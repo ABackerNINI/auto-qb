@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="test-coverage-uplift-2">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-20-2101">
 <meta name="doc-updated" content="26-10-20-2101">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-test-coverage-uplift-2.md">
@@ -100,7 +100,7 @@
   <h1>测试覆盖率提升 · 第二轮:<br>门槛清偿与 99% 冲刺</h1>
   <p class="lede">上一轮计划(91% → 96%, Done)之后, 覆盖率长期停在 98% 门槛线下飘红。本计划从 2026-10-20 全量实测出发, 先用 P0 把 <code>--cov-fail-under=98</code> 真正赎绿并留出余量, 再分 P1/P2 把综合覆盖率推到 99% 区间; 防回沉机制在 M1–M4 之上补 watchlist、豁免治理与工具侧门禁评估。全部缺口数字实测于 2026-10-20 <code>test.full</code> 全量(develop), 非估算基数。</p>
   <div class="metaline">
-    <span><b>状态</b> Open</span>
+    <span><b>状态</b> Done</span>
     <span><b>立计划</b> 2026-10-20 21:01</span>
     <span><b>基线</b> 2026-10-20 test.full 全量 · 0 failed · 门槛 98% 飘红(既有欠账)</span>
     <span><b>现状</b> 97.66%</span>
@@ -320,12 +320,13 @@
     <table>
       <tr><th>日期</th><th>变更</th></tr>
       <tr><td class="file">2026-10-20 21:01</td><td>立档 Open。基线实测 2026-10-20 test.full: TOTAL 97.66%(门槛 98% 飘红, 既有欠账), 缺口 633 单位; 分 P0 门槛清偿 / P1 中坚 / P2 长尾三阶段, 终点 99%±0.3, 机制 M1–M7。</td></tr>
+      <tr><td class="file">2026-10-21 01:04</td><td>转 Done。三阶段全部收口: P0 门槛 98 转绿(98.33%) → P1 阈值抬 98.5(99.03%) → P2 阈值抬 99(<b>99.41%</b>, 162 单位)且 <b>watchlist 清零</b>。累计自 97.66% / 633 单位净清偿 471 单位 = +1.75 点, 超过终点 99%±0.3。残留硬骨头 162 单位(relocate_mod 29 / webui/runtime 25 / hr/discovery 14 / routes/traffic_monitor 10 / hr/service 10 / views 8 / traffic_grid 8 / hr/runtime 7 / ops_mod 7 / 其余 64)集中在真机窗口·进程探测、GUI 托盘、低频错误路径与路由层竞态, 留第三轮。T2.6 结论: gtm 工具侧应加覆盖率门禁, 起步值 85(实施前先实测再定档), 另立任务。</td></tr>
     </table>
   </section>
 
   <footer>
     <span>auto-qb · memory-bank/plans/26-10-20-2101-plan-test-coverage-uplift-2.html</span>
-    <span>doc-status: Open · 认领档案 tasks/26-10-20-test-coverage-uplift-2.md</span>
+    <span>doc-status: Done · 认领档案 tasks/26-10-20-test-coverage-uplift-2.md</span>
   </footer>
 
 </div>

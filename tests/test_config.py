@@ -62,6 +62,7 @@
 - test_example_docker_config_yml_passes_fail_fast: docker/config.example.yml 过 fail-fast 校验 + 钉容器契约字段(data_dir=/data / web 0.0.0.0:8080 开 / notify 关(无桌面会话)/ grouping.check_missing_files 关(读宿主磁盘, 不关会误暂停整组 + 打 MISSING 标签) —— compose.yaml 的端口映射与 healthcheck 依赖)
 - test_validate_string_keys_exact_case: 校验器「按字符串键名取值」判据必须大小写精确(dat_path/period/download_curve/custom_basic_check_program_path 等被改大写后须走未知键/默认分支)
 - test_validate_short_circuit_pairs_differing_truth: 短路运算符(and/or)语义钉住 —— 用两操作数取不同真值的输入(traffic_source 空列表/非 list, curves 项单键判定, 规则集绑定, removed 触发白名单)
+- test_validate_nested_section_shapes_and_unparsable_intervals: 嵌套段形状守卫(traffic_source.global_traffic_monitor 非字典停在该层) + qb_traffic 时间串不可解析时范围比较整段跳过(只报解析错)
 - test_strip_none_list_branch_and_key_case: _strip_none 列表分支(None/空串项剔除 + 列表内嵌 dict 的站点 tri_state 叶保留) + state_file 键名精确性
 - test_validate_rule_refs_single_char_and_short_circuit: 规则引用 @ 后仅 1 字符仍是格式合法(钉住 r[1:] 而非 r[2:])
 - test_validate_qb_traffic_positive_boundary: sample_interval 正时间下界(0 报"必须为正时间", 1 报"须 >= main_tick")
@@ -2016,6 +2017,28 @@ def test_validate_short_circuit_pairs_differing_truth():
             "        extra: 1\n"
         )
         assert "必须为单项映射" in _load_errors(td, multi_key)
+
+
+def test_validate_nested_section_shapes_and_unparsable_intervals():
+    """嵌套段「形状非字典」与「时间串不可解析」两条纵深守卫
+
+    ① `traffic_source.global_traffic_monitor` 非字典 -> 报「必须是字典」并停在该层
+      (不继续取 tool_dir/tool_exe, 否则标量上取 in 判据语义漂移);
+    ② `qb_traffic.sample_interval` 不可解析 -> 只报解析错, **范围比较整段跳过**
+      (`if seconds is not None:` 假弧) —— 否则 None 参与比较会叠出假错或直接 TypeError。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        bad_tool = (
+            "config:\n"
+            "  traffic_source:\n"
+            "    provider: global_traffic_monitor\n"
+            "    global_traffic_monitor: notadict\n"
+        )
+        assert "config.traffic_source.global_traffic_monitor: 必须是字典" in _load_errors(td, bad_tool)
+
+        err = _load_errors(td, "config:\n  qb_traffic:\n    sample_interval: nonsense\n")
+        assert "config.qb_traffic.sample_interval" in err, err
+        assert "须为正时间" not in err and "须 <= 600s" not in err and "须 >= main_tick" not in err, err
 
 
 def test_validate_gslc_interval_key_exact():

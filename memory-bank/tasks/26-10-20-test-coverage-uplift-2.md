@@ -1,6 +1,6 @@
 # 26-10-20-test-coverage-uplift-2 — 覆盖率门槛清偿与 99% 冲刺 · 第二阶段 (97.7% → 99%)
 
-**Status:** Open
+**Status:** Done
 **Added:** 2026-10-20
 **Updated:** 2026-10-21
 **Summary:** 承接 26-10-01-2157 (91%→96%, Done) 的第二轮: 清偿 `--cov-fail-under=98` 连续多轮飘红的存量欠账, 分 P0/P1/P2 三阶段推到 99% 区间; 防回沉在 M1–M4 之外补 watchlist、豁免治理、工具侧门禁评估
@@ -34,8 +34,8 @@
 | 0 | 立档 + 计划制品 + 认领链 + 索引重生成 | Done (2026-10-20) |
 | 1 | P0 · 清偿 98% 门槛与快赢轮 | Done (2026-10-20, 98.33%) |
 | 2 | P1 · traffic 家族与 relocate 中坚 | Done (2026-10-21, 99.03%, 阈值抬 98.5) |
-| 3 | P2 · 长尾清偿与 watchlist 清零 | Pending |
-| 4 | P3 · 防回沉机制落地与常态化 | Pending |
+| 3 | P2 · 长尾清偿与 watchlist 清零 | Done (2026-10-21, 99.41%, 阈值抬 99, watchlist 清零) |
+| 4 | P3 · 防回沉机制落地与常态化 | Done (M1–M7 全部落地, 见 R5) |
 
 ## 进度日志
 
@@ -90,3 +90,18 @@ T1.3–T1.5 全部落地并完成 P1 阶段验收。全量: **3935 passed + 2 sk
 - **分包缺口**(P0 切片 → 现): core 230 → 76 / webui 101 → 84 / infra 51 → 26 / hr 41 → 41 / config 26 → 26 / rules 6 / tools 4 / tray 3 / torrents 1。
 - **P2 待清 Top**: relocate_mod 29 / tool_client 25 / runtime 25 / validation/sections 24 / utils 20 / grouping_mod 17 / hr/discovery 14 / traffic_monitor 10 / hr/service 10 / views 8 / traffic_grid 8。
 - 顺带把 R2/R3 标题时间戳按 `git log` 实际提交时刻校正(原记 00:40 / 01:10 为估时, 实为 00:13 / 00:28)。
+
+### R5 · P2-T2.1–T2.6 长尾清偿 + P2 验收 + 计划转 Done (2026-10-21 01:04)
+
+全量: **3967 passed + 2 skipped, TOTAL 99.03% → 99.41%**(75 miss + 87 partial = **162 单位**), 门槛 `--cov-fail-under` 由 **98.5 抬到 99** 后首次生效即转绿(余量 0.41 点); **watchlist 清零**(无行覆盖 <95% 单文件)。累计自计划基线 97.66% / 633 单位净清偿 **471 单位 = +1.75 点**, 超过终点 99%±0.3。基线切片 `testing/baselines/26-10-21-0104-test-coverage-uplift-2-p2.md`。
+
+- **T2.1 config 尾 24 → 2(+7 例)**: `validation/sections.py` 的 channel 跨机校验簇(host 只认字面量与 localhost / pairing 取值域与 token 类型 / port 与 discovery_port 相撞 / 非回环 + pairing=off + 无 token 必须拦 / discovery_port 落临时端口段只告警, 含平台段值参数化)+ relocate 段形状守卫 + `traffic_source.global_traffic_monitor` 非字典停在层 + qb_traffic 时间串不可解析时范围比较整段跳过。余 2 单位是 sections 的批量文案分支。
+- **T2.2 infra 尾 26 → 1(+10 例)**: `utils.py` 从 20 → 0 —— 回环判据两条保守出口 / `atomic_write` 失败清理两边缘 / PIDL 路线无 windll 降级 / 四个 Windows 入口缺导出静默(空集·False·""·False) / 无前台窗口不借线程权限 / 复用标题候选空集跳过匹配 / 置前后台化线程真执行(Event 等, 不断言线程对象); `notify.py` APPDATA 缺失清单为空 + close 哨兵投递失败只吞掉; `logging.record_domain` 三档。
+- **T2.3 core 尾 76 → 51(+12 例)**: `grouping_mod` 17 → 0(物理解析三层保守出口 / 第三方链接打标抛错不清标记 / save_path 变化无组键跳过 / 原组解散仍重归组 / 重归组两条跳过 / 状态转移首轮无快照跳过);`traffic_limits` 3 → 0(追加失败三条边缘: 首轮失败不推基线 / 无 carry 假弧 / 告警节流成一条);`speed_curve_mod` 5 → 0(`_require_snapshot` 装配缺项 fail-fast / 写后回读失败只降级 actual 不回滚);`rules` 6 → 2(move_to 的 confirm 与 reasons 为空两种回执 / 曲线段停用报「数据源未启用」/ 未知动作状态的兜底分支)。余 `relocate_mod` 29 + `ops_mod` 7 + `traffic_grid` 8 归入残留。
+- **T2.4 hr 家族 41 未动**: 计划给的 DoD 是覆盖率闸门 + watchlist 清零, 实测已达(99.41% / 0 个), 故 hr 41 单位(discovery 14 / service 10 / runtime 7 / server 5 / 其余 5)整包**并入残留清单**留第三轮 —— 不硬啃低频错误路径。
+- **T2.5 webui 二线 + watchlist 清零 84 → 59**: `tool_client.py` 25 → 0(**watchlist 唯一 <95% 项出清**, 91.3% → 98.3%, 剩余 3 行 2 partial 由 `test_webui_*` 侧直驱覆盖到 100% 口径)。新增 3 例(`_ensure_thread` 幂等 / 主循环两条容错 / `_clear_error` 恢复 INFO), 并**修掉 4 处既有假绿**(见下)。`views` 8 / `runtime` 25 / `traffic_monitor` 10 / `auth` 5 / `torrent_cmds` 5 归入残留。
+- **修掉的既有假绿(4 处)**: `test_traffic_monitor_client.py` 的 `_FAKE_EP.token_path` 是空串, 而 `_register`/`_heartbeat`/`_unregister` 第一步都是 `read_token(...)` —— 「不可达 / 200 缺 id / 注销不可达」三类断言实际走的是「密钥不可读」早退分支, 目标分支(336-338 / 344-345 / 368-370 / 378-379 / 402-404)从未执行。新增 `_ep_with_token(tmp_path)` 让密钥可读, 并补 `tool.paths()` 断言确保请求真的发出;同时保留「密钥不可读」自己那条分支的独立断言, 不再让两条分支互相冒充。
+- **T2.6 gtm 门禁评估(结论, 不改配置)**: 工具侧 10 个测试档 / 265 例, 无覆盖率门禁、dev 组无 `pytest-cov`。**结论: 应加, 起步值建议 85, 另立任务实施** —— 它与主仓是跨进程契约两端(主仓侧已有 99%+ 契约测试, 工具侧裸奔则漂移只会以「订阅莫名失效」暴露);成本只是配置面;起步值不能抄主仓 99(真机探测分支天然到不了), 须先实测再按「实测 − 0.5 点」定档。本机 `.venv` 不可用(`pyvenv.cfg` 缺失, exit 107)未取到实测值, 已在切片里写明「85 是保守起步值, 不是验收线」。
+- **P2 DoD 逐项**: ① TOTAL ≥ 99.2% → **99.41%** ✓ ② watchlist 清零 → **0 个 <95%** ✓ ③ 阈值抬 99 且全量绿 ✓ ④ 基线切片(含豁免行数与 watchlist 记录)✓ ⑤ 变异红验 **7/7 全杀**(36 例抽 19.4%)✓ ⑥ 豁免 8 行零新增 ✓ ⑦ 残留硬骨头 162 单位列名 ✓(计划允许 ≤220)。
+- **机制 M1–M7 全部落地**: 阈值阶梯 98 → 98.5 → 99 / 基线切片 ×3 / 红验 23+7 例 / 增量不欠账(常态) / watchlist 10 → 3 → 1 → 0 / 豁免行数 8 行零新增 / gtm 评估结论。
+- **残留清单(第三轮起点, 162 单位)**: relocate_mod 29 / webui/runtime 25 / hr/discovery 14 / routes/traffic_monitor 10 / hr/service 10 / views 8 / traffic_grid 8 / hr/runtime 7 / ops_mod 7 / torrent_cmds 5 / auth 5 / hr/server 5 / finalize_watch 4 / tray 3 / 其余 21。形态集中在真机窗口·进程探测、GUI 托盘、低频错误路径与路由层竞态。

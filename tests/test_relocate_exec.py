@@ -898,3 +898,38 @@ def test_step_finalize_skips_gone_member_and_pending_progress(tmp_path):
     job2 = _job("j2", phase=ru.PHASE_FINALIZING, hashes=("HB", ))
     mod._step_finalize(job2, {"finalize": ["HB"], "finalize_ts": time.time()})
     assert mod._jobs.get("j2") is None, "窗口内未完成不得判失败"
+
+
+def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
+    """规则 move_to 两条边缘回执: ① 预检判 confirm(目录别名需显式确认) -> skip 并指路 WebUI;
+    ② 闸门拒绝但 reasons 为空 -> fail 文案回落「未通过预检」(绝不留空原因)
+
+    直接替换模块的 relocate_execute 返回固定 items —— 这两条是**回执文案**面, 预检细节
+    已由 relocate_paths 覆盖, 这里只钉「四种 cls 各自怎么说」。
+    """
+    from auto_qb.rules.actions.transfer import MoveToAction
+
+    _pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
+    mod = mgr.host.get("relocate")
+
+    class _Ctx:
+        hash = "HA"
+        dry_run = False
+        manager = mgr
+        config = mgr.config
+        api = mgr.api
+
+    act = MoveToAction({"path": dst})
+    monkeypatch.setattr(mod, "relocate_execute", lambda hashes, path, confirm=False: [{"cls": "confirm"}])
+    r = act.execute(_Ctx())
+    assert r.is_skipped and "显式确认" in r.message, r
+
+    monkeypatch.setattr(
+        mod, "relocate_execute", lambda hashes, path, confirm=False: [{
+            "cls": "blocked",
+            "reasons": []
+        }]
+    )
+    r2 = act.execute(_Ctx())
+    assert r2.is_failed and "未通过预检" in r2.message, r2

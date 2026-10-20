@@ -102,6 +102,13 @@
 - test_mask_tracker_entry: mask R9 只改 url 其余字段保全/原条目不被就地改/缺 url 与虚拟条目原样返回
 - test_display_host: 展示地址(回环 IPv4/IPv6/IPv4-mapped -> localhost, 对外地址与大小写原样, 异常入参不炸)
 - test_time_in_range_minute_granularity: 时段判定按**分钟**粒度(端点整分钟含在内: 23:59:30 在 "00:00-23:59" 内 / 跨午夜两端 / 起点前 1 分仍在区间外) —— issue 26-10-19-0013 的守阵
+- test_is_loopback_host_empty_and_unparsable: 回环判据两条保守出口(空/None、主机名 -> False; localhost 大小写与两族字面量 -> True)
+- test_atomic_write_failure_cleanup_arcs: 失败清理两边缘(临时文件已不在则不删 / 删临时文件失败只吞掉, 原始异常照抛)
+- test_win_shell_with_pidl_missing_windll_returns_false: ctypes 无 windll 门面 -> False 降级不抛错
+- test_win_api_missing_attribute_silent: 四个 Windows 入口缺导出时静默降级(空集 / False / "" / False)
+- test_win_force_foreground_skips_attach_when_no_foreground: 无前台窗口(0)时不借线程权限, 但取焦照发
+- test_win_wait_explorer_no_title_candidates_skips_match: 复用标题候选为空集时跳过标题匹配, 超时即 None
+- test_win_foreground_explorer_async_spawns_daemon_thread: 置前后台化线程真执行(Event 等, 不断言线程对象)
 """
 import hashlib
 import ntpath
@@ -109,6 +116,7 @@ import os
 import pytest
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -1926,3 +1934,131 @@ def test_time_in_range_minute_granularity():
     assert utils.time_in_range(dtime(12, 0, 45), "10:00-12:00") is True
     assert utils.time_in_range(dtime(12, 1, 0), "10:00-12:00") is False
     assert utils.time_in_range(dtime(9, 59, 59), "10:00-12:00") is False
+
+
+# ---------------------------------------------------------------- P2-T2.2 保守出口簇
+
+
+def test_is_loopback_host_empty_and_unparsable():
+    """回环判据两条保守出口: 空/None -> False, 解析不出的字面量(主机名) -> False
+
+    保守方向是「按非回环处理」: 配置校验(非回环 + pairing=off + 无 token)与配对门
+    (pairing=auto 时非回环强制配对)都会因此往「要求配对」走 —— 宁可多要一道, 不放行。
+    """
+    assert utils.is_loopback_host("") is False
+    assert utils.is_loopback_host(None) is False
+    assert utils.is_loopback_host("nas.local") is False
+    assert utils.is_loopback_host("127.0.0.1") is True
+    assert utils.is_loopback_host("::1") is True
+    assert utils.is_loopback_host("localhost") is True
+    assert utils.is_loopback_host("  LOCALHOST  ") is True
+    assert utils.is_loopback_host("192.168.1.5") is False
+
+
+def test_atomic_write_failure_cleanup_arcs(tmp_path, monkeypatch):
+    """atomic_write 失败清理的两条边缘: ① 临时文件已不在时不删(少一次无谓 IO);
+    ② 删临时文件本身失败(占用/权限)只吞掉, **绝不掩盖原始异常**
+
+    ① 对应 `os.replace` 已成功后的形态; ② 对应 Windows 上杀毒/索引器短暂占用临时文件的形态 ——
+    清理是尽力而为, 调用方要看到的永远是「写盘中断」这个真原因。
+    """
+    target = str(tmp_path / "out.txt")
+
+    def _boom(f):
+        raise RuntimeError("写盘中断")
+
+    # ① exists 恒假 -> `if os.path.exists(tmp_path)` 假弧, 直接 re-raise
+    monkeypatch.setattr(os.path, "exists", lambda p: False)
+    with pytest.raises(RuntimeError, match="写盘中断"):
+        utils.atomic_write(target, _boom)
+    monkeypatch.undo()
+
+    # ② 删不掉 -> OSError 吞掉, 原始异常照抛
+    def _remove_boom(p):
+        raise OSError(13, "locked")
+
+    monkeypatch.setattr(os, "remove", _remove_boom)
+    with pytest.raises(RuntimeError, match="写盘中断"):
+        utils.atomic_write(target, _boom)
+    monkeypatch.undo()
+
+    for leaked in tmp_path.iterdir():  # ② 故意删不掉, 手工清残骸
+        leaked.unlink()
+
+
+def test_win_shell_with_pidl_missing_windll_returns_false(monkeypatch):
+    """PIDL 路线在 ctypes 无 windll 门面时 -> False 降级, 不抛 ImportError/AttributeError
+
+    打开路径是用户点出来的操作: 探测失败只许「换降级路线」, 绝不许把异常冒到端点。
+    """
+    import ctypes
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.delattr(ctypes, "windll", raising=False)
+    assert utils._win_shell_with_pidl("C:/x", lambda *a: True) is False
+
+
+def test_win_api_missing_attribute_silent(monkeypatch):
+    """四个 Windows 入口在「导出缺失」时一律静默降级(置前是锦上添花, 不许影响打开本体)
+
+    `_win_explorer_hwnds` 缺 `ctypes.WINFUNCTYPE` -> 空集(快照失败 = 跳过置前, 行为退化到修复前);
+    `_win_switch_to_this_window` / `_win_window_text` / `_win_force_foreground` 缺对应导出 ->
+    False / "" / False。user32 替身刻意只给空对象, 让第一次属性访问就抛 AttributeError。
+    """
+    import ctypes
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(utils, "_win_user32", lambda: SimpleNamespace())
+    monkeypatch.setattr(utils, "_win_kernel32", lambda: SimpleNamespace())
+    monkeypatch.delattr(ctypes, "WINFUNCTYPE", raising=False)
+    assert utils._win_explorer_hwnds() == set()
+    assert utils._win_switch_to_this_window(1) is False
+    assert utils._win_window_text(1) == ""
+    assert utils._win_force_foreground(1) is False
+
+
+def test_win_force_foreground_skips_attach_when_no_foreground(monkeypatch):
+    """没有前台窗口时**不借线程权限**(`bool(fg)` 短路), 但仍照常 SetForegroundWindow
+
+    前台窗口为 0(桌面切换中/锁屏刚恢复)时 AttachThreadInput 无对象可借, 硬借会拿 0 当线程 id
+    去挂 —— 这里钉住「没前台就不 attach」, 同时保证取焦动作照发(一次就拿到焦点)。
+    """
+    u32 = _install_fake_win(monkeypatch, hwnd=42, fg=0, focus_after=42)
+    assert utils._win_force_foreground(42) is True
+    assert [c for c in u32.calls if c[0] == "AttachThreadInput"] == [], "无前台窗口不借线程权限"
+    assert ("SetForegroundWindow", 42) in u32.calls
+
+
+def test_win_wait_explorer_no_title_candidates_skips_match(monkeypatch):
+    """目标算不出复用标题候选时(空集)整段跳过标题匹配, 只等新窗口差集, 超时即 None
+
+    对应「目标路径的末段/父目录都不可用作窗口标题」的形态(如根目录、驱动器根) —— 此时去枚举
+    旧窗口标题纯属空转, 必须走 `if names:` 假弧直接进超时判定。
+    """
+    monkeypatch.setattr(utils, "_EXPLORER_FG_TIMEOUT", 0.01)
+    monkeypatch.setattr(utils, "_EXPLORER_FG_POLL", 0.005)
+    monkeypatch.setattr(utils, "_win_reuse_title_candidates", lambda target: set())
+    monkeypatch.setattr(utils, "_win_explorer_hwnds", lambda: set())
+    matched = mock.MagicMock(return_value=7)
+    monkeypatch.setattr(utils, "_win_match_reused_explorer", matched)
+    assert utils._win_wait_explorer({1, 2}, "C:/") is None
+    assert matched.call_count == 0, "无候选名不该去匹配旧窗口"
+
+
+def test_win_foreground_explorer_async_spawns_daemon_thread(monkeypatch):
+    """置前后台化: 调用方(WebUI 端点/托盘菜单)立刻返回, 找窗口在 daemon 线程里做
+
+    用 Event 等线程真跑完 —— 不断言「线程对象已创建」, 否则线程根本没启动也全绿(假绿)。
+    """
+    done = threading.Event()
+    seen = []
+
+    def _fake(before, target):
+        seen.append((before, target))
+        done.set()
+        return True
+
+    monkeypatch.setattr(utils, "_win_foreground_new_explorer", _fake)
+    utils._win_foreground_explorer_async({1}, "dir")
+    assert done.wait(2.0), "后台线程必须真的执行置前动作"
+    assert seen == [({1}, "dir")]

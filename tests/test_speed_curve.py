@@ -1207,3 +1207,52 @@ def test_speed_curve_manual_log_resets_after_release(tmp_path):
         client.transfer.limits["upload_limit"] = 2001 * 1024
         assert _run_curve(mgr)
         assert cap.info_count() == 2
+
+
+def test_speed_curve_require_snapshot_missing_fails_fast(tmp_path):
+    """装配清单缺项(traffic_snapshot 未挂) -> `_require_snapshot` fail-fast RuntimeError
+
+    段级写只许经快照模块句柄(黄金法则 4: 装配错必须当场炸, 不许静默降级成"限速生效但界面
+    永远不更新")。报错文案要指路到装配序(TrafficSnapshotModule 必须注册在 SpeedCurveModule 之前)。
+    """
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points([(10, 6)])))
+    mgr, client = _make_mgr(tmp_path, gslc)
+    mod = mgr.host.get("speed_curve")
+    original = mod._ctx.traffic_snapshot
+    mod._ctx.traffic_snapshot = None
+    try:
+        with pytest.raises(RuntimeError, match="traffic_snapshot"):
+            mod._require_snapshot()
+    finally:
+        mod._ctx.traffic_snapshot = original
+
+
+def test_speed_curve_readback_failure_degrades_actual(tmp_path, monkeypatch):
+    """写后回读失败: 写入照样算成功, actual 退化为写前读数并附 read_failed 原因
+
+    回读只是展示用的"实际生效值"; qB 回读失败(重启中/API 抖动)绝不能把已写入的限速回滚,
+    也不能让本轮整体判失败 —— 前端靠 reasons 里的 read_failed 说明"实际值未知"。
+    """
+    today = date.today()
+    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    gslc = _gslc(dat, _pc("day", up=_points([(10, 6)])))
+    mgr, client = _make_mgr(tmp_path, gslc)
+
+    api = mgr.host.get("speed_curve")._ctx.api
+    real_read = api.get_global_speed_limits
+    reads = {"n": 0}
+
+    def _flaky_read():
+        reads["n"] += 1
+        if reads["n"] == 1:
+            return real_read()  # 写前读数照常(本轮决策要用)
+        raise OSError("qB 回读失败")
+
+    monkeypatch.setattr(api, "get_global_speed_limits", _flaky_read)
+    assert _run_curve(mgr)
+    assert client.transfer.calls == [("set_upload_limit", 6 * 1024 * 1024)], "回读失败不影响已写入的限速"
+    tv = mgr.web.traffic_view
+    assert [r["code"] for r in tv["limit"]["reasons"]] == ["read_failed"]
+    assert tv["limit"]["actual"]["up"] == 0, "actual 退化为写前读数"

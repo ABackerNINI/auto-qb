@@ -12,6 +12,7 @@
 - test_filter_log_lines_custom_field_specs: 字段宽度/数字/字面量 %% 等格式变体不影响等级定位
 - test_capture_logs_survives_qbmanager_setup_logging: QbManager 构造链清 root 后 helpers.capture_logs 仍有效(issue 26-10-04-2311 守阵); 对照断言 caplog.text 恒空钉死坑存在性
 - test_capture_logs_restores_logger_state: capture_logs 退出恢复目标 logger 的 level/propagate/handlers
+- test_record_domain_reads_domain_attr: record_domain 读归属层标注(未打标 / 打了标 / 值为 None 三档)
 
 注意: setup_logging 操作 root logger(清空并重建 handlers), 每个测试尾部必须恢复
 root level(WARNING)并清空 handlers, 避免污染同批其它测试的日志行为。
@@ -241,3 +242,18 @@ def test_capture_logs_restores_logger_state():
         assert cap.messages == ["restore-probe"]
     assert lg.level == old_level and lg.propagate is old_prop
     assert lg.handlers == old_handlers
+
+
+def test_record_domain_reads_domain_attr():
+    """`record_domain` 取归属层标注: 未打标 -> 空串(展示层按「未分层」处理), 打了标 -> 原值;
+    值为 None/空串同样归一为空串(不让 None 冒进展示与排障输出)"""
+    from auto_qb.infra.logging import DOMAIN_ATTR, record_domain
+
+    plain = logging.LogRecord("auto_qb", logging.INFO, __file__, 1, "m", None, None)
+    assert record_domain(plain) == ""
+    tagged = logging.LogRecord("auto_qb", logging.INFO, __file__, 1, "m", None, None)
+    setattr(tagged, DOMAIN_ATTR, "hr")
+    assert record_domain(tagged) == "hr"
+    empty = logging.LogRecord("auto_qb", logging.INFO, __file__, 1, "m", None, None)
+    setattr(empty, DOMAIN_ATTR, None)
+    assert record_domain(empty) == ""

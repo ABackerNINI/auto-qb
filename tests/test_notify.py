@@ -28,6 +28,8 @@
 - test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知器命令(不启动真实进程), send 走失败分支返回 False
 - test_notify_fatal_enabled_does_not_launch_process: 通知**启用且全程不 mock** 走 `notify_fatal` 真实路径 ⇒ 一个进程都不启动(用户原始诉求"测试时弹出通知框"的最直接回归点)
 - test_notify_icon_ico_points_to_real_file: 守阵(26-10-06-0028 H-02)——ICON_ICO 两级 dirname 指向真实存在的 icon.ico(与 tray 同口径)
+- test_notify_legacy_shortcut_paths_without_appdata: APPDATA 缺失 -> 旧快捷方式清单空(不拼半截路径去删)
+- test_notify_close_swallows_queue_put_failure: close 的哨兵投递失败只吞掉(队列满/已关闭不带崩 logging.shutdown)
 """
 import base64
 import logging
@@ -558,3 +560,32 @@ def test_notify_icon_ico_points_to_real_file():
     """
     assert os.path.isfile(notify_mod.ICON_ICO), f"ICON_ICO 不存在: {notify_mod.ICON_ICO}"
     assert os.path.basename(notify_mod.ICON_ICO) == "icon.ico"
+
+
+def test_notify_legacy_shortcut_paths_without_appdata(monkeypatch):
+    """APPDATA 缺失(非 Windows / 裁剪环境) -> 旧快捷方式清单为空, 不做任何路径拼接
+
+    这是环境依赖的保守出口: 拿不到 %APPDATA% 就无从定位「开始菜单\\程序」, 返回空清单让
+    启动清理静默跳过 —— 绝不能拼出半截相对路径去删东西。
+    """
+    monkeypatch.delenv("APPDATA", raising=False)
+    assert notify_mod.PlatformChannel._legacy_shortcut_paths() == []
+
+
+def test_notify_close_swallows_queue_put_failure():
+    """close 的哨兵投递失败只吞掉: 派发线程收不到 None 也照常关闭 handler
+
+    队列满/已关闭时 put_nowait 会抛 —— 关闭是收尾动作, 不能因为收尾失败把 logging.shutdown
+    的链路带崩(那时正在退出进程, 抛错只会变成难以归因的退出码)。
+    """
+    handler = NotifyHandler(
+        NotifyConfig(enabled=True, min_level="WARNING", max_per_hour=100, dedup_window=0),
+        PlatformChannel("linux"),
+    )
+
+    class _FullQueue:
+        def put_nowait(self, item):
+            raise RuntimeError("queue closed")
+
+    handler._queue = _FullQueue()
+    handler.close()  # 不抛即通过

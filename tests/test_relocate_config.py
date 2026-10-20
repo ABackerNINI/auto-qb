@@ -14,6 +14,7 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_low_space_warn_units: low_space_warn 走 parse_fsize(二进制单位; 10G 这种写法拒收)
 - test_relocate_load_config_explicit_values: 显式 YAML 值按 parse_* 语义进入 Config(含时间/大小)
 - test_relocate_section_absent_uses_defaults: 配置里没有 relocate 段时走字段默认
+- test_relocate_non_dict_section_rejected: 段形状守卫 —— 缺省(None)静默走默认; 非字典报「必须是字典」并停在该层(不跑逐键校验)
 - test_relocate_module_claims_section: RelocateModule.sections() == ("relocate",)(段认领完备守阵的模块侧)
 - test_relocate_module_apply_short_circuits: apply 段相等短路(零回执); 段变化换对象即生效
 - test_relocate_module_start_stop_no_side_effect: 即使 enabled=true, P1 start/stop 也无任务无链接
@@ -144,6 +145,14 @@ def test_relocate_section_absent_uses_defaults():
         cfg = load_config(path)
     assert cfg.relocate == RelocateConfig()
     assert cfg.relocate.enabled is False
+
+
+def test_relocate_non_dict_section_rejected():
+    """段形状守卫: 段缺省(None)静默走默认, 不报错; 段存在但非字典(标量/列表)报
+    「必须是字典」并停在该层 —— 不继续跑逐键校验(否则会在标量上取 .items() 炸出 AttributeError)"""
+    assert _validate(None) == []
+    assert _validate(["enabled"]) == ["config.relocate: 必须是字典"]
+    assert _validate("enabled") == ["config.relocate: 必须是字典"]
 
 
 def test_relocate_module_claims_section():

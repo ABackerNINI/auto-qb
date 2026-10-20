@@ -675,3 +675,17 @@ def test_parser_has_no_dead_op_constants():
     issue rules-parser-dead-op-constants-dup 的守阵)"""
     for name in ("_ARITH_OPS", "_ORDER_OPS", "_EQ_OPS", "_LOGIC_OPS"):
         assert not hasattr(expr_parser, name), f"parser 不应再定义 {name}(死件, 运算符族常量只由 types 持有)"
+
+
+def test_traffic_curve_section_disabled_raises():
+    """曲线段显式停用但来源仍开: 流量变量报「数据源未启用」并指到 global_speed_limit_curve.enabled
+
+    与「来源已关闭」是两个不同的不可用原因(用户据此去改不同的开关), 文案必须区分:
+    来源关 -> 指总开关; 曲线段关 -> 指曲线段 enabled。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, _, ctx = _setup(td)
+        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(curves=[], enabled=False)
+        mgr.config.traffic_source.traffic_monitor.dat_path = os.path.join(td, "history_traffic.dat")
+        with pytest.raises(ExprError, match="数据源未启用"):
+            _val("(sys.upload_today > 1GiB)", ctx)

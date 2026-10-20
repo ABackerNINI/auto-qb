@@ -777,3 +777,31 @@ def test_rule_hourly_record_stale_date_allows_rerun():
         handled, _stop = rule.process(ctx)
         assert handled, "跨日记录不得拦下本次执行"
         assert ("add_tags", ["X"]) in client.calls
+
+
+def test_rule_process_unknown_status_continues_without_marking():
+    """动作返回未知状态(既非 ok/failed/skipped/pending): 后续动作照常执行, 但既不算成功也不算失败
+
+    守的是处理链的**兜底分支**: 新增动作状态时若漏改这里, 规则会在该动作上静默中断 ——
+    本条钉住「未知状态不记 executed」, 让漏改表现为可见的行为差异而不是静默截断
+    (第二个返回值是 `stop_following_rules_if` 的判定, 与状态无关, 此处不断言)。
+    """
+    from auto_qb.rules.base import ActionResult
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="test"), client)
+
+        class _Weird:
+            """只有 execute 的动作替身: 返回一个模型外的状态值"""
+
+            name = "weird"
+
+            def execute(self, ctx):
+                return ActionResult("weird", "未知状态")
+
+        rule = Rule("g.test", {"actions": [{"stop": True}]}, mgr)
+        rule.actions = [_Weird()]
+        handled, _stop = rule.process(ctx)
+        assert handled is False, "未知状态不记 executed(既非成功也非失败)"

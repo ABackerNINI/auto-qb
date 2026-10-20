@@ -36,6 +36,13 @@
 - test_unregister_rejected_by_tool_records_only: 注销被拒(409)只记 INFO 不抛
 - test_pass_force_relaunch_consumed_by_thread: force_relaunch 只本轮生效(读到即清并转 agent)
 - test_heartbeat_interval_fallback_on_bad_value: 心跳周期缺/非数值/<=1s 回落缺省(防节拍归零紧循环)
+- test_ensure_thread_idempotent_when_alive: _ensure_thread 幂等(线程已存活时复用同一条, 不重复起)(P2-T2.5)
+- test_run_survives_pass_and_unregister_exceptions: 主循环容错(单轮异常不杀线程 / 收线注销异常只记 WARNING)(P2-T2.5)
+- test_clear_error_logs_recovery_info: 失败后恢复补 INFO 且清记忆, 无失败记忆时零日志(P2-T2.5)
+  ⚠ 本轮修三处**假绿**(P2-T2.5): `_FAKE_EP.token_path` 是空串, 而 `_register`/`_heartbeat`/`_unregister`
+    第一步都是 `read_token(...)` —— 「不可达 / 200 缺 id / 注销不可达」三类断言实际走的是
+    「密钥不可读」早退分支, 目标分支从未执行。已改用 `_ep_with_token(tmp_path)`(真读得到密钥的端点),
+    并补 `tool.paths()` 断言确保请求真的发出。
 """
 import io
 import json
@@ -43,6 +50,7 @@ import logging
 import threading
 import time
 from datetime import date
+from types import SimpleNamespace
 from unittest import mock
 
 import pytest
@@ -741,7 +749,22 @@ _FAKE_EP = agent.ToolEndpoint(
 )
 
 
-def test_register_token_missing_then_unreachable_then_no_id(sub_env):
+def _ep_with_token(tmp_path, **kw) -> "agent.ToolEndpoint":
+    """带**可读密钥**的端点替身 —— 「分支真抵达」的前提(pitfalls/testing/unreached-branch-guard.md)
+
+    坑(本轮实测): `_FAKE_EP.token_path` 是空串, 而 `_register` / `_heartbeat` / `_unregister`
+    第一件事都是 `read_token(...)`, 读不到就**早退**。于是「工具不可达 / 200 缺 id / 注销被拒」
+    这三类断言虽然通过, 走的却是「密钥不可读」那条路 —— 目标分支从未执行(假绿)。
+    本助手给出真读得到密钥的端点, 让异常/被拒分支真正抵达。
+    """
+    return agent.ToolEndpoint(
+        base_url=kw.get("base_url", _FAKE_EP.base_url),
+        token_path=_write_credential_file(tmp_path),
+        data_dir="",
+    )
+
+
+def test_register_token_missing_then_unreachable_then_no_id(sub_env, tmp_path):
     """_register 三态: 密钥缺失只记错不抛 / 不可达只记错不抛 / 200 缺 id 同口径"""
     _mgr, sub, tool = sub_env
     ep = agent.ToolEndpoint(
@@ -752,14 +775,15 @@ def test_register_token_missing_then_unreachable_then_no_id(sub_env):
     # 密钥文件缺失 -> 记错(不注册, 不抛)
     sub._register(ep)
     assert sub._sub_id == "" and tool.paths() == []
-    # 不可达 -> ToolUnreachable 收编为记错
-    ep2 = agent.ToolEndpoint(base_url=_FAKE_EP.base_url, token_path="/nonexistent/x.token", data_dir="")
+    # 不可达 -> ToolUnreachable 收编为记错(密钥可读, 确保走的是"不可达"而不是"密钥缺失"早退)
+    ep2 = _ep_with_token(tmp_path)
     tool.raise_exc = tool_client.ToolUnreachable("refused")
     sub._register(ep2)
     assert sub._sub_id == ""
+    assert tool.paths() == ["/subscribe"], "必须真的发出注册请求才谈得上不可达"
 
 
-def test_register_missing_id_in_response(sub_env):
+def test_register_missing_id_in_response(sub_env, tmp_path):
     """200 但响应缺 id: 记错且不置 sub_id(下轮重试, 不进入心跳态)"""
     _mgr, sub, tool = sub_env
     # 工具侧 200 但不回 id: 经 _FakeTool 的默认脚本改一件
@@ -767,30 +791,38 @@ def test_register_missing_id_in_response(sub_env):
 
     def no_id(base, path, method, credential, payload=None, timeout=None):
         if path == "/subscribe":
+            tool.calls.append((path, dict(payload or {})))
             return 200, {"ok": True}
         return real_call(base, path, method, credential, payload, timeout)
 
     tool_client.call_tool, _saved = no_id, tool_client.call_tool
     try:
-        sub._register(_FAKE_EP)
+        sub._register(_ep_with_token(tmp_path))
         assert sub._sub_id == ""
+        assert tool.paths() == ["/subscribe"], "密钥可读, 必须真的打到 /subscribe 才谈得上缺 id"
     finally:
         tool_client.call_tool = _saved
 
 
-def test_heartbeat_failure_branches_return_still_valid(sub_env):
+def test_heartbeat_failure_branches_return_still_valid(sub_env, tmp_path):
     """_heartbeat 三态: 密钥缺失 / 不可达 / 被拒(非 404) -> 一律 True(租约兜底, 不当失效)"""
     _mgr, sub, tool = sub_env
     sub._pass()  # 先注册
     assert sub._sub_id == "sub-1"
+    ep = _ep_with_token(tmp_path)
     tool.raise_exc = tool_client.ToolUnreachable("refused")
-    assert sub._heartbeat(_FAKE_EP) is True, "工具不可达不算失效(180s 租约给三次机会)"
+    assert sub._heartbeat(ep) is True, "工具不可达不算失效(180s 租约给三次机会)"
+    assert "/heartbeat" in tool.paths(), "必须真的发心跳才谈得上不可达"
     tool.raise_exc = None
     tool.heartbeat_codes = [500]
-    assert sub._heartbeat(_FAKE_EP) is True, "被拒只记错, 不立刻重注册"
+    assert sub._heartbeat(ep) is True, "被拒只记错, 不立刻重注册"
+    # 密钥不可读: 跳过本轮心跳但**仍算订阅有效**(不因此重注册, 也不发请求)
+    before = len(tool.calls)
+    assert sub._heartbeat(agent.ToolEndpoint(base_url=_FAKE_EP.base_url, token_path="", data_dir="")) is True
+    assert len(tool.calls) == before, "密钥不可读不得发心跳请求"
 
 
-def test_unregister_defensive_and_failure_branches(sub_env):
+def test_unregister_defensive_and_failure_branches(sub_env, tmp_path):
     """_unregister 防御/失败分支: 缺 reg_tool 寻址跳过 / 密钥不可读跳过 / 不可达静默 / 非 200-404 被拒"""
     _mgr, sub, tool = sub_env
     # sub_id 在但 reg_tool  None(同生同灭被破坏的纯防御路径)
@@ -801,11 +833,12 @@ def test_unregister_defensive_and_failure_branches(sub_env):
     sub._sub_id, sub._reg_tool = "sub-x", ("http://127.0.0.1:9", "/nonexistent/token")
     sub._unregister("测试")
     assert tool.paths() == []
-    # 不可达 -> 静默(租约兜底)
-    sub._sub_id, sub._reg_tool = "sub-x", (f"http://127.0.0.1:{POINTER_PORT}", "/nonexistent/token")
+    # 不可达 -> 静默(租约兜底); 密钥可读, 确保走的是"不可达"而不是"密钥不可读"早退
+    sub._sub_id, sub._reg_tool = "sub-x", (f"http://127.0.0.1:{POINTER_PORT}", _write_credential_file(tmp_path))
     tool.raise_exc = tool_client.ToolUnreachable("refused")
     sub._unregister("测试")
     assert sub._sub_id == ""
+    assert "/unsubscribe" in tool.paths(), "必须真的发注销请求才谈得上不可达"
     # 工具回 409(拒绝注销)只记 INFO 不抛的场景由 test_unregister_rejected_by_tool_records_only 直驱
 
 
@@ -853,3 +886,56 @@ def test_heartbeat_interval_fallback_on_bad_value():
     assert tool_client._heartbeat_interval({"heartbeat_interval_s": "abc"}) == tool_client._DEFAULT_HEARTBEAT_S
     assert tool_client._heartbeat_interval({"heartbeat_interval_s": 0.5}) == tool_client._DEFAULT_HEARTBEAT_S
     assert tool_client._heartbeat_interval({"heartbeat_interval_s": 45}) == 45.0
+
+
+def test_ensure_thread_idempotent_when_alive(sub_env):
+    """_ensure_thread 幂等: 线程已存活时再调**不重复起**(否则每次 sync 都多一条订阅线程)"""
+    _mgr, sub, _tool = sub_env
+    try:
+        sub._ensure_thread()
+        first = sub._thread
+        assert first is not None and first.is_alive()
+        sub._ensure_thread()
+        assert sub._thread is first, "已存活必须复用同一条线程"
+    finally:
+        sub.stop()
+
+
+def test_run_survives_pass_and_unregister_exceptions(sub_env, monkeypatch):
+    """订阅线程主循环的两条容错: 单轮异常不杀线程(下轮重试) / 收线注销异常只记 WARNING
+
+    与工具侧「单轮落盘失败不杀守护进程」同纪律: 订阅是长期后台件, 一轮异常就退线等于
+    一次网络抖动永久失去流量快照。`_run` 同步直调(不真起线程), 保证断言的是循环本身。
+    """
+    _mgr, sub, _tool = sub_env
+    seen = []
+
+    def _pass():
+        seen.append(1)
+        if len(seen) == 1:
+            raise RuntimeError("单轮异常")
+        return False
+
+    monkeypatch.setattr(sub, "_pass", _pass)
+    monkeypatch.setattr(sub, "_wake", SimpleNamespace(wait=lambda s: None, clear=lambda: None))
+
+    def _boom(reason):
+        raise RuntimeError("注销异常")
+
+    monkeypatch.setattr(sub, "_unregister", _boom)
+    sub._stop.clear()
+    sub._run()  # 首轮异常 -> want=True 继续; 次轮 False 收线
+    assert len(seen) == 2, "单轮异常后必须再跑一轮(不杀线程)"
+
+
+def test_clear_error_logs_recovery_info(sub_env):
+    """失败后恢复: 清失败记忆并补一条 INFO(失败不静默消失); 无失败记忆时零日志"""
+    _mgr, sub, _tool = sub_env
+    sub._last_error = "工具不可达"
+    with _LogCapture("auto_qb.webui.tool_client") as buf:
+        sub._clear_error()
+    assert "已恢复" in buf.getvalue() and "工具不可达" in buf.getvalue()
+    assert sub._last_error == ""
+    with _LogCapture("auto_qb.webui.tool_client") as buf2:
+        sub._clear_error()
+    assert buf2.getvalue() == "", "无失败记忆时不得再记"

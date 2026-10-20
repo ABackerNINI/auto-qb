@@ -1956,3 +1956,129 @@ def test_cross_group_single_side_dirty_still_detected():
             assert stop_mock.call_count == 1, f"检出即处置: {stop_mock.call_count}"
             assert stop_mock.call_args.kwargs["torrent_hashes"] == ["HB"], "只停下载方 HB"
             assert key_a in mgr.store.dirty_groups, "dirty_groups 只读不复位(消费单点仍是同组检查)"
+
+
+# ---------------- P2-T2.3 守卫与保守出口簇 (计划 26-10-20-2101 T2.3) ----------------
+
+
+def test_grouping_physical_dir_three_layers(monkeypatch):
+    """物理解析三层各自的保守出口(组键首元 = 物理内容根, 解析错了就是误并/裂组)
+
+    ① 迁移模块缺席(装配未挂) -> 直接进别名层;
+    ② 迁移模块抛错 -> 退回词法路径(异常不影响归组, 少并一组的代价 < 误并一组);
+    ③ 别名层: 判为 junction 但解析结果与词法路径相同 -> 返回原路径(没搬家);
+    ④ 别名层抛错 -> 保守返回词法路径。
+    """
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        sp = r"R:/D/movie"
+
+        class _BoomRelocate:
+            def resolve_physical(self, *a):
+                raise RuntimeError("迁移模块炸了")
+
+        class _Moved:
+            def resolve_physical(self, p, root):
+                return r"T:/lib/movie"
+
+        # ① relocate 缺席
+        monkeypatch.setattr(grp._ctx, "relocate", None)
+        assert grp._physical_dir(sp, sp) == sp
+        # ② relocate 抛错 -> 词法路径
+        monkeypatch.setattr(grp._ctx, "relocate", _BoomRelocate())
+        assert grp._physical_dir(sp, sp) == sp
+        # 迁移模块解析出不同物理路径 -> 直接采用(别名在场时组键首元应是 T)
+        monkeypatch.setattr(grp._ctx, "relocate", _Moved())
+        assert grp._physical_dir(sp, sp) == r"T:/lib/movie"
+
+        # ③ 别名层判为 junction 但 realpath 与词法路径一致 -> 返回原路径
+        monkeypatch.setattr(grp._ctx, "relocate", None)
+        monkeypatch.setattr(grouping_mod.alias_fs, "alias_kind_of", lambda p: grouping_mod.alias_fs.KIND_JUNCTION)
+        monkeypatch.setattr(
+            grouping_mod.file_access, "get_file_access", lambda: SimpleNamespace(realpath_lexical=lambda p: p)
+        )
+        assert grp._physical_dir(sp, sp) == sp
+
+        # ④ 别名层抛错 -> 词法路径
+        def _alias_boom(p):
+            raise OSError("stat 失败")
+
+        monkeypatch.setattr(grouping_mod.alias_fs, "alias_kind_of", _alias_boom)
+        assert grp._physical_dir(sp, sp) == sp
+
+
+def test_grouping_third_party_link_alias_error_keeps_mark(monkeypatch):
+    """第三方链接打标: 形态判定抛错 -> 静默跳过且**不清掉已有标记**
+
+    打标是给迁移用的拒迁依据: 判不出来就维持现状, 绝不能把上一轮已确认的标记抹掉
+    (抹掉等于放行迁移, 比漏标更危险)。
+    """
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        mgr.store.third_party_link_groups.add(key)
+
+        def _alias_boom(p):
+            raise OSError("stat 失败")
+
+        monkeypatch.setattr(grouping_mod.alias_fs, "alias_kind_of", _alias_boom)
+        grp._mark_third_party_link(key, r"R:/D", {"movie.mkv": 100})
+        assert key in mgr.store.third_party_link_groups, "判不出来必须维持原标记"
+
+
+def test_grouping_save_path_change_without_group_key_skipped():
+    """save_path 变化: 快照里有但从未归组(member_to_key 缺该 hash) -> 跳过, 不重归组不扫描"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        mgr.store.by_hash["H1"] = FakeTorrent(hash="H1", save_path=r"R:/New")
+        mgr.store.delta_fields["H1"] = {"save_path"}
+        grp._handle_save_path_changes(False)
+        assert "H1" not in mgr.store.member_to_key, "无原组可移出, 不得凭空建组"
+        assert client.calls == []
+
+
+def test_grouping_save_path_change_group_emptied_still_regroups():
+    """save_path 变化: 原组只有它一个成员 -> 组解散(不登记扫描), 但仍按新路径重归组
+
+    种子本身没丢: 组解散只是「原组无剩余成员可扫」, 该种子必须回到分组视图里(否则它
+    在界面上变成「未归组」, 缺文件检查也不再覆盖它)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1"])
+        mgr.store.by_hash["H1"].save_path = r"R:/Else"
+        mgr.store.delta_fields["H1"] = {"save_path"}
+        grp._handle_save_path_changes(False)
+        assert key not in mgr.store.groups, "原组已解散"
+        assert mgr.store.member_to_key["H1"] != key, "必须按新路径重归组"
+
+
+def test_grouping_regroup_scope_skips_unowned_and_empty():
+    """别名作用域重归组两条跳过: 非本 job 成员且 save_path 不在 src 下(与本 job 无关);
+    文件表为空(无从重算内容根) —— 都不计入重归组数量"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        mgr.store.by_hash["H1"] = FakeTorrent(hash="H1", save_path=r"R:/Other/x")
+        mgr.store.by_hash["H2"] = FakeTorrent(hash="H2", save_path=r"R:/D/k")
+        client.files = []  # 文件表读不到 -> fmap 空
+        assert grp.regroup_scope("R:/D", src=r"R:/D/k", hashes=()) == 0
+
+
+def test_grouping_state_transitions_first_round_no_snapshot_skipped():
+    """状态转移: 首轮无上一轮快照(state_snapshot 缺该 hash) -> 不视为变化, 零动作
+
+    首轮把「完成转暂停」全量当状态变化会在启动瞬间对整库触发缺文件扫描 —— 这是
+    与上传转暂停路径一致的口径(prev 缺失即跳过)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        key = (r"R:/D", "k")
+        _seed_group(mgr.store, key, ["H1"])
+        mgr.store.state_changed = [("H1", FakeTorrent(state="pausedUP").state_enum)]
+        grp._handle_state_transitions(False)
+        assert client.calls == [], "首轮无快照不得触发扫描/暂停"

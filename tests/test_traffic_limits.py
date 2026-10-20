@@ -444,3 +444,45 @@ def test_events_for_window_breaks_at_window_end_and_pick_limit(tmp_path):
     assert _pick_limit(0) == 0  # 0 = 不限速合法值
     assert _pick_limit("abc") is None
     assert _pick_limit(object()) is None
+
+
+def test_recorder_append_fail_arcs_bootstrap_and_throttle(tmp_path):
+    """追加失败的三条边缘: ① 启动首轮 `_bootstrap` 追加就失败 -> 不推进基线(下轮仍按首轮处理);
+    ② 首轮失败后 `_last` 仍为 None, 跨日判定走「无 carry」假弧(首个可得值按普通事件写);
+    ③ 同一告警窗口(3600s)内第二次失败**不再刷 WARNING**(节流, 否则磁盘故障会每秒刷屏)。
+
+    用自建 handler 挂模块 logger 收 record(不用 caplog: QbManager 构造会清 root handlers)。
+    """
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    rec = SpeedLimitRecorder(data_dir)
+    records = []
+
+    class _Rec(logging.Handler):
+        def emit(self, record):
+            records.append(record.getMessage())
+
+    lg = logging.getLogger("auto_qb.core.traffic_limits")
+    handler = _Rec()
+    handler.setLevel(logging.DEBUG)
+    old_level = lg.level
+    lg.setLevel(logging.DEBUG)
+    lg.addHandler(handler)
+    import builtins
+
+    real_open = builtins.open
+    try:
+        builtins.open = lambda *a, **k: (_ for _ in ()).throw(OSError("disk gone"))
+        try:
+            rec.observe(_state(1024, 2048), ts)  # ① 首轮追加失败
+            rec.observe(_state(0, 0), ts + 1)  # ②③ 同日再失败: 无 carry 分支 + 告警节流
+        finally:
+            builtins.open = real_open
+    finally:
+        lg.removeHandler(handler)
+        lg.setLevel(old_level)
+
+    warns = [m for m in records if "追加失败" in m]
+    assert len(warns) == 1, f"告警必须节流成一条: {warns}"
+    assert rec._last is None, "首轮失败不得推进基线"
+    assert rec._last_date is None, "失败轮不得推进日期"
