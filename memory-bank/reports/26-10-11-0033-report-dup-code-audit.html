@@ -7,9 +7,9 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-11-0033">
-<meta name="doc-updated" content="26-10-11-0352">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md">
-<title>全仓重复代码审查 · 滚动报告 (轮 00–19: 准备 + config + core + hr + webui + rules + infra + torrents)</title>
+<meta name="doc-updated" content="26-10-20-2232">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<title>全仓重复代码审查 · 滚动报告 (轮 00–23: 后端 config + core + hr + webui + rules + infra + torrents; 前端 shared JS + 抽屉族 + 三皮肤 CSS + 模板层)</title>
 <style>
   :root {
     color-scheme: dark;
@@ -154,6 +154,11 @@
           <tr><td class="r">R17</td><td class="mono">rules/ conditions · actions/* · expr/* · base · registry · checking_meta</td><td>2187 行 · 18 文件(计划写 15)</td></tr>
           <tr><td class="r">R18</td><td class="mono">infra/ utils·notify·logging·file_access·locking·versioning·autostart·errors</td><td>2013 行 · 9 文件</td></tr>
           <tr><td class="r">R19</td><td class="mono">torrents/ + tray/ + entry(store·record·view·compat; app; cli·__main__)</td><td>1877 行 · 9 文件(计划写 8)</td></tr>
+          <tr class="phase"><td colspan="3">Phase 2 —— 前端(webui/static/)轮 20–23</td></tr>
+          <tr><td class="r">R20</td><td class="mono">shared/*.js 六面(非抽屉): 表格视图/交互控件/配置编辑/运行时骨架/领域页面/横切支撑</td><td>17449 行 · 35 文件(拆 R20-A~F 六个子轮)</td></tr>
+          <tr><td class="r">R21</td><td class="mono">抽屉族: drawer·drawer_head·drawer_store·drawer_templates + drawer_tpl/01–12·90</td><td>8234 行 · 17 文件(拆 R21-A~C)</td></tr>
+          <tr><td class="r">R22</td><td class="mono">三皮肤 CSS: 各 style.css/tokens/themes/components/views/dialogs + shared/console_hub.css + dt_table.css</td><td>8109 行 · 19 CSS(拆 R22-A~C)</td></tr>
+          <tr><td class="r">R23</td><td class="mono">模板层: shared/tpl/*.html 20 件 + atlas/console/prism 三份 index.html</td><td>3967 行 · 20 件 + 632 行 · 3 份(拆 R23-A~C)</td></tr>
         </table>
         <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
       </section>
@@ -171,6 +176,8 @@
           <tr><td class="r mono">jscpd --min-lines=8 --min-tokens=60 · config</td><td>1 clone: <code>writer.py[199:5-207:11] ↔ [341:5-351:4]</code>(R03-W01)</td></tr>
           <tr><td class="r mono">pylint … =6 · rules+infra+torrents+tray<br>(R17–R19 实测)</td><td>2 组, 均在 <code>torrents/compat</code>↔<code>torrents/view</code> 字段列表(= R19-C01); rules / infra <b>0 命中</b>(rate 9.99/10)</td></tr>
           <tr><td class="r mono">jscpd python 10/70 · rules+infra+torrents+tray<br>(R17–R19 实测)</td><td><b>0 clone</b>(33 文件) —— 字面重复同样极低</td></tr>
+          <tr><td class="r mono">jscpd -f "javascript,css,markup"<br>--min-lines=10 --min-tokens=70 · webui/static<br>(Phase 2 R20 实测)</td><td><b>121 克隆 / 2525 重复行(6.56%)</b>: <b>css 74 克隆(18.55%)</b> / javascript 44 / markup 3。css 占重复行绝对多数 = 三皮肤互克隆; JS 字面重复极低(仅 3 处, 全部落入 R20-A); markup 仅 3 处且两处在 index.html(R23-C)</td></tr>
+          <tr><td class="r mono">jscpd 格式可用性</td><td><code>-f "js,html"</code> 报 not supported; <code>--list</code> 查得可用格式含 <code>javascript</code>/<code>css</code>/<b><code>markup</code></b>(无 <code>html</code>)。<b>markup 对模板族几乎无效</b> —— 模板骨架是"参数化后的同构", 变量名一换 token 序列即脱钩; Phase 2 的 166 项里 markup 机器提名只贡献 3 项</td></tr>
         </table>
         <div class="callout">
           <p><b>R00 关键结论:</b> config 包的字面重复检测几乎全静默 —— <b>与计划预判一致</b>(config 是 C 类「同一事实多表示」最密的包, 而非复制粘贴)。工具仅作提名, 主战场是 §3.3 结构线索 grep 与逐文件精读。阈值冻结: pylint <code>8</code>(config 下探 <code>5</code>)、jscpd <code>8/60</code>, 供后续轮沿用/微调。</p>
@@ -1277,8 +1284,209 @@
           <tr><td class="r mono">26-10-11-0240</td><td>追加 R11–R14(hr 全包)发现清单(29 项: A12/B1/C7/D9) + 累计分类计数(98 项: A38/B8/C24/D28) + hr 重构候选排序 + 入池 hr 9 issue; 覆盖表补 R11–R14; 复核已知 issue <code>26-10-02-0441</code>(<code>_prune_index</code> 同体重复)已消除; 取证基线 <code>81eb863d</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-11-0310</td><td>追加 R15–R16(webui 全包)发现清单(24 项: A9/B2/C7/D6) + 累计分类计数(122 项: A47/B10/C31/D34) + webui 重构候选排序 + 入池 webui 10 issue; 覆盖表补 R15–R16; 取证基线 <code>86138d33</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-11-0352</td><td>追加 R17–R19(rules / infra / torrents+tray+entry 全包)发现清单(34 项: A11/B5/C9/D9) + 累计分类计数(156 项: A58/B15/C40/D43) + 三段重构候选排序 + 入池 rules 3 / infra 5 / torrents+tray 3 = 11 issue; 覆盖表补 R17–R19; §2.1 补工具实测; 取证基线 <code>08f116ab</code>。纯审查轮, 零源码改动。</td></tr>
+          <tr><td class="r mono">26-10-20-2232</td><td><b>Phase 2(前端 webui/static/)</b>: 追加 R20–R23(shared JS 六面 / 抽屉族 / 三皮肤 CSS / 模板层+三 index.html)发现清单 <b>166 项(A71/B15/C48/D32)</b> + <b>全局累计 322 项(A129/B30/C88/D75)</b> + 30.2 A 类分布特征(与 Phase 1 的结构差异) + 候选排序 + 入池 16 refactor / 1 test = <b>17 issue</b>(族级合并); 覆盖表补 R20–R23; §2.1 补 jscpd 前端实测(121 克隆/6.56%, css 占 18.55%)与 markup 格式可用性结论。全程纯审查零源码改动, 取证基线 <code>4eef60fe</code>。</td></tr>
         </table>
         <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
+      </section>
+
+      <section id="s26">
+        <h2><span class="secno">26</span>R20 · shared/*.js 六面(非抽屉 · 17449 行 / 35 文件)</h2>
+        <hr class="sec-rule">
+        <p>Phase 2 首个子轮, 按面拆六个子轮(R20-A~F)。<b>实测规模远超单轮 4000 行上限</b>, 故整段 Phase 2(38391 行)按计划 §07 拆成 15 个子轮。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">27</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">1</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">24</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">17</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">69 项 = R20-A 表格视图面 6(A3/C2/D1) + R20-B 交互控件面 12(A5/C3/D4) + R20-C 配置编辑面 22(A13/B1/C4/D4) + R20-D 运行时骨架面 13(A3/C7/D3) + R20-E 领域页面 10(A2/C5/D3) + R20-F 横切支撑 6(A1/C3/D2)。</p>
+        <h3>26.1 主战果</h3>
+        <table>
+          <tr><th style="width:10%">编号</th><th style="width:7%">类</th><th>发现</th></tr>
+          <tr><td class="r mono">R20-C-22</td><td><span class="tag a">A</span></td><td><b>配置实体增/改/删骨架 9 处</b> —— 增命名实体 3 + hub 侧 promptDialog 包装 3 + 重命名 2 + 删实体 4, 同一语义按实体各抄一遍</td></tr>
+          <tr><td class="r mono">R20-B-01/02/03<br>R20-C-15</td><td><span class="tag a">A</span></td><td><b>dialogs/config_hub 的 busy+try+toast+finally 骨架 15 处</b> —— mgr CRUD 5 + 面板加载 5 + POST+waitCmd 4 + tm 面板 5</td></tr>
+          <tr><td class="r mono">R20-C-05</td><td><span class="tag a">A</span></td><td><b>schema→默认值梯三处同构且互嵌套</b>(字段级 / 插件 spec 级 / section 级) —— 本轮最缠绕的一处, 改一处影响另两处的边界</td></tr>
+          <tr><td class="r mono">R20-D-04<br>R20-E-02</td><td><span class="tag c">C</span></td><td><b>长驻轮询三份实现</b>(退避 while / 定间隔递归 + pollGen / setTimeout 链) + 停止条件 5 处手写; <b>实质缺陷面</b>: 抽屉侧轮询缺 qb 侧已修的悬挂兜底</td></tr>
+          <tr><td class="r mono">R20-B-08<br>R20-C-14<br>R20-E-05</td><td><span class="tag c">C</span></td><td><b>浮层定位几何手写 12 处</b> —— 8px 边距 6 处、12px 1 处(<code>hubAsk</code>, 无注释)、五处手写夹取, 而 <code>_subFitViewport</code> 这套单点已存在却只服务子面板</td></tr>
+          <tr><td class="r mono">R20-B-05</td><td><span class="tag a">A</span></td><td><b>combobox 键盘导航 3 处</b>(后续扩到 5 处, 见 R21-A-04 / R20-C-12)</td></tr>
+          <tr><td class="r mono">R20-A-04<br>R20-D-01/02/03</td><td><span class="tag c">C</span></td><td>跨层常量多表示(<code>REANNOUNCE_BLOCKED_STATES</code> / <code>STATE_RANK</code> / ETA 哨兵) + localStorage 读入族(白名单 7 处同构 + JSON 五种兜底)</td></tr>
+          <tr><td class="r mono">R20-C-07</td><td><span class="tag b">B</span></td><td>空列表处理分歧: 一处写 <code>[]</code> vs 四处删键(既定规则里明确"空列表≠缺键, 脏标记误判 + 后端校验必败")</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>R20 关键结论:</b> jscpd 在 JS 侧的 3 处字面克隆<b>全部落入 R20-A</b>, 其余 66 项全靠结构线索 grep 与精读 —— 与 Phase 1 后端完全同结论。前端 JS 的高价值重复是"<b>骨架同、参数不同</b>", 机器看不见。</p>
+        </div>
+      </section>
+
+      <section id="s27">
+        <h2><span class="secno">27</span>R21 · 抽屉族(drawer · drawer_head · drawer_store · drawer_templates + drawer_tpl/01–12·90 · 8234 行 / 17 文件)</h2>
+        <hr class="sec-rule">
+        <div class="counts">
+          <div class="box a"><div class="n">16</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">5</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">10</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">3</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">34 项 = R21-A 抽屉底座 12(A5/B1/C5/D1) + R21-B general+trackers 11(A6/B2/C2/D1) + R21-C peers+content+bridge 11(A5/B2/C3/D1)。</p>
+        <h3>27.1 主战果</h3>
+        <table>
+          <tr><th style="width:10%">编号</th><th style="width:7%">类</th><th>发现</th></tr>
+          <tr><td class="r mono">R21-A-01</td><td><span class="tag a">A</span></td><td><b>四 fetcher 同骨架 4 份</b>(detail/trackers/files/peers, 每份约 22 行) —— 两道 stale 代际守卫 + loading 门 + <code>_dtNotify</code> + <code>_drawerDone</code>, <b>次序有心</b>(先守卫再落定), 却抄四遍</td></tr>
+          <tr><td class="r mono">R21-A-02</td><td><span class="tag a">A</span></td><td><b>限速对话框双胞胎</b>(单选 <code>editLimits</code> ↔ 批量 <code>editLimitsMulti</code>, 约 30 行逐字同)</td></tr>
+          <tr><td class="r mono">R21-B</td><td><span class="tag a">A</span></td><td><b>三态空帧 + 整帧换帧骨架 12 份</b>(general 三件各 1 次 <code>createContextualFragment</code>、bridge 九件各 4 次 = 三态+整帧, 实测计数)</td></tr>
+          <tr><td class="r mono">R21-C</td><td><span class="tag a">A</span></td><td><b>peers 判据四件 3 份逐字同</b>(吸血启发式 / flag 分桶 / 内网判定 / <code>FLAG_META</code> 表) —— 判据漂移会让同一 peer 在三个版式下<b>分桶不同</b></td></tr>
+          <tr><td class="r mono">R21-A-06<br>R21-C-08</td><td><span class="tag b">B</span></td><td><b>文件优先级文案表 5 份</b>, 其中 <code>setFilePriority</code> 是<b>唯一孤立缺 4 档</b>的; <code>PRIO_LABEL</code> 三份含 4 档 —— 同族不同键集</td></tr>
+          <tr><td class="r mono">R21-B</td><td><span class="tag b">B</span></td><td><b>HR 摘要三段式已分叉</b>(03 版式整段缺 <code>hr_state</code>, 文案与 tone 三套) + trackers「渐进省略」判据两套</td></tr>
+          <tr><td class="r mono">R21-C</td><td><span class="tag b">B</span></td><td>content 目录树两份且<b>聚合字段已分叉</b>(<code>hasAv/minAv</code> vs <code>avSet/av</code>); trackers 分桶表 <code>BUCKET</code>(带 sev) vs <code>GROUPS</code>(带 cnt) 两种形状</td></tr>
+          <tr><td class="r mono">R21-A-04</td><td><span class="tag a">A</span></td><td><b>实质缺陷面</b>: combobox 键盘导航第 5 处 <code>onMovePathKeydown</code> <b>缺 IME 守卫</b>(另 4 处都有) —— 中文输入法下回车会误选候选</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>R21 关键结论:</b> 抽屉变体层是本项目<b>自建插件体系的中心</b>(<code>window.AQB_DRAWER_TPL_REG</code> 注册表 + <code>reg.helpers</code> 13 个公共骨架函数), 收敛度已相当高 —— 剩下的重复集中在"注册表能管项集、管不了渲染骨架"与"同一判据被每个变体各抄一份"。<b>helpers 未覆盖的三个面</b>(<code>ICO_TONE</code> 4 份 / <code>STATE_TEXT</code> 3 份 / 注册壳 12 份)是下一轮最直接的收敛目标。</p>
+        </div>
+      </section>
+
+      <section id="s28">
+        <h2><span class="secno">28</span>R22 · 三皮肤 CSS(atlas · console · prism + shared 通道 · 8109 行 / 19 CSS)</h2>
+        <hr class="sec-rule">
+        <div class="counts">
+          <div class="box a"><div class="n">10</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">0</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">5</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">5</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">20 项 = R22-A 令牌与主题层 5(C2/D3) + R22-B 组件层 6(A4/C1/D1) + R22-C 视图与对话框层 9(A6/C2/D1)。</p>
+        <h3>28.1 CSS 是前端重复的绝对主战场</h3>
+        <p>jscpd 全前端 <b>121 克隆 / 2525 重复行(6.56%)</b>, 其中 <b>css 74 克隆(18.55%)</b> —— 比例是 JS 侧的四倍以上。跨皮肤克隆行量: <code>atlas↔console views 272</code> / <code>atlas↔prism views 260</code> / <code>atlas↔console dialogs 236</code> / <code>atlas/dialogs↔prism/views 195</code> / <code>atlas/dialogs↔prism/components 121</code> / components 81·70·11。</p>
+        <table>
+          <tr><th style="width:10%">编号</th><th style="width:7%">类</th><th>发现</th></tr>
+          <tr><td class="r mono">R22-C-08</td><td><span class="tag c">C</span></td><td><b>三皮肤分层结构不一致</b> —— atlas/console 是 <code>style → components → views → dialogs</code> 四级; <b>prism 无 <code>dialogs.css</code></b>(弹窗族被拆进 components 与 views), 级联序与另两皮肤<b>相反</b>, 由此产生约 300 行"错位克隆"机器噪音</td></tr>
+          <tr><td class="r mono">R22-A-01</td><td><span class="tag c">C</span></td><td><b>atlas 缺 3 个字体令牌</b> —— 令牌名集 atlas 86 / console 89 / prism 89, 差集恰为 <code>--font-ui</code> / <code>--font-display</code> / <code>--font-mono</code>。后果已记录在 <code>drawer_templates.js</code> 的头注里</td></tr>
+          <tr><td class="r mono">R22-B-01~04<br>R22-C-01~06</td><td><span class="tag a">A</span></td><td><b>四规则族跨皮肤逐条同</b>: <code>hr-detail-table</code>(atlas/console dialogs 各 26 + prism components 3 + views 23) · <code>modal.strip</code>(atlas/console views 各 7 + prism components 7) · <code>qb-tabs</code>(三皮肤 views 各 9) · <code>drawer-tabs</code>(atlas/console dialogs 各 3 + prism views 3)</td></tr>
+          <tr><td class="r mono">R22-A-02</td><td><span class="tag c">C</span></td><td><code>drawer_templates.js</code> 头注的「CSS 令牌白名单」段<b>已过时</b>(与 R22-A-01 的令牌缺口同源)</td></tr>
+          <tr><td class="r mono">R22-C-09</td><td><span class="tag d">D</span></td><td>视图层注释契约正例 —— 三套 CSS 的段头注释是"类名与 JS 耦合不得改名"的<b>唯一载体</b>(无视觉回归测试), 收敛搬家时必须整段随行</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>R22 关键结论:</b> ①<b>收敛通道已验证存在</b> —— <code>/shared/console_hub.css</code>(1432 行)与 <code>/shared/dt_table.css</code>(162 行)是三皮肤共用的既有通道, 守阵已钉"三皮肤各挂载一次", <b>所有 CSS 收敛以此为模板, 不需要构建链</b>。②<b>先统一分层再谈收敛</b> —— prism 缺 <code>dialogs.css</code> 是结构性前提问题, 不解决则"哪两份该对齐"判断失真, 且 CSS 收敛会反复撞上错位克隆。</p>
+        </div>
+      </section>
+
+      <section id="s29">
+        <h2><span class="secno">29</span>R23 · 模板层(shared/tpl/*.html 20 件 3967 行 + 三 index.html 632 行)</h2>
+        <hr class="sec-rule">
+        <div class="counts">
+          <div class="box a"><div class="n">18</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">9</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">9</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">7</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">43 项 = R23-A 模板上半 15(A7/B3/C3/D2) + R23-B 模板下半 23(A9/B6/C5/D3) + R23-C 三 index.html 5(A2/C1/D2)。</p>
+        <h3>29.1 主战果(A 类密度全 Phase 2 最高)</h3>
+        <table>
+          <tr><th style="width:10%">编号</th><th style="width:7%">类</th><th>发现</th></tr>
+          <tr><td class="r mono">R23-A-01</td><td><span class="tag a">A</span></td><td><b>combobox 输入行 + 候选面板 5 处逐字同(约 100 行)</b> —— 状态层已单点(<code>comboHoverIdx</code> 按 key 分派即证据)、模板层仍是 5 份, 且 40ms 合帧的坑档注释在 5 处各写一遍; 第 6 变体(设置页站点搜索层)已明显分叉</td></tr>
+          <tr><td class="r mono">R23-A-02</td><td><span class="tag a">A</span></td><td><b>对话框外壳三段 11 处</b>(遮罩手势 10 / 标题头 11 / 动作栏 11) —— "mousedown 记臂位 + <code>mouseup.self</code> 才关窗"这个 2026-10-03 报障的修复<b>只在一处有出处注释</b>, 另 9 处只有代码</td></tr>
+          <tr><td class="r mono">R23-A-04</td><td><span class="tag a">A</span></td><td><b><code>.ctx-item</code> 渲染骨架 5 份</b> —— 注册表已把"项集"单点, 但骨架仍是四支各一份, <b>正是模板注释自己警告的"四支人肉奇偶"</b>(注释点名的 pitfall <code>ctx-menu-branch-parity</code> 有用户报障前科)</td></tr>
+          <tr><td class="r mono">R23-B-05</td><td><span class="tag a">A</span></td><td><b>peer 行渲染器 dt07 / dt08 除 CSS 前缀外逐字同</b>, dt09 仅 1 处特化; 注释已自认"同款单元格"。加一个 peer 列要改 3 处, <b>漏一处 = 该变体该列空白且无任何报错</b></td></tr>
+          <tr><td class="r mono">R23-B-01/02</td><td><span class="tag a">A</span></td><td><b><code>hb-switch</code> 7 处</b>(文字 4 带 3 不带, 同位置段开关一个带一个不带 = 纯漂移) + <b><code>hb-sub-toggle</code> 5 处</b>(toggle 签名三种)</td></tr>
+          <tr><td class="r mono">R23-B-06<br>R23-A-05</td><td><span class="tag a">A</span></td><td><b><code>.empty</code> 空态 11 处</b>, 其中设置页 HR 三张表<b>连图标都不写</b>; 另 row-pad 三明治 4 份、空态文案三分支集合已不同</td></tr>
+          <tr><td class="r mono">R23-B-09</td><td><span class="tag a">A</span></td><td><b><code>.site-chip</code> 3 份且 torrent 版缺 <code>search-hit</code></b> —— 与 <code>torrents.html</code> 行级同缺, 构成"种子页搜索时命中行不高亮"的<b>跨文件功能遗漏</b>(jscpd markup 3 克隆之一)</td></tr>
+          <tr><td class="r mono">R23-B-10</td><td><span class="tag b">B</span></td><td><b><code>aq-table</code> thead/grid 双分支排序箭头口径相反</b> —— 一个"每列都有箭头"、一个"仅当前列有", 用户可见差异且无注释说明</td></tr>
+          <tr><td class="r mono">R23-B-13</td><td><span class="tag b">B</span></td><td><b>drawer 四页签宿主的合并态已数据驱动、非合并态仍硬编码字面量</b> —— W4 那次收敛只做了一半的直接证据</td></tr>
+          <tr><td class="r mono">R23-B-16</td><td><span class="tag c">C</span></td><td><b>折叠交互 4 种实现并存</b>, 可访问性不一: 原生 <code>&lt;details&gt;</code>(3) 最好 / <code>hb-sub-toggle</code>(5) 次之 / <code>v-show</code> 折叠(1) 缺 <code>aria-expanded</code> / <code>aria-expanded</code> 挂钮而整栏可点(1)</td></tr>
+          <tr><td class="r mono">R23-C-01/02</td><td><span class="tag a">A</span></td><td><b>三 shell 除 head 资源清单外 87.5% 逐字同</b>(sprite 80 行 / 67 symbol、manifest 74 行、<code>#app</code>+login 31 行) —— 但三块拷贝里<b>只有 manifest 有守阵</b></td></tr>
+        </table>
+        <div class="callout">
+          <p><b>R23 关键结论(两条方向性判断):</b></p>
+          <p>①<b>模板侧的重复要"守阵化"而非"合并"</b>。三 shell 的 manifest(55 条 / 74 行)同样是三份物理拷贝, 但 <code>diff</code> 已被守阵强制相等 —— 抄漏一个分片 CI 即红。<b>重复本身不可怕, 无守阵的重复才可怕</b>。故 shell 的建议一律是"补齐 sprite 与 login 段的相等断言"(唯一"只改测试就能落地"的收益)。合并的唯一路径是后端渲染注入, 会让 <code>index.html</code> 失去静态直开能力, 属能力回退。</p>
+          <p>②<b>模板层的抽组件有硬边界</b>。cells 渲染器是<b>多根片段</b>, 单元格必须仍是行容器的<b>直接子元素</b>(grid 的 <code>:nth-child</code> 列对齐与 <code>data-table</code> 双依赖) —— 故 <code>m-dur</code> / <code>m-progress</code> / <code>tag-chip</code> 那几族<b>不能组件化</b>, 只能做"注释合一 + 纯 JS 算式抽单点"。凡建议里没写这条边界的, 都会在实施时踩坑。</p>
+        </div>
+      </section>
+
+      <section id="s30">
+        <h2><span class="secno">30</span>Phase 2 汇总: 分类计数 · 候选排序 · 入池 issue</h2>
+        <hr class="sec-rule">
+        <h3>30.1 分类计数</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">71</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">15</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">48</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">32</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small">Phase 2 累计 <b>166</b> 项 = R20 69(A27/B1/C24/D17) + R21 34(A16/B5/C10/D3) + R22 20(A10/B0/C5/D5) + R23 43(A18/B9/C9/D7)。</p>
+        <div class="counts">
+          <div class="box a"><div class="n">129</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">30</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">88</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">75</div><div class="l">D 不动</div></div>
+        </div>
+        <p class="small"><b>全局累计 322 项</b>(Phase 1 后端 156 + Phase 2 前端 166)。前端占比 51.6% —— 与"后端 36 包 vs 前端 38391 行单目录"的规模比例并不一致, 说明<b>前端的单位行重复密度更高</b>(尤其模板与 CSS 两层)。</p>
+        <h3>30.2 A 类分布特征(与 Phase 1 的结构差异)</h3>
+        <table>
+          <tr><th style="width:22%">维度</th><th style="width:39%">Phase 1(后端 156 项)</th><th>Phase 2(前端 166 项)</th></tr>
+          <tr><td class="r">A:B:C:D</td><td>58 : 15 : 40 : 43</td><td>71 : 15 : 48 : 32 —— <b>A 占比 42.8% vs 37.2%, D 占比 19.3% vs 27.6%</b></td></tr>
+          <tr><td class="r">机器提名有效性</td><td>pylint/jscpd 命中约 3 处 / 156 项(≈2%)</td><td>markup+js 命中 3 处 / 166 项(≈2%), <b>但 css 的 74 克隆几乎全部有效</b></td></tr>
+          <tr><td class="r">重复的形态</td><td>函数级样板(连接/重连/回执/序列化)</td><td><b>层内构件级</b>: 模板骨架(参数化同构) / CSS 规则族(前缀不同) / 注册表外壳</td></tr>
+          <tr><td class="r">收敛的阻力</td><td>契约层(改一处牵动模块契约与守阵)</td><td><b>DOM 结构硬约束</b>(多根片段 / 直接子元素 / grid 列对齐) 与<b>无构建链</b>(只能用 shared 通道)</td></tr>
+          <tr><td class="r">已完成的收敛</td><td>—</td><td>P1/P2/P3(表壳与 cells 渲染器) + W3/W4(抽屉头与流量控件) —— 本轮 A 类多数是<b>这些收敛的残留</b></td></tr>
+        </table>
+        <h3>30.3 候选排序(收益 / 风险)</h3>
+        <table>
+          <tr><th style="width:16%">族</th><th style="width:7%">类</th><th style="width:38%">候选</th><th style="width:11%">收益</th><th style="width:11%">风险</th><th>建议时机</th></tr>
+          <tr><td class="r mono">combobox</td><td><span class="tag a">A</span></td><td>模板骨架 5 处 + 键盘/收层 5 处 + 第 6 变体归一</td><td>高(约 -100 行)</td><td>中</td><td>前端重构批次(须 delay&gt;=120ms 逐处走查)</td></tr>
+          <tr><td class="r mono">dialog-shell</td><td><span class="tag a">A</span></td><td><code>aq-modal</code> 三段 + 管理对话框合并 + <code>modal-details</code> 合一</td><td>高(约 -90 行)</td><td>中</td><td>前端重构批次(11 个对话框须逐个验证拖选文字场景)</td></tr>
+          <tr><td class="r mono">shell-guard</td><td><span class="tag a">A</span></td><td>三 shell 的 sprite 段 + login 段加相等断言</td><td>中高</td><td><b>极低</b></td><td><b>随时</b>(唯一"只改测试"即可落地)</td></tr>
+          <tr><td class="r mono">site-chip</td><td><span class="tag a">A</span></td><td>补 <code>search-hit</code>(chip + 行级) 再组件化</td><td>中高</td><td>低</td><td><b>随时</b>(先修功能遗漏)</td></tr>
+          <tr><td class="r mono">drawer-fetcher</td><td><span class="tag a">A</span></td><td>四 fetcher 收 1 骨架 + 4 差异项</td><td>中</td><td>低</td><td>抽屉批次</td></tr>
+          <tr><td class="r mono">drawer-variant</td><td><span class="tag a">A</span></td><td>三态空帧入 helpers + peers 判据四件 + dt 渲染器 prefix prop</td><td>高(-55 行 + 关一类静默空白)</td><td>中</td><td>抽屉批次(5 个变体 e2e 逐一对齐)</td></tr>
+          <tr><td class="r mono">tpl-switch-fold-seg</td><td><span class="tag a">A</span></td><td><code>hb-switch</code> / <code>hb-fold</code> / <code>seg-group</code> 三组件 + 折叠立判据</td><td>中高</td><td>低-中</td><td>前端批次(<b>折叠判据优先</b>, 涉可访问性)</td></tr>
+          <tr><td class="r mono">tpl-list-row-empty</td><td><span class="tag a">A</span></td><td><code>aq-row-pad</code> + <code>aq-empty</code>(不能收敛行本身)</td><td>中</td><td>低-中</td><td>前端批次(行窗口化有性能纪律)</td></tr>
+          <tr><td class="r mono">ctx-item</td><td><span class="tag a">A</span></td><td>四支合一(支名已单点 <code>ctxMenuKind()</code>)</td><td>中高(有前科复发面)</td><td>中</td><td>前端批次(<code>menus.spec</code> 断言须逐支比对)</td></tr>
+          <tr><td class="r mono">config-entity-crud</td><td><span class="tag a">A</span></td><td>增/改/删三件 + hub 包装合并</td><td>中</td><td>低</td><td>配置批次</td></tr>
+          <tr><td class="r mono">dialogs-js-boiler</td><td><span class="tag a">A</span></td><td><code>_busyRun</code> + <code>_postWaitCmd</code> 两 helper, 15 处</td><td>中</td><td>低</td><td>前端批次</td></tr>
+          <tr><td class="r mono">config-default-ladder</td><td><span class="tag a">A</span></td><td>三层互嵌套阶梯递归化</td><td>高</td><td><b>中高</b></td><td><b>暂缓</b>(先画清"哪层补哪个键"的边界)</td></tr>
+          <tr><td class="r mono">css-rule-family</td><td><span class="tag a">A</span></td><td>四规则族逐个迁进 shared 通道</td><td>高(-约 800 行)</td><td>中</td><td><b>CSS 批次, 须在分层统一之后</b></td></tr>
+          <tr><td class="r mono">css-skin-layer</td><td><span class="tag c">C</span></td><td>恢复 prism <code>dialogs.css</code> + atlas 补 3 字体令牌</td><td>高(消 300 行错位噪音)</td><td>中</td><td><b>CSS 收敛的前置</b>(结构调整, 需三皮肤逐页回归)</td></tr>
+          <tr><td class="r mono">polling</td><td><span class="tag c">C</span></td><td><code>startPoll</code> 三份归一 + 停止条件注册表</td><td>中</td><td>中</td><td>前端批次(<b>悬挂兜底单独先修</b>, 那是行为缺陷)</td></tr>
+          <tr><td class="r mono">overlay-geometry</td><td><span class="tag c">C</span></td><td><code>fitInViewport</code> 升通用, 12 处</td><td>中</td><td>低</td><td>前端批次</td></tr>
+          <tr><td class="r mono">single-point-bypass</td><td><span class="tag a">A</span></td><td>7 族改调已存在的单点</td><td>中</td><td>低</td><td>随时(机械改动; 单位梯两族须先确认阶梯值)</td></tr>
+          <tr><td class="r mono">cell-fragment</td><td><span class="tag a">A</span></td><td><code>site-chip</code> 组件化 + 其余只做注释合一与 JS 算式单点</td><td>中</td><td>中高</td><td><b>降级为部分做</b>(其余组件化会破坏 grid 列对齐)</td></tr>
+          <tr><td class="r mono">tpl-ctx / tpl-shell 之外</td><td><span class="tag b">B</span></td><td>15 项 B 类全部</td><td>—</td><td>中高</td><td><b>暂缓</b>(须先钉差异点, 与 Phase 1 的 B 类同策略)</td></tr>
+        </table>
+        <h3>30.4 入池 issue(type=refactor / test, 专题 dup-code-audit)</h3>
+        <p>Phase 2 入池 <b>17 条</b>(16 refactor + 1 test), 按"同一收敛动作"把 71 项 A 类与 2 项 C 类合并成族级条目 —— Phase 1 是 46 条 / 156 项(逐轮拆分), Phase 2 是 17 条 / 71 项(族级合并), 前者便于分轮认领、后者便于一次改到底。</p>
+        <table>
+          <tr><th style="width:42%">issue</th><th>对应发现</th></tr>
+          <tr class="phase"><td colspan="2">高优先(收益高 / 风险低)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2230-refactor-fe-combobox-family-dup.html">fe-combobox-family-dup</a></td><td>R20-B-05/06/07 · R20-C-12 · R21-A-04/05 · R23-A-01/10</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-test-fe-tpl-shell-parity-guard.html">fe-tpl-shell-parity-guard</a></td><td>R23-C-01/02/04(守阵; <b>只改测试</b>)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-tpl-cell-fragment-dup.html">fe-tpl-cell-fragment-dup</a></td><td>R23-B-07/09(含 <code>search-hit</code> 功能遗漏)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-single-point-bypass-dup.html">fe-single-point-bypass-dup</a></td><td>R20-C-06/10/18 · R20-F-04/05 · R23-B-04/12</td></tr>
+          <tr class="phase"><td colspan="2">前端重构批次</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-dialog-shell-template-dup.html">fe-dialog-shell-template-dup</a></td><td>R23-A-02/03/08</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup.html">fe-tpl-ctx-item-branch-dup</a></td><td>R23-A-04</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html">fe-tpl-switch-fold-seg-dup</a></td><td>R23-B-01/02/13/16/17</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html">fe-tpl-list-row-empty-dup</a></td><td>R23-A-05 · R23-B-06</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-dialogs-js-boilerplate-dup.html">fe-dialogs-js-boilerplate-dup</a></td><td>R20-B-01/02/03 · R20-C-15</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-config-entity-crud-dup.html">fe-config-entity-crud-dup</a></td><td>R20-C-01/02/03/04</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-overlay-geometry-dup.html">fe-overlay-geometry-dup</a></td><td>R20-B-08 · R20-C-14 · R20-E-05 · R21-A</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-polling-family-dup.html">fe-polling-family-dup</a></td><td>R20-D-04/07 · R20-C-16 · R20-E-02</td></tr>
+          <tr class="phase"><td colspan="2">抽屉批次</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-drawer-fetcher-boilerplate-dup.html">fe-drawer-fetcher-boilerplate-dup</a></td><td>R21-A-01</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-drawer-variant-renderer-dup.html">fe-drawer-variant-renderer-dup</a></td><td>R21-B · R21-C(peers 判据) · R23-B-05</td></tr>
+          <tr class="phase"><td colspan="2">CSS 批次(须先做分层统一)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html">fe-css-skin-token-layer-dup</a></td><td>R22-A-01 · R22-C-08 · R23-C-03</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html">fe-css-rule-family-dup</a></td><td>R22-B-01~04 · R22-C-01~06</td></tr>
+          <tr class="phase"><td colspan="2">暂缓(须先画边界)</td></tr>
+          <tr><td class="r"><a href="../issues/26-10-20-2231-refactor-fe-config-default-ladder-dup.html">fe-config-default-ladder-dup</a></td><td>R20-C-05(三层互嵌套)</td></tr>
+        </table>
+        <p class="small"><b>未入池</b>: B 类 15 项全部暂缓(须先钉差异点); C 类 48 项中除 <code>fe-css-skin-token-layer-dup</code> 与 <code>fe-polling-family-dup</code> 两条外, 其余留待各批次顺手处理; D 类 32 项明确不动(<code>aq-drawer-head</code> / <code>aq-qb-ctl</code> / <code>aq-traffic-card</code> 三个单点组件、<code>tpl-aq-member-cells</code> 与 cells 渲染器的"每行模型单份"、位置契约与裁剪坑的正例注释 —— 均为<b>本轮推荐引用的成功范式</b>)。</p>
+        <h3>30.5 Phase 2 结论</h3>
+        <ul>
+          <li><b>前端重复的主战场是 CSS 与模板, 不是 JS</b>。css 74 克隆(18.55%)vs JS 字面克隆 3 处 —— 与 Phase 1 后端"字面重复极低"同结论, 但成因不同: 后端是"同一事实多表示", 前端是"<b>同一骨架多个皮肤/行模型</b>"。</li>
+          <li><b>收敛的既有通道已经存在, 不需要新建基础设施</b>。<code>shared/console_hub.css</code> / <code>shared/dt_table.css</code> / <code>reg.helpers</code> / <code>xtpl.html</code> 的具名分片 / 全局组件注册, 五条通道都已在用 —— 本轮所有建议都是"往已有通道里搬", 无一需要构建链。</li>
+          <li><b>"守阵 > 合并"是前端模板层的第一原则</b>。凡"物理拷贝不可消除"的地方(三 shell / 三皮肤令牌), 正确动作是把"必须相等"写成断言, 而不是引入注入层破坏静态能力。</li>
+          <li><b>抽组件有 DOM 结构硬边界</b>。cells 渲染器是多根片段、单元格必须是行容器直接子元素 —— 这一条决定了 <code>m-dur</code> / <code>m-progress</code> / <code>tag-chip</code> 那几族<b>只能做部分收敛</b>。建议里必须显式写出边界, 否则实施时必踩。</li>
+          <li><b>本轮的价值不止于重复</b>: 顺带确认了 3 处实质缺陷面(抽屉轮询缺悬挂兜底 / <code>onMovePathKeydown</code> 缺 IME 守卫 / torrent 行缺 <code>search-hit</code>)与 1 处能力缺口(<code>modal.checkbox</code> 无置灰能力)。</li>
+        </ul>
       </section>
 
       <footer>

@@ -1,0 +1,41 @@
+# 前端重复代码审查 · Phase 2 轮 20–23 收口（sharded JS / 抽屉族 / 三皮肤 CSS / 模板层）
+
+> 摘要: 用户「执行重复代码审查计划 PHASE2: 26-10-10-2333-plan-dup-code-audit.html」→ 按计划 §07 拆 **15 个子轮**跑完 Phase 2 前端全部四个面（R20 shared/*.js 17449 行/35 文件 · R21 shared/drawer*/drawer_tpl* 8234 行/17 文件 · R22 三皮肤 CSS 8109 行/19 文件 · R23 shared/tpl 20 件 3967 行 + 三 index.html 632 行）。**纯审查零源码改动**，取证基线 `4eef60fe`。产出：**166 项发现（A71/B15/C48/D32）**，与 Phase 1 合并后**全局累计 322 项（A129/B30/C88/D75）**；滚动报告 `26-10-11-0033` 追加 §26–§30 五小节；入池 **17 条 issue（16 refactor + 1 test，族级合并）**。Phase 2 全部完成，主线剩 Phase 3（测试与横切 轮 24–25）+ Phase 4（汇总 轮 26）。
+> 最后活动: 2026-10-20 22:33
+
+**Refs:** memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
+
+## 已完成(单会话收口)
+
+- **15 个子轮全部 Done**：R20-A~F（六面 69 项）/ R21-A~C（抽屉 34 项）/ R22-A~C（CSS 20 项）/ R23-A~C（模板 43 项）= **166 项**。
+- **机器提名实测**：jscpd 5.4.1 `-f "javascript,css,markup"`（**该版本无 html 格式**，模板层只能靠结构线索 + 精读）全前端 **121 克隆 / 2525 重复行(6.56%)** = css 74(18.55%) / javascript 44 / markup 3。**CSS 是唯一被 jscpd 有效覆盖的面**（18.55% 全定位到三皮肤 views/dialogs 互克隆）；JS 字面克隆仅 3 处（全部落 R20-A），**其余 163 项 100% 来自结构线索 grep + 精读** —— 这个比例本身是本轮方法论的核心结论：单靠 jscpd 只能抓到 Phase 2 的 1.8%。
+- **滚动报告** `26-10-11-0033` 已追加 §26(R20 六面) / §27(R21 抽屉族) / §28(R22 三皮肤 CSS) / §29(R23 模板层) / §30(Phase 2 汇总: 分类计数 + 主战果 + 30.2 A 类分布特征对比 + 30.3 候选排序 18 行 + 30.4 入池 issue 表 + 30.5 五条结论)；覆盖表补 R20–R23 五行；§2.1 补 jscpd 前端实测与格式可用性两行；§25 变更记录追加 `26-10-20-2232`。
+- **17 条 issue 入池**（`create-issue`, type=refactor×16 + test×1, topic=dup-code-audit, 全部 Open 未认领），与 Phase 1 的「逐轮拆分 46 条/156 项」不同，**Phase 2 走族级合并（17 条/71 A 类项）**，便于一次改到底：
+  - combobox 族 1 条（R20-B-05 + R20-C-12 + R21-A-04 + R23-A-01，JS 逻辑 5 处 + 模板骨架 5 处 + 设置页第 6 变体，`2230-refactor-fe-combobox-family-dup`）
+  - 台账/骨架族 4 条：`config-default-ladder-dup`（三份"schema→默认值梯"互相嵌套）/ `config-entity-crud-dup` / `dialogs-js-boilerplate-dup`（mgr CRUD 5 + 面板加载 5 + POST+waitCmd 4）/ `dialog-shell-template-dup`（mask 手势 10 + title 头 11 + actions 栏 11）
+  - 抽屉族 2 条：`drawer-fetcher-boilerplate-dup`（drawer_store 四 fetcher 同骨架）/ `drawer-variant-renderer-dup`（**dt07 与 dt08 除 CSS 前缀外逐字同** + peers 判据四件 3 份）
+  - 模板族 4 条：`tpl-cell-fragment-dup` / `tpl-ctx-item-branch-dup`（`.ctx-item` 骨架 5 份）/ `tpl-list-row-empty-dup`（`.empty` 11 处）/ `tpl-switch-fold-seg-dup`（`.hb-switch` 7 处 + `hb-sub-toggle` 5 处）
+  - CSS 族 2 条：`css-rule-family-dup` / `css-skin-token-layer-dup`（含 **R22-C-08 + R23-C-03 合并**：prism 无 dialogs.css 的同一事实两投影）
+  - 横切 2 条：`overlay-geometry-dup`（浮层定位几何五处手写）/ `polling-family-dup`（长驻轮询启停第二份，抽屉侧缺 qb 侧已修的悬挂兜底）/ `single-point-bypass-dup`（单点已存在但被旁路的族）
+  - 守阵 1 条（唯一 type=test）：**`2231-test-fe-tpl-shell-parity-guard`** —— 三 shell 的 sprite 段(80 行/67 symbol)与 login 段逐字相等目前**无守阵**，补两条断言即可让 CI 兜住，是本轮**唯一"只改测试不改源码"就能落地**的收益。
+- `memory-bank/issues/_index.md` 已由 `gen_issues_index.py` 重建，`fe-` 前缀计数 17。
+- **零改动确认**：`git status --porcelain` 只含 `memory-bank/` 路径，`src/` 与 `tests/` 为空。
+
+## 关键结论(供后续执行参考)
+
+- **①模板侧的重复要「守阵化」而非「合并」** —— 三 shell 的 manifest(74 行)已被守阵钉死 `diff` 相等，而 sprite(80 行/67 symbol) 与 login 段(31 行，仅差 1 行注释)未钉。合并唯一路径是后端渲染注入，会**破坏 `index.html` 静态直开能力**（能力回退），不可取。重复本身不可怕，无守阵的重复才可怕 → 全部建议改为「补齐守阵」。
+- **②抽组件有 DOM 结构硬边界** —— cells 渲染器是多根片段、单元格必须是行容器**直接子元素**（grid 靠 `:nth-child` 列对齐 + `data-table` 双依赖），故 `m-dur`/`m-progress`/`tag-chip` 那几族**不能组件化**（会多包一层 wrapper 破坏列对齐），只能做「注释合一 + 纯 JS 算式抽单点」。Vue in-DOM `<template is>` 不支持片段复用，加剧了这一约束。
+- **③R23-B 是 Phase 2 A 类密度最高的一段(9/23)** —— 原因是模板层此前已做过两轮大收敛（P1/P2/P3 表壳与 cells、W3/W4 抽屉头与流量控件），**残留同构件最集中**：收敛做过的面再复扫，命中率反而升高，说明"收敛完就该补守阵"，否则下一轮还会长回来。
+- **④发现 4 处非风格重复的实质缺陷面**（价值高于纯重复）：
+  - `R23-B-09` torrent 行 `.site-chip` 缺 `search-hit`，`torrents.html:8` 行级同缺 → **"种子页搜索时命中行不高亮"的跨文件功能遗漏**；
+  - `R23-B-10` `aq-table` thead/grid 双分支**排序箭头口径相反**（每列都有箭头 vs 仅当前列），无注释；
+  - `R23-B-13` drawer 四页签宿主的**合并态已数据驱动、非合并态仍硬编码字面量** → W4 收敛只做了一半的直接证据；
+  - `R23-B-12` `hrGroupTitle` 单点已存在，但 ep 行**内联手写四层三元绕过它**。
+- **⑤三皮肤 CSS 的结构性偏差**：atlas/console = `style.css → components → views → dialogs`；**prism 无 dialogs.css**（弹窗族被拆散进 components/views）→ **级联序与另两皮肤相反**。这不是遗漏而是历史选择，但它是 R22-C-08 / R23-C-03 至今反复被重新发现的根因 —— 入池时已合并成一条。
+- **⑥CSS 是 jscpd 唯一高命中面，但收益最低** —— 74 克隆/18.55% 里绝大多数是三皮肤同源规则的必然投影（换肤本来就要求三份），真正可动的是「同一皮肤内部的规则族重复」，故筛选后 A 类只留 10 项（R22 全轮 20 项中）。
+
+## 后续候选(未开工)
+
+- **Phase 3 = 测试与横切（轮 24–25）**：`tests/` fixture/hepler 重复、conftest 分片、`scripts/` 与 `src/` 的口径重复。
+- **Phase 4 = 汇总（轮 26）**：全局 322 项的重构候选排序总表（报告 §30.3 已有 Phase 2 部分 18 行雏形）+ 跨层「同一事实」总账（Phase 1 后端 ↔ Phase 2 前端同名/同义常量的对账）+ 未入池候选按清偿顺序决定。
+- **Phase 2 的 17 条 issue 全部 Open 未认领** —— 建议起手顺序：先认领 `2231-test-fe-tpl-shell-parity-guard`（零源码风险，立即吃掉"无守阵的重复"这个最大风险面），再按 §30.3 排序取 A 族。

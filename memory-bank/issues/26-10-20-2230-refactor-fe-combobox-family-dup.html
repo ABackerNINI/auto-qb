@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="fe-combobox-family-dup">
+<meta name="issue-stamp" content="26-10-20-2230">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体">
+<meta name="issue-summary" content="combobox 全链路重复: 键盘导航 5 处、40ms 合帧收层 3 处、模板输入行+候选面板 5 处逐字同, 且第 6 个变体已分叉">
+<title>前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体</h1>
+    <p class="lede">combobox 全链路重复: 键盘导航 5 处、40ms 合帧收层 3 处、模板输入行+候选面板 5 处逐字同, 且第 6 个变体已分叉</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-20-2230-refactor-fe-combobox-family-dup</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:30</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><b>现象</b>: 一个 combobox(输入框 + 自绘候选面板)在项目里被实现了 6 次, 其中 <b>5 处骨架逐字同</b>(仅 5 组标识符不同), 第 6 处(设置页站点搜索层)已明显分叉。</p>
+    <ul>
+      <li><b>模板侧</b>: <code>.add-input-row</code> + input 五绑(focus / click.stop / input / focusout / keydown) + <code>.add-pop-clear</code> + <code>.pop-menu.add-pop</code> + <code>pop-item</code>(on / data-hi / mousedown.prevent / mousemove) + <code>pop-empty</code>, 约 18-22 行 x 5 = ~100 行。</li>
+      <li><b>JS 侧</b>: 键盘导航 5 处同骨架(上/下/Enter/Esc/Home/End), "40ms 合帧失焦收层" 3 处, <code>comboHoverIdx(kind, …)</code> 的 kind 是字符串字面量(拼错不报错, 只是悬停高亮失效)。</li>
+      <li><b>第 6 变体</b>: <code>settings.html</code> 的站点搜索层用自己的 <code>hb-tr-drop / hb-tr-hit / hb-tr-hint</code> 类族, 还多了分组 chip 与逐项入场动画。</li>
+    </ul>
+    <p><b>应该是什么样</b>: 状态层已单点(<code>comboHoverIdx</code> 按 key 分派即证据), 缺的只是模板层与键盘层各一处实现。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li><b>模板骨架 5 处</b>: <code>src/auto_qb/webui/static/shared/tpl/dialogs-mgr.html</code> 的保存路径 / 分类 / 标签三块 · <code>tpl/move-dialog.html</code> 的 movePath · <code>tpl/popovers.html</code> 的 metaCat。grep: <code>add-input-row</code> / <code>class="pop-menu add-pop"</code> / <code>comboHoverIdx(</code></li>
+      <li><b>键盘导航</b>: grep <code>_comboKeydown</code> / <code>Keydown($event)</code>(<code>add_torrent.js</code> / <code>dialogs.js</code> / <code>config_hub.js</code> / <code>drawer.js</code>, 取证 2026-10-20 22:30 共 5 处)。</li>
+      <li><b>40ms 收层</b>: grep <code>BlurClose</code>(3 处) —— <code>addPopBlurClose</code> / <code>metaCatBlurClose</code> / <code>movePathBlurClose</code>。</li>
+      <li><b>第 6 变体</b>: <code>tpl/settings.html</code> grep <code>hb-tr-drop</code> / <code>hbTrackerKeydown</code>。</li>
+      <li>明细台账: <code>memory-bank/tasks/26-10-20-frontend-dup-code-audit.md</code> 的 R20-B-05 / R20-B-06 / R20-B-07 / R20-C-12 / R21-A-04 / R21-A-05 / R23-A-01 / R23-A-10。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>抽一层模板片段 + 一处键盘实现: 模板侧建议 <code>tpl/xtpl.html</code> 加 <code>tpl-combo-input</code>(参数 <code>model / menu / hi / options / onPick / comboKey / icon / emptyText / headText</code>), 五处改一行; 键盘侧把 <code>_comboKeydown</code> 提为单点并补 IME 守卫(目前 5 处里有 1 处缺)。</p>
+    <p>注意: 40ms 合帧那段"缺一即回归"的坑档注释现在有 3 份拷贝, 收敛时必须整段随行。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-20 22:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-20-2230-refactor-fe-combobox-family-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

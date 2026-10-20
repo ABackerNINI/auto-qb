@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="fe-tpl-list-row-empty-dup">
+<meta name="issue-stamp" content="26-10-20-2231">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标)">
+<meta name="issue-summary" content="row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 11 处, 其中 settings-detail 3 处连图标都没有">
+<title>模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标) · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>模板层列表行容器三明治 4 份 + 空态块 11 处(3 处无图标)</h1>
+    <p class="lede">row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 11 处, 其中 settings-detail 3 处连图标都没有</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-list-row-empty-dup</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><b>现象</b>: 表格列表的两件事各抄多遍。</p>
+    <ul>
+      <li><b>窗口化行容器三明治</b> 4 份: 上 <code>row-pad</code> 占位 + <code>v-for</code> 行 + 下 <code>row-pad</code> 占位(groups 组行 / groups 明细 / torrents 种子行 / shows 集明细)。占位撑总高是行窗口化契约, 四处手写意味着一处改了写法另三处不同步不会报错。</li>
+      <li><b>空态 <code>.empty</code></b> 11 处: 图标 + 文案。其中 <b>3 处(设置页 HR 三张表)连 <code>&lt;svg&gt;</code> 都不写</b>, 视觉上与其余 8 处不一致; 图标的语义分工(加载中 hourglass / 错误 warn / 空 inbox)也无文档。</li>
+      <li><b>空态文案</b>: groups/torrents/shows 三处是四层嵌套三元, 且<b>分支集合已经不同</b>(torrents 少一个"正在构建索引"分支)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li>grep <code>row-pad</code>(4 处)与 <code>class="empty"</code>(11 处)in <code>src/auto_qb/webui/static/shared/tpl/</code>(取证 2026-10-20 22:30)。</li>
+      <li>无图标的 3 处: <code>tpl/settings-detail.html</code> grep <code>class="empty"</code>。</li>
+      <li>明细台账: R23-A-05 / R23-B-06。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>① 抽 <code>&lt;aq-row-pad :top :bottom&gt;</code>(不能收敛行本身 —— 行窗口化有"不引入逐行组件实例"的性能纪律); ② 抽 <code>&lt;aq-empty :icon :text&gt;</code>, 11 处统一并补图标口径注释; ③ 空态文案先把三分支集合对齐再参数化。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

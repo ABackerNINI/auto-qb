@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="fe-tpl-switch-fold-seg-dup">
+<meta name="issue-stamp" content="26-10-20-2231">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套">
+<meta name="issue-summary" content="hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle 5 处(三种签名)、折叠 4 种实现(可访问性不一)、分段钮 4 套">
+<title>模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套</h1>
+    <p class="lede">hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle 5 处(三种签名)、折叠 4 种实现(可访问性不一)、分段钮 4 套</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><b>现象</b>: 四族"小控件"各有多份实现。</p>
+    <ul>
+      <li><b>开关 <code>hb-switch</code></b> 7 处: "<b>启用/关闭</b>"文字 4 处带、3 处不带; 且<b>同一位置的段开关</b>(<code>xtpl.html</code> 的 section vs <code>settings-detail.html</code> 的分区块)一个带一个不带 = 纯漂移。</li>
+      <li><b>折叠段头 <code>hb-sub-toggle</code></b> 5 处: toggle 签名三种(字符串 key / 组件方法 / 双参数), 键盘契约(<code>role=button</code> + <code>tabindex=0</code> + <code>keyup.enter</code>, <b>无 space</b>)各写一遍。</li>
+      <li><b>折叠交互 4 种</b>: 原生 <code>&lt;details&gt;</code>(3 处) / <code>hb-sub-toggle</code> + v-if(5 处) / <code>v-show</code> + 钮(1 处, 缺 <code>aria-expanded</code>) / <code>aria-expanded</code> 挂钮而整栏可点(规则 meta)。</li>
+      <li><b>分段单选钮 4 套</b>: <code>hist-tabs</code>(内联字面量映射) / <code>qb-tabs</code>(单点属性) / <code>qb-seg</code>(硬编码 3 钮) / <code>drawer-tabs</code>(合并态数据驱动、非合并态硬编码)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li>grep <code>hb-switch</code>(7) / <code>hb-sub-toggle</code>(5) / <code>&lt;details</code> / <code>hist-tabs</code> / <code>qb-tabs</code> / <code>qb-seg</code> / <code>drawer-tabs</code> in <code>shared/tpl/</code>(取证 2026-10-20 22:30)。</li>
+      <li>明细台账: R23-B-01 / R23-B-02 / R23-B-16 / R23-B-17 / R23-B-13。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>① <code>&lt;hb-switch :checked :on-change :text :tone&gt;</code>, 并在组件注释写清"何时该带文字"; ② <code>&lt;hb-fold :open :on-toggle&gt;</code>, 三种签名归一为回调; ③ <b>折叠立判据</b>(一次性排障 → <code>&lt;details&gt;</code>; 主内容区段 → <code>hb-sub-toggle</code>; 禁用 v-show 折叠与"整栏可点但 aria 挂钮"); ④ <code>&lt;seg-group :items :value :on-pick :cls&gt;</code>, 四套改数据表(<b>CSS 四组规则保留</b>, 视觉确实不同)。</p>
+    <p>③ 是这一族里<b>真正影响可访问性</b>的一条, 建议优先。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

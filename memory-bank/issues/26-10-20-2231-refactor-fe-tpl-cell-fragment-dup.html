@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="fe-tpl-cell-fragment-dup">
+<meta name="issue-stamp" content="26-10-20-2231">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份">
+<meta name="issue-summary" content="site-chip 3 份且 torrent 版缺 search-hit(与 torrents 行级同缺) = 种子页搜索不高亮; m-progress 4 份、m-dur / m-ratio / tag-chip / cat-chip 各 2-3 份">
+<title>模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份</h1>
+    <p class="lede">site-chip 3 份且 torrent 版缺 search-hit(与 torrents 行级同缺) = 种子页搜索不高亮; m-progress 4 份、m-dur / m-ratio / tag-chip / cat-chip 各 2-3 份</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-cell-fragment-dup</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><b>现象</b>: 单元格内的构件跨行模型各抄一份。</p>
+    <ul>
+      <li><b><code>site-chip</code></b> 3 处(group 行 / torrent 行 / ep 行): 其中 <b>torrent 版缺 <code>search-hit</code></b>, 且 <code>torrents.html</code> 的<b>行级 class 里也没有它</b> —— 表现为"种子页搜索时命中的行/chip 不高亮", 属功能遗漏而非纯重复。</li>
+      <li><b><code>m-progress</code></b> 4 份: 百分比算式 <code>Math.min(100, x*100)</code> 手写 4 遍。</li>
+      <li><b><code>m-dur</code> / <code>m-ratio</code></b> 各 2 份且<b>跨文件</b>(<code>xtpl-cells.html</code> ↔ <code>xtpl.html</code>), 连"<code>.dur-body</code> = 文字包裹层, 挂外层会随列宽画成整列一条"这段口径注释也各写一遍。</li>
+      <li><b><code>tag-chip</code> / <code>cat-chip</code></b> 各 3 份。</li>
+      <li>另: <code>rowIcon</code> 在每个 chip 内被调用 3 次(单处 3 次 x 3 处)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li>grep <code>site-chip</code> / <code>m-progress</code> / <code>m-dur</code> / <code>dur-body</code> / <code>tag-chip</code> / <code>cat-chip</code> in <code>shared/tpl/xtpl-cells.html</code> 与 <code>xtpl.html</code>(取证 2026-10-20 22:30)。</li>
+      <li>search-hit 缺失对照: <code>groups.html</code> member 行有、<code>torrents.html</code> 行级无。</li>
+      <li>明细台账: R23-B-07 / R23-B-09。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p><b>先修功能遗漏</b>(torrent 版补 <code>search-hit</code>, 行级同补), 再谈收敛。<code>site-chip</code> 可以组件化(chip 是单元格内元素, 不违反"单元格必须是行的直接子元素"); 其余几族<b>不建议组件化</b> —— 抽组件会多包一层, 破坏 grid 的 <code>:nth-child</code> 列对齐。那几族只做两件事: 注释合一(标明另一处逐字同) + 百分比算式抽 <code>$root.progPct(v)</code>(纯 JS, 零 DOM 风险)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-20-2231-refactor-fe-tpl-cell-fragment-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
