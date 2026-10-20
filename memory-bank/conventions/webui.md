@@ -2,6 +2,7 @@
 
 > 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、HTML dark 主题 —— 前端产出口径的唯一出处。
 > 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用
+**Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html
 
 ## WEB UI 菜单/入口分层原则 (2026-09-17 用户明确要求记入)
 
@@ -84,7 +85,17 @@
 - **三级层次由此为: 默认继承(框 tone) < 行自报(`.is-*`) < 强调加底(`.is-error` 独有)**, 越往后越醒目; 新增 popped-out 强调力度时按这个台阶往上加, 别直接全书对/加新色值。
 - **颜色一律引状态色令牌**(`--error/--warn/--green` 及其 `-soft/-line`), 三套 UI + 棱镜五主题均已声明, 不新增色值。
 - **按钮不参与本族**: `.bt.danger-solid` 保持实心红 —— 按钮表达「这个动作有后果」, 标题 tone 表达「整框语境等级」, 两层语义不合并(e2e `menus.spec.mjs` 依赖该类名)。
-- **CSS 落点**: 三组规则各自紧跟本皮肤的基线规则组 —— atlas / console 放 `css/views.css`(框级基线在 `components.css`), prism 放 `css/components.css`。⚠ **atlas `css/components.css` 已满 700 行**, 单 CSS 体量守阵(`test_frontend_template_split_wiring`)卡 ≤700, 追加前先量行数。
+- **CSS 落点**(2026-10-21 改): 本族**整组**(框级 tone / strip 标题条 / 行级 `.is-*` / 框级兜底 / 强调行)在 `shared/console_hub.css` 的「三皮肤共用规则族单点」段 —— 三皮肤逐字节同 ⇒ 单点一份(issue 26-10-20-2231)。本皮肤只留弹窗**基础语言**(`.modal-title` / `.modal.danger .modal-title .ico`), 那部分三皮肤本就不同。⚠ **atlas `css/components.css` 已满 700 行**, 单 CSS 体量守阵(`test_frontend_template_split_wiring`)卡 ≤700, 追加前先量行数。
+
+## WEB UI 三皮肤共用规则族 (2026-10-21, issue 26-10-20-2231)
+
+三份皮肤 CSS(prism / atlas / console)历史上互相克隆, 同一组件写三遍且逐字节相同 —— 这类**规则族**收敛到共用层单点:
+
+- **判据**: 同一族规则在三皮肤里**逐字节相同** ⇒ 搬进 `shared/console_hub.css` 尾段「三皮肤共用规则族单点」(A/B/C/D 四段)。三皮肤 `index.html` 都挂该文件且排在各自 CSS **之后** ⇒ 级联序天然就是收敛点, **不需要 `!important`**; 改共用层 = 三皮肤同改。
+- **已收敛**: `.qb-tabs` 组件本体(容器/按钮/激活态) · `.drawer-tabs` 容器与按钮底形 · 弹窗语义配色分级 ①②③④ · HR 表① 件(表头过滤栏 · 档位徽章 · 失踪行弱化 · 排序头 · 名称列限宽)。
+- **留皮肤内的是真差异, 不许顺手抹平**(守阵反向钉): `.drawer-tabs button.active` 令牌(atlas/console `--accent` vs prism `--accent-hi/--accent-line`) / `.hr-vsrc`·`.hr-pres` 描边(prism `--border-soft` vs 另两皮肤 `--border`) / `.hr-sub` 字体(prism `--font-mono` vs 字面等宽栈)。`test_frontend_hr_detail_table_wiring` 断言这三条**必须在各皮肤自己的 CSS 里**。
+- **守阵量程**: 判「三皮肤成对」用 `_ui_css_effective(ui)`(= 皮肤聚合 + shell 挂的 shared CSS, link 序), **不是** `_ui_css_aggregate(ui)`(只含本皮肤) —— 后者在规则搬走后恒红。判据原理见 `pitfalls/testing/assertions.md`「守阵的量程」条。
+- **新族入共用层的顺序**: 先搬逐字同的(最安全), 差异多的最后; 一族一改一回归, 不整文件对拷。
 
 ## WEB UI 悬浮提示 .aq-tip (2026-09-28)
 

@@ -65,6 +65,7 @@ from webui_helpers import (
     _ui_manifest,
     _ui_aggregate,
     _ui_css_aggregate,
+    _ui_css_effective,
     _app_bundle_files,
     _app_bundle_text,
 )
@@ -323,10 +324,14 @@ def test_frontend_qb_traffic_chart_wiring():
         "_logout 必须清三挂点数据(受保护内容同 historyOpen 先例)"
 
     # 4. CSS 三套 UI 成对(.qb-* 结构类 + .sb-qb 入口; tooltip/图例复用 .hist-* 不在此列)
+    # 判据落在**最终生效面**(皮肤聚合 + shared 共用层, link 序): .qb-tabs 组件本体自
+    # issue 26-10-20-2231 起收敛进 shared/console_hub.css(三皮肤逐条同, 单点一份),
+    # 只读皮肤聚合会恒红; 用共用层兜住「三皮肤都吃到」这件事, 而 .qb-note/.qb-chart
+    # 等仍由各皮肤自带(未收敛) —— 两处断言的语义因此都还是「三皮肤成对」。
     for css, name in (
-        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
-        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
-        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
     ):
         for rule, what in (
             (".qb-tabs button.active", "窗口切换激活态"),

@@ -277,8 +277,30 @@ def _ui_css_aggregate(ui):
 
     26-09-27 atlas/style.css 分层拆分(W2)后, 旧守阵继续单读 style.css 会假绿(规则搬进了 css/)。
     切分是连续字节切片(级联序不变), 聚合与拆分前逐字节等价。
+
+    注意: 本函数**只含本皮肤自己的 CSS**。三皮肤共用层的规则(shared/console_hub.css 等)
+    不在里面 —— 需要「这套 UI 最终生效的样式面」时用 _ui_css_effective。
     """
     return "\n".join(open(p, encoding="utf-8").read() for p in _ui_css_files(ui))
+
+
+def _ui_css_effective(ui):
+    """UI 最终生效的样式面 = 本皮肤聚合 + 三皮肤共用层(shared/*.css), 仍按 link 序
+
+    issue 26-10-20-2231 把逐字节相同的规则族(qb-tabs / drawer-tabs / 弹窗语义配色 /
+    HR 表① 件)收敛进 shared/console_hub.css 后, 这些规则**只在共用层存在一份**。
+    此时继续用 _ui_css_aggregate 断言「三皮肤各有一份」会恒红, 而放宽成「共用层有就算过」
+    又会把「某皮肤真漏了」也放过 —— 所以判据要落在**该皮肤实际吃到的级联面**上:
+    共用层在三皮肤 shell 里都挂且排在各皮肤 CSS 之后(级联序即收敛点), 故聚合后接共用层
+    与浏览器真实生效面一致。
+    """
+    shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+    shared = [
+        os.path.join(STATIC_ROOT,
+                     *h.lstrip("/").split("/"))
+        for h in re.findall(r'<link rel="stylesheet" href="(/shared/[^"]+\.css)"', shell)
+    ]
+    return "\n".join(open(p, encoding="utf-8").read() for p in _ui_css_files(ui) + shared)
 
 
 def _app_bundle_files():

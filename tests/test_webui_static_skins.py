@@ -34,6 +34,7 @@ from webui_helpers import (
     _ui_aggregate,
     _ui_css_files,
     _ui_css_aggregate,
+    _ui_css_effective,
     _app_bundle_files,
     _app_bundle_text,
     _tpl_path,
@@ -2278,20 +2279,35 @@ def test_frontend_hr_detail_table_wiring():
     assert "setInterval" not in hr_status_js, "hr_status.js 不得有轮询定时器(计划 §5.5: 打开拉一次 + 手动刷新)"
 
     # 4. CSS 三处成对 + 档位色义 + 失踪行弱化
+    # 判据落在**最终生效面**(皮肤聚合 + shared 共用层, link 序): issue 26-10-20-2231 把表头过滤栏 /
+    # 档位色义 / 失踪行弱化 / 排序头收进 shared/console_hub.css(三皮肤逐条同 ⇒ 单点一份),
+    # 徽章**底形族**(.hr-vsrc/.hr-pres/.hr-sub)因三皮肤描边与副行字体取值不同仍留在各皮肤内。
+    # 故这里同时钉两件事: ①收敛族在共用层有且生效; ②底形族在每套皮肤自己的文件里(真差异不许
+    # 被共用层顺手抹平)。原先「prism 拆 components.css + views.css 两件」的钉法随收敛失效 ——
+    # 那两段已不在 prism 文件里, 改成钉共用层持有它们。
+    shared_css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
+    assert ".hr-detail-table-bar" in shared_css, "shared/console_hub.css 缺表头过滤栏段(chips + 数据截至)"
+    assert ".hr-detail-table .hr-lane-a" in shared_css, "shared/console_hub.css 缺表格徽章色义段"
     for css, name in (
-        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
-        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
-        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
     ):
         assert ".hr-detail-table" in css, f"{name} 缺 .hr-detail-table 段 —— 三套 UI 必须成对改(计划 §5.6)"
         for lane in ("a", "b", "c", "d"):
             assert f".hr-detail-table .hr-lane-{lane}" in css, f"{name} 缺 .hr-lane-{lane} 档位色义(计划 §5.4)"
         assert ".hr-detail-table tr.missing .hr-lane" in css, f"{name} 缺失踪行 --paused 描边弱化规则"
         assert ".hr-vsrc" in css, f"{name} 缺来源小徽章(.hr-vsrc)样式"
-    pri_components = open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read()
-    pri_views = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
-    assert ".hr-detail-table-bar" in pri_components, "prism/css/components.css 缺表头过滤栏段( chips + 数据截至)"
-    assert ".hr-detail-table .hr-lane-a" in pri_views, "prism/css/views.css 缺表格徽章段"
+    for ui in ("atlas", "console", "prism"):
+        own = _ui_css_aggregate(ui)
+        for rule, what in (
+            # 带 `{` 边界: 不带的话 `.hr-detail-table .hr-pres` 会被 `.hr-pres.hr-pres-on`
+            # 那条修饰规则**子串命中**, 底形本体删了也照样绿(2026-10-21 红验实测)
+            (".hr-detail-table .hr-vsrc {", "来源徽章底形"),
+            (".hr-detail-table .hr-pres {", "在列/退役徽章底形"),
+            (".hr-detail-table .hr-sub {", "副行小字"),
+        ):
+            assert rule in own, f"{ui} 自己的 CSS 缺 {rule}({what}) —— 底形族是三皮肤真差异, 不许并进共用层"
 
 
 # node 单测探针(不落盘): 加载真实 hr_status.js, 对模块级纯函数 hrsCompareRows 跑排序语义电池
@@ -2458,10 +2474,12 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         js_code = re.sub(r"//[^\n]*", "", js_code)
         tpl_code = re.sub(r"<!--.*?-->", "", tpl, flags=re.S)
         assert dead not in js_code and dead not in tpl_code, f"{dead} 随旧列退役, 不得残留(死代码)"
+    # 生效面(聚合 + shared): 排序头/箭头/限宽钩子已收敛进 shared/console_hub.css(三皮肤逐条同),
+    # 徽章底形族仍各皮肤自带 —— 两处都在这张面上, 判据不变(三皮肤都得吃到)。
     for css, name in (
-        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
-        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
-        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
     ):
         for rule, what in (
             (".hr-detail-table th.sortable", "排序表头"),
@@ -2483,9 +2501,9 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
     #    看不见盒子模型, 这里只钉「不再参与行内布局」这一必要条件(几何量测见
     #    pitfalls/web-ui/header-cell-gutter.md: DOM 复现 14px -> 0px)。
     for css, name in (
-        (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
-        (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
-        (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
     ):
         mo = re.search(r"\.hr-detail-table th \.arrow\s*\{([^}]*)\}", css)
         assert mo, f"{name} 缺 .hr-detail-table th .arrow 规则体(计划 26-10-06-1009 §7)"

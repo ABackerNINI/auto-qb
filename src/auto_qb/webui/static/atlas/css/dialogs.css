@@ -55,10 +55,9 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-dim); cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
 .drawer-close:hover { background: var(--bg-hover); color: var(--fg); }
-/* 页签并入头部行(stretch 撑满头高): 活动页签下划线正好压在头部底边线上 */
-.drawer-tabs { display: flex; gap: 2px; }
-.drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
-  cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+/* 页签并入头部行(stretch 撑满头高): 活动页签下划线正好压在头部底边线上。
+ * 容器与按钮底形在 shared/console_hub.css(三皮肤逐条同); 激活态留这里 —— 三皮肤取值不同:
+ * atlas/console 取 --accent, prism 取 --accent-hi/--accent-line(棱镜激活页签文字更亮) */
 .drawer-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 .drawer-body { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 18px 20px; position: relative; }
 /* 流量形态正文(2026-10-04 三挂点并入抽屉): 图高撑满抽屉可用高 —— 正文转 flex 纵列,
@@ -90,48 +89,29 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-table .mono-cell { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 .drawer-table tr.skipped td { color: var(--fg-dim); }
 /* ---------------- HR 明细表①(计划 26-10-01-2216 阶段2) ----------------
- * 骨架复用 .drawer-table(模板同挂一类), 这里只补 HR 专属件: 表头档位筛选 chips +
- * 徽章色义(A=warn 考察中 / B=green 达标 / C=error 未达标 / D=blue 免罪, 计划 §5.4)+
- * 失踪行徽章 --paused 描边弱化(不铺底)。色值全取 :root 既有令牌, 不写死 hex;
- * 三套 UI 成对改(atlas/console dialogs.css, prism components.css + views.css)。 */
-.hr-detail-table-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
-.hr-chip { cursor: pointer; user-select: none; }
-.hr-chip.on { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
-.hr-detail-table-fresh { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
-.hr-detail-table .hr-lane { display: inline-block; padding: 0 7px; border-radius: 3px; border: 1px solid var(--fg-dim);
-  color: var(--fg-dim); font-size: 11px; white-space: nowrap; }
-.hr-detail-table .hr-lane-a { border-color: var(--warn-line); color: var(--warn); background: var(--warn-soft); }
-.hr-detail-table .hr-lane-b { border-color: var(--green-line); color: var(--green); background: var(--green-soft); }
-.hr-detail-table .hr-lane-c { border-color: var(--error-line); color: var(--error); background: var(--error-soft); }
-.hr-detail-table .hr-lane-d { border-color: var(--blue-line); color: var(--blue); background: var(--blue-soft); }
-.hr-detail-table tr.missing .hr-lane { border-color: var(--paused); color: var(--paused); background: transparent; }
+ * 骨架复用 .drawer-table(模板同挂一类)。档位色义(A=warn 考察中 / B=green 达标 /
+ * C=error 未达标 / D=blue 免罪, 计划 §5.4)、失踪行徽章 --paused 弱化、表头过滤栏与排序头
+ * 三皮肤逐条同 ⇒ 在 shared/console_hub.css(单点); 本文件只留徽章**底形族**与表②③ 专属件
+ * (底形三皮肤取值不同: prism --border-soft/--font-mono, atlas·console --border/字面等宽栈)。
+ * 色值全取 :root 既有令牌, 不写死 hex。 */
+/* 表头过滤栏(chips + 「数据截至」)在 shared/console_hub.css —— 三皮肤逐条同 */
+
 .hr-detail-table .hr-vsrc { display: inline-block; padding: 0 6px; border: 1px solid var(--border);
   border-radius: 999px; color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
 .hr-detail-table .hr-vsrc.hr-vsrc-b { border-color: var(--green-line); color: var(--green); }
 .hr-detail-table .hr-vsrc.hr-vsrc-d { border-color: var(--blue-line); color: var(--blue); }
-/* 三列重组 + 三态排序(计划 26-10-02-1936 §3.4/§3.6, 阶段3): 核实结论徽章沿用 hr-vsrc 底形
- * (margin-left 摘除 —— 独立成列不再是文字后缀); 副行小字 --fg-dim 等宽; 在列/退役徽章
- * hr-pres(on=绿 / out=蓝 已移出 / off=中性 已退役); 表头排序箭头用 sprite 双图标
- * (与种子页同款): 激活列 accent 全显, 非激活列 hover 浅色占位, 第三态(默认序)无激活列。 */
+/* 三列重组(计划 26-10-02-1936 §3.4, 阶段3): 核实结论徽章沿用 hr-vsrc 底形(margin-left 摘除
+ * —— 独立成列不再是文字后缀); 副行小字 --fg-dim 等宽; 在列/退役徽章 hr-pres
+ * (on=绿 / out=蓝 已移出 / off=中性 已退役)。
+ * 徽章**底形族**三皮肤取值不同, 故整族留本文件: prism 描边取 --border-soft、副行走 --font-mono,
+ * atlas/console 描边取 --border、副行写字面等宽栈 —— 差异是事实, 不搬到共用层抹平。
+ * 排序头/箭头(含三态 hover/激活语义)三皮肤逐条同, 在 shared/console_hub.css。 */
 .hr-detail-table .hr-sub { display: block; margin-top: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; color: var(--fg-dim); white-space: nowrap; }
 .hr-detail-table .hr-pres { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--fg-dim); font-size: 10.5px; white-space: nowrap; }
 .hr-detail-table .hr-pres.hr-pres-on { border-color: var(--green-line); color: var(--green); }
 .hr-detail-table .hr-pres.hr-pres-out { border-color: var(--blue-line); color: var(--blue); }
-.hr-detail-table th.sortable { position: relative; cursor: pointer; user-select: none; }
-.hr-detail-table th.sortable:hover { color: var(--fg); }
-/* 排序箭头绝对定位不占流(2026-10-06, 计划 26-10-06-1009 §7 · 报告 26-10-06-0945 B1):
- * 原 display:inline-block 恒占 11px + margin-left 3px = 14px, 把右对齐(num)列的表头文字整体
- * 左顶(实测 14px, 三主题一致)。改绝对定位后无偏移 = 取静态位置(仍紧贴标签右缘, opacity 揭示
- * 与 hover 语义不变), 但不再参与行内布局 => 标签回到列右缘, 与值文字同缘。
- * 别改回 inline-block, 也别补内层 v-if(切换排序列时标题会左右跳, 与主表 P3 同形)。 */
-.hr-detail-table th .arrow { position: absolute; margin-left: 3px; color: var(--accent); opacity: 0; }
-.hr-detail-table th .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
-.hr-detail-table th.sortable:hover .arrow { opacity: .45; }
-.hr-detail-table th.sortable .arrow.on { opacity: 1; }
-/* 名称列限宽钩子(计划 §3.6 mockup 同款): 卡片上下文收窄换行、全屏覆盖层放开 —— 表① 自
- * 阶段2 拍板(展开即全屏)后只存在于 .hr-full-modal 内, 限宽自然被放开规则盖住, 成对保留作双态钩子 */
-.hr-detail-table td.wrap { max-width: 150px; }
-.hr-full-modal .hr-detail-table td.wrap { max-width: none; }
+/* 排序头 / 排序箭头 / 名称列限宽钩子 在 shared/console_hub.css —— 三皮肤逐条同 */
+
 /* ---------------- HR 表② 排障视图(计划 26-10-01-2216 阶段3) ----------------
  * <details> 默认收起(展开态不持久化); 骨架复用 .drawer-table, 波次明细表同挂 .hr-detail-table
  * 继承上面的徽章色义; kv 表键列不换行弱化色, 值列 mono 走模板 .mono-cell;
@@ -146,7 +126,7 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .hr-wave-table { margin-top: 8px; }
 /* ---------------- HR 表③ 拉取历史(计划 26-10-04-0312 §3.5) ----------------
  * 骨架复用 .drawer-table + .hr-detail-table(徽章底形/mono/num 列对齐全继承), chips 行与
- * 「数据截至」复用 .hr-detail-table-bar/.hr-chip/.hr-detail-table-fresh; 新增件只有: 结果徽章
+ * 「数据截至」复用 shared/console_hub.css 的 .hr-detail-table-bar/.hr-chip/-fresh; 新增件只有: 结果徽章
  * 色档(后端 result_tone 直接映射 .hr-hres-<tone>, ok/warn/dim/err/blue 五档)+ 行点击展开
  * 明细子行 .hr-hist-sub(mono 小字弱化色)。色值全取既有令牌, 不写死 hex;
  * 三套 UI 成对改(atlas/console dialogs.css, prism components.css + views.css)。 */

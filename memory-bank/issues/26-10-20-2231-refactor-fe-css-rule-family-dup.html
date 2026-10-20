@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-webui-css-rule-family-shared.md,memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/testing/baselines/26-10-21-0340-webui-css-rule-family-shared.md,memory-bank/pitfalls/testing/assertions.md,memory-bank/conventions/webui.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)">
 <meta name="issue-summary" content="views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)">
 <title>三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-css-rule-family-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,7 +104,28 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 03:18 — 用户指派认领（「认领并修复」），<b>复验：2026-10-21 03:2x 仍在</b> —— 脚本逐条比对三皮肤聚合，四族共 43 条规则：39 条逐字节相同、4 条有真差异；其中 35 条搬进共用层，4 条与差异绑定的色义修饰按成组原则留皮肤内（详见下「取证」），状态 <strong>In Progress</strong></li>
+      <li>2026-10-21 03:40 — 已修并验证（全量 <b>3974 passed + 2 skipped / 0 failed</b>，覆盖率 99%；真浏览器冒烟 <b>336 passed + 10 skipped / 0 failed</b>；收敛前后生效规则表 59 条逐条一致），状态 <strong>Done</strong></li>
     </ul>
+
+    <h3>修复后补充</h3>
+    <p><b>取证（改前）</b>：按本文判据写脚本解析三皮肤聚合（剥注释后按顶层规则块取 selector→body），结论比入池时更精确 —— 四族里绝大多数逐字节同，少数是真空差异：</p>
+    <ul>
+      <li><code>qb-tabs</code> 4 条 —— 全同。</li>
+      <li><code>drawer-tabs</code> 3 条 —— 2 条同；<code>.active</code> 是差异：atlas/console 取 <code>--accent</code>，prism 取 <code>--accent-hi</code> / <code>--accent-line</code>（棱镜激活页签文字更亮）。</li>
+      <li><code>modal.strip</code> 5 条 —— 全同；连同同一套设计决定的框级 tone / 行级 <code>.is-*</code> / 框级兜底 / 强调行共 11 条一并收敛（拆散后各自的特异性论证读不懂）。</li>
+      <li><code>hr-detail-table</code> 25 条 —— 22 条同；3 条差异：<code>.hr-vsrc</code> / <code>.hr-pres</code> 描边（prism <code>--border-soft</code> vs 另两皮肤 <code>--border</code>）、<code>.hr-sub</code> 字体（prism <code>--font-mono</code> vs 字面等宽栈）。</li>
+    </ul>
+    <p><b>实际修法</b>：</p>
+    <ul>
+      <li><b>落点</b>：不新建 shared 文件，追加到 <code>shared/console_hub.css</code> 尾段「三皮肤共用规则族单点」（A qb-tabs / B drawer-tabs / C 弹窗语义配色分级 / D HR 表① 件，共 35 条规则 +96 行；余下 4 条是三个差异底形的色义修饰 <code>.hr-vsrc-b/-d</code>、<code>.hr-pres-on/-out</code>，与差异绑成一族一并留皮肤内）。三份 shell 里 console/prism 已卡满 212 行 cap，新增 <code>&lt;link&gt;</code> 要动 cap 与守阵；而该文件事实上已是共用层（<code>.kb-cursor</code> / <code>.ctx-custom-*</code> / <code>.aq-tip</code> 都住这里），且三皮肤都挂它并排在各自 CSS <b>之后</b> —— 级联序天然就是收敛点，不需要 <code>!important</code>。</li>
+      <li><b>三皮肤</b>：逐条删同族规则，原位留一行指针注释（说明搬去哪、哪些留、为什么留）。净行数 <code>atlas/views −35</code> / <code>console/views −35</code> / <code>prism/views −23</code> / <code>atlas/dialogs −20</code> / <code>console/dialogs −20</code> / <code>prism/components −29</code> ⇒ <b>三皮肤合计 −162 行</b>（共用层 +96，全仓净 −66；指针注释也占了若干行，故不是「删三份」的字面 3×）。顺带：<code>prism/css/components.css</code> 728 → 699，回到 700 行体量线以下。</li>
+      <li><b>真差异留皮肤内</b>（按本文口径，不抹平）：<code>.drawer-tabs button.active</code> 令牌、<code>.hr-vsrc</code>/<code>.hr-pres</code> 描边、<code>.hr-sub</code> 字体；弹窗的基线规则组（<code>.modal-title</code> / <code>.modal.danger .modal-title .ico</code>）也留各皮肤 —— 那是弹窗基础语言，三皮肤本就不同。</li>
+      <li><b>守阵</b>：新增 <code>tests/webui_helpers.py::_ui_css_effective(ui)</code> = 皮肤聚合 + shell 里挂的 shared CSS（link 序），三处断言改量「该皮肤实际吃到的级联面」（原判据在规则搬走后恒红，而直接放宽成「共用层有就算过」又会放过单皮肤漏改）。另补反向断言：徽章底形族<b>必须</b>留在各皮肤自己的 CSS 里。<code>prism 拆 components/views 两件</code> 那条钉法改为「共用层持有」。</li>
+    </ul>
+    <p><b>与建议修法的差异</b>：建议「一次一族、每族独立回归」，实际按<b>逐字节同 / 有差异</b>分组一次做完 —— 差异判定是机械的（脚本比对），不是判断，分批只多三次全量；建议顺序里 <code>hr-detail-table</code> 放最后（差异最多），实际它的 19 条同族规则同样机械可搬，3 条差异按规则留原地，没有需要人判的地方。建议的前置（<code>fe-css-skin-token-layer-dup</code> 分层统一）本轮未做 —— 它是独立的结构调整，且本轮不需要它就能判「哪两份该对齐」（用逐字节比对代替人工判断）。</p>
+    <p><b>验证方式</b>：① 等价性：脚本对改前/改后各现算「最终生效规则表」（按 link 序拼接后取每个 selector 的最后一条声明），59 条族内规则 <b>selector→body 逐条一致、无新增/丢失</b>，且生效表内 <b>无重复声明</b>（证明搬走的那份与留下的那份不冲突）；② 红验两支：删 atlas 的 <code>.hr-pres</code> 底形 → 新反向断言判红（首次实测竟绿 —— 见下条，改成带 <code>{</code> 边界后才红）；删共用层的 <code>.hr-detail-table-bar</code> → 共用层断言判红；③ <code>commands run test.full</code> 全绿（数字见基线切片 <code>memory-bank/testing/baselines/26-10-21-0340-webui-css-rule-family-shared.md</code>）；④ <code>commands run dev.e2e</code> 三皮肤主表/抽屉/设置页 HR 表①/弹窗全绿。</p>
+    <p><b>踩到的坑（已回写 <code>pitfalls/testing/assertions.md</code>「守阵的量程」条）</b>：① <code>assert ".hr-detail-table .hr-pres" in css</code> 被同文件的 <code>.hr-pres.hr-pres-on</code> <b>子串命中</b> ⇒ 底形本体删了也照样绿；断言必须带 <code>{</code> 这类规则边界。② CSS 收敛后「皮肤聚合」不再是「生效面」，守阵量错对象会恒红。</p>
   </section>
 
   <footer>
