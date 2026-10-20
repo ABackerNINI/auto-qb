@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-15
+**Updated:** 2026-10-21
 **Summary:** 用户指令「修复 hr 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §14–§17(轮 11–14)对 hr 全包入池 **9 条 refactor issue**; 本轮按用户拍板**只做低风险高收益子集(5 条)+ 保守口径(只做无行为变化的收口)**: ① `hr-adapter-parse-boilerplate-dup`(parse_counters 上收 `parse_header_counters` / ADAPTERS 工厂抽 `_standard_kwargs` / URL 参数提取抽 `query_param`); ② `hr-report-cli-boilerplate-dup`(三入口抽 `_gate_enabled_sites` + `_build_service` / `_scope_of` 收单点 / 删死件 `stamp_text_ts`); ③ `hr-lane-transition-boilerplate-dup`(档位截断/失效骨架抽 `_settle_lane`); ④ `hr-warn-dedup-throttle-dup`(三个 `_warn_*` 抽 `_warn_once` / 波级异常收尾抽 `_abort_wave` / 节流窗口算法抽 `warn_gap_floor`); ⑤ `hr-model-serialize-helper-dup`(仅 `_as_int/_as_float` 收单点; to_json/from_json dataclass 驱动属评估型, 保守跳过)。**零行为变化**(仅表意等价的结构收口 + 删一处死件)。余下 4 条(`hr-store-recover-lock-family` / `hr-token-persist-convention` / `hr-site-derive-convention` / `hr-thread-lifecycle`)按用户口径**暂缓**, 留 `Open`。**2026-10-13 续轮(R2)**: 用户指令「认领并修复hr相关的3个refactor issues」, 认领并修复 ⑥ `hr-site-derive-convention-dup`(派生单点上收 `Config.hr_site_confs()`, runtime/report 改走单点; webui 半留轮 15) ⑦ `hr-token-persist-convention-dup`(抽 `infra.utils.resolve_or_create_token`, hr/webui 两端一行委托, logger 身份经参保持, 4 条 patch 地址随迁) ⑧ `torrents-hr-entry-guard-dup`(抽 `TorrentRecord._hr_guard`, 三判定入口守卫收口; `hr_judgement` 语义不同不并入), 各配 1 条静态守阵, 仍**零行为变化**。余 store-recover(与轮 18 合并)/thread-lifecycle(机制不同收益低)/fetchable(待拍板)留 `Open`。 **2026-10-15 续轮(R3)**: 用户「认领并修复」第 9 条 `hr-thread-lifecycle-boilerplate-dup` —— 抽 `HrThreadHandle`(`hr/threadlifecycle.py`) 骨架单点(幂等 start + stop/join(timeout) + 退出/未退出日志 + started), 机制差异(Condition vs shutdown)经 request_stop 回调, worker/server 两调用点降为句柄调用, 日志文案字节同零行为变化; 余 store-recover/fetchable 留 `Open`。
 **Topics:** dup-code-audit
 
@@ -95,3 +95,5 @@
 - 仍 `Open` 的 hr 相关 1 条: `hr-fetchable-dead-config`(「接上强制 vs 删死字段」二选一待拍板)。〔2026-10-15 R12 续记〕`hr-store-recover-lock-family-dup` 已由 infra 轮(R18)合并考量收口 —— 恢复链与文件锁收 infra 单点, 见主档案 `26-10-10-backend-dup-code-audit.md` R12 与档案 `26-10-15-backend-store-recover-lock-dedup.md`。
 - webui 半合流: token(R15-C01) / 站点派生(R15-C03) 随 webui 轮 15 改走 infra/Config 单点(守阵白名单已预留)。
 - `hr-lane-transition-boilerplate-dup` 的 B 类子项(各档摘要串 service ↔ status, `(全深度)` vs `(全)`)仍未合 —— 需先钉文案差异点 + 回归保护, 本轮按报告口径只登记。
+
+- 2026-10-21 02:26 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)

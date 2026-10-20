@@ -3,6 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
+- test_frontend_shell_sprite_login_parity: 三份 index.html shell 内联段守阵(issue 26-10-20-2231) —— sprite 段(80 行/67 symbol)三皮肤逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, console 合法多一行皮肤说明注释)相等; symbol 数下限防"sprite 整体外提成共享文件后三份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须三皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
 - test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
@@ -1822,6 +1823,74 @@ def test_frontend_template_split_wiring():
     # 聚合配平放最后: 切割边界错位(半个元素切进相邻分片)在这里现形
     for ui in _UI_ALL:
         _assert_tags_balanced(_ui_aggregate(ui), f"{ui} 聚合模板")
+
+
+def test_frontend_shell_sprite_login_parity():
+    """三份 index.html shell 内联段守阵(issue 26-10-20-2231): sprite 段与 #app+login 段三皮肤对齐
+
+    三 shell 除 head 资源清单外逐字同约 87.5%, 但三处物理拷贝里只有 tpl-manifest 被
+    test_frontend_template_split_wiring 钉死"逐项相等" —— sprite(80 行/67 symbol)与 #app+login 段
+    没有守阵: 加一个图标/改一处登录遮罩要改 3 个文件, 漏一个的表现是"某皮肤下该图标空白且无任何
+    报错"(登录遮罩则是首屏第一眼、在任何 JS 之前渲染的块)。合并唯一路径是后端渲染时注入, 会让
+    index.html 失去"可直接静态打开"的能力(测试亦直接读盘), 属能力回退 —— 故补齐守阵让重复不漂:
+      1. sprite 段: <svg class="icon-sprite" 起到配套 </svg>, 三份逐字相等(当前实测相等);
+      2. #app+login 段: <div id="app" 起到 tpl-manifest 前, 归一 HTML 注释与空行后相等
+         (console 合法多一行皮肤说明注释; 注释不渲染, 归一后比 —— 标记/属性/文本 drift 一律红)。
+    另钉 symbol 数下限: sprite 若被整体外提成共享文件, 三份会同时消失、相等断言恒真 —— 下限逼
+    那种迁移显式改守阵(同轮补覆盖, 不是放宽)。
+    """
+    shells = {}
+    for ui in _UI_ALL:
+        with open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8") as f:
+            shells[ui] = f.read()
+
+    def _segment(text, start, end, keep_end=False):
+        i = text.find(start)
+        assert i != -1, f"shell 缺起始锚点 {start!r}(守阵提取失败 = 没守住任何东西)"
+        j = text.find(end, i + len(start))
+        assert j != -1, f"shell 起始锚点 {start!r} 之后缺结束锚点 {end!r}"
+        return text[i:j + (len(end) if keep_end else 0)]
+
+    def _strip_comments_blanks(text):
+        text = re.sub(r"<!--.*?-->", "", text, flags=re.S)
+        return "\n".join(ln.rstrip() for ln in text.split("\n") if ln.strip())
+
+    def _first_diff(a, b):
+        la, lb = a.split("\n"), b.split("\n")
+        for k in range(min(len(la), len(lb))):
+            if la[k] != lb[k]:
+                return f"首个差异在第 {k + 1} 行: {la[k]!r} != {lb[k]!r}"
+        return f"前缀相同但行数不同: {len(la)} vs {len(lb)}"
+
+    # 1. sprite 段: 逐字相等(动一个字节都要三皮肤同步)
+    sprites = {ui: _segment(t, '<svg class="icon-sprite"', "</svg>", keep_end=True) for ui, t in shells.items()}
+    base_sprite = sprites[_UI_ALL[0]]
+    n_symbol = base_sprite.count("<symbol")
+    assert n_symbol >= 40, (
+        f"{_UI_ALL[0]} sprite 段仅 {n_symbol} 个 <symbol>(当前实测 67) —— 下限逼「整体外提」类迁移显式改守阵, "
+        f"不放任相等断言在三份同时清空后恒真"
+    )
+    for ui in _UI_ALL[1:]:
+        assert sprites[ui] == base_sprite, (
+            f"{ui} 的图标 sprite 段与 {_UI_ALL[0]} 不一致 —— 改图标须三皮肤同步(漏改的表现: 该皮肤下图标空白"
+            f"且无任何报错); {_first_diff(base_sprite, sprites[ui])}"
+        )
+
+    # 2. #app+login 段: 注释与空行归一后相等(console 多一行皮肤说明注释是合法差异, 不参与比对)
+    apps = {
+        ui: _strip_comments_blanks(_segment(t, '<div id="app"', '<script type="application/json" id="tpl-manifest">'))
+        for ui, t in shells.items()
+    }
+    base_app = apps[_UI_ALL[0]]
+    assert 'id="app"' in base_app and 'class="login-mask"' in base_app, (
+        f"{_UI_ALL[0]} 的 #app 段提取结果不像登录遮罩块(id=app: {'id=\"app\"' in base_app} / "
+        f"login-mask: {'class=\"login-mask\"' in base_app})"
+    )
+    for ui in _UI_ALL[1:]:
+        assert apps[ui] == base_app, (
+            f"{ui} 的 #app+login 段与 {_UI_ALL[0]} 不一致(注释/空行已归一) —— 改登录遮罩须三皮肤同步; "
+            f"{_first_diff(base_app, apps[ui])}"
+        )
 
 
 def test_frontend_button_system_paired():

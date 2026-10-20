@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-11
+**Updated:** 2026-10-21
 **Topics:** dup-code-audit
 **Summary:** 用户指派修复报告 26-10-11-0033(config 部分)并认领相关 issue —— 7 条 refactor(0031 枚举双份 / 0032 默认多源 · 键面文档漂移 · loaders 绕过 _get · 站点页面事实双份 · 小校验三写两套 · writer 备份复制块)。修复口径: 枚举族收敛 schema/fields 单点 + validation/rules・sections・rules/expr/env 引用派生; loaders 两处统一走 _get; models.SiteHrCheckConfig 派生五键默认改空(真值只在 SITE_PRESETS); sections 抽 _try_port/_try_time_window; writer 抽 _atomic_copy; docs 漂移修正(log.format / hr_check 键数 / 档案 adapter 列 / schema_version 默认派生 CURRENT_VERSIONS) + docs↔代码守卫与枚举单源守卫入 test_config_schema。
 **Refs:** memory-bank/issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-default-multi-source.html, memory-bank/issues/26-10-11-0032-refactor-config-key-surface-doc-drift.html, memory-bank/issues/26-10-11-0032-refactor-config-loaders-get-inconsistency.html, memory-bank/issues/26-10-11-0032-refactor-config-site-preset-page-facts-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-validation-smallchecks-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-writer-backup-copy-dup.html, memory-bank/testing/baselines/26-10-11-1611-config-dup-code-fixes.md
@@ -66,3 +66,5 @@
 - **0032 docs/守卫**: configuration.md log.format + 9 键、keys.md 9 键 + btschool adapter 列修正; schema_version Field.default 派生 CURRENT_VERSIONS; 新守阵 4 条(test_validation_enums_are_schema_derived / test_site_hr_page_facts_are_preset_only / test_schema_version_field_default_tracks_versioning / test_docs_config_facts_match_code), 测试计划 docstring 同步。
 - **验证**: 定向先跑 test.quick(除自引发措辞 1 红外全绿, 已改时不变措辞复验); `commands run test.full` 全绿, 数字见基线切片 [26-10-11-1611](../testing/baselines/26-10-11-1611-config-dup-code-fixes.md); dev.fmt 覆盖 13 个改过的 .py; 7 issue 置 Done(实际修法/验证/数字进 issue changelog)。
 - **改道说明**: 0032 default-multi-source 的「schema.Field.default 全键由 models 派生」不做(YAML↔解析空间逐键换算成本高, 现有 unit_default/可解析守卫 + 新 docs 守卫兜主要漂移面), 其余按建议落地。
+
+- 2026-10-21 02:26 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)

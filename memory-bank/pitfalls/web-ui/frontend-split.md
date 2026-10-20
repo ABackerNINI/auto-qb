@@ -18,6 +18,14 @@
 - **处置**: `<template v-if="ui === 'atlas'|'prism'">` 条件块 + 块前 `ui-diff:` 注释说明原因; `_scan_ui_diff_registry` 收集全部条件块作为「活差异清单」(取值只认两 UI, 注册表为空也红 —— 机制必须保持存活)。参数化小差异(如界面切换下拉的选项表)优先走 computed(`uiCurrent`/`uiOptions`, 数据单点 `UI_HOME`)而非条件块。
 - **守阵**: `test_frontend_template_split_wiring`。
 
+### 三份 shell 内联段(sprite / #app+login) parity 守阵
+
+- **触发**: 改任一 `src/auto_qb/webui/static/<ui>/index.html` 的图标 sprite 段(加/改图标)或登录遮罩段(`#app` + `login-mask`)。
+- **判别**: 三 shell 除 head 资源清单外逐字同约 87.5%(manifest 74 行 / sprite 80 行 / `#app`+login 31 行), 但是**三份物理拷贝** —— 漏改一份的表现是"某皮肤下该图标空白且无任何报错"(登录遮罩则是首屏第一眼、在任何 JS 之前渲染的块)。合并唯一路径是后端渲染时注入, 会让 `index.html` 失去"可直接静态打开"的能力(测试亦直接读盘), 属**能力回退** —— 定案是"不合并, 补齐守阵"(R23-C, 台账 `tasks/26-10-20-frontend-dup-code-audit.md`)。
+- **处置**: `tests/test_webui_static_skins.py::test_frontend_shell_sprite_login_parity` —— ①sprite 段锚点切片(`<svg class="icon-sprite"` 起配套 `</svg>` 止)三份**逐字相等**, 另钉 symbol 数 ≥40 下限(实测 67): sprite 若被整体外提成共享文件, 三份会同时消失、相等断言恒真, 下限逼那种迁移显式改守阵; ②`#app`+login 段(`<div id="app"` 起 `tpl-manifest` 前止)**归一 HTML 注释与空行后**相等 —— console 合法多一行皮肤说明注释(§现象已记"仅差 1 行注释"), 照"逐字相等"字面执行会恒红, 故注释不参与比对(注释不渲染), 标记/属性/文本 drift 一律红。失败信息带首个差异行(行号 + 两侧原文)并提示"改图标/改登录遮罩须三皮肤同步"。
+- **守阵**: `test_frontend_shell_sprite_login_parity`(issue 26-10-20-2231, 2026-10-21 认领并修; 红验三类突变: console sprite 单边漂移红 / prism login 标记漂移红 / prism login 仅注释漂移绿, 突变精确反向还原后三份 shell `git diff` 零改动)。
+- **复发**: 0
+
 ### data/computed/watch/生命周期不许进 app.mixin —— 根选项专属
 
 - **触发**: 给根组件加状态字段 / 侦听器 / 生命周期钩子时。

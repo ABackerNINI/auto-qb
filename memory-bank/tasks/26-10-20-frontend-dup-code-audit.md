@@ -4,7 +4,7 @@
   
 **Added:** 2026-10-20
   
-**Updated:** 2026-10-20
+**Updated:** 2026-10-21
   
 **Topics:** dup-code-audit
   
@@ -1749,3 +1749,5 @@ R20-A~F(shared JS 六面) → R21-A~C(抽屉族) → R22-A~C(三皮肤 CSS) → 
    f. ~~R23-C-01/02 守阵 issue~~ **Done** —— `26-10-20-2231-test-fe-tpl-shell-parity-guard.html`(本轮唯一 type=test, 也是唯一"只改测试不改源码"即可落地的收益)。
 
 **本档无剩余项。** Phase 2 前端全部收口, 主线续跑见计划 `26-10-10-2333`: **Phase 3 = 测试与横切(轮 24–25)** → **Phase 4 = 汇总(轮 26)**。
+
+- 2026-10-21 02:26 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)

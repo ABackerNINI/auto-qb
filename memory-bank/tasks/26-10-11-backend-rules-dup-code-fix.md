@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-11
+**Updated:** 2026-10-21
 **Summary:** 用户指令「修复 rules 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §20(轮 17)对 rules 全包(2187 行 · 18 文件)入池 **3 条 refactor issue**; 本轮按**保守口径(只做无行为变化的收口)** 全部修完并置 `Done`: ① `rules-expr-disk-helper-dup`(env 三取值器 + `FreespaceCondition` 四处逐字同的「取数 + 错误映射」收成单点 `disk_usage_value(path, attr)`); ② `rules-expr-numeric-predicate-dup`(env 数值函数与 eval 算术运算符的「必须是数值」校验收成 `types.require_number(value, what)`, 报错文案逐字不变); ③ `rules-parser-dead-op-constants-dup`(删 parser 四个本文件不用的运算符常量死件)。**零行为变化**(结构收口 + 删死件), 新增 3 个守阵测试锁单点。全量 `test.full` **3115 passed + 4 skipped / 0 failed / 覆盖率 98.63%**。
 **Topics:** dup-code-audit
 
@@ -64,3 +64,5 @@
 
 - 重复代码审查主线: Phase 2 前端(轮 20–23)、Phase 3 测试与横切(24–25)、Phase 4 汇总(轮 26)仍未开工(见 `26-10-10-backend-dup-code-audit`)。
 - rules 包 R17 的 B 类项(no-HR 缺省语义两处 / AST 双类型检查)与 A03(动作 `__init__` 样板)按报告口径**只登记不修**(前者合并会改语义, 后者样板过薄), 未入池。
+
+- 2026-10-21 02:26 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步)">
 <meta name="issue-summary" content="三 shell 除 head 资源清单外 87.5% 逐字同; manifest 已被守阵钉死相等, sprite(67 symbol)与 login 段未钉 —— 加一条断言即可">
 <title>三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-test-fe-tpl-shell-parity-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -100,9 +100,37 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>修复与验证<span class="opt">（2026-10-21 认领并修）</span></h2>
+    <p><b>复验</b>(认领后第一件事, 2026-10-21 02:15): 现象仍在 —— 三 shell 的 sprite 段各 80 行 / 67 个
+      <code>&lt;symbol&gt;</code> 且逐字相等; <code>#app</code>+login 段仅差 console 一行皮肤说明注释(注释归一后相等);
+      测试侧对 <code>icon-sprite</code> / <code>login-mask</code> 零守阵(grep 实证)。</p>
+    <p><b>实际修法</b>: <code>tests/test_webui_static_skins.py</code> 新增
+      <code>test_frontend_shell_sprite_login_parity</code>(零源码改动; 本轮仅动测试本档、本 issue 与索引/基线/坑档回写) ——</p>
+    <ul>
+      <li><b>sprite 段</b>: 锚点切片 <code>&lt;svg class="icon-sprite"</code> 起、配套 <code>&lt;/svg&gt;</code> 止,
+        三份<b>逐字相等</b>(当前实测相等); 另钉 symbol 数 ≥40 下限(实测 67) —— sprite 若被整体外提成共享文件,
+        三份会同时消失、相等断言恒真, 下限逼那种迁移显式改守阵(同轮补覆盖, 不是放宽)。</li>
+      <li><b>#app+login 段</b>: 锚点切片 <code>&lt;div id="app"</code> 起、<code>tpl-manifest</code> 前止,
+        <b>归一 HTML 注释与空行后相等</b>; 失败信息带首个差异行(行号 + 两侧原文)并提示"改图标/改登录遮罩须三皮肤同步"。</li>
+      <li>与样板(<code>test_frontend_template_split_wiring</code> 的 manifest 逐项相等)同文件同风格, 文件头「测试计划」清单同步补一行。</li>
+    </ul>
+    <p><b>与建议(§03)的一处改道</b>: 建议两段都"逐字相等", 但 <code>#app</code>+login 段<b>当前并非逐字相等</b>
+      (console 合法多一行皮肤说明注释, §01 已记"仅差 1 行注释") —— 照字面执行会恒红。故 login 段改为<b>注释/空行归一后</b>比对:
+      注释不渲染, 归一不放过任何标记/属性/文本 drift; sprite 段无此问题, 保持更严的逐字相等。</p>
+    <p><b>验证(红验 + 测试数字)</b>: 三类突变全部符合预期 —— ①console sprite 段单边挪一个图标坐标 ⇒ 守阵红, 报
+      「console 的图标 sprite 段与 atlas 不一致 … 首个差异在第 2 行」并给出两侧原文; ②prism 登录段单边改一个类名 ⇒ 红, 报
+      「prism 的 #app+login 段与 atlas 不一致 … 首个差异在第 3 行」; ③prism 登录段仅加一行注释 ⇒ <b>绿</b>(注释容差按设计生效, 不误红)。
+      突变均以精确反向编辑还原, <code>git diff</code> 实证三份 shell 零改动(生产代码未动, 本 issue 纯测试缺口)。测试数字:
+      新守阵单跑 1 passed; 本文件全量 21 passed; <code>commands run test.full</code> <b>3966 passed / 10 skipped / TOTAL 99%</b>
+      (覆盖率闸 99% 照过) —— 数字誊至基线切片(最新值见 <code>commands run kb.baseline</code>)。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 02:15 — 用户指派认领(「认领并修复」); 复验现象仍在: sprite 段三份各 80 行 / 67 symbol 且逐字同, <code>#app</code>+login 段仅差 console 一行皮肤注释(注释归一后相等), 测试侧零守阵。状态 <strong>In Progress</strong>。</li>
+      <li>2026-10-21 02:24 — 修复并验证(修法/与建议的改道/红验三类突变/测试数字见 §04), 状态 <strong>Done</strong>。</li>
     </ul>
   </section>
 

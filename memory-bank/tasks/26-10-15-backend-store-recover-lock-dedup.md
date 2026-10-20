@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-15
-**Updated:** 2026-10-15
+**Updated:** 2026-10-21
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html」—— dup-code-audit infra 轮(R18)对 R6/R2/R3 三轮暂缓跨包件的合并考量收口。口径沿用前修复轮保守纪律(行为逐位不变, 仅编排/构造收口): ① `infra/store_recovery.py` 新增「读坏→(挪走)留证→读 `.bak`」编排单点 `recover_corrupt_file`(回调式 read_backup + 可选 quarantine, 不传 = 原地保留)与 `quarantine_bad_file` 时间戳留证单点, hr `HrLockSession._recover` 与 state `StateService.load()` 损坏分支两处调用 —— 语义差异(hr 挪走留证/schema 迁移/read_error 消息 vs state 原地保留/_CORRUPT 三态/分级日志/立即自愈写回)全部保留在调用方; ② `infra/locking.py` 新增 `open_file_lock`/`release_file_lock` 构造/释放单点, hr 站点锁与 SingleInstanceLock 同族收口(hr/store 不再裸 import filelock); ③ 新守阵 tests/test_store_recovery.py 十条(静态两判据均过红验)。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** dup-code-audit
 
@@ -56,3 +56,5 @@
 - **行为等价审计**: `read_error` 四段消息逐字重组(坏文件已挪走 / 未能挪走 / 已从备份恢复 / 备份不可用); state 的 WARNING/INFO/ERROR 三条日志与自愈写回路径不变; hr 锁的 acquire / Timeout→HrLockBusy / release 纪律不变(唯一微差: 释放失败 debug 文案「释放站点锁失败: {path}」→「释放站点锁 {path} 失败: ...」, 无守阵钉该文案)。
 - **验证**: 定向 6 文件全绿(hr_store / locking / rule_engine / hr_status / hr_service / store_recovery); test.full 全绿, 数字唯一权威在基线切片(见 **Refs:**), 此处不手抄。
 - **零改动确认**: 未触碰 `config.yml` / `auto-qb-data/`; webui/torrents 零改动; 既有测试文件零修改(仅新增 `tests/test_store_recovery.py`)。
+
+- 2026-10-21 02:26 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)
