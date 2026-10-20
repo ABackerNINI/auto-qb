@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体">
 <meta name="issue-summary" content="combobox 全链路重复: 键盘导航 5 处、40ms 合帧收层 3 处、模板输入行+候选面板 5 处逐字同, 且第 6 个变体已分叉">
 <title>前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体 · refactor · 计划外问题（便签）</title>
@@ -62,14 +62,14 @@
 <div class="sheet">
 
   <header class="cover">
-    <div class="kicker">计划外问题（便签）· refactor</div>
+    <div class="kicker">计划外问题（已修）· refactor</div>
     <h1>前端 combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体</h1>
     <p class="lede">combobox 全链路重复: 键盘导航 5 处、40ms 合帧收层 3 处、模板输入行+候选面板 5 处逐字同, 且第 6 个变体已分叉</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2230-refactor-fe-combobox-family-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge ok">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -106,6 +106,24 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 02:20 — 用户指派实施（认领），状态 <strong>In Progress</strong>。复验：五处模板骨架仍逐字同（<code>add-input-row</code> + input 五绑 + <code>add-pop-clear</code> + <code>pop-menu add-pop</code> + <code>pop-item</code> + <code>pop-empty</code>），键盘导航 5 处仍在（<code>_comboKeydown</code> 三处 + <code>onMetaCatKeydown</code> + <code>onMovePathKeydown</code>），IME 守卫仅 add 侧一处有</li>
+      <li>2026-10-21 02:52 — 修完，状态 <strong>Done</strong>。验证：全量 <code>pytest -q</code> <strong>3959 passed + 10 skipped，覆盖率 99.29%</strong>（含 4 个 combobox 守阵 + 模板分片接线守阵 + node --check 语法守阵）。实际修法见下方「修复后补充」</li>
+    </ul>
+    <h3>复验</h3>
+    <p>认领时复验仍复现：模板 5 处（dialogs-mgr.html 保存路径/分类/标签 · move-dialog.html movePath · popovers.html metaCat）、键盘 5 处、40ms 合帧收层 3 处（<code>addPopBlurClose</code>/<code>metaCatBlurClose</code>/<code>movePathBlurClose</code> 各自带一份 <code>setTimeout</code>+<code>clearTimeout</code> 与坑档注释拷贝）。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法</strong>（骨架单点 + 差异参数化，DOM/行为逐字节等价）：</p>
+    <ul>
+      <li><strong>模板骨架</strong>：新增分片 <code>shared/tpl/combo-input.html</code> 的 <code>#tpl-combo-input</code>（独立分片而非并进 <code>xtpl.html</code> —— 后者原 381 行，并入后 455 行超「单分片 400 行」守阵；三套 shell 的 <code>tpl-manifest</code> 同步加挂，逐项一致）。五处调用点改为一行 <code>&lt;aq-combo-input …&gt;</code>。差异全部参数化：<code>inputId</code>（<code>_popBlurShouldHold</code> 家族锚）/ <code>inputRef</code> / <code>menu</code>/<code>hi</code> / <code>options</code>（字符串数组，过滤产物由调用方传入）/ <code>onPick</code>/<code>comboKey</code>（悬停接管 kind，空 = 不挂）/ <code>icon</code>/<code>emptyText</code>/<code>headText</code>（计数头；路径/move 有、分类/标签/meta 无 —— 口径 R23-A-10）/ <code>clearKind</code>/<code>presetLabel</code>+<code>presetValue</code>（meta 的「(无分类)」预置行，不参与索引）/ <code>innerList</code>（路径/move 包可滚内层，分类/标签/meta 不包）。<strong>label 与 FX-18 注释留在调用点</strong>（label 守阵原样通过）。</li>
+      <li><strong>键盘导航</strong>：<code>_comboKeydown(e, kind)</code> → <code>comboKeydown(ctx, ev)</code> <strong>单点</strong>（add_torrent.js），<strong>IME 守卫恒开</strong>（<code>ev.isComposing || ev.keyCode === 229</code>，此前 5 处里只有 1 处有），ctx 全 getter 注入（<code>items/open/hi/setOpen/setHi/onPick</code>）+ 选项 <code>openOnArrow</code>（保存路径不按 ↑↓ 开层，与收敛前一致）/ <code>enterFallback</code>（meta、move 回车取输入框当前值）/ <code>listRef</code>（滚动跟随）。<code>onAddPathKeydown</code>/<code>onAddCatKeydown</code>/<code>onAddTagKeydown</code>/<code>onMetaCatKeydown</code>/<code>onMovePathKeydown</code> 全部降为薄适配器。</li>
+      <li><strong>40ms 合帧收层</strong>：新增 <code>COMBO_BLUR_CLOSE_MS = 40</code> + <code>_popBlurArm(timerKey, ids, close)</code> / <code>_popBlurCancel(timerKey)</code>，<code>_popBlurShouldHold(ids)</code> 保留；三处 <code>*BlurClose</code> 改为一行 <code>_popBlurArm</code>，三处 <code>open*</code> 改调 <code>_popBlurCancel</code>，删掉 <code>_metaPopBlurCancel</code>/<code>_movePopBlurCancel</code> 两份拷贝。坑档注释随骨架走一份。</li>
+      <li><strong>组件注册</strong>：<code>window.AQ_COMBO_INPUT_COMPONENT</code>（add_torrent.js，props 16 / emits 6 / methods <code>comboOnInput</code>·<code>comboOnHover</code>·<code>comboBindMenu</code>·<code>comboBindList</code>·<code>comboBindInput</code>），<code>app.component("aq-combo-input", …)</code> 挂进 app.js。</li>
+      <li><strong>范围守恒，未动</strong>：第 6 变体 <code>settings.html</code> 站点搜索层（<code>hb-tr-*</code> 类族 + <code>hubTrackerKeydown</code>，守阵独立）不并入；保存路径仍不挂悬停接管（收敛前即如此）。</li>
+    </ul>
+    <h3>修复中踩到的坑</h3>
+    <ul>
+      <li><strong>组件内字符串 ref 注册在子组件实例</strong>：<code>_fitAddPop</code>/<code>_hiScroll</code> 是根方法、读根 <code>$refs</code>，字符串 ref 进组件后拿不到 → 改用<strong>方法函数 ref</strong> <code>comboBindMenu/List/Input</code> 显式写 <code>this.$root.$refs[name]</code>（Chromium 实测开层/关层/重渲染全周期）。已立坑档 <code>pitfalls/web-ui/component-ref-ownership.md</code>。</li>
+      <li><strong>块注释被 <code>*/</code> 提前终结</strong>：注释里写 <code>comboOn*/comboBind*</code> 导致 add_torrent.js 语法错误 —— 已被 <code>node --check</code> 守阵抓住（既有坑档 <code>pitfalls/web-ui/js-comment-terminator.md</code> 已覆盖）。</li>
     </ul>
   </section>
 

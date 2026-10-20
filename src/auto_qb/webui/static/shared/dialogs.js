@@ -358,26 +358,21 @@ window.AQB_DIALOGS = {
         this.metaCatInput = name;
       }
     },
-    /* 失焦收层(与添加种子三下拉同一套口径, 见 pitfalls/web-ui/combobox-focusout-close):
+    /* 失焦收层(与添加种子三下拉同一套单点口径 _popBlurArm, 见 pitfalls/web-ui/combobox-focusout-close:
      * 40ms 合帧守卫是必需的 —— 点字段 label(for= 转发激活)时浏览器先 blur 再把焦点转回输入框,
      * 同步收层 = 关了又开(用户看到的"闪烁再现"); 焦点真回来由 openMetaCatMenu 撤销。
      * 改前这个下拉根本没有失焦收层(也没进 lifecycle 的 window click 兜底名单): 点了对话框里
      * 别的地方(标签胶囊 / 新标签输入框)下拉悬着不收, 只能 Esc 或选一项 —— 与三下拉同族缺陷。
-     * 四轮加固(2026-10-04): 收层前问 _popBlurShouldHold(单点在 add_torrent.js, 记录器挂根实例
-     * mounted) —— 模板 @mousedown.prevent 缺位时由 JS 守卫独立根除按住期收层闪烁。 */
+     * 四轮加固(2026-10-04): _popBlurArm 收层前问 _popBlurShouldHold(单点在 add_torrent.js,
+     * 记录器挂根实例 mounted) —— 模板 @mousedown.prevent 缺位时由 JS 守卫独立根除按住期收层闪烁。 */
     metaCatBlurClose() {
-      clearTimeout(this._metaPopBlurT);
-      this._metaPopBlurT = setTimeout(() => {
-        if (this._popBlurShouldHold(["meta-category"])) return;
+      this._popBlurArm("_metaPopBlurT", ["meta-category"], () => {
         this.metaCatMenu = false;
         this.metaCatHi = -1;
-      }, 40);
-    },
-    _metaPopBlurCancel() {
-      clearTimeout(this._metaPopBlurT);
+      });
     },
     openMetaCatMenu() {
-      this._metaPopBlurCancel();  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
+      this._popBlurCancel("_metaPopBlurT");  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
       this.metaCatMouseAt = null;  // 开层复位悬停门限坐标(同 addCatMouseAt)
       this.metaCatHi = this.metaCategories.indexOf(this.metaCatInput.trim());
       this.metaCatMenu = true;
@@ -389,25 +384,19 @@ window.AQB_DIALOGS = {
       return this.metaCategories.filter((c) => c.toLowerCase().includes(q));
     },
     onMetaCatKeydown(e) {
-      // 下拉未开时不接管按键(回车走应用); 开启后: 上下循环高亮, 回车选高亮项, Esc 只收面板(阻断冒泡不关对话框)
-      const opts = this.metaCatFiltered();
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && opts.length) {
-        e.preventDefault();
-        if (!this.metaCatMenu) {
-          this.metaCatMenu = true;
-          this.metaCatHi = e.key === "ArrowDown" ? -1 : 0;
-        }
-        this.metaCatHi = (this.metaCatHi + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
-        this._hiScroll("metaCatList");
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const picked = this.metaCatMenu && this.metaCatHi >= 0 ? opts[this.metaCatHi] : this.metaCatInput;
-        this.metaSetCategory(picked);
-      } else if (e.key === "Escape" && this.metaCatMenu) {
-        e.stopPropagation();
-        this.metaCatMenu = false;
-        this.metaCatHi = -1;
-      }
+      // 下拉未开时不接管按键(回车走应用); 开启后: 上下循环高亮, 回车选高亮项, Esc 只收面板(阻断冒泡不关对话框)。
+      // 键盘导航本体在 comboKeydown 单点(add_torrent.js, 收敛 R20-B-05 五处; 本处个性 = 回车回退提交输入框文本)
+      this.comboKeydown({
+        items: () => this.metaCatFiltered(),
+        open: () => this.metaCatMenu,
+        setOpen: (v) => { this.metaCatMenu = v; },
+        hi: () => this.metaCatHi,
+        setHi: (v) => { this.metaCatHi = v; },
+        onPick: (name) => this.metaSetCategory(name),
+        enterFallback: () => this.metaCatInput,  // 无高亮项时回车提交输入框文本(含清空 = 无分类)
+        listRef: "metaCatList",
+        openOnArrow: true,
+      }, e);
     },
     /* ---------------- 日志 tail(FE-2C): /api/log 只读(等级过滤 + 行数选择 + 手动刷新, 不轮询);
          入口在 Console Hub「常规」分区页尾(2026-09-26 由独立「运行日志」分区并入), 顶层 page 只有 groups/settings ---------------- */

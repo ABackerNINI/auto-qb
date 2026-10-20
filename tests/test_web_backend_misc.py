@@ -543,21 +543,34 @@ def test_frontend_dialog_combo_hover_takeover():
     .on 一条路; 3. 开层单点复位门限坐标(下次打开首个动作不被旧坐标误挡)。
     """
     mgr = open(os.path.join(STATIC_ROOT, "shared", "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
-    for token in (
-        "@mousemove=\"comboHoverIdx('cat', i, $event)\"",  # 悬停接管走位移门限(治上下键选中项闪烁)
-        "@mousemove=\"comboHoverIdx('tag', i, $event)\"",
-    ):
-        assert token in mgr, f"dialogs-mgr.html 缺少 {token}(分类/标签下拉悬停接线被改坏? 同步本守阵)"
+    pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
+    # 收敛 issue 26-10-20-2230: 分类/标签/meta 三处下拉的候选行进共享组件 #tpl-combo-input
+    # (xtpl.html), 悬停接线 = 模板 @mousemove=comboOnHover -> 组件方法按 comboKey 转发
+    # $root.comboHoverIdx; 调用点只传 combo-key(cat/tag/meta) —— 门限判据/分存坐标仍是下方单点
+    xt = open(os.path.join(STATIC_ROOT, "shared", "tpl", "combo-input.html"), encoding="utf-8").read()
+    tpl_seg = re.search(r'id="tpl-combo-input">([\s\S]*?)</script>', xt, re.S)
+    assert tpl_seg, "combo-input.html 找不到 #tpl-combo-input(combobox 共享模板, 悬停接线被改坏? 同步本守阵)"
+    assert '@mousemove="comboOnHover(i, $event)"' in tpl_seg.group(1), \
+        "组件模板候选行缺 @mousemove=comboOnHover(悬停接管走位移门限, 治上下键选中项闪烁)"
+    assert "@mouseenter" not in tpl_seg.group(1), \
+        "组件模板候选行不得挂 @mouseenter(静止光标旧高亮与键盘活动项同源打架 = 上下键选中项闪烁/Enter 选错), 悬停接管走 comboHoverIdx"
+    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    fwd = re.search(r"comboOnHover\(i, ev\) \{(.*?)\n    \},", at, re.S)
+    assert fwd and "if (this.comboKey)" in fwd.group(1), \
+        "comboOnHover 必须守 comboKey 空值(保存路径面板无悬停/键盘互斥面, 空 = 不接管)"
+    assert fwd and "this.$root.comboHoverIdx(this.comboKey, i, ev)" in fwd.group(1), \
+        "comboOnHover 必须按 comboKey 转发 $root.comboHoverIdx(转发断链 = 悬停接管失效)"
+    for kind in ("cat", "tag"):
+        assert f'combo-key="{kind}"' in mgr, \
+            f"dialogs-mgr.html 缺少 combo-key=\"{kind}\"(分类/标签下拉悬停接线被改坏? 同步本守阵)"
     assert "@mouseenter=\"addCatHi" not in mgr and "@mouseenter=\"addTagHi" not in mgr, \
         "分类/标签下拉行不得挂 @mouseenter(静止光标旧高亮与键盘活动项同源打架 = 上下键选中项闪烁/Enter 选错), 悬停接管走 comboHoverIdx"
-    pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
-    assert "@mousemove=\"comboHoverIdx('meta', i, $event)\"" in pop, "popovers.html 缺少 meta 分类下拉悬停接线(同步本守阵)"
+    assert 'combo-key="meta"' in pop, "popovers.html 缺少 combo-key=\"meta\"(meta 分类下拉悬停接线, 同步本守阵)"
     assert "@mouseenter=\"metaCatHi" not in pop, "编辑弹窗分类下拉行不得挂 @mouseenter(同族打架), 悬停接管走 comboHoverIdx"
     # 1. 门限坐标三字段声明(漏声明 = 响应性缺失) + 共享小工具单点实现(别三处各抄一份)
     st = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
     for token in ("addCatMouseAt: null", "addTagMouseAt: null", "metaCatMouseAt: null"):
         assert token in st, f"state.js 缺少 {token}(门限坐标未声明 = 响应性缺失)"
-    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
     assert "comboHoverIdx(kind, i, ev)" in at, "缺 comboHoverIdx 共享小工具(三处下拉共用, 别各抄一份)"
     fn = re.search(r"comboHoverIdx\(kind, i, ev\) \{(.*?)\n    \},", at, re.S)
     assert fn and "dx * dx + dy * dy < 9" in fn.group(1), \

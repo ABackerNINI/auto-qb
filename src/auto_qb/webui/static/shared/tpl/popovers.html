@@ -63,27 +63,17 @@
                  不挡则 metaCatBlurClose 的 40ms 合帧定时器在按住期间(人手 80~150ms)先收层,
                  松手 label 转发 refocus 再重开 = 闪烁。缺一即回归, 走查须 delay>=120ms。 -->
             <label class="add-dialog-label" for="meta-category" @mousedown.prevent @click.stop>分类(留空 = 无分类)</label>
-            <div class="add-input-row">
-              <input id="meta-category" v-model="metaCatInput" class="add-dialog-input" type="text"
-                     placeholder="下拉选择或自由输入, 留空 = 清除分类" autocomplete="off" spellcheck="false"
-                     @focus="openMetaCatMenu" @click.stop="openMetaCatMenu"
-                     @input="metaCatHi = -1; metaCatMenu = true" @focusout="metaCatBlurClose"
-                     @keydown="onMetaCatKeydown($event)">
-              <transition name="pop">
-                <div v-if="metaCatMenu" class="pop-menu add-pop" @click.stop ref="metaCatList">
-                  <div class="pop-item add-pop-item" @mousedown.prevent="metaSetCategory('')">
-                    <span class="pop-value">(无分类)</span>
-                  </div>
-                  <div v-for="(c, i) in metaCatFiltered()" :key="c" class="pop-item add-pop-item"
-                       :class="{ on: i === metaCatHi }" :data-hi="i === metaCatHi ? '1' : '0'"
-                       @mousedown.prevent="metaSetCategory(c)" @mousemove="comboHoverIdx('meta', i, $event)">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
-                    <span class="pop-value">{{ c }}</span>
-                  </div>
-                  <p v-if="!metaCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
-                </div>
-              </transition>
-            </div>
+            <!-- 骨架收敛为 <aq-combo-input>(issue 26-10-20-2230): "(无分类)"预置行经
+                 preset-label/preset-value 参数化(不参与键盘/悬停索引), 其余同添加种子三下拉 -->
+            <aq-combo-input input-id="meta-category" v-model="metaCatInput"
+                            placeholder="下拉选择或自由输入, 留空 = 清除分类"
+                            :menu="metaCatMenu" :hi="metaCatHi" :options="metaCatFiltered()"
+                            :on-pick="metaSetCategory" combo-key="meta" icon="#i-folder"
+                            empty-text="无匹配分类, 可直接自由输入"
+                            preset-label="(无分类)" preset-value=""
+                            menu-ref="metaCatList"
+                            @open="openMetaCatMenu" @input="metaCatHi = -1; metaCatMenu = true"
+                            @blur="metaCatBlurClose" @keydown="onMetaCatKeydown($event)"></aq-combo-input>
             <p v-if="metaCatDiff" class="add-dialog-hint">选中种子的分类不一致, 输入框已清空; 设置后将统一覆盖</p>
           </div>
           <div class="add-dialog-field">

@@ -31,27 +31,16 @@
                  不挡则 movePathBlurClose 的 40ms 合帧定时器在按住期间先收层, 松手转发 refocus 再重开 = 闪烁。
                  缺一即回归, 走查须 delay>=120ms。 -->
             <label class="add-dialog-label" for="move-path" @mousedown.prevent @click.stop>新保存路径</label>
-            <div class="add-input-row">
-              <input ref="movePathInputEl" id="move-path" v-model="movePathInput" class="add-dialog-input" type="text"
-                     placeholder="下拉选择或自由输入, 如 D:\downloads\target" autocomplete="off" spellcheck="false"
-                     @focus="openMovePathMenu" @click.stop="openMovePathMenu"
-                     @input="movePathHi = -1; movePathMenu = true" @focusout="movePathBlurClose"
-                     @keydown="onMovePathKeydown($event)">
-              <transition name="pop">
-                <div v-if="movePathMenu" class="pop-menu add-pop" @click.stop ref="movePathList">
-                  <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ movePathOptions.length }}</span></div>
-                  <div class="add-pop-list">
-                    <div v-for="(p, i) in movePathOptions" :key="p" class="pop-item add-pop-item"
-                         :class="{ on: i === movePathHi }" :data-hi="i === movePathHi ? '1' : '0'"
-                         @mousedown.prevent="moveApplyPath(p)" @mousemove="comboHoverIdx('move', i, $event)">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-                      <span class="pop-value">{{ p }}</span>
-                    </div>
-                    <p v-if="!movePathOptions.length" class="pop-empty">暂无历史位置, 可直接自由输入</p>
-                  </div>
-                </div>
-              </transition>
-            </div>
+            <!-- 骨架收敛为 <aq-combo-input>(issue 26-10-20-2230): 收层/限高/悬停/键盘四绑
+                 与添加种子三下拉 + meta 分类同点, 此处只留调用参数(menuRef/inputRef 锚名不变) -->
+            <aq-combo-input input-id="move-path" input-ref="movePathInputEl" v-model="movePathInput"
+                            placeholder="下拉选择或自由输入, 如 D:\downloads\target"
+                            :menu="movePathMenu" :hi="movePathHi" :options="movePathOptions"
+                            :on-pick="moveApplyPath" combo-key="move" icon="#i-folder-open"
+                            empty-text="暂无历史位置, 可直接自由输入" head-text="选择保存位置"
+                            menu-ref="movePathList" inner-list
+                            @open="openMovePathMenu" @input="movePathHi = -1; movePathMenu = true"
+                            @blur="movePathBlurClose" @keydown="onMovePathKeydown($event)"></aq-combo-input>
           </div>
         </div>
         <div class="modal-actions">

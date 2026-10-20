@@ -3465,27 +3465,41 @@ def test_frontend_add_combo_blur_close_and_fit():
 
     at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
     mgr = open(os.path.join(STATIC_ROOT, "shared", "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
+    xt = open(os.path.join(STATIC_ROOT, "shared", "tpl", "combo-input.html"), encoding="utf-8").read()
 
-    # 1. 三个输入框全部挂 @focusout 收层(漏一个 = 那个下拉点空白不收)
+    # 1. 三个输入框全部挂失焦收层(收敛 issue 26-10-20-2230: 输入框骨架进共享组件
+    #    #tpl-combo-input(独立分片 combo-input.html), 字段级接线在调用点) —— 漏一个 = 那个下拉点空白不收
+    tpl_seg = re.search(r'id="tpl-combo-input">([\s\S]*?)</script>', xt, re.S)
+    assert tpl_seg, "combo-input.html 找不到 #tpl-combo-input(combobox 共享模板, 改名或挪走了? 同步本守阵)"
+    assert '@focusout="$emit(\'blur\')"' in tpl_seg.group(1), \
+        "组件模板缺 @focusout=\"$emit('blur')\"(失焦即收是收层主判据, 组件内漏挂 = 五个下拉全不收)"
     for input_id in ("ad-save-path", "ad-category", "ad-tags"):
-        m = re.search(rf'<input id="{input_id}"(.*?)>', mgr, re.S)
+        m = re.search(rf'<aq-combo-input input-id="{input_id}"(.*?)>', mgr, re.S)
         assert m, f"dialogs-mgr.html 找不到 #{input_id}(添加窗口三下拉的输入框, 改名或挪走了? 同步本守阵)"
-        assert '@focusout="addPopBlurClose"' in m.group(1), \
-            f"#{input_id} 缺 @focusout=\"addPopBlurClose\"(失焦即收是收层主判据, 漏挂 = 该下拉点窗口其它位置不收)"
+        assert '@blur="addPopBlurClose"' in m.group(1), \
+            f"#{input_id} 缺 @blur=\"addPopBlurClose\"(失焦即收是收层主判据, 漏挂 = 该下拉点窗口其它位置不收)"
 
-    # 2. 失焦收层必须带合帧守卫: 同步收层会被 label 的焦点转回打断(闪烁回潮)
+    # 2. 失焦收层必须带合帧守卫: 40ms 合帧 + _popBlurShouldHold 收敛在 _popBlurArm 单点
+    #    (同步收层会被 label 的焦点转回打断 = 闪烁回潮); addPopBlurClose 是薄封装
+    arm = re.search(r"_popBlurArm\(timerKey, ids, close\) \{(.*?)\n    \},", at, re.S)
+    assert arm, "add_torrent.js 找不到 _popBlurArm(失焦收层合帧单点, 改名或挪走了? 同步本守阵)"
+    assert "setTimeout" in arm.group(1) and "clearTimeout" in arm.group(1), \
+        "_popBlurArm 必须用定时器合帧(同步收层 + label 转发回焦 = 关了又开闪烁); 定时窗内焦点回来由开层方法撤销"
+    assert "COMBO_BLUR_CLOSE_MS" in arm.group(1), \
+        "_popBlurArm 漏用 COMBO_BLUR_CLOSE_MS 单点常量(合帧窗改数值要三处同改, 收敛后只剩这一处)"
+    assert "_popBlurShouldHold(ids)" in arm.group(
+        1
+    ), "_popBlurArm 收层前没问守卫(见 test_frontend_add_combo_label_clear_mask_and_refit 第 7 节)"
     body = re.search(r"addPopBlurClose\(\) \{(.*?)\n    \},", at, re.S)
-    assert body, "add_torrent.js 找不到 addPopBlurClose(失焦收层单点, 改名或挪走了? 同步本守阵)"
-    assert "setTimeout" in body.group(1) and "clearTimeout" in body.group(1), \
-        "addPopBlurClose 必须用定时器合帧(同步收层 + label 转发回焦 = 关了又开闪烁); 定时窗内焦点回来由开层方法撤销"
+    assert body, "add_torrent.js 找不到 addPopBlurClose(失焦收层入口薄封装)"
     for field in ("addCatMenu", "addTagMenu", "addPathPop"):
         assert f"this.{field} = false" in body.group(1), f"addPopBlurClose 漏收 {field}"
 
     # 3. 三个开层方法先撤销挂起的收层(焦点回到输入框 = 菜单保持, 不闪)
     for fnname in ("openAddCatMenu", "openAddTagMenu", "openAddPathPop"):
         body = re.search(rf"{fnname}\(\) \{{(.*?)\n    \}},", at, re.S)
-        assert body and "_addPopBlurCancel()" in body.group(1), \
-            f"{fnname} 必须先 _addPopBlurCancel()(焦点转回输入框时撤销挂起的失焦收层, 否则菜单闪烁)"
+        assert body and '_popBlurCancel("_addPopBlurT")' in body.group(1), \
+            f"{fnname} 必须先 _popBlurCancel(\"_addPopBlurT\")(焦点转回输入框时撤销挂起的失焦收层, 否则菜单闪烁)"
 
     # 4. 限高: 开层 watcher 单点(开层入口有四处, 直挂方法会漏) + 量「行→滚动容器可见底沿」净空
     for token in ("addCatMenu(v) {", "addTagMenu(v) {", "addPathPop(v) {"):
@@ -3607,6 +3621,7 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     lf = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
     mgr = open(os.path.join(shared, "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
     pv = open(os.path.join(shared, "tpl", "popovers.html"), encoding="utf-8").read()
+    xt = open(os.path.join(shared, "tpl", "combo-input.html"), encoding="utf-8").read()
 
     # 1. 四个 combo 的字段 label 全部 @mousedown.prevent + @click.stop(漏一个 = 那个下拉点 label 稳定闪烁;
     #    prevent 挡 mousedown 默认动作的 blur(40ms 合帧窗赢不了人手按住时长), stop 挡 window click 收层)
@@ -3624,22 +3639,29 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
              f"输入框 blur 掉, addPopBlurClose 的 40ms 合帧定时器在按住期间(人手 80~150ms > 40ms)"
              f"先收层, 松手 label 转发回焦再重开 = 闪烁(2026-10-04 三修, 真机按住时序实测)")
 
-    # 2. 三个 combobox 内嵌清空(x): 行挂 has-clear + 按钮 @mousedown.prevent + 走 clearAddField
+    # 2. 三个 combobox 内嵌清空(x): 按钮本体收敛进组件模板 #tpl-combo-input(clear-kind 参数化,
+    #    issue 26-10-20-2230), 调用点传 kind + @clear 接线; 模板侧钉 has-clear + 双修饰符 + 非空显形
+    tpl_seg = re.search(r'id="tpl-combo-input">([\s\S]*?)</script>', xt, re.S)
+    assert tpl_seg, "combo-input.html 找不到 #tpl-combo-input(combobox 共享模板)"
+    tpl_body = tpl_seg.group(1)
+    assert "'has-clear': !!clearKind" in tpl_body, "组件模板输入行缺 has-clear 绑定(清空钮靠它让出右内边距)"
+    assert 'class="add-pop-clear"' in tpl_body, "组件模板缺 .add-pop-clear 清空按钮"
+    assert 'v-if="clearKind && modelValue"' in tpl_body, "组件模板清空钮缺非空显形条件(空框也显示 = 多点一次空操作)"
+    btn = re.search(r'<button[^>]*add-pop-clear[\s\S]{0,200}?>', tpl_body)
+    assert btn and "@mousedown.prevent" in btn.group(0), \
+        "组件模板清空钮缺 @mousedown.prevent(不拦默认动作会抢焦点 → 下拉被失焦收掉)"
+    assert btn and "@click.stop" in btn.group(0), \
+        ("组件模板清空钮缺 @click.stop —— 它的 click 会冒泡到 lifecycle 的 window "
+         "收层名单, 点一下 x 顺手把下拉一起收了(真机走查实测: 清空后菜单消失)")
+    assert "$emit('clear', clearKind)" in tpl_body, "组件模板清空钮没向调用方 emit clear(kind)"
     for input_id, kind, field in (
         ("ad-save-path", "path", "addSavePath"), ("ad-category", "cat", "addCategory"), ("ad-tags", "tag", "addTags")
     ):
-        i = mgr.index(f'id="{input_id}"')
-        seg = mgr[mgr.rindex('class="add-input-row', 0, i):i + 900]
-        assert "has-clear" in seg, f"#{input_id} 的输入行缺 has-clear(清空钮靠它让出右内边距)"
-        assert 'class="add-pop-clear"' in seg, f"#{input_id} 行内缺 .add-pop-clear 清空按钮"
-        assert '@mousedown.prevent' in seg, \
-            f"#{input_id} 的清空钮缺 @mousedown.prevent(不拦默认动作会抢焦点 → 下拉被失焦收掉)"
-        assert f"clearAddField('{kind}')" in seg, f"#{input_id} 的清空钮没接 clearAddField('{kind}')"
-        assert f'v-if="{field}"' in seg, f"#{input_id} 的清空钮没按 {field} 非空才显形"
-        btn = re.search(r'<button[^>]*add-pop-clear[\s\S]{0,200}?>', seg)
-        assert btn and "@click.stop" in btn.group(0), \
-            (f"#{input_id} 的清空钮缺 @click.stop —— 它的 click 会冒泡到 lifecycle 的 window "
-             f"收层名单, 点一下 x 顺手把下拉一起收了(真机走查实测: 清空后菜单消失)")
+        i = mgr.index(f'input-id="{input_id}"')
+        seg = mgr[mgr.rindex("<aq-combo-input", 0, i):i + 900]
+        assert f'clear-kind="{kind}"' in seg, f"#{input_id} 的调用点没传 clear-kind=\"{kind}\"(无清空钮)"
+        assert f'v-model="{field}"' in seg, f"#{input_id} 的调用点没把 {field} 绑进 v-model(清空钮非空显形条件失效)"
+        assert '@clear="clearAddField"' in seg, f"#{input_id} 的清空钮没接 @clear=\"clearAddField\""
     clear_body = re.search(r"clearAddField\(kind\) \{(.*?)\n    \},", at, re.S)
     assert clear_body, "add_torrent.js 找不到 clearAddField(三个 combobox 的清空单点)"
     for field in ("addSavePath", "addCategory", "addTags"):
@@ -3682,14 +3704,15 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
         "_fitAddPop 必须同时放行 meta 对话框与设定位置对话框(三处共用同一套限高, 只认 addOpen 会让 meta/move 侧恒不生效)"
 
     # 5. meta 分类下拉补失焦收层 + 进 window click 兜底名单(原本两处都漏 = 点对话框别处下拉不收)
-    m = re.search(r'<input id="meta-category"(.*?)>', pv, re.S)
-    assert m and '@focusout="metaCatBlurClose"' in m.group(1), \
-        "#meta-category 缺 @focusout 收层(点对话框里别的地方下拉悬着不收)"
+    #    (收敛 issue 26-10-20-2230: 输入框进组件模板, 字段接线在调用点 @blur)
+    m = re.search(r'<aq-combo-input input-id="meta-category"(.*?)>', pv, re.S)
+    assert m and '@blur="metaCatBlurClose"' in m.group(1), \
+        "#meta-category 缺 @blur 收层(点对话框里别的地方下拉悬着不收)"
     blur = re.search(r"metaCatBlurClose\(\) \{(.*?)\n    \},", dg, re.S)
-    assert blur and "setTimeout" in blur.group(1) and "clearTimeout" in blur.group(1), \
-        "metaCatBlurClose 必须定时合帧(同步收层会被 label 转发回焦打断 = 闪烁)"
+    assert blur and '_popBlurArm("_metaPopBlurT", ["meta-category"]' in blur.group(1), \
+        "metaCatBlurClose 必须走 _popBlurArm 合帧单点(同步收层会被 label 转发回焦打断 = 闪烁)"
     open_meta = re.search(r"openMetaCatMenu\(\) \{(.*?)\n    \},", dg, re.S)
-    assert open_meta and "_metaPopBlurCancel()" in open_meta.group(1), \
+    assert open_meta and '_popBlurCancel("_metaPopBlurT")' in open_meta.group(1), \
         "openMetaCatMenu 必须撤销挂起的失焦收层(焦点转回输入框时菜单不闪)"
     assert "this.metaCatMenu = false;" in lf, \
         "lifecycle.js 的 window click 兜底名单缺 metaCatMenu(与三下拉同层, 漏了靠 focusout 单点兜)"
@@ -3717,12 +3740,17 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
         "_popBlurShouldHold 必须先判「焦点已回本族输入框」(转发 click 已落地 → 不收)"
     assert "performance.now() - rec.t <= 350" in hold.group(1), \
         "_popBlurShouldHold 必须带 350ms 新鲜度上界(防旧记录误挡后续无 mousedown 的失焦, 如 Tab)"
+    # 收敛(issue 26-10-20-2230)后 addPopBlurClose/metaCatBlurClose 是薄封装, 家族 id 名单随
+    # _popBlurArm 实参传入、守卫调用在单点内 —— 断言入口传对名单 + 单点内恒问守卫
+    arm = re.search(r"_popBlurArm\(timerKey, ids, close\) \{(.*?)\n    \},", at, re.S)
+    assert arm and "_popBlurShouldHold(ids)" in arm.group(1), \
+        "_popBlurArm 收层前没问守卫(模板修饰符缺位时 JS 守卫独立根除按住期收层闪烁)"
     add_close = re.search(r"addPopBlurClose\(\) \{(.*?)\n    \},", at, re.S)
-    assert add_close and '_popBlurShouldHold(["ad-save-path", "ad-category", "ad-tags"])' in add_close.group(1), \
-        "addPopBlurClose 收层前没问守卫(三字段的家族 id 名单缺一即该字段守卫失效)"
+    assert add_close and '["ad-save-path", "ad-category", "ad-tags"]' in add_close.group(1), \
+        "addPopBlurClose 没传三字段的家族 id 名单(缺一即该字段守卫失效)"
     meta_close = re.search(r"metaCatBlurClose\(\) \{(.*?)\n    \},", dg, re.S)
-    assert meta_close and '_popBlurShouldHold(["meta-category"])' in meta_close.group(1), \
-        "metaCatBlurClose 收层前没问守卫(meta 分类下拉与三下拉同族, 缺位同闪)"
+    assert meta_close and '["meta-category"]' in meta_close.group(1), \
+        "metaCatBlurClose 没传 meta 分类的家族 id(meta 分类下拉与三下拉同族, 缺位同闪)"
 
 
 def test_frontend_move_dialog_combobox_wiring():
@@ -3763,14 +3791,13 @@ def test_frontend_move_dialog_combobox_wiring():
     assert "_addOrderByRecent(paths, recent.path)" in dr, "loadMoveOptions 没走 _addOrderByRecent 排序单点"
     assert "this._addRecencyMaps()" in dr, "loadMoveOptions 没走跨视图取数单点 _addRecencyMaps"
 
-    # 3. combobox 收层/限高/悬同同套口径
+    # 3. combobox 收层/限高/悬同同套口径(收敛 issue 26-10-20-2230: 合帧+守卫走 add_torrent.js
+    #    的 _popBlurArm 单点, 各处只剩定时器键/家族名单/收层动作)
     blur = re.search(r"movePathBlurClose\(\) \{(.*?)\n    \},", dr, re.S)
-    assert blur and "setTimeout" in blur.group(1) and "clearTimeout" in blur.group(1), \
-        "movePathBlurClose 必须定时合帧(同步收层会被 label 转发回焦打断 = 闪烁)"
-    assert '_popBlurShouldHold(["move-path"])' in (blur.group(1) if blur else ""), \
-        "movePathBlurClose 收层前没问守卫(与三下拉 + meta 同族)"
+    assert blur and '_popBlurArm("_movePopBlurT", ["move-path"]' in blur.group(1), \
+        "movePathBlurClose 必须走 _popBlurArm 合帧单点(同步收层会被 label 转发回焦打断 = 闪烁)"
     open_move = re.search(r"openMovePathMenu\(\) \{(.*?)\n    \},", dr, re.S)
-    assert open_move and "_movePopBlurCancel()" in open_move.group(1), \
+    assert open_move and '_popBlurCancel("_movePopBlurT")' in open_move.group(1), \
         "openMovePathMenu 必须撤销挂起的失焦收层(焦点转回输入框时菜单不闪)"
     for key, guard in (
         ("movePathMenu(v)", "if (v)"), ("movePathInput()", "if (this.movePathMenu)"),
@@ -3786,10 +3813,11 @@ def test_frontend_move_dialog_combobox_wiring():
     m = re.search(r'<label[^>]*for="move-path"[^>]*>', pv, re.S)
     assert m and "@click.stop" in m.group(0) and "@mousedown.prevent" in m.group(0), \
         "move-path label 缺 @click.stop + @mousedown.prevent(与三下拉 + meta 同因同修)"
-    mi = re.search(r'<input[^>]*id="move-path"(.*?)>', pv, re.S)
-    assert mi and '@focusout="movePathBlurClose"' in mi.group(1), "#move-path 缺 @focusout 收层"
+    mi = re.search(r'<aq-combo-input input-id="move-path"(.*?)>', pv, re.S)
+    assert mi and '@blur="movePathBlurClose"' in mi.group(1), "#move-path 缺 @blur 收层"
     assert mi and '@keydown="onMovePathKeydown' in mi.group(1), "#move-path 缺 @keydown 键盘导航"
-    assert 'ref="movePathList"' in pv, "move-dialog.html 缺 ref=movePathList(限高量拿不到容器)"
+    assert 'menu-ref="movePathList"' in (mi.group(1) if mi else ""), \
+        "move-dialog.html 缺 menu-ref=movePathList(限高量拿不到容器; 收敛后 ref 经组件方法函数写根 $refs)"
     assert "@mouseup.self=\"maskCloseIfArmed(closeMove)\"" in pv, "move 遮罩没接 mousedown 记臂位 + mouseup.self 才关"
     # 4b. 几何修(2026-10-19): 根元素按 movePathMenu 挂 .pop-open —— 下拉开层时对话框给 body 预留
     # 整高(规则在 5), 否则下拉伸出 body 被裁 + scrollHeight 撑大, 用户必须滚弹窗才能用下拉

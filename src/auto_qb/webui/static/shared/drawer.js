@@ -682,7 +682,7 @@ window.AQB_DRAWER = {
       }
     },
     openMovePathMenu() {
-      this._movePopBlurCancel();  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
+      this._popBlurCancel("_movePopBlurT");  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
       this.movePathMouseAt = null;  // 开层复位悬停门限坐标(同 addCatMouseAt)
       this.movePathHi = this.movePathOptions.indexOf(this.movePathInput.trim());
       this.movePathMenu = true;
@@ -696,46 +696,29 @@ window.AQB_DRAWER = {
       this.submitMoveDialog();
     },
     onMovePathKeydown(e) {
-      // 与 meta 分类下拉(onMetaCatKeydown)同套: 上下循环高亮(开层即展开), 回车即回填+提交(菜单未开时提交当前输入),
-      // Esc 只收面板(阻断冒泡不关对话框)
-      const opts = this.movePathOptions;
-      const n = opts.length;
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
-        e.preventDefault();
-        if (!this.movePathMenu) {
-          this.movePathMenu = true;
-          this.movePathHi = e.key === "ArrowDown" ? -1 : 0;
-        }
-        this.movePathHi = (this.movePathHi + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
-        this._hiScroll("movePathList");
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const p = this.movePathMenu && this.movePathHi >= 0 ? opts[this.movePathHi] : this.movePathInput;
-        if (p && p.trim()) {
-          this.movePathInput = p;
-          this.movePathMenu = false;
-          this.movePathHi = -1;
-          this.submitMoveDialog();
-        }
-      } else if (e.key === "Escape" && this.movePathMenu) {
-        e.stopPropagation();
-        this.movePathMenu = false;
-        this.movePathHi = -1;
-      }
+      // 与 meta 分类下拉同套单点(comboKeydown, add_torrent.js): 上下循环高亮(开层即展开),
+      // 回车即回填+提交(菜单未开时提交当前输入), Esc 只收面板(阻断冒泡不关对话框)。
+      // 本处个性 = ①回车回退提交修剪后的输入框文本 ②IME 组词守卫随单点恒开(收敛前缺, R21-A-04 ③)
+      this.comboKeydown({
+        items: () => this.movePathOptions,
+        open: () => this.movePathMenu,
+        setOpen: (v) => { this.movePathMenu = v; },
+        hi: () => this.movePathHi,
+        setHi: (v) => { this.movePathHi = v; },
+        onPick: (p) => this.moveApplyPath(p),
+        enterFallback: () => { const p = (this.movePathInput || "").trim(); return p || null; },
+        listRef: "movePathList",
+        openOnArrow: true,
+      }, e);
     },
-    /* 失焦收层(与添加种子三下拉 + meta 分类同套口径, 见 pitfalls/web-ui/combobox-focusout-close):
+    /* 失焦收层(与添加种子三下拉 + meta 分类同套单点 _popBlurArm, 见 pitfalls/web-ui/combobox-focusout-close:
      * 40ms 合帧守卫是必需的 —— 点字段 label(for= 转发激活)时浏览器先 blur 再把焦点转回输入框,
-     * 同步收层 = 关了又开; 焦点真回来由 openMovePathMenu 撤销。收层前问 _popBlurShouldHold(单点 add_torrent.js)。 */
+     * 同步收层 = 关了又开; 焦点真回来由 openMovePathMenu 撤销。收层前问 _popBlurShouldHold(add_torrent.js 单点)。 */
     movePathBlurClose() {
-      clearTimeout(this._movePopBlurT);
-      this._movePopBlurT = setTimeout(() => {
-        if (this._popBlurShouldHold(["move-path"])) return;
+      this._popBlurArm("_movePopBlurT", ["move-path"], () => {
         this.movePathMenu = false;
         this.movePathHi = -1;
-      }, 40);
-    },
-    _movePopBlurCancel() {
-      clearTimeout(this._movePopBlurT);
+      });
     },
     async submitMoveDialog() {
       if (this.moveBusy) return;

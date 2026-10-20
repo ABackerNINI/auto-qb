@@ -33,6 +33,12 @@ function _addNormPath(p) {
   return String(p == null ? "" : p).replace(/\\/g, "/").replace(/\/{2,}/g, "/");
 }
 
+/* combobox 失焦收层的合帧窗(毫秒): 焦点离开与 label 转发回焦之间隔着整段按住时长
+ * (人手 80~150ms), 同步收层必被回焦打断 = 下拉闪烁; 挂一个合帧定时器等"焦点真离开"。
+ * 单点常量 —— 收敛前 addPopBlurClose/metaCatBlurClose/movePathBlurClose 三处各写
+ * 一个 40(issue 26-10-20-2230 R21-A-05), 改策略要三处同改。 */
+const COMBO_BLUR_CLOSE_MS = 40;
+
 window.AQB_ADD = {
   /* DND-01: 全局拖拽监听挂 window(照 config_hub 的钩子先例); _dragDepth 非响应式(只驱动
    * addDragOver 布尔, 不进 data 免依赖追踪)。remove 与 add 引用同一 method 实例, 严格对称。 */
@@ -190,14 +196,14 @@ window.AQB_ADD = {
       }
     },
     openAddCatMenu() {
-      this._addPopBlurCancel();  // 焦点回到本输入框(label 转发/重新点入)时撤销挂起的失焦收层, 菜单不闪
+      this._popBlurCancel("_addPopBlurT");  // 焦点回到本输入框(label 转发/重新点入)时撤销挂起的失焦收层, 菜单不闪
       this.closeAddPopsExcept("cat");
       this.addCatHi = -1;
       this.addCatMouseAt = null;  // 开层复位悬停门限坐标(下次打开首个动作不被旧坐标误挡)
       this.addCatMenu = true;
     },
     openAddTagMenu() {
-      this._addPopBlurCancel();
+      this._popBlurCancel("_addPopBlurT");
       this.closeAddPopsExcept("tag");
       this.addTagHi = -1;
       this.addTagMouseAt = null;  // 同上
@@ -246,10 +252,28 @@ window.AQB_ADD = {
       this.addTagHi = -1;
     },
     onAddCatKeydown(e) {
-      this._comboKeydown(e, "cat");
+      this.comboKeydown({
+        items: () => this.addCatFiltered(),
+        open: () => this.addCatMenu,
+        setOpen: (v) => { this.addCatMenu = v; },
+        hi: () => this.addCatHi,
+        setHi: (v) => { this.addCatHi = v; },
+        onPick: (c) => this.pickAddCat(c),
+        listRef: "addCatList",
+        openOnArrow: true,  // 关层时方向键先开层(与 meta/move 同; 保存路径面板相反)
+      }, e);
     },
     onAddTagKeydown(e) {
-      this._comboKeydown(e, "tag");
+      this.comboKeydown({
+        items: () => this.addTagFiltered(),
+        open: () => this.addTagMenu,
+        setOpen: (v) => { this.addTagMenu = v; },
+        hi: () => this.addTagHi,
+        setHi: (v) => { this.addTagHi = v; },
+        onPick: (t) => this.pickAddTag(t),
+        listRef: "addTagList",
+        openOnArrow: true,
+      }, e);
     },
     /* 悬停接管(治「上下键选中项闪烁/Enter 选错」2026-09-29, issue 26-09-29-2142; 同款: config_hub.hubTrackerHoverIdx):
      * 分类/标签/编辑分类三处下拉的悬停高亮原是 @mouseenter 直写键盘活动项 —— 光标静止停在列表上
@@ -268,28 +292,49 @@ window.AQB_ADD = {
       this[atKey] = { x, y };
       this[hiKey] = i;
     },
-    _comboKeydown(e, kind) {
-      // 分类/标签 combobox 共用键盘导航: 上下循环高亮, 回车选中, Esc 只收下拉(阻断冒泡, 不关对话框)
-      const opts = kind === "cat" ? this.addCatFiltered() : this.addTagFiltered();
-      const menuKey = kind === "cat" ? "addCatMenu" : "addTagMenu";
-      const hiKey = kind === "cat" ? "addCatHi" : "addTagHi";
-      const listRef = kind === "cat" ? "addCatList" : "addTagList";
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && opts.length) {
-        e.preventDefault();
-        if (!this[menuKey]) {
-          this[menuKey] = true;
-          this[hiKey] = e.key === "ArrowDown" ? -1 : 0;
+    /* ---------------- combobox 键盘导航单点(收敛 issue 26-10-20-2230, R20-B-05/C-12 + R21-A-04) ----------------
+     * 五个自绘下拉(添加窗口 保存路径/分类/标签 · 设定位置 movePath · 编辑弹窗 metaCat)的键盘
+     * 导航原是五份同骨架实现(IME 守卫 -> ↑↓ 取模环绕 -> Enter 选中 -> Esc 只收面板), 分歧只在
+     * 选项上; 且五份里只有站点搜索 hubTrackerKeydown(另一族, 第 6 变体)带 IME 组词守卫, 其余
+     * 四份缺 —— 中文输入法组词期间方向键/回车会被劫持(路径输入多为 ASCII 而未暴露, R21-A-04 ③)。
+     * 收敛为单点 + 守卫恒开; 第 6 变体(settings.html 站点搜索层)有自己的类族/滚动跟随/无 Esc
+     * 语义且守阵独立钉着, 不并本单点。
+     * ctx 由调用方注入, 全部经 getter 现读现取(不用闭包快照, 根数据随时在变):
+     *   items()        候选数组(过滤产物; 路径/move 直传数组)
+     *   open()/setOpen(v)   hi()/setHi(v)   面板开合与高亮索引(根数据读写)
+     *   onPick(item)   选中候选(点选与回车共用同一个回调)
+     *   enterFallback() Enter 无高亮项时的回退值(null = 不回退; meta = 输入框文本,
+     *                   move = 修剪后的输入框文本)
+     *   listRef         ↑↓ 后滚动跟随的 $refs 名(null = 不跟随)
+     *   openOnArrow     关层时方向键是否先开层(false = 未开时不接管任何键, 保存路径面板) */
+    comboKeydown(ctx, ev) {
+      if (ev.isComposing || ev.keyCode === 229) return;  // IME 组词期不劫持(与 shortcuts/config_hub 同口径)
+      const items = ctx.items() || [];
+      const n = items.length;
+      const down = ev.key === "ArrowDown", up = ev.key === "ArrowUp";
+      if ((down || up) && n) {
+        if (!ctx.open() && !ctx.openOnArrow) return;
+        ev.preventDefault();
+        if (!ctx.open()) {
+          ctx.setOpen(true);
+          ctx.setHi(down ? -1 : 0);
         }
-        this[hiKey] = (this[hiKey] + (e.key === "ArrowDown" ? 1 : -1) + opts.length) % opts.length;
-        this._hiScroll(listRef);
-      } else if (e.key === "Enter" && this[menuKey] && this[hiKey] >= 0 && opts[this[hiKey]]) {
-        e.preventDefault();
-        if (kind === "cat") this.pickAddCat(opts[this[hiKey]]);
-        else this.pickAddTag(opts[this[hiKey]]);
-      } else if (e.key === "Escape" && this[menuKey]) {
-        e.stopPropagation();
-        this[menuKey] = false;
-        this[hiKey] = -1;
+        ctx.setHi((ctx.hi() + (down ? 1 : -1) + n) % n);
+        if (ctx.listRef) this._hiScroll(ctx.listRef);
+      } else if (ev.key === "Enter") {
+        const hi = ctx.hi();
+        if (ctx.open() && hi >= 0 && items[hi]) {
+          ev.preventDefault();
+          ctx.onPick(items[hi]);
+        } else if (ctx.enterFallback) {
+          ev.preventDefault();  // meta/move: 菜单未开或无高亮也吃掉回车(提交当前输入), 与收敛前逐字一致
+          const v = ctx.enterFallback();
+          if (v != null && v !== "") ctx.onPick(v);
+        }
+      } else if (ev.key === "Escape" && ctx.open()) {
+        ev.stopPropagation();  // 只收面板, 不关对话框(冒泡交 lifecycle 的 Esc 退栈链)
+        ctx.setOpen(false);
+        ctx.setHi(-1);
       }
     },
     /* ---------------- R10-11 路径选择器(服务端目录浏览) ----------------
@@ -370,50 +415,57 @@ window.AQB_ADD = {
      * —— 聚焦反而把面板关掉(为让位于原生 datalist 的建议浮层), 而那个浮层会自行超时消失,
      * 于是表现为"下拉 2 秒后不见了"。datalist 退役后聚焦 = 展开。 */
     openAddPathPop() {
-      this._addPopBlurCancel();
+      this._popBlurCancel("_addPopBlurT");
       this.closeAddPopsExcept("path");
       this.addPathHi = this.addPathOptions.indexOf(this.addSavePath.trim());
       this.addPathPop = true;
       this._hiScroll("addPathList");
     },
-    /* ---------------- 失焦收层(2026-10-03 报障: 点窗口其它位置下拉不收/闪烁重现) ----------------
-     * 收层主判据改成「输入框失焦」(模板 @focusout), window click(lifecycle.js)降级为兜底:
+    /* ---------------- 失焦收层单点(收敛 R20-B-06 + R21-A-05: 三处 40ms 合帧各写一遍) ----------------
+     * 收层主判据 = 输入框 @focusout(模板接线), window click(lifecycle.js)降级为兜底:
      * 点空白/点别的字段/Tab 走 focusout 必然触发; 点字段 label(for= 转发激活)不触发重开闪烁。
-     * ⚠ 不能在 focusout 里同步收 —— 点 label 时 mousedown 默认动作先 blur, label 的 click 默认
-     * 动作才把焦点转回输入框, 这两步之间隔着**整段按住时长**(人手 80~150ms); 零延迟合成点击
-     * 实测 ~2ms 是假象, 按 2ms 设计的合帧窗必输。同步收层 = 关了又开, leave 过渡被打断 = 闪烁。
-     * 挂 40ms 定时合帧: 焦点真离开(点空白/别的字段/Tab)下一拍收层; 焦点回来了(开层方法先跑)
-     * 则撤销, 菜单全程不闪。定时窗内收层前 window click 兜底照常生效。
-     * ⚠ label 一侧的 blur 由模板 @mousedown.prevent 根除(焦点不掉, 本定时器不武装) —— 本窗口
-     * 40ms 只兜点空白/Tab 这类瞬时焦点迁移, 不许再把 label 的长按间隙算进来(2026-10-04 三修)。
-     * ⚠ 四轮再加固: 收层前问 _popBlurShouldHold —— 焦点已回本族输入框或本族 label 转发 click
-     * 仍在途时跳过收层; 模板修饰符缺位(旧页签残留模板/未来回归)时由它独立根除闪烁, 不再
-     * 依赖模板与 JS 同代到达浏览器。 */
-    /* 失焦收层前的守卫(记录器见 mounted 注释): 在 40ms 合帧定时器**触发那刻**判定 ——
+     * ⚠ 不能在 focusout 里同步收 —— 点 label 时 mousedown 默认动作先把已聚焦的输入框 blur 掉,
+     * label 的 click 默认动作才把焦点转回, 这两步之间隔着**整段按住时长**(人手 80~150ms,
+     * 必 > 合帧窗); 同步收层 = 关了又开, leave 过渡被打断 = 用户看到的"下拉闪烁再现"
+     * (2026-10-03 报障, 三修才坐实, 完整判别见 pitfalls/web-ui/combobox-focusout-close)。
+     * 挂合帧定时器: 焦点真离开(点空白/别的字段/Tab)下一拍收层; 焦点回来了(开层方法先跑
+     * _popBlurCancel)则撤销, 菜单全程不闪。定时窗内 window click 兜底照常生效。
+     * ⚠ label 一侧的 blur 由模板 @mousedown.prevent 根除(焦点不掉, 本定时器不武装) —— 合帧
+     * 窗只兜点空白/Tab 这类瞬时焦点迁移, 不许把 label 的长按间隙算进来(2026-10-04 三修)。
+     * ⚠ 四轮加固: 收层前问 _popBlurShouldHold(记录器见 mounted 注释) —— 焦点已回本族输入框
+     * 或本族 label 转发 click 仍在途时跳过收层; 模板修饰符缺位(旧页签残留模板/未来回归)时
+     * 由它独立根除闪烁, 不再依赖模板与 JS 同代到达浏览器。
+     * ids = 本族输入框 id 名单; close = 收层动作(关面板 + 复位高亮)。 */
+    /* 失焦收层前的守卫(记录器见 mounted 注释): 在合帧定时器**触发那刻**判定 ——
      * ①焦点已回本族输入框(转发 click 已落地 / 合成零延迟点击) → 不收, 开层方法会接手;
      * ②本族 label 的 mousedown 落在 350ms 内且焦点不在任何输入框上 = 转发 click 仍在途
      *   (人手按住中) → 不收, 等松手后 label 默认动作把焦点转回。350ms 上界防旧记录误挡
-     *   后续无 mousedown 的失焦(如 Tab)。ids = 本族输入框 id(add 三字段 / meta 分类)。 */
+     *   后续无 mousedown 的失焦(如 Tab)。ids = 本族输入框 id(add 三字段 / meta 分类 / move)。 */
     _popBlurShouldHold(ids) {
       const ae = document.activeElement;
       if (ae && ae.id && ids.includes(ae.id)) return true;
       const rec = this._popLabelDown;
       return !!(rec && performance.now() - rec.t <= 350 && ids.includes(rec.forId));
     },
+    _popBlurArm(timerKey, ids, close) {
+      clearTimeout(this[timerKey]);
+      this[timerKey] = setTimeout(() => {
+        if (this._popBlurShouldHold(ids)) return;
+        close();
+      }, COMBO_BLUR_CLOSE_MS);
+    },
+    _popBlurCancel(timerKey) {
+      clearTimeout(this[timerKey]);
+    },
     addPopBlurClose() {
-      clearTimeout(this._addPopBlurT);
-      this._addPopBlurT = setTimeout(() => {
-        if (this._popBlurShouldHold(["ad-save-path", "ad-category", "ad-tags"])) return;
+      this._popBlurArm("_addPopBlurT", ["ad-save-path", "ad-category", "ad-tags"], () => {
         this.addCatMenu = false;
         this.addTagMenu = false;
         this.addPathPop = false;
         this.addCatHi = -1;
         this.addTagHi = -1;
         this.addPathHi = -1;
-      }, 40);
-    },
-    _addPopBlurCancel() {
-      clearTimeout(this._addPopBlurT);
+      });
     },
     /* ---------------- 下拉限高(2026-10-03 报障: 选项过长把添加窗口撑变形) ----------------
      * .pop-menu 基础 max-height:330px 只保证菜单自身可滚, 但菜单锚在输入行下方, 输入行贴近
@@ -445,23 +497,16 @@ window.AQB_ADD = {
       this.addPathHi = -1;
     },
     onAddPathKeydown(e) {
-      // 面板未开时不接管按键(按钮默认行为); 开启后: 上下移动高亮, 回车回填, Esc 只收面板(阻断冒泡不关对话框)
-      if (!this.addPathPop) return;
-      const n = this.addPathOptions.length;
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && n) {
-        e.preventDefault();
-        if (this.addPathHi < 0) this.addPathHi = e.key === "ArrowDown" ? -1 : 0;
-        this.addPathHi = (this.addPathHi + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
-        this._hiScroll("addPathList");
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        const p = this.addPathOptions[this.addPathHi];
-        if (p) this.pickAddPath(p);
-      } else if (e.key === "Escape") {
-        e.stopPropagation();
-        this.addPathPop = false;
-        this.addPathHi = -1;
-      }
+      this.comboKeydown({
+        items: () => this.addPathOptions,
+        open: () => this.addPathPop,
+        setOpen: (v) => { this.addPathPop = v; },
+        hi: () => this.addPathHi,
+        setHi: (v) => { this.addPathHi = v; },
+        onPick: (p) => this.pickAddPath(p),
+        listRef: "addPathList",
+        openOnArrow: false,  // 保存路径面板: 未开时不接管任何键(收敛前首行早退), 与 cat/tag/meta/move 相反
+      }, e);
     },
     _hiScroll(refName) {
       // 键盘高亮项滚动进可视区(block: nearest 不跳动)
@@ -678,7 +723,7 @@ window.AQB_ADD = {
     },
   },
   watch: {
-    /* 下拉限高单点: 三个浮层的开层入口有四处(开层方法 / 输入 @input 直开 / 键盘 _comboKeydown /
+    /* 下拉限高单点: 三个浮层的开层入口有四处(开层方法 / 输入 @input 直开 / 键盘 comboKeydown /
      * 目录浏览返回), 开层计时走 watcher 才不漏; 候选异步到位(loadAddOptions)会改变菜单高度,
      * 开着时也要重限。 */
     addCatMenu(v) {
@@ -713,4 +758,60 @@ window.AQB_ADD = {
       if (this.addPathPop) this._fitAddPop("addPathList");
     },
   },
+};
+
+/* ---------------- <aq-combo-input>: combobox 输入行 + 候选面板组件(收敛 issue 26-10-20-2230 / R23-A-01) ----------------
+ * 模板在 tpl/xtpl.html#tpl-combo-input(与 aq-table 同范式: body 注入的 x-template, 不随根模板
+ * 编译, 也不多包 DOM)。五个调用点(添加窗口 保存路径/分类/标签 · 设定位置 movePath · 编辑弹窗
+ * metaCat)此前各写一份逐字同骨架; 行为全部留在既有单点上(comboHoverIdx / comboKeydown /
+ * _fitAddPop / _popBlurShouldHold / clearAddField), 本组件**只贡献模板与最小实例态**:
+ *   · 数据一律 props(modelValue/menu/hi/options…), 写入一律 emit(update:modelValue/input/
+ *     open/blur/keydown/clear) —— 组件实例没有根数据(根数据只在根实例, 见 table.js 头注同一
+ *     教训; 模板里裸写 this.addCatMenu 会读到 undefined 且**不报错**)。
+ *   · 悬停接管经 $root.comboHoverIdx(3px 位移门限在它里面); comboKey 空 = 不挂(保存路径)。
+ *   · ref 落点 = **根** $refs(menuRef/listRef/inputRef), 经方法函数 ref 代写 —— 字符串 ref
+ *     会注册到本组件实例上, 而 _fitAddPop/_hiScroll 是根方法、读的是根 $refs(实测 Vue
+ *     3.5.13 语义, 见 pitfalls/web-ui 新增坑档); 名字为空 = 该处不需要 ref。
+ * WARN: 组件方法名全局唯一(_scan_mixin_wiring 扫 methods 段跨文件重名) —— 方法名一律 comboOn / comboBind 前缀。
+ * !本文件在 HTML 里必须排在 app.js 之前(app.js 末尾要 app.component 读 window.AQ_COMBO_INPUT_COMPONENT)。 */
+window.AQ_COMBO_INPUT_COMPONENT = {
+  name: "aq-combo-input",
+  props: {
+    modelValue: { type: String, default: "" },    // 输入框值(父模板 v-model 绑根数据)
+    inputId: { type: String, default: "" },       // 输入框 id(_popBlurShouldHold 家族名单锚)
+    inputRef: { type: String, default: "" },      // 输入框 $refs 名(开对话框自动聚焦用)
+    placeholder: { type: String, default: "" },
+    menu: { type: Boolean, default: false },      // 候选面板开合(根数据)
+    hi: { type: Number, default: -1 },            // 键盘/悬停高亮索引(根数据)
+    options: { type: Array, default: () => [] },  // 候选(字符串数组; 过滤产物由调用方传入)
+    onPick: { type: Function, required: true },   // 点选/回车选中(o)
+    comboKey: { type: String, default: "" },      // 悬停接管 kind(comboHoverIdx); 空 = 不挂
+    icon: { type: String, default: "" },          // 候选行图标(sprite href); 空 = 无图标
+    emptyText: { type: String, default: "" },
+    headText: { type: String, default: "" },      // 计数头; 空 = 无头(R23-A-10 口径见模板头注)
+    clearKind: { type: String, default: "" },     // 清空钮 clearAddField(kind); 空 = 无清空钮
+    presetLabel: { type: String, default: "" },   // 预置行文案(meta 的"(无分类)"); 空 = 无
+    presetValue: { type: String, default: "" },   // 预置行的 onPick 实参
+    innerList: { type: Boolean, default: false }, // 候选是否包 .add-pop-list 可滚内层
+    menuRef: { type: String, default: "" },       // 面板 $refs 名(限高/滚动跟随)
+    listRef: { type: String, default: "" },       // 可滚内层 $refs 名(限高)
+  },
+  emits: ["update:modelValue", "input", "open", "blur", "keydown", "clear"],
+  methods: {
+    /* 原生 input 一个事件两件事: 回写模型(父模板 v-model) + 调用方侧输入逻辑
+     * (如 addCatHi = -1; addCatMenu = true) —— 与收敛前 v-model/@input 两绑同序 */
+    comboOnInput(e) {
+      this.$emit("update:modelValue", e.target.value);
+      this.$emit("input", e);
+    },
+    /* 悬停接管(治上下键选中项闪烁, hover-keynav-fight): 门限判据在 comboHoverIdx 单点里,
+     * 这里只按 comboKey 转发; 空 = 该下拉没有悬停/键盘互斥面(保存路径候选) */
+    comboOnHover(i, ev) {
+      if (this.comboKey) this.$root.comboHoverIdx(this.comboKey, i, ev);
+    },
+    comboBindMenu(el) { if (this.menuRef) this.$root.$refs[this.menuRef] = el; },
+    comboBindList(el) { if (this.listRef) this.$root.$refs[this.listRef] = el; },
+    comboBindInput(el) { if (this.inputRef) this.$root.$refs[this.inputRef] = el; },
+  },
+  template: "#tpl-combo-input",
 };

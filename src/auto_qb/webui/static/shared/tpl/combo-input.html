@@ -1,0 +1,75 @@
+<!-- combobox 输入行 + 候选面板骨架单点(收敛 issue 26-10-20-2230, 台账 R23-A-01)。
+     x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层), app.component 注册
+     (aq-combo-input, 组件定义在 add_torrent.js 末尾 window.AQ_COMBO_INPUT_COMPONENT)。
+     此前 dialogs-mgr.html(保存路径/分类/标签) · move-dialog.html(movePath) ·
+     popovers.html(metaCat) 五处逐字复写同一骨架(输入行 + 五绑 + 清空钮 + transition
+     + 面板 + 候选行 + 空态, 18-22 行 x 5), 且"缺一即回归"的坑档注释
+     (pitfalls/web-ui/combobox-focusout-close: @mousedown.prevent / @click.stop /
+     40ms 合帧)在五处各写一遍 —— 只改四处 = 第五处静默复发。现骨架只此一份,
+     五处差异全部参数化:
+       modelValue  输入值(父模板 v-model 绑根数据; 组件不持有数据)
+       inputId     输入框 id(_popBlurShouldHold 的家族名单锚, 五处各自固定)
+       inputRef    输入框 $refs 名(开对话框自动聚焦用; 空 = 不需要)
+       menu/hi     面板开合与高亮索引(根数据, 双向经 emit 回写)
+       options     候选(**字符串数组**; 过滤产物由调用方传入, :key 即值本身)
+       onPick      点选与回车选中同一个回调(o)
+       comboKey    悬停接管 kind(comboHoverIdx 的 key); 空 = 不挂悬停接管
+                   (保存路径候选没有键盘/悬停互斥面, 与收敛前一致)
+       icon        候选行图标 sprite href(空 = 无图标)
+       emptyText   空态文案
+       headText    计数头("选择保存位置" + N); 空 = 无头 —— 口径(R23-A-10):
+                   候选 = 有限的历史路径清单 -> 带头; 候选 = 可过滤的全集 -> 不带头
+       clearKind   清空钮 clearAddField(kind); 空 = 无清空钮(move/meta 没有)
+       presetLabel/presetValue  meta 的"(无分类)"预置行(不参与键盘/悬停索引);
+                   空 = 无预置行
+       innerList   候选是否包 .add-pop-list 可滚内层 —— 路径/move 有(限大量的
+                   是列表), 分类/标签/meta 无(面板自身可滚, 包了反而限空)
+       menuRef/listRef  量测与滚动跟随的 $refs 名 —— 经**方法函数 ref** 写到**根**
+                   $refs: 字符串 ref 会注册到本组件实例, 而 _fitAddPop/_hiScroll 是
+                   根方法、读的是根 $refs(实测 Vue 3.5.13 语义, 见坑档)。
+     行为(comboHoverIdx / comboKeydown / _fitAddPop / _popBlurShouldHold /
+     clearAddField)仍是既有单点, 本组件只贡献模板与最小实例态(定义在 add_torrent.js)。
+     独立分片的缘由: 骨架+头注合计量把 xtpl.html(表壳/行渲染器语义源)顶过单分片 400 行
+     上限, 与 traffic-card.html 同范式抽走。 -->
+<script type="text/x-template" id="tpl-combo-input">
+  <div class="add-input-row" :class="{ 'has-clear': !!clearKind }">
+    <input :id="inputId" :ref="comboBindInput" :value="modelValue" class="add-dialog-input" type="text"
+           :placeholder="placeholder" autocomplete="off" spellcheck="false"
+           @focus="$emit('open')" @click.stop="$emit('open')"
+           @input="comboOnInput" @focusout="$emit('blur')" @keydown="$emit('keydown', $event)">
+    <!-- 清空(x): @mousedown.prevent 保焦点(不拦则按钮抢焦点 -> 输入框失焦走 40ms 合帧
+         收层把面板收掉); @click.stop 挡 lifecycle 的 window click 兜底(不挡 = 点 x
+         顺手把下拉一起收了)。两个修饰符缺一即回归(combobox-focusout-close 第二轮)。 -->
+    <button v-if="clearKind && modelValue" type="button" class="add-pop-clear"
+            @mousedown.prevent @click.stop="$emit('clear', clearKind)">
+      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+    </button>
+    <transition name="pop">
+      <div v-if="menu" class="pop-menu add-pop" @click.stop :ref="comboBindMenu">
+        <div v-if="headText" class="pop-head"><span>{{ headText }}</span><span class="pop-count">{{ options.length }}</span></div>
+        <!-- meta 的"(无分类)"预置行: 无 class/data-hi/mousemove —— 不参与键盘与悬停索引, 与收敛前一致 -->
+        <div v-if="presetLabel" class="pop-item add-pop-item" @mousedown.prevent="onPick(presetValue)">
+          <span class="pop-value">{{ presetLabel }}</span>
+        </div>
+        <div v-if="innerList" class="add-pop-list" :ref="comboBindList">
+          <div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item"
+               :class="{ on: i === hi }" :data-hi="i === hi ? '1' : '0'"
+               @mousedown.prevent="onPick(o)" @mousemove="comboOnHover(i, $event)">
+            <svg v-if="icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="icon"></use></svg>
+            <span class="pop-value">{{ o }}</span>
+          </div>
+          <p v-if="!options.length" class="pop-empty">{{ emptyText }}</p>
+        </div>
+        <template v-else>
+          <div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item"
+               :class="{ on: i === hi }" :data-hi="i === hi ? '1' : '0'"
+               @mousedown.prevent="onPick(o)" @mousemove="comboOnHover(i, $event)">
+            <svg v-if="icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="icon"></use></svg>
+            <span class="pop-value">{{ o }}</span>
+          </div>
+          <p v-if="!options.length" class="pop-empty">{{ emptyText }}</p>
+        </template>
+      </div>
+    </transition>
+  </div>
+</script>

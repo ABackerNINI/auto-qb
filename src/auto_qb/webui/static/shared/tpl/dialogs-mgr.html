@@ -52,36 +52,17 @@
               <div class="add-dialog-pathrow">
                 <!-- FX-18: 浮层必须锚在**输入行**上(.add-input-row 有 position:relative)。
                      旧写法把面板挂在 .add-dialog-pathrow 下, 而它没有定位祖先 -> 面板按
-                     .modal-mask(fixed; inset:0) 换算, 被渲染到视口下沿之外("点了没反应")。 -->
-                <div class="add-input-row has-clear">
-                  <input id="ad-save-path" v-model="addSavePath" class="add-dialog-input" type="text"
-                         placeholder="如 D:\Torrents" autocomplete="off" spellcheck="false"
-                         @focus="openAddPathPop" @click.stop="openAddPathPop" @input="addPathHi = -1"
-                         @focusout="addPopBlurClose" @keydown="onAddPathKeydown($event)">
-                  <!-- 清空(x): 两个修饰符缺一不可 —— @mousedown.prevent 拦掉默认动作让焦点留在输入框
-                       (否则按钮抢焦点 -> 输入框失焦走 addPopBlurClose 把候选面板收掉); @click.stop
-                       挡住 lifecycle 的 window click 兜底(不挡 = 点 x 顺手把下拉一起收了)。 -->
-                  <button v-if="addSavePath" type="button" class="add-pop-clear"
-                          @mousedown.prevent @click.stop="clearAddField('path')">
-                    <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-                  </button>
-                  <!-- FX-17: 原生 <datalist> + list= 退役 —— 它的建议浮层样式不受主题控制, 还会
-                       自行超时消失(即"下拉 2 秒后消失"), 并与自绘面板抢同一次交互。 -->
-                  <transition name="pop">
-                    <div v-if="addPathPop" class="pop-menu add-pop" @click.stop>
-                      <div class="pop-head"><span>选择保存位置</span><span class="pop-count">{{ addPathOptions.length }}</span></div>
-                      <div class="add-pop-list" ref="addPathList">
-                        <div v-for="(p, i) in addPathOptions" :key="p" class="pop-item add-pop-item"
-                             :class="{ on: i === addPathHi }" :data-hi="i === addPathHi ? '1' : '0'"
-                             @mousedown.prevent="pickAddPath(p)">
-                          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-                          <span class="pop-value">{{ p }}</span>
-                        </div>
-                        <p v-if="!addPathOptions.length" class="pop-empty">暂无历史位置</p>
-                      </div>
-                    </div>
-                  </transition>
-                </div>
+                     .modal-mask(fixed; inset:0) 换算, 被渲染到视口下沿之外("点了没反应")。
+                     现骨架收敛为 <aq-combo-input>(issue 26-10-20-2230), 锚定关系不变。 -->
+                <aq-combo-input input-id="ad-save-path" v-model="addSavePath"
+                                placeholder="如 D:\Torrents"
+                                :menu="addPathPop" :hi="addPathHi" :options="addPathOptions"
+                                :on-pick="pickAddPath" icon="#i-folder-open"
+                                empty-text="暂无历史位置" head-text="选择保存位置"
+                                clear-kind="path" inner-list list-ref="addPathList"
+                                @open="openAddPathPop" @input="addPathHi = -1"
+                                @blur="addPopBlurClose" @keydown="onAddPathKeydown($event)"
+                                @clear="clearAddField"></aq-combo-input>
                 <!-- R10-11 决策 D2-A: "选择位置"改为**服务端目录浏览**(列目录 + 上溯 + 新建文件夹,
                      回填绝对路径) —— 浏览器物理上拿不到本地绝对路径, 只能由服务端给;
                      输入框聚焦仍弹已知历史路径候选(openAddPathPop, 两个入口互补)。 -->
@@ -92,52 +73,30 @@
               <!-- @mousedown.prevent + @click.stop 同保存路径 label(按住期间 40ms 合帧定时器先收层,
                    松手 refocus 再重开 = 闪烁; mousedown.prevent 根除 blur) -->
               <label class="add-dialog-label" for="ad-category" @mousedown.prevent @click.stop>分类(可空)</label>
-              <!-- FX-18: 面板锚定"输入行"而非整个 field 盒(后者是 grid 项会被拉伸, 面板离输入框很远) -->
-              <div class="add-input-row has-clear">
-                <input id="ad-category" v-model="addCategory" class="add-dialog-input" type="text"
-                       placeholder="下拉选择或自由输入" autocomplete="off" spellcheck="false"
-                       @focus="openAddCatMenu" @click.stop="openAddCatMenu"
-                       @input="addCatHi = -1; addCatMenu = true" @focusout="addPopBlurClose" @keydown="onAddCatKeydown($event)">
-                <button v-if="addCategory" type="button" class="add-pop-clear"
-                        @mousedown.prevent @click.stop="clearAddField('cat')">
-                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-                </button>
-                <transition name="pop">
-                  <div v-if="addCatMenu" class="pop-menu add-pop" @click.stop ref="addCatList">
-                    <div v-for="(c, i) in addCatFiltered()" :key="c" class="pop-item add-pop-item"
-                         :class="{ on: i === addCatHi }" :data-hi="i === addCatHi ? '1' : '0'"
-                         @mousedown.prevent="pickAddCat(c)" @mousemove="comboHoverIdx('cat', i, $event)">
-                      <span class="pop-value">{{ c }}</span>
-                    </div>
-                    <p v-if="!addCatFiltered().length" class="pop-empty">无匹配分类, 可直接自由输入</p>
-                  </div>
-                </transition>
-              </div>
+              <!-- FX-18: 面板锚定"输入行"而非整个 field 盒(后者是 grid 项会被拉伸, 面板离输入框很远)。
+                   骨架收敛为 <aq-combo-input>(issue 26-10-20-2230), 锚定关系不变。 -->
+              <aq-combo-input input-id="ad-category" v-model="addCategory"
+                              placeholder="下拉选择或自由输入"
+                              :menu="addCatMenu" :hi="addCatHi" :options="addCatFiltered()"
+                              :on-pick="pickAddCat" combo-key="cat"
+                              empty-text="无匹配分类, 可直接自由输入"
+                              clear-kind="cat" menu-ref="addCatList"
+                              @open="openAddCatMenu" @input="addCatHi = -1; addCatMenu = true"
+                              @blur="addPopBlurClose" @keydown="onAddCatKeydown($event)"
+                              @clear="clearAddField"></aq-combo-input>
             </div>
             <div class="add-dialog-field add-dialog-combo">
               <!-- @mousedown.prevent + @click.stop 同保存路径 label -->
               <label class="add-dialog-label" for="ad-tags" @mousedown.prevent @click.stop>标签(逗号分隔, 可空)</label>
-              <div class="add-input-row has-clear">
-                <input id="ad-tags" v-model="addTags" class="add-dialog-input" type="text"
-                       placeholder="如 HR, Keep(可从下拉挑选)" autocomplete="off" spellcheck="false"
-                       @focus="openAddTagMenu" @click.stop="openAddTagMenu"
-                       @input="addTagHi = -1; addTagMenu = true" @focusout="addPopBlurClose" @keydown="onAddTagKeydown($event)">
-                <button v-if="addTags" type="button" class="add-pop-clear"
-                        @mousedown.prevent @click.stop="clearAddField('tag')">
-                  <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-                </button>
-                <transition name="pop">
-                  <div v-if="addTagMenu" class="pop-menu add-pop" @click.stop ref="addTagList">
-                    <div v-for="(t, i) in addTagFiltered()" :key="t" class="pop-item add-pop-item"
-                         :class="{ on: i === addTagHi }" :data-hi="i === addTagHi ? '1' : '0'"
-                         @mousedown.prevent="pickAddTag(t)" @mousemove="comboHoverIdx('tag', i, $event)">
-                      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
-                      <span class="pop-value">{{ t }}</span>
-                    </div>
-                    <p v-if="!addTagFiltered().length" class="pop-empty">无匹配标签, 可直接自由输入</p>
-                  </div>
-                </transition>
-              </div>
+              <aq-combo-input input-id="ad-tags" v-model="addTags"
+                              placeholder="如 HR, Keep(可从下拉挑选)"
+                              :menu="addTagMenu" :hi="addTagHi" :options="addTagFiltered()"
+                              :on-pick="pickAddTag" combo-key="tag" icon="#i-tag"
+                              empty-text="无匹配标签, 可直接自由输入"
+                              clear-kind="tag" menu-ref="addTagList"
+                              @open="openAddTagMenu" @input="addTagHi = -1; addTagMenu = true"
+                              @blur="addPopBlurClose" @keydown="onAddTagKeydown($event)"
+                              @clear="clearAddField"></aq-combo-input>
             </div>
           </div>
 

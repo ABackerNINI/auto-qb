@@ -927,6 +927,11 @@ app.component("aq-traffic-card", window.AQ_TRAFFIC_CARD_COMPONENT);
 // 它们只包**模板**(表头块 / 单元格分支链), 行为与状态仍在既有单点上 —— 组件模板经 $root 回调根实例。
 // 这组注册即「渲染器注册表」单点(行模型 → 组件), 守阵 test_frontend_table_shell_single_point 钉住。
 app.component("aq-table", window.AQ_TABLE_COMPONENT);
+/* combobox 输入行 + 候选面板(收敛 issue 26-10-20-2230 / R23-A-01): 五个自绘下拉(添加窗口
+ * 保存路径/分类/标签 · 设定位置 movePath · 编辑弹窗 metaCat)的骨架此前逐字复写五份, 现只此
+ * 一份组件(模板 tpl/xtpl.html#tpl-combo-input, 定义在 add_torrent.js); 行为仍是既有单点
+ * (comboHoverIdx/comboKeydown/_fitAddPop/_popBlurShouldHold), 组件只贡献模板。 */
+app.component("aq-combo-input", window.AQ_COMBO_INPUT_COMPONENT);
 app.component("aq-member-cells", window.AQ_MEMBER_CELLS_COMPONENT);
 app.component("aq-group-cells", window.AQ_GROUP_CELLS_COMPONENT);
 app.component("aq-torrent-cells", window.AQ_TORRENT_CELLS_COMPONENT);
