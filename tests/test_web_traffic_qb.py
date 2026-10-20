@@ -757,3 +757,55 @@ def test_api_traffic_qb_group_member_only_zruns_not_empty(web_env):
     assert body["points"] != []  # 非空态: 只剩 z 覆盖的成员仍产出 points
     p = next(p for p in body["points"] if p and p["t"] == start)
     assert p == {"t": start, "dl": 0, "up": 0}  # z 覆盖桶 -> 空闲 0 线
+
+
+# ---------- P1-T1.5 守卫与容错簇(计划 26-10-20-2101) ----------
+
+
+def test_service_defensive_paths(web_env, monkeypatch):
+    """读侧装配的防御面(直接驱动服务对象, 免端点样板):
+    - limitscache 构造期预建(无惰性双构造面); 限速读失败 = 空注解面(不 500, 缺线不冒充空态)
+    - 活尾未封口部分行按段过滤(无该型行 = ())
+    - 组成员天文件读竞态 -> 该成员按空观测面计 + 降级标 stale(不冒充无数据)
+    - 组成员 agg 读竞态 -> 成员行按 () 计 + 降级; 单系列 all 窗竞态 -> 栅格兜底
+    - 组成员月行 -> all 窗栅格由成员数据面并集铺格"""
+    from types import SimpleNamespace
+
+    from auto_qb.core.traffic_store import AggRow, v4_month_epoch
+    from auto_qb.webui.server import traffic_qb as tq_mod
+    from auto_qb.webui.server.traffic_qb import QbTrafficChartApi
+
+    mgr, _ = web_env
+    _enable_qb_traffic(mgr)
+    svc = QbTrafficChartApi(mgr)
+    assert svc.limitscache is svc._limitscache  # 构造期预建单例
+
+    def boom(*args, **kwargs):
+        raise OSError("read race")
+
+    monkeypatch.setattr(tq_mod, "limits_events_for_window", boom)
+    assert svc._limits_list(svc._grid("24h")) == []  # 注解面缺口: 空数组, 不抛
+
+    rows = (AggRow("hour", 100, 1, 1, 1, 1, 1, 1, 60), AggRow("day", 0, 1, 1, 1, 1, 1, 1, 60))
+    monkeypatch.setattr(svc, "_live_tail", lambda key: SimpleNamespace(pending_agg=rows))
+    assert [r.kind for r in svc._live_agg_rows("global", "hour")] == ["hour"]
+    assert svc._live_agg_rows("global", "month") == ()  # 无该型行
+
+    enc = encode_group_key(KEY)
+    monkeypatch.setattr(svc.v4cache, "read_window", boom)
+    body = svc.payload_group(enc, "24h")  # 成员天文件读竞态
+    assert body["meta"]["stale"] is True and body["points"] == []
+    monkeypatch.setattr(svc.v4cache, "read_agg", boom)
+    body = svc.payload_group(enc, "30d")  # 成员 agg 读竞态
+    assert body["meta"]["stale"] is True
+    assert svc.payload_global("all")["meta"]["stale"] is True  # 单系列 month 段竞态: 栅格兜底
+
+    monkeypatch.undo()
+    store = _qb_v4(mgr)
+    month = v4_month_epoch(int(time.time()))
+    for h in ("HA", "HB"):
+        store.append_agg_rows(f"torrent:{h}", (AggRow("month", month, 7, 9, 3, 4, 500, 600, 86400), ))
+    body = svc.payload_group(enc, "all")
+    assert body["meta"]["stale"] is False
+    assert [p["t"] for p in body["points"]] == [month]  # 成员月行并集铺格
+    assert body["points"][0]["dl"] == 14  # Σ 成员均值(7 + 7)

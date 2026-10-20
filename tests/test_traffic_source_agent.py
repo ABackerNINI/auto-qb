@@ -34,9 +34,21 @@
   启动器; 退出码 0 -> ok + 人话输出原样; 非 0 -> 拒绝; 超时/起不来 -> ok=False + 原因
 - test_read_deferred_note_states (D7): 注记只读; 损坏/schema 未知 -> None(不猜字段)
 - test_status_includes_claim_note (D7): 状态区载荷带 claim_note(工具侧书写, auto-qb 只读展示)
+
+P1-T1.3 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
+- test_pointer_path_macos_branch: 用户级数据根 macOS 支(~/Library/Application Support)——
+  Windows/Linux 两支由 test_pointer_path_is_user_level_platform_dir 钉住
+- test_parse_pointer_pid_fallback: pid 非数值 -> 0(可选字段, 不影响端点解析); 数值照读
+- test_read_deferred_note_non_dict_payload: 注记顶层非对象 -> None(只告警, 不猜字段)
+- test_ensure_running_launch_oserror_backs_off: 拉起本身失败(OSError)-> 记原因 + 固定 30s
+  退避 + 本轮不重试; 失败不计入 _launched_once(下轮仍按首次引导窗口)
+- test_request_relaunch_clears_backoff_and_failure: 手动重试清等待窗口/退避/失败记忆 ->
+  下一轮立刻重新拉起
+- test_note_error_throttles_same_reason: 同因首次 WARNING、其后 DEBUG, 换因重新 WARNING
 """
 import ast
 import json
+import logging
 import os
 import re
 import shutil
@@ -624,8 +636,7 @@ def test_run_claim_ok_and_refusal(monkeypatch):
     assert "已重登记为正主" in r.output
     assert seen["args"][-1] == "/inst/claim.cmd" and seen["cwd"] == "/inst" and seen["timeout"] == agent.CLAIM_TIMEOUT_S
 
-    monkeypatch.setattr(agent, "_run_foreground",
-                        lambda args, *, cwd, timeout: _proc(1, "工具正在运行, 请先停止再重登记\n"))
+    monkeypatch.setattr(agent, "_run_foreground", lambda args, *, cwd, timeout: _proc(1, "工具正在运行, 请先停止再重登记\n"))
     r2 = agent.run_claim(target)
     assert r2.ok is False and r2.exit_code == 1
     assert "请先停止" in r2.output  # 工具侧人话原样保留
@@ -654,7 +665,13 @@ def test_read_deferred_note_states(tmp_path, monkeypatch):
     monkeypatch.setattr(agent, "deferred_note_path", lambda: str(note_path))
     assert agent.read_deferred_note() is None  # 缺失
     note_path.parent.mkdir(parents=True, exist_ok=True)
-    note_path.write_text(json.dumps({"schema": agent.DEFERRED_SCHEMA, "reason": "relayed", "detail": "已让位"}), encoding="utf-8")
+    note_path.write_text(
+        json.dumps({
+            "schema": agent.DEFERRED_SCHEMA,
+            "reason": "relayed",
+            "detail": "已让位"
+        }), encoding="utf-8"
+    )
     note = agent.read_deferred_note()
     assert note["reason"] == "relayed" and note["detail"] == "已让位"
     note_path.write_text("{ not json", encoding="utf-8")
@@ -685,3 +702,103 @@ def test_run_foreground_real_execution_with_allowed_binary():
         return
     proc = agent._run_foreground([node, "--version"], cwd=None, timeout=30)
     assert proc.returncode == 0 and proc.stdout.strip()
+
+
+# ---------- P1-T1.3 守卫与容错簇(计划 26-10-20-2101) ----------
+
+
+def test_pointer_path_macos_branch(monkeypatch):
+    """用户级数据根 macOS 支(D6): ~/Library/Application Support —— Windows 走 LOCALAPPDATA,
+    Linux 走 XDG_DATA_HOME, 三支都是「平台惯例单点」, 工具侧镜像同一口径"""
+    monkeypatch.setattr(agent, "is_windows", lambda: False)
+    monkeypatch.setattr(agent.sys, "platform", "darwin")
+    expected = os.path.join(os.path.expanduser("~"), "Library", "Application Support", agent.POINTER_DIR_NAME)
+    assert agent.pointer_dir() == expected
+
+
+def test_parse_pointer_pid_fallback():
+    """pid 是可选字段: 非数值 -> 0(不影响端点解析, 只丢「谁在跑」的展示); 数值照读"""
+    base = {"schema": agent.ENDPOINT_SCHEMA, "host": "127.0.0.1", "port": 8099, "token_path": "/t"}
+    assert agent.parse_pointer({**base, "pid": "not-a-number"}).pid == 0
+    assert agent.parse_pointer({**base, "pid": "4321"}).pid == 4321
+    assert agent.parse_pointer(base).pid == 0  # 缺省
+
+
+def test_read_deferred_note_non_dict_payload(tmp_path, monkeypatch):
+    """注记顶层非对象(如数组)-> None: 只告警不猜字段, 与指针 schema 守卫同族纪律"""
+    note_path = tmp_path / "ptr" / "deferred.json"
+    monkeypatch.setattr(agent, "deferred_note_path", lambda: str(note_path))
+    note_path.parent.mkdir(parents=True, exist_ok=True)
+    note_path.write_text(json.dumps([agent.DEFERRED_SCHEMA]), encoding="utf-8")
+    assert agent.read_deferred_note() is None
+
+
+def test_ensure_running_launch_oserror_backs_off(tmp_path, monkeypatch):
+    """拉起本身失败(OSError): 记原因 + 固定退避 + 本轮不重试; 起不来不算「拉起过」
+    (下轮仍按首次引导窗口 120s, 不因失败提前降档)"""
+    monkeypatch.setattr(tool_client, "call_tool", _down)
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(tmp_path / "absent.json"))
+    (tmp_path / _LAUNCHER).write_text("", encoding="utf-8")
+
+    def _boom(target):
+        raise OSError("拒绝访问")
+
+    monkeypatch.setattr(agent, "launch_tool", _boom)
+    clock = [1000.0]
+    a = agent.TrafficSourceAgent(clock=lambda: clock[0])
+    conf = _conf(tool_dir=str(tmp_path))
+    assert a.ensure_running(conf) is None
+    st = a.status(conf)
+    assert st["state"] == "launch_failed" and "拉起失败" in st["error"] and "拒绝访问" in st["error"]
+    assert st["retry_s"] == pytest.approx(agent.RELAUNCH_BACKOFF_S)
+    assert a._launched_once is False and a._pending_until == 0.0
+    clock[0] += 1.0
+    assert a.ensure_running(conf) is None  # 退避中: 不再尝试
+
+
+def test_request_relaunch_clears_backoff_and_failure(tmp_path, monkeypatch):
+    """手动「立即拉起/重试」: 清等待窗口/退避/失败记忆 -> 下一轮立刻重新拉起(设置页按钮走这条)"""
+    monkeypatch.setattr(tool_client, "call_tool", _down)
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(tmp_path / "absent.json"))
+    (tmp_path / _LAUNCHER).write_text("", encoding="utf-8")
+    launches = []
+    monkeypatch.setattr(agent, "launch_tool", lambda target: launches.append(target))
+    clock = [1000.0]
+    a = agent.TrafficSourceAgent(clock=lambda: clock[0])
+    conf = _conf(tool_dir=str(tmp_path))
+    a.ensure_running(conf)  # 首次拉起
+    clock[0] += agent.FIRST_BOOT_WINDOW_S + 1.0
+    a.ensure_running(conf)  # 窗口耗尽 -> launch_failed + 退避
+    assert a.status(conf)["state"] == "launch_failed"
+    clock[0] += 1.0
+    assert a.ensure_running(conf) is None and len(launches) == 1  # 退避中不拉
+    a.request_relaunch()
+    assert a._pending_until == 0.0 and a._retry_after == 0.0 and a._fail_reason == ""
+    assert a.ensure_running(conf) is None and len(launches) == 2  # 清退避后立刻重拉
+
+
+def test_note_error_throttles_same_reason():
+    """失败日志节流(同一原因只说明白一次): 首条 WARNING, 同因降 DEBUG; 换原因重新 WARNING
+    —— 工具没起是常态, 逐轮 WARNING 会刷屏"""
+    lg = logging.getLogger("auto_qb.core.traffic_source.agent")
+    records = []
+
+    class _Rec(logging.Handler):
+        def emit(self, record):
+            records.append((record.levelno, record.getMessage()))
+
+    handler = _Rec()
+    handler.setLevel(logging.DEBUG)
+    old_level = lg.level
+    lg.setLevel(logging.DEBUG)
+    lg.addHandler(handler)
+    try:
+        a = agent.TrafficSourceAgent()
+        a._note_error("拉起失败: 拒绝访问")
+        a._note_error("拉起失败: 拒绝访问")
+        assert [lv for lv, _ in records] == [logging.WARNING, logging.DEBUG]
+        a._note_error("未安装: 工具目录解析不到")
+        assert records[-1][0] == logging.WARNING and "未安装" in records[-1][1]
+    finally:
+        lg.removeHandler(handler)
+        lg.setLevel(old_level)

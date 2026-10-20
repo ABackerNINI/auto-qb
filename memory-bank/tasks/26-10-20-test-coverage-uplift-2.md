@@ -2,7 +2,7 @@
 
 **Status:** Open
 **Added:** 2026-10-20
-**Updated:** 2026-10-20
+**Updated:** 2026-10-21
 **Summary:** 承接 26-10-01-2157 (91%→96%, Done) 的第二轮: 清偿 `--cov-fail-under=98` 连续多轮飘红的存量欠账, 分 P0/P1/P2 三阶段推到 99% 区间; 防回沉在 M1–M4 之外补 watchlist、豁免治理、工具侧门禁评估
 **Topics:** test-coverage-uplift-2
 **Refs:** memory-bank/plans/26-10-20-2101-plan-test-coverage-uplift-2.html
@@ -33,7 +33,7 @@
 |---|---|---|
 | 0 | 立档 + 计划制品 + 认领链 + 索引重生成 | Done (2026-10-20) |
 | 1 | P0 · 清偿 98% 门槛与快赢轮 | Done (2026-10-20, 98.33%) |
-| 2 | P1 · traffic 家族与 relocate 中坚 | In Progress (T1.1/T1.2 已落地, TOTAL 98.80%) |
+| 2 | P1 · traffic 家族与 relocate 中坚 | Done (2026-10-21, 99.03%, 阈值抬 98.5) |
 | 3 | P2 · 长尾清偿与 watchlist 清零 | Pending |
 | 4 | P3 · 防回沉机制落地与常态化 | Pending |
 
@@ -62,7 +62,7 @@ T0.1–T0.6 全部落地, 只补测试零产品码改动。test.full 全量: **3
 - **范围守恒**: 过程中发现 `_origin_allowed` 端口段非法抛未捕获 ValueError(应为 fail-closed 403), 按纪律入池 `issues/26-10-20-2230-bug-webui-origin-port-parse.html`, **不在本计划内修**(测试侧预留断言位)。
 - **机制侧**: watchlist 10 → **3** 个(tool_client / traffic_qb / relocate_mod);豁免行数 8 行零新增;变异红验 12/12 全杀(≥10% 抽检);Linux 侧 `test.linux` 容器 900s 超时未取得数字(非用例失败), 真值以 CI 复跑为准。
 
-### R2 · P1-T1.1 relocate_mod 守卫与容错簇 (2026-10-21 00:40)
+### R2 · P1-T1.1 relocate_mod 守卫与容错簇 (2026-10-21 00:13)
 
 relocate_mod 缺口 **79 → 29 单位**(50 miss + 29 partial → 13 miss + 16 partial), 文件行覆盖 92.6% → 97%; 全量 TOTAL 98.33% → **98.52%**。定向跑(`test_relocate_exec/units/paths/config/web_relocate/grouping_relocate`)136 passed。
 
@@ -70,7 +70,7 @@ relocate_mod 缺口 **79 → 29 单位**(50 miss + 29 partial → 13 miss + 16 p
 - 新增 `_bare_mod(...)` 助手: 裸 `RelocateModule` + `SimpleNamespace` 上下文(store/api/config/state), 默认 `data_dir=tmp_path`(journal 落盘不落 CWD —— 否则 sidefx 拦)。
 - 顺带修上游 KB 结构红: `tasks/26-10-20-frontend-dup-code-audit.md` 缺 4 个必备章节(远端 `790df0ef` 引入, 非本会话引入), 按最小结构补记, 正文事实取该档案自身陈述。
 
-### R3 · P1-T1.2 traffic_store + traffic_sample_mod (2026-10-21 01:10)
+### R3 · P1-T1.2 traffic_store + traffic_sample_mod (2026-10-21 00:28)
 
 两个文件在本档测试集下**均达 100%**(单文件 `-n 0` 口径复核: `traffic_store.py` 740 语句 / 238 分支零缺口, `traffic_sample_mod.py` 727 语句 / 278 分支零缺口)。全量 TOTAL 98.52% → **98.80%**(190 miss + 139 partial = 329 单位, 3918 passed + 2 skipped), 净清偿 82 单位。
 
@@ -78,3 +78,15 @@ relocate_mod 缺口 **79 → 29 单位**(50 miss + 29 partial → 13 miss + 16 p
 - **traffic_sample_mod(40 单位, `tests/test_traffic_sample.py` +13 例)**: 活尾 pending 行空桶与零覆盖跳过 / main_tick=0 不取整 / 改间隔关块的两条空操作 / 活跃种子缺字段走 n 游程 / 零速过滤与读数漂移防御支(`_FlipSpeedTorrent` 首读 0 次读 512) / z 游程须 totals / 末端锚点三级兜底 / n-only 前缀拆块(3 列 B + 5 列 B 二态并存) / 纯 z 块跨 flush 块头只写一次 / 恢复跨天末槽上下文接力(文件在场 vs 缺失的覆盖差)/ catch-up 开放小时重建 pending / 离线记账空块与 n 槽 / stop() 前置闸。
 - **两处「到不了的支」的处理**: ① `_agg_credit_day_file` 的空块零槽 —— 解析层不会产出空块, 直接构造 `V4Block(records=())` 走防御支并在 docstring 注明; ② catch-up 的空桶 —— `_agg_credit_hours` 不产空列表, 用替身 `_agg_credit_day_file` 注入空桶。
 - **未新增任何产品码改动**; 无新 `# pragma: no cover`。
+
+### R4 · P1-T1.3–T1.5 平台分支与防御面收尾 + P1 验收 (2026-10-21 00:41)
+
+T1.3–T1.5 全部落地并完成 P1 阶段验收。全量: **3935 passed + 2 skipped, TOTAL 98.80% → 99.03%**(145 miss + 122 partial = **267 单位**, 分母 27,683), 门槛 `--cov-fail-under` 由 **98 抬到 98.5** 后**首次生效即转绿**(余量 0.53 点)。基线切片 `testing/baselines/26-10-21-0041-test-coverage-uplift-2-p1.md`。
+
+- **T1.3 `traffic_source/agent.py` 17 → 0(100%, +6 例)**: `_platform_data_home` 三支平台惯例(macOS `~/Library/Application Support` 单测)/ `parse_pointer` pid 非数值兜底 0(不影响端点解析)/ 让位注记顶层非对象只告警不猜字段 / `ensure_running` 拉起 OSError 记原因 + 固定退避 + **不算「拉起过」**(下轮仍首次引导窗口)/ `request_relaunch` 清窗口·退避·失败记忆 / `_note_error` 同因节流(首条 WARNING、同因降 DEBUG、换原因重新 WARNING)。日志断言用自建 `logging.Handler` 子类挂模块 logger(**不用 caplog**: `QbManager` 构造会清 root handlers)。
+- **T1.4 `infra/alias_fs.py` 25 → 0(100%, +6 例) + `core/traffic_grid.py` 16 → 8(98.3%, +4 例)**: alias_fs 是纯平台分支簇 —— `/proc/mounts` 非注入路径 / `_remove_tree` 三条容错出口(清理尽力而为, 绝不用清理失败盖掉探测结论)/ `probe_junction` 非 Windows 早退 / `alias_kind_of` 无 reparse tag 走 `S_ISLNK` 兜底 / `_win_interactive_session` 两条保守出口 + `_win_create_junction` 内核失败清现场(ctypes `WinDLL` 桩, 不需真 Windows)。traffic_grid 余 8 单位是 v4 栅格窗界与快照竞争的复合条件, P2 再议。
+- **T1.5 `webui/server/traffic_qb.py` 15 → 0(100%, +1 例)**: 单例 `test_service_defensive_paths` 直驱 `QbTrafficChartApi`, 把「限速读失败空注解 / 成员天文件与 agg 读竞态降级 / 单系列 all 窗竞态栅格兜底 / 成员月行并集铺格」一次收完(webui 二线 runtime 25 与 views 8 留 P2)。
+- **P1 DoD 逐项**: ① TOTAL ≥ 98.7% → **99.03%** ✓ ② 阈值抬 98.5 且全量绿 ✓ ③ 基线切片(Windows 侧数字 + Linux 侧 900s 超时说明)✓ ④ 变异红验 **6/6 全杀**(17 例抽 35.3%, `tmp-analysis/mutation_check_t1x.py`)✓ ⑤ watchlist 3 → **1**(仅 `tool_client` 91.3%)✓ ⑥ 豁免 8 行零新增 ✓。
+- **分包缺口**(P0 切片 → 现): core 230 → 76 / webui 101 → 84 / infra 51 → 26 / hr 41 → 41 / config 26 → 26 / rules 6 / tools 4 / tray 3 / torrents 1。
+- **P2 待清 Top**: relocate_mod 29 / tool_client 25 / runtime 25 / validation/sections 24 / utils 20 / grouping_mod 17 / hr/discovery 14 / traffic_monitor 10 / hr/service 10 / views 8 / traffic_grid 8。
+- 顺带把 R2/R3 标题时间戳按 `git log` 实际提交时刻校正(原记 00:40 / 01:10 为估时, 实为 00:13 / 00:28)。

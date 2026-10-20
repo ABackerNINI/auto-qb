@@ -41,6 +41,20 @@
 - test_probe_capability_uac_note: 文件级 symlink 需提权时备注写明提权通道可用性
 - test_uac_available_swallows_error: 提权通道探测: 非 Windows 恒 False; 取窗口站抛错 -> False
 
+P1-T1.4 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
+- test_mount_info_reads_proc_mounts_when_not_injected: mounts_text 未注入 -> 走真实读取单点
+  (非 Linux 平台读不到 = None, 不抛); 注入文本时按最长前缀命中
+- test_remove_tree_tolerates_failures: 探测清理容错面 —— 目录不存在(scandir 抛 OSError)静默
+  返回 / 子项删不掉记 DEBUG 继续 / 收尾 rmdir 因残留失败同样只记 DEBUG(不半途抛)
+- test_probe_junction_non_windows: 非 Windows 恒不可用且原因写明「仅 Windows」(不做任何探测)
+- test_alias_kind_of_symlink_without_reparse_tag: 形态判定兜底支 —— st_reparse_tag 缺省时
+  按 S_ISLNK 判符号链接(POSIX 口径; Windows 上 reparse tag 先命中)
+- test_win_interactive_session_station_failures: 窗口站探测两条保守出口(ctypes 桩)——
+  拿不到窗口站句柄 / 取 UOI_FLAGS 失败 -> False(服务/SSH 会话弹不出 UAC)
+- test_win_create_junction_kernel_failure_cleans_up: junction 内核原语失败(ctypes 桩)——
+  CreateFileW 返回 INVALID_HANDLE / DeviceIoControl 失败 -> 抛 OSError 且删掉刚建的空目录;
+  清理时 rmdir 再失败也不掩盖主因
+
 ## 环境能力 skip(2026-10-18, issue 26-10-18-2030)
 
 真实建符号链接类用例依赖**宿主建链能力**: Windows 非特权进程(非管理员且未开开发者模式)缺
@@ -52,7 +66,9 @@ SeCreateSymbolicLinkPrivilege, `os.symlink` 抛 WinError 1314; 少数重定向�
 """
 import json
 import os
+import stat
 import tempfile
+from types import SimpleNamespace
 
 import pytest
 
@@ -651,3 +667,114 @@ def test_uac_available_swallows_error(monkeypatch):
 
     monkeypatch.setattr(alias_fs, "_win_interactive_session", boom)
     assert alias_fs._uac_available("windows") is False
+
+
+# ---------- P1-T1.4 守卫与容错簇(计划 26-10-20-2101) ----------
+
+
+def test_mount_info_reads_proc_mounts_when_not_injected(monkeypatch):
+    """mounts_text 未注入 -> 走真实 /proc/mounts 读取单点(_read_text); 读不到 = None(非 Linux
+    平台的常态, 不抛); 注入文本时按最长前缀命中(挂载表解析逻辑本身由既有用例钉住)"""
+    monkeypatch.setattr(alias_fs, "_read_text", lambda path: "")
+    assert alias_fs.mount_info_for_path("/mnt/c/x") is None  # 读不到: 不抛不猜
+    monkeypatch.setattr(
+        alias_fs, "_read_text", lambda path: "/dev/sda1 / ext4 rw 0 0\n/mnt/c /mnt/c 9p rw,aname=drvfs 0 0\n"
+    )
+    info = alias_fs.mount_info_for_path("/mnt/c/Users/x")
+    assert info is not None and info.mount_point == "/mnt/c" and info.is_drvfs
+
+
+def test_remove_tree_tolerates_failures(tmp_path, monkeypatch):
+    """_remove_tree 容错面(探测临时目录清理): 目录不存在(scandir 抛 OSError)-> 静默返回;
+    子项删不掉 -> 记 DEBUG 继续扫其它项(不半途抛); 收尾 rmdir 因残留失败同样只记 DEBUG
+    —— 清理是尽力而为, 绝不让清理失败盖掉探测结论"""
+    alias_fs._remove_tree(str(tmp_path / "absent"))  # scandir 抛 OSError: 零操作零异常
+    root = tmp_path / "probe"
+    root.mkdir()
+    stuck = root / "stuck.txt"
+    stuck.write_text("x", encoding="utf-8")
+    real_unlink = os.unlink
+
+    def _unlink_boom(path):
+        if os.path.basename(str(path)) == "stuck.txt":
+            raise OSError(13, "locked")
+        return real_unlink(path)
+
+    monkeypatch.setattr(alias_fs.os, "unlink", _unlink_boom)
+    alias_fs._remove_tree(str(root))
+    assert stuck.exists() and root.exists()  # 删不掉的留下, 别的照删, 全程不抛
+
+
+def test_probe_junction_non_windows(monkeypatch):
+    """非 Windows 平台: junction 恒不可用且原因写明「仅 Windows」(直接返回, 不做任何探测)"""
+    monkeypatch.setattr(alias_fs, "utils", SimpleNamespace(is_windows=lambda: False))
+    probe = alias_fs.probe_junction("whatever")
+    assert not probe.ok and "仅 Windows" in probe.error
+
+
+def test_alias_kind_of_symlink_without_reparse_tag(tmp_path, monkeypatch):
+    """形态判定兜底支: st_reparse_tag 缺省(非 Windows 口径)时按 S_ISLNK 判符号链接 ——
+    Windows 上 reparse tag 先命中, 这条兜底是 POSIX 与旧 stat 形态的唯一判据"""
+    monkeypatch.setattr(alias_fs.os, "lstat", lambda path: SimpleNamespace(st_mode=stat.S_IFLNK | 0o777, st_nlink=1))
+    assert alias_fs.alias_kind_of(str(tmp_path / "any")) == KIND_SYMLINK
+
+
+def test_win_interactive_session_station_failures(monkeypatch):
+    """窗口站探测两条保守出口(ctypes 桩): 拿不到窗口站句柄 / 取 UOI_FLAGS 失败 -> False
+    —— 无可见窗口站的会话(服务/SSH/计划任务)弹不出 UAC, 按「提权通道不可用」处理"""
+    import ctypes
+
+    def _fake_dll(station, info_ok):
+        def factory(name, use_errno=False, use_last_error=False):
+            def get_station():
+                return station
+
+            def get_info(*args):
+                return info_ok
+
+            return SimpleNamespace(GetProcessWindowStation=get_station, GetUserObjectInformationW=get_info)
+
+        return factory
+
+    monkeypatch.setattr(ctypes, "WinDLL", _fake_dll(0, 1))
+    assert alias_fs._win_interactive_session() is False  # 没有窗口站
+    monkeypatch.setattr(ctypes, "WinDLL", _fake_dll(1234, 0))
+    assert alias_fs._win_interactive_session() is False  # UOI_FLAGS 取不到
+
+
+def test_win_create_junction_kernel_failure_cleans_up(tmp_path, monkeypatch):
+    """junction 内核原语失败路径(ctypes 桩): CreateFileW 返回 INVALID_HANDLE / DeviceIoControl
+    失败 -> 抛 OSError 且删掉刚建的空目录(不留半截现场); 清理时 rmdir 再失败也不掩盖主因"""
+    import ctypes
+    from ctypes import wintypes
+
+    link = str(tmp_path / "link")
+    target = str(tmp_path / "target")
+    os.makedirs(target)
+    invalid = wintypes.HANDLE(-1).value
+
+    def _fake_k32(handle, io_ok):
+        def factory(name, use_errno=False, use_last_error=False):
+            return SimpleNamespace(
+                CreateFileW=lambda *args: handle,
+                DeviceIoControl=lambda *args: io_ok,
+                CloseHandle=lambda handle_: 1,
+            )
+
+        return factory
+
+    monkeypatch.setattr(ctypes, "WinDLL", _fake_k32(invalid, 0))
+    with pytest.raises(OSError):
+        alias_fs._win_create_junction(link, target)
+    assert not os.path.exists(link)  # 失败即清场
+    monkeypatch.setattr(ctypes, "WinDLL", _fake_k32(1234, 0))  # 句柄有效但 FSCTL 失败
+    with pytest.raises(OSError):
+        alias_fs._win_create_junction(link, target)
+    assert not os.path.exists(link)
+    # 清理本身失败(rmdir 抛错): 被吞掉, 主因照抛 —— 空目录留下但不掩盖失败原因
+    monkeypatch.setattr(alias_fs.os, "rmdir", lambda path: (_ for _ in ()).throw(OSError(13, "locked")))
+    with pytest.raises(OSError):
+        alias_fs._win_create_junction(link, target)
+    assert os.path.isdir(link)
+    monkeypatch.undo()
+    os.rmdir(link)

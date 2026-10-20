@@ -75,6 +75,7 @@ from auto_qb.core.traffic_grid import (
     WindowGrid,
     build_grid,
     build_month_grid,
+    grid_for_now,
     group_null_mask,
     group_rate_points,
     group_totals_points,
@@ -90,6 +91,7 @@ from auto_qb.core.traffic_grid import (
     v4_totals_points,
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
+    _bucket_delta,
 )
 from auto_qb.core.traffic_store import (
     AggRow,
@@ -1298,3 +1300,51 @@ def test_v4_grid_obs_break_bucket_rate_null_snapshot_kept():
     assert group_rate_points(unknown, g, mask)[100] == {"t": b0, "dl": None, "up": None}
     mixed = [{b0: BucketObs(None, 5, 1000, 500)}, {b0: BucketObs(30, None, 1600, 800)}]
     assert group_rate_points(mixed, g, mask)[100] == {"t": b0, "dl": 30, "up": 5}
+
+
+# ---------------- P1-T1.4 守卫与容错簇(计划 26-10-20-2101) ----------------
+
+
+def test_grid_for_now_wraps_build_grid():
+    """grid_for_now = build_grid 的现在时包装(API 层入口): 同一窗口/间隔/段, t1 取调用时刻
+    (两次调用秒级差 <= 2s)"""
+    g = grid_for_now("24h", 30)
+    ref = build_grid("24h", time.time(), 30)
+    assert g.name == ref.name == "24h" and g.interval == ref.interval == 30 and g.segment == ref.segment
+    assert abs(g.t1 - ref.t1) <= 2
+
+
+def test_bucket_delta_null_and_reset():
+    """累计差分两条 None 出口: 任一侧基线缺失 -> None(未知 != 0, 不冒充分线 0 值点);
+    计数器回落(cur < last)-> None(非优雅重启/删种重加, 绝不产负增量)"""
+    assert _bucket_delta(None, 5) is None and _bucket_delta(5, None) is None
+    assert _bucket_delta(3, 5) is None
+    assert _bucket_delta(5, 3) == 2 and _bucket_delta(5, 5) == 0
+
+
+def test_group_totals_up_direction_reset_independent():
+    """组累计差分逐向独立: 某成员上行快照回落只让上行贡献 0, 下行照常累加(不整桶丢弃)"""
+    g = build_grid("24h", NOW, 30.0)
+    b0, b1 = g.buckets[10], g.buckets[11]
+    member = {b0: BucketObs(0, 0, 1000, 1000), b1: BucketObs(0, 0, 1500, 400)}
+    totals = group_totals_points([member], g, [False] * len(g.buckets))
+    assert totals[11] == {"t": b1, "dl": 500, "up": 0}
+
+
+def test_v4_grid_obs_window_and_snapshot_edges():
+    """v4_grid_obs 边界: 完全窗外的点不消费(覆盖末端早于窗首)/ 覆盖越过窗尾在最后一个栅格桶
+    收口(不越界铺桶)/ 同桶后到的短覆盖点不抢快照(覆盖末端最晚者胜), 速率按覆盖秒加权"""
+    g = build_grid("24h", NOW, 30.0)
+    first, last = g.first, g.last
+    pts = (
+        V4PointEntry(first - 600, 100, 100, 10, 20, w=30),  # 窗外: 覆盖末端 < first
+        V4PointEntry(first, 200, 200, 100, 200, w=30),  # 窗首桶: 覆盖 30s
+        V4PointEntry(first + 10, 300, 300, 111, 222, w=10),  # 同桶后到、覆盖更短
+        V4PointEntry(last, 400, 400, 300, 400, w=120),  # 覆盖越过窗尾
+    )
+    obs = v4_grid_obs(pts, g)
+    assert first - 600 not in obs  # 窗外不消费
+    assert obs[first].dl_rate == 225  # (200x30 + 300x10) / 40
+    assert obs[first].dl_total == 100 and obs[first].up_total == 200  # 覆盖末端最晚者胜(后到短覆盖不抢)
+    assert obs[last].dl_rate == 400 and obs[last].dl_total == 300
+    assert max(obs) == last  # 窗尾之后不铺桶
