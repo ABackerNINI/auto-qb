@@ -354,7 +354,9 @@ class GlobalTrafficMonitorSourceConfig:
     tool_dir / tool_exe: 工具安装位置与启动目标(D10 解析顺序: tool_exe 优先, 否则 tool_dir 里的
       启动器)。**这里没有 data_dir** —— 数据目录是工具自己的事实, 由它在发现指针
       endpoint.json 里报出; 配置里再存一份只会与真值漂移(计划 26-10-17-0339 R2/D20)。
-    notify_cooldown_s: 收到事件后的刷新冷却(秒)
+    notify_cooldown_s: **已退役(26-10-21)** —— 曾是"收到事件后的刷新冷却(秒)"; 事件改零读盘
+      补丁后(用户拍板「读盘本身就是副作用, 要尽量减少读盘」)无成本可节流, 键保留仅为兼容
+      旧配置(校验/读入照旧), 取值不再被读取。
     """
     tool_dir: str = ""
     tool_exe: str = ""
@@ -373,9 +375,12 @@ class TrafficSourceConfig:
     provider: 当前生效来源("traffic_monitor" 或 "global_traffic_monitor"); 两来源参数可并存,
       但只有 provider 指向的那一个参与取数(严格互斥, D1)。
     traffic_monitor / global_traffic_monitor: 两个来源的参数(互斥生效)。
-    refresh_interval: 来源侧快照刷新节奏(秒, 26-10-18-0813 A3/D9): traffic_snapshot 模块按它
-      读一次 dat 并发布历史/累计。**与限速曲线的 interval 互相独立** —— 那个只管"读数 + 写限速",
-      不管图刷新; 两者默认都是 10 分钟, 但改一个不会连带改另一个。
+    refresh_interval: 来源侧**文件读盘节奏**(秒, 26-10-18-0813 A3/D9; 26-10-21 语义收紧):
+      traffic_snapshot 模块按它读一次 dat 并发布历史/累计 —— 读盘是成本(用户拍板「读盘本身
+      就是副作用, 要尽量减少读盘」), 全部文件读盘(定时 / 配置切源 / 兜底)都收拢在这一个
+      闸门。工具来源下 gtm 阈值事件**零读盘直达补丁**今日流量(publish_event, 事件自带权威
+      累计), 本间隔不再拦截事件, 只做兜底。**与限速曲线的 interval 互相独立** —— 那个只管
+      "读数 + 写限速", 不管图刷新; 改一个不会连带改另一个。
 
     !取数路径**不在本对象里算**(R2/D20): 工具来源的 dat 路径是运行期事实(工具自己报在发现
     指针里), 配置面无从得知。所有取数方一律调 `core.traffic_source.paths.dat_path(config)`

@@ -199,8 +199,10 @@ B/KiB/MiB/GiB/TiB)。解析与回显单点在 `gtm/units.py` (文法镜像 auto-
 - 阈值累计基数 = **上次事件时刻**的当日合计, 只在事件派发成功后推进 (随样本推进会
   把「累计变化」退化成单样本 delta); 跨天/累计回退只重置基数, 不产伪事件。
 - 推送以 `Authorization: Bearer <订阅时登记的 token>` POST JSON 到订阅端点
-  (auto-qb 侧 `/api/traffic/monitor/notify`, S7); 订阅方侧冷却 `notify_cooldown_s`
-  (默认 600s) 另算, 与事件号去重互补。
+  (auto-qb 侧 `/api/traffic/monitor/notify`, S7); 订阅方按事件号单调去重, 且 **26-10-21 起
+  事件直达补丁** —— auto-qb 收到事件后用六键自带权威累计直接改快照「今日流量」(零读盘,
+  用户拍板「读盘本身就是副作用」), 每个新事件号立即生效; 旧订阅方侧冷却 `notify_cooldown_s`
+  (曾默认 600s) 已退役(键保留仅为兼容)。
 
 ## 开发
 

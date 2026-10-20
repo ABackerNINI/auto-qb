@@ -21,6 +21,14 @@
 - test_refresh_interval_applies_to_registered_task: 热重载改 refresh_interval -> 已入队任务就地改 interval, 不重复入队
 - test_refresh_publish_logs_at_debug: 发布历史流量那行恒 DEBUG(通知链路高频, 26-10-18 降级; WARNING 路径不受影响)
 - test_poll_payload_drops_history: /api/status 与 /api/state 的 traffic 无 history; /api/traffic/history 仍有
+
+## 事件零读盘补丁(26-10-21, 用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」)
+- test_publish_event_patches_day_row_without_reading: 补丁只改 periods 的 day 行(month/history/limit 段不动),
+  ts 推进, 且**一次读盘都没有**(read_source_rows 打桩成 raise)
+- test_publish_event_high_water_clamps_both_paths: 高水位钳制 —— 低载荷不发布(返回 False),
+  文件读盘路径的 day 行也不低于水位(崩溃恢复闪跳被抹掉)
+- test_publish_event_ignores_non_today_and_source_off: 非当日 / 关源 -> False 且快照一字未动
+- test_publish_event_creates_day_row_on_cold_start: 冷启动(种子 periods=[])首个事件先于任何读盘 -> 建 day 行
 """
 import copy
 import logging
@@ -312,6 +320,100 @@ def test_only_snapshot_module_writes_traffic_view():
         for p in src.rglob("*.py") if ".set_traffic_view(" in p.read_text(encoding="utf-8")
     )
     assert callers == ["core/modules/traffic_snapshot_mod.py"], f"快照出现第二个写入点: {callers}"
+
+
+# ---------- 事件零读盘补丁(26-10-21) ----------
+
+
+def test_publish_event_patches_day_row_without_reading(tmp_path, monkeypatch):
+    """补丁只改 periods 的 day 行; month/history/limit 段一字不动; **一次读盘都没有**
+
+    读盘打桩成 raise: 事件路径(六键自带权威累计)若退回读文件, 这条用例直接红 ——
+    「读盘本身就是副作用」的判据就钉在这里。
+    """
+    import auto_qb.core.modules.traffic_snapshot_mod as tsm
+
+    today = date.today()
+    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mod = _mod(mgr)
+    assert mod.refresh() is True  # 先有一份文件派生快照(day + month 两行)
+    mod.publish_limit(target={"up": 5120, "down": 11264}, actual={"up": 5120, "down": 11264})
+    before_ts = mgr.web.traffic_view["ts"]
+    before = {k: copy.deepcopy(mgr.web.traffic_view[k]) for k in ("source", "history", "limit")}
+
+    def _boom(*_a, **_k):
+        raise AssertionError("事件补丁路径不许读盘(读盘本身就是副作用)")
+
+    monkeypatch.setattr(tsm, "read_source_rows", _boom)
+
+    assert mod.publish_event(today.isoformat(), 6 * GIB, 9 * GIB) is True
+    tv = mgr.web.traffic_view
+    rows = {r["period"]: (r["up"], r["down"]) for r in tv["periods"]}
+    assert rows["day"] == (6 * GIB, 9 * GIB), "day 行必须被载荷补丁"
+    assert rows["month"] == (3 * GIB, 5 * GIB), "month 行是文件派生的, 补丁不许动"
+    assert tv["ts"] > before_ts, "补丁也要推进 ts(前端据此知道快照变了)"
+    for k in ("source", "history", "limit"):
+        assert tv[k] == before[k], f"补丁踩了 {k} 段(段隔离失效)"
+    assert tv["state"] == derive_state(tv["source"]["state"], tv["limit"]["state"])
+
+
+def test_publish_event_high_water_clamps_both_paths(tmp_path):
+    """高水位钳制: 低载荷不发布(返回 False); 文件读盘路径的 day 行也不低于水位
+
+    崩溃恢复边缘: 工具 state.json 比 dat 旧 -> 首个 catch-up 事件载荷偏低 —— 钳制让 pill
+    不回退; 随后工具流量追上水位, 补丁自然恢复推进。
+    """
+    today = date.today()
+    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 1 * 1024, 1 * 1024)]))  # 今天行 1KiB/1KiB
+    mod = _mod(mgr)
+
+    assert mod.publish_event(today.isoformat(), 5000, 6000) is True
+    assert mod.publish_event(today.isoformat(), 100, 200) is False, "低于水位: 不发布"
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (5000, 6000), "低载荷不许把 pill 刷小"
+
+    # 文件读盘路径同样钳制: dat 今天行(1024B)低于水位 -> 发布值取水位
+    assert mod.refresh() is True
+    rows = {r["period"]: (r["up"], r["down"]) for r in mgr.web.traffic_view["periods"]}
+    assert rows["day"] == (5000, 6000), "文件派生值低于水位时必须被钳回水位(否则 pill 回退)"
+    assert rows["month"] == (1024, 1024), "month 行不钳(事件不携带月累计)"
+
+
+def test_publish_event_ignores_non_today_and_source_off(tmp_path):
+    """非当日 / 关源 -> False 且快照一字未动(那天的累计由兜底读盘覆盖)"""
+    mgr = _mgr(tmp_path)  # 无 dat: 真读了会发 stale, 没动就证明没读也没发
+    mod = _mod(mgr)
+    before = copy.deepcopy(mgr.web.traffic_view)
+
+    assert mod.publish_event("1999-01-01", 1024, 2048) is False
+    assert mgr.web.traffic_view == before
+
+    mgr.config.traffic_source.enabled = False
+    assert mod.publish_event(date.today().isoformat(), 1024, 2048) is False
+    assert mgr.web.traffic_view == before
+
+
+def test_publish_event_creates_day_row_on_cold_start(tmp_path, monkeypatch):
+    """冷启动(种子 periods=[])首个事件先于任何文件读盘: 建 day 行, limit 段保留
+
+    month 行等首次读盘补上 —— 前端按 period 取行, 缺 month 只影响本月对照, 不影响 pill。
+    """
+    import auto_qb.core.modules.traffic_snapshot_mod as tsm
+
+    def _boom(*_a, **_k):
+        raise AssertionError("事件补丁路径不许读盘(读盘本身就是副作用)")
+
+    monkeypatch.setattr(tsm, "read_source_rows", _boom)
+
+    mgr = _mgr(tmp_path)  # 连 dat_path 都没有: 纯冷启动
+    mod = _mod(mgr)
+    mod.publish_limit(target={"up": 1, "down": 2})
+
+    assert mod.publish_event(date.today().isoformat(), 7, 8) is True
+    tv = mgr.web.traffic_view
+    rows = {r["period"]: (r["up"], r["down"]) for r in tv["periods"]}
+    assert rows == {"day": (7, 8)}
+    assert tv["limit"]["target"] == {"up": 1, "down": 2}, "冷启动补丁也不许踩 limit 段"
 
 
 # ---------- 节奏键(A3) ----------

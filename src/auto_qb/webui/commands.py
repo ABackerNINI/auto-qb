@@ -1233,8 +1233,24 @@ class WebCommandsMixin:
         logger.info(f"配置热重载 | 流量来源变更 {before} -> {after}, 立即投递历史流量刷新")
         self.web.post_command("refresh_traffic", {"trigger": "config"})
 
-    def _cmd_refresh_traffic(self, event_id=None, day: str = "", trigger: str = "notify"):
-        """WEB UI 命令: 重读历史流量文件并重发流量快照(计划 26-10-16-0541 S7 接收面)
+    def _cmd_refresh_traffic(
+        self,
+        event_id=None,
+        day: str = "",
+        trigger: str = "notify",
+        up_bytes=None,
+        down_bytes=None,
+    ):
+        """WEB UI 命令: 流量来源刷新(计划 26-10-16-0541 S7 接收面; 26-10-21 事件零读盘补丁)
+
+        两种形态, 判据在**是否带载荷**(up_bytes/down_bytes):
+
+        - **载荷补丁**(notify 触发, 26-10-21 起): 工具阈值事件自带当日权威累计 -> 模块
+          `publish_event` **零读盘**补丁 periods 的 day 行(每日高水位钳制)。文件读盘全部
+          收拢在 refresh_interval 闸门(用户拍板「读盘本身就是副作用, 要尽量减少读盘」),
+          事件路径一次读盘都没有;
+        - **全量刷新**(无载荷: 配置切源 `trigger=config` / 兜底): 读一次来源文件并重发
+          快照(模块 `refresh()`)。
 
         两个触发源, 一条执行路径(判据在 `trigger`):
         - `notify`(缺省): **工具进程**的阈值事件(经 POST /api/traffic/monitor/notify 投递),
@@ -1243,7 +1259,7 @@ class WebCommandsMixin:
         - `config`: 配置热重载发现流量来源变了(见 `_cmd_reload_config`, 1737-S8) —— 保存后立刻
           换图, 日志口径据此区分(事件号为空是常态, 不能说成「监视器通知」)。
 
-        为什么经命令队列而不在端点/热重载里直接读盘: 读盘 + 快照发布归主循环线程(黄金法则 5),
+        为什么经命令队列而不在端点/热重载里直接发布: 读盘 + 快照发布归主循环线程(黄金法则 5),
         投递方只表达意图; 命令带上事件号与日键只为日志可追。
 
         刷新体自 26-10-18-0813(A5/D11)起在 **traffic_snapshot 模块**: 快照所有权跟着来源走了
@@ -1252,6 +1268,11 @@ class WebCommandsMixin:
         这正是「没配曲线就永远没有历史图」那个死角的修复面。命令名 / 端点 / 回执语义不变。
         """
         mod = self.host.get("traffic_snapshot")
+        if up_bytes is not None and down_bytes is not None and day:
+            patched = bool(mod is not None and mod.publish_event(day, up_bytes, down_bytes))
+            logger.debug(f"WEB UI | 监视器事件补丁今日流量: 事件 #{event_id}({day}), "
+                         f"状态={'已补丁' if patched else '未变化(高水位钳制)'}")
+            return
         refreshed = bool(mod is not None and mod.refresh())
         state = "已刷新" if refreshed else "跳过"
         if trigger == "config":

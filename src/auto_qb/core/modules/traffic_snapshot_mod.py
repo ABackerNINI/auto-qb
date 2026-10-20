@@ -6,6 +6,11 @@
 
 - 拥有 `ts` / `date` / `source` / `periods` / `history` 五键, 由自注册任务按
   `traffic_source.refresh_interval`(与曲线 `interval` 解绑)周期刷新;
+- **事件零读盘补丁**(26-10-21, 用户拍板「读盘本身就是副作用, 要尽量减少读盘」): gtm 阈值
+  事件自带当日权威累计, `publish_event` 只改 periods 的 day 行、一次读盘都没有 —— 文件
+  读盘全部收拢在 refresh_interval 一个闸门(定时 / 切源 / 兜底)。day 行带**每日高水位
+  钳制**: 崩溃恢复时首个 catch-up 事件可能偏低(state.json 比 dat 旧), 钳制抹掉这个
+  闪跳, 按日清零;
 - 曲线的 `limit` 段经 `publish_limit()` 写入 —— 段级契约代替整体替换: 谁写哪一段写进 API,
   而不是靠"两个任务别同时发"的约定;
 - 顶层 `state` 是**派生值**: 一律 `derive_state(source.state, limit.state)`, 没有第二个真相源。
@@ -13,7 +18,8 @@
 段隔离(D10): 三个 publisher 内部都是「读旧快照 -> 只改自己那段 -> 一次 set_traffic_view」,
 所以来源刷新不会把限速浮层的目标值清空, 曲线一轮也不会把历史图清空。
 
-边界: 本模块只读流量文件 + 发布内存快照, **不碰 qB**(不读不写全局限速, 那是曲线模块的事)。
+边界: 本模块只读流量文件 + 发布内存快照, **不碰 qB**(不读不写全局限速, 那是曲线模块的事);
+事件路径(publish_event)连文件都不读 —— 读盘是成本, 全部收拢在 refresh_interval 闸门。
 """
 import logging
 import time
@@ -127,6 +133,10 @@ class TrafficSnapshotModule(BaseModule):
 
     def __init__(self, ctx: AppContext) -> None:
         self._ctx = ctx
+        #: 每日事件补丁高水位(26-10-21): day -> (已发布最大 up, 已发布最大 down)。
+        #: 事件路径零读盘, 但崩溃恢复时工具内存可能低于 dat 已有值(state.json 比 dat 旧),
+        #: 首个 catch-up 事件载荷会偏低 —— 钳制让 pill 不回退, 按日清零只留今天的键。
+        self._hw: dict = {}
 
     def sections(self) -> tuple[str, ...]:
         """**只**消费来源段 —— 不声明 `global_speed_limit_curve` 正是解耦的判据(A1 守阵):
@@ -216,6 +226,45 @@ class TrafficSnapshotModule(BaseModule):
         logger.debug(f"流量快照 | 发布历史流量: {len(rows)} 行" + (f", 今日 上传 {day[1]}B/下载 {day[2]}B" if day else ""))
         return True
 
+    def publish_event(self, day: str, up, down) -> bool:
+        """事件载荷补丁(26-10-21): **零读盘**, 只把当日累计写进 periods 的 day 行
+
+        gtm 阈值事件六键自带当日权威累计(up_bytes/down_bytes; 工具推送前已强制落盘, dat 与
+        事件值一致) —— 顶栏「今日流量」pill 的数据源就是 periods 的 day 行, 补丁不需要读
+        dat: 文件读盘全部收拢在 refresh_interval 闸门(用户拍板「读盘本身就是副作用, 要尽量
+        减少读盘」), 事件路径一次读盘都没有、零额外网络调用(事件本身那次 HTTP 之外)。
+
+        高水位钳制: 取 max(载荷, `_hw[day]`) 后发布并记回 `_hw` —— 崩溃恢复时工具内存可能
+        低于 dat 已有值, 首个 catch-up 事件载荷会偏低, 钳制抹掉这个闪跳; 按日清零(只保留
+        今天的键)。文件读盘路径(`publish_source` 的 ok 分支)同样不低于该水位, 两条发布
+        路径都不让 day 行回退。
+
+        返回是否**发布了新值**(命令回执与日志据此区分"已补丁/未变化")。非当日 / 关源 ->
+        False(端点通常已拦; 执行期竞态兜底, 那天的累计由兜底读盘覆盖)。
+        """
+        today = date.today().isoformat()
+        if day != today or not traffic_paths.source_enabled(self._ctx.config):
+            return False
+        hw_up, hw_down = self._hw.get(today, (0, 0))
+        new_up, new_down = max(int(up), hw_up), max(int(down), hw_down)
+        self._hw = {today: (new_up, new_down)}
+        view = dict(self._ctx.web.traffic_view or {})
+        periods = [dict(row) for row in (view.get("periods") or [])]
+        row = next((r for r in periods if r.get("period") == "day"), None)
+        if row is None:
+            # 冷启动后首个事件先于任何文件读盘: 建 day 行(month 行等首次读盘补上,
+            # 前端按 period 取行, 缺 month 不渲染本月对照, 不影响 pill)
+            periods.insert(0, {"period": "day", "label": "今日", "up": new_up, "down": new_down})
+            changed = True
+        else:
+            changed = (row.get("up"), row.get("down")) != (new_up, new_down)
+            row["up"], row["down"] = new_up, new_down
+        if not changed:
+            return False
+        self._publish(periods=periods)
+        logger.debug(f"流量快照 | 事件补丁今日流量({today}): 上传 {new_up}B/下载 {new_down}B(零读盘)")
+        return True
+
     # ---------- 段级发布 API(D10: 全模块唯一改动 traffic_view 的入口) ----------
 
     def publish_source(
@@ -225,14 +274,26 @@ class TrafficSnapshotModule(BaseModule):
 
         rows 是 dat 的按日行(不是快照行): periods 与 history 由同一份行派生, 两者不会漂移。
         state 只允许 ok / stale(off 走 publish_off): 来源关闭时 periods/history 必须一起清空。
+
+        26-10-21 起 ok 分支的 day 行带**高水位钳制**: 不低于 `_hw[今天]`(事件补丁记的最大值)
+        —— 崩溃恢复后工具内存可能低于 dat 已有值, 文件读盘不许把 pill 刷回更小的数; 两条发布
+        路径(本方法 / publish_event)都不让 day 行回退。stale/off 分支不钳: 清空/归零是它们
+        的语义。
         """
         today = date.today()
+        periods = _period_rows(rows, today)
+        if state == SOURCE_OK:
+            hw = self._hw.get(today.isoformat())
+            if hw is not None:
+                row = next((r for r in periods if r["period"] == "day"), None)
+                if row is not None:
+                    row["up"], row["down"] = max(row["up"], hw[0]), max(row["down"], hw[1])
         self._publish(
             source={
                 "state": state,
                 "reasons": list(reasons)
             },
-            periods=_period_rows(rows, today),
+            periods=periods,
             history=_history_rows(rows),
         )
 

@@ -9,6 +9,7 @@ global_traffic_monitor 来源面」, 设置页里合并进同一张「全局流�
   POST /api/traffic/monitor/claim    「以本安装重登记」(D4/D5): 有界前台跑安装内 claim 启动器(人工易主)
   POST /api/traffic/monitor/shutdown  停止工具: 代理工具 POST /shutdown(S3, 26-10-17-1737)
   POST /api/traffic/monitor/notify    **接收面**(S7): 工具推送的累计流量阈值事件
+    (26-10-21 起: 事件自带权威累计 -> 主循环零读盘补丁今日流量, 不再触发读盘)
 
 auto-qb 与工具是两个进程、两个 venv: 本模块是唯一桥 —— 用 stdlib urllib 带 Bearer token
 调工具控制面(地址/密钥不再来自配置, 而是 **agent 读工具指针**得的 host/port/token_path)。
@@ -36,7 +37,7 @@ from __future__ import annotations
 import logging
 import math
 import threading
-import time
+from datetime import date
 
 from fastapi import APIRouter, HTTPException
 
@@ -134,33 +135,35 @@ def _ready_endpoint(manager):
 
 
 class NotifyGate:
-    """通知接收闸: 事件号单调去重 + 冷却(计划 26-10-16-0541 S7)
+    """通知接收闸: 事件号单调去重(计划 26-10-16-0541 S7; 26-10-21 冷却退役)
 
-    两个判据互补(§01「通知」行 / §05 默认参数), 状态是 **per app 实例**的(与 auth 的
-    「免鉴权只记一次」同款: 测试会对同一 manager 多次 create_app, 不得提升为模块级全局):
+    状态是 **per app 实例**的(与 auth 的「免鉴权只记一次」同款: 测试会对同一 manager
+    多次 create_app, 不得提升为模块级全局):
 
     - **事件号**: 记「已接受的最大事件号」, 小于等于它的一律丢(重复投递 / 乱序到达)。
-      重启后归零 —— 工具的下一条事件即放行, 冷启动后的第一次刷新不会被自己挡住;
-    - **冷却** `notify_cooldown_s`: 距上次**刷新**的间隔, 窗口内的新事件不再触发刷新(工具侧
-      阈值事件可能连续来, 一次刷新已覆盖中间所有增量), 也不推进事件号(它没被接受)。
+      重启后归零 —— 工具的下一条事件即放行, 冷启动后的第一次补丁不会被自己挡住。
 
-    纯内存、不落盘: 丢了通知只等于「晚一次刷新」—— 文件一直在写, 订阅方慢轮询兜底, 与工具侧
-    「推送失败不阻断落盘」互为冗余(§03 核心不变量)。Web 线程池并发调用 -> 加锁。
+    **为什么退役了冷却**(原 notify_cooldown_s, 26-10-21 用户拍板「读盘本身就是副作用, 要尽量
+    减少读盘; 事件基本无副作用应立即刷新」): 事件不再触发任何读盘 —— 它只把自带权威累计
+    补丁进快照(traffic_snapshot.publish_event, 一次内存发布), 无成本可节流; 冷却防的
+    「刷新风暴」在零读盘下并不存在, 留下的只有滞后(状态栏「今日流量」曾因此比设置页工具
+    状态旧数分钟)。配置键 notify_cooldown_s 保留(校验/读入照旧)仅为兼容旧配置, 取值不再
+    被读取。
+
+    纯内存、不落盘: 丢了通知只等于「晚一次兜底读盘」—— 文件一直在写, refresh_interval
+    定时任务兜底, 与工具侧「推送失败不阻断落盘」互为冗余(§03 核心不变量)。Web 线程池
+    并发调用 -> 加锁。
     """
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._last_event_id = -1
-        self._last_refresh_at = 0.0
 
-    def verdict(self, event_id: int, now: float, cooldown_s: float) -> tuple:
-        """-> (是否放行刷新, 原因: "" = 放行 / duplicate / cooldown)"""
+    def verdict(self, event_id: int) -> tuple:
+        """-> (是否放行补丁, 原因: "" = 放行 / duplicate)"""
         with self._lock:
             if event_id <= self._last_event_id:
                 return False, "duplicate"
-            if self._last_refresh_at and (now - self._last_refresh_at) < cooldown_s:
-                return False, "cooldown"
             self._last_event_id = event_id
-            self._last_refresh_at = now
             return True, ""
 
 
@@ -316,25 +319,31 @@ def build_router(ctx: WebContext) -> APIRouter:
 
     @router.post(NOTIFY_PATH)
     def api_tm_notify(body: dict = None):
-        """工具通知接收面(S7): 累计流量阈值事件 -> 主循环重读历史文件并重发流量快照
+        """工具通知接收面(S7): 累计流量阈值事件 -> 主循环零读盘补丁今日流量(26-10-21 改制)
 
-        链路(§04 S7): 校验 -> 事件号/冷却双闸 -> `_enqueue` 投递主循环命令(**黄金法则 5**:
-        读盘与快照发布都归主循环线程, 本端点只投递意图) -> 主循环重读 `dat_path` 指向的历史
-        文件 -> 重发限速/流量快照 -> 既有 `/api/state` 轮询与 SSE 通道自然把新值带给历史流量图
-        与顶栏(不新开推送链路)。
+        链路(§04 S7; 26-10-21 事件零读盘补丁): 校验 -> 事件号去重 -> 当日判定 -> `_enqueue`
+        投递主循环命令(**黄金法则 5**: 快照发布归主循环线程, 本端点只投递意图) -> 主循环把
+        事件自带的当日权威累计(up_bytes/down_bytes)补丁进快照 periods 的 day 行 -> 既有
+        `/api/state` 主轮询(1.5~3s)自然把新值带给顶栏「今日流量」pill(不新开推送链路)。
+
+        **为什么事件路径零读盘**(26-10-21 用户拍板「读盘本身就是副作用, 要尽量减少读盘;
+        事件基本无副作用应立即刷新」): 文件读盘全部收拢在 `traffic_source.refresh_interval`
+        一个闸门(定时任务 / 配置切源 / 兜底), 事件一次读盘都不触发 —— 六键里的累计值就是
+        权威数据(工具推送前已强制落盘, dat 与事件值一致), 补丁只是一次内存发布, 命令投递
+        即唤醒主循环(`post_command` -> `host.wake`, 亚秒级)。旧的冷却判据随之退役(见
+        NotifyGate): 它防的「刷新风暴」在零读盘下不存在, 留下的只有滞后。
 
         对话方是**工具进程**, 不是浏览器: 工具在订阅时登记的回调凭证 = 本实例 WEB 访问密钥,
         鉴权因此复用全局 `make_require_token`(见 webui/tool_client.py 的订阅客户端)。
 
         响应语义(全部 200, action 区分; 只事件体非法才 400):
-        - `refresh_queued` 已投递刷新(工具侧记「推送成功」);
-        - `skipped` + reason(duplicate / cooldown): 闸门拦下 —— 不是错误, 工具无需重试;
+        - `refresh_queued` 已投递补丁命令(工具侧记「推送成功」)—— 每个新事件号都直达;
+        - `skipped` + reason(duplicate / stale_day): 闸门拦下 —— 不是错误, 工具无需重试;
         - `disabled`: 联动总开关关(保守默认, §07 黄金法则 2) —— 含来源总开关
           `traffic_source.enabled=false`(S1/D1, 26-10-17-1737: 关源即停一切取数, 通知不触发刷新);
         - 400: 事件体非法(工具契约漂移必须响亮报错, 不静默按 0 记账)。
         """
         manager.web.touch()
-        conf = _tm_conf(manager)
         event = _parse_notify_event(body)
         # 来源总开关(S1/D1): 判定优先于 provider —— 关源时 provider 指向谁都不取数
         if not traffic_paths.source_enabled(manager.config):
@@ -351,17 +360,30 @@ def build_router(ctx: WebContext) -> APIRouter:
                 "event_id": event["event_id"],
                 "reason": "traffic_source.provider != global_traffic_monitor",
             }
-        allowed, reason = notify_gate.verdict(event["event_id"], time.time(), float(conf.notify_cooldown_s))
+        allowed, reason = notify_gate.verdict(event["event_id"])
         if not allowed:
-            logger.debug(f"全局流量监视器通知: 事件 #{event['event_id']} 未触发刷新({reason})")
+            logger.debug(f"全局流量监视器通知: 事件 #{event['event_id']} 未触发补丁({reason})")
             return {"ok": True, "action": "skipped", "event_id": event["event_id"], "reason": reason}
-        queued = ctx.enqueue("refresh_traffic", {"event_id": event["event_id"], "day": event["day"]})
+        if event["day"] != date.today().isoformat():
+            # 非当日事件(跨天边界 / 时钟偏差): 不补丁也不读盘 —— 那天的累计文件里早有,
+            # 由 refresh_interval 兜底读盘覆盖, 事件路径保持零读盘
+            logger.debug(f"全局流量监视器通知: 事件 #{event['event_id']} 非当日({event['day']}), 不补丁(兜底读盘覆盖)")
+            return {"ok": True, "action": "skipped", "event_id": event["event_id"], "reason": "stale_day"}
+        queued = ctx.enqueue(
+            "refresh_traffic",
+            {
+                "event_id": event["event_id"],
+                "day": event["day"],
+                "up_bytes": event["up_bytes"],
+                "down_bytes": event["down_bytes"],
+            },
+        )
         # DEBUG 而非 INFO: 阈值事件随流量密度来(工具侧默认每 100MiB 一个, 大流量日可达数百个),
-        # 且每事件还会带出主循环/快照发布两条同类日志 —— INFO 会刷屏(26-10-18 用户要求降级)。
+        # 且每事件还会带出主循环/快照补丁两条同类日志 —— INFO 会刷屏(26-10-18 用户要求降级)。
         # 与上面 skipped 分支(本就 DEBUG)口径一致: 放行/拦下都只在 DEBUG 可见。
         logger.debug(
             f"全局流量监视器通知: 事件 #{event['event_id']}({event['day']}, "
-            f"累计 {event['total_bytes']}B) -> 已投递历史流量刷新"
+            f"累计 {event['total_bytes']}B) -> 已投递今日流量补丁(零读盘)"
         )
         return {
             "ok": True,

@@ -133,28 +133,29 @@ relocate:
 ```yaml
 traffic_source:
     enabled: true                         # 总开关(缺省 true; false = 停一切取数, 见下)
-    refresh_interval: 10M                 # 快照刷新节奏(10S~1H; 与曲线 interval 独立)
+    refresh_interval: 10M                 # 文件读盘节奏(兜底; 10S~1H; 与曲线 interval 独立)
     provider: traffic_monitor              # traffic_monitor(缺省) | global_traffic_monitor
     traffic_monitor:
         dat_path: ".../history_traffic.dat" # provider=traffic_monitor 时必填(来源启用时)
     global_traffic_monitor:
         tool_dir: ""                       # 工具安装目录(留空 = 仓库内 tools/global-traffic-monitor)
         tool_exe: ""                       # 显式可执行文件路径(非空且存在则优先于启动器; 编译版逃生门)
-        notify_cooldown_s: 10M             # 收到工具事件后刷新历史图的冷却(0S~24H), 0S = 不冷却
+        notify_cooldown_s: 10M             # (已退役 26-10-21) 曾是"事件后刷新冷却(0S~24H), 0S=不冷却";
+                                            # 现事件零读盘直达补丁, 保留仅为兼容旧配置
         # !无 data_dir(R2/D20): 数据目录由工具的发现指针提供, 配置里不存副本
 ```
 
 | 键 | 类型/默认 | 说明 |
 |----|-----------|------|
 | `enabled` | bool / `true` | 数据来源总开关(计划 26-10-17-1737 S1/D1): `false` = 停止一切取数 —— 停订阅/停自动拉起/`dat_path` 返回空, 快照转 `off` 态; **不写盘改别的功能配置**(不动 `global_speed_limit_curve.enabled`), 开回即自恢复; 关来源后 `traffic_monitor.dat_path` 的必填校验豁免(没配好数据源时的出路) |
-| `refresh_interval` | time / `10M` | **快照刷新节奏**(计划 26-10-18-0813 A3/D9, 校验 `10S` ~ 1H): `traffic_snapshot` 模块按它读一次 dat 并发布历史行 + 今日/本月累计; 与限速曲线的 `interval` **互相独立** —— 那个只管「读数 + 写 qB 限速」, 调它不会连带改图刷新(反之亦然)。曲线没配时本键照常生效, 历史图仍有数据 |
+| `refresh_interval` | time / `10M` | **文件读盘节奏**(计划 26-10-18-0813 A3/D9, 校验 `10S` ~ 1H; 26-10-21 语义收紧为读盘闸门): `traffic_snapshot` 模块按它读一次 dat 并发布历史行 + 今日/本月累计。**读盘即成本**(用户拍板), 全部文件读盘(定时 / 配置切源 / 兜底)收拢在这一个闸门; 工具来源下 gtm 阈值事件**零读盘直达补丁**今日流量(事件自带权威累计), 本间隔只兜底。与限速曲线的 `interval` **互相独立** —— 那个只管「读数 + 写 qB 限速」, 调它不会连带改图刷新(反之亦然)。曲线没配时本键照常生效, 历史图仍有数据 |
 | `provider` | str / `traffic_monitor` | 取数来源: `traffic_monitor`(读 TrafficMonitor 的 history_traffic.dat) 或 `global_traffic_monitor`(读工具数据目录下的 history_traffic.dat); 留空/缺省 = `traffic_monitor` |
 | `traffic_monitor` | object | TrafficMonitor 来源子块; 仅一个键 `dat_path` |
 | `traffic_monitor.dat_path` | str / `""` | history_traffic.dat 路径; provider=traffic_monitor 且来源启用时必须非空(校验 fail-fast; `enabled: false` 时豁免) |
 | `global_traffic_monitor` | object | 全局流量监视器(工具)来源子块 |
 | `global_traffic_monitor.tool_dir` | str / `""` | 工具安装目录; 留空 = 仓库内 `tools/global-traffic-monitor`(源码态默认), 目录里放平台启动器 `launch.cmd`/`launch.sh` |
 | `global_traffic_monitor.tool_exe` | str / `""` | 显式可执行文件路径; **非空且文件存在则优先于启动器**(显式覆盖 / 编译版逃生门), 找不到才回退启动器, 两者都没有 = 「未安装」 |
-| `global_traffic_monitor.notify_cooldown_s` | time / `10M` | 收到工具事件后刷新历史图的冷却(`0S` ~ 24H), `0S` = 不冷却; 事件号去重另算, 两者互补 |
+| `global_traffic_monitor.notify_cooldown_s` | time / `10M` | **已退役(26-10-21)**: 曾是「收到工具事件后刷新历史图的冷却」(`0S` ~ 24H), `0S` = 不冷却; 用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」后, 事件改零读盘直达补丁(auto-qb 用事件自带累计直接改快照, 不读盘), 无成本可节流。键保留(校验/读入照旧)仅为兼容旧配置, 取值不再被读取; 事件号去重仍在(重复/乱序投递不重复补丁) |
 
 取数单点 = `core.traffic_source.paths.dat_path(config)`(实现单点 `src/auto_qb/core/traffic_source/paths.py`, R2/D20): provider=`traffic_monitor` → `traffic_monitor.dat_path`(去空白); provider=`global_traffic_monitor` → 读工具发现指针 `endpoint.json` 的 `data_dir` + 契约文件名 `history_traffic.dat`(指针缺失 = 无数据源, **不回退 TM 文件**)。两来源**严格互斥**(同一次取数只走一支)。**为什么路径不进配置**: 数据目录是工具自己的事实, 配置里存副本会与真值漂移(26-10-17 实测: 迁移后配置空、状态区却显示指针里的真目录, 曲线读 `''` 恒失败)。工具 = 独立进程的整机流量历史记录器(TrafficMonitor 替代), 本实例是其「配置方 + 消费者之一」; 工具自有配置(采样间隔/通知阈值/控制面地址/适配器过滤等)在工具数据目录的 config.yml, 由 WebUI 设置页经工具控制面代理读写。
 

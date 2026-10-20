@@ -27,7 +27,8 @@
 - test_reload_config_source_change_refreshes_immediately: 切源即刷新 —— 热重载换来源后同一 drain 内快照即为新来源数据(不等 interval), 不碰 qB(S8)
 - test_reload_config_source_off_publishes_off: 总开关关闭保存后立即转 off 关闭态(S8)
 - test_reload_config_unchanged_source_does_not_refresh: 无关配置保存不触发刷新(指纹相等不投递)(S8)
-- test_end_to_end_notify_then_state_shows_fresh_traffic: 端到端(进程内): 真端点 -> 命令队列 -> 真 handler -> 快照刷新 -> /api/state 与 /api/traffic/history 两取数位可见
+- test_end_to_end_notify_then_state_shows_fresh_traffic: 端到端(进程内): 真端点 -> 命令队列 -> 真 handler ->
+  事件零读盘补丁 day 行(26-10-21) + 兜底读盘补 month/历史 -> /api/state 与 /api/traffic/history 两取数位可见
 - test_mock_config_section_starts_no_thread: 桩配置(MagicMock 段)不得被当成「已联动」起订阅线程 —— 不等/恒等类型判据守阵
 - test_register_token_missing_then_unreachable_then_no_id: _register 三态(密钥缺失/不可达/缺 id)只记错不抛不置 sub_id(P0-T0.1)
 - test_register_missing_id_in_response: 200 缺 id -> 不进心跳态(下轮重试)
@@ -673,17 +674,23 @@ def test_reload_config_unchanged_source_does_not_refresh(tmp_path, monkeypatch):
 
 
 def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch):
-    """端到端(进程内): 真端点 -> 命令队列 -> 真主循环 handler -> 快照刷新 -> /api/state 可见
+    """端到端(进程内): 事件 -> 载荷补丁(零读盘) + 兜底读盘 -> /api/state 两取数位可见
 
     这是「工具发事件 -> WebUI 历史图与顶栏刷新」那条链路的进程内等价物(真机联调留待 S10):
     `/api/state` 的 `status.traffic` 就是顶栏 pill 与限速浮层的取数位(periods + source/limit
     段), 另一个取数位是 `/api/traffic/history` —— 两者同源(同一个 traffic_view), 这里两个都断言。
+
+    26-10-21 改制(用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」)后链路分两段:
+    事件路径**零读盘** —— 命令把六键自带的当日权威累计补丁进 periods 的 day 行(顶栏 pill 的
+    取数位); month 行与历史行仍由文件读盘派生(refresh_interval 兜底节拍; 生产首拍即跑,
+    冷启动竞态实际不存在)。本用例把两段都走一遍: 先事件补丁, 再模拟一次兜底读盘(任务执行体)。
 
     A5 载荷瘦身: 轮询响应里**没有** `history`(几百行每轮回传是纯浪费), 历史行只走专用端点 ——
     本用例同时守住这条边界, 否则「顺手把 history 塞回去」不会被任何断言拦住。
     """
     from fastapi.testclient import TestClient
 
+    from auto_qb.core.taskqueue import Task
     from auto_qb.webui import create_app
 
     mgr, _dat, _calls = _refresh_env(tmp_path, monkeypatch)
@@ -708,6 +715,16 @@ def test_end_to_end_notify_then_state_shows_fresh_traffic(tmp_path, monkeypatch)
     resp = client.post(tool_client.NOTIFY_PATH, json=event, headers=headers)
     assert resp.status_code == 200 and resp.json()["action"] == "refresh_queued"
     mgr.web.consume_commands()  # 主循环命令线(真 handler + 真 traffic_snapshot 模块)
+
+    # 第一段(事件路径): day 行已是事件自带累计; month 行等兜底读盘补(冷启动竞态, 生产不存在)
+    traffic = client.get("/api/state?view=group", headers=headers).json()["status"]["traffic"]
+    assert [(p["period"], p["up"], p["down"]) for p in traffic["periods"]] == [("day", 3 * MIB, 5 * MIB)]
+    assert traffic["source"]["state"] == "ok"
+    assert "history" not in traffic, "A5: 轮询载荷不得再带 history"
+
+    # 第二段(兜底读盘, 生产首拍即跑): 补齐 month 行 + 历史行
+    mod = mgr.host.get("traffic_snapshot")
+    mod.handle_traffic_snapshot(Task("internal", "traffic_snapshot_refresh", interval=600), dry_run=False)
 
     traffic = client.get("/api/state?view=group", headers=headers).json()["status"]["traffic"]
     assert [p["period"] for p in traffic["periods"]] == ["day", "month"]

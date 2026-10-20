@@ -53,7 +53,7 @@ R20-A~F(shared JS 六面) → R21-A~C(抽屉族) → R22-A~C(三皮肤 CSS) → 
 | R23-A | 模板上半                      | dialogs(137)·dialogs-mgr(284)·move-dialog(62)·popovers(367)·ctx-menus(178)·topbar(235)·statusbar(81)·dock(10)·groups(63)·torrents(29)·shows(90)·overlays(49) = 1585 | Done             |
 | R23-B | 模板下半 | settings-detail(520)·xtpl(381)·xtpl-cells(356)·traffic-card(317)·settings(317)·drawer(242)·xtpl-cells-dt(192)·drawer-head(59) = 2384 | Done |
 | R23-C | 三套 index.html 骨架          | atlas(208)·console(212)·prism(212) = 632                                                                                                                            | Done             |
-| S5    | 归档                        | 滚动报告追加 s26+ · issue 入池 · 档案/切片回写 · kb.index                                                                                                                         | Open             |
+| S5    | 归档                        | 滚动报告追加 s26+ · issue 入池 · 档案/切片回写 · kb.index                                                                                                                         | Done             |
 
 机器提名基线(jscpd 5.4.1, `-f "javascript,css,markup"`, 全前端): **121 克隆 / 2525 重复行(6.56%)**; css 74 克隆(18.55%, 主战场=三皮肤互克隆), javascript 44 克隆(字面重复极低, 仅 3 处 —— 与后端同结论: 主战场在结构线索+精读), markup 3 克隆。
 
