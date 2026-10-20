@@ -31,16 +31,10 @@
 
     <!-- ============ 区1: 数据来源 ============ -->
     <div class="hb-blk hb-cut">
-      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
-           @click="$root.hubSubToggle('source')" @keyup.enter="$root.hubSubToggle('source')">
-        <span class="bh-t">数据来源</span>
-        <span class="bh-n">二选一, 只有选中的来源参与取数</span>
-        <span class="bh-r">
-          <button class="hb-btn ghost sm" :aria-expanded="$root.hubSubOpen('source')"
-                  @click.stop="$root.hubSubToggle('source')">{{ $root.hubSubOpen('source') ? '收起' : '展开' }}</button>
-        </span>
-      </div>
-      <template v-if="$root.hubSubOpen('source')">
+      <!-- 三区的折叠头 + 折叠体统一走 <aq-fold>(模板层唯一实现, 见 tpl/ctl-bits.html 头注):
+           三份原本各写一遍 role=button / tabindex=0 / Enter / aria-expanded 挂层 -->
+      <aq-fold :open="$root.hubSubOpen('source')" :on-toggle="() => $root.hubSubToggle('source')"
+               title="数据来源" note="二选一, 只有选中的来源参与取数">
         <hub-field v-for="row in $root.tmSourceRows()" :key="$root.hubKey(row.path)" :item="row"></hub-field>
         <div class="hb-row" :class="{ 'hb-grey': $root.tmSourceOff() }">
           <div class="hb-lb">来源</div>
@@ -142,21 +136,13 @@
             </div>
           </div>
         </div>
-      </template>
+      </aq-fold>
     </div>
 
     <!-- ============ 区2: 限速曲线 ============ -->
     <div class="hb-blk hb-cut">
-      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
-           @click="$root.hubSubToggle('curve')" @keyup.enter="$root.hubSubToggle('curve')">
-        <span class="bh-t">限速曲线</span>
-        <span class="bh-n">按累计流量分档设置 qB 全局限速; 多条同时命中取最严</span>
-        <span class="bh-r">
-          <button class="hb-btn ghost sm" :aria-expanded="$root.hubSubOpen('curve')"
-                  @click.stop="$root.hubSubToggle('curve')">{{ $root.hubSubOpen('curve') ? '收起' : '展开' }}</button>
-        </span>
-      </div>
-      <template v-if="$root.hubSubOpen('curve')">
+      <aq-fold :open="$root.hubSubOpen('curve')" :on-toggle="() => $root.hubSubToggle('curve')"
+               title="限速曲线" note="按累计流量分档设置 qB 全局限速; 多条同时命中取最严">
         <!-- 来源关闭时这一区不能只剩一个「启用限速曲线」按钮: 按钮讲的是"本功能没开", 与"没数可读"
              完全是两回事, 用户会去点它然后发现没变化 -->
         <p v-if="$root.tmSourceOff()" class="hb-hp risk" style="padding:10px 14px 0">
@@ -277,21 +263,13 @@
             <button class="hb-btn danger" @click="$root.cfgCurveDisable()">关闭并移除曲线配置</button>
           </div>
         </template>
-      </template>
+      </aq-fold>
     </div>
 
     <!-- ============ 区3: 流量图采样 ============ -->
     <div class="hb-blk hb-cut">
-      <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
-           @click="$root.hubSubToggle('chart')" @keyup.enter="$root.hubSubToggle('chart')">
-        <span class="bh-t">流量图采样</span>
-        <span class="bh-n">qB 自己报的速率, 本地定期记录 —— 与来源文件的累计流量不是同一份数据</span>
-        <span class="bh-r">
-          <button class="hb-btn ghost sm" :aria-expanded="$root.hubSubOpen('chart')"
-                  @click.stop="$root.hubSubToggle('chart')">{{ $root.hubSubOpen('chart') ? '收起' : '展开' }}</button>
-        </span>
-      </div>
-      <template v-if="$root.hubSubOpen('chart')">
+      <aq-fold :open="$root.hubSubOpen('chart')" :on-toggle="() => $root.hubSubToggle('chart')"
+               title="流量图采样" note="qB 自己报的速率, 本地定期记录 —— 与来源文件的累计流量不是同一份数据">
         <!-- 这一区的口径与来源无关(qB 自己报的速率), 但全局历史流量图吃的是来源那段累计流量 ——
              关源时要说清"采样照常、图不更新", 否则用户会以为采样也停了 -->
         <p v-if="$root.tmSourceOff()" class="hb-hp" style="padding:10px 14px 0">
@@ -301,12 +279,8 @@
           <div class="hb-row">
             <div class="hb-lb">记录</div>
             <div class="hb-ct">
-              <label class="hb-switch">
-                <input type="checkbox" :checked="$root.cfgExists($root.tmChartSection().path)"
-                       @change="$root.cfgToggleSection($root.tmChartSection().path, $root.tmChartSection().field, $event.target.checked)">
-                <span class="hb-sw-track"></span>
-                <span class="hb-sw-text">{{ $root.cfgExists($root.tmChartSection().path) ? '启用' : '关闭' }}</span>
-              </label>
+              <aq-switch :checked="$root.cfgExists($root.tmChartSection().path)" :text="true"
+                         :on-change="(v) => $root.cfgToggleSection($root.tmChartSection().path, $root.tmChartSection().field, v)"></aq-switch>
               <span class="bh-n">{{ $root.cfgExists($root.tmChartSection().path) ? '按采样间隔记录 qB 口径速率, 供 WEB UI 流量图取数' : '关闭 = 不采样、不建目录、零文件(缺省)' }}</span>
             </div>
           </div>
@@ -315,7 +289,7 @@
           </template>
         </template>
         <p v-else class="hb-hp" style="padding:10px 14px">当前版本没有 qB 流量采样段。</p>
-      </template>
+      </aq-fold>
     </div>
   </div>
 </script>

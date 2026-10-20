@@ -199,9 +199,11 @@
           <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
           <span>历史流量</span>
           <span class="ce-spacer"></span>
+          <!-- 粒度三档改 <aq-seg>(26-10-20-2231): 清单在 dialogs.js 的 HIST_GRAN_ITEMS(与
+               historyBuckets 的分档判据同域), 模板此前内联字面量映射 —— 加一档要同时改两处。 -->
           <div class="hist-tabs">
-            <button v-for="g in ['day', 'month', 'year']" :key="g" :class="{ active: historyGran === g }"
-                    @click="historyGran = g">{{ { day: '天', month: '月', year: '年' }[g] }}</button>
+            <aq-seg :items="$root.histGranItems" :value="$root.historyGran"
+                    :on-pick="(g) => $root.historyGran = g"></aq-seg>
           </div>
           <button class="bt icon" @click="historyOpen = false">
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>

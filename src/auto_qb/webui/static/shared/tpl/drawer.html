@@ -44,17 +44,12 @@
                  两张都可点、自由切换(不再二选一); 门外/未开启回落四页签原样。
                  W4(计划 26-10-11-2106): 按钮清单与高亮判据改由 dtMergeTabList(合并对单点)经
                  v-for 驱动, 模板不再硬编码两张按钮与其 'gc'/'tp' 键(删「渲染列组 vs 命中」双份
-                 判据); 高亮 = 该对即当前页签所属对(mt.id === dtPair, 与列组同源)。 -->
-            <template v-if="dtMergeTabsOn">
-              <button v-for="mt in dtMergeTabList" :key="mt.id"
-                      :class="{ active: mt.id === dtPair }" @click="dtMergeTabPick(mt.id)">{{ mt.label }}</button>
-            </template>
-            <template v-else>
-              <button :class="{ active: drawer.tab === 'general' }" @click="drawerTab('general')">常规</button>
-              <button :class="{ active: drawer.tab === 'trackers' }" @click="drawerTab('trackers')">Tracker</button>
-              <button :class="{ active: drawer.tab === 'peers' }" @click="drawerTab('peers')">用户</button>
-              <button :class="{ active: drawer.tab === 'content' }" @click="drawerTab('content')">内容</button>
-            </template>
+                 判据); 高亮 = 该对即当前页签所属对(mt.id === dtPair, 与列组同源)。
+                 26-10-20-2231: 两态都改 <aq-seg> —— 非合并态那四个按钮此前是 DT_TAB_LABELS 的
+                 第二份拷贝(dtTabItems 已投影), 高亮判据统一为 `value === v`。 -->
+            <aq-seg v-if="dtMergeTabsOn" :items="dtMergeTabList" :value="dtPair"
+                    :on-pick="dtMergeTabPick"></aq-seg>
+            <aq-seg v-else :items="dtTabItems" :value="drawer.tab" :on-pick="drawerTab"></aq-seg>
             <!-- qB 口径流量图 · 单种挂点(S5b, plan 26-10-03-0946 §07 表②): enabled=false 时
                  页签不渲染(v-if=qbTrafficOn, fail-closed 门) = 无进入路径即无请求(P5 验收) -->
             <button v-if="qbTrafficOn" :class="{ active: drawer.tab === 'traffic' }" @click="drawerTab('traffic')">流量</button>

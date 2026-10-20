@@ -643,9 +643,14 @@ test.describe('设置页 · 流量与限速合并卡(B4)', () => {
       const srcZone = page.locator('.hb-blk', { hasText: '数据来源' }).first();
       await expect(srcZone.locator('.hb-row', { hasText: '刷新间隔' })).toHaveCount(1);
       await expect(srcZone.locator('.hb-row', { hasText: '启用' }).locator('input[type=checkbox]')).toBeChecked();
-      await srcHead.getByRole('button').click(); // 收起
+      /* 26-10-20-2231: 可点的是**整条段头**(<aq-fold> 给它 role=button + aria-expanded),
+         里层「收起/展开」钮已成鼠标用户的重复入口(aria-hidden + tabindex=-1, 移出 tab 链) ——
+         故这里点段头本身; 顺带钉住折叠态真的落在 aria-expanded 上(读屏用户读到的就是它)。 */
+      await srcHead.click(); // 收起
+      await expect(srcHead).toHaveAttribute('aria-expanded', 'false');
       await expect(page.getByRole('button', { name: 'Traffic Monitor 文件' })).toHaveCount(0);
-      await srcHead.getByRole('button').click(); // 展开
+      await srcHead.click(); // 展开
+      await expect(srcHead).toHaveAttribute('aria-expanded', 'true');
       await expect(page.getByRole('button', { name: 'Traffic Monitor 文件' })).toBeVisible();
 
       /* 3) 卡头入口 -> 全局历史流量弹层(空/关源态也算通过: 弹层本身必须开) */

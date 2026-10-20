@@ -1,7 +1,7 @@
 # 渲染 / 静态资源 / 两套 UI
 
 > 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。
-> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote, 类名撞名, 容器类, 行修饰, hb-ro, 只读行变窄, 文字自动换行, max-width 接管
+> 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote, 类名撞名, 容器类, 行修饰, hb-ro, 只读行变窄, 文字自动换行, max-width 接管, 折叠头, 可折叠段头, aria-expanded, aria-hidden, getByRole, aq-fold, aq-switch, aq-seg, 分段钮, 小控件, ctl-bits
 
 ### 变体渲染是通知驱动的: 状态翻转后必须补一发 _dtNotify, 否则停在旧态到下一拍轮询
 
@@ -195,3 +195,20 @@
 - **守阵**: `tests/test_web_traffic_monitor.py::test_frontend_readonly_row_class_not_colliding`(裸
   `.hb-ro` 规则为零 + 容器类成对存在 + 模板跟随改名); 真 DOM 侧在 `e2e/views.spec.mjs` 的 S7 用例内
   (`rowW > blkW - 4` / 值列 `ctW > 400`)。
+
+### 折叠头「整栏可点」时, 里层钮要 aria-hidden —— 但 e2e 的 getByRole 也随之看不见它
+
+- **触发**: 给可折叠段头统一可访问性(issue 26-10-20-2231 把 5 处 `hb-sub-toggle` 收进 `<aq-fold>`)。
+  收口前每处自己写 role/tabindex/keyup.enter, 且多数把 `aria-expanded` 挂在**里层那个小钮**上 ——
+  而实际整条段头都能点, 读屏用户会以为只有小钮能展开; 更糟的是内钮留在 tab 链里, Tab 到它按
+  Enter 时「内钮 click」与「段头冒泡的 toggle」各打一次, 净效果是按了没反应。
+- **判别**: 正确形态 = **段头** `role=button + tabindex=0 + aria-expanded`, 里层「收起/展开」钮降级为
+  鼠标用户的重复入口(`aria-hidden="true" tabindex="-1"`)。代价是 Playwright 的 `getByRole('button')`
+  默认**跳过 aria-hidden 子树** ⇒ `headingLocator.getByRole('button').click()` 从「点里层钮」变成
+  「等 30s 超时」, 报错只说 locator 等不到, 看上去像渲染没出来(2026-10-21 实测: 两条 B4 用例红)。
+- **处置**: e2e 改点**段头本身**(它才是 role=button), 并顺手把 `aria-expanded` 的翻转也断言上 ——
+  把可访问性契约变成断言, 而不是只把 locator 换个写法糊过去。别用 `includeHidden: true` 绕:
+  那等于把"用户其实点不到这个钮"这件事写进测试。
+- **守阵**: `tests/test_webui_static_skins.py::test_frontend_tpl_ctl_bits_single_source`(段头
+  role/tabindex/aria-expanded + 内钮 aria-hidden/tabindex=-1 的模板形态); 真手势侧在
+  `e2e/views.spec.mjs` 的 B4 用例(`srcHead.click()` + `toHaveAttribute('aria-expanded', ...)`)。

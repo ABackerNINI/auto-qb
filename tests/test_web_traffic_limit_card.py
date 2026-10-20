@@ -107,16 +107,21 @@ def test_frontend_card_three_zones_and_collapse():
     tpl = _card()
     hub = _shared("config_hub.js")
 
-    titles = re.findall(r'<span class="bh-t">(数据来源|限速曲线|流量图采样)</span>', tpl)
-    assert titles == ["数据来源", "限速曲线", "流量图采样"], f"卡内三区缺失或顺序漂了: {titles}"
-
-    # 每个区头都是可点折叠头(hb-blk-hd.hb-sub-toggle) + 一个 @click 到 hubSubToggle
-    heads = re.findall(r'class="hb-blk-hd hb-sub-toggle"[^>]*@click="(\$root\.hubSubToggle\(\'(\w+)\'\))"', tpl)
-    assert [k for _c, k in heads] == ["source", "curve", "chart"], f"三区折叠头缺或键不对: {heads}"
+    # 每个区头都是 <aq-fold>(模板层唯一折叠实现, 见 tpl/ctl-bits.html 头注) —— 标题经 title prop,
+    # 切换回调到 hubSubToggle。26-10-20-2231 前这里是三份手写的 hb-blk-hd.hb-sub-toggle 块
+    # (role/tabindex/Enter/aria 各抄一遍), 故判据从「段头类名 + @click」换成「组件调用点」。
+    # !开标签的正则要绕开 `=>`(on-toggle 是箭头函数, 裸 `[^>]*>` 会断在箭头上: 把 `=>`
+    #   当成一个整体字符类吃掉); 先剥注释, 否则注释里举例的 `<aq-fold>` 也被当成调用点。
+    body = re.sub(r"<!--[\s\S]*?-->", "", tpl)
+    folds = re.findall(r"<aq-fold\s((?:=>|[^>])*)>", body)
+    keys = [re.search(r"hubSubOpen\('(\w+)'\)", a).group(1) for a in folds if "hubSubOpen(" in a]
+    assert keys == ["source", "curve", "chart"], f"三区折叠头缺或键不对: {keys}"
+    heads = [re.search(r'title="([^"]+)"', a).group(1) for a in folds if "hubSubOpen(" in a]
+    assert heads == ["数据来源", "限速曲线", "流量图采样"], f"三区标题缺失或顺序漂了: {heads}"
 
     # 2026-10-19 去嵌套: 三区是**页面级**块(.hb-blk.hb-cut), 不再套在同名外壳卡里 ——
     # 否则二级页上会叠出「面包屑 / h1 / 卡头」三层同名标题, 三个区看起来像嵌在页面里的子页面
-    zones = re.findall(r'<div class="hb-blk (hb-cut|hb-sub)">\s*<div class="hb-blk-hd hb-sub-toggle"', tpl)
+    zones = re.findall(r'<div class="hb-blk (hb-cut|hb-sub)">(?:(?!<div class="hb-blk)[\s\S])*?<aq-fold\s', body)
     assert zones == ["hb-cut"] * 3, f"三区仍是嵌套块(hb-sub)或区序漂了: {zones}"
     assert 'class="bh-t">流量与限速' not in tpl, \
         "模板里又有与页头同名的块标题(二级页会出现两条「流量与限速」)"
@@ -128,7 +133,7 @@ def test_frontend_card_three_zones_and_collapse():
 
     # 来源关闭时三区都要有明确说明: 卡头提示条 + 各区的空态/灰显说明
     assert 'v-if="$root.tmSourceOff()"' in tpl, "缺来源关闭的常驻提示条"
-    assert "tmSourceOff" in tpl.split("<span class=\"bh-t\">限速曲线")[1], \
+    assert "tmSourceOff" in tpl.split('title="限速曲线"')[1], \
         "来源关闭时「限速曲线」区没有任何说明(只剩一个「启用限速曲线」按钮会让人以为是本功能没开)"
     assert "$root.tmSummary()" in tpl, "缺现状摘要(关闭态在摘要条上就该读得出来)"
 

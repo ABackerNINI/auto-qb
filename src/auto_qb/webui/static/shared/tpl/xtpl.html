@@ -13,13 +13,11 @@
           <span class="bh-t">{{ f.label }}</span>
           <span class="bh-n">{{ sectionSummary }}</span>
           <span class="bh-r">
-            <!-- readonly(程序托管)段: 启用/关闭开关无意义(段的存在性由 config.yml 管理), 换成徽标 -->
+            <!-- readonly(程序托管)段: 启用/关闭开关无意义(段的存在性由 config.yml 管理), 换成徽标。
+                 段头开关统一**不带**文字 —— 段的语义由上方标题与摘要讲清, 轨旁再写一遍「启用/
+                 关闭」是重复(判据见 tpl/ctl-bits.html 头注「开关什么时候该带文字」)。 -->
             <span v-if="readonly" class="hb-badge">程序维护</span>
-            <label v-else class="hb-switch">
-              <input type="checkbox" :checked="sectionExists()" @change="toggleSection($event.target.checked)">
-              <span class="hb-sw-track"></span>
-              <span class="hb-sw-text">{{ sectionExists() ? '启用' : '关闭' }}</span>
-            </label>
+            <aq-switch v-else :checked="sectionExists()" :on-change="toggleSection"></aq-switch>
             <button class="hb-btn ghost sm" :aria-expanded="sectionOpen"
                     @click="ce.cfgSectionToggle(path)">{{ sectionOpen ? '收起' : '展开' }}</button>
             <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
@@ -34,20 +32,15 @@
       <!-- 普通 object 段: 默认折叠(用户点过以本地图为准, 未点过跟随 schema 的 open);
            折叠态仍给「已配置 n/m 项」摘要, 让用户不展开也看得出这段有没有配过 -->
       <div v-else-if="item.type === 'group'" class="hb-blk hb-sub" :data-hb-key="ce.hubKey(path)">
-        <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0"
-             @click="toggleGroup()" @keyup.enter="toggleGroup()">
-          <span class="bh-t">{{ item.label }}</span>
-          <span class="bh-n">{{ groupSummary }}</span>
-          <span class="bh-r">
-            <button class="hb-btn ghost sm" :aria-expanded="groupOpen"
-                    @click.stop="toggleGroup()">{{ groupOpen ? '收起' : '展开' }}</button>
+        <!-- 「?」说明钮经 #act 插槽排在「展开/收起」之后(与收敛前逐位一致) -->
+        <aq-fold :open="groupOpen" :on-toggle="toggleGroup"
+                 :title="item.label" :note="groupSummary">
+          <template #act>
             <button class="hb-ask" :class="{ on: ce.hub.helpKey === ce.hubKey(path) }"
                     :aria-label="item.label + ' 说明'" @click.stop="ce.hubAsk(item, $event)">?</button>
-          </span>
-        </div>
-        <template v-if="groupOpen">
+          </template>
           <hub-field v-for="sub in item.items" :key="ce.hubKey(sub.path)" :item="sub"></hub-field>
-        </template>
+        </aq-fold>
       </div>
 
       <!-- 相关设置子卡: 随父字段一起显隐(见 visible); 子项少, 常显不折叠 -->
@@ -81,11 +74,9 @@
                (2026-10-03 实测: basic 分区 4 个 bool 行全中; 引入点是登录 9c6bc499 把按钮插进链中)。
                故此处成组; 内层 <button v-if> 之后没有 v-else 兄弟, 不会切链。 -->
           <template v-else-if="f.kind === 'bool'">
-            <label class="hb-switch" :class="ce.hubToneOf(item)">
-              <input type="checkbox" :checked="boolValue()" :disabled="readonly" @change="setBool($event.target.checked)">
-              <span class="hb-sw-track"></span>
-              <span class="hb-sw-text">{{ boolValue() ? '启用' : '关闭' }}</span>
-            </label>
+            <!-- bool 行: 开关独占一个值格、旁边没有其他说明它会变成什么, 故带上「启用/关闭」文字 -->
+            <aq-switch :checked="boolValue()" :disabled="readonly" :text="true"
+                       :tone="ce.hubToneOf(item)" :on-change="setBool"></aq-switch>
 
             <!-- 「跟随全局」按钮(方案 B 阶段3): 站点页回退链键且站点键已存在时出现, 点击删站点键 =
                  恢复继承(git --unset 同构, cfgSetBool 恒写 true/false 行为不变); 全局页/非链上键
@@ -180,12 +171,12 @@
                overwrite 族的 help 写了三态措辞, 得让它露出来); 规则页插件 spec 的 inline
                无 help, 并接后文本不变。「跟随全局」小钮放 label 外(放进 label 会连点开关) -->
           <template v-for="inl in item.inline" :key="inl.field.key">
-            <label class="hb-switch" :title="[inl.field.risk, inl.field.help].filter(Boolean).join(' ')">
-              <input type="checkbox" :checked="inlineValue(inl)" @change="setInline(inl, $event.target.checked)">
-              <span class="hb-sw-track"></span>
-              <span class="hb-sw-text">{{ inl.field.label }}</span>
+            <!-- 内联从属开关没有独立标签行 —— 就把项名当文字(:text 传字符串) -->
+            <aq-switch :checked="inlineValue(inl)" :text="inl.field.label"
+                       :tip="[inl.field.risk, inl.field.help].filter(Boolean).join(' ')"
+                       :on-change="(v) => setInline(inl, v)">
               <span v-if="siteBadge(inl.path)" class="hb-badge" :class="{ on: siteBadge(inl.path) === '站点' }">{{ siteBadge(inl.path) }}</span>
-            </label>
+            </aq-switch>
             <button v-if="canFollowGlobal(inl.path)" class="hb-btn ghost sm"
                     title="移除本站点的覆盖设置, 恢复跟随全局(保存后生效)"
                     @click="followGlobal(inl.path, inl.field.label)">跟随全局</button>

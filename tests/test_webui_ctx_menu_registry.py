@@ -421,7 +421,10 @@ def test_ctx_custom_panel_wiring():
         cust = f.read()
     assert cust.count("level: 0, title:") == 1 and cust.count("level: 1, title:") == 1, \
         "cmSections 必须正好两个区(一级 / 次级「更多操作」)"
-    assert "cmSkipCheck" in blk and "cmSetSkipCheck(" in blk, "跳检开关未绑 cmSkipCheck(D6 迁入的开关)"
+    # 26-10-20-2231: 开关收敛为 <aq-switch>, 回调以 prop 形式传方法引用(:on-change,
+    # 不再内联 @change + $event.target.checked) —— 判据随之从 "cmSetSkipCheck(" 改成 prop 绑定。
+    assert "cmSkipCheck" in blk and ':on-change="cmSetSkipCheck"' in blk, \
+        "跳检开关未绑 cmSkipCheck(D6 迁入的开关)"
     assert 'ctxCust.branch = b.key' in blk, "tab 点击未切 ctxCust.branch"
     for call in (
         "cmRows(cmBranch, sec.level)", "cmMoveStep(", "cmMoveLevel(", "cmToggleHidden(", "cmAddSep(", "cmDelSep(",

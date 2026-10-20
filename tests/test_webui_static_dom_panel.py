@@ -377,7 +377,9 @@ def test_frontend_qb_traffic_chart_wiring():
     # !建图落点 ref="qbChartHost" 仍**必须**留在 drawer.html(壳模板): _qbChartBuild 取宿主走
     #   this.$refs[def.host], 而该 this 恒是根实例(Vue 的 $refs 只在声明它的实例上登记) ——
     #   搬进组件 = 图永远不画且无报错, 见 tpl/drawer.html 流量正文段的长注与计划 §05 W3「落地」。
-    assert 'qbSetWindow(w)' in head_tpl and 'qbSetYAxisMode(' in head_tpl, \
+    # 26-10-20-2231: 两组分段钮改 <aq-seg> 数据驱动, 按钮本体不再逐个写死在模板里 ——
+    # 判据从「模板里有这几个回调」升级为「模板把两组的 items/value/pick 都接到 $root 单点」。
+    assert ':on-pick="$root.qbSetWindow"' in head_tpl and ':on-pick="$root.qbSetYAxisMode"' in head_tpl, \
         "tpl/drawer-head.html 的 <aq-qb-ctl> 缺档位/纵轴控件(三挂点控件必须齐全)"
     assert '<aq-qb-ctl></aq-qb-ctl>' in drawer_tpl, \
         "drawer.html 缺 <aq-qb-ctl> 挂点(流量形态头部中部与种子流量页签统计栏各一个)"
@@ -559,8 +561,12 @@ def test_frontend_qb_traffic_window_persist_and_single_source():
         "qbWindowNames computed 必须直返 QB_WINDOW_NAMES(模板 v-for 的唯一来源)"
     # W3(计划 26-10-11-2106): 档位按钮自 drawer.html 收进 <aq-qb-ctl> 组件模板(两挂点共用一份
     # 实现), 故登记面换成组件模板 —— 口径不变(展示面走 computed, 不硬编码档位清单)。
-    assert 'v-for="w in $root.qbWindowNames"' in head_tpl, \
-        "tpl/drawer-head.html 的 <aq-qb-ctl> 窗口按钮必须 v-for qbWindowNames(经 $root 回调根实例)"
+    # 26-10-20-2231: 模板侧再降一层 —— 按钮本体也交给 <aq-seg>, 模板只交 items/value/pick;
+    # 展示面仍只吃 computed(qbWindowTabs 投影自 QB_WINDOW_NAMES + qbWindowLabel), 零硬编码。
+    assert ':items="$root.qbWindowTabs"' in head_tpl and ':value="$root.qbCurWindow"' in head_tpl, \
+        "tpl/drawer-head.html 的 <aq-qb-ctl> 窗口按钮必须吃 qbWindowTabs + qbCurWindow(经 $root 回调根实例)"
+    assert re.search(r"qbWindowTabs\(\) \{\n\s*return QB_WINDOW_NAMES\.map\(", js), \
+        "qbWindowTabs 必须投影自 QB_WINDOW_NAMES(档位展示面仍只有一份清单)"
     assert 'v-for="w in qbWindowNames"' not in drawer_tpl and "v-for=\"w in ['1m'" not in drawer_tpl, \
         "drawer.html 仍手写档位按钮/硬编码档位清单(复写回潮: 控件组只有 <aq-qb-ctl> 一份实现)"
     # 前后切换: 按单点序定位(非法档回落默认) + 端点夹取不环绕 + 走 qbSetWindow 单点
@@ -1117,8 +1123,16 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     # W3(计划 26-10-11-2106): 控件组收进 <aq-qb-ctl>(**唯一实现**), 故旧口径
     # 「三态 × 2 处 = 6」改为「实现里三态各一(3) + drawer.html 零复写 + 唯一挂点接它」——
     # 覆盖强度不降反升(单点强于同源): 谁把按钮抄回 drawer.html, 下面的 == 0 与挂点断言同时判红。
-    assert head_tpl.count("qbSetYAxisMode(") == 3, \
-        "<aq-qb-ctl> 里纵轴三态必须各一个按钮(自动/限速+20%/手动)"
+    # 26-10-20-2231(R23-B-17): 纵轴三态改 <aq-seg> —— 模板不再有 3 个按钮, 判据换成
+    # 「模板一处接 qbYAxisTabs + 三档合法值与文案在 JS 单点各一份」: 覆盖强度不降(谁把档位
+    # 写回模板, 下面的 count == 0 与 qbYAxisTabs 投影断言同时判红), 且「加一档要改几处」从
+    # 3 处(清单/文案/模板)降到 2 处(清单/文案, 同域相邻)。
+    assert head_tpl.count("qbSetYAxisMode(") == 0, \
+        "<aq-qb-ctl> 不应手写纵轴三态按钮(应交 <aq-seg>, 清单单点在 qbYAxisTabs)"
+    assert ':items="$root.qbYAxisTabs"' in head_tpl and ':on-pick="$root.qbSetYAxisMode"' in head_tpl, \
+        "<aq-qb-ctl> 纵轴三态必须吃 qbYAxisTabs + 回调 qbSetYAxisMode"
+    assert re.search(r"qbYAxisTabs\(\) \{\n\s*return QB_YAXIS_MODES\.map\(", js), \
+        "qbYAxisTabs 必须投影自 QB_YAXIS_MODES(合法值仍只有一份清单)"
     assert drawer_tpl.count("qbSetYAxisMode(") == 0, \
         "drawer.html 仍手写纵轴按钮(复写回潮: 控件组只有 <aq-qb-ctl> 一份实现)"
     traffic_call = re.search(r'<aq-drawer-head v-if="drawerIsTraffic"[^>]*>(.*?)</aq-drawer-head>', drawer_tpl, re.S)
@@ -1561,10 +1575,15 @@ def test_drawer_tpl_registry_wiring():
     assert "dtSetMerge" not in core and "dtSetMerge" not in ctx_menus_tpl, \
         "dtSetMerge 残留(R3 已改单开关 dtToggleMerge; 双模型并存 = 空列 bug 根因复发)"
     assert "dtToggleMerge()" in ctx_menus_tpl, "ctx-menus 缺合并单开关入口(dtToggleMerge)"
-    # W4: 合并页签按钮与标签由 dtMergeTabList(对单点)经 v-for 驱动, 模板零硬编码;
+    # W4: 合并页签按钮与标签由 dtMergeTabList(对单点)经 <aq-seg> 驱动, 模板零硬编码;
     # 标签文案单点在 drawer.js MERGE_PAIRS(列头 .dt-col-head 同一份对数据)。
-    assert "dtMergeTabList" in drawer_tpl and "mt.id === dtPair" in drawer_tpl, \
-        "drawer.html 页签栏缺 W4 合并页签 v-for(按钮清单/高亮与列组同源)"
+    # 26-10-20-2231: 两态都改 <aq-seg> —— 非合并态那四个按钮原先是 DT_TAB_LABELS 的第二份拷贝,
+    # 现由 dtTabItems 投影; 高亮判据从内联 `mt.id === dtPair` 变为组件内 `v === value`。
+    assert ':items="dtMergeTabList" :value="dtPair"' in drawer_tpl \
+        and ':items="dtTabItems" :value="drawer.tab"' in drawer_tpl, \
+        "drawer.html 页签栏缺 <aq-seg> 数据驱动(按钮清单/高亮与列组同源, 模板零硬编码按钮)"
+    assert re.search(r"dtMergeTabList\(\) \{\n\s*return window\.AQB_DRAWER_MERGE\.PAIRS\.map\(", drawer_js), \
+        "dtMergeTabList 必须投影自 MERGE_PAIRS(对结构仍只有一份)"
     for label in ("常规&内容", "Tracker&用户"):
         assert f'label: "{label}"' in drawer_js, f"drawer.js 合并对缺标签 {label}(W4 标签随对数据走)"
     assert ':data-merge="dtPair"' in drawer_tpl, \

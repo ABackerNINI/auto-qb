@@ -117,6 +117,10 @@ function qbInitialWindow(scope) {
  * 时**按峰值显示**(上限只保底, 不裁剪数据; 见 _qbYRange)。 */
 const QB_YAXIS_MODES = ["auto", "limit", "manual"];
 const QB_YAXIS_DEFAULT = "auto";
+/* 纵轴三态的按钮文案(26-10-20-2231 R23-B-17): 此前只活在模板里(硬编码三个 <button>), 与上面的
+ * 合法值清单 QB_YAXIS_MODES 隔了一层 —— 改一档名时两处都对不上号。现在文案挂在模式清单旁边,
+ * 清单仍是唯一的合法值来源(label 缺失即回落到模式名本身, 不会静默渲出空钮)。 */
+const QB_YAXIS_LABELS = { auto: "自动", limit: "限速+20%", manual: "手动" };
 const QB_YAXIS_LIMIT_FACTOR = 1.2;
 const QB_YAXIS_MIB = 1024 * 1024;
 
@@ -454,6 +458,15 @@ window.AQB_QB_TRAFFIC = {
     /* 窗口档位清单(模板 v-for 的唯一来源, 与前后切换/持久化校验同源 QB_WINDOW_NAMES) */
     qbWindowNames() {
       return QB_WINDOW_NAMES;
+    },
+    /* R23-B-17(26-10-20-2231): 上面两份清单各自投影成 <aq-seg> 要的形状 [{v, label}] —— 投影
+     * 自既有单点(QB_WINDOW_NAMES + qbWindowLabel / QB_YAXIS_MODES + QB_YAXIS_LABELS), 不新建
+     * 第二份清单; 模板里不再手写这批按钮(它们的布局各自为政, 见 tpl/ctl-bits.html 头注)。 */
+    qbWindowTabs() {
+      return QB_WINDOW_NAMES.map((w) => ({ v: w, label: this.qbWindowLabel(w) }));
+    },
+    qbYAxisTabs() {
+      return QB_YAXIS_MODES.map((m) => ({ v: m, label: QB_YAXIS_LABELS[m] || m }));
     },
     /* ---------------- 纵轴固定模式(2026-10-08; 三挂点各自独立) ---------------- */
     /* 当前作用域的纵轴设置 {mode, manual}(字段名见 _QB_SCOPES.yaxis; 非流量形态返回 null) */

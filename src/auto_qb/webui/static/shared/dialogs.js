@@ -7,6 +7,16 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DIALOGS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+
+/* 历史流量粒度三档(26-10-20-2231 / R23-B-17): <aq-seg> 要的形状 [{v, label}]。
+ * 此前这份清单**只以字面量映射活在模板里**(`['day','month','year']` + `{day:'天',…}`), 与
+ * historyBuckets 的分档判据隔了一层 —— 加一档要同时改模板数组、模板文案表、聚合分支三处。
+ * 现在合法值挂在这里, 聚合分支与之同域(同文件), 模板只消费。 */
+const HIST_GRAN_ITEMS = [
+  { v: "day", label: "天" },
+  { v: "month", label: "月" },
+  { v: "year", label: "年" },
+];
 window.AQB_DIALOGS = {
   methods: {
     /* ---------------- 统计面板(FE-2C): 全局状态(server_state, 缺失显示 —) ----------------
@@ -784,6 +794,11 @@ window.AQB_DIALOGS = {
       return o.up !== "" && o.down !== "" && Number.isFinite(Number(o.up)) && Number.isFinite(Number(o.down));
     },
     /* ---------------- 历史流量(弹层): 按日原始行 -> 天(最近30)/月(近12)/年(全部)聚合 ---------------- */
+    /* 粒度钮的 items(供 <aq-seg>): 直接转上面的单点, 不在这里再排一遍 —— 档位与文案的
+     * 唯一事实是 HIST_GRAN_ITEMS, 下面的 historyBuckets 同源消费 historyGran。 */
+    histGranItems() {
+      return HIST_GRAN_ITEMS;
+    },
     historyBuckets() {
       const rows = this.historyData || [];
       if (this.historyGran === "month") {

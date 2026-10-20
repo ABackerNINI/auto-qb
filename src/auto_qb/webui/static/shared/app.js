@@ -932,6 +932,15 @@ app.component("aq-table", window.AQ_TABLE_COMPONENT);
  * 一份组件(模板 tpl/xtpl.html#tpl-combo-input, 定义在 add_torrent.js); 行为仍是既有单点
  * (comboHoverIdx/comboKeydown/_fitAddPop/_popBlurShouldHold), 组件只贡献模板。 */
 app.component("aq-combo-input", window.AQ_COMBO_INPUT_COMPONENT);
+/* 模板层「小控件」三件套(收敛 issue 26-10-20-2231 / 台账 R23-B-01·02·16·17): 7 处 hb-switch
+ * 开关块、5 处 hb-sub-toggle 可折叠段头、4 套分段单选钮此前各写各的(还有四种可访问性不一的
+ * 折叠实现); 现三段名为一套 —— 模板在 shared/tpl/ctl-bits.html, 定义在 shared/ctl_bits.js。
+ * !这三件套与上面那些组件一样**只贡献模板**: 状态与动作仍在各自的方法域(config_hub.js 的
+ * hubSub* / cfgRuleMeta* / cmSetSkipCheck 等), 组件经回调 prop 反调回去 —— 在这里补方法会
+ * 触发 _scan_mixin_wiring 的重名守阵(被盖掉的那份永不执行)。 */
+app.component("aq-switch", window.AQ_SWITCH_COMPONENT);
+app.component("aq-fold", window.AQ_FOLD_COMPONENT);
+app.component("aq-seg", window.AQ_SEG_COMPONENT);
 app.component("aq-member-cells", window.AQ_MEMBER_CELLS_COMPONENT);
 app.component("aq-group-cells", window.AQ_GROUP_CELLS_COMPONENT);
 app.component("aq-torrent-cells", window.AQ_TORRENT_CELLS_COMPONENT);

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套">
 <meta name="issue-summary" content="hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle 5 处(三种签名)、折叠 4 种实现(可访问性不一)、分段钮 4 套">
 <title>模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -103,6 +103,10 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 04:26 — 用户指派认领（"认领并修复"）。<b>复验 2026-10-21 04:26 仍复现</b>：<code>grep</code> 实测 <code>hb-switch</code> 7 处（4 带文字 3 不带，其中 xtpl 段开关与 settings-detail 分区块开关同位置同语义却一个带文字一个不带）/ <code>class="hb-blk-hd hb-sub-toggle"</code> 5 处（toggle 签名三种）/ 分段钮 4 套（hist-tabs 内联字面量、qb-tabs 属性驱动、qb-seg 硬编码、drawer-tabs 两态不一）/ 运行日志 <code>v-show</code> 折叠 1 处 / 规则 meta「整栏可点但 aria-expanded 挂里层钮」1 处。状态 <strong>Open</strong> → <strong>In Progress</strong></li>
+      <li>2026-10-21 04:39 — 修完，状态 <strong>In Progress</strong> → <strong>Done</strong>。<b>实际修法</b>：新增模板层小控件三件套 —— <code>shared/tpl/ctl-bits.html</code>（<code>#tpl-aq-switch</code> / <code>#tpl-aq-fold</code> / <code>#tpl-aq-seg</code>，多根片段、注入 body、不当根模板编译）+ <code>shared/ctl_bits.js</code>（只贡献模板与 props，状态与动作经回调 prop 回到拥有它的那一层；与 <code>aq-combo-input</code> 同范式）+ 三份 manifest 各登记一份 part/script（<code>ctl_bits.js</code> 排在 <code>app.js</code> 前）+ <code>app.js</code> 三行 <code>app.component</code>。调用点：开关 7 处 → <code>&lt;aq-switch :checked :on-change :text :tone&gt;</code>（"何时该带文字"判据写在模板分片头注，改模板的人读得到）；折叠段头 5 处 → <code>&lt;aq-fold :open :on-toggle :title :note&gt;</code>（三种 toggle 签名归一为回调 + open 布尔；键盘契约与 aria 挂层只有一份实现，里层"展开/收起"钮 <code>aria-hidden + tabindex=-1</code> 移出 tab 链，消掉"Tab 到内钮按 Enter 净效果没反应"）；分段钮 4 套 → <code>&lt;aq-seg :items :value :on-pick&gt;</code>，清单各自回到领域单点（<code>HIST_GRAN_ITEMS</code> / <code>dtMergeTabList</code> 投影自 <code>MERGE_PAIRS</code> / <code>dtTabItems</code> 投影自 <code>DT_TAB_LABELS</code> / <code>qbWindowTabs</code> 投影自 <code>QB_WINDOW_NAMES</code> / <code>qbYAxisTabs</code> 投影自 <code>QB_YAXIS_MODES</code>），模板零硬编码按钮。折叠立判据（a 原生 details / b 主区段 aq-fold / c 头里带控件不整行可点 / d 禁 v-show 折叠与"整栏可点 aria 挂钮"）作为唯一口径写进 <code>ctl-bits.html</code> 头注；运行日志按 (c) 保留普通段头 + 单个 aria 钮，按 (d) 把 <code>v-show</code> 改 <code>v-if</code>。<b>与建议 ④ 的改道</b>：建议是 <code>&lt;seg-group :items :value :on-pick :cls&gt;</code>（容器类下沉组件），实际改为 <code>&lt;aq-seg&gt;</code> <b>只渲染按钮、容器留调用点</b> —— 容器类名（<code>.hist-tabs</code>／<code>.qb-tabs</code>／<code>.qb-seg</code>／<code>.drawer-tabs</code>）是三皮肤 CSS 直接子选择器与父组件结构守阵（<code>&lt;aq-qb-ctl&gt;</code> 恰两根）的一部分，下沉会把"静默错版"的风险从 CSS 挪进组件层；理由记在分片头注里，不留在便签里。<b>验证方式与测试数字</b>：新增守阵 <code>test_frontend_tpl_ctl_bits_single_source</code>（三件套模板各恰一份 / 手抄块全仓归零且只在 ctl-bits.html / 分段钮都吃 items / 段头 role+aria 与内钮 aria-hidden 形态 / 定义+注册+清单三处接线），并更新 6 处受影响的既有断言（流量卡三区段头、qb 档位与纵轴按钮、抽屉两态页签、跳检开关 prop 绑定）—— 全部是"判据换形态"，覆盖强度不降；红验四类突变（手抄 hb-switch 回潮 / atlas 清单漏挂 ctl-bits / 纵轴文案硬编码回模板 / app.js 漏注册 aq-seg）全部判红后逐字节还原，还原后复跑绿。<code>test.full</code> <b>3968 passed + 10 skipped / TOTAL 99%</b>（20467 语句 / 7012 分支，各 93 单位缺口 —— 与上一笔一致：本轮只加模板与守阵，未动被测语句）</li>
+      <li>2026-10-21 05:07 — 真浏览器冒烟 <code>dev.e2e</code> 首轮 <b>334 passed / 2 failed</b>：两条 B4（atlas、prism）红在 <code>srcHead.getByRole('button').click()</code> —— 段头里的「收起/展开」钮现为 <code>aria-hidden</code>，Playwright 的 role 查询默认跳过 aria-hidden 子树（这正是本条要的可访问性形态）。处置：e2e 改点<b>段头本身</b>（它才是 role=button），并补上 <code>aria-expanded</code> 翻转断言 —— 把契约写成断言而不是换 locator 糊过去；重跑两条用例 <b>2 passed</b>；随后全量复跑 <code>dev.e2e</code> <b>336 passed + 10 skipped（11.7m，B4 的 atlas / prism 均 ok）</b>。坑档补 <code>pitfalls/web-ui/template-render</code> 一条（整栏可点时内钮 aria-hidden 与 getByRole 的相互作用）</li>
+      <li>2026-10-21 05:13 — 端口注记（复跑时踩到，记下来免得下次误判）：<code>8137</code> 被兄弟 clone <code>auto-qb-clone4</code> 的 <code>ui_harness</code> 占着、<code>8337</code> 被 <code>auto-qb-clone2</code> 占着，两个都是别的 clone 在跑的服务（未动）。按 <code>e2e/harness.mjs</code> 的排障路径用 <code>E2E_PORT=8437</code> 在干净端口跑通 —— <code>playwright.config.mjs</code> 明确 <code>reuseExistingServer: false</code>（多 clone 下复用会连上别人的残留 harness，"全 PASS"验的是旧代码）</li>
     </ul>
   </section>
 

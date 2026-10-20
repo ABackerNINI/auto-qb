@@ -140,10 +140,18 @@ window.AQB_DRAWER = {
       if (!this.dtPair) return false;
       return this.dtMergeGateOk();
     },
-    /* W4: 合并页签清单(页签栏 v-for 单点) —— 注册表是 boot 期静态数据, 依赖 dtMergeTabsOn
-     * 翻转即可; 高亮判据在模板内联 mt.id === dtPair(与列组同源, 无独立高亮态)。 */
+    /* W4: 合并页签清单(页签栏单点) —— 注册表是 boot 期静态数据, 依赖 dtMergeTabsOn
+     * 翻转即可; 高亮判据在模板内联 mt.id === dtPair(与列组同源, 无独立高亮态)。
+     * 26-10-20-2231: 形状改为 <aq-seg> 契约 [{v, label}](只做投影, 结构事实仍是 MERGE_PAIRS
+     * 一份; pairOf/dtPairCols 读的也还是它) —— 页签钮从此不在模板里手写。 */
     dtMergeTabList() {
-      return window.AQB_DRAWER_MERGE.PAIRS;
+      return window.AQB_DRAWER_MERGE.PAIRS.map((p) => ({ v: p.id, label: p.label }));
+    },
+    /* 非合并态的四页签清单(同 <aq-seg> 契约): 文案单点是 DT_TAB_LABELS(合并列的列头也读它),
+     * 顺序取该表的插入序(general/trackers/peers/content) —— 模板此前四个 <button> 逐字写死,
+     * 与 DT_TAB_LABELS 是同一批文案的两份拷贝。 */
+    dtTabItems() {
+      return Object.keys(DT_TAB_LABELS).map((t) => ({ v: t, label: DT_TAB_LABELS[t] }));
     },
     /* W4: 当前生效对的列定义(正文双列 v-for 单点)。general 列经 props 传详情(组件 prop 面
      * 与单栏一致), 其余列组件无 props(v-bind 空对象 = 无操作); label 即 .dt-col-head 文案。 */

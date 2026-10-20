@@ -67,10 +67,8 @@
                   <div class="hb-row">
                     <span class="hb-lb">右键菜单显示跳检</span>
                     <span class="hb-ct">
-                      <label class="hb-switch" title="开启后单选/单组/多选三支菜单出现「跳过哈希校验…」">
-                        <input type="checkbox" :checked="cmSkipCheck" @change="cmSetSkipCheck($event.target.checked)">
-                        <span class="hb-sw-track"></span>
-                      </label>
+                      <aq-switch tip="开启后单选/单组/多选三支菜单出现「跳过哈希校验…」"
+                                 :checked="cmSkipCheck" :on-change="cmSetSkipCheck"></aq-switch>
                     </span>
                   </div>
                 </div>
@@ -168,11 +166,8 @@
                       <!-- readonly(程序托管)段(如 fs): 启用/关闭开关无意义, 换成徽标(issue 26-09-28-2135) -->
                       <template v-if="b.section">
                         <span v-if="b.item.field && b.item.field.readonly" class="hb-badge">程序维护</span>
-                        <label v-else class="hb-switch">
-                          <input type="checkbox" :checked="cfgExists(b.item.path)"
-                                 @change="cfgToggleSection(b.item.path, b.item.field, $event.target.checked)">
-                          <span class="hb-sw-track"></span>
-                        </label>
+                        <aq-switch v-else :checked="cfgExists(b.item.path)"
+                                   :on-change="(v) => cfgToggleSection(b.item.path, b.item.field, v)"></aq-switch>
                       </template>
                     </span>
                   </div>
@@ -459,7 +454,10 @@
                                 @click="hubLogsToggle()">{{ logs.open ? '收起' : '展开' }}</button>
                       </span>
                     </div>
-                    <div v-show="logs.open" style="padding:12px 14px">
+                    <!-- 折叠体用 v-if 不用 v-show(26-10-20-2231 / R23-B-16 立判据 (d)): 折叠态
+                         隐层若留在 DOM 里, 读屏与页内查找仍能命中一段「看不见的日志」; 日志行
+                         本来就是一次性长文本, 收起时没有任何理由继续占着节点。 -->
+                    <div v-if="logs.open" style="padding:12px 14px">
                       <p v-if="logs.note" class="logs-note">{{ logs.note }}</p>
                       <pre v-if="logs.lines.length" class="hb-logs-pre">{{ logs.lines.join('\n') }}</pre>
                       <p v-else class="hb-hp">{{ logs.loading ? '正在加载日志…' : (logs.error || '日志文件暂无内容') }}</p>

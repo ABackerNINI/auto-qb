@@ -1826,6 +1826,89 @@ def test_frontend_template_split_wiring():
         _assert_tags_balanced(_ui_aggregate(ui), f"{ui} 聚合模板")
 
 
+def test_frontend_tpl_ctl_bits_single_source():
+    """模板层「小控件」三件套单点守阵(issue 26-10-20-2231 / 台账 R23-B-01·02·16·17)
+
+    收敛前四族"小控件"各有多份实现(开关 7 / 折叠段头 5 / 折叠交互 4 种 / 分段钮 4 套), 它们
+    不是风格差异而是同一件事写了好几遍: 给开关加一项能力要改 7 处、改一次折叠键盘策略要改 5 处。
+    统一到 <aq-switch> / <aq-fold> / <aq-seg>(模板 shared/tpl/ctl-bits.html, 定义 shared/ctl_bits.js)
+    之后, 真正要钉的是**不许悄悄长出第二份实现** —— 复写回潮的形态全是静默的:
+      1. 手抄块回到某个调用点(类名照旧、样式照旧, 只有"下次改一处"失效);
+      2. 分段钮的档位清单又写回模板(与 JS 单点漂移, 加一档漏一处);
+      3. 三件套没接线(模板在盘上但清单漏挂 / 组件没注册 = 页面整块空白且零报错)。
+    故本守阵三条: 手抄块全仓归零且唯一实现只在三件套 / 四套分段钮都吃数据 / 三件套接线齐。
+    """
+    tpl_dir = os.path.join(STATIC_ROOT, "shared", "tpl")
+    bits_path = os.path.join(tpl_dir, "ctl-bits.html")
+    assert os.path.isfile(bits_path), \
+        "缺 shared/tpl/ctl-bits.html(三件套模板的唯一实现; 改回各调用点手抄 = 收敛作废)"
+    bits = open(bits_path, encoding="utf-8").read()
+    for tpl_id in ("tpl-aq-switch", "tpl-aq-fold", "tpl-aq-seg"):
+        assert bits.count(f'id="{tpl_id}"') == 1, \
+            f"ctl-bits.html 里 {tpl_id} 必须恰一份(模板层唯一实现)"
+    # 可访问性契约随实现一起钉住(issue 26-10-20-2231 的唯一"真影响可用性"项):
+    #   · 折叠段头 = 唯一可点元素(role=button + tabindex=0 + aria-expanded 挂在它身上);
+    #   · 里层「收起/展开」钮 = 鼠标重复入口, 必须 aria-hidden + tabindex=-1 —— 移出 tab 链,
+    #     否则 Tab 到内钮按 Enter, 内钮 click 与本层 toggle 各打一次, 净效果"按了没反应";
+    #     e2e 的 getByRole('button') 也正因此找不到它(见坑档 pitfalls/web-ui/template-render)。
+    assert 'role="button" tabindex="0" :aria-expanded="open"' in bits, \
+        "aq-fold 段头必须 role=button + tabindex=0 + aria-expanded(aria 只能挂可点的那一层)"
+    assert 'aria-hidden="true" tabindex="-1"' in bits, \
+        "aq-fold 里层「收起/展开」钮必须 aria-hidden + tabindex=-1(否则 tab 链里出现双触发点)"
+
+    # 1. 手抄块归零: 三件套的 CSS 钩子类名在整个 tpl 目录里各只出现一次, 且就在三件套自己身上。
+    #    先剥注释 —— 三件套头注里会引用这些类名解释"为什么这么写"。
+    def _strip(text):
+        return re.sub(r"<!--[\s\S]*?-->", "", text)
+
+    tpl_files = {
+        f: _strip(open(os.path.join(tpl_dir, f), encoding="utf-8").read())
+        for f in sorted(os.listdir(tpl_dir)) if f.endswith(".html")
+    }
+    for needle, owner in (('class="hb-switch"', "aq-switch"), ('class="hb-blk-hd hb-sub-toggle"', "aq-fold")):
+        where = [(f, t.count(needle)) for f, t in tpl_files.items() if needle in t]
+        assert where == [
+            ("ctl-bits.html", 1)
+        ], (f"{needle} 必须只在 ctl-bits.html 出现一次(实测 {where}) —— 调用点手抄回潮: "
+            f"应改用 <{owner}>, 否则「改一处」又变成改 N 处")
+
+    # 2. 四套分段钮都吃数据(清单单点各自在 JS 领域层, 模板只交 items/value/pick)
+    pop = tpl_files["popovers.html"]
+    drawer_tpl = tpl_files["drawer.html"]
+    head_tpl = tpl_files["drawer-head.html"]
+    for text, needle, why in (
+        (pop, ':items="$root.histGranItems"', "历史粒度三档(清单在 dialogs.js HIST_GRAN_ITEMS)"),
+        (drawer_tpl, ':items="dtMergeTabList"', "抽屉合并态页签(投影自 MERGE_PAIRS)"),
+        (drawer_tpl, ':items="dtTabItems"', "抽屉非合并态四页签(投影自 DT_TAB_LABELS)"),
+        (head_tpl, ':items="$root.qbWindowTabs"', "流量窗口档位(投影自 QB_WINDOW_NAMES)"),
+        (head_tpl, ':items="$root.qbYAxisTabs"', "纵轴三态(投影自 QB_YAXIS_MODES)"),
+    ):
+        assert needle in text, f"缺 {needle} —— {why} 的按钮又回模板里手写了"
+    # 档位文案不得在模板里出现第二份(drawer.html 的流量页签是**能力门**而非档位, 单独留一个
+    # v-if=qbTrafficOn 按钮; 它的门控在 test_frontend_qb_traffic_chart_wiring 里钉着)
+    for literal in (">常规<", ">Tracker<", ">用户<", ">内容<", ">自动<", ">限速+20%<", ">手动<", "['day', 'month', 'year']"):
+        assert literal not in drawer_tpl and literal not in head_tpl and literal not in pop, \
+            f"模板里仍有硬编码档位/页签文案 {literal} —— 文案单点在 JS 领域层(分段钮只吃 items)"
+
+    # 3. 三件套接线: 定义(ctl_bits.js 挂 window.AQ_*) + 注册(app.js app.component) + 清单(parts 注入 body,
+    #    scripts 排在 app.js 之前 —— app.js 末尾才 createApp 并读 window.AQ_*, 排后面拿到 undefined)
+    js = open(os.path.join(STATIC_ROOT, "shared", "ctl_bits.js"), encoding="utf-8").read()
+    app_js = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+    for name, comp in (
+        ("aq-switch", "AQ_SWITCH_COMPONENT"), ("aq-fold", "AQ_FOLD_COMPONENT"), ("aq-seg", "AQ_SEG_COMPONENT")
+    ):
+        assert f"window.{comp} = {{" in js, f"ctl_bits.js 缺 window.{comp} 定义(<{name}> 无实现)"
+        assert app_js.count(f'app.component("{name}", window.{comp})') == 1, \
+            f"app.js 缺/重复 app.component(\"{name}\")(未注册 = 模板里当未知元素渲染, 整块控件消失且零报错)"
+    for ui in _UI_ALL:
+        mf = _ui_manifest(ui)
+        parts = [p["src"] for p in mf["parts"]]
+        assert "/shared/tpl/ctl-bits.html" in parts, f"{ui} 清单漏挂 ctl-bits.html 分片(boot 不注入)"
+        i_bits = mf["scripts"].index("/shared/ctl_bits.js")
+        i_app = mf["scripts"].index("/shared/app.js")
+        assert i_bits < i_app, f"{ui} 清单里 ctl_bits.js 必须排在 app.js 之前(否则注册时 window.AQ_* 尚未定义)"
+
+
 def test_frontend_shell_sprite_login_parity():
     """三份 index.html shell 内联段守阵(issue 26-10-20-2231): sprite 段与 #app+login 段三皮肤对齐
 

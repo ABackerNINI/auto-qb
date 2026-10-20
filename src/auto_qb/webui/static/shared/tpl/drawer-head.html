@@ -38,19 +38,20 @@
   </header>
 </script>
 <script type="text/x-template" id="tpl-aq-qb-ctl">
+  <!-- 档位与纵轴两组分段钮改走 <aq-seg>(26-10-20-2231 / R23-B-17): 清单由各自的领域单点投影
+       (qb_traffic_chart.js 的 qbWindowTabs = QB_WINDOW_NAMES + qbWindowLabel; qbYAxisTabs =
+       QB_YAXIS_MODES + QB_YAXIS_LABELS), 模板不再手抄按钮 —— 收敛前这里 5 个 <button> 逐字写死,
+       加一档要同时改 JS 清单与模板两处。容器(.qb-tabs/.qb-seg)仍留在原地: 三皮肤 CSS 的直接
+       子选择器按这两个类名命中(见 tpl/ctl-bits.html 头注)。 -->
   <div class="qb-tabs">
-    <button v-for="w in $root.qbWindowNames" :key="w" :class="{ active: $root.qbCurWindow === w }"
-            @click="$root.qbSetWindow(w)">{{ $root.qbWindowLabel(w) }}</button>
+    <aq-seg :items="$root.qbWindowTabs" :value="$root.qbCurWindow"
+            :on-pick="$root.qbSetWindow"></aq-seg>
   </div>
   <div class="qb-tools">
     <span class="qb-tools-label">纵轴</span>
     <div class="qb-seg">
-      <button :class="{ active: $root.qbYAxisMode === 'auto' }"
-              @click="$root.qbSetYAxisMode('auto')">自动</button>
-      <button :class="{ active: $root.qbYAxisMode === 'limit' }"
-              @click="$root.qbSetYAxisMode('limit')">限速+20%</button>
-      <button :class="{ active: $root.qbYAxisMode === 'manual' }"
-              @click="$root.qbSetYAxisMode('manual')">手动</button>
+      <aq-seg :items="$root.qbYAxisTabs" :value="$root.qbYAxisMode"
+              :on-pick="$root.qbSetYAxisMode"></aq-seg>
     </div>
     <input v-if="$root.qbYAxisMode === 'manual'" class="qb-yaxis-input" type="number"
            min="0" step="any" :value="$root.qbYAxisManual || ''" placeholder="MiB/s"

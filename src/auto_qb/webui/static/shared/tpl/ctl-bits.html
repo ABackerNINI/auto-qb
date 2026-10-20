@@ -1,0 +1,69 @@
+<!-- ================================================================================
+     模板层「小控件」三件套(收敛 issue 26-10-20-2231 / 台账 R23-B-01·02·16·17)
+     x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层), app.component 注册;
+     与 combo-input.html / drawer-head.html 同范式: 本文件**只贡献模板**, 数据与动作一律经
+     回调回到「拥有它的那一层」(定义见 shared/ctl_bits.js; 组件自身不持有任何业务状态) ——
+     组件里复写方法会触发 _scan_mixin_wiring 的重名守阵, 被盖掉的那份永不执行。
+
+     收敛前的事实: 四族"小控件"各有多份实现 —— hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle
+     可折叠段头 5 处(三种 toggle 签名)、分段单选钮 4 套(内联字面量 / $root 属性 / 硬编码 /
+     注册表)、折叠交互 4 种实现(可访问性逐条不一)。它们不是"风格不同", 而是同一件事写了
+     好几遍 —— 给开关加一项能力要改 7 处、改一次折叠键盘策略要改 5 处。
+
+     <aq-switch> DOM 必须与 `.hb-switch` 族 CSS 的**相邻兄弟 / 通用兄弟**选择器严格对齐:
+       顺序 input -> .hb-sw-track -> .hb-sw-text -> (插槽)
+       (console_hub.css 用 `input:checked + .hb-sw-track` 与 `input:checked ~ .hb-sw-text`)
+       —— 中间插任何 wrapper 元素, 滑轨与文字的所有随态样式静默落空(无报错)。
+     <aq-fold> 是**多根片段**(段头 + 折叠体): 三皮肤 CSS 与 e2e 靠 `.hb-blk > .hb-blk-hd`
+     直接子选择器命中, 多包一层 wrapper 即整区静默失配(同 <aq-qb-ctl> 的教训)。
+     <aq-seg> 只渲染**按钮本身**(多根片段), 容器由调用方持有 —— 容器类名
+     (.hist-tabs/.qb-tabs/.qb-seg/.drawer-tabs)是 CSS 选择器的一部分, 留在调用点可读性最好,
+     也免得父组件的结构守阵(如 <aq-qb-ctl> 恰两根)随之下沉。
+
+     ------------------------------------------------------------------------------
+     折叠立判据(R23-B-16, 本仓库唯一的折叠口径; 写在这里才不会各写一遍):
+       (a) 一次性排障 / 只读信息(如站点排障视图、拉取历史) -> 原生 `<details>`: 白拿键盘/读屏/
+           无 JS 状态, 代价只是 summary 的样式受限, 要自定义标题样式时才改用 (b)。
+       (b) 主内容区段(需自定义头样式 / 常驻钮, 如流量卡三区、配置 group 段、规则 meta)
+           -> <aq-fold>: 整条段头 role=button + tabindex=0 + Enter 切换。
+       (c) 头里自带 select / 输入框的区头(**如设置页「运行日志」**)不套整行可点折叠: 点控件会
+           连坐触发折叠, 与"我只在改筛选条件"背道而驰 —— 保持普通 .hb-blk-hd + 单个 aria-expanded 钮。
+       (d) 禁用 `v-show` 折叠, 禁用「整栏可点但 aria-expanded 挂在里层钮上」。
+     aria 挂层: 可点的那个元素(这里的段头)才能挂 aria-expanded —— 挂在里层钮上, 读屏用户会以为
+     只有那个小钮能展开, 而实际整栏都能点。里层的"展开/收起"钮是给鼠标用户的重复入口, 故
+     aria-hidden + tabindex=-1(移出 tab 链 —— 否则 Tab 到内钮再按 Enter, 里层 click 与本层
+     toggle 各打一次, 净效果是"按了没反应")。
+     ------------------------------------------------------------------------------
+     开关「什么时候该带文字」(R23-B-01; 收敛前同位置同语义却一个带一个不带 = 纯漂移):
+       · 带(:text="true", 显示「启用/关闭」): 单独占一行、旁边没有别的文字说明
+         开关当前状态时 —— 用户要读出词义, 光看滑轨位置在读不了颜色的场景里不够。
+       · 不带: 开关嵌在已有标签 / 已有摘要的行里(如分区段头、规则行), 或轨旁边就有 bh-n 说明。
+       · 文字也可以是"这一项的名字"(:text="inl.field.label"): 从属的内联开关没有
+         独立标签行, 此时的文字就是它的标签。
+     ================================================================================ -->
+<script type="text/x-template" id="tpl-aq-switch">
+  <label class="hb-switch" :class="tone" :title="tip || null">
+    <input type="checkbox" :checked="checked" :disabled="disabled"
+           @change="onChange($event.target.checked)">
+    <span class="hb-sw-track"></span>
+    <span v-if="swText" class="hb-sw-text">{{ swText }}</span>
+    <slot></slot>
+  </label>
+</script>
+<script type="text/x-template" id="tpl-aq-fold">
+  <div class="hb-blk-hd hb-sub-toggle" role="button" tabindex="0" :aria-expanded="open"
+       @click="onToggle()" @keyup.enter="onToggle()">
+    <span class="bh-t">{{ title }}</span>
+    <span class="bh-n">{{ note }}</span>
+    <span class="bh-r">
+      <button class="hb-btn ghost sm" aria-hidden="true" tabindex="-1"
+              @click.stop="onToggle()">{{ open ? '收起' : '展开' }}</button>
+      <slot name="act"></slot>
+    </span>
+  </div>
+  <template v-if="open"><slot></slot></template>
+</script>
+<script type="text/x-template" id="tpl-aq-seg">
+  <button v-for="it in items" :key="it.v" :class="{ active: it.v === value }"
+          @click="onPick(it.v)">{{ it.label }}</button>
+</script>
