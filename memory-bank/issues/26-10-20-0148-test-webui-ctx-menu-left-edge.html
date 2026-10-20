@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-0148">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-ctx-menu-left-edge">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-webui-menu-label-unify.md,memory-bank/plans/26-10-20-0145-plan-webui-menu-label-unify.html">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-webui-menu-label-unify.md,memory-bank/plans/26-10-20-0145-plan-webui-menu-label-unify.html,memory-bank/pitfalls/web-ui/ctx-menu-edge-clamp.md,memory-bank/testing/baselines/26-10-20-1117-webui-ctx-menu-left-edge.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="顶层右键菜单左缘 clamp 无 e2e 断言(存量测试缺口)">
 <meta name="issue-summary" content="顶层 .ctx-menu 左缘 clamp 有实现无测试; 右缘仅一条顺带断言, 建议补左右缘独立断言">
 <title>顶层右键菜单左缘 clamp 无 e2e 断言(存量测试缺口) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-0148-test-webui-ctx-menu-left-edge</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 01:48</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,9 +94,26 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>修复与验证<span class="opt">（2026-10-20 认领并修）</span></h2>
+    <p><b>复验</b>(认领后第一件事, 2026-10-20 10:45): 现象仍在 —— <code>ui_feedback.js</code> 的
+    <code>_menuPos</code>(:255 开层估算)与 <code>_menuFit</code>(:264-281 实测重钳位, <code>nx</code> :271)两级
+    <code>max(EDGE, …)</code> 在码; <code>menus.spec.mjs</code> 左缘仍无用例(右缘只有垂直 CTX-fit 里一条顺带断言)。</p>
+    <p><b>实际修法</b>: <code>e2e/menus.spec.mjs</code> 横轴拆出两支独立用例 ——</p>
+    <ul>
+      <li><code>CTX-fit 右缘</code>: 真实右键, 锚点贴 <code>.group-table</code> 滚动容器右缘内侧 2px(clientX≈1426, 落点经 <code>elementFromPoint</code> 验在行上), 断言菜单右缘 ≤ 视口宽 - 8(+1px 容差, 与既有几何守阵同口径)。</li>
+      <li><code>CTX-fit 左缘</code>: 锚点 clientX=2, 断言菜单左缘 ≥ 8(-1px)。clientX&lt;8 真实手势结构上不可达 —— 表格滚动容器左缘被 <code>.layout</code> 的 12px padding 钉死(实测 x=12, 双皮肤同), 行可点击区恒 ≥12, 而 EDGE=8; 故在真实行元素上派发<b>合成 contextmenu</b>, 事件仍走真实链路 <code>@contextmenu → openMemberMenu → _menuPos → _menuFit</code> 实测重钳位(不借道 vm, D4 守则只禁 vm 旁路; 本文件既有 dispatchEvent 先例)。坑档已立: <code>pitfalls/web-ui/ctx-menu-edge-clamp.md</code>。</li>
+      <li>原 CTX-fit 垂直用例里那条顺带右缘断言随之移除: 其锚点在行左缘(clientX≈14), 菜单盒 14..210 远离两缘, 恒真。</li>
+    </ul>
+    <p><b>与建议(§03)的改道</b>: 建议"在 CTX-fit 用例补左缘独立断言(≥ 8px)与右缘对称" —— 照此补则锚点仍在行左缘(clientX≈14), 断言恒真(红验证实: 拆掉左缘两级 clamp 也不红), 守住的是假象; 故改为锚点贴缘的独立两支, 保留建议的语义(左缘 ≥8 / 右缘对称)而换成立即可红的安排。左缘一支因真实手势不可达改用合成 contextmenu, 是建议未预见的路径(原文保留备查)。</p>
+    <p><b>验证</b>: 双皮肤(prism/atlas)新两支 + 垂直 CTX-fit 全绿; 红验两类突变各自判红且不误红 —— ①左缘两级 <code>max</code> 全拆 → 左缘支双皮肤 2 红、右缘支与垂直支绿(菜单左缘 2 &lt; 8); ②右缘两级钳位全拆 → 右缘支双皮肤 2 红、左缘支与垂直支绿(菜单右缘 1622 &gt; 1432); 突变均以精确反向编辑还原, <code>git diff</code> 实证 <code>ui_feedback.js</code> 零改动(生产代码未动, 本 issue 纯测试缺口)。menus.spec.mjs 全量、全量 e2e 默认轮与 test.full 的实测数字见基线切片(<code>commands run kb.baseline</code>)。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 01:48 — 入池，状态 <strong>Open</strong>（计划外，未修）。来源: WEBUI 菜单文案统一计划的事实核查(D13 拍板: 存量缺口入池不顺手修, 该计划不新增 clamp 代码)</li>
+      <li>2026-10-20 10:45 — 用户指派认领(「认领并修复」); 复验现象仍在(见 §04), 状态 <strong>In Progress</strong>。</li>
+      <li>2026-10-20 11:18 — 修复并验证(修法/红验/测试数字见 §04), 状态 <strong>Done</strong>。</li>
     </ul>
   </section>
 

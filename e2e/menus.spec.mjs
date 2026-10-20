@@ -69,6 +69,10 @@ import { armClick, armPending, readPending } from './lib/probes.mjs';
  *  L220  无 console.error / pageerror(off 轮收尾总检)               → installRuntimeErrorGuard
  *  · CTX-fit(**非旧脚本迁入**, 本 spec 新增): 视口下部行开批量菜单 → 菜单盒整体落在视口内 +
  *    底部项真实可点 —— issue 26-10-06-1717 的回归断言(计划外发现的正式修复轮补)。
+ *  · CTX-fit 横轴两支(issue 26-10-20-0148 清偿, 2026-10-20): 此前横轴只有 CTX-fit 里一条
+ *    "顺带"的右缘断言(锚点在行左缘 clientX≈14, 菜单盒 14..210 远离两缘 ⇒ 恒真), 左缘无用例。
+ *    拆出后: 右缘支锚点贴滚动容器右缘(真实右键, clientX≈1426)断言右缘 ≤ 视口宽-8; 左缘支
+ *    锚点 clientX=2(合成 contextmenu —— 真实手势结构上到不了, 见该支注释)断言左缘 ≥ 8。
  *  旧多选注入(vm.selMembers = …)在旧块里是取"已知选中集合"的手段; 新轨一律真实 Ctrl+click
  *  (D4 守则: 有真实 UI 路径的交互不借道 vm), 选中集合用 readInst 读数自证(第②类)。
  *
@@ -388,13 +392,98 @@ for (const skin of SKINS) {
         expect(Math.round(b.y + b.height),
           `菜单底 ${Math.round(b.y + b.height)} 应 ≤ 视口高 - 8(${vp.height - 8}) —— 溢出即底部项点不到`)
           .toBeLessThanOrEqual(vp.height - 8 + 1);
-        expect(Math.round(b.x + b.width), `菜单右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8`)
-          .toBeLessThanOrEqual(vp.width - 8 + 1);
+        // 横轴(左/右缘)断言不在本支: 本支锚点在行左缘(clientX≈14), 菜单盒 14..210 远离
+        // 两缘, 顺带的横轴断言恒真 —— 已拆到下面两支独立用例(issue 26-10-20-0148)。
         // 底部最后一项走真实点击: 溢出时这里报 "outside of the viewport" 直到超时(修复前的签名)
         await ctxItemById(page, 'delete').click();
         await expect(page.locator('.modal')).toBeVisible({ timeout: 5_000 });
         await page.keyboard.press('Escape'); // 收掉确认框(本用例只验可达性, 不提交)
         await expect(page.locator('.modal')).toHaveCount(0);
+      });
+
+      /* CTX-fit 横轴(issue 26-10-20-0148 清偿): 左/右缘 clamp 的独立回归断言。
+       * 由来: ui_feedback.js 的 _menuPos(开层估算)+ _menuFit(实测重钳位)两级都含
+       * max(EDGE, …) 左缘钳位, 但 e2e 原先只有 CTX-fit 里一条顺带的右缘断言, 左缘无用例。
+       * 几何事实(2026-10-20 实测, 双皮肤同): 表格滚动容器 .group-table 的左缘被 .layout 的
+       * 12px padding 钉死(x=12), 行可点击区恒 ≥12, 而 clamp 的 EDGE=8 ⇒ 真实手势到不了
+       * clientX<8, 左缘 clamp 结构上不可达; 右缘真实可达(锚点贴容器右缘)。
+       * 左缘支因此走**合成 contextmenu**(clientX=2, dispatch 在真实行元素上): 事件仍经
+       * 真实链路 Vue @contextmenu → openMemberMenu → _menuPos → _menuFit 实测重钳位,
+       * 不借道 vm(D4 守则禁的是 vm 旁路; 本文件既有 dispatchEvent 先例 —— 块E 的 pill 点击)。
+       * 红验(两支各自的可红性, 见 issue 报告 §04): 左缘两级 max 全拆 → 左缘支红/右缘支绿;
+       * 右缘两级钳位全拆 → 右缘支红/左缘支绿。 */
+      test('CTX-fit 右缘: 锚点贴滚动容器右缘, 菜单右缘钳进视口(≤ 视口宽 - 8)', async ({ page }) => {
+        /* 真实手势: 行横跨整表(实测 2648px > 视口), 锚点 x 取容器右缘内侧 2px ——
+         * clientX(≈1426) > 视口宽-估算宽-8 ⇒ 右缘两级 clamp 都咬合; 全拆则菜单右缘
+         * = clientX + 实测宽(≈1622)越出视口, 本断言红(红验实测)。 */
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const spot = await page.evaluate(() => {
+          const cont = document.querySelector('.group-table');
+          if (!cont) return null;
+          const x = cont.getBoundingClientRect().right - 2;
+          const guard = [...document.querySelectorAll('.sticky-head')]
+            .reduce((m, h) => Math.max(m, h.getBoundingClientRect().bottom), 0);
+          const rows = [...document.querySelectorAll('.torrent-row')];
+          for (let i = 0; i < rows.length; i++) {
+            const r = rows[i].getBoundingClientRect();
+            if (r.top >= guard + 8 && r.bottom <= window.innerHeight - 8) {
+              const y = r.top + r.height / 2;
+              const hit = document.elementFromPoint(x, y);
+              if (hit && rows[i].contains(hit)) return { x, y };
+            }
+          }
+          return null;
+        });
+        expect(spot, '视口内找到完整可见行且容器右缘落点在行上').toBeTruthy();
+        const s = /** @type {{x: number, y: number}} */ (spot);
+        await page.mouse.click(s.x, s.y, { button: 'right' });
+        const menu = page.locator('.ctx-menu');
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        const vp = /** @type {{width: number, height: number}} */ (page.viewportSize());
+        const b = /** @type {{x: number, y: number, width: number, height: number}} */ (await menu.boundingBox());
+        expect(b, '菜单盒量不到').toBeTruthy();
+        expect(Math.round(b.x + b.width),
+          `菜单右缘 ${Math.round(b.x + b.width)} 应 ≤ 视口宽 - 8(${vp.width - 8}) —— 溢出即右缘项点不到`)
+          .toBeLessThanOrEqual(vp.width - 8 + 1);
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
+      });
+
+      test('CTX-fit 左缘: 锚点 clientX<8, 菜单左缘钳进视口(≥ 8)', async ({ page }) => {
+        /* 合成 contextmenu(clientX=2)派发在真实行元素上(为何不能走真实手势见上注):
+         * _menuPos 的 max(8,·) 与 _menuFit 的 max(EDGE,·) 应把菜单左缘钳回 8;
+         * 两级全拆则菜单左缘 = 2, 本断言红(红验实测)。 */
+        await openApp(page, skin);
+        await tab(page, 'torrents').click();
+        await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+        const opened = await page.evaluate(() => {
+          const guard = [...document.querySelectorAll('.sticky-head')]
+            .reduce((m, h) => Math.max(m, h.getBoundingClientRect().bottom), 0);
+          const rows = [...document.querySelectorAll('.torrent-row')];
+          for (let i = 0; i < rows.length; i++) {
+            const r = rows[i].getBoundingClientRect();
+            if (r.top >= guard + 8 && r.bottom <= window.innerHeight - 8) {
+              const y = r.top + r.height / 2;
+              rows[i].dispatchEvent(new MouseEvent('contextmenu', {
+                bubbles: true, cancelable: true, clientX: 2, clientY: y,
+              }));
+              return { y, row: rows[i].className };
+            }
+          }
+          return null;
+        });
+        expect(opened, '视口内找到完整可见行(左缘锚点)').toBeTruthy();
+        const menu = page.locator('.ctx-menu');
+        await expect(menu).toBeVisible({ timeout: 5_000 });
+        const b = /** @type {{x: number, y: number, width: number, height: number}} */ (await menu.boundingBox());
+        expect(b, '菜单盒量不到').toBeTruthy();
+        expect(Math.round(b.x),
+          `菜单左缘 ${Math.round(b.x)} 应 ≥ 8 —— clientX=2 的锚点应被左缘 clamp 钳回(溢出即左缘项点不到)`)
+          .toBeGreaterThanOrEqual(8 - 1);
+        await page.keyboard.press('Escape');
+        await expect(menu).toHaveCount(0);
       });
 
       test('CTX-04/05/06 次级菜单: 唯一入口(更多操作) / 复制族并入 / 悬停语义色不变灰 / 移出收起', async ({ page }) => {
