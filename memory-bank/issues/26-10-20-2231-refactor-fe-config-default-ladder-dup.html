@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/testing/baselines/26-10-21-0323-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)">
 <meta name="issue-summary" content="cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处">
 <title>前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-config-default-ladder-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,14 +99,76 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>修复与验证<span class="opt">（2026-10-21 认领并修）</span></h2>
+    <p><b>复验</b>(认领后第一件事, 2026-10-21 03:05): 现象仍在 —— 三处行号与入池记录一致
+      (<code>config_editor.js:634-644</code> / <code>config_rules.js:181-200</code> · <code>201-208</code>),
+      三处各写一份「按 schema 形状造初值」的循环, 插件两份仍互嵌套; 测试侧零守阵(grep 实证)。</p>
+
+    <p><b>先画清边界再动</b>(§03 点名的前置动作): 三处看似同构, 实则各留了<b>刻意的分歧</b>, 收敛时一律保留 ——
+      ①插件 <code>spec_kind=bool</code> 初值 <code>"true"</code>(新动作默认开)而字段 <code>kind=bool</code> 是
+      <code>"false"</code>; ②object spec 只填<b>必填</b>子字段, 但它的 object 子段按<b>全字段</b>口径(且不再递归);
+      ③可选段非 object 字段的历史口径是 <code>[]</code>; ④未知 <code>spec_kind</code> 沿用子表单口径。
+      这四条正是"哪层补哪个键"的边界本身。</p>
+
+    <p><b>实际修法</b>: 收敛成一条下降链, 三处的差异退化成 <code>opts</code> 开关(不再是三份代码) ——</p>
+    <ul>
+      <li><code>config_editor.js</code> 新增阶梯单点 <code>cfgDefaultScalar(node, opts)</code>(叶子 → 标量:
+        enum→<code>options[0]</code> / bool→<code>boolOn ? "true" : "false"</code> / 其它→placeholder 或
+        <code>cfgScalar(default)</code>)与 <code>cfgDefaultForFields(fields, opts)</code>(字段清单 → 对象;
+        <code>object</code> 且 <code>recurse</code> 时再下一层); <code>opts</code> 三个开关 =
+        <code>requiredOnly</code> / <code>recurse</code> / <code>boolOn</code>。可选段入口
+        <code>cfgDefaultForField</code> 退化为薄壳(非 object 仍返回 <code>[]</code>)。</li>
+      <li><code>config_rules.js</code> 两份手搓循环(<code>cfgPluginDefaultSpec</code> /
+        <code>cfgPluginDefaultSection</code>)删除, 换为插件形态分派 <code>cfgDefaultForPlugin(meta)</code>:
+        按 <code>spec_kind</code> 选 列表(<code>[]</code>) / 子表单(必填优先 + object 子段递归) / 叶子(走
+        <code>cfgDefaultScalar</code>, bool 的分歧交给 <code>boolOn</code>); 单值形态取值域收成模块级
+        <code>SPEC_SCALAR_KINDS</code>(与后端 <code>Plugin.spec_kind</code> 对应), 不在列者沿用旧的子表单口径。</li>
+      <li>结果: 新增一种 kind 的默认值规则 = <b>只改 <code>cfgDefaultScalar</code> 一处</b>; 插件侧手搓字段循环
+        归零(<code>for (const f of</code> 计数 2 → 0), enum 首选项默认值全仓一处。</li>
+    </ul>
+
+    <p><b>行为等价性实证</b>(不是"看着一样", 是跑出来的): 改动前(HEAD)与改动后各跑同一批输入, 输出<b>逐字节一致</b> ——
+      ①合成 schema 电池 10 项(插件 bool/list/enum/str/object/未知形态 + 可选段两类 + 字段级三类)全等;
+      ②<b>真实 schema 全量对照</b>: 从后端 <code>schema_payload()</code> 导出真 schema, 对全部 <b>25 个插件</b>
+      (13 条件 + 12 动作)的 spec 初值与全部 <b>18 个 object 段</b>的可选段初值各算一遍, 两份 JSON
+      <code>diff</code> 为空。</p>
+
+    <p><b>守阵</b>: <code>tests/test_webui_static_dom_page.py::test_frontend_config_default_ladder_single_point</code> ——
+      形态六查(三单点各定义一处 / 旧 <code>cfgPluginDefaultSpec|Section</code> 零残留 / 插件侧零手搓循环 /
+      <code>options[0]</code> 全仓一处 / 两入口体内无循环只转调 / <b>恒久活性探针</b>钉住两个入口的调用点 ——
+      入口被删光会让前面五查恒真) + 有 node 时真跑 <b>11 项语义电池</b>, 把上面四条分歧逐条钉死;
+      日后谁"顺手统一"了某条口径, 这里立刻红。无 node 静默跳电池(不引入 skip)。</p>
+
+    <p><b>验证(红验三类突变 + 测试数字)</b>: 三类突变全部符合预期 —— ①把 <code>cfgDefaultScalar</code> 的 bool 分支
+      改成一律 <code>"false"</code>(把插件/字段口径"顺手统一") ⇒ 红, 报「行为漂移: 插件 bool spec 初值 =
+      "true"(与字段级 "false" 的分歧点)」; ②<code>config_rules.js</code> 里重新手搓一个字段循环 ⇒ 红, 报
+      「又出现了手搓的字段循环」; ③<code>cfgToggleSection</code> 不再调 <code>cfgDefaultForField</code> ⇒ 红, 报
+      「可选段初值入口断了」(活性探针)。三类均以精确反向编辑还原, <code>git diff -- src/</code> 只剩本轮有意的收敛改动。
+      测试数字: 新守阵单跑 1 passed; <code>commands run test.full</code> <b>3967 passed / 10 skipped / TOTAL 99%</b>
+      (20467 语句 / 7012 分支, 各 93 单位缺口; 覆盖率闸 99% 照过) —— 数字誊至基线切片
+      <code>memory-bank/testing/baselines/26-10-21-0323-dup-code-audit.md</code>(最新值见 <code>commands run kb.baseline</code>)。</p>
+
+    <p><b>与建议(§03)的口径对齐</b>: 建议是「一条递归 <code>defaultFor(schemaNode)</code>, 三层只是递归深度不同」 ——
+      实际落地的正是这个形状(递归深度由 <code>recurse</code> 开关表达), 只是叶子与容器分成两个函数:
+      容器要遍历字段清单、叶子只认单个节点, 合成一个函数会让"只填必填""bool 开/关"这类开关挂在不适用的那一半上。
+      §03 点名的风险(三处互嵌套)已按它自己的要求先画边界(见上)再动。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 03:10 — 用户指派认领，状态 <strong>In Progress</strong>；复验（03:05）现象仍在：
+        <code>config_editor.js:634-644</code> / <code>config_rules.js:181-200</code> / <code>201-208</code>
+        与入池记录行号一致，三处各写一份「按 schema 形状造初值」的循环（<code>kind === "enum"</code>
+        合计 5 处、<code>kind === "bool"</code> 合计 5 处），插件两份仍互嵌套；测试侧零守阵</li>
+      <li>2026-10-21 03:23 — 修复并验证（修法 / 四条分歧边界 / 行为等价性实证 / 守阵 / 红验三类突变 /
+        测试数字见 §04），状态 <strong>Done</strong>；文件头 <code>doc-refs</code> 已双向补链本件与基线切片</li>
     </ul>
   </section>
 
   <footer>
-    26-10-20-2231-refactor-fe-config-default-ladder-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+    26-10-20-2231-refactor-fe-config-default-ladder-dup.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在「状态变更日志」里留痕
   </footer>
 
 </div>

@@ -626,16 +626,36 @@ window.CONFIG_EDITOR = {
       }
       this.cfgSetPath(path, this.cfgDefaultForField(field));
     },
+    /* schema → 默认值阶梯单点(issue 26-10-20-2231)
+     *
+     * "按 schema 形状造初值"这条阶梯曾有三份实现(可选段 cfgDefaultForField / 插件 spec /
+     * 插件 section), 后两份还互相嵌套 —— 加一种 kind 的默认值规则要三处同改, 漏一处新条目
+     * 就过不了后端校验或写出非法空值。现在只剩这一条下降链, 三处的差异退化成 opts 开关:
+     *   cfgDefaultScalar(node, opts)      —— 叶子 → 标量(enum / bool / 其它)
+     *   cfgDefaultForFields(fields, opts) —— 字段清单 → 对象(object 且 recurse 时再下一层)
+     * opts: requiredOnly(只填必填子字段) / recurse(object 子段递归一层) / boolOn(bool 初值取 "true")
+     * 插件形态的分派(spec_kind → list / object / 叶子)在 config_rules.js::cfgDefaultForPlugin。 */
+    cfgDefaultScalar(node, opts) {
+      const o = opts || {};
+      if (node.kind === "enum") return (node.options && node.options[0]) || "";
+      if (node.kind === "bool") return o.boolOn ? "true" : "false";
+      return node.placeholder || this.cfgScalar(node.default);
+    },
+    cfgDefaultForFields(fields, opts) {
+      const o = opts || {};
+      const out = {};
+      for (const f of fields || []) {
+        if (o.requiredOnly && !f.required) continue;
+        // object 子段再下一层: 子段口径 = 全字段、不再递归(原 section 级的行为, 现在只是少传 recurse)
+        out[f.key] =
+          f.kind === "object" && o.recurse ? this.cfgDefaultForFields(f.fields, {}) : this.cfgDefaultScalar(f, o);
+      }
+      return out;
+    },
+    /* 可选段初值: object 段按必填子字段造对象; 非 object(历史口径)→ 空列表 */
     cfgDefaultForField(field) {
       if (field.kind !== "object") return [];
-      const spec = {};
-      for (const f of field.fields || []) {
-        if (!f.required) continue;
-        if (f.kind === "enum") spec[f.key] = (f.options && f.options[0]) || "";
-        else if (f.kind === "bool") spec[f.key] = "false";
-        else spec[f.key] = f.placeholder || this.cfgScalar(f.default);
-      }
-      return spec;
+      return this.cfgDefaultForFields(field.fields, { requiredOnly: true });
     },
     cfgInputValue(field, path) {
       const v = this.cfgRaw(path);

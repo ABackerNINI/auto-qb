@@ -13,6 +13,12 @@
  * spec 形态由 schema 的 Plugin.spec_kind 决定: str/enum/speed 单值, bool 开关, list 列表, object 子表单。
  * 动作可选集合按 trigger 过滤(与后端 validation 的删除触发白名单同源)。
  */
+
+/* 插件 spec 的**单值形态**取值域(对应后端 schema/fields.py::Plugin 的 spec_kind 文档串)
+ * —— 不在此列的形态按子表单(object)造初值(旧口径: 未知形态也走子表单)。新增单值形态
+ *    只要往这列加一项, 默认值规则由 cfgDefaultScalar 统一给(issue 26-10-20-2231)。 */
+const SPEC_SCALAR_KINDS = ["str", "speed", "expr", "enum", "bool"];
+
 window.CONFIG_RULES = {
   methods: {
     /* ---------------------------------------------------------- 列表与条目 */
@@ -41,7 +47,7 @@ window.CONFIG_RULES = {
     cfgPluginAdd(groupKey, ruleName, listName, pluginName) {
       const path = [...this.cfgRulePath(groupKey, ruleName), listName];
       const list = [...this.cfgPluginList(groupKey, ruleName, listName)];
-      list.push({ [pluginName]: this.cfgPluginDefaultSpec(pluginName) });
+      list.push({ [pluginName]: this.cfgDefaultForPlugin(this.cfgPluginIndex[pluginName]) });
       this.cfgSetPath(path, list);
     },
     cfgPluginRemove(groupKey, ruleName, listName, index) {
@@ -177,34 +183,22 @@ window.CONFIG_RULES = {
       this.toast("试算结果: " + data.value + (detail ? " [" + detail + "]" : ""), data.value ? "ok" : "info");
     },
 
-    /* 新增条目时的 spec 初始值: 必填字段用 schema 默认值/占位符填充, 让新条目可直接通过校验 */
-    cfgPluginDefaultSpec(pluginName) {
-      const meta = this.cfgPluginIndex[pluginName];
+    /* 新增条目时的 spec 初始值: 必填字段用 schema 默认值/占位符填充, 让新条目可直接通过校验
+     *
+     * 阶梯本体在 config_editor.js(cfgDefaultScalar / cfgDefaultForFields) —— 本处只做**插件形态分派**:
+     * spec_kind 决定取列表 / 子表单 / 叶子标量, 叶子那支连「插件 bool 初值 = "true"、字段 bool = "false"」
+     * 这个分歧也一并交给 cfgDefaultScalar 的 boolOn 开关(此前是两份代码各自写死)。 */
+    cfgDefaultForPlugin(meta) {
       if (!meta) return "";
       if (meta.spec_kind === "list") return [];
-      if (meta.spec_kind === "bool") return "true";
-      if (meta.spec_kind === "enum") return (meta.options && meta.options[0]) || "";
-      // expr = 单行表达式: 初值用占位示例(让新条目可直接通过后端校验)
-      if (meta.spec_kind === "str" || meta.spec_kind === "speed" || meta.spec_kind === "expr") {
-        return meta.placeholder || "";
+      // 非单值形态(含 object 与任何未知形态, 沿用旧口径)→ 按子字段造对象, 必填优先 + object 子段递归
+      if (!SPEC_SCALAR_KINDS.includes(meta.spec_kind)) {
+        return this.cfgDefaultForFields(meta.fields, { requiredOnly: true, recurse: true });
       }
-      const spec = {};
-      for (const f of meta.fields || []) {
-        if (!f.required) continue;
-        if (f.kind === "bool") spec[f.key] = "false";
-        else if (f.kind === "enum") spec[f.key] = (f.options && f.options[0]) || "";
-        else if (f.kind === "object") spec[f.key] = this.cfgPluginDefaultSection(f);
-        else spec[f.key] = f.placeholder || (f.default === null || f.default === undefined ? "" : String(f.default));
-      }
-      return spec;
-    },
-    cfgPluginDefaultSection(field) {
-      const section = {};
-      for (const f of field.fields || []) {
-        if (f.kind === "enum") section[f.key] = (f.options && f.options[0]) || "";
-        else section[f.key] = f.kind === "bool" ? "false" : f.placeholder || String(f.default === null || f.default === undefined ? "" : f.default);
-      }
-      return section;
+      return this.cfgDefaultScalar(
+        { kind: meta.spec_kind, options: meta.options, placeholder: meta.placeholder },
+        { boolOn: meta.spec_kind === "bool" }
+      );
     },
 
     /* ---------------------------------------------------------- 规则卡交互(启用/摘要) */

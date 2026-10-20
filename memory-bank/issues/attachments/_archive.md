@@ -4,10 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (61)
+## Open (59)
 
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
-- [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反)](../26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html) — atlas 令牌集 86 vs console/prism 89, 差集恰为 --font-ui/--font-display/--font-mono; prism 把 dialogs 族拆进 components/views 导致级联序与另两皮肤相反
 - [refactor] [前端对话框外壳三段式(mask 手势 / title 头 / actions 栏)11 处手写](../26-10-20-2231-refactor-fe-dialog-shell-template-dup.html) — 遮罩关窗手势 10 处、modal-title 头 11 处、modal-actions 栏 11 处逐字同; 管理对话框两实例同构 40 行; modal-details 行式键值两套
 - [refactor] [前端 dialogs/config_hub 三族 busy+try+toast+finally 骨架共 15 处](../26-10-20-2231-refactor-fe-dialogs-js-boilerplate-dup.html) — mgr CRUD 5 处、面板加载 5 处、POST+waitCmd+三态 toast 4 处、tm 面板 busy 5 处 —— 同一骨架抄 15 遍
@@ -72,8 +71,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (221)
+## Done (223)
 
+- [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)
 - [test] [三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步)](../26-10-20-2231-test-fe-tpl-shell-parity-guard.html) — 三 shell 除 head 资源清单外 87.5% 逐字同; manifest 已被守阵钉死相等, sprite(67 symbol)与 login 段未钉 —— 加一条断言即可

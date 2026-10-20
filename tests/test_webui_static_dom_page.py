@@ -32,10 +32,14 @@
 - test_api_cmd_result_endpoint: 命令端点返回 cmd_id; /api/cmd/{id} 查询回执(pending -> 结果)
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_frontend_password_field_ignores_autofill: 密码框的浏览器/密码管理器自动填充不得写进配置树(2026-10-20 报障「进常规就显示有改动还没保存」)—— 模板密码分支须 autocomplete=new-password 且写回走 setSecret, setSecret 须按「是否焦点」判据(未聚焦不写树并回填显示)
+- test_frontend_config_default_ladder_single_point: schema→默认值梯单点守阵(issue 26-10-20-2231 / R20-C-05) —— 三入口(可选段 cfgDefaultForField / 插件 spec / 插件 section)不得再各写一份「按 schema 形状造初值」的循环(插件侧零手搓循环、enum 首选项默认值全仓一处、旧 cfgPluginDefaultSpec/Section 零残留); 三个单点(cfgDefaultScalar/cfgDefaultForFields/cfgDefaultForPlugin)各定义一处且入口只转调; 有 node 时真跑语义电池钉行为(插件 bool="true" vs 字段 bool="false" / list=[] / enum=options[0] / str=placeholder / object 只填必填且子段按全字段口径 / 未知形态沿用子表单 / 可选段非 object=[])
 """
 import base64
+import json
 import os
 import re
+import shutil
+import subprocess
 import time
 
 from auto_qb.infra.utils import encode_group_key
@@ -1236,6 +1240,137 @@ def test_frontend_selection_size_summary_wiring():
 
     pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
     assert 'd.hint || String(d.value)' in pop, "详情行 title 必须吃 d.hint(实际占用行的口径说明入口)"
+
+
+# node 语义电池(不落盘): 加载**真实** config_editor.js + config_rules.js, 用合成 schema 跑
+# 「schema → 默认值」阶梯。钉的是**行为**而非文本 —— 单点被拆回三份、或某条口径被改错, 这里红;
+# 无 node 静默跳过(与 _scan_js_syntax_with_node 同口径, 不引入 pytest skip)。
+_NODE_CFG_DEFAULT_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+eval(fs.readFileSync(process.argv[2], "utf8"));
+const M = Object.assign({}, window.CONFIG_EDITOR.methods, window.CONFIG_RULES.methods);
+const IDX = {
+  pBool: { name: "pBool", spec_kind: "bool" },
+  pList: { name: "pList", spec_kind: "list" },
+  pEnum: { name: "pEnum", spec_kind: "enum", options: ["a", "b"] },
+  pStr: { name: "pStr", spec_kind: "str", placeholder: ">=1GiB" },
+  pObj: { name: "pObj", spec_kind: "object", fields: [
+      { key: "req_enum", kind: "enum", options: ["x", "y"], required: true },
+      { key: "req_bool", kind: "bool", required: true },
+      { key: "req_str", kind: "str", required: true, placeholder: "ph" },
+      { key: "opt_str", kind: "str" },
+      { key: "sub", kind: "object", required: true, fields: [
+          { key: "s_enum", kind: "enum", options: ["p", "q"] },
+          { key: "s_bool", kind: "bool" },
+          { key: "s_str", kind: "str", placeholder: "sph" },
+      ]},
+  ]},
+  pUnknown: { name: "pUnknown", spec_kind: "zzz", fields: [{ key: "k1", kind: "str", required: true, placeholder: "u" }] },
+};
+const ctx = Object.assign({ cfgPluginIndex: IDX }, M);
+const J = (v) => JSON.stringify(v);
+const spec = (n) => ctx.cfgDefaultForPlugin(IDX[n]);
+const objSpec = spec("pObj");
+const checks = [
+  ["插件 bool spec 初值 = \"true\"(与字段级 \"false\" 的分歧点)", spec("pBool") === "true"],
+  ["插件 list spec 初值 = []", Array.isArray(spec("pList")) && spec("pList").length === 0],
+  ["插件 enum spec 初值 = options[0]", spec("pEnum") === "a"],
+  ["插件 str spec 初值 = placeholder(不吃 default)", spec("pStr") === ">=1GiB"],
+  ["未知插件 → \"\"(不抛)", ctx.cfgDefaultForPlugin(undefined) === ""],
+  ["object spec 只填必填子字段(不含 opt_str)",
+    J(objSpec) === J({ req_enum: "x", req_bool: "false", req_str: "ph", sub: { s_enum: "p", s_bool: "false", s_str: "sph" } })],
+  ["object spec 的 object 子段按 section 口径(全字段、不再递归)",
+    J(objSpec.sub) === J({ s_enum: "p", s_bool: "false", s_str: "sph" })],
+  ["未知 spec_kind 沿用旧口径(按子表单造对象)", J(spec("pUnknown")) === J({ k1: "u" })],
+  ["可选段 object 字段: 必填优先 + object 子段不递归(走 placeholder/default)",
+    J(ctx.cfgDefaultForField({ kind: "object", fields: [
+        { key: "a", kind: "enum", options: ["m", "n"], required: true },
+        { key: "b", kind: "bool", required: true },
+        { key: "c", kind: "str" },
+        { key: "d", kind: "object", required: true, placeholder: "dph" },
+    ]})) === J({ a: "m", b: "false", d: "dph" })],
+  ["可选段非 object 字段 → [](历史口径)", J(ctx.cfgDefaultForField({ kind: "str" })) === "[]"],
+  ["字段级 bool = \"false\" / 默认值兜底走 cfgScalar / 空 options 兜底空串",
+    J(ctx.cfgDefaultForFields([
+      { key: "b", kind: "bool" }, { key: "n", kind: "int", default: 7 }, { key: "e", kind: "enum", options: [] },
+    ], {})) === J({ b: "false", n: "7", e: "" })],
+];
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_config_default_ladder_single_point():
+    """schema→默认值梯单点守阵(issue 26-10-20-2231, 台账 R20-C-05)
+
+    「按 schema 形状造初值」这条阶梯曾有三份实现(可选段 cfgDefaultForField / 插件 spec /
+    插件 section), 插件两份还互相嵌套 —— 加一种 kind 的默认值规则要三处同改, 漏一处新条目
+    就过不了后端校验或写出非法空值(默认值直接影响保存合法性)。已收敛成一条下降链
+    (cfgDefaultScalar → cfgDefaultForFields, 插件侧只做 spec_kind 分派), 本守阵钉两件事:
+
+    1. **形态**(静态): 三份手搓循环不得回潮 —— 插件侧 config_rules.js 零手搓字段循环、
+       enum 首选项(options[0])默认值全仓一处、旧 cfgPluginDefaultSpec/Section 零残留;
+       三个单点各定义一处; 两个入口(cfgDefaultForField / cfgDefaultForPlugin)体内不得再有循环,
+       只转调单点。**恒久活性探针**: 两个入口的调用点(cfgToggleSection / cfgPluginAdd)必须还在
+       —— 否则"入口被删光"会让上面所有断言恒真。
+    2. **行为**(有 node 时真跑): 合成 schema 语义电池 11 项, 把三处合并前**各自保留的分歧**
+       逐条钉死 —— 插件 bool = "true" 而字段 bool = "false" / list = [] / enum = options[0] /
+       str = placeholder / object 只填必填且 object 子段按全字段口径 / 未知形态沿用子表单 /
+       可选段非 object = []。日后谁"顺手统一"了某条口径, 这里立刻红。
+
+    无 node 的机器只跑静态那一半(静默跳过电池, 不引入 pytest skip, 基线 0 skipped)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    ed = open(os.path.join(shared, "config_editor.js"), encoding="utf-8").read()
+    ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
+
+    # 1. 三个单点各定义一处(两文件合计): 拆回多份 = 加 kind 又要多处同改
+    for fn in ("cfgDefaultScalar", "cfgDefaultForFields", "cfgDefaultForPlugin"):
+        defs = re.findall(rf"^    {fn}\(", ed + "\n" + ru, re.M)
+        assert len(defs) == 1, (
+            f"{fn} 定义 {len(defs)} 处(应为 1) —— schema→默认值梯被拆回多份, "
+            "加一种 kind 的默认值规则又要多处同改(issue 26-10-20-2231)"
+        )
+    # 2. 旧的两份手搓实现零残留(连名字一起): 留着就会有人继续往里加分支
+    for dead in ("cfgPluginDefaultSpec", "cfgPluginDefaultSection"):
+        assert dead not in ed and dead not in ru, (f"{dead} 残留 —— 旧的插件 spec/section 手搓默认值实现回潮(改回三处同构)")
+    # 3. 插件侧不再有手搓的字段循环; enum 首选项默认值单点
+    assert "for (const f of" not in ru, ("config_rules.js 又出现了手搓的字段循环 —— 造初值必须走 cfgDefaultForFields/cfgDefaultScalar")
+    assert len(re.findall(r"options\[0\]", ed + ru)) == 1, ("enum 首选项默认值(options[0])出现多处 —— 该口径的单点已漂移")
+    # 4. 两个入口只转调单点(体内不得再有循环)
+    for host, fn in (("config_editor.js", "cfgDefaultForField"), ("config_rules.js", "cfgDefaultForPlugin")):
+        text = ed if host == "config_editor.js" else ru
+        # 函数体切片: 从 `    <fn>(...) {` 起, 到同级 `    },` 止(花括号转义段单独写, 免得进 f-string)
+        m = re.search(rf"\n    {fn}\([^)]*\) " + r"\{\n(.*?)\n    \},", text, re.S)
+        assert m, f"{host} 找不到 {fn}(改名或挪走了? 同步本守阵)"
+        body = m.group(1)
+        assert "for (" not in body, f"{host}::{fn} 体内又有循环 —— 造初值必须走阶梯单点"
+        assert "cfgDefaultForFields(" in body, f"{host}::{fn} 未转调 cfgDefaultForFields(阶梯断了)"
+    assert "cfgDefaultScalar(" in ru, "config_rules.js 的插件分派未走 cfgDefaultScalar(叶子阶梯)"
+    # 5. 恒久活性探针: 入口的调用点还在(删光入口会让上面 1-4 恒真)
+    assert "this.cfgDefaultForField(field)" in ed, \
+        "config_editor.js::cfgToggleSection 未调 cfgDefaultForField(可选段初值入口断了? 同步本守阵)"
+    assert "this.cfgDefaultForPlugin(this.cfgPluginIndex[" in ru, \
+        "config_rules.js::cfgPluginAdd 未调 cfgDefaultForPlugin(插件 spec 初值入口断了? 同步本守阵)"
+
+    # 6. 有 node 时真跑语义电池(行为面, 不只是文本)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [
+                node, "-e", _NODE_CFG_DEFAULT_PROBE,
+                os.path.join(shared, "config_editor.js"),
+                os.path.join(shared, "config_rules.js")
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, f"默认值梯 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
+        res = json.loads(proc.stdout.strip())
+        assert res["total"] >= 11, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert not res["failed"], ("schema→默认值梯行为漂移: " + "、".join(res["failed"]) + " —— 三处合并前各自保留的口径被改掉了(新条目可能过不了后端校验)")
 
 
 def test_api_group_commands_enqueue(web_env):

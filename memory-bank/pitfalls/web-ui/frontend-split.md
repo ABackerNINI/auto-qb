@@ -1,7 +1,7 @@
 # 拆分与统一后的前端守阵口径
 
 > 摘要: 模板/样式/内核三层拆分 + 单一语义模板收敛(2026-09-27)后, 找前端内容与加守阵的固定口径 —— 一律读「聚合」, 模板级 UI 差异只走「差异口」, data/生命周期不许进 app.mixin。
-> 触发: 改守阵, 找模板内容, 加断言, 两套 UI 差异, 拆分, 聚合读法, 差异口, ui-diff, 根选项, app.mixin, hub-field, boot.js, 冒烟等价, 搬迁方法体, 拆文件守阵假红, v-if 链跨分片, 新分区, settings.html 上限
+> 触发: 改守阵, 找模板内容, 加断言, 两套 UI 差异, 拆分, 聚合读法, 差异口, ui-diff, 根选项, app.mixin, hub-field, boot.js, 冒烟等价, 搬迁方法体, 拆文件守阵假红, v-if 链跨分片, 新分区, settings.html 上限, 默认值梯, cfgDefaultScalar, cfgDefaultForFields, cfgDefaultForPlugin, 新增条目初值
 
 **Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md
 
@@ -24,6 +24,14 @@
 - **判别**: 三 shell 除 head 资源清单外逐字同约 87.5%(manifest 74 行 / sprite 80 行 / `#app`+login 31 行), 但是**三份物理拷贝** —— 漏改一份的表现是"某皮肤下该图标空白且无任何报错"(登录遮罩则是首屏第一眼、在任何 JS 之前渲染的块)。合并唯一路径是后端渲染时注入, 会让 `index.html` 失去"可直接静态打开"的能力(测试亦直接读盘), 属**能力回退** —— 定案是"不合并, 补齐守阵"(R23-C, 台账 `tasks/26-10-20-frontend-dup-code-audit.md`)。
 - **处置**: `tests/test_webui_static_skins.py::test_frontend_shell_sprite_login_parity` —— ①sprite 段锚点切片(`<svg class="icon-sprite"` 起配套 `</svg>` 止)三份**逐字相等**, 另钉 symbol 数 ≥40 下限(实测 67): sprite 若被整体外提成共享文件, 三份会同时消失、相等断言恒真, 下限逼那种迁移显式改守阵; ②`#app`+login 段(`<div id="app"` 起 `tpl-manifest` 前止)**归一 HTML 注释与空行后**相等 —— console 合法多一行皮肤说明注释(§现象已记"仅差 1 行注释"), 照"逐字相等"字面执行会恒红, 故注释不参与比对(注释不渲染), 标记/属性/文本 drift 一律红。失败信息带首个差异行(行号 + 两侧原文)并提示"改图标/改登录遮罩须三皮肤同步"。
 - **守阵**: `test_frontend_shell_sprite_login_parity`(issue 26-10-20-2231, 2026-10-21 认领并修; 红验三类突变: console sprite 单边漂移红 / prism login 标记漂移红 / prism login 仅注释漂移绿, 突变精确反向还原后三份 shell `git diff` 零改动)。
+- **复发**: 0
+
+### schema→默认值梯单点(cfgDefaultScalar / cfgDefaultForFields / cfgDefaultForPlugin)
+
+- **触发**: 新增/改一种字段 `kind`(或插件 `spec_kind`)的默认值规则; 动「新增条目 / 打开可选段」时填进去的初始值。
+- **判别**: 这条阶梯曾有三份实现且互相嵌套(可选段 `cfgDefaultForField` / 插件 spec / 插件 section)—— 加一种 kind 要三处同改, 漏一处新条目就过不了后端校验或写出非法空值(默认值直接影响保存合法性)。合并时**不能**顺手统一口径: 三处各留了刻意的分歧 —— 插件 bool 初值 `"true"`(新动作默认开) vs 字段 bool `"false"`; object spec 只填必填而它的 object 子段按**全字段**口径; 可选段非 object 字段历史口径是 `[]`; 未知 `spec_kind` 沿用子表单。
+- **处置**: 只剩一条下降链 —— `cfgDefaultScalar(node, opts)`(叶子 → 标量)与 `cfgDefaultForFields(fields, opts)`(字段清单 → 对象), 三处的差异退化成 opts 三个开关 `requiredOnly` / `recurse` / `boolOn`; 插件形态分派 `cfgDefaultForPlugin(meta)` 只按 `spec_kind` 选 list / 子表单 / 叶子(取值域单点 `SPEC_SCALAR_KINDS`, 与后端 `Plugin.spec_kind` 对应)。改默认值规则 = 只改 `cfgDefaultScalar` 一处。
+- **守阵**: `test_frontend_config_default_ladder_single_point`(issue 26-10-20-2231, 2026-10-21 认领并修)—— 形态六查(三单点各定义一处 / 旧 `cfgPluginDefaultSpec|Section` 零残留 / 插件侧零手搓字段循环 / `options[0]` 全仓一处 / 两入口体内无循环只转调 / 恒久活性探针钉调用点) + 有 node 时真跑 11 项语义电池(把上述分歧逐条钉死)。合并当轮做了**行为等价性实证**: 真实 `schema_payload()` 下 25 个插件 spec 初值 + 18 个 object 段初值, 改动前后两份 JSON `diff` 为空。
 - **复发**: 0
 
 ### data/computed/watch/生命周期不许进 app.mixin —— 根选项专属
