@@ -21,6 +21,17 @@ logger = logging.getLogger("auto_qb.web")
 WEB_STOP_TIMEOUT = 5.0
 WEB_START_TIMEOUT = 5.0
 
+# h11「未完成事件」(请求行+全部头) 的缓冲上限。缺省 16KB(h11 DEFAULT_MAX_INCOMPLETE_EVENT_SIZE)
+# 会拦掉组级路由的真实请求: 组 key = base64url(组路径+全组文件相对路径)(infra.utils.encode_group_key),
+# 随请求行走(/api/groups/{key}/resume 等全部组级端点 + 组流量图), 大组(整季上千文件、中文长路径)
+# 轻松超 16KB。h11 判非法的确切条件是「事件停在未完成态(NEED_DATA)时缓冲已超上限」—— 头一次性
+# 完整到达时不触发(不超单次读尺寸就能解析), 跨多次读且头未完即超限才拦, 所以症状**间歇**: 大组
+# 「启动整组/暂停/删除/组流量图」时好时坏, 日志里 "Invalid HTTP request received." + 同一笔请求的
+# 残留数据撞出 send_400 路径的 MUST_CLOSE 竞态(asyncio ERROR traceback, 2026-10-19 真机实报)。
+# 放宽到 1MiB: 覆盖浏览器可发出的合法请求行(Chromium URL 上限 2MiB 内), 传输层缓冲上限的
+# DoS 防护语义保留; uvicorn 0.53.0 原生透传该参数给 h11.Connection。
+H11_MAX_INCOMPLETE_EVENT_SIZE = 1024 * 1024
+
 # 网络波动噪音的节流窗口(秒): 窗口内只记首条, 末尾附被抑制条数
 NET_NOISE_WINDOW = 60.0
 
@@ -174,6 +185,9 @@ def start_web_server(manager) -> WebServerHandle:
         # X-Forwarded-For 会改写 request.client.host, XFF 伪造成 loopback 可造成
         # skip_local_verify 免鉴权误判(issue 26-09-21-1408 B-03)
         proxy_headers=False,
+        # 组 key 随请求行走, h11 缺省 16KB 未完成事件上限会间歇性拦掉大组命令 —— 见
+        # H11_MAX_INCOMPLETE_EVENT_SIZE 注(2026-10-19「WEBUI 启动整组报错」)
+        h11_max_incomplete_event_size=H11_MAX_INCOMPLETE_EVENT_SIZE,
     )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=_run_server, args=(server, ), name="auto-qb-web", daemon=True)

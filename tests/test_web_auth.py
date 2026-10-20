@@ -13,6 +13,8 @@
 - test_sse_ticket_flow: SSE 一次性票据(B-01) —— 带鉴权 POST 换票, 单次消费/过期无效/重放无效/无凭证 401/满额拒签(签发层回空串 + 路由层转 503)
 - test_sse_ticket_in_require_token_and_query_token_removed: require_token 收 ?ticket=(仅限 /api/events, 取即删); ?token 查询串兜底已删除(密钥正确也不再是凭证)
 - test_start_web_server_config_disables_proxy_headers: uvicorn Config 显式 proxy_headers=False(B-03, 防反代 XFF 改写 client.host 造成免鉴权误判)
+- test_start_web_server_config_raises_h11_incomplete_event_cap: uvicorn Config 显式调大 h11 未完成事件上限(组级路由请求行携带整组 key, 大组超 16KB 缺省即被传输层判非法 -> 「启动整组报错」)
+- test_oversized_request_line_reaches_app_not_transport_400: 真实 uvicorn 下 >16KB 请求行(组 key 真实形态)必须打到应用层, 不得被传输层判 "Invalid HTTP request received." 回裸 400(分片到达: 头停在未完成态且缓冲已超 16KB —— h11 判非法的确切条件, 一次性完整到达不触发)
 - test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token 通道不得回潮
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
 """
@@ -422,6 +424,97 @@ def test_start_web_server_config_disables_proxy_headers(web_env, monkeypatch):
     handle = lifecycle.start_web_server(web_env[0])
     assert handle.started
     assert captured["config"].proxy_headers is False
+
+
+def test_start_web_server_config_raises_h11_incomplete_event_cap(web_env, monkeypatch):
+    """uvicorn Config 显式调大 h11 未完成事件上限(2026-10-19「启动整组报错」守阵)
+
+    组级路由(/api/groups/{key}/resume 等)把整组 key(base64url(组路径+全组文件相对路径),
+    encode_group_key)放进请求行; 大组(整季上千文件、中文长路径)超出 h11 缺省 16KB 上限后,
+    请求在传输层被判 "Invalid HTTP request received." 回 400 —— 到不了 FastAPI。
+    装配点断言(同 proxy_headers 的 B-03 守阵): 必须显式放宽且大于 h11 缺省。
+    """
+    from auto_qb.webui.server import lifecycle
+
+    _H11_DEFAULT_MAX_INCOMPLETE_EVENT_SIZE = 16 * 1024  # h11._connection.DEFAULT_MAX_INCOMPLETE_EVENT_SIZE(缺省值, 不咬私有模块路径)
+
+    captured = {}
+
+    class _FakeServer:
+        def __init__(self, config):
+            captured["config"] = config
+            self.started = True
+            self.should_exit = False
+
+        def run(self):
+            pass
+
+    monkeypatch.setattr(lifecycle.uvicorn, "Server", _FakeServer)
+    handle = lifecycle.start_web_server(web_env[0])
+    assert handle.started
+    assert captured["config"].h11_max_incomplete_event_size == lifecycle.H11_MAX_INCOMPLETE_EVENT_SIZE
+    assert captured["config"].h11_max_incomplete_event_size > _H11_DEFAULT_MAX_INCOMPLETE_EVENT_SIZE, \
+        "必须显式放宽(大于 h11 缺省 16KB), 否则大组 key 依旧被传输层拦下"
+
+
+def test_oversized_request_line_reaches_app_not_transport_400(web_env):
+    """真实 uvicorn 下, 超 h11 缺省「未完成事件」上限(16KB)的请求头必须打到应用层(2026-10-19「启动整组报错」守阵)
+
+    组级路由把整组 key(base64url(组路径+全组文件相对路径), encode_group_key)放进请求行,
+    大组(整季上千文件、中文长路径)轻松超 16KB。h11 判非法的**确切条件**是: 事件停在未完成态
+    (NEED_DATA)时缓冲已超上限 —— 所以头一次性完整到达时不触发(实测 20KB 一发入魂能解析),
+    跨多次读且头未完即超限才拦("Receive buffer too long" → uvicorn 记 "Invalid HTTP request
+    received." 回裸 400); 用户真机正是 >60KB 的头分片到达 → 拦截 + 同连接残留数据撞出
+    send_400 路径的 MUST_CLOSE 竞态(日志 2×WARNING + 1×asyncio ERROR), 且因分片时序而间歇。
+    守阵: 经 start_web_server 走生产装配起真服务, 头分两片送(首片 17KB 未完)—— 响应必须是
+    应用层裁决(未匹配的 /api 路径 → FastAPI 404), 且不含传输层 400 的特征串。
+    """
+    import socket
+    import time
+
+    from auto_qb.webui import start_web_server, stop_web_server
+
+    def _free_port() -> int:
+        import socket as _s
+
+        with _s.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            return sock.getsockname()[1]
+
+    mgr, _client = web_env
+    mgr.config.web.port = _free_port()
+    h = start_web_server(mgr)
+    try:
+        assert h.started, "服务应监听成功"
+        # 首片: 请求行未写完就超 h11 缺省 16KB(17409 > 16384), 头停在未完成态; 隔开两读复现真机分片时序
+        head1 = b"GET /api/" + b"a" * 17400
+        head2 = b"a" * 3000 + b" HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+        with socket.create_connection(("127.0.0.1", mgr.config.web.port), timeout=5) as s:
+            s.sendall(head1)
+            time.sleep(0.15)
+            try:
+                s.sendall(head2)
+            except OSError:
+                pass  # 缺省装配下首片已被判非法并关连接, 二次写被 RST 是预期内的红验现场
+            s.settimeout(5)
+            resp = b""
+            try:
+                while True:
+                    chunk = s.recv(65536)
+                    if not chunk:
+                        break
+                    resp += chunk
+            except OSError:
+                pass  # 超时兜底: 已读到的部分足够判定
+        assert resp, "应收到响应(请求被传输层吞掉 = 本守阵要拦的回归)"
+        assert b"Invalid HTTP request received." not in resp, \
+            "传输层 400 特征串出现 = 请求没到应用层(见 lifecycle.H11_MAX_INCOMPLETE_EVENT_SIZE)"
+        status = int(resp.split(b" ", 2)[1])
+        assert status == 404, \
+            f"未匹配的 /api 路径应由应用层回 404(实收 {status}) = 传输层判非法回归"
+    finally:
+        if h.thread.is_alive():
+            stop_web_server(h)
 
 
 def test_frontend_sse_ticket_wiring():
