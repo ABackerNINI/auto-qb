@@ -10,6 +10,8 @@
   uninstall-autostart             三平台自启幂等卸载 (S5)
   endpoint                        读发现指针打印当前端点 host:port / token_path / data_dir
                                   (S13/D9: 端口随机后用户无从得知端口, 此命令回告)
+  claim [--data-dir DIR]          人工易主唯一通道: 重登记本安装为正主 (计划 §03/D5;
+                                  工具运行中或数据归属不符则拒绝, 非零退出)
 """
 
 from __future__ import annotations
@@ -29,23 +31,28 @@ from gtm.identity import (
     DeferredNote,
     Identity,
     IdentityError,
+    PrimaryRecord,
     clear_deferred,
     ensure_data_ownership,
     fill_primary_data_dir,
     load_or_create_install_id,
+    primary_path,
     relay_launch,
     resolve_startup,
     write_deferred,
+    write_primary,
 )
 from gtm.notifier import Notifier
 from gtm.sampler import AdapterFilter, Sampler
 from gtm.server import ControlServer, TokenManager
 from gtm.storage import (
     ENDPOINT_SCHEMA,
+    SingleInstanceLock,
     SingleInstanceLockError,
     Storage,
     default_data_dir,
     endpoint_path,
+    instance_lock_path,
     migrate_legacy_data_dir,
 )
 
@@ -88,6 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     uninstall = sub.add_parser("uninstall-autostart", help="卸载开机自启 (三平台, 幂等)")
     sub.add_parser("endpoint", help="读发现指针打印当前端点 (host:port / token_path / data_dir; 端口随机后手工调试用)")
+    claim = sub.add_parser(
+        "claim",
+        help="重登记本安装为整机正主 (唯一人工易主通道; 工具运行中/数据归属不符则拒绝)",
+    )
+    claim.add_argument(
+        "--data-dir",
+        default=None,
+        metavar="DIR",
+        help=f"重登记指向的数据目录; 默认 {default_data_dir()!r} 或环境变量 GLOBAL_TRAFFIC_MONITOR_DATA_DIR",
+    )
     return parser
 
 
@@ -410,6 +427,65 @@ def cmd_endpoint(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_claim(args: argparse.Namespace) -> int:
+    """claim: 唯一人工易主通道 (计划 §03 / D5) —— 把本安装重登记为正主.
+
+    护栏顺序 (D5, 与启动矩阵共用判据, 无第二套):
+      1. 非阻塞试单实例锁: 工具正在跑 -> 拒绝 (提示先停止; 运行中的正主本就持锁,
+         此时重登记会与它的启动路径对写记录);
+      2. 数据归属: data-id 异 -> 拒绝 (跨版本接管同启动矩阵口径, 删 id 是显式人工);
+      3. 原子重写 primary.json (id/install_path/data_dir 三项全用自己的事实) +
+         清让位注记 (权威时刻) -> 释放锁, 退出 0.
+    输出一人读结论行; 拒绝原因进 stderr (退出码非 0), 供 auto-qb 原样展示。
+    """
+    logging.basicConfig(
+        stream=sys.stderr,
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+    try:
+        identity = load_or_create_install_id()
+    except IdentityError as e:
+        print(f"global-traffic-monitor: {e}", file=sys.stderr)
+        return 1
+    # 1) 非阻塞试锁 (timeout=0): 争则拒, 不排队不等待
+    lock = SingleInstanceLock(instance_lock_path())
+    try:
+        lock.acquire()
+    except SingleInstanceLockError as e:
+        print(f"global-traffic-monitor: 工具正在运行, 请先停止再重登记 ({e})", file=sys.stderr)
+        return 1
+    try:
+        # 2) 数据归属 (与 cmd_run 同一 ensure_data_ownership, 拒绝跨版本接管)
+        data_dir = _resolve_data_dir(args.data_dir)
+        try:
+            ensure_data_ownership(data_dir, identity)
+        except IdentityError as e:
+            print(f"global-traffic-monitor: {e}", file=sys.stderr)
+            return 1
+        # 3) 原子重写记录 + 清注记 (记录损坏时本条路径同时也是修复入口)
+        try:
+            write_primary(
+                PrimaryRecord(
+                    id=identity.install_id,
+                    install_path=identity.install_root,
+                    data_dir=data_dir,
+                    version=__version__,
+                )
+            )
+        except OSError as e:
+            print(f"global-traffic-monitor: 重登记失败 (记录写入 {primary_path()}): {e}", file=sys.stderr)
+            return 1
+        clear_deferred()
+        print(
+            f"global-traffic-monitor: 已重登记为正主: install={identity.install_root} "
+            f"data={data_dir} (id={identity.install_id})"
+        )
+        return 0
+    finally:
+        lock.release()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.command == "run":
@@ -420,6 +496,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_autostart(args, install=False)
     if args.command == "endpoint":
         return cmd_endpoint(args)
+    if args.command == "claim":
+        return cmd_claim(args)
     # 无子命令: 打印帮助
     build_parser().print_help()
     return 0

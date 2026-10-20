@@ -30,6 +30,8 @@
   且返回启动器路径; 启动器缺失 -> None 且不 spawn; spawn 抛 OSError -> None
 - cmd_run 集成 (退出码 + 注记): 安装 ID 不可写 -> 1; refuse -> 1 + deferred
   reason=refused; relay -> 0 + reason=relayed + _spawn 已呼叫
+- cmd_claim 集成 (人工易主通道, D5): 成功 -> 记录三项全换成本安装事实 + data-id
+  认领 + 清注记; 工具在跑 (锁争) -> 拒绝且不碰记录; data-id 异 -> 拒绝且不碰记录
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ from pathlib import Path
 
 import pytest
 
+from gtm.__main__ import cmd_claim, cmd_run
 from gtm.identity import (
     DeferredNote,
     Identity,
@@ -57,7 +60,7 @@ from gtm.identity import (
     resolve_startup,
     write_deferred,
 )
-from gtm.__main__ import cmd_run
+from gtm.storage import SingleInstanceLock, instance_lock_path
 
 LAUNCHER_NAME = "launch.cmd" if os.name == "nt" else "launch.sh"
 
@@ -74,9 +77,14 @@ def fake_install(tmp_path: Path, name: str, install_id: str | None = None) -> st
 
 
 def patch_paths(monkeypatch, tmp_path: Path, install_root: str, pointer: str) -> None:
-    """重定向 gtm.identity 的两个路径单点 (安装根 + 指针目录)."""
+    """重定向路径单点: gtm.identity (安装根 + 记录/注记) 与 gtm.storage (claim 的单实例锁).
+
+    两个命名空间各持一份 pointer_dir 引用 (identity 与 storage 各自 import), 必须同址
+    重定向, 否则 claim 的锁与记录会落在不同目录。
+    """
     monkeypatch.setattr("gtm.identity.resolve_tool_root", lambda: install_root)
     monkeypatch.setattr("gtm.identity.pointer_dir", lambda: pointer)
+    monkeypatch.setattr("gtm.storage.pointer_dir", lambda: pointer)
 
 
 def write_primary_file(pointer: str, *, id_: str, install_path: str, data_dir: str = "", version: str = "9.9.9") -> None:
@@ -488,3 +496,52 @@ def test_cmd_run_identity_error_exits_1(tmp_path, monkeypatch):
     patch_paths(monkeypatch, tmp_path, root, ptr)
     assert cmd_run(run_args()) == 1
     assert not Path(ptr, "deferred.json").exists()  # 身份层故障不是让位, 不写注记
+
+
+# ---------------- cmd_claim 集成 (人工易主通道, D5) ----------------
+
+def claim_args(data_dir: str) -> argparse.Namespace:
+    return argparse.Namespace(command="claim", data_dir=data_dir, autostart=False)
+
+
+def test_cmd_claim_success_rewrites_record_and_clears_note(tmp_path, monkeypatch):
+    root_a = fake_install(tmp_path, "a", install_id="id-a")  # 原正主 (另一安装)
+    root_b = fake_install(tmp_path, "b", install_id="id-b")  # 本安装, 易主过来
+    ptr = str(tmp_path / "ptr")
+    write_primary_file(ptr, id_="id-a", install_path=root_a)
+    write_deferred(DeferredNote(reason="relayed", from_install=root_b, target_install=root_a))
+    patch_paths(monkeypatch, tmp_path, root_b, ptr)
+    data_dir = str(tmp_path / "data")
+    assert cmd_claim(claim_args(data_dir)) == 0
+    # 记录三项全换成本安装事实
+    record = read_primary()
+    assert record.id == "id-b" and record.install_path == root_b and record.data_dir == data_dir
+    # data-id 同时认领 (与启动矩阵共用的归属判据)
+    assert (Path(data_dir) / "tool-id").read_text(encoding="utf-8").strip() == "id-b"
+    # claim 成功清注记 (权威时刻)
+    assert not Path(ptr, "deferred.json").exists()
+
+
+def test_cmd_claim_refused_when_tool_running(tmp_path, monkeypatch):
+    root_b = fake_install(tmp_path, "b", install_id="id-b")
+    ptr = str(tmp_path / "ptr")
+    patch_paths(monkeypatch, tmp_path, root_b, ptr)
+    # 先占住单实例锁 (模拟工具正在运行)
+    lock = SingleInstanceLock(instance_lock_path())
+    lock.acquire()
+    try:
+        assert cmd_claim(claim_args(str(tmp_path / "data"))) == 1
+        assert read_primary() is None  # 拒绝且不碰记录
+    finally:
+        lock.release()
+
+
+def test_cmd_claim_refused_when_data_belongs_to_other_install(tmp_path, monkeypatch):
+    root_b = fake_install(tmp_path, "b", install_id="id-b")
+    ptr = str(tmp_path / "ptr")
+    patch_paths(monkeypatch, tmp_path, root_b, ptr)
+    data_dir = str(tmp_path / "data")
+    Path(data_dir).mkdir(parents=True, exist_ok=True)
+    (Path(data_dir) / "tool-id").write_text("id-other\n", encoding="utf-8")
+    assert cmd_claim(claim_args(data_dir)) == 1
+    assert read_primary() is None  # 拒绝且不碰记录

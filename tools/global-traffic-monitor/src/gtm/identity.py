@@ -53,6 +53,9 @@ ID_FILE_NAME = "tool-id"
 PRIMARY_SCHEMA = 1
 #: 注记 schema 版本 (同上)
 DEFERRED_SCHEMA = 1
+#: claim 启动器文件名 (D4/D19): 安装内第二启动器, 零参数人工易主通道 (claim 子命令)
+CLAIM_LAUNCHER_WINDOWS = "claim.cmd"
+CLAIM_LAUNCHER_POSIX = "claim.sh"
 
 
 class IdentityError(RuntimeError):

@@ -508,18 +508,31 @@ def _module_constants(path):
 
 
 def test_pointer_constants_mirror_tool_side():
-    """指针目录名 / 文件名 / schema 版本必须与工具侧 gtm/storage.py 同值
+    """指针目录名 / 文件名 / schema 版本必须与工具侧 gtm/storage.py 同值;
+    正主注册常量(记录/注记/id/claim 启动器)与 gtm/identity.py 同值(计划 26-10-20-1316 §03)
 
     工具是独立包(自带 venv), auto-qb **不 import 它**, 两侧各持一份镜像常量 —— 只改一边的
     后果是「工具在跑、auto-qb 永远发现不了」(或反过来读到旧格式瞎猜字段)。D6 已把指针定为
     唯一事实源, 这份镜像契约因此值得一条守阵。
     """
-    tool = _module_constants(_REPO_ROOT / "tools" / "global-traffic-monitor" / "src" / "gtm" / "storage.py")
+    tool_src = _REPO_ROOT / "tools" / "global-traffic-monitor" / "src" / "gtm"
+    tool = _module_constants(tool_src / "storage.py")
     assert tool["POINTER_DIR_NAME"] == agent.POINTER_DIR_NAME
     assert tool["ENDPOINT_FILE_NAME"] == agent.ENDPOINT_FILE_NAME
     assert tool["ENDPOINT_SCHEMA"] == agent.ENDPOINT_SCHEMA
     # D16: 用户可见面用全称(目录名与 CLI 同名), 包名 gtm 不外泄到指针路径
     assert agent.POINTER_DIR_NAME == "global-traffic-monitor"
+    # 正主注册(§03): auto-qb 只读注记展示/定位 claim 入口, 记录本身零读写(D7/D8)
+    identity = _module_constants(tool_src / "identity.py")
+    assert identity["PRIMARY_FILE_NAME"] == agent.PRIMARY_FILE_NAME
+    assert identity["DEFERRED_FILE_NAME"] == agent.DEFERRED_FILE_NAME
+    assert identity["DEFERRED_SCHEMA"] == agent.DEFERRED_SCHEMA
+    assert identity["ID_FILE_NAME"] == agent.ID_FILE_NAME
+    assert identity["CLAIM_LAUNCHER_WINDOWS"] == agent.CLAIM_LAUNCHER_WINDOWS
+    assert identity["CLAIM_LAUNCHER_POSIX"] == agent.CLAIM_LAUNCHER_POSIX
+    # claim 是 launch 之外的第二启动器(D4), 文件名不得与 D19 启动器族撞车
+    assert agent.CLAIM_LAUNCHER_WINDOWS != agent._LAUNCHER_WINDOWS
+    assert agent.CLAIM_LAUNCHER_POSIX != agent._LAUNCHER_POSIX
 
 
 # ---------- 守阵: 工具运行期目录不得污染 git status (§08 判据 8) ----------
@@ -531,7 +544,12 @@ def test_tool_runtime_dirs_are_gitignored():
     这两条是 S14 补的忽略项; 删掉或改路径的后果不是测试红, 而是运行中的工具把
     history_traffic.dat 与临时物写进 git status —— 踩本仓「树脏即停」的 git 纪律红线。
     判据直接读 .gitignore 文本(不起 git 进程: tests/sidefx.py 的 POPEN 白名单不放行)。
+    tool-id 是正主注册的安装 ID(计划 26-10-20-1316 §03): 仓库内安装根首次启动即生成。
     """
     lines = {ln.strip() for ln in (_REPO_ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()}
-    for entry in ("tools/global-traffic-monitor/data/", "tools/global-traffic-monitor/run/"):
+    for entry in (
+        "tools/global-traffic-monitor/data/",
+        "tools/global-traffic-monitor/run/",
+        "tools/global-traffic-monitor/tool-id",
+    ):
         assert entry in lines, f".gitignore 缺运行期目录忽略项: {entry}"

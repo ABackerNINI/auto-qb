@@ -40,6 +40,16 @@ ENDPOINT_FILE_NAME = "endpoint.json"
 #: 指针格式版本(plan §05): 读到未知值只告警不猜字段(D6) —— 不改写、不臆断
 ENDPOINT_SCHEMA = 1
 
+#: 正主注册镜像常量(计划 26-10-20-1316 §03): 与工具侧 gtm.identity 同源 —— 镜像而非 import
+#: (D7/D8: auto-qb 零记录读写; 实际只消费 deferred.json(只读展示)与 claim 启动器(定位执行),
+#:  其余常量钉住契约完整性, 由 test_pointer_constants_mirror_tool_side 同址核对)
+PRIMARY_FILE_NAME = "primary.json"
+DEFERRED_FILE_NAME = "deferred.json"
+DEFERRED_SCHEMA = 1
+ID_FILE_NAME = "tool-id"
+CLAIM_LAUNCHER_WINDOWS = "claim.cmd"
+CLAIM_LAUNCHER_POSIX = "claim.sh"
+
 #: 工具根目录的仓库内默认位置(D10 ②): tool_dir 留空时的兜底(源码态)
 _DEFAULT_TOOL_DIR_PARTS = ("tools", "global-traffic-monitor")
 
