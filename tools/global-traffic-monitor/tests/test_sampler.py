@@ -472,3 +472,69 @@ def test_sample_result_is_frozen_dataclass():
         assert type(exc).__name__ == "FrozenInstanceError"
     else:
         raise AssertionError("SampleResult 应为 frozen dataclass")
+
+
+# ---- 生产读数与边角出口 (26-10-21 覆盖率门禁 P1-T1.3) ----
+
+
+def test_select_without_stats_mapping():
+    """stats 整段缺失 (psutil 未给状态): 按空映射处理, 不因 None 崩 (等价于全 up)."""
+    adapter_filter = AdapterFilter()
+    counters = {"eth0": nic(100, 200), "lo": nic(1, 2)}
+    selected = adapter_filter.select(counters)  # 不传 stats
+    assert list(selected) == ["eth0"]  # loopback 仍被默认开关排除
+
+
+def test_production_readers_delegate_to_psutil(monkeypatch):
+    """生产读数单点 (默认注入点): read_counters/read_stats 直接转发 psutil 的同名调用."""
+    import gtm.sampler as sampler_mod
+
+    seen: list[str] = []
+
+    def fake_counters(pernic: bool = False):
+        seen.append(f"net_io_counters(pernic={pernic})")
+        return {"eth0": nic(1, 2)}
+
+    def fake_stats():
+        seen.append("net_if_stats")
+        return {"eth0": SimpleNamespace(isup=True)}
+
+    monkeypatch.setattr(sampler_mod.psutil, "net_io_counters", fake_counters)
+    monkeypatch.setattr(sampler_mod.psutil, "net_if_stats", fake_stats)
+    assert list(sampler_mod.read_counters()) == ["eth0"]
+    assert list(sampler_mod.read_stats()) == ["eth0"]
+    assert seen == ["net_io_counters(pernic=True)", "net_if_stats"]
+
+
+def test_restore_day_none_but_baseline_present_is_corrupt():
+    """day 为 None 却留着基线字段: 自相矛盾的快照按损坏处理 (不猜哪一半是真的)."""
+    sampler, _, _ = make_sampler()
+    warns = sampler.restore(
+        {
+            "version": 1,
+            "day": None,
+            "day_up_bytes": 0,
+            "day_down_bytes": 0,
+            "last_up_bytes": 5,
+            "last_down_bytes": 5,
+        }
+    )
+    assert len(warns) == 1 and "day 为 None 但基线字段有值" in warns[0]
+    assert sampler.day is None and not sampler.has_baseline
+
+
+def test_restore_negative_day_bytes_is_corrupt():
+    """当日累计为负: 按损坏降级 (负数只可能来自坏盘/坏移植, 不许进累计)."""
+    sampler, _, _ = make_sampler()
+    warns = sampler.restore(
+        {
+            "version": 1,
+            "day": DAY.isoformat(),
+            "day_up_bytes": -1,
+            "day_down_bytes": 10,
+            "last_up_bytes": 1,
+            "last_down_bytes": 1,
+        }
+    )
+    assert len(warns) == 1 and "当日累计为负" in warns[0]
+    assert sampler.day is None

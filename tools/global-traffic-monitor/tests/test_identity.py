@@ -39,15 +39,18 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from pathlib import Path
 
 import pytest
 
 from gtm.__main__ import cmd_claim, cmd_run
 from gtm.identity import (
+    Decision,
     DeferredNote,
     Identity,
     IdentityError,
+    PrimaryRecord,
     PrimaryRecordExists,
     claim_primary,
     clear_deferred,
@@ -64,8 +67,8 @@ from gtm.storage import SingleInstanceLock, instance_lock_path
 
 LAUNCHER_NAME = "launch.cmd" if os.name == "nt" else "launch.sh"
 
-
 # ---------------- hermetic 助手 ----------------
+
 
 def fake_install(tmp_path: Path, name: str, install_id: str | None = None) -> str:
     """造一个假安装根 (realpath 归一, 与 read_primary 的归一口径一致); 可选预置 tool-id."""
@@ -87,7 +90,9 @@ def patch_paths(monkeypatch, tmp_path: Path, install_root: str, pointer: str) ->
     monkeypatch.setattr("gtm.storage.pointer_dir", lambda: pointer)
 
 
-def write_primary_file(pointer: str, *, id_: str, install_path: str, data_dir: str = "", version: str = "9.9.9") -> None:
+def write_primary_file(
+    pointer: str, *, id_: str, install_path: str, data_dir: str = "", version: str = "9.9.9"
+) -> None:
     """直接往指针目录写一份 primary.json (绕过认领, 造既有事实)."""
     payload = {
         "schema": 1,
@@ -109,6 +114,7 @@ def run_args() -> argparse.Namespace:
 
 
 # ---------------- 安装 ID ----------------
+
 
 def test_install_id_created_then_loaded_idempotent(tmp_path, monkeypatch):
     root = fake_install(tmp_path, "inst")
@@ -150,6 +156,7 @@ def test_install_id_write_failure_raises(tmp_path, monkeypatch):
 
 # ---------------- 正主记录读 ----------------
 
+
 def test_read_primary_missing_returns_none(tmp_path, monkeypatch):
     patch_paths(monkeypatch, tmp_path, fake_install(tmp_path, "inst"), str(tmp_path / "ptr"))
     assert read_primary() is None
@@ -168,13 +175,16 @@ def test_read_primary_valid(tmp_path, monkeypatch):
     assert record.version == "1.2.3"
 
 
-@pytest.mark.parametrize("text", [
-    "{ not json",                        # 坏 JSON
-    '{"schema": 999, "id": "x", "install_path": "/p"}',  # schema 未知
-    '["not", "an", "object"]',           # 顶层非对象
-    '{"schema": 1, "install_path": "/p"}',  # 缺 id
-    '{"schema": 1, "id": "x"}',          # 缺 install_path
-])
+@pytest.mark.parametrize(
+    "text",
+    [
+        "{ not json",  # 坏 JSON
+        '{"schema": 999, "id": "x", "install_path": "/p"}',  # schema 未知
+        '["not", "an", "object"]',  # 顶层非对象
+        '{"schema": 1, "install_path": "/p"}',  # 缺 id
+        '{"schema": 1, "id": "x"}',  # 缺 install_path
+    ]
+)
 def test_read_primary_degraded_to_none(tmp_path, monkeypatch, text):
     ptr = str(tmp_path / "ptr")
     Path(ptr).mkdir(parents=True, exist_ok=True)
@@ -184,6 +194,7 @@ def test_read_primary_degraded_to_none(tmp_path, monkeypatch, text):
 
 
 # ---------------- 认领 ----------------
+
 
 def test_claim_primary_creates_record(tmp_path, monkeypatch):
     root = fake_install(tmp_path, "inst")
@@ -225,6 +236,7 @@ def test_claim_primary_write_failure_leaves_no_record(tmp_path, monkeypatch):
 
 # ---------------- data_dir 补写 ----------------
 
+
 def test_fill_primary_data_dir_only_when_own_and_empty(tmp_path, monkeypatch):
     root = fake_install(tmp_path, "inst")
     ptr = str(tmp_path / "ptr")
@@ -255,6 +267,7 @@ def test_fill_primary_data_dir_skips_foreign_or_missing(tmp_path, monkeypatch):
 
 # ---------------- 数据归属 ----------------
 
+
 def test_ensure_data_ownership_claim_same_different(tmp_path, monkeypatch):
     root = fake_install(tmp_path, "inst")
     patch_paths(monkeypatch, tmp_path, root, str(tmp_path / "ptr"))
@@ -284,10 +297,13 @@ def test_ensure_data_ownership_write_failure_raises(tmp_path, monkeypatch):
 
 # ---------------- 注记 ----------------
 
+
 def test_deferred_write_clear_idempotent(tmp_path, monkeypatch):
     ptr = str(tmp_path / "ptr")
     patch_paths(monkeypatch, tmp_path, fake_install(tmp_path, "inst"), ptr)
-    write_deferred(DeferredNote(reason="relayed", from_install="/from", target_install="/to", target_id="id-a", detail="msg"))
+    write_deferred(
+        DeferredNote(reason="relayed", from_install="/from", target_install="/to", target_id="id-a", detail="msg")
+    )
     note = read_deferred(ptr)
     assert note["reason"] == "relayed" and note["from_install"] == "/from"
     assert note["target_install"] == "/to" and note["target_id"] == "id-a"
@@ -311,6 +327,7 @@ def test_deferred_write_failure_only_warns(tmp_path, monkeypatch):
 
 # ---------------- 判定矩阵 ①②③④ ----------------
 
+
 def test_matrix_claim_when_no_record(tmp_path, monkeypatch):
     root = fake_install(tmp_path, "inst")
     patch_paths(monkeypatch, tmp_path, root, str(tmp_path / "ptr"))
@@ -330,7 +347,7 @@ def test_matrix_primary_when_id_and_path_match(tmp_path, monkeypatch):
 
 
 def test_matrix_refuse_when_id_matches_path_differs(tmp_path, monkeypatch):
-    root_a = fake_install(tmp_path, "a", install_id="id-x")   # 正主 (记录里的)
+    root_a = fake_install(tmp_path, "a", install_id="id-x")  # 正主 (记录里的)
     root_copy = fake_install(tmp_path, "copy", install_id="id-x")  # 拷贝件: 同 id 异 path
     ptr = str(tmp_path / "ptr")
     write_primary_file(ptr, id_="id-x", install_path=root_a)
@@ -341,8 +358,8 @@ def test_matrix_refuse_when_id_matches_path_differs(tmp_path, monkeypatch):
 
 
 def test_matrix_relay_when_other_install_is_primary(tmp_path, monkeypatch):
-    root_a = fake_install(tmp_path, "a", install_id="id-a")   # 注册正主
-    root_b = fake_install(tmp_path, "b", install_id="id-b")   # 本安装 (后启动的 B)
+    root_a = fake_install(tmp_path, "a", install_id="id-a")  # 注册正主
+    root_b = fake_install(tmp_path, "b", install_id="id-b")  # 本安装 (后启动的 B)
     ptr = str(tmp_path / "ptr")
     write_primary_file(ptr, id_="id-a", install_path=root_a)
     patch_paths(monkeypatch, tmp_path, root_b, ptr)
@@ -374,6 +391,7 @@ def test_matrix_refuse_when_target_install_id_mismatches_record(tmp_path, monkey
 
 
 # ---------------- resolve_startup (判定 + 认领 + 并发输家重判) ----------------
+
 
 def test_resolve_startup_claims_when_no_record(tmp_path, monkeypatch):
     root = fake_install(tmp_path, "inst")
@@ -409,6 +427,7 @@ def test_resolve_startup_unparsable_record_raises(tmp_path, monkeypatch):
 
 # ---------------- 代拉 ----------------
 
+
 def test_relay_launch_spawns_target_launcher(tmp_path, monkeypatch):
     root_a = fake_install(tmp_path, "a", install_id="id-a")
     Path(root_a, LAUNCHER_NAME).write_text("rem\n", encoding="utf-8")
@@ -443,8 +462,9 @@ def test_relay_launch_spawn_failure_returns_none(tmp_path, monkeypatch):
 
 # ---------------- cmd_run 集成 (退出码 + 注记 + 代拉) ----------------
 
+
 def test_cmd_run_refuse_exits_1_with_note(tmp_path, monkeypatch):
-    root_a = fake_install(tmp_path, "a", install_id="id-x")    # 注册正主
+    root_a = fake_install(tmp_path, "a", install_id="id-x")  # 注册正主
     root_copy = fake_install(tmp_path, "copy", install_id="id-x")  # 拷贝件本安装
     ptr = str(tmp_path / "ptr")
     write_primary_file(ptr, id_="id-x", install_path=root_a)
@@ -459,7 +479,7 @@ def test_cmd_run_refuse_exits_1_with_note(tmp_path, monkeypatch):
 def test_cmd_run_relay_exits_0_spawns_and_notes(tmp_path, monkeypatch):
     root_a = fake_install(tmp_path, "a", install_id="id-a")
     Path(root_a, LAUNCHER_NAME).write_text("rem\n", encoding="utf-8")
-    root_b = fake_install(tmp_path, "b", install_id="id-b")    # 本安装 (让位方)
+    root_b = fake_install(tmp_path, "b", install_id="id-b")  # 本安装 (让位方)
     ptr = str(tmp_path / "ptr")
     write_primary_file(ptr, id_="id-a", install_path=root_a)
     patch_paths(monkeypatch, tmp_path, root_b, ptr)
@@ -473,7 +493,7 @@ def test_cmd_run_relay_exits_0_spawns_and_notes(tmp_path, monkeypatch):
 
 
 def test_cmd_run_relay_missing_launcher_still_notes(tmp_path, monkeypatch):
-    root_a = fake_install(tmp_path, "a", install_id="id-a")    # 无启动器
+    root_a = fake_install(tmp_path, "a", install_id="id-a")  # 无启动器
     root_b = fake_install(tmp_path, "b", install_id="id-b")
     ptr = str(tmp_path / "ptr")
     write_primary_file(ptr, id_="id-a", install_path=root_a)
@@ -499,6 +519,7 @@ def test_cmd_run_identity_error_exits_1(tmp_path, monkeypatch):
 
 
 # ---------------- cmd_claim 集成 (人工易主通道, D5) ----------------
+
 
 def claim_args(data_dir: str) -> argparse.Namespace:
     return argparse.Namespace(command="claim", data_dir=data_dir, autostart=False)
@@ -546,3 +567,116 @@ def test_cmd_claim_refused_when_data_belongs_to_other_install(tmp_path, monkeypa
     (Path(data_dir) / "tool-id").write_text("id-other\n", encoding="utf-8")
     assert cmd_claim(claim_args(data_dir)) == 1
     assert read_primary() is None  # 拒绝且不碰记录
+
+
+# ---- 身份层容错出口与代拉实现 (26-10-21 覆盖率门禁 P2-T2.3) ----
+
+
+def test_read_id_file_oserror_degrades_to_missing(tmp_path, caplog):
+    """读 ID 文件遇 OSError (路径是目录/无权限): 只 WARNING 并按「缺失」降级, 不抛."""
+    from gtm.identity import read_id_file
+
+    path = tmp_path / "tool-id"
+    path.mkdir()  # 路径是目录 -> open 抛 IsADirectoryError
+    with caplog.at_level("WARNING", logger="gtm.identity"):
+        assert read_id_file(str(path)) is None
+    assert "读取 ID 文件失败" in caplog.text
+
+
+def test_fill_primary_data_dir_write_failure_only_warns(tmp_path, monkeypatch, caplog):
+    """补写 data_dir 失败只 WARNING: 它是信息位, 不能反过来让正主启动失败."""
+    root = fake_install(tmp_path, "inst", install_id="id-a")
+    ptr = str(tmp_path / "ptr")
+    patch_paths(monkeypatch, tmp_path, root, ptr)
+    write_primary_file(ptr, id_="id-a", install_path=root)  # data_dir 为空 -> 进入补写分支
+    identity = Identity(install_root=root, install_id="id-a")
+
+    def boom(record):
+        raise OSError("磁盘满")
+
+    monkeypatch.setattr("gtm.identity.write_primary", boom)
+    with caplog.at_level("WARNING", logger="gtm.identity"):
+        fill_primary_data_dir(identity, str(tmp_path / "data"))  # 不抛
+    assert "补写正主记录 data_dir 失败" in caplog.text
+
+
+def test_clear_deferred_swallows_oserror(tmp_path, monkeypatch, caplog):
+    """清注记遇非「已缺失」的 OSError: 只 WARNING (注记残留不影响权威方启动)."""
+    ptr = str(tmp_path / "ptr")
+    Path(ptr).mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr("gtm.identity.pointer_dir", lambda: ptr)
+    Path(ptr, "deferred.json").mkdir()  # 注记路径变成目录 -> os.remove 抛 OSError
+    with caplog.at_level("WARNING", logger="gtm.identity"):
+        clear_deferred()  # 不抛
+    assert "让位注记删除失败" in caplog.text
+
+
+def test_spawn_uses_detached_windowless_form(tmp_path, monkeypatch):
+    """_spawn 的生产形态: 三路 DEVNULL + close_fds + 平台专属参数 (无窗口 / 新会话)."""
+    import subprocess as real_subprocess
+
+    from gtm.identity import _spawn
+
+    seen: list[tuple] = []
+
+    class FakePopen:
+        def __init__(self, args, **kwargs):
+            seen.append((args, kwargs))
+
+    monkeypatch.setattr("gtm.identity.subprocess.Popen", FakePopen)
+    _spawn(["launcher", "arg"], cwd=str(tmp_path))
+    args, kwargs = seen[0]
+    assert args == ["launcher", "arg"]
+    assert kwargs["stdin"] is real_subprocess.DEVNULL
+    assert kwargs["stdout"] is real_subprocess.DEVNULL
+    assert kwargs["stderr"] is real_subprocess.DEVNULL
+    assert kwargs["close_fds"] is True
+    assert kwargs["cwd"] == str(tmp_path)
+    if sys.platform.startswith("win"):
+        assert kwargs["creationflags"] == getattr(real_subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    else:
+        assert kwargs["start_new_session"] is True
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="POSIX 启动器形态只在非 Windows 生效")
+def test_relay_launch_posix_uses_sh(tmp_path, monkeypatch):
+    """POSIX 侧代拉走 /bin/sh launch.sh (Windows 侧走 launch.cmd 的解释器分支)."""
+    root = tmp_path / "other"
+    root.mkdir()
+    (root / "launch.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    spawned: list = []
+    monkeypatch.setattr("gtm.identity._spawn", lambda args, **kw: spawned.append((args, kw)))
+    assert relay_launch(str(root)) == str(root / "launch.sh")
+    assert spawned[0][0] == ["/bin/sh", str(root / "launch.sh")]
+
+
+def test_resolve_startup_returns_winner_decision_after_claim_race(tmp_path, monkeypatch):
+    """认领竞争输家: 首次判定 claim -> claim_primary 撞 PrimaryRecordExists -> 按赢家重判.
+
+    这是**真竞态形态**, 不能用「一开始就判 relay」的夹具冒充: 那条路径在
+    `decision.kind != "claim"` 就返回了, 根本走不到认领 (夹具假绿)。
+    """
+    other = fake_install(tmp_path, "a", install_id="id-a")
+    root = fake_install(tmp_path, "b", install_id="id-b")
+    ptr = str(tmp_path / "ptr")
+    patch_paths(monkeypatch, tmp_path, root, ptr)
+    write_primary_file(ptr, id_="id-a", install_path=other)
+    identity = Identity(install_root=root, install_id="id-b")
+    winner = PrimaryRecord(id="id-a", install_path=other, data_dir="", version="9.9.9")
+    decisions = [
+        Decision("claim", None, "无正主记录, 本安装尝试认领"),
+        Decision("relay", winner, "已让位: 注册正主是另一安装"),
+    ]
+    seen: list[str] = []
+
+    def fake_evaluate(ident):
+        decision = decisions.pop(0)
+        seen.append(decision.kind)
+        return decision
+
+    monkeypatch.setattr("gtm.identity.evaluate_startup", fake_evaluate)
+    monkeypatch.setattr("gtm.identity.claim_primary", lambda ident: (_ for _ in ()).throw(PrimaryRecordExists()))
+    decision = resolve_startup(identity)
+    assert seen == ["claim", "relay"]  # 真的走了认领 -> 撞车 -> 重判
+    assert decision.kind == "relay"
+    assert decision.record.id == "id-a"

@@ -709,3 +709,107 @@ def test_maybe_register_autostart_returns_reason_on_failure(monkeypatch):
 
     assert stub.calls == ["register"]
     assert reason is not None and "拒绝访问" in reason
+
+
+# ---- 平台命令层与注册表的错误出口 (26-10-21 覆盖率门禁 P2-T2.1) ----
+#
+# installer 是工具侧唯一有平台独占面的文件: winreg 分支只在 Windows 可执行,
+# os.getuid 只在 POSIX 可执行 —— 所以两侧覆盖率天然不等, 定档取低者。这里能覆盖的
+# 一律用替身注入 (FakeRunner / FakeRegistry), 一行都不碰真注册表。
+
+
+def test_abstract_backend_members_raise_not_implemented(tmp_path):
+    """基类的三个平台钩子都是 NotImplementedError: 子类漏实现必须当场炸, 不静默 no-op."""
+    from gtm.installer import AutostartBackend
+
+    backend = AutostartBackend(make_plan(tmp_path), FakeRunner())
+    with pytest.raises(NotImplementedError):
+        _ = backend.target
+    with pytest.raises(NotImplementedError):
+        backend.is_registered()
+    with pytest.raises(NotImplementedError):
+        backend.register()
+    with pytest.raises(NotImplementedError):
+        backend.unregister()
+
+
+def test_run_wraps_missing_platform_command(tmp_path):
+    """平台命令不存在 (本机没装该自启机制): 包成 AutostartError 并点名命令."""
+    def handler(argv):
+        raise FileNotFoundError(2, "系统找不到指定的文件。", argv[0])
+
+    backend = make_linux(tmp_path, FakeRunner(handler), tmp_path)
+    with pytest.raises(AutostartError) as ei:
+        backend.register()
+    msg = str(ei.value)
+    assert "找不到命令" in msg and "systemctl" in msg
+
+
+def test_run_wraps_oserror_from_platform_command(tmp_path):
+    """平台命令执行失败 (权限/被杀): 同样包成 AutostartError, 不裸抛 OSError."""
+    def handler(argv):
+        raise PermissionError("拒绝访问")
+
+    backend = make_linux(tmp_path, FakeRunner(handler), tmp_path)
+    with pytest.raises(AutostartError) as ei:
+        backend.register()
+    assert "执行" in str(ei.value) and "systemctl" in str(ei.value)
+
+
+def test_windows_read_value_wraps_registry_oserror(tmp_path):
+    """读注册表遇 OSError (策略/安全软件拒绝): 上抛 AutostartError 而不是静默判未注册."""
+    reg = FakeRegistry()
+
+    def boom(key, sub_key, reserved=0, access=None):
+        raise PermissionError("拒绝访问")
+
+    reg.OpenKey = boom
+    backend = make_win(tmp_path, reg=reg)
+    with pytest.raises(AutostartError) as ei:
+        backend.is_registered()
+    assert "读注册表" in str(ei.value)
+
+
+def test_windows_unregister_race_value_already_gone(tmp_path):
+    """判存在与删之间被别人删了 (竞态): 按「已不存在」返回 absent, 不报错."""
+    class RaceRegistry(FakeRegistry):
+        def DeleteValue(self, handle, name):
+            raise FileNotFoundError(2, "系统找不到指定的文件。", name)
+
+    raced = RaceRegistry({DEFAULT_WINDOWS_VALUE: "cmd"})
+    backend = WindowsRunKeyBackend(make_plan(tmp_path), FakeRunner(), registry=raced)
+    assert backend.is_registered() is True
+    result = backend.unregister()
+    assert result.action == ACTION_ABSENT
+    assert "已不存在" in result.message
+
+
+def test_windows_unregister_wraps_oserror(tmp_path):
+    """删注册表值失败 (非「已不存在」的 OSError): 上抛 AutostartError 供设置页判失败."""
+    reg = FakeRegistry({DEFAULT_WINDOWS_VALUE: "cmd"})
+    reg.fail_with = PermissionError("拒绝访问")
+    backend = make_win(tmp_path, reg=reg)
+    with pytest.raises(AutostartError) as ei:
+        backend.unregister()
+    assert "删注册表值" in str(ei.value)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("win"), reason="惰性 import winreg 只在 Windows 可执行")
+def test_windows_registry_lazy_import_returns_winreg(tmp_path):
+    """registry 未注入时惰性 import winreg (非 Windows 上 import 会 ImportError, 故不顶层 import)."""
+    backend = WindowsRunKeyBackend(make_plan(tmp_path), FakeRunner(), registry=None)
+    assert backend._reg().__name__ == "winreg"
+
+
+def test_build_installer_rejects_empty_interpreter(tmp_path):
+    """解释器路径为空 (sys.executable 拿不到): 拒绝注册并给处置指引."""
+    with pytest.raises(AutostartError) as ei:
+        build_installer(str(tmp_path), platform=PLATFORM_WINDOWS, python_exe="", home=str(tmp_path))
+    assert "无法确定解释器路径" in str(ei.value)
+
+
+@pytest.mark.skipif(sys.platform.startswith("win"), reason="os.getuid 只在 POSIX 存在")
+def test_build_installer_macos_resolves_uid_when_absent(tmp_path):
+    """macOS 后端未给 uid 时从 os.getuid() 取 (launchctl gui/<uid> 需要它)."""
+    backend = build_installer(str(tmp_path), platform=PLATFORM_MACOS, python_exe=EXE, home=str(tmp_path))
+    assert backend._uid == os.getuid()

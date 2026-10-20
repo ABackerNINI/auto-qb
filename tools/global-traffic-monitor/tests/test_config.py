@@ -295,3 +295,83 @@ def test_config_holder_replace() -> None:
     assert holder.current.sample_interval == 5.0
     holder.replace(Config(sample_interval=1.0))
     assert holder.current.sample_interval == 1.0
+
+
+# ---- 类型/边界出口 (26-10-21 覆盖率门禁 P2-T2.4) ----
+
+
+def test_validate_payload_rejects_non_mapping() -> None:
+    """载荷顶层不是映射 (list/str): 直接拒并说明收到的类型 (不做属性猜测)."""
+    config, errors = validate_payload([("sample_interval", 5)])
+    assert config is None
+    assert len(errors) == 1 and "配置载荷必须是映射" in errors[0]
+    assert "list" in errors[0]
+
+
+@pytest.mark.parametrize(
+    "payload,expect",
+    [
+        ({
+            "http_port": True
+        }, "期望数值, 收到布尔"),
+        ({
+            "flush_delta_bytes": False
+        }, "期望数值, 收到布尔"),
+        ({
+            "sample_interval": True
+        }, "期望数值, 收到布尔"),
+    ],
+)
+def test_validate_rejects_bool_on_every_numeric_field(payload, expect) -> None:
+    """bool 是 int 子类: 三类数值字段 (整数/大小/时间) 都必须显式拒绝 True/False."""
+    config, errors = validate_payload(payload)
+    assert config is None
+    assert any(expect in e for e in errors), errors
+
+
+def test_validate_rejects_non_finite_duration() -> None:
+    """时间字段收到 inf: 拒绝 (有限数值才可调度; 否则 sleep(inf) 会永久挂住循环)."""
+    config, errors = validate_payload({"sample_interval": float("inf")})
+    assert config is None
+    assert any("期望有限数值" in e for e in errors)
+
+
+def test_validate_rejects_non_positive_size() -> None:
+    """大小字段非正 (0/-1): 拒绝 (0 字节节流阈值等于每次采样都落盘, 语义上不成立)."""
+    config, errors = validate_payload({"flush_delta_bytes": 0})
+    assert config is None
+    assert any("期望正数" in e for e in errors)
+
+
+@pytest.mark.parametrize("value", ["", "   ", 123, None])
+def test_validate_rejects_bad_string_fields(value) -> None:
+    """字符串字段空/非串: 拒绝 (http_host 空串会让 bind 落到 0.0.0.0, 属安全事故)."""
+    config, errors = validate_payload({"http_host": value})
+    assert config is None
+    assert any("期望非空字符串" in e for e in errors)
+
+
+def test_load_config_oserror_reports_read_failure(tmp_path) -> None:
+    """读配置遇 OSError (路径是目录): 返回读取失败而不是当「文件缺失」给默认值."""
+    path = tmp_path / "config.yml"
+    path.mkdir()
+    config, errors = load_config(str(path))
+    assert config is None
+    assert len(errors) == 1 and "读取失败" in errors[0]
+
+
+def test_migrate_legacy_config_ignores_non_mapping(tmp_path) -> None:
+    """顶层是列表的 config.yml: 迁移不猜结构, 直接 no-op (留给启动路径报错)."""
+    p = tmp_path / "config.yml"
+    p.write_text("- sample_interval\n- 5\n", encoding="utf-8")
+    assert migrate_legacy_config(str(p)) is None
+    assert p.read_text(encoding="utf-8").startswith("- sample_interval")
+
+
+def test_migrate_legacy_config_skips_rewrite_when_validation_fails(tmp_path) -> None:
+    """旧值存在但校验不过 (端口越界): 不改写磁盘 (坏配置不在迁移路径里被"修好")."""
+    p = tmp_path / "config.yml"
+    p.write_text("sample_interval: 5.0\nhttp_port: 70000\n", encoding="utf-8")
+    before = p.read_bytes()
+    assert migrate_legacy_config(str(p)) is None
+    assert p.read_bytes() == before

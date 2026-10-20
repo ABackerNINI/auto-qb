@@ -52,6 +52,7 @@ from gtm.storage import (
     KB,
     MIB,
     DatStore,
+    SingleInstanceLock,
     SingleInstanceLockError,
     StateStore,
     Storage,
@@ -816,3 +817,176 @@ def test_write_endpoint_atomic_and_remove_idempotent(tmp_path, monkeypatch):
     remove_endpoint()
     assert not Path(written).exists()
     remove_endpoint()  # 幂等: 已删再删不抛
+
+
+# ---- 搬迁/原子写/锁/state 的容错出口 (26-10-21 覆盖率门禁 P2-T2.2) ----
+
+
+def test_remove_endpoint_swallows_oserror(tmp_path, caplog):
+    """删发现指针遇非「已缺失」的 OSError: 只 WARNING, 不抛 (优雅退出不能被它挡住)."""
+    target = tmp_path / "endpoint.json"
+    target.mkdir()  # 路径是目录 -> os.remove 抛 OSError
+    with caplog.at_level("WARNING", logger="gtm.storage"):
+        remove_endpoint(path=str(target))  # 不抛
+    assert "发现指针删除失败" in caplog.text
+
+
+def test_migrate_legacy_skips_when_legacy_is_target(tmp_path, monkeypatch):
+    """旧目录与目标同址: 直接 no-op (不自己搬给自己)."""
+    same = tmp_path / "data"
+    _write_legacy(same)
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(same))
+    assert migrate_legacy_data_dir(str(same)) is None
+    assert (same / "history_traffic.dat").is_file()  # 原地不动
+
+
+def test_migrate_legacy_reports_interruption(tmp_path, monkeypatch, caplog):
+    """搬迁中途 OSError (目标路径被同名文件占住): 记 WARNING 并返回中断结论, 不阻断启动."""
+    legacy = tmp_path / "legacy"
+    _write_legacy(legacy)
+    blocked = tmp_path / "blocked"
+    blocked.write_text("我是文件, 不是目录", encoding="utf-8")  # makedirs 会抛 FileExistsError
+    monkeypatch.setattr("gtm.storage.legacy_data_dir", lambda: str(legacy))
+    with caplog.at_level("WARNING", logger="gtm.storage"):
+        msg = migrate_legacy_data_dir(str(blocked))
+    assert msg and "搬迁中断" in msg
+    assert "旧数据目录搬迁中断" in caplog.text
+    assert (legacy / "history_traffic.dat").is_file()  # 未搬成, 旧文件仍在
+
+
+def test_atomic_write_rejects_empty_path():
+    """空路径直接 ValueError (abspath('') 是 CWD, 会把临时文件丢到别处)."""
+    with pytest.raises(ValueError) as ei:
+        atomic_write_text("", "x")
+    assert "path 不能为空" in str(ei.value)
+
+
+def test_atomic_write_cleanup_failure_is_swallowed(tmp_path, monkeypatch):
+    """写失败后清理临时文件也失败: 仍抛原始错误, 不让清理异常盖住根因."""
+    import gtm.storage as storage_mod
+
+    def fail_replace(tmp, target):
+        raise PermissionError("读者持句柄")
+
+    def fail_remove(path):
+        raise PermissionError("临时文件删不掉")
+
+    monkeypatch.setattr(storage_mod, "_replace_retry", fail_replace)
+    monkeypatch.setattr(storage_mod.os, "remove", fail_remove)
+    target = tmp_path / "out.txt"
+    with pytest.raises(PermissionError) as ei:
+        atomic_write_text(str(target), "x")
+    assert "读者持句柄" in str(ei.value)  # 根因没被清理异常替换
+
+
+def test_dat_load_skips_invalid_date_row(tmp_path):
+    """dat 里日期非法 (2026/13/45): 整行跳过并告警, 其它日照常加载."""
+    path = tmp_path / "history_traffic.dat"
+    path.write_text('lines: "2"\n2026/13/45 1/2\n2026/10/16 3/4\n', encoding="utf-8")
+    store = DatStore(str(path))
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("gtm.storage.logger.warning", lambda *a, **k: None)  # 只验行为, 不锁日志文案
+        store.load()
+    assert list(store._rows) == [date(2026, 10, 16)]
+    assert store._rows[date(2026, 10, 16)] == (3 * KB, 4 * KB)
+
+
+def test_lock_release_swallows_meta_remove_oserror(tmp_path):
+    """释放锁时删伴生 meta 失败: 吞掉 (锁已释放, meta 只是排障辅助)."""
+    lock = SingleInstanceLock(str(tmp_path / "instance.lock"))
+    lock.acquire()
+    Path(lock.meta_path).unlink()
+    Path(lock.meta_path).mkdir()  # meta 路径变成目录 -> os.remove 抛 OSError
+    lock.release()  # 不抛
+    assert lock._held is False
+
+
+def test_lock_context_manager(tmp_path):
+    """with 语法: 进入即持锁, 退出即释放 (泄漏锁会卡死下一次启动)."""
+    path = str(tmp_path / "instance.lock")
+    with SingleInstanceLock(path) as lock:
+        assert lock._held is True
+        with pytest.raises(SingleInstanceLockError):
+            SingleInstanceLock(path).acquire()  # 持锁期间二次获取 fail-fast
+    assert lock._held is False
+    SingleInstanceLock(path).acquire()  # 释放后可再取
+
+
+def test_lock_meta_write_failure_only_debug(tmp_path, caplog):
+    """伴生 meta 写失败只 DEBUG: 锁才是主防线, meta 仅用于报错时补 PID."""
+    def boom(path, text):
+        raise OSError("磁盘满")
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr("gtm.storage.atomic_write_text", boom)
+        with caplog.at_level("DEBUG", logger="gtm.storage"):
+            lock = SingleInstanceLock(str(tmp_path / "instance.lock"))
+            lock.acquire()  # 不抛
+    assert lock._held is True
+    assert "锁伴生 meta 写入失败" in caplog.text
+    lock.release()
+
+
+def test_storage_context_manager_and_explicit_load(tmp_path):
+    """Storage 的 with 语法 (进持锁/出释放) + 显式 load() 幂等."""
+    storage = Storage(str(tmp_path), lock_path=str(tmp_path / "instance.lock"))
+    with storage as held:
+        assert held is storage
+        assert storage._lock._held is True
+        held.load()  # 显式加载 (重复调用安全)
+        held.load()
+        assert held._dat.loaded is True
+    assert storage._lock._held is False
+
+
+def test_recover_skips_corrupt_subscriber_entries(tmp_path, caplog):
+    """state.json 订阅条目局部损坏: 坏条跳过并告警, 好条照常入表, 末事件号接续."""
+    state = {
+        "version": 1,
+        "day": "2026-10-16",
+        "day_up_bytes": 10,
+        "day_down_bytes": 20,
+        "last_up_bytes": 10,
+        "last_down_bytes": 20,
+        "subscribers":
+            {
+                "good": {
+                    "endpoint": "http://h/1",
+                    "token": "t",
+                    "last_heartbeat": 100.0
+                },
+                "no-endpoint": {
+                    "token": "t",
+                    "last_heartbeat": 100.0
+                },
+                "bool-heartbeat": {
+                    "endpoint": "http://h/2",
+                    "last_heartbeat": True
+                },
+                "not-a-dict": "oops",
+            },
+        "last_event_id": 5,
+    }
+    (tmp_path / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    storage = make_storage(tmp_path)
+    try:
+        with caplog.at_level("WARNING", logger="gtm.storage"):
+            storage.recover(make_sampler())
+        assert set(storage.subscribers) == {"good"}
+        assert storage.last_event_id == 5
+        assert "订阅条目损坏已跳过" in caplog.text
+    finally:
+        storage.release_lock()
+
+
+def test_storage_close_flushes_final_state(tmp_path):
+    """close(): 最终落盘 (dat 封口), 不残留未落盘的活尾."""
+    counters = FakeCounters()
+    storage = make_storage(tmp_path)
+    sampler = make_sampler(counters=counters)
+    try:
+        sample_record(storage, sampler, counters, 1024, 2048)
+        storage.close()
+        assert (tmp_path / "history_traffic.dat").is_file()
+    finally:
+        storage.release_lock()

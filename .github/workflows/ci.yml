@@ -73,3 +73,50 @@ jobs:
 
       - name: Run tests
         run: uv run pytest tests -q
+
+  # 工具侧 (tools/global-traffic-monitor) 独立口径的门禁 job:
+  # 它有自己的 pyproject.toml + uv.lock, 覆盖率分母只含 gtm 包, 不与主仓 --cov=src 合算。
+  # 双 OS 是必需的: installer 的平台后端 (winreg / systemd / launchd) 只在各自一侧可执行,
+  # 两侧覆盖率天然不等, 阈值取较低者定档。python 版本不参与覆盖率差异, 只跑 3.12 省机时。
+  test-gtm:
+    name: Test gtm tool (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    defaults:
+      run:
+        working-directory: tools/global-traffic-monitor
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          enable-cache: true
+          # 缓存键跟着工具侧自己的锁文件走, 主仓 uv.lock 变动不该冲掉这份缓存
+          cache-dependency-glob: tools/global-traffic-monitor/uv.lock
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync
+
+      # 覆盖率门槛写在工具 pyproject.toml 的 addopts 里 (--cov-fail-under),
+      # 这里只额外补一份 xml 供上传, 不重复门槛参数。
+      - name: Run tests with coverage gate
+        run: uv run pytest --cov-report=xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-gtm-${{ matrix.os }}
+          path: tools/global-traffic-monitor/coverage.xml
+          if-no-files-found: ignore

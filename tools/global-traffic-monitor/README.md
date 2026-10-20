@@ -209,8 +209,47 @@ B/KiB/MiB/GiB/TiB)。解析与回显单点在 `gtm/units.py` (文法镜像 auto-
 ```bash
 uv sync                              # 在本目录建独立 venv 并安装依赖
 uv run global-traffic-monitor --version   # 验证安装与入口
-uv run pytest -q                     # 运行测试
 ```
+
+### 测试与覆盖率门槛
+
+```bash
+uv run pytest                                  # 全量 + 覆盖率门槛: 一条命令出 TOTAL 与判定
+uv run pytest tests/test_units.py --no-cov     # 排障单个测试档: 必须加 --no-cov
+```
+
+- **门槛口径独立, 不与主仓合算**: 覆盖率分母只含 `gtm` 包(语句 + 分支出口), 阈值写在
+  `pyproject.toml` 的 `[tool.pytest.ini_options] addopts` 里
+  (`--cov=gtm --cov-branch --cov-report=term-missing --cov-fail-under=<N>`)。主仓
+  `pytest.ini` 的 `--cov=src --cov-fail-under=99` **一个字不动** —— 两套分母混算会互相稀释,
+  两套数字也不可互比。
+- **阈值阶梯**: 88 → 91 → 93.5 → **98.5(定档 = Windows 侧实测 − 0.8, 向下取 0.5 的整数倍)**。阈值恒低于当期实测 0.8–1.0 点, 且取**双平台
+  较低者**; 抬阈值是阶段验收动作的一部分, 与基线切片同轮落地。
+- **单档必加 `--no-cov`**: addopts 里的门槛是对**全量收集面**设的, 只收集一个测试档时分母
+  塌缩, 覆盖率必然远低于门槛 → **假红**(用例其实全绿)。覆盖率闸只归全量跑(本地 `uv run
+  pytest` 与 CI)。
+- **两侧覆盖率天然不等**: `installer` 的平台后端(winreg 只在 Windows 可执行、`os.getuid`
+  只在 POSIX 可执行)与真机探测面决定了 ubuntu / windows 不可能相等, 所以定档取低者,
+  也不追主仓的 99%(硬追只能靠 `pragma: no cover`, 与「豁免只减不增」冲突)。
+- **豁免只减不增**: 现存 `pragma: no cover` 1 行(`units.py`), 新增豁免须逐块写理由;
+  平台分支优先走注入替身(`runner` / `registry` / `home` / `uid` 注入点)而不是豁免。
+- **CI 同一份 addopts**: `.github/workflows/ci.yml` 的 `test-gtm` job 在 ubuntu + windows
+  各跑一次, 本地 `uv run pytest` 与 CI 不靠人记参数。
+
+### 跨进程契约: 与主仓同轮跑(M6)
+
+本工具与 auto-qb 主仓是**同一份跨进程契约的两端**: 主仓 `webui/tool_client.py` 消费本工具的
+`GET /status`、`PUT /config`、`POST /subscribe|heartbeat|unsubscribe|autostart|shutdown`。
+主仓侧有 99% 门槛守着, 工具侧现在也有 98.5 门槛 —— 但两边各自绿**不等于契约没漂**。
+
+改任一侧的**端点路径 / 请求或响应字段 / 状态码**时, 两侧测试必须**同轮跑**:
+
+```bash
+commands run test.one -- tests/test_traffic_monitor_client.py   # 主仓契约端
+commands run test.gtm                                           # 工具侧契约端
+```
+
+任一侧红即阻断合并。只改实现细节(不动端点/字段/状态码)时按各自门槛正常跑即可。
 
 ## 自启 (S5)
 

@@ -39,6 +39,7 @@ global-traffic-monitor = "gtm.__main__:main"
 [dependency-groups]
 dev = [
     "pytest",
+    "pytest-cov",
 ]
 
 [build-system]
@@ -52,5 +53,11 @@ packages = ["src/gtm"]
 # (仓库根 pytest.ini 在父目录, pytest rootdir 上移会拾取它, 其 addopts 含 -n/--cov
 # 在本工具 venv 中不可用 → unrecognized arguments 报错)。更近的配置文件优先, 见
 # memory-bank/pitfalls/testing/nested-pytest-config.md。
+#
+# 覆盖率门槛 (本工具独立口径, 不与主仓 --cov=src 合算):
+#   分母 = gtm 包内语句 + 分支出口; --cov-fail-under 恒低于当期双平台较低实测 0.8-1.0 点。
+#   阈值阶梯: 88 (P0 起步) → 91 (P1) → 93.5 (P2) → 98.5 (P3 定档 = Windows 侧实测 99.42 − 0.8 向下取 0.5 的整数倍)。
+#   排障跑单个测试档时必须加 --no-cov, 否则收集面只有一个档, 覆盖率必然远低于门槛而假红。
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q --cov=gtm --cov-branch --cov-report=term-missing --cov-fail-under=98.5"

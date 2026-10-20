@@ -666,3 +666,69 @@ def test_wait_idle_returns_after_inflight_done(tmp_path) -> None:
         assert notifier.wait_idle(5.0) is True
     finally:
         storage.release_lock()
+
+
+# ---- 派发前置步骤的容错 (26-10-21 覆盖率门禁 P1-T1.3) ----
+#
+# 派发链是「落盘 -> 租约剔除 -> 事件号 -> 派发」。前两步失败都不能吃掉事件本身:
+# 订阅者可以慢轮询读到 dat, 也可以靠下一次心跳续租 —— 唯独「因为前置步骤失败而
+# 整条事件不发」是不可接受的 (通知是尽力而为, 但事件号必须前进)。
+
+
+def test_emit_flush_failure_still_pushes(tmp_path) -> None:
+    """前置落盘失败 (dat 写不进去): 记 exception 后仍继续推送, 事件号照常前进."""
+    pusher = RecordingPusher()
+    storage, _, notifier = make_env(tmp_path, pusher=pusher)
+    subscribe(storage, "s1", "http://h/1")
+
+    def boom() -> None:
+        raise OSError("磁盘满")
+
+    storage.flush = boom  # type: ignore[method-assign] - 只替换落盘步骤
+    try:
+        with capture_notifier_logs(logging.ERROR) as records:
+            event = notifier.notify(make_result(up=0), catch_up=True)
+        assert event is not None and event["event_id"] == 1
+        assert pusher.endpoints == ["http://h/1"]  # 照常推送
+        assert any("通知前置落盘失败" in r.getMessage() for r in records)
+    finally:
+        storage.release_lock()
+
+
+def test_emit_prune_failure_still_pushes(tmp_path) -> None:
+    """租约剔除失败: 按现有注册表继续派发 (不能因为清不动过期订阅者就不发事件)."""
+    pusher = RecordingPusher()
+    storage, _, notifier = make_env(tmp_path, pusher=pusher)
+    subscribe(storage, "s1", "http://h/1")
+
+    def boom(now: float, ttl: float):
+        raise OSError("state 写失败")
+
+    storage.prune_expired_subscribers = boom  # type: ignore[method-assign]
+    try:
+        with capture_notifier_logs(logging.ERROR) as records:
+            event = notifier.notify(make_result(up=0), catch_up=True)
+        assert event is not None
+        assert pusher.endpoints == ["http://h/1"]
+        assert any("通知前租约剔除失败" in r.getMessage() for r in records)
+    finally:
+        storage.release_lock()
+
+
+def test_close_with_inflight_push_warns(tmp_path) -> None:
+    """close 超时: 有界等待后放弃在途推送, 记 WARNING 并报在途条数 (不无限等)."""
+    release = threading.Event()
+    pusher = RecordingPusher({"http://h/1": lambda: release.wait(5.0)})
+    storage, _, notifier = make_env(tmp_path, pusher=pusher)
+    subscribe(storage, "s1", "http://h/1")
+    try:
+        notifier.notify(make_result(up=0), catch_up=True)
+        assert notifier.pending_pushes == 1
+        with capture_notifier_logs(logging.WARNING) as records:
+            notifier.close(timeout=0.05)
+        assert any("仍有 1 个推送线程在途" in r.getMessage() for r in records)
+        assert notifier.pending_pushes == 1  # 守护线程仍在途, 但不再等
+    finally:
+        release.set()
+        assert notifier.wait_idle(5.0)
+        storage.release_lock()
