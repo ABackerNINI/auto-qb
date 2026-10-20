@@ -28,6 +28,23 @@
 - test_entry_single_location_disabled_unchanged: 开关关: 单件移动调用序列与今日逐字节一致
 - test_entry_single_and_bulk_create_jobs: 开关开: 单件/批量都产生 job(回执 truth 计数)
 - test_entry_rule_move_to_gates: 规则 move_to 走闸门: 发起/幂等 skip/需确认 skip/拒绝 fail
+### P1-T1.1 守卫与容错簇(计划 26-10-20-2101)
+- test_resolve_physical_falls_back_on_resolver_error: 物理位置解析异常退回原路径(组判定绝不因迁移崩)
+- test_persist_noop_when_state_box_unavailable: state 账不可用时 _persist 静默返回
+- test_sync_relocating_builds_registry_on_legacy_store: 老 store 替身无 relocating_hashes -> 自建并登记非终态成员
+- test_on_task_line_noop_without_ctx: ctx/store 缺失(停机路径)零动作
+- test_advance_ignores_terminal_phase: 终态相位不再推进(相位机兜底)
+- test_step_move_mover_gone_marks_failed: 搬迁中 mover 从快照消失 -> failed(torrent_gone)
+- test_step_move_first_stagnant_sample_starts_stall_clock: 既没搬也没长大且无 stall_since -> 记起点
+- test_dst_size_and_ready_probe_failures_are_conservative: 采样异常静默计 0 / 齐备判定一律 False
+- test_step_moved_verify_mismatch_fails: 目标侧文件表不符 -> failed(verify_mismatch), 不建链接
+- test_penetration_ok_rejects_missing_or_unstatable: 穿透校验三态(不存在/stat 抛/齐备)
+- test_arm_survives_regroup_failure: 重归组失败只告警, 武装落账与 guardian 照旧
+- test_finish_direct_survives_regroup_and_resume_failure: 单成员收口重归组+恢复都失败也 done
+- test_qb_up_caches_negative_probe: 「qB 在?」探测异常判不在并缓存 10s
+- test_apply_reconcile_finalize_done_and_rejected: 收尾动作两档(成员全散 done / setLocation 被拒 failed)
+- test_apply_reconcile_unknown_action_is_debug_only: 未知对账动作只落 DEBUG, 不改 job
+- test_step_finalize_skips_gone_member_and_pending_progress: 收尾轮询跳过已消失成员 / progress 未回 1 等窗口
 """
 import os
 import time
@@ -622,3 +639,262 @@ def test_exec_unknown_stage_falls_back_to_arm(tmp_path, monkeypatch):
     mod._rt[job_id]["stage"] = "weird"
     mod.on_task_line()
     assert mod.get_job(job_id).phase == ru.PHASE_ARMED
+
+
+# ---------------- P1-T1.1 守卫与容错簇(计划 26-10-20-2101) ----------------
+#
+# relocate_mod 的守卫与容错分支是「迁移功能绝不拖垮主链路」的落点: 解析/采样/齐备判定
+# 一律保守(异常即退回/记 0/判不齐备), 相位机对终态与缺 ctx 一律零动作。这些分支正常
+# 路径不可达(配置合法 + 磁盘在), 只能直接喂坏输入。
+
+
+def _bare_mod(store=None, api=None, relocate=None, data_dir=""):
+    """不落盘的裸模块: ctx 用 SimpleNamespace 拼(state.data 供 _persist 落账)
+
+    data_dir 必须给临时目录: journal 写入点会真建目录, 留空会落到 CWD(副作用台账会拦)。
+    """
+    from auto_qb.config.models import RelocateConfig
+    from auto_qb.core.modules.relocate_mod import RelocateModule
+
+    mod = RelocateModule()
+    mod._ctx = types.SimpleNamespace(
+        store=store if store is not None else types.SimpleNamespace(by_hash={}, relocating_hashes=set()),
+        api=api if api is not None else types.SimpleNamespace(),
+        config=types.SimpleNamespace(relocate=relocate or RelocateConfig(enabled=True), data_dir=data_dir),
+        state=types.SimpleNamespace(data={}),
+    )
+    return mod
+
+
+def _job(job_id="j1", phase=ru.PHASE_MOVING, plan=None, hashes=("HA", )):
+    return ru.RelocateJob(
+        job_id=job_id,
+        hashes=hashes,
+        mover="HA",
+        src="R:/src",
+        dst="R:/dst",
+        scope="R:/src",
+        phase=phase,
+        plan=plan or {}
+    )
+
+
+def test_resolve_physical_falls_back_on_resolver_error(monkeypatch):
+    """物理位置解析异常退回原路径(§3.4 第 1 层: 组判定绝不因迁移功能崩)"""
+    from auto_qb.core.modules import relocate_units as ru_mod
+
+    mod = _bare_mod()
+    assert mod.resolve_physical("") == "", "空路径原样返回"
+    monkeypatch.setattr(ru_mod, "resolve_physical", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("解析炸了")))
+    assert mod.resolve_physical("R:/x") == "R:/x", "解析失败必须退回原路径"
+
+
+def test_persist_noop_when_state_box_unavailable(monkeypatch):
+    """state 账不可用(容器非 dict)时 _persist 静默返回, 不炸主循环"""
+    mod = _bare_mod()
+    monkeypatch.setattr(mod, "_state_jobs", lambda: None)
+    mod._persist()  # 不抛
+
+
+def test_sync_relocating_builds_registry_on_legacy_store():
+    """老 store 替身没有 relocating_hashes: 自建一份并登记非终态 job 的成员并集"""
+    mod = _bare_mod()
+    store = types.SimpleNamespace(by_hash={})  # 无 relocating_hashes 字段
+    mod._ctx = types.SimpleNamespace(
+        store=store, config=types.SimpleNamespace(relocate=None), state=types.SimpleNamespace(data={})
+    )
+    mod.register_job(_job())
+    mod._sync_relocating()
+    assert store.relocating_hashes == {"HA"}, "登记必须落在自建集合上"
+
+
+def test_on_task_line_noop_without_ctx():
+    """ctx/store 缺失(停机路径)时 on_task_line 零动作, 不碰任何 job"""
+    from auto_qb.config.models import RelocateConfig
+    from auto_qb.core.modules.relocate_mod import RelocateModule
+
+    mod = RelocateModule()  # ctx=None
+    mod._conf = RelocateConfig(enabled=True)  # 开关开: 不走 enabled 早退, 必须走 ctx 守卫
+    mod.on_task_line()  # 不抛
+    assert mod.jobs_view() == []
+
+
+def test_advance_ignores_terminal_phase():
+    """终态相位不再推进(相位机兜底: done/failed/cancelled 落到 elif 链之外)"""
+    mod = _bare_mod()
+    mod._advance(_job(phase=ru.PHASE_DONE))
+    mod._advance(_job("j2", phase=ru.PHASE_CANCELLED))
+    assert mod._rt == {"j1": {}, "j2": {}}, "只建运行态槽, 不改 job"
+
+
+def test_step_move_mover_gone_marks_failed():
+    """搬迁中 mover 从快照消失 -> failed(torrent_gone), 不再下发 setLocation"""
+    calls = []
+    api = types.SimpleNamespace(torrents_set_location=lambda **kw: calls.append(kw))
+    mod = _bare_mod(api=api)
+    mod._step_move(_job(), {})
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_FAILED and saved.reason == "torrent_gone"
+    assert calls == [], "mover 已消失不得下发搬迁"
+
+
+def test_step_move_first_stagnant_sample_starts_stall_clock():
+    """既没在搬也没长大且 stall_since 为空 -> 记当前时刻(停滞判定的起点)"""
+    from auto_qb.config.models import RelocateConfig
+
+    mod = _bare_mod(store=types.SimpleNamespace(by_hash={"HA": types.SimpleNamespace(state="pausedUP")}))
+    mod._conf = RelocateConfig(enabled=True, move_stall_timeout=600.0, move_warn_after=7200.0)
+    job = _job(plan={"files": [["a.mkv", 10]]})
+    rt = {"issue": False, "sample_ts": 0.0, "last_size": 999, "started": time.monotonic()}
+    mod._step_move(job, rt)
+    assert rt["stall_since"] > 0, "首次停滞采样必须记起点(否则永远判不出停滞)"
+    assert mod._jobs.get("j1") is None, "首采样不推进相位"
+
+
+def test_dst_size_and_ready_probe_failures_are_conservative(monkeypatch):
+    """采样异常: _dst_size 静默计 0(每 5s 一次不刷屏); _dst_ready 一律 False(宁可等)"""
+    from auto_qb.infra import file_access as fa_mod
+
+    mod = _bare_mod()
+    job = _job(plan={"files": [["a.mkv", 10]]})
+
+    class _DeadFA:
+        def exists(self, path):
+            raise OSError("盘掉线")
+
+        def getsize(self, path):
+            return 10
+
+    monkeypatch.setattr(fa_mod, "get_file_access", lambda: _DeadFA())
+    assert mod._dst_size(job) == 0, "采样异常按 0 计"
+    assert mod._dst_ready(job) is False, "判定不出齐备一律 False"
+    # 空计划: 无可校验内容 -> False(不把「没计划」当齐备)
+    assert mod._dst_ready(_job("j2", plan={})) is False
+
+
+def test_step_moved_verify_mismatch_fails(tmp_path):
+    """目标侧文件数/大小不符 -> failed(verify_mismatch), 一个链接都不建"""
+    mod = _bare_mod()
+    job = ru.RelocateJob(
+        job_id="j1",
+        hashes=("HA", ),
+        mover="HA",
+        src=str(tmp_path),
+        dst=str(tmp_path / "dst"),
+        scope=str(tmp_path),
+        phase=ru.PHASE_MOVED,
+        plan={"files": [["e00.mkv", 64]]}
+    )
+    mod._step_moved(job, {})
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_FAILED and saved.reason == "verify_mismatch"
+    assert saved.alias_paths == (), "校验不符不得建链接"
+
+
+def test_penetration_ok_rejects_missing_or_unstatable(monkeypatch):
+    """穿透校验: 原路径不存在/大小不符 -> False; stat 抛异常 -> False(一律保守)"""
+    from auto_qb.infra import file_access as fa_mod
+
+    mod = _bare_mod()
+    job = _job(plan={"files": [["a.mkv", 10]]})
+
+    class _FA:
+        def __init__(self, exists, size, boom=False):
+            self._exists, self._size, self._boom = exists, size, boom
+
+        def exists(self, p):
+            if self._boom:
+                raise OSError("盘掉线")
+            return self._exists
+
+        def getsize(self, p):
+            return self._size
+
+    monkeypatch.setattr(fa_mod, "get_file_access", lambda: _FA(False, 0))
+    assert mod._penetration_ok(job) is False, "原路径不存在 = 穿透失败"
+    monkeypatch.setattr(fa_mod, "get_file_access", lambda: _FA(True, 10, boom=True))
+    assert mod._penetration_ok(job) is False, "stat 抛异常 = 穿透失败"
+    monkeypatch.setattr(fa_mod, "get_file_access", lambda: _FA(True, 10))
+    assert mod._penetration_ok(job) is True
+
+
+def test_arm_survives_regroup_failure(monkeypatch):
+    """重归组失败只告警: 落账照旧 armed + guardian 照拉(下轮 save_path 变化还会再归)"""
+    spawned = []
+    mod = _bare_mod()
+    mod._ctx.grouping = types.SimpleNamespace(regroup_scope=lambda *a: (_ for _ in ()).throw(RuntimeError("归组炸了")))
+    monkeypatch.setattr(mod, "_spawn_guardian", lambda job: spawned.append(job.job_id) or True)
+    mod._arm(_job(), {})
+    assert mod._jobs["j1"].phase == ru.PHASE_ARMED, "重归组失败不得阻断武装落账"
+    assert spawned == ["j1"], "guardian 照拉"
+
+
+def test_finish_direct_survives_regroup_and_resume_failure():
+    """单成员收口: 重归组与恢复运行态都失败也照样 done(数据面已就位, 用户可手动起)"""
+    mod = _bare_mod(
+        api=types.SimpleNamespace(torrents_resume=lambda **kw: (_ for _ in ()).throw(RuntimeError("qB 拒了")))
+    )
+    mod._ctx.grouping = types.SimpleNamespace(regroup_scope=lambda *a: (_ for _ in ()).throw(RuntimeError("归组炸了")))
+    job = ru.RelocateJob(
+        job_id="j1", hashes=("HA", ), mover="HA", src="R:/s", dst="R:/d", scope="R:/s", resume_hashes=("HA", )
+    )
+    mod._finish_direct(job)
+    assert mod._jobs["j1"].phase == ru.PHASE_DONE and mod._jobs["j1"].reason == "direct"
+
+
+def test_qb_up_caches_negative_probe():
+    """「qB 在?」三证之一: 探测异常判「不在」并缓存 10s(免得每 tick 一次请求)"""
+    calls = []
+
+    class _Client:
+        def app_preferences(self):
+            calls.append(1)
+            raise RuntimeError("连不上")
+
+    mod = _bare_mod(api=types.SimpleNamespace(client=_Client()))
+    assert mod._qb_up() is False
+    assert mod._qb_up() is False
+    assert len(calls) == 1, "10s 内必须命中缓存(负结论同样缓存)"
+
+
+def test_apply_reconcile_finalize_done_and_rejected(tmp_path, monkeypatch):
+    """收尾动作两档: 成员全散 -> done(finalized); setLocation 被拒 -> failed(finalize_rejected)"""
+    mod = _bare_mod(data_dir=str(tmp_path))
+    job = _job(phase=ru.PHASE_REMOVED)
+    monkeypatch.setattr(mod, "_finalize_members", lambda j: ())
+    mod._apply_reconcile(job, {}, ru.ACT_FINALIZE)
+    assert mod._jobs["j1"].phase == ru.PHASE_DONE and mod._jobs["j1"].reason == "finalized"
+
+    mod2 = _bare_mod(
+        api=types.SimpleNamespace(torrents_set_location=lambda **kw: (_ for _ in ()).throw(RuntimeError("409"))),
+        data_dir=str(tmp_path)
+    )
+    monkeypatch.setattr(mod2, "_finalize_members", lambda j: ("HA", ))
+    mod2._apply_reconcile(_job(phase=ru.PHASE_REMOVED), {}, ru.ACT_FINALIZE)
+    assert mod2._jobs["j1"].phase == ru.PHASE_FAILED and mod2._jobs["j1"].reason == "finalize_rejected"
+
+
+def test_apply_reconcile_unknown_action_is_debug_only(tmp_path):
+    """未知对账动作只落一条 DEBUG(不推进相位, 不炸)"""
+    mod = _bare_mod(data_dir=str(tmp_path))
+    mod._apply_reconcile(_job(phase=ru.PHASE_ARMED), {}, "some-new-action")
+    assert mod._jobs.get("j1") is None, "未知动作不得改 job"
+
+
+def test_step_finalize_skips_gone_member_and_pending_progress(tmp_path):
+    """收尾轮询: 成员已消失 -> 跳过(不判未完成); progress<1 且非校验中 -> 未完成(等窗口)"""
+    store = types.SimpleNamespace(
+        by_hash={
+            "HA": types.SimpleNamespace(save_path="R:/dst", progress=1.0, state="pausedUP"),
+            "HB": types.SimpleNamespace(save_path="R:/dst", progress=0.4, state="pausedUP"),
+        }
+    )
+    mod = _bare_mod(store=store, data_dir=str(tmp_path))
+    job = _job(phase=ru.PHASE_FINALIZING, hashes=("HA", "GONE"))
+    mod._step_finalize(job, {"finalize": ["HA", "GONE"]})
+    assert mod._jobs["j1"].phase == ru.PHASE_DONE, "消失成员跳过, 其余到齐即完成"
+
+    # progress 未回 1: 不完成, 且窗口未到不判失败
+    job2 = _job("j2", phase=ru.PHASE_FINALIZING, hashes=("HB", ))
+    mod._step_finalize(job2, {"finalize": ["HB"], "finalize_ts": time.time()})
+    assert mod._jobs.get("j2") is None, "窗口内未完成不得判失败"
