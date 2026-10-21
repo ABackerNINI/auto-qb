@@ -540,9 +540,10 @@ def test_api_t_bulk_skip_check_enqueue(web_env):
 
 
 def test_drain_web_commands_torrent_write_actions():
-    """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速/保存路径写后同步快照"""
+    """二轮写命令: 参数正确传给 QbApi(真链路), cmd_id 回执 ok, 限速同 tick 生效; 保存路径**等上报**"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
+        old_save_path = mgr.store.get("HA").save_path
         # S3 删除改道(plan 26-10-07-0055): remove_tracker 收 mask 值, 后端重取原文比对
         client.trackers_map["HA"] = [{"url": "https://c.example/announce?passkey=SUPERSECRET123", "status": 2}]
         cmds = [
@@ -652,7 +653,8 @@ def test_drain_web_commands_torrent_write_actions():
         assert all(mgr.web.results[f"c{i}"]["status"] == "ok" for i in range(1, 13)), mgr.web.results
         # 限速/保存路径写后快照同步(QbApi update_torrent_fields)
         rec = mgr.store.get("HA")
-        assert rec.up_limit == 1024 and rec.dl_limit == 2048 and rec.save_path == "R:/Moved"
+        assert rec.up_limit == 1024 and rec.dl_limit == 2048, "限速是确定性字段: 写后同步"
+        assert rec.save_path == old_save_path, "保存路径改为等上报(26-10-21-2323 S2)"
 
 
 def test_drain_web_commands_torrent_write_unknown_hash_skips():
@@ -1083,7 +1085,8 @@ def test_drain_web_commands_bulk_torrents_limits_location():
         assert client.limit_location_hashes_calls[-1] == ("set_download_limit", ["HA", "HB"]), \
             "缺失 hash 过滤后一次调用传全部在册 hashes"
         assert mgr.web.results["l2"]["status"] == "error" and "1/3" in mgr.web.results["l2"]["error"]
-        # location: 一次调用传全 hashes, 快照 save_path 同步
+        # location: 一次调用传全 hashes; 快照 save_path 不改(等上报, 26-10-21-2323 S2)
+        save_before = mgr.store.get("HA").save_path
         mgr.web.commands.put(
             ("bulk_torrents", {
                 "hashes": ["HA", "HB"],
@@ -1096,7 +1099,7 @@ def test_drain_web_commands_bulk_torrents_limits_location():
         assert client.calls[-1] == ("set_location", "R:/X"), client.calls[-1]
         assert client.limit_location_hashes_calls[-1] == ("set_location", ["HA", "HB"])
         assert mgr.web.results["l3"]["status"] == "ok"
-        assert mgr.store.get("HA").save_path == "R:/X"
+        assert mgr.store.get("HA").save_path == save_before, "save_path 等 qB 上报, 不在命令后改写"
         # limits 两方向全空 -> error 回执不调 API(直投队列绕过路由 400 时的 handler 兜底)
         before = list(client.calls)
         mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA"], "action": "limits", "cmd_id": "l4"}))

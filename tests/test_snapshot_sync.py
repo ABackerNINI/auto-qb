@@ -160,14 +160,20 @@ def test_speed_limits_sync_record():
         assert mgr.store.get("H1").dl_limit == 2048 * 1000
 
 
-def test_set_location_syncs_save_path():
-    """set_location 同步快照 save_path"""
+def test_set_location_waits_for_sync():
+    """set_location **不写快照**(等 qB 上报): save_path 是分组键输入, 而搬家是异步的
+
+    26-10-21-2323 S2: 提前改写会让组归属在文件还没到位时就变(重归组/误扫描); 改后同 tick 读到旧值,
+    一次同步应用后才落真值 —— 与「运行状态只等上报」同一条纪律。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         t1 = FakeTorrent(hash="H1", name="A", save_path=r"R:\Old", state="stalledUP")
         _make_client(mgr, t1)
         mgr.api.torrents_set_location(torrent_hashes="H1", location=r"R:\New")
-        assert mgr.store.get("H1").save_path == r"R:\New"
+        assert mgr.store.get("H1").save_path == r"R:\Old", "同 tick 不得改写快照(等上报)"
+        mgr.store._apply({"H1": {"save_path": r"R:\New"}}, [], full=False)
+        assert mgr.store.get("H1").save_path == r"R:\New", "同步应用后才落真值"
 
 
 def test_torrents_delete_removes_from_snapshot():

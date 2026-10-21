@@ -147,8 +147,13 @@ class QbApi:
         location: Optional[str] = None,
         **kwargs: Any,
     ):
+        """移动保存路径(**不写快照**, 等 qB 上报)
+
+        save_path 虽是「我们下发的值」, 但它同时是**分组键的输入**(`group_key_of` 的第一个分量),
+        而 qB 的搬家是异步的 —— 提前改会让「组归属」在文件还没到位时就变(重归组/误扫描)。搬迁中的
+        判定由 relocate 的 `relocating_hashes` 负责, 两条线不重叠。字段边界见 conventions/code-style.md。
+        """
         self._client.torrents_set_location(torrent_hashes=torrent_hashes, location=location, **kwargs)
-        self.store.update_torrent_fields(torrent_hashes, save_path=location)
 
     def torrents_delete(
         self,

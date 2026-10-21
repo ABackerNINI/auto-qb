@@ -9,7 +9,7 @@
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-21-2323">
 <meta name="doc-updated" content="26-10-21-2323">
-<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/issues/26-10-21-2232-test-guard-scope-narrower-than-acceptance.html, memory-bank/testing/baselines/26-10-21-2334-post-command-state-writes.md">
+<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/issues/26-10-21-2232-test-guard-scope-narrower-than-acceptance.html, memory-bank/testing/baselines/26-10-21-2334-post-command-state-writes.md, memory-bank/testing/baselines/26-10-21-2349-post-command-state-writes.md">
 <style>
   :root {
     color-scheme: dark;
@@ -287,7 +287,7 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
 <table>
   <tr><th>期</th><th>内容</th><th>独立价值</th></tr>
   <tr><td class="tight">S1</td><td>守阵扩容（T4） <span class="tag crit">已完成</span></td><td>先把"全库"变成机检事实，后续改动都在守阵覆盖下</td></tr>
-  <tr><td class="tight">S2</td><td>写后同步边界（<code>save_path</code> + 口径 + T5）</td><td>消掉唯一有真实副作用的回写</td></tr>
+  <tr><td class="tight">S2</td><td>写后同步边界（<code>save_path</code> + 口径 + T5） <span class="tag crit">已完成</span></td><td>消掉唯一有真实副作用的回写</td></tr>
   <tr><td class="tight">S3</td><td>移除提交前复核（T2/T3）</td><td>少一条直查通道</td></tr>
   <tr><td class="tight">S4</td><td>补刷新计时（T1）+ 收尾（基线、文档、计划状态）</td><td>校正不再被白刷惩罚</td></tr>
 </table>
@@ -313,6 +313,7 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
 
 <h2 id="s9"><span class="n">9</span>变更记录</h2>
 <ul>
+  <li>2026-10-21 23:50 — <b>S2 完成</b>：<code>QbApi.torrents_set_location</code> 去掉写后同步（<code>save_path</code> 是分组键输入、qB 搬家异步，提前改会让组归属在文件未到位时变），口径写进 <code>conventions/code-style.md</code>（确定性字段可回写 / 运行状态只等上报 / <code>save_path</code> 例外 / 删除摘记录保留）；用例 <code>test_set_location_syncs_save_path</code> 翻面为 <code>test_set_location_waits_for_sync</code>（同 tick 读旧值 → 一次同步后落真值），另两处批量写命令断言同步收窄。issue <code>26-10-21-1813</code> 结案（边界已定义、<code>save_path</code> 已改、删除摘记录按 D5 判定非缺陷）。</li>
   <li>2026-10-21 23:35 — <b>S1 完成</b>：守阵改为 AST 全库扫描（<code>src/auto_qb/**</code>），判据从三条扩到四条（新增 <code>apply_delta</code> 调用点白名单 —— 历史漏网形态绕过前三条）；白名单收敛为 2 个文件（<code>qbmanager</code> / <code>taskqueue</code>，AST 下 <code>reader.py</code> 的正则假阳性消失）；新增红验用例。实测注入 <code>tor.apply_delta(live[0])</code> 到 <code>ops_mod.py</code> 后守阵立刻变红并指出文件+行号，还原后复绿。</li>
   <li>2026-10-21 23:23 — 初版。依据：A 系计划（26-10-13-0540）复盘 + 四条 issue 的 grilling 结论（D1–D6）。</li>
 </ul>

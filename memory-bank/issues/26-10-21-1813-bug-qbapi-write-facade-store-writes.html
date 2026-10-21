@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="post-command-state-writes">
 <meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义">
 <meta name="issue-summary" content="QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷">
 <title>写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1813-bug-qbapi-write-facade-store-writes</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:13</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core/qbapi · torrents</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -175,6 +175,7 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-21 23:50 — 边界定义 + <code>save_path</code> 改等上报（计划 26-10-21-2323 S2），状态 <strong>Done</strong>。</li>
       <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
       <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
       <li>2026-10-21 22:32 — 口径修订: tags/category 属 A 系计划 §11 明文非目标, 不再算缺陷; 本件收窄为删除摘记录 + 确定性字段边界未定义。</li>
@@ -185,7 +186,14 @@
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际处置</b>（2026-10-21 23:50，计划 26-10-21-2323 S2）：</p>
+    <ol>
+      <li><b>边界定义</b>：写进 <code>conventions/code-style.md</code> —— 判据是「值的事实来源」；确定性字段（tags / category / up_limit / dl_limit）可写后同步，运行状态（state / progress / 速率 / seeding_time / ratio）只等上报，<code>save_path</code> 例外（分组键输入 + 搬家异步）。</li>
+      <li><b><code>save_path</code> 已改等上报</b>：<code>QbApi.torrents_set_location</code> 去掉 <code>update_torrent_fields(save_path=...)</code>；用例翻面为 <code>test_set_location_waits_for_sync</code>。</li>
+      <li><b>删除摘记录保留</b>：按 D5 判定为「确定动作 + <code>_pending_removed</code> 兜底」，不是缺陷，不改。</li>
+      <li><b>tags / category</b>：A 系计划 §11 明文非目标，保持原样（见 s1 口径修订）。</li>
+    </ol>
+    <p><b>验证方式</b>：<code>test_set_location_waits_for_sync</code>（同 tick 读旧值 → 一次同步后落真值）+ 两处批量写命令断言收窄；实测数字见基线切片 <code>26-10-21-2350</code>。</p>
   </section>
 
   <footer>

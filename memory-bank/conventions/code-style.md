@@ -98,6 +98,7 @@
 - 插件注册: 类级 `name` 属性 + `@register_condition`/`@register_action` 装饰器, `registry.py` 按名创建; 未知名抛 ValueError。
 - 跨模块避免循环导入: `rules/base.py` 不 import QbManager (manager 以 `Any` 传入); `curves.py`/`episodes.py` 无项目内依赖。
 - Facade模式: 业务代码**只**调 `self.api` (QbApi), 不直接用 raw client (例外: 数据层惰性缓存内部与测试)。
+- **写后同步的字段边界** (2026-10-21, 计划 26-10-21-2323): 判据是「这个值的事实来源是谁」。`QbApi` 写方法只在**我们下发的确定性字段**上同步快照 (tags / category / up_limit / dl_limit); **运行状态** (state / progress / 速率 / seeding_time / ratio) 一律不写, 只等 qB 上报 —— qB 侧按 `BitTorrent/Session/RefreshInterval` 节流刷新, 命令后直查或回写都是假新鲜。`save_path` 是例外: 它也是我们的值, 但它是**分组键的输入**而 qB 搬家是异步的, 同样等上报。`torrents_delete` 的摘记录属「确定动作 + `_pending_removed` 兜底」, 保留。守阵: `tests/test_sync.py::test_no_synthetic_state_write_site`(全库 AST 扫描 + 四条判据)。
 
 ## 其它工程约定
 
