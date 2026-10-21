@@ -270,6 +270,7 @@ from auto_qb.hr.service import (
     fuzzy_name_match,
 )
 
+from helpers import capture_logs
 from hr_helpers import (
     CHALLENGE_PAGE,
     EMPTY_TABLE_PAGE,
@@ -1934,37 +1935,6 @@ def test_a_lane_row_downloads_even_when_matching_excluded_seed(tmp_path):
 # ==================== P1 覆盖率提升轮(T1.1 错误路径系统补齐) ====================
 
 
-class _ListLogHandler(logging.Handler):
-    """模块 logger 自足采集(pitfalls/testing/log-capture: 禁 caplog, 显式 setLevel)"""
-    def __init__(self):
-        super().__init__()
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
-class service_log:
-    """挂在 auto_qb.hr.service 模块 logger 上的临时 handler, 用完恢复级别与传播"""
-    def __init__(self, level=logging.DEBUG):
-        self._handler = _ListLogHandler()
-        self._logger = logging.getLogger("auto_qb.hr.service")
-        self._level = level
-
-    def __enter__(self):
-        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
-        self._logger.addHandler(self._handler)
-        self._logger.setLevel(self._level)
-        self._logger.propagate = False
-        return self._handler.messages
-
-    def __exit__(self, *exc):
-        self._logger.removeHandler(self._handler)
-        self._logger.setLevel(self._old_level)
-        self._logger.propagate = self._old_propagate
-        return False
-
-
 def test_refresh_site_guard_paths(tmp_path):
     """站点未接入 / 全局开关关 -> 不取数直接返回; HrRefreshResult.ok 属性语义"""
     clock = Clock()
@@ -2037,7 +2007,7 @@ def test_channel_quota_lets_wave_yield_and_warns_once(tmp_path):
     clock = Clock()
     fetcher = FakeFetcher(pages=standard_pages(), quota=True)
     service = make_service(tmp_path, fetcher, clock=clock)
-    with service_log() as messages:
+    with capture_logs("auto_qb.hr.service") as cap:
         first = run_wave(service, {})
         assert first.action == ACTION_WAITING
         assert "扩展侧硬上限" in first.reason
@@ -2046,9 +2016,9 @@ def test_channel_quota_lets_wave_yield_and_warns_once(tmp_path):
         clock.advance(60.0)
         second = run_wave(service, {})
         assert second.action == ACTION_WAITING
-    warns = [m for m in messages if "扩展侧硬上限挡下取数" in m]
-    assert len(warns) == 1, messages
-    assert any("仍生效(已告警过" in m for m in messages)
+    warns = [m for m in cap.messages if "扩展侧硬上限挡下取数" in m]
+    assert len(warns) == 1, cap.messages
+    assert any("仍生效(已告警过" in m for m in cap.messages)
 
 
 def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
@@ -2056,7 +2026,7 @@ def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
     clock = Clock()
     fetcher = FakeFetcher(pages={url_of(l): LOGIN_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
-    with service_log() as messages:
+    with capture_logs("auto_qb.hr.service") as cap:
         first = run_wave(service)
         assert first.action == ACTION_ERROR and "登录页" in first.reason
         data, _ = service.store(SITE).read_unlocked()
@@ -2064,23 +2034,23 @@ def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
         clock.advance(120.0)
         second = run_wave(service)
         assert second.action == ACTION_ERROR
-    login_errors = [m for m in messages if "页面是登录页 ⇒" in m]
+    login_errors = [m for m in cap.messages if "页面是登录页 ⇒" in m]
     assert len(login_errors) == 1, "登录恢复前每站只报一次(状态变化报一次), 不再每波重报"
-    assert sum("登录态仍未恢复(已告警过" in m for m in messages) == 1, "第二波走去重早退(INFO)"
+    assert sum("登录态仍未恢复(已告警过" in m for m in cap.messages) == 1, "第二波走去重早退(INFO)"
     # 去重分支本体: 直接连调 _warn_login(用未告警过的站名), 第一次真告警, 第二次走「已告警过」早退
-    with service_log() as repeat_messages:
+    with capture_logs("auto_qb.hr.service") as cap2:
         service._warn_login("example2", RuntimeError("仍未登录"))
         service._warn_login("example2", RuntimeError("仍未登录"))
-    assert sum("登录态仍未恢复(已告警过" in m for m in repeat_messages) == 1
+    assert sum("登录态仍未恢复(已告警过" in m for m in cap2.messages) == 1
     # 恢复重置: 中间正常波拿到内容页 -> 清去重标记; 再次登录失效重新报一次
     fetcher.pages.update(standard_pages())
     assert run_wave(service).action == "refreshed"  # 登录波不设复用窗, 恢复波直接可跑
     fetcher.pages.update({url_of(l): LOGIN_PAGE for l in "ABC"})
     clock.advance(12 * 3600.0 + 60.0)  # 跳出复用窗(2h)与拉取间隔(12h, 恢复波推进了 healthy_ts)
-    with service_log() as relogin:
+    with capture_logs("auto_qb.hr.service") as cap3:
         third = run_wave(service)
         assert third.action == ACTION_ERROR
-    assert len([m for m in relogin if "页面是登录页 ⇒" in m]) == 1, "恢复后再失效 -> 重新告警(状态变化报一次)"
+    assert len([m for m in cap3.messages if "页面是登录页 ⇒" in m]) == 1, "恢复后再失效 -> 重新告警(状态变化报一次)"
 
 
 def test_challenge_page_truncates_wave(tmp_path):
@@ -2604,12 +2574,12 @@ def test_lane_fail_streak_alerts_error(tmp_path):
     failed_pages = {**standard_pages(), url_of("A"): REVISED_PAGE}
     fetcher = FakeFetcher(pages=failed_pages)
     service = make_service(tmp_path, fetcher, clock=clock)
-    with service_log() as messages:
+    with capture_logs("auto_qb.hr.service") as cap:
         for _ in range(3):
             clock.advance(13 * 3600)
             run_wave(service)
-    errors = [m for m in messages if "已连续 3 波失效" in m]
-    assert len(errors) == 1, messages
+    errors = [m for m in cap.messages if "已连续 3 波失效" in m]
+    assert len(errors) == 1, cap.messages
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.lanes["A"].fail_streak == 3
     assert data.wave.lanes["A"].status == "failed"

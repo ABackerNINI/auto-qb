@@ -1,7 +1,6 @@
 """webui_helpers 共享件: WEB UI 后端测试拆分后的跨文件辅助与常量(原单文件已拆为 16 个平铺模块, 见 tasks/26-10-08-backend-test-web-split.md)
 """
 import json
-import logging
 import os
 import re
 import time
@@ -548,39 +547,6 @@ def _iter_api_routes(routes):
             if sub is not None and hasattr(sub, "routes"):
                 yield from _iter_api_routes(sub.routes)
                 break
-
-
-# ==================== P1 覆盖率提升轮: webui 运行时与命令长尾 ====================
-
-
-class _ListLogHandler(logging.Handler):
-    def __init__(self):
-        super().__init__()
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
-class module_log:
-    """挂在指定模块 logger 上的自足采集(pitfalls/testing/log-capture: 禁 caplog)"""
-    def __init__(self, name, level=logging.DEBUG):
-        self._handler = _ListLogHandler()
-        self._logger = logging.getLogger(name)
-        self._level = level
-
-    def __enter__(self):
-        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
-        self._logger.addHandler(self._handler)
-        self._logger.setLevel(self._level)
-        self._logger.propagate = False
-        return self._handler.messages
-
-    def __exit__(self, *exc):
-        self._logger.removeHandler(self._handler)
-        self._logger.setLevel(self._old_level)
-        self._logger.propagate = self._old_propagate
-        return False
 
 
 # ---------- v3 活尾合流(S6 验收追加, 2026-10-05) ----------

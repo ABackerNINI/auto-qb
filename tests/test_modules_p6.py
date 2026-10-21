@@ -21,7 +21,7 @@ from unittest import mock
 
 from auto_qb.config import Config
 from auto_qb.config.impact import KERNEL_SECTIONS, RESTART_SECTIONS
-from helpers import make_manager
+from helpers import capture_logs, make_manager
 
 
 def _mgr(td):
@@ -64,35 +64,6 @@ def test_kernel_sections_are_config_fields_and_disjoint():
 # ============================================================
 # 未认领段兜底(WARN + 全量重建)
 # ============================================================
-class _ModuleLogCapture:
-    """捕获指定模块 logger 输出(QbManager 构造清空 root handlers, caplog 失效 —— 惯例见 test_speed_curve)"""
-    def __init__(self, name, level=logging.DEBUG):
-        self._name = name
-        self._level = level
-        self.records = []
-
-    def __enter__(self):
-        self._lg = logging.getLogger(self._name)
-        self._handler = _RecHandler(self.records)
-        self._handler.setLevel(self._level)
-        self._old_level = self._lg.level
-        self._lg.setLevel(self._level)
-        self._lg.addHandler(self._handler)
-        return self
-
-    def __exit__(self, *exc):
-        self._lg.removeHandler(self._handler)
-        self._lg.setLevel(self._old_level)
-        return False
-
-
-class _RecHandler(logging.Handler):
-    def __init__(self, sink):
-        super().__init__()
-        self._sink = sink
-
-    def emit(self, record):
-        self._sink.append(record)
 
 
 def test_unclaimed_section_change_warns_and_rebuilds():
@@ -116,7 +87,7 @@ def test_unclaimed_section_change_warns_and_rebuilds():
         new = copy.copy(old)  # 浅拷贝: 未动的段保持同一对象(替身类可能没有 __eq__, 深拷贝会误报段变)
         new.add_episode_tags = copy.deepcopy(old.add_episode_tags)
         new.add_episode_tags.enabled = not old.add_episode_tags.enabled
-        with _ModuleLogCapture("auto_qb.core.qbmanager") as cap:
+        with capture_logs("auto_qb.core.qbmanager") as cap:
             receipt = mgr.apply_new_config(new)
         warns = [r for r in cap.records if "add_episode_tags" in r.getMessage()]
         assert warns and warns[0].levelno == logging.WARNING, "未认领段变更必须落 WARN 且点名段名(保守性可解释)"

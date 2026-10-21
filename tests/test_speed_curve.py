@@ -60,7 +60,7 @@ from auto_qb.core.modules.speed_curve_mod import (
 )
 from auto_qb.core.taskqueue import Task
 from auto_qb.core.traffic_source import paths as traffic_paths
-from helpers import FakeClient, make_manager
+from helpers import FakeClient, capture_logs, make_manager
 
 GIB = 1024**3
 MIB = 1024**2
@@ -159,39 +159,6 @@ def _make_mgr(tmp_path, gslc: _GslcBundle, with_app: bool = True):
     client = _fake_client() if with_app else FakeClient()
     mgr.client = client
     return mgr, client
-
-
-class _CurveLogCapture:
-    """捕获 speed_curve 模块 logger 输出(供断言手动保护的日志节流)
-
-    注: QbManager 构造时 setup_logging 清空 root handlers(caplog 捕获失效), 故直接给模块
-    logger 挂 StringIO handler; 默认 DEBUG 级 —— 被去重的轮次降 DEBUG, 也要看得见。
-    """
-    def __init__(self, level=logging.DEBUG):
-        self._level = level
-        self.buf = io.StringIO()
-
-    def __enter__(self):
-        self._lg = logging.getLogger("auto_qb.core.modules.speed_curve_mod")
-        self._handler = logging.StreamHandler(self.buf)
-        self._handler.setLevel(self._level)
-        self._old_level = self._lg.level
-        self._lg.setLevel(self._level)  # 模块 logger 无 handlers 时 effective level 取自 root, 需显式提升
-        self._lg.addHandler(self._handler)
-        return self
-
-    def __exit__(self, *exc):
-        self._lg.removeHandler(self._handler)
-        self._lg.setLevel(self._old_level)
-        return False
-
-    def info_count(self) -> int:
-        """INFO 档的手动保护条数(INFO 文案含"本轮不覆盖", DEBUG 文案不含 -> 按此区分)"""
-        return self.buf.getvalue().count("本轮不覆盖")
-
-    @property
-    def text(self) -> str:
-        return self.buf.getvalue()
 
 
 # ---------- 配置解析 / fail-fast ----------
@@ -1141,11 +1108,11 @@ def test_speed_curve_manual_log_throttled_same_state(tmp_path):
     client.transfer.limits["upload_limit"] = 2001 * 1024  # 奇数: 手动
     client.transfer.limits["download_limit"] = 10265 * 1024  # 奇数: 手动(用户实报的值)
 
-    with _CurveLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.speed_curve_mod") as cap:
         assert _run_curve(mgr)
-        assert cap.info_count() == 2  # 上传 + 下载 各一条
+        assert cap.text.count("本轮不覆盖") == 2  # 上传 + 下载 各一条
         assert _run_curve(mgr)
-        assert cap.info_count() == 2  # 同状态第二轮不再记 INFO
+        assert cap.text.count("本轮不覆盖") == 2  # 同状态第二轮不再记 INFO
         assert "同状态不重复记" in cap.text  # 降 DEBUG: 排障仍看得见每轮在等什么
 
     assert client.transfer.calls == []  # 两方向都被保护, 一次都不写
@@ -1164,19 +1131,19 @@ def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, mon
     clock = {"now": 1_000_000.0}
     monkeypatch.setattr("auto_qb.core.modules.speed_curve_mod.time.time", lambda: clock["now"])
 
-    with _CurveLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.speed_curve_mod") as cap:
         assert _run_curve(mgr)
-        assert cap.info_count() == 1  # 首次进入该状态 -> 说明白一次
+        assert cap.text.count("本轮不覆盖") == 1  # 首次进入该状态 -> 说明白一次
         clock["now"] += 61.0  # 远小于提醒周期
         assert _run_curve(mgr)
-        assert cap.info_count() == 1  # 同状态不重复
+        assert cap.text.count("本轮不覆盖") == 1  # 同状态不重复
         clock["now"] += _MANUAL_REMIND_GAP  # 越过一个提醒周期 -> 再说明白一次
         assert _run_curve(mgr)
-        assert cap.info_count() == 2
+        assert cap.text.count("本轮不覆盖") == 2
         # 手动值变化(2001 -> 2003, 仍是奇数): 状态指纹变了 -> 立即重报
         client.transfer.limits["upload_limit"] = 2003 * 1024
         assert _run_curve(mgr)
-        assert cap.info_count() == 3
+        assert cap.text.count("本轮不覆盖") == 3
         assert "2003KiB/s" in cap.text
 
 
@@ -1188,25 +1155,25 @@ def test_speed_curve_manual_log_resets_after_release(tmp_path):
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024
 
-    with _CurveLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.speed_curve_mod") as cap:
         assert _run_curve(mgr)
-        assert cap.info_count() == 1
+        assert cap.text.count("本轮不覆盖") == 1
         curve_mod = mgr.host.get("speed_curve")
         assert "up" in curve_mod._curve_manual_log  # 节流记忆已建立(状态在模块实例, plan P3)
         assert _run_curve(mgr)
-        assert cap.info_count() == 1  # 同状态不重复
+        assert cap.text.count("本轮不覆盖") == 1  # 同状态不重复
 
         # 用户取消手动(改成偶数) -> 曲线接管并清记忆
         client.transfer.limits["upload_limit"] = 2000 * 1024
         assert _run_curve(mgr)
         assert client.transfer.limits["upload_limit"] == 6144 * 1024  # 5GiB -> 首档 6MiB/s
         assert "up" not in curve_mod._curve_manual_log
-        assert cap.info_count() == 1  # 释放本身不额外刷日志(可见性由"设置全局限速"那条承载)
+        assert cap.text.count("本轮不覆盖") == 1  # 释放本身不额外刷日志(可见性由"设置全局限速"那条承载)
 
         # 再次手动设置(奇数) -> 重新说明白
         client.transfer.limits["upload_limit"] = 2001 * 1024
         assert _run_curve(mgr)
-        assert cap.info_count() == 2
+        assert cap.text.count("本轮不覆盖") == 2
 
 
 def test_speed_curve_require_snapshot_missing_fails_fast(tmp_path):

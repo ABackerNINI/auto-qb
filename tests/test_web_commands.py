@@ -59,7 +59,8 @@ from types import SimpleNamespace
 from auto_qb.infra.utils import encode_group_key, mask_tracker_url
 from auto_qb.webui.runtime import WebUIRuntime
 
-from webui_helpers import _make_grouped_manager, module_log
+from helpers import capture_logs
+from webui_helpers import _make_grouped_manager
 
 
 def test_drain_web_commands_group_actions():
@@ -763,7 +764,7 @@ def test_queue_torrent_qb_reject_receipt_and_log():
             raise Conflict409Error("必须启用 torrent 队列")
 
         client.torrents_decrease_priority = _boom
-        with module_log("auto_qb.webui.runtime") as messages:
+        with capture_logs("auto_qb.webui.runtime") as cap:
             mgr.web.commands.put(("queue_torrent", {"hash": "HA", "action": "down", "cmd_id": "q409"}))
             mgr.web.consume_commands()
         r = mgr.web.results["q409"]
@@ -771,8 +772,8 @@ def test_queue_torrent_qb_reject_receipt_and_log():
         assert "qB 拒绝执行" in r["error"] and "必须启用 torrent 队列" in r["error"], r
         assert "启用队列" in r["error"], "已知场景应附可行动建议"
         # 分流判据: 走「被 qB 拒绝」WARNING 分支, 而非「命令执行失败」ERROR 分支(文案区分, 级别绑定分支)
-        assert any("命令被 qB 拒绝" in m for m in messages), messages
-        assert not any("命令执行失败" in m for m in messages), messages
+        assert any("命令被 qB 拒绝" in m for m in cap.messages), cap.messages
+        assert not any("命令执行失败" in m for m in cap.messages), cap.messages
 
 
 def test_qb_reject_text_classification():
@@ -1544,10 +1545,10 @@ def test_reannounce_background_verify_and_cap():
         "epoch_mode": True,
         "t0": time.time() - 40
     }
-    with module_log("auto_qb.webui.runtime") as messages:
+    with capture_logs("auto_qb.webui.runtime") as cap:
         rt.check_pending()
     assert "H_OK" not in rt.reannounce_background
-    assert any("后台核实已确认" in m for m in messages)
+    assert any("后台核实已确认" in m for m in cap.messages)
     # rejected: status4+msg -> WARNING 日志后移除
     rt = _runtime([_epoch_tracker(status=4, msg="nope")])
     rt.reannounce_background["H_BAD"] = {
@@ -1556,10 +1557,10 @@ def test_reannounce_background_verify_and_cap():
         "epoch_mode": True,
         "t0": time.time() - 40
     }
-    with module_log("auto_qb.webui.runtime") as messages:
+    with capture_logs("auto_qb.webui.runtime") as cap2:
         rt.check_pending()
     assert "H_BAD" not in rt.reannounce_background
-    assert any("后台核实失败" in m for m in messages)
+    assert any("后台核实失败" in m for m in cap2.messages)
     # 未达 min_e: 不读不判, 条目保留; 逾时(min_e + TIMEOUT)未出结论 -> DEBUG 静默移除
     rt = _runtime([_epoch_tracker()])
     rt.reannounce_background["H_FUT"] = {
@@ -1574,11 +1575,11 @@ def test_reannounce_background_verify_and_cap():
         "epoch_mode": True,
         "t0": time.time() - 200
     }
-    with module_log("auto_qb.webui.runtime") as messages:
+    with capture_logs("auto_qb.webui.runtime") as cap3:
         rt.check_pending()
     assert "H_FUT" in rt.reannounce_background, "未达 min_e 不核实"
     assert "H_OLD" not in rt.reannounce_background, "逾时未出结论静默移除"
-    assert any("逾时移除" in m for m in messages)
+    assert any("逾时移除" in m for m in cap3.messages)
     # 上限 500: 超限丢最旧并 WARNING 一次
     rt = _runtime([_epoch_tracker()])
     for i in range(REANNOUNCE_BACKGROUND_MAX):
@@ -1596,11 +1597,11 @@ def test_reannounce_background_verify_and_cap():
     host.web = rt
     fut = time.time() + 1000  # min_e - t0 > 25s: HNEW 以推迟身份登记, 触发超限逐出
     bg_base = {"u": {"status": 2, "updating": False, "next": fut, "min": fut}}
-    with module_log("auto_qb.webui.commands") as cmd_messages:
+    with capture_logs("auto_qb.webui.commands") as cap4:
         QbManager._register_reannounce_pending(host, "cmd_bg", ["HNEW"], {"HNEW": bg_base}, True)
     assert len(rt.reannounce_background) == REANNOUNCE_BACKGROUND_MAX
     assert "H000" not in rt.reannounce_background and "HNEW" in rt.reannounce_background, "超限丢最旧"
-    assert any("丢弃最旧" in m for m in cmd_messages)
+    assert any("丢弃最旧" in m for m in cap4.messages)
 
 
 def test_cmd_group_actions_skip_missing_group():
@@ -1662,9 +1663,9 @@ def test_build_search_index_still_dirty_skips_completion_log():
         mgr.build_search_index = lambda: None  # 分批构建的中间轮: 索引仍脏
         mgr.web.search_index_dirty = True
         mgr.web.commands.put(("build_search_index", {}))
-        with module_log("auto_qb.webui.commands") as logs:
+        with capture_logs("auto_qb.webui.commands") as cap:
             mgr.web.consume_commands()
-        assert not any("搜索索引已构建" in m for m in logs), "仍脏不得报完成"
+        assert not any("搜索索引已构建" in m for m in cap.messages), "仍脏不得报完成"
         assert mgr.web.search_index_dirty is True
 
 

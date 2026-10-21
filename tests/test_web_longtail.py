@@ -64,13 +64,13 @@ from auto_qb.webui.runtime import (
     WebUIRuntime,
 )
 
+from helpers import capture_logs
 from webui_helpers import (
     KEY,
     STATIC_ROOT,
     _enable_qb_traffic,
     _qb_v4,
     _make_grouped_manager,
-    module_log,
     _attach_live_tail_host,
 )
 
@@ -186,11 +186,11 @@ def test_web_runtime_check_pending_paths():
 def test_web_runtime_resync_elapsed_ms_logs_by_threshold():
     """命令后补刷新计时: 异常慢升 WARNING, 正常只 DEBUG(不刷满日志)"""
     rt = WebUIRuntime(SimpleNamespace())
-    with module_log("auto_qb.webui.runtime") as messages:
+    with capture_logs("auto_qb.webui.runtime") as cap:
         rt.resync_elapsed_ms(time.time() - (float(CMD_SLOW_MS) / 1000.0 + 1.0))
-        assert any("命令后补刷新" in m and "真值" in m for m in messages), "超阈值 -> WARNING"
+        assert any("命令后补刷新" in m and "真值" in m for m in cap.messages), "超阈值 -> WARNING"
         rt.resync_elapsed_ms(time.time())
-    assert any("命令后补刷新" in m for m in messages), "正常耗时也落 DEBUG(排障可查)"
+    assert any("命令后补刷新" in m for m in cap.messages), "正常耗时也落 DEBUG(排障可查)"
 
 
 def test_web_runtime_set_result_prunes_stale_and_carries_truth():
@@ -238,9 +238,9 @@ def test_web_runtime_affected_truth_queries_live_api():
         raise RuntimeError("qB 断了")
 
     rt2 = WebUIRuntime(SimpleNamespace(api=SimpleNamespace(torrents_info=boom), state_kind=lambda t: "x"))
-    with module_log("auto_qb.webui.runtime") as messages:
+    with capture_logs("auto_qb.webui.runtime") as cap:
         assert rt2._affected_truth("pause_torrent", {"hash": "HA"}) is None
-    assert any("真值直查失败" in m for m in messages), "直查失败落 WARNING(不回落快照)"
+    assert any("真值直查失败" in m for m in cap.messages), "直查失败落 WARNING(不回落快照)"
 
 
 def test_web_commands_delete_with_files_and_reannounce_gone_receipt():
@@ -368,12 +368,12 @@ def test_web_commands_bulk_recheck_via_ops():
     """批量 recheck 经 ops 逐个提交: 提交/跳过/缺失聚合进回执(部分成功也报错)"""
     with tempfile.TemporaryDirectory() as td:
         mgr, client, key = _make_grouped_manager(td)
-        with module_log("auto_qb.webui.commands") as messages:
+        with capture_logs("auto_qb.webui.commands") as cap:
             mgr.web.commands.put(("bulk_torrents", {"hashes": ["HA", "GONE"], "action": "recheck", "cmd_id": "br"}))
             mgr.web.consume_commands()
         rec = mgr.web.results["br"]
         assert rec["status"] == "error" and "1/2 个种子不存在" in rec["error"]
-        assert any("批量 recheck(提交 1" in m for m in messages), "提交/跳过计数落日志(回执只带缺失文案)"
+        assert any("批量 recheck(提交 1" in m for m in cap.messages), "提交/跳过计数落日志(回执只带缺失文案)"
 
 
 def test_web_commands_add_torrents_receipt():

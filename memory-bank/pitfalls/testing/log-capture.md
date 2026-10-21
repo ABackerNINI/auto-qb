@@ -3,7 +3,7 @@
 > 摘要: caplog 与全局日志状态是跨测试共享的 —— 断言日志要挂模块 logger 自建 handler + 显式 setLevel, 不碰 caplog。
 > 触发: caplog, 日志断言, 日志级别, root handlers, root level, xdist, 偶发, CI 红, setup_logging, make_manager
 
-**Refs:** memory-bank/tasks/26-10-05-test-log-capture-helper.md
+**Refs:** memory-bank/tasks/26-10-05-test-log-capture-helper.md,memory-bank/tasks/26-10-22-test-log-capture-dup.md
 
 ### caplog 挂在 root 上、依赖全局日志状态 ⇒ 断言偶发落空或恒空
 
@@ -19,6 +19,9 @@
   (issue 26-10-04-2311 认领轮 2026-10-05: `.records/.messages/.text` 三视图 + 关 propagate 不污染输出),
   **新用例一律用它, 别再手写局部捕获器**; 守阵 `test_logging.py::test_capture_logs_survives_qbmanager_setup_logging`
   (对照断言钉死 caplog 恒空的坑存在性, 前提失效即红提示重评范式)。不要因此放弃日志断言 —— 日志级别即通知语义。
+  - **2026-10-22 清偿(issue 26-10-21-0502)**: 历史 7 份局部副本(helpers/webui_helpers/hr_service/hr_worker/
+    modules_p6/speed_curve/traffic_sample)已全部删除并改调 `capture_logs`, 全仓再无第二份模块 logger 采集器;
+    `test_tray._capture_on_module_logger` 是"包装调用方自备 handler"的另一语义, 不在收敛面。
 - **复发**: 2(原记于 stubs-sim「make_manager 清 root handlers」条, 2026-09-27 外迁至此。
   为什么没命中(首次): 旧判别只写"用例体内建 manager"这层, 没料到 root level 与 xdist 两个更底层的伤害面。
   2026-10-01 W2 issue 清偿轮再踩: **两个独立认领子智能体先后撞同一坑** —— QbManager 构造链执行

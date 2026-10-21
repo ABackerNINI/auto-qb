@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-0502">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md,memory-bank/tasks/26-10-22-test-log-capture-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)">
 <meta name="issue-summary" content="同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点">
 <title>测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-0502-refactor-test-log-capture-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 05:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -92,10 +92,18 @@
     <p>helpers.capture_logs 升级为唯一单点（补 messages/records 接口），七处改调；纯测试改动零源码风险。</p>
   </section>
 
+  <section id="s5">
+    <h2><span class="no">05</span>修复记录<span class="opt">（2026-10-22，认领方 26-10-22-test-log-capture-dup.md）</span></h2>
+    <p><strong>实际修法</strong>：capture_logs 的 records/messages/text 三视图在 pitfall 收敛轮(2026-10-05)即已具备，无需升级接口 —— 与建议的差异仅在此，建议原文保留。六处本地实现(webui_helpers.module_log+_ListLogHandler · test_hr_service.service_log · test_hr_worker.worker_log · test_modules_p6._ModuleLogCapture+_RecHandler · test_speed_curve._CurveLogCapture · test_traffic_sample._ModuleLogCapture)全部删除，33 处调用点改调 capture_logs：messages 列表形状 → cap.messages；cap.records/cap.text 形状原样保留；speed_curve 的 info_count() → cap.text.count("本轮不覆盖")。同步清理 webui_helpers 的 import logging 与 test_traffic_sample 的 import io/logging。test_tray._capture_on_module_logger 包装调用方自备 handler，语义不同，不在收敛面。</p>
+    <p><strong>验证方式</strong>：受影响 9 个测试文件子集先跑(514 passed)，再 `commands run test.full` 全量：<strong>3996 passed, 2 skipped</strong>，覆盖率 TOTAL 99%(99.28%, 过闸)；yapf --diff 零输出；全仓 grep 七个符号零残留。测试数字单点事实源见 `commands run kb.baseline`(切片 26-10-22-0409-test-log-capture-dup)。</p>
+  </section>
+
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-21 05:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 03:48 — 用户指派认领，状态 <strong>In Progress</strong>；复验：7 处锚点全部仍在（行号漂移，按 grep 关键词定位）；认领方 memory-bank/tasks/26-10-22-test-log-capture-dup.md</li>
+      <li>2026-10-22 04:09 — 已修并验证，状态 <strong>Done</strong>（修复记录见 §05；test.full 3996 passed + 2 skipped，覆盖率 99% 过闸）</li>
     </ul>
   </section>
 

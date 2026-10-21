@@ -173,8 +173,6 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_stop_early_return_when_disabled_or_no_data_dir: stop() 在 qb_traffic 段缺失/未启用/
   data_dir 为空时零操作(不封游程不 flush)
 """
-import io
-import logging
 import os
 import threading
 import time
@@ -223,7 +221,7 @@ from auto_qb.core.traffic_store import (
     v4_window_dates,
     v4_z_totals_ramp,
 )
-from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+from helpers import FakeClient, FakeTorrent, capture_logs, make_manager, seed_store
 from webui_helpers import _enable_qb_traffic, _qb_v4
 
 # 写入侧凭据判据的测试 idiom 消误报(2026-10-16 形态 D 轮用户拍板, 样板与缘由见
@@ -294,31 +292,6 @@ def _v4_read(tmp_path, key: str, ts: float):
 
 def _v4_series_dir(tmp_path, infohash: str):
     return tmp_path / "qb-traffic-v4" / "torrents" / infohash
-
-
-class _ModuleLogCapture:
-    """捕获 qb_traffic 模块 logger(QbManager 构造清空 root handlers, caplog 失效 —— 惯例见 test_speed_curve)"""
-    def __init__(self, level=logging.DEBUG):
-        self._level = level
-        self.buf = io.StringIO()
-
-    def __enter__(self):
-        self._lg = logging.getLogger("auto_qb.core.modules.traffic_sample_mod")
-        self._handler = logging.StreamHandler(self.buf)
-        self._handler.setLevel(self._level)
-        self._old_level = self._lg.level
-        self._lg.setLevel(self._level)
-        self._lg.addHandler(self._handler)
-        return self
-
-    def __exit__(self, *exc):
-        self._lg.removeHandler(self._handler)
-        self._lg.setLevel(self._old_level)
-        return False
-
-    @property
-    def text(self) -> str:
-        return self.buf.getvalue()
 
 
 # ---------- 配置键全链(§06) ----------
@@ -616,7 +589,7 @@ def test_counter_rollback_records_reset_no_negative(tmp_path):
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # 立基线
     mgr.store.server_state = _ss(alltime_dl=9_000_000, alltime_ul=20_000_000)  # dl 回落(qB 重启), ul 不变
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         _run_sample(mgr)
     g = mod.latest[GLOBAL_SERIES_KEY]
     assert g.dl_inc is None  # 重置: 该点增量记 null
@@ -1230,16 +1203,16 @@ def test_interval_mismatch_ceils_and_warns_once(tmp_path, monkeypatch):
     mgr.config.main_tick = 2.0  # FakeConfig 缺省 1.0; 显式置 2 构造失配场景
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         mod.handle_traffic_sample(dry_run=False)  # 不拒采
     assert mod._effective_interval == 4  # ceil(3/2) x 2 = 4(颗粒变粗不断线)
     assert "取整" in cap.text and "整数倍" in cap.text  # 恰一次告警
-    with _ModuleLogCapture() as cap2:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
         mod.handle_traffic_sample(dry_run=False)
     assert "取整" not in cap2.text  # 同一失配不重复告警
     # 配置变化 -> 记忆复位: 新失配再告警一次
     mgr.config.qb_traffic.sample_interval = 5  # ceil(2.5) x 2 = 6
-    with _ModuleLogCapture() as cap3:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap3:
         mod.handle_traffic_sample(dry_run=False)
     assert mod._effective_interval == 6 and "取整" in cap3.text
 
@@ -1254,7 +1227,7 @@ def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
     mgr.config.main_tick = 1.5  # FakeConfig 缺省 1.0; 显式对齐构造匹配小数档
     mgr.store.server_state = _ss()
     mod = mgr.host.get("qb_traffic")
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         mod.handle_traffic_sample(dry_run=False)  # t0: 块首 r
     assert mod._effective_interval == 1.5
     assert "取整" not in cap.text  # 整数倍匹配: 失配告警不触发
@@ -1492,12 +1465,12 @@ def test_flush_oserror_discards_block_warns_once(tmp_path, monkeypatch):
         return real_append(self, key, date_str, header, records, block_base)
 
     monkeypatch.setattr(TrafficV4Store, "append_records", flaky_append)
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         _flush(mod)  # 失败 1: 告警一次, 块复位
     assert "批量落盘失败" in cap.text
     assert mod._buffers[GLOBAL_SERIES_KEY].start_epoch is None  # 块状态复位
     _run_sample(mgr)
-    with _ModuleLogCapture() as cap2:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
         _flush(mod)  # 失败 2: 持续失败降级 DEBUG(措辞「持续」), 不再 WARNING
     assert "(持续)" in cap2.text and "(本批数据丢失" not in cap2.text
     failing["on"] = False
@@ -1640,7 +1613,7 @@ def test_agg_flush_all_isolates_series_error_and_resets(tmp_path, monkeypatch):
         return real(key, now)
 
     monkeypatch.setattr(mod, "_agg_flush_series", boom)
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         mod._agg_flush_all(now=h0 + HOUR_SECONDS)
         mod._agg_state(bad).pending[h0] = [V4HourSample(1, 1, 1, 1, 3600.0)]  # 下一轮重试
         mod._agg_flush_all(now=h0 + HOUR_SECONDS + 600)
@@ -2083,7 +2056,7 @@ def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
 
     monkeypatch.setattr(TrafficV4Store, "append_agg_rows", _raise)
     agg.pending[_AGG_H0 + 5 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 3600.0)]
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         assert mod._agg_flush_series(key, now=_AGG_H0 + 6 * HOUR_SECONDS) is False
         agg.pending[_AGG_H0 + 6 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 3600.0)]
         assert mod._agg_flush_series(key, now=_AGG_H0 + 7 * HOUR_SECONDS) is False
@@ -2091,12 +2064,12 @@ def test_agg_defensive_paths_cascades_and_write_failure(tmp_path, monkeypatch):
     # 裁剪 OSError: 告警, 内存判据不变(下轮重试); 淘汰扫描 OSError: 告警不上抛
     agg.earliest_hour = _AGG_H0
     monkeypatch.setattr(TrafficV4Store, "trim_agg_hours", lambda s, k, n, w: (_ for _ in ()).throw(OSError(1, "x")))
-    with _ModuleLogCapture() as cap2:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
         mod._agg_trim(key, agg, _AGG_H0 + 40 * 86400, 30 * 86400)
     assert "裁剪失败" in cap2.text and agg.earliest_hour == _AGG_H0
     monkeypatch.setattr(TrafficV4Store, "evict_expired_series", lambda s, n, w: (_ for _ in ()).throw(OSError(1, "x")))
     mod._last_evict_check = None
-    with _ModuleLogCapture() as cap3:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap3:
         mod._maybe_evict(mgr.config.qb_traffic, 1_760_000_000.0)
     assert "淘汰扫描失败" in cap3.text
     # 同月新日并入 month 累计器(_agg_ingest_day 同月追加支); 裁剪判据 earliest None 零操作
@@ -2607,7 +2580,7 @@ def test_recovery_fallback_full_read_when_agg_missing(tmp_path, monkeypatch):
             (V4Sample(10 + i, 5, 100, 200), V4Sample(20, 6, 200, 300)),
             (100, 200),
         )
-    with _ModuleLogCapture() as logs:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as logs:
         mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
     r = mgr.host.get("qb_traffic").recovery_reads[key]
     assert r["bound"] == "fallback"
@@ -2641,7 +2614,7 @@ def test_recovery_instrumentation_logs_counts(tmp_path, monkeypatch):
     # 系列 B: 无 agg -> fallback 全量 + 3 文件(读集 3 > 2 -> 留下界来源行)
     for i in range(3):
         _write_day_file(tmp_path, "torrent:BB", v4_epoch_date_str(now - i * 86400))
-    with _ModuleLogCapture() as logs:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as logs:
         mgr.host.get("qb_traffic").start(mgr.ctx, dry_run=False)
     text = logs.text
     assert "启动恢复开始: 启用态, 2 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)" in text
@@ -2836,7 +2809,7 @@ def test_torrent_active_missing_fields_takes_null_run(tmp_path, monkeypatch):
     seed_store(mgr, [_active_torrent("HASH123", uploaded=None)])
     mod = mgr.host.get("qb_traffic")
     key = "torrent:HASH123"
-    with _ModuleLogCapture() as cap:
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
         _run_sample(mgr)
     run = mod._open_runs[key]
     assert run.kind == "n" and run.samples == 1

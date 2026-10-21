@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from webui_helpers import _iter_api_routes, _make_grouped_manager, module_log
+from helpers import capture_logs
+from webui_helpers import _iter_api_routes, _make_grouped_manager
 
 # ---------------- 键盘快捷键 /api/keys(W6, 计划 26-09-28-0354 §4.4; 前端接线守阵在 test_web_shortcuts.py) ----------------
 
@@ -253,7 +254,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
             return orig_export(torrent_hash=torrent_hash, **kw)
 
         client.torrents_export = export
-        with module_log("auto_qb.webui.commands") as messages:
+        with capture_logs("auto_qb.webui.commands") as cap:
             mgr.web.commands.put(
                 (
                     "bulk_torrents", {
@@ -271,7 +272,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
         assert "1 个跳过: 今日已跳检过该种子" in rec["error"], rec["error"]
         assert "1 个失败: 部分下载的种子禁止跳检" in rec["error"], rec["error"]
         assert "1 个失败: 导出 .torrent 失败" in rec["error"], rec["error"]
-        assert any("批量跳检(成功 1, 跳过 1, 失败 2)" in m for m in messages), messages
+        assert any("批量跳检(成功 1, 跳过 1, 失败 2)" in m for m in cap.messages), cap.messages
         # ok 的那枚走通四阶段并记录同日去重(跨来源共享不回归)
         names = [c[0] for c in client.calls]
         assert "export" in names and "delete" in names and "add" in names, client.calls
@@ -284,7 +285,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
             t2 = FakeTorrent(hash="HASH123", name="Solo", state="pausedUP", progress=0.0)
             client2.torrents["HASH123"] = t2
             seed_store(mgr2, [t2])
-            with module_log("auto_qb.webui.commands") as messages2:
+            with capture_logs("auto_qb.webui.commands") as cap2:
                 mgr2.web.commands.put(
                     ("bulk_torrents", {
                         "hashes": ["HASH123"],
@@ -295,7 +296,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
                 mgr2.web.consume_commands()
                 drive_skip(mgr2)  # 批量走异步入口: 相位由调度器推进到终态后才写回执
             assert mgr2.web.results["bs2"]["status"] == "ok", mgr2.web.results["bs2"]
-            assert any("批量跳检(成功 1 个种子)" in m for m in messages2), messages2
+            assert any("批量跳检(成功 1 个种子)" in m for m in cap2.messages), cap2.messages
 
 
 def test_drain_web_commands_bulk_skip_check_gated():

@@ -700,43 +700,13 @@ def test_record_status_warns_on_partial_and_error(tmp_path):
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
     service = _service(tmp_path, fetcher, clock=Clock())
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
-    with worker_log() as messages:
+    with capture_logs("auto_qb.hr.worker") as cap:
         result = HrRefreshResult(site="pt.example.com", action=ACTION_PARTIAL, reason="页面取数失败", alerted=False)
         worker._note("pt.example.com", result)
-        assert any("页面取数失败" in m for m in messages), "partial 未告警 -> 线程补 WARNING"
+        assert any("页面取数失败" in m for m in cap.messages), "partial 未告警 -> 线程补 WARNING"
         # 状态不变 + 节流窗口内: 不重复
         worker._note("pt.example.com", result)
-        assert sum("页面取数失败" in m for m in messages) == 1, "同状态节流期内不重复记"
-
-
-class _ListLogHandler(logging.Handler):
-    def __init__(self):
-        super().__init__()
-        self.messages = []
-
-    def emit(self, record):
-        self.messages.append(record.getMessage())
-
-
-class worker_log:
-    """挂在 auto_qb.hr.worker 模块 logger 上的自足采集(pitfalls/testing/log-capture: 禁 caplog)"""
-    def __init__(self, level=logging.DEBUG):
-        self._handler = _ListLogHandler()
-        self._logger = logging.getLogger("auto_qb.hr.worker")
-        self._level = level
-
-    def __enter__(self):
-        self._old_level, self._old_propagate = self._logger.level, self._logger.propagate
-        self._logger.addHandler(self._handler)
-        self._logger.setLevel(self._level)
-        self._logger.propagate = False
-        return self._handler.messages
-
-    def __exit__(self, *exc):
-        self._logger.removeHandler(self._handler)
-        self._logger.setLevel(self._old_level)
-        self._logger.propagate = self._old_propagate
-        return False
+        assert sum("页面取数失败" in m for m in cap.messages) == 1, "同状态节流期内不重复记"
 
 
 # ==================== hr 首轮变异审计轮: 取数线程长尾 ====================
