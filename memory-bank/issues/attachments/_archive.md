@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (55)
+## Open (56)
 
+- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](../26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留
 - [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](../26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点
 - [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](../26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建

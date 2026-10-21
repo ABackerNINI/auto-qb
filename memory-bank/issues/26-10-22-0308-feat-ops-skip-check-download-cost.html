@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="ops-skip-check-download-cost">
+<meta name="issue-stamp" content="26-10-22-0308">
+<meta name="issue-type" content="feat">
+<meta name="doc-topic" content="skip-check-arch">
+<meta name="doc-refs" content="memory-bank/reports/26-10-22-0234-report-skip-check-arch.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量">
+<meta name="issue-summary" content="跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线">
+<title>跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量 · feat · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 feat · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· feat</div>
+    <h1>跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量</h1>
+    <p class="lede">跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-22-0308-feat-ops-skip-check-download-cost</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-22 03:08</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">ops</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>跳检（删种重加 + <code>seedMode=true</code>）时若本地数据并不完整，libtorrent 仍会进入 seed mode，并<strong>立刻向 tracker 宣告 <code>left=0</code></strong>（<code>is_seed()</code> 在 seed mode 下恒真、<code>bytes_left()</code> 恒 0）。此时没有任何校验发生。</p>
+    <p>一旦有 peer 请求到坏片，整片哈希失败 → 离开 seed mode → <strong>全量重校验</strong> → 缺口暴露 → <strong>重新下载</strong>。这部分下载计入站点下载量，不可逆（分享率、HR、配额）。</p>
+    <p>发现场景：2026-10-22 会话核查 qb/libtorrent 跳检机制时，用户指出报告只算了 I/O 与时间成本，漏了下载量这条硬成本；据此补入调查报告 <code>memory-bank/reports/26-10-22-0234-report-skip-check-arch.html</code> §2.10（R2），并把"缺防线"单独立此条。</p>
+    <p class="hint">与配置相关：仅当允许跳检（<code>web.skip_check_menu</code> 放行或规则 <code>checking.mode=skip-checking</code>）且数据不完整时发生。完整数据不会触发下载。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">以下为 libtorrent 2.1.2 / qBittorrent v5.3.0 源码原文，取证时间 2026-10-22（源码位置 <code>D:\Projects\Else\</code>，不在本仓，仅作行为依据）。</p>
+<pre><code>// 1) 加种瞬间只查"存在性 + 尺寸不小于", 不读内容 —— 预分配文件放行
+// libtorrent src/storage_utils.cpp:551-575
+bool const seed = (rd.have_pieces.size() &gt;= fs.num_pieces() &amp;&amp; rd.have_pieces.all_set())
+    || (rd.flags &amp; torrent_flags::seed_mode);
+if (seed) {
+    for (file_index_t const file_index : fs.file_range()) {
+        std::int64_t const size = get_filesize(stat, file_index, fs, save_path, ec);
+        if (size &lt; 0) return false;
+        if (size &lt; fs.file_size(file_index)) {   // 只查"不小于"
+            ec.ec = errors::mismatching_file_size;
+            return false;
+        }
+    }
+    return true;
+}
+
+// 2) 坏片不发送, 但会触发全量重校验
+// libtorrent src/peer_connection.cpp:5519-5526
+if (hash_failed[protocol_version::V1] || hash_failed[protocol_version::V2]) {
+    m_ses.alerts().emplace_alert&lt;hash_failed_alert&gt;(t-&gt;get_handle(), piece);
+    t-&gt;leave_seed_mode(aux::torrent::seed_mode_t::check_files);
+}
+
+// 3) 全量重校验: 已验片一个不留
+// libtorrent src/torrent.cpp:566-574
+if (checking == seed_mode_t::check_files &amp;&amp; state() != torrent_status::checking_resume_data) {
+    set_have_all(false);
+    set_state(torrent_status::downloading);
+    force_recheck();
+}
+// src/torrent.cpp (force_recheck): "forget that we have any pieces"
+set_have_all(false);
+++m_picker_generation;</code></pre>
+    <p>本项目侧现状（取证 2026-10-22）：<code>ops_mod.py</code> 的 partial 闸门只按 <code>progress</code> 判，前置检查 <code>check_filelist</code> 只比对"存在 + 尺寸"；<strong>没有任何读内容的环节</strong>，也没有下载侧保险丝。</p>
+    <p class="hint">注：<code>ops_mod.py:665</code> 现有注释写"零块被上传(垃圾数据)"，与引擎行为不符（坏片在发块前被整片哈希拦下，不外传）；该表述已在调查报告 §2.10 纠正。本条只关心"触发重新下载"这一后果。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>允许跳检 + 数据不完整（<code>progress</code> 落在 (0,1)，或文件尺寸相同但内容被替换）+ 有 peer 请求到坏片。三者同时成立才触发下载。</td></tr>
+      <tr><td>影响范围</td><td>规则源与 WEB 手动两个跳检入口都受影响；损失与种子大小成正比（按整片重下，piece 4–16 MiB 为放大单位）；直接作用于站点下载量、分享率与 HR 判定。</td></tr>
+      <tr><td>严重度</td><td>中。数据不会外传、且最终会自愈，但下载量不可逆；残缺比例高的大种一次可损失数十 GB，且发现时点不可控（可能是配额紧张时）。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">符号名 + grep 关键词 + 当时行号（取证 2026-10-22）。代码会漂移，靠符号与 grep 重新定位。</p>
+    <ul>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:665</code>（取证 2026-10-22）· 跳检闸门文档串里的 partial 段 · grep <code>partial</code> / <code>is_skip_checking</code></li>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:849</code> 与 <code>:1056</code>（取证 2026-10-22）· <code>torrents_add(..., is_skip_checking=True, is_stopped=True)</code> 两个重加点（对账重加 / 相位机重加）· grep <code>is_skip_checking=True</code></li>
+      <li><code>src/auto_qb/rules/actions/checking.py</code> · <code>_find_reference</code>（已具备 <code>torrents_piece_hashes</code> 调用，抽样校验可复用）· grep <code>torrents_piece_hashes</code></li>
+      <li><code>src/auto_qb/rules/actions/checking.py</code> · <code>check_filelist</code>（现有"存在 + 尺寸"前置检查）· grep <code>check_filelist</code></li>
+      <li><code>src/auto_qb/core/qbapi.py</code> · qB API 封装层（新增 <code>dlLimit</code> / <code>setDownloadLimit</code> 需要经过此处）· grep <code>def torrents_add</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p>跳检的完整性判定只有"文件存在 + 尺寸不小于"，不读内容；而稀疏预分配使尺寸恰好等于完整尺寸，于是"部分下载"与"内容被替换"这两类残缺都能过闸。</p>
+    <p>引擎的惰性校验只保证<strong>不外传坏数据</strong>，并不阻止<strong>触发重新下载</strong>——这是两个不同后果，前者被解决了，后者没有。项目侧缺的正是"用少量读盘证明完整性"这一环。</p>
+    <div class="callout">已排除：① 站点侧记账异常（本次不涉及）；② 数据外传（发块前整片哈希，坏片不外发，见调查报告 §2.5）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>判断完整性只有两种货币：读盘（免费、慢）与下载（花钱、不可逆）。跳检的实质是"先不付读盘，赌不用付下载"。所以完全避免 = 不跳检；可行的方向是用<strong>少量读盘</strong>把赌注压小，再用<strong>限速</strong>兜底。三层可独立实施：</p>
+    <ol>
+      <li><strong>抽样校验（核心）</strong>：跳检前用 <code>torrents_piece_hashes</code> + <code>torrents_files</code> + <code>piece_size</code> 算出 piece→文件偏移映射，自读 N 片（建议 16 片）算 sha1 比对。全过则放行，有失败则转全量校验或拒绝跳检。<strong>成本 = N × piece_size 读盘，零下载量。</strong>抽样策略：优先抽每个文件的尾部片与跨文件边界的片（部分下载总是尾部缺失，命中率最高），再均匀随机补几片（防内容被替换）。</li>
+      <li><strong>下载限速保险丝</strong>：重加时带极小的 per-torrent <code>dlLimit</code>（如 10 KB/s）；监控 <code>amount_left</code> 从 0 变正 / <code>progress</code> 从 1 掉下 / <code>state</code> 进入 <code>checkingUP→checkingDL</code>，命中即 <code>pause</code> + 告警；连续 N 小时无回退则解除限速。损失上限 = 限速 × 检测延迟。</li>
+      <li><strong>结构性收紧</strong>：带 <code>zSkipChecked</code> 标签的种禁止再次跳检；按种子大小设阈值，超过阈值强制走"有参考种子"分支；参考种加时效约束（参考种自己也可能后来被改）。</li>
+    </ol>
+    <p><strong>代价与边界</strong>：抽样需要正确的 piece→文件偏移映射（含 pad file、多文件跨片），实现有边界复杂度；抽样挡不住零星坏片，但零星坏片的损失本身就是整片级（4–16 MiB），正好由保险丝封顶。保险丝会拖慢"确实需要补齐"的场景，需设自动解除条件。</p>
+    <p><strong>已排除的方案</strong>（勿再试）：<code>upload_mode</code> 当闩——libtorrent 有该 flag，但 qB 只用于加 magnet 元数据并把它当错误态暴露（<code>torrentimpl.cpp:1361/1380</code>），WebUI 无端点，且 auto_managed 下 libtorrent 会自动退出该模式；<code>seed_mode</code> 加种后不能再置位（<code>torrent_flags.hpp:41-42</code>），所以无法"先普通加种校验、再切 seed mode"；也不存在"只校验不上传"的 API。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-22 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-22-0308-feat-ops-skip-check-download-cost.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

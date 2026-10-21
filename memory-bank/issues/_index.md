@@ -24,12 +24,13 @@
 | docs | 1 |
 | test | 2 |
 | refactor | 12 |
-| feat | 20 |
+| feat | 21 |
 | chore | 2 |
 | question | 6 |
 
 ## Open
 
+- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告…
 - [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键…
 - [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 log…
 - [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在…

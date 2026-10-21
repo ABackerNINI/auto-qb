@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>qB/libtorrent 跳检机制源码核查 — seed_mode 语义、惰性哈希校验与标记可替代性</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="skip-check-arch">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-22-0234">
+<meta name="doc-updated" content="26-10-22-0300">
+<meta name="doc-refs" content="memory-bank/issues/26-10-22-0308-feat-ops-skip-check-download-cost.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  .box { border: 1px solid var(--hair); border-left: 2px solid var(--accent); background: var(--code-bg); padding: 12px 16px; margin: 16px 0; }
+  .box .t { font-family: var(--display); font-weight: 600; font-size: 14px; margin-bottom: 4px; color: var(--accent-ink); }
+  .box.ok { border-left-color: var(--ok); }
+  .box.ok .t { color: var(--ok); }
+  .box.wr { border-left-color: var(--warn); }
+  .box.wr .t { color: var(--warn); }
+  .box.no { border-left-color: var(--no); }
+  .box.no .t { color: var(--no); }
+  .box p:first-of-type { margin-top: 6px; }
+  .box p:last-child { margin-bottom: 2px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: skip-check-arch</div>
+<h1>qB/libtorrent 跳检机制源码核查 — seed_mode 语义、惰性哈希校验与标记可替代性</h1>
+<p class="lede">跳检种子的特殊标记就是 libtorrent 的 <code>torrent_flags::seed_mode</code>；上传时它不是"顺便"校验，而是<strong>发块前强制整片哈希</strong>，失败即强制全量重校验——因此坏数据一个字节都发不出去。但该标记<strong>不能替代 <code>zSkipChecked</code> 标签</strong>：它没有 Web API 读面、落盘可滞后一小时、且全部验完后会自毁。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-22-0234 · <b>doc-updated</b> 26-10-22-0300 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>修订</b> R2（26-10-22-0300）：补残缺档的<strong>下载量成本</strong>——全量校验不花流量而跳检把发现缺口推迟到最坏时点，补齐缺口要计入站点下载量（§2.10 新增一节，§01 与 §2.4 相应收口）。<br>
+  <b>修订</b> R1（26-10-22-0256）：用户复核指出原 §2.10 把全量校验的基线少算了一次服务读，据此重写 §2.4 与 §2.10——补"校验读与服务读合并"的 I/O 账、收益按完整/残缺分档，并纠正"零块被上传成垃圾数据"的说法。<br>
+  <b>来源</b> 用户提问（2026-10-22 会话，两轮）：跳检的种子在 qb/libtorrent 源码里是否有特殊标记、上传时是否会顺带校验块 hash、块 hash 不符是否触发全文件校验，以及该标记能否替代 <code>zSkipChecked</code> 标签
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+
+<h3>三问三答</h3>
+<table>
+  <tr><th>问题</th><th>结论</th><th>证据锚点</th></tr>
+  <tr>
+    <td>跳检的种子有特殊标记吗</td>
+    <td><span class="good">有</span>。<code>lt::torrent_flags::seed_mode</code>，由 qB 的 <code>AddTorrentParams::seedMode</code> 置位，写入 resume 数据持久化。</td>
+    <td><code>sessionimpl.cpp:3086-3089</code> · <code>write_resume_data.cpp:84</code></td>
+  </tr>
+  <tr>
+    <td>上传时会顺便检查块 hash 吗</td>
+    <td><span class="good">会，且比"顺便"更强</span>：该片首次被请求时先算<strong>整片</strong>哈希（v1 全片 sha1；v2 全片所有 block 的 sha256），请求被 <em>hold</em> 而非 reject，验完才发块。每片只验一次。</td>
+    <td><code>peer_connection.cpp:5331-5367</code> · <code>5431-5530</code></td>
+  </tr>
+  <tr>
+    <td>块 hash 不对会触发全文件校验吗</td>
+    <td><span class="good">会，且是强制全量</span>：<code>hash_failed_alert</code> + <code>leave_seed_mode(check_files)</code> → <code>set_have_all(false)</code> + <code>force_recheck()</code>，整种回退重校验、缺片重新下载。</td>
+    <td><code>torrent.cpp:542-580</code></td>
+  </tr>
+</table>
+
+<div class="box ok">
+  <div class="t">数据完整性这条腿是硬的</div>
+  <p>跳检的安全模型不是"信任文件存在"，而是<strong>信任首次使用</strong>（trust on first use）：未验过的片不对外发送，任何一次校验失败都会把整种拉回全量校验。所以"跳检会往群里传垃圾数据"这个担心，在 libtorrent 这一层是不成立的。</p>
+</div>
+
+<div class="box">
+  <div class="t">收益与成本都严格取决于数据是否完整</div>
+  <p>完整数据下，哈希读与该片的服务读紧邻发生、命中页缓存，物理上只落一次盘——相对全量校验（校验读一次 + 之后冷读一次），<strong>相当于省掉一次全量读盘</strong>，且不必等校验跑完即可做种。</p>
+  <p>残缺数据下则相反：一次 <code>force_recheck</code> 把省下的全部收走还倒贴，而且补齐缺口要<strong>计入站点下载量</strong>——全量校验本身不花一个字节流量，跳检却把"发现缺口"推迟到最坏的时点。详见 <a href="#s210">§2.10</a>。</p>
+</div>
+
+<h3>能否替代 <code>zSkipChecked</code> 标签</h3>
+<p><strong>不能替代。</strong>它是引擎侧的事实，但不是一个可用的<em>对外判据</em>。三条决定性障碍见 <a href="#s28">§2.8</a>，一句话版本：</p>
+<ul>
+  <li><span class="bad">没有 API</span> —— <code>torrents/info</code> / <code>sync/maindata</code> / <code>torrents/properties</code> 全都没有该字段，只能读 qB 配置目录里的 <code>.fastresume</code> 文件，Docker 只挂下载目录、seedbox 远程部署直接失效。</li>
+  <li><span class="bad">不实时</span> —— resume 落盘由默认 60 分钟定时器驱动，跳检是删种重加且<em>不触发校验</em>，重加后既无校验完成事件也无状态跳变，文件可能一小时不更新甚至还不存在。用它确认"这次跳检成功了"必然误判。</li>
+  <li><span class="bad">会自毁</span> —— 全部片惰性验完后 <code>leave_seed_mode(skip_checking)</code> 立即 <code>m_verified.clear()</code>，<code>seed_mode</code> 同时归 0。所以"位图全满"这个状态<strong>永远观察不到</strong>，<code>seed_mode=0</code> 是个歧义值。</li>
+</ul>
+<p>但它有两个标签补不了的价值，前提是只当<strong>旁证</strong>用、且 fail-open：</p>
+<ul>
+  <li><strong>崩溃对账</strong>：现有 <code>_skip_step_finish</code> 打标失败只记 warning（"不影响跳检结果"），崩在打标之前安全性判据就静默破了。此时 <code>seed_mode=1</code> 是引擎侧铁证。</li>
+  <li><strong>自动摘标</strong>：对一个带 <code>zSkipChecked</code> 的种子，<code>seed_mode=0</code> 且 <code>progress==1</code> ⇒ 数据已完整校验（单向推断，论证见 §2.8）。这正好补上现在"程序只打不摘"（<code>infra/utils.py:638</code>）的缺口。</li>
+</ul>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>2.1 坐标与版本</h3>
+<table>
+  <tr><th>项</th><th>值</th></tr>
+  <tr><td>libtorrent</td><td><code>D:\Projects\Else\libtorrent</code> · HEAD <code>53acefea9</code> · 版本 <code>2.1.2.0</code>（<code>include/libtorrent/version.hpp</code>）</td></tr>
+  <tr><td>qBittorrent</td><td><code>D:\Projects\Else\qBittorrent</code> · HEAD <code>8182ae071</code> · <code>Changelog</code> 顶格 <code>v5.3.0</code></td></tr>
+  <tr><td>本项目侧</td><td><code>auto-qb-clone2</code> @ <code>dedec965</code>（会话开工同步后的基线）</td></tr>
+</table>
+
+<h3>2.2 标记从哪来：qB 的一个 bool 变成 libtorrent 的一个 flag</h3>
+<pre><code><span class="cm">// qBittorrent src/base/bittorrent/sessionimpl.cpp:3086-3089</span>
+<span class="cm">// Seeding mode / Skip checking and directly start seeding</span>
+if (addTorrentParams.seedMode)
+    p.flags |= lt::torrent_flags::seed_mode;
+else
+    p.flags &amp;= ~lt::torrent_flags::seed_mode;</code></pre>
+<p>WebUI 写面参数名 <code>seedMode</code>（<code>torrentscontroller.cpp:1143</code> 解析、<code>:1215</code> 赋值）。<code>WebAPI_Changelog.md</code> 2.16.0（#24724）记：<code>torrents/add</code> 接受 <code>seedMode</code>（bool），<strong>不再接受</strong> <code>skip_checking</code>；旧键兼容在 <code>addtorrentparams.cpp:128</code>（<code>.seedMode = ... jsonObj.value("skip_checking").toBool()</code>）。</p>
+<p>本项目用的 <code>qbittorrentapi</code> 同时发两个键（<code>.venv/Lib/site-packages/qbittorrentapi/torrents.py:424-425</code>），新旧 qB 都兼容 —— 该处<strong>无需改动</strong>。</p>
+
+<h4>持久化</h4>
+<pre><code><span class="cm">// libtorrent src/write_resume_data.cpp:84</span>
+ret["seed_mode"] = bool(atp.flags &amp; torrent_flags::seed_mode);
+<span class="cm">// src/torrent.cpp:7645-7646  (仅 seed mode 下写)</span>
+if (m_seed_mode) ret.verified_pieces = m_verified;
+<span class="cm">// src/write_resume_data.cpp:199-201 (verified 只在"部分已验"时出现)</span>
+if (!atp.verified_pieces.empty() &amp;&amp; !atp.verified_pieces.none_set())
+    ret["verified"] = to_string(atp.verified_pieces);</code></pre>
+<p>读回走 <code>read_resume_data.cpp:266</code>（<code>apply_flag(..., "seed_mode", ...)</code>）+ <code>torrent.cpp:2360-2374</code>（按 <code>verified_pieces</code> 逐位恢复 <code>m_verified</code>）。<strong>重启不重算已验过的片</strong>。qB 侧另在 <code>torrentimpl.cpp:2302-2323</code> 的 <code>prepareResumeData</code> 里做 <code>preserveSeedMode</code>，防 libtorrent 回吐的 resume 把标志洗掉。</p>
+
+<h3>2.3 标记什么时候会被静默丢弃</h3>
+<pre><code><span class="cm">// src/torrent.cpp:405-415</span>
+<span class="cm">// 设置 file-/piece-priority 时 seed mode 没有意义; 若 resume 说我们缺片, 也不可能是 seed mode</span>
+m_seed_mode = (p.flags &amp; torrent_flags::seed_mode)
+    &amp;&amp; std::find(p.file_priorities.begin(), p.file_priorities.end(), dont_download) == p.file_priorities.end()
+    &amp;&amp; std::find(p.piece_priorities.begin(), p.piece_priorities.end(), dont_download) == p.piece_priorities.end()
+    &amp;&amp; std::find(p.have_pieces.begin(), p.have_pieces.end(), false) == p.have_pieces.end();</code></pre>
+<p><code>read_resume_data.cpp:327-330</code> 同款：任一文件优先级为 <code>dont_download</code> 即 <code>ret.flags &amp;= ~torrent_flags::seed_mode</code>。这是"跳检没生效、白等一次全量校验"的最常见原因——静默降级，不报错。</p>
+
+<h3>2.4 加种瞬间只查存在性与尺寸，不查内容</h3>
+<pre><code><span class="cm">// src/storage_utils.cpp:551-575</span>
+bool const seed = (rd.have_pieces.size() &gt;= fs.num_pieces() &amp;&amp; rd.have_pieces.all_set())
+    || (rd.flags &amp; torrent_flags::seed_mode);
+if (seed) {
+    for (file_index_t const file_index : fs.file_range()) {
+        if (fs.pad_file_at(file_index)) continue;
+        std::int64_t const size = get_filesize(stat, file_index, fs, save_path, ec);
+        if (size &lt; 0) return false;
+        if (size &lt; fs.file_size(file_index)) {          <span class="cm">// 只查"不小于"</span>
+            ec.ec = errors::mismatching_file_size;
+            return false;                                <span class="cm">// resume 被拒 -&gt; 走全量校验</span>
+        }
+    }
+    return true;
+}</code></pre>
+<div class="box wr">
+  <div class="t">预分配文件能过闸</div>
+  <p>稀疏预分配使文件尺寸等于完整尺寸，这条"只查不小于"的检查会放行——内容却是零块。于是 <code>progress</code> 落在 (0,1) 的种子跳检会成功进入 seed mode，<strong>但产出的不是"垃圾数据外传"，而是"宣告 seeder 却供不出数据"</strong>：坏片在发块前被整片哈希拦下（§2.5），一个字节都出不去；代价是对端请求被扣住白等，以及必然触发的全量重校验（§2.6）。这不是 libtorrent 的缺陷，而是"信任首次使用"模型的前置条件。本项目 <code>ops_mod.py</code> 的 partial 闸门（仅 <code>progress==0</code> 可跳检）由此得到引擎层佐证，<strong>必须保留</strong>——但理由是收益分档（§2.10），不是"防外传"。</p>
+</div>
+
+<h3>2.5 上传路径：发块前强制整片哈希</h3>
+<pre><code><span class="cm">// src/peer_connection.cpp:5331-5367</span>
+bool const seed_mode = t-&gt;seed_mode();
+if (seed_mode &amp;&amp; !t-&gt;verified_piece(r.piece)
+    &amp;&amp; !m_settings.get_bool(settings_pack::disable_hash_checks))
+{
+    if (t-&gt;verifying_piece(r.piece)) continue;            <span class="cm">// 同片去重</span>
+    if (m_outstanding_piece_verification &gt;= 3) continue;  <span class="cm">// 每 peer 最多 3 个在途</span>
+    ++m_outstanding_piece_verification;
+    disk_job_flags_t flags;
+    if (t-&gt;info_hash().has_v1() &amp;&amp; !t-&gt;disable_v1_hashes()) flags |= disk_interface::v1_hash;
+    aux::vector&lt;sha256_hash&gt; hashes;
+    if (t-&gt;info_hash().has_v2()) hashes.resize(t-&gt;torrent_file().layout().blocks_in_piece2(r.piece));
+    m_disk_thread.async_hash(t-&gt;storage(), r.piece, v2_hashes, flags, ...);
+    t-&gt;verifying(r.piece);
+    continue;                                             <span class="cm">// 请求被 hold, 不是 reject</span>
+}</code></pre>
+<p>三个要点：</p>
+<ul>
+  <li><strong>粒度是整片</strong>，不是块。请求一个 16 KiB 块，代价是读并哈希整个片（v1 全片 sha1；v2 全片所有 block 的 sha256）。</li>
+  <li><strong>请求被扣住而非拒绝</strong>：<code>continue</code> 保留 <code>m_requests[i]</code>，验完由 <code>on_seed_mode_hashed</code> 末尾再 <code>fill_send_buffer()</code> 续发。对端只感受到延迟，不感受到错误。</li>
+  <li><strong>每片只验一次</strong>：结果落 <code>m_verified</code>（<code>torrent.cpp:1321</code> 起 <code>verified()</code>），并随 resume 落盘。</li>
+</ul>
+<p>配套：<code>is_seed()</code> 在 seed mode 下恒真、<code>bytes_left()</code> 恒 0（<code>torrent.cpp:9252-9263</code>、<code>:4365</code>），即对 tracker 立刻宣告 <code>left=0</code>、立刻做种。<code>disable_hash_checks</code> 默认 <code>false</code>（<code>settings_pack.cpp:158</code>），qBittorrent 全仓<strong>从不设置</strong>它（grep 无命中）——这道闸不可被 qB 侧关闭。</p>
+
+<h3>2.6 失败路径：全量重校验</h3>
+<pre><code><span class="cm">// src/peer_connection.cpp:5509-5526</span>
+if (hash_failed[protocol_version::V1] || hash_failed[protocol_version::V2]) {
+    peer_log(..., seed_mode_file_hash, "piece: %d failed", ...);
+    if (m_ses.alerts().should_post&lt;hash_failed_alert&gt;())
+        m_ses.alerts().emplace_alert&lt;hash_failed_alert&gt;(t-&gt;get_handle(), piece);
+    t-&gt;leave_seed_mode(aux::torrent::seed_mode_t::check_files);
+}</code></pre>
+<pre><code><span class="cm">// src/torrent.cpp:542-580</span>
+void torrent::leave_seed_mode(seed_mode_t const checking) {
+    if (!m_seed_mode) return;
+    m_seed_mode = false;
+    update_state_timers();
+    if (checking == seed_mode_t::check_files &amp;&amp; state() != torrent_status::checking_resume_data) {
+        set_have_all(false);
+        set_state(torrent_status::downloading);
+        force_recheck();          <span class="cm">// 整种回退重校验</span>
+    }
+    m_num_verified = 0;
+    m_verified.clear();           <span class="cm">// 位图连同已验结果一起清空</span>
+    m_verifying.clear();
+    set_need_save_resume(torrent_handle::if_state_changed);
+}</code></pre>
+<p>另外两条支路：</p>
+<ul>
+  <li><strong>磁盘错误</strong>（文件被移走/读失败）同样落 <code>leave_seed_mode(check_files)</code>（<code>peer_connection.cpp:5449</code>）。</li>
+  <li><strong>v1 与 v2 结论互相矛盾</strong> → <code>errors::torrent_inconsistent_hashes</code> + <code>pause()</code>（<code>peer_connection.cpp:5462-5467</code>），不擅自选边。</li>
+</ul>
+
+<h3>2.7 自动退出：<code>verified</code> 清空导致 <code>seed_mode=0</code> 是歧义值</h3>
+<pre><code><span class="cm">// src/peer_connection.cpp:5529-5530</span>
+if (t-&gt;seed_mode() &amp;&amp; t-&gt;all_verified())
+    t-&gt;leave_seed_mode(aux::torrent::seed_mode_t::skip_checking);
+<span class="cm">// src/aux_/torrent.hpp:1308</span>
+bool all_verified() const { return int(m_num_verified) == m_torrent_file-&gt;num_pieces(); }</code></pre>
+<div class="box no">
+  <div class="t">观察不到"全验完"这个状态</div>
+  <p><code>all_verified()</code> 成立的那一刻走 <code>skip_checking</code> 分支，紧接着 <code>m_verified.clear()</code>。所以磁盘上永远只会看到"部分已验"或"已退出"。<code>seed_mode=0</code> 因此同时代表两种可能：<em>从没跳检过</em>，或<em>跳检过但已全部惰性验完</em>。单看文件无法区分。</p>
+</div>
+
+<h3>2.8 API 可访问性</h3>
+<table>
+  <tr><th>面</th><th>是否可得</th><th>说明</th></tr>
+  <tr>
+    <td>写：加种</td>
+    <td><span class="good">可</span></td>
+    <td><code>POST /api/v2/torrents/add</code> 的 <code>seedMode=true</code>（API 2.16 起；<code>skip_checking</code> 已移除）</td>
+  </tr>
+  <tr>
+    <td>读：WebUI 任意端点</td>
+    <td><span class="bad">不可</span></td>
+    <td><code>serialize_torrent.h</code> 的全部 <code>KEY_TORRENT_*</code> 无该键；<code>src/webui/</code> 内 <code>seed_mode|seedMode</code> 仅命中 add 参数与 <code>addtorrent.html</code> 复选框</td>
+  </tr>
+  <tr>
+    <td>读：libtorrent C++ 层</td>
+    <td><span class="good">可（但进程内）</span></td>
+    <td><code>torrent_handle::flags() &amp; torrent_flags::seed_mode</code>、<code>torrent_status::flags</code>、<code>status(query_verified_pieces).verified_pieces</code>（<code>torrent_handle.hpp:361-363</code>、<code>torrent.cpp:12658</code>）。qB 未外传</td>
+  </tr>
+  <tr>
+    <td>读：磁盘文件</td>
+    <td><span class="wr">有条件可</span></td>
+    <td><code>&lt;profile&gt;/BT_backup/&lt;40hex&gt;.fastresume</code>（<code>sessionimpl.cpp:1476/1482</code>），以 <code>lt::write_resume_data</code> 打底（<code>bencoderesumedatastorage.cpp:413</code>），原生含 <code>seed_mode</code> 与 <code>verified</code></td>
+  </tr>
+</table>
+
+<h4>三个文件面的坑</h4>
+<ul>
+  <li><strong>后端可切换</strong>：默认 <code>ResumeDataStorageType::Legacy</code>（<code>sessionimpl.cpp:627</code>），但可切 SQLite（<code>torrents.db</code>，<code>:1468-1487</code>）。一切换 <code>.fastresume</code> 整个消失。</li>
+  <li><strong>落盘滞后</strong>：<code>SaveResumeDataInterval</code> 默认 60 分钟（<code>sessionimpl.cpp:589</code>），<code>generateResumeData</code> 只对 <code>needSaveResumeData()</code> 为真的种子请求（<code>:3363</code>）。</li>
+  <li><strong>文件名只认 v1</strong>：正则 <code>^([A-Fa-f0-9]{40})\.fastresume$</code>（<code>bencoderesumedatastorage.cpp:123</code>），纯 v2 种子不在该目录的加载面内。</li>
+</ul>
+<p>同文件里还有个诱饵：<code>qBt-seedStatus</code>（<code>bencoderesumedatastorage.cpp:465</code>）只是 <code>hasFinishedStatus</code>。它虽由 <code>seedMode</code> 派生（<code>sessionimpl.cpp:2831</code>），但普通完成的种子也会置真（<code>torrentimpl.cpp:2168/2212</code>），<strong>不能</strong>当跳检标记。</p>
+
+<h3 id="s28">2.9 能否替代 <code>zSkipChecked</code>：语义对照与判据</h3>
+<table>
+  <tr><th>维度</th><th><code>zSkipChecked</code> 标签</th><th><code>.fastresume</code> 的 <code>seed_mode</code> / <code>verified</code></th></tr>
+  <tr><td>读取通道</td><td>Web API <code>torrents/info.tags</code>（现有）</td><td>只能读 qB 配置目录</td></tr>
+  <tr><td>时效</td><td>打标即时（<code>_skip_step_finish</code>）</td><td>默认 60 分钟级滞后；新加种可能尚无文件</td></tr>
+  <tr><td>存活期</td><td>永久，直到人工摘</td><td><strong>自毁</strong>：全验完即清（§2.7）</td></tr>
+  <tr><td>表达的信息</td><td>"我们跳检过它"</td><td>"它跳检过且还有片没验"</td></tr>
+  <tr><td>用户可见</td><td>qB 界面可见、可手动摘</td><td>完全不可见</td></tr>
+  <tr><td>依赖</td><td>仅 API</td><td>文件系统 + 部署形态 + 存储后端</td></tr>
+</table>
+
+<h4>单向推断（成立，且有实用价值）</h4>
+<p>对一个带 <code>zSkipChecked</code> 的种子：<code>seed_mode=0</code> 且 <code>progress==1</code> ⇒ <strong>数据已经过完整哈希校验</strong>。论证是穷举离开 seed mode 的全部路径：</p>
+<table>
+  <tr><th>路径</th><th>结果</th></tr>
+  <tr><td><code>leave_seed_mode(skip_checking)</code>（全部片已验）</td><td>已校验 ✓</td></tr>
+  <tr><td><code>leave_seed_mode(check_files)</code>（校验失败/磁盘错误）</td><td><code>force_recheck()</code> → 全量校验后仍为"已校验或待下载"；<code>progress==1</code> 即已校验 ✓</td></tr>
+  <tr><td>加种时因 file/piece priority 或 have_pieces 被忽略（§2.3）</td><td>走正常校验 ✓</td></tr>
+  <tr><td>resume 被拒（文件尺寸不符等，§2.4）</td><td>走正常校验 ✓</td></tr>
+  <tr><td>删种后以普通方式重加</td><td>走正常校验 ✓</td></tr>
+</table>
+<p>失效方向是安全的：文件缺失 / 读不到 ⇒ 视为未知 ⇒ 维持标签（fail-open）；文件滞后仍写 <code>seed_mode=1</code> ⇒ 维持"未验证"判断（fail-closed 方向正确）。反向滞后不可能——删种会连带删除该文件（<code>sessionimpl.cpp:2700</code>）。</p>
+
+<div class="box">
+  <div class="t">建议：保留标签为唯一权威，旁证只做增益</div>
+  <p>① <code>zSkipChecked</code> 继续作为参考种子排除（<code>checking.py:_find_reference</code>）的唯一来源——该判据必须 fail-closed，而文件读取天然会失败。<br>
+  ② 若将来引入"读 qB 配置目录"能力，仅用于两件事：崩溃在打标之前时的对账（<code>seed_mode=1</code> 作证）、以及 §2.9 单向推断触发的自动摘标。<br>
+  ③ 更便宜的等价路径已存在：<code>verified_references</code> 内存并集（历史 full-checking 通过即入池），只是要花一次全量校验。</p>
+</div>
+
+<h3 id="s210">2.10 跳检的 I/O 账与对口径的影响</h3>
+
+<h4>校验读与服务读会合并</h4>
+<p>这是跳检收益的机制来源，也是它最容易被低估的地方。全量校验把"哈希读"提前到加种那一刻，等服务请求到来时缓存早已冷掉，同一批数据要<strong>再读一遍</strong>；跳检把哈希读推迟到该片首次被请求的瞬间，<code>async_hash</code> 读进页缓存后紧接着的 <code>async_read</code> 直接命中，物理上只落一次盘。</p>
+<table>
+  <tr><th>场景</th><th>校验读</th><th>服务读</th><th>合计</th></tr>
+  <tr><td>直接全量校验</td><td><code>T</code>（冷）</td><td><code>U</code>（冷）</td><td><code>T + U</code></td></tr>
+  <tr><td>完整数据 + 跳检</td><td colspan="2">合并——哈希后立即服务，命中页缓存</td><td><code>≈ T</code></td></tr>
+  <tr><td>残缺数据 + 跳检</td><td colspan="2">失败前已读 <code>Σ</code> + 强制全量重校验</td><td><code>T + U + Σ</code></td></tr>
+</table>
+<p class="aside"><code>T</code> = 种子总大小；<code>U</code> = 实际上传字节数（被完整下载一遍时 <code>U ≈ T</code>）；<code>Σ</code> = 撞上坏片之前已读的片。</p>
+<p>严格说不是"少一个读任务"：<code>async_hash</code>（<code>peer_connection.cpp:5363</code>）与随后的 <code>async_read</code> 仍是两个独立磁盘任务，只是第二次命中缓存。libtorrent 并未刻意做"读一次算两用"的优化，这是"哈希必须在发块前、且紧邻发块"这一顺序的必然结果。另外 <code>pread_disk_io::async_hash</code> 会先试 <code>m_cache.try_hash_piece()</code>，该片已在读缓存时连读盘都省掉。</p>
+
+<h4>收益按数据完整性分档</h4>
+<table>
+  <tr><th>数据状态</th><th>收益</th><th>代价</th><th>结论</th></tr>
+  <tr>
+    <td>完整（<code>progress==1</code>）</td>
+    <td>省掉一次全量读盘（<code>U ≈ T</code>）+ 不必等校验跑完即可做种</td>
+    <td>每片首次请求多一次哈希延迟；未被请求的片不验</td>
+    <td><span class="good">净正收益</span></td>
+  </tr>
+  <tr>
+    <td>残缺（<code>0 &lt; progress &lt; 1</code>）</td>
+    <td>失败前的短暂供种</td>
+    <td>多读 <code>Σ</code> + 必然触发 <code>force_recheck</code>（已验片一个不留）+ 位图全 1 翻全 0 的公开翻转 + 做种进度清零 + <strong>补齐缺口计入站点下载量</strong></td>
+    <td><span class="bad">净负收益</span></td>
+  </tr>
+</table>
+<p>残缺档的关键是<strong>必然性</strong>：<code>force_recheck()</code> 里 <code>set_have_all(false)</code> 加 <code>++m_picker_generation</code>（源码注释 "forget that we have any pieces"），已验结果一律不保留。所以只要有一片坏且被请求到，省下的校验时间就要连本带利还回去，还多一次删种重加。<strong>跳检省下的读盘，是在赌没人请求到坏片</strong>——赌赢了省一点，赌输了倒贴。</p>
+
+<h4>残缺档还有一笔硬成本：下载量</h4>
+<p>上面的账只算了 I/O 与时间。残缺档真正的成本大头在 PT 站点侧——<strong>补齐缺口要重新下载，每一个字节都计入你的下载量</strong>，而下载量是不可逆的硬通货（分享率、HR 判定、下载配额），花掉就没了。这笔账有三个特点：</p>
+<ul>
+  <li><strong>全量校验本身不花下载量。</strong>校验只是读盘，零流量。所以残缺档的跳检，本质是<strong>用下载量去买一个本来免费的东西</strong>（少等一次校验）——这个交易在结构上就是亏的，而完整档根本不会触发下载。</li>
+  <li><strong>发现时点被推迟，且不可控。</strong>全量校验在加种后几分钟就把缺口摆在你面前，你可以先看清"要重下多少"再决定删不删；跳检则要等到第一次有人请求坏片才引爆——此时你已经投入做种（HR 计时、站点记为 seeder、可能已有 peer 连上来），删种有沉没成本，留着要付下载量。引爆的时点可能是凌晨、可能是配额快用完的时候。</li>
+  <li><strong>按整片放大。</strong>piece 是原子单位，一个片里坏一个块就要重下整片（4–16 MiB），坏片集中在大文件时放大更明显。</li>
+</ul>
+<div class="box wr">
+  <div class="t">这才是 partial 闸门真正的价值</div>
+  <p>不是"防垃圾外传"（不会外传），也不只是"防 I/O 倒贴"（那只是时间）。是<strong>防止把下载量这种不可逆的硬通货，花在本来可以免费避免的地方</strong>。反过来说，"有可信参考种子"这道闸的经济含义也随之清晰：它降低的是<strong>触发重下的概率</strong>，也就是保护下载量——而不是"防止坏数据扩散"。</p>
+</div>
+<p class="aside">待实测项：跳检是删种重加，客户端侧的 <code>downloaded</code> 计数器会归零重新累计，站点如何处理这次回退取决于其记账实现（取最大值 / 按增量 / 按会话）。成熟站点按增量记账一般不会重复计费，但这一点<strong>无法从客户端源码判定</strong>，建议跳检前后各记一次站点面板数字做核对，别把它当成异常增长。</p>
+<div class="box wr">
+  <div class="t">一处需要纠正的常见说法</div>
+  <p>残缺档的危害<strong>不是</strong>"零块被上传成垃圾数据"。发块前的整片哈希（§2.5）保证坏片一个字节都出不去；真正的危害是对端请求被扣住白等、以及位图全 1 翻全 0 的公开翻转与随之而来的全量重校验。</p>
+</div>
+
+<h4>因此该守什么</h4>
+<p>既然坏数据发不出去、且必自愈，"有没有可信参考种子"其实<strong>不是数据完整性要件</strong>——libtorrent 已经兜底。真正该守的是另外三条：</p>
+<ol>
+  <li><strong>数据必须完整</strong>：<code>progress</code> 为 0 或 1。这不是"防外传垃圾"（不会外传），而是防上表第二行的净负收益，尤其是<strong>不可逆的下载量损失</strong>（§2.4）。partial 闸门不可动。</li>
+  <li><strong>共享物理文件不能有并发写方</strong>：片验完之后被别的种子写坏，再上传就真漏了（TOCTOU）。组内有活跃下载成员、组内校验在途这两类闸门防的是这个，<strong>不属于可放开范围</strong>。</li>
+  <li><strong>未校验窗口</strong>：没人请求的片永远不验。死种场景下这没有危害（无人取数据），但该种若日后复活，校验债会在那一刻一次性兑现。跳检后主动促验（或隔期补一次 recheck）可把窗口压短，使"跳检"退化为"把全量校验摊到做种过程中"。</li>
+</ol>
+<p>据此，可考虑的放宽方向是把"参考种子"从硬闸降级为优先级/顺序因素，而不是取消数据完整性与并发写方这两道闸。完整数据档的跳检是<strong>实打实省掉一次全量读盘、且不涉及任何下载量</strong>，不是"用风险换时间"——这为放宽口径提供了正面依据；而残缺档恰好相反，省的是时间、赔的是下载量。</p>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+
+<h3>方法</h3>
+<ul>
+  <li>静态源码走查，不做运行时抓包。以 <code>grep</code> 定位符号（<code>seed_mode</code> / <code>seedMode</code> / <code>verified_pieces</code> / <code>hash_failed_alert</code> / <code>save_resume_data</code>），再逐段读上下文与调用链，全部结论均带文件名与行号。</li>
+  <li>覆盖链路：qB <code>AddTorrentParams</code> → <code>lt::add_torrent_params.flags</code> → <code>torrent::init</code> → 启动 <code>async_check_files</code> → 上传 <code>fill_send_buffer</code> → <code>on_seed_mode_hashed</code> → <code>leave_seed_mode</code> → resume 写读。</li>
+  <li>本项目侧核对：<code>ops_mod.py</code> 跳检相位机与打标、<code>rules/actions/checking.py</code> 参考种子排除、<code>infra/utils.py</code> 标签口径、<code>qbittorrentapi</code> 实装参数表。</li>
+</ul>
+
+<h3>局限</h3>
+<ul>
+  <li><strong>未做运行时验证</strong>：没有构造坏片实测"上传被 hold → 全量重校验"的时序，结论来自代码路径，非观测。</li>
+  <li><strong>版本绑定</strong>：结论对应 libtorrent <code>2.1.2.0</code> 与 qB <code>v5.3.0</code> 分支。qB 4.x 的 WebUI 参数仍是 <code>skip_checking</code>，行为等价但参数名不同。</li>
+  <li><strong>ABI 1 差异</strong>：<code>torrent_status::seed_mode</code> 字段在 <code>TORRENT_ABI_VERSION == 1</code> 下才存在（<code>torrent_status.hpp:517-521</code>），ABI 2 走 <code>status.flags</code>。不影响 WebUI（本来就不暴露）。</li>
+  <li><strong>纯 v2 种子未实测</strong>：<code>.fastresume</code> 文件名正则只认 40 位 v1 hash，纯 v2 种子在该目录的落盘/加载行为未进一步验证。</li>
+  <li><strong>SQLite 后端未验证</strong>：若用户把 resume 存储切到 <code>torrents.db</code>，文件面结论整体失效。</li>
+</ul>
+
+<div class="aside">
+  <span class="tag">证据锚点索引</span> —— 标记来源 <code>sessionimpl.cpp:3086</code> · 静默丢弃 <code>torrent.cpp:405</code> · 启动只查尺寸 <code>storage_utils.cpp:551</code> · 上传闸门 <code>peer_connection.cpp:5331</code> · 失败回调 <code>peer_connection.cpp:5431</code> · 全量重校验 <code>torrent.cpp:542</code> · 落盘 <code>write_resume_data.cpp:84</code> · 只读面缺失 <code>serialize_torrent.h</code>
+</div>
+
+</div>
+</body>
+</html>
