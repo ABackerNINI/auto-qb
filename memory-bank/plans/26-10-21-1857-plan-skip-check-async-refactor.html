@@ -6,10 +6,10 @@
 <title>跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="skip-check-arch">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-21-1857">
 <meta name="doc-updated" content="26-10-21-1857">
-<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/testing/baselines/26-10-21-1933-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2005-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2026-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2122-skip-check-arch.md">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-21-1933-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2005-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2026-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2122-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2202-skip-check-arch.md">
 <style>
   :root {
     color-scheme: dark;
@@ -84,7 +84,7 @@
   <p class="lede">把跳检从「一次 drain 里同步跑完 N 个 hash 的四阶段阻塞链」改成「N 个 job 在主循环上按毫秒级微步推进」：写仍走 <code>QbApi</code>（单写者不破），运行状态一个字不写（只等 sync 上报），存在性当场确认（&lt;1s 保住），批量耗时与目标数解耦。</p>
   <div class="metagrid">
     <div class="it"><div class="k">编号</div><div class="v">26-10-21-1857</div></div>
-    <div class="it"><div class="k">状态</div><div class="v">In Progress（S1 起实施）</div></div>
+    <div class="it"><div class="k">状态</div><div class="v">Done（S1–S5 全部完成）</div></div>
     <div class="it"><div class="k">依据</div><div class="v">三条 issue（post-command-state-writes）+ qB 5.x / libtorrent 源码</div></div>
     <div class="it"><div class="k">形态</div><div class="v">主循环微步状态机（不引入 worker 线程）</div></div>
     <div class="it"><div class="k">范围</div><div class="v">core/modules/ops_mod.py · core/qbmanager.py · torrents/store.py · core/qbapi.py · webui/commands.py · rules/actions/skip_checking.py · tests/</div></div>
@@ -370,6 +370,7 @@ hashes(直接选中) ────┴→ 去重(保序) → 逐 hash 判闸门(�
 
 <h2 id="s13"><span class="n">13</span>变更记录</h2>
 <ul>
+  <li>2026-10-21 21:57 — <b>S5 收尾完成, 计划置 Done</b>：三条背景 issue 逐条重估并解除认领（issue 1 未涉及 → Open；issue 2/3 只落地了跳检相关部分 → Open 并在状态日志写明剩余面）；最终基线见切片 <code>26-10-21-2202</code>。后续未纳入本计划的项：P0-5 命令驱动补刷新、recheck 提交前 live 复核、写门面其余方法的写后同步。</li>
   <li>2026-10-21 21:30 — <b>S4 完成</b>：规则侧改走 <code>skip_submit(origin=ctx.task)</code>（返回 pending，终态由 <code>_skip_settle</code> 把 origin 重新入队：成功 keep_progress 续跑后续动作 / 失败默认重置重走决策链）；崩溃恢复对账（<code>on_sync_line</code> 首轮快照后按 <code>skip_check_backup</code> 账本三分流：已回→清账 / 不在且备份在→seed_mode 重加 / 备份丢失→ERROR 交人）；终态结果缓存 <code>skip_result(hash)</code> + SSE 进度事件（<code>skip_check</code>，前端只在失败时浮条提示）。实测见基线切片 <code>26-10-21-2122</code>。</li>
   <li>2026-10-21 20:40 — <b>S3 完成</b>：新增微步线 hook（<code>on_micro_line(dry_run)</code> / <code>next_micro_run_at()</code>，内核等待超时 = min(同步线, 任务线, 微步线)）；批量跳检改走异步入口 <code>skip_submit</code>（只建 job 返回 pending，相位由微步线并行推进），回执在最后一个 job 终态时按原因聚合写入（前端 <code>waitCmd</code> 契约不变）；<code>store.skipping_hashes</code> 窗口抑制（增量轮与全量轮都豁免 <code>torrents_removed</code>，记录不摘、不触发分组删除链路）。规则侧与单发仍走同步 <code>skip_check</code>（S4 迁移）。实测见基线切片 <code>26-10-21-2026</code>。</li>
   <li>2026-10-21 20:15 — <b>S2 完成（相位机）</b>：跳检执行体改为 <code>SkipJob</code> 相位机（准备 → 删除 → 确认消失 → 重加 → 确认出现 → 收尾），每步至多一次毫秒级调用，等待用 10~50ms 退避（原 500ms × 10 轮询，单条 ~6s）；删除走 <code>keep_record=True</code> 不摘记录；运行状态零写入；失败按「种子在 / 不在 / 看不见」三分流（看不见则保留备份与记录）。<b>偏差</b>：第三条时间线与异步契约随 S3 一起落 —— 没有异步调用方的调度器是死代码，单独落会留下半异步树；S2 仍是内联驱动（同步外观），延迟已从秒级降到毫秒级。实测见基线切片 <code>26-10-21-2005</code>。</li>

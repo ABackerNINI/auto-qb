@@ -4,8 +4,11 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (59)
+## Open (62)
 
+- [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例)](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: torrents_delete→remove_torrent、update_torrent_fields(标签/分类/限速/路径); 对照: 起停已按 A 系 26-10-13-0540 S1 改为纯透传(state 只由 qB 同步驱动) —— 同一口径尚未推广到删除与字段写
+- [bug] [P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变](../26-10-21-1812-bug-cmd-driven-resync.html) — cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚
+- [bug] [「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值](../26-10-21-1812-bug-decision-moment-live-query.html) — 跳检收尾用 torrents_info 结果 apply_delta 回写记录(ops_mod.py:806-821), 复核在动手前用同一直查判在途(ops_mod.py:546-563); qB 状态固定节拍刷新, 直查可能返回命令前旧值或过渡态, 写进快照后污染 G3/G6/G7 与 UI
 - [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](../26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留
 - [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](../26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点
 - [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](../26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建
@@ -66,11 +69,8 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (5)
+## In Progress (2)
 
-- [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例)](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: torrents_delete→remove_torrent、update_torrent_fields(标签/分类/限速/路径); 对照: 起停已按 A 系 26-10-13-0540 S1 改为纯透传(state 只由 qB 同步驱动) —— 同一口径尚未推广到删除与字段写
-- [bug] [P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变](../26-10-21-1812-bug-cmd-driven-resync.html) — cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚
-- [bug] [「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值](../26-10-21-1812-bug-decision-moment-live-query.html) — 跳检收尾用 torrents_info 结果 apply_delta 回写记录(ops_mod.py:806-821), 复核在动手前用同一直查判在途(ops_mod.py:546-563); qB 状态固定节拍刷新, 直查可能返回命令前旧值或过渡态, 写进快照后污染 G3/G6/G7 与 UI
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-1812">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="post-command-state-writes">
-<meta name="doc-refs" content="memory-bank/plans/26-10-21-1857-plan-skip-check-async-refactor.html">
+<meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Open">
 <meta name="issue-title" content="「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值">
 <meta name="issue-summary" content="跳检收尾用 torrents_info 结果 apply_delta 回写记录(ops_mod.py:806-821), 复核在动手前用同一直查判在途(ops_mod.py:546-563); qB 状态固定节拍刷新, 直查可能返回命令前旧值或过渡态, 写进快照后污染 G3/G6/G7 与 UI">
 <title>「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1812-bug-decision-moment-live-query</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops · rules</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -178,6 +178,19 @@ m_refreshInterval(BITTORRENT_SESSION_KEY(u"RefreshInterval"_s), 1500)</code></pr
     <p>重构方向：唯一真值源 = sync 流；「确认命令已生效」改为<b>等待上报</b>（该 hash 出现在 <code>torrents_removed</code>，
       或重新以新记录出现在 patches 里），不再用直查结果写快照；需要「是否在验」的判定只读快照并显式处理快照龄。
       本件不单独实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-21 21:57 — 计划 26-10-21-1857 已删除跳检路径的直查回写(<code>_skip_readd</code> 的 <code>apply_delta(live)</code>); 剩余面未改: recheck 提交前复核仍读 live state(<code>_live_recheck</code>), 跳检的 R2 只用于存在性(会话级, 合法)。状态回到 <strong>Open</strong>, 剩余面待排期。</li>
+      <li>2026-10-21 19:13 — 被计划 <code>26-10-21-1857</code> 认领, 状态 <strong>In Progress</strong>（开始实施）</li>
+      <li>2026-10-21 18:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
 
   <footer>

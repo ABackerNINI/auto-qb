@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-1812">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="post-command-state-writes">
-<meta name="doc-refs" content="memory-bank/plans/26-10-21-1857-plan-skip-check-async-refactor.html">
+<meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Open">
 <meta name="issue-title" content="P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变">
 <meta name="issue-summary" content="cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚">
 <title>P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1812-bug-cmd-driven-resync</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core · webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -168,6 +168,19 @@ elif sync_due:
     <p>重构方向（专题 <code>post-command-state-writes</code>）：状态推进只认 qB 的上报（sync 轮次），
       不再由命令触发「立即刷新」；需要「等命令生效」的地方，改为等待下一次上报，而不是把节拍提前。
       本件不单独实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-21 21:57 — 计划 26-10-21-1857 未涉及本件(P0-5 命令驱动补刷新的逻辑未改): 解除认领, 状态回到 <strong>Open</strong>, 留待后续排期。</li>
+      <li>2026-10-21 19:13 — 被计划 <code>26-10-21-1857</code> 认领, 状态 <strong>In Progress</strong>（开始实施）</li>
+      <li>2026-10-21 18:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>
 
   <footer>

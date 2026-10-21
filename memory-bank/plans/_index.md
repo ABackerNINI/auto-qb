@@ -9,7 +9,6 @@
 
 ## In Progress
 
-- [26-10-21-1857] [跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行](26-10-21-1857-plan-skip-check-async-refactor.html) — `skip-check-arch`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
@@ -27,6 +26,7 @@
 
 ## Done
 
+- [26-10-21-1857] [跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行](26-10-21-1857-plan-skip-check-async-refactor.html) — `skip-check-arch`
 - [26-10-21-0120] [gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96](26-10-21-0120-plan-gtm-coverage-gate.html) — `gtm-coverage-gate`
 - [26-10-20-2101] [测试覆盖率提升 · 第二轮 — 门槛清偿与 99% 冲刺 (97.66% → 99%)](26-10-20-2101-plan-test-coverage-uplift-2.html) — `test-coverage-uplift-2`
 - [26-10-20-0145] [WEBUI右键菜单文案统一:动词+灰色种子计数](26-10-20-0145-plan-webui-menu-label-unify.html) — `webui-menu-label-unify`

@@ -24,6 +24,7 @@ run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:403
         _wake_event.clear()
         state_changed = host.run_command_line()         # 命令线(:485): 消费命令+检查在途汇报确认
         if paused: _wait_next(...); continue            # 暂停 = 完全旁观
+        host.run_micro_line(dry_run)                    # 微步线: 跳检相位机每轮一步(无固定节拍)
         sync_due = now >= next_sync_at or (state_changed and not dry_run)  # P0-5 命令后补一次
         tick_due = now >= next_tick_at
         if sync_due and tick_due: _tick(dry_run, force=cmd_forced)   # 两线同拍 -> 完整一轮
@@ -33,7 +34,7 @@ run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:403
         if not dry_run:
             ctx.state.maybe_flush(...)   # 周期落盘(:534-535, 间隔 state_save_interval)
         重连检测(:540-545) + 断开期间退避重连(:557-558)
-        _wait_next(stop_event, _wake_event, min(next_sync_at, next_tick_at) - now)
+        _wait_next(stop_event, _wake_event, min(next_sync_at, next_tick_at, 微步线到期) - now)
     finally:                             # (:573-580)
         host.stop_all()                  # 模块停用(装配逆序); 状态落盘与锁释放留在其后
         ctx.state.save()                 # 优雅退出落盘(:577-578)
@@ -61,6 +62,13 @@ qB 源码 `sessionimpl.cpp:575` 定义 + `:6009-6027` `enqueueRefresh()` 延迟�
 `:6557/:6736` 自维持循环), 比 qB 自身数据粒度更快没有意义。⚠这是**服务端状态缓存**的粒度, **不是**「qB 自带
 WebUI 的轮询选择」—— 任何客户端(含 `/sync/maindata` 与 `/torrents/info`)都拿不到更细粒度, 调快本侧节拍或用
 info 直查都不改变这一点(evidence: report 26-10-12-2148 §3 R4 的 26-10-13-0441 补证)。
+**第三条时间线: 微步线 (2026-10-21, plan 26-10-21-1857 §4)**: 跳检相位机要求「毫秒级步进、但不许占住主循环」——
+每轮只推进一步(至多一次 qB 调用), 步间 10~50ms 退避。它**没有固定节拍**: 到期时刻由模块
+`next_micro_run_at()` 上报, 内核把它并入等待超时(`min(同步线, 任务线, 微步线)`); 推进走
+`host.run_micro_line(dry_run)`(与另三条线同款 hook, 内核只知「何时」不知「何事」)。暂停时同样跳过。
+批量 N 个 job 因此是**并行**推进的: 整批耗时 ≈ 相位深度 × 步间隔, 与 N 基本无关(11 个 ≈ 250ms;
+改造前是 6s × N 且全程阻塞同步线)。
+
 ❗**不能**退化成"单一 cadence + 任务线在内部按 next_tick_at 门控": 那样任务实际间隔会被循环粒度量化
 (1.5s 循环粒 + 2s 任务间隔 ⇒ 实际 3s 一次), 速率语义失真 —— 等待必须用 `min(两条线的到期时间)` 才能各自精确。
 
