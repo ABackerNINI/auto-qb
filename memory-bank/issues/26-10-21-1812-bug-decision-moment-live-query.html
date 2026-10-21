@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="post-command-state-writes">
 <meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值">
 <meta name="issue-summary" content="跳检收尾用 torrents_info 结果 apply_delta 回写记录(ops_mod.py:806-821), 复核在动手前用同一直查判在途(ops_mod.py:546-563); qB 状态固定节拍刷新, 直查可能返回命令前旧值或过渡态, 写进快照后污染 G3/G6/G7 与 UI">
 <title>「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1812-bug-decision-moment-live-query</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops · rules</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -186,6 +186,7 @@ m_refreshInterval(BITTORRENT_SESSION_KEY(u"RefreshInterval"_s), 1500)</code></pr
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-22 00:10 — 提交前复核整条移除（计划 26-10-21-2323 S3），剩余面清空，状态 <strong>Done</strong>。</li>
       <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
       <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
       <li>2026-10-21 22:32 — 口径修订: 跳检收尾回写已于 S2(c48ba02e) 修复(属 A 系计划遗漏); 本件收窄为 R1/R2 读侧前提。</li>
@@ -196,7 +197,14 @@ m_refreshInterval(BITTORRENT_SESSION_KEY(u"RefreshInterval"_s), 1500)</code></pr
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（两批，2026-10-21）：</p>
+    <ol>
+      <li><b>跳检收尾的回写</b>（S2，<code>c48ba02e</code>）：删掉 <code>_skip_readd</code> 的 <code>apply_delta(live)</code>，重加后不再直查回写记录 —— 运行状态只等 qB 上报。</li>
+      <li><b>提交前复核</b>（S3，计划 26-10-21-2323）：<code>ops_mod._live_recheck</code> 整条删除（recheck 与跳检两处调用），不存在的种子提交任何命令本就是 no-op，不必先查；recheck 的进度基线改取快照 <code>tor.progress</code>；跳检遇到种子已不在时失败在导出步，文案点明「可能已不在客户端」，失败路径撤掉残留记录。</li>
+    </ol>
+    <p><b>与建议修法的差异</b>：建议是「只保留存在性判断、去掉 state 判据」；实际按用户拍板<b>整条移除</b>（存在性也不查）—— 少一条通道就少一处维护面。</p>
+    <p><b>已知代价</b>：qB 自家 WebUI 刚发起的校验在快照窗口内不可见，可能被重复提交一次 recheck（qB 侧幂等，no-op 或重扫文件挪队尾）。</p>
+    <p><b>验证方式</b>：用例翻面 5 条（提交前零直查 / info 故障不影响提交 / 基线取快照 / 跳检导出失败 / R2 改写）+ 仲裁类直查计数从 2 降到 1；实测数字见基线切片 <code>26-10-22-0004</code>。</p>
   </section>
 
   <footer>

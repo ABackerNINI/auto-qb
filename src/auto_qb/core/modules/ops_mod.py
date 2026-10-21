@@ -10,7 +10,7 @@ recheck / 跳检的 qB 交互序列、提交点检查与保护策略单点归本
 - 防「自动化频率失控」的保护只作用 source="rule": 3 次/日校验失败冷却(recheck_fails)。
   WEB 源是手动排障, 不受限 —— 限制它就是「按钮为什么不生效」。
 - 防「真实冲突」的作用所有来源: 在途互斥(_active_checks 登记 / 快照 checking 态, R1)、
-  recheck 提交点实时复核(R1, plan 26-10-04-1824)、跳检实时复核(R2)、跳检同日去重
+  recheck 提交点检查(R1: 在途 + 快照)、跳检相位机 + 同日去重(提交前不直查, 见 26-10-21-2323 S3)
   (skip_check_day)、跳检前置闸门组(G3-G8/filelist, 三分流判定单点
   _skip_gates_detail + 执行路径 _skip_gates 派生 + 预检 skip_check_precheck, plan 26-10-05-0314)。
   判据: 被拒时用户能否从界面自行看出原因 —— checking 态种子列表可见
@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 # R1/R2 拒绝文案(自解释: checking 态在种子列表可见, 用户能对上原因)
 _RECHECK_BUSY_MSG = "校验进行中, 请等待当前校验完成"
 _SKIP_GONE_MSG = "种子已被移除(可能被用户删除), 放弃跳检"
-_RECHECK_GONE_MSG = "种子已被移除(可能被用户删除), 放弃校验"  # R1 实时复核 live 空时用(与 _SKIP_GONE_MSG 同族)
+_RECHECK_GONE_MSG = "种子已被移除(可能被用户删除), 放弃校验"  # 快照无记录时用(与 _SKIP_GONE_MSG 同族)
 
 # 跳检闸门三分流标签(plan 26-10-05-0314 §03/§04, cls 与谓词同点定义):
 #   blocked = 确定性危害/零收益, 一律硬拒(force 也不放行, case 1);
@@ -186,7 +186,7 @@ class OpsModule(BaseModule):
         on_success=None,
         origin=None,
     ) -> ActionResult:
-        """full-checking 操作: R1 提交点检查(快照 -> 冷却 -> 实时复核) -> 登记轮询子任务 ->
+        """full-checking 操作: R1 提交点检查(在途 -> 快照 -> 冷却) -> 登记轮询子任务 ->
         发送 recheck -> 轮询结果
 
         自 rules/actions/full_checking.py._execute_full_checking 迁入(行为等价), 规则侧差异
@@ -205,15 +205,14 @@ class OpsModule(BaseModule):
         宽限耗尽的启动超时分支在判超时前做一次性仲裁直查(D5): 快照同步线暂停/滞后时对 qB
         单 hash 直查核实, 见真校验态延长一次宽限(仍纯快照观测), 未见或直查异常判败(fail-closed)。
 
-        提交点实时复核(plan 26-10-04-1824 P1): 快照 <=1.5s 龄, qB 自家 WebUI 刚发起的校验在
-        该窗口内不可见, 此时提交会重复排队(no-op 或重扫文件挪队尾) —— 快照检查与冷却通过后、
-        登记之前对 qB 单 hash 直查核实(跳检 R2 同款范式): live 空 = 种子已不在(放弃) /
-        live checking = 拒绝 / 复核异常 fail-closed 拒绝; 进度基线一并改取 live 真值。成本为
-        每次提交 +1 次 torrents_info(人工点击与规则决策链都是低频事件, 计划 §10 R3 已接受)。
+        提交前**不直查**(26-10-21-2323 S3): 运行状态按 qB 的 RefreshInterval(默认 1500ms)节流
+        刷新, 命令后直查与快照读到的是同一份缓存, 多这一次只增加维护面; 不存在的种子提交任何
+        命令本就是 no-op。重复提交保护由「在途登记 + 快照 checking 态」承担(R1 两半), 代价是
+        qB 自家 WebUI 刚发起的校验可能被重复提交一次(qB 侧幂等)。进度基线改取快照 progress。
 
         返回 ActionResult: rule 源 pending(规则断点, 规则任务本轮不重入队, 恢复由轮询负责) /
-        web 源 ok(已提交, 结果经快照可见) / skip(R1 拒绝(快照/实时复核/种子已不在)或冷却) /
-        fail(发送失败或实时复核异常)。
+        web 源 ok(已提交, 结果经快照可见) / skip(R1 拒绝(在途/快照 checking) / 冷却 / 种子不在库) /
+        fail(发送失败)。
         """
         prefix = f"ops[{source}]"
 
@@ -237,22 +236,15 @@ class OpsModule(BaseModule):
             return ActionResult.skip(f"校验连续失败 {RECHECK_FAIL_LIMIT} 次, 今日不再重试")
 
         tor = torrent if torrent is not None else snap
+        if tor is None:
+            # 快照与显式传入都没有该种子: 干净放弃(真正的"已不在"由导出/轮询各自收口)
+            return ActionResult.skip(_RECHECK_GONE_MSG)
         tq = self._ctx.task_queue
 
-        # ---- R1 实时复核(全来源, plan 26-10-04-1824 P1): 动手前对 qB 单 hash 直查核实(跳检 R2
-        # 同款范式, 骨架单点 _live_recheck)。次序约束(计划 §6.1): 在冷却之后(冷却拒绝不付
-        # API 成本)、登记之前(拒绝时不留任何登记); live 空 = 种子已不在(qB 侧已删, 快照尚在)
-        # -> 放弃。
-        live = self._live_recheck(hash, "提交前", f"{prefix} {self._ops_repr(tor)} | recheck 放弃", _RECHECK_GONE_MSG)
-        if isinstance(live, ActionResult):
-            return live
-        if is_piece_checking(live[0].state):
-            # live 真值在校验(快照窗口内不可见, 典型: qB 自家 WebUI 刚发起) -> 拒绝重复提交
-            logger.info(f"{prefix} {self._ops_repr(tor)} | recheck 拒绝: {_RECHECK_BUSY_MSG}(实时复核)")
-            return ActionResult.skip(f"{_RECHECK_BUSY_MSG}(实时复核)")
-        # 进度基线取 live 真值(P1, 取代 store 快照值): 快照 progress 与 qB 不一致时, 轮询期的
-        # 回落证据(数据缺损签名)按 qB 真实进度判定 —— 闭包内存态, 不入 taskqueue/state_file
-        baseline_progress = live[0].progress
+        # 进度基线取**快照**(26-10-21-2323 S3): 提交前不再直查 qB 运行状态 —— 它按
+        # RefreshInterval(默认 1500ms)节流刷新, 直查读到的与快照是同一份缓存, 多这一次
+        # 只增加维护面(不存在的种子提交 recheck 本就是 no-op)。闭包内存态, 不入 state_file。
+        baseline_progress = tor.progress
 
         def poll(task: Task, dry_run: bool) -> bool:
             """校验结果轮询: 证据门控状态机 —— 读 store 活记录(原地更新, 不发 API 重查真值), 每
@@ -388,7 +380,7 @@ class OpsModule(BaseModule):
         submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
         seen_checking = False  # 本轮询周期内是否观察到过生效证据(成功结论的必要背书)
         arbitrated = False  # 本轮询生命周期内是否已仲裁过(启动超时判败前的一次性直查, D5 至多 1 次)
-        # (baseline_progress 已在上方实时复核处取 live 真值, P1 起基线不再取 store 快照)
+        # (baseline_progress 取提交时的快照 progress, 见上方说明)
 
         task = Task(
             "check",
@@ -413,7 +405,7 @@ class OpsModule(BaseModule):
             return ActionResult.pending("full-checking 校验已提交")
         return ActionResult.ok("校验已提交")
 
-    # ---------- skip-checking: 跳检四阶段(含 R2 实时复核) ----------
+    # ---------- skip-checking: 相位机(准备/删除/确认/重加/确认/收尾) ----------
 
     def skip_check(
         self,
@@ -514,11 +506,8 @@ class OpsModule(BaseModule):
         if hash in (getattr(self._ctx.store, "relocating_hashes", None) or set()):
             return None, ActionResult.skip("该种子正在整组迁移(搬迁/建别名中): 迁移收尾后再跳检")
 
-        # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态(骨架单点 _live_recheck)
-        # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
-        live = self._live_recheck(hash, "跳检前", f"{prefix} {tor.log_repr} | 跳检放弃", _SKIP_GONE_MSG)
-        if isinstance(live, ActionResult):
-            return None, live
+        # 提交前不再直查(26-10-21-2323 S3): 种子已不在时, 相位机的「导出 .torrent」会失败,
+        # 失败路径据此撤掉快照里的残留记录 —— 比"提交前先查一次"少一条通道, 结果同样安全。
 
         # ---- 阶段 1: 前置闸门 (任一不过 → fail/skip 返回, 无副作用; filelist 排最后) ----
         gate = self._skip_gates(hash, tor, force=force)
@@ -582,25 +571,6 @@ class OpsModule(BaseModule):
                 }
             )
         return results
-
-    def _live_recheck(self, hash: str, purpose: str, gone_log: str, gone_msg: str):
-        """R1/R2 实时复核样板单点(issue 26-10-11-0207 R10): 动手前对 qB 单 hash 直查核实
-
-        - 复核异常 fail-closed: 看不见就不提交(未执行任何变更), R1/R2 同口径;
-        - live 空 = 种子已不在(qB 侧已删, 快照尚在) -> 记 INFO 放弃(gone_log 为整行去掉
-          msg 的前缀, R1 = f"{prefix} {_ops_repr} | recheck 放弃" / R2 = "跳检放弃")。
-
-        返回 live 列表(继续往下走); 失败/放弃直接返回 ActionResult(fail/skip), 调用方
-        isinstance 分流。
-        """
-        try:
-            live = self._ctx.api.torrents_info(torrent_hashes=hash)
-        except Exception as e:
-            return ActionResult.fail(f"{purpose}实时复核失败(未执行任何变更): {e}")
-        if not live:
-            logger.info(f"{gone_log}: {gone_msg}")
-            return ActionResult.skip(gone_msg)
-        return live
 
     def _skip_gates(self, hash: str, tor: TorrentRecord, force: bool = False) -> Optional[ActionResult]:
         """跳检前置闸门(执行路径): 从 _skip_gates_detail 派生 —— 取首个未过闸门转 ActionResult,
@@ -1092,7 +1062,8 @@ class OpsModule(BaseModule):
         try:
             job.data = self._ctx.api.torrents_export(torrent_hash=job.hash)
         except Exception as e:
-            self._skip_fail(job, f"导出 .torrent 失败: {e}")
+            # 种子可能已不在客户端(提交前不再直查): 文案点明, 失败路径会撤掉残留记录
+            self._skip_fail(job, f"导出 .torrent 失败(种子可能已不在客户端): {e}")
             return
         if not job.data:
             self._skip_fail(job, "导出 .torrent 为空")

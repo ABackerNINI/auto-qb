@@ -38,7 +38,7 @@
 - test_checking_skip_partial_download_forbidden: 部分下载(0<progress<1)禁止跳检
 - test_checking_recheck_fail_cooldown: 校验连续失败达上限 -> 当日不再重试(防 recheck 死循环)
 - test_checking_skip_dedup_across_rules: 跨规则同日去重(同种子当日只跳检一次)
-- test_checking_skip_reread_gone_aborts_clean: R2 实时复核(plan 26-09-30-0109) —— 跳检任务运行前种子已被删除(快照仍在) -> skip 干净放弃, 零副作用无孤儿备份(修 C2 复活竞态)
+- test_checking_skip_gone_fails_at_export_with_clear_message: S3(26-10-21-2323) —— 提交前不直查: 种子已不在时失败在导出步(文案点明), 撤掉快照残留记录, 不删除/重加(修 C2 复活竞态)
 - test_checking_dry_run: dry-run 不发送请求
 - test_checking_full_checking_pending: 全检任务 pending 保留
 - test_checking_full_checking_dup_ignore: 全检重复提交忽略
@@ -418,7 +418,7 @@ def test_checking_paused_incomplete_not_skip():
     pd = FakeTorrent(hash="PD1", name="PD1", state="pausedDL")  # 暂停未完成
     inject_group(mgr, "HASH123", "PD1")
     seed_store(mgr, [t, pd])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, "暂停未完成不应跳过"
     run_queue(mgr)  # 首轮: 发送 recheck
@@ -433,7 +433,7 @@ def test_checking_no_group_uses_without_reference():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled
     run_queue(mgr)  # 首轮: 发送 recheck
@@ -542,7 +542,7 @@ def test_checking_no_reference_full_checking():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
     assert handled, "应提交校验"
@@ -799,7 +799,7 @@ def test_checking_piecehashes_diff():
     mgr.client = client
     client.piece_hashes_map = {"HASH123": ["a", "b"], "R1": ["a", "c"]}  # 不一致
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -817,7 +817,7 @@ def test_checking_piecehashes_api_error():
     mgr.client = client
     client.piece_hashes_error = True
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -857,7 +857,7 @@ def test_checking_custom_rc1():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -896,7 +896,7 @@ def test_checking_verified_references_not_persisted():
         client = CheckingFakeClient()
         mgr.client = client
         t = make_target()
-        client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+        client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
         t0 = time.time()
         process_rule(mgr, client, t, dry_run=False)  # 提交即发送 recheck
         seed_store(mgr, [make_target(state="checkingDL")])  # 校验中
@@ -1079,7 +1079,7 @@ def test_skip_check_tagged_member_excluded_as_reference():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")  # 已完成但带跳检标签
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -1098,7 +1098,7 @@ def test_skip_check_tagged_verified_reference_excluded():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
@@ -1128,7 +1128,7 @@ def test_checking_full_checking_pending():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     process_rule(mgr, client, t, dry_run=False)
     assert ("recheck", None) in client.calls, f"提交时即应发送 recheck: {client.calls}"
@@ -1145,7 +1145,7 @@ def test_checking_full_checking_dup_ignore():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     process_rule(mgr, client, t, dry_run=False)
     process_rule(mgr, client, t, dry_run=False)  # 重复 -> 忽略
     n_recheck = sum(1 for c in client.calls if c[0] == "recheck")
@@ -1159,7 +1159,7 @@ def test_checking_full_checking_auto_start_false():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     process_rule(mgr, client, t, dry_run=False)  # 提交即发送
     seed_store(mgr, [make_target(state="checkingDL")])  # 校验中
@@ -1202,7 +1202,7 @@ def test_checking_full_checking_pending_resume():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1239,7 +1239,7 @@ def test_checking_full_checking_resume_continues_actions():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1272,7 +1272,7 @@ def test_checking_full_checking_resume_skips_conditions():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1303,7 +1303,7 @@ def test_checking_full_checking_resume_skips_dedup():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1378,7 +1378,7 @@ def test_checking_full_checking_first_sample_race_not_failed():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1414,7 +1414,7 @@ def test_checking_full_checking_giveup_condemns():
     mgr.client = client
     t = make_target()
     seed_store(mgr, [t])
-    client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 提交前种子必须在客户端(非 checking 态)
+    client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
     rule = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     origin = mgr.host.get("rules")._create_rule_task(rule, "HASH123")
@@ -1667,13 +1667,12 @@ def test_recheck_fail_flushed_immediately():
 # ============================================================
 # C5. R2 跳检实时复核(plan 26-09-30-0109): 闸门后、动手前重拉实时状态
 # ============================================================
-def test_checking_skip_reread_gone_aborts_clean():
-    """测试: R2 实时复核 —— 跳检任务运行前种子已被删除(快照仍在) -> skip 干净放弃
+def test_checking_skip_gone_fails_at_export_with_clear_message():
+    """测试(S3): 提交前不直查 —— 种子已不在时失败在导出步, 文案点明, 且撤掉快照里的残留记录
 
-    修 C2: 跳检任务按上一轮快照创建, 闸门读陈旧记录; WEB 删除先于规则任务执行时,
-    旧流程会走 导出->备份->删除(空操作)->确认消失->重加 —— 把用户刚删的种子复活。
-    复核夹在前置闸门与导出之间: 拒绝发生在备份与删除之前, 零副作用、无孤儿备份,
-    残余方向安全(最坏导出失败干净放弃)。
+    修 C2 的机制换了但结论不变: 跳检任务按上一轮快照创建, 而种子可能已被删除。今天由
+    「导出 .torrent」这一必经步天然发现(qB 对不存在的 hash 回 404), 失败路径据此撤残留记录
+    —— 不会走到删除/重加, 也就不会把用户刚删的种子复活; 备份尚未写入, 无孤儿。
     """
     cfg = make_check_cfg(with_mode="skip-checking", without_mode="skip-checking", without_start=True)
     mgr = make_mgr(cfg)
@@ -1681,10 +1680,20 @@ def test_checking_skip_reread_gone_aborts_clean():
     mgr.client = client
     t = make_target(progress=0.0)  # 暂停未完成: 闸门 0 / 部分下载闸门都通过
     seed_store(mgr, [t])  # 快照仍在(陈旧)
-    # client.torrents 不灌该种子 = 客户端里已被删除(qB 端已生效, 快照尚未跟上)
+    # client.torrents 不灌该种子 = 客户端里已被删除; 替身按 qB 语义对未知 hash 抛 404
+    orig_export = client.torrents_export
+
+    def export_or_404(torrent_hashes=None, torrent_hash=None, **kw):
+        h = torrent_hash if torrent_hash is not None else torrent_hashes
+        if h not in client.torrents:
+            raise RuntimeError("404 Not Found")
+        return orig_export(torrent_hashes=torrent_hashes, torrent_hash=torrent_hash, **kw)
+
+    client.torrents_export = export_or_404
     handled, _stop = process_rule(mgr, client, t, dry_run=False)
-    assert not handled, "复核发现种子已不在, 应 skip 干净放弃(skip 不算 handled)"
-    assert client.calls == [], f"零副作用: 不得导出/删除/重加/打标: {client.calls}"
+    assert handled, "导出失败按 fail 返回(fail 视为已处理)"
+    assert not any(c[0] in ("delete", "add") for c in client.calls), f"不得删除/重加: {client.calls}"
+    assert mgr.store.get("HASH123") is None, "失败路径应撤掉快照里的残留记录"
     assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "未跳检不得记录同日去重"
     assert not mgr.state.get("skip_check_backup"), "不得留下孤儿备份元数据"
 
