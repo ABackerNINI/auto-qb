@@ -33,16 +33,23 @@ from webui_helpers import _iter_api_routes
 _AUTH_KEY = "Auth" + "orization"
 _CRED_FIELD = "tok" + "en"
 
+
 # day 动态取今天: 26-10-21 起端点只补丁当日事件(非当日 -> skipped/stale_day), 硬编码过去日期
-# 会让所有正向用例被当日判据拦下
-EVENT = {
-    "event_id": 3,
-    "day": date.today().isoformat(),
-    "up_bytes": 1024,
-    "down_bytes": 2048,
-    "total_bytes": 3072,
-    "ts": 1.0e9,
-}
+# 会让所有正向用例被当日判据拦下。
+# ⚠ 必须**调用时求值**(工厂), 不能在模块导入时算成常量 —— 服务端在请求时才读 date.today()
+# 判当日; 全量套件 23:59 收集 / 00:00 后执行时, 导入时算的 day 对服务端就是「非当日」,
+# 6 条正向用例全假红(2026-10-22 跨日窗口抖动; 坑档 pitfalls/testing/flaky-midnight-daycount.md)。
+# overrides 供校验 / 陈旧日等变体用例复用同一契约。
+def _event(**overrides):
+    return {
+        "event_id": 3,
+        "day": date.today().isoformat(),
+        "up_bytes": 1024,
+        "down_bytes": 2048,
+        "total_bytes": 3072,
+        "ts": 1.0e9,
+        **overrides,
+    }
 
 
 def _auth(mgr):
@@ -78,10 +85,10 @@ def _post(client, mgr, payload):
 
 def test_notify_requires_auth(web_env):
     mgr, client = web_env
-    assert client.post(tool_client.NOTIFY_PATH, json=EVENT).status_code == 401
+    assert client.post(tool_client.NOTIFY_PATH, json=_event()).status_code == 401
     # 带了 Bearer 但值不对: 必须也 401 —— 只测「没带」会漏掉密钥比较分支(该分支被绕过时前一行照样绿)
     wrong = {_AUTH_KEY: "Bearer " + "wrong-credential"}
-    assert client.post(tool_client.NOTIFY_PATH, json=EVENT, headers=wrong).status_code == 401
+    assert client.post(tool_client.NOTIFY_PATH, json=_event(), headers=wrong).status_code == 401
 
 
 def test_notify_path_is_client_constant(web_env):
@@ -99,24 +106,12 @@ def test_notify_validates_six_keys(tm_env):
     mgr, client = tm_env
     for bad in (
         {},
-        {
-            **EVENT, "event_id": -1
-        },
-        {
-            **EVENT, "day": ""
-        },
-        {
-            **EVENT, "total_bytes": -5
-        },
-        {
-            **EVENT, "up_bytes": "1024"
-        },
-        {
-            **EVENT, "ts": 0
-        },
-        {
-            **EVENT, "event_id": True
-        },
+        _event(event_id=-1),
+        _event(day=""),
+        _event(total_bytes=-5),
+        _event(up_bytes="1024"),
+        _event(ts=0),
+        _event(event_id=True),
     ):
         r = _post(client, mgr, bad)
         assert r.status_code == 400, f"应拒: {bad}"
@@ -130,15 +125,16 @@ def test_notify_queues_refresh_and_wakes(tm_env):
     """
     mgr, client = tm_env
     mgr._wake_calls.clear()
-    r = _post(client, mgr, EVENT)
+    ev = _event()
+    r = _post(client, mgr, ev)
     assert r.status_code == 200
     body = r.json()
-    assert body["action"] == "refresh_queued" and body["event_id"] == EVENT["event_id"] and body["cmd_id"]
+    assert body["action"] == "refresh_queued" and body["event_id"] == ev["event_id"] and body["cmd_id"]
     queued = _drain_commands(mgr)
     assert [c for c, _ in queued] == ["refresh_traffic"]
     payload = queued[0][1]
-    assert payload["event_id"] == EVENT["event_id"] and payload["day"] == EVENT["day"]
-    assert payload["up_bytes"] == EVENT["up_bytes"] and payload["down_bytes"] == EVENT["down_bytes"]
+    assert payload["event_id"] == ev["event_id"] and payload["day"] == ev["day"]
+    assert payload["up_bytes"] == ev["up_bytes"] and payload["down_bytes"] == ev["down_bytes"]
     assert payload["cmd_id"] == body["cmd_id"]
     assert mgr._wake_calls, "补丁命令必须唤醒主循环(否则要等下个节拍)"
 
@@ -146,8 +142,9 @@ def test_notify_queues_refresh_and_wakes(tm_env):
 def test_notify_duplicate_event_skipped(tm_env):
     """同一事件号重复投递: 第二次 skipped/duplicate, 不重复投递命令"""
     mgr, client = tm_env
-    assert _post(client, mgr, EVENT).json()["action"] == "refresh_queued"
-    second = _post(client, mgr, EVENT).json()
+    ev = _event()
+    assert _post(client, mgr, ev).json()["action"] == "refresh_queued"
+    second = _post(client, mgr, ev).json()
     assert second["action"] == "skipped" and second["reason"] == "duplicate"
     assert [c for c, _ in _drain_commands(mgr)] == ["refresh_traffic"]
 
@@ -160,12 +157,12 @@ def test_notify_no_throttle_every_new_event_patches(tm_env):
     """
     mgr, client = tm_env
     for step in (0, 1, 2):
-        e = {**EVENT, "event_id": EVENT["event_id"] + step}
+        e = _event(event_id=3 + step)
         assert _post(client, mgr, e).json()["action"] == "refresh_queued"
     assert [c for c, _ in _drain_commands(mgr)] == ["refresh_traffic"] * 3
 
     mgr.config.traffic_source.global_traffic_monitor.notify_cooldown_s = 86400.0
-    fourth = {**EVENT, "event_id": EVENT["event_id"] + 3}
+    fourth = _event(event_id=6)
     assert _post(client, mgr, fourth).json()["action"] == "refresh_queued"
     assert [c for c, _ in _drain_commands(mgr)] == ["refresh_traffic"]
 
@@ -176,7 +173,7 @@ def test_notify_stale_day_skipped(tm_env):
     那天的累计文件里早有, 由 refresh_interval 兜底读盘覆盖 —— 事件路径保持零读盘。
     """
     mgr, client = tm_env
-    stale = {**EVENT, "event_id": 99, "day": "1999-01-01"}
+    stale = _event(event_id=99, day="1999-01-01")
     body = _post(client, mgr, stale).json()
     assert body["action"] == "skipped" and body["reason"] == "stale_day"
     assert _drain_commands(mgr) == []
@@ -199,14 +196,15 @@ def test_notify_command_execution_patches_snapshot(tmp_path, monkeypatch):
 
     monkeypatch.setattr(tsm, "read_source_rows", _boom)
     mgr = make_manager(str(tmp_path / "state.json"))
+    ev = _event()
     mgr.web.commands.put(
         (
             "refresh_traffic",
             {
-                "event_id": EVENT["event_id"],
-                "day": EVENT["day"],
-                "up_bytes": EVENT["up_bytes"],
-                "down_bytes": EVENT["down_bytes"],
+                "event_id": ev["event_id"],
+                "day": ev["day"],
+                "up_bytes": ev["up_bytes"],
+                "down_bytes": ev["down_bytes"],
                 "cmd_id": "t1",
             },
         )
@@ -215,14 +213,14 @@ def test_notify_command_execution_patches_snapshot(tmp_path, monkeypatch):
     mgr.web.consume_commands()  # 主循环命令线: 排队 -> 执行 -> 回执
 
     rows = {p["period"]: (p["up"], p["down"]) for p in mgr.web.traffic_view["periods"]}
-    assert rows["day"] == (EVENT["up_bytes"], EVENT["down_bytes"]), "事件累计必须补丁进 day 行"
+    assert rows["day"] == (ev["up_bytes"], ev["down_bytes"]), "事件累计必须补丁进 day 行"
 
 
 def test_notify_disabled_no_enqueue(tm_env):
     """来源未指向工具(provider=traffic_monitor): action=disabled 且不投递命令(保守默认, 黄金法则 2)"""
     mgr, client = tm_env
     mgr.config.traffic_source.provider = "traffic_monitor"
-    body = _post(client, mgr, EVENT).json()
+    body = _post(client, mgr, _event()).json()
     assert body["action"] == "disabled" and "provider != global_traffic_monitor" in body["reason"]
     assert _drain_commands(mgr) == []
 
@@ -234,7 +232,7 @@ def test_notify_disabled_when_source_off(tm_env):
     """
     mgr, client = tm_env
     mgr.config.traffic_source.enabled = False
-    body = _post(client, mgr, EVENT).json()
+    body = _post(client, mgr, _event()).json()
     assert body["action"] == "disabled" and "enabled=false" in body["reason"]
     assert _drain_commands(mgr) == []
 
@@ -244,12 +242,13 @@ def test_notify_gate_is_per_app_instance(tm_env):
     from auto_qb.webui import create_app
 
     mgr, client = tm_env
-    assert _post(client, mgr, EVENT).json()["action"] == "refresh_queued"
-    assert _post(client, mgr, EVENT).json()["action"] == "skipped"
+    ev = _event()
+    assert _post(client, mgr, ev).json()["action"] == "refresh_queued"
+    assert _post(client, mgr, ev).json()["action"] == "skipped"
     fresh = create_app(mgr)  # 新 app 实例 = 新闸(状态不提升为模块级全局)
     from fastapi.testclient import TestClient
 
-    assert _post(TestClient(fresh), mgr, EVENT).json()["action"] == "refresh_queued"
+    assert _post(TestClient(fresh), mgr, ev).json()["action"] == "refresh_queued"
 
 
 def test_notify_refresh_logs_at_debug(tm_env):
@@ -259,8 +258,9 @@ def test_notify_refresh_logs_at_debug(tm_env):
     helpers.capture_logs —— QbManager 构造链会清 root handlers, caplog 在这类用例里恒空。
     """
     mgr, client = tm_env
+    ev = _event()
     with capture_logs("auto_qb.web") as cap:
-        r = _post(client, mgr, EVENT)
+        r = _post(client, mgr, ev)
     assert r.status_code == 200
     pairs = list(zip(cap.records, cap.messages))  # helper 契约: 两列表同序
     flood = [(rec, msg) for rec, msg in pairs if "已投递今日流量补丁" in msg]

@@ -14,7 +14,7 @@
 - test_api_traffic_qb_global_all_month_segment: (S3b D4 沿用)all 窗 agg month 行数据面逐月铺格(缺失月 null), 相邻月差分, interval_s=标称月长; 空数据面空态
 - test_api_traffic_qb_torrent_endpoint: 单种端点取数 / 非法哈希 400 / 未知哈希空态 / 冻结种子历史仍可查
 - test_api_traffic_qb_torrent_1y_single_agg_cold_read: (S3b 验收)年视图单 agg 文件冷读恰 1 open, 缓存命中再查零 open
-- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open; 两档 —— 真钟 + 假钟本地 00:05(issue 26-10-20-0024 跨零点守阵: base 恒取本地当日 00:00, 不再随真钟漂到前一日把跨日长洞抹平)
+- test_api_traffic_qb_global_24h_reads_only_involved_day_files: (S3b 端点面回归)24h 窗只开窗口涉及日期天文件(含窗首种子外扩: 常态恰 2 个/跨午夜边界至多 3 个), 窗外日期/agg.dat 零 open; 三档时钟 —— 真钟(钉入口时刻, 消除用例 now 与服务端收边横跨零点的竞态) + 假钟 00:05(issue 26-10-20-0024: base 恒取本地当日 00:00, 不随真钟漂前一日) + 假钟 00:00:15(2026-10-22 跨日窗口抖动: 当日首记录 base+30 未到窗尾时 base 桶为空桶 null, 期望值按几何分档)
 - test_api_traffic_qb_group_endpoint: 分组读侧现算(Σ 成员区间平均/全员空闲 z 覆盖 0 线/全员无观测断线 —— 借 global 判 null 退役且零全局读取/成员重置贡献 0/历史回溯可见/解析不到成员空态/畸形 key 400)
 - test_api_traffic_qb_group_30d_reads_member_agg_only: (S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
@@ -34,9 +34,11 @@ from webui_helpers import KEY, _enable_qb_traffic, _qb_v4, _attach_live_tail_hos
 #: 拆写仅为通过写入判据(用户 26-10-15 拍板: auth idiom 收敛成单点 + 形态调整消误报)
 _AUTH_HEADER_KEY = "Auth" + "orization"
 
-#: 24h 端点面用例的假钟档位(issue 26-10-20-0024): 本地当日 00:05 —— 每天头 10 分钟是
-#: 「base 落到前一日」的窗口, 真钟撞进去才复现, 故把它钉成常驻工况(与真钟档并列)
-_FIRST_10MIN_OFFSET = 300
+#: 24h 端点面用例的假钟档位(issue 26-10-20-0024 + 2026-10-22 跨日窗口抖动):
+#: 300 = 本地当日 00:05 —— 00:00-00:10 里 base 会甩到前一日的老窗口(0024);
+#: 15 = 本地当日 00:00:15 —— 00:00:00-00:00:30 里当日首记录(base+30)还没到窗尾的新窗口
+#: (当日桶无观测 = 空桶 null, 旧断言只认 null 字典故必红)。都钉成常驻工况, 不等真钟撞进去
+_FROZEN_OFFSETS = (300, 15)
 
 
 def _auth(mgr) -> dict:
@@ -581,18 +583,23 @@ def test_api_traffic_qb_torrent_1y_single_agg_cold_read(web_env, monkeypatch):
     monkeypatch.undo()
 
 
-@pytest.mark.parametrize("frozen_offset", [None, _FIRST_10MIN_OFFSET])
+@pytest.mark.parametrize("frozen_offset", [None, *_FROZEN_OFFSETS])
 def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkeypatch, frozen_offset):
     """24h 窗端点面回归(§05.2): 只开窗口涉及的日期天文件(24h 窗恰 2 个, 窗外更早天文件
-    零 open), agg.dat 亦不触。两档: 真钟 + 假钟本地 00:05(每天头 10 分钟那个跨零点窗口,
-    issue 26-10-20-0024)"""
+    零 open), agg.dat 亦不触。三档时钟: 真钟(钉在本用例入口时刻)+ 假钟本地 00:05(每天头
+    10 分钟窗口, issue 26-10-20-0024)+ 假钟本地 00:00:15(当日首记录未入窗窗口, 2026-10-22
+    跨日窗口抖动)"""
     from datetime import datetime, timedelta
 
     from auto_qb.core.traffic_store import V4Sample, v4_day_epoch, v4_epoch_date_str, v4_window_dates
 
-    if frozen_offset is not None:  # 假钟: 钉住用例与服务端(两侧同读 time.time, 钉一次双边生效)
-        _real = time.time()
-        monkeypatch.setattr(time, "time", lambda: v4_day_epoch(_real) + frozen_offset)
+    # 用例与服务端同读 time.time(端点 _grid 请求时现读), 钉一次双边生效:
+    # - 真钟档 = 钉在本用例入口时刻。窗口位置仍是现网形状(now 在什么时刻, 窗就在什么位置),
+    #   只是不再让用例取的 now 与服务端收边的 now 横跨本地零点(2026-10-22 跨日窗口抖动);
+    # - 假钟档 = 钉当日 00:05 / 00:00:15 两个常驻守阵位(_FROZEN_OFFSETS 注释)
+    _anchor = time.time()
+    _pinned = _anchor if frozen_offset is None else v4_day_epoch(_anchor) + frozen_offset
+    monkeypatch.setattr(time, "time", lambda: _pinned)
     mgr, client = web_env
     auth = _auth(mgr)
     _enable_qb_traffic(mgr)
@@ -618,11 +625,15 @@ def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkey
     dat_opens = sorted(os.path.basename(p) for p in _v4_opens(opened))
     assert dat_opens == sorted(d + ".dat" for d in involved)  # 只开涉及日期(含种子外扩), 更早日期/agg.dat 不触
     assert 2 <= len(involved) <= 3  # 常态恰 2; 窗首种子外扩跨本地午夜边界时至多 3(S2/D3)
-    assert next(p for p in body["points"] if p and p["t"] == base) == {
-        "t": base,
-        "dl": None,
-        "up": None
-    }  # 跨日长洞: 断链未知 -> null(issue 26-10-16-0954 修复语义)
+    # base 桶期望值按几何分档(窗尾 t1 = now, 当日首记录槽 base+30 的入窗条件 = base+30 < t1):
+    # - now > base+30: 首记录在窗内, 与昨日块相隔约 24h -> 跨日长洞断链未知 -> null 字典;
+    # - now <= base+30(00:00:00-00:00:30 窗口): 当日首记录还没到窗尾 -> 当日桶无观测 =
+    #   空桶 null(生产正确形态: 那天尚未采样; 旧断言只认 null 字典, 这 30 秒必假红)
+    entry = next((p for p in body["points"] if p and p["t"] == base), None)
+    if now <= base + 30:
+        assert entry is None, "当日首记录未入窗时 base 桶应为空桶"
+    else:
+        assert entry == {"t": base, "dl": None, "up": None}  # 跨日长洞: 断链未知 -> null(issue 26-10-16-0954 修复语义)
 
 
 def test_api_traffic_qb_group_endpoint(web_env, monkeypatch):

@@ -32,6 +32,7 @@
 """
 import copy
 import logging
+import time
 from datetime import date
 
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
@@ -330,8 +331,22 @@ def test_publish_event_patches_day_row_without_reading(tmp_path, monkeypatch):
 
     读盘打桩成 raise: 事件路径(六键自带权威累计)若退回读文件, 这条用例直接红 ——
     「读盘本身就是副作用」的判据就钉在这里。
+
+    时钟钉成每次调用 +1s 的严格递增假钟: `_publish` 每次发布都刷
+    `view["ts"] = time.time()`, 本机背靠背两次 `time.time()` 可返回**同一值**
+    (亚 µs 粒度坍缩), 真钟下 before_ts 与补丁发布的 ts 会相等 -> 下面的
+    「ts 严格推进」断言天生 flaky(2026-10-22 提交闸门里现形过)。假钟下:
+    发布不少 1 次就严格推进; 一次都不发布(补丁失效)则 ts 一字不动, 断言仍拦得住。
     """
     import auto_qb.core.modules.traffic_snapshot_mod as tsm
+
+    _tick = {"t": time.time()}
+
+    def _fake_time():
+        _tick["t"] += 1.0
+        return _tick["t"]
+
+    monkeypatch.setattr(time, "time", _fake_time)
 
     today = date.today()
     mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
