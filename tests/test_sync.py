@@ -25,7 +25,8 @@
 - test_own_writes_ttl_bounded: own_writes 永不逐出时 TTL 兜底丢弃(判据恢复 False, 防饿死)(A 系 S2 D2)
 - test_own_writes_group_judgement: deferral 判据含组维度(同组任一成员命中即让位)(A 系 S2)
 - test_own_writes_not_persisted: own_writes 纯内存不落盘(state.json 顶层无相关键)(A 系 S2 静态)
-- test_no_synthetic_state_write_site: 静态(A 系 S3 S1): qbapi.py/store.py 无任何合成 state 写点(剥注释扫描)
+- test_no_synthetic_state_write_site: 静态(A 系 S3 S1 + 26-10-21-2323 S1 扩容): **全库**(src/auto_qb/**)无合成 state 写点; AST 扫描三条形态 + 两文件白名单(带理由)
+- test_state_write_scanner_detects_synthetic_writes: 红验(26-10-21-2323 S1): 三种合成写形态各自可检出; docstring 里的同形文本不假红
 - test_value_layer_truth_only_via_sync: 值层(A 系 S3 V1): 动作后快照逐字不变, 下一轮同步落替身真值(含非四值枚举)
 - test_state_domain_not_flattened: 值域(A 系 S3 V2): 快照可持有 queued*/forced*/checking*/moving/missingFiles(未被压平)
 - test_store_apply_sync_full_update_first_round: 首轮全量 -> added 全部 + need_validate + 样本
@@ -64,6 +65,7 @@
 - test_store_rate_key_threshold_frozen: 阈值常量钉值(调整须显式改断言)
 - test_store_reset_sync_clears_rate_freshness: reset_sync 清新鲜度追踪
 """
+import ast
 import io
 import logging
 import os
@@ -545,39 +547,104 @@ def test_own_writes_not_persisted():
         assert "own_writes" not in mgr.state, "纯内存态不得进 state.json 落盘载荷"
 
 
-def _code_without_comments(rel_path: str) -> str:
-    """读源文件并剥掉注释(静态守阵用: 只看代码, 不受「说明已删除」的注释干扰)"""
-    src = (Path(__file__).resolve().parents[1] / rel_path).read_text(encoding="utf-8")
-    return "".join(
-        tok.string for tok in tokenize.generate_tokens(io.StringIO(src).readline) if tok.type != tokenize.COMMENT
-    )
+# 白名单: 允许出现 `.state =` 的非种子记录赋值点(每条必须带理由, 空理由即红)
+_STATE_WRITE_WHITELIST = {
+    "src/auto_qb/core/qbmanager.py": "ctx.state / self.state —— 状态服务句柄, 不是种子记录",
+    "src/auto_qb/core/taskqueue.py": "Task.state —— 任务状态机(PENDING/RUNNING)",
+}
+
+# `apply_delta` 是同步的应用入口, 只允许出现在「记录类自身」与「同步应用点」两个文件:
+# 历史漏网正是 ops_mod 的 `tor.apply_delta(live[0])`(issue 26-10-21-2232 的实例),
+# 它绕过了 .state= 三条判据, 只有按「调用点白名单」才能拦住。
+_APPLY_DELTA_ALLOWED = {
+    "src/auto_qb/torrents/store.py": "同步应用点(_apply)",
+    "src/auto_qb/torrents/record.py": "记录类自身(定义 + from_torrent)",
+}
+
+
+def _state_write_sites(source: str) -> list:
+    """扫描一段源码里的「合成 state 写点」-> [(行号, 形态)]
+
+    用 AST 而非正则: 正则会把 docstring 里的 `source.state="stale"` 当成写点(实测
+    traffic_source/reader.py 就有一例), 也会漏掉多目标/换行的赋值。三条形态与 A 系 S1 守阵一一对应:
+      ① `.state = ...`(属性赋值, 合成回写必然是给记录 state 赋值);
+      ② `setattr(obj, "state", ...)`(等价的间接赋值);
+      ③ `update_torrent_fields(..., state=...)`(该形参已删, 残留即回写通道复活)。
+    判据④(调用点): `apply_delta(...)` 只允许出现在 store.py / record.py —— 历史漏网形态
+    `tor.apply_delta(live[0])` 绕过前三条, 只有按调用点白名单才拦得住。
+    """
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Attribute) and target.attr == "state":
+                    hits.append((node.lineno, ast.unparse(target)))
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Name) and func.id == "setattr" and len(node.args) >= 2:
+                name = node.args[1]
+                if isinstance(name, ast.Constant) and name.value == "state":
+                    hits.append((node.lineno, "setattr(..., 'state', ...)"))
+            is_utf = (isinstance(func, ast.Attribute) and func.attr == "update_torrent_fields"
+                     ) or (isinstance(func, ast.Name) and func.id == "update_torrent_fields")
+            if is_utf and any(kw.arg == "state" for kw in node.keywords):
+                hits.append((node.lineno, "update_torrent_fields(state=...)"))
+    return hits
+
+
+def _apply_delta_calls(source: str) -> list:
+    """扫描 `apply_delta(...)` 调用 -> [(行号, 形态)]; 调用点白名单见 _APPLY_DELTA_ALLOWED"""
+    hits = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if (isinstance(func, ast.Attribute) and
+            func.attr == "apply_delta") or (isinstance(func, ast.Name) and func.id == "apply_delta"):
+            hits.append((node.lineno, ast.unparse(func)))
+    return hits
 
 
 def test_no_synthetic_state_write_site():
-    """守阵(A 系 S3 S1 静态): qbapi.py / store.py 无任何合成 state 写点
+    """守阵(A 系 S3 S1 静态 + 26-10-21-2323 S1 扩容): **全库**无合成 state 写点
 
-    三条判据(剥注释后扫描, 故「说明 _sync_paused_state 已删」的注释不算命中):
-      ① update_torrent_fields 调用块内不得出现 state= 关键字实参(该形参已删);
-      ② 不得出现 `.state =` 直接赋值(合成回写必然是给记录 state 赋值);
-      ③ 不得出现 setattr(..., "state", ...)(等价的间接赋值)。
-    红验: 还原任一一处合成回写 -> ①或②红。
+    扫描面从 qbapi.py / store.py 扩到 src/auto_qb/**: A 系计划的验收口径写的是「全库」, 旧守阵
+    只扫两个文件 —— ops_mod.py 里的直查回写因此漏网两天(issue 26-10-21-2232)。
+    白名单只放非种子记录的 `.state` 赋值点, 每条必须带理由且文件必须存在(死条目即红)。
     """
-    for rel in ("src/auto_qb/core/qbapi.py", "src/auto_qb/torrents/store.py"):
-        code = _code_without_comments(rel)
-        for m in re.finditer(r"update_torrent_fields\s*\(", code):
-            i, depth = m.end() - 1, 0
-            while i < len(code):
-                if code[i] == "(":
-                    depth += 1
-                elif code[i] == ")":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                i += 1
-            block = code[m.start():i + 1]
-            assert not re.search(r"\bstate\s*=(?!=)", block), f"{rel}: update_torrent_fields 仍有 state= 实参"
-        assert not re.search(r"\.\s*state\s*=(?!=)", code), f"{rel}: 仍有 .state= 直接赋值"
-        assert not re.search(r"setattr\s*\([^)]*[\"']state[\"']", code), f"{rel}: 仍有 setattr 写 state"
+    root = Path(__file__).resolve().parents[1]
+    offenders = {}
+    for path in sorted((root / "src/auto_qb").rglob("*.py")):
+        rel = path.relative_to(root).as_posix()
+        if rel in _STATE_WRITE_WHITELIST:
+            continue
+        source = path.read_text(encoding="utf-8")
+        sites = _state_write_sites(source)
+        if rel not in _APPLY_DELTA_ALLOWED:
+            sites = sites + [(ln, f"{what}()") for ln, what in _apply_delta_calls(source)]
+        if sites:
+            offenders[rel] = sites
+    assert not offenders, f"合成 state 写点(全库扫描): {offenders}"
+    for rel, reason in list(_STATE_WRITE_WHITELIST.items()) + list(_APPLY_DELTA_ALLOWED.items()):
+        assert reason.strip(), f"白名单条目必须带理由: {rel}"
+        assert (root / rel).exists(), f"白名单条目已失效(文件不存在): {rel}"
+
+
+def test_state_write_scanner_detects_synthetic_writes():
+    """红验(26-10-21-2323 S1): 三种合成写形态各自可检出 —— 守阵的能力不靠「恰好没有」
+
+    反向: docstring/注释里的同形文本不算写点(纯正则方案会在 traffic_source/reader.py 假红)。
+    """
+    samples = {
+        "attr": "def f(rec, v):\n    rec.state = v\n",
+        "setattr": "def f(rec, v):\n    setattr(rec, 'state', v)\n",
+        "update_torrent_fields": "def f(store, h, v):\n    store.update_torrent_fields(h, state=v)\n",
+    }
+    for name, src in samples.items():
+        assert _state_write_sites(src), f"{name} 形态未被检出"
+    # 判据④: apply_delta 调用(历史漏网形态 —— 它绕过了前三条)
+    assert _apply_delta_calls("def f(tor, live):\n    tor.apply_delta(live[0])\n"), "apply_delta 调用未被检出"
+    assert not _state_write_sites('def f(x):\n    """说明: 落 x.state="stale" 标记"""\n'), "docstring 同形文本不应命中"
 
 
 def test_value_layer_truth_only_via_sync():

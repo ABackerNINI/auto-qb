@@ -9,7 +9,7 @@
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-21-2323">
 <meta name="doc-updated" content="26-10-21-2323">
-<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html,memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html,memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html,memory-bank/issues/26-10-21-2232-test-guard-scope-narrower-than-acceptance.html">
+<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/issues/26-10-21-2232-test-guard-scope-narrower-than-acceptance.html, memory-bank/testing/baselines/26-10-21-2334-post-command-state-writes.md">
 <style>
   :root {
     color-scheme: dark;
@@ -232,17 +232,30 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
 
 <h3>4.4 守阵扩容</h3>
 
-<p><code>test_no_synthetic_state_write_site</code> 的扫描面从两个文件扩到 <code>src/auto_qb/**/*.py</code>，三条判据不变（<code>update_torrent_fields</code> 块内 <code>state=</code> / <code>.state =</code> / <code>setattr(..., "state", ...)</code>）。</p>
+<p><code>test_no_synthetic_state_write_site</code> 的扫描面从两个文件扩到 <code>src/auto_qb/**/*.py</code>，并把「正则」换成「<b>AST</b>」—— 正则会把 docstring 里的 <code>source.state="stale"</code> 当成写点（实测 <code>traffic_source/reader.py</code> 就有一例假阳性），也会漏掉多目标/换行的赋值。</p>
 
-<p>白名单（每条必须带理由，且断言理由非空）：</p>
+<p>判据四条（前三条形似原三条，第四条是这次补的）：</p>
+<ol>
+  <li><code>.state = ...</code>（属性赋值）；</li>
+  <li><code>setattr(obj, "state", ...)</code>（间接赋值）；</li>
+  <li><code>update_torrent_fields(..., state=...)</code>（形参已删，残留即回写通道复活）；</li>
+  <li><b><code>apply_delta(...)</code> 的调用点白名单</b> —— 只允许出现在 <code>torrents/store.py</code>（同步应用点）与 <code>torrents/record.py</code>（记录类自身）。这条是为历史漏网形态补的：<code>tor.apply_delta(live[0])</code> 绕过前三条，只有按调用点才拦得住。</li>
+</ol>
+
+<p>白名单（每条必须带理由，理由为空或文件不存在即红）：</p>
 <table>
   <tr><th>文件</th><th>为什么允许 <code>.state =</code></th></tr>
-  <tr><td class="tight"><code>core/qbmanager.py</code></td><td><code>ctx.state</code> / <code>self.state</code> —— 状态服务句柄，不是种子记录</td></tr>
-  <tr><td class="tight"><code>core/taskqueue.py</code></td><td><code>Task.state</code> —— 任务状态机（PENDING/RUNNING）</td></tr>
-  <tr><td class="tight"><code>core/traffic_source/reader.py</code></td><td>流量来源/曲线模块的 <code>state="stale"</code> 标记</td></tr>
+  <tr><td class="tight"><code>core/qbmanager.py</code></td><td><code>ctx.state</code> / <code>self.state</code> —— 状态服务句柄，不是种子记录（2 处）</td></tr>
+  <tr><td class="tight"><code>core/taskqueue.py</code></td><td><code>Task.state</code> —— 任务状态机（PENDING/RUNNING，6 处）</td></tr>
 </table>
 
-<p class="sm">实测：全仓 <code>.state =</code> 命中 10 处，全部落在这三个文件里，无种子记录命中（取证 2026-10-21 23:23）。</p>
+<table>
+  <tr><th>文件</th><th>为什么允许调用 <code>apply_delta</code></th></tr>
+  <tr><td class="tight"><code>torrents/store.py</code></td><td>同步应用点（<code>_apply</code>）</td></tr>
+  <tr><td class="tight"><code>torrents/record.py</code></td><td>记录类自身（定义 + <code>from_torrent</code>）</td></tr>
+</table>
+
+<p class="sm">实测（AST 扫描，2026-10-21 23:29）：全仓 <code>.state =</code> 命中 8 处，全部落在上述两个白名单文件，无种子记录命中；<code>apply_delta</code> 调用点只有 <code>store.py</code> / <code>record.py</code> 两处。<code>traffic_source/reader.py</code> 的正则命中是 docstring 假阳性，AST 下不存在。</p>
 
 <h2 id="s5"><span class="n">5</span>逐文件改动清单</h2>
 
@@ -273,7 +286,7 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
 
 <table>
   <tr><th>期</th><th>内容</th><th>独立价值</th></tr>
-  <tr><td class="tight">S1</td><td>守阵扩容（T4）</td><td>先把"全库"变成机检事实，后续改动都在守阵覆盖下</td></tr>
+  <tr><td class="tight">S1</td><td>守阵扩容（T4） <span class="tag crit">已完成</span></td><td>先把"全库"变成机检事实，后续改动都在守阵覆盖下</td></tr>
   <tr><td class="tight">S2</td><td>写后同步边界（<code>save_path</code> + 口径 + T5）</td><td>消掉唯一有真实副作用的回写</td></tr>
   <tr><td class="tight">S3</td><td>移除提交前复核（T2/T3）</td><td>少一条直查通道</td></tr>
   <tr><td class="tight">S4</td><td>补刷新计时（T1）+ 收尾（基线、文档、计划状态）</td><td>校正不再被白刷惩罚</td></tr>
@@ -300,6 +313,7 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
 
 <h2 id="s9"><span class="n">9</span>变更记录</h2>
 <ul>
+  <li>2026-10-21 23:35 — <b>S1 完成</b>：守阵改为 AST 全库扫描（<code>src/auto_qb/**</code>），判据从三条扩到四条（新增 <code>apply_delta</code> 调用点白名单 —— 历史漏网形态绕过前三条）；白名单收敛为 2 个文件（<code>qbmanager</code> / <code>taskqueue</code>，AST 下 <code>reader.py</code> 的正则假阳性消失）；新增红验用例。实测注入 <code>tor.apply_delta(live[0])</code> 到 <code>ops_mod.py</code> 后守阵立刻变红并指出文件+行号，还原后复绿。</li>
   <li>2026-10-21 23:23 — 初版。依据：A 系计划（26-10-13-0540）复盘 + 四条 issue 的 grilling 结论（D1–D6）。</li>
 </ul>
 

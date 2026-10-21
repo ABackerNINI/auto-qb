@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="post-command-state-writes">
 <meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件">
 <meta name="issue-summary" content="计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)">
 <title>守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-2232-test-guard-scope-narrower-than-acceptance</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 22:32</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -177,6 +177,7 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-21 23:35 — 修复完成(计划 26-10-21-2323 S1), 状态 <strong>Done</strong>。</li>
       <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
       <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
       <li>2026-10-21 22:32 — 入池，状态 <strong>Open</strong>（复盘 A 系计划验收口径时发现）</li>
@@ -184,7 +185,15 @@
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（2026-10-21 23:35，计划 26-10-21-2323 S1）：<code>test_no_synthetic_state_write_site</code> 扫描面扩到
+      <code>src/auto_qb/**</code>，检测从正则改 AST（正则会把 <code>traffic_source/reader.py</code> 的 docstring 误判为写点），
+      判据扩到四条 —— 第四条是 <code>apply_delta</code> 的<b>调用点白名单</b>（只允许 <code>torrents/store.py</code> 与
+      <code>torrents/record.py</code>）。这一条正是为历史漏网形态补的：<code>tor.apply_delta(live[0])</code> 绕过原有三条判据。</p>
+    <p><b>与建议修法的差异</b>：建议里写的是"白名单初版放 tests/ 与 _raw 兜底赋值"，实际白名单收敛为两个非种子记录的
+      <code>.state</code> 赋值文件（<code>qbmanager.py</code> / <code>taskqueue.py</code>），<code>tests/</code> 不在扫描面内、无需豁免。</p>
+    <p><b>验证方式</b>：新增红验用例 <code>test_state_write_scanner_detects_synthetic_writes</code>；并做了一次真注入 —— 向
+      <code>ops_mod.py</code> 追加 <code>tor.apply_delta(live[0])</code> 后守阵立刻变红并指出 <code>ops_mod.py:1299</code>，还原后复绿。
+      实测数字见基线切片 <code>26-10-21-2334</code>。</p>
   </section>
 
   <footer>
