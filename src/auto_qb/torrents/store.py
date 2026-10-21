@@ -90,6 +90,9 @@ class TorrentStore:
         # 本轮变化集
         self.delta_fields: Dict[str, FrozenSet[str]] = {}
         self.state_changed: List[Tuple[str, Any]] = []
+        # 当前 state 的起始时刻 {hash: time.time()}: 仅在「上报的 state 变了」或「首见」时更新,
+        # 供闸门文案给出「已进行多久」(G7 点名 blocker 时带时长; 纯展示, 不参与任何判定)
+        self.state_since: Dict[str, float] = {}
         # 字段变化检测(计划 26-09-27-1438):
         # watch_fields:   监听字段并集(规则 watch_fields ∪ maintenance on_change 的 tags), 空 = 检测关闭
         # field_snapshots: 跨轮基线 {hash: {字段: 值}}, 持久化于 state.field_snapshots ——
@@ -312,6 +315,7 @@ class TorrentStore:
             return [], []
         prev = self.by_hash
         by_hash = {} if full else dict(prev)  # 全量重建 / 增量: C 级浅拷贝, 未变化记录原样保留
+        now_ts = time.time()  # state_since 的同一时刻基准(纯展示用, 不参与判定)
         added: List[str] = []
         changes = list(removed)
         view_changed = False
@@ -325,6 +329,7 @@ class TorrentStore:
             if rec is None:
                 rec = TorrentRecord.from_torrent(src, hash=h)
                 added.append(h)
+                self.state_since[h] = now_ts  # 首见: 时长从这一轮起算
                 # 新增种子也过登记点: 有持久化基线(重启场景)时与基线对比 -> 停机期的外部变化
                 # 在重启后首轮补捕(计划 §04 细则 4); 无基线(真首见/升级首启)只落基线不触发。
                 # changed 传监听字段全集 ∪ tags: 与基线的差集才是真实变化, 不是"全变"。
@@ -339,6 +344,7 @@ class TorrentStore:
                         view_changed = True
                     if "state" in changed:
                         state_changed.append((h, rec.state_enum))
+                        self.state_since[h] = now_ts  # 状态换了: 时长重新起算(闸门文案用)
                         # 自有写逐出(S2): 该 hash 的新 state 已从 qB 回流应用 -> deferral 目的达成
                         self.own_writes.pop(h, None)
                     if not self._CONFLICT_FIELDS.isdisjoint(changed):
@@ -371,6 +377,7 @@ class TorrentStore:
             self.external_tag_changes.discard(h)
             self.self_caused_fields.pop(h, None)
             self.own_writes.pop(h, None)  # 自有写登记同样清掉: 种子已删, deferral 不再有意义
+            self.state_since.pop(h, None)  # 记录已不在: 状态时长无意义(重加时按首见重新起算)
         self.by_hash = by_hash
         self.delta_fields = delta_fields
         self.state_changed = state_changed
@@ -401,6 +408,15 @@ class TorrentStore:
 
     def hashes(self) -> List[str]:
         return list(self.by_hash)
+
+    def state_age(self, hash: str) -> Optional[float]:
+        """该 hash 当前 state 已持续秒数(基于本地观测到的最后一次 state 变化); 未知 -> None
+
+        只服务闸门文案(「已进行 N 分钟」), 不参与任何判定: 时刻取自本进程观测到的上报变化,
+        重启后从首见重新起算 —— 宁可少报时长, 不编造时长。
+        """
+        ts = self.state_since.get(hash)
+        return None if ts is None else max(0.0, time.time() - ts)
 
     def update_state_snapshot(self) -> None:
         """本轮结束前更新状态快照(hash -> state_enum)
@@ -624,6 +640,7 @@ class TorrentStore:
         self.state_snapshot.clear()
         self.verified_references.clear()
         self.own_writes.clear()  # 自有写登记不跨热重载残留(S2; 纯内存态, 与 state_snapshot 同级)
+        self.state_since.clear()  # 状态时长随状态快照一并重置(下一轮全量 refresh 重新起算)
         self.transitional_missing_skips.clear()  # 组 key 随分组索引重建, 过渡态计数一并清零
         # download_conflict_warned / cross_group_conflict_warned 有意不清(决策钉死, 防"顺手补 clear"):
         # 两个去重集合的组 key 均为纯函数派生(grouping_mod.group_key_of 单一事实源), 热重载重建

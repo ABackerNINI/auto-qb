@@ -1185,7 +1185,7 @@ def test_checking_full_checking_send_error():
     assert ("recheck", None) not in client.calls, f"发送失败不应产生 recheck 调用: {client.calls}"
     assert mgr.store.verified_references == set(), "发送失败不应晋升参考"
     assert mgr.task_queue._fast == [], "发送失败任务应消亡"
-    assert mgr.task_queue._active_checks == set(), "消亡应释放校验标记"
+    assert mgr.task_queue.active_check_hashes() == set(), "消亡应释放校验标记"
 
 
 def test_checking_full_checking_pending_resume():

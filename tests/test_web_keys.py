@@ -266,10 +266,10 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
             mgr.web.consume_commands()
         rec = mgr.web.results["bs1"]
         assert rec["status"] == "error", rec
-        # 文案逐段: ok 之外的三类各占一段(跳过按原因分桶, 失败聚合计数)
+        # 文案逐段: ok 之外的三类各占一段(跳过与失败都按原因分桶/聚合; 同因多目标才合并计数)
         assert "1 个跳过: 今日已跳检过该种子" in rec["error"], rec["error"]
-        assert "2 个失败: " in rec["error"] and "部分下载的种子禁止跳检" in rec["error"], rec["error"]
-        assert "导出 .torrent 失败" in rec["error"], rec["error"]
+        assert "1 个失败: 部分下载的种子禁止跳检" in rec["error"], rec["error"]
+        assert "1 个失败: 导出 .torrent 失败" in rec["error"], rec["error"]
         assert any("批量跳检(成功 1, 跳过 1, 失败 2)" in m for m in messages), messages
         # ok 的那枚走通四阶段并记录同日去重(跨来源共享不回归)
         names = [c[0] for c in client.calls]

@@ -12,7 +12,7 @@
 import heapq
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
 
 if TYPE_CHECKING:
     from ..torrents import TorrentStore
@@ -118,7 +118,10 @@ class TaskQueue:
     """
     def __init__(self):
         self._fast: List[Task] = []  # heapq: 所有按时间调度的任务
-        self._active_checks: Set[str] = set()  # 在途校验 hash 集合(去重)
+        # 在途校验登记: hash -> 登记时刻(monotonic)。集合语义(成员即"在途")+ 时刻供
+        # 闸门判泄漏(active_check_age / checking_meta.INFLIGHT_TTL): 登记只在轮询任务
+        # FINISHED 时释放, 任务被异常丢弃时登记会永久残留并挡住 G5/G7
+        self._active_checks: Dict[str, float] = {}
 
     # ---------- 入队 ----------
 
@@ -141,7 +144,7 @@ class TaskQueue:
         if task.kind == "check":
             if task.hash in self._active_checks:
                 return False
-            self._active_checks.add(task.hash)
+            self._active_checks[task.hash] = time.monotonic()
         now = time.time() if now is None else now
         task.interval = self._norm_interval(task.interval)
         task.next_run = now
@@ -192,6 +195,15 @@ class TaskQueue:
         """
         return set(self._active_checks)
 
+    def active_check_age(self, hash: str) -> Optional[float]:
+        """该 hash 在途登记的时长(秒, monotonic); 未登记 -> None
+
+        闸门侧 TTL 判据(checking_meta.INFLIGHT_TTL): 登记只在轮询任务 FINISHED 时释放,
+        任务被异常丢弃(队列重建等)时登记会残留 —— 时长超 TTL 由调用方判为泄漏并忽略。
+        """
+        ts = self._active_checks.get(hash)
+        return None if ts is None else max(0.0, time.monotonic() - ts)
+
     # ---------- 到期执行 + 收尾 ----------
 
     def run_due(self, dry_run: bool = False, now: float = None, max_tasks: int = 0, defer_gate=None) -> int:
@@ -223,7 +235,7 @@ class TaskQueue:
             if self._run_one(task, dry_run):
                 self._requeue(task, now)
             elif task.kind == "check":
-                self._active_checks.discard(task.hash)  # 消亡: 释放在途登记
+                self._active_checks.pop(task.hash, None)  # 消亡: 释放在途登记
         return len(due)
 
     def _pop_due(self, now: float, max_tasks: int) -> List[Task]:

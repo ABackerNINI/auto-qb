@@ -41,6 +41,8 @@
 - test_skip_check_filelist_precondition_blocks: T7 文件缺失/路径不可判定拒(带 check_filelist 描述与 fs.path_map 出路), 未导出未删除
 - test_skip_gates_rejects_group_checking_inflight: T16 组内其它成员校验在途(G7, case 2)两半各一例: 队列登记 / 快照 is_checking(用户手动 recheck, G5 队列视野外); 在途清空后放行; 零副作用 (S1b-2)
 - test_skip_gates_rejects_group_check_failed: T17 组内成员校验失败推断(G8, case 1): 正样本文案带成员+出路; 负样本三例(映射不一致 / 记录指向已完成成员自愈不参与 / 非当日); 只读自愈不 pop; 零副作用 (S1b-2)
+- test_skip_gates_g7_evidence_and_blocker_identity: S1(26-10-21-1857) —— G7 证据口径: checkingResumeData 不算在验 / 映射不一致成员不参与 / 命中时文案点名 blocker(hash8+名字+state)
+- test_skip_gates_inflight_ttl_expires_leaked_registration: S1(26-10-21-1857) —— 在途登记超 TTL 视为泄漏: G5 放行并记 WARNING(登记只在轮询任务 FINISHED 时释放)
 - test_skip_gates_detail_classification: T18 detail 三态归类 + 执行路径与 detail 首个未过闸门同源断言 + G7/G8 归类(G8 blocked 短路 filelist / G7 force 不短路)
 - test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5/G7)并留 WARNING+INFO 审计; blocked(G3/G6/G8/filelist)一律硬拒; 签名缺省 False
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
@@ -61,6 +63,7 @@ from auto_qb.core.modules.ops_mod import OpsModule
 from auto_qb.core.qbmanager import QbManager
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
+from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, seed_store
 
@@ -847,8 +850,11 @@ def test_skip_gates_predicate_edge_states():
         t = FakeTorrent(hash="HA", state=state, progress=1.0)
         seed_store(mgr, [t])
         vs = ops._skip_gates_detail("HA", t)
-        expected = ["G3"] + (["G6"] if g6_may_cofire(state) else [])
-        assert [v.gate for v in vs] == expected, f"{state} p=1 应落 G3(已完成无论状态, 做种态同): {vs}"
+        # 已完成但仍在验(checkingDL/checkingUP)落 G5(force): 「已完成, 跳检无意义」在这时是错话,
+        # 且 G3 是 blocked 无逃生, 会把「误发起的 recheck」堵死
+        head = ["G5"] if is_piece_checking(state) else ["G3"]
+        expected = head + (["G6"] if g6_may_cofire(state) else [])
+        assert [v.gate for v in vs] == expected, f"{state} p=1 应落 {head[0]}: {vs}"
 
 
 def test_skip_gates_allows_paused_incomplete():
@@ -980,7 +986,7 @@ def test_skip_check_rejects_inflight_recheck():
     seed_paused(mgr, client, hash="HASH123")
     seed_inflight(mgr, "HASH123")
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
-    assert r.is_failed and "校验中" in r.message, f"在途校验应拒绝: {r}"
+    assert r.is_failed and "正在全量校验" in r.message, f"在途校验应拒绝: {r}"
     assert not any(c[0] in ("export", "delete", "add") for c in client.calls), f"拒绝零副作用: {client.calls}"
     assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
     assert not mgr.state.get("skip_check_backup"), "拒绝不得留备份元数据"
@@ -1038,7 +1044,7 @@ def test_skip_gates_rejects_group_checking_inflight():
     wire_group(mgr, "K", "HASH123", "HB")
     seed_inflight(mgr, "HB")
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
-    assert r.is_failed and "校验中" in r.message, f"组员在途(队列登记)应拒: {r}"
+    assert r.is_failed and "正在全量校验" in r.message, f"组员在途(队列登记)应拒: {r}"
     assert client.calls == [], f"拒绝零副作用(不得导出/删除/重加): {client.calls}"
     assert not mgr.state.get("skip_check_day", {}).get("HASH123"), "拒绝不得写同日去重"
     assert not mgr.state.get("skip_check_backup"), "拒绝不得留备份元数据"
@@ -1063,7 +1069,7 @@ def test_skip_gates_rejects_group_checking_inflight():
     vs = mgr_b.ctx.ops._skip_gates_detail("HASH123", ha_b)
     assert [v.gate for v in vs] == ["G7"], f"快照 is_checking 半应只落 G7: {vs}"
     r3 = mgr_b.ctx.ops.skip_check("HASH123", source="web")
-    assert r3.is_failed and "校验中" in r3.message, f"组员在途(快照)应拒: {r3}"
+    assert r3.is_failed and "正在全量校验" in r3.message, f"组员在途(快照)应拒: {r3}"
     hb_b.state = "pausedDL"
     assert mgr_b.ctx.ops._skip_gates_detail("HASH123", ha_b) == [], "快照退出校验态后应放行"
 
@@ -1114,6 +1120,64 @@ def test_skip_gates_rejects_group_check_failed():
     assert mgr.ctx.ops._skip_gates_detail("HASH123", ha) == [], "非当日记录应放行"
 
 
+def test_skip_gates_g7_evidence_and_blocker_identity():
+    """测试(S1): G7 证据口径与点名 —— checkingResumeData 不算在验(qB 简历校验不产生数据判决);
+    映射不一致的成员不参与(对齐 G8); 命中时文案点名 blocker(hash8 + 名字 + state)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    a = FakeTorrent(hash="HASH123", state="pausedDL", progress=0.0)
+    b = FakeTorrent(hash="HBCHECK", name="Blocker.Movie", state="pausedDL", progress=0.0)
+    seed_store(mgr, [a, b])
+    client.torrents["HASH123"] = a
+    client.torrents["HBCHECK"] = b
+    wire_group(mgr, "K", "HASH123", "HBCHECK")
+    key = mgr.store.member_to_key["HASH123"]
+    mgr.store.group_sizes.setdefault(key, {})["HASH123"] = {"movie.mkv": 100}
+    mgr.store.group_sizes[key]["HBCHECK"] = {"movie.mkv": 100}
+
+    # 1) checkingResumeData: qB 启动/加种时的 resume data 比对, 不产生数据完整性判决 -> 不挡
+    b.state = "checkingResumeData"
+    assert mgr.ctx.ops._skip_gates_detail("HASH123", a) == [], "checkingResumeData 不应算作在验"
+
+    # 2) 映射不一致: 校验的是另一份数据, 判决与本次跳检无关 -> 不参与(对齐 G8)
+    b.state = "checkingUP"
+    mgr.store.group_sizes[key]["HBCHECK"] = {"movie.mkv": 200}
+    assert mgr.ctx.ops._skip_gates_detail("HASH123", a) == [], "映射不一致的成员不应参与 G7"
+
+    # 3) 映射一致 + 真在验 -> G7(force), 文案点名 blocker(含 state 已持续时长)
+    mgr.store.group_sizes[key]["HBCHECK"] = {"movie.mkv": 100}
+    mgr.store.state_since["HBCHECK"] = time.time() - 125  # 本地观测到的状态起点(纯展示用)
+    vs = mgr.ctx.ops._skip_gates_detail("HASH123", a)
+    assert [v.gate for v in vs] == ["G7"], vs
+    assert vs[0].cls == "force", vs
+    text = vs[0].text
+    assert "HBCHECK" in text and "Blocker.Movie" in text and "checkingUP" in text, \
+        f"文案必须点名 blocker(hash8/名字/state): {text}"
+    assert "已 2 分钟" in text, f"文案应带状态持续时长: {text}"
+
+
+def test_skip_gates_inflight_ttl_expires_leaked_registration():
+    """测试(S1): 在途登记超 TTL 视为泄漏(轮询任务已被丢弃) —— G5/G7 放行并记 WARNING
+
+    登记只在轮询任务 FINISHED 时释放; 任务被异常丢弃时登记会永久残留, 让闸门一直亮着。"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="pausedDL", progress=0.0)
+    seed_store(mgr, [t])
+    seed_inflight(mgr, "HASH123")
+
+    # 新鲜登记 -> G5(在途)
+    assert [v.gate for v in mgr.ctx.ops._skip_gates_detail("HASH123", t)] == ["G5"], "新鲜登记应挡"
+
+    # 超过 TTL -> 忽略登记并记 WARNING
+    mgr.task_queue.active_check_age = lambda h: INFLIGHT_TTL + 1
+    with capture_logs("auto_qb.core.modules.ops_mod") as cap:
+        assert mgr.ctx.ops._skip_gates_detail("HASH123", t) == [], "泄漏登记超 TTL 后应放行"
+    assert any("登记泄漏" in m for m in cap.messages), cap.messages
+
+
 def test_skip_gates_detail_classification():
     """测试(T18): _skip_gates_detail 三态归类 —— G5/G7->force; G3/G4/G6/G8/filelist/partial/dedup
     -> blocked; 全过->空; 执行路径 _skip_gates 与 detail 首个未过闸门一致(同源断言, 防两套谓词漂移;
@@ -1143,7 +1207,7 @@ def test_skip_gates_detail_classification():
     seed_inflight(mgr, "G5HC")
     assert gates("G5HC", t) == [("G5", "force")]
     r = ops._skip_gates("G5HC", t)
-    assert r.is_failed and "校验中" in r.message, f"force 类闸门缺省仍硬拒: {r}"
+    assert r.is_failed and "正在全量校验" in r.message, f"force 类闸门缺省仍硬拒: {r}"
     # G6 组内活跃下载 -> blocked
     t = fresh("pausedDL", 0.0, "G6HD")
     hb = FakeTorrent(hash="G6HE", state="downloading", progress=0.3)
@@ -1270,7 +1334,7 @@ def test_skip_check_force_semantics():
     seed_paused(mgr5, client5, hash="HASH123")
     seed_inflight(mgr5, "HASH123")
     r5 = mgr5.ctx.ops.skip_check("HASH123", source="web")
-    assert r5.is_failed and "校验中" in r5.message, f"缺省 force=False 应硬拒: {r5}"
+    assert r5.is_failed and "正在全量校验" in r5.message, f"缺省 force=False 应硬拒: {r5}"
 
     # G7 组内校验在途 + force=True: 豁越放行(与 G5 同款, WARNING 降级 + INFO 审计)
     mgr6 = make_mgr(FakeConfig())

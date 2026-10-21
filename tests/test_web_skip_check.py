@@ -4,6 +4,7 @@
 - test_web_skip_check_completed_rejected_receipt: T10(26-10-05-0314 S2) —— 单发已完成种子: ops G3 闸门拒绝文案经 ActionResult 通道原样透传进 error 回执(不截断不改写), 零 qB 写调用
 - test_web_bulk_skip_check_mixed_outcome: T11(26-10-05-0314 S2) —— 批量混合(1 已完成 + 1 暂停未完成): 聚合回执失败计数与文案自解释(G3), 成功标的走通四阶段并记同日去重(T12 门控不回归由既有 test_api_t_skip_check_gated_by_config(单发 403)/test_drain_web_commands_bulk_skip_check_gated(批量拒单)+ 本轮 T21 预检 403 断言覆盖, 无新用例)
 - test_web_precheck_endpoint: T21(26-10-05-0314 S2) —— 预检端点 POST /api/torrents/skip-check/precheck: 路由级 403 门控同单发(fail-closed 零入队)/空 hashes 400 不入队/入队载荷 {hashes}; drain 级回执 truth={results, summary} 结构、混合 {ok, force, blocked} 计数、未知 hash → cls=blocked 文案「已不在客户端」
+- test_web_bulk_skip_check_receipt_aggregates_same_reason: S1(26-10-21-1857) —— 批量同因失败按原因聚合: 3 个已完成目标只出一条「3 个失败: …」, 不再按条拼接截前 3 条(旧口径 = 3 段逐字重复)
 - test_web_force_passthrough: T22(26-10-05-0314 S2) —— 单发 body.force → ops.skip_check 收到 force=True(mock kwarg 断言)/缺省 force=False; 批量 body.force → _bulk_skip_check_via_ops 逐 hash 透传; 路由级提供才透传(缺省载荷形态不变); force=true 时 case 1 闸门(G3)照常硬拒进回执
 - test_webui_no_rules_import: 边界守阵(P2') —— webui 操作链不得 import 规则模块; 其余 webui 模块不得触碰规则动作插件(rules.actions/registry)
 """
@@ -66,6 +67,34 @@ def test_web_bulk_skip_check_mixed_outcome():
         names = [c[0] for c in client.calls]
         assert "export" in names and "delete" in names and "add" in names, client.calls
         assert mgr.state["skip_check_day"].get("HASH123"), "成功的标的应记录同日去重"
+
+
+def test_web_bulk_skip_check_receipt_aggregates_same_reason():
+    """S1: 批量同因失败按原因聚合 —— 3 个已完成目标只出一条「3 个失败: …」, 不再按条拼接
+    截前 3 条(旧口径 = 3 段逐字重复; 现场 11 个失败只显示 3 段相同文案)"""
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tors = [FakeTorrent(hash=f"HDONE{i}", name=f"Done{i}", state="pausedUP", progress=1.0) for i in range(3)]
+        for t in tors:
+            client.torrents[t.hash] = t
+        seed_store(mgr, tors)
+        mgr.web.commands.put(
+            ("bulk_torrents", {
+                "hashes": [t.hash for t in tors],
+                "action": "skip_check",
+                "cmd_id": "agg"
+            })
+        )
+        mgr.web.consume_commands()
+        rec = mgr.web.results["agg"]
+        assert rec["status"] == "error", rec
+        err = rec["error"]
+        assert "3 个失败: " in err, f"失败计数应聚合: {err!r}"
+        assert err.count("种子已完成") == 1, f"同因失败只应出现一次(聚合): {err!r}"
 
 
 def test_web_precheck_endpoint(web_env):

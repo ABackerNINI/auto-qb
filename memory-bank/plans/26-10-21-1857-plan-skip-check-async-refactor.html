@@ -9,7 +9,7 @@
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-21-1857">
 <meta name="doc-updated" content="26-10-21-1857">
-<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html,memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html,memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html">
+<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/testing/baselines/26-10-21-1933-skip-check-arch.md">
 <style>
   :root {
     color-scheme: dark;
@@ -343,7 +343,7 @@ hashes(直接选中) ────┴→ 去重(保序) → 逐 hash 判闸门(�
 <h3>分期（每期可独立提交、独立验收）</h3>
 <table>
   <tr><th>期</th><th>内容</th><th>独立价值</th></tr>
-  <tr><td class="tight">S1</td><td>闸门口径（G5 快照半 + G7 三条）+ 点名文案 + 回执按原因聚合</td><td>误挡立刻可诊断；不依赖执行模型改造</td></tr>
+  <tr><td class="tight">S1</td><td>闸门口径（G5 快照半 + G7 三条）+ 点名文案 + 回执按原因聚合 <span class="tag crit">已完成</span></td><td>误挡立刻可诊断；不依赖执行模型改造</td></tr>
   <tr><td class="tight">S2</td><td>相位机 + 微步调度（第三条时间线）+ 删除不摘记录</td><td>主循环不再被占；响应仍 &lt;1s</td></tr>
   <tr><td class="tight">S3</td><td>批量并行 + 窗口抑制 + 回执/进度契约（前后端）</td><td>批量耗时与目标数解耦</td></tr>
   <tr><td class="tight">S4</td><td>规则侧异步契约 + 崩溃恢复对账</td><td>规则源不再阻塞主循环</td></tr>
@@ -370,6 +370,7 @@ hashes(直接选中) ────┴→ 去重(保序) → 逐 hash 判闸门(�
 
 <h2 id="s13"><span class="n">13</span>变更记录</h2>
 <ul>
+  <li>2026-10-21 19:33 — <b>S1 完成</b>：G5 补快照半边（已完成但在验 → force 而非 blocked）、G7 改用 <code>_checking_evidence</code>（排除 <code>checkingResumeData</code>）+ 文件映射一致前置 + 点名 blocker（含状态时长）、在途登记 TTL、批量回执按原因聚合。实测见基线切片 <code>26-10-21-1933</code>。S2 待开工。</li>
   <li>2026-10-21 19:13 — 认领三条 issue（置 In Progress），开始实施 S1。</li>
   <li>2026-10-21 18:57 — 初版。基于当日 grilling 结论与 qB 5.x / libtorrent 源码取证；三条发现已入池（topic <code>post-command-state-writes</code>）；<code>code-style.md</code> 的「写后同步」条已按档案漂移移除。</li>
 </ul>

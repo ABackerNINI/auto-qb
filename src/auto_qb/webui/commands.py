@@ -1141,24 +1141,24 @@ class WebCommandsMixin:
         与单发同一提交点(ops_recheck, source="web"): 在途/校验中的 hash 被拒绝并计数,
         不重启其校验; 提交成功的 hash 经 ops 登记在途 -> 决策链 1.5 组内串行化可见。
         回执口径与 bulk 其余动作一致: 任何缺失/跳过/失败都进 error 文案(部分成功也报错,
-        拒绝计数必须可见), 全部正常提交才 ok。
+        拒绝计数必须可见), 全部正常提交才 ok。失败按原因聚合(同因多目标只出一行)。
         """
-        ok_n = skip_n = fail_n = 0
-        fail_msgs: List[str] = []
+        ok_n = skip_n = 0
+        fail_buckets: dict = {}
         for h in hashes:
             r = self.ctx.ops.recheck(h, source="web")  # plan kernel-module-refactor P4: 改走 ctx.ops
             if r.is_skipped:
                 skip_n += 1
             elif r.is_failed:
-                fail_n += 1
-                fail_msgs.append(r.message)
+                fail_buckets[r.message] = fail_buckets.get(r.message, 0) + 1
             else:
                 ok_n += 1
+        fail_n = sum(fail_buckets.values())
         msgs = self._bulk_missing_msgs(missing, n_req, missing_groups, n_keys)
         if skip_n:
             msgs.append(f"{skip_n} 个校验进行中已跳过")
-        if fail_n:
-            msgs.append(f"{fail_n} 个发送失败: {'; '.join(fail_msgs[:3])}")
+        for reason, n in fail_buckets.items():
+            msgs.append(f"{n} 个发送失败: {reason}")
         self._bulk_receipt(
             cmd_id,
             msgs,
@@ -1183,29 +1183,30 @@ class WebCommandsMixin:
         **逐 hash 串行**调用是单写线程假设的硬要求(pitfalls/backend/concurrency.md), 禁止并发扇出。
         force(plan 26-10-05-0314 S2): 逐 hash 透传 ops.skip_check —— 仅豁越 cls=force 的
         未过闸门, cls=blocked 一律硬拒; 缺省 False 行为零变化。
-        跳过按原因分桶计数(同日去重 / 种子已移除, 文案自解释), 失败聚合计数附前 3 条文案;
+        跳过按原因分桶计数(同日去重 / 种子已移除, 文案自解释), 失败同样按原因聚合计数 ——
+        G7/G8 这类组级闸门的文案对同批所有目标逐字相同, 按条拼接再截前 3 条会变成 N 段重复,
+        既丢信息又不可读(issue 26-10-21 现场: 11 个失败只显示 3 段相同文案)。
         回执口径与 bulk 其余动作一致: 任何缺失/跳过/失败都进 error 文案(部分成功也报错,
         拒绝计数必须可见), 全部成功才 ok。
         """
         ok_n = 0
         skip_buckets: dict = {}  # 跳过原因 -> 计数(dict 保插入序 = 首现序)
-        fail_n = 0
-        fail_msgs: List[str] = []
+        fail_buckets: dict = {}  # 失败原因 -> 计数(同上; 同因多目标只出一行)
         for h in hashes:
             r = self.ctx.ops.skip_check(h, source="web", force=force)
             if r.is_skipped:
                 skip_buckets[r.message] = skip_buckets.get(r.message, 0) + 1
             elif r.is_failed:
-                fail_n += 1
-                fail_msgs.append(r.message)
+                fail_buckets[r.message] = fail_buckets.get(r.message, 0) + 1
             else:
                 ok_n += 1
         skip_n = sum(skip_buckets.values())
+        fail_n = sum(fail_buckets.values())
         msgs = self._bulk_missing_msgs(missing, n_req, missing_groups, n_keys)
         for reason, n in skip_buckets.items():
             msgs.append(f"{n} 个跳过: {reason}")
-        if fail_n:
-            msgs.append(f"{fail_n} 个失败: {'; '.join(fail_msgs[:3])}")
+        for reason, n in fail_buckets.items():
+            msgs.append(f"{n} 个失败: {reason}")
         self._bulk_receipt(
             cmd_id,
             msgs,
