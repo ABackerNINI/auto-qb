@@ -81,7 +81,7 @@ from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_count
 from auto_qb.rules.checking_meta import PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
-from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
+from helpers import drive_skip, FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
 
 
 # ---------- 增强模拟客户端(piece hashes API / recheck 失败注入) ----------
@@ -182,7 +182,10 @@ def run_queue(mgr, now=None, dry_run=False):
     now: 显式时间点(校验任务 interval=2s, 多轮推进需递增 now)
     """
     now = time.time() if now is None else now
-    return mgr.task_queue.run_due(dry_run, now=now)
+    out = mgr.task_queue.run_due(dry_run, now=now)
+    # 跳检自 S4 起是异步入口: 相位由主循环微步线推进, 测试里随队列一并驱动到终态
+    drive_skip(mgr)
+    return out
 
 
 def process_rule(mgr, client, tor, dry_run=False):
@@ -210,7 +213,10 @@ def process_rule(mgr, client, tor, dry_run=False):
 
     mgr.api.torrents_delete = wrapped_delete
     try:
-        return rule.process(ctx)
+        out = rule.process(ctx)
+        # 跳检自 S4 起是异步入口(规则侧拿 pending, 相位由微步线推进): 测试里驱动到终态
+        drive_skip(mgr)
+        return out
     finally:
         mgr.api.torrents_delete = orig_delete
 

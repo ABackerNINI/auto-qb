@@ -46,6 +46,7 @@
 - test_skip_check_no_sleep_polling_and_keeps_record: S2(26-10-21-1857) —— 相位机成功路径零 sleep(原 500ms × 10 轮询) + 删除不摘记录 + 运行状态零写入(调用序 export→delete→add→add_tags)
 - test_skip_submit_async_scheduler_and_failure_isolation: S3(26-10-21-1857) —— 异步入口只受理(pending) + 调度器 advance_due 并行推进 + 逐 hash 失败隔离 + 窗口抑制随终态撤销
 - test_skip_window_suppression_ignores_sync_removal: S3(26-10-21-1857) —— 删除→重加窗口内 torrents_removed 不算删除(增量轮与全量轮都豁免), 窗口结束后恢复常态
+- test_skip_recovery_reconciles_backup_ledger: S4(26-10-21-1857) —— 崩溃恢复对账: 备份账本三分流(已回→清账 / 不在且备份在→seed_mode 重加 / 备份丢失→ERROR), 每进程只跑一次
 - test_skip_gates_detail_classification: T18 detail 三态归类 + 执行路径与 detail 首个未过闸门同源断言 + G7/G8 归类(G8 blocked 短路 filelist / G7 force 不短路)
 - test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5/G7)并留 WARNING+INFO 审计; blocked(G3/G6/G8/filelist)一律硬拒; 签名缺省 False
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
@@ -949,6 +950,35 @@ def test_skip_window_suppression_ignores_sync_removal():
     assert drive_skip(mgr), "调度推进应把 job 推到终态"
     _, removed_after = mgr.store._apply({}, ["HASH123"], full=False)
     assert "HASH123" in removed_after and mgr.store.get("HASH123") is None, "窗口结束后 removal 应照常生效"
+
+
+def test_skip_recovery_reconciles_backup_ledger():
+    """测试(S4): 崩溃恢复对账 —— 备份账本(删除前落盘)是唯一凭据: 种子不在客户端则用备份重加
+    (seed_mode), 种子已回来则清掉残留备份; 每进程只跑一次"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_mgr(FakeConfig())
+        client = FakeClient()
+        mgr.client = client
+        keep = FakeTorrent(hash="HKEEP", state="pausedUP", progress=1.0)
+        seed_store(mgr, [keep])
+        client.torrents["HKEEP"] = keep
+        path = os.path.join(td, "HMISSING.torrent")
+        with open(path, "wb") as f:
+            f.write(b"dummy-torrent")
+        backups = mgr.state.setdefault("skip_check_backup", {})
+        backups["HPRESENT"] = {"path": os.path.join(td, "nope.torrent"), "save_path": "R:\\", "ts": 0}
+        backups["HMISSING"] = {"path": path, "save_path": r"R:\Downloads", "category": "", "tags": "", "ts": 0}
+        mgr.store.by_hash["HPRESENT"] = FakeTorrent(hash="HPRESENT", state="pausedUP", progress=1.0)
+
+        mgr.ctx.ops.on_sync_line(True)
+
+        assert "HPRESENT" not in mgr.state["skip_check_backup"], "已回客户端的种子应清账"
+        assert "HMISSING" not in mgr.state["skip_check_backup"], "重加成功应清账"
+        adds = [c for c in client.calls if c[0] == "add"]
+        assert adds and adds[0][1]["is_skip_checking"] is True, f"应用备份重加(seed_mode): {client.calls}"
+
+        mgr.ctx.ops.on_sync_line(True)  # 一次性: 再调不再动作
+        assert len([c for c in client.calls if c[0] == "add"]) == 1, "对账每进程只跑一次"
 
 
 def test_skip_gates_rejects_group_downloading():

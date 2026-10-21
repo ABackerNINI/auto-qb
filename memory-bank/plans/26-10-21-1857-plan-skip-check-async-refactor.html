@@ -9,7 +9,7 @@
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-21-1857">
 <meta name="doc-updated" content="26-10-21-1857">
-<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/testing/baselines/26-10-21-1933-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2005-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2026-skip-check-arch.md">
+<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/testing/baselines/26-10-21-1933-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2005-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2026-skip-check-arch.md, memory-bank/testing/baselines/26-10-21-2122-skip-check-arch.md">
 <style>
   :root {
     color-scheme: dark;
@@ -346,7 +346,7 @@ hashes(直接选中) ────┴→ 去重(保序) → 逐 hash 判闸门(�
   <tr><td class="tight">S1</td><td>闸门口径（G5 快照半 + G7 三条）+ 点名文案 + 回执按原因聚合 <span class="tag crit">已完成</span></td><td>误挡立刻可诊断；不依赖执行模型改造</td></tr>
   <tr><td class="tight">S2</td><td>相位机 + 微步调度（第三条时间线）+ 删除不摘记录 <span class="tag crit">相位机已完成</span><span class="tag opt">调度随 S3</span></td><td>主循环不再被占；响应仍 &lt;1s</td></tr>
   <tr><td class="tight">S3</td><td>批量并行 + 窗口抑制 + 回执契约 <span class="tag crit">已完成</span><span class="tag opt">逐 hash 进度事件并入 S4</span></td><td>批量耗时与目标数解耦</td></tr>
-  <tr><td class="tight">S4</td><td>规则侧异步契约 + 崩溃恢复对账 + 逐 hash 进度事件（SSE）</td><td>规则源不再阻塞主循环</td></tr>
+  <tr><td class="tight">S4</td><td>规则侧异步契约 + 崩溃恢复对账 + 逐 hash 进度事件（SSE） <span class="tag crit">已完成</span></td><td>规则源不再阻塞主循环</td></tr>
   <tr><td class="tight">S5</td><td>测试改造 + 基线切片 + 文档回写（<code>modules/core-runtime.md</code>、<code>systemPatterns/data-layer.md</code>）</td><td>收尾</td></tr>
 </table>
 
@@ -370,6 +370,7 @@ hashes(直接选中) ────┴→ 去重(保序) → 逐 hash 判闸门(�
 
 <h2 id="s13"><span class="n">13</span>变更记录</h2>
 <ul>
+  <li>2026-10-21 21:30 — <b>S4 完成</b>：规则侧改走 <code>skip_submit(origin=ctx.task)</code>（返回 pending，终态由 <code>_skip_settle</code> 把 origin 重新入队：成功 keep_progress 续跑后续动作 / 失败默认重置重走决策链）；崩溃恢复对账（<code>on_sync_line</code> 首轮快照后按 <code>skip_check_backup</code> 账本三分流：已回→清账 / 不在且备份在→seed_mode 重加 / 备份丢失→ERROR 交人）；终态结果缓存 <code>skip_result(hash)</code> + SSE 进度事件（<code>skip_check</code>，前端只在失败时浮条提示）。实测见基线切片 <code>26-10-21-2122</code>。</li>
   <li>2026-10-21 20:40 — <b>S3 完成</b>：新增微步线 hook（<code>on_micro_line(dry_run)</code> / <code>next_micro_run_at()</code>，内核等待超时 = min(同步线, 任务线, 微步线)）；批量跳检改走异步入口 <code>skip_submit</code>（只建 job 返回 pending，相位由微步线并行推进），回执在最后一个 job 终态时按原因聚合写入（前端 <code>waitCmd</code> 契约不变）；<code>store.skipping_hashes</code> 窗口抑制（增量轮与全量轮都豁免 <code>torrents_removed</code>，记录不摘、不触发分组删除链路）。规则侧与单发仍走同步 <code>skip_check</code>（S4 迁移）。实测见基线切片 <code>26-10-21-2026</code>。</li>
   <li>2026-10-21 20:15 — <b>S2 完成（相位机）</b>：跳检执行体改为 <code>SkipJob</code> 相位机（准备 → 删除 → 确认消失 → 重加 → 确认出现 → 收尾），每步至多一次毫秒级调用，等待用 10~50ms 退避（原 500ms × 10 轮询，单条 ~6s）；删除走 <code>keep_record=True</code> 不摘记录；运行状态零写入；失败按「种子在 / 不在 / 看不见」三分流（看不见则保留备份与记录）。<b>偏差</b>：第三条时间线与异步契约随 S3 一起落 —— 没有异步调用方的调度器是死代码，单独落会留下半异步树；S2 仍是内联驱动（同步外观），延迟已从秒级降到毫秒级。实测见基线切片 <code>26-10-21-2005</code>。</li>
   <li>2026-10-21 19:33 — <b>S1 完成</b>：G5 补快照半边（已完成但在验 → force 而非 blocked）、G7 改用 <code>_checking_evidence</code>（排除 <code>checkingResumeData</code>）+ 文件映射一致前置 + 点名 blocker（含状态时长）、在途登记 TTL、批量回执按原因聚合。实测见基线切片 <code>26-10-21-1933</code>。S2 待开工。</li>

@@ -47,6 +47,11 @@ window.AQB_POLL = {
         // (见 commands.js onTruthEvent —— 服务端只在真值落地时才推, 所以可以放心采纳)
         try { this.onTruthEvent(JSON.parse((e && e.data) || "{}")); } catch (_) { /* 坏帧忽略 */ }
       });
+      es.addEventListener("skip_check", (e) => {
+        // 跳检终态(相位机在终态结算时广播, 见 ops_mod._skip_settle): 只有失败需要提示 ——
+        // 成功已由批量回执/行状态覆盖; 规则侧发起的跳检没有回执, 失败靠这条浮条兜底。
+        try { this.onSkipCheckEvent(JSON.parse((e && e.data) || "{}")); } catch (_) { /* 坏帧忽略 */ }
+      });
       es.addEventListener("ver", (e) => {
         // 只带版本号、**不含数据** —— 收到后拉一次 /api/state。密集发布时去抖合并,
         // 免得一轮 sync 触发 N 次全量拉取(3000 种子一轮 63ms, 打满主线程的坑踩过)。

@@ -52,7 +52,7 @@ from auto_qb.rules.actions import (
     StopAction,
     UploadSpeedLimitAction,
 )
-from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
+from helpers import drive_skip, FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
 
 
 def _seg(mode, auto_start=True, enabled=True):
@@ -425,6 +425,18 @@ def test_run_custom_check_error():
             assert action._run_custom_check(ctx, tor) is False
 
 
+def _run_action(action, ctx):
+    """执行动作; 跳检自 S4 起是异步入口(pending), 这里驱动微步线到终态并返回终态结果
+
+    生产由主循环微步线推进; 测试无主循环, 用 drive_skip 替身。非 pending 动作原样返回。
+    """
+    r = action.execute(ctx)
+    if r.is_pending:
+        drive_skip(ctx.manager)
+        return ctx.manager.ctx.ops.skip_result(ctx.hash) or r
+    return r
+
+
 def _skip_ctx(state_file, **client_patches):
     """构造 skip-checking 执行环境: 未归组 + 单种子快照 + 自定义 client"""
     mgr = make_manager(state_file)
@@ -460,7 +472,7 @@ def test_skip_checking_export_error():
 
         ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_export=boom)
         action = _check_action(without_seg=_seg("skip-checking"))
-        r = action.execute(ctx)
+        r = _run_action(action, ctx)
         assert r.is_failed and "导出" in r.message, f"应失败: {r}"
 
 
@@ -470,7 +482,7 @@ def test_skip_checking_export_empty():
         ctx, client = _skip_ctx(os.path.join(td, "state.json"))
         client.exported = b""
         action = _check_action(without_seg=_seg("skip-checking"))
-        r = action.execute(ctx)
+        r = _run_action(action, ctx)
         assert r.is_failed and "为空" in r.message, f"应失败: {r}"
 
 
@@ -483,7 +495,7 @@ def test_skip_checking_delete_error():
 
         ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_delete=boom)
         action = _check_action(without_seg=_seg("skip-checking"))
-        r = action.execute(ctx)
+        r = _run_action(action, ctx)
         assert r.is_failed and "删除种子失败" in r.message, f"应失败: {r}"
 
 
@@ -498,7 +510,7 @@ def test_skip_checking_readd_preserves_values():
         tor.seeding_time_limit = 0
         action = _check_action(without_seg=_seg("skip-checking"))
         with patch("auto_qb.core.modules.ops_mod.time.sleep"):
-            r = action.execute(ctx)
+            r = _run_action(action, ctx)
         assert r.is_ok, f"{r}"
         add = next(c for c in client.calls if c[0] == "add")
         assert add[1]["upload_limit"] == 0, f"不限速 0 应直传: {add}"
@@ -519,8 +531,9 @@ def test_skip_checking_readd_restores_store_record():
         client.torrents["HASH123"] = tor
         seed_store(mgr, [tor])
         action = _check_action(without_seg=_seg("skip-checking"))
+        ctx = make_ctx(mgr, tor, client)
         with patch("auto_qb.core.modules.ops_mod.time.sleep"):
-            r = action.execute(ctx := make_ctx(mgr, tor, client))
+            r = _run_action(action, ctx)
         assert r.is_ok, f"{r}"
         # 快照记录已恢复(对象身份 = 删除前捕获的 tor), tracker_conf 保留
         assert mgr.store.get("HASH123") is tor
@@ -583,7 +596,7 @@ def test_skip_checking_delete_not_confirmed():
         client.torrents_info = info_after_delete
         action = _check_action(without_seg=_seg("skip-checking"))
         with patch("auto_qb.core.modules.ops_mod.time.sleep"):
-            r = action.execute(ctx)
+            r = _run_action(action, ctx)
         assert r.is_failed and "确认删除失败" in r.message, f"应失败(看不见就当没确认, fail-closed): {r}"
         assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"
 
@@ -597,7 +610,7 @@ def test_skip_checking_auto_start_error():
 
         ctx, _ = _skip_ctx(os.path.join(td, "state.json"), torrents_start=boom)
         action = _check_action(without_seg=_seg("skip-checking", auto_start=True))
-        r = action.execute(ctx)
+        r = _run_action(action, ctx)
         assert r.is_failed and "自动开始失败" in r.message, f"应失败: {r}"
 
 
@@ -734,7 +747,7 @@ def test_checking_disabled_segment_skips():
         tor = FakeTorrent(hash="H1", tags="", state="pausedDL", progress=0.5)
         ctx = make_ctx(mgr, tor, client)
         action = _check_action(without_seg=_seg("full-checking", enabled=False))
-        result = action.execute(ctx)
+        result = _run_action(action, ctx)
         assert result.is_skipped and "无参考" in result.message
         # 有参考段未启用: 同组 H2 已完成作参考 -> 走 with_reference 段
         t2 = FakeTorrent(hash="H2", tags="", state="stalledUP", progress=1.0)

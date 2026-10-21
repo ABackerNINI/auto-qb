@@ -103,6 +103,8 @@ _SKIP_TERMINAL = frozenset({SKIP_PHASE_DONE, SKIP_PHASE_FAILED})
 _SKIP_BACKOFF_MS = (10, 20, 50, 50, 50)
 # 单条跳检的总上限(秒): 删除→重加窗口不许无限拉长(PT/HR 视角种子长期不在客户端)
 SKIP_DRIVE_TIMEOUT = 30.0
+# 终态结果缓存条数(纯观测面: 规则侧/测试取异步终态 + 进度事件回放; 不参与判定)
+_SKIP_RESULT_KEEP = 64
 
 
 @dataclass
@@ -144,8 +146,13 @@ class OpsModule(BaseModule):
 
     def __init__(self, ctx: AppContext) -> None:
         self._ctx = ctx
-        # 在途跳检 job(相位机; 内联驱动时只在调用栈内存在, 供幂等判据与 S3 调度)
+        # 在途跳检 job(相位机; 同步入口内联驱动, 异步入口由微步线推进)
         self._skip_jobs: dict = {}
+        # 最近终态结果 {hash: ActionResult}(供规则侧/测试取异步终态, 也供进度事件回放);
+        # 有界: 只留最近 _SKIP_RESULT_KEEP 条(纯观测面, 不参与判定)
+        self._skip_results: dict = {}
+        # 启动对账一次性开关(第一轮 sync 落地后跑一次; 进程内不复位)
+        self._skip_recovered = False
 
     def sections(self) -> tuple[str, ...]:
         return ("skip_checking_tag", )
@@ -829,6 +836,54 @@ class OpsModule(BaseModule):
                 verdicts.append(GateVerdict("filelist", GATE_BLOCKED, text))
         return verdicts
 
+    # ---------- 跳检崩溃恢复对账(计划 26-10-21-1857 §9) ----------
+
+    def on_sync_line(self, force: bool) -> None:
+        """同步线 hook: 首轮快照落地后做一次跳检备份对账(每进程一次)
+
+        账本就是 `state.skip_check_backup` —— 它在删除**之前**落盘(崩溃安全的锚点), 所以
+        "有备份" 等价于 "我们当时正准备删/已经删了这个 hash"。对账三分流:
+        - 种子已回到客户端 -> 跳检已完成(或用户手动加回): 备份无意义, 清掉;
+        - 种子不在且备份文件在 -> 崩溃发生在删除之后、重加之前: 用备份重加(seed_mode);
+        - 种子不在且备份文件丢了 -> 只能报 ERROR 交人(没有恢复凭据)。
+        """
+        if self._skip_recovered or not self._ctx.store.by_hash:
+            return
+        self._skip_recovered = True
+        self._recover_skip_backups()
+
+    def _recover_skip_backups(self) -> None:
+        """按备份账本对账(见 on_sync_line 三分流); 幂等: 处理过的条目会被清账"""
+        backups = self.state.get("skip_check_backup") or {}
+        if not backups:
+            return
+        for h in list(backups):
+            meta = backups.get(h) or {}
+            if h in self._ctx.store.by_hash:
+                logger.info(f"跳检对账: {h[:8]} 已在客户端, 清理残留备份")
+                self._clear_backup(h)
+                continue
+            path = meta.get("path") or ""
+            if not path or not os.path.exists(path):
+                logger.error(f"跳检对账: {h[:8]} 不在客户端且备份文件缺失({path or '无路径'}), 需人工处理")
+                continue
+            try:
+                with open(path, "rb") as f:
+                    data = f.read()
+                logger.warning(f"跳检对账: {h[:8]} 不在客户端(崩溃于删除之后), 用备份重加(未经哈希校验)")
+                self._ctx.api.torrents_add(
+                    torrent_files=[data],
+                    save_path=meta.get("save_path"),
+                    category=meta.get("category") or None,
+                    tags=meta.get("tags") or None,
+                    is_skip_checking=True,
+                    is_stopped=True,
+                )
+            except Exception as e:
+                logger.error(f"跳检对账: {h[:8]} 重加失败({e}), 备份保留: {path}")
+                continue
+            self._clear_backup(h)
+
     # ---------- 跳检相位机(计划 26-10-21-1857 §4/§5) ----------
 
     def _skip_job_new(
@@ -917,6 +972,22 @@ class OpsModule(BaseModule):
             job.result = ActionResult.fail(job.error)
         self._skip_jobs.pop(job.hash, None)
         self._ctx.store.skipping_hashes.discard(job.hash)
+        self._skip_results[job.hash] = job.result
+        while len(self._skip_results) > _SKIP_RESULT_KEEP:
+            self._skip_results.pop(next(iter(self._skip_results)), None)
+        web = getattr(self._ctx, "web", None)  # 进度事件(前端 toast; web 未启用时静默跳过)
+        if web is not None:
+            try:
+                web.notify(
+                    "skip_check", {
+                        "hash": job.hash,
+                        "name": job.tor.name if job.tor is not None else "",
+                        "ok": bool(job.result is not None and job.result.is_ok),
+                        "message": job.result.message if job.result is not None else "",
+                    }
+                )
+            except Exception as e:  # 事件广播失败不得影响已落定的终态
+                logger.warning(f"ops[{job.source}] {job.hash[:8]} | 跳检进度事件广播失败: {e}")
         if job.origin is not None:
             self._ctx.task_queue.add_task(job.origin, keep_progress=(job.phase == SKIP_PHASE_DONE))
         if job.on_done is not None:
@@ -924,6 +995,10 @@ class OpsModule(BaseModule):
                 job.on_done(job)
             except Exception as e:  # 回调异常不得影响已落定的终态
                 logger.error(f"ops[{job.source}] {job.hash[:8]} | 跳检终态回调异常: {e}")
+
+    def skip_result(self, hash: str):
+        """该 hash 最近一次跳检的终态结果(异步入口用; 无记录 -> None)"""
+        return self._skip_results.get(hash)
 
     def next_run_at(self) -> Optional[float]:
         """下一条跳检 job 的到期时刻(主循环等待超时的第三时间线); 无在途 job -> None"""

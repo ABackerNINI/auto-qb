@@ -315,6 +315,14 @@ window.AQB_COMMANDS = {
      *   由此收敛, 不再依赖"预测 == 真值"这种严格相等), prev 的值 = **最后已知真值** ——
      *   兜底回滚必须回这里: 回命令前的旧值等于把一个已暂停的种子显示成做种。
      */
+    /* 跳检终态事件(计划 26-10-21-1857 S4): 失败才提示, 成功交给回执/行状态 */
+    onSkipCheckEvent(ev) {
+      const p = (ev && ev.payload) || {};
+      if (p.ok) return;
+      const name = p.name || (p.hash || "").slice(0, 12);
+      this.toast(`跳检失败: ${name} —— ${p.message || "未知原因"}`, "error", 8000);
+    },
+
     onTruthEvent(rec) {
       const truth = rec && rec.truth;
       if (!truth) return;
