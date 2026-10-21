@@ -87,19 +87,45 @@ class GateVerdict:
     text: str
 
 
-def _poll_until(predicate, attempts: int, interval: float) -> bool:
-    """轮询直至 predicate 为真或次数耗尽(异常视为未满足); 返回是否满足
+# 跳检相位机(计划 26-10-21-1857 §5): 每步至多 1 次写 + 1 次存在性读, 步间用毫秒级退避
+# 代替原来的 500ms 轮询; 运行状态一个字不写(等 qB 上报), 删除也不摘记录(keep_record)。
+SKIP_PHASE_PREPARING = "preparing"
+SKIP_PHASE_DELETING = "deleting"
+SKIP_PHASE_GONE = "gone"
+SKIP_PHASE_ADDING = "adding"
+SKIP_PHASE_APPEARED = "appeared"
+SKIP_PHASE_FINISHING = "finishing"
+SKIP_PHASE_DONE = "done"
+SKIP_PHASE_FAILED = "failed"
 
-    供跳检的删除/重加确认共用: qB 的删除与重加均为异步生效, 需短间隔轮询客户端状态。
+_SKIP_TERMINAL = frozenset({SKIP_PHASE_DONE, SKIP_PHASE_FAILED})
+# 相位重试退避(毫秒): 10/20/50/50/50 —— 覆盖 qB 删除/重加异步生效的典型窗口
+_SKIP_BACKOFF_MS = (10, 20, 50, 50, 50)
+# 单条跳检的总上限(秒): 删除→重加窗口不许无限拉长(PT/HR 视角种子长期不在客户端)
+SKIP_DRIVE_TIMEOUT = 30.0
+
+
+@dataclass
+class SkipJob:
+    """一条跳检的相位机状态(纯内存; 崩溃恢复账本见计划 S4)
+
+    字段即相位推进所需的全部上下文: tor 是**删除前**的记录快照(备份/布局推断/打标判断都用它),
+    data/content_layout 在 PREPARING 一次备齐(删除后取不到)。
     """
-    for _ in range(attempts):
-        try:
-            if predicate():
-                return True
-        except Exception:
-            pass
-        time.sleep(interval)
-    return False
+
+    hash: str
+    tor: TorrentRecord
+    source: str
+    auto_start: bool
+    has_reference: bool
+    phase: str = SKIP_PHASE_PREPARING
+    attempts: int = 0
+    next_run: float = 0.0
+    started_at: float = 0.0
+    data: bytes = b""
+    content_layout: Optional[str] = None
+    backup: str = ""
+    error: str = ""
 
 
 class OpsModule(BaseModule):
@@ -113,6 +139,8 @@ class OpsModule(BaseModule):
 
     def __init__(self, ctx: AppContext) -> None:
         self._ctx = ctx
+        # 在途跳检 job(相位机; 内联驱动时只在调用栈内存在, 供幂等判据与 S3 调度)
+        self._skip_jobs: dict = {}
 
     def sections(self) -> tuple[str, ...]:
         return ("skip_checking_tag", )
@@ -384,13 +412,14 @@ class OpsModule(BaseModule):
         has_reference: bool = True,
         force: bool = False,
     ) -> ActionResult:
-        """辅种跳检(高风险): 导出 → 删除(保留文件) → 确认消失 → 重加(跳过校验) → 确认出现 → 恢复快照
+        """辅种跳检(高风险): 准备(导出/布局/备份) → 删除(保留文件) → 确认消失 → 重加(跳过校验) → 确认出现 → 收尾
 
-        自 rules/actions/skip_checking.py._execute_skip_checking 迁入(行为等价)。执行序(plan
-        26-10-05-0314 §03/§04): R2 实时复核 → 前置闸门(filelist 排最后) → 导出 —— filelist 并入
-        闸门后, 其插入点要求「R2 live 复核确认种子还在之后、导出等不可逆步骤之前」(live 都不在的
-        种子不值得再跑任何闸门, 含 filelist 的 files API), 故 R2 前移到闸门之前; 拒绝仍然零副作用
-        (R2 与全部闸门都在备份与删除这两个不可逆步骤之前)。
+        执行体是相位机(`SkipJob`, 计划 26-10-21-1857 §5): 每步至多一次毫秒级调用, 等待用
+        10~50ms 退避(原实现是 500ms × 10 轮询, 单条 ~6s)。两条硬约束: ①运行状态一个字不写 ——
+        重加后的 state/progress 由 qB 下一轮上报落账(命令后直查不可靠); ②删除不摘记录
+        (`keep_record=True`) —— delete+add 落在同一上报间隔内时, 摘了会踩「增量 diff 只给变化
+        字段 → 新建记录缺字段」。执行序(plan 26-10-05-0314 §03/§04): R2 实时复核 → 前置闸门
+        (filelist 排最后) → 准备 → 执行 —— 拒绝仍然零副作用(全部在备份与删除这两个不可逆步骤之前)。
 
         来源差异:
         - has_reference 的「无参考跳检(高风险)」告警是规则侧语义, 仅 rule 源产生(WEB 前端
@@ -407,6 +436,8 @@ class OpsModule(BaseModule):
         tor = torrent if torrent is not None else self._ctx.store.get(hash)
         if tor is None:
             return ActionResult.skip(_SKIP_GONE_MSG)
+        if self.skip_job_active(hash):
+            return ActionResult.skip("该种子的跳检已在执行中")
 
         # ---- S2 deferral 闸门(D-2, A 系 26-10-13-0540): 本程序刚对该种子或**其组任一成员**
         # 下发过停/起、qB 快照尚未回流 ⇒ 闸门读到的 state 陈旧, 本轮不出决策(免 G4/G6 陈旧-放行
@@ -434,59 +465,14 @@ class OpsModule(BaseModule):
         if gate is not None:
             return gate
 
-        # ---- 阶段 2: 准备 (导出/校验属性/布局推断, 均须在删除前完成) ----
-        try:
-            data = self._ctx.api.torrents_export(torrent_hash=hash)
-        except Exception as e:
-            return ActionResult.fail(f"导出 .torrent 失败: {e}")
-        if not data:
-            return ActionResult.fail("导出 .torrent 为空")
-
-        # 重加所需的 6 属性(RE_ADD_FIELDS)存在性已由启动期 schema 校验保证(refresh 首次
-        # 拉取时验证 REQUIRED_TORRENT_FIELDS); 记录对象删除后仍持有这些字段(_raw),
-        # 故直接读 tor 属性即可(无需中间投影对象)
-
-        # 布局推断依赖 content_path/save_path/文件列表(惰性缓存, filelist 前置检查已填充);
-        # 删除后 store 记录已移除, 必须在此之前完成
-        content_layout = self._infer_content_layout(tor, self._ctx.api.client)
-
-        # 备份先于删除(崩溃安全): 删除是整条链上第一个不可逆步骤。备份若挂在重加的失败路径上,
-        # 那么「删除已生效 → 重加未被 qB 接受」这一缝隙(含删除确认轮询的约 5s)内崩溃/强杀,
-        # 种子从客户端消失、data 只存在于内存、state 无在途标记 —— 重启后无任何恢复凭据
-        # (issue 26-09-21-1347)。备份写不进去就不删除: 此时放弃跳检没有任何损失。
-        try:
-            self._backup_torrent(tor, data)
-        except Exception as e:
-            return ActionResult.fail(f"跳检备份 .torrent 失败(未删除, 无损失): {e}")
-
-        # ---- 阶段 3: 执行 (删除 → 确认消失 → 重加 → 确认出现 → 恢复快照) ----
-        failed = self._skip_delete(hash, tor, prefix)
-        if failed is not None:
-            return failed
-        failed = self._skip_readd(hash, tor, data, content_layout)
-        if failed is not None:
-            return failed
-
-        # ---- 阶段 4: 收尾 ----
-        # 无参考高风险警告(规则侧语义; 用删除前捕获的 tor: 真实流程中删除后 store 记录已移除)
-        if source == "rule" and not has_reference:
-            logger.warning(f"{prefix} {tor.log_repr} | 无参考跳检(高风险): "
-                           f"仅文件存在与大小对比, 内容错误会传垃圾数据")
-        # 跳检成功打标(skip_checking_tag): 标记该种子未经哈希校验, 后续查找参考种子时排除;
-        # 标签名直接读全局 config.skip_checking_tag(默认 zSkipChecked, 不按规则覆盖);
-        # 打标失败不影响跳检结果(跳检本身已完成), 仅记 warning
-        skip_tag = self._ctx.config.skip_checking_tag
-        if skip_tag and skip_tag not in tor.tags_set:
-            try:
-                self._ctx.api.torrents_add_tags(tags=[skip_tag], torrent_hashes=hash)
-                logger.info(f"{prefix} {tor.log_repr} | 跳检完成, 已打标签 {skip_tag}(该种子不作参考种子)")
-            except Exception as e:
-                logger.warning(f"{prefix} {tor.log_repr} | 跳检打标签失败(不影响跳检结果): {e}")
+        # ---- 阶段 2-4: 相位机执行(准备 → 删除 → 确认消失 → 重加 → 确认出现 → 收尾) ----
+        # 每步只做毫秒级调用, 等待用 10~50ms 退避(原实现是 500ms × 10 轮询, 单条 ~6s);
+        # 运行状态一个字不写(等 qB 上报), 删除不摘记录(keep_record=True) —— 计划 26-10-21-1857 §5。
+        job = self._skip_job_new(hash, tor, source, auto_start, has_reference)
+        job = self._skip_drive(job)
+        if job.phase != SKIP_PHASE_DONE:
+            return ActionResult.fail(job.error)
         if auto_start:
-            try:
-                self._ctx.api.torrents_start(torrent_hashes=hash)
-            except Exception as e:
-                return ActionResult.fail(f"自动开始失败: {e}")
             return ActionResult.ok("skip-checking 跳检完成并自动开始")
         return ActionResult.ok("skip-checking 跳检完成")
 
@@ -797,93 +783,218 @@ class OpsModule(BaseModule):
                 verdicts.append(GateVerdict("filelist", GATE_BLOCKED, text))
         return verdicts
 
-    def _skip_delete(self, hash: str, tor: TorrentRecord, prefix: str) -> Optional[ActionResult]:
-        """跳检步骤: 删除种子(保留文件)并轮询确认已从客户端消失(qB 删除为异步)。
+    # ---------- 跳检相位机(计划 26-10-21-1857 §4/§5) ----------
 
-        返回 None = 已确认消失; ActionResult = 失败(种子未删除或消失未确认, 无损失,
-        放弃跳检避免重加撞"种子已存在")。
+    def _skip_job_new(
+        self, hash: str, tor: TorrentRecord, source: str, auto_start: bool, has_reference: bool
+    ) -> SkipJob:
+        """建 job 并入账(同 hash 在途即幂等覆盖: 调用方已先经 skip_job_active 拦过)"""
+        now = time.time()
+        job = SkipJob(
+            hash=hash,
+            tor=tor,
+            source=source,
+            auto_start=auto_start,
+            has_reference=has_reference,
+            next_run=now,
+            started_at=now
+        )
+        self._skip_jobs[hash] = job
+        return job
+
+    def skip_job_active(self, hash: str) -> bool:
+        """该 hash 是否有跳检 job 在途(幂等判据; 内联驱动时仅覆盖调用栈内)"""
+        return hash in self._skip_jobs
+
+    def _skip_drive(self, job: SkipJob) -> SkipJob:
+        """把 job 内联驱动到终态(保持规则侧同步 ActionResult 语义)
+
+        每步一次调用, 等待用 `_SKIP_BACKOFF_MS` 退避; 总时长受 `SKIP_DRIVE_TIMEOUT` 约束。
+        S3 起改为「提交即返回 + 主循环按 next_run_at 推进」, 本方法退化为同步驱动体。
         """
-        try:
-            logger.info(f"{prefix} {tor.log_repr} | 跳检删除种子(保留文件)")
-            self._ctx.api.torrents_delete(torrent_hashes=hash, delete_files=False)
-        except Exception as e:
-            return ActionResult.fail(f"删除种子失败(未删除, 无损失): {e}")
-        gone = _poll_until(lambda: not self._ctx.api.torrents_info(torrent_hashes=hash), attempts=10, interval=0.5)
-        if not gone:
-            # 种子没删掉(删除未生效) —— 删除前的备份也就没了意义, 清掉: 留着只剩一个孤儿
-            # .torrent 文件 + 一条"待恢复"的误导性元数据(state 会指引用户去恢复一个还在的种子)
-            self._clear_backup(hash)
-            return ActionResult.fail("删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)")
-        return None
+        deadline = time.time() + SKIP_DRIVE_TIMEOUT
+        while job.phase not in _SKIP_TERMINAL:
+            self._skip_step(job)
+            if job.phase in _SKIP_TERMINAL:
+                break
+            now = time.time()
+            if now >= deadline:
+                self._skip_fail(job, "跳检执行超时(客户端未在期限内响应), 备份保留")
+                break
+            delay = min(job.next_run - now, deadline - now)
+            if delay > 0:
+                time.sleep(delay)
+        self._skip_jobs.pop(job.hash, None)
+        return job
 
-    def _skip_readd(self, hash: str, tor: TorrentRecord, data: bytes,
-                    content_layout: Optional[str]) -> Optional[ActionResult]:
-        """跳检步骤: 以跳过校验方式重加(先暂停), 轮询确认出现, 恢复删除前快照记录。
-
-        属性直传不用 `or None` —— ratio/seeding limit 的 0/负值是有语义的(不限速/跟随
-        全局), 吞掉会使重加后行为漂移到 qB 新种缺省。重加成功后 store.restore_torrent
-        恢复删除前记录(保留 tracker_conf/惰性缓存): remove_torrent 会登记待报 removed,
-        不恢复则重加的同 hash 种子下轮被误判为已删除(生产 BUG 2026-09-06)。
-
-        返回 None = 成功; ActionResult = 失败(种子已从客户端移除, 已备份提示手动恢复)。
-        """
+    def _skip_step(self, job: SkipJob) -> None:
+        """推进一个相位(单步异常不逃逸: 规则侧按 ActionResult 收口)"""
         try:
-            self._ctx.api.torrents_add(
-                torrent_files=[data],
-                save_path=tor.save_path,
-                category=tor.category or None,
-                tags=tor.tags or None,
-                upload_limit=tor.up_limit,
-                download_limit=tor.dl_limit,
-                is_sequential_download=tor.seq_dl,
-                is_first_last_piece_priority=tor.f_l_piece_prio,
-                contentLayout=content_layout,
-                ratio_limit=tor.ratio_limit,
-                seeding_time_limit=tor.seeding_time_limit,
-                inactive_seeding_time_limit=tor.inactive_seeding_time_limit,
-                share_limit_action=tor.share_limit_action,
-                is_skip_checking=True,
-                is_stopped=True,
-            )
+            handler = {
+                SKIP_PHASE_PREPARING: self._skip_step_prepare,
+                SKIP_PHASE_DELETING: self._skip_step_delete,
+                SKIP_PHASE_GONE: self._skip_step_gone,
+                SKIP_PHASE_ADDING: self._skip_step_add,
+                SKIP_PHASE_APPEARED: self._skip_step_appeared,
+                SKIP_PHASE_FINISHING: self._skip_step_finish,
+            }.get(job.phase)
+            if handler is not None:
+                handler(job)
         except Exception as e:
-            # 备份在删除前已落盘(此处再调一次是幂等的覆盖写, 只为让失败信息带上备份路径)
-            backup = self._backup_torrent(tor, data)
-            return ActionResult.fail(f"重加种子失败: {e}; 种子已从客户端移除(文件保留), "
-                                     f".torrent 已备份: {backup}, 请手动重加")
-        appeared = _poll_until(lambda: self._ctx.api.torrents_info(torrent_hashes=hash), attempts=3, interval=0.3)
-        if not appeared:
-            # 种子已从客户端移除, 备份已在删除前落盘 —— 保留它(不清), 用户凭
-            # skip-check-backup/<hash>.torrent + state 元数据可手动恢复; store 此刻也无记录,
-            # 下轮不会执行 restore_torrent, 该种子会被误判为"用户主动删除"。
-            backup = self._backup_torrent(tor, data)
-            return ActionResult.fail(f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "
-                                     f"种子已从客户端移除(文件保留), .torrent 已备份: {backup}")
-        # 回写真值再放回(report 26-10-11-2017 §4.1): 重加走 is_skip_checking=True ⇒ qB 把全部块
-        # 视为有效(progress=1 / 本地统计清零 / 状态进 stoppedUP), 而删除前捕获的 tor 仍是"跳检前的
-        # 暂停 0%" —— 直接 restore 等于把一份撒谎的快照放回, 且系统随后会拿它做判定(G5/G7 的
-        # is_checking、分组冲突的 _CONFLICT_FIELDS、跳检闸门 G3/G4/G6 的状态判定), 不只是显示问题。
-        # 决定性时刻直查真值(pitfalls/backend/effect-confirmation.md): 用刚确认种子的同一个
-        # torrents_info 结果回写, 把"跳检结果"立刻带进快照, 不等下轮 sync。
-        # 失败 fail-closed: 记 warning 即可 —— 种子确已在 qB, 字段下轮 sync 也能跟上, 不改跳检结论。
+            self._skip_fail(job, f"跳检执行异常({job.phase}): {e}")
+
+    def _skip_retry(self, job: SkipJob, message: str) -> bool:
+        """本相位重试一次(10/20/50/50/50ms 退避); 次数耗尽 -> FAILED 并返回 False"""
+        job.attempts += 1
+        if job.attempts >= len(_SKIP_BACKOFF_MS):
+            self._skip_fail(job, message)
+            return False
+        job.next_run = time.time() + (_SKIP_BACKOFF_MS[job.attempts] / 1000.0)
+        return True
+
+    def _skip_fail(self, job: SkipJob, message: str) -> None:
+        """终态失败: 种子还在 -> 清掉无意义的备份(没有丢失, 无需恢复凭据);
+        种子已不在 -> 保留备份, 并把快照里那条记录撤掉(它就是假账, 下轮上报按真删除处理);
+        **看不见(直查异常) -> 什么都不动**: 备份可能是唯一恢复凭据, 宁可留着"""
+        job.phase = SKIP_PHASE_FAILED
+        job.error = message
+        logger.warning(f"ops[{job.source}] {job.hash[:8]} | 跳检失败: {message}")
         try:
-            live = self._ctx.api.torrents_info(torrent_hashes=hash)
-        except Exception as e:
-            logger.warning(f"跳检收尾回写真值失败(跳检本身已成功, 下轮 sync 校准): {e}")
-            live = []
+            live = self._ctx.api.torrents_info(torrent_hashes=job.hash)
+        except Exception:
+            return
         if live:
-            if tor.apply_delta(live[0]):
-                self._ctx.store.view_changed = True
-        self._ctx.store.restore_torrent(tor)
-        # 跳检完成: 记录跨规则同日去重(此后同种子当日任何来源的 checking 都不再跳检)
-        self.state.setdefault("skip_check_day", {})[hash] = date.today().isoformat()
-        # 去重标记即时落盘: 这是"今天已跳检过"的唯一凭据, 只靠退出/周期落盘的话, 跳检后
-        # 崩溃会重复跳检(PT 本地统计再丢一次)。跳检是天级低频事件, 即时写一次代价可忽略 ——
-        # 与备份路径的即时落盘同口径(issue 26-09-21-1347)。注意不能指望下面的 _clear_backup
-        # 顺带落盘: 备份元数据为空时它提前 return, 不经过 save_state。
+            self._clear_backup(job.hash)
+            return
+        self._ctx.store.remove_torrent(job.hash)
+
+    def _skip_add_call(self, job: SkipJob) -> None:
+        """下发重加(跳过校验 + 暂停): 属性直传, 0/负值有语义(不限速/跟随全局)不吞"""
+        tor = job.tor
+        self._ctx.api.torrents_add(
+            torrent_files=[job.data],
+            save_path=tor.save_path,
+            category=tor.category or None,
+            tags=tor.tags or None,
+            upload_limit=tor.up_limit,
+            download_limit=tor.dl_limit,
+            is_sequential_download=tor.seq_dl,
+            is_first_last_piece_priority=tor.f_l_piece_prio,
+            contentLayout=job.content_layout,
+            ratio_limit=tor.ratio_limit,
+            seeding_time_limit=tor.seeding_time_limit,
+            inactive_seeding_time_limit=tor.inactive_seeding_time_limit,
+            share_limit_action=tor.share_limit_action,
+            is_skip_checking=True,
+            is_stopped=True,
+        )
+
+    def _skip_step_prepare(self, job: SkipJob) -> None:
+        """准备: 导出 .torrent + 布局推断 + 备份落盘 —— 全部在删除之前完成(崩溃安全)"""
+        try:
+            job.data = self._ctx.api.torrents_export(torrent_hash=job.hash)
+        except Exception as e:
+            self._skip_fail(job, f"导出 .torrent 失败: {e}")
+            return
+        if not job.data:
+            self._skip_fail(job, "导出 .torrent 为空")
+            return
+        job.content_layout = self._infer_content_layout(job.tor, self._ctx.api.client)
+        try:
+            job.backup = self._backup_torrent(job.tor, job.data)
+        except Exception as e:
+            self._skip_fail(job, f"跳检备份 .torrent 失败(未删除, 无损失): {e}")
+            return
+        job.phase = SKIP_PHASE_DELETING
+        job.attempts = 0
+        job.next_run = time.time()
+
+    def _skip_step_delete(self, job: SkipJob) -> None:
+        """删除种子(保留文件); keep_record=True: 不动快照(见 QbApi.torrents_delete 注)"""
+        try:
+            self._ctx.api.torrents_delete(torrent_hashes=job.hash, keep_record=True)
+        except Exception as e:
+            self._skip_fail(job, f"删除种子失败(未删除, 无损失): {e}")
+            return
+        logger.info(f"ops[{job.source}] {job.tor.log_repr} | 跳检删除种子(保留文件)")
+        job.phase = SKIP_PHASE_GONE
+        job.attempts = 0
+        job.next_run = time.time()
+
+    def _skip_step_gone(self, job: SkipJob) -> None:
+        """确认消失(qB 删除是异步的; 存在性是会话级事实, 直查可靠)"""
+        try:
+            gone = not self._ctx.api.torrents_info(torrent_hashes=job.hash)
+        except Exception as e:
+            self._skip_retry(job, f"确认删除失败: {e}")
+            return
+        if gone:
+            job.phase = SKIP_PHASE_ADDING
+            job.attempts = 0
+            job.next_run = time.time()
+            return
+        if not self._skip_retry(job, "删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)"):
+            return
+        try:  # 重试一次删除(幂等)
+            self._ctx.api.torrents_delete(torrent_hashes=job.hash, keep_record=True)
+        except Exception:
+            pass
+
+    def _skip_step_add(self, job: SkipJob) -> None:
+        try:
+            self._skip_add_call(job)
+        except Exception as e:
+            self._skip_fail(job, f"重加种子失败: {e}; 种子已从客户端移除(文件保留), .torrent 已备份: {job.backup}, 请手动重加")
+            return
+        job.phase = SKIP_PHASE_APPEARED
+        job.attempts = 0
+        job.next_run = time.time()
+
+    def _skip_step_appeared(self, job: SkipJob) -> None:
+        try:
+            appeared = bool(self._ctx.api.torrents_info(torrent_hashes=job.hash))
+        except Exception as e:
+            self._skip_retry(job, f"确认重加失败: {e}")
+            return
+        if appeared:
+            job.phase = SKIP_PHASE_FINISHING
+            job.attempts = 0
+            job.next_run = time.time()
+            return
+        if not self._skip_retry(
+            job, f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "
+            f"种子已从客户端移除(文件保留), .torrent 已备份: {job.backup}"
+        ):
+            return
+        try:  # 重试一次重加(撞"已存在"说明删除还没落地, 下一轮再看)
+            self._skip_add_call(job)
+        except Exception:
+            pass
+
+    def _skip_step_finish(self, job: SkipJob) -> None:
+        """收尾: 无参考告警(规则语义) → 打标 → 自动开始 → 同日去重落盘 → 清备份"""
+        prefix = f"ops[{job.source}]"
+        tor = job.tor
+        if job.source == "rule" and not job.has_reference:
+            logger.warning(f"{prefix} {tor.log_repr} | 无参考跳检(高风险): 仅文件存在与大小对比, 内容错误会传垃圾数据")
+        skip_tag = self._ctx.config.skip_checking_tag
+        if skip_tag and skip_tag not in tor.tags_set:
+            try:
+                self._ctx.api.torrents_add_tags(tags=[skip_tag], torrent_hashes=job.hash)
+                logger.info(f"{prefix} {tor.log_repr} | 跳检完成, 已打标签 {skip_tag}(该种子不作参考种子)")
+            except Exception as e:
+                logger.warning(f"{prefix} {tor.log_repr} | 跳检打标签失败(不影响跳检结果): {e}")
+        if job.auto_start:
+            try:
+                self._ctx.api.torrents_start(torrent_hashes=job.hash)
+            except Exception as e:
+                self._skip_fail(job, f"自动开始失败: {e}")
+                return
+        # 跨规则同日去重: 此后同种子当日任何来源的 checking 都不再跳检; 即时落盘(崩溃即重复跳检)
+        self.state.setdefault("skip_check_day", {})[job.hash] = date.today().isoformat()
         self.save_state()
-        # 种子已回到客户端: 删除前那份备份完成使命, 清掉(否则每次跳检都留一个孤儿文件)
-        self._clear_backup(hash)
-        return None
+        self._clear_backup(job.hash)
+        job.phase = SKIP_PHASE_DONE
 
     def _infer_content_layout(self, tor, client) -> Optional[str]:
         """推断原内容布局(qB 种子信息无直接字段): 重加后数据路径必须与现存文件一致,

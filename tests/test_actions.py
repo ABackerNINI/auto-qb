@@ -584,7 +584,7 @@ def test_skip_checking_delete_not_confirmed():
         action = _check_action(without_seg=_seg("skip-checking"))
         with patch("auto_qb.core.modules.ops_mod.time.sleep"):
             r = action.execute(ctx)
-        assert r.is_failed and "仍在客户端" in r.message, f"应失败: {r}"
+        assert r.is_failed and "确认删除失败" in r.message, f"应失败(看不见就当没确认, fail-closed): {r}"
         assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"
 
 

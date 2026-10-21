@@ -150,8 +150,23 @@ class QbApi:
         self._client.torrents_set_location(torrent_hashes=torrent_hashes, location=location, **kwargs)
         self.store.update_torrent_fields(torrent_hashes, save_path=location)
 
-    def torrents_delete(self, torrent_hashes: Optional[HashType] = None, delete_files: bool = False, **kwargs: Any):
+    def torrents_delete(
+        self,
+        torrent_hashes: Optional[HashType] = None,
+        delete_files: bool = False,
+        keep_record: bool = False,
+        **kwargs: Any,
+    ):
+        """删除种子(普通删除: 调 qB + 立即摘快照记录)
+
+        keep_record=True 是**跳检专用**: 跳检随后会以 skip_checking 重加同一 hash, delete+add
+        常落在同一上报间隔内 —— qB 视角里种子从未离开, 增量 diff 只会给变化字段; 此时若本地
+        摘了记录, apply_sync 会拿残缺 patch 新建记录(缺 name/save_path 等必填字段)。窗口内记录
+        由下一轮上报原地校正, 状态一个字不写(计划 26-10-21-1857 §5)。
+        """
         self._client.torrents_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kwargs)
+        if keep_record:
+            return
         for h in self._to_list(torrent_hashes):
             self.store.remove_torrent(h)
 

@@ -43,6 +43,7 @@
 - test_skip_gates_rejects_group_check_failed: T17 组内成员校验失败推断(G8, case 1): 正样本文案带成员+出路; 负样本三例(映射不一致 / 记录指向已完成成员自愈不参与 / 非当日); 只读自愈不 pop; 零副作用 (S1b-2)
 - test_skip_gates_g7_evidence_and_blocker_identity: S1(26-10-21-1857) —— G7 证据口径: checkingResumeData 不算在验 / 映射不一致成员不参与 / 命中时文案点名 blocker(hash8+名字+state)
 - test_skip_gates_inflight_ttl_expires_leaked_registration: S1(26-10-21-1857) —— 在途登记超 TTL 视为泄漏: G5 放行并记 WARNING(登记只在轮询任务 FINISHED 时释放)
+- test_skip_check_no_sleep_polling_and_keeps_record: S2(26-10-21-1857) —— 相位机成功路径零 sleep(原 500ms × 10 轮询) + 删除不摘记录 + 运行状态零写入(调用序 export→delete→add→add_tags)
 - test_skip_gates_detail_classification: T18 detail 三态归类 + 执行路径与 detail 首个未过闸门同源断言 + G7/G8 归类(G8 blocked 短路 filelist / G7 force 不短路)
 - test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5/G7)并留 WARNING+INFO 审计; blocked(G3/G6/G8/filelist)一律硬拒; 签名缺省 False
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
@@ -868,6 +869,30 @@ def test_skip_gates_allows_paused_incomplete():
     assert mgr.ctx.ops._skip_gates_detail("HASH123", t) == [], "暂停未完成应过全部闸门(辅种主场景)"
     r = mgr.ctx.ops.skip_check("HASH123", source="web")
     assert r.is_ok, f"暂停未完成应放行完成跳检: {r}"
+
+
+def test_skip_check_no_sleep_polling_and_keeps_record():
+    """测试(S2): 相位机成功路径不 sleep(原实现 500ms × 10 轮询, 单条 ~6s);
+    且全程不动记录 —— 删除不摘记录(keep_record), 也不做 live 回写(运行状态等 qB 上报)"""
+    from unittest.mock import patch
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+
+    slept = []
+    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: slept.append(s)):
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"暂停未完成应完成跳检: {r}"
+    assert slept == [], f"成功路径不应有任何 sleep(相位机每步一次调用): {slept}"
+    # 记录对象原样保留(既没被 remove_torrent 摘除, 也没被 restore_torrent 重建)
+    assert mgr.store.get("HASH123") is t, "跳检不得摘除/重建记录(keep_record)"
+    assert t.progress == 0.0 and t.state == "stoppedDL", "运行状态不得被跳检路径写入(只等 qB 上报)"
+    names = [c[0] for c in client.calls]
+    assert names == ["export", "delete", "add", "add_tags"], f"相位序应为一轮一调用: {names}"
 
 
 def test_skip_gates_rejects_group_downloading():
