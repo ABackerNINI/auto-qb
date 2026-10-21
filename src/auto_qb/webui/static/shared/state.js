@@ -73,7 +73,7 @@ window.AQB_STATE = {
         claimErr: "",              // 重登记被拒/失败原因(工具侧输出原样转述)
         claimNote: null,           // 让位/被拒注记(deferred.json; D7 工具侧书写, auto-qb 只读展示)
         advancedOpen: false,    // 「工具参数(高级)」折叠态
-        pollGen: 0,             // 拉起后轮询收敛的代际守卫
+        // (有界轮询的代际守卫已随轮询骨架上提: polling.js 句柄表 _polls, 同名先停后起)
         pick: { open: false, loading: false, error: "", path: "", parent: "", dirs: [], name: "" },
       },
       groups: [],
@@ -146,7 +146,7 @@ window.AQB_STATE = {
       unrecognizedOpen: false,  // 未识别折叠区展开态(追剧视图)
       // 列选择器的列定义不再各存一份: 计划 26-10-11-1722 P4 起按表注册表 TABLE_DEFS 派生
       // (columns.js computed `tableDefs`), 四段硬编码标题 + v-for 收敛为一段。
-      // 底部详情抽屉(R1B): 各 tab 数据与加载态; _drawerTimer 轮询句柄挂实例(非响应式)
+      // 底部详情抽屉(R1B): 各 tab 数据与加载态; 页签轮询句柄随骨架挂 _polls["drawer"](非响应式)
       // kind(2026-10-04 双形态): "seed" = 种子详情(五页签) / "traffic" = qB 口径流量图(全局/分组,
       //   scope 记挂点); 两形态共用同一抽屉壳与同一拖拽高度(drawerHeightPx) —— 原模态弹层已并入。
       drawer: {
@@ -221,7 +221,7 @@ window.AQB_STATE = {
       filePrio: { visible: false, x: 0, y: 0, index: -1 },
       serviceDown: false,  // 服务不可达(程序退出): 显示全局横幅, 轮询继续以便恢复后自动接上
       pollFails: 0,        // 连续失败次数(轮询退避: 2s→4s→8s→15s 上限)
-      pollTimer: null,     // setTimeout 链式轮询句柄(上一轮结束后再计时, 不堆叠请求)
+      // (主轮轮询句柄 pollTimer 已随轮询骨架上提: polling.js 句柄表 _polls["main"])
       lastRid: null,       // 已持有的分组视图版本(服务端 rid); null = 尚未取到(强制全量)
       searchQuery: "",       // 搜索关键字
       searchHits: new Set(),  // 命中种子 hash 集合(服务端匹配裁决: 名字/站点/分类/路径/标签/文件)

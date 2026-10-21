@@ -207,24 +207,31 @@ window.AQB_COMMANDS = {
       }
       return this._cmdRecToResult(got, start, cmdId);
     },
-    /* 原轮询路径, 抽出来供 waitCmd 与事件路径赛跑(SSE 不可用时的兜底) */
-    async _pollCmd(cmdId, timeoutMs, firstMs, capMs, start, stop) {
-      let delay = firstMs;
-      while (!stop.v && Date.now() - start < timeoutMs) {
-        if (delay > 0) await new Promise((r) => setTimeout(r, delay));
-        try {
-          const r = await this.api(`/api/cmd/${cmdId}`);
-          // warn 也是终结态(reannounce 已受理·推迟/未确认, D4=warn): 不放行会一直挂到 40s 等待超时
-          if (r.status === "ok" || r.status === "error" || r.status === "warn") {
-            return r;  // 埋点与结果转换统一在 _cmdRecToResult 做(事件路径与轮询路径共用)
+    /* 原轮询路径, 抽出来供 waitCmd 与事件路径赛跑(SSE 不可用时的兜底)。
+     * 有界等待走轮询骨架的 awaitPoll 单点(polling.js): 退避曲线由 ms(n, prev) 表达
+     * (首拍 firstMs, 之后 0→150 起跳、逐拍翻倍夹到 capMs), 时间上限由 deadline 表达,
+     * 叫停由 stop 表达 —— 三份有界等待(_pollCmd / tmPollSettle / tmPollShutdown)自此同骨架。
+     * !key 传 null: 并发命令各等各的回执, 不能互相顶掉(传 key 会先停后起)。 */
+    _pollCmd(cmdId, timeoutMs, firstMs, capMs, start, stop) {
+      return this.awaitPoll(null, {
+        ms: (n, prev) => (n === 0 ? firstMs : prev === 0 ? 150 : Math.min(capMs, prev * 2)),
+        deadline: () => Date.now() - start >= timeoutMs,
+        stop: () => stop.v,
+        fn: async () => {
+          try {
+            const r = await this.api(`/api/cmd/${cmdId}`);
+            // warn 也是终结态(reannounce 已受理·推迟/未确认, D4=warn): 不放行会一直挂到 40s 等待超时
+            if (r.status === "ok" || r.status === "error" || r.status === "warn") {
+              return r;  // 埋点与结果转换统一在 _cmdRecToResult 做(事件路径与轮询路径共用)
+            }
+          } catch (e) {
+            if (e.auth) throw e;  // 401 由统一收口处理(回登录)
+            // 网络抖动: 继续轮询(服务恢复后回执仍可取到)
           }
-        } catch (e) {
-          if (e.auth) throw e;  // 401 由统一收口处理(回登录)
-          // 网络抖动: 继续轮询(服务恢复后回执仍可取到)
-        }
-        delay = delay === 0 ? 150 : Math.min(capMs, delay * 2);
-      }
-      return null;
+          return null;
+        },
+        until: (r) => !!r,
+      });
     },
     /* 回执 -> {ok, truth|error}, 并落埋点/[perf](事件路径与轮询路径共用, 保证两边观感一致) */
     _cmdRecToResult(r, start, cmdId) {

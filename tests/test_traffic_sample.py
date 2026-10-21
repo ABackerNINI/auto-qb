@@ -2717,7 +2717,7 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
 
 def test_read_side_no_poll_when_traffic_tab_closed():
     """「不打开 = 0 请求」(§3.2 末行): 前端轮询只在流量页签打开期间挂 —— 关抽屉/形态切换/
-    登出经 _qbTeardown 单点收三挂点(_qbPollStop -> clearInterval), _qbPollStart 幂等
+    登出经 _qbTeardown 单点收三挂点(_qbPollStop -> 骨架 stopPoll 清句柄), _qbPollStart 幂等
     不叠加; 关闭后无任何请求路径(读侧零 open 的另一半契约由端点逐档机检钉住)"""
     chart = open(
         os.path.join(
@@ -2727,7 +2727,7 @@ def test_read_side_no_poll_when_traffic_tab_closed():
         encoding="utf-8",
     ).read()
     stop_body = chart.split("_qbPollStop(scope) {", 1)[1].split("},", 1)[0]
-    assert "clearInterval" in stop_body  # 停轮询单点: 定时器清零(关闭后零请求路径)
+    assert "stopPoll(" in stop_body  # 停轮询单点: 经骨架清句柄(关闭后零请求路径)
     teardown = chart.split("_qbTeardown() {", 1)[1][:400]
     assert "_qbPollStop(s)" in teardown  # 关抽屉/形态切换/登出 -> 三挂点轮询全收
     assert "_qbPollStop(scope);" in chart.split("_qbPollStart(scope) {", 1)[1][:200]  # 重开幂等(不叠加)

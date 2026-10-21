@@ -1165,24 +1165,23 @@ window.CONFIG_HUB = {
         await this.api("/api/traffic/monitor/relaunch", { method: "POST" });
         this.tm.state = "launching";
         this.tm.retryS = 0;
-        this.tmPollSettle(0);
+        this.tmPollSettle();
       } catch (e) {
         this.tm.error = (e && e.message) || "促拉起失败";
         this.tm.relaunching = false;
       }
     },
-    /* 轮询收敛(有界): 每 2s 重读状态, 直到离开 launching 或到上限; pollGen 代际守卫防重入叠加 */
-    tmPollSettle(n) {
-      const gen = ++this.tm.pollGen;
-      setTimeout(async () => {
-        if (gen !== this.tm.pollGen) return;
-        await this.tmLoad();
-        if (this.tm.state === "launching" && n < 15) {
-          this.tmPollSettle(n + 1);
-          return;
-        }
-        this.tm.relaunching = false;
-      }, 2000);
+    /* 轮询收敛(有界): 每 2s 重读状态, 直到离开 launching 或到上限 —— 走轮询骨架的 awaitPoll
+     * 单点(polling.js): 同名 key 自带先停后起, 代际守卫不必再手写(漏掉代际检查曾是
+     * "两条轮询链叠加双请求"的隐患); 与 tmPollShutdown 共用 key ⇒ 两条链天然不叠加。 */
+    tmPollSettle() {
+      this.awaitPoll("tm", {
+        ms: () => 2000,
+        max: 16,  // 旧实现 n < 15 递归 ⇒ n = 0..15, 共 16 拍(拍数上限语义换成 max, 次数不变)
+        fn: () => this.tmLoad(),
+        until: () => this.tm.state !== "launching",
+        onEnd: () => { this.tm.relaunching = false; },  // 收敛/耗尽都收摊(与旧实现同)
+      });
     },
     /* 「关闭工具」(S4/D3/D4, 计划 26-10-17-1737): 确认框列出受影响功能(清单取自 schema
      * 字段 enabled 的 affects 元数据, 不另写一份) -> 先保存 enabled=false(热重载即停订阅 /
@@ -1223,22 +1222,20 @@ window.CONFIG_HUB = {
           this.tm.shutdownErr = "来源已关闭并保存; 停止工具失败: " + ((e && e.message) || "未知错误");
         }
         await this.tmLoad();
-        this.tmPollShutdown(0);
+        this.tmPollShutdown();
       } finally {
         this.tm.shutting = false;
       }
     },
     /* 停止后轮询收敛(有界): 每 1s 重读状态, 直到工具离开 ready(指针删除即 not_running)或到
-     * 上限; pollGen 代际守卫与 tmPollSettle 共用(两条轮询链不叠加)。 */
-    tmPollShutdown(n) {
-      const gen = ++this.tm.pollGen;
-      setTimeout(async () => {
-        if (gen !== this.tm.pollGen) return;
-        await this.tmLoad();
-        if (this.tm.state === "ready" && n < 10) {
-          this.tmPollShutdown(n + 1);
-        }
-      }, 1000);
+     * 上限; 与 tmPollSettle 同 key ⇒ 先停后起, 两条链不叠加。 */
+    tmPollShutdown() {
+      this.awaitPoll("tm", {
+        ms: () => 1000,
+        max: 11,  // 旧实现 n < 10 递归 ⇒ n = 0..10, 共 11 拍
+        fn: () => this.tmLoad(),
+        until: () => this.tm.state !== "ready",
+      });
     },
     /* 「以本安装重登记」(D4/D5, 计划 26-10-20-1316 §03): 二次确认 -> 有界前台跑安装内
      * claim 启动器(人工易主唯一通道)。工具正在跑/数据归属异会被工具侧拒绝(409), 其人话

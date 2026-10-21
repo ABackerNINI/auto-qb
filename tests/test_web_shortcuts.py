@@ -1212,16 +1212,19 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     # --- 前波移交观察项收口: 面板不可见(切走页面/视图)即停轮询拉取(定时器不拆, 回页自恢复) ---
     drawer_js = _read("drawer.js")
     store_js = _read("drawer_store.js")  # W1: 页签轮询收口在数据层
-    poll = re.search(
-        r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, this\.currentPollMs\(\)\);", store_js, re.S
-    )
-    assert poll, "drawer_store.js 找不到 trackers/peers 主节拍轮询 tick(W1 起轮询收口在数据层)"
+    # 2026-10-22: 轮询生命周期收敛进 polling.js 骨架(startPoll), 这里改为按**守卫声明**钉 ——
+    # 守卫序(面板开 -> 主内容页)由 guard 表达式的书写序承载, 页面隐藏由骨架恒等守卫兜。
+    poll = re.search(r"_startDrawerPoll\(\) \{\n(.*?)\n    \},", store_js, re.S)
+    assert poll, "drawer_store.js 找不到 trackers/peers 主节拍轮询(W1 起轮询收口在数据层)"
     pb = poll.group(1)
-    assert pb.index("!this.drawer.open") < pb.index('this.page !== "groups"'), "轮询 tick 守卫序: 面板开 -> 页面可见"
+    guard = re.search(r"guard: \(\) => (.*?),", pb, re.S)
+    assert guard, "主节拍轮询缺 guard 声明(守卫要交给骨架, 不得再裸写在 tick 里)"
+    gb = guard.group(1)
+    assert gb.index("this.drawer.open") < gb.index('this.page === "groups"'), "轮询守卫序: 面板开 -> 页面可见"
     # 2026-10-08(计划 26-10-08-1217): 面板三视图共用, 轮询只挡非主内容页 —— 在辅种页/追剧页展开的
     # 面板同样要续拉 trackers/peers(此前「换视图即不拉」会让这两页的页签数据停在打开那一刻)。
-    assert 'if (this.page !== "groups") return;' in pb, "轮询 tick 必须带主内容页守卫(非主内容页面板不在 DOM)"
-    assert 'this.viewMode !== "torrents"' not in pb, "轮询 tick 不得再挡视图(三视图共用面板)"
+    assert 'this.page === "groups"' in gb, "轮询必须带主内容页守卫(非主内容页面板不在 DOM)"
+    assert "viewMode" not in pb, "轮询不得再挡视图(三视图共用面板)"
 
 
 def test_kb_view_band_single_points() -> None:

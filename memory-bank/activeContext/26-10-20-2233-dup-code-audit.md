@@ -1,7 +1,7 @@
 # 前端重复代码审查 · Phase 2 轮 20–23 收口（sharded JS / 抽屉族 / 三皮肤 CSS / 模板层）
 
 > 摘要: 用户「执行重复代码审查计划 PHASE2: 26-10-10-2333-plan-dup-code-audit.html」→ 按计划 §07 拆 **15 个子轮**跑完 Phase 2 前端全部四个面（R20 shared/*.js 17449 行/35 文件 · R21 shared/drawer*/drawer_tpl* 8234 行/17 文件 · R22 三皮肤 CSS 8109 行/19 文件 · R23 shared/tpl 20 件 3967 行 + 三 index.html 632 行）。**纯审查零源码改动**，取证基线 `4eef60fe`。产出：**166 项发现（A71/B15/C48/D32）**，与 Phase 1 合并后**全局累计 322 项（A129/B30/C88/D75）**；滚动报告 `26-10-11-0033` 追加 §26–§30 五小节；入池 **17 条 issue（16 refactor + 1 test，族级合并）**。Phase 2 全部完成，主线剩 Phase 3（测试与横切 轮 24–25）+ Phase 4（汇总 轮 26）。
-> 最后活动: 2026-10-22 03:26
+> 最后活动: 2026-10-22 04:36
 **Refs:** memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 已完成(单会话收口)
@@ -60,3 +60,4 @@
 **R10(2026-10-22 02:24):** 认领并修复 issue 26-10-20-2231(模板层单元格碎片): site-chip 3 份收敛为 #tpl-aq-site-chip 单点组件(三调用点, DOM 逐字同), torrent chip+torrents.html 行级补 search-hit(休眠绑定已取证), m-progress 四处抽 $root.progPct 单点, dur-body 注释跨文件互指; 全量与 e2e 实测数字见 kb.baseline(切片 26-10-22-0221-webui-site-chip-progpct-dup)
 
 **R11(2026-10-22 03:26):** 认领并修复 issue 26-10-20-2231(fe-single-point-bypass-dup): 7 族单点绕过全部收敛 —— 提 cfgTruthy/aqbAuthHeaders/kibToBytes/bytesToKib/AQB_UNIT_LADDER/_fmtLadder/hrEpTitle 单点, 合并 cfgPathKey 第二份 path→key 单点, 11 处内联改调 + 单点处禁内联注释; 单位梯保留表格/图轴精度分歧(参数化), 阶梯核对无 KiB/KB 口径差; Bearer 取顶层函数护住 auth.js 单文件探针; test.full 与 e2e 三规格双绿(数字见基线切片 26-10-22-0324), 档案/契约/索引回写
+**R12(2026-10-22 04:36):** 认领并修复 issue 26-10-20-2231(refactor-fe-polling-family-dup): 轮询生命周期收敛为 polling.js 骨架 startPoll/stopPoll/awaitPoll, 抽屉侧补悬挂兜底, document.hidden 守卫单点; 新守阵 + 6 处既有守阵换形态; 红验八类突变全红; e2e 340 passed; test.full 3989 passed / 99.17%

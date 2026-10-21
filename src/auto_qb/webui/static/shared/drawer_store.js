@@ -146,10 +146,7 @@ window.AQB_DRAWER_STORE = {
       }
     },
     _stopDrawerPoll() {
-      if (this._drawerTimer) {
-        clearInterval(this._drawerTimer);
-        this._drawerTimer = null;
-      }
+      this.stopPoll("drawer");
       // !本方法**不清** _drawerSoftSwitch: 它会在 _switchDrawerTarget→_loadDrawerTab→_startDrawerPoll
       // 途中被调用, 而列表 loading 门抑制必须在同一次 _loadDrawerTab 的 fetcher 里已生效(见
       // _drawerListLoadingOn); 该标记只在 _drawerSwitchEnd 落定/被打断时清。
@@ -158,29 +155,60 @@ window.AQB_DRAWER_STORE = {
       // 仍是流量, _loadDrawerTab 会重新起(_qbPollStart 自带先停后起)
       this._qbPollStop("torrent");
     },
+    /* 抽屉页签轮询走长驻骨架(polling.js::startPoll 单点): 这里只声明差异 ——
+     *   - 节拍 2026-10-14(用户报「详情面板用户页实时速度刷新率太低」): 5s 固定 → 主节拍
+     *     currentPollMs()(种子页刷新间隔, 按种子量分档 1.5/2/3s) —— 实时速度与行数据同频观。
+     *     旧 P1-4 把 5s 省 qB 直连成本但把速度滞后直接卖掉, 用户口径是同频; 服务端 peers 短缓存
+     *     (1s)窗口仍窗口外, trackers 默认 2s 缓存把 1.5s 档里的白拉吸收。失败退背同主轮。
+     *   - 守卫: 面板开着 + 在主内容页(后台标签不拉数由骨架的恒等守卫兜, 不再手写)。
+     *     W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随主内容页 v-if 出入,
+     *     切走页面(设置页)后 drawer.open 仍为 true(回页状态保持语义), 旧浮层形态的轮询会继续对
+     *     隐藏面板打 trackers/peers —— 不可见即跳过(定时器不拆, 回主内容页下一拍自动恢复)。
+     *     2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图(种子/辅种/追剧)共用面板,
+     *     在辅种页/追剧页展开的面板同样要续拉; 只挡非主内容页。
+     *   - 悬挂兜底(2026-10-22 补, 与流量图同口径; 此前抽屉侧缺这一层): 见 _drawerPollStuck。 */
     _startDrawerPoll() {
-      this._stopDrawerPoll();
-      // 2026-10-14(用户报「详情面板用户页实时速度刷新率太低」): 5s 固定 → 主节拍 currentPollMs()
-      // (种子页刷新间隔, 按种子量分档 1.5/2/3s) —— 实时速度与行数据同频观。旧 P1-4 把 5s 省 qB
-      // 直连成本但把速度滞后直接卖掉, 用户口径是同频; 服务端 peers 短缓存(1s)窗口仍窗口外,
-      // trackers 默认 2s 缓存把 1.5s 档里的白拉吸收。失败退背随 currentPollMs 同主轮退背。
-      this._drawerTimer = setInterval(() => {
-        if (!this.drawer.open || document.hidden) return;
-        // W4 停靠化收口(计划 26-10-03-0917 前波移交观察项): 面板 DOM 随主内容页 v-if 出入,
-        // 切走页面(设置页)后 drawer.open 仍为 true(回页状态保持语义), 旧浮层形态的轮询会继续对
-        // 隐藏面板打 trackers/peers —— 不可见即跳过(定时器不拆, 回主内容页下一拍自动恢复)。
-        // 2026-10-08(计划 26-10-08-1217): 视图守卫解除 —— 三视图(种子/辅种/追剧)共用面板,
-        // 在辅种页/追剧页展开的面板同样要续拉; 只挡非主内容页。
-        if (this.page !== "groups") return;
-        // R2 S5: 合并 tp 对生效时双源同频(负载 = 用户页签单用时, 无新增频次)
-        if (this.dtSplitOn && this._dtPairOf(this.drawer.tab) === "tp") {
-          this._fetchDrawerTrackers(true);
-          this._fetchDrawerPeers(true);
-          return;
-        }
-        if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
-        else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
-      }, this.currentPollMs());
+      this._stopDrawerPoll();  // 先停后起(页签互斥: 顺带收掉种子流量页签的低频轮询)
+      this.startPoll("drawer", {
+        ms: () => this.currentPollMs(),
+        fn: () => {
+          // R2 S5: 合并 tp 对生效时双源同频(负载 = 用户页签单用时, 无新增频次)
+          if (this.dtSplitOn && this._dtPairOf(this.drawer.tab) === "tp") {
+            this._fetchDrawerTrackers(true);
+            this._fetchDrawerPeers(true);
+            return;
+          }
+          if (this.drawer.tab === "trackers") this._fetchDrawerTrackers(true);
+          else if (this.drawer.tab === "peers") this._fetchDrawerPeers(true);
+        },
+        guard: () => this.drawer.open && this.page === "groups",
+        stall: () => this._drawerPollStuck(),
+        onStall: (ms) => this._drawerPollUnstick(ms),
+      });
+    },
+    /* 抽屉侧的「卡死」判据(骨架 stall): 当前页签的列表 loading 门被置位且迟迟不复位。
+     * 门只由**非静默**取数置起(软切换窗口内不置, 见 _drawerListLoadingOn), 唯一复位路径是
+     * fetcher 的 finally —— 那个请求若不让出控制权(finally 永不到), 模板门 `loading && 无行`
+     * 就把面板永久顶在「正在加载…」(静默轮询照打但数据落不进可见态)。请求级超时(auth.js 15s)
+     * 已经兜掉绝大多数, 这一层是"连 abort 都没能让 finally 跑起来"的兜底, 与流量图同口径。
+     * !**不做在途互斥**(不上 skeleton 的 mutex): 静默续拉刻意不置门(否则常态空态会闪一帧
+     * 「正在加载…」, 见 test_drawer_list_switch_no_loading_flash_wiring), 门为假时挡拍无从谈起。 */
+    _drawerPollStuck() {
+      const t = this.drawer.tab;
+      if (t === "trackers") return !!this.drawer.trackersLoading;
+      if (t === "peers") return !!this.drawer.peersLoading;
+      if (this.dtSplitOn && this._dtPairOf(t) === "tp") {
+        return !!(this.drawer.trackersLoading || this.drawer.peersLoading);
+      }
+      return false;
+    },
+    /* 卡死补偿: 复位门让面板回到数据态并留一条痕(不静默吞掉, 便于真机归因)。
+     * 只清列表门 —— 详情门(drawer.loading)不参与轮询, 它的复位路径仍只有自己的 fetcher。 */
+    _drawerPollUnstick(ms) {
+      console.warn(`[drawer] ${this.drawer.tab}: loading 门在途超过 ${Math.round((ms || 30000) / 1000)}s` +
+        " 未复位, 视为悬挂, 强制复位(面板不再永久停在「正在加载…」)");
+      this.drawer.trackersLoading = false;
+      this.drawer.peersLoading = false;
     },
     /* W2 请求代际纪律: 四个 fetcher 均带可选 seq(0 = 无代际约束, 走 hash 戳守卫) ——
      * 换 hash(跟随/显式打开)或换代际(切页签)后, 在途旧响应一律丢弃, 防止慢响应把新目标的

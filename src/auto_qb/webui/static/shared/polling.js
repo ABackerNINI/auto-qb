@@ -8,6 +8,13 @@ function _esDisconnectEdge(prev) {
   return prev !== false;
 }
 
+/* 在途悬挂兜底阈值(2026-10-22 由 qb_traffic_chart.js 的 _QB_LOAD_STALL_MS 上提到轮询骨架 ——
+ * 抽屉侧此前没有这一层, 同一类"loading 卡死即永久挡拍/冻结"缺陷只修了一边)。
+ * 取值 30s = 请求级超时(auth.js AQB_FETCH_TIMEOUT_MS, 15s)的两倍余量: 正常在途请求(哪怕正好被
+ * 请求级超时兜到)不会命中 —— 只有"连 abort 都没能让 finally 跑起来"才走这里, 是兜底的兜底。
+ * 跨文件不变式: AQB_POLL_STALL_MS >= AQB_FETCH_TIMEOUT_MS(守阵 test_frontend_api_request_timeout)。 */
+const AQB_POLL_STALL_MS = 30000;
+
 window.AQB_POLL = {
   methods: {
     /* ---------------- P2 事件驱动(SSE /api/events) ----------------
@@ -104,15 +111,146 @@ window.AQB_POLL = {
        * 到这儿鉴权已放行, 这次请求必定带得上凭证。 */
       if (this.page === "settings" && !this.cfg.schema && !this.cfg.loading) this.cfgLoad();
     },
+    /* ---------------- 轮询骨架单点(R20-D-05 / R20-E-02 / R20-E-03, 2026-10-22 收敛) ----------------
+     * 此前「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」这份生命周期写了三份(主轮 setTimeout 链 /
+     * 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且抽屉侧漏了悬挂兜底(loading 卡死
+     * 即面板冻结到重开)—— 同一类缺陷只修了一边。收敛后各轮询只声明差异, 骨架认这些键:
+     *
+     *   startPoll(key, opts) —— 长驻心跳(无返回值):
+     *     ms      () => number        间隔; **每拍重读**(间隔随种子量/采样间隔变化时自动重排,
+     *                                 不再需要 qb 侧那个 resync 钩子)
+     *     fn      () => any           每拍动作
+     *     guard   () => bool          附加守卫(false = 跳过本拍, 定时器不拆 —— 回页/恢复后自动续)
+     *     stall   () => bool          卡死判据(true = 上一拍没让出控制权, 复位路径永不到)
+     *     mutex   bool                true = 卡死未超时前挡拍(流量图 loading 在途互斥);
+     *                                 false = 照常走本拍(抽屉静默取数不置门, 不能挡)
+     *     stallMs number              卡死阈值(ms), 默认 AQB_POLL_STALL_MS
+     *     onStall () => void          超时后的补偿(默认只留一条警告痕)
+     *     chain   bool                true = 等 fn 落定再排下一拍(不堆叠请求, 主轮用)
+     *
+     *   awaitPoll(key, opts) —— 有界等待(返回 Promise, 收敛即兑现, 耗尽/叫停兑现 null):
+     *     ms      (n, prevMs) => number   节拍(定间隔返回常量; 退避曲线按 prevMs 翻倍)
+     *     fn      () => any               每拍动作; 抛出即 reject(401 上抛给统一收口)
+     *     until   (r) => bool             收敛判据(r = 本拍 fn 的返回值)
+     *     max     number                  拍数上限
+     *     deadline() => bool              时间上限(true = 到点收摊)
+     *     stop    () => bool              外部叫停(赛跑落败方)
+     *     onEnd   () => void              收摊回调(收敛/耗尽/到点都走)
+     *   key 传 null = 不入表(并发命令回执轮询各走各的, 不能互相顶掉); 非空 key = 先停后起。
+     *
+     * 恒等守卫(写死在骨架里, 调用方一律不再手写): document.hidden —— 后台标签不拉数。
+     * 代际守卫: 同名 startPoll/awaitPoll 自带先停后起(句柄表 _polls), 不再手写 ++pollGen。 */
+    _polls: null,
+    stopPoll(key) {
+      const st = this._polls && this._polls[key];
+      if (!st || !st.alive) return;
+      st.alive = false;
+      if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+      if (st.wake) { const w = st.wake; st.wake = null; w(); }  // 唤醒在途 sleep, 不留永不兑现的 Promise
+      if (this._polls[key] === st) this._polls[key] = null;
+      if (st.settle) { const s = st.settle; st.settle = null; s(null); }  // awaitPoll: 收摊兑现 null
+    },
+    startPoll(key, opts) {
+      this.stopPoll(key);
+      if (!this._polls) this._polls = {};
+      const st = { alive: true, timer: null, stallAt: 0, period: 0 };
+      this._polls[key] = st;
+      const arm = () => {
+        if (!st.alive) return;
+        st.period = opts.ms();
+        st.timer = setTimeout(beat, st.period);
+      };
+      const beat = async () => {
+        if (!st.alive) return;
+        st.timer = null;
+        // 恒等守卫: 后台标签不拉数(单点, 调用方不再手写 document.hidden); 附加守卫只跳本拍,
+        // 定时器不拆 —— 回页/恢复/形态切回后下一拍自动续(抽屉切页与流量图切形态同口径)
+        if (!document.hidden && !(opts.guard && !opts.guard())) {
+          if (opts.stall && opts.stall()) {
+            const thr = opts.stallMs || AQB_POLL_STALL_MS;
+            if (!st.stallAt) st.stallAt = Date.now();
+            if (Date.now() - st.stallAt > thr) {
+              st.stallAt = 0;  // 补偿一次即重新计时 ⇒ 一段悬挂只留一条痕
+              if (opts.onStall) opts.onStall(thr);
+              else console.warn(`[poll] ${key}: 上一拍在途超过 ${Math.round(thr / 1000)}s, 视为悬挂, 强制续拉`);
+            } else if (opts.mutex) { arm(); return; }
+          } else {
+            st.stallAt = 0;
+          }
+          if (opts.chain) await opts.fn();
+          else opts.fn();
+        }
+        if (!st.alive) return;
+        arm();
+      };
+      arm();
+    },
+    awaitPoll(key, opts) {
+      if (key) this.stopPoll(key);
+      const st = { alive: true, timer: null, settle: null, fail: null, wake: null };
+      if (key) {
+        if (!this._polls) this._polls = {};
+        this._polls[key] = st;
+      }
+      const out = new Promise((resolve, reject) => { st.settle = resolve; st.fail = reject; });
+      const close = () => {
+        if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+        if (key && this._polls && this._polls[key] === st) this._polls[key] = null;
+      };
+      const finish = (v) => {
+        if (!st.alive) return;
+        st.alive = false;
+        close();
+        if (opts.onEnd) opts.onEnd();
+        const s = st.settle; st.settle = null;
+        if (s) s(v);
+      };
+      const fail = (e) => {
+        if (!st.alive) return;
+        st.alive = false;
+        close();
+        const f = st.fail; st.fail = null;
+        if (f) f(e);
+      };
+      (async () => {
+        let n = 0;
+        let prev = NaN;
+        while (st.alive) {
+          if (opts.stop && opts.stop()) break;
+          if (opts.max != null && n >= opts.max) break;
+          if (opts.deadline && opts.deadline()) break;
+          const ms = opts.ms(n, prev);
+          prev = ms;
+          if (ms > 0) {
+            await new Promise((r) => {
+              st.timer = setTimeout(() => { st.timer = null; r(); }, ms);
+              st.wake = r;
+            });
+            st.wake = null;
+          }
+          if (!st.alive) return;  // 期间被 stopPoll 收摊(已兑现 null)
+          if (opts.stop && opts.stop()) break;
+          let r = null;
+          try { r = await opts.fn(); } catch (e) { return fail(e); }
+          if (opts.until && opts.until(r)) return finish(r);
+          n += 1;
+        }
+        finish(null);
+      })();
+      return out;
+    },
     stopPolling() {
-      if (this.pollTimer) clearTimeout(this.pollTimer);
-      this.pollTimer = null;
+      this.stopPoll("main");
     },
     scheduleNext() {
-      // 用 setTimeout 链式续排(而非 setInterval): 保证上一轮请求结束后再计时, 不堆叠请求
-      this.stopPolling();
-      if (document.hidden || !this.authOk) return;  // R10-01: 按鉴权模式判断(本机免鉴权下 token 为空)
-      this.pollTimer = setTimeout(() => this.refresh(), this.currentPollMs());
+      // 主轮节拍走骨架 chain 形态: 上一轮落定后才排下一拍(不堆叠请求, 与旧 setTimeout 链同义);
+      // document.hidden / !authOk 交给骨架的恒等守卫, 这里不再手写停止条件(R20-E-03)
+      this.startPoll("main", {
+        chain: true,
+        ms: () => this.currentPollMs(),
+        fn: () => this.refresh(),
+        guard: () => this.authOk,
+      });
     },
     /* P1 落地后按种子量分档(2026-09-19)。档位是**实测**定的, 不是拍的 —— 用
      * scripts/ui_harness.py + e2e/perf.spec.mjs 的 A/B 量出"窗口化后单轮 refresh 的真实耗时":

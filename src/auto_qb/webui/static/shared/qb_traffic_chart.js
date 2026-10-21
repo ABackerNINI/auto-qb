@@ -20,9 +20,9 @@
  *
  * 低频轮询(§07 表「轮询/取数」列): 打开期间按采样间隔续拉 —— 间隔从最近响应 meta.interval_s
  * 取(raw 段窗(1m-24h)即采样间隔; agg 段窗(3d/7d/30d/6mo/1y/all) meta 是桶宽(3600s/86400s/
- * 标称月长)而非采样间隔, 夹取到配置校验上界 600s), 取不到回退 30s 常量; document.hidden 跳过
- * (对齐 drawer.js _startDrawerPoll 先例); 关闭/切走形态由 _stopDrawerPoll / _qbTeardown 显式
- * clearInterval —— 只挂打开期间, 不后台常驻。
+ * 标称月长)而非采样间隔, 夹取到配置校验上界 600s), 取不到回退 30s 常量; 页面隐藏跳过由轮询
+ * 骨架(polling.js::startPoll)恒等守卫兜; 关闭/切走形态由 _stopDrawerPoll / _qbTeardown 显式
+ * stopPoll —— 只挂打开期间, 不后台常驻。
  * meta.stale=true 的响应照常渲染(读竞态兜底位, §08, 前端不特殊处理)。
  *
  * 静默续拉(2026-10-04 修「每隔几秒闪一次」; 2026-10-05 补齐空态/错误态): 续拉对用户不可见 ——
@@ -75,14 +75,6 @@
 const _QB_POLL_MIN_MS = 1500;
 const _QB_POLL_MAX_MS = 600000;
 const _QB_POLL_FALLBACK_MS = 30000;
-
-/* 在途悬挂兜底(2026-10-16, issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout; 与 auth.js 的
- * 请求级超时 AQB_FETCH_TIMEOUT_MS 互补): loading 是**单向「请求在途」标志** —— 入口无条件置 true,
- * 唯一复位路径是 _qbLoad 的 finally; 一旦请求不让出控制权(悬挂), finally 不执行 ⇒ 轮询守卫
- * (this[def.loading]) 把之后每一拍都挡掉, 图表永久停在旧帧且无任何提示(不自愈)。
- * 取值 30s = 请求级超时(15s)的两倍余量: 正常在途请求(哪怕正好被请求级超时兜到)不会触发本兜底 ——
- * 只有「连 abort 都没能让 finally 跑起来」才走这里, 它是兜底的兜底, 不是主路径。 */
-const _QB_LOAD_STALL_MS = 30000;
 
 /* 窗口档位(13 档, 顺序即展示序: 短窗 -> 长窗; 与后端 webui/server/traffic_qb.py 的
  * WINDOW_NAMES 逐字一致) —— 展示(drawer.html v-for 走 qbWindowNames computed)、前后切换
@@ -571,7 +563,7 @@ window.AQB_QB_TRAFFIC = {
       if (!def || this[def.loading]) return;
       this._qbLoad(scope);
     },
-    /* 窗口切换(1m-30d 十档): 换窗即重拉重画; 打开中的轮询定时器由 _qbPollResync 按新窗重排 */
+    /* 窗口切换(1m-30d 十档): 换窗即重拉重画; 打开中的轮询由骨架每拍重读间隔自动重排 */
     qbSetWindow(w) {
       const s = this.qbCurScope;
       return s ? this._qbSetWindow(s, w) : undefined;
@@ -679,11 +671,8 @@ window.AQB_QB_TRAFFIC = {
       if (!this.qbTrafficOn) return;  // P5 验收: enabled=false 不发请求(入口 v-if 已门, 这里兜底)
       const ctx = def.ctx ? def.ctx(this) : "";
       this[def.loading] = true;
-      // 悬挂兜底计时起点(见 _QB_LOAD_STALL_MS): 置位处写、**finally 不擦** —— 换目标场景下旧请求的
-      // finally 晚于新请求的置位到达(stale 分支故意不复位 loading), 擦一次就把新请求的计时抹成 0,
-      // 兜底从此永不触发。不擦是安全的: loading 为假时守卫不读它, 每次置位都重写。
-      if (!this._qbLoadAt) this._qbLoadAt = {};
-      this._qbLoadAt[scope] = Date.now();
+      // 悬挂兜底的计时起点已随骨架上提(polling.js 的 st.stallAt, 由 tick 观测到 loading 置位的
+      // 那一刻起算)—— 换目标场景下旧请求的 finally 晚于新请求的置位到达时不再有"擦起点"的坑。
       // error **不在此清空**(2026-10-05 修「空态/错误态每隔一个轮询周期闪一次」): 请求前清错误 =
       // 续拉把错误文案换成一帧 loading/空态再换回, 与「清空旧数据把等待渲染成空态」同型; 错误态
       // 改由**下一次成功落袋**清除(见下), 期间的旧文案由 FX-29 遮罩在换目标时兜住(160ms 延迟点亮)。
@@ -713,7 +702,6 @@ window.AQB_QB_TRAFFIC = {
       if (scope === "torrent") this._drawerDone("traffic", ctx, 0);
       // 等 v-if 分支进 DOM 再建图(uPlot 要量容器宽); 轮询间隔随新 meta 重排(换窗/间隔变更)
       this.$nextTick(() => this._qbChartBuild(scope));
-      this._qbPollResync(scope);
     },
     /* 悬停桶的时刻(null 桶也能定位: 建图时的锚携带整列真值 xs(月行按行间隔非等距);
      * 旧锚形状无 xs 时回退等距公式推算) */
@@ -757,44 +745,26 @@ window.AQB_QB_TRAFFIC = {
       if (!(s > 0)) return _QB_POLL_FALLBACK_MS;
       return Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000));
     },
-    /* 在途悬挂判据(见 _QB_LOAD_STALL_MS): loading 置位时刻距今超过阈值即认定该请求已悬挂。 */
-    _qbLoadStalled(scope) {
-      const at = this._qbLoadAt && this._qbLoadAt[scope];
-      return !!at && Date.now() - at > _QB_LOAD_STALL_MS;
-    },
+    /* 低频轮询走长驻骨架(polling.js::startPoll 单点, 2026-10-22): 这里只声明差异 ——
+     *   - 节拍 = 采样间隔夹取(_qbPollMs); 骨架每拍重读间隔 ⇒ 换窗跨段(raw <-> hour)自动重排,
+     *     不再需要单独的 resync 钩子(旧 _qbPollResync 随本轮收敛删除)。
+     *   - 守卫 = 图还活跃(def.active); 页面隐藏由骨架恒等守卫兜, 不再手写。
+     *   - 在途互斥(loading, 在 _qbLoad finally 归位)+ 悬挂兜底: 骨架统一做 —— 卡死判据就是
+     *     loading 本身, 未超时前挡拍(mutex), 超阈值强制续拉并留一次警告痕(issue 26-10-16-0954
+     *     的成因: 旧实现 loading 卡死即永久挡拍, 图表停在旧帧且无提示也不自愈)。
+     *     阈值常量随骨架上提为 AQB_POLL_STALL_MS(polling.js), 抽屉侧自此同口径。 */
     _qbPollStart(scope) {
       this._qbPollStop(scope);
-      if (!this._qbPollTimers) this._qbPollTimers = {};
-      if (!this._qbPollPeriods) this._qbPollPeriods = {};
-      const ms = this._qbPollMs(scope);
-      this._qbPollPeriods[scope] = ms;
-      // 页面隐藏/图不活跃/上一拍未到齐: 跳过不拆表(回页/恢复后下一拍自动续, 对齐 drawer.js
-      // _startDrawerPoll 先例); 在途请求未落袋前不叠加(loading 在 _qbLoad finally 归位)
-      this._qbPollTimers[scope] = setInterval(() => {
-        const def = _QB_SCOPES[scope];
-        if (!def.active(this) || document.hidden) return;
-        // 在途互斥(loading)照旧, 只加悬挂兜底(issue 26-10-16-0954): loading 卡死不再永久挡拍 ——
-        // 置位超过 _QB_LOAD_STALL_MS 即视为上一拍已悬挂, 强制续拉 + 留一次警告痕(新一拍同步重写
-        // 计时起点, 故下一拍照常挡拍, 警告每段悬挂只出一条)。
-        if (this[def.loading]) {
-          if (!this._qbLoadStalled(scope)) return;
-          console.warn(`[qb-traffic] ${scope}: 上一拍请求在途超过 ${Math.round(_QB_LOAD_STALL_MS / 1000)}s, 视为悬挂, 强制续拉`);
-        }
-        this._qbLoad(scope);
-      }, ms);
+      this.startPoll(`qb:${scope}`, {
+        ms: () => this._qbPollMs(scope),
+        fn: () => this._qbLoad(scope),
+        guard: () => _QB_SCOPES[scope].active(this),
+        stall: () => this[_QB_SCOPES[scope].loading],
+        mutex: true,
+      });
     },
     _qbPollStop(scope) {
-      if (!this._qbPollTimers) return;
-      const t = this._qbPollTimers[scope];
-      if (t) {
-        clearInterval(t);
-        this._qbPollTimers[scope] = null;
-      }
-    },
-    /* meta.interval_s 变化(换窗跨段: raw 段窗 <-> hour 段窗)时按新间隔重排; 定时器本就停着则不动 */
-    _qbPollResync(scope) {
-      if (!this._qbPollTimers || !this._qbPollTimers[scope]) return;
-      if (this._qbPollMs(scope) !== this._qbPollPeriods[scope]) this._qbPollStart(scope);
+      this.stopPoll(`qb:${scope}`);
     },
     /* ---------------- uPlot 封装单点(options 样板一次配齐, §07) ---------------- */
     _qbChartTokens() {
@@ -962,7 +932,7 @@ window.AQB_QB_TRAFFIC = {
       }
       this._qbChartDestroy(scope);
       this._qbChartInjectCss();
-      this._qbAnchors[scope] = data.anchor;  // 悬停取值用(非响应式实例字段, 同 _drawerTimer 先例)
+      this._qbAnchors[scope] = data.anchor;  // 悬停取值用(非响应式实例字段, 同 _qbAnchors 自身先例)
       const tk = this._qbChartTokens();
       const W = this._qbChartWs[scope] = host.clientWidth || 860;
       // 高度跟随宿主(流量形态里 .qb-chart-host 撑满抽屉可用高): 量到就用, 量不到(布局未定)回落 300;

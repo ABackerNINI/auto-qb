@@ -50,6 +50,7 @@
 - test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 - test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
+- test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
 """
 import json
 import os
@@ -420,16 +421,19 @@ def test_frontend_qb_traffic_chart_wiring():
         "轮询间隔常量漂移(30s 兜底 / [1.5s,600s] 夹取界 = §06 配置校验边界, A4: 15000 -> 1500)"
     assert "Math.min(_QB_POLL_MAX_MS, Math.max(_QB_POLL_MIN_MS, s * 1000))" in js, \
         "轮询间隔必须经 [1.5s,600s] 夹取(agg 段窗 meta.interval_s=3600 是桶宽, 直拉 = 一小时不刷新)"
-    # 三判据(不活跃 / 页面隐藏 / 在途未落袋)语义不变, 但 2026-10-16 起**书写形态变了**: 「在途」判据
-    # 从合体式早退里拆出来接悬挂兜底(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout —— 合体式下
-    # loading 卡死即永久挡拍, 图表停在旧帧且不自愈)。故这里改按语义钉: 该在的判据都在 + 兜底在;
-    # 细分行为(未悬挂挡拍 / 悬挂放行)由 test_frontend_qb_traffic_load_stall_fallback 逐拍钉住。
-    assert "if (!def.active(this) || document.hidden) return;" in js, \
-        "轮询 tick 缺 document.hidden / 不活跃跳过(先例 _startDrawerPoll)"
-    assert "if (this[def.loading]) {" in js and "if (!this._qbLoadStalled(scope)) return;" in js, \
-        "轮询 tick 缺在途未落袋跳过, 或该判据被退回合体式早退(loading 卡死即永久挡拍, 见 issue 26-10-16-0954)"
-    assert js.count("clearInterval(") == 1, \
-        "组件内 clearInterval 只允许在 _qbPollStop 单点(轮询停止收口)"
+    # 三判据(不活跃 / 页面隐藏 / 在途未落袋)语义不变, 书写形态 2026-10-22 再变一次: 轮询生命周期
+    # 收敛进 polling.js 骨架(startPoll)—— 页面隐藏由骨架的**恒等守卫**兜(不再每处手写 document.hidden),
+    # 在途互斥 + 悬挂兜底改为声明 `stall` / `mutex` 两个键。故这里按语义钉: 声明齐全 + 文件内零裸
+    # 定时器(启停一律经骨架); 细分行为(未悬挂挡拍 / 悬挂放行 / 抽屉侧同口径)由
+    # test_frontend_qb_traffic_load_stall_fallback 与 test_frontend_poll_skeleton_single_point 逐拍钉住。
+    assert "this.startPoll(`qb:${scope}`, {" in js, \
+        "流量轮询必须走骨架 startPoll 单点(文件内不得再手写 setInterval/clearInterval 启停)"
+    assert "guard: () => _QB_SCOPES[scope].active(this)," in js, \
+        "流量轮询缺「图还活跃」守卫声明(页面隐藏由骨架恒等守卫兜, 但活跃判据要自己声明)"
+    assert "stall: () => this[_QB_SCOPES[scope].loading]," in js and "mutex: true," in js, \
+        "流量轮询缺在途互斥 / 悬挂兜底声明(判据退回裸早退 = loading 卡死即永久挡拍, issue 26-10-16-0954)"
+    assert "setInterval(" not in js and "clearInterval(" not in js, \
+        "qb_traffic_chart.js 不得再裸写定时器(启停收口到骨架, 手柄在 _polls 表)"
     # 关闭路径统一收口(2026-10-04): closeDrawer 收抽屉即 _qbTeardown(停三挂点轮询 + 销毁三挂点图)
     assert "this._qbTeardown();" in drawer_js, \
         "drawer.js 缺 _qbTeardown 调用(关抽屉/换形态时轮询与图不停, P5 验收)"
@@ -2787,11 +2791,12 @@ def test_frontend_drawer_groups_shows_views():
     follow = re.search(r"_kbFollowDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert follow and "viewMode" not in follow.group(1), \
         "_kbFollowDrawer 不得再挡视图(三视图共用: 辅种/追剧成员行光标同样要跟随)"
-    poll = re.search(
-        r"_drawerTimer = setInterval\(\(\) => \{(.*?)\n      \}, this\.currentPollMs\(\)\);", store_js, re.S
-    )
-    assert poll and "viewMode" not in poll.group(1), \
-        "主节拍轮询 tick 不得再挡视图(换视图即停会让这两页的页签数据停在打开那一刻)"
+    poll = re.search(r"_startDrawerPoll\(\) \{\n(.*?)\n    \},", store_js, re.S)
+    assert poll, "drawer_store.js 找不到主节拍轮询 _startDrawerPoll(2026-10-22 起走骨架 startPoll 声明式)"
+    assert "viewMode" not in poll.group(1), \
+        "主节拍轮询不得再挡视图(换视图即停会让这两页的页签数据停在打开那一刻)"
+    assert 'this.page === "groups"' in poll.group(1), \
+        "主节拍轮询必须带主内容页守卫(2026-10-22 起写在骨架的 guard 声明里: 面板开 + 在主内容页)"
     tor = re.search(r"  torrent: \{(.*?)\n  \},", chart_js, re.S)
     assert tor, "qb_traffic_chart.js 缺 torrent 作用域(单种流量图)"
     assert "viewMode" not in tor.group(1), \
@@ -4756,19 +4761,24 @@ def test_drawer_tpl_no_table_variants_out_of_scope():
                 "(范围守恒 §10; 若确要接表, 先把该文件挪进含表格名单并更新本守阵)"
 
 
-# node 单测探针(issue 26-10-16-0954 方案 #2): 加载真实 qb_traffic_chart.js, 用**真 _qbLoad** 驱动
-# 轮询 tick 的「在途悬挂」兜底路线 —— api 桩返回永不 settle 的 promise(悬挂), 断言: 在途未悬挂照旧
-# 挡拍 / 悬挂(超 _QB_LOAD_STALL_MS)放行且只留一条警告 / 新一拍重写计时起点故后续照常挡拍 /
-# 图不活跃与页面隐藏照旧跳过 / 判据边界。无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+# node 单测探针(issue 26-10-16-0954 方案 #2; 2026-10-22 随轮询骨架改写): 加载真实 polling.js +
+# qb_traffic_chart.js, 用**真骨架 + 真 _qbLoad** 驱动「在途悬挂」兜底路线 —— api 桩返回永不 settle 的
+# promise(悬挂), 断言: 在途未悬挂照旧挡拍 / 悬挂(超阈值)放行且只留一条警告 / 补偿后重新计时故后续
+# 照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 停止后句柄摘除。无 node 静默跳过(同 _NODE_QB_TRAFFIC_PROBE)。
 _NODE_QB_POLL_STALL_PROBE = r"""
 const fs = require("fs");
 global.window = {};
 global.document = { hidden: false };
-eval(fs.readFileSync(process.argv[1], "utf8"));
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js(骨架)
+eval(fs.readFileSync(process.argv[2], "utf8"));   // qb_traffic_chart.js
+const P = window.AQB_POLL.methods;
 const M = window.AQB_QB_TRAFFIC.methods;
 const checks = [];
 let tick = null;
-global.setInterval = (fn) => { tick = fn; return 1; };  // 捕获节拍回调, 不真跑定时器
+global.setTimeout = (fn) => { tick = fn; return 1; };   // 捕获下一拍, 不真跑定时器
+global.clearTimeout = () => {tick = null;};
+const realNow = Date.now; let off = 0;
+Date.now = () => realNow() + off;                       // 可控时钟: 免得真睡 30s
 const warns = [];
 console.warn = (...a) => { warns.push(a.join(" ")); };
 const mk = (over) => {
@@ -4779,46 +4789,45 @@ const mk = (over) => {
     page: "groups",
     qbHistData: { meta: { interval_s: 30 } },
     qbHistLoading: false,
-    _qbLoadAt: {},
     apiCalls: 0,
-    _qbPollTimers: null,
-    _qbPollPeriods: null,
   }, over || {});
   t.api = () => { t.apiCalls += 1; return new Promise(() => {}); };  // 悬挂: await 永不返回
+  t.startPoll = P.startPoll;
+  t.stopPoll = P.stopPoll;
   t._qbPollStop = M._qbPollStop;
   t._qbPollMs = M._qbPollMs;
   t._qbLoad = M._qbLoad;
-  t._qbLoadStalled = M._qbLoadStalled;
   return t;
 };
-// ① 在途未悬挂(1s 前置位): 照旧挡拍
-let t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 1000 } });
-M._qbPollStart.call(t, "global");
-tick();
-checks.push(["在途未悬挂照旧挡拍", t.apiCalls === 0]);
-// ② 悬挂(60s 前置位): 放行 + 一条警告; 真 _qbLoad 重写起点 => 后续拍照常挡
-t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 60000 } });
+const run = (t) => { M._qbPollStart.call(t, "global"); tick(); };
+// ① 在途未悬挂(刚置位): 照旧挡拍(骨架记下计时起点后 mutex 挡住)
+off = 0;
+let t = mk({ qbHistLoading: true });
+run(t);
+checks.push(["在途未悬挂照旧挡拍", t.apiCalls === 0 && warns.length === 0]);
+// ② 悬挂(起点记下后时钟跳过 60s): 放行 + 一条警告; 补偿后重新计时 => 后续拍照常挡、警告只一条
 warns.length = 0;
-M._qbPollStart.call(t, "global");
+t = mk({ qbHistLoading: true });
+run(t);          // 第一拍只记起点
+off = 60000;     // 时钟跳过阈值
 tick();
 checks.push(["悬挂放行(强制续拉)", t.apiCalls === 1 && warns.length === 1 && t.qbHistLoading === true]);
 for (let i = 0; i < 5; i++) tick();
-checks.push(["新起点生效: 后续照常挡拍且警告只一条", t.apiCalls === 1 && warns.length === 1]);
+checks.push(["补偿后重新计时: 后续照常挡拍且警告只一条", t.apiCalls === 1 && warns.length === 1]);
 // ③ 图不活跃(切走页面) / 页面隐藏: 照旧跳过(兜底不越界)
-t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 60000 }, page: "settings" });
-M._qbPollStart.call(t, "global");
-tick();
+t = mk({ qbHistLoading: true, page: "settings" });
+run(t);
 checks.push(["图不活跃跳过", t.apiCalls === 0]);
 global.document.hidden = true;
-t = mk({ qbHistLoading: true, _qbLoadAt: { global: Date.now() - 60000 } });
-M._qbPollStart.call(t, "global");
-tick();
+t = mk({ qbHistLoading: true });
+run(t);
 checks.push(["页面隐藏跳过", t.apiCalls === 0]);
 global.document.hidden = false;
-// ④ 判据本身: 边界与缺省
-checks.push(["29s 不判悬挂", M._qbLoadStalled.call({ _qbLoadAt: { global: Date.now() - 29000 } }, "global") === false]);
-checks.push(["31s 判悬挂", M._qbLoadStalled.call({ _qbLoadAt: { global: Date.now() - 31000 } }, "global") === true]);
-checks.push(["无计时起点不判悬挂", M._qbLoadStalled.call({ _qbLoadAt: {} }, "global") === false]);
+// ④ 停止收口: _qbPollStop 后句柄从表里摘掉(不再有拍)
+t = mk({ qbHistLoading: false });
+run(t);
+t._qbPollStop("global");
+checks.push(["停止后句柄摘除", !t._polls["qb:global"]]);
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
@@ -4831,38 +4840,41 @@ def test_frontend_qb_traffic_load_stall_fallback():
     唯一复位路径是它的 finally; 请求悬挂时 finally 不执行 ⇒ 轮询 tick 的守卫(`this[def.loading]`)
     把之后每一拍都挡掉, 图表永久停在旧帧、无提示也不自愈(10-12 修的是同链另一入口: stale 谓词取反)。
 
-    本守阵钉三层, 任一层被拆即红:
-      ① 阈值常量 `_QB_LOAD_STALL_MS` 在(30s = 请求级超时 15s 的两倍余量: 正常在途请求不会命中);
-      ② 判据单点 `_qbLoadStalled` 在, 且 tick 的跳过判据必须经它(`document.hidden || this[def.loading]`
-         合体写法不得回潮 —— 那种写法下 loading 卡死即永久挡拍);
-      ③ `_qbLoad` 置位处写计时起点 `_qbLoadAt[scope]`, 且 finally 不擦(擦会把换目标场景下新请求的
-         起点抹成 0, 兜底从此永不触发)。
-    行为面走 node 电池真跑(无 node 静默跳过): 真 `_qbLoad` + 永不 settle 的 api 桩。
+    2026-10-22(issue 26-10-20-2231-refactor-fe-polling-family-dup): 兜底随轮询生命周期收进
+    polling.js 骨架, 阈值常量上提为 `AQB_POLL_STALL_MS`(抽屉侧自此同口径 —— 此前同一类卡死只修了
+    流量图一边)。本守阵改钉三层, 任一层被拆即红:
+      ① 阈值常量 `AQB_POLL_STALL_MS` 在 polling.js(30000 = 请求级超时 15s 的两倍余量);
+      ② 流量侧**声明**齐全: `stall: () => this[_QB_SCOPES[scope].loading]` + `mutex: true`
+         (合体式早退 `document.hidden || this[def.loading]` 不得回潮 —— 那正是本 issue 的成因形态);
+      ③ 抽屉侧必有同口径兜底(`stall` + `onStall`), 否则「同一类卡死只修一边」复发。
+    行为面走 node 电池真跑(无 node 静默跳过): 真骨架 + 真 `_qbLoad` + 永不 settle 的 api 桩。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     js_path = os.path.join(shared, "qb_traffic_chart.js")
+    store_path = os.path.join(shared, "drawer_store.js")
+    poll_path = os.path.join(shared, "polling.js")
     js = open(js_path, encoding="utf-8").read()
+    store_js = open(store_path, encoding="utf-8").read()
+    poll_js = open(poll_path, encoding="utf-8").read()
 
-    m = re.search(r"^const _QB_LOAD_STALL_MS = (\d+);", js, re.M)
-    assert m, "qb_traffic_chart.js 缺 _QB_LOAD_STALL_MS 常量(悬挂兜底阈值)"
+    m = re.search(r"^const AQB_POLL_STALL_MS = (\d+);", poll_js, re.M)
+    assert m, "polling.js 缺 AQB_POLL_STALL_MS 常量(悬挂兜底阈值, 骨架单点)"
     assert int(m.group(1)) == 30000, \
         "兜底阈值应 = 请求级超时(15s)的两倍余量 30000 —— 改它必须同步本守阵与常量注释里的依据"
     assert "document.hidden || this[def.loading]" not in js, \
         "tick 跳过判据回潮成 loading 合体式 —— loading 卡死即永久挡拍(issue 26-10-16-0954 的成因)"
-    blk = re.search(r"_qbPollTimers\[scope\] = setInterval\(\(\) => \{\n(.*?)\n      \}, ms\);", js, re.S)
-    assert blk, "qb_traffic_chart.js 缺 _qbPollStart 的 tick 落点(结构漂移? 同步本守阵)"
-    body = blk.group(1)
-    assert "this[def.loading]" in body and "this._qbLoadStalled(scope)" in body, \
-        "tick 必须在 loading 为真时经 _qbLoadStalled 判悬挂(未悬挂才挡拍)"
-    assert "this._qbLoadAt[scope] = Date.now();" in js, "缺置位处计时起点(_qbLoad)"
-    fin = re.search(r"async _qbLoad\(scope\) \{\n(.*?)\n    \},\n", js, re.S)
-    assert fin and "_qbLoadAt[scope] = 0" not in fin.group(1), \
-        "_qbLoad 的 finally 不得擦计时起点(换目标场景会把新请求的起点抹成 0 => 兜底永不触发)"
+    assert "stall: () => this[_QB_SCOPES[scope].loading]," in js and "mutex: true," in js, \
+        "流量轮询缺在途悬挂兜底声明(stall)或在途互斥(mutex)"
+    # 抽屉侧同口径(2026-10-22 补的实质缺陷面): 卡死判据 + 补偿动作都在, 否则面板仍可能永久冻结
+    dp = re.search(r"_startDrawerPoll\(\) \{\n(.*?)\n    \},", store_js, re.S)
+    assert dp, "drawer_store.js 缺 _startDrawerPoll(结构漂移? 同步本守阵)"
+    assert "stall: () => this._drawerPollStuck()," in dp.group(1) and "onStall:" in dp.group(1), \
+        "抽屉页签轮询缺悬挂兜底声明 —— 同一类卡死只修了流量图一边(issue 26-10-20-2231 的实质缺陷面)"
 
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_QB_POLL_STALL_PROBE, js_path],
+            [node, "-e", _NODE_QB_POLL_STALL_PROBE, poll_path, js_path],
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -4952,13 +4964,14 @@ def test_frontend_api_request_timeout():
       ② fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮 —— 那正是本 issue 的根因形态);
       ③ AbortError 必须翻译(超时 / 取消分型 + `timeout` 标记), 否则用户看到的是
          "The operation was aborted";
-      ④ `finally` 必须 `clearTimeout(timer)`; 且跨文件不变式: 流量图悬挂兜底阈值不得早于请求级超时
-         (`_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`) —— 否则正常在途请求会被当成悬挂。
+      ④ `finally` 必须 `clearTimeout(timer)`; 且跨文件不变式: 轮询悬挂兜底阈值不得早于请求级超时
+         (`AQB_POLL_STALL_MS >= AQB_FETCH_TIMEOUT_MS`) —— 否则正常在途请求会被当成悬挂。
+         (阈值 2026-10-22 随骨架从 qb_traffic_chart.js 上提到 polling.js, 抽屉侧自此同口径)
     行为面走 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
-    chart_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    poll_js = open(os.path.join(shared, "polling.js"), encoding="utf-8").read()
 
     assert "const AQB_FETCH_TIMEOUT_S = 15;" in auth_js, "缺请求级超时常量(秒值单点)"
     assert "const AQB_FETCH_TIMEOUT_MS = AQB_FETCH_TIMEOUT_S * 1000;" in auth_js, \
@@ -4970,9 +4983,10 @@ def test_frontend_api_request_timeout():
     assert 'e.name === "AbortError"' in auth_js and "err.timeout = timedOut" in auth_js, \
         'AbortError 必须翻译(超时/取消分型 + timeout 标记), 否则用户只会看到 "The operation was aborted"'
     timeout_s = re.search(r"^const AQB_FETCH_TIMEOUT_S = (\d+);", auth_js, re.M)
-    stall = re.search(r"^const _QB_LOAD_STALL_MS = (\d+);", chart_js, re.M)
+    stall = re.search(r"^const AQB_POLL_STALL_MS = (\d+);", poll_js, re.M)
     assert timeout_s and stall and int(stall.group(1)) >= int(timeout_s.group(1)) * 1000, \
-        "流量图悬挂兜底阈值(_QB_LOAD_STALL_MS)不得早于请求级超时(AQB_FETCH_TIMEOUT_MS) —— 否则正常在途请求会被当成悬挂"
+        "轮询悬挂兜底阈值(AQB_POLL_STALL_MS, 骨架单点)不得早于请求级超时(AQB_FETCH_TIMEOUT_MS)" \
+        " —— 否则正常在途请求会被当成悬挂"
 
     node = shutil.which("node")
     if node:
@@ -5582,3 +5596,214 @@ def test_drawer_variant_skeleton_single_point():
         assert 'template: "#tpl-aq-dt-peer-cells"' in blk, f"{comp} 未共享共用值格模板"
         assert f'pfx: {{ type: String, default: "{pfx}" }}' in blk, f"{comp} 的 pfx 默认值应为 {pfx}"
         assert f"occ: {{ type: Boolean, default: {occ} }}" in blk, f"{comp} 的 occ 默认值应为 {occ}"
+
+
+# node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— ①chain 在途不排下一拍
+# (不堆叠请求) ②卡死判据持续为真 -> 超阈值补偿一次并重新计时 ③有界等待: 退避曲线与旧 _pollCmd 逐项
+# 等价 / 拍数上限 / 截止时间 / 同名先停后起 / 外部叫停 / fn 抛出即 reject ④页面隐藏恒等守卫。
+# 定时器全部桩住(只记节拍、手动放拍), 时钟可整体前移 —— 免得真睡 30s。无 node 静默跳过。
+_NODE_POLL_SKELETON_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+global.document = { hidden: false };
+eval(fs.readFileSync(process.argv[1], "utf8"));   // polling.js
+const P = window.AQB_POLL.methods;
+const checks = [];
+const realNow = Date.now;
+let off = 0;
+Date.now = () => realNow() + off;
+let beats = [];            // 待放的拍(桩 setTimeout 只入队, 不真跑)
+let sleeps = [];           // 记录每次排的间隔, 用于曲线对账
+global.setTimeout = (fn, ms) => { sleeps.push(ms); beats.push(fn); return beats.length; };
+global.clearTimeout = () => {};
+const warns = [];
+console.warn = (...a) => { warns.push(a.join(" ")); };
+const flush = async (n) => { for (let i = 0; i < (n || 12); i++) await null; };
+const fire = async () => { const f = beats.shift(); if (f) f(); await flush(); };
+const mk = (over) => Object.assign({ authOk: true, calls: 0, currentPollMs: () => 1500 }, over || {});
+
+(async () => {
+  // ① 主轮 chain: 上一拍没落定前不排下一拍(不堆叠请求; setInterval 形态在这里会堆)
+  let inflight = 0, maxInflight = 0, release = null;
+  let t = mk();
+  t.refresh = () => { inflight += 1; maxInflight = Math.max(maxInflight, inflight);
+    return new Promise((r) => { release = () => { inflight -= 1; r(); }; }); };
+  t.startPoll = P.startPoll;
+  t.stopPoll = P.stopPoll;
+  t.scheduleNext = P.scheduleNext;
+  t.scheduleNext();
+  await fire();                       // 第一拍: refresh 在途
+  await fire(); await fire();         // 在途期间没有新拍可放
+  checks.push(["chain 在途不排下一拍(不堆叠)", maxInflight === 1 && inflight === 1 && beats.length === 0]);
+  release();
+  await flush(20);
+  checks.push(["落定后才排下一拍", beats.length === 1 && sleeps[sleeps.length - 1] === 1500]);
+  t.stopPoll("main");
+  checks.push(["stopPoll 摘句柄", !t._polls.main]);
+  beats = []; sleeps = [];   // 丢掉上一节遗留的待放拍(各节独立对账)
+
+  // ② 悬挂兜底: 卡死判据持续为真 -> 记起点 -> 超阈值补偿一次 -> 重新计时(痕只一条)
+  let stuck = true, unstuck = 0;
+  t = mk();
+  t.startPoll = P.startPoll;
+  t.stopPoll = P.stopPoll;
+  t.startPoll("drawer", { ms: () => 1000, fn: () => { t.calls += 1; }, stall: () => stuck,
+                          onStall: () => { unstuck += 1; } });
+  await fire();
+  checks.push(["卡死未超时: 不补偿(无 mutex 时照常走本拍)", unstuck === 0 && t.calls === 1]);
+  off = 60000;                        // 时钟跳过阈值
+  await fire();
+  checks.push(["超阈值补偿一次", unstuck === 1]);
+  off = 0;
+  await fire();
+  checks.push(["补偿后重新计时: 痕只一条", unstuck === 1 && warns.length === 0]);
+  // 恢复(门复位)后不再判卡死
+  stuck = false;
+  await fire();
+  checks.push(["卡死判据转假后不再补偿", unstuck === 1]);
+
+  // ③ 有界等待: 退避曲线与旧 _pollCmd 逐项等价(首拍 firstMs, 之后 0->150 起跳、翻倍夹 cap)
+  const curve = async (firstMs, capMs, maxBeats) => {
+    sleeps = []; beats = [];
+    const inst = mk();
+    inst.awaitPoll = P.awaitPoll;
+    let n = 0;
+    const p = inst.awaitPoll(null, {
+      ms: (i, prev) => (i === 0 ? firstMs : prev === 0 ? 150 : Math.min(capMs, prev * 2)),
+      max: maxBeats,
+      fn: async () => { n += 1; return null; },
+      until: (r) => !!r,
+    });
+    for (let i = 0; i < maxBeats + 3; i++) await fire();
+    return { got: await p, n, sleeps: sleeps.slice() };
+  };
+  let r = await curve(0, 500, 5);
+  checks.push(["退避曲线 0 起点与旧实现等价(0 不睡: 150/300/500/500)",
+    JSON.stringify(r.sleeps) === JSON.stringify([150, 300, 500, 500])]);
+  checks.push(["拍数上限收摊兑现 null", r.got === null && r.n === 5]);
+  r = await curve(500, 1000, 3);
+  checks.push(["宽松曲线 500 起点(500/1000/1000)",
+    JSON.stringify(r.sleeps) === JSON.stringify([500, 1000, 1000])]);
+
+  // 截止时间 / 外部叫停 / 收敛兑现 / 抛出上抛 / 同名先停后起
+  const inst = mk();
+  inst.awaitPoll = P.awaitPoll;
+  inst.stopPoll = P.stopPoll;
+  checks.push(["截止时间到点收摊", (await inst.awaitPoll(null, { ms: () => 0, max: 9,
+    deadline: () => true, fn: async () => 1, until: (v) => !!v })) === null]);
+  let stop = false;
+  checks.push(["外部叫停收摊", (await inst.awaitPoll(null, { ms: () => 0, max: 9, stop: () => stop,
+    fn: async () => { stop = true; return null; }, until: (v) => !!v })) === null]);
+  checks.push(["收敛即兑现该拍的值", (await inst.awaitPoll(null, { ms: () => 0, max: 9,
+    fn: async () => "ok", until: (v) => !!v })) === "ok"]);
+  let rejected = false;
+  try {
+    await inst.awaitPoll(null, { ms: () => 0, max: 9, fn: async () => { throw new Error("boom"); },
+      until: (v) => !!v });
+  } catch (e) { rejected = e.message === "boom"; }
+  checks.push(["fn 抛出即 reject(401 上抛路径)", rejected]);
+  let old = null, ended = 0;
+  const p1 = inst.awaitPoll("tm", { ms: () => 5, max: 9, fn: async () => null, until: (v) => !!v,
+    onEnd: () => { ended += 1; } });
+  inst.awaitPoll("tm", { ms: () => 5, max: 9, fn: async () => null, until: (v) => !!v });
+  old = await p1;
+  checks.push(["同名先停后起: 旧链兑现 null(代际守卫内建)", old === null]);
+
+  // ④ 页面隐藏: 骨架恒等守卫(调用方不再手写)
+  beats = []; sleeps = [];
+  const vis = mk();
+  vis.startPoll = P.startPoll;
+  vis.stopPoll = P.stopPoll;
+  vis.startPoll("main", { ms: () => 100, fn: () => { vis.calls += 1; } });
+  global.document.hidden = true;
+  await fire();
+  checks.push(["页面隐藏跳本拍(定时器不拆)", vis.calls === 0 && beats.length === 1]);
+  global.document.hidden = false;
+  await fire();
+  checks.push(["回可见下一拍自动续", vis.calls === 1]);
+
+  console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+})();
+"""
+
+
+def test_frontend_poll_skeleton_single_point():
+    r"""长驻 / 有界轮询骨架单点守阵(issue 26-10-20-2231-refactor-fe-polling-family-dup, 2026-10-22)
+
+    同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉
+    setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底** —— 同一类
+    "loading 卡死 ⇒ 面板永久冻结在「正在加载…」"的缺陷只修了流量图一边(本件的实质缺陷面)。
+
+    收敛形态: 骨架三口子 `startPoll` / `stopPoll` / `awaitPoll` 落在 polling.js, 各轮询只声明
+    差异(ms / guard / stall / mutex / onStall / chain)。本守阵钉四层, 任一层被拆即红:
+      ① 骨架三口子在 + 阈值常量 `AQB_POLL_STALL_MS`(30000 = 请求级超时 15s 的两倍余量);
+      ② 三处启停一律经骨架 —— 抽屉/流量两侧裸 `setInterval` 零残留, 主轮走 `startPoll("main")`;
+      ③ 停止条件单点: `document.hidden` 只许出现在骨架里(另一处是 lifecycle 的 visibilitychange
+         事件响应, 那是"停表"不是"每拍判据"), 散点回潮即红;
+      ④ 三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 `awaitPoll`, 手写的
+         `++pollGen` 代际守卫与 setTimeout 递归不得回潮。
+    行为面走 node 电池真跑(无 node 静默跳过), 见 _NODE_POLL_SKELETON_PROBE。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    poll_js = open(os.path.join(shared, "polling.js"), encoding="utf-8").read()
+    store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
+    chart_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
+    hub_js = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    cmd_js = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+
+    # ① 骨架三口子 + 阈值常量
+    for name in ("startPoll(key, opts)", "stopPoll(key)", "awaitPoll(key, opts)"):
+        assert f"    {name} {{" in poll_js, f"polling.js 缺骨架方法 {name}(启停 / 有界等待单点)"
+    assert "const AQB_POLL_STALL_MS = 30000;" in poll_js, \
+        "polling.js 缺悬挂兜底阈值常量 AQB_POLL_STALL_MS(30000 = 请求级超时 15s 的两倍余量)"
+
+    # ② 三处启停一律经骨架(裸定时器零残留)
+    assert 'this.startPoll("main"' in poll_js and 'this.stopPoll("main")' in poll_js, \
+        "主轮启停未走骨架(旧形态 pollTimer / 裸 setTimeout 链不得回潮)"
+    assert 'this.startPoll("drawer", {' in store_js and 'this.stopPoll("drawer")' in store_js, \
+        "抽屉页签轮询未走骨架(裸 setInterval 回潮)"
+    assert "this.startPoll(`qb:${scope}`" in chart_js and "this.stopPoll(`qb:${scope}`)" in chart_js, \
+        "流量图轮询未走骨架(裸 setInterval 回潮)"
+    for name, js in (("drawer_store.js", store_js), ("qb_traffic_chart.js", chart_js)):
+        assert "setInterval(" not in js, f"{name} 裸 setInterval 回潮(轮询启停收口到骨架)"
+
+    # ③ 停止条件单点: document.hidden 只许在骨架(每拍判据)与 lifecycle 的可见性事件响应里
+    hidden_files = sorted(
+        n for n in os.listdir(shared) if n.endswith(".js") and os.path.isfile(os.path.join(shared, n)) and
+        "document.hidden" in open(os.path.join(shared, n), encoding="utf-8").read()
+    )
+    assert hidden_files == ["lifecycle.js", "polling.js"], \
+        f"document.hidden 散点回潮(应为骨架 polling.js + lifecycle 的 visibilitychange 停表): {hidden_files}"
+
+    # ④ 有界等待一律经 awaitPoll, 旧形态不得回潮
+    assert "this.awaitPoll(null, {" in cmd_js, \
+        "commands.js::_pollCmd 未走 awaitPoll 单点(旧退避 while + stop 标志不得回潮)"
+    # 曲线本身写在调用点(骨架只认 ms(n, prev) 回调), 必须与旧实现逐项等价
+    assert "ms: (n, prev) => (n === 0 ? firstMs : prev === 0 ? 150 : Math.min(capMs, prev * 2))," in cmd_js, \
+        "命令回执轮询的退避曲线被改写(应 = 旧实现: 首拍 firstMs, 之后 0→150 起跳、翻倍夹 capMs)"
+    assert 'this.awaitPoll("tm", {' in hub_js, \
+        "config_hub.js 的 tmPollSettle / tmPollShutdown 未走 awaitPoll 单点"
+    assert "pollGen" not in hub_js and "pollGen" not in state_js, \
+        "tm 有界轮询回潮成手写 ++pollGen 代际守卫(骨架同名先停后起已内建)"
+
+    node = shutil.which("node")
+    if node:
+        # 带超时: 骨架被改坏时(如拍数漏递增)电池会陷入微任务死循环, 没超时就把 CI 挂住
+        try:
+            proc = subprocess.run(
+                [node, "-e", _NODE_POLL_SKELETON_PROBE,
+                 os.path.join(shared, "polling.js")],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            )
+        except subprocess.TimeoutExpired:
+            raise AssertionError("轮询骨架 node 电池超时(骨架循环疑似失控 —— 拍数递增 / 收摊条件被拆?)")
+        assert proc.returncode == 0, f"轮询骨架 node 电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"轮询骨架电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"

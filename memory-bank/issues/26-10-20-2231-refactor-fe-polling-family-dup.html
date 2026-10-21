@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端轮询族: 三份实现 + 心跳守卫 5 处 + 抽屉缺悬挂兜底">
 <meta name="issue-summary" content="轮询三份实现(退避 while / 定间隔递归 / setTimeout 链)、停止条件 5 处手写、抽屉侧缺 qb 侧已修的悬挂兜底">
 <title>前端轮询族: 三份实现 + 心跳守卫 5 处 + 抽屉缺悬挂兜底 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-polling-family-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,6 +104,30 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 03:07 — 复验（用户指派认领）：三份实现仍在（<code>commands.js::_pollCmd:211</code> / <code>config_hub.js::tmPollSettle:1173</code>·<code>tmPollShutdown:1231</code> / <code>polling.js::scheduleNext:111</code>）；<code>document.hidden</code> 仍散在 <code>polling.js:114</code>·<code>drawer_store.js:168</code>·<code>qb_traffic_chart.js:775</code>·<code>lifecycle.js:215</code>；<code>drawer_store.js::_startDrawerPoll:161-183</code> 仍无在途悬挂兜底（qb 侧 <code>_qbLoadStalled:761</code> 有）；<code>drawer.js</code> 三条 watch 同调 <code>_fitAddPop</code> 仍在（1482/1485/1488）。现象全部仍复现 → 置 <strong>In Progress</strong></li>
+      <li>2026-10-22 04:35 — 已修并验证（实际修法见第 05 节）→ 置 <strong>Done</strong>；<code>drawer.js</code> 三条 watch 一项<b>有意不做</b>（理由同节）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法 / 验证</h2>
+    <p><b>修法</b>（与「建议」同向，形态按本仓既有的「骨架 + 差异声明」范式落地）：</p>
+    <ul>
+      <li><b>骨架单点</b>：<code>polling.js</code> 新增三口子 —— <code>startPoll(key, opts)</code>（长驻心跳）/ <code>stopPoll(key)</code> / <code>awaitPoll(key, opts)</code>（有界等待，返回 Promise）+ 句柄表 <code>_polls</code>。代际守卫内建（同名先停后起），<code>document.hidden</code> 写死在骨架里当恒等守卫。</li>
+      <li><b>三处长驻启停收敛</b>：主轮 <code>scheduleNext</code>（chain 形态，落定后才排下一拍）/ 抽屉 <code>_startDrawerPoll</code> / 流量图 <code>_qbPollStart</code>，三处退化为「只声明差异」（<code>ms</code> / <code>guard</code> / <code>stall</code> / <code>mutex</code> / <code>onStall</code>）。<code>_qbPollResync</code> 随之删除（间隔每拍重读）。</li>
+      <li><b>三条有界等待收敛</b>：<code>commands.js::_pollCmd</code>（退避曲线改由 <code>ms(n, prev)</code> 表达）/ <code>tmPollSettle</code> / <code>tmPollShutdown</code> → 全走 <code>awaitPoll</code>；<code>state.js</code> 的 <code>tm.pollGen</code> 与手写代际检查一并删除。</li>
+      <li><b>停止条件</b>：5 处手写 → 1 处（骨架恒等守卫）+ 各轮一条 <code>guard</code> 声明。</li>
+      <li><b>抽屉侧悬挂兜底（实质缺陷面，优先做）</b>：阈值常量 <code>_QB_LOAD_STALL_MS</code> 上提为骨架的 <code>AQB_POLL_STALL_MS</code>（30s，仍 &gt;= 请求级超时 15s）；新增 <code>_drawerPollStuck</code>（当前页签列表 loading 门迟迟不复位即判卡死）+ <code>_drawerPollUnstick</code>（复位门 + 留一条警告痕）。<b>不做在途互斥</b>——静默续拉刻意不置门（否则常态空态会闪一帧「正在加载…」，见 <code>test_drawer_list_switch_no_loading_flash_wiring</code>）。</li>
+    </ul>
+    <p><b>验证</b>：新增守阵 <code>test_frontend_poll_skeleton_single_point</code>（形态四查 + node 电池 17 项：chain 在途不排下一拍 / 悬挂补偿一次且重新计时 / 退避曲线与旧 <code>_pollCmd</code> 逐项等价 / 拍数与截止时间收摊 / 同名先停后起 / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫）；更新既有守阵 6 处到新形态（覆盖不降）；红验八类突变全红后精确还原；<code>dev.e2e</code> 340 passed + 10 skipped 零失败（抽屉/流量/主轮三条链真浏览器过）；<code>test.full</code> 3989 passed + 10 skipped / TOTAL 99.17%（数字见基线切片 <code>26-10-22-0433-webui-poll-skeleton-dup</code>）。</p>
+    <p><b>有意未做</b>：<code>drawer.js</code> 三条 watch 同调 <code>_fitAddPop</code>（1482/1485/1488）。它们各只一行，收敛需把 Vue <code>watch</code> 声明改成表驱动生成，而既有守阵是按「逐条字面」断言的（要整体换形态）；收益与风险不成比例，且它与 <code>state.js</code> 四处 <code>_menuFitRefit</code> 同属 R20-D-04 族，与本件（轮询族）不同族，不并。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>遗留</h2>
+    <ul>
+      <li><code>lifecycle.js::_startErrPoll</code>（60s 错误日志补拉）仍裸 <code>setInterval</code> 且无可见性守卫 —— 属 R20-E-03 另一条，不在本件明细台账内（范围守恒），未动。</li>
+      <li>抽屉侧悬挂兜底只在「门被置位」时生效；静默续拉不置门，故「静默请求悬挂」不在兜底面内（现有行为未变，请求级超时 15s 兜它）。</li>
     </ul>
   </section>
 
