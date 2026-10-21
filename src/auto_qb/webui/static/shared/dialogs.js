@@ -88,15 +88,21 @@ window.AQB_DIALOGS = {
       this.mgrOpen = kind;
       this.mgrCategories = [];
       this.mgrTags = [];
-      this.mgrNewCatName = "";
-      this.mgrNewCatPath = "";
-      this.mgrNewTags = "";
+      this.mgrNew.tags = "";
+      this.mgrNew.catName = "";
+      this.mgrNew.catPath = "";
       this.mgrError = "";
       this.loadMgr();
     },
     closeMgr() {
       if (this.mgrBusy) return;  // 写操作回执等待期不允许误关
       this.mgrOpen = "";
+    },
+    /* 新建行提交分派(issue 26-10-20-2231 管理对话框合并后单一入口): 添加钮与 Enter 两路共用,
+     * 按 mgrOpen 分派到既有 submitMgrTags / submitMgrCategory —— 校验与投递单点不动。 */
+    mgrSubmitNew() {
+      if (this.mgrOpen === "tag") this.submitMgrTags();
+      else if (this.mgrOpen === "category") this.submitMgrCategory();
     },
     async loadMgr() {
       this.mgrLoading = true;
@@ -121,17 +127,17 @@ window.AQB_DIALOGS = {
     },
     async submitMgrCategory() {
       if (this.mgrBusy) return;  // 回车提交与按钮同源: 防回执等待期重复投递
-      const name = this.mgrNewCatName.trim();
+      const name = this.mgrNew.catName.trim();
       if (!name) { this.toast("分类名称不能为空", "warn"); return; }
       this.mgrBusy = true;
       try {
         const payload = { name };
-        const savePath = this.mgrNewCatPath.trim();
+        const savePath = this.mgrNew.catPath.trim();
         if (savePath) payload.save_path = savePath;  // 可空: 留空 = 仅建分类不带路径
         await this.api("/api/categories", { method: "POST", body: JSON.stringify(payload) });
         this.toast(`已创建分类: ${name}`, "ok", 2500);
-        this.mgrNewCatName = "";
-        this.mgrNewCatPath = "";
+        this.mgrNew.catName = "";
+        this.mgrNew.catPath = "";
         await this.loadMgr();
       } catch (e) {
         if (!e.auth) this.toast(`创建分类失败: ${e.message}`, "error", 8000);
@@ -142,13 +148,13 @@ window.AQB_DIALOGS = {
     async submitMgrTags() {
       if (this.mgrBusy) return;  // 回执等待期防重复投递
       // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
-      const tags = this.mgrNewTags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
+      const tags = this.mgrNew.tags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
       if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
       this.mgrBusy = true;
       try {
         await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags }) });
         this.toast(`已创建 ${tags.length} 个标签`, "ok", 2500);
-        this.mgrNewTags = "";
+        this.mgrNew.tags = "";
         await this.loadMgr();
       } catch (e) {
         if (!e.auth) this.toast(`创建标签失败: ${e.message}`, "error", 8000);
@@ -926,4 +932,45 @@ window.AQB_DIALOGS = {
       if (this.metaCatMenu) this._fitAddPop("metaCatList");
     },
   },
+};
+
+/* ---------------- <aq-modal-head> / <aq-modal>: 对话框外壳组件(收敛 issue 26-10-20-2231 / R23-A-02·A-03·A-08) ----------------
+ * 模板在 tpl/dialog-shell.html(与 aq-combo-input 同范式: body 注入的 x-template, 不随根模板
+ * 编译, 也不多包 DOM)。11 处对话框此前各手抄一份三段式外壳(modal-title 头 11 / modal-actions
+ * 栏 10 / 遮罩关窗手势对 10), 现外壳一份 + 中部插槽; 本组件只贡献模板与 props, **零方法**:
+ *   · 遮罩手势是根方法(读根 _maskArmed) —— 组件内一律 $root 调用(见 pitfalls/web-ui/
+ *     component-ref-ownership: 全局 mixin 的方法域会骗过 this, 根数据只在根实例上)。
+ *   · 关窗一律 :close(Function) + 可选 :close-args(Array)(通用确认框 resolveModal + [false]),
+ *     不在模板里写内联箭头(同 closeHistory 注释口径); 开合用 :open 或调用点 v-if 均可。
+ *   · body-class 空 = 中部裸插槽(hist/确认框不包 .add-dialog-body); $slots.actions 空 = 不渲染
+ *     动作栏(hist 无底部条, 空条会多出 16px margin-top)。
+ * WARN: 组件方法名全局唯一(_scan_mixin_wiring 扫 methods 段跨文件重名) —— 本组件零方法, 无重名面。
+ * !本文件在 HTML 里必须排在 app.js 之前(app.js 末尾要 app.component 读 window.AQ_*)。 */
+window.AQ_MODAL_HEAD_COMPONENT = {
+  name: "aq-modal-head",
+  props: {
+    icon: { type: String, required: true },      // 标题图标(sprite href, 如 "#i-plus")
+    iconClass: { type: String, default: "" },    // 图标附加类(stats ico-chart / hist ico-history)
+    title: { type: String, default: "" },        // 标题文本(#title 插槽缺省时的回退)
+    close: { type: Function, required: true },   // 关闭动作(遮罩/关闭钮共用一份)
+    x: { type: Boolean, default: true },         // 关闭钮(通用确认框无 ✕)
+  },
+  template: "#tpl-aq-modal-head",
+};
+window.AQ_MODAL_COMPONENT = {
+  name: "aq-modal",
+  props: {
+    open: { type: Boolean, default: true },      // 开合(调用点也可直接 v-if 在组件标签上)
+    close: { type: Function, required: true },   // 关闭动作(maskCloseIfArmed(close, ...closeArgs))
+    closeArgs: { type: Array, default: () => [] }, // 关闭动作实参(确认框 resolveModal + [false])
+    icon: { type: String, default: "" },         // 标题图标(sprite href)
+    iconClass: { type: String, default: "" },    // 图标附加类
+    title: { type: String, default: "" },        // 标题文本
+    label: { type: String, default: "" },        // aria-label; 空 = 不挂(hist/确认框同原状)
+    widthClass: { default: "" },                 // .modal 附加类(字符串/数组/对象透传; move 的 pop-open 走数组)
+    bodyClass: { type: String, default: "" },    // 中部包裹类; 空 = 裸插槽(不加空 wrapper)
+    maskClass: { type: String, default: "modal-mask" }, // 遮罩附加类(add-dialog-mask / dir-browse-mask)
+    x: { type: Boolean, default: true },         // 关闭钮(通用确认框无 ✕)
+  },
+  template: "#tpl-aq-modal",
 };

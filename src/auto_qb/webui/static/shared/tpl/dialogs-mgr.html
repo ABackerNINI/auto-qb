@@ -2,17 +2,9 @@
     <!-- 遮罩关窗不用 @click.self: click 的 target 是 mousedown/mouseup 的**公共祖先**, 在输入框里
          拖选文字、终点落在遮罩上抬手时公共祖先就是遮罩 -> 被判成"点空白关窗"(2026-10-03 报障:
          选个标签文字抬手, 整个添加窗口没了)。改成"mousedown 记臂位 + mouseup.self 才关"。 -->
-    <div v-if="addOpen" class="modal-mask add-dialog-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeAddTorrent)">
-      <div class="modal add-dialog" role="dialog" aria-modal="true" aria-label="添加种子">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-plus"></use></svg>
-          <span>添加种子</span>
-          <button class="bt icon add-dialog-x" @click="closeAddTorrent">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
+    <aq-modal :open="addOpen" :close="closeAddTorrent" icon="#i-plus" title="添加种子"
+              label="添加种子" width-class="add-dialog" body-class="add-dialog-body"
+              mask-class="modal-mask add-dialog-mask">
           <div class="add-dialog-field">
             <label class="add-dialog-label">来源(.torrent 文件与链接可混合)</label>
             <div class="add-dialog-source">
@@ -143,31 +135,21 @@
               <template v-else>保存路径下暂无匹配的辅种组(计数 0: 路径为空或未命中已有组前缀)</template>
             </p>
           </div>
-        </div>
 
-        <div class="modal-actions">
+      <template #actions>
           <button class="bt ghost" :disabled="addSubmitting" @click="closeAddTorrent">取消</button>
           <button class="bt primary" :disabled="!addCanSubmit" @click="submitAddTorrent">
             <svg v-if="addSubmitting" class="ico ico-sm spin" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>
             {{ addSubmitting ? '提交中…' : '添加' }}
           </button>
-        </div>
-      </div>
-    </div>
+      </template>
+    </aq-modal>
     <!-- R10-11 路径选择器(决策 D2-A): 服务端目录浏览 —— 浏览器拿不到本地绝对路径(目录上传控件
          只给相对路径), 所以"像选 .torrent 那样选目录"只能由服务端给路径。它也是本轮唯一新增的
          文件系统读能力: 安全边界(允许根白名单 / .. 穿越 / 符号链接逃逸 / 只列目录)全在后端。 -->
-    <div v-if="dirBrowse.open" class="modal-mask dir-browse-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeDirBrowse)">
-      <div class="modal dir-browse" role="dialog" aria-modal="true" aria-label="选择保存位置">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-          <span>选择保存位置</span>
-          <button class="bt icon add-dialog-x" @click="closeDirBrowse">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
+    <aq-modal :open="dirBrowse.open" :close="closeDirBrowse" icon="#i-folder-open" title="选择保存位置"
+              label="选择保存位置" width-class="dir-browse" body-class="add-dialog-body"
+              mask-class="modal-mask dir-browse-mask">
           <div class="db-bar">
             <button class="bt ghost sm" :disabled="!dirBrowse.parent" @click="dirUp()">
               上一级
@@ -190,54 +172,8 @@
             <button class="bt ghost sm" :disabled="!dirBrowse.newName.trim() || dirBrowse.busy" @click="dirMkdir()">新建</button>
           </div>
           <p class="add-dialog-hint">只能浏览已有保存路径及其子目录(安全边界); 其它位置请直接在输入框填写。</p>
-        </div>
-        <div class="modal-actions">
+      <template #actions>
           <button class="bt ghost" @click="closeDirBrowse">取消</button>
           <button class="bt primary" :disabled="!dirBrowse.path" @click="dirPick()">选择该文件夹</button>
-        </div>
-      </div>
-    </div>
-    <!-- 分类管理对话框(FE-2C2): 列表(名字+保存路径) + 新建行 + 行级改路径/删除; CRUD 走 /api/categories 系端点,
-         成功后重拉列表; 关闭后主列表随下一轮 rid 轮询自然更新。复用 .modal/.add-dialog 视觉体系(.mgr-dialog 调宽与行样式) -->
-    <div v-if="mgrOpen === 'category'" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMgr)">
-      <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理分类">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder"></use></svg>
-          <span>管理分类</span>
-          <button class="bt icon add-dialog-x" @click="closeMgr">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
-          <div v-if="mgrLoading" class="ce-placeholder loading">正在加载分类…</div>
-          <div v-else-if="mgrError" class="ce-placeholder">
-            <p class="error">{{ mgrError }}</p>
-            <button class="bt" @click="loadMgr()">重试</button>
-          </div>
-          <template v-else>
-            <div class="mgr-list">
-              <div v-for="c in mgrCategories" :key="c.name" class="mgr-row">
-                <span class="mgr-name" :title="c.name">{{ c.name }}</span>
-                <span class="mgr-sub" :class="{ dim: !c.save_path }" :title="c.save_path || '未设置保存路径'">{{ c.save_path || '未设置保存路径' }}</span>
-                <span class="mgr-acts">
-                  <button class="bt ghost sm" :disabled="mgrBusy" @click="mgrEditCatPath(c.name)">改路径…</button>
-                  <button class="bt danger sm" :disabled="mgrBusy" @click="mgrDeleteCategory(c.name)">删除</button>
-                </span>
-              </div>
-              <p v-if="!mgrCategories.length" class="mgr-empty">暂无分类, 在下方新建</p>
-            </div>
-            <div class="mgr-new">
-              <input v-model="mgrNewCatName" class="add-dialog-input" type="text" placeholder="分类名称"
-                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
-              <input v-model="mgrNewCatPath" class="add-dialog-input" type="text" placeholder="保存路径(可空)"
-                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrCategory">
-              <button class="bt primary" :disabled="!mgrNewCatName.trim() || mgrBusy" @click="submitMgrCategory">添加</button>
-            </div>
-          </template>
-        </div>
-        <div class="modal-actions">
-          <button class="bt primary" @click="closeMgr">关闭</button>
-        </div>
-      </div>
-    </div>
+      </template>
+    </aq-modal>

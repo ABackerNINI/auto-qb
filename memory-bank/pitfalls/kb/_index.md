@@ -10,6 +10,7 @@
 
 | 主题 | 一句话 | 触发词 |
 |---|---|---|
+| [artifact-secret-write-guard.md](artifact-secret-write-guard.md) | 工作区写入守卫(artifact_secret_detected)扫的是**落盘后的整份文件**, 不是本次新增文本 —— 文件里既有 `token: ""`(空串初值)或测试夹具里的 `Authorization` 头这类「长得像凭据赋值」的历史行时, 对该文件的 edit/a… | 写入被拦, artifact_secret_detected, 键名 token, Authorization, 凭据字面量误判, state.js 写不进, 测试文件写不进, 整文件扫描 |
 | [cap-counting.md](cap-counting.md) | 守卫的字符数比编辑器统计**每行多 1**(CRLF); cap 是**字符数**而外部常报**字节数**(中文一字 3 字节 ⇒ 可差 3 倍, 误报出根本不存在的债务); append-only 流水撞 `log` cap 的正解是**轮转**; 外迁到 `attachmen… | 判断文件是否超 cap, 字符数对不上, KB 超 cap, 字节 vs 字符, 债务误报, 单位换算, baseline-history 超 cap, 追加流水, log 档, 轮转, attachments, 外迁附件坏链, 随迁链接,… |
 | [cap-debt.md](cap-debt.md) | 尺寸 cap 从「提交前置条件」降级为**债务**(2026-09-30) 时, 有三处会静默把债务重新变成阻塞 —— warns 里混入非债务提示、检查器不可用被判 STOP、以及删除尺寸断言后守卫退化成恒绿。 | cap 债务, doc.caps, --strict, warns 混装, DEBT_MARK, 检查器找不到, 降级守卫, 恒绿守卫, 可发现性断言, 债务清零, 清理会话 |
 | [commit-hash-refs.md](commit-hash-refs.md) | KB(backtick / `<code>` / `commit <hash>` 语境)里记 feature 分支提交, 分支 rebase 并入 develop 后旧 hash 对象不可解析; 守卫(kb.check / test_docs_forms)不查可解析性, 静默累积… | KB 里写 commit hash, rebase 合流, 悬空 hash, cat-file missing, 按图索骥找不到提交, hash 时好时坏 |

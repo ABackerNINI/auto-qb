@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-webui-dialog-shell-single-point.md,memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端对话框外壳三段式(mask 手势 / title 头 / actions 栏)11 处手写">
 <meta name="issue-summary" content="遮罩关窗手势 10 处、modal-title 头 11 处、modal-actions 栏 11 处逐字同; 管理对话框两实例同构 40 行; modal-details 行式键值两套">
 <title>前端对话框外壳三段式(mask 手势 / title 头 / actions 栏)11 处手写 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-dialog-shell-template-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -107,6 +107,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 05:12 — 用户指派认领（「认领并修复」），<b>复验：2026-10-21 05:1x 仍在</b> —— grep 现算：遮罩手势 10 处 / <code>class="modal-title"</code> 11 处 / <code>add-dialog-x</code> 9 处逐字同（台账小差：<code>modal-actions</code> 实为 <b>10</b> 处，本行更正台账的 11）；管理对话框双胞胎与 <code>modal-details</code> 两套俱在。认领方 = <code>tasks/26-10-21-webui-dialog-shell-single-point.md</code>（doc-refs 已回填），状态 <strong>In Progress</strong></li>
+      <li>2026-10-21 14:1x — 已修并验证，状态 <strong>Done</strong>。<b>实际修法</b>（与建议的差异）：外壳拆两个组件 —— <code>&lt;aq-modal&gt;</code>(遮罩+.modal+标题头+中部+动作栏) 覆盖全部 10 个带遮罩对话框，<code>&lt;aq-modal-head&gt;</code> 供无遮罩异形 speed-pop 直拼；三处异形吸收：hist 头插页签走 <code>#extra</code> 插槽 / kb-help 标题 h3 走 <code>#title</code> 插槽 / hist 无 body 包裹与无动作栏由 bodyClass 空 + <code>$slots.actions</code> 条件渲染表达；关窗走 <code>:close</code>(Function)+<code>:close-args</code>(Array) 不写内联箭头（通用确认框 <code>resolveModal</code>+<code>[false]</code>）。管理对话框 = 单份模板 + <code>mgrDef</code> 数据表（state.js 根 computed，行/字段/文案/提示全表驱动，草稿收成 <code>mgrNew.{tags,catName,catPath}</code> 保 v-model 的 IME 语义，提交经 <code>mgrSubmitNew</code> 分派）。明细并一 = <code>modalDetailRows</code> 根 computed（verdict 行 copy=false 在前 / details 行 copy=true 在后），复制钮显形边界 <code>String(d.value || '')</code> → <code>String(d.value ?? '')</code>（value===0 不再被吞，null/undefined 仍无钮）。守阵：新增 <code>test_frontend_dialog_shell_single_point</code>（字面量 census + 调用点清点 + 数据表单点 + 复制钮边界）；既有遮罩手势/verdict/宽档/tooltip 守阵同轮改读取面不改口径；<code>$slots</code> 进模板保留前缀内建白名单。<b>验证方式与数字</b>：全量 <b>3978 passed + 2 skipped / 0 failed</b>（覆盖率 99.41%）；真浏览器 e2e <b>336 passed + 10 skipped / 0 failed</b>（9.9m）；红验三类突变（手抄外壳回潮 / 复制钮边界退化 / 数据表分支丢失）逐类判红后还原回绿。数字详见基线切片 <code>testing/baselines/26-10-21-1408-webui-dialog-shell-single-point.md</code>（<code>commands run kb.baseline</code>）</li>
     </ul>
   </section>
 

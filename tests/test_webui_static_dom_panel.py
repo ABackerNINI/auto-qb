@@ -29,6 +29,7 @@
 - test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
 - test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 单组 v-else 分支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量分支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
+- test_frontend_dialog_shell_single_point: 对话框外壳单点守阵(issue 26-10-20-2231, R23-A-02·A-03·A-08 收敛) —— 三段式外壳(标题头/动作栏/遮罩手势对/关闭钮)只许在组件模板 dialog-shell.html 一处(剥注释后字面量清点), 调用点一律经 <aq-modal>(9 处调用覆盖 10 个对话框开态, :open/:close/:close-args/mask-class/icon-class/width-class/body-class 接线逐点清点) + 无遮罩异形 speed-pop 走 <aq-modal-head>; 管理对话框双胞胎合并为单份模板 + mgrDef 数据表(state.js computed 两态字段/文案/动作全表驱动, dialogs-mgr/popovers 零 mgrOpen 直判残留, dialogs.js mgrSubmitNew 分派) + modal-details 两套并一(state.js::modalDetailRows: verdict 在前 copy=false / details 在后 copy=true, 复制钮边界 String(d.value ?? '') 修 value===0 不出钮)
 - test_frontend_rename_dialog_width_wiring: 重命名对话框宽档接线守阵(2026-10-19 用户报「弹窗太小」)—— 字段值 = 完整种子显示名(真实名称 routinely 80~120 字符), 骑通用 .modal 基档 520(为确认/提示一句话设计)时输入框仅 474px, 真浏览器实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露); 修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化)+ 重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860, 与设定位置/添加种子同档)。钉 _modalInit cls 字段 / popovers.html 根类绑定并入 modal.cls / editRename 传类 / 三皮肤宽档规则成对; 行为面由 e2e/rename-dialog-fit.spec.mjs 真浏览器钉
 - test_frontend_add_torrent_drag_drop_wiring: DND-01 全局拖拽添加种子接线守阵(静态) —— window 级 drag 四事件 add/remove 对称、drop handler 必 preventDefault(否则浏览器直接打开文件)、接管判据只认 Files/text-uri-list(不误拦页面内拖文本)、双 UI 落点遮罩成对 + app.js addDragOver 状态
 - test_frontend_add_torrent_partial_receipt_wiring: 添加种子「部分受理关窗」回执分流守阵(2026-10-18 用户报障「部分种子添加失败(已存在)时添加窗口不消失」) —— submitAddTorrent 三态分流(r.status === "warn" 分支在, 只判 r.ok 的二态写法回潮即红)+ warn 分支关窗且 warn 类 toast 带详情(后端文案带成功/失败计数)+ ok 分支保持关窗 + error(全拒)分支不得关窗(文件/链接原样没进 qB, 留窗才能改完重提; 部分成功与全部失败混为一谈是本案病根, 两个方向都钉)。行为面由 e2e/add-partial-receipt.spec.mjs 真浏览器钉
@@ -2861,6 +2862,8 @@ def test_removed_redundant_tooltips_stay_removed():
         ("shared/tpl/dialogs.html", ('title="关闭"', )),
         ("shared/tpl/dialogs-mgr.html", ('title="关闭"', )),
         ("shared/tpl/popovers.html", ('title="关闭"', )),
+        # E2 续(issue 26-10-20-2231): 对话框关闭钮收敛进组件模板后, 新单点同样不得复活该 tooltip
+        ("shared/tpl/dialog-shell.html", ('title="关闭"', )),
         # F 组 · 曲线标题栏 caret: 箭头方向已表意
         ("shared/tpl/settings-detail.html", ("点击收起", )),
         ("shared/tpl/xtpl.html", ("点击收起", )),
@@ -3044,12 +3047,14 @@ def test_skip_check_dialog_precheck_wired():
     assert m, "popovers.html 找不到 modalOk 确认钮(模板重构? 同步本守阵)"
     assert ':disabled="modal.okDisabled"' in m.group(0), \
         "modalOk 确认钮缺 :disabled=\"modal.okDisabled\" 绑定 —— 进框禁用/按态解锁失效(计划 26-10-05-0314 S4)"
-    # busy 行(整行锚定)与 verdict 渲染区(行式明细, 复用 modal-details 范式)
+    # busy 行(整行锚定)与 verdict 渲染区(行式明细; issue 26-10-20-2231 两套明细并一后,
+    # 行表由 state.js::modalDetailRows 拼装 —— 消费面在此钉住, 单点本体由
+    # test_frontend_dialog_shell_single_point 钉)
     assert '<p v-if="modal.busy" class="modal-body">正在检查前置条件…</p>' in tpl, \
         "popovers.html 缺预检 busy 行 —— 预检在途无反馈(计划 26-10-05-0314 S4)"
-    assert '<div v-if="modal.verdict && modal.verdict.length" class="modal-details">' in tpl, \
+    assert '<div v-if="modalDetailRows.length" class="modal-details">' in tpl, \
         "popovers.html 缺 verdict 三分流渲染区(modal-details 行式范式)"
-    assert 'v-for="(d, i) in modal.verdict"' in tpl, "verdict 区缺行式 v-for 渲染"
+    assert 'v-for="d in modalDetailRows"' in tpl, "verdict 区缺行式 v-for 渲染"
     # 强制钮仍复用 extraText 第三钮通道(danger-solid 破坏性分支; 换自铸强制钮即红)
     assert re.search(r'<button v-if="modal\.extraText" class="bt danger-solid" @click="resolveModal\(\'extra\'\)">', tpl), \
         "第三钮(extraText 通道)被改写 —— S4 强制钮必须复用既有 danger-solid 破坏性分支"
@@ -3365,7 +3370,7 @@ def test_frontend_meta_dialog_paired():
     #    (2026-10-05 批量控制条退役: 模板层不再直接调 openMetaDialog(null), 批量入口统一走 ctxMeta)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
-        assert 'v-if="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(三套 UI 必须成对改)"
+        assert ':open="metaOpen"' in text, f"{ui}/index.html 缺少标签/分类对话框(三套 UI 必须成对改)"
         assert "openMetaDialog(null)" not in text, (
             f"{ui}/index.html 又出现模板层直接调 openMetaDialog(null) —— 批量控制条已退役, "
             f"批量入口应统一走 ctxMeta(右键批量菜单)"
@@ -3718,20 +3723,48 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
         assert f"this.{field} = \"\";" in clear_body.group(1), f"clearAddField 不清空 {field}"
 
     # 3. 遮罩关窗: mousedown 记臂位 + mouseup.self 才关; 全仓不许再有 @click.self
-    masks = 0
-    for name in ("dialogs-mgr.html", "dialogs.html", "popovers.html"):
+    #    (issue 26-10-20-2231 收敛后手势对单点在 <aq-modal> 组件模板(tpl/dialog-shell.html),
+    #    调用点不再出现遮罩字面量 —— 改为组件模板一处手势对 + 调用点 :close 接线清点)
+    shell = open(os.path.join(shared, "tpl", "dialog-shell.html"), encoding="utf-8").read()
+    masks = re.findall(r'<div v-if="open" :class="maskClass"[\s\S]{0,240}?>', shell)
+    assert len(masks) == 1, f"dialog-shell.html 应恰有 1 处遮罩(组件单点), 实数 {len(masks)}"
+    assert '$root.maskDownSelf($event)' in masks[0] and '$root.maskCloseIfArmed(close, ...closeArgs)' in masks[0], \
+        ("aq-modal 的遮罩没接「mousedown 记臂位 + mouseup.self 才关」—— @click.self 会被"
+         "『拖选文字终点落在遮罩上抬手』误判成点空白关窗; 手势经 $root 回调根方法(读根 _maskArmed)")
+    for name in ("dialogs-mgr.html", "dialogs.html", "popovers.html", "move-dialog.html", "dialog-shell.html"):
         txt = open(os.path.join(shared, "tpl", name), encoding="utf-8").read()
-        for m in re.finditer(r'<div v-if="[^"]*" class="modal-mask[\s\S]{0,240}?>', txt):
-            masks += 1
-            tag = m.group(0)
-            assert '@mousedown="maskDownSelf"' in tag and '@mouseup.self="maskCloseIfArmed(' in tag, \
-                (f"{name} 的遮罩没接「mousedown 记臂位 + mouseup.self 才关」: {tag[:80]} —— "
-                 f"@click.self 会被『拖选文字终点落在遮罩上抬手』误判成点空白关窗")
         live = re.sub(r"<!--[\s\S]*?-->", "", txt)  # 注释里讲原理不算(只查真接线)
         assert "@click.self" not in live, \
             f"{name} 仍残留 @click.self 遮罩关窗(拖选文字抬手会误关窗)"
-    # 2026-10-04: qb-traffic.html 两个模态弹层并入底部详情抽屉(无遮罩) -> 阈值 11 -> 9
-    assert masks >= 9, f"只数到 {masks} 处 modal-mask(漏挂? 或守阵正则失配, 复核)"
+    # 调用点清点: 全部带遮罩对话框都必须走 <aq-modal>(漏一处 = 手抄外壳回潮);
+    # 9 处调用覆盖 10 个开态(mgr 两态共用一份模板), speed-pop(无遮罩异形)直用 head 组件
+    callsites = {
+        "dialogs-mgr.html":
+            (
+                ':open="addOpen"', ':close="closeAddTorrent"', 'mask-class="modal-mask add-dialog-mask"',
+                ':open="dirBrowse.open"', ':close="closeDirBrowse"', 'mask-class="modal-mask dir-browse-mask"'
+            ),
+        "dialogs.html":
+            (
+                ':open="statsOpen"', ':close="closeStats"', 'icon-class="ico-chart"',
+                '<aq-modal-head icon="#i-gauge" title="限速" :close="closeSpeedDialog">'
+            ),
+        "popovers.html":
+            (
+                ':close="closeMgr"', ':open="metaOpen"', ':close="closeMeta"', ':open="modal.visible"',
+                ':close="resolveModal"', ':close-args="[false]"', ':x="false"', ':open="historyOpen"',
+                ':close="closeHistory"', 'icon-class="ico-history"', '<template #extra>', ':open="kbHelpOpen"',
+                ':close="closeKbHelp"'
+            ),
+        "move-dialog.html": (':open="moveOpen"', ':close="closeMove"'),
+    }
+    n_calls = 0
+    for name, needles in callsites.items():
+        ctxt = open(os.path.join(shared, "tpl", name), encoding="utf-8").read()
+        for needle in needles:
+            assert needle in ctxt, f"{name} 缺 {needle}(对话框没走 <aq-modal>? 手抄外壳回潮)"
+        n_calls += ctxt.count("<aq-modal ")
+    assert n_calls == 9, f"<aq-modal> 调用点应 9 处(mgr 两态共用一份), 实数 {n_calls}"
     arm = re.search(r"maskDownSelf\(e\) \{(.*?)\n    \},", dg, re.S)
     assert arm and "e.target === e.currentTarget" in arm.group(1), \
         "dialogs.js::maskDownSelf 必须判 target === currentTarget(只有按在遮罩上才算起手)"
@@ -3859,7 +3892,7 @@ def test_frontend_move_dialog_combobox_wiring():
         "comboHoverIdx 缺 move 分支(悬同接管走错 state 对象 = 上下键选中项闪烁)"
 
     # 4. 对话框模板接线
-    assert 'v-if="moveOpen"' in pv, "move-dialog.html 缺 moveOpen 遮罩"
+    assert ':open="moveOpen"' in pv, "move-dialog.html 缺 moveOpen 开合(对话框没走 <aq-modal>?)"
     m = re.search(r'<label[^>]*for="move-path"[^>]*>', pv, re.S)
     assert m and "@click.stop" in m.group(0) and "@mousedown.prevent" in m.group(0), \
         "move-path label 缺 @click.stop + @mousedown.prevent(与三下拉 + meta 同因同修)"
@@ -3868,11 +3901,11 @@ def test_frontend_move_dialog_combobox_wiring():
     assert mi and '@keydown="onMovePathKeydown' in mi.group(1), "#move-path 缺 @keydown 键盘导航"
     assert 'menu-ref="movePathList"' in (mi.group(1) if mi else ""), \
         "move-dialog.html 缺 menu-ref=movePathList(限高量拿不到容器; 收敛后 ref 经组件方法函数写根 $refs)"
-    assert "@mouseup.self=\"maskCloseIfArmed(closeMove)\"" in pv, "move 遮罩没接 mousedown 记臂位 + mouseup.self 才关"
+    assert ':close="closeMove"' in pv, "move 对话框缺 :close 接线(遮罩手势对在组件模板, 调用点只交 close)"
     # 4b. 几何修(2026-10-19): 根元素按 movePathMenu 挂 .pop-open —— 下拉开层时对话框给 body 预留
     # 整高(规则在 5), 否则下拉伸出 body 被裁 + scrollHeight 撑大, 用户必须滚弹窗才能用下拉
-    assert re.search(r':class="\{\s*\'pop-open\':\s*movePathMenu\s*\}"', pv), \
-        "move-dialog.html 缺 :class pop-open 绑定(下拉开层时对话框不预留空间)"
+    assert re.search(r':width-class="\[\'add-dialog move-dialog\', \{ \'pop-open\': movePathMenu \}\]"', pv), \
+        "move-dialog.html 缺 pop-open 并入 width-class(下拉开层时对话框不预留空间)"
 
     # 5. 三皮肤成对 CSS(漏一档 = 该皮肤对话框无样式)
     for ui in _UI_ALL:
@@ -3922,9 +3955,13 @@ def test_frontend_rename_dialog_width_wiring():
         "ui_feedback.js _modalInit 缺 cls 字段(附加类名单点; 不进初值 = 后补属性不进 Vue 响应)"
 
     # 2. 模板根类绑定并入 modal.cls(与 danger/wide 并列; 空串零附加, 既有对话框零变化)
-    m = re.search(r'<div class="modal" :class="([^"]+)"', pv)
+    #    (issue 26-10-20-2231: 绑定经 <aq-modal :width-class> 透传, .modal 本体在组件模板)
+    shell = open(os.path.join(shared, "tpl", "dialog-shell.html"), encoding="utf-8").read()
+    assert '<div class="modal" :class="widthClass"' in shell, \
+        "dialog-shell.html 缺 <div class=\"modal\" :class=\"widthClass\">(宽度档透传面被改)"
+    m = re.search(r':width-class="(\[modal\.cls[^"]*)"', pv)
     assert m and "modal.cls" in m.group(1), \
-        "popovers.html 模态根类绑定缺 modal.cls(cls 选项挂不上类 = 宽档失生效)"
+        "popovers.html 确认框调用点缺 :width-class 并入 modal.cls(cls 选项挂不上类 = 宽档失生效)"
 
     # 3. editRename 传 cls: "rename-dialog"(回退到裸 _openModal = 骑 520 基档, 长名被裁)
     ren = re.search(r'async editRename\(h = ""\) \{(.*?)\n    \},', dr, re.S)
@@ -3936,6 +3973,113 @@ def test_frontend_rename_dialog_width_wiring():
         blob = _ui_css_aggregate(ui)
         assert re.search(r"\.modal\.rename-dialog \{\s*width:\s*var\(--modal-w-add\)", blob), \
             f"{ui} 缺 .modal.rename-dialog 宽档规则(输入框仅 474px, 97 字符长名裁 223px; 860 = 与设定位置/添加种子同档)"
+
+
+def test_frontend_dialog_shell_single_point():
+    """对话框外壳单点守阵(issue 26-10-20-2231, R23-A-02·A-03·A-08 收敛)
+
+    11 处对话框此前各手抄一份三段式外壳(.modal-title 头 11 / .modal-actions 栏 10 /
+    遮罩关窗手势对 10), 现外壳一份(tpl/dialog-shell.html 的 <aq-modal> / <aq-modal-head>)
+    + 中部插槽。本守阵钉三类回潮:
+      1. 手抄外壳回潮: 三段字面量(class="modal-title" / class="modal-actions" / add-dialog-x)
+         在 shared/tpl/ 下剥注释后只许出现在组件模板一处; 手写遮罩 div 零残留;
+      2. 调用点旁路: 全部带遮罩对话框必须走 <aq-modal>(9 处调用覆盖 10 个开态, :open/:close/
+         :close-args/mask-class/icon-class/width-class/body-class 接线逐点清点), 无遮罩异形
+         speed-pop 直用 <aq-modal-head>; hist 的无 body 包裹/无动作栏由 bodyClass 空 +
+         $slots.actions 条件渲染表达(空 .modal-actions 会多出 16px margin);
+      3. 数据表旁路: 管理对话框双胞胎合并后 popovers.html 只剩一份 mgrDef 驱动模板
+         (dialogs-mgr/popovers 零 mgrOpen 直判/直渲残留, dialogs.js mgrSubmitNew 分派,
+         state.js mgrDef 两态字段表), modal-details 两套并一(state.js::modalDetailRows:
+         verdict 在前 copy=false / details 在后 copy=true, 复制钮 String(d.value ?? '') 边界
+         —— value===0 时旧写法 String(0 || '') 落空串不出钮)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl_dir = os.path.join(shared, "tpl")
+    shell = open(os.path.join(tpl_dir, "dialog-shell.html"), encoding="utf-8").read()
+    names = sorted(n for n in os.listdir(tpl_dir) if n.endswith(".html"))
+    live = {n: re.sub(r"<!--[\s\S]*?-->", "", open(os.path.join(tpl_dir, n), encoding="utf-8").read()) for n in names}
+
+    # 1. 三段外壳字面量只许在组件模板一处(剥注释后清点; 手抄副本回潮 = 散到别文件)
+    #    dialogs.html 的动作栏例外 = speed-pop 自有(无遮罩异形不走 aq-modal, 恰 1 处)
+    for needle, label, allow in (
+        ('class="modal-title"', "标题头", ["dialog-shell.html"]),
+        ('class="modal-actions"', "动作栏", ["dialog-shell.html", "dialogs.html"]),
+        ('add-dialog-x', "关闭钮", ["dialog-shell.html"]),
+    ):
+        where = [n for n, t in live.items() if needle in t]
+        assert sorted(where) == sorted(allow), \
+            f"{label}({needle})超出允许面 {allow}(issue 26-10-20-2231), 现散在: {where}"
+    assert live["dialogs.html"].count('class="modal-actions"') == 1, \
+        "dialogs.html 的动作栏只许 speed-pop 自有一处(其余对话框的动作栏都在组件模板)"
+    for n, t in live.items():
+        assert '<div class="modal-mask' not in t, f"{n} 残留手写遮罩 div(应走 <aq-modal> 的 mask-class)"
+    # 手势对成对挂在唯一遮罩上, 且经 $root 回调根方法(读根 _maskArmed)
+    masks = re.findall(r'<div v-if="open" :class="maskClass"[\s\S]{0,240}?>', shell)
+    assert len(masks) == 1, f"dialog-shell.html 应恰有 1 处遮罩, 实数 {len(masks)}"
+    assert '$root.maskDownSelf($event)' in masks[0] and '$root.maskCloseIfArmed(close, ...closeArgs)' in masks[0], \
+        "aq-modal 遮罩没接成对手势(mousedown 记臂位 + mouseup.self 才关; @click.self 会被拖选文字误判关窗)"
+    assert 'v-if="$slots.actions" class="modal-actions"' in shell, \
+        "动作栏必须 $slots.actions 条件渲染(hist 无底部条, 空 .modal-actions 会多出 16px margin)"
+    assert '<div v-if="bodyClass" :class="bodyClass"><slot></slot></div>' in shell and "<slot v-else></slot>" in shell, \
+        "中部必须 bodyClass 条件包裹(hist/确认框裸内容, 不加空 wrapper)"
+
+    # 2. 调用点清点: 9 个 <aq-modal> 覆盖 10 个开态(mgr 两态一份模板) + speed 直用 head
+    callsites = {
+        "dialogs-mgr.html":
+            (
+                ':open="addOpen"', ':close="closeAddTorrent"', 'mask-class="modal-mask add-dialog-mask"',
+                ':open="dirBrowse.open"', ':close="closeDirBrowse"', 'mask-class="modal-mask dir-browse-mask"'
+            ),
+        "dialogs.html":
+            (
+                ':open="statsOpen"', ':close="closeStats"', 'icon-class="ico-chart"',
+                '<aq-modal-head icon="#i-gauge" title="限速" :close="closeSpeedDialog">'
+            ),
+        "popovers.html":
+            (
+                ':close="closeMgr"', ':open="metaOpen"', ':close="closeMeta"', ':open="modal.visible"',
+                ':close="resolveModal"', ':close-args="[false]"', ':x="false"', ':open="historyOpen"',
+                ':close="closeHistory"', 'icon-class="ico-history"', '<template #extra>', ':open="kbHelpOpen"',
+                ':close="closeKbHelp"', '<template #title><h3>键盘快捷键</h3></template>', 'body-class="kb-help-body"'
+            ),
+        "move-dialog.html":
+            (
+                ':open="moveOpen"', ':close="closeMove"',
+                ":width-class=\"['add-dialog move-dialog', { 'pop-open': movePathMenu }]\""
+            ),
+    }
+    n_calls = 0
+    for name, needles in callsites.items():
+        for needle in needles:
+            assert needle in live[name], f"{name} 缺 {needle}(对话框没走 <aq-modal>? 手抄外壳回潮)"
+        n_calls += live[name].count("<aq-modal ")
+    assert n_calls == 9, f"<aq-modal> 调用点应 9 处(mgr 两态共用一份), 实数 {n_calls}"
+    assert 'v-if="mgrDef"' in live["popovers.html"], "管理对话框必须 v-if=mgrDef(表驱动单份)"
+
+    # 3. 数据表与明细并一的单点
+    st = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+    dg = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    m = re.search(r"mgrDef\(\) \{(.*?)\n    \},", st, re.S)
+    assert m, "state.js 找不到 mgrDef(管理对话框数据表被改名/挪走? 同步本守阵)"
+    for needle in (
+        'this.mgrOpen === "tag"', 'this.mgrOpen === "category"', "mgrDeleteTag(t)", "mgrEditCatPath(c.name)",
+        "mgrDeleteCategory(c.name)", 'key: "tags"', 'key: "catName"', 'key: "catPath"', "addDisabled",
+        "H&R / 集数 / MISSING", '"未设置保存路径"', "正在加载标签", "正在加载分类"
+    ):
+        assert needle in m.group(1), f"mgrDef 缺 {needle}(两态差异必须表驱动, 模板分支回潮)"
+    assert "mgrSubmitNew()" in dg, "dialogs.js 缺 mgrSubmitNew(新建行提交分派单点)"
+    assert 'mgrOpen === "tag"' not in live["popovers.html"] and 'mgrOpen === "category"' not in live["dialogs-mgr.html"], \
+        "管理对话框两态分支回潮(popovers/dialogs-mgr 不许再按 mgrOpen 直判/直渲)"
+    assert "mgr-list" not in live["dialogs-mgr.html"], "dialogs-mgr.html 残留管理列表(双胞胎合并后只许 popovers 一份)"
+    mrows = re.search(r"modalDetailRows\(\) \{(.*?)\n    \},", st, re.S)
+    assert mrows and "this.modal.verdict" in mrows.group(1) and "this.modal.details" in mrows.group(1) \
+        and '"v" + i' in mrows.group(1) and "copy: false" in mrows.group(1) and "copy: true" in mrows.group(1), \
+        "modalDetailRows 必须 verdict(copy:false, key 'v'+i)在前 + details(copy:true, key=label)在后"
+    assert live["popovers.html"].count('class="modal-details"') == 1, "modal-details 渲染块必须恰一处(两套并一)"
+    assert 'v-for="d in modalDetailRows"' in live["popovers.html"], "明细行必须消费 modalDetailRows 单点"
+    assert "String(d.value ?? '')" in live["popovers.html"], \
+        "复制钮显形必须 String(d.value ?? '')(value===0 时 String(0 || '') 落空串不出钮)"
+    assert "String(d.value || '')" not in live["popovers.html"], "旧边界写法回潮"
 
 
 def test_frontend_ctx_submenu_single_entry_and_hover_close():

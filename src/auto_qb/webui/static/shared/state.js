@@ -409,9 +409,11 @@ window.AQB_STATE = {
       mgrError: "",
       mgrCategories: [],     // [{name, save_path}](GET /api/categories 的 map 展平)
       mgrTags: [],           // [名字...](GET /api/tags 原样)
-      mgrNewCatName: "",     // 新建分类行: 名称
-      mgrNewCatPath: "",     // 新建分类行: 保存路径(可空)
-      mgrNewTags: "",        // 新建标签行: 逗号分隔可批量
+      mgrNew: {              // 新建行草稿(表驱动字段键: tags / catName / catPath, mgrDef.fields 引用;
+        tags: "",            //  issue 26-10-20-2231: 三个散属性收成对象, v-model 走 mgrNew[f.key])
+        catName: "",         // 新建分类行: 名称
+        catPath: "",         // 新建分类行: 保存路径(可空)
+      },
       mgrBusy: false,        // 写操作回执等待中(防重复提交 + 关闭窗口误触)
       // 标签/分类编辑对话框: 对选中集合(或单种子)**即时**增删标签/改分类
       // 写操作走 /api/torrents/bulk(add_tags/remove_tags/set_category), 每次点击独立命令独立回执;
@@ -448,6 +450,55 @@ window.AQB_STATE = {
     };
   },
   computed: {
+    /* 对话框行式明细单份(issue 26-10-20-2231): 跳检预检 verdict 区(固定警示区+三分流, 不出复制钮)
+     * 与删除确认框 details 区(目标信息行, 出复制钮)此前两套同构渲染, 现拼成一份行表供 popovers
+     * 单一渲染块消费 —— verdict 在前(key "v"+i 保索引序), details 在后(key=label 与原 :key 同口径);
+     * copy 标志决定复制钮, title 口径统一 d.hint || String(d.value)(verdict 行无 hint = 原行为)。 */
+    modalDetailRows() {
+      const vs = this.modal.verdict || [];
+      const ds = this.modal.details || [];
+      return [
+        ...vs.map((d, i) => ({ ...d, key: "v" + i, copy: false })),
+        ...ds.map((d) => ({ ...d, key: d.label, copy: true })),
+      ];
+    },
+    /* 标签/分类管理对话框的数据表(issue 26-10-20-2231 双胞胎合并): 两态差异全部表驱动,
+     * popovers.html 只剩一份模板 —— 图标/标题/aria-label/加载与空态文案/行(名字+可选副列+行内动作)/
+     * 新建字段表/添加钮禁用判据/提示行按 kind 给出; 行内动作闭包直调既有 CRUD 单点
+     * (mgrDeleteTag/mgrEditCatPath/mgrDeleteCategory), 不另派。null = 两态都没开(调用点 v-if)。 */
+    mgrDef() {
+      if (this.mgrOpen === "tag") {
+        return {
+          label: "管理标签", icon: "#i-tag", title: "管理标签",
+          loading: "正在加载标签…", empty: "暂无标签, 在下方新建",
+          rows: this.mgrTags.map((t) => ({
+            key: t, name: t, sub: null, subDim: false,
+            acts: [{ label: "删除", cls: "danger sm", go: () => this.mgrDeleteTag(t) }],
+          })),
+          fields: [{ key: "tags", ph: "新标签(逗号分隔可批量, 如 HR, Keep)" }],
+          addDisabled: !this.mgrNew.tags.trim() || this.mgrBusy,
+          hint: "H&R / 集数 / MISSING 等标签由自动规则管理, 手动删除后可能被重新打上",
+        };
+      }
+      if (this.mgrOpen === "category") {
+        return {
+          label: "管理分类", icon: "#i-folder", title: "管理分类",
+          loading: "正在加载分类…", empty: "暂无分类, 在下方新建",
+          rows: this.mgrCategories.map((c) => ({
+            key: c.name, name: c.name,
+            sub: c.save_path || "未设置保存路径", subDim: !c.save_path,
+            acts: [
+              { label: "改路径…", cls: "ghost sm", go: () => this.mgrEditCatPath(c.name) },
+              { label: "删除", cls: "danger sm", go: () => this.mgrDeleteCategory(c.name) },
+            ],
+          })),
+          fields: [{ key: "catName", ph: "分类名称" }, { key: "catPath", ph: "保存路径(可空)" }],
+          addDisabled: !this.mgrNew.catName.trim() || this.mgrBusy,
+          hint: "",
+        };
+      }
+      return null;
+    },
     /* 界面切换下拉(单一语义模板的参数化差异): 按钮档 uiCurrent + 菜单全档 uiOptions,
      * 数据面 = UI_HOME 单点 —— 三套 UI 直选, 不再环切。 */
     uiCurrent() {

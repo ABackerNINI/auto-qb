@@ -11,18 +11,9 @@
          ①对话框加宽到 --modal-w-add(与添加种子同宽, 路径项 nowrap+ellipsis 多显示); ②开层时
          根元素挂 .pop-open 类, body 加 padding-bottom 给下拉预留整高(预留量见三皮肤 CSS),
          下拉完整落在对话框内, 弹窗体本身零新增滚动。模板只加类名绑定, 几何数字全在 CSS 单点。 -->
-    <div v-if="moveOpen" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMove)">
-      <div class="modal add-dialog move-dialog" :class="{ 'pop-open': movePathMenu }"
-           role="dialog" aria-modal="true" aria-label="设定位置">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg>
-          <span>设定位置</span>
-          <button class="bt icon add-dialog-x" @click="closeMove">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
+    <aq-modal :open="moveOpen" :close="closeMove" icon="#i-folder-open" title="设定位置"
+              label="设定位置" body-class="add-dialog-body"
+              :width-class="['add-dialog move-dialog', { 'pop-open': movePathMenu }]">
           <p class="move-targets">作用于 <b>{{ moveCount }}</b> 个种子(打开时锁定)</p>
           <p class="move-note">将把种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。</p>
           <div class="add-dialog-field add-dialog-combo">
@@ -42,10 +33,8 @@
                             @open="openMovePathMenu" @input="movePathHi = -1; movePathMenu = true"
                             @blur="movePathBlurClose" @keydown="onMovePathKeydown($event)"></aq-combo-input>
           </div>
-        </div>
-        <div class="modal-actions">
+      <template #actions>
           <button class="bt ghost" @click="closeMove">取消</button>
           <button class="bt primary" :disabled="moveBusy" @click="submitMoveDialog">设定位置</button>
-        </div>
-      </div>
-    </div>
+      </template>
+    </aq-modal>

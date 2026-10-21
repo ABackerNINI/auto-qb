@@ -1,0 +1,39 @@
+<!-- 对话框外壳组件 <aq-modal> / <aq-modal-head>(收敛 issue 26-10-20-2231 / R23-A-02·A-03·A-08)
+     此前 11 处对话框各手抄一份三段式外壳: .modal-title 头(图标+标题+关闭钮)11 处 /
+     .modal-actions 栏 10 处 / 遮罩关窗手势对(@mousedown 记臂位 + @mouseup.self 才关)10 处,
+     现外壳一份 + 中部插槽, 差异全部参数化或走插槽:
+       · head-extra 插槽: 标题行中段插东西(历史弹层的 ce-spacer+hist-tabs);
+       · title 插槽: 标题文本换标记(快捷键帮助用 <h3>, 缺省回退 <span>{{ title }}</span>);
+       · body-class 空 = 中部裸插槽(历史弹层 / 确认框不包 .add-dialog-body, 不加空 wrapper);
+       · $slots.actions 空 = 不渲染动作栏(历史弹层无底部条, 空条会多出 16px margin-top);
+       · width-class 透传 :class(字符串/数组/对象; 设定位置弹窗的 pop-open 动态类走数组);
+       · mask-class(add-dialog-mask / dir-browse-mask) / label(aria-label, 空 = 不挂) / x(无 ✕ 框)。
+     行为面: 遮罩手势 maskDownSelf/maskCloseIfArmed 是根方法(读根 _maskArmed), 组件内一律
+     $root 调用(见 pitfalls/web-ui/component-ref-ownership); 关窗一律 :close(Function) +
+     可选 :close-args(Array), 不在模板里写内联箭头(dialogs.js::closeHistory 注释同口径)。
+     x-template 注入 body(在 #app 之外, 不当根模板编译, 不多包 DOM 层), app.component 注册
+     (定义在 dialogs.js 尾)。!本分片必须挂进三份 index.html 的 parts(into: body)。 -->
+<script type="text/x-template" id="tpl-aq-modal-head">
+  <div class="modal-title">
+    <svg class="ico ico-sm" :class="iconClass" viewBox="0 0 16 16"><use :href="icon"></use></svg>
+    <slot name="title"><span>{{ title }}</span></slot>
+    <slot name="extra"></slot>
+    <button v-if="x" class="bt icon add-dialog-x" @click="close()">
+      <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
+    </button>
+  </div>
+</script>
+<script type="text/x-template" id="tpl-aq-modal">
+  <div v-if="open" :class="maskClass"
+       @mousedown="$root.maskDownSelf($event)" @mouseup.self="$root.maskCloseIfArmed(close, ...closeArgs)">
+    <div class="modal" :class="widthClass" role="dialog" aria-modal="true" :aria-label="label || undefined">
+      <aq-modal-head :icon="icon" :icon-class="iconClass" :title="title" :close="close" :x="x">
+        <template #title><slot name="title"><span>{{ title }}</span></slot></template>
+        <template #extra><slot name="extra"></slot></template>
+      </aq-modal-head>
+      <div v-if="bodyClass" :class="bodyClass"><slot></slot></div>
+      <slot v-else></slot>
+      <div v-if="$slots.actions" class="modal-actions"><slot name="actions"></slot></div>
+    </div>
+  </div>
+</script>

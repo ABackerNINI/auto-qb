@@ -478,7 +478,7 @@ _RESERVED_PREFIX_SPAN_PATS = (
     (r"\{\{(.*?)\}\}", 1),  # 插值: 组 1 = 表达式
     (r"""(?:^|\s)(?:v-[\w:.\-]+|@[\w.\-]+|:[\w.\-]+)\s*=\s*(["'])(.*?)\1""", 2),  # 指令: 组 2 = 表达式
 )
-_RESERVED_PREFIX_WHITELIST = ("$event", "$root", "$emit")  # Vue 内建(口径见守阵 docstring), 模板里合法
+_RESERVED_PREFIX_WHITELIST = ("$event", "$root", "$emit", "$slots")  # Vue 内建(口径见守阵 docstring), 模板里合法
 
 
 def _reserved_prefix_problems(rel, text):
@@ -521,7 +521,9 @@ def test_frontend_template_no_reserved_prefix_identifiers():
     是两回事): `$event` 事件形参; `$root` = 根实例代理 —— 表壳/明细单元格渲染器组件(计划
     26-10-11-1722 P1/P2)是「单根组件 + 全局 mixin」架构下的**纯模板**片段, 行为经 `$root`
     回调根实例(根数据只在根实例上), 组件自身不复制方法实现; `$emit` = 组件向调用方发事件
-    (P5 表壳 thead 模式: 排序状态归调用方, 组件只 `$emit("sort", key)`)。
+    (P5 表壳 thead 模式: 排序状态归调用方, 组件只 `$emit("sort", key)`);
+    `$slots` = 本实例插槽分布(aq-modal 动作栏条件渲染 issue 26-10-20-2231: hist 无底部条,
+    空 .modal-actions 会多出 16px margin —— Vue 内建对象, 组件实例真实存在)。
     `obj._x` 成员访问(点号后)不属于裸标识符, 不拦。
 
     issue 26-10-11-2030: 指令分支曾取错捕获组(组 1 是引号, 表达式在组 2), 整支变死且全绿无征兆
@@ -546,9 +548,10 @@ def test_frontend_template_no_reserved_prefix_identifiers():
         "扫描分支有死支或捕获组取错(issue 26-10-11-2030), 同步本守阵"
     )
     whitelist_probe = _reserved_prefix_problems(
-        "白名单探针", '<div @click="$emit(\'sort\', k)" :prop="$root.x" @input="$event">{{ $root.y }}</div>'
+        "白名单探针",
+        '<div v-if="$slots.actions" @click="$emit(\'sort\', k)" :prop="$root.x" @input="$event">{{ $root.y }}</div>',
     )
-    assert not whitelist_probe, (f"白名单探针误拦 Vue 内建($event/$root/$emit): {whitelist_probe} —— 白名单口径漂移, 同步本守阵")
+    assert not whitelist_probe, (f"白名单探针误拦 Vue 内建($event/$root/$emit/$slots): {whitelist_probe} —— 白名单口径漂移, 同步本守阵")
 
     assert not problems, "模板保留前缀标识符: " + "; ".join(problems)
 

@@ -941,6 +941,12 @@ app.component("aq-combo-input", window.AQ_COMBO_INPUT_COMPONENT);
 app.component("aq-switch", window.AQ_SWITCH_COMPONENT);
 app.component("aq-fold", window.AQ_FOLD_COMPONENT);
 app.component("aq-seg", window.AQ_SEG_COMPONENT);
+/* 对话框外壳(收敛 issue 26-10-20-2231 / R23-A-02·A-03·A-08): <aq-modal>(遮罩+.modal+标题头+中部+动作栏)
+ * 覆盖全部带遮罩对话框, <aq-modal-head>(标题头五段)另供无遮罩异形 speed-pop 直拼 —— 11 处手抄
+ * 三段式外壳只此一份(tpl/dialog-shell.html), 中部走插槽; 行为仍是既有单点(maskDownSelf/
+ * maskCloseIfArmed/各 closeX), 组件只贡献模板(遮罩手势经 $root 回调, 见 dialogs.js 尾注)。 */
+app.component("aq-modal", window.AQ_MODAL_COMPONENT);
+app.component("aq-modal-head", window.AQ_MODAL_HEAD_COMPONENT);
 app.component("aq-member-cells", window.AQ_MEMBER_CELLS_COMPONENT);
 app.component("aq-group-cells", window.AQ_GROUP_CELLS_COMPONENT);
 app.component("aq-torrent-cells", window.AQ_TORRENT_CELLS_COMPONENT);

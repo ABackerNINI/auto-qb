@@ -1086,7 +1086,7 @@ def test_help_overlay_wiring() -> None:
     assert "this.kbHelpOpen" in _read("dialogs.js"), "escBusy 必须同步 kbHelpOpen(新增浮层两处同步守则)"
     assert "this.kbHelpOpen" in eng, "_kbOverlayBusy 必须同步 kbHelpOpen(浮层打开时列表键位失效)"
     pop = (SHARED / "tpl" / "popovers.html").read_text(encoding="utf-8")
-    for needle in ('v-if="kbHelpOpen"', "kbGroups()", "kbEntriesOf(grp)", "kbGoSettings()"):
+    for needle in (':open="kbHelpOpen"', "kbGroups()", "kbEntriesOf(grp)", "kbGoSettings()"):
         assert needle in pop, f"帮助浮层模板缺 {needle}"
 
 

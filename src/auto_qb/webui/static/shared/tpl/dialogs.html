@@ -1,16 +1,8 @@
          <!-- 统计面板(FE-2C): /api/stats server_state 直取(缺失显示 —); server 为 null 时空态。
          复用 .modal/.add-dialog 视觉语言(.stats-dialog 仅调宽与行样式); 打开时取一次, 卡内可手动刷新 -->
-    <div v-if="statsOpen" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeStats)">
-      <div class="modal add-dialog stats-dialog" role="dialog" aria-modal="true" aria-label="qBittorrent 统计">
-        <div class="modal-title">
-          <svg class="ico ico-sm ico-chart" viewBox="0 0 16 16"><use href="#i-chart"></use></svg>
-          <span>qBittorrent 统计</span>
-          <button class="bt icon add-dialog-x" @click="closeStats">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
+    <aq-modal :open="statsOpen" :close="closeStats" icon="#i-chart" icon-class="ico-chart"
+              title="qBittorrent 统计" label="qBittorrent 统计"
+              width-class="add-dialog stats-dialog" body-class="add-dialog-body">
           <!-- FIX-04b 防闪烁: 骨架常驻 — 加载态不卸载字段列表(仅值区降透明), 刷新按钮自身 disabled+spin;
                错误仅在无数据时占位重试, 有数据时顶部细条提示并保留上次结果 -->
           <div v-if="statsError && !statsServer" class="ce-placeholder">
@@ -51,15 +43,13 @@
             </div>
             </div>
           </template>
-        </div>
-        <div class="modal-actions">
+      <template #actions>
           <button class="bt ghost" :disabled="statsLoading" @click="loadStats()">
             <svg class="ico ico-sm" :class="{ spin: statsLoading }" viewBox="0 0 16 16"><use href="#i-refresh"></use></svg>刷新
           </button>
           <button class="bt primary" @click="closeStats">关闭</button>
-        </div>
-      </div>
-    </div>
+      </template>
+    </aq-modal>
     <!-- 限速浮层(SPD-04; FX-08 改为就近弹出): 点击状态栏"限制速度"向上弹出, 该方向输入框预聚焦。
          1. 无遮罩(页面其余部分仍可操作), 点空白/Esc 关闭;
          2. **必须是状态栏的兄弟节点** —— .statusbar 有 overflow: hidden, 嵌在里面时子元素溢出会被裁掉,
@@ -67,13 +57,7 @@
          3. 位置由 JS 写在 inline style 上(只写 left, 并夹取到视口内), 不写死在 CSS 里。 -->
     <div v-if="speedOpen" ref="speedPop" class="speed-pop" :style="speedPopStyle()"
          role="dialog" aria-label="限速" @click.stop>
-      <div class="modal-title">
-        <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-gauge"></use></svg>
-        <span>限速</span>
-        <button class="bt icon add-dialog-x" @click="closeSpeedDialog">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-        </button>
-      </div>
+      <aq-modal-head icon="#i-gauge" title="限速" :close="closeSpeedDialog"></aq-modal-head>
       <div class="add-dialog-body">
         <div class="speed-mode-line">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use :href="speedMode.curveEnabled ? '#i-gauge' : '#i-lock'"></use></svg>

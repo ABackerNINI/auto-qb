@@ -1,61 +1,48 @@
-    <!-- 标签管理对话框(FE-2C2): 列表 + 新建行(逗号分隔可批量) + 行级删除; 底部静态提示自动规则标签 -->
-    <div v-if="mgrOpen === 'tag'" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMgr)">
-      <div class="modal add-dialog mgr-dialog" role="dialog" aria-modal="true" aria-label="管理标签">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
-          <span>管理标签</span>
-          <button class="bt icon add-dialog-x" @click="closeMgr">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
-          <div v-if="mgrLoading" class="ce-placeholder loading">正在加载标签…</div>
-          <div v-else-if="mgrError" class="ce-placeholder">
-            <p class="error">{{ mgrError }}</p>
-            <button class="bt" @click="loadMgr()">重试</button>
-          </div>
-          <template v-else>
-            <div class="mgr-list">
-              <div v-for="t in mgrTags" :key="t" class="mgr-row">
-                <span class="mgr-name" :title="t">{{ t }}</span>
-                <span class="mgr-acts">
-                  <button class="bt danger sm" :disabled="mgrBusy" @click="mgrDeleteTag(t)">删除</button>
-                </span>
-              </div>
-              <p v-if="!mgrTags.length" class="mgr-empty">暂无标签, 在下方新建</p>
-            </div>
-            <div class="mgr-new">
-              <input v-model="mgrNewTags" class="add-dialog-input" type="text" placeholder="新标签(逗号分隔可批量, 如 HR, Keep)"
-                     autocomplete="off" spellcheck="false" @keyup.enter="submitMgrTags">
-              <button class="bt primary" :disabled="!mgrNewTags.trim() || mgrBusy" @click="submitMgrTags">添加</button>
-            </div>
-            <div class="mgr-hint">
-              <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>
-              <span>H&R / 集数 / MISSING 等标签由自动规则管理, 手动删除后可能被重新打上</span>
-            </div>
-          </template>
-        </div>
-        <div class="modal-actions">
-          <button class="bt primary" @click="closeMgr">关闭</button>
-        </div>
+    <!-- 标签/分类管理对话框(FE-2C2; issue 26-10-20-2231 双胞胎合并): 单份外壳 + mgrDef 数据表
+         (state.js computed)驱动 —— 图标/标题/aria-label/加载与空态文案/行(名字+可选副列+行内动作)/
+         新建字段/添加钮禁用/提示行由表给出, 两态共用这一个模板。CRUD 走 /api/categories|tags 系端点
+         (dialogs.js), 成功后重拉列表; 关闭后主列表随下一轮 rid 轮询自然更新。
+         复用 .modal/.add-dialog 视觉体系(.mgr-dialog 调宽与行样式)。 -->
+    <aq-modal v-if="mgrDef" :close="closeMgr" :icon="mgrDef.icon" :title="mgrDef.title"
+              :label="mgrDef.label" width-class="add-dialog mgr-dialog" body-class="add-dialog-body">
+      <div v-if="mgrLoading" class="ce-placeholder loading">{{ mgrDef.loading }}</div>
+      <div v-else-if="mgrError" class="ce-placeholder">
+        <p class="error">{{ mgrError }}</p>
+        <button class="bt" @click="loadMgr()">重试</button>
       </div>
-    </div>
+      <template v-else>
+        <div class="mgr-list">
+          <div v-for="r in mgrDef.rows" :key="r.key" class="mgr-row">
+            <span class="mgr-name" :title="r.name">{{ r.name }}</span>
+            <span v-if="r.sub !== null" class="mgr-sub" :class="{ dim: r.subDim }" :title="r.sub">{{ r.sub }}</span>
+            <span class="mgr-acts">
+              <button v-for="a in r.acts" :key="a.label" class="bt" :class="a.cls" :disabled="mgrBusy"
+                      @click="a.go()">{{ a.label }}</button>
+            </span>
+          </div>
+          <p v-if="!mgrDef.rows.length" class="mgr-empty">{{ mgrDef.empty }}</p>
+        </div>
+        <div class="mgr-new">
+          <input v-for="f in mgrDef.fields" :key="f.key" v-model="mgrNew[f.key]" class="add-dialog-input"
+                 type="text" :placeholder="f.ph" autocomplete="off" spellcheck="false"
+                 @keyup.enter="mgrSubmitNew()">
+          <button class="bt primary" :disabled="mgrDef.addDisabled" @click="mgrSubmitNew()">添加</button>
+        </div>
+        <div v-if="mgrDef.hint" class="mgr-hint">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>
+          <span>{{ mgrDef.hint }}</span>
+        </div>
+      </template>
+      <template #actions>
+        <button class="bt primary" @click="closeMgr">关闭</button>
+      </template>
+    </aq-modal>
     <!-- 标签/分类编辑对话框: 对选中集合(或单种子)**即时**增删标签/改分类; 写操作走 /api/torrents/bulk
          (add_tags/remove_tags/set_category), 每次点击独立命令独立回执, 无"应用/取消"(照 qB 官方交互)。
          目标集合打开时锁定; 分类/标签候选打开时拉取; 复用 .modal/.add-dialog 视觉体系(.meta-dialog)。
          逻辑在 shared/dialogs.js(AQB_DIALOGS), 两套 UI 成对 -->
-    <div v-if="metaOpen" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeMeta)">
-      <div class="modal add-dialog meta-dialog" role="dialog" aria-modal="true" aria-label="标签与分类">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-tag"></use></svg>
-          <span>标签与分类</span>
-          <button class="bt icon add-dialog-x" @click="closeMeta">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="add-dialog-body">
+    <aq-modal :open="metaOpen" :close="closeMeta" icon="#i-tag" title="标签与分类"
+              label="标签与分类" width-class="add-dialog meta-dialog" body-class="add-dialog-body">
           <p class="meta-targets">作用于 <b>{{ metaCount }}</b> 个种子(打开时锁定)</p>
           <div class="add-dialog-field add-dialog-combo">
             <!-- label 必须 @mousedown.prevent + @click.stop(与添加种子三下拉同因同修):
@@ -95,54 +82,40 @@
             <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-info"></use></svg>
             <span>操作即时生效(每次点击单独投递); 行内标签/分类列稍后自动刷新</span>
           </div>
-        </div>
-        <div class="modal-actions">
+      <template #actions>
           <button class="bt primary" @click="closeMeta">完成</button>
-        </div>
-      </div>
-    </div>
-    <div v-if="modal.visible" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(resolveModal, false)">
-      <!-- cls(2026-10-19): 按对话框定制形态的附加类名(如重命名 rename-dialog 宽档);
-           空串不附加任何类, 既有对话框零变化
-           tone/strip(2026-10-19, 计划 26-10-19-2341): tone 由 _openModal 单点派生故恒非空,
-           strip 仅显式开启的框(删除确认/跳检预检)挂载; 数组项取假值时 Vue 自动丢弃 -->
-      <div class="modal" :class="[modal.cls, { danger: modal.danger, wide: modal.wide, strip: modal.strip }, modal.tone && 'tone-' + modal.tone]" role="dialog" aria-modal="true">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16">
-            <use :href="modal.icon || (modal.danger ? '#i-warn' : '#i-info')"></use>
-          </svg>
-          <span>{{ modal.title }}</span>
-        </div>
+      </template>
+    </aq-modal>
+    <aq-modal :open="modal.visible" :close="resolveModal" :close-args="[false]" :x="false"
+              :icon="modal.icon || (modal.danger ? '#i-warn' : '#i-info')" :title="modal.title"
+              :width-class="[modal.cls, { danger: modal.danger, wide: modal.wide, strip: modal.strip }, modal.tone && 'tone-' + modal.tone]">
+        <!-- cls(2026-10-19): 按对话框定制形态的附加类名(如重命名 rename-dialog 宽档);
+             空串不附加任何类, 既有对话框零变化
+             tone/strip(2026-10-19, 计划 26-10-19-2341): tone 由 _openModal 单点派生故恒非空,
+             strip 仅显式开启的框(删除确认/跳检预检)挂载; 数组项取假值时 Vue 自动丢弃 -->
         <p class="modal-body">{{ modal.body }}</p>
         <!-- 跳检预检对话框(S4, 计划 26-10-05-0314 §04)两段扩展, 既有对话框缺省零变化:
              busy 行: 预检在途(modal.busy 进框 true), 回执到货即撤下;
              verdict 区: modal.verdict = 行式明细 [{icon,label,value,wide}], 固定警示区
              (统计清零/未哈希校验/无参考/HR 在管)恒在行首与分流结果并列不互斥, 随后是
-             三分流结果(计数/按原因分组/单发全量原因/预检失败降级) —— 复用删除确认框
-             modal-details 行式范式(单行省略 + title 全文), 空 = 不渲染。 -->
+             三分流结果(计数/按原因分组/单发全量原因/预检失败降级)。 -->
         <p v-if="modal.busy" class="modal-body">正在检查前置条件…</p>
-        <div v-if="modal.verdict && modal.verdict.length" class="modal-details">
-          <div v-for="(d, i) in modal.verdict" :key="i" class="modal-detail-row" :class="[d.tone && 'is-' + d.tone, { wide: d.wide }]">
+        <!-- 行式明细(issue 26-10-20-2231 两套并一): 跳检预检 verdict 行(固定警示区+三分流, 不出复制钮)
+             与删除确认框 details 行(目标信息 + 复制钮)此前两套同构渲染, 现由 state.js::modalDetailRows
+             拼成一份行表(verdict 在前 key "v"+i / details 在后 key=label), 此处单一渲染块, 空 = 不渲染。
+             待操作目标信息区口径不变: R10-16 四个删除入口的详情行由 _deleteFlow 统一派生(目标/成员/
+             站点/路径/总大小); 2026-10-18(计划 26-10-18-2013 D12) 多选同辅种组副本时末行追加"实际占用";
+             R10-13 长值一律"单行省略 + title 全文 + 复制按钮", 复制钮对所有 details 行开放。
+             d.hint(2026-10-18): 可选的口径说明(如删除框"实际占用"行的去重解释); 缺省时 title 仍是值自身。
+             复制钮显形 String(d.value ?? ''): value===0 时旧写法 String(0 || '') 落空串不出钮(issue 建议
+             顺带修的边界); null/undefined 仍视为无值。 -->
+        <div v-if="modalDetailRows.length" class="modal-details">
+          <div v-for="d in modalDetailRows" :key="d.key" class="modal-detail-row" :class="[d.tone && 'is-' + d.tone, { wide: d.wide }]">
             <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
             <span class="d-label">{{ d.label }}</span>
-            <span class="d-value" :title="String(d.value)">{{ d.value }}</span>
-          </div>
-        </div>
-        <!-- 待操作目标信息区(删除确认框: 名称/站点/路径等, 行式键值 + 语义图标)
-             R10-16: 四个删除入口的详情行由 _deleteFlow 统一派生, 结构完全一致(目标/成员/站点/路径/总大小)。
-             2026-10-18(计划 26-10-18-2013 D12): 多选同辅种组副本时末行追加"实际占用"(Y<X 条件行)。
-             R10-13: 长值一律"单行省略 + title 全文 + 复制按钮"(wide 行例外: 值独占一行冡 3 行),
-             不再无限换行把弹窗顶高; 复制按钮对所有行开放(不再限 wide)。 -->
-        <div v-if="modal.details" class="modal-details">
-          <div v-for="d in modal.details" :key="d.label" class="modal-detail-row" :class="[d.tone && 'is-' + d.tone, { wide: d.wide }]">
-            <svg v-if="d.icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="d.icon"></use></svg>
-            <span class="d-label">{{ d.label }}</span>
-            <!-- d.hint(2026-10-18): 可选的口径说明(如删除框"实际占用"行的去重解释);
-                 缺省时 title 仍是值自身 —— 既有行零变化 -->
             <span class="d-value" :title="d.hint || String(d.value)">{{ d.value }}</span>
-            <button v-if="String(d.value || '').length" type="button" class="bt icon d-copy"
-                    @click="copyText(String(d.value), d.label)">
+            <button v-if="d.copy && String(d.value ?? '').length" type="button" class="bt icon d-copy"
+                    @click="copyText(String(d.value ?? ''), d.label)">
               <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg>
             </button>
           </div>
@@ -175,7 +148,7 @@
             <span class="opt-dot"></span><span>{{ c.label }}</span>
           </button>
         </div>
-        <div class="modal-actions">
+        <template #actions>
           <button class="bt ghost" @click="resolveModal(false)">{{ modal.cancelText }}</button>
           <!-- 第三个钮(三选一框, 见 confirmThreeDialog): 破坏性分支("放弃改动并刷新"这类),
                缺省不渲染(extraText 为空) —— 既有两钮对话框零变化 -->
@@ -187,28 +160,21 @@
                   :disabled="modal.okDisabled" @click="resolveModal(true)">
             {{ modal.okText }}
           </button>
-        </div>
-      </div>
-    </div>
+        </template>
+    </aq-modal>
 
     <!-- 历史流量弹层(今日流量面板入口): dat 按日行 -> 天/月/年聚合折线图(SVG, 容器级悬停取值) -->
-    <div v-if="historyOpen" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeHistory)">
-      <div class="modal hist-modal" role="dialog" aria-modal="true">
-        <div class="modal-title">
-          <svg class="ico ico-sm ico-history" viewBox="0 0 16 16"><use href="#i-history"></use></svg>
-          <span>历史流量</span>
-          <span class="ce-spacer"></span>
-          <!-- 粒度三档改 <aq-seg>(26-10-20-2231): 清单在 dialogs.js 的 HIST_GRAN_ITEMS(与
-               historyBuckets 的分档判据同域), 模板此前内联字面量映射 —— 加一档要同时改两处。 -->
-          <div class="hist-tabs">
-            <aq-seg :items="$root.histGranItems" :value="$root.historyGran"
-                    :on-pick="(g) => $root.historyGran = g"></aq-seg>
-          </div>
-          <button class="bt icon" @click="historyOpen = false">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
+    <aq-modal :open="historyOpen" :close="closeHistory" icon="#i-history" icon-class="ico-history"
+              title="历史流量" width-class="hist-modal">
+      <template #extra>
+        <span class="ce-spacer"></span>
+        <!-- 粒度三档改 <aq-seg>(26-10-20-2231): 清单在 dialogs.js 的 HIST_GRAN_ITEMS(与
+             historyBuckets 的分档判据同域), 模板此前内联字面量映射 —— 加一档要同时改两处。 -->
+        <div class="hist-tabs">
+          <aq-seg :items="$root.histGranItems" :value="$root.historyGran"
+                  :on-pick="(g) => $root.historyGran = g"></aq-seg>
         </div>
+      </template>
         <div v-if="historyLoading" class="hist-loading">加载中…</div>
         <p v-else-if="historyError" class="error">{{ historyError }}</p>
         <!-- off(26-10-17-1737 S1): 数据来源总开关关闭 —— 空态文案指到总开关, 不说成"数据为空" -->
@@ -267,8 +233,7 @@
             <span>均值 <b>{{ fmtSize(historySummary.avg) }}</b></span>
           </div>
         </template>
-      </div>
-    </div>
+    </aq-modal>
 
     <!-- DND-01 全局拖拽落点提示: 拖 .torrent 文件/链接进页面任意位置时点亮(addDragOver 由
          window 级 dragenter/leave 的 depth 计数驱动, 见 add_torrent.js); pointer-events:none
@@ -328,17 +293,9 @@
 
     <!-- 键盘快捷键帮助浮层(W6, 计划 26-09-28-0354 §5.2: H 组 Shift+Slash 打开, 只读速查;
          Esc 关闭归 lifecycle 退栈链, 名单三处同步: 退栈链 / escBusy / _kbOverlayBusy) -->
-    <div v-if="kbHelpOpen" class="modal-mask"
-         @mousedown="maskDownSelf" @mouseup.self="maskCloseIfArmed(closeKbHelp)">
-      <div class="modal kb-help" role="dialog" aria-modal="true" aria-label="键盘快捷键">
-        <div class="modal-title">
-          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-select-all"></use></svg>
-          <h3>键盘快捷键</h3>
-          <button class="bt icon add-dialog-x" @click="kbHelpOpen = false">
-            <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
-          </button>
-        </div>
-        <div class="kb-help-body">
+    <aq-modal :open="kbHelpOpen" :close="closeKbHelp" icon="#i-select-all"
+              label="键盘快捷键" width-class="kb-help" body-class="kb-help-body">
+      <template #title><h3>键盘快捷键</h3></template>
           <div v-for="grp in kbGroups()" :key="grp" class="kb-help-grp">
             <div class="kb-help-grp-t">{{ grp }}</div>
             <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-help-row">
@@ -350,10 +307,8 @@
               <span v-else class="kb-none">未绑定</span>
             </div>
           </div>
-        </div>
-        <div class="modal-actions">
-          <span class="kb-note">键位存于服务端, 所有浏览器共享</span>
-          <button class="bt primary" @click="kbGoSettings()">前往设置自定义</button>
-        </div>
-      </div>
-    </div>
+      <template #actions>
+        <span class="kb-note">键位存于服务端, 所有浏览器共享</span>
+        <button class="bt primary" @click="kbGoSettings()">前往设置自定义</button>
+      </template>
+    </aq-modal>
