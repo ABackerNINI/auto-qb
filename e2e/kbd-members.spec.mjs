@@ -17,6 +17,11 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  * 另覆盖(2026-10-09 用户报「收起当前行快捷键无法在键盘光标进入分组后收起分组」):
  *   3. 辅种页: 光标落成员行后 ← 收起**所属分组**并把光标带回组行(此前成员行上 ← 静默无反应);
  *   4. 追剧页: 光标落集成员行后 ← 收起**所属集**并把光标带回集行(剧仍展开)。
+ * 另覆盖(2026-10-22 用户报「Esc 退出明细表后键盘锚点消失」):
+ *   5. 辅种页: 光标落成员行后 Esc 收起明细表, 光标**退回该组行**而不是悬空(此前明细行随收起
+ *      卸载, 光标仍指着链外 hash —— 虚线框连坐消失, 下一次 ↑↓ 要重走无光标回落);
+ *   6. 追剧页: 同构两档 —— 一次 Esc 收起集并把光标退回集行, 再一次 Esc 收起剧并把光标退回剧行。
+ *      (与 ← 同归位口径: 谁被收起, 光标退回谁。)
  *
  * 断言口径: 按键走真实 keyboard(不借道 vm), 判据读 DOM(.kb-cursor / .selected 类, 与用户所见一致)。
  * 点行一律点名称格(.g-name / .ep-name) —— 行中心多半落在站点/标签挂件上(@click.stop 走筛选, 不展开)。
@@ -129,6 +134,71 @@ for (const skin of SKINS) {
       await expect(page.locator('.ep-row.kb-cursor'), '← 后光标必须回到所属集行').toHaveCount(1, {
         timeout: 5_000,
       });
+    });
+
+    test(`辅种页: 光标进成员行后 Esc 收起明细表并把光标退回组行 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+
+      // 展开第一组 -> ↓ 进成员行(光标此刻指着链内的成员 hash)
+      await page.locator('.group-row').first().locator('.g-name').click({ force: true });
+      await expect(page.locator('.member-row').first()).toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press('ArrowDown');
+      await expect(page.locator('.member-row.kb-cursor')).toHaveCount(1, { timeout: 5_000 });
+
+      // Esc: 明细表收起(成员行消失) + 光标退回**被收起的那一组**, 不是消失
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.member-row'), 'Esc 必须收起明细表(成员行消失)').toHaveCount(0, {
+        timeout: 5_000,
+      });
+      await expect(page.locator('.group-row.kb-cursor'), 'Esc 后虚线框必须还在(锚点没被清)').toHaveCount(1, {
+        timeout: 5_000,
+      });
+      await expect(
+        page.locator('.group-row').first(),
+        'Esc 后光标必须回到被收起的那一组(不是随便一行)',
+      ).toHaveClass(/kb-cursor/, { timeout: 5_000 });
+    });
+
+    test(`追剧页: 光标进集成员行后 Esc 逐层收起, 光标退回集行 / 剧行 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await page.click('nav.tabs [data-view="shows"]');
+      await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 30_000 });
+
+      // 展开剧 -> ↓ 落集行 -> 展开集 -> ↓ 落成员行
+      await page.locator('.show-row').first().locator('.g-name').click({ force: true });
+      await expect(page.locator('.ep-row').first()).toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press('ArrowDown');
+      await expect(page.locator('.ep-row.kb-cursor')).toHaveCount(1, { timeout: 5_000 });
+      await page.locator('.ep-row').first().locator('.ep-name').click({ force: true });
+      await expect(page.locator('.member-row').first()).toBeVisible({ timeout: 10_000 });
+      await page.keyboard.press('ArrowDown');
+      await expect(page.locator('.member-row.kb-cursor')).toHaveCount(1, { timeout: 5_000 });
+
+      // 第一次 Esc: 收起集(成员行消失), 光标退回**该集行**, 剧仍展开
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.member-row'), '第一次 Esc 收起集(成员行消失)').toHaveCount(0, {
+        timeout: 5_000,
+      });
+      await expect(page.locator('.ep-row.kb-cursor'), '第一次 Esc 后光标必须在集行上').toHaveCount(1, {
+        timeout: 5_000,
+      });
+
+      // 第二次 Esc: 收起剧(集行消失), 光标退回**该剧行**
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.ep-row'), '第二次 Esc 收起剧(集行消失)').toHaveCount(0, {
+        timeout: 5_000,
+      });
+      await expect(
+        page.locator('.show-row').first(),
+        '第二次 Esc 后光标必须回到被收起的那一剧',
+      ).toHaveClass(/kb-cursor/, { timeout: 5_000 });
     });
   });
 }

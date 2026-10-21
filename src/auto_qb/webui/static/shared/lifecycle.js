@@ -95,6 +95,7 @@ window.AQB_LIFECYCLE = {
       if (this.speedOpen) this.closeSpeedDialog();
     });
     // Esc: 逐层退栈(FIX-07) —— 确认框/弹窗 → 抽屉内浮层 → 历史弹层 → 抽屉 → 筛选器下拉/其余弹层(pop) → 右键菜单 → 清选择/收展开兜底 → 清筛选兜底(仅数据页+非输入态, 26-10-01-2108)
+    // 收展开兜底档(2026-10-22 起)**顺便把键盘光标退回被收起的父行**, 不再让它悬空指向已卸载的明细行。
     // WARN: 本链与 dialogs.js::escBusy 是同一份浮层名单(后者给 config_hub 的「Esc 返回设置首页」守门),
     //   新增浮层两处同步; config_hub.js::hubOnKey 的 Esc 分支排在本链之后(链上有层时它不动)
     document.addEventListener("keydown", (e) => {
@@ -128,9 +129,32 @@ window.AQB_LIFECYCLE = {
       else if (this.filterMenu) this.filterMenu = "";  // 筛选器下拉(pop)
       else if (this.menu.visible) this.menu.visible = false;  // 右键菜单: pop 层之后
       else if (this.selGroups.length || this.selMembers.length) this.clearSelection();  // 兜底: 清除行/组选择(复用现有逻辑)
-      else if (this.expandedKey) this.expandedKey = null;  // 兜底: 收起分组展开
-      else if (this.expandedShowEp) this.expandedShowEp = null;  // 兜底: 收起追剧集展开
-      else if (this.expandedShows.length) this.expandedShows = [];  // 兜底: 收起追剧剧展开
+      /* 兜底: 收起分组展开。**收起不"清光标", 光标退回被收起的父行**(2026-10-22):
+       *   明细行随收起一起卸载, 光标却仍指着那个已不在链上的成员 hash —— 虚线框被宿主连坐带走,
+       *   观感就是"锚点丢了", 下一次 ↑↓ 还得走无光标回落(_kbViewportRow)重新猜落点。
+       *   归位口径与 ← (shortcuts.js::_kbCollapseRow) 一致: 成员行 -> 所属组行。就地赋值不调
+       *   引擎内部方法 —— 退栈链自成一体, 不反向依赖快捷键引擎; 父行紧邻被收起的明细块, 本就在
+       *   视口内, 无需滚动跟随(也避开禁 scrollIntoView 的红线)。 */
+      else if (this.expandedKey) {
+        const k = this.expandedKey;
+        this.expandedKey = null;
+        this.kbCursor = { kind: "group", id: k };
+      }
+      else if (this.expandedShowEp) {  // 兜底: 收起追剧集展开(与辅种页同构: 版本行 -> 所属集行)
+        const k = this.expandedShowEp;
+        this.expandedShowEp = null;
+        this.kbCursor = { kind: "ep", id: k };
+      }
+      else if (this.expandedShows.length) {  // 兜底: 收起追剧剧展开(集行 -> 所属剧行)
+        // 剧可多支同时展开: 优先退回**光标所在那一支**(注意力所在, 不横跳到别的剧), 否则退回首支
+        const c = this.kbCursor;
+        const p = c && c.kind === "ep" ? this._kbParseEpId(c.id) : null;
+        const k = p && this.expandedShows.includes(p.showKey) ? p.showKey
+          : c && c.kind === "show" && this.expandedShows.includes(c.id) ? c.id
+            : this.expandedShows[0];
+        this.expandedShows = [];
+        this.kbCursor = { kind: "show", id: k };
+      }
       // 兜底最深一档: 清全部面筛(26-10-01-2108 拍板) —— 仅数据页 + 非输入态 + 无 hrPop 卡;
       // 搜索词不清(归 clearSearch); 触发即 toast 点名, 不静默。门条件缺一不可:
       // page 挡设置页(escBusy 无需同步), inInput 挡搜索框, hrPop 让"收卡"独占该次按键

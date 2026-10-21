@@ -111,6 +111,10 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_settings_panel_section: settings-detail 有 hub.view === 'keys' 分支(录制/禁用/重置/
   冲突三选一/保存放弃全套钮); config_hub 首页卡+hubNow+hubRestore 认 "keys";
   console_hub.css 有 .kb-row 样式
+- test_esc_collapse_returns_cursor_to_parent: Esc 收展开兜底档把键盘光标**退回被收起的父行**
+  (2026-10-22 用户报「Esc 退出明细表后键盘锚点消失」) —— 三档(expandedKey→group /
+  expandedShowEp→ep / expandedShows→show)各自归位, 就地赋值不调 _kbCollapseRow(退栈链不反向
+  依赖引擎), 多剧展开选支走 _kbParseEpId 单点; 清选择仍先于收展开(一次按键只退一层)
 - test_esc_chain_clear_filters_fallback: ESC 接退栈链终端兜底清面筛(计划 26-10-02-1632 方案 A) ——
   兜底在收剧展开之后(链序即退栈序, LIFO 不可倒) / 门条件五件套(authOk / page=groups /
   !hrPop.open / !inInput / facetsActive) / toast 点名不静默; Escape 仅 clear-esc 一个默认绑定
@@ -1105,6 +1109,44 @@ def test_settings_panel_section() -> None:
     css = (SHARED / "console_hub.css").read_text(encoding="utf-8")
     for cls in (".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger"):
         assert cls in css, f"console_hub.css 缺 {cls}(挂件类名必须有对应规则)"
+
+
+def test_esc_collapse_returns_cursor_to_parent() -> None:
+    """Esc 收展开兜底档把键盘光标退回被收起的父行(2026-10-22 用户报「Esc 退出明细表后键盘
+    锚点消失」): 明细行随收起一起卸载, 光标却仍指着链外 hash => 虚线框被宿主连坐带走, 下一次
+    ↑↓ 还要走无光标回落(_kbViewportRow)重猜落点。三档(group / ep / show)各自归位, 且退栈链
+    就地赋值不反向依赖快捷键引擎; 清选择仍先于收展开(一次按键只退一层)"""
+    lc = _read("lifecycle.js")
+    m = re.search(r'if \(e\.key !== "Escape"\) return;(.*?)\n    \}\);', lc, re.S)
+    assert m, "lifecycle.js 找不到 Esc 退栈链(结构变了? 同步本守阵)"
+    chain = m.group(1)
+    branches = chain.split("else if (")
+
+    def branch(tok: str) -> str:
+        hit = [b for b in branches if tok in b]
+        assert hit, f"Esc 退栈链缺收起分支: {tok}"
+        return hit[0]
+
+    for tok, field, kind in (
+        ("this.expandedKey", "expandedKey", "group"),
+        ("this.expandedShowEp", "expandedShowEp", "ep"),
+        ("this.expandedShows.length", "expandedShows", "show"),
+    ):
+        b = branch(tok)
+        assert f"{field} = null" in b or f"{field} = []" in b, f"{field} 收起分支未复位展开态"
+        assert f'this.kbCursor = {{ kind: "{kind}"' in b, (
+            f"收起分支必须把光标退回父行({field} -> kind={kind}): 明细行随收起消失, "
+            "光标悬空在链外 = 用户看到的「锚点没了」"
+        )
+    assert "this._kbCollapseRow(" not in chain, (
+        "Esc 退栈链不得反向调用快捷键引擎方法(就地赋值 —— 链序由注册序守阵, 不被引擎牵动; "
+        "注释里点名 _kbCollapseRow 说明同口径是允许的, 这里只禁真调用)"
+    )
+    assert chain.index("this.clearSelection()") < chain.index("this.expandedKey"), \
+        "清选择必须先于收展开(一次按键只退一层, 有选中时 Esc 不动光标也不收展开)"
+    # 剧可多支同时展开: 归位走 _kbParseEpId 单点解析所属剧(不手抄 ep id 形态), 优先光标所在那一支
+    assert "_kbParseEpId" in branch("this.expandedShows.length"), \
+        "多剧展开归位必须走 _kbParseEpId 单点(光标在哪个剧的集行上就退回哪个剧, 不横跳到首支)"
 
 
 def test_esc_chain_clear_filters_fallback() -> None:
