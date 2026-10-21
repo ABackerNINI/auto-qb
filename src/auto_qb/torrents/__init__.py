@@ -16,7 +16,7 @@
 - compat.py  qB 字段契约与版本兼容(字段表/REQUIRED_TORRENT_FIELDS/QbCompatError)
 - view.py    Web 视图字段契约(_VIEW_FIELDS/量化步长/置脏判定)
 - record.py  TorrentRecord(种子数据唯一所有者)
-- store.py   TorrentStore(增量同步 + 分组索引 + 写后同步)
+- store.py   TorrentStore(增量同步 + 分组索引 + 确定性字段写后同步)
 - __init__.py 全量重导出(调用方 from auto_qb.torrents import X 不变)
 
 说明:

@@ -17,7 +17,7 @@
                 │  客户端构造在 core/qbclient.py(new_client/LocalQbClient)       │
                 ├──────────────────────────────────────────────────────────────┤
  每tick增量同步 →│ TorrentStore (torrents/ 包: store/record/view/compat)         │
-                │  快照/惰性缓存/分组索引        (写后同步)  ← QbApi (qbapi.py)   │
+                │  快照/惰性缓存/分组索引      (确定性字段)  ← QbApi (qbapi.py)   │
                 │  ↑ apply_sync (sync/maindata rid 增量)      → qbittorrent-api │
                 ├──────────────────────────────────────────────────────────────┤
                 │ TaskQueue (taskqueue.py)  单一时间优先堆                       │

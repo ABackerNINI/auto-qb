@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="qbapi-write-facade-store-writes">
+<meta name="issue-stamp" content="26-10-21-1813">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="post-command-state-writes">
+<meta name="doc-refs" content="memory-bank/plans/26-10-21-1857-plan-skip-check-async-refactor.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="In Progress">
+<meta name="issue-title" content="写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例)">
+<meta name="issue-summary" content="QbApi 的写方法以「命令已生效」为前提立即改 store: torrents_delete→remove_torrent、update_torrent_fields(标签/分类/限速/路径); 对照: 起停已按 A 系 26-10-13-0540 S1 改为纯透传(state 只由 qB 同步驱动) —— 同一口径尚未推广到删除与字段写">
+<title>写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例)</h1>
+    <p class="lede">QbApi 的写方法以「命令已生效」为前提立即改 store: torrents_delete→remove_torrent、update_torrent_fields(标签/分类/限速/路径); 对照: 起停已按 A 系 26-10-13-0540 S1 改为纯透传(state 只由 qB 同步驱动) —— 同一口径尚未推广到删除与字段写</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-21-1813-bug-qbapi-write-facade-store-writes</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:13</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">core/qbapi · torrents</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><code>QbApi</code> 的部分写方法在调用 qB 之后<b>立即改写快照</b>，隐含「命令已生效」：删除会立刻摘记录、
+      打标/分类/限速/路径会立刻改字段。qB 的状态按固定节拍刷新，这些写入在生效前就把账改了。</p>
+    <p>对照（同一份门面里已有的先例）：起停四入口已按 <b>A 系 26-10-13-0540 S1</b> 改为<b>纯透传 + <code>note_own_write</code></b>，
+      注释写明「state 是唯一由 qB 同步权威驱动的字段」—— 本件记的是这条口径<b>尚未推广</b>到删除与字段写。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文，不转述。</p>
+    <p><b>A. 删除即摘记录（<code>core/qbapi.py:153-156</code>，取证 2026-10-21 18:26）</b>：</p>
+<pre><code>def torrents_delete(self, torrent_hashes=None, delete_files=False, **kwargs):
+    self._client.torrents_delete(torrent_hashes=torrent_hashes, delete_files=delete_files, **kwargs)
+    for h in self._to_list(torrent_hashes):
+        self.store.remove_torrent(h)</code></pre>
+    <p><b>B. 打标/分类/限速/路径直接改字段</b>：<code>qbapi.py:59-94</code>（<code>torrents_add_tags</code> / <code>torrents_remove_tags</code> /
+      <code>torrents_set_category</code>）、<code>:130-151</code>（上下限 / <code>set_location</code>）→ <code>store.update_torrent_fields</code>。
+      这些是<b>确定性字段</b>（值就是我们下发的），与「运行状态」不同；争议点是它们同样在命令返回后立即写，且
+      <code>set_location</code> 会改分组键的输入（组键由 <code>group_key_of(物理目录, 文件映射)</code> 构造）。</p>
+    <p><b>C. 反例（已改对的那一半，<code>qbapi.py:96-124</code>）</b>：起停纯透传，只登记 <code>own_writes</code>，注释原文
+      「!不回写快照(A 系 26-10-13-0540 S1: 删除原 <code>_sync_paused_state</code> 合成回写)。state 是<b>唯一</b>由 qB 同步权威驱动的字段」。</p>
+    <p><b>D. 文档仍是旧口径</b>：<code>memory-bank/conventions/code-style.md</code> 原第 101 行「写后同步: 任何通过 QbApi 的写操作同步更新 store 快照」
+      —— 2026-10-21 18:26 已按用户判定作为<b>档案漂移</b>移除（代码早已改面，文档未跟）。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>任何走 <code>QbApi</code> 门面的写操作；命令未生效前读取快照的消费者都会读到假账</td></tr>
+      <tr><td>影响范围</td><td>① <code>remove_torrent</code> 只摘 <code>by_hash</code>，<code>groups</code>/<code>member_to_key</code> 不动 → 幽灵成员；② 预测 state 污染 G3/G4/G6/G7；③ 改 <code>save_path</code> 直接影响分组键</td></tr>
+      <tr><td>严重度</td><td>中：与「命令后立即读状态」叠加时，会把错误的账喂给所有闸门</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/core/qbapi.py:153-156</code>（取证 2026-10-21 18:26）· <code>torrents_delete</code> · grep <code>store.remove_torrent</code></li>
+      <li><code>src/auto_qb/core/qbapi.py:96-124</code> · 起停纯透传（先例）· grep <code>不回写快照</code></li>
+      <li><code>src/auto_qb/core/qbapi.py:59-94 / 130-151</code> · 标签/分类/限速/路径字段直写 · grep <code>update_torrent_fields</code></li>
+      <li><code>src/auto_qb/torrents/store.py:722-735</code> · <code>remove_torrent</code> / <code>restore_torrent</code>（只动 <code>by_hash</code>）</li>
+      <li>对照档案：<code>memory-bank/tasks/26-10-13-backend-seed-state-writeback.md</code>（A1 纯透传移除）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">门面把本地账本当成「写缓存」：命令成功即改账。命令成功只说明 qB 接受了请求，不说明状态已生效；
+      真正的账要等 qB 上报。起停已经按这条改面（A 系 S1），删除与字段写还停在旧口径 —— 缺的不是新原则，
+      是<b>把既有原则推广完</b>。<br>
+      已排除：不是字段映射错误（字段名与 qB 一致）；不是 <code>_sync_paused_state</code> 仍在（已于 2026-10-13 删除）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>重构方向：写门面只发命令、不写账；账一律由 sync 落。需要「本地立即反映」的地方，改为<b>等待上报</b>或在前端做乐观态（可回滚），
+      不写进服务端快照。本件不单独实施。</p>
+  </section>
+
+  <footer>
+    26-10-21-1813-bug-qbapi-write-facade-store-writes.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

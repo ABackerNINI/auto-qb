@@ -1,4 +1,4 @@
-"""TorrentStore: 主索引 + 增量同步态 + 分组索引 + 全局标签/分类缓存 + 写后同步"""
+"""TorrentStore: 主索引 + 增量同步态 + 分组索引 + 全局标签/分类缓存 + 确定性字段写后同步"""
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 

@@ -11,7 +11,7 @@
 - state.py      状态持久化服务 StateService（state.json 读写/迁移/周期落盘/执行历史单点;
                 自 RuleEngineMixin 迁出, 26-09-30）
 - taskqueue.py  单任务队列（add_task / run_due 两动词）
-- qbapi.py      qB API Facade（写后同步快照）
+- qbapi.py      qB API Facade（确定性字段写后同步; 运行状态只等 qB 同步）
 - qbclient.py   qB 客户端构造（本地直连 trust_env 处理）
 - curves.py     限速曲线纯逻辑（Traffic Monitor dat 解析/聚合/查档）
 - episodes.py   集数解析（第x集 > S01E05 > EP05 > E05）

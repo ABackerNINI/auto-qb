@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="skip-check-arch">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-10-21-1857">
+<meta name="doc-updated" content="26-10-21-1857">
+<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html,memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html,memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #101216;
+    --panel: #15181e;
+    --ink: #e0e1dc;
+    --dim: #9aa0a8;
+    --faint: #6d747d;
+    --line: #262b33;
+    --acc: #7fb3a8;
+    --warn: #c9a26b;
+    --code-bg: #0c0e12;
+    --serif: Georgia, "Songti SC", "SimSun", "Times New Roman", serif;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --mono: Consolas, "Cascadia Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--bg); }
+  body { margin: 0; padding: 0 20px 90px; background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14.5px; line-height: 1.72; }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  header.cover { padding: 54px 0 20px; border-bottom: 1px solid var(--line); }
+  .kicker { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--acc); margin-bottom: 16px; }
+  h1 { font-family: var(--serif); font-weight: 400; font-size: 30px; line-height: 1.28; margin: 0 0 12px; letter-spacing: -.01em; }
+  h1 .sub2 { display: block; font-size: 19px; color: var(--dim); margin-top: 8px; }
+  .lede { color: var(--dim); font-size: 14px; max-width: 68ch; margin: 0; }
+  .metagrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); margin-top: 24px; border-top: 1px solid var(--line); }
+  .metagrid .it { padding: 10px 18px 10px 0; border-bottom: 1px solid var(--line); }
+  .metagrid .k { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+  .metagrid .v { font-size: 13px; font-family: var(--mono); color: var(--ink); margin-top: 2px; }
+  nav.toc { margin: 34px 0 8px; }
+  nav.toc .th { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); margin-bottom: 12px; }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 44px; }
+  nav.toc li { margin: 0 0 7px; break-inside: avoid; }
+  nav.toc a { color: var(--ink); text-decoration: none; font-family: var(--serif); font-size: 15px; }
+  nav.toc a:hover { color: var(--acc); }
+  nav.toc a .n { font-family: var(--mono); font-size: 11.5px; color: var(--acc); margin-right: 9px; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: 22px; margin: 52px 0 6px; padding-top: 16px; border-top: 1px solid var(--line); }
+  h2 .n { font-family: var(--mono); font-size: 12.5px; color: var(--acc); margin-right: 12px; }
+  h3 { font-family: var(--serif); font-weight: 400; font-size: 17px; margin: 30px 0 6px; }
+  h4 { font-size: 13px; font-weight: 500; letter-spacing: .04em; color: var(--dim); margin: 20px 0 4px; }
+  p { margin: 9px 0; max-width: 76ch; }
+  ul, ol { margin: 9px 0; padding-left: 22px; max-width: 76ch; }
+  li { margin: 5px 0; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px; font-size: 13px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 9px 12px 9px 0; vertical-align: top; text-align: left; }
+  th { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 500; border-bottom-color: var(--acc); }
+  td.tight, th.tight { white-space: nowrap; }
+  .sm { font-size: 12px; color: var(--dim); }
+  code, .mono { font-family: var(--mono); font-size: 12.4px; background: var(--code-bg); border: 1px solid var(--line); border-radius: 3px; padding: 1px 5px; color: #a8d0c6; word-break: break-word; }
+  pre { background: var(--code-bg); border: 1px solid var(--line); border-radius: 4px; padding: 14px 16px; overflow-x: auto; font-size: 12.4px; line-height: 1.62; font-family: var(--mono); color: #bfc6cc; }
+  pre code { border: 0; padding: 0; background: none; color: inherit; }
+  .callout { border: 1px solid var(--line); border-radius: 3px; background: var(--panel); padding: 13px 16px; margin: 16px 0; }
+  .callout .lbl { display: block; font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--acc); margin-bottom: 6px; }
+  .callout p:first-of-type { margin-top: 0; }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout.warn .lbl { color: var(--warn); }
+  .tag { display: inline-block; font-size: 10.5px; letter-spacing: .06em; padding: 1px 7px; border: 1px solid var(--line); border-radius: 3px; color: var(--dim); vertical-align: 1px; }
+  .tag.crit { border-color: var(--acc); color: var(--acc); }
+  .step { font-family: var(--mono); font-size: 12px; color: var(--acc); margin-right: 8px; }
+  .foot { margin-top: 64px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; max-width: 78ch; }
+  @media (max-width: 640px) { nav.toc ol { columns: 1; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="cover">
+  <div class="kicker">Plan · 实施计划 · doc-topic = skip-check-arch</div>
+  <h1>跳检机制重构 · 执行计划
+    <span class="sub2">上报驱动真值 + 主循环微步调度 + 批量并行推进</span>
+  </h1>
+  <p class="lede">把跳检从「一次 drain 里同步跑完 N 个 hash 的四阶段阻塞链」改成「N 个 job 在主循环上按毫秒级微步推进」：写仍走 <code>QbApi</code>（单写者不破），运行状态一个字不写（只等 sync 上报），存在性当场确认（&lt;1s 保住），批量耗时与目标数解耦。</p>
+  <div class="metagrid">
+    <div class="it"><div class="k">编号</div><div class="v">26-10-21-1857</div></div>
+    <div class="it"><div class="k">状态</div><div class="v">In Progress（S1 起实施）</div></div>
+    <div class="it"><div class="k">依据</div><div class="v">三条 issue（post-command-state-writes）+ qB 5.x / libtorrent 源码</div></div>
+    <div class="it"><div class="k">形态</div><div class="v">主循环微步状态机（不引入 worker 线程）</div></div>
+    <div class="it"><div class="k">范围</div><div class="v">core/modules/ops_mod.py · core/qbmanager.py · torrents/store.py · core/qbapi.py · webui/commands.py · rules/actions/skip_checking.py · tests/</div></div>
+    <div class="it"><div class="k">非目标</div><div class="v">不改 recheck 轮询 · 不改 qB 参数 · 不动 HR / relocate / 分组算法</div></div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="th">目录</div>
+  <ol>
+    <li><a href="#s1"><span class="n">1</span>背景与目标</a></li>
+    <li><a href="#s2"><span class="n">2</span>根因与源码证据</a></li>
+    <li><a href="#s3"><span class="n">3</span>设计公理与边界</a></li>
+    <li><a href="#s4"><span class="n">4</span>执行模型：主循环微步</a></li>
+    <li><a href="#s5"><span class="n">5</span>相位表（单 hash）</a></li>
+    <li><a href="#s6"><span class="n">6</span>批量：N 个 job 并行推进</a></li>
+    <li><a href="#s7"><span class="n">7</span>闸门重写（G3–G8）</a></li>
+    <li><a href="#s8"><span class="n">8</span>回执与进度契约</a></li>
+    <li><a href="#s9"><span class="n">9</span>崩溃恢复与幂等</a></li>
+    <li><a href="#s10"><span class="n">10</span>逐文件改动清单</a></li>
+    <li><a href="#s11"><span class="n">11</span>测试计划</a></li>
+    <li><a href="#s12"><span class="n">12</span>分期、验收与风险</a></li>
+    <li><a href="#s13"><span class="n">13</span>变更记录</a></li>
+  </ol>
+</nav>
+
+<h2 id="s1"><span class="n">1</span>背景与目标</h2>
+
+<p>用户报告（2026-10-21 17:22 / 17:32）：在 qB 里对某种子做完强制校验后，到 WebUI 对<b>同组</b>种子批量跳检，回执是「批量跳检未完成: 11 个失败: 同组种子正在全量校验中…」（同一段文案重复 3 次）；另一次同组 3 个目标出现「成功 1、失败 2」，失败原因相同。单发跳检同样会命中。</p>
+
+<p>追查确认这不是一个闸门写错，而是<b>执行模型</b>的问题：批量跳检在命令 drain 内同步串行跑完 N 个 hash（每个约 6s，几乎全是 sleep 轮询），整批期间同步线停摆、快照冻结；跳检收尾又把「命令后直查到的状态」写回快照。三个环节叠加，产生误挡、自毒化与不可诊断的回执。</p>
+
+<h4>本计划要达到的</h4>
+<ul>
+  <li><b>不占主循环</b>：任何一步只做一次 <code>QbApi</code> 调用（毫秒级），不再有 5s 级 sleep 轮询；</li>
+  <li><b>响应 &lt;1s</b>：完成语义只依赖「命令 ack + 存在性确认」，不等运行状态；</li>
+  <li><b>真值单源</b>：运行状态（state / progress）只由 <code>apply_sync</code> 写，跳检路径一个字不写；</li>
+  <li><b>批量与目标数解耦</b>：11 个目标 ≈ 250ms（现状 ≈ 66s），慢的不拖快的；</li>
+  <li><b>可诊断</b>：失败点名 blocker（hash8 + 名字 + state），回执按原因聚合。</li>
+</ul>
+
+<h4>非目标</h4>
+<ul>
+  <li>不改 <code>ops.recheck</code> 的提交 + 轮询结构（它本来就是「命令 + 快照观测」的正确形态）；</li>
+  <li>不改 qB 的 <code>RefreshInterval</code> 等参数；不改分组算法、不改 HR / relocate。</li>
+</ul>
+
+<h2 id="s2"><span class="n">2</span>根因与源码证据</h2>
+
+<table>
+  <tr><th>现象</th><th>机制</th><th>位置</th></tr>
+  <tr>
+    <td>同组 11 个目标全被 G7 挡</td>
+    <td>G7 是组级扇出：组内<b>任一</b>其它成员被判「在验」即挡下其余全部；判据只有本地快照 + 在途登记，且 <code>is_checking</code> 把 <code>checkingResumeData</code> 也算进来</td>
+    <td><code>ops_mod.py:685-694</code>；<code>qbittorrentapi</code> <code>TorrentState.is_checking</code></td>
+  </tr>
+  <tr>
+    <td>校验结束后仍挡</td>
+    <td>快照按 sync 节拍更新、在途登记按任务生命周期释放，G7 侧没有任何超时/自愈；不比对文件映射</td>
+    <td><code>taskqueue.py:225-226</code>；<code>ops_mod.py:714</code>（G8 有映射前置，G7 没有）</td>
+  </tr>
+  <tr>
+    <td>「成功 1、失败 2」</td>
+    <td>批量在单次 drain 内串行执行，整批期间不跑 sync；跳检收尾把直查结果 <code>apply_delta</code> 回写快照，写进去的是命令前的旧值或构造期初始值 → 同批后续成员被「刚跳检完的组员」挡住</td>
+    <td><code>commands.py:1194-1202</code>；<code>qbmanager.py:538-575</code>；<code>ops_mod.py:806-821</code></td>
+  </tr>
+  <tr>
+    <td>11 个失败只显示 3 段重复</td>
+    <td>失败消息按 hash 逐条收集，G7 文案不含身份 ⇒ N 条逐字相同；收口处 <code>[:3]</code> 硬截</td>
+    <td><code>commands.py:1207-1208</code></td>
+  </tr>
+</table>
+
+<h4>源码证据（qBittorrent 5.x / libtorrent，取证 2026-10-21 18:32）</h4>
+<pre><code>// 运行状态是缓存, 按 1500ms 定时器批量刷新 —— 命令后直查必读旧值
+sessionimpl.cpp:575   m_refreshInterval(..., 1500)
+sessionimpl.cpp:6013  QTimer::singleShot(refreshInterval(), ..., [this]{ post_torrent_updates(); });
+torrentimpl.cpp:1284  TorrentState TorrentImpl::state() const { return m_state; }        // 缓存
+torrentimpl.cpp:927   qreal TorrentImpl::progress() const { ... m_nativeStatus ... }     // 缓存
+torrentimpl.cpp:2108  handleStateUpdate(status) 只在 state_update_alert 时更新缓存
+
+// 存在性: 删除同步 / 新增异步
+sessionimpl.cpp:2643  TorrentImpl *const torrent = m_torrents.take(id);   // 同步摘除
+sessionimpl.cpp:3137  m_nativeSession->async_add_torrent(p);             // 新增走告警泵
+sessionimpl.cpp:6258  createTorrent() { ... m_torrents.insert(...) }     // 告警到达才入表
+
+// 跳检重加为什么"不校验": skip_checking 已弃用, 被翻成 seedMode → seed_mode
+addtorrentparams.cpp:128  .seedMode = ... jsonObj.value("skip_checking").toBool()
+sessionimpl.cpp:3086      if (addTorrentParams.seedMode) p.flags |= lt::torrent_flags::seed_mode;
+// libtorrent: seed_mode = 假定文件完整, 不校验; 某块被请求时才验, 失败则退出 seed mode 并全量重验</code></pre>
+
+<div class="callout">
+  <span class="lbl">由此得出的硬结论</span>
+  <p>新建 <code>TorrentImpl</code> 在第一个上报周期之前是 <code>state=pausedDL</code>、<code>progress=0</code>（构造期由默认 status 推出，<code>total_wanted==0</code>）。所以「跳检收尾直查回写」写进快照的必然是旧值或初始值 —— 这条纪律的前提不成立，相关发现已入池：<a href="../issues/26-10-21-1812-bug-cmd-driven-resync.html">P0-5 命令驱动补刷新</a>、<a href="../issues/26-10-21-1812-bug-decision-moment-live-query.html">决定性时刻直查真值</a>、<a href="../issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html">写操作门面直写快照</a>。</p>
+</div>
+
+<h2 id="s3"><span class="n">3</span>设计公理与边界</h2>
+
+<p>四条公理，后面所有设计都由它们推出，不再逐条论证：</p>
+<ol>
+  <li><b>A1 真值单源</b>：运行状态（state / progress）只由 <code>apply_sync</code> 写；命令后不查、不推、不写。</li>
+  <li><b>A2 门面唯一</b>：所有 qB 访问经 <code>QbApi</code>（业务代码不得直连 raw client）；<code>QbApi</code> 是 store 的唯一维护点。</li>
+  <li><b>A3 不占主循环</b>：不阻塞、不 sleep、不按 tick 摊开动作；每步只做一次毫秒级调用。</li>
+  <li><b>A4 响应 &lt;1s</b>：完成语义不等运行状态。</li>
+</ol>
+
+<h4>边界：存在性 ≠ 运行状态</h4>
+<table>
+  <tr><th>类别</th><th>例子</th><th>生效方式</th><th>能否当场确认</th></tr>
+  <tr><td>存在性（会话级）</td><td>delete 后是否还在会话、add 后是否出现</td><td>qB 处理请求即改 <code>m_torrents</code></td><td><b>删除：可以</b>（<code>m_torrents.take</code> 同步）；<b>新增：可以短轮询</b>（告警泵异步，ms 级）</td></tr>
+  <tr><td>运行状态（节拍级）</td><td>progress / checkingUP / stoppedUP</td><td>qB 每 <code>refreshInterval</code>（1500ms）批量刷新</td><td><b>不可以</b>，只能等上报</td></tr>
+</table>
+
+<div class="callout warn">
+  <span class="lbl">由此产生的一个必须接受的窗口</span>
+  <p>跳检完成后，qB 自己在第一个上报周期内报 <code>pausedDL / 0%</code>，第二个周期才报 <code>pausedUP / 100%</code>；再经我们的 sync 落账 → WebUI 行会有 <b>1.5~3s 的「暂停 / 0%」</b>。这是 qB 的真值，不是假账。服务端不做任何补偿；前端可显示「跳检完成，等待客户端刷新」的纯展示临时态（不落快照）。</p>
+</div>
+
+<h2 id="s4"><span class="n">4</span>执行模型：主循环微步</h2>
+
+<p>写必须走 <code>QbApi</code>，而 <code>QbApi</code> 改 store ⇒ 写必须在主循环线程上。那就让每一步都小到可以接受：</p>
+
+<ul>
+  <li><b>一步</b> = 至多 1 次写调用 + 1 次存在性读（都是 ms 级），做完立刻让出；</li>
+  <li><b>步间间隔</b> 10~20ms，由主循环的等待超时纳入调度，<b>不 sleep、不空转、不等 tick</b>；</li>
+  <li><b>每轮预算</b>：50ms 或 20 次调用，先到先止；超出的下一轮优先；</li>
+  <li><b>批量</b>：同一次唤醒里所有到期 job 各推一步。</li>
+</ul>
+
+<h4>内核改动（唯一一处）</h4>
+<pre><code># core/qbmanager.py:636 现为
+wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
+# 改为: 把"下一条 job 的下一步"并入等待超时
+wait_for = max(0.0, min(next_sync_at, next_tick_at, self.skip.next_run_at()) - time.time())</code></pre>
+<p class="sm">命令线（<code>run_command_line</code>）每轮调用 <code>skip.advance_due(budget_ms=50, budget_calls=20)</code>；job 注册表与相位推进都在 <code>SkipCheckModule</code> 内，内核只认识「下一条到期时间」这一个数字。</p>
+
+<h4>时序（11 个目标）</h4>
+<pre><code>轮 1   delete ×11                      主循环占用 ~50ms
+轮 2   确认消失 ×11 + add ×11           ~100ms
+轮 3   确认出现 ×11 + 打标/开始 ×11      ~100ms
+→ 整批 ~250ms 完成(现状 66s 且全阻塞); 慢的只影响自己, 不拖住整批</code></pre>
+
+<h2 id="s5"><span class="n">5</span>相位表（单 hash）</h2>
+
+<table>
+  <tr><th>相位</th><th>本轮动作</th><th>进入下一相的条件</th><th>上限 / 重试</th><th>失败处置</th></tr>
+  <tr><td class="tight"><code>ACCEPTED</code></td><td>判闸门（只读快照，零 API）；写 <code>.torrent</code> 备份（本地 IO）</td><td>闸门全过</td><td>—</td><td>拒绝 → <code>REJECTED</code>（零副作用）</td></tr>
+  <tr><td class="tight"><code>DELETING</code></td><td><code>api.torrents_delete(..., keep_record=True)</code></td><td>调用返回成功</td><td>3 次（10/20/50ms）</td><td><code>FAILED</code>（未删除，无损失）</td></tr>
+  <tr><td class="tight"><code>GONE</code></td><td><code>api.torrents_info(hash)</code> 为空</td><td>返回空</td><td>5 次（10~100ms）</td><td>回 <code>DELETING</code> 重发一次，仍不空 → <code>FAILED</code></td></tr>
+  <tr><td class="tight"><code>ADDING</code></td><td><code>api.torrents_add(skip_checking=True, stopped=True, …)</code></td><td>返回 <code>Ok.</code></td><td>5 次（撞「已存在」即重试）</td><td><code>FAILED</code>（种子已移除，备份保留）</td></tr>
+  <tr><td class="tight"><code>APPEARED</code></td><td><code>api.torrents_info(hash)</code> 非空</td><td>非空</td><td>5 次</td><td><code>FAILED</code></td></tr>
+  <tr><td class="tight"><code>FINISH</code></td><td>打标 + <code>auto_start</code> + 写 <code>skip_check_day</code> + 清备份</td><td>打标成功或失败均继续</td><td>1 次</td><td>打标失败仅 warning</td></tr>
+</table>
+
+<div class="callout">
+  <span class="lbl">两条不可退让的细节</span>
+  <p><b>① 删除不摘记录</b>：<code>torrents_delete(keep_record=True)</code> 只发命令、不动 <code>by_hash</code>。理由：delete+add 若落在同一上报间隔内，qB 视角里种子从未离开，增量 diff 只会给变化字段；若我们本地摘了记录，<code>apply_sync</code> 会拿残缺 patch 新建记录（缺 name / save_path 等必填字段）。普通删除（非跳检）行为不变。</p>
+  <p><b>② 备份先于删除</b>：沿用现有语义（备份写不进去就不删除），只是把备份从「同步链的中段」提前到 <code>ACCEPTED</code> 相位。</p>
+</div>
+
+<h2 id="s6"><span class="n">6</span>批量：N 个 job 并行推进</h2>
+
+<h4>受理（一次命令，逐 hash O(1) 判定）</h4>
+<pre><code>keys(组) → 展开成员 ─┐
+hashes(直接选中) ────┴→ 去重(保序) → 逐 hash 判闸门(同一份快照) → 建 job
+→ 立即回执 { batch_id, items:[{hash, cls, reasons}] }</code></pre>
+<ul>
+  <li><b>判定同源</b>：整批用同一份快照判，避免「先删的成员让后面成员的判定变样」；</li>
+  <li><b>快照龄闸</b>：快照龄 &gt; 1 个 sync 周期 ⇒ 整批推迟到下一轮上报后再判（不半批判定、不半批执行）；</li>
+  <li><b>幂等</b>：同一 hash 在 keys 展开与直接选中里重复出现只留一个；已有在途 job 的 hash 直接返回 <code>skip</code>。</li>
+</ul>
+
+<h4>调度</h4>
+<pre><code>轮 = 一次主循环迭代
+取所有到期 job → 按"组"归并排序(同组连续) → 依次推进一步
+直到预算用完(50ms 或 20 次调用, 先到先止) → 剩下的下一轮优先</code></pre>
+<p class="sm">组内同轮是<b>优先级</b>而非硬约束：文件不动，组内拆到两轮没有物理风险；只是判定已在受理时完成，拆开不影响正确性。</p>
+
+<h4>窗口抑制（批量才暴露的问题）</h4>
+<p>批量的删除→重加窗口只有 ms 级，但 N 个目标让「sync 恰好插进窗口」的概率变大。插进来时 qB 会报 <code>torrents_removed</code>，<code>apply_sync</code> 会摘记录、<code>grouping</code> 会走「种子已删除」链路（取消归组 / 缺文件扫描 / 删除事件）。</p>
+<p>处理：批次在途的 hash 暴露为 <code>store.skipping_hashes</code>；<code>apply_sync</code> 收到这些 hash 的 removal 时只登记内部待结算，不进 <code>last_removed</code>、不触发 grouping 链路；job 终态时统一结算（成功 → 忽略这次 removal；失败 → 按真删除处理，摘记录）。</p>
+
+<h4>失败与重试（逐 hash 独立）</h4>
+<p>每个 hash 独立重试与终态；<b>整批不回滚</b>——已成功的保持，失败的点名，互不影响。某个 hash 的 delete 没落地，只它自己停在该相重试，其余照常推进。</p>
+
+<h2 id="s7"><span class="n">7</span>闸门重写（G3–G8）</h2>
+
+<table>
+  <tr><th>闸门</th><th>现状</th><th>改后</th></tr>
+  <tr><td class="tight">G3 / G4</td><td>已完成 / 活跃中（谓词同 <code>checking.py:88</code>）</td><td>不变</td></tr>
+  <tr><td class="tight">G5 同 hash 在验</td><td>只看队列在途登记</td><td>队列在途 <b>或</b> 快照 <code>is_piece_checking</code>（补上「用户手动 recheck」半边）；在途登记带 TTL</td></tr>
+  <tr><td class="tight">G6 组内下载</td><td><code>group_has_downloading</code></td><td>不变</td></tr>
+  <tr><td class="tight">G7 组内成员在验</td><td>快照 <code>is_checking</code>（含 <code>checkingResumeData</code>）∪ 队列；不比对映射；文案不点名</td><td>① 只用 <code>is_piece_checking</code>（排除 <code>checkingResumeData</code>，它不产生数据判决）；② 仅<b>映射一致</b>的成员参与（对齐 G8）；③ 文案点名 blocker；④ 在途登记 TTL</td></tr>
+  <tr><td class="tight">G8 组内失败推断</td><td>四要件 + 映射一致</td><td>不变（文案同步点名）</td></tr>
+  <tr><td class="tight">partial / dedup / filelist</td><td>—</td><td>判定不变；<b>filelist 从预检挪到 <code>ACCEPTED</code></b>（预检只做 O(1)，不碰 files API / stat）</td></tr>
+</table>
+
+<p>文案示例（G7）：</p>
+<pre><code>同组种子 a1b2c3d4《Some.Movie.2024.1080p》正在全量校验(state=checkingUP, 已 12 分钟):
+等其结束后再跳检, 校验通过即证明共享文件完好; 强制跳检将不经其判决断言数据有效,
+若判决为失败坏数据将被永久洗白</code></pre>
+
+<h2 id="s8"><span class="n">8</span>回执与进度契约</h2>
+<ul>
+  <li><b>受理即回执</b>：<code>{batch_id, items:[{hash, name, cls, reasons}]}</code>，前端据此渲染三分流（可跳检 / 需强制 / 禁止）；</li>
+  <li><b>执行中</b>：每个 hash 终态一条 SSE 事件（成功 / 失败 + 原因 + blocker）；</li>
+  <li><b>全部终态</b>：一条汇总（成功 X / 失败 Y / 跳过 Z，失败逐条列原因，不再 <code>[:3]</code> 截断、不再重复同因文案）；</li>
+  <li><b>前端</b>：批量跳检不再用 60s <code>waitCmd</code> 等整批，改为「受理回执 + 事件驱动 toast」。</li>
+</ul>
+
+<h2 id="s9"><span class="n">9</span>崩溃恢复与幂等</h2>
+<ul>
+  <li><b>job 账</b>落 <code>state["skip_check"]["jobs"]</code>：<code>{hash: {phase, backup, started_at, source, origin_rule}}</code>，由主循环单点写（黄金法则 3 / 5）；终态即清；</li>
+  <li><b>启动对账</b>：非终态 job 在第一轮上报后核对——qB 里没有该 hash 且有备份 ⇒ 用备份重加一次（<code>seed_mode</code> + stopped）；重加失败或 qB 里仍有 ⇒ 标 <code>FAILED</code> 并通知；</li>
+  <li><b>幂等</b>：同 hash 已有在途 job ⇒ 拒绝重复受理；<code>skip_check_day</code> 仍在终态写（跨来源同日去重语义不变）。</li>
+</ul>
+
+<h2 id="s10"><span class="n">10</span>逐文件改动清单</h2>
+
+<table>
+  <tr><th>文件</th><th>改动</th></tr>
+  <tr><td class="tight"><code>core/modules/skip_check_mod.py</code>（新）</td><td>job 注册表 + 相位机 + 预算调度 + 在途抑制登记 + 崩溃对账；<code>next_run_at()</code> / <code>advance_due()</code> 两个对外口</td></tr>
+  <tr><td class="tight"><code>core/modules/ops_mod.py</code></td><td>跳检执行体迁出（<code>_skip_gates_detail</code> 保留为闸门单点）；删 <code>_poll_until</code> 轮询与 <code>apply_delta(live)</code> 回写；<code>skip_check()</code> 改为「受理 + 建 job」，返回已受理</td></tr>
+  <tr><td class="tight"><code>core/qbmanager.py</code></td><td><code>:636</code> 等待超时并入 <code>skip.next_run_at()</code>；命令线调用 <code>advance_due()</code></td></tr>
+  <tr><td class="tight"><code>core/qbapi.py</code></td><td><code>torrents_delete(..., keep_record=False)</code> 新形参（跳检用 True）；其余写方法不动</td></tr>
+  <tr><td class="tight"><code>torrents/store.py</code></td><td><code>skipping_hashes</code> 集合；<code>_apply</code> 对在途 hash 的 removal 只登记待结算；<code>remove_torrent</code> 保持原语义</td></tr>
+  <tr><td class="tight"><code>rules/actions/skip_checking.py</code></td><td>改为「提交即 pending」；job 终态把 <code>origin</code> 重新入队（与 recheck 同构）</td></tr>
+  <tr><td class="tight"><code>webui/commands.py</code></td><td>批量跳检改为受理 + 汇总回执（按原因聚合）；<code>fail_msgs[:3]</code> 删除；<code>_bulk_recheck_via_ops</code> 共用同一聚合单点</td></tr>
+  <tr><td class="tight"><code>webui/static/shared/drawer.js</code></td><td>批量跳检 toast 改事件驱动；预检对话框的三分流渲染不变</td></tr>
+  <tr><td class="tight"><code>rules/checking_meta.py</code></td><td>新增在途登记 TTL 常量（建议 <code>2 × CHECK_START_GIVEUP</code>）</td></tr>
+  <tr><td class="tight"><code>tests/</code></td><td>见 §11；<code>test_ops</code> / <code>test_checking</code> 的同步断言改造为「驱动相位机到终态」的夹具</td></tr>
+</table>
+
+<h2 id="s11"><span class="n">11</span>测试计划</h2>
+
+<table>
+  <tr><th>编号</th><th>用例</th><th>要点</th></tr>
+  <tr><td class="tight">T1</td><td>相位机推进</td><td>假时钟逐相推进，每相至多 1 写 + 1 读，全程无 sleep；终态正确</td></tr>
+  <tr><td class="tight">T2</td><td>删除不摘记录</td><td><code>keep_record=True</code> 后 <code>by_hash</code> 仍有记录；普通删除仍摘除</td></tr>
+  <tr><td class="tight">T3</td><td>窗口抑制</td><td>在途 hash 的 <code>torrents_removed</code> 不进 <code>last_removed</code>、不触发分组删除链路；终态结算正确</td></tr>
+  <tr><td class="tight">T4</td><td>批量预算</td><td>21 个目标在 20 次预算下分两轮推进；11 个目标单轮完成</td></tr>
+  <tr><td class="tight">T5</td><td>失败隔离</td><td>单个 hash 的 add 持续失败 → 仅它 FAILED，其余照常 DONE</td></tr>
+  <tr><td class="tight">T6</td><td>崩溃恢复</td><td>state 有 job + qB 无该 hash ⇒ 用备份重加；重加失败 → FAILED + 通知</td></tr>
+  <tr><td class="tight">T7</td><td>G7 谓词</td><td><code>checkingResumeData</code> 不挡；映射不一致不挡；文案含 blocker 的 hash8/名字/state</td></tr>
+  <tr><td class="tight">T8</td><td>G5 快照半</td><td>手动 recheck（队列无登记）也挡；TTL 到期后放行</td></tr>
+  <tr><td class="tight">T9</td><td>回执聚合</td><td>11 条同因失败 → 一条「11 个失败: &lt;原因&gt;」；不同原因分组</td></tr>
+  <tr><td class="tight">T10</td><td>快照龄闸</td><td>快照龄超 1 个 sync 周期 ⇒ 整批推迟，不半批执行</td></tr>
+  <tr><td class="tight">T11</td><td>规则侧契约</td><td>规则源提交返回 pending；job 终态 origin 重新入队；执行历史在终态写</td></tr>
+  <tr><td class="tight">T12</td><td>守阵：真值单源</td><td>跳检全程<b>零</b> state/progress 写入（只允许 <code>skip_check_day</code> 与 <code>keep_record</code> 语义）</td></tr>
+</table>
+
+<p class="sm">改造面：<code>test_ops.py</code> 27 条、<code>test_checking.py</code> 69 条里的同步断言需要改成「建 job → 驱动相位机 → 断言终态」；<code>test_web_commands.py</code> 的批量回执断言改按原因聚合口径。</p>
+
+<h2 id="s12"><span class="n">12</span>分期、验收与风险</h2>
+
+<h3>分期（每期可独立提交、独立验收）</h3>
+<table>
+  <tr><th>期</th><th>内容</th><th>独立价值</th></tr>
+  <tr><td class="tight">S1</td><td>闸门口径（G5 快照半 + G7 三条）+ 点名文案 + 回执按原因聚合</td><td>误挡立刻可诊断；不依赖执行模型改造</td></tr>
+  <tr><td class="tight">S2</td><td>相位机 + 微步调度（第三条时间线）+ 删除不摘记录</td><td>主循环不再被占；响应仍 &lt;1s</td></tr>
+  <tr><td class="tight">S3</td><td>批量并行 + 窗口抑制 + 回执/进度契约（前后端）</td><td>批量耗时与目标数解耦</td></tr>
+  <tr><td class="tight">S4</td><td>规则侧异步契约 + 崩溃恢复对账</td><td>规则源不再阻塞主循环</td></tr>
+  <tr><td class="tight">S5</td><td>测试改造 + 基线切片 + 文档回写（<code>modules/core-runtime.md</code>、<code>systemPatterns/data-layer.md</code>）</td><td>收尾</td></tr>
+</table>
+
+<h3>验收要点</h3>
+<ul>
+  <li>11 个目标批量跳检：主循环单轮占用 ≤50ms、整批 ≤1s 完成、<code>test.full</code> 全绿；</li>
+  <li>跳检全程无 state/progress 写入（T12 守阵）；</li>
+  <li>G7 误挡可复现验证：<code>checkingResumeData</code> 与映射不一致两种场景均放行；</li>
+  <li>回执：11 条同因失败只出现一条聚合文案，且含 blocker 身份。</li>
+</ul>
+
+<h3>风险与取舍</h3>
+<table>
+  <tr><th>风险</th><th>说明 / 处置</th></tr>
+  <tr><td>UI 1.5~3s 的「暂停 / 0%」</td><td>qB 第一个上报周期的真值，已接受；服务端不补偿，前端只做展示临时态</td></tr>
+  <tr><td>规则侧契约翻转</td><td><code>skip_check</code> 由同步返回变「受理 + 终态重入队」，影响 <code>test_checking</code> 的同步断言；S4 单独一期消化</td></tr>
+  <tr><td>不做双路径</td><td>不保留旧同步执行体作为回退开关（双轨必然漂移）；回退 = revert 该期提交</td></tr>
+  <tr><td>在途抑制的边界</td><td>抑制只覆盖 job 在途的 hash；job 终态失败时按真删除处理，避免「永久隐瞒」</td></tr>
+  <tr><td>每轮预算过小</td><td>大库（200+ 目标）会分多轮，总时长随 N 线性增长但主循环始终不被占；预算可配置</td></tr>
+</table>
+
+<h2 id="s13"><span class="n">13</span>变更记录</h2>
+<ul>
+  <li>2026-10-21 19:13 — 认领三条 issue（置 In Progress），开始实施 S1。</li>
+  <li>2026-10-21 18:57 — 初版。基于当日 grilling 结论与 qB 5.x / libtorrent 源码取证；三条发现已入池（topic <code>post-command-state-writes</code>）；<code>code-style.md</code> 的「写后同步」条已按档案漂移移除。</li>
+</ul>
+
+<div class="foot">
+  26-10-21-1857-plan-skip-check-async-refactor.html · 计划不等于已实施；实施前需先认领三条 issue 并置 <code>In Progress</code>。
+</div>
+
+</div>
+</body>
+</html>
