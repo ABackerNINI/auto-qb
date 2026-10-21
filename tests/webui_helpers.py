@@ -351,6 +351,112 @@ def _qb_v4(mgr):
     return TrafficV4Store(mgr.config.data_dir)
 
 
+# ---- HR 两张表的行键面单点(闭集断言: test_hr_status 与 test_web_hr 同引此处; 后端加字段只改这一处) ----
+# 字面量刻意写在**测试侧**、不从 dataclass 派生: 派生会让「后端加字段」与「期望键面」同步漂移, 守阵形同虚设。
+# 正确姿势 = 改 prod 的 dataclass/装配 -> 两条用例同时红 -> 在此改一次 -> 两处同时绿(单点声明, 语义不变)。
+HISTORY_ROW_KEYS = frozenset(
+    {
+        "ts",
+        "ts_text",
+        "site",
+        "kind",
+        "kind_text",
+        "trigger",
+        "trigger_text",
+        "action",
+        "result_text",
+        "result_tone",
+        "reason",
+        "reason_kind",
+        "pages",
+        "rows",
+        "torrents_ok",
+        "torrents_fail",
+        "verified",
+        "elapsed_s",
+        "elapsed_text",
+        "lanes",
+        "notes",
+        "by",
+    }
+)
+# EntryDetail.to_dict 面(entry_details 导出; 计划 26-10-01-2216 §3 P0+P1 全集)
+ENTRY_ROW_KEYS = frozenset(
+    {
+        "tid",
+        "dl_id",
+        "name",
+        "lane",
+        "lane_text",
+        "uploaded_bytes",
+        "downloaded_bytes",
+        "ratio",
+        "need_seed_seconds",
+        "need_seed_text",
+        "infohash_v1",
+        "infohash_v2",
+        "verified_ts",
+        "verified_source",
+        "verified_source_text",
+        "done_iso",
+        "active",
+        "missing_streak",
+        "first_seen",
+        "last_seen",
+    }
+)
+# 响应层多一个只读标记: mark_local_present 的 join 追加(server/routes/hr.py, 计划 26-10-02-1936 §3.3 决策点③a)
+ENTRY_ROW_KEYS_API = ENTRY_ROW_KEYS | {"local_present"}
+# history 行内嵌的 lane 子键面(HistoryLane.to_dict; 拉取历史展开小表的一行)
+HISTORY_LANE_KEYS = frozenset({"lane", "lane_text", "status", "status_text", "pages", "rows", "detail"})
+# 站点级快照面(SiteStatus.to_dict; WebUI 表② 的 kv 行与摘要层)
+SITE_STATUS_KEYS = frozenset(
+    {
+        "site",
+        "enabled",
+        "listing",
+        "now",
+        "channel_state",
+        "channel_text",
+        "revision",
+        "file_path",
+        "read_error",
+        "fetched_at",
+        "healthy_ts",
+        "expires_at",
+        "next_wave_at",
+        "refresh_interval",
+        "idle_mode",
+        "stale",
+        "fresh_text",
+        "lanes",
+        "lanes_text",
+        "releases_enabled",
+        "zero_rows",
+        "empty_confirmed",
+        "count_attested_empty",
+        "retention_text",
+        "notes",
+        "writer_instance",
+        "writer_heartbeat",
+        "index_total",
+        "index_active",
+        "lane_counts",
+        "pending_infohash",
+        "backfill_ratio",
+        "managed",
+        "keys",
+        "downloaded",
+        "fails",
+        "verified",
+        "observing",
+        "quota",
+        "allow_window",
+        "blocking",
+    }
+)
+
+
 def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
     """给 web 替身挂上一个**真** HR 服务(跑过一轮), 返回它 —— 站点文件与视图都是真的
 

@@ -114,6 +114,12 @@ from auto_qb.hr.status import (
     site_status,
     stamp_text,
 )
+from webui_helpers import (  # 键面单点(与 test_web_hr 同引, issue 26-10-21-0502)
+    ENTRY_ROW_KEYS,
+    HISTORY_LANE_KEYS,
+    HISTORY_ROW_KEYS,
+    SITE_STATUS_KEYS,
+)
 
 
 def _site(entries) -> HrSiteData:
@@ -243,29 +249,7 @@ def test_entry_details_field_surface():
         missing_streak=1,
     )
     row = entry_details(_site([entry]))[0].to_dict()
-    expected = {
-        "tid",
-        "dl_id",
-        "name",
-        "lane",
-        "lane_text",
-        "uploaded_bytes",
-        "downloaded_bytes",
-        "ratio",
-        "need_seed_seconds",
-        "need_seed_text",
-        "infohash_v1",
-        "infohash_v2",
-        "verified_ts",
-        "verified_source",
-        "verified_source_text",
-        "done_iso",
-        "active",
-        "missing_streak",
-        "first_seen",
-        "last_seen",
-    }
-    assert set(row) == expected, "字段面要与计划 §3 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
+    assert set(row) == ENTRY_ROW_KEYS, "字段面要与计划 §3 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
     assert "remain_seconds" not in row, "决策点③: 考核窗口倒计时不得进表(2026-09-25 误读教训)"
     assert row["dl_id"] == 173107 and row["done_iso"] == "2026-09-20 10:00:00"
     assert row["lane_text"] == "考察中" and row["first_seen"] == 111.0 and row["last_seen"] == 222.0
@@ -537,31 +521,8 @@ def test_history_rows_plain_texts_and_lanes():
 def test_history_rows_field_surface():
     """行键面 = 计划 §3.4 全集; lane 子键面钉死 —— 前端只消费后端算好字段, 键面漂移即红"""
     row = history_rows(_datas(alpha=[_hist(1.0, lanes=[{"lane": "B", "status": "ok"}])]), 10, 9.0)[0].to_dict()
-    assert set(row) == {
-        "ts",
-        "ts_text",
-        "site",
-        "kind",
-        "kind_text",
-        "trigger",
-        "trigger_text",
-        "action",
-        "result_text",
-        "result_tone",
-        "reason",
-        "reason_kind",
-        "pages",
-        "rows",
-        "torrents_ok",
-        "torrents_fail",
-        "verified",
-        "elapsed_s",
-        "elapsed_text",
-        "lanes",
-        "notes",
-        "by",
-    }, "字段面要与计划 §3.4 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
-    assert set(row["lanes"][0]) == {"lane", "lane_text", "status", "status_text", "pages", "rows", "detail"}
+    assert set(row) == HISTORY_ROW_KEYS, "字段面要与计划 §3.4 逐字对齐(多导出 = 体积浪费, 少导出 = 前端没得吃)"
+    assert set(row["lanes"][0]) == HISTORY_LANE_KEYS
 
 
 # ---------- 稳态降频展示同步(计划 26-10-05-0555 S3 + 拍板 D1) ----------
@@ -843,7 +804,7 @@ def test_history_lanes_defaults_and_fallbacks():
     rich = _history_lanes([{"lane": "C", "status": "failed", "pages": 2, "rows": 9, "detail": "d"}])[0]
     assert (rich.lane, rich.lane_text, rich.status, rich.status_text) == ("C", "未达标", "failed", "失效")
     assert (rich.pages, rich.rows, rich.detail) == (2, 9, "d")
-    assert set(rich.to_dict()) == {"lane", "lane_text", "status", "status_text", "pages", "rows", "detail"}
+    assert set(rich.to_dict()) == HISTORY_LANE_KEYS
     # 整条缺 lane/status 键: 兜空串(or 右侧占位文本会进展示行)
     empty = _history_lanes([{}])[0]
     assert (empty.lane, empty.lane_text, empty.status, empty.status_text) == ("", "", "", "-"), "缺键兜空串/人话表空串键(不是占位)"
@@ -1120,49 +1081,7 @@ def test_site_status_to_dict_field_surface():
     conf = SiteHrCheckConfig(refresh_interval=3600.0, idle_refresh_interval=86400.0)
     snap = site_status("s", _rich_data(NOW), _rich_view(), _RichSvc(conf), NOW)
     keys = set(snap.to_dict())
-    assert keys == {
-        "site",
-        "enabled",
-        "listing",
-        "now",
-        "channel_state",
-        "channel_text",
-        "revision",
-        "file_path",
-        "read_error",
-        "fetched_at",
-        "healthy_ts",
-        "expires_at",
-        "next_wave_at",
-        "refresh_interval",
-        "idle_mode",
-        "stale",
-        "fresh_text",
-        "lanes",
-        "lanes_text",
-        "releases_enabled",
-        "zero_rows",
-        "empty_confirmed",
-        "count_attested_empty",
-        "retention_text",
-        "notes",
-        "writer_instance",
-        "writer_heartbeat",
-        "index_total",
-        "index_active",
-        "lane_counts",
-        "pending_infohash",
-        "backfill_ratio",
-        "managed",
-        "keys",
-        "downloaded",
-        "fails",
-        "verified",
-        "observing",
-        "quota",
-        "allow_window",
-        "blocking",
-    }, "字段面与 WebUI 契约逐字对齐"
+    assert keys == SITE_STATUS_KEYS, "字段面与 WebUI 契约逐字对齐"
     assert set(snap.to_dict()["quota"]) == set(QuotaStatus().to_dict())
 
 

@@ -73,7 +73,7 @@ import pytest
 from auto_qb.infra import file_access
 from auto_qb.infra.utils import encode_group_key
 
-from webui_helpers import _UI_ALL, _ui_aggregate, _hr_status_env
+from webui_helpers import _UI_ALL, _ui_aggregate, _hr_status_env, ENTRY_ROW_KEYS_API, HISTORY_ROW_KEYS
 
 # ?????????? idiom ???(2026-10-16 CI ???????, ??????
 # pitfalls/testing/credential-shape-write-guard.md): ???????, ????????? +
@@ -137,29 +137,7 @@ def test_api_hr_site_entries_full_fields(web_env, tmp_path):
     assert body["site"] == "HHan" and body["read_error"] == "" and body["now"] > 0
     assert len(body["entries"]) == 1
     row = body["entries"][0]
-    assert set(row) == {
-        "tid",
-        "dl_id",
-        "name",
-        "lane",
-        "lane_text",
-        "uploaded_bytes",
-        "downloaded_bytes",
-        "ratio",
-        "need_seed_seconds",
-        "need_seed_text",
-        "infohash_v1",
-        "infohash_v2",
-        "verified_ts",
-        "verified_source",
-        "verified_source_text",
-        "local_present",
-        "done_iso",
-        "active",
-        "missing_streak",
-        "first_seen",
-        "last_seen",
-    }
+    assert set(row) == ENTRY_ROW_KEYS_API
     assert row["tid"] == 101 and row["name"]
     assert row["infohash_v1"] and row["infohash_v2"], "取过 .torrent 的行 v1/v2 都已回填"
     assert row["local_present"] is False, "夹具本地库为空 -> 全部行是未做种(local_present join 响应层追加)"
@@ -305,30 +283,7 @@ def test_api_hr_history_rows_from_real_wave(web_env, tmp_path):
     assert body["enabled"] is True and body["read_errors"] == {} and body["now"] > 0
     assert body["rows"], "夹具跑过一轮真实波, 历史表不能是空的"
     row = body["rows"][0]
-    assert set(row) == {
-        "ts",
-        "ts_text",
-        "site",
-        "kind",
-        "kind_text",
-        "trigger",
-        "trigger_text",
-        "action",
-        "result_text",
-        "result_tone",
-        "reason",
-        "reason_kind",
-        "pages",
-        "rows",
-        "torrents_ok",
-        "torrents_fail",
-        "verified",
-        "elapsed_s",
-        "elapsed_text",
-        "lanes",
-        "notes",
-        "by",
-    }
+    assert set(row) == HISTORY_ROW_KEYS
     assert row["site"] == "HHan" and row["kind"] == "wave"
     assert row["result_text"] == "完成" and row["result_tone"] == "ok", "三档全跑完的波 -> 完成徽章(映射单点在 hr.status)"
     assert row["trigger"] == "auto" and row["trigger_text"] == "自动"

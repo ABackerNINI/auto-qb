@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-0502">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md, memory-bank/tasks/26-10-22-test-hr-row-key-surface-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)">
 <meta name="issue-summary" content="history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留">
 <title>HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-0502-refactor-test-hr-row-key-surface-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 05:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,24 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法 / 验证</h2>
+    <p>按建议修法落地，但复验实测修正了两处口径：</p>
+    <ul>
+      <li><strong>history 实为 22 键</strong>（<code>ts</code> … <code>by</code>），不是摘要里的 23；两侧逐字相同 ⇒ 共用一个 <code>HISTORY_ROW_KEYS</code>。</li>
+      <li><strong>entry 面两侧本就不同集</strong>：<code>test_hr_status</code> 断言 <code>EntryDetail.to_dict()</code>（模型面 20 键），<code>test_web_hr</code> 断言端点响应面（21 键，多 <code>local_present</code>，由 <code>server/routes/hr.py::mark_local_present</code> 响应层 join 追加）。硬套单一常量会抹掉这条差异 ⇒ 拆两层：<code>ENTRY_ROW_KEYS</code> + <code>ENTRY_ROW_KEYS_API = ENTRY_ROW_KEYS | {"local_present"}</code>（改道原因：保留「响应层只多这一个只读标记」这一事实）。</li>
+      <li>三常量落在 <code>tests/webui_helpers.py</code> 的 HR 段；<strong>刻意不从 dataclass 派生</strong>——<code>EntryDetail.to_dict = asdict(self)</code>，派生会让「实现」与「期望键面」同步漂移，守阵失效。</li>
+      <li>四处断言改引常量：<code>test_hr_status.py</code>（history 行 / entry 行）、<code>test_web_hr.py</code>（history 行 / entry 响应行）。lane 子键面与 <code>SiteStatus</code> 键面首轮未动，<strong>R1（同档案续作）已一并收单点</strong>：<code>HISTORY_LANE_KEYS</code>（7 键，两处去重）、<code>SITE_STATUS_KEYS</code>（39 键，原本只有一处，收进同一常量模块 —— 单点声明，无去重收益）。<code>LaneStatus</code>（14 键，波次级）与 <code>QuotaStatus</code> 仍就地，不在本条范围。</li>
+    </ul>
+    <p><strong>验证方式</strong>：① 探针——临时给 <code>EntryDetail</code> 加 <code>probe_extra</code> 字段，两处闭集断言<strong>同时变红</strong>（2 failed），还原后归绿 ⇒ 守阵语义未因收单点而削弱；② 全量闸门 <code>commands run test.full</code> 全绿，实测数字见 <code>commands run kb.baseline</code>（本轮新切片；本件不抄数字）；③ 档案 <code>memory-bank/tasks/26-10-22-test-hr-row-key-surface-dup.md</code>。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-21 05:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 03:24 — 用户指派认领（档案 <code>memory-bank/tasks/26-10-22-test-hr-row-key-surface-dup.md</code>），状态 <strong>In Progress</strong>；复验：基线 <code>39771d41</code> 四处字面量仍在（<code>grep "assert set(row) == {"</code> 命中 test_hr_status:540 / test_web_hr:308 / test_hr_status:246 / test_web_hr:140）</li>
+      <li>2026-10-22 03:29 — 修完置 <strong>Done</strong>：三常量入 <code>tests/webui_helpers.py</code>，四处断言改引；探针验守阵仍咬（prod 加字段两处同红）；全量闸门全绿（数字见本轮基线切片）</li>
+      <li>2026-10-22 03:46 — R1 追加（同档案续作，状态仍 <strong>Done</strong>）：lane 子键面与 <code>SiteStatus</code> 键面一并收单点（<code>HISTORY_LANE_KEYS</code> / <code>SITE_STATUS_KEYS</code>）；探针验守阵仍咬（HistoryLane 加字段 → 两处同红；SiteStatus 加字段 → 红）</li>
     </ul>
   </section>
 
