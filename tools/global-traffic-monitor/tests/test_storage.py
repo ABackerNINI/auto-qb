@@ -11,7 +11,8 @@
   值逐日一致); sampler.restore_from_dat 对产出文本 round-trip (读写两侧同格式单点)
 - 原子写: 写失败 (fsync 抛) 留原文件且无临时残留; replace 遇 PermissionError
   (Windows 读者持句柄) 退避重试成功, 重试耗尽抛错且留原文件; 并发读守阵 (线程 +
-  子进程) 只见完整文件 (无半行/截断/空文件)
+  子进程) 只见完整文件 (无半行/截断/空文件) —— 活性判据是「写到读者读够 N 次为止」
+  (不靠写次数推断, 单次写耗时跨平台差一个量级)
 - state: 每次 record 必写 (丢失窗口 <= 采样间隔); 缺失/损坏 read() -> None
 - 节流: 低于阈值且未到间隔不落盘; 达 1MiB 落盘; 达 30s 落盘; 首帧必落盘
   (恢复值/初始值即时持久化); render 活尾随时可服务 (文件未落盘时内存即最新)
@@ -257,6 +258,25 @@ def test_atomic_write_raises_after_retry_exhausted(tmp_path, monkeypatch):
     assert litter == []  # 临时文件已清理
 
 
+# ---- 并发读守阵的活性门槛 ----
+#
+# 语义: 读者必须在**写者活跃的窗口内**完成至少这么多次完整读, 否则守阵是真空过的
+# (读者没跑 / 循环秒退 -> 永远读不到半截内容, 断言恒绿)。
+#
+# ⚠ 不能靠「写者写满 N 次」间接推断读者读够了多少次: 单次 atomic_write_text 的耗时
+# 随机器与文件系统漂移一个量级 (CI ubuntu-latest 上 mkstemp+fsync+replace ~0.1ms,
+# 开发机 Windows 上慢得多) —— 原本「写 300 次期间读者必读 >50 次」的期望在 Linux CI
+# 上实测只有 29 次, 写者早就收工了读者还没读几轮。这是**机器速度依赖的活性阈值**,
+# 不是被测行为的回归。改法: 写者写到**读者读够为止** (上限 + deadline 兜底), 把
+# 「期望读够」换成「确保读够」——读者不干活时循环撞 deadline, 断言照红。
+LIVE_READS_THREAD = 50
+LIVE_READS_PROC = 100
+#: 写者写入次数上限 (正常路径几百次即达标; 上限只在读者异常慢/不干活时触及)
+LIVE_WRITES_LIMIT = 20000
+#: 活性等待总上限: 读者始终不读时到此为止并红 (防测试挂死)
+LIVE_DEADLINE_SEC = 15.0
+
+
 def _validate_dat_bytes(data: bytes) -> Optional[str]:
     """返回违规描述; None = 完整一致. (空文件在预写后即违规: 文件应恒存在)."""
     if not data:
@@ -296,18 +316,23 @@ def test_concurrent_reader_thread_never_sees_partial(tmp_path):
     t = threading.Thread(target=reader)
     t.start()
     try:
-        for i in range(300):
-            atomic_write_text(str(dat), f'lines: "1"\n2026/10/16 {i + 2}/{i + 2}\n')
+        # 写到读者读够为止 (写次数不是活性判据, 见 LIVE_READS_THREAD 注释)
+        writes = 0
+        deadline = time.monotonic() + LIVE_DEADLINE_SEC
+        while reads[0] < LIVE_READS_THREAD and writes < LIVE_WRITES_LIMIT and time.monotonic() < deadline:
+            atomic_write_text(str(dat), f'lines: "1"\n2026/10/16 {writes + 2}/{writes + 2}\n')
+            writes += 1
+            time.sleep(0)  # 让出 GIL: 读者比写者慢时不空耗写入配额
     finally:
         stop.set()
         t.join()
-    assert reads[0] > 50
-    assert violations == []
+    assert reads[0] >= LIVE_READS_THREAD  # 活性: 读者确实在写窗口内读过 (空转/没跑 -> 红)
+    assert violations == []  # 被守行为: 任何时刻打开都是完整文件
 
 
 _READER_PROC_SCRIPT = r"""
 import os, re, sys, time
-path, done, started = sys.argv[1], sys.argv[2], sys.argv[3]
+path, done, started, counts = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 ROW = re.compile(r"^\d{4}/\d{1,2}/\d{1,2} \d+/\d+$")
 open(started, "w").close()
 bad = 0
@@ -325,6 +350,8 @@ def read_retry():
 while not os.path.exists(done):
     data = read_retry()
     reads += 1
+    with open(counts, "w") as cf:  # 心跳计数: 父进程据此判断读者已覆盖几轮 (不靠墙钟推断)
+        cf.write(str(reads))
     if not data or not data.endswith(b"\n"):
         bad += 1
         continue
@@ -341,14 +368,24 @@ print(reads, bad)
 """
 
 
+def _reader_reads(counts: Path) -> int:
+    """子进程上报的读次数 (心跳文件); 缺失 / 撞上写半途的空串 -> 0 (不误判达标)."""
+    try:
+        return int(counts.read_text())
+    except (FileNotFoundError, ValueError):
+        return 0
+
+
 def test_concurrent_reader_process_never_sees_partial(tmp_path):
     dat = tmp_path / "history_traffic.dat"
     done = tmp_path / "reader.done"
     started = tmp_path / "reader.started"
+    counts = tmp_path / "reader.reads"
     atomic_write_text(str(dat), 'lines: "1"\n2026/10/16 1/1\n')
     proc = subprocess.Popen(
         [sys.executable, "-c", _READER_PROC_SCRIPT,
-         str(dat), str(done), str(started)],
+         str(dat), str(done), str(started),
+         str(counts)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -358,8 +395,12 @@ def test_concurrent_reader_process_never_sees_partial(tmp_path):
         while not started.exists() and time.monotonic() < deadline:  # 握手: 读者就绪后才写
             time.sleep(0.01)
         assert started.exists(), "读者进程未就绪"
-        for i in range(400):
-            atomic_write_text(str(dat), f'lines: "1"\n2026/10/16 {i + 2}/{i + 2}\n')
+        # 写到读者读够为止 (写次数不是活性判据, 见 LIVE_READS_PROC 注释)
+        writes = 0
+        deadline = time.monotonic() + LIVE_DEADLINE_SEC
+        while (_reader_reads(counts) < LIVE_READS_PROC and writes < LIVE_WRITES_LIMIT and time.monotonic() < deadline):
+            atomic_write_text(str(dat), f'lines: "1"\n2026/10/16 {writes + 2}/{writes + 2}\n')
+            writes += 1
         done.write_text("done\n")
         out, err = proc.communicate(timeout=30)
     finally:
@@ -368,7 +409,8 @@ def test_concurrent_reader_process_never_sees_partial(tmp_path):
             proc.communicate()
     assert proc.returncode == 0, err
     reads, bad = out.split()
-    assert int(bad) == 0 and int(reads) > 100
+    # 活性: 读者确实在写窗口内读过 (空转/没跑 -> 红) + 被守行为: 无半截内容
+    assert int(bad) == 0 and int(reads) >= LIVE_READS_PROC
 
 
 # ---- state.json ----

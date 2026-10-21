@@ -436,7 +436,11 @@ def test_relay_launch_spawns_target_launcher(tmp_path, monkeypatch):
     launcher = relay_launch(root_a)
     assert launcher == os.path.join(root_a, LAUNCHER_NAME)
     args, kwargs = spawned[0]
-    assert args[:2] == (["cmd.exe", "/c"] if os.name == "nt" else ["/bin/sh"])
+    # 平台前缀长度不同 (win 两项 / POSIX 一项): 按前缀实际长度切片, 不能写死 [:2]
+    # —— 写死 [:2] 时 POSIX 侧恒红 (args 只有 ["/bin/sh", launcher] 两项, 前缀却被切成两项,
+    # 而 nt 侧凑巧成立) —— 平台判据与 relay_launch 同口径 (sys.platform), 不另用 os.name。
+    prefix = ["cmd.exe", "/c"] if sys.platform.startswith("win") else ["/bin/sh"]
+    assert args[:len(prefix)] == prefix
     assert args[-1] == launcher
     assert kwargs["cwd"] == root_a  # 相对定位以安装根为准
 
