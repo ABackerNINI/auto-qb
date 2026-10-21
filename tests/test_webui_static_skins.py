@@ -2,7 +2,8 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾)
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 三皮肤 CSS 链接序(atlas/console: style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
+- test_frontend_skin_css_token_parity: 三皮肤令牌**名集**相等守阵(issue 26-10-20-2231) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 三份 index.html shell 内联段守阵(issue 26-10-20-2231) —— sprite 段(80 行/67 symbol)三皮肤逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, console 合法多一行皮肤说明注释)相等; symbol 数下限防"sprite 整体外提成共享文件后三份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须三皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
@@ -1734,7 +1735,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤212 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤214 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -1744,12 +1745,13 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 212:
+        if n_shell > 214:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 212"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 214"
                 "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5/S6 各 +3; "
                 "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4; "
-                "W6 计划 26-10-13-0811 shared/dt_table.css 挂载(注释+link)+2)"
+                "W6 计划 26-10-13-0811 shared/dt_table.css 挂载(注释+link)+2; "
+                "issue 26-10-20-2231 prism/css/dialogs.css 挂载(注释+link)+2)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []
@@ -1792,7 +1794,7 @@ def test_frontend_template_split_wiring():
         assert mf["scripts"], f"{ui} 清单缺 scripts(逻辑脚本无人放行)"
         assert mf["scripts"][0].endswith("vue.global.prod.js"), f"{ui} 清单首个脚本必须是 Vue vendor"
         assert mf["scripts"][-1].endswith("/app.js"), (f"{ui} 清单末个脚本必须是 app.js(它末尾才 createApp, 且启动时要读 window.AQB_*)")
-        # W2 CSS 分层(atlas/console): 链接顺序即级联序; 单文件 ≤700 行体量守阵
+        # CSS 分层: 链接顺序即级联序; 单文件 ≤700 行体量守阵
         css_files = _ui_css_files(ui)
         if ui in ("atlas", "console"):
             rels = [os.path.relpath(p, STATIC_ROOT).replace(os.sep, "/") for p in css_files]
@@ -1803,6 +1805,24 @@ def test_frontend_template_split_wiring():
                 n = open(p, encoding="utf-8").read().count("\n")
                 if n > 700:
                     problems.append(f"{os.path.relpath(p, STATIC_ROOT)} {n} 行, 超 700 行单 CSS 体量上限")
+        else:
+            # prism 分层(issue 26-10-20-2231): 令牌 → 五主题 → base → components → views → **dialogs**。
+            # dialogs 必须排在 views 之后 —— 弹窗族是最后介入级联的本皮肤层, 排在前面就会被页面级
+            # 规则反压(该皮肤此前正是这种"级联序相反"的变形结构, 约 300 行错位克隆噪音由此而来)。
+            rels = [os.path.relpath(p, STATIC_ROOT).replace(os.sep, "/") for p in css_files]
+            assert rels == ["prism/css/tokens.css"] + [
+                f"prism/css/themes/{t}.css" for t in ("ocean", "galaxy", "frost", "golden", "orbit")
+            ] + ["prism/css/base.css", "prism/css/components.css", "prism/css/views.css", "prism/css/dialogs.css"
+                ], (f"prism CSS 链接顺序漂移: {rels}(级联序 = link 序; 令牌/主题必须在最前, 弹窗层在最后)")
+            # 体量: 存量冻结 —— prism/css/views.css 现存 818 行(页面级版式密度本就高于另两皮肤),
+            # 拆它属独立排期; 这里冻结现值, 只拦"再长"。其余文件一律吃 700 行口径。
+            frozen = {"prism/css/views.css": 818}
+            for p in css_files:
+                rel = os.path.relpath(p, STATIC_ROOT).replace(os.sep, "/")
+                n = open(p, encoding="utf-8").read().count("\n")
+                limit = frozen.get(rel, 700)
+                if n > limit:
+                    problems.append(f"{rel} {n} 行, 超 {limit} 行单 CSS 体量上限" + ("(存量冻结, 只许减不许增)" if rel in frozen else ""))
     # 单一语义模板: 各套 shell 清单必须逐项相等 —— 漂移 = 偷偷分裂出第二份模板(收敛前态回潮)
     base_mf = manifests[_UI_ALL[0]]
     for ui in _UI_ALL[1:]:
@@ -1974,6 +1994,47 @@ def test_frontend_shell_sprite_login_parity():
         assert apps[ui] == base_app, (
             f"{ui} 的 #app+login 段与 {_UI_ALL[0]} 不一致(注释/空行已归一) —— 改登录遮罩须三皮肤同步; "
             f"{_first_diff(base_app, apps[ui])}"
+        )
+
+
+def test_frontend_skin_css_token_parity():
+    """三皮肤令牌**名集**相等守阵(issue 26-10-20-2231)
+
+    三皮肤各自维护一份令牌声明块(atlas/console 在 style.css 的 :root, prism 在 css/tokens.css +
+    css/themes/*), 取值本就该按设计语言各写各的 —— 但**名字**必须齐: 皮肤少声明一个令牌,
+    别处 `var(--x)` 的那条声明会在计算值阶段判无效而被整条丢弃(既无报错也无回退), 表现为
+    "某皮肤下某处字体/圆角静默失效"。星图此前正是这样少了 3 个字体令牌(86 vs 89):
+    自己 css 里 4 处 `var(--font-mono)` 裸引用全程失效, 共用层 shared/console_hub.css 只能
+    靠 "星图没有 --font-mono" 的兜底链各自为政(两套兜底链还不一致)。
+    故钉: 三皮肤令牌名集必须相等(取值自由); 差异按缺/多两侧成对列出, 便于直接补漏。
+    """
+    def _tokens(paths):
+        names = set()
+        for p in paths:
+            with open(p, encoding="utf-8") as f:
+                for line in f:
+                    m = re.match(r"\s*(--[\w-]+)\s*:", line)
+                    if m:
+                        names.add(m.group(1))
+        return names
+
+    prism_css = os.path.join(STATIC_ROOT, "prism", "css")
+    sets = {ui: _tokens([os.path.join(STATIC_ROOT, ui, "style.css")]) for ui in ("atlas", "console")}
+    sets["prism"] = _tokens(
+        [os.path.join(prism_css, "tokens.css"),
+         os.path.join(prism_css, "base.css")] + sorted(
+             os.path.join(prism_css, "themes", f)
+             for f in os.listdir(os.path.join(prism_css, "themes")) if f.endswith(".css")
+         )
+    )
+    base = sets[_UI_ALL[0]]
+    assert len(base) > 60, f"{_UI_ALL[0]} 只解析出 {len(base)} 个令牌 —— 提取口径坏了(守阵会恒真)"
+    for ui in _UI_ALL[1:]:
+        missing, extra = sorted(base - sets[ui]), sorted(sets[ui] - base)
+        assert sets[ui] == base, (
+            f"{ui} 与 {_UI_ALL[0]} 的令牌名集不一致(相对 {_UI_ALL[0]}: 缺 {missing} / 多 {extra}) —— "
+            f"皮肤少声明一个令牌, 该皮肤下 `var(--x)` 的那条声明在计算值阶段整条作废且无任何报错; "
+            f"补令牌, 或把消费方改成带兜底的 var(--x, fallback)"
         )
 
 
@@ -2245,10 +2306,10 @@ def test_frontend_hr_safety_wiring():
 
     # 3. 新样式两套 CSS 成对
     atlas_css = _ui_css_aggregate("atlas")
-    prism_css = open(os.path.join(STATIC_ROOT, "prism", "css", "views.css"), encoding="utf-8").read()
+    prism_css = _ui_css_aggregate("prism")  # issue 26-10-20-2231: hr-pop 段已并入 prism/css/dialogs.css, 改读聚合
     console_css = _ui_css_aggregate("console")
     for css, name in (
-        (atlas_css, "atlas css 聚合(link 序)"), (prism_css, "prism/css/views.css"),
+        (atlas_css, "atlas css 聚合(link 序)"), (prism_css, "prism css 聚合(link 序)"),
         (console_css, "console css 聚合(link 序)")
     ):
         for rule in (

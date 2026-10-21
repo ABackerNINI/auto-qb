@@ -27,6 +27,15 @@
 
 同名语义只允许有一个令牌族, 新增值先找族再考虑加令牌:
 
+- **令牌名集三皮肤必须相等**(issue 26-10-20-2231, 守阵 `test_frontend_skin_css_token_parity`): 取值按各自设计语言各写各的
+  (如 `--font-display` 星图 = 单一无衬线族、控制台/棱镜 = Bahnschrift), 但**名字一个都不能少** —— 少声明一个,
+  该皮肤下 `var(--x)` 的那条声明会在计算值阶段**整条作废且无任何报错**(星图此前少 3 个字体令牌, 自己 4 处
+  `var(--font-mono)` 裸引用全程失效、共用层只能按"该皮肤没有令牌"各写兜底链)。新增令牌 = 三皮肤同轮补名。
+- **CSS 分层三皮肤同构**(2026-10-21): 星图/控制台 = `style.css → css/components → css/views → css/dialogs`;
+  棱镜 = `css/tokens → css/themes/*(五主题) → css/base → css/components → css/views → css/dialogs`;
+  三皮肤最后都接共用层 `shared/console_hub.css` + `shared/dt_table.css`。**弹窗层恒排最后**(抽屉/确认框/对话框/
+  全屏覆盖层/悬停弹窗/抽屉内表), 排在页面级规则之前会被反压 —— 棱镜此前正是这种变形结构(issue 26-10-20-2231)。
+  链接序由 `test_frontend_template_split_wiring` 钉死, 别按"就近贴语义最近的文件"改。
 - **状态色族**(`--green/--blue/--error/--warn` + `--paused-*`): 表达**种子/行状态**。只染有语义的状态; 0 值/
   "—"占位不染; 芯片(站点/标签/分类)保持自身语义色不跟随行色(决策 D6-A —— 芯片表达**成员级**语义, 跟随行色会抹平这层信息)。
   `--paused` 是唯一"无色相"的成员, 取值 = `--fg-muted`(中性中间调), 配 `--paused-soft: transparent` + `--paused-line: var(--border-strong)`

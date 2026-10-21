@@ -218,8 +218,8 @@ def test_frontend_hr_full_modal_wiring():
             assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5 阶段2)"
         assert "--head-h" in css and "--statusbar-h" in css, \
             f"{name} 的全屏覆盖层缺顶栏/状态栏让出声明(--head-h / --statusbar-h)"
-    pri_components = open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read()
-    assert ".hr-full-modal" in pri_components, "prism/css/components.css 缺全屏覆盖层段(与 .modal-mask 同文件)"
+    pri_dialogs = open(os.path.join(STATIC_ROOT, "prism", "css", "dialogs.css"), encoding="utf-8").read()
+    assert ".hr-full-modal" in pri_dialogs, "prism/css/dialogs.css 缺全屏覆盖层段(与 .modal-mask 同文件)"
 
 
 def test_frontend_hr_contract_keys_match_backend():

@@ -588,7 +588,7 @@ def test_frontend_dialog_combo_hover_takeover():
     for rel in (
         os.path.join("atlas", "css",
                      "dialogs.css"), os.path.join("console", "css",
-                                                  "dialogs.css"), os.path.join("prism", "css", "components.css")
+                                                  "dialogs.css"), os.path.join("prism", "css", "dialogs.css")
     ):
         css = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
         assert ".pop-item[data-hi]:not(.on):hover" in css, \

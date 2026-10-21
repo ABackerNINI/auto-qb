@@ -3395,8 +3395,8 @@ def test_frontend_meta_dialog_paired():
     for name, t in (
         ("atlas css 聚合(link 序)", _ui_css_aggregate("atlas")),
         (
-            "prism/css/components.css",
-            open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read()
+            "prism/css/dialogs.css", open(os.path.join(STATIC_ROOT, "prism", "css", "dialogs.css"),
+                                          encoding="utf-8").read()
         ),
         ("console css 聚合(link 序)", _ui_css_aggregate("console")),
     ):

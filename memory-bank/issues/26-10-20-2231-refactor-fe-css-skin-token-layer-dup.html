@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反)">
 <meta name="issue-summary" content="atlas 令牌集 86 vs console/prism 89, 差集恰为 --font-ui/--font-display/--font-mono; prism 把 dialogs 族拆进 components/views 导致级联序与另两皮肤相反">
 <title>三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-css-skin-token-layer-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,7 +104,23 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 05:20 — 复验（<code>grep --font-</code> 三处令牌集 / <code>ls prism/css</code>）：现象仍在，atlas 86 vs console·prism 89（差集恰为三个字体令牌），prism 仍无 <code>dialogs.css</code>，状态置 <strong>In Progress</strong>（用户指派「认领并修复」）</li>
+      <li>2026-10-21 05:32 — 修完并验证，状态 <strong>Done</strong>（实际修法与验证数字见 §05）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法<span class="opt">（修完补记）</span></h2>
+    <p>按建议原样落地, 未改道 —— 先统一分层(tokens 补齐 + prism 弹窗层归位), 再谈后续收敛。</p>
+    <ul>
+      <li><b>atlas 补 3 个字体令牌</b>(<code>atlas/style.css</code> 的 <code>:root</code> 开头): <code>--font-ui</code> / <code>--font-display</code> 取星图既有的单一无衬线族(与 <code>html,body</code> 原字面栈逐字同值, 也与 <code>shared/console_hub.css</code> 的兜底同栈 ⇒ 像素零变化); <code>--font-mono</code> 取与另两皮肤同族的栈。连带把 <code>html,body</code> 的字体改走 <code>var(--font-ui)</code>。令牌名集 86 → 89, 三皮肤相等。
+        副产物是**修掉一处静默失效**: atlas 自己 CSS 里 4 处 <code>var(--font-mono)</code> 裸引用(状态栏速度读数 <code>.sb-spd .val/.lim</code>、抽屉与 HR 弹窗的 <code>.kv b</code> / <code>.hg-end</code>)此前令牌缺失 ⇒ 声明在计算值阶段整条作废、等宽被静默退回继承值; 现在真成等宽(真浏览器逐像素比对: 改动只落在这几处数值文本上, 其余像素 0 差异)。</li>
+      <li><b>prism 新建 <code>css/dialogs.css</code></b>, 把弹窗族从 components(确认框/全屏覆盖层/路径选择器/添加种子/DND/D4/种子编辑/HR 表②/统计与分类标签等对话框/抽屉网格行 = 313 行)与 views(合并双列/抽屉壳 + drawer-table + HR 表①③ + HR 站点状态 + 限速弹窗 + HR 悬停弹窗 = 264 行)迁入, 块序 = 原全局序(纯字节搬运); <code>index.html</code> 的 <code>&lt;link&gt;</code> 落到 <code>views.css</code> 之后、共用层之前 —— 三皮肤"弹窗层恒排最后"至此同构。拆完 components 699→381 / views 1085→818 / dialogs 603 行。
+        顺手改正 5 处搬后会误指的注释(「仍在本套 components.css」「继承 views.css 的徽章段」等)。</li>
+      <li><b>守阵同轮对齐</b>(不然红的都是假红): 单文件路径硬编码 5 处改聚合/新路径(<code>test_web_shortcuts</code> ×4、<code>test_web_backend_misc</code>、<code>test_webui_static_dom_page</code>、<code>test_webui_static_dom_panel</code>);「文件前段不得出现 <code>inset: 0</code>」改为逐条抽 <code>.drawer-leave-active</code> 的声明体来判(判据收窄, 意图不变); shell cap 214(带理由 +2)。新增两条守阵: 三皮肤 CSS 链接序含 prism 分层冻结 + <code>test_frontend_skin_css_token_parity</code>(令牌名集相等), 两条都做过红验(摘掉 atlas 的 <code>--font-mono</code> / 把 dialogs 挪到 views 之前 ⇒ 均红), 验后精确还原。</li>
+    </ul>
+    <p><b>等价性怎么证的</b>(结构改动最怕"看着没变"但级联翻面): ①静态 —— 搬前/搬后解析成 (媒体上下文, 选择器, 属性) → 赢家值 表逐项比对, 3526 条三元组两边完全一致、0 处赢家值改变; 再列"特异性平手 + 末段类名相交 + 顺序反转"的交叉对 11 处, 逐条人判为互斥子树(弹窗层 vs 页面层), 无真实翻面; ②像素 —— 真浏览器桩服务下改前/改后各截 5 态(分组页/种子页/抽屉开/添加弹窗/设置页)逐像素比, <b>prism 5/5 全 0 差异</b>(改前先跑两遍证明基线可复现); ③用例 —— 全量 pytest 与 <code>npm run test:e2e:fast</code> 全绿(数字见 §05 后的验证段与本次基线切片)。</p>
+    <p><b>遗留</b>(不属本单, 记录备查): <code>prism/css/views.css</code> 仍 818 行, 超单 CSS 700 行体量口径 —— 已在守阵里作"存量冻结"(只许减不许增), 拆分属独立排期; 三皮肤 <code>dialogs.css</code> 的<b>内容边界</b>仍有差异(atlas/console 的弹窗层里还混着 HR 表族与限速浮层等, prism 现在也是同一类"非纯弹窗"桶), 逐族归位是后续收敛的事。</p>
   </section>
 
   <footer>

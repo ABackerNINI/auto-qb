@@ -742,7 +742,7 @@ def test_drawer_dock_keyboard_w2() -> None:
     )
     # --- 三皮肤 CSS 成对: switching 遮罩 + 加载胶囊 ---
     for ui in ("atlas", "console", "prism"):
-        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
         css = cssp.read_text(encoding="utf-8")
         assert ".drawer-body.switching > *:not(.drawer-busy)" in css, f"{ui}: 缺 FX-29 软切换遮罩规则(三皮肤成对)"
         assert ".drawer-busy {" in css, f"{ui}: 缺加载胶囊样式"
@@ -836,7 +836,7 @@ def test_drawer_height_w3() -> None:
     assert ':style="drawerPanelStyle()"' in tpl, "aside 必须绑定内联高度"
     # --- 三皮肤 CSS 成对: grip / 拖拽期禁选中 / 面板 relative(absolute grip 定位参照) ---
     for ui in ("atlas", "console", "prism"):
-        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
         css = cssp.read_text(encoding="utf-8")
         assert ".drawer-grip" in css and "touch-action: none" in css, f"{ui}: grip 样式缺失(触摸端拖拽会滚动页面)"
         assert "body.drawer-resizing" in css and "user-select: none" in css, f"{ui}: 拖拽期禁选中文本缺失"
@@ -1135,7 +1135,7 @@ def test_drawer_narrow_fullscreen_w4() -> None:
     assert 'class="drawer-close"' not in (SHARED / "tpl" / "drawer.html").read_text(encoding="utf-8"), \
         "关闭钮不得在面板模板再写一份(两形态各一份头部的复写正是问题 4 根因, W3 收口)"
     for ui in ("atlas", "console", "prism"):
-        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
         css = cssp.read_text(encoding="utf-8")
         # prism 等文件在 D3 之前已有同断点的窄屏块(topbar 折行族), 必须认含 .drawer 的那块
         blocks = [m.group(1) for m in re.finditer(r"@media \(max-width: 900px\) \{(.*?)\n\}", css, re.S)]
@@ -1364,12 +1364,16 @@ def test_drawer_transition_dock_anim() -> None:
     assert al and "if (this.drawer.open) return;" in al.group(1), "afterLeave 必须挡收场被打断的迟到清场(不杀 enter 拍循环)"
     # --- 三皮肤 CSS 成对: 动画期裁剪 + 退场 absolute 底缘锚定(顶锚定会随槽位塌缩把面板顶跑) ---
     for ui in UIS:
-        cssp = STATIC / ui / ("css/views.css" if ui == "prism" else "css/dialogs.css")
+        cssp = STATIC / ui / "css" / "dialogs.css"  # issue 26-10-20-2231: prism 也有了弹窗层, 三皮肤同路径
         css = cssp.read_text(encoding="utf-8")
         assert ".drawer-dock.drawer-anim { overflow: hidden; }" in css, f"{ui}: 缺 dock 动画期裁剪规则(三皮肤成对)"
         assert re.search(r"\.drawer-leave-active \{ position: absolute; left: 0; right: 0; bottom: 0;",
                          css), (f"{ui}: 退场必须 absolute 底缘锚定(bottom: 0, 面板沉下去而不是被顶跑)")
-        assert "inset: 0" not in css.split(".drawer-leave-active")[0], f"{ui}: 退场不得用 inset: 0(顶锚定随槽位塌缩把面板顶跑)"
+        # 判据只落在 .drawer-leave-active **自己的声明体**上: issue 26-10-20-2231 起 prism 的
+        # 弹窗层文件里 .modal-mask(合法地用 inset: 0)排在抽屉段之前, 按"文件前段不得出现 inset: 0"
+        # 判会把遮罩的合法写法当违规 —— 改成逐条抽该选择器的声明体来判(意图不变, 判据更窄)。
+        for body in re.findall(r"\.drawer-leave-active[^{]*\{([^}]*)\}", css):
+            assert "inset" not in body, f"{ui}: 退场不得用 inset: 0(顶锚定随槽位塌缩把面板顶跑)"
 
 
 def test_sel_group_member_linkage() -> None:

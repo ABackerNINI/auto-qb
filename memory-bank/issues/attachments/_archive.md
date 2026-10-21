@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (61)
+## Open (60)
 
 - [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](../26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留
 - [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](../26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点
@@ -13,7 +13,6 @@
 - [refactor] [web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路](../26-10-21-0502-refactor-test-web-env-param-dup.html) — web_env 硬编码 config_text/client; test_web_auth ×10 与 test_web_admin ×5 每用例内联 TestClient(create_app(mgr)); web_env 参数化后回收
 - [test] [「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵](../26-10-21-0502-test-test-plan-docstring-guard.html) — 121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
-- [refactor] [三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反)](../26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html) — atlas 令牌集 86 vs console/prism 89, 差集恰为 --font-ui/--font-display/--font-mono; prism 把 dialogs 族拆进 components/views 导致级联序与另两皮肤相反
 - [refactor] [前端对话框外壳三段式(mask 手势 / title 头 / actions 栏)11 处手写](../26-10-20-2231-refactor-fe-dialog-shell-template-dup.html) — 遮罩关窗手势 10 处、modal-title 头 11 处、modal-actions 栏 11 处逐字同; 管理对话框两实例同构 40 行; modal-details 行式键值两套
 - [refactor] [前端 dialogs/config_hub 三族 busy+try+toast+finally 骨架共 15 处](../26-10-20-2231-refactor-fe-dialogs-js-boilerplate-dup.html) — mgr CRUD 5 处、面板加载 5 处、POST+waitCmd+三态 toast 4 处、tm 面板 busy 5 处 —— 同一骨架抄 15 遍
 - [refactor] [抽屉变体渲染器族: 三态空帧骨架 12 份 + peers 判据四件 3 份 + dt07/08 逐字同](../26-10-20-2231-refactor-fe-drawer-variant-renderer-dup.html) — 变体层三态空帧骨架 12 份、peers 判据(吸血/分桶/内网)3 份逐字同、dt07 与 dt08 仅 CSS 前缀不同
@@ -73,11 +72,12 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (227)
+## Done (228)
 
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)
+- [refactor] [三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反)](../26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html) — atlas 令牌集 86 vs console/prism 89, 差集恰为 --font-ui/--font-display/--font-mono; prism 把 dialogs 族拆进 components/views 导致级联序与另两皮肤相反
 - [refactor] [抽屉四个 fetcher 同骨架 4 份(detail/trackers/files/peers)](../26-10-20-2231-refactor-fe-drawer-fetcher-boilerplate-dup.html) — drawer_store 四份 fetcher 各约 22 行, stale 守卫 x2 + loading 门 + _dtNotify + _drawerDone 的次序有心, 却抄了四遍
 - [refactor] [模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标, 入池时记 11)](../26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html) — row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 12 处(复验实测), 其中 settings-detail 3 处连图标都没有
 - [refactor] [模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套](../26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html) — hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle 5 处(三种签名)、折叠 4 种实现(可访问性不一)、分段钮 4 套
