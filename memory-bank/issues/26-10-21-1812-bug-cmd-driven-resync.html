@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-1812">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="post-command-state-writes">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变">
 <meta name="issue-summary" content="cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚">
 <title>P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1812-bug-cmd-driven-resync</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core · webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -110,6 +110,9 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
+    <div class="callout"><span class="lbl">口径修订 · 2026-10-21 22:32</span>
+      <p>计划 <code>26-10-13-0540</code> §5 已明确讨论过本件所指的行为, 并判定「补刷新读到的仍是 qB 节流缓存 ⇒ 只有恰逢缓存已前进才同 tick。<b>这条不是缺陷, 而是 A 系的特性</b>」, §11 还把它列为「P0-5 与 truth_pending 兜底用户点击场景」的保留机制。因此本件不是「实现与原则冲突」, 而是一处<b>判断分歧</b>: 本件主张的独立问题是计划未考虑的那一半 —— 补刷新同时把 <code>next_sync_at</code> 推后一个 interval, 一旦读到旧值, 校正反而更晚。待定: 接受计划判断(置 Dropped) 或只修 schedule 副作用。</p>
+    </div>
     <p>写命令（暂停/开始/删除/打标…）返回后，主循环把 <code>sync_due</code> 直接置真，<b>立刻补刷新一次</b>，
       隐含前提是「命令返回时 qB 状态已变」。qB 的种子状态按<b>自身固定节拍</b>刷新，命令返回 ≠ 状态已生效，
       因此这次补刷新读到的仍是命令前的状态；而它同时把 <code>next_sync_at</code> 推后一个 interval，
@@ -173,6 +176,9 @@ elif sync_due:
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
+      <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
+      <li>2026-10-21 22:32 — 口径修订: 计划 26-10-13-0540 §5 已判定该行为是 A 系特性(非缺陷); 本件收窄为「补刷新推后 next_sync_at 的副作用」这一处判断分歧。</li>
       <li>2026-10-21 21:57 — 计划 26-10-21-1857 未涉及本件(P0-5 命令驱动补刷新的逻辑未改): 解除认领, 状态回到 <strong>Open</strong>, 留待后续排期。</li>
       <li>2026-10-21 19:13 — 被计划 <code>26-10-21-1857</code> 认领, 状态 <strong>In Progress</strong>（开始实施）</li>
       <li>2026-10-21 18:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>

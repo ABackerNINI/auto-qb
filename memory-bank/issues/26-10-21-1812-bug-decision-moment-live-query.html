@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-1812">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="post-command-state-writes">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值">
 <meta name="issue-summary" content="跳检收尾用 torrents_info 结果 apply_delta 回写记录(ops_mod.py:806-821), 复核在动手前用同一直查判在途(ops_mod.py:546-563); qB 状态固定节拍刷新, 直查可能返回命令前旧值或过渡态, 写进快照后污染 G3/G6/G7 与 UI">
 <title>「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1812-bug-decision-moment-live-query</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops · rules</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -110,6 +110,9 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
+    <div class="callout"><span class="lbl">口径修订 · 2026-10-21 22:32</span>
+      <p><b>已修一半</b>: 跳检收尾的 <code>apply_delta(live)</code> 回写已于 2026-10-21 S2(<code>c48ba02e</code>) 删除 —— 该半属计划 <code>26-10-13-0540</code> 的<b>实施遗漏</b>(其不变量「快照严格 = 最近一次同步的应用结果」与 §10 验收「全库无合成 state 值」都覆盖它, 但 §6 清单与静态守阵只扫了 qbapi/store 两个文件, 见 issue <code>26-10-21-2232</code>)。<b>剩余面</b>: R1/R2 提交前用单点直查的 state 做决策(<code>_live_recheck</code>), 计划未涉及(它只声明「不引入回写」)。本件后续只跟剩余面。</p>
+    </div>
     <p>用户 2026-10-21 18:10 指出：<b>qB 的状态刷新是固定的，命令发出后无法即时拿到状态</b>；
       「决定性时刻直查真值」这条纪律的前提不成立。当前跳检收尾用它回写快照，R1/R2 复核用它判「在途/已不在」。</p>
   </section>
@@ -183,6 +186,9 @@ m_refreshInterval(BITTORRENT_SESSION_KEY(u"RefreshInterval"_s), 1500)</code></pr
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
+      <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
+      <li>2026-10-21 22:32 — 口径修订: 跳检收尾回写已于 S2(c48ba02e) 修复(属 A 系计划遗漏); 本件收窄为 R1/R2 读侧前提。</li>
       <li>2026-10-21 21:57 — 计划 26-10-21-1857 已删除跳检路径的直查回写(<code>_skip_readd</code> 的 <code>apply_delta(live)</code>); 剩余面未改: recheck 提交前复核仍读 live state(<code>_live_recheck</code>), 跳检的 R2 只用于存在性(会话级, 合法)。状态回到 <strong>Open</strong>, 剩余面待排期。</li>
       <li>2026-10-21 19:13 — 被计划 <code>26-10-21-1857</code> 认领, 状态 <strong>In Progress</strong>（开始实施）</li>
       <li>2026-10-21 18:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>

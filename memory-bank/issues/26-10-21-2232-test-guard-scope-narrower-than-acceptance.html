@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="guard-scope-narrower-than-acceptance">
+<meta name="issue-stamp" content="26-10-21-2232">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="post-command-state-writes">
+<meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="In Progress">
+<meta name="issue-title" content="守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件">
+<meta name="issue-summary" content="计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)">
+<title>守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件</h1>
+    <p class="lede">计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-21-2232-test-guard-scope-narrower-than-acceptance</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 22:32</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>计划 <code>26-10-13-0540</code>（A 系：删合成回写 + 局部 deferral）的验收口径写的是「<b>全库</b>无合成 state 值」，
+      但它的机检（S1 静态守阵 <code>test_no_synthetic_state_write_site</code>）只扫 <code>qbapi.py</code> 与
+      <code>store.py</code> 两个文件。结果：<code>ops_mod.py</code> 里由 report 26-10-11-2017 引入的
+      <code>_skip_readd</code> 直查回写（<code>torrents_info</code> → <code>apply_delta</code>）<b>从未被任何断言覆盖</b>，
+      计划机检全绿、验收缺口照旧存在，直到 2026-10-21 S2（<code>c48ba02e</code>）才被删掉。</p>
+    <p>发现场景：复盘「三条 post-command-state-writes issue 是否属于该计划的实施遗漏」时，对照 §10 验收口径与
+      §12 守阵实现范围，发现两者不一致。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文，不转述；附取证时间。</p>
+    <p><b>A. 验收口径（计划 §10「验收要点」第 1 条，取证 2026-10-21 22:32）</b>：</p>
+<pre><code>全库无合成 state 值（S1 静态守阵）。</code></pre>
+    <p><b>B. 守阵实现范围（计划 §12「变更记录」26-10-13-0714 条）</b>：</p>
+<pre><code>S1 静态（tokenize 剥注释后扫描 qbapi.py / store.py, 三条判据: …）</code></pre>
+    <p><b>C. 代码（<code>tests/test_sync.py:557-580</code>）</b> —— 扫描面是硬编码的两元素元组：</p>
+<pre><code>def test_no_synthetic_state_write_site():
+    """守阵(A 系 S3 S1 静态): qbapi.py / store.py 无任何合成 state 写点 …"""
+    for rel in ("src/auto_qb/core/qbapi.py", "src/auto_qb/torrents/store.py"):
+        code = _code_without_comments(rel)
+        …</code></pre>
+    <p><b>D. 漏网实例</b>：<code>_skip_readd</code> 的 <code>live = torrents_info(hash); tor.apply_delta(live[0])</code>
+      写于 <code>d186d603</code>（2026-10-11），比本计划早两天；计划 §6 的逐文件清单里 <code>ops_mod.py</code> 只列了
+      D-2 的四个闸门行号，没有这个回写点。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>验收口径用「全库/全局」这类范围词，而守阵用文件清单列举 —— 口径与机检不同域时必现</td></tr>
+      <tr><td>影响范围</td><td>机检绿 ⇒ 验收绿 ⇒ 缺口无人复查；同类风险：任何「全库/所有写方法/所有消费方」口径的守阵</td></tr>
+      <tr><td>严重度</td><td>中：不直接产生错误行为，但会让「架构不变量」的机检形同虚设（本例缺口存在了两天并跨过一次计划收尾）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>tests/test_sync.py:557-580</code>（取证 2026-10-21 22:32）· <code>test_no_synthetic_state_write_site</code> · grep <code>for rel in ("src/auto_qb/core/qbapi.py"</code></li>
+      <li><code>memory-bank/plans/26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html</code> §10 验收要点 / §12 变更记录 · grep <code>全库无合成 state 值</code></li>
+      <li>漏网点（已修）：<code>git show d186d603 -- src/auto_qb/core/modules/ops_mod.py</code>；修复提交 <code>c48ba02e</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">口径与机检不同域：验收写「全库」（范围词），守阵写「两个文件」（清单）。没有任何机检去校验
+      「扫描面 ⊇ 口径范围」，于是清单外的写点天然豁免。<br>
+      已排除：不是守阵写错（它按 §12 的描述实现正确）；不是计划口径写错（「全库」才是真正想要的架构不变量）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p><b>待拍板（二选一）</b>：</p>
+    <ol>
+      <li><b>扩扫描面到 <code>src/auto_qb/**</code></b>（白名单例外：注释/测试替身/明确允许的合成点），让「全库」成为机检事实。
+        代价：需要一份白名单并解释每条例外；收益：口径与机检同域，同类缺口结构性消失。</li>
+      <li><b>把验收口径改成「两文件」</b>，承认不变量只覆盖 qbapi/store。代价最低，但等于放弃「全库」这条架构不变量。</li>
+    </ol>
+    <p>倾向方案 1；白名单初版可只放 <code>tests/</code> 与 <code>_raw</code> 兜底赋值两处。不在本件实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
+      <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
+      <li>2026-10-21 22:32 — 入池，状态 <strong>Open</strong>（复盘 A 系计划验收口径时发现）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-21-2232-test-guard-scope-narrower-than-acceptance.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

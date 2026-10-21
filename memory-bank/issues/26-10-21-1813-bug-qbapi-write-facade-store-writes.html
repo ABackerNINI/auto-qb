@@ -7,12 +7,12 @@
 <meta name="issue-stamp" content="26-10-21-1813">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="post-command-state-writes">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例)">
-<meta name="issue-summary" content="QbApi 的写方法以「命令已生效」为前提立即改 store: torrents_delete→remove_torrent、update_torrent_fields(标签/分类/限速/路径); 对照: 起停已按 A 系 26-10-13-0540 S1 改为纯透传(state 只由 qB 同步驱动) —— 同一口径尚未推广到删除与字段写">
-<title>写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例) · bug · 计划外问题</title>
+<meta name="issue-status" content="In Progress">
+<meta name="issue-title" content="写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义">
+<meta name="issue-summary" content="QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷">
+<title>写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义 · bug · 计划外问题</title>
 <style>
   :root {
     --bg: #10151a;
@@ -96,13 +96,13 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（未修）· bug</div>
-    <h1>写操作门面在命令返回后直接改写快照: 删除摘记录 / 确定性字段直写(起停已改纯透传, 是现成先例)</h1>
-    <p class="lede">QbApi 的写方法以「命令已生效」为前提立即改 store: torrents_delete→remove_torrent、update_torrent_fields(标签/分类/限速/路径); 对照: 起停已按 A 系 26-10-13-0540 S1 改为纯透传(state 只由 qB 同步驱动) —— 同一口径尚未推广到删除与字段写</p>
+    <h1>写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义</h1>
+    <p class="lede">QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1813-bug-qbapi-write-facade-store-writes</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:13</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core/qbapi · torrents</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -110,6 +110,9 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
+    <div class="callout"><span class="lbl">口径修订 · 2026-10-21 22:32</span>
+      <p><b>范围澄清</b>: 计划 <code>26-10-13-0540</code> §11 明文把 tags/category 的写后同步列为<b>非目标</b>(「不改 tags / category 的写后同步与登记机制」), §6 也明确「保留 tags 通道」—— 故这两类不构成本件所指的缺陷。<b>收窄后仍成立的两处</b>: ① <code>torrents_delete</code> 在命令后立即摘记录(计划全文未涉及, 新发现); ② limits/save_path 这类「确定性字段」的写后同步边界从未定义(计划的不变量只限定 state)。</p>
+    </div>
     <p><code>QbApi</code> 的部分写方法在调用 qB 之后<b>立即改写快照</b>，隐含「命令已生效」：删除会立刻摘记录、
       打标/分类/限速/路径会立刻改字段。qB 的状态按固定节拍刷新，这些写入在生效前就把账改了。</p>
     <p>对照（同一份门面里已有的先例）：起停四入口已按 <b>A 系 26-10-13-0540 S1</b> 改为<b>纯透传 + <code>note_own_write</code></b>，
@@ -172,6 +175,9 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
+      <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
+      <li>2026-10-21 22:32 — 口径修订: tags/category 属 A 系计划 §11 明文非目标, 不再算缺陷; 本件收窄为删除摘记录 + 确定性字段边界未定义。</li>
       <li>2026-10-21 21:57 — 计划 26-10-21-1857 只给 <code>torrents_delete</code> 加了 <code>keep_record</code>(跳检专用), 其余写方法(标签/分类/限速/路径)未改。状态回到 <strong>Open</strong>, 待排期。</li>
       <li>2026-10-21 19:13 — 被计划 <code>26-10-21-1857</code> 认领, 状态 <strong>In Progress</strong>（开始实施）</li>
       <li>2026-10-21 18:13 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
