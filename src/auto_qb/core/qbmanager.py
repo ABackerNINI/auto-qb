@@ -551,7 +551,8 @@ class QbManager(
                     # P0-5: 本批命令改了 qB 种子状态 -> 立即同步一次, 让真实状态在几十毫秒内
                     # 进快照(不必等下个节拍)。整批只补一次: sync_due 为真时本轮至多跑一次刷新。
                     # dry_run 不补(只观察); 暂停时上面已 continue(暂停 = 完全旁观)。
-                    sync_due = (now >= next_sync_at) or (cmd_changed_state and not dry_run)
+                    sync_due_by_time = now >= next_sync_at
+                    sync_due = sync_due_by_time or (cmd_changed_state and not dry_run)
                     tick_due = now >= next_tick_at
                     # !必须在 try **之外**初始化: 兜底 flush 在 except 之后读它, 若异常发生在这行
                     # 之前, 名字未绑定会抛 NameError —— 它在 try 外面, 会直接把主循环打挂。
@@ -570,11 +571,15 @@ class QbManager(
                         _t_line = time.time() if (cmd_changed_state and not dry_run) else 0.0
                         if sync_due and tick_due:
                             self._tick(dry_run, force=cmd_forced)
-                            next_sync_at = time.time() + sync_interval
                             next_tick_at = time.time() + main_tick
+                            # 补刷新只在「按时到的」或「这次真拿到了变化」时才重设同步节拍:
+                            # 读到同一份节流缓存的白刷不能把下一次校正推后一个周期(S4)
+                            if sync_due_by_time or self._sync_moved():
+                                next_sync_at = time.time() + sync_interval
                         elif sync_due:
                             self._sync_line(dry_run, force=cmd_forced)
-                            next_sync_at = time.time() + sync_interval
+                            if sync_due_by_time or self._sync_moved():
+                                next_sync_at = time.time() + sync_interval
                         elif tick_due:
                             self._task_line(dry_run, force=cmd_forced)
                             next_tick_at = time.time() + main_tick
@@ -727,6 +732,17 @@ class QbManager(
             "changes": len(changes),
             "restart_required": restart_required,
         }
+
+    def _sync_moved(self) -> bool:
+        """本轮同步是否真拿到了变化 —— 决定补刷新后要不要重设同步节拍(计划 26-10-21-2323 S4)
+
+        qB 的种子状态按 BitTorrent/Session/RefreshInterval(默认 1500ms)节流刷新: 写命令后立刻补
+        刷新, 读到的很可能还是同一份缓存(delta 全空)。那种"白刷"不能把下一次自然同步推后一个
+        周期 —— 否则一旦真值还没到, 校正反而更晚。这里用「本轮是否有新增/删除/字段变化」当
+        "缓存是否前进"的**代理**(不是真值判断, 与「快照 = 同步结果」的口径一致)。
+        """
+        store = self.store
+        return bool(store.delta_fields or store.last_added or store.last_removed)
 
     def _sync_line(self, dry_run: bool, flush: bool = True, force: bool = False) -> None:
         """同步线(sync_interval 节拍): 拉 qB 增量 -> 推进快照/事件/分组 -> 视图惰性重建

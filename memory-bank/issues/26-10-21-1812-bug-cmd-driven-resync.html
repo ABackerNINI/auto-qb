@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="post-command-state-writes">
 <meta name="doc-refs" content="memory-bank/plans/26-10-21-2323-plan-command-writeback-boundary.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变">
 <meta name="issue-summary" content="cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚">
 <title>P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-1812-bug-cmd-driven-resync</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 18:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core · webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -176,6 +176,7 @@ elif sync_due:
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-22 00:30 — 计时副作用已修（计划 26-10-21-2323 S4），状态 <strong>Done</strong>。</li>
       <li>2026-10-21 23:23 — 计划 <code>26-10-21-2323</code>(命令后状态写入的边界收口)认领本件, 补 doc-refs 反向声明。</li>
       <li>2026-10-21 22:32 — 用户指派认领, 状态 <strong>In Progress</strong>(计划 grilling 中; 计划落盘后补 doc-refs 反向声明)。</li>
       <li>2026-10-21 22:32 — 口径修订: 计划 26-10-13-0540 §5 已判定该行为是 A 系特性(非缺陷); 本件收窄为「补刷新推后 next_sync_at 的副作用」这一处判断分歧。</li>
@@ -186,7 +187,9 @@ elif sync_due:
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际处置</b>（2026-10-22 00:30，计划 26-10-21-2323 S4）：按 D1 保留补刷新（它是「点完别等一拍」的对策，<code>truth_pending</code> 依赖它），只修计时副作用 —— 主循环拆出 <code>sync_due_by_time</code>，同步节拍改为「按时到期 <b>或</b> 本轮真有变化」才重设；新增 <code>_sync_moved()</code>（本轮 <code>delta_fields</code>/<code>last_added</code>/<code>last_removed</code> 任一非空）作为「qB 缓存是否前进」的代理。</p>
+    <p><b>与建议修法的差异</b>：建议里给的选项是「接受计划判断 → Dropped」或「只修 schedule 副作用」；实际选后者，故本件不是被驳回而是被修掉。</p>
+    <p><b>验证方式</b>：<code>test_cmd_resync_keeps_schedule_when_nothing_moved</code>（interval=1.0s、命令在 0.9s 触发补刷新且无变化 → 第 3 次刷新落在 ≈1.0s）+ <code>test_sync_moved_proxy</code>；红验：改回无条件重设后该用例报「实得 1.91s」失败。实测数字见基线切片 <code>26-10-22-0024</code>。</p>
   </section>
 
   <footer>

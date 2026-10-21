@@ -6,10 +6,10 @@
 <title>命令后状态写入的边界收口 · 实施计划 — 计时副作用 + 移除提交前复核 + 字段边界 + 守阵扩容</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="post-command-state-writes">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-21-2323">
 <meta name="doc-updated" content="26-10-21-2323">
-<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/issues/26-10-21-2232-test-guard-scope-narrower-than-acceptance.html, memory-bank/testing/baselines/26-10-21-2334-post-command-state-writes.md, memory-bank/testing/baselines/26-10-21-2349-post-command-state-writes.md, memory-bank/testing/baselines/26-10-22-0004-post-command-state-writes.md">
+<meta name="doc-refs" content="memory-bank/issues/26-10-21-1812-bug-cmd-driven-resync.html, memory-bank/issues/26-10-21-1812-bug-decision-moment-live-query.html, memory-bank/issues/26-10-21-1813-bug-qbapi-write-facade-store-writes.html, memory-bank/issues/26-10-21-2232-test-guard-scope-narrower-than-acceptance.html, memory-bank/testing/baselines/26-10-21-2334-post-command-state-writes.md, memory-bank/testing/baselines/26-10-21-2349-post-command-state-writes.md, memory-bank/testing/baselines/26-10-22-0004-post-command-state-writes.md, memory-bank/testing/baselines/26-10-22-0024-post-command-state-writes.md">
 <style>
   :root {
     color-scheme: dark;
@@ -84,7 +84,7 @@
   <p class="lede">复盘 A 系计划（26-10-13-0540）后仍成立的四件事：补刷新把下次同步推后的计时副作用、提交前复核对运行状态的直查依赖、写后同步从未划清的字段边界、以及守阵扫描面窄于验收口径。本计划只收这四处，不动跳检相位机与任何业务行为。</p>
   <div class="metagrid">
     <div class="it"><div class="k">编号</div><div class="v">26-10-21-2323</div></div>
-    <div class="it"><div class="k">状态</div><div class="v">Open（待实施）</div></div>
+    <div class="it"><div class="k">状态</div><div class="v">Done（S1–S4 全部完成）</div></div>
     <div class="it"><div class="k">依据</div><div class="v">4 条 issue（post-command-state-writes）+ A 系计划复盘</div></div>
     <div class="it"><div class="k">范围</div><div class="v">core/qbmanager.py · core/modules/ops_mod.py · core/qbapi.py · conventions/code-style.md · tests/</div></div>
     <div class="it"><div class="k">非目标</div><div class="v">不改跳检相位机/微步线 · 不改 tags/category/limits 的写后同步 · 不改删除摘记录</div></div>
@@ -289,7 +289,7 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
   <tr><td class="tight">S1</td><td>守阵扩容（T4） <span class="tag crit">已完成</span></td><td>先把"全库"变成机检事实，后续改动都在守阵覆盖下</td></tr>
   <tr><td class="tight">S2</td><td>写后同步边界（<code>save_path</code> + 口径 + T5） <span class="tag crit">已完成</span></td><td>消掉唯一有真实副作用的回写</td></tr>
   <tr><td class="tight">S3</td><td>移除提交前复核（T2/T3） <span class="tag crit">已完成</span></td><td>少一条直查通道</td></tr>
-  <tr><td class="tight">S4</td><td>补刷新计时（T1）+ 收尾（基线、文档、计划状态）</td><td>校正不再被白刷惩罚</td></tr>
+  <tr><td class="tight">S4</td><td>补刷新计时（T1）+ 收尾（基线、文档、计划状态） <span class="tag crit">已完成</span></td><td>校正不再被白刷惩罚</td></tr>
 </table>
 
 <h4>验收</h4>
@@ -313,6 +313,7 @@ save_path 例外 —— 它也是我们的值, 但它是分组键的输入而 qB
 
 <h2 id="s9"><span class="n">9</span>变更记录</h2>
 <ul>
+  <li>2026-10-22 00:30 — <b>S4 完成, 计划置 Done</b>：主循环拆出 <code>sync_due_by_time</code>，同步节拍改为「按时到期 <b>或</b> 本轮真有变化」才重设（新增 <code>_sync_moved()</code> 代理判据）；补刷新读到同一份节流缓存时不再把下一次校正推后一个周期。新增 2 例守阵并做了红验（改回无条件重设 → 实得 1.91s 失败）。四条 issue 全部结案。实测见基线切片 <code>26-10-22-0024</code>。</li>
   <li>2026-10-22 00:10 — <b>S3 完成</b>：删掉 <code>ops_mod._live_recheck</code> 与两处调用（recheck 提交前、跳检入口）；recheck 的进度基线改取<b>快照</b> <code>tor.progress</code>（不再有「基线比观测新」的错位）；跳检遇到种子已不在时失败在「导出 .torrent」步，文案改为「导出 .torrent 失败(种子可能已不在客户端)」，由失败路径撤掉残留记录。用例翻面 5 条（提交前零直查 / info 故障不影响提交 / 基线取快照 / 跳检导出失败 / R2 改写），仲裁类用例的直查计数从 2 降到 1。已知代价：qB 自家 WebUI 刚发起的校验可能被重复提交一次（qB 幂等）。</li>
   <li>2026-10-21 23:50 — <b>S2 完成</b>：<code>QbApi.torrents_set_location</code> 去掉写后同步（<code>save_path</code> 是分组键输入、qB 搬家异步，提前改会让组归属在文件未到位时变），口径写进 <code>conventions/code-style.md</code>（确定性字段可回写 / 运行状态只等上报 / <code>save_path</code> 例外 / 删除摘记录保留）；用例 <code>test_set_location_syncs_save_path</code> 翻面为 <code>test_set_location_waits_for_sync</code>（同 tick 读旧值 → 一次同步后落真值），另两处批量写命令断言同步收窄。issue <code>26-10-21-1813</code> 结案（边界已定义、<code>save_path</code> 已改、删除摘记录按 D5 判定非缺陷）。</li>
   <li>2026-10-21 23:35 — <b>S1 完成</b>：守阵改为 AST 全库扫描（<code>src/auto_qb/**</code>），判据从三条扩到四条（新增 <code>apply_delta</code> 调用点白名单 —— 历史漏网形态绕过前三条）；白名单收敛为 2 个文件（<code>qbmanager</code> / <code>taskqueue</code>，AST 下 <code>reader.py</code> 的正则假阳性消失）；新增红验用例。实测注入 <code>tor.apply_delta(live[0])</code> 到 <code>ops_mod.py</code> 后守阵立刻变红并指出文件+行号，还原后复绿。</li>

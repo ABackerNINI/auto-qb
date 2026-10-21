@@ -16,6 +16,8 @@
 - test_wake_drains_commands_without_extra_ticks: 命令唤醒只走命令线, 命令风暴下 tick 次数不增加
 - test_drain_web_commands_reports_resync_needed: P0-5 门控——只有改种子状态的命令置 changed
 - test_command_batch_triggers_single_resync: P0-5 一批命令后补**一次**完整刷新(整批合单)
+- test_sync_moved_proxy: S4(26-10-21-2323) —— 「本轮是否有变化」代理判据: delta/新增/删除任一非空即为真
+- test_cmd_resync_keeps_schedule_when_nothing_moved: S4(26-10-21-2323) —— 补刷新没拿到变化时不推后下一次同步(否则校正反而更晚)
 - test_drain_web_commands_bumps_write_seq: P1-4 失效接线——写命令自增 web.write_seq, 自投递不自增
 - test_drain_bumps_write_seq_before_writing_receipt: BUG-5 顺序——回执写入时写序号须已自增
 - test_run_due_requeues: handler 成功 -> run_due 收尾重入队(run_count+1, 回 PENDING)
@@ -344,6 +346,60 @@ def test_command_batch_triggers_single_resync():
         mgr.run(dry_run=False, stop_event=stop)
         # 首轮(两条线都到期)一次 + 命令批一次 = 2; 5 条命令不产生 5 次
         assert calls["refresh"] == 2, f"一批 5 条命令应只补一次刷新, 实际 {calls['refresh']}"
+
+
+def test_sync_moved_proxy():
+    """S4: `_sync_moved()` 只看本轮是否真有变化(delta/新增/删除任一非空)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        assert mgr._sync_moved() is False, "空库/无变化轮应为假"
+        mgr.store.delta_fields = {"HA": frozenset({"progress"})}
+        assert mgr._sync_moved() is True, "有字段变化应为真"
+        mgr.store.delta_fields = {}
+        mgr.store.last_added = ["HA"]
+        assert mgr._sync_moved() is True, "有新增应为真"
+        mgr.store.last_added = []
+        mgr.store.last_removed = ["HA"]
+        assert mgr._sync_moved() is True, "有删除应为真"
+
+
+def test_cmd_resync_keeps_schedule_when_nothing_moved():
+    """S4: 补刷新没拿到变化时**不推后**下一次同步
+
+    时间线: sync_interval=1.0s, 首轮(t≈0)按时同步 -> 下次到期 1.0s; t≈0.9s 一条改状态命令触发
+    补刷新, 但它读到同一份节流缓存(delta 全空) -> 到期点必须仍是 1.0s(旧行为会推到 1.9s)。
+    判据: 观测到 3 次刷新, 且第 3 次与首轮的间隔 ≈1.0s(阈值 1.4s, 旧行为约 1.9s)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.main_tick = 10.0
+        mgr.config.sync_interval = 1.0
+        stamps = []
+
+        def refresh(dry_run=False):
+            stamps.append(time.time())
+            if len(stamps) >= 3:
+                raise KeyboardInterrupt  # 观测到第 3 次即退出(不必等满窗口)
+
+        mgr._refresh_torrents = refresh
+        mgr._task_line = lambda dry_run, force=False: None
+        mgr._cmd_pause_torrent = mock.Mock()
+        stop = threading.Event()
+
+        def poster():
+            time.sleep(0.9)
+            mgr.web.commands.put(("pause_torrent", {"cmd_id": "c1", "hash": "HA"}))
+            mgr.wake()
+            time.sleep(1.5)  # 兜底: 第 3 次没来时不挂死
+            stop.set()
+            mgr.wake()
+
+        threading.Thread(target=poster, daemon=True).start()
+        mgr.run(dry_run=False, stop_event=stop)
+        assert len(stamps) >= 3, f"应观测到 3 次刷新(按时/补刷新/下一个按时): {len(stamps)}"
+        gap = stamps[2] - stamps[0]
+        assert gap < 1.4, f"补刷新无变化时不得推后节拍(第 3 次应 ≈1.0s, 实得 {gap:.2f}s)"
 
 
 def test_drain_web_commands_bumps_write_seq():

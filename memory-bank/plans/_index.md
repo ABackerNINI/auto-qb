@@ -14,7 +14,6 @@
 
 ## Open
 
-- [26-10-21-2323] [命令后状态写入的边界收口 · 实施计划 — 计时副作用 + 移除提交前复核 + 字段边界 + 守阵扩容](26-10-21-2323-plan-command-writeback-boundary.html) — `post-command-state-writes`
 - [26-10-20-1316] [global-traffic-monitor 正主注册与让位代拉设计](26-10-20-1316-plan-gtm-primary-registration.html) — `gtm-primary-registration`
 - [26-10-19-2341] [WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)](26-10-19-2341-plan-webui-dialog-tone-color.html) — `webui-dialog-tone-color`
 - [26-10-18-1604] [免重启整组迁移(A/C)分步实施计划](26-10-18-1604-plan-group-relocate-restart-free.html) — `group-relocate-restart-free`
@@ -27,6 +26,7 @@
 
 ## Done
 
+- [26-10-21-2323] [命令后状态写入的边界收口 · 实施计划 — 计时副作用 + 移除提交前复核 + 字段边界 + 守阵扩容](26-10-21-2323-plan-command-writeback-boundary.html) — `post-command-state-writes`
 - [26-10-21-1857] [跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行](26-10-21-1857-plan-skip-check-async-refactor.html) — `skip-check-arch`
 - [26-10-21-0120] [gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96](26-10-21-0120-plan-gtm-coverage-gate.html) — `gtm-coverage-gate`
 - [26-10-20-2101] [测试覆盖率提升 · 第二轮 — 门槛清偿与 99% 冲刺 (97.66% → 99%)](26-10-20-2101-plan-test-coverage-uplift-2.html) — `test-coverage-uplift-2`
