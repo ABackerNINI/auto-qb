@@ -9,7 +9,9 @@
  *   实例 —— 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
  *
  * 归属契约(重建期不许越界):
- *   - 本层拥有: 四个 fetcher(_fetchDrawerDetail|Trackers|Files|Peers) · 请求代际序号
+ *   - 本层拥有: 四 fetcher 的具名入口(_fetchDrawerDetail|Trackers|Files|Peers)与其**唯一**取数
+ *     骨架(_fetchDrawerSource)+ 差异项表(_DT_FETCH)(2026-10-21 R21-A-01 收敛: 落袋次序只此一份) ·
+ *     请求代际序号
  *     (_drawerLoadSeq) 与竞态守卫(_drawerStale) · 软切换待到集合(_drawerWait/_drawerWaitSources/
  *     _drawerDone) · 遮罩延迟点亮(_drawerBusyArm/_drawerBusyDisarm/_drawerSwitchEnd) · 按页签取数
  *     单点(_loadDrawerTab) · 换目标软切换(_switchDrawerTarget) · 页签轮询(_startDrawerPoll/
@@ -46,6 +48,83 @@ function _dtMergeRows(oldRows, newRows, keyOf) {
   }
   return out;
 }
+
+/* 四数据源差异项表 —— 全仓唯一一处(R21-A-01, 2026-10-21 收敛):
+ *   端点 url(hash) · 归一 norm(vm, r) · 目标状态键 key · 空值形状 rows + pack
+ * 外加三条结构性差异(loading 门字段 / 失败标记与提示 / 通知时机)。落袋与竞态的**次序**不在这里,
+ * 只在 _fetchDrawerSource 一份 —— 任何地方再写第二份次序, stale/notify/done 的三步先后就会重新分裂,
+ * 而这类颠倒不报错、只静默变成用户可见故障(见该骨架头注三条)。守阵
+ * tests/test_webui_static_dom_panel.py::test_drawer_fetcher_skeleton_single_point 拦。
+ *   url         端点(带 hash 拼装)
+ *   key         drawer 上的目标状态键
+ *   norm(vm,r)  归一: 取载荷 / 键名适配(peers) / 恒数组形; 返回值即本轮的行或值
+ *   rowKey      行键(trackers=url / files=index(缺则 name) / peers=ip:port, 与各表 rowKey 同口径);
+ *               null = 不合并, 整值落袋(详情)
+ *   rows(old)   从目标状态键取旧行 —— 空值形状在此: 无旧值或形不对 => 空数组
+ *   pack(rows)  行数组写回目标状态键 —— peers 多包一层 { peers }
+ *   loadingKey  列表 loading 门字段; null = 详情(走 drawer.loading, 不经门抑制单点)
+ *   errKey      失败标记字段; null = 详情(落 drawer.error)
+ *   toastText   失败提示前缀; null = 不提示(详情失败由 error 态表达)
+ *   failText    无 e.message 时的兜底文案
+ *   absentText  载荷为空时的 error 文案(只有详情有: /api/torrents/{hash} 查无此种子)
+ *   notifyAtLand true = 落袋即通知(详情: 变体不渲染 loading 态); false = 清 loading 之后通知 */
+const _DT_FETCH = {
+  detail: {
+    url: (hash) => `/api/torrents/${hash}`,
+    key: "detail",
+    norm: (vm, r) => (r && r.torrent) || null,
+    rowKey: null,
+    loadingKey: null,
+    errKey: null,
+    toastText: null,
+    failText: "详情获取失败",
+    absentText: "种子不存在或已被删除",
+    notifyAtLand: true,
+  },
+  trackers: {
+    url: (hash) => `/api/torrents/${hash}/trackers`,
+    key: "trackers",
+    norm: (vm, r) => (Array.isArray(r) ? r : []),
+    rowKey: (t) => String(t && t.url || ""),
+    rows: (old) => (Array.isArray(old) ? old : []),
+    pack: (rows) => rows,
+    loadingKey: "trackersLoading",
+    errKey: "trackersError",
+    toastText: "tracker 列表获取失败: ",
+    failText: "tracker 列表获取失败",
+    notifyAtLand: false,
+  },
+  files: {
+    url: (hash) => `/api/torrents/${hash}/files`,
+    key: "files",
+    norm: (vm, r) => (Array.isArray(r) ? r : []),
+    rowKey: (f) => String(f && f.index !== undefined ? f.index : (f && f.name) || ""),
+    rows: (old) => (Array.isArray(old) ? old : []),
+    pack: (rows) => rows,
+    loadingKey: "filesLoading",
+    errKey: "filesError",
+    toastText: "文件列表获取失败: ",
+    failText: "文件列表获取失败",
+    notifyAtLand: false,
+  },
+  peers: {
+    url: (hash) => `/api/torrents/${hash}/peers`,
+    key: "peers",
+    /* 归一: 键名适配单点(vm._drawerNormPeers, 补 dlspeed / upspeed) + dict/数组恒归数组形 */
+    norm: (vm, r) => {
+      const norm = vm._drawerNormPeers(r);
+      return Array.isArray(norm.peers) ? norm.peers : Object.values(norm.peers || {});
+    },
+    rowKey: (x) => String((x && x.ip || "?") + ":" + ((x && x.port) || "")),
+    rows: (old) => (Array.isArray(old && old.peers) ? old.peers : []),
+    pack: (rows) => ({ peers: rows }),
+    loadingKey: "peersLoading",
+    errKey: "peersError",
+    toastText: "peer 列表获取失败: ",
+    failText: "peer 列表获取失败",
+    notifyAtLand: false,
+  },
+};
 
 window.AQB_DRAWER_STORE = {
   methods: {
@@ -109,91 +188,76 @@ window.AQB_DRAWER_STORE = {
     _drawerStale(hash, seq) {
       return this.drawer.hash !== hash || (!!seq && seq !== this._drawerLoadSeq);
     },
-    async _fetchDrawerDetail(seq = 0) {
+    /* ---------------- 四 fetcher 的唯一取数骨架(R21-A-01, 2026-10-21 收敛) ----------------
+     * 落袋次序是有心之作, 原先在 detail/trackers/files/peers 里各写一遍(每份 ~22 行, 全层 13 个
+     * _drawerStale 判点): hash 快照 -> ① 前置门 -> try{api} -> ② stale 守卫 -> ③ 归一 + 引用稳定
+     * 合并 -> 清失败标记 -> catch{失败提示 / stale 守卫 / 落失败标记} -> finally{stale 守卫
+     * -> 清 loading -> _dtNotify -> _drawerDone}。
+     * 次序颠倒不报错, 只静默变成用户可见故障, 所以只留这一份:
+     *   - ③ 之前不判 stale = 旧响应覆盖新目标(W2);
+     *   - 列表源 _dtNotify 早于清 loading = 空列表停「正在加载…」一拍轮询(2026-10-07 报障);
+     *   - 漏 _drawerDone = FX-29 遮罩等一个永不到手的源, 永久挂死(2026-10-04 实测)。
+     * 差异项全部外置在 _DT_FETCH 表, 本方法不认识任何具体数据源。 */
+    async _fetchDrawerSource(src, silent = false, seq = 0) {
+      const cfg = _DT_FETCH[src];
       const hash = this.drawer.hash;
-      this.drawer.loading = true;
-      this.drawer.error = "";
-      try {
-        const r = await this.api(`/api/torrents/${hash}`);
-        if (this._drawerStale(hash, seq)) return;  // 旧响应丢弃(W2 代际纪律)
-        this.drawer.detail = (r && r.torrent) || null;
-        if (!this.drawer.detail) this.drawer.error = "种子不存在或已被删除";
-        this._dtNotify("detail");  // 模板核心层(计划 26-10-06-0838 S1): 落袋即通知活动变体重渲染(W7 恢复)
-      } catch (e) {
-        if (this._drawerStale(hash, seq)) return;
-        if (!e.auth) this.drawer.error = e.message || "详情获取失败";
-      } finally {
-        // 过期请求不动 loading 态(新在途请求持有它), 免得闪一帧"加载完"假象
-        if (!this._drawerStale(hash, seq)) this.drawer.loading = false;
-        this._drawerDone("detail", hash, seq);  // FX-29: 落定登记(该数据源已到手)
+      // ① 前置门: 列表源走门抑制单点(软切换窗口内不置门, 见 _drawerListLoadingOn); 详情源没有
+      //    「上一目标留下的空态」要保, 恒置 loading 并清 error(它不参与轮询, 无静默路径)。
+      if (cfg.loadingKey) {
+        if (this._drawerListLoadingOn(silent)) this.drawer[cfg.loadingKey] = true;
+      } else {
+        this.drawer.loading = true;
+        this.drawer.error = "";
       }
-    },
-    async _fetchDrawerTrackers(silent = false, seq = 0) {
-      const hash = this.drawer.hash;
-      if (this._drawerListLoadingOn(silent)) this.drawer.trackersLoading = true;
       try {
-        const r = await this.api(`/api/torrents/${hash}/trackers`);
-        if (this._drawerStale(hash, seq)) return;
-        /* W5: 引用稳定合并(行键 url) —— 写字段不重建, 行 DOM 身份恒定 */
-        this.drawer.trackers = _dtMergeRows(this.drawer.trackers, Array.isArray(r) ? r : [], (t) => String(t && t.url || ""));
-        this.drawer.trackersError = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
+        const r = await this.api(cfg.url(hash));
+        if (this._drawerStale(hash, seq)) return;  // ② 旧响应丢弃(W2 代际纪律)
+        /* ③ 落袋三步: 归一(qB 键名适配 / 恒数组形) -> 按行键引用稳定合并(W5: 写字段不重建, 行
+         * DOM 身份恒定) -> 写目标状态键。详情源 rowKey 为 null, 整值落袋。 */
+        const v = cfg.norm(this, r);
+        this.drawer[cfg.key] = cfg.rowKey
+          ? cfg.pack(_dtMergeRows(cfg.rows(this.drawer[cfg.key]), v, cfg.rowKey))
+          : v;
+        if (cfg.errKey) this.drawer[cfg.errKey] = "";  // 成功落袋即清失败标记(上一次失败不影响本轮展示)
+        else if (!v) this.drawer.error = cfg.absentText;  // 详情 404 语义: 载荷为空不是"没拉到"
+        // 详情落袋即通知(W7 恢复, 模板核心层计划 26-10-06-0838 S1); 列表源见 finally
+        if (cfg.notifyAtLand) this._dtNotify(src);
       } catch (e) {
-        if (!silent && !e.auth) this.toast("tracker 列表获取失败: " + e.message, "error");
+        // 失败提示不看 stale: 用户发起的请求失败就该说一声(详情源 toastText 为 null, 由 error 态表达)
+        if (cfg.toastText && !silent && !e.auth) this.toast(cfg.toastText + e.message, "error");
         // P3-5: 失败标记落 state(过期响应不动它, 属于在途的新目标); 抽屉轮询期(silent)也落,
         // 否则静默失败变体永远停在空态
-        if (!this._drawerStale(hash, seq)) this.drawer.trackersError = e.message || "tracker 列表获取失败";
+        if (this._drawerStale(hash, seq)) return;
+        if (cfg.errKey) this.drawer[cfg.errKey] = e.message || cfg.failText;
+        else if (!e.auth) this.drawer.error = e.message || cfg.failText;
       } finally {
+        // 过期请求不动 loading 态(新在途请求持有它), 免得闪一帧"加载完"假象
         if (!this._drawerStale(hash, seq)) {
-          this.drawer.trackersLoading = false;
-          this._dtNotify("trackers");  // W7 恢复: 旧变体需通知才重渲染, 理由见 2026-10-07 报障
+          if (cfg.loadingKey) {
+            this.drawer[cfg.loadingKey] = false;
+            // W7 恢复: 列表源的通知必须在 loading 清掉之后 —— 变体只在 _dtNotify 时重渲染,
+            // 通知先于清门 = 空列表停在「正在加载…」到下一拍轮询(2026-10-07 用户页报障)
+            if (!cfg.notifyAtLand) this._dtNotify(src);
+          } else {
+            this.drawer.loading = false;
+          }
         }
-        this._drawerDone("trackers", hash, seq);
+        this._drawerDone(src, hash, seq);  // FX-29: 落定登记(该数据源已到手)
       }
+    },
+    /* 四个具名入口 = 骨架的薄壳: 名字是调用点/守阵/跨模块登记认的接口, 差异全在 _DT_FETCH 表。
+     * 这里(以及任何新数据源)都不许再写第二份落地次序 —— 见 _fetchDrawerSource 头注。 */
+    async _fetchDrawerDetail(seq = 0) {
+      return this._fetchDrawerSource("detail", false, seq);
+    },
+    async _fetchDrawerTrackers(silent = false, seq = 0) {
+      return this._fetchDrawerSource("trackers", silent, seq);
     },
     async _fetchDrawerFiles(silent = false, seq = 0) {
-      const hash = this.drawer.hash;
-      if (this._drawerListLoadingOn(silent)) this.drawer.filesLoading = true;
-      try {
-        const r = await this.api(`/api/torrents/${hash}/files`);
-        if (this._drawerStale(hash, seq)) return;
-        /* W5: 引用稳定合并(行键 index, 缺则 name) */
-        this.drawer.files = _dtMergeRows(this.drawer.files, Array.isArray(r) ? r : [],
-          (f) => String(f && f.index !== undefined ? f.index : (f && f.name) || ""));
-        this.drawer.filesError = "";  // 成功落袋即清失败标记(同 trackers)
-      } catch (e) {
-        if (!silent && !e.auth) this.toast("文件列表获取失败: " + e.message, "error");
-        if (!this._drawerStale(hash, seq)) this.drawer.filesError = e.message || "文件列表获取失败";
-      } finally {
-        if (!this._drawerStale(hash, seq)) {
-          this.drawer.filesLoading = false;
-          this._dtNotify("files");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt10/11/12)
-        }
-        this._drawerDone("files", hash, seq);
-      }
+      return this._fetchDrawerSource("files", silent, seq);
     },
     async _fetchDrawerPeers(silent = false, seq = 0) {
-      const hash = this.drawer.hash;
-      if (this._drawerListLoadingOn(silent)) this.drawer.peersLoading = true;
-      try {
-        const r = await this.api(`/api/torrents/${hash}/peers`);
-        if (this._drawerStale(hash, seq)) return;
-        /* W5: 引用稳定合并(行键 ip:port, 与各 peer 表 rowKey=addr 同口径); 归一恒归数组形 */
-        const norm = this._drawerNormPeers(r);
-        const plist = Array.isArray(norm.peers) ? norm.peers : Object.values(norm.peers || {});
-        this.drawer.peers = { peers: _dtMergeRows(
-          Array.isArray(this.drawer.peers && this.drawer.peers.peers) ? this.drawer.peers.peers : [],
-          plist, (x) => String((x && x.ip || "?") + ":" + ((x && x.port) || ""))) };
-        this.drawer.peersError = "";  // 成功落袋即清失败标记(同 trackers)
-      } catch (e) {
-        if (!silent && !e.auth) this.toast("peer 列表获取失败: " + e.message, "error");
-        if (!this._drawerStale(hash, seq)) this.drawer.peersError = e.message || "peer 列表获取失败";
-      } finally {
-        if (!this._drawerStale(hash, seq)) {
-          this.drawer.peersLoading = false;
-          this._dtNotify("peers");  // W7 恢复: 通知在 loading 清掉之后(理由同 trackers, 变体 dt07/08/09)
-        }
-        this._drawerDone("peers", hash, seq);
-      }
+      return this._fetchDrawerSource("peers", silent, seq);
     },
     /* 按 tab 拉取对应数据(开抽屉初值 / 切 tab / W2 跟随换目标共用, 单一加载逻辑):
      * 每次进入 bump 请求代际 seq —— 之后所有带 seq 的在途响应过期, 换目标/换页签竞态在此收口。 */

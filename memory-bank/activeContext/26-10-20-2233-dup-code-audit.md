@@ -1,7 +1,7 @@
 # 前端重复代码审查 · Phase 2 轮 20–23 收口（sharded JS / 抽屉族 / 三皮肤 CSS / 模板层）
 
 > 摘要: 用户「执行重复代码审查计划 PHASE2: 26-10-10-2333-plan-dup-code-audit.html」→ 按计划 §07 拆 **15 个子轮**跑完 Phase 2 前端全部四个面（R20 shared/*.js 17449 行/35 文件 · R21 shared/drawer*/drawer_tpl* 8234 行/17 文件 · R22 三皮肤 CSS 8109 行/19 文件 · R23 shared/tpl 20 件 3967 行 + 三 index.html 632 行）。**纯审查零源码改动**，取证基线 `4eef60fe`。产出：**166 项发现（A71/B15/C48/D32）**，与 Phase 1 合并后**全局累计 322 项（A129/B30/C88/D75）**；滚动报告 `26-10-11-0033` 追加 §26–§30 五小节；入池 **17 条 issue（16 refactor + 1 test，族级合并）**。Phase 2 全部完成，主线剩 Phase 3（测试与横切 轮 24–25）+ Phase 4（汇总 轮 26）。
-> 最后活动: 2026-10-21 05:05
+> 最后活动: 2026-10-21 05:47
 **Refs:** memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 已完成(单会话收口)
@@ -37,7 +37,7 @@
 
 - **Phase 3 = 测试与横切（轮 24–25）**：`tests/` fixture/hepler 重复、conftest 分片、`scripts/` 与 `src/` 的口径重复。
 - **Phase 4 = 汇总（轮 26）**：全局 322 项的重构候选排序总表（报告 §30.3 已有 Phase 2 部分 18 行雏形）+ 跨层「同一事实」总账（Phase 1 后端 ↔ Phase 2 前端同名/同义常量的对账）+ 未入池候选按清偿顺序决定。
-- **Phase 2 的 17 条 issue：4 条已 Done（`2231-test-fe-tpl-shell-parity-guard` 守阵、`2231-refactor-fe-config-entity-crud-dup` 三骨架收敛、`2230-refactor-fe-combobox-family-dup` combobox 族、`2231-refactor-fe-config-default-ladder-dup` 默认值梯），余 13 条 Open 未认领** —— 建议起手顺序：守阵族（零源码风险）→ 按 §30.3 排序取 A 族；`config-entity-crud-dup` 已给出「先写等价性断言再改」的模板（见 R2）。
+- **Phase 2 的 17 条 issue：8 条已 Done（`2230-refactor-fe-combobox-family-dup` combobox 族 · `2231-test-fe-tpl-shell-parity-guard` 守阵 · `2231-refactor-fe-config-entity-crud-dup` 三骨架收敛 · `2231-refactor-fe-config-default-ladder-dup` 默认值梯 · `2231-refactor-fe-tpl-list-row-empty-dup` 列表外壳两件套 · `2231-refactor-fe-tpl-switch-fold-seg-dup` 模板小控件三件套 · `2231-refactor-fe-css-rule-family-dup` CSS 四规则族 · `2231-refactor-fe-drawer-fetcher-boilerplate-dup` 四 fetcher 唯一骨架），余 9 条 Open 未认领** —— 建议起手顺序：守阵族（零源码风险）→ 按 §30.3 排序取 A 族；`config-entity-crud-dup` 已给出「先写等价性断言再改」的模板（见 R2）。
 
 **R1(2026-10-21 02:26):** 认领并修复 issue 26-10-20-2231(test-fe-tpl-shell-parity-guard): tests/test_webui_static_skins.py 新增 test_frontend_shell_sprite_login_parity —— 三份 shell sprite 段逐字相等 + #app+login 段注释归一后相等, 零源码改动; 红验三类突变(sprite 漂移红/login 标记漂移红/login 仅注释漂移绿)后精确还原, 三份 shell git diff 零改动; issue 置 Done, test.full 3966 passed + 10 skipped / TOTAL 99%(数字见基线切片 26-10-21-0225-dup-code-audit)
 
@@ -50,3 +50,5 @@
 **R5(2026-10-21 04:46):** 认领并修复 issue 26-10-20-2231(refactor-fe-tpl-list-row-empty-dup, 台账 R23-A-05 + R23-B-06): 模板层两件套各收敛一份 —— 新增分片 tpl/list-shell.html 的 tpl-aq-row-pad / tpl-aq-empty + table.js 两组件 + app.js 注册 + 三 shell 清单挂载(aq-row-pad 落地为同组件挂两次, 占位须夹住 v-for 行; 行本身仍内联, 不碰逐行组件实例纪律), 四处三明治 8 个占位实例与十二处空态全部改挂(无图标的 4 处按语义补 hourglass/warn/inbox 且口径写进组件头注), 空态四层嵌套三元收敛为 filters.js::listEmptyText 单点 + 三视图 computed 薄壳并补回种子页缺失的索引构建分支; 新增守阵 test_frontend_list_row_pad_and_empty_single_point(形态查 + 活性探针 + node 语义电池 15 项), 红验 4/4 判红并修正活性探针被头注字样撑满的失效(计数前剥 HTML 注释); test.full 3968 passed + 10 skipped / TOTAL 99%
 
 **R6(2026-10-21 05:05):** Phase 3 收口(轮 24-25): R24 tests/ 审查 25 项(A11/B5/C6/D3, 拆 A-D 四子轮, jscpd 112 克隆/1.30% + ast docstring 比对 56 文件漂移) + R25 跨层六主题面总账(全局累计 347 项); 入池 6 条(5 refactor+1 test); 零源码改动, 基线 cecbe4a9
+
+**R7(2026-10-21 05:47):** 认领并修复 issue 26-10-20-2231(refactor-fe-drawer-fetcher-boilerplate-dup, 台账 R21-A-01): drawer_store 四份 fetcher 收敛为唯一骨架 _fetchDrawerSource + 顶层差异表 _DT_FETCH(端点/归一/目标状态键/空值形状 + loading 门/失败标记/通知时机), 四入口退化为单行薄壳, stale 判点 13→4; 等价性实证(37 项 node 电池对收敛前实现同绿) + 红验七类突变全红 + 抽屉域 11 份 e2e 64 绿; 新增守阵 test_drawer_fetcher_skeleton_single_point, 四处既有守阵同步到骨架/表; 数字见 kb.baseline

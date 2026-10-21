@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/testing/baselines/26-10-21-0545-fe-drawer-fetcher-skeleton.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="抽屉四个 fetcher 同骨架 4 份(detail/trackers/files/peers)">
 <meta name="issue-summary" content="drawer_store 四份 fetcher 各约 22 行, stale 守卫 x2 + loading 门 + _dtNotify + _drawerDone 的次序有心, 却抄了四遍">
 <title>抽屉四个 fetcher 同骨架 4 份(detail/trackers/files/peers) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-drawer-fetcher-boilerplate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,9 +99,75 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>修复与验证<span class="opt">（2026-10-21 认领并修）</span></h2>
+    <p><b>复验</b>（认领后第一件事, 2026-10-21 05:34）: 现象仍在 —— 四份 fetcher 仍连续相邻
+      （<code>drawer_store.js:112-197</code>, 各 19/22/21/24 行）, 全层
+      <code>this._drawerStale(hash, seq)</code> 共 <b>13</b> 处（四 fetcher 各 3 路 = 12 +
+      <code>_drawerDone</code> 1 处）, 与入池记录一致。</p>
+
+    <p><b>实际修法</b>: 按 §03 落地「1 份骨架 + 4 个差异项」——</p>
+    <ul>
+      <li><b>唯一骨架</b> <code>_fetchDrawerSource(src, silent, seq)</code> 固定那条有心次序:
+        hash 快照 → ① 前置门 → try{api} → ② stale 守卫 → ③ 归一 + 引用稳定合并 → 清失败标记 →
+        catch{失败提示 / stale 守卫 / 落失败标记} → finally{stale 守卫 → 清 loading → <code>_dtNotify</code>
+        → <code>_drawerDone</code>}。三条「颠倒即静默故障」的次序写进头注并逐条说明为什么不能动
+        （stale 前移 = 慢响应覆盖新目标 / 列表通知早于清门 = 空列表停「正在加载…」一拍 /
+        漏 <code>_drawerDone</code> = FX-29 遮罩挂死）。</li>
+      <li><b>差异项表</b> <code>_DT_FETCH</code>（顶层, 全仓唯一一处）: 每源声明
+        <code>url</code>(端点) / <code>norm</code>(归一: 取载荷 / peers 键名适配 / 恒数组形) /
+        <code>key</code>(目标状态键) / <code>rows</code> + <code>pack</code>(空值形状),
+        外加三条结构性差异 <code>loadingKey</code>(列表门抑制) / <code>errKey</code>(失败标记) /
+        <code>notifyAtLand</code>(通知时机)。<b>两处刻意不对称原样保留</b>: 详情无合并(整值落袋)、
+        无 loading 门、无 toast、落袋即通知; 三列表源走门抑制单点、失败落标记 + 非静默 toast、
+        清门之后才通知。</li>
+      <li><b>四个具名入口</b> <code>_fetchDrawerDetail/Trackers/Files/Peers</code> 退化为
+        单行薄壳（名字是调用点 / 守阵 / 跨模块登记认的接口, 签名与默认值一字未动）, 差异全在表里。</li>
+      <li>§03 顺带提到的 <code>_startDrawerPoll</code> 悬挂兜底<b>本轮未做</b> —— 它属
+        <code>fe-polling-family-dup</code>（轮询族收敛）, 混进本轮会把「取数骨架」与「轮询退避/兜底」
+        两件事绑在一起, 违反范围守恒。</li>
+    </ul>
+
+    <p><b>守阵</b>: 新增
+      <code>tests/test_webui_static_dom_panel.py::test_drawer_fetcher_skeleton_single_point</code> ——
+      ① 骨架恰一份、<code>await this.api(</code> 全层恰一处、四入口必须是<b>单行薄壳</b>;
+      ② <code>this._drawerStale(hash, seq)</code> 恰 4 处（骨架三路 + <code>_drawerDone</code>）;
+      ③ 差异表四源齐全且逐字段在位（端点字面量只许出现在表里, 骨架不认 <code>/api/torrents/</code>）;
+      ④ 有 node 时真跑 <b>37 项行为电池</b>（四源成功 / 空载荷 / 鉴权失败 / 静默 / 失败 / 软切换窗口不置门 /
+      行对象引用稳定 / 三张行键口径 / peers 键名适配 / 过期代际与换目标丢弃 / 失败也落定）。
+      四处既有守阵按「形守阵失配即同步」改为钉骨架 + 表（语义只收紧不放松）:
+      <code>test_drawer_dock_keyboard_w2</code> / <code>test_drawer_tpl_registry_wiring</code> /
+      <code>test_drawer_tpl_a11y_and_fetch_error_states</code> /
+      <code>test_drawer_peers_speed_keys_normalized</code> / <code>test_drawer_list_switch_no_loading_flash_wiring</code>。</p>
+
+    <p><b>验证（等价性 + 红验七类突变 + 浏览器层）</b>:
+      ① <b>等价性对照</b> —— 同一份 37 项电池对<b>收敛前</b>的实现（<code>git show HEAD:…drawer_store.js</code>）
+      同样 37/37 全过, 故电池证明的是「行为不变」而非「形态变成这样」;
+      ② 红验七类突变全部判红（薄壳加第二行逻辑 / 列表通知提前 / 漏 <code>_drawerDone</code> /
+      peers 空值形状改裸数组 / peers 归一绕过 <code>_drawerNormPeers</code> / 抹平通知时机分化 /
+      peers 薄壳回潮自带 <code>await this.api</code>）, 均以精确反向编辑还原, 还原后 md5 逐字节比对;
+      ③ 浏览器层: 抽屉域 11 份 e2e <b>64 passed</b>（双皮肤, 含 <code>drawer-switch-no-flash</code> 逐帧采样
+      与 <code>drawer-merge</code> 双列）;
+      ④ 测试数字: 新守阵单跑 1 passed; <code>commands run test.full</code>
+      <b>3972 passed / 10 skipped / TOTAL 99%</b>（20471 语句 / 7012 分支, 缺口 91·93; 覆盖率闸照过）——
+      数字誊至基线切片 <code>memory-bank/testing/baselines/26-10-21-0545-fe-drawer-fetcher-skeleton.md</code>。</p>
+
+    <p><b>与建议（§03）的口径对齐</b>: 差异项按建议的四项落地, 另发现三项结构性差异也必须进表
+      （loading 门字段 / 失败标记 / 通知时机）—— 若不进表, 骨架里就得留 <code>src === "detail"</code>
+      式的分支, 那是把次序按数据源分叉, 等于没收敛。行数明细: <code>drawer_store.js</code> 359 → 423
+      （+64 全在表与头注）, 次序逻辑 86 行 → 骨架 48 + 薄壳 4; stale 判点 13 → 4。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 05:34 — 用户指派认领（「认领并修复」），状态 <strong>In Progress</strong>；复验现象仍在：
+        四份 fetcher 仍连续相邻（<code>drawer_store.js:112-197</code>），
+        <code>this._drawerStale(hash, seq)</code> 共 <b>13</b> 处（四 fetcher 各 3 路 = 12 +
+        <code>_drawerDone</code> 1 处）</li>
+      <li>2026-10-21 05:45 — 修复并验证（唯一骨架 + 差异表 / 等价性电池对旧实现同绿 / 红验七类突变 /
+        抽屉域 e2e 64 passed / 测试数字见 §04），状态 <strong>Done</strong>；
+        head <code>doc-refs</code> 已由 <code>kb.new baseline</code> 双向并链本切片</li>
     </ul>
   </section>
 

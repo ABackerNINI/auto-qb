@@ -679,7 +679,19 @@ def test_drawer_dock_keyboard_w2() -> None:
     for fn in ("_fetchDrawerDetail", "_fetchDrawerTrackers", "_fetchDrawerFiles", "_fetchDrawerPeers"):
         sig = re.search(rf"async {fn}\((.*?)\) \{{", store_js)
         assert sig and "seq = 0" in sig.group(1), f"{fn} 必须带可选 seq(代际守卫)"
-    assert store_js.count("this._drawerStale(hash, seq)") >= 8, "四个 fetcher 的成功/异常/finally 三路都必须过 _drawerStale 旧响应丢弃"
+    # R21-A-01(2026-10-21): 四 fetcher 的落地次序收敛为唯一骨架 _fetchDrawerSource —— stale 判点
+    # 从「四份 × 3 路 = 12」降到骨架内 3 路 + _drawerDone 1 处; 具名入口只许是薄壳(自带请求 = 又一份次序)。
+    skel = re.search(r"async _fetchDrawerSource\(src, silent = false, seq = 0\) \{(.*?)\n    \},", store_js, re.S)
+    assert skel, "drawer_store.js 找不到四 fetcher 的唯一骨架 _fetchDrawerSource(改名或挪走了? 同步本守阵)"
+    assert skel.group(1).count("this._drawerStale(hash, seq)") == 3, \
+        "骨架必须成功/异常/finally 三路都过 _drawerStale 旧响应丢弃(任一路缺失 = 慢响应覆盖新目标)"
+    assert store_js.count("this._drawerStale(hash, seq)") == 4, \
+        "stale 判点只该在骨架 3 路 + _drawerDone 1 处(多出来的 = 又有一份落地次序)"
+    for fn in ("_fetchDrawerDetail", "_fetchDrawerTrackers", "_fetchDrawerFiles", "_fetchDrawerPeers"):
+        thin = re.search(rf"async {fn}\(.*?\) \{{(.*?)\n    \}},", store_js, re.S)
+        assert thin, f"{fn} 形态漂移(守阵正则失配, 同步本守阵)"
+        assert "this._fetchDrawerSource(" in thin.group(1), f"{fn} 必须委派唯一骨架(次序不得有第二份)"
+        assert "await this.api(" not in thin.group(1), f"{fn} 不许自带请求(次序只此一份)"
     stale = re.search(r"_drawerStale\(hash, seq\) \{\n      return (.*?);\n    \},", store_js, re.S)
     assert stale and "this.drawer.hash !== hash" in stale.group(1) and "seq !== this._drawerLoadSeq" in stale.group(
         1

@@ -128,6 +128,24 @@ def _tpl_top_level_tags(body: str):
     return parser.roots
 
 
+def _drawer_fetch_parts(store_js: str):
+    """抽出「四 fetcher 唯一取数骨架」与「四数据源差异表」两段源文本(R21-A-01, 2026-10-21 收敛)。
+
+    收敛前 detail/trackers/files/peers 各有一份 ~22 行的落地次序(每份三道 _drawerStale), 守阵只能
+    逐个 fetcher 用正则钉次序 —— 而**新增第五份**、或某份偷偷改掉次序而正则仍匹配, 都拦不住。
+    收敛后次序只在 `_fetchDrawerSource` 一份、差异项在顶层 `_DT_FETCH` 表, 故守阵改为:
+    次序在骨架里钉一次 + 差异项在表里逐字段钉 + 四个具名入口只许是薄壳(见
+    `test_drawer_fetcher_skeleton_single_point`)。
+
+    返回 (骨架 body, 差异表 body); 两段缺失即判红(改名/挪走都要同步这里, 不许静默失配)。
+    """
+    skel = re.search(r"async _fetchDrawerSource\(src, silent = false, seq = 0\) \{(.*?)\n    \},", store_js, re.S)
+    assert skel, "drawer_store.js 找不到四 fetcher 的唯一骨架 _fetchDrawerSource(改名或挪走了? 同步本守阵)"
+    table = re.search(r"const _DT_FETCH = \{(.*?)\n\};", store_js, re.S)
+    assert table, "drawer_store.js 找不到差异项表 _DT_FETCH(四源的端点/归一/状态键/空值形状单点)"
+    return skel.group(1), table.group(1)
+
+
 # node 单测探针(P5a): 加载真实 qb_traffic_chart.js, 对模块级纯函数 _qbPointsToData 跑
 # 栅格重建 + null 断线语义电池(plan 26-10-03-0946 §5.1/§5.2: 桶键等距 / null 槽 y=null
 # / 全 null 回落 / interval 非法防御)。无 node 静默跳过(与 _scan_js_syntax_with_node 同口径)。
@@ -1490,18 +1508,22 @@ def test_drawer_tpl_registry_wiring():
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
     m = re.search(r"_loadDrawerTab\(tab\) \{\n(.*?)\n    \},", store_js, re.S)
     assert m and "this._dtSync()" in m.group(1), "_loadDrawerTab 尾部缺 _dtSync(换页签不挂/不卸变体)"
+    # R21-A-01(2026-10-21): 四 fetcher 收敛为「唯一骨架 + 差异表」—— 通知点由骨架按 src 发一份,
+    # 四个源是否都在表里、通知时机是否仍然分化, 改在表上钉(逐 fetcher 钉已不可能: 具名入口是薄壳)。
+    skel, ftable = _drawer_fetch_parts(store_js)
     for typ in ("detail", "trackers", "files", "peers"):
-        assert f'this._dtNotify("{typ}")' in store_js, f"四 fetcher 落袋处缺 _dtNotify(\"{typ}\")"
-    # 4a. 列表三 fetcher 的落袋通知必须在 loading 清掉之后(变体只在 _dtNotify 时重渲染,
+        assert re.search(rf"^  {typ}: \{{", ftable, re.M), f"差异表缺 {typ} 源(该源没有取数差异项 = 拉不到数)"
+    assert "this._dtNotify(src);" in skel, "骨架落袋/落定处缺 _dtNotify(变体只在 _dtNotify 时重渲染)"
+    # 4a. 列表三源的通知必须在 loading 清掉之后(变体只在 _dtNotify 时重渲染,
     #     通知先于清 loading = 空列表停在"正在加载…"到下一拍 5s 轮询; 2026-10-07 用户页报障。
-    #     detail 不在列: general 变体不渲染 loading 态, 经典层走 Vue 响应式无此窗口)
-    for fname, flag in (("Trackers", "trackersLoading"), ("Files", "filesLoading"), ("Peers", "peersLoading")):
-        fm = re.search(rf"async _fetchDrawer{fname}\(.*?\n    \}},", store_js, re.S)
-        assert fm, f"_fetchDrawer{fname} 形态漂移(守阵正则失配, 同步本守阵)"
-        clear = fm.group(0).find(f"this.drawer.{flag} = false")
-        notify = fm.group(0).find(f'this._dtNotify("{fname.lower()}")')
-        assert clear != -1 and notify != -1 and clear < notify, \
-            f"_fetchDrawer{fname}: _dtNotify 必须在 {flag} 清掉之后(次序反 = 空列表停\"正在加载…\"一拍轮询)"
+    #     detail 不在列: general 变体不渲染 loading 态, 经典层走 Vue 响应式无此窗口 —— 故
+    #     notifyAtLand 只在 detail 为 true, 其余三源走 finally 那条)
+    clear = skel.find("this.drawer[cfg.loadingKey] = false")
+    notify_after_clear = skel.find("if (!cfg.notifyAtLand) this._dtNotify(src);")
+    assert clear != -1 and notify_after_clear != -1 and clear < notify_after_clear, \
+        "列表源 _dtNotify 必须在 loading 清掉之后(次序反 = 空列表停\"正在加载…\"一拍轮询)"
+    assert ftable.count("notifyAtLand: true") == 1 and ftable.count("notifyAtLand: false") == 3, \
+        "通知时机分化漂移(应只有 detail 落袋即通知, 三列表源清 loading 后通知)"
     m = re.search(r"closeDrawer\(\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m and "this._dtUnmountAll()" in m.group(1), "closeDrawer 缺 _dtUnmountAll(变体定时器/监听不清)"
 
@@ -1980,15 +2002,19 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
                 f"drawer_tpl/{name}: 筛选 chips 必须是原生 <button>(键盘可达; 换纯 div 模拟须补 P3-4 件套)"
 
     # 3. 失败标记: 显式建字段(vue-reactivity 口径) + catch 落标记 + 成功清 + 换目标作废
-    #    W1 起四 fetcher/软切换作废落 drawer_store.js(数据层), 初值显式建字段仍住 drawer.js
+    #    W1 起四 fetcher/软切换作废落 drawer_store.js(数据层), 初值显式建字段仍住 drawer.js;
+    #    R21-A-01(2026-10-21) 起落/清在唯一骨架里按 cfg.errKey 做, 字段名只在差异表声明。
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
+    skel, ftable = _drawer_fetch_parts(store_js)
     for fld in ("trackersError", "filesError", "peersError"):
         assert f'{fld}: ""' in drawer_js, \
             f"drawer.js: drawer 初值缺 {fld} 显式建字段(vue-reactivity 坑: 后补属性不进响应式)"
-        assert f"this.drawer.{fld} = e.message" in store_js, \
-            f"drawer_store.js: {fld} 未在 fetcher catch 落失败标记(P3-5: 变体拿不到区分信号)"
-        assert f'this.drawer.{fld} = "";' in store_js, \
-            f"drawer_store.js: {fld} 成功落袋后未清(上一次失败永久钉住错误态)"
+        assert f'errKey: "{fld}"' in ftable, \
+            f"drawer_store.js: 差异表未把 {fld} 认作失败标记(P3-5: 变体拿不到区分信号)"
+    assert "this.drawer[cfg.errKey] = e.message || cfg.failText;" in skel, \
+        "drawer_store.js: 骨架 catch 未落失败标记(P3-5: 变体拿不到区分信号)"
+    assert 'this.drawer[cfg.errKey] = "";' in skel, \
+        "drawer_store.js: 骨架成功落袋后未清失败标记(上一次失败永久钉住错误态)"
     assert 'this.drawer.trackersError = this.drawer.filesError = this.drawer.peersError = "";' in store_js, \
         "drawer_store.js: 换目标(软切换)未作废三个失败标记(旧目标错误态串显到新目标)"
 
@@ -4121,15 +4147,21 @@ def test_drawer_peers_speed_keys_normalized():
 
     # ② 落袋单点走适配(直存 r 即漏原始键名)。2026-10-13 软切换宽限引入 norm 局部量
     #    (首个空响应「未就绪」时保留旧数据不落袋, 见下条守阵), 故断言形改为「归一结果才是落袋值」。
-    fetch = re.search(r"async _fetchDrawerPeers\(.*?\) \{(.*?)\n    \},", store_js, re.S)
-    assert fetch, "drawer_store.js 找不到 _fetchDrawerPeers(改名或挪走了? 同步本守阵)"
-    fb = fetch.group(1)
+    #    R21-A-01(2026-10-21): 归一外置到差异表 peers 条目(norm(vm, r)), 落袋在唯一骨架 —— 两处各钉一半。
+    skel, ftable = _drawer_fetch_parts(store_js)
+    peers = re.search(r"\n  peers: \{(.*?)\n  \},", ftable, re.S)
+    assert peers, "差异表找不到 peers 条目(改名或书写形态漂移? 同步本守阵)"
+    pb = peers.group(1)
     # W5(26-10-13-0811): 落袋改「norm → 引用稳定合并」两步 —— 归一仍是落袋前置单点,
     # 合并(_dtMergeRows)保行对象引用稳定(写字段不重建, 行 DOM 身份恒定)。
-    assert "const norm = this._drawerNormPeers(r);" in fb, \
-        "peers 落袋未过 _drawerNormPeers(直存 qB 原始响应 ⇒ 原始键名漏进消费点, 上下行恒 0)"
-    assert "_dtMergeRows(" in fb, \
-        "peers 落袋未走引用稳定合并(W5/L5: 整组换数组 = 行重建, 速度格节点身份不保)"
+    assert "const norm = vm._drawerNormPeers(r);" in pb, \
+        "peers 归一未过 _drawerNormPeers(直存 qB 原始响应 ⇒ 原始键名漏进消费点, 上下行恒 0)"
+    assert "Object.values(norm.peers || {})" in pb, \
+        "peers 归一必须覆盖 dict 形态(真 qB 恒 dict, 只认数组 = 真机恒空)"
+    assert 'pack: (rows) => ({ peers: rows }),' in pb, \
+        "peers 的目标状态键形状必须是 { peers }(消费点按 drawer.peers.peers 读, 裸数组即整页空)"
+    assert "_dtMergeRows(" in skel, \
+        "落袋未走引用稳定合并(W5/L5: 整组换数组 = 行重建, 速度格节点身份不保)"
 
     # ③ 桩保真: 合成对端的键名必须与真 qB 同形(dl_speed / up_speed)
     harness = (Path(__file__).resolve().parents[1] / "scripts" / "ui_harness.py").read_text(encoding="utf-8")
@@ -4160,19 +4192,17 @@ def test_drawer_list_switch_no_loading_flash_wiring():
     assert "return !silent && !this._drawerSoftSwitch;" in m.group(1), \
         "门抑制判据不符(应 = 非静默 且 不在软切换窗口)"
 
-    # ② 三 fetcher 的 loading 置位必须都经该单点(直写 `if (!silent) xxxLoading = true` = 软切换时门会闪)
-    for fn, flag in (
-        ("_fetchDrawerPeers", "peersLoading"),
-        ("_fetchDrawerTrackers", "trackersLoading"),
-        ("_fetchDrawerFiles", "filesLoading"),
-    ):
-        fm = re.search(r"async %s\(.*?\) \{(.*?)\n    \}," % fn, store_js, re.S)
-        assert fm, "drawer_store.js 找不到 %s(改名或挪走了? 同步本守阵)" % fn
-        fb = fm.group(1)
-        assert "if (this._drawerListLoadingOn(silent)) this.drawer.%s = true;" % flag in fb, \
-            "%s 的 loading 置位未走 _drawerListLoadingOn(软切换时门会闪)" % fn
-        assert "if (!silent) this.drawer.%s = true;" % flag not in fb, \
-            "%s 回潮为直写 loading(软切换时会闪『正在加载…』)" % fn
+    # ② 三列表的 loading 置位必须都经该单点(直写 `if (!silent) xxxLoading = true` = 软切换时门会闪)
+    #    R21-A-01(2026-10-21): 置位动作收在唯一骨架里, 字段名由差异表 loadingKey 给 ——
+    #    表里缺哪个源, 那个源就退回「直写」或干脆不置门, 故这里逐个字段钉表 + 骨架只此一处写法。
+    skel, ftable = _drawer_fetch_parts(store_js)
+    assert "if (this._drawerListLoadingOn(silent)) this.drawer[cfg.loadingKey] = true;" in skel, \
+        "骨架的列表 loading 置位未走 _drawerListLoadingOn(软切换时门会闪)"
+    assert "if (!silent) this.drawer[cfg.loadingKey] = true;" not in skel, \
+        "骨架回潮为直写 loading(软切换时会闪『正在加载…』)"
+    for flag in ("peersLoading", "trackersLoading", "filesLoading"):
+        assert f'loadingKey: "{flag}"' in ftable, \
+            "差异表缺 %s 的 loading 门字段(该源不经门抑制单点, 软切换时门会闪)" % flag
 
     # ③ 标记置位必须在 _loadDrawerTab **之前**(三 fetcher 在其内 await 前同步读它)
     sw = re.search(r"_switchDrawerTarget\(hash\) \{(.*?)\n    \},", store_js, re.S)
@@ -4198,6 +4228,241 @@ def test_drawer_list_switch_no_loading_flash_wiring():
     for gone in ("_drawerGraceHold", "_DRAWER_GRACE_DELAYS", "_drawerPeerCount"):
         assert gone not in store_js, \
             "旧的『空响应视为未就绪→延迟重拉』机制(%s)不得回潮(会把常态空态推迟)" % gone
+
+
+_NODE_DRAWER_FETCH_PROBE = r"""
+const path = process.argv[1];
+global.window = {};
+require(path);
+const M = global.window.AQB_DRAWER_STORE.methods;
+const checks = [];
+const ck = (name, cond) => checks.push({ name: name, ok: !!cond });
+
+/* 假 vm: 只把「抽屉状态 + 四个外部触点(api/toast/_dtNotify/_drawerDone)」换成探针可观测的桩,
+ * 骨架/_drawerStale/_drawerNormPeers/_fetchDrawer* 全用真实现。gateAtRequest 记录「请求发出那一刻」
+ * 三个 loading 门的值 —— 门是同步置的, 只有在这一刻看才分得清 silent / 软切换窗口的抑制。 */
+const mk = (over) => {
+  const vm = Object.assign({}, M);
+  vm.drawer = Object.assign({
+    open: true, hash: "h1", tab: "trackers", loading: false, error: "", detail: null,
+    trackers: [], files: [], peers: { peers: [] },
+    trackersLoading: false, filesLoading: false, peersLoading: false,
+    trackersError: "", filesError: "", peersError: "",
+  }, over || {});
+  vm._drawerLoadSeq = 0;
+  vm._drawerSoftSwitch = false;
+  vm.calls = [];
+  vm.notify = [];
+  vm.done = [];
+  vm.toasts = [];
+  vm.gateAtRequest = [];
+  vm.reply = async () => null;
+  vm.toast = (m) => vm.toasts.push(m);
+  vm._dtNotify = (src) => vm.notify.push({ src: src, detail: vm.drawer.detail,
+    t: vm.drawer.trackersLoading, f: vm.drawer.filesLoading, p: vm.drawer.peersLoading });
+  vm._drawerDone = (src, hash, seq) => vm.done.push([src, hash, seq]);
+  vm.api = async (url) => {
+    vm.calls.push(url);
+    vm.gateAtRequest.push({ t: vm.drawer.trackersLoading, f: vm.drawer.filesLoading,
+      p: vm.drawer.peersLoading, l: vm.drawer.loading });
+    return vm.reply(url);
+  };
+  return vm;
+};
+
+(async () => {
+  /* ---- detail: 恒置 loading / 空载荷=种子不存在 / 失败不 toast / 鉴权失败不写 error ---- */
+  let vm = mk({ tab: "general" });
+  vm.reply = async () => ({ torrent: { name: "n1" } });
+  await vm._fetchDrawerDetail();
+  ck("detail 端点", vm.calls[0] === "/api/torrents/h1");
+  ck("detail 落袋", vm.drawer.detail && vm.drawer.detail.name === "n1");
+  ck("detail 请求期置 loading", vm.gateAtRequest[0].l === true);
+  ck("detail 清 loading", vm.drawer.loading === false);
+  ck("detail 通知一次且已落袋", vm.notify.length === 1 && vm.notify[0].src === "detail" && vm.notify[0].detail.name === "n1");
+  ck("detail 落定登记", vm.done.length === 1 && vm.done[0].join(",") === "detail,h1,0");
+
+  vm = mk({ tab: "general" });
+  vm.reply = async () => ({});
+  await vm._fetchDrawerDetail();
+  ck("detail 空载荷=种子不存在", vm.drawer.detail === null && vm.drawer.error === "种子不存在或已被删除");
+
+  vm = mk({ tab: "general" });
+  vm.reply = async () => { throw new Error("boom"); };
+  await vm._fetchDrawerDetail();
+  ck("detail 失败落 error", vm.drawer.error === "boom");
+  ck("detail 失败不 toast", vm.toasts.length === 0);
+  ck("detail 失败也登记落定", vm.done.length === 1);
+
+  vm = mk({ tab: "general" });
+  vm.reply = async () => Promise.reject(Object.assign(new Error("401"), { auth: true }));
+  await vm._fetchDrawerDetail();
+  ck("detail 鉴权失败不写 error", vm.drawer.error === "");
+
+  /* ---- trackers: 引用稳定合并 / 行键 url / 门抑制 / 失败标记与 toast ---- */
+  const oldRow = { url: "u1", seeds: 1 };
+  vm = mk({ trackers: [oldRow] });
+  vm.reply = async () => ([{ url: "u2", seeds: 3 }, { url: "u1", seeds: 2 }]);
+  await vm._fetchDrawerTrackers(false);
+  ck("trackers 端点", vm.calls[0] === "/api/torrents/h1/trackers");
+  ck("trackers 行对象引用稳定", vm.drawer.trackers.length === 2 && vm.drawer.trackers[1] === oldRow && oldRow.seeds === 2);
+  ck("trackers 按服务端序重建", vm.drawer.trackers[0].url === "u2");
+  ck("trackers 请求期置门", vm.gateAtRequest[0].t === true);
+  ck("trackers 通知在清门之后", vm.notify.length === 1 && vm.notify[0].t === false);
+
+  vm = mk({ trackersError: "旧错" });
+  vm.reply = async () => ([]);
+  await vm._fetchDrawerTrackers(false);
+  ck("trackers 成功清失败标记", vm.drawer.trackersError === "");
+  ck("trackers 空响应=空列表", Array.isArray(vm.drawer.trackers) && vm.drawer.trackers.length === 0);
+
+  vm = mk();
+  vm.reply = async () => { throw new Error("net"); };
+  await vm._fetchDrawerTrackers(true);
+  ck("silent 不置门", vm.gateAtRequest[0].t === false);
+  ck("silent 失败仍落标记", vm.drawer.trackersError === "net");
+  ck("silent 失败不 toast", vm.toasts.length === 0);
+
+  vm = mk();
+  vm.reply = async () => { throw new Error("net"); };
+  await vm._fetchDrawerTrackers(false);
+  ck("失败 toast 带源前缀", vm.toasts.length === 1 && vm.toasts[0] === "tracker 列表获取失败: net");
+
+  vm = mk();
+  vm._drawerSoftSwitch = true;
+  vm.reply = async () => ([]);
+  await vm._fetchDrawerTrackers(false);
+  ck("软切换窗口不置门", vm.gateAtRequest[0].t === false);
+  ck("软切换窗口通知仍在", vm.notify.length === 1);
+
+  /* ---- files: 行键 index(缺则 name) ---- */
+  const oldFile = { index: 2, name: "b.mkv", size: 1 };
+  vm = mk({ files: [oldFile] });
+  vm.reply = async () => ([{ name: "a.mkv", size: 1 }, { index: 2, name: "b.mkv", size: 9 }]);
+  await vm._fetchDrawerFiles(false);
+  ck("files 端点", vm.calls[0] === "/api/torrents/h1/files");
+  ck("files 行键 index 优先(引用稳定)", vm.drawer.files.length === 2 && vm.drawer.files[1] === oldFile && oldFile.size === 9);
+  ck("files 缺 index 用 name 作行键", vm.drawer.files[0].name === "a.mkv");
+
+  /* ---- peers: 键名适配 + { peers } 形状 + 行键 ---- */
+  vm = mk();
+  vm.reply = async () => ({ peers: { a: { ip: "1.1.1.1", port: 5, dl_speed: 100, up_speed: 20 } } });
+  await vm._fetchDrawerPeers(false);
+  const plist = vm.drawer.peers && vm.drawer.peers.peers;
+  ck("peers 端点", vm.calls[0] === "/api/torrents/h1/peers");
+  ck("peers 目标状态键形状 {peers}", Array.isArray(plist));
+  ck("peers 归一键名适配", plist[0].dlspeed === 100 && plist[0].upspeed === 20);
+  ck("peers 行键 ip:port", plist.length === 1);
+
+  vm = mk();
+  vm.reply = async () => { throw new Error("x"); };
+  await vm._fetchDrawerPeers(false);
+  ck("失败也登记落定(遮罩不挂死)", vm.done.length === 1 && vm.done[0][0] === "peers");
+
+  /* ---- 竞态: 过期代际 / 换目标后旧响应一律丢弃 ---- */
+  vm = mk({ trackers: [{ url: "old" }] });
+  vm._drawerLoadSeq = 9;
+  vm.reply = async () => ([{ url: "new" }]);
+  await vm._fetchDrawerTrackers(false, 8);
+  ck("过期代际不落袋", vm.drawer.trackers.length === 1 && vm.drawer.trackers[0].url === "old");
+  ck("过期代际不通知", vm.notify.length === 0);
+  ck("过期代际不动 loading", vm.drawer.trackersLoading === true);
+
+  vm = mk({ tab: "general" });
+  let release = null;
+  vm.reply = () => new Promise((res) => { release = () => res({ torrent: { name: "old" } }); });
+  const inflight = vm._fetchDrawerDetail();
+  vm.drawer.hash = "h2";
+  release();
+  await inflight;
+  ck("换目标后旧响应不落袋", vm.drawer.detail === null);
+  ck("换目标后旧响应不通知", vm.notify.length === 0);
+
+  const failed = checks.filter((c) => !c.ok).map((c) => c.name);
+  console.log(JSON.stringify({ ok: checks.length - failed.length, total: checks.length, failed: failed }));
+})();
+"""
+
+
+def test_drawer_fetcher_skeleton_single_point():
+    """抽屉四 fetcher 收敛守阵(R21-A-01, issue 26-10-20-2231-refactor-fe-drawer-fetcher-boilerplate-dup)。
+
+    现象(入池 2026-10-20 22:31, 认领复验 2026-10-21 05:34 仍在): detail / trackers / files / peers
+    四份 fetcher 骨架相同(每份 ~22 行) —— 「hash 快照 → loading 门 → stale 守卫 → 合并落袋 → 清标记 →
+    catch → finally(清 loading → _dtNotify → _drawerDone)」的次序是有心之作, 却抄了四遍(全层 13 个
+    `_drawerStale` 判点)。次序错一处不报错, 只静默变成用户可见故障: 旧响应覆盖新目标(W2) /
+    空列表停「正在加载…」一拍轮询(2026-10-07 报障) / FX-29 遮罩等一个永不到手的源挂死(2026-10-04)。
+
+    修法 = **唯一骨架** `_fetchDrawerSource(src, silent, seq)` + 顶层差异表 `_DT_FETCH`
+    (端点 url / 归一 norm / 目标状态键 key / 空值形状 rows+pack, 外加 loading 门字段 / 失败标记 /
+    通知时机)。本守阵钉四件事:
+
+    ① 骨架只有一份、`await this.api(` 全层只有一处, 四个具名入口必须是**单行薄壳**(自带请求 = 又一份
+      次序; 薄壳里写第二行 = 差异项没进表);
+    ② `this._drawerStale(hash, seq)` 全层恰 4 处(骨架成功/异常/finally 三路 + `_drawerDone` 一处),
+      多一处即回潮;
+    ③ 差异表四源齐全、每源字段逐项在位(端点/归一/状态键/空值形状/loadingKey/errKey), 且端点字面量
+      只许出现在表里(骨架与薄壳都不认 `/api/torrents/`);
+    ④ 有 node 时真跑 37 项行为电池 —— 同一电池对**收敛前的四份实现**同样 37/37 全绿(实测), 所以它证明
+      的是「行为不变」, 不是「形态变成这样」。电池覆盖: 四源成功/空载荷/鉴权/静默/失败、软切换窗口与
+      silent 都不置门、引用稳定合并(行对象身份)、三张行键口径、peers 键名适配、过期代际与换目标丢弃、
+      失败也登记落定。
+    """
+    store_js = open(os.path.join(STATIC_ROOT, "shared", "drawer_store.js"), encoding="utf-8").read()
+    skel, ftable = _drawer_fetch_parts(store_js)
+
+    # ① 骨架单份 + 具名入口只许是薄壳
+    assert len(re.findall(r"async _fetchDrawerSource\(", store_js)) == 1, \
+        "取数骨架出现多份(落地次序又分裂了)"
+    assert store_js.count("await this.api(") == 1, \
+        "drawer_store.js 出现第二处 api 调用(应只有骨架一处, 否则就是又一份次序)"
+    for fn in ("_fetchDrawerDetail", "_fetchDrawerTrackers", "_fetchDrawerFiles", "_fetchDrawerPeers"):
+        body = re.search(rf"async {fn}\(.*?\) \{{(.*?)\n    \}},", store_js, re.S)
+        assert body, f"{fn} 形态漂移(守阵正则失配, 同步本守阵)"
+        lines = [ln for ln in body.group(1).strip().splitlines() if ln.strip()]
+        assert len(lines) == 1 and "this._fetchDrawerSource(" in lines[0], \
+            f"{fn} 不再是单行薄壳(任何额外逻辑都应进 _DT_FETCH 表或骨架, 不许在各入口各写一份)"
+
+    # ② stale 判点收敛
+    assert skel.count("this._drawerStale(hash, seq)") == 3, \
+        "骨架必须成功/异常/finally 三路都过 _drawerStale(任一路缺失 = 慢响应覆盖新目标)"
+    assert store_js.count("this._drawerStale(hash, seq)") == 4, \
+        "stale 判点应恰为骨架 3 路 + _drawerDone 1 处(多出来的 = 又有一份落地次序)"
+
+    # ③ 差异表字段齐全 + 端点单点
+    assert len(re.findall(r"^  (\w+): \{", ftable, re.M)) == 4, "差异表条目数不是 4(多源少源都要同步本守阵)"
+    for src in ("detail", "trackers", "files", "peers"):
+        entry = re.search(rf"\n  {src}: \{{(.*?)\n  \}},", ftable, re.S)
+        assert entry, f"差异表缺 {src} 源或书写形态漂移(同步本守阵)"
+        e = entry.group(1)
+        for field in ("url:", "key:", "norm:", "rowKey:", "failText:", "notifyAtLand:"):
+            assert field in e, f"差异表 {src} 条目缺 {field}(该源的差异项没声明全)"
+        if src == "detail":  # 不合并: 整值落袋, 无 loading 门/失败标记/提示
+            assert "rowKey: null" in e and "loadingKey: null" in e and "errKey: null" in e, \
+                "detail 应声明 rowKey/loadingKey/errKey 为 null(它走 drawer.loading 与 drawer.error)"
+        else:
+            assert "rows:" in e and "pack:" in e, f"{src} 未声明空值形状(rows 取旧行 / pack 写回)"
+            assert f'errKey: "{src}Error"' in e, f"{src} 的失败标记字段没在表里声明(P3-5)"
+            assert 'loadingKey: "' in e, f"{src} 的 loading 门字段没在表里声明(软切换守不住)"
+    assert len(re.findall(r"url: \(hash\) => `/api/torrents/", store_js)) == 4, \
+        "四个端点应只在差异表各声明一次(散回骨架/入口 = 端点双份)"
+    assert "/api/torrents/" not in skel, "骨架里出现端点字面量(它不该认识具体数据源)"
+
+    # ④ 有 node 时真跑行为电池(无 node 静默跳过, 不引入 skip)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_DRAWER_FETCH_PROBE,
+             os.path.join(STATIC_ROOT, "shared", "drawer_store.js")],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        assert proc.returncode == 0, f"抽屉取数电池跑挂: {proc.stderr.strip()}"
+        report = json.loads(proc.stdout.strip().splitlines()[-1])
+        assert report["failed"] == [], \
+            f"抽屉取数电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 _NODE_DT_TABLE_PROBE = r"""
