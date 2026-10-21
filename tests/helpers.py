@@ -1074,13 +1074,9 @@ def capture_logs(logger_name="auto_qb", level=logging.DEBUG):
         lg.propagate = old_propagate
 
 
-def make_manager(state_file, tracker_rules=None, tracker_kw=None):
-    cfg = FakeConfig()
-    cfg.state_file = state_file
-    kw = dict(hr=_hr_rule(), rules=tracker_rules)
-    kw.update(tracker_kw or {})
-    cfg.trackers = {"HHan": FakeTracker("HHan", **kw)}
-    config_dict = {
+def _example_rules_config():
+    """make_manager 默认装配的三条示例规则(站点标签 / HR 完成 / 低分享率停种)"""
+    return {
         "example_rules":
             {
                 "add_site_tag":
@@ -1128,10 +1124,62 @@ def make_manager(state_file, tracker_rules=None, tracker_kw=None):
                     },
             }
     }
-    cfg.rules_config = config_dict
-    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr.host.get("rules").load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+
+
+def make_manager(
+    state_file=None,
+    tracker_rules=None,
+    tracker_kw=None,
+    cfg=None,
+    client=None,
+    no_lock=True,
+    bare=False,
+    load_rules=None,
+    **cfg_overrides,
+):
+    """QbManager 构造单点 —— 测试侧唯一装配入口(用例里不要再内联 QbManager(...))。
+
+    state_file: 写进 cfg.state_file; None = 沿用 cfg 自带的值
+    tracker_rules / tracker_kw: 默认装配的 HHan 假 tracker 的 rules / 其余构造参数
+    cfg: 现成配置对象(默认 FakeConfig()); 给了就**不装**默认 tracker + 三条示例规则
+    bare: True = 空配置(等价内联 `FakeConfig()`, 只留 cfg_overrides 覆盖的段);
+          与 cfg 同给时 cfg 优先
+    client: 构造后挂上替身(等价 `mgr.client = client`)
+    no_lock: 透传 QbManager(默认 True = 测试不持锁)
+    load_rules: None = 自动(默认装配路径 True, cfg / bare 路径 False —— 配置自备则规则面也自备);
+                显式 True 强制加载(自备 rules_config 的场景)
+    **cfg_overrides: 对最终 cfg 的段覆盖(未知段名抛 TypeError, 防手滑写成幽灵属性)
+
+    用法: `make_manager(state_file)` 全默认; `make_manager(state_file, bare=True,
+    grouping=grouping_cfg(), client=client)` 只要分组段 + 替身客户端。
+    """
+    assemble = cfg is None and not bare  # 默认装配 = 假 tracker + 三条示例规则
+    if cfg is None:
+        cfg = FakeConfig()
+    if assemble:
+        kw = dict(hr=_hr_rule(), rules=tracker_rules)
+        kw.update(tracker_kw or {})
+        cfg.trackers = {"HHan": FakeTracker("HHan", **kw)}
+        cfg.rules_config = _example_rules_config()
+    if state_file is not None:
+        cfg.state_file = state_file
+    for key, value in cfg_overrides.items():
+        if not hasattr(cfg, key):
+            raise TypeError(f"make_manager: FakeConfig 无 {key!r} 段(段名写错了?)")
+        setattr(cfg, key, value)
+    mgr = QbManager("", config=cfg, no_lock=no_lock)
+    if load_rules is None:
+        load_rules = assemble
+    if load_rules:
+        mgr.host.get("rules").load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+    if client is not None:
+        mgr.client = client
     return mgr
+
+
+def grouping_cfg(enabled=True, **grouping_kw):
+    """分组场景的 grouping 段(测试统一口径: missing_tag 固定 MISSING)"""
+    return GroupingConfig(enabled=enabled, missing_tag="MISSING", **grouping_kw)
 
 
 def _fake_file(name, size):

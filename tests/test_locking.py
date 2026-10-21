@@ -19,8 +19,7 @@ import pytest
 from auto_qb.config import ConfigError
 from auto_qb.infra.errors import AutoQbError
 from auto_qb.infra.locking import SingleInstanceLock, SingleInstanceLockError
-from auto_qb.core.qbmanager import QbManager
-from helpers import FakeConfig
+from helpers import FakeConfig, make_manager
 
 
 def test_lock_acquire_release_basic(tmp_path):
@@ -72,7 +71,7 @@ def test_lock_skipped_when_no_lock_flag(tmp_path):
     cfg.state_file = str(tmp_path / "state.json")
     lock_path = str(tmp_path / "state.lock")
     assert not os.path.exists(lock_path)
-    mgr = QbManager("", config=cfg, no_lock=True)
+    mgr = make_manager(cfg=cfg)
     try:
         assert not os.path.exists(lock_path), "no_lock=True 不应创建锁文件"
         assert mgr._lock is None

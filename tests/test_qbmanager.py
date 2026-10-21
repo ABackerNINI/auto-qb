@@ -74,7 +74,7 @@ from qbittorrentapi import APIConnectionError, Client
 from auto_qb.config import QbittorrentConfig
 from auto_qb.infra.errors import AutoQbError
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, _throttle
 from auto_qb.torrents import QbCompatError
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, make_manager, seed_store
 
@@ -1122,14 +1122,14 @@ def test_p2a_init_with_lock_cleans_orphan_tmp_and_releases():
             f.write("{}")
         cfg = FakeConfig()
         cfg.state_file = state_file
-        mgr = QbManager("", config=cfg, no_lock=False)
+        mgr = make_manager(cfg=cfg, no_lock=False)
         try:
             assert not os.path.exists(orphan), "持锁后应清掉孤儿 tmp 文件"
             assert mgr._lock is not None
         finally:
             mgr._lock.release()
         # 锁已释放: 第二个实例可再次持锁(证明第一个真的持有过)
-        mgr2 = QbManager("", config=cfg, no_lock=False)
+        mgr2 = make_manager(cfg=cfg, no_lock=False)
         mgr2._lock.release()
 
 
@@ -1138,7 +1138,7 @@ def test_p2a_run_with_lock_releases_in_finally():
     with tempfile.TemporaryDirectory() as td:
         cfg = FakeConfig()
         cfg.state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=cfg, no_lock=False)
+        mgr = make_manager(cfg=cfg, no_lock=False)
         mgr.connect = mock.Mock(return_value=True)
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
         mgr.run(dry_run=False)

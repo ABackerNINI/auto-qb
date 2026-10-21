@@ -33,7 +33,7 @@ import pytest
 from auto_qb.infra import autostart, notify as notify_mod
 from auto_qb.config import NotifyConfig
 from auto_qb.infra.notify import NotifyHandler, PlatformChannel
-from auto_qb.core.qbmanager import QbConnectError, QbManager
+from auto_qb.core.qbmanager import QbConnectError
 from auto_qb.tray import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from auto_qb.config import QbittorrentConfig
 from helpers import FakeClient, FakeConfig, FakeQbServer, FakeTorrent, make_manager, seed_store
@@ -279,7 +279,7 @@ def test_connect_failure_throttles_logging(tmp_path):
         cfg = FakeConfig()
         cfg.state_file = str(tmp_path / "state.json")
         cfg.qbittorrent = QbittorrentConfig(host="127.0.0.1", port=srv.port, username="u", password="p")
-        mgr = QbManager("", config=cfg, no_lock=True)
+        mgr = make_manager(cfg=cfg)
 
         records = []
 

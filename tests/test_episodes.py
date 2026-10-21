@@ -14,8 +14,7 @@ from types import SimpleNamespace
 
 from auto_qb.config.models import AddEpisodeTagsConfig
 from auto_qb.core.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
-from auto_qb.core.qbmanager import QbManager
-from helpers import FakeClient, FakeConfig, FakeTorrent
+from helpers import FakeClient, FakeTorrent, make_manager
 
 
 def _fake_file(name, size):
@@ -105,12 +104,8 @@ def test_episode_tags_added_on_new_torrent():
     """种子添加时自动添加集数标签(从文件列表解析)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, add_episode_tags=AddEpisodeTagsConfig(enabled=True), client=client)
 
         t1 = FakeTorrent(hash="H1", name="Show.S01E01", state="stalledUP")  # 名称含集数标记(仍解析文件)
         t2 = FakeTorrent(hash="H2", name="Show.S02.BluRay", state="stalledUP")  # 名称无集数 -> 解析
@@ -130,12 +125,8 @@ def test_episode_tags_not_on_existing_refresh():
     """仅种子添加时触发, 后续刷新不重复拉取文件列表/不重复加标签"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, add_episode_tags=AddEpisodeTagsConfig(enabled=True), client=client)
 
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1
@@ -154,12 +145,8 @@ def test_episode_tags_non_continuous_skipped():
     """集数非连续(存在缺集/误提取)时放弃添加标签"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, add_episode_tags=AddEpisodeTagsConfig(enabled=True), client=client)
 
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1
@@ -178,12 +165,8 @@ def test_episode_tags_ignore_date_screenshot():
     """附带日期时间截图(2022.05.11_14.51.23.jpg)不干扰集数解析"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.add_episode_tags = AddEpisodeTagsConfig(enabled=True)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, add_episode_tags=AddEpisodeTagsConfig(enabled=True), client=client)
 
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1
@@ -202,12 +185,8 @@ def test_episode_tags_disabled():
     """add_episode_tags 关闭时不拉取文件列表/不加标签"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.add_episode_tags = AddEpisodeTagsConfig()  # 默认 disabled
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, add_episode_tags=AddEpisodeTagsConfig(), client=client)  # 默认 disabled
 
         t1 = FakeTorrent(hash="H1", name="Show.BluRay", state="stalledUP")
         client.torrents["H1"] = t1

@@ -76,12 +76,11 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from auto_qb.config import Config
-from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_count
 from auto_qb.rules.checking_meta import PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
-from helpers import drive_skip, FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
+from helpers import drive_skip, FakeClient, FakeConfig, FakeTorrent, make_ctx, make_manager, seed_store
 
 
 # ---------- 增强模拟客户端(piece hashes API / recheck 失败注入) ----------
@@ -170,8 +169,7 @@ def make_mgr(cfg, with_tq=False):
     """构造 QbManager(可选任务队列); 未指定 state_file 时自动分配一份临时 state 文件"""
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
-    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr.host.get("rules").load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
+    mgr = make_manager(cfg=cfg, load_rules=True)
     if with_tq:
         mgr.task_queue = TaskQueue()
     return mgr
@@ -906,7 +904,7 @@ def test_checking_verified_references_not_persisted():
         assert mgr.store.verified_references == {"HASH123"}, "完成后应晋升"
         mgr.ctx.state.save()
 
-        mgr2 = QbManager("", config=cfg, no_lock=True)  # 测试不持锁  # 重新加载同一 state 文件
+        mgr2 = make_manager(cfg=cfg)  # 重新加载同一 state 文件
         assert mgr2.store.verified_references == set(), "verified 参考不应持久化"
 
 

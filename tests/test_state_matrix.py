@@ -22,10 +22,8 @@ import tempfile
 
 import pytest
 
-from auto_qb.config import GroupingConfig
-from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.conditions import StateCondition
-from helpers import FakeClient, FakeConfig, FakeTorrent, make_ctx, seed_store
+from helpers import FakeClient, FakeTorrent, grouping_cfg, make_ctx, make_manager, seed_store
 
 try:
     from qbittorrentapi import TorrentState
@@ -36,13 +34,6 @@ except ImportError:  # pragma: no cover
     ALL_STATES = []
 
 pytestmark = pytest.mark.skipif(TorrentState is None, reason="qbittorrentapi 未安装")
-
-
-def _group_cfg(state_file):
-    cfg = FakeConfig()
-    cfg.state_file = state_file
-    cfg.grouping = GroupingConfig(enabled=True, missing_tag="MISSING")
-    return cfg
 
 
 def _dl_expected(state):
@@ -71,8 +62,7 @@ def test_state_enum_has_exactly_22_members():
 def test_group_has_downloading_matrix(state):
     """_group_has_downloading: 单成员组是否含活跃下载 == is_downloading 且非停止且非校验"""
     with tempfile.TemporaryDirectory() as td:
-        mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")), no_lock=True)  # 测试不持锁
-        mgr.client = FakeClient()
+        mgr = make_manager(os.path.join(td, "state.json"), bare=True, grouping=grouping_cfg(), client=FakeClient())
         seed_store(mgr, [FakeTorrent(hash="H1", state=state.value)])
         assert mgr.host.get("grouping")._group_has_downloading(["H1"]) is _dl_expected(state), f"state={state.value}"
 
@@ -82,6 +72,6 @@ def test_group_has_downloading_matrix(state):
 def test_state_condition_matches_enum_matrix(state, attr):
     """StateCondition(is_* 属性名 spec) 判定 == TorrentState 枚举属性(全状态 × 全属性, 锁定无手写映射漂移)"""
     with tempfile.TemporaryDirectory() as td:
-        mgr = QbManager("", config=_group_cfg(os.path.join(td, "state.json")), no_lock=True)  # 测试不持锁
+        mgr = make_manager(os.path.join(td, "state.json"), bare=True, grouping=grouping_cfg())
         ctx = make_ctx(mgr, FakeTorrent(state=state.value), FakeClient())
         assert StateCondition(attr).match(ctx) is getattr(state, attr), f"{attr} × {state.value}"

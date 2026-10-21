@@ -64,12 +64,11 @@ from datetime import date
 from types import SimpleNamespace
 
 from auto_qb.core.modules.ops_mod import OpsModule
-from auto_qb.core.qbmanager import QbManager
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
 from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
-from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, seed_store
+from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, make_manager, seed_store
 
 # 跳检会真实落盘 .torrent 备份(issue 26-09-21-1347): state_file 必须落临时目录, 与 test_checking 同口径
 _TMP_STATE_DIR = tempfile.TemporaryDirectory(prefix="autoqb-ops-state-")
@@ -79,8 +78,7 @@ def make_mgr(cfg):
     """构造 QbManager(独立任务队列); 自动分配临时 state 文件"""
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
-    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    mgr.host.get("rules").load_rules()
+    mgr = make_manager(cfg=cfg, load_rules=True)
     mgr.task_queue = TaskQueue()
     return mgr
 

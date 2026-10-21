@@ -10,21 +10,16 @@
 import os
 import tempfile
 
-from auto_qb.core.qbmanager import QbManager
 from auto_qb.core.taskqueue import Task
-from helpers import FakeClient, FakeConfig, FakeTorrent
+from helpers import FakeClient, FakeTorrent, make_manager
 
 
 def test_global_delete_tags():
     """全局任务彻底删除标签(精确 + 正则 regex: 前缀)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.delete_tags = ["M-Team - TP", "regex:^BTSCHOOL"]
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, delete_tags=["M-Team - TP", "regex:^BTSCHOOL"], client=client)
         # 客户端已有标签定义 + 种子使用中
         client.tags = {"HHan", "M-Team - TP", "BTSCHOOL-OLD", "KEEP"}
         tor = FakeTorrent(tags="HHan,M-Team - TP,BTSCHOOL-OLD")
@@ -43,12 +38,8 @@ def test_global_delete_tags_dry_run():
     """全局删除标签 dry-run 无副作用"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.delete_tags = ["M-Team - TP"]
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, delete_tags=["M-Team - TP"], client=client)
         client.tags = {"HHan", "M-Team - TP"}
 
         task = Task("internal", "delete_tags", interval=60, handler=mgr.host.get("maintenance").handle_delete_tags)
@@ -61,13 +52,11 @@ def test_global_delete_tags_if_has_no_torrents():
     """全局任务彻底删除无种子的标签(仅删无种子使用的, 有种子使用保留)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        # 模拟 load_config 展开 @tracker_tags 后的结果: 站点标签 HHan
-        cfg.delete_tags_if_has_no_torrents = ["HHan", "regex:^ORPHAN"]
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        # 模拟 load_config 展开 @tracker_tags 后的结果: 站点标签 HHan
+        mgr = make_manager(
+            state_file, bare=True, delete_tags_if_has_no_torrents=["HHan", "regex:^ORPHAN"], client=client
+        )
         # HHan 无种子使用(孤儿), ORPHAN-1 无种子使用, KEEP 有种子使用
         client.tags = {"HHan", "ORPHAN-1", "KEEP"}
         tor = FakeTorrent(tags="KEEP")
@@ -89,12 +78,8 @@ def test_global_delete_tags_no_pattern_match():
     """无匹配格式时不调用客户端"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.delete_tags = ["不存在的标签"]
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, delete_tags=["不存在的标签"], client=client)
         client.tags = {"HHan", "KEEP"}
         tor = FakeTorrent(tags="HHan")
         client.torrents["HASH123"] = tor
@@ -108,11 +93,9 @@ def test_global_delete_tags_queued():
     """配置非空时创建两个全局任务加入队列"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = FakeConfig()
-        cfg.state_file = state_file
-        cfg.delete_tags = ["M-Team - TP"]
-        cfg.delete_tags_if_has_no_torrents = ["@tracker_tags"]
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
+        mgr = make_manager(
+            state_file, bare=True, delete_tags=["M-Team - TP"], delete_tags_if_has_no_torrents=["@tracker_tags"]
+        )
         mgr._create_global_tasks()  # run() 中才自动创建; 测试直接构造后手动创建
         # 队列应包含两个全局标签清理任务
         names = {t.name for t in mgr.task_queue._fast}
@@ -120,4 +103,4 @@ def test_global_delete_tags_queued():
         assert "delete_tags_if_has_no_torrents" in names, f"缺少 delete_tags_if_has_no_torrents 任务: {names}"
         for t in mgr.task_queue._fast:
             if t.name in ("delete_tags", "delete_tags_if_has_no_torrents"):
-                assert t.interval == cfg.interval, f"全局任务 interval 应为 {cfg.interval}: {t.interval}"
+                assert t.interval == mgr.config.interval, f"全局任务 interval 应为 {mgr.config.interval}: {t.interval}"

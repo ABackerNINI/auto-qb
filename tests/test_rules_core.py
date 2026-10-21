@@ -21,7 +21,6 @@ import os
 import tempfile
 import time
 
-from auto_qb.core.qbmanager import QbManager
 from auto_qb.rules.actions import AddCategoryAction
 from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_ctx, make_manager, seed_store
 
@@ -257,10 +256,8 @@ def test_rule_interval():
                         },
                 }
         }
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-        mgr.host.get("rules").load_rules()  # run() 中才自动加载; 测试直接构造后需手动加载规则
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(cfg=cfg, load_rules=True, client=client)
         tor = FakeTorrent(tags="", ratio=0.1, state="uploading")
         client.torrents["HASH123"] = tor  # 种子级规则任务通过 store 快照读取
         seed_store(mgr)

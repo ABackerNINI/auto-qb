@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-0502">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md, memory-bank/tasks/26-10-22-test-manager-builder-params-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)">
 <meta name="issue-summary" content="单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建">
 <title>make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-0502-refactor-test-manager-builder-params-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 05:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,25 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法 / 验证</h2>
+    <p>按建议修法落地（<strong>扩参数而非新建第二构造器</strong>），复验实测把规模从「89 处 / 15 文件」校正为 <strong>86 处 / 12 文件</strong>（差在：原计数含 <code>test_web_seed_center</code> / <code>test_qbmanager_alias_freeze</code> 的 docstring 提及，以及 <code>helpers.py</code> 单点本体）。</p>
+    <ul>
+      <li><code>make_manager</code> 参数面扩为 <code>state_file / tracker_rules / tracker_kw / cfg / client / no_lock / bare / load_rules / **cfg_overrides</code>，三种装配形态：<strong>默认</strong>（假 tracker + 三条示例规则 + <code>load_rules()</code>，与改动前逐字等价）、<strong><code>cfg=</code></strong>（现成配置对象，供共享 cfg 与包装器委派）、<strong><code>bare=True</code></strong>（空 <code>FakeConfig</code> + 段覆盖，86 处里绝大多数走这条）。</li>
+      <li><strong><code>load_rules</code> 三态</strong>（None / True / False）：内联用例本来就不加载规则，让 <code>cfg</code>/<code>bare</code> 路径默认加载等于顺手改了它们的装配语义（grouping 用例断言 <code>task_queue._fast</code> 无多余任务）；故 <code>None</code> = 自动（默认装配 True，cfg/bare 路径 False），自备 <code>rules_config</code> 的三处显式 <code>load_rules=True</code>。</li>
+      <li><strong><code>**段覆盖</code> 未知段名抛 <code>TypeError</code></strong>（fail-fast）：<code>**kwargs</code> 静默 setattr 会在段名写错时造出幽灵属性——配置没生效而测试照样绿，那是「旁路」的变体形态。</li>
+      <li><code>grouping_cfg()</code> 收分组段单点（<code>missing_tag="MISSING"</code> 口径），替换 <code>test_grouping</code> / <code>test_state_matrix</code> 两份逐字相同的 <code>_group_cfg</code> 与 <code>test_modules_p4</code> 的 <code>_mgr</code> 装配。</li>
+      <li><strong>新增静态守阵</strong> <code>tests/test_manager_single_point.py</code>：AST 扫 <code>tests/*.py</code>，除单点本体 <code>helpers.py</code> 外零豁免（持锁走 <code>no_lock=False</code>、自备配置走 <code>cfg=</code>、空配置走 <code>bare=True</code>，没有绕不过去的场景），另带一支「造违规文件必须被报出」的自检，防扫描型守阵退化成恒绿。</li>
+      <li>测试面 13 文件 <strong>净 −91 行</strong>（165+/256−）；<code>src/</code> 零改动。</li>
+    </ul>
+    <p><strong>验证方式</strong>：① 守阵红验——临时造含内联 <code>QbManager("", ...)</code> 的 <code>tests/test_zz_probe.py</code>，守阵判红并报 <code>test_zz_probe.py:5</code>，删除后归绿；② 全量闸门 <code>commands run test.full</code> 全绿，实测数字见 <code>commands run kb.baseline</code>（本轮新切片；本件不抄数字）；③ 档案 <code>memory-bank/tasks/26-10-22-test-manager-builder-params-dup.md</code>。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-21 05:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 03:56 — 用户指派认领（档案 <code>memory-bank/tasks/26-10-22-test-manager-builder-params-dup.md</code>），状态 <strong>In Progress</strong>；复验：基线 <code>06db0649</code> 上按 <code>grep 'QbManager("'</code> 逐文件实测 <strong>86 处内联构造 / 12 文件</strong>（test_grouping 60 / test_episodes 5 / test_delete_tags 5 / test_hr 4 / test_qbmanager 3 / test_state_matrix 2 / test_checking 2 / 其余五个文件各 1），现象属实</li>
+      <li>2026-10-22 04:08 — 修完置 <strong>Done</strong>：make_manager 扩五参数 + <code>grouping_cfg()</code> 单点，86 处改调，新增 AST 守阵并红验通过；全量闸门全绿（数字见本轮基线切片）</li>
     </ul>
   </section>
 

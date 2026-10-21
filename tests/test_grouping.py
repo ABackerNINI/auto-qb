@@ -94,9 +94,7 @@ from unittest import mock
 
 import pytest
 
-from auto_qb.config import GroupingConfig
-from auto_qb.core.qbmanager import QbManager
-from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
+from helpers import FakeClient, FakeTorrent, grouping_cfg, make_manager, seed_store
 
 
 def _fake_file(name, size):
@@ -108,21 +106,12 @@ def _non_tag_calls(client):
     return [c for c in client.calls if c[0] != "add_tags"]
 
 
-def _group_cfg(state_file, enabled=True):
-    cfg = FakeConfig()
-    cfg.state_file = state_file
-    cfg.grouping = GroupingConfig(enabled=enabled, missing_tag="MISSING")
-    return cfg
-
-
 def test_grouping_size_mismatch_pauses_group():
     """新增种子归组时文件大小不一致 -> 警告 + 整组暂停(不加标签, 不再每轮检查)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         client.torrents["H1"] = t1
@@ -144,10 +133,8 @@ def test_grouping_missing_files_pauses_group():
     """种子由上传转暂停 -> 同轮立即触发缺文件检查, 文件丢失 -> 整组暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -173,10 +160,8 @@ def test_grouping_state_change_triggers_check():
     """仅"上传转暂停"触发检查(检测到即立即处理); 上传状态间变化/状态不变不触发"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -214,10 +199,10 @@ def test_grouping_state_change_triggers_check():
 
 def _scan_scenario(state_file):
     """同组两成员(H1/H2)均 stalledUP 的场景: 首轮归组 + 建立状态快照, 调用记录已清空"""
-    cfg = _group_cfg(state_file)
-    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
     client = FakeClient()
-    mgr.client = client  # property setter 会把 api 重绑到该 client(生产路径同构)
+    mgr = make_manager(
+        state_file, bare=True, grouping=grouping_cfg(), client=client
+    )  # property setter 会把 api 重绑到该 client(生产路径同构)
 
     t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
     t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -290,10 +275,8 @@ def test_grouping_deleted_torrent_triggers_check():
     """同组种子被删除 -> 同一轮立即触发缺文件扫描(不等下一轮)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -318,12 +301,12 @@ def test_grouping_no_global_task():
     """分组为事件驱动, 不再创建周期轮询全局任务"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg())
         names = {t.name for t in mgr.task_queue._fast}
         assert "grouping" not in names, f"事件驱动不应创建分组周期任务: {names}"
 
         # 未启用也不创建
-        mgr2 = QbManager("", config=_group_cfg(state_file, enabled=False), no_lock=True)  # 测试不持锁
+        mgr2 = make_manager(state_file, bare=True, grouping=grouping_cfg(enabled=False))
         names2 = {t.name for t in mgr2.task_queue._fast}
         assert "grouping" not in names2, f"未启用也不应创建分组任务: {names2}"
 
@@ -332,13 +315,10 @@ def test_grouping_replaces_per_torrent_missing_files():
     """逐种子 missing_files 任务已移除, 缺文件检查统一由分组事件驱动承担"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        cfg.check_missing_files = True
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), check_missing_files=True, client=client)
         tor = FakeTorrent(hash="H1", name="T1")
-        tor.tracker_conf = cfg.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
+        tor.tracker_conf = mgr.config.trackers["HHan"]  # 显式 setUp: 模拟 _refresh_torrents 匹配
         seed_store(mgr, [tor])
 
         mgr.host.get("rules")._create_torrent_tasks("H1")
@@ -346,10 +326,9 @@ def test_grouping_replaces_per_torrent_missing_files():
         assert "missing_files" not in names, f"不应创建逐种子检查: {names}"
 
         # 未启用分组同样不创建(逐种子检查已整体移除, 不再回退)
-        cfg2 = _group_cfg(state_file, enabled=False)
-        cfg2.check_missing_files = True
-        mgr2 = QbManager("", config=cfg2, no_lock=True)  # 测试不持锁
-        mgr2.client = FakeClient()
+        mgr2 = make_manager(
+            state_file, bare=True, grouping=grouping_cfg(enabled=False), check_missing_files=True, client=FakeClient()
+        )
         seed_store(mgr2, [tor])
         mgr2.host.get("rules")._create_torrent_tasks("H1")
         names2 = {t.name for t in mgr2.task_queue._fast}
@@ -360,9 +339,8 @@ def test_grouping_incremental_on_add():
     """新增种子时自动归组(增量), 不再每轮全量重建分组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         # 新增 H1 -> _refresh_torrents 检测 added 并自动归组(全部增量归组, 无初始化)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
@@ -387,9 +365,8 @@ def test_grouping_removed_from_groups():
     """种子删除时自动从分组移除(空组删除)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -418,9 +395,8 @@ def test_grouping_save_path_change_triggers_check():
     """种子保存路径变化 -> 原组剩余成员触发缺文件扫描; 新组已有其它成员也触发扫描"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         # 组 A: H1/H2(DownloadsA); 组 B: H3(DownloadsB)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsA")
@@ -450,9 +426,8 @@ def test_grouping_save_path_change_new_group_alone():
     """保存路径变化但新组无其它成员 -> 仅原组触发扫描, 新组不扫"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsA")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\DownloadsA")
@@ -482,9 +457,8 @@ def test_grouping_no_full_files_scan():
     """归组仅拉一次文件列表(增量归组); 后续刷新状态不变不触发扫描, 不重复拉取"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         client.torrents["H1"] = t1
@@ -508,7 +482,7 @@ def test_is_downloading_excludes_checking():
     导致下载冲突检查误暂停整组。现活跃下载判定由 _group_has_downloading 承担:
     is_downloading and not is_stopped and not is_checking(读 store 快照)。
     """
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     # checking* 状态 -> 不算组内活跃下载(不阻塞校验决策链)
     seed_store(
         mgr, [
@@ -527,9 +501,8 @@ def test_grouping_force_checking_not_conflict():
     """强制校验种子不再被当作下载中(62dbc25 回归): 与下载中/已完成成员同组不触发冲突暂停"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         # 组 A: H1 强制校验(未完成) + H2 下载中 —— 修复前误判 multi-dl
         # 组 B: H3 强制校验(未完成) + H4 已完成做种 —— 修复前误判 mixed
@@ -551,9 +524,8 @@ def test_grouping_download_conflict_multi_dl():
     """下载冲突: 同组两个及以上种子同时下载 -> 警告+整组暂停; 去重: 冲突持续不重复, 消除后清除可再次触发"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -589,9 +561,8 @@ def test_grouping_download_conflict_mixed():
     """下载冲突: 同组已完成与下载中并存 -> 警告+整组暂停(真冲突不受修复影响)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -609,9 +580,8 @@ def test_grouping_download_conflict_dry_run():
     """下载冲突 dry-run: 只报告不暂停, 也不记录去重(下次真实执行仍会暂停)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -633,9 +603,8 @@ def test_download_conflict_meta_dl_mixed():
     """下载冲突: metaDL(元数据下载, amount_left>0)算活跃下载, 与已完成并存 -> mixed"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="metaDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -654,9 +623,8 @@ def test_download_conflict_checking_up_mixed():
     """下载冲突: checkingUP(校验中但已完成, amount_left=0) + stalledDL -> mixed(qB 重启场景)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="checkingUP", amount_left=0)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -675,9 +643,8 @@ def test_download_conflict_forced_queued_dl():
     """下载冲突: forcedDL + queuedDL 两个活跃下载 -> multi-dl"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="forcedDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="queuedDL", amount_left=100)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -696,9 +663,8 @@ def test_download_conflict_paused_dl_pair():
     """下载冲突: pausedDL + stoppedDL 停种(暂停)不算活跃下载 -> 不冲突不暂停"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="pausedDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stoppedDL", amount_left=100)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -716,9 +682,8 @@ def test_download_conflict_resolve_by_complete():
     """下载冲突: 混合冲突随下载完成(转做种)消除 -> 去重清除; 重现可再次触发"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0)
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -751,9 +716,8 @@ def test_download_conflict_two_groups_independent():
     """下载冲突: 两组同时冲突分别处理, 去重 key 按组独立; 一组消除不影响另一组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="downloading", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledDL", amount_left=100)
         t3 = FakeTorrent(hash="H3", name="T3", state="stalledDL", amount_left=100)
@@ -781,13 +745,13 @@ def test_download_conflict_two_groups_independent():
 
 def test_group_members_not_in_group():
     """_group_members: 未归组 -> [自身 hash] 单种子(无参考)"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     assert mgr.host.get("grouping")._group_members("H1") == ["H1"]
 
 
 def test_group_members_in_group():
     """_group_members: 已归组 -> 返回全部成员 hash"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
     mgr.store.groups = {"g1": ["H1", "H2"]}
     assert mgr.host.get("grouping")._group_members("H1") == ["H1", "H2"]
@@ -795,7 +759,7 @@ def test_group_members_in_group():
 
 def test_leave_group_removes():
     """_leave_group: 移出成员, 组内仍有剩余 -> 返回组 key"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     mgr.store.member_to_key = {"H1": "g1", "H2": "g1"}
     mgr.store.groups = {"g1": ["H1", "H2"]}
     mgr.store.group_sizes = {"g1": {"H1": {}, "H2": {}}}
@@ -807,7 +771,7 @@ def test_leave_group_removes():
 
 def test_leave_group_empty_deletes():
     """_leave_group: 组空 -> 删除整组返回 None"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     mgr.store.member_to_key = {"H1": "g1"}
     mgr.store.groups = {"g1": ["H1"]}
     mgr.store.group_sizes = {"g1": {"H1": {}}}
@@ -818,13 +782,13 @@ def test_leave_group_empty_deletes():
 
 def test_leave_group_not_in_group():
     """_leave_group: 种子不在任何组 -> None 且不抛异常"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     assert mgr.host.get("grouping")._leave_group("NOPE") is None
 
 
 def test_group_has_downloading():
     """_group_has_downloading: 组内存在活跃下载成员 -> True(成员状态读 store 快照)"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     seed_store(mgr, [
         FakeTorrent(hash="H1", state="stalledDL"),
         FakeTorrent(hash="H2", state="stalledUP"),
@@ -839,7 +803,7 @@ def test_group_has_downloading_delegates_to_store():
     生产输入形态(members == store.group_members(hash) 全量列表)与未归组/幽灵/空列表输入下,
     委托后输出 == 上移前逐字语义(内联参照实现) == store 直查; 末段以实例级替身钉死委托路由。
     """
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     seed_store(
         mgr,
         [
@@ -892,7 +856,7 @@ def test_group_has_downloading_delegates_to_store():
 
 def test_group_reference_candidates():
     """_group_reference_candidates: 组内已完成且未在校验的成员(参考种子候选, 读 store 快照)"""
-    mgr = QbManager("", config=_group_cfg("state.json"), no_lock=True)  # 测试不持锁
+    mgr = make_manager("state.json", bare=True, grouping=grouping_cfg())
     seed_store(
         mgr,
         [
@@ -910,9 +874,8 @@ def test_grouping_save_path_change_no_cache():
     """_handle_save_path_changes: 无缓存文件映射 -> 跳过该种子(维持原行为)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\DownloadsB")
         seed_store(mgr, [t1])
@@ -928,9 +891,8 @@ def test_assign_new_torrent_missing():
     """_assign_new_torrent: 哈希不在 store 快照 -> AttributeError 上抛(调用方保证传入存在的 hash)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         with pytest.raises(AttributeError):
             mgr.host.get("grouping")._assign_new_torrent("NOPE", dry_run=False)
         assert client.files_calls == 0, "tor 不存在不应拉文件列表"
@@ -940,9 +902,8 @@ def test_assign_new_torrent_files_error():
     """_assign_new_torrent: 文件列表拉取异常 -> 异常上抛(不缓存, 由 run 主循环兜底), 不归组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         def boom(h):
             raise RuntimeError("api down")
@@ -960,9 +921,8 @@ def test_assign_to_group_empty_map():
     """_assign_to_group: 空文件映射 -> 不归组"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP")
         mgr.host.get("grouping")._assign_to_group(t1, {}, dry_run=False)
         assert mgr.store.groups == {}
@@ -973,9 +933,8 @@ def test_check_missing_files_no_seeding_rep():
     """_check_missing_files: 组内无已完成未校验种子 -> 不检查; 暂停完成成员亦是有效代表"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         members = [FakeTorrent(hash="H1", name="T1", state="pausedUP", amount_left=100)]
         mgr.host.get("grouping")._check_missing_files(members, {}, dry_run=False, key="K")
         assert client.calls == [], "未完成成员不应作为代表扫描"
@@ -995,9 +954,8 @@ def test_check_missing_files_size_mismatch():
     """_check_missing_files: 文件存在但大小不符 -> 警告 + 整组暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         real = os.path.join(td, "movie.mkv")
         with open(real, "wb") as f:
             f.write(b"x" * 10)
@@ -1012,9 +970,8 @@ def test_check_missing_files_getsize_error():
     """_check_missing_files: 文件读取 OSError -> 警告 + 整组暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         real = os.path.join(td, "movie.mkv")
         with open(real, "wb") as f:
             f.write(b"x" * 10)
@@ -1031,9 +988,8 @@ def test_check_missing_files_checking_up_not_rep():
     对照 stalledUP(校验完成做种)作代表 -> 缺文件触发暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         # checkingUP: is_complete 但 is_checking -> 排除出有效代表, 不扫描
         checking_up = FakeTorrent(hash="H1", name="T1", state="checkingUP", save_path=td, amount_left=0)
@@ -1053,9 +1009,8 @@ def test_check_missing_files_first_done_rep():
     """_check_missing_files: 多已完成成员取第一个作代表, 非代表大小映射差异不影响扫描结果"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         real = os.path.join(td, "movie.mkv")
         with open(real, "wb") as f:
             f.write(b"x" * 10)
@@ -1076,9 +1031,8 @@ def test_check_missing_files_empty_sizes_map():
     """_check_missing_files: 大小映射为空 -> 无文件可检查, 不误报"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         mgr.host.get("grouping")._check_missing_files([rep], {}, dry_run=False, key="K")
         assert client.calls == [], f"空大小映射不应触发扫描: {client.calls}"
@@ -1088,9 +1042,8 @@ def test_check_missing_files_member_has_tag():
     """_check_missing_files: 成员已带 MISSING 标签 -> 不重复 add_tags(仍暂停)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0, tags="MISSING")
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
         mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
@@ -1102,9 +1055,8 @@ def test_check_missing_files_dry_run():
     """_check_missing_files dry-run: 不暂停也不加标签"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
         mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=True, key="K")
@@ -1121,9 +1073,8 @@ def test_check_missing_files_qb_transitional_suffix_skips():
     """
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         # 磁盘上只有 qB 搬运期的孪生文件(原名不存在) —— 模拟改名窗口
         with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
             f.write(b"x" * 100)
@@ -1144,9 +1095,8 @@ def test_check_missing_files_transitional_skip_limit_reaches_missing():
     """
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         grouping = mgr.host.get("grouping")
         with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
             f.write(b"x" * 100)
@@ -1179,9 +1129,8 @@ def test_check_missing_files_transitional_counter_resets_on_clean():
     """过渡态计数只在相邻过渡态间累积: 一次正常判定(文件恢复原名)后清零, 需重新连续 3 次"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         grouping = mgr.host.get("grouping")
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}
@@ -1221,9 +1170,8 @@ def test_check_missing_files_real_missing_no_twin():
     """回归保护: 原名缺失且无 .!qB 孪生 -> 照旧判缺失(暂停 + MISSING), 不受容忍逻辑影响"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在, 也无孪生
         mgr.host.get("grouping")._check_missing_files([rep], sizes, dry_run=False, key="K")
@@ -1235,9 +1183,8 @@ def test_check_missing_files_dry_run_transitional():
     """dry-run 下过渡态命中 -> 零外部副作用(不暂停、不加标签; 计数为会话内报告态)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         with open(os.path.join(td, "movie.mkv.!qB"), "wb") as f:
             f.write(b"x" * 100)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
@@ -1252,10 +1199,8 @@ def test_grouping_errored_transition_pauses_group():
     持续 errored 不重复触发"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -1290,10 +1235,8 @@ def test_grouping_errored_via_checking_transition():
     -> missingFiles(下一拍触发)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -1322,10 +1265,8 @@ def test_grouping_errored_files_intact_no_action():
     """errored 转换但磁盘文件齐全(非缺文件的 error)-> 扫描确认后无任何动作(保守)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         # 真实文件存在且大小一致
         real_file = os.path.join(td, "movie.mkv")
@@ -1351,10 +1292,8 @@ def test_grouping_errored_whole_group_representative():
     """全组同时进入 errored(如同轮重校验全部成员)-> errored 成员可作代表种, 仍能扫描暂停 + MISSING"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -1376,11 +1315,8 @@ def test_grouping_errored_check_disabled():
     """grouping.check_missing_files=False -> errored 转换不触发缺文件扫描"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        cfg = _group_cfg(state_file)
-        cfg.grouping.check_missing_files = False
-        mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(check_missing_files=False), client=client)
 
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", save_path=r"R:\Downloads")
@@ -1401,9 +1337,8 @@ def test_download_conflict_missing_done_excluded():
     对照: 完成成员无 MISSING 标签(健康组)-> 照旧触发 mixed 暂停"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="stalledUP", amount_left=0, tags="MISSING")
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -1427,9 +1362,8 @@ def test_download_conflict_multi_dl_with_missing_tag():
     """multi-dl 不受 MISSING 标签豁免: 同组两个活跃下载写同一物理文件, 与缺文件无关, 仍拦截"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         t1 = FakeTorrent(hash="H1", name="T1", state="stalledDL", amount_left=100)
         t2 = FakeTorrent(hash="H2", name="T2", state="forcedDL", amount_left=100, tags="MISSING")
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -1447,9 +1381,8 @@ def test_missing_scan_dedup_within_round():
     """缺文件扫描轮内去重: 同组 key 同轮多触发源(如状态转移+路径变化)只扫一次; 轮重置后可再扫"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)  # 测试不持锁
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
         rep = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=td, amount_left=0)
         sizes = {"H1": {"movie.mkv": 100}}  # 文件不存在
         key = ("R:/Downloads", ("movie.mkv", ))
@@ -1476,9 +1409,8 @@ def test_group_key_of_is_single_source_of_truth():
 
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
-        mgr = QbManager("", config=_group_cfg(state_file), no_lock=True)
         client = FakeClient()
-        mgr.client = client
+        mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(), client=client)
 
         # 覆盖等价类边界: 反斜杠/正斜杠混用、重复斜杠、尾斜杠有无、大小写、多文件、中文
         cases = [
@@ -1512,12 +1444,8 @@ def test_group_key_of_is_single_source_of_truth():
 
 def _grp_env(state_file, **grouping_kw):
     """直驱 grouping 模块方法的白盒环境: QbManager + FakeClient, 返回 (mgr, grp, client)"""
-    cfg = FakeConfig()
-    cfg.state_file = state_file
-    cfg.grouping = GroupingConfig(enabled=True, missing_tag="MISSING", **grouping_kw)
-    mgr = QbManager("", config=cfg, no_lock=True)
     client = FakeClient()
-    mgr.client = client
+    mgr = make_manager(state_file, bare=True, grouping=grouping_cfg(**grouping_kw), client=client)
     return mgr, mgr.host.get("grouping"), client
 
 

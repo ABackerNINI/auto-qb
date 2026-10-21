@@ -4,11 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (54)
+## Open (53)
 
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](../26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点
-- [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](../26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建
 - [refactor] [tests 同名小助手多份拷贝 9 族(_fake_file/_pin_disk_usage/_write_dat/_ss/_write_token/_make_store/atomic 注入/legacy v1 样本等)](../26-10-21-0502-refactor-test-shared-micro-helper-dup.html) — 逐字级拷贝散在 2-5 个文件各一份; 收进 tests 共享层(helpers/webui_helpers)单点
 - [refactor] [web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路](../26-10-21-0502-refactor-test-web-env-param-dup.html) — web_env 硬编码 config_text/client; test_web_auth ×10 与 test_web_admin ×5 每用例内联 TestClient(create_app(mgr)); web_env 参数化后回收
 - [test] [「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵](../26-10-21-0502-test-test-plan-docstring-guard.html) — 121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填
@@ -66,13 +65,14 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (239)
+## Done (240)
 
 - [test] [守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件](../26-10-21-2232-test-guard-scope-narrower-than-acceptance.html) — 计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)
 - [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷
 - [bug] [P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变](../26-10-21-1812-bug-cmd-driven-resync.html) — cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚
 - [bug] [「决定性时刻直查真值」不成立: 跳检收尾与 R1/R2 复核把单点直查当作实时真值](../26-10-21-1812-bug-decision-moment-live-query.html) — 跳检收尾用 torrents_info 结果 apply_delta 回写记录(ops_mod.py:806-821), 复核在动手前用同一直查判在途(ops_mod.py:546-563); qB 状态固定节拍刷新, 直查可能返回命令前旧值或过渡态, 写进快照后污染 G3/G6/G7 与 UI
 - [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](../26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留
+- [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](../26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)

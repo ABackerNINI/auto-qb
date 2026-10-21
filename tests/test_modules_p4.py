@@ -33,10 +33,8 @@ import os
 import tempfile
 from unittest import mock
 
-from auto_qb.config import GroupingConfig
 from auto_qb.core.modules import GroupingModule, OpsModule
-from auto_qb.core.qbmanager import QbManager
-from helpers import FakeClient, FakeConfig, FakeTorrent, seed_store
+from helpers import FakeClient, FakeTorrent, grouping_cfg, make_manager, seed_store
 
 
 def _fake_file(name, size):
@@ -45,11 +43,7 @@ def _fake_file(name, size):
 
 
 def _mgr(td, grouping_enabled=True):
-    cfg = FakeConfig()
-    cfg.state_file = os.path.join(td, "state.json")
-    cfg.grouping = GroupingConfig(enabled=grouping_enabled, missing_tag="MISSING")
-    mgr = QbManager("", config=cfg, no_lock=True)  # 测试不持锁
-    return mgr
+    return make_manager(os.path.join(td, "state.json"), bare=True, grouping=grouping_cfg(enabled=grouping_enabled))
 
 
 # ---------- 装配与 ctx 服务(plan §3.3) ----------
