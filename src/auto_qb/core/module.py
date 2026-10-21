@@ -123,8 +123,9 @@ class Module(Protocol):
     - sections() 声明消费的配置顶层段, 守阵保证每段至少被一个模块认领(P6 上线)。
 
     loop hooks 是**可选**扩展点(不在 Protocol 内): on_command_line() -> bool /
-    on_sync_line(force) / on_task_line(force), 有则被宿主按装配序调用, 无则跳过 ——
-    用 getattr 探测, 故基类/实现不声明即不存在。
+    on_sync_line(force) / on_task_line(force) / on_micro_line(dry_run), 有则被宿主按装配序调用,
+    无则跳过 —— 用 getattr 探测, 故基类/实现不声明即不存在。微步线(第三条时间线)另需
+    `next_micro_run_at()` 报到期时刻, 内核把它并入等待超时(计划 26-10-21-1857 §4)。
     """
 
     name: str
@@ -405,6 +406,24 @@ class ModuleHost:
         """任务线收尾 hook(webui: 错误原因预取 / 搜索索引)"""
         for hook in self._iter_hooks("on_task_line"):
             hook(force)
+
+    def run_micro_line(self, dry_run: bool) -> None:
+        """微步线 hook(第三条时间线, 计划 26-10-21-1857 §4): 每轮推进一步毫秒级工作
+
+        与三条主线不同, 它**没有固定节拍** —— 到期时刻由 `next_micro_run_at()` 给出, 内核把它
+        并入等待超时。目前只有 ops 的跳检相位机认领(每步至多一次 qB 调用)。
+        """
+        for hook in self._iter_hooks("on_micro_line"):
+            hook(dry_run)
+
+    def next_micro_run_at(self) -> Optional[float]:
+        """微步线最早到期时刻(无认领者 / 无在途工作 -> None)
+
+        内核只认这一个数字: 等待超时 = min(同步线, 任务线, 微步线) - now。
+        """
+        due = [m.next_micro_run_at() for m in self._modules if hasattr(m, "next_micro_run_at")]
+        due = [d for d in due if d is not None]
+        return min(due) if due else None
 
 
 __all__ = [

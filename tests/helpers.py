@@ -1176,6 +1176,26 @@ def make_ctx(mgr, tor, client, dry_run=False):
     return RuleContext(mgr, client, mgr.config, tor.hash, dry_run=dry_run)
 
 
+def drive_skip(mgr, timeout=5.0):
+    """把在途跳检 job 驱动到终态(测试替身: 主循环的第三条时间线)
+
+    生产由主循环每轮调 `ops.advance_due()`, 等待超时由 `next_run_at()` 并入; 测试里没有主循环,
+    这里按同一预算反复推进直到没有在途 job。返回是否清空(超时 -> False)。
+    """
+    ops = mgr.ctx.ops
+    deadline = time.time() + timeout
+    while True:
+        nxt = ops.next_run_at()
+        if nxt is None:
+            return True
+        if time.time() >= deadline:
+            return False
+        wait = nxt - time.time()
+        if wait > 0:
+            time.sleep(min(wait, 0.01))
+        ops.advance_due(budget_ms=200.0, budget_calls=100)
+
+
 def seed_store(mgr, torrents=None):
     """将种子灌入 mgr.store(对象身份直写: 记录即传入对象, 后续修改实时可见)
 

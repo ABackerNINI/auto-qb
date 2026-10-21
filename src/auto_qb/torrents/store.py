@@ -74,6 +74,10 @@ class TorrentStore:
         self.by_hash: Dict[str, TorrentRecord] = {}
         # 本程序自身发起删除、待下轮上报的 hash(remove_torrent 登记 / restore_torrent 撤销)
         self._pending_removed: Set[str] = set()
+        # 跳检窗口抑制登记(ops 相位机建 job 时加入 / 终态结算时移除): 窗口内 qB 上报的
+        # torrents_removed 不算删除 —— 记录不摘、不进 last_removed、不触发分组删除链路
+        # (计划 26-10-21-1857 §6; 跳检随后会以 skip_checking 重加同一 hash)
+        self.skipping_hashes: Set[str] = set()
         # 增量同步态
         self.rid: int = 0
         self.need_validate: bool = True
@@ -317,7 +321,8 @@ class TorrentStore:
         by_hash = {} if full else dict(prev)  # 全量重建 / 增量: C 级浅拷贝, 未变化记录原样保留
         now_ts = time.time()  # state_since 的同一时刻基准(纯展示用, 不参与判定)
         added: List[str] = []
-        changes = list(removed)
+        # 跳检窗口内的 hash 不算删除(ops 相位机登记): 记录保留, 由下一轮上报原地校正
+        changes = [h for h in removed if h not in self.skipping_hashes]
         view_changed = False
         delta_fields: Dict[str, FrozenSet[str]] = {}
         state_changed: List[Tuple[str, Any]] = []
@@ -359,7 +364,11 @@ class TorrentStore:
             by_hash[h] = rec
         if full:
             # 全量: by_hash 由本轮响应重建, 旧快照中未出现者即已删除
-            changes.extend(h for h in prev if h not in patches)
+            # (跳检窗口内的 hash 豁免: 它正在"删了马上加回来"的窗口里, 见 skipping_hashes)
+            for h in list(self.skipping_hashes):
+                if h not in by_hash and h in prev:
+                    by_hash[h] = prev[h]  # 窗口内记录保留(全量轮会把缺席者当删除)
+            changes.extend(h for h in prev if h not in patches and h not in self.skipping_hashes)
         else:
             for h in changes:
                 by_hash.pop(h, None)

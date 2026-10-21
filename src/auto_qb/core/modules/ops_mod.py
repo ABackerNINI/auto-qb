@@ -37,7 +37,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import date
-from typing import Optional
+from typing import Any, Optional
 
 from ...infra import file_access, utils
 from ...rules.base import ActionResult
@@ -126,6 +126,11 @@ class SkipJob:
     content_layout: Optional[str] = None
     backup: str = ""
     error: str = ""
+    # 终态结算面(同步入口不传; 异步入口经 skip_submit 传入)
+    on_done: Any = None  # 终态回调(web 批量聚合回执)
+    origin: Any = None  # 规则任务(终态重新入队, 与 recheck 同构)
+    result: Any = None  # 终态 ActionResult(同步入口直接返回它)
+    settled: bool = False
 
 
 class OpsModule(BaseModule):
@@ -432,12 +437,60 @@ class OpsModule(BaseModule):
           缺省 False —— 规则侧调用点不传(签名缺省即零变化不变式的证明)。
         - torrent: 可选活记录; None 时经 store 取(规则侧 ctx.torrent 与缺省取值等价)。
         """
+        job, early = self._skip_begin(hash, source, torrent, auto_start, has_reference, force)
+        if early is not None:
+            return early
+        job = self._skip_drive(job)
+        return job.result
+
+    def skip_submit(
+        self,
+        hash: str,
+        source: str = "web",
+        torrent: Optional[TorrentRecord] = None,
+        auto_start: bool = False,
+        has_reference: bool = True,
+        force: bool = False,
+        on_done=None,
+        origin=None,
+    ) -> ActionResult:
+        """异步入口(批量 WEB): 只做前置与建 job, 相位推进交给主循环微步调度器
+
+        与 `skip_check` 共用 `_skip_begin`(前置与闸门单点), 差别只在谁驱动相位:
+        - 本入口返回 `pending`(已受理), 终态经 `on_done(job)` 回调(job.result 是终态结果);
+        - 规则侧 `origin` 在终态重新入队(与 recheck 的 origin 重入队同构, S4 启用)。
+
+        主循环每轮调 `advance_due()` 推进一步, 等待超时由 `next_run_at()` 并入(第三条时间线),
+        因此批量 N 个 job 是并行推进的: 整批耗时 ≈ 相位深度 × 步间隔, 与 N 基本无关。
+        """
+        job, early = self._skip_begin(
+            hash, source, torrent, auto_start, has_reference, force, on_done=on_done, origin=origin
+        )
+        if early is not None:
+            return early
+        return ActionResult.pending("跳检已受理")
+
+    def _skip_begin(
+        self,
+        hash: str,
+        source: str,
+        torrent: Optional[TorrentRecord],
+        auto_start: bool,
+        has_reference: bool,
+        force: bool,
+        on_done=None,
+        origin=None,
+    ):
+        """跳检共同前置(同步/异步两个入口共用): 存在性 → 幂等 → 自有写 → 搬迁 → R2 → 闸门
+
+        返回 `(job, None)` 表示已建 job; `(None, ActionResult)` 表示被拒/放弃(零副作用)。
+        """
         prefix = f"ops[{source}]"
         tor = torrent if torrent is not None else self._ctx.store.get(hash)
         if tor is None:
-            return ActionResult.skip(_SKIP_GONE_MSG)
+            return None, ActionResult.skip(_SKIP_GONE_MSG)
         if self.skip_job_active(hash):
-            return ActionResult.skip("该种子的跳检已在执行中")
+            return None, ActionResult.skip("该种子的跳检已在执行中")
 
         # ---- S2 deferral 闸门(D-2, A 系 26-10-13-0540): 本程序刚对该种子或**其组任一成员**
         # 下发过停/起、qB 快照尚未回流 ⇒ 闸门读到的 state 陈旧, 本轮不出决策(免 G4/G6 陈旧-放行
@@ -445,36 +498,29 @@ class OpsModule(BaseModule):
         # 是只读预览、其 cls 契约(blocked/force)不引入第四类; 执行路径拦下即可, 预检照旧摊开闸门。
         # WEB 命令路径不在 task 线(D-1 覆盖不到), 故在此单点补拦; 有界: own_writes 逐出/TTL 到期即恢复。
         if self._ctx.store.own_write_pending(hash):
-            return ActionResult.skip("本程序刚下发过停/起操作, 状态尚未从 qB 回流(避免按陈旧快照误判); 请稍后重试")
+            return None, ActionResult.skip("本程序刚下发过停/起操作, 状态尚未从 qB 回流(避免按陈旧快照误判); 请稍后重试")
 
         # ---- 搬迁窗口闸门(计划 26-10-18-1604 §2.3/P4): 组内正在整组迁移 ⇒ 跳检跳过
         # 跳检是「删除 + 以跳过校验方式重加」, 在文件正被 qB 搬走时重加会立刻进入缺文件态,
         # 且删除动作会打断搬运 —— 与 relocating 让路缺文件扫描是同一条纪律(登记单点在
         # RelocateModule, 这里只读)。
         if hash in (getattr(self._ctx.store, "relocating_hashes", None) or set()):
-            return ActionResult.skip("该种子正在整组迁移(搬迁/建别名中): 迁移收尾后再跳检")
+            return None, ActionResult.skip("该种子正在整组迁移(搬迁/建别名中): 迁移收尾后再跳检")
 
         # ---- R2 实时复核: 闸门读的是快照(≤2s 龄), 动手前重拉一次实时状态(骨架单点 _live_recheck)
         # 种子已不在 -> 干净放弃: 发生在备份与删除之前, 零副作用、无孤儿备份(修 C2)。
         live = self._live_recheck(hash, "跳检前", f"{prefix} {tor.log_repr} | 跳检放弃", _SKIP_GONE_MSG)
         if isinstance(live, ActionResult):
-            return live
+            return None, live
 
         # ---- 阶段 1: 前置闸门 (任一不过 → fail/skip 返回, 无副作用; filelist 排最后) ----
         gate = self._skip_gates(hash, tor, force=force)
         if gate is not None:
-            return gate
+            return None, gate
 
-        # ---- 阶段 2-4: 相位机执行(准备 → 删除 → 确认消失 → 重加 → 确认出现 → 收尾) ----
-        # 每步只做毫秒级调用, 等待用 10~50ms 退避(原实现是 500ms × 10 轮询, 单条 ~6s);
-        # 运行状态一个字不写(等 qB 上报), 删除不摘记录(keep_record=True) —— 计划 26-10-21-1857 §5。
-        job = self._skip_job_new(hash, tor, source, auto_start, has_reference)
-        job = self._skip_drive(job)
-        if job.phase != SKIP_PHASE_DONE:
-            return ActionResult.fail(job.error)
-        if auto_start:
-            return ActionResult.ok("skip-checking 跳检完成并自动开始")
-        return ActionResult.ok("skip-checking 跳检完成")
+        # ---- 阶段 2: 建 job(相位推进见 _skip_step / _skip_drive / advance_due) ----
+        job = self._skip_job_new(hash, tor, source, auto_start, has_reference, on_done=on_done, origin=origin)
+        return job, None
 
     def skip_check_precheck(self, hashes: list) -> list:
         """跳检预检(只读 dry-run, plan 26-10-05-0314 D6/D9): 逐 hash 给出三分流判定, 供 WEB 确认框
@@ -786,9 +832,20 @@ class OpsModule(BaseModule):
     # ---------- 跳检相位机(计划 26-10-21-1857 §4/§5) ----------
 
     def _skip_job_new(
-        self, hash: str, tor: TorrentRecord, source: str, auto_start: bool, has_reference: bool
+        self,
+        hash: str,
+        tor: TorrentRecord,
+        source: str,
+        auto_start: bool,
+        has_reference: bool,
+        on_done=None,
+        origin=None
     ) -> SkipJob:
-        """建 job 并入账(同 hash 在途即幂等覆盖: 调用方已先经 skip_job_active 拦过)"""
+        """建 job 并入账(同 hash 在途即幂等覆盖: 调用方已先经 skip_job_active 拦过)
+
+        同时把 hash 登记进 `store.skipping_hashes`: 删除→重加窗口内 sync 若报 torrents_removed,
+        `_apply` 不把它当删除(记录不摘、不触发分组删除链路) —— 窗口抑制的登记点。
+        """
         now = time.time()
         job = SkipJob(
             hash=hash,
@@ -797,9 +854,12 @@ class OpsModule(BaseModule):
             auto_start=auto_start,
             has_reference=has_reference,
             next_run=now,
-            started_at=now
+            started_at=now,
+            on_done=on_done,
+            origin=origin,
         )
         self._skip_jobs[hash] = job
+        self._ctx.store.skipping_hashes.add(hash)
         return job
 
     def skip_job_active(self, hash: str) -> bool:
@@ -813,9 +873,9 @@ class OpsModule(BaseModule):
         S3 起改为「提交即返回 + 主循环按 next_run_at 推进」, 本方法退化为同步驱动体。
         """
         deadline = time.time() + SKIP_DRIVE_TIMEOUT
-        while job.phase not in _SKIP_TERMINAL:
+        while not job.settled:
             self._skip_step(job)
-            if job.phase in _SKIP_TERMINAL:
+            if job.settled:
                 break
             now = time.time()
             if now >= deadline:
@@ -824,7 +884,6 @@ class OpsModule(BaseModule):
             delay = min(job.next_run - now, deadline - now)
             if delay > 0:
                 time.sleep(delay)
-        self._skip_jobs.pop(job.hash, None)
         return job
 
     def _skip_step(self, job: SkipJob) -> None:
@@ -842,6 +901,70 @@ class OpsModule(BaseModule):
                 handler(job)
         except Exception as e:
             self._skip_fail(job, f"跳检执行异常({job.phase}): {e}")
+        if job.phase in _SKIP_TERMINAL and not job.settled:
+            self._skip_settle(job)
+
+    def _skip_settle(self, job: SkipJob) -> None:
+        """终态结算(单点): 落 result → 出账 → 撤销窗口抑制 → 规则 origin 重入队 → 回调
+
+        顺序有讲究: 先出账/撤抑制, 再重入队与回调 —— 回调里可能立刻提交同 hash 的新 job
+        (用户连点), 此时旧 job 必须已经从 `_skip_jobs` 与 `skipping_hashes` 里消失。
+        """
+        job.settled = True
+        if job.phase == SKIP_PHASE_DONE:
+            job.result = ActionResult.ok("skip-checking 跳检完成并自动开始" if job.auto_start else "skip-checking 跳检完成")
+        else:
+            job.result = ActionResult.fail(job.error)
+        self._skip_jobs.pop(job.hash, None)
+        self._ctx.store.skipping_hashes.discard(job.hash)
+        if job.origin is not None:
+            self._ctx.task_queue.add_task(job.origin, keep_progress=(job.phase == SKIP_PHASE_DONE))
+        if job.on_done is not None:
+            try:
+                job.on_done(job)
+            except Exception as e:  # 回调异常不得影响已落定的终态
+                logger.error(f"ops[{job.source}] {job.hash[:8]} | 跳检终态回调异常: {e}")
+
+    def next_run_at(self) -> Optional[float]:
+        """下一条跳检 job 的到期时刻(主循环等待超时的第三时间线); 无在途 job -> None"""
+        if not self._skip_jobs:
+            return None
+        return min(job.next_run for job in self._skip_jobs.values())
+
+    # 微步线 hook 契约(module.ModuleHost.run_micro_line / next_micro_run_at 认领口)
+
+    def on_micro_line(self, dry_run: bool) -> None:
+        """微步线: 每轮推进到期 job(dry-run 不写 qB)"""
+        if dry_run:
+            return
+        self.advance_due()
+
+    def next_micro_run_at(self) -> Optional[float]:
+        """微步线最早到期时刻(= next_run_at; 契约名与内核 hook 对齐)"""
+        return self.next_run_at()
+
+    def advance_due(self, budget_ms: float = 50.0, budget_calls: int = 20) -> int:
+        """推进到期的跳检 job: 每个 job 本轮至多一步, 预算(时间或步数)先到先止
+
+        主循环每轮调用一次(命令线之后、暂停判断之后), 步间由 `next_run_at()` 并入等待超时 ——
+        所以"等待"是 10~50ms 的退避, 不是任务节拍。返回本轮推进的 job 数(预算截断时 < 到期数)。
+        """
+        if not self._skip_jobs:
+            return 0
+        now = time.time()
+        due = sorted(
+            (j for j in self._skip_jobs.values() if j.next_run <= now and not j.settled), key=lambda j: j.next_run
+        )
+        if not due:
+            return 0
+        deadline = time.monotonic() + (budget_ms / 1000.0)
+        stepped = 0
+        for job in due:
+            if stepped >= budget_calls or time.monotonic() >= deadline:
+                break
+            self._skip_step(job)
+            stepped += 1
+        return stepped
 
     def _skip_retry(self, job: SkipJob, message: str) -> bool:
         """本相位重试一次(10/20/50/50/50ms 退避); 次数耗尽 -> FAILED 并返回 False"""

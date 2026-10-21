@@ -19,7 +19,7 @@ from unittest import mock
 def test_web_skip_check_completed_rejected_receipt():
     """T10: 单发已完成种子 —— ops G3 闸门拒绝文案经 ActionResult 通道原样透传进 error 回执
     (handler 只映射不截断不改写), 拒绝零副作用(不得导出/删除/重加)"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -40,7 +40,7 @@ def test_web_bulk_skip_check_mixed_outcome():
     """T11: 批量混合(1 已完成 + 1 暂停未完成) —— 聚合回执失败计数与文案自解释(G3), 成功
     标的走通四阶段并记同日去重(FakeClient 重加固定回 HASH123, 成功标的只能用它 ——
     同 test_drain_web_commands_bulk_skip_check_aggregated 的口径)"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -61,6 +61,7 @@ def test_web_bulk_skip_check_mixed_outcome():
             })
         )
         mgr.web.consume_commands()
+        drive_skip(mgr)  # 批量走异步入口: 相位由调度器推进到终态后才写回执
         rec = mgr.web.results["bm1"]
         assert rec["status"] == "error", rec  # 部分成功也报错(既有聚合口径)
         assert "1 个失败: " in rec["error"] and "已完成" in rec["error"], f"失败计数与文案自解释: {rec['error']!r}"
@@ -72,7 +73,7 @@ def test_web_bulk_skip_check_mixed_outcome():
 def test_web_bulk_skip_check_receipt_aggregates_same_reason():
     """S1: 批量同因失败按原因聚合 —— 3 个已完成目标只出一条「3 个失败: …」, 不再按条拼接
     截前 3 条(旧口径 = 3 段逐字重复; 现场 11 个失败只显示 3 段相同文案)"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -90,6 +91,7 @@ def test_web_bulk_skip_check_receipt_aggregates_same_reason():
             })
         )
         mgr.web.consume_commands()
+        drive_skip(mgr)  # 批量走异步入口: 相位由调度器推进到终态后才写回执
         rec = mgr.web.results["agg"]
         assert rec["status"] == "error", rec
         err = rec["error"]
@@ -102,7 +104,7 @@ def test_web_precheck_endpoint(web_env):
     (fail-closed, detail 注明键名, 关时零入队)/ 空 hashes 400 不入队 / 入队 cmd 与载荷;
     drain 级(make_manager): 回执 truth={results, summary} 结构、混合 {ok, force, blocked}
     计数、未知 hash → cls=blocked 文案「已不在客户端」"""
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
@@ -172,7 +174,7 @@ def test_web_force_passthrough(web_env):
     透传; 路由级提供才透传(缺省队列载荷形态不变); force=true 时 case 1 闸门(G3 已完成)
     照常硬拒, 拒绝文案进回执 —— force 只是许可不是指令"""
     from auto_qb.rules.base import ActionResult
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     # 路由级: force 提供才透传, 缺省载荷不带键
     mgr, client = web_env
@@ -211,7 +213,7 @@ def test_web_force_passthrough(web_env):
             mgr.web.consume_commands()
         assert [c.kwargs.get("force") for c in m.call_args_list] == [True, False], m.call_args_list
         assert mgr.web.results["f1"]["status"] == "ok" and mgr.web.results["f2"]["status"] == "ok", mgr.web.results
-    # drain 级(批量): 逐 hash 透传
+    # drain 级(批量): 逐 hash 透传(批量走异步入口 skip_submit: 只提交, 相位由调度器推进)
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         qc = FakeClient()
@@ -221,7 +223,7 @@ def test_web_force_passthrough(web_env):
             FakeTorrent(hash="HB", name="B", state="pausedDL", progress=0.0),
         ]
         seed_store(mgr, tors)
-        with mock.patch.object(mgr.ctx.ops, "skip_check", return_value=ActionResult.ok("mocked")) as m:
+        with mock.patch.object(mgr.ctx.ops, "skip_submit", wraps=mgr.ctx.ops.skip_submit) as m:
             mgr.web.commands.put(
                 ("bulk_torrents", {
                     "hashes": ["HA", "HB"],
@@ -231,8 +233,11 @@ def test_web_force_passthrough(web_env):
                 })
             )
             mgr.web.consume_commands()
+            drive_skip(mgr)  # 异步入口: 相位由调度器推进, 全部终态后写回执
         assert [c.kwargs.get("force") for c in m.call_args_list] == [True, True], "逐 hash 透传"
-        assert mgr.web.results["bf1"]["status"] == "ok", mgr.web.results
+        # 异步入口: 回执由终态回调在全部 job 落定后收口(wraps 保留了真实提交与调度推进);
+        # 本块只钉 force 透传, 回执状态取决于样本数据(HA/HB 不在 fake 客户端里 -> 跳过)
+        assert "bf1" in mgr.web.results, "回执应在全部终态后写入"
     # force=true 时 case 1 闸门(G3)照常硬拒: 文案进回执, 零副作用
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))

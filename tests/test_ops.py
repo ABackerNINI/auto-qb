@@ -44,6 +44,8 @@
 - test_skip_gates_g7_evidence_and_blocker_identity: S1(26-10-21-1857) —— G7 证据口径: checkingResumeData 不算在验 / 映射不一致成员不参与 / 命中时文案点名 blocker(hash8+名字+state)
 - test_skip_gates_inflight_ttl_expires_leaked_registration: S1(26-10-21-1857) —— 在途登记超 TTL 视为泄漏: G5 放行并记 WARNING(登记只在轮询任务 FINISHED 时释放)
 - test_skip_check_no_sleep_polling_and_keeps_record: S2(26-10-21-1857) —— 相位机成功路径零 sleep(原 500ms × 10 轮询) + 删除不摘记录 + 运行状态零写入(调用序 export→delete→add→add_tags)
+- test_skip_submit_async_scheduler_and_failure_isolation: S3(26-10-21-1857) —— 异步入口只受理(pending) + 调度器 advance_due 并行推进 + 逐 hash 失败隔离 + 窗口抑制随终态撤销
+- test_skip_window_suppression_ignores_sync_removal: S3(26-10-21-1857) —— 删除→重加窗口内 torrents_removed 不算删除(增量轮与全量轮都豁免), 窗口结束后恢复常态
 - test_skip_gates_detail_classification: T18 detail 三态归类 + 执行路径与 detail 首个未过闸门同源断言 + G7/G8 归类(G8 blocked 短路 filelist / G7 force 不短路)
 - test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5/G7)并留 WARNING+INFO 审计; blocked(G3/G6/G8/filelist)一律硬拒; 签名缺省 False
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
@@ -66,7 +68,7 @@ from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
 from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
-from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, seed_store
+from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, seed_store
 
 # 跳检会真实落盘 .torrent 备份(issue 26-09-21-1347): state_file 必须落临时目录, 与 test_checking 同口径
 _TMP_STATE_DIR = tempfile.TemporaryDirectory(prefix="autoqb-ops-state-")
@@ -893,6 +895,60 @@ def test_skip_check_no_sleep_polling_and_keeps_record():
     assert t.progress == 0.0 and t.state == "stoppedDL", "运行状态不得被跳检路径写入(只等 qB 上报)"
     names = [c[0] for c in client.calls]
     assert names == ["export", "delete", "add", "add_tags"], f"相位序应为一轮一调用: {names}"
+
+
+def test_skip_submit_async_scheduler_and_failure_isolation():
+    """测试(S3): 异步入口 —— skip_submit 只建 job 返回 pending; 调度器 advance_due 并行推进,
+    单条失败不影响另一条(逐 hash 独立终态); 窗口抑制登记随终态撤销"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    a = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    # fake add 固定把 HASH123 登记回客户端 -> 这条重加确认不到, 用来验失败隔离
+    b = FakeTorrent(hash="HBADD", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [a, b])
+    client.torrents["HASH123"] = a
+    client.torrents["HBADD"] = b
+    ops = mgr.ctx.ops
+    results = {}
+
+    def on_done(job):
+        results[job.hash] = job.result
+
+    ra = ops.skip_submit("HASH123", source="web", on_done=on_done)
+    rb = ops.skip_submit("HBADD", source="web", on_done=on_done)
+    assert ra.is_pending and rb.is_pending, f"异步入口只受理不等待: {ra} / {rb}"
+    assert ops.next_run_at() is not None, "在途 job 应暴露下一步到期时间(第三条时间线)"
+    assert {"HASH123", "HBADD"} <= mgr.store.skipping_hashes, "建 job 时应登记窗口抑制"
+
+    assert drive_skip(mgr), "调度推进应把在途 job 全部推到终态"
+    assert ops.next_run_at() is None, "终态后不应再有在途 job"
+    assert mgr.store.skipping_hashes == set(), "终态应撤销窗口抑制登记"
+    assert results["HASH123"].is_ok, results.get("HASH123")
+    assert results["HBADD"].is_failed, results.get("HBADD")
+    assert mgr.state["skip_check_day"].get("HASH123"), "成功的那条应记同日去重"
+    assert not mgr.state["skip_check_day"].get("HBADD"), "失败的那条不得记去重"
+
+
+def test_skip_window_suppression_ignores_sync_removal():
+    """测试(S3): 删除→重加窗口内 qB 上报 torrents_removed 不算删除 —— 记录保留、不进 last_removed
+    (否则 grouping 会走「种子已删除」链路: 取消归组 / 缺文件扫描 / 删除事件); 窗口结束后恢复常态"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    assert mgr.ctx.ops.skip_submit("HASH123", source="web").is_pending
+
+    _, removed = mgr.store._apply({}, ["HASH123"], full=False)
+    assert "HASH123" not in removed and mgr.store.get("HASH123") is t, "增量轮: 窗口内不得摘记录/报删除"
+    _, removed_full = mgr.store._apply({}, [], full=True)
+    assert "HASH123" not in removed_full and mgr.store.get("HASH123") is t, "全量轮: 窗口内同样豁免"
+
+    assert drive_skip(mgr), "调度推进应把 job 推到终态"
+    _, removed_after = mgr.store._apply({}, ["HASH123"], full=False)
+    assert "HASH123" in removed_after and mgr.store.get("HASH123") is None, "窗口结束后 removal 应照常生效"
 
 
 def test_skip_gates_rejects_group_downloading():

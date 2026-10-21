@@ -1176,43 +1176,59 @@ class WebCommandsMixin:
         n_keys: int = 0,
         force: bool = False,
     ) -> None:
-        """批量跳检经 ops 层逐 hash 串行提交(计划 26-10-02-1955 W3): 聚合回执按结果分桶
+        """批量跳检: 逐 hash **异步提交**(ops.skip_submit), 全部终态后聚合写一条回执
 
-        与单发同一提交点(ops 层 skip_check, source="web"): R2 实时复核 / 同日去重
-        (skip_check_day 跨来源共享)/ 备份 / 打标守卫全部在 ops 层原样生效, 批量只是聚合层 ——
-        **逐 hash 串行**调用是单写线程假设的硬要求(pitfalls/backend/concurrency.md), 禁止并发扇出。
-        force(plan 26-10-05-0314 S2): 逐 hash 透传 ops.skip_check —— 仅豁越 cls=force 的
-        未过闸门, cls=blocked 一律硬拒; 缺省 False 行为零变化。
-        跳过按原因分桶计数(同日去重 / 种子已移除, 文案自解释), 失败同样按原因聚合计数 ——
-        G7/G8 这类组级闸门的文案对同批所有目标逐字相同, 按条拼接再截前 3 条会变成 N 段重复,
-        既丢信息又不可读(issue 26-10-21 现场: 11 个失败只显示 3 段相同文案)。
-        回执口径与 bulk 其余动作一致: 任何缺失/跳过/失败都进 error 文案(部分成功也报错,
-        拒绝计数必须可见), 全部成功才 ok。
+        与单发同一提交点(ops._skip_begin): R2 实时复核 / 同日去重(skip_check_day 跨来源共享)/
+        备份 / 闸门全部在 ops 层原样生效, 批量只是聚合层 —— 逐 hash 串行**提交**是单写线程假设的
+        硬要求(pitfalls/backend/concurrency.md), 禁止并发扇出; 但相位推进不再占用命令 drain:
+        每个 hash 只做前置与建 job(毫秒级), 后续由主循环微步调度并行推进(计划 26-10-21-1857 §4/§6)。
+        回执在最后一个 job 终态时写入, 前端 waitCmd 拿到的仍是真实结果(只是晚 ~百毫秒), 契约不变。
+        force(plan 26-10-05-0314 S2): 逐 hash 透传 —— 仅豁越 cls=force 的未过闸门, blocked 一律硬拒。
+        跳过/失败均按原因聚合(同因多目标只出一行); 任何缺失/跳过/失败都进 error 文案(部分成功也报错)。
         """
-        ok_n = 0
         skip_buckets: dict = {}  # 跳过原因 -> 计数(dict 保插入序 = 首现序)
         fail_buckets: dict = {}  # 失败原因 -> 计数(同上; 同因多目标只出一行)
+        counts = {"ok": 0}
+        pending = {"n": 0}
+
+        def finish_if_done() -> None:
+            if pending["n"] > 0:
+                return
+            skip_n = sum(skip_buckets.values())
+            fail_n = sum(fail_buckets.values())
+            msgs = self._bulk_missing_msgs(missing, n_req, missing_groups, n_keys)
+            for reason, n in skip_buckets.items():
+                msgs.append(f"{n} 个跳过: {reason}")
+            for reason, n in fail_buckets.items():
+                msgs.append(f"{n} 个失败: {reason}")
+            self._bulk_receipt(
+                cmd_id,
+                msgs,
+                ok_line=f"批量跳检(成功 {counts['ok']} 个种子)",
+                fail_line=f"批量跳检(成功 {counts['ok']}, 跳过 {skip_n}, 失败 {fail_n})",
+            )
+
+        def on_done(job) -> None:
+            """相位机终态回调(主循环线程内): 计数并尝试收口"""
+            r = job.result
+            if r is not None and r.is_ok:
+                counts["ok"] += 1
+            elif r is not None and r.is_failed:
+                fail_buckets[r.message] = fail_buckets.get(r.message, 0) + 1
+            elif r is not None:
+                skip_buckets[r.message] = skip_buckets.get(r.message, 0) + 1
+            pending["n"] -= 1
+            finish_if_done()
+
         for h in hashes:
-            r = self.ctx.ops.skip_check(h, source="web", force=force)
-            if r.is_skipped:
+            r = self.ctx.ops.skip_submit(h, source="web", force=force, on_done=on_done)
+            if r.is_pending:
+                pending["n"] += 1
+            elif r.is_skipped:
                 skip_buckets[r.message] = skip_buckets.get(r.message, 0) + 1
             elif r.is_failed:
                 fail_buckets[r.message] = fail_buckets.get(r.message, 0) + 1
-            else:
-                ok_n += 1
-        skip_n = sum(skip_buckets.values())
-        fail_n = sum(fail_buckets.values())
-        msgs = self._bulk_missing_msgs(missing, n_req, missing_groups, n_keys)
-        for reason, n in skip_buckets.items():
-            msgs.append(f"{n} 个跳过: {reason}")
-        for reason, n in fail_buckets.items():
-            msgs.append(f"{n} 个失败: {reason}")
-        self._bulk_receipt(
-            cmd_id,
-            msgs,
-            ok_line=f"批量跳检(成功 {ok_n} 个种子)",
-            fail_line=f"批量跳检(成功 {ok_n}, 跳过 {skip_n}, 失败 {fail_n})",
-        )
+        finish_if_done()
 
     def _cmd_reload_config(self, config: Config):
         """配置热重载 + **切源即刷新**(计划 26-10-17-1737 S8 / 26-10-18-0813 P0)

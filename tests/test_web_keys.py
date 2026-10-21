@@ -226,7 +226,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
     """
     from datetime import date
 
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -264,6 +264,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
                 )
             )
             mgr.web.consume_commands()
+            drive_skip(mgr)  # 批量走异步入口: 相位由调度器推进到终态后才写回执
         rec = mgr.web.results["bs1"]
         assert rec["status"] == "error", rec
         # 文案逐段: ok 之外的三类各占一段(跳过与失败都按原因分桶/聚合; 同因多目标才合并计数)
@@ -292,6 +293,7 @@ def test_drain_web_commands_bulk_skip_check_aggregated():
                     })
                 )
                 mgr2.web.consume_commands()
+                drive_skip(mgr2)  # 批量走异步入口: 相位由调度器推进到终态后才写回执
             assert mgr2.web.results["bs2"]["status"] == "ok", mgr2.web.results["bs2"]
             assert any("批量跳检(成功 1 个种子)" in m for m in messages2), messages2
 
@@ -303,7 +305,7 @@ def test_drain_web_commands_bulk_skip_check_gated():
     单发端点 403 双态既有用例不回归(test_api_t_skip_check_gated_by_config)。
     hash 用 FakeClient 重加固定回的 HASH123, 使重开开关后的放行段走通重加确认。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -322,6 +324,7 @@ def test_drain_web_commands_bulk_skip_check_gated():
         mgr.config.web.skip_check_menu = True
         mgr.web.commands.put(("bulk_torrents", {"hashes": ["HASH123"], "action": "skip_check", "cmd_id": "bg2"}))
         mgr.web.consume_commands()
+        drive_skip(mgr)  # 批量走异步入口: 相位由调度器推进到终态后才写回执
         assert mgr.web.results["bg2"]["status"] == "ok", mgr.web.results["bg2"]
         assert any(c[0] == "export" for c in client.calls), client.calls
 
@@ -332,7 +335,7 @@ def test_drain_web_commands_skip_check_torrent():
     WEB 触发的跳检与规则跳检同一闸门/同一去重/同一执行体(天然串行于主循环线程);
     hash 用 FakeClient 重加固定回的 HASH123, 使重加确认走通全流程。
     """
-    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+    from helpers import FakeClient, FakeTorrent, drive_skip, make_manager, seed_store
 
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))

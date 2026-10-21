@@ -40,6 +40,6 @@
 - **字段量化 `_VIEW_QUANTUM` + `view_field_value(field, value)`**: 该表内的字段按步长向下取整后再比较与展示 —— 目前仅 `seeding_time: 60`(秒级递增但前端只展示到分钟, 不量化会让做种中的种子每轮置脏, 惰性重建对绝大多数种子失效)。**重建判定与 `_build_group_view` 展示值共用同一函数**, 保证"视图内容"与"脏标记依据"不脱钩; 新增需量化的字段只需加进该表。
 - **惰性缓存**: `trackers_info`/`files` 首次访问才拉 API 并持久缓存 (种子删除时随记录回收); 全局 `all_tags()`/`all_categories()` 缓存 + `invalidate_*()` (由 QbApi 写操作触发失效)。
 - **分组索引** (GroupingMixin 直接读写): `groups[key]`/`group_sizes[key]`/`member_to_key[hash]`(O(1) 定位)/`state_snapshot`/`state_since`(当前 state 起始时刻, 纯展示: 闸门文案「已 N 分钟」)/`download_conflict_warned`。分组键 = `(path_normalize(save_path), 排序后的文件相对路径元组)`。
-- **删除/恢复**: `remove_torrent(h)` 立即从 `by_hash` 摘除并登记 `_pending_removed`(下轮 added/removed 上报); `restore_torrent(rec)` 撤销登记并放回记录(跳检重加, 保留 tracker_conf/惰性缓存)。
+- **删除/恢复**: `remove_torrent(h)` 立即从 `by_hash` 摘除并登记 `_pending_removed`(下轮 added/removed 上报); `restore_torrent(rec)` 撤销登记并放回记录(跳检重加, 保留 tracker_conf/惰性缓存); `skipping_hashes`(跳检窗口抑制登记) —— 窗口内上报的 `torrents_removed` 不算删除(增量轮与全量轮都豁免), 记录不摘、不触发分组删除链路。
 - `verified_references: Set[str]`: full-checking 通过的种子, **仅内存** (重启重新积累), 作为同组跳检参考。注意: 带跳检标签 (标签名是全局配置 `config.skip_checking_tag`, 默认 zSkipChecked, 全局统一不按规则覆盖, 动作运行时经 ctx 读取; 跳检成功后打在种子上、跨重启) 的种子即便在此集合中, 也会被 `_find_reference` 排除 —— 跳检未经哈希校验, 不可作参考。
 - `update_torrent_fields(...)`: 确定性字段写后同步 (tags/category/限速/save_path); **state 不在此列** —— 运行状态只由 qB 同步驱动 (A 系 26-10-13-0540 S1 起, 起停已改纯透传)。

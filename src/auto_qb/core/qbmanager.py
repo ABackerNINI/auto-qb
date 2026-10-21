@@ -542,6 +542,11 @@ class QbManager(
                             logger.info("收到停止信号, 退出主循环")
                             break
                         continue
+                    # 第三条时间线(计划 26-10-21-1857 §4): 微步线 —— 每轮对到期 job 各推一步
+                    # (每步至多一次毫秒级调用), 步间由 next_micro_run_at() 并入下面的等待超时。
+                    # 走模块 hook(与命令线/同步线/任务线同款): 内核只知「何时」, 不知「何事」;
+                    # 放在暂停判断之后 —— 暂停 = 完全旁观, 不在此时对 qB 发写命令。
+                    self.host.run_micro_line(dry_run)
                     now = time.time()
                     # P0-5: 本批命令改了 qB 种子状态 -> 立即同步一次, 让真实状态在几十毫秒内
                     # 进快照(不必等下个节拍)。整批只补一次: sync_due 为真时本轮至多跑一次刷新。
@@ -633,7 +638,12 @@ class QbManager(
                     if not _flushed:
                         self.web.flush_truths()
                     # 等待到最近一条时间线到期, 或被命令唤醒(命令线近乎零延迟)
-                    wait_for = max(0.0, min(next_sync_at, next_tick_at) - time.time())
+                    # 第三条时间线: 跳检 job 的下一步(10~50ms 退避)也参与最早到期计算
+                    ops_next = self.host.next_micro_run_at()
+                    wake_at = min(next_sync_at, next_tick_at)
+                    if ops_next is not None:
+                        wake_at = min(wake_at, ops_next)
+                    wait_for = max(0.0, wake_at - time.time())
                     if _wait_next(stop_event, self._wake_event, wait_for):
                         logger.info("收到停止信号, 退出主循环")
                         break
