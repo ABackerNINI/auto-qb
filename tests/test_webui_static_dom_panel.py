@@ -47,6 +47,8 @@
 - test_dt_table_kernel_single_point: 详情面板表格内核守阵(计划 26-10-13-0811 W1; 用户 2026-10-13 报八项表格症状, 归三个根因簇, 本守阵解簇 A「几何与列被多处各算一遍且零校验」) —— ①三份 manifest 都登记 shared/dt_table.js 且文件在盘上; ②window.DT_TABLE 六口子齐全(layout/assertLayout/checkLabels/registerCell/cellOf/hasArrow); ③几何单一出口: 轨道串/对齐/列键同一个返回值里出来且 gridTemplate 恒等于 tracks.join(" ")(调用方再拼一次就是新事实源, 即红) + 固化宽度覆盖生效; ④L3 列名守卫: 列定义的 label 字段零方向符(扫 app.js 列定义单点 + drawer_tpl 全部变体), 「↑ 占用」不得回潮(密度雷达表头多箭头的出处) + 方向符号只能由排序态单点渲染(表壳 .arrow); ⑤渲染即自查: assertLayout 三处计数(网格轨道/列头格/数据行子格)必须相等, 不相等即报(视觉表现正是「速度列下方异常横带」与「多列内容挤在一起」), 未挂载/未渲染不算不一致(面板没开不得满屏报错); ⑥L2 落点: 单元格渲染器未登记即抛(不许渲染空白)。node 电池真跑 ③⑤⑥(无 node 静默跳过)
 - test_frontend_qb_traffic_load_stall_fallback: 流量图轮询「在途悬挂」兜底守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #2, 2026-10-16) —— loading 是单向「请求在途」标志(_qbLoad 入口无条件置 true, 唯一复位路径是它的 finally), 请求悬挂时 finally 不执行 ⇒ tick 守卫把之后每一拍都挡掉, 图表永久停在旧帧且无提示(与 10-12 修的同链另一入口 stale 谓词取反不同)。三层静态锚: ①阈值常量 _QB_LOAD_STALL_MS(=30000, 请求级超时的两倍余量); ②判据单点 _qbLoadStalled 在且 tick 必须经它(合体写法 `document.hidden || this[def.loading]` 不得回潮); ③_qbLoad 置位处写计时起点 _qbLoadAt[scope] 且 finally 不擦(擦会把换目标场景下新请求的起点抹成 0)。行为面 node 电池真跑(无 node 静默跳过): 真 _qbLoad + 永不 settle 的 api 桩 —— 在途未悬挂照旧挡拍 / 悬挂放行且只留一条警告 / 新起点生效故后续照常挡拍 / 图不活跃与页面隐藏照旧跳过 / 判据边界(29s 不判、31s 判、无起点不判)
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: ①单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); ②**裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); ③boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); ④四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
+- test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
+- test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 """
 import json
 import os
@@ -5250,3 +5252,143 @@ def test_frontend_raw_fetch_timeout_single_point():
             report = json.loads(lines[-1])
             assert report["failed"] == [], \
                 f"{label}电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+def test_frontend_busy_skeleton_single_point():
+    """busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册
+    (_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态
+    toast) + 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族
+    4 槽 + 一键导入) + finally 复位保底必须住在单点内(漏 finally = 面板永久转圈) + 裸 busy 置位
+    反向断言(再手抄 = 破单点, 回潮即红)。"""
+    dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
+    hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    # 1. 三单点在册(dialogs.js 是骨架单点文件, config_hub.js 经同一根实例混入调用)
+    for token in (
+        "async _mgrRun(fn, okMsg, errMsg)",
+        "async _panelLoad(obj, fn, opts)",
+        "async _postWaitCmd(busyObj, busyKey, url, body, opts)",
+    ):
+        assert token in dlg, f"shared/dialogs.js 缺 busy 骨架单点 {token}(改名或挪走了? 同步本守阵)"
+    # 2. 接线数对账(19 处全走单点; 少一处 = 有调用点被改回裸骨架或漏接)
+    assert dlg.count("this._mgrRun(") == 5, "dialogs.js _mgrRun 接线数漂了(mgr CRUD 应为 5 处)"
+    assert dlg.count("this._panelLoad(") == 5, "dialogs.js _panelLoad 接线数漂了(面板加载应为 5 处)"
+    assert dlg.count("this._postWaitCmd(") == 4, "dialogs.js _postWaitCmd 接线数漂了(POST+waitCmd 应为 4 处)"
+    assert hub.count("this._panelLoad(") == 5, "config_hub.js _panelLoad 接线数漂了(tm 族 4 处 + 一键导入 1 处)"
+    # 3. finally 复位保底必须住在单点里(收编动机: 漏 finally 的症状是面板永久转圈)
+    m = re.search(r"async _mgrRun\(fn, okMsg, errMsg\) \{.*?\n    \},", dlg, re.S)
+    assert m and "this.mgrBusy = false" in m.group(0), "_mgrRun 必须 finally 复位 mgrBusy"
+    m = re.search(r"async _panelLoad\(obj, fn, opts\) \{.*?\n    \},", dlg, re.S)
+    assert m and "obj[o.loading] = false" in m.group(0), "_panelLoad 必须 finally 复位 loading 位"
+    m = re.search(r"async _postWaitCmd\(busyObj, busyKey, url, body, opts\) \{.*?\n    \},", dlg, re.S)
+    assert m and "busyObj[busyKey] = false" in m.group(0), "_postWaitCmd 必须 finally 复位 busy 位"
+    # 4. 裸骨架散写反向断言: 这些 busy 置位原先各处手抄, 收敛后只许出现在单点内(回潮 = 破单点)
+    for gone in (
+        "this.statsLoading = true",
+        "this.mgrLoading = true",
+        "this.logs.loading = true",
+        "this.historyLoading = true",
+        "this.metaBusy = true",
+        "this.speedOverride.busy = true",
+        "this.speedAlt.busy = true",
+        "this.altToggling = true",
+    ):
+        assert gone not in dlg, f"dialogs.js 又出现裸骨架散写 {gone}(应走 _mgrRun/_panelLoad/_postWaitCmd 单点)"
+    for gone in (
+        "this.tm.loading = true",
+        "this.tm.saving = true",
+        "this.tm.autoBusy = true",
+        "this.tm.pick.loading = true",
+        "this.hub.importing = true",
+    ):
+        assert gone not in hub, f"config_hub.js 又出现裸骨架散写 {gone}(应走 dialogs.js::_panelLoad 单点)"
+
+
+def test_drawer_variant_skeleton_single_point():
+    """抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) ——
+    ① 三态空帧单点 H.emptyFrame: 核心 HELPERS 在册(has 闸 + loading→err→empty
+       优先级 + err 进 title 走 esc)+ 04-12 九件桥变体各 1 处接线(槽类名/空态文案
+       逐件对账)+ 内联三态块零残留(「正在加载…」态帧回潮即红); general 三件的裸空态
+       (无槽无文案 + lastSig 记账)形状不同, 刻意不收编(接线数钉 0);
+    ② peers 判据单点 reg.peers: 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)
+       在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费 + 本地副本零残留;
+    ③ dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与
+       旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且
+       pfx/occ 默认值各表自己 + 旧三模板 id 零残留。
+    行为等价(空帧三态 DOM/dt 单元格 DOM)由 e2e 盯(drawer-peers-columns /
+    drawer-peers-variant-tables / dt-table-* 诸 spec)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    cells = open(os.path.join(shared, "tpl", "xtpl-cells.html"), encoding="utf-8").read()
+    table = open(os.path.join(shared, "table.js"), encoding="utf-8").read()
+
+    # ---- ① 三态空帧单点(04-12 九件桥变体的 27 块 → 9 处接线 + 1 个 helper) ----
+    m = re.search(r"emptyFrame: function \(host, o\) \{.*?\n    \},", core, re.S)
+    assert m, "drawer_templates.js 缺三态空帧单点 emptyFrame(改名或挪走了? 同步本守阵)"
+    body = m.group(0)
+    assert "o.has" in body and "i-hourglass" in body and "i-warn" in body, \
+        "emptyFrame 形状漂了(应 = has 闸 + 沙漏加载态 + 警告错态 + esc 转义)"
+    assert "esc(o.err)" in body, "emptyFrame 的 err 进 title 必须走 esc(与 dtHtml 插值同口径)"
+    BRIDGE = {
+        "04-trackers-status-cards-tall": ("dt04-empty", "暂无 tracker"),
+        "05-trackers-health-groups-low": ("dt05-empty", "暂无 tracker"),
+        "06-trackers-table-collapsed": ("dt06-empty", "暂无 tracker"),
+        "07-peers-dashboard-tall": ("dt07-empty", "暂无已连接用户"),
+        "08-peers-groups-low": ("dt08-empty", "暂无已连接用户"),
+        "09-peers-density-collapsed": ("dt09-empty", "暂无已连接用户"),
+        "10-content-tree-detail-tall": ("dt10-load", "无文件列表"),
+        "11-content-treegrid-batch-low": ("dt11-load", "无文件列表"),
+        "12-content-space-treemap-collapsed": ("dt12-load", "无文件列表"),
+    }
+    for name, (cls, empty_text) in BRIDGE.items():
+        v = open(os.path.join(shared, "drawer_tpl", name + ".js"), encoding="utf-8").read()
+        assert v.count("H.emptyFrame(") == 1, f"{name} emptyFrame 接线数漂了(应 1 处)"
+        assert f'cls: "{cls}"' in v, f"{name} 空帧槽类名应为 {cls}(以同步后代码为准)"
+        assert f'emptyText: "{empty_text}"' in v, f"{name} 空态文案应为 {empty_text}"
+        assert "正在加载…" not in v, f"{name} 又出现内联加载态帧(应走 H.emptyFrame 单点)"
+    # general 三件裸空态形状不同(无槽无文案 + lastSig 复位记账), 刻意不收编
+    for name in ("01-general-hero-tall", "02-general-cards-low", "03-general-dossier-collapsed"):
+        v = open(os.path.join(shared, "drawer_tpl", name + ".js"), encoding="utf-8").read()
+        assert "H.emptyFrame(" not in v, f"{name} 不应接 emptyFrame(裸空态是变体记账, 形状不同)"
+
+    # ---- ② peers 判据单点(07/08/09 各手抄一份 → 核心层 reg.peers) ----
+    for token in (
+        "FLAG_META: {",
+        "flagTokens: function (p)",
+        "isBad: function (p)",
+        "bucketOf: function (p)",
+        "isLanIp: function (ip)",
+    ):
+        assert token in core, f"drawer_templates.js 缺 peers 判据单点 {token}"
+    assert "peers: PEERS," in core, "TPL_REG 未挂 peers 命名空间(变体经 reg.peers 消费)"
+    for name in ("07-peers-dashboard-tall", "08-peers-groups-low", "09-peers-density-collapsed"):
+        v = open(os.path.join(shared, "drawer_tpl", name + ".js"), encoding="utf-8").read()
+        assert "const P = reg.peers;" in v, f"{name} 未接 peers 判据单点(const P = reg.peers)"
+        for gone in (
+            "function isBad(",
+            "function bucketOf(",
+            "function isLanIp(",
+            "function flagTokens(",
+            "const FLAG_META = {",
+        ):
+            assert gone not in v, f"{name} 又出现 peers 判据本地副本 {gone}(应走 reg.peers 单点)"
+
+    # ---- ③ dt 值格模板合一(dt07≡dt08 逐字同, dt09 三处特化 → pfx/occ 两 prop) ----
+    assert 'id="tpl-aq-dt-peer-cells"' in cells, "xtpl-cells.html 缺 peers 共用值格模板"
+    for gone in ('id="tpl-aq-dt07-cells"', 'id="tpl-aq-dt08-cells"', 'id="tpl-aq-dt09-cells"'):
+        assert gone not in cells, f"xtpl-cells.html 残留旧分片 {gone}(已合一, 回潮 = 双模板副本)"
+    tpl_blk = re.search(r'<script type="text/x-template" id="tpl-aq-dt-peer-cells">(.*?)</script>', cells,
+                        re.S).group(1)
+    assert ":class=\"pfx + '-addr'\"" in tpl_blk, "共用模板类名应经 pfx prop 计算(渲染结果与旧逐字同)"
+    assert "occ ? '-occ' : '-spd u'" in tpl_blk, "upspeed 分支缺 occ 密度雷达特化"
+    assert "[pfx + '-dn'" in tpl_blk, "dlspeed 分支缺 occ 平铺特化"
+    for comp, pfx, occ in (
+        ("DT07", "dt07", "false"),
+        ("DT08", "dt08", "false"),
+        ("DT09", "dt09", "true"),
+    ):
+        m = re.search(r"window.AQ_%s_CELLS_COMPONENT = \{(.*?)\n\};" % comp, table, re.S)
+        assert m, f"table.js 缺 AQ_{comp}_CELLS_COMPONENT(组件名不变, 动态名接线依赖它)"
+        blk = m.group(1)
+        assert 'template: "#tpl-aq-dt-peer-cells"' in blk, f"{comp} 未共享共用值格模板"
+        assert f'pfx: {{ type: String, default: "{pfx}" }}' in blk, f"{comp} 的 pfx 默认值应为 {pfx}"
+        assert f"occ: {{ type: Boolean, default: {occ} }}" in blk, f"{comp} 的 occ 默认值应为 {occ}"

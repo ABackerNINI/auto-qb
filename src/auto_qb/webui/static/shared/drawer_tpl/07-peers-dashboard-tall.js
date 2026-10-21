@@ -30,6 +30,7 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
+  const P = reg.peers; /* peers 判据单点(issue 26-10-20-2231): 吸血/分桶/内网/FLAG_META, 07/08/09 共用 */
 
   /* 方向五桶(与 08/09 同判据, 纯 flags 派生): U=我方向其上传 D=对端向我供数
    * u=被我方限流 ?/空=握手未完成, 其余(含 K 完整副本)=闲置 */
@@ -41,19 +42,7 @@
     { key: "hand", text: "握手中", color: "--fg-dim", tip: "握手未完成, 身份未明" },
   ];
 
-  /* qB peer_info 标志位逐项解释(设计稿同款; 色映射按 S1 白名单就近取) */
-  const FLAG_META = {
-    D: { c: "fl-d", t: "D — 我方正在从该 peer 下载数据" },
-    U: { c: "fl-u", t: "U — 我方正在向该 peer 上传数据" },
-    u: { c: "fl-uo", t: "u — 对方有意向我下载, 但我方已将其限流(choked)" },
-    K: { c: "fl-k", t: "K — 完整副本(对方是做种者)" },
-    E: { c: "fl-e", t: "E — 加密连接" },
-    H: { c: "fl-h", t: "H — 该 peer 经 DHT 引入" },
-    X: { c: "fl-x", t: "X — 该 peer 经 PEX(对端交换)引入" },
-    I: { c: "fl-i", t: "I — 对方主动连入(incoming)" },
-    P: { c: "fl-p", t: "P — uTP 传输" },
-    "?": { c: "fl-q", t: "? — 握手未完成, 状态未知" },
-  };
+  /* flags 徽章表(FLAG_META)在核心层 reg.peers 单点(issue 26-10-20-2231), 07/08/09 共用 */
 
   /* 筛选 chips: bad 档仅有嫌疑对端时出现(渐进) */
   const FILTERS = [
@@ -208,32 +197,10 @@
     return Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
   }
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  function flagTokens(p) {
-    return String(p.flags || "").split(/\s+/).filter(Boolean);
-  }
+  /* 判据四件(flagTokens/isBad/bucketOf/isLanIp)在核心层 reg.peers 单点(issue
+   * 26-10-20-2231), 07/08/09 共用 —— 本件只留 07 独有的 flagHas 封装 */
   function flagHas(p, f) {
-    return flagTokens(p).indexOf(f) >= 0;
-  }
-  /* 吸血嫌疑启发式(与 09 同判据): client 名含 "XL/迅雷", 纯展示 */
-  function isBad(p) {
-    const c = String(p.client || "");
-    return c.indexOf("迅雷") >= 0 || /(^|[^A-Za-z])XL([^A-Za-z]|$)/.test(c);
-  }
-  function bucketOf(p) {
-    const f = flagTokens(p);
-    if (!f.length || f.indexOf("?") >= 0) return "hand";
-    if (f.indexOf("u") >= 0) return "choke";
-    if (f.indexOf("U") >= 0) return "take";
-    if (f.indexOf("D") >= 0) return "feed";
-    return "idle";
-  }
-  function isLanIp(ip) {
-    const s = String(ip || "");
-    if (s.indexOf(":") >= 0) return /^fe80:/i.test(s) || s === "::1";
-    const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)/.exec(s);
-    if (!m) return false;
-    const a = +m[1], b = +m[2];
-    return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    return P.flagTokens(p).indexOf(f) >= 0;
   }
   function clientName(p) {
     const c = String(p.client || "").trim();
@@ -241,16 +208,16 @@
   }
   function countsOf(list) {
     const n = { take: 0, feed: 0, idle: 0, choke: 0, hand: 0 };
-    for (const p of list) n[bucketOf(p)]++;
+    for (const p of list) n[P.bucketOf(p)]++;
     return n;
   }
   function countOf(list, key) {
     if (key === "all") return list.length;
     if (key === "up") return list.filter((p) => num(p.upspeed) > 0).length;
     if (key === "down") return list.filter((p) => num(p.dlspeed) > 0).length;
-    if (key === "bad") return list.filter(isBad).length;
-    if (key === "lan") return list.filter((p) => isLanIp(p.ip)).length;
-    if (key === "hand") return list.filter((p) => bucketOf(p) === "hand").length;
+    if (key === "bad") return list.filter(P.isBad).length;
+    if (key === "lan") return list.filter((p) => P.isLanIp(p.ip)).length;
+    if (key === "hand") return list.filter((p) => P.bucketOf(p) === "hand").length;
     return 0;
   }
 
@@ -331,8 +298,8 @@
     const enc = list.filter((p) => flagHas(p, "E")).length;
     const utp = list.filter((p) => flagHas(p, "P")).length;
     const v6 = list.filter((p) => String(p.ip || "").indexOf(":") >= 0).length;
-    const lan = list.filter((p) => isLanIp(p.ip)).length;
-    const bad = list.filter(isBad);
+    const lan = list.filter((p) => P.isLanIp(p.ip)).length;
+    const bad = list.filter(P.isBad);
     const alert = bad.length
       ? T`<div class="dt07-alert" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示无动作(计划 P-04 口径)">
           <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>
@@ -361,8 +328,8 @@
     return list.filter((p) => countOf([p], f) > 0);
   }
   function rowOf(ctx, p) {
-    const f = flagTokens(p);
-    const lan = isLanIp(p.ip);
+    const f = P.flagTokens(p);
+    const lan = P.isLanIp(p.ip);
     const up = num(p.upspeed), down = num(p.dlspeed);
     const addr = `${p.ip || "?"}${p.port ? ":" + p.port : ""}`;
     return {
@@ -372,9 +339,9 @@
       ccTitle: lan ? "局域网直连(私有地址段启发式)" : String(p.country || p.country_code || ""),
       lan,
       client: String(p.client || "未知"),
-      bad: isBad(p),
+      bad: P.isBad(p),
       flagToks: f.map((x) => {
-        const m = FLAG_META[x];
+        const m = P.FLAG_META[x];
         return { ch: x, cls: m ? m.c : "fl-h", tip: m ? m.t : "" };
       }),
       files: String(p.files || ""),
@@ -389,7 +356,7 @@
         progress: p.progress || 0, dlspeed: down, upspeed: up,
         downloaded: num(p.downloaded), uploaded: num(p.uploaded), relevance: p.relevance || 0,
       },
-      _cls: [isBad(p) ? "bad" : "", lan ? "lan" : "", bucketOf(p) === "hand" ? "hand" : ""]
+      _cls: [P.isBad(p) ? "bad" : "", lan ? "lan" : "", P.bucketOf(p) === "hand" ? "hand" : ""]
         .filter(Boolean).join(" ") || null,
     };
   }
@@ -433,22 +400,12 @@
       return;
     }
     _ctx = ctx;
-    if (loading && !list.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
-      return;
-    }
-    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
-    if (err && !list.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt07-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">用户列表加载失败, 将在下次自动刷新时重试</span></div>`));
-      return;
-    }
-    if (!list.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt07-empty"><span>暂无已连接用户</span></div>`));
-      return;
-    }
+    /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
+     * 错态先于空态(P3-5: 失败且无数据不是"真的没有", 重试口径真实 —— 本页签 5s 轮询会自动重拉) */
+    if (H.emptyFrame(host, {
+      cls: "dt07-empty", has: !!list.length, loading: !!loading, err: err,
+      errText: "用户列表加载失败, 将在下次自动刷新时重试", emptyText: "暂无已连接用户",
+    })) return;
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 表壳/行由桥 Teleport 进锚 */
     const html = T`<div class="dt07-wrap">
       <div class="dt07-cards">${R(cardsHtml(ctx, list))}</div>

@@ -1134,22 +1134,22 @@ def test_drawer_table_bridge_wiring():
     # ⑨ 渲染器分片: 六份 x-template + 列 key 配对(值格漏分支 = 表头在、值恒空)
     cells = read("tpl", "xtpl-cells.html")
     cells_dt = read("tpl", "xtpl-cells-dt.html")
-    for comp in ("dt07", "dt08", "dt09"):
-        assert f'id="tpl-aq-{comp}-cells"' in cells, f"xtpl-cells.html 缺 tpl-aq-{comp}-cells 分片"
-    for comp in ("dt04", "dt05", "dt06", "dt10", "dt11"):
-        assert f'id="tpl-aq-{comp}-cells"' in cells_dt, f"xtpl-cells-dt.html 缺 tpl-aq-{comp}-cells 分片"
-    app_keys = re.findall(r"\{ key: \"(\w+)\"", app)
-    for comp, colconst, src in (
-        ("dt07", "DRAWER_PEER_V07_COLUMNS", cells),
-        ("dt08", "DRAWER_PEER_V08_COLUMNS", cells),
-        ("dt09", "DRAWER_PEER_V09_COLUMNS", cells),
-    ):
+    # !issue 26-10-20-2231(三族重复收敛): dt07/dt08/dt09 三份值格模板合一为单一
+    # tpl-aq-dt-peer-cells(dt07≡dt08 逐字同, dt09 密度雷达三处特化经 pfx/occ 两个
+    # prop 表达) —— 加一个 peer 列只改模板一处, 漏一处 = 三变体该列齐空白且无任何
+    # 报错。守阵口径随之升级: 单一模板必须覆盖**三变体列键并集**(逐变体子集天然
+    # 被覆盖; dt09 列模型无 files ⇒ files 分支对它是死分支, 无害)。
+    tpl_blk = re.search(r'<script type="text/x-template" id="tpl-aq-dt-peer-cells">(.*?)</script>', cells, re.S)
+    assert tpl_blk, "xtpl-cells.html 缺 tpl-aq-dt-peer-cells 分片(peers 三变体共用值格模板)"
+    peer_keys = set()
+    for colconst in ("DRAWER_PEER_V07_COLUMNS", "DRAWER_PEER_V08_COLUMNS", "DRAWER_PEER_V09_COLUMNS"):
         m3 = re.search(r"const %s = \[(.*?)\];" % colconst, app, re.S)
         assert m3, f"app.js 缺 {colconst}"
-        tpl_blk = re.search(r'<script type="text/x-template" id="tpl-aq-%s-cells">(.*?)</script>' % comp, src, re.S)
-        assert tpl_blk, f"分片缺 {comp}"
-        for k in ("addr", "client", "flags", "progress", "upspeed", "dlspeed", "uploaded", "downloaded", "relevance"):
-            assert f"col.key === '{k}'" in tpl_blk.group(1), f"{comp} 渲染器缺 {k} 值格分支(表头在、值恒空)"
+        peer_keys.update(re.findall(r'\{ key: "(\w+)"', m3.group(1)))
+    for k in sorted(peer_keys):
+        assert f"col.key === '{k}'" in tpl_blk.group(1), f"peers 共用值格模板缺 {k} 值格分支(表头在、值恒空)"
+    for comp in ("dt04", "dt05", "dt06", "dt10", "dt11"):
+        assert f'id="tpl-aq-{comp}-cells"' in cells_dt, f"xtpl-cells-dt.html 缺 tpl-aq-{comp}-cells 分片"
     # U3 tracker 三分片: 06 列驱动(逐列 key 配对), 04/05 单列满宽(卡片/分组行 = kind 分支非列分支)
     m3 = re.search(r"const DRAWER_TRACKER_V06_COLUMNS = \[(.*?)\];", app, re.S)
     assert m3, "app.js 缺 DRAWER_TRACKER_V06_COLUMNS"

@@ -47,6 +47,7 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
+  const P = reg.peers; /* peers 判据单点(issue 26-10-20-2231): 吸血/分桶/内网/FLAG_META, 07/08/09 共用 */
 
   /* 分区定义: 顺序即设计稿五区; quiet = 「只看在传数据」过滤的目标外分区 */
   const GROUPS = [
@@ -57,19 +58,7 @@
     { key: "hand", text: "握手中", color: "--fg-dim", tip: "握手未完成, 客户端与进度未知", quiet: true },
   ];
 
-  /* qB peer_info 标志位逐项解释(设计稿同款; 色映射按 S1 白名单就近取) */
-  const FLAG_META = {
-    D: { c: "fl-d", t: "D — 我方正在从该 peer 下载数据" },
-    U: { c: "fl-u", t: "U — 我方正在向该 peer 上传数据" },
-    u: { c: "fl-uo", t: "u — 对方有意向我下载, 但我方已将其限流(choked)" },
-    K: { c: "fl-k", t: "K — 完整副本(对方是做种者)" },
-    E: { c: "fl-e", t: "E — 加密连接" },
-    H: { c: "fl-h", t: "H — 该 peer 经 DHT 引入" },
-    X: { c: "fl-x", t: "X — 该 peer 经 PEX(对端交换)引入" },
-    I: { c: "fl-i", t: "I — 对方主动连入(incoming)" },
-    P: { c: "fl-p", t: "P — uTP 传输" },
-    "?": { c: "fl-q", t: "? — 握手未完成, 状态未知" },
-  };
+  /* flags 徽章表(FLAG_META)在核心层 reg.peers 单点(issue 26-10-20-2231), 07/08/09 共用 */
 
   /* 视图偏好(跨重渲染与换种子保持): 只看在传数据 / 组折叠(默认 idle/hand 收起);
    * lastSig 供跳过重建。!排序态已并引擎(dtSortState.drawerPeerV08, U2) —— 手搓
@@ -201,30 +190,8 @@
     return Array.isArray(p.peers) ? p.peers : Object.values(p.peers || {});
   }
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  function flagTokens(p) {
-    return String(p.flags || "").split(/\s+/).filter(Boolean);
-  }
-  /* 吸血嫌疑启发式: client 名含 "XL/迅雷", 纯展示 */
-  function isBad(p) {
-    const c = String(p.client || "");
-    return c.indexOf("迅雷") >= 0 || /(^|[^A-Za-z])XL([^A-Za-z]|$)/.test(c);
-  }
-  function bucketOf(p) {
-    const f = flagTokens(p);
-    if (!f.length || f.indexOf("?") >= 0) return "hand";
-    if (f.indexOf("u") >= 0) return "choke";
-    if (f.indexOf("U") >= 0) return "take";
-    if (f.indexOf("D") >= 0) return "feed";
-    return "idle";
-  }
-  function isLanIp(ip) {
-    const s = String(ip || "");
-    if (s.indexOf(":") >= 0) return /^fe80:/i.test(s) || s === "::1";
-    const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)/.exec(s);
-    if (!m) return false;
-    const a = +m[1], b = +m[2];
-    return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
-  }
+  /* 判据四件(flagTokens/isBad/bucketOf/isLanIp)在核心层 reg.peers 单点(issue
+   * 26-10-20-2231), 07/08/09 共用 —— 本件无私有封装, 直接经 P 消费 */
 
   /* 组头聚合(设计稿同款口径) */
   function aggText(key, ms) {
@@ -242,8 +209,8 @@
 
   /* ---------------- 行装配(U2: 数据判据在这里, 呈现在渲染器分片; 分段 = 分桶) ---------------- */
   function rowOf(ctx, p) {
-    const f = flagTokens(p);
-    const lan = isLanIp(p.ip);
+    const f = P.flagTokens(p);
+    const lan = P.isLanIp(p.ip);
     const up = num(p.upspeed), down = num(p.dlspeed);
     const addr = `${p.ip || "?"}${p.port ? ":" + p.port : ""}`;
     return {
@@ -253,9 +220,9 @@
       ccTitle: lan ? "局域网直连(私有地址段启发式)" : String(p.country || p.country_code || ""),
       lan,
       client: String(p.client || "未知"),
-      bad: isBad(p),
+      bad: P.isBad(p),
       flagToks: f.map((x) => {
-        const m = FLAG_META[x];
+        const m = P.FLAG_META[x];
         return { ch: x, cls: m ? m.c : "fl-h", tip: m ? m.t : "" };
       }),
       files: String(p.files || ""),
@@ -270,7 +237,7 @@
         progress: p.progress || 0, dlspeed: down, upspeed: up,
         downloaded: num(p.downloaded), uploaded: num(p.uploaded), relevance: p.relevance || 0,
       },
-      _cls: [isBad(p) ? "bad" : "", lan ? "lan" : "", bucketOf(p) === "hand" ? "handrow" : ""]
+      _cls: [P.isBad(p) ? "bad" : "", lan ? "lan" : "", P.bucketOf(p) === "hand" ? "handrow" : ""]
         .filter(Boolean).join(" ") || null,
     };
   }
@@ -283,7 +250,7 @@
   function rowsFn(ctx) {
     const list = peerList(ctx);
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
-    for (const p of list) buckets[bucketOf(p)].push(p);
+    for (const p of list) buckets[P.bucketOf(p)].push(p);
     return GROUPS
       .filter((g) => !(ui.onlyMoving && g.quiet))
       .map((g) => ({ key: g.key, rows: buckets[g.key].map((p) => rowOf(ctx, p)) }));
@@ -331,7 +298,7 @@
     const err = (ctx.drawer && ctx.drawer.peersError) || "";
     /* 五区分桶(空分区不缺席, 由 hidden 类隐藏; 判据与 rowsFn / 数据拍回填同一条) */
     const buckets = { take: [], feed: [], idle: [], choke: [], hand: [] };
-    for (const p of list) buckets[bucketOf(p)].push(p);
+    for (const p of list) buckets[P.bucketOf(p)].push(p);
     /* 结构 sig(2026-10-18 用户报障根治收口): 只含**帧形态**决定项 —— 加载/失败/空态/只看在传/
      * 折叠态; **不再含在场分组集**。旧口径组空⇒整节隐藏(锚离场)、组补⇒新锚进场都算结构变化
      * ⇒ 握手连接翻动一次就整帧 replaceChildren + anchFill + Teleport 重挂(全组表格抖动);
@@ -361,22 +328,12 @@
       return;
     }
     _ctx = ctx;
-    if (loading && !list.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt08-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
-      return;
-    }
-    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
-    if (err && !list.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt08-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">用户列表加载失败, 将在下次自动刷新时重试</span></div>`));
-      return;
-    }
-    if (!list.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt08-empty"><span>暂无已连接用户</span></div>`));
-      return;
-    }
+    /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
+     * 错态先于空态(P3-5: 失败且无数据不是"真的没有", 重试口径真实 —— 本页签 5s 轮询会自动重拉) */
+    if (H.emptyFrame(host, {
+      cls: "dt08-empty", has: !!list.length, loading: !!loading, err: err,
+      errText: "用户列表加载失败, 将在下次自动刷新时重试", emptyText: "暂无已连接用户",
+    })) return;
     /* 五区恒在场(quiet 区在「只看在传数据」下整组离场, 其余区空组以 dt08-hide 隐藏)——
      * 组头计数/聚合数在数据拍由 paintTick 原地回填, 隐藏类随组 membership 翻动原地切换 */
     const body = GROUPS

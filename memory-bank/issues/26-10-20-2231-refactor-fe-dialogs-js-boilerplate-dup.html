@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/tasks/26-10-21-webui-busy-skeleton.md, memory-bank/testing/baselines/26-10-21-0605-webui-busy-skeleton.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端 dialogs/config_hub 三族 busy+try+toast+finally 骨架共 15 处">
 <meta name="issue-summary" content="mgr CRUD 5 处、面板加载 5 处、POST+waitCmd+三态 toast 4 处、tm 面板 busy 5 处 —— 同一骨架抄 15 遍">
 <title>前端 dialogs/config_hub 三族 busy+try+toast+finally 骨架共 15 处 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-dialogs-js-boilerplate-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,10 +99,18 @@
     <p>抽 <code>_busyRun(el, fn, opts)</code>(置位 / 复位 / 失败 toast 模式)与 <code>_postWaitCmd(...)</code> 两个 helper, 15 处改一行。POST+waitCmd 那族还要顺带把"三态 toast"(ok / error / timeout)的判据单点。</p>
   </section>
 
+  <section id="s-fix">
+    <h2><span class="no">04</span>修复后补充</h2>
+    <p><strong>实际修法</strong>（与建议的两个 helper 不同, 落地为三个单点 —— 反馈通道不同是族的真实边界, 强并一个万能 helper 要把各 catch 体全部回调化）：<code>_mgrRun(fn, okMsg, errMsg)</code>（mgr CRUD 5 处: busy → fn → ok toast → 重拉列表 → 失败 toast(!auth) → 复位）、<code>_panelLoad(obj, fn, opts)</code>（面板加载与 tm 槽回执 10 处: loading 可选 / 错误槽与 toast 双通道 / authGated·keepErr·onOk·onErr·onFinally 承接差异）、<code>_postWaitCmd(busyObj, busyKey, url, body, opts)</code>（POST+waitCmd 4 处: ok / 命令回执失败 / 发送失败三态判据单点; onPost 保留 <code>_markCmdPost</code> 记账位）。单点住 <code>shared/dialogs.js</code>, config_hub.js 经同一根实例混入调用; tmShutdownTool（保存失败回滚内存态）按台账口径刻意保持手写。</p>
+    <p><strong>验证方式</strong>：① 复验锚点 19 处逐处在位（标题记 15 与 lede 分族算术 5+5+4+5=19 不一致, 以 grep 为准）；② 逐处对照原 catch/finally 的反馈文案、时长、auth 闸与复位次序, 行为零变化；③ 新守阵 <code>test_frontend_busy_skeleton_single_point</code>（三单点在册 + 19 处接线对账 + finally 保底 + 裸 busy 置位反向断言）, 两支红验（拆 finally / 回潮散写）均判红后还原；④ <code>commands run test.full</code> 与 <code>dev.e2e</code> 双绿, 数字见基线切片 <code>26-10-21-0605-webui-busy-skeleton</code>；⑤ 收敛 POST 出口后 triggers.js <code>calls</code> 表四处旧登记并为 <code>_postWaitCmd</code> 一行（登记表双向相等闸复绿）。</p>
+  </section>
+
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 05:16 — 用户指派认领（档案 <code>memory-bank/tasks/26-10-21-webui-busy-skeleton.md</code>），状态 <strong>In Progress</strong>。复验：开工重读源码，锚点 19 处全部在位（标题记 15 与 lede 分族算术 5+5+4+5=19 不一致，以 grep 为准）；动手前全量测试绿（树上 95baf46b，数字见 kb.baseline）</li>
+      <li>2026-10-21 06:06 — 修复并验证完成，状态 <strong>Done</strong>（实测数字见上方「修复后补充」，全量基线见 <code>kb.baseline</code>）</li>
     </ul>
   </section>
 

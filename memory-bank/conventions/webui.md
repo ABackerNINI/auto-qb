@@ -106,6 +106,16 @@
 - **守阵量程**: 判「三皮肤成对」用 `_ui_css_effective(ui)`(= 皮肤聚合 + shell 挂的 shared CSS, link 序), **不是** `_ui_css_aggregate(ui)`(只含本皮肤) —— 后者在规则搬走后恒红。判据原理见 `pitfalls/testing/assertions.md`「守阵的量程」条。
 - **新族入共用层的顺序**: 先搬逐字同的(最安全), 差异多的最后; 一族一改一回归, 不整文件对拷。
 
+## WEB UI busy 骨架单点 (2026-10-21, issue 26-10-20-2231)
+
+「置 busy → try 请求 → 失败反馈 → finally 复位」的前端骨架收敛为 `shared/dialogs.js` 三个单点(config_hub.js 经同一根实例混入调用), **新面板/对话框代码一律走单点, 不许再手抄骨架**(漏 finally = 面板永久转圈, 见 pitfalls/web-ui/inflight-flag-no-timeout):
+
+- **`_mgrRun(fn, okMsg, errMsg)`**: 管理对话框写操作(成功 toast → 重拉列表; 失败 toast, auth 静默)。
+- **`_panelLoad(obj, fn, opts)`**: 面板加载与槽回执(loading 位可选; 失败走错误槽 `err` 或 toast 通道 `errToast`; `authGated: false` = tm 族失败恒上屏; `keepErr` = 不预清旧错; `onOk/onErr/onFinally` 承接成功收尾/失败回滚/完成置位)。
+- **`_postWaitCmd(busyObj, busyKey, url, body, opts)`**: POST+waitCmd **三态 toast 判据单点**(ok / 命令回执失败 cmdFail / 发送失败 sendFail); POST 调用点唯一 ⇒ triggers.js 的 TRIGGER_DEFS.calls 只登记它一行(scope = 调用方并集 sel|anchor|none)。
+- **刻意不收编**: tmShutdownTool(保存失败回滚内存态)骨架形状不同, 保持手写; 各调用点差异(槽名/文案/时长/成功收尾)以参数与回调留在调用点。
+- **守阵**: `test_frontend_busy_skeleton_single_point`(三单点在册 + 19 处接线数对账 + finally 保底 + 裸 busy 置位反向断言) · `test_trigger_registry_call_sites_exact`(POST 出口登记双向相等)。
+
 ## WEB UI 悬浮提示 .aq-tip (2026-09-28)
 
 全局 tooltip 收敛为自绘单例, **新元素一律继续写原生 `title` 属性**(模板侧零成本接入), 不许再自造浮层:

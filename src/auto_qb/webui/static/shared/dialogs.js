@@ -3,6 +3,8 @@
  * app.js 按域拆分出的片段(2026-09-20)。约定与 config_editor.js / config_rules.js 同一范式:
  * 挂到 window.AQB_DIALOGS, 由 app.js 末尾 app.mixin(window.AQB_DIALOGS) 注入同一个 Vue 实例 ——
  * 方法体里的 this 仍是那个组件实例, 跨模块互调与拆分前完全等价。
+ * 另承载 busy+try+反馈+finally 骨架的三个单点(_mgrRun/_panelLoad/_postWaitCmd, issue 26-10-20-2231):
+ * config_hub.js 的 tm 面板族经同一根实例混入调用, 单点不在那份文件里重写。
  *
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_DIALOGS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
@@ -33,17 +35,11 @@ window.AQB_DIALOGS = {
       this.statsOpen = false;
     },
     async loadStats() {
-      this.statsLoading = true;
-      this.statsError = "";
-      try {
+      await this._panelLoad(this, async () => {
         const r = await this.api("/api/stats");
         this.statsServer = r.server || null;
-      } catch (e) {
-        if (!e.auth) this.statsError = e.message || "加载失败";
         // FIX-04b: 失败不清空已有数据(骨架常驻防闪烁); 仅首次加载失败保持 null → 错误占位重试
-      } finally {
-        this.statsLoading = false;
-      }
+      }, { loading: "statsLoading", err: "statsError", errFallback: "加载失败" });
     },
     /* 统计值兜底: 字段缺失(null/undefined)显示 —; 0 是合法值(如 DHT 0 节点)原样展示 */
     statVal(v, fmt) {
@@ -79,6 +75,80 @@ window.AQB_DIALOGS = {
     closeKbHelp() {
       this.kbHelpOpen = false;
     },
+    /* ---------------- busy 骨架单点(issue 26-10-20-2231: dialogs/config_hub 共 19 处收敛) ----------------
+     * 「置 busy → try 请求 → 失败反馈 → finally 复位」这条骨架原先在 dialogs.js 与 config_hub.js
+     * 手抄 19 遍; 漏 finally 的症状是面板永久转圈(见 pitfalls/web-ui/inflight-flag-no-timeout)。
+     * 三个单点按反馈通道分家(反馈形态不同是族的真实边界, 不强并成一个万能 helper):
+     *   _mgrRun      管理对话框写操作(R20-B-01): busy → fn → ok toast → 重拉列表 → 失败 toast(!auth) → 复位
+     *   _panelLoad   面板加载/槽回执(R20-B-02 + R20-C-15): busy(可选) → 槽清空 → fn → 失败落槽或 toast → 复位
+     *   _postWaitCmd POST+waitCmd 三态 toast(R20-B-03): busy → POST → waitCmd → ok / 命令失败 / 发送失败 → 复位
+     * 各处差异(成功收尾 / 失败回滚 / 槽名 / 静默变体)作为参数或回调留在调用点。刻意不入
+     * helper 的特例: tmShutdownTool(保存失败回滚内存态, 见 R20-C-15 台账)保持原样。 */
+    /* 管理对话框写操作骨架: fn 抛错 = 失败(auth 拦截静默, 交给登录框); 成功先 toast 再重拉列表 */
+    async _mgrRun(fn, okMsg, errMsg) {
+      this.mgrBusy = true;
+      try {
+        await fn();
+        this.toast(okMsg, "ok", 2500);
+        await this.loadMgr();
+        return true;
+      } catch (e) {
+        if (!e.auth) this.toast(`${errMsg}: ${e.message}`, "error", 8000);
+        return false;
+      } finally {
+        this.mgrBusy = false;
+      }
+    },
+    /* 面板加载/槽回执骨架: loading 置真期间预清旧错(重试可见); 失败落错误槽 —— authGated=false
+     * 的 tm 族不看 auth(状态轮询/配置保存的失败都要上屏, 不能静默)。loading 不传 = 静默变体
+     * (speedMode: 不动 busy 位、不预清旧错, 失败仍落槽); keepErr=true 只跳过预清(tmLoad 重拉
+     * 不清自己的状态槽, 由响应/失败分支落值)。errToast = toast 通道(一键导入站点: 恒提示不看
+     * auth)。onOk/onErr/onFinally 承接各处个性(成功收尾 / 失败装配与回滚 / 加载完成置位)。 */
+    async _panelLoad(obj, fn, opts) {
+      const o = opts || {};
+      if (o.loading) {
+        obj[o.loading] = true;
+        if (o.err && !o.keepErr) obj[o.err] = "";
+      }
+      try {
+        await fn();
+      } catch (e) {
+        if (o.errToast) {
+          this.toast(`${o.errToast.prefix}: ${(e && e.message) || o.errToast.fallback}`, "error", o.errToast.ms);
+        } else if (o.err && (o.authGated === false || !e.auth)) {
+          obj[o.err] = (e && e.message) || o.errFallback;
+        }
+        if (o.onErr) o.onErr(e);
+      } finally {
+        if (o.loading) obj[o.loading] = false;
+        if (o.onFinally) o.onFinally();
+      }
+    },
+    /* POST+waitCmd 三态 toast 骨架(三态判据单点): ①ok 回执 → okMsg(okMs 缺省 2500; 传函数 =
+     * 成功此刻才取值, 供「按切换前状态措辞」的场景) ②命令回执失败(已送达被拒) → cmdFail: r.error(8000)
+     * ③请求本身失败(发送不出去) → sendFail: e.message(auth 拦截静默, 交给登录框)。onPost 在
+     * POST 完成与 waitCmd 之间(命令遥测 _markCmdPost 的记账点), onOk 在成功 toast 后
+     * (await 完才走 finally 复位)。 */
+    async _postWaitCmd(busyObj, busyKey, url, body, opts) {
+      busyObj[busyKey] = true;
+      try {
+        const resp = await this.api(url, { method: "POST", body: JSON.stringify(body) });
+        if (opts.onPost) opts.onPost(resp);
+        const r = await this.waitCmd(resp.cmd_id);
+        if (r.ok) {
+          this.toast(typeof opts.okMsg === "function" ? opts.okMsg() : opts.okMsg, "ok", opts.okMs || 2500);
+          if (opts.onOk) await opts.onOk();
+          return true;
+        }
+        this.toast(`${opts.cmdFail}: ${r.error}`, "error", 8000);
+        return false;
+      } catch (e) {
+        if (!e.auth) this.toast(`${opts.sendFail}: ` + e.message, "error");
+      } finally {
+        busyObj[busyKey] = false;
+      }
+      return false;
+    },
     /* ---------------- 分类/标签管理对话框(FE-2C2): qB 分类/标签的增删改 ----------------
      * 列表数据源 GET /api/categories|tags; 写操作走 POST /api/categories(/edit|/remove) 与 /api/tags(/remove)。
      * CRUD 成功后重拉列表刷新对话框; 对话框关闭后主列表随下一轮 rid 轮询自然更新(不强刷)。
@@ -105,9 +175,7 @@ window.AQB_DIALOGS = {
       else if (this.mgrOpen === "category") this.submitMgrCategory();
     },
     async loadMgr() {
-      this.mgrLoading = true;
-      this.mgrError = "";
-      try {
+      await this._panelLoad(this, async () => {
         if (this.mgrOpen === "category") {
           // qB categories: {名字: {save_path, ...}} → 行数组(名字字典序)
           const r = await this.api("/api/categories");
@@ -119,48 +187,30 @@ window.AQB_DIALOGS = {
           const r = await this.api("/api/tags");
           this.mgrTags = (r.tags || []).slice().sort((a, b) => a.localeCompare(b));
         }
-      } catch (e) {
-        if (!e.auth) this.mgrError = e.message || "加载失败";
-      } finally {
-        this.mgrLoading = false;
-      }
+      }, { loading: "mgrLoading", err: "mgrError", errFallback: "加载失败" });
     },
     async submitMgrCategory() {
       if (this.mgrBusy) return;  // 回车提交与按钮同源: 防回执等待期重复投递
       const name = this.mgrNew.catName.trim();
       if (!name) { this.toast("分类名称不能为空", "warn"); return; }
-      this.mgrBusy = true;
-      try {
+      await this._mgrRun(async () => {
         const payload = { name };
         const savePath = this.mgrNew.catPath.trim();
         if (savePath) payload.save_path = savePath;  // 可空: 留空 = 仅建分类不带路径
         await this.api("/api/categories", { method: "POST", body: JSON.stringify(payload) });
-        this.toast(`已创建分类: ${name}`, "ok", 2500);
         this.mgrNew.catName = "";
         this.mgrNew.catPath = "";
-        await this.loadMgr();
-      } catch (e) {
-        if (!e.auth) this.toast(`创建分类失败: ${e.message}`, "error", 8000);
-      } finally {
-        this.mgrBusy = false;
-      }
+      }, `已创建分类: ${name}`, "创建分类失败");
     },
     async submitMgrTags() {
       if (this.mgrBusy) return;  // 回执等待期防重复投递
       // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
       const tags = this.mgrNew.tags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
       if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
-      this.mgrBusy = true;
-      try {
+      await this._mgrRun(async () => {
         await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags }) });
-        this.toast(`已创建 ${tags.length} 个标签`, "ok", 2500);
         this.mgrNew.tags = "";
-        await this.loadMgr();
-      } catch (e) {
-        if (!e.auth) this.toast(`创建标签失败: ${e.message}`, "error", 8000);
-      } finally {
-        this.mgrBusy = false;
-      }
+      }, `已创建 ${tags.length} 个标签`, "创建标签失败");
     },
     async mgrEditCatPath(name) {
       const cur = (this.mgrCategories.find((c) => c.name === name) || {}).save_path || "";
@@ -171,44 +221,26 @@ window.AQB_DIALOGS = {
       const savePath = p.trim();
       if (!savePath) { this.toast("保存路径不能为空", "warn"); return; }
       if (savePath === cur) { this.toast("未作修改", "ok", 2000); return; }
-      this.mgrBusy = true;
-      try {
-        await this.api("/api/categories/edit", { method: "POST", body: JSON.stringify({ name, save_path: savePath }) });
-        this.toast(`已更新分类路径: ${name}`, "ok", 2500);
-        await this.loadMgr();
-      } catch (e) {
-        if (!e.auth) this.toast(`修改分类路径失败: ${e.message}`, "error", 8000);
-      } finally {
-        this.mgrBusy = false;
-      }
+      await this._mgrRun(
+        () => this.api("/api/categories/edit", { method: "POST", body: JSON.stringify({ name, save_path: savePath }) }),
+        `已更新分类路径: ${name}`, "修改分类路径失败",
+      );
     },
     async mgrDeleteCategory(name) {
       const ok = await this.confirmDialog("删除分类", `将删除分类「${name}」(不删除种子与文件)`, { okText: "删除", danger: true });
       if (!ok) return;
-      this.mgrBusy = true;
-      try {
-        await this.api("/api/categories/remove", { method: "POST", body: JSON.stringify({ names: [name] }) });
-        this.toast(`已删除分类: ${name}`, "ok", 2500);
-        await this.loadMgr();
-      } catch (e) {
-        if (!e.auth) this.toast(`删除分类失败: ${e.message}`, "error", 8000);
-      } finally {
-        this.mgrBusy = false;
-      }
+      await this._mgrRun(
+        () => this.api("/api/categories/remove", { method: "POST", body: JSON.stringify({ names: [name] }) }),
+        `已删除分类: ${name}`, "删除分类失败",
+      );
     },
     async mgrDeleteTag(tag) {
       const ok = await this.confirmDialog("删除标签", `将删除标签「${tag}」(自动规则可能重新打上)`, { okText: "删除", danger: true });
       if (!ok) return;
-      this.mgrBusy = true;
-      try {
-        await this.api("/api/tags/remove", { method: "POST", body: JSON.stringify({ tags: [tag] }) });
-        this.toast(`已删除标签: ${tag}`, "ok", 2500);
-        await this.loadMgr();
-      } catch (e) {
-        if (!e.auth) this.toast(`删除标签失败: ${e.message}`, "error", 8000);
-      } finally {
-        this.mgrBusy = false;
-      }
+      await this._mgrRun(
+        () => this.api("/api/tags/remove", { method: "POST", body: JSON.stringify({ tags: [tag] }) }),
+        `已删除标签: ${tag}`, "删除标签失败",
+      );
     },
     /* ---------------- 标签/分类编辑对话框: 对选中集合**即时**增删标签/改分类 ----------------
      * 与管理对话框(FE-2C2, 全局定义的增删)互补: 这里只改"种子上打了什么"。
@@ -300,26 +332,14 @@ window.AQB_DIALOGS = {
       const { groupKeys, memberHashes } = this.metaTargets;
       const t0 = this._newCmdStats(action);
       this._markCmdPatch(t0);
-      this.metaBusy = true;
-      try {
-        const resp = await this.api("/api/torrents/bulk", {
-          method: "POST",
-          body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes, ...extra }),
+      return this._postWaitCmd(this, "metaBusy", "/api/torrents/bulk",
+        { action, keys: groupKeys, hashes: memberHashes, ...extra },
+        {
+          okMsg: `已执行: ${okText}`,
+          cmdFail: `${okText}失败`,
+          sendFail: "命令发送失败",
+          onPost: () => this._markCmdPost(t0),  // 遥测记账点: POST 完成与 waitCmd 之间
         });
-        this._markCmdPost(t0);
-        const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) {
-          this.toast(`已执行: ${okText}`, "ok", 2500);
-          return true;
-        }
-        this.toast(`${okText}失败: ${r.error}`, "error", 8000);
-        return false;
-      } catch (e) {
-        if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
-        return false;
-      } finally {
-        this.metaBusy = false;
-      }
     },
     async metaToggleTag(tag) {
       if (this.metaBusy) return;
@@ -417,9 +437,7 @@ window.AQB_DIALOGS = {
     /* ---------------- 日志 tail(FE-2C): /api/log 只读(等级过滤 + 行数选择 + 手动刷新, 不轮询);
          入口在 Console Hub「常规」分区页尾(2026-09-26 由独立「运行日志」分区并入), 顶层 page 只有 groups/settings ---------------- */
     async loadLogs() {
-      this.logs.loading = true;
-      this.logs.error = "";
-      try {
+      await this._panelLoad(this.logs, async () => {
         const q = new URLSearchParams({ lines: String(this.logs.num || 300) });
         if (this.logs.level) q.set("level", this.logs.level);
         const r = await this.api(`/api/log?${q.toString()}`);
@@ -427,11 +445,7 @@ window.AQB_DIALOGS = {
         this.logs.file = r.file || "";
         this.logs.note = r.note || "";   // "筛不了"的说明(后端给): 空结果与筛选失效不再长得一样
         this.logs.loaded = true;
-      } catch (e) {
-        if (!e.auth) this.logs.error = e.message || "日志加载失败";
-      } finally {
-        this.logs.loading = false;
-      }
+      }, { loading: "loading", err: "error", errFallback: "日志加载失败" });
     },
     /* ---------------- 限速托管状态与临时覆盖(FE-2C D2) ----------------
      * /api/speed/mode 只读快照; /api/speed/override 两方向都必填(0=不限),
@@ -439,7 +453,8 @@ window.AQB_DIALOGS = {
      */
     async loadSpeedMode(force = false) {
       if (this.speedMode.loaded && !force) return;
-      try {
+      // 静默变体(无 loading 位): 不预清旧错, 失败仍落槽 —— 与四块面板加载同骨架不同反馈节奏
+      await this._panelLoad(this.speedMode, async () => {
         const r = await this.api("/api/speed/mode");
         this.speedMode = {
           loaded: true,
@@ -450,36 +465,25 @@ window.AQB_DIALOGS = {
           altCurrent: r.alt_current || null, // ALT-01: 备用限速当前值(KiB/s)
           error: "",
         };
-      } catch (e) {
-        if (!e.auth) this.speedMode.error = e.message || "状态获取失败";
-      }
+      }, { err: "error", errFallback: "状态获取失败" });
     },
     async submitSpeedOverride() {
       if (!this.speedOvReady || this.speedOverride.busy) return false;
       const up = Math.max(0, Math.round(Number(this.speedOverride.up)));
       const down = Math.max(0, Math.round(Number(this.speedOverride.down)));
       const text = `上传 ${this.fmtLimit(up) || "不限速"} / 下载 ${this.fmtLimit(down) || "不限速"}`;  // toast 保留"不限速"字样(TBL-02)
-      this.speedOverride.busy = true;
-      try {
-        const resp = await this.api("/api/speed/override", {
-          method: "POST",
-          body: JSON.stringify({ upload_kib: up, download_kib: down }),
-        });
-        const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) {
-          this.toast(`已临时覆盖全局限速: ${text}`, "ok", 3000);
-          this.speedOverride = { up: "", down: "", busy: false };
-          await this.loadSpeedMode(true);  // 覆盖后刷新托管状态(qB 当前值已变)
-          return true;  // SPD-04: 供弹窗判断成功关窗
-        } else {
-          this.toast(`限速覆盖失败: ${r.error}`, "error", 8000);
-        }
-      } catch (e) {
-        if (!e.auth) this.toast("限速覆盖发送失败: " + e.message, "error");
-      } finally {
-        this.speedOverride.busy = false;
-      }
-      return false;
+      return this._postWaitCmd(this.speedOverride, "busy", "/api/speed/override",
+        { upload_kib: up, download_kib: down },
+        {
+          okMsg: `已临时覆盖全局限速: ${text}`,
+          okMs: 3000,
+          cmdFail: "限速覆盖失败",
+          sendFail: "限速覆盖发送失败",
+          onOk: async () => {
+            this.speedOverride = { up: "", down: "", busy: false };
+            await this.loadSpeedMode(true);  // 覆盖后刷新托管状态(qB 当前值已变)
+          },
+        });  // 返回 true 供弹窗判断成功关窗(SPD-04)
     },
     /* ---------------- 限速修改浮层(SPD-04; FX-08 改为**就近弹出**) ----------------
      * FX-08: 不再居中 + 遮罩弹出, 而是锚在点击的"限制速度"按钮附近向上弹(该方向输入框预聚焦),
@@ -559,45 +563,25 @@ window.AQB_DIALOGS = {
      */
     async toggleAltSpeed() {
       if (this.altToggling) return;
-      this.altToggling = true;
-      try {
-        const resp = await this.api("/api/speed/alt/toggle", { method: "POST", body: "{}" });
-        const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) {
-          // toast 按切换前的状态措辞(sbAltOn 是旧值): 灭 -> 切到备用, 亮 -> 切回主速
-          this.toast(this.sbAltOn ? "已切回主速度" : "已切换到备用速度(乌龟)", "ok", 2500);
-        } else {
-          this.toast("速度模式切换失败: " + r.error, "error", 8000);
-        }
-      } catch (e) {
-        if (!e.auth) this.toast("切换请求发送失败: " + e.message, "error");
-      } finally {
-        this.altToggling = false;  // 新状态由主轮询 statsServer.use_alt_speed_limits 回读, 不本地预翻转
-      }
+      await this._postWaitCmd(this, "altToggling", "/api/speed/alt/toggle", {}, {
+        okMsg: () => (this.sbAltOn ? "已切回主速度" : "已切换到备用速度(乌龟)"),  // 成功此刻取值: 按切换前状态措辞
+        cmdFail: "速度模式切换失败",
+        sendFail: "切换请求发送失败",
+      });  // 新状态由主轮询 statsServer.use_alt_speed_limits 回读, 不本地预翻转
     },
     async submitAltLimits() {
       const up = Math.max(0, Math.round(Number(this.speedAlt.up) || 0));
       const down = Math.max(0, Math.round(Number(this.speedAlt.down) || 0));
       const c = this.speedMode.altCurrent || {};
       if (up === (c.upload_limit ?? -1) && down === (c.download_limit ?? -1)) return true;  // 未改动不下发
-      this.speedAlt.busy = true;
-      try {
-        const resp = await this.api("/api/speed/alt", {
-          method: "POST",
-          body: JSON.stringify({ upload_kib: up, download_kib: down }),
+      return this._postWaitCmd(this.speedAlt, "busy", "/api/speed/alt",
+        { upload_kib: up, download_kib: down },
+        {
+          okMsg: `已更新备用限速: 上 ${this.fmtLimit(up) || "不限速"} / 下载 ${this.fmtLimit(down) || "不限速"}`,
+          okMs: 3000,
+          cmdFail: "备用限速设置失败",
+          sendFail: "备用限速发送失败",
         });
-        const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) {
-          this.toast(`已更新备用限速: 上 ${this.fmtLimit(up) || "不限速"} / 下载 ${this.fmtLimit(down) || "不限速"}`, "ok", 3000);
-          return true;
-        }
-        this.toast("备用限速设置失败: " + r.error, "error", 8000);
-      } catch (e) {
-        if (!e.auth) this.toast("备用限速发送失败: " + e.message, "error");
-      } finally {
-        this.speedAlt.busy = false;
-      }
-      return false;
     },
     /* ---------------- 历史流量弹层(今日流量面板入口; 天/月/年切换 + 悬停取值) ---------------- */
     async openHistory() {
@@ -605,18 +589,12 @@ window.AQB_DIALOGS = {
       await this.loadHistory();
     },
     async loadHistory() {
-      this.historyLoading = true;
-      this.historyError = "";
-      try {
+      await this._panelLoad(this, async () => {
         const data = await this.api("/api/traffic/history");
         this.historyData = data.history || [];
         // 26-10-17-1737 S1: 快照态随响应带回(off = 来源总开关关闭), 空态文案据此指到总开关
         this.historyState = data.state || "disabled";
-      } catch (e) {
-        if (!e.auth) this.historyError = e.message || "加载失败";
-      } finally {
-        this.historyLoading = false;
-      }
+      }, { loading: "historyLoading", err: "historyError", errFallback: "加载失败" });
     },
     /* 悬停追踪: 事件挂在 .hist-chart容器(mousemove), 指针 x 折算进 viewBox 坐标再换算
      * 桶索引 —— 连续无空隙; 旧版逐桶 enter/leave + 命中区只盖单柱的闪烁根因即在此 */

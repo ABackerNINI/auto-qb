@@ -1,0 +1,6 @@
+# webui-drawer-variant-renderer-dup
+
+> 摘要: 认领并修复 issue 26-10-20-2231: 抽屉变体渲染层三族重复收敛 —— ①27 块三态空帧骨架入 drawer_templates.js::HELPERS.emptyFrame 单点(9 件桥变体各一处接线, general 三件刻意不收编); ②07/08/09 五件 peers 判据(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)逐字副本提为 reg.peers 命名空间, 删本地副本改单点消费; ③dt07/08/09 三份 x-template 合一为 tpl-aq-dt-peer-cells, 接 pfx/occ 两 prop 且不改 CSS 类名, 渲染结果与旧逐字同。守阵 dom_panel 新增 test_drawer_variant_skeleton_single_point + skins⑨ 改并集口径, 红验三支命中即红; test.full 3983 passed/10 skipped/99%, e2e 全量 336 passed/10 skipped 逐位持平; issue 置 Done, 契约回写 webui-static-contract.md, 基线切片 26-10-22-0039 已建。工作区未提交(用户未授权)。
+> 最后活动: 2026-10-22 00:43
+
+**R0(2026-10-22 00:43):** 认领并修复 issue 26-10-20-2231: 抽屉变体渲染层三族重复收敛 —— ①27 块三态空帧骨架入 drawer_templates.js::HELPERS.emptyFrame 单点(9 件桥变体各一处接线, general 三件刻意不收编); ②07/08/09 五件 peers 判据(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)逐字副本提为 reg.peers 命名空间, 删本地副本改单点消费; ③dt07/08/09 三份 x-template 合一为 tpl-aq-dt-peer-cells, 接 pfx/occ 两 prop 且不改 CSS 类名, 渲染结果与旧逐字同。守阵 dom_panel 新增 test_drawer_variant_skeleton_single_point + skins⑨ 改并集口径, 红验三支命中即红; test.full 3983 passed/10 skipped/99%, e2e 全量 336 passed/10 skipped 逐位持平; issue 置 Done, 契约回写 webui-static-contract.md, 基线切片 26-10-22-0039 已建。工作区未提交(用户未授权)。

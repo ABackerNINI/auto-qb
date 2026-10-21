@@ -368,22 +368,12 @@
       }
       return;
     }
-    if (loading && !ts.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
-      return;
-    }
-    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
-    if (err && !ts.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt05-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">Tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
-      return;
-    }
-    if (!ts.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt05-empty"><span>暂无 tracker</span></div>`));
-      return;
-    }
+    /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
+     * 错态先于空态(P3-5: 失败且无数据不是"真的没有", 重试口径真实 —— 本页签 5s 轮询会自动重拉) */
+    if (H.emptyFrame(host, {
+      cls: "dt05-empty", has: !!ts.length, loading: !!loading, err: err,
+      errText: "Tracker 列表加载失败, 将在下次自动刷新时重试", emptyText: "暂无 tracker",
+    })) return;
     /* 五组恒在场(2026-10-18: 空组以 dt05-hide 隐藏, 不进 sig 不整帧重建; 徽章计数/隐藏类
      * 在数据拍由原地回填更新) */
     const secs = GROUPS.map((g) => groupHtml(g, byKey[g.key], groupHidden(byKey[g.key])));

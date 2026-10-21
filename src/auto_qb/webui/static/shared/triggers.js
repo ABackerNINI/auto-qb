@@ -200,8 +200,8 @@ const TRIGGER_DEFS = {
       "scope": "sel|anchor", "why": ""
     },
     {
-      "file": "dialogs.js", "fn": "_metaBulk", "ep": "/api/torrents/bulk (tags/category)",
-      "scope": "sel|anchor", "why": ""
+      "file": "dialogs.js", "fn": "_postWaitCmd", "ep": "POST+waitCmd 统一出口: /api/torrents/bulk 与 /api/speed/*(端点由调用方定)",
+      "scope": "sel|anchor|none", "why": "统一出口: 目标级(_metaBulk → sel|anchor)与非目标级(限速三处 → none)由调用方定"
     },
     {
       "file": "drawer.js", "fn": "torrentCmd", "ep": "/api/torrents/{hash}/{action}",
@@ -274,18 +274,6 @@ const TRIGGER_DEFS = {
     {
       "file": "dialogs.js", "fn": "metaSetCategory", "ep": "/api/categories (先建后设)",
       "scope": "none", "why": "候选资源创建: 第二步 _metaBulk 才带目标"
-    },
-    {
-      "file": "dialogs.js", "fn": "submitSpeedOverride", "ep": "/api/speed/override",
-      "scope": "none", "why": "全局限速配置: 非目标级"
-    },
-    {
-      "file": "dialogs.js", "fn": "toggleAltSpeed", "ep": "/api/speed/alt/toggle",
-      "scope": "none", "why": "全局限速配置"
-    },
-    {
-      "file": "dialogs.js", "fn": "submitAltLimits", "ep": "/api/speed/alt",
-      "scope": "none", "why": "全局限速配置"
     },
     {
       "file": "hr_status.js", "fn": "hrsConfirmEmpty", "ep": "/api/hr/confirm-empty",

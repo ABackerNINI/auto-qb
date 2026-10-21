@@ -261,96 +261,50 @@
 
   <!-- U2 变体格渲染器(计划 26-10-12-0527, 用户表三变体): 桥 Teleport 进变体外壳锚的行体。
        行对象由变体注册条目的 rowsFn 预装配(显示值 + _raw 排序原值 + 修饰字段), 渲染器只做声明式
-       呈现 —— 判据(吸血启发式/五桶/内网段/渐进字段)零复制, 单点在变体文件。多根片段: 单元格必须
-       是 .group-row 的直接子元素。渐进 files 列(07/08)在列定义 omitEmpty —— 无任何对端携带时
-       整列省略(columns.js _colsOmitEmpty), 本分支只在列在场时被走到。 -->
-  <script type="text/x-template" id="tpl-aq-dt07-cells">
+       呈现 —— 判据(吸血启发式/五桶/内网段/FLAG_META)零复制, 单点在核心层 reg.peers。多根片段:
+       单元格必须是 .group-row 的直接子元素。
+       !issue 26-10-20-2231(三族重复收敛): dt07/dt08/dt09 三份值格模板合一为**一份**
+       tpl-aq-dt-peer-cells —— dt07 与 dt08 原本逐字同(仅 CSS 类名前缀), dt09 密度雷达三处
+       特化(upspeed 占用条 / dlspeed 平铺 / 列模型无 files)。差异由两个 prop 表达:
+         · pfx: CSS 类名前缀("dt07"/"dt08"/"dt09") —— 类名**渲染结果与旧逐字同**(三皮肤 CSS
+           与 _scan_ui_diff_registry 零触碰), 故静态 class 一律改 :class 计算, 值不变;
+         · occ: 密度雷达特化(仅 dt09 true) —— upspeed 出占用条 + 合计比重 title, dlspeed
+           平铺(z 类落 div 不上 b)。
+       价值不在省行数: 加一个 peer 列只改这一处 —— 旧形态漏改一处 = 该变体该列空白且无任何
+       报错; skins 守阵按三变体列键并集盯死本模板(见 test_webui_static_skins ⑨)。
+       files 列: 07/08 列模型常驻(渲染器对空值出 "—" 占位), dt09 列模型无 files ⇒ 本分支
+       对 dt09 是死分支(无害; 真给 dt09 加 files 列时它自动获得同款单元格)。 -->
+  <script type="text/x-template" id="tpl-aq-dt-peer-cells">
     <template v-for="col in cols" :key="col.key">
-      <div v-if="col.key === 'addr'" class="dt07-addr" :title="p.addrTitle">
-        <span v-if="p.cc" class="dt07-cc" :class="{ lan: p.lan }" :title="p.ccTitle">{{ p.cc }}</span>
-        <span class="dt07-ip">{{ p.addr }}</span>
+      <div v-if="col.key === 'addr'" :class="pfx + '-addr'" :title="p.addrTitle">
+        <span v-if="p.cc" :class="[pfx + '-cc', { lan: p.lan }]" :title="p.ccTitle">{{ p.cc }}</span>
+        <span :class="pfx + '-ip'">{{ p.addr }}</span>
       </div>
-      <div v-else-if="col.key === 'client'" class="dt07-client" :title="p.client">
+      <div v-else-if="col.key === 'client'" :class="pfx + '-client'" :title="p.client">
         <span class="cname">{{ p.client }}</span>
-        <span v-if="p.bad" class="dt07-badb" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>
+        <span v-if="p.bad" :class="pfx + '-badb'" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>
       </div>
-      <div v-else-if="col.key === 'flags'" class="dt07-flags">
-        <span v-if="!p.flagToks.length" class="dt07-none" title="flags 缺失">—</span>
-        <span v-for="tk in p.flagToks" :key="tk.ch" class="dt07-fl" :class="tk.cls" :title="tk.tip">{{ tk.ch }}</span>
+      <div v-else-if="col.key === 'flags'" :class="pfx + '-flags'">
+        <span v-if="!p.flagToks.length" :class="pfx + '-none'" title="flags 缺失">—</span>
+        <span v-for="tk in p.flagToks" :key="tk.ch" :class="[pfx + '-fl', tk.cls]" :title="tk.tip">{{ tk.ch }}</span>
       </div>
-      <div v-else-if="col.key === 'files'" class="dt07-files" :class="{ dimc: !p.files }"
+      <div v-else-if="col.key === 'files'" :class="[pfx + '-files', { dimc: !p.files }]"
            :title="p.files ? '对端正在获取的文件(qB files 字段)' : ''">{{ p.files || "—" }}</div>
-      <div v-else-if="col.key === 'progress'" class="dt07-prog" :class="{ zero: !p._raw.progress }" :title="'对端自身进度 ' + p.progress + '%'">
+      <div v-else-if="col.key === 'progress'" :class="[pfx + '-prog', { zero: !p._raw.progress }]" :title="'对端自身进度 ' + p.progress + '%'">
         <span class="bar"><i :style="{ width: p.progress + '%' }"></i></span><em>{{ p.progress }}%</em>
       </div>
-      <div v-else-if="col.key === 'upspeed'" class="dt07-spd u" title="我方发给该对端的即时速度(qB upspeed)">
+      <div v-else-if="col.key === 'upspeed'" :class="pfx + (occ ? '-occ' : '-spd u')"
+           :title="occ ? ('我方发给该对端的即时速度(qB upspeed); 条长 = 占当前上传合计(' + p.upTotalTxt + ')的比重') : '我方发给该对端的即时速度(qB upspeed)'">
+        <span v-if="occ && p.occBar" class="track"><i :style="{ width: p.occBar + '%' }"></i></span>
         <b :class="{ z: !p._raw.upspeed }">{{ p.upspeed }}</b>
       </div>
-      <div v-else-if="col.key === 'dlspeed'" class="dt07-spd d" title="我方从该对端收到的即时速度(qB dlspeed)">
-        <b :class="{ z: !p._raw.dlspeed }">{{ p.dlspeed }}</b>
+      <div v-else-if="col.key === 'dlspeed'" :class="occ ? [pfx + '-dn', { z: !p._raw.dlspeed }] : (pfx + '-spd d')"
+           :title="'我方从该对端收到的即时速度(qB dlspeed)'">
+        <b v-if="!occ" :class="{ z: !p._raw.dlspeed }">{{ p.dlspeed }}</b>
+        <template v-else>{{ p.dlspeed }}</template>
       </div>
-      <div v-else-if="col.key === 'uploaded'" class="dt07-amt" :class="{ z: !p._raw.uploaded }" title="本次会话我方已发给该对端的累计(qB uploaded)">{{ p.uploaded }}</div>
-      <div v-else-if="col.key === 'downloaded'" class="dt07-amt" :class="{ z: !p._raw.downloaded }" title="本次会话我方已从该对端收到的累计(qB downloaded)">{{ p.downloaded }}</div>
-      <div v-else-if="col.key === 'relevance'" class="dt07-rel" title="relevance: 该对端拥有我缺失数据的比例">{{ p.relevance }}</div>
-    </template>
-  </script>
-  <!-- dt08 五区分组: 与 07 同判据同款单元格(dt08-* 类族), 差异只在版式(组体由外壳承载) -->
-  <script type="text/x-template" id="tpl-aq-dt08-cells">
-    <template v-for="col in cols" :key="col.key">
-      <div v-if="col.key === 'addr'" class="dt08-addr" :title="p.addrTitle">
-        <span v-if="p.cc" class="dt08-cc" :class="{ lan: p.lan }" :title="p.ccTitle">{{ p.cc }}</span>
-        <span class="dt08-ip">{{ p.addr }}</span>
-      </div>
-      <div v-else-if="col.key === 'client'" class="dt08-client" :title="p.client">
-        <span class="cname">{{ p.client }}</span>
-        <span v-if="p.bad" class="dt08-badb" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>
-      </div>
-      <div v-else-if="col.key === 'flags'" class="dt08-flags">
-        <span v-if="!p.flagToks.length" class="dt08-none" title="flags 缺失">—</span>
-        <span v-for="tk in p.flagToks" :key="tk.ch" class="dt08-fl" :class="tk.cls" :title="tk.tip">{{ tk.ch }}</span>
-      </div>
-      <div v-else-if="col.key === 'files'" class="dt08-files" :class="{ dimc: !p.files }"
-           :title="p.files ? '对端正在获取的文件(qB files 字段)' : ''">{{ p.files || "—" }}</div>
-      <div v-else-if="col.key === 'progress'" class="dt08-prog" :class="{ zero: !p._raw.progress }" :title="'对端自身进度 ' + p.progress + '%'">
-        <span class="bar"><i :style="{ width: p.progress + '%' }"></i></span><em>{{ p.progress }}%</em>
-      </div>
-      <div v-else-if="col.key === 'upspeed'" class="dt08-spd u" title="我方发给该对端的即时速度(qB upspeed)">
-        <b :class="{ z: !p._raw.upspeed }">{{ p.upspeed }}</b>
-      </div>
-      <div v-else-if="col.key === 'dlspeed'" class="dt08-spd d" title="我方从该对端收到的即时速度(qB dlspeed)">
-        <b :class="{ z: !p._raw.dlspeed }">{{ p.dlspeed }}</b>
-      </div>
-      <div v-else-if="col.key === 'uploaded'" class="dt08-amt" :class="{ z: !p._raw.uploaded }" title="本次会话我方已发给该对端的累计(qB uploaded)">{{ p.uploaded }}</div>
-      <div v-else-if="col.key === 'downloaded'" class="dt08-amt" :class="{ z: !p._raw.downloaded }" title="本次会话我方已从该对端收到的累计(qB downloaded)">{{ p.downloaded }}</div>
-      <div v-else-if="col.key === 'relevance'" class="dt08-rel" title="relevance: 该对端拥有我缺失数据的比例">{{ p.relevance }}</div>
-    </template>
-  </script>
-  <!-- dt09 密度雷达: 「↑ 占用」列 = upspeed 语义(条长 = 占当前上传合计比重, 排序键不变) -->
-  <script type="text/x-template" id="tpl-aq-dt09-cells">
-    <template v-for="col in cols" :key="col.key">
-      <div v-if="col.key === 'addr'" class="dt09-addr" :title="p.addrTitle">
-        <span v-if="p.cc" class="dt09-cc" :class="{ lan: p.lan }" :title="p.ccTitle">{{ p.cc }}</span>
-        <span class="dt09-ip">{{ p.addr }}</span>
-      </div>
-      <div v-else-if="col.key === 'client'" class="dt09-client" :title="p.client">
-        <span class="cname">{{ p.client }}</span>
-        <span v-if="p.bad" class="dt09-badb" title="吸血嫌疑 = client 名含 XL/迅雷 启发式, 纯展示">吸血</span>
-      </div>
-      <div v-else-if="col.key === 'flags'" class="dt09-flags">
-        <span v-if="!p.flagToks.length" class="dt09-none" title="flags 缺失">—</span>
-        <span v-for="tk in p.flagToks" :key="tk.ch" class="dt09-fl" :class="tk.cls" :title="tk.tip">{{ tk.ch }}</span>
-      </div>
-      <div v-else-if="col.key === 'progress'" class="dt09-prog" :class="{ zero: !p._raw.progress }" :title="'对端自身进度 ' + p.progress + '%'">
-        <span class="bar"><i :style="{ width: p.progress + '%' }"></i></span><em>{{ p.progress }}%</em>
-      </div>
-      <div v-else-if="col.key === 'upspeed'" class="dt09-occ"
-           :title="'我方发给该对端的即时速度(qB upspeed); 条长 = 占当前上传合计(' + p.upTotalTxt + ')的比重'">
-        <span v-if="p.occBar" class="track"><i :style="{ width: p.occBar + '%' }"></i></span>
-        <b :class="{ z: !p._raw.upspeed }">{{ p.upspeed }}</b>
-      </div>
-      <div v-else-if="col.key === 'dlspeed'" class="dt09-dn" :class="{ z: !p._raw.dlspeed }" title="我方从该对端收到的即时速度(qB dlspeed)">{{ p.dlspeed }}</div>
-      <div v-else-if="col.key === 'uploaded'" class="dt09-amt" :class="{ z: !p._raw.uploaded }" title="本次会话我方已发给该对端的累计(qB uploaded)">{{ p.uploaded }}</div>
-      <div v-else-if="col.key === 'downloaded'" class="dt09-amt" :class="{ z: !p._raw.downloaded }" title="本次会话我方已从该对端收到的累计(qB downloaded)">{{ p.downloaded }}</div>
-      <div v-else-if="col.key === 'relevance'" class="dt09-rel" title="relevance: 该对端拥有我缺失数据的比例">{{ p.relevance }}</div>
+      <div v-else-if="col.key === 'uploaded'" :class="[pfx + '-amt', { z: !p._raw.uploaded }]" title="本次会话我方已发给该对端的累计(qB uploaded)">{{ p.uploaded }}</div>
+      <div v-else-if="col.key === 'downloaded'" :class="[pfx + '-amt', { z: !p._raw.downloaded }]" title="本次会话我方已从该对端收到的累计(qB downloaded)">{{ p.downloaded }}</div>
+      <div v-else-if="col.key === 'relevance'" :class="pfx + '-rel'" title="relevance: 该对端拥有我缺失数据的比例">{{ p.relevance }}</div>
     </template>
   </script>

@@ -9,6 +9,8 @@
  *
  * 版式与控件外观见 shared/console_hub.css(样张 05-console-hub 的原样复刻)。
  * 分组文案取自样张第 9 节「文案改写对照」—— 说它做了什么, 不说它叫什么。
+ * busy+try+反馈+finally 骨架不走本文件: tm 面板族与一键导入改接 dialogs.js 的
+ * _panelLoad 单点(issue 26-10-20-2231), 经同一根实例混入调用。
  */
 
 /* 分区文案: 每条回答「它管什么 / 现在什么状态」; 缺省回退 schema 的 label / help */
@@ -970,10 +972,10 @@ window.CONFIG_HUB = {
     },
     async hubImportSites() {
       /* 一键导入缺失站点(对齐 CLI --export-yaml --only-missing): 后端只读扫描,
-       * 条目填入编辑器待审 —— 示例值不未经审阅生效, 保存走既有 cfgSave 路径 */
+       * 条目填入编辑器待审 —— 示例值不未经审阅生效, 保存走既有 cfgSave 路径。
+       * busy 骨架走 dialogs.js::_panelLoad(toast 通道 errToast: 恒提示不看 auth)。 */
       if (this.hub.importing) return;
-      this.hub.importing = true;
-      try {
+      await this._panelLoad(this.hub, async () => {
         const res = await this.api("/api/sites/missing");
         const sites = res.sites || [];
         if (!sites.length) {
@@ -1001,11 +1003,7 @@ window.CONFIG_HUB = {
         }
         this.cfgSetPath([...this.cfgConfigPath(), "trackers"], trackers);
         this.toast(`已填入 ${added} 个站点, 核对后点「保存」生效`, "ok", 6000);
-      } catch (e) {
-        this.toast("导入失败: " + (e.message || "未知错误"), "error", 9000);
-      } finally {
-        this.hub.importing = false;
-      }
+      }, { loading: "importing", errToast: { prefix: "导入失败", fallback: "未知错误", ms: 9000 } });
     },
     async hubAddRuleGroup() {
       return this.hubAddEntity({
@@ -1120,12 +1118,12 @@ window.CONFIG_HUB = {
       return { ready: "ok", launching: "warn", launch_failed: "warn", not_running: "off", not_installed: "off" }[this.tm.state] || "";
     },
     async tmLoad() {
-      this.tm.loading = true;
+      // 重拉即作废面板上残留的动作回执(保存/自启/关闭工具) —— _panelLoad 只预清自己的错误槽
       this.tm.saveMsg = "";
       this.tm.saveErr = "";
       this.tm.autoMsg = "";
       this.tm.autoErr = "";
-      try {
+      await this._panelLoad(this.tm, async () => {
         const r = await this.api("/api/traffic/monitor/status");
         this.tm.enabled = !!r.enabled;
         this.tm.state = r.state || "not_running";
@@ -1144,15 +1142,17 @@ window.CONFIG_HUB = {
         if (this.tm.reachable && r.status && r.status.config) {
           this.tm.form = this.tmNormalizeForm(r.status.config);
         }
-      } catch (e) {
-        this.tm.reachable = false;
-        this.tm.state = "not_running";
-        this.tm.status = null;
-        this.tm.error = (e && e.message) || "读取失败";
-      } finally {
-        this.tm.loading = false;
-        this.tm.loaded = true;
-      }
+      }, {
+        loading: "loading", err: "error", errFallback: "读取失败",
+        authGated: false,  // 状态轮询的失败(含 auth)都要落「不可达」上屏, 不静默
+        keepErr: true,     // 不预清状态槽: tm.error 由响应/失败分支落值(与 dialogs 四块面板不同)
+        onErr: () => {     // 失败态装配(轮询口径: 拿不到 = 未运行)
+          this.tm.reachable = false;
+          this.tm.state = "not_running";
+          this.tm.status = null;
+        },
+        onFinally: () => { this.tm.loaded = true; },
+      });
     },
     /* 「立即拉起/重试」: 促订阅线程立刻重跑并忽略失败退避; 之后短轮询 status 观察 launching -> ready/launch_failed */
     async tmRelaunch() {
@@ -1315,41 +1315,29 @@ window.CONFIG_HUB = {
       };
     },
     async tmSave() {
-      this.tm.saving = true;
-      this.tm.saveMsg = "";
-      this.tm.saveErr = "";
-      try {
+      await this._panelLoad(this.tm, async () => {
         const r = await this.api("/api/traffic/monitor/config", {
           method: "PUT",
           body: JSON.stringify({ config: this.tmBuildPayload() }),
         });
         if (r && r.config) this.tm.form = this.tmNormalizeForm(r.config);
         this.tm.saveMsg = "已保存（工具侧已热重载）";
-      } catch (e) {
-        this.tm.saveErr = (e && e.message) || "保存失败";
-      } finally {
-        this.tm.saving = false;
-      }
+      }, { loading: "saving", err: "saveErr", errFallback: "保存失败", authGated: false });
     },
     /* 自启开关: 读指针 autostart_registered, 拨动只发 install/uninstall; 失败回滚勾选态 */
     async tmAutostart(action) {
       const desired = action === "install";
-      this.tm.autoBusy = true;
-      this.tm.autoMsg = "";
-      this.tm.autoErr = "";
-      try {
+      await this._panelLoad(this.tm, async () => {
         const r = await this.api("/api/traffic/monitor/autostart", {
           method: "POST",
           body: JSON.stringify({ action: action }),
         });
         this.tm.autoMsg = (r && r.message) || "已处理";
         this.tm.autostartRegistered = desired;
-      } catch (e) {
-        this.tm.autoErr = (e && e.message) || "操作失败";
-        this.tm.autostartRegistered = !desired;
-      } finally {
-        this.tm.autoBusy = false;
-      }
+      }, {
+        loading: "autoBusy", err: "autoErr", errFallback: "操作失败", authGated: false,
+        onErr: () => { this.tm.autostartRegistered = !desired; },  // 失败回滚勾选态(与指针一致)
+      });
     },
     tmFmtBytes(n) {
       return this.fmtSize(n);
@@ -1364,19 +1352,15 @@ window.CONFIG_HUB = {
       this.tmPickLoad("");
     },
     async tmPickLoad(path) {
-      this.tm.pick.loading = true;
-      this.tm.pick.error = "";
-      try {
+      await this._panelLoad(this.tm.pick, async () => {
         const r = await this.api("/api/fs/dirs?path=" + encodeURIComponent(path || ""));
         this.tm.pick.path = r.path || "";
         this.tm.pick.parent = r.parent || "";
         this.tm.pick.dirs = r.dirs || [];
-      } catch (e) {
-        this.tm.pick.error = (e && e.message) || "目录读取失败";
-        this.tm.pick.dirs = [];
-      } finally {
-        this.tm.pick.loading = false;
-      }
+      }, {
+        loading: "loading", err: "error", errFallback: "目录读取失败", authGated: false,
+        onErr: () => { this.tm.pick.dirs = []; },
+      });
     },
     tmPickEnter(d) {
       this.tmPickLoad(d.path);

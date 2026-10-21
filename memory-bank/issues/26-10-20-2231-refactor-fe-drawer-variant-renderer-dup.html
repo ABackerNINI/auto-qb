@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/tasks/26-10-21-webui-drawer-variant-renderer-dup.md, memory-bank/testing/baselines/26-10-22-0039-webui-drawer-variant-renderer-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="抽屉变体渲染器族: 三态空帧骨架 12 份 + peers 判据四件 3 份 + dt07/08 逐字同">
 <meta name="issue-summary" content="变体层三态空帧骨架 12 份、peers 判据(吸血/分桶/内网)3 份逐字同、dt07 与 dt08 仅 CSS 前缀不同">
 <title>抽屉变体渲染器族: 三态空帧骨架 12 份 + peers 判据四件 3 份 + dt07/08 逐字同 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-drawer-variant-renderer-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,6 +104,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-21 23:45 — 用户显式指派「认领并修复」，状态 <strong>In Progress</strong>（开工同步后复验三族锚点在位，唯 12 号件换帧点实测 5 处比入池记录多 1 —— 以同步后代码为准）</li>
+      <li>2026-10-22 00:41 — 修复完成，状态 <strong>Done</strong>（三族收敛落定，行为零变化：①三态空帧入 <code>drawer_templates.js::HELPERS.emptyFrame</code> 单点，27 块 → 9 件桥变体(04-12)各一处接线；<b>general 三件刻意不收编</b>（无三态、仅裸空态且形状不同，12 号件第 5 处换帧是 treemap 的 <code>mapEl</code> 独立换帧面，非本族）；②peers 判据实为<b>五件</b>（四件 + bucketOf 依赖的 flagTokens）逐字同，提为 <code>reg.peers</code> 命名空间（<code>FLAG_META</code>/<code>flagTokens</code>/<code>isBad</code>/<code>bucketOf</code>/<code>isLanIp</code>），07/08/09 删本地副本改单点消费；③dt07/08/09 合一为单模板 <code>tpl-aq-dt-peer-cells</code>，接 <code>pfx</code>/<code>occ</code> 两 prop 且<b>不改 CSS 类名</b>，dt09 特化实为三处（upspeed 占用条/dlspeed 平铺/files 列）全由 <code>occ</code> 表达，渲染结果与旧逐字同 —— 三皮肤 CSS 与 <code>_scan_ui_diff_registry</code> 零触碰；验证 test.full 3983 passed/10 skipped/99%、e2e 全量 336 passed/10 skipped 逐位持平，红验三支命中即红；档案 <a href="../tasks/26-10-21-webui-drawer-variant-renderer-dup.md">tasks/26-10-21-webui-drawer-variant-renderer-dup.md</a>，基线切片见 kb.baseline）</li>
     </ul>
   </section>
 

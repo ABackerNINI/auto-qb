@@ -268,22 +268,12 @@
       if (ts.length && !loading && !err) H.paintHtml(host, ".dt06-toolbar", toolbarHtml(ctx, ts, d));
       return;
     }
-    if (loading && !ts.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
-      return;
-    }
-    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有", 重试口径真实(本页签 5s 轮询会自动重拉) */
-    if (err && !ts.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt06-empty"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">Tracker 列表加载失败, 将在下次自动刷新时重试</span></div>`));
-      return;
-    }
-    if (!ts.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt06-empty"><span>暂无 tracker</span></div>`));
-      return;
-    }
+    /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
+     * 错态先于空态(P3-5: 失败且无数据不是"真的没有", 重试口径真实 —— 本页签 5s 轮询会自动重拉) */
+    if (H.emptyFrame(host, {
+      cls: "dt06-empty", has: !!ts.length, loading: !!loading, err: err,
+      errText: "Tracker 列表加载失败, 将在下次自动刷新时重试", emptyText: "暂无 tracker",
+    })) return;
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位, 表壳/行由桥 Teleport 进锚 */
     const html = T`<div class="dt06-wrap">
       <div class="dt06-toolbar">${R(toolbarHtml(ctx, ts, d))}</div>

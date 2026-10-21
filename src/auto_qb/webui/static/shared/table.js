@@ -183,32 +183,43 @@ window.AQ_DT_BRIDGE_COMPONENT = {
  * 修饰字段(flagToks 徽章数组 / up·down 微条宽度 / bad·lan·hand 行修饰) —— 渲染器只做
  * 声明式呈现, 判据零复制。行级修饰类(bad/lan/hand)不在这里: 走描述符 rowCls 绑 .group-row。
  *   dt07 四卡仪表 → <aq-dt07-cells>   dt08 五区分组 → <aq-dt08-cells>   dt09 密度雷达 → <aq-dt09-cells>
- * 模板在 tpl/xtpl-cells.html 末尾(同为 body 注入的 x-template, 无需 manifest 行)。 */
+ * !issue 26-10-20-2231(三族重复收敛): 三变体值格模板合一为 tpl-aq-dt-peer-cells —— dt07 与
+ * dt08 原本逐字同(仅 CSS 类名前缀), dt09 密度雷达三处特化(upspeed 占用条 / dlspeed 平铺 /
+ * 列模型无 files)。差异经 pfx(类名前缀, 渲染结果与旧逐字同, 不撞三皮肤 CSS) + occ(占用条)
+ * 两个 prop 表达; 三组件**同名不变**(动态名 'aq-' + rowModel + '-cells' 接线不动), 各自
+ * 带默认 prop —— 加一个 peer 列只改模板一处, 漏一处 = 三变体该列齐空白(守阵盯并集)。
+ * 模板在 tpl/xtpl-cells.html(同为 body 注入的 x-template, 无需 manifest 行)。 */
 window.AQ_DT07_CELLS_COMPONENT = {
   name: "aq-dt07-cells",
   props: {
     cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerPeerV07"))
     p: { type: Object, required: true },         // dt07 行(rowsFn 装配)
+    pfx: { type: String, default: "dt07" },      // CSS 类名前缀(渲染结果与旧逐字同)
+    occ: { type: Boolean, default: false },      // 密度雷达特化(占用条/dlspeed 平铺); 四卡仪表 = false
   },
-  template: "#tpl-aq-dt07-cells",
+  template: "#tpl-aq-dt-peer-cells",
 };
 
 window.AQ_DT08_CELLS_COMPONENT = {
   name: "aq-dt08-cells",
   props: {
-    cols: { type: Array, required: true },
-    p: { type: Object, required: true },
+    cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerPeerV08"))
+    p: { type: Object, required: true },         // dt08 行(rowsFn 装配)
+    pfx: { type: String, default: "dt08" },
+    occ: { type: Boolean, default: false },      // 五区分组 = false
   },
-  template: "#tpl-aq-dt08-cells",
+  template: "#tpl-aq-dt-peer-cells",
 };
 
 window.AQ_DT09_CELLS_COMPONENT = {
   name: "aq-dt09-cells",
   props: {
-    cols: { type: Array, required: true },
-    p: { type: Object, required: true },
+    cols: { type: Array, required: true },       // 可见列(visibleColsOf("drawerPeerV09"))
+    p: { type: Object, required: true },         // dt09 行(rowsFn 装配)
+    pfx: { type: String, default: "dt09" },
+    occ: { type: Boolean, default: true },       // 密度雷达: upspeed 出占用条, dlspeed 平铺
   },
-  template: "#tpl-aq-dt09-cells",
+  template: "#tpl-aq-dt-peer-cells",
 };
 
 /* ---------------- U3 变体格渲染器(计划 26-10-12-0527, Tracker 04/05/06) ----------------

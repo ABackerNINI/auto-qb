@@ -376,22 +376,12 @@
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     const hasAv = files.some((f) => f && f.availability !== undefined && f.availability !== null);
-    if (loading && !files.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt10-load"><svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span></div>`));
-      return;
-    }
-    /* 错误态先于空态(P3-5): 失败且无数据不是"真的没有"; content 页签无轮询, 文案不承诺自动重拉 */
-    if (err && !files.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt10-load"><svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg><span title="${err}">文件列表加载失败, 数据不可用</span></div>`));
-      return;
-    }
-    if (!files.length) {
-      host.replaceChildren(document.createRange().createContextualFragment(
-        T`<div class="dt10-load"><span>无文件列表</span></div>`));
-      return;
-    }
+    /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
+     * 错态先于空态(P3-5: 失败且无数据不是"真的没有"); content 页签无轮询, 文案不承诺自动重拉 */
+    if (H.emptyFrame(host, {
+      cls: "dt10-load", has: !!files.length, loading: !!loading, err: err,
+      errText: "文件列表加载失败, 数据不可用", emptyText: "无文件列表",
+    })) return;
     const tree = buildTree(files);
     const sel = findNode(tree, ui.selPath);
     const cnt = { all: tree.files };

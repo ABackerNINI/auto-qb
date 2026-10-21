@@ -277,6 +277,30 @@
       var cur = vm && vm.dtBridge ? vm.dtBridge[tableId] : null;
       if (cur && cur.on) vm.dtBridge[tableId] = { gen: cur.gen + 1, on: true };
     },
+    /* ---------------- 三态空帧(issue 26-10-20-2231) ----------------
+     * 04-12 九件桥变体各手抄一份「加载态(沙漏)/ 错态(警告 + err 原文 title)/ 空态
+     * (纯文案) + 整帧替换」—— 27 块除槽类名与文案外逐字同(入池报告 R21-B)。general
+     * 三件的裸空态(无槽无文案 + lastSig 复位记账)形状不同, 刻意不入本 helper。
+     * 调用方已从 ctx 取好 loading/err 与数据长度; 本 helper 只认开关: has = 有数据
+     * (直接返 false, 调用方继续走整帧); 否则按 loading → err → empty 优先级渲对应
+     * 空帧并返 true(调用方直接 return) —— 与原三块 if 的判定序和 !length 合并语义
+     * 逐位对齐。err 进 title 经 esc(与 dtHtml 插值同口径 —— API 错误文案可能带引号),
+     * 静态文案同样过 esc(与 KIT 同口径)。 */
+    emptyFrame: function (host, o) {
+      if (o.has) return false; /* 有数据: 不是空帧, 调用方继续整帧 */
+      var inner;
+      if (o.loading) {
+        inner = '<svg class="ico" viewBox="0 0 16 16"><use href="#i-hourglass"></use></svg><span>正在加载…</span>';
+      } else if (o.err) {
+        inner = '<svg class="ico" viewBox="0 0 16 16"><use href="#i-warn"></use></svg>' +
+          '<span title="' + esc(o.err) + '">' + esc(o.errText) + "</span>";
+      } else {
+        inner = "<span>" + esc(o.emptyText) + "</span>";
+      }
+      host.replaceChildren(document.createRange().createContextualFragment(
+        '<div class="' + o.cls + '">' + inner + "</div>"));
+      return true;
+    },
   };
 
   /* ---------------- 部件工具箱(reg.kit, R2 S1 计划 26-10-09-2219) ----------------
@@ -307,6 +331,55 @@
     },
   };
 
+  /* ---------------- peers 判据共用模块(reg.peers, issue 26-10-20-2231) ----------------
+   * 07/08/09 三件 peers 变体各手抄一份的判据簇: FLAG_META(flags 徽章表) / flagTokens
+   * (bucketOf 的依赖) / isBad(吸血启发式) / bucketOf(flags 方向分桶) / isLanIp(内网
+   * 判定) —— 程序化 diff 三份逐字同(入池报告 R21-C)。漂移代价: 判据只改一份 ⇒ 同一
+   * peer 在三个版式下分桶不同(吸血名单/内网口径各说各话)。提为单点, 三变体经同一
+   * reg 消费。变体私有不入本模块: BUCKETS(方向桶配色, 07 独有) / FILTERS(筛选档,
+   * 07 比 09 多 hand 档) / flagHas·clientName·countsOf(07 独有封装)。 */
+  var PEERS = {
+    /* qB peer_info 标志位逐项解释(设计稿同款; 色映射按 S1 白名单就近取) */
+    FLAG_META: {
+      D: { c: "fl-d", t: "D — 我方正在从该 peer 下载数据" },
+      U: { c: "fl-u", t: "U — 我方正在向该 peer 上传数据" },
+      u: { c: "fl-uo", t: "u — 对方有意向我下载, 但我方已将其限流(choked)" },
+      K: { c: "fl-k", t: "K — 完整副本(对方是做种者)" },
+      E: { c: "fl-e", t: "E — 加密连接" },
+      H: { c: "fl-h", t: "H — 该 peer 经 DHT 引入" },
+      X: { c: "fl-x", t: "X — 该 peer 经 PEX(对端交换)引入" },
+      I: { c: "fl-i", t: "I — 对方主动连入(incoming)" },
+      P: { c: "fl-p", t: "P — uTP 传输" },
+      "?": { c: "fl-q", t: "? — 握手未完成, 状态未知" },
+    },
+    flagTokens: function (p) {
+      return String(p.flags || "").split(/\s+/).filter(Boolean);
+    },
+    /* 吸血嫌疑启发式: client 名含 "XL/迅雷", 纯展示 */
+    isBad: function (p) {
+      var c = String(p.client || "");
+      return c.indexOf("迅雷") >= 0 || /(^|[^A-Za-z])XL([^A-Za-z]|$)/.test(c);
+    },
+    /* 方向五桶(与变体 BUCKETS 展示配置同键): U=我方向其上传 D=对端向我供数
+     * u=被我方限流 ?/空=握手未完成, 其余(含 K 完整副本)=闲置 */
+    bucketOf: function (p) {
+      var f = PEERS.flagTokens(p);
+      if (!f.length || f.indexOf("?") >= 0) return "hand";
+      if (f.indexOf("u") >= 0) return "choke";
+      if (f.indexOf("U") >= 0) return "take";
+      if (f.indexOf("D") >= 0) return "feed";
+      return "idle";
+    },
+    isLanIp: function (ip) {
+      var s = String(ip || "");
+      if (s.indexOf(":") >= 0) return /^fe80:/i.test(s) || s === "::1";
+      var m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)/.exec(s);
+      if (!m) return false;
+      var a = +m[1], b = +m[2];
+      return a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31);
+    },
+  };
+
   /* ---------------- 注册表(变体文件直接消费的单例, 不走 app.mixin) ----------------
    * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
    * 否则接线守阵会把它当漏注入的 mixin。 */
@@ -321,6 +394,7 @@
     dtRaw: dtRaw,
     helpers: HELPERS,
     kit: KIT,
+    peers: PEERS,
     /* 变体自注册入口: (id, tab) 唯一, tab 必须是五页签之一; id 只收 [A-Za-z0-9_-]
      * (要进 data-dt 属性与 CSS 选择器)。非法/重复 fail-fast 抛错 —— 变体半残比静默好。 */
     register: function (entry) {
