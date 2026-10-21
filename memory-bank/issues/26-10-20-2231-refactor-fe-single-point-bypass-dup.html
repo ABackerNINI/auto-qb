@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/tasks/26-10-22-webui-single-point-bypass-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端单点已存在但被绕过 7 族(cfgBool / hubKey / directionKey / Bearer / KiB / 单位梯 / hrGroupTitle)">
 <meta name="issue-summary" content="每族都有一个已存在的单点函数, 调用侧却内联重写一遍 —— 单点存在而无强制力">
 <title>前端单点已存在但被绕过 7 族(cfgBool / hubKey / directionKey / Bearer / KiB / 单位梯 / hrGroupTitle) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-single-point-bypass-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -102,8 +102,25 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法</h2>
+    <p>7 族全部改调<b>既有单点</b>(机械改动, 无结构风险), 每个单点处补一行「禁止内联重写」注释(收敛 issue 编号 + 台账号):</p>
+    <ol>
+      <li><b>cfgBool 族</b>(R20-C-06): <code>config_editor.js</code> 提 <code>cfgTruthy(v)</code> 纯函数单点(<code>cfgBool</code> 转调), <code>config_rules.js::cfgSpecBool</code> / <code>config_hub.js::hrSiteEnabled</code> / <code>hubReadout</code> hr_check 分支三处内联改调 <code>this.cfgTruthy</code>。</li>
+      <li><b>hubKey 族</b>(R20-C-18): <code>config_rules.js</code> 的 <code>cfgRuleMetaOpen/Toggle</code> 两处 <code>cfgRulePath(...).join(".")</code> 改调 <code>this.hubKey</code>; <b>连带发现并合并第二份单点</b> <code>config_editor.js::cfgPathKey</code>(与 <code>hubKey</code> 逐字同构 —— 两份单点比内联更隐蔽), 现转调 <code>hubKey</code>。</li>
+      <li><b>directionKey 族</b>(R20-C-10): <code>cfgCurvePointAdd</code> 内联三元改调 <code>this.cfgCurveDirectionKey(direction)</code>。</li>
+      <li><b>Bearer 族</b>(R20-F-04): <code>auth.js</code> 提顶层函数 <code>aqbAuthHeaders(token)</code>(无 token 不发头; 用顶层函数而非 mixin 方法 —— <code>shortcuts.js</code> 的 <code>AQB_KEYS_ADAPTER</code> 不是 mixin 单例拿不到 this, 与 <code>aqbFetch</code> 同款裸调形态), <code>_request</code> / shortcuts 密钥读写 ×2 / commands 导出下载共 4 处改调。</li>
+      <li><b>KiB↔bytes 族</b>(R20-F-05): <code>format.js</code> 提 <code>kibToBytes</code>/<code>bytesToKib</code> 两单点, <code>fmtLimit</code> + <code>drawer.js</code> 限速对话框三处(单选预填 / 单选提交 / 批量提交)内联乘除 1024 改调。</li>
+      <li><b>单位梯族</b>(R20-C-09 + R23-B-04): <code>format.js</code> 提 <code>AQB_UNIT_LADDER</code> 数据表 + <code>_fmtLadder(v, kind, digits, roundFallback, top)</code> 参数化单点 —— 表格(toFixed(2) + 原样兜底 + 梯顶 PiB)与曲线图(toFixed(1) + 取整兜底 + 梯顶 TiB)的<b>精度分歧是设计</b>, 由参数各自表达, 档位数据同源; <code>config_editor.js::_fmtBytes/_fmtSpeed</code> 改调。模板侧 <code>unitOptions/unitLabel</code> 复验时发现<b>已收敛</b>为转发 <code>cfgUnitOptions/cfgUnitLabel</code>(前轮修复), 本轮仅在 <code>cfgUnitOptions</code> 补禁止另抄阶梯注释。阶梯值已核对: 两梯均纯 1024 进制(KiB/MiB/GiB/TiB), KB/1000 制仅存在于 <code>_sizeMultiplier</code>(曲线阈值解析, 刻意双支持), <b>无 KiB vs KB 口径差</b>。</li>
+      <li><b>hrGroupTitle 族</b>(R23-B-12): <code>hr.js</code> 在 <code>hrGroupTitle</code> 旁提 <code>hrEpTitle(e)</code>(保留 ep 行既有短文案 —— 与 group 行长文案的措辞分歧是现存行为, 统一属用户可见改动、不在机械收敛范围, 注释已写明), <code>xtpl-cells.html</code> ep 行四层三元改调 <code>$root.hrEpTitle(e)</code>。</li>
+    </ol>
+    <p><b>验证</b>: ① 全量 <code>commands run test.full</code> <b>3996 passed, 2 skipped</b>, 覆盖率 <b>99%</b>(TOTAL 99.28%), 见 kb.baseline; ② 真浏览器 <code>commands run dev.e2e -- e2e/views.spec.mjs e2e/multiselect-shows.spec.mjs e2e/hr-history.spec.mjs</code> <b>52 passed</b>(三皮肤; 含设置页 S7 单位控件保存回传复合串、设置-HR 在线核实、追剧集行三视图); ③ 改动文件 node <code>--check</code> 全过; ④ 内联回归 grep: 7 族惯用式(真值列表 / <code>Bearer ${token}</code> / <code>* 1024</code> / <code>/ 1024</code> / path <code>.join(".")</code> / 单位梯字面量 / HR 标题三元)在全仓 <code>shared/</code> 仅剩各单点自身定义处。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
+      <li>2026-10-22 03:30 — 修完并验证，状态 <strong>Done</strong>（7 族全部改调既有单点 + 单点处禁内联注释；连带合并 cfgPathKey 第二份单点；单位梯阶梯值核对无 KiB/KB 口径差；模板侧 unitOptions 复验发现已收敛仅补注释；全量 3996 passed / 2 skipped / 覆盖率 99%，e2e 三规格 52 passed；档案与基线切片见 doc-refs）</li>
+      <li>2026-10-22 02:42 — 用户指派认领，状态 <strong>In Progress</strong>（复验：7 族锚点全部仍复现，grep 2026-10-22 02:45）</li>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
   </section>

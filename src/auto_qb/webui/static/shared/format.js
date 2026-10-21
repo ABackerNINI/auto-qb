@@ -7,22 +7,39 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_FORMAT);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* 单位梯数据单点(收敛 issue 26-10-20-2231 / 台账 R20-C-09 + R20-F-05): 字节/速度两族的
+ * 档位与 1024 进制只此一张表。加/删档(如补 PiB 速度档)只改这里; 曲线图专用梯顶截断见
+ * _fmtLadder 的 top 参数 —— 调用侧**禁止另抄一份梯子**。 */
+const AQB_UNIT_LADDER = {
+  bytes: [["PiB", 2 ** 50], ["TiB", 2 ** 40], ["GiB", 2 ** 30], ["MiB", 2 ** 20], ["KiB", 2 ** 10]],
+  speed: [["GiB/s", 2 ** 30], ["MiB/s", 2 ** 20], ["KiB/s", 2 ** 10]],
+};
 window.AQB_FORMAT = {
   methods: {
+    /* 单位梯消费单点: digits = 小数位, roundFallback = 梯下原值是否取整, top = 梯顶档位名
+     * (曲线图轴标要短, 只到 TiB; 缺省用整张梯)。表格(toFixed(2)+原样兜底)与图轴(toFixed(1)+
+     * 取整兜底)的精度分歧是设计而非疏漏, 由参数各自表达; 档位数据仍同源。 */
+    _fmtLadder(v, kind, digits, roundFallback, top) {
+      const floor = kind === "speed" ? "B/s" : "B";
+      const ladder = AQB_UNIT_LADDER[kind];
+      let i = 0;
+      if (top) {
+        const at = ladder.findIndex((rung) => rung[0] === top);
+        if (at >= 0) i = at;  // 档位名写错(改表忘了改调用)时回落整张梯, 不静默错值
+      }
+      for (; i < ladder.length; i++) {
+        if (v >= ladder[i][1]) return (v / ladder[i][1]).toFixed(digits) + " " + ladder[i][0];
+      }
+      return (roundFallback ? Math.round(v) : v) + " " + floor;
+    },
     fmtSpeed(v) {
       if (!v) return "0 B/s";
-      for (const [unit, div] of [["GiB/s", 1073741824], ["MiB/s", 1048576], ["KiB/s", 1024]]) {
-        if (v >= div) return (v / div).toFixed(2) + " " + unit;
-      }
-      return v + " B/s";
+      return this._fmtLadder(v, "speed", 2, false);
     },
     fmtSize(v) {
       if (v === null || v === undefined) return "-";
       if (!v) return "0 B";
-      for (const [unit, div] of [["PiB", 2 ** 50], ["TiB", 2 ** 40], ["GiB", 2 ** 30], ["MiB", 2 ** 20], ["KiB", 2 ** 10]]) {
-        if (v >= div) return (v / div).toFixed(2) + " " + unit;
-      }
-      return v + " B";
+      return this._fmtLadder(v, "bytes", 2, false);
     },
     /* 0 值不显示 "0 B/s"/"0 B"(满屏零值噪声): 只留极淡占位符, 列对齐不受影响 */
     fmtSpeedOrDash(v) {
@@ -149,11 +166,20 @@ window.AQB_FORMAT = {
       if (!value || value <= 0 || !denom || denom <= 0) return "";
       return value / denom < 0.75 ? "tone-low" : "tone-high";
     },
+    /* KiB/s ↔ bytes/s 换算单点(收敛 issue 26-10-20-2231 / 台账 R20-F-05): 后端限速口径是
+     * KiB/s, qB 与显示口径是 bytes/s(后端半已登记 R06-A02)。全前端乘除 1024 只此两个函数;
+     * 调用侧**禁止内联** `* 1024` / `/ 1024` —— 后端改限速单位口径时要能一处收口。 */
+    kibToBytes(kib) {
+      return kib * 1024;
+    },
+    bytesToKib(bytes) {
+      return bytes / 1024;
+    },
     /* 限速显示: 后端单位 KiB/s(0 = 不限速, null = 该方向不管理) */
     fmtLimit(kib) {
       if (kib === null || kib === undefined) return "—";
       if (!kib) return "";  // 0 = 不限速: 不再显示字样(TBL-02); 提示/toast 文案处调用方用 || "不限速" 兜回
-      return this.fmtSpeed(kib * 1024);
+      return this.fmtSpeed(this.kibToBytes(kib));
     },
   },
 };

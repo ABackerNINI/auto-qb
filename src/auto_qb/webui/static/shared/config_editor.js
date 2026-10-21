@@ -113,6 +113,9 @@ window.CONFIG_EDITOR = {
     cfgHasUnit(kind) {
       return !!UNIT_OPTIONS[kind];
     },
+    /* 单位梯(下拉选项)**唯一来源**(收敛 issue 26-10-20-2231 / 台账 R23-B-04): hub-field 的
+     * unitOptions/unitLabel 与 traffic-card 的单位下拉都转调这两个函数, 调用侧**禁止另抄
+     * 一份阶梯** —— 双源会导致"配置页 30MiB、工具参数页 30GiB"这类同值不同单位。 */
     cfgUnitOptions(kind) {
       return UNIT_OPTIONS[kind] || [];
     },
@@ -351,10 +354,14 @@ window.CONFIG_EDITOR = {
       const v = this.cfgVal(path, fallback);
       return v === null || v === undefined ? "" : String(v);
     },
-    cfgBool(path, fallback) {
-      const v = this.cfgVal(path, fallback);
+    /* 真值判断单点(收敛 issue 26-10-20-2231 / 台账 R20-C-06): YAML BaseLoader 全字符串口径下
+     * 的高频判断。加真值词(如 "y")只改这一处; 调用侧**禁止内联重写**这份列表。 */
+    cfgTruthy(v) {
       if (typeof v === "boolean") return v;
       return ["true", "1", "yes", "on"].includes(String(v).trim().toLowerCase());
+    },
+    cfgBool(path, fallback) {
+      return this.cfgTruthy(this.cfgVal(path, fallback));
     },
     cfgSetPath(path, value) {
       let node = this.cfg.tree;
@@ -561,8 +568,10 @@ window.CONFIG_EDITOR = {
       else next[key] = true;
       this.cfg.openSections = next;
     },
+    /* path→key 与 hubKey 是同一事实(收敛 issue 26-10-20-2231 / 台账 R20-C-18): 本文件历史上
+     * 的第二份单点(比内联更隐蔽 —— 看着都像合法的单点)。现转调 hubKey, 判据只此一处。 */
     cfgPathKey(path) {
-      return Array.isArray(path) ? path.join(".") : String(path);
+      return this.hubKey(path);
     },
     /* 普通 object 段(group)展开/折叠: 三态 —— 用户点过以本地图为准; 未点过跟随 schema 声明
      * (Field.open), 两者都未定则缺省折叠 */
@@ -932,7 +941,7 @@ window.CONFIG_EDITOR = {
       return [...this.cfgCurvePeriodPath(i), direction];
     },
     cfgCurvePointAdd(i, direction) {
-      const directionKey = direction === "upload_curve" ? "upload_speed_limit" : "download_speed_limit";
+      const directionKey = this.cfgCurveDirectionKey(direction);
       const list = [...this.cfgCurvePoints(i, direction)];
       // 阈值键为动态字符串(如 10GiB); 新增档位给空阈值由用户填写
       list.push({ "": { [directionKey]: "0KiB/s" } });
@@ -944,6 +953,8 @@ window.CONFIG_EDITOR = {
       if (list.length) this.cfgSetPath(this.cfgCurvePointsPath(i, direction), list);
       else this.cfgDelPath(this.cfgCurvePointsPath(i, direction));
     },
+    /* 曲线方向→限速键映射单点(收敛 issue 26-10-20-2231 / 台账 R20-C-10): 加第三方向(如双向
+     * 曲线)只改这一处; 调用侧**禁止内联**同名三元。 */
     cfgCurveDirectionKey(direction) {
       return direction === "upload_curve" ? "upload_speed_limit" : "download_speed_limit";
     },
@@ -1142,17 +1153,14 @@ window.CONFIG_EDITOR = {
       if (!t) return null;
       return this._parseSizeValue(t.replace(/\s*\/\s*s\s*$/i, ""));
     },
+    /* 曲线图轴标签(收敛 issue 26-10-20-2231 / 台账 R20-C-09): 档位与进制走 format.js 的单位梯
+     * 数据单点(AQB_UNIT_LADDER), 精度是**设计分歧** —— 轴标要短: toFixed(1) + 取整兜底, 梯顶
+     * 只到 TiB(表格侧到 PiB)。禁止在此另抄一份梯子。 */
     _fmtBytes(v) {
-      for (const [u, div] of [["TiB", 2 ** 40], ["GiB", 2 ** 30], ["MiB", 2 ** 20], ["KiB", 2 ** 10]]) {
-        if (v >= div) return (v / div).toFixed(1) + " " + u;
-      }
-      return Math.round(v) + " B";
+      return this._fmtLadder(v, "bytes", 1, true, "TiB");
     },
     _fmtSpeed(v) {
-      for (const [u, div] of [["GiB/s", 2 ** 30], ["MiB/s", 2 ** 20], ["KiB/s", 2 ** 10]]) {
-        if (v >= div) return (v / div).toFixed(1) + " " + u;
-      }
-      return Math.round(v) + " B/s";
+      return this._fmtLadder(v, "speed", 1, true);
     },
   },
 };

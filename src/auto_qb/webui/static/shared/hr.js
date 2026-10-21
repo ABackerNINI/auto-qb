@@ -307,6 +307,16 @@ window.AQB_HR = {
       if (!g.hr_pending) return `已触发 HR 的 ${g.hr_triggered} 个成员均已满足做种时间/分享率要求`;
       return `已触发 HR ${g.hr_triggered} 个, 其中 ${g.hr_pending} 个尚未满足做种时间/分享率要求`;
     },
+    /* HR 徽标 title 的 ep 行版(收敛 issue 26-10-20-2231 / 台账 R23-B-12): 与 hrGroupTitle
+     * 同字段(hr_triggered/hr_pending)但**措辞是两套** —— ep 行密, 用短文案(徽标本身已显示
+     * M/N, title 只补结论); group 行长文案。此处保留 ep 行既有措辞(统一属用户可见改动, 不在
+     * 机械收敛范围); 后续若要统一, 把本函数改成转调 hrGroupTitle 即可。
+     * 判据在 JS 不在模板: 模板里**禁止**再内联手写 HR 标题三元。 */
+    hrEpTitle(e) {
+      if (!e.hr_triggered) return "该集无成员触发 HR";
+      if (!e.hr_pending) return "HR 已全部达标";
+      return e.hr_pending + "/" + e.hr_triggered + " 未满足要求";
+    },
     /* 站点侧三态行(详情抽屉): 结论(含来源档位) + 依据原文 —— 全由后端算好,
      * 前端只拼展示; 未接入 hr_check 的站点 hr_state 为空 ⇒ 返回空串(不显示这行) */
     hrStateLine(m) {

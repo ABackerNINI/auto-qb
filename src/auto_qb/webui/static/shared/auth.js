@@ -12,6 +12,14 @@
  * 顶层只声明常量, 不碰 DOM/BOM(本文件会被测试的 node 探针 eval)。 */
 const AQB_FETCH_TIMEOUT_S = 15;  // 秒; 定时器与超时文案同源(改一处两处生效, 不手抄两份)
 const AQB_FETCH_TIMEOUT_MS = AQB_FETCH_TIMEOUT_S * 1000;
+/* Authorization 头单点(收敛 issue 26-10-20-2231 / 台账 R20-F-04): 鉴权头形态(前缀大小写 /
+ * 双头 / 凭据来源)只此一处。无 token 不发头(R10-01 本机免鉴权, 见 _request 注释)。
+ * !顶层函数而非 mixin 方法: 快捷键密钥适配器(shortcuts.js 的 AQB_KEYS_ADAPTER)不是 Vue
+ *   mixin 单例, 拿不到 this —— 与 aqbFetch(fetch_low.js)同款裸调形态。
+ *   调用侧**禁止内联** `Bearer ${token}`。 */
+function aqbAuthHeaders(token) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 window.AQB_AUTH = {
   methods: {
     async api(path, options = {}) {
@@ -30,8 +38,7 @@ window.AQB_AUTH = {
       // R10-01: **无密钥就不带 Authorization 头**(本机免鉴权模式)。旧实现无条件拼
       // `Bearer ${token}`, token 为空时发出裸 "Bearer", 而后端的免鉴权分支会把它当"未带凭证"
       // 每次请求记一条 WARNING(噪音); 带上真实密钥时后端也是忽略, 两种都不如干脆不发。
-      const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
-      if (token) headers.Authorization = `Bearer ${token}`;
+      const headers = { "Content-Type": "application/json", ...aqbAuthHeaders(token), ...(options.headers || {}) };
       // 请求级超时(见 AQB_FETCH_TIMEOUT_MS): 超时与外部 signal 都收敛到同一个 controller;
       // 定时器无论成功/失败都在 finally 清掉(不留悬挂定时器)。外部 signal 用**链接**而不是覆盖 ——
       // 今天全仓无人传 signal, 这层是防「将来加取消时被本函数的 signal 静默顶掉」。

@@ -571,7 +571,7 @@ window.AQB_DRAWER = {
       const hash = this._editTargetHash(h);
       if (!hash) return;
       const d = await this._editDetail(hash);
-      const kiB = (bytes) => (bytes > 0 ? String(Math.round(bytes / 1024)) : "");  // 不限/未设(≤0)留空
+      const kiB = (bytes) => (bytes > 0 ? String(Math.round(this.bytesToKib(bytes))) : "");  // 不限/未设(≤0)留空
       const res = await this._openModal({
         title: "速度限制",
         body: "设置该种子的上传/下载速度上限(KiB/s)。留空 = 保持不变, 填 0 = 不限速。",
@@ -590,7 +590,7 @@ window.AQB_DRAWER = {
           this.toast("限速需为非负数字(KiB/s)", "warn");
           return;
         }
-        body[key] = Math.round(n * 1024);  // KiB/s → bytes/s; 0 原样传(后端语义 = 不限)
+        body[key] = Math.round(this.kibToBytes(n));  // KiB/s → bytes/s; 0 原样传(后端语义 = 不限)
       }
       if (!Object.keys(body).length) {
         this.toast("未作修改", "ok", 2000);
@@ -776,7 +776,7 @@ window.AQB_DRAWER = {
           this.toast("限速需为非负数字(KiB/s)", "warn");
           return;
         }
-        body[key] = Math.round(n * 1024);  // KiB/s 转 bytes/s; 0 原样传(qB 语义 = 不限)
+        body[key] = Math.round(this.kibToBytes(n));  // KiB/s 转 bytes/s; 0 原样传(qB 语义 = 不限)
       }
       if (!Object.keys(body).length) {
         this.toast("未作修改", "ok", 2000);

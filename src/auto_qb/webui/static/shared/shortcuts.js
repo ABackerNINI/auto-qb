@@ -391,11 +391,10 @@ const AQB_KEYS_ADAPTER = {
     this._doc = doc;
   },
   /* 启动/打开面板时拉服务端真值; 网络失败/非 2xx 返回 false(不炸, 维持现有内存稿) */
-  async reload(token) {
-    try {
-      const headers = {};
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const r = await aqbFetch("/api/keys", { headers });
+    async reload(token) {
+      try {
+        const headers = { ...aqbAuthHeaders(token) };
+        const r = await aqbFetch("/api/keys", { headers });
       if (!r.ok) return false;
       this._doc = this._sanitize(await r.json());
       return true;
@@ -404,11 +403,10 @@ const AQB_KEYS_ADAPTER = {
     }
   },
   /* PUT 整份替换; 失败返回 {ok:false, error}(调用方本地回滚 + 报错, 计划 §4.4) */
-  async save(doc, token) {
-    try {
-      const headers = { "Content-Type": "application/json" };
-      if (token) headers.Authorization = `Bearer ${token}`;
-      const r = await aqbFetch("/api/keys", { method: "PUT", headers, body: JSON.stringify(doc) });
+    async save(doc, token) {
+      try {
+        const headers = { "Content-Type": "application/json", ...aqbAuthHeaders(token) };
+        const r = await aqbFetch("/api/keys", { method: "PUT", headers, body: JSON.stringify(doc) });
       if (!r.ok) {
         const detail = await r.json().catch(() => ({}));
         return { ok: false, error: detail.detail || `HTTP ${r.status}` };

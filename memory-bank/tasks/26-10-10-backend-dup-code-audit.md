@@ -212,3 +212,5 @@
 - 2026-10-22 01:49 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup 认领并修复: ctx-menus.html 四支各一份 .ctx-item 骨架(5 份)合并为一条 ctxItems(ctxMenuKind()) v-for, 骨架 5 份→2 份; 三件守阵比对面搬到 ctxMenuKind() 单点; 全量 3994 passed/覆盖率 99.28%
 
 - 2026-10-22 02:24 认领并修复 issue 26-10-20-2231(模板层单元格碎片): site-chip 3 份收敛为 #tpl-aq-site-chip 单点组件(三调用点, DOM 逐字同), torrent chip+torrents.html 行级补 search-hit(休眠绑定已取证), m-progress 四处抽 $root.progPct 单点, dur-body 注释跨文件互指; 全量 3995 passed/99%, e2e 三规格 64 passed
+
+- 2026-10-22 03:26 认领并修复 issue 26-10-20-2231(fe-single-point-bypass-dup): 7 族单点绕过全部收敛 —— 提 cfgTruthy/aqbAuthHeaders/kibToBytes/bytesToKib/AQB_UNIT_LADDER/_fmtLadder/hrEpTitle 单点, 合并 cfgPathKey 第二份 path→key 单点, 11 处内联改调 + 单点处禁内联注释; 单位梯保留表格/图轴精度分歧(参数化), 阶梯核对无 KiB/KB 口径差; Bearer 取顶层函数护住 auth.js 单文件探针; test.full 与 e2e 三规格双绿(数字见基线切片 26-10-22-0324), 档案/契约/索引回写

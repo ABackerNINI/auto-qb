@@ -113,8 +113,7 @@ window.CONFIG_RULES = {
     },
     cfgSpecBool(groupKey, ruleName, listName, index) {
       const v = this.cfgSpecRaw(groupKey, ruleName, listName, index);
-      if (typeof v === "boolean") return v;
-      return ["true", "1", "yes", "on"].includes(String(v === undefined ? "false" : v).trim().toLowerCase());
+      return this.cfgTruthy(v);
     },
     /* spec 的渲染项: 统一映射为通用字段项, 从而复用同一套控件(无 YAML 片段兜底) */
     cfgSpecItems(groupKey, ruleName, listName, index) {
@@ -248,10 +247,10 @@ window.CONFIG_RULES = {
     },
     /* 折叠态(缺省 = 折叠, 与设置页 group 段同口径): 摘要行常显当前值, 不展开也能看出节奏 */
     cfgRuleMetaOpen(groupKey, ruleName) {
-      return !!this.cfg.openRuleMeta[this.cfgRulePath(groupKey, ruleName).join(".")];
+      return !!this.cfg.openRuleMeta[this.hubKey(this.cfgRulePath(groupKey, ruleName))];
     },
     cfgRuleMetaToggle(groupKey, ruleName) {
-      const key = this.cfgRulePath(groupKey, ruleName).join(".");
+      const key = this.hubKey(this.cfgRulePath(groupKey, ruleName));
       this.cfg.openRuleMeta = { ...this.cfg.openRuleMeta, [key]: !this.cfg.openRuleMeta[key] };
     },
     /* 「触发与节奏」折叠头摘要: 触发时机 + 非默认的间隔/去重/冷却(默认值不占摘要, 展开可见全部) */

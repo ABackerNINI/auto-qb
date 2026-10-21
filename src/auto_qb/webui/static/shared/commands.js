@@ -921,7 +921,7 @@ window.AQB_COMMANDS = {
      * !走低层带超时单点 aqbFetch(issue 26-10-16-1303): 裸 fetch 悬挂时 await 永不返回 ⇒
      *   回执永远停在"进行中"、失败 toast 也永不出现; 挂上限后悬挂变一次可报的失败(超时文案)。 */
     async _exportDownload(hash) {
-      const resp = await aqbFetch(`/api/torrents/${hash}/export`, { headers: { Authorization: `Bearer ${this.token}` } });
+      const resp = await aqbFetch(`/api/torrents/${hash}/export`, { headers: aqbAuthHeaders(this.token) });
       if (resp.status === 401) {
         this._logout("密钥无效或已更换");
         const err = new Error("unauthorized");

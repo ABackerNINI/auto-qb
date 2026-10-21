@@ -249,7 +249,7 @@
       <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }">{{ $root.fmtSpeedOrDash(e.upspeed) }}</div>
       <div v-else-if="col.key === 'uploaded'" class="g-stat" :class="{ zero: !e.uploaded }">{{ $root.fmtSizeOrDash(e.uploaded) }}</div>
       <div v-else-if="col.key === 'hr'" class="g-hr" :class="$root.hrGroupClass(e)"
-           :title="e.hr_triggered ? (e.hr_pending ? e.hr_pending + '/' + e.hr_triggered + ' 未满足要求' : 'HR 已全部达标') : '该集无成员触发 HR'">
+           :title="$root.hrEpTitle(e)">
         <span v-if="!e.hr_triggered" class="zero"></span>
         <svg v-else-if="!e.hr_pending" class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-check-circle"></use></svg>
         <template v-else>

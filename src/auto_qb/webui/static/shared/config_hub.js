@@ -490,6 +490,8 @@ window.CONFIG_HUB = {
       }
       this.hubGo(v);
     },
+    /* 路径数组→点分键单点(收敛 issue 26-10-20-2231 / 台账 R20-C-18): 改键格式(如加前缀防碰撞)
+     * 只改这一处; 调用侧**禁止内联** `path.join(".")`。 */
     hubKey(path) {
       return Array.isArray(path) ? path.join(".") : String(path);
     },
@@ -542,8 +544,7 @@ window.CONFIG_HUB = {
           // 已随 schema v2 废除(迁移链自动改写), 不再计数
           const enabled = Object.entries(this.hrSiteEntries()).filter(([id, e]) => {
             if (!e) return false;
-            const v = e.enabled;
-            return typeof v === "boolean" ? v : ["true", "1", "yes", "on"].includes(String(v).trim().toLowerCase());
+            return this.cfgTruthy(e.enabled);
           }).length;
           return enabled ? `${enabled} 个站点在线核实` : "未配置站点";
         }
@@ -618,8 +619,7 @@ window.CONFIG_HUB = {
     hrSiteEnabled(id) {
       const entry = this.hrSiteEntries()[id];
       if (!entry) return false;
-      const v = entry.enabled;
-      return typeof v === "boolean" ? v : ["true", "1", "yes", "on"].includes(String(v).trim().toLowerCase());
+      return this.cfgTruthy(entry.enabled);
     },
     hrSiteSetEnabled(id, on) {
       if (!on && !this.cfgExists(["config", "hr_check", "sites", id])) return; // 未配置 = 本就关闭, 不写垃圾键
