@@ -5,7 +5,7 @@
 **Updated:** 2026-10-21
 **Summary:** 前端对话框外壳三段式收敛: aq-modal 单点(遮罩手势/标题头/动作栏 + 管理对话框合并 + 行式明细合并)
 **Topics:** webui-dialog-shell-single-point
-**Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-dialog-shell-template-dup.html, memory-bank/testing/baselines/26-10-21-1408-webui-dialog-shell-single-point.md
+**Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-dialog-shell-template-dup.html, memory-bank/testing/baselines/26-10-21-1408-webui-dialog-shell-single-point.md, memory-bank/testing/baselines/26-10-21-1459-webui-dialog-shell-single-point.md
 
 ## 原始请求
 
