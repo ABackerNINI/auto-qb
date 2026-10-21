@@ -11,6 +11,25 @@
        !本分片由 tpl-manifest 注入 **body**(与 xtpl.html 同), 不被当作根模板编译, 也不多包 DOM 层。
        ================================================================================ -->
 
+  <!-- 站点 chip 单点(收敛 issue 26-10-20-2231 / 台账 R23-B-09): group / torrent / ep 三处站点
+       单元格此前各抄一份 11 行 chip 骨架(torrent 版还漏了 search-hit, 与 torrents.html 行级同缺)。
+       !chip 是**单元格内**元素, 组件化不违反"单元格必须是行的直接子元素"—— 组件根即
+         span.site-chip, 渲染 DOM 与旧三份逐字同(grid :nth-child 列对齐零影响)。
+       !与行渲染器同范式: 只贡献模板, 行为/格式化一律 $root.xxx(根数据只在根实例上)。
+       !search-hit 三处一律绑 m.hit: group/ep 行的成员带 hit(filters.js / shows.js 装饰),
+         torrent 行对象**刻意不带** hit(filters.js:268-270, 26-10-07「保留即命中」决策)——
+         torrent 处绑定当前休眠, 保留以求 markup 与另两页对称, 决策反转即自动生效。 -->
+  <script type="text/x-template" id="tpl-aq-site-chip">
+    <span class="site-chip" :class="[m.kind, $root.siteAlertClass(m), { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
+          :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
+          @click.stop="$root.filterFromChip('site', m.site)">
+      {{ m.site }}
+      <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
+        <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
+      </svg>
+    </span>
+  </script>
+
   <!-- group 行模型(辅种组行): 49 个列分支只此一份(原 groups.html 内联) -->
   <script type="text/x-template" id="tpl-aq-group-cells">
     <template v-for="col in cols" :key="col.key">
@@ -34,15 +53,20 @@
       </div>
       <div v-else-if="col.key === 'total_size'" class="g-stat" :class="{ zero: !g.total_size }">{{ $root.fmtSizeOrDash(g.total_size) }}</div>
       <!-- 辅种扩列(2026-09-28): 组级聚合后端算好。进度 = 组内最高(最完整副本), 复用明细同款进度条 -->
+      <!-- 进度单元格与 torrent/ep(本文件)/member(xtpl.html)三处逐字同(issue 26-10-20-2231 登记
+           不动): 刻意不组件化, 百分比算式已抽 $root.progPct 单点(format.js), 改口径只改那一处 -->
       <div v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: Math.min(100, g.progress * 100) + '%' }"></i></span>
-        <span class="val">{{ (g.progress * 100).toFixed(1) }}%</span>
+        <span class="bar"><i :style="{ width: $root.progPct(g.progress) + '%' }"></i></span>
+        <span class="val">{{ $root.progPct(g.progress).toFixed(1) }}%</span>
       </div>
       <!-- 剩余时间 = 组内最小有效 eta(后端排除哨兵, 0 = 无下载活动); 口径与种子页 fmtEta 一致 -->
       <div v-else-if="col.key === 'eta'" class="g-stat" :class="{ zero: !g.eta || g.eta >= 8640000 }">{{ $root.fmtEta(g.eta) }}</div>
       <!-- 已下载求和 = 多站切换下载的流量总消耗 -->
       <div v-else-if="col.key === 'downloaded'" class="g-stat" :class="[{ zero: !g.downloaded }, $root.numTone(g.downloaded, g.size)]">{{ $root.fmtSizeOrDash(g.downloaded) }}</div>
       <div v-else-if="col.key === 'tags'" class="g-tags">
+        <!-- tag-chip 三处**不**逐字同(issue 26-10-20-2231 登记不动, 刻意不组件化): 组行(本处)
+             吃聚合口径 g.commonTags.list + 首个成员算 tagClass; torrent 行(本文件)与 member 行
+             (xtpl.html)吃 $root.mTags(m), 那两处彼此逐字同 -->
         <span v-for="t in g.commonTags.list" :key="t" class="tag-chip"
               :class="[$root.tagClass(t, g.members[0]), { 'f-on': $root.isFilterOn('tagFilter', t) }]"
               @click.stop="$root.filterFromChip('tag', t)">{{ t }}</span>
@@ -50,6 +74,9 @@
         <span v-if="g.commonTags.diff" class="diff-mark" title="组内标签不一致(此处仅显示共同标签)">±</span>
       </div>
       <div v-else-if="col.key === 'category'" class="g-cat">
+        <!-- cat-chip 三处**不**逐字同(issue 26-10-20-2231 登记不动, 刻意不组件化): 组行(本处)
+             有 commonCategory.diff 三态(多分类); torrent 行(本文件)与 member 行(xtpl.html)
+             只有有/无两态, 那两处彼此逐字同 -->
         <span v-if="g.commonCategory.value" class="cat-chip"
               :class="{ 'f-on': $root.isFilterOn('categoryFilter', g.commonCategory.value) }"
               @click.stop="$root.filterFromChip('category', g.commonCategory.value)">{{ g.commonCategory.value }}</span>
@@ -59,16 +86,9 @@
       <div v-else-if="col.key === 'sites'" class="g-sites">
         <!-- 站点 chip(计划 26-10-19-2206 S1): 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错
              红底), 图标通道只留**命令结果**且固定放在站点名之后 —— 每 chip 最多一个图标, 位置不随
-             状态跳。提示挂整块 chip(title 由 ui_feedback 迁成 data-aq-tip), 两类文案合并两行。 -->
-        <span v-for="m in g.members" :key="m.hash"
-              class="site-chip" :class="[m.kind, $root.siteAlertClass(m), { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
-              :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
-              @click.stop="$root.filterFromChip('site', m.site)">
-          {{ m.site }}
-          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
-            <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
-          </svg>
-        </span>
+             状态跳。提示挂整块 chip(title 由 ui_feedback 迁成 data-aq-tip), 两类文案合并两行。
+             chip 骨架本身已收敛为 <aq-site-chip> 单点(issue 26-10-20-2231), 此处只留 v-for。 -->
+        <aq-site-chip v-for="m in g.members" :key="m.hash" :m="m"></aq-site-chip>
       </div>
       <!-- H&R: 未满足做种时间/分享率的成员数 / 已触发 HR 的成员数(全部达标只显示对勾图标, 文案在 title) -->
       <div v-else-if="col.key === 'hr'" class="g-hr" :class="$root.hrGroupClass(g)" :title="$root.hrGroupTitle(g)">
@@ -109,14 +129,7 @@
         <span class="g-name-text">{{ m.name }}</span>
       </div>
       <div v-else-if="col.key === 'site'" class="g-sites">
-        <span class="site-chip" :class="[m.kind, $root.siteAlertClass(m), { 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
-              :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
-              @click.stop="$root.filterFromChip('site', m.site)">
-          {{ m.site }}
-          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
-            <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
-          </svg>
-        </span>
+        <aq-site-chip :m="m"></aq-site-chip>
       </div>
       <div v-else-if="col.key === 'state'" class="g-cat">
         <span class="g-status" :class="'k-' + m.kind">
@@ -141,8 +154,8 @@
         <span v-if="!$root.mTags(m).length" class="zero"></span>
       </div>
       <div v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
-        <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+        <span class="bar"><i :style="{ width: $root.progPct(m.progress) + '%' }"></i></span>
+        <span class="val">{{ $root.progPct(m.progress).toFixed(1) }}%</span>
       </div>
       <div v-else-if="col.key === 'num_seeds'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'seeds') }">{{ $root.cellPeers(m, 'seeds') }}</div>
       <div v-else-if="col.key === 'num_leechs'" class="g-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</div>
@@ -162,7 +175,9 @@
       <div v-else-if="col.key === 'tracker'" class="g-save-path" :title="m.tracker">{{ m.tracker || '' }}</div>
       <div v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[$root.hrDurClass(m), $root.hrSrcClass(m)]" @mouseenter="$root.hrPopEnter($event, m)" @mouseleave="$root.hrPopLeave">
         <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
-             (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
+             (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条)
+             本注释与 xtpl.html#tpl-aq-member-cells 的 member 版逐字同(issue 26-10-20-2231 合一:
+             FX-02/04 口径的唯一载体, 改口径两处同改) -->
         <span class="dur-body">
           <span class="dur-val">{{ $root.cellSeedingTime(m) }}<i v-if="$root.hrSrcHalf(m)" class="hr-line"></i></span>
           <span v-if="$root.cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ $root.fmtDuration(m.hr_req_time) }}</span>
@@ -221,22 +236,14 @@
         <span class="state-text">{{ $root.kindText(e.state) }}</span>
       </div>
       <div v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: Math.min(100, e.progress * 100) + '%' }"></i></span>
-        <span class="val">{{ (e.progress * 100).toFixed(1) }}%</span>
+        <span class="bar"><i :style="{ width: $root.progPct(e.progress) + '%' }"></i></span>
+        <span class="val">{{ $root.progPct(e.progress).toFixed(1) }}%</span>
       </div>
       <div v-else-if="col.key === 'size'" class="g-stat" :class="{ zero: !e.size }"
            :title="'最完整版本大小'">{{ $root.fmtSizeOrDash(e.size) }}</div>
       <div v-else-if="col.key === 'versions'" class="g-count">{{ e.count }}</div>
       <div v-else-if="col.key === 'sites'" class="g-sites">
-        <span v-for="m in e.members" :key="m.hash" class="site-chip"
-              :class="[m.kind, $root.siteAlertClass(m), { 'search-hit': m.hit, 'f-on': $root.isFilterOn('siteFilter', m.site) }]"
-              :title="$root.chipAlertTip(m)" :aria-label="$root.siteAlertAria(m) || null"
-              @click.stop="$root.filterFromChip('site', m.site)">
-          {{ m.site }}
-          <svg v-if="$root.rowIcon(m.hash)" class="ico sx" :class="'sx-' + $root.rowIcon(m.hash).kind">
-            <use :href="$root.alertIconHref($root.rowIcon(m.hash).kind)"></use>
-          </svg>
-        </span>
+        <aq-site-chip v-for="m in e.members" :key="m.hash" :m="m"></aq-site-chip>
       </div>
       <div v-else-if="col.key === 'dlspeed'" class="g-stat" :class="{ zero: !e.dlspeed }">{{ $root.fmtSpeedOrDash(e.dlspeed) }}</div>
       <div v-else-if="col.key === 'upspeed'" class="g-stat" :class="{ zero: !e.upspeed }">{{ $root.fmtSpeedOrDash(e.upspeed) }}</div>

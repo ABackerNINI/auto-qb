@@ -5,8 +5,11 @@
             <!-- P1-2 行窗口: 3000 行里只渲染视口附近那几十行; 上下占位撑住总高
                  (占位件收敛为 <aq-row-pad>, 与辅种/追剧三份列表同一份实现, issue 26-10-20-2231) -->
             <aq-row-pad v-if="torrentPadTop" :height="torrentPadTop"></aq-row-pad>
+            <!-- 行级 search-hit 与另两页对齐(groups/shows 的 member 行、shows 的 show 行均有;
+                 issue 26-10-20-2231 补漏): 种子页行对象**刻意不带** hit 字段(filters.js:268-270,
+                 26-10-07「保留即命中, 全亮反而无区分」决策) —— 本绑定当前休眠, 决策反转即自动生效 -->
             <div v-for="m in visibleTorrents" :key="m.hash" class="group-row torrent-row" data-table="torrent" :data-hash="m.hash"
-                 :class="['s-' + m.kind, { selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash) }]"
+                 :class="['s-' + m.kind, { selected: isMemberSelected(m), 'is-pending': isPending(m.hash), 'kb-cursor': isKbCursor('torrent', m.hash), 'search-hit': m.hit }]"
                  :style="gridStyle('torrent')"
                  @click="onTorrentClick(m, $event)"
                  @dblclick="openTorrentDrawer(m.hash)"

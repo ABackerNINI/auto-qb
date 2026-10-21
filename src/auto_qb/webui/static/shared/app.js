@@ -952,6 +952,10 @@ app.component("aq-group-cells", window.AQ_GROUP_CELLS_COMPONENT);
 app.component("aq-torrent-cells", window.AQ_TORRENT_CELLS_COMPONENT);
 app.component("aq-show-cells", window.AQ_SHOW_CELLS_COMPONENT);
 app.component("aq-ep-cells", window.AQ_EP_CELLS_COMPONENT);
+/* 站点 chip 单点(收敛 issue 26-10-20-2231 / R23-B-09): group/torrent/ep 三处站点单元格的
+   11 行骨架合一(模板 xtpl-cells.html#tpl-aq-site-chip, 定义在 table.js) —— chip 是单元格内
+   元素, 组件根即 span.site-chip, 不触碰"单元格必须是行直接子元素"的 grid 约束。 */
+app.component("aq-site-chip", window.AQ_SITE_CHIP_COMPONENT);
 /* 变体表格体桥(计划 26-10-12-0527 U1): 外壳锚 → Teleport 表壳 + 行渲染器(见 table.js 尾注) */
 app.component("aq-dt-bridge", window.AQ_DT_BRIDGE_COMPONENT);
 /* U2 变体格渲染器(计划 26-10-12-0527): 用户表三变体的行模型(桥模板按 rowModel 动态解析) */

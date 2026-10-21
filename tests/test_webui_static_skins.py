@@ -729,6 +729,10 @@ def test_frontend_table_shell_single_point():
        渲染器 —— 主视图五个 `<aq-member-cells>`(member) / `<aq-group-cells>`(group) /
        `<aq-torrent-cells>`(torrent) / `<aq-show-cells>`(追剧剧行) / `<aq-ep-cells>`(追剧集行);
        组件模板里的行为一律经 `$root` 回调根实例。
+       (2026-10-22 加站点 chip 单点 `<aq-site-chip>`(收敛 issue 26-10-20-2231 / R23-B-09:
+       group/torrent/ep 三处站点单元格的 11 行骨架合一, torrent 版顺带补上 search-hit)——
+       chip 是**单元格内**元素, 组件根即 span.site-chip, 渲染 DOM 与旧三份逐字同,
+       不触碰"单元格必须是行直接子元素"的 grid 约束。)
        (2026-10-14: 抽屉三表的 `<aq-tracker-cells>` / `<aq-peer-cells>` / `<aq-file-cells>`
        随「移除四内容页签经典 UI」一并删除 —— 那三张经典表只由已删的 drawer-tabs.html 渲染,
        四内容页签的表格体此后全部走变体桥。)
@@ -751,6 +755,7 @@ def test_frontend_table_shell_single_point():
         ("aq-torrent-cells", "AQ_TORRENT_CELLS_COMPONENT"),
         ("aq-show-cells", "AQ_SHOW_CELLS_COMPONENT"),
         ("aq-ep-cells", "AQ_EP_CELLS_COMPONENT"),
+        ("aq-site-chip", "AQ_SITE_CHIP_COMPONENT"),
     )
     for name, glob in comps:
         assert re.search(r'app\.component\(\s*"%s"\s*,\s*window\.%s\s*\)' % (name, glob),
@@ -2667,8 +2672,10 @@ def test_frontend_site_alert_icon_wiring():
     三件事必须同时成立, 缺一条就是"pytest 全绿但界面废掉":
       ① 三皮肤样式**键集合相等**(漏一套 = 某皮肤下 chip 不变色/图标没颜色, 只在一套皮肤上看得见);
          缺配置的虚线底边(非颜色通道, D4)与搜索命中"让出底色改描边"(D6)同属可读性契约, 一并钉住;
-      ② 模板三处站点 cell(种子页 / 组行 / 集行)都**只剩一个图标槽**(命令结果), tooltip 挂整块 chip;
-         旧图标类(`.sa` / `sa-<token>`)必须零残留 —— 残留 = 某个视图还在画第二个图标;
+      ② 站点 chip 骨架收敛为单点组件 <aq-site-chip>(issue 26-10-20-2231 / R23-B-09, 此前种子页/
+         组行/集行各抄一份 11 行骨架、torrent 版还漏 search-hit): 单点模板里**一个**图标槽
+         (命令结果), 三处调用点都走它, tooltip 挂整块 chip; 旧图标类(`.sa` / `sa-<token>`)
+         必须零残留 —— 残留 = 某个视图还在画第二个图标;
       ③ 图标 token -> 符号映射单点在 commands.js(模板里不得出现第二份 `#i-xxx` 映射),
          且该表**只含命令结果四种 token**(站点问题不该再有图标)。
     """
@@ -2725,21 +2732,24 @@ def test_frontend_site_alert_icon_wiring():
             f"{_UI_ALL[0]}-{ui}={sorted(base - per_skin[ui])} / {ui}-{_UI_ALL[0]}={sorted(per_skin[ui] - base)}"
         )
 
-    # ② 模板三处站点 cell 各**一个**图标槽(命令结果), 站点问题不再有图标
+    # ② 站点 chip 骨架单点(issue 26-10-20-2231 / R23-B-09): 组件模板一个图标槽, 三处调用点都走它
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl-cells.html"), encoding="utf-8").read()
-    assert tpl.count('class="ico sx"') == 3, "站点 cell 三处(种子页/组行/集行)各要有一个命令结果图标槽"
+    assert 'id="tpl-aq-site-chip"' in tpl, "xtpl-cells.html 缺 #tpl-aq-site-chip 单点模板(site-chip 三份回潮?)"
+    assert tpl.count("<aq-site-chip ") == 3, "站点 chip 必须恰三处调用点(种子页/组行/集行)且都走单点组件(调用点必带 :m prop, 故标签后一定有空格; 注释里的字面提及不计)"
+    assert tpl.count('class="ico sx"') == 1, "chip 单点模板里要有一个命令结果图标槽"
+    assert tpl.count("'search-hit': m.hit") == 1, "chip 单点必须带 search-hit 绑定(torrent 版曾漏, 见 issue 26-10-20-2231)"
     assert 'class="ico sa"' not in tpl, "站点问题不再走图标 —— 模板里不得再有 .sa 图标槽"
     assert "'sa-' + m.site_alert" not in tpl, "旧站点图标类拼接必须清零"
-    # tooltip 挂整块 chip(D8): 三处都绑合并文案, 图标不再各自挂 title
-    assert tpl.count("$root.siteAlertClass(m)") == 3, "三处 chip 都要按站点问题染色"
-    assert tpl.count("$root.chipAlertTip(m)") == 3, "tooltip 必须挂整块 chip(三处齐备)"
-    assert tpl.count("$root.siteAlertAria(m)") == 3, "站点问题必须补 aria-label(D4)"
+    # tooltip 挂整块 chip(D8): 单点模板绑合并文案, 图标不再各自挂 title
+    assert tpl.count("$root.siteAlertClass(m)") == 1, "chip 单点按站点问题染色"
+    assert tpl.count("$root.chipAlertTip(m)") == 1, "tooltip 必须挂整块 chip"
+    assert tpl.count("$root.siteAlertAria(m)") == 1, "站点问题必须补 aria-label(D4)"
     for seg in re.findall(r"<svg[^>]*class=\"ico sx\"[^>]*>", tpl):
         assert ":title" not in seg, "命令结果图标不再单独挂 title(触发面已放大到整块 chip)"
 
     # ③ token -> 符号单点: 命令结果符号一律经 alertIconHref 取, 不得内联第二份映射
-    # (3 处 cell × 1 槽 = 3 次; 模板里既有的 #i-warn/#i-caret 属于别的语义, 不在此列)
-    assert tpl.count("$root.alertIconHref(") == 3, "命令结果图标必须经 alertIconHref 单点取符号"
+    # (单点模板 × 1 槽 = 1 次; 模板里既有的 #i-warn/#i-caret 属于别的语义, 不在此列)
+    assert tpl.count("$root.alertIconHref(") == 1, "命令结果图标必须经 alertIconHref 单点取符号"
     cmds = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
     m = re.search(r"const ALERT_ICON = \{([\s\S]*?)\};", cmds)
     assert m, "commands.js 必须有 ALERT_ICON 单点"

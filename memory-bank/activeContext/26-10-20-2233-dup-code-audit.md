@@ -1,7 +1,7 @@
 # 前端重复代码审查 · Phase 2 轮 20–23 收口（sharded JS / 抽屉族 / 三皮肤 CSS / 模板层）
 
 > 摘要: 用户「执行重复代码审查计划 PHASE2: 26-10-10-2333-plan-dup-code-audit.html」→ 按计划 §07 拆 **15 个子轮**跑完 Phase 2 前端全部四个面（R20 shared/*.js 17449 行/35 文件 · R21 shared/drawer*/drawer_tpl* 8234 行/17 文件 · R22 三皮肤 CSS 8109 行/19 文件 · R23 shared/tpl 20 件 3967 行 + 三 index.html 632 行）。**纯审查零源码改动**，取证基线 `4eef60fe`。产出：**166 项发现（A71/B15/C48/D32）**，与 Phase 1 合并后**全局累计 322 项（A129/B30/C88/D75）**；滚动报告 `26-10-11-0033` 追加 §26–§30 五小节；入池 **17 条 issue（16 refactor + 1 test，族级合并）**。Phase 2 全部完成，主线剩 Phase 3（测试与横切 轮 24–25）+ Phase 4（汇总 轮 26）。
-> 最后活动: 2026-10-22 01:49
+> 最后活动: 2026-10-22 02:24
 **Refs:** memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 已完成(单会话收口)
@@ -56,3 +56,5 @@
 **R8(2026-10-21 05:47):** 认领并修复 issue 26-10-20-2231(refactor-fe-drawer-fetcher-boilerplate-dup, 台账 R21-A-01): drawer_store 四份 fetcher 收敛为唯一骨架 _fetchDrawerSource + 顶层差异表 _DT_FETCH(端点/归一/目标状态键/空值形状 + loading 门/失败标记/通知时机), 四入口退化为单行薄壳, stale 判点 13→4; 等价性实证(37 项 node 电池对收敛前实现同绿) + 红验七类突变全红 + 抽屉域 11 份 e2e 64 绿; 新增守阵 test_drawer_fetcher_skeleton_single_point, 四处既有守阵同步到骨架/表; 数字见 kb.baseline
 
 **R9(2026-10-22 01:49):** issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup 认领并修复: ctx-menus.html 四支各一份 .ctx-item 骨架(5 份)合并为一条 ctxItems(ctxMenuKind()) v-for, 骨架 5 份→2 份; 三件守阵比对面搬到 ctxMenuKind() 单点; 全量 3994 passed/覆盖率 99.28%
+
+**R10(2026-10-22 02:24):** 认领并修复 issue 26-10-20-2231(模板层单元格碎片): site-chip 3 份收敛为 #tpl-aq-site-chip 单点组件(三调用点, DOM 逐字同), torrent chip+torrents.html 行级补 search-hit(休眠绑定已取证), m-progress 四处抽 $root.progPct 单点, dur-body 注释跨文件互指; 全量与 e2e 实测数字见 kb.baseline(切片 26-10-22-0221-webui-site-chip-progpct-dup)

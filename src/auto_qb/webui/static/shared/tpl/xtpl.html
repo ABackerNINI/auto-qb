@@ -291,13 +291,14 @@
         <span v-else class="zero"></span>
       </span>
       <span v-else-if="col.key === 'progress'" class="m-progress">
-        <span class="bar"><i :style="{ width: Math.min(100, m.progress * 100) + '%' }"></i></span>
-        <span class="val">{{ (m.progress * 100).toFixed(1) }}%</span>
+        <span class="bar"><i :style="{ width: $root.progPct(m.progress) + '%' }"></i></span>
+        <span class="val">{{ $root.progPct(m.progress).toFixed(1) }}%</span>
       </span>
       <!-- 做种时间/分享率: 口径单点化(FX-02/04) —— 0 分钟且无 HR 要求 与 进度为 0 的种子不显示 -->
       <span v-else-if="col.key === 'seeding_time'" class="m-pair m-dur" :class="[$root.hrDurClass(m), $root.hrSrcClass(m)]" @mouseenter="$root.hrPopEnter($event, m)" @mouseleave="$root.hrPopLeave">
         <!-- .dur-body = **文字**包裹层: 整格线(在线)挂它上面才随文字宽; 挂 .m-dur 上会随列宽
-             (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条) -->
+             (行是 grid, 单元格被拉满列宽, width:100% 的空 <i> 就画成整列一条)
+             本注释与 xtpl-cells.html#tpl-aq-torrent-cells 的 torrent 版逐字同(issue 26-10-20-2231 合一) -->
         <span class="dur-body">
           <span class="dur-val">{{ $root.cellSeedingTime(m) }}<i v-if="$root.hrSrcHalf(m)" class="hr-line"></i></span>
           <span v-if="$root.cellSeedingTime(m) && m.hr_req_time" class="req">/ {{ $root.fmtDuration(m.hr_req_time) }}</span>

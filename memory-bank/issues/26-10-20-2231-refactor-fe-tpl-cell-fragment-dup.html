@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份">
 <meta name="issue-summary" content="site-chip 3 份且 torrent 版缺 search-hit(与 torrents 行级同缺) = 种子页搜索不高亮; m-progress 4 份、m-dur / m-ratio / tag-chip / cat-chip 各 2-3 份">
 <title>模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-cell-fragment-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -101,9 +101,23 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法</h2>
+    <p><b>先修遗漏再收敛</b>(按建议段顺序):</p>
+    <ol>
+      <li><b>search-hit 补齐</b>: torrent 版 chip 与 <code>torrents.html</code> 行级都补 <code>'search-hit': m.hit</code>。<b>取证附注</b>(<code>filters.js:268-270</code>): 种子页行对象<b>刻意不复制</b> <code>hit</code> 字段(26-10-07「保留即命中, 全亮反而无区分」决策 + 实测 3000 条复制 68ms), 故两处绑定在当前数据流下<b>休眠</b> —— 本修的实质是 markup 与另两页对称 + 决策反转即自动生效; "种子页搜索不高亮"的现状是已记录的设计意图而非回归, 若要真高亮属产品决策, 超出本 issue 范围。</li>
+      <li><b>site-chip 组件化</b>(按建议, 唯一组件化的一族): 新增 <code>#tpl-aq-site-chip</code> 单点模板(<code>xtpl-cells.html</code>)+ <code>AQ_SITE_CHIP_COMPONENT</code>(<code>table.js</code>)+ <code>app.component("aq-site-chip")</code>(<code>app.js</code>), group/torrent/ep 三处 11 行骨架 → 3 个调用点。组件根即 <code>span.site-chip</code>, 渲染 DOM 与旧三份逐字同(e2e 实证)。<b>改道说明</b>(建议原文保留): 台账 R23-B-09 建议的 <code>:m :with-hit</code> 两 prop 未采用 —— 三处调用点都需要 hit 绑定, <code>with-hit</code> 是恒 true 的死配置, 常绑更简; <code>rowIcon</code> 三连调用保留在单点模板内(9 次→3 次同处), 未改 computed —— 组件维持"只贡献模板"契约, 且 <code>rowIcon</code> 的 <code>Date.now()</code> 过期判据与 computed 缓存有语义差。</li>
+      <li><b>百分比算式抽 <code>$root.progPct(v)</code></b>(<code>format.js</code> AQB_FORMAT 单点): group/torrent/ep/member 四处 <code>m-progress</code> 的 <code>Math.min(100, X*100)</code> 与 <code>(X*100).toFixed(1)</code> 都改调它。文本同取钳后值(progress&gt;1 时旧文本显示 &gt;100% 而条已满格, 本就不一致, 顺带收口; qB 口径 progress≤1, 常规渲染零变化)。</li>
+      <li><b>注释合一</b>: <code>.dur-body</code> 口径注释(FX-02/04 唯一载体)两份互指"逐字同"; <code>m-progress</code> 标注四处逐字同 + 登记不动理由; <code>tag-chip</code>/<code>cat-chip</code> 标注组行与 torrent/member 行的真实分歧点(聚合口径 vs <code>$root.mTags(m)</code>; diff 三态 vs 两态) —— 建议段"标明另一处逐字同"对这两族不成立(它们不逐字同), 按实际分歧记。</li>
+    </ol>
+    <p><b>验证</b>: ① 全量 <code>commands run test.full</code> <b>3995 passed, 2 skipped</b>, 覆盖率 <b>99%</b>(门槛 99%), 见 kb.baseline; ② 同轮改版的两件守阵全绿: <code>test_frontend_site_alert_icon_wiring</code>(比对面改扫单点模板: 图标槽 / siteAlertClass / chipAlertTip / siteAlertAria / alertIconHref 计数 3→1 + 三调用点 + search-hit 绑定)与 <code>test_frontend_table_shell_single_point</code>(comps 元组加 aq-site-chip); ③ 真浏览器 <code>commands run dev.e2e -- e2e/site-alerts.spec.mjs e2e/dt-table-face-bg.spec.mjs e2e/multiselect-shows.spec.mjs</code> <b>64 passed</b>(三皮肤; chip 变色 / 图标槽 / 搜索命中让出底色 / search-hit 行首格镜像 / 集行多选) —— 组件化后 DOM 与旧逐字同由既有断言原样通过实证。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 02:09 — 用户指派认领，状态 <strong>In Progress</strong>。复验：<code>shared/tpl/xtpl-cells.html</code> 的 <code>site-chip</code> 仍为 3 处（group 行 <code>#tpl-aq-group-cells</code> / torrent 行 <code>#tpl-aq-torrent-cells</code> / ep 行 <code>#tpl-aq-ep-cells</code>），torrent 版仍缺 <code>search-hit</code>、<code>tpl/torrents.html</code> 行级 class 仍无它；<code>m-progress</code> 仍 4 份（xtpl-cells 3 + xtpl.html 1）、<code>m-dur</code>/<code>m-ratio</code> 仍跨两份文件且 <code>.dur-body</code> 口径注释各写一遍、<code>tag-chip</code>/<code>cat-chip</code> 各 3 份，现象仍在。另取证 <code>shared/filters.js:268-270</code>：种子页行对象<b>刻意不复制</b> <code>hit</code> 字段（26-10-07 决策「保留即命中，全亮反而无区分」+ 实测 3000 条复制 68ms）——torrent 两项 <code>search-hit</code> 绑定在当前数据流下为休眠态，修法影响面以此为准记录</li>
+      <li>2026-10-22 02:21 — 修完并验证，状态 <strong>Done</strong>（site-chip 3 份→单点组件 <code>#tpl-aq-site-chip</code> + 三调用点，torrent 版补 search-hit；torrents.html 行级同补（休眠绑定已取证）；m-progress 四处算式抽 <code>$root.progPct</code> 单点；.dur-body 注释跨文件互指；tag-chip/cat-chip 分歧点标注；全量 3995 passed / 2 skipped / 覆盖率 99%，e2e 三规格 64 passed）</li>
     </ul>
   </section>
 

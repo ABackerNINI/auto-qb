@@ -160,6 +160,19 @@ window.AQ_EP_CELLS_COMPONENT = {
   template: "#tpl-aq-ep-cells",
 };
 
+/* ---------------- 站点 chip 单点(收敛 issue 26-10-20-2231 / 台账 R23-B-09) ----------------
+ * group / torrent / ep 三处站点单元格此前各抄一份 11 行 chip 骨架(torrent 版还漏了 search-hit),
+ * 只此一份。chip 是**单元格内**元素 —— 组件根即 span.site-chip, 渲染 DOM 与旧三份逐字同,
+ * 不违反"单元格必须是行的直接子元素"(grid :nth-child 列对齐零影响)。
+ * 与行渲染器同范式: 只贡献模板, 行为/格式化一律经 $root 回调根实例(不在本组件补方法)。 */
+window.AQ_SITE_CHIP_COMPONENT = {
+  name: "aq-site-chip",
+  props: {
+    m: { type: Object, required: true },         // 成员行(站点 chip 的数据源)
+  },
+  template: "#tpl-aq-site-chip",
+};
+
 /* ---------------- 变体表格体桥(计划 26-10-12-0527 U1, 拍板 D1 = Teleport 锚) ----------------
  * 变体外壳(字符串 DOM)在表格区输出空锚 `<div data-dt-table-anchor="<tableId>">`, 本组件把
  * 表壳 + 行渲染器传送进锚内 —— 单一 Vue 应用, 外壳零感知引擎, 引擎零感知外壳。

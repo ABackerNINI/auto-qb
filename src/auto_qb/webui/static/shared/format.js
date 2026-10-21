@@ -108,6 +108,13 @@ window.AQB_FORMAT = {
       if (!m.progress) return "";  // FX-04: 进度为 0(未开始/未下载)的种子不显示分享率
       return (m.ratio || 0).toFixed(2);
     },
+    /* 进度百分比单点(收敛 issue 26-10-20-2231 / 台账 R23-B-07): group / torrent / ep / member
+     * 四个行模型的进度单元格此前各手写 Math.min(100, X*100)(条宽) 与 (X*100).toFixed(1)(文本)
+     * —— 口径要改得四处同改, 必漏。钳上界 100: 条宽不得溢出单元格; 文本同取钳后值(progress>1
+     * 时旧文本显示 >100% 而条已满格, 本就不一致, 顺带收口)。 */
+    progPct(v) {
+      return Math.min(100, v * 100);
+    },
     /* 可用性(FX-26): 两个"没有有效值"的来源都不显示 ——
      * 1. 负数: qB 拿不到 distributed_copies 时给 -1(未连上 tracker / 无 peer 数据), 旧版直接
      *    toFixed 出 "-1.00" 看着像真数值; 2. 暂停中的种子: 没连接就谈不上分布式副本数(与
