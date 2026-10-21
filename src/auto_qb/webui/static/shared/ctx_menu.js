@@ -18,8 +18,8 @@
 (function () {
   "use strict";
 
-  /* 四支分支名(与 triggers.js variant 口径一致; 模板判据链 menu.multi / menu.episode /
-   * menu.hash / v-else 原样保留, 静态守阵 T3 的比对面不动)。 */
+  /* 四支分支名(与 triggers.js variant 口径一致; 支名单点 = menu.js::ctxMenuKind(), 模板的
+   * ctxItems(ctxMenuKind()) 与容器 :data-kind 都读它, 静态守阵 T3 的比对面 = 该方法的四个返回值)。 */
   const CTX_BRANCHES = ["multi", "episode", "member", "group"];
   /* 次级菜单名(state.js subMenu: "" | "advanced"; 全库仅此一个次级, 四支共用) */
   const CTX_SUB_NAME = "advanced";
@@ -104,7 +104,8 @@
       { id: "sep:d5", kind: "sep" },
       { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delTorrent() },
     ],
-    /* 单组(v-else): 目标 = 该组全部成员(组级六入口复用批量链, commands.js) */
+    /* 单组(ctxMenuKind() 兜底支): 目标 = 该组全部成员(组级六入口复用批量链, commands.js;
+     * 2026-10-09 用户报「单组右键菜单缺选项」后按批量菜单同序同图标补齐) */
     group: [
       { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.act("resume") },
       { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.act("pause") },
@@ -326,7 +327,7 @@
    * 方法而非 computed: 带分支参数; 列表 ≤15 项, 无缓存必要, 响应式依赖(flags/menu)随渲染收集。 */
   window.AQB_CTX_MENU = {
     methods: {
-      /* 一级可见项(含 sep 与「更多操作」父项); 分支判据链仍在模板 v-if, 这里只按支取名 */
+      /* 一级可见项(含 sep 与「更多操作」父项); 支名由模板侧的 ctxMenuKind() 传入, 这里只按支取名 */
       ctxItems(branch) {
         return window.AQB_CTX_MENU_REG.ctxRenderLayer(branch, 0, this.flags, this);
       },

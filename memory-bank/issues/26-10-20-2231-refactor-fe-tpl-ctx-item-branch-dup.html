@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="右键菜单 .ctx-item 渲染骨架 5 份(注册表已单点项集, 骨架未单点)">
 <meta name="issue-summary" content="ctx-menus.html 四支 + 次级面板各写一遍 ctx-item 渲染骨架; 正是模板注释自己警告的「四支人肉奇偶」残留">
 <title>右键菜单 .ctx-item 渲染骨架 5 份(注册表已单点项集, 骨架未单点) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -100,9 +100,28 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法</h2>
+    <p><b>四支合一</b>: <code>ctx-menus.html</code> 行菜单根块的四条 <code>&lt;template v-if/else-if/else&gt;</code> 与四份 <code>.ctx-item</code> 骨架合并为一条 <code>&lt;template v-for="it in ctxItems(ctxMenuKind())"&gt;</code>, 支名由 <code>menu.js::ctxMenuKind()</code> 单点给出(与容器 <code>:data-kind</code> 同源, 与注册表 <code>CTX_BRANCHES</code> 同词)。<code>submenu</code> 分支按建议保留独立判断(唯一带子面板的 kind), 子面板改消费 <code>ctxSubItems(ctxMenuKind())</code> —— 模板里已无任何支名字面量。</p>
+    <ul>
+      <li>行菜单根块 <code>class="ctx-item"</code> 骨架: <b>5 份 → 2 份</b>(一级项 + 次级面板项), <code>has-sub</code> 1 份; 行数 101 → 68。</li>
+      <li>DOM 结构零变化(<code>v-for</code> 挂在 <code>&lt;template&gt;</code> 上不产生元素) —— <code>.ctx-menu &gt; .ctx-item</code> 选择器与 e2e 的 <code>data-item</code>/<code>data-kind</code> 挂点全部原样。</li>
+      <li>各支语义注释未丢: 单种子支的 FX-15/CTX-05/06/D7 长注随 submenu 分支保留; 组级 CTX-03 收录口径与支目标语义本就在注册表 <code>CTX_ITEM_DEFS</code> 支注释与模板头部注释里, 合并块只留一句指路, 不复制第二份。</li>
+      <li><b>守阵同步搬迁</b>(比对面从「模板四支段」搬到「支名单点」, 治的仍是同一件事):
+        <code>test_ctx_menu_template_consumes_registry</code>(改为钉「无支名字面量 + 骨架恰 2 份 + 子面板结构 + 无逐项 @click」)、
+        <code>test_webui_trigger_registry.py::_ctx_menu_branches</code>(T3 改为读 <code>ctxMenuKind()</code> 的四个 return 字面量)、
+        <code>test_frontend_ctx_menu_group_actions_parity</code>、<code>test_frontend_ctx_menu_multi_select_targets_selection</code>、
+        <code>test_frontend_ctx_submenu_single_entry_and_hover_close</code>(行菜单根块整段即渲染面)。</li>
+      <li>回写: <code>memory-bank/conventions/webui.md</code>(加「渲染骨架也只有一条」条)、<code>memory-bank/pitfalls/web-ui/ctx-menu-branch-parity.md</code>(处置第 2/3 条)。</li>
+    </ul>
+    <p><b>验证</b>: ① 目标文件三件守阵全绿(<code>test_webui_ctx_menu_registry</code> + <code>test_webui_trigger_registry</code> 12 passed / <code>test_webui_static_dom_panel</code> 52 passed); ② 全量 <code>commands run test.full</code> <b>3994 passed, 2 skipped</b>(另有 1 条存量实时尾随 flake 单跑通过, 与本改动无涉), 覆盖率 <b>99.28%</b>(门槛 99%), 见 kb.baseline; ③ 合并链由 vendored Vue 3.5.13 编译器实测通过(v-if/注释/v-else-if/v-else 在 v-for 内编译为三元链, 注释被丢弃 —— 无「注释打断 else 链」风险); ④ 渲染层真浏览器实测: <code>commands run dev.e2e -- e2e/menus.spec.mjs e2e/trigger-scope.spec.mjs</code> <b>44 passed / 6 skipped</b>(含 CTX-04/05/06 次级菜单、四支菜单 <code>data-kind</code> 与批量/单组目标矩阵), DOM 结构未变故既有断言原样通过。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 01:40 — 用户指派认领，状态 <strong>In Progress</strong>。复验：<code>tpl/ctx-menus.html</code> 行菜单根块（<code>&lt;!-- 表头右键菜单</code> 之前）仍为 <code>class="ctx-item"</code> 5 处（四支 4 份 + 次级面板 1 份）+ <code>class="ctx-item has-sub"</code> 1 处，<code>ctxItems('multi'|'episode'|'member'|'group')</code> 四个 v-for 锚点，现象仍在</li>
+      <li>2026-10-22 01:52 — 修完并验证，状态 <strong>Done</strong>（骨架 5 份 → 2 份；三件守阵全绿 + 全量 3994 passed / 2 skipped / 覆盖率 99.28%）</li>
     </ul>
   </section>
 

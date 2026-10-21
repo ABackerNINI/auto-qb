@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (57)
+## Open (56)
 
 - [refactor] [HR 两张表行键面字面量双份(test_hr_status 与 test_web_hr 各声明全量键集)](../26-10-21-0502-refactor-test-hr-row-key-surface-dup.html) — history 23 键 + entry 键面两处全量断言; 键面常量收单点, 闭集守阵语义保留
 - [refactor] [测试日志捕获器 7 份实现(helpers/webui_helpers/hr_service/hr_worker/modules_p6/speed_curve/traffic_sample)](../26-10-21-0502-refactor-test-log-capture-dup.html) — 同名同语义的模块 logger 采集器 7 份, jscpd 三方逐字坐实; 收 helpers.capture_logs 唯一单点
@@ -17,7 +17,6 @@
 - [refactor] [前端轮询族: 三份实现 + 心跳守卫 5 处 + 抽屉缺悬挂兜底](../26-10-20-2231-refactor-fe-polling-family-dup.html) — 轮询三份实现(退避 while / 定间隔递归 / setTimeout 链)、停止条件 5 处手写、抽屉侧缺 qb 侧已修的悬挂兜底
 - [refactor] [前端单点已存在但被绕过 7 族(cfgBool / hubKey / directionKey / Bearer / KiB / 单位梯 / hrGroupTitle)](../26-10-20-2231-refactor-fe-single-point-bypass-dup.html) — 每族都有一个已存在的单点函数, 调用侧却内联重写一遍 —— 单点存在而无强制力
 - [refactor] [模板层单元格碎片: site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份](../26-10-20-2231-refactor-fe-tpl-cell-fragment-dup.html) — site-chip 3 份且 torrent 版缺 search-hit(与 torrents 行级同缺) = 种子页搜索不高亮; m-progress 4 份、m-dur / m-ratio / tag-chip / cat-chip 各 2-3 份
-- [refactor] [右键菜单 .ctx-item 渲染骨架 5 份(注册表已单点项集, 骨架未单点)](../26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup.html) — ctx-menus.html 四支 + 次级面板各写一遍 ctx-item 渲染骨架; 正是模板注释自己警告的「四支人肉奇偶」残留
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -69,7 +68,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (235)
+## Done (236)
 
 - [test] [守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件](../26-10-21-2232-test-guard-scope-narrower-than-acceptance.html) — 计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)
 - [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷
@@ -83,6 +82,7 @@
 - [refactor] [前端 dialogs/config_hub 三族 busy+try+toast+finally 骨架共 15 处](../26-10-20-2231-refactor-fe-dialogs-js-boilerplate-dup.html) — mgr CRUD 5 处、面板加载 5 处、POST+waitCmd+三态 toast 4 处、tm 面板 busy 5 处 —— 同一骨架抄 15 遍
 - [refactor] [抽屉四个 fetcher 同骨架 4 份(detail/trackers/files/peers)](../26-10-20-2231-refactor-fe-drawer-fetcher-boilerplate-dup.html) — drawer_store 四份 fetcher 各约 22 行, stale 守卫 x2 + loading 门 + _dtNotify + _drawerDone 的次序有心, 却抄了四遍
 - [refactor] [抽屉变体渲染器族: 三态空帧骨架 12 份 + peers 判据四件 3 份 + dt07/08 逐字同](../26-10-20-2231-refactor-fe-drawer-variant-renderer-dup.html) — 变体层三态空帧骨架 12 份、peers 判据(吸血/分桶/内网)3 份逐字同、dt07 与 dt08 仅 CSS 前缀不同
+- [refactor] [右键菜单 .ctx-item 渲染骨架 5 份(注册表已单点项集, 骨架未单点)](../26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup.html) — ctx-menus.html 四支 + 次级面板各写一遍 ctx-item 渲染骨架; 正是模板注释自己警告的「四支人肉奇偶」残留
 - [refactor] [模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标, 入池时记 11)](../26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html) — row-pad 上下占位 + 行 + row-pad 4 份; .empty 空态 12 处(复验实测), 其中 settings-detail 3 处连图标都没有
 - [refactor] [模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套](../26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html) — hb-switch 7 处(4 带文字 3 不带)、hb-sub-toggle 5 处(三种签名)、折叠 4 种实现(可访问性不一)、分段钮 4 套
 - [test] [三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步)](../26-10-20-2231-test-fe-tpl-shell-parity-guard.html) — 三 shell 除 head 资源清单外 87.5% 逐字同; manifest 已被守阵钉死相等, sprite(67 symbol)与 login 段未钉 —— 加一条断言即可

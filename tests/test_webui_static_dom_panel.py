@@ -26,8 +26,8 @@
 - test_skip_check_dialog_precheck_wired: 跳检预检对话框接线守阵(T23, 计划 26-10-05-0314 S4) —— ui_feedback.js _modalInit 声明 okDisabled/busy/verdict 三字段 + popovers.html 确认钮 :disabled="modal.okDisabled" 绑定 / busy 行 / verdict 行式渲染区(强制钮复用 extraText 第三钮 danger-solid) + drawer.js 两入口(skipCheckTorrent/skipCheckMulti, 后者带可选 targets 供单组入口 skipCheckGroup 复用)均交棒 _skipCheckDialog 且不再自带 _openModal + _skipCheckDialog 进框即禁用(busy + 固定警示区)并发预检(_skipPrecheck), 任一被重构摘除即红
 - test_skip_check_dialog_verdict_render: 跳检预检三分流渲染逻辑守阵(T24, 计划 26-10-05-0314 S4) —— _skipPrecheck 状态机分支(预检失败降级=启用普通确认且无强制钮 / 含 blocked=确认强制双钮全收 / ok+force 混合=确认钮文案「跳检 N 个可跳检的」+ 强制钮「强制跳检全部」/ force-only=确认保持禁用 / 全 ok=只启用确认)+ ok 子集派生(cls==="ok" 过滤)+ 确认路径送 ok 子集而强制路径送全量+force(_skipExec 单发 body 仅 force 时带 force 键, 批量确认只走 hashes 通道)+ 降级文案「后端闸门仍会在执行时拦截」+ _skipVerdictRows 计数行与分组上限截断(slice(0,5)+等 X 个), 任一分支被改写即红
 - test_modal_identity_stamp_landing_guard: 模态身份戳落袋守卫单点(F1-01, issue 26-10-06-0028) —— ui_feedback.js _openModal 每框发自增 mid + _modalIsCurrent 单点(visible + mid 双比对) + drawer.js _skipCheckDialog 把 this.modal.mid 交棒 _skipPrecheck 且落袋守卫为 seq + 身份戳双条件(取消跳检框后开无关 modal, 只有身份戳拦得住迟到回执)
-- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 必须有批量分支且调 ctxAct/ctxDelete、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
-- test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 单组 v-else 分支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量分支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
+- test_frontend_ctx_menu_multi_select_targets_selection: 多选右键菜单守阵 —— 四个 open*Menu 必须写 menu.multi、三套 UI 的行菜单必须消费注册表 ctxItems(ctxMenuKind()) 且段内无逐项直写(批量支走 ctxAct/ctxDelete)、ctxAct/ctxDelete 必须复用 bulkAct/bulkDelete
+- test_frontend_ctx_menu_group_actions_parity: 单组右键菜单与多选批量菜单项集一致守阵(2026-10-09 用户报「单组右键菜单缺选项」)—— 模板只按支名消费注册表(ctxItems(ctxMenuKind()) 单点)、单组支必含六个组级入口(重新校验/跳检/限速/移动/标签分类/导出, 与批量支同项集)、跳检项吃 flags.skip_check_menu 门控、六入口复用多选同一套下游链路(recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog / exportGroup->_exportHashes)不为组级另开旁路
 - test_frontend_meta_dialog_paired: 标签/分类编辑对话框守阵 —— 三套 UI 成对(metaOpen 对话框 + 批量菜单/单种子菜单两处入口, 批量控制条退役后模板层不再直接调 openMetaDialog(null))、shared 逻辑接线(openMetaDialog 锁定目标 + metaToggleTag 走 bulk 链路 + ctxMeta 先收菜单)、.meta-dialog/.opt-pill 三套 CSS 成对定义
 - test_frontend_dialog_shell_single_point: 对话框外壳单点守阵(issue 26-10-20-2231, R23-A-02·A-03·A-08 收敛) —— 三段式外壳(标题头/动作栏/遮罩手势对/关闭钮)只许在组件模板 dialog-shell.html 一处(剥注释后字面量清点), 调用点一律经 <aq-modal>(9 处调用覆盖 10 个对话框开态, :open/:close/:close-args/mask-class/icon-class/width-class/body-class 接线逐点清点) + 无遮罩异形 speed-pop 走 <aq-modal-head>; 管理对话框双胞胎合并为单份模板 + mgrDef 数据表(state.js computed 两态字段/文案/动作全表驱动, dialogs-mgr/popovers 零 mgrOpen 直判残留, dialogs.js mgrSubmitNew 分派) + modal-details 两套并一(state.js::modalDetailRows: verdict 在前 copy=false / details 在后 copy=true, 复制钮边界 String(d.value ?? '') 修 value===0 不出钮)
 - test_frontend_rename_dialog_width_wiring: 重命名对话框宽档接线守阵(2026-10-19 用户报「弹窗太小」)—— 字段值 = 完整种子显示名(真实名称 routinely 80~120 字符), 骑通用 .modal 基档 520(为确认/提示一句话设计)时输入框仅 474px, 真浏览器实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露); 修法 = _openModal 增 cls 附加类选项(空 = 既有对话框零变化)+ 重命名走 rename-dialog 类 + 三皮肤 .modal.rename-dialog 宽档(--modal-w-add 860, 与设定位置/添加种子同档)。钉 _modalInit cls 字段 / popovers.html 根类绑定并入 modal.cls / editRename 传类 / 三皮肤宽档规则成对; 行为面由 e2e/rename-dialog-fit.spec.mjs 真浏览器钉
@@ -389,7 +389,8 @@ def test_frontend_qb_traffic_chart_wiring():
     assert 'gate: "qb_traffic"' in reg and "vm.openQbGroup(vm.menu.key)" in reg, \
         "ctx_menu.js 缺组右键「qB 口径流量图」菜单项(注册表 gate: qb_traffic + menu.key 直用的 encode_group_key 通道)"
     assert reg.count("vm.openQbGroup(vm.menu.key)") == 1, "组右键菜单项只能挂在单组菜单(多选/剧集菜单不得出现)"
-    assert 'ctxItems(\'group\')' in ctx_menus, "ctx-menus.html 单组支必须 v-for 消费注册表(回退静态直写 = 四支人肉奇偶复发)"
+    assert 'ctxItems(ctxMenuKind())' in ctx_menus, \
+        "ctx-menus.html 行菜单必须 v-for 消费注册表(支名走 menu.js::ctxMenuKind() 单点; 回退静态直写 = 四支人肉奇偶复发)"
     assert 'v-if="qbTrafficActive"' in drawer_tpl and 'ref="qbChartHost"' in drawer_tpl \
         and 'qbCurSummary' in drawer_tpl, \
         "drawer.html 缺流量形态正文块(三挂点共用: qbTrafficActive 门 / 建图落点 / 汇总)"
@@ -3223,9 +3224,11 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
     修法是让菜单在"被点的行属于选中集合"时升级为批量菜单, 动作复用批量浮条的链路。这条守阵
     钉住三处**成对**关系(任一处漏改都会静默退化回单目标, 且 pytest/`node --check` 都看不见):
       1. 四个 open*Menu 必须各自写入 `multi:` —— 漏一处, 那条路径的多选右键就仍是单目标;
-      2. 三套 UI 的批量分支都必须存在且消费注册表 `ctxItems('multi')`(W3 起项集/分派在
+      2. 三套 UI 的行菜单都必须存在且消费注册表 `ctxItems(ctxMenuKind())`(W3 起项集/分派在
          shared/ctx_menu.js 注册表单点, 三 UI 同指 /shared/tpl/ctx-menus.html 一份 = 漂移
-         结构性不可能); 注册表 multi 支只能调 ctxAct/ctxDelete;
+         结构性不可能; 2026-10-22 issue 26-10-20-2231 起四支骨架合并为一条, 批量支不再有
+         独立的 template 段 —— 比对面换成"根块消费 ctxMenuKind() 单点 + 段内无逐项直写");
+         注册表 multi 支只能调 ctxAct/ctxDelete;
       3. ctxAct/ctxDelete 必须**复用** bulkAct/bulkDelete —— 自己再拆一遍目标集合就会与批量浮条
          的口径漂移(虚拟行/组展开/失效目标跳过这三条语义都在 _bulkTargets 里)。
     """
@@ -3246,22 +3249,23 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
             )
             assert "multi:" in body, f"{rel} 的 {fn} 没把 multi 写进 this.menu —— 模板读不到, 批量分支永不渲染"
 
-    # 2. 三套 UI 的批量分支都存在且消费注册表; 项集/分派在注册表单点(shared/ctx_menu.js,
+    # 2. 三套 UI 的行菜单都必须消费注册表; 项集/分派在注册表单点(shared/ctx_menu.js,
     #    三 UI 同指 /shared/tpl/ctx-menus.html = 双 UI 漂移结构性不可能; W3 起逐项分派从
-    #    模板文本搬进注册表 act —— 比对面随之搬家, 治的是同一件事)
+    #    模板文本搬进注册表 act —— 比对面随之搬家, 治的是同一件事)。
+    #    2026-10-22(issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup): 四支各一份骨架
+    #    合并为 ctxItems(ctxMenuKind()) 一条, 批量支不再有独立 <template v-if="menu.multi"> 段
+    #    —— 比对面从"批量分支段"换成"行菜单根块消费 ctxMenuKind() 单点 + 段内无逐项直写"。
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
-        m = re.search(r'<template v-if="menu\.multi">(.*?)</template>', text, re.S)
-        assert m, (
-            f"{ui}/index.html 的右键菜单没有 v-if=\"menu.multi\" 批量分支 —— "
-            f"多选右键拿不到批量动作(双 UI 必须成对改, 另一套有而它没有 = 半边用户没有该功能)"
+        assert "<!-- 表头右键菜单" in text, f"{ui}/index.html 找不到行右键菜单段锚点(模板分片变了? 同步本守阵)"
+        row = text[:text.index("<!-- 表头右键菜单")]
+        assert "ctxItems(ctxMenuKind())" in row, (
+            f"{ui}/index.html 的行右键菜单没有消费注册表 ctxItems(ctxMenuKind()) —— "
+            f"多选右键拿不到批量动作(三 UI 必须成对改, 另一套有而它没有 = 半边用户没有该功能)"
         )
-        assert "ctxItems('multi')" in m.group(1), (
-            f"{ui}/index.html 批量分支未消费注册表 ctxItems('multi') —— W3 v-for 化后项集在"
-            f" ctx_menu.js, 模板回退逐项直写 = 四支人肉奇偶复发(CTX-03)"
-        )
-        assert "actTorrent(" not in m.group(1) and "actEpisode(" not in m.group(1), (
-            f"{ui}/index.html 批量分支里出现了单目标/单集动作 —— 批量菜单必须整份走 ctxAct/ctxDelete"
+        assert "actTorrent(" not in row and "actEpisode(" not in row, (
+            f"{ui}/index.html 行菜单段出现了单目标/单集动作直写 —— 分派必须整份走注册表 act"
+            f"(批量支走 ctxAct/ctxDelete, CTX-03)"
         )
     # 注册表 multi 支: 五个批量动作 + ctxDelete 必须在, 且只能调 ctxAct/ctxDelete
     reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
@@ -3300,15 +3304,15 @@ def test_frontend_ctx_menu_group_actions_parity():
       3. 六个入口方法必须在 commands.js/drawer.js 落地且复用多选同一套下游链路
          (recheckGroup->_actCore / 限速移动跳检->drawer.js 多选对话框 / metaGroup->openMetaDialog /
           exportGroup->_exportHashes), 不为组级另开旁路。
-    W3(计划 26-10-20-0024)起四支项集搬到注册表单点: 判据链仍在模板(v-else 支 +
-    ctxItems('group') 消费), 项集/门控/分派在 ctx_menu.js group 支定义段 —— 比对面随之搬家。
+    W3(计划 26-10-20-0024)起四支项集搬到注册表单点: 模板只按支名取项(ctxItems(支)), 项集/
+    门控/分派在 ctx_menu.js group 支定义段 —— 比对面随之搬家。
+    2026-10-22(issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup): 四支各一份骨架合并为
+    一条 `ctxItems(ctxMenuKind())` v-for, 单组支不再是独立的 `<template v-else>` 段 ——
+    "模板只消费注册表"这条断言改挂 ctxMenuKind() 单点, 项集比对面(下面三处)一字不动。
     """
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "ctx-menus.html"), encoding="utf-8").read()
-    # v-else 精确匹配单组分支(v-else-if 带 -if 后缀, 不会误命中)
-    m = re.search(r"<template v-else>(.*?)</template>", tpl, re.S)
-    assert m, "ctx-menus.html 找不到单组菜单 v-else 分支(结构被改? 同步本守阵)"
-    assert "ctxItems('group')" in m.group(1), (
-        "ctx-menus.html 单组支必须 v-for 消费注册表 ctxItems('group') —— 回退逐项直写 = "
+    assert "ctxItems(ctxMenuKind())" in tpl, (
+        "ctx-menus.html 行菜单未消费注册表 ctxItems(ctxMenuKind()) —— 回退逐项直写 = "
         "四支人肉奇偶复发(2026-10-09 报障: 单组缺选项)"
     )
     reg = open(os.path.join(STATIC_ROOT, "shared", "ctx_menu.js"), encoding="utf-8").read()
@@ -4111,12 +4115,12 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
                              text), (f"{ui} 仍存在后代写法的 `.ctx-item:hover .ico` —— hover 父项会连子面板图标一起变灰(CTX-04)")
 
     # 2. 三套 UI 的次级菜单: 一级只有一个入口, 复制三项在面板内(模板侧只留父项结构与交互;
-    #    W3 计划 26-10-20-0024 起面板内容与「更多操作」文案搬到注册表次级定义段)
+    #    W3 计划 26-10-20-0024 起面板内容与「更多操作」文案搬到注册表次级定义段;
+    #    2026-10-22 issue 26-10-20-2231 起四支骨架合并为一条, 行菜单根块整段即渲染面)
     for ui in _UI_ALL:
         text = _ui_aggregate(ui)
-        seg = re.search(r'v-else-if="menu\.hash"(.*?)<template v-else>', text, re.S)
-        assert seg, f"{ui}/index.html 找不到单种子支(v-else-if=menu.hash; 四支结构变了? 同步本守阵)"
-        block = seg.group(1)
+        assert "<!-- 表头右键菜单" in text, f"{ui}/index.html 找不到行右键菜单段锚点(模板分片变了? 同步本守阵)"
+        block = text[:text.index("<!-- 表头右键菜单")]
         n_sub = block.count('class="ctx-item has-sub"')
         assert n_sub == 1, (f"{ui} 一级菜单出现 {n_sub} 个「更多操作」入口 —— 只允许一个(CTX-06)")
         assert '@mouseleave="scheduleSubClose()"' in block, (

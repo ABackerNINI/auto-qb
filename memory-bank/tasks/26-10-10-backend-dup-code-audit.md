@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-10-10
-**Updated:** 2026-10-21
+**Updated:** 2026-10-22
 **Topics:** dup-code-audit
 **Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包)**; 用户「做 Phase 1 hr 部分」→ 已完成 **轮 11–14(hr 全包)**; 用户「做 Phase 1 webui 部分」→ 已完成 **轮 15–16(webui 全包)**; 用户「做 Phase 1, 17-19部分」→ 已完成 **轮 17–19(rules / infra / torrents+tray+entry)**, 三包 34 项发现(A11/B5/C9/D9), 全局累计 156 项(A58/B15/C40/D43)。**Phase 1 后端(config+core+hr+webui+rules+infra+torrents)全部走完**。全程纯审查轮, 零源码改动。
 **Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/activeContext/26-10-11-0240-dup-code-audit.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/activeContext/26-10-11-0352-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/testing/baselines/26-10-11-0240-dup-code-audit-hr.md,memory-bank/testing/baselines/26-10-11-0314-dup-code-audit-webui.md,memory-bank/testing/baselines/26-10-11-0352-dup-code-audit-rules-infra-torrents.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html,memory-bank/tasks/26-10-11-webui-dup-code-fixes.md
@@ -208,3 +208,5 @@
 - 2026-10-21 05:35 认领并修复 issue 26-10-20-2231(refactor-fe-css-skin-token-layer-dup): atlas :root 补 --font-ui/--font-display/--font-mono 三令牌(86→89, 与另两皮肤相等, 顺带修掉自己 4 处 var(--font-mono) 裸引用的静默失效); prism 新建 css/dialogs.css 把弹窗族从 components(313 行)/views(264 行) 按原全局序迁入, link 落 views 之后, 拆后 381/818/603 行; 守阵同轮对齐(单文件路径 5 处改聚合、inset:0 判据收窄、shell cap 214)+ 新增令牌名集相等与 prism 链接序两条守阵(均红验); 等价性静态赢家表 3526 条零变化 + 真浏览器 5 态像素 prism 全 0 差异 + test.full 3971 passed
 
 - 2026-10-21 05:47 认领并修复 issue 26-10-20-2231(refactor-fe-drawer-fetcher-boilerplate-dup, 台账 R21-A-01): drawer_store 四份 fetcher 收敛为唯一骨架 _fetchDrawerSource + 顶层差异表 _DT_FETCH(端点/归一/目标状态键/空值形状 + loading 门/失败标记/通知时机), 四入口退化为单行薄壳, stale 判点 13→4; 等价性实证(37 项 node 电池对收敛前实现同绿) + 红验七类突变全红 + 抽屉域 11 份 e2e 64 绿; 新增守阵 test_drawer_fetcher_skeleton_single_point, 四处既有守阵同步到骨架/表; 数字见 kb.baseline
+
+- 2026-10-22 01:49 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup 认领并修复: ctx-menus.html 四支各一份 .ctx-item 骨架(5 份)合并为一条 ctxItems(ctxMenuKind()) v-for, 骨架 5 份→2 份; 三件守阵比对面搬到 ctxMenuKind() 单点; 全量 3994 passed/覆盖率 99.28%

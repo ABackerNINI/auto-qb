@@ -29,9 +29,13 @@
 - **处置**:
   1. 加项: 在注册表对应支加**一行**(`label` 是函数时必须同时给 `labelText` 静态名, 定制面板求不出
      动态文案); 要跨支一致就加到多支 —— 同一行定义被多处引用, 不再有两份文本可漏改。
-  2. 模板不许回潮: `ctx-menus.html` 四支只能 `v-for` 消费 `ctxItems('<支>')` + `ctxRun(it)`,
-     逐项 `@click="actTorrent(...)"` 直写由 `test_ctx_menu_template_consumes_registry` 拦下。
-  3. 守阵比对面都读**注册表定义序**(组级奇偶六入口 / T4 动作族奇偶 / 批量分支成对), 模板文本
-     token 断言在 v-for 化后没有意义 —— 改注册表要同步改这些断言。
+  2. 模板不许回潮: `ctx-menus.html` 行菜单只能 `v-for` 消费 `ctxItems(ctxMenuKind())` + `ctxRun(it)`,
+     逐项 `@click="actTorrent(...)"` 直写与 `ctxItems('multi')` 这类**支名字面量**都由
+     `test_ctx_menu_template_consumes_registry` 拦下 —— 字面量要分四支, 分四支就要四份骨架
+     (2026-10-22 issue `26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup`: 骨架曾四支各一份,
+     5 份里 4 份逐字同; 现 `.ctx-item` 骨架恰 2 份 = 一级项 + 次级面板项)。
+  3. 守阵比对面都读**注册表定义序**(组级奇偶六入口 / T4 动作族奇偶 / 批量入口成对: open*Menu 写
+     `multi:` + 行菜单根块消费 `ctxMenuKind()`), 模板文本 token 断言在 v-for 化后没有意义 ——
+     改注册表要同步改这些断言。
   4. 面板写出的布局必须过后端校验: `test_ctx_custom_write_shape_passes_config_contract` 在 node 里
      跑真写路径再喂 `validate_config`(支级/次级键集合与 `_CTX_BRANCH_KEYS`/`_CTX_LAYER_KEYS` 对齐)。

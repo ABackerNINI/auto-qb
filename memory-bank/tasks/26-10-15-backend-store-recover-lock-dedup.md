@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-15
-**Updated:** 2026-10-21
+**Updated:** 2026-10-22
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html」—— dup-code-audit infra 轮(R18)对 R6/R2/R3 三轮暂缓跨包件的合并考量收口。口径沿用前修复轮保守纪律(行为逐位不变, 仅编排/构造收口): ① `infra/store_recovery.py` 新增「读坏→(挪走)留证→读 `.bak`」编排单点 `recover_corrupt_file`(回调式 read_backup + 可选 quarantine, 不传 = 原地保留)与 `quarantine_bad_file` 时间戳留证单点, hr `HrLockSession._recover` 与 state `StateService.load()` 损坏分支两处调用 —— 语义差异(hr 挪走留证/schema 迁移/read_error 消息 vs state 原地保留/_CORRUPT 三态/分级日志/立即自愈写回)全部保留在调用方; ② `infra/locking.py` 新增 `open_file_lock`/`release_file_lock` 构造/释放单点, hr 站点锁与 SingleInstanceLock 同族收口(hr/store 不再裸 import filelock); ③ 新守阵 tests/test_store_recovery.py 十条(静态两判据均过红验)。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** dup-code-audit
 
@@ -70,3 +70,5 @@
 - 2026-10-21 05:35 认领并修复 issue 26-10-20-2231(refactor-fe-css-skin-token-layer-dup): atlas :root 补 --font-ui/--font-display/--font-mono 三令牌(86→89, 与另两皮肤相等, 顺带修掉自己 4 处 var(--font-mono) 裸引用的静默失效); prism 新建 css/dialogs.css 把弹窗族从 components(313 行)/views(264 行) 按原全局序迁入, link 落 views 之后, 拆后 381/818/603 行; 守阵同轮对齐(单文件路径 5 处改聚合、inset:0 判据收窄、shell cap 214)+ 新增令牌名集相等与 prism 链接序两条守阵(均红验); 等价性静态赢家表 3526 条零变化 + 真浏览器 5 态像素 prism 全 0 差异 + test.full 3971 passed
 
 - 2026-10-21 05:47 认领并修复 issue 26-10-20-2231(refactor-fe-drawer-fetcher-boilerplate-dup, 台账 R21-A-01): drawer_store 四份 fetcher 收敛为唯一骨架 _fetchDrawerSource + 顶层差异表 _DT_FETCH(端点/归一/目标状态键/空值形状 + loading 门/失败标记/通知时机), 四入口退化为单行薄壳, stale 判点 13→4; 等价性实证(37 项 node 电池对收敛前实现同绿) + 红验七类突变全红 + 抽屉域 11 份 e2e 64 绿; 新增守阵 test_drawer_fetcher_skeleton_single_point, 四处既有守阵同步到骨架/表; 数字见 kb.baseline
+
+- 2026-10-22 01:49 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup 认领并修复: ctx-menus.html 四支各一份 .ctx-item 骨架(5 份)合并为一条 ctxItems(ctxMenuKind()) v-for, 骨架 5 份→2 份; 三件守阵比对面搬到 ctxMenuKind() 单点; 全量 3994 passed/覆盖率 99.28%

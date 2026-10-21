@@ -164,7 +164,8 @@ window.AQB_MENU = {
       return this._scopeResolve("anchor", { kind: "group", id: m.key });
     },
     /* 当前菜单作用对象的分支名(与注册表 CTX_BRANCHES 同一套词: multi/episode/member/group)
-     * —— 容器 :data-kind 的取值, e2e 用它区分四支(文案统一后可见文案已趋同, D9)。 */
+     * —— 容器 :data-kind 的取值, e2e 用它区分四支(文案统一后可见文案已趋同, D9);
+     * 也是模板 v-for 的支名来源(ctxItems(ctxMenuKind()), 2026-10-22 起四支共用一条渲染骨架)。 */
     ctxMenuKind() {
       const m = this.menu || {};
       if (m.multi) return "multi";

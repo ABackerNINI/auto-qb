@@ -249,9 +249,9 @@ window.AQB_DECORATE = {
       }
       return { keys, hashes, skipped };
     },
-    /* 右键菜单当前目标的可用性(模板 :class / :title 用)。分支判据与 ctx-menus.html 的
-     * v-if 链**同序** —— menu.multi 优先级最高(menu.js _ctxMulti 与 shows.js 两个入口都会
-     * 同时置 multi 与 episode/hash, 模板先判 multi, 故这里也必须先判 multi)。 */
+    /* 右键菜单当前目标的可用性(模板 :class / :title 用)。分支判据与 menu.js::ctxMenuKind()
+     * **同序** —— menu.multi 优先级最高(menu.js _ctxMulti 与 shows.js 两个入口都会
+     * 同时置 multi 与 episode/hash, ctxMenuKind() 先判 multi, 故这里也必须先判 multi)。 */
     reannounceMenuGate() {
       const m = this.menu || {};
       let t = null;

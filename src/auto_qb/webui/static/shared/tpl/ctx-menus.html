@@ -5,9 +5,12 @@
           <!-- 行右键菜单四支(计划 26-10-20-0024 W3 起): 项集/顺序/显隐/跨层全部由注册表
                shared/ctx_menu.js(window.AQB_CTX_MENU_REG) + 布局数据(web.ctx_menu, 经
                /api/webui/flags 下发, lifecycle.loadWebFlags 写入 flags)驱动 —— 本模板只保留
-               ①四支判据链(与 triggers.js variant 口径一致, 静态守阵 T3 的比对面)与
+               ①四支共用的**一条**渲染骨架(支名由 menu.js::ctxMenuKind() 单点给出, 与注册表
+               CTX_BRANCHES 同词 —— 2026-10-20 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup
+               之前是四支各一份 .ctx-item 骨架, 给项加属性漏改一支即同族缺陷)与
                ②「更多操作」子面板的展开交互(CTX-05/06, 在 menu.js)。
-               渲染: ctxItems('<支>') 出一级可见项, ctxSubItems('member') 出次级可见项; 点击
+               渲染: ctxItems(ctxMenuKind()) 出一级可见项, ctxSubItems(ctxMenuKind()) 出次级可见项
+               (次级注册表现状只有 member 支有默认内容, 故 submenu 父项实际只出现在单种子支); 点击
                走 ctxRun(it) 分派到注册表 act(原方法调用逐字平移, 动作链一行不动)。默认布局
                (不写 ctx_menu 时)与静态模板逐位一致 —— 零漂移由 node 电池(注册表层)与
                e2e menus.spec(渲染层)双守。逐项语义(门控/置灰/动态文案/图标)见注册表内注释:
@@ -32,70 +35,36 @@
                合单); 跳检是高危项, 由 flags.skip_check_menu 门控(fail-closed, 后端端点同步
                拒单); 仍不放需要**逐目标现值**的单目标项(详细信息/重命名/复制等, 预填与展示
                都依赖单个目标的当前值); 要单目标操作请不选中任何行再右键。 -->
-          <template v-if="menu.multi">
-            <template v-for="it in ctxItems('multi')" :key="it.id">
-              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
-              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" :data-item="it.id" @click="ctxRun(it)">
-                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
-              </div>
-            </template>
-          </template>
-          <template v-else-if="menu.episode">
-            <!-- 整集整剧(shows.js openShowEpMenu/openShowMenu): scope=ep/show 决定动态文案,
-                 取首个成员哈希(同剧同集通常共用同一保存路径); 项集与注册表 episode 支对齐 -->
-            <template v-for="it in ctxItems('episode')" :key="it.id">
-              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
-              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" :data-item="it.id" @click="ctxRun(it)">
-                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
-              </div>
-            </template>
-          </template>
-          <template v-else-if="menu.hash">
-            <!-- 单种子(menu.hash): 一级 14 项(含「更多操作」父项)+ 5 线; 次级 11 项 + 2 线。
+          <template v-for="it in ctxItems(ctxMenuKind())" :key="it.id">
+            <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
+            <!-- 「更多操作」父项: 唯一带子面板的 kind(注册表 kind: submenu, 现状只在单种子支)。
                  FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子
                  控制, 不是"高级"能力); hover 与点击均可展开; CTX-06: 复制族(名称/哈希/magnet)
                  由独立子面板并入本面板末尾 —— 一级只留这一个入口; 移出父项/面板后延迟收起
                  (CTX-05, 180ms 宽限跨过 4px 缝, 见 menu.js openSub/keepSub/scheduleSubClose);
                  子面板钳位在 menu.js _subFitViewport(估宽只管首帧方向, 精确收口在实测)。
                  D7: 次级无可见项时注册表不出「更多操作」父项(单选项/空面板 = 半残 UI)。 -->
-            <template v-for="it in ctxItems('member')" :key="it.id">
-              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
-              <div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }" :data-item="it.id"
-                   @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
-                   @click.stop="toggleSub('advanced', $event)">
-                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
-                <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-                <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
-                     :style="{ top: subTop + 'px' }"
-                     @click.stop @mouseenter="keepSub()">
-                  <template v-for="sit in ctxSubItems('member')" :key="sit.id">
-                    <div v-if="sit.kind === 'sep'" class="ctx-sep"></div>
-                    <div v-else class="ctx-item" :class="[sit.cls, { 'is-gated': sit.gated }]" :title="sit.title" :data-item="sit.id" @click="ctxRun(sit)">
-                      <svg class="ico ico-sm" :class="sit.icon.cls" viewBox="0 0 16 16"><use :href="sit.icon.use"></use></svg><span class="ctx-text">{{ sit.label }} <span v-if="sit.note" class="ctx-note">{{ sit.note }}</span></span>
-                    </div>
-                  </template>
-                </div>
+            <div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }" :data-item="it.id"
+                 @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub('advanced', $event)">
+              <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
+              <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
+              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+                   :style="{ top: subTop + 'px' }"
+                   @click.stop @mouseenter="keepSub()">
+                <template v-for="sit in ctxSubItems(ctxMenuKind())" :key="sit.id">
+                  <div v-if="sit.kind === 'sep'" class="ctx-sep"></div>
+                  <div v-else class="ctx-item" :class="[sit.cls, { 'is-gated': sit.gated }]" :title="sit.title" :data-item="sit.id" @click="ctxRun(sit)">
+                    <svg class="ico ico-sm" :class="sit.icon.cls" viewBox="0 0 16 16"><use :href="sit.icon.use"></use></svg><span class="ctx-text">{{ sit.label }} <span v-if="sit.note" class="ctx-note">{{ sit.note }}</span></span>
+                  </div>
+                </template>
               </div>
-              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" :data-item="it.id" @click="ctxRun(it)">
-                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
-              </div>
-            </template>
-          </template>
-          <template v-else>
-            <!-- CTX-03 组级动作补齐(2026-10-09 用户报「单组右键菜单缺选项」): 单组菜单此前只有
-                 开始/暂停/汇报 + 打开文件夹/流量图/删除, 而多选批量菜单还有 重新校验/跳检/限速/
-                 移动/标签分类/导出 —— 同一批动作在「右键 1 组」与「选 2 组」两条路径上项集不一致。
-                 现按批量菜单同序同图标补齐(项集在注册表 group 支), 目标 = 该组全部成员
-                 (menu.key 组级解析); 下游复用多选同一套链路(recheckGroup / skipCheckGroup /
-                 editLimitsGroup / editMoveGroup / metaGroup / exportGroup, 见 commands.js),
-                 不为组级另开旁路。跳检同样吃 flags.skip_check_menu 门控(fail-closed);
-                 qB 口径流量图(S5b)吃 flags.qb_traffic_enabled 门(无入口即无请求, P5 验收)。 -->
-            <template v-for="it in ctxItems('group')" :key="it.id">
-              <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
-              <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" :data-item="it.id" @click="ctxRun(it)">
-                <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
-              </div>
-            </template>
+            </div>
+            <!-- 其余三支(多选/整集整剧/单组)共用本骨架 —— 支目标语义见注册表 CTX_ITEM_DEFS 的支注释
+                 (批量 = 选中集合 / 整集整剧 = menu.episode.hashes / 单组 = menu.key 全部成员)。 -->
+            <div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" :title="it.title" :data-item="it.id" @click="ctxRun(it)">
+              <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
+            </div>
           </template>
         </div>
         </transition>

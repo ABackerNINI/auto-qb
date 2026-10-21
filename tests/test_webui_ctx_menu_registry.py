@@ -7,10 +7,11 @@ ctx-menus.html 四支菜单从静态模板直写改为注册表单点(shared/ctx
 v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线守阵(manifest/mixin/挂载面)。
 
 ## 测试计划(每个测试函数一条)
-- test_ctx_menu_template_consumes_registry: 模板消费守阵(W3) —— 四支判据链原样(与 triggers.js
-  variant 口径一致, T3 比对面)+ 各支段 v-for 消费 ctxItems('<支>') + member 支子面板结构
-  (has-sub/ctx-caret/ctxSubItems('member')/CTX-05 交互三件/钳位状态) + 逐项 @click 直写回潮
-  拦截(唯一允许 ctxRun(it) 与 toggleSub)。W2 期还另有一项「注册表 ↔ 静态模板计数对账」过渡锚
+- test_ctx_menu_template_consumes_registry: 模板消费守阵(W3 + 2026-10-22 骨架单点) —— 支名
+  只许走 ctxMenuKind()(无 ctxItems('<支>') 字面量) + 行菜单根块 .ctx-item 骨架恰 2 份
+  (一级 + 次级面板) + 「更多操作」父项结构(has-sub/ctx-caret/ctxSubItems(ctxMenuKind())/
+  CTX-05 交互三件/钳位状态) + 逐项 @click 直写回潮拦截(唯一允许 ctxRun(it) 与 toggleSub)。
+  W2 期还另有一项「注册表 ↔ 静态模板计数对账」过渡锚
   (52 项 + 14 线逐支相等), W3 模板 v-for 化后如期退役 —— 渲染层零漂移由 e2e menus.spec 接棒,
   注册表层由本文件余两项与 W5 新守阵(注册表 id ↔ 默认布局 ↔ config 契约 ↔ flags 键)接棒
 - test_ctx_menu_registry_node_battery: node 真跑电池(无 node 静默跳过, 不引入 skip) —— 默认布局
@@ -325,50 +326,60 @@ console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: check
 
 
 def test_ctx_menu_template_consumes_registry():
-    """模板消费守阵(W3): 四支判据链原样 + 各支 v-for 消费注册表 + member 支子面板结构
+    """模板消费守阵(W3 + 2026-10-22 骨架单点): 一条骨架消费注册表 + 子面板结构
 
-    W3 起 ctx-menus.html 四支从静态逐项直写改为注册表单点消费。本守阵钉住替换后的模板
-    形态, 防回潮(回潮 = 四支人肉奇偶复发, 即 pitfall ctx-menu-branch-parity 的 root cause):
-      1. 四支判据链原样(v-if="menu.multi" / v-else-if="menu.episode" / v-else-if="menu.hash" /
-         v-else; 与 triggers.js variant 口径一致, 静态守阵 T3 的比对面);
-      2. 每支段内必须 v-for 消费 ctxItems('<支>') —— 项集只能来自注册表单点;
-      3. member 支含「更多操作」父项结构: has-sub + ctx-caret + 子面板 v-for 消费
-         ctxSubItems('member') + CTX-05/06 交互三件(openSub/scheduleSubClose/toggleSub,
-         收起语义在 menu.js, 模板必须挂上)+ 钳位状态消费(subFlip/subTop);
+    W3 起 ctx-menus.html 的项集从静态逐项直写改为注册表单点消费; 2026-10-22(issue
+    26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup)起**渲染骨架本身**也收成一条 ——
+    四支各一份 `.ctx-item` 骨架(5 份, 其中 4 份逐字同)合并为 `ctxItems(ctxMenuKind())`
+    单 v-for, 支名改由 menu.js::ctxMenuKind() 单点给出。本守阵钉住合并后的形态, 防两种回潮
+    (回潮 = 四支人肉奇偶复发, 即 pitfall ctx-menu-branch-parity 的 root cause):
+      1. 支名只许走 `ctxMenuKind()`: 模板里出现 `ctxItems('multi')` 这类字面量就是"四支各一份"
+         的开端(字面量要分四支, 分四支就要四份骨架);
+      2. 行菜单根块里 `.ctx-item` 骨架恰 2 份(一级项 + 次级面板项) —— 给项加属性只改这两处,
+         多一份 = 有人又按支抄了一遍;
+      3. 「更多操作」父项结构: has-sub + ctx-caret + 子面板 v-for 消费 `ctxSubItems(ctxMenuKind())`
+         + CTX-05/06 交互三件(openSub/scheduleSubClose/toggleSub, 收起语义在 menu.js, 模板必须挂上)
+         + 钳位状态消费(subFlip/subTop);
       4. 行菜单段不得再出现逐项 @click 分派(ctxAct/actTorrent/actEpisode/ctxDelete/… 直写)——
          项级唯一允许 ctxRun(it), 父项级唯一允许 toggleSub。
     """
     with open(_CTX_MENUS_TPL, encoding="utf-8") as f:
         tpl = f.read()
     row = tpl[:tpl.index("<!-- 表头右键菜单")]  # 只取行右键菜单根块, 排除表头/文件优先级/抽屉菜单
-    anchors = [
-        ("multi", 'v-if="menu.multi"'),
-        ("episode", 'v-else-if="menu.episode"'),
-        ("member", 'v-else-if="menu.hash"'),
-        ("group", "<template v-else>"),
-    ]
-    pos = []
-    for name, needle in anchors:
-        assert needle in row, f"ctx-menus.html 缺 {name} 支判据链锚点 {needle}(四支结构变了? 同步本守阵)"
-        pos.append((name, row.index(needle)))
-    for i, (name, p) in enumerate(pos):
-        end = pos[i + 1][1] if i + 1 < len(pos) else len(row)
-        seg = row[p:end]
-        assert f"ctxItems('{name}')" in seg, (f"{name} 支未 v-for 消费注册表 ctxItems('{name}') —— 项集必须来自 ctx_menu.js 单点")
-        for handler in re.findall(r'@click(?:\.stop)?="([^"]+)"', seg):
-            assert handler.startswith("ctxRun(") or handler.startswith("toggleSub("), (
-                f"{name} 支出现逐项 @click 直写 {handler} —— 回退静态直写 = 四支人肉奇偶复发"
-                f"(pitfall ctx-menu-branch-parity); 分派归注册表 act, 模板只调 ctxRun(it)"
-            )
-    # member 支子面板结构(CTX-05/06 交互 + 钳位消费; D7 下次级空时注册表不出父项, 面板恒有内容)
-    member_seg = row[pos[2][1]:pos[3][1]]
-    assert "has-sub" in member_seg and "ctx-caret" in member_seg, \
-        "member 支缺「更多操作」父项结构(has-sub/ctx-caret)"
-    assert "ctxSubItems('member')" in member_seg, "member 支子面板未消费 ctxSubItems('member')"
+
+    # 1. 支名单点(字面量 = 四支各一份骨架的开端)
+    assert "ctxItems(ctxMenuKind())" in row, (
+        "ctx-menus.html 行菜单未 v-for 消费 ctxItems(ctxMenuKind()) —— 支名必须来自"
+        " menu.js::ctxMenuKind() 单点(四支各写一份 ctxItems('<支>') = 骨架分家, pitfall ctx-menu-branch-parity)"
+    )
+    for name in ("multi", "episode", "member", "group"):
+        assert f"ctxItems('{name}')" not in row and f'ctxItems("{name}")' not in row, (
+            f"ctx-menus.html 出现支名字面量 ctxItems('{name}') —— 支名只许走 ctxMenuKind()"
+            f"(字面量回潮 = 四支各一份骨架, 同族缺陷复发)"
+        )
+
+    # 2. 骨架份数: 一级项 + 次级面板项(共 2); 「更多操作」父项恰 1
+    n_item = row.count('class="ctx-item"')
+    assert n_item == 2, (
+        f"行菜单根块有 {n_item} 份 .ctx-item 骨架 —— 只允许 2 份(一级项 + 次级面板项);"
+        f" 多出来的是按支抄的骨架(issue 26-10-20-2231 已合并, 别再分家)"
+    )
+    assert row.count('class="ctx-item has-sub"') == 1, "「更多操作」父项骨架应恰 1 份(has-sub)"
+
+    # 3. 子面板结构(CTX-05/06 交互 + 钳位消费; D7 下次级空时注册表不出父项, 面板恒有内容)
+    assert "ctxSubItems(ctxMenuKind())" in row, "子面板未消费 ctxSubItems(ctxMenuKind())(支名同走单点)"
+    assert "has-sub" in row and "ctx-caret" in row, "缺「更多操作」父项结构(has-sub/ctx-caret)"
     for call in ("openSub('advanced'", "scheduleSubClose()", "toggleSub('advanced'", "keepSub()"):
-        assert call in member_seg, f"member 支子面板缺交互 {call}(CTX-05 收起语义在 menu.js, 模板必须挂上)"
-    assert "subFlip" in member_seg and "subTop" in member_seg, \
+        assert call in row, f"子面板缺交互 {call}(CTX-05 收起语义在 menu.js, 模板必须挂上)"
+    assert "subFlip" in row and "subTop" in row, \
         "子面板缺钳位状态消费(flip-x / top; _subFitViewport 钳位结果要有绑定)"
+
+    # 4. 逐项 @click 直写回潮拦截(项级唯一 ctxRun, 父项级唯一 toggleSub)
+    for handler in re.findall(r'@click(?:\.stop)?="([^"]+)"', row):
+        assert handler.startswith("ctxRun(") or handler.startswith("toggleSub("), (
+            f"行菜单段出现逐项 @click 直写 {handler} —— 回退静态直写 = 四支人肉奇偶复发"
+            f"(pitfall ctx-menu-branch-parity); 分派归注册表 act, 模板只调 ctxRun(it)"
+        )
 
 
 def test_ctx_menu_registry_node_battery():

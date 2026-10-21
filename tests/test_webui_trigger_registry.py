@@ -14,8 +14,10 @@
   出现点所在方法必须与 `calls` 表**双向相等**(表外即红 = 新功能绕开登记; 表内残留 = 声明腐烂)
 - test_trigger_registry_no_outlet_expansion: T2 —— 选中集合的展开只允许出现在 selection.js
   与 `_kbInvertSel`(反选是**改选中**, 不是解析目标); 出口之外不得再长出第三套展开
-- test_ctx_menu_variants_match_registry: T3 —— `tpl/ctx-menus.html` 的四支与登记表
-  `ui=ctx-menu` 的 variant 集合一一对应(治 pitfall ctx-menu-branch-parity: 加了一支漏另一支)
+- test_ctx_menu_variants_match_registry: T3 —— 支名单点 `menu.js::ctxMenuKind()`(模板
+  `ctxItems(ctxMenuKind())` 与容器 `:data-kind` 都读它)的四个返回值与登记表 `ui=ctx-menu` 的
+  variant 集合一一对应(治 pitfall ctx-menu-branch-parity: 加了一支漏另一支; 2026-10-22 模板
+  四支骨架合并后比对面从模板判据链搬到该方法)
 - test_ctx_menu_action_families_parity: T4 —— 四支的**动作族**奇偶: 四支都必须有
   {开始/暂停/汇报/删除}, multi/member/group 还必须各有 {重新校验/跳检/限速/移动/标签分类/导出}
   (2026-10-09 用户报「单组右键菜单缺选项」的回归位; W3 计划 26-10-20-0024 起比对面从
@@ -110,25 +112,17 @@ def _post_call_sites() -> Counter:
 
 
 def _ctx_menu_branches() -> dict:
-    """ctx-menus.html 第一块 .ctx-menu 的四支 -> 各支的 @click 处理器列表(原文, 未归族)。"""
-    src = _read("tpl/ctx-menus.html")
-    body = src.split("<!-- 表头右键菜单")[0]  # 只取行右键菜单根块, 排除表头/文件优先级/抽屉菜单
-    marks = [
-        ("multi", 'v-if="menu.multi"'),
-        ("episode", 'v-else-if="menu.episode"'),
-        ("member", 'v-else-if="menu.hash"'),
-        ("group", "<template v-else>"),
-    ]
-    positions = []
-    for name, needle in marks:
-        assert needle in body, f"ctx-menus.html 找不到 {name} 支的锚点 {needle}(四支结构变了? 同步本守阵)"
-        positions.append((name, body.index(needle)))
-    branches = {}
-    for i, (name, pos) in enumerate(positions):
-        end = positions[i + 1][1] if i + 1 < len(positions) else len(body)
-        seg = body[pos:end].split("</template>")[0]
-        branches[name] = re.findall(r'@click(?:\.stop)?="([^"]+)"', seg)
-    return branches
+    """行右键菜单的支名集合 -> {支: []}(占位值, 只为保持调用面的 dict 形状)。
+
+    2026-10-22(issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup): `tpl/ctx-menus.html`
+    的四支 `<template v-if>` 判据链 + 四份 `.ctx-item` 骨架合并为**一条**
+    `ctxItems(ctxMenuKind())` v-for —— 模板侧已无支段可切。支名单点随之只剩
+    `menu.js::ctxMenuKind()`(模板 v-for 与容器 `:data-kind` 都读它, 返回值与注册表
+    CTX_BRANCHES 同词)。T3 的比对面搬到"该方法会返回哪几个支名": 少一支 = 某条右键路径
+    落到 v-else 的单组支(项集静默错位, 正是 ctx-menu-branch-parity 的形态)。
+    """
+    body = _method_body(_read("menu.js"), "ctxMenuKind")
+    return {name: [] for name in re.findall(r'return "([a-z]+)";', body)}
 
 
 def _scopes_ok(value: str) -> bool:
@@ -244,16 +238,20 @@ def test_trigger_registry_no_outlet_expansion() -> None:
 
 
 def test_ctx_menu_variants_match_registry() -> None:
-    """T3: 模板四支 ↔ 登记表 variant 集合一一对应(治 ctx-menu-branch-parity)。"""
+    """T3: 支名单点(ctxMenuKind)↔ 登记表 variant 集合一一对应(治 ctx-menu-branch-parity)。
+
+    2026-10-22 起模板四支骨架合并为一条 `ctxItems(ctxMenuKind())`, 比对面 = `ctxMenuKind()`
+    的返回字面量(见 `_ctx_menu_branches`)。
+    """
     branches = _ctx_menu_branches()
-    assert len(branches) == 4, f"ctx-menus.html 行右键菜单应有四支, 实际 {len(branches)}: {sorted(branches)}"
+    assert len(branches) == 4, f"ctxMenuKind() 应返回四支, 实际 {len(branches)}: {sorted(branches)}"
     template_variants = {BRANCH_TO_VARIANT[b] for b in branches}
     assert template_variants == VARIANTS, f"模板支到 variant 的映射不全: {sorted(template_variants)}"
 
     registered = {r["variant"] for r in _defs()["ui"] if r["ui"] == "ctx-menu"}
     assert registered == template_variants, (
-        f"登记表 ctx-menu variant 集合 {sorted(registered)} 与模板四支 {sorted(template_variants)} 不一致"
-        " —— 加了模板支没登记(或反之)"
+        f"登记表 ctx-menu variant 集合 {sorted(registered)} 与 ctxMenuKind() 四支 {sorted(template_variants)} 不一致"
+        " —— 加了支没登记(或反之)"
     )
 
 

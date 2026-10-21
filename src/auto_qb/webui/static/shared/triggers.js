@@ -13,8 +13,9 @@
  * 字段:
  *   ui[]    id        唯一标识
  *           ui        ctx-menu | kbd | drawer
- *           variant   仅 ctx-menu 有, 与 tpl/ctx-menus.html 的四支一一对应
- *                     (multi / episode / member / group); 守阵 T3 拿它对账模板分支
+ *           variant   仅 ctx-menu 有, 与 menu.js::ctxMenuKind() 的四个返回值一一对应
+ *                     (multi / episode / member / group); 守阵 T3 拿它对账支名单点
+ *                     (模板消费面 = 一条 ctxItems(ctxMenuKind()) v-for, 2026-10-22 起无四支段)
  *           entry     入口方法名(可含多个, 用 | 分隔 —— 同一作用域的同族入口)
  *           scope     sel | anchor | cursor | sel-first-cursor | panel(可含 | 表示两种口径并存)
  *           dispatch  action | edit | delete | export | folder | panel | none

@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-21
+**Updated:** 2026-10-22
 **Topics:** dup-code-audit
 **Summary:** 用户指派修复报告 26-10-11-0033(config 部分)并认领相关 issue —— 7 条 refactor(0031 枚举双份 / 0032 默认多源 · 键面文档漂移 · loaders 绕过 _get · 站点页面事实双份 · 小校验三写两套 · writer 备份复制块)。修复口径: 枚举族收敛 schema/fields 单点 + validation/rules・sections・rules/expr/env 引用派生; loaders 两处统一走 _get; models.SiteHrCheckConfig 派生五键默认改空(真值只在 SITE_PRESETS); sections 抽 _try_port/_try_time_window; writer 抽 _atomic_copy; docs 漂移修正(log.format / hr_check 键数 / 档案 adapter 列 / schema_version 默认派生 CURRENT_VERSIONS) + docs↔代码守卫与枚举单源守卫入 test_config_schema。
 **Refs:** memory-bank/issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-default-multi-source.html, memory-bank/issues/26-10-11-0032-refactor-config-key-surface-doc-drift.html, memory-bank/issues/26-10-11-0032-refactor-config-loaders-get-inconsistency.html, memory-bank/issues/26-10-11-0032-refactor-config-site-preset-page-facts-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-validation-smallchecks-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-writer-backup-copy-dup.html, memory-bank/testing/baselines/26-10-11-1611-config-dup-code-fixes.md
@@ -80,3 +80,5 @@
 - 2026-10-21 05:35 认领并修复 issue 26-10-20-2231(refactor-fe-css-skin-token-layer-dup): atlas :root 补 --font-ui/--font-display/--font-mono 三令牌(86→89, 与另两皮肤相等, 顺带修掉自己 4 处 var(--font-mono) 裸引用的静默失效); prism 新建 css/dialogs.css 把弹窗族从 components(313 行)/views(264 行) 按原全局序迁入, link 落 views 之后, 拆后 381/818/603 行; 守阵同轮对齐(单文件路径 5 处改聚合、inset:0 判据收窄、shell cap 214)+ 新增令牌名集相等与 prism 链接序两条守阵(均红验); 等价性静态赢家表 3526 条零变化 + 真浏览器 5 态像素 prism 全 0 差异 + test.full 3971 passed
 
 - 2026-10-21 05:47 认领并修复 issue 26-10-20-2231(refactor-fe-drawer-fetcher-boilerplate-dup, 台账 R21-A-01): drawer_store 四份 fetcher 收敛为唯一骨架 _fetchDrawerSource + 顶层差异表 _DT_FETCH(端点/归一/目标状态键/空值形状 + loading 门/失败标记/通知时机), 四入口退化为单行薄壳, stale 判点 13→4; 等价性实证(37 项 node 电池对收敛前实现同绿) + 红验七类突变全红 + 抽屉域 11 份 e2e 64 绿; 新增守阵 test_drawer_fetcher_skeleton_single_point, 四处既有守阵同步到骨架/表; 数字见 kb.baseline
+
+- 2026-10-22 01:49 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup 认领并修复: ctx-menus.html 四支各一份 .ctx-item 骨架(5 份)合并为一条 ctxItems(ctxMenuKind()) v-for, 骨架 5 份→2 份; 三件守阵比对面搬到 ctxMenuKind() 单点; 全量 3994 passed/覆盖率 99.28%

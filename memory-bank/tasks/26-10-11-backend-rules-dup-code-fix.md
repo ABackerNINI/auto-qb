@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-21
+**Updated:** 2026-10-22
 **Summary:** 用户指令「修复 rules 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §20(轮 17)对 rules 全包(2187 行 · 18 文件)入池 **3 条 refactor issue**; 本轮按**保守口径(只做无行为变化的收口)** 全部修完并置 `Done`: ① `rules-expr-disk-helper-dup`(env 三取值器 + `FreespaceCondition` 四处逐字同的「取数 + 错误映射」收成单点 `disk_usage_value(path, attr)`); ② `rules-expr-numeric-predicate-dup`(env 数值函数与 eval 算术运算符的「必须是数值」校验收成 `types.require_number(value, what)`, 报错文案逐字不变); ③ `rules-parser-dead-op-constants-dup`(删 parser 四个本文件不用的运算符常量死件)。**零行为变化**(结构收口 + 删死件), 新增 3 个守阵测试锁单点。全量 `test.full` **3115 passed + 4 skipped / 0 failed / 覆盖率 98.63%**。
 **Topics:** dup-code-audit
 
@@ -78,3 +78,5 @@
 - 2026-10-21 05:35 认领并修复 issue 26-10-20-2231(refactor-fe-css-skin-token-layer-dup): atlas :root 补 --font-ui/--font-display/--font-mono 三令牌(86→89, 与另两皮肤相等, 顺带修掉自己 4 处 var(--font-mono) 裸引用的静默失效); prism 新建 css/dialogs.css 把弹窗族从 components(313 行)/views(264 行) 按原全局序迁入, link 落 views 之后, 拆后 381/818/603 行; 守阵同轮对齐(单文件路径 5 处改聚合、inset:0 判据收窄、shell cap 214)+ 新增令牌名集相等与 prism 链接序两条守阵(均红验); 等价性静态赢家表 3526 条零变化 + 真浏览器 5 态像素 prism 全 0 差异 + test.full 3971 passed
 
 - 2026-10-21 05:47 认领并修复 issue 26-10-20-2231(refactor-fe-drawer-fetcher-boilerplate-dup, 台账 R21-A-01): drawer_store 四份 fetcher 收敛为唯一骨架 _fetchDrawerSource + 顶层差异表 _DT_FETCH(端点/归一/目标状态键/空值形状 + loading 门/失败标记/通知时机), 四入口退化为单行薄壳, stale 判点 13→4; 等价性实证(37 项 node 电池对收敛前实现同绿) + 红验七类突变全红 + 抽屉域 11 份 e2e 64 绿; 新增守阵 test_drawer_fetcher_skeleton_single_point, 四处既有守阵同步到骨架/表; 数字见 kb.baseline
+
+- 2026-10-22 01:49 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup 认领并修复: ctx-menus.html 四支各一份 .ctx-item 骨架(5 份)合并为一条 ctxItems(ctxMenuKind()) v-for, 骨架 5 份→2 份; 三件守阵比对面搬到 ctxMenuKind() 单点; 全量 3994 passed/覆盖率 99.28%
