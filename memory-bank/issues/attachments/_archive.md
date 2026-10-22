@@ -62,8 +62,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (243)
+## Done (244)
 
+- [bug] [流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树](../26-10-22-0435-bug-webui-aq-fold-ce-inject-break.html) — aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效
 - [test] [守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件](../26-10-21-2232-test-guard-scope-narrower-than-acceptance.html) — 计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)
 - [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷
 - [bug] [P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变](../26-10-21-1812-bug-cmd-driven-resync.html) — cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚

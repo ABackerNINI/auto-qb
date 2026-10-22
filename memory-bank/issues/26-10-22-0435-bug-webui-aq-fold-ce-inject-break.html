@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-aq-fold-ce-inject-break">
+<meta name="issue-stamp" content="26-10-22-0435">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-aq-fold-ce-inject-break">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-22-webui-aq-fold-ce-inject-break.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树">
+<meta name="issue-summary" content="aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效">
+<title>流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题 · bug</div>
+    <h1>流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树</h1>
+    <p class="lede">aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-22-0435-bug-webui-aq-fold-ce-inject-break</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-22 04:35</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>生产实例（schema v5、<code>traffic_source.provider: global_traffic_monitor</code>）跑 WEBUI，在「流量与限速」卡点「关闭工具」后：磁盘与运行时的 <code>traffic_source.enabled</code> 正确变为 <code>false</code>（日志见 §02），但卡片上「数据来源」区的<strong>「启用」开关仍显示开启</strong>；把开关往「关闭」拨<strong>不产生未保存改动</strong>，「保存并应用」按钮不出现；F5 刷新、重启 auto-qb 均无效；工具也无法从 UI 重新拉起，只能手改 config.yml 恢复。</p>
+    <p>手工把 <code>traffic_source.enabled</code> 改成 <code>false</code> 再启动，<code>GET /api/config</code> 响应里该键确实是 <code>false</code>，界面仍显示「启用」——<strong>服务端真相与界面相反</strong>，且同一页面里顶部横幅（<code>$root.tmSourceOff()</code>）正确显示「流量来源已关闭」，与开关自相矛盾。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <h3>生产日志（用户提供，取证 2026-10-22 03:10，证明关闭动作本身完整落盘）</h3>
+<pre><code>2026-10-22 03:10:25,853 - INFO - 配置热重载完成: 变更 1 项, 动作 ['traffic_snapshot:reloaded']
+2026-10-22 03:10:25,853 - INFO - 配置热重载 | 流量来源变更 (True, 'global_traffic_monitor', 'D:/Programs/TrafficMonitor/history_traffic.dat') -> (False, 'global_traffic_monitor', 'D:/Programs/TrafficMonitor/history_traffic.dat'), 立即投递历史流量刷新
+2026-10-22 03:10:25,854 - INFO - 流量快照 | 来源总开关关闭(traffic_source.enabled=false), 发布 off 快照
+2026-10-22 03:10:25,911 - INFO - 全局流量监视器订阅已注销: id=18ce3fc9678c5f96(流量来源已关闭(traffic_source.enabled=false): 已停止取数与订阅)</code></pre>
+    <h3>本机浏览器级复现（Playwright + 真实 WEBUI + 生产形状配置，取证 2026-10-22 04:00~04:30）</h3>
+    <p>组件树遍历流量卡内 hub-field 实例（<strong>修复前</strong>）——注入到的 <code>ce</code> 是 aq-fold 组件实例，树里读不到值：</p>
+<pre><code>{
+ "path": "config.traffic_source.enabled",
+ "ce_is_root": false,
+ "ce_name": "aq-fold",          // 注入了 aq-fold 实例而非根实例
+ "ce_has_tree": false,          // 它带着 mixin data() 新建的空 cfg 树(tree=null)
+ "boolValue": true,             // 空树 -> 回落 schema 默认 true -> 开关恒显「启用」
+ "raw": null                    // cfgRaw(["config","traffic_source","enabled"]) 取不到
+}</code></pre>
+    <p>同一页面根实例状态（<code>$root.tmSourceOff()</code>）为 <code>true</code>、磁盘值为 <code>"false"</code>——开关与横幅读的不是同一棵树。Vue 3 三层探针实验同时证明：<strong>组件自己的 provide 赢过 mixin 的 provide</strong>（<code>own(mixin)</code>），故透传范式本身有效，缺的是 aq-fold 那一层。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>凡经 <code>&lt;aq-fold&gt;</code> 渲染的 <code>&lt;hub-field&gt;</code>（即折叠段内的字段）全部中招，与具体配置无关——默认折叠的 object 段展开后必现</td></tr>
+      <tr><td>影响范围</td><td>设置页所有可折叠段：流量卡三区（数据来源/限速曲线/流量图采样）、xtpl 的 object group 段（各分区嵌套 object 段）、规则页「触发与节奏」折叠段。平铺块（settings-detail 的 hb-blk）不受影响。表现为字段只显 schema 默认值、编辑不进根树、保存按钮不出现</td></tr>
+      <tr><td>严重度</td><td><strong>高</strong>——静默数据丢失面：用户以为在改配置，实际一个字节都没进树；磁盘值（如 enabled=false）与界面长期相反，只能手改文件恢复</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/ctl_bits.js:51</code>（取证 2026-10-22 04:35）· <code>window.AQ_FOLD_COMPONENT</code> · grep <code>AQ_FOLD_COMPONENT</code>——缺 <code>inject: ["ce"]</code> 与 provide 透传（修复后已补）</li>
+      <li><code>src/auto_qb/webui/static/shared/config_editor.js:71</code> · <code>CONFIG_EDITOR.provide()</code> · grep <code>return { ce: this }</code>——全局 mixin 给每个组件挂 provide(){ce:this} 的源头</li>
+      <li><code>src/auto_qb/webui/static/shared/app.js:913</code> · grep <code>app.mixin(window.CONFIG_EDITOR)</code>——mixin 全局注册点</li>
+      <li><code>src/auto_qb/webui/static/shared/config_editor.js:1171</code> · <code>window.CE_FIELD_BASE</code> · grep <code>CE_FIELD_BASE</code>——既有透传范式（hub-field 侧，正确的那一份）</li>
+      <li><code>src/auto_qb/webui/static/shared/traffic_card.js:15</code> · grep <code>provide() { return { ce: this.ce }; }</code>——卡片侧透传（正确的那一份）</li>
+      <li><code>src/auto_qb/webui/static/shared/tpl/xtpl.html:36</code> · grep <code>aq-fold :open="groupOpen"</code>——object group 段的折叠（嵌套 hub-field 在插槽里）</li>
+      <li><code>src/auto_qb/webui/static/shared/tpl/traffic-card.html:36/144/271</code> · grep <code>hubSubOpen</code>——流量卡三区折叠</li>
+      <li><code>src/auto_qb/webui/static/shared/tpl/settings.html:237</code> · grep <code>cfgRuleMetaOpen</code>——规则 meta 折叠</li>
+    </ul>
+    <p class="hint">回归引入点：<code>6ad07b6a</code>（2026-10-21 05:15，「前端四族小控件收敛为模板层三件套」，issue 26-10-20-2231）——该提交把折叠段头从普通 <code>div.hb-blk-hd</code> 换成 <code>&lt;aq-fold&gt;</code> 组件，hub-field 从卡片/根的直系孩子变成组件插槽内容，注入链被组件实例截断。此前 10-18 上线至 10-21 之前行为正常。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">
+      <p><strong>已确认（浏览器级实证，非推断）</strong>：<code>CONFIG_EDITOR</code> 以全局 mixin 注册（<code>app.js:913</code>），其 <code>provide(){ ce:this }</code> 因此挂在<strong>每个</strong>组件实例上——每个实例都带着 mixin <code>data()</code> 新建的空 <code>cfg</code> 树（<code>tree:null</code>）。<code>&lt;aq-fold&gt;</code> 作为中间层组件没有把自己注入到的 <code>ce</code> 原样透传（<code>inject:["ce"]</code> + <code>provide(){ce:this.ce}</code> 二件皆缺），其默认插槽里的 <code>&lt;hub-field&gt;</code> 于是注入到 <strong>aq-fold 实例本身</strong>：字段读写全部落在空树上——只显 schema 默认值（<code>cfgFallbackValue</code>）、编辑不进根树（根 <code>cfgDirty</code> 恒 false、「保存并应用」不出现）、磁盘原样不动。</p>
+      <p>已排除：重复键/版本闸门等配置内容病（生产配置是最新版且启动正常）、渲染层字符串真值化（<code>cfgBool</code> 对 <code>"false"</code> 解析正确）、多标签/缓存/Service Worker（静态层 no-cache、无 SW、无跨标签配置同步）、陈旧标签页（重启+刷新均复现）。</p>
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p><strong>已随提交入库</strong>（用户 2026-10-22 授权「提交」，按 AGENTS.md 提交口径 = commit+push 一次走完；档案 <code>memory-bank/tasks/26-10-22-webui-aq-fold-ce-inject-break.md</code>）：给 <code>AQ_FOLD_COMPONENT</code> 补上仓库既有透传范式（与 <code>traffic_card.js</code> / <code>CE_FIELD_BASE</code> 逐字同款）：</p>
+<pre><code>window.AQ_FOLD_COMPONENT = {
+  name: "aq-fold",
+  inject: ["ce"],
+  provide() { return { ce: this.ce }; },
+  props: { ... },
+  template: "#tpl-aq-fold",
+};</code></pre>
+    <p>备选（未实施）：把 <code>CONFIG_EDITOR.provide</code> 改成 <code>{ ce: this.ce || this }</code> 做全局兜底——可覆盖「声明了 inject 但忘了 provide」的未来组件，但对二件皆缺的组件（如本例 aq-fold）无效，且改动面触及每个组件，风险高于单点修。建议先落单点修 + e2e 守阵，全局兜底另案评估。</p>
+    <p>守阵（已落地，2026-10-22 05:05）：<code>e2e/traffic-source-switch.spec.mjs</code> —— 浏览器级规格，双皮肤 6 例全过；<strong>摘掉修复后 6 例全红</strong>（红/绿双向验证过，不是恒真断言）。三路判据：① 读路径，route 桩把磁盘 <code>traffic_source.enabled</code> 注入为 <code>"false"</code>，流量卡开关必须显「关闭」且无「默认」徽标、与卡头摘要同判「已关闭」，刷新后仍关闭（钉「重启无效」症状）；② 写路径，拨动 → 「有改动还没保存」脏标记出现 → 「保存并应用」→ PUT 载荷 <code>enabled="false"</code> → 保存后仍关闭（钉「切换无法保存」症状）；③ 第二现场，规则卡「触发与节奏」折叠段（<code>settings.html:237</code>，同一 <code>&lt;aq-fold&gt;</code> 机制的另一调用面）磁盘 <code>execute_once="daily"</code> 必须显 daily，断裂时回落 schema 默认 "never"。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-22 04:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 04:50 — 根因已由本机浏览器级复现确认（组件树遍历 + 三层 provide 探针，见 §02/§05）；修复（<code>ctl_bits.js</code> aq-fold 补 ce 透传）已落在<strong>本地工作树、未提交</strong>，前后对照验证通过。状态保持 <strong>Open</strong> 直至修复进入仓库历史——按 create-issue 规约，未提交不算 Done</li>
+      <li>2026-10-22 05:05 — e2e 回归守阵落地（用户批准三项后续动作之一）：新建 <code>e2e/traffic-source-switch.spec.mjs</code>（读路径 / 写路径 / 规则卡第二现场，双皮肤 6 例）。<strong>摘掉修复后 6 例全红、修复后 6 例全过</strong> —— 双向验证说明判据真的 discriminate（既有 views.spec「三区同屏」那条只断言 schema 缺省 true，与断裂回落值同形，恒真）。守阵详情见 §06。状态保持 <strong>Open</strong>（修复仍未提交）</li>
+      <li>2026-10-22 12:20 — 修复随提交入库（用户授权「提交」= commit+push；档案 <code>tasks/26-10-22-webui-aq-fold-ce-inject-break.md</code>），状态置 <strong>Done</strong>。收尾回写齐：坑档 <code>pitfalls/web-ui/mixin-ce-inject-break.md</code>（触发/判别/处置/守阵/复发五段）、基线切片 <code>26-10-22-1217</code>（test.full 实测誊写）、本档案；<code>e2e:fast</code> 全量 214 passed。修复方式与建议一致（单点透传，未走全局兜底备选）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>2026-10-22 04:00~04:30 本机复现（真实 WEBUI + Playwright + 生产形状配置 v5/provider=global_traffic_monitor/enabled=false）：修复前开关 <code>checked=true</code> 文字「启用」、拨动无脏标记、保存钮不出现；修复后开关 <code>checked=false</code> 文字「关闭」、点击后出现「有改动还没保存」与「保存并应用」。全量测试 <code>commands run test.full</code>：<strong>3990 passed / 10 skipped，TOTAL 99%</strong>。</p>
+    <h3>修复后补充</h3>
+    <p>实际修法与建议修法一致（单点透传，未走全局兜底备选）。改动仅 <code>src/auto_qb/webui/static/shared/ctl_bits.js</code> 一个文件；5 处 <code>&lt;aq-fold&gt;</code> 使用点（流量卡三区 / xtpl group 段 / 规则 meta 段）全部位于 ce 提供者（根 / aq-traffic-card / hub-field）下游，无孤儿风险。e2e 回归守阵已落地（见 §06 / §07 05:05 行）。收尾回写已完成：坑档 <code>pitfalls/web-ui/mixin-ce-inject-break.md</code>、基线切片 <code>26-10-22-1217</code>、档案 <code>tasks/26-10-22-webui-aq-fold-ce-inject-break.md</code>；修复已于 2026-10-22 12:20 随提交入库（commit+push）。</p>
+  </section>
+
+  <footer>
+    26-10-22-0435-bug-webui-aq-fold-ce-inject-break.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

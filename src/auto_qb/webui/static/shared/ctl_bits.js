@@ -47,9 +47,22 @@ window.AQ_SWITCH_COMPONENT = {
  * key 长什么样; 键盘契约(role=button + tabindex=0 + Enter)与 aria 挂层只有这一份实现。
  * !不加 keyup.space: 段头里常自带 focusable 子元素(hb-ask 等), 空格会从它们冒泡上来 ——
  *   里层钮的 click 与本层的 toggle 各打一次, 净效果是「按了没反应」。这条因此刻意与 pop-item
- *   的 enter+space 口径不等, 差异写在这里, 免得下次有人当作漏项补上去。 */
+ *   的 enter+space 口径不等, 差异写在这里, 免得下次有人当作漏项补上去。
+ *
+ * ce 透传(与 aq-traffic-card / CE_FIELD_BASE 同范式, 缺了它就是静默事故):
+ * <aq-fold> 的默认插槽里常直接放 <hub-field>(流量卡三区 / xtpl 的 object group 段 /
+ * 规则 meta 段) —— 而全局 mixin(CONFIG_EDITOR)给**每个**组件都挂了 provide(){ce:this},
+ * 本组件若不把自己注入到的 ce 原样透传, 插槽里的 hub-field 会注入到**本组件实例**:
+ * 它带着 mixin data() 新建的空 cfg 树(tree=null), 于是字段只显 schema 默认值、编辑不进
+ * 根树。2026-10-22 实测(流量卡「启用」开关): 磁盘 enabled=false 时开关恒显「启用」且带
+ * 「默认」徽标, 拨动不脏树、「保存并应用」永不出现, 与横幅($root.tmSourceOff 读到 false)
+ * 自相矛盾。Vue 选项初始化 inject 先于 provide, 此时 this.ce 已就绪。 */
 window.AQ_FOLD_COMPONENT = {
   name: "aq-fold",
+  inject: ["ce"],
+  provide() {
+    return { ce: this.ce };
+  },
   props: {
     open: { type: Boolean, default: false },
     onToggle: { type: Function, required: true },  // () => void
