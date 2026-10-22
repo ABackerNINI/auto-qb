@@ -94,11 +94,7 @@ from unittest import mock
 
 import pytest
 
-from helpers import FakeClient, FakeTorrent, grouping_cfg, make_manager, seed_store
-
-
-def _fake_file(name, size):
-    return SimpleNamespace(name=name, size=size)
+from helpers import FakeClient, FakeTorrent, _fake_file, grouping_cfg, make_manager, seed_store
 
 
 def _non_tag_calls(client):

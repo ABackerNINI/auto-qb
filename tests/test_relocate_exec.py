@@ -55,19 +55,9 @@ import pytest
 from auto_qb.core.modules import relocate_units as ru
 from auto_qb.infra import relocate_journal
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
+from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
 
 FREE = 1 << 40
-
-
-def _pin_disk_usage(monkeypatch, free=FREE):
-    from auto_qb.infra import file_access as fa_mod
-
-    monkeypatch.setattr(
-        fa_mod.LocalFileAccess,
-        "disk_usage",
-        lambda self, path: fa_mod.DiskUsage(total=free * 10, used=0, free=free),
-    )
 
 
 def _make_env(td, file_count=2, subdir="Show", state="uploading", progress=1.0):
@@ -140,7 +130,7 @@ def _only_job(mod):
 
 def test_exec_normal_flow_links_and_arm(tmp_path, monkeypatch):
     """正常链路: 暂停 -> 下发 -> 轮询 -> 逐文件链接 -> 穿透 -> 重归组 -> armed -> 恢复"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2, state="uploading")
     mod = mgr.host.get("relocate")
     spawned = []
@@ -170,7 +160,7 @@ def test_exec_normal_flow_links_and_arm(tmp_path, monkeypatch):
 
 def test_exec_stalled_fails_without_moving_back(tmp_path, monkeypatch):
     """停滞判失败: dst 不增长且 qB 不在 moving 超时 ⇒ failed, 零搬回(只下发过一次 setLocation)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mgr.config.relocate.move_stall_timeout = 600.0
     mod = mgr.host.get("relocate")
@@ -191,7 +181,7 @@ def test_exec_stalled_fails_without_moving_back(tmp_path, monkeypatch):
 
 def test_exec_long_running_turns_watching(tmp_path, monkeypatch):
     """长耗时: qB 仍在 moving 且超过 warn_after ⇒ 转 watching(只提示), 不判失败"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mgr.config.relocate.move_warn_after = 7200.0
     mod = mgr.host.get("relocate")
@@ -209,7 +199,7 @@ def test_exec_long_running_turns_watching(tmp_path, monkeypatch):
 
 def test_exec_link_failure_rolls_back_and_finalizes(tmp_path, monkeypatch):
     """第 3 条链接失败 ⇒ 已建的 2 条被删 + 转 removed(收尾路径), 不搬回"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=5)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -242,7 +232,7 @@ def test_exec_link_failure_rolls_back_and_finalizes(tmp_path, monkeypatch):
 
 def test_exec_qb_disconnect_does_not_reissue(tmp_path, monkeypatch):
     """qB 中途断连(快照停在 moving): 不重复下发 setLocation(会排队/覆盖)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -256,7 +246,7 @@ def test_exec_qb_disconnect_does_not_reissue(tmp_path, monkeypatch):
 
 def test_exec_direct_single_member_skips_alias(tmp_path, monkeypatch):
     """单成员组: direct —— 无别名、无收尾, 搬完直接 done"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     # 只留一个成员: 直接改 store 组结构(单成员组 = 独占内容)
     store = mgr.store
@@ -280,7 +270,7 @@ def test_exec_direct_single_member_skips_alias(tmp_path, monkeypatch):
 
 def test_exec_dry_run_no_side_effects(tmp_path, monkeypatch):
     """dry-run: 不落盘不建链, 回执标 dry-run(数据面零动作)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     mod._dry = True
@@ -292,7 +282,7 @@ def test_exec_dry_run_no_side_effects(tmp_path, monkeypatch):
 
 def test_exec_step_budget(tmp_path, monkeypatch):
     """单步有界: 大批文件分块建链接, 单次 on_task_line 只建一批(主循环零阻塞)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=450)
     mgr.config.relocate.alias_file_threshold = 1000  # 强制逐文件链接(不做目录别名)
     mod = mgr.host.get("relocate")
@@ -312,7 +302,7 @@ def test_exec_step_budget(tmp_path, monkeypatch):
 
 def _armed_env(tmp_path, monkeypatch):
     """跑到 armed 的环境(供对账/撤销用例)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     spawned = []
@@ -455,7 +445,7 @@ def test_guardian_removes_links_after_three_proofs(tmp_path, monkeypatch):
 
 def test_jobs_persist_and_reload(tmp_path, monkeypatch):
     """job 账落 state; 重启恢复非终态 job 并重挂 relocating 登记"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -482,7 +472,7 @@ def test_entry_single_location_disabled_unchanged(tmp_path, monkeypatch):
 
 def test_entry_single_and_bulk_create_jobs(tmp_path, monkeypatch):
     """开关开: 单件与批量都产生 job, 回执 truth 计数可读"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -504,7 +494,7 @@ def test_entry_rule_move_to_gates(tmp_path, monkeypatch):
     """规则 move_to: 发起/幂等 skip/需确认 skip/拒绝 fail 四态"""
     from auto_qb.rules.actions.transfer import MoveToAction
 
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -542,7 +532,7 @@ def test_entry_rule_move_to_gates(tmp_path, monkeypatch):
 
 def test_restart_does_not_reissue_setlocation(tmp_path, monkeypatch):
     """重启恢复: 账里 phase=moving 的 job 继续轮询, **不重复下发** setLocation"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -560,7 +550,7 @@ def test_restart_does_not_reissue_setlocation(tmp_path, monkeypatch):
 
 def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):
     """搬迁窗口: relocating 登记内的种子跳检直接 skip(不删除/不重加)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -575,7 +565,7 @@ def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):
 
 def test_exec_defer_until_pause_snapshot(tmp_path, monkeypatch):
     """下发前等自有暂停快照回流(own_write_pending): 未回流不下发, 回流后下发一次"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -593,7 +583,7 @@ def test_exec_defer_until_pause_snapshot(tmp_path, monkeypatch):
 
 def test_exec_move_rejected(tmp_path, monkeypatch):
     """qB 拒绝 setLocation -> failed(move_rejected), 不自动搬回、不动数据"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -613,7 +603,7 @@ def test_exec_move_rejected(tmp_path, monkeypatch):
 
 def test_exec_skip_when_all_at_target(tmp_path, monkeypatch):
     """全组已在目标位置 -> skip(幂等), 不建账不下发"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -627,7 +617,7 @@ def test_exec_skip_when_all_at_target(tmp_path, monkeypatch):
 
 def test_exec_unknown_stage_falls_back_to_arm(tmp_path, monkeypatch):
     """未知 stage 按 arm 收口(防御: 运行期字段损坏不至于挂死)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path)
     mod = mgr.host.get("relocate")
     spawned = []
@@ -909,7 +899,7 @@ def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
     """
     from auto_qb.rules.actions.transfer import MoveToAction
 
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
     mod = mgr.host.get("relocate")
 

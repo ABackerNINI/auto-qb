@@ -34,12 +34,7 @@ import tempfile
 from unittest import mock
 
 from auto_qb.core.modules import GroupingModule, OpsModule
-from helpers import FakeClient, FakeTorrent, grouping_cfg, make_manager, seed_store
-
-
-def _fake_file(name, size):
-    from types import SimpleNamespace
-    return SimpleNamespace(name=name, size=size)
+from helpers import FakeClient, FakeTorrent, _fake_file, grouping_cfg, make_manager, seed_store
 
 
 def _mgr(td, grouping_enabled=True):

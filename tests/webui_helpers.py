@@ -8,7 +8,9 @@ from types import SimpleNamespace
 
 from auto_qb.config.models import HrCheckConfig
 from auto_qb.config.models import RelocateConfig  # noqa: E402  (整组迁移, 计划 26-10-18-1604 P2)
+from auto_qb.core.qbapi import QbApi
 from auto_qb.infra.utils import encode_group_key
+from auto_qb.torrents import TorrentStore
 from auto_qb.webui.runtime import WebUIRuntime
 
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
@@ -563,3 +565,28 @@ def _attach_live_tail_host(mgr, tails):
     from types import SimpleNamespace
 
     mgr.host = SimpleNamespace(get=lambda name: SimpleNamespace(live_tail=tails))
+
+
+# ---------- 增量时间线装库(issue 26-10-21-0502: 原 test_webui_delta / _mirror 各一份) ----------
+
+
+def make_store(*hashes, state: str = "stalledUP") -> TorrentStore:
+    """真实 TorrentStore 装库(FakeClient/FakeTorrent 范式同 test_sync), 随后清掉装库轮的
+    S1 快照与 view_changed —— 基线不进被测时间线窗口, 各用例从干净基线驱动
+
+    剧集形命名: parse_release 解析为 episode(带 key) —— 不触发 _build_shows_view 的文件兑底
+    pending 标记(名称解析不出剧键时构建器会 mark_shows_pending(True), 与 c 场景的转换拍
+    断言互相干扰)。
+    """
+    from helpers import FakeClient, FakeTorrent
+
+    client = FakeClient()
+    for h in hashes:
+        client.torrents[h] = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP", state=state)
+    store = TorrentStore(client)
+    store.apply_sync(QbApi(client, store))
+    store.last_added = []
+    store.last_removed = []
+    store.delta_fields = {}
+    store.consume_view_changed()
+    return store

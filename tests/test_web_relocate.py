@@ -26,19 +26,7 @@ import shutil
 
 from auto_qb.core.modules.relocate_units import RelocateJob
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
-
-
-def _pin_disk_usage(monkeypatch, free=1024**4):
-    """把 disk_usage 钉成固定值: 同卷证明/空间闸门不再受并行写盘抖动影响(测试确定性)"""
-    from auto_qb.infra import file_access as fa_mod
-
-    monkeypatch.setattr(
-        fa_mod.LocalFileAccess,
-        "disk_usage",
-        lambda self, path: fa_mod.DiskUsage(total=free * 10, used=0, free=free),
-    )
-    return free
+from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
 
 
 def _make_group_env(td, file_count=2, subdir="Show", free=1024**4):
@@ -81,7 +69,7 @@ def _make_group_env(td, file_count=2, subdir="Show", free=1024**4):
 
 def test_relocate_module_precheck_ok_and_confirm(tmp_path, monkeypatch):
     """双成员组: F=2 -> ok(file_links); F=9+专属子目录 -> confirm(dir_alias); 零 qB 写调用"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     mod = mgr.host.get("relocate")
     items = mod.relocate_precheck(["HA", "HB"], dst)
@@ -107,7 +95,7 @@ def test_relocate_precheck_no_false_dir_link_note(tmp_path, monkeypatch):
     **敏感**比较恒不等 —— 任何含大写字母的正常目录都会被误报成目录级链接。两侧同过
     normcase 再比后, 只有**真实**链接(解析结果确实不同)才出该 note。
     """
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     # 全大写内容根(比 tmp_path 默认混合大小写更严: 两侧 normcase 后必须相等)
     src = os.path.join(str(tmp_path), "SRC-UPPER")
     os.makedirs(src)
@@ -142,7 +130,7 @@ def test_relocate_precheck_no_false_dir_link_note(tmp_path, monkeypatch):
 
 def test_relocate_module_precheck_gone_and_param(tmp_path, monkeypatch):
     """未知 hash -> gone/blocked(逐条); 空 location -> param/blocked"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path)
     mod = mgr.host.get("relocate")
     items = mod.relocate_precheck(["HA", "HMISSING"], dst)
@@ -155,7 +143,7 @@ def test_relocate_module_precheck_gone_and_param(tmp_path, monkeypatch):
 
 def test_relocate_module_precheck_target_conflict_gate(tmp_path, monkeypatch):
     """目标已存在同名内容 -> blocked(target_conflict): qB 会走全量校验(进度清零)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     os.makedirs(os.path.join(dst, "Show"), exist_ok=True)
     with open(os.path.join(dst, "Show", "e00.mkv"), "wb") as f:
@@ -166,7 +154,7 @@ def test_relocate_module_precheck_target_conflict_gate(tmp_path, monkeypatch):
 
 def test_relocate_module_precheck_unfinished_job_gate(tmp_path, monkeypatch):
     """非终态 job 碰本组 -> blocked(unfinished): 链接套链接会让旧迁移收尾失效(S10)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path)
     mod = mgr.host.get("relocate")
     mod.register_job(
@@ -187,7 +175,7 @@ def test_relocate_module_precheck_unfinished_job_gate(tmp_path, monkeypatch):
 
 def test_relocate_module_precheck_readonly_proof(tmp_path, monkeypatch):
     """预检零副作用独立证明: qB 写调用零条 + state 深比对不变 + store 组结构不变"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=9)
     state_before = json.dumps(mgr.state, sort_keys=True, ensure_ascii=False)
     groups_before = {k: list(v) for k, v in mgr.store.groups.items()}
@@ -206,7 +194,7 @@ def _fwd(p):
 
 def test_relocate_module_precheck_qb_temp_gate(tmp_path, monkeypatch):
     """内容根存在 qB 未完成孪生(原名 + .!qB 后缀) -> blocked(qb_temp): 数据尚未落定"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     with open(os.path.join(content, "e00.mkv.!qB"), "wb") as f:
         f.write(b"partial")
@@ -304,7 +292,7 @@ def test_relocate_module_fs_fact_branches(tmp_path, monkeypatch):
     item2 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     assert "target_unknown" in [r["gate"] for r in item2["reasons"]]
     monkeypatch.undo()
-    _pin_disk_usage(monkeypatch)  # 恢复 disk_usage 钉值后重挂「抛错」变体
+    pin_disk_usage(monkeypatch)  # 恢复 disk_usage 钉值后重挂「抛错」变体
     monkeypatch.setattr(fa_mod.LocalFileAccess, "disk_usage", lambda self, p: (_ for _ in ()).throw(OSError("no disk")))
     item3 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     gates3 = [r["gate"] for r in item3["reasons"]]
@@ -328,7 +316,7 @@ def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypat
 
 def test_relocate_module_precheck_classify_entries(tmp_path, monkeypatch):
     """内容根多出条目分类: 同 save_path 其它种子的文件 -> 组外占用; 散落 .torrent -> 杂项"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     # 组外种子 HC: 同 save_path, 文件落在同一内容根(分集同目录; 盘上要有真实文件, listing 才看得到)
     ext_files = [_fake_file("Show/S01E02.mkv", 100)]
@@ -415,7 +403,7 @@ def test_relocate_module_branch_extras(tmp_path, monkeypatch):
     item2 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     assert item2["cls"] == "blocked" and "form" in [r["gate"] for r in item2["reasons"]]
     monkeypatch.undo()
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
 
     # 目标存在性「抛错」(而非 UNDETERMINED) -> 同样按不可判定拒绝
     def _raise_exists(self, p):
@@ -425,7 +413,7 @@ def test_relocate_module_branch_extras(tmp_path, monkeypatch):
     item3 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     assert "target_unknown" in [r["gate"] for r in item3["reasons"]]
     monkeypatch.undo()
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     # allow_uac=false + 文件级链接需提权 -> 拒绝文案注明「不弹 UAC, 直接拒绝」
     mgr.config.relocate.allow_uac = False
     failed = alias_fs.LinkProbe(False, error="权限不足(需提权/UAC): 以管理员身份运行 auto-qb")
@@ -450,7 +438,7 @@ def test_relocate_module_branch_extras(tmp_path, monkeypatch):
     item4 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     assert any("allow_uac=false" in r["text"] for r in item4["reasons"])
     monkeypatch.undo()
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     # 真硬链接(组文件 nlink>1) -> blocked(hardlink, D11)
     hl_link = os.path.join(dst, "alias-probe")
     with open(hl_link, "wb") as f:
@@ -472,7 +460,7 @@ def test_relocate_module_branch_extras(tmp_path, monkeypatch):
 
 def test_relocate_module_classify_entries_degenerate(tmp_path, monkeypatch):
     """组外分类退化: 其它 save_path 的种子跳过; 记录字段异常的单条跳过不炸"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     elsewhere = FakeTorrent(hash="HX", name="Else", save_path="R:/elsewhere", progress=1.0, state="pausedUP")
     client.files_map["HX"] = [_fake_file("Show/e00.mkv", 100)]  # 即便同名也因 save_path 不同不算组外
@@ -493,7 +481,7 @@ def test_relocate_module_classify_entries_degenerate(tmp_path, monkeypatch):
 
 def test_relocate_module_precheck_scandir_missing_root(tmp_path, monkeypatch):
     """内容根目录消失(记录与磁盘脱节) -> listing 失败 -> 不专属 -> 逐文件链接(不猜)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     shutil.rmtree(content)
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
@@ -629,7 +617,7 @@ def test_web_relocate_cancel_route(web_env):
 def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
     """drain 级撤销两步走: 未确认(cls=confirm + cost, 数据零变动); 确认(cls=ok,
     set_location 搬回 src + phase=cancelled + journal 落盘)"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     mgr.config.data_dir = str(tmp_path / "data")
     mod = mgr.host.get("relocate")
@@ -659,7 +647,7 @@ def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
 def test_web_relocate_precheck_drain(tmp_path, monkeypatch):
     """drain 级: 回执 truth={results, summary} 结构 + gone verdict + 混合计数;
     precheck_add 回执 truth=单 item"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
     mgr.web.commands.put(("relocate_precheck", {"hashes": ["HA", "HMISSING"], "location": dst, "cmd_id": "rp1"}))
     mgr.web.consume_commands()

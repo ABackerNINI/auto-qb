@@ -43,11 +43,12 @@ from types import SimpleNamespace
 from auto_qb.core import tvshows
 from auto_qb.core.qbapi import QbApi
 from auto_qb.infra.utils import encode_group_key
-from auto_qb.torrents import TorrentStore
 from auto_qb.webui import WebUIRuntime
 from auto_qb.webui.views import WebviewMixin
 
-from helpers import FakeClient, FakeTorrent, FakeTracker
+from helpers import FakeTorrent, FakeTracker
+
+from webui_helpers import make_store
 
 # ---------- 替身与驱动 ----------
 
@@ -62,24 +63,6 @@ class _ViewHost(WebviewMixin):
 
     def wake(self):  # _build_shows_view 的 post_command 路径兜底(本文件用例不会触发)
         pass
-
-
-def _make_store(*hashes, state: str = "stalledUP") -> TorrentStore:
-    """真实 TorrentStore 装库(首轮全量, FakeClient/FakeTorrent 范式同 test_sync);
-    随后清掉装库轮的 S1 快照与 view_changed —— 基线不进被测时间线窗口, 各用例从干净基线驱动"""
-    client = FakeClient()
-    for h in hashes:
-        # 剧集形命名: parse_release 解析为 episode(带 key)—— 不触发 _build_shows_view 的
-        # 文件兑底 pending 标记(名称解析不出剧键时构建器会 mark_shows_pending(True),
-        # 与 c) 场景的转换拍断言互相干扰)
-        client.torrents[h] = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP", state=state)
-    store = TorrentStore(client)
-    store.apply_sync(QbApi(client, store))
-    store.last_added = []
-    store.last_removed = []
-    store.delta_fields = {}
-    store.consume_view_changed()
-    return store
 
 
 def _delta_runtime(store) -> WebUIRuntime:
@@ -102,7 +85,7 @@ def _publish(rt) -> dict:
 
 def test_timeline_appends_per_publish_and_truncates():
     """每次发布恰追加一条目 + maxlen=40 截断(plan S2 验收 DoD 第 1 条)"""
-    store = _make_store("H1")
+    store = make_store("H1")
     rt = _delta_runtime(store)
     base = rt.group_view_ver
     assert len(rt._delta_timeline) == 0  # 尚未发布: 时间线为空
@@ -131,7 +114,7 @@ def test_same_tick_upsert_removed_cancel():
 
     removed hash 须带组键(否则按 R11 直接本代 full, 走不到抵消段) —— 用例 ⑤ 专测该分支。
     """
-    store = _make_store("H1")
+    store = make_store("H1")
     store.member_to_key["H3"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H3"]
     store.member_to_key["H4"] = ("R:\\E", )
@@ -155,7 +138,7 @@ def test_same_tick_upsert_removed_cancel():
 
 def test_gate_skipped_round_keys_survive_to_next_gen():
     """门控跳拍键集累积进下一代不丢(R4): 「上一版没被取走不重建」语义原样保留"""
-    store = _make_store("H1")
+    store = make_store("H1")
     store.member_to_key["H2"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H2"]
     rt = _delta_runtime(store)
@@ -186,7 +169,7 @@ def test_group_key_migration_old_removed_new_upsert():
     removed」的同键两清, 旧行滞留成孤儿), 故排空段直接标 full(与 row_key_unresolvable
     同口径, 保守正确优先)。本用例只给迁移待办、零 delta_fields(纯重键轮)。
     """
-    store = _make_store("H1", "H2")
+    store = make_store("H1", "H2")
     K1 = ("R:/Download/Testing", ("Show/e00.mkv", ))
     K2 = ("H:/Download/Testing-relocated", ("Show/e00.mkv", ))
     store.groups[K1] = ["H1", "H2"]
@@ -224,7 +207,7 @@ def test_group_key_migration_old_removed_new_upsert():
 def test_full_downgrade_sources_matrix():
     """五个降级源各自触发 full 代(R11): full 条目键集清空, 累积器与理由一并清空"""
     # a) 配置热重载(module.py apply -> mark_dirty(full=True, reason="config_reload"))
-    rt = _delta_runtime(_make_store("H1"))
+    rt = _delta_runtime(make_store("H1"))
     rt._delta_pending["upsert"]["torrent"].add("HX")  # 预置累积键: full 代一并清空
     rt.mark_dirty(full=True, reason="config_reload")
     entry = _publish(rt)
@@ -234,7 +217,7 @@ def test_full_downgrade_sources_matrix():
     assert rt._pending_full_reasons == set()  # 理由一并清空
 
     # b) HR revision(flush_views 判定点): 基线不等即 full, 重建后基线前移下一拍不再 full
-    store = _make_store("H1")
+    store = make_store("H1")
     rt = _delta_runtime(store)
     rt._host.hr = SimpleNamespace(revision=7)
     rt.mark_dirty()
@@ -243,7 +226,7 @@ def test_full_downgrade_sources_matrix():
     assert _publish(rt)["full"] is False
 
     # c) shows_pending 归位(True->False 转换拍; 非转换拍不登记)
-    rt = _delta_runtime(_make_store("H1"))
+    rt = _delta_runtime(make_store("H1"))
     rt.shows_pending = True
     rt.mark_shows_pending(False)  # 模拟 views._trigger_shows_rebuild_if_pending 归位
     rt.mark_dirty()
@@ -253,7 +236,7 @@ def test_full_downgrade_sources_matrix():
     assert _publish(rt)["full"] is False
 
     # d) 跨组交叉标记增删(走真 _build_group_view 的构建期回传): 首代立基线, 增删即 full
-    store = _make_store("H1")
+    store = make_store("H1")
     rt = _delta_runtime(store)
     store.cross_group_conflict_warned = {(("R:\\A", ), ("R:\\B", ))}
     rt.mark_dirty()
@@ -266,7 +249,7 @@ def test_full_downgrade_sources_matrix():
 
     # e) 进程重启: ver 以进程启动时间播种(runtime 构造), 时间线/累积器归零 —— 旧客户端
     #    的 rid 小于新 ver 即窗外、大于新 ver 即 rid>ver, 两者都退化全量(R10), 无需显式标记
-    store = _make_store("H1")
+    store = make_store("H1")
     rt = _delta_runtime(store)
     for _ in range(3):
         rt.mark_dirty()
@@ -283,7 +266,7 @@ def test_full_downgrade_sources_matrix():
 
 def test_group_removed_key_unresolvable_full():
     """组行 removed 键推导(R11): 查得到按组仍在/解散分流; 查不到 -> 本代 full(保守)"""
-    store = _make_store("H1")
+    store = make_store("H1")
     store.member_to_key["HG"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["HG"]
     rt = _delta_runtime(store)
@@ -323,7 +306,7 @@ def test_error_reason_refresh_row_level_upsert():
     走真 refresh_tracker_health(错误态种子 + FakeClient.trackers_map 报错条目);
     任务线真实时序 = 预取 -> flush_views(排空) -> 发布(落代)。
     """
-    store = _make_store("H1", state="error")
+    store = make_store("H1", state="error")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]
     rt = _delta_runtime(store)
@@ -365,7 +348,7 @@ def test_site_alert_refresh_row_level_upsert():
 
     计划 26-10-19-2007 S2 验收③④: 字段变化进 torrent 桶、组成员变化进 group 桶、不降级 full。
     """
-    store = _make_store("H1")
+    store = make_store("H1")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]
     rt = _delta_runtime(store)
@@ -402,7 +385,7 @@ def test_site_alert_refresh_row_level_upsert():
 
 def _baseline_rid(store_hashes=("H1", )) -> tuple:
     """装库 + 基线代发布, 回 (store, runtime, 客户端所持 rid)"""
-    store = _make_store(*store_hashes)
+    store = make_store(*store_hashes)
     rt = _delta_runtime(store)
     rt.mark_dirty()
     _publish(rt)  # 基线代(空键集条目): 客户端在此版本上持全量
@@ -499,7 +482,7 @@ def test_reduce_delta_upsert_removed_normal():
     assert state["removed"] == {"torrents": []}
 
     # group 视图: 组行 upsert 回整行(键 = encode_group_key), singles 桶只收未归组行
-    store = _make_store("H1", "H2")
+    store = make_store("H1", "H2")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]  # H1 归组, H2 未归组
     rt = _delta_runtime(store)
@@ -520,7 +503,7 @@ def test_reduce_delta_upsert_removed_normal():
 
     # 组解散代(组内唯一成员被删, 组随之消失): removed.groups 回 encode 后字符串
     # (与视图行键同标识), removed.singles 回 hash
-    store = _make_store("H1")
+    store = make_store("H1")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]
     rt = _delta_runtime(store)
@@ -610,7 +593,7 @@ def _assert_json_native(obj, path="root"):
 def test_reduce_payload_json_native_and_key_exclusivity():
     """JSON 原生守阵 + 键互斥(S3 DoD): 增量载荷全字段可 json.dumps; 增量不含四数组键,
     全量不含 delta/removed 键(逐一断言, R10)"""
-    store = _make_store("H1", "H2")
+    store = make_store("H1", "H2")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]
     rt = _delta_runtime(store)
@@ -679,7 +662,7 @@ def test_s6_partial_rebuild_reference_stability():
     前端 S7 按行对象身份的 WeakMap 记忆化依赖: 引用稳定**只对未脏行**承诺, 脏行新对象
     自然 miss 重算。组行内嵌 members 数组随组行整行走(P-02 一期口径, R8)。
     """
-    store = _make_store("H1", "H2", "H3", "H4")
+    store = make_store("H1", "H2", "H3", "H4")
     # H3/H4 归组, H1/H2 未归组(归组登记须在基线发布前, 同镜子 M4 前置口径)
     store.member_to_key["H3"] = ("R:\\D", )
     store.member_to_key["H4"] = ("R:\\D", )
@@ -748,7 +731,7 @@ def test_s6_partial_rows_equal_full_rebuild():
     混合序列逐代局部重聚合后, 发布视图(未脏行复用旧对象)与全量重跑对照 —— 行键集合 +
     行内容逐字段(不比数组顺序); 另断言脏组行 == 单组可调用全量重跑该行。
     """
-    store = _make_store("H1", "H2", "H3")
+    store = make_store("H1", "H2", "H3")
     store.member_to_key["H1"] = ("R:\\D", )
     store.member_to_key["H2"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1", "H2"]
@@ -794,7 +777,7 @@ def test_s6_solo_member_group_removal_no_stale_row():
     归约缺行防御性 full 兜住)。对照: 多成员组删单员照常重建非 removed —— 由
     test_s6_partial_rebuild_reference_stability c) 钉住(row 非 None 分支不挪键)。
     """
-    store = _make_store("H1", "H2")
+    store = make_store("H1", "H2")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]
     rt = _delta_runtime(store)
@@ -863,12 +846,12 @@ def test_publish_partial_merge_skeleton_single_point():
 
 # ---------- ⑩ S8: 剧键等价映射(正确性边界 1 成员迁移的前置数据结构) ----------
 
-_S8_NAME = "Show.{}.S01E01.720p.x264-GRP"  # 与 _make_store 的装库命名同款
+_S8_NAME = "Show.{}.S01E01.720p.x264-GRP"  # 与 webui_helpers.make_store 的装库命名同款
 
 
 def _s8_baseline(*hashes) -> tuple:
     """装库 + 基线代发布(空键集 -> 全量路径): 映射随首个全量代回填, 回 (store, runtime, 键表)"""
-    store = _make_store(*hashes)
+    store = make_store(*hashes)
     rt = _delta_runtime(store)
     rt.mark_dirty()
     _publish(rt)
@@ -978,7 +961,7 @@ def test_s9a_show_row_callable_matches_full_view():
     S9b 局部重算的衔接面)。成员集按 tvshows 直算独立重放分类(不走 _parse_show_member),
     防同源互证。
     """
-    store = _make_store()  # 空库起步, 逐颗装异形命名种子(覆盖各解析分支)
+    store = make_store()  # 空库起步, 逐颗装异形命名种子(覆盖各解析分支)
     client = store.client
     spec = {
         # 同剧异写("Show.Name"/"SHOW NAME" 同键异题): 频次 2:1 -> 展示名取众数
@@ -1046,7 +1029,7 @@ def test_s9a_show_row_callable_matches_full_view():
 def _s9b_baseline() -> tuple:
     """S9b 等价断言基线: 同剧多成员(S01/S02)+ 独立剧 + 未识别种子, 其中两成员预归组
     (删除拍组键可解析), 回 (store, runtime, host, 剧行键表)"""
-    store = _make_store()  # 空库起步, 逐颗装异形命名种子
+    store = make_store()  # 空库起步, 逐颗装异形命名种子
     client = store.client
     for h, kw in {
         "HA": dict(name="Show.Alpha.S01E01.1080p-GRP", state="downloading"),
@@ -1167,7 +1150,7 @@ def test_s9b_reduce_show_view_normal():
             for r in state["delta"]["shows"]} == {key_h1,
                                                   tvshows.parse_release("Show.H2.S01E01.720p.x264-GRP").key}
     # c) 剧行消失: 单成员剧成员删除(组键预置可解析) -> removed.shows 回剧键
-    store = _make_store("H1")
+    store = make_store("H1")
     store.member_to_key["H1"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H1"]
     rt = _delta_runtime(store)
@@ -1191,7 +1174,7 @@ def test_s9b_show_unrecognized_downgrade_full():
     """S9b 折叠面降级(R11): 未识别成员增/删/分类变化不可归约为行级脏(协议无未识别桶)
     -> 本代 full; 分类不变的未识别种子抖动不触发(精确不放大); full 后下一拍恢复行级增量"""
     # a) 新增未识别种子 -> full; 下一拍常规变化恢复行级增量(对照)
-    store = _make_store("H1")
+    store = make_store("H1")
     store.client.torrents["HM"] = FakeTorrent(hash="HM", name="Some.Movie.2023.1080p", state="stalledUP")
     store.apply_sync(QbApi(store.client, store))
     rt = _delta_runtime(store)

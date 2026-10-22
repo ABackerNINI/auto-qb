@@ -14,11 +14,7 @@ from types import SimpleNamespace
 
 from auto_qb.config.models import AddEpisodeTagsConfig
 from auto_qb.core.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
-from helpers import FakeClient, FakeTorrent, make_manager
-
-
-def _fake_file(name, size):
-    return SimpleNamespace(name=name, size=size)
+from helpers import FakeClient, FakeTorrent, _fake_file, make_manager
 
 
 def test_episode_tag_utils():

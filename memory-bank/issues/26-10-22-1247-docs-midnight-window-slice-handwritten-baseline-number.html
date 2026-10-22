@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="midnight-window-slice-handwritten-baseline-number">
+<meta name="issue-stamp" content="26-10-22-1247">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="dup-code-audit">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Dropped">
+<meta name="issue-title" content="activeContext 切片 26-10-22-0102 的 3990 属冻结存量(误判入池, 已撤销)">
+<meta name="issue-summary" content="误判: 守卫只报扫描序末 N 条, 0102 的命中其实是 HEAD 里已有的冻结存量; 本轮真正新增的手抄是本会话 R12 回写行, 已改「数字见 kb.baseline」">
+<title>activeContext 切片 26-10-22-0102 的 3990 属冻结存量(误判入池, 已撤销) · docs · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· docs</div>
+    <h1>activeContext 切片 26-10-22-0102 的 3990 属冻结存量(误判入池, 已撤销)</h1>
+    <p class="lede">误判: 守卫只报扫描序末 N 条, 0102 的命中其实是 HEAD 里已有的冻结存量; 本轮真正新增的手抄是本会话 R12 回写行, 已改「数字见 kb.baseline」</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-22-1247-docs-midnight-window-slice-handwritten-baseline-number</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-22 12:47</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>activeContext 切片 <code>26-10-22-0102-test-midnight-window-jitter.md</code> 的 R0 摘要行手抄测试数字「全量基线 3990 passed/2 skipped」—— 按口径数字只写 <code>testing/baselines/</code> 切片，正文应改「见 kb.baseline」。因守阵对存量冻结(只拦新增)，此条未自动判红，是 `commands run kb.check` 输出里唯一的 FAIL 项。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>memory-bank/activeContext/26-10-22-0102-test-midnight-window-jitter.md:6</code>（取证 2026-10-22 12:47，HEAD = c6b2f5e3）· grep 关键词 <code>3990</code>（该文件内 2 处）</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>把 R0 行内的「全量基线 3990 passed/2 skipped」改为「全量基线见 kb.baseline」；同文件另一处 <code>3990</code> 一并核对。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-22 12:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 14:40 — 状态 <strong>Dropped</strong>：入池取证误判，撤销。逐条核对两份命中清单（HEAD <code>git archive</code> 快照 vs 工作区，<code>check_wording.py --list-numbers</code> 各 394/395 行 <code>diff</code>）后确认：本轮真正新增的 1 处手抄是<strong>本会话自己写的 R12 回写行</strong>（<code>activeContext/26-10-20-2233-dup-code-audit.md:64</code>，已改为「数字见 kb.baseline(切片 26-10-22-1245-dup-code-audit)」，复算回到 394/394、守卫零违规）；本 issue 指向的 0102 切片 2 处命中在 HEAD 里即已存在，属冻结存量（在内 394 额度内），按范围守恒本轮不动。原入池依据是守卫「只报扫描序末 N 条」的提示方式，把存量末条误当新增，教训记于此。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-22-1247-docs-midnight-window-slice-handwritten-baseline-number.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

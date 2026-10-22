@@ -21,19 +21,9 @@ import pytest
 from auto_qb.core.modules.relocate_units import RelocateJob
 from auto_qb.infra import alias_fs, utils
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, seed_store
+from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
 
 FREE = 1 << 40
-
-
-def _pin_disk_usage(monkeypatch, free=FREE):
-    from auto_qb.infra import file_access as fa_mod
-
-    monkeypatch.setattr(
-        fa_mod.LocalFileAccess,
-        "disk_usage",
-        lambda self, path: fa_mod.DiskUsage(total=free * 10, used=0, free=free),
-    )
 
 
 def _env(td, files=("Show/e00.mkv", "Show/e01.mkv")):
@@ -180,7 +170,7 @@ def test_third_party_junction_joins_group(tmp_path, monkeypatch):
 
 def test_third_party_link_detected_and_relocation_blocked(tmp_path, monkeypatch):
     """⑥ 硬链接组: 组被打标(识别), 迁移闸门拒迁(hardlink) —— 搬走的是链接本身, 数据留原地"""
-    _pin_disk_usage(monkeypatch)
+    pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content = _env(tmp_path)
     target = os.path.join(content, "e00.mkv")
     spare = os.path.join(str(tmp_path), "spare.mkv")

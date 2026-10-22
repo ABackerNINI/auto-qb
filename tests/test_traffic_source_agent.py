@@ -62,6 +62,8 @@ from auto_qb.core.traffic_source import agent
 from auto_qb.infra.utils import is_windows
 from auto_qb.webui import tool_client
 
+from helpers import write_credential_file
+
 #: 本平台对应的 D19 启动器文件名(与工具目录里的文件同名同源)
 _LAUNCHER = agent._LAUNCHER_WINDOWS if is_windows() else agent._LAUNCHER_POSIX
 
@@ -71,14 +73,6 @@ _LAUNCHER = agent._LAUNCHER_WINDOWS if is_windows() else agent._LAUNCHER_POSIX
 def _conf(*, tool_dir="", tool_exe=""):
     """拉起源参数段替身: resolve_launch_target / ensure_running 只鸭子类型读 tool_dir / tool_exe"""
     return SimpleNamespace(tool_dir=tool_dir, tool_exe=tool_exe)
-
-
-def _write_token(tmp_path, text="tool-credential-abc") -> str:
-    """写一个假的工具密钥文件(值仅用于断言透传, 与真工具凭据无关)"""
-    path = tmp_path / "gtm" / "monitor.token"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-    return str(path)
 
 
 def _write_pointer(
@@ -118,7 +112,7 @@ def _write_pointer(
 @pytest.fixture()
 def probe_env(tmp_path, monkeypatch):
     """探活环境: 真指针 + 真密钥文件 + 可换的假控制面 -> (monkeypatch 出的调用记录, 切换函数)"""
-    token_path = _write_token(tmp_path)
+    token_path = write_credential_file(tmp_path)
     _write_pointer(tmp_path, monkeypatch, token_path=token_path)
     calls = []
 
@@ -249,7 +243,7 @@ def test_probe_requires_pointer_and_200(tmp_path, monkeypatch, probe_env):
 
     # 复位指针: 探活走 GET /status, 凭据从密钥文件读
     set_tool()
-    _write_pointer(tmp_path, monkeypatch, token_path=_write_token(tmp_path))
+    _write_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
     calls = []
     monkeypatch.setattr(
         tool_client,

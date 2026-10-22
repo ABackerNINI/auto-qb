@@ -59,7 +59,7 @@ import pytest
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
-from helpers import make_manager
+from helpers import dat_text, make_manager, write_credential_file
 
 GIB = 1024**3
 MIB = 1024**2
@@ -85,22 +85,6 @@ def _points(pairs):
 
 def _pc(period: str, up=None, down=None) -> PeriodCurve:
     return PeriodCurve(period=period, upload_points=up, download_points=down)
-
-
-def _dat_text(rows) -> str:
-    """rows: [(date, 上传字节, 下载字节)] -> dat 文本(单位 KB, 与 curves.parse_history_dat 同口径)"""
-    lines = ['lines: "30"']
-    for d, up_b, down_b in rows:
-        lines.append(f"{d:%Y/%m/%d} {up_b // 1024}/{down_b // 1024}")
-    return "\n".join(lines)
-
-
-def _write_credential_file(tmp_path) -> str:
-    """写一个假的工具密钥文件(值仅用于断言透传, 与真工具无关)"""
-    path = tmp_path / "gtm" / "monitor.token"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("tool-credential-abc\n", encoding="utf-8")
-    return str(path)
 
 
 def _write_pointer(tmp_path, monkeypatch, *, token_path: str, schema=agent.ENDPOINT_SCHEMA) -> str:
@@ -224,7 +208,7 @@ def sub_env(tmp_path, monkeypatch):
     setattr(mgr.web, _CRED_FIELD, "web-credential-1")
     # S16: 是否联动只看顶层来源段的 provider; 端点与密钥来自发现指针(D6), 不再读配置 url/token
     mgr.config.traffic_source.provider = "global_traffic_monitor"
-    _write_pointer(tmp_path, monkeypatch, token_path=_write_credential_file(tmp_path))
+    _write_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
     tool = _FakeTool()
     monkeypatch.setattr(tool_client, "call_tool", tool)
     # !真实拉起会 Popen(工具启动器) —— sidefx 的 POPEN 白名单只放行 node 与临时 wrapper,
@@ -436,7 +420,7 @@ def _refresh_env(tmp_path, monkeypatch, *, enabled=True, dat_name="history_traff
     mgr = make_manager(str(tmp_path / "state.json"))
     dat_path = tmp_path / dat_name
     if write_dat:
-        dat_path.write_text(_dat_text([(date.today(), 3 * MIB, 5 * MIB)]), encoding="utf-8")
+        dat_path.write_text(dat_text([(date.today(), 3 * MIB, 5 * MIB)]), encoding="utf-8")
     mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
         curves=[_pc("day", up=_points([(1, 1)])),
                 _pc("month", down=_points([(1, 2)]))],
@@ -625,7 +609,7 @@ def test_reload_config_source_change_refreshes_immediately(tmp_path, monkeypatch
     mgr, _dat_file, qb_calls = _refresh_env(tmp_path, monkeypatch)
     tool_dir = tmp_path / "tool-data"
     tool_dir.mkdir()
-    (tool_dir / "history_traffic.dat").write_text(_dat_text([(date.today(), 9 * MIB, 1 * MIB)]), encoding="utf-8")
+    (tool_dir / "history_traffic.dat").write_text(dat_text([(date.today(), 9 * MIB, 1 * MIB)]), encoding="utf-8")
     _point_at(tool_dir, monkeypatch)  # 工具来源的数据目录(取数只读指针, 不探活)
     ts_before = mgr.web.traffic_view["ts"]
 
@@ -776,7 +760,7 @@ def _ep_with_token(tmp_path, **kw) -> "agent.ToolEndpoint":
     """
     return agent.ToolEndpoint(
         base_url=kw.get("base_url", _FAKE_EP.base_url),
-        token_path=_write_credential_file(tmp_path),
+        token_path=write_credential_file(tmp_path),
         data_dir="",
     )
 
@@ -851,7 +835,7 @@ def test_unregister_defensive_and_failure_branches(sub_env, tmp_path):
     sub._unregister("测试")
     assert tool.paths() == []
     # 不可达 -> 静默(租约兜底); 密钥可读, 确保走的是"不可达"而不是"密钥不可读"早退
-    sub._sub_id, sub._reg_tool = "sub-x", (f"http://127.0.0.1:{POINTER_PORT}", _write_credential_file(tmp_path))
+    sub._sub_id, sub._reg_tool = "sub-x", (f"http://127.0.0.1:{POINTER_PORT}", write_credential_file(tmp_path))
     tool.raise_exc = tool_client.ToolUnreachable("refused")
     sub._unregister("测试")
     assert sub._sub_id == ""

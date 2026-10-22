@@ -50,26 +50,13 @@ from auto_qb.core.modules.traffic_snapshot_mod import (
 )
 from auto_qb.core.taskqueue import Task
 
-from helpers import capture_logs, make_manager
+from helpers import capture_logs, make_manager, write_dat
 
 GIB = 1024**3
 
 #: 鉴权头键名 / 密钥字段名**拆写**: 工作区写入判据把「凭据键名 + Bearer 字面量」当凭据拦整文件
 _CRED_FIELD = "tok" + "en"
 _AUTH_KEY = "Auth" + "orization"
-
-
-def _dat_text(rows) -> str:
-    lines = ['lines: "30"']
-    for d, up_b, down_b in rows:
-        lines.append(f"{d:%Y/%m/%d} {up_b // 1024}/{down_b // 1024}")
-    return "\n".join(lines)
-
-
-def _write_dat(tmp_path, rows, name="history_traffic.dat") -> str:
-    p = tmp_path / name
-    p.write_text(_dat_text(rows), encoding="utf-8")
-    return str(p)
 
 
 def _mgr(tmp_path, dat_path=""):
@@ -134,7 +121,7 @@ def test_history_published_without_curve_config(tmp_path):
     但历史图有数据 —— 两者并存正是设计意图。
     """
     today = date.today()
-    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
     assert mgr.config.global_speed_limit_curve is None
 
     assert _mod(mgr).refresh() is True
@@ -203,7 +190,7 @@ def test_publish_source_keeps_limit_segment(tmp_path):
 def test_publish_limit_keeps_source_segment(tmp_path):
     """段隔离之二: publish_limit 只写 limit 段 —— source/periods/history 逐键不变"""
     today = date.today()
-    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
     mod = _mod(mgr)
     mod.refresh()
     before = {k: copy.deepcopy(mgr.web.traffic_view[k]) for k in ("source", "periods", "history")}
@@ -218,7 +205,7 @@ def test_publish_limit_keeps_source_segment(tmp_path):
 def test_publish_off_clears_both_segments(tmp_path):
     """publish_off: 来源翻 off + 清 periods/history + limit 复位 disabled(目标/实读皆 None)"""
     today = date.today()
-    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
     mod = _mod(mgr)
     mod.refresh()
     mod.publish_limit(target={"up": 1, "down": 2})
@@ -267,7 +254,7 @@ def test_refresh_source_off_publishes_off_without_reading(tmp_path):
 
     # 开回来自动恢复: 下一轮正常发布
     mgr.config.traffic_source.enabled = True
-    mgr.config.traffic_source.traffic_monitor.dat_path = _write_dat(tmp_path, [(date.today(), 1, 1)])
+    mgr.config.traffic_source.traffic_monitor.dat_path = write_dat(tmp_path, [(date.today(), 1, 1)])
     assert _mod(mgr).refresh() is True
     assert mgr.web.traffic_view["source"]["state"] == SOURCE_OK
 
@@ -278,7 +265,7 @@ def test_refresh_publish_logs_at_debug(tmp_path):
     INFO 会刷屏(26-10-18 用户要求降级); 读盘失败/坏行两条 WARNING 不降, 异常仍要响亮。
     日志捕获走 helpers.capture_logs(QbManager 构造链清 root handlers, caplog 恒空)。
     """
-    dat = _write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)])
     mgr = _mgr(tmp_path, dat)
 
     with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
@@ -292,7 +279,7 @@ def test_refresh_publish_logs_at_debug(tmp_path):
 def test_curve_run_leaves_source_segment_untouched(tmp_path):
     """A4 守阵: 曲线任务一跑, 来源段(含 history)一字未变 —— 只写 limit"""
     today = date.today()
-    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
     mgr.config.global_speed_limit_curve = _gslc_day_curve()
     _mod(mgr).refresh()
     before = {k: copy.deepcopy(mgr.web.traffic_view[k]) for k in ("source", "periods", "history")}
@@ -349,7 +336,7 @@ def test_publish_event_patches_day_row_without_reading(tmp_path, monkeypatch):
     monkeypatch.setattr(time, "time", _fake_time)
 
     today = date.today()
-    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
     mod = _mod(mgr)
     assert mod.refresh() is True  # 先有一份文件派生快照(day + month 两行)
     mod.publish_limit(target={"up": 5120, "down": 11264}, actual={"up": 5120, "down": 11264})
@@ -379,7 +366,7 @@ def test_publish_event_high_water_clamps_both_paths(tmp_path):
     不回退; 随后工具流量追上水位, 补丁自然恢复推进。
     """
     today = date.today()
-    mgr = _mgr(tmp_path, _write_dat(tmp_path, [(today, 1 * 1024, 1 * 1024)]))  # 今天行 1KiB/1KiB
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 1 * 1024, 1 * 1024)]))  # 今天行 1KiB/1KiB
     mod = _mod(mgr)
 
     assert mod.publish_event(today.isoformat(), 5000, 6000) is True

@@ -76,7 +76,7 @@ from auto_qb.infra.errors import AutoQbError
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, _throttle
 from auto_qb.torrents import QbCompatError
-from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, make_manager, seed_store
+from helpers import LEGACY_V1, FakeClient, FakeConfig, FakeTorrent, capture_logs, make_manager, seed_store
 
 
 def test_create_global_tasks():
@@ -1214,24 +1214,7 @@ def test_p2a_run_materializes_schema_migration_dry_run_then_write():
     """run() 启动物化: dry-run 只探测不落盘(425); 非 dry-run 迁移+备份落盘(427)"""
     from auto_qb.config import load_config
 
-    legacy = (
-        "config:\n"
-        "  qbittorrent:\n"
-        "    host: h\n"
-        "    port: 1\n"
-        "    username: u\n"
-        "    password: p\n"
-        "  trackers:\n"
-        "    BTSchool:\n"
-        "      domains: [pt.btschool.club]\n"
-        "      hr:\n"
-        "        required_seeding_time: 3D\n"
-        "      hr_check:\n"
-        "        mode: partial\n"
-        "        adapter: nexusphp\n"
-        "        hr_page_url: https://pt.btschool.club/myhr.php\n"
-        "        refresh_interval: 6H\n"
-    )
+    legacy = LEGACY_V1
     with tempfile.TemporaryDirectory() as td:
         cfg = FakeConfig()
         cfg.state_file = os.path.join(td, "state.json")

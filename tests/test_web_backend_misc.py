@@ -247,23 +247,15 @@ def test_web_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
     清理临时文件并重抛 —— 目标路径保持旧内容。若实现退回 O_TRUNC 直写, 同一时刻半截内容已落
     目标文件, 本条在 raises 处即红。
     """
-    from auto_qb.infra import utils as infra_utils
     from auto_qb.webui import ensure_web_token
+
+    from helpers import pin_atomic_write_crash
 
     mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
     token_file = tmp_path / "web.token"
     token_file.write_text("", encoding="ascii")  # 空文件: 读取侧判空后走重新生成分支
 
-    real_atomic_write = infra_utils.atomic_write
-
-    def _crash_mid(path, write_fn, **kw):
-        def _half(_f):
-            _f.write("deadbeef")  # 半截密钥, 模拟写盘途中被杀
-            raise RuntimeError("simulated kill mid-write")
-
-        return real_atomic_write(path, _half, **kw)
-
-    monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
+    pin_atomic_write_crash(monkeypatch)
     with pytest.raises(RuntimeError):
         ensure_web_token(mgr)
     assert token_file.read_text(encoding="ascii") == "", "中断后不得留下非空半截 token"

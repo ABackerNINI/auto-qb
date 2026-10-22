@@ -87,6 +87,8 @@ from auto_qb.config.errors import ConfigError
 from auto_qb.config.loaders import load_config
 from auto_qb.config.writer import materialize_schema_migration, preview_tree, read_tree, write_tree
 
+from helpers import LEGACY_V1
+
 # 「天生当前版本的干净文件」锚(当前 = v5): BASE 供各写盘用例当无 hr 的最小合法配置
 BASE = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
 
@@ -576,27 +578,6 @@ def test_preview_tree_stamps_schema_version(tmp_path):
 
 
 # ------------------------------------------------- 写回版本闸门 + 启动物化(计划 26-09-27-2252)
-
-# schema v1 存量形态(BTSchool 旧键未迁移, 无版本章), 与 test_hr_config.test_legacy_equivalent_migration
-# 的生产锚点同构 —— 程序升级前打开的页签 GET 到的就是这棵树
-LEGACY_V1 = (
-    "config:\n"
-    "  qbittorrent:\n"
-    "    host: h\n"
-    "    port: 1\n"
-    "    username: u\n"
-    "    password: p\n"
-    "  trackers:\n"
-    "    BTSchool:\n"
-    "      domains: [pt.btschool.club]\n"
-    "      hr:\n"
-    "        required_seeding_time: 3D\n"
-    "      hr_check:\n"
-    "        mode: partial\n"
-    "        adapter: nexusphp\n"
-    "        hr_page_url: https://pt.btschool.club/myhr.php\n"
-    "        refresh_interval: 6H\n"
-)
 
 
 def test_write_tree_rejects_stale_version_tree(tmp_path):

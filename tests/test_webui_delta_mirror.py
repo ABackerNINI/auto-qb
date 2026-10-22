@@ -59,6 +59,8 @@ from auto_qb.webui.views import WebviewMixin
 
 from helpers import FakeClient, FakeTorrent
 
+from webui_helpers import make_store
+
 # ---------- 替身与驱动(范式同 test_webui_delta/test_sync) ----------
 
 
@@ -73,26 +75,9 @@ class _ViewHost(WebviewMixin):
         pass
 
 
-def _make_store(*hashes, state: str = "stalledUP") -> TorrentStore:
-    """真实 TorrentStore 装库(FakeClient/FakeTorrent 范式同 test_sync), 随后清掉装库轮的
-    S1 快照与 view_changed —— 基线不进被测时间线窗口, 各用例从干净基线驱动"""
-    client = FakeClient()
-    for h in hashes:
-        # 剧集形命名: parse_release 解析为 episode(带 key), 不触发 _build_shows_view 的
-        # 文件兑底 pending 标记(与 test_webui_delta 同款防干扰)
-        client.torrents[h] = FakeTorrent(hash=h, name=f"Show.{h}.S01E01.720p.x264-GRP", state=state)
-    store = TorrentStore(client)
-    store.apply_sync(QbApi(client, store))
-    store.last_added = []
-    store.last_removed = []
-    store.delta_fields = {}
-    store.consume_view_changed()
-    return store
-
-
 def _make_named_store(spec: dict, state: str = "stalledUP") -> TorrentStore:
     """真实 TorrentStore 装库(自定义命名版, M10-M12 同剧多成员/异写标题用), 清快照口径同
-    _make_store"""
+    webui_helpers.make_store"""
     client = FakeClient()
     for h, name in spec.items():
         client.torrents[h] = FakeTorrent(hash=h, name=name, state=state)
@@ -231,7 +216,7 @@ class Mirror:
 
 def _mirror(hashes=("H1", "H2")):
     """装库 + 基线代发布 + 双 B 客户端基线全量, 回 (store, rt, mirror, torrent客户端, group客户端)"""
-    store = _make_store(*hashes)
+    store = make_store(*hashes)
     rt = _delta_runtime(store)
     m = Mirror(store, rt)
     ct, cg = DeltaClient("torrent"), DeltaClient("group")
@@ -330,7 +315,7 @@ def test_m3_quantum_boundary_beat_invisible():
 
 def test_m4_same_tick_add_remove_and_pending_removed_overlap():
     # H2/H4 归组须在基线发布**前**登记(基线后手工改归组本身就是无键重建, B 通道无从观测)
-    store = _make_store("H1", "H2", "H4")
+    store = make_store("H1", "H2", "H4")
     store.member_to_key["H2"] = ("R:\\D", )
     store.member_to_key["H4"] = ("R:\\D", )
     store.groups[("R:\\D", )] = ["H2", "H4"]
@@ -420,7 +405,7 @@ def test_unkeyed_command_source_yields_full():
 
     # b) reset_runtime: 清分组索引 + 置 view_changed, 同样无键 —— 组行消失/成员回 singles,
     #    行键不可推导 -> 必须 full, 否则 B 组行残留 + H1 单行缺失(镜子必红)
-    store2 = _make_store("H1", "H2")
+    store2 = make_store("H1", "H2")
     store2.member_to_key["H1"] = ("R:\\D", )
     store2.groups[("R:\\D", )] = ["H1"]
     rt2 = _delta_runtime(store2)
@@ -440,7 +425,7 @@ def test_unkeyed_command_source_yields_full():
 
 
 def test_m6_restart_ver_seeding_old_rid_full():
-    store = _make_store("H1", "H2")
+    store = make_store("H1", "H2")
     rt = _delta_runtime(store)
     m = Mirror(store, rt)
     ct, cg = DeltaClient("torrent"), DeltaClient("group")
@@ -688,7 +673,7 @@ def test_fuzz_random_operation_sequence():
     跑一次全绿为准, 不追求极限压测。
     """
     rng = random.Random(20261007)
-    store = _make_store("H1", "H2", "H3")
+    store = make_store("H1", "H2", "H3")
     rt = _delta_runtime(store)
     m = Mirror(store, rt)
     ct, cg, cs = DeltaClient("torrent"), DeltaClient("group"), DeltaClient("show")

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="dup-code-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests 同名小助手多份拷贝 9 族(_fake_file/_pin_disk_usage/_write_dat/_ss/_write_token/_make_store/atomic 注入/legacy v1 样本等)">
 <meta name="issue-summary" content="逐字级拷贝散在 2-5 个文件各一份; 收进 tests 共享层(helpers/webui_helpers)单点">
 <title>tests 同名小助手多份拷贝 9 族(_fake_file/_pin_disk_usage/_write_dat/_ss/_write_token/_make_store/atomic 注入/legacy v1 样本等) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-0502-refactor-test-shared-micro-helper-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 05:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -85,6 +85,7 @@
     <ul>
       <li>①<code>tests/helpers.py:1137</code> + <code>tests/test_episodes.py:21</code> + <code>tests/test_grouping.py:102</code> + <code>tests/test_modules_p4.py:42</code>；②<code>tests/test_relocate_exec.py:59</code> + <code>tests/test_relocate_paths.py:35</code> + <code>tests/test_grouping_relocate.py:25</code> + <code>tests/test_web_relocate.py:~20</code>；③<code>tests/test_speed_curve.py:127</code> ↔ <code>tests/test_traffic_snapshot.py:62</code> + 变体 <code>test_traffic_store.py:222</code>/<code>test_traffic_limits.py:48</code>/<code>test_traffic_sample.py:2037</code>；④<code>tests/test_traffic_sample.py:238</code> ↔ <code>tests/test_traffic_store.py:183</code>；⑤<code>tests/test_traffic_source_agent.py:76</code> ↔ <code>tests/test_traffic_monitor_client.py:98</code>；⑥<code>tests/test_webui_delta.py:67</code> ↔ <code>tests/test_webui_delta_mirror.py:76</code>；⑦<code>tests/test_hr_channel.py:135</code> ↔ <code>tests/test_web_backend_misc.py:261</code>；⑧<code>tests/test_config_writer.py:580</code> ↔ <code>tests/test_qbmanager.py:1161</code>（取证 2026-10-21，基线 cecbe4a9；行号为当时值）</li>
     </ul>
+    <p><strong>复验 2026-10-22 04:40（基线 ad17518a，取证 26 笔快进后）</strong>：8 族 24 处锚点全部仍在 —— ①<code>_fake_file</code> 4 份（helpers/test_episodes/test_grouping/test_modules_p4，行号已漂到 1185/20/100/40）；②<code>_pin_disk_usage</code> 4 份（29/63/39/32）；③<code>_dat_text</code> 3 份逐字（speed_curve 132 / snapshot 62 / monitor_client 90）+ <code>_write_dat</code> 2 份逐字（speed_curve 140 / snapshot 69）+ store 222 / limits 48 / sample 2092 三变体；④<code>_ss</code>+<code>_active_torrent</code> 2 份（sample 235/249、store 183/196）；⑤<code>_write_token</code> 76 ≡ <code>_write_credential_file</code> 98；⑥<code>_make_store</code> 2 份（delta 67 / delta_mirror 76）；⑦atomic 中断注入 2 份逐字（hr_channel 135-146 / web_backend_misc 261-272）；⑧legacy v1 共 14 行逐字（config_writer 582 / qbmanager 1217）。</p>
   </section>
 
   <section id="s3">
@@ -92,10 +93,34 @@
     <p>每族收 tests 共享层（helpers.py / webui_helpers.py）单点；dat 写手与 legacy 样本刻意与生产实现独立（防同义反复），只在 tests 侧合流，格式由读侧往返守阵钉。</p>
   </section>
 
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法（2026-10-22，基线 ad17518a）</h2>
+    <p>全部 8 族收口到共享层单点，调用点直引单点，不留转发壳（壳会再造一层同名概念）：</p>
+    <ul>
+      <li>①<code>_fake_file</code>：共享层已有单点（helpers.py:1185），删 episodes/grouping/modules_p4 三份副本改 import。</li>
+      <li>②<code>_pin_disk_usage</code> → <code>helpers.pin_disk_usage(monkeypatch, free=1&lt;&lt;40)</code>：四份合一；原 web_relocate 变体返回值没人用，统一丢弃。</li>
+      <li>③dat 写手 → helpers 三点：<code>dat_text(rows)</code>（3 份合一）+ <code>write_dat(tmp_path, rows, name)</code>（2 份合一）+ <code>write_dat_lines(path, lines)</code>（store 变体）。monitor_client 用 <code>dat_text</code> 直写。</li>
+      <li>④<code>_ss</code>/<code>_active_torrent</code> → <code>helpers.server_state(**overrides)</code> / <code>helpers.active_torrent(hash, **kw)</code>：sample/store 两处合一。</li>
+      <li>⑤<code>_write_token</code> ≡ <code>_write_credential_file</code> → <code>helpers.write_credential_file(tmp_path, text="tool-credential-abc")</code>；两处原文本差一个尾换行，生产读侧 <code>read_token</code> 走 <code>.strip()</code>，取不带换行版本语义等价。</li>
+      <li>⑥<code>_make_store</code> → <code>webui_helpers.make_store(*hashes, state)</code>（该函数的落点领域就是 WEB UI）。</li>
+      <li>⑦atomic 中断注入 → <code>helpers.pin_atomic_write_crash(monkeypatch)</code>：13 行注入器合一。</li>
+      <li>⑧legacy v1 样本 → <code>helpers.LEGACY_V1</code>：14 行锚文本合一，test_qbmanager 的局部 <code>legacy</code> 变量随之删除。</li>
+    </ul>
+    <p>与「建议」的差异：dat 文本/legacy 样本仍**测试侧手写**（不引生产实现，防同义反复），只合流到 tests 共享层；格式由读侧往返守阵钉住，本轮未新增此类守阵（既有断言已覆盖两条读侧路径）。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>验证方式与测试数字</h2>
+    <p><code>commands run test.full</code>（基线 ad17518a，改动后同基线）：<strong>3990 passed, 10 skipped, TOTAL 覆盖率 99%</strong>（20728 语句 / 116 missed / 7088 branches / 106 partial）。零失败零回归。</p>
+    <p>收口后复核：<code>grep -rn "def _fake_file|def _pin_disk_usage|def _write_dat|def _ss(|def _active_torrent|def _write_token|def _write_credential_file|def _crash_mid|LEGACY_V1 = (" tests/*.py</code> 仅剩共享层单点三处定义。</p>
+  </section>
+
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-21 05:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 04:40 — 用户指派认领，状态 <strong>In Progress</strong>；复验 8 族 24 处锚点仍全部复现（基线 ad17518a，详见 §02 复验段）</li>
+      <li>2026-10-22 12:28 — 修复完成，状态 <strong>Done</strong>：8 族全部收口共享层单点，<code>test.full</code> 实测 3990 passed / 10 skipped / 覆盖率 99%（§05/§06）</li>
     </ul>
   </section>
 

@@ -173,34 +173,19 @@ from auto_qb.core.traffic_store import (
     v4_window_dates,
     v4_z_totals_ramp,
 )
-from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+from helpers import (
+    FakeClient,
+    FakeTorrent,
+    active_torrent,
+    make_manager,
+    seed_store,
+    server_state,
+    write_dat_lines,
+)
 
 HOUR = HOUR_SECONDS
 H0 = 10 * HOUR  # 被封口的小时桶起点
 H1 = 11 * HOUR  # 当前小时桶起点(封口触发时刻所在桶)
-
-
-def _ss(**overrides) -> dict:
-    base = {
-        "dl_info_speed": 1024,
-        "up_info_speed": 2048,
-        "alltime_dl": 10_000_000,
-        "alltime_ul": 20_000_000,
-        "dl_info_data": 1_000_000,
-        "up_info_data": 2_000_000,
-    }
-    base.update(overrides)
-    return base
-
-
-def _active_torrent(hash="HASH123", **kw) -> FakeTorrent:
-    kw.setdefault("dlspeed", 512)
-    kw.setdefault("upspeed", 256)
-    kw.setdefault("downloaded", 5_000_000)
-    kw.setdefault("uploaded", 3_000_000)
-    kw.setdefault("downloaded_session", 500_000)
-    kw.setdefault("uploaded_session", 300_000)
-    return FakeTorrent(hash=hash, **kw)
 
 
 def _mgr(tmp_path, qb_traffic, data_dir=True) -> object:
@@ -219,19 +204,9 @@ def _run_sample(mgr, dry_run=False) -> None:
     mgr.host.get("qb_traffic").handle_traffic_sample(dry_run=dry_run)
 
 
-def _write_dat(path, lines) -> None:
-    """手工构造 dat 文件(行列表逐行写, 换行行尾)"""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        f.write("\n".join(lines) + "\n")
-
-
 def _read_text(path) -> str:
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
-
-
-# ---------- handler 接线 ----------
 
 
 def test_restart_continuity_appends_without_truncation(tmp_path, monkeypatch):
@@ -241,8 +216,8 @@ def test_restart_continuity_appends_without_truncation(tmp_path, monkeypatch):
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: fixed)
     # 第一段运行: 一轮采样(r 记录随 flush 落盘)
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     _run_sample(mgr)
@@ -252,8 +227,8 @@ def test_restart_continuity_appends_without_truncation(tmp_path, monkeypatch):
     assert len(_read_text(gpath).splitlines()) == 4  # 头 + key + B + 1 行
     # 重启: 全新 manager(同 data_dir), 计数器推进
     mgr2 = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr2.store.server_state = _ss(alltime_dl=10_001_000, alltime_ul=20_002_000)
-    seed_store(mgr2, [_active_torrent(downloaded=5_000_700, uploaded=3_000_400)])
+    mgr2.store.server_state = server_state(alltime_dl=10_001_000, alltime_ul=20_002_000)
+    seed_store(mgr2, [active_torrent(downloaded=5_000_700, uploaded=3_000_400)])
     mod2 = mgr2.host.get("qb_traffic")
     mod2.start(mgr2.ctx, dry_run=False)
     _run_sample(mgr2)
@@ -275,8 +250,8 @@ def test_handler_writes_v4_only_no_legacy_side_effects(tmp_path, monkeypatch):
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     assert _run_sample(mgr) is None
@@ -295,8 +270,8 @@ def test_handler_writes_v4_only_no_legacy_side_effects(tmp_path, monkeypatch):
 def test_handler_dry_run_persists_nothing(tmp_path):
     """dry_run 全程零文件: start 跳过对账, handler 不落盘不封口(观测写盘属真实副作用)"""
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=True)
     _run_sample(mgr, dry_run=True)
@@ -308,8 +283,8 @@ def test_empty_data_dir_persists_nothing(tmp_path, monkeypatch):
     """data_dir 为空(防御: 真实配置恒非空, loaders 默认 auto-qb-data) -> 零文件零目录零泄漏"""
     monkeypatch.chdir(tmp_path)  # CWD 钉到 tmp: 断言无相对路径泄漏
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30), data_dir=False)
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     _run_sample(mgr)
@@ -321,8 +296,8 @@ def test_all_persist_writes_on_caller_thread(tmp_path, monkeypatch):
     """单写线程不变式: 全部 v4 批量落盘(TrafficV4Store.append_records)发生在调时钟线钩子
     的线程(= 主循环线程)内, 模块不建线程(黄金法则 5)"""
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     mod._last_flush = time.time() - 601  # 预置过期: 本轮采样内 flush 驱动即触发
@@ -347,8 +322,8 @@ def test_handler_deleted_torrent_no_new_records(tmp_path, monkeypatch):
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     _run_sample(mgr)  # r 进缓冲
@@ -371,8 +346,8 @@ def test_handler_readded_torrent_keeps_history(tmp_path, monkeypatch):
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
     _run_sample(mgr)
@@ -381,7 +356,7 @@ def test_handler_readded_torrent_keeps_history(tmp_path, monkeypatch):
     t["now"] = H1 + 160.0
     _run_sample(mgr)  # 删种期: 无记录
     # 同 hash 重加(活跃, 计数器推进) -> 续写
-    seed_store(mgr, [_active_torrent(downloaded=6_000_000, uploaded=4_000_000)])
+    seed_store(mgr, [active_torrent(downloaded=6_000_000, uploaded=4_000_000)])
     t["now"] = H1 + 220.0
     _run_sample(mgr)
     mod._flush_all_series()
@@ -396,8 +371,8 @@ def test_handler_dry_run_skips_store_construction(tmp_path, monkeypatch):
     t = {"now": H1 + 100.0}
     monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
     mgr = _mgr(tmp_path, QbTraffic(enabled=True, sample_interval=30))
-    mgr.store.server_state = _ss()
-    seed_store(mgr, [_active_torrent()])
+    mgr.store.server_state = server_state()
+    seed_store(mgr, [active_torrent()])
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=True)
     mgr.store.by_hash.pop("HASH123")
@@ -991,7 +966,7 @@ def test_v4_store_series_has_data_gate(tmp_path):
     assert st.series_has_data("torrent:ABC") is False  # 目录缺失
     os.makedirs(v4_series_dir(str(tmp_path), "torrent:ABC"))
     assert st.series_has_data("torrent:ABC") is False  # 目录空
-    _write_dat(
+    write_dat_lines(
         v4_day_file_path(str(tmp_path), "torrent:ABC", v4_epoch_date_str(H1)), [HEADER_LINE_V4, "key,torrent:ABC"]
     )
     assert st.series_has_data("torrent:ABC") is True  # 有天文件
@@ -1057,8 +1032,8 @@ def test_v4_store_series_keys_and_day_dates(tmp_path):
     d_old, d_new = "2026-01-01", "2026-03-15"
     for key in ("global", "torrent:ABC"):
         for d in (d_old, d_new):
-            _write_dat(st.series_day_path(key, d), [HEADER_LINE_V4, f"key,{key}"])
-        _write_dat(v4_agg_file_path(str(tmp_path), key), [HEADER_LINE_V4, f"key,{key}"])
+            write_dat_lines(st.series_day_path(key, d), [HEADER_LINE_V4, f"key,{key}"])
+        write_dat_lines(v4_agg_file_path(str(tmp_path), key), [HEADER_LINE_V4, f"key,{key}"])
     os.makedirs(os.path.join(v4_root_dir(str(tmp_path)), "torrents", "NOT!HASH"))  # 非 infohash 目录: 跳过
     assert st.series_keys() == ["global", "torrent:ABC"]
     min_epoch = v4_date_str_epoch("2026-03-01")
@@ -1213,11 +1188,11 @@ def test_v4_store_evict_expired_series(tmp_path, monkeypatch):
     new_d = "2026-03-16"
     # OLD: 超龄(天文件 + agg.dat 同删); EDGE: 恰压线保留; NEW: 新鲜; AGGONLY: 无天文件保守跳过
     for key, d in (("torrent:OLD", old_d), ("torrent:EDGE", "2026-03-15"), ("torrent:NEW", new_d)):
-        _write_dat(st.series_day_path(key, d), [HEADER_LINE_V4, f"key,{key}"])
-    _write_dat(v4_agg_file_path(str(tmp_path), "torrent:OLD"), [HEADER_LINE_V4, "key,torrent:OLD"])
+        write_dat_lines(st.series_day_path(key, d), [HEADER_LINE_V4, f"key,{key}"])
+    write_dat_lines(v4_agg_file_path(str(tmp_path), "torrent:OLD"), [HEADER_LINE_V4, "key,torrent:OLD"])
     os.makedirs(v4_series_dir(str(tmp_path), "torrent:AGGONLY"))
-    _write_dat(v4_agg_file_path(str(tmp_path), "torrent:AGGONLY"), [HEADER_LINE_V4, "key,torrent:AGGONLY"])
-    _write_dat(st.series_day_path("global", old_d), [HEADER_LINE_V4, "key,global"])  # 全局豁免(结构性)
+    write_dat_lines(v4_agg_file_path(str(tmp_path), "torrent:AGGONLY"), [HEADER_LINE_V4, "key,torrent:AGGONLY"])
+    write_dat_lines(st.series_day_path("global", old_d), [HEADER_LINE_V4, "key,global"])  # 全局豁免(结构性)
     evicted = st.evict_expired_series(now, window)
     assert evicted == ["torrent:OLD"]
     assert not os.path.exists(v4_series_dir(str(tmp_path), "torrent:OLD"))  # 整目录(天文件 + agg.dat)
@@ -1225,8 +1200,8 @@ def test_v4_store_evict_expired_series(tmp_path, monkeypatch):
         assert os.path.exists(v4_series_dir(str(tmp_path), key))
     assert os.path.exists(v4_series_dir(str(tmp_path), "global"))
     # 删除失败重试: 重建 OLD(首轮已被删) -> rmtree 抛错 -> 目录保留且不进返回表 -> 下轮重试成功
-    _write_dat(st.series_day_path("torrent:OLD", old_d), [HEADER_LINE_V4, "key,torrent:OLD"])
-    _write_dat(v4_agg_file_path(str(tmp_path), "torrent:OLD"), [HEADER_LINE_V4, "key,torrent:OLD"])
+    write_dat_lines(st.series_day_path("torrent:OLD", old_d), [HEADER_LINE_V4, "key,torrent:OLD"])
+    write_dat_lines(v4_agg_file_path(str(tmp_path), "torrent:OLD"), [HEADER_LINE_V4, "key,torrent:OLD"])
 
     def _boom(path):
         raise OSError(16, "locked")
@@ -1258,7 +1233,7 @@ def test_v4_store_data_dir_property_and_has_data_edges(tmp_path, monkeypatch):
     monkeypatch.setattr("auto_qb.core.traffic_store.os.listdir", _boom_listdir)
     assert st.series_has_data(key) is False  # 读侧竞态保守 False
     monkeypatch.undo()
-    _write_dat(os.path.join(series_dir, "2026-10-20.dat"), [HEADER_LINE_V4])
+    write_dat_lines(os.path.join(series_dir, "2026-10-20.dat"), [HEADER_LINE_V4])
     assert st.series_has_data(key) is True
 
 
@@ -1270,7 +1245,7 @@ def test_v4_store_evict_skips_missing_root_and_foreign_entries(tmp_path):
     torrents_dir = os.path.join(v4_root_dir(str(tmp_path)), TORRENTS_DIR_NAME)
     os.makedirs(torrents_dir)
     os.makedirs(os.path.join(torrents_dir, "not-a-hash"))
-    _write_dat(os.path.join(torrents_dir, "notes.txt"), ["x"])
+    write_dat_lines(os.path.join(torrents_dir, "notes.txt"), ["x"])
     assert st.evict_expired_series(1_800_000_000.0, 30 * 86400.0) == []
     assert os.path.isdir(os.path.join(torrents_dir, "not-a-hash"))
     assert os.path.exists(os.path.join(torrents_dir, "notes.txt"))

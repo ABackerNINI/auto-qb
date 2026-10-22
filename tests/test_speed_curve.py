@@ -60,7 +60,7 @@ from auto_qb.core.modules.speed_curve_mod import (
 )
 from auto_qb.core.taskqueue import Task
 from auto_qb.core.traffic_source import paths as traffic_paths
-from helpers import FakeClient, capture_logs, make_manager
+from helpers import FakeClient, capture_logs, make_manager, write_dat
 
 GIB = 1024**3
 MIB = 1024**2
@@ -127,20 +127,6 @@ class _GslcBundle:
 
 def _gslc(dat_path, *period_curves, interval=None) -> _GslcBundle:
     return _GslcBundle(dat_path, GlobalSpeedLimitCurve(curves=list(period_curves), interval=interval))
-
-
-def _dat_text(rows) -> str:
-    """rows: [(date, 上传字节, 下载字节)] -> dat 文件文本(单位 KB)"""
-    lines = ['lines: "30"']
-    for d, up_b, down_b in rows:
-        lines.append(f"{d:%Y/%m/%d} {up_b // 1024}/{down_b // 1024}")
-    return "\n".join(lines)
-
-
-def _write_dat(tmp_path, rows, name="history_traffic.dat") -> str:
-    p = tmp_path / name
-    p.write_text(_dat_text(rows), encoding="utf-8")
-    return str(p)
 
 
 def _run_curve(mgr, dry_run: bool = False) -> bool:
@@ -637,7 +623,7 @@ def test_curve_speed_last_tier_clamp_matrix():
 def test_speed_curve_beyond_last_tier_clamps_both_directions(tmp_path):
     """超末档(D5): 上/下载累计流量超出末档边界 -> 写入末档速度值(clamp), 而非解除限速(写 0)"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 1200 * GIB, 1200 * GIB)])  # 双向均超各自末档(1000GiB)
+    dat = write_dat(tmp_path, [(today, 1200 * GIB, 1200 * GIB)])  # 双向均超各自末档(1000GiB)
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
 
@@ -727,7 +713,7 @@ def test_curve_state_day_keys_pruned(tmp_path):
 def test_speed_curve_applies_staged_upload_limit(tmp_path):
     """今天行流量命中档位 -> transfer_set_upload_limit 写入对应 bytes/s(只管理配置了的方向) """
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))  # 只管理上传
     mgr, client = _make_mgr(tmp_path, gslc)
 
@@ -746,7 +732,7 @@ def test_speed_curve_applies_staged_upload_limit(tmp_path):
 def test_speed_curve_idempotent_second_run_no_write(tmp_path):
     """目标 == 当前 -> 幂等, 重复执行不再调 transfer_set_upload_limit"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
 
@@ -758,7 +744,7 @@ def test_speed_curve_idempotent_second_run_no_write(tmp_path):
 def test_speed_curve_manual_odd_kib_skips_direction(tmp_path):
     """当前限速为正奇数 KiB(如 2001)视为手动 -> 该方向不覆盖, 另一方向照常写"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024  # 用户手动 2001KiB/s(奇数)
@@ -776,7 +762,7 @@ def test_speed_curve_manual_odd_kib_skips_direction(tmp_path):
 def test_speed_curve_multi_period_takes_strictest(tmp_path):
     """同方向多条 period 曲线 -> 取最严(最小非零限速)"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 0)])
     # 1D: X=15GiB >= 10GiB(单点末档) -> 6MiB/s; 7D: X=15GiB < 30GiB -> 2MiB/s(首档覆盖)
     gslc = _gslc(dat, _pc("day", up=_points([(10, 6)])), _pc("7D", up=_points([(30, 2)])))
     mgr, client = _make_mgr(tmp_path, gslc)
@@ -790,7 +776,7 @@ def test_speed_curve_unlimited_target_writes_zero(tmp_path):
     """档位限速为 0(该档不限速)且当前有限速 -> transfer 写 0(bytes/s = 不限速) """
     today = date.today()
     # 今天行缺失(跨天), 但存在历史行使 dat 有效: 今天累计 0 < 10GiB -> 首档 0(不限速)
-    dat = _write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points([(10, 0)])))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 5120 * 1024  # 上一轮旧限速
@@ -802,7 +788,7 @@ def test_speed_curve_unlimited_target_writes_zero(tmp_path):
 def test_speed_curve_cross_day_rollback(tmp_path):
     """今天行缺失 -> 累计 0 -> 自动放开回落到首档(昨天触发的低速档被放宽)"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today - timedelta(days=1), 200 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 512 * 1024  # 昨天触发到 0.5MiB/s(200GiB >= 100GiB)
@@ -815,7 +801,7 @@ def test_speed_curve_cross_day_rollback(tmp_path):
 def test_speed_curve_dry_run_no_read_no_write(tmp_path):
     """dry_run: 不读当前、不写 qB, 仅记录 state(dry_run=True)"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
 
@@ -848,7 +834,7 @@ def test_speed_curve_no_config_noop(tmp_path):
 
 def test_speed_curve_enabled_false_short_circuits(tmp_path):
     """enabled=False: 曲线任务仍注册但整体短路 -> 不读 dat 不写 qB, limit 段落 disabled(Web 视为未启用)"""
-    gslc = _gslc(_write_dat(tmp_path, [(date.today(), 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
+    gslc = _gslc(write_dat(tmp_path, [(date.today(), 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
     gslc.curve.enabled = False  # 数据可用, 证明短路先于读数据
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 999 * 1024  # 当前非目标值: 若未短路将被改写
@@ -874,7 +860,7 @@ def test_speed_curve_source_off_publishes_nothing(tmp_path):
     只会让"谁写 state"变成两个作者 —— 所以这里断言的是"快照一字未动"。
     """
     today = date.today()
-    gslc = _gslc(_write_dat(tmp_path, [(today, 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
+    gslc = _gslc(write_dat(tmp_path, [(today, 15 * GIB, 0)]), _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     mgr.config.traffic_source.enabled = False  # 数据可用, 证明短路先于读数据
     client.transfer.limits["upload_limit"] = 888 * 1024  # 偶数非目标值: 若未短路将被改写
@@ -929,7 +915,7 @@ def test_speed_curve_success_logs_period_stats(tmp_path):
     import io
 
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
     # day 双向; 7D 仅下载; month/30D 仅上传(覆盖单方向曲线分支与中文两位数标签)
     gslc = _gslc(
         dat,
@@ -1021,7 +1007,7 @@ def test_traffic_view_disabled_without_config(tmp_path):
 def test_traffic_view_ok_reports_limits(tmp_path):
     """正常路径: 曲线只写 limit 段 —— 命中/实际限速(KiB/s)一致, 来源段一字未变"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     # 来源侧先发一次(历史上这两段是同一次发布; 解耦后是两个模块各管一段)
@@ -1047,7 +1033,7 @@ def test_traffic_view_ok_reports_limits(tmp_path):
 def test_traffic_view_manual_reason_on_odd_kib(tmp_path):
     """手动保护(奇数 KiB)写入 reasons(含方向与中文原因) -> 前端标锁图标并显示"命中/实际"两值"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024  # 用户手动 2001KiB/s(奇数)
@@ -1063,7 +1049,7 @@ def test_traffic_view_manual_reason_on_odd_kib(tmp_path):
 def test_traffic_view_dry_run_has_target_without_actual(tmp_path):
     """dry_run: 只有命中目标, 不读不写 qB -> actual 为 None"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
 
@@ -1102,7 +1088,7 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
 def test_speed_curve_manual_log_throttled_same_state(tmp_path):
     """手动保护同状态逐轮不刷屏: 首轮每方向一条 INFO, 次轮降 DEBUG(但快照 reasons 照旧)"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
+    dat = write_dat(tmp_path, [(today, 5 * GIB, 5 * GIB)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024  # 奇数: 手动
@@ -1123,7 +1109,7 @@ def test_speed_curve_manual_log_throttled_same_state(tmp_path):
 def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, monkeypatch):
     """超 _MANUAL_REMIND_GAP 再提醒一次; 手动值变化(仍是奇数)立即重报, 不等周期"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 5 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 5 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024
@@ -1150,7 +1136,7 @@ def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, mon
 def test_speed_curve_manual_log_resets_after_release(tmp_path):
     """退出手动保护(改成偶数被正常覆盖)后清记忆 -> 再次进入手动状态重新报一条"""
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 5 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 5 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024
@@ -1183,7 +1169,7 @@ def test_speed_curve_require_snapshot_missing_fails_fast(tmp_path):
     永远不更新")。报错文案要指路到装配序(TrafficSnapshotModule 必须注册在 SpeedCurveModule 之前)。
     """
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points([(10, 6)])))
     mgr, client = _make_mgr(tmp_path, gslc)
     mod = mgr.host.get("speed_curve")
@@ -1203,7 +1189,7 @@ def test_speed_curve_readback_failure_degrades_actual(tmp_path, monkeypatch):
     也不能让本轮整体判失败 —— 前端靠 reasons 里的 read_failed 说明"实际值未知"。
     """
     today = date.today()
-    dat = _write_dat(tmp_path, [(today, 15 * GIB, 0)])
+    dat = write_dat(tmp_path, [(today, 15 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points([(10, 6)])))
     mgr, client = _make_mgr(tmp_path, gslc)
 

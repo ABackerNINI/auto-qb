@@ -1266,3 +1266,116 @@ def seed_store(mgr, torrents=None):
     removed = [h for h in old_hashes if h not in new_by_hash]
     store.by_hash = new_by_hash
     return added, removed
+
+
+# ---------- 跨文件小助手单点(issue 26-10-21-0502: 8 族同名小助手逐字拷贝收口) ----------
+# 口径: dat 文本与 legacy 配置样本刻意**测试侧手写**, 不引生产解析/写入实现(防同义反复);
+# 格式正确性由读侧往返守阵钉(生产 parse 回读 / 生产 read_tree 回读), 不靠与生产共用代码自证。
+
+DAT_HEADER_LINE = 'lines: "30"'
+
+# schema v1 存量形态(BTSchool 旧键未迁移, 无版本章): 程序升级前打开的页签 GET 到的就是这棵树
+LEGACY_V1 = (
+    "config:\n"
+    "  qbittorrent:\n"
+    "    host: h\n"
+    "    port: 1\n"
+    "    username: u\n"
+    "    password: p\n"
+    "  trackers:\n"
+    "    BTSchool:\n"
+    "      domains: [pt.btschool.club]\n"
+    "      hr:\n"
+    "        required_seeding_time: 3D\n"
+    "      hr_check:\n"
+    "        mode: partial\n"
+    "        adapter: nexusphp\n"
+    "        hr_page_url: https://pt.btschool.club/myhr.php\n"
+    "        refresh_interval: 6H\n"
+)
+
+
+def dat_text(rows) -> str:
+    """rows: [(日期, 上传字节, 下载字节)] -> history dat 文本(单位 KB)"""
+    lines = [DAT_HEADER_LINE]
+    for d, up_b, down_b in rows:
+        lines.append(f"{d:%Y/%m/%d} {up_b // 1024}/{down_b // 1024}")
+    return "\n".join(lines)
+
+
+def write_dat(tmp_path, rows, name="history_traffic.dat") -> str:
+    """写一份 history dat(工具侧总账文件的 qB 形态), 返回路径字符串"""
+    p = tmp_path / name
+    p.write_text(dat_text(rows), encoding="utf-8")
+    return str(p)
+
+
+def write_dat_lines(path, lines) -> None:
+    """按行列表落盘 dat(建父目录 + 覆盖写, LF 行尾 + 尾换行)"""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def server_state(**overrides) -> dict:
+    """合法 server_state 样例(六字段齐全, 与 qB sync 响应同键名)"""
+    base = {
+        "dl_info_speed": 1024,
+        "up_info_speed": 2048,
+        "alltime_dl": 10_000_000,
+        "alltime_ul": 20_000_000,
+        "dl_info_data": 1_000_000,
+        "up_info_data": 2_000_000,
+    }
+    base.update(overrides)
+    return base
+
+
+def active_torrent(hash="HASH123", **kw) -> FakeTorrent:
+    """活跃种子样例(默认 dlspeed>0); 字段可覆盖"""
+    kw.setdefault("dlspeed", 512)
+    kw.setdefault("upspeed", 256)
+    kw.setdefault("downloaded", 5_000_000)
+    kw.setdefault("uploaded", 3_000_000)
+    kw.setdefault("downloaded_session", 500_000)
+    kw.setdefault("uploaded_session", 300_000)
+    return FakeTorrent(hash=hash, **kw)
+
+
+def write_credential_file(tmp_path, text="tool-credential-abc") -> str:
+    """写一个假的工具密钥文件(值仅用于断言透传, 与真工具凭据无关)"""
+    path = tmp_path / "gtm" / "monitor.token"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return str(path)
+
+
+def pin_disk_usage(monkeypatch, free=1 << 40) -> None:
+    """把 disk_usage 钉成固定值: 同卷证明/空间闸门不再受并行写盘抖动影响(测试确定性)"""
+    from auto_qb.infra import file_access as fa_mod
+
+    monkeypatch.setattr(
+        fa_mod.LocalFileAccess,
+        "disk_usage",
+        lambda self, path: fa_mod.DiskUsage(total=free * 10, used=0, free=free),
+    )
+
+
+def pin_atomic_write_crash(monkeypatch) -> None:
+    """把 atomic_write 换成「写一半抛错」: 回调落半截内容后抛 RuntimeError
+
+    目标路径保持旧内容 + 临时文件被清理 —— 两件事都由真 atomic_write 负责; 若实现退回
+    O_TRUNC 直写, 半截内容会直接落进目标文件, 断言当场红。
+    """
+    from auto_qb.infra import utils as infra_utils
+
+    real_atomic_write = infra_utils.atomic_write
+
+    def _crash_mid(path, write_fn, **kw):
+        def _half(_f):
+            _f.write("deadbeef")  # 半截内容, 模拟写盘途中被杀
+            raise RuntimeError("simulated kill mid-write")
+
+        return real_atomic_write(path, _half, **kw)
+
+    monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
