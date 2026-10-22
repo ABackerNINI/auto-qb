@@ -4,10 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (48)
+## Open (47)
 
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
-- [test] [「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵](../26-10-21-0502-test-test-plan-docstring-guard.html) — 121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -60,7 +59,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (246)
+## Done (247)
 
 - [bug] [流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树](../26-10-22-0435-bug-webui-aq-fold-ce-inject-break.html) — aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效
 - [test] [守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件](../26-10-21-2232-test-guard-scope-narrower-than-acceptance.html) — 计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)
@@ -72,6 +71,7 @@
 - [refactor] [make_manager 不收 config 覆盖参数导致 89 处 QbManager 内联装配(test_grouping 60 处)](../26-10-21-0502-refactor-test-manager-builder-params-dup.html) — 单点已存在(45 文件在用)被旁路; 根因=不收 cfg 覆盖参; 扩参数而非新建
 - [refactor] [tests 同名小助手多份拷贝 9 族(_fake_file/_pin_disk_usage/_write_dat/_ss/_write_token/_make_store/atomic 注入/legacy v1 样本等)](../26-10-21-0502-refactor-test-shared-micro-helper-dup.html) — 逐字级拷贝散在 2-5 个文件各一份; 收进 tests 共享层(helpers/webui_helpers)单点
 - [refactor] [web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路](../26-10-21-0502-refactor-test-web-env-param-dup.html) — web_env 硬编码 config_text/client; test_web_auth ×10 与 test_web_admin ×5 每用例内联 TestClient(create_app(mgr)); web_env 参数化后回收
+- [test] [「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵](../26-10-21-0502-test-test-plan-docstring-guard.html) — 121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)

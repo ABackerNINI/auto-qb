@@ -41,6 +41,7 @@
 - test_rule_process_action_skipped_not_executed: 动作 skip 不记 executed 不记历史 (P2-a)
 - test_rule_condition_error_throttled_to_debug: 条件出错同因节流降 DEBUG (P2-a)
 - test_rule_hourly_record_stale_date_allows_rerun: hourly 记录跨日允许再执行 (P2-a)
+- test_rule_process_unknown_status_continues_without_marking
 """
 import os
 import tempfile

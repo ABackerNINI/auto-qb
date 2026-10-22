@@ -43,21 +43,32 @@
 - test_request_refresh_accumulates_and_bumps_seq: 受理累加(不覆盖) + 唤醒序号递增
 - test_request_refresh_logs_accepted_sites: 受理日志精确报出站点清单
 - test_run_once_hands_site_anchors_three_state: 锚点三态交接(None / 映射 / 缺键 {})
-- test_run_once_records_note_under_site: _note 以站点为键记账
 - test_build_views_prefers_memory_snapshot: 本轮结果的内存快照覆盖已落盘视图; generated_at 取现读时钟
 - test_note_logs_normal_action_only_on_change: 正常动作只在变化时记一条, 缺省文案「正常」
 - test_note_pacing_key_and_message: 节流键取自原因; 缺省文案「正常」; 精确文案
 - test_note_warn_gap_floor_and_exact_boundary: 非节流告警的 warn_gap 下界 60s 且「恰好到点」即再报
 - test_note_pacing_reminder_fires_at_exact_gap: 节流态持续时恰好满一个 warn_gap 即再说明一次
-- test_note_warn_message_names_site_and_action: 改版告警文案点名站点与动作
 - test_note_info_branch_message: 非告警动作走 INFO 分支并带站点与动作
 - test_silence_reference_prefers_last_contact: 静默基准优先「上次联系时刻」(非启动时刻)
 - test_silence_reference_defaults_when_attr_missing: 端点缺 last_contact_ts/rejected_contacts 时保守缺省
-- test_silence_where_labels_both_branches: 「启动以来」/「上次联系后」两分支各自精确
 - test_silence_gap_floor_and_exact_boundary: 静默 gap 下界 60s; 恰好到点即出声
 - test_silence_rejected_threshold_is_positive: 被拒计数 >0 即算被拒(不是 >1)
 - test_silence_hours_value_uses_3600: 静默小时数 = 秒 / 3600(展示取整可辨)
 - test_silence_event_tag_sets_domain: 静默出口挂通道层标签(hr_domain)
+- test_loop_round_exception_logs_traceback
+- test_loop_startup_publish_failure_logs_traceback
+- test_loop_survives_startup_publish_failure
+- test_loop_waits_for_poll_interval
+- test_pacing_class_separates_fetch_interval_gate
+- test_record_status_warns_on_partial_and_error
+- test_request_refresh_consumed_once_and_not_left_behind
+- test_request_refresh_site_filtering
+- test_request_refresh_targets_only_named_site
+- test_silence_missing_rejected_attr_defaults_zero
+- test_silence_where_after_contact_label: 「上次联系后」分支标签精确(原 test_silence_where_labels_both_branches 拆分)
+- test_silence_where_started_label: 「启动以来」分支标签精确(原 test_silence_where_labels_both_branches 拆分)
+- test_start_twice_is_idempotent
+- test_stop_timeout_reports_error
 """
 import logging
 import threading

@@ -22,6 +22,10 @@
 - test_web_loop_exception_handler_delegates_real_bug: 反向守阵 —— 非波动异常交回 asyncio 默认处理器, 不吞
 - test_is_network_fluctuation_matrix: 波动判定矩阵(异常类 / winerror / errno 三条路都认; 非 OSError 与"目标拒绝"不算)
 - test_uvicorn_config_installs_loop_exception_handler: 处理器必须真的装到 uvicorn 事件循环上(经 get_loop_factory 注入)
+- test_build_shows_view_aggregation
+- test_build_singles_view_num_seeds_fields
+- test_build_singles_view_ungrouped_only
+- test_shows_view_files_fallback_hook
 """
 import errno
 import json

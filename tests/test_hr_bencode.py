@@ -25,6 +25,7 @@
 - test_bdecode_rejects_deeply_nested_dict: 深嵌套字典触发 MAX_DEPTH 拒绝
 - test_skip_position_for_nested_list: _skip 跳过嵌套列表后位置正确
 - test_torrent_display_name_replaces_invalid_utf8: 非法 UTF-8 按 replace 处理不抛
+- test_rejects_deep_nesting
 """
 import base64
 import hashlib

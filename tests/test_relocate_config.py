@@ -18,6 +18,7 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_module_claims_section: RelocateModule.sections() == ("relocate",)(段认领完备守阵的模块侧)
 - test_relocate_module_apply_short_circuits: apply 段相等短路(零回执); 段变化换对象即生效
 - test_relocate_module_start_stop_no_side_effect: 即使 enabled=true, P1 start/stop 也无任务无链接
+- test_relocate_module_registered_in_host
 """
 import os
 import tempfile

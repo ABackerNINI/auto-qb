@@ -13,6 +13,8 @@
 - test_third_party_junction_joins_group: 第三方目录 junction 的种子按解析后物理目录并组
 - test_third_party_link_detected_and_relocation_blocked: 硬链接组被打标, 迁移闸门拒迁(hardlink)
 - test_resolver_identity_when_disabled: 无 job 且非链接时解析恒等(开关关 = 逐字节现状)
+- test_cross_group_ghost_member_and_bad_path
+- test_regroup_scope_degenerate
 """
 import os
 

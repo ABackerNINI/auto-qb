@@ -27,6 +27,38 @@
 - test_history_missing_key_legacy_compat: 旧 JSON 不含 history 键 -> from_json 得空表且其余字段无损(存量文件零迁移)
 - test_history_cap_keeps_latest: 超 HISTORY_CAP(2000)条时修剪助手保留最新 HISTORY_CAP 条(原表不动)
 - test_history_age_prune_boundary: 按龄修剪: 超过 183 天剔、恰好 183 天边界保留、未来时刻保留
+- test_backup_read_failure_reported
+- test_field_parse_failure_reported
+- test_lock_session_site_property
+- test_model_downloaded_roundtrip_and_defaults
+- test_model_entry_missing_keys_use_defaults
+- test_model_entry_optional_none_roundtrip
+- test_model_entry_roundtrip_all_fields
+- test_model_history_event_missing_keys_use_defaults
+- test_model_lanestate_roundtrip_and_defaults
+- test_model_rateledger_roundtrip_and_defaults
+- test_model_sitedata_roundtrip_all_fields
+- test_model_sitedata_schema_version_and_writer_fallback
+- test_model_sitedata_verified_filter_positive_ts
+- test_model_verified_roundtrip_and_defaults
+- test_model_wavemeta_roundtrip_and_defaults
+- test_quarantine_absent_file_returns_empty
+- test_quarantine_failure_returns_empty
+- test_read_oserror_reports_and_keeps_hint
+- test_root_not_dict_is_bad_file
+- test_store_check_lock_heartbeat_zero_is_not_unsafe
+- test_store_error_hints_include_file_head
+- test_store_file_hint_variants
+- test_store_hr_dir_strips_trailing_separators
+- test_store_init_defaults_and_lock_timeout
+- test_store_instance_id_is_twelve_hex
+- test_store_missing_file_recoverable_flag
+- test_store_parse_valid_and_schema_mismatch_recoverable_flags
+- test_store_recover_unmovable_keeps_backup
+- test_store_session_read_alerted_false_when_clean
+- test_store_write_default_keeps_backup
+- test_store_write_unicode_and_sorted_keys
+- test_warn_unsafe_only_once_per_store
 
 ## R17 变异审计补测(序列化与持久化)
 - test_model_entry_roundtrip_all_fields: HrEntry 全字段非默认往返(钉键名与取值)

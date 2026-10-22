@@ -22,6 +22,7 @@ socket(与 helpers.FakeQbServer 同手法), 失败类走     monkeypatch `urlope
 - test_call_tool_os_error_raises: 裸 OSError -> ToolUnreachable(网络层失败统一收口)
 - test_error_text_prefers_errors_list: errors 列表优先(校验聚合, 逐条 join), 空列表回落 error 字段
 - test_error_text_fallbacks: 无 errors/error -> 默认文案带状态码
+- test_call_tool_http_error_from_urlopen_reads_body
 """
 import http.server
 import json

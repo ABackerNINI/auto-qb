@@ -33,6 +33,8 @@
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_frontend_password_field_ignores_autofill: 密码框的浏览器/密码管理器自动填充不得写进配置树(2026-10-20 报障「进常规就显示有改动还没保存」)—— 模板密码分支须 autocomplete=new-password 且写回走 setSecret, setSecret 须按「是否焦点」判据(未聚焦不写树并回填显示)
 - test_frontend_config_default_ladder_single_point: schema→默认值梯单点守阵(issue 26-10-20-2231 / R20-C-05) —— 三入口(可选段 cfgDefaultForField / 插件 spec / 插件 section)不得再各写一份「按 schema 形状造初值」的循环(插件侧零手搓循环、enum 首选项默认值全仓一处、旧 cfgPluginDefaultSpec/Section 零残留); 三个单点(cfgDefaultScalar/cfgDefaultForFields/cfgDefaultForPlugin)各定义一处且入口只转调; 有 node 时真跑语义电池钉行为(插件 bool="true" vs 字段 bool="false" / list=[] / enum=options[0] / str=placeholder / object 只填必填且子段按全字段口径 / 未知形态沿用子表单 / 可选段非 object=[])
+- test_frontend_cols_empty_hint_is_not_a_floating_banner
+- test_frontend_list_row_pad_and_empty_single_point
 """
 import base64
 import json

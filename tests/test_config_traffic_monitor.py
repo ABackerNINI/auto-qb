@@ -27,6 +27,7 @@
 - test_migrate_v4_through_load_config: v4 旧配置经 load_config 全链路升到 v5, 取数路径与旧行为等价
 - test_migrate_v4_defensive_shapes_skipped: 曲线内 traffic_source 非列表/列表项非字典/dat_path 空 —— 三类畸形形状静默跳过取数, 键照删(255/257/259 假弧)
 - test_migrate_v4_keeps_existing_traffic_source_dicts: 顶层 traffic_source 与其两子块已是字典时就地改写不重建空壳(279/288/300 假弧), 显式键原样保留
+- test_migrate_v4_with_gtm_section_through_load_config
 """
 from pathlib import Path
 

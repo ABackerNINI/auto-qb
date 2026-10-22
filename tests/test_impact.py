@@ -14,6 +14,7 @@ L0/L1/L2 三张手写级别表退役, 「段变了之后做什么」由各模块
 - test_one_sided_section_reported: 一侧独有的段(键集不重叠)按变更报告 —— 钉住 diff 用并集而非交集
 - test_changes_sorted_by_path: 变更按段名排序(与配置段书写顺序无关)
 - test_restart_required_paths: 仅返回命中 R 闸的路径且保持变更顺序
+- test_restart_gate_covers_fs_section
 """
 from types import SimpleNamespace
 

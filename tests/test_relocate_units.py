@@ -24,6 +24,20 @@
   file_links + note 列出组外条目(不动别人的文件)
 - test_evaluate_add_rows: §3.6 第 1/3/8/15 行 + 第三方链接落点(无 job 登记)
 - test_same_volume_proof_table: 相等 True / 任一侧 None False / 不等 False(§2.4 硬证据口径)
+- test_evaluate_add_skips_terminal_and_unmatched_jobs
+- test_evaluate_group_confirm_not_downgraded_by_later_block
+- test_evaluate_group_cross_volume_note
+- test_evaluate_group_form_reject_gate
+- test_job_dict_roundtrip
+- test_job_from_dict_type_error_and_reconcile_fallthrough
+- test_plan_empty_files_reject
+- test_plan_hard_max_dir_kind_none_suffix
+- test_reconcile_table_rows
+- test_recover_exec_phase
+- test_resolve_physical_and_finalize_members
+- test_scope_hit_flat_does_not_cover_subdirs
+- test_stall_verdict_boundaries
+- test_within_empty_scope_never_matches
 """
 import os
 

@@ -13,6 +13,7 @@
 - test_hr_overwrite_category_semantics: _set_category 覆盖语义(跳过/覆盖/自动分类可更新)
 - test_hr_tracker_without_hr_skips: 站点无 hr 配置 -> 不应用 HR(即使全局有默认)
 - test_hr_exclude_tag_skips_tagging: HR 排除命中标签/分类 -> 不加任何 HR 标签/分类(未命中照常)
+- test_hr_dlsize_small_completed_triggers
 """
 import os
 import tempfile

@@ -67,9 +67,10 @@
 - test_site_status_no_healthy_wave: healthy_ts=0 ⇒ next_wave_at=0.0 且 fresh_text 不带下次核对段
 - test_site_status_unknown_channel_text: 未知通道态回落「未启用」
 - test_site_status_empty_confirmed_boundary: 对账戳 ts=1 即算已确认(>0 口径)
-- test_site_status_limits_for_site_arg: limits_for 按站点取(不是 None)
 - test_site_status_to_dict_field_surface: SiteStatus.to_dict 键面 = 全字段(零 no tests)
 - test_build_site_statuses_reads_error_and_sites: 显式站点序 + read_error 空串/原文透出
+- test_site_status_empty_index_backfill
+- test_site_status_observing_counts_only_positive_streak
 """
 import json
 

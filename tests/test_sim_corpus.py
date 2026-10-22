@@ -24,6 +24,20 @@
 - test_corpus_source_loads_and_rejects_aborted: 语料加载; status=aborted 的语料必须拒绝回放
 - test_corpus_tracker_section_picks_specific_tag: 站点标签取"对该 host 最专有"的, 不被通用标签抢走
 - test_corpus_mode_pump_touches_alltime_accumulators: 回归钉(P6 续做轮) —— alltime 三属性两档都初始化, 语料档 pump 触达累加行不炸且 server_state 仍透传
+- test_corpus_sync_full_then_increment
+- test_group_exact_diff_green
+- test_group_exact_diff_red_on_member_swap
+- test_group_exact_diff_red_on_missing_group
+- test_group_exact_diff_red_on_split_group
+- test_known_tag_literals_are_mapped_after_sanitization
+- test_merge_window_tags_net
+- test_minimal_bencode_is_parseable_shape
+- test_replay_latency_modes
+- test_timeline_advances_and_merges_window
+- test_timeline_applies_fs_delta
+- test_timeline_excludes_closure_frame
+- test_two_layer_state_info_newer_than_maindata
+- test_two_layer_state_red_without_lag
 """
 from __future__ import annotations
 

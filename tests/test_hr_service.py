@@ -200,6 +200,8 @@
 - test_sign_releases_hit_head_does_not_abort_rest: 本波命中对象跳过(continue 非 break): unmatched 首条命中也不拦后续签发
 - test_freeze_terminal_failed_lane_between_entries: 档位失效的条目只跳过自己(continue 非 break): 其后可退役的终态条目照常退役
 - test_advance_observation_scope_exit_resets_streak: A 档观察条目连续 2 波位置覆盖出口: 出口后 streak 显式清零(不是 None)
+- test_fuzzy_name_match_rejects_noise_only_overlap
+- test_mark_fetch_failed_and_seen_rows_units
 """
 import logging
 import re

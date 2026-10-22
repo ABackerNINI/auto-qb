@@ -35,6 +35,8 @@
 - test_file_access_abstract_guards: FileAccess 抽象方法漏覆写即 NotImplementedError
 - test_mapped_root_contained_and_unmapped_listdir: 容器根包含判定(rp==root) + 未映射列目录报不可判定
 - test_path_map_selfcheck_probe_failure_logged: 挂载点可写探测非权限失败记 INFO
+- test_fs_config_empty_is_off
+- test_fs_config_roundtrip
 """
 import os
 import shutil

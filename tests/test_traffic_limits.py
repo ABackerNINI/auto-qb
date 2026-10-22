@@ -18,6 +18,7 @@
 - test_events_for_window_synthetic_first_and_dedup: 读侧装配 D3″/D5 —— 合成首事件(<= t0 最近值, 窗首前一天的 carry 窥得到) / 同值连续事件去重 / 记录起点晚于窗口起点不合成 / 无记录空表 / 跨天文件拼接
 - test_api_payload_limits_shape_and_same_source: payload 契约 D3″ —— 三端点响应恒带 limits 且同源同值(组/单种不另读文件), 空态未启用也恒在(= [])
 - test_module_wiring_sample_global_observes: 采样模块接线守阵 —— _sample_global 调 SpeedLimitRecorder.observe(真实模块实例 + 替身 server_state 触发落盘), dry_run 轮零写入
+- test_recorder_append_fail_arcs_bootstrap_and_throttle
 """
 import logging
 import os

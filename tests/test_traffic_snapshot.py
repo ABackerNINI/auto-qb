@@ -21,6 +21,10 @@
 - test_refresh_interval_applies_to_registered_task: 热重载改 refresh_interval -> 已入队任务就地改 interval, 不重复入队
 - test_refresh_publish_logs_at_debug: 发布历史流量那行恒 DEBUG(通知链路高频, 26-10-18 降级; WARNING 路径不受影响)
 - test_poll_payload_drops_history: /api/status 与 /api/state 的 traffic 无 history; /api/traffic/history 仍有
+- test_publish_event_creates_day_row_on_cold_start
+- test_publish_event_high_water_clamps_both_paths
+- test_publish_event_ignores_non_today_and_source_off
+- test_publish_event_patches_day_row_without_reading
 
 ## 事件零读盘补丁(26-10-21, 用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」)
 - test_publish_event_patches_day_row_without_reading: 补丁只改 periods 的 day 行(month/history/limit 段不动),

@@ -21,6 +21,13 @@ guardian 的退化路径、journal 落盘与 pid 锁、CLI 入口。目的有二
 - test_guardian_degenerate_paths: no_spec / already_running / verify 不齐 / 超时退出
 - test_guardian_cli_main: main() 返回码与打印(job 不存在 = 1)
 - test_guardian_helpers: _port_refused / _verify_dst / _delete_links / _proc_absent 退化
+- test_cancel_and_finalize_close_journal
+- test_execute_early_returns
+- test_finalize_polling_and_timeout
+- test_guardian_cli_rc_zero_on_running
+- test_guardian_retires_when_job_closed
+- test_guardian_spawn_and_link_failure_paths
+- test_module_guard_branches
 """
 import os
 import time

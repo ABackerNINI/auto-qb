@@ -19,6 +19,7 @@
 - test_api_traffic_qb_group_30d_reads_member_agg_only: (S3b 验收)3d+ 窗组图只读成员 agg 文件(2 成员恰 2 open = M×1, 天文件零读取)
 - test_api_traffic_qb_group_never_transferred_empty_state: 组从未有成员产过流量 -> 空态
 - test_api_traffic_qb_group_member_only_zruns_not_empty: 组空态判据观测面 —— 成员只剩 z 块不算「从未产过流量」, 出 0 线而非空态
+- test_service_defensive_paths
 """
 import os
 import time

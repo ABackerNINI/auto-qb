@@ -55,6 +55,11 @@
 - test_v4_grid_obs_break_bucket_rate_null_snapshot_kept: (issue 26-10-16-0954-bug-traffic-seam-zero-bucket-isolated-marker)断链首桶该向出 None(不再是 0/0 伪点),
   快照照记 -> 次桶基线不断; 无观测缝的起始桶仍 0 线; 组面全成员未知 -> None
 - test_group_rate_points_over_transformed_obs_unchanged: 组求和口径不变(S1 钉住)—— group_null_mask/group_rate_points 消费变换后 obs
+- test_bucket_delta_null_and_reset
+- test_grid_for_now_wraps_build_grid
+- test_group_totals_up_direction_reset_independent
+- test_v4_agg_obs_live_merge_partial_and_residual
+- test_v4_grid_obs_window_and_snapshot_edges
   无需改动, 豁免桶 0 线按 0 计入组
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block

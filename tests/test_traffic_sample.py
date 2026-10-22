@@ -171,6 +171,9 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_agg_credit_day_file_empty_block_and_null_slots: 空块零槽跳过 / n 槽 null 期不贡献
   (_slot_agg_obs 返回 None 的两条同源出口)
 - test_stop_early_return_when_disabled_or_no_data_dir: stop() 在 qb_traffic 段缺失/未启用/
+- test_live_tail_pending_agg_published_and_cleared_by_seal
+- test_v4_write_io_full_day_2s_interval
+- test_v4_write_io_full_day_30s_interval
   data_dir 为空时零操作(不封游程不 flush)
 """
 import os

@@ -84,6 +84,12 @@
 - test_cross_group_dispose_dry_run_only_warns: S3 dry-run: 警告在, 不暂停, 不记去重 (26-10-04-0107 S3)
 - test_cross_group_reset_runtime_keeps_warned: S3 reset_runtime 有意不清跨组去重集合(决策钉死, 防后人顺手加 clear) (26-10-04-0107 S3)
 - test_cross_group_single_side_dirty_still_detected: S3/风险2: 单侧脏(dirty 仅含组 A)仍全量检出并暂停 (26-10-04-0107 S3)
+- test_grouping_physical_dir_three_layers
+- test_grouping_regroup_scope_skips_unowned_and_empty
+- test_grouping_save_path_change_group_emptied_still_regroups
+- test_grouping_save_path_change_without_group_key_skipped
+- test_grouping_state_transitions_first_round_no_snapshot_skipped
+- test_grouping_third_party_link_alias_error_keeps_mark
 """
 import logging
 import os

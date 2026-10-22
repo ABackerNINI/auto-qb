@@ -82,6 +82,22 @@
 - test_loader_defaults_config_top_level_scalars: load_config 顶层标量键全缺省 -> Config 字段默认
 - test_loader_defaults_sections_when_absent: 各段整段缺省 -> 段内键逐个走该段字段默认
 - test_loader_defaults_gslc_optional_keys: global_speed_limit_curve 可选键缺省 -> interval=None/enabled=True/省略方向=None
+- test_skip_checking_tag_global_default_and_override
+- test_validate_fs_errors
+- test_validate_hr_check_type_errors
+- test_validate_hr_site_bindings_skips_unparseable_enabled
+- test_validate_hr_site_entry_errors
+- test_validate_notify_and_root_edges
+- test_validate_notify_channels_edges
+- test_validate_plugin_entry_and_notify_edges
+- test_validate_root_config_not_dict
+- test_validate_sections_pass_shapes
+- test_validate_tracker_field_errors
+- test_validate_tracker_rules_non_list_skips_refs
+- test_validate_trackers_and_rules_structure
+- test_validate_traffic_source_enabled_key
+- test_validate_value_errors_extended
+- test_validate_web_errors
 """
 import logging
 import os

@@ -77,6 +77,9 @@
 - test_mask_tree_recurses_into_nested_dicts: mask_tree 递归进嵌套映射掩码深层敏感键; 空值不掩码; 原树不改
 - test_set_path_rebuilds_non_mapping_mid_nodes: _set_path 复用已有 dict 中途节点(不丢兄弟键)/标量重建/缺失现场建
 - test_backup_skips_when_source_missing_and_keeps_encoding: _backup 源缺失零副作用; 按 dirname 建目录; utf-8 读写无损
+- test_materialize_unknown_host_old_key_dropped
+- test_preview_tree_stamps_schema_version
+- test_write_tree_keeps_lossy_numeric_strings_quoted
 """
 import copy
 import os

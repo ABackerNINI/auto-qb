@@ -37,6 +37,8 @@
 - test_schema_payload_constants_keys_exact: constants 分区键集合逐位钉住(12 项)
 - test_schema_payload_constants_values: 每个常量表与源常量的取值一致(顺序敏感)
 - test_schema_payload_preset_key_metadata: hr_check_site_presets 每条键集合与逐字段取值钉住
+- test_grouping_cross_group_conflict_check_non_bool_aggregates
+- test_grouping_cross_group_conflict_check_valid_bool
 """
 import re
 from pathlib import Path

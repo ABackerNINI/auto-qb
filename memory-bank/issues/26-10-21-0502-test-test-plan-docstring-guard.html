@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-0502">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md, memory-bank/tasks/26-10-22-test-plan-docstring-guard.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵">
 <meta name="issue-summary" content="121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填">
 <title>「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-0502-test-test-plan-docstring-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 05:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-21 05:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 19:09 — 用户指派认领，置 <strong>In Progress</strong>；复验（基线 40cceff8）仍复现：51 漂移 / 295 未列 / 4 无清单段 / 6 幽灵（126 个测试文件）</li>
+      <li>2026-10-22 19:09 — 修复完成，置 <strong>Done</strong>。实际修法（与 §03 建议同向）：①守阵 <code>tests/test_test_plan_docstring_guard.py</code>（段定位/列表行/缺列/幽灵判据 + 合成源红验内建 + 全仓零漂移断言 + EXEMPT_FILES/EXEMPT_NAMES 豁免名单；段边界只认同级 <code>## </code>，<code>###</code> 小节不算边界）；②存量回填：51 文件补 295 条 + hr_discovery/snapshot_sync 新建段 46 条 + sync/logging 伪清单标题升格；③幽灵 6 处逐条人裁（dom_panel 2 条就地改名、hr_worker silence 拆分对 2 后继接手旧描述、删 3 条）。验证：全仓机械对账 0 漂移 0 幽灵（127 文件，含守阵自身）+ 守阵合成源红验 6/6 + 活体突变红验（真实文件追加未登记 def 当场红、原字节还原）+ dev.fmt 零扰动 + test.full 3998 passed / 10 skipped / 99%（基线切片 26-10-22-1907）；src/ 零改动。认领档案：tasks/26-10-22-test-plan-docstring-guard.md</li>
     </ul>
   </section>
 

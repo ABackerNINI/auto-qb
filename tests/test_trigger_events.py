@@ -27,6 +27,7 @@
 - test_maintenance_on_change_recheck_on_external_change: tags 外部变化 -> 重检一次(登记消费)
 - test_maintenance_interval_unchanged: 默认 interval 行为与迁移前等价(无变化也执行)
 - test_maintenance_on_change_hot_reload_full_convergence: 热重载后首轮全量收敛
+- test_deleted_whitelist_print_ok
 """
 import os
 import tempfile

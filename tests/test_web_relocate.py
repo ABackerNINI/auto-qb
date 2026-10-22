@@ -18,6 +18,19 @@
 - test_web_relocate_cancel_drain: drain 级两步走: 未确认只回成本(数据零变动), 确认后
   搬回 + phase=cancelled + journal 落盘
 - test_web_relocate_precheck_drain: drain 级回执 truth={results, summary} 结构 + gone verdict +
+- test_relocate_add_gate_wired_in_add_dialog
+- test_relocate_module_branch_extras
+- test_relocate_module_capability_view
+- test_relocate_module_classify_entries_degenerate
+- test_relocate_module_fs_fact_branches
+- test_relocate_module_precheck_add_disk_usage_degraded
+- test_relocate_module_precheck_classify_entries
+- test_relocate_module_precheck_defensive_paths
+- test_relocate_module_precheck_qb_temp_gate
+- test_relocate_module_precheck_scandir_and_lstat_degraded
+- test_relocate_module_precheck_scandir_missing_root
+- test_relocate_module_start_and_apply_probe_wiring
+- test_relocate_precheck_no_false_dir_link_note
   混合计数; precheck_add 回执 truth=单 item
 """
 import json

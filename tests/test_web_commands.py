@@ -51,6 +51,7 @@
 - test_bulk_recheck_via_ops_aggregates_skip_and_fail: 批量 recheck 经 ops 逐个提交, 跳过/失败计数进聚合文案
 - test_add_torrents_files_only_and_urls_only: _cmd_add_torrents files/urls 两分支各自一次调用
 - test_cmd_handlers_without_cmd_id_stay_silent: 无 cmd_id 一侧全覆盖(CLI/内部触发旁路) —— 14 处 `if cmd_id:` 假弧 + _bulk_receipt 两档 + _bulk_missing_msgs 缺失组文案 + skip_check 菜单关早退 + add_torrents 无回执: 不写回执(空键不出现)、不炸、日志照记
+- test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing
 """
 import tempfile
 import time

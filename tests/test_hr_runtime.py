@@ -68,6 +68,11 @@
 
 ### 端口隔离守卫(issue 26-10-16-0348)
 - test_channel_runtime_leaves_discovery_unbound: 本文件 channel 用例默认关发现(discovery_port=0),
+- test_extension_id_empty_warns
+- test_judge_site_view_lane_a_managed
+- test_request_refresh_delegates_to_worker_and_accepts
+- test_request_refresh_without_worker_reports_note
+- test_sleeper_interrupt_during_wait_message_is_precise
   不绑共享固定端口 18788-18790 —— 防「并行占满 ⇒ 发现 WARNING 污染 INFO 断言」复发
 """
 import logging

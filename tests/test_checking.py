@@ -65,6 +65,12 @@
 - test_is_piece_checking_excludes_resume_data: 全量校验态判定 —— 排除 qB 启动期简历校验 checkingResumeData(伪证据别名)
 - test_poll_verdict_line_by_line: 轮询单跳判定逐行表测(事故行: 无证据 progress=1.0 不得 SUCCESS)
 - test_poll_verdict_success_iff_seen_checking: 判定穷举性质(160 组合): SUCCESS 必有 seen_checking 背书
+- test_skip_check_success_applies_tag
+- test_skip_check_tag_empty_disables
+- test_skip_check_tag_failure_doesnt_fail_skip
+- test_skip_check_tag_uses_global_config
+- test_skip_check_tagged_member_excluded_as_reference
+- test_skip_check_tagged_verified_reference_excluded
 """
 import json
 import os

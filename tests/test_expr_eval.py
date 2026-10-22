@@ -41,6 +41,7 @@
 - test_require_number_single_point: 数值断言单点(env 数值函数 + eval 算术运算符都走 require_number;
   issue rules-expr-numeric-predicate-dup 的守阵)
 - test_parser_has_no_dead_op_constants: parser 不再携带本文件不用的运算符常量死件
+- test_traffic_curve_section_disabled_raises
   (issue rules-parser-dead-op-constants-dup 的守阵)
 """
 import os

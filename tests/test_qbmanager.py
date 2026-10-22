@@ -57,6 +57,8 @@
 - test_p2a_run_materializes_schema_migration_dry_run_then_write: run() 启动物化 dry-run 不落盘 / 非 dry-run 迁移+备份 (P2-a)
 - test_p2a_sync_line_flush_propagates_to_host: _sync_line flush=True 经 host.run_sync_line; False 不调 (P2-a)
 - test_p2a_refresh_added_pipeline_skips_ghost_and_unmatched: added 管线幽灵 hash / 未匹配 tracker 跳过 (P2-a)
+- test_connect_recovery_logged
+- test_connect_throttle_repeated_failures
 """
 import json
 import logging

@@ -66,6 +66,17 @@
 - test_order_violations_direction_from_first_pair: 方向由首对可比行推断(desc / asc)
 - test_order_violations_equal_adjacent_not_violation: 相邻相等不算违反
 - test_cross_page_violation_asc_equal_boundary_not_violation: 跨页 asc 边界相等不算违反
+- test_adapter_non_digit_tid_ends_data_region
+- test_adapter_parse_page_without_tid_column_degrades
+- test_adapter_row_missing_tid_cell_breaks
+- test_adapter_row_without_links_falls_back_to_tid
+- test_extract_table_header_not_first_row
+- test_order_violations_records_only_first_inversion_position
+- test_page_bounds_no_match_returns_none
+- test_parse_duration_days_only
+- test_parse_ratio_malformed_returns_none
+- test_parse_size_malformed_number_returns_none
+- test_table_tree_anchor_without_href_is_ignored
 """
 import pytest
 

@@ -42,6 +42,13 @@
 - test_speed_curve_manual_log_throttled_same_state: 手动保护同状态逐轮不刷屏(仅首轮 INFO, 次轮降 DEBUG)
 - test_speed_curve_manual_log_periodic_reminder_and_value_change: 超周期提醒一次 / 手动值变化立即重报
 - test_speed_curve_manual_log_resets_after_release: 退出手动保护后清记忆, 再次进入重新报
+- test_speed_curve_readback_failure_degrades_actual
+- test_speed_curve_require_snapshot_missing_fails_fast
+- test_traffic_view_disabled_without_config
+- test_traffic_view_dry_run_has_target_without_actual
+- test_traffic_view_manual_reason_on_odd_kib
+- test_traffic_view_ok_reports_limits
+- test_traffic_view_stale_when_dat_missing_or_empty
 """
 import copy
 import io

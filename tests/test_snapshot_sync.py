@@ -11,6 +11,25 @@ Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() �
 - set_category / start / stop / 限速 / set_location / delete 同步 record 字段
 - create_category 失效全局分类缓存
 - RuleContext.api 恒为 manager.api(QbApi Facade); 未绑定客户端时 api.client 为 None
+
+## 测试计划(每个测试函数一条)
+
+- test_add_tags_syncs_snapshot_and_tag_usage
+- test_create_category_invalidates_categories_cache
+- test_ctx_api_not_fallback_without_manager_client
+- test_ctx_api_uses_manager_api_when_bound
+- test_delete_tags_if_has_no_torrents_not_deleted_after_same_tick_add
+- test_delete_tags_removes_from_all_records
+- test_qbapi_passthrough_methods_delegate
+- test_qbapi_read_ops_fallback_on_cache_miss
+- test_qbapi_to_list_normalization
+- test_read_ops_use_store
+- test_remove_tags_syncs_snapshot
+- test_set_category_syncs_record
+- test_set_location_waits_for_sync
+- test_speed_limits_sync_record
+- test_start_stop_syncs_state
+- test_torrents_delete_removes_from_snapshot
 """
 import os
 import tempfile

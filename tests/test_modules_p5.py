@@ -25,6 +25,7 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_p2a_apply_event_rule_process_exception_caught: 事件规则同步执行异常捕获不传播 (P2-a)
 - test_p2a_handle_event_rule_resume_exception_caught: 断点续跑异常捕获, handler 恒 FINISHED (P2-a)
 - test_full_round_without_task_queue_is_noop: full_round 在 ctx.task_queue 缺失(重建中/停机后)时静默返回, 不打断相位分发
+- test_full_round_skips_unmatched_records
 """
 import json
 import os

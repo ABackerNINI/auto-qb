@@ -58,6 +58,10 @@
 - test_store_remove_torrent_pending_semantics: remove_torrent 已知 hash 登记 removed / 未知 hash 无操作
 - test_view_dirty_intersection: view_dirty 集合交集判定(触及视图字段 True / 无关字段 False)
 - test_hr_entry_guard_single_point: 守阵(issue torrents-hr-entry-guard-dup) HR 判定入口前置守卫单点在 _hr_guard —— record.py 里 not self.tracker_conf.hr 只许出现一次
+- test_record_tracker_name_and_hr_fallback
+- test_record_tracker_name_unknown_without_conf
+- test_store_reset_runtime_marks_view_changed
+- test_store_view_changed_on_membership
 """
 from dataclasses import MISSING, fields as dc_fields
 

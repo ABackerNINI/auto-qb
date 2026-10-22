@@ -20,6 +20,39 @@
 
 真绑定用例一律用**动态空闲端口**当候选表基底 —— 全量并行(-n 8)下固定 18788 会被其它
 worker 的同族用例占住, 候选轮换是特性而非碰撞。
+
+## 测试计划(每个测试函数一条)
+
+- test_candidates_consecutive_and_cap
+- test_default_registry_path_platform_shape
+- test_discover_aggregates_and_filters
+- test_heartbeat_loop_runs_until_stopped
+- test_heartbeat_once_registers_and_survives_registry_failure
+- test_hr_registry_path_is_isolated_from_real_file
+- test_pairing_auto_branches_by_host
+- test_pairing_display_code_shape_and_stability
+- test_pairing_flood_limit_silences_per_source
+- test_pairing_gate_three_ways
+- test_registry_prunes_expired_on_upsert
+- test_registry_read_retries_transient_denial
+- test_registry_read_transient_denial_is_not_empty_table
+- test_registry_tolerates_missing_and_corrupt
+- test_registry_upsert_and_ttl
+- test_resolve_pairing_secret_creates_once
+- test_retry_loop_backoff_and_stop_exit
+- test_revocation_by_deleting_file
+- test_route_options_preflight_and_404
+- test_route_origin_gate_403
+- test_runtime_builds_and_starts_discovery
+- test_runtime_discovery_bind_failure_keeps_data_endpoint
+- test_runtime_discovery_disabled_when_port_zero
+- test_runtime_identity_covers_new_keys
+- test_runtime_l0_rebuild_keeps_discovery
+- test_runtime_non_loopback_pairing_full_flow
+- test_start_all_busy_returns_false_and_retries
+- test_start_binds_first_free_candidate
+- test_stop_is_idempotent_and_releases
+- test_wildcard_host_uses_request_host
 """
 import builtins
 import json

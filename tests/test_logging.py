@@ -1,6 +1,6 @@
 """test_logging: setup_logging 控制台/文件 handler 配置
 
-计划覆盖:
+## 测试计划(每个测试函数一条)
 - test_setup_logging_console_only: file 为空 -> 仅 console handler, 不建文件
 - test_setup_logging_file_handler: file 给定 -> 自动 makedirs 子目录 + RotatingFileHandler, 启动日志写入文件
 - test_setup_logging_file_no_dir: file 无目录部分 -> 跳过 makedirs 直接建文件

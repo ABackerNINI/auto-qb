@@ -46,6 +46,8 @@
 - test_write_endpoint_502_when_webui_module_missing (P0-T0.4): host 拿不到 webui 模块
   -> 502(读不到工具状态/拉起通道, 不静默空转)
 - test_notify_rejects_non_dict_body (P0-T0.4): 事件体非 JSON 对象 -> 400(契约漂移响亮报错)
+- test_claim_refused_409_with_tool_output
+- test_status_passes_autostart_error_through
 """
 import os
 import re

@@ -93,6 +93,7 @@
 - test_badge_reflects_connection_state 更新(R4 徽标文字折中): 平时徽标文本清空(状态色外框零遮挡),
   仅「发现失败」态为红 `!` + setBadgeBackgroundColor; 旧 OK/.. 徽标文案不得回潮
 - test_badge_icon_frame_mapping: 真跑 background.js::badgeIconOf —— 四态->{16,32} 图标路径映射 +
+- test_extension_quota_windows_roll_over
   8 个 PNG(scripts/gen_ext_icons.py 生成物)在盘上 + manifest action.default_icon 指向基础图
   (未配置态与安装初始态共用; Chrome 无还原默认图标 API, 外框方案必须自带基础图)
 """

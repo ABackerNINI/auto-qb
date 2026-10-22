@@ -57,6 +57,13 @@
 - test_api_hr_status_reports_site_state: 启用后逐站点摊开现状 —— 新鲜度/覆盖证明/索引与回填进度/配额/熔断/
   「现在为什么不放行」(与 --hr-status 同一 `hr.status` 口径) + 波次明细 lane_text 徽章人话逐档正确(LANE_TEXTS 单点)
 - test_api_hr_status_names_the_blocking_step: 覆盖证明不成立时要说清卡在哪一步(用户看到种子没放行时最想知道的一句)
+- test_api_hr_refresh_409_when_worker_not_running
+- test_api_hr_refresh_accepts_and_returns_requested
+- test_api_hr_refresh_requires_enabled_hr
+- test_build_group_view_added_on_is_latest_member
+- test_build_group_view_hr_counts
+- test_build_group_view_hr_tags
+- test_frontend_hr_status_fields_match_backend
 """
 import json
 import os

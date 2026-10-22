@@ -31,6 +31,10 @@ test_guardian_removes_links_after_three_proofs 钉住; 本文件补其余出口�
 - test_verify_dst_missing_file_is_mismatch: 目标侧文件缺失/大小不符 ⇒ 不齐; 读取抛异常同口径
 - test_delete_links_continues_on_failure: 单条删除抛异常 ⇒ 跳过继续, 返回成功条数(幂等)
 - test_main_cli_runs_and_prints_result: CLI 入口: 解析参数跑 run() 并打印结论, 终态码按结果分档
+- test_alive_posix_branches
+- test_heartbeat_age_no_journal_is_inf
+- test_heartbeat_age_uses_ts
+- test_release_pid_tolerates_missing
 """
 import os
 import subprocess

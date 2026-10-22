@@ -45,6 +45,11 @@ P1-T1.3 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_request_relaunch_clears_backoff_and_failure: 手动重试清等待窗口/退避/失败记忆 ->
   下一轮立刻重新拉起
 - test_note_error_throttles_same_reason: 同因首次 WARNING、其后 DEBUG, 换因重新 WARNING
+- test_parse_pointer_reads_optional_autostart_error
+- test_resolve_claim_target_missing_returns_none
+- test_resolve_claim_target_tool_exe_dir_priority
+- test_run_claim_timeout_and_spawn_failure
+- test_run_foreground_real_execution_with_allowed_binary
 """
 import ast
 import json

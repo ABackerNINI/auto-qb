@@ -109,6 +109,9 @@
 - test_win_force_foreground_skips_attach_when_no_foreground: 无前台窗口(0)时不借线程权限, 但取焦照发
 - test_win_wait_explorer_no_title_candidates_skips_match: 复用标题候选为空集时跳过标题匹配, 超时即 None
 - test_win_foreground_explorer_async_spawns_daemon_thread: 置前后台化线程真执行(Event 等, 不断言线程对象)
+- test_fmt_size_invalid
+- test_parse_hm_invalid_format
+- test_win_shell_open_not_windows
 """
 import hashlib
 import ntpath

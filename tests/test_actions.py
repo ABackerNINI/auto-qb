@@ -34,6 +34,7 @@
 - test_print_details_missing_torrent: print_torrent_details 种子不存在 -> fail (P2-a)
 - test_checking_disabled_segment_skips: checking 未启用段 -> skip 有/无参考两指代 (P2-a)
 - test_checking_verified_reference_union_filters: verified_references 并集过滤(自身/快照外)且去重 (P2-a)
+- test_actions_registry_complete
 """
 import os
 import tempfile

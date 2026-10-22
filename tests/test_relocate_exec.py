@@ -45,6 +45,13 @@
 - test_apply_reconcile_finalize_done_and_rejected: 收尾动作两档(成员全散 done / setLocation 被拒 failed)
 - test_apply_reconcile_unknown_action_is_debug_only: 未知对账动作只落 DEBUG, 不改 job
 - test_step_finalize_skips_gone_member_and_pending_progress: 收尾轮询跳过已消失成员 / progress 未回 1 等窗口
+- test_entry_rule_move_to_confirm_and_empty_reasons
+- test_exec_defer_until_pause_snapshot
+- test_exec_move_rejected
+- test_exec_skip_when_all_at_target
+- test_exec_unknown_stage_falls_back_to_arm
+- test_restart_does_not_reissue_setlocation
+- test_skip_check_skips_during_relocation
 """
 import os
 import time

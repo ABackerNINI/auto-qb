@@ -25,6 +25,51 @@
 - [x] 非 bare 集数起点 0 跳过(E0) (P2-a)
 - [x] 剧名归一化 bigram 噪音成对剔除 (P2-a)
 - [x] parse_files 目录段无季标记继续向后 (P2-a)
+- test_anime_season_with_bare_episode
+- test_bare_excludes_resolution_and_year
+- test_bare_trailing_without_context_not_matched
+- test_bare_zero_not_episode
+- test_bracket_form
+- test_bracket_only_title_picks_last_candidate
+- test_bracket_paren_form
+- test_cjk_equivalence
+- test_cjk_int_hundred_and_invalid_char
+- test_dash_form
+- test_date_basic
+- test_date_invalid_not_date
+- test_default_unknown_shared
+- test_e_lookalike_not_matched
+- test_empty_name_defaults
+- test_empty_or_noise_name_keyless
+- test_episode_before_season
+- test_episode_patterns
+- test_episode_wins_over_date
+- test_find_episode_non_bare_zero_skipped
+- test_find_season_out_of_range_and_earliest_kept
+- test_frozen
+- test_fullwidth_brackets_kept_as_title
+- test_group_prefix_stripped
+- test_identity_diff_preserved
+- test_key_forms
+- test_marker_cut_takes_first_position
+- test_multi_season_unknown
+- test_noise_tokens_stripped
+- test_normalization_equivalence
+- test_normalize_key_bigram_noise
+- test_parse_files_no_season
+- test_parse_files_s01_dir_and_zh_marker
+- test_parse_files_season_and_episodes
+- test_parse_files_season_scan_skips_non_matching_parts
+- test_range_end_from_resolution_dropped
+- test_refine_explicit_episode_untouched
+- test_refine_no_usable_files_unchanged
+- test_refine_season_from_files
+- test_refine_season_pack
+- test_refine_unknown_rescued
+- test_season
+- test_season_pack
+- test_sxe_season_not_double_counted
+- test_unknown
 """
 import pytest
 

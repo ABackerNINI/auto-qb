@@ -21,6 +21,10 @@
 - test_trackers_baseline_keys_are_raw_urls: 守阵④ 基线 key 为原文(plan 26-10-07-0055 S4) —— _trackers_baseline 的 dict key == fake client 原文 url, 同 host 两条不同 passkey key 互异且各行 epoch 字段对号; 红验: 基线临时切 mask
 - test_torrent_detail_trackers_route_mask_canary: 守阵⑤ 静态扫 canary(plan 26-10-07-0055 S4) —— torrent_detail.py 源码含 mask_tracker_entry 引用且钉在 trackers 端点 _cached_read 取数 lambda 上(mask 先于缓存写入); 红验: 同守阵① 改回透传
 - test_optimistic_rollback_and_settle_use_truth_not_stale_prev: 守阵(report 26-10-11-2017 §6.4) 静态扫 commands.js —— _expirePending 回滚目标为 truthSnapshot 现值(缺失才退 op.prev)、_optimisticSettled 按 action 用"已离开命令前状态"判据(与服务端 _truth_landed 同谓词)、_snapshotTruth 顺带保鲜 op.prev
+- test_affected_truth_reads_qb_directly_not_sync_snapshot
+- test_cmd_timing_is_logged_without_browser
+- test_receipt_sent_immediately_truth_pushed_later
+- test_truth_hold_matches_truth_push_cap
 """
 import logging
 import os

@@ -9,7 +9,7 @@
   src/auto_qb/qbapi.py     QbApi.sync_maindata 透传
   src/auto_qb/qbmanager.py _refresh_torrents / _validate_torrent_schema
 
-测试清单:
+## 测试计划(每个测试函数一条)
 - test_apply_delta_only_touches_patch_fields: 增量只处理 patch 内字段, 未提及字段保持
 - test_apply_delta_returns_changed_fields: 返回变化字段名集合(非视图字段/视图字段/升格字段)
 - test_apply_delta_quantizes_view_field: seeding_time 秒级递增不计入变化(量化)

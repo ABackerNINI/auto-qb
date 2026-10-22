@@ -51,6 +51,18 @@
 - test_run_hr_confirm_empty_note_and_stamp: 对账 notes 累加不丢旧备注 + 事件 site + 打印戳与落盘一致
 - test_build_fetcher_null_message: 无通道提示逐字(含配置键名, 不静默降级)
 - test_local_page_fetcher_replaces_bad_bytes: 离线页面按 utf-8/replace 读(坏字节不抛)
+- test_print_status_rows_empty_hint_exact
+- test_print_status_site_branches_and_placeholders
+- test_print_status_site_lane_counts_missing_keys_fall_to_zero
+- test_print_status_site_lines_exact
+- test_run_hr_confirm_empty_blank_notes
+- test_run_hr_confirm_empty_disabled_hint
+- test_run_hr_confirm_empty_stamps_site
+- test_run_hr_once_multisite_join
+- test_run_hr_once_passes_html_dir_to_fetcher
+- test_run_hr_status_multisite_join
+- test_run_hr_status_read_error_warn
+- test_status_rows_header_aligns_when_cell_wider
 """
 import io
 import pathlib
