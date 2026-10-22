@@ -13,6 +13,11 @@ from auto_qb.webui.runtime import WebUIRuntime
 
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
 
+# WEB 测试环境配置文本单点(issue 26-10-21-0502-refactor-test-web-env-param-dup):
+# conftest.web_env 与 _make_web_manager 的各内联拷贝收敛于此 —— 6 份拷贝(conftest 1 +
+# test_web_backend_misc 2 + test_web_views_reload 3)并为 web_env 的 config_text 参数缺省值。
+WEB_ENV_CONFIG_TEXT = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
+
 
 def _web_stub(enabled=True, host="127.0.0.1", port=8080, token="t"):
     """WEB 段替身(仅 _apply_web_config 关心的字段)"""

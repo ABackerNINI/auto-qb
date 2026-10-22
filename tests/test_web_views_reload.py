@@ -37,7 +37,7 @@ from auto_qb import __version__
 from auto_qb.config.models import HrCheckConfig
 from auto_qb.webui import create_app
 
-from webui_helpers import _web_stub, _make_web_manager, _make_grouped_manager
+from webui_helpers import WEB_ENV_CONFIG_TEXT, _web_stub, _make_web_manager, _make_grouped_manager
 
 
 def _free_port() -> int:
@@ -666,9 +666,8 @@ def test_stop_web_server_releases_port_for_restart(tmp_path):
     """
     from auto_qb.webui import start_web_server, stop_web_server
 
-    cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
     port = _free_port()
-    mgr1 = _make_web_manager(tmp_path, cfg_text)
+    mgr1 = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
     mgr1.config.web.port = port
     h1 = start_web_server(mgr1)
     try:
@@ -676,7 +675,7 @@ def test_stop_web_server_releases_port_for_restart(tmp_path):
         assert stop_web_server(h1), "stop_web_server 应等到服务线程退出"
         assert not h1.thread.is_alive(), "服务线程应已退出(监听套接字已释放)"
 
-        mgr2 = _make_web_manager(tmp_path, cfg_text)
+        mgr2 = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
         mgr2.config.web.port = port
         h2 = start_web_server(mgr2)
         try:
@@ -701,8 +700,7 @@ def test_start_web_server_started_message_is_info(tmp_path):
 
     grabbed, restore = _grab_web_logger()
     try:
-        cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
-        mgr = _make_web_manager(tmp_path, cfg_text)
+        mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
         mgr.config.web.port = _free_port()
         h = start_web_server(mgr)
         try:
@@ -754,11 +752,10 @@ def test_start_web_server_reports_failure_when_port_taken(tmp_path):
 
     from auto_qb.webui import start_web_server, stop_web_server
 
-    cfg_text = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n"
     with socket.socket() as holder:  # 占住端口(不 listen 也可; bind 后即不可再绑)
         holder.bind(("127.0.0.1", 0))
         holder.listen(1)
-        mgr = _make_web_manager(tmp_path, cfg_text)
+        mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
         mgr.config.web.port = holder.getsockname()[1]
         grabbed, restore = _grab_web_logger(logging.ERROR)
         try:

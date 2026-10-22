@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-21-0502">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-21-test-dup-code-audit.md, memory-bank/tasks/26-10-22-test-web-env-param-dup.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路">
 <meta name="issue-summary" content="web_env 硬编码 config_text/client; test_web_auth ×10 与 test_web_admin ×5 每用例内联 TestClient(create_app(mgr)); web_env 参数化后回收">
 <title>web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-21-0502-refactor-test-web-env-param-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-21 05:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -93,9 +93,23 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法 / 验证</h2>
+    <p>按建议修法落地(<strong>单点扩参数, 不新建第二夹具</strong>): <code>web_env</code> 经 pytest indirect 参数化(<code>request.param</code> dict)收两个「形态」参数 —— <code>config_text</code>(缺省 = 原硬编码那段, 现为 <code>webui_helpers.WEB_ENV_CONFIG_TEXT</code> 单点常量)与 <code>client_addr</code>(缺省 None = starlette 缺省 <code>testclient</code>, 与参数化前逐字等价)。</p>
+    <ul>
+      <li><strong>回收</strong>: test_web_auth <strong>7 个用例</strong>改走参数化 web_env(loopback 对端), <strong>10 处 TestClient 构造 → 3 处</strong>(残留全是「同一 app 第二客户端」<code>TestClient(client.app, client=...)</code> 既有约定形态, 含 test_config_public_endpoint_no_auth 原有 1 处); test_web_admin 的 <code>test_api_speed_mode_curve_config_disabled</code>(纯 GET, 只读 traffic_view + 曲线配置)回收。</li>
+      <li><strong>口径校正(未全收, 保留建议原文如上)</strong>: admin 另 4 处(<code>test_api_speed_mode_and_override</code> / <code>test_api_speed_alt_and_toggle</code> / <code>test_api_add_torrent_endpoint</code> / <code>test_add_torrent_receipt_and_optional_flags</code>)要跑 <code>mgr.web.consume_commands()</code> 断言 FakeClient 台账, 命令执行经 <code>host._web_command_handlers()</code>(WebCommandsMixin, 挂真 QbManager) —— 与 web_env 替身(SimpleNamespace)<strong>不是同一装配事实</strong>, 强行回收等于给替身扩命令执行面(改变桩保真度), 不回收。form ① 站点多为「只要 manager」的 token/sidecar 测试或需双 manager / 占端口, 其重复实体是 config_text 字面量。</li>
+      <li><strong>字面量收敛</strong>: config_text <strong>6 份拷贝 → 1 份</strong>(conftest 1 + test_web_backend_misc 2 + test_web_views_reload 3, 收敛到 <code>WEB_ENV_CONFIG_TEXT</code>); <code>skip_local_verify</code> 不加参数 —— 鉴权闸 per-request 读该段(create_app 装配期不读配置, 已核 factory.py), 用例拿到底座后置位与「先置位再 create_app」语义等价。</li>
+      <li><strong>零守阵</strong>: 回收后残留的 <code>TestClient(create_app(</code> 全是合法形态(真 manager), 零豁免扫描必假阳、带豁免训练人忽略告警, 故不加静态守阵(与 make_manager 那轮 86 处同形态的局面不同)。</li>
+    </ul>
+    <p><strong>验证方式</strong>: ① 复验锚点 grep 实测(见状态日志 2026-10-22 04:42 行); ② 受影响 4 文件单跑 106 passed; ③ 全量闸门 <code>commands run test.full</code> 全绿, 实测数字见 <code>commands run kb.baseline</code>(本轮新切片 <code>26-10-22-0502</code>, 本件不抄数字); ④ 档案 <code>memory-bank/tasks/26-10-22-test-web-env-param-dup.md</code>。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-21 05:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 04:42 — 用户指派认领（档案 <code>memory-bank/tasks/26-10-22-test-web-env-param-dup.md</code>），状态 <strong>In Progress</strong>；复验：基线 <code>ad17518a</code> 上 grep 实测 —— test_web_auth.py <strong>10 处 TestClient 构造 / 7 处 <code>create_app(mgr)</code></strong>、test_web_admin.py <strong>5 处 <code>TestClient(create_app(</code></strong>、config_text 字面量 <strong>6 份拷贝</strong>（conftest 1 + test_web_backend_misc 2 + test_web_views_reload 3）；web_env 现行 <code>tests/conftest.py:241</code>（issue 记 :246，行号漂移，符号锚点有效）。现象属实</li>
+      <li>2026-10-22 05:02 — 修完置 <strong>Done</strong>: web_env 扩 <code>config_text</code> / <code>client_addr</code> 两参数（indirect，默认路径逐字等价），config_text 收敛为 <code>WEB_ENV_CONFIG_TEXT</code> 单点（6 份拷贝 → 1）；test_web_auth 7 用例回收（10 处 TestClient 构造 → 3 处第二客户端形态），test_web_admin 回收 1 处纯 GET 用例；admin 另 4 处需真实 QbManager 命令执行（<code>consume_commands</code> → WebCommandsMixin），与替身不是同一装配事实，不回收（口径校正，原因见上）；<code>test.full</code> 全绿（数字见基线切片）</li>
     </ul>
   </section>
 

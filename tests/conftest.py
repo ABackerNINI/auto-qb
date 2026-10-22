@@ -234,21 +234,36 @@ def _isolated_hr_registry(tmp_path_factory):
         hr_runtime.default_registry_path = real
 
 
-from webui_helpers import _make_web_manager
+from webui_helpers import WEB_ENV_CONFIG_TEXT, _make_web_manager
 
 
 @pytest.fixture()
-def web_env(tmp_path):
-    """带 TestClient 的 WEB 环境(manager 替身 + 密钥已生成)"""
+def web_env(tmp_path, request):
+    """带 TestClient 的 WEB 环境(manager 替身 + 密钥已生成)
+
+    **单点扩参数**(issue 26-10-21-0502-refactor-test-web-env-param-dup): 经 indirect
+    参数化传 ``request.param``(dict), 只给「形态」参数, 默认路径与参数化前逐字等价:
+
+    - ``config_text``: 配置文本, 缺省 ``WEB_ENV_CONFIG_TEXT``(即本夹具此前硬编码那段,
+      现与 webui_helpers 单点常量同一份);
+    - ``client_addr``: TestClient 对端地址, 缺省 None = starlette 缺省 ``testclient``
+      (与参数化前逐字等价)。鉴权用例要 loopback 免鉴权/跨站闸分支时显式传
+      ``("127.0.0.1", 50000)`` —— 缺省对端非 loopback, 缺省 Host=testserver 也不在
+      白名单(坑档 memory-bank/pitfalls/testing/web-auth-test-forms.md)。
+
+    同一 app 上要第二个对端(remote 等)不新建装配: ``TestClient(client.app, client=...)``
+    (既有约定, 见 test_web_auth.test_config_public_endpoint_no_auth)。
+    ``web.skip_local_verify`` 由鉴权闸 **per-request** 读(create_app 装配期不读配置),
+    用例拿到底座后自行置位即可, 无需重建 app。
+    """
     from fastapi.testclient import TestClient
 
     from auto_qb.webui import create_app, ensure_web_token
 
-    mgr = _make_web_manager(
-        tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
-    )
+    params = getattr(request, "param", None) or {}
+    mgr = _make_web_manager(tmp_path, params.get("config_text", WEB_ENV_CONFIG_TEXT))
     mgr.web.token = ensure_web_token(mgr)
     app = create_app(mgr)
-    client = TestClient(app)
+    client_addr = params.get("client_addr")
+    client = TestClient(app) if client_addr is None else TestClient(app, client=client_addr)
     return mgr, client

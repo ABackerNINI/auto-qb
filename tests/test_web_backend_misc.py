@@ -52,7 +52,7 @@ import pytest
 
 from auto_qb.infra.utils import decode_group_key, encode_group_key
 
-from webui_helpers import _make_web_manager, STATIC_ROOT, _UI_ALL, _ui_aggregate
+from webui_helpers import WEB_ENV_CONFIG_TEXT, _make_web_manager, STATIC_ROOT, _UI_ALL, _ui_aggregate
 
 
 def test_config_schema_endpoint(web_env):
@@ -168,10 +168,7 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
     """
     from auto_qb.webui import ensure_web_token
 
-    mgr = _make_web_manager(
-        tmp_path,
-        "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
-    )
+    mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
     with caplog.at_level(logging.DEBUG, logger="auto_qb.web"):
         token = ensure_web_token(mgr)
     assert token, "前置: 应生成随机密钥"
@@ -179,9 +176,6 @@ def test_web_token_not_printed_in_logs(tmp_path, caplog):
     for r in caplog.records:
         assert token not in r.getMessage(), f"密钥不得出现在日志: {r.getMessage()}"
         assert token[:8] not in r.getMessage(), f"密钥前缀也不得出现: {r.getMessage()}"
-
-
-_WEB_MGR_CFG = "config:\n  qbittorrent:\n    host: h\n    port: 1\n    username: u\n    password: p\n  schema_version: 5\n"
 
 
 def test_web_sidecar_dir_single_point(tmp_path):
@@ -206,7 +200,7 @@ def test_web_sidecar_dir_single_point(tmp_path):
     common = (root / "webui/server/common.py").read_text(encoding="utf-8")
     assert common.count("os.path.dirname(manager.state_file)") == 1, "旁挂目录寻址必须在 common.state_dir 单点"
 
-    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
     assert state_dir(mgr) == os.path.dirname(mgr.state_file)
     assert keys_file_path(mgr) == os.path.join(state_dir(mgr), "webui-keys.json")
     assert keys_file_path(SimpleNamespace(state_file="state.json")) == os.path.join(".", "webui-keys.json")
@@ -221,7 +215,7 @@ def test_web_token_generated_atomic_and_readable(tmp_path):
     """
     from auto_qb.webui import ensure_web_token
 
-    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
     token = ensure_web_token(mgr)
     assert re.fullmatch(r"[0-9a-f]{64}", token), "token_hex(32) 应为 64 位小写 hex"
     token_file = tmp_path / "web.token"
@@ -236,7 +230,7 @@ def test_web_token_existing_file_reused_without_rewrite(tmp_path, monkeypatch):
 
     existing = "ab" * 32
     (tmp_path / "web.token").write_text(existing, encoding="ascii")
-    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
 
     def _must_not_write(*_a, **_kw):
         raise AssertionError("已有合法 token 时不得触达写盘路径")
@@ -256,7 +250,7 @@ def test_web_token_write_interrupt_leaves_no_half_token(tmp_path, monkeypatch):
     from auto_qb.infra import utils as infra_utils
     from auto_qb.webui import ensure_web_token
 
-    mgr = _make_web_manager(tmp_path, _WEB_MGR_CFG)
+    mgr = _make_web_manager(tmp_path, WEB_ENV_CONFIG_TEXT)
     token_file = tmp_path / "web.token"
     token_file.write_text("", encoding="ascii")  # 空文件: 读取侧判空后走重新生成分支
 

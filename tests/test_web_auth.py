@@ -26,8 +26,6 @@ from pathlib import Path
 
 import pytest
 
-from auto_qb.webui import create_app
-
 from webui_helpers import STATIC_ROOT, _iter_api_routes
 
 # 等价形态常量单点(2026-10-16): 请求头名 / 旧查询串传参名字面量不直接连写赋值符 ——
@@ -91,6 +89,7 @@ def test_config_public_endpoint_no_auth(web_env):
     assert str(mgr.web.token) not in resp.text
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_loopback_bypass(web_env, caplog):
     """web.skip_local_verify=true 时: 本机(loopback)连接免密钥放行, 直接进入
 
@@ -104,15 +103,11 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     """
     from fastapi.testclient import TestClient
 
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
-    # 用独立 loopback 客户端 + 开启开关
+    mgr, loopback = web_env
+    # 开启开关(鉴权闸 per-request 读该段, 无需重建 app); remote 对端经同一 app 自建
     mgr.config.web.skip_local_verify = True
-    app = create_app(mgr)
     host_hdr = {"Host": "127.0.0.1:8080"}
-    loopback = TestClient(app, client=("127.0.0.1", 50000))
-    remote = TestClient(app, client=("192.168.1.50", 50000))
+    remote = TestClient(loopback.app, client=("192.168.1.50", 50000))
 
     caplog.set_level(logging.INFO, logger="auto_qb.web")
     caplog.clear()
@@ -132,6 +127,7 @@ def test_skip_local_verify_loopback_bypass(web_env, caplog):
     assert remote.get("/api/status", headers={**host_hdr, _AUTH_HEADER: f"Bearer {mgr.web.token}"}).status_code == 200
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
     """skip_local_verify 开启时 Host 白名单(DNS rebinding 防护, issue 26-09-21-1408)
 
@@ -141,13 +137,8 @@ def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
     RFC 6761 保留域信任: 浏览器解析到 loopback 且不可注册)照常放行, 不破坏正常本机
     使用; 相似串(localhost.attacker.com / notlocalhost)不命中后缀判据。
     """
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
+    mgr, client = web_env
     mgr.config.web.skip_local_verify = True
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
     caplog.set_level(logging.WARNING, logger="auto_qb.web")
     # 外部域名(rebinding 面): API 与静态页一律 403, 不静默(WARNING 留痕)
     assert client.get("/api/status", headers={"Host": "attacker.com"}).status_code == 403
@@ -167,6 +158,7 @@ def test_skip_local_verify_cross_site_guard_host_whitelist(web_env, caplog):
         assert client.get("/api/status", headers={"Host": host}).status_code == 403, host
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_cross_site_guard_write_origin(web_env):
     """skip_local_verify 开启时写方法 Origin 同源校验(CSRF 防护, issue 26-09-21-1408)
 
@@ -175,13 +167,8 @@ def test_skip_local_verify_cross_site_guard_write_origin(web_env):
     POST 也会带)与无 Origin(curl/脚本)照常放行; GET 不校验(跨站读拿不到响应体,
     危害面在写, 与 issue 修法一致); ``*.localhost`` 子域(2026-10-16)同源同样成立。
     """
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
+    mgr, client = web_env
     mgr.config.web.skip_local_verify = True
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
     host_hdr = {"Host": "127.0.0.1:8080"}
     body = {"text": "(tor.size >= 1GiB)"}
     # 读方法不校验 Origin(跨站 GET 响应不可读, 无危害面)
@@ -210,6 +197,7 @@ def test_skip_local_verify_cross_site_guard_write_origin(web_env):
     assert client.post("/api/expr/eval", headers={**local, "Origin": "http://evil.com"}, json=body).status_code == 403
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_cross_site_guard_all_write_endpoints(web_env):
     """全部写端点穷举: 跨站 Origin 下一律 403(闸在全局依赖单点, 先于任何处理器/422)
 
@@ -219,13 +207,8 @@ def test_skip_local_verify_cross_site_guard_all_write_endpoints(web_env):
     """
     import re
 
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
+    mgr, client = web_env
     mgr.config.web.skip_local_verify = True
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
     headers = {"Host": "127.0.0.1:8080", "Origin": "http://evil.com"}
     write_methods = {"POST", "PUT", "DELETE", "PATCH"}
     write_routes = [r for r in _iter_api_routes(client.app.routes) if r.methods & write_methods]
@@ -240,6 +223,7 @@ def test_skip_local_verify_cross_site_guard_all_write_endpoints(web_env):
     assert ("POST", "/api/torrents/{hash}/delete") in checked, "高危写端点必须在覆盖面内"
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_cross_site_guard_credentials_bypass(web_env):
     """携带凭证的请求绕过跨站闸: 持密即可信方(浏览器跨站伪造不了凭证), 既有语义照旧裁决
 
@@ -249,13 +233,9 @@ def test_skip_local_verify_cross_site_guard_credentials_bypass(web_env):
     """
     from fastapi.testclient import TestClient
 
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
+    mgr, loopback = web_env
     mgr.config.web.skip_local_verify = True
-    app = create_app(mgr)
-    loopback = TestClient(app, client=("127.0.0.1", 50000))
-    remote = TestClient(app, client=("192.168.1.50", 50000))
+    remote = TestClient(loopback.app, client=("192.168.1.50", 50000))
     ok = {"Host": "attacker.com", _AUTH_HEADER: f"Bearer {mgr.web.token}"}
     bad = {"Host": "attacker.com", _AUTH_HEADER: "Bearer wrong"}
     assert loopback.get("/api/status", headers=ok).status_code == 200
@@ -264,15 +244,11 @@ def test_skip_local_verify_cross_site_guard_credentials_bypass(web_env):
     assert remote.get("/api/status", headers=bad).status_code == 401
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_default_off_no_cross_site_guard(web_env):
     """默认关闭零变化: 外部 Host/Origin 不触发 403, 仍走既有 401 路径(安全纪律)"""
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
+    mgr, client = web_env
     assert mgr.config.web.skip_local_verify is False
-    client = TestClient(create_app(mgr), client=("127.0.0.1", 50000))
     assert client.get("/api/status", headers={"Host": "attacker.com"}).status_code == 401
     assert client.post("/api/expr/eval", json={"text": "(tor.size >= 1GiB)"}).status_code == 401
 
@@ -527,14 +503,9 @@ def test_frontend_sse_ticket_wiring():
     assert "_esRetry" in src, "一次性票据重连必失效: 必须有关连接换新票重开的重试路径"
 
 
+@pytest.mark.parametrize("web_env", [{"client_addr": ("127.0.0.1", 50000)}], indirect=True)
 def test_skip_local_verify_default_off(web_env):
     """默认关闭(保守): 本机连接也不免鉴权, 无密钥仍 401"""
-    from fastapi.testclient import TestClient
-
-    from auto_qb.webui import create_app
-
-    mgr = web_env[0]
+    mgr, loopback = web_env
     assert mgr.config.web.skip_local_verify is False  # 默认 false
-    app = create_app(mgr)
-    loopback = TestClient(app, client=("127.0.0.1", 50000))
     assert loopback.get("/api/status").status_code == 401

@@ -186,33 +186,26 @@ def test_qbapi_alt_speed_limits_normalization(tmp_path):
     assert api.get_speed_limits_mode() == 1
 
 
-def test_api_speed_mode_curve_config_disabled():
+def test_api_speed_mode_curve_config_disabled(web_env):
     """曲线存在但 enabled=False -> /api/speed/mode 返回 curve_enabled=False(快照滞后也兑底); 对照 enabled=True 不影响"""
-    from fastapi.testclient import TestClient
-
     from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
-    from helpers import FakeClient, make_manager
 
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.client = FakeClient()
-        mgr.web.token = "t"
-        mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
-            curves=[PeriodCurve(period="day", upload_points=[CurvePoint(threshold_bytes=1, speed_bytes_per_s=1)])],
-            enabled=False,
-        )
-        mgr.config.traffic_source.traffic_monitor.dat_path = "x.dat"
-        mgr.web.traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 滞后快照
-        tc = TestClient(create_app(mgr))
-        auth = {"Authorization": "Bearer t"}
-        data = tc.get("/api/speed/mode", headers=auth).json()
-        assert data["curve_enabled"] is False and data["curve_target"] is None
+    mgr, tc = web_env
+    mgr.config.global_speed_limit_curve = GlobalSpeedLimitCurve(
+        curves=[PeriodCurve(period="day", upload_points=[CurvePoint(threshold_bytes=1, speed_bytes_per_s=1)])],
+        enabled=False,
+    )
+    mgr.config.traffic_source.traffic_monitor.dat_path = "x.dat"
+    mgr.web.traffic_view = {"state": "ok", "limit": {"target": {"up": 100, "down": 50}}}  # 滞后快照
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = tc.get("/api/speed/mode", headers=auth).json()
+    assert data["curve_enabled"] is False and data["curve_target"] is None
 
-        # 对照: 恢复 enabled=True(缺省)后, 快照判定不受配置叠加影响
-        mgr.config.global_speed_limit_curve.enabled = True
-        data = tc.get("/api/speed/mode", headers=auth).json()
-        assert data["curve_enabled"] is True
-        assert data["curve_target"] == {"upload_kib": 100, "download_kib": 50}
+    # 对照: 恢复 enabled=True(缺省)后, 快照判定不受配置叠加影响
+    mgr.config.global_speed_limit_curve.enabled = True
+    data = tc.get("/api/speed/mode", headers=auth).json()
+    assert data["curve_enabled"] is True
+    assert data["curve_target"] == {"upload_kib": 100, "download_kib": 50}
 
 
 def test_api_add_torrent_endpoint():

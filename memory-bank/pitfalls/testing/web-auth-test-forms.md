@@ -3,6 +3,8 @@
 > 摘要: TestClient 缺省 Host=testserver / client=testclient 都不是本机形态, 跨站闸(Host 白名单)开启后必 403; loopback 免鉴权分支**先于** token 校验 —— skip 开启时 loopback 对端连错密钥也 200。
 > 触发: 改 webui 鉴权, 写鉴权测试, skip_local_verify, Host 白名单, 跨站, 403, 错密钥 200, TestClient, client 参数
 
+**Refs:** memory-bank/tasks/26-10-22-test-web-env-param-dup.md
+
 ### TestClient 缺省形态不是 loopback, 跨站闸下必被拒
 
 - **触发**: 写/改 `webui/server/auth.py` 鉴权相关测试(2026-10-02, issue 26-09-21-1408 跨站闸落地时)。
