@@ -884,12 +884,13 @@ window.AQB_DRAWER = {
     /* 文件优先级小菜单: 锚定单元格下方, 视口吸附(@click.stop 防止开菜单的点击立即被窗口关闭) */
     openFilePrio(ev, index) {
       this._markCtxSource(ev);
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
       const rect = ev.currentTarget.getBoundingClientRect();
       const w = 150, h = 176;
       this.filePrio = {
         visible: true, index,
-        x: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - w - 8)),
-        y: Math.min(rect.bottom + 4, Math.max(8, window.innerHeight - h - 8)),
+        x: FIT.clampAxis(rect.left, w, window.innerWidth),
+        y: FIT.clampAxis(rect.bottom + 4, h, window.innerHeight),
       };
     },
     /* 优先级 4 档(0=跳过 1=普通 6=高 7=最高) → POST files/priority。

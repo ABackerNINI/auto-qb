@@ -151,17 +151,20 @@ window.AQB_HR = {
      * 下方也放不下则贴底; 箭头指向触发矩形中心并随翻转换向。行已被轮询重建(windowing/刷新)时矩形
      * 为零 → 视为悬停目标已消失, 直接收弹窗(否则会钉在视口左上角)。 */
     _hrPopPlace(el, trg) {
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
       const r = trg.getBoundingClientRect();
       if (!r.width && !r.height) {
         this.hrPopHideNow();
         return;
       }
       const pw = el.offsetWidth, ph = el.offsetHeight;
-      const vw = window.innerWidth, vh = window.innerHeight, gap = 10, margin = 8;
-      const left = Math.max(margin, Math.min(vw - pw - margin, r.left + r.width / 2 - pw / 2));
+      const gap = 10, margin = FIT.EDGE;
+      const left = FIT.clampAxis(r.left + r.width / 2 - pw / 2, pw, window.innerWidth, margin);
       const below = r.top - gap - ph < margin;
       let top = below ? r.bottom + gap : r.top - gap - ph;
-      if (below && top + ph > vh - margin) top = Math.max(margin, vh - margin - ph);
+      if (below && top + ph > window.innerHeight - margin) {
+        top = FIT.clampAxis(window.innerHeight - ph, ph, window.innerHeight, margin);
+      }
       el.style.left = Math.round(left) + "px";
       el.style.top = Math.round(top) + "px";
       this.hrPop.above = !below;

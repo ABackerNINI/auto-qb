@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-20-2231">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-20-frontend-dup-code-audit.md, memory-bank/tasks/26-10-22-webui-overlay-fit.md, memory-bank/testing/baselines/26-10-22-0646-webui-overlay-fit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端浮层定位几何手写 12 处(8px / 12px 边距与视口夹取)">
 <meta name="issue-summary" content="toast/确认框/菜单 8px 边距 6 处、hubAsk 12px、浮层定位五处手写、openFilePrio 第 6 处、子面板钳位单点">
 <title>前端浮层定位几何手写 12 处(8px / 12px 边距与视口夹取) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-20-2231-refactor-fe-overlay-geometry-dup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-20 22:31</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,6 +104,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-20 22:31 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-22 04:35 — 用户显式指派「认领并修复」，状态 <strong>In Progress</strong>（开工同步 <code>ad17518a</code> 后复验：入池锚点全部在位 —— ui_feedback.js <code>_menuOverflowsRight</code>/<code>_menuPos</code>/<code>_menuFit</code>/aq-tip <code>place()</code>、menu.js <code>_subOverflowsRight</code>/<code>_subFitViewport</code>、config_hub.js <code>hubAsk</code>(12px)、hr.js <code>_hrPopPlace</code>、drawer.js <code>openFilePrio</code>；<b>实测增量 2 处同族未入账</b>：<code>columns.js::openColMenuAt</code>(PAD=8 夹取)与 <code>dialogs.js::speedPopStyle</code>(PAD=12 夹取，其 <code>openSpeedAt</code> 另有一处 12px 右缘回落锚) —— 12px 实测 2 处而非入池记录的 1 处，以同步后代码为准一并收敛)</li>
+      <li>2026-10-22 07:05 — 修复完成，状态 <strong>Done</strong>。做法：新增单点模块 <code>shared/overlay_fit.js</code>(<code>window.AQB_OVERLAY_FIT</code>：EDGE/clampAxis/probeRight/probeLeft/fitInViewport)，原 <code>menu.js::_subFitViewport</code> 的夹取逻辑升格为单点四入口之一、本体改调；<b>实测 12 处同族函数全部改调用</b>，边距提为 <code>edge</code> 参数(缺省 8)；hubAsk 与 speed-pop 的 12px 显式命名常量(<code>EDGE = 12</code> / <code>SPEED_PAD = 12</code>)传参并注释原因(拔草清单原文"用途不明，无证据说明必须不同"——无证据合并，先保留)。验证：node 等价网格逐位等价(旧 4 种夹取写法 ×2 处 Math.max 兜底 ×5 公式形态 ×7 视口 ×5 高 ×7 尺寸 ×10 目标位 ×2 边距；唯一不可达拐角由 filePrio watcher 的 <code>_menuFitRefit</code> 归一化)；test.full <strong>3999 passed / 2 skipped / 99%</strong>(较 04:09 基线 3996：+1 新增守阵，+2 来自 04:31 开工同步合入的并行会话提交)；e2e 全量 <strong>340 passed / 10 skipped</strong> 逐位持平(11.1m)；5 类变异(删 manifest 条目 / 调用点回退手写 / clampAxis 代数破坏 / 12px 匿名化 / 顶层 const 撞名)全部先红后绿。坑点：classic script 顶层 <code>let/const</code> 跨文件共享全局词法环境，多文件同名顶层常量即 SyntaxError 连带全页瘫痪——静态守阵看不见，仅真实浏览器暴露，已入 pitfalls/web-ui 并新增跨文件撞名扫描守阵。档案 tasks/26-10-22-webui-overlay-fit.md，基线切片 testing/baselines/26-10-22-0646-webui-overlay-fit.md，契约 bullet 入 modules/webui-static-contract.md</li>
     </ul>
   </section>
 

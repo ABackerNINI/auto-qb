@@ -716,27 +716,29 @@ window.CONFIG_HUB = {
       }
       const btn = ev.currentTarget;
       const b = btn.getBoundingClientRect();
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
       this.hub.help = this.hubHelpOf(item);
       this.hub.helpKey = key;
+      /* 说明浮窗贴边留白 12px: 比浮层默认 8px(overlay_fit.js::EDGE)多 4px —— 入池审计
+       * (issue 26-10-20-2231)时此处无注释、也无佐证必须不同; 按行为零变化口径显式传参
+       * 保留现值, 确要统一只改这一个常量。 */
+      const EDGE = 12, gap = 10;
       this.$nextTick(() => {
         const pop = this.$refs.hubPop;
         if (!pop) return;
         const pw = pop.offsetWidth;
         const ph = pop.offsetHeight;
-        const gap = 10;
         let left = b.right + gap;
         let place = "left";
-        if (left + pw > window.innerWidth - 12) {
+        if (FIT.probeRight(b.right, pw, gap, EDGE)) {
           left = b.left - gap - pw;
           place = "right";
-          if (left < 12) {
-            left = Math.max(12, window.innerWidth - pw - 12);
+          if (FIT.probeLeft(b.left, pw, gap, EDGE)) {
+            left = FIT.clampAxis(window.innerWidth - pw, pw, window.innerWidth, EDGE);
             place = "left";
           }
         }
-        let top = b.top - 6;
-        if (top + ph > window.innerHeight - 12) top = window.innerHeight - ph - 12;
-        if (top < 12) top = 12;
+        const top = FIT.clampAxis(b.top - 6, ph, window.innerHeight, EDGE);
         this.hub.pop = { left: left, top: top };
         this.hub.arrow = {
           place: place,

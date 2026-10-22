@@ -49,6 +49,7 @@
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: ①单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); ②**裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); ③boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); ④四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
 - test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
+- test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 """
 import json
 import os
@@ -5305,6 +5306,191 @@ def test_frontend_busy_skeleton_single_point():
         "this.hub.importing = true",
     ):
         assert gone not in hub, f"config_hub.js 又出现裸骨架散写 {gone}(应走 dialogs.js::_panelLoad 单点)"
+
+
+# 浮层视口夹取几何单点 node 电池(issue 26-10-20-2231): 四入口七型真跑 + 与旧手写式
+# (入池前的四种书写: 标准夹取 / openFilePrio 横轴书写 / hubAsk 纵轴 if 链 / 居中夹取,
+# 以及两个 Math.max 兜底)网格逐点代数等价 —— 重构改坏几何即红。无 node 静默跳过。
+_OVERLAY_FIT_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = { innerWidth: 1440, innerHeight: 900 };
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const F = window.AQB_OVERLAY_FIT;
+const checks = [];
+const ok = (n, c) => checks.push([n, !!c]);
+const eq = (n, got, want) => checks.push([n, got === want]);
+ok("EDGE 缺省 8", F.EDGE === 8);
+// clampAxis 七型
+eq("透传", F.clampAxis(100, 150, 1440), 100);
+eq("钳下缘", F.clampAxis(2, 150, 1440), 8);
+eq("钳上缘", F.clampAxis(1400, 150, 1440), 1282);
+eq("浮层宽过可用空间贴上缘", F.clampAxis(700, 1500, 1440), 8);
+eq("edge 显式传参(12px 两处用)", F.clampAxis(2, 150, 1440, 12), 12);
+// 探针: 右缘(左缘起算 gap=0 与父项右缘+缝 gap=4 两种旧书写)
+ok("probeRight 命中", F.probeRight(1400, 150, 4) === true);
+ok("probeRight 不命中", F.probeRight(100, 150, 4) === false);
+ok("probeRight gap 缺省 0", F.probeRight(1290, 150) === true);
+ok("probeLeft 命中", F.probeLeft(100, 380, 10) === true);
+ok("probeLeft 不命中", F.probeLeft(800, 380, 10) === false);
+// fitInViewport: el 实测与 w/h 估算两路同值
+const el = { offsetWidth: 214, offsetHeight: 222 };
+const p1 = F.fitInViewport(el, 1400, 900);
+eq("fit el x", p1.x, 1218); eq("fit el y", p1.y, 670);
+const p2 = F.fitInViewport(null, 1400, 900, { w: 214, h: 222 });
+eq("fit est x", p2.x, 1218); eq("fit est y", p2.y, 670);
+// 代数等价: 旧手写式网格逐点同值
+const oldA = (v, s, vp, e) => Math.max(e, Math.min(v, Math.max(e, vp - s - e)));
+const oldB = (v, s, vp, e) => Math.min(Math.max(e, v), Math.max(e, vp - s - e));
+const oldC = (v, s, vp, e) => { let t = v; if (t + s > vp - e) t = vp - s - e; if (t < e) t = e; return t; };
+const oldCenter = (v, s, vp, e) => Math.max(e, Math.min(vp - s - e, v));
+let diff = 0;
+for (const vp of [320, 640, 1024, 1440, 1920])
+  for (const s of [150, 214, 380, 500])
+    for (const v of [-20, 0, 5, 8, 12, 300, 1300, 3000])
+      for (const e of [8, 12]) {
+        const a = F.clampAxis(v, s, vp, e);
+        if (a !== oldA(v, s, vp, e) || a !== oldB(v, s, vp, e)
+            || a !== oldC(v, s, vp, e) || a !== oldCenter(v, s, vp, e)) diff++;
+        if (F.clampAxis(vp - s, s, vp, e) !== Math.max(e, vp - e - s)) diff++;  // 右缘/底部两兜底
+      }
+ok("旧手写式代数等价(网格零差)", diff === 0);
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length, failed: checks.filter((c) => !c[1]) }));
+"""
+
+
+def test_overlay_fit_single_point():
+    """浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) ——
+    ① 单点模块 shared/overlay_fit.js 在盘且四入口齐全(EDGE=8 / clampAxis / probeRight /
+       probeLeft / fitInViewport), 三份 tpl-manifest 同点登记且装载序在首个消费方
+       config_hub.js 之前(漏登记或序错 = 消费方取别名拿到 undefined, 开层即抛);
+    ② 七个消费文件全部经 FIT 别名走单点, 接线数逐文件对账(ui_feedback 7 / menu 5 /
+       config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1);
+    ③ 手写夹取式零残留(8/12 字面量夹取、PAD、margin=8、EDGE=8 等回潮即红);
+    ④ 12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位(不是默默手写字面量);
+    ⑤ 顶层 const/let 跨文件撞名零容忍(本轮实测事故: 七文件各写顶层 const FIT, 经典
+       脚本顶层 let/const 是全局词法环境, 后六个文件 SyntaxError、mixin 静默不注册、
+       整页崩且静态守阵全绿 —— 跨文件别名只许方法内取或包 IIFE);
+    ⑥ 行为面 node 电池: 四入口七型 + 与旧手写式网格代数等价(无 node 静默跳过);
+    真实浏览器几何由 e2e/menus.spec.mjs 的 CTX-fit 左右缘诸例盯。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    fit_js = open(os.path.join(shared, "overlay_fit.js"), encoding="utf-8").read()
+    files = {
+        name: open(os.path.join(shared, name), encoding="utf-8").read()
+        for name in ("ui_feedback.js", "menu.js", "config_hub.js", "hr.js", "drawer.js", "columns.js", "dialogs.js")
+    }
+    # 1. 单点在册(四入口 + EDGE 缺省 8)
+    assert "window.AQB_OVERLAY_FIT" in fit_js, "缺单点 overlay_fit.js(issue 26-10-20-2231 的收敛落点)"
+    for token in (
+        "var EDGE = 8;", "function clampAxis(", "function probeRight(", "function probeLeft(", "function fitInViewport("
+    ):
+        assert token in fit_js, f"overlay_fit.js 缺入口 {token}(改名或挪走了? 同步本守阵)"
+    # 2. 三清单同点登记 + 装载序在首个消费方 config_hub.js 之前
+    for ui in _UI_ALL:
+        scripts = _ui_manifest(ui)["scripts"]
+        assert "/shared/overlay_fit.js" in scripts, \
+            f"{ui} 清单漏挂 overlay_fit.js(消费方运行时会取到 undefined)"
+        assert scripts.index("/shared/overlay_fit.js") < scripts.index("/shared/config_hub.js"), \
+            f"{ui} 装载序错: overlay_fit.js 须排在首个消费方 config_hub.js 之前"
+    # 3. 消费面接线数对账(七个文件全部走 FIT; 少一处 = 该处回退成手写)
+    for name, text in files.items():
+        assert "window.AQB_OVERLAY_FIT" in text, f"{name} 缺 FIT 别名(几何回退手写了?)"
+    wiring = {
+        "ui_feedback.js": {
+            "FIT.EDGE": 2,
+            "FIT.clampAxis": 3,
+            "FIT.fitInViewport": 1,
+            "FIT.probeRight": 1
+        },
+        "menu.js": {
+            "FIT.EDGE": 1,
+            "FIT.clampAxis": 1,
+            "FIT.probeRight": 2,
+            "FIT.probeLeft": 1
+        },
+        "config_hub.js": {
+            "FIT.clampAxis": 2,
+            "FIT.probeRight": 1,
+            "FIT.probeLeft": 1
+        },
+        "hr.js": {
+            "FIT.EDGE": 1,
+            "FIT.clampAxis": 2
+        },
+        "drawer.js": {
+            "FIT.clampAxis": 2
+        },
+        "columns.js": {
+            "FIT.EDGE": 2,
+            "FIT.clampAxis": 1
+        },
+        "dialogs.js": {
+            "FIT.clampAxis": 1
+        },
+    }
+    for name, wants in wiring.items():
+        for token, n in wants.items():
+            got = files[name].count(token)
+            assert got == n, f"{name} 的 {token} 接线数 {got} != {n}(调用点被改写了? 同步本守阵)"
+    # 4. 手写夹取式零残留(收编动机就是这些各处手抄的边距与夹取; 词界防误伤
+    #    SPEED_PAD = 12 这类显式命名的合法常量)
+    residue = (
+        r"Math\.max\(8,",
+        r"Math\.min\(Math\.max\(8",
+        r"Math\.max\(12,",
+        r"innerWidth - 8",
+        r"innerHeight - 8",
+        r"innerWidth - 12",
+        r"innerHeight - 12",
+        r"(?<![A-Za-z_])PAD = 8",
+        r"(?<![A-Za-z_])PAD = 12",
+        r"(?<![A-Za-z_])margin = 8",
+        r"(?<![A-Za-z_])EDGE = 8",
+    )
+    for name, text in files.items():
+        for pat in residue:
+            assert not re.search(pat, text), \
+                f"{name} 又出现手写几何 /{pat}/(应收敛到 overlay_fit.js 单点)"
+    # 5. 12px 两处显式命名 + 注释在位(hubAsk / speed-pop; 行为零变化口径保留现值)
+    assert "const EDGE = 12, gap = 10;" in files["config_hub.js"], \
+        "hubAsk 的 12px 必须显式命名传参(回退成手写字面量即红)"
+    assert "const SPEED_PAD = 12;" in files["dialogs.js"], \
+        "speed-pop 的 12px 必须显式命名(SPEED_PAD)传参"
+    # 6. 顶层 const/let 跨文件撞名零容忍 —— 本轮实测事故: 收敛时七个文件各写了一个顶层
+    #    const FIT, 而经典脚本的顶层 let/const 进**全局词法环境**(跨 <script> 共享):
+    #    首个声明(config_hub.js)之后的六个文件全部 SyntaxError, window.AQB_* mixin 一个
+    #    都没注册, 整页崩, 且静态守阵全绿(只有真浏览器现形)。跨文件别名只许方法内取或
+    #    包 IIFE(参照 drawer_tpl 变体的 const T/R/H/P 全在 IIFE 内)。
+    seen = {}
+    for root, dirs, fnames in os.walk(shared):
+        dirs[:] = [d for d in dirs if d != "vendor"]
+        for fn in fnames:
+            if not fn.endswith(".js"):
+                continue
+            path = os.path.join(root, fn)
+            rel = os.path.relpath(path, shared).replace(os.sep, "/")
+            for m in re.finditer(r"(?m)^(?:const|let)\s+([A-Za-z_$][\w$]*)", open(path, encoding="utf-8").read()):
+                name = m.group(1)
+                assert name not in seen, (
+                    f"shared/{rel} 与 shared/{seen[name]} 顶层同名 const/let {name} —— "
+                    "经典脚本顶层 let/const 是全局词法环境, 撞名 = 后一个文件 SyntaxError、"
+                    "mixin 静默不注册(整页崩, 仅真浏览器现形); 跨文件别名须方法内取或包 IIFE"
+                )
+                seen[name] = rel
+    # 7. 行为面: node 电池(四入口七型 + 旧手写式代数等价)
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _OVERLAY_FIT_NODE_PROBE,
+         os.path.join(shared, "overlay_fit.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"overlay_fit node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"几何电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
 
 
 def test_drawer_variant_skeleton_single_point():

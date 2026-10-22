@@ -311,7 +311,8 @@ window.AQB_MENU = {
      * 估宽 = min-width 190 + 内边距 12 ≈ 202; 实测重判在 _subFitViewport。 */
     _subOverflowsRight(anchor) {
       if (!anchor || !anchor.getBoundingClientRect) return false;
-      return anchor.getBoundingClientRect().right + 4 + 202 > window.innerWidth - 8;
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
+      return FIT.probeRight(anchor.getBoundingClientRect().right, 202, 4);
     },
     /* 子面板展开后按实测尺寸重钳位。子面板不能搬出父项 —— 它是父项的 DOM 后代
      * (CTX-05 的 mouseleave 收起语义依赖这一点), 故钳位只做两件事:
@@ -320,22 +321,22 @@ window.AQB_MENU = {
      *    视口(顶再钳回上缘留白) —— 位移写成相对父项的 top 内联值, 不动 DOM 结构。 */
     _subFitViewport(anchor) {
       if (!anchor || !anchor.getBoundingClientRect) return;
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
       const host = this.$refs.ctxMenu;
       const el = host && host.querySelector ? host.querySelector(".ctx-sub") : null;
       if (!el) return; // 子面板已收起(v-if): 无可钳位
       const rect = anchor.getBoundingClientRect();
       if (!rect.width && !rect.height) return; // 锚点已脱离文档(整帧被换): 放弃
-      const EDGE = 8; // 视口边缘留白(与 _menuFit/_menuOverflowsRight 同口径)
+      const EDGE = FIT.EDGE; // 视口边缘留白(单点 overlay_fit.js)
       const GAP = 4;  // 与 .ctx-sub left/right 的 4px 缝同口径
-      const vw = window.innerWidth, vh = window.innerHeight;
       const w = el.offsetWidth, h = el.offsetHeight;
-      const roomRight = rect.right + GAP + w <= vw - EDGE;
-      const roomLeft = rect.left - GAP - w >= EDGE;
+      const roomRight = !FIT.probeRight(rect.right, w, GAP, EDGE);
+      const roomLeft = !FIT.probeLeft(rect.left, w, GAP, EDGE);
       if (!this.subFlip && !roomRight && roomLeft) this.subFlip = true;
       else if (this.subFlip && !roomLeft && roomRight) this.subFlip = false;
       /* 视口系理想顶 = 父项顶 - 6; 收进视口的最高顶 = vh - EDGE - h; 取小再钳回上缘,
        * 换算成相对父项的 top(CSS top 基准 = 父项顶)。不裁剪时结果恒为 -6 = CSS 默认。 */
-      const want = Math.max(EDGE, Math.min(rect.top - 6, vh - EDGE - h));
+      const want = FIT.clampAxis(rect.top - 6, h, window.innerHeight, EDGE);
       this.subTop = want - rect.top;
     },
     /* 指针落在父项或子面板上: 撤销挂起的收起(子面板上不要再算 flip —— 锚点是父项不是面板) */

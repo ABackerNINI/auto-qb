@@ -19,13 +19,14 @@ window.AQB_COLUMNS = {
      * 由 colMenuStyle 给 maxHeight+滚动), 不走 flip-x(inline left 优先级高于类, 翻转不生效)。
      * page 参数当前仅区分语义(弹层四段全量展示), 留作按视图段落定位的扩展点 */
     openColMenuAt(ev, page) {
-      const W = 300, PAD = 8;
-      const y = Math.max(PAD, ev.clientY);
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
+      const W = 300;
+      const y = Math.max(FIT.EDGE, ev.clientY);
       this.colFlip = false;
       this.colMenuAt = {
-        x: Math.max(PAD, Math.min(ev.clientX, window.innerWidth - W - PAD)),
+        x: FIT.clampAxis(ev.clientX, W, window.innerWidth),
         y,
-        mh: Math.max(160, window.innerHeight - y - PAD),
+        mh: Math.max(160, window.innerHeight - y - FIT.EDGE),
       };
       this.colMenuOpen = true;
     },

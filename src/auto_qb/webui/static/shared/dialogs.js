@@ -19,6 +19,11 @@ const HIST_GRAN_ITEMS = [
   { v: "month", label: "月" },
   { v: "year", label: "年" },
 ];
+/* 限速浮层(.speed-pop)贴边留白 12px: 比浮层默认 8px(overlay_fit.js::EDGE)多 4px ——
+ * FX-08 改就近弹出时的历史值, 无注释也无佐证必须不同; issue 26-10-20-2231 复验时按
+ * 行为零变化口径显式命名保留, 夹取走单点显式传参, 确要统一只改这一个常量。 */
+const SPEED_PAD = 12;
+
 window.AQB_DIALOGS = {
   methods: {
     /* ---------------- 统计面板(FE-2C): 全局状态(server_state, 缺失显示 —) ----------------
@@ -495,7 +500,7 @@ window.AQB_DIALOGS = {
       const el = ev && ev.currentTarget;
       const rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
       const W = 380;  // 与 .speed-pop 的 width 单点一致
-      const left = rect ? rect.left - 12 : window.innerWidth - W - 12;
+      const left = rect ? rect.left - SPEED_PAD : window.innerWidth - W - SPEED_PAD;
       this.speedAt = { left, dir: dir === "down" ? "down" : "up" };
       this.speedOpen = true;
       await this.loadSpeedMode(true);  // 开窗取当前值(强制刷新, 不吃缓存)
@@ -519,10 +524,11 @@ window.AQB_DIALOGS = {
       this.speedAlt.up = pick(a.upload_limit);
       this.speedAlt.down = pick(a.download_limit);
     },
-    /* 浮层内联定位: 只写 left(纵向由 CSS 锚定状态栏上缘), 并夹取到视口内 */
+    /* 浮层内联定位: 只写 left(纵向由 CSS 锚定状态栏上缘), 并夹取到视口内(12px 边距显式传参) */
     speedPopStyle() {
-      const W = 380, PAD = 12;
-      return { left: Math.max(PAD, Math.min(this.speedAt.left, window.innerWidth - W - PAD)) + "px" };
+      const FIT = window.AQB_OVERLAY_FIT; /* 几何单点(issue 26-10-20-2231), 方法内取别名 */
+      const W = 380;
+      return { left: FIT.clampAxis(this.speedAt.left, W, window.innerWidth, SPEED_PAD) + "px" };
     },
     /* 旧入口(居中弹窗)保留为薄包装: 无点击坐标时锚在视口右侧(第三方链接/键盘触发路径) */
     openSpeedDialog() {

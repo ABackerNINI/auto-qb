@@ -242,10 +242,13 @@ window.AQB_FEEDBACK = {
         } else resolve(choice === "extra" ? "extra" : true);
       } else resolve(input || hasChecks || hasFields ? null : false);
     },
-    /* 锚点左缘 + 弹层宽度是否超出视口(留 8px 边距); ev.currentTarget 在同步代码内有效 */
+    /* 锚点左缘 + 弹层宽度是否超出视口(边距走单点 overlay_fit.js::EDGE); ev.currentTarget 在同步代码内有效 */
     _menuOverflowsRight(anchor, menuW) {
+      /* 浮层视口夹取几何单点(issue 26-10-20-2231): 别名方法内取 —— 经典脚本顶层 const
+       * 进全局词法环境, 多文件同名即重复声明(整文件 SyntaxError, mixin 静默不注册)。 */
+      const FIT = window.AQB_OVERLAY_FIT;
       if (!anchor || !anchor.getBoundingClientRect) return false;
-      return anchor.getBoundingClientRect().left + menuW > window.innerWidth - 8;
+      return FIT.probeRight(anchor.getBoundingClientRect().left, menuW);
     },
     /* 右键菜单定位**初值**: 视口边界吸附(菜单尺寸取常量估算, 避免先渲染再测量的抖动)。
      * ⚠ 常量只是初值 —— 菜单真实高度随分支差一倍以上(批量菜单实测 393px, 此处按 222 估算),
@@ -253,9 +256,8 @@ window.AQB_FEEDBACK = {
      *   会越过下缘, 底部菜单项真实点击不可达(issue 26-10-06-1717: Playwright 报
      *   "element is outside of the viewport" 重试到超时)。 */
     _menuPos(event, w = 214, h = 222) {
-      const x = Math.min(event.clientX, Math.max(8, window.innerWidth - w - 8));
-      const y = Math.min(event.clientY, Math.max(8, window.innerHeight - h - 8));
-      return { x: Math.max(8, x), y: Math.max(8, y) };
+      const FIT = window.AQB_OVERLAY_FIT;
+      return FIT.fitInViewport(null, event.clientX, event.clientY, { w: w, h: h });
     },
     /* 开层后按**实测**尺寸把菜单盒整体收进视口(issue 26-10-06-1717 的修法主体)。
      * 只认 offsetWidth/offsetHeight —— 菜单内容随分支(单种子/批量/整集/表头/文件优先级)
@@ -263,13 +265,14 @@ window.AQB_FEEDBACK = {
      * 兜底限高 + 可滚, 保证底部项仍够得着; 限高每次开层先复位, 否则本次量到的是上次压过的高度。 */
     _menuFit(el, x, y) {
       if (!el) return { x, y };
-      const EDGE = 8;                // 视口边缘留白(与 _menuOverflowsRight 同口径)
+      const FIT = window.AQB_OVERLAY_FIT;
+      const EDGE = FIT.EDGE;           // 视口边缘留白(单点 overlay_fit.js)
       el.style.maxHeight = "";
       el.style.overflowY = "";
       const vw = window.innerWidth, vh = window.innerHeight;
       const w = el.offsetWidth, h = el.offsetHeight;
-      const nx = Math.max(EDGE, Math.min(x, Math.max(EDGE, vw - w - EDGE)));
-      let ny = Math.max(EDGE, Math.min(y, Math.max(EDGE, vh - h - EDGE)));
+      const nx = FIT.clampAxis(x, w, vw, EDGE);
+      let ny = FIT.clampAxis(y, h, vh, EDGE);
       if (h > vh - EDGE * 2) {
         /* 菜单高过视口: 顶到上缘并限高可滚(宁可滚动也要让底部项可达)。注: 此分支下
          * .ctx-sub 次级面板会随本盒一起被裁 —— 但菜单已占满视口, 子面板本也无处可展。 */
@@ -331,7 +334,8 @@ window.AQB_FEEDBACK = {
   "use strict";
   const SHOW_DELAY_MS = 350; // 与原生 tooltip 的迟滞感对齐, 掠过不闪
   const GAP = 6;             // 浮层与锚点的间距
-  const EDGE = 8;            // 视口边缘留白(同 _menuOverflowsRight 口径)
+  const FIT = window.AQB_OVERLAY_FIT; // 视口夹取几何单点(issue 26-10-20-2231)
+  const EDGE = FIT.EDGE;     // 视口边缘留白(单点口径, 不再本地手写字面量)
   let tip = null;            // 单例浮层(懒建: 登录页等无 title 场景零 DOM 成本)
   let cur = null;            // 当前悬浮的 [data-aq-tip] 元素(嵌套组取最内层)
   let curX = NaN, curY = NaN; // 最近一次鼠标命中的视口坐标(锚点被换掉时按它重解析, 见 show)
@@ -414,8 +418,8 @@ window.AQB_FEEDBACK = {
     curRect = { left: r.left, top: r.top, width: r.width, height: r.height };
     const w = t.offsetWidth, h = t.offsetHeight;
     const vw = window.innerWidth, vh = window.innerHeight;
-    // 水平: 锚点居中, 夹取到视口内(留 EDGE); 浮层宽过视口时贴左(右段裁掉, 好过整块出屏)
-    const x = Math.max(EDGE, Math.min(r.left + r.width / 2 - w / 2, Math.max(EDGE, vw - w - EDGE)));
+    // 水平: 锚点居中, 夹取到视口内(边距走单点); 浮层宽过视口时贴左(右段裁掉, 好过整块出屏)
+    const x = FIT.clampAxis(r.left + r.width / 2 - w / 2, w, vw, EDGE);
     // 垂直: 首选上方(与锚点留 GAP) -> 上方放不下转下方 -> 两侧都放不下才允许溢出视口。
     // !末尾**不再无条件夹回视口内**: 状态栏锚点在视口底缘, 一旦走"转下方"分支, 旧版夹取会把
     //   浮层拉回状态栏上, 正好盖住它自己描述的元素(用户报的"挡住元素本身")。
