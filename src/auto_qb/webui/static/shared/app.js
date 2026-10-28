@@ -874,8 +874,10 @@ function initialDrawerMerge() {
  * {downloading,checking}(后端取 downloading —— 保留) 与 {paused,seeding}(前端取 seeding —— 恢复)。
  * !2026-09-19 的 BUG-7 把前端表整体对齐到后端, 顺手把 {paused,seeding} 也翻成 paused ⇒
  * 辅种页"部分暂停部分做种"的组由绿变灰(2026-09-21 用户报"以前是对的"), 本次两表一起改回做种优先。
+ * !2026-10-29 加入 moving(第 7 档), 插在 paused 之后 / other 之前 —— 不扰动上面这段踩过坑的
+ *   相对顺序。它是"qB 在动磁盘、不传输"的临时态, 属非典型态, 与 other 相邻。
  */
-const STATE_RANK = { error: 0, downloading: 1, checking: 2, seeding: 3, paused: 4, other: 5 };
+const STATE_RANK = { error: 0, downloading: 1, checking: 2, seeding: 3, paused: 4, moving: 5, other: 6 };
 // 表里没有的 kind 排到最后(与后端 `_SHOW_STATE_RANK.get(k, 9)` 同口径)
 const STATE_RANK_LAST = 9;
 

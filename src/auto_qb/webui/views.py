@@ -111,11 +111,14 @@ SITE_ALERT_NO_CONF_TEXT = "站点未在配置中"
 # site_alert_msg 截断长度(计划 R7): 站点自定义报错文案可能几百字符, 直接塞 title 会撑爆弹窗
 SITE_ALERT_MSG_MAX = 200
 
-# 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 其它(前端按 state 着色)
+# 集节点聚合状态优先级: 错误 > 下载 > 校验 > 做种 > 暂停 > 移动 > 其它(前端按 state 着色)
 # !做种必须排在**暂停之前**: 组/集内"部分暂停部分做种中"是常态(整组只有个别站点被暂停),
 #   取 paused 会让整个做种中的行变成灰的(2026-09-21 用户报"辅种页状态色错误")。
 #   与前端 `shared/app.js::STATE_RANK` 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对。
-_SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "other": 5}
+# !moving 插在 paused 之后 other 之前, 不扰动上面这段踩过坑的相对顺序(2026-10-29 满分):
+#   两者同属"非典型态", 且 moving 是强遮蔽态(qB 源码 Moving 顺位高于 MissingFiles/Error),
+#   让它在争夺里压过常规态会把整组落成"正在搬", 与实际观感不符。
+_SHOW_STATE_RANK = {"error": 0, "downloading": 1, "checking": 2, "seeding": 3, "paused": 4, "moving": 5, "other": 6}
 # 表外 kind 的兜底秩(排最后): 与前端 `shared/app.js::STATE_RANK_LAST` 同值,
 # 逐项一致由 tests/test_webui_static_skins.py 静态守阵机械比对(issue 26-10-11-0310 补钉)。
 _SHOW_STATE_RANK_LAST = 9
@@ -175,16 +178,27 @@ def _max_valid_ts(values) -> int:
 class WebviewMixin:
     @staticmethod
     def state_kind(rec: TorrentRecord) -> str:
-        """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰
+        """状态语义分类(前端着色): 错误红/校验蓝/下载蓝/做种绿/暂停灰/移动中紫/其它
 
         注意 is_stopped 须先于 is_downloading/is_uploading 判定: 暂停的种子
         (stoppedDL/stoppedUP)同时命中下载/做种类别, 暂停态优先展示。
+
+        !MOVING/ALLOCATING 必须**显式判**, 不能靠上面的谓词: qbittorrent-api 的
+          TorrentState 里这两个成员**不属于任何谓词集合**(is_downloading/is_uploading/
+          is_complete/is_checking/is_errored/is_stopped 全都不含), 走到最后一行会被兜底
+          成 "other" ⇒ 前端显示"其他"。          这是上游设计而非缺陷, 所以补的分类只写在这里, **不得去 patch 第三方枚举**。
+          两者都归类为 moving: ALLOCATING(分配存储)当前版本 qB 已不再产出
+          (qB v5.3.0 源码全文无此符号; libtorrent allocating=6 也已被 ABI v1 标弃用),
+          仅在回连旧版 qB 时才可能出现; 它同属"qB 在动磁盘、不传输"的合成态, 合流进来
+          最坏也只是显示成"移动中"而不是"其他"。
         """
         e = rec.state_enum
         if e.is_errored:
             return "error"
         if e.is_checking:
             return "checking"
+        if e is TorrentState.MOVING or e is TorrentState.ALLOCATING:
+            return "moving"
         if e.is_stopped:
             return "paused"
         if e.is_downloading:
@@ -324,7 +338,10 @@ class WebviewMixin:
             if is_err and rec.state_enum is TorrentState.MISSING_FILES:
                 continue  # 不取数、不点健康图标(文件丢失不是站点问题)
             if not is_err and kind not in ("seeding", "downloading", "checking"):
-                # paused / other: 不扫描(暂停种子不会汇报, 报错文本无意义)。
+                # paused / moving / other: 不扫描(这些状态不会汇报, 报错文本无意义)。
+                # !moving 是靠**不在上面的集合里**才被跳过的 —— 恰好正确(qB 搬迁期间 tracker
+                #   不可达, 扫了只会误判站点异常), 但属于"撞对"而非"写死": 将来往那个元组里
+                #   加任何一项都可能连 moving 一起带进去。动这个元组时回想一下这句话。
                 # 健康态保留 —— 暂停期间没有观测证据, 不拿"没看"当成"好了"。
                 continue
             if now < self._tracker_health_due(rec, is_err):

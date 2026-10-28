@@ -62,18 +62,24 @@ function _decoFpHit(g, fp) {
  * `if (is_paused()) return;` 直接空转, 排队种子同样发不出去(本项目调研报告
  * 26-10-05-0854 §3 附注「停止种子盲区」)。
  *
- * !判定必须读 qB **原始 state 串**而不是 kind: kind 只有 6 档, queuedDL/queuedUP 被
- *   qbittorrent-api 归进 is_downloading/is_uploading ⇒ 落成 downloading/seeding, 单看 kind
- *   会把排队种子当成活跃。state 缺失(老版本/异常行)时回落到 kind 的 paused/checking/error
- *   三档兜底(与 views.py::state_kind 的非活跃三档一一对应, 宁可漏放不误拦)。 */
+ * !判定必须读 qB **原始 state 串**而不是 kind: kind 现 7 档(2026-10-29 加 moving), 而
+ *   queuedDL/queuedUP 被 qbittorrent-api 归进 is_downloading/is_uploading ⇒ 落成
+ *   downloading/seeding, 单看 kind 会把排队种子当成活跃。state 缺失(老版本/异常行)时回落到
+ *   kind 的 paused/checking/error 三档兜底(与 views.py::state_kind 的非活跃三档一一对应,
+ *   宁可漏放不误拦)。
+ *   moving 是反向的一例: 它自成第 7 档, **看 kind 判得出来**, 但它同样不在后端任何 state_enum
+ *   谓词集合里 ⇒ 后端仍必须按 state 串判(见 commands.py 同名表)。 */
 const REANNOUNCE_BLOCKED_STATES = {
   pausedDL: "种子暂停", pausedUP: "种子暂停",
   stoppedDL: "种子已停止", stoppedUP: "种子已停止",
   queuedDL: "种子排队", queuedUP: "种子排队",
   checkingDL: "种子校验", checkingUP: "种子校验", checkingResumeData: "种子校验",
   error: "种子错误", missingFiles: "丢失文件",
+  // 搬迁中: qB 处在 moving 期间所有 peer 传输都会让位给磁盘搬运(libtorrent 行为), 汇报出去
+  // 也换不回 peer; 且项目自己的搬迁模块把 moving 成员当禁区(relocate_units.py GATE_MOVING)。
+  moving: "种子搬迁中",
 };
-const REANNOUNCE_BLOCKED_KINDS = { paused: "种子暂停", checking: "种子校验", error: "种子错误" };
+const REANNOUNCE_BLOCKED_KINDS = { paused: "种子暂停", checking: "种子校验", error: "种子错误", moving: "种子搬迁中" };
 
 window.AQB_DECORATE = {
   methods: {
@@ -142,7 +148,11 @@ window.AQB_DECORATE = {
       return { value: diff ? "" : vals[0], diff };
     },
     kindText(kind) {
-      return { seeding: "做种", downloading: "下载", checking: "校验", paused: "暂停", error: "错误", other: "其他" }[kind] || kind;
+      // moving = 搬迁中(qB 原始 state "moving"); allocating 与它合流见 views.py::state_kind
+      return {
+        seeding: "做种", downloading: "下载", checking: "校验", paused: "暂停",
+        error: "错误", moving: "移动中", other: "其他",
+      }[kind] || kind;
     },
     /* 单种子状态文案: 错误状态优先显示**后端算好的具体原因**(error_reason: "文件丢失" /
      * tracker 报错原文), 其余状态回落 kindText。原因文本一律由后端给出(取数单点), 前端不得
@@ -154,10 +164,12 @@ window.AQB_DECORATE = {
       return this.kindText(m.kind);
     },
     kindIcon(kind) {
-      // 状态图标(与 sprite symbol 一一对应): 校验用 i-pulse(配合 CSS 呼吸动画, 语义=进行中)
+      // 状态图标(与 sprite symbol 一一对应): 校验用 i-pulse(配合 CSS 呼吸动画, 语义=进行中);
+      // moving 复用 i-pulse —— 同为"进行中"语义, 且不新增 symbol(三份 index.html 的 sprite
+      // 必须逐字相等, 由 tests 静态守阵机械比对)
       return {
         seeding: "#i-upload", downloading: "#i-download", checking: "#i-pulse",
-        paused: "#i-pause", error: "#i-warn", other: "#i-info",
+        paused: "#i-pause", error: "#i-warn", moving: "#i-pulse", other: "#i-info",
       }[kind] || "#i-info";
     },
     /* HR 标签分类色(与后端 WebviewMixin._hr_view_tags 对应)

@@ -5,7 +5,7 @@
 **Updated:** 2026-10-17
 **Topics:** webui-reannounce-inactive-gate
 **Summary:** 用户要求「WEBUI 非活跃状态的种子不允许强制汇报, 包括右键/详情面板, 按钮变灰不可点击, 与 qb 的行为保持一致」。口径按 qB 原样对齐(commit `aa189a7` 关闭 issue #12080: `isPaused`/`isChecking`/`isQueued` 时 `actionForceReannounce->setEnabled(false)`, tooltip 原文 "Can not force reannounce if torrent is Paused/Queued/Errored/Checking" ⇒ 暂停/停止 · 排队 · 校验中 · 错误/文件丢失 均为非活跃)。四处落点: 判定单点 `shared/decorate.js`(两张表 + 四个方法, 多目标按 qB `oneCanForceReannounce` = 任一活跃即可用); 显示层 `tpl/ctx-menus.html` 四支 + `drawer_tpl/04|05|06` 重报钮置灰(`.is-gated` + title 给原因); 行为层 `commands.js::_guardReannounce` 接在 `_actCore` 的 reannounce 前置(覆盖 组/单种/整集/批量)、`shortcuts.js::_kbAct` 早于确认框、`drawer.js::torrentCmd` 兜底 —— 四条入口一个不落。9 源文件 + 1 测试文件(静态守阵含 node 电池真跑 24 项)+ e2e `menus.spec.mjs` 块E 双皮肤(`@fast` 门禁)。机理入坑档 `pitfalls/web-ui/reannounce-inactive-gate.md`。**后续轮(20:32, 用户追问混选)**: 上一轮"照 qB 照发全选"的判断被修正 —— 复刻了 qB 的指令集合却没复刻它的观感(我们多一层 qB 没有的 per-target 确认回执, 非活跃目标会白等窗口后落假「未确认」, 把干净的成功渲染成部分失败)。用户三项拍板后新增**投递收敛**第二层: 前端单点 `decorate.js::reannouncePlan`(组目标展开为活跃成员 hash, 解析面与闸门同源)+ `_actCore` 按计划投递与跳过数文案 + 后端 `commands.py` 模块级 `REANNOUNCE_BLOCKED_STATES`/`reannounce_blocked()`/`_reannounce_active()` 与两个 `_cmd_reannounce_*` 过滤(第二道闸)。⚠ 后端判据**不得**用 `state_enum` 谓词(实测 `queuedDL` 命中 `is_downloading`, 判不出排队), 必须判 `rec.state` 原文并与前端表逐项同表(守阵钉住)。详见下方「后续轮」节。
-**Refs:** memory-bank/testing/baselines/26-10-10-2004-webui-reannounce-inactive-gate.md, memory-bank/pitfalls/web-ui/reannounce-inactive-gate.md, memory-bank/issues/26-10-17-1703-bug-webui-delete-reannounce-paused.html, memory-bank/testing/baselines/26-10-17-1816-webui-reannounce-inactive-gate.md
+**Refs:** memory-bank/testing/baselines/26-10-10-2004-webui-reannounce-inactive-gate.md, memory-bank/pitfalls/web-ui/reannounce-inactive-gate.md, memory-bank/issues/26-10-17-1703-bug-webui-delete-reannounce-paused.html, memory-bank/testing/baselines/26-10-17-1816-webui-reannounce-inactive-gate.md, memory-bank/plans/26-10-29-0308-plan-webui-torrent-moving-state-kind.html
 ## 原始请求
 
 > 用户(2026-10-10): 「WEBUI非活跃状态的种子不允许强制汇报, 包括右键/详情面板, 按钮变灰不可点击, 与qb的行为保持一致」
@@ -16,6 +16,7 @@
 - **口径三问(开工先问, 不猜)**: ①「非活跃」范围 → 用户选**与 qB 完全一致**(不是"仅暂停/停止"); ②多选/整组/整集置灰规则 → 用户选**全部目标都非活跃才置灰**(= qB `oneCanForceReannounce` 的"任一活跃即可用"); ③键盘快捷键 → 用户选**一并拦截**。
 - **qB 判据核实(不靠记忆)**: 拉 qB [commit `aa189a7`](https://github.com/qbittorrent/qBittorrent/commit/aa189a7) 原文 —— `const bool rechecking = torrent->isChecking(); const bool queued = (Session::instance()->isQueueingSystemEnabled() && torrent->isQueued()); if (!isPaused && !rechecking && !queued) oneCanForceReannounce = true;` 并 `setEnabled(oneCanForceReannounce)` + tooltip "Paused/Queued/Errored/Checking"; 关联网 [issue #12080](https://github.com/qbittorrent/qBittorrent/issues/12080)。**多目标判据是"任一可汇报即可用", 不是"全部"** —— 这条抄错会把混合组误置灰。
 - **判定字段选型(关键)**: 项目的派生字段 `kind` 只 6 档, 而 qbittorrent-api 把 `queuedDL`/`queuedUP` 归进 `is_downloading`/`is_uploading` ⇒ 其 kind 落成 `downloading`/`seeding` —— **单看 kind 判不出排队**。故判定读 qB 原始 `state` 串(成员行/SEED_ITEM/详情 `to_dict()` 都带), `state` 缺失时回落 kind 的 paused/checking/error 三档兜底。
+  > 📌 **2026-10-29 时效注记**: 此处「kind 只 6 档」是当时的真实情况; 当日起 `state_kind` 补出第 7 档 `moving`(同时收 `allocating`), 见第四轮节与 [26-10-29-0308 计划](../plans/26-10-29-0308-plan-webui-torrent-moving-state-kind.html)。**"读 state 不读 kind"这条结论本身没有变** —— moving 同时是它的反向证据: 它自成第 7 档(看 kind 判得出), 但后端 `state_enum` 谓词**依然收不到它**, 所以后端那张 blocked 表同样只能按 state 串写。
 - **入口盘点(为什么必须四处都接)**: 强制汇报的四条路径 —— ①右键菜单四支(多选/整集/单种子/单组)→ `_actCore`; ②键盘 `Shift+A` → `_kbAct` → `_actCore`; ③详情面板 tracker 页签重报钮 → `drawerCmd` → `torrentCmd`(不经 `_actCore`!); ④任何直调。只堵右键 ⇒ 键盘与面板绕得过去。故显示层负责"变灰 + 原因", 行为层在 `_actCore`(覆盖 ① ②)与 `torrentCmd`(覆盖 ③)各设一道总闸。
 - **置灰的"不可点"实现选型**: 项目既有 `is-gated` 口径(可见但不可点: 样式灰 + `cursor:default` + title 给原因 + 行为层再拦一道)。**不采用 `disabled` 属性 / `pointer-events:none`** —— 二者会让全局自绘 tooltip 的 `mouseover` 委托命中不到, "为什么变灰"的说明反而丢失(详见坑档「置灰规则的 CSS 特异性」节)。故: 菜单项恒绑 title 字符串(可用时空串, 走 ui_feedback 的「空串 title = 清除提示」通道; 绑 `|| null` 会走 removeAttribute 分支, 旧的 `data-aq-tip` 不被清), 图标色并进同一条 `is-gated` 规则(压过 `.ico-sync` 的 (0,2,0))。
 - **不越界**: 未顺手改其它动作的可用性。
@@ -67,6 +68,7 @@
 - **不越界(本轮新增的观察到的事实, 未动手)**: 规则侧 `rules/actions/transfer.py::ReannounceAction` 只跳 `is_stopped`(不跳排队/校验中/错误), 与 qB 口径不一致 —— 那是规则引擎的主动汇报路径(自带 600s 去重), 不在本轮"WEBUI 非活跃禁汇报"范围内, 未改。
 
 **后续候选(未做)**: ①规则侧 `ReannounceAction` 是否对齐 qB 口径(需先确认规则侧是否也该"静默跳过"); ②`kind` 只 6 档导致"排队"在其它状态相关门控里同样判不出 —— 若后续还有状态门控需求, 考虑把 `state` 原文进 `SEED_ITEM` 的既有字段面做统一判据单点。
+  > 📌 **2026-10-29**: 仍成立(7 档也没消除"同 kind 不同 state"), 该候选**未做**; 但同轮出现了它的**镜像形态** —— 谓词收不到 `moving`(详见第四轮节), 处置已落成。
 
 **第三轮(2026-10-17, 修 issue 26-10-17-1703)**: 删除确认框(六个入口汇入 `_deleteFlow`)是「一条'不允许'必须接全部入口」清单里唯一漏接的入口 —— 默认勾选的汇报前置对非活跃种子请求照发 → 后端 warn → 不放行 → 删除被整体中止。修法(D1–D8): 闸门层全非活跃禁用复选框(opt-pill.is-gated + aria-disabled + 标题给原因 + 模板点击短路) + 投递层 `reannouncePlan` 收敛(跳过数对话框内可见) + `_reannounceAll` 四桶分型(非活跃 warn 降级 skip 不挡删除, 推迟中/error 维持保守口径) + 竞态两处兜底; 测试三重补强(静态守阵扩段/node 电池 46 项/harness 命令泵按 state 判活跃/e2e 按 hash 断言); 坑档复发 +1; 后端零改动。数字见基线切片 26-10-17-1816。
 
@@ -100,3 +102,12 @@
 - **2026-10-17 18:19** 测试三重补强完成并全绿: 静态守阵扩段 ⑦(node 电池 24→46 项, 含删除闸门五型 + `_reannounceAll` 四种回执分型)+ harness 命令泵按 state 判活跃(非活跃回 warn, 否则 warn 路径在桩上永不可达)+ e2e 块E 两条(@fast 双皮肤 4/4, 按 hash 断言); 三轮红验(静态 JS 关键词漂移 / 模板 is-gated 摘除 / e2e 投递收敛还原)全部报红后还原; node 重放 before/after/race 三幕全转绿; `test.full` 3537 passed + 4 skipped(数字见基线切片 26-10-17-1816); issue 置 Done。
 
 - 2026-10-17 18:19 删除链接入 reannounce-inactive-gate: 闸门层(全非活跃禁用复选框)+投递层(reannouncePlan 收敛)+_reannounceAll skip 桶(D4/D6); issue 26-10-17-1703 修复置 Done; test.full 3537 passed + 4 skipped
+
+## 第四轮(2026-10-29, kind 补第 7 档 moving)
+
+由**另一份档案**驱动 —— 用户报「WEBUI 种子移动中的状态显示为了『其它』」。本档案只记与**本Topic(非活跃门控)**相交的部分, 完整脉络见 [26-10-29-0308 计划](../plans/26-10-29-0308-plan-webui-torrent-moving-state-kind.html)。
+
+- **同一个根因 的镜像形态**: 前三轮反复立的是「`kind` 太粗 ⇒ 单看 kind 会把排队当活跃 ⇒ 门控必须读 `state`」。这一轮撞的是**反向**的同一个根因: qB 的 `moving` **不属于 `TorrentState` 的任何谓词集合**(is_downloading/is_uploading/is_complete/is_checking/is_errored/is_stopped 全不含它) ⇒ `state_kind` 一路判空撞兜底落成 `other`。**一个值可以同时"kind 判得出来"却"谓词判不出来"** —— 于是 "读 state 不读谓词" 这条结论在前后端两侧各自还要立一遍: 后端即便 kind 已有第 7 档, blocked 表仍须按 `state` 串写。
+- **显示错位与门控放行是同一个根因的两面**: 补第 7 档只治了显示/筛选/统计; moving 不在 blocked 表里 ⇒ 被当活跃, 强制汇报与删除前汇报都能点。而 qB 在 moving 期间 peer 传输是真停的(libtorrent 搬数据), 汇报换不回 peer; 项目自己的搬迁模块也早把 moving 成员当禁区(`relocate_units.py::GATE_MOVING`)。**补法必须两侧同时落**, 只做一侧等于修了半边。
+- **本 Topic 受影响的落点**: `decorate.js::REANNOUNCE_BLOCKED_STATES` 与 `commands.py::REANNOUNCE_BLOCKED_STATES` 同步登记 `moving`(文案「种子搬迁中」); `REANNOUNCE_BLOCKED_KINDS` 补 kind 侧兜底。`REANNOUNCE_INACTIVE_SKIP` 回执文案**维持原样未动**(被 `test_web_commands.py:1465` 逐字断言 + 另有漂移守卫, 改一个字牵动三处) —— moving 的语义由前端 blocked 表的值表达。
+- **口径订正**: 「非活跃」自 2026-10-29 起 = 暂停/停止 · 排队 · 校验中 · 错误/文件丢失 · **搬迁中**(qB `aa189a7` 原文未列 moving, 它是按"传输确实停了"这一同一个根因 纳入的)。

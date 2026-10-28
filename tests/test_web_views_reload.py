@@ -441,11 +441,20 @@ def test_api_state_speed_totals_survives_view_scoping():
         ("downloading", "downloading"),
         ("stalledUP", "seeding"),
         ("uploading", "seeding"),
-        ("moving", "other"),
+        # moving/allocating: qbittorrent-api 的这两个成员**不属于任何谓词集合**, 此前被兜底成
+        # other ⇒ 前端显示"其他"(2026-10-29 用户报 bug)。它们在 state_kind 里显式归类为 moving。
+        ("moving", "moving"),
+        ("allocating", "moving"),  # 旧版 qB 才产出, 与 moving 合流(qB v5.3.0 源码已无此符号)
+        # unknown 必须留在 other: 它是"真的不知道", 不能跟着 moving 一起被特殊化
+        ("unknown", "other"),
     ]
 )
 def test_state_kind_maps_states(state, kind):
-    """state_kind: 状态语义分类(前端着色) —— 暂停态优先于下载/做种, errored/checking 最前"""
+    """state_kind: 状态语义分类(前端着色) —— 暂停态优先于下载/做种, errored/checking 最前
+
+    moving/allocating 单独一档: TorrentState 的这两个成员不被 is_downloading/is_uploading/
+    is_complete/is_checking/is_errored/is_stopped 任何一组收录, 不显式判就掉进 other。
+    """
     from auto_qb.core.qbmanager import QbManager
     from helpers import FakeTorrent
 

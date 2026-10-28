@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 种子状态修复:新增 moving 类并封堵遗漏状态</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-torrent-moving-state-kind">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-29-0308">
+<meta name="doc-updated" content="26-10-29-0346">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-10-webui-reannounce-inactive-gate.md, memory-bank/pitfalls/web-ui/reannounce-inactive-gate.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-torrent-moving-state-kind</div>
+<h1>WEBUI 种子状态修复:新增 moving 类并封堵遗漏状态</h1>
+<p class="lede">把 qB 的搬迁态 <code>moving</code> 从 <code>other</code> 兜底里捞出来, 升格为独立的第 7 档 kind —— 显示「移动中」、可单独筛选与统计、按「非活跃」拦截汇报类命令; 并以 qBittorrent v5.3.0 与 libtorrent 源码为基准穷举全部 19 个 state 取值, 确认除 moving 外再无第二类真性遗漏。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-29-0308 · <b>doc-updated</b> 26-10-29-0346 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户报 bug(WEBUI 移动中显示「其它」) → grilling 第一轮 Q1–Q3 用户「按推荐」 → 用户追加指令(核实是否还有其它状态遗漏) → 上游源码核实 qBittorrent v5.3.0(<code>git 8182ae071</code>, 2026-10-07) + libtorrent(<code>include/libtorrent/torrent_status.hpp</code>)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景</h3>
+<p>用户报「WEBUI 种子移动中的状态显示为了『其它』」。实为一个三层判定链的最末端表象: qB 的原始 state 串 <code>moving</code>, 落到后端分类函数时被兜底成 <code>other</code>, 再由前端文案表翻成「其他」。同一颗种子在抽屉详情里却显示「移动中」, 两处自相矛盾。</p>
+
+<h3>目标(做到什么程度算成)</h3>
+<p><code>moving</code> 在全部四个消费面上都成为一等公民:</p>
+<table>
+  <tr><th>消费面</th><th>今天</th><th>修完之后</th></tr>
+  <tr><td>显示</td><td class="bad">主表 / 组行 / 追剧集行显示「其他」</td><td class="good">显示「移动中」, 与抽屉详情口径一致</td></tr>
+  <tr><td>筛选</td><td class="bad">状态下拉里没有这一项, 筛不到</td><td class="good">下拉与分布条出现「移动中」并可点击筛选</td></tr>
+  <tr><td>聚合</td><td class="bad">被算进「其他」桶</td><td class="good">独立成桶, 组态按 §03 的 rank 位参与争夺</td></tr>
+  <tr><td>命令</td><td class="bad">被判为「活跃」, 强制汇报可点可发</td><td class="good">按非活跃拦截, 删除前汇报跳过</td></tr>
+</table>
+
+<h3>设计底线(不变量, 违反即视为改坏)</h3>
+<ol>
+  <li><b>不动第三方库的谓词。</b>只在项目自己的 <code>state_kind()</code> 里加分支, 不 patch <code>qbittorrentapi.TorrentState</code> —— 谓词集合是上游定义的,<span class="wr">「MOVING 是孤儿成员」是上游事实而非缺陷</span>, 修错层会导致依赖同步时回归。</li>
+  <li><b>前后端两张优先级表必须同步。</b><code>views.py::_SHOW_STATE_RANK</code> 与 <code>app.js::STATE_RANK</code> 由 <code>tests/test_webui_static_skins.py::_scan_state_rank</code> 机械比对, 改一边不改另一边必然染红。</li>
+  <li><b>命令闸门前后端两表必须同步。</b><code>commands.py::REANNOUNCE_BLOCKED_STATES</code> 与 <code>decorate.js::REANNOUNCE_BLOCKED_STATES</code> 由 <code>tests/test_webui_static_dom_panel.py</code> 断言集合相等, 差一项就红。</li>
+  <li><b>不新增颜色令牌、不新增 sprite symbol。</b>现有色板 <code>--blue/--paused/--green</code> 足以表达 moving; 新增令牌会撞三皮肤令牌名相等的守阵, 新增 symbol 要同步改三份 <code>index.html</code> 的内联 sprite 并检查 67 symbol 逐字相等。<span class="wr">这是把改动成本按在地板上的关键约束。</span></li>
+  <li><b>范围守恒。</b>抽屉三份 <code>STATE_TEXT</code>(<code>drawer_tpl/01/02/03</code>)与 <code>kindText</code> 的四份重复文案属既有技术债, <span class="wr">不在本计划内重构</span>, 按 <code>create-issue</code> 流程入池。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>根因链</h3>
+<pre><code>qB WebUI 返回 state = "moving"
+        ↓  TorrentState("moving") == TorrentState.MOVING
+六个谓词集合全部不含 MOVING  ← upstream 事实
+        ↓
+WebviewMixin.state_kind()  (views.py:177)  一路判空 → return "other"
+        ↓
+decorate.js:145  kindText → "其他"
+        ↓
+主表状态列 / 组行 / 分布条: 「其他」   ← 用户看到的 bug</code></pre>
+<p>而抽屉详情走的是另一条路:<code>drawer_tpl/01-general-hero-tall.js:31</code> 等三处的 <code>STATE_TEXT</code> 直接按 qB 原始 state 取文案, 早已写着 <code>moving: "移动中"</code>。两条从不交叉。<b>这就是同一颗种子自相矛盾的来源。</b></p>
+
+<h3>证据: qB v5.3.0 的 19 个 state 全映射(逐一核实)</h3>
+<p>基准:<code>Else/qBittorrent/src/base/bittorrent/torrent.h:82-110</code>(枚举 19 成员)与 <code>Else/qBittorrent/src/webui/api/serialize/serialize_torrent.cpp:44-87</code>(WebUI 序列化唯一出参点)。逐个过 <code>state_kind()</code> 后的归类:</p>
+<table>
+  <tr><th>qB state 串</th><th>qB 枚举成员</th><th>产生条件</th><th>归类 kind</th><th>判定</th></tr>
+  <tr><td><code>checkingResumeData</code></td><td>CheckingResumeData</td><td>libtorrent <code>checking_resume_data</code></td><td>checking</td><td class="good">✓</td></tr>
+  <tr><td><code>moving</code></td><td>Moving</td><td><code>isMoveInProgress()</code></td><td><b>other</b></td><td class="bad">✗ BUG</td></tr>
+  <tr><td><code>missingFiles</code></td><td>MissingFiles</td><td><code>hasMissingFiles()</code></td><td>error</td><td class="good">✓</td></tr>
+  <tr><td><code>error</code></td><td>Error</td><td><code>hasError()</code></td><td>error</td><td class="good">✓</td></tr>
+  <tr><td><code>stoppedDL</code></td><td>StoppedDownloading</td><td>未完成 + isStopped</td><td>paused</td><td class="good">✓</td></tr>
+  <tr><td><code>queuedDL</code></td><td>QueuedDownloading</td><td>未完成 + isQueued</td><td>downloading</td><td class="good">✓ 6 档口径</td></tr>
+  <tr><td><code>forcedMetaDL</code></td><td>ForcedDownloadingMetadata</td><td>无元数据 + isForced</td><td>downloading</td><td class="good">✓</td></tr>
+  <tr><td><code>metaDL</code></td><td>DownloadingMetadata</td><td>无元数据</td><td>downloading</td><td class="good">✓</td></tr>
+  <tr><td><code>forcedDL</code></td><td>ForcedDownloading</td><td>未完成 + isForced</td><td>downloading</td><td class="good">✓</td></tr>
+  <tr><td><code>downloading</code></td><td>Downloading</td><td>下载速率 &gt; 0</td><td>downloading</td><td class="good">✓</td></tr>
+  <tr><td><code>stalledDL</code></td><td>StalledDownloading</td><td>未完成 + 无速率</td><td>downloading</td><td class="good">✓</td></tr>
+  <tr><td><code>checkingDL</code></td><td>CheckingDownloading</td><td>checking_files + 未完成</td><td>checking</td><td class="good">✓</td></tr>
+  <tr><td><code>stoppedUP</code></td><td>StoppedUploading</td><td>已完成 + isStopped</td><td>paused</td><td class="good">✓</td></tr>
+  <tr><td><code>queuedUP</code></td><td>QueuedUploading</td><td>已完成 + isQueued</td><td>seeding</td><td class="good">✓</td></tr>
+  <tr><td><code>forcedUP</code></td><td>ForcedUploading</td><td>已完成 + isForced</td><td>seeding</td><td class="good">✓</td></tr>
+  <tr><td><code>uploading</code></td><td>Uploading</td><td>上传速率 &gt; 0</td><td>seeding</td><td class="good">✓</td></tr>
+  <tr><td><code>stalledUP</code></td><td>StalledUploading</td><td>已完成 + 无速率</td><td>seeding</td><td class="good">✓</td></tr>
+  <tr><td><code>checkingUP</code></td><td>CheckingUploading</td><td>checking_files + 已完成</td><td>checking</td><td class="good">✓</td></tr>
+  <tr><td><code>unknown</code></td><td>Unknown = -1(default)</td><td>枚举兜底</td><td>other</td><td class="good">✓ 语义正确</td></tr>
+</table>
+<p><b>结论: 当前目标的 qB 版本里, <code>moving</code> 是唯一一个「会出现、却归错类」的状态。</b></p>
+
+<h3>第三方库里多出来的三项: 历史遗产</h3>
+<p><code>qbittorrent-api</code> 的 <code>TorrentState</code> 枚举有 22 个成员, 比上游多了三项。逐一定性:</p>
+<table>
+  <tr><th>多出项</th><th>上游现状</th><th>归类</th><th>风险</th></tr>
+  <tr><td><code>allocating</code></td><td>qB v5.3.0 源码全文无此符号; libtorrent 里 <code>allocating = 6</code> 被 <code>#if TORRENT_ABI_VERSION == 1</code> 包住并标 <code>TORRENT_DEPRECATED_ENUM</code></td><td><b>other</b>(同为孤儿成员)</td><td class="wr">⚠ 老版 qB 才出现, 一旦出现即复刻同一个 bug</td></tr>
+  <tr><td><code>pausedDL</code> / <code>pausedUP</code></td><td>旧名, 已被重命名成 <code>stoppedDL</code> / <code>stoppedUP</code>, 库中保留作兼容</td><td>paused</td><td class="good">无害(命中 is_stopped)</td></tr>
+</table>
+<div class="aside">
+  <b>顺带钉住两条源码事实</b>(后面用到):<br>
+  ① <b>moving 是强遮蔽态。</b><code>torrentimpl.cpp:1289-1347</code> 的 <code>updateState()</code> 里, <code>Moving</code> 的判定顺位仅次于 <code>checking_resume_data</code>, <b>高于 <code>MissingFiles</code> 与 <code>Error</code></b> —— 也就是说搬迁期间文件丢失或报错, qB 给出的 state 仍是 <code>moving</code>。这就是 moving 必须独立成档的第二个理由: 混进 other 会让搬迁期的任何异常都不可见。<br>
+  ② <b>moving 期间传输是真的停的。</b>libtorrent 搬数据时所有 peer 传输都会让位, 这也是 §03 把 moving 判为「非活跃」的上游依据, 与项目自身 <code>relocate_units.py:464</code> 的 <code>GATE_MOVING</code>(对 moving 成员再下发命令即阻塞)同源同判。
+</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>主线</h3>
+<ol>
+  <li><b>后端分类</b>:<code>state_kind()</code> 在 <code>is_stopped</code> 之前插入 MOVING 分支, 返回新 kind <code>"moving"</code>。插入位置须在 <code>is_stopped</code> 之前 —— moving 不命中任何谓词, 放哪都行, 但放此处与「先判特殊态」的现有读法一致。</li>
+  <li><b>前端枚举/文案/分布</b>: <code>app.js</code> 的 <code>STATE_RANK</code>、<code>decorate.js</code> 的 <code>kindText</code>/<code>kindIcon</code>、<code>dialogs.js</code> 的 <code>distSegments</code> order, 三张硬编码表各加一项(详见下表)。</li>
+  <li><b>三皮肤着色</b>: 复用现有色令牌, 新增 <code>.k-moving</code> / <code>.s-moving</code> 两套选择子。</li>
+  <li><b>命令闸门</b>: moving 按「非活跃」处理, 前后端两表同步加项。</li>
+  <li><b>测试补位</b>: 既有 parametrize 的期望值从 <code>("moving","other")</code> 翻成 <code>("moving","moving")</code>。</li>
+</ol>
+
+<h3>落点清单(一次性改全, 避免二次回归)</h3>
+<table>
+  <tr><th>层</th><th>文件</th><th>位置</th><th>动作</th></tr>
+  <tr><td>后端分类</td><td><code>src/auto_qb/webui/views.py</code></td><td><code>state_kind()</code> L177</td><td>插入 MOVING 分支</td></tr>
+  <tr><td>后端 rank</td><td><code>src/auto_qb/webui/views.py</code></td><td><code>_SHOW_STATE_RANK</code> L118</td><td>加 <code>moving</code>(位次见 P2)</td></tr>
+  <tr><td>前端 rank</td><td><code>static/shared/app.js</code></td><td><code>STATE_RANK</code> L878</td><td>与上一条同 value</td></tr>
+  <tr><td>前端文案</td><td><code>static/shared/decorate.js</code></td><td><code>kindText</code> L145</td><td><code>moving: "移动中"</code></td></tr>
+  <tr><td>前端图标</td><td><code>static/shared/decorate.js</code></td><td><code>kindIcon</code> L156</td><td>复用现有 symbol(推荐 <code>#i-pulse</code>)</td></tr>
+  <tr><td>分布/筛选</td><td><code>static/shared/dialogs.js</code></td><td><code>distSegments</code> order L663</td><td>数组加 <code>"moving"</code>(下拉由此渲染)</td></tr>
+  <tr><td>闸门(后)</td><td><code>src/auto_qb/webui/commands.py</code></td><td><code>REANNOUNCE_BLOCKED_STATES</code> L72</td><td>加 <code>"moving"</code></td></tr>
+  <tr><td>闸门(前)</td><td><code>static/shared/decorate.js</code></td><td><code>REANNOUNCE_BLOCKED_STATES</code> L69 / <code>REANNOUNCE_BLOCKED_KINDS</code></td><td>两个集合都加 moving</td></tr>
+  <tr><td>CSS ×3</td><td>console / atlas / prism 的 <code>components.css</code>(prism 还含 <code>views.css</code>)</td><td><code>.k-*</code> 与 <code>.s-*</code> 族</td><td>新增 moving 档, 用现有令牌</td></tr>
+  <tr><td>测试</td><td><code>tests/test_web_views_reload.py</code></td><td><code>test_state_kind_maps_states</code> L433-452</td><td>期望值改为 <code>("moving","moving")</code></td></tr>
+  <tr><td>测试</td><td><code>tests/test_webui_static_dom_panel.py</code></td><td>reannounce 闸门 L2450-2556</td><td>补 moving 用例, 保前后代表相等</td></tr>
+</table>
+
+<h3>显式确定: tracker 健康扫描那条</h3>
+<p><code>views.py:326</code> 的 <code>kind not in ("seeding","downloading","checking")</code> 决定「只有跑着的种子才去问 tracker 健康」。moving 拆分后仍落在集合外 → <span class="good">行为恰好正确(跳过扫描)</span>。但这是<b>靠集合外兜底撞对的</b>:将来只要在那个元组里加一项就可能连 moving 一起改坏。本计划要求<b>就地加一行注释钉住这个语义</b>, 不改动逻辑本身。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S1</b><br>最小可见修复</td><td>后端 <code>state_kind</code> + 前后端两张 rank 表 + <code>kindText</code>/<code>kindIcon</code>/<code>distSegments</code> order</td><td>动手造一颗 state=moving 的种子, 主表状态列显示「移动中」; 状态下拉出现该项且能筛; 分布条把它单独统计。<code>_scan_state_rank</code> 绿</td></tr>
+  <tr><td><b>S2</b><br>命令闸门</td><td><code>commands.py</code> 与 <code>decorate.js</code> 的 blocked 集合同步加 moving</td><td>moving 种子的「强制重新汇报」禁用; 混选删除时 moving 计入「非活跃将跳过」。<code>test_webui_static_dom_panel.py</code> 前后代表相等断言绿</td></tr>
+  <tr><td><b>S3</b><br>三皮肤着色</td><td>console/atlas/prism 各补 <code>.k-moving</code> / <code>.s-moving</code>, 复用现有令牌</td><td>三皮肤下 moving 行与 chip 有可读配色; <code>test_frontend_skin_css_token_parity</code> 绿(未新增令牌)</td></tr>
+  <tr><td><b>S4</b><br>测试与全量</td><td>改既有 parametrize 期望值 + 补闸门用例; 跑 <code>commands run test.full</code></td><td>全量绿;<b>新基线按 testing/baseline.md 口径落一张切片</b>(不在任何二手文档里手抄数字)</td></tr>
+</table>
+<p>S1 与 S2 强耦合(都碰 <code>decorate.js</code>), 建议同批提交; S3 可独立提交; S4 收尾。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+
+<h3>P1 · <code>allocating</code> 怎么处置</h3>
+<p><span class="tag">已拍板 2026-10-29</span> 已采纳 <b>A</b>: 并入 moving 同档 —— <code>state_kind</code> 的一条分支同时收 MOVING 与 ALLOCATING。</p>
+<p>它是第二个孤儿成员, 但<b>当前目标版本(qB v5.3.0)根本不产出它</b>。风险窗口取决于生产环境实际跑的 qB 版本。</p>
+<ul>
+  <li><b>A(推荐) 并入 moving 同档。</b><code>ALLOCATING</code> 与 <code>MOVING</code> 同为「qB 在动磁盘、不传输」的合成非活动态, 且当前版本出现概率≈0。成本近乎为零(与 S1 同一行分支), 即使误合并, 用户看到的也是「移动中」而非「其他」。</li>
+  <li><b>B 单独第 8 档。</b>文案「分配中」, 语义最准, 但 CSS 与四张表的改动量翻倍。</li>
+  <li><b>C 本次不动, 入池跟踪。</b>严格守住 Q1 批准的范围不放。前提是能确认生产环境连的 qB 不会产出 <code>allocating</code>; 确认不了则回落到方案 A。</li>
+</ul>
+
+<h3>P2 · moving 在 rank 表里的位次</h3>
+<p><span class="tag">已拍板 2026-10-29</span> 已采纳 <b>A</b>: <code>moving: 5</code>, 原 <code>other: 5</code> 顺延 6(不扰动已验证顺序)。前后端两张表同步。</p>
+<p>决定「一组里既有常规状态又有 moving 成员时, 组行显示哪个」。现有顺序是踩过两次坑调出来的(<code>app.js:871-876</code> 注释留着事故史)。</p>
+<ul>
+  <li><b>A(推荐) 排 <code>paused</code> 之后、<code>other</code> 之前。</b>即 <code>moving: 5</code>, 原 <code>other: 5</code> 顺延为 6。理由: 不扰动任何已验证的相对顺序, moving 与 other 相邻、语义同属「非典型态」。</li>
+  <li><b>B 紧邻 error(<code>moving: 1</code>), 其余顺延。</b>理由: moving 是「别插手」的临时锁定态, 应当高于常规活动态; 且本系统搬迁是整组行为(<code>relocate_mod</code> 按组下发), 组态如实显示「正在搬」更贴近真实。<span class="wr">代价: 重排五个已验证的位次。</span></li>
+</ul>
+
+<h3>P3 · 「其他」要不要改成「未知」</h3>
+<p><span class="tag">已拍板 2026-10-29</span> 已采纳 <b>A</b>: 本次不改。<code>other</code> 先收敛回 <code>unknown</code> 单一来源; 改文案会溢出到 <code>drawer.html:34</code> 与 <code>drawer_head.js:18</code> 的 <code>tone="other"</code> 两处, 另开一轮查清再动。</p>
+<p>拆分 moving 之后, <code>other</code> 理论上只剩 <code>unknown</code> 一个来源, 「未知」更诚实。<span class="wr">但有一个已知陷阱</span>: 流量抽屉把 <code>tone="other"</code> 硬写在 <code>tpl/drawer.html:34</code>, <code>drawer_head.js:18</code> 的 tone <code>default</code> 值也是 <code>"other"</code> —— 改文案会溢出到那两处。</p>
+<ul>
+  <li><b>A(推荐) 本次不改。</b>先把 moving 分出去, 让 other 收敛回单一来源; 若收尾时仍看到「其他」字样, 单开一轮查清 <code>tone</code> 消费面再改。</li>
+  <li><b>B 本次一并改为「未知」, 同时排查两处 tone 消费。</b></li>
+</ul>
+
+<h3>P4 · 是否给 moving 加 e2e 断言</h3>
+<p><span class="tag">已拍板 2026-10-29</span> 已采纳 <b>A</b>: 加 —— <code>e2e/state-moving.spec.mjs</code>(prism + atlas 双皮肤绿)。</p>
+<ul>
+  <li><b>A(推荐) 加。</b>在 <code>e2e/</code> 补一条「state=moving 的种子主表显示移动中」的用例, 钉住本次行为的回归面。</li>
+  <li><b>B 不加。</b>只靠 pytest 守 classify。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>议题</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>Q1 是否把 moving 升格为第 7 个 kind</td><td class="good">采用甲方案 —— 升格为独立 kind, 显示/筛选/聚合/命令四处消费面全部补齐</td><td>2026-10-29</td></tr>
+  <tr><td>D2</td><td>Q2 moving 是否算「非活跃」</td><td class="good">算 —— 纳入前后端两份 <code>REANNOUNCE_BLOCKED_STATES</code>, 强制汇报与删除前汇报均拦截</td><td>2026-10-29</td></tr>
+  <tr><td>D3</td><td>Q3 本轮边界</td><td class="good">先出计划文档, 不动代码; 待拍板项结算后再执行</td><td>2026-10-29</td></tr>
+  <tr><td>P1</td><td>allocating 处置</td><td class="good">A —— 并入 moving 同档</td><td>2026-10-29</td></tr>
+  <tr><td>P2</td><td>moving 的 rank 位次</td><td class="good">A —— paused 之后 / other 之前(moving 5, other 6)</td><td>2026-10-29</td></tr>
+  <tr><td>P3</td><td>「其他」文案</td><td class="good">A —— 本次不改</td><td>2026-10-29</td></tr>
+  <tr><td>P4</td><td>e2e 断言</td><td class="good">A —— 加 e2e/state-moving.spec.mjs</td><td>2026-10-29</td></tr>
+  <tr><td>D4</td><td>是否还有其它状态遗漏</td><td class="good">以 qB v5.3.0 + libtorrent 源码穷举 19 值(见 §02): <b>moving 之外无第二类真性遗漏</b>; 仅 <code>allocating</code> 为同类风险但当前版本不产出(见 P1)</td><td>2026-10-29</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td class="wr">R1 两张 rank 表不同步</td><td>只改了 <code>app.js</code> 或只改了 <code>views.py</code></td><td><code>_scan_state_rank</code> 会红并报出差异项。对策: S1 一次改两处, 改完单独跑该守卫再往下走</td></tr>
+  <tr><td class="wr">R2 新增颜色令牌</td><td>给 moving 调了专属色</td><td><code>test_frontend_skin_css_token_parity</code> 要求三皮肤令牌名集相等。对策: 只用 <code>--blue</code>/<code>--paused</code> 等现有令牌</td></tr>
+  <tr><td class="wr">R3 新增 sprite symbol</td><td>给 moving 画了专属图标</td><td><code>test_frontend_shell_sprite_login_parity</code> 钉三份 sprite 的 67 symbol 逐字相等。对策: <code>kindIcon</code> 复用 <code>#i-pulse</code></td></tr>
+  <tr><td class="wr">R4 moving 遮蔽错误信息</td><td>搬迁期间文件丢失 / 报错</td><td>上游源码行为(<code>torrentimpl.cpp:1295</code> Moving 顺位高于 MissingFiles/Error), 不可绕过。对策: 接受该语义; 搬迁失败另有兜底 —— <code>relocate_units.py:816</code> 的 <code>STALL_FAILED</code> 停滞判据不依赖 <code>state_kind</code></td></tr>
+  <tr><td class="wr">R5 老版 qB 回连复刻同类 bug</td><td>连到产出 <code>allocating</code> 的旧 qB</td><td>由 P1 决定封装范围; 若选 C, 则入池跟踪</td></tr>
+  <tr><td class="bad">R6 CSS 行数守阵(实施期实踩)</td><td>按计划给三皮肤<b>新增规则行</b>补 moving 档时触发: <code>atlas components.css</code> 700→712、<code>prism views.css</code> 818→828, 撞 <code>test_frontend_template_split_wiring</code> 的「单 CSS 体量上限, 存量冻结只许减不许增」</td><td>改<b>合并式</b>写法: moving 的选择器并进既有 blue 族规则(同行追加选择器), 四份 CSS 行数零增长。此后此 project 的三皮肤加档一律先想「能不能合并进同行」, 不许先增行再回头看守阵</td></tr>
+  <tr><td class="wr">R7 回执文案牵动三处断言</td><td>试图把 <code>REANNOUNCE_INACTIVE_SKIP</code> 补上「搬迁中」字样</td><td>已<b>回退文案</b>(保持原文案)。该串被 <code>tests/test_web_commands.py:1465</code> 逐字断言, <code>test_webui_static_dom_panel.py:2597</code> 还有漂移守卫; moving 的语义改由前端 <code>REANNOUNCE_BLOCKED_STATES</code> 的值「种子搬迁中」表达</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-29-0308</span> 初版。来源: 用户报 bug + grilling 第一轮 Q1–Q3(用户「按推荐」) + 用户追加指令(核实状态遗漏)。要点: ① 根因链定为「MOVING 是谓词孤儿 → 兜底 other」三层; ② 以 qB v5.3.0(<code>git 8182ae071</code>)与 libtorrent <code>torrent_status.hpp</code> 为基准穷举 19 个 state 并逐一归类, 确认唯一真性遗漏为 <code>moving</code>; ③ 识别出 <code>allocating</code> 为同类(第二孤儿)遗留项、<code>pausedDL/pausedUP</code> 为无害改名; ④ 四条設計底線含「不动第三方谓词」「不新增色令牌与 sprite symbol」; ⑤ 五处待拍板 P1–P4(含 P2 位次两方案)。</li>
+  <li><span class="tag">R1 · 26-10-29-0346</span> S1-S4 实施完成: moving 升第 7 档 kind(后端分类+前后端 rank 表+kindText/kindIcon/distSegments+allocating 合流), moving 入前后端汇报闸门(reannounce 回执文案保持原位未动), 三皮肤合并式加档零增行, 测试与 e2e/state-moving.spec.mjs 补齐; test.full 4000 passed + 10 skipped</li>
+</ul>
+
+</div>
+</body>
+</html>

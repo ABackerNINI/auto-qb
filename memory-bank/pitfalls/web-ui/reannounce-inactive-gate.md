@@ -1,15 +1,17 @@
 # 非活跃种子禁强制汇报(qB 口径)
 
-> 摘要: 「非活跃种子不允许强制汇报」这条 qB 对齐规则, 三处最容易做错 —— ①**判定读 `kind` 而不读 qB 原始 `state`**: `kind` 只 6 档(error/checking/paused/downloading/seeding/other), 而 qbittorrent-api 把 `queuedDL`/`queuedUP` 归进 is_downloading/is_uploading ⇒ 其 kind 落成 downloading/seeding, 单看 kind 会把**排队**种子当活跃放行(而 qB 自己正是拿 `isQueued` 置灰的); ②**只接一个入口**: 强制汇报有四条入口(右键菜单四支 / 键盘 Shift+A / 详情面板 tracker 重报钮 / 程序化 `torrentCmd`), 只改右键 = 键盘与详情面板绕得过去, "不允许"就不成立; ③**置灰样式压不住 base**: 菜单项图标另有 `.ico-sync`(0,2,0), 变体动作钮 hover 是 (0,3,0), 05 失败区更有 (0,4,0) —— 不显式抬特异性就会出现"文字灰、图标仍蓝"或"置灰了还能 hover 亮起"的半灰态。
-> 触发: 强制汇报, reannounce, 非活跃, 暂停种子, 排队种子, queuedDL, stoppedUP, checkingResumeData, is-gated, 置灰, 按钮变灰, 右键置灰, qB 口径, aa189a7, issue 12080, kind 判不出排队, state 原文, isPaused isChecking isQueued
+> 摘要: 「非活跃种子不允许强制汇报」这条 qB 对齐规则, 三处最容易做错 —— ①**判定读 `kind` 而不读 qB 原始 `state`**: `kind` 现 7 档(error/checking/paused/downloading/seeding/**moving**/other; moving 于 2026-10-29 补), 而 qbittorrent-api 把 `queuedDL`/`queuedUP` 归进 is_downloading/is_uploading ⇒ 其 kind 落成 downloading/seeding, 单看 kind 会把**排队**种子当活跃放行(而 qB 自己正是拿 `isQueued` 置灰的); **同一个坑的反向版本**: 补了 moving 档之后它虽然"看 kind 判得出来", 但后端 `state_enum` 的谓词**依然不包含它**, 所以后端那张表照样得按 `state` 串写 —— 前后端判据必须同表, 只改一边必立刻报红; ②**只接一个入口**: 强制汇报有四条入口(右键菜单四支 / 键盘 Shift+A / 详情面板 tracker 重报钮 / 程序化 `torrentCmd`), 只改右键 = 键盘与详情面板绕得过去, "不允许"就不成立; ③**置灰样式压不住 base**: 菜单项图标另有 `.ico-sync`(0,2,0), 变体动作钮 hover 是 (0,3,0), 05 失败区更有 (0,4,0) —— 不显式抬特异性就会出现"文字灰、图标仍蓝"或"置灰了还能 hover 亮起"的半灰态。
+> 触发: 强制汇报, reannounce, 非活跃, 暂停种子, 排队种子, 搬迁中, moving, queuedDL, stoppedUP, checkingResumeData, is-gated, 置灰, 按钮变灰, 右键置灰, qB 口径, aa189a7, issue 12080, kind 判不出排队, state 原文, isPaused isChecking isQueued
+> 更新: 2026-10-29 —— moving 进同张表并升第 7 档 kind(处境: [26-10-29-0308-plan-webui-torrent-moving-state-kind.html](../../plans/26-10-29-0308-plan-webui-torrent-moving-state-kind.html))
 
-**Refs:** memory-bank/tasks/26-10-10-webui-reannounce-inactive-gate.md
+**Refs:** memory-bank/tasks/26-10-10-webui-reannounce-inactive-gate.md, memory-bank/plans/26-10-29-0308-plan-webui-torrent-moving-state-kind.html
 
 ## 判定必须读 qB 原始 `state` 串, 不能只读 `kind`
 
 - **触发**: 给"与种子状态相关"的动作做可用性门控(强制汇报是第一例, 同类还有跳检/校验/移动)。
-- **判别**: 需要区分**同 kind 不同 state** 的场合 —— `/api/state` 各行与详情 `to_dict()` 都带 qB 原文 `state`(`queuedDL` / `stoppedUP` / `checkingResumeData` / `missingFiles` …), 而项目派生字段 `kind` 只 6 档: `queuedDL` 与 `downloading` 同为 `downloading`(`queuedUP` 与 `uploading` 同为 `seeding`)。
-- **处置**: 门控读 `state`, 只在 `state` 缺失(老版本/异常行)时**回落** `kind` 的 paused/checking/error 三档兜底。判据单点 = `shared/decorate.js::REANNOUNCE_BLOCKED_STATES`(qB 口径逐项: paused*/stopped*/queued*/checking*/error/missingFiles) + `REANNOUNCE_BLOCKED_KINDS`。
+- **判别**: 需要区分**同 kind 不同 state** 的场合 —— `/api/state` 各行与详情 `to_dict()` 都带 qB 原文 `state`(`queuedDL` / `stoppedUP` / `checkingResumeData` / `missingFiles` / `moving` …), 而项目派生字段 `kind` 现 **7 档**: `queuedDL` 与 `downloading` 同为 `downloading`(`queuedUP` 与 `uploading` 同为 `seeding`)。
+- **⚠ 2026-10-29 新增的反向坑(同类第四例)**: 反过来也存在**"谓词收不到、kind 却收得到"**的状态 —— qB 的 `moving`(搬迁存储位置中)不属于 `TorrentState` 的**任何**谓词集合(is_downloading/is_uploading/is_complete/is_checking/is_errored/is_stopped 全不含它), 于是 `state_kind` 一路判空撞兜底 ⇒ 落成 `other`, 界面显示「其他」。这类"孤儿成员"的双重后果是: **显示层错位**(2026-10-29 用户报"移动中显示成了其它")且**门控层放行**(不在 blocked 表里 = 被当活跃, 强制汇报/删除前汇报都能点 —— 而 qB 在 moving 期间 peer 传输是真停的, 汇报换不回 peer)。**补法必须两边同时落**: `state_kind` 里单独成档(显示/筛选/统计)+ 前后端两张 blocked 表同步登记(门控); 只做成档不做门控 = 修了显示、漏放行。(第三方库同族孤儿还有 `allocating`, 已与 moving 同档合并 —— qB v5.3.0 不再产出, 老版回连才会复刻。完整穷举见上述计划文档 §03 全映射表)
+- **处置**: 门控读 `state`, 只在 `state` 缺失(老版本/异常行)时**回落** `kind` 的 paused/checking/error 三档兜底(2026-10-29 起 moving 亦然 —— 走 state 主路径, kind 兜底不扩那一档以免本末倒置)。判据单点 = `shared/decorate.js::REANNOUNCE_BLOCKED_STATES`(qB 口径逐项: paused*/stopped*/queued*/checking*/error/missingFiles/**moving**) + `REANNOUNCE_BLOCKED_KINDS`; 后端同名表在 `commands.py`, 与前端逐项同表由守阵钉住。
 - **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_reannounce_inactive_gate_wiring` —— 含 node 电池真跑(关键一条: `state=queuedDL` 且 `kind=downloading` 仍须判非活跃)。
 
 ## 一条"不允许"必须接**全部**入口, 少接即形同虚设

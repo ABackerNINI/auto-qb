@@ -162,7 +162,7 @@
 
 /* 状态语义配色(分布条/chip/明细圆点共用, 与后端 kind 一一对应) */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
-.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch { color: var(--blue); }
+.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch, .k-moving, .k-moving .swatch { color: var(--blue); }
 /* FX-06(D8-B): 暂停/其它保持无色相, 但字色从 --fg-dim 抬到中性中间调(--paused) ——
  * 旧写法用 dim 灰, 叠加白色高光底就读作"白底看不到字"。 */
 .k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }

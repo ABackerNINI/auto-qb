@@ -68,7 +68,11 @@ RC_UNCONFIRMED_PREFIX = "未确认: "
 #
 # !必须判 **qB 原始 state 串**, 不能用 state_enum 的谓词: 实测 queuedDL/queuedUP 命中
 #   is_downloading/is_uploading(只有 paused*/stopped* 是 is_stopped、error/missingFiles 是
-#   is_errored), 用谓词会把排队/校验中当活跃放过去 —— 与前端"kind 只 6 档"是同一个坑。
+#   is_errored), 用谓词会把排队/校验中当活跃放过去 —— 与前端"单看 kind 判不出排队"是同一个坑。
+# !反向的坑: `moving` **不属于任何谓词集合**(它不在 is_stopped/is_checking/is_errored/
+#   is_downloading/is_uploading 任一族里 —— state_kind 是靠一条独立分支收它的, 2026-10-29
+#   起为第 7 档), 谓词判定同样会把它当活跃放行。故它既要在 state_kind 里单独成档(显示与筛选),
+#   也必须出现在下面这张表里(门控), 两处缺一即复刻 2026-10-29 那个"移动中显示成其它"的 bug。
 REANNOUNCE_BLOCKED_STATES = frozenset(
     {
         "pausedDL",
@@ -82,9 +86,15 @@ REANNOUNCE_BLOCKED_STATES = frozenset(
         "checkingResumeData",
         "error",
         "missingFiles",
+        # 搬迁中: qB 处在 moving 期间所有 peer 传输都会让位给磁盘搬运(libtorrent 行为), 汇报
+        # 换不回 peer; 且项目自己的搬迁模块把 moving 成员当禁区(relocate_units.py GATE_MOVING,
+        # 排队下发会互相覆盖)。!注意 moving 不命中 TorrentState 的任何谓词, 只能按原始串判。
+        "moving",
     }
 )
 # 非活跃目标的回执文案(第二道闸命中时用; 前端正常路径已被 reannouncePlan 收敛, 不会到这里)
+# !此串被 tests/test_web_commands.py 与 test_webui_static_dom_panel.py 逐字断言(后者还有
+#   "前后端文案漂移"守卫), 改一个字就要连带改三处 —— 本次 moving 入闸不在此列, 保持原样。
 REANNOUNCE_INACTIVE_SKIP = "种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报"
 
 

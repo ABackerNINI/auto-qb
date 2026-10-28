@@ -293,7 +293,7 @@
 .g-status { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto;
   border-radius: var(--radius-sm); background: var(--surface-2); }
 .g-status.k-seeding { background: var(--green-soft); }
-.g-status.k-downloading, .g-status.k-checking { background: var(--blue-soft); }
+.g-status.k-downloading, .g-status.k-checking, .g-status.k-moving { background: var(--blue-soft); }
 .g-status.k-error { background: var(--error-soft); }
 /* FX-06(D8-B): 暂停/其它芯片此前没有背景修饰符, 落回 .g-status 的 --surface-2(暗主题 = 白 6%)
  * 读作"太白/没颜色"; 改为不铺底 + 中性描边 + 中性中间调字色 —— 与其它四色并列时"有色/无色"
@@ -376,7 +376,7 @@
 .member-row.downloading .tag-chip:not(.hr-pending):not(.hr-done),
 .member-row.downloading .cat-chip,
 .member-row.checking .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.checking .cat-chip { background: var(--blue-soft); color: var(--blue); }
+.member-row.checking .cat-chip, .group-row.s-moving .tag-chip:not(.hr-pending):not(.hr-done), .group-row.s-moving .cat-chip, .member-row.moving .tag-chip:not(.hr-pending):not(.hr-done), .member-row.moving .cat-chip { background: var(--blue-soft); color: var(--blue); }
 .group-row.s-error .tag-chip:not(.hr-pending):not(.hr-done),
 .group-row.s-error .cat-chip,
 .member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
@@ -423,7 +423,7 @@
 .m-state { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); }
 .m-state .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 .member-row.seeding .m-state { color: var(--green); }
-.member-row.downloading .m-state, .member-row.checking .m-state { color: var(--blue); }
+.member-row.downloading .m-state, .member-row.checking .m-state, .member-row.moving .m-state { color: var(--blue); }
 .member-row.error .m-state { color: var(--error); }
 .member-row.paused .m-state, .member-row.other .m-state { color: var(--paused); }  /* FX-06: 与状态芯片同族(不再是 dim 灰) */
 .member-row.paused .m-site .dot, .member-row.other .m-site .dot { background: var(--paused); }
@@ -783,11 +783,11 @@
 .group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count,
 .group-row.s-seeding .m-progress .val, .group-row.s-seeding .state-text { color: var(--green); }
 .group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat:not(.zero),
-.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero),
+.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero), .group-row.s-moving .g-name-text, .group-row.s-moving .g-stat:not(.zero),
 .group-row.s-downloading .g-save-path, .group-row.s-downloading .m-hash, .group-row.s-downloading .g-count,
-.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count,
-.group-row.s-downloading .m-progress .val, .group-row.s-checking .m-progress .val,
-.group-row.s-downloading .state-text, .group-row.s-checking .state-text { color: var(--blue); }
+.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count, .group-row.s-moving .g-save-path, .group-row.s-moving .m-hash, .group-row.s-moving .g-count,
+.group-row.s-downloading .m-progress .val, .group-row.s-checking .m-progress .val, .group-row.s-moving .m-progress .val,
+.group-row.s-downloading .state-text, .group-row.s-checking .state-text, .group-row.s-moving .state-text { color: var(--blue); }
 .group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero),
 .group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count,
 .group-row.s-error .m-progress .val, .group-row.s-error .state-text { color: var(--error); }
@@ -800,11 +800,11 @@
 /* 成员行(展开明细/追剧集明细)同口径: 行类名是 m.kind 而非 s-*, 故单独一组 */
 .member-row.seeding .m-stat:not(.zero), .member-row.seeding .m-hash, .member-row.seeding .g-save-path,
 .member-row.seeding .m-progress .val, .member-row.seeding .state-text { color: var(--green); }
-.member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero),
-.member-row.downloading .m-hash, .member-row.checking .m-hash,
-.member-row.downloading .g-save-path, .member-row.checking .g-save-path,
-.member-row.downloading .m-progress .val, .member-row.checking .m-progress .val,
-.member-row.downloading .state-text, .member-row.checking .state-text { color: var(--blue); }
+.member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero), .member-row.moving .m-stat:not(.zero),
+.member-row.downloading .m-hash, .member-row.checking .m-hash, .member-row.moving .m-hash,
+.member-row.downloading .g-save-path, .member-row.checking .g-save-path, .member-row.moving .g-save-path,
+.member-row.downloading .m-progress .val, .member-row.checking .m-progress .val, .member-row.moving .m-progress .val,
+.member-row.downloading .state-text, .member-row.checking .state-text, .member-row.moving .state-text { color: var(--blue); }
 .member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path,
 .member-row.error .m-progress .val, .member-row.error .state-text { color: var(--error); }
 .member-row.paused .m-stat:not(.zero), .member-row.paused .m-hash, .member-row.paused .g-save-path,

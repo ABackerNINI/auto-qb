@@ -128,7 +128,7 @@
  * 暂停/其它用中性中间调 --paused(与棱镜同口径): 此前用更暗的 --fg-dim, 与"已暂停"状态文字
  * 不同族; 见下方令牌声明处的说明。 */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
-.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch { color: var(--blue); }
+.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch, .k-moving, .k-moving .swatch { color: var(--blue); }
 .k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }
 .k-error, .k-error .swatch { color: var(--error); }
 
@@ -288,7 +288,7 @@
 .g-status { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto;
   border-radius: 6px; background: var(--surface-2); }
 .g-status.k-seeding { background: var(--green-soft); }
-.g-status.k-downloading, .g-status.k-checking { background: var(--blue-soft); }
+.g-status.k-downloading, .g-status.k-checking, .g-status.k-moving { background: var(--blue-soft); }
 .g-status.k-error { background: var(--error-soft); }
 /* FX-06 对齐: 暂停/其它不铺底(原先落回 --surface-2 的白 6% 底 -> 读作"太白"), 改中性描边 +
  * 中间调图标色 —— 与做种/下载/错误三个有色底并列时, "有色/无色"的层次反而更清楚。 */
@@ -314,11 +314,11 @@
 .group-row.s-seeding .g-save-path, .group-row.s-seeding .m-hash, .group-row.s-seeding .g-count,
 .group-row.s-seeding .m-progress .val, .group-row.s-seeding .state-text { color: var(--green); }
 .group-row.s-downloading .g-name-text, .group-row.s-downloading .g-stat:not(.zero),
-.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero),
+.group-row.s-checking .g-name-text, .group-row.s-checking .g-stat:not(.zero), .group-row.s-moving .g-name-text, .group-row.s-moving .g-stat:not(.zero),
 .group-row.s-downloading .g-save-path, .group-row.s-downloading .m-hash, .group-row.s-downloading .g-count,
-.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count,
-.group-row.s-downloading .m-progress .val, .group-row.s-checking .m-progress .val,
-.group-row.s-downloading .state-text, .group-row.s-checking .state-text { color: var(--blue); }
+.group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count, .group-row.s-moving .g-save-path, .group-row.s-moving .m-hash, .group-row.s-moving .g-count,
+.group-row.s-downloading .m-progress .val, .group-row.s-checking .m-progress .val, .group-row.s-moving .m-progress .val,
+.group-row.s-downloading .state-text, .group-row.s-checking .state-text, .group-row.s-moving .state-text { color: var(--blue); }
 .group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero),
 .group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count,
 .group-row.s-error .m-progress .val, .group-row.s-error .state-text { color: var(--error); }
@@ -333,11 +333,11 @@
  * 芯片类(站点/标签/分类)按决策 D6-A **不跟随**行状态色(它们表达成员级语义) */
 .member-row.seeding .m-stat:not(.zero), .member-row.seeding .m-hash, .member-row.seeding .g-save-path,
 .member-row.seeding .m-progress .val, .member-row.seeding .state-text { color: var(--green); }
-.member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero),
-.member-row.downloading .m-hash, .member-row.checking .m-hash,
-.member-row.downloading .g-save-path, .member-row.checking .g-save-path,
-.member-row.downloading .m-progress .val, .member-row.checking .m-progress .val,
-.member-row.downloading .state-text, .member-row.checking .state-text { color: var(--blue); }
+.member-row.downloading .m-stat:not(.zero), .member-row.checking .m-stat:not(.zero), .member-row.moving .m-stat:not(.zero),
+.member-row.downloading .m-hash, .member-row.checking .m-hash, .member-row.moving .m-hash,
+.member-row.downloading .g-save-path, .member-row.checking .g-save-path, .member-row.moving .g-save-path,
+.member-row.downloading .m-progress .val, .member-row.checking .m-progress .val, .member-row.moving .m-progress .val,
+.member-row.downloading .state-text, .member-row.checking .state-text, .member-row.moving .state-text { color: var(--blue); }
 .member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path,
 .member-row.error .m-progress .val, .member-row.error .state-text { color: var(--error); }
 .member-row.paused .m-stat:not(.zero), .member-row.paused .m-hash, .member-row.paused .g-save-path,
@@ -395,7 +395,7 @@
 .member-row.downloading .tag-chip:not(.hr-pending):not(.hr-done),
 .member-row.downloading .cat-chip,
 .member-row.checking .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.checking .cat-chip { background: var(--blue-soft); color: var(--blue); }
+.member-row.checking .cat-chip, .group-row.s-moving .tag-chip:not(.hr-pending):not(.hr-done), .group-row.s-moving .cat-chip, .member-row.moving .tag-chip:not(.hr-pending):not(.hr-done), .member-row.moving .cat-chip { background: var(--blue-soft); color: var(--blue); }
 .group-row.s-error .tag-chip:not(.hr-pending):not(.hr-done),
 .group-row.s-error .cat-chip,
 .member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
@@ -429,7 +429,7 @@
 .m-state { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); }
 .m-state .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 .member-row.seeding .m-state { color: var(--green); }
-.member-row.downloading .m-state, .member-row.checking .m-state { color: var(--blue); }
+.member-row.downloading .m-state, .member-row.checking .m-state, .member-row.moving .m-state { color: var(--blue); }
 .member-row.error .m-state { color: var(--error); }
 /* FX-06 对齐: 暂停/其它与状态芯片同族(不再是更暗的 --fg-dim) */
 .member-row.paused .m-state, .member-row.other .m-state { color: var(--paused); }

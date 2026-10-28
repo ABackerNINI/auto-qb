@@ -658,9 +658,11 @@ window.AQB_DIALOGS = {
      *   groups  →  各组 members + singles(同一来源 _member_view, kind 字段一致)
      *   torrents→  平铺数组(kind 字段同样由 _member_view 透出)
      *   shows   →  剧集节点的聚合 state(后端 _build_show_view 已取 min kind)
-     * 顺序表与 kind 口径与 decorate.kindText 一致, 计数为 0 的类别被 filter 掉 */
+     * 顺序表与 kind 口径与 decorate.kindText 一致, 计数为 0 的类别被 filter 掉
+     * !这张表同时是**状态筛选器下拉的选项源**(tpl/topbar.html 按 distSegments 渲染 v-for),
+     *   所以新 kind 不进来 = 既统计不到也筛不到(2026-10-29 moving 补齐时补此注) */
     distSegments() {
-      const order = ["seeding", "downloading", "checking", "paused", "error", "other"];
+      const order = ["seeding", "downloading", "checking", "paused", "error", "moving", "other"];
       const count = {};
       const bump = (k) => { if (k) count[k] = (count[k] || 0) + 1; };
       if (this.viewMode === "torrents") {
