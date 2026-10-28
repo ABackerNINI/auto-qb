@@ -163,6 +163,8 @@ class FakeFetcher:
         #: scope 集合: 取页抛 HrLoginExpired(扩展回传登录页语义, M1 回归用)
         login_at: Iterable[str] = (),
         quota: bool = False,
+        #: 异常实例: 每次取页都抛它 —— 用于通道层新形态(缺站点权限 / 网络层失败, 计划 26-10-29-0147)
+        channel_error: Optional[BaseException] = None,
     ) -> None:
         self.pages = dict(pages or {})
         self.blobs = dict(blobs or {})
@@ -173,6 +175,7 @@ class FakeFetcher:
         self.login_at = set(login_at)
         #: True = 每次都抛 HrChannelQuota(模拟扩展侧硬上限拒发, 与「取数失败」区分开)
         self.quota = quota
+        self.channel_error = channel_error
         self.text_calls: List[str] = []
         self.byte_calls: List[str] = []
 
@@ -195,6 +198,8 @@ class FakeFetcher:
 
     def get_text(self, url: str) -> str:
         self.text_calls.append(url)
+        if self.channel_error is not None:
+            raise self.channel_error
         if self.quota:
             raise HrChannelQuota("扩展侧硬上限挡下(HR 页访问 本小时达硬上限 10 次)")
         scope = self.scope_of(url)

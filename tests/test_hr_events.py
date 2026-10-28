@@ -21,6 +21,10 @@
 - test_channel_silent_sites_join_and_empty_placeholder: 受影响站点按 ", " 拼接; 空集回落占位串
 - test_channel_silent_note_tail_appended_only_when_present: note 只在非空时以空格拼接(空/缺省不留尾巴)
 - test_emit_sets_domain_and_silent_flags: 出口挂上归属层与档位(默认可见; 已知事件 -> 其层; 未登记 -> 空层)
+- test_site_not_permitted_anchors_and_no_parse_prefix: 缺站点权限文案 = 通道层标签 + 站点名 + 具体动作
+  + 重装重置警告; **不得**带 `[HR 页面改版]`(环境态冒充站点结论是本坑成因)
+- test_extension_network_anchors_distinct_from_permission: 网络层文案指向网络/代理/VPN, 不把人赶去授权
+  (与缺权限是两个动作, 不许共用一句)
 """
 import logging
 
@@ -161,6 +165,34 @@ def test_channel_silent_note_tail_appended_only_when_present():
     blank = events.channel_silent(1.0, "启动以来", ["a"], note="", evidence="none")
     assert "XXXX" not in blank
     assert not blank.endswith(" "), "空 note 不该拼出一个尾空格"
+
+
+# ---------- 通道病因文案(计划 26-10-29-0147 W2/D7) ----------
+
+
+def test_site_not_permitted_anchors_and_no_parse_prefix():
+    """缺站点权限: 归**通道层**标签 + 站点名 + 自带动作 + 重装重置警告
+
+    !最要紧的一条: 文案里不能出现 `[HR 页面改版]`。2026-10-28 那次 12h 的故障正是被这枚标签
+    盖成「站点改版」, 于是没人去看扩展权限 —— 环境态冒充站点结论是本坑的成因, 也是守阵的对象。
+    """
+    msg = events.site_not_permitted("btschool", "站点未授权(https://pt.btschool.club)")
+    assert msg.startswith("[HR 通道不可用]"), "通道层标签(与登录失效/静默同一域)"
+    assert "btschool" in msg and "https://pt.btschool.club" in msg, "站点名与详情都要带出"
+    assert "根本没发出去" in msg, "语义锚点: 请求没发出去(不是站点给了坏页面)"
+    assert "申请勾选站点的权限" in msg, "动作引导必须具体到按钮"
+    assert "重装" in msg and "重置" in msg, "本次故障的直接诱因: 重装/重载会重置可选权限"
+    assert events.prefix(events.EVENT_PARSE) not in msg, "环境态不许挂改版标签"
+
+
+def test_extension_network_anchors_distinct_from_permission():
+    """网络层失败: 与缺权限**动作不同**(查代理 vs 去授权), 两句不许共用"""
+    msg = events.extension_network("btschool", "Failed to fetch")
+    assert msg.startswith("[HR 通道不可用]")
+    assert "btschool" in msg and "Failed to fetch" in msg
+    assert "网络" in msg and "代理" in msg and "VPN" in msg, "动作指向网络/代理/VPN"
+    assert "申请勾选站点的权限" not in msg, "别把用户赶去扩展选项页 —— 那边是好的"
+    assert events.prefix(events.EVENT_PARSE) not in msg
 
 
 # ---------- log.emit ----------

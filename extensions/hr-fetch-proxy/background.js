@@ -401,7 +401,43 @@ async function requestBackendRefresh() {
   return total;
 }
 
-chrome.permissions.onAdded.addListener(() => noteStatus({ text: '站点权限已更新' }));
+/**
+ * 授权变化后重算缓存(计划 26-10-29-0147 W1/D5): 用户点「授权」或被浏览器撤销时,
+ * 徽标与选项页要**立刻**跟着变 —— 否则会出现「已经授权了, 图标还红着」的反向谎言。
+ */
+async function recheckSitePerms() {
+  let got;
+  try {
+    got = await chrome.storage.local.get({ sitePerms: {} });
+  } catch (e) {
+    return;
+  }
+  const perms = got.sitePerms || {};
+  const origins = Object.keys(perms);
+  if (!origins.length) return;
+  for (const origin of origins) {
+    const g = await siteGranted(origin);
+    if (g !== null) perms[origin] = { granted: g, checkedAt: Date.now() };
+  }
+  try {
+    await chrome.storage.local.set({ sitePerms: perms });
+  } catch (e) {}
+  await refreshBadge();
+}
+
+if (chrome.permissions && chrome.permissions.onAdded) {
+  chrome.permissions.onAdded.addListener(() => {
+    noteStatus({ text: '站点权限已更新' }).catch(() => {});
+    recheckSitePerms().catch(() => {});
+  });
+}
+if (chrome.permissions && chrome.permissions.onRemoved) {
+  chrome.permissions.onRemoved.addListener(() => {
+    // 撤销站点权限 = 取数一定会失败: 抬头就要红, 别等下一轮取数才发现
+    noteStatus({ text: '站点权限被撤销, 取数会失败(回「站点权限」重新授权)' }).catch(() => {});
+    recheckSitePerms().catch(() => {});
+  });
+}
 
 // ---------- 主流程 ----------
 
@@ -614,12 +650,15 @@ const BADGE = {
   ok: { text: '', color: '#2e7d46', label: '连接正常' },
   reconnecting: { text: '', color: '#b8802f', label: '重连中' },
   discoveryFailed: { text: '!', color: '#b0453d', label: '发现失败' },
+  // 计划 26-10-29-0147 D5: 通道通、但站点没授权 —— 取数**一定全失败**, 必须抬头可见
+  noSitePermission: { text: '!', color: '#b0453d', label: '站点未授权' },
 };
 
 /**
- * 徽标态推导(纯函数, 守阵直测): 四态判据见计划 §3.3 ——
+ * 徽标态推导(纯函数, 守阵直测): 五态判据见计划 §3.3 + 26-10-29-0147 D5 ——
  * 未配置(发现地址空**且**实例清单空) / 连接正常(最近一轮**至少一个实例成功**) /
- * 发现失败(候选表全无应答 **且** 无任何可用实例, C4) / 重连中(其余: 有发现地址但当前无成功实例)。
+ * 发现失败(候选表全无应答 **且** 无任何可用实例, C4) / 重连中(其余: 有发现地址但当前无成功实例) /
+ * **站点未授权**(有实例成功, 但已判定的站点里有未授权的 —— 排在 ok 之前, 否则「连接正常」是假话)。
  */
 function badgeStateOf(cfg) {
   const instances = Array.isArray(cfg.instances) ? cfg.instances : [];
@@ -630,6 +669,10 @@ function badgeStateOf(cfg) {
     const h = health[String((e && e.endpoint) || '')];
     return Boolean(h && h.ok);
   });
+  const perms = cfg.sitePerms && typeof cfg.sitePerms === 'object' ? cfg.sitePerms : {};
+  const anyDenied = Object.keys(perms).some((k) => perms[k] && perms[k].granted === false);
+  // !anyOk 是前置条件: 端点本身连不上时, 「站点未授权」会盖掉更严重的连接故障 —— 那才是撒谎
+  if (anyOk && anyDenied) return 'noSitePermission';
   if (anyOk) return 'ok';
   const last = cfg.lastDiscovery;
   if (hasDiscovery && last && last.ok === false && last.answered === false) return 'discoveryFailed';
@@ -642,15 +685,17 @@ const BADGE_ICON = {
   ok: 'icon-ok',
   reconnecting: 'icon-warn',
   discoveryFailed: 'icon-bad',
+  noSitePermission: 'icon-bad',
 };
 
-/** 四态 -> {16, 32} 两档图标路径(纯函数, 守阵直测): 未知态回落基础图 */
+/** 五态 -> {16, 32} 两档图标路径(纯函数, 守阵直测): 未知态回落基础图 */
 function badgeIconOf(state) {
   const base = BADGE_ICON[state] || BADGE_ICON.unconfigured;
   return { '16': `icons/${base}16.png`, '32': `icons/${base}32.png` };
 }
 
-/** 按四态落图标外框 + 悬停标题; 徽标文本仅「发现失败」态非空(红 `!`); 禁用时清空(不显示"看着正常"的图标) */
+/** 按五态落图标外框 + 悬停标题; 徽标文本只在「发现失败」与「站点未授权」两态非空(都是红 `!`,
+ * 语义靠悬停标题区分); 禁用时清空(不显示"看着正常"的图标) */
 async function refreshBadge() {
   let cfg;
   try {
@@ -660,6 +705,7 @@ async function refreshBadge() {
       discoveryAddress: DEFAULT_DISCOVERY_ADDRESS,
       instanceHealth: {},
       lastDiscovery: null,
+      sitePerms: {},   // 站点授权缓存(判据见 badgeStateOf): 徽标是同步纯函数, 只能读缓存
     });
   } catch (e) {
     return; // 读不到就不动徽标: 状态信号不值得赌主流程
@@ -794,6 +840,83 @@ function hostOf(url) {
     return new URL(url).hostname;
   } catch (e) {
     return '';
+  }
+}
+
+/** `https://pt.example.com/x` -> `https://pt.example.com`(权限判定与展示都以 origin 为单位) */
+function originOf(url) {
+  try {
+    const u = new URL(url);
+    return `${u.protocol}//${u.hostname}`;
+  } catch (e) {
+    return '';
+  }
+}
+
+// ---------- 站点权限预检(计划 26-10-29-0147 W1) ----------
+//
+// !为什么要在取数**之前**判: `fetch` 对「没有该站 host 权限」与「DNS/代理不通」给的是**同一句**
+// `TypeError: Failed to fetch`, 事后归因只能猜。而 `chrome.permissions.getAll()` 能**明确**回答
+// 「我到底有没有这个站」, 于是「缺权限」从一句猜谜变成一条可展示、可回传的事实。
+// 生产实证 2026-10-28: 扩展重装后可选站点权限被重置, 三档全失败 12h, 日志却一直写「页面取数失败」。
+
+/** 把匹配模式拆成 {scheme, host}; 非法返回 null(裸域名 / 缺 scheme 的一律不认) */
+function splitPattern(pat) {
+  const m = /^(\*|https?|file|ftp):\/\/([^/]+)/i.exec(String(pat || '').trim());
+  if (!m) return null;
+  return { scheme: m[1].toLowerCase(), host: m[2].toLowerCase() };
+}
+
+/**
+ * 该 origin 是否已被授予(纯函数, 守阵直测)
+ *
+ * !不要用 `chrome.permissions.contains({origins: [...]})` 判多个: 它只在**全部**都授予时返回 true,
+ * 于是「一个站没授权」会被读成「全都授权了」(或反过来), 整个逐站展示就失去意义。
+ * 这里改成「拿全量已授予模式 + 逐个匹配」。
+ */
+function originGranted(origin, patterns) {
+  const target = splitPattern(`${String(origin || '').replace(/\/+$/, '')}/*`);
+  if (!target) return false;
+  for (const pat of patterns || []) {
+    const got = splitPattern(pat);
+    if (!got) continue;
+    if (got.scheme !== '*' && got.scheme !== target.scheme) continue;
+    if (got.host === '*' || got.host === target.host) return true;
+    // `*.example.com` 覆盖子域(Chrome 的匹配模式语义), 但不覆盖 example.com 本身
+    if (got.host.indexOf('*.') === 0 && target.host.slice(-(got.host.length - 1)) === got.host.slice(1)) return true;
+  }
+  return false;
+}
+
+/**
+ * 站点授权现状: true=已授权 / false=明确未授权 / null=无法判定(API 不可用或 URL 非法)
+ *
+ * !null 与 false 必须分开: 测试桩与老环境没有 `permissions.getAll`, 把「判不了」当成「没授权」
+ * 会让所有取数被误拒 —— 判不了就照旧走, 由 `Failed to fetch` 兜底归因。
+ */
+async function siteGranted(url) {
+  const origin = originOf(url);
+  if (!origin) return null;
+  if (!chrome.permissions || typeof chrome.permissions.getAll !== 'function') return null;
+  let all;
+  try {
+    all = await chrome.permissions.getAll();
+  } catch (e) {
+    return null;
+  }
+  return originGranted(origin, (all && all.origins) || []);
+}
+
+/** 把一次判定写进 storage 缓存(徽标是同步纯函数, 只能读缓存; 选项页也读这份) */
+async function noteSitePerm(origin, granted) {
+  if (!origin) return;
+  try {
+    const got = await chrome.storage.local.get({ sitePerms: {} });
+    const perms = Object.assign({}, got.sitePerms || {});
+    perms[origin] = { granted: Boolean(granted), checkedAt: Date.now() };
+    await chrome.storage.local.set({ sitePerms: perms });
+  } catch (e) {
+    // 缓存写不进去不影响取数: 展示层降级为「不知道」, 不为此反噬主流程
   }
 }
 
@@ -1132,6 +1255,18 @@ function hasTable(html) {
 async function runTask(task) {
   const t0 = Date.now();
   log('debug', '任务', `开始执行 id=${task.id}(kind=${task.kind})`, { 站点: hostOf(task.url), url: task.url });
+  const origin = originOf(task.url);
+  // ---- 取数前预检站点权限(计划 26-10-29-0147 W1/D1) ----
+  // 没权限时**一个字节都不发**(发也发不出去), 直接回 kind=no-permission: 后端据此归通道层,
+  // 用户看到的是「去扩展选项页授权」而不是「站点改版」。
+  const grant = await siteGranted(task.url);
+  if (grant !== null) await noteSitePerm(origin, grant);
+  if (grant === false) {
+    const msg = `站点未授权(${origin}): 到扩展选项页 →「站点权限」勾选该站 → 点「申请勾选站点的权限」`;
+    log('warn', '任务', `任务 ${task.id} 跳过(未授权): ${msg}`, { 站点: hostOf(task.url), url: task.url });
+    pushEvent({ host: hostOf(task.url), kind: task.kind, ok: false, ms: 0, tag: 'no-permission', note: msg });
+    return { rendered: false, payload: { id: task.id, ok: false, url: task.url, error: msg, kind: 'no-permission' } };
+  }
   try {
     if (task.kind === 'page') {
       const page = await pageText(task.url);
@@ -1140,23 +1275,27 @@ async function runTask(task) {
     const body = await fetchBinary(task.url);
     return { rendered: false, payload: { id: task.id, ok: true, status: 200, url: task.url, body_b64: body } };
   } catch (e) {
+    const emsg = String(e && e.message ? e.message : e);
+    // 「预检说已授权、fetch 仍报 Failed to fetch」= 站点请求在网络层就挂了(DNS/代理/断网)。
+    // 归因成 kind=network: 与「缺权限」同属通道层但**动作不同**(查网络 vs 去授权), 见计划 D3。
+    const isNetFail = grant === true && emsg.indexOf('Failed to fetch') >= 0;
     // 配额拒发在 requireAllowance 里已记 warn, 不重复; 登录页降半级记 warn(不是故障, 是要人处置)
     if (!(e instanceof ExtQuotaError)) {
-      log(e instanceof LoginPageError ? 'warn' : 'error', '任务', `任务 ${task.id} 失败(kind=${task.kind}): ${e && e.message ? e.message : e}`, {
+      log(e instanceof LoginPageError || isNetFail ? 'warn' : 'error', '任务', `任务 ${task.id} 失败(kind=${task.kind}): ${emsg}`, {
         站点: hostOf(task.url),
         url: task.url,
       });
     }
-    // 事件环与日志同源双写: quota/login/error 三类失败都进表(让位不是故障, 但用户要能在表里看到)
+    // 事件环与日志同源双写: quota/login/no-permission/network/error 五类失败都进表
     pushEvent({
       host: hostOf(task.url),
       kind: task.kind,
       ok: false,
       ms: Date.now() - t0,
-      tag: e instanceof ExtQuotaError ? 'quota' : e instanceof LoginPageError ? 'login' : 'error',
-      note: String(e && e.message ? e.message : e),
+      tag: e instanceof ExtQuotaError ? 'quota' : e instanceof LoginPageError ? 'login' : isNetFail ? 'network' : 'error',
+      note: emsg,
     });
-    const payload = { id: task.id, ok: false, url: task.url, error: String(e && e.message ? e.message : e) };
+    const payload = { id: task.id, ok: false, url: task.url, error: emsg };
     if (e instanceof ExtQuotaError) {
       // 扩展侧硬上限: 让后端能把它与「取数失败」区分开(前者只让位, 后者才计失败/熔断)
       payload.kind = 'ext-quota';
@@ -1164,6 +1303,9 @@ async function runTask(task) {
     } else if (e instanceof LoginPageError) {
       // 登录页: 后端按「HR 登录失效」处置(不计失败 / 不推熔断 / 每站报一次并给动作)
       payload.kind = 'login-page';
+    } else if (isNetFail) {
+      // 网络层失败: 后端归通道层(不计档位失败 / 不带「页面改版」前缀), 文案指向网络/代理
+      payload.kind = 'network';
     }
     return { rendered: false, payload: payload };
   }

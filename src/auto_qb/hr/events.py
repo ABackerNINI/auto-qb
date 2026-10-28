@@ -143,6 +143,32 @@ def channel_unavailable(site: str, detail: str) -> str:
     return f"{prefix(EVENT_CHANNEL)} 站点 {site} | 通道不可用, 本轮不做在线核实(保守回落本地兜底): {detail}"
 
 
+def site_not_permitted(site: str, detail: str) -> str:
+    """扩展**没有该站点的 host 权限**(计划 26-10-29-0147 W2/D7): 要人动手的配置态
+
+    !与 `channel_unavailable` 分开的理由: 那句的前提是「等通道恢复就会好」(浏览器没开 / 端点没起),
+    而缺站点权限**重试一万次也一样** —— 只有人去扩展选项页点「申请勾选站点的权限」才会好。
+    故这里给 ERROR 级 + 进前端错误历史 + 主动通知, 文案必须自带动作, 不能让用户再猜。
+    """
+    return (
+        f"{prefix(EVENT_CHANNEL)} 站点 {site} | **扩展未授权该站点, 取数请求根本没发出去**: {detail} | "
+        "动作: 打开扩展选项页 → 「站点权限」勾选该站 → 点「申请勾选站点的权限」"
+        "(重装 / 重新加载扩展会重置这组可选权限, 需重新授权)"
+    )
+
+
+def extension_network(site: str, detail: str) -> str:
+    """扩展到站点的**网络层**失败(DNS / 代理 / 断网), 浏览器只给一句 `Failed to fetch`
+
+    !它**不是**「页面取数失败」, 更不是「站点改版」: 站点页面根本没被访问到。文案指向网络/代理,
+    与 `site_not_permitted`(去授权)是两个完全不同的动作, 不能共用一句话。
+    """
+    return (
+        f"{prefix(EVENT_CHANNEL)} 站点 {site} | 扩展到站点的网络请求失败(站点页面未被访问): {detail} | "
+        "动作: 查浏览器所在机器的网络 / 代理 / VPN 规则是否覆盖该站点(后端与频控无关, 不推熔断)"
+    )
+
+
 def channel_silent(hours: float, where: str, sites: Sequence[str], note: str = "", *, evidence: str = "none") -> str:
     """通道静默: 端点级事件(扩展没来联系**就没有任何站点能取数**) ⇒ 文案里点出受影响站点
 
@@ -187,6 +213,7 @@ __all__ = [
     "channel_unavailable",
     "counter_mismatch",
     "domain_of",
+    "extension_network",
     "fetch_failed",
     "lane_persistent_failure",
     "login_expired",
@@ -195,6 +222,7 @@ __all__ = [
     "page_changed",
     "prefix",
     "retention_violation",
+    "site_not_permitted",
     "summarize_sites",
     "zero_listing",
 ]

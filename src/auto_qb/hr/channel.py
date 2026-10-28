@@ -75,6 +75,15 @@ KIND_EXT_QUOTA = "ext-quota"
 #: 结果 kind: 扩展取 .torrent 拿到的是 HTML(登录页 / 未登录)。与页面命中登录页同一语义:
 #: 只有人工登录才会好, 不计取数失败(映射为 HrLoginExpired, 由 service 统一处置)。
 KIND_LOGIN_PAGE = "login-page"
+#: 结果 kind: 扩展**没有该站点的 host 权限**(可选权限未授予 / 重装后丢失), 连请求都没发出去。
+#: !它必须与「页面取数失败」分开: 站点页面根本没被访问, 归通道层(不计档位失败、不推连续失效、
+#: 不带 `[HR 页面改版]`), 动作是「去扩展选项页授权」—— 与站点改版/结构失效完全不同的解。
+#: 生产实证 2026-10-28: 扩展重装后 `granted_permissions.explicit_host` 只剩回环, 三档全失败
+#: 12h+, 却被写成「页面取数失败 / 疑似改版」。
+KIND_NO_PERMISSION = "no-permission"
+#: 结果 kind: 站点请求在网络层就失败了(DNS / 代理 / 断网), 浏览器只给一句 `Failed to fetch`。
+#: 与 KIND_NO_PERMISSION 分开是因为**动作不同**(查浏览器网络/代理 vs 去授权), 但同归通道层。
+KIND_NETWORK = "network"
 
 
 class HrChannelError(RuntimeError):
@@ -285,7 +294,8 @@ class HrResult:
     error: str = ""
     retry_after: float = 0.0
     received_at: float = 0.0
-    #: 扩展侧的错误分类(空 = 普通取数失败); 目前只有 KIND_EXT_QUOTA / KIND_LOGIN_PAGE
+    #: 扩展侧的错误分类(空 = 普通取数失败); 现为 KIND_EXT_QUOTA / KIND_LOGIN_PAGE /
+    #: KIND_NO_PERMISSION / KIND_NETWORK —— 后两个归通道层, 前两个各有专属语义(见常量区)
     kind: str = ""
 
     @property
@@ -406,6 +416,8 @@ __all__ = [
     "EXTENSION_ORIGIN_PREFIX",
     "KIND_EXT_QUOTA",
     "KIND_LOGIN_PAGE",
+    "KIND_NETWORK",
+    "KIND_NO_PERMISSION",
     "MAX_BATCH",
     "MAX_BODY_BYTES",
     "ORIGIN_HEADER",

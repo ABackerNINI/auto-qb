@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>HR 扩展缺站点权限的可见化与失败分类修正</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hr-ext-site-permission">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-29-0147">
+<meta name="doc-updated" content="26-10-29-0212">
+<meta name="doc-refs" content="memory-bank/pitfalls/web-ui/extension-bridge.md, memory-bank/tasks/26-10-29-backend-hr-ext-site-permission.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: hr-ext-site-permission</div>
+<h1>HR 扩展缺站点权限的可见化与失败分类修正</h1>
+<p class="lede">把「扩展到底能不能访问这个站」从隐性前提变成显性状态：扩展预检并逐站展示授权态，后端按 <code>kind</code> 把权限/网络失败归进通道层，再让这个状态一路贯穿到分类、计数、站点卡与告警。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-29-0147 · <b>doc-updated</b> 26-10-29-0212 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 生产故障取证（本机日志 + Edge 扩展授权记录）→ <code>grilling</code> 两轮 → 用户「全按推荐」「按推荐」全数拍板
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>要做到什么算成</h3>
+<ol>
+  <li><strong>缺站点权限是可观测事实，不是反推结论。</strong>扩展侧逐站可见 + 抬头可见；auto-qb 侧站点卡片「通道」一行直接说「扩展未授权该站点」，并给动作（去选项页授权哪个域名）。不再靠「三档全失败 + <code>Failed to fetch</code>」倒推。</li>
+  <li><strong>网络层/权限层失败不再冒充站点结论。</strong>「浏览器到不了这个站」与「这个站改版了」必须分家：前者归通道层（不计档位失败、不推连续失效、不带 <code>[HR 页面改版]</code> 前缀、文案给的是环境动作）。</li>
+  <li><strong>判据不撒谎。</strong><code>zero_rows</code> 只描述「全档有效且清单为空」；一页都没取到的波不许自称「结构完好」，更不许把用户引向 <code>--hr-confirm-empty</code>。</li>
+</ol>
+
+<h3>不变量（违反即破坏设计）</h3>
+<ul>
+  <li><strong>零 cookie 边界</strong>：后端仍不直连站点、不持 cookie；取数只经扩展。<code>host_permissions</code> 保持只回环，站点继续走 <code>optional_host_permissions</code>，<span class="bad">绝不 <code>&lt;all_urls&gt;</code></span>。</li>
+  <li><strong>通道层 / 页面层分家的判据不变</strong>：能不能靠重试解决。<code>HrChannelTimeout</code> 的 docstring（<code>fetcher.py:32</code>）已经写明这条，本次是把它贯彻到「网络层失败」这一类，不是新造分层。</li>
+  <li><strong>v3 裁决不变</strong>：不引入退避/熔断/令牌桶（<code>ratelimit.py:13</code> 明写「被删除的旧概念」）。</li>
+  <li><strong>零迁移</strong>：新落盘字段走「缺键回默认」，<strong>不抬</strong> <code>hr_site</code> 的 <code>schema_version</code>（照 <code>history</code> 的既有范式，<code>model.py:474</code>）。</li>
+  <li><strong>单一写线程 / fail-fast 不变</strong>：不新增配置键；若最终必须加，必须同步 <code>config.validate_config</code> 与 <code>config/schema.py</code>（黄金法则 4）。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>故障时间线（生产实测）</h3>
+<table>
+  <tr><th style="width:170px">时刻</th><th>事件</th><th style="width:230px">证据</th></tr>
+  <tr><td>10-25 23:35:44</td><td>最后一次健康波（<span class="good">refreshed: 正常</span>）</td><td><code>wave.healthy_ts</code> = 1792942544.47</td></tr>
+  <tr><td>10-27 21:31 → 10-28 09:45</td><td>扩展根本没在跑：<code>no-channel / 等待浏览器扩展取数超时(180s)</code></td><td><code>auto-qb.log</code> 92657–92664 区间</td></tr>
+  <tr><td>10-28 12:47:36</td><td><strong>扩展被重装</strong>（<code>first_install_time</code> == <code>last_update_time</code> ⇒ 非 reload 而是新装）</td><td>Edge <code>Secure Preferences</code> → <code>extensions.settings.&lt;id&gt;</code></td></tr>
+  <tr><td>10-28 12:49:07</td><td>首条 <code>扩展取数失败(Failed to fetch)</code>（重装后 91 秒）</td><td><code>auto-qb.log:92694</code></td></tr>
+  <tr><td>10-29 01:32</td><td>仍在失败，<code>fail_streak</code> 55–58</td><td><code>hr/BTSchool.json</code>、<code>hr/tracker_carpt_net.json</code></td></tr>
+</table>
+
+<h3>根因证据（决定性一条）</h3>
+<pre><code>Edge  Default/Secure Preferences → extensions.settings.obdcncpkinclbpjhfmnakkgcjobbenig
+  granted_permissions.explicit_host = [
+    "http://127.0.0.1/*", "http://[::1]/*", "http://localhost/*"     <span class="cm">← 只有回环</span>
+  ]
+  <span class="cm">// 缺 https://pt.btschool.club/* 与 https://carpt.net/*</span>
+  withholding_permissions = false
+  path = D:\Projects\auto-qb\extensions\hr-fetch-proxy   location = 4 (unpacked)</code></pre>
+<p>站点 origin 没被授予 ⇒ MV3 service worker 里的 <code>fetch(url,{credentials:'include'})</code> 属<strong>无授权的跨源请求</strong>，被 CORS 秒拒，浏览器只给一句 <code>TypeError: Failed to fetch</code>（<code>background.js:1096 fetchText</code> → <code>runTask</code> catch → <code>payload.error</code> → <code>fetcher.py:177</code> 原样包成「扩展取数失败」）。端点/令牌/extension_id 全部正常，所以任务照常下发——<strong>唯独站点取不到</strong>。</p>
+
+<h3>三处设计缺口（本次一并修）</h3>
+<table>
+  <tr><th style="width:70px">缺口</th><th>现象</th><th style="width:330px">位置</th></tr>
+  <tr><td>G1</td><td>网络层失败被套上 <code>[HR 页面改版]</code> 前缀，日志把人引向「站点改版」</td><td><code>events.py:76 fetch_failed</code>（用 <code>EVENT_PARSE</code>）；<code>fetcher.py:177</code> 未区分 <code>kind</code></td></tr>
+  <tr><td>G2</td><td>连续失效升级告警没接上：<code>fail_streak</code> 到 58 也从未出现「已连续 N 波失效」ERROR</td><td><code>service.py:1539 _maybe_alert_lane_fail</code> 仅在 <code>service.py:819</code>（<code>_LaneAbort</code> 结构失效）调用；取数失败路径 <code>service.py:745-748</code> 不调</td></tr>
+  <tr><td>G3</td><td>全档失败波自称「结构完好但清单为 0」，并把 WebUI 引向 <code>--hr-confirm-empty</code></td><td><code>service.py:1155</code> <code>zero_rows = sum(rows)==0</code>；<code>service.py:1235</code> note 无 <code>had_error</code> 守卫（而 <code>1237</code> 的 WARNING <strong>有</strong>）；<code>status.py:614</code> 直接消费落盘 <code>wave.zero_rows</code></td></tr>
+</table>
+
+<h3>痛点本质</h3>
+<p>三处缺口是同一件事的三个投影：<strong>环境态被写成站点结论</strong>。<code>fetcher.py:32</code> 的 docstring 已经为「等超时」修过一次同类问题（「那是环境态被伪装成站点结论的量级混淆」），但当时的修法只覆盖了「通道不可用」，没覆盖「通道可用、但扩展对站点没权限/网络不通」这一类。本次把这一类补齐，并顺手把 G2/G3 这两处「判据与文案不同步」收口。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p>主线一句话：<strong>扩展先知道、后端才分类、两侧都要显示、判据只描述它真正知道的事</strong>。五个工作面互不阻塞，可按 M1→M5 顺序落地，M1 单独上线即能让故障"一眼可见"。</p>
+
+<table>
+  <tr><th style="width:60px">面</th><th style="width:190px">做什么</th><th>落点</th></tr>
+  <tr><td>W1</td><td>扩展预检 + 逐站展示 + 徽标第五态</td><td><code>background.js</code> / <code>options.js</code> / <code>BADGE</code> 状态机</td></tr>
+  <tr><td>W2</td><td>失败分类：<code>kind</code> → 通道层异常 → 落盘通道痕</td><td><code>channel.py</code> / <code>fetcher.py</code> / <code>model.py</code> / <code>service.py</code></td></tr>
+  <tr><td>W3</td><td>auto-qb 展示：<code>channel_state</code> 第四态 + <code>blocking_reason</code></td><td><code>status.py</code> / <code>service.py:1453</code> / <code>report.py:379</code>（WebUI 零改动）</td></tr>
+  <tr><td>W4</td><td>判据与告警：<code>zero_rows</code> 全档有效口径、note 守卫、升级告警补接</td><td><code>service.py:1155/1235/745/819</code></td></tr>
+  <tr><td>W5</td><td>文档、坑档、测试守阵</td><td><code>extensions/…/README.md</code> / <code>docs/configuration.md</code> / <code>pitfalls/web-ui/extension-bridge.md</code> / <code>tests/*</code></td></tr>
+</table>
+
+<h3>决策速览（全文见 §06）</h3>
+<table>
+  <tr><th style="width:60px">D</th><th style="width:180px">决策</th><th>结论</th></tr>
+  <tr><td>D1</td><td>检测时机</td><td>预检（<code>permissions</code>）+ 失败归因，两者都要</td></tr>
+  <tr><td>D2</td><td>后端感知通道</td><td>只走 <code>POST /api/hr/result</code> 的 <code>kind</code>，不做 capability 上报</td></tr>
+  <tr><td>D3</td><td>分类归属</td><td><code>no-permission</code> / <code>network</code> 归<strong>通道层</strong>，两<strong>个独立</strong>异常类</td></tr>
+  <tr><td>D4</td><td>零行判据</td><td><code>zero_rows = 总量为 0 ∧ 全档 ok</code>，并保留 note 的 <code>had_error</code> 守卫</td></tr>
+  <tr><td>D5</td><td>扩展侧展示</td><td>选项页逐站授权态 + 徽标第五态（<code>noteStatus</code> 弹提示不做）</td></tr>
+  <tr><td>D6</td><td>auto-qb 展示位</td><td><code>channel_state</code> 第四态（+落盘字段）<strong>与</strong> <code>blocking_reason</code> 都接</td></tr>
+  <tr><td>D7</td><td>告警级别</td><td>缺权限 → ERROR + 主动通知（文案自带动作）；网络层维持 WARNING + silent</td></tr>
+  <tr><td>D8</td><td>升级告警边界</td><td>只接页面层（HTTP/挑战页/结构失效），通道层不接</td></tr>
+  <tr><td>D9</td><td>验收面</td><td>代码 + 单测 + 文档 + 真机走查全做；退避/capability/schema 抬版三项明确不做</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th style="width:60px">期</th><th style="width:200px">内容</th><th>验收判据（可复现）</th></tr>
+  <tr><td>M1</td><td>W1 扩展侧预检与展示</td><td>撤销站点权限后：选项页该站标红「未授权」+ 顶部汇总；徽标变 <code>!</code>；站点侧<strong>零请求</strong>（DevTools Network 无站点域名）</td></tr>
+  <tr><td>M2</td><td>W2 后端分类与落盘</td><td>同一状态下日志出现通道层文案（不含 <code>[HR 页面改版]</code>）；<code>fail_streak</code> <strong>不增长</strong>；站点文件出现 <code>channel_last_error</code></td></tr>
+  <tr><td>M3</td><td>W3 两侧展示</td><td>WebUI 站点卡「通道」行显示「扩展未授权该站点」；<code>--hr-status</code> 同步；点开「为什么不放行」先看到这句话</td></tr>
+  <tr><td>M4</td><td>W4 判据与告警</td><td>全档失败波 <code>wave.zero_rows == false</code>；<code>blocking_reason</code> 不再出现 <code>--hr-confirm-empty</code>；页面层连续 3 波失效出现 ERROR</td></tr>
+  <tr><td>M5</td><td>W5 文档/坑档/测试</td><td><code>commands run test.full</code> 全绿 + 新基线切片记实测数字；坑档 <code>复发</code> +1</td></tr>
+</table>
+
+<h3>M1 · 扩展侧：预检、拒发、展示</h3>
+
+<h4>① 预检（<code>background.js</code>）</h4>
+<ul>
+  <li>新增 <code>readSiteGrants(origins)</code>：用 <code>chrome.permissions.getAll()</code> <strong>一次取全量已授予模式</strong>，再用纯函数 <code>originGranted(origin, patterns)</code> 做匹配。<span class="wr">不要用 <code>permissions.contains({origins:[a,b]})</code> 判多个</span>——它只在<strong>全部</strong>都授予时返回 true，会把「部分未授权」误判成整批状态。</li>
+  <li>匹配前必须归一化：授予回来的是 <code>https://pt.btschool.club/*</code>，目标是 <code>https://pt.btschool.club</code>。归一化与匹配写成纯函数，直接进守阵测试。</li>
+  <li>每轮 <code>pollInstanceOnce</code> 开头跑一次，结果写 <code>storage.local.sitePerms = {origin: bool, checkedAt}</code>。<strong>徽标是同步纯函数，不能 await</strong>，只能读这份缓存（<code>badgeStateOf</code> 现有签名不变）。</li>
+</ul>
+
+<h4>② 拒发（<code>runTask</code>）</h4>
+<ul>
+  <li>取数前查缓存：未授权 → <strong>不发请求</strong>，直接回 <code>{id, ok:false, kind:'no-permission', error:'站点未授权(&lt;origin&gt;): 到扩展选项页点「申请勾选站点的权限」'}</code>，并 <code>pushEvent(tag:'no-permission')</code>。</li>
+  <li>归因兜底：catch 里若 <code>msg.includes('Failed to fetch')</code> 且预检<strong>说已授权</strong> → <code>kind:'network'</code>，文案指向「浏览器网络/代理」，<strong>不要</strong>复用 <code>explainFetchError</code> 那份「后端没起」清单（那是拉清单的错因，不是站点取数的）。</li>
+</ul>
+
+<h4>③ 选项页（<code>options.js</code>）</h4>
+<ul>
+  <li>站点权限区每行右侧加状态：<span class="good">已授权</span> / <span class="bad">未授权</span>（读同一份 <code>sitePerms</code>，进页与「重新获取站点」后各刷一次）。</li>
+  <li>顶部汇总条：有未授权时给「<span class="bad">N 个站点未授权，取数会全部失败</span>」+ 一个「授权未授权站点」按钮；复用 <code>options.js:496</code> 的 <code>chrome.permissions.request({origins})</code>，<strong>仍是手势内第一个 await</strong>（<code>options.js:244</code> 的硬约束）。</li>
+</ul>
+
+<h4>④ 徽标（<code>background.js:612-651</code>）</h4>
+<pre><code>BADGE.noSitePermission = { text: '!', color: '#b0453d', label: '站点未授权' }
+BADGE_ICON.noSitePermission = 'icon-bad'
+<span class="cm">// 判据定序（badgeStateOf 内，自上而下第一条命中即返回）</span>
+unconfigured → noSitePermission → ok → discoveryFailed → reconnecting</code></pre>
+<p><code>noSitePermission</code> 排在 <code>ok</code> 之前是必须的：实例连通正常但站点未授权时，若徽标显示「连接正常」就是在撒谎。只要<strong>存在</strong>一个已勾选站点未授权即报此态（保守，宁可报警）。</p>
+
+<h3>M2 · 后端：分类、异常、落盘</h3>
+
+<h4>① 常量（<code>channel.py</code>）</h4>
+<pre><code>KIND_NO_PERMISSION = "no-permission"
+KIND_NETWORK = "network"
+<span class="cm">// 同步 __all__；并改 channel.py:288 那句「目前只有 KIND_EXT_QUOTA / KIND_LOGIN_PAGE」</span></code></pre>
+
+<h4>② 异常（<code>fetcher.py</code>）</h4>
+<pre><code>class HrExtensionNoPermission(HrChannelUnavailable):  <span class="cm">// 动作: 去扩展选项页授权</span>
+class HrExtensionNetwork(HrChannelUnavailable):       <span class="cm">// 动作: 查浏览器网络/代理</span>
+
+<span class="cm">// _fetch() 的 if not result.ok: 分支顺序</span>
+login-page → ext-quota → no-permission → network → 其余(HrFetchError)</code></pre>
+<p>两个类都继承 <code>HrChannelUnavailable</code>，于是<strong>自动继承</strong>既有的通道层语义：不计档位失败、不推连续失效、不带 <code>[HR 页面改版]</code>、不进前端错误历史（D7 只对缺权限解禁后者）、每站一次告警。<span class="wr">旧扩展不回这两个 kind 时走原 <code>HrFetchError</code>，行为零变化</span>——向后兼容由「未知 kind 保持原分支」天然保证，不要加白名单式校验。</p>
+
+<h4>③ 落盘（<code>model.py</code> + <code>service.py</code>）</h4>
+<pre><code># HrSiteData 新字段（照 history 的零迁移范式，缺键回 {}，不抬 schema_version）
+channel_last_error: Dict[str, Any] = field(default_factory=dict)
+<span class="cm"># {"kind": "no-permission", "detail": "...", "ts": 1793...}</span></code></pre>
+<ul>
+  <li>写入点：<code>HrChannelUnavailable</code> 分支（<code>service.py:659-663</code>），<code>_abort_wave()</code> 之前。</li>
+  <li>清除点：<code>_reset_warned_on_recovery</code>（<code>service.py:1465</code>）同点——拿到正常内容页即清。两处必须同点，否则会出现「告警已恢复、站点卡还红着」。</li>
+</ul>
+
+<h3>M3 · 展示：<code>channel_state</code> 第四态</h3>
+<ul>
+  <li><code>status.py</code>：<code>CHANNEL_NO_PERMISSION</code> / <code>CHANNEL_NETWORK</code> 两个常量 + <code>CHANNEL_TEXTS</code> 文案（「扩展未授权该站点」/「扩展连不上站点网络」）。</li>
+  <li><code>service.py:1453 channel_state()</code>：<strong>先判</strong> <code>channel_last_error</code>，且要求其 <code>ts &gt; wave.healthy_ts</code> 才生效（防陈旧残留把「其实已经好了」的站点一直标红）；再走既有 <code>disabled/silent/ok</code>。</li>
+  <li><code>blocking_reason</code>（<code>status.py:614</code>）：在 <code>zero_rows</code> 判据<strong>之前</strong>插一句「扩展未授权站点 &lt;域名&gt;，本轮取数无法进行 —— 去扩展选项页授权」。放在前面是 D4 的配套：判据修好之后，缺权限波的 <code>zero_rows</code> 已为 false，但「先看病因再看症状」仍然成立。</li>
+  <li>WebUI <strong>零改动</strong>：<code>hr_status.js:477</code> 的 kv 行与 <code>settings-detail.html:260</code> 的 <code>hrs-tag</code> 都读 <code>channel_text</code>，自动带出新文案。<span class="cm">可选增强：给 tag 按 state 加 class 变色，非必需，不阻塞。</span></li>
+  <li><code>report.py:379</code> 与 <code>--hr-status</code> 同源，自动同步，无需改。</li>
+</ul>
+
+<h3>M4 · 判据与告警</h3>
+
+<h4>① <code>zero_rows</code> 口径（<code>service.py:1155</code>）</h4>
+<pre><code><span class="cm">// 改前</span>
+zero_rows = total_rows == 0
+<span class="cm">// 改后：全档有效但清单为空，才叫「结构完好的零行波」</span>
+zero_rows = total_rows == 0 and all(st.ok for st in lane_states.values())</code></pre>
+<p>语义依据：<code>events.py:129</code> 的原话是「结构完好的零行波」。有档没取到，这波就<strong>没资格</strong>判定「清单为空」。连带影响都在安全侧：<code>releases_enabled</code> 本就先要求 <code>all(st.ok)</code>；<code>confirmed_empty</code> 随之不再需要人工戳（因为压根不该判空）；<code>count_attested_empty</code>（<code>status.py:172</code>）读的是落盘值，同样跟着变。</p>
+
+<h4>② note 守卫（<code>service.py:1235</code>）</h4>
+<pre><code>if zero_rows and not confirmed_empty and not wave.had_error:</code></pre>
+
+<h4>③ 升级告警补接（<code>service.py:745-748</code>）</h4>
+<pre><code>_mark_fetch_failed_lane(lane_states, wave)
+if lane_states[lane].fail_streak &gt;= LANE_FAIL_ALERT_STREAK:   <span class="cm">// 复用既有 _maybe_alert_lane_fail</span>
+    self._maybe_alert_lane_fail(site, lane_states[lane])</code></pre>
+<p>D3 落地后这个 <code>except HrFetchError</code> 分支<strong>只剩页面层</strong>失败（权限/网络在上一行 <code>except (...HrChannelUnavailable...) : raise</code> 就被拦走），所以补在这里天然满足 D8「只接页面层」。</p>
+
+<h4>④ 告警级别（D7）</h4>
+<p><code>_warn_no_channel</code>（<code>service.py:1500</code>）按异常类型分支：<code>HrExtensionNoPermission</code> → <strong>ERROR + 非 silent</strong>（进前端错误历史、触发主动通知，最低级别 ERROR 已在生产开启），文案自带动作；<code>HrExtensionNetwork</code> 与既有超时 → 维持 WARNING + silent。去重仍走 <code>_warn_once</code>，恢复仍走 <code>_reset_warned_on_recovery</code>。</p>
+
+<h3>M5 · 文档、坑档、测试</h3>
+
+<table>
+  <tr><th style="width:340px">文件</th><th>改动</th></tr>
+  <tr><td><code>extensions/hr-fetch-proxy/README.md</code></td><td>安装步骤第 3 步后补「授权站点」为独立一步；新增醒目警告：<strong>重装 / 重新加载扩展会重置可选站点权限</strong>（本次故障的直接诱因）；排障表把「站点取数报 <code>Failed to fetch</code>」与「拉清单报 <code>Failed to fetch</code>」分成两行（两者错因完全不同，现有表格只覆盖后者）</td></tr>
+  <tr><td><code>docs/configuration.md</code></td><td>通道态一节补两个新态与各自的动作；零行节补「全档有效」口径</td></tr>
+  <tr><td><code>memory-bank/pitfalls/web-ui/extension-bridge.md</code></td><td>新增一行「重装后站点未授权 → <code>Failed to fetch</code>」；头部 <code>复发</code> +1（同一坑的第三个变体：前两次是「从未授予/写法不对」，这次是「曾授予、重装后丢失」）</td></tr>
+</table>
+
+<table>
+  <tr><th style="width:330px">测试文件</th><th>用例</th></tr>
+  <tr><td><code>tests/test_hr_fetcher_channel.py</code></td><td><code>no-permission</code>/<code>network</code> → 对应异常类；旧 kind 仍落 <code>HrFetchError</code>；<code>retry_after</code> 不串味</td></tr>
+  <tr><td><code>tests/test_hr_service.py</code></td><td><code>zero_rows</code> 全档有效口径（三档全失败 → false；一档 ok 两档失败 → false；全 ok 全空 → true）；note 守卫；取数失败路径触发 <code>_maybe_alert_lane_fail</code>；缺权限波 <code>fail_streak</code> 不增长</td></tr>
+  <tr><td><code>tests/test_hr_status.py</code></td><td>新 <code>channel_state</code> 两态文案；<code>blocking_reason</code> 优先级（缺权限 &gt; 零行）；<code>ts &lt;= healthy_ts</code> 的陈旧痕不生效</td></tr>
+  <tr><td><code>tests/test_hr_events.py</code></td><td>两条新文案各自带动作、不带 <code>[HR 页面改版]</code></td></tr>
+  <tr><td><code>tests/test_extension_proxy.py</code></td><td><code>originGranted</code> 归一化与部分匹配；<code>badgeStateOf</code> 第五态与定序；manifest 作用域不变（只回环 + 站点走可选权限 + 绝不 <code>&lt;all_urls&gt;</code>）</td></tr>
+  <tr><td><code>tests/test_hr_store.py</code></td><td><code>channel_last_error</code> 缺键回 <code>{}</code> 的零迁移往返</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无。D1–D9 已于 2026-10-29 由用户「全按推荐」「按推荐」全数拍板（见 §06）。实施中若出现新分叉，按 <code>D10+</code> 续编号追加，不回头改已拍板项。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th style="width:50px">D</th><th style="width:150px">决策</th><th>结论</th><th style="width:90px">日期</th></tr>
+  <tr><td>D1</td><td>检测时机</td><td>预检 + 失败归因<strong>都要</strong>：预检负责提前可见与归因依据，catch 兜底「预检说已授权、fetch 仍失败 → <code>network</code>」</td><td>26-10-29</td></tr>
+  <tr><td>D2</td><td>后端感知通道</td><td>只走 <code>POST /api/hr/result</code> 的 <code>kind</code>；不做轮询期 capability 上报（收益仅提前一个轮询周期，代价是新协议面与旧扩展兼容判断）</td><td>26-10-29</td></tr>
+  <tr><td>D3</td><td>分类归属</td><td>归<strong>通道层</strong>；<code>HrExtensionNoPermission</code> 与 <code>HrExtensionNetwork</code> <strong>分成两类</strong>（动作不同：一个去授权、一个查网络）</td><td>26-10-29</td></tr>
+  <tr><td>D4</td><td>零行判据</td><td><code>zero_rows = 总量 0 ∧ 全档 ok</code>；同时保留 note 的 <code>had_error</code> 守卫做双保险</td><td>26-10-29</td></tr>
+  <tr><td>D5</td><td>扩展侧展示</td><td>选项页逐站授权态 + 徽标第五态；<code>noteStatus</code> 弹提示不做（与现有离屏渲染提示语义冲突且不常驻）</td><td>26-10-29</td></tr>
+  <tr><td>D6</td><td>auto-qb 展示位</td><td><code>channel_state</code> 第四态（+落盘字段）与 <code>blocking_reason</code> 都接：卡片一眼可见 + 点进去看病因</td><td>26-10-29</td></tr>
+  <tr><td>D7</td><td>告警级别</td><td>缺权限 → ERROR + 主动通知（每站每次状态变化一次，文案自带动作）；网络层维持 WARNING + silent</td><td>26-10-29</td></tr>
+  <tr><td>D8</td><td>升级告警边界</td><td>只接页面层（HTTP/挑战页/结构失效）；通道层不接（已有通道告警覆盖，且 <code>fail_streak</code> 本就不该涨）</td><td>26-10-29</td></tr>
+  <tr><td>D9</td><td>验收面</td><td>代码 + 单测 + 文档 + 真机走查全做；明确不做：通道层退避/熔断、capability 上报、抬 <code>schema_version</code></td><td>26-10-29</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th style="width:200px">风险</th><th style="width:300px">触发条件</th><th>处置</th></tr>
+  <tr><td>权限匹配误判 → 假报警</td><td>授予回来是 <code>https://host/*</code>，目标是 <code>https://host</code>；或用户授予的是 <code>https://*.host/*</code></td><td><code>originGranted</code> 归一化后按「scheme+host 相等，或 pattern 为通配父域」匹配，纯函数直测；宁可漏报也不误报</td></tr>
+  <tr><td>徽标长期红着被误读成「后端坏了」</td><td>用户一直不授权</td><td>文案写「站点未授权」而非「异常」，选项页给一键授权入口；与「发现失败」的红 <code>!</code> 靠悬停标题区分</td></tr>
+  <tr><td>历史站点文件的 <code>zero_rows=True</code> 残留</td><td>站点长时间不再取数（<code>refresh_interval</code> 5H）</td><td><code>blocking_reason</code> 先判 <code>channel_last_error</code> 再判 <code>zero_rows</code>；下一波自然重写</td></tr>
+  <tr><td>ERROR 提级后反复通知</td><td>用户反复撤销/授权同一站点</td><td><code>_warn_once</code> 去重 + <code>_reset_warned_on_recovery</code> 恢复重置；主动通知每小时上限 20 兜底</td></tr>
+  <tr><td>旧扩展不配合</td><td>用户只更新后端不更新扩展</td><td>未知 <code>kind</code> 保持原分支 → 行为与今天完全一致；文档写明「本次修复需扩展同步更新」</td></tr>
+  <tr><td>多实例共享站点文件互相覆盖</td><td>两个实例同时写 <code>channel_last_error</code></td><td>该字段随波 <code>session.commit</code> 落盘，与 <code>wave</code> 同语义同粒度；只在「本波确实发生通道层失败」时写，成功波清空</td></tr>
+  <tr><td>D4 口径变更打翻既有测试</td><td><code>test_zero_rows_no_release</code> / <code>test_counter_zero_claims_self_attest_empty</code> 依赖旧判据</td><td>两例改为「全档 ok + 空表」夹具；改判据与改夹具同一提交，不拆两笔</td></tr>
+</table>
+
+<h2><span class="no">§08</span>明确不做</h2>
+<ul>
+  <li><strong>不给通道层加退避/熔断</strong>：违反 v3「熔断与退避全删」裁决；扩展预检后零成本拒发已经够了。</li>
+  <li><strong>不做 capability 上报</strong>（D2）：轮询期带授权清单会让后端多一个「可能过期的能力视图」，收益只有一个轮询周期。</li>
+  <li><strong>不抬 <code>hr_site</code> 的 <code>schema_version</code></strong>：新字段走缺键回默认。</li>
+  <li><strong>不改 <code>host_permissions</code></strong>：站点继续走可选权限，绝不 <code>&lt;all_urls&gt;</code>。</li>
+  <li><strong>不重构 WebUI 结构</strong>：只借 <code>channel_text</code> 既有渲染点；变色为可选增强。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-29-0147</span> 初版。来源：生产故障（BTSchool / CarPT 三档全失败 12h+）取证 → 定位到扩展重装后可选站点权限丢失（Edge <code>Secure Preferences</code> 实测 <code>granted_permissions.explicit_host</code> 仅回环）→ <code>grilling</code> 两轮（D1–D5 / D6–D9）全数拍板 → 成文。要点：五工作面（W1 扩展预检与展示 / W2 失败分类与落盘 / W3 两侧展示 / W4 判据与告警 / W5 文档测试），三处既有设计缺口（G1 改版前缀复用 / G2 升级告警未接 / G3 零行误标）一并收口。</li>
+  <li><span class="tag">R1 · 26-10-29-0212</span> 实现完成(M1–M5 全量): 扩展侧 permissions.getAll 预检 + 未授权即拒发(kind=no-permission) + 选项页逐站授权态与「授权未授权站点」+ 徽标第五态(排在 ok 之前); 后端两个新 kind → 两个通道层异常 → 落盘 channel_last_error → 通道态两新态 + blocking_reason 病因优先; zero_rows 改「总量为 0 且全档 ok」; 页面层取数失败路径补接升级告警; 文档(扩展 README / configuration.md)、坑档(复发 +1)、守阵(新增 17 例)同步</li>
+</ul>
+
+</div>
+</body>
+</html>

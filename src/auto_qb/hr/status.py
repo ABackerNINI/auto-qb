@@ -25,6 +25,8 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .model import (
     CHANNEL_DISABLED,
+    CHANNEL_NETWORK,
+    CHANNEL_NO_PERMISSION,
     CHANNEL_OK,
     CHANNEL_SILENT,
     FETCH_LANES,
@@ -45,6 +47,10 @@ CHANNEL_TEXTS = {
     CHANNEL_OK: "正常",
     CHANNEL_SILENT: "静默(长期没有健康波)",
     CHANNEL_DISABLED: "未启用",
+    # 计划 26-10-29-0147 W3: 两个「要人动手」的通道态 —— 文案必须说清**做什么**,
+    # 因为用户看到这一行时通常正是在问「为什么一个都没取到」。
+    CHANNEL_NO_PERMISSION: "扩展未授权该站点(去扩展选项页授权)",
+    CHANNEL_NETWORK: "扩展连不上站点网络(查浏览器网络/代理)",
 }
 
 #: 档位人话(明细表等展示共用; 键 = 站点 scope 字母)
@@ -608,6 +614,13 @@ def blocking_reason(view: HrSiteView, data: HrSiteData, stale: bool, site: str =
 
     用户看到「种子没被放行」时最想知道的就是它卡在哪一步, 而这一步光看数据看不出来。
     """
+    # 通道病因先于数据症状(计划 26-10-29-0147 W3/D6): 取数根本没发生时, 下面几句描述的都是
+    # 「没取到之后的样子」, 说出来只会把人引向错的动作(例如 --hr-confirm-empty 人工对账,
+    # 或「先让扩展跑一轮取数」—— 而那正是当前做不成的事)。故排在整个判定链最前。
+    if view.channel_state == CHANNEL_NO_PERMISSION:
+        return "扩展未授权该站点, 取数请求根本没发出去 —— 打开扩展选项页 → 勾选该站 → 申请权限"
+    if view.channel_state == CHANNEL_NETWORK:
+        return "扩展到该站点的网络请求失败(站点页面未被访问)—— 查浏览器网络 / 代理 / VPN 规则"
     if not view.lane_a and not view.lane_terminal and not view.verified:
         return "索引里还没有任何可判数据(先让浏览器扩展跑一轮取数)"
     if data.wave.zero_rows and not data.empty_confirmed_at and not count_attested_empty(data):

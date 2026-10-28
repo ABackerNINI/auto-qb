@@ -36,6 +36,14 @@
 - test_build_channel_fetcher_null_reason_names_config_key: 未启用时空通道的 reason 指向配置键
 - test_scope_of_url_query_parsing: 档位提取只切第一个 `?`/`&`/`=`(排障展示)
 - test_tid_of_url_query_parsing: 种子 id 提取只切第一个 `?`/`&`/`=`
+
+### 站点可选权限轮(计划 26-10-29-0147 W2/D3): 两个新 kind 归通道层
+- test_no_permission_result_is_channel_layer_not_page_failure: 扩展回 `kind='no-permission'`(站点未授权)
+  -> HrExtensionNoPermission(通道层子类, **不计档位失败**/不挂改版标签) —— 2026-10-28 那次 12h 的根因
+- test_network_result_is_channel_layer_with_own_class: `kind='network'` -> HrExtensionNetwork, 与缺权限
+  **不同类**(动作不同: 查代理 vs 去授权), 但同属通道层(继承关系即判据)
+- test_unknown_kind_still_falls_back_to_fetch_error: 旧扩展 / 未知 kind 仍落 HrFetchError(向后兼容,
+  不许因新增分支把老版本回传当成通道层)
 """
 import threading
 import time
@@ -43,13 +51,17 @@ import time
 import pytest
 
 from auto_qb.config.models import HrChannelConfig
-from auto_qb.hr.channel import KIND_EXT_QUOTA, KIND_LOGIN_PAGE, HrChannelError, HrResult, UrlPolicy
+from auto_qb.hr.channel import (
+    KIND_EXT_QUOTA, KIND_LOGIN_PAGE, KIND_NETWORK, KIND_NO_PERMISSION, HrChannelError, HrResult, UrlPolicy
+)
 from auto_qb.hr.fetcher import (
     ChannelFetcher,
     HrChannelQuota,
     HrChannelStopped,
     HrChannelTimeout,
     HrChannelUnavailable,
+    HrExtensionNetwork,
+    HrExtensionNoPermission,
     HrFetchError,
     HrLoginExpired,
     NullFetcher,
@@ -223,6 +235,60 @@ def test_login_page_result_is_not_a_fetch_failure():
     try:
         with pytest.raises(HrLoginExpired):
             fetcher.get_bytes(DL)
+    finally:
+        auto.close()
+
+
+def test_no_permission_result_is_channel_layer_not_page_failure():
+    """扩展回传 kind='no-permission' ⇒ `HrExtensionNoPermission`(通道层): 不计档位失败、不带改版前缀
+
+    !2026-10-28 生产实证: 扩展重装后可选站点权限被重置, 三档全失败 12h+, 日志却一直写
+    「页面取数失败 / [HR 页面改版]」—— 站点页面**根本没被访问**, 把它当改版是把配置态伪装成
+    站点结论(计划 26-10-29-0147 D3)。
+    """
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue, ok=False, answer=b"", error="站点未授权(https://pt.example.com)", kind=KIND_NO_PERMISSION)
+    try:
+        with pytest.raises(HrExtensionNoPermission) as err:
+            fetcher.get_text(URL)
+        assert isinstance(err.value, HrChannelUnavailable), "父类语义成立(通道层统一处置: 不计失败/不推熔断)"
+        assert not isinstance(err.value, HrFetchError) or isinstance(err.value, HrChannelUnavailable)
+        assert "未授权" in str(err.value)
+    finally:
+        auto.close()
+
+
+def test_network_result_is_channel_layer_with_own_class():
+    """扩展回传 kind='network' ⇒ `HrExtensionNetwork`: 与「缺权限」同层但**不同类**
+
+    两者的解不同(查浏览器网络/代理 vs 去扩展授权), 文案不能共用 —— 都归通道层是为了不把
+    「浏览器到不了站点」记成「站点改版」(计划 26-10-29-0147 D3)。
+    """
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue, ok=False, answer=b"", error="Failed to fetch", kind=KIND_NETWORK)
+    try:
+        with pytest.raises(HrExtensionNetwork) as err:
+            fetcher.get_text(URL)
+        assert isinstance(err.value, HrChannelUnavailable)
+        assert not isinstance(err.value, HrExtensionNoPermission), "两个类必须可区分(动作不同)"
+        assert "网络" in str(err.value)
+    finally:
+        auto.close()
+
+
+def test_unknown_kind_still_falls_back_to_fetch_error():
+    """未知 kind(旧扩展 / 未来新增分类) ⇒ 仍走 `HrFetchError`: 向后兼容不许靠白名单校验
+
+    旧扩展只会回 `ext-quota` / `login-page`; 新后端必须照旧把它们之外的一切当普通取数失败,
+    否则「先升级后端」的那段时间会静默丢任务。
+    """
+    queue, fetcher = make_fetcher()
+    auto = _Auto(queue, ok=False, answer=b"", error="HTTP 503", kind="something-new")
+    try:
+        with pytest.raises(HrFetchError) as err:
+            fetcher.get_text(URL)
+        assert not isinstance(err.value, HrChannelUnavailable), "未知分类不得被误抬成通道层"
+        assert "503" in str(err.value)
     finally:
         auto.close()
 

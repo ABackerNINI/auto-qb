@@ -20,3 +20,5 @@
 **守阵**: `tests/test_hr_service.py`(通道归位 / 不升级疑似改版 / 页面失败边界回归 / 层表)· `tests/test_hr_worker.py`(三档可见性)· `tests/test_webui_backend_errlog.py`(静默不入环)· `tests/test_notify.py`(静默不通知)· `tests/test_hr_server.py`(被拒接触面 + 401 节流)
 
 **复发**: 2026-10-09 用户实报「关浏览器过夜, 错误历史出现 4 条 `[HR 页面改版] 页面取数失败(等待浏览器扩展取数超时 180s)` + 2 条 `[HR 通道静默]`」—— 根因即「等回传超时」抛的是裸 `HrFetchError`。修复见 [plans/26-10-09-0821](../../plans/26-10-09-0821-plan-hr-fault-domain.html)。
+
+**复发 +1**: 2026-10-28 实报「两个站点 12h 全站零行, 三档 `fail_streak` 涨到 55+, 日志全是 `[HR 页面改版] 页面取数失败(Failed to fetch)`」—— 真因是**扩展缺站点 host 权限**(重装扩展后可选权限被清空), 却因为扩展回传的是「未知 kind」而落进 `HrFetchError`, 又一次被当成站点改版; 同时 `zero_rows` 判据只看「总量为 0」, 把「一页都没取到」写成「结构完好但清单为 0」, 把用户引向 `--hr-confirm-empty` 人工对账。两处都是本坑的**原形**(环境态冒充站点结论), 修复: 新增 `no-permission` / `network` 两个 kind → 两个通道层异常 → 落盘 `channel_last_error` → 通道态展示 + `blocking_reason` 优先说病因, 并把 `zero_rows` 改成「总量为 0 **∧ 全档 ok**」。见 [plans/26-10-29-0147](../../plans/26-10-29-0147-plan-hr-ext-site-permission.html)。

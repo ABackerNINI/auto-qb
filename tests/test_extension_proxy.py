@@ -62,8 +62,8 @@
   answered + 逐候选 url/note), 选项页顶部总览与逐候选结果的渲染源
 - test_instance_health_ledger_records_per_instance: 真跑 background.js —— 健康台账按端点落, 连续失败累加、
   成功清零、清单外端点剪除(C3 的「疑似失效」阈值靠它, R3 不许每请求写 storage)
-- test_badge_reflects_connection_state: 真跑 background.js —— 徽标四态(未配置/正常/重连中/发现失败,
-  C4 边界)+ 禁用清空 + 点图标开选项页
+- test_badge_reflects_connection_state: 真跑 background.js —— 徽标五态(未配置/正常/重连中/发现失败/
+  站点未授权, C4 边界)+ 禁用清空 + 点图标开选项页
 - test_badge_text_is_ascii_only: 徽标文案禁非 ASCII 图形符(code-style: 代码禁图形符号)
 - 降噪场景(_NODE_RUN_NOISE)显式 discoveryAddress 置空 —— 那条守阵钉「连接失败降噪」, 不混发现流日志
 ### 连接自愈轮 · S6 守阵补强(计划 26-10-15-2357 S6)
@@ -73,7 +73,7 @@
 - test_options_listens_instances_changes: storage.onChanged 监听 instances/instanceHealth/lastDiscovery(S3④)
 - test_conn_state_judgement_matches_badge: **跨层机械比对** —— 徽标态(background.js::badgeStateOf)与顶部
   总览态(options.js::connStateOf)是同一判据的两个展示面, 切出函数体真跑同一张真值表逐输入一致 +
-  四态键集(BADGE vs CONN_STATE_TEXT)同源 + 徽标图例(options.html)与 BADGE label 同源
+  五态键集(BADGE vs CONN_STATE_TEXT)同源 + 徽标图例(options.html)与 BADGE label 同源
 ### 连接区 UI 重排 + 实例状态入表轮(计划 26-10-16-0214 S4-S6)
 - test_row_health_of_four_states: 真跑 options.js::rowHealthOf —— 行级四态真值表(绿=正常 / 红=401/403
   token 或来源被拒, 红优先于 ok / 橙=连败(连不上·连败 N 轮) / 灰=还没轮过; 旧台账无 state 字段按 C2
@@ -85,17 +85,25 @@
   fetch); probeMainInstance 保留但只服务 discoverNow 命中后的即时结论(C1 单一写入口: 台账唯一写者是
   后台); 「自测端点连通」与「载入」旧字面量不得回潮(只扫字符串字面量, 注释里的历史说明不算)
 - test_badge_legend_says_browser_toolbar: 徽标图例必须写明「浏览器工具栏」(旧歧义措辞「工具栏图标徽标」
-  不得回潮 —— 读者会误解为本页实例表)并配四态框式色样(R4)
+  不得回潮 —— 读者会误解为本页实例表)并配框式色样(R4; 站点未授权与发现失败共用红框)
 - test_instance_source_badge_is_manual_or_auto: 来源徽标只有「手动/自动」两值(R2, 「优先」徽标废止;
   上游 26-10-15-2357 口径演进 —— 历史测试中不存在 [优先] 徽标断言, 无需翻转, 以本守阵为准)
 - test_options_swiss_wiring 扩: 元素清单随 S1 更新(helpTroubleshoot/connStateDot/Text/Meta)
   + 「自测端点连通」「载入」按钮字面量不得回潮 + 实例表真表头(状态列)
 - test_badge_reflects_connection_state 更新(R4 徽标文字折中): 平时徽标文本清空(状态色外框零遮挡),
-  仅「发现失败」态为红 `!` + setBadgeBackgroundColor; 旧 OK/.. 徽标文案不得回潮
-- test_badge_icon_frame_mapping: 真跑 background.js::badgeIconOf —— 四态->{16,32} 图标路径映射 +
+  仅「发现失败」与「站点未授权」两态为红 `!` + setBadgeBackgroundColor; 旧 OK/.. 徽标文案不得回潮
+- test_badge_icon_frame_mapping: 真跑 background.js::badgeIconOf —— 五态->{16,32} 图标路径映射 +
 - test_extension_quota_windows_roll_over
   8 个 PNG(scripts/gen_ext_icons.py 生成物)在盘上 + manifest action.default_icon 指向基础图
   (未配置态与安装初始态共用; Chrome 无还原默认图标 API, 外框方案必须自带基础图)
+### 站点可选权限轮(计划 26-10-29-0147 W1/D5): 未授权即拒发 + 逐站展示
+- test_origin_grant_matches_across_layers: 真跑两份 `originGranted`(background.js 与 options.js 各写一份,
+  两页不共享 SW 作用域)—— 三种模式(`*` / `*.parent` / 精确)+ scheme 必须一致的真值表逐行对照,
+  漂移即红; `permissions.contains` 判多 origin 的写法不得回潮(只在**全部**授予时为真)
+- test_run_task_refuses_without_site_permission: 真跑 background.js —— 站点未授权时**零请求**
+  (stub 的 fetch 一次都不许被调)且回 `kind:'no-permission'`; 授权后同一任务照常发出
+- test_run_task_marks_network_failure_when_granted: 已授权却 `Failed to fetch` ⇒ `kind:'network'`
+  (与缺权限是两个动作: 查代理 vs 去授权; 都不许落到页面层 `HrFetchError`)
 """
 import json
 import pathlib
@@ -1685,7 +1693,8 @@ def test_badge_text_is_ascii_only():
     bg = _read(BACKGROUND_JS)
     block = bg[bg.index("const BADGE = {"):bg.index("function badgeStateOf")]
     texts = re.findall(r"text: '([^']*)'", block)
-    assert len(texts) == 4, f"徽标四态各有文案(改结构时这条一起改): {texts}"
+    # 26-10-29-0147 D5 起五态(新增 noSitePermission): 改结构时这条一起改
+    assert len(texts) == 5, f"徽标五态各有文案(改结构时这条一起改): {texts}"
     for text in texts:
         assert text.isascii(), f"徽标文案出现非 ASCII 字符 {text!r}(小字号下渲染成方框)"
 
@@ -2019,6 +2028,24 @@ const cases = [
     instances: [{ endpoint: A }], discoveryAddress: 'http://127.0.0.1:18788',
     instanceHealth: { [A]: { ok: true } }, lastDiscovery: { ok: false, answered: false }
   },
+  // 26-10-29-0147 D5: 通道通 + 站点未授权 ⇒ noSitePermission(必须压过 ok, 否则「连接正常」是假话)
+  {
+    instances: [{ endpoint: A }], discoveryAddress: '',
+    instanceHealth: { [A]: { ok: true } },
+    sitePerms: { 'https://pt.example.com': { granted: false, checkedAt: 1 } }
+  },
+  // 反向对照: 同样有未授权记录但端点不通 ⇒ 仍是重连中(不许拿站点未授权盖住连接故障)
+  {
+    instances: [{ endpoint: A }], discoveryAddress: '',
+    instanceHealth: { [A]: { ok: false } },
+    sitePerms: { 'https://pt.example.com': { granted: false, checkedAt: 1 } }
+  },
+  // 全部已授权 ⇒ 回到 ok
+  {
+    instances: [{ endpoint: A }], discoveryAddress: '',
+    instanceHealth: { [A]: { ok: true } },
+    sitePerms: { 'https://pt.example.com': { granted: true, checkedAt: 1 } }
+  },
 ];
 const badgeBlock = bg.slice(bg.indexOf('const BADGE = {'), bg.indexOf('function badgeStateOf'));
 const labels = (badgeBlock.match(/label: '([^']*)'/g) || []).map((s) => s.replace("label: '", '').replace("'", ''));
@@ -2049,14 +2076,204 @@ def test_conn_state_judgement_matches_badge():
     assert got["badgeOut"] == got["connOut"], \
         f"徽标态与顶部总览态对同一配置给出了不同结论(同一条判据的两份实现漂移了): {got}"
     assert got["badgeOut"] == [
-        "unconfigured", "reconnecting", "ok", "discoveryFailed", "reconnecting", "reconnecting", "ok"
-    ], f"四态判据(计划 §3.3, C4 边界)取值不符: {got['badgeOut']}"
-    assert got["badgeKeys"] == got["connKeys"] == ["unconfigured", "ok", "reconnecting", "discoveryFailed"], \
-        f"四态键集必须同源: BADGE={got['badgeKeys']} CONN_STATE_TEXT={got['connKeys']}"
+        "unconfigured", "reconnecting", "ok", "discoveryFailed", "reconnecting", "reconnecting", "ok",
+        "noSitePermission", "reconnecting", "ok"
+    ], f"五态判据(计划 §3.3 + 26-10-29-0147 D5, C4 边界)取值不符: {got['badgeOut']}"
+    assert got["badgeKeys"] == got["connKeys"] == [
+        "unconfigured", "ok", "reconnecting", "discoveryFailed", "noSitePermission"
+    ], f"五态键集必须同源: BADGE={got['badgeKeys']} CONN_STATE_TEXT={got['connKeys']}"
     html = _read(OPTIONS_HTML)
     legend = html[html.index('id="badgeLegend"'):]
     for label in got["labels"]:
         assert label in legend, f"徽标图例没写全四态(与 background.js 的 BADGE label 同源): 缺 {label}"
+
+
+# ---------- 站点权限预检(计划 26-10-29-0147 W1/D1/D3): 跨层一致 + 取数前拒发 + 网络层归因 ----------
+
+#: 一次跑完: ① 两份 originGranted(background / options)对同一张真值表必须一致;
+#: ② runTask 三场景 —— 未授权(不发请求, kind=no-permission) / 已授权但 fetch 抛 Failed to fetch
+#: (kind=network) / 已授权且成功(ok)。
+_NODE_RUN_SITE_PERM = """
+const fs = require('fs');
+const vm = require('vm');
+function grab(src, name) {
+  const i = src.indexOf('function ' + name + '(');
+  if (i < 0) throw new Error('未找到函数 ' + name);
+  let depth = 0, seen = false;
+  for (let k = i; k < src.length; k += 1) {
+    const ch = src[k];
+    if (ch === '{') { depth += 1; seen = true; }
+    else if (ch === '}') { depth -= 1; if (seen && depth === 0) return src.slice(i, k + 1); }
+  }
+  throw new Error('函数体花括号不配平: ' + name);
+}
+const bg = fs.readFileSync(process.argv[1], 'utf8');
+const opt = fs.readFileSync(process.argv[2], 'utf8');
+const mk = (src) => new Function(
+  grab(src, 'splitPattern') + '\\n' + grab(src, 'originGranted') + '\\nreturn originGranted;'
+)();
+const bgFn = mk(bg);
+const optFn = mk(opt);
+
+// 真值表: [origin, 已授予模式, 期望]
+const CASES = [
+  ['https://pt.example.com', ['https://pt.example.com/*'], true],
+  ['https://pt.example.com', ['http://pt.example.com/*'], false],
+  ['https://pt.example.com', ['https://*.example.com/*'], true],
+  ['https://example.com', ['https://*.example.com/*'], false],
+  ['https://pt.example.com', ['https://*/*'], true],
+  ['https://pt.example.com', [], false],
+  ['https://pt.example.com', ['<all_urls>'], false],
+  ['https://pt.example.com', ['http://127.0.0.1/*'], false],
+  ['https://pt.example.com', ['https://pt.example.com'], true],
+];
+
+const noop = { addListener() {} };
+const PAGE = '<html><body><table><tr><td>1</td></tr></table></body></html>';
+const PAGE_URL = 'https://pt.example.com/myhr.php?hrtype=A';
+const store = {};
+let fetches = 0;
+let grantedOrigins = [];
+let failFetch = false;
+const chrome = {
+  alarms: { create: () => {}, onAlarm: noop },
+  runtime: { onInstalled: noop, onStartup: noop, onMessage: noop, onSuspend: noop },
+  permissions: {
+    onAdded: noop, onRemoved: noop,
+    getAll: async () => ({ origins: grantedOrigins.slice() }),
+  },
+  storage: {
+    onChanged: noop,
+    local: {
+      get: (defaults) => {
+        const out = {};
+        for (const key of Object.keys(defaults || {})) out[key] = (key in store) ? store[key] : defaults[key];
+        return Promise.resolve(out);
+      },
+      set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+    },
+  },
+  action: {
+    setBadgeText: async () => {}, setBadgeBackgroundColor: async () => {},
+    setIcon: async () => {}, setTitle: async () => {}, onClicked: noop,
+  },
+  scripting: { executeScript: async () => [{ result: PAGE }] },
+  windows: {
+    create: async () => ({ id: 1, tabs: [{ id: 2 }] }),
+    get: async () => ({ id: 1 }), getLastFocused: async () => ({ id: 1 }),
+    update: async () => ({}), remove: async () => {},
+  },
+  tabs: { create: async () => ({ id: 2, windowId: 1 }), get: async () => ({ id: 2, status: 'complete' }), remove: async () => {} },
+};
+const sandbox = {
+  chrome, importScripts: () => {}, console, setTimeout, clearTimeout, Date, Promise, JSON, URL,
+  btoa, TextDecoder, TextEncoder,
+  fetch: async () => {
+    fetches += 1;
+    if (failFetch) throw new TypeError('Failed to fetch');
+    return {
+      ok: true, status: 200, headers: { get: () => 'text/html' },
+      text: async () => PAGE, arrayBuffer: async () => new ArrayBuffer(8), json: async () => ({}),
+    };
+  },
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[3], 'utf8'), sandbox);   // discovery.js
+vm.runInContext(fs.readFileSync(process.argv[4], 'utf8'), sandbox);   // site-caps.js
+vm.runInContext(bg, sandbox);                                        // background.js
+
+async function run(label, origins, fail) {
+  grantedOrigins = origins; failFetch = Boolean(fail); fetches = 0;
+  const got = await sandbox.runTask({ id: label, kind: 'page', url: PAGE_URL });
+  return { label: label, payload: got.payload, fetches: fetches, sitePerms: JSON.parse(JSON.stringify(store.sitePerms || {})) };
+}
+(async () => {
+  const tasks = [];
+  tasks.push(await run('no-perm', [], false));                                  // 未授权: 一个字节都不发
+  tasks.push(await run('net-fail', ['https://pt.example.com/*'], true));        // 已授权但网络层失败
+  tasks.push(await run('ok', ['https://pt.example.com/*'], false));             // 已授权且成功
+  process.stdout.write(JSON.stringify({
+    cases: CASES,
+    bgOut: CASES.map((c) => bgFn(c[0], c[1])),
+    optOut: CASES.map((c) => optFn(c[0], c[1])),
+    tasks: tasks,
+    sitePerms: store.sitePerms || {},
+  }));
+})();
+"""
+
+_SITE_PERM_TRACE: dict = {}
+
+
+def site_perm_trace() -> dict:
+    """跑一次 node 拿真值表 + runTask 三场景(缓存: 两个用例共用同一次 node 运行)"""
+    if _SITE_PERM_TRACE:
+        return _SITE_PERM_TRACE
+    node = _node()
+    if not node:
+        return {}
+    proc = _run_node(
+        [node, "-e", _NODE_RUN_SITE_PERM,
+         str(BACKGROUND_JS),
+         str(OPTIONS_JS),
+         str(DISCOVERY_JS),
+         str(SITE_CAPS_JS)]
+    )
+    assert proc.returncode == 0, f"node 跑站点权限场景失败: {proc.stderr.strip()}"
+    _SITE_PERM_TRACE.update(json.loads(proc.stdout))
+    return _SITE_PERM_TRACE
+
+
+def test_origin_grant_matches_across_layers():
+    """`originGranted` 在 background.js 与 options.js 是成对的两份 —— 同一张真值表必须逐格一致
+
+    (与 connStateOf/badgeStateOf 同一套纪律: 扩展页与 SW 不共享作用域, 允许成对, 不允许漂移)
+    同时钉住匹配语义: scheme 必须一致、`*` 与 `*.父域` 覆盖、通配不覆盖 apex、`<all_urls>` 这种
+    裸模式不被认(本扩展**从不**申请它, 出现即说明权限面被改坏)。
+    """
+    got = site_perm_trace()
+    if not got:
+        return  # 没装 node: 与其它前端守阵同口径静默跳过
+    for idx, (origin, patterns, expected) in enumerate(got["cases"]):
+        assert got["bgOut"][idx] == expected, f"background.originGranted({origin}, {patterns}) 应为 {expected}"
+        assert got["optOut"][idx] == expected, f"options.originGranted({origin}, {patterns}) 应为 {expected}"
+    assert got["bgOut"] == got["optOut"], "两份 originGranted 漂移了(徽标与选项页会给出相反结论)"
+
+
+def test_run_task_refuses_without_site_permission():
+    """取数前预检: 未授权 ⇒ **不发请求** + kind=no-permission + 落 sitePerms 缓存
+
+    这是 2026-10-28 故障的直接对策: 那次三档全失败 12h, 日志一直写「页面取数失败」——
+    因为扩展根本没去判「我有没有这个站的权限」, 只能等 fetch 抛一句 `Failed to fetch` 再猜。
+    """
+    got = site_perm_trace()
+    if not got:
+        return
+    no_perm = got["tasks"][0]
+    assert no_perm["payload"]["ok"] is False
+    assert no_perm["payload"]["kind"] == "no-permission", no_perm
+    assert no_perm["fetches"] == 0, "未授权时不许发出任何站点请求(发也发不出去, 只会多烧一次额度)"
+    assert "未授权" in no_perm["payload"]["error"]
+    perms = (no_perm.get("sitePerms") or {}).get("https://pt.example.com") or {}
+    assert perms.get("granted") is False, f"未授权必须落缓存(徽标读它): {no_perm.get('sitePerms')}"
+
+
+def test_run_task_marks_network_failure_when_granted():
+    """已授权但 fetch 仍报 `Failed to fetch` ⇒ kind=network(通道层); 已授权且成功 ⇒ ok
+
+    !两者必须分开: 缺权限的解是「去授权」, 网络层的解是「查代理/VPN」—— 共用一句 `Failed to fetch`
+    正是这次故障被误读成「站点改版」的起点。
+    """
+    got = site_perm_trace()
+    if not got:
+        return
+    net = got["tasks"][1]
+    assert net["payload"]["ok"] is False
+    assert net["payload"]["kind"] == "network", net
+    assert net["fetches"] == 1, "已授权时请求该照常发出(失败发生在网络层, 不是预检拦的)"
+    ok = got["tasks"][2]
+    assert ok["payload"]["ok"] is True, ok
+    assert ok["payload"].get("kind") is None, "成功回传不得带错误分类"
 
 
 def test_log_ui_wiring_and_escape():

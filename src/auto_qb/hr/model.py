@@ -64,6 +64,11 @@ LANE_FAILED = "failed"  # 本波结构性失效(表头缺失/字段缺失, 第 1
 CHANNEL_OK = "ok"
 CHANNEL_SILENT = "silent"
 CHANNEL_DISABLED = "disabled"
+#: 扩展**没有该站点的 host 权限**(可选权限未授予 / 重装后丢失) —— 请求根本没发出去。
+#: 与 silent 分开: silent 是「等通道恢复就会好」, 这个**必须人动手**(去扩展选项页授权)。
+CHANNEL_NO_PERMISSION = "no-permission"
+#: 扩展到站点的网络层失败(DNS/代理/断网) —— 同样是人要处置的环境态, 不是站点改版
+CHANNEL_NETWORK = "network"
 
 # 拉取历史容量(计划 26-10-04-0312 §3.2; 容量拍板 2026-10-04: 2000 条 + 6 个月, 覆盖计划原稿的 200 条/14 天)
 HISTORY_CAP = 2000  #: 每站点保留的最近事件条数(修剪助手按追加序截新)
@@ -575,6 +580,11 @@ class HrSiteData:
     #: 拉取历史(计划 26-10-04-0312 §3.1): 追加式事件表, 纯观测不入判定, 随站点文件共享;
     #: 追加前先经 prune_history 修剪(容量 + 按龄), 存量文件不含该键时回空表(零迁移)
     history: List[HrHistoryEvent] = field(default_factory=list)
+    #: 通道层最近一次失败的痕迹 `{"kind": <CHANNEL_*>, "detail": str, "ts": epoch}`
+    #: (计划 26-10-29-0147 W2): 只由 service 在「通道不可用」的两种新形态(缺站点权限 / 网络层
+    #: 失败)时写入, 拿到正常内容页即清空 —— 让「扩展到底能不能访问这个站」成为**落盘的观测事实**,
+    #: 而不是靠 `healthy_ts` 陈旧 + 三档全失败反推。缺键回 {} (零迁移, 不抬 schema_version)。
+    channel_last_error: Dict[str, Any] = field(default_factory=dict)
 
     # ---------- 读写 ----------
 
@@ -616,6 +626,7 @@ class HrSiteData:
             "empty_confirmed_at": self.empty_confirmed_at,
             "retry_after_until": self.retry_after_until,
             "history": [e.to_json() for e in self.history],
+            "channel_last_error": dict(self.channel_last_error),
         }
 
     @classmethod
@@ -633,6 +644,9 @@ class HrSiteData:
             empty_confirmed_at=_as_float(raw.get("empty_confirmed_at")),
             retry_after_until=_as_float(raw.get("retry_after_until")),
             history=[HrHistoryEvent.from_json(item) for item in (raw.get("history") or [])],
+            # 缺键 / 非 dict(旧文件或手改坏)一律回空 dict —— 观测字段不该让整站读盘失败
+            channel_last_error=dict(raw.get("channel_last_error"))
+            if isinstance(raw.get("channel_last_error"), dict) else {},
         )
         for item in raw.get("index") or []:
             entry = HrEntry.from_json(item)

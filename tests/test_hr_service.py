@@ -202,6 +202,18 @@
 - test_advance_observation_scope_exit_resets_streak: A 档观察条目连续 2 波位置覆盖出口: 出口后 streak 显式清零(不是 None)
 - test_fuzzy_name_match_rejects_noise_only_overlap
 - test_mark_fetch_failed_and_seen_rows_units
+
+### 站点可选权限轮(计划 26-10-29-0147 W2/W4): 归层、判据与告警
+- test_zero_rows_false_when_all_lanes_failed: 全档失败的波**不是**零行波(D4: 总量为 0 ∧ 全档 ok)——
+  改前它自称「结构完好但清单为 0」并把用户引向 --hr-confirm-empty(2026-10-28 实报的误导)
+- test_zero_rows_true_when_all_lanes_ok_and_empty: 全档有效且确实为空 ⇒ 零行波成立, 人工对账话术照旧
+- test_zero_rows_false_when_one_lane_failed: 一档 ok 两档失败也不算: 有档没看到就没资格判「空」
+- test_no_permission_is_channel_layer_and_persisted: 缺站点权限归通道层(fail_streak 不增长)+ 落盘
+  channel_last_error + channel_state 出 no-permission(改回 HrFetchError 即红)
+- test_network_failure_persists_network_kind: 网络层落成**不同** kind(动作不同: 查代理 vs 去授权)
+- test_channel_error_cleared_on_recovery: 拿到正常内容页即清通道痕(告警态与展示态同一恢复点)
+- test_page_fetch_failure_escalates_after_streak: 页面层连续 3 波同档失效 ⇒ ERROR 升级(D8: 只接页面层;
+  改前 fail_streak 涨到 58 也没有一句「疑似改版」)
 """
 import logging
 import re
@@ -214,8 +226,17 @@ import pytest
 
 import auto_qb.hr.service as hr_service
 from auto_qb.hr import events
-from auto_qb.hr.fetcher import HrChannelStopped, HrChannelTimeout, HrFetchError, NullFetcher
+from auto_qb.hr.fetcher import (
+    HrChannelStopped,
+    HrChannelTimeout,
+    HrExtensionNetwork,
+    HrExtensionNoPermission,
+    HrFetchError,
+    NullFetcher,
+)
 from auto_qb.hr.model import (
+    CHANNEL_NETWORK,
+    CHANNEL_NO_PERMISSION,
     CHANNEL_OK,
     FETCH_LANES,
     LANE_EXEMPT,
@@ -4336,3 +4357,120 @@ def test_advance_observation_scope_exit_resets_streak():
     assert entry.active is False, "位置被覆盖连续 2 波 -> 判移出"
     assert entry.missing_streak == 0, "出口后 streak 清零(不是 None)"
     assert "h11" in data.verified and data.verified["h11"].source == SOURCE_NOT_LISTED
+
+
+# ---------------- 站点权限 / 网络层失败归通道层 + 零行判据(计划 26-10-29-0147) ----------------
+
+
+def test_zero_rows_false_when_all_lanes_failed(tmp_path):
+    """全档失败的波**不是**零行波(计划 26-10-29-0147 D4)
+
+    改前 `zero_rows = 总量为 0`, 于是「一页都没取到」也自称「结构完好但清单为 0」, 并把 WebUI
+    引向 `--hr-confirm-empty` 人工对账 —— 2026-10-28 那次 12h 的故障就一直在这么说。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNoPermission("扩展未授权该站点"))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.action == ACTION_NO_CHANNEL
+    assert data.wave.zero_rows is False, "全档失败: 连清单都没看到, 不许判「清单为空」"
+    assert "结构完好" not in result.reason
+    assert "--hr-confirm-empty" not in result.reason
+
+
+def test_zero_rows_true_when_all_lanes_ok_and_empty(tmp_path):
+    """全档有效且确实为空 ⇒ 零行波成立(人工对账话术照旧)"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([], [], []))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert all(data.wave.lanes[lane].ok for lane in FETCH_LANES)
+    assert data.wave.zero_rows is True
+    assert "结构完好但清单为 0" in result.reason
+    assert data.wave.releases_enabled is False, "零行未确认仍不签发放行(行为不变)"
+
+
+def test_zero_rows_false_when_one_lane_failed(tmp_path):
+    """A 档取到空表、B 档取数失败 ⇒ 也不是零行波: 有档没看到, 这一波没资格判「空」"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([], [], []), fail_text_at={"B": "HTTP 500"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].ok is True and data.wave.lanes["B"].ok is False
+    assert data.wave.zero_rows is False
+    assert "结构完好" not in result.reason
+
+
+def test_no_permission_is_channel_layer_and_persisted(tmp_path):
+    """缺站点权限: 归通道层(不计档位失败) + 落盘 channel_last_error(计划 D3/D6)
+
+    !这条是「环境态不许冒充站点结论」的机械守卫: 若哪天有人把它改回 HrFetchError,
+    `fail_streak` 会开始涨、日志会带 `[HR 页面改版]`, 这里立刻红。
+    """
+    clock = Clock()
+    from auto_qb.config.models import HrChannelConfig
+
+    fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNoPermission("扩展未授权该站点"))
+    service = make_service(tmp_path, fetcher, clock=clock, gconf=global_conf(channel=HrChannelConfig(enabled=True)))
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert result.action == ACTION_NO_CHANNEL
+    # 通道层失败走 _abort_wave: 波次结构不落盘(没有"这一波跑到哪"可言), 故 lanes 要么为空、
+    # 要么全是上一波的旧值 —— 无论哪种, 都不许出现 fail_streak 增长。
+    for lane_state in data.wave.lanes.values():
+        assert lane_state.fail_streak == 0, "通道层失败不许推进档位连续失效计数"
+    assert data.channel_last_error.get("kind") == CHANNEL_NO_PERMISSION
+    assert data.channel_last_error.get("ts", 0) > 0
+    assert service.channel_state(SITE, data) == CHANNEL_NO_PERMISSION
+
+
+def test_network_failure_persists_network_kind(tmp_path):
+    """网络层失败与缺权限落成**不同**的 kind(动作不同: 查代理 vs 去授权)"""
+    clock = Clock()
+    from auto_qb.config.models import HrChannelConfig
+
+    fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNetwork("Failed to fetch"))
+    service = make_service(tmp_path, fetcher, clock=clock, gconf=global_conf(channel=HrChannelConfig(enabled=True)))
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.channel_last_error.get("kind") == CHANNEL_NETWORK
+    assert service.channel_state(SITE, data) == CHANNEL_NETWORK
+
+
+def test_channel_error_cleared_on_recovery(tmp_path):
+    """拿到正常内容页即清通道痕 —— 告警态与展示态必须同一个恢复点"""
+    clock = Clock()
+    fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNoPermission("扩展未授权该站点"))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.channel_last_error, "先确认痕迹已落盘"
+    fetcher.channel_error = None
+    fetcher.pages.update(standard_pages([], [], []))
+    clock.advance(13 * 3600)
+    run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.channel_last_error == {}, "恢复后不许留旧痕(否则站点卡会一直红着)"
+    assert service.channel_state(SITE, data) != CHANNEL_NO_PERMISSION
+
+
+def test_page_fetch_failure_escalates_after_streak(tmp_path, caplog):
+    """页面层连续 3 波同档失效 ⇒ ERROR 升级(计划 D8)
+
+    此前只有「结构失效」(_LaneAbort)接了升级告警, 取数失败这条没接 —— 于是 fail_streak 涨到
+    58 也没有一句「疑似改版」, 信号全被 `_warn_parse` 节流成 INFO(2026-10-28 实报)。
+    """
+    clock = Clock()
+    fetcher = FakeFetcher(pages=standard_pages([], [], []), fail_text_at={"A": "HTTP 500"})
+    service = make_service(tmp_path, fetcher, clock=clock)
+    # 推进 25h: 部分成功波会把拉取间隔推到 24h(稳态降频), 13h 不够 —— 不然中间会夹一个
+    # ACTION_WAITING("未到拉取时刻"), streak 永远差一波。
+    for _ in range(3):
+        run_wave(service, {})
+        clock.advance(25 * 3600)
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].fail_streak == 3
+    assert "已连续 3 波失效" in caplog.text, "页面层取数失败也必须能升到 ERROR"

@@ -33,12 +33,16 @@ from .fetcher import (
     HrChannelQuota,
     HrChannelStopped,
     HrChannelUnavailable,
+    HrExtensionNetwork,
+    HrExtensionNoPermission,
     HrFetchError,
     HrFetcher,
     HrLoginExpired,
 )
 from .model import (
     CHANNEL_DISABLED,
+    CHANNEL_NETWORK,
+    CHANNEL_NO_PERMISSION,
     CHANNEL_OK,
     CHANNEL_SILENT,
     FETCH_LANES,
@@ -319,6 +323,11 @@ class _WaveContext:
         self.parse_problem = False
         self.budget_limited = False
         self.had_error = False
+        #: 本波**产生处**已经打过 WARNING/ERROR(登录失效等): `_finish_wave` 末尾重算 `alerted`
+        #: 时要把这条算进去, 否则 worker 状态层会重复记一遍。此前这个信号是靠「零行波」间接
+        #: 得到的(登录波三档无数据 ⇒ zero_rows=True ⇒ alerted=True); 零行判据收紧成「全档有效」
+        #: 后(计划 26-10-29-0147 D4)那条间接路径断了, 故显式化。
+        self.alerted = False
         self.notes: List[str] = []
 
     def seen_rows(self) -> Mapping[int, HrEntry]:
@@ -387,6 +396,12 @@ class HrRefreshService:
         #: 「无可用取数通道」已告警过的站点: 取数线程是分钟级轮询, 每轮都 WARNING 会把
         #: notify 的系统通知淹掉 —— 只在**状态变化**时报一次, 通道恢复后重置。
         self._no_channel_warned: set = set()
+        #: 「扩展未授权该站点」已告警过的站点(计划 26-10-29-0147 D7): 它是**要人动手**的配置态,
+        #: 故单独一套去重集合 + ERROR 级 + 可见(进前端错误历史、触发主动通知);
+        #: 与 `_no_channel_warned` 分开是因为两者级别与可见性不同, 共用一套会互相压掉。
+        self._no_perm_warned: set = set()
+        #: 「扩展到站点的网络层失败」已告警过的站点: 归通道层(等环境恢复), 每站一次 + silent
+        self._network_warned: set = set()
         #: 「扩展侧硬上限」已告警过的站点(超限会持续到下一个窗口, 只在状态变化时报一次)。
         self._ext_quota_warned: set = set()
         #: 「登录失效」已告警过的站点: 登录态没恢复前每轮都会命中登录页, 报一次就够。
@@ -662,6 +677,10 @@ class HrRefreshService:
         except HrChannelUnavailable as e:
             result.action = ACTION_NO_CHANNEL
             result.reason = str(e)
+            # 落盘通道痕(计划 26-10-29-0147 W2): 只有「缺站点权限 / 网络层失败」两种新形态写,
+            # 让展示层能直接说「扩展未授权该站点」, 而不是让用户从「三档全失败」反推。
+            # 必须在 _abort_wave 之前 —— 随同一次 commit 落盘。
+            self._note_channel_error(data, e)
             self._warn_no_channel(site, e)
             _abort_wave()
             return
@@ -672,7 +691,7 @@ class HrRefreshService:
             self._warn_login(site, e)
             result.action = ACTION_ERROR
             result.reason = str(e)
-            result.alerted = True
+            wave.alerted = True  # _finish_wave 会重算 result.alerted, 这里只留信号(见 _WaveContext)
             # 扩展回传「登录页」时请求确实发出去了: 间隔基准必须前进, 否则登录态恢复前
             # 每轮 poll(60s)都立即重发, 白烧日额还持续刷站点(这条路径不经过页面级 mark)。
             budget.mark()
@@ -744,7 +763,13 @@ class HrRefreshService:
                     wave.had_error = True
                     wave.notes.append(f"档位 {lane} 页面取数失败: {e}")
                     self._warn_parse(site, events.fetch_failed(site, 1, 1, str(e)))
-                    _mark_fetch_failed_lane(lane_states, wave)
+                    if _mark_fetch_failed_lane(lane_states, wave):
+                        # 连续多波同档失效的 ERROR 升级(§5.2 / 计划 26-10-29-0147 D8): 此前只有
+                        # 「结构失效」(_LaneAbort)那条路接了升级告警, 取数失败这条没接 —— 于是
+                        # fail_streak 涨到 58 也没有一句「疑似改版」, 信号全被节流成 INFO。
+                        # 通道层不会走到这里(上面那行 except 已把 HrChannelUnavailable 家族 raise 走),
+                        # 所以这条天然只覆盖「真·页面层失败」。
+                        self._maybe_alert_lane_fail(site, st)
                     wave.current_lane = ""
                     active.remove(lane)
                     continue
@@ -758,7 +783,7 @@ class HrRefreshService:
                     raise HrFetchError(f"命中挑战页(档位 {lane} 第 {page_no} 页)")
                 # ---- 站点恢复重置(§5.2 告警口径): 正常内容页到手 = 通道/额度/登录态都通 ——
                 # 清三个「已告警过」去重标记, 同类事件再次发生时重新报一次。
-                self._reset_warned_on_recovery(site)
+                self._reset_warned_on_recovery(site, data)
                 parsed = adapter.parse_page(lane, html)
                 if st.wave_ts <= 0:
                     # 新鲜度闸门用本档**首页**取数时刻(该档快照的最早时刻, 最保守基准)
@@ -1152,7 +1177,12 @@ class HrRefreshService:
         #      站点合法清账后会把批量签发永久冻死(误触面)。 ----
         total_rows = sum(st.rows for st in lane_states.values())
         retention_ratio, retention_ok = self._retention_check(data, lane_states, wave)
-        zero_rows = total_rows == 0
+        # 「结构完好的零行波」= **全档有效但清单为空**(计划 26-10-29-0147 D4)。改前只判总量为 0,
+        # 于是「一页都没取到」的全档失败波也被算成零行 —— 它随后把 WebUI 引向
+        # `--hr-confirm-empty` 人工对账(2026-10-28 实报: 12h 里一直在说「结构完好但清单为 0」)。
+        # 有档没取到, 这一波就**没资格**判定「清单为空」: 释放闸门本就先要求 all(st.ok),
+        # 故收紧后不会误放行, 只让展示与告警不再撒谎。
+        zero_rows = total_rows == 0 and all(st.ok for st in lane_states.values())
         if total_rows > 0:
             data.empty_confirmed_at = 0.0  # 清单再现任何非零行 → 确认戳自动失效(§5.3)
         # ---- 失效波数清零(model.py「干净波清零」口径): 「连续失效」只跨失效波延续 ——
@@ -1232,7 +1262,9 @@ class HrRefreshService:
         result.releases_signed = signed + exits
         result.lane_texts = _lanes_summary_from(lane_states)
         notes = list(wave.notes)
-        if zero_rows and not confirmed_empty:
+        # `not wave.had_error` 是判据修正之外的第二道守卫(D4): 即便哪天判据再被改宽, 有取数
+        # 失败的波也不许自称「结构完好」——「结构」根本没被看到过。
+        if zero_rows and not confirmed_empty and not wave.had_error:
             notes.append("结构完好但清单为 0: 不签发放行(需 --hr-confirm-empty 人工对账)")
             if not wave.parse_problem and not wave.had_error:
                 self._warn_parse(site, events.zero_listing(site))
@@ -1250,7 +1282,7 @@ class HrRefreshService:
         )
         # 本波产生处已打过 WARNING/ERROR(页面失败/改版/防伪/零行/计数对不平) ⇒ worker 状态层只记 INFO 不重复
         result.alerted = bool(
-            wave.had_error or wave.parse_problem or not retention_ok or depth_broken or
+            wave.had_error or wave.parse_problem or not retention_ok or depth_broken or wave.alerted or
             (zero_rows and not confirmed_empty)
         )
         result.reason = "; ".join(notes)
@@ -1451,11 +1483,27 @@ class HrRefreshService:
         return out
 
     def channel_state(self, site: str, data: Optional[HrSiteData] = None) -> str:
-        """通道状态: disabled(未启用 channel) / silent(长期没有健康波) / ok"""
+        """通道状态: disabled / no-permission / network / silent / ok
+
+        `no-permission`(扩展未授权该站点)与 `network`(扩展到站点的网络不通)来自落盘的
+        `channel_last_error`(计划 26-10-29-0147 W3): 它们比 `silent` **更具体**, 故先判 ——
+        「长期没有健康波」只能说明"没成过", 说不出"为什么没成", 而用户要的正是后者。
+
+        !生效条件 `ts > healthy_ts`: 痕迹只在**上一次健康波之后**才算数。否则站点恢复后,
+        旧痕迹会把卡片一直标红(展示层撒谎比不展示更糟)。
+        """
         if not self.global_conf.channel.enabled:
             return CHANNEL_DISABLED
         if data is None:
             data, _err = self.store(site).read_unlocked()
+        last = data.channel_last_error or {}
+        kind = str(last.get("kind") or "")
+        try:
+            last_ts = float(last.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            last_ts = 0.0
+        if kind in (CHANNEL_NO_PERMISSION, CHANNEL_NETWORK) and last_ts > data.wave.healthy_ts:
+            return kind
         if data.wave.healthy_ts <= 0:
             return CHANNEL_SILENT
         if self._now() - data.wave.healthy_ts > CHANNEL_SILENCE_WARN:
@@ -1464,15 +1512,22 @@ class HrRefreshService:
 
     # ---------- 告警(升级但行为不变, §5.2) ----------
 
-    def _reset_warned_on_recovery(self, site: str) -> None:
+    def _reset_warned_on_recovery(self, site: str, data: Optional[HrSiteData] = None) -> None:
         """站点恢复(本波拿到正常内容页) → 清通道/额度/登录三类「已告警过」去重标记。
 
         「每站只报一次」的准确语义是**每次状态变化报一次**: 恢复即重置,
         下次同类事件重新告警(此前无条件在 _finish_wave 末尾清, 每波都重报)。
+
+        `data` 给定时同点清掉落盘的通道痕(`channel_last_error`) —— 告警态与展示态**必须同一个
+        恢复点**, 否则会出现「日志说恢复了、站点卡还红着」。
         """
         self._no_channel_warned.discard(site)
         self._ext_quota_warned.discard(site)
         self._login_warned.discard(site)
+        self._no_perm_warned.discard(site)
+        self._network_warned.discard(site)
+        if data is not None and data.channel_last_error:
+            data.channel_last_error = {}
 
     def _warn_once(
         self,
@@ -1497,12 +1552,58 @@ class HrRefreshService:
         seen.add(site)
         hr_log.emit(logger, level, msg, event=event, silent=silent)
 
+    def _note_channel_error(self, data: HrSiteData, err: Exception) -> None:
+        """把「通道层这次为什么不通」落成站点文件里的观测事实(计划 26-10-29-0147 W2)
+
+        只记**两种要人处置的新形态**(缺站点权限 / 网络层失败); 「等回传超时」不记 —— 它的语义
+        已经由 `healthy_ts` 陈旧 + `CHANNEL_SILENT` 表达, 再写一份只会多一个会过期的副本。
+        清除点在 `_reset_warned_on_recovery`(拿到正常内容页), 两处必须同点, 否则会出现
+        「告警已恢复、站点卡还红着」。
+        """
+        kind = ""
+        if isinstance(err, HrExtensionNoPermission):
+            kind = CHANNEL_NO_PERMISSION
+        elif isinstance(err, HrExtensionNetwork):
+            kind = CHANNEL_NETWORK
+        if not kind:
+            return
+        data.channel_last_error = {"kind": kind, "detail": str(err)[:200], "ts": self._now()}
+
     def _warn_no_channel(self, site: str, err: Exception) -> None:
         """无通道告警: **每个站点只报一次**(直到通道恢复)
 
-        通道层(含「等扩展超时」)统一在此出 —— 且标 `silent`: 只进后端 log, 不进前端错误历史、
+        通道层(含「等扩展超时」)统一在此出 —— 默认标 `silent`: 只进后端 log, 不进前端错误历史、
         不弹通知(计划 §03.2/D2①: 「连不上浏览器」是**预期内**的环境态)。
+
+        !两个例外(计划 26-10-29-0147 D7): 「扩展未授权该站点」与「网络层失败」虽然也归通道层,
+        但**不会自己好** —— 前者要人去授权、后者要人查代理。前者提级到 ERROR 且可见(它值得一次
+        主动通知: 2026-10-28 的故障就是被 silent 埋了 12h); 后者维持 WARNING + silent
+        (它可能只是 VPN 抖动, 恢复即消音)。
         """
+        if isinstance(err, HrExtensionNoPermission):
+            self._warn_once(
+                self._no_perm_warned,
+                site,
+                dup_level=logging.INFO,
+                dup_msg=f"HR 站点 {site} | 扩展仍未授权该站点(已告警过, 本波不做在线核实): {err}",
+                level=logging.ERROR,
+                msg=events.site_not_permitted(site, err),
+                event=events.EVENT_CHANNEL,
+                silent=False,
+            )
+            return
+        if isinstance(err, HrExtensionNetwork):
+            self._warn_once(
+                self._network_warned,
+                site,
+                dup_level=logging.DEBUG,
+                dup_msg=f"HR 站点 {site} | 扩展到站点的网络仍不通(已告警过, 本波不做在线核实): {err}",
+                level=logging.WARNING,
+                msg=events.extension_network(site, err),
+                event=events.EVENT_CHANNEL,
+                silent=True,
+            )
+            return
         self._warn_once(
             self._no_channel_warned,
             site,
@@ -1590,12 +1691,15 @@ def _settle_lane(st: HrLaneState, *, failed_detail: str, truncated_detail: str, 
     return False
 
 
-def _mark_fetch_failed_lane(lane_states, wave: "_WaveContext") -> None:
-    """页面级取数失败: 失败页无效, 该档在失效点截断(之前有效); 首页即失败 = 该档失效"""
+def _mark_fetch_failed_lane(lane_states, wave: "_WaveContext") -> bool:
+    """页面级取数失败: 失败页无效, 该档在失效点截断(之前有效); 首页即失败 = 该档失效
+
+    返回 True = 记了失效(调用方据此决定要不要走连续失效的升级告警, 与 `_settle_lane` 同口径)。
+    """
     st = lane_states.get(wave.current_lane)
     if st is None or st.status == LANE_OK:
-        return
-    _settle_lane(st, failed_detail="页面取数失败", truncated_detail="页面取数失败(失效点之前数据有效)", count_failure=True)
+        return False
+    return _settle_lane(st, failed_detail="页面取数失败", truncated_detail="页面取数失败(失效点之前数据有效)", count_failure=True)
 
 
 # ---------------- 模块级纯函数(便于单测直调) ----------------

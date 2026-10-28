@@ -12,7 +12,7 @@
 import time
 from typing import Callable, Optional, Protocol, runtime_checkable
 
-from .channel import KIND_EXT_QUOTA, KIND_LOGIN_PAGE, TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
+from .channel import KIND_EXT_QUOTA, KIND_LOGIN_PAGE, KIND_NETWORK, KIND_NO_PERMISSION, TASK_PAGE, TASK_TORRENT, HrResult, UrlPolicy
 from .queue import HrTaskQueue
 
 
@@ -74,6 +74,27 @@ class HrLoginExpired(HrFetchError):
     故 service 对它: **不计失败、不推进熔断**, 只报一次 WARNING(文案直接给动作), 并把原因写进
     站点文件的 `refresh.reason`(失败路径里唯一持久可见的痕迹) —— 不碰 fetched_at / 覆盖证明 /
     新鲜度基准, 所以证据链不会被动。
+    """
+
+
+class HrExtensionNoPermission(HrChannelUnavailable):
+    """**扩展没有该站点的 host 权限** —— 请求根本没发出去(可选权限未授予 / 重装后丢失)
+
+    !为什么归通道层而不是「页面取数失败」: 判据沿用异常家族既有那条(**能不能靠重试解决**)。
+    重试一万次也一样 —— 只有人去扩展选项页点「申请勾选站点的权限」才会好。若按页面层处置,
+    会得到三档全失败 + `[HR 页面改版]` 前缀 + 连续失效升级「疑似改版」, 把一个**配置态**
+    包装成**站点结论**(2026-10-28 生产实证: 重装扩展后 12h 一直这么报)。
+
+    动作与 `HrChannelUnavailable` 家族一致(等通道恢复), 但文案必须不同: 这是**要人动手**的,
+    不是「浏览器没开, 等会儿自己会好」, 故 service 对它单独提级(ERROR + 可见)。
+    """
+
+
+class HrExtensionNetwork(HrChannelUnavailable):
+    """**扩展到站点的网络层失败**(DNS / 代理 / 断网) —— 浏览器只给一句 `Failed to fetch`
+
+    !与 `HrExtensionNoPermission` 分开: 两者的解不同(查浏览器网络/代理 vs 去授权), 文案不能共用;
+    与 `HrFetchError` 分开: 站点页面同样没被访问到, 记成「页面取数失败」等于让环境态冒充站点结论。
     """
 
 
@@ -174,6 +195,12 @@ class ChannelFetcher:
                 raise HrLoginExpired(f"扩展取到登录页而非内容({detail}): {url}")
             if result.kind == KIND_EXT_QUOTA:
                 raise HrChannelQuota(f"扩展侧硬上限挡下取数({detail}): {url}", retry_after=result.retry_after)
+            if result.kind == KIND_NO_PERMISSION:
+                # 通道层: 请求没发出去(可选站点权限未授予) —— 只有人去授权才会好
+                raise HrExtensionNoPermission(f"扩展未授权该站点, 取数未发起({detail}): {url}")
+            if result.kind == KIND_NETWORK:
+                # 通道层: 站点请求在网络层就失败(DNS/代理/断网) —— 站点页面同样没被访问到
+                raise HrExtensionNetwork(f"扩展到站点的网络请求失败({detail}): {url}")
             raise HrFetchError(f"扩展取数失败({detail}): {url}", retry_after=result.retry_after)
         if not result.body:
             raise HrFetchError(f"扩展回传内容为空: {url}")
@@ -233,6 +260,7 @@ def build_channel_fetcher(
 
 
 __all__ = [
-    "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelTimeout", "HrChannelUnavailable", "HrFetchError",
-    "HrFetcher", "HrLoginExpired", "NullFetcher", "build_channel_fetcher", "is_available", "query_param"
+    "ChannelFetcher", "HrChannelQuota", "HrChannelStopped", "HrChannelTimeout", "HrChannelUnavailable",
+    "HrExtensionNetwork", "HrExtensionNoPermission", "HrFetchError", "HrFetcher", "HrLoginExpired", "NullFetcher",
+    "build_channel_fetcher", "is_available", "query_param"
 ]

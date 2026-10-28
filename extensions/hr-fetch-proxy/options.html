@@ -40,6 +40,15 @@
     }
     .sites label:last-child { border-bottom: 0; }
     .sites .org { color: #7d8a92; font: 12px Consolas, monospace; }
+    /* 逐站授权态(计划 26-10-29-0147 D5): origin 与徽章同格, 保持每行正好三个网格项 */
+    .sites .orgwrap { display: flex; gap: 10px; align-items: center; min-width: 0; flex-wrap: wrap; }
+    .sites .perm {
+      font: 11px Consolas, monospace; letter-spacing: .04em; padding: 1px 6px;
+      border: 1px solid rgba(255,255,255,.16); color: #7d8a92; white-space: nowrap;
+    }
+    .sites .perm.ok { color: #8fc98f; border-color: #8fc98f; }
+    .sites .perm.no { color: #d98a8a; border-color: #d98a8a; }
+    .permwarn { color: #e2a86e; }
     table.swtab { border-collapse: collapse; width: 100%; margin: 10px 0 0; font-size: 12.5px; max-width: 860px; }
     table.swtab th {
       text-align: left; font-size: 10.5px; letter-spacing: .09em; color: #7d8a92;
@@ -74,7 +83,7 @@
     table.swtab .inst-token { font-family: Consolas, "Courier New", monospace; font-size: 11.5px; color: #97a2aa; }
     table.swtab .tk-missing { color: #d98a8a; }
     table.swtab td.ep, table.swtab th.ep { white-space: nowrap; }
-    /* 徽标图例四态色样(框式, R4) */
+    /* 徽标图例五态色样(框式, R4; 站点未授权与发现失败共用红框, 语义靠角标/悬停区分) */
     .sw-frame { display: inline-block; width: 11px; height: 11px; border-radius: 3px; margin: 0 4px -1px 0; border: 2px solid; background: #101214; }
     .sw-none { border-color: #5a6673; } .sw-ok { border-color: #8fc98f; } .sw-warn { border-color: #e2a86e; } .sw-bad { border-color: #d98a8a; }
     details.attn > summary { color: #e8590c; }
@@ -144,7 +153,7 @@
     <div id="hint"></div>
     <details id="helpTroubleshoot">
       <summary>说明与排障(端口机制 / 配对码 / 徽标图例 / 排查指路)</summary>
-      <p class="sub" id="badgeLegend" style="margin-top:8px"><b>浏览器工具栏</b>的扩展图标<b>状态色外框</b>(常驻, 非本页元素): <span class="sw-frame sw-none"></span>未配置(无外框) · <span class="sw-frame sw-ok"></span>连接正常(绿框) · <span class="sw-frame sw-warn"></span>重连中(橙框) · <span class="sw-frame sw-bad"></span>发现失败(红框, 图标角标补 <code>!</code>) —— 悬停图标有中文结论, 点图标即回本页。</p>
+      <p class="sub" id="badgeLegend" style="margin-top:8px"><b>浏览器工具栏</b>的扩展图标<b>状态色外框</b>(常驻, 非本页元素): <span class="sw-frame sw-none"></span>未配置(无外框) · <span class="sw-frame sw-ok"></span>连接正常(绿框) · <span class="sw-frame sw-warn"></span>重连中(橙框) · <span class="sw-frame sw-bad"></span>发现失败(红框, 图标角标补 <code>!</code>) · <span class="sw-frame sw-bad"></span>站点未授权(红框, 图标角标补 <code>!</code> —— 端点通但站点权限没给, 取数一定全失败, 回第 2 步授权) —— 悬停图标有中文结论, 点图标即回本页。</p>
       <p class="sub">后端 hr_check.channel.discovery_port 默认 18788(被占自动顺延 18789/18790, 本扩展会并行探测整张候选表); 命中后实例自动并入上方列表, token 免手抄。发现地址与配对码随「立即发现」一起保存。</p>
       <p class="sub">后端 port 配 0(默认)时端口随机且经发现自动分发; 显式配端口时多实例必须不同 —— 后端启动日志会打一行「HR 取数通道端点已启动: http://127.0.0.1:&lt;端口&gt;」, 端口以那行为准。</p>
       <p class="sub">配对码: 仅跨机/开启配对时需要 —— 取后端启动日志或 HR 状态卡里的 6 位展示码; 同机零配置不需要。</p>
@@ -166,8 +175,10 @@
     <div class="stepno">2</div>
     <h4>站点权限(从后端获取, 默认全勾)</h4>
     <div id="siteChecks" class="sites"></div>
+    <p class="sub" id="sitePermSummary" style="margin:8px 0 0"></p>
     <div class="btnrow">
       <button class="primary" id="grantChecked">申请勾选站点的权限</button>
+      <button class="ghost" id="grantMissing">授权未授权站点</button>
       <button class="ghost" id="fetchSites">重新获取站点</button>
       <button class="ghost" id="selectAllSites">全选</button>
     </div>

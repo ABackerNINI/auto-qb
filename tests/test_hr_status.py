@@ -71,12 +71,23 @@
 - test_build_site_statuses_reads_error_and_sites: 显式站点序 + read_error 空串/原文透出
 - test_site_status_empty_index_backfill
 - test_site_status_observing_counts_only_positive_streak
+
+### 通道病因可见化(计划 26-10-29-0147 W3/D6)
+- test_channel_texts_carry_the_next_action: 两个新通道态人话逐字且**带动作**(用户看这行时正在问
+  「为什么一个都没取到」); 视图直取 CHANNEL_TEXTS 单点不另写第二份
+- test_blocking_reason_channel_cause_precedes_data_symptoms: 通道病因排在整条判定链最前 ——
+  缺权限/网络不通时既不劝人去「先跑一轮取数」也不劝人「--hr-confirm-empty」; 无病因时旧文案照旧
+- test_channel_state_stale_trace_ignored: `ts <= healthy_ts` 的陈旧痕不生效(恢复后旧痕不许把站点
+  卡标红), 且未知 kind / 坏 ts 不猜
 """
 import json
+from types import SimpleNamespace
 
 from auto_qb.config.models import SiteHrCheckConfig
 from auto_qb.hr import report
 from auto_qb.hr.model import (
+    CHANNEL_NETWORK,
+    CHANNEL_NO_PERMISSION,
     CHANNEL_OK,
     LANE_FAILED,
     LANE_IDLE,
@@ -94,6 +105,7 @@ from auto_qb.hr.model import (
 from auto_qb.hr.ratelimit import HrLimits, day_key
 from auto_qb.hr.resolve import HrSiteView
 from auto_qb.hr.status import (
+    CHANNEL_TEXTS,
     LANE_STATUS_TEXTS,
     LANE_TEXTS,
     LaneStatus,
@@ -1128,3 +1140,78 @@ def test_build_site_statuses_reads_error_and_sites():
     assert all(isinstance(s, SiteStatus) for s in out)
     default_out = build_site_statuses(svc, NOW)
     assert [s.site for s in default_out] == ["b", "a"], "不传站点回落 enabled_sites(其序)"
+
+
+# ---------- 通道病因可见化(计划 26-10-29-0147 W3/D6) ----------
+
+
+def test_channel_texts_carry_the_next_action():
+    """两个新通道态的人话逐字且**带动作**: 用户看到这一行时正在问「为什么一个都没取到」,
+    只说现象等于把排障整段留给人(2026-10-28 那次 12h 里, 界面只会说「静默」)"""
+    assert CHANNEL_TEXTS[CHANNEL_NO_PERMISSION] == "扩展未授权该站点(去扩展选项页授权)"
+    assert CHANNEL_TEXTS[CHANNEL_NETWORK] == "扩展连不上站点网络(查浏览器网络/代理)"
+    assert "授权" in CHANNEL_TEXTS[CHANNEL_NO_PERMISSION]
+    assert "代理" in CHANNEL_TEXTS[CHANNEL_NETWORK]
+    conf = SiteHrCheckConfig(refresh_interval=3600.0, idle_refresh_interval=86400.0)
+    for state in (CHANNEL_NO_PERMISSION, CHANNEL_NETWORK):
+        snap = site_status("s", _rich_data(NOW), _rich_view(channel_state=state), _RichSvc(conf), NOW)
+        assert snap.channel_state == state, "原值透出(前端按态上色, 不靠文案猜)"
+        assert snap.channel_text == CHANNEL_TEXTS[state], "视图直取单点, 另写第二份文案即红"
+
+
+def test_blocking_reason_channel_cause_precedes_data_symptoms():
+    """通道病因排在整条判定链最前(计划 D6): 取数根本没发生时, 后面几句描述的都是「没取到之后
+    的样子」, 说出来只会把人引向错的动作"""
+    data = HrSiteData()
+    data.wave.zero_rows = True
+    data.wave.lanes = {"A": HrLaneState(lane="A")}  # count_claim=None ⇒ 未计数自证
+    data.wave.releases_enabled = True
+    empty = HrSiteView(site="s")  # 索引全空: 「先让扩展跑一轮取数」本该命中
+    only_terminal = HrSiteView(site="s", lane_terminal={"h": None})
+    # 阴性对照: 没有通道病因时两句旧文案照旧 —— 证明下面的断言不是「恒返回第一句」
+    assert "先让浏览器扩展跑一轮取数" in blocking_reason(empty, data, False)
+    assert "--hr-confirm-empty" in blocking_reason(only_terminal, data, False)
+
+    for view in (
+        HrSiteView(site="s", channel_state=CHANNEL_NO_PERMISSION),
+        HrSiteView(site="s", channel_state=CHANNEL_NO_PERMISSION, lane_terminal={"h": None}),
+    ):
+        text = blocking_reason(view, data, False)
+        assert "授权" in text, "缺权限要说清动作(去扩展选项页勾选)"
+        assert "先让浏览器扩展跑一轮取数" not in text, "那正是当前做不成的事"
+        assert "--hr-confirm-empty" not in text, "零行对账是数据症状, 不是病因"
+    net = blocking_reason(HrSiteView(site="s", channel_state=CHANNEL_NETWORK, lane_terminal={"h": None}), data, False)
+    assert "代理" in net and "--hr-confirm-empty" not in net
+
+
+def _channel_state_of(data: HrSiteData, *, enabled: bool = True, now: float = NOW) -> str:
+    """借真 service 的 channel_state 判据(不 new 引擎): 它只读 global_conf.channel / data / _now
+    三样, 故用探针 self 就能在纯展示测试里守它的口径"""
+    from auto_qb.hr.service import HrRefreshService
+
+    class _Probe:
+        global_conf = SimpleNamespace(channel=SimpleNamespace(enabled=enabled))
+
+        def _now(self):
+            return now
+
+    return HrRefreshService.channel_state(_Probe(), "s", data)
+
+
+def test_channel_state_stale_trace_ignored():
+    """`ts <= healthy_ts` 的陈旧痕不生效: 站点恢复后旧痕不许把卡片一直标红(展示层撒谎比不展示更糟)"""
+    data = HrSiteData()
+    data.wave.healthy_ts = NOW - 60
+    data.channel_last_error = {"kind": CHANNEL_NO_PERMISSION, "detail": "x", "ts": NOW - 3600}
+    assert _channel_state_of(data) == CHANNEL_OK, "痕迹早于最近健康波 ⇒ 已经不是它的事了"
+    data.channel_last_error = {"kind": CHANNEL_NO_PERMISSION, "detail": "x", "ts": NOW - 30}
+    assert _channel_state_of(data) == CHANNEL_NO_PERMISSION, "健康波之后的痕迹才算数"
+    data.channel_last_error = {"kind": CHANNEL_NO_PERMISSION, "detail": "x", "ts": NOW - 60}
+    assert _channel_state_of(data) == CHANNEL_OK, "恰等 healthy_ts 也不算(> 口径): 同一刻的健康波已解释掉它"
+    # 只认两种「要人处置」的形态: 别的 kind 落在这里只说明分类写错了, 不许顶替通道态
+    data.channel_last_error = {"kind": "ext-quota", "ts": NOW}
+    assert _channel_state_of(data) == CHANNEL_OK
+    data.channel_last_error = {"kind": CHANNEL_NETWORK, "ts": "not-a-number"}
+    assert _channel_state_of(data) == CHANNEL_OK, "坏 ts 按 0 处理(不猜, 也就永远比不过健康波)"
+    data.channel_last_error = {}
+    assert _channel_state_of(data) == CHANNEL_OK, "空痕(恢复点清空后的常态)不生效"

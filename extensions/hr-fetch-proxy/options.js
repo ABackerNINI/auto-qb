@@ -316,6 +316,8 @@ const CONN_STATE_TEXT = {
   ok: '连接正常',
   reconnecting: '重连中',
   discoveryFailed: '发现失败',
+  // 计划 26-10-29-0147 D5: 通道通但站点没授权 —— 取数一定全失败, 必须与「连接正常」分开显示
+  noSitePermission: '站点未授权',
 };
 
 /**
@@ -332,11 +334,45 @@ function connStateOf(cfg) {
     const h = health[String((e && e.endpoint) || '')];
     return Boolean(h && h.ok);
   });
+  const perms = cfg.sitePerms && typeof cfg.sitePerms === 'object' ? cfg.sitePerms : {};
+  const anyDenied = Object.keys(perms).some((k) => perms[k] && perms[k].granted === false);
+  // !anyOk 是前置条件(与 background.js 同序): 端点连不上时不许拿「站点未授权」盖住更严重的连接故障
+  if (anyOk && anyDenied) return 'noSitePermission';
   if (anyOk) return 'ok';
   const last = cfg.lastDiscovery;
   if (hasDiscovery && last && last.ok === false && last.answered === false) return 'discoveryFailed';
   return 'reconnecting';
 }
+
+// ---------- 站点授权态(计划 26-10-29-0147 D5): 逐站显示「已授权 / 未授权」 ----------
+//
+// !这两个函数与 background.js 的同名函数是**成对的两份**(扩展页与 SW 不共享作用域), 由
+// `test_extension_proxy.py::test_origin_grant_matches_across_layers` 用同一张真值表机械钉死一致 ——
+// 与 connStateOf / badgeStateOf 同一套纪律: 允许成对, 不允许漂移。
+
+/** 把匹配模式拆成 {scheme, host}; 非法返回 null */
+function splitPattern(pat) {
+  const m = /^(\*|https?|file|ftp):\/\/([^/]+)/i.exec(String(pat || '').trim());
+  if (!m) return null;
+  return { scheme: m[1].toLowerCase(), host: m[2].toLowerCase() };
+}
+
+/** 该 origin 是否已被授予(纯函数; 不用 permissions.contains 判多个 —— 它要求**全部**命中) */
+function originGranted(origin, patterns) {
+  const target = splitPattern(`${String(origin || '').replace(/\/+$/, '')}/*`);
+  if (!target) return false;
+  for (const pat of patterns || []) {
+    const got = splitPattern(pat);
+    if (!got) continue;
+    if (got.scheme !== '*' && got.scheme !== target.scheme) continue;
+    if (got.host === '*' || got.host === target.host) return true;
+    if (got.host.indexOf('*.') === 0 && target.host.slice(-(got.host.length - 1)) === got.host.slice(1)) return true;
+  }
+  return false;
+}
+
+/** origin -> 是否已授权(最近一次 refreshSitePermUI 的判定; grantMissing 同步读它, 保持手势内无 await) */
+let lastPermState = {};
 
 /** 最近一次发现的短句(总览用): 命中端口 / 失败结论 + 逐候选都在这里露一次 */
 function lastDiscoveryText(last) {
@@ -446,18 +482,92 @@ function renderSiteChecks() {
   const box = $('siteChecks');
   if (!backendSites.length) {
     box.innerHTML = '<label class="row"><span class="tk">(还没有站点清单 — 在上面「连接后端」区配好实例后点「重新获取站点」; 后端起来且站点 hr_check.mode 非 off 才会有)</span></label>';
+    const summary = $('sitePermSummary');
+    if (summary) summary.textContent = '';
     return;
   }
+  // !每行必须正好三个网格项(checkbox / 站名 / origin+授权态): 多一个会被 .sites 的
+  // grid-template-columns 挤到下一行 —— 故 origin 与授权徽章包在同一个 span 里。
   box.innerHTML = backendSites
     .map((s) => {
       const origin = String(s.origin || '');
       const checked = siteSelections.includes(origin) || !siteSelections.length ? ' checked' : '';
       return (
         `<label><input type="checkbox" data-origin="${esc(origin)}"${checked}>` +
-        `${esc(String(s.site || ''))} <span class="org">${esc(origin)}</span></label>`
+        `<span class="sname">${esc(String(s.site || ''))}</span>` +
+        `<span class="orgwrap"><span class="org">${esc(origin)}</span>` +
+        `<span class="perm" data-perm-for="${esc(origin)}"></span></span></label>`
       );
     })
     .join('');
+  refreshSitePermUI().catch(() => {});
+}
+
+/**
+ * 逐站刷新授权态 + 顶部汇总(计划 26-10-29-0147 D5)
+ *
+ * 直接问浏览器(`permissions.getAll`), 不读后台缓存: 用户打开这一页往往**正是**因为取数全失败,
+ * 此刻需要的是当下真值, 而不是"上次取数时的结论"。
+ */
+async function refreshSitePermUI() {
+  const rows = Array.from(document.querySelectorAll('#siteChecks [data-perm-for]'));
+  const summary = $('sitePermSummary');
+  lastPermState = {};
+  if (!rows.length) {
+    if (summary) summary.textContent = '';
+    return;
+  }
+  let patterns = null;
+  try {
+    const all = await chrome.permissions.getAll();
+    patterns = (all && all.origins) || [];
+  } catch (e) {
+    patterns = null; // 读不到就说不知道 —— 不能谎报「未授权」
+  }
+  let missing = 0;
+  for (const row of rows) {
+    const origin = row.dataset.permFor;
+    if (patterns === null) {
+      row.textContent = '权限状态读不到';
+      row.className = 'perm';
+      continue;
+    }
+    const ok = originGranted(origin, patterns);
+    lastPermState[origin] = ok;
+    row.textContent = ok ? '已授权' : '未授权';
+    row.className = 'perm ' + (ok ? 'ok' : 'no');
+    if (!ok) missing += 1;
+  }
+  if (summary) {
+    if (patterns === null) {
+      summary.textContent = '读不到站点权限状态(浏览器权限 API 不可用)';
+      summary.className = 'sub';
+    } else if (missing) {
+      summary.textContent = `注意: ${missing} 个站点未授权 —— 取数会全部失败, 点「授权未授权站点」补上`;
+      summary.className = 'sub permwarn';
+    } else {
+      summary.textContent = '勾选的站点都已授权';
+      summary.className = 'sub';
+    }
+  }
+}
+
+/** 只申请「未授权」的那些站点(计划 26-10-29-0147 D5): 读内存里的上一次判定, 保持手势内无 await */
+async function grantMissing() {
+  const origins = Object.keys(lastPermState).filter((o) => lastPermState[o] === false);
+  if (!origins.length) {
+    setStatus('没有未授权的站点(或还没取到站点清单) —— 先点「重新获取站点」');
+    return;
+  }
+  hint('申请的是这些匹配模式: ' + origins.join(', '));
+  try {
+    // !仍是本手势内的第一个 await(Chrome 硬约束, 见上 grant)
+    const ok = await chrome.permissions.request({ origins });
+    setStatus(ok ? `已补授 ${origins.length} 个站点源` : '站点权限被拒绝(再点一次即可重试)');
+    await refreshSitePermUI();
+  } catch (e) {
+    setStatus(`申请站点权限失败: ${e.message || e}`);
+  }
 }
 
 /** 勾选变化即持久化(不用点保存); 勾选的站点在授权时一并申请 */
@@ -496,6 +606,7 @@ async function grant() {
     const ok = await chrome.permissions.request({ origins });
     const badTail = manual.bad.length ? `; 跳过 ${manual.bad.length} 条格式不对的: ${manual.bad.join(' / ')}` : '';
     setStatus(ok ? `已授予 ${origins.length} 个站点源` : `站点权限被拒绝(再点一次授权即可重试)${badTail}`);
+    await refreshSitePermUI(); // 授权完立刻刷新逐站徽章, 别让页面停在「未授权」
   } catch (e) {
     // 典型: 某个模式仍不合法 / 非用户手势 —— 必须消化掉, 不能让 Promise 裸抛(用户只会看到红字英文)
     setStatus(`申请站点权限失败: ${e.message || e}`);
@@ -523,7 +634,16 @@ function eventPhrase(ev) {
   return `取 ${kind} · x ${(ev.note || '失败').slice(0, 30)}`;
 }
 
-const TAG_TEXT = { ok: '正常', quota: '受限', login: '登录失效', error: '异常' };
+//: 事件 tag -> 人话。!表里用 `TAG_TEXT[tag] || '正常'` 兜底, 所以**新增 tag 必须同时登记**,
+//: 否则「未授权/网络不通」会显示成「正常」(展示层撒谎比不显示更糟)。计划 26-10-29-0147 W1。
+const TAG_TEXT = {
+  ok: '正常',
+  quota: '受限',
+  login: '登录失效',
+  error: '异常',
+  'no-permission': '未授权',
+  network: '网络不通',
+};
 
 async function refreshTables() {
   const got = await chrome.storage.local.get({ events: [], siteLedger: {} });
@@ -939,6 +1059,8 @@ $('instList').addEventListener('click', (ev) => instListClick(ev).catch((e) => s
 $('fetchSites').addEventListener('click', () => fetchSites(true).catch((e) => setStatus(String(e))));
 $('selectAllSites').addEventListener('click', selectAllSites);
 $('grantChecked').addEventListener('click', () => grant().catch((e) => setStatus(String(e))));
+// 只补「未授权」的那些(计划 26-10-29-0147 D5): 全量重申请会把已授权的也再问一遍, 徒增确认窗
+$('grantMissing').addEventListener('click', () => grantMissing().catch((e) => setStatus(String(e))));
 $('siteChecks').addEventListener('change', () => siteChecksChange().catch((e) => setStatus(String(e))));
 $('discNow').addEventListener('click', () => discoverNow().catch((e) => setDiscStatus(String(e))));
 $('save').addEventListener('click', () => save().catch((e) => setStatus(String(e))));

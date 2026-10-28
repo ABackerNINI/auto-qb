@@ -1,7 +1,10 @@
 # 浏览器扩展 ↔ 本地端点
 
-> 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。另含 MV3 落盘设施(运行日志/台账)的 storage 口径与 promise 串行链自引用死锁(静默, 无报错), 以及 2026-10-16 加的可见性信号(徽标)两条: 计划里的图形符号不能抄进代码、写台账与读台账不能并发。
-> 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup, 运行日志, 日志分级, 环形缓冲, storage.local, 防抖落盘, promise 死锁, 串行链, 徽标, badge, setBadgeText, setBadgeBackgroundColor, 图形符号, ASCII, 台账, instanceHealth, Promise.all 顺序
+> 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。另含 MV3 落盘设施(运行日志/台账)的 storage 口径与 promise 串行链自引用死锁(静默, 无报错), 以及 2026-10-16 加的可见性信号(徽标)两条: 计划里的图形符号不能抄进代码、写台账与读台账不能并发。2026-10-28 补第四条: **站点 origin 是可选权限, 重装/重载扩展会静默清空**, 症状与「端点没起」同为一句 `Failed to fetch` 而动作相反。
+> 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, optional_host_permissions, permissions.getAll, permissions.contains, 站点未授权, 重装扩展, 重新加载扩展, 可选权限丢失, no-permission, 零行, 结构完好但清单为 0, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup, 运行日志, 日志分级, 环形缓冲, storage.local, 防抖落盘, promise 死锁, 串行链, 徽标, badge, setBadgeText, setBadgeBackgroundColor, 图形符号, ASCII, 台账, instanceHealth, Promise.all 顺序
+**Refs:** memory-bank/plans/26-10-29-0147-plan-hr-ext-site-permission.html
+
+- **复发**: 3 (同一句 `Failed to fetch` 的三个变体 —— ① 从未授予过站点权限 ② 授予了但写法不对/只授了一半 ③ **曾授予、重装或重载扩展后丢失**, 后者 2026-10-28 实报 12h, 见下表末行)
 
 ## 两条实测报错 → 根因 → 处置
 
@@ -10,6 +13,7 @@
 | `Invalid value for origin pattern pt.btschool.club: Missing scheme separator.` | 站点权限那一栏填了**裸域名**, 而 `chrome.permissions.request` 只接受**匹配模式**(必须带 scheme); 且它是**未捕获的 Promise 拒绝**, 页面上只留一行英文红字 | 输入先归一化: 裸域名补 `https://` 再补 `/*` ⇒ `https://pt.btschool.club/*`; 授权调用包 `try` + 逐个模式报错(一条坏不拖垮整批) |
 | `TypeError: Failed to fetch` | ① 后端**端点根本没起** —— 它要三个开关同时满足(`hr_check.enabled` + 至少一个站点 `mode != off` + `hr_check.channel.enabled`), 缺一就没有监听, 浏览器只会给这一句; ② 地址写法不对(`127.0.0.1:8788` 无 scheme 会被当**相对地址**解析到扩展自己的 origin); ③ `localhost` 解析到 IPv6 回环而后端只 listen `127.0.0.1`; ④ 写成 `https://`(后端端点不提供 TLS) | ① 把手写清单写进文档最显眼处 + 选项页加**自测端点连通**按钮, 把"连不上 / 401 / 403"分开; ② 端点也走归一化(补 scheme / `localhost` 折成 `127.0.0.1` / 协议固定 `http`); ③ `host_permissions` 同时给 `127.0.0.1` 与 `localhost`、`[::1]` 别名 |
 | 「抓数据时浏览器被弹到前台 / 开出一个新标签或新窗口」(用户 2026-09-25 两轮实报) | 页面取数原本需要真实渲染的 DOM ⇒ 只能开标签/窗口; 而 `chrome.tabs.create({active:false})` **只保证「不是那个窗口的活动标签」**, 不保证窗口不被抬起来; 换成自建窗口 + `state:'minimized'` 后, 用户又看到**新窗口**弹出 —— 最小化在部分平台仍会先显示一下 | ① **能直取就别开界面**(见下方口径) ② 真要渲染就用**离屏 popup 窗口**(`left/top = -32000` + `type:'popup'` + `focused:false`), 用完连窗口一起删 ③ 加**焦点守卫**(被抢则把焦点还回原窗口) |
+| 站点取数一直 `Failed to fetch`, 但**拉清单/自测全正常**(2026-10-28 实报, 12h 全站零行) | MV3 的**站点 origin 是可选权限**(`optional_host_permissions`, 安装时不授予、运行时申请), 而 **重装 / 重新加载扩展会把它们全部清空** —— 该扩展 `first_install_time == last_update_time`, Edge `Secure Preferences` 里 `explicit_host` 只剩三个回环 origin。于是 `fetch(url,{credentials:'include'})` 被 CORS 拒, 浏览器只给一句 `TypeError: Failed to fetch`, 与「端点没起」**同一句话、完全不同病因** | ① 扩展侧取数**前**先查 `permissions.getAll()` 并按 origin 匹配, 未授权就**不发请求**、直接回 `kind:'no-permission'` ② 选项页逐站显示授权态 + 顶部「N 个站点未授权」汇总条与一键授权 ③ 后端把该 `kind` 归**通道层**(不推进 `fail_streak`、不挂 `[HR 页面改版]`), 并在站点卡显示「扩展未授权该站点」 ④ 文档把「授权站点」写成独立安装步骤 + 醒目标注重装会重置 |
 
 ## 硬约束
 
@@ -17,6 +21,16 @@
   归一化要覆盖: 补 scheme、主机别名归一、协议归一、非法输入**逐条**报错而不是整批失败。
 - **网络层失败只有一句 `Failed to fetch`** ⇒ 必须自己翻译成可操作清单(后端在跑吗 / 哪几个开关 / 端口 / 主机写法),
   并把自测做成按钮(用户点一下就知道是"连不上"还是"401 token 不对"还是"403 来源被拒")。
+- **同一句 `Failed to fetch` 有两个完全不同的病因, 且动作相反**: 「端点没起」要人去查后端, 「站点未授权」要人去
+  扩展选项页。**判据不在错误文本里**(浏览器不给), 只能靠**发请求之前**的自查: 目标 origin 是否在
+  `permissions.getAll()` 里。故取数路径必须是「先查权限 → 未授权则不发请求 → 回 `kind:'no-permission'`」,
+  而不是「发了再说, 错了再猜」。
+- **可选权限会在重装/重载扩展时静默清零**: 任何依赖站点 origin 的能力都必须**每轮重新核对**, 不能缓存在
+  内存里跨 SW 回收; 也不能把「安装成功」当成「权限还在」。用户侧对应口径: **重装后必须重新授权**,
+  这条要写在安装步骤里(不是排障表里)。
+- **判「一批 origin 是否都已授权」不许用 `permissions.contains({origins:[a,b]})`**: 它只在**全部**授予时
+  返回 true, 会把「部分未授权」整体误判成已授权。用 `getAll()` 取全量模式 + 纯函数 `originGranted()`
+  逐个匹配(`*` / `*.parent` / 精确三种写法, scheme 必须一致), 该纯函数直接进守阵。
 - **归一化只留一份**: 选项页与后台 service worker 各写一遍必然漂移, 而漂移的症状是"配了不生效"。
   做法: 抽成纯函数文件, 选项页 `<script>` 载入、后台 `importScripts()` 载入, pytest 侧用 node 直接 eval 它跑用例。
 - **`unhandledrejection` 兜底**: 事件回调里任何漏网的拒绝都要落到状态栏, 否则用户只能对着红字干看。
@@ -57,8 +71,12 @@
   就是写风暴; 不剪旧键则死端点的台账永久堆积 —— 与发现集"只增不减"是同一个病, 同一个处置。
 - **禁用态必须清空徽标**: 用户会盯着一个"看着正常"的图标排查半天 —— `enabled:false` 时
   `setBadgeText({ text: '' })`。
-- **徽标四态要有唯一推导函数**: 判据散在 `pollAll` / 发现收尾两处必然漂移; 抽成纯函数
-  (`badgeStateOf(cfg)`)既让守阵能直测四态取值, 也让"哪一态"只有一处定义。
+- **徽标五态要有唯一推导函数**: 判据散在 `pollAll` / 发现收尾两处必然漂移; 抽成纯函数
+  (`badgeStateOf(cfg)`)既让守阵能直测各态取值, 也让"哪一态"只有一处定义。
+  ❗**新增一态时位置即语义**: 判据自上而下第一条命中即返回 —— 「站点未授权」必须排在「连接正常」**之前**
+  (实例连通但站点没授权时显示「连接正常」就是撒谎), 且它要求「至少有一个已勾选站点未授权」,
+  这样单个端点坏掉时不会被它遮住(那属于 `reconnecting`)。选项页的 `connStateOf` 是**第二份实现**
+  (两页不共享 SW 作用域), 两边的真值表由守阵逐行对照, 改一侧不改另一侧必红。
 
 ## 守阵
 
@@ -71,7 +89,9 @@
 选项页 clear-logs 协议两边一致 + innerHTML 前必须 esc 转义 + 限渲染 3000 行) ·
 **发现与自愈**(合并语义 = 手动优先 + 发现集整批替换 + 空集不替换 / 周期 2 分钟 / 任一实例失败即触发且 60s 内不重复 /
 401 不算失败 / 实例清单为空也按周期发现 / 结构化 `lastDiscovery` 逐候选结果 / `instanceHealth` 连续失败累加与剪枝 /
-徽标四态 + 禁用清空 + 点图标开选项页)。
+徽标五态 + 禁用清空 + 点图标开选项页) ·
+**站点可选权限**(`originGranted` 三种模式的跨层真值表 —— 后台与选项页两份实现逐行对照 / 未授权时
+`runTask` **零请求**且回 `kind:'no-permission'` / 已授权才把 `Failed to fetch` 归成 `network`)。
 
 ⚠ 红验过: 去掉“补 scheme”那行 ⇒ `test_normalizers_behave` 当场变红;
 强制走渲染通道 ⇒ `test_page_fetch_is_headless_when_html_looks_fine` 当场变红。

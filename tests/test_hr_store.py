@@ -977,7 +977,9 @@ def test_store_write_unicode_and_sorted_keys(tmp_path):
         session.commit(now=1.0)
     text = (tmp_path / "s.json").read_text(encoding="utf-8")
     assert "例站 中文" in text, "中文不得被转义(ensure_ascii=False)"
-    assert text.startswith('{"downloaded"'), "顶层键按 sort_keys=True 排序"
+    # 首键 = 字典序最小的顶层键。26-10-29 起新增 `channel_last_error`(计划 26-10-29-0147 W2),
+    # 它排在 `downloaded` 之前 —— 这里断言的是「sort_keys 生效」而非某个具体键名, 跟着改。
+    assert text.startswith('{"channel_last_error"'), "顶层键按 sort_keys=True 排序"
 
 
 def test_store_session_read_alerted_false_when_clean(tmp_path):
