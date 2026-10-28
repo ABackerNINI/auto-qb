@@ -2,7 +2,7 @@
 
 > 摘要: 自绘下拉(combobox)的收层判据若只靠 window click, 「点字段 label(for= 转发激活)」这条路径会关了又开 —— 浏览器对 label 的 mousedown 先 blur 输入框、click 默认动作再把焦点转回, click 关层 + 转发 click 重开落在同一交互里, leave 过渡被打断 = 用户看到的「下拉闪烁再次出现且未失焦」。处置 = 收层主判据改 @focusout, **且必须定时合帧**(同步收层仍会被回焦打断); 开层方法先撤销挂起的收层; 字段 label 与浮层内按钮(清空 x)一律 @click.stop + **@mousedown.prevent** —— 前者挡「window 收层 → 转发的 click 重开」, 后者根除 mousedown blur(合帧窗再大也赢不了人手按住时长 80~150ms), 缺一即**稳定**(非概率)闪烁。合成零延迟点击验证不了按住时序竞态, 走查必须 `delay>=120ms`。另: 浮层限高不能只靠 CSS max-height —— 绝对定位溢出会把滚动容器的 scrollHeight 撑大(窗口"变形"), 要在开层**与过滤词变化时**量「锚点→滚动容器可见底沿」净空(只开层量 = 删字让候选涨回全量时旧限高不更新)。**净空算式只治「下方有净空但不够」; 组合框若是表单最后一项, 净空为负、`avail>0` 门恒不生效, 治法只能是给容器预留空间(padding), 不是继续调限高值**(2026-10-19 设定位置弹窗报障, 见条目 5)。
 > 触发: 自绘下拉收起, combobox, focusout, blur 收层, label 转发激活, for 属性回焦, 下拉闪烁重现, 点窗口其它位置不收, 下拉撑变形, 浮层限高, add-pop, 转发 click, 合帧守卫, 开层撤销, label click.stop, label mousedown.prevent, 按住时长, 合帧窗竞态, 人手点击 delay, 清空按钮, 点 x 下拉没了, 过滤词变化重限高, 删字撑变形, 旧页签残留, 资源代际, SPA 静态资源, 强刷, 收层守卫, _popBlurShouldHold, mousedown 记录器, 组合框是表单最后一项, 下拉伸出对话框, 弹窗内滚动, 预留空间, padding-bottom, pop-open, 设定位置弹窗太小, 保存路径下拉显示不全, 需要滚动, 净空为负
-**Refs:** memory-bank/tasks/26-10-19-webui-move-dialog-geometry.md
+**Refs:** memory-bank/tasks/26-10-19-webui-move-dialog-geometry.md, memory-bank/plans/26-10-29-0041-plan-webui-move-dialog-pick-geometry.html
 
 ## 条目
 

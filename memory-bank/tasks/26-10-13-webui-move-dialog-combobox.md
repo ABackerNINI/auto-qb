@@ -5,7 +5,7 @@
 **Updated:** 2026-10-13
 **Summary:** 给 WEBUI「设定位置…」(单种子右键/键盘、单组右键、多选批量右键三入口) 的保存路径输入, 添加「下拉候选 + 最近使用排序」—— 与添加种子对话框保存路径同口径, 复用 add_torrent.js 的 _addRecencyMaps/_addOrderByRecent/_addNormPath 单点。改三入口统一改, 用一份对话框状态机。
 **Topics:** webui-move-dialog-combobox
-**Refs:** memory-bank/testing/baselines/26-10-13-0642-webui-move-dialog-combobox.md
+**Refs:** memory-bank/testing/baselines/26-10-13-0642-webui-move-dialog-combobox.md, memory-bank/plans/26-10-29-0041-plan-webui-move-dialog-pick-geometry.html
 
 ## 原始请求
 

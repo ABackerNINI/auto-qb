@@ -20,6 +20,12 @@ const SKIP_GATE_LABELS = {
   filelist: "丢失文件", gone: "已不在客户端",
 };
 
+/* 设定位置对话框: 下拉开层后「限高重测」的延时(2026-10-29)。开层时 body 的 padding-bottom 走
+ * 200ms 过渡(三皮肤 dialogs.css `.modal.move-dialog .add-dialog-body`), 过渡**进行中**量到的净空
+ * 只有一半 ⇒ _fitAddPop 会把列表误限到 120px 且不再自恢复; 过渡结束(+余量)后复位重测一次。
+ * !本常量必须 > CSS 过渡时长 —— 改任一边必须同步另一边(守阵查两处都在)。 */
+const MOVE_POP_SETTLE_MS = 240;
+
 /* ---------------- 页签合并(W4, 计划 26-10-11-2106: 合并状态收进面板核心单点) ----------------
  * W3 前这套判据住在模板选择层(AQB_DRAWER_TPL mixin, 插件/变体层) —— 但合并是
  * **抽屉级布局状态**, 不是插件层概念; W4 把它收进本文件(渲染核心)。
@@ -665,7 +671,11 @@ window.AQB_DRAWER = {
       this.moveBusy = false;
       this.movePathInput = prefill || "";
       this.loadMoveOptions();
-      // 开对话框即聚焦输入框(与 _openModal 原行为): 键盘路径 Enter 即确认, 鼠标路径下拉候选展开
+      // 开对话框即聚焦输入框(键盘路径可直接打字/回车), 但**不展开下拉**(2026-10-29 用户拍板):
+      // 打开就弹面板会让「第一眼」是开层态, 收层时窗口高度骤变 = 跳变。抑制标志只消费一次,
+      // 之后点输入框 / 按方向键照常展开(见 openMovePathMenu 首行)。
+      this.moveSuppressOpen = true;
+      clearTimeout(this._movePopSettleT);
       this.$nextTick(() => {
         const el = this.$refs.movePathInputEl;
         if (el) el.focus();
@@ -673,6 +683,7 @@ window.AQB_DRAWER = {
     },
     closeMove() {
       if (this.moveBusy) return;  // 命令回执等待期不允许误关(与 meta 同口径)
+      clearTimeout(this._movePopSettleT);
       this.moveOpen = false;
     },
     async loadMoveOptions() {
@@ -690,23 +701,36 @@ window.AQB_DRAWER = {
       }
     },
     openMovePathMenu() {
+      // 打开即聚焦的那一次不展开(2026-10-29): 抑制标志只消费一次, 之后点输入框/方向键照常展开
+      if (this.moveSuppressOpen) { this.moveSuppressOpen = false; return; }
       this._popBlurCancel("_movePopBlurT");  // 焦点回到本输入框时撤销挂起的失焦收层, 菜单不闪
       this.movePathMouseAt = null;  // 开层复位悬停门限坐标(同 addCatMouseAt)
       this.movePathHi = this.movePathOptions.indexOf(this.movePathInput.trim());
       this.movePathMenu = true;
       this._hiScroll("movePathList");
+      this._movePopSettle();  // 高度过渡结束后复位重测限高(过渡中量到的净空只有一半)
+    },
+    /* 高度过渡后的限高重测(2026-10-29): 开层时 body 的 padding-bottom 走 200ms 过渡, 过渡中量到的
+     * 净空偏小会把列表误限到 120px 且不再自恢复 ⇒ 过渡结束(+余量)后 _fitAddPop 复位重测一次。
+     * 时长单点见文件头 MOVE_POP_SETTLE_MS(必须 > CSS 过渡时长, 改任一边同步另一边)。 */
+    _movePopSettle() {
+      clearTimeout(this._movePopSettleT);
+      this._movePopSettleT = setTimeout(() => {
+        if (this.movePathMenu) this._fitAddPop("movePathList");
+      }, MOVE_POP_SETTLE_MS);
     },
     moveApplyPath(p) {
-      // 候选点击即回填 + 提交(对话框提交直接, 与添加种子回填态不同: 这里无后续"添加"步)
+      // 点选候选 = 只回填 + 收面板, **不提交**(2026-10-29 用户报障「点选项就移动」): 真正移动只由
+      // 「设定位置」按钮或手输回车发起, 与添加种子 pickAddPath 同口径(那边点选也只回填)。
       this.movePathInput = p;
       this.movePathMenu = false;
       this.movePathHi = -1;
-      this.submitMoveDialog();
+      clearTimeout(this._movePopSettleT);
     },
     onMovePathKeydown(e) {
-      // 与 meta 分类下拉同套单点(comboKeydown, add_torrent.js): 上下循环高亮(开层即展开),
-      // 回车即回填+提交(菜单未开时提交当前输入), Esc 只收面板(阻断冒泡不关对话框)。
-      // 本处个性 = ①回车回退提交修剪后的输入框文本 ②IME 组词守卫随单点恒开(收敛前缺, R21-A-04 ③)
+      // 与 meta 分类下拉同套单点(comboKeydown, add_torrent.js): 上下循环高亮(开层即展开)。
+      // 2026-10-29 起语义分两条: 有高亮项回车 = 只回填(经 moveApplyPath, 再按一次才提交);
+      // 无高亮/手输回车 = 直接提交(走 onEnter 钩子, 其余四个下拉不传该钩子)。Esc 只收面板。
       this.comboKeydown({
         items: () => this.movePathOptions,
         open: () => this.movePathMenu,
@@ -715,6 +739,8 @@ window.AQB_DRAWER = {
         setHi: (v) => { this.movePathHi = v; },
         onPick: (p) => this.moveApplyPath(p),
         enterFallback: () => { const p = (this.movePathInput || "").trim(); return p || null; },
+        // 回车直接提交: 回车是明确的确认手势(不是误点), 手输路径后不该逼用户再挪鼠标
+        onEnter: (p) => { this.movePathInput = p; this.movePathMenu = false; this.movePathHi = -1; this.submitMoveDialog(); },
         listRef: "movePathList",
         openOnArrow: true,
       }, e);
@@ -724,6 +750,7 @@ window.AQB_DRAWER = {
      * 同步收层 = 关了又开; 焦点真回来由 openMovePathMenu 撤销。收层前问 _popBlurShouldHold(add_torrent.js 单点)。 */
     movePathBlurClose() {
       this._popBlurArm("_movePopBlurT", ["move-path"], () => {
+        clearTimeout(this._movePopSettleT);
         this.movePathMenu = false;
         this.movePathHi = -1;
       });

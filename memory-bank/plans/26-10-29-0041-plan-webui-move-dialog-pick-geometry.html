@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 设定位置对话框 · 点选只回填 + 几何平滑过渡</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-move-dialog-pick-geometry">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-29-0041">
+<meta name="doc-updated" content="26-10-29-0105">
+<meta name="doc-refs" content="memory-bank/pitfalls/web-ui/combobox-focusout-close.md, memory-bank/tasks/26-10-13-webui-move-dialog-combobox.md, memory-bank/tasks/26-10-29-webui-move-dialog-pick-geometry.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-move-dialog-pick-geometry</div>
+<h1>WEBUI 设定位置对话框 · 点选只回填 + 几何平滑过渡</h1>
+<p class="lede">让「设定位置」只剩一条写路径(按钮 / 手输回车), 并把对话框几何从「开层瞬跳 272px」改成「基线抬高 + 200ms 平滑过渡」, 打开时不再自动弹下拉。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-29-0041 · <b>doc-updated</b> 26-10-29-0105 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 两轮(Q1–Q7) + 用户 2026-10-29 修订指令(窗口更大气 / 不写多余文案 / 不自动展开 / 不能跳变要用动画)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>两条报障, 两个落点</h3>
+<ol>
+  <li><b>点选候选就移动</b> → 点选 = 只回填 + 收面板; 真正移动只由底部「设定位置」按钮或手输后回车发起。</li>
+  <li><b>窗口太小 + 点下拉高度跳变</b> → 收层态基线从实测 243px 抬到 360px(更大气); 开层不再 <code>0 ↔ 272px</code> 一步到位, 改走 200ms 高度过渡 + 面板淡入下移。</li>
+</ol>
+
+<h3>不变量(动了就是回归)</h3>
+<ul>
+  <li>三入口名/签名与下游投递不变: <code>editMove → _editPost</code>、<code>editMoveMulti / editMoveGroup → _bulkEditPost</code>(守阵 + 触发登记表钉这些)。</li>
+  <li>combobox 四绑不变, 仍走单点: 收层合帧 <code>_popBlurArm</code> / 限高 <code>_fitAddPop</code> / 悬停接管 <code>comboHoverIdx</code> / 键盘导航 <code>comboKeydown</code>。</li>
+  <li>三皮肤成对(atlas / console / prism), 漏一档 = 该皮肤无样式。</li>
+  <li><b>不新增说明文案</b>(用户 Q6: 明显的交互逻辑不必写) —— 预留区保持留白, 不放提示语。</li>
+</ul>
+
+<h3>设计原则</h3>
+<ul>
+  <li><b>单一写路径</b>: 点选只做「选中」, 写动作必须显式(按钮 / 回车)。与「添加种子」三下拉的 <code>pickAddPath</code> 口径一致 —— 那边点选本来也只回填。</li>
+  <li><b>布局变化必须可过渡</b>: 任何由 class 切换引起的高度变化都要有 <code>transition</code>, 不允许瞬跳。</li>
+  <li><b>数字单点</b>: 高度 / 预留量 / 时长只写在三皮肤 CSS, JS 只留一个与 CSS 时长对齐的 settle 常量(两处互相点名)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<table>
+  <tr><th style="width:22%">症状</th><th style="width:38%">代码位置</th><th>机理</th></tr>
+  <tr><td>点选即移动</td><td><code>drawer.js:699-705 moveApplyPath</code></td><td>回填 + 收面板后直调 <code>submitMoveDialog()</code> —— 无二次确认。</td></tr>
+  <tr><td>回车也提交</td><td><code>drawer.js:716 onPick</code> + <code>add_torrent.js:324-333</code></td><td>有高亮项: Enter → <code>onPick(items[hi])</code> → 同上; 无高亮/手输: <code>enterFallback → onPick(v)</code> 也提交。两条路汇到同一个提交函数。</td></tr>
+  <tr><td>窗口小</td><td><code>dialogs.css:319</code></td><td>高度由内容撑开, 收层态实测约 243px(一句说明 + 一个输入框)。</td></tr>
+  <tr><td>开层瞬跳</td><td><code>move-dialog.html:16</code> + <code>dialogs.css:320</code></td><td><code>pop-open</code> 条件类切换 <code>padding-bottom: 0 ↔ 272px</code>, 高度一步到位、无 transition ⇒ 一次开/收 = 高度 ±272px 硬跳。</td></tr>
+  <tr><td>第一眼即展开</td><td><code>drawer.js:669-672</code></td><td>打开即 focus → 组件 <code>@focus</code> 发 <code>open</code> → 自动展开下拉。于是用户第一眼看到「大窗口」, 一按 Esc 塌回小窗口 —— 跳变被放大成两次。</td></tr>
+</table>
+
+<div class="aside">
+几何实测口径(1440x900, 见 <code>e2e/move-dialog-fit.spec.mjs</code> 头注): 宽 860(<code>--modal-w-add</code>); 收层 243px; 开层 515px = 243 + 272; 跳变量 272px。预留量 272 = 面板头 ~46 + 列表 210 + 顶距 4 + 余量 12。
+</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>A 线 · 提交语义收口(行为)</h3>
+<table>
+  <tr><th style="width:8%">编号</th><th style="width:26%">落点</th><th>内容</th></tr>
+  <tr><td>A1</td><td><code>drawer.js moveApplyPath</code></td><td>改为纯回填: <code>movePathInput = p</code> / <code>movePathMenu = false</code> / <code>movePathHi = -1</code>, <b>删掉</b> <code>submitMoveDialog()</code> 调用。焦点留在输入框(mousedown.prevent 已保)。</td></tr>
+  <tr><td>A2</td><td><code>add_torrent.js comboKeydown</code> + <code>drawer.js onMovePathKeydown</code></td><td>回退分支加可选钩子: <code>const fn = ctx.onEnter || ctx.onPick; fn(v)</code>。仅 move 传 <code>onEnter: (p) =&gt; { this.movePathInput = p; this.submitMoveDialog(); }</code> ⇒ 手输回车仍提交; 有高亮项时 Enter 只回填(经 A1), 再按一次才提交。其余四个下拉不传该钩子, 行为零变化。</td></tr>
+  <tr><td>A3</td><td><code>move-dialog.html</code> 按钮</td><td><code>:disabled="moveBusy || !movePathInput.trim()"</code> —— 按钮成为唯一提交路径后, 空态直接置灰; <code>submitMoveDialog</code> 的空值校验保留为兜底。</td></tr>
+  <tr><td>A4</td><td><code>drawer.js openMoveDialog / openMovePathMenu</code></td><td>聚焦前置 <code>moveSuppressOpen = true</code>; <code>openMovePathMenu()</code> 首行消费该标志并 <code>return</code>(只聚焦不展开)。之后点输入框 / 按方向键照常展开。</td></tr>
+</table>
+
+<h3>B 线 · 几何平滑化(观感)</h3>
+<table>
+  <tr><th style="width:8%">编号</th><th style="width:26%">落点</th><th>内容</th></tr>
+  <tr><td>B1</td><td>三皮肤 <code>dialogs.css</code></td><td><code>.modal.move-dialog { min-height: min(360px, calc(100vh - 120px)) }</code> + <code>.modal.move-dialog .modal-actions { margin-top: auto; padding-top: 16px }</code> —— 动作条钉底, 多出的高度留在 body 与动作条之间(呼吸感), 收层态不再是小个子。<b>body 不能加 <code>flex:1</code></b>: 全局 <code>* { box-sizing: border-box }</code> 下 padding 会长在固定高度里, 内容反被挤成滚动条。</td></tr>
+  <tr><td>B2</td><td>同上</td><td><code>.modal.move-dialog .add-dialog-body { transition: padding-bottom 200ms var(--ease) }</code>; <code>.pop-open</code> 仍切 272px ⇒ 高度 360 → 515 平滑长高(约 155px), 收层平滑回落。<b>删掉瞬跳</b>, 保留 <code>pop-open</code> 类(守阵/template 接线不变)。</td></tr>
+  <tr><td>B3</td><td>同上</td><td><b>面板入场不另加规则</b>(实施时纠正初稿): <code>.pop-menu</code> 自带 <code>animation: drop-in .12s</code>(opacity 0 + translateY(-4px) 起, 见 components.css), 再加 <code>.pop-enter-*</code> 是死规则且与动画争同一组属性 —— 用户看到的「跳变」在<b>容器高度</b>, 由 B2 承担。</td></tr>
+  <tr><td>B4</td><td><code>drawer.js openMovePathMenu</code></td><td>开层置 <code>_movePopSettleT = 240ms</code>(&gt; CSS 200ms), 到点重跑 <code>_fitAddPop("movePathList")</code> —— 过渡中量到的净空偏小会误限高, settle 后复位重测; 收层/关窗清定时器。</td></tr>
+  <tr><td>B5</td><td>同上</td><td><code>@media (prefers-reduced-motion: reduce) { transition: none }</code>(项目既有先例: <code>dialogs.css:447</code>)。</td></tr>
+</table>
+
+<div class="aside">
+<b>为什么不做「高度恒定 + 常驻 272px 预留」</b>: Q7 定为打开不自动展开后, 恒定高会在第一眼露出 ~270px 空箱(且 Q6 不许写文案填它)。改为「基线抬升 + 平滑过渡」, 三个诉求(大气 / 不跳 / 有动画)同时满足, 且没有空箱。
+</div>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th style="width:7%">步</th><th style="width:30%">改动</th><th style="width:32%">验收判据</th><th>影响文件</th></tr>
+  <tr>
+    <td>S1</td>
+    <td>行为收口: A1 纯回填 / A2 onEnter / A3 按钮置灰 / A4 抑制自动展开</td>
+    <td>点选后面板收起、输入框回填、对话框仍在、<b>零网络写请求</b>; 空输入按钮置灰; 打开后下拉未展开, 点输入框才展开</td>
+    <td><code>shared/drawer.js</code>、<code>shared/tpl/move-dialog.html</code></td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td>共享单点: <code>comboKeydown</code> 回退分支加 <code>ctx.onEnter</code> 钩子 + 头注补一行(五个调用点里只有 move 传)</td>
+    <td>其余四处(添加窗口 保存路径/分类/标签 · meta 分类)行为零变化, 现有守阵全绿</td>
+    <td><code>shared/add_torrent.js</code></td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td>几何: B1–B5, 三皮肤成对</td>
+    <td>开/收下拉高度过渡 200ms(可采样到中间态); settle 后列表 <code>maxHeight</code> 未被限到 210 以下; 360 高视口/768 高视口均可用</td>
+    <td><code>atlas|console|prism/css/dialogs.css</code>、<code>shared/drawer.js</code></td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td>守阵: <code>test_webui_static_dom_panel.py</code> 的 move 用例改写 + 扩容</td>
+    <td>新增钉: ①<code>moveApplyPath</code> 体内<b>不得</b>出现 <code>submitMoveDialog</code>; ②<code>comboKeydown</code> 回退分支含 <code>ctx.onEnter || ctx.onPick</code>; ③模板按钮 disabled 表达式; ④<code>openMoveDialog</code> 置抑制标志 + <code>openMovePathMenu</code> 首行守卫; ⑤三皮肤成对 <code>min-height</code> / <code>transition: padding-bottom</code> / <code>.pop-enter-from</code>。既有断言(§3 watcher 正则、§4b <code>pop-open</code> 接线、§5 <code>padding-bottom: 272px</code>)保持</td>
+    <td><code>tests/test_webui_static_dom_panel.py</code></td>
+  </tr>
+  <tr>
+    <td>S5</td>
+    <td>e2e 重写: <code>e2e/move-dialog-fit.spec.mjs</code></td>
+    <td>①打开即收层态: 高 ≈360、body 零滚动、下拉未展开; ②点输入框展开: <code>ResizeObserver</code> 采样高度序列, 至少 1 个严格介于 H0 与 H1 之间的中间值(证明是过渡而非瞬跳), 末值 ≈ H0+272, 下拉完整落在框内、前 6 项可点; ③点第 1 项: 对话框仍在 + 输入框 = 该项 + <code>/location</code> 写请求计数 0; ④点「设定位置」: 计数 1、成功关窗</td>
+    <td><code>e2e/move-dialog-fit.spec.mjs</code></td>
+  </tr>
+  <tr>
+    <td>S6</td>
+    <td>收尾 DoD: <code>commands run test.full</code> → 新建基线切片 → <code>kb.wrap</code> → 坑档回写</td>
+    <td>基线数字只写切片; 坑档新增「条件类切高度必须带 transition」一条(<code>pitfalls/web-ui/</code>, 与 <code>combobox-focusout-close</code> 互链)</td>
+    <td><code>memory-bank/testing/baselines/</code>、<code>memory-bank/pitfalls/web-ui/</code></td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>实施时两项均按推荐默认落地, 无遗留待拍板项。</p>
+<ul>
+  <li><b>基线高度 360px</b>(<code>min-height: min(360px, calc(100vh - 120px))</code>) —— 实测收层态 360、开层 515(prism)/513(atlas)。单点可调, 不动其它规则。</li>
+  <li><b>过渡时长 200ms</b> + <code>MOVE_POP_SETTLE_MS = 240</code> —— 若改时长, settle 常量须同步 +40ms。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th style="width:8%">编号</th><th style="width:36%">结论</th><th style="width:10%">日期</th><th>备注</th></tr>
+  <tr><td>D1</td><td>点选候选 = 只回填 + 收面板, 不提交(须点按钮)</td><td>26-10-29</td><td>Q1; 与 <code>pickAddPath</code> 同口径</td></tr>
+  <tr><td>D2</td><td>手输路径后回车仍直接提交; 有高亮项时 Enter 只回填</td><td>26-10-29</td><td>Q2; 需 <code>ctx.onEnter</code> 钩子</td></tr>
+  <tr><td>D3</td><td>几何走「基线抬升 + 平滑过渡」, 不做恒定高 + 空白区</td><td>26-10-29</td><td>Q3(B) + 用户「更大气 / 不能跳变 / 要动画」</td></tr>
+  <tr><td>D4</td><td>路径为空时「设定位置」按钮置灰</td><td>26-10-29</td><td>Q4; 批量入口无预填, 初始即置灰属预期</td></tr>
+  <tr><td>D5</td><td>不新增说明文案, 预留区留白</td><td>26-10-29</td><td>Q6</td></tr>
+  <tr><td>D6</td><td>打开对话框不自动展开下拉(只聚焦)</td><td>26-10-29</td><td>Q7</td></tr>
+  <tr><td>D7</td><td>预留量 272px 不变(面板头 46 + 列表 210 + 顶距 4 + 余量 12)</td><td>26-10-29</td><td>与 <code>_fitAddPop</code> 净空算式对齐, 列表永不触发限高</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th style="width:26%">风险</th><th style="width:34%">触发条件</th><th>处置</th></tr>
+  <tr><td>过渡期 <code>_fitAddPop</code> 误限高</td><td>候选 <code>/api/paths</code> 在 200ms 内返回, watcher 量到半截净空 → 列表被限到 120px 且不再自恢复</td><td>B4 settle 240ms 后复位重测; 判据: settle 后 <code>listH == 210</code>(e2e 断言)</td></tr>
+  <tr><td>短视口基线过高</td><td>视口高 &lt; 480, <code>min()</code> 夹取后 360 不可达</td><td>body 自身滚动 + <code>_fitAddPop</code> 限高兜底(与添加种子同口径); 768 高视口必须实测可用</td></tr>
+  <tr><td>共享单点加钩子波及其余四处</td><td>某处误传 <code>onEnter</code> / 默认值写错</td><td>钩子默认回落 <code>onPick</code>, 只有 move 传; 守阵钉回退分支表达式 + 四处冒烟</td></tr>
+  <tr><td>面板入场过渡误伤其它浮层</td><td>把 <code>.pop-enter-*</code> 写成全局</td><td>选择器限定 <code>.modal.move-dialog</code>; 守阵查「限定作用域」</td></tr>
+  <tr><td>抑制展开标志泄漏</td><td>只在首次置 true, 第二次打开不聚焦/不展开</td><td><code>openMoveDialog</code> 每次重置; 判据: 连开三次都能点开下拉</td></tr>
+  <tr><td>置灰被当成故障</td><td>批量设定位置无预填 → 按钮一进来就是灰的</td><td>D4 已拍板为预期; 若审阅觉得像坏了, 退回「点击后再 toast 校验」</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R1 · 26-10-29-0105</span> 实施完成(D1–D7 全落地)。两处与初稿的偏差: ①B1 的 <code>body { flex:1 }</code> 被否 —— 全局 <code>box-sizing: border-box</code> 下 padding 会长在固定高度里, 内容反被挤成滚动条, 改为 body auto 高度 + 动作条 <code>margin-top:auto</code> 钉底; ②B3 的面板入场 <code>.pop-enter-*</code> 被删 —— <code>.pop-menu</code> 自带 <code>drop-in</code> 动画, 再加 transition 是死规则。实测: H0=360 / H1=515(prism)·513(atlas), ResizeObserver 12 帧中 6 帧为中间态; e2e 双皮肤全绿; 全量零失败(数字见基线切片 26-10-29-0053)。</li>
+  <li><span class="tag">R0 · 26-10-29-0041</span> 初版。来源: 用户两条 WEBUI 报障 + grilling 两轮定稿(Q1–Q7 / D1–D7)。要点: 点选只回填、手输回车仍提交、空态置灰、打开不自动展开、几何基线抬到 360px 并走 200ms 平滑过渡(替掉 ±272px 瞬跳)。</li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -10,7 +10,11 @@
          被裁且把 body scrollHeight 撑大(弹窗体内多出滚动条), 净空算式 avail<0 恒不限高。治法 =
          ①对话框加宽到 --modal-w-add(与添加种子同宽, 路径项 nowrap+ellipsis 多显示); ②开层时
          根元素挂 .pop-open 类, body 加 padding-bottom 给下拉预留整高(预留量见三皮肤 CSS),
-         下拉完整落在对话框内, 弹窗体本身零新增滚动。模板只加类名绑定, 几何数字全在 CSS 单点。 -->
+         下拉完整落在对话框内, 弹窗体本身零新增滚动。模板只加类名绑定, 几何数字全在 CSS 单点。
+         2026-10-29 二修(用户报「点下拉选项就移动」+「窗口太小, 点下拉高度跳变」):
+         ①点选候选只回填(逻辑在 drawer.js::moveApplyPath), 移动只由「设定位置」按钮或手输回车发起;
+         ②窗口基线抬到 360px(三皮肤 min-height), 开层预留改走 200ms 过渡(不再 0↔272 瞬跳);
+         ③打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen), 点输入框/方向键才展开。 -->
     <aq-modal :open="moveOpen" :close="closeMove" icon="#i-folder-open" title="设定位置"
               label="设定位置" body-class="add-dialog-body"
               :width-class="['add-dialog move-dialog', { 'pop-open': movePathMenu }]">
@@ -35,6 +39,8 @@
           </div>
       <template #actions>
           <button class="bt ghost" @click="closeMove">取消</button>
-          <button class="bt primary" :disabled="moveBusy" @click="submitMoveDialog">设定位置</button>
+          <!-- 空路径置灰(2026-10-29): 按钮是唯一鼠标提交路径(点选候选只回填), 空态点了才 toast 太笨;
+               submitMoveDialog 的空值校验保留为兜底(回车路径仍可能走到) -->
+          <button class="bt primary" :disabled="moveBusy || !movePathInput.trim()" @click="submitMoveDialog">设定位置</button>
       </template>
     </aq-modal>

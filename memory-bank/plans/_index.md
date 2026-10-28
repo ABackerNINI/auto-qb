@@ -26,6 +26,7 @@
 
 ## Done
 
+- [26-10-29-0041] [WEBUI 设定位置对话框 · 点选只回填 + 几何平滑过渡](26-10-29-0041-plan-webui-move-dialog-pick-geometry.html) — `webui-move-dialog-pick-geometry`
 - [26-10-21-2323] [命令后状态写入的边界收口 · 实施计划 — 计时副作用 + 移除提交前复核 + 字段边界 + 守阵扩容](26-10-21-2323-plan-command-writeback-boundary.html) — `post-command-state-writes`
 - [26-10-21-1857] [跳检机制重构 · 执行计划 — 上报驱动 + 主循环微步 + 批量并行](26-10-21-1857-plan-skip-check-async-refactor.html) — `skip-check-arch`
 - [26-10-21-0120] [gtm 工具侧覆盖率门槛实施计划 — 88% 起步 · 双平台同口径 · 阶梯到 96](26-10-21-0120-plan-gtm-coverage-gate.html) — `gtm-coverage-gate`

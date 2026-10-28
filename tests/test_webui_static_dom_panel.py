@@ -3870,6 +3870,12 @@ def test_frontend_move_dialog_combobox_wiring():
          朝下开的下拉必伸出 .add-dialog-body 底沿被裁且撑大其 scrollHeight ⇒ 根元素按
          movePathMenu 挂 .pop-open 类 + 三皮肤成对的开层预留(padding-bottom 272px)与
          860 宽档(--modal-w-add)规则, 下拉完整落在对话框内、弹窗体零新增滚动。
+      6. 二修(2026-10-29 用户报「点下拉选项就触发移动」+「窗口太小, 点下拉高度跳变」):
+         ①点选候选只回填(moveApplyPath 体内不得出现 submitMoveDialog), 移动只由按钮/手输回车发起;
+         ②手输回车仍提交 —— 键盘单点回退分支走 (ctx.onEnter || ctx.onPick)(v), 只有 move 传钩子;
+         ③空路径按钮置灰; ④打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen, openMovePathMenu
+         首行消费); ⑤三皮肤成对: 收层态基线 min-height 360px + 动作条 margin-top:auto 钉底 +
+         padding-bottom 200ms 过渡(替掉 0↔272 硬切), 过渡后 settle(MOVE_POP_SETTLE_MS=240)重测限高。
     """
     import re
 
@@ -3925,6 +3931,25 @@ def test_frontend_move_dialog_combobox_wiring():
     assert re.search(r':width-class="\[\'add-dialog move-dialog\', \{ \'pop-open\': movePathMenu \}\]"', pv), \
         "move-dialog.html 缺 pop-open 并入 width-class(下拉开层时对话框不预留空间)"
 
+    # 4c. 二修(2026-10-29): 点选只回填 / 手输回车仍提交 / 空态置灰 / 打开不自动展开
+    apply_body = re.search(r"moveApplyPath\(p\) \{(.*?)\n    \},", dr, re.S)
+    assert apply_body, "drawer.js 找不到 moveApplyPath(点选候选的回填单点)"
+    assert "submitMoveDialog" not in apply_body.group(1), \
+        "moveApplyPath 又调了 submitMoveDialog —— 点选候选直接移动(2026-10-29 报障回归)"
+    assert "this.movePathInput = p" in apply_body.group(1), "moveApplyPath 必须回填输入框"
+    assert "(ctx.onEnter || ctx.onPick)(v)" in at, \
+        "comboKeydown 回退分支没走 ctx.onEnter 钩子(手输回车提交链断: 缺省仍须回落 onPick)"
+    assert "onEnter: (p) =>" in dr, "onMovePathKeydown 没传 onEnter(手输路径回车不再提交)"
+    assert re.search(r'<button class="bt primary" :disabled="moveBusy \|\| !movePathInput\.trim\(\)"', pv), \
+        "「设定位置」按钮缺空路径置灰(按钮是唯一鼠标提交路径, 空态点了才 toast 太笨)"
+    assert "this.moveSuppressOpen = true" in dr, \
+        "openMoveDialog 没置抑制标志(打开即自动展开下拉 = 第一眼开层态, 收层时高度骤变)"
+    assert open_move and "if (this.moveSuppressOpen) { this.moveSuppressOpen = false; return; }" in open_move.group(1), \
+        "openMovePathMenu 首行缺抑制标志消费(打开就弹面板; 标志还须只消费一次, 后续点击仍展开)"
+    assert re.search(r"const MOVE_POP_SETTLE_MS = 240;", dr), \
+        "drawer.js 缺 MOVE_POP_SETTLE_MS 常量(过渡期量到的净空只有一半, 不重测会把列表误限到 120px)"
+    assert "_movePopSettle()" in open_move.group(1), "openMovePathMenu 没触发过渡后重测限高"
+
     # 5. 三皮肤成对 CSS(漏一档 = 该皮肤对话框无样式)
     for ui in _UI_ALL:
         css_dir = os.path.join(STATIC_ROOT, ui, "css")
@@ -3938,6 +3963,13 @@ def test_frontend_move_dialog_combobox_wiring():
             f"{ui} 的 .modal.move-dialog 宽度未走 --modal-w-add(860 宽档, 与添加种子同宽; 560 窄档路径项 ellipsis 少显示)"
         assert re.search(r"\.modal\.move-dialog\.pop-open \.add-dialog-body \{[^}]*padding-bottom:\s*272px", blob), \
             f"{ui} 缺 .pop-open 开层预留规则(下拉伸出 body 被裁 + scrollHeight 撑大 = 用户须滚弹窗; 272px = 面板头 ~46 + 列表 210 + 顶距 4 + 余量)"
+        # 二修(2026-10-29): 基线抬到 360(治「窗口太小」) + 动作条钉底 + padding 过渡(治「高度跳变」)
+        assert re.search(r"\.modal\.move-dialog \{\s*width:\s*var\(--modal-w-add\);\s*min-height:\s*min\(360px,\s*calc\(100vh - 120px\)\)", blob), \
+            f"{ui} 的 .modal.move-dialog 缺收层态基线 min-height(原实测 243px = 用户报的「窗口太小」)"
+        assert re.search(r"\.modal\.move-dialog \.modal-actions \{[^}]*margin-top:\s*auto", blob), \
+            f"{ui} 动作条没钉底(基线抬高后按钮会浮在中间)"
+        assert re.search(r"\.modal\.move-dialog \.add-dialog-body \{[^}]*transition:\s*padding-bottom\s+200ms", blob), \
+            f"{ui} 缺 padding-bottom 过渡(0↔272 硬切 = 开/收下拉高度瞬跳, 2026-10-29 报障)"
 
     # 6. Esc 退栈链 + escBusy 同步(与 meta 同层)
     assert "this.moveOpen) this.closeMove()" in lf, "lifecycle.js Esc 退栈链缺 moveOpen→closeMove"

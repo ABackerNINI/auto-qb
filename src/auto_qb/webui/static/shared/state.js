@@ -444,6 +444,7 @@ window.AQB_STATE = {
       movePathOptions: [],   // 保存路径候选(GET /api/paths, 按最近使用排序)
       movePathInput: "",     // 新保存路径输入框(自由输入 + 下拉候选; 回车/候选点击应用)
       movePathMenu: false,   // 保存路径下拉展开态
+      moveSuppressOpen: false,  // 打开对话框即聚焦时抑制自动展开(2026-10-29: 打开只聚焦, 点输入框/方向键才展开)
       movePathHi: -1,        // 保存路径下拉键盘高亮
       movePathMouseAt: null, // 悬停接管门限坐标(comboHoverIdx, 同 addCatMouseAt)
       moveBusy: false,       // 有命令在飞(防误关 + 防重复投递)

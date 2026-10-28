@@ -301,8 +301,19 @@
  * ②开层时根元素挂 .pop-open(模板 :class), body 预留 272px = 下拉整高(面板头 ~46 + 列表 210 + 顶距
  * 4 + 余量 12) —— 预留后 _fitAddPop 净空 ≈216px > 列表 210 不再限高, 下拉完整落在对话框内; 矮视口
  * modal 自身滚动时 body 收缩、净空变小, 由限高兜底(与添加种子同口径, 见 combobox-focusout-close)。 */
-.modal.move-dialog { width: var(--modal-w-add); }
+/* 2026-10-29 二修(用户报「窗口太小」+「点下拉框高度跳变」): ①收层态基线抬到 360px(原实测 243 小个子),
+ * 动作条 margin-top:auto 钉底, 多出的高度留在 body 与动作条之间 = 呼吸感, 不写任何说明文案;
+ * ②开层预留不再 0↔272 硬切 —— padding-bottom 走 200ms 过渡, 高度 360→515 平滑长高、收层平滑回落。
+ * !body 不能加 flex:1(* { box-sizing: border-box }, padding 会长在固定高度里 -> 内容被挤成滚动条),
+ * 高度增长只能靠 body 的 auto 高度随 padding 走。时长与 drawer.js 的 MOVE_POP_SETTLE_MS(240,
+ * 过渡结束后重测限高)成对, 改任一边必须同步另一边。 */
+.modal.move-dialog { width: var(--modal-w-add); min-height: min(360px, calc(100vh - 120px)); }
+.modal.move-dialog .modal-actions { margin-top: auto; padding-top: 16px; }
+.modal.move-dialog .add-dialog-body { transition: padding-bottom 200ms var(--ease); }
 .modal.move-dialog.pop-open .add-dialog-body { padding-bottom: 272px; }
+/* 面板入场不另加规则: .pop-menu 自带 animation: drop-in .12s(opacity 0 + translateY(-4px) 起,
+ * 见 components.css) —— 用户看到的「跳变」在**容器高度**, 由上面的 padding-bottom 过渡承担。 */
+@media (prefers-reduced-motion: reduce) { .modal.move-dialog .add-dialog-body { transition: none; } }
 /* 重命名对话框(2026-10-19 几何修, 用户报「弹窗太小」): 字段值 = 完整种子显示名, 真实名称
  * routinely 80~120 字符 —— 通用 modal 基档 520(为确认/提示一句话设计)下输入框仅 474px,
  * 实测 97 字符长名裁掉 223px(桩名 43 字符恰好不裁, 故冒烟从未暴露)。宽度走 --modal-w-add
