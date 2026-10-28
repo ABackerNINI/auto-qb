@@ -150,7 +150,9 @@ by_hash 本就无采样), 文件留存到按龄删除(淘汰属 S2b)。
 创建任何线程; 全部落盘写在采样调用链内。
 活尾快照 live_tail(S6 验收追加)每轮采样末尾构建不可变 LiveTail 表整体替换引用, Web 线程
 只读单引用无锁(ctx.web.set_traffic_view 同款快照发布先例; 读侧 traffic_qb 按请求现取该
-引用, 故与视图发布先后无关)。
+引用, 故与视图发布先后无关)。快照两面: raw 面 = 未落盘记录 + 开放游程槽(v4_live_tail_slots
+复原), agg 面 = 未封口部分行 + 开放游程合成段(_pending_agg_rows <- _open_run_hour_samples,
+26-10-29 起) —— 两面同构, 空闲期都出 0 不出 null。
 
 配置: config.qb_traffic(QbTraffic, 缺省 None = 未启用)。启用/停用与热重载全由采样体入口
 现读判据承担(enabled=true 即时开采、运行期关闭即时短路), 不依赖队列重建相位; 未启用零
@@ -341,7 +343,71 @@ def _record_slots(rec, anchor: float, cursor: float, block_head: bool) -> tuple:
     return tuple(anchor + spacing * k for k in range(1, n + 1))
 
 
-def _pending_agg_rows(agg: "SeriesAgg", now: float) -> tuple:
+def _hour_spans(start: float, end: float) -> tuple:
+    """[start, end) 按小时界切段(与 _agg_credit_hours 的桶切分规则同源; 模块级纯函数)。
+
+    返回 Tuple[(段起, 段止), ...], 每段恰落一个 hour 桶; 空/退化区间 -> ()。段数 =
+    区间跨的小时数 —— 活尾合成上界 ~24: 开放游程被 00:00 硬切, 不跨天。"""
+    spans: list = []
+    cur = start
+    while cur < end:
+        h = int(cur) // HOUR_SECONDS * HOUR_SECONDS
+        nxt = min(end, float(h + HOUR_SECONDS))
+        spans.append((cur, nxt))
+        cur = nxt
+    return tuple(spans)
+
+
+def _open_run_hour_samples(agg: "SeriesAgg", run: Optional["OpenRun"]) -> dict:
+    """开放游程 + 未结算信用 -> hour 桶样本(活尾合成, plan 26-10-29-0231 §03; 模块级纯函数)。
+
+    为什么需要它: agg 记账只在记录落盘时发生(_agg_feed <- _append_record), 而 z 游程
+    只在**封口**时成记录(非零样本 / 换型 / 00:00 硬切 / stop / 天级保险闸)—— 空闲期
+    agg.pending 恒空、open_credit 悬着未结算, 于是 3d/7d/30d(hour)与 6mo/1y/all(逐级
+    继承)的图尾从最后一个封口点起到 now 全是 null, 前端渲染成「无采样」。跨天后尤甚:
+    00:00 把前一日整段封口补记成行(昨日 0 线是对的), 同时新游程从 00:00 起再不封口
+    —— 用户报的「0 值区显示无采样, 特别是跨天后」正是这一段。
+
+    口径与封口路径逐字同源(复用同一批纯函数, 不写第二份聚合逻辑):
+    - (1) credit 段 [open_credit 槽位, 游程首槽): 按上一记录速率 —— 即 _agg_feed 在
+      下一记录到达时结算的同一区间。**无开放游程时不出任何样本**(见函数体注释: 把信用
+      推到 now 会在「系列已不再被采样」的退化形态下凭空造覆盖)。
+    - (2) 游程内(z 型): 速率恒 0, totals 按 v4_z_totals_ramp 逐段摊配到**末端锚点**
+      (run.last_dl_total/last_up_total = 封口时 _resolve_run_end 用的同一个值)。不取
+      开启快照: 读侧 v4_merge_agg 取「后封行」totals, 合成行带更早快照会让累计链回退
+      (计划 §01 不变量 2)。
+    - (3) 末端取 run.last_seen, **不推到 now**: 采样停摆时不能凭空造覆盖(裁定 D2)。
+    - (4) n 游程(断连)只出 (1), 之后留 null —— 断连不可归因为 0(裁定 D3)。
+
+    每段恰 1 条 V4HourSample(O(小时数), 不是 O(槽数)): 段内速率与 totals 恒定,
+    v4_hour_agg 的 dt 加权与「级末快照 = 末记录」在等值样本下与逐槽展开等价。
+    返回 {hour_epoch: [V4HourSample, ...]}; 调用方并入 pending 副本(不与累计器共享容器)。
+    """
+    out: dict = {}
+    credit = agg.open_credit
+    if credit is None:
+        return out  # 无观测信用(null 期后): 不猜
+    if run is None:
+        # 无开放游程 = 没有「仍在采样」的证据: 不把信用推到 now。健康形态下 credit 槽位
+        # 就是本轮刚落的记录(now - 槽位 ~ 毫秒, 补不补都一样); 而**退化形态**(种子已从 qB
+        # 消失 / 系列不再被采样, 最后一条是非零 r 记录)若照推, 会按旧速率凭空造出整段
+        # 非零覆盖 —— 与「不猜」冲突。信用的前向结算留给下一条记录(封口路径本职)。
+        return out
+    TrafficSampleModule._agg_credit_hours(out, credit[0], run.start, credit[1], credit[2], credit[3], credit[4])
+    if run.kind != "z":
+        return out  # n 游程: 断连不可归因, run.start 之后留 null
+    spans = _hour_spans(run.start, run.last_seen)
+    # 摊配粒度 = 小时段数(不是槽数): n == 1 时 v4_z_totals_ramp 的「单槽跨度退化取开启
+    # 快照」规则不适用(一段 = 整条游程, 末端就是末端锚点) —— 传 2 再只取末元。
+    ramp = v4_z_totals_ramp(run.dl_total, run.up_total, run.last_dl_total, run.last_up_total, max(len(spans), 2))
+    if len(spans) == 1:
+        ramp = ramp[-1:]
+    for (seg_start, seg_end), (dl_total, up_total) in zip(spans, ramp):
+        TrafficSampleModule._agg_credit_hours(out, seg_start, seg_end, 0, 0, dl_total, up_total)
+    return out
+
+
+def _pending_agg_rows(agg: "SeriesAgg", run: Optional["OpenRun"], now: float) -> tuple:
     """聚合累计器 -> 活尾未封口部分行(S7, 2026-10-14; 模块级纯函数供单测探针)。
 
     agg.dat 只有**封口**行(hour 完结整小时 / day 完结本地日 / month 完结自然月才
@@ -349,6 +415,12 @@ def _pending_agg_rows(agg: "SeriesAgg", now: float) -> tuple:
     all(month)视图图尾停在最后一个封口桶(用户报「3 天及以上视图有真空: 只显示到
     14 日 0 点, 实际已到 1 点」的根因)。本函数把累计器里的当前桶部分聚合成 AggRow
     发布到活尾快照(LiveTail.pending_agg), 读侧按 epoch 与磁盘封口行合流。
+
+    活尾合成段(plan 26-10-29-0231, 用户报「3d 及以上视图 0 值区显示无采样, 特别是跨天
+    后」): 累计器只记「已落盘记录」的信用, 空闲游程未封口期间 pending 为空 —— 于是把
+    _open_run_hour_samples 的合成段并入 pending 的**副本**(累计器本体不动, 封口路径零
+    影响)。合成段与已结算样本同桶时按时间序追加在后, v4_hour_agg 的「级末快照 = 末
+    记录」因此拿到更晚的 totals。
 
     口径与写侧封口同源(三层各自当前桶):
     - hour: pending 各桶逐桶 v4_hour_agg(dt 加权); 含「已完成未 flush」的桶(flush
@@ -367,8 +439,12 @@ def _pending_agg_rows(agg: "SeriesAgg", now: float) -> tuple:
     """
     rows: list = []
     hour_partials: list = []
-    for h in sorted(agg.pending):
-        samples = agg.pending[h]
+    # 副本: 合成段只进副本, 累计器本体不动(封口路径零影响; 同桶样本按时间序追加在后)
+    pending = {h: list(samples) for h, samples in agg.pending.items()}
+    for h, samples in _open_run_hour_samples(agg, run).items():
+        pending.setdefault(h, []).extend(samples)
+    for h in sorted(pending):
+        samples = pending[h]
         if not samples:
             continue  # 空桶不留(全 null 覆盖的小时不产行, 与 _agg_flush_series 同)
         try:
@@ -378,7 +454,14 @@ def _pending_agg_rows(agg: "SeriesAgg", now: float) -> tuple:
     rows.extend(hour_partials)
     try:
         day_epoch = agg.day_epoch if agg.day_epoch is not None else v4_day_epoch(now)
-        day_children = list(agg.day_hours) + [r for r in hour_partials if v4_day_epoch(r.epoch) == day_epoch]
+        # 合成段可能把「今日小时」带进 pending, 而 agg.day_epoch 仍停在前一日(00:00 后尚未
+        # 有封口小时行入库): 开放日按子行里最晚的那天走, 前一日已封口小时不并进新日行
+        for r in hour_partials:
+            e = v4_day_epoch(r.epoch)
+            if e > day_epoch:
+                day_epoch = e
+        day_children = list(agg.day_hours) if day_epoch == agg.day_epoch else []
+        day_children += [r for r in hour_partials if v4_day_epoch(r.epoch) == day_epoch]
         if day_children:
             rows.append(v4_rollup_agg("day", day_epoch, tuple(day_children)))
     except (ValueError, OSError, OverflowError):
@@ -533,6 +616,11 @@ class TrafficSampleModule(BaseModule):
         agg 段平移)。发布面因此从 buffers|open_runs 扩到 _agg_states: flush 后
         records 虽已清空(磁盘接管 raw 面), 只要小时未封口, pending_agg 照常发布
         (agg 面)。部分行计算在主线程(纯函数读累计器, 无锁), AggRow 冻结不可变。
+
+        26-10-29 追加开放游程合成段(plan 26-10-29-0231): 部分行不再只含「已落盘记录的
+        信用」—— 空闲 z 游程未封口期间累计器 pending 为空, 图尾整段 null(跨天后从 00:00
+        起尤甚)。_pending_agg_rows 现按 _open_run_hour_samples 把「未结算信用 + 开放
+        游程」合成进 pending 副本, 与 raw 面 v4_live_tail_slots 的开放游程合成同构。
         """
         tails: dict = {}
         now = time.time()
@@ -542,7 +630,7 @@ class TrafficSampleModule(BaseModule):
             has_block = buf is not None and buf.start_epoch is not None
             records = tuple(buf.records) if has_block else ()
             agg = self._agg_states.get(key)
-            pending_agg = _pending_agg_rows(agg, now) if agg is not None else ()
+            pending_agg = _pending_agg_rows(agg, run, now) if agg is not None else ()
             if run is None and not records and not pending_agg:
                 continue  # 无待写记录无开放游程无未封口聚合行: 无活尾信息(shell 缓冲不留快照)
             tails[key] = LiveTail(

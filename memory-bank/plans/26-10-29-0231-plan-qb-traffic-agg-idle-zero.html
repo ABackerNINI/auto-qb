@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>qB 流量图 3d+ 视图空闲零值区显示无采样修复计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="qb-traffic-agg-idle-zero">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-29-0231">
+<meta name="doc-updated" content="26-10-29-0303">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: qb-traffic-agg-idle-zero</div>
+<h1>qB 流量图 3d+ 视图空闲零值区显示无采样修复计划</h1>
+<p class="lede">让 3d/7d/30d（hour 段）与 6mo/1y/all（day/month 段）在「程序在跑、qB 在线、速率为 0」的空闲段画出 0 线，而不是「无采样」。设计主轴：把 raw 段活尾已有的「开放游程合成槽」同款能力补到 agg 段，且合成行与将来真正封口落盘的行**逐字节同源**。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-29-0231 · <b>doc-updated</b> 26-10-29-0303 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话 26-10-29（用户报「WEBUI 流量图 3d 及以上视图 0 值区显示无采样，特别是跨天后」），6 个前沿问题全部按推荐拍板（D1–D6，见 §06）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>目标</h3>
+<ul>
+  <li><b>做到</b>：agg 段窗（3d/7d/30d 的 hour 桶、6mo/1y 的 day 桶、all 的 month 桶）里，凡是「采样在跑且速率确实为 0」的小时，图上出 0 值点；hover 出 0 桶状态行，不是「无采样」。</li>
+  <li><b>做到</b>：跨天（00:00 硬切）后新一天的整段空闲，不再出现「从 00:00 一直到现在的整片斜纹」。</li>
+  <li><b>不做</b>：不改前端（`qb_traffic_chart.js` / `drawer.html` 的 null 与 0 本就分开渲染）、不加配置键、不改落盘格式、不动 raw 段（1m–24h）语义。</li>
+</ul>
+
+<h3>设计底线 / 不变量</h3>
+<ol>
+  <li><b>合成行 = 封口行的前缀</b>：同一时间区间必须用封口路径的同一套纯函数（`_agg_credit_hours` / `v4_z_totals_ramp` / `v4_hour_agg` / `v4_rollup_agg`）算出来。这样落盘后读侧 `v4_merge_agg` 合流不会出现第二口径（项目已有 R07/R10「同源双实现」旧账，不再加一份）。</li>
+  <li><b>totals 单调不回退</b>：合成行的 `dl_total/up_total` 取游程<b>末端锚点</b>（= `_resolve_run_end` 用的同一个值），保证 `v4_merge_agg`「totals 取后封行」时拿到的是更晚的快照。</li>
+  <li><b>归因诚实</b>：z 游程 = 已知 0（可画 0）；n 游程 = 断连未知（必须留 null）。合成末端取 `run.last_seen`，<b>不推到 now</b> —— 采样停摆时不能凭空造覆盖。</li>
+  <li><b>覆盖不双计</b>：合成区间从 `open_credit` 槽位起算，与磁盘已封区间天然互斥；合流后 cov 截到桶宽 3600。</li>
+  <li><b>单写线程不变式不动</b>（黄金法则 5）：合成只在主线程 `_publish_live_tail` 内读内存累计器，产出不可变 tuple 后整体替换引用。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>调用链（证据表）</h3>
+<table>
+  <tr><th style="width:16%">环节</th><th style="width:34%">位置</th><th>行为</th></tr>
+  <tr><td>窗口 → 段</td><td><code>traffic_grid.py:61-75</code></td><td>3d/7d/30d → <code>hour</code>（桶宽 3600s）；6mo/1y → <code>day</code>；all → <code>month</code>。1m–24h 才是 <code>raw</code>。</td></tr>
+  <tr><td>读侧映射</td><td><code>traffic_grid.py:744</code> <code>v4_agg_obs</code> / <code>:756</code> <code>v4_agg_obs_live</code></td><td><code>{r.epoch: ... for r in rows if r.epoch in buckets}</code> —— <b>缺行 = 该桶不进返回表 = null</b>。</td></tr>
+  <tr><td>前端</td><td><code>qb_traffic_chart.js:414</code> · <code>:267</code> <code>_qbGapRuns</code> · <code>drawer.html:134</code></td><td>null 桶 = 断线不连线 + 斜纹，图例文案「无采样 · 程序未运行或 qB 断连」；0 桶另有状态行。二者前端本来就分得开。</td></tr>
+  <tr><td>写侧记账</td><td><code>traffic_sample_mod.py:977</code> → <code>:1083</code> <code>_agg_feed</code></td><td>聚合记账<b>只在记录落盘时</b>被调用（<code>_append_record</code> 内）。</td></tr>
+  <tr><td>游程封口</td><td><code>:714</code> 非零样本 · <code>:773-775</code> 换型或 00:00 硬切 · <code>:796</code> 天级保险闸 · <code>:1509</code> <code>stop()</code></td><td>z 游程只在封口时成记录。<code>ZRUN_FLUSH_S = 86400</code>（<code>:207</code>）是防溢出保险闸，正常空闲永远不触。</td></tr>
+  <tr><td>累计器</td><td><code>:301-325</code> <code>SeriesAgg</code> · <code>open_credit</code>（<code>:309</code>）</td><td>上一非 null 槽的前向覆盖<b>待下一记录到达才结算</b>；空闲期间它就悬在那里。</td></tr>
+  <tr><td>活尾发布</td><td><code>:344</code> <code>_pending_agg_rows</code> · <code>:522</code> <code>_publish_live_tail</code></td><td>只遍历 <code>agg.pending</code>；空闲期 <code>pending</code> 为空 ⇒ 发布空 tuple ⇒ agg 段图尾无行。</td></tr>
+</table>
+
+<h3>三个关键证据</h3>
+<ol>
+  <li><b>空闲期确实一条 hour 行都不产</b>（子代理实测，26-10-29）：空闲 09:00:30 → 10:00:00，<code>agg.dat</code> 不存在、<code>pending = {}</code>、<code>OpenRun(kind='z', samples=120)</code>。</li>
+  <li><b>跨天是「昨天补上、今天全空」的分水岭</b>：00:00 硬切把前一日整段空闲封口补记成行（实测 23:00 行在跨天后落盘，<code>dl_avg=0, cov_s=3570</code>）—— 所以<b>昨天以前的 0 线是对的</b>；同时新开一个 z 游程并一直不封口，<b>新的一天从 00:00 起整段 null</b>，直到出现第一个非零样本。这正是「特别是跨天后」的机制解释。</li>
+  <li><b>raw 段没有这个病</b>：<code>v4_live_tail_slots</code>（<code>traffic_store.py:513</code>）会把开放游程按未来封口形态合成 z 槽（obs = (0,0,快照)）⇒ 24h 视图有 0 线。<b>agg 段缺的就是这条同款路径</b> —— 这是「只有 3 天及以上才犯」的直接原因。</li>
+</ol>
+
+<h3>影响面</h3>
+<ul>
+  <li>三个作用域全中：global / group（成员逐个合成）/ torrent（单种空闲即整段 null）。</li>
+  <li>6mo/1y 的当日行同款：`_pending_agg_rows` 的 day 行由 <code>hour_partials</code> 逐级 rollup，hour 缺段 ⇒ 当日行 cov 偏小；all 的当月行再往上一级同样。</li>
+  <li>窗口内累计（`qbCurSummary`）不受影响：null 桶本就不计。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>主线（D1 拍板：写侧活尾合成）</h3>
+<p>在 <code>_pending_agg_rows</code> 的入口把「未结算 credit + 开放游程」合成进 <code>agg.pending</code> 的<b>副本</b>，其余逻辑（逐桶 <code>v4_hour_agg</code> → day/month 逐级 rollup）<b>一行不改</b>。合成段本身复用封口路径的两个既有纯函数，不新增任何聚合语义。</p>
+
+<div class="aside">
+<b>载体边界（别与方案③混读）</b>：合成出来的是<b>内存 <code>AggRow</code> 元组</b>，只挂进活尾快照 <code>LiveTail.pending_agg</code> 供 Web 读侧按请求消费 —— <b>不进 <code>agg.dat</code>、不写天文件、不切记录</b>，每轮采样末尾整体重建替换（不累积），进程一重启就没了。磁盘上<b>仍然只有封口行</b>（00:00 硬切 / 非零样本 / <code>stop()</code> 产出），封口路径 <code>_agg_flush_series</code> → <code>_agg_append</code> 读的仍是 <code>agg.pending</code> 本体（合成只进副本，故零影响）。所以「空闲 8 小时出 8 条 hour 部分行」描述的是<b>读侧这一刻能拿到的行</b>，不是落盘了 8 条；写放大为 0，落盘格式与文件布局不变。方案③（按小时 <code>_seal_run</code> 落盘）换来的「重启不丢」被明确放弃，代价记在 §05 观察项。
+</div>
+
+<h4>落点与改动面</h4>
+<table>
+  <tr><th style="width:38%">文件</th><th style="width:14%">动作</th><th>内容</th></tr>
+  <tr><td><code>src/auto_qb/core/modules/traffic_sample_mod.py</code></td><td>改</td><td>新增 <code>_hour_spans</code>（纯切段，<=6 行）+ <code>_open_run_hour_samples</code>；<code>_pending_agg_rows</code> 签名加 <code>run</code> 并改吃 pending 副本；<code>_publish_live_tail</code> 传 <code>run</code>。</td></tr>
+  <tr><td><code>src/auto_qb/core/traffic_store.py</code></td><td>仅注释</td><td><code>LiveTail.pending_agg</code> docstring 补一句「含开放游程合成段」。</td></tr>
+  <tr><td><code>tests/test_traffic_sample.py</code></td><td>改 + 加</td><td>既有 <code>_pending_agg_rows</code> 相关用例同步签名；新增 S1–S4 的判据用例。</td></tr>
+  <tr><td>前端 / 配置 / 落盘格式</td><td class="good">不动</td><td>无配置键新增（黄金法则 4 无需动 <code>validate_config</code>）；agg 行格式与文件布局不变。</td></tr>
+</table>
+
+<h4>合成口径（伪代码，落实时按此实现）</h4>
+<pre><code><span class="cm"># 新增：纯切段（与 _agg_credit_hours 的切段规则同源，单测可直接喂）</span>
+def _hour_spans(start, end) -&gt; list[tuple[float, float]]: ...
+
+<span class="cm"># 新增：未结算 credit + 开放游程 -&gt; hour 桶样本（每段恰 1 条，O(小时数) 不是 O(槽数)；不接收 now）</span>
+def _open_run_hour_samples(agg, run) -&gt; dict[int, list]:
+    out = {}
+    credit = agg.open_credit                      <span class="cm"># (槽位, dl_rate, up_rate, dl_total, up_total)</span>
+    if credit is None:
+        return out                                <span class="cm"># null 期后无观测：不猜</span>
+    if run is None:
+        return out                                <span class="cm"># 无开放游程 = 无「仍在采样」证据，不把信用推到 now（R1 修订）</span>
+    <span class="cm"># (1) credit 段 [上一记录末槽, 游程首槽) 按上一记录速率 —— 与 _agg_feed 结算口径逐字一致</span>
+    _agg_credit_hours(out, credit[0], run.start, *credit[1:])
+    if run.kind != "z":
+        return out                                <span class="cm"># n 游程：断连不可归因，之后留 null（D3）</span>
+    <span class="cm"># (2) 游程内速率恒 0，totals 按末端锚点逐段摊配（与封口时 v4_z_totals_ramp 同源）</span>
+    spans = _hour_spans(run.start, run.last_seen)          <span class="cm"># 末端 = last_seen，不推 now（D2）</span>
+    ramp = v4_z_totals_ramp(run.dl_total, run.up_total,
+                            run.last_dl_total, run.last_up_total, max(len(spans), 2))
+    if len(spans) == 1:
+        ramp = ramp[-1:]                          <span class="cm"># 单段 = 整条游程：取末端锚点（R1 修订）</span>
+    for (s, e), (dl_t, up_t) in zip(spans, ramp):
+        _agg_credit_hours(out, s, e, 0, 0, dl_t, up_t)
+    return out
+
+<span class="cm"># 改：入口合流副本（agg.pending 本体不动，封口路径零影响）</span>
+def _pending_agg_rows(agg, run, now):
+    merged = {h: list(v) for h, v in agg.pending.items()}
+    for h, samples in _open_run_hour_samples(agg, run, now).items():
+        merged.setdefault(h, []).extend(samples)          <span class="cm"># 同桶相加，cov 由 v4_hour_agg 截到 3600</span>
+    ... <span class="cm"># 其余逐桶 v4_hour_agg / day / month rollup 原样不动</span>
+</code></pre>
+
+<div class="aside">
+<b>为什么不是另两条路</b>（D1 的取舍记录）：<br>
+② <b>读侧合成</b>（给 <code>LiveTail</code> 加 credit 字段、在 <code>traffic_grid</code> 里按请求算）：读侧要复刻 credit 切段 + totals 摊配，等于把封口口径写第二遍 —— 正是 R07/R10 那类旧账。<br>
+③ <b>按小时封口落盘</b>（<code>_advance_run</code> 跨小时界就 <code>_seal_run</code>）：磁盘数据确实更完备（能扛重启），但每个有空闲游程的系列每天 z 记录从 1 条变 24 条（24× 写放大），raw 段记录数跟着涨；收益只是「重启后那段不丢」，不值得在这一轮付。
+</div>
+
+<h3>分期</h3>
+<table>
+  <tr><th style="width:10%">期</th><th style="width:30%">内容</th><th>出口条件</th></tr>
+  <tr><td>S1</td><td>纯函数层：<code>_hour_spans</code> + <code>_open_run_hour_samples</code></td><td>单测覆盖 z / n / credit=None / 跨小时 / 跨天五种形态</td></tr>
+  <tr><td>S2</td><td>接线：<code>_pending_agg_rows</code> 吃副本 + <code>_publish_live_tail</code> 传 <code>run</code></td><td>空闲 8 小时 → 快照 <code>pending_agg</code> 里有 8 条 hour <b>部分行</b> + 1 条 day + 1 条 month 部分行（内存行，不落盘），cov 与 avg 正确</td></tr>
+  <tr><td>S3</td><td>totals 不变量 + 合流断言</td><td>磁盘行与合成行同 epoch 合流后 cov 截 3600、totals 取更晚快照、不回退</td></tr>
+  <tr><td>S4</td><td>全档回归（3d/7d/30d/6mo/1y/all）+ 文档回写 + 全量测试</td><td><code>commands run test.full</code> 绿，新建基线切片</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th style="width:6%">#</th><th style="width:46%">内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>S1</td>
+    <td>新增 <code>_hour_spans(start, end)</code>（纯切段，与 <code>_agg_credit_hours</code> 的 <code>int(cur)//3600*3600</code> 规则同源）与 <code>_open_run_hour_samples(agg, run, now)</code>。两者都是模块级纯函数，不触文件不触时钟，供单测探针。</td>
+    <td>
+      (a) 空闲 z 游程 09:10→12:20 → 3 段，<code>seg</code> 分别 3000/3600/1200，rate 恒 0；<br>
+      (b) n 游程 → 只出 credit 段，游程内零样本；<br>
+      (c) <code>open_credit is None</code> → 空 dict；<br>
+      (d) 跨天 z 游程（23:10→次日 01:20）→ 桶键落在两个自然日，各自小时键正确。
+    </td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td><code>_pending_agg_rows(agg, run, now)</code> 改签名并先构造 <code>merged</code> 副本；<code>_publish_live_tail</code>（<code>:545</code>）传 <code>run</code>。同步既有用例 <code>test_pending_agg_rows_skips_empty_and_zero_coverage_buckets</code>（<code>tests/test_traffic_sample.py:2717</code>）签名 —— <b>其「空桶不出行」断言必须原样保留</b>。</td>
+    <td>
+      (a) 空闲 8 整小时 → 活尾快照 <code>pending_agg</code> 里 8 条 hour <b>部分行</b>（<code>dl_avg=up_avg=0</code>、<code>cov_s=3600</code>，内存行，<b>磁盘 <code>agg.dat</code> 仍是零行</b>）+ 当日 day 部分行 + 当月 month 部分行；<br>
+      (b) 无开放游程且 <code>pending</code> 为空 → 仍返回空 tuple（空态面不回归）；<br>
+      (c) 该用例原断言不变（空桶 = null 语义不动）。
+    </td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td>totals 不变量：合成段 totals 一律取 <code>run.last_dl_total/last_up_total</code>（= 封口时 <code>_resolve_run_end</code> 的末端锚点），并按 <code>v4_z_totals_ramp</code> 逐段摊配。补一条合流断言用例。</td>
+    <td>磁盘已有该 hour 的封口行（<code>cov=1200, totals=T1</code>）+ 合成行（<code>cov=2400, totals=T2&gt;T1</code>）→ <code>v4_agg_obs_live</code> 合流后 <code>cov=3600</code>、<code>totals=T2</code>、<code>dl_avg=0</code>；若把合成行 totals 换成开启快照，该用例必须<span class="bad">红</span>。</td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td>全档回归：3d/7d/30d（hour）、6mo/1y（day，含当日行）、all（month，含当月行）；并确认 raw 段（1m–24h）与 <code>_qbSeamHint</code> 接缝提示判据零回归。</td>
+    <td>
+      (a) 6mo 视图当日行 <code>cov_s</code> 含空闲小时（不再只到最后一个封口点）；<br>
+      (b) all 当月行同款；<br>
+      (c) raw 段既有用例全绿；<br>
+      (d) 断连（n 游程）段在 agg 段窗仍是 null（<span class="bad">不许</span>被合成为 0）。
+    </td>
+  </tr>
+  <tr>
+    <td>S5</td>
+    <td>文档回写：<code>_pending_agg_rows</code> 与 <code>LiveTail.pending_agg</code> 的 docstring 补「含开放游程合成段，口径与封口同源」；测试文件头部「## 测试计划」清单同步新增用例；跑全量并新建基线切片。</td>
+    <td><code>commands run test.full</code> 绿；<code>commands run kb.new baseline</code> 记实测数字；<code>commands run kb.index</code> 重建索引。</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>无。</b>D1–D6 已在 26-10-29 grilling 轮全部拍板（见 §06），本轮无开放决策项。</p>
+<p>仅留一条<b>观察项（不阻塞、不在本轮范围）</b>：S1 的路线不解决「空闲期进程重启 → 该段在磁盘本就不存在 → catch-up 后仍是真空（null）」。这与 raw 段活尾同款（活尾是内存近似，重启即丢）。若日后要求「磁盘完备」，另立 issue 走 D1 被否掉的方案 ③（按小时封口，24× 写放大），不在本计划内追加。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th style="width:7%">编号</th><th style="width:22%">议题</th><th style="width:40%">结论</th><th style="width:10%">日期</th></tr>
+  <tr><td>D1</td><td>修复层</td><td>写侧活尾合成（方案 ①）：在 <code>_pending_agg_rows</code> 入口合成 pending 副本，复用封口链路纯函数。否决读侧合成（口径二份）与按小时封口（24× 写放大）。</td><td>26-10-29</td></tr>
+  <tr><td>D2</td><td>「已知 0」归因边界</td><td>合成 <code>[credit_slot, first_run_slot)</code> 按上一记录速率 + 游程内 0；末端取 <code>run.last_seen</code>，<b>不取 now</b>。</td><td>26-10-29</td></tr>
+  <tr><td>D3</td><td>n 游程（qB 断连）</td><td>只合成 credit 段到 <code>run.start</code>，之后留 null —— 断连不可归因为 0。</td><td>26-10-29</td></tr>
+  <tr><td>D4</td><td>6mo/1y/all</td><td>不单独立项，hour 层修好后逐级 rollup 自然继承；但验收必须覆盖 day/month 两级（S4）。</td><td>26-10-29</td></tr>
+  <tr><td>D5</td><td>前端</td><td>不改。0 线与「无采样」前端本就分开渲染，修完后若仍见 null 即为真空/断连，语义正确。</td><td>26-10-29</td></tr>
+  <tr><td>D6</td><td>流程口径</td><td>不入池 issue，直接出本计划文档；代码改动待用户确认计划后另起一轮。</td><td>26-10-29</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th style="width:6%">编号</th><th style="width:30%">风险 / 触发条件</th><th>处置</th></tr>
+  <tr>
+    <td>R1</td><td><b>发布路径变热</b>：<code>_publish_live_tail</code> 每轮遍历全部系列，合成按小时数多算几次。<br>触发：空闲游程跨满一天 + 数千个有种数据的系列。</td>
+    <td>合成段每段只产 1 条 <code>V4HourSample</code>（不是每槽一条），单系列上界约 25 段；且封口前游程必被 00:00 硬切，跨度天然 &lt; 24h。若真机 profile 出现热点，退化手段：距上次发布不足一个采样间隔时复用上次合成结果（缓存挂在 <code>SeriesAgg</code> 旁，不跨线程）。</td>
+  </tr>
+  <tr>
+    <td>R2</td><td><b>totals 回退</b>：合成行与磁盘行同 epoch 合流时，<code>v4_merge_agg</code> 取「后封行」的 totals；若合成行带的是游程<b>开启</b>快照，累计链会倒退成 null。<br>触发：游程跨小时界且该小时已封口。</td>
+    <td>S3 把末端锚点写成硬不变量 + 一条「换成开启快照必须红」的反向断言用例。</td>
+  </tr>
+  <tr>
+    <td>R3</td><td><b>重启丢活尾</b>：空闲期重启 → 该段磁盘本无数据 → catch-up 后仍 null。<br>触发：空闲期进程重启/崩溃。</td>
+    <td>接受，与 raw 段同款诚实口径（活尾 = 内存近似）。在 §05 观察项写明不是本轮回归；要磁盘完备另立 issue 走方案 ③。</td>
+  </tr>
+  <tr>
+    <td>R4</td><td><b>断连被误画成 0</b>：<br>触发：n 游程被一并合成。</td>
+    <td>D3 的 <code>kind != "z"</code> 提前返回 + S4(d) 专门断言「断连段仍 null」。</td>
+  </tr>
+  <tr>
+    <td>R5</td><td><b>覆盖双计</b>：合成区间与磁盘已封区间重叠 → cov 虚增（avg 仍是 0 不影响值，但会污染 day/month 的权重）。<br>触发：合成起点取错。</td>
+    <td>合成起点恒为 <code>open_credit[0]</code>（= 上一记录末槽，游标每次只消费一次，区间天然互斥）；<code>v4_hour_agg</code> 把 cov 截到 3600；S3 断言合流后 cov 恰为 3600。</td>
+  </tr>
+  <tr>
+    <td>R6</td><td><b>人工时钟</b>：测试把模块 time 钉在 1970 附近时，day/month 本地界换算在 Windows 换出负 epoch → <code>OSError</code>。</td>
+    <td><code>_pending_agg_rows</code> 已有 <code>except (ValueError, OSError, OverflowError)</code> 兜底（该级不出行），合成路径沿用同一兜底，不新增分支。</td>
+  </tr>
+  <tr>
+    <td>R7</td><td><b>采样停摆</b>：handler 卡住时 <code>last_seen</code> 落后 now，图尾仍留一小段 null。<br>触发：主循环阻塞。</td>
+    <td>不修 —— 这正是 D2 要的诚实边界；与 raw 段行为一致，且 <code>_qbSeamHint</code> 的重启缝提示会照常覆盖该形态。</td>
+  </tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-29-0231</span> 初版：grilling 会话（6 问全部按推荐拍板）产出。根因定位到 agg 段活尾缺「开放游程合成」路径，方案定为写侧活尾合成（D1），分 S1–S5 五步落地。</li>
+  <li><span class="tag">R1 · 26-10-29-0242</span> 实施完成后的口径修订（两处，均已在代码与守阵里钉住）：<br>
+  ① <b>无开放游程不再把信用推到 now</b>（原 §03 伪代码的「瞬时无游程形态」分支删除）。实现期发现该分支在退化形态下会凭空造覆盖：种子已从 qB 消失 / 系列不再被采样而最后一条是非零 r 记录时，<code>open_credit</code> 会一直悬着，照推到 now 就是按旧速率伪造整段非零覆盖 —— 与「不猜」冲突。健康形态下信用槽位就是本轮刚落的记录（now 差毫秒级），不补零损失。<br>
+  ② <b>单小时段的 totals 取末端锚点</b>。原写法用 <code>v4_z_totals_ramp(..., len(spans))</code>，而该函数的 <code>n == 1</code> 是「单槽跨度退化恒取开启快照」—— 这里的 n 是<b>小时段数</b>不是槽数，单段游程会因此带上开启快照，合流后累计链回退（S3 守阵当场拦下）。改为传 <code>max(len(spans), 2)</code> 再对单段只取末元。<br>
+  落地状态：S1–S5 全部完成，<code>commands run test.full</code> 绿（数字见基线切片 <code>26-10-29-0242</code>），doc-status 置 Done。</li>
+  <li><span class="tag">R2 · 26-10-29-0303</span> 表述澄清（语义零变化，用户指出 S2 判据易被读成被否掉的方案③）：<br>
+  ① §03 新增「载体边界」段，明写合成行是<b>内存 <code>AggRow</code></b>、只挂 <code>LiveTail.pending_agg</code> 供读侧消费，<b>不进 <code>agg.dat</code> / 不写天文件 / 不切记录 / 每轮重建不累积 / 重启即失</b>；磁盘仍只有封口行，写放大 0。<br>
+  ② S2 验收判据与分期表出口条件由「8 条 hour 行」改为「8 条 hour <b>部分行</b>（内存行，磁盘 <code>agg.dat</code> 仍是零行）」；S3 判据里「磁盘已有该 hour 行」改为「该 hour 的封口行」。<br>
+  ③ 伪代码里 <code>_open_run_hour_samples</code> 签名按实现去掉无用 <code>now</code> 形参（R1 之后已不再使用）。</li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -498,6 +498,11 @@ class LiveTail:
     合流(v4_merge_agg 口径: 磁盘无行的开放桶直映, 已封桶的迟到补记残余与封口行
     合并 —— 与写侧 _agg_merge_prev 同判据)。与 records 独立: flush 后 records
     清空(磁盘接管 raw 面), 只要小时未封口 pending_agg 照常发布(agg 面)。
+    26-10-29 起(plan 26-10-29-0231)部分行还含**开放游程合成段**: 空闲 z 游程未封口
+    期间累计器 pending 为空, 图尾从最后一个封口点起到 now 整段 null(跨天后从 00:00
+    起尤甚) —— 写侧按 _open_run_hour_samples 合成「未结算信用 + 游程内 0 速率」,
+    与 raw 面 v4_live_tail_slots 的开放游程合成同构。合成行 totals 取游程末端锚点
+    (不是开启快照), 保证 v4_merge_agg 的「totals 取后封行」不回退。
     """
 
     block_open: bool  # 写侧是否存在开放块(start_epoch 非 None)

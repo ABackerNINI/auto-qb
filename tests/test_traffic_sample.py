@@ -150,6 +150,20 @@ v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
 P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_pending_agg_rows_skips_empty_and_zero_coverage_buckets: 活尾 pending 行 —— 空桶不留行 /
   零有效覆盖桶 ValueError 逐一跳过(不出行 = null 语义), 无子行时 day/month 两级不出行
+- test_hour_spans_splits_on_hour_boundary: 小时界切段纯函数 —— 跨整点出 3 段, 退化/空区间出 ()
+- test_open_run_hour_samples_idle_z_run_emits_zero_hours: 空闲 z 游程合成 —— credit 段按上一记录
+  速率 + 游程内恒 0, totals 摊配到末端锚点, 末端取 last_seen 不推 now
+- test_open_run_hour_samples_null_run_leaves_tail_null: n 游程只合成 credit 段到 run.start, 之后留
+  null(断连不可归因为 0)
+- test_open_run_hour_samples_without_credit_is_empty: 无观测信用 -> 不合成任何样本(不猜)
+- test_pending_agg_rows_idle_z_run_fills_tail_hours: 空闲 8 小时 z 游程 -> 活尾快照里 8 条 hour
+  部分行(avg 0 / cov 3600, 内存行不落盘)+ 当日 day 行 + 当月 month 行; 累计器本体不动(副本语义)
+- test_pending_agg_rows_keeps_totals_monotonic_against_disk_row: 合成行 totals = 末端锚点 ->
+  与磁盘行合流「totals 取后封行」不回退(反证: 带开启快照会回退)
+- test_pending_agg_rows_cross_midnight_keeps_day_row_on_new_day: 跨本地日界 -> hour 行落两天,
+  开放日行只取新一天的小时(前一日已封口小时不并进新日行)
+- test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end: 端到端 —— 先一笔非零(立信用)再
+  一路空闲, z 游程未封口时活尾快照已带 0 值 hour 行(整小时 avg 0 / cov 3600), 3d+ 不再画「无采样」
 - test_apply_interval_without_main_tick_uses_raw_interval: main_tick 未配置(0) -> 生效间隔
   = sample_interval 原值(不取整, 无失配告警)
 - test_close_blocks_for_interval_change_skips_runless_and_unopened: 改间隔关块只封「有开放块」
@@ -2219,7 +2233,7 @@ def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypat
     mod._agg_feed(key, V4Sample(200, 60, 2000, 3000), h0, h0 + 1838, False, 30.0)
     mod._agg_feed(key, V4Sample(300, 70, 3000, 4000), h0 + 1838, h0 + 3600, False, 30.0)
     now = h0 + HOUR_SECONDS
-    rows = _pending_agg_rows(mod._agg_states[key], now)
+    rows = _pending_agg_rows(mod._agg_states[key], None, now)
     hours = [r for r in rows if r.kind == "hour"]
     assert hours == [AggRow("hour", h0, 149, 200, 55, 60, 2000, 3000, 3600)]  # dt 加权 + 级末快照
     day = [r for r in rows if r.kind == "day"]
@@ -2228,17 +2242,17 @@ def test_live_tail_pending_agg_published_and_cleared_by_seal(tmp_path, monkeypat
     assert month == [AggRow("month", v4_month_epoch(h0), 149, 200, 55, 60, 2000, 3000, 3600)]  # 开放月逐级
     # 小时封口: hour 部分行消失(磁盘接管), 开放日部分行仍在(日未封)
     assert mod._agg_flush_series(key, now=now) is True
-    rows = _pending_agg_rows(mod._agg_states[key], now)
+    rows = _pending_agg_rows(mod._agg_states[key], None, now)
     assert [r for r in rows if r.kind == "hour"] == []
     assert [r for r in rows if r.kind == "day"] == day  # 日累计器持已封 hour 行, 部分行照发
     # 无累计器/空 pending: 不出行
-    assert _pending_agg_rows(SeriesAgg(), h0) == ()
+    assert _pending_agg_rows(SeriesAgg(), None, h0) == ()
     # 跨日残余: 前一日的 pending 小时不进当日 day 部分行(hour 部分行照发, 读侧与磁盘行合流)
     agg2 = SeriesAgg()
     prev_h = v4_day_epoch(h0) - HOUR_SECONDS
     agg2.pending[prev_h] = [V4HourSample(100, 50, 1000, 2000, 1800.0)]
     agg2.day_epoch = v4_day_epoch(h0)
-    rows2 = _pending_agg_rows(agg2, h0 + 1800)
+    rows2 = _pending_agg_rows(agg2, None, h0 + 1800)
     assert [r.epoch for r in rows2 if r.kind == "hour"] == [prev_h]
     assert [r for r in rows2 if r.kind == "day"] == []  # 当日无 pending 无已封小时 -> 不出日行
 
@@ -2723,12 +2737,185 @@ def test_pending_agg_rows_skips_empty_and_zero_coverage_buckets(tmp_path):
     agg = mod._agg_state(GLOBAL_SERIES_KEY)
     agg.pending[_AGG_H0] = []  # 空桶(全 null 覆盖的小时)
     agg.pending[_AGG_H0 + HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 0.0)]  # 零有效覆盖
-    assert ts_mod._pending_agg_rows(agg, now=_AGG_H0 + 2 * HOUR_SECONDS) == ()
+    assert ts_mod._pending_agg_rows(agg, None, now=_AGG_H0 + 2 * HOUR_SECONDS) == ()
     # 对照: 合法桶照常产 hour 行, day/month 两级由它上卷(无子行时两级不出行)
     agg.pending[_AGG_H0 + 2 * HOUR_SECONDS] = [V4HourSample(100, 50, 1, 2, 1800.0)]
-    rows = ts_mod._pending_agg_rows(agg, now=_AGG_H0 + 3 * HOUR_SECONDS)
+    rows = ts_mod._pending_agg_rows(agg, None, now=_AGG_H0 + 3 * HOUR_SECONDS)
     assert [r.kind for r in rows] == ["hour", "day", "month"]
     assert rows[0].cov_s == 1800 and rows[1].epoch == v4_day_epoch(_AGG_H0)
+
+
+# ---------- 活尾合成段(plan 26-10-29-0231: 3d+ 视图空闲零值区显示无采样) ----------
+
+
+def test_hour_spans_splits_on_hour_boundary():
+    """_hour_spans: 按小时界切段(与 _agg_credit_hours 同源) —— 跨 2 个整点出 3 段;
+    退化/空区间出 (); 段数 = 跨的小时数(活尾合成 O(小时数) 而非 O(槽数) 的根据)"""
+    from auto_qb.core.modules.traffic_sample_mod import _hour_spans
+
+    h0 = _AGG_H0
+    assert _hour_spans(h0 + 300, h0 + 2 * HOUR_SECONDS + 600) == (
+        (h0 + 300, h0 + HOUR_SECONDS),
+        (h0 + HOUR_SECONDS, h0 + 2 * HOUR_SECONDS),
+        (h0 + 2 * HOUR_SECONDS, h0 + 2 * HOUR_SECONDS + 600),
+    )
+    assert _hour_spans(h0, h0) == ()
+    assert _hour_spans(h0 + 10, h0 + 5) == ()
+
+
+def test_open_run_hour_samples_idle_z_run_emits_zero_hours():
+    """开放游程合成(D2/D3): 空闲 z 游程 = credit 段按上一记录速率 + 游程内恒 0;
+    totals 逐段摊配到**末端锚点**(不是开启快照); 末端取 last_seen 不推 now(now 再晚
+    也不多出段); 每段恰 1 条样本"""
+    from auto_qb.core.modules.traffic_sample_mod import OpenRun, SeriesAgg, _open_run_hour_samples
+
+    h0 = _AGG_H0
+    agg = SeriesAgg()
+    agg.open_credit = (float(h0 + 120), 100, 50, 1000, 2000)  # 上一记录末槽 + 速率 + 快照
+    run = OpenRun(
+        kind="z",
+        start=h0 + 300,
+        last_seen=h0 + 3 * HOUR_SECONDS + 600,
+        dl_total=1000,
+        up_total=2000,
+        samples=100,
+        last_dl_total=3000,
+        last_up_total=4000,
+    )
+    out = _open_run_hour_samples(agg, run)  # 不接收 now: 末端恒为 last_seen(不推当前时刻)
+    # h0 桶: credit 段 180s@100 + 游程首段 3300s@0
+    assert out[h0] == [V4HourSample(100, 50, 1000, 2000, 180.0), V4HourSample(0, 0, 1000, 2000, 3300.0)]
+    # 整小时游程段: rate 0, totals 沿开启->末端线性摊配(k = 1 / 2)
+    assert out[h0 + HOUR_SECONDS] == [V4HourSample(0, 0, 1667, 2667, 3600.0)]
+    assert out[h0 + 2 * HOUR_SECONDS] == [V4HourSample(0, 0, 2333, 3333, 3600.0)]
+    # 末段 600s: totals 恰为末端锚点(不是开启快照 1000/2000)
+    assert out[h0 + 3 * HOUR_SECONDS] == [V4HourSample(0, 0, 3000, 4000, 600.0)]
+    assert set(out) == {h0, h0 + HOUR_SECONDS, h0 + 2 * HOUR_SECONDS, h0 + 3 * HOUR_SECONDS}
+
+
+def test_open_run_hour_samples_null_run_leaves_tail_null():
+    """断连(n 游程)只合成 credit 段到 run.start, 之后不出样本(留 null)—— 断连不可归因
+    为 0(裁定 D3); 与 z 游程「整段 0」形成对照"""
+    from auto_qb.core.modules.traffic_sample_mod import OpenRun, SeriesAgg, _open_run_hour_samples
+
+    h0 = _AGG_H0
+    agg = SeriesAgg()
+    agg.open_credit = (float(h0 + 60), 100, 50, 1000, 2000)
+    run = OpenRun("n", h0 + 600, h0 + 2 * HOUR_SECONDS, 0, 0, 120, 0, 0)
+    out = _open_run_hour_samples(agg, run)
+    assert out == {h0: [V4HourSample(100, 50, 1000, 2000, 540.0)]}  # 只到 run.start
+
+
+def test_open_run_hour_samples_without_credit_is_empty():
+    """无观测信用(open_credit is None: null 期后 / 首样前)-> 不合成任何样本(不猜);
+    有信用但无开放游程 -> 同样不出样本(没有「仍在采样」的证据, 把信用推到 now 会在
+    系列已不再被采样的退化形态下凭空造覆盖)"""
+    from auto_qb.core.modules.traffic_sample_mod import OpenRun, SeriesAgg, _open_run_hour_samples
+
+    run = OpenRun("z", _AGG_H0, _AGG_H0 + HOUR_SECONDS, 0, 0, 60, 0, 0)
+    assert _open_run_hour_samples(SeriesAgg(), run) == {}
+    agg = SeriesAgg()
+    agg.open_credit = (float(_AGG_H0), 100, 50, 1000, 2000)
+    assert _open_run_hour_samples(agg, None) == {}
+
+
+def test_pending_agg_rows_idle_z_run_fills_tail_hours(tmp_path):
+    """活尾合成接线(S2): 空闲 8 小时 z 游程 -> 活尾快照里 8 条 hour 部分行(avg 0 / cov 3600,
+    内存行不落盘)+ 当日 day 行 + 当月 month 行; 累计器本体不动(合成只进 pending 副本)"""
+    from auto_qb.core.modules.traffic_sample_mod import OpenRun, _pending_agg_rows
+
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    agg = mod._agg_state(GLOBAL_SERIES_KEY)
+    h0 = v4_day_epoch(_AGG_H0) + 2 * HOUR_SECONDS  # 当日 02:00 起, 8 小时不跨本地日界
+    agg.open_credit = (float(h0), 0, 0, 1000, 2000)
+    run = OpenRun("z", h0, h0 + 8 * HOUR_SECONDS, 1000, 2000, 8, 1000, 2000)
+    rows = _pending_agg_rows(agg, run, now=h0 + 8 * HOUR_SECONDS)
+    hours = [r for r in rows if r.kind == "hour"]
+    assert [r.epoch for r in hours] == [h0 + k * HOUR_SECONDS for k in range(8)]
+    assert all(r.dl_avg == 0 and r.up_avg == 0 and r.cov_s == HOUR_SECONDS for r in hours)
+    assert agg.pending == {}  # 副本语义: 合成段不进累计器
+    assert [r for r in rows if r.kind == "day"] == [
+        AggRow("day", v4_day_epoch(h0), 0, 0, 0, 0, 1000, 2000, 8 * HOUR_SECONDS)
+    ]
+    assert [r for r in rows if r.kind == "month"] == [
+        AggRow("month", v4_month_epoch(h0), 0, 0, 0, 0, 1000, 2000, 8 * HOUR_SECONDS)
+    ]
+
+
+def test_pending_agg_rows_keeps_totals_monotonic_against_disk_row(tmp_path):
+    """totals 不变量(计划 §01 不变量 2 / S3): 合成行 totals = 游程末端锚点 —— 与磁盘已封
+    行同 epoch 合流时「totals 取后封行」拿到更晚快照, 累计链不回退; 反证: 若带开启快照
+    合流后 totals 会回退(< 磁盘行)"""
+    from auto_qb.core.modules.traffic_sample_mod import OpenRun, _pending_agg_rows
+    from auto_qb.core.traffic_store import v4_merge_agg
+
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    agg = mod._agg_state(GLOBAL_SERIES_KEY)
+    h0 = v4_day_epoch(_AGG_H0) + 2 * HOUR_SECONDS
+    agg.open_credit = (float(h0), 0, 0, 1000, 2000)
+    run = OpenRun("z", h0, h0 + HOUR_SECONDS, 1000, 2000, 60, 5000, 9000)
+    live = [r for r in _pending_agg_rows(agg, run, now=h0 + HOUR_SECONDS) if r.kind == "hour"][0]
+    assert (live.dl_total, live.up_total) == (5000, 9000)  # 末端锚点, 非开启快照
+    disk = AggRow("hour", h0, 0, 0, 0, 0, 2000, 4000, 1200)  # 已封段: 更早快照
+    merged = v4_merge_agg(disk, live)
+    assert merged.cov_s == HOUR_SECONDS  # 相加截到桶宽
+    assert (merged.dl_total, merged.up_total) == (5000, 9000)  # 取更晚快照, 不回退
+    # 反证: 合成行若带开启快照, 合流后 totals 回退到 1000/2000(< 磁盘行)
+    naive = AggRow("hour", h0, 0, 0, 0, 0, 1000, 2000, HOUR_SECONDS)
+    assert v4_merge_agg(disk, naive).dl_total == 1000 < disk.dl_total
+
+
+def test_pending_agg_rows_cross_midnight_keeps_day_row_on_new_day(tmp_path):
+    """跨天合成(用户报「特别是跨天后」): 游程跨本地日界 -> hour 行落两天, 开放日行只取
+    新一天的小时(前一日已封口小时不并进新日行); 新一天从 00:00 起就有 0 行"""
+    from auto_qb.core.modules.traffic_sample_mod import OpenRun, _pending_agg_rows
+
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    agg = mod._agg_state(GLOBAL_SERIES_KEY)
+    d0 = v4_day_epoch(_AGG_H0)
+    start, end = d0 - 2 * HOUR_SECONDS, d0 + 2 * HOUR_SECONDS
+    agg.open_credit = (float(start), 0, 0, 1000, 2000)
+    run = OpenRun("z", start, end, 1000, 2000, 4, 1000, 2000)
+    rows = _pending_agg_rows(agg, run, now=end)
+    assert [r.epoch for r in rows if r.kind == "hour"] == [start + k * HOUR_SECONDS for k in range(4)]
+    assert [r for r in rows if r.kind == "day"] == [
+        AggRow("day", d0, 0, 0, 0, 0, 1000, 2000, 2 * HOUR_SECONDS)
+    ]  # 只新一天的两个小时
+    assert [r.epoch for r in rows if r.kind == "month"] == [v4_month_epoch(d0)]
+
+
+def test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end(tmp_path, monkeypatch):
+    """端到端(S2 出口判据): 全局先出一笔非零(立信用)再一路空闲 2 小时 —— z 游程始终未
+    封口, 但 handler 发布的活尾快照里已有 2 条 hour 行(整小时那条 avg 0 / cov 3600),
+    即 3d+ 视图不再把空闲段画成「无采样」; 同一快照的 raw 面开放游程照旧在(两面同构)"""
+    d0 = v4_day_epoch(_AGG_H0)
+    h0 = d0 + 2 * HOUR_SECONDS
+    clock = _Clock(h0)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=600))
+    mgr.store.server_state = server_state(dl_info_speed=100, up_info_speed=50, alltime_dl=1000, alltime_ul=2000)
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # t=h0: r 记录(立信用, 尚无游程)
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=0, alltime_dl=1000, alltime_ul=2000)
+    clock.advance(30)
+    _run_sample(mgr)  # t=h0+30: 零样本 -> 开 z 游程(此后一直不封口)
+    clock.advance(HOUR_SECONDS)
+    _run_sample(mgr)  # t=h0+1h30s
+    clock.advance(HOUR_SECONDS)
+    _run_sample(mgr)  # t=h0+2h30s
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.open_run is not None and tail.open_run.kind == "z"  # 游程确实没封口
+    hours = [r for r in tail.pending_agg if r.kind == "hour"]
+    assert [r.epoch for r in hours] == [h0, h0 + HOUR_SECONDS, h0 + 2 * HOUR_SECONDS]
+    # 整小时那条: 全程空闲 -> avg 0, cov 满桶(修复前它整条不存在 = 图面 null)
+    assert (hours[1].dl_avg, hours[1].up_avg, hours[1].cov_s) == (0, 0, HOUR_SECONDS)
+    assert (hours[2].dl_avg, hours[2].cov_s) == (0, 30)  # 尾部 30s 部分桶照常出 0 行
+    # 首小时: credit 段 30s@100 摊进满桶 -> round(3000/3600) = 1, cov 仍是满桶
+    assert (hours[0].dl_avg, hours[0].cov_s) == (1, HOUR_SECONDS)
+    assert [r.epoch for r in tail.pending_agg if r.kind == "day"] == [d0]
 
 
 def test_apply_interval_without_main_tick_uses_raw_interval(tmp_path):

@@ -26,6 +26,7 @@
 
 ## Done
 
+- [26-10-29-0231] [qB 流量图 3d+ 视图空闲零值区显示无采样修复计划](26-10-29-0231-plan-qb-traffic-agg-idle-zero.html) — `qb-traffic-agg-idle-zero`
 - [26-10-29-0147] [HR 扩展缺站点权限的可见化与失败分类修正](26-10-29-0147-plan-hr-ext-site-permission.html) — `hr-ext-site-permission`
 - [26-10-29-0041] [WEBUI 设定位置对话框 · 点选只回填 + 几何平滑过渡](26-10-29-0041-plan-webui-move-dialog-pick-geometry.html) — `webui-move-dialog-pick-geometry`
 - [26-10-21-2323] [命令后状态写入的边界收口 · 实施计划 — 计时副作用 + 移除提交前复核 + 字段边界 + 守阵扩容](26-10-21-2323-plan-command-writeback-boundary.html) — `post-command-state-writes`
