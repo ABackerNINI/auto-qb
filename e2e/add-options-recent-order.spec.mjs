@@ -86,6 +86,21 @@ for (const skin of SKINS) {
       await expect(pathPop.locator('.pop-item').first()).toBeVisible({ timeout: 10_000 });
       const gotPaths = await optionValues(pathPop);
       expect(gotPaths.slice(0, 3), '保存路径候选头部(最近使用降序)').toEqual(EXPECT_PATH_HEAD);
+
+      // —— 面板内**非交互区**点了不许收起面板(2026-10-29 六修, 用户报「点面板头面板就收了」)。
+      //    焦点纪律挂在共享模板的面板**根**上(@mousedown.prevent), 只给 .pop-head 打补丁会漏掉
+      //    空态文案这一段 —— 故用真能产出空列表的下拉(分类按输入过滤)再验一次: 修复前 mousedown
+      //    把焦点从输入框抢走 → @focusout → 40ms 合帧收层 = 面板"点一下就消失"。
+      await page.keyboard.press('Escape');  // 先收路径面板: 它朝下展开, 正盖着下面的分类输入框
+      await expect(pathPop).toBeHidden();
+      await page.locator('#ad-category').click();  // 三浮层互斥: 开分类即收掉别家面板
+      await expect(catPop.locator('.pop-item').first()).toBeVisible({ timeout: 5_000 });
+      await catInput.fill('zzz-无此分类');
+      const emptyTip = catPop.locator('.pop-empty');
+      await expect(emptyTip).toBeVisible({ timeout: 5_000 });
+      await emptyTip.click();
+      await page.waitForTimeout(300);  // > 40ms 合帧窗, 定时器该响的都响完了
+      await expect(catPop, '点空态文案不得收起面板(面板内非交互区抢焦点 = 同一类缺陷)').toBeVisible();
     });
   });
 }

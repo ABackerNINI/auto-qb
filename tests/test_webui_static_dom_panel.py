@@ -36,6 +36,7 @@
 - test_frontend_add_combo_blur_close_and_fit: 添加种子三下拉「失焦即收 + 限高不出窗」接线守阵(2026-10-03 报障) —— 三输入框 @focusout 收层 + 收层必须 40ms 合帧守卫(label 转发回焦同步收 = 闪烁) + 三开层方法撤销挂起收层 + 开层 watcher 量「输入行→滚动容器可见底沿」净空限高(滚动条留在窗口内) + 候选异步到位重限 + 三浮层互斥双向(closeAddPopsExcept 单点, 三开层各调一次, 26-10-04-0130)
 - test_frontend_ctx_menu_refit_by_measured_size: 浮层菜单开层实测钳位守阵(issue 26-10-06-1717) —— _menuFit 按 offsetWidth/offsetHeight 实测算(退回常量估算即红)且以视口为界、每次复位兜底限高; 三个菜单容器 ref(ctxMenu/headMenuEl/filePrioEl)与三个开层 watcher 的 (stateKey, refName) 一一对上且都在 $nextTick 里量; _menuFitRefit 现读 this[stateKey]/this.$refs[refName] 并守 visible
 - test_frontend_add_combo_label_clear_mask_and_refit: 添加种子三下拉「第二轮遗留四项」守阵(2026-10-03, label 闪烁 2026-10-04 三修+四轮 JS 守卫) —— 四个 combo 的字段 label 一律 @mousedown.prevent + @click.stop(mousedown 默认动作 blur 武装的 40ms 合帧定时器在人手按住期间先收层、松手转发回焦再重开 = 闪烁; stop 挡 window click 收层; 缺一即回归)+ 收层 JS 单点守卫 _popBlurShouldHold(收层前判「焦点已回本族输入框 / 本族 label 转发 click 仍在途」→ 不收, 模板修饰符缺位(旧页签残留)时独立根除闪烁, add 三字段 + meta 分类全接)+ 三输入框内嵌清空 x(@mousedown.prevent 保焦点 + @click.stop 挡 window 收层, 缺一即「清完下拉没了」)+ 遮罩关窗改「mousedown 记臂位 + mouseup.self 才关」(全仓 11 处, @click.self 会被"拖选文字终点落在遮罩上抬手"误判成点空白关窗, 零残留)+ 过滤词变化重限高(三个输入值 watcher + meta 侧三处)+ meta 分类下拉补失焦收层与 window click 兜底名单 + 清空钮样式三皮肤成对
+- test_frontend_combo_hiscroll_never_scrolls_ancestors: 下拉高亮滚动跟随「只滚菜单内部」守阵(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下滑一次」)—— _hiScroll 禁用 scrollIntoView(它把**所有可滚祖先**一起滚: 开层过渡期 .add-dialog-body 的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回, 实测 body.scrollTop 0→166→83→18→0; 输入框为空时 hi=-1 无 [data-hi="1"] 故只有"选过路径"才看得见); 必须逐级向上以**菜单根为界**手动差值调 scrollTop(box.contains(n) + 到 box 即 break), 剥注释后不得出现 scrollIntoView 字面量(注释里讲禁令不算违规)。行为面由 e2e/move-dialog-fit.spec.mjs 逐帧采样 body.scrollTop 恒 0 + 文案 top 极差 ≤2px 钉
 - test_frontend_ctx_submenu_single_entry_and_hover_close: 右键次级菜单守阵 —— 一级只留「更多操作」一个入口(复制族并入, CTX-06)、移出父项后延迟收起(CTX-05)、hover 图标规则必须限定直接子级且压特异性否则整片子面板变灰(CTX-04)
 - test_frontend_qb_traffic_yaxis_and_annotation: 流量图纵轴固定模式 + 画布注解层守阵(2026-10-08, issue 26-10-07-0149 认领一并做) —— _qbYRange/_qbGapRuns 纯函数 node 真跑(自动 = peak*1.05 / 固定上限取 max(cap, peak*1.05) 峰值超上限按峰值显示 / 缺口 = 上下行皆 null 才算); 限速三作用域同源 = qB 全局限速上下行**较大者**(_qbGlobalLimit -> speedLimitBytes); 上限派生单点 _qbYCapOf(limit×1.2 / manual MiB); 三作用域**各自独立**持久化(qbYAxisStoreKey 三键 + qbInitialYAxis 只认合法模式与正数 + persistQbYAxis 吞异常) + 切档落盘重排(qbSetYAxisMode/qbSetYAxisManual -> _qbChartRescale 走 setData 重算 scale 不重建) + 限速变化重排 watcher(mounted 注册, this.drawer 守卫剔除 BaseTransition 假实例); 建图 y range 接纯函数 + draw/drawClear 两钩子画限速虚线/缺口斜纹(共享图面三挂点全生效, uPlot.pxRatio 设备像素换算, 限速线只画落在可视值域内的); 模板 .qb-tools/.qb-seg 控件 + CSS 三皮肤成对 + **控件组唯一挂点**(图下统计栏 .qb-statctl; 2026-10-16 版式改: 流量形态头部不再挂控件, 全局/分组与种子流量图三挂点对齐, 上限读数 qbYAxisCapText/.qb-tools-hint 随 UI 移除退役) + P4 重启缝提示(plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 判据纯函数 node 真跑(重启贴近链末->提示(含首采即链末桶的实测帧形态)/链到右沿或链确已接续或旧后端->null, 边界含尾区起点、右沿与左端前一桶三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行文案单源带重启时刻锚 + 断线语义不变(spanGaps:false ×2)
 - test_frontend_qb_traffic_scope_stale_polarity: 流量图三挂点 stale 谓词极性守阵(2026-10-12 修「种子流量图加载不出来」) —— W2–W6 机械改名把 torrent/group 两处 `!(...)` 写成 `!!(...)`(取反变双重取反), 恰在本图活跃时判「响应已过期」⇒ 数据不落袋 + loading 不复位 + 早退不建图 ⇒ 种子「流量」页签恒停「正在加载流量数据…」且轮询被 loading 卡住不自愈(global 未中招, 故症状只在种子/分组图)。既有静态锚(源码字符串级)对单/双 bang 天然失明, 本守阵补两层: ①node 电池用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表, 对三挂点喂「活跃/切走/关闭/换目标/功能关」五类上下文断言 stale 真假 + `active => stale === false` 同向性; ②静态极性兜底钉 `!(...)` 书写形态、`!!(...)` 不得回潮
@@ -3617,6 +3618,37 @@ def test_frontend_add_combo_blur_close_and_fit():
              f"互斥漏一侧 = 双浮层同悬且盖住相邻字段 label 的点击")
 
 
+def test_frontend_combo_hiscroll_never_scrolls_ancestors():
+    """combobox 高亮滚动跟随「只滚菜单内部」守阵(2026-10-29 八修, 静态防回潮)
+
+    症状(用户报): 选中过一条新路径后再点下拉框, 弹窗里的说明文案**从上往下滑一次**; 输入框为空时正常。
+    根因: `_hiScroll` 用 `el.scrollIntoView({block:'nearest'})` —— 它会把**所有可滚祖先**一起滚, 而
+    `.add-dialog-body` 正是 overflow-y 容器, 开层过渡期其 scrollHeight 比 clientHeight 大 166px
+    (实测 body.scrollTop `0 → 166 → 83 → 18 → 0`, 文案 top `352 → 186 → 269 → 334`)。空输入时
+    hi = -1、没有 `[data-hi="1"]`, 所以只有"已选中过路径"才看得见 —— 与用户描述逐字吻合。
+    修法 = 手动差值调 scrollTop, 且**只动菜单内部**那层(逐级向上, 到菜单根即止); 与 26-09-29-2142
+    (键盘光标滚动跟随)同一条禁令: 禁 scrollIntoView, 它会连带滚整页。
+    """
+    import re
+
+    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    m = re.search(r"_hiScroll\(refName\) \{(.*?)\n    \},", at, re.S)
+    assert m, "add_torrent.js 找不到 _hiScroll(高亮滚动跟随单点, 改名或挪走了? 同步本守阵)"
+    # 只查**真代码**: 注释里讲原理(「禁用 scrollIntoView」)不算违规
+    body = re.sub(r"^\s*//.*$", "", re.sub(r"/\*[\s\S]*?\*/", "", m.group(1)), flags=re.M)
+    assert "scrollIntoView" not in body, \
+        ("_hiScroll 不得用 scrollIntoView —— 它逐层滚动**所有可滚祖先**, 而 .add-dialog-body 就是"
+         "overflow-y 容器: 开层过渡期会把整段说明文案一起滚走再弹回(2026-10-29 八修, 用户报「选中路径"
+         "后再点下拉, 弹窗文字从上往下滑一次」; 同禁令先例 26-09-29-2142)")
+    assert "scrollTop" in body and "getBoundingClientRect" in body, \
+        "_hiScroll 必须手动差值调 scrollTop(block: nearest 语义, 只滚菜单内部那层)"
+    assert "box.contains(n)" in body and "n === box" in body, \
+        ("_hiScroll 的逐级滚动必须以菜单根为界(box.contains(n) 循环条件 + 到 box 即 break) —— "
+         "不设界就会继续往上滚 .add-dialog-body / 页面, 等于把 scrollIntoView 的危害换个写法重犯")
+    assert '[data-hi="1"]' in body, \
+        "_hiScroll 找不到高亮项选择器 [data-hi=\"1\"](与模板 data-hi 绑定同源, 改了要两处同步)"
+
+
 def test_frontend_ctx_menu_refit_by_measured_size():
     """浮层菜单开层后按**实测**尺寸重钳位(issue 26-10-06-1717 的接线守阵, 静态防回潮)
 
@@ -3696,6 +3728,18 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
          本族输入框或本族 label 转发 click 仍在途(mousedown 记录器 capture 记落点) → 跳过收层。
          模板修饰符在 = 纯 no-op(mousedown 已被 prevent, 定时器不武装); 缺位 = 独立根除闪烁,
          任何模板/JS 代际混合都安全。
+      6. **点面板头/空态文案把面板点没了(2026-10-29 六修)**: 面板里除候选行/预置行之外还有两处
+         **非交互区** —— .pop-head(标题+计数) 与 .pop-empty(空态文案)。它们点了什么都不该发生, 但
+         mousedown 的默认动作把焦点从输入框抢走 → @focusout → 40ms 合帧后收层 = 面板"点一下就消失"
+         (光标本来就在候选行正上方, 误触概率极高)。修法 = 焦点纪律挂在**面板根**
+         (@mousedown.prevent)一处覆盖全部非交互子元素; 逐个给 .pop-head 打补丁 = 空态那处静默复发
+         (e2e 两条断言必须配对: 单看"点头不收"放得过半截修法)。
+      7. **按下与抬起落在不同元素, 面板点一下就关(2026-10-29 七修)**: 浏览器把 click 的 target 定成
+         mousedown/mouseup 两者的**公共祖先** —— 按在输入框、抬到行内留白/面板/整行时, click 目标是
+         `.add-input-row`, 那一层没有 @click.stop 就冒泡到 lifecycle 的 window 收层名单, 面板立刻关。
+         无焦点时最易踩(面板在按住期间才挂载, DOM 在按下与抬起之间变化), 皮肤差异也由此而来(输入行
+         差 2px + drop-in 从 -4px 起)。修法 = 组件根挂 @click.stop, **只挂组件根**: 挂到对话框层会把
+         "点对话框别处收层"一起废掉(e2e 反向守门断言就在测这条)。
     """
     import re
 
@@ -3750,6 +3794,31 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
     assert clear_body, "add_torrent.js 找不到 clearAddField(三个 combobox 的清空单点)"
     for field in ("addSavePath", "addCategory", "addTags"):
         assert f"this.{field} = \"\";" in clear_body.group(1), f"clearAddField 不清空 {field}"
+
+    # 6. 面板根挂 @mousedown.prevent(2026-10-29 六修): 面板内**非交互区**(.pop-head 标题+计数 /
+    #    .pop-empty 空态文案)点了不许把焦点从输入框抢走 —— 抢走即 @focusout → 40ms 合帧收层
+    #    = 面板"点一下就消失"。修饰符必须在**根**: 逐个给非交互子元素打补丁, 新增一处即静默复发
+    #    (本轮红验证: 只给 .pop-head 挂 prevent 时"点头不收"仍绿, 空态那条才抓到)。
+    root_tag = re.search(r'<div v-if="menu" class="pop-menu add-pop"[^>]*>', tpl_body)
+    assert root_tag, "组件模板找不到面板根(.pop-menu.add-pop)(改名或挪走了? 同步本守阵)"
+    assert "@mousedown.prevent" in root_tag.group(0), \
+        ("组件模板面板根缺 @mousedown.prevent —— 点面板头/空态文案时 mousedown 的默认动作把焦点从"
+         "输入框抢走, @focusout 的 40ms 合帧定时器收层 = 面板点一下就消失(2026-10-29 六修); "
+         "修饰符必须挂根上一处覆盖全部非交互子元素, 逐个打补丁 = 往面板里加一处展示节点就复发")
+    assert "@click.stop" in root_tag.group(0), \
+        "组件模板面板根丢了 @click.stop(面板内点击会冒泡到 lifecycle 的 window 收层名单, 点一下就把下拉收了)"
+
+    # 7. 组件**根**挂 @click.stop(2026-10-29 七修): 按下与抬起落在不同元素时, click 的 target 是两者的
+    #    **公共祖先**(.add-input-row / 面板 / 整行) —— 那一层没人挡就冒泡到 lifecycle 的 window 收层名单
+    #    ⇒ 面板点一下就关。无焦点时最易踩: 面板在按住期间才挂载, DOM 在按下与抬起之间变化, 抬起落点被
+    #    改写的机会就在那一段(两皮肤输入行差 2px + drop-in 从 -4px 起 = 皮肤差异的来源)。
+    #    ⚠ 只许挂在组件根: 挂到更外层(对话框)会把"点对话框别处收层"一起废掉。
+    row_tag = re.search(r'<div class="add-input-row"[^>]*>', tpl_body)
+    assert row_tag, "组件模板找不到输入行根(.add-input-row)(改名或挪走了? 同步本守阵)"
+    assert "@click.stop" in row_tag.group(0), \
+        ("组件模板输入行根缺 @click.stop —— 按下与抬起落在不同元素时 click 的 target 是公共祖先"
+         "(.add-input-row/面板), 事件冒泡到 window 收层名单 = 面板点一下就关(2026-10-29 七修); "
+         "它必须挂在组件根, 挂到对话框层会把「点对话框别处收层」一起废掉")
 
     # 3. 遮罩关窗: mousedown 记臂位 + mouseup.self 才关; 全仓不许再有 @click.self
     #    (issue 26-10-20-2231 收敛后手势对单点在 <aq-modal> 组件模板(tpl/dialog-shell.html),
@@ -3887,6 +3956,17 @@ def test_frontend_move_dialog_combobox_wiring():
          ③空路径按钮置灰; ④打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen, openMovePathMenu
          首行消费); ⑤三皮肤成对: 收层态基线 min-height 360px + 动作条 margin-top:auto 钉底 +
          padding-bottom 200ms 过渡(替掉 0↔272 硬切), 过渡后 settle(MOVE_POP_SETTLE_MS=240)重测限高。
+      7. 三修(2026-10-29 用户报「点下拉框, 下拉框出现后自动弹回」): 遮罩默认 align-items:center,
+         开层增高上下对半扩 ⇒ 输入行连同刚展开的面板整体上移 77px, 面板顶到光标底下(再点一下即
+         命中候选/面板头 = 面板"自动弹回")⇒ 遮罩挂 .move-dialog-mask 改 flex-start + margin-top
+         复刻收层态居中偏移, **增长只朝下**。三皮肤成对 + 模板 mask-class 接线。
+      8. 四修(2026-10-29 用户报「下拉框出现时弹窗有一瞬间出现滚动条」): 预留 padding 是过渡的,
+         面板瞬间挂载 ⇒ 开层头 ~110ms 面板伸出 body 的 padding 盒(实测溢出 256→0), body 是
+         overflow-y:auto 的滚动容器 ⇒ 闪滚动条 + 内容横向挤一个滚动条宽。开层期溢出的只有预留
+         空白 ⇒ 关掉滚动条(收层态仍 auto, 矮视口 body 兜底滚动不受影响)。
+      9. 五修(2026-10-29 用户报「下拉框消失时弹窗仍会有一瞬间出现滚动条」): 收层时面板**不立刻
+         离场** —— 离场淡出(~120ms)期间它仍在 DOM 里、高度不变, 而 .pop-open 已摘 ⇒ 溢出涨到
+         254px(实测)。开关必须跟「面板是否存在」走(`:has(.add-pop)`), 跟开合状态走只覆盖开层。
     """
     import re
 
@@ -3942,6 +4022,11 @@ def test_frontend_move_dialog_combobox_wiring():
     assert re.search(r':width-class="\[\'add-dialog move-dialog\', \{ \'pop-open\': movePathMenu \}\]"', pv), \
         "move-dialog.html 缺 pop-open 并入 width-class(下拉开层时对话框不预留空间)"
 
+    # 4d. 三修(2026-10-29): 开层增长只朝下 —— 遮罩类必须接线(否则居中容器里增高上下对半扩,
+    #     输入行上移 77px 把刚展开的面板顶到光标底下 = 用户报的「下拉框出现后自动弹回」)
+    assert 'mask-class="modal-mask move-dialog-mask"' in pv, \
+        "move-dialog.html 遮罩缺 .move-dialog-mask 类(增长方向改不了 = 面板被顶到光标底下, 2026-10-29 三修回归)"
+
     # 4c. 二修(2026-10-29): 点选只回填 / 手输回车仍提交 / 空态置灰 / 打开不自动展开
     apply_body = re.search(r"moveApplyPath\(p\) \{(.*?)\n    \},", dr, re.S)
     assert apply_body, "drawer.js 找不到 moveApplyPath(点选候选的回填单点)"
@@ -3974,6 +4059,13 @@ def test_frontend_move_dialog_combobox_wiring():
             f"{ui} 的 .modal.move-dialog 宽度未走 --modal-w-add(860 宽档, 与添加种子同宽; 560 窄档路径项 ellipsis 少显示)"
         assert re.search(r"\.modal\.move-dialog\.pop-open \.add-dialog-body \{[^}]*padding-bottom:\s*272px", blob), \
             f"{ui} 缺 .pop-open 开层预留规则(下拉伸出 body 被裁 + scrollHeight 撑大 = 用户须滚弹窗; 272px = 面板头 ~46 + 列表 210 + 顶距 4 + 余量)"
+        # 四修(2026-10-29): 预留是过渡的、面板是瞬间挂载的 ⇒ 开层头 ~110ms 面板伸出 body(padding 盒)
+        # 之外, body 是 overflow-y:auto 的滚动容器 ⇒ 闪一条滚动条(还横向挤一个滚动条宽)。开层期溢出
+        # 的只有预留空白 ⇒ 关滚动。五修(同日): 收层时面板离场淡出(~120ms)期间仍在 DOM 里、高度不变,
+        # 而 .pop-open 已摘 ⇒ 开关必须跟「面板是否存在」走(:has), 跟开合状态走会漏掉收层那一段。
+        assert re.search(r"\.modal\.move-dialog:has\(\.add-pop\) \.add-dialog-body \{[^}]*overflow:\s*hidden", blob), \
+            f"{ui} 缺 .move-dialog:has(.add-pop) 的 overflow:hidden(面板在 DOM 期间(body 是滚动容器)闪滚动条; " \
+            "只挂 .pop-open 会漏掉离场淡出那 ~120ms)"
         # 二修(2026-10-29): 基线抬到 360(治「窗口太小」) + 动作条钉底 + padding 过渡(治「高度跳变」)
         assert re.search(r"\.modal\.move-dialog \{\s*width:\s*var\(--modal-w-add\);\s*min-height:\s*min\(360px,\s*calc\(100vh - 120px\)\)", blob), \
             f"{ui} 的 .modal.move-dialog 缺收层态基线 min-height(原实测 243px = 用户报的「窗口太小」)"
@@ -3981,6 +4073,11 @@ def test_frontend_move_dialog_combobox_wiring():
             f"{ui} 动作条没钉底(基线抬高后按钮会浮在中间)"
         assert re.search(r"\.modal\.move-dialog \.add-dialog-body \{[^}]*transition:\s*padding-bottom\s+200ms", blob), \
             f"{ui} 缺 padding-bottom 过渡(0↔272 硬切 = 开/收下拉高度瞬跳, 2026-10-29 报障)"
+        # 三修(2026-10-29): 增长只朝下 —— 遮罩改 flex-start + margin-top 复刻收层态居中偏移
+        assert re.search(r"\.modal-mask\.move-dialog-mask \{[^}]*align-items:\s*flex-start", blob), \
+            f"{ui} 缺 .move-dialog-mask 的 flex-start(居中容器里增高上下对半扩, 输入行上移 = 面板顶到光标底下)"
+        assert re.search(r"\.modal\.move-dialog \{[^}]*margin-top:\s*clamp\(0px, calc\(\(100vh - 360px\) / 2 - 20px\)", blob), \
+            f"{ui} 的 .modal.move-dialog 缺 margin-top 居中补偿(缺了收层态会顶到视口上沿, 居中观感丢失)"
 
     # 6. Esc 退栈链 + escBusy 同步(与 meta 同层)
     assert "this.moveOpen) this.closeMove()" in lf, "lifecycle.js Esc 退栈链缺 moveOpen→closeMove"

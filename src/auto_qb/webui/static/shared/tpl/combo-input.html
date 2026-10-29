@@ -29,10 +29,16 @@
                    根方法、读的是根 $refs(实测 Vue 3.5.13 语义, 见坑档)。
      行为(comboHoverIdx / comboKeydown / _fitAddPop / _popBlurShouldHold /
      clearAddField)仍是既有单点, 本组件只贡献模板与最小实例态(定义在 add_torrent.js)。
+     焦点纪律(六修补一条): 面板**根**挂 @mousedown.prevent —— 面板内任何非交互区(.pop-head /
+     .pop-empty / 将来新增的展示节点)点了都不许把焦点从输入框抢走, 否则 @focusout 收层 = 点一下就消失。
+     焦点纪律(七修补一条): 组件**根**(.add-input-row)挂 @click.stop —— 按下与抬起落在不同元素时,
+     click 的 target 是两者的**公共祖先**(行内留白 / 面板 / 整行), 那一路没人挡就冒泡到 lifecycle 的
+     window 收层名单 = 面板点一下就关。无焦点时最易踩: 面板是在**按住期间**才挂载的, DOM 在按下与抬起
+     之间变化, 抬起落点被改写的机会就在那一段(见坑档 combobox-focusout-close 第七轮)。
      独立分片的缘由: 骨架+头注合计量把 xtpl.html(表壳/行渲染器语义源)顶过单分片 400 行
      上限, 与 traffic-card.html 同范式抽走。 -->
 <script type="text/x-template" id="tpl-combo-input">
-  <div class="add-input-row" :class="{ 'has-clear': !!clearKind }">
+  <div class="add-input-row" :class="{ 'has-clear': !!clearKind }" @click.stop>
     <input :id="inputId" :ref="comboBindInput" :value="modelValue" class="add-dialog-input" type="text"
            :placeholder="placeholder" autocomplete="off" spellcheck="false"
            @focus="$emit('open')" @click.stop="$emit('open')"
@@ -45,7 +51,16 @@
       <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-close"></use></svg>
     </button>
     <transition name="pop">
-      <div v-if="menu" class="pop-menu add-pop" @click.stop :ref="comboBindMenu">
+      <!-- 面板根挂 @mousedown.prevent(2026-10-29 六修, 用户报「点面板头面板就收了」): 面板里除候选行/
+           预置行之外还有两处**非交互区** —— .pop-head(标题+计数) 与 .pop-empty(空态文案)。它们点了什么
+           都不该发生, 但 mousedown 的默认动作会把焦点从输入框抢走 → @focusout → 40ms 合帧后收层
+           = 面板"点一下就消失"。光标本来就在候选行正上方, 误触概率极高。
+           挂在**根**而不是逐个非交互子元素: 一处覆盖现有全部非交互子元素, 将来往面板里加任何展示性
+           节点也自动免疫(逐个打补丁的老路 = 新增一处静默复发, 与 combobox-focusout-close 同源教训)。
+           与候选行自带的 @mousedown.prevent 不冲突(同一事件先到目标行、再到根, 重复 prevent 无害) ——
+           行上的那份保留: onPick 靠它保证"焦点不掉"这件事与根的挂载顺序无关。
+           WARN 不影响滚轮/滚动条: 滚动是合成器与原生滚动条的行为, 不经 mousedown 默认动作。 -->
+      <div v-if="menu" class="pop-menu add-pop" @mousedown.prevent @click.stop :ref="comboBindMenu">
         <div v-if="headText" class="pop-head"><span>{{ headText }}</span><span class="pop-count">{{ options.length }}</span></div>
         <!-- meta 的"(无分类)"预置行: 无 class/data-hi/mousemove —— 不参与键盘与悬停索引, 与收敛前一致 -->
         <div v-if="presetLabel" class="pop-item add-pop-item" @mousedown.prevent="onPick(presetValue)">

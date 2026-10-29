@@ -511,12 +511,28 @@ window.AQB_ADD = {
       }, e);
     },
     _hiScroll(refName) {
-      // 键盘高亮项滚动进可视区(block: nearest 不跳动)
+      /* 高亮项滚进可视区(block: nearest 语义) —— **只滚菜单内部的可滚层**, 逐级向上到菜单根为止。
+       * ⚠ 禁用 scrollIntoView(2026-10-29 八修, 用户报「选中新路径后再点下拉框, 弹窗里的文字从上往下
+       * 滑一次」): 它会把**所有可滚祖先**一起滚 —— `.add-dialog-body` 就是 overflow-y 容器, 开层过渡期
+       * 它的 scrollHeight 比 clientHeight 大 166px, 于是整段文案被滚走再弹回(实测 body.scrollTop
+       * 0 → 166 → 83 → 18 → 0, 文案 top 352 → 186 → 269 → 334)。输入框为空时 hi = -1、没有
+       * [data-hi="1"], 所以只有"已选中过路径"才看得见 —— 与用户描述逐字吻合。
+       * 同一条禁令本仓库另有先例(26-09-29-2142 键盘光标滚动跟随: 逐层滚可滚祖先会连带滚整页), 这里补上。 */
       this.$nextTick(() => {
         const box = this.$refs[refName];
         if (!box) return;
         const el = box.querySelector('[data-hi="1"]');
-        if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+        if (!el) return;
+        // 从高亮项往上走, 只动「菜单内部、真的可滚」的那层; 到菜单根即止, 绝不碰 .add-dialog-body / 页面
+        for (let n = el.parentElement; n && box.contains(n); n = n.parentElement) {
+          if (n.scrollHeight > n.clientHeight + 1) {
+            const nb = n.getBoundingClientRect();
+            const eb = el.getBoundingClientRect();
+            if (eb.top < nb.top) n.scrollTop -= nb.top - eb.top;
+            else if (eb.bottom > nb.bottom) n.scrollTop += eb.bottom - nb.bottom;
+          }
+          if (n === box) break;
+        }
       });
     },
     onAddFilePick(event) {

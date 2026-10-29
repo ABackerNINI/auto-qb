@@ -103,3 +103,23 @@
 - **判别**: **事实有误** —— `tests/helpers.py:388` 用的是 `ThreadingHTTPServer(("127.0.0.1", 0), ...)`,
   端口 **0 = 由内核分配**, 天然不撞。
 - **处置**: 别拿这条当挡箭牌。
+
+### 偶发红: 自选端口的用例在 `-n 8` 下会抢 —— **先留 traceback 再判**
+
+- **触发**: 全量并行**偶发**红在端口相关用例上(`test_hr_discovery.py` 一族), 单跑绿、紧接重跑全量也绿。
+- **判别**: 先看三件事, 缺一件就别下结论 ——
+  ①**改动面是否沾边**: `git diff --stat` 里有没有 `src/auto_qb/hr/**`、`tests/test_hr_discovery.py`;
+  ②**单独跑是否绿**: `uv run pytest <nodeid> -q -n 0`;
+  ③**traceback 在不在手**: 从全量日志里取栈。
+  2026-10-29 实例(八修收尾, **未定位, 只留观察**): 连跑两次 `test.full`, 第一次红在
+  `test_runtime_discovery_bind_failure_keeps_data_endpoint`, 第二次 `4007 passed + 2 skipped` 全绿;
+  该轮只碰前端 JS/CSS/模板 ⇒ 与改动零交集, 判偶发。**本可避免的失误**: 第一次红只截了 `tail`,
+  traceback 没落盘 ⇒ 只能记「偶发」而无法定位。
+- **处置**:
+  - 跑全量一律 `> tmp-analysis/full-run-N.log 2>&1`, 红了从日志取栈 —— 别再只截尾巴。
+  - 定性前先排除「验错对象」面: 桩/服务进程是不是旧的(见 [smoke.md](smoke.md) 同类陷阱)。
+  - 嫌疑面(**未验证, 勿当结论**): `_free_port()` 是 bind(0) → 取号 → **close** 三步, 拿到号到真正
+    bind 之间是 TOCTOU 窗口; `_hold_ports()` 一次绑 base/+1/+2 三个连号, 窗口比单端口更大。
+    ⚠ 但 [fixed-port-test-collision.md](fixed-port-test-collision.md) 记过一次「猜 `_free_port()`
+    TOCTOU 结果猜错」的前科 —— 要定性得先有栈, 别顺着最像竞态的那个猜。
+- **同族**: [fixed-port-test-collision.md](fixed-port-test-collision.md)(固定端口 + 连号候选表的面)。

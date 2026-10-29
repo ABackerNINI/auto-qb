@@ -1,7 +1,8 @@
 # 键盘导航与悬停高亮同源打架(下拉/列表选中项闪烁)
 
-> 摘要: 下拉/列表组件把悬停(@mouseenter 直写高亮状态 + CSS :hover 与活动项同款样式)与键盘活动项(↑↓)接到同一个高亮状态上 —— 静止光标钉住旧高亮, 且浏览器在行动画/滚动/DOM 变更后给静止光标补发合成 hover 事件把活动项拽回光标行, 上下键时选中项交替闪烁。处置 = 悬停接管走 mousemove + 位移门限(3px), CSS 只留活动项类一条高亮路。
-> 触发: 改下拉列表键盘导航, 加悬停高亮, 上下键选中项闪烁乱跳, mouseenter, 双高亮, 合成 hover 事件, scrollIntoView, combobox, 活动项
+> 摘要: 下拉/列表组件把悬停(@mouseenter 直写高亮状态 + CSS :hover 与活动项同款样式)与键盘活动项(↑↓)接到同一个高亮状态上 —— 静止光标钉住旧高亮, 且浏览器在行动画/滚动/DOM 变更后给静止光标补发合成 hover 事件把活动项拽回光标行, 上下键时选中项交替闪烁。处置 = 悬停接管走 mousemove + 位移门限(3px), CSS 只留活动项类一条高亮路。**滚动跟随禁用 scrollIntoView**(它逐层滚动所有可滚祖先): 手动差值调 `scrollTop`, 且**以菜单/列表根为界**, 否则会连弹窗自己的 `.add-dialog-body` 一起滚 —— 症状是「弹窗内容从上往下滑一次」(2026-10-29 复发 1, 见条目 2)。
+> 触发: 改下拉列表键盘导航, 加悬停高亮, 上下键选中项闪烁乱跳, mouseenter, 双高亮, 合成 hover 事件, scrollIntoView, combobox, 活动项, 弹窗内容滑动, 文案从上往下滑, 选中候选后再点下拉, _hiScroll, 高亮滚动跟随, 逐级滚动祖先, 祖先滚动容器
+**Refs:** memory-bank/testing/baselines/26-10-29-0412-webui-move-dialog-pick-geometry.md
 
 ## 条目
 
@@ -9,4 +10,10 @@
 - **判别**: ①纯键盘(鼠标不在面板上)不闪, 鼠标停在下拉里就闪或出现双行高亮 = 本坑; ②代码上 grep `@mouseenter` 直写高亮状态 + CSS 里 `:hover` 与活动项类共用样式; ③容易漏的放大器: 浏览器在元素移动(入场动画 translateY)/列表滚动/DOM 变更后会向静止光标**补发合成 hover 事件** —— 不动鼠标也会触发, 纯键盘路径复现不出来, 代码审查时容易以为"只在鼠标移动时才发生"。
 - **处置**: ①悬停接管改 `@mousemove` + 位移门限(距上次接管 <3px 不接管 —— 合成事件位移恒 0 天然被挡, 真实移动才交出活动项), 单点 `hubTrackerHoverIdx(i, ev)`; ②CSS 摘掉 `:hover`, 高亮只走活动项类一条路(双高亮从样式层根除); ③收层/关闭时复位门限坐标(下次打开首个动作不被旧坐标误挡); ④给列表加滚动跟随时**不用 scrollIntoView** —— 它逐层滚动所有可滚祖先, 会连带滚动暗幕后面的整页产生二次干扰; 改用 getBoundingClientRect 差值手动调列表自身 `scrollTop`(block:"nearest" 语义, 行在视野内不动), 且必须在 `$nextTick` 里量(等 Vue 把活动项类挪到新行); 程序滚动后浏览器可能补发的合成 mousemove 正是靠①的门限挡住, 修滚动跟随前先确认门限已就位(站点搜索已兑圆: config_hub.js `hubTrackerScrollActIntoView`, 2026-09-29 issue 26-09-29-2142-bug-tracker-hit-keynav-scroll)。参考实现: config_hub.js `hubTrackerHoverIdx` + `hubTrackerScrollActIntoView` + console_hub.css `.hb-tr-hit.act` 单路; 弹窗三下拉参考实现: add_torrent.js `comboHoverIdx(kind,i,ev)`(三处共用) + 开层复位(openAddCatMenu/openAddTagMenu/openMetaCatMenu; 键盘/@input 开层路径**故意不复位** —— 静止光标的旧坐标恰是保护, 复位反造「坐标 null = 任何事件都接管」的夺高亮窗口) + dialogs 样式 `.pop-item[data-hi]:not(.on):hover` 中和(`.pop-item:hover` 是共享样式, 列菜单/UI 切换器仍靠它, 不能全局摘)。
 - **守阵**: test_web_backend_misc.py::test_frontend_tracker_search_wiring —— 模板必须挂 `@mousemove="hubTrackerHoverIdx(i, $event)"`、`@mouseenter="hub.trackerHitIdx` 零残留、收层单点复位 `trackerMouseAt`、CSS 高亮只走 `.hb-tr-hit.act` 且无 `hb-tr-hit:hover`; 滚动跟随(②b): keydown 必须调 `hubTrackerScrollActIntoView`, 实现必须是 getBoundingClientRect+scrollTop 差值且内禁 `scrollIntoView`; 弹窗族守阵 test_web_backend_misc.py::test_frontend_dialog_combo_hover_takeover(接线/零残留/门限/开层复位/三皮肤 CSS 成对)。
-- **复发**: 0
+- **复发**: 1
+
+- **复发: 1**(2026-10-29, 用户报「选中新路径后再次点下拉框, 弹窗里的元素从上往下滑动出现一次; 输入框无文字时正常」): 上面处置 ④ 的禁令在弹窗 combobox 的**滚动跟随单点** `_hiScroll`(add_torrent.js, 五个下拉共用)上一直没落实 —— 它用的是 `el.scrollIntoView({ block: "nearest" })`。这次被连带滚的不是「暗幕后面的整页」, 而是**弹窗自己的滚动容器**: `.add-dialog-body` 是 overflow-y 容器, 开层过渡期(200ms padding 过渡)它的 scrollHeight 比 clientHeight 大 166px, `scrollIntoView` 顺手把它滚下去又弹回 —— 实测 `body.scrollTop` `0 → 166 → 83 → 18 → 0`、说明文案 top `352 → 186 → 269 → 334`, 就是用户看到的「元素从上往下滑一次」。
+  **为什么只有「选中过路径」才复现**: 输入框为空时 `hi = -1`、面板里没有 `[data-hi="1"]`, `_hiScroll` 查不到高亮项直接 return; 一旦回填过候选, 高亮项存在 ⇒ 触发滚动跟随 ⇒ 才滚祖先。
+  **处置**: `_hiScroll` 改手动差值调 `scrollTop`(block:nearest 语义), 且**逐级滚动以菜单根为界**(`for (let n = el.parentElement; n && box.contains(n); ...)` + 到 `box` 即 break), 绝不碰 `.add-dialog-body` / 页面。
+  **守阵**: `test_webui_static_dom_panel.py::test_frontend_combo_hiscroll_never_scrolls_ancestors`(剥注释后真代码内禁 `scrollIntoView`; 必须 `scrollTop`+`getBoundingClientRect`; 必须有界 `box.contains(n)` + `n === box`) + e2e `move-dialog-fit.spec.mjs`「选中候选后再点下拉 · 弹窗文案不滑动」(逐帧 `body.scrollTop` 恒 0、文案屏坐标极差 ≤2px; **反向守门**: 高亮项仍须落在列表可视区内, 防「修死」滚动跟随)。
+  **教训**: ①「禁 scrollIntoView」要按**单点**清点落实(本次漏的就是 `_hiScroll`), 只在踩过的文件里改 = 换个入口就复发; ②`scrollIntoView` 的受害者往往不是「整页」, 而是**当前弹窗自己的滚动容器** —— 症状表现为「弹窗内容滑动/跳动」, 很容易被误判成 CSS 或滚动条问题; ③「某个状态下才复现」的条件(这里有文本 / 无文本)先查**那条路是不是直接 return 了**。

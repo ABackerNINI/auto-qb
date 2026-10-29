@@ -2,7 +2,8 @@
 
 > 摘要: `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法
 > (部分条目源自旧单页冒烟脚本时代 —— 该脚本 2026-10-06 已退役, 判据对 e2e 新轨同样成立)。
-> 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因
+> 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因, 回归, 验错对象, 旧进程, 旧页签, 桩服务死了, 皮肤差异, prism 正常 atlas 异常, 服务端发出的字节
+**Refs:** memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md
 
 ### 能力与定位
 
@@ -249,3 +250,20 @@
   别只等 `vm.headMenu.visible === false`(状态已假、DOM 还在)。排障时 `elementFromPoint` 是首选仪器:
   一眼看出"落点被谁接走了"。
 - **复发**: 0
+
+### 「回归」的第一嫌疑是验错对象: 旧桩进程 / 旧页签跑的是旧资源
+
+- **触发**: 报「某个已修缺陷回归了」, 且带皮肤/页面差异(如「prism 正常, atlas 异常」)。2026-10-29 七修
+  排查现场就是这一形态: 六修已全绿, 用户侧却稳定复现「无焦点点下拉即弹回」。
+- **判别**: 先核对**服务端现在发的是什么字节**与**进程是否还活着**, 再谈代码 ——
+  ① `curl -s --noproxy '*' -o /dev/null -w "%{http_code}" http://127.0.0.1:8099/atlas/` 返回 `000`
+     (连接被拒)⇒ 那份桩早就死了, 用户测的不是它(旧进程 / 别的 clone / 旧页签);
+  ② `curl -s .../shared/tpl/combo-input.html | grep -c "@mousedown.prevent"`、`.../atlas/css/dialogs.css |
+     grep -c ":has(.add-pop)"` ⇒ 直接证明"服务端发的是不是当前代码", 比问「你刷新了吗」有效得多;
+  ③ SPA 的模板与 JS 以**页面加载时刻**为准(boot.js fetch 注入), 页签长开不刷新 = 永远跑旧资源; 按皮肤
+     分页签时极易只刷了一个(prism 刷了 / atlas 没刷)⇒ 看起来像**皮肤差异**, 实际是**页签代际差异**。
+- **处置**: 复现与验收固定三步 —— 起**新**桩(并用 `run_in_background` 常驻, 不要 `&` 脱离: shell 退出
+  进程就被回收, 上一份桩就是这么静默死掉的) → 核对发出的字节 → **两个皮肤都 Ctrl+F5**。同一份代码在
+  12 条交互序列 × 5 种视口 × headless/headed 下全绿而用户侧稳定复现 ⇒ 先怀疑对象, 别先改代码。
+- **复发**: 1(2026-10-29: 上一轮 8099 桩进程已死, 用户对着它测出「回归」; 换新进程 + 强刷后不复现)
+

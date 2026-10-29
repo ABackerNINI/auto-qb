@@ -14,9 +14,14 @@
          2026-10-29 二修(用户报「点下拉选项就移动」+「窗口太小, 点下拉高度跳变」):
          ①点选候选只回填(逻辑在 drawer.js::moveApplyPath), 移动只由「设定位置」按钮或手输回车发起;
          ②窗口基线抬到 360px(三皮肤 min-height), 开层预留改走 200ms 过渡(不再 0↔272 瞬跳);
-         ③打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen), 点输入框/方向键才展开。 -->
+         ③打开只聚焦不展开(openMoveDialog 置 moveSuppressOpen), 点输入框/方向键才展开。
+         2026-10-29 三修(用户报「点下拉框, 下拉框出现后自动弹回」): 遮罩默认 align-items:center,
+         开层增高上下对半扩 ⇒ 输入行连同刚展开的面板整体上移 77px, 面板正好顶到光标底下(光标原位
+         落在候选行上, 再点一下即命中候选/面板头 = 面板"自动弹回")。增长只能朝下 ⇒ 遮罩挂
+         .move-dialog-mask 改 flex-start + margin-top 复刻收层态居中偏移(几何数字全在三皮肤 CSS)。 -->
     <aq-modal :open="moveOpen" :close="closeMove" icon="#i-folder-open" title="设定位置"
               label="设定位置" body-class="add-dialog-body"
+              mask-class="modal-mask move-dialog-mask"
               :width-class="['add-dialog move-dialog', { 'pop-open': movePathMenu }]">
           <p class="move-targets">作用于 <b>{{ moveCount }}</b> 个种子(打开时锁定)</p>
           <p class="move-note">将把种子文件移动到新路径。注意: 移动后该种子将离开当前辅种组。</p>

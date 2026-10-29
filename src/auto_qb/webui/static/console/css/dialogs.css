@@ -321,11 +321,33 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
  * ②开层预留不再 0↔272 硬切 —— padding-bottom 走 200ms 过渡, 高度 360→515 平滑长高、收层平滑回落。
  * !body 不能加 flex:1(* { box-sizing: border-box }, padding 会长在固定高度里 -> 内容被挤成滚动条),
  * 高度增长只能靠 body 的 auto 高度随 padding 走。时长与 drawer.js 的 MOVE_POP_SETTLE_MS(240,
- * 过渡结束后重测限高)成对, 改任一边必须同步另一边。 */
-.modal.move-dialog { width: var(--modal-w-add); min-height: min(360px, calc(100vh - 120px)); }
+ * 过渡结束后重测限高)成对, 改任一边必须同步另一边。
+ * 2026-10-29 三修(用户报「点下拉框, 下拉框出现后自动弹回」): 遮罩默认 align-items:center, 开层增高
+ * 上下对半扩 ⇒ 输入行连同刚展开的面板整体上移 77px(360→515 的一半), 面板顶到光标底下 —— 光标原位
+ * 正落在候选行上, 再点一下即命中候选或面板头 = 面板"自动弹回"。**增长只能朝下**: 遮罩改 flex-start,
+ * margin-top 复刻收层态的居中偏移(减掉遮罩自身 padding 20); 上限扣掉开层态总高(515 = 基线 360 +
+ * 增量 155)与下沿余量 ⇒ 矮视口不外溢, 更矮时由 .modal 的 max-height 壳内滚兜底。
+ * 2026-10-29 四修(用户报「下拉框出现时弹窗有一瞬间出现滚动条」): 面板绝对定位在 .add-dialog-body
+ * 里, 而预留 padding 是**过渡**着的 —— 开层头 ~110ms 内面板(256px)伸到 body 的 padding 盒之外
+ * (实测 scrollHeight 溢出 256→173→108→…→0), body 又是 overflow-y:auto 的滚动容器 ⇒ 闪出一条
+ * 滚动条(还顺带把内容横向挤一个滚动条宽)。开层期间溢出的**只有那段预留空白**(真内容在输入行
+ * 上方, 不参与溢出)⇒ 面板在 DOM 期间 overflow:hidden 关掉滚动条(离场淡出期同样要覆盖, 见五修):
+ * 面板裁在 padding 盒底沿 = 随过渡逐帧露出(裁剪位置与 auto 完全相同, 只是不再有滚动条),
+ * 列表自身仍可滚(.add-pop-list)兜住矮视口。 */
+.modal-mask.move-dialog-mask { align-items: flex-start; }
+.modal.move-dialog {
+  width: var(--modal-w-add); min-height: min(360px, calc(100vh - 120px));
+  margin-top: clamp(0px, calc((100vh - 360px) / 2 - 20px), calc(100vh - 560px));
+}
 .modal.move-dialog .modal-actions { margin-top: auto; padding-top: 16px; }
 .modal.move-dialog .add-dialog-body { transition: padding-bottom 200ms var(--ease); }
 .modal.move-dialog.pop-open .add-dialog-body { padding-bottom: 272px; }
+/* 五修(2026-10-29 用户报「下拉框消失时弹窗仍会有一瞬间出现滚动条」): 收层时面板**并不立刻离场**
+ * —— <transition name="pop"> 的离场淡出(--dur-fast ~120ms)期间它仍在 DOM 里、高度仍是 256px,
+ * 而 .pop-open 已摘(overflow 回到 auto)、padding 在 200ms 里往回缩 ⇒ 头 ~140ms 溢出涨到 254px
+ * (实测) = 又闪一条滚动条。所以滚动条开关必须跟**面板是否存在**走(:has 在离场期仍命中), 不能跟
+ * 开合状态(.pop-open)走 —— 后者只覆盖开层那一段。 */
+.modal.move-dialog:has(.add-pop) .add-dialog-body { overflow: hidden; }
 /* 面板入场不另加规则: .pop-menu 自带 animation: drop-in .12s(opacity 0 + translateY(-4px) 起,
  * 见 components.css) —— 用户看到的「跳变」在**容器高度**, 由上面的 padding-bottom 过渡承担。 */
 @media (prefers-reduced-motion: reduce) { .modal.move-dialog .add-dialog-body { transition: none; } }
