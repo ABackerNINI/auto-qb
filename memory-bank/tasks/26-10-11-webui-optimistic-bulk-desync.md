@@ -70,3 +70,5 @@
 - **2026-10-11 (闸门 + 回写)** — `dev.fmt` 无额外改动(代码已合规); `commands run test.full` 全绿 / 0 failed / TOTAL 99%(数字与耗时采样见基线切片); 基线切片 `26-10-11-2040-webui-bulk-desync-fix`; 计划 `26-10-11-2040-*`; 报告口径修正; activeContext 切片; `kb.index`/`kb.check`。
 
 - 2026-10-30 06:30 grilling 两轮+真机实测定稿: 认领 issue 26-10-01-2137(复验分岔: add ~34ms 已覆盖不改码; rename ~1.7s 与主备速度切 0~1.5s 立项); 追加实测 SSE 断退回轮询 ~1.19s 归因用户观察, 独立入池 26-10-30-0626-perf-webui-sse-down-poll-latency(暂不修)
+
+- 2026-10-30 07:48 S1/S2/S4/S5 实施收口: 4 提交落地 rename 乐观补丁+速度切预翻转; test.full 4159 passed + 2 skipped / TOTAL 99%, 基线切片 26-10-30-0746; 计划与 issue 26-10-01-2137 均置 Done; 真机复测两链延迟阻塞(测试实例 @36595 不可达)

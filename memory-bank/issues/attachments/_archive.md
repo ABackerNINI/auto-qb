@@ -62,11 +62,10 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (3)
+## In Progress (2)
 
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
-- [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](../26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 
 ## Done (279)
 
@@ -291,6 +290,7 @@
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](../26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
 - [bug] [添加新站点热重载后不触发种子的内置维护任务](../26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](../26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui
+- [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](../26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 - [bug] [「删除类标签」全局/站点单设置语义混淆, 开启后无法切回全局](../26-10-01-2129-bug-webui-delete-tag-scope-confusion.html) — 删除类标签的全局设置与站点单设置没有分清, 点击开启后无法切换回全局设置
 - [feat] [批量移动/批量跳检](../26-10-01-2119-feat-webui-batch-move-skipcheck.html) — WEBUI 缺批量移动与批量跳检入口; 右键单组跳检与危险操作独立操作层已落地可复用
 - [feat] [重做优化种子详情抽屉](../26-10-01-2119-feat-webui-drawer-redesign.html) — 详情抽屉整体重设计(未排期); 已有标签页记忆与长文本截断等局部改进, 需要一次整体重做

@@ -7,9 +7,9 @@
 <title>乐观UI扩面: 重命名乐观补丁+主备速度切预翻转</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-optimistic-ui">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-30-0610">
-<meta name="doc-updated" content="26-10-30-0627">
+<meta name="doc-updated" content="26-10-30-0747">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>乐观UI扩面: 重命名乐观补丁+主备速度切预翻转</h1>
 <p class="lede">把乐观 UI 从 pause/resume 白名单扩面到两项真机实测确认的真缺口 —— 种子重命名（回执 5.6ms 但名字可见 ~1.7s）与主备速度切（确认延迟 0~1.5s 随 sync 相位）；添加种子经实测确认已被补刷新链覆盖（~34ms），不改码。设计主轴：<b>零后端改动，全部落在前端显示层</b>，复用既有乐观四件套（贴上/回执撤下/真值对账/兜底回滚）。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-30-0610 · <b>doc-updated</b> 26-10-30-0627 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-30-0610 · <b>doc-updated</b> 26-10-30-0747 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> grilling 会话(2026-10-30, 两轮拍板+真机实测) · 认领 issue <a href="../issues/26-10-01-2137-feat-webui-optimistic-ui-expansion.html">26-10-01-2137-feat-webui-optimistic-ui-expansion</a> · 实测原始数据 H:/Temp/opt-webui-test/
 </div>
 
@@ -175,6 +175,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-30-0610</span> 初版。来源:grilling 两轮(范围→撤回回执即 refresh→实测先行) + 子智能体真机实测(qB 5.2.3 @36595,原始数据 H:/Temp/opt-webui-test/)。要点:add 凭实测结案不改码(D6);rename 实测 ~1.7s 后改道立项乐观补丁(D7);速度切按 D2/D8 立项;runtime.py 注释修正随行(S4);issue 26-10-01-2137 已认领并补复验行(D10)。</li>
   <li><span class="tag">R1 · 26-10-30-0627</span> S3 补遗: 用户生产观察『添加后 &gt;1s』经同日复测归因为 SSE 失效退回轮询(可见 ~1.19s, 服务端 ~20ms 已就绪), 与 add 链路无关 —— 已独立入池 issues/26-10-30-0626-perf-webui-sse-down-poll-latency, 本计划 S3 结论(不改码)不变</li>
+  <li><span class="tag">R2 · 26-10-30-0747</span> S1/S2/S4/S5 实施完成(4 提交: 5ac63a7e S1 rename 乐观补丁 + S4 runtime.py 注释修正 / e6ef9344 S2 altOverride 预翻转+四路回滚 / c9b9a1c8 S5a 静态守阵 2 条 + rename/alt 四态单测 / 19ab6fbb S5b e2e 两条 × prism/atlas 双皮 4 例); test.full 实测 4159 passed + 2 skipped, TOTAL 99%(基线切片 baselines/26-10-30-0746-webui-optimistic-ui)。实施期事实修正三处: ① §04 S1.3 句「rename 的真值是 kind 而非 name」系笔误, 实为 name —— kind 守卫处方本身无误, 已照做; ② memberByHash 与 _forEachRow 三数组是同一批对象引用, 补丁落行即落索引, §04 S1.4 所述「右键菜单/导出文件名滞后 ≤1.7s」的实际后果不会发生; ③ S2 的 3s 回滚验证由单测四态覆盖, 未做断 SSE 的 e2e。真机复测两链延迟(§04 验收项)阻塞: qBittorrent-testing 5.2.3 @127.0.0.1:36595 不可达(TCP 连接拒绝), 无数字、不伪造, 留待实例可达后补测。</li>
 </ul>
 
 </div>
