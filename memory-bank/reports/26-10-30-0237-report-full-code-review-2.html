@@ -345,7 +345,61 @@
 
 <h3>批B · hr/ 全域(service·model·status + channel·worker·parse·resolve·discovery·threadlifecycle·server·adapters 等)</h3>
 <p class="cm">登记格式: ID(B-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
-<p class="cm">未登记。</p>
+<p class="cm"><b>评审时 HEAD:</b> <code>6fd63bd3</code>(26-10-30 批B开工只读实测 <code>git rev-parse</code>, 树净) · <b>范围:</b> 26 文件 / 8,971 行(新增 3 · 变更 18 · 未变 5; 新增/变更全量读码对 R1–R11 勾选, 未变 5 件轻量 + 交互面过目) · <b>重点维度:</b> R1 R3 R5 R6 R7 R8 R9 R11 · <b>五步执行记录:</b> ①读档 hr/__init__ 模块分工 docstring(v3 波次模型/线程三分职责「不碰 state_file/队列/store」) + systemPatterns main-loop(HR 取数线程与主循环解耦节); ②坑档对照 backend/_index(concurrency 叫停口与单一写线程·unreachable-wait·verdict-scope-parity·fault-domain-classification·release-record-baseline·platform-fs·page-scraping·format-driven-parse); ③逐文件读码(LOC 降序 service→status→model→discovery→…; 变更函数对照 <code>git diff a4d14a8d..HEAD</code> 定位); ④ruff+bandit(见工具小结, 逐条人工复核); ⑤本表登记(逐条对照 §04 四表 + 批A条目去重)。</p>
+<p class="cm"><b>首次评审(26-10-05-1036 批B1/B2)八项回归核对:</b> B1-01 store 惰性建双构造 — <span class="good">已修</span>(service 构造期预建 <code>_stores</code>, 注记 issue 26-10-06-0028, CLI 点名仍走惰性兜底); B1-02 status.py:40 死导入 next_allowed_at — <span class="good">已修</span>(导入表已剔除); B1-03 _do_wave <code>except HrFetchError</code> 尾段死代码 — <span class="good">已消解</span>(_run_pages 挑战页路径 <code>raise HrFetchError</code> 无 retry_after, 尾段现可达且语义正确); B2-01 非 UTF-8 站点文件读崩自愈链 — <span class="good">已修</span>(_read_full/read_backup 捕 UnicodeDecodeError 归 recoverable, 走 quarantine→.bak 链); B2-02 judge_record 双 hash 平局合并未实现 — <span class="good">已实现</span>(_rank 保守合并序 + _tie_prefer, C 终态未达标恒保留不被放行依据洗掉); B2-03 worker <code>_force</code>「空集=全部站点」注释与实现相反 — <span class="wr">仍在</span>(首轮「仅记录」口径维持, 不重报); B2-04 parse_size 表外单位当 1 字节 — <span class="good">已修</span>(认不出回 None 不猜); B2-05 五处死导入 + HrStoreCorrupted 死异常类 — <span class="good">已修</span>(HrChannelQuota 出 hr/__init__ 导入表, 其余随重构消解; 但新文件 discovery.py 又引两处死导入 → 本轮 B-02); B2-06 ratelimit 固定 86400s 推算 DST 偏移 — <span class="wr">仍在</span>(首轮「仅记录」口径维持, 不重报)。</p>
+<h4>批B 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>B-01</td><td>R5(R2)</td><td>P1</td>
+    <td>hr/service.py <code>_freeze_terminal</code>(:1329 <code>done &lt; st.cutoff_done</code>) / <code>_position_covered</code>(:1729 同形) / <code>_absence_proven_all</code>(:1753 <code>done - COVERAGE_SLACK &lt; st.cutoff_done</code>); 判据语义锚 model.py:332(<code>cutoff_done: 0 = 没有位置概念</code>); 可达性支点 adapters/nexusphp.py:57(REQUIRED_KEYS 不含 done 列)</td>
+    <td>「位置覆盖」三判据对 <code>cutoff_done == 0</code>(本波该档没有任何可解析完成时刻)退化: 冻结/观察期两处 <code>done &lt; 0</code> 恒 False ⇒ 任意位置都判「已覆盖」; 批量签发处 <code>done - 1D &lt; 0</code> 对完成时刻早于 1 天的对象恒通过 —— 「0 = 没有位置概念」被当成「位置 0 = 比一切都老」。后果: 该档 ok 且非全深度(预算截断/停翻3)时, 终态条目被冻结并签发<b>永续放行</b>、考察中条目观察期计数推进(连续 2 波即判「移出」放行, 行1 管束被解除)、未对账对象走批量「未列出」放行 —— 放行记录永续有效, 种子就此退出 HR 管束, 用户据此删种即真吃 H&amp;R</td>
+    <td>①本波该档全部已见行 done 不可解析即可: done 列不在 REQUIRED_KEYS(name/need_seed/remain), 整列失明不触发 S2 零容忍(missing_field_rate==0)也不 _LaneAbort —— 站点改换完成时间书写形态(相对时间「3天前」/斜杠日期)即满足; ②「ok 且非全深度」是常态路径(_run_pages 尾段预算截断 <code>_truncate_lane</code> 置 LANE_OK+full_depth=False; 停翻3 只看 infohash 对上不看 done); ③观察期出口只需条目自身 done_epoch 有改版前的旧值; 批量签发侧 releases_enabled(全档 ok)/retention 均不被 done 列退化阻断; ④测试面无「cutoff==0 且非全深度」钉死(test_hr_service 各处 cutoff_done 均非零或 full_depth=True)</td>
+    <td>无(§04 四表无; 坑档 verdict-scope-parity 系「判据漏一个消费侧」, 本条系同一判据三消费侧同源退化, 非撞车形态; release-record-baseline 同域不同机制)</td>
+    <td>入池(bug, P1, 建议优先级高): 三处补「非全深度 ∧ cutoff_done&lt;=0 ⇒ 位置不可证」(或 _update_cutoff 用哨兵区分「无位置概念」与 epoch 0); 并评估把 done 列纳入 REQUIRED_KEYS —— 完成时间整列失明本就该按改版截断(零容忍口径的补网)</td>
+  </tr>
+  <tr>
+    <td>B-02</td><td>general</td><td>P3</td>
+    <td>hr/discovery.py:27 <code>is_loopback_host</code> 导入未消费(ruff F401) / :33 <code>_content_length</code> 导入未消费(F401)</td>
+    <td>新文件两处死导入: 回环判据与体长助手均由底层(make_endpoint_handler/_EndpointServer)承担, 本模块不再直接用 —— 行为无影响, 属工具提示源人工复核采纳项</td>
+    <td>静态即证(uvx ruff F401); 运行行为零差异</td>
+    <td>无</td>
+    <td>入池(chore, P3)或仅记录(顺手修候选: 删两行导入)</td>
+  </tr>
+</table>
+<h4>批B 逐文件勾选表(26/26)</h4>
+<p class="cm">深度: 全量 = 逐行过目 + R1-R11 逐维勾选; 轻量 = 未变文件维度抽验 + 交互面过目 + 首轮该域发现回归核对。结论含「无发现」。</p>
+<table>
+  <tr><th>文件</th><th>变更态</th><th>深度</th><th>结论</th><th>备注(一句话)</th></tr>
+  <tr><td><code>hr/__init__.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>包路由 docstring 补 discovery/threadlifecycle 与实际一致; 配对码族与异常类导出同步; 首评 B2-05 之 HrChannelQuota 已出导入表</td></tr>
+  <tr><td><code>hr/adapters/__init__.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>登记点三家 + carpt 参数注入; 未登记 adapter 回 None 由调用方报错(可登记性单点在 site_presets)</td></tr>
+  <tr><td><code>hr/adapters/base.py</code></td><td>未变</td><td>轻量</td><td>无发现</td><td>parse_counters 覆写契约三条(宁可不用不可错用)在位; login/challenge 通用特征判据未动</td></tr>
+  <tr><td><code>hr/adapters/btschool.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>计数 2 数=A/C 映射(样张证据链 docstring 齐); 位数不符降级空集走 parse_header_counters 单点</td></tr>
+  <tr><td><code>hr/adapters/carpt.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>dl_id 双 id 空间(download.php 优先/details 兜底); login 锚点换本站表头; 3 数=A/C/上限不采</td></tr>
+  <tr><td><code>hr/adapters/nexusphp.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>新增 parse_header_counters 公共收尾单点; REQUIRED_KEYS 不含 done 列 —— 作为 B-01 可达性支点在该条登记, 本文件自身无缺陷</td></tr>
+  <tr><td><code>hr/bencode.py</code></td><td>未变</td><td>轻量</td><td>无发现</td><td>原始字节切片 infohash 口径与深度上限不变; bandit B324 复核误报(SHA1 即 infohash 定义)</td></tr>
+  <tr><td><code>hr/channel.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>KIND_* 四分类常量与 fetcher 异常映射两侧同源(R11); 配对码族 HMAC 现导无状态、常数时间比对; 数值强转回收 model 单点</td></tr>
+  <tr><td><code>hr/discovery.py</code></td><td class="good">新增</td><td>全量</td><td>B-02</td><td>发现端点 origin+配对双门/防枚举节流/注册表原子写+读侧退避(platform-fs 坑档处置)/绑定失败退避重试不抢绑/发现不可用不影响数据端点 —— 骨架扎实; 缺口仅两处死导入</td></tr>
+  <tr><td><code>hr/events.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>事件→归属层单点(DOMAINS)使「通道层贴站点层标签」不可表达; 新事件文案自带动作与分级理由</td></tr>
+  <tr><td><code>hr/fetcher.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>异常家族按「能不能靠重试解决」分层完整(HrExtensionNoPermission/HrExtensionNetwork 新两类); listening_fn 现读闭包防白等(unreachable-wait 处置在位)</td></tr>
+  <tr><td><code>hr/log.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>层/档位挂 record 出口收放; 漏打标=多报不漏报(向后兼容)契约明示; 键放 infra 不成环</td></tr>
+  <tr><td><code>hr/model.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>channel_last_error 补字段零迁移、to/from_json 两侧同步、非 dict 回空; <code>cutoff_done</code>「0=没有位置概念」语义注释与三消费点相悖 —— 判据缺口登记于 B-01(service 侧)</td></tr>
+  <tr><td><code>hr/module.py</code></td><td>未变</td><td>轻量</td><td>无发现</td><td>apply 不限 L1 透传门面; sections 认领 hr_check+trackers; 短路/重建判据单点在 runtime</td></tr>
+  <tr><td><code>hr/parse.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>parse_size 认不出回 None(B2-04 修复确认); 排序校验方向自适应+证据不足不判+跨页边界相等不算违反</td></tr>
+  <tr><td><code>hr/queue.py</code></td><td>未变</td><td>轻量</td><td>无发现</td><td>单 Condition 双表零 IO; 叫停标记优先于一切(含叫停后新发起的等待, 坑档 concurrency 处置在位); TTL 双向到期防堆积</td></tr>
+  <tr><td><code>hr/ratelimit.py</code></td><td>未变</td><td>轻量</td><td>无发现</td><td>窗口键幂等(重启不重置/重放不重复消耗); B2-06 DST 仅记录维持</td></tr>
+  <tr><td><code>hr/report.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>三入口公共门/构造单点; 走查 force=True 带 persist=False 零写盘; LocalPageFetcher 仅 CLI 诊断非安全边界(首轮③复核维持)</td></tr>
+  <tr><td><code>hr/resolve.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>保守合并序 + _tie_prefer 落地(B2-02 修复确认); HrSiteFacts 拷贝防「视图不可变 ≠ 行不可变」撕裂</td></tr>
+  <tr><td><code>hr/runtime.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>stop 顺序(中断位→worker.cancel_all→join→端点→发现)对坑档 concurrency; apply 短路/监听身份重挂/keep_endpoint 从无到有补启动; _anchors 只读快照(首轮⑤撕裂读复核维持不登记)</td></tr>
+  <tr><td><code>hr/server.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>host 可配+port 0 随机+allow_reuse_address=False 独占; 鉴权/origin/体上限/单请求异常兜底全在 route(纯逻辑可单测); 被拒接触记账节流单点 RejectThrottle(与 discovery 共用)</td></tr>
+  <tr><td><code>hr/service.py</code></td><td class="wr">变更</td><td>全量</td><td>B-01</td><td>波前现算/三停翻/档位独立/防伪链/告警分档自洽, R1(force 一次性)/R3(锁内写)/R6(Retry-After 落盘+间隔基准前进)逐维过; 缺口集中在 cutoff_done==0 的位置证明退化</td></tr>
+  <tr><td><code>hr/status.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>通道病因先于数据症状(blocking_reason 链首); CHANNEL_TEXTS/HISTORY_* 人话单点与 CLI 同源; 首评 B1-02 死导入已修</td></tr>
+  <tr><td><code>hr/store.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>非 UTF-8 归坏文件自愈链(B2-01 修复确认); 写者心跳自检退只读+恢复 rebaseline 防「自愈变砖」; _file_hint 取证串</td></tr>
+  <tr><td><code>hr/threadlifecycle.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>幂等 start/stop(join 超时未退出留句柄防「再也停不掉」); 叫停先于 join 的纪律按注释留在调用方(worker/server 均照做)</td></tr>
+  <tr><td><code>hr/worker.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>冷启动先发布磁盘既有结论(防判定真空期); force 一次性消费即清; 视图原子发布单元组防撕裂; <code>_force</code>「空集=全部站点」注释与实现相反仍在(首轮 B2-03, 不重报)</td></tr>
+</table>
+<h4>批B 工具提示源小结(uvx ruff + uvx bandit, 逐条人工复核)</h4>
+<p><b>ruff</b>(uvx ruff check src/auto_qb/hr/, 434 条): 采纳 2 条(discovery.py F401 ×2 → B-02); 其余逐类复核不采纳 —— UP006/UP035/UP045 现代注解 369 条系项目既定风格(与批A同口径), I001/RUF022/RUF023/RET501/F541/FURB167/SIM102/UP007 纯风格零行为差, G201 ×9 为既定 <code>error(..., exc_info=True)</code> 风格, BLE001 ×3 均为「单站点失败/单轮异常不外抛」的既定 fail-closed 收口, RUF100 ×4 系 uvx 缺省未启 BLE001 所致的 noqa 误报, TRY004 ×2(bencode)ValueError 系解析 fail-closed 契约, B023(worker.py:284 wait_for 谓词 lambda)为误报 —— <code>seq</code> 每迭代重赋值且 lambda 在同一迭代内即被消费, 无延迟绑定窗口。<b>bandit</b>(uvx bandit, 11 条: High 2 / Medium 1 / Low 8): 全部复核排除 —— B324 ×2(bencode SHA1 即 infohash 定义非安全用途; runtime <code>sha1(data_dir)</code> 仅作注册表条目 id 摘要), B104(discovery:211 系 <code>_is_wildcard_host</code> 对 "0.0.0.0" 的字符串比较, 非绑定调用), B105 ×2('X-Hr-Token' 系头名常量 / '' 系空串缺省), B101 ×4(assert 系 fail-fast 风格且均为逻辑不变量, 优化编译剔除不影响安全判据)。真信号合计: ruff 采纳 2(并入 B-02), bandit 采纳 0。</p>
 
 <h3>批C · 流量域(traffic_store·traffic_grid·traffic_limits·curves + traffic_sample/snapshot_mod)</h3>
 <p class="cm">登记格式: ID(C-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
