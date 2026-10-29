@@ -4,12 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (64)
+## Open (61)
 
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)
-- [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
-- [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](../26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退
-- [bug] [gtm http_host 无回环约束, 与「控制面强制绑定 127.0.0.1」docstring 契约漂移](../26-10-30-0624-bug-gtm-http-host-loopback-contract.html) — http_host 可配置且校验只查非空, PUT 0.0.0.0 重启后控制面对局域网暴露(token 明文落盘), 安全声明与实现未取齐一头
 - [bug] [relocate journal 双写者竞态: guardian 心跳可覆盖 auto-qb 终态相位](../26-10-30-0624-bug-relocate-journal-heartbeat-phase.html) — finalize_watch 心跳无条件整包覆盖 journal, auto-qb 终态相位落在读-写间隙即被覆盖回 armed, 造成僵尸 guardian 与对账面相位失真
 - [bug] [备用限速组缺非空闸, 读失败窗口提交即静默写 0/0](../26-10-30-0622-bug-alt-limits-submit-empty-gate.html) — submitAltLimits 无字段非空闸, /api/speed/mode 读失败窗口内提交把备用限速静默写成不限速, 打破「未改动的组不下发」承诺
 - [bug] [drawer 合并补给无条件 bump seq, 孤儿化在飞取数与 loading 门](../26-10-30-0622-bug-drawer-merge-seq-bump-conditional.html) — _drawerMergeSupply 即使两源都被门挡住也前进代际, 在飞页签取数被打成 stale 且门不清, gc 对双列停在加载中
@@ -77,8 +74,11 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](../26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 
-## Done (270)
+## Done (273)
 
+- [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
+- [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](../26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退
+- [bug] [gtm http_host 无回环约束, 与「控制面强制绑定 127.0.0.1」docstring 契约漂移](../26-10-30-0624-bug-gtm-http-host-loopback-contract.html) — http_host 可配置且校验只查非空, PUT 0.0.0.0 重启后控制面对局域网暴露(token 明文落盘), 安全声明与实现未取齐一头
 - [bug] [HR 位置证明三判据在 cutoff_done==0 时退化恒通过, 种子永续放行退出 HR 管束](../26-10-30-0550-bug-hr-cutoff-zero-position-proof.html) — cutoff_done==0 时 _freeze_terminal/_position_covered/_absence_proven_all 三处覆盖判据退化为恒通过, 终态冻结/观察期出口/批量签发三条路全部签发永续放行, 种子退出 HR 管束
 - [refactor] [tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)](../26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html) — 同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵
 - [refactor] [relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口](../26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html) — 4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致

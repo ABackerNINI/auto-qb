@@ -2,6 +2,8 @@
 
 + S7 (计划 26-10-17-1737 / D13): 时间/大小为复合串 —— 写侧只写 "30S"/"10MiB", 读侧兼容
   旧式裸数值 (按秒/字节平移), 旧值一次性迁移不丢语义、不误碰无旧值的文件。
++ T-02 (issue 26-10-30-0624): http_host 回环约束 —— 127.0.0.0/8 与 ::1 (及 localhost)
+  放行, 非回环地址 (0.0.0.0/局域网/域名) 拒绝, 启动加载与 PUT /config 两入口共用。
 全部用例 hermetic: tmp_path 落盘, 不碰真实工具数据目录。
 """
 
@@ -349,6 +351,32 @@ def test_validate_rejects_bad_string_fields(value) -> None:
     config, errors = validate_payload({"http_host": value})
     assert config is None
     assert any("期望非空字符串" in e for e in errors)
+
+
+@pytest.mark.parametrize("value", ["127.0.0.1", "127.255.255.254", "::1", "localhost", "LocalHost"])
+def test_validate_accepts_loopback_http_host(value) -> None:
+    """http_host 回环约束放行面: 127.0.0.0/8 全段 + ::1 + 保留名 localhost (T-02)."""
+    config, errors = validate_payload({"http_host": value})
+    assert errors == ()
+    assert config is not None and config.http_host == value
+
+
+@pytest.mark.parametrize("value", ["0.0.0.0", "192.168.1.10", "10.0.0.2", "::", "::ffff:192.168.1.1", "example.com"])
+def test_validate_rejects_non_loopback_http_host(value) -> None:
+    """http_host 非回环: 拒绝 —— 放开即对 LAN 暴露单因素 Bearer 控制面 (token 明文落盘),
+    「控制面强制绑定回环地址」的声明必须由校验层兑现, 不静默回落默认值."""
+    config, errors = validate_payload({"http_host": value})
+    assert config is None
+    assert any("回环" in e for e in errors)
+
+
+def test_load_config_rejects_non_loopback_http_host(tmp_path) -> None:
+    """启动加载路径同样受约束: config.yml 写 0.0.0.0 -> fail-fast 聚合报错 (两入口共用校验)."""
+    p = tmp_path / "config.yml"
+    p.write_text("http_host: 0.0.0.0\n", encoding="utf-8")
+    config, errors = load_config(str(p))
+    assert config is None
+    assert any("回环" in e for e in errors)
 
 
 def test_load_config_oserror_reports_read_failure(tmp_path) -> None:

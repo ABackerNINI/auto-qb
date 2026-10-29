@@ -8,6 +8,7 @@
 - 正常 delta: 两样本差值进入当日累计; day_total_bytes = up+down
 - 重置归零: 上行/下行/双侧重置三种, delta 记 0 + 告警, 不产生负流量, 另一侧正常计
 - 跨天硬切: day_rolled=True, 旧日累计清零, 跨日流量计入新日
+- 挂钟回跳跨日界: 不硬切 (累计保持 + 采样日钉原日界 + 告警), 日界再前进恢复正常硬切
 - 基线: 首样本 delta 恒 0 + baseline=True; 全过滤空场景告警
 - 适配器过滤: loopback 三名形态 (lo/lo0/Loopback Pseudo-Interface 1) / down / include 白名单 /
   exclude 黑名单 / stats 缺失不收编 / 顺序优先级 (include 不翻案 loopback 开关)
@@ -173,6 +174,52 @@ def test_day_rollover_resets_accumulation():
     assert (r2.delta_up_bytes, r2.delta_down_bytes) == (100, 60)
     assert (r2.day_up_bytes, r2.day_down_bytes) == (100, 60)  # 旧日累计已清零
     assert r2.counter_reset is False
+
+
+def test_clock_rollback_across_day_boundary_keeps_accumulation():
+    """挂钟回跳跨日界 (day < self._day): 不硬切 —— 累计保持, 采样日钉在原日界,
+    day_rolled=False。清零会让 dat 今日行被低值 upsert 覆盖且当日不可自愈 (T-03);
+    钉日界同时保证 dat upsert 目标不落到历史行。
+    """
+    sampler, clock, counters = make_sampler()
+    counters.page = {"eth0": nic(100, 200)}
+    sampler.sample_once()
+    counters.page = {"eth0": nic(300, 500)}  # +200/+300
+    sampler.sample_once()
+    clock.now = datetime(2026, 10, 17, 0, 0, 1)
+    counters.page = {"eth0": nic(400, 560)}  # 前进到 10-17: 正常硬切, 新日累计 100/60
+    r2 = sampler.sample_once()
+    assert r2.day_rolled is True
+
+    clock.now = datetime(2026, 10, 16, 23, 59, 0)  # 挂钟回跳回 10-16 (NTP 校正/手动改钟)
+    counters.page = {"eth0": nic(500, 620)}  # +100/+60
+    r3 = sampler.sample_once()
+    assert r3.day_rolled is False
+    assert r3.day == date(2026, 10, 17)  # 采样日钉在原日界 (累计与 upsert 目标一致)
+    assert (r3.day_up_bytes, r3.day_down_bytes) == (200, 120)  # 10-17 累计未清零, 继续累加
+    assert any("挂钟回跳" in w for w in r3.warnings)
+    # 快照日界与累计一致: 重启后 restore 见"快照日期晚于今天" -> 判损坏降级, 与恢复路径同防线
+    assert sampler.snapshot()["day"] == "2026-10-17"
+
+
+def test_clock_rollback_then_forward_resumes_rollover():
+    """回跳期间持续按原日累计; 日界再次前进时恢复正常硬切 (当日可自愈)."""
+    sampler, clock, counters = make_sampler()
+    counters.page = {"eth0": nic(100, 200)}
+    sampler.sample_once()
+    clock.now = datetime(2026, 10, 17, 0, 0, 1)
+    counters.page = {"eth0": nic(300, 500)}
+    assert sampler.sample_once().day_rolled is True
+    clock.now = datetime(2026, 10, 16, 23, 0, 0)  # 回跳
+    counters.page = {"eth0": nic(400, 560)}
+    r3 = sampler.sample_once()
+    assert r3.day_rolled is False and r3.day == date(2026, 10, 17)
+    clock.now = datetime(2026, 10, 18, 0, 0, 1)  # 日界再次前进
+    counters.page = {"eth0": nic(500, 620)}
+    r4 = sampler.sample_once()
+    assert r4.day_rolled is True
+    assert r4.day == date(2026, 10, 18)
+    assert (r4.day_up_bytes, r4.day_down_bytes) == (100, 60)  # 新日从 0 起计
 
 
 # ---- 适配器过滤 ----

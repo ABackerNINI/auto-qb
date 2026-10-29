@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="gtm http_host 无回环约束, 与「控制面强制绑定 127.0.0.1」docstring 契约漂移">
 <meta name="issue-summary" content="http_host 可配置且校验只查非空, PUT 0.0.0.0 重启后控制面对局域网暴露(token 明文落盘), 安全声明与实现未取齐一头">
 <title>gtm http_host 无回环约束, 与「控制面强制绑定 127.0.0.1」docstring 契约漂移 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0624-bug-gtm-http-host-loopback-contract</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 06:48 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（按建议取「校验层兑现绑定承诺」一侧: config.py 新增 <code>_check_http_host</code> —— 非空 + 回环约束(127.0.0.0/8 与 ::1, 经 <code>ipaddress.is_loopback</code>; 保留名 localhost 放行), <code>load_config</code> 与 PUT /config 两入口共用, 非回环 fail-fast 聚合报错不静默回落; server/storage 两处 docstring 声明面同步取齐「回环」口径; 守阵 test_config 放行/拒绝两参数化面 + test_server 端点面 PUT 400; 全量 test.full 全绿与覆盖率见 kb.baseline 最新切片）</li>
     </ul>
   </section>
 

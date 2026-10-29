@@ -5,6 +5,8 @@
 + S14 POST /autostart 成功回写工具 config autostart (自启意图唯一裁决权).
 + 26-10-17-1737 S3 POST /shutdown: 先回 200 再置位 stop_event (优雅退出信号), 鉴权同闸;
   未绑定 stop_event 仍 200; _run_loop 对置位即时响应 (不空等采样间隔).
++ T-01/T-02 (issue 26-10-30-0624): config 写临界区互斥 (PUT /config 与 /autostart 串行化,
+  /autostart 读-改-写不丢并发 PUT 的参数); PUT /config 拒绝非回环 http_host.
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -809,6 +811,71 @@ def test_autostart_failure_leaves_config_untouched(tmp_path) -> None:
     try:
         assert http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())[0] == 500
         assert holder.current.autostart is True  # 未被改成 false
+    finally:
+        server.stop()
+
+
+def test_config_writes_serialized_put_and_autostart(tmp_path, monkeypatch) -> None:
+    """T-01: PUT /config 与 POST /autostart 的落盘临界区互斥 (_config_write_lock).
+
+    复刻丢更新交叠: /autostart 持锁读旧快照后在 save_config 内阻塞, 期间并发 PUT /config
+    只能在锁外等待 —— autostart 的「旧快照 + autostart 位」整份回写先落, PUT 的全量
+    覆盖后落, 刚改的参数不被还原。无锁时该交叠会让 sample_interval 回落 5S。
+    """
+    import gtm.server as server_module
+
+    real_save = server_module.save_config
+    calls: list[Config] = []
+    entered = threading.Event()  # autostart 已持锁进入 save_config
+    allow = threading.Event()
+
+    def fake_save(path: str, config: Config) -> None:
+        calls.append(config)
+        if len(calls) == 1:
+            entered.set()
+            assert allow.wait(timeout=5)
+        real_save(path, config)
+
+    monkeypatch.setattr(server_module, "save_config", fake_save)
+    backend = FakeBackend(result=AutostartResult("registered", "已注册"))
+    factory, _ = _factory_recording(backend)
+    server, storage, _sampler, holder, token = make_server(tmp_path, installer_factory=factory)
+    try:
+        t_auto = threading.Thread(
+            target=lambda: http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())
+        )
+        t_auto.start()
+        assert entered.wait(timeout=5)
+        put_results: list[tuple[int, dict]] = []
+        t_put = threading.Thread(
+            target=lambda: put_results.
+            append(http(server, "PUT", "/config", body={"sample_interval": "9S"}, token=token.token()))
+        )
+        t_put.start()
+        allow.set()
+        t_auto.join(timeout=5)
+        t_put.join(timeout=5)
+        assert put_results and put_results[0][0] == 200
+        # 落盘顺序: autostart (旧快照 + autostart 位) 先, PUT 全量后 —— 参数不丢
+        assert len(calls) == 2
+        assert calls[0].sample_interval == 5.0 and calls[0].autostart is True
+        assert calls[1].sample_interval == 9.0
+        # 终态两侧一致: 热换的活配置 + 磁盘文件都保住 PUT 的参数
+        assert holder.current.sample_interval == 9.0 and holder.current.autostart is True
+        loaded, errors = load_config(os.path.join(storage.data_dir, "config.yml"))
+        assert errors == () and loaded.sample_interval == 9.0 and loaded.autostart is True
+    finally:
+        server.stop()
+
+
+def test_put_config_rejects_non_loopback_http_host(tmp_path) -> None:
+    """T-02 端点面: PUT /config 写非回环 http_host -> 400 (回环承诺由校验层兑现)."""
+    server, *_rest, holder, token = make_server(tmp_path)
+    try:
+        status, payload = http(server, "PUT", "/config", body={"http_host": "0.0.0.0"}, token=token.token())
+        assert status == 400
+        assert any("回环" in e for e in payload["errors"])
+        assert holder.current.http_host == "127.0.0.1"  # 旧配置不被半截覆盖
     finally:
         server.stop()
 

@@ -6,7 +6,8 @@
 flush 节流参数热生效; http host/port 改动需重启生效 (改绑监听地址无法热切换)。
 
 默认参数 (计划 §05): sample_interval=5S / flush=Δ>=1MiB 或 30S /
-notify_threshold=100MiB / http=127.0.0.1 (http_port=0 由内核分配随机端口, S13/D9) /
+notify_threshold=100MiB / http=127.0.0.1 (http_port=0 由内核分配随机端口, S13/D9;
+host 强制回环 —— 127.0.0.0/8 与 ::1, 校验层兑现「控制面不提供跨机访问面」承诺) /
 lease_ttl=180S / heartbeat=60S / notify_timeout=3S / adapters 排除 loopback 与 down /
 autostart=true (自启意图唯一裁决, S14/D13)。全部可经 WebUI 设置页调整。
 
@@ -26,6 +27,7 @@ bool (sample_interval: true 不是 5S); 布尔字段 (autostart) 反向只收 tr
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import math
 import re
@@ -67,7 +69,7 @@ class Config:
     flush_delta_bytes: int = DEFAULT_FLUSH_DELTA_MIB * MIB
     flush_interval_s: float = DEFAULT_FLUSH_INTERVAL_S
     notify_threshold_bytes: int = DEFAULT_NOTIFY_THRESHOLD_MIB * MIB
-    http_host: str = DEFAULT_HTTP_HOST
+    http_host: str = DEFAULT_HTTP_HOST  # 强制回环 (127.0.0.0/8 或 ::1, 校验层限定; 见 _check_http_host)
     http_port: int = DEFAULT_HTTP_PORT
     lease_ttl_s: float = DEFAULT_LEASE_TTL_S
     heartbeat_interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S
@@ -93,10 +95,11 @@ _DURATION_FIELDS = (
 )
 _SIZE_FIELDS = ("flush_delta_bytes", "notify_threshold_bytes")
 _INT_FIELDS = ("http_port", )
-_STR_FIELDS = ("http_host", )
+# http_host 独立于普通字符串字段: 校验不只查非空, 还强制回环 (见 _check_http_host)
+_HOST_FIELDS = ("http_host", )
 _LIST_FIELDS = ("adapter_include", "adapter_exclude")
 _BOOL_FIELDS = ("autostart", )
-_KNOWN_FIELDS = frozenset(_DURATION_FIELDS + _SIZE_FIELDS + _INT_FIELDS + _STR_FIELDS + _LIST_FIELDS + _BOOL_FIELDS)
+_KNOWN_FIELDS = frozenset(_DURATION_FIELDS + _SIZE_FIELDS + _INT_FIELDS + _HOST_FIELDS + _LIST_FIELDS + _BOOL_FIELDS)
 
 # 端口区间 (S13/D9): 0 合法 = 内核分配随机端口; 下限从 1 放开到 0
 _PORT_RANGE = (0, 65535)
@@ -167,6 +170,28 @@ def _check_str(name: str, value: Any, errors: list[str]) -> Optional[str]:
     return value.strip()
 
 
+def _check_http_host(name: str, value: Any, errors: list[str]) -> Optional[str]:
+    """http_host: 非空串 + **回环约束** (127.0.0.0/8 或 ::1, 及约定的 "localhost").
+
+    「控制面强制绑定回环地址」是 server/storage docstring 明示的安全不变式 (token
+    明文落盘, 不提供跨机访问面) —— 校验层必须兑现绑定承诺: 放开 0.0.0.0/局域网地址
+    即对 LAN 暴露单因素 Bearer 控制面。约束在 validate_payload 一处生效, 启动加载
+    (load_config) 与 PUT /config 两个入口共用, 配置者写了非回环地址就 fail-fast
+    聚合报错, 不静默回落默认值 (黄金法则 4)。
+    """
+    text = _check_str(name, value, errors)
+    if text is None:
+        return None
+    try:
+        loopback = ipaddress.ip_address(text).is_loopback
+    except ValueError:
+        loopback = text.lower() == "localhost"  # RFC 6761 保留名, 按定义只解析到回环
+    if not loopback:
+        errors.append(f"{name}: 控制面强制绑定回环地址 (127.0.0.0/8 或 ::1), 收到 {value!r}")
+        return None
+    return text
+
+
 def _check_str_list(name: str, value: Any, errors: list[str]) -> Optional[Tuple[str, ...]]:
     if not isinstance(value, list) or any(not isinstance(x, str) for x in value):
         errors.append(f"{name}: 期望字符串数组 (正则列表), 收到 {type(value).__name__} {value!r}")
@@ -198,7 +223,8 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
 
     校验面: 未知键 (黄金法则 4 口径 —— 拒绝拼写错误/过期键, 不静默忽略) /
     类型 (时间/大小为复合串或旧式裸数值, 端口整数, 数值字段显式拒 bool) / 范围 (正数、
-    端口 0-65535、有限数值、字节为整数)。逐键独立校验, 错误聚合一次报齐 (不止第一个错)。
+    端口 0-65535、有限数值、字节为整数、http_host 强制回环 —— 见 _check_http_host)。
+    逐键独立校验, 错误聚合一次报齐 (不止第一个错)。
     """
     if not isinstance(payload, Mapping):
         return None, (f"配置载荷必须是映射, 收到 {type(payload).__name__}", )
@@ -222,9 +248,9 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
             ok = _check_int(name, payload[name], errors)
             if ok is not None:
                 overrides[name] = ok
-    for name in _STR_FIELDS:
+    for name in _HOST_FIELDS:
         if name in payload:
-            ok = _check_str(name, payload[name], errors)
+            ok = _check_http_host(name, payload[name], errors)
             if ok is not None:
                 overrides[name] = ok
     for name in _LIST_FIELDS:

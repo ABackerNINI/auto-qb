@@ -1,8 +1,9 @@
 """控制面: 本地 HTTP 服务 (S3 实现).
 
-stdlib ThreadingHTTPServer, 强制绑定 127.0.0.1 (端口默认 0 = 内核分配随机端口, 可配;
-占用即 fail-fast)。鉴权 Bearer token: 首次启动原子生成 monitor.token (临时文件 +
-重命名), 比对用 compare_digest (照 auto-qb auth.py 模式)。
+stdlib ThreadingHTTPServer, 强制绑定回环地址 (config 校验层限定 127.0.0.0/8 与 ::1,
+默认 127.0.0.1; 端口默认 0 = 内核分配随机端口, 可配; 占用即 fail-fast)。鉴权 Bearer
+token: 首次启动原子生成 monitor.token (临时文件 + 重命名), 比对用 compare_digest
+(照 auto-qb auth.py 模式)。
 
 端点:
   GET  /status       采样状态、当日累计、末事件号、订阅者数、文件路径、配置回显
@@ -166,6 +167,11 @@ class ControlServer:
         self._stop_event = stop_event
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+        # config.yml 双 HTTP 线程写点的串行化锁 (与 storage._state_lock 同族的单写防护):
+        # PUT /config 全量覆盖与 POST /autostart 读-改-写 (基于旧 Config 快照整份回写) 并发
+        # 交叠会丢更新 —— 读到旧快照后他人写入的新参数被整份覆盖回去。save_config +
+        # holder.replace 的临界区一律持锁; 锁内无网络/无重活, 不长占。
+        self._config_write_lock = threading.Lock()
 
     @property
     def config_path(self) -> str:
@@ -339,8 +345,9 @@ class ControlServer:
         config, errors = validate_payload(body)
         if config is None:
             return self._send(handler, 400, {"ok": False, "errors": list(errors)})
-        save_config(self.config_path, config)
-        self.config_holder.replace(config)
+        with self._config_write_lock:
+            save_config(self.config_path, config)
+            self.config_holder.replace(config)
         logger.info("配置热重载: %s", self.config_path)
         self._send(handler, 200, {"ok": True, "config": config_to_payload(config)})
 
@@ -441,9 +448,12 @@ class ControlServer:
             return self._send(handler, 501, {"error": str(e)})
         except AutostartError as e:
             return self._send(handler, 500, {"error": str(e)})
-        new_config = replace(self.config_holder.current, autostart=(action == "install"))
-        save_config(self.config_path, new_config)
-        self.config_holder.replace(new_config)
+        # 读-改-写整段持 _config_write_lock: 快照读取若在锁外, 与并发 PUT /config
+        # 交叠时旧快照整份回写会丢更新 (issue 26-10-30-0624 T-01)
+        with self._config_write_lock:
+            new_config = replace(self.config_holder.current, autostart=(action == "install"))
+            save_config(self.config_path, new_config)
+            self.config_holder.replace(new_config)
         logger.info("自启 %s: %s (config autostart=%s)", action, result.message, new_config.autostart)
         self._send(handler, 200, {"ok": True, "action": result.action, "message": result.message})
 

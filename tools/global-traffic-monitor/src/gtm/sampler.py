@@ -7,7 +7,9 @@
 - 上次读数快照: 本次 < 上次 -> 判定计数器重置 (网卡重连/驱动重启), delta 记 0
   并 WARNING, 不产生负流量 (上下行独立判定, 单侧重置只影响该侧, 另一侧正常计).
 - 当日累计 (本地日界): 跨天 00:00 硬切 —— 累计清零, 新的一天从 0 起计
-  (SampleResult.day_rolled=True 上报, 旧行的最终落盘属 S2 storage).
+  (SampleResult.day_rolled=True 上报, 旧行的最终落盘属 S2 storage)。硬切带方向检查:
+  只有日界**前进**才切; 挂钟回跳跨日界记 WARNING 且保持累计不清零 (采样日钉在原
+  日界, 与 restore 的未来日期降级同一防线, 宁可少报不重置).
 
 崩溃恢复 (S2 run 启动链路接入, 两步有序):
 - restore(snapshot): 用 state.json 载荷 (本模块 snapshot() 产出, S2 负责读写)
@@ -328,11 +330,20 @@ class Sampler:
         total_down = sum(io.bytes_recv for io in selected.values())
         warnings: list[str] = []
 
-        day_rolled = self._day is not None and day != self._day
+        # 日界方向检查 (与 restore 的未来日期降级同一防线): 只有日界**前进**才硬切清零。
+        # 挂钟回跳跨日界 (NTP 大步校正/手动改钟) 不清零 —— 回跳侧的"新日"其实是历史日,
+        # 清零会让 dat 今日行被低值 upsert 覆盖且当日不可自愈 (宁可少报, 不重置);
+        # 采样日钉在原日界 (累计与 dat upsert 目标保持一致, 不写历史行), 日界追平后自愈。
+        day_rolled = self._day is not None and day > self._day
         if day_rolled:
             logger.info("跨天切换 | %s -> %s, 当日累计清零", self._day.isoformat(), day.isoformat())  # type: ignore[union-attr]
             self._day_up = 0
             self._day_down = 0
+        elif self._day is not None and day < self._day:
+            warnings.append(
+                f"挂钟回跳: {self._day.isoformat()} -> {day.isoformat()}, 当日累计不清零 (继续按 {self._day.isoformat()} 累计)"
+            )
+            day = self._day  # type: ignore[assignment]
         self._day = day
 
         if not selected:

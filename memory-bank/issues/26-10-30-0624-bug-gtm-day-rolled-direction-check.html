@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零">
 <meta name="issue-summary" content="挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退">
 <title>gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0624-bug-gtm-day-rolled-direction-check</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,6 +98,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 06:48 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（按建议加方向检查: <code>sample_once</code> day_rolled 判据改 <code>day &gt; self._day</code> 才硬切清零; <code>day &lt;</code> 记 WARNING「挂钟回跳」保持累计不清零, 且**采样日钉在原日界** —— 复验发现 <code>storage.record</code> 用 <code>result.day</code> 做 dat upsert 目标, 不钉会把累计写进历史行; 快照日界保持「晚于今天」形态, 与 restore 未来日期降级同一防线; 守阵 test_sampler 两用例(回跳保持 + 回跳后再前进自愈); 全量 test.full 全绿与覆盖率见 kb.baseline 最新切片）</li>
     </ul>
   </section>
 
