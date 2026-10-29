@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1335">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-29-2113-pop-item-a11y-contract.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current">
 <meta name="issue-summary" content="同一 .pop-item 交互原语分三套可访问性口径，其中 combobox 自绘高亮却无 listbox/option/aria-activedescendant，读屏听不出当前高亮项">
 <title>浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1335-bug-b-r23a09-pop-item-a11y-contract</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -240,11 +240,37 @@ prism/css/components.css:157  .pop-item:focus-visible { outline: 2px solid var(-
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:35 — 入池，状态 <strong>Open</strong>（计划外，未修；B 类复核结论：分歧仍在且已构成 a11y 契约缺失，故按 bug/standard 立档，非原提议的"先立契约不急合"）</li>
+      <li>2026-10-29 20:51 — 用户指派认领，状态 <strong>In Progress</strong>（本 clone auto-qb-clone1 修复；先复验后动码）</li>
+      <li>2026-10-29 21:15 — 修完并验证，状态 <strong>Done</strong>（实测修法/验证方式/测试数字见下方「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」（先看 <code>grep -rn "aria-activedescendant" src/auto_qb/webui/static</code> 是否仍为空）。</p>
+    <p>复验：2026-10-29 20:51 仍复现 —— 锚点逐项重跑命中（本 clone auto-qb-clone1，已同步至 <code>08549262</code>，与取证时 <code>1b7dd104</code> 相比该三面无变化）：<code>grep -rn "aria-activedescendant|listbox" src/auto_qb/webui/static</code> 仍零匹配；<code>tpl/combo-input.html</code> 的输入行与两处候选行 v-for 仍无任何 role/aria-*（行号有漂移：模板现为 28-68 行，按 grep 词定位）；列选择器项（topbar.html :76-81）仍只有 <code>@keyup.enter</code> 无 Space；UI 切换项（topbar.html :138-140）仍无 <code>aria-current</code>；筛选器项参照锚（Enter/Space 双键）原样健在。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与 §06 建议一致，三步全落地；两处微调已注明，建议原文保留未改）：
+    ①combobox（单组件 <code>&lt;aq-combo-input&gt;</code>，五调用点继承零改动）：输入框 <code>role="combobox"</code> +
+    <code>:aria-expanded</code> + <code>aria-autocomplete="list"</code> + <code>:aria-controls</code> + <code>:aria-activedescendant</code>，
+    面板 <code>role="listbox"</code> + <code>:id="inputId + '-pop'"</code>，候选行（两处 v-for 变体）<code>role="option"</code> +
+    <code>:id</code> + <code>:aria-selected</code>，预置行 <code>aria-hidden="true"</code>（不参与索引就不配 option）；
+    微调 1 —— <code>aria-controls</code> 仅开层时指面板（面板 v-if 关层即不在 DOM，常挂 = 悬空引用）；
+    微调 2 —— <code>aria-activedescendant</code> 带界（<code>hi &gt;= 0 &amp;&amp; hi &lt; options.length</code>），
+    过滤缩列表后 hi 越界时不悬空指向已不存在的 option；候选 id 生成式收敛为组件方法
+    <code>comboOptId(i)</code>（add_torrent.js 单点，输入侧与行侧同一来源）。②列选择器项补
+    <code>@keyup.space.prevent</code>（与筛选器项逐字同款 handler）。③UI 切换项补
+    <code>:aria-current="o.id === ui ? 'page' : null"</code>。④判据落档（§06 第 3 步）：
+    <code>combo-input.html</code> 头注续写三分类契约（菜单式/选择式/导航式 + 同族参照），新增浮层按此对号入座。</p>
+    <p><strong>验证方式</strong>：</p>
+    <ul>
+      <li>新守阵 <code>tests/test_webui_static_dom_panel.py::test_frontend_pop_item_a11y_contract</code>：
+      输入侧五属性逐个钉 + 面板 listbox/id 同源 + 两变体 option 语义各齐 + id 单点计数（js 定义恰 1 / 模板消费恰 3）
+      + 预置行 aria-hidden + 列选择器 Enter/Space 双键逐字同款 + 筛选器基准锚 + aria-current。</li>
+      <li>红验：修复前 <code>test.one -k pop_item_a11y</code> → <strong>1 failed</strong>（红恰在缺口首断言）。
+      修复后连同 <code>test_webui_static_dom_page.py</code> → <strong>90 passed</strong> 全绿。</li>
+      <li>真浏览器冒烟：<code>npm run test:e2e:fast</code> → <strong>228 passed</strong>（9.6m，双皮肤；
+      添加种子三候选/设定位置对话框/渲染健康等直接踩过改动的模板，Vue 挂载无运行时错误）。</li>
+      <li>全量：<code>commands run test.full</code> → <strong>4053 passed + 10 skipped，覆盖率门槛 99% 通过</strong>
+      —— 数字单点在基线切片 <code>memory-bank/testing/baselines/26-10-29-2113-pop-item-a11y-contract.md</code>
+      （10 skipped 为既有环境条件 skip，与上基线同量）。</li>
+    </ul>
   </section>
 
   <footer>

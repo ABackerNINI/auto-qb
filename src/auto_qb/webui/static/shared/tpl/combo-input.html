@@ -36,11 +36,25 @@
      window 收层名单 = 面板点一下就关。无焦点时最易踩: 面板是在**按住期间**才挂载的, DOM 在按下与抬起
      之间变化, 抬起落点被改写的机会就在那一段(见坑档 combobox-focusout-close 第七轮)。
      独立分片的缘由: 骨架+头注合计量把 xtpl.html(表壳/行渲染器语义源)顶过单分片 400 行
-     上限, 与 traffic-card.html 同范式抽走。 -->
+     上限, 与 traffic-card.html 同范式抽走。
+     a11y 契约(.pop-item 三分类判据, issue 26-10-29-1335/R23-A-09; 新增浮层按此对号入座, 防第四次漂移):
+       菜单式(.ctx-item 右键菜单族) —— 项可聚焦 + roving tabindex; 本族键盘化未做, 重开另立件(issue 06)。
+       选择式(本组件 combobox) —— 输入框 role=combobox + :aria-expanded + aria-autocomplete=list +
+         :aria-controls(仅开层时指面板: 面板 v-if 关层即不在 DOM, 常挂 = 悬空引用) +
+         :aria-activedescendant(带界, 只指真实存在的候选项, hi 未高亮/越界时移除该属性);
+         面板 role=listbox + :id=inputId+'-pop' 与 aria-controls 同源;
+         候选行 role=option + :id=comboOptId(i) + :aria-selected=i===hi —— 候选 id 生成式单点是
+         组件方法 comboOptId(add_torrent.js), 输入侧与行侧必须同一来源, 各写一份必漂移;
+         预置行不参与键盘/悬停索引, 不配 option 语义, aria-hidden 挂起(可点性读屏忽略, 点击仍在)。
+       导航式(a href, 顶栏 UI 切换) —— 保留链接语义, 当前项标 :aria-current="page", 不用 role/pressed。
+       同族参照: 顶栏列选择器/筛选器项是 role=button + tabindex + Enter/Space 双键(筛选器为基准锚)。 -->
 <script type="text/x-template" id="tpl-combo-input">
   <div class="add-input-row" :class="{ 'has-clear': !!clearKind }" @click.stop>
     <input :id="inputId" :ref="comboBindInput" :value="modelValue" class="add-dialog-input" type="text"
            :placeholder="placeholder" autocomplete="off" spellcheck="false"
+           role="combobox" :aria-expanded="menu" aria-autocomplete="list"
+           :aria-controls="menu ? inputId + '-pop' : null"
+           :aria-activedescendant="hi >= 0 && hi < options.length ? comboOptId(hi) : null"
            @focus="$emit('open')" @click.stop="$emit('open')"
            @input="comboOnInput" @focusout="$emit('blur')" @keydown="$emit('keydown', $event)">
     <!-- 清空(x): @mousedown.prevent 保焦点(不拦则按钮抢焦点 -> 输入框失焦走 40ms 合帧
@@ -60,14 +74,16 @@
            与候选行自带的 @mousedown.prevent 不冲突(同一事件先到目标行、再到根, 重复 prevent 无害) ——
            行上的那份保留: onPick 靠它保证"焦点不掉"这件事与根的挂载顺序无关。
            WARN 不影响滚轮/滚动条: 滚动是合成器与原生滚动条的行为, 不经 mousedown 默认动作。 -->
-      <div v-if="menu" class="pop-menu add-pop" @mousedown.prevent @click.stop :ref="comboBindMenu">
+      <div v-if="menu" class="pop-menu add-pop" role="listbox" :id="inputId + '-pop'" @mousedown.prevent @click.stop :ref="comboBindMenu">
         <div v-if="headText" class="pop-head"><span>{{ headText }}</span><span class="pop-count">{{ options.length }}</span></div>
-        <!-- meta 的"(无分类)"预置行: 无 class/data-hi/mousemove —— 不参与键盘与悬停索引, 与收敛前一致 -->
-        <div v-if="presetLabel" class="pop-item add-pop-item" @mousedown.prevent="onPick(presetValue)">
+        <!-- meta 的"(无分类)"预置行: 无 class/data-hi/mousemove —— 不参与键盘与悬停索引, 与收敛前一致;
+             aria-hidden(issue 26-10-29-1335): 不参与索引就不配 option 语义, 读屏忽略其可点性(点击仍在) -->
+        <div v-if="presetLabel" class="pop-item add-pop-item" aria-hidden="true" @mousedown.prevent="onPick(presetValue)">
           <span class="pop-value">{{ presetLabel }}</span>
         </div>
         <div v-if="innerList" class="add-pop-list" :ref="comboBindList">
-          <div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item"
+          <div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item" role="option"
+               :id="comboOptId(i)" :aria-selected="i === hi"
                :class="{ on: i === hi }" :data-hi="i === hi ? '1' : '0'"
                @mousedown.prevent="onPick(o)" @mousemove="comboOnHover(i, $event)">
             <svg v-if="icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="icon"></use></svg>
@@ -76,7 +92,8 @@
           <p v-if="!options.length" class="pop-empty">{{ emptyText }}</p>
         </div>
         <template v-else>
-          <div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item"
+          <div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item" role="option"
+               :id="comboOptId(i)" :aria-selected="i === hi"
                :class="{ on: i === hi }" :data-hi="i === hi ? '1' : '0'"
                @mousedown.prevent="onPick(o)" @mousemove="comboOnHover(i, $event)">
             <svg v-if="icon" class="ico ico-sm" viewBox="0 0 16 16"><use :href="icon"></use></svg>

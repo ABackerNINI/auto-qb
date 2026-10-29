@@ -58,6 +58,12 @@
 - test_drawer_tpl_no_table_variants_out_of_scope
 - test_drawer_tpl_render_error_fallback_default
 - test_frontend_move_dialog_combobox_wiring
+- test_frontend_pop_item_a11y_contract: .pop-item 三分类 a11y 契约守阵(issue 26-10-29-1335, R23-A-09) ——
+  选择式 combobox(单组件 <aq-combo-input>): 输入框 role=combobox + :aria-expanded + aria-autocomplete=list +
+  :aria-controls(仅开层时指面板, 关层面板不在 DOM 防悬空引用) + :aria-activedescendant(带界只指真实候选);
+  面板 role=listbox + :id=inputId+'-pop'; 两处 v-for 变体候选行 role=option/:id/:aria-selected 各齐两份;
+  候选 id 生成式单点 comboOptId(add_torrent.js 定义恰 1 次, 模板消费恰 3 次), 预置行 aria-hidden 不配 option;
+  同族顶栏: 列选择器项 Enter/Space 双键逐字同款 handler(筛选器项为基准锚一并钉), UI 切换项 :aria-current=page
 """
 import json
 import os
@@ -3647,6 +3653,84 @@ def test_frontend_combo_hiscroll_never_scrolls_ancestors():
          "不设界就会继续往上滚 .add-dialog-body / 页面, 等于把 scrollIntoView 的危害换个写法重犯")
     assert '[data-hi="1"]' in body, \
         "_hiScroll 找不到高亮项选择器 [data-hi=\"1\"](与模板 data-hi 绑定同源, 改了要两处同步)"
+
+
+def test_frontend_pop_item_a11y_contract():
+    """浮层可点击行 .pop-item 的 a11y 三分类契约守阵(issue 26-10-29-1335, R23-A-09)
+
+    同一可点击行原语被三种浮层复用, 修复前是三套口径且 combobox 一路整段缺失(读屏听不出
+    高亮项与面板开关、列选择器 Space 无反应、UI 切换听不出当前项)。守阵按修复定案的三分类逐项钉:
+      选择式(combobox, <aq-combo-input> 单组件): 输入框 role=combobox + :aria-expanded +
+        aria-autocomplete=list + :aria-controls(仅开层时指面板 —— 面板 v-if 关层即不在 DOM,
+        常挂 = 悬空引用) + :aria-activedescendant(带界, 只指真实存在的候选项);
+        面板 role=listbox + :id=inputId+'-pop' 与 aria-controls 同源; 候选行 role=option +
+        :id + :aria-selected。候选 id 生成式单点是组件方法 comboOptId —— 输入侧与行侧
+        各写一份必漂移, 守阵数出现次数(js 定义恰 1, 模板消费恰 3: 输入 1 + 两变体各 1);
+        预置行不参与键盘索引, 不配 option 语义, aria-hidden 挂起(可点性读屏忽略, 点击仍在)。
+      选择式同族(顶栏列选择器): role=button + Enter/Space 双键, handler 与 @click/@keyup.enter
+        逐字同款; 筛选器项是基准锚一并钉住(参照被改 = 全族口径漂移, 同步本守阵)。
+      导航式(顶栏 UI 切换 <a href>): 保留链接语义, 当前项 :aria-current="page"。
+    右键菜单族(.ctx-item)键盘化是另一件(issue 06 重开条件), 本守阵不管。
+    """
+    combo_tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "combo-input.html"), encoding="utf-8").read()
+    body = _tpl_body(combo_tpl, "tpl-combo-input")
+    at = open(os.path.join(STATIC_ROOT, "shared", "add_torrent.js"), encoding="utf-8").read()
+    topbar = open(os.path.join(STATIC_ROOT, "shared", "tpl", "topbar.html"), encoding="utf-8").read()
+
+    # 1. 选择式: 输入框侧 combobox 语义(逐属性钉, 漂移即红)
+    combo_controls = ''':aria-controls="menu ? inputId + '-pop' : null"'''
+    combo_descendant = ''':aria-activedescendant="hi >= 0 && hi < options.length ? comboOptId(hi) : null"'''
+    panel_binding = ''':id="inputId + '-pop'"'''
+    assert 'role="combobox"' in body, "combobox 输入框缺 role=combobox(读屏不报组合框语义, issue 26-10-29-1335)"
+    assert ':aria-expanded="menu"' in body, "combobox 输入框缺 :aria-expanded(面板开关状态读屏不播报)"
+    assert 'aria-autocomplete="list"' in body, "combobox 输入框缺 aria-autocomplete=list(组合框补全模式语义)"
+    assert combo_controls in body, "combobox 输入框缺 :aria-controls(必须仅开层时指面板 id, 关层置 null 防悬空引用)"
+    assert combo_descendant in body, (
+        "combobox 输入框缺 :aria-activedescendant(键盘高亮只写 hi 无 ARIA 出口 = "
+        "读屏听不出当前第几项; 必须带界只指真实存在的候选项)"
+    )
+
+    # 2. 选择式: 面板 listbox + id 同源; 两处 v-for 变体候选行 option 语义各齐
+    assert 'role="listbox"' in body and panel_binding in body, \
+        "候选面板缺 role=listbox + :id=inputId+'-pop'(与输入框 aria-controls 同源)"
+    assert body.count('role="option"') == 2, \
+        "候选行两处 v-for(innerList 与非 innerList 变体)必须都带 role=option(缺一处 = 该变体读屏不报选项)"
+    assert body.count(':id="comboOptId(i)"') == 2, \
+        "候选行 :id 必须两处变体都走 comboOptId(i) 单点(手写 id 串 = 与 aria-activedescendant 漂移)"
+    assert body.count(':aria-selected="i === hi"') == 2, \
+        "候选行 :aria-selected 必须两处变体都有(读屏靠它听高亮, 视觉 .on 不够)"
+
+    # 3. 候选 id 生成式单点: js 定义恰 1 次(钉定义形态, 注释提及不算), 模板消费恰 3 次(输入 1 + 两变体各 1)
+    assert at.count("comboOptId(i) {") == 1, \
+        "候选 id 生成式必须只在 add_torrent.js 定义一次(重复定义/多份生成式 = 输入侧与行侧漂移)"
+    assert '"-opt-"' in at, "comboOptId 生成式里找不到 '-opt-' 后缀(面板 id 家族约定, 改名要同步本守阵)"
+    assert body.count("comboOptId(") == 3, \
+        "模板 comboOptId( 消费必须恰 3 处: 输入 aria-activedescendant 1 + 两个 v-for 变体各 1"
+
+    # 4. 预置行: 不参与键盘索引就不配 option 语义, aria-hidden 让读屏忽略其可点性(点击仍在)
+    m = re.search(r'<div v-if="presetLabel"[^>]*>', body)
+    assert m, "combo-input.html 找不到预置行(改名/挪走了? 同步本守阵)"
+    assert 'aria-hidden="true"' in m.group(0) and "role=" not in m.group(0), \
+        "预置行必须 aria-hidden 且不配 role(option 语义要求参与键盘索引, 它不参与; 裸露可点性又会被读屏误报)"
+    assert body.count('aria-hidden="true"') == 1, \
+        "模板里 aria-hidden 只许挂在预置行上(候选行都必须能被读屏看到)"
+
+    # 5. 选择式同族: 列选择器项 Enter/Space 双键, handler 逐字同款(与 @click 同式)
+    m = re.search(r'<div v-for="c in def\.columns"[^>]*>', topbar)
+    assert m, "topbar.html 找不到列选择器项(改名/挪走了? 同步本守阵)"
+    col = m.group(0)
+    assert '@keyup.enter="!c.locked && toggleColumn(def.id, c.key)"' in col and \
+        '@keyup.space.prevent="!c.locked && toggleColumn(def.id, c.key)"' in col, \
+        "列选择器项必须 Enter/Space 双键且 handler 逐字同款(Space 无反应 = 与筛选器项口径分裂)"
+    # 6. 基准锚: 筛选器项的三键位(它是本族参照; 改它 = 全族口径漂移, 同步本守阵)
+    assert '@keyup.enter="toggleFilterValue(f.field, o.value)"' in topbar and \
+        '@keyup.space.prevent="toggleFilterValue(f.field, o.value)"' in topbar, \
+        "筛选器项基准锚(Enter/Space 双键)被改 —— 全族 Space 口径参照没了, 同步本守阵"
+    # 7. 导航式: UI 切换项当前值 aria-current=page(视觉 .on 不够, 读屏听不出当前项)
+    m = re.search(r'<a v-for="o in uiOptions"[^>]*>', topbar)
+    assert m, "topbar.html 找不到 UI 切换项(改名/挪走了? 同步本守阵)"
+    ui_current = ''':aria-current="o.id === ui ? 'page' : null"'''
+    assert ui_current in m.group(0), "UI 切换项缺 :aria-current=page(导航式当前项标注, 只靠 .on 上色读屏听不出)"
 
 
 def test_frontend_ctx_menu_refit_by_measured_size():

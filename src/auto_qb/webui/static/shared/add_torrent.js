@@ -827,6 +827,10 @@ window.AQ_COMBO_INPUT_COMPONENT = {
     comboOnHover(i, ev) {
       if (this.comboKey) this.$root.comboHoverIdx(this.comboKey, i, ev);
     },
+    /* 候选 id 生成式单点(issue 26-10-29-1335): 面板 role=listbox 的候选行 :id 与输入框
+     * :aria-activedescendant 必须同一来源 —— 各写一份必漂移, 守阵数 comboOptId 出现次数。
+     * 方法名走 combo 前缀(全局唯一约定); 带参判定走 method 不走 computed(带参 computed 是静默白屏坑)。 */
+    comboOptId(i) { return this.inputId + "-opt-" + i; },
     comboBindMenu(el) { if (this.menuRef) this.$root.$refs[this.menuRef] = el; },
     comboBindList(el) { if (this.listRef) this.$root.$refs[this.listRef] = el; },
     comboBindInput(el) { if (this.inputRef) this.$root.$refs[this.inputRef] = el; },

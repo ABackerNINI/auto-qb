@@ -77,7 +77,8 @@
                      :class="{ locked: c.locked, on: colVisible(def.id, c.key) }"
                      role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible(def.id, c.key)"
                      @click="!c.locked && toggleColumn(def.id, c.key)"
-                     @keyup.enter="!c.locked && toggleColumn(def.id, c.key)">
+                     @keyup.enter="!c.locked && toggleColumn(def.id, c.key)"
+                     @keyup.space.prevent="!c.locked && toggleColumn(def.id, c.key)">
                   <span class="pop-value">{{ c.label }}</span>
                   <span v-if="c.locked" class="col-lock">必显</span>
                   <svg v-else-if="colVisible(def.id, c.key)" class="ico ico-sm col-tick" viewBox="0 0 16 16"><use href="#i-check"></use></svg>
@@ -137,6 +138,7 @@
                    仅收起(有反馈), 点其它项整页跳转; 这与筛选器菜单(多选需常开)语义相反, 别照抄 -->
               <div v-if="uiMenuOpen" class="pop-menu flip-x">
                 <a v-for="o in uiOptions" :key="o.id" class="pop-item" :class="{ on: o.id === ui }" :href="o.href"
+                   :aria-current="o.id === ui ? 'page' : null"
                    @click="o.id === ui && $event.preventDefault()">
                   <svg class="ico ico-sm"><use :href="o.icon"></use></svg>
                   <span class="pop-value">{{ o.label }}</span>
