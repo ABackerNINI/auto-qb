@@ -34,6 +34,15 @@
 - test_print_details_missing_torrent: print_torrent_details 种子不存在 -> fail (P2-a)
 - test_checking_disabled_segment_skips: checking 未启用段 -> skip 有/无参考两指代 (P2-a)
 - test_checking_verified_reference_union_filters: verified_references 并集过滤(自身/快照外)且去重 (P2-a)
+- test_actions_ignore_error_passthrough: 六个动作类 __init__ 原样透传 ignore_error(丢实参/置 None 即失效)
+- test_actions_torrent_hash_scope: 各动作下发 qB 的 torrent_hashes 恒为本种子 hash(置 None = 全库副作用)
+- test_add_category_overwrite_switch: add_category 的 overwrite 开关读取(显式 true/false 与缺省)
+- test_add_remove_tags_string_spec_not_split: 字符串 spec 不得被 list() 拆成单字符
+- test_add_category_format_default: add_category 缺 format 键时兜底空串(不得产出 "None"/"XXXX")
+- test_actions_expand_tracker_vars: ${required_seeding_time} 经 tracker_conf 展开(remove_tags/add_category)
+- test_add_category_creates_named_category: 建分类时 create_category 收到真实分类名
+- test_move_to_confirm_gate_skips: 整组迁移 confirm 形态只回 skip 且规则侧 confirm=False
+- test_speed_limit_direction_uses_own_axis: 上传/下载限速各读自己的轴做手动限速闸门
 - test_actions_registry_complete
 """
 import os
@@ -775,3 +784,161 @@ def test_checking_verified_reference_union_filters():
         action = _check_action(basic_check="filelist")
         refs = action._find_reference(ctx, ["H1", "H2"])
         assert [t.hash for t in refs] == ["H2"], "自身排除 / 快照外排除 / 与候选去重"
+
+
+def test_actions_ignore_error_passthrough():
+    """六个动作类 __init__ 必须把 ignore_error 原样交给基类
+
+    ignore_next_action_error 的运行时效果全靠这个属性: 任一子类把 super().__init__ 的第二
+    实参丢成 None / 省略, 规则链里「可忽略的失败」就升级成中断(后续动作不再执行)。
+    """
+    cases = [
+        (AddTagsAction, "TAG"),
+        (RemoveTagsAction, "TAG"),
+        (AddCategoryAction, {
+            "format": "AUTO"
+        }),
+        (CheckAction, {
+            "basic_check": "filelist"
+        }),
+        (MoveToAction, {
+            "path": r"R:\New"
+        }),
+        (UploadSpeedLimitAction, "1000KiB/s"),
+        (DownloadSpeedLimitAction, "1000KiB/s"),
+    ]
+    for cls, spec in cases:
+        assert cls(spec, True).ignore_error is True, f"{cls.__name__} 丢了 ignore_error"
+        assert cls(spec).ignore_error is False, f"{cls.__name__} 默认应为 False"
+
+
+def test_actions_torrent_hash_scope():
+    """动作下发 qB 的 torrent_hashes 必须是本种子 hash
+
+    置 None / 省略 = qB 按「全库」处理, 一次规则命中会误伤所有种子。
+    FakeClient 的 calls 不记 hash, 故对 remove_tags / set_category / set_location 挂记录器;
+    限速与强制汇报用 FakeClient 已有的 hash 级台账。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        seen = []
+        for meth in ("torrents_remove_tags", "torrents_set_category", "torrents_set_location"):
+            orig = getattr(client, meth)
+
+            def spy(*a, _orig=orig, _meth=meth, **kw):
+                seen.append((_meth, kw.get("torrent_hashes")))
+                return _orig(*a, **kw)
+
+            setattr(client, meth, spy)
+
+        tor = FakeTorrent(tags="seed-3D", category="")
+        ctx = make_ctx(mgr, tor, client)
+        assert RemoveTagsAction(["regex:^seed-"]).execute(ctx).is_ok
+        assert AddCategoryAction({"format": "AUTO"}).execute(ctx).is_ok
+        assert RemoveCategoryAction("").execute(ctx).is_ok
+        assert MoveToAction({"path": r"R:\New"}).execute(ctx).is_ok
+        assert ReannounceAction("").execute(ctx).is_ok
+        assert UploadSpeedLimitAction("1000KiB/s").execute(ctx).is_ok
+        assert DownloadSpeedLimitAction("2MiB/s").execute(ctx).is_ok
+
+        assert len(seen) >= 4, f"作用域记录缺失: {seen}"
+        assert [h for _, h in seen] == [ctx.hash] * len(seen), f"下发作用域必须只含本 hash: {seen}"
+        assert client.reannounce_hashes_calls == [ctx.hash], "reannounce 作用域必须只含本 hash"
+        assert ("set_upload_limit", ctx.hash) in client.limit_location_hashes_calls
+        assert ("set_download_limit", ctx.hash) in client.limit_location_hashes_calls
+
+
+def test_add_category_overwrite_switch():
+    """add_category 的 overwrite 开关: 显式 true 必须为 True, 缺省/显式 false 为 False
+
+    键名错位或置 None 会让 overwrite 恒 False —— 用户配了覆盖却永远不覆盖。
+    """
+    assert AddCategoryAction({"format": "X", "overwrite": True}).overwrite is True
+    assert AddCategoryAction({"format": "X", "overwrite": "true"}).overwrite is True
+    assert AddCategoryAction({"format": "X", "overwrite": False}).overwrite is False
+    assert AddCategoryAction({"format": "X"}).overwrite is False
+
+
+def test_add_remove_tags_string_spec_not_split():
+    """字符串 spec 必须当成单个标签/模式, 不得被 list() 拆成单字符"""
+    assert AddTagsAction("TAG").tags == ["TAG"]
+    assert RemoveTagsAction("NOPE").patterns == ["NOPE"]
+    assert AddTagsAction(["A", "B"]).tags == ["A", "B"]
+
+
+def test_add_category_format_default():
+    """add_category 缺 format 键时兜底空串(不得产出 "None"/"XXXX" 脏分类名)"""
+    assert AddCategoryAction({}).format == ""
+    assert AddCategoryAction({"format": "AUTO-${required_seeding_time}"}).format == "AUTO-${required_seeding_time}"
+
+
+def test_actions_expand_tracker_vars():
+    """${required_seeding_time} 必须经 tracker_conf 展开(传 None 则占位符永不解析)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags="seed-3D"), client)  # 默认 HHan 站点 hr.required_seeding_time_raw = "3D"
+        assert RemoveTagsAction(["seed-${required_seeding_time}"]).execute(ctx).is_ok
+        assert ("remove_tags", ["seed-3D"]) in client.calls, f"pattern 未展开: {client.calls}"
+        assert AddCategoryAction({"format": "CAT-${required_seeding_time}"}).execute(ctx).is_ok
+        assert ("set_category", "CAT-3D") in client.calls, f"format 未展开: {client.calls}"
+
+
+def test_add_category_creates_named_category():
+    """建分类时 create_category 必须收到真实分类名(None 会在 qB 侧留下名为 None 的脏分类)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(category=""), client)
+        assert AddCategoryAction({"format": "AUTO-A"}).execute(ctx).is_ok
+        assert ("create_category", "AUTO-A") in client.calls, f"分类名丢失: {client.calls}"
+
+
+def test_move_to_confirm_gate_skips():
+    """整组迁移的 confirm 形态: 规则侧无交互, 只回 skip 且不得请求确认
+
+    confirm=True 会让「目录别名」这类需用户点头的形态在无人值守下直接执行整组迁移。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(), client)
+        ctx.config.relocate.enabled = True
+        calls = []
+
+        class _Relocate:
+            """迁移闸门替身: 别名形态需要显式确认"""
+            def relocate_execute(self, hashes, path, confirm=False):
+                calls.append((list(hashes), path, confirm))
+                return [{"cls": "confirm", "form": "alias"}]
+
+        mgr.ctx.relocate = _Relocate()
+        r = MoveToAction({"path": r"R:\New"}).execute(ctx)
+        assert r.is_skipped, f"需确认的形态只能 skip: {r}"
+        assert calls == [([ctx.hash], r"R:\New", False)], f"规则侧不得请求确认: {calls}"
+        assert all(c[0] != "set_location" for c in client.calls), "闸门形态不得再直下 set_location"
+
+
+def test_speed_limit_direction_uses_own_axis():
+    """上传/下载限速各读自己的轴(up_limit / dl_limit)做手动限速闸门
+
+    方向判定被改坏时上传动作会去读 dl_limit: 手动限速保护失效(覆盖用户设置),
+    或本轴空闲却被另一轴的手动值挡住。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        manual = 2001 * 1024  # 奇数 KiB/s = 用户手动设置(utils.is_manual_speed_limit)
+        tor = FakeTorrent(up_limit=manual, dl_limit=0)
+        ctx = make_ctx(mgr, tor, client)
+        assert UploadSpeedLimitAction("1000KiB/s").execute(ctx).is_skipped, "上传轴已手动设置 -> 不覆盖"
+        tor.up_limit, tor.dl_limit = 0, manual
+        assert DownloadSpeedLimitAction("1000KiB/s").execute(ctx).is_skipped, "下载轴已手动设置 -> 不覆盖"
+        # 对照: 另一轴的手动值不得影响本轴下发
+        tor.up_limit, tor.dl_limit = 0, manual
+        assert UploadSpeedLimitAction("1000KiB/s").execute(ctx).is_ok, "上传轴空闲 -> 应下发"
+        assert ("set_upload_limit", 1000 * 1024) in client.calls
+        tor.up_limit, tor.dl_limit = manual, 0
+        assert DownloadSpeedLimitAction("1000KiB/s").execute(ctx).is_ok, "下载轴空闲 -> 应下发"
+        assert ("set_download_limit", 1000 * 1024) in client.calls

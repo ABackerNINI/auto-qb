@@ -42,6 +42,13 @@
 - test_rule_condition_error_throttled_to_debug: 条件出错同因节流降 DEBUG (P2-a)
 - test_rule_hourly_record_stale_date_allows_rerun: hourly 记录跨日允许再执行 (P2-a)
 - test_rule_process_unknown_status_continues_without_marking
+- test_rule_hourly_dedup_scope: hourly 仅「当日且同小时」去重, 跨小时/跨日均放行
+- test_rule_daily_dedup_scope: daily 当日记录去重, 昨日记录放行(and→or 会让昨日也去重)
+- test_rule_ignore_next_only_once: ignore_next 状态机: 初值 False / 只忽略紧随的一个失败 / 消费后复位
+- test_rule_enabled_key_read: enabled 键名读取(显式 false 必须停用, 缺省 true)
+- test_rule_once_dedup_with_record: once 有执行记录必须去重(无记录放行)
+- test_rule_cooldown_sub_second_boundary: 0 < cooldown <= 1 秒的冷却同样生效
+- test_rule_never_not_deduped: never 有记录仍放行(对照 once 必须去重, 防 !=never 反转)
 """
 import os
 import tempfile
@@ -806,3 +813,153 @@ def test_rule_process_unknown_status_continues_without_marking():
         rule.actions = [_Weird()]
         handled, _stop = rule.process(ctx)
         assert handled is False, "未知状态不记 executed(既非成功也非失败)"
+
+
+def test_rule_hourly_dedup_scope():
+    """execute_once=hourly: 只有「当日且同小时」的记录去重, 跨小时/跨日均放行
+
+    判据被改坏(字面量/日期键/小时键/比较方向/返回)会让 hourly 规则整段失效(每小时重复执行)
+    或整段锁死(跨小时也不执行)。
+    """
+    from datetime import datetime
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        rule = Rule("g.hourly", {"actions": [{"add_tags": ["X"]}], "execute_once": "hourly"}, mgr)
+        mgr.ctx.state.record_execution("g.hourly", ctx.hash)
+        rec = mgr.ctx.state.get_exec_record("g.hourly", ctx.hash)
+        now = datetime.now()
+        rec["date"], rec["hour"] = now.date().isoformat(), now.hour
+        assert rule._dedup_allowed(ctx) is False, "同一天同一小时 -> 去重"
+        rec["hour"] = (now.hour + 1) % 24
+        assert rule._dedup_allowed(ctx) is True, "跨小时 -> 放行"
+        rec["hour"], rec["date"] = now.hour, "2000-01-01"
+        assert rule._dedup_allowed(ctx) is True, "跨日 -> 放行"
+
+
+def test_rule_daily_dedup_scope():
+    """execute_once=daily: 当日记录去重, 昨日记录放行
+
+    `and`→`or` 的改坏会让「昨日记录」也被当成当日 -> daily 规则永久静默。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        rule = Rule("g.daily", {"actions": [{"add_tags": ["X"]}], "execute_once": "daily"}, mgr)
+        mgr.ctx.state.record_execution("g.daily", ctx.hash)
+        rec = mgr.ctx.state.get_exec_record("g.daily", ctx.hash)
+        assert rule._dedup_allowed(ctx) is False, "当日已执行 -> 去重"
+        rec["date"] = "2000-01-01"
+        assert rule._dedup_allowed(ctx) is True, "昨日记录 -> 放行"
+
+
+def test_rule_ignore_next_only_once():
+    """ignore_next_action_error 状态机: 初值 False / 只作用于紧随的一个动作 / 消费后复位
+
+    链 A 钉初值(首个失败必须中断), 链 B 钉「只忽略一次」(第二个失败仍中断) ——
+    初值置 True 或消费后不复位, 都会让规则在多次失败后继续执行真实种子动作。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+
+        rule_a = Rule("g.a", {"actions": [{"move_to": {"path": ""}}, {"add_tags": ["A-AFTER"]}]}, mgr)
+        handled_a, _ = rule_a.process(ctx)
+        assert handled_a, "失败动作同样算 handled"
+        assert ("add_tags", ["A-AFTER"]) not in client.calls, "无标记的失败必须中断后续动作"
+
+        rule_b = Rule(
+            "g.b",
+            {
+                "actions":
+                    [
+                        {
+                            "ignore_next_action_error": "true"
+                        },
+                        {
+                            "move_to": {
+                                "path": ""
+                            }
+                        },  # 被忽略
+                        {
+                            "add_tags": ["B-AFTER"]
+                        },
+                        {
+                            "move_to": {
+                                "path": ""
+                            }
+                        },  # 标记已消费 -> 中断
+                        {
+                            "add_tags": ["B-NEVER"]
+                        },
+                    ]
+            },
+            mgr,
+        )
+        handled_b, _ = rule_b.process(ctx)
+        assert handled_b
+        assert ("add_tags", ["B-AFTER"]) in client.calls, "标记后的失败应被忽略, 后继动作照常执行"
+        assert ("add_tags", ["B-NEVER"]) not in client.calls, "标记只生效一次, 其后的失败仍中断"
+
+
+def test_rule_enabled_key_read():
+    """enabled 键名: 显式 false 必须停用, 缺省为 true(键名漂移会让停用规则照跑)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        assert Rule("g.off", {"enabled": False, "actions": []}, mgr).enabled is False
+        assert Rule("g.on", {"enabled": True, "actions": []}, mgr).enabled is True
+        assert Rule("g.default", {"actions": []}, mgr).enabled is True
+
+
+def test_rule_once_dedup_with_record():
+    """execute_once=once: 无记录放行, 有记录必须去重(不得重跑)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        rule = Rule("g.once", {"actions": [{"add_tags": ["X"]}], "execute_once": "once"}, mgr)
+        assert rule._dedup_allowed(ctx) is True, "无执行记录 -> 放行"
+        mgr.ctx.state.record_execution("g.once", ctx.hash)
+        assert rule._dedup_allowed(ctx) is False, "有执行记录 -> 去重"
+
+
+def test_rule_cooldown_sub_second_boundary():
+    """cooldown 边界: 0 < cooldown <= 1 秒的冷却同样生效
+
+    `cooldown <= 0` 被改成 `<= 1`(或 `> 0` 改成 `> 1`)会让 0.5S 这类短冷却整段跳过,
+    规则每轮重复执行。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        rule = Rule("g.cd", {"actions": [{"add_tags": ["X"]}], "cooldown": "0.5S"}, mgr)
+        assert rule.cooldown == 0.5
+        h1, _ = rule.process(ctx)
+        assert h1
+        assert client.calls.count(("add_tags", ["X"])) == 1
+        assert rule._dedup_allowed(ctx) is False, "0.5S 冷却期内必须去重"
+        h2, _ = rule.process(ctx)
+        assert not h2, "0.5S 冷却期内不得重复执行"
+        assert client.calls.count(("add_tags", ["X"])) == 1
+
+
+def test_rule_never_not_deduped():
+    """execute_once=never: 有记录仍放行; 对照 once 有记录必须去重
+
+    `== "never"` 反转成 `!= "never"` 时, 有记录的非 never 规则会在入口被整段放行(去重失效)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        never = Rule("g.never", {"actions": [{"add_tags": ["X"]}], "execute_once": "never"}, mgr)
+        mgr.ctx.state.record_execution("g.never", ctx.hash)
+        assert never._dedup_allowed(ctx) is True, "never 有记录仍放行"
+        once = Rule("g.once", {"actions": [{"add_tags": ["Y"]}], "execute_once": "once"}, mgr)
+        mgr.ctx.state.record_execution("g.once", ctx.hash)
+        assert once._dedup_allowed(ctx) is False, "对照组: once 有记录必须去重"

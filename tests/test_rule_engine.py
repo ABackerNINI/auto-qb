@@ -39,6 +39,7 @@
 - test_load_state_bak_recovery_passes_migration_chain: .bak 回退路径同样过迁移链, 写回文件带新版本章
 - test_materialize_state_migration: 物化方法: 无迁移/描述为空不落盘, dry-run 仅内存, 正常路径落盘新版本
 - test_state_migration_materialize_is_wired_in_run: 接线守阵: 物化必须挂在 run() 的 ctx.state.load() 之后
+- test_rule_process_resumes_from_breakpoint: 断点续跑起点取 task.resume_index(恒 0 会重放已成功动作)
 """
 import json
 import os
@@ -610,3 +611,26 @@ def test_rules_for_torrent_ignores_non_ref():
         tor.tracker_conf = mgr.config.trackers["HHan"]
         bound = mgr.host.get("rules")._rules_for_torrent(tor)
         assert [r.name for r in bound] == ["example_rules.add_site_tag"]
+
+
+def test_rule_process_resumes_from_breakpoint():
+    """断点续跑: 起点必须取 task.resume_index, 断点前已成功的动作不得重复执行
+
+    起点被改成恒 0 时, 校验 pending 恢复的续跑轮会把前面的真实种子动作(改分类/停种/移动)
+    再执行一遍。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        tor = FakeTorrent(tags="")
+        tor.tracker_conf = mgr.config.trackers["HHan"]
+        client.torrents["HASH123"] = tor
+        seed_store(mgr)
+        rule = Rule("t", {"actions": [{"add_tags": ["FIRST"]}, {"add_tags": ["SECOND"]}]}, mgr)
+        task = Task("rule", "t", hash="HASH123", store=mgr.store, interval=0)
+        task.resume_index = 1  # 第 0 个动作已成功(pending 恢复, 断点=下一个动作索引)
+        assert mgr.host.get("rules")._handle_rule(rule, task, dry_run=False) is True
+        assert ("add_tags", ["SECOND"]) in client.calls, "断点后的动作应继续执行"
+        assert ("add_tags", ["FIRST"]) not in client.calls, "断点前已成功的动作不得重复执行"
+        assert task.resume_index is None, "续跑完成后断点应被消费"
