@@ -19,7 +19,10 @@
 - [x] 字幕组括号前缀: [Group] Title - 05 / [Group][Title][05]; 【剧名】保留
 - [x] 未识别: 电影(无标记)/纯噪音 → kind=unknown 或 key 为空
 - [x] parse_files: 目录段季号(Season 01/S01/第1季); 集数来自视频文件名
-- [x] refine_with_files: 季包展开集数范围; unknown 抢救为 episode; 有明确集数不改
+- [x] parse_files: 「季标记 + 发布后缀」目录(Season 2 (1080p)/S02 Complete/第2季(1080p) 等);
+      多季合包与白名单外尾词仍判未知 (issue 26-10-29-1329-bug-b-r08e03-dir-season-anchor)
+- [x] refine_with_files: 季包展开集数范围; unknown 抢救为 episode; 有明确集数不改;
+      名称无季标记时 season_inferred 留痕
 - [x] 中文数字百位进位与非法字符兜底(_cjk_int) (P2-a)
 - [x] 季标记越界季号跳过 + 多模式最早位置保留 (P2-a)
 - [x] 非 bare 集数起点 0 跳过(E0) (P2-a)
@@ -56,14 +59,19 @@
 - test_noise_tokens_stripped
 - test_normalization_equivalence
 - test_normalize_key_bigram_noise
+- test_parse_files_multi_season_dir_unknown
 - test_parse_files_no_season
 - test_parse_files_s01_dir_and_zh_marker
 - test_parse_files_season_and_episodes
+- test_parse_files_season_dir_non_suffix_tail_unknown
+- test_parse_files_season_dir_with_suffix
 - test_parse_files_season_scan_skips_non_matching_parts
 - test_range_end_from_resolution_dropped
 - test_refine_explicit_episode_untouched
+- test_refine_name_season_not_inferred
 - test_refine_no_usable_files_unchanged
 - test_refine_season_from_files
+- test_refine_season_from_suffixed_dir
 - test_refine_season_pack
 - test_refine_unknown_rescued
 - test_season
@@ -339,6 +347,44 @@ class TestFiles:
         assert season is None
         assert eps == [5]
 
+    @pytest.mark.parametrize(
+        "dir_name",
+        [
+            "Season 2 (1080p)",  # 季 + 画质后缀: 旧整段 $ 锚定拒绝(issue 26-10-29-1329)
+            "S02 Complete",
+            "第2季(1080p)",
+            "Season 02 [1080p]",
+            "2nd Season 1080p",
+            "Show S02 Complete",  # 剧名 + 季标记 + 后缀: 放宽后的有意行为(issue §06 ②显式写明)
+            "Show.S02.Complete",  # 点分隔同上
+        ],
+    )
+    def test_parse_files_season_dir_with_suffix(self, dir_name):
+        assert parse_files([f"Show/{dir_name}/E05.mkv"]) == (2, [5])
+
+    def test_parse_files_multi_season_dir_unknown(self):
+        # 多季合包无法归单季: 宁可未知也不错归 S1(放宽锚定后不得退化)
+        assert parse_files(["Show/S01-S04/E05.mkv"]) == (None, [5])
+        assert parse_files(["Show/第1-4季/E05.mkv"]) == (None, [5])
+
+    def test_parse_files_season_dir_non_suffix_tail_unknown(self):
+        # 白名单外的尾随词不算发布后缀: 不放宽成标题侧的模糊搜(防剧名尾词误判)
+        assert parse_files(["Show/Season 2 of Show/E05.mkv"]) == (None, [5])
+
+    def test_refine_season_from_suffixed_dir(self):
+        # issue 26-10-29-1329: 名称无季标记 + 带后缀季目录 → season 2(曾静默落 S1);
+        # 其余字段逐字不变, 且 season_inferred 留痕
+        parsed = p("Show.1080p.Complete")
+        r = refine_with_files(parsed, ["Show/Season 2 (1080p)/E05.mkv"])
+        assert r.kind == KIND_EPISODE and r.season == 2
+        assert (r.key, r.title, r.ep_start, r.ep_end) == (parsed.key, parsed.title, 5, None)
+        assert r.season_inferred is True
+
+    def test_refine_name_season_not_inferred(self):
+        # 名称侧已有季标记: 季号沿用, season_inferred 不置位
+        r = refine_with_files(p("Show.Name.S01.Complete.1080p"), ["Season 1/Show.S01E01.mkv"])
+        assert r.season == 1 and r.season_inferred is False
+
     def test_refine_season_pack(self):
         parsed = p("Show.Name.S01.Complete.1080p")
         files = ["Season 1/Show.S01E01.mkv", "Season 1/Show.S01E02.mkv", "Season 1/Show.S01E03.mkv"]
@@ -353,6 +399,7 @@ class TestFiles:
         r = refine_with_files(parsed, files)
         assert r.kind == KIND_EPISODE
         assert (r.season, r.ep_start, r.ep_end) == (1, 5, 6)
+        assert r.season_inferred is True  # 季 1 是「带集数无季标记」既有口径的兑底, 留痕
 
     def test_refine_explicit_episode_untouched(self):
         parsed = p("Show.Name.S01E05.1080p")

@@ -835,8 +835,8 @@ class WebviewMixin:
         pending=True 表示该 hash 可被文件兑底但搜索索引未覆盖(调用方登记待归位,
         _build_shows_view 接线 shows_pending); files=None 即索引未覆盖该 hash,
         索引已覆盖但文件列表为空同样按未覆盖处理(与拆分前逐分支一致)。
-        注意 refine_with_files 不改剧键(S8 已核: replace 字段集仅 kind/season/ep),
-        故剧键归属在兑底前后稳定, 分类结果可放心喂给 _build_show_row 聚合。
+        注意 refine_with_files 不改剧键(S8 已核: replace 字段集仅 kind/season/ep,
+        后增 season_inferred 留痕位), 故剧键归属在兑底前后稳定, 分类结果可放心喂给 _build_show_row 聚合。
         """
         from ..core import tvshows
 

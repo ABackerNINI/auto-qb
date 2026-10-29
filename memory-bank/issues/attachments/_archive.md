@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (66)
+## Open (65)
 
 - [refactor] [tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)](../26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html) — 同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵
 - [refactor] [relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口](../26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html) — 4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致
@@ -18,7 +18,6 @@
 - [bug] [抽屉 03 版式 HR 行整段缺 hr_state：同一颗种子比 01/02 少一行「能否删」结论](../26-10-29-1341-bug-b-r21b04-hr-strip-variants.html) — HR 摘要三份各自演化，03 的 hrLine 不读 hr_state/hr_safety_text，触发态只给徽章不给删除安全档位结论与依据
 - [refactor] [文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档](../26-10-29-1340-refactor-b-r21a06-file-prio-text-table.html) — 优先级码→中文同一张表 5 份(4 份含 4 档)，setFilePriority 缺 4 档且回退 String(p)，4 档一进回执就显示「4」
 - [refactor] [config_rules.js spec 编辑八助手已无调用者，其中 ListItemRemove 空态写 [] 与全项目删键口径相反](../26-10-29-1334-refactor-b-r20c07-spec-list-empty-write.html) — spec 列表增删删键口径的正确实现已由 hub-field→cfgItemRemove 接管，残留的 cfgSpecListItemRemove 等 8 个死人方法里空态仍写 []，是抄错边的入口
-- [bug] [目录季标记锚定过窄: 「Season 2 (1080p)」类目录漏识别, 兜底静默归第 1 季](../26-10-29-1329-bug-b-r08e03-dir-season-anchor.html) — parse_files 只认整段三形态, 带后缀目录的季号丢失后 refine_with_files 默认归 1; 同一目录串标题模式解出 2
 - [refactor] [集数正则族两份(episodes 4 项 vs tvshows 7 项): 双向非对称, 只补守阵不合并](../26-10-29-1328-refactor-b-r08e02-episode-pattern-family.html) — 两族同源已演化且互有对方不认的形态; 合并任一侧都改行为, 缺守阵导致静默漂移无信号
 - [refactor] [各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案](../26-10-29-1327-refactor-b-r13s01-lane-summary-twin.html) — 同一各档摘要两处实现: 全深度/(全) 文案分叉, tag 回落与计数段格式各写一遍
 - [refactor] [webui 三桶同键抵消(R5)在 fold 与 publish 各写一份](../26-10-29-1321-refactor-b-r16b02-delta-cancel-helper.html) — 同键 upsert/removed 两路抵消这段规则在 _fold_delta_pending_locked 与 _publish_locked 分叉判定前逐字重写(后者自述「重跑一遍」), 抽一个 helper 收单点
@@ -78,9 +77,10 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (250)
+## Done (251)
 
 - [bug] [浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current](../26-10-29-1335-bug-b-r23a09-pop-item-a11y-contract.html) — 同一 .pop-item 交互原语分三套可访问性口径，其中 combobox 自绘高亮却无 listbox/option/aria-activedescendant，读屏听不出当前高亮项
+- [bug] [目录季标记锚定过窄: 「Season 2 (1080p)」类目录漏识别, 兜底静默归第 1 季](../26-10-29-1329-bug-b-r08e03-dir-season-anchor.html) — parse_files 只认整段三形态, 带后缀目录的季号丢失后 refine_with_files 默认归 1; 同一目录串标题模式解出 2
 - [bug] [webui 搜索结果行自建一份行构造（seeding_time 未量化 + 明细字段缺失）](../26-10-29-1320-bug-b-r16b01-search-row-view-converge.html) — search_torrents 的 _view 与 _member_view 各建一份行(覆盖 R16-B01/R19-B01): seeding_time 未走 view_field_value, 且缺 eta/num_*/downloaded 等字段, 搜索虚拟行展开明细列空白
 - [bug] [parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback](../26-10-29-1252-bug-b-r18b01-parse-unit-ladder.html) — parse_speed 正则允许 'iB/S' 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛
 - [bug] [流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树](../26-10-22-0435-bug-webui-aq-fold-ce-inject-break.html) — aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效

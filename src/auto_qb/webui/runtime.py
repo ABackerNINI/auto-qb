@@ -247,7 +247,8 @@ class WebUIRuntime:
         # ---- 剧键等价映射(plan 26-10-07-0414 S8): hash -> 剧键, 「上一版键」记忆 ----
         # 正确性边界 1(成员迁移: name 变化移动剧键)的实现前提, S9 按脏剧键局部重算的数据源。
         # 剧键口径 = tvshows.parse_release(rec.name).key(views._build_shows_view 现算点同款;
-        # refine_with_files 的 replace 只动 kind/season/ep 不改 key, 文件兑底不影响剧键)。
+        # refine_with_files 的 replace 只动 kind/season/ep(+ season_inferred 留痕位)不改 key,
+        # 文件兑底不影响剧键)。
         # 剧键是 parse_release 派生的表现层概念, store 只懂 hash/组 -> 收本对象而非 store;
         # 读写模式与时间线同构: 写只在 view_lock 临界区(排空段更新/清理 + 全量路径回填,
         # 主循环线程; Web 线程 ensure_state 触发的发布也在同一把锁内), R12 单一写线程不变。
@@ -768,8 +769,8 @@ class WebUIRuntime:
 
         剧键口径 = tvshows.parse_release(rec.name).key, 出处 views._build_shows_view 现算
         点(views.py, 「parsed = tvshows.parse_release(rec.name)」行)—— 口径以现码为准;
-        refine_with_files 不改 key(tvshows.py replace 字段集仅 kind/season/ep), 故文件
-        兑底不影响剧键, 无需复刻索引兑底。局部导入同 views 同款(核心域入口按需取)。
+        refine_with_files 不改 key(tvshows.py replace 字段集仅 kind/season/ep,
+        后增 season_inferred 留痕位), 故文件兑底不影响剧键, 无需复刻索引兑底。局部导入同 views 同款(核心域入口按需取)。
 
         解析不出剧键的 hash 不登记; 已登记 hash 改名进未识别区 -> 清条目, 候选只记旧键
         一侧(新剧行不存在)。暂存只供 S9 推导脏剧键: 候选允许「过宽」—— 名称可解析但暂居

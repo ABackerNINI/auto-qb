@@ -57,6 +57,7 @@ class ParsedRelease:
     ep_start: Optional[int] = None  # 集数起点(含)
     ep_end: Optional[int] = None  # 集数终点(含); None = 单集
     date: Optional[str] = None  # ISO 日期(仅 KIND_DATE)
+    season_inferred: bool = False  # 季号非来自名称标记(文件目录推断或无信息兜底 1), refine_with_files 落子
 
     @property
     def episode_key(self) -> tuple:
@@ -103,8 +104,8 @@ _NUM_GROUP = r"(\d{1,4}|[零一二两三四五六七八九十百]{1,6})"
 
 # 季标记(独立出现, 不带集数)。S01 需负向预查排除 S01E05/S01x05/S1 E05 —— 带集数的
 # S 由集数模式匹配并回填季号, 若此处也命中会重复计位(标题被切短)。
-# !目录名侧还有一个精简季正则组(parse_files 内联, 锚定 $ 的三形态)——
-# 同一「目录季标记」口径的两种形态(标题模糊搜 vs 目录整段锚定), 互指见该处注释。
+# !目录名侧(parse_files 的 _dir_season)复用本组词形, 但锚定更强: 标记之后到段尾只允许
+# 发布后缀(_DIR_SEASON_SUFFIX_RE), 互指见该处注释(issue 26-10-29-1329-bug-b-r08e03)。
 _SEASON_PATTERNS = [
     (re.compile(r"(?<![A-Za-z0-9])[Ss](\d{1,2})(?![A-Za-z0-9]|\s*[EeXx]\s*\d)"), lambda m: _cjk_int(m.group(1))),
     (re.compile(r"(?<![A-Za-z0-9])Season[ ._-]?(\d{1,2})(?![0-9])", re.IGNORECASE), lambda m: _cjk_int(m.group(1))),
@@ -182,6 +183,23 @@ _MULTI_SEASON_RE = re.compile(
     r"(?<![A-Za-z0-9])[Ss]\d{1,2}[-~][Ss]?\d{1,2}(?![0-9])"
     r"|(?<![A-Za-z0-9])[Ss]\d{1,2}\s*[-~]\s*[Ss]\d{1,2}(?![0-9])"
     r"|第\s*\d{1,2}\s*[-~至到]\s*\d{1,2}\s*季"
+)
+
+# 目录段季标记的「发布后缀」白名单: 季标记之后只允许这些 token(空格/点/下划线/横线/
+# 括号中括号分隔)直到段尾。目录段锚定从「整段精确锚定」放宽为「季标记 + 可选后缀」的
+# 边界 —— Season 2 (1080p) / S02 Complete / 第2季(1080p) / Season 02 [1080p] 这类
+# 「季 + 画质/后缀」目录是合法命名, 旧 $ 锚定整段拒绝后季号丢失, 被 refine_with_files
+# 兜底成第 1 季(issue 26-10-29-1329-bug-b-r08e03-dir-season-anchor);白名单外的一律
+# 不算后缀 —— 防把「剧名尾随词」的目录误判成季(不放宽成标题侧的模糊搜)。
+_DIR_SEASON_SUFFIX_RE = re.compile(
+    r"[\s._()\[\]-]*"
+    r"(?:(?:"
+    r"\d{3,4}[pPiI]?|[Cc]omplete|全集|完结|全一季"
+    r"|中字|简繁|简体|繁体|双语|国语|粤语|国粤|内封|内嵌"
+    r"|x26[45]|H\.?26[45]|10bit|8bit|[56]0fps|HDR(?:10\+)?|DoVi|DV|SDR"
+    r"|BluRay|BDMV|Remux|WEB-?DL|WEBRip|WEB|HDTV|NF|AMZN|ATVP|DSNP|HMAX|PMTP"
+    r"|TrueHD|Atmos|DDP?|[257]\.[01]|FLAC|AAC|MP3"
+    r")[\s._()\[\]-]*)*$"
 )
 
 # bare number 排除集: 分辨率(单点 episodes.RESOLUTION_EXCLUDE, 与 episodes.py bare 分支
@@ -421,7 +439,8 @@ def parse_release(name: str) -> ParsedRelease:
 def parse_files(names: List[str]) -> Tuple[Optional[int], List[int]]:
     """文件列表(相对路径)兜底: 返回 (季号或None, 集数列表)
 
-    - 季号扫**目录段**(Season 01/S01/第1季), 文件名部分不参与;
+    - 季号扫**目录段**(Season 01/S01/第1季, 含「季标记 + 发布后缀」如 Season 2 (1080p)),
+      文件名部分不参与; 判定口径见 _dir_season;
     - 集数复用 episodes 的解析(仅视频文件、明确标记、无 bare number)。
     """
     from . import episodes as _episodes
@@ -430,25 +449,44 @@ def parse_files(names: List[str]) -> Tuple[Optional[int], List[int]]:
     for n in names:
         parts = (n or "").replace("\\", "/").split("/")
         for part in parts[:-1]:
-            p = part.strip()
-            # 目录名季标记(整段锚定): _SEASON_PATTERNS(标题模糊搜)的同口径精简形态,
-            # 两处互指 —— 合并需先统一锚定语义(issue 26-10-11-0207 R08 登记, 不急合)
-            m = (
-                re.search(r"第\s*(\d{1,2}|[一二三四五六七八九十]{1,3})\s*季$", p) or
-                re.search(r"Season[ ._-]?(\d{1,2})$", p, re.IGNORECASE) or re.search(r"^[Ss](\d{1,2})$", p)
-            )
-            if m:
-                season = _cjk_int(m.group(1))
+            s = _dir_season(part.strip())
+            if s is not None:
+                season = s
                 break
         if season is not None:
             break
     return season, _episodes.extract_episodes_from_names(names)
 
 
+def _dir_season(part: str) -> Optional[int]:
+    """目录段季标记: 整段须为「季标记 + 可选发布后缀」; 多季合包判未知(返回 None)
+
+    词形复用 _SEASON_PATTERNS(与标题侧同源: S/Season/第N季/第N期/Nth Season, 含中文数字),
+    锚定比标题侧强 —— 标记命中后到段尾只允许发布后缀(_DIR_SEASON_SUFFIX_RE)。旧实现是
+    「整段精确锚定」三形态($), Season 2 (1080p)/S02 Complete 类目录整段被拒、季号丢失后
+    被 refine_with_files 兜底成第 1 季(issue 26-10-29-1329-bug-b-r08e03-dir-season-anchor);
+    放宽后仍守两条边界: 白名单外的尾随词不算后缀(不退化成标题侧模糊搜), 多季合包
+    (_MULTI_SEASON_RE)无法归单季 —— 宁可未知也不错归 S1。
+    """
+    if _MULTI_SEASON_RE.search(part):
+        return None
+    for regex, extractor in _SEASON_PATTERNS:
+        m = regex.search(part)
+        if m is None:
+            continue
+        s = extractor(m)
+        if s is not None and 1 <= s <= 99 and _DIR_SEASON_SUFFIX_RE.fullmatch(part[m.end():]):
+            return s
+    return None
+
+
 def refine_with_files(parsed: ParsedRelease, files: List[str]) -> ParsedRelease:
     """用文件列表补全: 整季包展开集数范围; 未识别种子从文件名抢救集数
 
     已有明确集数/日期的结果不改(名称标记优先于文件推断); 无剧名的结果同样不动。
+    名称侧已有季标记的结果季号不改; 名称侧无季标记时, 季号来自文件目录或沿用
+    「带集数无季标记按第 1 季」的既有口径, 两种来源都置 season_inferred=True 留痕 ——
+    「解析不到季就默认 1」不允许无声发生(issue 26-10-29-1329-bug-b-r08e03)。
     """
     if parsed.kind in (KIND_EPISODE, KIND_DATE) or not parsed.key:
         return parsed
@@ -456,11 +494,14 @@ def refine_with_files(parsed: ParsedRelease, files: List[str]) -> ParsedRelease:
     if not eps:
         return parsed
     start, end = min(eps), max(eps)
-    season = parsed.season if parsed.season is not None else (season_f if season_f is not None else 1)
+    if parsed.season is not None:
+        return replace(parsed, kind=KIND_EPISODE, ep_start=start, ep_end=end if end != start else None)
+    season = season_f if season_f is not None else 1
     return replace(
         parsed,
         kind=KIND_EPISODE,
         season=season,
         ep_start=start,
         ep_end=end if end != start else None,
+        season_inferred=True,
     )

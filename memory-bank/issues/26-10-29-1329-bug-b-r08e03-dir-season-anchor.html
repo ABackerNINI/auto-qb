@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1329">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-29-2128-dir-season-anchor.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="目录季标记锚定过窄: 「Season 2 (1080p)」类目录漏识别, 兜底静默归第 1 季">
 <meta name="issue-summary" content="parse_files 只认整段三形态, 带后缀目录的季号丢失后 refine_with_files 默认归 1; 同一目录串标题模式解出 2">
 <title>目录季标记锚定过窄: 「Season 2 (1080p)」类目录漏识别, 兜底静默归第 1 季 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1329-bug-b-r08e03-dir-season-anchor</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:29</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -185,9 +185,13 @@ refine: ParsedRelease(key='show', title='Show Complete', kind='episode', season=
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-29 21:28 — 认领（用户指派「认领并修复」）并修复完成：开工重跑第 02 节取证串，现象仍在；修法按建议「更稳」支线（词形复用 + 后缀白名单 + 多季排除），兜底语义取「出口标注来源」支；状态 <strong>Open → Done</strong>（实际修法 / 验证方式 / 测试数字见下方「修复后补充」；基线切片 26-10-29-2128-dir-season-anchor）</li>
     </ul>
     <h3>复验</h3>
-    <p>认领后先重跑第 02 节的两条命令：若 <code>Season 2 (1080p)</code> 仍返回 <code>(None, [5])</code> 且 <code>refine</code> 仍落 <code>season=1</code>，则现象仍在。</p>
+    <p>2026-10-29 21:28（本轮认领会话开工时）重跑第 02 节的两条命令：带后缀四形态仍返回 <code>(None, [5])</code> 且 <code>refine</code> 仍落 <code>season=1</code> —— 现象仍在，与取证一致，按原判修复。</p>
+    <p><strong>实际修法</strong>（2026-10-29 21:28）：① 新增 <code>_DIR_SEASON_SUFFIX_RE</code>（发布后缀白名单：分辨率/年份/来源/编码/Complete/字幕词等 token，token 间允许空格/点/下划线/横线/括号分隔）与 <code>_dir_season(part)</code> —— 词形直接复用 <code>_SEASON_PATTERNS</code>（含中文数字/第N期/Nth Season），标记命中后要求段尾只剩白名单后缀，且该段命中 <code>_MULTI_SEASON_RE</code> 时判未知（<code>S01-S04</code>/<code>第1-4季</code> 不误归 S1）；<code>parse_files</code> 的三形态内联正则退役，原「防 <code>Show.S01.Complete</code> 误判」的意图由白名单承载（该形态修后显式判季 1，与旧兑底结果一致，§06 ② 已列为有意行为变化）。② <code>ParsedRelease</code> 增 <code>season_inferred: bool = False</code>，<code>refine_with_files</code> 在名称侧无季标记的展开分支置 True —— 文件推断与「无信息兑底 1」两路都留痕，不再无声；「兑底 1」的值本身保留，因其与 <code>parse_release</code> 对「带集数无季标记」种子的既有口径一致（分歧点 3 的「同季未知两处语义不同」由留痕补齐）。与建议的偏差：未采用「白名单首 token 后 <code>.*</code> 全放开」的极简正则 —— 后缀 token 逐个过白名单，防「Season 2 of Show」这类剧名尾词误判；标题侧正则与优先级未动。</p>
+    <p><strong>验证方式</strong>：① 修前复验取证串全量复现（四形态 None + refine season=1）；② 新守阵 11 项（修后全绿）—— TestFiles 后缀目录参数化 7 例 + 多季合包两条负测 + 白名单外尾词负测 + refine 端到端 2 条（season=2 且 key/title/ep 逐字不变、<code>season_inferred=True</code>；名称侧已有季号不置位）；③ 既有三条 <code>parse_files</code> 用例与全部 refine 用例保持绿；④ 全量 <code>commands run test.full</code>：4071 passed + 2 skipped、覆盖率门槛 99% 通过 —— 数字单点见基线切片 <a href="../testing/baselines/26-10-29-2128-dir-season-anchor.md">26-10-29-2128-dir-season-anchor</a>。既有失败：无（全量零失败）。</p>
+    <p><strong>守阵落点</strong>：tests/test_tvshows.py::TestFiles（文件头「## 测试计划」已同步）。负测钉住不放宽的边界：多季合包仍未知、白名单外尾词仍未知。本轮未踩已记坑（pitfalls 索引核对无同款）。</p>
   </section>
 
   <footer>
