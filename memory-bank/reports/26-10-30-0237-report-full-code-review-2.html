@@ -403,7 +403,41 @@
 
 <h3>批C · 流量域(traffic_store·traffic_grid·traffic_limits·curves + traffic_sample/snapshot_mod)</h3>
 <p class="cm">登记格式: ID(C-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
-<p class="cm">未登记。</p>
+<p class="cm"><b>评审时 HEAD:</b> <code>70d6da60</code>(26-10-30 批C开工只读实测 <code>git rev-parse</code>, 树净) · <b>范围:</b> 6 文件 / 4,841 行(新增 2 · 变更 4; 新增/变更全量读码对 R1–R11 逐维勾选, 变更函数对照 <code>git diff a4d14a8d..HEAD</code> 定位) · <b>重点维度:</b> R3 R5 R7 R11 · <b>五步执行记录:</b> ①读档六件模块 docstring(v4 行型定约/关块状态机/聚合分层/活尾快照/限速历史/快照段级发布) + systemPatterns main-loop(时钟线钩子与单写线程); ②坑档对照 backend/_index(concurrency·traffic-agg-reseal·traffic-row-format-extension·traffic-window-edge-floor·traffic-source-discovery-pointer·task-interval-tick-quantization·qb-api·verdict-scope-parity); ③逐文件读码(LOC 降序 store→sample→grid→snapshot→limits→curves); ④ruff+bandit(见工具小结, 逐条人工复核); ⑤本表登记(逐条对照 §04 四表 + 批A/批B条目去重)。</p>
+<p class="cm"><b>首次评审(26-10-05-1036 批C)五项回归核对:</b> C-01 agg hour 无界增长 — <span class="good">已修</span>(_agg_ingest_hour 维护 earliest_hour 判据, docstring 注记 issue 26-10-06-0028, _agg_trim 消费); C-02 _parse_int_field 重复定义 — <span class="good">已修</span>(单一定义, 唯一调用点 _parse_nn_int); C-03 V3Block F401 — <span class="good">已修</span>(v3 读侧随 S5 整体退役, traffic_grid 导入表无 V3*); C-04 v3 坏行字段退役 — <span class="good">已处置</span>(v3 整代退役; v4 补最小观测消费方 _warn_bad_lines, issue C-04 P-05 注记在位); C-05 hour 桶 UTC 整点对齐 vs 本地日界 — <span class="wr">仍在</span>(设计口径未变且 docstring 明示, 首轮「仅记录」口径维持, 不重报)。</p>
+<h4>批C 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>C-01</td><td>R11(R6)</td><td>P3</td>
+    <td>core/traffic_store.py:821 <code>parse_v4_agg_text.on_agg_line</code>(cov 列 <code>_parse_nn_int(parts[8])</code> 无下限) / :1207-1209 <code>v4_rollup_agg</code>(cov&lt;=0 ValueError) / :1244 <code>v4_merge_agg</code>(cov 除法); core/modules/traffic_sample_mod.py:1427 <code>_recover_aggregates</code>(逐系列隔离只捕 OSError) / :1523-1528 <code>_recover_series</code> -&gt; <code>_catch_up_level</code>(rollup 消费 parse 行)</td>
+    <td>「行存在即有覆盖」cov_s 下限 1 只在写侧产出行成立(v4_hour_agg 2026-10-13 下限修复), 解析侧 9 列行 cov_s=0 照单全收(负值才记坏)。坏文件若给出 cov_s=0 的<b>语义合法行</b>: ①恢复路径 _catch_up_level 用 parse 出的 hour/day 行做 rollup, 全零 cov 子行触发 v4_rollup_agg ValueError「逐级聚合无有效覆盖」; ②_recover_aggregates 的逐系列隔离只捕 OSError(docstring 宣称「单系列失败不阻断其它系列」), ValueError 逃逸恢复循环 —— 单系列坏文件中断其余全部系列的恢复, 且 host.start_all(core/module.py:364)无兜, 启动链中断; ③同型 cov_s=0 成对行经读侧 v4_agg_obs_live 合流进 v4_merge_agg 时除以 cov=0 ZeroDivisionError(Web 线程)</td>
+    <td>需外部编辑/定向损坏把某行 cov_s 列恰改成 0 且其余 8 列合法(随机损坏更可能整行记坏, 故可达性窄); 本仓写者自 2026-10-13 下限修复后不产 0 行。R11「坏文件降级」口径下, 解析契约与写侧不变式不对齐是缺口本体 —— 按 P3 健壮性登记, 不按 bug</td>
+    <td>无(§04 四表无; 首评 C-04 坏行口径已由 _warn_bad_lines 消费, 本条是「合法但越界值」不同面; 批A/批B无同类)</td>
+    <td>入池(refactor, P3): parse 侧对 cov_s 设 &gt;=1 下限(违者按坏行, 与写侧契约对齐), 或 _recover_aggregates 隔离口径与 _agg_flush_all 的 Exception 对齐; v4_merge_agg 补 cov&lt;=0 守卫(与 v4_rollup_agg 同款 fail-closed)</td>
+  </tr>
+  <tr>
+    <td>C-02</td><td>general</td><td>P3</td>
+    <td>core/curves.py:76 <code>aggregate</code>(<code>today: date = None</code>)</td>
+    <td>隐式 Optional 注解漂移: 签名宣称 today 必为 date, docstring 与实现(「today 可注入(测试); None 回落 date.today()」)及全部调用方都按 None 允许使用 —— 注解与契约不符, 类型检查视角下 None 实参全数误报。行为零差异, 属工具提示源人工复核采纳项</td>
+    <td>静态即证(uvx ruff RUF013); 运行行为零差异</td>
+    <td>无</td>
+    <td>入池(chore, P3)或仅记录(顺手修候选: <code>Optional[date] = None</code>)</td>
+  </tr>
+</table>
+<h4>批C 逐文件勾选表(6/6)</h4>
+<p class="cm">深度: 全量 = 逐行过目 + R1-R11 逐维勾选。结论含「无发现」。</p>
+<table>
+  <tr><th>文件</th><th>变更态</th><th>深度</th><th>结论</th><th>备注(一句话)</th></tr>
+  <tr><td><code>core/traffic_store.py</code></td><td class="wr">变更</td><td>全量</td><td>C-01(锚点侧)</td><td>v4 行型定约读写两侧同源单点(_parse_v4_text 纪律骨架 26-10-29-1304 R07-T06 收敛); R7 追加+fsync / 唯一原子重写点 + PermissionError 退避 / V4DayCache mtime+size 键控锁外解析; R3 写侧单线程无锁成立; 缺口 = 解析侧 cov_s 无下限(C-01)</td></tr>
+  <tr><td><code>core/modules/traffic_sample_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>C-01</td><td>时钟线自持节拍(issue 26-10-16-0954)/v4 关块状态机(基线立点·n-only 拆块·重置关块)/dt 链写读镜像/聚合分层与恢复读集有界(plan 26-10-12-2010)逐维过; 26-10-29 开放游程合成段(_open_run_hour_samples)与封口路径同源复用纯函数, 区间互斥无双计; R3 单写线程(含 live_tail 整体替换引用发布)成立; 缺口 = 恢复隔离 OSError 口径(C-01)</td></tr>
+  <tr><td><code>core/traffic_grid.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>v4 桶点模型/接缝摊配(plan 26-10-15-0829 + issue 26-10-16-0954 修复面)/组聚合除零守卫齐(cov&gt;=1·w&gt;=1·a[0]/a[2] 分母守卫); 真空 null 标记取整口径系已记坑档(traffic-window-edge-floor)不重报; 活尾合流按 ts 精确去重 + 与磁盘块同判真空(修复轮语义在位)</td></tr>
+  <tr><td><code>core/modules/traffic_snapshot_mod.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>段级发布契约自洽(derive_state 单点/段缺失按 ok/publish_event 高水位钳制按日清零); publish_event 经命令队列归主循环线程(webui/commands.py:1299), 黄金法则 5 不破; R11: gtm 事件自带当日权威累计 + 推送前强制落盘的契约明示, 零读盘补丁与 refresh 读盘闸门(refresh_interval)分离; 与批T 交叉面(gtm dat 契约)经 reader 单点核对无发现, S6 汇总时与批T 互链</td></tr>
+  <tr><td><code>core/traffic_limits.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>记录器单线程 + 失败轮不推基线 + 跨天 carry + 重启去重自洽; 读侧 LimitsCache 锁外解析/撕裂尾豁免; limits/ 非系列目录(v4_rel_dir_to_key 不认)被扫描与淘汰天然跳过 —— 契约与 store 两侧一致; monotonic 哨兵 None 判法对齐 _warn_bad_lines 先例(节流首告防吞)</td></tr>
+  <tr><td><code>core/curves.py</code></td><td class="wr">变更</td><td>全量</td><td>C-02</td><td>纯函数层: parse_history_dat 行形状与 gtm sampler DAT_ROW_RE(tools/gtm sampler.py:53)逐字同源(R11, 双侧单点各一, 注释互指在位); normalize_period/curve_speed 档位语义/merge_direction 最严约束自洽; curve_speed 空档位序列 IndexError 由 config 校验兜(R4 面, 归批D); 缺口仅注解漂移(C-02)</td></tr>
+</table>
+<h4>批C 工具提示源小结(uvx ruff + uvx bandit, 逐条人工复核)</h4>
+<p><b>ruff</b>(uvx ruff check 六件, 144 条): 采纳 1 条(curves.py:76 RUF013 → C-02); 其余逐类复核不采纳 —— UP045 ×101 / UP006+UP035 ×26 现代注解系项目既定风格(与批A/批B同口径), RUF046 ×16 int(round()) 冗余强转纯风格零行为差, SIM102 ×2(traffic_limits.observe 跨天硬切与变化追加两段嵌套 if 语义独立, 合并不减复杂度)/I001 ×2/RUF022 ×1/PLR1730 ×1 纯风格, TRY004 ×1(curves.normalize_period)ValueError 系解析 fail-closed 契约。F 类零条(无死导入死绑定)。<b>bandit</b>(uvx bandit 六件): 0 条。真信号合计: ruff 采纳 1(并入 C-02), 人工发现 1(C-01); 无 P0/P1。</p>
 
 <h3>批D · config/ 全部</h3>
 <p class="cm">登记格式: ID(D-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
