@@ -362,7 +362,13 @@ window.AQB_POLL = {
         // qB 全局状态(server_state)随 status **恒回传**(与 traffic 同口径: 不受 rid 门控) ——
         // 状态栏常显统计与"限制速度"取它, 不再单独打 /api/stats ⇒ 每轮只剩 1 条请求,
         // 且状态栏与行数据**同源同轮**(不再出现"状态栏新鲜 / 种子行滞后"的错位观测)。
-        if (state.status && state.status.server !== undefined) this.statsServer = state.status.server || null;
+        // S2 速度切预翻转(计划 26-10-30-0610/D8)的对账点单点在这里: server_state 是
+        // use_alt_speed_limits 唯一的确认通道(无 SSE cmd/ver/truth 事件), 赋值后立即问一次
+        // 覆盖是否已与真值一致 —— 一致即清除 altOverride(摘除前后显示同值, 零观感跳变)。
+        if (state.status && state.status.server !== undefined) {
+          this.statsServer = state.status.server || null;
+          this._altOverrideReconcile();
+        }
         if (state.updated !== false) {
           // P0-0 埋点: 这段赋值 + 多选交集是"点了没反应"里唯一发生在前端的部分,
           // 超过 50ms 就在控制台留痕 —— 大库下这是 P1(行窗口化)要不要做的直接判据。

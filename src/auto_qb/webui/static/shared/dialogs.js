@@ -567,13 +567,63 @@ window.AQB_DIALOGS = {
      * 模式切换(乌龟按钮)与限速修改(弹窗)是两个独立动作; 备用限速走 /api/speed/alt
      * (app/setPreferences alt_*), 与主速覆盖通道互不触碰。
      */
+    /* S2 速度切乐观预翻转(计划 26-10-30-0610 §04 S2 / D2/D8): 点击当帧翻转高亮(0ms 级),
+     * 回执 ok 转 hold(值保持到轮询确认, 防弹回), 四路失败回滚, 绝不留永久假状态。
+     * speed_alt_toggle 实测回执 ~11ms 但 server_state 随 sync 快照翻转, 可见延迟均匀 [0,1.5s]
+     * 随相位, 且无 SSE cmd/ver/truth 事件 —— 轮询是唯一确认通道, 预翻转是唯一修法。
+     * 四路回滚(决策 D8):
+     *   1. 回执 error        -> _postWaitCmd 返回 false -> _altOverrideClear(回落 server 值)
+     *   2. 发送失败(异常)    -> 同上(catch 也返回 false, 已有 cmdFail/sendFail toast)
+     *   3. 3s 无回执         -> _altOverrideArm(3000,false) 兜底清除(显示回落 server 值)
+     *   4. ok 后 8s 未确认   -> _altOverrideArm(8000,true) 兜底清除(借 TRUTH_HOLD_MS 同款语义)
+     * 确认单点在 polling.js statsServer 赋值处调 _altOverrideReconcile: refresh 带回的
+     * use_alt_speed_limits 与 override 一致即清除 —— 确认延迟 = 距下个 sync 节拍相位(<=1.5s)。 */
     async toggleAltSpeed() {
       if (this.altToggling) return;
-      await this._postWaitCmd(this, "altToggling", "/api/speed/alt/toggle", {}, {
-        okMsg: () => (this.sbAltOn ? "已切回主速度" : "已切换到备用速度(乌龟)"),  // 成功此刻取值: 按切换前状态措辞
+      // 点击时刻的 server 值: 既是回滚目标(prev), 也是成功措辞的基准 ——
+      // !预翻转后 sbAltOn 已是新值, okMsg 再读 this.sbAltOn 会按"切换后"措辞(方向反了)
+      const serverOn = !!(this.statsServer && this.statsServer.use_alt_speed_limits);
+      this.altOverride = { value: !serverOn, prev: serverOn, ts: Date.now(), hold: false };
+      this._altOverrideArm(3000, false);  // 路3: 3s 无回执 -> 回滚
+      const ok = await this._postWaitCmd(this, "altToggling", "/api/speed/alt/toggle", {}, {
+        okMsg: () => (serverOn ? "已切回主速度" : "已切换到备用速度(乌龟)"),  // 成功此刻取值: 按 server 切换前状态措辞
         cmdFail: "速度模式切换失败",
         sendFail: "切换请求发送失败",
-      });  // 新状态由主轮询 statsServer.use_alt_speed_limits 回读, 不本地预翻转
+      });
+      /* 路1/路2: 回执 error / 发送失败 -> 回滚到 server 值。
+       * !waitCmd 等待超时(40s)也落这里返回 false, 但那之前 3s 兜底已清除, 幂等 no-op。 */
+      if (!ok) { this._altOverrideClear(); return; }
+      // 路4 兜底重排: 回执 ok -> 转 hold(值覆盖保持到轮询确认), 期限从回执到达重算
+      if (this.altOverride && !this.altOverride.hold) {
+        this.altOverride.hold = true;
+        this.altOverride.ts = Date.now();
+        this._altOverrideArm(8000, true);  // 8s 未确认 -> 清除(回落 server 值)
+      }
+    },
+    /* 兜底定时器(句柄挂实例不进 data: 非响应式, 同 _polls/_cmdWaiters 先例)。
+     * needHold = 触发时要求的覆盖状态(3s 兜底要求仍未收到回执, 8s 兜底要求仍在 hold) ——
+     * 状态已推进(回执到/已清除)即作废, 防旧定时器把新状态提前摘掉。 */
+    _altOverrideArm(ms, needHold) {
+      if (this._altOverrideTimer) clearTimeout(this._altOverrideTimer);
+      this._altOverrideTimer = setTimeout(() => {
+        this._altOverrideTimer = null;
+        const ov = this.altOverride;
+        if (!ov || ov.hold !== needHold) return;
+        this._altOverrideClear();  // 回滚 = 摘覆盖, sbAltOn 自动回落 server 值(最后已知真值)
+      }, ms);
+    },
+    _altOverrideClear() {
+      if (this._altOverrideTimer) { clearTimeout(this._altOverrideTimer); this._altOverrideTimer = null; }
+      this.altOverride = null;
+    },
+    /* 对账单点(polling.js statsServer 赋值处每轮调用): server 真值与 override 一致 = 翻转已
+     * 落地, 覆盖即可摘除(摘除前后显示同值, 零观感跳变); 不一致继续 hold 防弹回
+     * (快照带回命令前的旧值时, 摘了就会闪一下旧态 —— 与 pendingOps 的 hold 同理)。 */
+    _altOverrideReconcile() {
+      const ov = this.altOverride;
+      if (!ov) return;
+      const serverOn = !!(this.statsServer && this.statsServer.use_alt_speed_limits);
+      if (serverOn === ov.value) this._altOverrideClear();
     },
     async submitAltLimits() {
       const up = Math.max(0, Math.round(Number(this.speedAlt.up) || 0));
@@ -724,9 +774,13 @@ window.AQB_DIALOGS = {
       const f = (v) => (v === null ? "—" : (v ? this.fmtSpeed(v) : "不限"));
       return { down: f(down), up: f(up) };
     },
-    /* ALT-01: 备用速度是否生效 —— 单点读 statsServer.use_alt_speed_limits(qB server_state 随主轮询
-     * 逐轮下发, 与规则引擎 sys.alt_speed_on 同源同键), 状态栏乌龟按钮与限速浮层双组高亮都引这里。 */
+    /* ALT-01: 备用速度是否生效 —— 显示单点。S2(计划 26-10-30-0610 §04 S2 / D8)起改为
+     * 「override 优先, server 兜底」: 有预翻转覆盖时显示 override 值, 否则读
+     * statsServer.use_alt_speed_limits(qB server_state 随主轮询逐轮下发, 与规则引擎
+     * sys.alt_speed_on 同源同键)。状态栏乌龟按钮高亮/title 与限速浮层双组高亮都引这里,
+     * 预翻转与确认清除后自动跟随, 无需各自接线。 */
     sbAltOn() {
+      if (this.altOverride) return !!this.altOverride.value;
       return !!(this.statsServer && this.statsServer.use_alt_speed_limits);
     },
     sbAltTitle() {

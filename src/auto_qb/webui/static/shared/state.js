@@ -400,6 +400,12 @@ window.AQB_STATE = {
       // altToggling = 状态栏乌龟按钮切换进行中(防重复点击 + 图标旋转)
       speedAlt: { up: "", down: "", busy: false },
       altToggling: false,
+      // S2 速度切乐观预翻转(计划 26-10-30-0610 §04 S2 / D8): { value, prev, ts, hold } | null。
+      // 与 pendingOps 同语义的单布尔覆盖态 —— value = 预翻转后的显示值, prev = 点击时刻的
+      // server 值(回滚目标), hold = 回执 ok 后转真(值保持到轮询确认, 防弹回)。
+      // 写入口单点 = dialogs.js::toggleAltSpeed; 对账/清除单点 = polling.js statsServer 赋值处
+      // 调 _altOverrideReconcile; 失败/未知绝不留永久假状态(3s 无回执 / 8s 未确认兜底)。
+      altOverride: null,
       speedOpen: false,  // SPD-04: 限速修改浮层(qB 式「点击限速 → 弹窗」, 表单从信息栏收进窗内)
       // FX-08: 浮层锚点 —— left 由点击坐标算出(状态栏"限制速度"按钮左缘 - 12), dir 为预聚焦方向
       speedAt: { left: 0, dir: "up" },
