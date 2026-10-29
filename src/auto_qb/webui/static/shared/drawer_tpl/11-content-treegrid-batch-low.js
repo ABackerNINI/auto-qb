@@ -4,7 +4,9 @@
  * 矮/高 = 单表承层级自适应滚动。收起档(摘要条)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: 结构单一来源 ctx.drawerFileRows()(树扁平化, 目录行 + 文件行, 文件行带 index),
  * 数值/渐进字段从 ctx.drawer.files[index] 取 —— 目录行聚合(子树大小 / 加权进度 / 文件数 /
- * 最低可用性 / 缺口)前端按路径前缀派生, 零后端改动。
+ * 最低可用性 / 缺口)前端按路径前缀派生, 零后端改动。本变体走 derive() 扁平表 + path 前缀
+ * 归并的第三算法(issue 26-10-29-1343 未并入 reg.content::buildFileTree), 聚合口径
+ * (大小/进度/缺口/可用性最低值)以核心 buildFileTree 为准 —— 口径改动须两处对齐。
  * 动作(plan §04 映射行): 勾选批量优先级 → setFilePriority(p, indices)(S5 批量通道, indices
  * 从 drawerFileRows() 树收集: 勾目录 = 整棵子树三态框, 一次 POST files/priority); 单文件徽章
  * 点击循环 不下载→正常→高→最高(逐次真实提交, 回执/toast 由既有链自带)。

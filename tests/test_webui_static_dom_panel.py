@@ -52,6 +52,7 @@
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 - test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
 - test_drawer_tracker_bucket_text_single_point: tracker 五桶文案表单点守阵(issue 26-10-29-1343) —— 04/05/06 三变体各持一份的桶文案(04/06 BUCKET{text,sev} 两份 + 05 GROUPS{text,cnt} 一份 + 04 PILLS 与 05 计数条内联字面, 共 5 处两形状)收口成核心层 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt + TRACKER_BUCKET_ORDER 处理序数组, 05 分区顺序与 04/06 sev 升序同源写一次)挂 reg.trackers(reg.peers 同类判据命名空间); 守阵 = 核心表全列逐字钉住 + 桶文案词「未联系」drawer_tpl/ 零命中且核心层恰 1 处 + 三变体 TK 接线与本地 BUCKET/GROUPS/胶囊 text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义留各自文件) + node 真跑 text/sev/cnt 与旧表逐字对账(sev 0/1/2/3/9 不动 = 排序权值等价; 变体私有 bucketOf 三份属 R21-B-05/C-05 不在本项; 行为等价 e2e 盯 drawer-trackers-variant-tables / drawer-trackers-reannounce)
+- test_drawer_content_file_tree_single_point: content 目录树构建/聚合单点守阵(issue 26-10-29-1343) —— 10/12 各持一份的 newDir/buildTree/aggregate/findNode 四件收口成核心 CONTENT(buildFileTree/findNode)挂 reg.content(reg.peers/reg.trackers 同类「按页签判据命名空间」, 不落 helpers —— 那里只住跨页签骨架机制); 统一节点模型「dirs + 标量 av」(目录 = 子树最低可用性, undefined/null 同为无值 —— 旧 12 把 null 当值聚合、旧 10 的 Infinity 哨兵会渲染出 "Infinity", 均属无判据漂移, 以单点为准); 守阵 = drawer_tpl/ 四函数定义零命中 + 10/12 FT 接线数逐件对账(10: buildFileTree 4 处/findNode 2 处; 12: 各 1 处) + 旧模型字面零残留(minAv/布尔对/裸 availability 叶子字段; 11 的 derive 扁平表第三算法不在本项, 自有模型不查) + 11 头注声明口径以 buildFileTree 为准 + node 真跑语义电池: 新旧三实现(新单点/旧 10/旧 12)对 fixture 组(嵌套两层/根单文件/size 缺失/availability null·负数·小数·零/空目录段/空名回退)逐节点归一化 JSON 全等(旧 10 布尔对 -> av、旧 12 null -> 无值、dirs 统一现算), 另钉 findNode 四态与新节点键集纯净; 行为等价 e2e 盯 drawer-content-variant-tables / drawer-content-dt11-sticky
 - test_drawer_general_hr_state_line_parity: 抽屉 general 三变体 HR 结论行对齐守阵(issue 26-10-29-1341) —— 同一颗 hr_triggered 种子的「删除安全档位结论 · 依据」行(hr_safety_text/hr_state_text + hr_reason)三变体都必须消费 hr_state: 01/02 从旧版就有, 03 手抄时字段集停在旧版整段漏掉, 后端 views.py 详情载荷字段齐全、hr.js::hrStateLine 注释成文「详情抽屉要显示这行」, 选 03 就看不到「能否删」是用户可见缺失; 守阵 = 三件源码各含 if (d.hr_state) 闸(空值路径被闸拦住, hr_state 为空不多出空行), 缺件即红
 - test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
@@ -6115,6 +6116,312 @@ console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
 
+
+def test_drawer_content_file_tree_single_point():
+    """content 目录树构建/聚合单点守阵(issue 26-10-29-1343) ——
+    ① 核心单点: CONTENT(buildFileTree/findNode)在核心层并挂 TPL_REG.content
+       (reg.peers/reg.trackers 同类「按页签判据命名空间」; 不落 helpers —— 那里只住
+       跨页签骨架机制, 树构建只有 content 组消费);
+    ② 单点唯一性: drawer_tpl/ 全体 function buildTree/aggregate/newDir/findNode 零命中;
+    ③ 接线与零残留: 10/12 各 const FT = reg.content; 一处 + FT.buildFileTree/FT.findNode
+       调用数逐件对账(10: 4/2 —— rowsFn/render/onClick 优先级段/onClick 折叠全收;
+       12: 1/1) + 旧模型字面零残留(minAv/布尔对/裸 availability 叶子字段; 11 的 derive
+       扁平表是第三算法不在本项, 自有 stats 模型不查)+ 11 头注声明口径以 buildFileTree 为准;
+    ④ node 语义电池(等价性主证据, 无 node 静默跳过): 新旧三实现(新单点/旧 10/旧 12)
+       对 fixture 组逐节点归一化 JSON 全等 —— 归一只做两件已裁定的事: 旧 10 的布尔对
+       (hasAv/minAv)换算成标量 av、旧 12 的 null 值归一成无值(单一哨兵 undefined 的
+       语义收敛, 见核心 CONTENT 头注); dirs 统一按聚合公式现算(旧 12 无该字段)。
+    行为等价由 e2e 盯(drawer-content-variant-tables / drawer-content-dt11-sticky)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    tpl_dir = os.path.join(shared, "drawer_tpl")
+
+    # ---- ① 核心单点(模型取两份并集 + 标量 av 单一哨兵) ----
+    assert "buildFileTree: function (files)" in core, "核心层缺 content 目录树单点 buildFileTree"
+    assert "findNode: function (n, path)" in core, "核心层缺 findNode(应随树单点一并导出)"
+    assert "content: CONTENT," in core, "TPL_REG 未挂 content 命名空间(变体经 reg.content 消费)"
+    for shape in (
+        'files: 0, dirs: 0, prog: 100, av: undefined',
+        "av: (f.availability === undefined || f.availability === null) ? undefined"
+    ):
+        assert shape in core, f"核心树节点模型形状漂了: {shape}(dirs 恒有 / null 同为无值)"
+
+    # ---- ② 单点唯一性: 变体层四函数定义零命中 ----
+    for fn in sorted(os.listdir(tpl_dir)):
+        if not fn.endswith(".js"):
+            continue
+        v = open(os.path.join(tpl_dir, fn), encoding="utf-8").read()
+        for gone in ("function buildTree", "function aggregate", "function newDir", "function findNode"):
+            assert gone not in v, f"drawer_tpl/{fn} 又出现树构建本地副本 {gone!r}(应走 reg.content 单点)"
+
+    # ---- ③ 接线逐件对账 + 旧模型零残留 ----
+    for name, ft_calls, fn_calls in (
+        ("10-content-tree-detail-tall", 4, 2),
+        ("12-content-space-treemap-collapsed", 1, 1),
+    ):
+        v = open(os.path.join(tpl_dir, name + ".js"), encoding="utf-8").read()
+        assert v.count("const FT = reg.content;") == 1, f"{name} 未接 reg.content 单点(const FT 别名应恰 1 处)"
+        assert v.count("FT.buildFileTree(") == ft_calls, f"{name} buildFileTree 接线数漂了(应 {ft_calls} 处)"
+        assert v.count("FT.findNode(") == fn_calls, f"{name} findNode 接线数漂了(应 {fn_calls} 处)"
+        assert "minAv" not in v, f"{name} 残留旧最小可用性哨兵字段 minAv(应读统一标量 n.av)"
+        assert "n.hasAv" not in v and "hasAv: " not in v, f"{name} 残留旧布尔对可用性表示(应读 n.av !== undefined)"
+        assert "availability: f.availability" not in v and "av: f.availability" not in v, \
+            f"{name} 叶子节点残留裸 availability 直传(null 会穿进聚合, 应走单点的无值归一)"
+    v11 = open(os.path.join(tpl_dir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
+    assert "buildFileTree" in v11, "11 头注缺「口径以核心 buildFileTree 为准」声明(第三算法未并入, 口径须对齐)"
+
+    # ---- ④ node 语义电池: 新旧三实现逐节点 JSON 全等 ----
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _CONTENT_TREE_NODE_PROBE,
+         os.path.join(shared, "drawer_templates.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"content tree node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"content tree 电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+_CONTENT_TREE_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* localStorage 桩; document 保持 undefined —— dtInjectCss 有守卫跳过注入 */
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const FT = window.AQB_DRAWER_TPL_REG.content;
+
+/* ---- 旧实现对账基准(只活在测试里; 逐字取自收编前的 10/12 本地四件, 仅函数改名) ---- */
+const num = (v) => Number(v) || 0;
+/* 旧 10: dirs 计数 + hasAv/minAv 布尔对(Infinity 哨兵) */
+function old10NewDir(name, parentPath, parentDepth) {
+  return {
+    dir: true, name, path: parentPath ? parentPath + "/" + name : name,
+    depth: parentDepth + 1, children: [], size: 0, done: 0, miss: 0,
+    files: 0, dirs: 0, prog: 100, minAv: Infinity, hasAv: false,
+  };
+}
+function old10Build(files) {
+  const root = old10NewDir("", "", -1);
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const parts = String(f.name || "").split("/").filter(Boolean);
+    let node = root;
+    for (let d = 0; d < parts.length - 1; d++) {
+      let next = null;
+      for (const c of node.children) {
+        if (c.dir && c.name === parts[d]) { next = c; break; }
+      }
+      if (!next) {
+        next = old10NewDir(parts[d], node.path, node.depth);
+        node.children.push(next);
+      }
+      node = next;
+    }
+    const last = parts[parts.length - 1] || "文件 " + i;
+    node.children.push({
+      dir: false, name: last, path: node.path ? node.path + "/" + last : last,
+      depth: node.depth + 1, index: i, size: num(f.size),
+      prog: Math.round(num(f.progress) * 1000) / 10,
+      prio: num(f.priority), availability: f.availability,
+    });
+  }
+  old10Agg(root);
+  return root;
+}
+function old10Agg(n) {
+  if (!n.dir) {
+    n.done = n.size * (n.prog / 100);
+    n.miss = Math.max(0, n.size - n.done);
+    n.files = 1;
+    if (n.availability !== undefined && n.availability !== null) {
+      n.hasAv = true;
+      n.minAv = num(n.availability);
+    }
+    return;
+  }
+  for (const c of n.children) {
+    old10Agg(c);
+    n.size += c.size; n.done += c.done; n.miss += c.miss; n.files += c.files;
+    if (c.dir) n.dirs += c.dirs + 1;
+    if (c.hasAv && c.minAv < n.minAv) n.minAv = c.minAv;
+    n.hasAv = n.hasAv || c.hasAv;
+  }
+  n.prog = n.size > 0 ? n.done / n.size * 100 : 100;
+}
+/* 旧 12: 标量 av(undefined = 无值; null 会当值聚合 —— 已知漂移) */
+function old12NewDir(name, parentPath, parentDepth) {
+  return {
+    dir: true, name, path: parentPath ? parentPath + "/" + name : name,
+    depth: parentDepth + 1, children: [], size: 0, done: 0, miss: 0,
+    files: 0, prog: 100, av: undefined,
+  };
+}
+function old12Build(files) {
+  const root = old12NewDir("", "", -1);
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    const parts = String(f.name || "").split("/").filter(Boolean);
+    let node = root;
+    for (let d = 0; d < parts.length - 1; d++) {
+      let next = null;
+      for (const c of node.children) {
+        if (c.dir && c.name === parts[d]) { next = c; break; }
+      }
+      if (!next) {
+        next = old12NewDir(parts[d], node.path, node.depth);
+        node.children.push(next);
+      }
+      node = next;
+    }
+    const last = parts[parts.length - 1] || "文件 " + i;
+    node.children.push({
+      dir: false, name: last, path: node.path ? node.path + "/" + last : last,
+      depth: node.depth + 1, index: i, size: num(f.size),
+      prog: Math.round(num(f.progress) * 1000) / 10,
+      prio: num(f.priority), av: f.availability,
+    });
+  }
+  old12Agg(root);
+  return root;
+}
+function old12Agg(n) {
+  if (!n.dir) {
+    n.done = n.size * (n.prog / 100);
+    n.miss = Math.max(0, n.size - n.done);
+    n.files = 1;
+    return;
+  }
+  let avSet = false, minAv = Infinity;
+  for (const c of n.children) {
+    old12Agg(c);
+    n.size += c.size; n.done += c.done; n.miss += c.miss; n.files += c.files;
+    if (c.av !== undefined) {
+      if (!avSet || c.av < minAv) minAv = c.av;
+      avSet = true;
+    }
+  }
+  n.prog = n.size > 0 ? n.done / n.size * 100 : 100;
+  if (avSet) n.av = minAv;
+}
+
+/* ---- 归一化: 三份产出折到同一「统一节点模型」视图再比 JSON ----
+ * 折算只做两件已裁定的事: 旧 10 布尔对 -> 标量 av; 旧 12 null -> 无值(单一哨兵)。
+ * dirs 三边统一按聚合公式现算(旧 12 本无该字段, 收编后为并集模型恒有)。
+ * 等价域口径: null 在入参侧归一(旧实现跑 null->undefined 后的同一 fixture) —— 旧 10 对
+ * null 的原生判定与此同值; 旧 12 会把 null 当值且**毒化整条祖先链**(min 被 null 占位),
+ * 属裁定消除的缺陷, 2) 段留取证。另注: 旧 10 的叶子无 hasAv 键, 目录聚合 false||undefined
+ * 会产出 undefined(仍为假值语义), 归一后不受影响。 */
+const dirsOf = (n) => (!n.dir ? 0 : n.children.reduce((s, c) => s + (c.dir ? dirsOf(c) + 1 : 0), 0));
+const norm = (n, avOf) => {
+  const o = {};
+  for (const k of Object.keys(n).sort()) {
+    if (k === "av" || k === "minAv" || k === "hasAv" || k === "availability" || k === "dirs") continue;
+    const v = n[k];
+    o[k] = v && typeof v === "object" ? (Array.isArray(v) ? v.map((x) => norm(x, avOf)) : norm(v, avOf)) : v;
+  }
+  o.av = avOf(n);
+  if (n.dir) o.dirs = dirsOf(n);
+  return o;
+};
+const avNew = (n) => n.av;
+const avOld10 = (n) => (n.hasAv ? n.minAv : undefined);
+const avOld12 = (n) => n.av; /* 入参已无 null, 直传 */
+
+/* ---- fixture 组(issue 验证手段②: 嵌套两层/根单文件/size 缺失/null·负数·小数/空目录段/空名) ---- */
+const FIXTURES = [
+  { name: "嵌套两层+根单文件+零/负/小数可用性", files: [
+    { name: "tv/Show/S01E01.mkv", size: 1073741824, progress: 0.5, priority: 1, availability: 2.5 },
+    { name: "tv/Show/S01E02.mkv", size: 1073741824, progress: 1, priority: 6, availability: 1 },
+    { name: "tv/Extras/notes.txt", size: 1024, progress: 0, priority: 0, availability: 0 },
+    { name: "readme.txt", size: 128, progress: 1, priority: 1, availability: -0.5 },
+  ] },
+  { name: "size/availability 缺失+null 可用性", files: [
+    { name: "a/b/c.bin", progress: 0.25, priority: 1 },
+    { name: "a/top.iso", size: 2048, progress: 0.75, priority: 6, availability: null },
+    { name: "loose.mp4", size: 512, progress: 1, priority: 0, availability: 3 },
+  ] },
+  { name: "空目录段+前导空段+空名回退", files: [
+    { name: "x//y.mp4", size: 10, progress: 0.5, priority: 1, availability: 1.25 },
+    { name: "/root.bin", size: 20, progress: 0, priority: 6, availability: 0.5 },
+    { name: "", size: 30, progress: 0.5, priority: 1, availability: 2 },
+  ] },
+  { name: "无 availability 键+目录最低值跨层传播", files: [
+    { name: "d1/f.bin", size: 100, progress: 0.5, priority: 1 },
+    { name: "d2/d3/g.bin", size: 200, progress: 0, priority: 0, availability: 0.125 },
+    { name: "d2/h.bin", size: 300, progress: 1, priority: 1, availability: 9.5 },
+  ] },
+];
+
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+/* 1) 逐 fixture 逐节点: 新 vs 旧 10(归一) vs 旧 12(归一) JSON 全等
+ * 旧实现跑 null->undefined 归一后的同一 fixture(等价域 = 无 null 数据, 见上方归一注) */
+const noNull = (files) => files.map((f) => (f.availability === null ? { ...f, availability: undefined } : f));
+for (const fx of FIXTURES) {
+  const tNew = FT.buildFileTree(fx.files);
+  const t10 = old10Build(noNull(fx.files));
+  const t12 = old12Build(noNull(fx.files));
+  const walk = (a, b, c, path) => {
+    const ja = JSON.stringify(norm(a, avNew));
+    const jb = JSON.stringify(norm(b, avOld10));
+    const jc = JSON.stringify(norm(c, avOld12));
+    ok(`[${fx.name}] node ${path || "(根)"} 新 vs 旧10 归一全等`, ja === jb);
+    ok(`[${fx.name}] node ${path || "(根)"} 新 vs 旧12 归一全等`, ja === jc);
+    if (a.dir) for (let i = 0; i < a.children.length; i++) {
+      walk(a.children[i], b.children[i], c.children[i], path + "/" + a.children[i].name);
+    }
+  };
+  walk(tNew, t10, t12, "");
+}
+
+/* 2) 语义收敛取证(null 漂移是裁定消除的, 不是碰巧不等; 这里跑**原始** fixture) */
+const f2 = FIXTURES[1].files;
+const dirA = (t) => t.children.find((c) => c.dir && c.name === "a");
+ok("null 可用性: 统一后目录 = 无值(旧 10 口径)", dirA(FT.buildFileTree(f2)).av === undefined);
+ok("null 可用性: 旧 12 确实把 null 当值并毒化根(dirA.av === null)", dirA(old12Build(f2)).av === null);
+ok("null 可用性: 旧 12 毒化到根(根 av === null, 尽管 loose.mp4 有 3)", old12Build(f2).av === null);
+ok("null 可用性: 旧 10 同为无值(dirA.hasAv 假值 —— 叶子无该键的既有怪癖)",
+  !dirA(old10Build(f2)).hasAv);
+ok("旧 10 Infinity 哨兵不再进统一模型(无可用性目录 av=undefined)",
+  FT.buildFileTree([{ name: "d/f.bin", size: 1, progress: 1, priority: 1 }]).children[0].av === undefined);
+
+/* 3) 统一模型键集纯净: 新树全节点无旧分叉字段; dir 有 dirs/children, 叶子有 index/prio */
+{
+  let bad = null;
+  const scan = (n, path) => {
+    if ("minAv" in n || "hasAv" in n || "availability" in n) bad = path + " 残留旧分叉字段";
+    else if (n.dir && !("dirs" in n) || !n.dir && "dirs" in n) bad = path + " dirs 字段位形不对";
+    else if (!n.dir && !("index" in n && "prio" in n)) bad = path + " 叶子缺 index/prio";
+    for (const c of n.children || []) scan(c, path + "/" + (c.name || "?"));
+  };
+  for (const fx of FIXTURES) scan(FT.buildFileTree(fx.files), "");
+  ok("统一模型键集纯净(无 minAv/hasAv/availability, dirs 位形, 叶子 index/prio)", bad === null);
+}
+
+/* 4) findNode 四态 */
+{
+  const t = FT.buildFileTree(FIXTURES[0].files);
+  const hitDir = FT.findNode(t, "tv/Show");
+  ok("findNode 命中目录", !!hitDir && hitDir.dir === true && hitDir.files === 2);
+  const hitLeaf = FT.findNode(t, "readme.txt");
+  ok("findNode 命中叶子", !!hitLeaf && hitLeaf.dir === false && hitLeaf.index === 3);
+  ok("findNode 空 path 不命中(根不可选中)", FT.findNode(t, "") === null);
+  ok("findNode 未命中返 null", FT.findNode(t, "no/such") === null);
+}
+
+console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]).length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
 # node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— ①chain 在途不排下一拍
 # (不堆叠请求) ②卡死判据持续为真 -> 超阈值补偿一次并重新计时 ③有界等待: 退避曲线与旧 _pollCmd 逐项
 # 等价 / 拍数上限 / 截止时间 / 同名先停后起 / 外部叫停 / fn 抛出即 reject ④页面隐藏恒等守卫。

@@ -4,7 +4,8 @@
  * 矮/高 = 左树 + 右 324px 详情自适应滚动。收起档(核心内置摘要条)已随面板折叠状态
  * 整体移除(2026-10-09)。
  * 数据: /files qB 透传(drawer.files, 进入页签拉一次 + 优先级改动后静默补拉), 树与子树聚合
- * (子树大小 / 文件数 / 加权进度 / 缺口字节 / 最低可用性)全部前端派生, 零后端改动。
+ * (子树大小 / 文件数 / 加权进度 / 缺口字节 / 最低可用性)全部前端派生(buildFileTree 判据
+ * 单点在核心 reg.content, issue 26-10-29-1343), 零后端改动。
  * 动作(plan §04 映射行): 目录点选子树聚合; 文件行优先级徽章 → openFilePrio(经典锚定小菜单,
  * 回执/toast 由既有链自带); 右侧详情优先级分段 → setFilePriority(p, indices)(S5 批量通道,
  * 单文件 = [index], 目录 = 整棵子树收集)。重命名不在本变体设计内 → 回 classic 用(试用期对照)。
@@ -32,6 +33,7 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘/锚保活 */
+  const FT = reg.content; /* content 目录树单点(buildFileTree/findNode, issue 26-10-29-1343) */
   const TABLE_ID = "drawerContentV10";
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
@@ -154,74 +156,13 @@
     ".drawer .dt10-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
-  /* ---------------- 树构建与子树聚合(判据单点, U4 保留) ---------------- */
+  /* ---------------- 树构建与子树聚合走核心 reg.content 单点(issue 26-10-29-1343) ----------------
+   * 节点模型(核心单点): 目录 { dir, name, path, depth, children, size, done, miss, files,
+   * dirs, prog, av? } / 叶子 { dir:false, ..., index, size, prog, prio, av? } —— av 标量
+   * (undefined = 无值), 本变体旧的「布尔对 + Infinity 哨兵」最小可用性表示已并入单点;
+   * 渲染侧取数一律 n.av(目录 = 子树最低值, 文件 = 自身值)。 */
   function fileList(ctx) {
     return (ctx.drawer && ctx.drawer.files) || [];
-  }
-  function newDir(name, parentPath, parentDepth) {
-    return {
-      dir: true, name, path: parentPath ? parentPath + "/" + name : name,
-      depth: parentDepth + 1, children: [], size: 0, done: 0, miss: 0,
-      files: 0, dirs: 0, prog: 100, minAv: Infinity, hasAv: false,
-    };
-  }
-  function buildTree(files) {
-    const root = newDir("", "", -1);
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      const parts = String(f.name || "").split("/").filter(Boolean);
-      let node = root;
-      for (let d = 0; d < parts.length - 1; d++) {
-        let next = null;
-        for (const c of node.children) {
-          if (c.dir && c.name === parts[d]) { next = c; break; }
-        }
-        if (!next) {
-          next = newDir(parts[d], node.path, node.depth);
-          node.children.push(next);
-        }
-        node = next;
-      }
-      const last = parts[parts.length - 1] || "文件 " + i;
-      const prio = num(f.priority);
-      node.children.push({
-        dir: false, name: last, path: node.path ? node.path + "/" + last : last,
-        depth: node.depth + 1, index: i, size: num(f.size),
-        prog: Math.round(num(f.progress) * 1000) / 10,
-        prio, availability: f.availability,
-      });
-    }
-    aggregate(root);
-    return root;
-  }
-  function aggregate(n) {
-    if (!n.dir) {
-      n.done = n.size * (n.prog / 100);
-      n.miss = Math.max(0, n.size - n.done);
-      n.files = 1;
-      if (n.availability !== undefined && n.availability !== null) {
-        n.hasAv = true;
-        n.minAv = num(n.availability);
-      }
-      return;
-    }
-    for (const c of n.children) {
-      aggregate(c);
-      n.size += c.size; n.done += c.done; n.miss += c.miss; n.files += c.files;
-      if (c.dir) n.dirs += c.dirs + 1;
-      if (c.hasAv && c.minAv < n.minAv) n.minAv = c.minAv;
-      n.hasAv = n.hasAv || c.hasAv;
-    }
-    n.prog = n.size > 0 ? n.done / n.size * 100 : 100;
-  }
-  function findNode(n, path) {
-    if (path && n.path === path) return n;
-    if (!n.dir) return null;
-    for (const c of n.children) {
-      const hit = findNode(c, path);
-      if (hit) return hit;
-    }
-    return null;
   }
   function subtreeIndices(n) {
     const out = [];
@@ -291,7 +232,7 @@
   function rowsFn(ctx) {
     const files = fileList(ctx);
     if (!files.length) return [];
-    const tree = buildTree(files);
+    const tree = FT.buildFileTree(files);
     const rows = [];
     (function emit(n) {
       for (const c of n.children) {
@@ -320,7 +261,7 @@
     const skipChip = (!isDir && n.prio === 0)
       ? T`<span class="dt10-stchip skip" title="优先级为不下载: 不参与下载, 已有数据保留">不下载</span>` : "";
     const avCell = hasAv
-      ? T`<div class="dt10-cell"><i title="${isDir ? "子树内最低可用性(最稀缺文件)" : "qB availability: 全 swarm 中该文件数据的份数"}">可用性</i><b>${isDir ? n.minAv.toFixed(2) : num(n.availability).toFixed(2)}</b></div>`
+      ? T`<div class="dt10-cell"><i title="${isDir ? "子树内最低可用性(最稀缺文件)" : "qB availability: 全 swarm 中该文件数据的份数"}">可用性</i><b>${num(n.av).toFixed(2)}</b></div>`
       : "";
     const segs = PRIO_ORDER.map((p) => {
       const on = !isDir && n.prio === p;
@@ -375,15 +316,17 @@
     const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
-    const hasAv = files.some((f) => f && f.availability !== undefined && f.availability !== null);
     /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
      * 错态先于空态(P3-5: 失败且无数据不是"真的没有"); content 页签无轮询, 文案不承诺自动重拉 */
     if (H.emptyFrame(host, {
       cls: "dt10-load", has: !!files.length, loading: !!loading, err: err,
       errText: "文件列表加载失败, 数据不可用", emptyText: "无文件列表",
     })) return;
-    const tree = buildTree(files);
-    const sel = findNode(tree, ui.selPath);
+    const tree = FT.buildFileTree(files);
+    /* 全局可用性闸 = 树根同判定(issue 26-10-29-1343: 旧 files.some(...) 与聚合单点同判据,
+     * 收到树模型上 —— 根 av 有值即全树至少一个文件有可用性) */
+    const hasAv = tree.av !== undefined;
+    const sel = FT.findNode(tree, ui.selPath);
     const cnt = { all: tree.files };
     const missCnt = countBy(tree, (x) => !x.dir && x.prog < 100);
     const skipCnt = countBy(tree, (x) => !x.dir && x.prio === 0);
@@ -450,7 +393,7 @@
     }
     const seg = ev.target.closest("[data-setp]");
     if (seg) {
-      const sel = findNode(buildTree(fileList(ctx)), ui.selPath);
+      const sel = FT.findNode(FT.buildFileTree(fileList(ctx)), ui.selPath);
       if (!sel) return;
       const p = Number(seg.getAttribute("data-setp"));
       ctx.setFilePriority(p, subtreeIndices(sel));
@@ -464,7 +407,7 @@
     }
     const foldBtn = ev.target.closest("[data-fold]");
     if (foldBtn) {
-      const all = collectDirs(buildTree(fileList(ctx)));
+      const all = collectDirs(FT.buildFileTree(fileList(ctx)));
       ui.folded = foldBtn.getAttribute("data-fold") === "close" ? new Set(all) : new Set();
       return;
     }

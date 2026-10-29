@@ -18,7 +18,8 @@
  * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
  *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846; 文件优先级文案表 PRIO_TEXT/
  *   prioText, issue 26-10-29-1340) + trackers 五桶判据表(reg.trackers: TRACKER_BUCKETS/
- *   TRACKER_BUCKET_ORDER, issue 26-10-29-1343)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
+ *   TRACKER_BUCKET_ORDER, issue 26-10-29-1343) + content 目录树单点(reg.content:
+ *   buildFileTree/findNode, issue 26-10-29-1343)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
  * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
  *
  * 装载序: 必须排在 drawer.js 之后、state.js 之前(三份 index.html 的 tpl-manifest)。
@@ -416,6 +417,90 @@
     TRACKER_BUCKET_ORDER: ["err", "warn", "upd", "ok", "off"],
   };
 
+  /* ---------------- content 目录树构建与聚合(reg.content, issue 26-10-29-1343) ----------------
+   * 10/12 两件 content 变体各持一份的 newDir/buildTree/aggregate/findNode 四件收口成单点
+   * (入池报告 R21-C-06: 四件各两份约 60 行, 路径切分/建目录/叶子字段/findNode 逐字同, 分歧全在
+   * 节点模型 —— 10 用 dirs 计数 + hasAv/minAv 布尔对, 12 用标量 av)。统一取并集与更优表示,
+   * av 单一哨兵 undefined(目录 = 子树最低可用性, 文件/子目录一并计入; 全树皆无则 undefined):
+   *   目录 { dir:true, name, path, depth, children, size, done, miss, files, dirs, prog, av? }
+   *   叶子 { dir:false, name, path, depth, index, size, prog, prio, av? }
+   * null 与 undefined 同视为无值(10 旧判定口径; 12 旧实现把 null 当值聚合、n.minAv=Infinity
+   * 会渲染出 "Infinity", 均属无判据漂移, 以本单点为准 —— 同时保证消费侧 num(n.av).toFixed
+   * 永不踩 null/Infinity)。dirs 恒有(12 多带一个计数字段无害)。不做 option 化
+   * (withDirCount/withAv 之类会让调用方又回到「各写一套判据」)。11(第三算法 derive 扁平表)
+   * 本项不并入, 口径以本函数为准(11 头注已声明)。落 reg.content 而非 reg.helpers:
+   * helpers 是跨页签骨架机制(dur/size/num/sig/滚动/事件/键盘), 判据命名空间按页签走
+   * (reg.peers 服务 07/08/09、reg.trackers 服务 04/05/06 的先例), 本表服务 10/12(将来 11)。 */
+  function dtNewDirNode(name, parentPath, parentDepth) {
+    return {
+      dir: true, name: name, path: parentPath ? parentPath + "/" + name : name,
+      depth: parentDepth + 1, children: [], size: 0, done: 0, miss: 0,
+      files: 0, dirs: 0, prog: 100, av: undefined,
+    };
+  }
+  function dtAggNode(n) {
+    if (!n.dir) {
+      n.done = n.size * (n.prog / 100);
+      n.miss = Math.max(0, n.size - n.done);
+      n.files = 1;
+      return;
+    }
+    for (var i = 0; i < n.children.length; i++) {
+      var c = n.children[i];
+      dtAggNode(c);
+      n.size += c.size; n.done += c.done; n.miss += c.miss; n.files += c.files;
+      if (c.dir) n.dirs += c.dirs + 1;
+      if (c.av !== undefined && (n.av === undefined || c.av < n.av)) n.av = c.av;
+    }
+    n.prog = n.size > 0 ? n.done / n.size * 100 : 100;
+  }
+  function dtFindNodeByPath(n, path) {
+    if (path && n.path === path) return n;
+    if (!n.dir) return null;
+    for (var i = 0; i < n.children.length; i++) {
+      var hit = dtFindNodeByPath(n.children[i], path);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  var CONTENT = {
+    /* qB files[].name 的 "/" 分隔路径 -> 目录树 + 自底向上聚合
+     * (子树大小 / 加权进度 / 缺口字节 / 文件数 / 子目录数 / 最低可用性) */
+    buildFileTree: function (files) {
+      var root = dtNewDirNode("", "", -1);
+      for (var i = 0; i < files.length; i++) {
+        var f = files[i];
+        var parts = String(f.name || "").split("/").filter(Boolean);
+        var node = root;
+        for (var d = 0; d < parts.length - 1; d++) {
+          var next = null;
+          for (var j = 0; j < node.children.length; j++) {
+            if (node.children[j].dir && node.children[j].name === parts[d]) { next = node.children[j]; break; }
+          }
+          if (!next) {
+            next = dtNewDirNode(parts[d], node.path, node.depth);
+            node.children.push(next);
+          }
+          node = next;
+        }
+        var last = parts[parts.length - 1] || "文件 " + i;
+        node.children.push({
+          dir: false, name: last, path: node.path ? node.path + "/" + last : last,
+          depth: node.depth + 1, index: i, size: HELPERS.num(f.size),
+          prog: Math.round(HELPERS.num(f.progress) * 1000) / 10,
+          prio: HELPERS.num(f.priority),
+          av: (f.availability === undefined || f.availability === null) ? undefined : HELPERS.num(f.availability),
+        });
+      }
+      dtAggNode(root);
+      return root;
+    },
+    /* 按 path 找节点(空 path 恒不命中 —— 根自身不可选中) */
+    findNode: function (n, path) {
+      return dtFindNodeByPath(n, path);
+    },
+  };
+
   /* ---------------- 注册表(变体文件直接消费的单例, 不走 app.mixin) ----------------
    * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
    * 否则接线守阵会把它当漏注入的 mixin。 */
@@ -432,6 +517,7 @@
     kit: KIT,
     peers: PEERS,
     trackers: TRACKERS,
+    content: CONTENT,
     /* 变体自注册入口: (id, tab) 唯一, tab 必须是五页签之一; id 只收 [A-Za-z0-9_-]
      * (要进 data-dt 属性与 CSS 选择器)。非法/重复 fail-fast 抛错 —— 变体半残比静默好。 */
     register: function (entry) {

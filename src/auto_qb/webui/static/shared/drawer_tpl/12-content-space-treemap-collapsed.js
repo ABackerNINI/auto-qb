@@ -3,7 +3,8 @@
  * 设计稿: resources/detail-panel-templates/12-content-space-treemap-collapsed.html(collapsed 档;
  * 矮/高 = 左树图 + 右体积榜自适应。收起档(摘要条体积构成)已随面板折叠状态整体移除(2026-10-09)。
  * 数据: /files qB 透传(drawer.files), squarified 树图纯前端计算 —— 块面积 = 体积占比,
- * 完整块绿面 / 未完成块琥珀水位(完成度 = --lv 渐变高), 顶层目录组头可折叠成单块聚合。
+ * 完整块绿面 / 未完成块琥珀水位(完成度 = --lv 渐变高), 顶层目录组头可折叠成单块聚合;
+ * 树构建/聚合走核心 reg.content::buildFileTree 单点(issue 26-10-29-1343, 与 10 同源)。
  * 动作(plan §04 映射行): 悬停互联(纯前端) —— 树图块与体积榜行互加高亮; 点选块/行 = 选中
  * 信息条(纯展示, 无优先级动作 —— 优先级回 classic / 变体 10/11 用)。
  * 渐进字段: 每文件 availability 有则进 title/信息条, 无则省略。
@@ -22,6 +23,7 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/事件挂摘 */
+  const FT = reg.content; /* content 目录树单点(buildFileTree/findNode, issue 26-10-29-1343) */
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
   /* 优先级文案经 H.prioText 单点取文(issue 26-10-29-1340), 本变体不再持字面表 */
@@ -114,72 +116,11 @@
     ".drawer .dt12-load { padding:26px 0; text-align:center; color:var(--fg-dim); font-size:12px; }",
   ].join("\n");
 
-  /* ---------------- 树构建(与 10 同判据, 自包含) ---------------- */
+  /* ---------------- 树构建走核心 reg.content 单点(issue 26-10-29-1343) ----------------
+   * 节点模型与 10 同源(av 标量, undefined/null = 无值); 本变体旧本地四件(newDir/buildTree/
+   * aggregate/findNode)已删, 旧「null 当值聚合」的漂移随单点消除。渲染侧 n.av 门不变。 */
   function fileList(ctx) {
     return (ctx.drawer && ctx.drawer.files) || [];
-  }
-  function newDir(name, parentPath, parentDepth) {
-    return {
-      dir: true, name, path: parentPath ? parentPath + "/" + name : name,
-      depth: parentDepth + 1, children: [], size: 0, done: 0, miss: 0,
-      files: 0, prog: 100, av: undefined,
-    };
-  }
-  function buildTree(files) {
-    const root = newDir("", "", -1);
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      const parts = String(f.name || "").split("/").filter(Boolean);
-      let node = root;
-      for (let d = 0; d < parts.length - 1; d++) {
-        let next = null;
-        for (const c of node.children) {
-          if (c.dir && c.name === parts[d]) { next = c; break; }
-        }
-        if (!next) {
-          next = newDir(parts[d], node.path, node.depth);
-          node.children.push(next);
-        }
-        node = next;
-      }
-      const last = parts[parts.length - 1] || "文件 " + i;
-      node.children.push({
-        dir: false, name: last, path: node.path ? node.path + "/" + last : last,
-        depth: node.depth + 1, index: i, size: num(f.size),
-        prog: Math.round(num(f.progress) * 1000) / 10,
-        prio: num(f.priority), av: f.availability,
-      });
-    }
-    aggregate(root);
-    return root;
-  }
-  function aggregate(n) {
-    if (!n.dir) {
-      n.done = n.size * (n.prog / 100);
-      n.miss = Math.max(0, n.size - n.done);
-      n.files = 1;
-      return;
-    }
-    let avSet = false, minAv = Infinity;
-    for (const c of n.children) {
-      aggregate(c);
-      n.size += c.size; n.done += c.done; n.miss += c.miss; n.files += c.files;
-      if (c.av !== undefined) { /* 目录聚合 = 子树内最低可用性(文件/子目录一并计入) */
-        if (!avSet || c.av < minAv) minAv = c.av;
-        avSet = true;
-      }
-    }
-    n.prog = n.size > 0 ? n.done / n.size * 100 : 100;
-    if (avSet) n.av = minAv; /* 目录 = 子树最低可用性(渐进字段, 全树皆无则保持 undefined) */
-  }
-  function findNode(n, path) {
-    if (path && n.path === path) return n;
-    if (!n.dir) return null;
-    for (const c of n.children) {
-      const hit = findNode(c, path);
-      if (hit) return hit;
-    }
-    return null;
   }
   function leaves(n) {
     const out = [];
@@ -342,7 +283,7 @@
     return T`<div class="dt12-list">${R(rows)}</div>`;
   }
   function infoHtml(tree) {
-    const n = ui.selPath ? findNode(tree, ui.selPath) : null;
+    const n = ui.selPath ? FT.findNode(tree, ui.selPath) : null;
     if (!n) return T`<div class="dt12-info"></div>`;
     const total = tree.size || 1;
     const stats = [
@@ -388,7 +329,7 @@
       cls: "dt12-load", has: !!files.length, loading: !!loading, err: err,
       errText: "文件列表加载失败, 数据不可用", emptyText: "无文件列表",
     })) return;
-    const tree = buildTree(files);
+    const tree = FT.buildFileTree(files);
     ui.tree = tree;
     const html = T`<div class="dt12-wrap${ui.fmiss ? " fmiss" : ""}">
       <div class="dt12-tools">
