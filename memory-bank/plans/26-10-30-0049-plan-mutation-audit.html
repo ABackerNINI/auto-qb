@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>rules/ 包变异测试审计 · 分步执行计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="mutation-audit">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-30-0049">
+<meta name="doc-updated" content="26-10-30-0049">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .gate { border-left: 2px solid var(--warn); background: rgba(226,168,110,.08); padding: 8px 14px; margin: 12px 0; font-size: 13.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: mutation-audit</div>
+<h1>rules/ 包变异测试审计 · 分步执行计划</h1>
+<p class="lede">对 <code>src/auto_qb/rules/</code>(规则引擎: 条件判据 + 表达式求值 + 动作副作用)跑一轮 mutmut 变异审计: 机器批量提名存活变异, 人手工确认哪些是真洞, 真洞各自入池。本计划只写「怎么修、为什么这么修」—— <b>不在本计划里实施</b>; 执行时轮次进任务档案 <code>tasks/26-10-08-test-mutation-audit.md</code> 与基线切片。形态与 <code>plans/26-10-09-1459-plan-mutation-hr.html</code>(已完成)同款。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-30-0049 · <b>doc-updated</b> 26-10-30-0049 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「写rules变异测试计划」(hr 计划翻 Done 后, 按常驻锚 §07 覆盖进度总表 rules/ 行「待做(优先级 1)」派生; 指导: mutation-testing skill「派生计划」节)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>1.1 目标与边界</h3>
+<table>
+  <tr><th>项</th><th>值</th></tr>
+  <tr><td>目标包</td><td class="mono" style="white-space:normal">src/auto_qb/rules/</td></tr>
+  <tr><td>目标 glob (only_mutate)</td><td class="mono">**/rules/*.py</td></tr>
+  <tr><td>包内构成</td><td>顶层 5 文件 · <code>actions/</code> 6 文件 · <code>expr/</code> 7 文件 = <b>18 个 .py</b>(2026-10-30 实测)</td></tr>
+  <tr><td>规模</td><td>2,731 行(含空行) · 209 个 def/class(2026-10-30 实测)</td></tr>
+  <tr><td>选择池</td><td>16 个定向测试文件 / 470 test fn(§3.2, D1 待拍板)</td></tr>
+  <tr><td>粒度</td><td><b>一个包</b> —— 不按全 <code>src</code> 跑(硬约束 1)</td></tr>
+</table>
+<p><code>**/rules/*.py</code> 已实测(fnmatch, 2026-10-30, 全 src 逐文件核对): 恰好命中 rules 包全部 18 个文件(含 <code>actions/</code> 与 <code>expr/</code> 子目录 —— mutmut 的匹配是 fnmatch 语义, <code>*</code> 跨 <code>/</code>), 且<b>零误伤</b> —— <code>src/auto_qb/config/validation/rules.py</code>(config 侧校验模块, 同名)不匹配(路径段是 <code>rules.py</code> 不是 <code>rules/</code>), <code>webui/server/routes/hr.py</code> 等也不匹配。不要写 <code>**/rules/**/*.py</code> —— 它要求 <code>rules/</code> 下必须有子目录, 会漏掉顶层 5 个文件。</p>
+<p class="cm" style="font-size:13px">工具约束说明: mutmut 的 <code>source_paths</code> 必须是整个 <code>src</code>(写单文件会因包内相对 import 失败), 目标靠 <code>only_mutate</code> 收窄; 实际参与变异的只有 glob 命中的 rules 包 18 文件。</p>
+
+<h3>1.2 为什么先 rules</h3>
+<ul>
+  <li><b>对象优先级第 1 位</b> —— 可行性报告 §11 按「判据密度 × 出错代价」排: ① <b><code>rules/</code></b> ② <code>hr/</code> ③ <code>config/</code> ④ <code>core/</code>。hr/config 已做完(hr 六轮全清、config 七轮全清), rules 是剩面里优先级最高的; 常驻锚 §07 里它挂「待做(优先级 1)」。</li>
+  <li><b>实测分数全项目最低</b> —— 报告 §11: <code>rules/</code> 与 <code>infra/utils.py</code> 覆盖率同为 98%, 变异杀死率却差 17 个点(<b>55.5% vs 72.5%</b>); 3,270 变异里存活 1,446 条, 从未做过三分类, 一个真洞 issue 都没有。判据多的地方, 测试最容易只写「跑通」不写「边界」。</li>
+  <li><b>出错代价是真实种子上的错误动作</b> —— 规则引擎的输出直接作用于生产种子: 加标签/分类、暂停、<b>跳检</b>(黄金法则的保守默认对象, 错放 = 对未校验种子跳过哈希检查)、转移(MoveTo 路径)。<code>recheck_fail</code> 上限闸(<code>RECHECK_FAIL_LIMIT</code>)错一处, 边界种子反复 recheck 或漏处理。</li>
+  <li><b>复合体, 边界最难写全</b> —— 条件判据(大小/状态/空闲/做种时间) + 表达式子语言(lexer/parser/eval/env 四层) + 动作副作用 + 注册表去重 + checking_meta 的在检竞态窗口。表达式求值层的运算符边界与求值顺序, 覆盖率给不出刻度。</li>
+  <li><b>本轮的核心产出是一个刻度, 不是一次修复</b> —— 报告那次实测只是可行性调研的一次性观测(§1.2 报告自己的「数字可复现性边界」); 本轮跑正式审计轮, 首轮以实测为准, 真洞按主题入池。</li>
+</ul>
+
+<h3>1.3 目标函数 / 类清单 (按判据密度 × 出错代价排序)</h3>
+<p>下表是<b>人工预判的重点面</b>, 用于事后对照「机器提名到的是不是这些地方」; 变异目标仍以 glob 为准, 不按清单逐个跑。</p>
+<table>
+  <tr><th>档</th><th>位置</th><th>判据形态</th></tr>
+  <tr>
+    <td><b>A</b><br><span class="cm">表达式子语言</span></td>
+    <td class="mono">expr/eval.py(11 def) · expr/env.py(39 def) · expr/parser.py(20 def) · expr/lexer.py(5 def) · expr/types.py(7 def) · expr/errors.py(3 def)</td>
+    <td>求值顺序与短路 · 比较链与边界(<code>&lt;</code>/<code>&lt;=</code>) · 函数调用白名单(env) · 未知名/类型错拒收(errors, 不猜) · 递归下降优先级与结合性 · 词法容错(前导零/非法字符拒绝)</td>
+  </tr>
+  <tr>
+    <td><b>A</b><br><span class="cm">条件判据</span></td>
+    <td class="mono">conditions.py(41 def)</td>
+    <td>大小/份额/做种时间/空闲/状态/自由空间各判据的边界(早一行/晚一行) · 区间开闭 · 缺字段兜底(不猜)</td>
+  </tr>
+  <tr>
+    <td><b>A</b><br><span class="cm">动作副作用</span></td>
+    <td class="mono">actions/checking.py(8 def) · actions/full_checking.py(8 def) · actions/basic.py(19 def) · actions/transfer.py(10 def) · actions/skip_checking.py(2 def)</td>
+    <td><code>RECHECK_FAIL_LIMIT</code> 计数与上限闸(错 = 反复 recheck 或漏处理) · 跳检动作(高风险, 黄金法则保守默认对象) · 加标签/分类/暂停副作用 · MoveTo 路径拼接与冲突</td>
+  </tr>
+  <tr>
+    <td><b>B</b><br><span class="cm">引擎骨架</span></td>
+    <td class="mono">base.py(27 def) · registry.py(4 def) · checking_meta.py(5 def)</td>
+    <td>Rule/RuleContext 生命周期与匹配顺序 · 注册表去重与查找 · 在检判定与 <code>INFLIGHT_TTL</code> 竞态窗口(过期误判 = 卡死或重复动作)</td>
+  </tr>
+  <tr>
+    <td><b>C</b><br><span class="cm">胶水</span></td>
+    <td class="mono">__init__.py × 3 · actions/__init__.py(装配)</td>
+    <td>re-export 与工厂装配; 行为由消费方覆盖, 预期变异极少</td>
+  </tr>
+</table>
+
+<h3>1.4 显式排除 (不在本轮范围)</h3>
+<table>
+  <tr><th>排除项</th><th>理由</th></tr>
+  <tr><td class="mono">src/auto_qb/config/validation/rules.py</td><td>config 侧的规则<b>校验</b>模块(同名不同物), 不匹配目标 glob; 属 config 轮(已七轮做完)</td></tr>
+  <tr><td class="mono">tests/test_config_schema.py</td><td>测的是 config 校验面(fail-fast), 只是 import 了 rules registry/expr.env 做装配检查 —— 属 config 轮</td></tr>
+  <tr><td class="mono">tests/test_modules_p5.py</td><td>测的是 core 模块宿主(rules_mod 透传), 属模块宿主轮次</td></tr>
+  <tr><td class="mono">tests/test_snapshot_sync.py · test_web_skip_check.py</td><td>只 import rules 类型(<code>RuleContext</code>/<code>ActionResult</code>)做签名/端点测试, 测的是 core 与 webui 面 —— 不进池(见 §3.2 残差风险)</td></tr>
+  <tr><td>全 <code>tests/</code> 当池</td><td>实测把 WSL 打挂(报告 §07 对照四); 且报告 §11 实测池宽对杀死率只差 1 个点</td></tr>
+  <tr><td>追杀死率 100% / 挂提交闸门</td><td>等价变异杀不掉是数学事实; 变异分数是审计信号不是放行条件(报告 §11)</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+  <li><b>覆盖率 98% 量不出强弱</b> —— 报告 §11 实测: <code>rules/</code> 3,270 变异 / 杀 1,813 / 存活 1,446 / <code>no tests</code> 1 / 超时 10 → 杀死率 <b>55.5%</b>(7.48 mut/s · 墙时 7m31s · <code>--max-children 4</code> · WSL 8 核 · 定向 6 文件池)。同一份代码覆盖率 98% —— 两条路都「跑到了」, 但近一半变异没人抓得住。</li>
+  <li><b>那次实测是单次观测</b> —— 报告 §11 自己标注: rules 的 7m31s 与 55.5% 只测了一次, 变异执行本身确定, 但不能当正式基线; 正式审计轮以本轮实测为准。</li>
+  <li><b>1,446 条存活从未分类</b> —— config 轮(七轮)与 hr 轮(首轮 + 七个模块轮)都已走完「三分类 → 真洞入池 → 补测 → 复跑」全流程; rules 是常驻锚 §07 里唯一「分数已知但零处置」的包。</li>
+  <li><b>池宽/池窄的经验已有单点</b> —— 报告 §11: rules 同进度点 6 文件池 vs 全 tests 池杀死率只差 1 个点(52.4% vs 53.6%), 池宽的代价在内存不在结论; hr 首轮推论: 池覆盖整包时假存活≈0(抽验 24/24), <code>mutants.verify</code> 缩不了候选, 工作量在读 diff 判真洞 vs 等价 —— 本轮池(16 文件)属宽池, 直接按这个口径排人力。</li>
+  <li><b>主仓代码自报告基线已演化</b> —— 报告实测时 rules/ 2,662 行 → 现在 2,731 行(§1.1); 变异数估算按现行行数外推, 首轮以实测为准。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 主线</h3>
+<p>一轮整包审计(S1–S8, 同 hr 形态): 首轮拿正式刻度 → <code>mutants.report</code> 导出带 diff 清单 → 三分类(宽池口径: 直接读 diff 判真洞 vs 等价) → 真洞按主题入池 → 按模块拆补测轮(后续计划或续轮, 不在本计划展开)。计划拍板后冻结, 执行时轮次进共享任务档案。</p>
+
+<h3>3.2 选择池 (定向 16 文件 / 470 test fn)</h3>
+<table>
+  <tr><th>池文件</th><th class="mono" style="text-align:right">test fn</th><th>覆盖的 rules 面</th></tr>
+  <tr><td class="mono">tests/test_rule_base.py</td><td style="text-align:right">40</td><td>base.py: Rule/RuleContext/ActionResult 生命周期</td></tr>
+  <tr><td class="mono">tests/test_rule_engine.py</td><td style="text-align:right">34</td><td>引擎匹配顺序与执行</td></tr>
+  <tr><td class="mono">tests/test_rules_core.py</td><td style="text-align:right">9</td><td>条件+动作集成(StateCondition/AddCategory)</td></tr>
+  <tr><td class="mono">tests/test_conditions.py</td><td style="text-align:right">32</td><td>conditions.py 全族 + expr.errors</td></tr>
+  <tr><td class="mono">tests/test_state_matrix.py</td><td style="text-align:right">3</td><td>StateCondition 状态矩阵</td></tr>
+  <tr><td class="mono">tests/test_file_access.py</td><td style="text-align:right">31</td><td>FreespaceCondition 等文件面条件</td></tr>
+  <tr><td class="mono">tests/test_registry.py</td><td style="text-align:right">6</td><td>registry.py 注册/查找</td></tr>
+  <tr><td class="mono">tests/test_actions.py</td><td style="text-align:right">34</td><td>actions/basic.py 等 + actions 装配</td></tr>
+  <tr><td class="mono">tests/test_checking.py</td><td style="text-align:right">70</td><td>actions/checking.py + full_checking.py(recheck_fail 闸)</td></tr>
+  <tr><td class="mono">tests/test_ops.py</td><td style="text-align:right">48</td><td>checking_meta.py(在检判定/TTL) + RECHECK_FAIL_LIMIT</td></tr>
+  <tr><td class="mono">tests/test_relocate_exec.py</td><td style="text-align:right">41</td><td>actions/transfer.py(MoveTo)</td></tr>
+  <tr><td class="mono">tests/test_expr_parse.py</td><td style="text-align:right">18</td><td>expr/lexer.py + parser.py + types.py</td></tr>
+  <tr><td class="mono">tests/test_expr_eval.py</td><td style="text-align:right">32</td><td>expr/eval.py + env.py</td></tr>
+  <tr><td class="mono">tests/test_mixins_tags.py</td><td style="text-align:right">32</td><td>actions/basic.py(AddTags) 混入面</td></tr>
+  <tr><td class="mono">tests/test_trigger_events.py</td><td style="text-align:right">27</td><td>Rule/RuleContext 经触发链的消费面</td></tr>
+  <tr><td class="mono">tests/test_hr.py</td><td style="text-align:right">13</td><td>HR 规则走 rules 引擎(dlsize 条件 + add_tag 动作); hr 计划 §1.4 显式划给 rules 轮</td></tr>
+  <tr><td><b>合计</b></td><td style="text-align:right"><b>470</b></td><td>—</td></tr>
+</table>
+<ul>
+  <li><b>为什么不用全 <code>tests/</code></b>: 实测打挂 WSL(报告 §07 对照四); 且 16 文件已覆盖整包函数面(下表), 再宽只有内存代价。</li>
+  <li><b>函数面核对(硬约束 9)</b>: 池与模块基本一一对应 —— <code>base.py</code>←rule_base/rule_engine/trigger_events · <code>conditions.py</code>←conditions/state_matrix/file_access/test_hr · <code>registry.py</code>←registry · <code>checking_meta.py</code>←ops · <code>actions/*</code>←actions/checking/ops/relocate_exec/mixins_tags/rules_core · <code>expr/*</code>←expr_parse/expr_eval/conditions。残差风险: <code>actions/skip_checking.py</code>(2 def)的专属用例若只在 <code>test_web_skip_check.py</code>(webui 轮, 不进池), 其变异可能落 <code>no tests</code>; <code>expr/env.py</code> 的部分环境函数可能只有 config 侧消费。两处都由 <b>S2 的 <code>no tests</code> 计数</b>核实 —— 整片落进先补进池再复跑(硬约束 9), 不硬分类。</li>
+  <li><b>池是「存活数的函数」</b>: 这 16 个文件就是本轮的选择池变量, 必须原样写进切片; 换池后跨轮数字不可比(坑档 mutation-pool-artifact)。</li>
+</ul>
+
+<h3>3.3 测算基数</h3>
+<table>
+  <tr><th>口径</th><th>依据</th><th style="text-align:right">变异数</th><th style="text-align:right">单轮时长</th></tr>
+  <tr>
+    <td>现行行数外推</td>
+    <td>2,731 行 × 1.2/行(报告 §08 实测 2,662 行 → 3,270 变异 = 1.23/行)</td>
+    <td style="text-align:right">≈ 3,300</td>
+    <td style="text-align:right">≈ 40–80 min</td>
+  </tr>
+</table>
+<ul>
+  <li><b>墙时不用报告的 7m31s 外推</b> —— 那是 6 文件池的单价锚(7.48 mut/s); 本轮池 16 文件 / 470 fn, 与 hr 池(15 文件 / 457 fn)同量级, hr 实测 ≈1.4 mut/s(≈0.7s/变异) → 3,300 变异 ≈ 40 min。按 skill 口径「每 1,000 变异 ≥12 min 并留 2x 余量」→ 排期按 <b>40–80 min</b>。<code>mutants.run</code> 的 timeout 已是 7200s(R15 抬过), 整包单轮在窗口内。</li>
+  <li><b>本轮不做「剔除纯数据声明」的精化</b>: config 首轮这么估后实测 +26%; 估算只用于排期, 首轮一律以实测为准并原样记进切片。</li>
+  <li><b>变异数显著偏离的处置</b>: 明显低于 ≈3,300 → 一批声明被排除属正常记一笔; 明显高于 ≈3,600 → 先核 glob(<code>commands run mutants.status</code> 看 <code>only_mutate</code> 是否多收文件)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p>命令<b>一律走 task id</b>(命令本体与陷阱内建在 <code>mutants</code> 包里, 不手拼裸命令)。用法细节用 <code>commands run show mutants.run</code> 取。</p>
+
+<div class="aside"><b>S1 · 环境就绪</b> —— 建/刷新 WSL 镜像仓 + 依赖 + mutmut。幂等; <code>commands run mutants.setup</code>。门槛: 本机需 WSL。多 clone 并行时 <code>--mirror '~/auto-qb-mut-rules'</code> 各占一份 + <code>--children</code> 降到 3(硬约束 14)。</div>
+<div class="aside"><b>S2 · 首轮</b> —— 对 rules 包整包跑一轮, 池 = §3.2 的 16 个文件; 记下变异数 / 杀死率 / 耗时 / 工具版本 / 选择池 / <code>no tests</code> 计数。<code>commands run mutants.run -- --target '**/rules/*.py' --pool tests/test_rule_base.py tests/test_rule_engine.py tests/test_rules_core.py tests/test_conditions.py tests/test_state_matrix.py tests/test_file_access.py tests/test_registry.py tests/test_actions.py tests/test_checking.py tests/test_ops.py tests/test_relocate_exec.py tests/test_expr_parse.py tests/test_expr_eval.py tests/test_mixins_tags.py tests/test_trigger_events.py tests/test_hr.py</code>。入场条件(硬): 基线全绿 —— 先 <code>commands run test.quick</code>, 不绿先修别跑变异。存活清单落盘, 终端只回显头部, 读全文按需 grep 别整读。</div>
+<div class="aside"><b>S3 · 导出 + 三分类</b> —— <code>commands run mutants.report -- --target '**/rules/*.py'</code> 拿<b>带 diff 的清单</b>与按状态/按模块汇总; 逐条判「真洞 / 等价变异 / 假存活」。宽池推论(hr 首轮实测): 池覆盖整包 ⇒ 假存活≈0, <b>别指望 <code>mutants.verify</code> 缩小候选</b>, 工作量直接落在读 diff。rules 域高频<b>等价</b>形态预警: 短路求值中无副作用的右支、离散状态枚举上的 <code>&lt;=</code>/<code>&lt;</code>、re-export 别名、异常文案; 高频<b>真洞</b>形态: 条件边界(早一行/晚一行)、<code>RECHECK_FAIL_LIMIT</code> 计数增减时机、<code>INFLIGHT_TTL</code> 比较方向、求值短路顺序、env 白名单漏项、MoveTo 路径拼接。</div>
+<div class="aside"><b>S4 · 手工确认</b> —— 候选多时先按「判据密度 × 出错代价」与变异形态(边界/continue-break/and-or/语句删除)收窄再 <code>commands run mutants.verify -- --from-report &lt;清单&gt; [--only-status survived]</code>(全套件 apply → 跑 → 还原, ≈15s/条); 宽池下它只做确认不做筛选。判据: 红 = 假存活(池没选到); 不红且行为错 = 真缺口。候选只有形态没 id 时走硬约束 13 形态级手搓复验(不进存活计数)。</div>
+<div class="aside"><b>S5 · 补测</b> —— 只对确认的真洞加断言: 改 <code>tests/</code> + 同步文件头 docstring「## 测试计划」, 补完 <code>commands run test.full</code>; 守阵必须<b>红验</b>(同构变异 → 目标用例红 → 还原复绿, 源码零残留)。真洞指向<b>代码缺陷</b>时不顺手改 —— 按范围守恒入池 <code>memory-bank/issues/</code>。</div>
+<div class="aside"><b>S6 · 复跑</b> —— 同目标<b>同池</b>再跑一轮看存活数下降; 带新守阵时先 <code>cp</code> 测试进镜像再 <code>--no-refresh</code>(硬约束 11, 否则 <code>git checkout -f</code> 把未提交守阵冲掉)。</div>
+<div class="aside"><b>S7 · 记录</b> —— 基线切片 <code>memory-bank/testing/baselines/YY-MM-DD-HHMM-mutants-rules.md</code>(必填字段见 skill 记录口径; 切片自带 <code>**Refs:</code> 行); 任务档案追加一行轮次(轮次号先 <code>git fetch</code> 看远端, 并行会话撞号时后到者重编号); 真洞<b>各自</b>入池, issue 填 <code>doc-refs</code>。</div>
+<div class="aside"><b>S8 · 更新常驻锚</b> —— 改 issue <code>26-10-08-0642-test-mutation-audit-standing</code> <b>§07 覆盖进度总表</b>的 <code>rules/</code> 行: 日期 / 变异数 / 杀死率 / 轮次 / 状态(待做 → 已做(余量在池) 或 已做(已清)) / 切片链接; §08 台账补行。<div class="gate">这步没做完, 一轮不算收尾; 表里只放一行汇总刻度与指针, 不抄 <code>N passed</code>。</div></div>
+
+<h3>验收 (可判定)</h3>
+<table>
+  <tr><th class="mono" style="text-align:right">#</th><th>判据</th></tr>
+  <tr><td class="mono" style="text-align:right">1</td><td>基线切片字段齐全: 目标 glob · <b>选择池逐个文件</b> · 变异总数 · 杀死/存活/<code>no tests</code>/超时计数 · 杀死率 · 耗时(墙时+CPU) · 工具名+版本 · <code>--max-children</code> · 机器(WSL 核数) · <b>真洞数 + 各 issue 链接</b> · <code>**Refs:</code> 行</td></tr>
+  <tr><td class="mono" style="text-align:right">2</td><td>三分类后的<b>真洞全部</b>已入池或已当场补测(无悬空真洞)</td></tr>
+  <tr><td class="mono" style="text-align:right">3</td><td>复跑(同目标同池)存活数 <b>≤</b> 首轮</td></tr>
+  <tr><td class="mono" style="text-align:right">4</td><td>补测后 <code>commands run test.full</code> 全绿; 覆盖率不低于基线</td></tr>
+  <tr><td class="mono" style="text-align:right">5</td><td><b>常驻锚 §07</b> 的 <code>rules/</code> 行已同步(日期/变异数/杀死率与切片逐位一致, 挂切片链接)</td></tr>
+</table>
+<div class="gate"><b>口径</b>: 目标不是「分数涨」, 是「包内不再有不知道为什么活着的变异」—— 每条存活都要有分类理由(真洞/等价/假存活)。等价变异杀不掉是数学事实, 不追。</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th class="mono">编号</th><th>决策点</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr>
+    <td class="mono">D1</td>
+    <td>选择池口径</td>
+    <td><b>16 文件定向池</b>(§3.2, 含 <code>test_hr.py</code>) —— 函数面覆盖整包, <code>no tests</code> 风险最小; 代价是宽池下单变异更慢(≈0.7s), 且与报告锚点(6 文件池)数字不可比</td>
+    <td>报告同款 6 文件最小池 —— 与 §02 锚点同口径, 墙时短; 但函数面覆盖弱, <code>no tests</code>/假存活风险高, 仍要二次补池</td>
+  </tr>
+  <tr>
+    <td class="mono">D2</td>
+    <td>首轮粒度</td>
+    <td><b>整包单轮</b> —— 预估 3,300 变异 / 40–80 min, 在 7200s timeout 窗口内; 超 60 min 长尾可 mutmut 续跑(硬约束 15), 不必预切</td>
+    <td>直接按模块切三轮(expr / actions / base+conditions+registry+checking_meta) —— 每轮窗口可控; 代价是三份切片、池要跟着切, 数字拆分记录</td>
+  </tr>
+</table>
+<p class="cm" style="font-size:13px">拍板后本计划冻结(状态 Open → Done 走 <code>commands run kb.status</code>); 改版 = 同文件加变更记录 + 抬 <code>doc-updated</code>。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th class="mono">编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td class="mono">—</td><td class="cm">待拍板(拍板后回填 D 编号结论)</td><td class="cm">—</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险 / 现象</th><th>触发条件与处置</th></tr>
+  <tr><td>基线不绿</td><td>S2 入场即停 —— 工具会跳过变异(<code>skipping mutation testing because N baseline test(s) failed</code>); 先 <code>test.quick</code> 修绿再跑</td></tr>
+  <tr><td>单轮墙时超长</td><td>预估已按 40–80 min 排; 撞 7200s timeout 或长尾卡住 → <b>不从零重跑</b>: mutmut 对未变函数保留结果, 镜像里直接续跑只补余量(硬约束 15, 必须绕过 <code>mutants.run</code> —— 它每次 <code>rm -rf mutants</code>); 更稳是按模块切(D2 备选)</td></tr>
+  <tr><td>WSL 整体失去响应</td><td><code>wsl --shutdown</code> 救回 → 降 <code>--max-children</code> 重来; 核 glob 是否多收文件</td></tr>
+  <tr><td>并行会话冲毁镜像</td><td>有其它会话在跑变异 → 专用镜像 <code>--mirror '~/auto-qb-mut-rules'</code> + <code>--children</code> 降 3(硬约束 14); 否则对方 <code>rm -rf mutants</code> 删掉你正在跑的 <code>.meta</code>, 崩在 FileNotFoundError(hr 首轮实测 85% 作废)</td></tr>
+  <tr><td><code>no tests</code> 整片集中</td><td>若一批变异落在池没碰过的函数(预判: <code>skip_checking.py</code> / <code>expr/env.py</code> 尾部) → 先补进池再复跑, 否则那批连三分类都做不了(硬约束 9)</td></tr>
+  <tr><td>把存活清单当缺口单</td><td>停 —— 必须先 S3 三分类 + S4 手工确认; 宽池下假存活≈0 但等价变异占比不小(config/hr 实测: 文案/日志级别/短路右支/离散枚举比较)</td></tr>
+  <tr><td>换池后跨轮比存活数</td><td>禁止 —— 池是变量, 数字不可比; 池必须逐文件写进切片</td></tr>
+  <tr><td>拿 mutmut 分数与 gremlins 分数横向比</td><td>禁止 —— 分母不同(前者含 <code>no tests</code>)</td></tr>
+  <tr><td>手搓复验条数当存活数报</td><td>手搓变异不是 mutmut 编号, 量化只认 <code>mutants.run</code> 同池复跑(硬约束 13 边界)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-30-0049</span> 初版: rules/ 包分步执行计划(范围 18 文件 2,731 行 · A/B/C 三档目标清单 · 16 文件 470 fn 池含函数面核对 · 测算 ≈3,300 变异 / 40–80 min · S1–S8 · 验收 5 条 · 待拍板 D1 池口径 / D2 首轮粒度 · 风险停手点)。来源: 用户指令「写rules变异测试计划」; 引报告 §08/§11 实测锚点与 config/hr 轮经验, 零 src/tests 改动, 未执行审计(计划边界: 不在计划里实施)。</li>
+</ul>
+
+</div>
+</body>
+</html>

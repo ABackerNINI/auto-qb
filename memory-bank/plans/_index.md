@@ -14,6 +14,7 @@
 
 ## Open
 
+- [26-10-30-0049] [rules/ 包变异测试审计 · 分步执行计划](26-10-30-0049-plan-mutation-audit.html) — `mutation-audit`
 - [26-10-20-1316] [global-traffic-monitor 正主注册与让位代拉设计](26-10-20-1316-plan-gtm-primary-registration.html) — `gtm-primary-registration`
 - [26-10-19-2341] [WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)](26-10-19-2341-plan-webui-dialog-tone-color.html) — `webui-dialog-tone-color`
 - [26-10-18-1604] [免重启整组迁移(A/C)分步实施计划](26-10-18-1604-plan-group-relocate-restart-free.html) — `group-relocate-restart-free`
