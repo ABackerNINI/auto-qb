@@ -1292,9 +1292,13 @@ def test_drawer_table_bridge_wiring():
             f"{fname} 残留手搓排序表头(表头归引擎 aq-table)"
         if segkey:
             # 分段桥锚槽是动态寻址(data-dt-anchor-slot="${g.key}"), 逐组 teleport :to 追 [data-dt-seg=key];
-            # segkey 钉在分组键表声明侧(键名漂移即桥段寻址失配)。
+            # segkey 钉在分组键表声明侧(键名漂移即桥段寻址失配) —— 两可形态: 组表字面(08)或
+            # 核心桶序派生(05, issue 26-10-29-1343 后键集单源在核心 TRACKER_BUCKET_ORDER,
+            # 逐键由 test_drawer_tracker_bucket_text_single_point 钉住)。
             assert 'data-dt-anchor-slot="${g.key}"' in v, f"{fname} 缺分组锚槽动态寻址(分段桥的段寻址侧)"
-            assert f'{{ key: "{segkey}"' in v, f"{fname} 缺分组键 {segkey}(分段桥段寻址的声明侧)"
+            if f'{{ key: "{segkey}"' not in v:
+                assert "TRACKER_BUCKET_ORDER" in v, \
+                    f"{fname} 缺分组键 {segkey}(分段桥段寻址的声明侧: 组表字面或核心桶序派生)"
         else:
             assert 'data-dt-anchor-slot=""' in v, f"{fname} 缺单锚槽"
     # 04 排序并引擎的正向钉: 分段钮经 dtSortSet 直设 dyn 键(引擎单点), active 态读 dtSortCell

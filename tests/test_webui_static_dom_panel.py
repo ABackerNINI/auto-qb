@@ -51,6 +51,7 @@
 - test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
 - test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
+- test_drawer_tracker_bucket_text_single_point: tracker 五桶文案表单点守阵(issue 26-10-29-1343) —— 04/05/06 三变体各持一份的桶文案(04/06 BUCKET{text,sev} 两份 + 05 GROUPS{text,cnt} 一份 + 04 PILLS 与 05 计数条内联字面, 共 5 处两形状)收口成核心层 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt + TRACKER_BUCKET_ORDER 处理序数组, 05 分区顺序与 04/06 sev 升序同源写一次)挂 reg.trackers(reg.peers 同类判据命名空间); 守阵 = 核心表全列逐字钉住 + 桶文案词「未联系」drawer_tpl/ 零命中且核心层恰 1 处 + 三变体 TK 接线与本地 BUCKET/GROUPS/胶囊 text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义留各自文件) + node 真跑 text/sev/cnt 与旧表逐字对账(sev 0/1/2/3/9 不动 = 排序权值等价; 变体私有 bucketOf 三份属 R21-B-05/C-05 不在本项; 行为等价 e2e 盯 drawer-trackers-variant-tables / drawer-trackers-reannounce)
 - test_drawer_general_hr_state_line_parity: 抽屉 general 三变体 HR 结论行对齐守阵(issue 26-10-29-1341) —— 同一颗 hr_triggered 种子的「删除安全档位结论 · 依据」行(hr_safety_text/hr_state_text + hr_reason)三变体都必须消费 hr_state: 01/02 从旧版就有, 03 手抄时字段集停在旧版整段漏掉, 后端 views.py 详情载荷字段齐全、hr.js::hrStateLine 注释成文「详情抽屉要显示这行」, 选 03 就看不到「能否删」是用户可见缺失; 守阵 = 三件源码各含 if (d.hr_state) 闸(空值路径被闸拦住, hr_state 为空不多出空行), 缺件即红
 - test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
@@ -5938,6 +5939,105 @@ for (const p of [0, 1, 6, 7]) {
 }
 ok("4 档(legacy 高)补测: prioText(4, '4') === 高", H.prioText(4, "4") === "高");
 ok("PRIO_TEXT 五键全在册", [0, 1, 4, 6, 7].every((p) => H.PRIO_TEXT[p] !== undefined));
+console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]).length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_drawer_tracker_bucket_text_single_point():
+    """tracker 五桶文案表单点守阵(issue 26-10-29-1343) ——
+    ① 桶文案/桶集单源: 核心 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt 逐字钉住 +
+       TRACKER_BUCKET_ORDER)挂 reg.trackers(reg.peers 同类判据命名空间);
+    ② 桶文案词唯一: 「未联系」(只在桶文案出现的词)在 drawer_tpl/ 零命中、核心层表内恰 1 处
+       (drawer.js 的 drawerTrackerStatus 状态码表是另一张表, 不在本项范围);
+    ③ 04/05/06 各经 reg.trackers 消费(TK 别名), 本地 BUCKET/GROUPS 字面与 04 PILLS 的
+       text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义, 留各自文件);
+    ④ node 真跑(无 node 静默跳过): text/sev/cnt 与旧表逐字对账, sev 权值 0/1/2/3/9 不动
+       (04/06 排序权值等价), order 与 TRACKER_BUCKET_ORDER 下标同源。
+    行为等价由 e2e 盯(drawer-trackers-variant-tables / drawer-trackers-reannounce)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+
+    # ---- ① 核心层单源表(全列逐字钉住) ----
+    for row in (
+        'err: { text: "未工作", sev: 0, order: 0, cnt: "正在拖后腿 · 优先处理" }',
+        'warn: { text: "未联系", sev: 1, order: 1, cnt: "可用但需关注" }',
+        'upd: { text: "更新中", sev: 2, order: 2, cnt: "汇报进行时" }',
+        'ok: { text: "工作", sev: 3, order: 3, cnt: "按 tier 升序" }',
+        'off: { text: "禁用", sev: 9, order: 4, cnt: "qB 合成 / 已禁用" }',
+    ):
+        assert row in core, f"TRACKER_BUCKETS 行漂了: {row}"
+    assert 'TRACKER_BUCKET_ORDER: ["err", "warn", "upd", "ok", "off"]' in core, \
+        "TRACKER_BUCKET_ORDER 漂了(05 分区顺序与 04/06 sev 升序同源)"
+    assert "trackers: TRACKERS," in core, "TPL_REG 未挂 trackers 命名空间(变体经 reg.trackers 消费)"
+
+    # ---- ② 桶文案词唯一 ----
+    tpl_dir = os.path.join(shared, "drawer_tpl")
+    for fn in os.listdir(tpl_dir):
+        if not fn.endswith(".js"):
+            continue
+        v = open(os.path.join(tpl_dir, fn), encoding="utf-8").read()
+        assert "未联系" not in v, f"drawer_tpl/{fn} 出现桶文案字面「未联系」(应读 reg.trackers 单点)"
+    assert core.count("未联系") == 1, "核心层桶文案字面应恰 1 处(TRACKER_BUCKETS 表内)"
+
+    # ---- ③ 三变体接线, 本地副本零残留 ----
+    for name, gone in (
+        ("04-trackers-status-cards-tall", ('const BUCKET = {', 'text: "工作"', 'tip: "工作 = 绿"')),
+        ("05-trackers-health-groups-low", ("const GROUPS = [", 'cnt: "正在拖后腿 · 优先处理"')),
+        ("06-trackers-table-collapsed", ("const BUCKET = {", )),
+    ):
+        v = open(os.path.join(tpl_dir, name + ".js"), encoding="utf-8").read()
+        assert "reg.trackers" in v, f"{name} 未接 trackers 判据单点(reg.trackers)"
+        for g in gone:
+            assert g not in v, f"{name} 又出现桶表本地副本 {g!r}(应读 reg.trackers 单点)"
+
+    # ---- ④ node 真跑: text/sev/cnt/order 与旧表逐字对账 ----
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _TRACKER_BUCKETS_NODE_PROBE,
+         os.path.join(shared, "drawer_templates.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"tracker buckets node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"tracker buckets 电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+_TRACKER_BUCKETS_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* localStorage 桩; document 保持 undefined —— dtInjectCss 有守卫跳过注入 */
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const TK = window.AQB_DRAWER_TPL_REG.trackers;
+/* 旧五处文案/权值对账基准(只活在测试里): 04/06 BUCKET{text,sev} + 05 GROUPS{cnt} */
+const OLD_TEXT_SEV = {
+  err: { text: "未工作", sev: 0 }, warn: { text: "未联系", sev: 1 }, upd: { text: "更新中", sev: 2 },
+  ok: { text: "工作", sev: 3 }, off: { text: "禁用", sev: 9 },
+};
+const OLD_CNT = { err: "正在拖后腿 · 优先处理", warn: "可用但需关注", upd: "汇报进行时",
+  ok: "按 tier 升序", off: "qB 合成 / 已禁用" };
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+for (const k of Object.keys(OLD_TEXT_SEV)) {
+  const b = TK.TRACKER_BUCKETS[k];
+  ok(`${k} text 与旧表逐字同`, !!b && b.text === OLD_TEXT_SEV[k].text);
+  ok(`${k} sev 权值不动(04/06 排序等价)`, !!b && b.sev === OLD_TEXT_SEV[k].sev);
+  ok(`${k} cnt 副标题话术与旧表逐字同`, !!b && b.cnt === OLD_CNT[k]);
+}
+ok("处理序数组与 05 分区顺序逐字同",
+  JSON.stringify(TK.TRACKER_BUCKET_ORDER) === JSON.stringify(["err", "warn", "upd", "ok", "off"]));
+ok("order 与 TRACKER_BUCKET_ORDER 下标同源",
+  TK.TRACKER_BUCKET_ORDER.every((k, i) => TK.TRACKER_BUCKETS[k].order === i));
 console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]).length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """

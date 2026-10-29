@@ -31,16 +31,12 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
+  const TK = reg.trackers; /* trackers 五桶判据表单点(issue 26-10-29-1343) */
   const TABLE_ID = "drawerTrackerV06";
 
-  /* 状态分桶 -> 文案与排序权值(异常置顶; 虚拟恒排最后) */
-  const BUCKET = {
-    err: { text: "未工作", sev: 0 },
-    warn: { text: "未联系", sev: 1 },
-    upd: { text: "更新中", sev: 2 },
-    ok: { text: "工作", sev: 3 },
-    off: { text: "禁用", sev: 9 },
-  };
+  /* 状态分桶 -> 文案与排序权值(异常置顶; 虚拟恒排最后)
+   * —— 文案/sev 单源读 reg.trackers(issue 26-10-29-1343), 本变体不再持字面 */
+  const BUCKET = TK.TRACKER_BUCKETS;
 
   /* 视图偏好(跨重渲染与换种子保持): 仅看异常 / msg 展开集合; lastSig 供跳过重建。
    * !排序态已并引擎(dtSortState.drawerTrackerV06, U3) —— 手搓固定排序退役。 */

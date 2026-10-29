@@ -29,25 +29,22 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
+  const TK = reg.trackers; /* trackers 五桶判据表单点(issue 26-10-29-1343) */
   const TABLE_ID = "drawerTrackerV04";
 
-  /* 状态分桶 -> 展示文案与排序权值(异常优先 = 权值升序; 虚拟恒排最后) */
-  const BUCKET = {
-    err: { text: "未工作", sev: 0 },
-    warn: { text: "未联系", sev: 1 },
-    upd: { text: "更新中", sev: 2 },
-    ok: { text: "工作", sev: 3 },
-    off: { text: "禁用", sev: 9 },
-  };
+  /* 状态分桶 -> 展示文案与排序权值(异常优先 = 权值升序; 虚拟恒排最后)
+   * —— 文案/sev 单源读 reg.trackers(issue 26-10-29-1343), 本变体不再持字面 */
+  const BUCKET = TK.TRACKER_BUCKETS;
   /* 色族说明下放到各胶囊(原挂在 .dt04-overview 容器上, 悬浮子元素时 tooltip 锚到容器
-   * 中上方远离光标 —— 锚点取最内层 [data-aq-tip], title 须挂在实际悬浮的小元素上) */
+   * 中上方远离光标 —— 锚点取最内层 [data-aq-tip], title 须挂在实际悬浮的小元素上)。
+   * 桶名文案读单源表; cls/tip(色族话术)是本变体呈现语义, 留此。 */
   const PILLS = [
     { f: "all", text: "全部", cls: "", tip: "状态分类沿用全局状态色族" },
-    { f: "ok", text: "工作", cls: "pd-ok", tip: "工作 = 绿" },
-    { f: "warn", text: "未联系", cls: "pd-warn", tip: "未联系 = 黄" },
-    { f: "upd", text: "更新中", cls: "pd-upd", tip: "更新中 = 蓝" },
-    { f: "err", text: "未工作", cls: "pd-err", tip: "未工作 = 红" },
-    { f: "off", text: "禁用", cls: "pd-off", tip: "禁用 = 中性描边" },
+    { f: "ok", cls: "pd-ok", tip: BUCKET.ok.text + " = 绿" },
+    { f: "warn", cls: "pd-warn", tip: BUCKET.warn.text + " = 黄" },
+    { f: "upd", cls: "pd-upd", tip: BUCKET.upd.text + " = 蓝" },
+    { f: "err", cls: "pd-err", tip: BUCKET.err.text + " = 红" },
+    { f: "off", cls: "pd-off", tip: BUCKET.off.text + " = 中性描边" },
   ];
 
   /* 视图偏好(跨重渲染与换种子保持): 计数筛选; lastSig 供数据未变跳过重建。
@@ -275,8 +272,9 @@
     const pills = PILLS.map((p) => {
       const cnt = p.f === "all" ? real : n[p.f];
       const act = ui.filter === p.f ? " active" : "";
+      const text = p.text || BUCKET[p.f].text; /* 桶名读单源表(「全部」胶囊自带文案) */
       const dot = p.cls ? T`<span class="pdot ${p.cls}"></span>` : T`<span class="pdot" style="background:var(--fg-dim)"></span>`;
-      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}" title="${p.tip}">${R(dot)}${p.text} <b>${cnt}</b></button>`;
+      return T`<button type="button" class="dt04-pill${act}" data-f="${p.f}" title="${p.tip}">${R(dot)}${text} <b>${cnt}</b></button>`;
     }).join("");
     /* 排序分段钮(active 态读引擎 dyn 键): 手搓分段排序态退役, 直设走 dtSortSet */
     const sortKey = ctx.dtSortCell(TABLE_ID).key || "sev";

@@ -17,7 +17,8 @@
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
  * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
  *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846; 文件优先级文案表 PRIO_TEXT/
- *   prioText, issue 26-10-29-1340)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
+ *   prioText, issue 26-10-29-1340) + trackers 五桶判据表(reg.trackers: TRACKER_BUCKETS/
+ *   TRACKER_BUCKET_ORDER, issue 26-10-29-1343)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
  * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
  *
  * 装载序: 必须排在 drawer.js 之后、state.js 之前(三份 index.html 的 tpl-manifest)。
@@ -395,6 +396,26 @@
     },
   };
 
+  /* ---------------- trackers 五桶判据表(reg.trackers, issue 26-10-29-1343) ----------------
+   * 04/05/06 三件 trackers 变体各持一份的桶文案(两种形状: 04/06 的 BUCKET{text,sev}、
+   * 05 的 GROUPS{text,cnt}, 外加 04 PILLS 与 05 计数条各自内联的字面, 共 5 处)收口成单源:
+   * 一张全列表各取所需 —— text 中文文案 / sev 排序权值(04/06 异常优先升序, 0/1/2/3/9 不动)
+   * / order 处理序下标 / cnt 05 分区副标题话术; TRACKER_BUCKET_ORDER 是处理序数组
+   * (05 的分区顺序与 04/06 的 sev 升序同源, 写一次)。cls/tip 色族与各版式自己的桶序是
+   * 呈现语义, 留各自文件; 文案逐字不变(守阵以桶文案词抽查: drawer_tpl/ 内零命中)。
+   * 变体私有 bucketOf(状态码 -> 桶)三份属 R21-B-05/C-05, 本项不顺手改; 将来收编应并入
+   * 本命名空间, 避免出现两个半套的「tracker 判据单点」。 */
+  var TRACKERS = {
+    TRACKER_BUCKETS: {
+      err: { text: "未工作", sev: 0, order: 0, cnt: "正在拖后腿 · 优先处理" },
+      warn: { text: "未联系", sev: 1, order: 1, cnt: "可用但需关注" },
+      upd: { text: "更新中", sev: 2, order: 2, cnt: "汇报进行时" },
+      ok: { text: "工作", sev: 3, order: 3, cnt: "按 tier 升序" },
+      off: { text: "禁用", sev: 9, order: 4, cnt: "qB 合成 / 已禁用" },
+    },
+    TRACKER_BUCKET_ORDER: ["err", "warn", "upd", "ok", "off"],
+  };
+
   /* ---------------- 注册表(变体文件直接消费的单例, 不走 app.mixin) ----------------
    * !书写形态约定(pitfalls web-ui/frontend-split): 赋值右侧不写对象字面量,
    * 否则接线守阵会把它当漏注入的 mixin。 */
@@ -410,6 +431,7 @@
     helpers: HELPERS,
     kit: KIT,
     peers: PEERS,
+    trackers: TRACKERS,
     /* 变体自注册入口: (id, tab) 唯一, tab 必须是五页签之一; id 只收 [A-Za-z0-9_-]
      * (要进 data-dt 属性与 CSS 选择器)。非法/重复 fail-fast 抛错 —— 变体半残比静默好。 */
     register: function (entry) {

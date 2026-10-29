@@ -36,16 +36,15 @@
   const T = reg.dtHtml;
   const R = reg.dtRaw;
   const H = reg.helpers; /* 公共骨架单点(报告 26-10-07-0845): 工具/sig 比对/滚动自保/事件挂摘/锚保活 */
+  const TK = reg.trackers; /* trackers 五桶判据表单点(issue 26-10-29-1343) */
   const TABLE_ID = "drawerTrackerV05";
 
-  /* 分区定义: 顺序即处理顺序(问题前置); 空分区整节隐藏 */
-  const GROUPS = [
-    { key: "err", text: "未工作", cnt: "正在拖后腿 · 优先处理" },
-    { key: "warn", text: "未联系", cnt: "可用但需关注" },
-    { key: "upd", text: "更新中", cnt: "汇报进行时" },
-    { key: "ok", text: "工作", cnt: "按 tier 升序" },
-    { key: "off", text: "禁用", cnt: "qB 合成 / 已禁用" },
-  ];
+  /* 分区定义: 顺序即处理顺序(问题前置); 空分区整节隐藏
+   * —— 文案/cnt 副标题与桶集单源读 reg.trackers(issue 26-10-29-1343), 处理序 =
+   * TRACKER_BUCKET_ORDER 展开(与 04/06 的 sev 升序同源), 本变体不再持字面 */
+  const GROUPS = TK.TRACKER_BUCKET_ORDER.map((k) => ({
+    key: k, text: TK.TRACKER_BUCKETS[k].text, cnt: TK.TRACKER_BUCKETS[k].cnt,
+  }));
 
   /* 视图偏好(跨重渲染与换种子保持): 分区折叠 / msg 展开集合; lastSig 供跳过重建 */
   const ui = { folded: {}, openMsg: {}, lastSig: "" };
@@ -318,13 +317,16 @@
     </section>`;
   }
 
-  /* 计数条 HTML —— 整帧重建与数据拍原地回填(paintHtml)共用同一构建器 */
+  /* 计数条 HTML —— 整帧重建与数据拍原地回填(paintHtml)共用同一构建器。
+   * 桶名文案读 reg.trackers 单源(issue 26-10-29-1343); 圆点色族与本条的桶序
+   * (工作在前, 非 sev 升序)是本条呈现语义, 留此。 */
   function stripHtml(n, virtualN) {
-    return T`<span class="dt05-c"><i style="background:var(--green)"></i>工作 <b>${n.ok}</b></span>
-      <span class="dt05-c"><i style="background:var(--warn)"></i>未联系 <b>${n.warn}</b></span>
-      <span class="dt05-c"><i style="background:var(--blue)"></i>更新中 <b>${n.upd}</b></span>
-      <span class="dt05-c"><i style="background:var(--error)"></i>未工作 <b>${n.err}</b></span>
-      <span class="dt05-c"><i style="background:var(--border-strong)"></i>禁用 <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
+    const BK = TK.TRACKER_BUCKETS;
+    return T`<span class="dt05-c"><i style="background:var(--green)"></i>${BK.ok.text} <b>${n.ok}</b></span>
+      <span class="dt05-c"><i style="background:var(--warn)"></i>${BK.warn.text} <b>${n.warn}</b></span>
+      <span class="dt05-c"><i style="background:var(--blue)"></i>${BK.upd.text} <b>${n.upd}</b></span>
+      <span class="dt05-c"><i style="background:var(--error)"></i>${BK.err.text} <b>${n.err}</b></span>
+      <span class="dt05-c"><i style="background:var(--border-strong)"></i>${BK.off.text} <b>${n.off}</b>${virtualN ? R(T`<span class="dt05-note">(虚拟 ${virtualN})</span>`) : ""}</span>
       <span class="dt05-note">5s 自动刷新</span>
       <span class="dt05-spacer"></span>`;
   }
