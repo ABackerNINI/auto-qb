@@ -387,7 +387,8 @@ class TorrentRecord:
 
         check_hr_condition / hr_managed / check_hr_satisfied 三处顶部逐字同的两行守卫收成
         一处(issue torrents-hr-entry-guard-dup): 「站点未配 hr 不判定」与「排除优先级最高」
-        的口径新增判定入口不再各抄一遍 —— 新入口先过本守卫。hr_judgement 不走它:
+        的口径新增判定入口不再各抄一遍 —— 新入口先过本守卫。表达式取值面 _hr 亦委托到本口径,
+        不再自带「未配 hr」判定(issue b-r17b01-hr-absent-default)。hr_judgement 不走它:
         排除时返回 None(走本地字段逻辑), 语义不同。
         """
         return not self.tracker_conf.hr or self.hr_excluded()

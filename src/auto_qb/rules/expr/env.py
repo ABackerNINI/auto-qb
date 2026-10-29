@@ -97,10 +97,17 @@ def _state(attr: str):
 
 
 def _hr(method: str):
-    """HR 判定: 无 tracker_conf 或无 HR 配置 -> false(有定义的缺省, 不是错误)"""
+    """HR 判定: 无 tracker_conf -> false(有定义的缺省, 不是错误)
+
+    「站点未配 hr 不判定」不在本层重复判定 —— 记录侧 _hr_guard 是该口径单点,
+    本函数委托即守卫(原抄的 `not tracker_conf.hr` 半句已删, issue b-r17b01-hr-absent-default)。
+    与条件侧 HrCondition 的分歧是有意契约, 勿单边改齐: 无 hr 配置时本侧
+    tor.hr_satisfied=false(达标语义 —— WebUI「可删/不能删」徽章走 check_hr_satisfied,
+    若改 true 无 HR 站点会集体跳「已达标」); 条件侧 satisfied=true(义务语义 —— 没有要求=视为已满足)。
+    """
     def get(ctx):
         tor = ctx.torrent
-        if tor.tracker_conf is None or not tor.tracker_conf.hr:
+        if tor.tracker_conf is None:
             return False
         return bool(getattr(tor, method)())
 

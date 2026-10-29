@@ -159,6 +159,8 @@ class HrCondition(BaseCondition):
             return self.mode == "condition-not-met"
         if conf.hr is None:
             # 站点已匹配但没配 HR = 没有 HR 要求 ⇒ "已满足"与"未管束"同为真
+            # (表达式侧 tor.hr_satisfied 同场景恒 false —— 那里答「可打标/可删」达标语义,
+            #  本处答「有无义务」; 有意分歧勿单边改齐, 见 rules/expr/env.py _hr 注释)
             return self.mode != "condition-met"
         if self.mode == "condition-not-met":
             return not torrent.hr_managed()
