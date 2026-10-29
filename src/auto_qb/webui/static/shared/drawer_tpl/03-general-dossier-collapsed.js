@@ -217,6 +217,10 @@
       bits.push(T`<span>${d.hr_satisfied ? "HR 已触发 · 已达标" : "HR 已触发 · 未达标"}</span>`);
       if (d.hr_req_time) bits.push(T`<span>要求做种 <b>${ctx.fmtDuration(d.hr_req_time)}</b></span>`);
       if (d.hr_req_ratio > 0) bits.push(T`<span>要求分享率 <b>${Number(d.hr_req_ratio).toFixed(2)}</b></span>`);
+      if (d.hr_state) {
+        const line = (d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : "");
+        if (line) bits.push(T`<span>${line}</span>`);
+      }
       if (d.hr_site_lane) {
         if (d.hr_site_need !== "" && d.hr_site_need !== undefined && d.hr_site_need !== null) {
           bits.push(T`<span>站点侧还需做种 <b>${ctx.fmtDuration(d.hr_site_need)}</b></span>`);
