@@ -205,16 +205,16 @@
               </div>
             </div>
             <!-- 2026-10-14: 四内容页签的正文**恒由变体宿主承载**(经典 Vue 组件已整体移除) ——
-                 每页签一个 data-dt-host 宿主, _dtSync 挂当前选中变体; 显隐走 dtHostOn(v-show)。 -->
+                 每页签一个 data-dt-host 宿主, _dtSync 挂当前选中变体; 显隐走 dtHostOn(v-show)。
+                 2026-10-30 (26-10-29-1354): 宿主与桥的页签清单收进 dtTabItems(单点 DT_TAB_LABELS
+                 投影), 模板不再写死页签名; 宿主与桥保持两个分立 v-for —— 兄弟序 = 4 宿主 + 4 桥,
+                 不得合成一个 v-for(桥会插进每个宿主后面, 插花序)。 -->
             <template v-else>
-              <div class="dt-host" v-show="dtHostOn('general')" data-dt-host="general"></div>
-              <div class="dt-host" v-show="dtHostOn('trackers')" data-dt-host="trackers"></div>
-              <div class="dt-host" v-show="dtHostOn('peers')" data-dt-host="peers"></div>
-              <div class="dt-host" v-show="dtHostOn('content')" data-dt-host="content"></div>
+              <div v-for="t in dtTabItems" :key="'dth-' + t.v" class="dt-host" v-show="dtHostOn(t.v)" :data-dt-host="t.v"></div>
               <!-- 变体表格体桥(计划 26-10-12-0527 U1): 逐页签自点亮(锚代数 > 0 才渲染),
                    无 tableId 声明 / 锚不在 DOM 恒不渲染 —— 生产零观感。 -->
-              <template v-for="t in ['general', 'trackers', 'peers', 'content']" :key="'dtb-' + t">
-                <aq-dt-bridge v-if="dtBridgeOn(t)" :key="dtBridgeKey(t)" :tab="t"></aq-dt-bridge>
+              <template v-for="t in dtTabItems" :key="'dtb-' + t.v">
+                <aq-dt-bridge v-if="dtBridgeOn(t.v)" :key="dtBridgeKey(t.v)" :tab="t.v"></aq-dt-bridge>
               </template>
             </template>
           </template>

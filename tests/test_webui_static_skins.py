@@ -1059,8 +1059,10 @@ def test_drawer_table_bridge_wiring():
         f"drawer.html 桥挂点应为恰 2 处(单栏 + 合并列), 实测 {drh.count('<aq-dt-bridge')}"
     assert drh.count(':key="dtBridgeKey(') == 2, \
         "桥挂点缺 :key=锚代数(不换代 = 宿主重建后内容写进游离旧锚)"
-    assert "v-for=\"t in ['general', 'trackers', 'peers', 'content']\"" in drh, \
-        "单栏桥未按四页签自点亮(硬编码单页签会让其他页签变体桥失效)"
+    # 2026-10-30 (26-10-29-1354): 单栏桥页签清单收进 dtTabItems(单点 DT_TAB_LABELS 投影) ——
+    # 宿主与桥两个 v-for 共两处, 内联页签名数组字面量不得回潮。
+    assert drh.count('v-for="t in dtTabItems"') == 2, \
+        "单栏桥/宿主未按 dtTabItems v-for 自点亮(页签名数组字面量回潮会让页签清单存回两份)"
 
     # ⑤ 桥组件 + x-template: 表壳/行渲染器/滚动同步/引擎排序全走 $root 单点; 分段 teleport
     tbl = read("table.js")

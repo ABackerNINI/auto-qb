@@ -1555,8 +1555,13 @@ def test_drawer_tpl_registry_wiring():
     #    选择入口移到 openDrawerMenu 右键菜单; 合并双列各列带 data-dt-tab(右键按命中区域定页签)
     #    2026-10-14: 流量变体(13/14/15)与图前/图后双宿主(traffic-pre/post)已移除 —— 流量正文
     #    由模板内联的经典图渲染, 无变体宿主。
-    for host in ("general", "trackers", "peers", "content"):
-        assert f'data-dt-host="{host}"' in drawer_tpl, f"drawer.html 缺变体宿主 {host}"
+    #    2026-10-30 (26-10-29-1354): 非合并态四宿主/桥的页签清单收进 dtTabItems(drawer.js 对
+    #    单点 DT_TAB_LABELS 的投影) —— 模板不再逐字写四个宿主 div, 页签名静态字面量归零。
+    assert drawer_tpl.count('v-for="t in dtTabItems"') == 2, \
+        "drawer.html 非合并态宿主与桥应各有一个 dtTabItems v-for(共两处; 页签清单第二份拷贝回潮)"
+    m = re.search(r"const DT_TAB_LABELS = \{([^}]*)\}", drawer_js)
+    assert m and set(re.findall(r"(\w+):", m.group(1))) == {"general", "trackers", "peers", "content"}, \
+        "drawer.js DT_TAB_LABELS 应恰四键(general/trackers/peers/content; 宿主页签清单的投影单点)"
     assert "traffic-pre" not in drawer_tpl and "traffic-post" not in drawer_tpl, \
         "drawer.html 又出现流量变体宿主(traffic-pre/post) —— 流量页签已无变体(2026-10-14)"
     assert 'class="dt-select"' not in drawer_tpl, \
@@ -1582,9 +1587,18 @@ def test_drawer_tpl_registry_wiring():
     assert "aq-drawer-general" not in tpl_code and "aq-drawer-trackers" not in tpl_code \
         and "aq-drawer-peers" not in tpl_code and "aq-drawer-content" not in tpl_code, \
         "drawer.html 又引用经典页签组件(aq-drawer-*) —— 四组件已删(2026-10-14)"
+    # 2026-10-30 (26-10-29-1354): 非合并态四宿主改 dtTabItems v-for 驱动 —— :data-dt-host 动态
+    # 绑定恰两处(合并列 col.tab + 非合并 v-for t.v), 静态逐页签字面量归零; 宿主与桥两个 v-for
+    # 分立(兄弟序 = 4 宿主 + 4 桥), 不得合成一个 v-for 插花。
+    assert drawer_tpl.count(":data-dt-host=") == 2, \
+        "drawer.html :data-dt-host 绑定应恰两处(合并列 :data-dt-host=\"col.tab\" + 非合并 :data-dt-host=\"t.v\")"
+    assert ':data-dt-host="t.v"' in drawer_tpl and ":key=\"'dth-' + t.v\"" in drawer_tpl, \
+        "drawer.html 非合并态宿主未走 dtTabItems v-for(页签清单第二份拷贝回潮)"
+    assert "['general', 'trackers'" not in drawer_tpl, \
+        "drawer.html 桥循环又写死页签名数组(dtTabItems 单点回潮)"
     for tab in ("general", "trackers", "peers", "content"):
-        assert drawer_tpl.count(f'data-dt-host="{tab}"') == 1, \
-            f"drawer.html: data-dt-host={tab} 必须恰一份"
+        assert f'data-dt-host="{tab}"' not in drawer_tpl, \
+            f"drawer.html: data-dt-host={tab} 静态字面量回潮(应由 dtTabItems v-for 驱动)"
     # R2 S2/S3 接线 + R3 修订(计划 26-10-09-2219 R3): 合并开关显式建字段 + 双列宿主 + 右键单开关
     assert "drawerMerge: initialDrawerMerge()" in state_js, "state.js 缺 drawerMerge 显式建字段(vue-reactivity 坑)"
     assert "dtWinW:" in state_js, "state.js 缺 dtWinW 显式建字段(dtSplitOn 响应式消费)"
