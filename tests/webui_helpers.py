@@ -473,9 +473,9 @@ def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
     from types import SimpleNamespace
     import time
 
-    from auto_qb.hr.runtime import HrRuntimeStatus, HrRefreshService
+    from auto_qb.hr.runtime import HrRuntimeStatus
     from auto_qb.config.models import SiteHrCheckConfig
-    from hr_helpers import Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
+    from hr_helpers import Clock, FakeFetcher, global_conf, make_service, myhr_page, row, site_conf, torrent_blob
 
     # !假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
     # hr_helpers 默认的 2023 基准, 数据必然被判「已过有效期」—— 测的就不是想测的东西了
@@ -484,13 +484,11 @@ def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
         pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
         if not complete:
             pages["C"] = "<html><body>没有表格</body></html>"
-    svc = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(),
-        site_confs={"HHan": site_conf()},
-        fetcher=FakeFetcher(pages, {101: torrent_blob("t101.bin")}),
-        owner="tester",
+    svc = make_service(
+        tmp_path,
+        FakeFetcher(pages, {101: torrent_blob("t101.bin")}),
         now_fn=clock,
+        site_confs={"HHan": site_conf()},
     )
     svc.refresh_site("HHan")
     mgr.config.hr_check = HrCheckConfig(enabled=True)

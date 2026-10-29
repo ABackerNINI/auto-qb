@@ -1,14 +1,16 @@
 """HR 在线核实测试用的共享夹具(非测试文件, 不被 pytest 收集)。
 
-四件事: 1. 读脱敏页面 fixture; 2. 按行构造 myhr 页面(行为测试用, 恰好裁剪出需要的行);
+五件事: 1. 读脱敏页面 fixture; 2. 按行构造 myhr 页面(行为测试用, 恰好裁剪出需要的行);
 3. 构造合法 .torrent 字节(测试 infohash 用, 不依赖外部样本); 4. 假取数通道 ——
-按 URL/scope 返回 HTML、按 tid 返回 .torrent, 并记录调用序列(用于验证防重取与限速)。
+按 URL/scope 返回 HTML、按 tid 返回 .torrent, 并记录调用序列(用于验证防重取与限速);
+5. HrRefreshService 测试装配单点 make_service(issue 26-10-29-1404: 4 份构造器 + 10 处内联收口)。
 """
 import pathlib
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from auto_qb.config.models import HrCheckConfig, SiteHrCheckConfig
 from auto_qb.hr.fetcher import HrChannelQuota, HrFetchError, HrLoginExpired
+from auto_qb.hr.service import HrRefreshService
 
 FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures" / "hr"
 
@@ -267,6 +269,51 @@ def global_conf(**overrides) -> HrCheckConfig:
     )
     base.update(overrides)
     return HrCheckConfig(**base)
+
+
+def make_service(
+    tmp_path,
+    fetcher,
+    *,
+    now_fn,
+    site_confs=None,
+    gconf=None,
+    owner="tester",
+    persist=True,
+    allow_fetch=True,
+    sleeper=None,
+    data_dir=None,
+    sleep_max=None,
+    round_wait_max=None,
+) -> HrRefreshService:
+    """HrRefreshService 测试装配单点(issue 26-10-29-1404)。
+
+    参数面覆盖 HrRefreshService 全量构造参数; 新场景扩这里, 不要内联 new
+    (守阵 tests/test_manager_single_point.py 会拦)。硬约束:
+    - now_fn **无默认值**: 每个调用点必须显式表态真钟(time.time)/假钟(Clock 实例) ——
+      「默认假钟落到需要真实时刻的用例」是一种新型假绿;
+    - 假钟不许 partial 绑同一个 Clock 实例(181 个用例共享一个可推进时钟 = 跨用例状态泄漏),
+      每处绑定新建实例;
+    - owner 字样有断言钉着(test_hr_service 钉 "test", test_web_hr 钉 "tester"),
+      改默认值前先 grep。
+    """
+    return HrRefreshService(
+        data_dir=str(tmp_path if data_dir is None else data_dir),
+        global_conf=gconf or global_conf(),
+        site_confs=dict(site_confs) if site_confs is not None else {"example": site_conf()},
+        fetcher=fetcher,
+        owner=owner,
+        persist=persist,
+        allow_fetch=allow_fetch,
+        now_fn=now_fn,
+        sleeper=sleeper,
+        **({
+            "sleep_max": sleep_max
+        } if sleep_max is not None else {}),
+        **({
+            "round_wait_max": round_wait_max
+        } if round_wait_max is not None else {}),
+    )
 
 
 def anchor(

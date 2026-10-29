@@ -80,10 +80,9 @@ from auto_qb.hr.adapters.nexusphp import NexusPhpMyhrAdapter
 from auto_qb.hr.ratelimit import day_key
 from auto_qb.hr.report import LocalPageFetcher, build_fetcher, run_hr_confirm_empty, run_hr_once, run_hr_status
 import auto_qb.hr.service as hr_service
-from auto_qb.hr.service import HrRefreshService
 from auto_qb.hr.store import HrSiteStore
 
-from hr_helpers import EMPTY_TABLE_PAGE, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
+from hr_helpers import EMPTY_TABLE_PAGE, FakeFetcher, global_conf, make_service, myhr_page, row, site_conf, torrent_blob
 
 SITE = "example"
 
@@ -114,16 +113,9 @@ def _seed(tmp_path, fetcher, *, site=None, gconf=None) -> None:
 
     刻意不打钟(用真时钟): 报告里的「x 前 / 复用窗至」才有意义。
     """
-    HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=gconf or global_conf(),
-        site_confs={
-            SITE: site or site_conf()
-        },
-        fetcher=fetcher,
-        owner="tester",
-        persist=True,
-    ).refresh_site(SITE)
+    make_service(tmp_path, fetcher, now_fn=time.time, site_confs={
+        SITE: site or site_conf()
+    }, gconf=gconf).refresh_site(SITE)
 
 
 def _write_pages(directory: pathlib.Path, pages: dict) -> str:
@@ -618,13 +610,8 @@ def test_print_channel_lists_shared_dir_when_configured(tmp_path):
 
     cfg = _config(tmp_path)
     cfg.hr_check.shared_dir = "R:/Shared/hr"
-    service = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=cfg.hr_check,
-        site_confs={SITE: site_conf()},
-        fetcher=NullFetcher("x"),
-        owner="t",
-        persist=False,
+    service = make_service(
+        tmp_path, NullFetcher("x"), now_fn=time.time, site_confs={SITE: site_conf()}, gconf=cfg.hr_check, persist=False
     )
     out = io.StringIO()
     _print_channel(cfg, service, out)
@@ -791,13 +778,8 @@ def test_print_channel_lines_exact(tmp_path):
         enabled=True, port=18765, request_timeout=45.0, extension_id="ext123", token="tok"
     )
     cfg.hr_check.shared_dir = ""
-    service = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=cfg.hr_check,
-        site_confs={SITE: site_conf()},
-        fetcher=NullFetcher("x"),
-        owner="t",
-        persist=False,
+    service = make_service(
+        tmp_path, NullFetcher("x"), now_fn=time.time, site_confs={SITE: site_conf()}, gconf=cfg.hr_check, persist=False
     )
     out = io.StringIO()
     _print_channel(cfg, service, out)

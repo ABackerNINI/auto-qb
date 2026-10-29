@@ -302,6 +302,7 @@ from hr_helpers import (
     Clock,
     FakeFetcher,
     global_conf,
+    make_service as hr_make_service,
     myhr_page,
     row,
     site_conf,
@@ -343,6 +344,10 @@ def anchor_for(
     )
 
 
+def _no_sleep(_seconds: float) -> None:
+    """空转 sleeper(测试不打盹; 需要测「无 sleeper 放弃」的用例显式传 None)"""
+
+
 def make_service(
     tmp_path,
     fetcher,
@@ -354,24 +359,30 @@ def make_service(
     round_wait_max=None,
     allow_fetch=True,
     persist=True,
+    sleeper=_no_sleep,
+    confs=None,
+    data_dir=None,
 ) -> HrRefreshService:
-    clock = clock or Clock()
-    kwargs = {}
-    if sleep_max is not None:
-        kwargs["sleep_max"] = sleep_max
-    if round_wait_max is not None:
-        kwargs["round_wait_max"] = round_wait_max
-    return HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=gconf or global_conf(),
-        site_confs={SITE: site or site_conf()},
-        fetcher=fetcher,
+    """薄绑定到 hr_helpers.make_service 单点(issue 26-10-29-1404 收口, 调用点签名不变)。
+
+    本文件的差异面: 假钟(clock 缺省时**每次新建** Clock 实例, 不共享 —— 可推进时钟
+    跨用例共享就是状态泄漏)+ 空转 sleeper + owner="test"(owner 透传守阵
+    test_store_lazy_branch_constructor_args 钉死该字样)。新场景(多站 confs / 换
+    data_dir / sleeper=None)扩参数而不是内联 new。
+    """
+    return hr_make_service(
+        tmp_path,
+        fetcher,
+        now_fn=clock or Clock(),
+        site_confs=confs if confs is not None else {SITE: site or site_conf()},
+        gconf=gconf,
         owner="test",
         persist=persist,
         allow_fetch=allow_fetch,
-        now_fn=clock,
-        sleeper=lambda _s: None,
-        **kwargs,
+        sleeper=sleeper,
+        data_dir=data_dir,
+        sleep_max=sleep_max,
+        round_wait_max=round_wait_max,
     )
 
 
@@ -1968,17 +1979,7 @@ def test_refresh_site_guard_paths(tmp_path):
     assert r1.action == "disabled" and r1.reason == "该站未接入 hr_check"
     assert r1.ok is False
     # 全局开关关
-    svc2 = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(enabled=False),
-        site_confs={SITE: site_conf()},
-        fetcher=fetcher,
-        owner="test",
-        persist=True,
-        allow_fetch=True,
-        now_fn=clock,
-        sleeper=lambda _s: None,
-    )
+    svc2 = make_service(tmp_path, fetcher, gconf=global_conf(enabled=False), clock=clock)
     r2 = svc2.refresh_site(SITE, {})
     assert r2.reason == "hr_check.enabled=false"
     assert fetcher.text_calls == [], "守卫路径不得发任何请求"
@@ -2136,17 +2137,7 @@ def test_budget_take_gives_up_without_sleeper(tmp_path):
     """无 sleeper 的服务不持锁干等: 间隔未到 -> 该档本轮放弃(预算受限截断)"""
     clock = Clock()
     fetcher = FakeFetcher(pages=standard_pages())
-    service = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(min_interval=90.0),
-        site_confs={SITE: site_conf()},
-        fetcher=fetcher,
-        owner="test",
-        persist=True,
-        allow_fetch=True,
-        now_fn=clock,
-        sleeper=None,
-    )
+    service = make_service(tmp_path, fetcher, gconf=global_conf(min_interval=90.0), clock=clock, sleeper=None)
     result = run_wave(service, {})
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.lanes["A"].ok, "首档间隔基准为 0, 正常取页"
@@ -2389,17 +2380,7 @@ def test_persist_false_reports_readonly_mode(tmp_path):
     """只读走查口径(persist=False): 波照常跑、不写盘, reason 注明「只读模式, 未写盘」"""
     clock = Clock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
-    service = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(),
-        site_confs={SITE: site_conf()},
-        fetcher=fetcher,
-        owner="test",
-        persist=False,
-        allow_fetch=True,
-        now_fn=clock,
-        sleeper=lambda _s: None,
-    )
+    service = make_service(tmp_path, fetcher, clock=clock, persist=False)
     result = run_wave(service, {})
     assert "只读模式, 未写盘" in result.reason
     assert result.persisted is False
@@ -2543,16 +2524,12 @@ def test_build_views_skips_disabled_and_channel_states(tmp_path):
     clock = Clock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), blobs={11: torrent_blob(name="OTHER 11")})
     confs = {SITE: site_conf(), "offsite": site_conf(tracker="offsite", enabled=False)}
-    service = HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(channel=HrChannelConfig(enabled=True)),
-        site_confs=confs,
-        fetcher=fetcher,
-        owner="test",
-        persist=True,
-        allow_fetch=True,
-        now_fn=clock,
-        sleeper=lambda _s: None,
+    service = make_service(
+        tmp_path,
+        fetcher,
+        clock=clock,
+        gconf=global_conf(channel=HrChannelConfig(enabled=True)),
+        confs=confs,
     )
     run_wave(service, {})
     views = service.build_views()
@@ -2564,30 +2541,16 @@ def test_build_views_skips_disabled_and_channel_states(tmp_path):
     clock.advance(7 * 3600)
     assert service.channel_state(SITE, data) == "silent"
     # 不传数据 -> 无锁读现算
-    service2 = HrRefreshService(
-        data_dir=str(tmp_path / "d2"),
-        global_conf=global_conf(channel=HrChannelConfig(enabled=True)),
-        site_confs={SITE: site_conf()},
-        fetcher=fetcher,
-        owner="test",
-        persist=True,
-        allow_fetch=True,
-        now_fn=Clock(),
-        sleeper=lambda _s: None,
+    service2 = make_service(
+        tmp_path,
+        fetcher,
+        data_dir=tmp_path / "d2",
+        clock=Clock(),
+        gconf=global_conf(channel=HrChannelConfig(enabled=True))
     )
     assert service2.channel_state(SITE) == "silent", "从未有健康波 -> silent"
     # 通道未启用 -> disabled
-    service3 = HrRefreshService(
-        data_dir=str(tmp_path / "d3"),
-        global_conf=_gconf_channel_off(),
-        site_confs={SITE: site_conf()},
-        fetcher=fetcher,
-        owner="test",
-        persist=True,
-        allow_fetch=True,
-        now_fn=Clock(),
-        sleeper=lambda _s: None,
-    )
+    service3 = make_service(tmp_path, fetcher, data_dir=tmp_path / "d3", clock=Clock(), gconf=_gconf_channel_off())
     assert service3.channel_state(SITE, None) == "disabled"
 
 

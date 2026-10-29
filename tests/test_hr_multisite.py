@@ -15,10 +15,10 @@ M4 的结论必须是**配出来的**, 不是"文档里说可以": 本文件把�
 """
 from typing import Dict
 
-from auto_qb.hr import ACTION_ERROR, ACTION_REFRESHED, HrRefreshService, build_adapter
+from auto_qb.hr import ACTION_ERROR, ACTION_REFRESHED, build_adapter
 from auto_qb.hr.fetcher import HrFetchError
 from auto_qb.hr.status import build_site_statuses
-from hr_helpers import Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, torrent_blob
+from hr_helpers import Clock, FakeFetcher, make_service, myhr_page, row, site_conf, torrent_blob
 
 ALPHA = "alpha"
 BETA = "beta"
@@ -59,15 +59,11 @@ def _pages_for(site: str, tids, conf) -> Dict[str, str]:
 
 
 def _service(tmp_path, fetcher, clock, confs=None):
-    confs = confs or {ALPHA: _conf(ALPHA), BETA: _conf(BETA)}
-    return HrRefreshService(
-        data_dir=str(tmp_path),
-        global_conf=global_conf(),
-        site_confs=confs,
-        fetcher=fetcher,
-        owner="tester",
-        now_fn=clock,
-    )
+    """薄绑定到 hr_helpers.make_service 单点(issue 26-10-29-1404 收口): 多站默认 {ALPHA, BETA}。
+
+    假钟由每个调用点显式给(单点不给时钟默认值); owner 用单点默认 "tester"(与收口前一致)。
+    """
+    return make_service(tmp_path, fetcher, now_fn=clock, site_confs=confs or {ALPHA: _conf(ALPHA), BETA: _conf(BETA)})
 
 
 def test_second_nexusphp_site_needs_config_only(tmp_path):
