@@ -5,7 +5,8 @@
     python mutants.py setup     [--distro D] [--mirror P] [--branch B] [--no-sync] [--dry-run]
     python mutants.py run       --target G [--pool F ...] [--children N] [--no-refresh] [--dry-run]
     python mutants.py report    [--target G] [--status S,S] [--limit N] [--out DIR] [--dry-run]
-    python mutants.py verify    (--from-report F | --ids-file F) [--workers N] [--no-refresh] [--dry-run]
+    python mutants.py verify    (--from-report F | --ids-file F) [--workers N] [--no-refresh]
+                                [--suite-timeout S] [--recompute-baseline] [--fresh] [--dry-run]
     python mutants.py gremlins  --target F [--pool F ...] [--workers N] [--dry-run]
     python mutants.py status    [--distro D] [--mirror P]
 
@@ -15,6 +16,8 @@
   没有文件:行与变异内容, 没法三分类); 同时打按状态/按模块的汇总。
 - `verify` 对清单里的候选逐条做 **S4 手工确认的机械化版本**: 在镜像里 `mutmut apply <id>` →
   跑**全套件** → 还原, 记 KILLED(假存活, 池没选到) / SURVIVED(真洞候选或等价)。
+  **判据是与基线的差集**: 开跑先量一遍未变异套件的失败集合(不要求基线全绿),
+  每条候选只看「本次失败 - 基线」是否非空 —— 否则基线常红会让**每条**候选恒判 KILLED(全杀 = 没杀)。
   **这一步是整轮的时间大头**(实测 ~15s/条), 所以清单要先按 `--status` / 手挑缩小。
 
 **为什么要有这个脚本**(而不是把命令写进 config.toml 的 run 串): 一轮 mutmut 是
@@ -31,6 +34,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shlex
@@ -48,10 +52,13 @@ MUTMUT_VERSION = "3.8.0"
 GREMLINS_VERSION = "1.11.2"
 DEFAULT_CHILDREN = 4  # WSL 只有 8 核(.wslconfig), 拉满会打挂
 DEFAULT_WORKERS = 8
+DEFAULT_SUITE_TIMEOUT = 1200  # 单次全套件硬截止; 变异体可能死循环, 没有它会把整条 verify 挂死
 DEFAULT_OUT = "R:/Temp/auto-qb/mutants"  # 别落仓内(报告 §10 #7)
 HEAD_LINES = 30
 #: 结果导出脚本(仓库内, 由本脚本推进镜像 /tmp 后执行) —— 它 import mutmut 内部 API, 只能在镜像里跑
 DUMP_SCRIPT_REL = ".commands/mutants/scripts/mutants_dump.py"
+#: 基线失败清单缓存前缀 —— 内容由(镜像 HEAD, 并行度)决定, 两者任一变化都必须重算
+BASELINE_CACHE_PREFIX = "s4-baseline"
 
 _PROGRESS = (re.compile(r"\d+/\d+\s"), re.compile(r"pytest-gremlins: Progress "))
 
@@ -77,8 +84,13 @@ def _say(msg: str = "") -> None:
     print(msg)
 
 
-def _run(cmd: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None,
-         check: bool = True) -> subprocess.CompletedProcess:
+def _run(
+    cmd: list[str],
+    *,
+    cwd: Path | None = None,
+    env: dict[str, str] | None = None,
+    check: bool = True
+) -> subprocess.CompletedProcess:
     if _DRY:
         _say("+ " + " ".join(cmd))
         return subprocess.CompletedProcess(cmd, 0, "", "")
@@ -129,7 +141,11 @@ def _wsl_write(distro: str, remote_path: str, content: str) -> None:
         return
     proc = subprocess.run(
         ["wsl.exe", "-d", distro, "--", "bash", "-lc", f"cat > {_bq(remote_path)}"],
-        input=content, capture_output=True, text=True, encoding="utf-8", errors="replace"
+        input=content,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
     )
     if proc.returncode != 0:
         raise Fail(f"写入 WSL 文件失败({remote_path}, rc={proc.returncode}): {proc.stderr.strip()}")
@@ -203,8 +219,7 @@ def _ensure_tool(distro: str, mirror: str) -> None:
     _wsl(distro, f"cd {mq} && test -x .venv/bin/mutmut || uv pip install -q mutmut=={MUTMUT_VERSION}")
     # WSL 里通常只有 python3; 包脚本的 wrapper 端到端用例要裸 `python`(报告 §10 #13)
     _wsl(
-        distro,
-        'command -v python >/dev/null 2>&1 || { mkdir -p "$HOME/.local/bin" '
+        distro, 'command -v python >/dev/null 2>&1 || { mkdir -p "$HOME/.local/bin" '
         '&& ln -sf "$(command -v python3)" "$HOME/.local/bin/python"; }',
         check=False
     )
@@ -316,12 +331,153 @@ def _candidate_ids(args: argparse.Namespace) -> list[str]:
     return ids
 
 
+def _suite_cmd(workers: int, timeout_s: int, target: str = "tests/") -> str:
+    """全套件的一次调用(在镜像里跑)。
+
+    `-B` + `PYTHONDONTWRITEBYTECODE=1` 是**判定正确性**的一部分, 不是性能开关: 逐条 apply 时等长替换
+    + 秒级 mtime 碰撞会让 CPython 复用上一条变异体编译的 `.pyc`, 于是「跑的其实不是这个变异体」
+    ⇒ 假 SURVIVED(实测, 见 pitfalls/testing/redverify-pycache-stale-verdict)。旧 `.pyc` 仍会被读,
+    所以调用方还要先清一次 `__pycache__`。
+
+    `target` 可换成若干 node id —— 复现校验(只复跑新增失败的那几条)走这条路。
+
+    参数口径: **不能有 `-x`**(基线本来就红时它会停在第一条既有失败上, 变异体根本没被执行);
+    `-rfE` 出 short test summary(逐条 node id, 用来与基线做差集); `--tb=no` 压掉回溯。
+    """
+    return (
+        f"PYTHONDONTWRITEBYTECODE=1 timeout {timeout_s} "
+        f".venv/bin/python -B -m pytest {target} -q --no-cov -p no:cacheprovider -rfE --tb=no -n {workers}"
+    )
+
+
+def _fail_ids(text: str) -> set[str]:
+    """从 short test summary 里取失败/报错的 node id(含收集期 `ERROR tests/x.py`)。"""
+    ids: set[str] = set()
+    for line in text.splitlines():
+        m = re.match(r"^(?:FAILED|ERROR)\s+(\S+)", line.strip())
+        if m:
+            ids.add(m.group(1))
+    return ids
+
+
+def _summary_of(text: str) -> str:
+    """取 pytest 最后一行汇总(如 `3 failed, 4144 passed, 10 skipped in 25.51s`); 没有则空串。"""
+    for line in reversed(text.strip().splitlines()):
+        s = line.strip()
+        if re.search(r"\d+ (?:passed|failed|error)", s):
+            return s
+    return ""
+
+
+def _purge_pycache(distro: str, mirror: str) -> None:
+    """开工清字节码缓存 —— 只设 `PYTHONDONTWRITEBYTECODE` 挡不住**已存在**的旧 `.pyc`。"""
+    mq = _bq(mirror)
+    _wsl(
+        distro,
+        f"cd {mq} && find src tests -name __pycache__ -type d -prune -exec rm -rf {{}} + 2>/dev/null; true",
+        check=False
+    )
+
+
+def _baseline(distro: str, mirror: str, out: Path, workers: int, timeout_s: int, *,
+              recompute: bool) -> tuple[set[str], str]:
+    """量出「未变异时本来就红」的集合 —— verify 的判据是**与它的差集**, 不是「套件有没有失败」。
+
+    本机 WSL Linux 侧曾恒有 3 个既有平台失败(`test_alias_fs` ×2 · `test_relocate_paths` ×1, 2026-10-30
+    已修绿), 直接拿「套件失败」当 KILLED 会让每条候选都判 KILLED(全杀 = 没杀)。基线随镜像 HEAD 与并行度
+    变化, 所以缓存键带上两者; 命中就复用, 续跑不必重付这一遍。
+    """
+    mq = _bq(mirror)
+    if _DRY:
+        _say("[baseline] (dry-run 未跑)")
+        return set(), "(dry-run)"
+    head = _wsl(distro, f"cd {mq} && git rev-parse --short HEAD", check=False).stdout.strip() or "unknown"
+    cache = out / f"{BASELINE_CACHE_PREFIX}-{head}-n{workers}.json"
+    if cache.exists() and not recompute:
+        data = json.loads(cache.read_text(encoding="utf-8"))
+        fails = set(data.get("failures") or ())
+        _say(f"[baseline] 复用 {cache.name}: 既有失败 {len(fails)} 条 · {data.get('summary') or '(无汇总行)'}")
+        return fails, data.get("summary") or ""
+
+    _say(f"[baseline] 先跑一遍未变异全套件, 量出「本来就红」的集合(-n {workers})")
+    _wsl(distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
+    proc = _wsl(distro, f"cd {mq} && {_suite_cmd(workers, timeout_s)}", check=False)
+    text = proc.stdout + "\n" + proc.stderr
+    fails, summary = _fail_ids(text), _summary_of(text)
+    if not summary:
+        raise Fail(f"基线跑不出汇总行(rc={proc.returncode}) —— 套件在收集期就崩了, verify 无从判定。\n"
+                   f"{text.strip()[-2000:]}")
+    cache.write_text(
+        json.dumps(
+            {
+                "head": head,
+                "workers": workers,
+                "failures": sorted(fails),
+                "summary": summary
+            },
+            ensure_ascii=False,
+            indent=2
+        ) + "\n",
+        encoding="utf-8"
+    )
+    _say(f"[baseline] 既有失败 {len(fails)} 条 · {summary} -> {cache.name}")
+    for fid in sorted(fails)[:HEAD_LINES]:
+        _say(f"  · {fid}")
+    return fails, summary
+
+
+def _verdict(rc: int, text: str, baseline: set[str], *, reconfirmed: bool | None = None) -> tuple[str, str]:
+    """单条候选的判定(纯函数, 由 test_mutants.py 守阵): 返回(verdict, 汇总行)。
+
+    判据只有一条: **本次失败 - 基线失败 非空 ⇒ KILLED**。老口径「套件里有 failed 就算 KILLED」
+    在基线常红的机器上恒真(全杀 = 没杀), 已废。APPLY_FAIL / TIMEOUT / UNKNOWN 都是「没判定」,
+    不能算进 SURVIVED —— 否则未判定会被当成「真洞候选」污染分母。
+
+    `reconfirmed=False` 表示新增失败**复跑没复现**(套件里有 flaky 用例, 实测 `test_hr_discovery`
+    的端口绑定用例会随机红) ⇒ 记 FLAKY, 同样算未判定, 不能记 KILLED 虚增假存活数。
+    """
+    summary = _summary_of(text)
+    if "APPLYFAIL" in text:
+        return "APPLY_FAIL", next((l.strip() for l in text.splitlines() if "APPLYFAIL" in l), "")
+    if rc == 124:
+        return "TIMEOUT", summary
+    if not summary:
+        return "UNKNOWN", ""
+    new = _fail_ids(text) - baseline
+    if not new:
+        return "SURVIVED", summary
+    if reconfirmed is False:
+        return "FLAKY", f"{summary} | 新增失败未复现: {', '.join(sorted(new)[:3])}"
+    return "KILLED", f"{summary} | 新增失败: {', '.join(sorted(new)[:3])}"
+
+
+def _reproduces(distro: str, mirror: str, ids: set[str], timeout_s: int) -> bool:
+    """只复跑「新增失败」的那几条 node id(变异体仍处于 applied 状态), 看是否还红。
+
+    这是 KILLED 的防伪: 全套件里混着 flaky 用例时, 一次红不足以定罪。复跑成本 ~1-3s(几条用例),
+    远低于整条候选的 28s, 所以只在「已经判 KILLED」时才做。
+    """
+    if not ids:
+        return False
+    sel = " ".join(shlex.quote(i) for i in sorted(ids))
+    proc = _wsl(distro, f"cd {_bq(mirror)} && {_suite_cmd(0, timeout_s, sel)}", check=False)
+    return bool(_fail_ids(proc.stdout + "\n" + proc.stderr) & ids)
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """S4 的机械化: 对候选逐条 `mutmut apply` → 跑**全套件** → 还原, 记 KILLED / SURVIVED。
 
     KILLED = 全套件能杀 ⇒ 池没选到(假存活); SURVIVED = 全套件仍杀不掉 ⇒ 真洞候选或等价变异。
     这是整轮的时间大头(实测 ~15s/条), 所以先 `mutants.report` 再挑候选。**幂等可续跑**:
     已写进结果文件的 id 会跳过。
+
+    **判据是差集, 不是「套件有没有失败」**: 先跑一遍未变异套件拿到基线失败集合, 每条候选只看
+    `本次失败 - 基线失败` 是否非空。基线本来就红(本机 Linux 侧 3 个平台失败)时, 老口径「有 failed
+    就算 KILLED」会把每条候选都判 KILLED —— 全杀 = 没杀。同理不能带 `-x`: 它会停在第一条**既有**
+    失败上, 变异体根本没被执行。
+
+    **新增失败还要复跑复现**才算 KILLED: 套件里混着 flaky 用例(端口绑定类)时, 一次红不足以定罪,
+    复现不了记 FLAKY(未判定)。
     """
     if not (args.from_report or args.ids_file):
         raise Fail("verify 需要 --from-report(用 mutants.report 的产物)或 --ids-file")
@@ -334,40 +490,81 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    path = out / f"{datetime.now().strftime('%y-%m-%d-%H%M')}-s4-verify.txt"
+    # 结果文件按**输入清单**定名(不是时间戳): 否则跨分钟重跑就换了个文件, 「已验 id 跳过」形同虚设
+    stem = _slug(Path(args.from_report or args.ids_file).stem)
+    path = out / f"s4-verify-{stem}.txt"
+    if args.fresh and path.exists():
+        path.unlink()
     done = set()
     if path.exists():
-        done = {x.split(" :: ")[0] for x in path.read_text(encoding="utf-8").splitlines() if " :: " in x}
+        done = {
+            x.split(" :: ")[0]
+            for x in path.read_text(encoding="utf-8").splitlines()
+            if " :: " in x and not any(v in x for v in ("UNKNOWN", "TIMEOUT", "FLAKY"))
+        }
     todo = [i for i in ids if i not in done]
-    _say(f"[verify] 候选 {len(ids)} 条(已验 {len(done)} · 本次 {len(todo)}) · 全套件 -n {args.workers}")
-    _say(f"[verify] 结果 -> {path}(逐条 ~15s, 中断后重跑自动续)")
 
-    killed = survived = failed = 0
+    _purge_pycache(args.distro, args.mirror)
+    baseline, baseline_summary = _baseline(
+        args.distro, args.mirror, out, args.workers, args.suite_timeout, recompute=args.recompute_baseline
+    )
+    _say(f"[verify] 候选 {len(ids)} 条(已验 {len(done)} · 本次 {len(todo)}) · 全套件 -n {args.workers}")
+    _say(f"[verify] 判据: 本次失败 - 基线 {len(baseline)} 条既有失败 非空 **且复跑复现** ⇒ KILLED")
+    _say(f"[verify] 结果 -> {path}(逐条 ~15s, 中断后重跑自动续)")
+    if _DRY:
+        _say("[verify] (dry-run) 以上为计划, 未执行")
+        return 0
+
+    if not _DRY and not path.exists():
+        path.write_text(
+            f"# baseline {len(baseline)} 条既有失败 · {baseline_summary} · {', '.join(sorted(baseline))}\n",
+            encoding="utf-8"
+        )
+
+    killed = survived = apply_failed = timed_out = unknown = flaky = 0
     with path.open("a", encoding="utf-8") as fh:
         for i, mid in enumerate(todo, 1):
             t0 = time.time()
+            # apply 后**不还原**: 新增失败要在这个变异体上复跑校验, 还原放到判定之后
             script = (
                 f"cd {mq} && git checkout -- src/ 2>/dev/null; "
-                f".venv/bin/mutmut apply {mid} >/dev/null 2>&1 || {{ echo APPLYFAIL; exit 9; }}; "
-                f".venv/bin/python -m pytest tests/ -q -n {args.workers} --no-cov -x -p no:cacheprovider 2>&1 | tail -4; "
-                f"git checkout -- src/ 2>/dev/null"
+                f".venv/bin/mutmut apply {mid} >/dev/null 2>&1 "
+                f"|| {{ echo 'APPLYFAIL apply 返回非零'; exit 9; }}; "
+                # apply 报成功但**没落地**(缓存与源码对不上)时必须停手: 跑的是原码 ⇒ 恒 SURVIVED
+                f"git diff --quiet -- src/ && {{ echo 'APPLYFAIL 变异未落地(apply 后 src/ 无改动)'; exit 9; }}; "
+                f"{_suite_cmd(args.workers, args.suite_timeout)}; exit $?"
             )
             proc = _wsl(args.distro, script, check=False)
-            summary = next(
-                (l.strip() for l in reversed(proc.stdout.strip().splitlines())
-                 if ("passed" in l or "failed" in l or "error" in l)), ""
-            )
-            if "APPLYFAIL" in proc.stdout:
-                verdict, failed = "APPLY_FAIL", failed + 1
-            elif "failed" in summary or "error" in summary:
-                verdict, killed = "KILLED", killed + 1
+            text = proc.stdout + "\n" + proc.stderr
+            verdict, summary = _verdict(proc.returncode, text, baseline)
+            if verdict == "KILLED" and not _reproduces(
+                args.distro, args.mirror,
+                _fail_ids(text) - baseline, args.suite_timeout
+            ):
+                verdict, summary = _verdict(proc.returncode, text, baseline, reconfirmed=False)
+            _wsl(args.distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
+            if verdict == "APPLY_FAIL":
+                apply_failed += 1
+            elif verdict == "TIMEOUT":
+                timed_out += 1
+            elif verdict == "UNKNOWN":
+                unknown += 1
+            elif verdict == "FLAKY":
+                flaky += 1
+            elif verdict == "KILLED":
+                killed += 1
             else:
-                verdict, survived = "SURVIVED", survived + 1
+                survived += 1
             fh.write(f"{mid} :: {verdict} :: {summary}\n")
             fh.flush()
             _say(f"  [{i}/{len(todo)}] {time.time() - t0:.0f}s {verdict}  {mid}")
     _wsl(args.distro, f"cd {mq} && git checkout -- src/ 2>/dev/null", check=False)
-    _say(f"[verify] KILLED(假存活) {killed} · SURVIVED(真洞候选) {survived} · 失败 {failed} -> {path}")
+    _say(
+        f"[verify] KILLED(假存活) {killed} · SURVIVED(真洞候选) {survived} · "
+        f"APPLY_FAIL {apply_failed} · TIMEOUT {timed_out} · FLAKY {flaky} · UNKNOWN {unknown} -> {path}"
+    )
+    if timed_out or unknown or flaky:
+        _say("[verify] TIMEOUT/FLAKY/UNKNOWN 是**未判定**(不是 SURVIVED): 重跑同一命令会自动重试这几条")
     return 0
 
 
@@ -428,11 +625,26 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("cmd", choices=("setup", "run", "report", "verify", "gremlins", "status"))
     p.add_argument("--target", help="run: 只变异的目标 glob(相对仓库根, 例 '**/config/*.py'); gremlins: 目标文件")
     p.add_argument("--pool", nargs="*", default=[], help="测试选择池(定向的几个文件; 别用全 tests)")
-    p.add_argument("--children", type=int, default=DEFAULT_CHILDREN, help=f"mutmut --max-children(默认 {DEFAULT_CHILDREN})")
-    p.add_argument("--workers", type=int, default=DEFAULT_WORKERS,
-                   help=f"gremlins --gremlin-workers / verify 的全套件并行度(默认 {DEFAULT_WORKERS})")
-    p.add_argument("--status", default="survived,no tests,timeout,suspicious,segfault",
-                   help="report: 导出哪些状态(逗号分隔; 默认全部非 killed)")
+    p.add_argument(
+        "--children", type=int, default=DEFAULT_CHILDREN, help=f"mutmut --max-children(默认 {DEFAULT_CHILDREN})"
+    )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help=f"gremlins --gremlin-workers / verify 的全套件并行度(默认 {DEFAULT_WORKERS})"
+    )
+    p.add_argument(
+        "--suite-timeout",
+        type=int,
+        default=DEFAULT_SUITE_TIMEOUT,
+        help=f"verify: 单次全套件硬截止秒数(默认 {DEFAULT_SUITE_TIMEOUT}); 超时记 TIMEOUT(未判定), 不记 SURVIVED"
+    )
+    p.add_argument("--recompute-baseline", action="store_true", help="verify: 强制重跑基线(默认按 镜像HEAD+并行度 复用缓存; 镜像树被手改过时用)")
+    p.add_argument("--fresh", action="store_true", help="verify: 丢弃已有结果文件, 所有候选重验")
+    p.add_argument(
+        "--status", default="survived,no tests,timeout,suspicious,segfault", help="report: 导出哪些状态(逗号分隔; 默认全部非 killed)"
+    )
     p.add_argument("--limit", type=int, default=0, help="report: 最多导出多少条(0 = 不限)")
     p.add_argument("--from-report", help="verify: 用 mutants.report 的产物文件挑候选")
     p.add_argument("--ids-file", help="verify: 直接给一份候选 id 清单(每行一条)")
@@ -453,8 +665,14 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.cmd != "gremlins":
             check_mirror(args.mirror)
-        return {"setup": cmd_setup, "run": cmd_run, "report": cmd_report, "verify": cmd_verify,
-                "gremlins": cmd_gremlins, "status": cmd_status}[args.cmd](args)
+        return {
+            "setup": cmd_setup,
+            "run": cmd_run,
+            "report": cmd_report,
+            "verify": cmd_verify,
+            "gremlins": cmd_gremlins,
+            "status": cmd_status
+        }[args.cmd](args)
     except Fail as exc:
         sys.stderr.write(f"[FAIL] {exc}\n")
         return 1

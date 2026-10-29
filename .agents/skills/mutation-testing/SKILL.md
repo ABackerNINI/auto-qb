@@ -65,6 +65,8 @@ user-invocable: true
 10. **S4 的规模要主动收窄** —— 逐条跑**全套件**是整轮的时间大头(实测 ~15s/条: 274 条 ≈ 68min)。
     别对「全部存活」无差别开跑: 先用 `mutants.report` 的汇总挑优先文件(判据密度 × 出错代价高的档),
     或按变异形态(`continue→break` / 边界 / `and-or` / 语句删除)筛, 再 `mutants.verify`。
+    另注: 基线不必全绿 —— `verify` 自带一遍基线, 判据是差集; 但**基线越红, 判据越弱**(既有失败盖住的
+    那部分行为本来就没被套件盯住), 真要做量化结论仍建议先把 Linux 侧平台失败修绿。
 11. **复跑要带「新守阵」时用 `--no-refresh`** —— `mutants.run` 默认会 `git checkout -f` 把镜像刷成 develop,
     **未提交的测试改动会被冲掉**; 补测后的 S6 复跑要先把新测试 `cp` 进镜像 `tests/`, 再 `--no-refresh`。
     反之, S4 要的是「develop 的全套件」, 用默认(刷新)即可。
@@ -95,7 +97,7 @@ user-invocable: true
 | `commands run mutants.setup` | 建 / 刷新 WSL 镜像仓 + 装工具 | 首次, 或镜像落后时(其余命令会自动确保) |
 | `commands run mutants.run -- <目标glob> <池文件...>` | 对某包/模块跑一轮 mutmut | **主力**: 每轮审计 |
 | `commands run mutants.report -- <目标glob>` | 把上一轮的存活/未覆盖变异导出成**带 diff 的清单** + 按状态/按模块汇总 | 首轮跑完, **三分类之前**(`mutmut results` 只有 id, 没有文件:行与变异内容) |
-| `commands run mutants.verify -- --from-report <清单>` | 对候选逐条 `apply` → 跑**全套件** → 还原, 记 KILLED / SURVIVED | **S4 手工确认的机械化**(整轮时间大头, 先缩小候选) |
+| `commands run mutants.verify -- --from-report <清单>` | 对候选逐条 `apply` → 跑**全套件** → 还原, 记 KILLED / SURVIVED(**判据 = 本次失败 - 基线失败**的差集, 基线常红不影响) | **S4 手工确认的机械化**(整轮时间大头, 先缩小候选) |
 | `commands run mutants.gremlins -- <目标文件> <池文件...>` | Windows 侧兜底 / 交叉验证 | 不想开 WSL, 或想用第二工具核对数字 |
 | `commands run mutants.status` | 看镜像状态 + 上一轮结果摘要 | 轮次之间回看 |
 
@@ -115,6 +117,9 @@ user-invocable: true
    - **id 级**(有 id 清单): `commands run mutants.verify -- --from-report <清单> [--only-status survived]`,
      对每条候选在**全套件**下 `apply` → 跑 → 还原。**这是量化与逐 id 归因的唯一判据**; 先按硬约束 10 收窄。
      KILLED = 假存活(全套件能杀, 只是池没选到); SURVIVED = 真洞候选(夹着少量等价变异, 逐个判)。
+     判据是**与基线的差集**(开跑先量一遍未变异套件的既有失败集合): 本机 Linux 侧曾恒有 3 条平台失败
+     (2026-10-30 已修绿), 「套件有 failed 就算 KILLED」的老口径在那时会判每条候选恒 KILLED(全杀 = 没杀)。
+     `APPLY_FAIL` / `TIMEOUT` / `UNKNOWN` 是**未判定**, 不算 SURVIVED; 重跑同一命令会自动重试。
    - **形态级**(只有形态、没给 id): 按硬约束 13 手搓同构变异跑**定向池**(见下节)。
      这一路**不产出存活计数**, 只回答「这个形态的守阵在不在 / 新补的守阵是不是空转」。
 6. **处置** ——

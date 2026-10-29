@@ -69,10 +69,15 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 import os
 import re
 import subprocess
+import sys
 
 import pytest
 
 import sidefx
+
+# 覆盖率闸: 平台定档(为什么不是一个数, 见 pytest_configure 的 docstring)
+COVERAGE_FLOOR_WIN = 99.0
+COVERAGE_FLOOR_OTHER = 98.5
 
 # 通知器可执行名(小写、不含 .exe): 与 notify.PlatformChannel 的三个平台后端一一对应
 NOTIFIER_EXECUTABLES = frozenset({"notify-send", "osascript", "powershell", "pwsh"})
@@ -81,6 +86,34 @@ NOTIFIER_EXECUTABLES = frozenset({"notify-send", "osascript", "powershell", "pws
 AUMID_KEY_PREFIX = "Software\\Classes\\AppUserModelId\\"
 
 _real_run = subprocess.run
+
+
+def pytest_configure(config):
+    """覆盖率闸按平台定档 —— 两侧分母天然不同, 单一阈值必有一侧恒红。
+
+    实测(2026-10-30): Windows 侧 99.27%, Linux 侧 **98.74%**。差额几乎全在**Windows 独有代码**:
+    `infra/alias_fs.py` 的 ctypes / junction 封装一项就 91 语句 + 25 分支(占差额 ~3/4), 另有
+    autostart 注册表后端、relocate_journal、traffic_sample 等。这些行在 Linux 上**跑不到**, 也不该
+    为它们编假测试 —— 于是 ubuntu CI 在 `--cov-fail-under=99` 下**恒红**(实测
+    `FAIL Required test coverage of 99% not reached. Total coverage: 98.74%`), 而同一阈值对
+    Windows 是有效卡口。⇒ 分档: Windows 仍按 99 卡, 其余平台按 98.5 卡(实测值向下取整留 ~0.24pt
+    余量)。口径与 `tools/global-traffic-monitor` 的「双 OS 阈值取较低者」一致。
+
+    !闸值单点: 阈值**不再写进** `pytest.ini` 的 addopts(写死就两侧共用), 只在这里定。显式传
+    `--cov-fail-under=<非零>` 时本钩子让路; `=0` 按「未设」处理 —— pytest-cov 自己就把 0 当
+    「不卡」(`> 0` 才判), 语义一致。要彻底不测覆盖率用 `--no-cov`。
+
+    !为什么改的是**插件实例**而不是 `config.option`: pytest-cov 在 `pytest_load_initial_conftests`
+    阶段就用**早期解析的命名空间**(`early_config.known_args_namespace`)建好了 `_cov` 插件, 之后
+    只读自己那份 —— 实测改 `config.option` 或 `session.config.option` 都**不生效**(报告期仍视为
+    「未设阈值」, 闸门静默失效)。所以这里取插件对象改它的 `options`。
+    """
+    plugin = config.pluginmanager.getplugin("_cov")
+    if plugin is None:
+        return  # 没开覆盖率(--no-cov / 无 --cov): 无闸可设
+    if getattr(plugin.options, "cov_fail_under", 0):
+        return  # 命令行已显式给了非零阈值 —— 让路
+    plugin.options.cov_fail_under = COVERAGE_FLOOR_WIN if sys.platform == "win32" else COVERAGE_FLOOR_OTHER
 
 
 def _guard_run(cmd, *args, **kwargs):

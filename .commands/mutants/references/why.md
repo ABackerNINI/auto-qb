@@ -30,10 +30,28 @@ cd <mirror> && .venv/bin/mutmut results
 cat > /tmp/mutants_dump.py < <仓库里的 .commands/mutants/scripts/mutants_dump.py>
 cd <mirror> && .venv/bin/python /tmp/mutants_dump.py --status 'survived,no tests' --target-glob '<glob>'
 # verify: 逐条候选 —— apply -> 跑全套件 -> 还原(全部在镜像 src/ 上, 不碰主仓库)
+# 0) 先量基线: 未变异跑一遍, 收集失败 node id(基线常红也要能出数 —— 本机曾有 3 条平台失败, 2026-10-30 已修绿)
+cd <mirror> && git checkout -- src/ && PYTHONDONTWRITEBYTECODE=1 timeout 1200 \
+  .venv/bin/python -B -m pytest tests/ -q --no-cov -p no:cacheprovider -rfE --tb=no -n 8
+# 1) 逐条: 只看「本次失败 - 基线」是否非空 ⇒ KILLED; **不能带 -x**
 cd <mirror> && git checkout -- src/ && .venv/bin/mutmut apply <mutant_id> \
-  && .venv/bin/python -m pytest tests/ -q -n 8 --no-cov -x -p no:cacheprovider | tail -4 \
+  && PYTHONDONTWRITEBYTECODE=1 timeout 1200 \
+     .venv/bin/python -B -m pytest tests/ -q --no-cov -p no:cacheprovider -rfE --tb=no -n 8 \
   && git checkout -- src/
 ```
+
+**verify 的两条判据**(2026-10-30 修, 之前结构性失效):
+
+1. **差集, 不是「套件有没有失败」** —— 本机 WSL Linux 侧全量套件曾有 3 个既有平台失败
+   (`test_alias_fs.py` ×2 · `test_relocate_paths.py` ×1, **2026-10-30 已修绿**), 老口径「有 failed 就算
+   KILLED」在那时让**每条**候选恒判 KILLED(全杀 = 没杀)。现在先量基线失败集合, 每条候选只看新增失败 ——
+   与基线是否全绿无关, 这才是结构性修法。
+2. **不能带 `-x`** —— 它会停在第一条**既有**失败上, 变异体根本没被执行; 实测老口径的输出是
+   `1 failed, 1395 passed`(套件 4144 条, 走到 1395 就断了)。
+
+配套: `-B` + `PYTHONDONTWRITEBYTECODE=1` 且开工清 `__pycache__`(防等长替换 + 秒级 mtime 让
+CPython 复用上一条变异体的 `.pyc` ⇒ 假 SURVIVED, 见坑档 redverify-pycache-stale-verdict);
+单次套件 `timeout`(变异体死循环)超时记 TIMEOUT, 与 APPLY_FAIL / UNKNOWN 一起算**未判定**, 不并进 SURVIVED。
 
 ```text
 # pytest-gremlins(Windows, 兜底) —— mutants.gremlins 展开成这一条
@@ -129,7 +147,10 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | `mutants.status` 恒报 `mutmut=no`(实际已装) | WSL 登录壳实为 zsh —— `cd` 改了**真实** cwd, 但 `$PWD` / `$()` 仍报 WSL 启动目录; `status` 的 `$(test -x .venv/bin/mutmut ...)` 因此读错目录 | **已修(2026-10-08)**: `cmd_status` 的回显改 `cd {mq} && <直接命令>` 形态(不再用 `$()` 取相对路径); 顺带把末行 `only_mutate` 加 fallback(镜像未跑过 run 时不再误报 `[FAIL]`)。若又见到本现象, 核脚本是否被改回 `$()` 写法。详见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
 | 复跑时新加的守阵"没生效"(存活数不降) | `mutants.run` 默认 `git checkout -q -f -B develop FETCH_HEAD`, 会把镜像里**未提交的测试改动冲掉** | 先把新测试 `cp` 进镜像 `tests/`, 再 `mutants.run --no-refresh`(跳过刷新) |
 | 想看某条变异的 diff / 想批量三分类 | `mutmut results` 只有 id, 没有 diff | 用 `mutants.report`(带 diff 的清单 + 按状态/按模块汇总); 单条用 `mutmut show <id>` |
-| `verify` 跑得极慢 / 想中断 | 每条候选都要跑一遍**全套件**(实测 ~15s/条) | 先 `mutants.report` 再用 `--only-status` 或手挑把候选缩小; 中断后重跑同一 `--out` 自动续(已验 id 跳过) |
+| `verify` 输出**全是** KILLED(尤其「全杀」) | 老口径拿「套件里有 failed」当 KILLED, 而本机 Linux 侧基线本来就红(当时 3 条平台失败) ⇒ 恒真 | **已修(2026-10-30)**: 判据改「本次失败 - 基线失败」差集; 若又见到全杀, 先看输出里 `[baseline] 既有失败 N 条` 是否合理, 并核命令是否被改回带 `-x` 的写法 |
+| `verify` 报大量 `TIMEOUT` / `UNKNOWN` | 变异体死循环, 或套件在收集期就崩(没有汇总行) | TIMEOUT 抬 `--suite-timeout`; UNKNOWN 先手工跑一遍该变异体看真实报错 —— 两者都是**未判定**, 别当 SURVIVED |
+| 基线缓存与镜像树对不上 | 用 `--no-refresh` 且手改过镜像 `tests/`(缓存键只有 镜像HEAD+并行度) | `--recompute-baseline` 强制重跑基线 |
+| `verify` 跑得极慢 / 想中断 | 每条候选都要跑一遍**全套件**(实测 ~15s/条), 外加一遍基线 | 先 `mutants.report` 再用 `--only-status` 或手挑把候选缩小; 中断后重跑同一命令自动续(结果文件按输入清单定名, 已判定 id 跳过; `--fresh` 重头) |
 | 想用「本地新守阵」而不是 develop 的测试跑 verify | `verify` 默认刷新镜像(测试 = develop) | 加 `--no-refresh`(镜像里是什么测试就用什么) |
 | 跑到一半崩在 `FileNotFoundError: mutants/.../<file>.meta` | **并行会话**共用同一镜像, 对方的 `mutants.run` 执行了 `rm -rf mutants`, 删掉你正在跑的 `.meta` | 每会话用**专用镜像** `--mirror '~/auto-qb-mut-<pkg>'`(`report` / `verify` 带同一个); 并存时降 `--children`(实测 4+4 会互相拖慢)。判别与处置见坑档 [mutants-shared-mirror](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md) |
 | 大包单轮被 3600s timeout 截断 | `mutants.run` 的 `timeout = 3600`; 大包实测会超(hr: 8,027 变异 ≈96 min) | **别从零重跑**: 在镜像里 `cd <mirror> && .venv/bin/mutmut run --max-children 4` **续跑**(mutmut 对未变函数保留既有 `exit_code`, 跳过已有结果, 与整跑等价); 更稳的是按模块切 |

@@ -719,9 +719,13 @@ def test_alias_kind_of_symlink_without_reparse_tag(tmp_path, monkeypatch):
     assert alias_fs.alias_kind_of(str(tmp_path / "any")) == KIND_SYMLINK
 
 
+@_WIN_ONLY
 def test_win_interactive_session_station_failures(monkeypatch):
     """窗口站探测两条保守出口(ctypes 桩): 拿不到窗口站句柄 / 取 UOI_FLAGS 失败 -> False
-    —— 无可见窗口站的会话(服务/SSH/计划任务)弹不出 UAC, 按「提权通道不可用」处理"""
+    —— 无可见窗口站的会话(服务/SSH/计划任务)弹不出 UAC, 按「提权通道不可用」处理
+
+    !平台准入: 用例靠 `ctypes.WinDLL` 桩住 user32, 而 Linux 上 `ctypes` **没有 WinDLL 属性**
+    (monkeypatch.setattr 直接 AttributeError)。被测函数本身也只在 Windows 调用。"""
     import ctypes
 
     def _fake_dll(station, info_ok):
@@ -742,9 +746,12 @@ def test_win_interactive_session_station_failures(monkeypatch):
     assert alias_fs._win_interactive_session() is False  # UOI_FLAGS 取不到
 
 
+@_WIN_ONLY
 def test_win_create_junction_kernel_failure_cleans_up(tmp_path, monkeypatch):
     """junction 内核原语失败路径(ctypes 桩): CreateFileW 返回 INVALID_HANDLE / DeviceIoControl
-    失败 -> 抛 OSError 且删掉刚建的空目录(不留半截现场); 清理时 rmdir 再失败也不掩盖主因"""
+    失败 -> 抛 OSError 且删掉刚建的空目录(不留半截现场); 清理时 rmdir 再失败也不掩盖主因
+
+    !平台准入同 `test_win_interactive_session_station_failures`: 桩的是 `ctypes.WinDLL`, Linux 无此属性。"""
     import ctypes
     from ctypes import wintypes
 

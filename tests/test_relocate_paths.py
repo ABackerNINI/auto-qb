@@ -173,6 +173,13 @@ def test_precheck_empty_file_table_skips_representative_probe(tmp_path, monkeypa
 
     !POSIX 目录 st_nlink 恒 >= 2(Linux CI 实测): 旧写法落到 `names[0]` 直接 IndexError;
     Windows 目录 nlink=1 根本走不到那条分支 —— 本地全绿、CI 全红。
+
+    !平台差异(2026-10-30 修): 本用例按「os.lstat 有没有被叫到 save_path」取证, 而
+    `os.path.realpath` 在 **POSIX 上是 Python 实现**(逐段 `os.lstat` 走), Windows 上走
+    `nt._getfinalpathname` 不碰 `os.lstat`。于是同一条生产路径(内容根真实存在时做别名解析比较)
+    在 Linux 上会额外 lstat 到 save_path, 把「代表文件探测」的取证污染成假红。这里把 realpath
+    换成恒等 —— 取证对象是**代表文件探测**, 不是别名解析; 若 `if names:` 闸门被删, `names[0]`
+    会立刻 IndexError, 本用例照样红。
     """
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path)
@@ -180,6 +187,7 @@ def test_precheck_empty_file_table_skips_representative_probe(tmp_path, monkeypa
     monkeypatch.setattr(type(client), "torrents_files", lambda self, h: [])
     for t in (mgr.store.by_hash["HA"], mgr.store.by_hash["HB"]):
         t._files = None
+    monkeypatch.setattr(os.path, "realpath", lambda p, **kw: p)  # 见 docstring「平台差异」
 
     def _norm(p):
         s = str(p)

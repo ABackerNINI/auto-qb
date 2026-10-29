@@ -33,7 +33,7 @@ script  = "mutants.py"
 args    = ["verify"]
 timeout = 14400
 when    = "S4 手工确认的机械化: 对候选逐条 `mutmut apply` -> 跑**全套件** -> 还原, 记 KILLED(假存活) / SURVIVED(真洞候选)"
-note    = "用法: commands run mutants.verify -- --from-report <dump.txt> [--only-status survived] [--workers 8] [--no-refresh]。**这是整轮的时间大头**(实测 ~15s/条) —— 先用 --only-status 或手挑把候选缩小。幂等可续跑(已写进结果文件的 id 自动跳过)。会刷新镜像并在镜像 src/ 上 apply/还原(不碰主仓库)。KILLED = 全套件能杀 ⇒ 池没选到; SURVIVED = 全套件仍杀不掉 ⇒ 真洞候选或等价变异"
+note    = "用法: commands run mutants.verify -- --from-report <dump.txt> [--only-status survived] [--workers 8] [--suite-timeout 1200] [--recompute-baseline] [--fresh] [--no-refresh]。**这是整轮的时间大头**(实测 ~15s/条) —— 先用 --only-status 或手挑把候选缩小。**判据是差集不是「套件有没有失败」**: 开跑先量一遍未变异套件的**基线失败集合**(不要求基线全绿: 本机 Linux 侧曾有 3 条平台失败, 2026-10-30 已修绿), 每条候选只看「本次失败 - 基线」是否非空 —— 否则基线常红会让每条候选恒判 KILLED(全杀 = 没杀)。基线按 镜像HEAD+并行度 缓存, 换 HEAD 或手改过镜像树用 --recompute-baseline。另: 不带 -x(会停在既有失败上)、带 -B 并先清 __pycache__(防 .pyc 复用上一条变异体)。APPLY_FAIL / TIMEOUT / UNKNOWN 是**未判定**, 不算 SURVIVED。幂等可续跑(结果文件按输入清单定名, 已判定 id 自动跳过, --fresh 重头)。会刷新镜像并在镜像 src/ 上 apply/还原(不碰主仓库)。"
 doc     = "references/why.md"
 
 [tasks."mutants.setup"]

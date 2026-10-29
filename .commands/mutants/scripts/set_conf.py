@@ -11,7 +11,8 @@
 设计要点(逐条对应可行性报告 26-10-08-0231 §10 的坑; 改这里之前先读那份):
 
 - ``source_paths`` 必须写**整个 src** —— 写单文件会因包内相对 import 失败; 目标用 ``only_mutate`` 收窄。
-- ``pytest_add_cli_args`` 必带 ``-n 0 --no-cov``(抵消 pytest.ini addopts 里的 ``-n 4`` 与 ``--cov-fail-under``)
+- ``pytest_add_cli_args`` 必带 ``-n 0 --no-cov``(抵消 pytest.ini addopts 里的 ``-n 8``, 以及
+  tests/conftest.py 按平台设的覆盖率闸)
   以及**文本层守阵**的 ``--deselect``: mutmut 把变异体写进同一份文件, 凡「读源码文本做断言」的守阵
   在基线就红, 整轮直接中断(实测两条, 见 ``DEFAULT_DESELECT``; 它们会随测试文件拆分漂移, 报错时先核这里)。
 - ``process_isolation = "forkserver"`` —— 默认 ``fork`` 会让注册表类守阵假红。
