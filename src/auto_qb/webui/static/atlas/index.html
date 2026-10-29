@@ -5,10 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>auto-qb · 辅种管理 · 星图</title>
   <link rel="icon" type="image/png" href="/shared/icon.png">
+  <!-- 主表行语言引擎(shared/rowlang.js): head 同步执行(首帧前定 data-rowlang, 无 FOUC) --><script src="/shared/rowlang.js"></script>
   <link rel="stylesheet" href="/atlas/style.css">
   <!-- W2 分层(26-09-26-2233): 令牌+基线留根 style.css, 链接顺序即级联序(components → views → dialogs) -->
   <link rel="stylesheet" href="/atlas/css/components.css">
   <link rel="stylesheet" href="/atlas/css/views.css">
+  <!-- 主表行语言结构规则单点(计划 26-10-30-0217): 必须在本皮肤 views.css 之后(级联序), 三皮肤共用 -->
+  <link rel="stylesheet" href="/shared/row_lang.css">
   <link rel="stylesheet" href="/atlas/css/dialogs.css">
   <link rel="stylesheet" href="/shared/console_hub.css">
   <!-- W6 表格面背景/密度族单点: 变体只声明令牌值(说明见该文件头) -->

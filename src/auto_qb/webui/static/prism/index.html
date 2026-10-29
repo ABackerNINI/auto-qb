@@ -6,8 +6,8 @@
   <meta name="color-scheme" content="dark light">
   <title>auto-qb · 辅种管理 · 棱镜</title>
   <link rel="icon" type="image/png" href="/shared/icon.png">
-  <!-- 主题引擎必须在 head 同步执行(首帧前定 data-theme, 无 FOUC); 颜色全部来自 themes/*.css -->
-  <script src="/prism/js/theme.js"></script>
+  <!-- 主题引擎+主表行语言引擎(shared/rowlang.js)都在 head 同步执行(首帧前定 data-theme/data-rowlang, 无 FOUC); 两 script 并行单行: shell 体量守阵见 test_frontend_template_split_wiring(cap 随挂载同步上调) -->
+  <script src="/prism/js/theme.js"></script><script src="/shared/rowlang.js"></script>
   <link rel="stylesheet" href="/prism/css/tokens.css">
   <link rel="stylesheet" href="/prism/css/themes/ocean.css">
   <link rel="stylesheet" href="/prism/css/themes/galaxy.css">
@@ -17,6 +17,8 @@
   <link rel="stylesheet" href="/prism/css/base.css">
   <link rel="stylesheet" href="/prism/css/components.css">
   <link rel="stylesheet" href="/prism/css/views.css">
+  <!-- 主表行语言结构规则单点(计划 26-10-30-0217): 必须在本皮肤 views.css 之后(级联序), 三皮肤共用 -->
+  <link rel="stylesheet" href="/shared/row_lang.css">
   <!-- 弹窗层(issue 26-10-20-2231): 抽屉/确认框/对话框/覆盖层/HR 表族 —— 与另两皮肤同构, 排最后 -->
   <link rel="stylesheet" href="/prism/css/dialogs.css">
   <link rel="stylesheet" href="/shared/console_hub.css">

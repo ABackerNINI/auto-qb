@@ -78,12 +78,15 @@
 .theme-menu[hidden] { display: none; }
 .theme-menu-title { padding: 4px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .06em;
   color: var(--fg-dim); }
-.theme-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px;
+/* 主表行语言条目(shared/rowlang.js 引擎, topbar.html #theme-menu 内 .rowlang-group)与
+ * 主题条目同款外观 —— 直接并选择器复用规则; frost/golden 亮主题下整组隐藏(行语言仅服务暗主题) */
+html[data-theme="frost"] .rowlang-group, html[data-theme="golden"] .rowlang-group { display: none; }
+.theme-item, .rowlang-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 9px;
   border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-soft);
   font-size: 12.5px; text-align: left; cursor: pointer;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
-.theme-item:hover { background: var(--surface-2); color: var(--fg); }
-.theme-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600;
+.theme-item:hover, .rowlang-item:hover { background: var(--surface-2); color: var(--fg); }
+.theme-item.on, .rowlang-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600;
   box-shadow: inset 2px 0 0 var(--accent); }
 .theme-item .td { width: 12px; height: 12px; flex: 0 0 auto; border-radius: 3px;
   border: 1px solid var(--border-strong);
@@ -315,7 +318,7 @@
 /* 按下反馈(可点元素统一轻微回缩; .bt 的按下态自成一体, 见按钮体系段) */
 .tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
 .ctx-item:active, .pop-item:active, .col-menu-item:active,
-.theme-item:active { transform: scale(.975); }
+.theme-item:active, .rowlang-item:active { transform: scale(.975); }
 .ctx-item:active { transform: scale(.96); }
 
 select option { background: var(--bg-elev); color: var(--fg); }

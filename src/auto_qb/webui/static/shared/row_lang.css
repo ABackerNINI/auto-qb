@@ -1,0 +1,452 @@
+/* auto-qb WEB UI · 主表行语言结构规则单点(shared, 三皮肤共用)
+ *
+ * 单点地位: 行语言(flat/wave)的全部**结构规则**唯一来源 —— 三皮肤 views.css/components.css 里的
+ * .group-row 卡语言规则(卡底/描边/圆角/微抬)不删不改, 由本文件按更高特异性覆盖; 皮肤路径内
+ * 不得再出现任何行语言规则(计划 26-10-30-0217 §04 验收: grep 无皮肤路径内的新行语言规则)。
+ *
+ * 作用域机制: 每条规则键都是 `html[data-rowlang=…] + .rl-scope` 双前缀 ——
+ * - html[data-rowlang] 由 shared/rowlang.js 在 head 同步写入(首帧前定值, 无 FOUC);
+ * - .rl-scope 首版只挂在主表容器 .torrents-dock(shared/tpl/groups.html) = 种子/辅种/追剧三主表;
+ *   抽屉各面/设置面不挂该类 ⇒ 全部规则天然不命中, 抽屉零变化。未来新面采用 = 容器挂 .rl-scope。
+ *
+ * 级联序要求: 本文件必须排在三皮肤 views.css **之后**加载(shell 里的 link 顺序即级联序),
+ * 否则皮肤行卡规则会反压本文件(特异性虽占优, 但保持声明序直觉, 级联序不依赖特异性兜底)。
+ *
+ * 亮主题排除前缀: prism 亮主题(frost/golden)不提供行语言(计划 §03 拍板) —— flat 组选择器
+ * 统一带 `:not([data-theme="frost"]):not([data-theme="golden"])`; atlas/console 无 data-theme
+ * 属性, :not 恒真自然生效。未来亮主题采用行语言时: 删前缀 + 按面覆写 tint 令牌即可。
+ *
+ * tint 令牌带回退约定: 所有半透明色一律 `var(--rl-*, 回退值)` 形式引用(禁裸 rgba 字面) ——
+ * 暗主题现在零令牌工作; 未来亮主题或个别面微调时只需在承载容器上覆写令牌值, 不改结构规则:
+ * - --rl-hover-tint  hover 行面 tint(回退 rgba(255,255,255,.12)); 仅 flat 行板消费
+ * - --rl-hover-solid flat 吸左名称列 hover 纯色底(回退 color-mix: 不透明白按 12% 权重混页底,
+ *                    不透明合成色) —— 26-10-30 复验二修: 换掉 ::after opacity 方案(合成器独立
+ *                    管线与行板主线程重绘帧错位); 复验三修: 混入色必须不透明+显式权重(带
+ *                    alpha 的混入色会被 color-mix 把 alpha 平均成半透明结果, 横滚透底);
+ *                    与行板过渡同一属性 background-color、同一份 views.css transition ⇒ 逐帧
+ *                    相等; 仅 flat 首格消费
+ * - --rl-hairline    行间 1px 发丝线(回退 rgba(255,255,255,.06)); 仅 flat 消费
+ * - --rl-bar         名称列左条 hover 中性白条(回退 rgba(255,255,255,.5))
+ * - --rl-bar-on      名称列左条选中 accent 实色(回退链 var(--accent, #3aa6a6), 运行时取皮肤 --accent)
+ * - --rl-sel-tint    选中/半选行 accent tint(回退 rgba(58,166,166,.10))
+ * - --rl-sel-solid   flat 吸左名称列选中/半选纯色底(回退 color-mix: 不透明 accent 按 10% 权重
+ *                    混页底, 不透明合成色); 仅 flat 首格消费(与 --rl-hover-solid 同管线, 见上)
+ * - --rl-zebra-tint  wave 斑马行 tint(回退 rgba(255,255,255,.03))
+ * - --rl-wave-tint   wave 扫层=高亮终色(回退 rgba(255,255,255,.12), 与 flat hover 同档 ——
+ *                    验收修正: 旧 9% 与斑马 3% 过近, 用户读作"斑马纹与 hover 分不清")
+ *
+ * 阶段口径: flat(A) 组与 wave(B) 组均已落地; 两语言共用的行缝归零/左条/选中基础各组自带。
+ * 状态底重锚(阶段 4, 计划 §04-4)已落地: expanded/search-hit 两语言各写「行板 + 吸左首格」
+ * 成对规则, 按「半透明 tint 叠不透明基色」合成(flat/wave 承光底 = 页底 var(--bg); wave 另备
+ * zebra 三层组合)。主表行 class 实际清单( tpl/groups.html:25 / torrents.html:12 / shows.html:10,27 )
+ * 里再无其它带行底的状态 —— err/bad/is-chk 只存在于抽屉面(不挂 .rl-scope), is-pending 只动
+ * opacity(全局), s-* 只动芯片/文字色, kb-cursor 无 CSS 规则, 均无需重锚。
+ *
+ * 菜单 chrome 段(文末): 非 prism(atlas/console)的行语言入口菜单(#rowlang-btn/#rowlang-menu,
+ * topbar.html `ui !== 'prism'` 条件块)样式也在本单点 —— atlas/css/components.css 已顶 700 行
+ * 体量 cap 无法再加, 且菜单是行语言挂件的自带 chrome, 与行结构规则同文件同源。选择器一律带
+ * `.rowlang-menu` 前缀: prism 的行语言分组内嵌 #theme-menu, 页面里不存在 .rowlang-menu ⇒
+ * 这些规则在 prism 惰性, prism 分组外观仍由 prism components.css 的 .theme-item 并选择器承担。
+ * 菜单不挂 .rl-scope(它不在主表容器里), 也不需要亮主题排除前缀(frost/golden 是 prism 独有
+ * data-theme, 非 prism 皮肤无该属性); 令牌一律直呼皮肤令牌名(--bg-elev/--border-strong/...
+ * 名集相等由 test_frontend_skin_css_token_parity 守阵兜底)。
+ */
+
+/* ---------------------------------------------------------------- wave(B): 斑马纹 + 「波即高亮」扩散波
+ * 规格单点 = 计划 26-10-30-0217 §03 模板 B mock(.mk-b) + §06 D4 追记五(终版):
+ * - 斑马: 数据行序奇偶给 白3% tint(偶数行)。奇偶序**不能**用 :nth-child —— 主表 .group-table
+ *   的直接子元素混有 .detail 展开体与 .row-pad 占位, 行窗口化还会整块换行, DOM 序 != 数据序;
+ *   .rl-zebra class 由 shared/rowlang.js 按容器内数据行序写入(每个 .group-table 容器内独立计数)。
+ * - 「波即高亮」模型: 扫层 ::after 本身 = 高亮终色(var(--rl-wave-tint) 白12%), inset:0 铺满整行,
+ *   以 --mx(rowlang.js mousemove 写入的行盒内百分比)为 transform-origin 做 scaleX 0→1 扩散
+ *   300ms ease-out、forwards 驻留成持续高亮 —— 扫过即终值, 无二次渐入无渐隐; 移出 = animation
+ *   撤除, scaleX(0) 瞬时消失。
+ * - hover 不改行/名称列底色(高亮唯一来源是扫层): 本组行板/首格基础规则特异性 (0,4,0) 恒压
+ *   三皮肤 .group-row:hover(0,2,0) 与 .group-row:hover > :first-child(0,3,0), 皮肤 hover 底色
+ *   在 wave 下全程不生效 ⇒ zebra tint 在 hover 下保留, 不另写 hover 规则去"还原"; transform:none
+ *   放基础位同理压掉皮肤 hover 微抬。
+ * - 扫层 z-index:3 在吸左名称列(z-index:2, 三皮肤 views.css 同值)之上 —— 从名称列进入也有波;
+ *   半透明覆盖不破坏名称列「不透明挡横滚」语义(那约束的是基础底色, 不禁上层叠加)。
+ * ---------------------------------------------------------------- */
+
+/* ---- flat(A): 平板发丝线 — 行透明落页底, 行间 1px 发丝线, 无卡无描边无圆角无微抬 ---- */
+
+/* 行缝归零: 三皮肤 gap 5px(prism)/6px(atlas·console) 不一, flat 下行距 = 发丝线本身, 统一覆盖为 0。
+ * 连动: 展开明细的 margin-top:-6px 是「吃掉行间 gap」的让位量, gap 归零后改回 0(否则倒扣 6px
+ * 压进行底)。.torrents-dock > .group-table 的 padding-top 首行让位规则不是行语言, 保留不动。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table { gap: 0; }
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded + .detail { margin-top: 0; }
+
+/* 行板: 摘卡语言 —— background 透明落页底、描边归零只留底部发丝线、圆角 0、投影无、hover 不微抬。
+ * 行 padding 维持皮肤原值(14px), 不在此覆盖。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rl-hairline, rgba(255,255,255,.06));
+  border-radius: 0;
+  box-shadow: none;
+}
+/* hover: 白 12% 渐入 + 去微抬。皮肤 :hover 的 border-color(var(--border-strong)) 会改掉发丝线颜色,
+ * 同条重申回发丝线。transform 走 none —— 行是「读数行」不是「卡」, 不做拿起感(计划 §03 模板 A)。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover {
+  background: var(--rl-hover-tint, rgba(255,255,255,.12));
+  border-color: var(--rl-hairline, rgba(255,255,255,.06));
+  transform: none;
+}
+/* 展开态(阶段 4 状态底重锚, 计划 §04-4): 皮肤原规则(prism views.css:284 / atlas·console
+ * components.css)`linear-gradient(--bg-sunken,--bg-sunken), var(--bg-row)` 的合成基色被行板
+ * 基础规则压掉, 在此换新承光底重写 —— --bg-sunken 是半透明皮肤令牌(ocean rgba(5,12,24,.5)),
+ * 叠 flat 承光底 = 页底 var(--bg)。行板与首格同一表达式(逐字相等, 坑档 frozen-column.md ⑩);
+ * 底角取直/明细相连等结构性规则留在皮肤原样, 不在此重复。排在本组 :hover 之后(与皮肤
+ * views.css 状态序同惯例: 状态规则在 hover 后声明)⇒ 展开行悬停保持下沉底, hover 不冲掉状态底;
+ * selected/partial 排其后再取赢(皮肤状态序: selected/partial 在 expanded 之后)。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded {
+  background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg, #0d1724);
+}
+/* 搜索命中(阶段 4): 皮肤原样 = 90deg accent-soft→transparent 46% 渐层 over 行底(prism
+ * views.css:441 / atlas components.css:666 / console components.css:639) —— 渐层原样保留,
+ * 基色从 --bg-row 换新承光底 var(--bg)。首格同表达式(方向渐层镜像判据: 坑档 frozen-column.md ⑦)。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+}
+
+/* 选中/半选基础: accent tint **叠页底**合成 ——
+ * 坑档 frozen-column.md ⑩ 口径: 半透明状态底不许裸写替换行底; flat 行底 = 页底 var(--bg),
+ * 行板与首格用同一表达式(逐字相等), 保证吸左首格与行板永远同承光底。排在本组 :hover 之后,
+ * 特异性更高, hover 不冲掉选中底。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected,
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial {
+  background: linear-gradient(var(--rl-sel-tint, rgba(58,166,166,.10)), var(--rl-sel-tint, rgba(58,166,166,.10))), var(--bg, #0d1724);
+}
+
+/* 皮肤行级旧左条(.group-row.selected::before/.partial::before)不再摘除 —— 行语言的左条本尊
+ * 就是这个行级承载(26-10-30 复验四修后定案, 见下方左条规则注释: 吸左首格 overflow:hidden 会
+ * 裁掉负偏移条, 条必须挂行上); 本文件的行级左条规则以更高特异性接管全部状态的几何与配色,
+ * 选中/半选在下方显式重申 accent(不靠皮肤 --sel-bar)。成员行(.member-row)左条不在范围, 不动。 */
+
+/* 吸左名称列首格: 不透明且与行板同底(flat 行板 = 页底)。半透明裸值挡不住横滚滑入的兄弟列
+ * (坑档 frozen-column.md ②)。hover/选中底 = **color-mix 现算不透明纯色**直接换 background
+ * (26-10-30 复验二修): 上一版 ::after opacity 覆盖层在快速 hover 切换下仍与行板错拍 ——
+ * opacity 过渡可被提升到合成器独立管线(GPU), 行板 background-color 是主线程逐帧重绘, 两条
+ * 动画管线帧错位, 插值路径也不同。本方案两侧过渡**同一个属性** background-color、继承
+ * **同一份**皮肤 transition(三皮肤 views.css 首格既有 `transition: background-color
+ * var(--dur) var(--ease)` —— prism:268 / atlas:182 / console:178, --dur/--ease 三皮肤定义
+ * 同值: 160ms / cubic-bezier(.2,.8,.3,1); 本文件**不另声明** transition, 免脱离 --dur 单点),
+ * 插值路径/时长/缓动完全一致 ⇒ 数学上逐帧相等。
+ * 恒等推导(premultiplied, 26-10-30 复验三修更正): 行板 hover 底 = 白 tint(α=.12u)半透明叠
+ * 不透明页底 var(--bg) ⇒ 可见色 C = α·255 + (1-α)·C_bg, 合成后 alpha=1; 这恒等于
+ * **不透明白按 α·100% 权重**混页底: color-mix(in srgb, rgb(255 255 255) 12%, var(--bg))
+ * = .12·255 + .88·C_bg —— 同一条式子, 逐通道恒等且结果不透明。选中 sel tint(α=.10u)同理
+ * = color-mix(in srgb, rgb(58 166 166) 10%, var(--bg))。
+ * ⚠color-mix 坑(上一版实际踩中): 混入**带 alpha** 的颜色(如 rgb(255 255 255 / .12))且不写
+ * 权重 ⇒ 权重默认 50%/50%, premultiplied 结果 alpha = .5·.12 + .5·1 = .56 —— 产出半透明色
+ * (横滚透底!)且白色实际权重只有一半(着色不足), 名称格恒久与行板不一致。混 tint 必须用
+ * **不透明色 + 显式权重**表达「α tint 叠不透明底」。
+ * color-mix 基线: Chromium 111+(2023-03); 仓库先例 console components.css/dialogs.css 的
+ * --tone-line 等多处; e2e 跑 Playwright Chromium, 允许。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row > :first-child {
+  background: var(--bg, #0d1724);
+  /* 无 padding-left 让位(26-10-30 复验四修: 阶段2 的 padding-left:14px 把名称文本推离列头
+   * 「名称」, 观感成列头对齐左条) —— 左条改落行 padding 沟槽(见 ::before 规则), 文本零位移。 */
+}
+/* hover 纯色底: background-color 单属性替换(基础底无 background-image, 无 image 参与过渡)。
+ * 排除 expanded/search-hit/selected/partial —— 状态首格规则特异性更低(无 :not 链), 不排除则
+ * hover 以更高特异性冲掉声明序在后的状态底; 排除后悬停展开/命中/选中行首格保持状态底,
+ * 与行板「状态规则声明序压过 hover」同构。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:not(.expanded):not(.search-hit):not(.selected):not(.partial):hover > :first-child {
+  background-color: var(--rl-hover-solid, color-mix(in srgb, rgb(255 255 255) 12%, var(--bg, #0d1724)));
+}
+/* 展开态/搜索命中的首格镜像(阶段 4): 与各自行板同一表达式(逐字相等)。**残留仍在**(点击触发
+ * 态, 非瞬态 hover, 不在验收抱怨内): gradient 合成不可插值, 底色切换仍是离散的; 且行板与首格
+ * 同为 gradient 离散替换, 两侧同步, 不产生 hover 那种首帧竖带。声明序在 hover 之后、选中
+ * 之前 —— 与行板序完全同构。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded > :first-child {
+  background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg, #0d1724);
+}
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit > :first-child {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+}
+/* 选中/半选首格: color-mix 纯色底(与 hover 同管线同过渡源), **background 简写**顺带重置
+ * image —— 声明序在 expanded/search-hit 镜像之后压掉它们的 gradient(选中行若同时展开,
+ * 不能残留 sunken 渐层); 合成值 = sel tint 叠页底, 与行板 selected 表达式
+ * (linear-gradient(sel,sel), var(--bg))逐通道一致(premultiplied 推导见首格基础注释)。
+ * hover 规则已排除 selected/partial, 组合态无歧义 —— 选中行悬停保持选中底, 与行板一致。
+ * ::after 覆盖层**整体撤销**(hover 与 selected 都改纯色, 不再需要层叠上下文承载 tint)。
+ * 离散换底残留收敛一处: 仅 expanded/search-hit 的 gradient 镜像(点击触发态, 见上)。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected > :first-child,
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial > :first-child {
+  background: var(--rl-sel-solid, color-mix(in srgb, rgb(58 166 166) 10%, var(--bg, #0d1724)));
+}
+
+/* 名称列左条 —— 承载物 = **行 ::before**(26-10-30 复验五修, Playwright 实证定案):
+ * 上一版把条挂在吸左首格 ::before、left 取负行 padding 企图落进行 padding 沟槽 —— 实测
+ * getComputedStyle(首格)::before 规则全部生效(left:-14px/3px/opacity .6), 但首格元素本尊
+ * (.g-name)自带 overflow: hidden(文本截断所需, prism views.css:288 / atlas components.css 同构),
+ * 负偏移条在**任何滚动状态**下都被首格自身裁剪(barLeftWorld 12 < cellLeft 26, 横滚后更是
+ * 叠加 scrollport 裁剪)⇒「左条没了」。行(.group-row)无 overflow 声明(三皮肤核实)且
+ * position:relative(皮肤自带), 行 ::before 定位基于行 padding 盒 ⇒ left:0 恰是行 padding
+ * 沟槽左缘 = 旧选中左条(views.css:459 left:0)的几何原位, 条右缘距文本起点 = 行 padding
+ * (var(--tbl-pad-x, 14px), 三皮肤 .group-row 同一表达式: prism views.css:276 / atlas
+ * components.css:272 / console components.css:253)——文本零位移、列头对齐, 且不被任何
+ * overflow 裁剪。规格 = 旧选中左条同款: top/bottom 14% 不满高 / 3px 宽 / 右侧圆角;
+ * hover = 中性白条 120ms 渐入; 选中/半选 = accent 实色条(D4 追记: 左条颜色分家)。
+ *
+ * 左条两态几何(flat/wave 两组逐字一致):
+ * - 未横滚(.group-table 无 .is-hscrolled): 条挂行 ::before, left:0 = 行 padding 沟槽,
+ *   随行在文档流里(横滚时自然随行滚出视野 —— 旧坑档 ③ 形态)。
+ * - 横滚(.group-table.is-hscrolled, JS 三处单点打标): 行级沟槽条 content:none 摘除(防 1-2px
+ *   滚动时与吸左条并存出双条), 改由吸左首格 ::before 在 left:0 出一条 2px 窄条 —— 首格
+ *   sticky 钉在滚动容器左缘, 条在首格盒内不被自身 overflow:hidden 裁剪, 恒可见; 条压在
+ *   文本起点上 2px, 可读性可接受(备选「右缘指示条 right:0」未采纳, 见任务报告)。
+ * 成员行(.member-row)不带 .group-row 类, 本组规则零误伤; .rl-scope 外(抽屉)不命中。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--rl-bar, rgba(255,255,255,.5));
+  opacity: 0;
+  transition: opacity .12s ease, background-color .12s ease;
+  pointer-events: none;
+}
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::before { opacity: .6; }
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before,
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+/* 横滚态: 沟槽条让位给吸左首格窄条(几何见上「左条两态几何」)。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row::before {
+  content: none;
+}
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row > :first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--rl-bar, rgba(255,255,255,.5));
+  opacity: 0;
+  transition: opacity .12s ease, background-color .12s ease;
+  pointer-events: none;
+}
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row:hover > :first-child::before { opacity: .6; }
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before,
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.partial > :first-child::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+
+/* ---- wave(B) 规则体 ---- */
+
+/* 行缝归零 + 展开明细连动(与 flat 同款: 皮肤 .expanded + .detail 的 margin-top:-6px 是吃
+ * 行间 gap 的让位量, gap 归零后必须回 0, 否则倒扣 6px 压进行底)。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table { gap: 0; }
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded + .detail { margin-top: 0; }
+
+/* 行板: 摘卡语言——background 透明落页底、描边全去(wave 分行信息由斑马 tint 承担, 无 flat 的
+ * 发丝线)、圆角 0、投影无; transform:none 放基础位(特异性 (0,4,0) 恒压皮肤 :hover 的微抬),
+ * 行是「读数行」, 任何状态下都不拿起。行 padding 维持皮肤原值(14px)。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+/* 斑马行: 白3% tint 半透明叠页底 = 合成值(行板允许半透明, 吸左首格必须不透明, 见下条);
+ * .rl-zebra 由 rowlang.js 按 .group-table 容器内数据行序打标, 本文件不做任何奇偶判断。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.rl-zebra {
+  background: var(--rl-zebra-tint, rgba(255,255,255,.03));
+}
+
+/* 吸左名称列首格: 不透明且与行板同承光底(flat 同口径, 坑档 frozen-column.md ②)。zebra 行
+ * 用「同色 linear-gradient 叠不透明页底」合成, 与行板(zebra tint 半透明叠页底)逐通道一致;
+ * 无 hover 首格规则 —— 皮肤 :hover > :first-child((0,3,0))被本条 (0,4,0) 压死, hover 下首格
+ * 原底不动(高亮唯一来源是扫层)。无 padding-left 让位(与 flat 同步, 26-10-30 复验四修: 左条
+ * 落行 padding 沟槽, 文本零位移、列头对齐恢复, 见 flat ::before 注释)。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row > :first-child {
+  background: var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.rl-zebra > :first-child {
+  background: linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))), var(--bg, #0d1724);
+}
+
+/* 展开态/搜索命中(阶段 4 状态底重锚, 计划 §04-4): 与 flat 同口径 —— 状态 tint 叠不透明基色,
+ * 行板与首格同一表达式(逐字相等, 坑档 frozen-column.md ⑩⑦); search-hit 渐层保留皮肤原样
+ * (90deg accent-soft→transparent 46%), 基色换页底。zebra 行写三层合成(sunken/命中渐层 + zebra
+ * + 页底, 表达式与 selected.rl-zebra 先例同构), 靠 (0,5,0) 特异性取赢普通斑马。排序: 排 zebra
+ * 规则之后(声明序压过普通斑马)、selected 之前(皮肤状态序: selected/partial 在 expanded/search-hit
+ * 之后取赢) ⇒ 与下方选中块构成 hover(无) < zebra < expanded < search-hit < selected 全序。
+ * hover 不另写 —— wave 高亮唯一来源是扫层(::after 均匀半透明叠加, 行板/首格同步承光, 不破坏
+ * 逐通道一致); 结构性规则(底角取直/明细相连)留在皮肤原样。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded {
+  background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded.rl-zebra {
+  background:
+    linear-gradient(var(--bg-sunken), var(--bg-sunken)),
+    linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
+    var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit.rl-zebra {
+  background:
+    linear-gradient(90deg, var(--accent-soft), transparent 46%),
+    linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
+    var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded > :first-child {
+  background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded.rl-zebra > :first-child {
+  background:
+    linear-gradient(var(--bg-sunken), var(--bg-sunken)),
+    linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
+    var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit > :first-child {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.search-hit.rl-zebra > :first-child {
+  background:
+    linear-gradient(90deg, var(--accent-soft), transparent 46%),
+    linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
+    var(--bg, #0d1724);
+}
+
+/* 选中/半选(计划 D2; expanded/search-hit 见上方阶段 4 块): accent tint **叠页底**合成
+ * —— 坑档 frozen-column.md ⑩ 口径, 半透明状态底不许裸写替换行底。zebra 行双 tint 合成
+ * (sel tint 叠 zebra tint 叠页底), 行板与首格用同一表达式逐字相等, 名称列不出异色竖带。
+ * 排在 zebra 之后, 靠 .selected.rl-zebra 更高特异性取赢。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial {
+  background: linear-gradient(var(--rl-sel-tint, rgba(58,166,166,.10)), var(--rl-sel-tint, rgba(58,166,166,.10))), var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected.rl-zebra,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial.rl-zebra {
+  background:
+    linear-gradient(var(--rl-sel-tint, rgba(58,166,166,.10)), var(--rl-sel-tint, rgba(58,166,166,.10))),
+    linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
+    var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected > :first-child,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial > :first-child {
+  background: linear-gradient(var(--rl-sel-tint, rgba(58,166,166,.10)), var(--rl-sel-tint, rgba(58,166,166,.10))), var(--bg, #0d1724);
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected.rl-zebra > :first-child,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial.rl-zebra > :first-child {
+  background:
+    linear-gradient(var(--rl-sel-tint, rgba(58,166,166,.10)), var(--rl-sel-tint, rgba(58,166,166,.10))),
+    linear-gradient(var(--rl-zebra-tint, rgba(255,255,255,.03)), var(--rl-zebra-tint, rgba(255,255,255,.03))),
+    var(--bg, #0d1724);
+}
+
+/* 皮肤行级旧左条(.group-row.selected::before/.partial::before)不再摘除 —— 行语言的左条本尊
+ * 就是这个行级承载(与 flat 同款定案, 见 flat 左条规则注释: 吸左首格 overflow:hidden 会裁掉
+ * 负偏移条); 本文件的行级左条规则以更高特异性接管全部状态的几何与配色, 选中/半选在下方
+ * 显式重申 accent(不靠皮肤 --sel-bar)。成员行(.member-row)左条不在范围, 不动。 */
+
+/* 名称列左条 —— 与 flat 完全同款(行 ::before 承载 + 横滚吸左首格窄条), 几何与两态口径
+ * 见 flat 左条规则注释「左条两态几何」(两组逐字一致):
+ * - 未横滚: 行 ::before, left:0 = 行 padding 沟槽左缘(= 旧选中左条几何原位);
+ * - 横滚(.group-table.is-hscrolled): 沟槽条摘除, 吸左首格 ::before left:0 出 2px 窄条。
+ * hover = 中性白条 120ms 渐入; 选中/半选 = accent 实色条。wave 叠层序: 行 ::before(无
+ * z-index)在行内常规层, 扫层 ::after(z-index:3)半透明覆盖其上 —— 与行板/首格同步承光。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--rl-bar, rgba(255,255,255,.5));
+  opacity: 0;
+  transition: opacity .12s ease, background-color .12s ease;
+  pointer-events: none;
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::before { opacity: .6; }
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+/* 横滚态: 沟槽条让位给吸左首格窄条(几何见上「左条两态几何」)。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row::before {
+  content: none;
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row > :first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14%;
+  bottom: 14%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--rl-bar, rgba(255,255,255,.5));
+  opacity: 0;
+  transition: opacity .12s ease, background-color .12s ease;
+  pointer-events: none;
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row:hover > :first-child::before { opacity: .6; }
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.partial > :first-child::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+
+/* 「波即高亮」扫层(查证 26-10-30: 三皮肤全量 grep 无 .group-row::after 占用 —— ::after 只被
+ * .site-chip/.tag-chip/.cat-chip/.f-cell.f-on 与 .h-cell .resizer 使用)。绝对定位伪元素不参与
+ * grid 布局(行是 grid 容器, 出流子元素不占轨), inset:0 铺满整行; z-index:3 压过吸左首格的
+ * z-index:2(三皮肤 views.css 同值); pointer-events:none 不挡点击/右键。transform-origin 吃
+ * rowlang.js 写入的 --mx(行盒内百分比), 缺省 50% = 无 JS 坐标时从中间扩散。keyframes 名
+ * rl-wave 全局唯一(全仓 grep 无冲突)。 */
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: var(--rl-wave-tint, rgba(255,255,255,.12));
+  transform: scaleX(0);
+  transform-origin: var(--mx, 50%) 50%;
+}
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::after {
+  animation: rl-wave .3s ease-out forwards;
+}
+@keyframes rl-wave {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* ---------------------------------------------------------------- 非 prism 行语言菜单 chrome
+ * 载体 = topbar.html `ui !== 'prism'` 条件块的 .rowlang-pop/.rowlang-menu(shared/rowlang.js 自管
+ * 开合: 点 #rowlang-btn 翻 hidden / 点外部收 / Escape 收 / 开合后 syncUI 翻 .on)。结构抄 prism
+ * #theme-menu(.theme-pop/.theme-menu/.theme-menu-title, prism components.css)同构, 值取各皮肤
+ * 令牌(两皮肤名集相等有守阵); --radius console 为 0(方角)是该皮肤本意, 照取即可。drop-in
+ * keyframes 三皮肤 components.css 各自定义, 直接消费。为什么放本文件: 见头部「菜单 chrome 段」
+ * 说明(atlas components.css 顶 700 行 cap); 为什么 prism 惰性: 全部选择器要求 .rowlang-menu
+ * 或 .rowlang-pop 存在, prism 页面无此类 ⇒ 不命中, prism 分组外观零变化。 */
+.rowlang-pop { position: relative; }
+.rowlang-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 190px; padding: 6px;
+  border-radius: var(--radius); background: var(--bg-elev); border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-3); animation: drop-in .12s var(--ease-out); }
+.rowlang-menu[hidden] { display: none; }
+.rowlang-menu-title { padding: 4px 8px 6px; font-size: 11px; font-weight: 600; letter-spacing: .05em;
+  color: var(--fg-dim); }
+.rowlang-menu .rowlang-item { display: flex; align-items: center; width: 100%; padding: 7px 9px;
+  border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--fg-soft);
+  font-size: 12.5px; text-align: left; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.rowlang-menu .rowlang-item:hover { background: var(--surface-2); color: var(--fg); }
+.rowlang-menu .rowlang-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--accent); }

@@ -3,7 +3,9 @@
              flex:1/min-height:0, 面板 auto) —— 三视图(种子/辅种/追剧)通用, 面板对三者一视同仁
              (计划 26-10-08-1217); W3 高度治理在此几何钩子上接拖拽调高。类名沿用 torrents-dock
              (三套 CSS 的 .torrents-dock > .group-table 选择器不必改, 三视图的列表容器同名) -->
-        <main class="content" :class="{ 'torrents-dock': true }">
+        <!-- rl-scope(计划 26-10-30-0217): 主表行语言作用域类 —— shared/row_lang.css 全部规则经它命中,
+             只挂主表容器(三主表共用本模板); 抽屉/设置等其它表格面不挂 = 行语言零波及 -->
+        <main class="content rl-scope" :class="{ 'torrents-dock': true }">
 
         <template v-if="viewMode === 'groups'">
         <!-- 表壳组件(计划 26-10-11-1722 P1): 表头块(列名/排序箭头/拖宽把手/重排指示线/表头右键)

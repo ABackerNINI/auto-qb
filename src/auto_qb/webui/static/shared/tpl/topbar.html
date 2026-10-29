@@ -121,6 +121,30 @@
                 <button type="button" class="theme-item" data-theme="frost" style="--td-a:#3d6aa3;--td-b:#e9f1f9"><i class="td"></i>极地晨霜<span class="t-kind">亮</span></button>
                 <button type="button" class="theme-item" data-theme="golden" style="--td-a:#9c7110;--td-b:#f6f1e6"><i class="td"></i>麦秋<span class="t-kind">亮</span></button>
                 <button type="button" class="theme-item" data-theme="orbit" style="--td-a:#3fa87e;--td-b:#122019"><i class="td"></i>品牌轨道<span class="t-kind">暗</span></button>
+                <!-- 主表行语言分组(计划 26-10-30-0217): shared/rowlang.js 引擎切换 html[data-rowlang],
+                     条目 class 固定 .rowlang-item(绝不能复用 .theme-item —— theme.js 委托会误吞),
+                     激活态 on 由引擎 syncUI 维护; frost/golden 亮主题下整组 CSS 隐藏(prism components.css) -->
+                <div class="rowlang-group">
+                  <div class="theme-menu-title">主表行语言</div>
+                  <button type="button" class="rowlang-item" data-rowlang="flat">平板发丝线</button>
+                  <button type="button" class="rowlang-item" data-rowlang="wave">波纹扩散</button>
+                </div>
+              </div>
+            </div>
+            </template>
+            <!-- ui-diff: 主表行语言切换在 prism 内嵌 #theme-menu(复用 theme.js 既有开合引擎);
+                 atlas/console 无主题引擎, 行语言此前无入口 —— 独立按钮+菜单, 开合/Escape/点外部
+                 关闭由 shared/rowlang.js 自管(条目 class 仍 .rowlang-item, 不复用 .theme-item) -->
+            <template v-if="ui !== 'prism'">
+            <div class="rowlang-pop">
+              <button type="button" id="rowlang-btn" class="table-tool">
+                <svg class="ico ico-sm" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.6"/><path d="M8 2.4a5.6 5.6 0 0 1 0 11.2z" fill="currentColor" stroke="none"/></svg>
+                行语言
+              </button>
+              <div id="rowlang-menu" class="rowlang-menu" hidden>
+                <div class="rowlang-menu-title">主表行语言</div>
+                <button type="button" class="rowlang-item" data-rowlang="flat">平板发丝线</button>
+                <button type="button" class="rowlang-item" data-rowlang="wave">波纹扩散</button>
               </div>
             </div>
             </template>
