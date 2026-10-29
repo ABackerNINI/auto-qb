@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 from collections.abc import Mapping
+from typing import NamedTuple
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
@@ -1434,3 +1435,77 @@ def write_endpoint_pointer(
     path.write_text(json.dumps(payload), encoding="utf-8")
     monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
     return str(path)
+
+
+# ---------- relocate 环境构建器单点(issue 26-10-29-1405: 4 份 35 行同构骨架收口) ----------
+
+
+class RelocateEnv(NamedTuple):
+    """relocate_env 返回值(具名六元; 防 5/6 元解包错位)"""
+
+    mgr: QbManager
+    client: FakeClient
+    src: str
+    dst: str
+    content: str
+    files: list
+
+
+def relocate_env(
+    td,
+    *,
+    file_count=2,
+    subdir="Show",
+    state="pausedUP",
+    size=64,
+    progress=1.0,
+    assign=True,
+    data_dir=True,
+    free=1 << 40,
+    paths=None,
+) -> RelocateEnv:
+    """真临时目录 + HA/HB 双成员组 + 目标卷的 relocate 测试环境(四份局部构建器的单点)
+
+    组内两个成员共享同一份物理文件(HA/HB 同 files_map), 初始态默认 pausedUP, 目标卷
+    真实存在(exists/scandir 才可判定)。参数化的是四个原局部版本的**真实差异**:
+    - state: exec 用例从 uploading 起步(relocate 第一步就是暂停做种中的种子)
+    - assign: False 时成员不登记进分组表(测「链接在场是否裂组」用例故意让成员先落各自组)
+    - data_dir: False 时不设 mgr.config.data_dir(journal 落盘位置; 预检用例不依赖)
+    - paths: 传入相对路径元组可指定成员文件名(默认按 file_count 生成 e00/e01/...)
+    - size: 声明文件大小(字节), 磁盘实际写入同尺寸(声明与磁盘一致; 原web版100/64不一致已统一)
+    pin_disk_usage(monkeypatch) 是能力钉不是环境, 仍由用例自己调。
+    """
+    mgr = make_manager(os.path.join(str(td), "state.json"))
+    client = FakeClient()
+    mgr.client = client
+    src = os.path.join(str(td), "src")
+    dst = os.path.join(str(td), "dst")
+    content = os.path.join(src, subdir)
+    os.makedirs(content)
+    os.makedirs(dst)
+    rels = paths if paths is not None else [f"{subdir}/e{i:02d}.mkv" for i in range(file_count)]
+    files = []
+    for rel in rels:
+        p = os.path.join(src, *rel.split("/"))
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "wb") as f:
+            f.write(b"x" * size)
+        files.append(_fake_file(rel, size))
+    client.files_map["HA"] = list(files)
+    client.files_map["HB"] = list(files)
+    tors = [
+        FakeTorrent(hash="HA", name="Show", save_path=src, progress=progress, state=state),
+        FakeTorrent(hash="HB", name="Show", save_path=src, progress=progress, state=state),
+    ]
+    for t in tors:
+        client.torrents[t.hash] = t
+    seed_store(mgr, tors)
+    if assign:
+        grouping = mgr.host.get("grouping")
+        grouping._assign_new_torrent("HA")
+        grouping._assign_new_torrent("HB")
+    mgr.store.server_state = {"free_space_on_disk": free}
+    if data_dir:
+        mgr.config.data_dir = os.path.join(str(td), "data")
+    mgr.config.relocate.enabled = True
+    return RelocateEnv(mgr, client, src, dst, content, files)

@@ -62,46 +62,7 @@ import pytest
 from auto_qb.core.modules import relocate_units as ru
 from auto_qb.infra import relocate_journal
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
-
-FREE = 1 << 40
-
-
-def _make_env(td, file_count=2, subdir="Show", state="uploading", progress=1.0):
-    """真临时目录 + 双成员组; 返回 (mgr, client, src, dst, content, files)
-
-    组内两个成员共享同一份物理文件(HA/HB), 初始做种态(会被暂停), 目标卷已存在。
-    """
-    mgr = make_manager(os.path.join(str(td), "state.json"))
-    client = FakeClient()
-    mgr.client = client
-    src = os.path.join(str(td), "src")
-    dst = os.path.join(str(td), "dst")
-    content = os.path.join(src, subdir)
-    os.makedirs(content)
-    os.makedirs(dst)
-    files = []
-    for i in range(file_count):
-        name = f"{subdir}/e{i:02d}.mkv"
-        with open(os.path.join(content, f"e{i:02d}.mkv"), "wb") as f:
-            f.write(b"x" * 64)
-        files.append(_fake_file(name, 64))
-    client.files_map["HA"] = list(files)
-    client.files_map["HB"] = list(files)
-    tors = [
-        FakeTorrent(hash="HA", name="Show", save_path=src, progress=progress, state=state),
-        FakeTorrent(hash="HB", name="Show", save_path=src, progress=progress, state=state),
-    ]
-    for t in tors:
-        client.torrents[t.hash] = t
-    seed_store(mgr, tors)
-    grouping = mgr.host.get("grouping")
-    grouping._assign_new_torrent("HA")
-    grouping._assign_new_torrent("HB")
-    mgr.store.server_state = {"free_space_on_disk": FREE}
-    mgr.config.data_dir = os.path.join(str(td), "data")
-    mgr.config.relocate.enabled = True
-    return mgr, client, src, dst, content, files
+from helpers import pin_disk_usage, relocate_env
 
 
 def _simulate_moved(mgr, dst, files, content, mover="HA"):
@@ -138,7 +99,7 @@ def _only_job(mod):
 def test_exec_normal_flow_links_and_arm(tmp_path, monkeypatch):
     """正常链路: 暂停 -> 下发 -> 轮询 -> 逐文件链接 -> 穿透 -> 重归组 -> armed -> 恢复"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2, state="uploading")
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
     mod = mgr.host.get("relocate")
     spawned = []
     _spy_spawn(mod, spawned)
@@ -168,7 +129,7 @@ def test_exec_normal_flow_links_and_arm(tmp_path, monkeypatch):
 def test_exec_stalled_fails_without_moving_back(tmp_path, monkeypatch):
     """停滞判失败: dst 不增长且 qB 不在 moving 超时 ⇒ failed, 零搬回(只下发过一次 setLocation)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mgr.config.relocate.move_stall_timeout = 600.0
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -189,7 +150,7 @@ def test_exec_stalled_fails_without_moving_back(tmp_path, monkeypatch):
 def test_exec_long_running_turns_watching(tmp_path, monkeypatch):
     """长耗时: qB 仍在 moving 且超过 warn_after ⇒ 转 watching(只提示), 不判失败"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mgr.config.relocate.move_warn_after = 7200.0
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -207,7 +168,7 @@ def test_exec_long_running_turns_watching(tmp_path, monkeypatch):
 def test_exec_link_failure_rolls_back_and_finalizes(tmp_path, monkeypatch):
     """第 3 条链接失败 ⇒ 已建的 2 条被删 + 转 removed(收尾路径), 不搬回"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=5)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=5, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -240,7 +201,7 @@ def test_exec_link_failure_rolls_back_and_finalizes(tmp_path, monkeypatch):
 def test_exec_qb_disconnect_does_not_reissue(tmp_path, monkeypatch):
     """qB 中途断连(快照停在 moving): 不重复下发 setLocation(会排队/覆盖)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -254,7 +215,7 @@ def test_exec_qb_disconnect_does_not_reissue(tmp_path, monkeypatch):
 def test_exec_direct_single_member_skips_alias(tmp_path, monkeypatch):
     """单成员组: direct —— 无别名、无收尾, 搬完直接 done"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     # 只留一个成员: 直接改 store 组结构(单成员组 = 独占内容)
     store = mgr.store
     key = store.member_to_key["HB"]
@@ -278,7 +239,7 @@ def test_exec_direct_single_member_skips_alias(tmp_path, monkeypatch):
 def test_exec_dry_run_no_side_effects(tmp_path, monkeypatch):
     """dry-run: 不落盘不建链, 回执标 dry-run(数据面零动作)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     mod._dry = True
     items = mod.relocate_execute(["HA"], dst)
@@ -290,7 +251,7 @@ def test_exec_dry_run_no_side_effects(tmp_path, monkeypatch):
 def test_exec_step_budget(tmp_path, monkeypatch):
     """单步有界: 大批文件分块建链接, 单次 on_task_line 只建一批(主循环零阻塞)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=450)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=450, state="uploading")
     mgr.config.relocate.alias_file_threshold = 1000  # 强制逐文件链接(不做目录别名)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
@@ -310,7 +271,7 @@ def test_exec_step_budget(tmp_path, monkeypatch):
 def _armed_env(tmp_path, monkeypatch):
     """跑到 armed 的环境(供对账/撤销用例)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     spawned = []
     _spy_spawn(mod, spawned)
@@ -453,7 +414,7 @@ def test_guardian_removes_links_after_three_proofs(tmp_path, monkeypatch):
 def test_jobs_persist_and_reload(tmp_path, monkeypatch):
     """job 账落 state; 重启恢复非终态 job 并重挂 relocating 登记"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     items = mod.relocate_execute(["HA"], dst)
@@ -469,7 +430,7 @@ def test_jobs_persist_and_reload(tmp_path, monkeypatch):
 
 def test_entry_single_location_disabled_unchanged(tmp_path, monkeypatch):
     """开关关: 单件移动仍是「一次 setLocation」—— 调用序列与今日逐字节一致"""
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mgr.config.relocate.enabled = False
     mgr.web.commands.put(("set_torrent_location", {"hash": "HA", "location": dst, "cmd_id": "c1"}))
     mgr.web.consume_commands()
@@ -480,7 +441,7 @@ def test_entry_single_location_disabled_unchanged(tmp_path, monkeypatch):
 def test_entry_single_and_bulk_create_jobs(tmp_path, monkeypatch):
     """开关开: 单件与批量都产生 job, 回执 truth 计数可读"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     mgr.web.commands.put(("set_torrent_location", {"hash": "HA", "location": dst, "cmd_id": "c1"}))
@@ -502,7 +463,7 @@ def test_entry_rule_move_to_gates(tmp_path, monkeypatch):
     from auto_qb.rules.actions.transfer import MoveToAction
 
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
 
@@ -522,7 +483,7 @@ def test_entry_rule_move_to_gates(tmp_path, monkeypatch):
     assert r2.is_skipped and "幂等" in r2.message, r2
     # 目标冲突 -> fail 且带自解释原因
     os.makedirs(tmp_path / "b", exist_ok=True)
-    mgr2, client2, src2, dst2, content2, files2 = _make_env(tmp_path / "b", file_count=2)
+    mgr2, client2, src2, dst2, content2, files2 = relocate_env(tmp_path / "b", file_count=2, state="uploading")
     os.makedirs(os.path.join(dst2, "Show"), exist_ok=True)
     (tmp_path / "b" / "dst" / "Show" / "e00.mkv").write_bytes(b"occupied")
 
@@ -540,7 +501,7 @@ def test_entry_rule_move_to_gates(tmp_path, monkeypatch):
 def test_restart_does_not_reissue_setlocation(tmp_path, monkeypatch):
     """重启恢复: 账里 phase=moving 的 job 继续轮询, **不重复下发** setLocation"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -558,7 +519,7 @@ def test_restart_does_not_reissue_setlocation(tmp_path, monkeypatch):
 def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):
     """搬迁窗口: relocating 登记内的种子跳检直接 skip(不删除/不重加)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     mod.relocate_execute(["HA"], dst)
@@ -573,7 +534,7 @@ def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):
 def test_exec_defer_until_pause_snapshot(tmp_path, monkeypatch):
     """下发前等自有暂停快照回流(own_write_pending): 未回流不下发, 回流后下发一次"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, state="uploading")
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -591,7 +552,7 @@ def test_exec_defer_until_pause_snapshot(tmp_path, monkeypatch):
 def test_exec_move_rejected(tmp_path, monkeypatch):
     """qB 拒绝 setLocation -> failed(move_rejected), 不自动搬回、不动数据"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -611,7 +572,7 @@ def test_exec_move_rejected(tmp_path, monkeypatch):
 def test_exec_skip_when_all_at_target(tmp_path, monkeypatch):
     """全组已在目标位置 -> skip(幂等), 不建账不下发"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     for h in ("HA", "HB"):
@@ -625,7 +586,7 @@ def test_exec_skip_when_all_at_target(tmp_path, monkeypatch):
 def test_exec_unknown_stage_falls_back_to_arm(tmp_path, monkeypatch):
     """未知 stage 按 arm 收口(防御: 运行期字段损坏不至于挂死)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
     mod = mgr.host.get("relocate")
     spawned = []
     _spy_spawn(mod, spawned)
@@ -907,7 +868,7 @@ def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
     from auto_qb.rules.actions.transfer import MoveToAction
 
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _make_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
     mod = mgr.host.get("relocate")
 
     class _Ctx:

@@ -23,41 +23,7 @@ import pytest
 from auto_qb.core.modules.relocate_units import RelocateJob
 from auto_qb.infra import alias_fs, utils
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
-
-FREE = 1 << 40
-
-
-def _env(td, files=("Show/e00.mkv", "Show/e01.mkv")):
-    """双成员组 + 目标目录; 返回 (mgr, client, src, dst, content)"""
-    mgr = make_manager(os.path.join(str(td), "state.json"))
-    client = FakeClient()
-    mgr.client = client
-    src = os.path.join(str(td), "src")
-    dst = os.path.join(str(td), "dst")
-    content = os.path.join(src, "Show")
-    os.makedirs(content)
-    os.makedirs(dst)
-    fl = []
-    for rel in files:
-        p = os.path.join(src, *rel.split("/"))
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "wb") as f:
-            f.write(b"x" * 64)
-        fl.append(_fake_file(rel, 64))
-    client.files_map["HA"] = list(fl)
-    client.files_map["HB"] = list(fl)
-    tors = [
-        FakeTorrent(hash="HA", name="Show", save_path=src, progress=1.0, state="pausedUP"),
-        FakeTorrent(hash="HB", name="Show", save_path=src, progress=1.0, state="pausedUP"),
-    ]
-    for t in tors:
-        client.torrents[t.hash] = t
-    seed_store(mgr, tors)
-    mgr.store.server_state = {"free_space_on_disk": FREE}
-    mgr.config.data_dir = os.path.join(str(td), "data")
-    mgr.config.relocate.enabled = True
-    return mgr, client, src, dst, content
+from helpers import FakeTorrent, _fake_file, pin_disk_usage, relocate_env, seed_store
 
 
 def _job(src, dst, content, phase="armed", hashes=("HA", "HB")):
@@ -75,7 +41,7 @@ def _job(src, dst, content, phase="armed", hashes=("HA", "HB")):
 
 def test_file_links_keep_group_together(tmp_path):
     """① 文件链接在场: 仍指向 src 的 HB 与已到 dst 的 HA 落进同一组(不裂组)"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     mgr.host.get("relocate").register_job(_job(src, dst, content))
     mgr.store.by_hash["HA"].save_path = dst  # mover 已搬到目标
@@ -90,7 +56,7 @@ def test_file_links_keep_group_together(tmp_path):
 
 def test_relocating_skips_missing_scan(tmp_path):
     """② 搬迁窗口: 组内成员在 relocating 登记内 ⇒ 跳过错文件扫描(不暂停、不打 MISSING)"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     grouping._assign_new_torrent("HA")
     grouping._assign_new_torrent("HB")
@@ -111,7 +77,7 @@ def test_relocating_skips_missing_scan(tmp_path):
 
 def test_new_member_joins_alias_group(tmp_path):
     """③ 别名期间新加的同内容辅种自动并进同一组(作用域不是快照)"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     mgr.host.get("relocate").register_job(_job(src, dst, content))
     mgr.store.by_hash["HA"].save_path = dst
@@ -128,7 +94,7 @@ def test_new_member_joins_alias_group(tmp_path):
 
 def test_cross_group_conflict_still_blocks(tmp_path):
     """④ 同名不同内容(文件集不同 ⇒ 两组)仍被跨组交叉检测拦下, 只暂停下载方"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     mgr.config.grouping.cross_group_conflict_check = True  # 该检测默认关(保守默认), 守阵显式开
     # HB 改成 {Show/e01, Show/e02}: 与 HA 的 {e00,e01} 不同组但共享 e01.mkv
     with open(os.path.join(content, "e02.mkv"), "wb") as f:
@@ -150,7 +116,7 @@ def test_cross_group_conflict_still_blocks(tmp_path):
 @pytest.mark.skipif(not utils.is_windows(), reason="junction 仅 Windows")
 def test_third_party_junction_joins_group(tmp_path, monkeypatch):
     """⑤ 第三方目录 junction: 按 realpath 解析后的物理目录并组"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     real = os.path.join(str(tmp_path), "real")
     os.makedirs(os.path.join(real, "Show"))
     with open(os.path.join(real, "Show", "e00.mkv"), "wb") as f:
@@ -173,7 +139,7 @@ def test_third_party_junction_joins_group(tmp_path, monkeypatch):
 def test_third_party_link_detected_and_relocation_blocked(tmp_path, monkeypatch):
     """⑥ 硬链接组: 组被打标(识别), 迁移闸门拒迁(hardlink) —— 搬走的是链接本身, 数据留原地"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     target = os.path.join(content, "e00.mkv")
     spare = os.path.join(str(tmp_path), "spare.mkv")
     os.remove(target)
@@ -190,7 +156,7 @@ def test_third_party_link_detected_and_relocation_blocked(tmp_path, monkeypatch)
 
 def test_resolver_identity_when_disabled(tmp_path):
     """解析恒等: 无 job + 普通目录 ⇒ 组键首元仍是原 save_path(开关关逐字节现状)"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     mgr.config.relocate.enabled = False
     grouping = mgr.host.get("grouping")
     grouping._assign_new_torrent("HA")
@@ -200,7 +166,7 @@ def test_resolver_identity_when_disabled(tmp_path):
 
 def test_regroup_scope_degenerate(tmp_path, monkeypatch):
     """重归组退化: 文件表读不到 -> 跳过该条; 作用域无人命中 -> 0"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     grouping = mgr.host.get("grouping")
     monkeypatch.setattr(type(client), "torrents_files", lambda self, h: (_ for _ in ()).throw(RuntimeError("api down")))
     for t in mgr.store.by_hash.values():
@@ -212,7 +178,7 @@ def test_regroup_scope_degenerate(tmp_path, monkeypatch):
 
 def test_cross_group_ghost_member_and_bad_path(tmp_path, monkeypatch):
     """跨组检测退化: 组内幽灵成员(快照无)跳过; 目录 realpath 抛错回退词法不中断"""
-    mgr, client, src, dst, content = _env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, assign=False)
     mgr.config.grouping.cross_group_conflict_check = True
     grouping = mgr.host.get("grouping")
     grouping._assign_new_torrent("HA")

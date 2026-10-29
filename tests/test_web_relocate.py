@@ -39,51 +39,13 @@ import shutil
 
 from auto_qb.core.modules.relocate_units import RelocateJob
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
-
-
-def _make_group_env(td, file_count=2, subdir="Show", free=1024**4):
-    """真临时目录 + 双成员组(HA/HB 同内容)的环境; 返回 (mgr, client, src, dst, content)
-
-    同卷证明(§2.4)的 qB 侧读数与 disk_usage 一并钉在 free(测试确定性; 真实判据的
-    抖动容差由 same_volume_proof 自身的容差带承担)。
-    """
-    mgr = make_manager(os.path.join(td, "state.json"))
-    client = FakeClient()
-    mgr.client = client
-    src = os.path.join(td, "src")
-    dst = os.path.join(td, "dst")
-    content = os.path.join(src, subdir)
-    os.makedirs(content)
-    os.makedirs(dst)  # 目标卷必须真实存在(exists/scandir 才可判定)
-    files = []
-    for i in range(file_count):
-        name = f"{subdir}/e{i:02d}.mkv"
-        with open(os.path.join(content, f"e{i:02d}.mkv"), "wb") as f:
-            f.write(b"x" * 64)
-        files.append(_fake_file(name, 100))
-    client.files_map["HA"] = list(files)
-    client.files_map["HB"] = list(files)
-    tors = [
-        FakeTorrent(hash="HA", name="Show", save_path=src, progress=1.0, state="pausedUP"),
-        FakeTorrent(hash="HB", name="Show", save_path=src, progress=1.0, state="pausedUP"),
-    ]
-    for t in tors:
-        client.torrents[t.hash] = t
-    seed_store(mgr, tors)
-    grouping = mgr.host.get("grouping")
-    grouping._assign_new_torrent("HA")
-    grouping._assign_new_torrent("HB")
-    # 同卷证明(§2.4): qB 上报 free_space_on_disk = 本机源卷剩余(钉值, 见 _pin_disk_usage)
-    mgr.store.server_state = {"free_space_on_disk": free}
-    mgr.config.relocate.enabled = True
-    return mgr, client, src, dst, content
+from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, relocate_env, seed_store
 
 
 def test_relocate_module_precheck_ok_and_confirm(tmp_path, monkeypatch):
     """双成员组: F=2 -> ok(file_links); F=9+专属子目录 -> confirm(dir_alias); 零 qB 写调用"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     mod = mgr.host.get("relocate")
     items = mod.relocate_precheck(["HA", "HB"], dst)
     assert len(items) == 1, items
@@ -93,7 +55,7 @@ def test_relocate_module_precheck_ok_and_confirm(tmp_path, monkeypatch):
     assert item["target_free"] is not None and item["same_volume"] is True
     assert client.calls == [], f"预检零 qB 写调用: {client.calls}"
     # F=9 + 专属子目录 -> 目录别名需确认
-    mgr2, _c2, src2, dst2, content2 = _make_group_env(tmp_path / "b", file_count=9)
+    mgr2, _c2, src2, dst2, content2, _ = relocate_env(tmp_path / "b", file_count=9, data_dir=False)
     mod2 = mgr2.host.get("relocate")
     item2 = mod2.relocate_precheck(["HA", "HB"], dst2)[0]
     assert item2["cls"] == "confirm", (item2["cls"], item2["reasons"])
@@ -144,7 +106,7 @@ def test_relocate_precheck_no_false_dir_link_note(tmp_path, monkeypatch):
 def test_relocate_module_precheck_gone_and_param(tmp_path, monkeypatch):
     """未知 hash -> gone/blocked(逐条); 空 location -> param/blocked"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
     items = mod.relocate_precheck(["HA", "HMISSING"], dst)
     assert len(items) == 2
@@ -157,7 +119,7 @@ def test_relocate_module_precheck_gone_and_param(tmp_path, monkeypatch):
 def test_relocate_module_precheck_target_conflict_gate(tmp_path, monkeypatch):
     """目标已存在同名内容 -> blocked(target_conflict): qB 会走全量校验(进度清零)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     os.makedirs(os.path.join(dst, "Show"), exist_ok=True)
     with open(os.path.join(dst, "Show", "e00.mkv"), "wb") as f:
         f.write(b"occupied")
@@ -168,7 +130,7 @@ def test_relocate_module_precheck_target_conflict_gate(tmp_path, monkeypatch):
 def test_relocate_module_precheck_unfinished_job_gate(tmp_path, monkeypatch):
     """非终态 job 碰本组 -> blocked(unfinished): 链接套链接会让旧迁移收尾失效(S10)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
     mod.register_job(
         RelocateJob(
@@ -189,7 +151,7 @@ def test_relocate_module_precheck_unfinished_job_gate(tmp_path, monkeypatch):
 def test_relocate_module_precheck_readonly_proof(tmp_path, monkeypatch):
     """预检零副作用独立证明: qB 写调用零条 + state 深比对不变 + store 组结构不变"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=9)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=9, data_dir=False)
     state_before = json.dumps(mgr.state, sort_keys=True, ensure_ascii=False)
     groups_before = {k: list(v) for k, v in mgr.store.groups.items()}
     mod = mgr.host.get("relocate")
@@ -208,7 +170,7 @@ def _fwd(p):
 def test_relocate_module_precheck_qb_temp_gate(tmp_path, monkeypatch):
     """内容根存在 qB 未完成孪生(原名 + .!qB 后缀) -> blocked(qb_temp): 数据尚未落定"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     with open(os.path.join(content, "e00.mkv.!qB"), "wb") as f:
         f.write(b"partial")
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
@@ -222,7 +184,7 @@ def test_relocate_module_precheck_defensive_paths(tmp_path):
 
     from auto_qb.config.models import RelocateConfig
 
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
     # 未启用(路由层已 403, 模块侧兜底)
     mgr.config.relocate.enabled = False
@@ -248,7 +210,7 @@ def test_relocate_module_start_and_apply_probe_wiring(tmp_path):
     """启动/热重载接线: enabled 时 start 探测一次、apply 段变重探; 文案随开关变化"""
     from auto_qb.config.models import RelocateConfig
 
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
     mod.start(mgr.ctx, dry_run=False)  # enabled=True -> 探测 + INFO
     assert mod._conf is mgr.config.relocate
@@ -274,7 +236,7 @@ def test_relocate_module_fs_fact_branches(tmp_path, monkeypatch):
     from auto_qb.infra import alias_fs, file_access as fa_mod
     from auto_qb.infra.alias_fs import AliasCapability, LinkProbe
 
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     mod = mgr.host.get("relocate")
     failed = LinkProbe(False, error="权限不足(需提权/UAC): 以管理员身份运行 auto-qb")
     cap = AliasCapability(
@@ -314,7 +276,7 @@ def test_relocate_module_fs_fact_branches(tmp_path, monkeypatch):
 
 def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypatch):
     """内容根 listing 失败 -> 不专属(目录别名不可用); 代表文件不可读 -> 识别降级 note"""
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     # 文件表与磁盘不一致: 记录里的文件不在盘上 -> scandir 失败 + lstat 失败
     ghost = [_fake_file("Show/ghost.mkv", 100)]
     client.files_map["HA"] = list(ghost)
@@ -330,7 +292,7 @@ def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypat
 def test_relocate_module_precheck_classify_entries(tmp_path, monkeypatch):
     """内容根多出条目分类: 同 save_path 其它种子的文件 -> 组外占用; 散落 .torrent -> 杂项"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     # 组外种子 HC: 同 save_path, 文件落在同一内容根(分集同目录; 盘上要有真实文件, listing 才看得到)
     ext_files = [_fake_file("Show/S01E02.mkv", 100)]
     client.files_map["HC"] = ext_files
@@ -351,7 +313,7 @@ def test_relocate_module_precheck_classify_entries(tmp_path, monkeypatch):
 
 def test_relocate_module_capability_view(tmp_path):
     """能力面板: alias_fs 六项探测事实 + enabled 状态"""
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     view = mgr.host.get("relocate").capability_view()
     for key in ("junction", "dir_symlink", "file_symlink", "hardlink", "uac_available", "container", "enabled"):
         assert key in view, key
@@ -362,7 +324,7 @@ def test_relocate_module_precheck_add_disk_usage_degraded(tmp_path, monkeypatch)
     """添加预检: 命中作用域但目标卷剩余读不到 -> volume_free=None(展示「不可判定」不猜)"""
     from auto_qb.infra import file_access as fa_mod
 
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
     mod.register_job(
         RelocateJob(
@@ -384,7 +346,7 @@ def test_relocate_module_branch_extras(tmp_path, monkeypatch):
     from auto_qb.config.models import RelocateConfig
     from auto_qb.infra import alias_fs, file_access as fa_mod
 
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     mod = mgr.host.get("relocate")
     # start 未启用: 只 debug 不探测(零副作用面)
     mgr.config.relocate.enabled = False
@@ -474,7 +436,7 @@ def test_relocate_module_branch_extras(tmp_path, monkeypatch):
 def test_relocate_module_classify_entries_degenerate(tmp_path, monkeypatch):
     """组外分类退化: 其它 save_path 的种子跳过; 记录字段异常的单条跳过不炸"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     elsewhere = FakeTorrent(hash="HX", name="Else", save_path="R:/elsewhere", progress=1.0, state="pausedUP")
     client.files_map["HX"] = [_fake_file("Show/e00.mkv", 100)]  # 即便同名也因 save_path 不同不算组外
     client.torrents["HX"] = elsewhere
@@ -495,7 +457,7 @@ def test_relocate_module_classify_entries_degenerate(tmp_path, monkeypatch):
 def test_relocate_module_precheck_scandir_missing_root(tmp_path, monkeypatch):
     """内容根目录消失(记录与磁盘脱节) -> listing 失败 -> 不专属 -> 逐文件链接(不猜)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     shutil.rmtree(content)
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
     assert item["form"] == "file_links" and item["cls"] in ("ok", "confirm", "blocked")
@@ -504,7 +466,7 @@ def test_relocate_module_precheck_scandir_missing_root(tmp_path, monkeypatch):
 def test_relocate_module_precheck_add(tmp_path):
     """添加预检: ok / confirm(目录别名作用域 -> 实际落点+卷剩余) / confirm(收尾窗口) /
     confirm(同名链接覆盖)"""
-    mgr, client, src, dst, content = _make_group_env(tmp_path)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, data_dir=False)
     mod = mgr.host.get("relocate")
     # 无 job: ok
     r = mod.precheck_add(src, "Other.Show")
@@ -631,7 +593,7 @@ def test_web_relocate_cancel_drain(tmp_path, monkeypatch):
     """drain 级撤销两步走: 未确认(cls=confirm + cost, 数据零变动); 确认(cls=ok,
     set_location 搬回 src + phase=cancelled + journal 落盘)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     mgr.config.data_dir = str(tmp_path / "data")
     mod = mgr.host.get("relocate")
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -661,7 +623,7 @@ def test_web_relocate_precheck_drain(tmp_path, monkeypatch):
     """drain 级: 回执 truth={results, summary} 结构 + gone verdict + 混合计数;
     precheck_add 回执 truth=单 item"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content = _make_group_env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     mgr.web.commands.put(("relocate_precheck", {"hashes": ["HA", "HMISSING"], "location": dst, "cmd_id": "rp1"}))
     mgr.web.consume_commands()
     rec = mgr.web.results["rp1"]

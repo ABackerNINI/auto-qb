@@ -38,42 +38,7 @@ from auto_qb.core.modules import relocate_units as ru
 from auto_qb.infra import alias_fs, relocate_journal
 from auto_qb.tools import finalize_watch as fw
 
-from helpers import FakeClient, FakeTorrent, _fake_file, make_manager, pin_disk_usage, seed_store
-
-FREE = 1 << 40
-
-
-def _env(td, file_count=2, subdir="Show", state="pausedUP"):
-    mgr = make_manager(os.path.join(str(td), "state.json"))
-    client = FakeClient()
-    mgr.client = client
-    src = os.path.join(str(td), "src")
-    dst = os.path.join(str(td), "dst")
-    content = os.path.join(src, subdir)
-    os.makedirs(content)
-    os.makedirs(dst)
-    files = []
-    for i in range(file_count):
-        rel = f"{subdir}/e{i:02d}.mkv"
-        with open(os.path.join(src, *rel.split("/")), "wb") as f:
-            f.write(b"x" * 64)
-        files.append(_fake_file(rel, 64))
-    client.files_map["HA"] = list(files)
-    client.files_map["HB"] = list(files)
-    tors = [
-        FakeTorrent(hash="HA", name="Show", save_path=src, progress=1.0, state=state),
-        FakeTorrent(hash="HB", name="Show", save_path=src, progress=1.0, state=state),
-    ]
-    for t in tors:
-        client.torrents[t.hash] = t
-    seed_store(mgr, tors)
-    grouping = mgr.host.get("grouping")
-    grouping._assign_new_torrent("HA")
-    grouping._assign_new_torrent("HB")
-    mgr.store.server_state = {"free_space_on_disk": FREE}
-    mgr.config.data_dir = os.path.join(str(td), "data")
-    mgr.config.relocate.enabled = True
-    return mgr, client, src, dst, content, files
+from helpers import pin_disk_usage, relocate_env
 
 
 def _simulate_moved(mgr, dst, files, content, mover="HA"):
@@ -124,7 +89,7 @@ def test_journal_pid_lock(tmp_path):
 def test_exec_dir_alias_flow(tmp_path, monkeypatch):
     """目录别名形态: F>=阈值 + 专属子目录 -> confirm; 确认后整条别名建链并武装"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path, file_count=9)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=9)
     mod = mgr.host.get("relocate")
     spawned = []
     _spy_spawn(mod, spawned)
@@ -144,7 +109,7 @@ def test_exec_dir_alias_flow(tmp_path, monkeypatch):
 def test_exec_dir_alias_non_empty_root_rolls_back(tmp_path, monkeypatch):
     """目录别名建不出(内容根还非空) -> 删已建/转收尾, 不搬回"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path, file_count=9)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=9)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     items = mod.relocate_execute(["HA"], dst, confirm=True)
@@ -161,7 +126,7 @@ def test_exec_dir_alias_non_empty_root_rolls_back(tmp_path, monkeypatch):
 def test_exec_penetration_failure_keeps_scene(tmp_path, monkeypatch):
     """穿透校验失败(链接建了但读不到) -> failed(alias_unreadable), 链接现场保留"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -179,7 +144,7 @@ def test_exec_penetration_failure_keeps_scene(tmp_path, monkeypatch):
 def test_exec_reject_and_pause_failure(tmp_path, monkeypatch):
     """形态拒绝(文件表为空) -> blocked(form); 暂停失败 -> blocked(pause_failed)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path, file_count=2)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     orig = type(client).torrents_files
@@ -210,7 +175,7 @@ def test_precheck_empty_file_table_skips_representative_probe(tmp_path, monkeypa
     Windows 目录 nlink=1 根本走不到那条分支 —— 本地全绿、CI 全红。
     """
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     monkeypatch.setattr(type(client), "torrents_files", lambda self, h: [])
     for t in (mgr.store.by_hash["HA"], mgr.store.by_hash["HB"]):
@@ -238,7 +203,7 @@ def test_precheck_empty_file_table_skips_representative_probe(tmp_path, monkeypa
 def test_exec_spawn_argv(tmp_path, monkeypatch):
     """真实拉起入口: detached + 无窗口, argv 走 -m auto_qb.tools.finalize_watch"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     seen = {}
 
@@ -259,7 +224,7 @@ def test_exec_spawn_argv(tmp_path, monkeypatch):
 def test_cancel_rejects_unknown_and_failure(tmp_path, monkeypatch):
     """撤销: 未知 job -> blocked; qB 拒绝搬回 -> blocked + 账落 failed(cancel_failed)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     r = mod.relocate_cancel("nope", cost_confirmed=True)
@@ -279,7 +244,7 @@ def test_cancel_rejects_unknown_and_failure(tmp_path, monkeypatch):
 def test_reconcile_revert_redelist_done_external(tmp_path, monkeypatch):
     """对账三条处置: 撤销删除意图 / guardian 重删 / 已被外部完成"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     spawned = []
     _spy_spawn(mod, spawned)
@@ -316,7 +281,7 @@ def test_reconcile_revert_redelist_done_external(tmp_path, monkeypatch):
 def test_task_line_exception_isolated(tmp_path, monkeypatch):
     """单 job 抛异常 -> 该 job failed(internal_error), 不影响其它 job/任务线"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -328,7 +293,7 @@ def test_task_line_exception_isolated(tmp_path, monkeypatch):
 
 def test_qb_up_probe(tmp_path):
     """qB 在? 探测: 客户端可读 -> True(缓存复用); 无 api -> False"""
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     assert mod._qb_up() is True
     assert mod._qb_up() is True  # 缓存命中分支
@@ -446,7 +411,7 @@ def test_guardian_process_names_parsing(monkeypatch):
 def test_finalize_polling_and_timeout(tmp_path, monkeypatch):
     """收尾轮询: 成员未到位/进度未回 1 继续等; 超 finalize_timeout ⇒ failed"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -479,7 +444,7 @@ def test_finalize_polling_and_timeout(tmp_path, monkeypatch):
 def test_execute_early_returns(tmp_path, monkeypatch):
     """执行入口退化入参: 未启用 / 空 hashes / 空目标 / qB 不可用 各回 blocked 且零副作用"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     mgr.config.relocate.enabled = False
@@ -495,7 +460,7 @@ def test_execute_early_returns(tmp_path, monkeypatch):
 def test_guardian_spawn_and_link_failure_paths(tmp_path, monkeypatch):
     """守护进程拉起失败/规格落盘失败/删链接异常 三条退化: 只告警不中断(下轮对账重试)"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
@@ -533,7 +498,7 @@ def test_guardian_spawn_and_link_failure_paths(tmp_path, monkeypatch):
 def test_module_guard_branches(tmp_path, monkeypatch):
     """模块壳的退化守卫: 上下文缺失 / 坏账条目 / stop 落账异常 / 任务线未启用 都不炸"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
 
     # stop: 落账抛错只 debug(退出路径不抛)
@@ -582,7 +547,7 @@ def test_guardian_retires_when_job_closed(tmp_path, monkeypatch):
 def test_cancel_and_finalize_close_journal(tmp_path, monkeypatch):
     """撤销/收尾完成都会把 journal 写成终态, 供 guardian 退休"""
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = _env(tmp_path)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path)
     mod = mgr.host.get("relocate")
     _spy_spawn(mod, [])
     job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
