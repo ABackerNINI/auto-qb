@@ -74,47 +74,6 @@ window.CONFIG_RULES = {
       const name = this.cfgPluginName(entry);
       return [...this.cfgRulePath(groupKey, ruleName), listName, index, name, ...(extra || [])];
     },
-    cfgSpecRaw(groupKey, ruleName, listName, index) {
-      const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
-      return entry ? entry[this.cfgPluginName(entry)] : undefined;
-    },
-    cfgSpecSet(groupKey, ruleName, listName, index, value) {
-      const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
-      const name = this.cfgPluginName(entry);
-      if (!name) return;
-      this.cfgSetPath([...this.cfgRulePath(groupKey, ruleName), listName, index, name], value);
-    },
-    /* 列表形态 spec: 值为数组(YAML 单值亦归一为数组, 与插件解析一致) */
-    cfgSpecList(groupKey, ruleName, listName, index) {
-      const v = this.cfgSpecRaw(groupKey, ruleName, listName, index);
-      if (Array.isArray(v)) return v;
-      return v === undefined || v === null || v === "" ? [] : [v];
-    },
-    cfgSpecListItemSet(groupKey, ruleName, listName, index, i, value) {
-      const list = [...this.cfgSpecList(groupKey, ruleName, listName, index)];
-      list[i] = value;
-      this.cfgSpecSet(groupKey, ruleName, listName, index, list);
-    },
-    cfgSpecListItemAdd(groupKey, ruleName, listName, index, meta) {
-      const list = [...this.cfgSpecList(groupKey, ruleName, listName, index)];
-      list.push(meta && meta.placeholder ? meta.placeholder : "");
-      this.cfgSpecSet(groupKey, ruleName, listName, index, list);
-    },
-    cfgSpecListItemRemove(groupKey, ruleName, listName, index, i) {
-      const list = [...this.cfgSpecList(groupKey, ruleName, listName, index)];
-      list.splice(i, 1);
-      if (list.length) this.cfgSpecSet(groupKey, ruleName, listName, index, list);
-      else this.cfgSpecSet(groupKey, ruleName, listName, index, []);
-    },
-    /* 单值形态 spec: 直接读写成字符串 */
-    cfgSpecText(groupKey, ruleName, listName, index) {
-      const v = this.cfgSpecRaw(groupKey, ruleName, listName, index);
-      return v === undefined || v === null ? "" : String(v);
-    },
-    cfgSpecBool(groupKey, ruleName, listName, index) {
-      const v = this.cfgSpecRaw(groupKey, ruleName, listName, index);
-      return this.cfgTruthy(v);
-    },
     /* spec 的渲染项: 统一映射为通用字段项, 从而复用同一套控件(无 YAML 片段兜底) */
     cfgSpecItems(groupKey, ruleName, listName, index) {
       const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
