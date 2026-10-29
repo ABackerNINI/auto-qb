@@ -879,7 +879,19 @@ window.AQB_DRAWER = {
         this.toast("名称不能为空", "warn");
         return;
       }
-      await this._editPost(hash, "rename", { name: res.name }, "已重命名");
+      /* S1 重命名乐观补丁(计划 26-10-30-0610): 对话框确认后、POST 之前把新名贴上行与抽屉。
+       * 覆盖面(决策 D3): _forEachRow 三数组(torrents/singles/组成员)+ 抽屉 detail;
+       * 头部标题(drawerTitle)经 memberByHash 自动跟随 —— memberByHash 的值与三数组是
+       * **同一批对象引用**, 补丁落行即落索引, 无需(也不得)另写一份。
+       * 回执链沿用 _editPost: ok 转 hold(值覆盖保持到快照 name 同意, 不弹回),
+       * error / 发送异常 / 等待超时都返回 false -> resolveOptimistic(false) 回滚原名;
+       * 3s 无回执由 _expirePending 兜底回滚, 不留假状态。 */
+      this.applyOptimisticPatch([hash], "rename", { name: res.name });
+      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail) {
+        this.drawer.detail.name = res.name;
+      }
+      const ok = await this._editPost(hash, "rename", { name: res.name }, "已重命名");
+      this.resolveOptimistic([hash], ok);
     },
     /* ---------------- 抽屉 Tracker 页签编辑(D 轮): 添加/删除 ---------------- */
     async trackerAdd() {

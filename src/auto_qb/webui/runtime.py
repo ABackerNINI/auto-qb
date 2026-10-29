@@ -537,10 +537,13 @@ class WebUIRuntime:
                     #   写的是 error) —— 那种情况 drain 不得再用 ok 覆盖(report 26-10-11-2017 §6.2)。
                     if cmd_id and not deferred and cmd_id not in self.results:
                         if cmd in RESYNC_COMMANDS:
-                            # 改种子状态的命令: 回执**推迟到补刷新之后**再写(见 flush_truths)。
-                            # 原写法在这里就写 ok, 而补刷新还在后面才跑 ⇒ 前端"拿到回执就立刻
-                            # refresh"取到的必然是补刷新之前的旧快照(rid 未变), 第一次拉取 100%
-                            # 扑空。推迟后第一次拉取即可命中。
+                            # 改种子状态的命令 —— D2 现行语义(实现单点 = defer_receipt):
+                            # **回执立即写**(只表示"命令已执行", 前端据此结束压暗, 撤下 10~20ms 级);
+                            # **真值延后推**: flush_truths 直查 qB, 落地了才发 `truth` 事件,
+                            # 前端据此结束"值覆盖"。旧语义(在这里扣住回执等真值)已废弃:
+                            # 真机实测 qB 翻状态要 ~1.25s, 扣回执会把撤下钉死在 1.25s+(实测 2947ms)。
+                            # 注: 回执到达时补刷新尚未跑, 前端此刻立刻 refresh 仍可能扑空一次,
+                            # 扑空窗口实测 <10ms, 行上值覆盖由 hold 兜住不弹回(2026-10-30 实测锚点)。
                             self.defer_receipt(cmd_id, cmd, args, timing)
                         else:
                             self.set_result(cmd_id, "ok", timing=timing)

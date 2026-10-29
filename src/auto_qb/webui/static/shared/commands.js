@@ -338,13 +338,18 @@ window.AQB_COMMANDS = {
         const t = truth[h];
         if (!t || !t.kind) continue;
         const op = this.pendingOps[h];
-        if (op) {
+        /* !kind 注入只对 pause/resume 的 op(计划 26-10-30-0610 S1.3 守卫): 它们的真值是 kind,
+         *   注入后 resume/pause 各走 _optimisticSettled 的专用谓词, 不受多出的键影响。
+         *   其余 action(如 rename)的 op 保持原 patch —— rename 的真值是 **name** 而非 kind,
+         *   掺入 kind 会让 _optimisticSettled 的逐键比对永远差一个键(对账判据被污染,
+         *   op 挂到 8s 兜底才回滚, 行名被错误弹回旧名)。静态守阵钉住本守卫, 防回归。 */
+        if (op && (op.action === "pause" || op.action === "resume")) {
           op.patch = { ...op.patch, kind: t.kind };
           op.prev = { ...op.prev, kind: t.kind };
           op.hold = true;   // 覆盖保持到"快照同意"(见上; 压暗早已由回执结束)
           op.ts = now;      // 兜底期限从真值落地起算(D2: 压暗已结束, 晚释放没有观感代价)
         }
-        // 真值直接落到行上(不等下一轮 refresh)
+        // 真值直接落到行上(不等下一轮 refresh)—— kind 是服务端真值, 对 rename 也无害(kind 未变)
         this._forEachRow(h, (row) => { row.kind = t.kind; });
       }
       if (this.cmdStats) this.cmdStats.settleVia = "push";
@@ -398,6 +403,35 @@ window.AQB_COMMANDS = {
       if (action === "pause") return { kind: "paused" };
       if (action === "resume") return { kind: row && row.progress >= 1 ? "seeding" : "downloading" };
       return null;  // 不在白名单 -> 不做乐观
+    },
+    /* 显式补丁注册口(计划 26-10-30-0610 S1): 补丁由调用方给出, 不查 _optimisticPatch 白名单。
+     * 首个消费者 = 种子重命名(patch = {name}, drawer.js::editRename): 实测回执 ~5.6ms 但新名
+     * 进 sync 快照要 ~1.7s(扑空 5/5), 不贴补丁行名就白等一个 sync 周期。回执/真值/兜底全走
+     * 既有四件套, 对它们零改动: resolveOptimistic(ok -> hold) / _expirePending(3s/8s 兜底) /
+     * reapplyPending(整表替换后重贴) / _snapshotTruth + _optimisticSettled(通用分支逐键比对,
+     * 天然支持 {name})。
+     * !与 applyOptimistic 的两点差异:
+     *   1. 行不在当前视图(hash 不在 _forEachRow 三数组)时**也照常注册 op** —— 否则该 hash 没有
+     *      回执入口, hold/回滚语义整体断链; 对空 prev 的回滚 Object.assign 是 no-op, 无害。
+     *   2. 不做白名单判定 —— 调用方必须只传"值来自我们"的字段(§01 不变量: 值覆盖只盖
+     *      「值来自我们」的字段; name 是我们下发的值, 符合)。
+     * !真值语义: pause/resume 的真值是 kind, rename 的真值是 **name**(由 _optimisticSettled
+     *   对快照逐键比对); onTruthEvent 的 kind 注入必须带 action 守卫 —— 见该方法内注释。 */
+    applyOptimisticPatch(hashes, action, patch) {
+      if (!patch || !Object.keys(patch).length) return;
+      const now = Date.now();
+      for (const h of hashes || []) {
+        if (!h) continue;
+        const prev = {};
+        this._forEachRow(h, (row) => {
+          for (const k of Object.keys(patch)) prev[k] = row[k];
+          Object.assign(row, patch);
+        });
+        // grey = 压暗(回执到即结束) / hold = 值覆盖保持到真值对齐(防弹回), 与 applyOptimistic 同语义
+        this.pendingOps[h] = { patch, prev, ts: now, action, grey: true, hold: false };
+      }
+      // 目标数供 settleMs 的 [perf] 阈值分档(见 _markCmdSettle)
+      if (this.cmdStats) this.cmdStats.targets = (hashes || []).length;
     },
     _forEachRow(hash, fn) {
       for (const r of this.torrents || []) if (r.hash === hash) fn(r);
