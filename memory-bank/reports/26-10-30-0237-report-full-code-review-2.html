@@ -817,7 +817,80 @@
 
 <h3>批T · tools/global-traffic-monitor/ 全部(D2 拍板: 独立 T 批全量)</h3>
 <p class="cm">登记格式: ID(T-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
-<p class="cm">未登记。</p>
+<p class="cm"><b>评审时 HEAD:</b> <code>ba0f2ee7</code>(26-10-30 批T开工只读实测 <code>git rev-parse</code>, 树净; 本分支为本地评审分支远端无它, 按指令未跑任何 sync) · <b>范围:</b> 27 文件 / 10,570 行(全部 a4d14a8d 后新增; src/gtm 10 件全量读码, tests 12 件轻量[conftest 全读 + 各件头注/设计单点核对 + 抽查], pyproject + 4 启动器全量; README 与 uv.lock 不入集) · <b>重点维度:</b> R1 R3 R5 R7 R11 · <b>五步执行记录:</b> ①读档 gtm 十模块 docstring + 计划 26-10-16-0541 档案切片(activeContext, S0–S9 全落地/计划 Done, 只登记计划未覆盖增量); ②坑档对照 backend/_index(traffic-source-discovery-pointer·concurrency) + testing/_index(ci-only-guard·sandbox-tempfile-cwd-fallback·test-lock-path-injection·nested-pytest-config) + ops/_index(session-program-blacklist·console-encoding·prod-files); ③逐文件读码(src 侧 LOC 降序, 读侧对照 auto-qb curves.py / traffic_source(paths·agent·reader) / traffic_snapshot_mod.publish_event / webui/server/routes/traffic_monitor.py / tool_client.py 做交叉核对); ④uvx ruff + uvx bandit(见工具小结, 逐条人工复核); ⑤本表登记(逐条对照 §04 四表 + 批A–GH 条目去重)。</p>
+<p class="cm"><b>批T 专项判据结论(计划 §03):</b> ①<b>dat 契约双向核对成立</b> —— dat 行格式两侧同源(gtm <code>sampler.DAT_ROW_RE</code> :53 与 curves.parse_history_dat fullmatch 同形, 注释互指在位; KB×1024 双侧同值, 写侧向下取整「宁可少报」; 重复日期末行胜、行序不敏感两侧一致; 坏行跳过口径一致); endpoint.json 指针 gtm 写侧 11 键(server.py:219-231)与 agent.parse_pointer 消费 8 键逐字段对上(host/port/token_path 必填, data_dir/version/pid/autostart_registered/autostart_error 可选), 未知键双侧「不猜字段只告警」同族纪律, 镜像常量由主仓 test_pointer_constants_mirror_tool_side 机械钉住; notify 六键事件(gtm notifier:137-144 = event_id/day/up_bytes/down_bytes/total_bytes/ts)与接收面 _parse_notify_event(traffic_monitor.py:170-197)全键显式校验逐键对上, event_id 单调去重两侧同判, 高水位钳制(snapshot_mod._hw)防恢复期低值闪跳。②<b>双写者禁令逐文件核实通过(R3/R11)</b> —— history_traffic.dat 唯一写者 = gtm 采样线程(record/flush/close 单线程编排, HTTP 线程只经 _state_lock 触 state 不触 dat; auto-qb 全链只读, publish_event 为零读盘内存补丁不触盘); state.json 工具内采样+HTTP 双线程写经 _state_lock 串行化、每次写盘完整镜像; endpoint.json/primary.json/deferred.json/tool-id 写者唯一(auto-qb 只读 deferred.json 展示)。③<b>版本兼容与坏文件降级路径齐</b> —— dat 格式冻结无版本字段; endpoint/primary/deferred schema=1 未知只告警不猜; state snapshot version 不符/损坏/字段非法 → 逐级告警降级 → dat 兜底恢复(restore_from_dat), 注册表坏条跳过不拖垮; 指针缺失 → auto-qb 探活失败按 not_running, 不崩。④<b>滞后归属专项(对照 26-10-13-1034 机理)</b> —— 事故根因 L2(读侧发布节拍绑死限速节拍, 最坏 10.5 分钟)在 gtm 架构下消除: 采样 5s + dat 落盘节流 ≤30s + 事件推送即时(推送前强制落盘保证 dat 与事件值一致) + refresh_interval 单闸兜底读盘; 采样时点→归属窗口的唯一语义边界 = 跨天 00:00 硬切(边界一个 sample_interval 的昨日尾量计入新日, 与主程序 v4 硬切同口径, 坑档 traffic-window-edge-floor 同族不重报) —— 残余时钟面缺口仅 T-03(挂钟回跳)。</p>
+<h4>批T 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>T-01</td><td>R9(R3)</td><td>P3</td>
+    <td>tools/global-traffic-monitor/src/gtm/server.py:444-446 <code>_autostart</code>(replace 当前 Config 快照 → save_config → holder.replace, 全程无锁) / :339-343 <code>_put_config</code>(save_config + replace); 对照 storage.py:489 <code>_state_lock</code>(state.json 同类双线程写已串行化)</td>
+    <td>config.yml 有两个 HTTP 线程写点且无锁: /autostart 是<b>读-改-写</b>(基于 <code>config_holder.current</code> 旧快照整份重写 + 只翻 autostart 位), 与并发 PUT /config(全量覆盖)或另一 /autostart 交叠时丢更新 —— 读到旧快照后他人写入的新参数被「旧快照 + autostart 位」整份覆盖回去。ThreadingHTTPServer 每请求一线程, 交叠真实存在; state.json 同款双线程写已用 _state_lock 解决, config 路径没有对等防护(「last-writer-wins」口径只覆盖全量载荷语义, 盖不住读-改-写)。后果限配置回退(用户刚改的参数被静默还原), 无数据破坏。</td>
+    <td>设置页「保存参数」(PUT /config)与「自启开关」(POST /autostart)是两个独立请求, 交叠窗 = save_config 读-序列化-写盘的毫秒级窗, 交叠即触发。判 P3: 单用户本地控制面(127.0.0.1), 触发窗窄, 丢的是可重做的配置写。</td>
+    <td>无(§04 四表无; 批C/批GH 无同类; GH-01 系 relocate journal 双写者竞态, 不同件不同文件)</td>
+    <td>入池(bug, P3)或仅记录: config 写路径加与 _state_lock 同族的锁并串行化 PUT /config 与 /autostart, 或 /autostart 改为「只改 autostart 键的最小改写」不再整份回写</td>
+  </tr>
+  <tr>
+    <td>T-02</td><td>R8</td><td>P3</td>
+    <td>tools/global-traffic-monitor/src/gtm/config.py:163-167 <code>_check_str</code>(http_host 只验非空串) / server.py:192 <code>start</code>(<code>_Server((self.host, self.port))</code>) + :277 cmd_run 装配(host=config.http_host); 对照 storage.py:22-23 与 server.py:3 docstring「控制面强制绑定 127.0.0.1」</td>
+    <td>「控制面强制绑定 127.0.0.1」是 docstring 明示的安全不变式, 但 http_host 是可配置键且校验只查非空 —— PUT /config 设 <code>http_host: 0.0.0.0</code>(或任意地址)后重启, 控制面(PUT /config / POST /shutdown / 订阅注册, Bearer 单因素)即对局域网暴露, 而 monitor.token 明文落盘(storage.py:22 自认与 config.yml 同风险面)。校验层没有兑现绑定承诺, 属安全声明与实现的契约漂移。</td>
+    <td>静态即证(校验无回环约束); 利用需配置者自设 + 重启生效(config.py docstring 明示 host/port 改动需重启) —— 配置者即本机用户, 故按「契约漂移的健壮性缺口」记 P3 而非安全洞。</td>
+    <td>无</td>
+    <td>入池(bug, P3)或仅记录: validate_payload 对 http_host 加回环约束(127.0.0.0/8 + ::1), 或把两处 docstring 改成「默认 127.0.0.1, 可配置放开」并写明 token 风险面 —— 声明与实现必须取齐一头</td>
+  </tr>
+  <tr>
+    <td>T-03</td><td>R5</td><td>P3</td>
+    <td>tools/global-traffic-monitor/src/gtm/sampler.py:331-336 <code>sample_once</code>(day_rolled 判据 = <code>day != self._day</code> 无方向检查, 命中即当日累计清零) / :359-362(清零后新基线自当前读数起); 对照 :270-273 <code>restore</code>(恢复路径有「快照日期晚于今天 → 判损坏降级」的方向防御)</td>
+    <td>挂钟回跳跨日界(NTP 大步校正/手动改钟)时 <code>day != self._day</code> 同样命中 → 当日累计<b>二次清零</b>, dat 今日行被低值 upsert 覆盖(render 全量替换落盘), 当日少报且当日不可自愈; notifier 侧 <code>total &lt; self._last_total</code>(notifier.py:108)有回退防御不产伪事件, storage.record 无方向检查。恢复路径防了「日期超前」, 运行路径没防「日期倒退」—— 同一防线两处不对称。</td>
+    <td>需挂钟跨日界回跳(罕见); 一旦发生当日行静默少报, 次日起恢复正常。判 P3: 触发罕见, 无崩溃, 损失为当日累计偏低(「宁可少报」方向, 无虚增)。</td>
+    <td>无(坑档 traffic-window-edge-floor 是读侧窗口取整语义, 不同面; 首评 C-05 hour 桶 UTC 对齐亦不同层)</td>
+    <td>入池(bug, P3)或仅记录: day_rolled 判据加方向检查(<code>day &gt; self._day</code> 才硬切; <code>day &lt;</code> 记 WARNING 保持累计不清零), 与 restore 的未来日期降级对齐</td>
+  </tr>
+  <tr>
+    <td>T-04</td><td>R10</td><td>P3</td>
+    <td>tools/global-traffic-monitor/src/gtm/__init__.py:8-10(「当前进度: S0/S1/S2/S3/S4/S5 已落地, 其余步骤待逐项授权」) + README.md「后者即时重读历史文件并刷新 WebUI 历史流量图」; 对照 notifier.py:9-12(「26-10-21 起 auto-qb 侧事件直达补丁…零读盘」已同步)与 26-10-16-0541 档案(S6–S9 全落地, 计划 Done)</td>
+    <td>包级门面文档双重漂移: ①__init__ 进度注停在 S5, 实际 S6–S9(auto-qb 配置面/接收面/集成过渡/守阵)均已落地且计划 Done; ②__init__ 与 README 仍写「事件推送 → 即时重读历史文件」, 26-10-21 改制后事件走六键直达补丁(零读盘, notifier docstring 与 snapshot_mod.publish_event 均已同步) —— 新读者会按旧机制理解通知链路。</td>
+    <td>静态即证(对照档案切片与 notifier docstring)</td>
+    <td>无(§04 #58 版本双源是另一面; 批GH 无 gtm 文档条)</td>
+    <td>入池(docs, P3)或归文档顺手项: __init__ 进度注改「S0–S9 已落地」并补 26-10-21 零读盘直达补丁一句, README 同步</td>
+  </tr>
+  <tr>
+    <td>T-05</td><td>general</td><td>P3</td>
+    <td>tools/global-traffic-monitor/src/gtm/server.py:56(F401 <code>Config</code> 导入未用) / __main__.py:96(F841 <code>uninstall</code> 子命令绑定未用) / config.py:313(RUF059 <code>errors</code> 解包未用 —— migrate_legacy_config 刻意不消费, 宜改 <code>_</code>)</td>
+    <td>工具侧 ruff F 类三处死码: server.py 的 Config 死导入(配置经 ConfigHolder/validate_payload 进, 不直接引用类型); __main__ 的 uninstall 子命令无 add_argument 调用故绑定未用; migrate_legacy_config 解包 errors 从不读。行为零差异, 纯死码。</td>
+    <td>静态即证(uvx ruff F401/F841/RUF059)</td>
+    <td>无(§04 四表与批A–GH 无 gtm 死码条; GH-02 系 extensions 死分支不同件)</td>
+    <td>入池(chore, P3)或归死代码清理顺手项(与首评⑧ base.py F401 同池)</td>
+  </tr>
+</table>
+<h4>批T 不登记观察(判据: 论证不出树内可达路径或纯备忘, 备查不占 ID)</h4>
+<p class="cm">①installer.py:403-412 <code>SystemdUserBackend.unregister</code>: is_registered 判存在与 os.remove 之间单元文件被删 → FileNotFoundError 原样逃逸(未包 AutostartError); 单用户工具内并发卸载不可达, 防御边界备忘。②server.py:91-96 <code>TokenManager._load_or_generate</code>: 已存在 token 文件内容为空串时静默重生成(已订阅方全体 401); 盘上文件由本函数原子写, 树内无产生空文件的路径, 仅外部编辑可达。③config.py:126-143: 时间字段只验 &gt;0 无下界 —— sample_interval 可配 "0.001S" 自打自伤(每轮 psutil 双枚举成本, 池 #16 同源); 保守默认由缺省 5S 承担, 是否加下限属产品口径。④identity.py:230-232 <code>claim_primary</code>: 认领写半途失败时 os.remove 撤占位, remove 自身再抛会掩盖原异常; 刚 O_EXCL 建的文件被锁概率趋零。⑤__main__.py:234-242: ensure_data_ownership/fill_primary_data_dir 排在单实例锁之前 —— 两份安装并发首启同指一 data_dir 时 tool-id 双写(last-writer-wins), 输家随即被锁挡下、赢家血统防线兜底, 现状自洽; 若未来把锁提前须重排这段顺序。</p>
+<h4>批T 逐文件勾选表(27/27)</h4>
+<p class="cm">深度: 全量 = 逐行过目 + R1-R11 逐维勾选; 轻量 = 头注/设计单点核对 + conftest 守卫面 + 抽查。结论含「无发现」。</p>
+<table>
+  <tr><th>文件</th><th>变更态</th><th>深度</th><th>结论</th><th>备注(一句话)</th></tr>
+  <tr><td colspan="5"><b>src/gtm(10 件)</b></td></tr>
+  <tr><td><code>src/gtm/sampler.py</code></td><td class="good">新增</td><td>全量</td><td>T-03</td><td>delta/单侧重置归零不产负流量/跨天硬切/过滤固定顺序(保守默认黄金法则 2)/restore 降级链(版本·损坏·未来日期)/dat 兜底与 curves.py 正则同源互指 —— 缺口仅挂钟回跳方向检查(T-03); 每轮双 psutil 枚举成本系池 #16 既有条不重开</td></tr>
+  <tr><td><code>src/gtm/storage.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>atomic_write_text 原子写单点(tmp+fsync+replace, Windows WinError 5 退避与 infra/utils._replace_retry 同值注释互指)/dat 镜像+节流(单调钟)/state 每帧必写(丢失窗 ≤ 采样间隔, 黄金法则 3)/双线程写 _state_lock 串行化完整镜像/单实例锁锚用户级目录与 data_dir 解耦/恢复 state 权威 dat 兜底 —— R3 单写面成立(dat 仅采样线程); docstring「强制绑定 127.0.0.1」为 T-02 症状面</td></tr>
+  <tr><td><code>src/gtm/server.py</code></td><td class="good">新增</td><td>全量</td><td>T-01 T-02 T-05</td><td>鉴权 compare_digest/请求体上限/端点校验聚合/Windows 关抢占式 SO_REUSEADDR fail-fast/指针 11 键原子写+atexit 删除/autostart 回写裁决权与不信任请求体 data_dir/shutdown 先 200 后置位 —— 缺口 = config RMW 竞态(T-01)/http_host 无回环约束(T-02)/Config 死导入(T-05)</td></tr>
+  <tr><td><code>src/gtm/notifier.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>基数推进纪律(只派发成功后推进, 单样本退化缺陷已在 S4 修)/推送前强制落盘(R11 契约明示)/每订阅者一线程不占采样循环+在途上限 32/回退与跨天不产伪事件/六键事件体与接收面逐键对上 —— R3: 推送线程不碰 state/dat, 单写假设不破</td></tr>
+  <tr><td><code>src/gtm/config.py</code></td><td class="good">新增</td><td>全量</td><td>T-02 T-05</td><td>validate_payload 全量聚合(未知键拒/bool 陷阱双向拒/正数/端口 0-65535/正则预编译校验)/复合串单形态 + 旧裸数值迁移只动真有旧值的文件/ConfigHolder 原子换引用 —— 缺口 = http_host 校验面(T-02)/RUF059(T-05)</td></tr>
+  <tr><td><code>src/gtm/identity.py</code></td><td class="good">新增</td><td>全量</td><td>无发现(观察④⑤备查)</td><td>启动矩阵①②③④/O_EXCL 认领(非 replace, 并发输家重判)/镜像常量与 agent.py 同源注释互指/记录损坏按无记录降级不猜字段/数据归属血统防线/让位代拉矛盾防御 —— 幂等与 fail-fast 面自洽</td></tr>
+  <tr><td><code>src/gtm/installer.py</code></td><td class="good">新增</td><td>全量</td><td>无发现(观察①备查)</td><td>期望态幂等判据(内容一致且已启用/已加载, 「存在则跳过」谎报分支已钉)/只信退出码不解析本地化输出(坑档 console-encoding 处置)/Windows Run 键改道理由注在位(26-10-17-1455)/命令长度上限拦截/生成物头注「手改被覆盖」</td></tr>
+  <tr><td><code>src/gtm/__main__.py</code></td><td class="good">新增</td><td>全量</td><td>T-05(观察⑤备查)</td><td>启动序列顺序不变式(正主判定 → 数据归属 → 锁 → 自启 → 绑端口 → 指针)自洽/单轮失败不杀循环/finally 全收尾(通知器→控制面→落盘→锁)/让位 exit 0 拒绝 exit 1 语义诚实/claim 护栏三步与启动矩阵同判据 —— 缺口仅 F841 死绑定(T-05)</td></tr>
+  <tr><td><code>src/gtm/units.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>文法镜像断言核对成立(TIME_UNITS/SIZE_UNITS 与 config/schema/fields.py 逐字同值; 二进制阶梯, 十进制缩写拒)/parse(format(x)) 往返无损/bool 与非有限值显式拒 —— R5 数值面干净</td></tr>
+  <tr><td><code>src/gtm/__init__.py</code></td><td class="good">新增</td><td>全量</td><td>T-04</td><td>包壳 + 版本 0.1.0(与 pyproject 一致, 无 #58 型双源) —— 缺口 = 进度注与通知机制描述双漂移(T-04)</td></tr>
+  <tr><td colspan="5"><b>启动器与配置(5 件)</b></td></tr>
+  <tr><td><code>launch.cmd</code> / <code>launch.sh</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>D19 零参数契约(自启意图写死, 恒 --autostart, 裁决权在工具 config)/pythonw→python→uv 三级回退/不传 --data-dir(PWD 不可信注在位); pythonw 丢 stderr 排障注明示</td></tr>
+  <tr><td><code>claim.cmd</code> / <code>claim.sh</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>零参数人工易主通道; cmd 侧 echo+exit /b 透传退出码供 auto-qb run_claim 消费, 与 agent.run_claim 契约闭合</td></tr>
+  <tr><td><code>pyproject.toml</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>运行时依赖三件(psutil/filelock/pyyaml)与主仓同版本族; 独立 pytest 配置(nested-pytest-config 坑档处置在位)+覆盖率门槛 98.5 带阶梯注; 版本 0.1.0 与 __init__ 一致</td></tr>
+  <tr><td colspan="5"><b>tests(12 件)</b></td></tr>
+  <tr><td><code>tests/conftest.py</code></td><td class="good">新增</td><td>轻量</td><td>无发现</td><td>autouse 前后快照守卫: 任何用例不得改动真实用户级指针目录(双命名空间 patch 自批背景注在位, ci-only-guard 同族纪律)</td></tr>
+  <tr><td><code>tests/test_sampler.py</code> / <code>tests/test_storage.py</code> / <code>tests/test_notifier.py</code> / <code>tests/test_server.py</code> / <code>tests/test_config.py</code> / <code>tests/test_units.py</code> / <code>tests/test_identity.py</code> / <code>tests/test_installer.py</code> / <code>tests/test_main_run.py</code> / <code>tests/test_smoke.py</code></td><td class="good">新增</td><td>轻量</td><td>无发现</td><td>合计 353 用例全 hermetic(注入替身/tmp_path, 红验纪律档案在案); 各件头注设计单点指向 S1–S7 计划步与实现一致; 跨侧 dat 契约另由主仓 tests/test_traffic_monitor_dat.py(真写者进程内加载)钉住 —— R10 守阵面成立, 未发现行为变更处缺守阵</td></tr>
+  <tr><td><code>tests/manual_e2e_relay.py</code></td><td class="good">新增</td><td>轻量</td><td>无发现</td><td>手动 e2e 复算脚本不进 pytest 套件(sidefx POPEN 白名单理由注在位), 与 hermetic 守阵分工明示</td></tr>
+</table>
+<h4>批T 工具提示源小结(uvx ruff + uvx bandit, 逐条人工复核)</h4>
+<p><b>ruff</b>(uvx ruff check tools/global-traffic-monitor/src/, 128 条): 采纳 3 条(server.py:56 F401 / __main__.py:96 F841 / config.py:313 RUF059 → 并入 T-05); 其余逐类复核不采纳 —— UP045×71/UP037×18/UP035×7/UP006×7/UP007×3 现代注解系项目既定风格(与批A–GH 同口径), I001×5 + RUF100×5(uvx 缺省未启 N802/A002/PLC0415 的 noqa 误报) + PYI034×2 + SIM103×1 纯风格, BLE001×2(notifier.py:204 单订阅者推送失败不外抛)与 S110×1(server.py:515 handler 500 兜底)均系既定 fail-closed 收口, PLW1510×1(installer default_runner 代码自判 returncode, check=True 会改语义 —— 沿批GH 判)。F 类其余零条。<b>bandit</b>(uvx bandit -r src/, 13 条 = Low 12 + Medium 1): 全部复核排除 —— B101×7(sampler.py:347 系 has_baseline 判定后的不变式断言, 条件此前刚判, -O 剥除亦安全; server 侧 5 处为 _read_json 返回值 narrowing), B404×2/B603×2(subprocess 目标为 self._plan 自派生的 systemctl/launchctl 与身份层启动器, 无 shell=True, 配置者即本人), B310×1(Medium; notifier.urlopen 目标 = 持 Bearer 才能登记的订阅端点, _valid_endpoint 白名单 http/https, 与回环控制面同族), B110×1(_Handler 500 兜底)。真信号合计: 工具源采纳 3(并入 T-05), 人工发现 4(T-01/T-02/T-03/T-04); 五条全部 P3, 无 P0/P1/P2。</p>
 
 <h2><span class="no">§06</span>R1–R11 维度速查表</h2>
 <p class="cm">R1–R10 判据全文见首次评审计划 <a href="../plans/26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> §03; R11 判据全文见本计划 <a href="../plans/26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> §03。速查表只作每批勾选时的提词。</p>
