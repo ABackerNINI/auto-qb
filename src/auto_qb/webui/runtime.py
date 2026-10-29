@@ -128,6 +128,21 @@ def _new_delta_buckets() -> dict:
     }
 
 
+def _cancel_delta_buckets(delta: dict) -> None:
+    """R5 同键抵消: 同一桶内同时 upsert+removed 的行净变化为零(幂等)。
+
+    规则单点: _publish_locked 分叉判定前与 _fold_delta_pending_locked 落代前各调一次
+    (fold 段重跑一遍是幂等兜底)。循环走 upsert 的键(即 _new_delta_buckets 的键),
+    新增桶维度不再漏。注意 _reduce_delta 的跨代单向让位(rm -= up)是另一条规则,
+    不得换用本 helper。
+    """
+    upsert, removed = delta["upsert"], delta["removed"]
+    for view in upsert:
+        both = upsert[view] & removed[view]
+        upsert[view] -= both
+        removed[view] -= both
+
+
 class WebErrLogHandler(logging.Handler):
     """auto_qb logger -> WEB 错误历史内存环(WARNING+; tray/app.py UiLogHandler 同款范式)
 
@@ -889,12 +904,9 @@ class WebUIRuntime:
             reasons.clear()
             self._delta_pending = _new_delta_buckets()
         else:
+            _cancel_delta_buckets(self._delta_pending)
             upsert = self._delta_pending["upsert"]
             removed = self._delta_pending["removed"]
-            for view in ("torrent", "group", "show"):
-                both = upsert[view] & removed[view]
-                upsert[view] -= both
-                removed[view] -= both
             entry = {"ver": ver, "full": False, "upsert": upsert, "removed": removed}
             self._delta_pending = _new_delta_buckets()
         self._delta_timeline.append(entry)
@@ -1258,12 +1270,9 @@ class WebUIRuntime:
             self._pending_full_reasons.add("cross_group")
         self.note_cross_keys(cross_keys)  # 局部路径不经 _build_group_view, 基线在此统一前移
         # R5 交叉抵消前移: 分叉判据是抵消后的净键集(fold 落代段重跑一遍, 幂等)
+        _cancel_delta_buckets(self._delta_pending)
         upsert = self._delta_pending["upsert"]
         removed = self._delta_pending["removed"]
-        for bucket in ("torrent", "group", "show"):
-            both = upsert[bucket] & removed[bucket]
-            upsert[bucket] -= both
-            removed[bucket] -= both
         # 未识别折叠面变化检测(plan S9b, R11): 增量协议没有未识别桶(S4 前端 delta 轮对
         # unrecognized「不动」, 只在 full 轮整表替换) -> 折叠成员增删不可归约为行级脏,
         # 本代标 full(保守正确优先)。判定用全量分类同款口径(_parse_show_member 解析+
