@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-09-1459">
-<meta name="doc-updated" content="26-10-09-1459">
+<meta name="doc-updated" content="26-10-30-0041">
 <title>hr/ 包变异测试审计 · 分步执行计划</title>
 <style>
   :root {
@@ -164,7 +164,7 @@
       <h1>hr/ 包变异测试审计 · 分步执行计划</h1>
       <p class="lede">对 <code>src/auto_qb/hr/</code> 跑一轮 mutmut 变异审计: 机器批量提名存活变异, 人手工确认哪些是真洞, 真洞各自入池。本计划只写「怎么修、为什么这么修」—— <b>不在本计划里实施</b>; 执行时另立任务档案, 轮次进档案与基线切片。</p>
       <div class="meta-row">
-        <span>状态 <b class="mono">Open</b>(待拍板)</span>
+        <span>状态 <b class="mono">Done</b>(已实施: R14 首轮 + R16–R22 六条真洞轮全清)</span>
         <span>立项 <b class="mono">26-10-09-1459</b></span>
         <span>目标 <b class="mono">**/hr/*.py</b></span>
         <span>规划基线 <b class="mono">9926953b</b></span>
@@ -537,6 +537,11 @@
             <td class="mono">26-10-09-1459</td>
             <td>初版: hr/ 包分步执行计划 (范围与目标清单含 A/B/C 三档 / 测算基数 7,863 行 ≈7,800 变异 / 15 文件 457 fn 池 / S1–S8 / 验收 5 条 / 风险停手点)</td>
             <td>用户「根据变异测试指导+skill写一个 hr 模块的测试计划」</td>
+          </tr>
+          <tr>
+            <td class="mono">26-10-30-0041</td>
+            <td>状态 Open → Done: 计划 S1–S8 已全部实施 —— R14 首轮(8,027 变异 / 杀死率 69.2%, 真洞入池 6 条 <code>test</code> issue)+ R16–R22 按模块补测复跑(六条 issue 全部置 Done, 常驻锚 §07 <code>hr/</code> 行已同步), 基线切片 <code>26-10-09-1522</code> / <code>26-10-10-1458</code> / <code>26-10-10-1940</code> / <code>26-10-10-2044</code> / <code>26-10-15-0846</code> / <code>26-10-15-0927</code> / <code>26-10-15-0922</code> 见任务档案 <code>tasks/26-10-08-test-mutation-audit.md</code></td>
+            <td>用户「hr变异测试是否已完成, 如果已经完成, 更新文档状态」</td>
           </tr>
         </table>
       </section>
