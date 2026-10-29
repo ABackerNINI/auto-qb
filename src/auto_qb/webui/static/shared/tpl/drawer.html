@@ -109,7 +109,8 @@
                    数据链末点早于右沿且重启贴近链末时给接缝提示, 不与停机洞混读(报告 §3.2 投递黑障:
                    尾区斜纹视觉延伸到观察时刻的误读面)。
                    判据单点 _qbSeamHint(纯函数, node 单测), 文案只此一处(守阵按字面量计数);
-                   断线语义不变(null 照旧断线不连线 + 斜纹)。样式复用 .qb-stale 状态行
+                   链中段缺口的断线语义不变(null 照旧断线不连线 + 斜纹; 2026-10-30 起斜纹
+                   只给链中段 —— 链外空白不打记号)。样式复用 .qb-stale 状态行
                    (三皮肤同源零新增 CSS), .qb-seam 仅作判据/守阵锚点类。 -->
               <p v-if="qbCurSeamHint" class="qb-stale qb-seam">数据接缝中 · 服务于 {{ fmtTime(qbCurSeamHint.startedAt) }} 重启, 之后无采样</p>
               <!-- uPlot 建图落点: 容器 ref 由 _qbChartBuild 量宽高, tooltip 为其兄弟绝对定位;
@@ -131,7 +132,10 @@
                     <span v-if="qbCurHover.lim" class="h-limit">当时限速 上{{ fmtSpeed(qbCurHover.lim[0]) }} / 下{{ fmtSpeed(qbCurHover.lim[1]) }}</span>
                   </template>
                   <template v-else>
-                    <span>无采样 · 程序未运行或 qB 断连</span>
+                    <!-- 缺口文案走 qbCurGapText 单点(按「区段 × 作用域」给出; 2026-10-30 起
+                         不再替用户归因为什么没有数据 —— 释文见 qb_traffic_chart.js)。模板
+                         只引用不重算(webui.md 单点口径原则) -->
+                    <span>{{ qbCurGapText }}</span>
                     <!-- D7 缺口也读: 限速是时间真值, 独立于流量采样存在与否 -->
                     <span v-if="qbCurHover.lim" class="h-limit">当时限速 上{{ fmtSpeed(qbCurHover.lim[0]) }} / 下{{ fmtSpeed(qbCurHover.lim[1]) }}</span>
                   </template>
@@ -151,7 +155,7 @@
                   <span class="hs-leg"><i class="sw up"></i>上传</span>
                   <span class="hs-leg"><i class="sw down"></i>下载</span>
                   <span>窗口 <b>{{ qbCurSummary.buckets }} 桶</b></span>
-                  <!-- 口径注解(「累计为窗口内增量(断线期不计)」, 分组再加组口径尾注)自 2026-10-09
+                  <!-- 口径注解(「累计为窗口内增量(无数据期不计)」, 分组再加组口径尾注)自 2026-10-09
                        起不再是常驻文案 —— 改为**两个累计读数的悬浮提示**(用户动议: 常驻占统计栏
                        一行, 而这句只在「读数怎么算的」被问到时才有用)。title 走全局断供管道
                        (ui_feedback.js 落 DOM 即迁成 data-aq-tip, 原生 title 断供), 两处同源

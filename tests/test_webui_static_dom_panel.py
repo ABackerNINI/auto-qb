@@ -256,10 +256,15 @@ def test_frontend_qb_traffic_chart_wiring():
       _drawerDone("traffic"), 与 _drawerWaitSources 成对, 缺一边遮罩等永不到手的源。
       drawer-dock 落点已自种子视图上提为 app 级分片(dock.html), 入口任意页可达(触发即切回主内容
       页), 面板本体由 drawerVisible 限主内容页 —— 见 test_frontend_qb_traffic_drawer_page_guard。
-    6. 缺口三态文案与空态(plan 26-10-04-0721 §05, P4): 悬停 0 桶状态行(空闲段 z 派生 (0,0)
-      真实观测点, 与 null 缺口可辨)/ 悬停缺口合并文案「无采样 · 程序未运行或 qB 断连」/
-      单种空态收窄为「从未有传输记录」; 三皮肤共用 shared 分片与 mixin(tpl-manifest 登记链见上面
-      第 3 点), 文案单点钉住即可。2026-10-08 版式改(用户动议)推翻「图例 hint 两处」旧口径:
+    6. 缺口文案与空态(plan 26-10-04-0721 §05, P4; 2026-10-30 按区段改): 悬停 0 桶状态行(空闲段
+      z 派生 (0,0) 真实观测点, 与 null 缺口可辨)/ 悬停缺口按「区段 × 作用域」出文案 —— 数据链
+      之外(首次采样之前 / 最后一次之后)只陈述「该时段无此种子(该分组/无)数据」, 链中间的洞才
+      说「采样中断 · 该时段无数据」; 判据单点 _qbChainBounds/_qbGapZone 只认本帧 points, **不**
+      用种子 added_on 推算(跳检 = 删同 hash 再重加且流量按 infohash 留存, 拿 added_on 切一刀会
+      把早期真实数据误判成「尚未添加」); 文案收进 computed qbCurGapText 单点(模板只引用不重算)
+      且旧的「一律归因」合并文案必须退场; 单种空态改为「从未产生传输采样」。三皮肤共用 shared
+      分片与 mixin(tpl-manifest 登记链见上面第 3 点), 文案单点钉住即可。2026-10-08 版式改(用户
+      动议)推翻「图例 hint 两处」旧口径:
       窗口档位/纵轴控件上提流量形态头部标题栏, 图例(上行/下行)并入统计栏, 两处 hint 与独立
       图例行全退场 —— 这里改为钉上提/并入/退场三条新结构口径。"""
     shared = os.path.join(STATIC_ROOT, "shared")
@@ -503,8 +508,15 @@ def test_frontend_qb_traffic_chart_wiring():
     # 生效 —— 这里钉文案本体 + 触发判据 + 旧文案退场, 不逐皮肤重复
     assert 'v-if="qbCurHover.up + qbCurHover.dl === 0">0 B/s · 空闲/做种</span>' in drawer_tpl, \
         "悬停 0 桶缺状态行(空闲段 z 派生 (0,0) 真实观测点, 必须与 null 缺口可辨; 速率行照旧)"
-    assert "无采样 · 程序未运行或 qB 断连" in drawer_tpl, \
-        "悬停缺口文案未更新(plan §05 首版合并文案: 两态区分依赖可选 API 形状增强, 拍板不做)"
+    # 2026-10-30 按区段改: 文案离开模板收进 computed 单点 qbCurGapText(按「区段 × 作用域」
+    # 输出)。plan 26-10-04-0721 §05 当年「两态区分依赖可选 API 形状增强, 拍板不做」随之作废
+    # —— 新判据不需要任何 API 增强, 只用本帧 points 的数据链边界。
+    for gap_txt in ("该时段无此种子数据", "该时段无该分组数据", "该时段无数据", "采样中断 · 该时段无数据"):
+        assert gap_txt in js, f"缺口悬停文案缺: {gap_txt}(应在 qbCurGapText 单点内)"
+    assert "<span>{{ qbCurGapText }}</span>" in drawer_tpl, \
+        "悬停缺口文案必须引用 qbCurGapText 单点(webui.md 单点口径: 模板不得内联重算)"
+    assert "无采样 · 程序未运行或 qB 断连" not in drawer_tpl and "无采样 · 程序未运行或 qB 断连" not in js, \
+        "旧合并文案必须退场(对所有 null 一视同仁归因为「qB 断联」; 评注里也不得留原文, 免得 grep 误命中)"
     assert "断线 · 无数据" not in drawer_tpl, "旧缺口文案「断线 · 无数据」必须退场"
     # 2026-10-08 版式改(用户动议): 两处 hint 全移除 —— 图下那行独立图例(含口径注释)并入统计栏,
     # 口径说明不再以常驻文案出现(信息在悬停 tooltip 里给)。原「两处 hint 同步」的守阵随之退役,
@@ -564,8 +576,15 @@ def test_frontend_qb_traffic_chart_wiring():
         "控件组唯一挂点(图下统计栏)必须接 <aq-qb-ctl>(2026-10-16 起头部挂点退役, 恰此一处)"
     assert 'class="hist-legend"' not in drawer_tpl, \
         "独立的图例行(.hist-legend)必须退场: 上行/下行图例已并入统计栏 .hist-summary"
-    assert '暂无该种子的 qB 口径流量数据(从未有传输记录)' in js, \
-        "单种空态文案未收窄为「从未有传输记录」(plan §03.3 拍板: 空闲不再产生空态)"
+    assert '暂无该种子的 qB 口径流量数据(从未产生传输采样)' in js, \
+        "单种空态文案未收窄为「从未产生传输采样」(plan §03.3 拍板: 空闲不再产生空态; " \
+        "2026-10-30 起与缺口悬停同口径 —— 只陈述采样条件, 不替用户归因)"
+    assert "暂无该分组的 qB 口径流量数据(成员产生传输采样期间才有数据)" in js, \
+        "分组空态文案未改中性口径(旧句归因于「成员活跃传输期间」)"
+    assert "暂无 qB 口径流量数据(该时段无任何采样)" in js, \
+        "全局空态文案未改中性口径(旧句归因于「程序运行期间」, 程序在跑而该作用域无数据时是错的)"
+    assert "累计为窗口内增量(无数据期不计)" in js, \
+        "累计注解未改中性口径(「断线期」是归因, 「无数据期」是事实)"
     assert "仅活跃传输期间有采样" not in js, \
         "旧单种空态文案必须退场(空闲段现在是 0 平线, 空态语义只剩从未传输)"
 
@@ -654,7 +673,7 @@ def test_frontend_qb_traffic_window_persist_and_single_source():
 
 
 # 纵轴固定模式 + 缺口游程 + 重启缝判据 node 电池(2026-10-08; P4 追加 _qbSeamHint, plan 26-10-15-0829):
-# 三个模块级纯函数 _qbYRange/_qbGapRuns/_qbSeamHint 真跑。无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+# 模块级纯函数 _qbYRange/_qbGapRuns/_qbChainBounds/_qbGapZone/_qbPointsColumns/_qbSeamHint 真跑。无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
 _NODE_QB_YAXIS_PROBE = r"""
 const fs = require("fs");
 global.window = {};
@@ -674,6 +693,23 @@ eq("缺口游程 前导", _qbGapRuns([null, 2, 3], [null, 2, 3]), [[0, 0]]);
 eq("缺口游程 全 null", _qbGapRuns([null, null], [null, null]), [[0, 1]]);
 eq("缺口游程 无缺口", _qbGapRuns([1, 2, 3], [1, 2, 3]), []);
 eq("单列 null 不算缺口", _qbGapRuns([null, 2], [1, 2]), []);
+
+// 缺口**区段归类**(2026-10-30): 数据链之外只陈述「没有数据」, 链中间的洞才谈「中断」。
+// 边界只认本帧 points, 不用种子 added_on —— 跳检是删同 hash 再重加且流量按 infohash 留存,
+// 拿 added_on 切一刀会把早期真实数据误判成「尚未添加」(与本次要修的失真同型反向)。
+eq("数据链边界 前导空洞", _qbChainBounds([null, null, 3, 4], [null, null, 3, 4]), [2, 3]);
+eq("数据链边界 尾随空洞", _qbChainBounds([3, 4, null], [3, 4, null]), [0, 1]);
+eq("数据链边界 全空", _qbChainBounds([null, null], [null, null]), [-1, -1]);
+eq("数据链边界 无缺口", _qbChainBounds([1, 2], [1, 2]), [0, 1]);
+eq("数据链边界 单列有点即算观测", _qbChainBounds([null, 3], [5, null]), [0, 1]);
+eq("区段 链首之前->outside", _qbGapZone(0, 2, 3), "outside");
+eq("区段 链尾之后->outside", _qbGapZone(3, 0, 1), "outside");
+eq("区段 全空->outside(>-1 恒真)", _qbGapZone(0, -1, -1), "outside");
+eq("区段 链中间的洞->mid", _qbGapZone(2, 0, 4), "mid");
+eq("区段 恰在链首->mid(首桶有观测)", _qbGapZone(0, 0, 3), "mid");
+// hover 侧把 points 转成 uPlot 同形状两列, 与画布侧共用上面同一判据
+eq("转列 对齐 uPlot 形状", _qbPointsColumns([null, { t: 10, up: 1, dl: 2 }]), [[null, 1], [null, 2]]);
+eq("转列 全空", _qbPointsColumns([null, null]), [[null, null], [null, null]]);
 
 // 重启缝提示判据(P4, plan 26-10-15-0829; 左端口径修订 2026-10-16, issue 26-10-16-0954): _qbSeamHint 真跑
 // —— 数据链末点早于右沿 + 重启贴近链末(∈ [链末桶前一桶起点, 右沿]) -> 提示; 链到右沿/链确已接续/旧后端不提示
@@ -773,6 +809,37 @@ function _mkCtx2() {
   ok("扫线覆盖缺口右边界(有线段右下端 >= xb)", segs.some((s) => s[1] >= xb - 1e-6));
   // 扫线步长恒定 8px(斜纹间距), 且每条线段水平跨度 = H(45 度硬约束)
   ok("每条斜纹线段跨度 = H(45 度)", segs.every((s) => Math.abs((s[1] - s[0]) - H) < 1e-6));
+})();
+
+(function () {
+  /* ---------- 缺口斜纹**只给数据链中段**(2026-10-30) ----------
+   * 斜纹是「中断」的视觉记号; 链外的空白(首次采样之前 / 最后一次之后 / 全帧无观测)同样是
+   * 「不知道原因的没有数据」, 铺斜纹等于在视觉上重复一遍 tooltip 已纠掉的归因错误。
+   * 用同一份记账式假 ctx 实跑真 _qbDrawGaps, 断言那些段**一笔都没画**。 */
+  const fn3 = global.window.AQB_QB_TRAFFIC && global.window.AQB_QB_TRAFFIC.methods._qbDrawGaps;
+  ok("_qbDrawGaps 可取(区段电池)", !!fn3);
+  if (!fn3) return;
+  const xs3 = [0, 60, 120, 180];
+  const paint = (up, dl) => {
+    const c = _mkCtx2();
+    fn3.call({ _qbCanvasScale: (z) => { z.ctx.save(); return 1; } }, {
+      data: [xs3, up, dl],
+      bbox: { left: 50, top: 17, width: 825, height: 233 },
+      ctx: c,
+      valToPos: (v) => (xs3.indexOf(v) / 3) * 825,
+    }, { grid: "rgba(255,255,255,.055)", gap: "rgba(255,255,255,.22)" });
+    return c;
+  };
+  const head = paint([null, null, 5, 6], [null, null, 5, 6]);     // 链首之前的空白
+  ok("链首之外的空白不铺斜纹(0 条线段)", head.segCount === 0);
+  ok("链首之外不落逐 run 缺口 clip", head.clips.length === 0);
+  const tail = paint([5, 6, null, null], [5, 6, null, null]);     // 链尾之后的空白
+  ok("链尾之外的空白不铺斜纹(0 条线段)", tail.segCount === 0);
+  const none = paint([null, null, null, null], [null, null, null, null]);
+  ok("全帧无观测不铺斜纹(0 条线段)", none.segCount === 0);
+  const inner = paint([5, null, null, 6], [5, null, null, 6]);    // 链中间的洞
+  ok("链中间的洞照旧铺斜纹", inner.segCount > 0);
+  ok("链中间的洞仍落逐 run 缺口 clip", inner.clips.length >= 2);
 })();
 
 (function () {
@@ -971,8 +1038,14 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
        _qbSeamHint 纯函数 node 真跑(重启贴近链末 -> 提示, 含「重启后首采即链末桶」的实测帧形态 /
        链到右沿或链确已接续(重启早于链末前一桶)或旧后端无新键 -> null, 边界含尾区起点、右沿与
        左端「链末桶前一桶起点」三点) + computed qbCurSeamHint 消费单点 + drawer.html 提示行(三挂点
-       共用正文块一处, 文案单源, 带服务重启时刻锚 fmtTime) + 断线语义不变守阵(null 不连线
-       spanGaps:false 与斜纹钩子原样)。"""
+       共用正文块一处, 文案单源, 带服务重启时刻锚 fmtTime) + null 不连线 spanGaps:false 原样。
+    7. 缺口的**区段分治**(2026-10-30, 用户报「种子添加之前的时间提示说成 qB 断联不符合实际」):
+       判据 _qbChainBounds/_qbGapZone node 真跑(数据链 = 首/末个非空桶; outside = 链首之前 /
+       链尾之后 / 全帧无观测, 判据**只认本帧 points**、不碰种子 added_on —— 跳检即删同 hash
+       再重加且流量按 infohash 留存, 用 added_on 切一刀会把早期真实数据误判成「尚未添加」);
+       斜纹只给链中段的洞(node 电池实跑 _qbDrawGaps: 链外段线段数与 clip 数皆 0, 链中段照旧
+       铺), 链外空白由 tooltip 用中性文字陈述; 文案按「区段 × 作用域」收在 computed 单点
+       qbCurGapText(全局态没有"种子"这一主语, 一律套「此种子」是又一次瞎编)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()

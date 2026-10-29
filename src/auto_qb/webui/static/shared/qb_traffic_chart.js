@@ -279,6 +279,51 @@ function _qbGapRuns(up, dl) {
   return out;
 }
 
+/* 数据链边界: 首/末个非空桶下标(全系列无观测 -> [-1, -1]) —— 「数据链」= 本帧实际
+ * 有观测的那段连续区间。
+ * !这条边界**只认本次取到的 points**, 不用种子 added_on 推算: added_on 是「最近一次
+ *   被加进 qB」的时刻(跳检即删同 hash 再重加 —— core/modules/ops_mod.py 的 delete ->
+ *   add, hr/resolve.py 据 added_on 变化识别该语义), 而流量按 infohash 长期留存
+ *   (core/traffic_store.py, 删种不清理、只按龄淘汰)。拿 added_on 切一刀会把早于最新
+ *   added_on 的那段**真实历史数据**误判成「尚未添加」—— 与本轮要修的失真同型反向。
+ * hover 侧经 _qbPointsColumns 转成同形状两列再过本函数, 与画布侧同判据。 */
+function _qbChainBounds(up, dl) {
+  const n = Math.min(up.length, dl.length);
+  let first = -1;
+  let last = -1;
+  for (let k = 0; k < n; k++) {
+    if (up[k] != null || dl[k] != null) {
+      if (first < 0) first = k;
+      last = k;
+    }
+  }
+  return [first, last];
+}
+/* 缺口桶所在区段(纯函数供 node 单测):
+ *   "outside" = 数据链之外(链首之前 / 链尾之后 / 全系列无观测) —— 系统只知道这段时间没有
+ *               该对象的采样, **不知道为什么**, 故文案只陈述事实、不替用户归因;
+ *   "mid"     = 数据链中间的洞(前后都有观测) —— 只有这一段谈得上「中断」, 且它是可观测
+ *               事实而非推断。
+ * first = -1(全空)时 i > last 恒真 -> 一律 outside, 无需额外分支。
+ * !2026-10-30 前的实现不分区段: 所有 null 桶一律出「程序未运行或 qB 断联」式的归因文案
+ *   (plan 26-10-04-0721 §05 首版合并文案) —— 刚添加不久的种子, 图左侧那一整段历史空白
+ *   因此全被断言成断联, 即用户报障「不符合实际情况」的口径。 */
+function _qbGapZone(i, first, last) {
+  return i < first || i > last ? "outside" : "mid";
+}
+/* points([{t, up, dl} | null]) -> 画布同形状的两列([up], [dl]); hover 侧因此能直接复用
+ * _qbChainBounds/_qbGapZone(与 _qbDrawGaps 直读 u.data[1]/u.data[2] 同判据)。 */
+function _qbPointsColumns(points) {
+  const up = [];
+  const dl = [];
+  for (let k = 0; k < points.length; k++) {
+    const p = points[k];
+    up.push(p ? p.up : null);
+    dl.push(p ? p.dl : null);
+  }
+  return [up, dl];
+}
+
 /* 重启缝提示判据(plan 26-10-15-0829 P4, 模块级纯函数供 node 单测; 左端口径修订 26-10-16,
  * issue 26-10-16-0954): 「数据链末点早于右沿且重启贴近链末」 -> 返回 { startedAt }, 否则 null。
  * - 数据链末点 = 最后一个非 null 桶; 尾部未观测区存在 ⟺ 末非 null 下标 < n-1(链已到
@@ -411,11 +456,29 @@ window.AQB_QB_TRAFFIC = {
       return s ? this[_QB_SCOPES[s].window] : "24h";
     },
     /* 悬停取值(对齐 dialogs.js histHover 十字先例): 时刻 + 上/下载速率(fmtSpeed 同源);
-     * 断线桶(null)不出速率, 出「无采样」文案(plan 26-10-04-0721 §05); 0 桶状态行在
-     * drawer.html 模板侧(up+dl==0)。left/flip 由十字线 px 折算。 */
+     * null 桶不出速率, 出缺口文案(qbCurGapText, 按区段 × 作用域 —— 2026-10-30 起不再对
+     * 所有缺口一视同仁地归因); 0 桶状态行在 drawer.html 模板侧(up+dl==0)。left/flip 由
+     * 十字线 px 折算。 */
     qbCurHover() {
       const s = this.qbCurScope;
       return s ? this._qbHoverOf(s) : null;
+    },
+    /* 缺口悬停文案单点(webui.md「同一口径收成 computed 单点」, 模板只引用不重算):
+     * 口径 = **不得替用户归因** —— 系统能观测到的只有「这里有/没有数据」, 为什么没有它不知道。
+     *   - mid(数据链中间的洞): 前后都有观测 ⇒ 「中断」是可观测事实, 三挂点同句;
+     *   - outside(数据链之外: 链首之前 / 链尾之后 / 全帧无观测): 只陈述「该时段没有这个
+     *     对象的数据」, 主语按作用域取(种子态才是「此种子」, 全局态没有种子概念 —— 一律套
+     *     「此种子」在全局图上又是一次瞎编)。
+     * !旧文案对两类缺口通吃、一律断言成「程序未运行或 qB 断联」: 刚添加不久的种子, 图左侧那
+     *   一整段历史空白(那时确实还没这个种子的数据, 与断联无关)全被断言成断联。 */
+    qbCurGapText() {
+      const h = this.qbCurHover;
+      if (!h || !h.gap) return "";
+      if (h.zone === "mid") return "采样中断 · 该时段无数据";
+      const s = this.qbCurScope;
+      if (s === "torrent") return "该时段无此种子数据";
+      if (s === "group") return "该时段无该分组数据";
+      return "该时段无数据";
     },
     /* 窗口内累计(totals 非空桶求和; 断线/重置桶本就 null 不计 —— §5.1 差分语义) */
     /* 重启缝提示(P4, plan 26-10-15-0829; 左端口径修订 26-10-16, issue 26-10-16-0954):
@@ -432,16 +495,19 @@ window.AQB_QB_TRAFFIC = {
       const s = this.qbCurScope;
       return s ? this._qbSummaryOf(s) : null;
     },
-    /* 空态/汇总口径文案(按作用域微调; 其余文案三挂点一致) */
+    /* 空态/汇总口径文案(按作用域微调; 其余文案三挂点一致)。
+     * !2026-10-30 起与缺口悬停同口径: 只陈述事实不归因 —— 空态要说的只是「这份数据为空」
+     *   加上「有传输才会产生采样」这条采样条件; 旧版 global 那句「程序运行期间无采样」在
+     *   程序明明在跑、只是该作用域无数据时, 读起来是错的。 */
     qbCurEmptyText() {
       const s = this.qbCurScope;
-      if (s === "torrent") return "暂无该种子的 qB 口径流量数据(从未有传输记录)";
-      if (s === "group") return "暂无该分组的 qB 口径流量数据(成员活跃传输期间才有采样)";
-      return "暂无 qB 口径流量数据(程序运行期间无采样)";
+      if (s === "torrent") return "暂无该种子的 qB 口径流量数据(从未产生传输采样)";
+      if (s === "group") return "暂无该分组的 qB 口径流量数据(成员产生传输采样期间才有数据)";
+      return "暂无 qB 口径流量数据(该时段无任何采样)";
     },
     qbCurSummaryHint() {
       const s = this.qbCurScope;
-      const base = "累计为窗口内增量(断线期不计)";
+      const base = "累计为窗口内增量(无数据期不计)";
       const scoped = s === "group" ? base + " · 组口径 = 当前成员集聚合" : base;
       // D4(plan 26-10-12-0535)文案: 限速线取值口径 + 记录起点前不显示(挂点 = 悬浮说明,
       // 常驻说明区已随 2026-10-08 版式改退役)
@@ -726,7 +792,13 @@ window.AQB_QB_TRAFFIC = {
       const W = (this._qbChartWs && this._qbChartWs[scope]) || 0;
       const flip = W > 0 && this[def.hoverLeft] > W * 0.62;
       const lim = _qbLimitAt(d.limits || [], ts);  // D7: 悬停时刻生效的当时限速(缺口也给 —— 时间真值)
-      if (!p) return { tip, gap: true, lim, left: this[def.hoverLeft], flip };
+      if (!p) {
+        // 缺口: 交付**区段判据**(数据链之外 vs 链中间的洞); 文案由 qbCurGapText 按
+        // 「区段 × 作用域」给 —— webui.md 单点口径, 模板只引用不重算原因
+        const [first, last] = _qbChainBounds(..._qbPointsColumns(d.points));
+        const zone = _qbGapZone(i, first, last);
+        return { tip, gap: true, zone, lim, left: this[def.hoverLeft], flip };
+      }
       return { tip, up: p.up, dl: p.dl, lim, left: this[def.hoverLeft], flip };
     },
     _qbSummaryOf(scope) {
@@ -800,8 +872,12 @@ window.AQB_QB_TRAFFIC = {
       u.ctx.scale(px, px);
       return px;
     },
-    /* 缺口斜纹(drawClear 钩子 = 画在系列**之下**): 采样缺口区间(null 桶游程)铺 45 度斜纹底纹,
-     * 图面自解释(与图例「缺口 = 无采样」文案同义)。
+    /* 缺口斜纹(drawClear 钩子 = 画在系列**之下**): 只给**数据链中间**的缺口(null 桶游程,
+     * _qbGapZone === "mid")铺 45 度斜纹 —— 斜纹是「中断」的视觉记号, 只配给中断。
+     * !2026-10-30: 链外的空白(该对象第一次采样之前 / 最后一次之后)留白不铺 —— 它同样是「不
+     *   知道原因的没有数据」, 铺斜纹等于在视觉上重复一遍 tooltip 已经纠掉的归因错误。
+     *   (旧注释称「与图例『缺口 = 无采样』文案同义」; 该图例随 2026-10-08 版式改退场, 且
+     *   旧钩子对两类缺口通吃 —— 同为「标出这里没有数据」的性质, 但斜纹比中性文字更强硬。)
      *
      * 【几何硬约束, 别改坏 —— 2026-10-08 二次修复】缺口必须被铺成**以缺口区间为左右边的竖矩形**
      * (x ∈ [xa, xb] 全高), 而不是"沿 45 度平移的一条斜带": 45 度线段的水平跨度恒为 H(图高), 若
@@ -816,6 +892,10 @@ window.AQB_QB_TRAFFIC = {
       if (!up || !dl || !u.bbox || !u.ctx) return;
       const runs = _qbGapRuns(up, dl);
       if (!runs.length) return;
+      // 只留数据链中间的洞(前后都有观测); 链外的空白交给 tooltip 用中性文字陈述, 不铺记号
+      const [first, last] = _qbChainBounds(up, dl);
+      const inner = runs.filter((r) => _qbGapZone(r[0], first, last) === "mid");
+      if (!inner.length) return;
       const px = this._qbCanvasScale(u);
       const ctx = u.ctx;
       const L = u.bbox.left / px;
@@ -834,7 +914,7 @@ window.AQB_QB_TRAFFIC = {
       ctx.lineWidth = 1;
       ctx.setLineDash([]);
       const step = 8;  // 斜纹间距(CSS px)
-      for (const [a, b] of runs) {
+      for (const [a, b] of inner) {
         const xa = L + u.valToPos(u.data[0][a], "x");
         const xb = L + u.valToPos(u.data[0][b], "x");
         if (!(xb > xa)) continue;
