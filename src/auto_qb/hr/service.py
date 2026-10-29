@@ -1328,8 +1328,7 @@ class HrRefreshService:
             st = lane_states.get(entry.lane)
             if st is None or not st.ok:
                 continue
-            done = entry.done_epoch
-            if not st.full_depth and (done is None or done < st.cutoff_done):
+            if not _lane_covers_done(st, entry.done_epoch):
                 continue  # 位置未被覆盖: 不能证明它离开了, 维持原状(命中照常, 保守无害)
             entry.active = False
             for h in (entry.infohash_v1, entry.infohash_v2):
@@ -1717,6 +1716,29 @@ def _dl_by_hash(data: HrSiteData) -> Dict[str, int]:
     return out
 
 
+def _lane_covers_done(st, done: Optional[float], slack: float = 0.0) -> bool:
+    """单档对「完成时刻 = done」这个位置的覆盖证明是否成立(§3.4, 三处判据的唯一口径)。
+
+    - 全深度档(翻到末页 / 2.到期段停翻): 对**任意位置**成立, 位置无关;
+    - 位置有界档(1.完成时间覆盖 / 3.本地全集停翻 / 预算或失效点截断): 仅当 done 已知且
+      ``done - slack >= cutoff_done`` 才成立 —— 比它更深的页没翻到, 不可判;
+    - ``cutoff_done <= 0`` = 该档**没有位置概念**(model.py 注释原话「0 = 没有位置概念」;
+      供给侧 `_update_cutoff` 只在 page_deepest>0 时前进 ⇒ 整列 done 不可解析时恒为 0)
+      ⇒ 位置**不可证**。
+
+    第三条必须显式判死: 漏了它, `done < 0` 对任意真实 epoch(≈1.7e9)恒为 False, 「未覆盖」
+    出口永不触发, 三处判据一起退化成恒通过 —— 终态冻结 / 观察期出口 / 批量签发三条路全部
+    签发永续放行, 种子就此退出 HR 管束(issue 26-10-30-0550)。
+    """
+    if st.full_depth:
+        return True
+    if done is None or done <= 0:
+        return False
+    if st.cutoff_done <= 0:
+        return False
+    return done - slack >= st.cutoff_done
+
+
 def _position_covered(entry: HrEntry, lane_states) -> bool:
     """种子完成时间位置是否被本波各档覆盖(§3.4 观察期推进判据)。
 
@@ -1729,7 +1751,7 @@ def _position_covered(entry: HrEntry, lane_states) -> bool:
         st = lane_states.get(lane)
         if st is None or not st.ok:
             return False
-        if not st.full_depth and done < st.cutoff_done:
+        if not _lane_covers_done(st, done):
             return False
     return True
 
@@ -1749,11 +1771,7 @@ def _absence_proven_all(lane_states, wave: _WaveContext, anchor: HrAnchor) -> bo
         # 新鲜度闸门: 种子 added_on 晚于该档本波取数 ⇒ 该档快照对它无证明力 → 行 4
         if anchor.added_on and anchor.added_on > st.wave_ts:
             return False
-        if st.full_depth:
-            continue  # 全深度证明: 位置无关
-        if done <= 0:
-            return False
-        if done - COVERAGE_SLACK < st.cutoff_done:
+        if not _lane_covers_done(st, done, COVERAGE_SLACK):
             return False
     return True
 

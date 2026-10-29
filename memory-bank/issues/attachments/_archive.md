@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (65)
+## Open (64)
 
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
@@ -24,7 +24,6 @@
 - [bug] [relocate 相位机入口缺 dry_run 短路, 恢复账本路径绕过 --dry-run 契约](../26-10-30-0616-bug-relocate-phase-dry-run-shortcircuit.html) — relocate 相位机 on_task_line/_step_move/_build_links/relocate_cancel 全程无 dry_run 闸, --dry-run 启动携恢复账本非终态 job 时真写下发/建删链接
 - [bug] [relocate 失败路径不消费 resume_hashes, 被暂停组成员永久停在暂停态](../26-10-30-0616-bug-resume-hashes-failure-path.html) — 迁移失败路径(move_rejected/stalled/internal_error/cancel_failed)只置 FAILED 不恢复 resume_hashes, 整组运行成员静默停留暂停态且无日志
 - [perf] [_finalize_members 对全库种子先发 files API 再过滤, 大库主循环停摆分钟级](../26-10-30-0616-perf-finalize-members-filetable-filter.html) — ACT_FINALIZE 收尾集合计算逐条种子先取 torrents/files 再按 save_path 过滤, 单 tick 串行 N 次 HTTP; 应先过滤再取, job.hashes 成员免文件表
-- [bug] [HR 位置证明三判据在 cutoff_done==0 时退化恒通过, 种子永续放行退出 HR 管束](../26-10-30-0550-bug-hr-cutoff-zero-position-proof.html) — cutoff_done==0 时 _freeze_terminal/_position_covered/_absence_proven_all 三处覆盖判据退化为恒通过, 终态冻结/观察期出口/批量签发三条路全部签发永续放行, 种子退出 HR 管束
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
@@ -78,8 +77,9 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](../26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 
-## Done (269)
+## Done (270)
 
+- [bug] [HR 位置证明三判据在 cutoff_done==0 时退化恒通过, 种子永续放行退出 HR 管束](../26-10-30-0550-bug-hr-cutoff-zero-position-proof.html) — cutoff_done==0 时 _freeze_terminal/_position_covered/_absence_proven_all 三处覆盖判据退化为恒通过, 终态冻结/观察期出口/批量签发三条路全部签发永续放行, 种子退出 HR 管束
 - [refactor] [tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)](../26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html) — 同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵
 - [refactor] [relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口](../26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html) — 4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致
 - [refactor] [HrRefreshService 测试构造器 4 份 + 10 处内联未收口(参数面不够就绕过)](../26-10-29-1404-refactor-b-r24a03-hr-service-builder.html) — 4 个文件各有一份构造器(181/47/5 次调用), 另有 10 处内联; 根因是构造器参数面缺 data_dir/confs/sleeper/owner, 与已修的 QbManager 单点同根

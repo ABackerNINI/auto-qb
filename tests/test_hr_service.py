@@ -200,6 +200,8 @@
 - test_sign_releases_hit_head_does_not_abort_rest: 本波命中对象跳过(continue 非 break): unmatched 首条命中也不拦后续签发
 - test_freeze_terminal_failed_lane_between_entries: 档位失效的条目只跳过自己(continue 非 break): 其后可退役的终态条目照常退役
 - test_advance_observation_scope_exit_resets_streak: A 档观察条目连续 2 波位置覆盖出口: 出口后 streak 显式清零(不是 None)
+- test_position_proof_cutoff_zero_is_unprovable: issue 26-10-30-0550 守阵 —— cutoff_done<=0 ∧ 非全深度
+  ⇒ 位置不可证(三判据同口径 `_lane_covers_done`), 并反向钉死全深度 / 边界已越过的正常路径不被拦死
 - test_fuzzy_name_match_rejects_noise_only_overlap
 - test_mark_fetch_failed_and_seen_rows_units
 
@@ -283,6 +285,7 @@ from auto_qb.hr.service import (
     REASON_PARSE,
     _absence_proven_all,
     _Budget,
+    _lane_covers_done,
     _position_covered,
     _prune_index,
     _release_record,
@@ -4233,6 +4236,63 @@ def test_absence_proven_all_boundary_matrix():
     assert _absence_proven_all(lanes(wave_ts=1000.0), empty_wave, anchor(added_on=1000)) is True
     # 位置闸边界: done - COVERAGE_SLACK 恰好等于 cutoff(余量内) → 可证
     assert _absence_proven_all(lanes(full_depth=False), empty_wave, anchor(completion_on=1_000_000)) is True
+
+
+def test_position_proof_cutoff_zero_is_unprovable():
+    """issue 26-10-30-0550 守阵: cutoff_done<=0 ∧ 非全深度 ⇒ 位置不可证(三判据同口径)。
+
+    改前三处各写一份 `done < st.cutoff_done`, cutoff=0 时它对任意真实 epoch(≈1.7e9)恒为
+    False ⇒ 终态冻结 / 观察期出口 / 批量签发三条路全部签发永续放行, 种子退出 HR 管束。现三者
+    共用 `_lane_covers_done` 一条口径; 本用例把「无位置概念」与「正常覆盖」两组都钉死, 防止
+    修过头把正常路径一起拦死。
+    """
+    from auto_qb.hr.adapters.base import ParsedScope
+
+    now = time.time()
+    entry = HrEntry(tid=9, name="e", done_iso=DONE_OLD)
+    real_done = entry.done_epoch
+    assert real_done > COVERAGE_SLACK, "真实 epoch 须远深于对齐余量, 否则本用例失去意义"
+
+    def states(full_depth: bool, cutoff: float) -> dict:
+        base = dict(status=LANE_OK, wave_ts=now, pages=1, rows=1, full_depth=full_depth, cutoff_done=cutoff)
+        return {ln: HrLaneState(lane=ln, **base) for ln in FETCH_LANES}
+
+    zero = states(False, 0.0)
+    # 三判据: 无位置概念 ⇒ 一律不可证(不是「位置 0 = 比一切都老」)
+    assert _lane_covers_done(zero["A"], real_done) is False
+    assert _position_covered(entry, zero) is False, "观察期 streak 冻结(维持管束)"
+    assert _absence_proven_all(zero, _WaveContext({}), HrAnchor(completion_on=int(real_done))) is False, \
+        "批量「未列出」不得签发"
+    # 负哨兵同口径(<=0 整体视为「没有位置概念」)
+    assert _position_covered(entry, states(False, -1.0)) is False
+    assert _absence_proven_all(states(False, -1.0), _WaveContext({}), HrAnchor(completion_on=int(real_done))) is False
+    # 对照组: 全深度与位置无关; 非全深度但边界已越过 ⇒ 可证(不是一刀切拦死)
+    assert _position_covered(entry, states(True, 0.0)) is True
+    assert _absence_proven_all(states(True, 0.0), _WaveContext({}), HrAnchor()) is True
+    covered = states(False, real_done - COVERAGE_SLACK)
+    assert _position_covered(entry, covered) is True
+    assert _absence_proven_all(covered, _WaveContext({}), HrAnchor(completion_on=int(real_done))) is True
+    assert _absence_proven_all(
+        states(False, real_done - COVERAGE_SLACK + 1), _WaveContext({}), HrAnchor(completion_on=int(real_done))
+    ) is False, "差 1s 落在余量外 ⇒ 不可证"
+    # 供给侧成因: 整列 done 不可解析 ⇒ _update_cutoff 不前进, cutoff 恒 0(与前半段合成完整触发链)
+    st = HrLaneState(lane="A", status=LANE_OK, full_depth=False)
+    HrRefreshService._update_cutoff(
+        st,
+        ParsedScope(
+            scope="A", entries=[
+                HrEntry(tid=1, name="x", done_iso=""),
+                HrEntry(tid=2, name="y", done_iso="昨日"),
+            ]
+        )
+    )
+    assert st.cutoff_done == 0.0, "整列失明不前进 cutoff(0 = 没有位置概念)"
+    # 终态冻结端到端: cutoff=0 ∧ 非全深度 ⇒ 不退役、不签发(改前恒退役并签永续放行)
+    data = HrSiteData()
+    term = HrEntry(tid=21, name="t", done_iso=DONE_OLD, lane=LANE_SATISFIED, active=True, infohash_v1="H21")
+    data.index[21] = term
+    assert HrRefreshService._freeze_terminal(data, zero, _WaveContext({}), now) == 0
+    assert term.active is True and not data.verified, "位置不可证 ⇒ 维持管束, 不签放行"
 
 
 def test_sign_releases_hit_head_does_not_abort_rest(tmp_path):
