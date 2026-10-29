@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1304">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0209-v4-parse-skeleton-single-point.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="traffic 天文件与 agg 解析纪律骨架二份收敛为单点">
 <meta name="issue-summary" content="parse_v4_day_text 与 parse_v4_agg_text 的头行门闩/坏行计数/撕裂尾豁免骨架逐字重复, 建议抽公共行循环驱动器、行型判定留回调">
 <title>traffic 天文件与 agg 解析纪律骨架二份收敛为单点 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1304-refactor-b-r07t06-v4-parse-skeleton</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit · B 类复核批次 C</div></div>
     </div>
   </header>
@@ -124,6 +124,8 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:04 — 入池，状态 <strong>Open</strong>（B 类复核批次 C；未认领，未修）</li>
+      <li>2026-10-30 — 用户指派认领，状态 <strong>In Progress</strong>。复验：<code>2026-10-30 HEAD 6bf29427</code> 现象仍复现（骨架仍在 <code>parse_v4_agg_text</code> / <code>parse_v4_day_text</code>，行号较取证时略有漂移，符号锚点一致）；修复按 §04 建议（公共驱动器 + 行型回调 + 双向红验），<code>doc-refs</code> 保持空（用户直接指派，无 tasks 档案认领方）</li>
+      <li>2026-10-30 — 修完，状态 <strong>Done</strong>。实际修法：抽公共行循环驱动器 <code>_parse_v4_text(text, on_line) -> (key, bad, data, torn_tail)</code> 单点（头行门闩含头行记坏 / key 首个消费 / 空行注释跳 / data 逐行分母 / 吞 ValueError+IndexError 统一计坏 / 撕裂尾末行豁免），两 parser 只留行型回调（agg 9+8 列 / day 块状态机，块头前数据行与无基线块 r/z 两守卫以 ValueError 走同一吞异常路径）。§04 建议中的 <code>empty</code> 参数省去：头行门闩时回调一次未跑，调用方累积器自然为空，组装即整文件坏形态，驱动器只返回纪律四元组、结果对象由调用方组装。验证：① 新守阵 <code>test_v4_parse_discipline_dual_parser_same_verdict</code>（行型中立夹具五组：空文本/头行缺失与旧头行/坏行族+空行注释跳/撕裂尾/完整末行无换行，两侧 key/bad_lines/data_lines/torn_tail 逐项同判）+ <code>test_v4_parse_skeleton_single_point</code>（静态：骨架行/行循环/驱动器接线各恰一处；<code>traffic_limits.parse_limits_day_text</code> 同形行属另一族不在范围，守阵只扫本文件）；② 双向红验闭环：自抄骨架回 → 静态红行为绿；删撕裂尾豁免 → 行为红静态绿（精确 edit 还原，还原后字节数一致）；③ 既有守阵 <code>test_v4_parse_bad_line_family_cursor_not_advanced</code> 等全绿，<code>test_traffic_sample.py</code> 113 passed。测试数字：test.full <strong>4067 passed + 10 skipped / 覆盖率 99%</strong>（见 <a href="../testing/baselines/26-10-30-0209-v4-parse-skeleton-single-point.md">基线切片 26-10-30-0209</a>）</li>
     </ul>
   </section>
 

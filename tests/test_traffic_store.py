@@ -35,6 +35,11 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
   重建再封时 cov 相加(非取残余), avg 按 cov 加权 / totals 取后封行 / 桶宽截断 / 异 kind-epoch
   fail-fast(2026-10-13 真机「重封替换丢覆盖」回归)
 - test_v4_format_fail_fast_and_torn_tail: 序列化 fail-fast + 撕裂尾行豁免口径
+- test_v4_parse_discipline_dual_parser_same_verdict: 同纪律夹具双 parser 同判(issue 26-10-29-1304 R07-T06
+  解析纪律收敛 _parse_v4_text 单点的行为守阵)—— 空文本/头行缺失与旧头行(整文件坏含头行本身)/
+  坏行族+空行注释跳/撕裂尾(末行坏才豁免)/完整末行无换行 五组夹具, day 与 agg 纪律面逐项同判
+- test_v4_parse_skeleton_single_point: 静态守阵 —— 骨架行/行循环/驱动器接线在 traffic_store.py
+  各恰一处(_parse_v4_text 单点, 两解析器无行循环副本)
 
 v4 写侧存储(S2a/S2b, TrafficV4Store):
 - test_v4_store_append_records_day_file_shape: 新文件头行(v4)+key+B 行(带块基线)+r/z/n delta 行 roundtrip; 全空零操作
@@ -113,8 +118,10 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
 import builtins
+import inspect
 import logging
 import os
+import re
 import threading
 import time
 from datetime import datetime
@@ -801,6 +808,64 @@ def test_v4_format_fail_fast_and_torn_tail():
     # 残缺末行: 记 torn_tail(豁免损坏占比)且计坏行; 前面好行照常收
     torn = parse_v4_day_text(_v4_day_text(head + ["r,1,1"])[:-1])  # 去掉末行换行 -> 残缺尾段
     assert torn.torn_tail is True and torn.bad_lines == 1 and len(torn.blocks[0].records) == 1
+
+
+# ---------- 解析纪律单点守卫(issue 26-10-29-1304 R07-T06 收敛) ----------
+
+
+def test_v4_parse_discipline_dual_parser_same_verdict():
+    """同纪律夹具双 parser 同判(行为守阵): 解析纪律骨架收敛 _parse_v4_text 单点后, 同一
+    夹具喂 parse_v4_day_text / parse_v4_agg_text, 纪律面 (key / bad_lines / data_lines /
+    torn_tail) 逐项同判 —— 夹具只用行型中立行(空行/注释/key 行/两侧皆坏的行), 行型语义
+    差异(day 块状态机 vs agg 9+8 列)不进本守阵; 覆盖空文本 / 头行缺失与旧头行(整文件坏
+    含头行本身) / 坏行族+空行注释跳 / 撕裂尾(末行坏才豁免) / 完整末行无换行(不标 torn)"""
+    def _both(text):
+        return parse_v4_day_text(text), parse_v4_agg_text(text)
+
+    # 空文本: 零行零坏不撕裂, key 空
+    day, agg = _both("")
+    assert (day.key, day.bad_lines, day.data_lines, day.torn_tail) == (None, 0, 0, False)
+    assert (agg.key, agg.bad_lines, agg.data_lines, agg.torn_tail) == (None, 0, 0, False)
+    # 头行缺失 / 旧头行(v1/v3): 整文件记坏且 bad 含头行本身(bad == data == 全行数, 非 len-1)
+    for head in ("key,early", "# auto-qb qb-traffic v1", "# auto-qb qb-traffic v3"):
+        day, agg = _both(_v4_day_text([head, "garbage", "key,g1"]))
+        for parsed in (day, agg):
+            assert (parsed.key, parsed.bad_lines, parsed.data_lines, parsed.torn_tail) == (None, 3, 3, False)
+    # 坏行族 + 空行注释跳: data 分母 = 头行之后全部行(含空行/注释/坏行), bad 只计真坏行,
+    # key 首个消费(重复 key 行按行型记坏); 行型载荷两侧皆空
+    neutral_bad = ["garbage", "x,y,z", "key,a,b", "key,", "r,1,1,1,1"]  # 两侧皆坏的行型中立行
+    lines = [HEADER_LINE_V4, "key,g1", "", "# note"] + neutral_bad + ["key,g2"]
+    day, agg = _both(_v4_day_text(lines))
+    for parsed in (day, agg):
+        assert parsed.key == "g1"
+        assert parsed.bad_lines == len(neutral_bad) + 1  # + 重复 key 行
+        assert parsed.data_lines == len(lines) - 1
+        assert parsed.torn_tail is False
+    assert day.blocks == () and (agg.hours, agg.days, agg.months) == ((), (), ())
+    # 撕裂尾: 无尾换行且坏行恰为末行 -> torn_tail 两侧同判
+    day, agg = _both(_v4_day_text([HEADER_LINE_V4, "key,g1", "garbage"])[:-1])
+    for parsed in (day, agg):
+        assert (parsed.key, parsed.bad_lines, parsed.data_lines, parsed.torn_tail) == ("g1", 1, 2, True)
+    # 撕裂文件但末行是好行(被消费) -> 不标 torn_tail(豁免只标末行坏)
+    day, agg = _both(_v4_day_text([HEADER_LINE_V4, "garbage", "key,g1"])[:-1])
+    for parsed in (day, agg):
+        assert (parsed.key, parsed.bad_lines, parsed.data_lines, parsed.torn_tail) == ("g1", 1, 2, False)
+
+
+def test_v4_parse_skeleton_single_point():
+    """静态守阵: 解析纪律骨架单点(issue 26-10-29-1304 R07-T06) —— 骨架行 / 行循环 /
+    驱动器接线在 traffic_store.py 各恰一处(两解析器都走 _parse_v4_text, 无行循环副本)。
+    口径说明: 同形的空行注释跳行在 traffic_limits.parse_limits_day_text 还有一处, 但那是
+    另一族解析器(无头行门闩 / 撕裂尾直接丢弃), 不在本 issue 收敛范围 —— 守阵只扫本文件"""
+    src = inspect.getsource(traffic_store_module)
+    assert src.count('if not s or s.startswith("#")') == 1, "空行注释跳骨架行应只在公共驱动器"
+    assert src.count("for i, line in enumerate(lines[1:]):") == 1, "行循环应只在公共驱动器"
+    assert src.count("def _parse_v4_text(") == 1
+    wiring = re.findall(r"^    key, bad, data, torn_tail = _parse_v4_text\(text, on_\w+_line\)$", src, re.M)
+    assert sorted(wiring) == [
+        "    key, bad, data, torn_tail = _parse_v4_text(text, on_agg_line)",
+        "    key, bad, data, torn_tail = _parse_v4_text(text, on_day_line)",
+    ], "两个解析器必须各自单点接线公共驱动器"
 
 
 # ---------- P1-T1.2 纯函数守卫簇(计划 26-10-20-2101) ----------
