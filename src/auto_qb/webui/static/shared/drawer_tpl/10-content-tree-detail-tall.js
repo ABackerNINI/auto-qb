@@ -35,7 +35,7 @@
   const TABLE_ID = "drawerContentV10";
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
+  /* 优先级文案经 H.prioText 单点取文(issue 26-10-29-1340), 本变体不再持字面表 */
   const PRIO_ORDER = [0, 1, 6, 7];
 
   /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 选中节点路径; lastSig 供跳过重建;
@@ -278,9 +278,9 @@
       progW: Math.min(100, Math.max(0, n.prog)).toFixed(1),
       part: n.prog < 100,
       progTitle: (dir ? "子树加权平均进度" : "文件进度") + " " + n.prog.toFixed(1) + "%",
-      badge: dir ? "" : (PRIO_LABEL[n.prio] || "正常"),
+      badge: dir ? "" : H.prioText(n.prio, "正常"),
       badgeCls: dir ? "" : prioBadgeClass(n.prio).trim(),
-      badgeTitle: dir ? "" : "优先级: " + (PRIO_LABEL[n.prio] || "正常") + " — 点击弹出优先级小菜单",
+      badgeTitle: dir ? "" : "优先级: " + H.prioText(n.prio, "正常") + " — 点击弹出优先级小菜单",
       index: dir ? -1 : n.index,
       _cls: (dir ? "dir" : "file") + (sel ? " sel" : ""),
     };
@@ -326,7 +326,7 @@
       const on = !isDir && n.prio === p;
       const cls = p === 0 ? "skip" : p === 1 ? "norm" : p === 7 ? "max" : "high";
       return T`<button type="button" class="dt10-seg ${cls}${on ? " on" : ""}" data-setp="${p}"
-        title="设为${PRIO_LABEL[p]}${isDir ? " — 作用于目录内全部 " + n.files + " 个文件" : ""}">${PRIO_LABEL[p]}</button>`;
+        title="设为${H.prioText(p, "")}${isDir ? " — 作用于目录内全部 " + n.files + " 个文件" : ""}">${H.prioText(p, "")}</button>`;
     }).join("");
     return T`<div class="dt10-kicker"><svg class="ico" viewBox="0 0 16 16"><use href="${isDir ? "#i-folder" : "#i-list"}"></use></svg>${isDir ? (n.depth < 0 ? "种子根目录" : "目录") : "文件"}</div>
       <div class="dt10-dname" title="${n.name}">${n.name}</div>

@@ -36,7 +36,7 @@
   const TABLE_ID = "drawerContentV11";
 
   const { num } = H; /* 公共工具: Number(v)||0(核心层单点) */
-  const PRIO_LABEL = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
+  /* 优先级文案经 H.prioText 单点取文(issue 26-10-29-1340), 本变体不再持字面表 */
   const PRIO_CYCLE = [0, 1, 6, 7]; /* 徽章点击循环序(qB 4 档; 旧值 4 = 高, 归入 6 位) */
 
   /* 视图偏好(跨重渲染与换变体保持): 筛选 / 折叠目录集 / 勾选集(文件 path); lastSig 供跳过重建;
@@ -279,9 +279,9 @@
       avTxt: avNum ? num(item.av).toFixed(2) : "—",
       avLow: avNum && num(item.av) < 1,
       avTitle: avNum ? "qB availability: 全 swarm 中该文件数据的份数" : "qB 未返回该文件可用性",
-      badge: PRIO_LABEL[item.prio] || "正常",
+      badge: H.prioText(item.prio, "正常"),
       badgeCls: prioBadgeClass(item.prio).trim(),
-      badgeTitle: "优先级: " + (PRIO_LABEL[item.prio] || "正常") + " — 点击循环 不下载→正常→高→最高",
+      badgeTitle: "优先级: " + H.prioText(item.prio, "正常") + " — 点击循环 不下载→正常→高→最高",
       _cls: "file" + (checked ? " is-chk" : ""),
     };
   }
@@ -388,7 +388,7 @@
           <span>已选 <b>${checkedIdx.length}</b> 个文件 · <b>${ctxOf().fmtSize(checkedSize)}</b>${R(checkedMiss > 0 ? T` · <b class="w">缺 ${ctxOf().fmtSize(checkedMiss)}</b>` : "")}</span>
           <span class="sp"></span>
           ${R(PRIO_CYCLE.map((p) => T`<button type="button" class="dt11-bp ${p === 0 ? "skip" : p === 7 ? "max" : p === 6 ? "high" : ""}" data-bp="${p}"
-              title="将已选 ${checkedIdx.length} 个文件设为${PRIO_LABEL[p]}">${PRIO_LABEL[p]}</button>`).join(""))}
+              title="将已选 ${checkedIdx.length} 个文件设为${H.prioText(p, "")}">${H.prioText(p, "")}</button>`).join(""))}
           <button type="button" class="dt11-clear" data-bclear title="清除全部勾选">清除</button>
         </div>`
       : T`<div class="dt11-foot" title="勾选行(勾目录 = 整棵子树)后此处浮出批量优先级条">

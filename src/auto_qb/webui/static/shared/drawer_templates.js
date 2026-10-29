@@ -16,7 +16,8 @@
  *
  * 注册表 + 宿主生命周期 + dtHtml 转义标签模板 + CSS 注入单点 + autoqb.ui.drawerTpl 读写
  * + 变体公共骨架 helpers(reg.helpers: 工具/sig 比对/滚动自保/事件挂摘, 报告 26-10-07-0845;
- *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
+ *   行级键盘 roving tabindex 四件套, issue 26-10-07-0846; 文件优先级文案表 PRIO_TEXT/
+ *   prioText, issue 26-10-29-1340)。本文件是「核心层」: 不含任何具体模板变体 —— 变体是
  * shared/drawer_tpl/<NN>-<tab>-<slug>.js 一个自注册文件, 删除 = 删文件 + 三份 manifest 各去 1 行。
  *
  * 装载序: 必须排在 drawer.js 之后、state.js 之前(三份 index.html 的 tpl-manifest)。
@@ -147,6 +148,14 @@
    *     host.__dtEvents 事件表上, 成对纪律由实现保证, 变体不再各自维护 __dtNNWired 标志;
    *   - roving/rowFocusKey/rowRestore/rowMove: 行级键盘 roving tabindex(issue 26-10-07-0846,
    *     content 组 dt10/11/12 消费) —— 锚点设置/焦点记账/重建回焦/方向键移焦四步。 */
+  /* ---------------- 文件优先级码 -> 中文文案(reg.helpers::PRIO_TEXT/prioText, issue 26-10-29-1340) ----------------
+   * 全仓唯一字面表(硬约束): qB files[].priority 五键 —— 4 是 qB legacy「高」档, 设置侧三入口
+   * (10 PRIO_ORDER / 11 PRIO_CYCLE / ctx-menus.html 静态菜单)只发 0/1/6/7, 但现网旧种子仍会
+   * 回读 4, 显示侧承认它。消费方各带回退 dash: 显示侧(drawerFileRows 与 10/11/12 徽章)回退
+   * 「正常」, 回执侧(setFilePriority)回退码原文 String(p) —— 4 从此走「高」, 不再打「4」。
+   * drawer.js 核心经 window.AQB_DRAWER_TPL_REG 方法内取别名消费(openFilePrio 的 FIT 先例)。 */
+  var PRIO_TEXT = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
+
   var HELPERS = {
     dur: function (ctx, v, dash) {
       return (v === null || v === undefined || v < 0) ? (dash || "未设") : ctx.fmtDuration(v);
@@ -154,6 +163,12 @@
     size: function (ctx, v) { return ctx.fmtSizeOrDash(v) || "—"; },
     present: function (v) { return v !== undefined && v !== null && v !== ""; },
     num: function (v) { return Number(v) || 0; },
+    /* 文件优先级取文(带回退参数, 字面表见上方 PRIO_TEXT 注) */
+    PRIO_TEXT: PRIO_TEXT,
+    prioText: function (p, dash) {
+      var t = PRIO_TEXT[p];
+      return t === undefined ? dash : t;
+    },
     skipUnchanged: function (host, ui, sig) {
       if (sig === ui.lastSig && host.firstChild) return true;
       ui.lastSig = sig;

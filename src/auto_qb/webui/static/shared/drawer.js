@@ -920,7 +920,9 @@ window.AQB_DRAWER = {
         y: FIT.clampAxis(rect.bottom + 4, h, window.innerHeight),
       };
     },
-    /* 优先级 4 档(0=跳过 1=普通 6=高 7=最高) → POST files/priority。
+    /* 文件优先级码 -> 中文文案(0=跳过 1=普通 4|6=高 7=最高; 4=qB legacy「高」档, 设置侧只发
+     * 0/1/6/7, 现网旧种子仍会回读) -> POST files/priority。文案字面单点在模板核心层
+     * reg.helpers::prioText(issue 26-10-29-1340, 与 :1425 注释同一键集)。
      * indices 可选(计划 26-10-06-0838 S5 内容变体批量通道): 传文件下标数组时一次提交整批
      * (后端 files/priority 本就收 indices 数组, 见 torrent_cmds.py); 缺省沿用 filePrio.index
      * 单文件语义 —— 经典小菜单(ctx-menus.html)与变体 10 的锚定小菜单(openFilePrio)零变化。 */
@@ -929,7 +931,8 @@ window.AQB_DRAWER = {
       const hash = this.drawer.hash;
       const idx = Array.isArray(indices) ? indices.slice() : [this.filePrio.index];
       if (!hash || !idx.length || idx.some((i) => !Number.isInteger(i) || i < 0)) return;
-      const label = { 0: "不下载", 1: "正常", 6: "高", 7: "最高" }[p] || String(p);
+      const { prioText } = window.AQB_DRAWER_TPL_REG.helpers; /* 文案单点(issue 26-10-29-1340), 方法内取别名(FIT 先例) */
+      const label = prioText(p, String(p));
       const okText = Array.isArray(indices)
         ? `已将 ${idx.length} 个文件设为「${label}」` : `优先级已设为「${label}」`;
       await this._editPost(hash, "files/priority", { indices: idx, priority: p }, okText);
@@ -1440,7 +1443,7 @@ window.AQB_DRAWER = {
         }
         node.files.push({ ...f, index: fi });
       }
-      const prio = (p) => ({ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }[p] ?? "正常");
+      const prio = (p) => window.AQB_DRAWER_TPL_REG.helpers.prioText(p, "正常"); /* 文案单点(issue 26-10-29-1340), 方法内取 */
       const rows = [];
       const walk = (node, name, depth) => {
         if (name !== null) rows.push({

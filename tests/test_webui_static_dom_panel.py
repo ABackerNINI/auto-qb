@@ -50,6 +50,7 @@
 - test_frontend_api_request_timeout: 前端请求级超时守阵(issue 26-10-16-0954-bug-webui-chart-fetch-no-timeout 方案 #1, 2026-10-16) —— `_request` 旧的裸 `fetch(path, { ...options, headers })` 无超时: 连接静默失效时 await 永不返回, 调用方 finally 整条失效(流量图 loading 卡死⇒轮询守卫把自己挡死; polling.js::refresh 更是永久停表), 界面上也无任何提示。四层静态锚: ①常量单点 AQB_FETCH_TIMEOUT_S/MS(毫秒值由秒值派生, 不手抄两份); ②fetch 必须带 `signal: ctl.signal`(裸 fetch 不得回潮); ③AbortError 必须翻译(超时/取消分型 + timeout 标记); ④`finally` 必须 `clearTimeout(timer)` 且跨文件不变式 `_QB_LOAD_STALL_MS >= AQB_FETCH_TIMEOUT_MS`(兜底不得早于请求级超时)。行为面 node 电池真跑(无 node 静默跳过): 桩 fetch + 手动触发定时器, 六型 —— 悬挂→「请求超时(15s)」+ timeout 标记 + 定时器已清 / 成功值透传且定时器清 / 401 仍走 auth 分支(_logout + auth 标记) / 非 2xx 文案照旧 / 已 abort 的外部 signal → 「请求已取消」不冒充超时 / - test_frontend_raw_fetch_timeout_single_point: 前端裸 fetch 零回潮 + 低层带超时单点守阵(issue 26-10-16-1303-bug-webui-raw-fetch-bypass-no-timeout, 2026-10-16) —— 5 处请求有意或历史地绕开 auth.js::_request(它已有请求级超时), 直接裸 fetch 且无 signal: 启动分片装载 / 免鉴权判定 / 导出下载 / 快捷键密钥读写 x2; 连接静默失效时 await 永不返回 ⇒ 各有收尾动作停在中途(白屏 / 停在“验证中” / 回执停在“进行中” / 密钥面板 loading 不复位)。修法 = 低层单点 shared/fetch_low.js(aqbFetch: AbortController + 15s + AbortError 翻译, **原始 Response** 透传不解析), 四处改调它; boot.js 在清单脚本之前执行(用不了单点), 自带等价内联超时(10s, 阻塞首屏 ⇒ 早失败)。四层静态锚: ①单点常量在且与 auth.js 请求级超时同值(同口径两处实现, 只改一边即红); ②**裸 fetch 零回潮**(全 shared 除 vendor 外, 出现调用点 fetch( 的文件只允许单点自身 / auth.js / boot.js); ③boot.js 内联件齐(常量 10s + AbortController + signal 透传 + clearTimeout + AbortError 翻译); ④四旁路调用点全改调单点 + lifecycle 采纳行的等价格式(字段名与空值占位各一个常量; 回潮成字面成员赋值会让该文件对本仓 agent 只读)。行为面 node 电池真跑(无 node 静默跳过): 单点七型(悬挂→「请求超时(15s)」+ timeout 标记 / 原始 Response 透传不解析 / 非 abort 错误上抛 / 外部取消不冒充超时 / method+headers 透传 / 定时器清理)与 boot.js 白屏悬挂五项(信号在 / 10s 定时器在 / 悬挂→可读失败文案 / 定时器清掉)
 - test_frontend_busy_skeleton_single_point: busy+try+反馈+finally 骨架单点守阵(issue 26-10-20-2231) —— dialogs.js 三 helper 在册(_mgrRun 管理对话框写操作 / _panelLoad 面板加载与 tm 槽回执 / _postWaitCmd POST+waitCmd 三态 toast)+ 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族 4 槽 + 一键导入)+ finally 复位保底住在单点内(漏 finally = 面板永久转圈)+ 裸 busy 置位反向断言(再手抄 = 破单点, 回潮即红)
 - test_drawer_variant_skeleton_single_point: 抽屉变体渲染器族三族重复收敛守阵(issue 26-10-20-2231) —— ①三态空帧单点 H.emptyFrame 在核心 HELPERS(has 闸 + loading→err→empty 优先级 + err 进 title 走 esc)且 04-12 九件桥变体各 1 处接线(槽类名/空态文案逐件对账), 内联三态块零残留(「正在加载…」态帧不得回潮; 01/02/03 裸空态形状不同刻意不收编, 接线数钉 0); ②peers 判据单点 reg.peers 五件(FLAG_META/flagTokens/isBad/bucketOf/isLanIp)在核心 + TPL_REG 挂载 + 07/08/09 经 const P 消费, 本地副本零残留(反向断言); ③dt 值格模板合一: 单一 tpl-aq-dt-peer-cells(类名经 pfx prop 计算, 渲染结果与旧逐字同; dt09 密度雷达特化经 occ prop) + table.js 三组件同名不变共享模板且 pfx/occ 默认值各表自己 + 旧三模板 id 零残留(双模板副本回潮即红)
+- test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
 - test_drawer_general_hr_state_line_parity: 抽屉 general 三变体 HR 结论行对齐守阵(issue 26-10-29-1341) —— 同一颗 hr_triggered 种子的「删除安全档位结论 · 依据」行(hr_safety_text/hr_state_text + hr_reason)三变体都必须消费 hr_state: 01/02 从旧版就有, 03 手抄时字段集停在旧版整段漏掉, 后端 views.py 详情载荷字段齐全、hr.js::hrStateLine 注释成文「详情抽屉要显示这行」, 选 03 就看不到「能否删」是用户可见缺失; 守阵 = 三件源码各含 if (d.hr_state) 闸(空值路径被闸拦住, hr_state 为空不多出空行), 缺件即红
 - test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
@@ -5853,6 +5854,93 @@ def test_drawer_variant_skeleton_single_point():
         assert f'pfx: {{ type: String, default: "{pfx}" }}' in blk, f"{comp} 的 pfx 默认值应为 {pfx}"
         assert f"occ: {{ type: Boolean, default: {occ} }}" in blk, f"{comp} 的 occ 默认值应为 {occ}"
 
+
+def test_drawer_prio_text_single_point():
+    """文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) ——
+    ① 字面表全仓唯一(硬约束): shared/ 递归扫五键表字面仅核心层 PRIO_TEXT 1 处;
+    ② 取文函数带回退参数: prioText 内部查表缺键回落 dash, 与 PRIO_TEXT 一并挂 reg.helpers
+       (dur/size 同族「带回退小工具」通道); 表含 legacy 4 档(「高」);
+    ③ 五处消费接线: drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示
+       「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名, FIT 先例)+ 10/11/12 各经
+       H.prioText 消费, 本地 PRIO_LABEL 与字面表零残留;
+    ④ node 真跑(无 node 静默跳过): p∈{0,1,6,7} 可达域新旧输出逐字同(旧内联表作对账基准),
+       4 档补测 prioText(4, "4") === "高"(旧 setFilePriority 表缺 4 会打「4」, 收敛后绿)。
+    行为等价由 e2e 盯(drawer-content-variant-tables)。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
+    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+
+    # ---- ① 字面表全仓唯一 ----
+    LITERAL = '{ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }'
+    hits = []
+    for root, _dirs, files in os.walk(shared):
+        for fn in files:
+            p = os.path.join(root, fn)
+            try:
+                text = open(p, encoding="utf-8").read()
+            except (UnicodeDecodeError, ValueError):
+                continue  # vendor 二进制/字体等非源码文件
+            if LITERAL in text:
+                hits.append(os.path.relpath(p, shared).replace("\\", "/"))
+    assert hits == ["drawer_templates.js"], f"优先级文案表字面回潮(应仅核心层 1 处): {hits}"
+
+    # ---- ② 核心层: 全键表 + 带回退取文 ----
+    assert f"var PRIO_TEXT = {LITERAL};" in core, \
+        "核心层缺 PRIO_TEXT 全键表(缺 legacy 4 档 = setFilePriority 回执打码原文的旧坑回潮)"
+    assert "prioText: function (p, dash)" in core, "核心层缺带回退参数的 prioText 取文函数"
+    assert "PRIO_TEXT: PRIO_TEXT," in core, "HELPERS 未随表挂出 PRIO_TEXT(消费方取不到表面)"
+
+    # ---- ③ 五处消费接线, 本地副本零残留 ----
+    assert "prioText(p, String(p))" in drawer_js, "drawer.js setFilePriority 回执未接 prioText(兜底码原文)"
+    assert 'window.AQB_DRAWER_TPL_REG.helpers.prioText(p, "正常")' in drawer_js, \
+        "drawer.js drawerFileRows 显示未接 prioText(兜底「正常」)"
+    assert LITERAL not in drawer_js, "drawer.js 又出现本地字面表(应走 reg.helpers 单点)"
+    for name in ("10-content-tree-detail-tall", "11-content-treegrid-batch-low", "12-content-space-treemap-collapsed"):
+        v = open(os.path.join(shared, "drawer_tpl", name + ".js"), encoding="utf-8").read()
+        assert "H.prioText(" in v, f"{name} 未接 H.prioText 单点"
+        assert "PRIO_LABEL" not in v, f"{name} 残留本地 PRIO_LABEL(应走 reg.helpers::prioText)"
+
+    # ---- ④ node 真跑: 可达域等价 + 4 档补测 ----
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _PRIO_TEXT_NODE_PROBE,
+         os.path.join(shared, "drawer_templates.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"prioText node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"prioText 电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+_PRIO_TEXT_NODE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+/* localStorage 桩; document 保持 undefined —— dtInjectCss 有守卫跳过注入 */
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const H = window.AQB_DRAWER_TPL_REG.helpers;
+/* 旧五处内联表(等价性对账基准, 只活在测试里): 显示侧 ?? "正常" / 回执侧 || String(p) */
+const OLD = { 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" };
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+for (const p of [0, 1, 6, 7]) {
+  ok(`显示侧 p=${p} 与旧表逐字同(兜底正常)`, H.prioText(p, "正常") === (OLD[p] ?? "正常"));
+  ok(`回执侧 p=${p} 与旧表逐字同(兜底码原文)`, H.prioText(p, String(p)) === (OLD[p] || String(p)));
+}
+ok("4 档(legacy 高)补测: prioText(4, '4') === 高", H.prioText(4, "4") === "高");
+ok("PRIO_TEXT 五键全在册", [0, 1, 4, 6, 7].every((p) => H.PRIO_TEXT[p] !== undefined));
+console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]).length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
 
 # node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— ①chain 在途不排下一拍
 # (不堆叠请求) ②卡死判据持续为真 -> 超阈值补偿一次并重新计时 ③有界等待: 退避曲线与旧 _pollCmd 逐项
