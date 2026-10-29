@@ -32,6 +32,9 @@
 - test_parse_fsize_invalid_unit: 非 iB 单位 -> ValueError
 - test_parse_speed_empty: 空串 -> 0
 - test_parse_speed_invalid: 非法速度格式 -> ValueError
+- test_parse_quantity_ladder_valid_and_empty: 三解析器表驱动矩阵·合法值与空串语义(time/speed 空串 -> 0, fsize 无回退)
+- test_parse_quantity_ladder_invalid_valueerror: 守阵(issue 26-10-29-1252)——非法输入矩阵断言异常类恰为 ValueError(无前缀 iB/十进制前缀/小数多段/纯非法/空串); KeyError 不是 ValueError 子类, 单位表白名单兜底缺失时必红
+- test_parse_quantity_ladder_unit_whitelist_message: 单位白名单兜底报错文案(speed 新增 iB 提示, fsize 旧文案保持不变)
 - test_add_long_path_prefix_non_windows: 非 Windows 原样返回
 - test_atomic_write_creates_file: 原子写生成目标文件且不残留临时文件
 - test_atomic_write_rejects_empty_path: 空路径直接 ValueError(否则临时文件落到 CWD 的父目录)
@@ -475,6 +478,69 @@ def test_parse_speed_invalid():
         assert False, "应抛 ValueError"
     except ValueError:
         pass
+
+
+# ---------- 数量解析三函数 × 输入矩阵(issue 26-10-29-1252) ----------
+# parse_time/parse_fsize/parse_speed 的单位白名单记在两处(正则字符类 + dict 键),
+# 旧实现只有 fsize 在两表之间有兜底; speed 的正则比表宽一格, "1iB/s"/"10KB/s"
+# 命中正则但不在表里 -> units[unit] 下标抛 KeyError(KeyError 不是 ValueError 子类),
+# 逃出校验层 _try(只接 ValueError)与 load_config 的统一 ConfigError 契约。
+# 本组矩阵断言异常**类**恰为 ValueError, 钉死 KeyError 不复现。
+
+
+@pytest.mark.parametrize(
+    "fn,value,expected", [
+        (utils.parse_time, "", 0),
+        (utils.parse_speed, "", 0),
+        (utils.parse_time, "90M", 5400.0),
+        (utils.parse_time, "0.5H", 1800.0),
+        (utils.parse_fsize, "512B", 512),
+        (utils.parse_fsize, "1.5GiB", int(1.5 * 1024**3)),
+        (utils.parse_speed, "500B/s", 500),
+        (utils.parse_speed, "0.5MiB/s", int(0.5 * 1024**2)),
+    ]
+)
+def test_parse_quantity_ladder_valid_and_empty(fn, value, expected):
+    """三解析器合法值与空串语义(time/speed 空串 -> 0; fsize 无空串回退)"""
+    assert fn(value) == expected
+
+
+@pytest.mark.parametrize(
+    "fn,value",
+    [
+        (utils.parse_time, "1iB"),  # 无前缀 iB: time 正则不含 i -> 走不命中分支
+        (utils.parse_time, "1.5.5M"),  # 小数多段: 形状命中但 float 拒绝
+        (utils.parse_time, "abc"),
+        (utils.parse_fsize, ""),  # fsize 空串无回退 -> 不命中分支
+        (utils.parse_fsize, "1iB"),  # 无前缀 iB: 正则命中、单位表没有 -> 白名单兜底
+        (utils.parse_fsize, "10KB"),  # 十进制前缀同理(旧实现已有兜底, 保持)
+        (utils.parse_fsize, "1.5.5MiB"),
+        (utils.parse_fsize, "abc"),
+        (utils.parse_speed, "1iB/s"),  # 无前缀 iB/s: 修复点 —— 旧实现 KeyError 'IB/S'
+        (utils.parse_speed, "10KB/s"),  # 十进制前缀: 同一缺口(旧实现 KeyError 'KB/S')
+        (utils.parse_speed, "1.5.5MiB/s"),
+        (utils.parse_speed, "abc"),
+    ]
+)
+def test_parse_quantity_ladder_invalid_valueerror(fn, value):
+    """非法输入矩阵: 异常类恰为 ValueError(KeyError 不是 ValueError 子类, 白名单兜底缺失时必红)"""
+    with pytest.raises(ValueError) as ei:
+        fn(value)
+    assert type(ei.value) is ValueError
+
+
+@pytest.mark.parametrize(
+    "fn,value,frag", [
+        (utils.parse_fsize, "10KB", "无效大小格式(需使用iB单位, 如 10MiB): 10KB"),
+        (utils.parse_speed, "1iB/s", "无效速度格式(需使用iB单位, 如 10MiB/s): 1iB/s"),
+        (utils.parse_speed, "10KB/s", "无效速度格式(需使用iB单位, 如 10MiB/s): 10KB/s"),
+    ]
+)
+def test_parse_quantity_ladder_unit_whitelist_message(fn, value, frag):
+    """单位白名单兜底的报错文案(带 iB 提示); fsize 两条旧文案保持不变"""
+    with pytest.raises(ValueError) as ei:
+        fn(value)
+    assert frag in str(ei.value)
 
 
 def test_add_long_path_prefix_non_windows(monkeypatch):

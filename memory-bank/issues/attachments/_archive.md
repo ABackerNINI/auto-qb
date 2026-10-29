@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (68)
+## Open (67)
 
 - [refactor] [tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)](../26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html) — 同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵
 - [refactor] [relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口](../26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html) — 4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致
@@ -26,7 +26,6 @@
 - [refactor] [HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra](../26-10-29-1310-refactor-b-r10x03-exempt-baseline-single-source.html) — 打标侧回落只用 hr.required, 取数/达标/视图侧用 required+extra, 同一事实四处手算; 收敛为 HRRule 派生属性
 - [refactor] [traffic 天文件与 agg 解析纪律骨架二份收敛为单点](../26-10-29-1304-refactor-b-r07t06-v4-parse-skeleton.html) — parse_v4_day_text 与 parse_v4_agg_text 的头行门闩/坏行计数/撕裂尾豁免骨架逐字重复, 建议抽公共行循环驱动器、行型判定留回调
 - [refactor] [「无 HR 配置」缺省在 expr 再抄一份记录侧守卫](../26-10-29-1259-refactor-b-r17b01-hr-absent-default.html) — env._hr 自判 无 conf/无 hr 返 false, 与 record._hr_guard 的 未配 hr 不判定 重复; 可等价收敛为单一权威, satisfied 两侧差异另记
-- [bug] [parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback](../26-10-29-1252-bug-b-r18b01-parse-unit-ladder.html) — parse_speed 正则允许 'iB/S' 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
@@ -80,9 +79,10 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (248)
+## Done (249)
 
 - [bug] [webui 搜索结果行自建一份行构造（seeding_time 未量化 + 明细字段缺失）](../26-10-29-1320-bug-b-r16b01-search-row-view-converge.html) — search_torrents 的 _view 与 _member_view 各建一份行(覆盖 R16-B01/R19-B01): seeding_time 未走 view_field_value, 且缺 eta/num_*/downloaded 等字段, 搜索虚拟行展开明细列空白
+- [bug] [parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback](../26-10-29-1252-bug-b-r18b01-parse-unit-ladder.html) — parse_speed 正则允许 'iB/S' 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛
 - [bug] [流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树](../26-10-22-0435-bug-webui-aq-fold-ce-inject-break.html) — aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效
 - [test] [守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件](../26-10-21-2232-test-guard-scope-narrower-than-acceptance.html) — 计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)
 - [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷

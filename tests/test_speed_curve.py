@@ -9,6 +9,7 @@
 - test_speed_curve_config_rejects_bad_traffic_source: 顶层 traffic_source 结构错误(非字典/未知键/provider 非枚举/缺或空 dat_path/traffic_monitor 非字典)
 - test_speed_curve_config_rejects_bad_curves: curves 缺失/空/非单项映射/键名非 curve/curve 非 dict/未知键/缺 period/非法或重复 period/双向全缺
 - test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法/多阈值键
+- test_speed_unit_prefixless_ib_aggregates_config_error: 守阵(issue 26-10-29-1252)——速度键写无前缀 iB/s 时 load_config 聚合成 ConfigError(消息含键名), 不许 KeyError 裸穿「统一 ConfigError」契约
 - test_normalize_period_aliases: period 别名归一化(day/1D/month/ND) / 非法值 ValueError
 - test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
 - test_parse_history_dat_bad_lines: 脏行计数 / 非法日期 / 重复日期取最后
@@ -497,6 +498,22 @@ def test_speed_curve_config_rejects_bad_points(tmp_path):
     for spec in cases:
         with pytest.raises(ConfigError):
             _load(tmp_path, spec)
+
+
+def test_speed_unit_prefixless_ib_aggregates_config_error(tmp_path):
+    """守阵(issue 26-10-29-1252): 速度键写无前缀 iB/s -> 聚合 ConfigError(消息含键名)
+
+    旧实现 parse_speed 正则允许 iB/s 但单位表无此键, KeyError 逃出校验层 _try(只接
+    ValueError)与 load_config「任何配置问题统一抛 ConfigError」契约, 用户只见裸 traceback。
+    """
+    d = _cfg_dict(None)
+    d["config"]["trackers"] = {"T1": {"domains": ["example.com"], "upload_speed_limit": "1iB/s"}}
+    p = tmp_path / "config.yml"
+    p.write_text(yaml.dump(d, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError) as ei:
+        load_config(str(p))
+    msg = str(ei.value)
+    assert "配置校验失败" in msg and "upload_speed_limit" in msg, msg
 
 
 # ---------- curves 纯函数 ----------

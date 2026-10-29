@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from datetime import time as dtime
 from functools import wraps
 from urllib.parse import urlparse
-from typing import List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -232,47 +232,105 @@ def convert_bool_in_dict(d):
     return d
 
 
+def _parse_quantity(
+    raw,
+    pattern: str,
+    units: dict,
+    *,
+    cast: Callable[[float], float],
+    empty_zero: bool,
+    err: str,
+    err_unit: Optional[str] = None,
+):
+    """数量解析骨架: 正则 -> 单位白名单兜底 -> 乘数(issue 26-10-29-1252 单点)
+
+    parse_time/parse_fsize/parse_speed 是「regex -> 单位表 -> 乘数」的三份同构副本(B 类分歧
+    重复), 单位白名单记在两处(正则字符类 + dict 键) —— 此前只有 fsize 在两表之间补了
+    `unit not in units` 兜底, speed 的正则比表宽一格: "1iB/s" 命中正则但不在表里,
+    units[unit] 直接下标抛 KeyError, 而 KeyError 不是 ValueError 子类, 逃出校验层 _try
+    (只接 ValueError)与 load_config「任何配置问题统一抛 ConfigError」的契约, 用户只见裸
+    traceback。骨架把白名单兜底收进必经路径, 「正则比单位表宽」这类同构副本演化分歧在结构上
+    不可能再以 KeyError 形态发生; 三个公有函数各自保留单位表 / 正则 / 报错文案 / 返回类型 /
+    空串语义(带 mode 参数合一的做法被 issue 否决: 返回类型与空串语义三份都不同, 参数化后每个
+    调用点都要记 mode 语义, 可读性净损)。
+
+    - empty_zero: 空串语义 —— True 空串返回 0(time/speed); False 空串落进正则不命中按 err
+      报错(fsize);
+    - err / err_unit: 正则不命中 / 单位不在表里的报错文案(fsize 与 speed 两条文案不同, 各自
+      传入; err_unit 缺省同 err —— time 的正则与单位表精确同宽, 白名单分支不可达);
+    - 白名单检查先于数值转换(fsize 旧序): speed 的 "1.5.5iB/s" 这类双重非法输入的报错文案
+      由 float 转换错变为单位白名单错, 异常类不变(仍 ValueError);
+    - 输入先 .upper() 再匹配, flags 恒 re.IGNORECASE: time 旧实现无 flag, 但大写化之后该
+      flag 无可观测差异。
+    """
+    if not raw and empty_zero:
+        return 0
+    m = re.match(pattern, str(raw).strip().upper(), re.IGNORECASE)
+    if not m:
+        raise ValueError(f"{err}: {raw}")
+    value, unit = m.groups()
+    if unit not in units:
+        raise ValueError(f"{err_unit or err}: {raw}")
+    return cast(float(value) * units[unit])
+
+
 def parse_time(time_str: str) -> float:
     """时间字符串(如 '3D', '12H', '10M') -> 秒; 空串返回0"""
-    if not time_str:
-        return 0
-    units = {"S": 1, "M": 60, "H": 3600, "D": 86400}
-    m = re.match(r"^([\d.]+)\s*([SMHD])$", str(time_str).strip().upper())
-    if not m:
-        raise ValueError(f"无效时间格式: {time_str}")
-    value, unit = m.groups()
-    return float(value) * units[unit]
+    return _parse_quantity(
+        time_str,
+        r"^([\d.]+)\s*([SMHD])$",
+        {
+            "S": 1,
+            "M": 60,
+            "H": 3600,
+            "D": 86400
+        },
+        cast=float,
+        empty_zero=True,
+        err="无效时间格式",
+    )
 
 
 def parse_fsize(fsize_str: str) -> int:
     """大小字符串(如 '10.5 GiB') -> 字节; 仅支持二进制单位: B, KiB, MiB, GiB, TiB, PiB"""
-    units = {
-        "B": 1,
-        "KIB": 1024,
-        "MIB": 1024**2,
-        "GIB": 1024**3,
-        "TIB": 1024**4,
-        "PIB": 1024**5,
-    }
-    m = re.match(r"^([\d.]+)\s*([KMGTP]?i?B)$", str(fsize_str).strip().upper(), re.IGNORECASE)
-    if not m:
-        raise ValueError(f"无效大小格式: {fsize_str}")
-    value, unit = m.groups()
-    if unit not in units:
-        raise ValueError(f"无效大小格式(需使用iB单位, 如 10MiB): {fsize_str}")
-    return int(float(value) * units[unit])
+    return _parse_quantity(
+        fsize_str,
+        r"^([\d.]+)\s*([KMGTP]?i?B)$",
+        {
+            "B": 1,
+            "KIB": 1024,
+            "MIB": 1024**2,
+            "GIB": 1024**3,
+            "TIB": 1024**4,
+            "PIB": 1024**5
+        },
+        cast=int,
+        empty_zero=False,
+        err="无效大小格式",
+        err_unit="无效大小格式(需使用iB单位, 如 10MiB)",
+    )
 
 
 def parse_speed(speed_str: str) -> int:
-    """速度字符串(如 '10MiB/s', '1000KiB/s') -> 字节/秒; 空串返回0"""
-    if not speed_str:
-        return 0
-    units = {"B/S": 1, "KIB/S": 1024, "MIB/S": 1024**2, "GIB/S": 1024**3}
-    m = re.match(r"^([\d.]+)\s*([KMG]?i?B/S)$", str(speed_str).strip().upper(), re.IGNORECASE)
-    if not m:
-        raise ValueError(f"无效速度格式: {speed_str}")
-    value, unit = m.groups()
-    return int(float(value) * units[unit])
+    """速度字符串(如 '10MiB/s', '1000KiB/s') -> 字节/秒; 空串返回0
+
+    单位白名单兜底在 _parse_quantity 单点(issue 26-10-29-1252): 无前缀 iB/s 与十进制前缀
+    KB/s, MB/s, GB/s 命中正则但不在单位表里, 一律 ValueError(旧实现 KeyError)。
+    """
+    return _parse_quantity(
+        speed_str,
+        r"^([\d.]+)\s*([KMG]?i?B/S)$",
+        {
+            "B/S": 1,
+            "KIB/S": 1024,
+            "MIB/S": 1024**2,
+            "GIB/S": 1024**3
+        },
+        cast=int,
+        empty_zero=True,
+        err="无效速度格式",
+        err_unit="无效速度格式(需使用iB单位, 如 10MiB/s)",
+    )
 
 
 def parse_hr_condition(cond_str) -> tuple:

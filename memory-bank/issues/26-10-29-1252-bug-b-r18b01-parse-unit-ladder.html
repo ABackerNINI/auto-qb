@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1252">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-29-1835-parse-unit-ladder.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback">
 <meta name="issue-summary" content="parse_speed 正则允许 &#x27;iB/S&#x27; 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛">
 <title>parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1252-bug-b-r18b01-parse-unit-ladder</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 12:52</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -207,11 +207,15 @@ def _try(parse_fn, value, where, errors):
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 12:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-29 18:04 — 认领（用户指派「认领并修复」），状态 <strong>In Progress</strong>；修法按建议方案 B（收敛 + 兜底一起治）</li>
+      <li>2026-10-29 18:35 — 修复完成，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见下方「修复后补充」；基线切片 26-10-29-1835-parse-unit-ladder）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-29 18:04 — 复验：<strong>仍复现</strong>（HEAD c1507039，单元级重跑锚点）：<code>parse_speed('1iB/s') -&gt; KeyError 'IB/S'</code>、<code>parse_speed('10KB/s') -&gt; KeyError 'KB/S'</code>（十进制前缀同一缺口）；对照侧 <code>parse_fsize('10KB') -&gt; ValueError(需使用iB单位…)</code>、<code>parse_fsize('1iB/s') -&gt; ValueError</code>、<code>parse_time('1iB') -&gt; ValueError</code>。定位锚点符号与行号逐一核对无漂移（parse_time 235 / parse_fsize 247 / parse_speed 266 / _try 137）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（2026-10-29 18:35，按建议方案 B）：抽私有骨架 <code>_parse_quantity(raw, pattern, units, *, cast, empty_zero, err, err_unit=None)</code>，三个公有函数各留薄包装并<strong>各自保留</strong>：单位表 / 正则 / 报错文案 / 返回类型（time→float、fsize/speed→int）/ 空串语义（time/speed 空串→0、fsize→ValueError）；白名单兜底 <code>if unit not in units: raise ValueError</code> 收进必经路径 —— 「正则比单位表宽」这类同构副本演化分歧在结构上不可能再以 KeyError 形态发生。与建议签名的两处偏差：①报错文案拆成 <code>err</code> / <code>err_unit</code> 两条 —— fsize 的「无效大小格式」与「无效大小格式(需使用iB单位, 如 10MiB)」语义不同，单 err 会把形状错与单位错合并、丢失 iB 提示（time 两者同文案，<code>err_unit</code> 缺省回退）；②<code>empty_default</code> 改布尔 <code>empty_zero</code>（空串语义只有「归零」与「报错」两态）。speed 白名单文案按建议取「无效速度格式(需使用iB单位, 如 10MiB/s)」；带 mode 参数合一的否决意见维持；白名单检查先于数值转换（fsize 旧序）—— speed 的 "1.5.5iB/s" 双重非法输入报错文案由 float 转换错变为单位白名单错，异常类不变。</p>
+    <p><strong>验证方式</strong>：红/绿双验 —— 修前 <code>test.one -- tests/test_utils.py -k parse_quantity</code> <strong>4 failed / 19 passed</strong>（红恰为 speed 白名单 4 例：旧实现 KeyError 对不上 ValueError），配置层守阵 <strong>1 failed</strong>（KeyError 裸穿 load_config，与本件证据 ② 同形态）；修后两文件 <strong>176 passed</strong> 全绿。全量 <code>commands run test.full</code>：4051 passed + 10 skipped、覆盖率门槛 99% 通过 —— 数字单点见基线切片 <a href="../testing/baselines/26-10-29-1835-parse-unit-ladder.md">26-10-29-1835-parse-unit-ladder</a>。既有失败：无（全量零失败）。</p>
+    <p><strong>守阵落点</strong>：表驱动矩阵三件（test_utils，断言异常<strong>类</strong>恰为 ValueError，KeyError 复现即红）+ 配置层一条（test_speed_curve，钉「任何配置问题统一抛 ConfigError」契约）；<code>_try</code> 未动（只接 ValueError 是设计选择，§05 已排除）。本轮未踩已记坑（pitfalls 无同款记录，grep 核过）。</p>
   </section>
 
   <footer>
