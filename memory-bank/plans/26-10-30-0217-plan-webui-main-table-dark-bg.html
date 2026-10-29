@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 主表暗主题背景重设计: 可交互模板选型</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-main-table-dark-bg">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-30-0217">
+<meta name="doc-updated" content="26-10-30-0332">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* ============ 可交互主表模板 (mock, 令牌取 ocean 实值) ============ */
+  .mock { margin: 14px 0 6px; padding: 16px; background: var(--m-bg, #0d1724); border: 1px solid var(--hair-soft); overflow-x: auto; }
+  .mock .tbl { min-width: 880px; display: flex; flex-direction: column; gap: var(--m-gap, 5px); }
+  .m-head, .m-row { display: grid; grid-template-columns: minmax(300px, 1.9fr) 96px 96px 92px 92px 88px 84px; align-items: center; }
+  .m-head { font-family: var(--mono); font-size: 11px; letter-spacing: .05em; color: #6e84a3; padding: 0 0 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .m-head .m-c { background: transparent !important; }
+  .m-row { cursor: pointer; transition: background-color .16s ease; }
+  .m-c { padding: 9px 12px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: #bccadd; }
+  .m-name { position: sticky; left: 0; z-index: 2; font-weight: 600; color: #e9eff7; align-self: stretch; display: flex; align-items: center; transition: background-color .16s ease; }
+  .m-num { text-align: right; font-family: var(--mono); font-size: 12.5px; }
+  .m-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+  .st-seed { color: #3fd699; } .st-seed .m-dot { background: #3fd699; }
+  .st-down { color: #4cc3f7; } .st-down .m-dot { background: #4cc3f7; }
+  .st-chk  { color: #f5bb42; } .st-chk .m-dot { background: #f5bb42; }
+  .st-pause{ color: #6e84a3; } .st-pause .m-dot { background: #6e84a3; }
+  .st-err  { color: #f3766f; } .st-err .m-dot { background: #f3766f; }
+  .m-prog { position: relative; height: 4px; background: rgba(255,255,255,.08); border-radius: 2px; margin-top: 5px; }
+  .m-prog i { position: absolute; inset: 0 auto 0 0; background: #3aa6a6; border-radius: 2px; }
+  .m-sub { color: #6e84a3; font-weight: 400; font-size: 12px; margin-left: 8px; }
+  .hint { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin: 2px 0 0; }
+  .recipe { font-family: var(--mono); font-size: 11.5px; color: var(--dim); background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 8px 12px; margin: 10px 0 2px; overflow-x: auto; white-space: nowrap; }
+  .tverdict { font-size: 13px; color: var(--dim); margin: 8px 0 0; }
+
+  /* 模板 0: 当前样式(对照) — 行卡 + 白7%描边 + 圆角, 行底 #112034 */
+  .mk-cur { --m-gap: 5px; }
+  .mk-cur .m-row { background: #112034; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; }
+  .mk-cur .m-row:hover { background: #1c3050; border-color: rgba(255,255,255,.14); }
+  .mk-cur .m-name { background: #112034; padding-left: 2px; }
+  .mk-cur .m-row:hover .m-name { background: #1c3050; }
+  .mk-cur .m-row.sel { background: rgba(58,166,166,.10), #112034; }
+
+  /* 模板 A: 平板发丝线 — 行透明落页底, 行间 1px 发丝线, 无卡无描边 */
+  .mk-a { --m-gap: 0px; }
+  .mk-a .m-row { background: transparent; border-bottom: 1px solid rgba(255,255,255,.06); border-radius: 0; }
+  .mk-a .m-row:hover { background: rgba(255,255,255,.12); }
+  .mk-a .m-name { background: #0d1724; padding-left: 8px; }
+  .mk-a .m-name::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: rgba(255,255,255,.5); opacity: 0; transition: opacity .12s ease, background-color .12s ease; }
+  .mk-a .m-row:hover .m-name { background: #2a333e; }
+  .mk-a .m-row:hover .m-name::before { opacity: .6; }
+  .mk-a .m-row.sel { background: rgba(58,166,166,.10); }
+  .mk-a .m-row.sel .m-name { background: #122531; }
+  .mk-a .m-row.sel .m-name::before { background: #3aa6a6; opacity: 1; }
+  .mk-a .m-head { border-bottom-color: rgba(255,255,255,.10); }
+
+  /* 模板 B: 斑马纹 — 偶数行白3% tint, 无描边; 吸左首格取不透明合成色
+     动效(D4 拍板+追记一~五): M4「从鼠标处向两侧扫」终版 — 「波即高亮」模型:
+     · 扫层 ::after 本身就是高亮终色(白9%实色), 以 --mx(JS mousemove 写入)为 transform-origin
+       做 scaleX 0→1 扩散(300ms), forwards 驻留 = 持续高亮 — 扫过之处直接是终值, 无二次渐入,
+       无跳变(追记四的 delay 渐入方案废弃: 波与底色两层各自淡入淡出, 中间有暗谷读成跳变);
+     · hover 不再改行/名称列底色(原 hover 规则删除), 高亮唯一来源是扫层 ⇒ zebra tint 在
+       hover 下保留, 同行内名称列与其它列拿到同一层 +9% overlay, 终态逐通道一致;
+     · 扫层 z-index:3 在吸左名称列(z-index:2)之上 — 从名称列进入也有波(追记三);
+       半透明覆盖不破坏名称列「不透明挡横滚」语义(那约束的是基础底色, 不禁上层叠加);
+     · 移出 = animation 撤除, scaleX(0) 瞬时消失(高亮立即退场)。 */
+  .mk-b { --m-gap: 0px; }
+  .mk-b .m-row { position: relative; background: transparent; border-radius: 0; }
+  .mk-b .m-row.zebra { background: rgba(255,255,255,.03); }
+  .mk-b .m-row::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+    background: rgba(255,255,255,.09);
+    transform: scaleX(0); transform-origin: var(--mx, 50%) 50%; }
+  .mk-b .m-row:hover::after { animation: mk-sweep .3s ease-out forwards; }
+  @keyframes mk-sweep { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  .mk-b .m-name { background: #0d1724; padding-left: 8px; }
+  .mk-b .m-row.zebra .m-name { background: #141e2b; }
+  /* M2(追记六 并入): 名称列左条滑入, 与模板 A 同语言 — hover=中性白条(白50%, 120ms 渐入),
+     选中=accent 实色条; 选中条实现从 box-shadow 换成 ::before 与 A 统一 */
+  .mk-b .m-name::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    background: rgba(255,255,255,.5); opacity: 0; transition: opacity .12s ease, background-color .12s ease; }
+  .mk-b .m-row:hover .m-name::before { opacity: .6; }
+  .mk-b .m-row.sel { background: rgba(58,166,166,.10); }
+  .mk-b .m-row.sel .m-name { background: #122531; }
+  .mk-b .m-row.sel .m-name::before { background: #3aa6a6; opacity: 1; }
+
+  /* 模板 C: 沉降卡 — 页底压深, 行底抬高提净, 去描边留圆角, 拉开明度对比 */
+  .mk-c { --m-gap: 6px; --m-bg: #091019; }
+  .mk-c .m-row { background: #182a42; border: 0; border-radius: 8px; }
+  .mk-c .m-row:hover { background: #22406a; }
+  .mk-c .m-name { background: #182a42; padding-left: 2px; }
+  .mk-c .m-row:hover .m-name { background: #22406a; }
+  .mk-c .m-row.sel { background: #1c394e; }
+  .mk-c .m-row.sel .m-name { background: #1c394e; box-shadow: inset 2px 0 0 #3aa6a6; }
+
+  /* 模板 D: 幽灵行 — 全透明无分隔, 悬停浮现底色, 选中走 accent 左条 */
+  .mk-d { --m-gap: 0px; }
+  .mk-d .m-row { background: transparent; border-radius: 0; }
+  .mk-d .m-row:hover { background: rgba(255,255,255,.08); }
+  .mk-d .m-name { background: #0d1724; padding-left: 2px; }
+  .mk-d .m-row:hover .m-name { background: #202a36; }
+  .mk-d .m-row.sel { background: rgba(58,166,166,.10); }
+  .mk-d .m-row.sel .m-name { background: #122531; box-shadow: inset 2px 0 0 #3aa6a6; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-main-table-dark-bg</div>
+<h1>WebUI 主表暗主题背景重设计: 可交互模板选型</h1>
+<p class="lede">重设计主列表(主表)暗主题下的行/列背景语言——提供 4 套可交互模板(§03)供选型，主轴是「把行底从与页底纠缠的中间调里解放出来：要么干净地落在页底上(平板)，要么明确地浮起来(卡片)」。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-30-0217 · <b>doc-updated</b> 26-10-30-0332 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话用户指令：「主表列背景色(暗主题)看着灰蒙蒙、界面很脏，需要重新设计；先设计几个简单的可交互 UI 模板供选择，模板写入计划文件」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>：用户反馈默认暗主题(ocean)下主表「灰蒙蒙、界面很脏」。根因不是某个颜色选错，而是背景<b>层次语言</b>模糊——行底、页底、悬停、芯片底全挤在同一段中间明度里，谁也不比谁干净。</p>
+<p><b>做到什么程度算成</b>：用户在 §03 的交互模板里选定一套；实施后主表暗主题肉眼不再有「蒙灰」感，且既有判据不回归（吸左首格计算底 == 行板计算底，见 <code>pitfalls/web-ui/frozen-column.md</code>）。</p>
+<p><b>设计底线 / 不变量</b>：</p>
+<ul>
+  <li>吸左首列(名称列)必须<b>不透明</b>且与行板同底——半透明挡不住横滚的兄弟列（<code>views.css:171</code> 注释既有口径）；半透明状态色一律「同色 linear-gradient 叠不透明基色」合成。</li>
+  <li>只动<b>暗主题</b>的背景令牌与行语言；亮主题(frost/golden)不动。</li>
+  <li>状态语义色(绿/蓝/黄/红/accent)与文字层级不重设计——本轮只收敛<b>背景面</b>。</li>
+  <li>表头/吸顶、抽屉表格面(<code>shared/dt_table.css</code>) 与主表共用令牌族，改令牌须全链核对，不允许主表干净了、抽屉仍蒙灰。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>主表当前是「行卡」语言：每行一张卡——不透明行底 + 1px 描边 + 圆角，行间 5px 间隙露页底。ocean 主题实测：</p>
+<ul>
+  <li>行卡三件套：<code>src/auto_qb/webui/static/prism/css/views.css:275</code>（<code>.group-row { background: var(--bg-row); border: 1px solid var(--border-soft); border-radius: var(--radius) }</code>）+ <code>views.css:149</code> 行距 <code>gap: 5px</code>。</li>
+  <li>吸左首格同底：<code>views.css:172</code>（<code>background: var(--bg-row)</code>）。</li>
+  <li>ocean 令牌（<code>themes/ocean.css:7-13</code>）：页底 <code>--bg: #0d1724</code> vs 行底 <code>--bg-row: #112034</code>——逐通道差仅 (4, 9, 16)/255，且色相向蓝偏移；悬停 <code>--bg-hover: #1c3050</code>、芯片底 <code>--surface-2: rgba(255,255,255,.06)</code>（ocean.css:80）、描边 <code>--border-soft: rgba(255,255,255,.07)</code>。</li>
+</ul>
+<p><b>「灰蒙蒙」的构成</b>：行底与页底明度几乎相同但色相略偏 → 每行读作页底上「没擦干净的一块」；再叠每行一圈白 7% 描边 + 圆角 + 5px 缝隙，形成低对比卡片墙；行内状态芯片/表头 hover 又是一层白 6% 中间调。整页没有任何一个面是「干净的页底」，全部被半层灰覆盖。</p>
+<p>下方是当前样式的可交互对照 mock（可悬停、点选行、横向滚动验证吸左首列）：</p>
+
+<div class="mock mk-cur">
+  <div class="tbl">
+    <div class="m-head"><div class="m-c">名称</div><div class="m-c">状态</div><div class="m-c">进度</div><div class="m-c" style="text-align:right">↓ 速度</div><div class="m-c" style="text-align:right">↑ 速度</div><div class="m-c" style="text-align:right">大小</div><div class="m-c" style="text-align:right">种/伴</div></div>
+    <div class="m-row"><div class="m-c m-name">Dune.Part.Two.2024.2160p.WEB-DL.H265<span class="m-sub">HDVision</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">12.4 MB/s</div><div class="m-c m-num">58.2 GB</div><div class="m-c m-num">86 / 3</div></div>
+    <div class="m-row"><div class="m-c m-name">三体.2023.S30.1080p.HDTV.H264<span class="m-sub">OurTV</span></div><div class="m-c st-down"><span class="m-dot"></span>下载</div><div class="m-c"><span class="m-num">62%</span><div class="m-prog"><i style="width:62%"></i></div></div><div class="m-c m-num">8.9 MB/s</div><div class="m-c m-num">1.1 MB/s</div><div class="m-c m-num">4.7 GB</div><div class="m-c m-num">142 / 51</div></div>
+    <div class="m-row"><div class="m-c m-name">漫长的季节.2023.S01.1080p.WEB-DL<span class="m-sub">FRDS</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">3.8 MB/s</div><div class="m-c m-num">31.5 GB</div><div class="m-c m-num">54 / 2</div></div>
+    <div class="m-row"><div class="m-c m-name">Oppenheimer.2023.2160p.UHD.BluRay.REMUX<span class="m-sub">CHDBits</span></div><div class="m-c st-chk"><span class="m-dot"></span>校验</div><div class="m-c"><span class="m-num">78%</span><div class="m-prog"><i style="width:78%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">82.6 GB</div><div class="m-c m-num">0 / 0</div></div>
+    <div class="m-row"><div class="m-c m-name">繁花.2023.E01-30.4K.WEB-DL<span class="m-sub">iLoveHD</span></div><div class="m-c st-err"><span class="m-dot"></span>错误</div><div class="m-c"><span class="m-num">45%</span><div class="m-prog"><i style="width:45%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">96.3 GB</div><div class="m-c m-num">0 / 0</div></div>
+  </div>
+</div>
+<p class="hint">交互：行可悬停 / 点选 / 容器可横向滚动（首列吸左）。以下四个模板同款交互。</p>
+
+<h2><span class="no">§03</span>方案：4 套可交互模板</h2>
+<p>四套模板共用同一组示例数据与语义色，只变<b>背景面语言</b>。每套下方给出令牌配方（实施即照抄）与取舍。</p>
+
+<h3>模板 A · 平板发丝线（推荐）</h3>
+<div class="mock mk-a">
+  <div class="tbl">
+    <div class="m-head"><div class="m-c">名称</div><div class="m-c">状态</div><div class="m-c">进度</div><div class="m-c" style="text-align:right">↓ 速度</div><div class="m-c" style="text-align:right">↑ 速度</div><div class="m-c" style="text-align:right">大小</div><div class="m-c" style="text-align:right">种/伴</div></div>
+    <div class="m-row"><div class="m-c m-name">Dune.Part.Two.2024.2160p.WEB-DL.H265<span class="m-sub">HDVision</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">12.4 MB/s</div><div class="m-c m-num">58.2 GB</div><div class="m-c m-num">86 / 3</div></div>
+    <div class="m-row"><div class="m-c m-name">三体.2023.S30.1080p.HDTV.H264<span class="m-sub">OurTV</span></div><div class="m-c st-down"><span class="m-dot"></span>下载</div><div class="m-c"><span class="m-num">62%</span><div class="m-prog"><i style="width:62%"></i></div></div><div class="m-c m-num">8.9 MB/s</div><div class="m-c m-num">1.1 MB/s</div><div class="m-c m-num">4.7 GB</div><div class="m-c m-num">142 / 51</div></div>
+    <div class="m-row"><div class="m-c m-name">漫长的季节.2023.S01.1080p.WEB-DL<span class="m-sub">FRDS</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">3.8 MB/s</div><div class="m-c m-num">31.5 GB</div><div class="m-c m-num">54 / 2</div></div>
+    <div class="m-row"><div class="m-c m-name">Oppenheimer.2023.2160p.UHD.BluRay.REMUX<span class="m-sub">CHDBits</span></div><div class="m-c st-chk"><span class="m-dot"></span>校验</div><div class="m-c"><span class="m-num">78%</span><div class="m-prog"><i style="width:78%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">82.6 GB</div><div class="m-c m-num">0 / 0</div></div>
+    <div class="m-row"><div class="m-c m-name">繁花.2023.E01-30.4K.WEB-DL<span class="m-sub">iLoveHD</span></div><div class="m-c st-err"><span class="m-dot"></span>错误</div><div class="m-c"><span class="m-num">45%</span><div class="m-prog"><i style="width:45%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">96.3 GB</div><div class="m-c m-num">0 / 0</div></div>
+  </div>
+</div>
+<div class="recipe">--bg-row: transparent(落页底) · 行分隔: 1px 白6%发丝线 · 动效 M1+M2: hover 白12% 渐入(名称列合成 #2a333e) + 名称列左条滑入(120ms; hover=中性白条, 选中=accent 实色条, 色相分家) · 选中: accent 10% + accent 左条 · 圆角/描边: 全去</div>
+<p class="tverdict">页面重新拥有大片干净底色，与抽屉表格面(<code>shared/dt_table.css</code> 行板=页底+发丝线)的既有语言<b>天然合流</b>；吸左首格直接取页底，合成规则最简。代价：行「卡片感」消失，与站点其它卡片区(统计卡等)的层级语言略微分家。</p>
+
+<h3>模板 B · 斑马纹</h3>
+<div class="mock mk-b">
+  <div class="tbl">
+    <div class="m-head"><div class="m-c">名称</div><div class="m-c">状态</div><div class="m-c">进度</div><div class="m-c" style="text-align:right">↓ 速度</div><div class="m-c" style="text-align:right">↑ 速度</div><div class="m-c" style="text-align:right">大小</div><div class="m-c" style="text-align:right">种/伴</div></div>
+    <div class="m-row"><div class="m-c m-name">Dune.Part.Two.2024.2160p.WEB-DL.H265<span class="m-sub">HDVision</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">12.4 MB/s</div><div class="m-c m-num">58.2 GB</div><div class="m-c m-num">86 / 3</div></div>
+    <div class="m-row zebra"><div class="m-c m-name">三体.2023.S30.1080p.HDTV.H264<span class="m-sub">OurTV</span></div><div class="m-c st-down"><span class="m-dot"></span>下载</div><div class="m-c"><span class="m-num">62%</span><div class="m-prog"><i style="width:62%"></i></div></div><div class="m-c m-num">8.9 MB/s</div><div class="m-c m-num">1.1 MB/s</div><div class="m-c m-num">4.7 GB</div><div class="m-c m-num">142 / 51</div></div>
+    <div class="m-row"><div class="m-c m-name">漫长的季节.2023.S01.1080p.WEB-DL<span class="m-sub">FRDS</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">3.8 MB/s</div><div class="m-c m-num">31.5 GB</div><div class="m-c m-num">54 / 2</div></div>
+    <div class="m-row zebra"><div class="m-c m-name">Oppenheimer.2023.2160p.UHD.BluRay.REMUX<span class="m-sub">CHDBits</span></div><div class="m-c st-chk"><span class="m-dot"></span>校验</div><div class="m-c"><span class="m-num">78%</span><div class="m-prog"><i style="width:78%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">82.6 GB</div><div class="m-c m-num">0 / 0</div></div>
+    <div class="m-row"><div class="m-c m-name">繁花.2023.E01-30.4K.WEB-DL<span class="m-sub">iLoveHD</span></div><div class="m-c st-err"><span class="m-dot"></span>错误</div><div class="m-c"><span class="m-num">45%</span><div class="m-prog"><i style="width:45%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">96.3 GB</div><div class="m-c m-num">0 / 0</div></div>
+  </div>
+</div>
+<div class="recipe">--bg-row: transparent / 偶数行 白3% tint · 动效 M4(终版「波即高亮」) + M2: 扫层=高亮终色白9%实色, 从鼠标进入点 scaleX 0→1 扩散 300ms 后原地驻留成持续高亮(扫过即终值, 无跳变; hover 不再改底色, zebra 保留; JS 写 --mx 定 origin, 扫层覆盖吸左名称列; 移出瞬时退场) + 名称列左条滑入(120ms, hover 白条/选中 accent 实色条) · 吸左首格: 按行奇偶取不透明合成色(#0d1724 / #141e2b) · 圆角/描边: 全去</div>
+<p class="tverdict">横向扫读宽表时行追踪性最好（本产品行多列多，优势真实存在）。代价：吸左首格必须按<b>行奇偶</b>做两套不透明合成（mock 里已按合成色写死，实施走 <code>:nth-child</code> 规则族），且行窗口化/筛选/展开明细插入行时奇偶归位要实测；是四套里实现面最大的一套。</p>
+
+<h3>模板 C · 沉降卡（保留卡片语言，拉对比）</h3>
+<div class="mock mk-c">
+  <div class="tbl">
+    <div class="m-head"><div class="m-c">名称</div><div class="m-c">状态</div><div class="m-c">进度</div><div class="m-c" style="text-align:right">↓ 速度</div><div class="m-c" style="text-align:right">↑ 速度</div><div class="m-c" style="text-align:right">大小</div><div class="m-c" style="text-align:right">种/伴</div></div>
+    <div class="m-row"><div class="m-c m-name">Dune.Part.Two.2024.2160p.WEB-DL.H265<span class="m-sub">HDVision</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">12.4 MB/s</div><div class="m-c m-num">58.2 GB</div><div class="m-c m-num">86 / 3</div></div>
+    <div class="m-row"><div class="m-c m-name">三体.2023.S30.1080p.HDTV.H264<span class="m-sub">OurTV</span></div><div class="m-c st-down"><span class="m-dot"></span>下载</div><div class="m-c"><span class="m-num">62%</span><div class="m-prog"><i style="width:62%"></i></div></div><div class="m-c m-num">8.9 MB/s</div><div class="m-c m-num">1.1 MB/s</div><div class="m-c m-num">4.7 GB</div><div class="m-c m-num">142 / 51</div></div>
+    <div class="m-row"><div class="m-c m-name">漫长的季节.2023.S01.1080p.WEB-DL<span class="m-sub">FRDS</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">3.8 MB/s</div><div class="m-c m-num">31.5 GB</div><div class="m-c m-num">54 / 2</div></div>
+    <div class="m-row"><div class="m-c m-name">Oppenheimer.2023.2160p.UHD.BluRay.REMUX<span class="m-sub">CHDBits</span></div><div class="m-c st-chk"><span class="m-dot"></span>校验</div><div class="m-c"><span class="m-num">78%</span><div class="m-prog"><i style="width:78%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">82.6 GB</div><div class="m-c m-num">0 / 0</div></div>
+    <div class="m-row"><div class="m-c m-name">繁花.2023.E01-30.4K.WEB-DL<span class="m-sub">iLoveHD</span></div><div class="m-c st-err"><span class="m-dot"></span>错误</div><div class="m-c"><span class="m-num">45%</span><div class="m-prog"><i style="width:45%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">96.3 GB</div><div class="m-c m-num">0 / 0</div></div>
+  </div>
+</div>
+<div class="recipe">--bg: #091019(压深) · --bg-row: #182a42(提净抬高) · 描边: 去 · 圆角: 留 · hover: #22406a · 行距 6px</div>
+<p class="tverdict">改动最小——仍是行卡，只是把「页底↔行底」明度差从 ~5/255 拉开一个数量级（实测 #091019 vs #182a42，逐通道 15/26/41）并去掉描边噪音，「灰蒙蒙」感主要来自描边+近色，拉对比后明显改善。代价：仍是全页铺中间调卡片，干净程度不如 A/D；暗房环境下深页底可能与窗口外黑边糊在一起。</p>
+
+<h3>模板 D · 幽灵行（极简悬停浮现）</h3>
+<div class="mock mk-d">
+  <div class="tbl">
+    <div class="m-head"><div class="m-c">名称</div><div class="m-c">状态</div><div class="m-c">进度</div><div class="m-c" style="text-align:right">↓ 速度</div><div class="m-c" style="text-align:right">↑ 速度</div><div class="m-c" style="text-align:right">大小</div><div class="m-c" style="text-align:right">种/伴</div></div>
+    <div class="m-row"><div class="m-c m-name">Dune.Part.Two.2024.2160p.WEB-DL.H265<span class="m-sub">HDVision</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">12.4 MB/s</div><div class="m-c m-num">58.2 GB</div><div class="m-c m-num">86 / 3</div></div>
+    <div class="m-row"><div class="m-c m-name">三体.2023.S30.1080p.HDTV.H264<span class="m-sub">OurTV</span></div><div class="m-c st-down"><span class="m-dot"></span>下载</div><div class="m-c"><span class="m-num">62%</span><div class="m-prog"><i style="width:62%"></i></div></div><div class="m-c m-num">8.9 MB/s</div><div class="m-c m-num">1.1 MB/s</div><div class="m-c m-num">4.7 GB</div><div class="m-c m-num">142 / 51</div></div>
+    <div class="m-row"><div class="m-c m-name">漫长的季节.2023.S01.1080p.WEB-DL<span class="m-sub">FRDS</span></div><div class="m-c st-seed"><span class="m-dot"></span>做种</div><div class="m-c"><span class="m-num">100%</span><div class="m-prog"><i style="width:100%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">3.8 MB/s</div><div class="m-c m-num">31.5 GB</div><div class="m-c m-num">54 / 2</div></div>
+    <div class="m-row"><div class="m-c m-name">Oppenheimer.2023.2160p.UHD.BluRay.REMUX<span class="m-sub">CHDBits</span></div><div class="m-c st-chk"><span class="m-dot"></span>校验</div><div class="m-c"><span class="m-num">78%</span><div class="m-prog"><i style="width:78%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">82.6 GB</div><div class="m-c m-num">0 / 0</div></div>
+    <div class="m-row"><div class="m-c m-name">繁花.2023.E01-30.4K.WEB-DL<span class="m-sub">iLoveHD</span></div><div class="m-c st-err"><span class="m-dot"></span>错误</div><div class="m-c"><span class="m-num">45%</span><div class="m-prog"><i style="width:45%"></i></div></div><div class="m-c m-num">—</div><div class="m-c m-num">—</div><div class="m-c m-num">96.3 GB</div><div class="m-c m-num">0 / 0</div></div>
+  </div>
+</div>
+<div class="recipe">--bg-row: transparent · 分隔: 无 · hover: 白8%浮现(名称列合成 #202a36) · 选中: accent 10% + 左条 2px · 圆角/描边: 全去</div>
+<p class="tverdict">四套里最「干净」，静息态整页只有文字与语义色。代价：无任何分隔线索，多 chip 撑高的行与展开明细的归属感弱，宽表横扫时易串行；适合行数少、行高一致的场景，与本产品「长表 + 明细展开」的使用形态有张力。</p>
+
+<p class="aside">推荐序：<b>A &gt; B &gt; C &gt; D</b>。A 与抽屉表格面既有语言合流、实现面最小；B 的行追踪好但实现面最大；C 是保守微调；D 风格激进但不贴合长表明细场景。</p>
+
+<h3>悬停动效候选（文字方案 · 拍板 D4）</h3>
+<p>背景换色后 hover 仍不够明显的补救走<b>动效</b>。候选全部是纯 CSS、零 JS、不碰布局的「简单动效」，可单选也可组合（组合默认以 M1 为底）：</p>
+<table>
+  <tr><th>编号</th><th>动效</th><th>观感</th><th>实现面</th><th>备注</th></tr>
+  <tr><td><b>M1 · 提亮渐入</b>（推荐底座）</td><td>hover 底色 160ms 渐入（现有 transition 保留），终值再提一档：白 8% → 白 12~14%</td><td>行「浮亮」，最克制</td><td>最小：改一个令牌值</td><td>不动位移不动物体；名称列合成色随之重算一档</td></tr>
+  <tr><td><b>M2 · 名称列左条滑入</b></td><td>名称列左缘 2px accent 竖条，hover 时 120ms 渐入（透明→半亮），移出淡出</td><td>指向性最强——视线锚点在行首，一眼定位悬停行</td><td>小：名称列 ::before 伪元素 + opacity 过渡</td><td>与选中态左条同语言（选中=常驻实色，hover=半亮），层次自然</td></tr>
+  <tr><td><b>M3 · 行微抬</b></td><td>hover 时整行 translateY(-1px)（120ms）</td><td>「卡片被拿起」的物理感</td><td>最小：一行 transform</td><td>现行主表已有此动效（<code>views.css:277</code> .group-row:hover），本方案=保留现状；A/B/D 无卡语言下「抬」的语义弱化，更适合 C</td></tr>
+  <tr><td><b>M4 · 高亮扫入</b></td><td>hover 瞬间一层高亮从左向右扫过行面（~200ms，一次性）</td><td>动感最强，扫过方向=阅读方向</td><td>中：伪元素 translateX 动画；与吸左首格合成规则叠加需单独验证</td><td>高频扫表时可能显闹；与 B 的斑马叠加最需验证</td></tr>
+  <tr><td><b>M5 · 名称文字点亮</b></td><td>hover 时名称文字色提亮一档（--fg → 纯白）；caret 变 accent 现行已有</td><td>文字级微反馈，最安静</td><td>最小：一条 color 规则</td><td>单独用不够明显，只作组合佐料</td></tr>
+</table>
+<p><b>推荐组合</b>：<b>M1 + M2</b>——亮度解决「面」的可见性，左条解决「位置」的可见性，都是低动效里最稳的一档；若 D1 选 C 可再加 M3。M4 动感强但与吸左列/斑马的叠加验证成本高，不默认推荐。</p>
+
+<h3>实施定稿：A 与 B 双实施、可切换（grilling 后拍板，2026-10-30）</h3>
+<p>经 grilling 确认（结论全录 §06）：**不二选一，A/B 都实施、用户可切换**；范围三皮肤暗主题全量；默认 A；未来可能推进到抽屉内/设置中各表格面 ⇒ **按移植设计**。架构如下：</p>
+<ul>
+  <li><b>引擎 <code>shared/rowlang.js</code></b>（新，仿 <code>prism/js/theme.js</code> 模式）：head 同步执行（首帧前定 <code>html[data-rowlang]</code>，无 FOUC）；持久化 <code>localStorage["autoqb.ui.rowlang"]</code>（隐私模式回退会话内生效）；值域 <code>flat</code>(A) / <code>wave</code>(B)，缺省 <code>flat</code>；切换派发 <code>autoqb:rowlangchange</code> 事件；document 级事件委托绑定 <code>.rowlang-item</code>（菜单未渲染时空操作）。三皮肤 index.html 各挂一行 script。</li>
+  <li><b>菜单</b>：<code>shared/tpl/topbar.html</code> 的 <code>#theme-menu</code> 内加「主表行语言」分组（两个 <code>.rowlang-item</code>：平板发丝线 / 波纹扩散）——顶栏模板三皮肤共用，<b>一处改动全量生效</b>（已核实 atlas/console 均加载该模板；主题引擎虽是 prism 专属，行语言引擎是 shared，不依赖主题引擎）。prism 亮主题（frost/golden）下该分组用 CSS 隐藏。</li>
+  <li><b>规则单点 <code>shared/row_lang.css</code></b>（新，三皮肤共用，加载序在皮肤 views.css 之后）：全部规则键在 <code>html[data-rowlang=…] + .rl-scope</code> 上——<b>作用域类</b> <code>.rl-scope</code> 首版只挂在主表容器 <code>.torrents-dock</code>（groups.html 模板加一个 class）。抽屉各面/设置面不挂类 = 零变化，满足「不更改列表其它元素」。</li>
+  <li><b>移植契约</b>（核心要求）：未来任何表格面采用行语言 = <b>容器挂 <code>.rl-scope</code> 一个 class</b>，结构规则/JS/菜单零改动；tint 全部走「令牌带白 alpha 回退」（如 <code>var(--rl-hover-tint, rgba(255,255,255,.12))</code>、<code>--rl-wave-tint</code>(.09)、<code>--rl-zebra-tint</code>(.03)、<code>--rl-bar</code>）——暗主题现在零令牌工作，未来亮主题或个别面微调时只需覆写令牌值，不改结构规则。</li>
+  <li><b>亮主题排除</b>：行语言选择器前缀 <code>:not([data-theme="frost"]):not([data-theme="golden"])</code> 单点写在 row_lang.css（atlas/console 无 data-theme 不受影响）；未来亮主题采用时删前缀+补令牌即可。</li>
+  <li><b>两套语言定稿</b>：A(flat) = 行透明落页底 + 1px 发丝线分行 + hover 白12% 渐入 + 名称列左条；B(wave) = 斑马纹(白3%) + 「波即高亮」扩散波(白9% 实色 scaleX 驻留, JS 写 --mx) + 名称列左条。两套共用：名称列左条语言（hover 白条 120ms/选中 accent 实色条）、选中 accent 10%+左条、搜索命中/错误/校验/展开状态按既有合成口径重锚到新行底。名称列 padding-left 2→8px 让位（拍板 Q4a）。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤（按 §03 实施定稿细化）</h2>
+<ol>
+  <li><b>引擎与菜单</b>：新建 <code>shared/rowlang.js</code>（head 同步、localStorage、data-rowlang、委托绑定，见 §03）；<code>shared/tpl/topbar.html</code> 加「主表行语言」分组；三皮肤 <code>index.html</code> head 各挂一行 script。验收：切换即时生效、刷新后保持、隐私模式不报错、首帧无闪变。</li>
+  <li><b>规则单点</b>：新建 <code>shared/row_lang.css</code>（三皮肤 views.css 之后加载）；flat/wave 两组结构规则键在 <code>html[data-rowlang=…]:not(亮主题) + .rl-scope</code>；tint 走「令牌带回退」；<code>groups.html</code> 给 <code>.torrents-dock</code> 挂 <code>rl-scope</code>。验收：grep 无皮肤路径内的新行语言规则（单点不破）。</li>
+  <li><b>行语言规则体</b>：行底/分隔/描边圆角、flat hover 白12% 渐入、wave 斑马+「波即高亮」扫层（--mx origin + mousemove 委托监听也放 rowlang.js）、名称列左条（hover 白条/选中 accent 实色条）+ padding-left 2→8px、行缝 flat 归零/wave 归零、<code>.is-hscrolled</code> 发丝线保留。验收：§03 两个 mock 的观感在真页复现。</li>
+  <li><b>状态底重锚</b>：expanded/selected/partial/search-hit/err/bad/is-chk/is-pending 各状态行与吸左首格的合成基色从 <code>--bg-row</code> 换成新承光底（flat=页底；wave=页底+zebra 奇偶两套）。验收：每一状态首格计算底 == 行板计算底（逐通道差 &lt; 可辨阈 20，判据见 <code>pitfalls/web-ui/frozen-column.md</code>）。</li>
+  <li><b>不改面清单核对</b>（范围守卫，对应 §06 Q5）：抽屉 04-11 各面、表头/吸顶、列宽列序、排序筛选、状态芯片、行高密度、字号字色、亮主题 frost/golden——逐一截图/样式对比确认零变化；<code>shared/dt_table.css</code> 级联序不受影响。验收：抽屉四面无新异色带，亮主题页面 diff 为空。</li>
+  <li><b>回归与基线</b>：<code>commands run test.full</code> + 新基线切片；涉及皮肤 CSS 断言的守卫测试（如 <code>test_frontend_hr_detail_table_wiring</code>）核对/更新。验收：全量通过、基线数字入 <code>kb.baseline</code>。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>全部拍板完成（2026-10-30，grilling 轮），结论已迁 §06。</b>原清单存档：</p>
+<table>
+  <tr><th>编号</th><th>决策</th><th>结论</th></tr>
+  <tr><td>D1</td><td>模板选型</td><td><b>A 与 B 双实施、可切换</b>（C/D 出局）；默认 A（Q3）</td></tr>
+  <tr><td>D2</td><td>选中态语言</td><td>accent 10% 柔底 + 名称列左条；左条颜色分家（hover 白条/选中 accent 实色条，R4）</td></tr>
+  <tr><td>D3</td><td>应用范围</td><td>三皮肤暗主题全量一次到位（grilling Q1b）；亮主题不提供开关</td></tr>
+  <tr><td>D4</td><td>悬停动效</td><td>A = M1+M2；B = M4「波即高亮」扩散 + M2（R3-R9 六轮迭代定稿）</td></tr>
+  <tr><td>D5</td><td>切换载体</td><td>主题菜单加分组 + localStorage + head 同步引擎（grilling Q2a）</td></tr>
+  <tr><td>D6</td><td>移植设计</td><td>shared 单点规则 + .rl-scope 作用域类 + tint 令牌带回退（grilling 移植性要求）</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p><b>D4(部分) · 26-10-30</b>：悬停动效分模板实施比对——<b>A = M1+M2</b>（提亮渐入白12% + 名称列左条滑入），<b>B = M4</b>（高亮左→右扫入）；C/D 维持纯色 hover。D1 背景模板、D2、D3 及 D4 最终统一口径仍未拍板。<br>
+<b>D4 追记 · 26-10-30</b>：用户目验 hover 左条与选中左条色相太相似 ⇒ 左条颜色分家——hover=中性白条（白 50%，120ms 渐入），选中=accent 实色条；accent 语义从此只属于选中态。<br>
+<b>D4 追记二 · 26-10-30</b>：B 的 M4 由「左→右扫过」改为「**从鼠标进入点向两侧扩散**」——扫层铺满整行，JS mousemove 把鼠标 x 写入 `--mx` 作 transform-origin，scaleX 0→1 扩散 280ms 后渐隐（一次性波，不留残留）。<br>
+<b>D4 追记三 · 26-10-30</b>：用户目验「名称列无动效」⇒ 扫层 z-index 1→3，抬到吸左名称列(z-index 2)之上——从名称列进入也有波；半透明瞬时覆盖不破坏名称列「不透明挡横滚」语义。<br>
+<b>D4 追记四 · 26-10-30</b>：用户拍板 B 的时序——进入瞬间行**不高亮**（保持静息底），波扫过后（延迟 240ms）持续高亮白 9% 才渐入；`transition-delay` 只写在 hover 侧，移出时归零、高亮立即退场。名称列 hover 底同步同延迟。<br>
+<b>D4 追记五（终版）· 26-10-30</b>：用户目验追记四的时序「动效不连续，扫完有跳变」⇒ 改「**波即高亮**」模型：扫层本身就是高亮终色（白 9% 实色），scaleX 扩散后 forwards 驻留成持续高亮——扫过之处直接是终值，无二次渐入；hover 改底色的规则整体删除（zebra tint 在 hover 下保留，名称列与其它列拿同一层 overlay，终态一致）。追记四的 delay 渐入方案废弃。<br>
+<b>D4 追记六 · 26-10-30</b>：M2（名称列左条滑入）并入模板 B——与 A 同语言（hover 中性白条 / 选中 accent 实色条），B 的选中条从 box-shadow 换成 ::before 统一实现；名称列 padding-left 2→8px 让位左条。</p>
+
+<h3>Grilling 终局拍板（2026-10-30）</h3>
+<p>用户指令「拟定实施模板 A 与 B，可切换，注意不要更改列表的其它元素」，经 grilling 六问收敛：</p>
+<table>
+  <tr><th>编号</th><th>结论</th><th>依据</th></tr>
+  <tr><td>D1</td><td><b>A 与 B 双实施、用户可切换，默认 A(flat)</b>；C/D 出局</td><td>Q1 前置 + Q3 用户答「A」</td></tr>
+  <tr><td>D3</td><td>三皮肤暗主题<b>全量一次到位</b>（不分期）；亮主题 frost/golden 不提供开关、保持现状</td><td>Q1 用户答「b」</td></tr>
+  <tr><td>D5</td><td>切换载体 = 主题菜单加「主表行语言」分组 + <code>localStorage["autoqb.ui.rowlang"]</code> + head 同步引擎（<code>shared/rowlang.js</code>）</td><td>Q2 按推荐 a</td></tr>
+  <tr><td>Q4</td><td>名称列文字右移 ~6px（padding-left 2→8px）让位左条，属行语言本体</td><td>Q4 按推荐 a</td></tr>
+  <tr><td>Q5</td><td>边界清单确认（§04-5 允许/禁止两级），作为范围守卫执行</td><td>Q5 按推荐</td></tr>
+  <tr><td>Q6</td><td>展开明细区下沉底（<code>--bg-sunken</code>）保持现状不动</td><td>Q6 按推荐</td></tr>
+  <tr><td>D6</td><td><b>移植性硬要求</b>：后续可能推进到抽屉内/设置中各表格面 ⇒ shared 单点规则 + <code>.rl-scope</code> 作用域类 + tint 令牌带回退，新面采用成本 = 挂一个 class</td><td>用户追加要求（架构见 §03 实施定稿）</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<ul>
+  <li><b>吸左首格异色回归</b>：触发条件——改了行底但首格合成基色没跟着换。对策：沿用 §04-4 的逐通道判据 + <code>pitfalls/web-ui/frozen-column.md</code> 检查单。</li>
+  <li><b>B 模板奇偶错位</b>：触发条件——筛选/展开/窗口化导致 <code>:nth-child</code> 与视觉行序不一致。对策：奇偶 class 由渲染层按数据行序写入而非依赖 DOM 序；实施前先做一版小样验证。</li>
+  <li><b>亮主题误伤</b>：触发条件——把暗主题配方写进了共用层。对策：所有新值只进各主题令牌文件；共用层只允许结构性规则（描边/圆角/分隔的开关需要亮暗同态时，亮主题的 frost/golden 单独声明回退）。</li>
+  <li><b>抽屉面观感不同步</b>：触发条件——主表换语言后 <code>shared/dt_table.css</code> 族底仍是旧语义。对策：§04-5 全链核对 + 截图目验四个抽屉面。</li>
+  <li><b>级联序失守（新）</b>：触发条件——<code>shared/row_lang.css</code> 的规则输给皮肤 views.css 的行规则（特异性或加载序），行语言静默失效或半生效。对策：加载序钉死在皮肤 views.css 之后；行语言规则键 <code>html[data-rowlang]</code> 提高特异性；实施后用计算样式断言（首格底==行板底）自证。</li>
+  <li><b>作用域类漏挂/多挂（新）</b>：触发条件——<code>.rl-scope</code> 漏挂（行语言不生效）或误挂到抽屉面（违反「不更改其它元素」）。对策：首版只在 groups.html 的 <code>.torrents-dock</code> 挂；核对清单里加「grep rl-scope 全仓应只有主表容器一处」。</li>
+  <li><b>亮主题排除遗漏（新）</b>：触发条件——<code>:not(frost/golden)</code> 前缀写漏一条规则，亮主题出现白 tint 高亮。对策：前缀收敛为 row_lang.css 内的单一选择器组（@layer 或 SCPP 变量不可用则用重复前缀+守卫注释）；§04-5 亮主题 diff 为空验收。</li>
+  <li><b>首帧闪变（新）</b>：触发条件——rowlang.js 非同步加载或晚于首帧执行，默认 flat 与用户所选 wave 之间闪一次。对策：仿 theme.js 在 head 同步执行；三皮肤 index.html 挂载点核对。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-30-0217</span> 初版：用户报主表暗主题「灰蒙蒙/脏」，现状取证（views.css:171/275、ocean.css:7-13）后出 4 套可交互模板（对照 + A 平板 / B 斑马 / C 沉降卡 / D 幽灵行），待拍板 D1-D3。</li>
+  <li><span class="tag">R1 · 26-10-30-0228</span> 按用户目验反馈改四模板 hover: 全部提到白8-9%(名称列不透明合成色重算, 与行板逐通道对齐); B 的 hover 与斑马 tint 拉开三倍档差; C 页底/行底对比拉大一个数量级(#091019/#182a42, hover #22406a); 选中态名称列合成色同步 #122531</li>
+  <li><span class="tag">R2 · 26-10-30-0238</span> 用户反馈 hover 仍不够明显, §03 新增悬停动效文字方案候选表 M1-M5(纯CSS零JS不碰布局) + 推荐组合 M1+M2, §05 增拍板项 D4; 动效实现待拍板后进模板</li>
+  <li><span class="tag">R3 · 26-10-30-0246</span> D4 部分拍板并实施进模板: A=M1+M2(hover 白12%渐入, 名称列 accent 左条 ::before 滑入 120ms, hover 半亮/选中实色, 名称列 padding-left 2→8px 让位左条), B=M4(行 ::after 高亮扫层左→右 240ms 一次性, z-index 1 落吸左名称列之下, 与白9%底色 hover 并存); §06 回填拍板记录</li>
+  <li><span class="tag">R4 · 26-10-30-0256</span> 用户目验 hover 左条与选中左条色相太相似 ⇒ 左条颜色分家: hover=中性白条(白50%), 选中=accent 实色条; A 模板 ::before 过渡加 background-color 分量, 配方行与 §06 D4 追记同步</li>
+  <li><span class="tag">R5 · 26-10-30-0258</span> B 的 M4 由左→右扫过改为从鼠标进入点向两侧扩散: 扫层铺满整行(inset:0), JS mousemove 写 --mx 作 transform-origin, scaleX 0→1 扩散 280ms 后渐隐(一次性波); mock 脚本加 mousemove 处理器, 配方行与 §06 D4 追记二同步</li>
+  <li><span class="tag">R6 · 26-10-30-0301</span> 用户目验 B 扩散波不覆盖名称列(扫层 z-index 1 在吸左名称列 2 之下, 从名称列进入无波) ⇒ 扫层抬 z-index 3 到名称列之上; 半透明瞬时覆盖不破坏名称列不透明挡横滚语义; 配方行与 §06 D4 追记三同步</li>
+  <li><span class="tag">R7 · 26-10-30-0304</span> 用户拍板 B 的 M4 时序: 进入瞬间行不高亮(保持静息底), 波扫过后(transition-delay 240ms 只写在 hover 侧)持续高亮白9%才渐入, 移出 delay 归零高亮立即退场; 名称列 hover 底同步同延迟; 配方行与 §06 D4 追记四同步</li>
+  <li><span class="tag">R8 · 26-10-30-0309</span> 用户目验追记四时序不连续(波与底色两层各自淡入淡出, 中间暗谷读成跳变) ⇒ B 的 M4 改终版「波即高亮」: 扫层=高亮终色白9%实色, scaleX 0→1 扩散 300ms forwards 驻留成持续高亮, 扫过即终值无二次渐入; hover 改底色规则整体删除(zebra 保留, 名称列与其它列同一层 overlay 终态一致)</li>
+  <li><span class="tag">R9 · 26-10-30-0311</span> M2 并入模板 B(追记六): 名称列左条滑入与 A 同语言(hover 中性白条 120ms/选中 accent 实色条), B 选中条从 box-shadow 换成 ::before 统一, 名称列 padding-left 2→8px 让位; A 与 B 现同为 M1/M4+M2 组合</li>
+  <li><span class="tag">R10 · 26-10-30-0332</span> grilling 六问收敛并回填: D1=A/B 双实施可切换默认A, D3=三皮肤暗主题全量(Q1b), D5=主题菜单分组+localStorage+head同步引擎, D6=移植性硬要求(shared/row_lang.css 单点 + .rl-scope 作用域类 + tint 令牌带回退, 新面采用=挂一个class); §03 增实施定稿段, §04 重写为六步, §05 全拍板归档, §07 增级联/作用域/亮主题排除/FOUC 四风险</li>
+</ul>
+
+</div>
+<script>
+  document.querySelectorAll('.mock .tbl').forEach(function(tbl){
+    tbl.querySelectorAll('.m-row').forEach(function(row){
+      row.addEventListener('click', function(){
+        tbl.querySelectorAll('.m-row.sel').forEach(function(x){ x.classList.remove('sel'); });
+        row.classList.add('sel');
+      });
+    });
+    tbl.querySelectorAll('.mk-b .m-row').forEach(function(row){
+      row.addEventListener('mousemove', function(e){
+        var r = row.getBoundingClientRect();
+        row.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100).toFixed(2) + '%');
+      });
+    });
+  });
+</script>
+</body>
+</html>
