@@ -93,6 +93,9 @@ function hrsHistIsBad(r) {
  * 故 HR 表自成一张同形注册表, 加一张 HR 表 = 在此加一行 + 模板里挂调用点。
  *
  * columns: 列定义(key/label/num 与既有表头逐字一致 —— P5 硬验收是 DOM 逐字节等价)。
+ *   hrDetail 十列全带 sortable: true —— 判据 = HRS_SORT_VAL 十键全有访问器(真能排的才标);
+ *   漏标 = thead 行为侧 headActivate 按 col.sortable 早退, 该列静默失去排序(issue 26-10-29-1348:
+ *   曾十列全漏, 表壳却按「可排序」画箭头/挂可点类, 视觉与行为各取一半)。
  * features: 只声明差异 —— hrDetail 有 sort(排序仍走 HR 自己的 hrsSetSort 三态, D3=B: 只借壳);
  *   hrWave / hrKv 无排序无调宽(纯展示; 波次表行数 ≤4, 计划 26-10-02-1936 §3.4)。
  * header: false = 该表无列头(kv 表是两列固定 k/v 列表, 行模型 hrsKvRows 驱动, 只登记形状)。
@@ -102,16 +105,16 @@ const HR_TABLE_DEFS = {
   hrDetail: {
     label: "HR 明细表", features: { sort: true },
     columns: [
-      { key: "lane", label: "档位" },
-      { key: "name", label: "名称" },
-      { key: "tid", label: "tid" },
-      { key: "uploaded_bytes", label: "上传量", num: true },
-      { key: "downloaded_bytes", label: "下载量", num: true },
-      { key: "ratio", label: "分享率", num: true },
-      { key: "need_seed_seconds", label: "还需做种", num: true },
-      { key: "done_iso", label: "完成时间" },
-      { key: "verified_ts", label: "核实结论" },
-      { key: "last_seen", label: "在列" },
+      { key: "lane", label: "档位", sortable: true },
+      { key: "name", label: "名称", sortable: true },
+      { key: "tid", label: "tid", sortable: true },
+      { key: "uploaded_bytes", label: "上传量", num: true, sortable: true },
+      { key: "downloaded_bytes", label: "下载量", num: true, sortable: true },
+      { key: "ratio", label: "分享率", num: true, sortable: true },
+      { key: "need_seed_seconds", label: "还需做种", num: true, sortable: true },
+      { key: "done_iso", label: "完成时间", sortable: true },
+      { key: "verified_ts", label: "核实结论", sortable: true },
+      { key: "last_seen", label: "在列", sortable: true },
     ],
   },
   hrWave: {

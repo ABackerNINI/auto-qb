@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1348">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0025-hr-thead-sort-gate.md, memory-bank/pitfalls/web-ui/sortable-gate-source-split.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头">
 <meta name="issue-summary" content="设置页 HR 详情表列头点击/键盘均不触发排序(col.sortable 恒空 ⇒ headActivate 早退), 表头却恒显箭头">
 <title>HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头</h1>
     <p class="lede">设置页 HR 详情表列头点击/键盘均不触发排序(col.sortable 恒空 ⇒ headActivate 早退), 表头却恒显箭头</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1348-bug-b-r23b10-aqtable-hr-sort-dead</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:48</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -224,11 +224,14 @@ hrsCols() { return HR_TABLE_DEFS.hrDetail.columns; }   // 原样返回, 不做�
     <ul>
       <li>来源: <code>重复代码审查报告 §29 R23-B-10</code>（B 类复核 2026-10-29）—— 原记「thead 每列有箭头 / grid 仅当前列有, 用户可见差异且无注释」; 复核时沿 <code>col.sortable</code> 补查列定义后升级为缺陷。</li>
       <li>2026-10-29 13:48 — 入池，状态 <strong>Open</strong>（计划外，未修，未认领）</li>
+      <li>2026-10-29 22:36 — 用户指派认领，状态 <strong>Open → In Progress</strong>；复验仍复现（见上），按建议修法①（最小面）开工。</li>
+      <li>2026-10-30 00:24 — 修复完成，状态 <strong>In Progress → Done</strong>。实际修法 = 建议修法①：列定义十列补 <code>sortable: true</code>（HRS_SORT_VAL 十键全有访问器，全标即真实能力）+ thead 判据同源 <code>col.sortable</code>（硬编码 sortable 类与恒渲染箭头退役）；守阵同轮改版并红验两轮；全量与真浏览器等价性见「修复后补充」，数字见基线切片 26-10-30-0025。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验</strong>: 2026-10-29 22:36 仍复现（HEAD 1821a1e7 逐锚实读）—— ①xtpl.html thead 分支仍硬编码 <code>class="sortable"</code> 且箭头无 <code>v-if</code> 门控；②shared/table.js <code>headActivate</code> 首行 <code>if (!col.sortable) return;</code>；③HR_TABLE_DEFS.hrDetail 十列零 <code>sortable</code>；④对照 <code>HRS_SORT_VAL</code> 十键全有访问器 —— 十列全具真实排序能力，建议修法①（最小面）可行。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（按建议修法① 最小面执行，无改道）：</b>① <code>hr_status.js</code> — <code>HR_TABLE_DEFS.hrDetail</code> 十列全补 <code>sortable: true</code>；「别把全部 10 列一刀切」的前置核验已做：<code>HRS_SORT_VAL</code> 访问器恰好覆盖全部十列 key（<code>hrsCompareRows</code> 十键全真能排），全标即真实能力而非一刀切。② <code>xtpl.html</code> thead 分支 — 硬编码 <code>class="sortable"</code> 改 <code>:class="{ sortable: col.sortable, num: col.num }"</code>、箭头位补 <code>v-if="col.sortable"</code>（十列全 sortable ⇒ 可见渲染与修前一致，仅 tabindex/aria-sort 按修复意图变化）；<code>shared/table.js</code> 的 <code>headActivate</code> 门控保留（不采纳「摘门控」方向）。</p>
+    <p><b>验证方式：</b>① 静态守阵同轮改版 + 扩断言（thead 判据同源两条 + 十列 sortable 计数 + HRS_SORT_VAL 访问器对账），红验两轮（markup 回潮突变 → 2 failed 恰落新断言；列定义摘标记突变 → 1 failed 红在计数断言）；② <code>test.full</code> 全量绿，数字见 <code>commands run kb.baseline</code> 最新切片（26-10-30-0025）；③ e2e fast 228 passed（双皮肤渲染健康无运行时错误）；④ 真浏览器等价性（atlas + dev.harness 桩，站点明细端点在页面内以 fetch 桩现灌 5 行合成数据，其余走真链路）：点同列三次 = 降序（空值恒末位）/ 升序（空值仍末位）/ 后端默认序，aria-sort 与箭头逐态同步，键盘 focus+Enter 可触发（修前列头连焦点都进不去）。教训入坑档 <code>pitfalls/web-ui/sortable-gate-source-split.md</code>。</p>
   </section>
 
   <footer>

@@ -207,13 +207,16 @@
          (#app innerHTML), 浏览器只认表格内容模型 —— 自定义元素直接放 <thead> 里会被 foster-parent
          移出表格, 故借 <tr> 占位并用 `vue:` 前缀让编译器把它当组件(Vue 内建的口径)。
          排序仍走调用方自己的实现(D3=B: 只借壳不并引擎) —— 组件只 emit('sort', key) 并按
-         sortKey/sortDir 画箭头, 不持有排序状态, 也不挂拖宽/重排/右键(grid 模式专属)。 -->
+         sortKey/sortDir 画箭头, 不持有排序状态, 也不挂拖宽/重排/右键(grid 模式专属)。
+         可排序性唯一判据 = 列定义 col.sortable: sortable 类/箭头位/tabindex 全按它出, 不得硬编码
+         (issue 26-10-29-1348: 曾硬编码 class="sortable" 且箭头恒渲染, 而 headActivate 按
+         col.sortable 早退 —— 唯一调用方 HR 表十列全无标记, 排序整表静默失效)。 -->
     <tr v-if="mode === 'thead'">
-      <th v-for="col in cols" :key="col.key" class="sortable" :class="{ num: col.num }"
+      <th v-for="col in cols" :key="col.key" :class="{ sortable: col.sortable, num: col.num }"
           :aria-sort="headAriaSort(col)" :tabindex="col.sortable ? 0 : null"
           @click="headActivate(col)"
           @keydown.enter.prevent="headActivate(col)"
-          @keydown.space.prevent="headActivate(col)"><span>{{ col.label }}</span><span class="arrow"
+          @keydown.space.prevent="headActivate(col)"><span>{{ col.label }}</span><span v-if="col.sortable" class="arrow"
           :class="{ on: sortKey === col.key }"><svg class="ico" viewBox="0 0 16 16"><use
             :href="sortKey === col.key && sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"></use></svg></span></th>
     </tr>
