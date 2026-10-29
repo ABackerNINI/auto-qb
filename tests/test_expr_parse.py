@@ -26,6 +26,7 @@
 - test_read_string_trailing_escape_quote_is_unterminated: C38 守阵 —— 末尾转义引号仍算转义
   (字符串缺少结束引号)
 - test_unary_plus_literal_folds_without_sign_flip: C39 守阵 —— 一元 + 折叠不得翻符号
+- test_not_keyword_not_folded_as_unary_sign: C54 守阵 —— `not` 关键字判定失效即退化成符号折叠
 """
 import pytest
 
@@ -263,3 +264,10 @@ def test_unary_plus_literal_folds_without_sign_flip():
     assert root.left == Lit(5), f"+5 折叠错: {root.left}"
     assert root.right == Lit(3)
     assert _root("(-5) > 3").left == Lit(-5), "-5 仍应折叠为负字面量"
+
+
+def test_not_keyword_not_folded_as_unary_sign():
+    """C54 守阵: `not` 必须走一元节点分支, 不得落进 +/- 的字面量折叠
+    (关键字判定失效 -> `not 5` 变成 Lit(5), 配置期类型检查被整段绕过)"""
+    with pytest.raises(ExprSyntaxError, match="操作数必须是布尔"):
+        compile_expr("(not 5) > 3")

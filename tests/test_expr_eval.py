@@ -58,6 +58,19 @@
 - test_division_is_not_multiplication: C34 守阵 —— `/` 是除法(改乘法即静默错算)
 - test_comparison_boundaries_exclude_equal: C35 守阵 —— 相等值上 `>` 与 `<` 均为 False
 - test_match_operator_hits_any_element_of_set: C36 守阵 —— `~` 对集合语义 = 任一元素命中
+- test_func_table_metadata_is_self_consistent: C43 守阵 —— FUNC_TABLE 每个函数的 type/arity/arg_types
+  与预期签名逐字段一致, 合法调用配置期放行(置 None / 放宽 arity 即误拒或 TypeError)
+- test_name_table_static_types_are_all_typed: C44 守阵 —— NAME_TABLE 每条 static_type 非空且与预期一致
+- test_name_table_expected_entries_resolve: C45 守阵 —— tracker.url / sys.hour / sys.minute 条目存在且取值正确
+- test_up_dl_limit_names_read_server_state: C48 守阵 —— sys.up_limit / sys.dl_limit 读 server_state 对应字段
+- test_jsonable_preserves_numbers_and_falls_back_to_text: C49 守阵 —— 浮点保数值 / inf·nan 转字符串 / 异型转文本
+- test_order_and_equality_type_rules: C50 守阵 —— 同类型比较放行、混合类型相等拒收
+- test_unary_static_type_checks_operand: C52 守阵 —— 一元运算的操作数静态类型检查不得被绕过
+- test_trace_descends_into_call_args_and_list_items: C53 守阵 —— trace 递归遍历 Call 实参与 ListLit 元素
+- test_server_state_empty_dict_is_unavailable: C57 守阵 —— server_state 为空 dict 仍报「数据源不可用」
+- test_list_literal_items_are_static_checked: C58 守阵 —— 列表字面量元素逐个静态校验
+- test_unary_plus_static_type_checked: C59 守阵 —— 一元 `+` 也做数值静态检查
+- test_snapshot_filter_excludes_internal_fields: C60 守阵 —— 非快照内部字段不得泄露为可取值名
 """
 import os
 import shutil
@@ -73,7 +86,8 @@ from auto_qb.infra import file_access
 from auto_qb.infra.file_access import UNDETERMINED, FileAccessError
 from auto_qb.rules.base import Rule
 from auto_qb.rules.expr import env as expr_env
-from auto_qb.rules.expr import ANY, compile_expr, evaluate, validate
+from auto_qb.config.schema.fields import STATE_ATTRS
+from auto_qb.rules.expr import ANY, BOOL, LIST, NUM, STR, compile_expr, evaluate, validate
 from auto_qb.rules.expr import eval as expr_eval
 from auto_qb.rules.expr import parser as expr_parser
 from auto_qb.rules.expr.errors import ExprError, ExprSyntaxError
@@ -824,3 +838,207 @@ def test_match_operator_hits_any_element_of_set():
     _, _, ctx = _setup(tags="HR-x,1080p")
     assert _val('tor.tags ~ "regex:^HR"', ctx) is True
     assert _val('tor.tags ~ "regex:^NO"', ctx) is False
+
+
+# ============================================================
+# C 档变异守阵: 取值面/类型表元数据(配置期拒收与诊断)
+# ============================================================
+
+# 函数白名单的预期签名(单一事实源的守阵副本): type / arity / arg_types 三字段逐项对齐
+_EXPECTED_FUNC_SIGNATURES = {
+    "freespace": (NUM, (1, ), (STR, )),
+    "disk_total": (NUM, (1, ), (STR, )),
+    "disk_used": (NUM, (1, ), (STR, )),
+    "exists": (BOOL, (1, ), (STR, )),
+    "file_count": (NUM, (0, ), ()),
+    "raw": (ANY, (1, ), (STR, )),
+    "len": (NUM, (1, ), (ANY, )),
+    "abs": (NUM, (1, ), (NUM, )),
+    "round": (NUM, (1, ), (NUM, )),
+    "min": (NUM, (2, ), (NUM, NUM)),
+    "max": (NUM, (2, ), (NUM, NUM)),
+    "days": (NUM, (1, ), (NUM, )),
+    "hours": (NUM, (1, ), (NUM, )),
+}
+
+# 手工登记/派生名字的预期静态类型(快照字段由注解派生, 不在此表)
+_EXPECTED_NAME_TYPES = {
+    "tor.tags": LIST,
+    "tor.tags_raw": STR,
+    "tor.progress_pct": NUM,
+    "tor.tags_count": NUM,
+    "tor.hr_condition_met": BOOL,
+    "tor.hr_local_triggered": BOOL,
+    "tor.hr_satisfied": BOOL,
+    "tor.age": NUM,
+    "tor.idle": NUM,
+    "tracker.name": STR,
+    "tracker.groups": LIST,
+    "tracker.names": LIST,
+    "tracker.url": STR,
+    "sys.now": NUM,
+    "sys.hour": NUM,
+    "sys.minute": NUM,
+    "sys.time_of_day": NUM,
+    "sys.dow": NUM,
+    "sys.dom": NUM,
+    "sys.torrent_count": NUM,
+    "sys.downloading_count": NUM,
+    "sys.seeding_count": NUM,
+    "sys.upload_today": NUM,
+    "sys.download_today": NUM,
+    "sys.upload_month": NUM,
+    "sys.dl_speed": NUM,
+    "sys.up_speed": NUM,
+    "sys.dl_limit": NUM,
+    "sys.up_limit": NUM,
+    "sys.alt_speed_on": BOOL,
+}
+
+
+def test_func_table_metadata_is_self_consistent():
+    """C43 守阵: FUNC_TABLE 元数据自洽 —— type/arity/arg_types 任一被置 None 或 arity 放宽,
+    合法调用就会在配置期被误拒(参数个数)或 TypeError 崩溃; 一条表驱动断言钉死整表"""
+    assert set(expr_env.FUNC_TABLE) == set(_EXPECTED_FUNC_SIGNATURES), "函数白名单增删必须同步守阵表"
+    for name, (kind, arity, arg_types) in _EXPECTED_FUNC_SIGNATURES.items():
+        info = expr_env.FUNC_TABLE[name]
+        assert info.name == name
+        assert info.type == kind, f"{name} 的返回静态类型被改坏: {info.type!r}"
+        assert info.arity == arity, f"{name} 的参数个数集合被改坏: {info.arity!r}"
+        assert info.arg_types == arg_types, f"{name} 的参数类型表被改坏: {info.arg_types!r}"
+        assert callable(info.call)
+        assert len(info.arg_types) == arity[0], f"{name} 的 arg_types 与 arity 不对齐"
+    # 合法调用: 配置期必须放行(arity/arg_types 置 None 会让静态校验自己抛 TypeError)
+    for text in (
+        "freespace(tor.save_path) > 0",
+        'disk_total("R:/") > 0',
+        "exists(tor.save_path)",
+        "file_count() > 0",
+        'raw("x") == 1',
+        "len(tor.tags) > 0",
+        "abs(tor.ratio) > 0",
+        "round(tor.ratio) > 0",
+        "min(tor.size, 1) > 0",
+        "max(tor.size, 1) > 0",
+        "days(1) > 0",
+        "hours(1) > 0",
+    ):
+        validate(compile_expr(text).root)
+    # 非法调用仍要在配置期被拒(arity 放宽后 freespace() 会溜过去)
+    with pytest.raises(ExprSyntaxError, match="参数个数"):
+        validate(compile_expr("freespace() > 0").root)
+    with pytest.raises(ExprSyntaxError, match="参数类型应为 数值"):
+        validate(compile_expr("abs(tor.name) > 0").root)
+
+
+def test_name_table_static_types_are_all_typed():
+    """C44 守阵: NAME_TABLE 每条 static_type 必须是合法类型标记且与预期一致
+    (置 None 会让配置期把合法表达式判成类型错 / 放过非法表达式)"""
+    kinds = {NUM, BOOL, STR, LIST, ANY}
+    for name, info in expr_env.NAME_TABLE.items():
+        assert info.name == name, f"{name} 条目的自述名漂移"
+        assert info.type in kinds, f"{name} 的 static_type 缺失/非法: {info.type!r}"
+        assert callable(info.getter), f"{name} 缺取值器"
+    for name, kind in _EXPECTED_NAME_TYPES.items():
+        assert expr_env.NAME_TABLE[name].type == kind, f"{name} 的 static_type 被改坏"
+    # 状态派生名按 STATE_ATTRS 批量登记: 每一条都必须是布尔
+    for attr in STATE_ATTRS:
+        assert expr_env.NAME_TABLE["tor." + attr].type == BOOL, f"tor.{attr} 必须是布尔"
+    # 三类前缀各取正例: 类型齐全时配置期放行
+    validate(compile_expr('(tor.size > 0) and (tor.name == "x")').root)
+    validate(compile_expr('(tracker.name ~ "regex:^H") and ("a" in tracker.groups)').root)
+    validate(compile_expr("(sys.hour >= 0) and (sys.dl_speed > 0)").root)
+
+
+def test_name_table_expected_entries_resolve(monkeypatch):
+    """C45 守阵: tracker.url / sys.hour / sys.minute 条目存在、取值器可用、取值正确
+    (条目丢失 / 键名漂移 -> 配置期「未知取值」; 取值器坏 -> 运行期 AttributeError/None)"""
+    now = _freeze_clock(monkeypatch)
+    _, tor, ctx = _setup()
+    tor.tracker = "https://tracker.example/announce"
+    for name in ("tracker.url", "sys.hour", "sys.minute"):
+        info = expr_env.NAME_TABLE.get(name)
+        assert info is not None, f"{name} 条目丢失/键名漂移"
+        assert callable(info.getter), f"{name} 取值器不可用"
+    assert _val("tracker.url", ctx) == "https://tracker.example/announce"
+    assert _val("sys.hour", ctx) == now.hour
+    assert _val("sys.minute", ctx) == now.minute
+
+
+def test_up_dl_limit_names_read_server_state():
+    """C48 守阵: sys.up_limit / sys.dl_limit 名字键与 server_state 源字段名都不得漂移
+    (漂移 -> 永远报「未知取值 / 缺失字段」)"""
+    mgr, _, ctx = _setup()
+    for name in ("sys.up_limit", "sys.dl_limit"):
+        assert name in expr_env.NAME_TABLE, f"{name} 名字键漂移"
+    mgr.store.server_state = {"dl_rate_limit": 1024, "up_rate_limit": 2048}
+    assert _val("sys.dl_limit", ctx) == 1024
+    assert _val("sys.up_limit", ctx) == 2048
+
+
+def test_jsonable_preserves_numbers_and_falls_back_to_text():
+    """C49 守阵: _jsonable 浮点保持数值、inf/nan 转字符串、非原始类型转文本
+    (isinstance 条件放宽 -> 3.5 变 "3.5"; nan 判定反转 -> JSON 序列化炸; str(None) -> 值被吞)"""
+    assert expr_eval._jsonable(3.5) == 3.5
+    assert expr_eval._jsonable(float("inf")) == "inf"
+    assert expr_eval._jsonable(float("nan")) == "nan"
+    assert expr_eval._jsonable({"a": 1}) == "{'a': 1}"
+    assert expr_eval._jsonable(frozenset({"a"})) == ["a"]
+
+
+def test_order_and_equality_type_rules():
+    """C50 守阵: 同类型比较/相等放行、混合类型相等拒收
+    (same_str 置 None / and→or / right==NUM 反转都会让合法配置被误拒或非法配置溜过)"""
+    validate(compile_expr('(tor.name < "z")').root)  # 字符串有序比较
+    validate(compile_expr('(tor.name == "Test")').root)  # 同类型相等
+    with pytest.raises(ExprSyntaxError, match="类型不一致"):
+        validate(compile_expr('(tor.size == "abc")').root)  # 数值 vs 字符串
+
+
+def test_unary_static_type_checks_operand():
+    """C52 守阵: 一元运算的操作数静态类型必须被检查
+    (op 传 None / 操作数 static_type 传 None -> 检查整段被绕过)"""
+    with pytest.raises(ExprSyntaxError, match="操作数必须是数值"):
+        validate(compile_expr("(-tor.name) > 0").root)
+    with pytest.raises(ExprSyntaxError, match="操作数必须是布尔"):
+        validate(compile_expr("not tor.size").root)
+
+
+def test_trace_descends_into_call_args_and_list_items():
+    """C53 守阵: trace 递归遍历 Call 实参与 ListLit 元素
+    (walk(None) -> 内层取值项从求值轨迹中消失, WEB 试算面板看不到真实取值)"""
+    _, _, ctx = _setup()
+    items = trace(compile_expr("abs(tor.ratio) > 0").root, ctx)
+    assert [i["name"] for i in items if i["kind"] == "name"] == ["tor.ratio"]
+    items = trace(compile_expr("tor.state in [tor.name]").root, ctx)
+    assert {i["name"] for i in items if i["kind"] == "name"} == {"tor.state", "tor.name"}
+
+
+def test_server_state_empty_dict_is_unavailable():
+    """C57 守阵: server_state 为空 dict 时仍须报「数据源不可用」
+    (`or`→`and` -> 空数据源被当成可用, 报错指向「缺失字段」错方向)"""
+    mgr, _, ctx = _setup()
+    mgr.store.server_state = {}
+    with pytest.raises(ExprError, match="数据源不可用"):
+        _val("sys.dl_speed", ctx)
+
+
+def test_list_literal_items_are_static_checked():
+    """C58 守阵: 列表字面量元素逐个做静态校验
+    (递归调用被置 None -> 列表内的未知取值可过配置期)"""
+    with pytest.raises(ExprSyntaxError, match="未知取值"):
+        validate(compile_expr("tor.state in [tor.nope]").root)
+
+
+def test_unary_plus_static_type_checked():
+    """C59 守阵: 一元 `+` 与 `-` 同样做数值静态检查
+    (枚举里 "+" 被改坏 -> `+"a"` 静默通过配置期)"""
+    with pytest.raises(ExprSyntaxError, match="操作数必须是数值"):
+        compile_expr('+"a"')
+
+
+def test_snapshot_filter_excludes_internal_fields():
+    """C60 守阵: 快照字段过滤 `or` 不得改成 `and`
+    (改后非快照的内部瞬态字段 tracker_health_msg 等泄露为可取值名)"""
+    with pytest.raises(ExprSyntaxError, match="未知取值"):
+        validate(compile_expr('tor.tracker_health_msg ~ "x"').root)

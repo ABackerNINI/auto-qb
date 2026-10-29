@@ -47,6 +47,11 @@
   成员, 且带跳检标签的种子不截断后续参考(成员/快照判据 + continue→break)
 - test_start_stop_gate_ignores_group_members_own_write: C31 守阵 —— 起停幂等门只判本 hash
   (group=False), 兄弟成员的自写不得误伤
+- test_print_details_numeric_fields: C46 守阵 —— 进度/分享率/做种时长有值精确、None 显示 "-" 且仍 ok
+- test_print_details_non_empty_fields_not_replaced_by_dash: C47 守阵 —— 非空字段不得被 `and "-"` 恒替换
+- test_print_details_size_fields_formatted: C51 守阵 —— 大小/上传/下载走 fmt_size 真实值(不得传 None)
+- test_print_details_line_contains_all_fields: C55 守阵 —— detail 整行不得被置 None
+- test_print_details_emits_exactly_one_info_line: C56 守阵 —— logger.info 不得被置 None(有且仅一行)
 - test_actions_registry_complete
 """
 import os
@@ -66,7 +71,7 @@ from auto_qb.rules.actions import (
     StopAction,
     UploadSpeedLimitAction,
 )
-from helpers import drive_skip, FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
+from helpers import capture_logs, drive_skip, FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
 
 
 def _seg(mode, auto_start=True, enabled=True):
@@ -997,3 +1002,94 @@ def test_start_stop_gate_ignores_group_members_own_write():
         tor.state = "stalledUP"
         assert StopAction("").execute(ctx).is_ok, "兄弟成员的自写不得拦下本种子的 stop"
         assert ("stop", None) in client.calls
+
+
+# ============================================================
+# C 档变异守阵: print_torrent_details 的格式化数值与兜底
+# ============================================================
+
+
+def _run_print_details(tor):
+    """执行 print_torrent_details, 返回 (result, 动作模块产出的日志行列表)
+
+    用 helpers.capture_logs 而非 caplog: make_manager 构造链会清空 root handlers, caplog 恒空。
+    """
+    from auto_qb.rules.actions import PrintTorrentDetailsAction
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, tor, FakeClient())
+        with capture_logs("auto_qb.rules.actions.basic") as cap:
+            result = PrintTorrentDetailsAction(True).execute(ctx)
+    return result, cap.messages
+
+
+def test_print_details_numeric_fields():
+    """C46 守阵: 进度/分享率/做种时长有值时精确显示, None 时显示 "-" 且动作仍 ok
+    (条件被 and False/or True 改写、算式 *100 漂移、判据 is None 反转都会显示错值或崩)"""
+    tor = FakeTorrent(tags="", progress=0.5, ratio=2.0, seeding_time=3600)
+    result, lines = _run_print_details(tor)
+    assert result.is_ok
+    text = "\n".join(lines)
+    assert "进度=50.0%" in text
+    assert "分享率=2.00" in text
+    assert "做种时长=3600s" in text
+    tor2 = FakeTorrent(hash="H2", tags="", progress=None, ratio=None, seeding_time=None)
+    result2, lines2 = _run_print_details(tor2)
+    assert result2.is_ok
+    text2 = "\n".join(lines2)
+    assert "进度=-" in text2 and "分享率=-" in text2 and "做种时长=-" in text2
+
+
+def test_print_details_non_empty_fields_not_replaced_by_dash():
+    """C47 守阵: 非空字段不得被 `x or "-"` → `x and "-"` 的改写恒替换成 "-" """
+    tor = FakeTorrent(
+        tags="HR,1080p",
+        name="测试种子",
+        state="uploading",
+        save_path="R:/A",
+        content_path="R:/A/B",
+        category="Anime",
+    )
+    result, lines = _run_print_details(tor)
+    assert result.is_ok
+    text = "\n".join(lines)
+    for frag in (
+        "名称=测试种子",
+        "状态=uploading",
+        "保存路径=R:/A",
+        "内容路径=R:/A/B",
+        "标签=HR,1080p",
+        "分类=Anime",
+    ):
+        assert frag in text, f"详情行丢了真实值: {frag}"
+
+
+def test_print_details_size_fields_formatted():
+    """C51 守阵: 大小/上传量/下载量必须把真实字节数交给 fmt_size(传 None 恒显示 "-")"""
+    tor = FakeTorrent(tags="", size=200 * 1024**3, uploaded=400 * 1024**3, downloaded=100 * 1024**2)
+    result, lines = _run_print_details(tor)
+    assert result.is_ok
+    text = "\n".join(lines)
+    assert "大小=200.00 GiB" in text
+    assert "上传=400.00 GiB" in text
+    assert "下载=100.00 MiB" in text
+
+
+def test_print_details_line_contains_all_fields():
+    """C55 守阵: detail 整行不得被置 None —— 动作唯一产出必须是完整详情行"""
+    tor = FakeTorrent(tags="HR", name="X")
+    result, lines = _run_print_details(tor)
+    assert result.is_ok
+    text = "\n".join(lines)
+    assert "打印种子详情:" in text
+    assert "名称=" in text and "tracker=" in text
+
+
+def test_print_details_emits_exactly_one_info_line():
+    """C56 守阵: logger.info 不得被置 None —— 只读动作必须真的输出一行详情"""
+    tor = FakeTorrent(tags="HR", name="X")
+    result, lines = _run_print_details(tor)
+    assert result.is_ok
+    assert len(lines) == 1, f"应只有一行详情日志, 实得 {len(lines)} 行: {lines}"
+    assert "打印种子详情:" in lines[0] and "名称=X" in lines[0]
