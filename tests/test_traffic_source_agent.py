@@ -67,7 +67,7 @@ from auto_qb.core.traffic_source import agent
 from auto_qb.infra.utils import is_windows
 from auto_qb.webui import tool_client
 
-from helpers import write_credential_file
+from helpers import write_credential_file, write_endpoint_pointer
 
 #: 本平台对应的 D19 启动器文件名(与工具目录里的文件同名同源)
 _LAUNCHER = agent._LAUNCHER_WINDOWS if is_windows() else agent._LAUNCHER_POSIX
@@ -80,45 +80,11 @@ def _conf(*, tool_dir="", tool_exe=""):
     return SimpleNamespace(tool_dir=tool_dir, tool_exe=tool_exe)
 
 
-def _write_pointer(
-    tmp_path,
-    monkeypatch,
-    *,
-    token_path,
-    host="127.0.0.1",
-    port=8099,
-    schema=agent.ENDPOINT_SCHEMA,
-    autostart_error=None,
-) -> str:
-    """写发现指针 endpoint.json 并把 agent 的指针路径重定向到它(S16/D6)
-
-    载荷字段名与工具侧 gtm 的写出契约一致(镜像非 import)。
-    """
-    path = tmp_path / "pointer" / agent.ENDPOINT_FILE_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema": schema,
-        "version": "0.1.0",
-        "pid": 4321,
-        "started_at": "2026-10-17T00:00:00+08:00",
-        "host": host,
-        "port": port,
-        "data_dir": str(tmp_path / "gtm"),
-        "token_path": token_path,
-        "exe_path": "",
-        "autostart_registered": True,
-        "autostart_error": autostart_error,
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
-    return str(path)
-
-
 @pytest.fixture()
 def probe_env(tmp_path, monkeypatch):
     """探活环境: 真指针 + 真密钥文件 + 可换的假控制面 -> (monkeypatch 出的调用记录, 切换函数)"""
     token_path = write_credential_file(tmp_path)
-    _write_pointer(tmp_path, monkeypatch, token_path=token_path)
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=token_path)
     calls = []
 
     def set_tool(result=None, exc=None):
@@ -248,7 +214,7 @@ def test_probe_requires_pointer_and_200(tmp_path, monkeypatch, probe_env):
 
     # 复位指针: 探活走 GET /status, 凭据从密钥文件读
     set_tool()
-    _write_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
     calls = []
     monkeypatch.setattr(
         tool_client,
@@ -273,7 +239,7 @@ def test_probe_requires_pointer_and_200(tmp_path, monkeypatch, probe_env):
     # 密钥文件为空 -> 不发探活请求
     empty = tmp_path / "empty.token"
     empty.write_text("", encoding="utf-8")
-    _write_pointer(tmp_path, monkeypatch, token_path=str(empty))
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=str(empty))
     monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: (200, {}))
     assert agent.probe() is None
 

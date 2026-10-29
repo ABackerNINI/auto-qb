@@ -28,6 +28,7 @@ from auto_qb.config.models import RelocateConfig  # noqa: E402  (整组迁移, �
 from auto_qb.config.models import TrafficSourceConfig  # noqa: E402  (包 __init__ 未导出)
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
+from auto_qb.core.traffic_source import agent  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
 from auto_qb.torrents import (  # noqa: E402
     _SNAPSHOT_FIELDS,
@@ -1394,3 +1395,42 @@ def wait_until(pred, *, timeout=3.0, poll=0.02) -> bool:
             return True
         time.sleep(poll)
     return pred()
+
+
+def write_endpoint_pointer(
+    tmp_path,
+    monkeypatch,
+    *,
+    token_path="",
+    host="127.0.0.1",
+    port=8099,
+    schema=agent.ENDPOINT_SCHEMA,
+    autostart_error=None,
+    payload=None,
+) -> str:
+    """写发现指针 endpoint.json 并把 agent 的指针路径重定向到它(三份 traffic 测试共用的单点)
+
+    payload 非空则整字典原样写(喂最小合法指针 / schema 不匹配等任意形态, 测读者容错),
+    否则按 11 键默认载荷写 —— 字段集镜像工具侧 gtm 的写出契约(含 autostart_error,
+    缺键时读侧 .get() 容错, 但镜像保持完整)。统一落 tmp/pointer/endpoint.json,
+    monkeypatch 后返回路径字符串。
+    """
+    path = tmp_path / "pointer" / agent.ENDPOINT_FILE_NAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if payload is None:
+        payload = {
+            "schema": schema,
+            "version": "0.1.0",
+            "pid": 4321,
+            "started_at": "2026-10-17T00:00:00+08:00",
+            "host": host,
+            "port": port,
+            "data_dir": str(tmp_path / "gtm"),
+            "token_path": token_path,
+            "exe_path": "",
+            "autostart_registered": True,
+            "autostart_error": autostart_error,
+        }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
+    return str(path)

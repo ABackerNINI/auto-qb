@@ -17,23 +17,18 @@
 - test_dat_path_source_off_returns_empty: enabled=false -> ""(关源停取数, 优先于 provider 分支)
 - test_unavailable_reason_source_off: 关源文案含「已关闭」且优先于 provider 分支(verdict-scope-parity)
 """
-import json
 import os
 from types import SimpleNamespace
 
 from auto_qb.core.traffic_source import agent, paths
 from auto_qb.config.models import TrafficSourceConfig
 
+from helpers import write_endpoint_pointer
+
 
 def _cfg(ts) -> SimpleNamespace:
     """把 traffic_source 段包成"像 Config"的最小对象(dat_path 只读 .traffic_source)"""
     return SimpleNamespace(traffic_source=ts)
-
-
-def _write_pointer(tmp_path, monkeypatch, payload: dict) -> None:
-    path = tmp_path / agent.ENDPOINT_FILE_NAME
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
 
 
 def _pointer_payload(data_dir: str) -> dict:
@@ -60,7 +55,7 @@ def test_dat_path_traffic_monitor():
 
 
 def test_dat_path_global_joins_pointer_data_dir(tmp_path, monkeypatch):
-    _write_pointer(tmp_path, monkeypatch, _pointer_payload("/opt/gtm/data"))
+    write_endpoint_pointer(tmp_path, monkeypatch, payload=_pointer_payload("/opt/gtm/data"))
     ts = TrafficSourceConfig(provider="global_traffic_monitor")
     assert paths.dat_path(_cfg(ts)) == os.path.join("/opt/gtm/data", "history_traffic.dat")
 
@@ -74,14 +69,14 @@ def test_dat_path_global_without_pointer(tmp_path, monkeypatch):
 
 
 def test_dat_path_global_pointer_without_data_dir(tmp_path, monkeypatch):
-    _write_pointer(tmp_path, monkeypatch, _pointer_payload(""))
+    write_endpoint_pointer(tmp_path, monkeypatch, payload=_pointer_payload(""))
     ts = TrafficSourceConfig(provider="global_traffic_monitor")
     assert paths.dat_path(_cfg(ts)) == ""
 
 
 def test_dat_path_provider_is_exclusive(tmp_path, monkeypatch):
     """两来源参数并存是常态(切来源不丢另一侧), 互斥必须落在取数单点上"""
-    _write_pointer(tmp_path, monkeypatch, _pointer_payload("/tool/data"))
+    write_endpoint_pointer(tmp_path, monkeypatch, payload=_pointer_payload("/tool/data"))
     ts = TrafficSourceConfig(provider="traffic_monitor")
     ts.traffic_monitor.dat_path = "/tm/history_traffic.dat"
     assert paths.dat_path(_cfg(ts)) == "/tm/history_traffic.dat"
@@ -126,7 +121,7 @@ def test_source_enabled_identity_judgment():
 def test_dat_path_source_off_returns_empty(tmp_path, monkeypatch):
     """enabled=false -> 取数单点返回空(关源停取数); 判定优先于 provider 分支"""
     # 工具指针就绪也不例外: 关源时工具在不在跑都不读它的数据
-    _write_pointer(tmp_path, monkeypatch, _pointer_payload("/opt/gtm/data"))
+    write_endpoint_pointer(tmp_path, monkeypatch, payload=_pointer_payload("/opt/gtm/data"))
     off_tool = TrafficSourceConfig(enabled=False, provider="global_traffic_monitor")
     assert paths.dat_path(_cfg(off_tool)) == ""
     off_tm = TrafficSourceConfig(enabled=False, provider="traffic_monitor")
@@ -136,7 +131,7 @@ def test_dat_path_source_off_returns_empty(tmp_path, monkeypatch):
 
 def test_unavailable_reason_source_off(tmp_path, monkeypatch):
     """关源文案: 含「已关闭」/指到总开关, 且优先于 provider 分支(与 dat_path 同源判定)"""
-    _write_pointer(tmp_path, monkeypatch, _pointer_payload("/opt/gtm/data"))
+    write_endpoint_pointer(tmp_path, monkeypatch, payload=_pointer_payload("/opt/gtm/data"))
     off_tool = _cfg(TrafficSourceConfig(enabled=False, provider="global_traffic_monitor"))
     reason = paths.unavailable_reason(off_tool)
     assert "流量来源已关闭" in reason

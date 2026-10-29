@@ -59,7 +59,7 @@ import pytest
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
-from helpers import dat_text, make_manager, wait_until, write_credential_file
+from helpers import dat_text, make_manager, wait_until, write_credential_file, write_endpoint_pointer
 
 GIB = 1024**3
 MIB = 1024**2
@@ -85,30 +85,6 @@ def _points(pairs):
 
 def _pc(period: str, up=None, down=None) -> PeriodCurve:
     return PeriodCurve(period=period, upload_points=up, download_points=down)
-
-
-def _write_pointer(tmp_path, monkeypatch, *, token_path: str, schema=agent.ENDPOINT_SCHEMA) -> str:
-    """写发现指针 endpoint.json 并把 agent 的指针路径重定向到它(S16)
-
-    指针是订阅方向唯一的端点/密钥来源(D6); 载荷字段名与工具侧 gtm 的写出契约一致。
-    """
-    path = tmp_path / "pointer" / agent.ENDPOINT_FILE_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "schema": schema,
-        "version": "0.1.0",
-        "pid": 4321,
-        "started_at": "2026-10-17T00:00:00+08:00",
-        "host": POINTER_HOST,
-        "port": POINTER_PORT,
-        "data_dir": str(tmp_path / "gtm"),
-        "token_path": token_path,
-        "exe_path": "",
-        "autostart_registered": True,
-    }
-    path.write_text(json.dumps(payload), encoding="utf-8")
-    monkeypatch.setattr(agent, "endpoint_path", lambda: str(path))
-    return str(path)
 
 
 def _sub_threads():
@@ -198,7 +174,9 @@ def sub_env(tmp_path, monkeypatch):
     setattr(mgr.web, _CRED_FIELD, "web-credential-1")
     # S16: 是否联动只看顶层来源段的 provider; 端点与密钥来自发现指针(D6), 不再读配置 url/token
     mgr.config.traffic_source.provider = "global_traffic_monitor"
-    _write_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
+    write_endpoint_pointer(
+        tmp_path, monkeypatch, token_path=write_credential_file(tmp_path), host=POINTER_HOST, port=POINTER_PORT
+    )
     tool = _FakeTool()
     monkeypatch.setattr(tool_client, "call_tool", tool)
     # !真实拉起会 Popen(工具启动器) —— sidefx 的 POPEN 白名单只放行 node 与临时 wrapper,
