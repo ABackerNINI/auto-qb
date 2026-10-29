@@ -49,6 +49,8 @@
 - test_rule_once_dedup_with_record: once 有执行记录必须去重(无记录放行)
 - test_rule_cooldown_sub_second_boundary: 0 < cooldown <= 1 秒的冷却同样生效
 - test_rule_never_not_deduped: never 有记录仍放行(对照 once 必须去重, 防 !=never 反转)
+- test_rule_cooldown_expired_allows_rerun: C32 守阵 —— cooldown 合取是 and(改 or -> 冷却过期
+  也不放行, 规则永久静默)
 """
 import os
 import tempfile
@@ -963,3 +965,22 @@ def test_rule_never_not_deduped():
         once = Rule("g.once", {"actions": [{"add_tags": ["Y"]}], "execute_once": "once"}, mgr)
         mgr.ctx.state.record_execution("g.once", ctx.hash)
         assert once._dedup_allowed(ctx) is False, "对照组: once 有记录必须去重"
+
+
+def test_rule_cooldown_expired_allows_rerun():
+    """C32 守阵: cooldown 的合取是 `and`(改成 `or` -> 有记录且 cooldown>0 时永不执行)
+
+    记录 ts 早于 cooldown 窗口 -> 冷却已过, 必须放行; `and`→`or` 会让 `cooldown > 0` 单独成立,
+    整条冷却分支恒返回 False(规则永久静默)。
+    """
+    from datetime import datetime
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
+        rule = Rule("g.cd", {"actions": [{"add_tags": ["X"]}], "cooldown": "1H"}, mgr)
+        assert rule.cooldown == 3600
+        mgr.ctx.state.record_execution("g.cd", ctx.hash)
+        rec = mgr.ctx.state.get_exec_record("g.cd", ctx.hash)
+        rec["ts"] = datetime.now().timestamp() - 7200  # 2 小时前 -> 1H 冷却早已过期
+        assert rule._dedup_allowed(ctx) is True, "冷却已过期 -> 必须放行"

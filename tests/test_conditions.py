@@ -33,6 +33,11 @@
 - test_tracker_group_condition_ignore_case: tracker_group 条件 :ignore_case(精确+regex 两型)
 - test_tags_condition_empty_pattern_after_var_replace: tags 条件变量替换为空的模式跳过 (P2-a)
 - test_expr_condition_runtime_non_bool_guard_and_repr: expr 运行期非布尔兜底 ExprError + repr (P2-a)
+- test_in_range_upper_bound_inclusive: C40 守阵 —— _in_range 区间上界含端点(8/31 号必须命中)
+- test_trackers_condition_no_conf_matches_false_without_raising: C41 守阵 —— conf=None 恒不匹配
+  且不抛 AttributeError
+- test_seedtime_condition_strict_operator_not_equality: C42 守阵 —— 比较符被置 None 会退化成等值
+  判断(恰好 1H 的种子上 >1H 必须 False)
 """
 import os
 import shutil
@@ -505,3 +510,42 @@ def test_expr_condition_runtime_non_bool_guard_and_repr():
             with pytest.raises(ExprError) as ei:
                 cond.match(ctx)
             assert "布尔" in str(ei.value)
+
+
+# ============================================================
+# B 档变异守阵: 条件判据边界(C40/C41/C42)
+# ============================================================
+
+
+def test_in_range_upper_bound_inclusive():
+    """C40 守阵: 区间上界含端点(上界 `<` 改成 `<=` 的反向改坏 -> 8 号 / 31 号 / 周日被排除)"""
+    assert _in_range(3, "3-8") is True, "下界含端点"
+    assert _in_range(8, "3-8") is True, "上界含端点"
+    assert _in_range(31, "1-31") is True, "月末(31 号)必须命中"
+    assert _in_range(9, "3-8") is False
+
+
+def test_trackers_condition_no_conf_matches_false_without_raising():
+    """C41 守阵: 未匹配站点(conf=None)恒不匹配, 且不得抛 AttributeError
+
+    变异: `[conf.name] if conf is not None else []` 的判据被 or True 短路 -> None.name 崩。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        tor = FakeTorrent(tags="")
+        ctx = _ctx(mgr, tor)
+        tor.tracker_conf = None  # 未匹配站点(与 trackers 条件的「恒不匹配」同语义)
+        assert TrackersCondition("HHan").match(ctx) is False
+        assert TrackersCondition(["regex:^HH", "Kufirc"]).match(ctx) is False
+
+
+def test_seedtime_condition_strict_operator_not_equality():
+    """C42 守阵: 比较符被置 None 会落到 `left == right` 等值判断
+
+    恰好 1H 的种子上 `>1H` 必须为 False(等值判断会给 True), `>=1H` 仍为 True。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = _ctx(mgr, FakeTorrent(seeding_time=3600))
+        assert SeedtimeCondition(">1H").match(ctx) is False, "恰好 1H 不满足 >1H"
+        assert SeedtimeCondition(">=1H").match(ctx) is True, "对照组: >=1H 应命中"

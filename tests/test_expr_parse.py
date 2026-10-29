@@ -21,6 +21,11 @@
 - test_parse_more_errors: not 出现在中缀位置 / 右操作数再带一元(该层第二个运算符)
 - test_types_direct_rules: types.py 运算符类型规则直测(数值/比较/相等/in/~ 的报错支路 +
   ANY 放行 + LIST/ANY 型别判定)
+- test_tokenize_x_stays_name_not_delimiter: C29 守阵 —— 引号集/括号集常量不得放宽, 'X' 仍是名字
+- test_tokenize_two_char_op_consumes_exactly_two: C37 守阵 —— 两字符运算符游标只前进 2
+- test_read_string_trailing_escape_quote_is_unterminated: C38 守阵 —— 末尾转义引号仍算转义
+  (字符串缺少结束引号)
+- test_unary_plus_literal_folds_without_sign_flip: C39 守阵 —— 一元 + 折叠不得翻符号
 """
 import pytest
 
@@ -218,3 +223,43 @@ def test_types_direct_rules():
     t.check_op_types("~", t.STR, t.STR)
     t.check_unary_types("-", t.NUM)
     t.check_unary_types("?", t.NUM)  # 非 not/-/+ 的一元名: 规则表外静默放行(路由方只送三种)
+
+
+# ============================================================
+# B 档变异守阵: 词法/语法骨架(C29/C37/C38/C39)
+# ============================================================
+
+
+def test_tokenize_x_stays_name_not_delimiter():
+    """C29 守阵: 引号集/括号集常量不得放宽 —— 'X' 仍是名字首字符, 不是字符串引号也不是括号"""
+    toks = tokenize("X")
+    assert [t.kind for t in toks] == ["name", "eof"], f"'X' 应切成一个名字: {toks}"
+    assert toks[0].value == "X"
+
+
+def test_tokenize_two_char_op_consumes_exactly_two():
+    """C37 守阵: 两字符运算符游标只前进 2(+=3 会吞掉紧贴的右操作数)"""
+    toks = tokenize("a<=b")
+    assert [(t.kind, t.value) for t in toks] == [
+        ("name", "a"),
+        ("op", "<="),
+        ("name", "b"),
+        ("eof", None),
+    ], f"记号流被改写: {[(t.kind, t.value) for t in toks]}"
+
+
+def test_read_string_trailing_escape_quote_is_unterminated():
+    """C38 守阵: 末尾转义引号仍是转义(边界放宽到 i+2 -> 反被当收尾, 少报一个错)
+
+    `"a\\"` 的字符序列是 引号 a 反斜杠 引号 —— 反斜杠把最后一个引号转义掉, 字符串没有收尾。
+    """
+    with pytest.raises(ExprSyntaxError, match="字符串缺少结束引号"):
+        tokenize('"a\\"')
+
+
+def test_unary_plus_literal_folds_without_sign_flip():
+    """C39 守阵: 一元 +/- 作用于数字字面量时折叠为原值(+5 不得被折成 -5)"""
+    root = _root("(+5) > 3")
+    assert root.left == Lit(5), f"+5 折叠错: {root.left}"
+    assert root.right == Lit(3)
+    assert _root("(-5) > 3").left == Lit(-5), "-5 仍应折叠为负字面量"

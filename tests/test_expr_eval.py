@@ -43,6 +43,21 @@
 - test_parser_has_no_dead_op_constants: parser 不再携带本文件不用的运算符常量死件
 - test_traffic_curve_section_disabled_raises
   (issue rules-parser-dead-op-constants-dup 的守阵)
+- test_expensive_funcs_flagged_and_cached: C18 守阵 —— FUNC_TABLE 昂贵函数逐条标 expensive,
+  且同一 ctx 内两次调用只取数一次(参数化 5 个函数)
+- test_time_names_flagged_expensive_and_cached: C19 守阵 —— 时间类名字逐条标昂贵且求值后落进
+  ctx.expr_cache(参数化 6 个名字)
+- test_binary_or_right_branch_evaluated_with_ctx: C20 守阵 —— `or` 右支带 ctx 求值, 左假时按
+  ctx 短路求值而非抛错
+- test_used_names_collects_call_args_and_list_items: C21 守阵 —— used_names 聚合 Call 实参与
+  ListLit 元素(数据源门控不漏判)
+- test_downloading_and_seeding_count_predicates: C24 守阵 —— 两个计数按状态谓词精确计数
+  (谓词漂移恒 0 / 谓词丢 None 退化成全库)
+- test_age_is_now_minus_added_on: C30 守阵 —— tor.age = now - added_on(减改加 / and 0 即错)
+- test_unary_plus_keeps_sign: C33 守阵 —— 一元 `+` 不改符号
+- test_division_is_not_multiplication: C34 守阵 —— `/` 是除法(改乘法即静默错算)
+- test_comparison_boundaries_exclude_equal: C35 守阵 —— 相等值上 `>` 与 `<` 均为 False
+- test_match_operator_hits_any_element_of_set: C36 守阵 —— `~` 对集合语义 = 任一元素命中
 """
 import os
 import shutil
@@ -690,3 +705,122 @@ def test_traffic_curve_section_disabled_raises():
         mgr.config.traffic_source.traffic_monitor.dat_path = os.path.join(td, "history_traffic.dat")
         with pytest.raises(ExprError, match="数据源未启用"):
             _val("(sys.upload_today > 1GiB)", ctx)
+
+
+# ============================================================
+# B 档变异守阵: 引擎骨架与匹配顺序(C18/C19/C20/C21/C24/C30/C33/C34/C35/C36)
+# ============================================================
+
+_EXPENSIVE_FUNCS = ("freespace", "disk_total", "disk_used", "exists", "file_count")
+
+_TIME_NAMES = ("sys.now", "sys.hour", "sys.minute", "sys.time_of_day", "sys.dow", "sys.dom")
+
+
+@pytest.mark.parametrize("name", _EXPENSIVE_FUNCS)
+def test_expensive_funcs_flagged_and_cached(name):
+    """C18 守阵: FUNC_TABLE 每个昂贵函数都标 expensive, 且同一 ctx 内两次调用只取数一次
+
+    变异: 任一 FuncInfo 的 expensive=True 被降级/删除 -> 求值侧不再按 ctx 缓存,
+    同一次规则执行里反复打盘/拉文件列表(3000 种子库即灾难)。
+    """
+    _, _, ctx = _setup()
+    info = expr_env.FUNC_TABLE[name]
+    assert info.expensive is True, f"{name} 必须标昂贵(按 ctx 缓存)"
+    calls = []
+    probe = expr_env.FuncInfo(
+        info.name, info.type, info.arity, info.arg_types, lambda c, a: calls.append(a) or 0, expensive=info.expensive
+    )
+    expr_env.FUNC_TABLE[name] = probe
+    try:
+        text = f"{name}()" if name == "file_count" else f'{name}("R:/")'
+        assert _val(text, ctx) == 0
+        assert _val(text, ctx) == 0
+    finally:
+        expr_env.FUNC_TABLE[name] = info
+    assert len(calls) == 1, f"{name} 同 ctx 二次调用应命中缓存: {calls}"
+
+
+@pytest.mark.parametrize("name", _TIME_NAMES)
+def test_time_names_flagged_expensive_and_cached(name, monkeypatch):
+    """C19 守阵: 时间类名字全部标昂贵, 求值后落进 ctx.expr_cache -> 同一规则执行内取值一致
+
+    变异: 任一时间名的 expensive=True 被降级/删除 -> 同轮 sys.hour 前后可能取到不同值。
+    """
+    _freeze_clock(monkeypatch)
+    _, _, ctx = _setup()
+    assert expr_env.NAME_TABLE[name].expensive is True, f"{name} 必须标昂贵(同轮取值固定)"
+    assert ("name", name) not in ctx.expr_cache
+    _val(name, ctx)
+    assert ("name", name) in ctx.expr_cache, f"{name} 求值后应落进 ctx 缓存"
+
+
+def test_binary_or_right_branch_evaluated_with_ctx():
+    """C20 守阵: `or` 右支必须带 ctx 求值(短路只跳过求值, 不能丢 ctx/丢实参/传 None)
+
+    变异: 右支被改坏 -> 左假时抛错(或断言走不到), 而不是按 ctx 短路求值。
+    """
+    _, _, ctx = _setup()
+    assert _val("(1 > 2) or (2 > 1)", ctx) is True
+    assert _val("(1 > 2) or (tor.size > 1)", ctx) is True
+    assert _val("(1 > 2) or (tor.size > 100GiB)", ctx) is True
+    assert _val("(1 > 2) or (1 > 2)", ctx) is False
+
+
+def test_used_names_collects_call_args_and_list_items():
+    """C21 守阵: used_names 聚合 Call 实参与 ListLit 元素(赋值/交集写错 -> 数据源门控漏判)"""
+    assert expr_env.gated_names_in(compile_expr("min(sys.upload_today, 1) > 0").root) == ["sys.upload_today"]
+    assert expr_env.gated_names_in(compile_expr("sys.download_today in [sys.upload_month, 1]").root) == [
+        "sys.download_today", "sys.upload_month"
+    ]
+
+
+def test_downloading_and_seeding_count_predicates():
+    """C24 守阵: 两个计数按状态谓词精确计数
+
+    变异: 谓词属性名漂移 -> 计数恒 0; 谓词被丢成 None -> 退化成全库计数。
+    """
+    mgr, _, ctx = _setup(state="downloading")
+    mgr.store.by_hash["H-UP"] = FakeTorrent(hash="H-UP", state="uploading")
+    mgr.store.by_hash["H-STALL"] = FakeTorrent(hash="H-STALL", state="stalledUP")
+    assert _val("sys.torrent_count", ctx) == 3
+    assert _val("sys.downloading_count", ctx) == 1, "只有 downloading 那颗算下载中"
+    assert _val("sys.seeding_count", ctx) == 2, "uploading + stalledUP 两颗算做种(不得退化成全库 3)"
+
+
+def test_age_is_now_minus_added_on():
+    """C30 守阵: tor.age = now - added_on(减改加 -> 年龄恒错; `added_on and 0` -> 年龄=当前时间戳)"""
+    _, tor, ctx = _setup()
+    tor.added_on = int(datetime.now().timestamp()) - 1000
+    age = _val("tor.age", ctx)
+    assert abs(age - 1000) < 5, f"年龄应为 now - added_on ≈ 1000s, 实得 {age}"
+
+
+def test_unary_plus_keeps_sign():
+    """C33 守阵: 一元 `+` 不改符号(判定追加 or True -> + 变取负)"""
+    _, _, ctx = _setup()
+    assert _val("tor.ratio > 0", ctx) is True
+    assert _val("(+tor.ratio) > 0", ctx) is True, "一元 + 不得把 2.0 变成 -2.0"
+
+
+def test_division_is_not_multiplication():
+    """C34 守阵: `/` 分支是除法(改成乘法 -> 10/4 变 40, 静默错算)"""
+    _, _, ctx = _setup()
+    assert _val("(10 / 4) > 2", ctx) is True
+    assert _val("(10 / 4) > 3", ctx) is False
+
+
+def test_comparison_boundaries_exclude_equal():
+    """C35 守阵: 相等值上 `>` 与 `<` 均为 False(`>`→`>=` / `<`→`<=` / `<` 分支失配都偏移一格)"""
+    _, _, ctx = _setup()
+    assert _val("(2 > 2)", ctx) is False
+    assert _val("(2 < 2)", ctx) is False
+    assert _val("(2 >= 2)", ctx) is True
+    assert _val("(2 <= 2)", ctx) is True
+    assert _val("(1 < 2)", ctx) is True
+
+
+def test_match_operator_hits_any_element_of_set():
+    """C36 守阵: `~` 左值为集合时语义是「任一元素命中」(集合化被禁用 -> 整集合字符串匹配恒 False)"""
+    _, _, ctx = _setup(tags="HR-x,1080p")
+    assert _val('tor.tags ~ "regex:^HR"', ctx) is True
+    assert _val('tor.tags ~ "regex:^NO"', ctx) is False

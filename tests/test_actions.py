@@ -43,6 +43,10 @@
 - test_add_category_creates_named_category: 建分类时 create_category 收到真实分类名
 - test_move_to_confirm_gate_skips: 整组迁移 confirm 形态只回 skip 且规则侧 confirm=False
 - test_speed_limit_direction_uses_own_axis: 上传/下载限速各读自己的轴做手动限速闸门
+- test_find_reference_union_membership_and_tagged_ordering: C23 守阵 —— verified 并集只取组内
+  成员, 且带跳检标签的种子不截断后续参考(成员/快照判据 + continue→break)
+- test_start_stop_gate_ignores_group_members_own_write: C31 守阵 —— 起停幂等门只判本 hash
+  (group=False), 兄弟成员的自写不得误伤
 - test_actions_registry_complete
 """
 import os
@@ -942,3 +946,54 @@ def test_speed_limit_direction_uses_own_axis():
         tor.up_limit, tor.dl_limit = manual, 0
         assert DownloadSpeedLimitAction("1000KiB/s").execute(ctx).is_ok, "下载轴空闲 -> 应下发"
         assert ("set_download_limit", 1000 * 1024) in client.calls
+
+
+def test_find_reference_union_membership_and_tagged_ordering():
+    """C23 守阵: 参考集构造 —— verified 并集只取组内成员, 带跳检标签的种子不截断后续参考
+
+    变异: 成员判据反转(`h not in members`)-> 组外种子被当参考; 快照判据反转
+    (`h not in by_hash`)-> 组内 verified 参考丢失; 去重循环 `continue`→`break` ->
+    跳检标签种子之后的有效参考全部丢失(参考链断在第一个未验证种子上)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        me = FakeTorrent(hash="H1", name="T", state="pausedDL", progress=0.5, tags="")
+        normal = FakeTorrent(hash="H2", name="N", state="stalledUP", tags="")
+        verified = FakeTorrent(hash="H3", name="V", state="pausedDL", progress=0.5, tags="")
+        tagged = FakeTorrent(hash="H4", name="K", state="stalledUP", tags="zSkipChecked")
+        outside = FakeTorrent(hash="H9", name="O", state="stalledUP", tags="")
+        mgr = _grouped_mgr(os.path.join(td, "state.json"), {"H1": me, "H2": normal, "H3": verified, "H4": tagged})
+        mgr.store.by_hash["H9"] = outside  # 在快照里但不在组内
+        # 顺序钉死: 带跳检标签的 verified 参考排在有效参考之前 -> break 变体会把它后面的全吞掉
+        mgr.store.verified_references = ["H4", "H3", "H9"]
+        ctx = make_ctx(mgr, me, FakeClient())
+        refs = _check_action(basic_check="filelist")._find_reference(ctx, ["H1", "H2", "H3", "H4"])
+        assert [t.hash for t in refs] == ["H2", "H3"], f"参考集应只含组内有效参考: {[t.hash for t in refs]}"
+
+
+def test_start_stop_gate_ignores_group_members_own_write():
+    """C31 守阵: 起停幂等门只判本 hash(`group=False`) —— 同组成员刚被自写时不得误伤
+
+    变异: group=False 被省略/置 True -> 兄弟成员的自写登记把本种子的起停整段拦下
+    (组内各成员各自起停互相误伤)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        tor = FakeTorrent(hash="HA", state="pausedDL")
+        sib = FakeTorrent(hash="HB", state="stalledUP")
+        ctx = make_ctx(mgr, tor, client)
+        mgr.store.by_hash["HB"] = sib
+        mgr.store.groups[("KEY", )] = ["HA", "HB"]
+        mgr.store.member_to_key.update({"HA": ("KEY", ), "HB": ("KEY", )})
+        mgr.store.note_own_write("HB")  # 同组成员刚被自有停/起
+        assert mgr.store.own_write_pending("HA") is True, "对照组: 组维度判据应为真"
+        assert mgr.store.own_write_pending("HA", group=False) is False
+
+        assert StartAction("").execute(ctx).is_ok, "兄弟成员的自写不得拦下本种子的 start"
+        assert ("start", None) in client.calls
+
+        mgr.store.own_writes.clear()
+        mgr.store.note_own_write("HB")
+        tor.state = "stalledUP"
+        assert StopAction("").execute(ctx).is_ok, "兄弟成员的自写不得拦下本种子的 stop"
+        assert ("stop", None) in client.calls

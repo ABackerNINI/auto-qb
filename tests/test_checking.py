@@ -71,6 +71,15 @@
 - test_skip_check_tag_uses_global_config
 - test_skip_check_tagged_member_excluded_as_reference
 - test_skip_check_tagged_verified_reference_excluded
+- test_skip_checking_forwards_origin_task: C22 守阵 —— 跳检委托把 ctx.task 原样交给 ops origin
+  (丢失则终态后规则任务永不回队)
+- test_group_fail_inference_gates_own_hash_and_zero_count: C25 守阵 —— 1.6 闸门: 自身失败不推断
+  自己, count==0 的兄弟不推断
+- test_group_fail_inference_scans_past_self_and_stale_records: C26 守阵 —— 1.6 遍历遇自身/陈旧
+  记录只跳过当前项(continue→break 会截断后续真失败成员)
+- test_run_custom_check_carries_timeout: C27 守阵 —— 自定义校验 subprocess 必须带 timeout=600
+- test_bump_recheck_fail_resets_count_across_day: C28 守阵 —— 跨自然日重置写 count 键(键名漂移
+  -> 昨日计数不清零)
 """
 import json
 import os
@@ -1820,3 +1829,130 @@ def test_poll_verdict_success_iff_seen_checking():
                         assert (v is PollVerdict.SUCCESS) == (progress >= 1.0), f"生效后判定只由 progress 决定: {ctx}"
                     else:
                         assert v is not PollVerdict.SUCCESS, f"无生效证据不得 SUCCESS: {ctx}"
+
+
+# ============================================================
+# B 档变异守阵: 引擎骨架与匹配顺序(C22/C25/C26/C27/C28)
+# ============================================================
+
+
+def test_skip_checking_forwards_origin_task():
+    """C22 守阵: 跳检委托必须把 ctx.task 原样交给 ops 的 origin
+
+    origin 丢失(置 None / 省略 / 取错属性名)后, 跳检终态结算找不到触发任务 ->
+    规则任务永不回队, 后续动作整段丢失。
+    """
+    cfg = make_check_cfg()
+    mgr = make_mgr(cfg)
+    client = CheckingFakeClient()
+    mgr.client = client
+    tor = make_target()
+    ctx = make_ctx(mgr, tor, client)
+    origin = SimpleNamespace(kind="rule-task")
+    ctx.task = origin
+    seen = {}
+
+    def fake_skip_submit(hash, **kw):
+        seen.update(hash=hash, **kw)
+        return "SENTINEL"
+
+    mgr.ctx.ops.skip_submit = fake_skip_submit
+    try:
+        action = CheckAction({"basic_check": "filelist", "with_reference": _seg("skip-checking")})
+        out = action._execute_skip_checking(ctx, {"mode": "skip-checking", "auto_start": True}, True)
+    finally:
+        del mgr.ctx.ops.skip_submit
+    assert out == "SENTINEL"
+    assert seen["origin"] is origin, f"origin 必须是 ctx.task 本身: {seen}"
+    assert seen["hash"] == "HASH123" and seen["source"] == "rule" and seen["has_reference"] is True
+
+
+def test_group_fail_inference_gates_own_hash_and_zero_count():
+    """C25 守阵: 1.6 闸门 —— 自身失败不得推断自己, 无失败证据的兄弟也不得推断
+
+    变异: `h == hash or count <= 0` 的 `or` 改 `and` -> 自身的失败记录反被当证据;
+    `<= 0` 改 `< 0` -> count==0(无证据)的兄弟被当成失败成员。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    me = make_target(hash="HA")
+    sib = make_target(hash="HB")
+    seed_store(mgr, [me, sib])
+    inject_group(mgr, "HA", "HB")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {}).update({"HA": {"movie.mkv": 100}, "HB": {"movie.mkv": 100}})
+    mgr.state.setdefault("recheck_fails", {})["HA"] = {"date": date.today().isoformat(), "count": 3}
+    ctx = make_ctx(mgr, me, client)
+    action = CheckAction({"basic_check": "filelist"})
+    assert action._skip_on_group_check_failed(ctx, ["HA", "HB"]) is None, "自身失败/兄弟无证据都不得推断"
+
+
+def test_group_fail_inference_scans_past_self_and_stale_records():
+    """C26 守阵: 1.6 遍历遇自身/陈旧记录只跳过当前项
+
+    变异: 两处 `continue` 改成 `break` -> 首轮(自身)或陈旧记录处即中断, 后面的真失败成员
+    不被判定, 失败推断与假失败自愈整段失效。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    me = make_target(hash="HA")
+    stale = make_target(hash="HB", state="pausedUP", progress=1.0)  # 已完成 -> 记录是假失败
+    failed = make_target(hash="HC")
+    seed_store(mgr, [me, stale, failed])
+    inject_group(mgr, "HA", "HB", "HC")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {}).update(
+        {
+            "HA": {
+                "movie.mkv": 100
+            },
+            "HB": {
+                "movie.mkv": 100
+            },
+            "HC": {
+                "movie.mkv": 100
+            },
+        }
+    )
+    today = date.today().isoformat()
+    mgr.state.setdefault("recheck_fails",
+                         {}).update({
+                             "HB": {
+                                 "date": today,
+                                 "count": 3
+                             },
+                             "HC": {
+                                 "date": today,
+                                 "count": 2
+                             },
+                         })
+    ctx = make_ctx(mgr, me, client)
+    action = CheckAction({"basic_check": "filelist"})
+    out = action._skip_on_group_check_failed(ctx, ["HA", "HB", "HC"])
+    assert out is not None and out.is_skipped, "末位的真失败成员仍应被判定并推断跳过"
+    assert "HC" in out.message
+    assert "HB" not in mgr.state.get("recheck_fails", {}), "陈旧记录应被自愈清除"
+
+
+def test_run_custom_check_carries_timeout():
+    """C27 守阵: 自定义校验程序必须带 timeout=600(去掉 -> 挂死的外部程序无限阻塞规则线程)"""
+    action = CheckAction({"basic_check": "custom", "custom_basic_check_program_path": "prog"})
+    tor = FakeTorrent(hash="C1", name="C", state="stalledUP")
+    with patch("subprocess.run", return_value=SimpleNamespace(returncode=0, stderr="")) as run:
+        assert action._run_custom_check(None, tor) is True
+    assert run.call_args.kwargs["timeout"] == 600, f"缺超时保险丝: {run.call_args}"
+
+
+def test_bump_recheck_fail_resets_count_across_day():
+    """C28 守阵: 跨自然日重置写的是 count 键(键名漂移 -> 昨日计数不清零, 当日首次即触上限)"""
+    cfg = make_check_cfg()
+    mgr = make_mgr(cfg)
+    state = mgr.ctx.state
+    state.data.setdefault("recheck_fails", {})["HX"] = {"date": "2000-01-01", "count": 3}
+    assert bump_recheck_fail(state, "HX") == 1, "跨日必须从 1 重新计数"
+    assert state.data["recheck_fails"]["HX"] == {"date": date.today().isoformat(), "count": 1}
+    assert bump_recheck_fail(state, "HX") == 2, "同日继续累加"
