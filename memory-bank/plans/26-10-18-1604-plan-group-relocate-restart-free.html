@@ -7,9 +7,9 @@
 <title>免重启整组迁移(A/C)分步实施计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="group-relocate-restart-free">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-18-1604">
-<meta name="doc-updated" content="26-10-19-0759">
+<meta name="doc-updated" content="26-10-30-0211">
 <meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-19-1421-group-relocate-p7.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>免重启整组迁移(A/C)分步实施计划</h1>
 <p class="lede">开关开启时, WebUI「移动位置」与规则 <code>move_to</code> 改走「<b>qB 搬字节 → 别名接续 → 下次 qB 退出时收尾</b>」：字节一律由 qBittorrent 搬(auto-qb 不写自研搬迁代码)，auto-qb 只负责闸门、建别名、对账与收尾；关闭时逐字节保持现状。别名形态<b>按文件数分流</b>：少量文件逐文件链接（对未来种子零影响），文件多且目录专属才用目录别名。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-19-0759 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-18-1604 · <b>doc-updated</b> 26-10-30-0211 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「准备实施 A/C 方案」(26-10-18) + 五轮 grilling 拍板(14:31 / 15:34 / 16:03 / 16:31 / 16:57) + 前序报告 <code>26-10-18-0818</code> / <code>26-10-18-1300</code> + 本机(Windows 与 WSL Ubuntu)与测试客户端(<code>localhost:36595</code>, qB v5.2.3)只读探测
 </div>
 

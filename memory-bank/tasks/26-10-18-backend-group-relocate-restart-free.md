@@ -1,10 +1,10 @@
 # 26-10-18-backend-group-relocate-restart-free — 免重启整组迁移(A/C) P0 能力探测
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-18
-**Updated:** 2026-10-19
+**Updated:** 2026-10-30
 **Summary:** 免重启整组迁移实施档案: P0 能力探测(alias_fs) / P1 配置面 / P2 别名单元与只读预检 /
-P3-P6 执行体+组判定+三入口+guardian 收尾已落地(Fake qB 全替身); 余 P7 真机验收(需 qB 环境, 交他人)
+P3-P6 执行体+组判定+三入口+guardian 收尾已落地(Fake qB 全替身); P7 真机验收 12 步全过(含 5 缺陷修复+2 补强, 全量 3754 通过)
 **Topics:** backend-group-relocate-restart-free
 **Refs:** memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/pitfalls/backend/alias-links.md, memory-bank/testing/baselines/26-10-18-1940-group-relocate-restart-free-p0.md
 
