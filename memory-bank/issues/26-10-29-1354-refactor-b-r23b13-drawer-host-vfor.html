@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1354">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮)">
 <meta name="issue-summary" content="drawer.html 非合并态 4 个 dt-host div + 桥的页签名数组是 DT_TAB_LABELS 之外的第二份页签清单, 加页签要改两处">
 <title>抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1354-refactor-b-r23b13-drawer-host-vfor</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -121,6 +121,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:54 — 入池，状态 <strong>Open</strong>（计划外，未认领，未修）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（抽屉非合并态四页签宿主与桥改 dtTabItems v-for, 模板页签字面量归零(不新增单点, 两分立 v-for 保持 DOM 等价); 守阵 2 passed, e2e 全量 358 passed + 10 skipped；提交 <code>6dc63e5b</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

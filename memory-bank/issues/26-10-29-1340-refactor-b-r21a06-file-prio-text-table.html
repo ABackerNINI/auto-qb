@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1340">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档">
 <meta name="issue-summary" content="优先级码→中文同一张表 5 份(4 份含 4 档)，setFilePriority 缺 4 档且回退 String(p)，4 档一进回执就显示「4」">
 <title>文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1340-refactor-b-r21a06-file-prio-text-table</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -124,6 +124,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:40 — 入池，状态 <strong>Open</strong>（B 类复核批次 G；未认领，未修）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（文件优先级文案表 5 份收口 reg.helpers::PRIO_TEXT/prioText 单点(legacy 4 档补齐, 回执 toast 从「4」修为「高」), 新守阵 test_drawer_prio_text_single_point；提交 <code>b3949cf0</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

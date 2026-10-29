@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1321">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 三桶同键抵消(R5)在 fold 与 publish 各写一份">
 <meta name="issue-summary" content="同键 upsert/removed 两路抵消这段规则在 _fold_delta_pending_locked 与 _publish_locked 分叉判定前逐字重写(后者自述「重跑一遍」), 抽一个 helper 收单点">
 <title>webui 三桶同键抵消(R5)在 fold 与 publish 各写一份 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1321-refactor-b-r16b02-delta-cancel-helper</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:21</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -128,6 +128,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:21 — 入池，状态 <strong>Open</strong>（未认领；计划外问题，等用户指派）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（抽模块级 _cancel_delta_buckets 收敛 webui 三桶同键抵消(R5)规则单点, 两处逐字副本消解; 定向 delta 26 + mirror 14 passed；提交 <code>0075d3ce</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

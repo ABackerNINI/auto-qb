@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1310">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra">
 <meta name="issue-summary" content="打标侧回落只用 hr.required, 取数/达标/视图侧用 required+extra, 同一事实四处手算; 收敛为 HRRule 派生属性">
 <title>HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1310-refactor-b-r10x03-exempt-baseline-single-source</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:10</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit · B 类复核批次 D1</div></div>
     </div>
   </header>
@@ -119,6 +119,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:10 — 入池，状态 <strong>Open</strong>（B 类复核批次 D1；未认领，未修）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（用户拍板 req+extra: 超额豁免线四处手算收敛 HRRule.required_total_seeding_time 派生属性单点(行为变更: 未接入站 3×req → 3×(req+extra), 默认站型 9D → 10.5D, 与达标判据对齐); 红验 + 定向 3 + 5 passed；提交 <code>2bd0e234</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

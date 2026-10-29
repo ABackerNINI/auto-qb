@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1343">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tracker 五桶文案表两种形状、字面散在 5 处(04/05/06)">
 <meta name="issue-summary" content="BUCKET{text,sev} 两份、GROUPS{text,cnt} 一份，另有 04 PILLS 与 05 计数条内联字面，改文案或加桶要动五处">
 <title>tracker 五桶文案表两种形状、字面散在 5 处(04/05/06) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1343-refactor-b-r21c07-tracker-bucket-table-shapes</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:43</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -118,6 +118,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:43 — 入池，状态 <strong>Open</strong>（B 类复核批次 G；未认领，未修）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（tracker 五桶文案表 5 处两种形状收口 reg.trackers 判据命名空间单源(TRACKER_BUCKETS + TRACKER_BUCKET_ORDER), 文案逐字不变; 新守阵 + node 电池, 家族 18 passed；提交 <code>541ede4b</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

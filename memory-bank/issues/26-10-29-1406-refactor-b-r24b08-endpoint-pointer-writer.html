@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1406">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)">
 <meta name="issue-summary" content="同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵">
 <title>tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 14:06</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -116,6 +116,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 14:06 — 入池，状态 <strong>Open</strong>（计划外，未认领；B 类复核重估后判"值得做"，规模不大但代价同样小）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（三份 endpoint.json 指针写手收口 tests/helpers.write_endpoint_pointer 单点(payload 参数挂同一写手, client 版补齐 autostart_error 键); 定向三模块 75 passed；提交 <code>409f36fc</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

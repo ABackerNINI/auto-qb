@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1327">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案">
 <meta name="issue-summary" content="同一各档摘要两处实现: 全深度/(全) 文案分叉, tag 回落与计数段格式各写一遍">
 <title>各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1327-refactor-b-r13s01-lane-summary-twin</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:27</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -122,6 +122,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:27 — 入池，状态 <strong>Open</strong>（B 类复核批次 E；未认领，未修）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（用户拍板全深度 + 透传 status: 摘要串三部件(tag/深度/计数)单点落 hr/model.py, service/status 两套字面副本消解(用户可见文案 (全) 变 (全深度)); 新增 parity 守阵, 定向 304 passed；提交 <code>cf7357cb</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 

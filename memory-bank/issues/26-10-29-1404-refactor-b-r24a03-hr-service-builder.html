@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1404">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0418-refactor-b-recheck-batch-baseline.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HrRefreshService 测试构造器 4 份 + 10 处内联未收口(参数面不够就绕过)">
 <meta name="issue-summary" content="4 个文件各有一份构造器(181/47/5 次调用), 另有 10 处内联; 根因是构造器参数面缺 data_dir/confs/sleeper/owner, 与已修的 QbManager 单点同根">
 <title>HrRefreshService 测试构造器 4 份 + 10 处内联未收口(参数面不够就绕过) · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1404-refactor-b-r24a03-hr-service-builder</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 14:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -119,6 +119,7 @@
     <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 14:04 — 入池，状态 <strong>Open</strong>（计划外，未认领；B 类复核重估：未被 manager-builder 那次收口消解）</li>
+      <li>2026-10-30 04:17 — 修复完成，状态 <strong>Open</strong> → <strong>Done</strong>（HrRefreshService 测试装配收口 tests/hr_helpers.make_service 单点(4 份本地构造器 + 10 处内联, 233 次调用零改动), 守阵扩到双类; 定向受影响 7 文件 433 passed + 1 skipped；提交 <code>bfd19fda</code>；验证：定向数字见提交内实测，全量 test.full 与覆盖率见 <code>commands run kb.baseline</code> 最新切片）</li>
     </ul>
   </section>
 
