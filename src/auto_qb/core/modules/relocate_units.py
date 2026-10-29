@@ -866,6 +866,17 @@ ACT_DONE_EXTERNAL = "done_external"  # 已被外部完成(save_path==dst): done
 
 GUARDIAN_HEARTBEAT_MAX_AGE = 60.0  # guardian 心跳过期判据(§3.5 对账表第 1 行)
 
+# 重试退避与上限(防无界重试): 建链必失败的环境(权限不足 / 未开 Windows 开发者模式且
+# allow_uac 关 —— 预检文案自己点名的常见环境)里, 「REMOVED(alias_partial) → 对账
+# REBUILD → 置 MOVED 重建 → 再失败」会每 1-2 个 tick 一轮 create-fail-delete 且永不终态
+# (WARNING 约 4s 一条刷屏); guardian 心跳一过期就每 tick 重拉一次进程同理。这类失败不是
+# 抖动, 靠退避拉开间隔 + 达到上限转 failed 留现场才能收敛。
+# 取常量而非配置键: 这是执行体的内部节拍(与 GUARDIAN_HEARTBEAT_MAX_AGE 同档), 不是用户
+# 该调的策略面 —— 重试次数由 job.attempts 记账(落 state, 重启不丢)。
+REBUILD_MAX_ATTEMPTS = 3  # 重建链接的重试上限(超出 ⇒ failed 留现场交人)
+REBUILD_BACKOFF = 300.0  # 秒; 两次重建之间的最小间隔
+RESPAWN_BACKOFF = 60.0  # 秒; 两次 guardian 拉起之间的最小间隔(与心跳过期判据同档)
+
 
 def reconcile(
     job: RelocateJob,

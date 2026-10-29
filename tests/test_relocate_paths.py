@@ -15,7 +15,7 @@ guardian 的退化路径、journal 落盘与 pid 锁、CLI 入口。目的有二
 - test_guardian_process_names_parsing: tasklist/ps//proc 三条进程表解析 + 平台分派 + 读不到 ⇒ 空
 - test_exec_spawn_argv: 真实拉起入口的 argv(detached 单点)
 - test_cancel_rejects_unknown_and_failure: 未知 job -> blocked; 搬回被拒 -> blocked + failed 账
-- test_reconcile_revert_redelist_done_external: 对账三条处置分支(撤销意图/重删/外部完成)
+- test_reconcile_revert_redelist_done_external: 对账三条处置分支(撤销意图/重删/外部完成; 重删用例需把重拉退避推到窗口外)
 - test_task_line_exception_isolated: 单 job 抛异常 -> failed(internal_error), 不拖垮任务线
 - test_qb_up_probe: 客户端可读 -> True; 无 api -> False
 - test_guardian_degenerate_paths: no_spec / already_running / verify 不齐 / 超时退出
@@ -270,10 +270,11 @@ def test_reconcile_revert_redelist_done_external(tmp_path, monkeypatch):
     assert mod.get_job(job_id).phase == ru.PHASE_ARMED
     assert relocate_journal.read_journal(str(tmp_path / "data"), job_id)["phase"] == ru.PHASE_ARMED
 
-    # guardian 重删: journal=removing + 链接在 + qB 不在
+    # guardian 重删: journal=removing + 链接在 + qB 不在(重拉有退避: 把上次拉起的时间推到窗口外)
     relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_REMOVING, "ts": time.time()})
     mod._qb_up = lambda: False
     spawned.clear()
+    mod._rt[job_id]["respawn_ts"] = time.monotonic() - ru.RESPAWN_BACKOFF - 1.0
     mod.on_task_line()
     assert spawned == [job_id], spawned
 

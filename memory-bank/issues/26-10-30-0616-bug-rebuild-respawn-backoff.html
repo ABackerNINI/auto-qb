@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate REBUILD/RESPAWN 无退避无上限, job.attempts 零消费">
 <meta name="issue-summary" content="建链失败进 REMOVED-REBUILD-再失败循环每 1-2 tick 一轮 create-fail-delete, guardian respawn 每 tick 重拉进程, 均无退避无重试上限">
 <title>relocate REBUILD/RESPAWN 无退避无上限, job.attempts 零消费 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0616-bug-rebuild-respawn-backoff</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -168,11 +168,16 @@ job 的 guardian 心跳缺失时(:899 ACT_RESPAWN → :906 _spawn_guardian)每 t
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 07:06 — 认领（用户 26-10-30 指派「认领并修复」三条批A issue），状态 <strong>In Progress</strong>；同轮完成复验</li>
+      <li>2026-10-30 07:06 — 已修并验证，状态 <strong>Done</strong>（实际修法见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-30 07:04 仍复现</strong> —— grep <code>attempts</code> 只命中 <code>RelocateJob</code> 字段定义与 <code>job_to_dict</code> / <code>job_from_dict</code> 的序列化，逻辑侧<strong>零消费</strong>（字段语义 = 重试计数，无歧义）；<code>_apply_reconcile</code> 的 ACT_REBUILD 分支直调 <code>_build_links</code> 无退避无上限；ACT_RESPAWN / ACT_REDELETE / ACT_REVERT_INTENT 三条分支每 tick 直调 <code>_spawn_guardian</code>。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：<code>relocate_units.py</code> 新增三个执行体内部节拍常量 <code>REBUILD_MAX_ATTEMPTS=3</code> / <code>REBUILD_BACKOFF=300s</code> / <code>RESPAWN_BACKOFF=60s</code>（与既有 <code>GUARDIAN_HEARTBEAT_MAX_AGE</code> 同档，未扩配置键面 —— 这是内部节拍不是用户策略面）；<code>_build_links</code> 失败分支记 <code>attempts + 1</code>（落 state，重启不丢）；ACT_REBUILD 先判上限（达上限 ⇒ <code>_fail(rebuild_exhausted)</code>，保留现场与 attempts 计数交人处理）再判退避（<code>rt["rebuild_ts"]</code>）；新增 <code>_respawn_guardian(job, rt)</code>（带退避），对账三条重拉分支改走它；<code>_arm</code> 武装成功时 <code>attempts</code> 归零（重建成功后不占下次配额）。</p>
+    <p><strong>改道说明</strong>：建议是「REBUILD/RESPAWN 加退避与 attempts 上限」，实际对两者做了区分 —— <strong>respawn 只加退避、不加上限</strong>：guardian 是「保活」语义（要一直活着等到 qB 退出那一次收尾，上限会把它误杀），它的问题只是每 tick fork；<strong>rebuild 退避 + 上限都加</strong>：它是「重建」语义，权限不足这类环境修不好就永远失败，必须有终态。上限转 FAILED 而非静默停摆，与建议的「转 FAILED 留现场」一致。</p>
+    <p><strong>验证方式</strong>：新增 4 条用例 —— <code>test_build_links_failure_bumps_attempts</code>（建链失败 ⇒ attempts +1）、<code>test_rebuild_backoff_blocks_within_window</code>（退避窗口内不重建、窗口外放行）、<code>test_rebuild_capped_then_failed_keeps_scene</code>（达上限 ⇒ failed(rebuild_exhausted) 且保留 attempts 计数）、<code>test_reconcile_respawn_backoff_not_every_tick</code>（连跑 5 tick 零重拉）；另修订 2 条既有用例的判据（<code>test_reconcile_respawn_guardian_on_stale_heartbeat</code> 与 <code>test_relocate_paths.py::test_reconcile_revert_redelist_done_external</code>）—— 它们钉的是「心跳过期必重拉」，退避生效后需先把 <code>rt["respawn_ts"]</code> 推到窗口外才成立，属判据更新不是功能回退。</p>
+    <p><strong>测试数字</strong>：见 <code>commands run kb.baseline</code> —— 切片 <code>26-10-30-0706-relocate-closeout-batch-a</code>（数字只写那里一处）。</p>
   </section>
 
   <footer>

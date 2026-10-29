@@ -228,6 +228,37 @@ class RelocateModule(BaseModule):
         self._persist()
         return job
 
+    def _resume_members(self, job: RelocateJob) -> None:
+        """恢复本 job 发起时被暂停的成员(幂等: 无暂停成员即 no-op)
+
+        _start_job 为按住搬迁窗口先暂停组内运行中成员并记进 resume_hashes; 此后任何出口
+        要么「迁移成了」(武装/单成员收口/撤销成功)要么「没成」—— 后者不恢复的话, 整组
+        成员会永久停在暂停态而日志一字不提(做种静默中断, 用户只能靠猜)。故恢复与置相位
+        一样是收口的必做项, 不是可选的美化。恢复失败只告警: 数据面未动, 用户可手动起。
+        """
+        if not job.resume_hashes:
+            return
+        try:
+            self._ctx.api.torrents_resume(torrent_hashes=list(job.resume_hashes))
+        except Exception as e:  # noqa: BLE001 - 恢复失败只记: 数据面未动, 用户可手动恢复
+            logger.warning(
+                f"relocate | job {job.job_id}: 恢复成员运行态失败({e}) —— "
+                f"{len(job.resume_hashes)} 个成员仍被暂停, 需手动恢复: {', '.join(job.resume_hashes)}"
+            )
+            return
+        logger.info(f"relocate | job {job.job_id}: 已恢复 {len(job.resume_hashes)} 个成员的运行态")
+
+    def _fail(self, job: RelocateJob, reason: str, last_error: str = "") -> RelocateJob:
+        """失败收口单点: 置 FAILED + 消费 resume_hashes(把发起时暂停的成员放回去)
+
+        失败 = 「这次迁移没成」: 被暂停的成员必须回到运行态(见 _resume_members 的为什么);
+        数据面一律保留现场 —— 不搬回、不删链接, 交人处理(§3.5.1)。相位机所有失败出口
+        一律走这里, 免得漏一个就留一批静默暂停的种子。
+        """
+        failed = self._set_job(replace(job, phase=ru.PHASE_FAILED, reason=reason, last_error=last_error))
+        self._resume_members(failed)
+        return failed
+
     # ---------- 任务线: 每 tick 推进一步(P3 状态机) ----------
 
     def on_task_line(self, force: bool = False) -> None:
@@ -236,9 +267,17 @@ class RelocateModule(BaseModule):
         未启用时零动作(保守默认); 每步只做「一个可观测推进」(一次采样 / 一批链接 /
         一次 setLocation), 绝不在一个 tick 里跑完整个迁移 —— 大种子搬运要跨很多 tick,
         卡住主循环会让整库同步停滞。
+
+        dry_run 时同样零动作: 相位机每一步都是真写(setLocation / 建删链接 / 拉 guardian /
+        恢复运行态), 而 relocate_execute 那道闸只挡了「新建 job」这一条路 —— start() 从
+        state 恢复的非终态 job 不经任何入口闸(崩溃/重启窗口即常态), 闸门必须落在这里,
+        否则 --dry-run 启动会照着昨天的账真写。与 ops_mod.on_micro_line 同款。
         """
         conf = self._live_conf()
         if conf is None or not getattr(conf, "enabled", False):
+            return
+        if self._dry_run():
+            logger.debug("relocate | dry-run: 相位机不推进(含 state 恢复的在途 job —— 不真写)")
             return
         if self._ctx is None or self._ctx.store is None:
             return
@@ -247,7 +286,7 @@ class RelocateModule(BaseModule):
                 self._advance(job)
             except Exception as e:  # noqa: BLE001 - 单 job 异常不得拖垮任务线(其它 job 照常推进)
                 logger.exception(f"relocate | job {job.job_id} 推进异常: {e}")
-                self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="internal_error", last_error=str(e)))
+                self._fail(job, "internal_error", str(e))
 
     def _advance(self, job: RelocateJob) -> None:
         """按相位分派一步"""
@@ -268,7 +307,7 @@ class RelocateModule(BaseModule):
         store = self._ctx.store
         mover = store.by_hash.get(job.mover)
         if mover is None:
-            self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="torrent_gone", last_error="搬迁中种子已不存在"))
+            self._fail(job, "torrent_gone", "搬迁中种子已不存在")
             return
         if rt.get("issue", True):
             # 等自有暂停的快照回流(own_write_pending 语义): 未回流前不下发, 免得与暂停排队冲突
@@ -278,9 +317,7 @@ class RelocateModule(BaseModule):
             try:
                 self._ctx.api.torrents_set_location(torrent_hashes=[job.mover], location=job.dst)
             except Exception as e:  # noqa: BLE001 - qB 拒绝: 落 failed, 不自动搬回
-                self._set_job(
-                    replace(job, phase=ru.PHASE_FAILED, reason="move_rejected", last_error=f"setLocation 被拒: {e}")
-                )
+                self._fail(job, "move_rejected", f"setLocation 被拒: {e}")
                 return
             rt["issue"] = False
             rt["started"] = time.monotonic()
@@ -313,9 +350,7 @@ class RelocateModule(BaseModule):
             stalled_for=(now - float(rt.get("stall_since") or 0.0)) if rt.get("stall_since") else 0.0,
         )
         if verdict == ru.STALL_FAILED:
-            self._set_job(
-                replace(job, phase=ru.PHASE_FAILED, reason="move_stalled", last_error="搬迁停滞(dst 不再增长且 qB 已不在 moving)")
-            )
+            self._fail(job, "move_stalled", "搬迁停滞(dst 不再增长且 qB 已不在 moving)")
             return
         if verdict == ru.STALL_WARN and job.phase == ru.PHASE_MOVING:
             logger.info(
@@ -374,7 +409,7 @@ class RelocateModule(BaseModule):
         conf = self._live_conf()
         if stage == "verify":
             if not self._dst_ready(job):
-                self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="verify_mismatch", last_error="目标侧文件数/大小不符"))
+                self._fail(job, "verify_mismatch", "目标侧文件数/大小不符")
                 return
             rt["stage"] = "link"
             # 已建链接不重建(崩溃恢复: 重启后 alias_paths 非空, 从断点续建)
@@ -393,7 +428,7 @@ class RelocateModule(BaseModule):
         if stage == "penetrate":
             if job.alias_paths and not self._penetration_ok(job):
                 # 穿透失败: 保留链接现场(便于排查), 不删链接不搬回
-                self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="alias_unreadable", last_error="经原路径读不到已迁数据"))
+                self._fail(job, "alias_unreadable", "经原路径读不到已迁数据")
                 return
             rt["stage"] = "arm"
             return
@@ -448,6 +483,8 @@ class RelocateModule(BaseModule):
                     phase=ru.PHASE_REMOVED,
                     reason="alias_partial",
                     last_error=str(e),
+                    # 记账: 重建配额由对账侧消费(建链必失败的环境不能无限重建, 见 REBUILD_MAX_ATTEMPTS)
+                    attempts=int(job.attempts or 0) + 1,
                 )
             )
             return False
@@ -474,14 +511,11 @@ class RelocateModule(BaseModule):
                 grouping.regroup_scope(job.scope, job.src, job.hashes)
             except Exception as e:  # noqa: BLE001 - 重归组失败不影响落账(下轮 save_path 变化还会再归)
                 logger.warning(f"relocate | job {job.job_id}: 重归组失败({e})")
-        armed = replace(job, phase=ru.PHASE_ARMED, armed_at=time.time(), reason="")
+        # attempts 归零: 重建链接成功即本轮重试周期结束, 上次的历史失败不该占着下次的配额
+        armed = replace(job, phase=ru.PHASE_ARMED, armed_at=time.time(), reason="", attempts=0)
         self._set_job(armed)
         self._spawn_guardian(armed)
-        if armed.resume_hashes:
-            try:
-                self._ctx.api.torrents_resume(torrent_hashes=list(armed.resume_hashes))
-            except Exception as e:  # noqa: BLE001 - 恢复失败只记: 数据面已就位, 用户可手动起
-                logger.warning(f"relocate | job {armed.job_id}: 恢复运行态失败({e})")
+        self._resume_members(armed)
         logger.info(
             f"relocate | job {armed.job_id}: 已武装收尾(别名 {len(armed.alias_paths)} 条, "
             f"形态 {armed.alias_kind or 'direct'}) —— 下次 qB 退出时自动收尾"
@@ -495,11 +529,7 @@ class RelocateModule(BaseModule):
                 grouping.regroup_scope(job.scope, job.src, job.hashes)
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"relocate | job {job.job_id}: 重归组失败({e})")
-        if job.resume_hashes:
-            try:
-                self._ctx.api.torrents_resume(torrent_hashes=list(job.resume_hashes))
-            except Exception as e:  # noqa: BLE001
-                logger.warning(f"relocate | job {job.job_id}: 恢复运行态失败({e})")
+        self._resume_members(job)
         self._set_job(replace(job, phase=ru.PHASE_DONE, reason="direct"))
         logger.info(f"relocate | job {job.job_id}: 单成员组迁移完成(qB 自搬, 无需别名)")
 
@@ -586,15 +616,27 @@ class RelocateModule(BaseModule):
             return
         if action == ru.ACT_RESPAWN or action == ru.ACT_REDELETE:
             logger.info(f"relocate | job {job.job_id}: guardian 心跳过期/未在工作, 重拉({action})")
-            self._spawn_guardian(job)
+            self._respawn_guardian(job, rt)
             return
         if action == ru.ACT_REVERT_INTENT:
             logger.info(f"relocate | job {job.job_id}: 删别名期间 qB 回来了 —— 撤销删除意图, 回 armed")
             relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_ARMED, "ts": time.time()})
             self._set_job(replace(job, phase=ru.PHASE_ARMED))
-            self._spawn_guardian(job)
+            self._respawn_guardian(job, rt)
             return
         if action == ru.ACT_REBUILD:
+            if int(job.attempts or 0) >= ru.REBUILD_MAX_ATTEMPTS:
+                self._fail(
+                    job,
+                    "rebuild_exhausted",
+                    f"重建链接已失败 {int(job.attempts or 0)} 次(上限 {ru.REBUILD_MAX_ATTEMPTS}) —— "
+                    f"保留现场交人处理: 通常是权限不足, 修好后重新发起即可",
+                )
+                return
+            if time.monotonic() - float(rt.get("rebuild_ts") or 0.0) < ru.REBUILD_BACKOFF:
+                logger.debug(f"relocate | job {job.job_id}: 重建链接退避中(距上次 < {ru.REBUILD_BACKOFF}s), 本轮跳过")
+                return
+            rt["rebuild_ts"] = time.monotonic()
             logger.warning(f"relocate | job {job.job_id}: 链接不在而 qB 在线(删的时候 qB 其实在跑) —— 重建链接")
             rt["stage"] = "link"
             rt["link_pos"] = 0
@@ -614,23 +656,20 @@ class RelocateModule(BaseModule):
             try:
                 self._ctx.api.torrents_set_location(torrent_hashes=list(members), location=job.dst)
             except Exception as e:  # noqa: BLE001
-                self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="finalize_rejected", last_error=str(e)))
+                self._fail(job, "finalize_rejected", str(e))
                 return
             rt["finalize"] = list(members)
             rt["finalize_ts"] = time.time()
             self._set_job(replace(job, phase=ru.PHASE_FINALIZING))
             return
         if action == ru.ACT_FAILED_GONE:
-            self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="torrent_gone", last_error="收尾前种子已被删除"))
+            self._fail(job, "torrent_gone", "收尾前种子已被删除")
             return
         if action == ru.ACT_FAILED_TIMEOUT:
-            self._set_job(
-                replace(
-                    job,
-                    phase=ru.PHASE_FAILED,
-                    reason="finalize_timeout",
-                    last_error="数据已在目标位置, qB 仍指向原路径 —— 已超收尾等待上限, 请手动 setLocation",
-                )
+            self._fail(
+                job,
+                "finalize_timeout",
+                "数据已在目标位置, qB 仍指向原路径 —— 已超收尾等待上限, 请手动 setLocation",
             )
             return
         if action == ru.ACT_DONE_EXTERNAL:
@@ -669,7 +708,7 @@ class RelocateModule(BaseModule):
             if time.time() - float(rt.get("finalize_ts") or time.time()) > float(
                 getattr(conf, "finalize_timeout", 0) or 0
             ):
-                self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="finalize_timeout"))
+                self._fail(job, "finalize_timeout")
             return
         self._set_job(replace(job, phase=ru.PHASE_DONE, reason="finalized"))
         relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_DONE, "ts": time.time()})
@@ -853,10 +892,21 @@ class RelocateModule(BaseModule):
         """撤销迁移: 删链接 + qB 搬回(目标为空 ⇒ 零校验) —— 必须先给用户看成本
 
         未确认成本时只回「将把 X 从 T 搬回 S(预计)」, 不动任何东西(§3.5.1)。
+
+        dry_run 时不执行(删链接 + qB 搬回都是真写, 且搬回要再复制一遍全量数据)。
         """
         job = self._jobs.get(job_id)
         if job is None:
             return {"cls": "blocked", "reasons": [{"gate": "gone", "text": f"未找到迁移任务 {job_id}"}]}
+        if self._dry_run():
+            return {
+                "cls": "blocked",
+                "job_id": job_id,
+                "reasons": [{
+                    "gate": "dry_run",
+                    "text": "dry-run: 撤销不执行(不删链接、不搬回)"
+                }],
+            }
         total = sum(int(s) for _r, s in self._plan_files(job))
         cost = {
             "job_id": job_id,
@@ -871,16 +921,12 @@ class RelocateModule(BaseModule):
         try:
             self._ctx.api.torrents_set_location(torrent_hashes=[job.mover], location=job.src)
         except Exception as e:  # noqa: BLE001
-            self._set_job(replace(job, phase=ru.PHASE_FAILED, reason="cancel_failed", last_error=str(e)))
+            self._fail(job, "cancel_failed", str(e))
             return {"cls": "blocked", "cost": cost, "reasons": [{"gate": "cancel_failed", "text": f"搬回被拒: {e}"}]}
-        self._set_job(replace(job, phase=ru.PHASE_CANCELLED, alias_paths=(), reason="cancelled"))
+        cancelled = self._set_job(replace(job, phase=ru.PHASE_CANCELLED, alias_paths=(), reason="cancelled"))
         # 通知 guardian 退休(它可能在等 qB 退出; 撤销后没有它要干的活了)
         relocate_journal.write_journal(self._data_dir(), job_id, {"phase": ru.PHASE_CANCELLED, "ts": time.time()})
-        if job.resume_hashes:
-            try:
-                self._ctx.api.torrents_resume(torrent_hashes=list(job.resume_hashes))
-            except Exception:  # noqa: BLE001
-                pass
+        self._resume_members(cancelled)
         return {"cls": "ok", "cost": cost, "job_id": job_id, "phase": ru.PHASE_CANCELLED}
 
     # ---------- 链接删除与 guardian 拉起 ----------
@@ -902,6 +948,19 @@ class RelocateModule(BaseModule):
     def _data_dir(self) -> str:
         cfg = getattr(self._ctx, "config", None) if self._ctx is not None else None
         return str(getattr(cfg, "data_dir", "") or "auto-qb-data")
+
+    def _respawn_guardian(self, job: RelocateJob, rt: dict) -> None:
+        """对账驱动的重拉(带退避): 心跳一过期就每 tick 拉一次进程是纯浪费
+
+        退避窗口内跳过 —— 判断依据(心跳/链接/qB)没变, 下一轮还会判到同一个动作;
+        首次拉起(rt 无记录)不受退避影响, 与「刚武装」时的 _spawn_guardian 直调同口径。
+        """
+        now = time.monotonic()
+        if now - float(rt.get("respawn_ts") or 0.0) < ru.RESPAWN_BACKOFF:
+            logger.debug(f"relocate | job {job.job_id}: guardian 重拉退避中(距上次 < {ru.RESPAWN_BACKOFF}s), 本轮跳过")
+            return
+        rt["respawn_ts"] = now
+        self._spawn_guardian(job)
 
     def _spawn_guardian(self, job: RelocateJob) -> bool:
         """拉起 guardian 独立进程(不随 auto-qb 消亡; 规格经文件传, Unicode 路径不经命令行)"""

@@ -52,6 +52,16 @@
 - test_exec_unknown_stage_falls_back_to_arm
 - test_restart_does_not_reissue_setlocation
 - test_skip_check_skips_during_relocation
+### 收口 / 退避守卫(issues 26-10-30-0616 批A: resume_hashes 失败路径 / dry_run 短路 / 重试退避)
+- test_fail_path_resumes_paused_members: 失败出口消费 resume_hashes(旧实现只在成功路径恢复)
+- test_fail_path_resume_rejected_still_fails_and_names_paused: 恢复被拒: 失败照落 + 告警点名仍被暂停
+- test_cancel_failed_resumes_members: 撤销搬回被拒 ⇒ failed(cancel_failed) 且恢复成员
+- test_on_task_line_holds_in_dry_run: dry-run 相位机不推进(含 start() 恢复账本这条不经入口闸的路径)
+- test_cancel_dry_run_is_blocked: dry-run 撤销零动作(不删链接不搬回)
+- test_build_links_failure_bumps_attempts: 建链失败 ⇒ attempts +1(对账侧重建配额消费它)
+- test_rebuild_backoff_blocks_within_window: 退避窗口内不重建(旧实现每 1-2 tick 一轮建删)
+- test_rebuild_capped_then_failed_keeps_scene: 重建达上限 ⇒ failed 留现场(不再永不终态)
+- test_reconcile_respawn_backoff_not_every_tick: guardian 重拉退避(旧实现每 tick 拉一次进程)
 """
 import os
 import time
@@ -325,13 +335,29 @@ def test_reconcile_rebuild_when_link_lost_but_qb_alive(tmp_path, monkeypatch):
 
 
 def test_reconcile_respawn_guardian_on_stale_heartbeat(tmp_path, monkeypatch):
-    """armed + 链接在 + 心跳过期 ⇒ 重拉 guardian"""
+    """armed + 链接在 + 心跳过期(且退避窗口已过) ⇒ 重拉 guardian"""
     mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
     mod._qb_up = lambda: True
     relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_ARMED, "ts": time.time() - 999})
     spawned.clear()
+    mod._rt[job_id]["respawn_ts"] = time.monotonic() - ru.RESPAWN_BACKOFF - 1.0  # 退避窗口外
     mod.on_task_line()
     assert spawned == [job_id]
+
+
+def test_reconcile_respawn_backoff_not_every_tick(tmp_path, monkeypatch):
+    """重拉退避: 距上次拉起不足 RESPAWN_BACKOFF ⇒ 本轮跳过(旧实现每 tick 拉一次进程)
+
+    心跳判据没变, 下一轮还会判到同一个动作 —— 退避掉的只是「同一秒内反复 fork」。
+    """
+    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    mod._qb_up = lambda: True
+    relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_ARMED, "ts": time.time() - 999})
+    spawned.clear()
+    mod._rt[job_id]["respawn_ts"] = time.monotonic()  # 刚拉过
+    for _ in range(5):
+        mod.on_task_line()
+    assert spawned == [], f"退避窗口内不得每 tick 重拉: {spawned}"
 
 
 def test_reconcile_failed_gone_and_timeout(tmp_path, monkeypatch):
@@ -624,16 +650,28 @@ def _bare_mod(store=None, api=None, relocate=None, data_dir=""):
     return mod
 
 
-def _job(job_id="j1", phase=ru.PHASE_MOVING, plan=None, hashes=("HA", )):
+def _job(
+    job_id="j1",
+    phase=ru.PHASE_MOVING,
+    plan=None,
+    hashes=("HA", ),
+    resume_hashes=(),
+    src="R:/src",
+    dst="R:/dst",
+    scope=None,
+    **kw,
+):
     return ru.RelocateJob(
         job_id=job_id,
         hashes=hashes,
         mover="HA",
-        src="R:/src",
-        dst="R:/dst",
-        scope="R:/src",
+        src=src,
+        dst=dst,
+        scope=scope or src,
         phase=phase,
-        plan=plan or {}
+        resume_hashes=resume_hashes,
+        plan=plan or {},
+        **kw,
     )
 
 
@@ -891,3 +929,138 @@ def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
     )
     r2 = act.execute(_Ctx())
     assert r2.is_failed and "未通过预检" in r2.message, r2
+
+
+# ---------------------------------------------------------------- 收口/退避守卫(issues 26-10-30-0616 批A)
+
+
+def test_fail_path_resumes_paused_members():
+    """失败出口消费 resume_hashes: 迁移没成 ⇒ 把发起时暂停的成员放回运行态
+
+    旧实现只在成功路径(武装 / 单成员收口 / 撤销成功)恢复, 失败出口一律漏掉 —— 整组
+    成员永久停在暂停态且日志一字不提, 用户只能观察到「莫名暂停」。
+    """
+    resumed = []
+    store = types.SimpleNamespace(by_hash={"HA": types.SimpleNamespace(state="pausedUP")}, relocating_hashes=set())
+    mod = _bare_mod(
+        store=store,
+        api=types.SimpleNamespace(
+            torrents_set_location=lambda **kw: (_ for _ in ()).throw(RuntimeError("qB 拒绝 setLocation")),
+            torrents_resume=lambda **kw: resumed.append(list(kw["torrent_hashes"])),
+        ),
+    )
+    mod._step_move(_job(resume_hashes=("HA", "HB")), {"issue": True})
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_FAILED and saved.reason == "move_rejected", (saved.phase, saved.reason)
+    assert resumed == [["HA", "HB"]], f"失败必须把被暂停的成员放回运行态: {resumed}"
+
+
+def test_fail_path_resume_rejected_still_fails_and_names_paused():
+    """恢复被拒: 失败照落(数据面保留现场), 只告警并点名「仍被暂停」(用户可照单手动恢复)"""
+    from helpers import capture_logs
+
+    mod = _bare_mod(api=types.SimpleNamespace(torrents_resume=lambda **kw: (_ for _ in ()).throw(RuntimeError("拒了"))))
+    with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
+        mod._fail(_job(resume_hashes=("HA", )), "move_stalled", "停滞")
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_FAILED and saved.reason == "move_stalled"
+    assert any("仍被暂停" in m and "HA" in m for m in cap.messages), cap.messages
+
+
+def test_cancel_failed_resumes_members(tmp_path):
+    """撤销搬回被拒 ⇒ failed(cancel_failed) 且恢复成员(搬回没成, 组不该继续被按住)"""
+    resumed = []
+    mod = _bare_mod(
+        api=types.SimpleNamespace(
+            torrents_set_location=lambda **kw: (_ for _ in ()).throw(RuntimeError("409")),
+            torrents_resume=lambda **kw: resumed.append(list(kw["torrent_hashes"])),
+        ),
+        data_dir=str(tmp_path),
+    )
+    mod._jobs["j1"] = _job(phase=ru.PHASE_ARMED, resume_hashes=("HA", ))
+    out = mod.relocate_cancel("j1", cost_confirmed=True)
+    assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "cancel_failed", out
+    assert mod._jobs["j1"].phase == ru.PHASE_FAILED and mod._jobs["j1"].reason == "cancel_failed"
+    assert resumed == [["HA"]], f"撤销失败必须恢复成员: {resumed}"
+
+
+def test_on_task_line_holds_in_dry_run(tmp_path, monkeypatch):
+    """dry-run: 相位机不推进 —— 含「恢复账本」这条不经入口闸的路径
+
+    相位机每一步都是真写(setLocation / 建删链接 / 拉 guardian / 恢复运行态), 而
+    relocate_execute 那道闸只挡新建 job; 上一轮非终态 job 由 start() 从 state 恢复,
+    携它以 --dry-run 启动必须同样零动作。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    before = len([c for c in client.calls if c[0] == "set_location"])
+    mod._dry = True  # 等价于以 --dry-run 启动
+    _run_ticks(mod, 3)
+    assert len([c for c in client.calls if c[0] == "set_location"]) == before, "dry-run 不得下发 setLocation"
+    assert mod.get_job(job_id).phase == ru.PHASE_MOVING, "相位机不得推进"
+
+    from auto_qb.core.modules.relocate_mod import RelocateModule
+
+    mod2 = RelocateModule()  # 新进程: 从 state 恢复同一批 job(启动期 _load_jobs)
+    mod2._ctx = mod._ctx
+    mod2._dry = True
+    assert mod2._load_jobs() >= 1, "state 里应有上一轮留下的非终态 job"
+    mod2.on_task_line()
+    assert len([c for c in client.calls if c[0] == "set_location"]) == before, "恢复账本路径同样不得真写"
+
+
+def test_cancel_dry_run_is_blocked(tmp_path, monkeypatch):
+    """dry-run 撤销零动作: 回执 blocked(dry_run), 不删链接不搬回(搬回要再复制全量数据)"""
+    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    links = list(mod.get_job(job_id).alias_paths)
+    assert links, "armed 现场应有链接(撤销要删的对象)"
+    mod._dry = True
+    out = mod.relocate_cancel(job_id, cost_confirmed=True)
+    assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "dry_run", out
+    assert mod.get_job(job_id).phase == ru.PHASE_ARMED, "撤销不得改相位"
+    assert [c for c in client.calls if c[0] == "set_location"][-1][1] == dst, "不得搬回源路径"
+    assert any(os.path.exists(p) for p in links), "链接必须还在"
+
+
+def test_build_links_failure_bumps_attempts(tmp_path, monkeypatch):
+    """建链失败 ⇒ attempts +1(对账侧的重建配额消费它; 旧实现该字段全程零消费)"""
+    from auto_qb.infra import alias_fs
+
+    monkeypatch.setattr(alias_fs, "create_file_alias", lambda *a, **k: (_ for _ in ()).throw(OSError("权限不足")))
+    mod = _bare_mod(data_dir=str(tmp_path))
+    job = _job(
+        phase=ru.PHASE_MOVED, plan={"files": [["a.mkv", 10]]}, src=str(tmp_path / "src"), dst=str(tmp_path / "dst")
+    )
+    assert mod._build_links(job, {"links": [], "link_pos": 0}) is False
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_REMOVED and saved.reason == "alias_partial", (saved.phase, saved.reason)
+    assert saved.attempts == 1, saved.attempts
+
+
+def test_rebuild_backoff_blocks_within_window(tmp_path, monkeypatch):
+    """重建退避: 距上次重建不足 REBUILD_BACKOFF ⇒ 本轮跳过(旧实现每 1-2 tick 一轮建删)"""
+    mod = _bare_mod(data_dir=str(tmp_path))
+    calls = []
+    monkeypatch.setattr(mod, "_build_links", lambda j, rt: calls.append(j.job_id) or True)
+    rt = {"rebuild_ts": time.monotonic()}  # 刚重建过
+    mod._apply_reconcile(_job("j1", phase=ru.PHASE_REMOVED), rt, ru.ACT_REBUILD)
+    assert calls == [], f"退避窗口内不得重建: {calls}"
+    rt["rebuild_ts"] = time.monotonic() - ru.REBUILD_BACKOFF - 1.0
+    mod._apply_reconcile(_job("j2", phase=ru.PHASE_REMOVED), rt, ru.ACT_REBUILD)
+    assert calls == ["j2"], f"退避窗口外应放行重建: {calls}"
+
+
+def test_rebuild_capped_then_failed_keeps_scene(tmp_path):
+    """重建达 attempts 上限 ⇒ failed(rebuild_exhausted) 留现场, 不再无限 create-fail-delete
+
+    建链必失败的环境(权限不足 / 未开开发者模式且 allow_uac 关)里旧实现永不终态。
+    """
+    mod = _bare_mod(data_dir=str(tmp_path))
+    job = _job(phase=ru.PHASE_REMOVED, attempts=ru.REBUILD_MAX_ATTEMPTS)
+    mod._apply_reconcile(job, {}, ru.ACT_REBUILD)
+    saved = mod._jobs["j1"]
+    assert saved.phase == ru.PHASE_FAILED and saved.reason == "rebuild_exhausted", (saved.phase, saved.reason)
+    assert saved.attempts == ru.REBUILD_MAX_ATTEMPTS, "保留重试次数供排查(不抹掉现场)"

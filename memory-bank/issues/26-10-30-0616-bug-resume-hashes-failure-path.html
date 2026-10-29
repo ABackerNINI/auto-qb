@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate 失败路径不消费 resume_hashes, 被暂停组成员永久停在暂停态">
 <meta name="issue-summary" content="迁移失败路径(move_rejected/stalled/internal_error/cancel_failed)只置 FAILED 不恢复 resume_hashes, 整组运行成员静默停留暂停态且无日志">
 <title>relocate 失败路径不消费 resume_hashes, 被暂停组成员永久停在暂停态 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0616-bug-resume-hashes-failure-path</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -167,11 +167,15 @@ move_stalled / internal_error / torrent_gone / cancel_failed)只置 FAILED —�
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 07:06 — 认领（用户 26-10-30 指派「认领并修复」三条批A issue），状态 <strong>In Progress</strong>；同轮完成复验</li>
+      <li>2026-10-30 07:06 — 已修并验证，状态 <strong>Done</strong>（实际修法见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-30 07:04 仍复现</strong> —— 按锚点 grep <code>resume_hashes</code> 重跑，消费点仍只有 <code>_arm</code> / <code>_finish_direct</code> / <code>relocate_cancel</code> 成功路径三处；失败出口实点 <strong>11 处</strong>（<code>_step_move</code> 的 torrent_gone / move_rejected / move_stalled、<code>on_task_line</code> 的 internal_error、<code>_step_moved</code> 的 verify_mismatch / alias_unreadable、<code>_apply_reconcile</code> 的 finalize_rejected / torrent_gone / finalize_timeout、<code>_step_finalize</code> 的 finalize_timeout、<code>relocate_cancel</code> 的 cancel_failed）一律只置 FAILED，零处消费 resume_hashes —— 报告里列的失败出口清单经复验是完整的（比原描述多出 verify_mismatch / alias_unreadable / finalize_rejected / finalize_timeout(_step_finalize) 四处）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与建议修法同向，未改道）：在 <code>relocate_mod.py</code> 新增两个收口单点 —— <code>_resume_members(job)</code>（恢复 resume_hashes；无暂停成员即 no-op，被拒只告警并点名「N 个成员仍被暂停」+ hash 清单）与 <code>_fail(job, reason, last_error)</code>（置 FAILED + 调 <code>_resume_members</code>）；上面 11 处失败出口全部改走 <code>_fail</code>，含建议点名的 cancel_failed。<code>_arm</code> / <code>_finish_direct</code> / 撤销成功路径原本各自写的一段恢复一并收敛到 <code>_resume_members</code>（行为不变，去重）。数据面一律照旧保留现场：不搬回、不删链接。</p>
+    <p><strong>验证方式</strong>：新增 3 条用例 —— <code>test_fail_path_resumes_paused_members</code>（setLocation 被拒 ⇒ failed 且 resume 真的发出）、<code>test_fail_path_resume_rejected_still_fails_and_names_paused</code>（恢复被拒仍落 failed，且告警点名「仍被暂停」带 hash）、<code>test_cancel_failed_resumes_members</code>（撤销搬回被拒 ⇒ failed(cancel_failed) 且恢复成员）。</p>
+    <p><strong>测试数字</strong>：见 <code>commands run kb.baseline</code> —— 切片 <code>26-10-30-0706-relocate-closeout-batch-a</code>（数字只写那里一处）。</p>
   </section>
 
   <footer>
