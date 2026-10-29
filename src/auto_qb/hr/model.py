@@ -384,6 +384,22 @@ class HrLaneState:
         )
 
 
+# 各档摘要串部件单点(issue 26-10-29-1327): service._lanes_summary_from 与 status._lane_statuses
+# 的紧凑摘要共用下面三个部件, 两侧各自保留排版模板只改读部件 —— 改文案/加档位状态只动这里。
+LANE_TAGS = {LANE_OK: "[x]", LANE_FAILED: "x", LANE_IDLE: "-"}
+#: 深度标签字面单点: 摘要串括号内文本(verbose 串与 webui 详情同用「全深度」表述)。
+FULL_DEPTH_TEXT = "全深度"
+#: 未知档位状态回落判据: LANE_TAGS.get(status, status) **透传原值**(拍板 2026-10-30), 不静默
+#: 降级成「-」—— 与 LANE_STATUS_TEXTS 同口径, 将来加新档位状态时摘要直接显示新值, 漂移可观察。
+
+
+def _lane_count_segment(st: HrLaneState) -> str:
+    """计数段部件: /声明N(+ 对不平); count_claim=None = 本波无计数, 整段缺席。"""
+    if st.count_claim is None:
+        return ""
+    return f"/声明{st.count_claim}" + (" 对不平" if st.count_match is False else "")
+
+
 @dataclass(slots=True)
 class HrWaveMeta:
     """最近一波的波次元数据(波次引擎 §4 的状态面; 取代 v2 的 HrRefreshMeta 覆盖证明语义)"""

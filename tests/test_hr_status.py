@@ -48,6 +48,8 @@
 - test_lane_statuses_missing_lane_keeps_rest: 缺档位不 break 停表 —— 后续档位与「无」标记都在
 - test_lane_statuses_unknown_status_falls_back_to_raw: 未知状态人话回落原文, 不静默丢也不变 None
 - test_lane_statuses_text_condition_boundaries: text 各条件边界(全深度假/声明 None/对不平 True 与 None/detail 空/连续失效 1 与 2)
+- test_lanes_summary_parity_between_service_and_status: service._lanes_summary_from 与 status._lane_statuses
+  parts 同波次逐字相等(tag/深度/计数三部件读 model 单点, issue 26-10-29-1327); 未知状态两侧同透传
 - test_duration_text_exact_tiers: 人话时长四档精确边界(恰等 86400/3600/60 与 +1s 组合)
 - test_ago_text_never_suffix_and_fraction: 「从未」三形态(0/负/边界) + 「Nx前」后缀 + 小数秒
 - test_stamp_text_format_zero_and_edges: 绝对时刻格式逐字 + 0/负/1 的「-」边界
@@ -102,6 +104,7 @@ from auto_qb.hr.model import (
     HrVerified,
     HrWaveMeta,
 )
+from auto_qb.hr.service import _lanes_summary_from
 from auto_qb.hr.ratelimit import HrLimits, day_key
 from auto_qb.hr.resolve import HrSiteView
 from auto_qb.hr.status import (
@@ -660,7 +663,7 @@ def test_lane_statuses_text_composition_exact():
     data.wave.lanes = {"A": _rich_lane(), "B": HrLaneState(lane="B"), "C": HrLaneState(lane="C")}
     out, lanes_text = _lane_statuses(data, 1_800_000_000.0)
     assert out[0].text == "考察中 有效: 3 页 / 4 行(全深度) / 声明 5 行 对不平, 预算截断, 连续失效 3 波"
-    assert lanes_text == "A:[x]3页4行(全)/声明5 对不平 B:-0页0行 C:-0页0行"
+    assert lanes_text == "A:[x]3页4行(全深度)/声明5 对不平 B:-0页0行 C:-0页0行"
 
 
 def test_lane_statuses_missing_lane_keeps_rest():
@@ -692,7 +695,7 @@ def test_lane_statuses_text_condition_boundaries():
     }
     out, lanes_text = _lane_statuses(data, 1_800_000_000.0)
     assert out[0].text == "考察中 有效: 3 页 / 4 行", "全深度假/无声明/对不平缺失/detail 空/streak=1 时无附加段"
-    assert lanes_text == "A:[x]3页4行 B:无 C:无", "摘要同口径: 无 (全) 无 /声明"
+    assert lanes_text == "A:[x]3页4行 B:无 C:无", "摘要同口径: 无 (全深度) 无 /声明"
     data2 = HrSiteData()
     data2.wave.lanes = {"A": _rich_lane(full_depth=False, count_claim=None, count_match=None, detail="", fail_streak=2)}
     out2, _ = _lane_statuses(data2, 1_800_000_000.0)
@@ -702,7 +705,24 @@ def test_lane_statuses_text_condition_boundaries():
     out3, lanes3 = _lane_statuses(data3, 1_800_000_000.0)
     assert out3[0].status_text == "失效" and out3[0].lane_text == "考察中"
     assert "声明 7 行" in out3[0].text and "对不平" not in out3[0].text, "count_match=True 不标对不平"
-    assert lanes3 == "A:x3页4行(全)/声明7 B:无 C:无", "failed 档摘要标记 x 且不带对不平"
+    assert lanes3 == "A:x3页4行(全深度)/声明7 B:无 C:无", "failed 档摘要标记 x 且不带对不平"
+
+
+def test_lanes_summary_parity_between_service_and_status():
+    """同一波次两套摘要逐字相等(issue 26-10-29-1327 验证①): service._lanes_summary_from 与
+    status._lane_statuses 的 parts 在 tag/深度/计数三部件上读同一 model 单点, 排版模板一致
+    ⇒ 整串相等; 缺档与未知状态回落也同口径(透传原值不静默降级)"""
+    data = HrSiteData()
+    data.wave.lanes = {"A": _rich_lane(), "B": HrLaneState(lane="B"), "C": HrLaneState(lane="C")}
+    _, lanes_text = _lane_statuses(data, 1_800_000_000.0)
+    assert _lanes_summary_from(data.wave.lanes) == lanes_text
+    assert lanes_text == "A:[x]3页4行(全深度)/声明5 对不平 B:-0页0行 C:-0页0行"
+    # 未知档位状态: 两侧同走 LANE_TAGS.get(status, status) 透传, 不各自回落
+    data2 = HrSiteData()
+    data2.wave.lanes = {"A": _rich_lane(status="weird-status")}
+    _, lanes_text2 = _lane_statuses(data2, 1_800_000_000.0)
+    assert _lanes_summary_from(data2.wave.lanes) == lanes_text2
+    assert lanes_text2.startswith("A:weird-status3页4行"), "未知状态透传原文, 不是 -"
 
 
 def test_duration_text_exact_tiers():
@@ -1003,7 +1023,7 @@ def test_site_status_rich_snapshot_fields():
         f"上次取波 {ago_text(NOW - 60, NOW)} · 最近健康波 {ago_text(NOW - 3600, NOW)}"
         f" · 复用窗至 {stamp_text(NOW + 100)} · 下次核对清单 {stamp_text(NOW)}"
     )
-    assert snap.lanes_text == "A:[x]3页4行(全)/声明5 对不平 B:-0页0行 C:-0页0行"
+    assert snap.lanes_text == "A:[x]3页4行(全深度)/声明5 对不平 B:-0页0行 C:-0页0行"
     assert snap.releases_enabled is True and snap.zero_rows is False
     assert snap.empty_confirmed is False and snap.count_attested_empty is False
     assert snap.retention_text == "上波 A 档 1 行, 本波留存率 50%, 正常"

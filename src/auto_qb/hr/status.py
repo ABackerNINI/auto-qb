@@ -36,8 +36,11 @@ from .model import (
     SOURCE_EXEMPT,
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
+    FULL_DEPTH_TEXT,
+    LANE_TAGS,
     HrHistoryEvent,
     HrSiteData,
+    _lane_count_segment,
 )
 from .ratelimit import day_key, next_day_reset, quota_left
 from .resolve import HrSiteView
@@ -291,12 +294,10 @@ def _lane_statuses(data: HrSiteData, now: float) -> Tuple[List[LaneStatus], str]
             (f", 连续失效 {ls.fail_streak} 波" if ls.fail_streak > 1 else "")
         )
         out.append(ls)
+        # tag/深度/计数三部件读 model 单点(issue 26-10-29-1327), 未知状态透传判据见 model.LANE_TAGS
         parts.append(
-            f"{lane}:{'[x]' if st.status == LANE_OK else ('x' if st.status == LANE_FAILED else '-')}"
-            f"{st.pages}页{st.rows}行" + ("(全)" if st.full_depth else "") + (
-                f"/声明{st.count_claim}" +
-                (" 对不平" if st.count_match is False else "") if st.count_claim is not None else ""
-            )
+            f"{lane}:{LANE_TAGS.get(st.status, st.status)}{st.pages}页{st.rows}行" +
+            (f"({FULL_DEPTH_TEXT})" if st.full_depth else "") + _lane_count_segment(st)
         )
     return out, " ".join(parts)
 

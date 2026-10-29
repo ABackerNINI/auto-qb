@@ -55,6 +55,8 @@ from .model import (
     SOURCE_EXEMPT,
     SOURCE_NOT_LISTED,
     SOURCE_SATISFIED,
+    FULL_DEPTH_TEXT,
+    LANE_TAGS,
     HrDownloaded,
     HrDlFail,
     HrEntry,
@@ -64,6 +66,7 @@ from .model import (
     HrVerified,
     lane_is_terminal,
     prune_history,
+    _lane_count_segment,
 )
 from .parse import cross_page_violation, order_violations, page_javascript_marks
 from .ratelimit import HrLimits, next_allowed_at, try_consume
@@ -1775,11 +1778,12 @@ def _lanes_summary_from(lane_states) -> str:
         if st is None:
             parts.append(f"{lane}:无")
             continue
-        tag = {"ok": "[x]", LANE_FAILED: "x", LANE_IDLE: "-"}.get(st.status, st.status)
-        counter = ""
-        if st.count_claim is not None:  # 计数对平展示(计划 26-09-29-2036 §2.6)
-            counter = f"/声明{st.count_claim}" + (" 对不平" if st.count_match is False else "")
-        parts.append(f"{lane}:{tag}{st.pages}页{st.rows}行" + ("(全深度)" if st.full_depth else "") + counter)
+        # tag/深度/计数三部件读 model 单点(issue 26-10-29-1327), 未知状态透传判据见 model.LANE_TAGS
+        tag = LANE_TAGS.get(st.status, st.status)
+        parts.append(
+            f"{lane}:{tag}{st.pages}页{st.rows}行" + (f"({FULL_DEPTH_TEXT})" if st.full_depth else "") +
+            _lane_count_segment(st)
+        )
     return " ".join(parts)
 
 
