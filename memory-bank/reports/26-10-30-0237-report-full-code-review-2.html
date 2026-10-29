@@ -240,7 +240,108 @@
 
 <h3>批A · core/ 内核(qbmanager·taskqueue·state·module·qbapi) + modules/ 全部</h3>
 <p class="cm">登记格式: ID(A-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
-<p class="cm">未登记。</p>
+<p class="cm"><b>评审时 HEAD:</b> <code>da19ca84</code>(26-10-30 my-commit-flow.sync 后树净) · <b>范围:</b> 25 文件 / 9,689 行(新增 6 · 变更 18 · 未变 1; 新增/变更全量读码, 未变 exporter.py 轻量 + 交互面过目) · <b>重点维度:</b> R1 R2 R3 R6 R9 R11 · <b>五步执行记录:</b> ①读档 core/modules/traffic_source 包 docstring + systemPatterns main-loop/taskqueue/client-and-state; ②坑档对照 backend/_index(concurrency·high-risk-ops·effect-confirmation·windows-relocate-traps·traffic-source-*·task-interval-tick-quantization·last-round-snapshot-stale); ③逐文件读码(LOC 降序, 变更函数对照 git diff a4d14a8d..HEAD 定位); ④ruff+bandit(见工具小结); ⑤本表登记(逐条对照 §04 四表去重)。</p>
+<p class="cm"><b>首次评审(26-10-05-1036 批A)八项回归核对:</b> A-01 suppress live 旗标异常残留 — <span class="good">已修</span>(qbmanager._refresh_torrents 事件窗口改 try/finally); A-02 export 编码 — <span class="good">已修</span>(utf-8 显式); A-03 state 键无界 — <span class="good">已修</span>(state._prune_exec_history + speed_curve 日键 prune_day_keys); A-04 pause/resume 不对称 — <span class="good">已消解</span>(A 系删合成回写, 四入口统一 note_own_write); A-05 跳检备份 wb 非原子 — <span class="wr">仍在</span>(首轮「仅记录」口径维持, 不重报); A-06 handled 未消费 — <span class="good">已消解</span>(_run_rule 骨架不再解包); A-07 凭据错刷屏 — <span class="good">已修</span>(_note_conn_failed 转换节流 + retry_warned); A-08 core/__init__ docstring 漂移 — <span class="good">已修</span>。</p>
+<h4>批A 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>A-01</td><td>R2</td><td>P2</td>
+    <td>core/modules/relocate_mod.py:233 <code>on_task_line</code>(相位机总入口) / :279 <code>_step_move</code> setLocation 下发 / :406 <code>_build_links</code> 建链 / :852 <code>relocate_cancel</code></td>
+    <td>relocate 执行相位机与撤销路径全程无 dry_run 闸门: relocate_execute 只在首步下发处(:826)判 _dry_run, 而 on_task_line 驱动的 _step_move(真实 setLocation)、_build_links(真实建删文件系统链接)、_arm(guardian 拉起 + resume)、relocate_cancel(删链接 + 搬回)一律照跑 —— --dry-run「只观察不落盘不建链」契约被相位机绕开</td>
+    <td>现两个 job 创建入口各自在入口侧闸住 dry_run(rules move_to: rules/actions/transfer.py:31 <code>not ctx.dry_run</code>; WEB 命令: webui/module.py:66 dry-run 不启服务), 故正常路径不可达; 但 start() 恢复账本不走这两道闸 —— 上一轮真实运行在 state.json relocate.jobs 留有非终态 job(崩溃/重启窗口即常态), 携它以 --dry-run 启动且 relocate.enabled ⇒ _load_jobs(:186)恢复后下一任务线 tick 即真写下发 setLocation</td>
+    <td>无</td>
+    <td>入池(bug, P2): on_task_line/_advance/relocate_cancel 入口补 dry_run 短路(与 ops_mod.on_micro_line:983 同款)</td>
+  </tr>
+  <tr>
+    <td>A-02</td><td>R6</td><td>P2</td>
+    <td>core/modules/relocate_mod.py:795 <code>_start_job</code>(暂停成员) / :271-319 <code>_step_move</code>(失败三出口) / :874 <code>relocate_cancel</code>(搬回被拒)</td>
+    <td>迁移发起时暂停了组内运行中成员(resume_hashes), 但此后任何失败路径(move_rejected / move_stalled / internal_error / torrent_gone / cancel_failed)只置 FAILED —— resume_hashes 仅 _arm(:482)/_finish_direct(:500)/relocate_cancel 成功路径(:879)消费, 失败即整组运行成员永久停在暂停态, 无日志提示「成员仍被暂停」</td>
+    <td>可达: qB 拒绝 setLocation(目标路径权限/被占用)即命中 move_rejected; 停滞判据 600s 超时命中 move_stalled —— 两者的常规修复都是用户排查后再手动发起, 而此前被暂停的成员无人恢复, 做种静默中断</td>
+    <td>无</td>
+    <td>入池(bug, P2): 失败路径(含 cancel_failed)消费 resume_hashes + 日志点名「已恢复运行态」</td>
+  </tr>
+  <tr>
+    <td>A-03</td><td>R6</td><td>P2</td>
+    <td>core/modules/relocate_mod.py:441-453 <code>_build_links</code>(失败置 REMOVED) / :597-608 <code>_apply_reconcile</code> ACT_REBUILD 分支; relocate_units.py:904 <code>reconcile</code>(qb_up ⇒ REBUILD)</td>
+    <td>建链接失败进入「REMOVED(alias_partial) → 对账 REBUILD → 置 MOVED 重建 → 再失败」循环: 每 1-2 个任务线 tick 一轮 create-fail-delete, 无退避、无重试上限、永不终态 —— RelocateJob.attempts 字段全程零消费; WARNING 级日志约每 4s 一条持续刷屏。同族: armed job 的 guardian 心跳缺失时(:899 ACT_RESPAWN → :906 _spawn_guardian)每 tick 重拉一次进程, 同样无退避</td>
+    <td>可达: 权限不足(未提权/未开 Windows 开发者模式且 allow_uac 关)下文件级符号链接创建必失败 —— 这是预检文案自己点名的常见环境; 修复前每次对账都回到 REBUILD 再失败</td>
+    <td>无</td>
+    <td>入池(bug, P2): REBUILD/RESPAWN 加退避与 attempts 上限(转 FAILED 留现场), 复用 job.attempts 字段</td>
+  </tr>
+  <tr>
+    <td>A-04</td><td>R1(R9)</td><td>P2</td>
+    <td>core/modules/relocate_mod.py:825→:833 <code>_start_job</code>(先 _persist 后 setLocation) / :196-204 <code>_load_jobs</code>(恢复一律 issue=False); relocate_units.py:842 <code>recover_exec_phase</code>(无调用方)</td>
+    <td>崩溃恢复窗口误判: job 账先落 state、setLocation 后下发, 两步之间崩溃/停止后重启, _load_jobs 对 MOVING job 一律置 rt["issue"]=False —— 不再补发 setLocation; qB 侧从未开始搬运 ⇒ dst 恒空且不在 moving, 600s(move_stall_timeout)后按 move_stalled 误判失败(叠加 A-02 成员暂停不恢复)。relocate_units.recover_exec_phase 恢复判据纯函数(按 qB 现场三分流)已为该场景设计但全仓零调用方(死代码)</td>
+    <td>可达: 发起迁移后、setLocation 返回前进程退出(窗口小但恰是「崩溃恢复」功能要兜的场景); 重启后无任何日志指明「未下发搬迁」, 只会在 10 分钟后看到 move_stalled 失败</td>
+    <td>无</td>
+    <td>入池(bug, P2): _load_jobs 对 phase=moving 恢复 rt["issue"]=True(重发 setLocation 幂等无害), 或接线 recover_exec_phase</td>
+  </tr>
+  <tr>
+    <td>A-05</td><td>R9</td><td>P2</td>
+    <td>core/modules/relocate_mod.py:643-651 <code>_finalize_members</code>(先逐记录 rec.files 后过滤); torrents/record.py:287 <code>files</code>(惰性缓存证实首见即一次 HTTP)</td>
+    <td>ACT_FINALIZE 的收尾集合计算对 <b>全库每一条种子</b>先发 torrents/files API 再按 save_path 过滤 —— 目录别名 job 在 qB 重启后走标准收尾路径(missingFiles ⇒ finalize)时, 单个主循环 tick 内串行发 N(全库种子数)次 HTTP, 大库下主循环停摆分钟级; 而判定实际只需要 save_path==src 的成员(covers 分支)与 job.hashes(无需文件表)</td>
+    <td>可达: 目录别名形态 job 武装后 qB 重启 ⇒ 对账表 journal removed + 链接不在 + qb_up + missingFiles ⇒ ACT_FINALIZE —— 这是该形态设计的标准收尾路径; _file_map 对 files() 异常按空表吞, 停摆只表现为同步线掉拍</td>
+    <td>无(坑档「视图组装里绝对不能发 qB API」同族 —— 主循环任务线版: 逐成员先过滤 save_path 再取文件表即可, 与该坑「主循环预取+缓存」纪律一致)</td>
+    <td>入池(perf, P2): _finalize_members 先按 save_path==src 过滤再对命中者取文件表; job.hashes 成员直接免文件表</td>
+  </tr>
+  <tr>
+    <td>A-06</td><td>R9(R2)</td><td>P2</td>
+    <td>core/taskqueue.py:224-234 <code>run_due</code>(defer 命中仍占 due 批次) / :241 <code>_pop_due</code>(max_tasks 计数含 defer); core/qbmanager.py:781 <code>_own_write_defer_gate</code></td>
+    <td>D-1 deferral 闸门命中的任务以 next_run=now 重入堆, 但它已计入本轮 due 批次并消耗 max_tasks_per_tick 预算 —— 组级 own_write(整组停/size 一致性停种)时同批大量同组任务被让位仍占满预算, 同 tick 无关任务不被弹出; own_write TTL 10s 内任务线接近空转, 速率语义(max_tasks/2s)在该窗口失真</td>
+    <td>可达: 多成员组触发 grouping size 一致性停种或 WEB 批量停止 ⇒ own_writes 覆盖整组 ⇒ 该组全部种子级任务逐 tick 命中 defer_gate(own_write_pending 组维度)且各占一个 due 名额; 组成员数 ≥ max_tasks_per_tick(缺省 20)时其它任务完全饿到 TTL 退出</td>
+    <td>无(坑档 concurrency「D-1 队列级闸门」条目记了让位语义与有界性, 未记预算占用面)</td>
+    <td>入池(bug, P2): defer 命中的任务不计入 due 预算(_pop_due 后先过闸再计数, 或 defer 名额单列)</td>
+  </tr>
+  <tr>
+    <td>A-07</td><td>general(R4 邻域)</td><td>P3</td>
+    <td>core/traffic_source/agent.py:382 <code>ensure_running</code>(<code>enabled is not True</code>)</td>
+    <td>enabled 判据与自家口径相反: docstring 与 paths.source_enabled(:51)的契约都是「只有显式 False 才停」(<code>is not False</code>), 本处写成 <code>is not True</code> —— 真配置 bool 下两者等价, 但 mock/非 bool 真值(坑档 hot-reload-mock-sections 点名的形状)会被误判为「关闭」而不探活不拉起</td>
+    <td>静态即证(两处恒等判据方向相反); 现生产调用方 tool_client.py:250 传 paths.source_enabled 的真 bool, 无行为差异 —— 属契约形状漂移, 与该坑档「属性值不能当成启用/关闭的事实」同族</td>
+    <td>无(坑档 hot-reload-mock-sections 同族佐证, 非直接撞车)</td>
+    <td>入池(chore, P3)或仅记录: 对齐 <code>enabled is False</code> 判据(与 paths.source_enabled 镜像)</td>
+  </tr>
+  <tr>
+    <td>A-08</td><td>general</td><td>P3</td>
+    <td>core/modules/ops_mod.py:465 <code>skip_submit</code>(<code>job</code> 解包未消费, ruff RUF059) / :487 <code>_skip_begin</code>(<code>prefix</code> 赋值未消费, F841)</td>
+    <td>两处死绑定: skip_submit 只消费 early 返回, job 变量闲置; _skip_begin 的 prefix 日志前缀拼接后未使用 —— 行为无影响, 属工具提示源人工复核采纳项</td>
+    <td>静态即证(ruff F841/RUF059); 运行行为零差异</td>
+    <td>无</td>
+    <td>仅记录(顺手修候选: <code>_, early = ...</code> / 删 prefix 行)</td>
+  </tr>
+</table>
+<h4>批A 逐文件勾选表(25/25)</h4>
+<p class="cm">深度: 全量 = 逐行过目 + R1-R11 逐维勾选; 轻量 = 未变文件维度抽验 + 交互面过目 + 首轮该域发现回归核对。结论含「无发现」。</p>
+<table>
+  <tr><th>文件</th><th>变更态</th><th>深度</th><th>结论</th><th>备注(一句话)</th></tr>
+  <tr><td><code>core/__init__.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>首轮 A-08 docstring 漂移已修; 包内路由描述与现状一致</td></tr>
+  <tr><td><code>core/episodes.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>RESOLUTION_EXCLUDE 单点收口(与 tvshows 共用); 与 tvshows 的子集关系注释登记 issue 对齐底册 #11</td></tr>
+  <tr><td><code>core/exporter.py</code></td><td>未变</td><td>轻量</td><td>无发现</td><td>读写两侧 utf-8 在位; bandit B506(BaseLoader)误报复核同首轮口径</td></tr>
+  <tr><td><code>core/module.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>loop-hook 骨架单点(_iter_hooks)与 micro 线接线齐; emit 无隔离仍为明文契约; ctx 增 grouping/traffic_snapshot/relocate 句柄</td></tr>
+  <tr><td><code>core/modules/__init__.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>装配清单 +Relocate/TrafficSnapshot, __all__ 同步</td></tr>
+  <tr><td><code>core/modules/grouping_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>物理解析三层/relocating 让路/组键迁移登记(P7)/_is_active_download 单点齐; _mark_third_party_link 现无生产消费方(前瞻标记, 可达性不出不登记)</td></tr>
+  <tr><td><code>core/modules/logging_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>apply 骨架化到 apply_section, 行为等价</td></tr>
+  <tr><td><code>core/modules/maintenance_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>register_global_tasks/_apply_tag_changes/_purge_matched_tags 三骨架单点, 逐条对照行为等价</td></tr>
+  <tr><td><code>core/modules/notify_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>apply 骨架化(remount 闭包), force 挂载语义保留</td></tr>
+  <tr><td><code>core/modules/ops_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>A-08</td><td>跳检相位机/崩溃恢复对账/闸门单点(_skip_gates_detail)齐; D-2 deferral 与 relocating 让路在位; 底册 #20(dedup 被 G3 遮蔽)仍在、属底册不重报</td></tr>
+  <tr><td><code>core/modules/relocate_mod.py</code></td><td class="good">新增</td><td>全量</td><td>A-01 A-02 A-03 A-04 A-05</td><td>闸门/预检/对账表骨架扎实; 缺口集中在执行相位机的失败与恢复路径(干跑闸/恢复运行态/退避/崩溃窗口)与收尾取数面</td></tr>
+  <tr><td><code>core/modules/relocate_units.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>纯函数层判定序(能力校正先于阈值/scope 收窄/对账表)自洽; recover_exec_phase 死代码并入 A-04</td></tr>
+  <tr><td><code>core/modules/rules_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>_make_ctx/_run_rule/_dispatch_trigger_rules 三单点; 异常路径返回值(REQUEUE)与基线逐位一致(对照 a4d14a8d 核实)</td></tr>
+  <tr><td><code>core/modules/speed_curve_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>首轮 A-03 曲线日键已修; 取数改走 paths/reader 单点; source 关闭不发布(A4 口径)有明文</td></tr>
+  <tr><td><code>core/modules/tracker_mod.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>apply 双短路原因保持显式有登记(不套 apply_section 骨架); 限速手动保护面未动</td></tr>
+  <tr><td><code>core/qbapi.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>A 系重做(删合成回写 + note_own_write)与坑档 concurrency 逐条对上; torrents_edit_tracker 退役零消费方; torrents_trackers 直连分支补 mask(R8); 首轮 A-04 不对称随重做消解</td></tr>
+  <tr><td><code>core/qbclient.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>api_key 透传(空串回退 None, 密码路径零变化)</td></tr>
+  <tr><td><code>core/qbmanager.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>首轮 A-01/A-02/A-07 三项修复回归确认; 微步线第三时间线接线(_wait_next min 并入)与 _sync_moved(S4)判据经 store._apply 清空时序(:310-319)核实无残值误判; suppress 窗口 try/finally 落位</td></tr>
+  <tr><td><code>core/state.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>首轮 A-03 exec_history 清理落地(日期淘汰 + 存量上限, 当日保护); 三态加载/恢复链未动面复核一致</td></tr>
+  <tr><td><code>core/taskqueue.py</code></td><td class="wr">变更</td><td>全量</td><td>A-06</td><td>defer_gate 参数化落地正确(先闸后执行/重入堆); 缺口仅在预算计数</td></tr>
+  <tr><td><code>core/traffic_source/__init__.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>包路由 docstring 与实际三模块一致</td></tr>
+  <tr><td><code>core/traffic_source/agent.py</code></td><td class="good">新增</td><td>全量</td><td>A-07</td><td>指针解析不猜字段/拉起退避/claim 有界前台/单写线程注记齐; status()/run_claim 调用方经核在 WEB 线程(非主循环), ensure_running 在订阅线程</td></tr>
+  <tr><td><code>core/traffic_source/paths.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>取数路径唯一入口口径齐(总开关优先/指针只读不探活/signature 只取配置事实)</td></tr>
+  <tr><td><code>core/traffic_source/reader.py</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>失败判据两条不抛、形状给两侧复用, 与 verdict-scope-parity 纪律一致</td></tr>
+  <tr><td><code>core/tvshows.py</code></td><td class="wr">变更</td><td>全量</td><td>无发现</td><td>_dir_season 锚定放宽(季标记+发布后缀白名单)+season_inferred 留痕, 对应底册/坑档 26-10-29-1329 修复面; 名称侧已有季号不改的分支与旧行为一致</td></tr>
+</table>
+<h4>批A 工具提示源小结(uvx ruff + uvx bandit, 逐条人工复核)</h4>
+<p><b>ruff</b>(uvx ruff check 全规则): 390 条提示 — 采纳 2 条(A-08: ops_mod RUF059 + F841); 其余逐类复核为项目风格不采纳(UP006/UP045/UP035 现代注解 295 条、BLE001 24 条均带 noqa 或有意设计、RUF100 系 uvx 缺省配置未启 BLE001 所致的 noqa 误报、G201/S110/S112 为既定 fail-closed 与 best-effort 路径)。F401/RUF022/RET501 等零星逐条过目均纯风格。<b>bandit</b>(uvx bandit, 15 条: Low 13 / Medium 1 / High 1): 全部复核排除 — B506(exporter yaml_load)误报同首轮(Loader=BaseLoader 只构造标量); B404/B603 subprocess 四条为固定参数启动器(relocate._spawn 的 sys.executable -m 固定模块; agent.launch_tool/claim 启动器来自用户配置非不可信输入, 无 shell, 测试注入单点明文); B110/B112 六条为采样/重试/清理的既定 best-effort 路径; B324 sha1 仅作 job_id 摘要非安全用途。真信号合计: 采纳 2(并入 A-08), bandit 采纳 0。</p>
 
 <h3>批B · hr/ 全域(service·model·status + channel·worker·parse·resolve·discovery·threadlifecycle·server·adapters 等)</h3>
 <p class="cm">登记格式: ID(B-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
