@@ -2,6 +2,13 @@
       <!-- ================================================================
            设置页(Console Hub): 首页卡片总览 → 二级页分区, 说明走就近浮窗。
            经典设置页已移除(2026-09-25), 本页是唯一设置页; 与 cfg* 读写共用同一棵配置树。
+           图标来源纪律(2026-10-30, 26-10-29-1355): 图标优先吃三皮肤 shell 的 SVG sprite
+           —— <use href="#i-*">(本页随所在 shell 同文档载入, sprite 恒在, 分区卡/分区头
+           已是此写法); 仅 sprite 无对应 symbol、又只此一处的小图形才内联完整 path。现存
+           内联(点名, 勿再添): 返回箭头(.cb-back, sprite 无左向 chevron)、加号 x2(与
+           #i-plus 几何差 0.4 单位, 换有可见变化)、导入箭头(#i-download 同构但坐标不同)。
+           禁止同一图形既内联又与 sprite symbol 同形并存(守阵: dom_panel #i-* 命中检查
+           已扫本文件)。
            ================================================================ -->
       <main v-if="page==='settings'" class="ce-page hub-page">
         <div v-if="cfg.loading" class="ce-placeholder loading">正在加载配置…</div>
@@ -22,7 +29,7 @@
                   </p>
                 </div>
                 <div class="hd-search">
-                  <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+                  <svg class="hb-ico" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
                   <input class="hb-input" v-model="hub.query" placeholder="搜索配置项，比如「端口」">
                 </div>
               </header>
@@ -104,7 +111,7 @@
                 <div class="hb-tr-stage" :class="{ on: hubTrackerStageOpen }">
                   <div class="hb-tr-veil" @click="hubTrackerStageClose(true)"></div>
                   <div class="hb-tr-search">
-                    <svg class="hb-ico" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.6"/><path d="M10.6 10.6 14 14"/></svg>
+                    <svg class="hb-ico" viewBox="0 0 16 16"><use href="#i-search"></use></svg>
                     <input ref="trackerSearchInput" class="hb-input" v-model="cfg.trackerQuery" autocomplete="off"
                            placeholder='搜索站点…(空格=且, -词排除, "短语")'
                            :aria-expanded="hubTrackerStageOpen ? 'true' : 'false'"
