@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="drawer 合并补给无条件 bump seq, 孤儿化在飞取数与 loading 门">
 <meta name="issue-summary" content="_drawerMergeSupply 即使两源都被门挡住也前进代际, 在飞页签取数被打成 stale 且门不清, gc 对双列停在加载中">
 <title>drawer 合并补给无条件 bump seq, 孤儿化在飞取数与 loading 门 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0622-bug-drawer-merge-seq-bump-conditional</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 07:48 — 认领修复（用户指派），状态 <strong>Done</strong>。复验 2026-10-30：无条件 bump 仍在。实际修法 = 建议①形态：seq bump 移进「确有缺口要补」分支 —— gc/tp 两对各自先算 needX，两源都被数据/门挡住时整段早退不 bump（在飞取数不被打成 stale，门照常由其 finally 清），有缺口时 bump 仍只一次、两源同代际；tp 对的 _startDrawerPoll 留在早退之外（起轮与代际无关，不得因早退丢起轮）。已知残留（未修，超出本件口径）：一源缺需补发而另一源恰在飞时，bump 仍会孤儿化在飞那个 —— 需要按源分代际才能根除，窗更窄且无数据破坏。验证：新增 test_webui_static_dom_panel.test_drawer_merge_supply_seq_bump_conditional（node 电池七型：双源有数据/双源在途/单源缺口/双源都缺/tp 双源在途/tp 有缺口/合并关）；test.full 4167 passed / 2 skipped。</li>
     </ul>
   </section>
 

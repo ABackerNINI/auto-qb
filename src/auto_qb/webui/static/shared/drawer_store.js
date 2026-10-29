@@ -130,18 +130,31 @@ window.AQB_DRAWER_STORE = {
   methods: {
     /* R2 S5: 合并开启/门跨越后的第二列数据补给(核心层 drawerMerge $watch 与 resize 回调共用;
      * 插件禁触碰取数/轮询纪律不破)。按生效对把缺失的数据源补齐: 已有数据/在途不重发(避免
-     * 开关抽屉反复打请求), fetcher 自带静默/loading/stale 丢弃。seq 只 bump 一次走代际守卫。 */
+     * 开关抽屉反复打请求), fetcher 自带静默/loading/stale 丢弃。seq 只 bump 一次走代际守卫。
+     * !seq bump 只在「确有缺口要补」时执行(issue 26-10-30-0622): 两源都被数据/门挡住仍前进
+     *   代际, 会把**在飞**的页签取数(旧 seq)打成 stale —— 响应在 _fetchDrawerSource 被丢弃,
+     *   而 finally 的 stale 分支刻意不清 loading 门(前提是「新在途请求持有它」, 补给方没补发
+     *   时不成立), 门成孤儿且无重发路径 ⇒ 合并对双列停「正在加载…」。 */
     _drawerMergeSupply() {
       if (!this.drawer.open || !this.dtSplitOn) return;
       const pair = this._dtPairOf(this.drawer.tab);
       if (!pair) return;
-      const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
       if (pair === "gc") {
-        if (!this.drawer.files.length && !this.drawer.filesLoading) this._fetchDrawerFiles(false, seq);
-        if (!this.drawer.detail && !this.drawer.loading) this._fetchDrawerDetail();
+        const needFiles = !this.drawer.files.length && !this.drawer.filesLoading;
+        const needDetail = !this.drawer.detail && !this.drawer.loading;
+        if (needFiles || needDetail) {
+          const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
+          if (needFiles) this._fetchDrawerFiles(false, seq);
+          if (needDetail) this._fetchDrawerDetail();
+        }
       } else if (pair === "tp") {
-        if (!this.drawer.trackers.length && !this.drawer.trackersLoading) this._fetchDrawerTrackers(false, seq);
-        if (!this.drawerPeerRows().length && !this.drawer.peersLoading) this._fetchDrawerPeers(false, seq);
+        const needTrackers = !this.drawer.trackers.length && !this.drawer.trackersLoading;
+        const needPeers = !this.drawerPeerRows().length && !this.drawer.peersLoading;
+        if (needTrackers || needPeers) {
+          const seq = (this._drawerLoadSeq = (this._drawerLoadSeq || 0) + 1);
+          if (needTrackers) this._fetchDrawerTrackers(false, seq);
+          if (needPeers) this._fetchDrawerPeers(false, seq);
+        }
         this._startDrawerPoll();
       }
     },

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="路由层数值字段裸转换, 畸形载荷 500 而非 400">
 <meta name="issue-summary" content="torrent_cmds/torrent_detail 五处裸 int()/float() 直转, 直调 API 传字符串抛 ValueError 变 500, 与同层三处 400 先例口径不一致">
 <title>路由层数值字段裸转换, 畸形载荷 500 而非 400 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0622-bug-numeric-param-400-collect</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 07:48 — 认领修复（用户指派），状态 <strong>Done</strong>。复验 2026-10-30：五处仍在（另核 system.py/hr.py 两处裸转换均为 FastAPI 类型化查询参数，框架 422 兜住，无 500 路径）。实际修法 = 建议 B 形态：common.py 新增 int_param/float_param 单点（照 group_key_param 的 400 口径），torrent_cmds 五处 + torrent_detail._cmd_speed_limits 两处改走 helper，行为零变化（合法数值照常入队）。验证：新增 test_web_longtail.test_api_numeric_params_malformed_string_400（12 型畸形值全 400 + 不入队 + 合法值照常入队）；test.full 4167 passed / 2 skipped，覆盖 99%。</li>
     </ul>
   </section>
 

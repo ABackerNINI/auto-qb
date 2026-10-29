@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse, Response
 
 from ....infra.utils import auto_managed_tag_rules, is_auto_managed_tag, mask_tracker_entry
-from ..common import content_disposition
+from ..common import content_disposition, int_param as _int_param
 from ..traffic_qb import QbTrafficChartApi as _QbTrafficChartApi
 
 from fastapi import APIRouter
@@ -117,8 +117,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         b = body or {}
         return _enqueue(
             cmd, {
-                "upload_kib": int(b.get("upload_kib") or 0),
-                "download_kib": int(b.get("download_kib") or 0)
+                "upload_kib": _int_param(b.get("upload_kib") or 0),
+                "download_kib": _int_param(b.get("download_kib") or 0)
             }
         )
 

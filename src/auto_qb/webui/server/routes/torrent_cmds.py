@@ -11,6 +11,7 @@ from typing import List
 from fastapi import HTTPException
 
 from ..common import group_key_param as _group_key_param
+from ..common import float_param as _float_param, int_param as _int_param
 
 from fastapi import APIRouter
 from ..context import WebContext
@@ -207,9 +208,9 @@ def build_router(ctx: WebContext) -> APIRouter:
         b = body or {}
         payload = {"hash": hash}
         if b.get("up_limit") is not None:
-            payload["up_limit"] = int(b["up_limit"])
+            payload["up_limit"] = _int_param(b["up_limit"])
         if b.get("dl_limit") is not None:
-            payload["dl_limit"] = int(b["dl_limit"])
+            payload["dl_limit"] = _int_param(b["dl_limit"])
         return _enqueue("set_torrent_limits", payload)
 
     @router.post("/api/torrents/{hash}/share-limits")
@@ -218,11 +219,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         b = body or {}
         payload = {"hash": hash}
         if b.get("ratio_limit") is not None:
-            payload["ratio_limit"] = float(b["ratio_limit"])
+            payload["ratio_limit"] = _float_param(b["ratio_limit"])
         if b.get("seeding_time_limit") is not None:
-            payload["seeding_time_limit"] = int(b["seeding_time_limit"])
+            payload["seeding_time_limit"] = _int_param(b["seeding_time_limit"])
         if b.get("inactive_seeding_time_limit") is not None:
-            payload["inactive_seeding_time_limit"] = int(b["inactive_seeding_time_limit"])
+            payload["inactive_seeding_time_limit"] = _int_param(b["inactive_seeding_time_limit"])
         return _enqueue("set_share_limits", payload)
 
     @router.post("/api/torrents/{hash}/location")
@@ -260,8 +261,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         b = body or {}
         payload = {
             "hash": hash,
-            "indices": [int(i) for i in (b.get("indices") or [])],
-            "priority": int(b.get("priority") or 0),
+            "indices": [_int_param(i) for i in (b.get("indices") or [])],
+            "priority": _int_param(b.get("priority") or 0),
         }
         return _enqueue("set_file_priority", payload)
 
@@ -316,12 +317,12 @@ def build_router(ctx: WebContext) -> APIRouter:
             payload["force"] = True
         # 批量限速/移动(W2): 提供才透传; 0 = 不限速合法, 负数路由层拒收
         if b.get("up_limit") is not None:
-            v = int(b["up_limit"])
+            v = _int_param(b["up_limit"])
             if v < 0:
                 raise HTTPException(status_code=400, detail="up_limit 不能为负数(0 = 不限速)")
             payload["up_limit"] = v
         if b.get("dl_limit") is not None:
-            v = int(b["dl_limit"])
+            v = _int_param(b["dl_limit"])
             if v < 0:
                 raise HTTPException(status_code=400, detail="dl_limit 不能为负数(0 = 不限速)")
             payload["dl_limit"] = v

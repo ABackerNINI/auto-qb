@@ -56,6 +56,7 @@
 - test_drawer_general_hr_state_line_parity: 抽屉 general 三变体 HR 结论行对齐守阵(issue 26-10-29-1341) —— 同一颗 hr_triggered 种子的「删除安全档位结论 · 依据」行(hr_safety_text/hr_state_text + hr_reason)三变体都必须消费 hr_state: 01/02 从旧版就有, 03 手抄时字段集停在旧版整段漏掉, 后端 views.py 详情载荷字段齐全、hr.js::hrStateLine 注释成文「详情抽屉要显示这行」, 选 03 就看不到「能否删」是用户可见缺失; 守阵 = 三件源码各含 if (d.hr_state) 闸(空值路径被闸拦住, hr_state 为空不多出空行), 缺件即红
 - test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
+- test_drawer_merge_supply_seq_bump_conditional: 合并补给 seq bump 条件化守阵(issue 26-10-30-0622) —— _drawerMergeSupply 两源都被数据/门挡住时不得前进代际(否则在飞页签取数被打成 stale, finally 刻意不清 loading 门, 门成孤儿无重发路径 ⇒ 合并对双列停「正在加载…」); bump 移进「确有缺口要补」分支, 有缺口时代际仍只前进一次且 tp 对轮询照常起。行为面 node 电池真跑(无 node 静默跳过)
 - test_drawer_fetcher_skeleton_single_point
 - test_drawer_tpl_data_beat_no_anchor_move
 - test_drawer_tpl_default_sel
@@ -6647,3 +6648,111 @@ def test_frontend_poll_skeleton_single_point():
         report = json.loads(proc.stdout.strip().splitlines()[-1])
         assert report["failed"] == [], \
             f"轮询骨架电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+# node 单测探针(issue 26-10-30-0622): 提取 drawer_store.js 的 _drawerMergeSupply 方法体真跑,
+# 用桩 this 验证 seq bump 的条件化 —— 两源都被数据/门挡住时不得前进代际(否则在飞取数被打成
+# stale, 其 finally 刻意不清 loading 门, 门成孤儿 ⇒ 合并对双列停「正在加载…」)。
+# 无 node 静默跳过(与 _NODE_QB_TRAFFIC_PROBE 同口径)。
+_NODE_MERGE_SUPPLY_PROBE = r"""
+const fs = require("fs");
+const src = fs.readFileSync(process.argv[1], "utf8");
+const checks = [];
+const push = (name, ok) => checks.push([name, !!ok]);
+const m = src.match(/_drawerMergeSupply\(\) \{([\s\S]*?)\n    \},/);
+if (!m) {
+  push("drawer_store.js 找到 _drawerMergeSupply(改名或挪走了? 同步本探针)", false);
+} else {
+  const store = {};
+  eval("store._drawerMergeSupply = function () {" + m[1] + "}");
+  const mkInst = (over) => Object.assign({
+    dtSplitOn: true,
+    _drawerLoadSeq: 5,
+    fetched: [],
+    polled: 0,
+    drawer: { open: true, tab: "general", hash: "HA", detail: null, loading: false,
+              files: [], filesLoading: false, trackers: [], trackersLoading: false, peersLoading: false },
+    _dtPairOf(tab) { return (tab === "general" || tab === "content") ? "gc"
+      : (tab === "trackers" || tab === "peers") ? "tp" : null; },
+    _fetchDrawerFiles(s, seq) { this.fetched.push(["files", seq]); },
+    _fetchDrawerDetail() { this.fetched.push(["detail"]); },
+    _fetchDrawerTrackers(s, seq) { this.fetched.push(["trackers", seq]); },
+    _fetchDrawerPeers(s, seq) { this.fetched.push(["peers", seq]); },
+    _startDrawerPoll() { this.polled += 1; },
+    drawerPeerRows() { return []; },
+  }, over);
+  // ① 双源都有数据(「已有数据不重发」): 不 bump 代际、零补发
+  let vm = mkInst({ drawer: { open: true, tab: "general", hash: "HA", detail: { name: "x" },
+                              loading: false, files: [{ index: 0 }], filesLoading: false } });
+  store._drawerMergeSupply.call(vm);
+  push("双源都有数据: 代际不前进", vm._drawerLoadSeq === 5);
+  push("双源都有数据: 零补发", vm.fetched.length === 0);
+  // ② 双源都在途(loading 门持有, issue 本体场景): 不 bump —— 在飞取数(旧 seq)不被打成 stale
+  vm = mkInst({ drawer: { open: true, tab: "general", hash: "HA", detail: null,
+                          loading: true, files: [], filesLoading: true } });
+  store._drawerMergeSupply.call(vm);
+  push("双源都在途: 代际不前进(在飞取数不被孤儿化)", vm._drawerLoadSeq === 5);
+  push("双源都在途: 零补发", vm.fetched.length === 0);
+  // ③ 单源缺口: 代际恰好前进一次, 只补缺的那源且带新代际
+  vm = mkInst({ drawer: { open: true, tab: "general", hash: "HA", detail: { name: "x" },
+                          loading: false, files: [], filesLoading: false } });
+  store._drawerMergeSupply.call(vm);
+  push("单源缺口: 代际恰好前进一次", vm._drawerLoadSeq === 6);
+  push("单源缺口: 只补 files 且带新代际", vm.fetched.length === 1 && vm.fetched[0][0] === "files" && vm.fetched[0][1] === 6);
+  // ④ 双源都缺: 代际只 bump 一次, 两源同代际(与旧口径一致)
+  vm = mkInst();
+  store._drawerMergeSupply.call(vm);
+  push("双源都缺: 代际恰好前进一次", vm._drawerLoadSeq === 6);
+  push("双源都缺: detail+files 同代际补发", vm.fetched.map((f) => f[0]).join(",") === "files,detail" && vm.fetched[0][1] === 6);
+  // ⑤ tp 对双源在途: 不 bump、零补发, 但页签轮询照常起(轮询与代际无关, 不得因早退丢起轮)
+  vm = mkInst({ drawer: { open: true, tab: "trackers", hash: "HA", trackers: [],
+                          trackersLoading: true, peersLoading: false }, peerRows: [1, 2] });
+  vm.drawerPeerRows = function () { return this.peerRows; };
+  store._drawerMergeSupply.call(vm);
+  push("tp 双源在途: 代际不前进", vm._drawerLoadSeq === 5);
+  push("tp 双源在途: 零补发且轮询照常起", vm.fetched.length === 0 && vm.polled === 1);
+  // ⑥ tp 对有缺口: 代际恰好前进一次, 两源同代际 + 轮询照常起
+  vm = mkInst({ drawer: { open: true, tab: "peers", hash: "HA", trackers: [],
+                          trackersLoading: false, peersLoading: false } });
+  store._drawerMergeSupply.call(vm);
+  push("tp 有缺口: 代际恰好前进一次且两源同代际", vm._drawerLoadSeq === 6 && vm.fetched.length === 2 && vm.fetched.every((f) => f[1] === 6));
+  push("tp 有缺口: 轮询照常起", vm.polled === 1);
+  // ⑦ 合并关: 代际与取数都不动(既有早退守卫仍在)
+  vm = mkInst({ dtSplitOn: false });
+  store._drawerMergeSupply.call(vm);
+  push("合并关: 代际与取数都不动", vm._drawerLoadSeq === 5 && vm.fetched.length === 0);
+}
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_drawer_merge_supply_seq_bump_conditional():
+    """合并补给 seq bump 条件化守阵(issue 26-10-30-0622, 第二次全项目 code review 批F2 F2-03)
+
+    故障链: _drawerMergeSupply 的 seq bump 无条件执行 —— 即使两个源的取数都因「有数据/门在途」
+    被跳过, 代际照样前进, 把**正在飞行**的页签取数(seq N)整体打成 stale: 响应在
+    _fetchDrawerSource 被 stale 分支丢弃, 而 finally 的 stale 分支刻意**不清 loading 门**(注释
+    前提是「新在途请求持有它」, 在补给方没补发的场景不成立), 门成孤儿且无重发路径 ⇒ gc 对
+    (general+files, 页签无轮询)双列停「正在加载…」, 无 _dtNotify 到来则变体不重渲, 直到用户
+    切页签/换种子/重开抽屉。修法 = bump 移进「确有缺口要补」分支(两 fetch 都被门挡住不 bump)。
+    行为面 node 电池真跑(无 node 静默跳过): 双源有数据 / 双源在途 / 单源缺口 / 双源都缺 /
+    tp 对同款五型 + 合并关早退。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [node, "-e", _NODE_MERGE_SUPPLY_PROBE,
+         os.path.join(shared, "drawer_store.js")],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=60,
+    )
+    assert proc.returncode == 0, f"合并补给 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], \
+        f"合并补给电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"

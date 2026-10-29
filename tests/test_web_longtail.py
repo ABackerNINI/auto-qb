@@ -18,6 +18,7 @@
 - test_web_commands_bulk_recheck_via_ops: 批量 recheck 经 ops 聚合回执
 - test_web_commands_add_torrents_receipt: 添加种子三态回执(全受理 ok / 部分受理 warn / 全拒 error)
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
+- test_api_numeric_params_malformed_string_400: 数值型请求体字段畸形值(字符串)回 400 而不是 500(issue 26-10-30-0622, 五处裸 int()/float() 收口 common.int_param/float_param); 拒收在路由层不入队, 合法数值照常入队
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
 - test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
 - test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
@@ -482,6 +483,71 @@ def test_api_torrent_write_endpoints_extra_enqueue(web_env):
         assert payload == want, path
     # 鉴权沿用 /api/* 全局依赖
     assert client.post("/api/torrents/HA/pause").status_code == 401
+
+
+def test_api_numeric_params_malformed_string_400(web_env):
+    """数值型请求体字段畸形值(字符串)回 400 而不是 500(issue 26-10-30-0622)
+
+    五处裸 int()/float() 直转收口 common.int_param/float_param —— 直调 API 传 "abc" 时
+    ValueError 不再冒成服务端 500, 与同层 group_key_param / parse_window 的 4xx 先例同口径;
+    拒收在路由层, 不产生命令入队。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    cases = [
+        ("/api/torrents/HA/limits", {
+            "up_limit": "abc"
+        }),
+        ("/api/torrents/HA/limits", {
+            "dl_limit": "abc"
+        }),
+        ("/api/torrents/HA/share-limits", {
+            "ratio_limit": "abc"
+        }),
+        ("/api/torrents/HA/share-limits", {
+            "seeding_time_limit": "abc"
+        }),
+        ("/api/torrents/HA/share-limits", {
+            "inactive_seeding_time_limit": "abc"
+        }),
+        ("/api/torrents/HA/files/priority", {
+            "indices": ["x"],
+            "priority": 1
+        }),
+        ("/api/torrents/HA/files/priority", {
+            "indices": [0],
+            "priority": "x"
+        }),
+        ("/api/torrents/bulk", {
+            "action": "limits",
+            "hashes": ["HA"],
+            "up_limit": "abc"
+        }),
+        ("/api/torrents/bulk", {
+            "action": "limits",
+            "hashes": ["HA"],
+            "dl_limit": "abc"
+        }),
+        ("/api/speed/override", {
+            "upload_kib": "abc"
+        }),
+        ("/api/speed/override", {
+            "download_kib": "abc"
+        }),
+        ("/api/speed/alt", {
+            "upload_kib": "abc",
+            "download_kib": 1
+        }),
+    ]
+    for path, body in cases:
+        resp = client.post(path, json=body, headers=auth)
+        assert resp.status_code == 400, (path, body, resp.status_code)
+    assert mgr.web.commands.empty(), "畸形值拒收在路由层, 不得产生命令入队"
+    # 合法数值仍照常入队(既有行为零变化)
+    resp = client.post("/api/torrents/HA/limits", json={"up_limit": 1024}, headers=auth)
+    assert resp.status_code == 200
+    cmd, payload = mgr.web.commands.get_nowait()
+    assert cmd == "set_torrent_limits" and payload["up_limit"] == 1024
 
 
 def test_api_torrents_add_endpoint_errors_and_enqueue(web_env):

@@ -108,3 +108,23 @@ def group_key_param(text: str) -> tuple:
         return decode_group_key(text)
     except (ValueError, TypeError, LookupError):  # LookupError 覆盖 IndexError / KeyError
         raise HTTPException(status_code=400, detail="分组标识无效")
+
+
+def int_param(value) -> int:
+    """请求体数值字段 → int; 畸形值(如字符串 "abc")转 400 而不是 500
+
+    前端正常路径恒发数值, 直调 API(curl/脚本/扩展)传字符串时裸 int() 抛 ValueError
+    变 500 —— 客户端错误应回 4xx, 与 group_key_param / parse_window 先例同口径。
+    """
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="数值字段非法")
+
+
+def float_param(value) -> float:
+    """请求体浮点字段 → float; 同 int_param 口径(畸形值 400 而不是 500)"""
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="数值字段非法")

@@ -4,13 +4,11 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (56)
 
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)
 - [bug] [relocate journal 双写者竞态: guardian 心跳可覆盖 auto-qb 终态相位](../26-10-30-0624-bug-relocate-journal-heartbeat-phase.html) — finalize_watch 心跳无条件整包覆盖 journal, auto-qb 终态相位落在读-写间隙即被覆盖回 armed, 造成僵尸 guardian 与对账面相位失真
 - [bug] [备用限速组缺非空闸, 读失败窗口提交即静默写 0/0](../26-10-30-0622-bug-alt-limits-submit-empty-gate.html) — submitAltLimits 无字段非空闸, /api/speed/mode 读失败窗口内提交把备用限速静默写成不限速, 打破「未改动的组不下发」承诺
-- [bug] [drawer 合并补给无条件 bump seq, 孤儿化在飞取数与 loading 门](../26-10-30-0622-bug-drawer-merge-seq-bump-conditional.html) — _drawerMergeSupply 即使两源都被门挡住也前进代际, 在飞页签取数被打成 stale 且门不清, gc 对双列停在加载中
-- [bug] [路由层数值字段裸转换, 畸形载荷 500 而非 400](../26-10-30-0622-bug-numeric-param-400-collect.html) — torrent_cmds/torrent_detail 五处裸 int()/float() 直转, 直调 API 传字符串抛 ValueError 变 500, 与同层三处 400 先例口径不一致
 - [chore] [qbittorrent 三 str 键缺类型 fail-fast 校验](../26-10-30-0622-chore-config-qbittorrent-str-typecheck.html) — _validate_qbittorrent 的 username/password/api_key 无 isinstance(str) 检查, 键误写成容器时校验零报错运行期才炸
 - [refactor] [v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐](../26-10-30-0622-refactor-traffic-agg-cov-parse-contract.html) — parse_v4_agg_text 对 cov_s=0 语义合法行照单全收, 坏值可炸 rollup/merge 并逃逸恢复循环 —— 解析契约与写侧下限1不对齐
 - [chore] [注解/注释/文档契约卫生(第二次全项目评审合并条 2)](../26-10-30-0620-chore-annotation-comment-contract-hygiene.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: A-07(enabled 判据镜像对齐)+F1-02(app.js:206 指路修正)+T-04(gtm 进度注与 README 通知描述)
@@ -71,11 +69,13 @@
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 - [feat] [乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示](../26-10-01-2137-feat-webui-optimistic-ui-expansion.html) — 将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick
 
-## Done (276)
+## Done (278)
 
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
 - [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](../26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退
 - [bug] [gtm http_host 无回环约束, 与「控制面强制绑定 127.0.0.1」docstring 契约漂移](../26-10-30-0624-bug-gtm-http-host-loopback-contract.html) — http_host 可配置且校验只查非空, PUT 0.0.0.0 重启后控制面对局域网暴露(token 明文落盘), 安全声明与实现未取齐一头
+- [bug] [drawer 合并补给无条件 bump seq, 孤儿化在飞取数与 loading 门](../26-10-30-0622-bug-drawer-merge-seq-bump-conditional.html) — _drawerMergeSupply 即使两源都被门挡住也前进代际, 在飞页签取数被打成 stale 且门不清, gc 对双列停在加载中
+- [bug] [路由层数值字段裸转换, 畸形载荷 500 而非 400](../26-10-30-0622-bug-numeric-param-400-collect.html) — torrent_cmds/torrent_detail 五处裸 int()/float() 直转, 直调 API 传字符串抛 ValueError 变 500, 与同层三处 400 先例口径不一致
 - [bug] [relocate REBUILD/RESPAWN 无退避无上限, job.attempts 零消费](../26-10-30-0616-bug-rebuild-respawn-backoff.html) — 建链失败进 REMOVED-REBUILD-再失败循环每 1-2 tick 一轮 create-fail-delete, guardian respawn 每 tick 重拉进程, 均无退避无重试上限
 - [bug] [relocate 相位机入口缺 dry_run 短路, 恢复账本路径绕过 --dry-run 契约](../26-10-30-0616-bug-relocate-phase-dry-run-shortcircuit.html) — relocate 相位机 on_task_line/_step_move/_build_links/relocate_cancel 全程无 dry_run 闸, --dry-run 启动携恢复账本非终态 job 时真写下发/建删链接
 - [bug] [relocate 失败路径不消费 resume_hashes, 被暂停组成员永久停在暂停态](../26-10-30-0616-bug-resume-hashes-failure-path.html) — 迁移失败路径(move_rejected/stalled/internal_error/cancel_failed)只置 FAILED 不恢复 resume_hashes, 整组运行成员静默停留暂停态且无日志
