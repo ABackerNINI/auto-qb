@@ -7,10 +7,10 @@
 <title>实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-30-0221">
-<meta name="doc-updated" content="26-10-30-0221">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/reports/26-10-05-1036-report-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-11-0033-report-dup-code-audit.html">
+<meta name="doc-updated" content="26-10-30-0554">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/reports/26-10-05-1036-report-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-11-0033-report-dup-code-audit.html, memory-bank/issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流</h1>
 <p class="lede">对全仓源码(后端 46.3k 行 Python + 前端 39.3k 行 static + gtm 子项目 10.4k 行 + extensions)做第二次只读全面评审: 沿用首次全面 review(26-10-05-0951)的分批评审骨架与 R1–R10 维度, 主轴改「增量优先」—— 首次基线 <code>a4d14a8d</code> 以来的新增/变更文件全量读码, 未变更文件轻量复核, 末轮汇总分级、撞车去重、P0/P1 入池。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-30-0221 · <b>doc-updated</b> 26-10-30-0221 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-30-0221 · <b>doc-updated</b> 26-10-30-0554 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「再做一次全面 code review, 先写一个分步实施计划」(26-10-30 会话); 方案骨架继承首次全面 review 计划 26-10-05-0951(状态 Done)与其后续修复计划 26-10-06-0103(状态 Done)、重复代码审查 26-10-10-2333(Phase 1–2 Done)
 </div>
 
@@ -195,6 +195,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-30-0221</span> 初版: 用户指令发起; 继承首次全面 review(26-10-05-0951, Done)骨架, 改增量优先主轴; 九批(A–H+T)+ R11 新维度 + S0–S7 门控 + 拍板点 D1–D6, 待拍板。底数实测: HEAD 6441a707 / 基线 4073+2 / 99%(切片 26-10-30-0139)/ issues Open 19 / 距首次基线 620 commits / 214 文件变更。</li>
+  <li><span class="tag">R1 · 26-10-30-0554</span> 定稿收尾: S0–S7 全部走完 —— 十批评审 27/27 勾选, S6 终验 26 条(P0×0/P1×1/P2×6/P3×19), B-01 已入池(26-10-30-0550), 报告 26-10-30-0237 定稿 Done; doc-status 翻 Done</li>
 </ul>
 
 </div>

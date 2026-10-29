@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 6 |
 | docs | 1 |
 | test | 1 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [HR 位置证明三判据在 cutoff_done==0 时退化恒通过, 种子永续放行退出 HR 管束](26-10-30-0550-bug-hr-cutoff-zero-position-proof.html) — cutoff_done=…
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告…
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_i…
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显…

@@ -7,9 +7,10 @@
 <title>全项目第二次全面 Code Review（只读取证）</title>
 <meta name="doc-type" content="report">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-30-0237">
-<meta name="doc-updated" content="26-10-30-0237">
+<meta name="doc-updated" content="26-10-30-0553">
+<meta name="doc-refs" content="memory-bank/issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html">
 <style>
   :root {
     --bg: #10151a;
@@ -72,9 +73,9 @@
 
 <div class="kicker">REPORT · memory-bank · doc-topic: full-code-review-2</div>
 <h1>全项目第二次全面 Code Review（只读取证）</h1>
-<p class="lede">全项目第二次全面 Code Review 的 S0(准备+底册)与后续各批评审的滚动登记底稿: D1–D6 全部按推荐拍板; 起点 HEAD <code>bfd19fda</code> / 起点 test.full 4073 passed + 2 skipped / 覆盖率 99%(切片 26-10-30-0139, 不重跑); 已知问题底册四表蒸馏完成, 十批发现登记区就位。</p>
+<p class="lede">全项目第二次全面 Code Review 终版报告: S0(准备+底册)→ 十批评审滚动登记(§05)→ S6 汇总分级(§08)→ S7 定稿; D1–D6 全部按推荐拍板; 起点 HEAD <code>bfd19fda</code> / 起点 test.full 4073 passed + 2 skipped / 覆盖率 99%(切片 26-10-30-0139, 不重跑); 终验登记 <b>26 条</b>(P0×0 / P1×1 / P2×6 / P3×19, 见 §08), 评审期间代码面零回归。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-30-0237 · <b>doc-updated</b> 26-10-30-0237 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-30-0237 · <b>doc-updated</b> 26-10-30-0553 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「再做一次全面 code review」(26-10-30 会话); 本报告是计划 <a href="../plans/26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> 的 S0 产物, 之后作为 S2–S5 各批评审发现的滚动登记底稿<br>
   <b>评审分支</b> review-full-code-review-2 · <b>起点 HEAD</b> <code>bfd19fda</code>(26-10-30 sync 后实测; 计划成文时 6441a707, 其后前进 1 笔)<br>
   <b>起点基线</b> test.full <b>4073 passed + 2 skipped / 覆盖率 99%</b>(全量 158.96s; 引用基线切片 <a href="../testing/baselines/26-10-30-0139-expr-hr-guard-delegate.md">26-10-30-0139</a>, 未重跑) · <b>拍板</b> D1–D6 全部按计划「推荐」列执行(26-10-30)
@@ -84,6 +85,8 @@
 <p>S0 完成。D1–D6 全部按推荐拍板(逐项结论已回写计划 §06): <b>D1</b> 增量优先分层(新增/变更文件全量读码对 R1–R11 勾选; 未变文件逐文件过目但只做维度抽验 + 上次该域发现回归核对); <b>D2</b> gtm 子项目纳入, 独立 T 批全量; <b>D3</b> 重复代码审查 Phase 3/4 不并入, 只把 322 条发现与 17 条入池 issue 收进底册; <b>D4</b> ruff + bandit 沿用首次口径(限包范围、逐条人工复核), 前端 XSS 用「数据源→渲染点」grep 清单法; <b>D5</b> 评审不当场修(P0/P1 当轮入池并标注建议优先级, 由用户决定); <b>D6</b> 每批开工记 HEAD + 三锚登记 + S6 对 P0/P1 在当期 HEAD 复验。</p>
 <p>底册四表蒸馏完毕(§04): issues 池 Open <b>61</b> 条、坑档 7 类共 <b>241</b> 条、在途计划/报告 <b>6</b> 件(含本计划)、重复代码审查 322 条发现(A129/B30/C88/D75, Phase 2 快照)与 17 条 Phase 2 入池 issue 收账。分批评审发现登记区十小节就位(§05), R1–R11 维度速查表就位(§06)。</p>
 <p class="wr">与计划底数的两处偏差(以本报告实测为准): ①计划 §02 写「issues 池 19 条 Open」, 26-10-30 实测 <b>61</b> 条(分布见 §02)—— 计划成文时的口径偏窄, S1 重盘与各批撞车比对一律以本报告表 a 为准; ②计划 §02 列为在途的 26-10-16-0541(gtm)与 26-10-20-2101(覆盖率二轮)实测 doc-status 已为 Done, 不再列在途。</p>
+<p><b>各批评审 HEAD</b>(D6 口径, 每批 <code>git rev-parse</code> 只读实测): A <code>da19ca84</code> · B <code>6fd63bd3</code> · C <code>70d6da60</code> · D <code>ae8b4c45</code> · E <code>fcde2e29</code> · F1 <code>1c5aef85</code> · F2 <code>7807fb15</code> · F3 <code>855e954d</code> · GH <code>ba0f2ee7</code>(开工 855e954d) · T <code>3d957597</code>(开工 ba0f2ee7)。S6 汇总分级与 P0/P1 复验在当期 HEAD <code>3d957597</code>(哨兵数字见 §8.5); 评审起点 bfd19fda → 汇总时点 3d957597 的前进均为本计划自身的报告回填提交。</p>
+<p><b>处置执行情况(S7)</b>: 分级统计与撞车终验见 §08(26 条: P0×0 / P1×1 / P2×6 / P3×19, 全部维持原级)。按 D5 拍板, P1 唯一条 <a href="../issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html">B-01 已当轮入池</a>(<code>26-10-30-0550</code>, bug 标准档, 状态 Open, 建议优先级高, 待用户认领); 其余 17 个建议池位(6×P2 逐条 + P3 收敛 11)留在 §8.6 清单由用户决定。计划 <a href="../plans/26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> 状态翻 Done。</p>
 
 <h2><span class="no">§02</span>证据快照</h2>
 <ul>
@@ -1356,7 +1359,7 @@
   <li><code>service.py:1729</code>(_position_covered): done None 已在 :1723-1724 回 False; cutoff_done==0 时 <code>done &lt; 0</code> 恒 False → 循环走完 → 判「已覆盖」→ 观察期计数推进(连续 2 波即判「移出」放行, 行 1 管束解除)。</li>
   <li><code>service.py:1753</code>(_absence_proven_all): done 源 anchor.completion_on 且有 :1751 <code>done &lt;= 0</code> 守卫(只保护 completion_on 缺失/0); 真实 epoch(≈1.7e9)下 <code>done - 86400 &lt; 0</code> 恒 False → 「未覆盖」出口永不触发 → 缺席证明恒成立, 未对账对象走批量「未列出」放行。三处的病根一致: 「0 = 没有位置概念」(model.py:332 注释原话)被减法/比较当成「位置 0 = 比一切都老」。</li>
 </ul>
-<p><b>触发链各环在当前 HEAD 逐环实测</b>: ①供给侧 —— <code>_update_cutoff</code>(:944-948)只在 page_deepest&gt;0 时前进, 整列 done 不可解析 ⇒ <code>_deepest_seen_done</code>(:938-941)回 0.0 ⇒ cutoff_done 恒 0.0; done 列不在 REQUIRED_KEYS(nexusphp.py:57, 复测在位), 整列失明不触发 _LaneAbort(service.py:795-796 的零容忍只查 missing_field_rate = 必填键缺失率) —— 站点改换完成时间书写形态即满足, 无需任何恶意构造。②「ok 且非全深度」常态 —— 预算截断 _truncate_lane→_settle_lane(:1682-1691, 有页即 LANE_OK+full_depth=False)、停翻3(:820-824 full=False)、翻页上限(:854)三条路都在位。③测试面无钉死 —— test_hr_service 的 cutoff_done 用例均非零或 full_depth=True(:2423/:2425/:2589/:4216; :4314 cutoff_done=0.0 但 full_depth=True), 「cutoff==0 ∧ 非全深度」组合零覆盖, 修复时无守阵冲突。<b>结论: 可达性成立, 维持 P1 不降级</b> —— 触发链是「站点改版 + 预算截断」两个常态条件的组合, 后果为放行记录永续有效、种子退出 HR 管束、用户据此删种真吃 H&amp;R; 不判 P0 因程序自身不破坏数据(放行是「停止管束」的非对称失误, 可经重新对账恢复)。当轮入池(bug, 建议优先级高)。</p>
+<p><b>触发链各环在当前 HEAD 逐环实测</b>: ①供给侧 —— <code>_update_cutoff</code>(:944-948)只在 page_deepest&gt;0 时前进, 整列 done 不可解析 ⇒ <code>_deepest_seen_done</code>(:938-941)回 0.0 ⇒ cutoff_done 恒 0.0; done 列不在 REQUIRED_KEYS(nexusphp.py:57, 复测在位), 整列失明不触发 _LaneAbort(service.py:795-796 的零容忍只查 missing_field_rate = 必填键缺失率) —— 站点改换完成时间书写形态即满足, 无需任何恶意构造。②「ok 且非全深度」常态 —— 预算截断 _truncate_lane→_settle_lane(:1682-1691, 有页即 LANE_OK+full_depth=False)、停翻3(:820-824 full=False)、翻页上限(:854)三条路都在位。③测试面无钉死 —— test_hr_service 的 cutoff_done 用例均非零或 full_depth=True(:2423/:2425/:2589/:4216; :4314 cutoff_done=0.0 但 full_depth=True), 「cutoff==0 ∧ 非全深度」组合零覆盖, 修复时无守阵冲突。<b>结论: 可达性成立, 维持 P1 不降级</b> —— 触发链是「站点改版 + 预算截断」两个常态条件的组合, 后果为放行记录永续有效、种子退出 HR 管束、用户据此删种真吃 H&amp;R; 不判 P0 因程序自身不破坏数据(放行是「停止管束」的非对称失误, 可经重新对账恢复)。当轮入池(bug, 建议优先级高)—— <b>已入池</b>: <a href="../issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html">26-10-30-0550</a>。</p>
 <h4>批A 6×P2 三锚复核(当前 HEAD 3d957597)</h4>
 <p>逐条 grep/sed 定位实测: A-01(:233/:279 setLocation 下发行/:406/:852/:826 dry_run 判点/:186)、A-02(:795 pause 行/:271-319/:874 cancel_failed/:482/:500/:879 resume 行)、A-03(:441-453 建链失败分支/:597-608 ACT_REBUILD; relocate_units :870 def reconcile/:904 ACT_REBUILD 行)、A-04(:825 _persist→:833 setLocation/:196-204; relocate_units :842 def recover_exec_phase)、A-05(:643 def _finalize_members; record.py :287 def files)、A-06(taskqueue :224-234 defer 占预算循环体/:241; qbmanager :781) —— <b>全部与登记锚一致, 行号仍准</b>(评审期间 develop 无外部合入, 与 D6 预期相符)。</p>
 <h4>其余各条(P2×1 + P3×19)维持理由</h4>
@@ -1391,7 +1394,7 @@
 <p class="cm">D5 拍板口径: P0/P1 当轮入池并标建议优先级; P2/P3 由用户决定。本清单为 S7 的执行输入。</p>
 <h4>必须入池(1 条)</h4>
 <ul>
-  <li><b>B-01</b> —— 入池 bug, <b>建议优先级: 高</b>。三处判据补「非全深度 ∧ cutoff_done&lt;=0 ⇒ 位置不可证」(或 _update_cutoff 用哨兵区分「无位置概念」与 epoch 0), 评估 done 列纳入 REQUIRED_KEYS; 补「cutoff==0 ∧ 非全深度」守阵钉死。</li>
+  <li><b>B-01</b> —— <b>已入池(S7 执行)</b>: <a href="../issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html">26-10-30-0550-bug-hr-cutoff-zero-position-proof</a>(bug 标准档, 状态 Open, <b>建议优先级: 高</b>, doc-refs 与本报告/计划互链)。修法口径: 三处判据补「非全深度 ∧ cutoff_done&lt;=0 ⇒ 位置不可证」(或 _update_cutoff 用哨兵区分「无位置概念」与 epoch 0), 评估 done 列纳入 REQUIRED_KEYS; 补「cutoff==0 ∧ 非全深度」守阵钉死。</li>
 </ul>
 <h4>建议入池(6 条 P2, 逐条)</h4>
 <ul>
@@ -1422,6 +1425,10 @@
   <li>T-③(config 时间字段只验 &gt;0 无下界, sample_interval 可配 0.001S 自伤): <b>并入池 #16(26-10-20-2345)备注</b> —— 同源成本议题, 是否加下限属产品口径, 不另立条。</li>
   <li>T-④(claim_primary 撤占位 remove 再抛会掩盖原异常): <b>仅记录</b> —— 刚 O_EXCL 建的文件被锁概率趋零。</li>
   <li>T-⑤(ensure_data_ownership/fill_primary 排在单实例锁之前, 并发首启 tool-id 双写): <b>仅记录</b> —— 输家随即被锁挡下、赢家血统防线兜底, 现状自洽; 未来把锁提前须重排这段顺序。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>  <li><span class="tag">R1 · 26-10-30-0553</span> S7 定稿: §01 补各批评审 HEAD 清单与处置执行情况; B-01 当轮入池(26-10-30-0550, bug, 建议优先级高)并双向互链; 终验登记 26 条(P0×0/P1×1/P2×6/P3×19)全部维持原级, 十批撞车终验无合并; doc-status 翻 Done</li>
 </ul>
 
 </div>

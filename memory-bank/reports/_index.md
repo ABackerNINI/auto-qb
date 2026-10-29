@@ -13,10 +13,11 @@
 
 ## Open
 
-- [26-10-30-0237] [全项目第二次全面 Code Review（只读取证）](26-10-30-0237-report-full-code-review-2.html) — `full-code-review-2`
+(暂无)
 
 ## Done
 
+- [26-10-30-0237] [全项目第二次全面 Code Review（只读取证）](26-10-30-0237-report-full-code-review-2.html) — `full-code-review-2`
 - [26-10-22-0234] [qB/libtorrent 跳检机制源码核查 — seed_mode 语义、惰性哈希校验与标记可替代性](26-10-22-0234-report-skip-check-arch.html) — `skip-check-arch`
 - [26-10-20-0307] [右键菜单自定义布局 改版报告](26-10-20-0307-report-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`
 - [26-10-18-1300] [免重启整组迁移 A/C 路线实测验证](26-10-18-1300-report-group-relocate-restart-free-verified.html) — `group-relocate-restart-free-verified`
