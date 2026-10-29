@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>全项目第二次全面 Code Review（只读取证）</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="full-code-review-2">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-30-0237">
+<meta name="doc-updated" content="26-10-30-0237">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: full-code-review-2</div>
+<h1>全项目第二次全面 Code Review（只读取证）</h1>
+<p class="lede">全项目第二次全面 Code Review 的 S0(准备+底册)与后续各批评审的滚动登记底稿: D1–D6 全部按推荐拍板; 起点 HEAD <code>bfd19fda</code> / 起点 test.full 4073 passed + 2 skipped / 覆盖率 99%(切片 26-10-30-0139, 不重跑); 已知问题底册四表蒸馏完成, 十批发现登记区就位。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-30-0237 · <b>doc-updated</b> 26-10-30-0237 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「再做一次全面 code review」(26-10-30 会话); 本报告是计划 <a href="../plans/26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> 的 S0 产物, 之后作为 S2–S5 各批评审发现的滚动登记底稿<br>
+  <b>评审分支</b> review-full-code-review-2 · <b>起点 HEAD</b> <code>bfd19fda</code>(26-10-30 sync 后实测; 计划成文时 6441a707, 其后前进 1 笔)<br>
+  <b>起点基线</b> test.full <b>4073 passed + 2 skipped / 覆盖率 99%</b>(全量 158.96s; 引用基线切片 <a href="../testing/baselines/26-10-30-0139-expr-hr-guard-delegate.md">26-10-30-0139</a>, 未重跑) · <b>拍板</b> D1–D6 全部按计划「推荐」列执行(26-10-30)
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p>S0 完成。D1–D6 全部按推荐拍板(逐项结论已回写计划 §06): <b>D1</b> 增量优先分层(新增/变更文件全量读码对 R1–R11 勾选; 未变文件逐文件过目但只做维度抽验 + 上次该域发现回归核对); <b>D2</b> gtm 子项目纳入, 独立 T 批全量; <b>D3</b> 重复代码审查 Phase 3/4 不并入, 只把 322 条发现与 17 条入池 issue 收进底册; <b>D4</b> ruff + bandit 沿用首次口径(限包范围、逐条人工复核), 前端 XSS 用「数据源→渲染点」grep 清单法; <b>D5</b> 评审不当场修(P0/P1 当轮入池并标注建议优先级, 由用户决定); <b>D6</b> 每批开工记 HEAD + 三锚登记 + S6 对 P0/P1 在当期 HEAD 复验。</p>
+<p>底册四表蒸馏完毕(§04): issues 池 Open <b>61</b> 条、坑档 7 类共 <b>241</b> 条、在途计划/报告 <b>6</b> 件(含本计划)、重复代码审查 322 条发现(A129/B30/C88/D75, Phase 2 快照)与 17 条 Phase 2 入池 issue 收账。分批评审发现登记区十小节就位(§05), R1–R11 维度速查表就位(§06)。</p>
+<p class="wr">与计划底数的两处偏差(以本报告实测为准): ①计划 §02 写「issues 池 19 条 Open」, 26-10-30 实测 <b>61</b> 条(分布见 §02)—— 计划成文时的口径偏窄, S1 重盘与各批撞车比对一律以本报告表 a 为准; ②计划 §02 列为在途的 26-10-16-0541(gtm)与 26-10-20-2101(覆盖率二轮)实测 doc-status 已为 Done, 不再列在途。</p>
+
+<h2><span class="no">§02</span>证据快照</h2>
+<ul>
+  <li><b>起点 HEAD</b>: <code>bfd19fda</code>(26-10-30 sync 后实测, <code>git rev-parse</code>); 分支 <code>review-full-code-review-2</code>。计划成文时起点为 6441a707, 其后 develop 前进 1 笔。</li>
+  <li><b>起点基线</b>: <code>commands run test.full</code> — 4073 passed, 2 skipped, 覆盖率 99%(TOTAL 行), 全量 158.96s; 出自基线切片 <a href="../testing/baselines/26-10-30-0139-expr-hr-guard-delegate.md">26-10-30-0139</a>(26-10-30 01:39 建档), 本步未重跑。评审期间每批以此对比(基线不变式)。</li>
+  <li><b>issues 池分布</b>(26-10-30 实测 <code>issues/_index.md</code>): bug 6 · perf 6 · docs 1 · test 1 · refactor 18 · feat 21 · chore 2 · question 6 = <b>61 Open</b>(另 In Progress 2)。</li>
+  <li><b>坑档</b>: 7 类共 <b>241</b> 条主题档(backend 40 / web-ui 79 / testing 73 / kb 19 / git 15 / ops 9 / docs 6)。</li>
+  <li><b>重复代码审查</b>(26-10-11-0033): Phase 2 快照全局累计 <b>322</b> 项(A129/B30/C88/D75) = Phase 1 后端 156 + Phase 2 前端 166; Phase 3(测试横切 25 项)后定稿 <b>347</b> 项(A140/B35/C94/D78)。入池共 69 条(P1 46 + P2 17 + P3 6, 全 light 档), 复核 26-10-29-0421 已 <b>69/69 Done</b>(清偿率 100%)。</li>
+  <li><b>S0 末 git 状态</b>: 新增本报告草稿 + <code>memory-bank/reports/_index.md</code> 索引重建(kb.new 生成物自动步骤), 零源码/测试改动。</li>
+</ul>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<p><b>方法</b>: 报告骨架由 <code>commands run kb.new report</code> 生成(专题 full-code-review-2), 底册四表蒸馏只读索引与文件头 meta —— <code>issues/_index.md</code> + 各 Open issue HTML 的 <code>issue-*</code> meta、<code>pitfalls/_index.md</code> + 7 类 <code>_index.md</code> 主题表、plans/reports 全量 <code>doc-status</code> meta 扫描、dup-audit 报告只抽 §30.1/§33 全局计数与入池总账段。未整读任一目录。</p>
+<p><b>局限</b>:</p>
+<ul>
+  <li>表 a 的「一句话」取 issue 标题(索引口径), 摘要在索引层有截断; 撞车比对命中疑似项时仍须打开该 issue 报告核对细节。</li>
+  <li>issue 池的档位是 <b>standard(标准)/light(便签)</b> 两档, 与本评审的 P0–P3 分级不同轴; 表 a 记录池内原档位, P 级只在本报告 §05 登记区出现。</li>
+  <li>坑档表 b 只记条目数与高频主题(蒸馏自各类索引一句话列), 未逐条摘录; 各批读码前按域打开对应类索引对照。</li>
+  <li>报告出厂 meta 为 Done(kb.new 对快照型报告的缺省), 本件是滚动登记稿, 已改 <b>Open</b>, 终稿 S7 翻回 Done。</li>
+  <li>计划底数「19 条 Open / gtm 与覆盖率二轮在途」与实测有出入(见 §01), 已按实测回写口径; 计划正文其余部分不动。</li>
+</ul>
+
+<h2><span class="no">§04</span>附录: 已知问题底册(四表)</h2>
+<p>本节是全部批次共用的撞车比对基准: 每条新发现登记前先对四表去重, 命中即标「撞车」并链底册条目, 不作为新发现报告。</p>
+
+<h3>表 a · issues 池 Open 条目(61 条, 26-10-30 实测)</h3>
+<p class="cm">格式: 类型 × 位置(包/文件, 蒸馏自标题与摘要) × 一句话(= issue 标题) × 池内档位 × issue 链接。档位: 标准 = standard, 便签 = light。</p>
+<table>
+  <tr><th>#</th><th>类型</th><th>位置</th><th>一句话</th><th>档</th><th>issue</th></tr>
+  <tr><td>1</td><td>refactor</td><td>tests/(3 个 traffic 测试文件)</td><td>三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)</td><td>便签</td><td><a href="../issues/26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html">26-10-29-1406</a></td></tr>
+  <tr><td>2</td><td>refactor</td><td>tests/(4 个 relocate 测试文件)</td><td>relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口</td><td>便签</td><td><a href="../issues/26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html">26-10-29-1405</a></td></tr>
+  <tr><td>3</td><td>refactor</td><td>tests/(test_hr_service 等 4 文件)</td><td>HrRefreshService 测试构造器 4 份 + 10 处内联未收口(参数面不够就绕过)</td><td>便签</td><td><a href="../issues/26-10-29-1404-refactor-b-r24a03-hr-service-builder.html">26-10-29-1404</a></td></tr>
+  <tr><td>4</td><td>refactor</td><td>tests/(3 个测试文件)</td><td>tests 三份轮询等待助手(_wait_until/_wait_for)收口 helpers.wait_until</td><td>便签</td><td><a href="../issues/26-10-29-1403-refactor-b-r24a02-wait-until-helpers.html">26-10-29-1403</a></td></tr>
+  <tr><td>5</td><td>refactor</td><td>webui/static/settings.html</td><td>设置页搜索图标内联两遍且与 sprite #i-search 逐字同形</td><td>便签</td><td><a href="../issues/26-10-29-1355-refactor-b-r23b15-settings-inline-svg.html">26-10-29-1355</a></td></tr>
+  <tr><td>6</td><td>refactor</td><td>webui/static/drawer.html</td><td>抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮)</td><td>便签</td><td><a href="../issues/26-10-29-1354-refactor-b-r23b13-drawer-host-vfor.html">26-10-29-1354</a></td></tr>
+  <tr><td>7</td><td>refactor</td><td>webui/static(内容页签变体 10/12)</td><td>content 目录树构建与聚合两份且节点模型已分叉(hasAv/minAv vs av)</td><td>便签</td><td><a href="../issues/26-10-29-1343-refactor-b-r21c06-content-file-tree-two-copies.html">26-10-29-1343</a></td></tr>
+  <tr><td>8</td><td>refactor</td><td>webui/static(变体 04/05/06)</td><td>tracker 五桶文案表两种形状、字面散在 5 处</td><td>便签</td><td><a href="../issues/26-10-29-1343-refactor-b-r21c07-tracker-bucket-table-shapes.html">26-10-29-1343</a></td></tr>
+  <tr><td>9</td><td>refactor</td><td>webui/static(5 处)</td><td>文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档</td><td>便签</td><td><a href="../issues/26-10-29-1340-refactor-b-r21a06-file-prio-text-table.html">26-10-29-1340</a></td></tr>
+  <tr><td>10</td><td>refactor</td><td>webui/static config_rules.js</td><td>spec 编辑八助手已无调用者, ListItemRemove 空态写 [] 与全项目删键口径相反</td><td>便签</td><td><a href="../issues/26-10-29-1334-refactor-b-r20c07-spec-list-empty-write.html">26-10-29-1334</a></td></tr>
+  <tr><td>11</td><td>refactor</td><td>core episodes/tvshows</td><td>集数正则族两份(episodes 4 项 vs tvshows 7 项): 双向非对称, 只补守阵不合并</td><td>便签</td><td><a href="../issues/26-10-29-1328-refactor-b-r08e02-episode-pattern-family.html">26-10-29-1328</a></td></tr>
+  <tr><td>12</td><td>refactor</td><td>traffic 曲线摘要侧</td><td>各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案</td><td>便签</td><td><a href="../issues/26-10-29-1327-refactor-b-r13s01-lane-summary-twin.html">26-10-29-1327</a></td></tr>
+  <tr><td>13</td><td>refactor</td><td>webui/traffic fold+publish</td><td>webui 三桶同键抵消(R5)在 fold 与 publish 各写一份</td><td>便签</td><td><a href="../issues/26-10-29-1321-refactor-b-r16b02-delta-cancel-helper.html">26-10-29-1321</a></td></tr>
+  <tr><td>14</td><td>refactor</td><td>hr/(HRRule 派生面)</td><td>HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra</td><td>便签</td><td><a href="../issues/26-10-29-1310-refactor-b-r10x03-exempt-baseline-single-source.html">26-10-29-1310</a></td></tr>
+  <tr><td>15</td><td>feat</td><td>ops 跳检</td><td>跳检缺少「不完整数据触发重新下载」的防线, 损失直接计入 PT 下载量</td><td>标准</td><td><a href="../issues/26-10-22-0308-feat-ops-skip-check-download-cost.html">26-10-22-0308</a></td></tr>
+  <tr><td>16</td><td>perf</td><td>tools/global-traffic-monitor 采样器</td><td>每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次</td><td>标准</td><td><a href="../issues/26-10-20-2345-perf-gtm-sampler-other-io.html">26-10-20-2345</a></td></tr>
+  <tr><td>17</td><td>question</td><td>traffic agg 读侧</td><td>agg 速率 lane 是否应包含 z 游程内的隐形字节</td><td>便签</td><td><a href="../issues/26-10-16-0020-question-agg-rate-lane-invisible-bytes.html">26-10-16-0020</a></td></tr>
+  <tr><td>18</td><td>feat</td><td>webui 内容页签(变体 10/11/12)</td><td>种子详情内容页签「重命名…」入口缺失</td><td>标准</td><td><a href="../issues/26-10-14-0521-feat-content-tab-file-rename-missing.html">26-10-14-0521</a></td></tr>
+  <tr><td>19</td><td>question</td><td>core grouping_mod</td><td>A系删回写后整组停种经同步回流, 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)</td><td>标准</td><td><a href="../issues/26-10-13-0626-question-grouping-transition-reflow-retrigger.html">26-10-13-0626</a></td></tr>
+  <tr><td>20</td><td>bug</td><td>ops 跳检闸门(G3/dedup)</td><td>跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)</td><td>标准</td><td><a href="../issues/26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html">26-10-11-2045</a></td></tr>
+  <tr><td>21</td><td>bug</td><td>torrents/store _apply</td><td>增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)</td><td>标准</td><td><a href="../issues/26-10-11-2045-bug-torrents-store-removed-pop-readd.html">26-10-11-2045</a></td></tr>
+  <tr><td>22</td><td>test</td><td>tests(常驻排期锚)</td><td>变异测试定期审计(常驻排期锚)</td><td>标准</td><td><a href="../issues/26-10-08-0642-test-mutation-audit-standing.html">26-10-08-0642</a></td></tr>
+  <tr><td>23</td><td>perf</td><td>webui /api/state</td><td>分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)</td><td>标准</td><td><a href="../issues/26-10-08-0411-perf-webui-api-state-pagination.html">26-10-08-0411</a></td></tr>
+  <tr><td>24</td><td>perf</td><td>webui 组视图</td><td>组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级</td><td>标准</td><td><a href="../issues/26-10-07-1420-perf-webui-group-row-hash-ref.html">26-10-07-1420</a></td></tr>
+  <tr><td>25</td><td>feat</td><td>webui 抽屉</td><td>抽屉开合态持久化回读(补强一, 与 D1 拍板冲突待翻案)</td><td>标准</td><td><a href="../issues/26-10-07-0149-feat-webui-drawer-open-state-restore.html">26-10-07-0149</a></td></tr>
+  <tr><td>26</td><td>feat</td><td>webui 09 peers 变体</td><td>09 变体 peer 悬停封禁钮(需后端端点, P-04 备选)</td><td>标准</td><td><a href="../issues/26-10-07-0149-feat-webui-peer-ban-action.html">26-10-07-0149</a></td></tr>
+  <tr><td>27</td><td>feat</td><td>webui 14 traffic 变体</td><td>14 变体解读栏与图悬停联动(P-05 备选)</td><td>标准</td><td><a href="../issues/26-10-07-0149-feat-webui-traffic-interpret-hover-link.html">26-10-07-0149</a></td></tr>
+  <tr><td>28</td><td>feat</td><td>hr _prune_index</td><td>C3: 30 天静默淘汰淘汰前无预告(方向 A: 日志预告)</td><td>标准</td><td><a href="../issues/26-10-05-0922-feat-hr-prune-notice.html">26-10-05-0922</a></td></tr>
+  <tr><td>29</td><td>refactor</td><td>config SiteHrCheckConfig</td><td>SiteHrCheckConfig.fetchable 全仓零消费方, listing=none 不取数未被取数侧强制</td><td>便签</td><td><a href="../issues/26-10-05-0922-refactor-hr-fetchable-dead-config.html">26-10-05-0922</a></td></tr>
+  <tr><td>30</td><td>bug</td><td>ops 跳检决策链</td><td>跳检无闸门拦截候选种子自身当日校验失败, 已证实坏数据可被洗白成已校验</td><td>标准</td><td><a href="../issues/26-10-05-0402-bug-skip-check-self-fail-gate.html">26-10-05-0402</a></td></tr>
+  <tr><td>31</td><td>perf</td><td>core 主循环</td><td>渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移 1.22→0.801s; 原「max_tasks_per_tick 自适应」经查非有效旋钮)</td><td>标准</td><td><a href="../issues/26-10-01-2218-perf-mainloop-max-tasks-adaptive.html">26-10-01-2218</a></td></tr>
+  <tr><td>32</td><td>question</td><td>config 加载/校验面</td><td>配置切分(每站点一份)是否做(存疑)</td><td>便签</td><td><a href="../issues/26-10-01-2212-question-config-split-per-site.html">26-10-01-2212</a></td></tr>
+  <tr><td>33</td><td>question</td><td>站点交互(想法)</td><td>基于搜索的辅种方式可行性(存疑)</td><td>便签</td><td><a href="../issues/26-10-01-2212-question-search-based-recheck-feasibility.html">26-10-01-2212</a></td></tr>
+  <tr><td>34</td><td>refactor</td><td>rules(容错键)</td><td>重新梳理 ignore_next_action_error / stop_following_rules_if 语义</td><td>便签</td><td><a href="../issues/26-10-01-2211-refactor-rules-keys-semantics-review.html">26-10-01-2211</a></td></tr>
+  <tr><td>35</td><td>bug</td><td>tray(--tray 模式)</td><td>--tray 模式下 Ctrl+C 无法关闭程序</td><td>标准</td><td><a href="../issues/26-10-01-2203-bug-tray-ctrl-c-not-exit.html">26-10-01-2203</a></td></tr>
+  <tr><td>36</td><td>feat</td><td>运维/备份面</td><td>现场重建: 硬盘/qB 损坏后重建辅种现场</td><td>标准</td><td><a href="../issues/26-10-01-2203-feat-disaster-site-rebuild.html">26-10-01-2203</a></td></tr>
+  <tr><td>37</td><td>feat</td><td>extensions</td><td>浏览器扩展优化信息展示</td><td>标准</td><td><a href="../issues/26-10-01-2203-feat-ext-info-display.html">26-10-01-2203</a></td></tr>
+  <tr><td>38</td><td>feat</td><td>extensions</td><td>扩展版本号 + 主程序仅支持固定版本 + 扩展高度参数化</td><td>标准</td><td><a href="../issues/26-10-01-2203-feat-ext-version-pinning.html">26-10-01-2203</a></td></tr>
+  <tr><td>39</td><td>feat</td><td>webui/通知</td><td>支持多语言(低优先级)</td><td>标准</td><td><a href="../issues/26-10-01-2203-feat-i18n-multi-language.html">26-10-01-2203</a></td></tr>
+  <tr><td>40</td><td>feat</td><td>qB 组迁移</td><td>整组迁移防进度丢失(qB 逐个移动同组种子的问题)</td><td>标准</td><td><a href="../issues/26-10-01-2147-feat-group-move-atomicity.html">26-10-01-2147</a></td></tr>
+  <tr><td>41</td><td>feat</td><td>hr 在线核实</td><td>HR 在线核实同步修改 HR 标签/分类</td><td>标准</td><td><a href="../issues/26-10-01-2147-feat-hr-verify-sync-hr-tags.html">26-10-01-2147</a></td></tr>
+  <tr><td>42</td><td>feat</td><td>webui 限速曲线</td><td>命中的限速曲线强调显示 + 限速时可配置弹窗提醒</td><td>标准</td><td><a href="../issues/26-10-01-2147-feat-speedlimit-curve-emphasis.html">26-10-01-2147</a></td></tr>
+  <tr><td>43</td><td>question</td><td>hr 在线核实</td><td>HR 在线核实同组间优先核实下载量高的种子(前提待商榷)</td><td>便签</td><td><a href="../issues/26-10-01-2147-question-hr-same-group-download-priority.html">26-10-01-2147</a></td></tr>
+  <tr><td>44</td><td>question</td><td>ops 跳检</td><td>同组中无已完成种子时拒绝跳检</td><td>便签</td><td><a href="../issues/26-10-01-2147-question-skipcheck-no-completed-in-group.html">26-10-01-2147</a></td></tr>
+  <tr><td>45</td><td>feat</td><td>webui 追剧视图</td><td>追剧视图完善: 同剧判定调研与分组排序打磨</td><td>标准</td><td><a href="../issues/26-10-01-2138-feat-webui-shows-grouping-research.html">26-10-01-2138</a></td></tr>
+  <tr><td>46</td><td>feat</td><td>webui tracker 态</td><td>tracker error/warning 状态展示, 且可配置忽略错误或警告</td><td>标准</td><td><a href="../issues/26-10-01-2138-feat-webui-tracker-error-warning-state.html">26-10-01-2138</a></td></tr>
+  <tr><td>47</td><td>feat</td><td>webui 乐观 UI</td><td>乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示</td><td>标准</td><td><a href="../issues/26-10-01-2137-feat-webui-optimistic-ui-expansion.html">26-10-01-2137</a></td></tr>
+  <tr><td>48</td><td>feat</td><td>webui 设置页</td><td>设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色</td><td>标准</td><td><a href="../issues/26-10-01-2137-feat-webui-settings-help-followup.html">26-10-01-2137</a></td></tr>
+  <tr><td>49</td><td>bug</td><td>webui 删除路径</td><td>删除种子(同时删除文件)会引起缺文件 WARNING</td><td>标准</td><td><a href="../issues/26-10-01-2129-bug-webui-delete-files-missing-warning.html">26-10-01-2129</a></td></tr>
+  <tr><td>50</td><td>feat</td><td>webui chip</td><td>WEBUI 自定义站点名/分类/标签字体颜色</td><td>标准</td><td><a href="../issues/26-10-01-2120-feat-webui-custom-chip-colors.html">26-10-01-2120</a></td></tr>
+  <tr><td>51</td><td>refactor</td><td>webui 弹窗</td><td>管理标签/分类窗口重构</td><td>便签</td><td><a href="../issues/26-10-01-2120-refactor-webui-tag-category-dialog.html">26-10-01-2120</a></td></tr>
+  <tr><td>52</td><td>feat</td><td>webui 搜索</td><td>搜索命中高亮显示 + 无命中时提示命中域(如「文件名」标识)</td><td>标准</td><td><a href="../issues/26-10-01-2119-feat-webui-search-highlight.html">26-10-01-2119</a></td></tr>
+  <tr><td>53</td><td>feat</td><td>hr 计数徽章</td><td>HR 计数: 上限徽章总数轴互证(P3 缓做项)</td><td>标准</td><td><a href="../issues/26-09-30-0052-feat-hr-badge-total-crosscheck.html">26-09-30-0052</a></td></tr>
+  <tr><td>54</td><td>perf</td><td>hr 计数翻页</td><td>HR 计数: 末页追翻省略(P3 缓做项)</td><td>标准</td><td><a href="../issues/26-09-30-0052-perf-hr-lastpage-fetch-skip.html">26-09-30-0052</a></td></tr>
+  <tr><td>55</td><td>docs</td><td>docs/ 键面守卫</td><td>插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免</td><td>便签</td><td><a href="../issues/26-09-28-1946-docs-config-plugin-spec-docs.html">26-09-28-1946</a></td></tr>
+  <tr><td>56</td><td>feat</td><td>torrents 流量统计</td><td>重新设计单种周期上传/下载量统计(upload_size 四条件 + begin_round 底座已移除)</td><td>标准</td><td><a href="../issues/26-09-27-1248-feat-stats-redesign-torrent-traffic.html">26-09-27-1248</a></td></tr>
+  <tr><td>57</td><td>bug</td><td>webui 设置页警示条</td><td>设置页警示条是伪警示: 只复述 schema 风险文案, 不反映配置健康; 升级失效键无任何提示</td><td>标准</td><td><a href="../issues/26-09-22-2002-bug-webui-config-health-warning.html">26-09-22-2002</a></td></tr>
+  <tr><td>58</td><td>chore</td><td>版本号双源</td><td>版本号双源矛盾: __init__.__version__ 0.2.0 vs pyproject 0.1.0</td><td>便签</td><td><a href="../issues/26-09-21-1408-chore-version-dual-source.html">26-09-21-1408</a></td></tr>
+  <tr><td>59</td><td>refactor</td><td>全仓类型注解</td><td>类型注解完整覆盖仅 43%, 无 mypy/pyright 配置</td><td>便签</td><td><a href="../issues/26-09-21-1408-refactor-type-annotations-mypy.html">26-09-21-1408</a></td></tr>
+  <tr><td>60</td><td>chore</td><td>.agents/skills hatch-pet</td><td>hatch-pet 调付费 OpenAI 图像 API 且无成本提示</td><td>便签</td><td><a href="../issues/26-09-20-1427-chore-skill-hatch-pet-api-cost.html">26-09-20-1427</a></td></tr>
+  <tr><td>61</td><td>perf</td><td>webui 轮询门控</td><td>节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径</td><td>标准</td><td><a href="../issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html">26-09-19-2122</a></td></tr>
+</table>
+<p class="cm">另有 In Progress 2 条(question Transmission 兼容 26-10-01-2212 / bug 任务栏图标 26-10-01-2203), 撞车比对时一并参照。feat/question 类多数是需求/想法而非缺陷, 撞车比对重点取 bug/perf/refactor/docs/chore/test 类。</p>
+
+<h3>表 b · 坑档 7 类索引(241 条, 26-10-30 实测)</h3>
+<table>
+  <tr><th>类</th><th>条目数</th><th>高频主题(蒸馏自类索引一句话列)</th></tr>
+  <tr><td><a href="../pitfalls/web-ui/_index.md">web-ui</a></td><td>79</td><td>抽屉/对话框/浮层几何与定位、键盘导航族(kbd-*)、Vue reactivity 与语义静默白屏、CSS 单点(密度档/表面色族/宽度档)、模板与 sprite 三 shell 同步、a11y 与焦点、轮询与前后端数据契约</td></tr>
+  <tr><td><a href="../pitfalls/testing/_index.md">testing</a></td><td>73</td><td>红验与守阵纪律(redverify/guard 族)、变异测试(mutants-* WSL/镜像/池)、沙箱与 TMPDIR、时序 flaky(跨零点/并行端口)、桩与仿真保真度(stubs/sim/corpus)、coverage 导出与门槛</td></tr>
+  <tr><td><a href="../pitfalls/backend/_index.md">backend</a></td><td>40</td><td>Windows 平台(长路径/进程探测/reparse/ctypes)、qB API 契约(sync 增量/content_path/epoch)、热重载绑定与派生视图、traffic 聚合封口与行格式扩展、并发七约束、异步成败判定(effect-confirmation)、判据多消费侧(verdict-scope-parity)</td></tr>
+  <tr><td><a href="../pitfalls/kb/_index.md">kb</a></td><td>19</td><td>请求边界与纪律失效、立档/索引 cap 与计数、引用与改名、skill 装载与脚本路径、doc-status/专题元数据口径</td></tr>
+  <tr><td><a href="../pitfalls/git/_index.md">git</a></td><td>15</td><td>ref 静默丢弃与三处核对、推送/镜像分歧、历史整合(rebase 续行需净 index)、自改写库(配置/导入)、行尾、运行时数据入库</td></tr>
+  <tr><td><a href="../pitfalls/ops/_index.md">ops</a></td><td>9</td><td>生产文件红线(config.yml/auto-qb-data)、控制台编码与 MSYS 路径、端口与生产实例、告警级别、docker 宿主特性</td></tr>
+  <tr><td><a href="../pitfalls/docs/_index.md">docs</a></td><td>6</td><td>文档漂移与冲突裁决顺序、锚点引用、HTML/MD 编辑、包 README 入口</td></tr>
+</table>
+
+<h3>表 c · 在途计划/报告清单(26-10-30 实测, doc-status 非 Done)</h3>
+<table>
+  <tr><th>文件</th><th>状态</th><th>覆盖的代码面</th></tr>
+  <tr><td><a href="../plans/26-10-01-1758-plan-issue-clearance-roadmap.html">plans/26-10-01-1758-plan-issue-clearance-roadmap.html</a></td><td>Open</td><td>issues 池清偿路线图(横跨全部域, 非单一代码面)</td></tr>
+  <tr><td><a href="../plans/26-09-22-2318-version-management-plan.html">plans/26-09-22-2318-version-management-plan.html</a></td><td>In Progress</td><td>依赖与版本管理面(pyproject / __init__ / 打包元数据)</td></tr>
+  <tr><td><a href="../plans/26-10-10-2001-plan-webui-selection-trigger-parity.html">plans/26-10-10-2001-plan-webui-selection-trigger-parity.html</a></td><td>In Progress</td><td>webui 选择与触发动作一致性面</td></tr>
+  <tr><td><a href="../plans/26-10-17-0339-plan-global-traffic-source-integration.html">plans/26-10-17-0339-plan-global-traffic-source-integration.html</a></td><td>In Progress</td><td>core traffic_source 读取面 + gtm 数据源集成</td></tr>
+  <tr><td><a href="../plans/26-10-30-0049-plan-mutation-audit.html">plans/26-10-30-0049-plan-mutation-audit.html</a></td><td>Open</td><td>变异测试审计(全库按包, tests 强度面)</td></tr>
+  <tr><td><a href="26-10-30-0221-plan-full-code-review-2.html">plans/26-10-30-0221-plan-full-code-review-2.html</a></td><td>Open</td><td>本计划(全项目源码, 即本报告)</td></tr>
+</table>
+<p class="cm">更正计划 §02 一处: 所列 26-10-16-0541(global-traffic-monitor)与 26-10-20-2101(覆盖率二轮)实测 doc-status 已为 Done, 不属在途。另有 Superseded 计划 9 件(终态, 非在途, 不列)。reports/ 目录实测全部 Done(本报告除外)。</p>
+
+<h3>表 d · 重复代码审查撞车底册(26-10-11-0033)</h3>
+<h4>d-1 发现分布概况</h4>
+<ul>
+  <li><b>Phase 2 快照(计划口径, 本轮 D3 收账基数)</b>: 全局累计 <b>322</b> 项 —— A 真重复 129 / B 分歧 30 / C 同一事实 88 / D 不动 75; 构成 = Phase 1 后端 156(A58/B15/C40/D43, 36 包) + Phase 2 前端 166(A71/B15/C48/D32, static 38391 行)。</li>
+  <li><b>Phase 3 后定稿</b>: 追加测试横切 25 项(A11/B5/C6/D3), 全局 <b>347</b> 项(A140/B35/C94/D78)。梯度: A 占比逐阶段升高、D 占比逐阶段降低 —— 后端多为「有理由保留的重复」, 测试侧多为「没人管的复制粘贴」。</li>
+  <li><b>入池与清偿</b>: 三阶段共入池 <b>69</b> 条(P1 后端 46 + P2 前端 17 + P3 测试 6, 全 light 档, 专题 dup-code-audit), 复核 26-10-29-0421 全部 Done, 清偿率 100%。B/D 两类按定义不入池(只登记不建议立即合 / 明确不动)。</li>
+</ul>
+<h4>d-2 Phase 2 前端 17 条入池 issue 清单(现状全部 Done)</h4>
+<table>
+  <tr><th>#</th><th>ID(issue 文件)</th><th>位置</th><th>一句话</th></tr>
+  <tr><td>1</td><td><a href="../issues/26-10-20-2230-refactor-fe-combobox-family-dup.html">26-10-20-2230-combobox</a></td><td>webui/static JS+模板+设置页</td><td>combobox 族: JS 键盘/收层 5 处 + 模板骨架 5 处 + 设置页第 6 变体</td></tr>
+  <tr><td>2</td><td><a href="../issues/26-10-20-2231-refactor-fe-config-default-ladder-dup.html">26-10-20-2231-config-default-ladder</a></td><td>webui/static 配置编辑侧</td><td>前端 schema→默认值梯三处同构(字段/插件 spec/插件 section)</td></tr>
+  <tr><td>3</td><td><a href="../issues/26-10-20-2231-refactor-fe-config-entity-crud-dup.html">26-10-20-2231-config-entity-crud</a></td><td>webui/static 站点与规则集/规则</td><td>前端配置实体增/改/删骨架 9 处</td></tr>
+  <tr><td>4</td><td><a href="../issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html">26-10-20-2231-css-rule-family</a></td><td>三皮肤 CSS</td><td>三皮肤 CSS 规则族互克隆(74 克隆 / 18.55%, 全前端最高重复面)</td></tr>
+  <tr><td>5</td><td><a href="../issues/26-10-20-2231-refactor-fe-css-skin-token-layer-dup.html">26-10-20-2231-css-skin-token-layer</a></td><td>三皮肤 CSS 令牌层</td><td>三皮肤 CSS 结构不一致: atlas 缺 3 个字体令牌 + prism 无 dialogs.css(级联序相反)</td></tr>
+  <tr><td>6</td><td><a href="../issues/26-10-20-2231-refactor-fe-dialog-shell-template-dup.html">26-10-20-2231-dialog-shell</a></td><td>webui/static 对话框</td><td>对话框外壳三段式(mask 手势/title 头/actions 栏)11 处手写</td></tr>
+  <tr><td>7</td><td><a href="../issues/26-10-20-2231-refactor-fe-dialogs-js-boilerplate-dup.html">26-10-20-2231-dialogs-boilerplate</a></td><td>dialogs/config_hub</td><td>三族 busy+try+toast+finally 骨架共 15 处</td></tr>
+  <tr><td>8</td><td><a href="../issues/26-10-20-2231-refactor-fe-drawer-fetcher-boilerplate-dup.html">26-10-20-2231-drawer-fetcher</a></td><td>抽屉 fetcher</td><td>抽屉四个 fetcher 同骨架 4 份(detail/trackers/files/peers)</td></tr>
+  <tr><td>9</td><td><a href="../issues/26-10-20-2231-refactor-fe-drawer-variant-renderer-dup.html">26-10-20-2231-drawer-variant</a></td><td>抽屉变体渲染器</td><td>三态空帧骨架 12 份 + peers 判据四件 3 份 + dt07/08 逐字同</td></tr>
+  <tr><td>10</td><td><a href="../issues/26-10-20-2231-refactor-fe-overlay-geometry-dup.html">26-10-20-2231-overlay-geometry</a></td><td>toast/确认框/菜单等浮层</td><td>浮层定位几何手写 12 处(8px/12px 边距与视口夹取)</td></tr>
+  <tr><td>11</td><td><a href="../issues/26-10-20-2231-refactor-fe-polling-family-dup.html">26-10-20-2231-polling-family</a></td><td>webui 轮询</td><td>轮询三份实现 + 心跳守卫 5 处 + 抽屉缺悬挂兜底</td></tr>
+  <tr><td>12</td><td><a href="../issues/26-10-20-2231-refactor-fe-single-point-bypass-dup.html">26-10-20-2231-single-point-bypass</a></td><td>webui/static 各单点</td><td>单点已存在但被绕过 7 族(cfgBool/hubKey/directionKey/Bearer/KiB/单位梯/hrGroupTitle)</td></tr>
+  <tr><td>13</td><td><a href="../issues/26-10-20-2231-refactor-fe-tpl-cell-fragment-dup.html">26-10-20-2231-tpl-cell-fragment</a></td><td>模板层单元格</td><td>site-chip 3 份(缺 search-hit) + 百分比/时长/标签/分类跨文件各 2-4 份</td></tr>
+  <tr><td>14</td><td><a href="../issues/26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup.html">26-10-20-2231-tpl-ctx-item</a></td><td>右键菜单模板</td><td>.ctx-item 渲染骨架 5 份(注册表已单点, 骨架未单点)</td></tr>
+  <tr><td>15</td><td><a href="../issues/26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html">26-10-20-2231-tpl-list-row-empty</a></td><td>模板层列表行/空态</td><td>列表行容器三明治 4 份 + 空态块 12 处(3 处无图标)</td></tr>
+  <tr><td>16</td><td><a href="../issues/26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html">26-10-20-2231-tpl-switch-fold-seg</a></td><td>模板层开关/折叠/分段钮</td><td>开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套</td></tr>
+  <tr><td>17</td><td><a href="../issues/26-10-20-2231-test-fe-tpl-shell-parity-guard.html">26-10-20-2231-tpl-shell-parity</a></td><td>三份 index.html shell</td><td>shell 的 sprite 段与 login 段缺守阵(现靠人工三处同步)</td></tr>
+</table>
+<p class="cm">Phase 1 后端 46 条与 Phase 3 测试 6 条不入本表(全 Done 且与前端批重叠小); 需要时按专题 dup-code-audit 查 <code>issues/_index.md</code> 归档。全部 69 条已清偿 —— 本表用途是「防止把已修的重复重新报告为新发现」, 不是待办。</p>
+
+<h2><span class="no">§05</span>分批评审发现登记区</h2>
+<p><b>登记格式(七字段, 缺一不登记)</b>: <code>ID(批字母-序号)</code> / <code>维度(R1–R11 或 general)</code> / <code>级(P0 数据破坏·安全 — P1 功能错误 — P2 健壮性 — P3 可维护性)</code> / <code>三锚位置(文件+函数+行号)</code> / <code>症状</code> / <code>可达性证据</code> / <code>撞车(对 §04 底册四表)</code> / <code>处置建议</code>。</p>
+<div class="aside">
+  <p><b>纪律</b>: 草稿期只增不改旧条目; 撞车字段必填(无撞车写「无」); 可达性论证不出不登记为 bug。每批开工记当批 HEAD(D6), 批内发现的三锚以当批 HEAD 为准; S6 汇总时对 P0/P1 在当期 HEAD 复验。D5: 评审不当场修, P0/P1 当轮入池并标注建议优先级。</p>
+</div>
+<p class="cm">批 B = 计划 §03 的 B1+B2(域同伪 hr/), 批 GH = G+H(其余后端面)。</p>
+
+<h3>批A · core/ 内核(qbmanager·taskqueue·state·module·qbapi) + modules/ 全部</h3>
+<p class="cm">登记格式: ID(A-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批B · hr/ 全域(service·model·status + channel·worker·parse·resolve·discovery·threadlifecycle·server·adapters 等)</h3>
+<p class="cm">登记格式: ID(B-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批C · 流量域(traffic_store·traffic_grid·traffic_limits·curves + traffic_sample/snapshot_mod)</h3>
+<p class="cm">登记格式: ID(C-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批D · config/ 全部</h3>
+<p class="cm">登记格式: ID(D-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批E · webui/ py(routes·views·commands·runtime·server)</h3>
+<p class="cm">登记格式: ID(E-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批F1 · static 主干大件(app/main·dt_table·drawer_templates·config_editor·dialogs·commands 等)</h3>
+<p class="cm">登记格式: ID(F1-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批F2 · static 抽屉族(drawer_tpl 14 件 + drawer_pages + drawer_head/store)</h3>
+<p class="cm">登记格式: ID(F2-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批F3 · static 其余 js + CSS 机制面 + HTML</h3>
+<p class="cm">登记格式: ID(F3-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批GH · rules/ + torrents/ + infra/ + tray/ + 入口 + scripts/ + extensions/</h3>
+<p class="cm">登记格式: ID(GH-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h3>批T · tools/global-traffic-monitor/ 全部(D2 拍板: 独立 T 批全量)</h3>
+<p class="cm">登记格式: ID(T-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
+<p class="cm">未登记。</p>
+
+<h2><span class="no">§06</span>R1–R11 维度速查表</h2>
+<p class="cm">R1–R10 判据全文见首次评审计划 <a href="../plans/26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> §03; R11 判据全文见本计划 <a href="../plans/26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> §03。速查表只作每批勾选时的提词。</p>
+<table>
+  <tr><th>#</th><th>维度</th><th>一句判据</th></tr>
+  <tr><td>R1</td><td>幂等与窗口语义</td><td>「每天一次/只跑一次」类窗口必须靠 state_file 去重(record_execution), 不依赖循环频率; 重复执行无副作用</td></tr>
+  <tr><td>R2</td><td>保守默认与危险闸门</td><td>跳检/强制汇报/删种子/覆盖限速默认关 + 只对显式范围生效; 规则路径与 WEB 路径双入口都要过闸</td></tr>
+  <tr><td>R3</td><td>状态持久化与单一写线程</td><td>只有主循环线程改任务队列与 state_file; 找绕开假设的写点; 优雅退出落盘 + 周期落盘</td></tr>
+  <tr><td>R4</td><td>fail-fast 边界</td><td>新配置键全量进 validate_config 且同步 config/schema.py; 校验通过后的代码不应再散落防御式校验</td></tr>
+  <tr><td>R5</td><td>时间与数值语义</td><td>epoch 秒 vs 倒计时; 挂钟 vs 单调钟; 时区; 挂钟上界断言滥用; 除零/空集合</td></tr>
+  <tr><td>R6</td><td>错误处理与退避</td><td>except 静默吞并; 异常路径时间线推进/退避; 失败可观测</td></tr>
+  <tr><td>R7</td><td>IO 与资源</td><td>原子写(tmp+replace); O_TRUNC 直写; 句柄泄漏; 编码; 跨平台路径</td></tr>
+  <tr><td>R8</td><td>安全面</td><td>凭据引用不入日志/报告; webui 输入校验与路径穿越; 前端 XSS 汇入点(innerHTML 系); 外部进程/API 注入面</td></tr>
+  <tr><td>R9</td><td>并发与竞态</td><td>webui 轮询读主循环共享结构的快照一致性; HR 后台 worker 与主循环边界; 双写竞态</td></tr>
+  <tr><td>R10</td><td>测试缺口与文档漂移</td><td>行为变更处守阵是否存在; 坑档复发检查; docs 与代码漂移点(只登记不修)</td></tr>
+  <tr><td>R11</td><td>跨进程/跨侧契约(本轮新增)</td><td>gtm 与主程序的 dat 文件契约(双写者禁令/版本兼容/缺坏文件降级); 扩展 MV3 与后端通道(权限丢失自愈); 前端轮询与后端路由的字段契约两侧同步</td></tr>
+</table>
+
+</div>
+</body>
+</html>

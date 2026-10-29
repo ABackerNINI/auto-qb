@@ -13,7 +13,7 @@
 
 ## Open
 
-(暂无)
+- [26-10-30-0237] [全项目第二次全面 Code Review（只读取证）](26-10-30-0237-report-full-code-review-2.html) — `full-code-review-2`
 
 ## Done
 

@@ -169,7 +169,16 @@
 </table>
 
 <h2><span class="no">§06</span>拍板记录</h2>
-<p class="cm">待拍板 —— 拍板后逐项回填(编号 / 结论 / 日期)。</p>
+<p>用户 26-10-30 拍板: <b>D1–D6 全部按「推荐」列执行</b>。逐项结论如下(证据与产出见报告 <a href="../reports/26-10-30-0237-report-full-code-review-2.html">26-10-30-0237</a>):</p>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th><th>口径</th></tr>
+  <tr><td>D1</td><td>增量优先分层: 新增/变更文件全量读码对 R1–R11 勾选; 未变文件逐文件过目但只做维度抽验 + 上次该域发现回归核对(全部文件 0 漏)</td><td>26-10-30</td><td>按推荐</td></tr>
+  <tr><td>D2</td><td>tools/global-traffic-monitor/ 纳入, 独立 T 批全量</td><td>26-10-30</td><td>按推荐</td></tr>
+  <tr><td>D3</td><td>重复代码审查 Phase 3/4 不并入, 只把 322 条发现与 17 条入池 issue 收进底册做撞车比对; Phase 3/4 维持独立排期</td><td>26-10-30</td><td>按推荐</td></tr>
+  <tr><td>D4</td><td>ruff + bandit 沿用首次口径(限包范围、逐条人工复核); 前端 XSS 用「数据源→渲染点」grep 清单法</td><td>26-10-30</td><td>按推荐</td></tr>
+  <tr><td>D5</td><td>评审不当场修(保持只读); P0/P1 当轮入池并标注建议优先级, 由用户决定何时认领</td><td>26-10-30</td><td>按推荐</td></tr>
+  <tr><td>D6</td><td>每批开工 sync 记本批 HEAD + 三锚登记 + 报告记各批 HEAD + S6 对 P0/P1 在当期 HEAD 逐条复验</td><td>26-10-30</td><td>按推荐</td></tr>
+</table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
