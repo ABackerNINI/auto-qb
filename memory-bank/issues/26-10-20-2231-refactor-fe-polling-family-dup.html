@@ -128,6 +128,7 @@
     <ul>
       <li><code>lifecycle.js::_startErrPoll</code>（60s 错误日志补拉）仍裸 <code>setInterval</code> 且无可见性守卫 —— 属 R20-E-03 另一条，不在本件明细台账内（范围守恒），未动。</li>
       <li>抽屉侧悬挂兜底只在「门被置位」时生效；静默续拉不置门，故「静默请求悬挂」不在兜底面内（现有行为未变，请求级超时 15s 兜它）。</li>
+      <li>二评备注(26-10-30-0237, 取证 2026-10-30): 二评批F3 观察 F3-① —— startPoll 回调抛出则该轮询静默停摆, 系骨架对调用方的隐式契约, 树内两消费方现状全捕; 复看时机=新增 startPoll 消费方时。详情见二评报告 <code>memory-bank/reports/26-10-30-0237-report-full-code-review-2.html</code>。</li>
     </ul>
   </section>
 

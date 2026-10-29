@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="dead-code-batch-cleanup-2">
+<meta name="issue-stamp" content="26-10-30-0620">
+<meta name="issue-type" content="chore">
+<meta name="doc-topic" content="full-code-review-2">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="死码/死导入/死分支批量清理(第二次全项目评审合并条 1)">
+<meta name="issue-summary" content="第二次全项目 code review(26-10-30-0237) P3 合并池位: 6 条死码登记(A-08/B-02/F2-01/F2-02/T-05/GH-02)+3 顺手项批量清理">
+<title>死码/死导入/死分支批量清理(第二次全项目评审合并条 1) · chore · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· chore</div>
+    <h1>死码/死导入/死分支批量清理(第二次全项目评审合并条 1)</h1>
+    <p class="lede">第二次全项目 code review(26-10-30-0237) P3 合并池位: 6 条死码登记(A-08/B-02/F2-01/F2-02/T-05/GH-02)+3 顺手项批量清理</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-30-0620-chore-dead-code-batch-cleanup-2</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:20</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>第二次全项目 code review(报告 26-10-30-0237)19 条 P3 中, 6 条死码/死导入/死分支登记按该报告 §8.6 合并方案收敛为本池位, 连同 3 处顺手卫生项一次批量清理 —— 全部为死码/纯注释卫生, 行为零差异。</p>
+    <p style="background: var(--warn-bg); border-left: 3px solid var(--warn); padding: 8px 12px; border-radius: 3px; max-width: 74ch;">来源: 第二次全项目 code review(26-10-30-0237)§8.6 合并条 1(<code>memory-bank/reports/26-10-30-0237-report-full-code-review-2.html</code>); 各条三锚誊自该报告 §05/§08 各批登记表, 复验留待认领时做(防过期原则: 开工先重跑锚点)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">行号均为评审时行号(评审 HEAD <code>3d957597</code>, 取证 2026-10-30); 代码漂移后靠符号与 grep 重新定位。逐成员清单(认领人按此批量清理):</p>
+    <ul>
+      <li><strong>A-08</strong> · <code>core/modules/ops_mod.py:465</code> <code>skip_submit</code>(RUF059 未消费解包) / <code>:487</code> <code>_skip_begin</code>(F841 未消费赋值) —— 两处死绑定, 行为零差异。grep: <code>skip_submit</code> / <code>_skip_begin</code></li>
+      <li><strong>B-02</strong> · <code>hr/discovery.py:27</code> <code>is_loopback_host</code> / <code>:33</code> <code>_content_length</code> —— F401 死导入 ×2。grep: <code>is_loopback_host</code> / <code>_content_length</code></li>
+      <li><strong>F2-01</strong> · <code>static/shared/drawer_store.js:35-50</code> <code>_dtMergeRows</code>(<code>:41</code>/<code>:44</code> seen 只写不读) —— 去重记账 Set 白付构建+插入, 合并语义实际全靠 <code>oldByKey</code>, JS 版 F841 死变量。grep: <code>_dtMergeRows</code></li>
+      <li><strong>F2-02</strong> · <code>static/drawer_tpl/05-trackers-health-groups-low.js:429-434</code> 与 <code>06-trackers-table-collapsed.js:318-323</code> <code>rerender</code>(无调用点); <code>09-peers-density-collapsed.js:224-225</code> 死 chips —— W5 反应式改造残留死码三处(从 04 复制的骨架未随改版清理)。grep: <code>rerender</code> / <code>chips</code></li>
+      <li><strong>T-05</strong> · <code>tools/global-traffic-monitor/src/gtm/server.py:56</code>(F401 <code>Config</code>) / <code>__main__.py:96</code>(F841 <code>uninstall</code>) / <code>config.py:313</code>(RUF059 <code>errors</code>) —— 工具侧死码三处。grep: <code>Config</code> / <code>uninstall</code> / <code>errors</code></li>
+      <li><strong>GH-02</strong> · <code>extensions/hr-fetch-proxy/background.js:307-314</code> <code>poll-now</code> 死消息分支 —— 全仓无发送方(选项页只发 refresh-now), 且日志文案与 refresh-now 逐字同, 恢复使用即不可辨识。grep: <code>poll-now</code></li>
+    </ul>
+    <p class="hint">顺手项(非正式登记, 各批工具/人工顺手卫生, §8.6 点名一并清):</p>
+    <ul>
+      <li>批E · <code>webui/server/runtime.py:44</code> F401 <code>DEFERRED_RECEIPT_COMMANDS</code> 死导入(is_deferred_receipt 单点化后遗留)。</li>
+      <li>首评⑧ · <code>rules/base.py:8</code> F401 <code>TorrentDictionary</code> 死导入(首轮「死代码清理顺手项」口径维持, grep: <code>TorrentDictionary</code>)。</li>
+      <li>批E · <code>webui/module.py:117</code> 注释「客户顿」系「客户端」笔误(纯注释卫生)。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>按上表逐文件批量删除死绑定/死导入/无调用点 rerender 与 chips/死消息分支, 顺手项一并; 删除属零行为差纯卫生, 清完跑全量测试确认(评审时点基线: 4075 passed + 2 skipped)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-30 06:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-30-0620-chore-dead-code-batch-cleanup-2.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

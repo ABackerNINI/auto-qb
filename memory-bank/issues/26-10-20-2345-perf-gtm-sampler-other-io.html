@@ -184,6 +184,9 @@ history_traffic.dat  与 state.json 同拍（同轮 record() 内先 flush dat �
       <tr><td>C. 合并为一次枚举（大改）</td><td>ctypes 直调 <code>GetIfTable2</code> 一次取全量（counters + OperStatus），替掉两次 psutil 调用</td><td>每轮降到约 100 次以内，且不再依赖 psutil 版本实现</td><td>引入平台专有代码（Windows-only 分支）；<code>Sampler</code> 的注入点/<code>NicIo</code> 协议与单测替身要重做；三平台需分别验证</td></tr>
     </table>
     <p class="hint">倾向：先用 A 止血（用户可自助），若后续确实要更细粒度再评估 B；C 只在需要跨平台统一口径时值得做。</p>
+    <ul>
+      <li>二评备注(26-10-30-0237, 取证 2026-10-30): 二评批T 观察 T-③ —— config 时间字段只验 &gt;0 无下界, sample_interval 可配 0.001s 自伤; 与本池同源成本议题, 是否加下限属产品口径, 不另立条。详情见二评报告 <code>memory-bank/reports/26-10-30-0237-report-full-code-review-2.html</code>。</li>
+    </ul>
   </section>
 
   <section id="s7">

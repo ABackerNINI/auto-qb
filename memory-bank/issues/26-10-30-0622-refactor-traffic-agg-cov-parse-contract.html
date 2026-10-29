@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="traffic-agg-cov-parse-contract">
+<meta name="issue-stamp" content="26-10-30-0622">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="full-code-review-2">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐">
+<meta name="issue-summary" content="parse_v4_agg_text 对 cov_s=0 语义合法行照单全收, 坏值可炸 rollup/merge 并逃逸恢复循环 —— 解析契约与写侧下限1不对齐">
+<title>v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐</h1>
+    <p class="lede">parse_v4_agg_text 对 cov_s=0 语义合法行照单全收, 坏值可炸 rollup/merge 并逃逸恢复循环 —— 解析契约与写侧下限1不对齐</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-30-0622-refactor-traffic-agg-cov-parse-contract</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:22</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>v4 行型定约「行存在即有覆盖」的 cov_s 下限 1 只在写侧产出行成立（v4_hour_agg 2026-10-13 下限修复），解析侧对 cov_s=0 的<b>语义合法行</b>照单全收（负值才记坏）。坏文件给出 cov_s=0 行时：①恢复路径 _catch_up_level 用 parse 出的行做 rollup，全零 cov 子行触发 <code>v4_rollup_agg</code> ValueError「逐级聚合无有效覆盖」；②<code>_recover_aggregates</code> 的逐系列隔离只捕 OSError（docstring 宣称「单系列失败不阻断其它系列」），ValueError 逃逸恢复循环，单系列坏文件中断其余全部系列的恢复且 host.start_all 无兜，启动链中断；③同型行经读侧 v4_agg_obs_live 合流进 <code>v4_merge_agg</code> 时除以 cov=0 ZeroDivisionError（Web 线程）—— 解析契约与写侧不变式不对齐。</p>
+    <p class="hint"><strong>来源:</strong> 第二次全项目 code review（<a href="../reports/26-10-30-0237-report-full-code-review-2.html">26-10-30-0237</a>）批C 条目 C-01（P3 健壮性，按 R11「坏文件降级」口径登记）；复验留待认领时做。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>core/traffic_store.py:821</code> <code>parse_v4_agg_text.on_agg_line</code>（cov 列 <code>_parse_nn_int(parts[8])</code> 无下限）· <code>:1207-1209</code> <code>v4_rollup_agg</code>（cov&lt;=0 ValueError）· <code>:1244</code> <code>v4_merge_agg</code>（cov 除法）· grep: <code>parse_v4_agg_text</code> / <code>v4_merge_agg</code></li>
+      <li><code>core/modules/traffic_sample_mod.py:1427</code> <code>_recover_aggregates</code>（逐系列隔离只捕 OSError）· <code>:1523-1528</code> <code>_recover_series</code> -&gt; <code>_catch_up_level</code> · grep: <code>_recover_aggregates</code> / <code>_catch_up_level</code></li>
+      <li class="hint">以上为当时行号（评审 HEAD <code>70d6da60</code>，第二次全项目 code review 批C，取证 2026-10-30）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>parse 侧对 cov_s 设 &gt;=1 下限（违者按坏行，与写侧契约对齐），或 <code>_recover_aggregates</code> 隔离口径与 <code>_agg_flush_all</code> 的 Exception 对齐；<code>v4_merge_agg</code> 补 cov&lt;=0 守卫（与 v4_rollup_agg 同款 fail-closed）。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-30 06:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-30-0622-refactor-traffic-agg-cov-parse-contract.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
