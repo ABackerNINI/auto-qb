@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-optimistic-ui">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示">
 <meta name="issue-summary" content="将「基本不会失败」的响应式反馈扩为乐观 UI(先分析清单), 并让新添加的种子当拍可见而非下个 tick">
 <title>乐观 UI 扩面: 盘点可改造操作 + 添加种子即时显示 · feat · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2137-feat-webui-optimistic-ui-expansion</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:37</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -154,10 +154,11 @@ L18: [] WEBUI添加种子后新种子下一个tick才会显示出来, 可以考�
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:37 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 — 认领，状态 <strong>In Progress</strong>；复验分岔： 添加种子半边已被补刷新链覆盖（实测 ~34ms）， 扩面半边收窄为 rename（~1.7s）与主备速度切（0~1.5s 随相位）两项， 方案见乐观 UI 扩面计划；「添加种子乐观插入」经证据评估不采纳（qB 对重复种子挑着拒、回执不带回 hash， 且补刷新已把可见性压到几十 ms 量级）</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L17+L18）由末阶段统一移除，本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验： 2026-10-30 真机实测（qBittorrent-testing 5.2.3 @127.0.0.1:36595， auto-qb 独立配置 8 种子库）。两条诉点分岔： ①「添加种子下个 tick 才显示」<b>已消失</b> —— add_torrents 在 RESYNC_COMMANDS， 命令后同拍补刷新， 实测 t0→数据可见均值 34ms（n=5， SSE ver ~14ms）； ②「扩面乐观 UI」<b>部分成立</b> —— 同批实测： rename 回执 5.6ms 但数据可见 ~1.7s（扑空 5/5， qB 未在命令后补刷新中反映新名）， speed_alt_toggle 确认延迟均匀分布于 [0,1.5s] 随 sync 相位且无 SSE 事件 —— 两处是真缺口， 进入乐观 UI 扩面计划（memory-bank/plans/）； 原始数据 H:/Temp/opt-webui-test/。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

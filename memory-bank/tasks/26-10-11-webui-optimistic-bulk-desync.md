@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-11 20:40
+**Updated:** 2026-10-30
 **Topics:** webui-optimistic-ui
 **Summary:** 用户报「批量跳检成功后批量开始, UI 先显示下载、几秒后显示已停止, 而 qB 里种子已做种」。报告取证定为三条独立缺陷叠加(+ 一条加固): ①跳检收尾不回写快照; ②批量命令无真值出口(`bulk_torrents` 被整体列进延迟回执族 ⇒ drain 不给它 `defer_receipt` ⇒ `_truth_landed`/`_affected_hashes` 的 bulk 分支永不可达); ③前端兜底回滚打回「点击那一刻的旧值」+ 收敛判据与服务端不对称; ④`_sync_paused_state` 用陈旧完成位反推 state。按「止血 + 加固」修: 后端 6 处(收尾回写真值 / `is_deferred_receipt` 单点 / `CMD_ID_COMMANDS` / drain 守卫 / handler 回执分支 / 完成位联合判据) + 前端 3 处(回滚认 truthSnapshot / prev 保鲜 / 收敛同谓词) + 测试 3 处(替身保真 + 两条机械守阵)。全量结果见 kb.baseline。
 **Refs:** memory-bank/plans/26-10-11-2040-plan-webui-bulk-skipcheck-start-desync.html,memory-bank/reports/26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html
@@ -68,3 +68,5 @@
 - **2026-10-11 (实施 · 后端)** — P1(`_skip_readd` 直查回写) + P6(`_sync_paused_state` 联合判据) + P2/P3/P4/P5(bulk 真值出口)。首次 `test.quick` 6 红: 4 条是 cmd_id 未传递(见上「实施期才暴露的坑」), 2 条是替身保真连锁; 分别修 `CMD_ID_COMMANDS` 与调整去重用例后全绿。
 - **2026-10-11 (实施 · 前端 + 守阵)** — F1/F2/F3 三处; 新增 T2(后端白名单遍历)与 T3(前端静态扫)两条机械守阵; 测试计划清单同步 `test_web_commands.py` / `test_web_seed_center.py`。
 - **2026-10-11 (闸门 + 回写)** — `dev.fmt` 无额外改动(代码已合规); `commands run test.full` 全绿 / 0 failed / TOTAL 99%(数字与耗时采样见基线切片); 基线切片 `26-10-11-2040-webui-bulk-desync-fix`; 计划 `26-10-11-2040-*`; 报告口径修正; activeContext 切片; `kb.index`/`kb.check`。
+
+- 2026-10-30 06:30 grilling 两轮+真机实测定稿: 认领 issue 26-10-01-2137(复验分岔: add ~34ms 已覆盖不改码; rename ~1.7s 与主备速度切 0~1.5s 立项); 追加实测 SSE 断退回轮询 ~1.19s 归因用户观察, 独立入池 26-10-30-0626-perf-webui-sse-down-poll-latency(暂不修)

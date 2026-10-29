@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>乐观UI扩面: 重命名乐观补丁+主备速度切预翻转</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-optimistic-ui">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-30-0610">
+<meta name="doc-updated" content="26-10-30-0627">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-optimistic-ui</div>
+<h1>乐观UI扩面: 重命名乐观补丁+主备速度切预翻转</h1>
+<p class="lede">把乐观 UI 从 pause/resume 白名单扩面到两项真机实测确认的真缺口 —— 种子重命名（回执 5.6ms 但名字可见 ~1.7s）与主备速度切（确认延迟 0~1.5s 随 sync 相位）；添加种子经实测确认已被补刷新链覆盖（~34ms），不改码。设计主轴：<b>零后端改动，全部落在前端显示层</b>，复用既有乐观四件套（贴上/回执撤下/真值对账/兜底回滚）。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-30-0610 · <b>doc-updated</b> 26-10-30-0627 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> grilling 会话(2026-10-30, 两轮拍板+真机实测) · 认领 issue <a href="../issues/26-10-01-2137-feat-webui-optimistic-ui-expansion.html">26-10-01-2137-feat-webui-optimistic-ui-expansion</a> · 实测原始数据 H:/Temp/opt-webui-test/
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>issue 26-10-01-2137 的扩面诉求（「所有基本不会失败的响应式反馈改成乐观 UI」+「添加种子当拍可见」）经代码分析与两轮 grilling 收窄，再经真机实测定案。做到什么程度算成：</p>
+<ul>
+  <li><b>S1 重命名</b>：点击确认对话框后，行上新名字<b>当帧可见</b>（回执级 ~10ms）；命令失败 / 3s 无回执 / 8s 无真值确认，一律回滚原名，绝不留假状态。</li>
+  <li><b>S2 主备速度切</b>：点击乌龟按钮<b>立即预翻转</b>高亮（0ms 级）；轮询确认后自然过渡不弹回；四路失败（回执 error / 发送失败 / 3s 无回执 / 8s 未确认）回滚。</li>
+  <li><b>S3 添加种子</b>：不改码，凭实测数字结案（§02）。</li>
+</ul>
+<div class="aside"><b>设计底线 / 不变量</b>（沿用乐观 UI 既有红线，违反即破坏设计）：① 失败 / 未知绝不留永久假状态——回滚显式回到补丁前的最后已知真值；② 值覆盖保持到「服务端真值同意」，不靠等真值的时间，防弹回；③ 值覆盖只盖「值来自我们」的字段（name 是我们下发的值；<code>use_alt_speed_limits</code> 的显示翻转是前端本地态，不是 store 回写）——<b>写后同步字段边界（plan 26-10-21-2323 §4.3）零触碰，后端一行不改</b>。</div>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 机制现状</h3>
+<p>乐观 UI 主体在 <code>static/shared/commands.js</code>（P0-3，计划 26-09-20-2139 + D2 改造后）：白名单制，<code>_optimisticPatch</code> 只认 pause/resume；四件套 = 点击贴补丁（压暗）→ 回执撤下（~85ms）→ SSE truth 事件 / 轮询快照对账（<code>_optimisticSettled</code> 通用分支已支持任意补丁键逐键比对）→ 3s/8s 兜底回滚。机制本身是通用的，<b>扩面成本在「结果是否可预测」与「行上哪些字段要盖」，不在机制</b>。</p>
+<h3>2.2 真机实测（2026-10-30，qBittorrent-testing 5.2.3 @127.0.0.1:36595，auto-qb 独立配置 8 种子库）</h3>
+<table>
+  <tr><th>链路</th><th>回执</th><th>数据可见</th><th>回执时拉 state</th><th>SSE</th><th>裁决</th></tr>
+  <tr><td>添加种子(n=5)</td><td>~30ms</td><td class="good">~34ms(均值)</td><td>命中 5/5</td><td>ver ~14ms</td><td class="good">已被补刷新链覆盖,不改码</td></tr>
+  <tr><td>重命名(n=5)</td><td>~5.6ms</td><td class="bad">~1717ms(扑空 5/5)</td><td>命中 0/5</td><td>ver ~1694ms</td><td class="bad">真缺口:补刷新时 qB 未反映新名,只能等下个 1.5s 周期</td></tr>
+  <tr><td>主备速度切(n=6+2 相位对照)</td><td>~11ms</td><td class="bad">均匀 [0, 1.5s] 随 sync 相位</td><td>命中 0/8</td><td class="bad">无 cmd/ver/truth 事件</td><td class="bad">真缺口:前端只能靠轮询发现翻转,预翻转是唯一修法</td></tr>
+</table>
+<p class="cm">注意:绝对值随库规模放大(代码注释:3000 种子全量序列化 ~63-189ms);各段<b>相对结构</b>是可靠结论。speed_alt_toggle 不在 RESYNC_COMMANDS(commands.py:121)⇒ 无补刷新;server_state 来自 store sync 快照(server/routes/state.py:83),不进视图版本 ⇒ 永远不会有 ver 事件。</p>
+<h3>2.3 代码锚点</h3>
+<ul>
+  <li>重命名:<code>drawer.js::_editPost(hash,"rename")</code>(drawer.js:553)只 toast,行名等下轮 sync;后端 <code>commands.py:862 _cmd_rename_torrent</code> 明确「快照 name 不手工改」。</li>
+  <li>速度切:<code>dialogs.js::toggleAltSpeed</code> 注释「新状态由主轮询回读,<b>不本地预翻转</b>」(计划 26-09-28-0037 当时搁置);显示单点 <code>sbAltOn</code>(dialogs.js:730)读 <code>statsServer.use_alt_speed_limits</code>,乌龟按钮与限速浮层双组高亮都引它。</li>
+  <li>⚠ 注释漂移(本轮分析被它带偏一轮):<code>runtime.py:539</code> 附近注释仍写「回执<b>推迟到补刷新之后</b>再写」,与 D2 后 <code>defer_receipt</code>「回执立即写」(runtime.py:1063)的实现不符——S4 随本计划修正。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<table>
+  <tr><th>分期</th><th>内容</th><th>落点</th><th>决策</th></tr>
+  <tr><td>S1</td><td>重命名乐观补丁:pendingOps 开「显式补丁」注册口,patch=<code>{name}</code>,先于 POST 贴上;回执/真值/兜底全走既有四件套</td><td>仅前端(commands.js + drawer.js)</td><td>D7 改道立项</td></tr>
+  <tr><td>S2</td><td>主备速度切预翻转:本地 <code>altOverride</code> 覆盖 <code>sbAltOn</code> 显示单点,四路回滚 + 轮询确认清除</td><td>仅前端(dialogs.js + state.js)</td><td>D2/D8 立项</td></tr>
+  <tr><td>S3</td><td>添加种子:不改码,数字结案(§2.2);「乐观插入行」评估后<b>不采纳</b>(qB 对重复种子挑着拒、回执不带回 hash、现状已 ~34ms)</td><td>—</td><td>D4/D6</td></tr>
+  <tr><td>S4</td><td>修正 runtime.py RESYNC_COMMANDS 分支的过时注释(D2 现行语义:回执立即写、真值延后、扑空窗口 &lt;10ms)</td><td>1 行注释</td><td>D5</td></tr>
+  <tr><td>S5</td><td>测试与验收:静态守阵 + 单测(四态:预翻转/回滚/确认/兜底)+ e2e 两条 + 收尾基线切片</td><td>tests/</td><td>D9</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>S1 重命名乐观补丁(仅前端)</h3>
+<ol>
+  <li><b>commands.js</b>:新增通用注册口 <code>applyOptimisticPatch(hashes, action, patch)</code> —— 与 <code>applyOptimistic</code> 同骨架,但补丁由调用方显式给出(不查 <code>_optimisticPatch</code> 白名单);注册进 <code>pendingOps</code>(grey=true, hold=false)。既有 <code>resolveOptimistic</code> / <code>_expirePending</code> / <code>reapplyPending</code> / <code>_snapshotTruth</code> / <code>_optimisticSettled</code>(通用分支逐键比对 <code>{name}</code>)对它<b>零改动生效</b>。</li>
+  <li><b>drawer.js::editRename</b>:对话框确认后、POST 之前调 <code>applyOptimisticPatch([hash], "rename", {name})</code>;沿用 <code>_editPost</code> 回执链——ok 转 hold(值覆盖到快照同意),error / 发送异常走 <code>resolveOptimistic(..., false)</code> 回滚原名。抽屉 detail 刷新照旧(<code>_editPost</code> 已有 <code>_fetchDrawerDetail</code>)。</li>
+  <li><b>onTruthEvent 守卫</b>:现实现给每个 pendingOp 注入 <code>kind</code>(commands.js:342)——rename 的真值是 kind 而非 name,必须加 action 守卫:只对 pause/resume 的 op 注入 kind,其余 action 的 op 保持原 patch(否则补丁被掺入无关键,对账判据被污染)。</li>
+  <li><b>覆盖面(决策 D3)</b>:<code>_forEachRow</code> 三数组(torrents / singles / 组成员)+ 抽屉 detail/头部;追剧行 / 集行的聚合名不碰(等 sync 自然更新,hold 兜底防弹回);<code>memberByHash</code> 不补丁(右键菜单 / 导出文件名短暂滞后 ≤1.7s,与今天持平)。</li>
+  <li><b>验收</b>:确认对话框后行名当帧更新;命令失败回原名;3s 无回执回原名;快照 name 对齐后自动清除不弹回;真机复测「点击→行上新名可见」降到回执级(&lt;50ms)。</li>
+</ol>
+<h3>S2 主备速度切预翻转(仅前端)</h3>
+<ol>
+  <li><b>state.js</b>:data 加 <code>altOverride: null</code>(形如 <code>{ value, ts, hold }</code>,与 pendingOps 同语义的但单布尔)。</li>
+  <li><b>dialogs.js</b>:<code>sbAltOn</code> 改为「override 优先,server 兜底」的显示单点——乌龟按钮高亮 / title 与限速浮层双组高亮都引它,自动跟随;<code>toggleAltSpeed</code>:点击 → 预翻转(记录 server 当前值为回滚目标)→ POST;<code>altToggling</code> 防重入照旧。</li>
+  <li><b>四路回滚(决策 D8)</b>:回执 error / 发送失败 / 3s 无回执 → 回滚到 server 值;ok 转 hold,等 refresh 带回的 <code>statsServer.use_alt_speed_limits</code> 与 override 一致 → 清除 override(实测确认延迟 = 距下个 sync 节拍相位,≤1.5s);8s 未确认 → 清除(回落 server 值,借 <code>TRUTH_HOLD_MS</code> 同款兜底语义)。对账点放在 statsServer 赋值处(polling.js:365)。</li>
+  <li><b>验收</b>:点击当帧翻转(0ms 级);e2e:点乌龟 → 高亮立即变 → 轮询确认后不弹回;故意断 SSE 验证 3s 回滚;双组高亮与按钮 title 同步。</li>
+</ol>
+<h3>S3 添加种子(不改码)</h3>
+<p>issue 复验行已补(2026-10-30):「下个 tick 才显示」已消失,实测 t0→数据可见均值 34ms。本计划不为此写任何代码;若未来大库下该数字劣化再回来另立方案(候选:前端「回执武装、ver 完成」的一次性定向刷新,而非直查真值——plan 26-10-21-2323 方向是减少直查)。</p>
+<h3>S4 注释修正(1 处)</h3>
+<p><code>runtime.py</code> consume_commands 的 RESYNC_COMMANDS 分支注释改为 D2 现行语义:回执立即写(defer_receipt)、真值延后推、扑空窗口实测 &lt;10ms;随 S1 同一提交,防实现与注释再度漂移。</p>
+<h3>S5 测试与验收口径(决策 D9)</h3>
+<ul>
+  <li>静态守阵:仿现有 webui 守阵模式——钉「<code>applyOptimisticPatch</code> 调用点必须先于 POST」「onTruthEvent 的 kind 注入必须带 action 守卫」两条,防回归。</li>
+  <li>单测:rename 四态(贴上/回执 hold/失败回滚/快照对齐清除)+ altOverride 四态,仿 pause/resume 乐观既有用例;新测试同步文件头「## 测试计划」清单。</li>
+  <li>e2e 两条(Playwright,贴 26-10-06 计划既有矩阵):改名立即可见不弹回;乌龟按钮立即翻转不弹回。</li>
+  <li>收尾:<code>commands run test.full</code> + <code>kb.new baseline</code> 记实测数字;真机复测两链延迟写进档案。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无遗留待拍板——全部决策已在两轮 grilling + 实测后收口,结论见 §06。实施中若撞出新的分支,默认按「写后同步字段边界(plan 26-10-21-2323 §4.3)+ 失败不留假状态」两条不变量自行裁决并在 §10 记录;rename 在追剧视图聚合行的覆盖维持 D3 的「不覆盖」。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>时间 / 依据</th></tr>
+  <tr><td>D1</td><td>范围:速度切+重命名做乐观;添加种子按实测再定;删除/标签/移动不入本轮</td><td>2026-10-30 grilling R1(用户基本同意)</td></tr>
+  <tr><td>D2</td><td>速度切<b>点击立即预翻转</b>,hold 到轮询确认,不是"回执才翻"</td><td>2026-10-30 grilling R1(按推荐)</td></tr>
+  <tr><td>D3</td><td>rename 乐观覆盖面 = _forEachRow 三数组+抽屉;追剧聚合行不碰</td><td>2026-10-30 grilling R1(按推荐)</td></tr>
+  <tr><td>D4</td><td>add「回执即 refresh」<b>撤回</b>:回执先于补刷新,扑空窗口实测真实存在(~3ms 时 0/2 命中);ver 链已承担刷新</td><td>2026-10-30 grilling R2 + 实测</td></tr>
+  <tr><td>D5</td><td>add/rename 先真机实测再定方案(不引入直查真值,与 26-10-21-2323 方向一致);runtime.py 过时注释纳入修正</td><td>2026-10-30 用户拍板「先真机实测再决定」</td></tr>
+  <tr><td>D6</td><td>add <b>不改码</b>结案:实测 ~34ms,补刷新链已覆盖;乐观插入行不采纳(结果不可预测+无 hash)</td><td>2026-10-30 实测后定</td></tr>
+  <tr><td>D7</td><td>rename <b>改道做乐观补丁</b>(推翻 R1 推荐"不做"):实测回执 5.6ms 但可见 ~1.7s,与 pause/resume 当初的 1.25s 同量级</td><td>2026-10-30 实测后定</td></tr>
+  <tr><td>D8</td><td>速度切实现形态:altOverride 显示单点 + 四路回滚 + 轮询确认清除,零后端改动</td><td>2026-10-30 grilling R2(按推荐)</td></tr>
+  <tr><td>D9</td><td>测试与验收口径:守阵两条+单测四态+e2e 两条+基线切片</td><td>2026-10-30 grilling R2(按推荐)</td></tr>
+  <tr><td>D10</td><td>落盘计划 + 认领 issue 26-10-01-2137(复验行已补,状态 In Progress)</td><td>2026-10-30 grilling R1(按推荐)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>onTruthEvent 给 rename 的 op 掺入 kind 键,污染对账判据</td><td>S1.3 守卫缺失或回归</td><td>action 守卫 + 静态守阵钉住;单测覆盖「rename 收到 truth 事件后 patch 仍只有 name」</td></tr>
+  <tr><td>alt 预翻转后 SSE 断 / 回执丢失,高亮停在假状态</td><td>网络抖动 / 服务重启</td><td>3s 无回执回滚 + 8s 未确认回滚;轮询兜底自带(polling 保留路径);假状态最长 8s 且方向与用户意图一致</td></tr>
+  <tr><td>大库下绝对延迟放大,实测数字失真</td><td>3000 种子库(序列化 63-189ms)</td><td>判据用相对结构;S5 收尾在真机生产库复测并写基线切片,超标再议行窗口化(P1 既有议题)</td></tr>
+  <tr><td>乐观 name 与派生显示漂移(组键/站点 chip)</td><td>—</td><td>name 不是分组键输入(save_path 才是,plan 26-10-21-2323 D3),无重归组副作用;chip 读 site 字段不受影响</td></tr>
+  <tr><td>实现与注释再度漂移(539 注释教训)</td><td>后续改动 defer_receipt 语义</td><td>S4 随 S1 同提交;注释里带实测数字锚点(&lt;10ms),漂移时排障一眼可见</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-30-0610</span> 初版。来源:grilling 两轮(范围→撤回回执即 refresh→实测先行) + 子智能体真机实测(qB 5.2.3 @36595,原始数据 H:/Temp/opt-webui-test/)。要点:add 凭实测结案不改码(D6);rename 实测 ~1.7s 后改道立项乐观补丁(D7);速度切按 D2/D8 立项;runtime.py 注释修正随行(S4);issue 26-10-01-2137 已认领并补复验行(D10)。</li>
+  <li><span class="tag">R1 · 26-10-30-0627</span> S3 补遗: 用户生产观察『添加后 &gt;1s』经同日复测归因为 SSE 失效退回轮询(可见 ~1.19s, 服务端 ~20ms 已就绪), 与 add 链路无关 —— 已独立入池 issues/26-10-30-0626-perf-webui-sse-down-poll-latency, 本计划 S3 结论(不改码)不变</li>
+</ul>
+
+</div>
+</body>
+</html>
