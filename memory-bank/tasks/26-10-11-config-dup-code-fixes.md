@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-22
+**Updated:** 2026-10-29
 **Topics:** dup-code-audit
 **Summary:** 用户指派修复报告 26-10-11-0033(config 部分)并认领相关 issue —— 7 条 refactor(0031 枚举双份 / 0032 默认多源 · 键面文档漂移 · loaders 绕过 _get · 站点页面事实双份 · 小校验三写两套 · writer 备份复制块)。修复口径: 枚举族收敛 schema/fields 单点 + validation/rules・sections・rules/expr/env 引用派生; loaders 两处统一走 _get; models.SiteHrCheckConfig 派生五键默认改空(真值只在 SITE_PRESETS); sections 抽 _try_port/_try_time_window; writer 抽 _atomic_copy; docs 漂移修正(log.format / hr_check 键数 / 档案 adapter 列 / schema_version 默认派生 CURRENT_VERSIONS) + docs↔代码守卫与枚举单源守卫入 test_config_schema。
 **Refs:** memory-bank/issues/26-10-11-0031-refactor-config-schema-validation-enum-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-default-multi-source.html, memory-bank/issues/26-10-11-0032-refactor-config-key-surface-doc-drift.html, memory-bank/issues/26-10-11-0032-refactor-config-loaders-get-inconsistency.html, memory-bank/issues/26-10-11-0032-refactor-config-site-preset-page-facts-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-validation-smallchecks-dup.html, memory-bank/issues/26-10-11-0032-refactor-config-writer-backup-copy-dup.html, memory-bank/testing/baselines/26-10-11-1611-config-dup-code-fixes.md
@@ -89,3 +89,5 @@
 - 2026-10-22 04:36 认领并修复 issue 26-10-20-2231(refactor-fe-polling-family-dup): 轮询生命周期收敛为 polling.js 骨架 startPoll/stopPoll/awaitPoll, 抽屉侧补悬挂兜底, document.hidden 守卫单点; 新守阵 + 6 处既有守阵换形态; 红验八类突变全红; e2e 340 passed; test.full 3989 passed / 99.17%
 
 - 2026-10-22 12:44 认领并修复 26-10-21-0502-refactor-test-shared-micro-helper-dup: 8 族同名小助手逐字拷贝(24 处)全部收口共享层单点(helpers/webui_helpers), test.full 实测数字见 kb.baseline(切片 26-10-22-1245-dup-code-audit)
+
+- 2026-10-29 04:33 Phase 4(轮 26)汇总收口: 滚动报告追加 §33 —— 全局 347 项(A140/B35/C94/D78)定稿 + 入池 69 条全部 Done(清偿率 100%) + 候选排序总表 21 行(收益/风险 × 现状) + 清偿顺序三批 + 六条方法论结论 + 计划 §08 验收五项逐条核销达成; 计划 26-10-10-2333 与报告 26-10-11-0033 同步置 Done; 纯审查零源码改动(取证基线 83461080)

@@ -1,7 +1,7 @@
 # 前端重复代码审查 · Phase 2 轮 20–23 收口（sharded JS / 抽屉族 / 三皮肤 CSS / 模板层）
 
 > 摘要: 用户「执行重复代码审查计划 PHASE2: 26-10-10-2333-plan-dup-code-audit.html」→ 按计划 §07 拆 **15 个子轮**跑完 Phase 2 前端全部四个面（R20 shared/*.js 17449 行/35 文件 · R21 shared/drawer*/drawer_tpl* 8234 行/17 文件 · R22 三皮肤 CSS 8109 行/19 文件 · R23 shared/tpl 20 件 3967 行 + 三 index.html 632 行）。**纯审查零源码改动**，取证基线 `4eef60fe`。产出：**166 项发现（A71/B15/C48/D32）**，与 Phase 1 合并后**全局累计 322 项（A129/B30/C88/D75）**；滚动报告 `26-10-11-0033` 追加 §26–§30 五小节；入池 **17 条 issue（16 refactor + 1 test，族级合并）**。Phase 2 全部完成，主线剩 Phase 3（测试与横切 轮 24–25）+ Phase 4（汇总 轮 26）。
-> 最后活动: 2026-10-22 12:44
+> 最后活动: 2026-10-29 04:33
 **Refs:** memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html
 
 ## 已完成(单会话收口)
@@ -63,3 +63,5 @@
 **R12(2026-10-22 04:36):** 认领并修复 issue 26-10-20-2231(refactor-fe-polling-family-dup): 轮询生命周期收敛为 polling.js 骨架 startPoll/stopPoll/awaitPoll, 抽屉侧补悬挂兜底, document.hidden 守卫单点; 新守阵 + 6 处既有守阵换形态; 红验八类突变全红; e2e 340 passed; test.full 3989 passed / 99.17%
 
 **R13(2026-10-22 12:44):** 认领并修复 26-10-21-0502-refactor-test-shared-micro-helper-dup: 8 族同名小助手逐字拷贝(24 处)全部收口共享层单点(helpers/webui_helpers), 调用点直引单点不留转发壳, src/ 零改动; test.full 实测数字见 kb.baseline(切片 26-10-22-1245-dup-code-audit)
+
+**R14(2026-10-29 04:33):** Phase 4(轮 26)汇总收口: 滚动报告追加 §33 —— 全局 347 项(A140/B35/C94/D78)定稿 + 入池 69 条全部 Done(清偿率 100%) + 候选排序总表 21 行(收益/风险 × 现状) + 清偿顺序三批 + 六条方法论结论 + 计划 §08 验收五项逐条核销达成; 计划 26-10-10-2333 与报告 26-10-11-0033 同步置 Done; 纯审查零源码改动(取证基线 83461080)

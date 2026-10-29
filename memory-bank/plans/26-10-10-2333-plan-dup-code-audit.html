@@ -5,9 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-10-2333">
-<meta name="doc-updated" content="26-10-10-2333">
+<meta name="doc-updated" content="26-10-29-0432">
 <title>全仓重复代码审查 · 分步执行计划</title>
 <style>
   :root {
@@ -176,7 +176,7 @@
       <h1>全仓重复代码审查 · 分步执行计划</h1>
       <p class="lede">对 <code>src/auto_qb/</code> 八个后端包 + <code>webui/static/</code> 三皮肤前端 + <code>tests/</code> 做一轮<b>系统性重复代码审查</b>, 产出后续重构可依据的「重复清单」与「重构候选」。本计划只定<b>轮次、口径与步骤</b> —— 不在本计划内改任何代码; 发现可动项一律入池 issue, 由后续重构任务分别认领。</p>
       <div class="meta-row">
-        <span>状态 <b class="mono">Open</b>(待拍板)</span>
+        <span>状态 <b class="mono">Done</b>(轮 00–26 全部走完)</span>
         <span>立项 <b class="mono">26-10-10-2333</b></span>
         <span>范围 <b class="mono">src/auto_qb/** + webui/static/** + tests/**</b></span>
         <span>粒度 <b class="mono">一轮一个面</b></span>
@@ -552,7 +552,8 @@ npx --yes jscpd -f python,javascript,css,html --min-lines 10 --min-tokens 70 src
         <table>
           <tr><th style="width:20%">版本</th><th>变更</th></tr>
           <tr><td class="r mono">26-10-10-2333</td><td>初版: 全仓四类口径 + 27 轮分步清单 (00–26) + 每轮六步微步骤 + 归档与验收。</td></tr>
-        </table>
+                  <tr><td class="r mono">26-10-29-0421</td><td><b>轮 26(Phase 4 汇总)完成, 计划收口</b>: 全局分类计数定稿 <b>347 项</b>(A140/B35/C94/D78) = 后端 156 + 前端 166 + 测试横切 25; 入池 <b>69 条全部 Done</b>(清偿率 100%), 未入池 113 项 = B 35(按口径只登记) + D 78(明确不动); 重构候选排序总表与清偿顺序落滚动报告 §33; 计划 §08 验收五项逐条核销达成; 计划与滚动报告同步置 <code>Done</code>。纯审查轮, 零源码改动。</td></tr>
+</table>
       </section>
 
       <footer>

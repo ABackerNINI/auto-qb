@@ -9,7 +9,7 @@
 
 ## In Progress
 
-- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–25: 后端 + 前端 + 测试与横切, Phase 0–3; 轮 26 汇总待做)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
+(暂无)
 
 ## Open
 
@@ -32,6 +32,7 @@
 - [26-10-12-1854] [WEBUI「列」选择器信息架构重设计 · 方案调研与对比报告 (26-10-12-1854)](26-10-12-1854-report-webui-column-picker-redesign.html) — `webui-column-picker`
 - [26-10-12-0455] [WEBUI 表格统一 · 双计划联合偏差审计报告 (26-10-11-1722 + 26-10-11-2106)](26-10-12-0455-report-webui-drawer-table-unification-audit.html) — `webui-drawer-table-unification`
 - [26-10-11-2017] [批量跳检后批量开始 · UI 与 qB 状态脱节 · 原因分析报告](26-10-11-2017-report-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
+- [26-10-11-0033] [全仓重复代码审查 · 滚动报告 (轮 00–26: 后端 + 前端 + 测试与横切 + 全局汇总, Phase 0–4 全部完成)](26-10-11-0033-report-dup-code-audit.html) — `dup-code-audit`
 - [26-10-10-2237] [WEBUI 全量文案对齐 qB · 排查报告 · auto-qb](26-10-10-2237-report-webui-wording-unify.html) — `webui-wording-unify`
 - [26-10-09-2136] [WEBUI 弹窗键盘操作调研 · 焦点管理的成熟方案与适配路线 · auto-qb](26-10-09-2136-report-webui-dialog-keyboard-accessibility.html) — `webui-dialog-keyboard-accessibility`
 - [26-10-09-1731] [WEBUI 快捷键「改为切换语义」适配性分析 · 哪些适合按一下开/再按一下关 · auto-qb](26-10-09-1731-report-webui-shortcuts-toggle-suitability.html) — `webui-keyboard-shortcuts`

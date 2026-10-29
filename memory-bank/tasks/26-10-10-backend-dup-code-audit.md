@@ -1,10 +1,10 @@
 # 26-10-10-backend-dup-code-audit — 全仓重复代码审查(分步执行计划)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-10
-**Updated:** 2026-10-22
+**Updated:** 2026-10-29
 **Topics:** dup-code-audit
-**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包)**; 用户「做 Phase 1 hr 部分」→ 已完成 **轮 11–14(hr 全包)**; 用户「做 Phase 1 webui 部分」→ 已完成 **轮 15–16(webui 全包)**; 用户「做 Phase 1, 17-19部分」→ 已完成 **轮 17–19(rules / infra / torrents+tray+entry)**, 三包 34 项发现(A11/B5/C9/D9), 全局累计 156 项(A58/B15/C40/D43)。**Phase 1 后端(config+core+hr+webui+rules+infra+torrents)全部走完**。全程纯审查轮, 零源码改动。
+**Summary:** 用户要求「做一轮重复代码审查, 主要用于后续的重构, 增强一致性与减少维护点; 先写一个分步执行方案(先分析后端哪一部分 config? core?), 避免单轮任务过长」, 追问下选定**正式 HTML 计划 + 全仓范围(含前端三皮肤)+ 步骤拆细**。本轮**只产出计划制品, 零代码改动**: 计划 `plans/26-10-10-2333-plan-dup-code-audit.html`(专题 `dup-code-audit`, 状态 `Open` 待拍板)。计划含四类判定口径(A 真重复 / B 分歧重复只登记 / C 同一事实多表示 / D 表面相似不动) + 两段式方法(机器提名 pylint R0801 / jscpd → 人工定性) + **27 轮分步清单**(准备 → 后端 19 → 前端 4 → 测试与横切 2 → 汇总, 一轮一面独立会话) + 每轮六步微步骤 S1–S6 + 硬停手点(只审查不改码 · 单轮 ≤4000 行 · B 类只登记)。〔26-10-11 执行轮〕用户「做 Phase 0/1」→ 已完成 **Phase 0 + 轮 01–04(config 全包)**; 用户「做 Phase 1 core部分」→ 已完成 **轮 05–10(core 全包)**; 用户「做 Phase 1 hr 部分」→ 已完成 **轮 11–14(hr 全包)**; 用户「做 Phase 1 webui 部分」→ 已完成 **轮 15–16(webui 全包)**; 用户「做 Phase 1, 17-19部分」→ 已完成 **轮 17–19(rules / infra / torrents+tray+entry)**, 三包 34 项发现(A11/B5/C9/D9), 全局累计 156 项(A58/B15/C40/D43)。**Phase 1 后端(config+core+hr+webui+rules+infra+torrents)全部走完**。全程纯审查轮, 零源码改动。〔26-10-29 收口轮〕用户「重复代码审核计划似乎还未收尾, 收尾」→ 执行 **Phase 4 = 轮 26 全局汇总**(全计划最后一轮): 全局 **347 项定稿(A140/B35/C94/D78)** = 后端 156 + 前端 166 + 测试横切 25; 入池 **69 条复核全部 Done(清偿率 100%)**, 未入池 113 项 = B 35(按口径只登记) + D 78(明确不动); 重构候选排序总表(21 行, 收益/风险 × 现状) + 清偿顺序三批 + 六条方法论结论落滚动报告 §33; 计划 §08 验收五项逐条核销达成; 计划 `26-10-10-2333` 与报告 `26-10-11-0033` 同步置 **Done**, 本档案收口。
 **Refs:** memory-bank/activeContext/26-10-10-2356-dup-code-audit.md,memory-bank/activeContext/26-10-11-0207-dup-code-audit.md,memory-bank/activeContext/26-10-11-0240-dup-code-audit.md,memory-bank/activeContext/26-10-11-0314-dup-code-audit.md,memory-bank/activeContext/26-10-11-0352-dup-code-audit.md,memory-bank/testing/baselines/26-10-10-2356-dup-code-audit-plan.md,memory-bank/testing/baselines/26-10-11-0033-dup-code-audit-config.md,memory-bank/testing/baselines/26-10-11-0207-dup-code-audit-core.md,memory-bank/testing/baselines/26-10-11-0240-dup-code-audit-hr.md,memory-bank/testing/baselines/26-10-11-0314-dup-code-audit-webui.md,memory-bank/testing/baselines/26-10-11-0352-dup-code-audit-rules-infra-torrents.md,memory-bank/reports/26-10-11-0033-report-dup-code-audit.html,memory-bank/tasks/26-10-11-webui-dup-code-fixes.md
 
 ## 原始请求
@@ -217,3 +217,5 @@
 - 2026-10-22 04:36 认领并修复 issue 26-10-20-2231(refactor-fe-polling-family-dup): 轮询生命周期收敛为 polling.js 骨架 startPoll/stopPoll/awaitPoll, 抽屉侧补悬挂兜底, document.hidden 守卫单点; 新守阵 + 6 处既有守阵换形态; 红验八类突变全红; e2e 340 passed; test.full 3989 passed / 99.17%
 
 - 2026-10-22 12:44 认领并修复 26-10-21-0502-refactor-test-shared-micro-helper-dup: 8 族同名小助手逐字拷贝(24 处)全部收口共享层单点(helpers/webui_helpers), test.full 实测数字见 kb.baseline(切片 26-10-22-1245-dup-code-audit)
+
+- 2026-10-29 04:33 Phase 4(轮 26)汇总收口: 滚动报告追加 §33 —— 全局 347 项(A140/B35/C94/D78)定稿 + 入池 69 条全部 Done(清偿率 100%) + 候选排序总表 21 行(收益/风险 × 现状) + 清偿顺序三批 + 六条方法论结论 + 计划 §08 验收五项逐条核销达成; 计划 26-10-10-2333 与报告 26-10-11-0033 同步置 Done; 纯审查零源码改动(取证基线 83461080)

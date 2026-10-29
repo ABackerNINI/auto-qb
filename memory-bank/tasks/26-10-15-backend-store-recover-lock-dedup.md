@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-15
-**Updated:** 2026-10-22
+**Updated:** 2026-10-29
 **Summary:** 用户指令「认领并修复 memory-bank/issues/26-10-11-0240-refactor-hr-store-recover-lock-family-dup.html」—— dup-code-audit infra 轮(R18)对 R6/R2/R3 三轮暂缓跨包件的合并考量收口。口径沿用前修复轮保守纪律(行为逐位不变, 仅编排/构造收口): ① `infra/store_recovery.py` 新增「读坏→(挪走)留证→读 `.bak`」编排单点 `recover_corrupt_file`(回调式 read_backup + 可选 quarantine, 不传 = 原地保留)与 `quarantine_bad_file` 时间戳留证单点, hr `HrLockSession._recover` 与 state `StateService.load()` 损坏分支两处调用 —— 语义差异(hr 挪走留证/schema 迁移/read_error 消息 vs state 原地保留/_CORRUPT 三态/分级日志/立即自愈写回)全部保留在调用方; ② `infra/locking.py` 新增 `open_file_lock`/`release_file_lock` 构造/释放单点, hr 站点锁与 SingleInstanceLock 同族收口(hr/store 不再裸 import filelock); ③ 新守阵 tests/test_store_recovery.py 十条(静态两判据均过红验)。测试数字唯一权威在基线切片(见 **Refs:**)。
 **Topics:** dup-code-audit
 
@@ -79,3 +79,5 @@
 - 2026-10-22 04:36 认领并修复 issue 26-10-20-2231(refactor-fe-polling-family-dup): 轮询生命周期收敛为 polling.js 骨架 startPoll/stopPoll/awaitPoll, 抽屉侧补悬挂兜底, document.hidden 守卫单点; 新守阵 + 6 处既有守阵换形态; 红验八类突变全红; e2e 340 passed; test.full 3989 passed / 99.17%
 
 - 2026-10-22 12:44 认领并修复 26-10-21-0502-refactor-test-shared-micro-helper-dup: 8 族同名小助手逐字拷贝(24 处)全部收口共享层单点(helpers/webui_helpers), test.full 实测数字见 kb.baseline(切片 26-10-22-1245-dup-code-audit)
+
+- 2026-10-29 04:33 Phase 4(轮 26)汇总收口: 滚动报告追加 §33 —— 全局 347 项(A140/B35/C94/D78)定稿 + 入池 69 条全部 Done(清偿率 100%) + 候选排序总表 21 行(收益/风险 × 现状) + 清偿顺序三批 + 六条方法论结论 + 计划 §08 验收五项逐条核销达成; 计划 26-10-10-2333 与报告 26-10-11-0033 同步置 Done; 纯审查零源码改动(取证基线 83461080)

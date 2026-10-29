@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-11
-**Updated:** 2026-10-22
+**Updated:** 2026-10-29
 **Summary:** 用户指令「修复 rules 部分问题: `26-10-11-0033-report-dup-code-audit.html`, 相关 issue 一并认领」。滚动报告 §20(轮 17)对 rules 全包(2187 行 · 18 文件)入池 **3 条 refactor issue**; 本轮按**保守口径(只做无行为变化的收口)** 全部修完并置 `Done`: ① `rules-expr-disk-helper-dup`(env 三取值器 + `FreespaceCondition` 四处逐字同的「取数 + 错误映射」收成单点 `disk_usage_value(path, attr)`); ② `rules-expr-numeric-predicate-dup`(env 数值函数与 eval 算术运算符的「必须是数值」校验收成 `types.require_number(value, what)`, 报错文案逐字不变); ③ `rules-parser-dead-op-constants-dup`(删 parser 四个本文件不用的运算符常量死件)。**零行为变化**(结构收口 + 删死件), 新增 3 个守阵测试锁单点。全量 `test.full` **3115 passed + 4 skipped / 0 failed / 覆盖率 98.63%**。
 **Topics:** dup-code-audit
 
@@ -87,3 +87,5 @@
 - 2026-10-22 04:36 认领并修复 issue 26-10-20-2231(refactor-fe-polling-family-dup): 轮询生命周期收敛为 polling.js 骨架 startPoll/stopPoll/awaitPoll, 抽屉侧补悬挂兜底, document.hidden 守卫单点; 新守阵 + 6 处既有守阵换形态; 红验八类突变全红; e2e 340 passed; test.full 3989 passed / 99.17%
 
 - 2026-10-22 12:44 认领并修复 26-10-21-0502-refactor-test-shared-micro-helper-dup: 8 族同名小助手逐字拷贝(24 处)全部收口共享层单点(helpers/webui_helpers), test.full 实测数字见 kb.baseline(切片 26-10-22-1245-dup-code-audit)
+
+- 2026-10-29 04:33 Phase 4(轮 26)汇总收口: 滚动报告追加 §33 —— 全局 347 项(A140/B35/C94/D78)定稿 + 入池 69 条全部 Done(清偿率 100%) + 候选排序总表 21 行(收益/风险 × 现状) + 清偿顺序三批 + 六条方法论结论 + 计划 §08 验收五项逐条核销达成; 计划 26-10-10-2333 与报告 26-10-11-0033 同步置 Done; 纯审查零源码改动(取证基线 83461080)

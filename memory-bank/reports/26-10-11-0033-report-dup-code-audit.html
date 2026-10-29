@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="doc-type" content="report">
 <meta name="doc-topic" content="dup-code-audit">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-11-0033">
-<meta name="doc-updated" content="26-10-21-0454">
+<meta name="doc-updated" content="26-10-29-0421">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/tasks/26-10-20-frontend-dup-code-audit.md,memory-bank/tasks/26-10-21-test-dup-code-audit.md">
-<title>全仓重复代码审查 · 滚动报告 (轮 00–25: 后端 + 前端 + 测试与横切, Phase 0–3; 轮 26 汇总待做)</title>
+<title>全仓重复代码审查 · 滚动报告 (轮 00–26: 后端 + 前端 + 测试与横切 + 全局汇总, Phase 0–4 全部完成)</title>
 <style>
   :root {
     color-scheme: dark;
@@ -117,6 +117,7 @@
       <a href="#s30"><b>30</b>&nbsp; Phase 2 汇总</a>
       <a href="#s31"><b>31</b>&nbsp; R24 tests/</a>
       <a href="#s32"><b>32</b>&nbsp; R25 跨层总账</a>
+      <a href="#s33"><b>33</b>&nbsp; R26 全局汇总</a>
     </nav>
     <main>
       <div class="kicker">执行报告 · 重复代码审查</div>
@@ -169,7 +170,8 @@
           <tr class="phase"><td colspan="3">Phase 3 —— 测试与横切 轮 24–25</td></tr>
           <tr><td class="r">R24</td><td class="mono">tests/ 全目录: 共享助手层(conftest·helpers·hr_helpers·sidefx·webui_helpers 整读) + 跨文件内联桩族 + 断言样板 + 「## 测试计划」docstring 漂移</td><td>100241 行 · 130 py(拆 R24-A~D; 立法基线时 63956/108)</td></tr>
           <tr><td class="r">R25</td><td>跨层「同一事实」总账: 配置键面 · 枚举/状态词 · 颜色令牌 · 模块契约 · 中文文案 · 口径单点</td><td>六主题面合账(C 94 项; 不按行数)</td></tr>
-        </table>
+                  <tr><td class="r">R26</td><td>全局汇总与重构路线图: 分类计数定稿 · 入池总账 · 候选排序总表 · 清偿顺序 · 验收对照</td><td>不按行数(输入 = 轮 00–25 全部阶段账)</td></tr>
+</table>
         <p class="small">非目标(同计划 §01.2): 不改代码 · 不查缺陷/安全 · 不做性能 · 不评价复杂度 · 不追求零重复。</p>
       </section>
 
@@ -1297,7 +1299,8 @@
           <tr><td class="r mono">26-10-11-0352</td><td>追加 R17–R19(rules / infra / torrents+tray+entry 全包)发现清单(34 项: A11/B5/C9/D9) + 累计分类计数(156 项: A58/B15/C40/D43) + 三段重构候选排序 + 入池 rules 3 / infra 5 / torrents+tray 3 = 11 issue; 覆盖表补 R17–R19; §2.1 补工具实测; 取证基线 <code>08f116ab</code>。纯审查轮, 零源码改动。</td></tr>
           <tr><td class="r mono">26-10-20-2232</td><td><b>Phase 2(前端 webui/static/)</b>: 追加 R20–R23(shared JS 六面 / 抽屉族 / 三皮肤 CSS / 模板层+三 index.html)发现清单 <b>166 项(A71/B15/C48/D32)</b> + <b>全局累计 322 项(A129/B30/C88/D75)</b> + 30.2 A 类分布特征(与 Phase 1 的结构差异) + 候选排序 + 入池 16 refactor / 1 test = <b>17 issue</b>(族级合并); 覆盖表补 R20–R23; §2.1 补 jscpd 前端实测(121 克隆/6.56%, css 占 18.55%)与 markup 格式可用性结论。全程纯审查零源码改动, 取证基线 <code>4eef60fe</code>。</td></tr>
           <tr><td class="r mono">26-10-21-0454</td><td><b>Phase 3(测试与横切)</b>: 追加 R24(tests/ 全目录 100241 行/130 py, 拆 A~D 四子轮)发现清单 <b>25 项(A11/B5/C6/D3)</b> + R25 跨层「同一事实」总账(六主题面合账, C 类 94 项) + <b>全局累计 347 项(A140/B35/C94/D78)</b> + 入池 5 refactor / 1 test = <b>6 issue</b>(族级合并); 覆盖表补 R24–R25; §2.1 补 tests 机器提名实测(jscpd 112 克隆/1.30% vs src 0 的反转); nav 补 §26–§32, 并修正 Phase 2 漏改的头部覆盖口径(title/lede/本轮范围/footer)。取证基线 <code>cecbe4a9</code>。纯审查轮, 零源码改动。</td></tr>
-        </table>
+                  <tr><td class="r mono">26-10-29-0421</td><td><b>Phase 4(轮 26 汇总)</b>: 追加 §33 —— 全局分类计数定稿(347 项: A140/B35/C94/D78) + 入池总账与清偿结果(69 条全部 Done) + 重构候选排序总表(21 行, 收益/风险 × 现状) + 清偿顺序(第 0 批已完成 / B 类 35 项按分歧点收敛难度分三档 / D 类 78 项不动) + 六条方法论结论 + 计划 §08 验收逐条对照; 覆盖表补 R26 行; 报告与计划同步置 <code>Done</code>。纯审查轮, 零源码改动, 取证基线 <code>83461080</code>。</td></tr>
+</table>
         <p class="small">收尾基线切片(本轮零 <code>src/</code> 改动, 数字与上基线持平): 见 <code>commands run kb.baseline</code>。</p>
       </section>
 
@@ -1637,9 +1640,109 @@
         </div>
       </section>
 
+      <section id="s33">
+        <h2><span class="secno">33</span>R26 · 全局汇总与重构路线图(Phase 4)</h2>
+        <hr class="sec-rule">
+        <p>本轮 = 计划 §04 的最后一轮(轮 26): 只做汇总, 不新增审查面、不改任何源码。输入 = §23(P1 汇总) + §30(P2 汇总) + §31/§32(P3) 三份阶段账; 输出 = 全局分类计数定稿 · 入池总账与清偿结果 · 重构候选排序总表 · 清偿顺序 · 验收对照。取证基线 <code>83461080</code>; 本轮核验 <code>git status --porcelain</code> 仅 <code>memory-bank/</code> 路径, <code>src/</code> · <code>tests/</code> · <code>scripts/</code> 为空。</p>
+
+        <h3>33.1 全局分类计数(轮 00–25 定稿)</h3>
+        <div class="counts">
+          <div class="box a"><div class="n">140</div><div class="l">A 真重复</div></div>
+          <div class="box b"><div class="n">35</div><div class="l">B 分歧</div></div>
+          <div class="box c"><div class="n">94</div><div class="l">C 同一事实</div></div>
+          <div class="box d"><div class="n">78</div><div class="l">D 不动</div></div>
+        </div>
+        <p><b>全局 347 项</b> = Phase 1 后端 156(A58/B15/C40/D43) + Phase 2 前端 166(A71/B15/C48/D32) + Phase 3 测试横切 25(A11/B5/C6/D3)。</p>
+        <table>
+          <tr><th style="width:16%">阶段</th><th>发现数</th><th>A 占比</th><th>B 占比</th><th>C 占比</th><th>D 占比</th><th>形态特征</th></tr>
+          <tr><td class="r">P1 后端</td><td>156</td><td>37.2%</td><td>9.6%</td><td>25.6%</td><td>27.6%</td><td>函数级样板 + 契约层; D 占比最高(历史刻意重复多)</td></tr>
+          <tr><td class="r">P2 前端</td><td>166</td><td>42.8%</td><td>9.0%</td><td>28.9%</td><td>19.3%</td><td>层内构件级; 受 DOM 结构硬边界约束(不可随意组件化)</td></tr>
+          <tr><td class="r">P3 测试</td><td>25</td><td>44.0%</td><td>20.0%</td><td>24.0%</td><td>12.0%</td><td>字面拷贝沉积; 机器可提名、可机械守阵、收敛阻力最小</td></tr>
+        </table>
+        <p class="small">读法: A 占比逐阶段升高、D 占比逐阶段降低 —— 后端多为「有理由保留的重复」, 测试侧多为「没人管的复制粘贴」。这一梯度决定了 §33.4 的清偿顺序: 测试侧先清, 后端 B 类最后碰。</p>
+
+        <h3>33.2 入池总账与清偿结果</h3>
+        <table>
+          <tr><th style="width:22%">阶段</th><th>入池条数</th><th>构成</th><th>现状(复核 26-10-29-0421)</th></tr>
+          <tr><td class="r">P1 后端</td><td>46</td><td>config 7 · core 9 · hr 9 · webui 10 · rules 3 · infra 5 · torrents+tray 3</td><td>46 / 46 Done</td></tr>
+          <tr><td class="r">P2 前端</td><td>17</td><td>16 refactor + 1 test(族级合并)</td><td>17 / 17 Done</td></tr>
+          <tr><td class="r">P3 测试横切</td><td>6</td><td>5 refactor + 1 test(族级合并)</td><td>6 / 6 Done</td></tr>
+          <tr><td class="r">合计</td><td><b>69</b></td><td>全部 light 档 · 专题 <code>dup-code-audit</code></td><td><b>69 / 69 Done(清偿率 100%)</b></td></tr>
+        </table>
+        <p>三张入池表(§24 / §30.4 / §32.8)记账时均为「Open 未认领」, 至本轮复核已<b>全部 Done</b> —— 每条修复都自带等价性实证与守阵(静态守阵 / e2e / node 语义电池), 故清偿过程中未产生新的漂移面。另有同专题 <code>26-10-22-1247-docs-midnight-window-slice-handwritten-baseline-number</code> 一条(文档类, 手写基线数字)已置 Dropped, 属审查期间的沿路发现, 不计入上述三阶段产出。</p>
+        <div class="callout">
+          <p><b>未入池的 113 项不是遗漏, 而是口径:</b> 347 − (A140 + C94) = 113 = <b>B 35 + D 78</b>。按计划 §02 —— B 类「只登记不建议立即合」、D 类「明确不动, 防过度抽象」, 两类<b>按定义不入池</b>; 各轮「未入池」行已逐条写明判据(分歧点 / 为何不动), 供后续有人再提合并时回查。</p>
+        </div>
+
+        <h3>33.3 重构候选排序总表(收益 / 风险)</h3>
+        <p>把三份阶段排序表(§23.2 / §30.3 / §32.8)按「收益 = 消除的重复面规模与维护点数」×「风险 = 改动面宽度与回归验证代价」重新合并排序。<b>收益 / 风险两列沿用各阶段原判, 现状列为本轮复核结果。</b></p>
+        <table>
+          <tr><th style="width:4%">#</th><th style="width:28%">候选(族)</th><th style="width:6%">阶段</th><th style="width:5%">类</th><th style="width:15%">收益</th><th style="width:11%">风险</th><th>现状</th></tr>
+          <tr><td class="r">1</td><td class="r">配置键面单点(schema / validation / models / docs / 设置页元数据 8+1 表示处)</td><td>P1</td><td><span class="cls c">C</span></td><td>高(消 C 类最大单账)</td><td>中高(触 docs 与 validation 面)</td><td>Done · <code>config-key-surface-doc-drift</code> · <code>config-schema-validation-enum-dup</code></td></tr>
+          <tr><td class="r">2</td><td class="r">三皮肤 CSS 四规则族迁 shared 通道</td><td>P2</td><td><span class="cls a">A</span></td><td>高(约 −800 行, 全前端最高重复面)</td><td>中(须在分层统一之后)</td><td>Done · <code>fe-css-rule-family-dup</code></td></tr>
+          <tr><td class="r">3</td><td class="r">皮肤令牌层: prism 恢复 dialogs.css + atlas 补三字体令牌</td><td>P2</td><td><span class="cls c">C</span></td><td>高(消约 300 行错位噪音)</td><td>中(结构调整, 三皮肤逐页回归)</td><td>Done · <code>fe-css-skin-token-layer-dup</code></td></tr>
+          <tr><td class="r">4</td><td class="r">combobox 族(模板骨架 5 + 键盘/收层 5 + 第 6 变体归一)</td><td>P2</td><td><span class="cls a">A</span></td><td>高(约 −100 行)</td><td>中(须逐处走查 delay≥120ms)</td><td>Done · <code>fe-combobox-family-dup</code></td></tr>
+          <tr><td class="r">5</td><td class="r">对话框外壳三段式 + 管理对话框合并</td><td>P2</td><td><span class="cls a">A</span></td><td>高(约 −90 行)</td><td>中(11 个对话框逐个验证)</td><td>Done · <code>fe-dialog-shell-template-dup</code></td></tr>
+          <tr><td class="r">6</td><td class="r">抽屉变体渲染层(空帧骨架 27 处 / peers 判据四件 / dt 渲染器)</td><td>P2</td><td><span class="cls a">A</span></td><td>高(−55 行 + 关掉一类静默空白)</td><td>中(5 个变体 e2e 逐一对齐)</td><td>Done · <code>fe-drawer-variant-renderer-dup</code></td></tr>
+          <tr><td class="r">7</td><td class="r">模块契约样板(apply 短路 / 全局任务自注册)</td><td>P1</td><td><span class="cls a">A</span></td><td>高(10 个模块各写一遍)</td><td>中高(触契约层, 联守阵)</td><td>Done · <code>core-module-contract-boilerplate-dup</code></td></tr>
+          <tr><td class="r">8</td><td class="r">原子写口径收敛到 infra 单点(R07-T05 / R05-S01 / R14-T02)</td><td>P1</td><td><span class="cls c">C</span></td><td>高(跨包同一动作三份实现)</td><td>中(触热路径写入)</td><td>Done(归 infra / hr 族 issue)</td></tr>
+          <tr><td class="r">9</td><td class="r">默认值单点(models 派生 schema / docs)</td><td>P1</td><td><span class="cls c">C</span></td><td>高(消默认值的多源)</td><td>中</td><td>Done · <code>config-default-multi-source</code></td></tr>
+          <tr><td class="r">10</td><td class="r">模板小控件三件套(hb-switch / hb-fold / seg-group)</td><td>P2</td><td><span class="cls a">A</span></td><td>中高</td><td>低-中(涉可访问性)</td><td>Done · <code>fe-tpl-switch-fold-seg-dup</code></td></tr>
+          <tr><td class="r">11</td><td class="r">右键菜单 .ctx-item 四支合一</td><td>P2</td><td><span class="cls a">A</span></td><td>中高(有前科复发面)</td><td>中(menus.spec 断言逐支比对)</td><td>Done · <code>fe-tpl-ctx-item-branch-dup</code></td></tr>
+          <tr><td class="r">12</td><td class="r">单元格碎片: site-chip 组件化(chip + 行级补 search-hit)</td><td>P2</td><td><span class="cls a">A</span></td><td>中高(<b>先修功能遗漏</b>再收敛)</td><td>中高(其余族组件化会破坏 grid 列对齐)</td><td>Done · <code>fe-tpl-cell-fragment-dup</code>(其余族降级为注释合一 + JS 算式单点)</td></tr>
+          <tr><td class="r">13</td><td class="r">单点旁路 7 族改调已存在的单点</td><td>P2</td><td><span class="cls a">A</span></td><td>中</td><td>低(机械改动)</td><td>Done · <code>fe-single-point-bypass-dup</code></td></tr>
+          <tr><td class="r">14</td><td class="r">轮询族归一 + 抽屉侧补悬挂兜底</td><td>P2</td><td><span class="cls c">C</span></td><td>中(<b>悬挂兜底是行为缺陷, 单独先修</b>)</td><td>中</td><td>Done · <code>fe-polling-family-dup</code></td></tr>
+          <tr><td class="r">15</td><td class="r">测试共享小助手 9 族 24 处收 tests 共享层</td><td>P3</td><td><span class="cls a">A</span></td><td>中(<code>src/</code> 零改动)</td><td>低</td><td>Done · <code>test-shared-micro-helper-dup</code></td></tr>
+          <tr><td class="r">16</td><td class="r">日志捕获器 7 份 → capture_logs 单点</td><td>P3</td><td><span class="cls a">A</span></td><td>中</td><td>低</td><td>Done · <code>test-log-capture-dup</code></td></tr>
+          <tr><td class="r">17</td><td class="r">make_manager 收 cfg 覆盖参(89 处内联) / web_env 参数化(15+ 处)</td><td>P3</td><td><span class="cls c">C</span></td><td>中(收敛动作 = 扩参数而非新建)</td><td>低</td><td>Done · <code>test-manager-builder-params-dup</code> · <code>test-web-env-param-dup</code></td></tr>
+          <tr><td class="r">18</td><td class="r">「## 测试计划」docstring 漂移(56 文件 / 约 290 条未列)补机械守阵</td><td>P3</td><td><span class="cls c">C</span></td><td>中高(<b>只改测试</b>即可落地的硬规则面)</td><td>极低</td><td>Done · <code>test-plan-docstring-guard</code></td></tr>
+          <tr><td class="r">19</td><td class="r">三 shell 的 sprite 段 / login 段补相等断言</td><td>P2</td><td><span class="cls a">A</span></td><td>中高(重复本身不合并, 只钉守阵)</td><td>极低(<b>零源码改动</b>)</td><td>Done · <code>test-fe-tpl-shell-parity-guard</code></td></tr>
+          <tr><td class="r">20</td><td class="r">B 类 35 项(分歧重复)</td><td>P1–P3</td><td><span class="cls b">B</span></td><td>—</td><td>中高</td><td><b>暂缓</b>(按 §02 只登记; 须先钉差异点, 见 §33.4)</td></tr>
+          <tr><td class="r">21</td><td class="r">D 类 78 项(表面相似)</td><td>P1–P3</td><td><span class="cls d">D</span></td><td>—</td><td>—</td><td><b>不动</b>(判据已逐条写在各轮台账「为何不动」栏)</td></tr>
+        </table>
+        <p class="small">第 19 项是本次审查方法论的代表: 三 shell 的重复<b>不可合并</b>(合并唯一路径是后端渲染注入, 会破坏 <code>index.html</code> 静态直开能力), 但<b>可以守阵化</b> —— 「重复本身不可怕, 无守阵的重复才可怕」。</p>
+
+        <h3>33.4 清偿顺序</h3>
+        <ol>
+          <li><b>第 0 批(已完成)</b>: 69 条入池 issue 按 §33.3 自顶向下清偿, 实际执行顺序与逐条实证见三个 Phase 档案的进度日志, <b>清偿率 100%</b>。</li>
+          <li><b>第 1 批 · B 类 35 项</b>(须先钉差异点再谈合并), 按「分歧点收敛难度」升序:
+            <ul>
+              <li><b>① 参数面可扩张类(P3, 5 项 / 17 处)</b> —— <code>wait_until</code> ×3 · 假时钟 ×3 · 指针写手 ×3 · relocate env ×4 · hr service 构造器 ×4。共同根因是「单点参数面不够」(§32.6), 收敛动作 = 扩参数而非新建, 阻力最小 —— 先做。</li>
+              <li><b>② 前端构件与模板分歧类(P2, 15 项)</b> —— 分歧点已写在 §30.3 末行与各轮台账, 且与 DOM 硬边界纠缠, 建议并入前端批次顺手做。</li>
+              <li><b>③ 行为分歧类(P1, 15 项)</b> —— 差分 / 解析 / 集数正则族 · 量化口径 · 轮末基线刷新 · search 行精度与三桶集合 · 各档摘要串 · parse_* 族。这类差异多为<b>业务选择而非疏忽</b>, 需先有人拍板「哪一侧是正解」, 否则合并即行为变更 —— 最后碰。</li>
+            </ul>
+          </li>
+          <li><b>第 2 批 · D 类 78 项</b>: 明确不动。后续若有人提合并, 先回查该轮台账的「为何不动」栏 —— 无判据的重新判定, 有判据的直接驳回。</li>
+          <li><b>入池纪律</b>: 面向 B 类的后续 refactor, 必须<b>先写等价性断言再改</b>(Phase 2 的 <code>fe-config-entity-crud-dup</code> 给出可复用模板: 50 项 harness 对改前 / 改后各跑一遍全绿)。</li>
+        </ol>
+
+        <h3>33.5 六条结论(方法论沉淀)</h3>
+        <ol>
+          <li><b>机器提名只能当线索, 不能当结论。</b> jscpd 在 <code>src/</code> 上 0 克隆(P1)、在 <code>tests/</code> 上 1.30%(P3)、前端 121 克隆里仅 3 处 JS 字面克隆落到 A 类 —— P2 的 166 项里 163 项(98.2%)来自结构线索 grep + 精读; 反过来工具又是 CSS 面唯一的高命中手段(74 克隆 / 18.55%)。</li>
+          <li><b>三个阶段的重复形态根本不同, 收敛手法不能互相照搬</b>: 后端 = 函数级样板 + 契约层(抽 helper 即可); 前端 = 层内构件级, 有 DOM 硬边界(单元格必须是行容器直接子元素, 组件化会破坏 <code>:nth-child</code> 列对齐); 测试 = 字面拷贝沉积(机器可提名、可机械守阵、阻力最小)。</li>
+          <li><b>收敛必须配守阵, 否则会重新长回来。</b> P2 的 R23(模板层)是 A 类密度最高的一段(9/23), 恰恰因为它此前做过两轮大收敛 —— 已收敛面复扫的命中率反而更高。</li>
+          <li><b>C 类(同一事实多表示)收益最高、也最难。</b> 配置键面 8+1 表示处至今是全局最大单账, docs 两处仍无守卫且已实证漂移。</li>
+          <li><b>审查的副产品价值高于纯重复本身</b>: 4 处实质缺陷面 —— torrent 行与 chip 同缺 <code>search-hit</code>(跨文件功能遗漏) · <code>aq-table</code> 排序箭头双分支口径相反 · 抽屉四页签非合并态仍硬编码(前轮收敛只做了一半) · <code>hrGroupTitle</code> 单点被内联四层三元绕过。</li>
+          <li><b>「入池 → 认领 → 带守阵修复」的闭环在本专题跑通</b>: 69 条全 Done, 每轮修复都附等价性实证(静态赢家表 / 真浏览器像素 / node 语义电池 / e2e), 清偿过程零漂移回流。</li>
+        </ol>
+
+        <h3>33.6 验收对照(计划 §08)</h3>
+        <table>
+          <tr><th style="width:16%">验收项</th><th style="width:8%">结论</th><th>依据</th></tr>
+          <tr><td class="r">覆盖面</td><td><b>达成</b></td><td>8 个后端包 + 前端三皮肤 + <code>tests/</code> 各至少过一轮: 轮 01–19(后端) · 20–23(前端, 拆 15 子轮) · 24(<code>tests/</code>, 拆 4 子轮) · 25(跨层总账); 覆盖表 §1.1 逐轮有行。</td></tr>
+          <tr><td class="r">每轮完备</td><td><b>达成</b></td><td>每轮均有七字段发现清单(位置 / 类别 / 重复对象 / 分歧点 / 维护风险 / 建议收敛形态 / 收益风险) + 四分类计数 + 噪声参数(§2.1 记 jscpd / pylint 各阶段实测与调参)。</td></tr>
+          <tr><td class="r">全局产出</td><td><b>达成</b></td><td>重构候选排序总表(§33.3) + 跨层「同一事实」总账(§32, 六主题面) + 入池 issue 索引(§24 / §30.4 / §32.8, 共 69 条)。</td></tr>
+          <tr><td class="r">零改动</td><td><b>达成</b></td><td>四个阶段均为纯审查轮; 本轮复核 <code>git status --porcelain</code> 仅 <code>memory-bank/</code>, <code>src/</code> · <code>tests/</code> · <code>scripts/</code> 为空。</td></tr>
+          <tr><td class="r">可交接</td><td><b>达成</b></td><td>计划(轮次与口径) + 报告(证据) + 三个 Phase 档案(执行与实证) + 切片(滚动) 四层齐备; 后续接手只读 §33.3 / §33.4 即可。</td></tr>
+        </table>
+        <div class="callout">
+          <p><b>计划收口:</b> 轮 26 完成 ⇒ 计划 <code>26-10-10-2333</code> 与本报告同步置 <b>Done</b>。后续若再起重复代码审查, 属新专题(建议按「已收敛面的守阵复扫」立项), 不在本计划范围内。</p>
+        </div>
+      </section>
+
       <footer>
         执行报告 · 专题 <code>dup-code-audit</code> · 滚动报告(起始 26-10-11-0033)<br>
-        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0–3(轮 00–25; 轮 26 全局汇总待做)。各阶段取证基线: Phase 1 <code>08f116ab</code> · Phase 2 <code>4eef60fe</code> · Phase 3 <code>cecbe4a9</code>。
+        纯审查轮: 全程不改任何源码; 可动项一律入池 issue, 由后续重构任务分别认领。范围 = Phase 0–4(轮 00–26 全部完成, 报告定稿置 Done)。各阶段取证基线: Phase 1 <code>08f116ab</code> · Phase 2 <code>4eef60fe</code> · Phase 3 <code>cecbe4a9</code> · Phase 4 <code>83461080</code>。
       </footer>
     </main>
   </div>
