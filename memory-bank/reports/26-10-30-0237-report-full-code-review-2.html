@@ -579,7 +579,60 @@
 
 <h3>批F2 · static 抽屉族(drawer_tpl 14 件 + drawer_pages + drawer_head/store)</h3>
 <p class="cm">登记格式: ID(F2-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
-<p class="cm">未登记。</p>
+<p class="cm"><b>评审时 HEAD:</b> <code>1c5aef85</code>(26-10-30 批F2开工只读实测 <code>git rev-parse</code>, 树净) · <b>范围:</b> 15 文件 / 5,756 行(新增 15 · 变更 0 · 未变 0; 新增件 D1 全深度, 全部全量读码对 R1–R11 逐维勾选) · <b>重点维度:</b> R8 R9 · <b>五步执行记录:</b> ①读档 15 件头注(drawer_store 数据层归属契约与跨模块登记成对纪律 / 变体 dtHtml 转义·自包含·锚保活纪律 / 90 桥 fixture 定位 / drawer_head 组件只贡献模板范式) + memory-bank/systemPatterns web-runtime(rid 增量·线程模型)·web-responsiveness(乐观 UI·窗口化); ②坑档对照 web-ui/_index(drawer-switch-flicker·drawer-open-vs-kind·drawer-multi-form-hosts·drawer-merge-hit-region·esc-attr-quote-dead-class·variant-singleton-shadow·vif-host-node-stale·sticky-scrollpad-inset·tbl-pad-x-single-point·global-mixin-basetransition-watch·wording-audit-surface); ③逐文件读码 15/15 全量; ④前端 XSS「数据源→渲染点」grep 清单法(见下方清单) + <code>node --check</code> 15/15 全过(与守阵 test_frontend_static_bundle_health 同源; 仓库无 eslint 配置沿首评判; ruff/bandit 为 py 工具不适用); ⑤本表登记(逐条对照 §04 四表 + 批A–F1 条目 + 首评批F1/F2 去重)。</p>
+<p class="cm"><b>成员口径注:</b> 计划 §03 点名的 drawer_pages 已不在盘上(26-10-21 W2 数据层抽离后其取数骨架并入 drawer_store.js 四 fetcher 单点), 实际成员以 §07 矩阵 15 件为准(drawer_tpl 13 件 + drawer_head.js + drawer_store.js)。<b>首次评审回归核对:</b> 首评(26-10-05-1036)批F2 三条(F2-01 add_torrent multipart 注释漂移 / F2-02 delete_flow 死变量 / F2-03 loadDir+doSearch 代际守卫)属**当时**批F2 范围(其余 25 件 JS, 本轮划批F3), 本批 15 件全部为 a4d14a8d 后新增文件, 与首评批F2 无交集 —— 无回归核对对象; 首评批F1 的 drawer.js 条目已由本轮批F1 核对, 不重复。<b>变体复制漂移专项(13 变体互查):</b> STATE_TEXT/SEEDING_STATES 三个 general 变体逐字一致; ICO_TONE 三份(01/02/03)逐字一致; bucketOf 状态分桶 04/05/06 同式; hostOf/非负 num 谓词 04/05/06/07/08/09 同式; peers 判据四件 07/08/09 全走 reg.peers 核心单点(issue 26-10-20-2231 收口在位); wire/destroy 成对 12/12(90 无监听、register 的 destroy 可选契约, 口径成立); 结构 sig 口径 04/05/06/07/09 同式(只含结构态不含数据), 08 另含折叠/只看在传, 10/11/12 含整包数据序列化(content 页签无轮询, 语义成立); 空组恒在场 + 原地 hidden 类 05/08 同口径(2026-10-18 根治注齐全)。差异点: 05/06 rerender 死码 + 09 死 chips(F2-02)、02 tags 徽章着 is-hr 档而 01 素色(两变体设计稿分档差异, 非漂移缺陷)。</p>
+<h4>批F2 发现表</h4>
+<table>
+  <tr><th>ID</th><th>维度</th><th>级</th><th>位置(文件:行 + 函数)</th><th>症状</th><th>可达性证据</th><th>撞车</th><th>处置建议</th></tr>
+  <tr>
+    <td>F2-01</td><td>R10</td><td>P3</td>
+    <td>static/shared/drawer_store.js:35-50 <code>_dtMergeRows</code>(:41 <code>seen</code> 声明 / :44 <code>seen.add(k)</code>)</td>
+    <td>W5 引用稳定合并的按行键对账里, 去重记账 Set 只写不读 —— <code>seen</code> 建表后逐行 add, 全函数再无任何读取(命中判据实际全靠 <code>oldByKey</code> Map 的 get, 合并语义不依赖 seen), 是 ruff F841 同族的 JS 死变量; 三列表源(trackers/files/peers)每拍轮询白付一次 Set 构建+插入</td>
+    <td>静态即证(node --check 过, 纯冗余零行为差)</td>
+    <td>无(§04 四表无; 首评批F2 F2-02 delete_flow 死变量同族不同件)</td>
+    <td>入池(chore, P3)或归死代码合并条: 删 :41/:44 两行</td>
+  </tr>
+  <tr>
+    <td>F2-02</td><td>R10(复制漂移)</td><td>P3</td>
+    <td>drawer_tpl/05-trackers-health-groups-low.js:429-434 <code>rerender</code> / drawer_tpl/06-trackers-table-collapsed.js:318-323 <code>rerender</code> / drawer_tpl/09-peers-density-collapsed.js:224-225 <code>render</code> 内 <code>chips</code></td>
+    <td>W5 反应式改造后的残留死码三处: 05/06 的 rerender() 在两变体 onClick/onKeyDown 全部改为 class 原地翻转(折叠/msg/仅看异常均不重建)后已无任何调用点(对照 04/07/08/09 的 rerender 均有调用, 系从 04 复制的骨架未随 05/06 交互改版清理); 09 全帧路径 :224-225 把筛选 chips 与 barHtml(list) 同一构建器重复拼装一遍后从未消费(html 组装只用 barHtml)</td>
+    <td>静态即证(05/06 两文件全文无 <code>rerender(</code> 调用点; 09 render 内 chips 无引用; node --check 过)</td>
+    <td>无(§04 四表无; 池 26-10-20-2231-drawer-variant 是重复代码收敛议题非死码; 首评 F2-02 死变量同族不同件)</td>
+    <td>入池(chore, P3)或归死代码合并条: 删 05/06 rerender + 09 死 chips 三处</td>
+  </tr>
+  <tr>
+    <td>F2-03</td><td>R9</td><td>P3</td>
+    <td>static/shared/drawer_store.js:134-147 <code>_drawerMergeSupply</code>(:138 seq 无条件 bump) + :229-275 <code>_fetchDrawerSource</code>(:242 stale 丢弃 / :261-274 finally 持门不清) + 触发点 drawer.js:188-202(window resize 150ms 防抖回调与 drawerMerge $watch)</td>
+    <td>合并双列数据补给的注释口径是「已有数据/在途不重发, fetcher 自带 stale 丢弃」—— 但 seq bump **无条件**执行: 即使两个源的取数都因「有数据/门在途」被跳过, 代际照样前进, 把**正在飞行**的页签取数(seq N)整体打成 stale —— 响应在 :242 被丢弃, 而 finally 的 stale 分支刻意**不清 loading 门**(:263 注释前提是「新在途请求持有它」, 在补给方没补发的场景不成立), 门成为孤儿且无任何重发路径 ⇒ gc 对(general+files, 页签无轮询)双列停在「正在加载…」, 无 _dtNotify 到来则变体不重渲, 直到用户切页签/换种子/重开抽屉; tp 对因页签轮询静默续拉(seq=0 走 hash 戳守卫)一拍内自愈</td>
+    <td>合并开启状态下打开抽屉(gc 对) → _loadDrawerTab 发 detail(seq N, :294)+files(seq N, :317) → 飞行窗口内(慢路径可达秒级, auth 超时上限 15s)窗口 resize 或 drawerMerge watch 触发 _drawerMergeSupply → bump 至 N+1(:138) → 两响应双双 stale(:217 判真) → 数据弃、门不清、补给分支因门 true 跳过; 判 P3: 需「合并开启 + 取数飞行窗内 resize/开关合并」时序窗, 无数据破坏, 用户操作可恢复</td>
+    <td>无(§04 四表无; 批F1 无; 与首评 F2-03「慢响应覆盖新状态」同为代际守卫族但方向相反 —— 那条是旧代际覆盖新状态, 本条是新代际误杀在途且无重发兜底)</td>
+    <td>入池(bug, P3): _drawerMergeSupply 把 seq bump 移进「确有缺口要补」分支(两 fetch 都被门挡住时不 bump), 或 _fetchDrawerSource stale 丢弃时对持有 loading 门的源安排一次补发</td>
+  </tr>
+</table>
+<h4>批F2 XSS 渲染点清单(数据源→渲染点, D4 拍板口径)</h4>
+<p><b>grep 口径</b>: innerHTML / outerHTML / insertAdjacentHTML / document.write / eval( / new Function / v-html / .html( 八件全扫 —— 命中 3 处 innerHTML 写点(drawer_tpl/05:365 badge、drawer_tpl/08:323 agg、drawer_tpl/90:42 host)+ 变体消费的核心单点 paintHtml(drawer_templates.js:183, 批F1 已扫); eval/Function/v-html/document.write 全批 0 处; 其余渲染全走 dtHtml 标签模板(插值自动 esc 五元 &amp;&lt;&gt;"', dtRaw 显式豁免; esc 定义 drawer_templates.js:112-116, 批F1 已审)。<b>逐点复核</b>: ①05:365 <code>badge.innerHTML = bh</code> —— bh = T\`&lt;i&gt;&lt;/i&gt;${g.text} ${ms.length}\`, g.text 是 GROUPS 常量静态文案、ms.length 数字, 数据源零外部串; ②08:323 <code>agg.innerHTML = a</code> —— aggText 只拼 g.key 分支的静态文案 + fmtSpeedOf/fmtSizeOf 数字格式化产出; ③90:42 <code>host.innerHTML = html</code> —— 纯静态 chrome 模板(测试 fixture, ?dtstub 查询参数门控生产不可见, 零插值); ④12:427-440 属性选择器拼接 —— cssEsc 成对转义反斜杠/引号(:443-445), 与核心 cssAttrEsc 同式保底; ⑤全部 <code>style="..."</code> 插值(进度 pct/width/--lv/opacity/树图坐标)均为 toFixed 数值串, 无自由文本进 style; ⑥title/data-* 属性插值(tracker url 全文 urlTitle、peer addr/client/files)全部经 dtHtml esc。<b>结论</b>: 数据源→渲染点逐点回溯无未转义外部数据链, XSS 面 0 登记(与批F1「dtHtml 单点收口 + 守阵禁变体裸 innerHTML」口径互证; 05/08 两处 innerHTML 直写的数据源均为变体常量表, 90 为静态 fixture)。</p>
+<h4>批F2 逐文件勾选表(15/15)</h4>
+<p class="cm">深度: 全量 = 逐行过目 + R1-R11 逐维勾选。结论含「无发现」。</p>
+<table>
+  <tr><th>文件</th><th>变更态</th><th>深度</th><th>结论</th><th>备注(一句话)</th></tr>
+  <tr><td><code>shared/drawer_head.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>两个纯外壳组件(aq-drawer-head / aq-qb-ctl), props 白名单 + 数据动作全经 $root 回调不复制实现(_scan_mixin_wiring 守阵口径); textTitle/statusTitle 的 null 显式区分防凭空空 data-aq-tip(注释自证); 模板面在 tpl/drawer-head.html 归批F3; R9 无监听无定时器</td></tr>
+  <tr><td><code>shared/drawer_store.js</code></td><td class="good">新增</td><td>全量</td><td>F2-01 + F2-03</td><td>四 fetcher 唯一取数骨架 + _DT_FETCH 差异表(R21-A-01 收口, 落袋次序单点, 守阵钉); W2 代际 + hash 戳双守卫; W5 引用稳定合并(写不重建); 轮询 startPoll 单点(节拍主拍对齐/守卫/悬挂兜底 stall+unstick); FX-29 软切换 wait 集合按源成对(traffic 跨模块成对注记在位); R11: 四端点与 routes/torrent_detail.py :31/:44/:58/:66 一致, peers 键名适配单点(dlspeed/upspeed), 判 P3 不判 bug 的静默口径与 toast/auth 豁免一致; 缺口 = 死 seen(F2-01) + 合并补给无条件 bump(F2-03)</td></tr>
+  <tr><td><code>drawer_tpl/01-general-hero-tall.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>dtHtml 全量转义; 英雄行五数字渐进字段; rawHtml 全字段透出与经典链同内容只转义(R8 过); 折叠/原始键值展开态自保; P3-4 键盘达(role=button)在位; destroy 摘监听成对</td></tr>
+  <tr><td><code>drawer_tpl/02-general-cards-low.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>磁力按需取走 _editDetail(实现 catch 内 toast+null 永不 reject, .then 无 catch 无悬挂面, R9 过); 六卡聚类渐进纪律; tags 徽章 is-hr 档系设计稿分档差异(01 素色)非漂移</td></tr>
+  <tr><td><code>drawer_tpl/03-general-dossier-collapsed.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>双栏档案渐进字段; max_ratio.toFixed 有非空非负闸(R5 过); 折叠/extOpen 自保; 右栏 252px 版式纯 CSS</td></tr>
+  <tr><td><code>drawer_tpl/04-trackers-status-cards-tall.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>sig 只含结构态不含数据(锚保活, 数据拍 paintHtml 原地回填); rowsFn 版式筛选 + 引擎 dtSortSet(R7 模式选择口径); 重报闸门 drawerReannounceGate torrent 级一次取(R2 过); LAN_RE 纯启发式展示; rerender 有调用点非死码</td></tr>
+  <tr><td><code>drawer_tpl/05-trackers-health-groups-low.js</code></td><td class="good">新增</td><td>全量</td><td>F2-02(rerender 死码)</td><td>五组恒在场 + 空组原地 hidden 类(2026-10-18 抖动根治在位); 失败处置建议映射纯静态(变体内置); 徽章计数原地回填走 dtHtml 产出(R8 过); --tbl-pad-x 单点声明(tbl-pad-x 坑档口径); 缺口 = rerender 死码</td></tr>
+  <tr><td><code>drawer_tpl/06-trackers-table-collapsed.js</code></td><td class="good">新增</td><td>全量</td><td>F2-02(rerender 死码)</td><td>next_announce epoch 真口径减 nowSec(R5 在位, 注释明示 epoch 不是倒计时), qB&lt;5.2 回退全局近似并诚实标注; 仅看异常 class 直流行不重装配; msg 展开态 rowsFn 读取重建后恢复; 缺口 = rerender 死码</td></tr>
+  <tr><td><code>drawer_tpl/07-peers-dashboard-tall.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>四卡前端聚合零后端改动; _ctx 只读引用在全帧路径先置(skip/空帧路径不可能先于全帧, lastSig 初始空); peers 判据四件走 reg.peers 单点; 桥描述符 drawerPeerV07 与 app.js:367 一致(R11 过); 吸顶 -14px 补偿(sticky-scrollpad-inset 坑档口径)</td></tr>
+  <tr><td><code>drawer_tpl/08-peers-groups-low.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>五区恒在场 + 组空类切换 + sig 含折叠/只看在传(2026-10-18 两报障根治注齐全); 组头状态条定位伪元素(z-index 收口); agg 原地回填文本先比后写; handrow 行类与描述符 rowCls 消费口径一致(R11 过)</td></tr>
+  <tr><td><code>drawer_tpl/09-peers-density-collapsed.js</code></td><td class="good">新增</td><td>全量</td><td>F2-02(chips 死变量)</td><td>占用条分母 rowsFn 现算(手搓 maxUp 退役注); FILTERS 无 hand 芯系收起档设计; 密度表 30px 行距个性; 缺口 = 全帧路径死 chips</td></tr>
+  <tr><td><code>drawer_tpl/10-content-tree-detail-tall.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>树聚合单遍 + 子树指标; 换种子重置选中/筛选、折叠跨种子保持(P3-6 口径注释在位); 行级键盘 roving 四件套走核心单点(rowAfterFn 回焦); subtreeIndices 批量通道一次 POST(R11 与 files/priority 契约一致); data-path 属性选择器无拼接面(命中走 data-dt-key)</td></tr>
+  <tr><td><code>drawer_tpl/11-content-treegrid-batch-low.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>勾选集按 path 记账 + 换种子强制重置(误操作面注释自证, 与折叠纯视图语义分开); 补拉后勾选集按存活 path 收敛; 主勾选框 indeterminate 三态; PRIO_CYCLE 旧值 4 归位 6; 目录聚合路径前缀单遍(O(F×深度) 不做 O(D*F))</td></tr>
+  <tr><td><code>drawer_tpl/12-content-space-treemap-collapsed.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>squarify 局部名 RH/mapW/mapH 避 T/R/H 遮蔽(variant-singleton-shadow 坑档守阵注释在位); ResizeObserver 单例 destroy disconnect + ui.host/mapEl 清空 + 回调 isConnected 守卫(R9 成对); cssEsc 选择器转义保底; 折叠/选中 lastSig 置空全帧重建(本变体无锚, 设计口径); 属性插值全过 esc</td></tr>
+  <tr><td><code>drawer_tpl/90-peers-stub-bridge.js</code></td><td class="good">新增</td><td>全量</td><td>无发现</td><td>测试 fixture(?dtstub 门控, 生产零观感 —— 菜单/DOM/CSS 全不出现); 静态 chrome + 稳定锚不变量(skipUnchanged 恒定 sig); 无监听故无 destroy(register 可选契约核对通过); innerHTML 写纯静态模板(R8 过)</td></tr>
+</table>
+<h4>批F2 工具提示源小结(node --check + XSS grep 清单, 逐条人工复核)</h4>
+<p><b>node --check</b>(与守阵 test_frontend_static_bundle_health 同源): 15/15 语法全过。<b>eslint</b>: 仓库无任何 eslint 配置, 沿首评判跳过并注明。<b>ruff/bandit</b>: py 工具不适用(批内无 py 文件)。<b>XSS grep 清单</b>: 见上方清单 —— innerHTML 写点 3 处(数据源全为变体常量表/静态 fixture)+ 核心单点 paintHtml 消费, 0 未转义外部数据链。<b>死代码/重名面</b>(ruff F811/F401 的 JS 对应位): 采纳 3 —— F2-01(死 seen)· F2-02(死 rerender ×2 + 死 chips); 顶层 const/T|R|H 遮蔽跨 13 变体机械核对 0 违例(12 的 RH 改名按守阵注执行)。真信号合计: 工具源采纳 0, 人工发现 3(F2-01/F2-02 死码面 / F2-03 合并补给代际竞态), 全部 P3, 无 P0/P1/P2。</p>
 
 <h3>批F3 · static 其余 js + CSS 机制面 + HTML</h3>
 <p class="cm">登记格式: ID(F3-n) / 维度 / 级 / 三锚 / 症状 / 可达性证据 / 撞车 / 处置建议。</p>
