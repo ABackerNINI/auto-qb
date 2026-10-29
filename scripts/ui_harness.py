@@ -68,7 +68,14 @@ from auto_qb.config.loaders import load_config  # noqa: E402
 from auto_qb.infra.versioning import CURRENT_VERSIONS  # noqa: E402
 from auto_qb.webui import create_app  # noqa: E402
 from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES, REANNOUNCE_INACTIVE_SKIP  # noqa: E402
-from tests.helpers import FakeClient, FakeTorrent, FakeTracker, make_manager, seed_store  # noqa: E402
+from tests.helpers import (  # noqa: E402
+    FakeClient,
+    FakeTorrent,
+    FakeTracker,
+    make_manager,
+    seed_store,
+    server_state,
+)
 
 _STATES = ["stalledUP", "uploading", "downloading", "pausedUP", "pausedDL", "stalledDL", "checkingUP", "errored"]
 _SIZES = [2 * 1024**3, 8 * 1024**3, 25 * 1024**3, 60 * 1024**3]
@@ -628,7 +635,31 @@ def _apply_truth(mgr, cmd: str, body: dict, revert_ms: int = 0):
 
     `revert_ms` > 0 时, 真值被前端取走后再等这么久把它还原(见 _revert_after_consume) ——
     让长驻桩服务可以反复跑而不累积状态。
+
+    S5 e2e 真值落地(计划 26-10-30-0610): rename_torrent / speed_alt_toggle 两命令的真值通道
+    与 pause/resume 的 kind 同理 —— 桩没有真实 qB, 命令泵只回执不执行, 不在这里落地的话
+    乐观值永远走 3s/8s 兜底收尾, e2e 的「轮询/快照确认后不弹回」断言测不到东西(与本函数
+    原动机同: 真值不到, 对齐类断言集体测假)。
+      rename: 真值 = 快照 name —— 经 store._apply 增量 patch 走生产同款推导(与
+              _publish_with_delta 的保真纪律一致, 直改 rec.name 推不出 delta 桶);
+      alt:    真值 = server_state.use_alt_speed_limits —— store.server_state 随
+              /api/state status.server 恒回传且不进视图版本, 直改即可; 首次样例用
+              helpers 的六字段齐全 server_state(), 免得统计面板读到缺键。
+    两条都不参与 --state-revert-ms 回弹: rename 由用例自己改名还原, alt 由用例点回
+    (长驻桩共享实例, 用例自理收尾 —— 与既有 pause/resume 的回弹机制互不搭界)。
     """
+    if cmd == "rename_torrent":
+        h = (body or {}).get("hash")
+        name = str((body or {}).get("name") or "").strip()
+        if h and name and mgr.store.by_hash.get(h) is not None:
+            mgr.store._apply({h: {"name": name}}, [], full=False)
+            mgr.web.flush_views(force=True)
+        return
+    if cmd == "speed_alt_toggle":
+        ss = dict(mgr.store.server_state or server_state())
+        ss["use_alt_speed_limits"] = not bool(ss.get("use_alt_speed_limits"))
+        mgr.store.server_state = ss
+        return
     act = body.get("action") if cmd == "bulk_torrents" else cmd.split("_", 1)[0]
     if act not in ("pause", "resume"):
         return
