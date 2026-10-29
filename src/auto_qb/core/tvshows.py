@@ -121,9 +121,11 @@ _SEASON_PATTERNS = [
 # 每项第三元 bare 标志: 动画 bare number 只认 "- 05" 与 "[05]"/"(05)" 两种形态,
 # 且起点需过 _bare_ok(排除分辨率/年份); 其余模式起点不设此限(E1080 类大编号合法)。
 # 裸尾随数字(如 Oceans.11)不识别 —— 与 episodes.py 禁用 bare number 同一顾虑。
-# !本族是 episodes._EPISODE_PATTERNS 的超集(多 1x05/中文数字/日期/区间/裸数字五类),
-# 同源已演化 —— 直接合并会改行为, 差异点登记于 issue
-# 26-10-11-0207-refactor-core-episode-marker-dup(R08, B 类), 评估 episodes 复用本解析后再定。
+# !与 episodes._EPISODE_PATTERNS 是覆盖域不同的两族, 不是超集/子集: 本族解析含噪音的
+# 种子标题(每项带左右边界预查防 webdl5 类误判, 另有 1x05/第5话(話)/中文数字/区间续接),
+# episodes 解析已规范化的文件列表(认 ShowE05 粘连而本族不认), 互有对方不认的形态,
+# 合并任一侧都会改行为 —— 差异点与守阵用例见 issue 26-10-29-1328-refactor-b-r08e02-
+# episode-pattern-family(tests/test_tvshows.py::test_e05_glued_title_side_unknown)。
 _EPISODE_PATTERNS = [
     # S01E05 / S01E05-E06 / S01E05E06 / S01x05(季号内嵌, 优先级最高)
     # 区间续接两分支: "-06"/"-E06"(破折号 + 可选 E)与 "E06"(直接连写); 裸空格接数字不算区间

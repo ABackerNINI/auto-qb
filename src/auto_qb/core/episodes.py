@@ -11,9 +11,11 @@ from typing import List
 #   第5集 / 第05-08集 / S01E05  >  EP05  >  E05
 # 每项: (正则, 提取函数(match -> List[int])), 提取函数返回该文件贡献的集数列表
 # 新增模式: 在合适优先级位置插入一项即可, 无需改提取逻辑
-# !本族是 tvshows._EPISODE_PATTERNS 的子集(tvshows 版多 1x05/中文数字/日期/区间/裸数字
-# 五类), 同源已演化 —— 直接合并会改行为, 差异点登记于 issue
-# 26-10-11-0207-refactor-core-episode-marker-dup(R08, B 类), 评估复用 tvshows 解析后再定。
+# !与 tvshows._EPISODE_PATTERNS 是覆盖域不同的两族, 不是子集/超集: 本族解析已规范化的
+# 文件列表, tvshows 解析含噪音的种子标题(带边界预查/区间续接/中文数字), 互有对方不认
+# 的形态(本族认 ShowE05 粘连而 tvshows 不认; tvshows 认 1x05/第5话(話)/区间续接而本族
+# 不认), 合并任一侧都会改行为 —— 差异点与守阵用例见 issue 26-10-29-1328-refactor-b-
+# r08e02-episode-pattern-family(tests/test_episodes.py::test_tvshows_side_forms_not_matched)。
 _EPISODE_PATTERNS: List[tuple] = [
     # 第x集 / 第x-y集(区间展开为多集)
     (

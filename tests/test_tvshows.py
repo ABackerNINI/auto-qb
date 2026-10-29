@@ -6,6 +6,7 @@
 - [x] 1x05 旧 scene 风格(季号内嵌); 1920x1080 分辨率不误判
 - [x] 第5集 / 第05-08集 / 第5话(話) / 第五集(中文数字)
 - [x] EP05 / Episode 5 / E05; webdl5 类粘连不误判 E 模式
+- [x] ShowE05 粘连不识别(E 模式左边界) —— 与 episodes 文件列表侧互为对照, 两族双向非对称 (issue 26-10-29-1328)
 - [x] 季标记: S01 / Season 1 / 第一季(中文数字) / 第2期 / 2nd Season
 - [x] S01E05 中的 S01 不被季模式重复命中(标题切分点正确)
 - [x] 日期型: 2026.09.15 → ISO; 非法日期(2023.13.99)不判为日期
@@ -41,6 +42,7 @@
 - test_date_basic
 - test_date_invalid_not_date
 - test_default_unknown_shared
+- test_e05_glued_title_side_unknown
 - test_e_lookalike_not_matched
 - test_empty_name_defaults
 - test_empty_or_noise_name_keyless
@@ -124,6 +126,12 @@ class TestEpisodePatterns:
         assert r.season == season
         assert r.ep_start == start
         assert r.ep_end == end
+
+    def test_e05_glued_title_side_unknown(self):
+        # ShowE05 粘连: E 模式要求左边界, 标题侧不识别 —— 与 episodes 文件列表侧对照
+        # (episodes 认 ShowE05 -> [5], 两族双向非对称, issue 26-10-29-1328)
+        r = p("ShowE05.mkv")
+        assert r.kind == KIND_UNKNOWN
 
     def test_e_lookalike_not_matched(self):
         # "webdl5" 粘连: E 模式带左边界, 不应把 dl5 当集数

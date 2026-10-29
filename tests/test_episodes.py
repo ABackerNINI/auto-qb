@@ -7,13 +7,16 @@
 - test_episode_tags_non_continuous_skipped: 非连续集数放弃
 - test_episode_tags_ignore_date_screenshot: 日期型截图干扰忽略
 - test_episode_tags_disabled: 配置关闭时不加标签
+- test_tvshows_side_forms_not_matched: 负测守阵(与 tvshows 族双向非对称, issue 26-10-29-1328)
 """
 import os
 import tempfile
 from types import SimpleNamespace
 
+import pytest
+
 from auto_qb.config.models import AddEpisodeTagsConfig
-from auto_qb.core.episodes import extract_episodes_from_files, format_episode_tag, name_has_episode_marker
+from auto_qb.core.episodes import extract_episodes_from_files, extract_episodes_from_names, format_episode_tag, name_has_episode_marker
 from helpers import FakeClient, FakeTorrent, _fake_file, make_manager
 
 
@@ -94,6 +97,27 @@ def test_episode_tag_utils():
     assert format_episode_tag([1, 2, 3, 4, 5], "E${episode_first}", "E${episode_first}-${episode_last}") == "E1-5"
     # [1, 5] 间隔 4 集 -> 不连续 -> 返回空
     assert format_episode_tag([1, 5], "single", "multi") == ""
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("Show.1x05.mkv", []),  # scene 风格: 仅 tvshows 侧识别
+        ("Show.第五集.mkv", []),  # 中文数字: 仅 tvshows 侧识别
+        ("Show.第5话.mkv", []),  # 话: 仅 tvshows 侧识别
+        ("Show.第5話.mkv", []),  # 繁体 話: 仅 tvshows 侧识别
+        ("Show.S01E05-E06.mkv", [5]),  # 区间续接不做: 按 S01E05 只取首集
+    ],
+)
+def test_tvshows_side_forms_not_matched(name, expected):
+    """负测守阵(issue 26-10-29-1328): episodes 族不认 tvshows 侧独有的形态
+
+    episodes(文件列表路径)与 tvshows(种子标题路径)两族覆盖域不同、互有对方不认的形态,
+    不是子集/超集 —— 本组用例钉住 episodes 侧不认的项: 谁要合并两族, 这里必红, 须显式
+    改期望并说明行为 delta。对照面(tvshows 侧不认 ShowE05)见 test_tvshows.py 的
+    test_showe05_glued_title_side_unknown。
+    """
+    assert extract_episodes_from_names([name]) == expected, f"{name!r} 解析结果不符现状"
 
 
 def test_episode_tags_added_on_new_torrent():
