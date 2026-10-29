@@ -1279,6 +1279,151 @@
 <tr><td><code>tools/global-traffic-monitor/tests/test_storage.py</code></td><td>1034</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
 <tr><td><code>tools/global-traffic-monitor/tests/test_units.py</code></td><td>142</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
 </table>
+
+<h2><span class="no">§08</span>汇总分级(S6)</h2>
+<p>十批全部回填后的终验与定稿: 合并终表 / 撞车终验(批间互撞逐对 + 对 §04 四表) / 逐条 P 级二次论证(含 B-01 P1 当期 HEAD 可达性复验) / 无 ID 断号核对 / 回归哨兵记录 / 处置分流(入池清单定稿, 入池动作本身归 S7)。</p>
+<p class="wr"><b>登记总数以逐条清点为准: 26 条</b>(P0×0 / P1×1 / P2×6 / P3×19)。批内清点: A 8(P2×6+P3×2) / B 2(P1×1+P3×1) / C 2 / D 1 / E 1 / F1 2 / F2 3 / F3 0 / GH 2 / T 5, 合计 8+2+2+1+1+2+3+0+2+5 = <b>26</b>; P3 = 2+1+2+1+1+2+3+2+5 = <b>19</b>。S6 任务书口径「28 条 / P3×21」系总账行计数笔误(逐批数字本身与清点一致), 本节一律以 26/19 为准。</p>
+
+<h3>8.1 合并终表(26 条)</h3>
+<p class="cm">三锚已按 D6 在当前 HEAD <code>3d957597</code> 复核(见 8.3); 「一句话」为症状压缩版, 全文见 §05 各批发现表。批号即 ID 前缀。</p>
+<table>
+  <tr><th>ID</th><th>批</th><th>维度</th><th>级</th><th>三锚(文件:行 + 函数, 当前 HEAD 实测)</th><th>一句话</th></tr>
+  <tr><td>A-01</td><td>A</td><td>R2</td><td class="wr">P2</td><td>core/modules/relocate_mod.py:233 <code>on_task_line</code> / :279 <code>_step_move</code> setLocation / :406 <code>_build_links</code> / :852 <code>relocate_cancel</code></td><td>relocate 相位机与撤销路径全程无 dry_run 闸(唯一判点 :826 在首步), 恢复账本路径(--dry-run 启动携非终态 job)真写下发/建删链接</td></tr>
+  <tr><td>A-02</td><td>A</td><td>R6</td><td class="wr">P2</td><td>relocate_mod.py:795 <code>_start_job</code> 暂停成员 / :271-319 <code>_step_move</code> / :874 <code>relocate_cancel</code>; 消费点 :482/:500/:879</td><td>迁移失败路径(move_rejected/stalled、internal_error、cancel_failed)不消费 resume_hashes, 整组被暂停成员永久停在暂停态且无日志</td></tr>
+  <tr><td>A-03</td><td>A</td><td>R6</td><td class="wr">P2</td><td>relocate_mod.py:441-453 <code>_build_links</code> 失败 / :597-608 <code>_apply_reconcile</code> REBUILD; relocate_units.py:870 <code>reconcile</code>(:904 qb_up⇒REBUILD)</td><td>建链失败进 REMOVED→REBUILD→再失败循环, 每 1-2 tick 一轮 create-fail-delete, 无退避无上限, job.attempts 零消费; guardian respawn 同族</td></tr>
+  <tr><td>A-04</td><td>A</td><td>R1(R9)</td><td class="wr">P2</td><td>relocate_mod.py:825→:833 <code>_start_job</code>(先 _persist 后 setLocation) / :196-204 <code>_load_jobs</code>(恢复一律 issue=False); relocate_units.py:842 <code>recover_exec_phase</code>(全仓零调用)</td><td>persist 与 setLocation 之间崩溃后重启, MOVING job 不补发 setLocation, 600s 后按 move_stalled 误判失败(叠加 A-02); 判据纯函数已备而未接线</td></tr>
+  <tr><td>A-05</td><td>A</td><td>R9</td><td class="wr">P2</td><td>relocate_mod.py:643-651 <code>_finalize_members</code>; torrents/record.py:287 <code>files</code>(惰性缓存首见即一次 HTTP)</td><td>ACT_FINALIZE 收尾集合对全库每条种子先发 files API 再过滤, 大库下单 tick 串行 N 次 HTTP, 主循环停摆分钟级; 实际只需 save_path 过滤 + job.hashes</td></tr>
+  <tr><td>A-06</td><td>A</td><td>R9(R2)</td><td class="wr">P2</td><td>core/taskqueue.py:224-234 <code>run_due</code>(defer 命中仍占 due 批次) / :241 <code>_pop_due</code>; core/qbmanager.py:781 <code>_own_write_defer_gate</code></td><td>deferral 让位任务重入堆但仍计入本轮 max_tasks 预算, 组级 own_write TTL 10s 窗口内同组任务逐 tick 占满预算, 无关任务饥饿、速率语义失真</td></tr>
+  <tr><td>A-07</td><td>A</td><td>general</td><td>P3</td><td>core/traffic_source/agent.py:382 <code>ensure_running</code>(<code>enabled is not True</code>)</td><td>启用判据与自家契约(paths.source_enabled 的 is not False)方向相反, 真 bool 下等价、mock/非 bool 真值被误判关闭</td></tr>
+  <tr><td>A-08</td><td>A</td><td>general</td><td>P3</td><td>core/modules/ops_mod.py:465 <code>skip_submit</code>(RUF059) / :487 <code>_skip_begin</code>(F841)</td><td>两处死绑定(job 解包未消费 / prefix 拼接未使用), 行为零差异</td></tr>
+  <tr><td>B-01</td><td>B</td><td>R5(R2)</td><td class="bad">P1</td><td>hr/service.py:1329 <code>_freeze_terminal</code> / :1729 <code>_position_covered</code> / :1753 <code>_absence_proven_all</code>; 语义锚 model.py:332; 支点 adapters/nexusphp.py:57</td><td>cutoff_done==0(本波该档无任何可解析完成时刻)时三处「位置覆盖」判据全退化为恒通过, 终态冻结/观察期出口/批量签发三条路全部签发永续放行, 种子就此退出 HR 管束</td></tr>
+  <tr><td>B-02</td><td>B</td><td>general</td><td>P3</td><td>hr/discovery.py:27 <code>is_loopback_host</code> / :33 <code>_content_length</code>(F401 ×2)</td><td>新文件两处死导入, 行为零差异</td></tr>
+  <tr><td>C-01</td><td>C</td><td>R11(R6)</td><td>P3</td><td>core/traffic_store.py:821 <code>parse_v4_agg_text</code>(cov_s 无下限) / :1207-1209 <code>v4_rollup_agg</code> / :1244 <code>v4_merge_agg</code>; traffic_sample_mod.py:1427 <code>_recover_aggregates</code>(只捕 OSError) / :1523-1528 <code>_catch_up_level</code></td><td>解析侧对 cov_s=0 语义合法行照单全收(写侧 2026-10-13 起下限 1): 坏值可炸 rollup ValueError 逃逸恢复循环(启动链中断)或 merge 除零(Web 线程) —— 解析契约与写侧不变式不对齐</td></tr>
+  <tr><td>C-02</td><td>C</td><td>general</td><td>P3</td><td>core/curves.py:76 <code>aggregate</code>(<code>today: date = None</code>, RUF013)</td><td>隐式 Optional 注解漂移, 注解与 docstring/调用方契约不符, 行为零差异</td></tr>
+  <tr><td>D-01</td><td>D</td><td>R4</td><td>P3</td><td>config/validation/sections.py:217 <code>_validate_qbittorrent</code>(三 str 键无类型检查), 对照 :820 <code>_validate_web</code> token 先例; loaders.py:86 <code>load_qbittorrent_config</code></td><td>qbittorrent username/password/api_key 缺「必须是字符串」fail-fast, 键误写成容器时校验零报错、运行期才炸出误导性连接错误 —— 同包同形态键已有先例, 覆盖面不均匀</td></tr>
+  <tr><td>E-01</td><td>E</td><td>R8</td><td>P3</td><td>webui/server/routes/torrent_cmds.py:210/:212/:221-225/:263-264/:319/:325 裸 int()/float(); torrent_detail.py:120-121 同族</td><td>数值型请求体字段无形状防护, 直调 API 传字符串 ValueError→500(无自定义处理器), 与同层三处 400 先例口径不一致</td></tr>
+  <tr><td>F1-01</td><td>F1</td><td>R9(R6)</td><td>P3</td><td>static/shared/dialogs.js:578-591 <code>submitAltLimits</code>(无字段非空闸), 对照 :784-787 <code>speedOvReady</code>; tpl/dialogs.html:110-112</td><td>备用限速组缺「字段非空才可提交」闸, /api/speed/mode 读失败窗口内提交即以 0/0 静默改写备用限速为「不限速」, 打破「未改动的组不下发」承诺</td></tr>
+  <tr><td>F1-02</td><td>F1</td><td>R10</td><td>P3</td><td>static/shared/app.js:206 段头注</td><td>指路注释指向已删除的 drawer_tabs.js, 现行口吻指路落空, 纯文档漂移</td></tr>
+  <tr><td>F2-01</td><td>F2</td><td>R10</td><td>P3</td><td>static/shared/drawer_store.js:35-50 <code>_dtMergeRows</code>(:41/:44 seen 只写不读)</td><td>去重记账 Set 白付构建+插入, 合并语义实际全靠 oldByKey, JS 版 F841 死变量</td></tr>
+  <tr><td>F2-02</td><td>F2</td><td>R10</td><td>P3</td><td>drawer_tpl/05-trackers-health-groups-low.js:429-434 / 06-trackers-table-collapsed.js:318-323 <code>rerender</code>; 09-peers-density-collapsed.js:224-225 死 chips</td><td>W5 反应式改造残留死码三处(05/06 rerender 无调用点、09 重复拼装从未消费), 系从 04 复制的骨架未随改版清理</td></tr>
+  <tr><td>F2-03</td><td>F2</td><td>R9</td><td>P3</td><td>static/shared/drawer_store.js:134-147 <code>_drawerMergeSupply</code>(:138 无条件 bump) / :229-275 <code>_fetchDrawerSource</code>(:242 stale 丢弃 / :261-274 门不清); 触发点 drawer.js:188-202</td><td>合并补给即使两源都因门被跳过也前进代际, 把在飞页签取数整体打成 stale 且 loading 门成孤儿, gc 对双列停在「正在加载」直到用户手动扰动</td></tr>
+  <tr><td>GH-01</td><td>GH</td><td>R11(R9)</td><td>P3</td><td>tools/finalize_watch.py:185-190 <code>run</code>(读后心跳无条件整包覆盖) / :238(max_wait 缺省 0); infra/relocate_journal.py:1-14 头注「唯一写者」; 对照 relocate_mod.py:593/:605/:639/:675/:878</td><td>journal 实际两写者(guardian + auto-qb 主循环), last-writer-wins 无前向合并, auto-qb 终态相位落在 guardian 读-写间隙即被覆盖回 armed —— 僵尸 guardian(每 10s 心跳+持 pid 锁)与对账面相位失真, 数据面无害(权威在 state.json)</td></tr>
+  <tr><td>GH-02</td><td>GH</td><td>R10</td><td>P3</td><td>extensions/hr-fetch-proxy/background.js:307-314 <code>poll-now</code> 分支</td><td>死消息分支(全仓无发送方, 选项页只发 refresh-now), 且日志文案与 refresh-now 逐字同, 恢复使用即不可辨识</td></tr>
+  <tr><td>T-01</td><td>T</td><td>R9(R3)</td><td>P3</td><td>gtm/server.py:444-446 <code>_autostart</code>(读-改-写无锁) / :339-343 <code>_put_config</code>; 对照 storage.py:489 <code>_state_lock</code>(state 路径已串行化)</td><td>config.yml 双 HTTP 线程写点无锁, /autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即丢更新(刚改的参数被静默还原)</td></tr>
+  <tr><td>T-02</td><td>T</td><td>R8</td><td>P3</td><td>gtm/config.py:163-167 <code>_check_str</code>(只验非空); server.py:192/:277; storage.py:22-23 docstring「强制绑定 127.0.0.1」</td><td>http_host 可配且无回环约束, PUT 0.0.0.0 重启后控制面对局域网暴露(token 明文落盘) —— 安全声明与实现的契约漂移</td></tr>
+  <tr><td>T-03</td><td>T</td><td>R5</td><td>P3</td><td>gtm/sampler.py:331-336 <code>sample_once</code>(day_rolled 无方向检查) / :359-362; 对照 :270-273 <code>restore</code>(有未来日期降级)</td><td>挂钟回跳跨日界当日累计二次清零, dat 今日行被低值覆盖且当日不可自愈(「宁可少报」方向, 无虚增); 恢复路径防了日期超前、运行路径没防倒退</td></tr>
+  <tr><td>T-04</td><td>T</td><td>R10</td><td>P3</td><td>gtm/__init__.py:8-10 进度注; README 通知机制段; 对照 notifier.py:9-12 与 26-10-16-0541 档案</td><td>包级门面文档双重漂移: 进度注停在 S5(实际 S0-S9 落地)、通知链路仍写「重读历史文件」(26-10-21 起为零读盘直达补丁)</td></tr>
+  <tr><td>T-05</td><td>T</td><td>general</td><td>P3</td><td>gtm/server.py:56(F401 <code>Config</code>) / __main__.py:96(F841 <code>uninstall</code>) / config.py:313(RUF059 <code>errors</code>)</td><td>工具侧死码三处, 行为零差异</td></tr>
+</table>
+
+<h3>8.2 撞车终验</h3>
+<p class="cm">判据: 两批条目构成同一缺陷(同文件同机理同后果)才合并; 同域不同面(不同存储/不同层/不同后果)记互链不合并。批间无交叉面的组合(如 B×E、B×F1/F2、D×T、A×F1/F2、C×E、E×F2、E×GH、F1×GH 等)一轮即判无, 不逐对展开; 下列为有交叉面或任务书点名的全部组合。</p>
+<table>
+  <tr><th>组合</th><th>结论</th></tr>
+  <tr><td>A×B</td><td>无。A=core/modules 域, B=hr 域, 无同件; A-07(traffic_source 探活判据)与 B 条无交叠。</td></tr>
+  <tr><td>A×C</td><td>无。流量域六件整体划 C 批后, A 批仅余 traffic_source 判据面(A-07), 与 C-01(cov_s 值面)/C-02(注解面)不同层不同件。</td></tr>
+  <tr><td>A×D</td><td>无(任务书点名对)。A-01 是运行期 dry_run 闸门缺失(runtime 行为面), D 批是配置键形状校验面(唯一条 D-01 在 qbittorrent 段 str 键)—— 不同层不同件, 且 D 批「新键对账」专项已核 relocate 9 键三处齐, 无绕过守卫的键。</td></tr>
+  <tr><td>A×E</td><td>无。A 批未涉 webui; 批A 登记引用的 webui/module.py:66 dry-run 入口闸与 E-01(数值字段 500)不同件。</td></tr>
+  <tr><td>A×GH</td><td>无合并, <b>互链</b>。A-04(state.json relocate.jobs 账本恢复 issue=False → 不补发 setLocation → move_stalled 误判)与 GH-01(journal 文件两写者 → guardian 心跳覆盖终态相位 → 僵尸进程)同在 relocate 恢复/收尾面, 但存储不同(state.json 账本 vs journal 文件)、机理不同(恢复判据 vs last-writer-wins)、后果不同(误判失败 vs 进程泄漏), 不构成同一缺陷。互补性: A-04 备选修法「接线 recover_exec_phase(读 qB 现场三分流)」与 GH-01 修法「journal 写纪律(读到的相位仍 armed 才写)」各自独立成立, 修复宜同批做(同文件群 relocate_mod/relocate_units/finalize_watch)。A-05(_finalize_members HTTP fan-out)与 GH-01 同为「收尾面」但一个是取数成本一个是相位竞态, 无交叠。</td></tr>
+  <tr><td>A×T</td><td>无。A-07 是 auto-qb 侧 agent 探活判据, T 批 gtm 侧无同件; 批T 交叉核对过的 agent.parse_pointer/paths/reader 面在批A 登记为零发现, 两侧互证。</td></tr>
+  <tr><td>B×C</td><td>无。域不相交。</td></tr>
+  <tr><td>B×D</td><td>无。D 批 hr schema/校验面专项核对(channel 8 键/idle 交叉校验)零发现; B-01 系 service 判据层非配置面。</td></tr>
+  <tr><td>B×GH</td><td>无。GH 扩展回传四 kind 与 service 消费链(:1486/:1650)经批GH专项②闭合核对; GH 未在 hr/service.py 登记条目, B-01 无 GH 侧同件。</td></tr>
+  <tr><td>B×T</td><td>无。</td></tr>
+  <tr><td>C×D</td><td>无合并, <b>互链</b>。C-02(RUF013 隐式 Optional)与批D 复核时点名的「RUF013 注解债归池 26-09-21-1408」同池同判 —— 处置时 C-02 并入该池备注即可(见 8.6)。</td></tr>
+  <tr><td>C×T</td><td>无撞车, <b>互证</b>(任务书点名对)。dat 契约两侧: 批C 核 curves.py parse_history_dat 与 gtm sampler.DAT_ROW_RE 逐字同源(注释互指在位), 批T 专项①从 gtm 侧独立核对同一契约(行格式/KB×1024/末行胜/坏行跳过)结论一致 —— 双方均未在 dat 契约上登记缺陷, 属双向独立复核互证非撞车。C-01(traffic_store v4 agg cov_s)与 gtm 无关(gtm 不产 v4 agg 行)。</td></tr>
+  <tr><td>D×GH</td><td>无, <b>互证</b>。versioning v4→v5 盖章与批D migrations 双向核对一致(两侧注释互指)。</td></tr>
+  <tr><td>E×F1</td><td>无合并, <b>互链</b>。E-01(后端数值字段 500)与 F1-01(前端备用限速非空闸)不同面不同件; F1-01 的失败窗来源 = 首评 E-02「speed/mode 三读整组回 None」修法(批E 已核修复在位)—— 修法引入的前端消费侧缺口, 处置时两条同读。</td></tr>
+  <tr><td>F1×F2</td><td>无。F1-01(dialogs 限速浮层)与 F2-03(drawer_store 合并补给)同为 R9 代际/竞态族但不同件不同模块; F2-03 与首评 F2-03「同族反方向」的辨析已在撞车字段自明。</td></tr>
+  <tr><td>F2×F3</td><td>无。F3 零登记; F3 两处观察(polling/startEvents)与 F2 三条不同件。</td></tr>
+  <tr><td>F×GH</td><td>无合并, <b>同族归并</b>。GH-02(extensions poll-now 死分支)与 F2-01/F2-02(死变量/死码)同属死码清理族不同件 —— 处置时并入同一批量清理条(见 8.6), 登记层面维持分立。</td></tr>
+  <tr><td>GH×T</td><td>无合并, <b>互链</b>。GH-01(relocate journal 双写者)与 T-01(gtm config 双线程写)同为「双写者竞态」族但不同件不同进程边界(T-01 撞车字段已自辨「不同件不同文件」); T-01 修复参照 storage._state_lock 既有先例, GH-01 修复参照写侧守序, 两者互为同族先例。</td></tr>
+  <tr><td>A×B×T(traffic_source 域三方)</td><td>无撞车。A-07(auto-qb 探活判据)/T 批(gtm 工具本体)/批C(流量存储)三侧在该域各查各面, 无同件; dat/endpoint/notify 三契约均双向核对成立。</td></tr>
+</table>
+<p><b>对 §04 四表终验</b>(26 条逐条再过一遍, 与各条撞车字段自辨交叉核对):</p>
+<ul>
+  <li><b>表 a(issues 池 61 Open + 2 In Progress)</b>: 最紧的候选逐个排除 —— #40(整组迁移原子性, feat 诉求非缺陷, 与 A-01..A-05 不同轴)、#31(主循环掉拍/管线预算, 与 A-06 同队列域不同机理: 管线请求预算 vs defer 预算占用)、#16(gtm psutil 成本, T 批观察③已注记同源不重开)、#57/池 26-09-22-2002(设置页伪警示, 首评 F1-04 口径维持)、#58(版本双源, T-04 撞车字段已辨「另一面」; gtm 自身 __init__ 与 pyproject 一致)、#59(类型注解 43%, C-02 是其 RUF013 子面, 处置并入)、#20/#30(跳检, 本轮无涉)。终验无一条与本轮 26 条构成同一缺陷。</li>
+  <li><b>表 b(坑档 241 条)</b>: 本轮与坑档构成同族佐证而非撞车的: A-05(「视图组装里绝对不能发 qB API」主循环任务线版)、A-07(hot-reload-mock-sections)、B-01(verdict-scope-parity 同域不同机制: 那条是漏一个消费侧, 本条是同一判据三消费侧同源退化)、A-06(concurrency 的 D-1 闸门条记了让位语义未记预算面 —— 建议随修复补坑档)、T-03(traffic-window-edge-floor 是读侧取整语义不同面)。无撞车。</li>
+  <li><b>表 c(在途 6 件)</b>: 无撞车。26-10-17-0339(traffic source integration)覆盖面与 A-07/T 批同域但在途计划是交付编排非缺陷登记; 其余五件与本轮无交叠。</li>
+  <li><b>表 d(dup 底册 347 条)</b>: 69 条入池已全部 Done, 防再报面成立。本轮 F2-02(变体死码)与池 26-10-20-2231(docker 变体收敛议题)性质不同(死码清理 vs 结构收敛), 撞车字段自辨成立。</li>
+</ul>
+
+<h3>8.3 P 级二次论证</h3>
+<h4>B-01(P1)可达性复验(D6 拍板: 当期 HEAD 3d957597 实测)</h4>
+<p><b>三判据逐行在位且逐行退化成立</b>:</p>
+<ul>
+  <li><code>service.py:1329</code>(_freeze_terminal): <code>if not st.full_depth and (done is None or done &lt; st.cutoff_done): continue</code> —— 前半守卫保护 done_epoch 为 None 的条目(保守不冻结), 退化面 = done_epoch 非空的条目, 而这正是终态条目的主体(早前波次解析过 done 并随索引留存); cutoff_done==0 时 <code>done &lt; 0</code> 对任意真实 epoch 恒 False → 不 continue → 冻结并签发<b>永续放行</b>。</li>
+  <li><code>service.py:1729</code>(_position_covered): done None 已在 :1723-1724 回 False; cutoff_done==0 时 <code>done &lt; 0</code> 恒 False → 循环走完 → 判「已覆盖」→ 观察期计数推进(连续 2 波即判「移出」放行, 行 1 管束解除)。</li>
+  <li><code>service.py:1753</code>(_absence_proven_all): done 源 anchor.completion_on 且有 :1751 <code>done &lt;= 0</code> 守卫(只保护 completion_on 缺失/0); 真实 epoch(≈1.7e9)下 <code>done - 86400 &lt; 0</code> 恒 False → 「未覆盖」出口永不触发 → 缺席证明恒成立, 未对账对象走批量「未列出」放行。三处的病根一致: 「0 = 没有位置概念」(model.py:332 注释原话)被减法/比较当成「位置 0 = 比一切都老」。</li>
+</ul>
+<p><b>触发链各环在当前 HEAD 逐环实测</b>: ①供给侧 —— <code>_update_cutoff</code>(:944-948)只在 page_deepest&gt;0 时前进, 整列 done 不可解析 ⇒ <code>_deepest_seen_done</code>(:938-941)回 0.0 ⇒ cutoff_done 恒 0.0; done 列不在 REQUIRED_KEYS(nexusphp.py:57, 复测在位), 整列失明不触发 _LaneAbort(service.py:795-796 的零容忍只查 missing_field_rate = 必填键缺失率) —— 站点改换完成时间书写形态即满足, 无需任何恶意构造。②「ok 且非全深度」常态 —— 预算截断 _truncate_lane→_settle_lane(:1682-1691, 有页即 LANE_OK+full_depth=False)、停翻3(:820-824 full=False)、翻页上限(:854)三条路都在位。③测试面无钉死 —— test_hr_service 的 cutoff_done 用例均非零或 full_depth=True(:2423/:2425/:2589/:4216; :4314 cutoff_done=0.0 但 full_depth=True), 「cutoff==0 ∧ 非全深度」组合零覆盖, 修复时无守阵冲突。<b>结论: 可达性成立, 维持 P1 不降级</b> —— 触发链是「站点改版 + 预算截断」两个常态条件的组合, 后果为放行记录永续有效、种子退出 HR 管束、用户据此删种真吃 H&amp;R; 不判 P0 因程序自身不破坏数据(放行是「停止管束」的非对称失误, 可经重新对账恢复)。当轮入池(bug, 建议优先级高)。</p>
+<h4>批A 6×P2 三锚复核(当前 HEAD 3d957597)</h4>
+<p>逐条 grep/sed 定位实测: A-01(:233/:279 setLocation 下发行/:406/:852/:826 dry_run 判点/:186)、A-02(:795 pause 行/:271-319/:874 cancel_failed/:482/:500/:879 resume 行)、A-03(:441-453 建链失败分支/:597-608 ACT_REBUILD; relocate_units :870 def reconcile/:904 ACT_REBUILD 行)、A-04(:825 _persist→:833 setLocation/:196-204; relocate_units :842 def recover_exec_phase)、A-05(:643 def _finalize_members; record.py :287 def files)、A-06(taskqueue :224-234 defer 占预算循环体/:241; qbmanager :781) —— <b>全部与登记锚一致, 行号仍准</b>(评审期间 develop 无外部合入, 与 D6 预期相符)。</p>
+<h4>其余各条(P2×1 + P3×19)维持理由</h4>
+<p class="cm">结论: <b>26 条全部维持原级, 无升降</b>。逐条一句:</p>
+<ul>
+  <li>A-02/A-03/A-04: 失败与恢复路径缺口的四要素(位置/症状/可达性/后果)在 HEAD 复核无变化, 且可达性均为常规运维场景(qB 拒绝 setLocation、权限不足、崩溃窗口), P2 健壮性档恰当 —— 维持。</li>
+  <li>A-05: 标准收尾路径可达、大库下分钟级停摆、无数据破坏, P2 perf 恰当 —— 维持。</li>
+  <li>A-06: own_write TTL 10s 窗口内饥饿、语义失真可自愈, P2 恰当 —— 维持。</li>
+  <li>A-07: 静态即证但现生产调用方传真 bool 无行为差, 契约形状漂移 —— P3 维持。</li>
+  <li>A-08/B-02/F2-01/F2-02/T-05/GH-02: 死码/死导入/死分支, 行为零差异 —— P3 维持。</li>
+  <li>C-01: 需定向坏值才可达但违反「坏文件降级」R11 口径本体, 按健壮性不按 bug —— P3 维持。</li>
+  <li>C-02: 注解债(池 26-09-21-1408 同判) —— P3 维持。</li>
+  <li>D-01: 可达性窄(缩进错位手误)但同包 :820 web.token 先例证明属校验层职责, fail-fast 覆盖面不均 —— P3 维持。</li>
+  <li>E-01: 直调 API 可达但无状态污染, 伤害限错误口径失真 —— P3 维持。</li>
+  <li>F1-01: 「读失败 + 用户在错误提示在场时仍提交」双条件且可手动改回, 非数据破坏 —— P3 维持(不升 P2)。</li>
+  <li>F1-02: 纯注释漂移 —— P3 维持。</li>
+  <li>F2-03: 时序窗(合并开启 + 飞行窗内 resize/开关合并)无数据破坏、用户操作可恢复 —— P3 维持。</li>
+  <li>GH-01: 触发窗毫秒级、数据权威在 state.json 无危害, 后果限进程泄漏与对账失真 —— P3 维持。</li>
+  <li>T-01: 单用户本地控制面、交叠窗毫秒级、丢的是可重做的配置写 —— P3 维持。</li>
+  <li>T-02: 配置者即本机用户, 按契约漂移记健壮性不记安全洞 —— P3 维持。</li>
+  <li>T-03: 挂钟跨日界回跳罕见且方向「宁可少报」无虚增 —— P3 维持。</li>
+  <li>T-04: 纯文档漂移 —— P3 维持。</li>
+</ul>
+
+<h3>8.4 无 ID 断号核对</h3>
+<p>脚本核对(<code>grep -o '&lt;td&gt;…&lt;/td&gt;'</code> 提取 + 逐批连续性检查): 各批发现表 ID <b>连续无断号、无重号</b> —— A-01..A-08、B-01..B-02、C-01..C-02、D-01、E-01、F1-01..F1-02、F2-01..F2-03、GH-01..GH-02、T-01..T-05, 合计 <b>26</b>。全文共提取 41 处 ID 字样, 其中 15 处系各批勾选表「结论」列与 §08 交叉引用的复现(同 ID 重复出现, 不占新 ID); 剔除后唯一 ID 恰 26 个, 与 8.1 终表逐条对上。批号前缀十批(F3 零登记无 ID)与计划批次映射一致。</p>
+
+<h3>8.5 回归哨兵记录</h3>
+<p>汇总时点 test.full 已由主会话在当前 HEAD <code>3d957597</code> 实测: <b>4075 passed + 2 skipped / 覆盖率 99% / 全量 122.70s, 0 失败</b>。与起点引用基线(4073+2, 切片 26-10-30-0139)的差额 <b>+2 passed 已查明</b>: <code>9887b649</code> 净增 2 条 traffic_store 守阵(基线切片 26-10-30-0209), 起点 bfd19fda 本身系纯 tests 重构(不改测试数量) —— 基线不变式成立, 无未解释的测试数漂移。各批开工记录的 skip 数差异(1-2 条)属环境条件(平台/沙箱相关用例), 非回归。十批评审全程零源码改动, 本报告草稿为唯一产出, 哨兵结论: <b>评审期间代码面零回归</b>。</p>
+
+<h3>8.6 处置分流(入池清单定稿; 入池动作归 S7)</h3>
+<p class="cm">D5 拍板口径: P0/P1 当轮入池并标建议优先级; P2/P3 由用户决定。本清单为 S7 的执行输入。</p>
+<h4>必须入池(1 条)</h4>
+<ul>
+  <li><b>B-01</b> —— 入池 bug, <b>建议优先级: 高</b>。三处判据补「非全深度 ∧ cutoff_done&lt;=0 ⇒ 位置不可证」(或 _update_cutoff 用哨兵区分「无位置概念」与 epoch 0), 评估 done 列纳入 REQUIRED_KEYS; 补「cutoff==0 ∧ 非全深度」守阵钉死。</li>
+</ul>
+<h4>建议入池(6 条 P2, 逐条)</h4>
+<ul>
+  <li><b>A-01</b> 入池 bug: 相位机入口(on_task_line/_advance/relocate_cancel)补 dry_run 短路, 与 ops_mod.on_micro_line 同款。</li>
+  <li><b>A-02</b> 入池 bug: 失败路径(含 cancel_failed)消费 resume_hashes + 日志点名「已恢复运行态」。</li>
+  <li><b>A-03</b> 入池 bug: REBUILD/RESPAWN 加退避与 attempts 上限(转 FAILED 留现场), 复用 job.attempts 字段。</li>
+  <li><b>A-04</b> 入池 bug: _load_jobs 对 phase=moving 恢复 rt["issue"]=True(重发 setLocation 幂等), 或接线 recover_exec_phase(与 GH-01 修复同批做)。</li>
+  <li><b>A-05</b> 入池 perf: _finalize_members 先按 save_path==src 过滤再取文件表; job.hashes 成员免文件表。</li>
+  <li><b>A-06</b> 入池 bug: defer 命中任务不计入 due 预算(_pop_due 后先过闸再计数, 或 defer 名额单列); 随修复补坑档 concurrency 的 D-1 条预算面。</li>
+</ul>
+<h4>P3×19 合并方案(收敛为 11 个池位)</h4>
+<ul>
+  <li><b>合并条 1「死码/死导入/死分支批量清理」(chore, light)</b>: A-08(ops_mod ×2) + B-02(discovery ×2) + F2-01(drawer_store seen) + F2-02(rerender ×2 + chips) + T-05(gtm ×3) + GH-02(poll-now 分支), 共 6 条登记; 顺手项一并: 批E runtime.py:44 F401 死导入、首评⑧ rules/base.py:8 F401、批E webui/module.py:117 注释笔误。各文件清单以各条三锚为准。</li>
+  <li><b>合并条 2「注解/注释/文档契约卫生」(chore, light)</b>: A-07(enabled 判据镜像对齐) + F1-02(app.js:206 指路修正) + T-04(gtm __init__ 进度注与 README 通知机制描述); C-02 不另立, <b>并入池 26-09-21-1408(类型注解)备注</b>(与批D 点名的 RUF013 债同池, 推荐口径)。</li>
+  <li><b>逐条保留(9 条)</b>: C-01 入池 refactor(轻)—— parse 侧 cov_s 下限与写侧契约对齐 + 恢复隔离口径与 _agg_flush_all 对齐 + v4_merge_agg 补守卫; D-01 入池 chore(轻)—— 三键 isinstance(str) 照 web.token 形态 + 顺带盘点同族 str 键; E-01 入池 bug(轻)—— 五处转换照 group_key_param 形态收口 400(或 _int_param helper); F1-01 入池 bug(轻)—— submitAltLimits 补非空闸或 altCurrent null 时禁用备用组控件(处置时与 E-02 修法同读); F2-03 入池 bug(轻)—— seq bump 移进「确有缺口要补」分支或 stale 丢弃时安排补发; GH-01 入池 bug(轻)—— 心跳写前判相位(仍 armed 才写) + relocate_journal 头注改与实现一致 + 评估 max_wait 非零缺省(与 A-04 修复同批); T-01 入池 bug(轻)—— config 写路径加锁或 /autostart 改最小改写; T-02 入池 bug(轻)—— http_host 加回环约束或两处 docstring 改口径, 声明与实现取齐一头; T-03 入池 bug(轻)—— day_rolled 加方向检查与 restore 的未来日期降级对齐。</li>
+</ul>
+<p class="cm">池位合计: 必须 1 + 建议 6 + 合并条 2 + 逐条 9 = <b>18 个新池位</b>(C-02 走并入池备注)。原 21 池位口径按 19 条 P3 修正后如上。</p>
+<h4>不登记观察 11 条(逐条建议)</h4>
+<ul>
+  <li>F3-①(startPoll 回调抛出则该轮询静默停摆): <b>入池备忘</b> —— 挂池 26-10-20-2231(轮询族)备注, 系骨架对调用方的隐式契约, 树内两消费方现状全捕。</li>
+  <li>F3-②(startEvents 首次 onerror 也发「推送断开」toast): <b>仅记录</b> —— _esDisconnectEdge 注释明示沿此设计, 设计取舍非缺陷。</li>
+  <li>GH-①(alias_fs _win_create_junction except 清理可能误删被占目录): <b>仅记录</b> —— 唯一生产调用方已前置防御, 防御边界备忘; 未来新增调用方须复看。</li>
+  <li>GH-②(store_recovery move_failed 未区分「挪不动」与「本不存在」): <b>仅记录</b> —— 两调用方现状不可达。</li>
+  <li>GH-③(takeAllowance storage 读改写无锁可丢计数): <b>仅记录</b> —— 第二道闸「≥ 后端 × 1.5」保守兜底吸收, MV3 单轮串行。</li>
+  <li>GH-④(finalize_watch 稳定窗用墙钟): <b>仅记录</b> —— 删除动作由进程/端口双证据独立门控, 无「仅凭时钟就删」路径。</li>
+  <li>T-①(installer unregister is_registered 与 os.remove 之间 FileNotFoundError 逃逸): <b>仅记录</b> —— 单用户工具内并发卸载不可达。</li>
+  <li>T-②(TokenManager 对空串 token 文件静默重生成, 已订阅方 401): <b>仅记录</b> —— 盘上文件由本函数原子写, 树内无空文件路径, 仅外部编辑可达。</li>
+  <li>T-③(config 时间字段只验 &gt;0 无下界, sample_interval 可配 0.001S 自伤): <b>并入池 #16(26-10-20-2345)备注</b> —— 同源成本议题, 是否加下限属产品口径, 不另立条。</li>
+  <li>T-④(claim_primary 撤占位 remove 再抛会掩盖原异常): <b>仅记录</b> —— 刚 O_EXCL 建的文件被锁概率趋零。</li>
+  <li>T-⑤(ensure_data_ownership/fill_primary 排在单实例锁之前, 并发首启 tool-id 双写): <b>仅记录</b> —— 输家随即被锁挡下、赢家血统防线兜底, 现状自洽; 未来把锁提前须重排这段顺序。</li>
+</ul>
+
 </div>
 </body>
 </html>
