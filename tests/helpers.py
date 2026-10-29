@@ -1379,3 +1379,18 @@ def pin_atomic_write_crash(monkeypatch) -> None:
         return real_atomic_write(path, _half, **kw)
 
     monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
+
+
+def wait_until(pred, *, timeout=3.0, poll=0.02) -> bool:
+    """轮询等待条件成立(线程用例): 命中即返回 True
+
+    超时分支再判一次 pred()(monitor_client 版语义): 只为减少线程用例的 flake ——
+    最后一个 poll 窗口内条件刚好翻转时多判一次, 方向只会更宽松, 不放宽任何断言语义
+    (现有断言没有一处依赖「必须更严」)。
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if pred():
+            return True
+        time.sleep(poll)
+    return pred()

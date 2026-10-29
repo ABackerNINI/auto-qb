@@ -84,7 +84,7 @@ from auto_qb.hr import events
 from auto_qb.hr.fetcher import HrFetchError, NullFetcher
 from auto_qb.hr.worker import HrViewPublisher, HrWorker, pacing_class, stable_key, view_signature
 from auto_qb.infra.logging import DOMAIN_ATTR
-from helpers import capture_logs
+from helpers import capture_logs, wait_until
 from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, myhr_page, row, site_conf, \
     torrent_blob
 
@@ -116,15 +116,6 @@ def _service(tmp_path, fetcher, *, global_overrides=None, persist=True, allow_fe
 
 def _view(revision=1, channel_state=CHANNEL_OK) -> HrSiteView:
     return HrSiteView(site="pt.example.com", listing="list", revision=revision, channel_state=channel_state)
-
-
-def _wait_until(pred, timeout: float = 3.0) -> bool:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if pred():
-            return True
-        time.sleep(0.02)
-    return False
 
 
 # ---------- 发布器 ----------
@@ -527,9 +518,9 @@ def test_start_wake_and_stop(tmp_path):
     worker.start()
     try:
         assert worker.started
-        assert _wait_until(lambda: worker.rounds >= 1), "启动后应立刻检查一轮(不等 poll_interval)"
+        assert wait_until(lambda: worker.rounds >= 1), "启动后应立刻检查一轮(不等 poll_interval)"
         worker.wake()
-        assert _wait_until(lambda: worker.rounds >= 2), "wake() 要能打断等待立刻干活"
+        assert wait_until(lambda: worker.rounds >= 2), "wake() 要能打断等待立刻干活"
     finally:
         assert worker.stop(timeout=5.0)
     assert not worker.started
@@ -573,7 +564,7 @@ def test_loop_survives_round_exception(tmp_path, caplog, monkeypatch):
     with caplog.at_level(logging.ERROR, logger="auto_qb.hr.worker"):
         worker.start()
         try:
-            assert _wait_until(lambda: calls["n"] >= 2), "单轮异常后线程要继续跑下一轮"
+            assert wait_until(lambda: calls["n"] >= 2), "单轮异常后线程要继续跑下一轮"
         finally:
             worker.stop(timeout=5.0)
     assert any("单轮异常" in r.getMessage() for r in caplog.records)
@@ -1201,7 +1192,7 @@ def test_loop_waits_for_poll_interval(tmp_path):
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
     worker.start()
     try:
-        assert _wait_until(lambda: worker.rounds >= 1, timeout=10.0)
+        assert wait_until(lambda: worker.rounds >= 1, timeout=10.0)
         time.sleep(0.4)
         assert worker.rounds == 1, "poll_interval=60s, 0.4s 内不该再跑"
     finally:
