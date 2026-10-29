@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-29-1320">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="dup-code-audit-b-recheck">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-29-1809-search-row-view-converge.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="webui 搜索结果行自建一份行构造（seeding_time 未量化 + 明细字段缺失）">
 <meta name="issue-summary" content="search_torrents 的 _view 与 _member_view 各建一份行(覆盖 R16-B01/R19-B01): seeding_time 未走 view_field_value, 且缺 eta/num_*/downloaded 等字段, 搜索虚拟行展开明细列空白">
 <title>webui 搜索结果行自建一份行构造（seeding_time 未量化 + 明细字段缺失） · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修并验证）· bug</div>
     <h1>webui 搜索结果行自建一份行构造（seeding_time 未量化 + 明细字段缺失）</h1>
     <p class="lede">search_torrents 的 _view 与 _member_view 各建一份行(覆盖 R16-B01/R19-B01): seeding_time 未走 view_field_value, 且缺 eta/num_*/downloaded 等字段, 搜索虚拟行展开明细列空白</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-29-1320-bug-b-r16b01-search-row-view-converge</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -230,11 +230,35 @@ ratio/save_path/tags/category/by, 供前端完整展示命中种子信息</code>
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-29 13:20 — 入池，状态 <strong>Open</strong>（未认领；计划外问题，等用户指派）</li>
+      <li>2026-10-29 17:57 — 用户指派认领，状态 <strong>In Progress</strong>（本 clone auto-qb-clone5 修复）</li>
+      <li>2026-10-29 18:10 — 修完并验证，状态 <strong>Done</strong>（实测修法/验证方式/测试数字见下方「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">待认领后重跑锚点并补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-29 17:57 仍复现 —— 锚点逐项重跑命中：<code>views.py:1104</code> 的 <code>def _view(rec, by)</code>
+    仍自建行字典、<code>seeding_time</code> 仍是原始秒（未走 <code>view_field_value</code>），
+    <code>def _member_view</code>（:506）/ <code>def _seed_view</code>（:699）与 §02 取证一致；仓库已快进至 <code>c1507039</code>，
+    锚点行号未漂移。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与 §06 建议一致，未改道）: <code>views.py</code> 的内嵌 <code>_view</code>
+    收敛为 <code>return {**self._member_view(rec), "by": by}</code> —— 与 <code>_seed_view</code>
+    同范式；原自建字典（含重复的 <code>_site_alert</code> 调用）整段删除；
+    <code>search_torrents</code> docstring 的手抄字段清单改为指向 <code>_member_view</code>。</p>
+    <p><strong>验证方式</strong>:</p>
+    <ul>
+      <li>新守阵 <code>tests/test_web_hr.py::test_search_row_view_converged_on_member_view</code>:
+      ast 静态（<code>_view</code> 返回字典只有 <code>**</code> 展开 + 显式键 <code>by</code> —— 注意 dict
+      字面量的 <code>**</code> 展开在 AST 里是 key=None 不是 Starred）+ 动态（键集 = 成员行键集 + {by}，
+      同名字段值等值，<code>seeding_time</code> 走分钟量化，eta/num_seeds/downloaded/availability 有值）。</li>
+      <li>红验: 临时在 <code>_view</code> 重列 <code>"hash"</code> 键 → 守阵判红；还原后绿。</li>
+      <li>既有搜索语义用例全绿: <code>test.one -k "search or restatement or view_fields"</code> →
+      21 passed。</li>
+      <li>全量: <code>commands run test.full</code> → <strong>4036 passed + 2 skipped，覆盖率 99.27%</strong>
+      （门槛 99）—— 数字单点在基线切片
+      <code>memory-bank/testing/baselines/26-10-29-1809-search-row-view-converge.md</code>。
+      首轮全量曾红在 <code>test_gen_all_check_is_green</code>（issues 索引未重建，收尾步骤未做而非代码缺陷），
+      <code>kb.index</code> 后复跑转绿。</li>
+      <li>e2e 冒烟未跑（§06 标注可选；虚拟行明细列数据源已由动态守阵直接断言）。</li>
+    </ul>
   </section>
 
   <footer>

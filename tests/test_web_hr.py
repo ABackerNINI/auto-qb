@@ -31,6 +31,9 @@
 - test_build_search_index_budget_resumes: 限流分批构建, 未拉完保持脏, 续建至完成
 - test_build_search_index_aborts_when_disconnected: qB 断连时中止构建且不写空索引
 - test_search_torrents_name_match: 种子名匹配(即时/大小写不敏感)
+- test_search_row_view_converged_on_member_view: 守阵(issue b-r16b01-search-row-view-converge) search_torrents._view 不自建行构造 ——
+  ast 静态: 返回字典只有 {**_member_view} 展开 + by; 动态: 搜索行键集 = 成员行键集 + {by}, 同名字段值等值,
+  seeding_time 走分钟量化, 明细列(eta/num_seeds/downloaded/availability)不再空白
 - test_search_torrents_separator_normalized: 分隔符归一匹配 —— 空格查询词命中点/下划线/连字符分隔的名与文件(回归 "cat and" 搜不到 The.Cat.and… 名)
 - test_parse_query_tokens: 查询解析词法 —— 正/负词/短语 + 宽容边界(孤立-/未闭合引号/纯标点/--dv/web-dl)
 - test_search_torrents_cross_row_and: 正词逐词跨行 AND(拍板 26-09-27 二次定案, 推翻 26-09-26 文件行隔离)—— 每个正词命中任一候选行(全称行/文件行)即可: 「minions mteam」名字×标签、「delta 03」名字×集文件跨行命中; 负词种子级不变
@@ -877,6 +880,65 @@ def test_search_torrents_name_match():
         names = [x["hash"] for x in r["results"]]
         assert names == ["HA"], f"名称命中(小写): {r}"
         assert all(x["by"] == "name" for x in r["results"])
+
+
+def test_search_row_view_converged_on_member_view():
+    """守阵: search_torrents._view 不自建行构造(issue b-r16b01-search-row-view-converge)
+
+    静态(ast): `_view`(search_torrents 内嵌函数)的返回字典字面量只有 `**_member_view` 展开
+    + 显式键 "by" —— 行构造单点收敛在 _member_view(与 _seed_view 同范式)。此前这里自建一份
+    字段子集: seeding_time 原始秒未走 view_field_value(与重建量化契约脱钩), 且缺
+    eta/num_*/downloaded 等 19 键 —— 未归组命中种子的搜索虚拟行(searchUncovered)展开明细的
+    默认列全空白。红验: 在 _view 里重列任一 _member_view 键即判红。
+    动态: 搜索结果行键集 = _member_view 键集 + {"by"}; 同一条记录两侧同名字段值等值;
+    seeding_time 走分钟量化(与 _member_view 同口径); 明细列有值。
+    """
+    import ast
+
+    from auto_qb.torrents.view import view_field_value
+
+    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "views.py"
+    tree = ast.parse(src.read_text(encoding="utf-8"))
+    view_fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_view")
+    ret = next(n for n in ast.walk(view_fn) if isinstance(n, ast.Return))
+    spread = [k for k in ret.value.keys if k is None]  # dict 字面量的 ** 展开在 AST 里是 key=None, 不是 Starred
+    declared = {k.value for k in ret.value.keys if isinstance(k, ast.Constant)}
+    assert len(spread) == 1, "_view 返回字典必须以 {**_member_view(...)} 起手"
+    assert declared == {"by"}, f"_view 只允许显式声明 by(重列 _member_view 键即重述): {sorted(declared)}"
+
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        tor = FakeTorrent(
+            hash="H1",
+            name="SearchRowTest",
+            state="stalledUP",
+            seeding_time=3630,
+            eta=8640030,
+            time_active=3641,
+            num_seeds=5,
+            num_leechs=2,
+            availability=1.25,
+            dl_limit=1024,
+            up_limit=2048,
+        )
+        seed_store(mgr, [tor])
+        rec = mgr.store.get("H1")
+        member = mgr._member_view(rec)
+        r = mgr.search_torrents("searchrow")
+    assert len(r["results"]) == 1, f"应恰好命中一颗种子: {r}"
+    row = r["results"][0]
+    assert row["by"] == "name"
+    assert set(member) <= set(row), f"搜索行缺成员视图字段: {sorted(set(member) - set(row))}"
+    assert set(row) - set(member) == {"by"}, f"搜索行只允许多 by: {sorted(set(row) - set(member))}"
+    diff = {k: (member[k], row[k]) for k in member if member[k] != row[k]}
+    assert not diff, f"同名字段值不等(口径漂移): {diff}"
+    assert row["seeding_time"] == view_field_value("seeding_time", rec.seeding_time) == 3600, "seeding_time 必须走分钟量化"
+    # 明细列不再空白(issue 的用户可见面): 虚拟行展开的默认可见列有值
+    assert row["eta"] == 8640000 and row["num_seeds"] == 5 and row["num_leechs"] == 2
+    assert row["downloaded"] == tor.downloaded and row["availability"] == 1.25
 
 
 def test_search_torrents_separator_normalized():

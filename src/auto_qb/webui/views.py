@@ -1096,37 +1096,21 @@ class WebviewMixin:
         看似命中的种子可能因文件行负词在就位后被剔除), 已投递构建命令, 前端应稍后重查以获取完整
         匹配结果; negative_only 为 True
         表示查询只含排除词(无正判据, 「只说不要什么」无从起搜, 与 Google 一致返回空, 前端据此前端
-        提示)。结果项含完整明细字段(与分组成员视图对齐):
-        hash/name/site/kind/error_reason/dlspeed/upspeed/uploaded/size/progress/seeding_time/
-        ratio/save_path/tags/category/by, 供前端完整展示命中种子信息(by = 首个含正词的全称行类别,
-        文件行兜底命中时为 file; 供测试定位, 前端不消费)。
+        提示)。结果项 = 分组成员视图(_member_view)全字段 + by —— 行构造不另建字段子集(与
+        _seed_view 同范式收敛, issue b-r16b01-search-row-view-converge: 自建子集曾缺
+        eta/num_*/downloaded 等 19 键, 未归组命中种子的虚拟行展开明细默认列全空白;
+        seeding_time 也未走 view_field_value 分钟量化, 与重建脏判定契约脱钩), 供前端完整展示
+        命中种子信息(by = 首个含正词的全称行类别, 文件行兜底命中时为 file; 供测试定位,
+        前端不消费)。
         """
         def _view(rec, by):
-            site_alert, site_alert_msg = self._site_alert(rec)
-            return {
-                "hash": rec.hash,
-                "name": rec.name,
-                "site": rec.tracker_name,
-                "kind": self.state_kind(rec),
-                "error_reason": self._error_reason(rec),
-                # 与 _member_view 同口径(判定单点在 _site_alert): 搜索结果行同样带站点健康图标
-                "site_alert": site_alert,
-                "site_alert_msg": site_alert_msg,
-                "dlspeed": rec.dlspeed,
-                "upspeed": rec.upspeed,
-                "uploaded": rec.uploaded,
-                "size": rec.size,
-                "save_path": rec.save_path,
-                "tags": sorted(rec.tags_set),
-                "category": rec.category,
-                "progress": round(rec.progress, 4),
-                "seeding_time": rec.seeding_time,
-                "ratio": round(rec.ratio, 3),
-                "added_on": rec.added_on,
-                # 未归组命中种子以单种子虚拟行展示, 同样需要 HR 列所需字段
-                **self.hr_view_fields(rec),
-                "by": by,
-            }
+            # 行构造单点在 _member_view(issue b-r16b01-search-row-view-converge): 此前这里
+            # 自建一份字段子集 —— seeding_time 原始秒未走 view_field_value(与 torrents.view
+            # 的重建量化契约脱钩, hr.js 60s 边界本地比色翻色), 且缺 eta/num_*/downloaded 等
+            # 19 键(搜索虚拟行 searchUncovered 展开明细的默认列全空白)。与 _seed_view 同范式:
+            # 同名字段一律以 _member_view 为准, 这里只叠加搜索语义键 by(守阵
+            # test_search_row_view_converged_on_member_view 钉两边同名字段等值 + 键集关系)。
+            return {**self._member_view(rec), "by": by}
 
         pos, neg = _parse_query(q or "")
         if not pos:
