@@ -295,6 +295,376 @@
   <tr><td>R11</td><td>跨进程/跨侧契约(本轮新增)</td><td>gtm 与主程序的 dat 文件契约(双写者禁令/版本兼容/缺坏文件降级); 扩展 MV3 与后端通道(权限丢失自愈); 前端轮询与后端路由的字段契约两侧同步</td></tr>
 </table>
 
+
+<h2><span class="no">§07</span>批次矩阵(S1 重盘实测)</h2>
+<p><b>实测口径</b>: S1 实测 HEAD <code>18ab9128</code>(即 S0 报告提交本身, 较起点 <code>bfd19fda</code> 前进 1 笔, 源码面与起点一致); diff 基线 = 首次评审基线 <code>a4d14a8d</code>。变更态定义: <span class="good">新增</span> = a4d14a8d 树中不存在该路径; <span class="wr">变更</span> = 两树均有该路径且出现在 <code>git diff --name-only a4d14a8d..HEAD</code>; 未变 = 两树均有且不在 diff(重命名不做 rename 检测, 按路径存在性判)。行数 = 工作树 <code>wc -l</code> 实测(工作树净, 与 HEAD 一致)。源码全集 = src/ 全部 .py + src/auto_qb/webui/static/ 全部 .js/.css/.html + tools/global-traffic-monitor/ 全部源码面 + extensions/ 全部 .js + scripts/ 全部 .py; 排除 tests/(主仓)、auto-qb-data/、config.yml、memory-bank/、.commands/、.agents/、文档与生成物。</p>
+<p><b>核对结果(脚本断言)</b>: 源码全集 <b>299</b> 件 / <b>108,082</b> 行(新增 86 · 变更 165 · 未变 48); 十批文件并集 == 源码全集, <b>0 漏 0 重, 断言通过</b>; 每文件变更态与 <code>git ls-tree</code> + <code>git diff</code> 逐件复核, <b>断言通过</b>(脚本核对, 独立于本表生成)。</p>
+<aside><p><b>F1 成员确定化口径</b>: 计划 §03 F1 为「app/main·dt_table·drawer_templates·config_editor·dialogs·commands 等」—— 「等」确定为抽屉宿主 <code>drawer.js</code> 与配置中枢 <code>config_hub.js</code> 两主干; 其余 shared js 全部落 F3。批 B/GH 的重点维度为计划 B1+B2、G+H 维度的并集。</p></aside>
+<h3>批次地图回填(实测 vs 计划 §03 估值)</h3>
+<table>
+<tr><th>批</th><th>实测件数</th><th>实测行数</th><th>新增</th><th>变更</th><th>未变</th><th>计划估值</th><th>差异一句话</th></tr>
+<tr><td><b>A</b></td><td>25</td><td>9,689</td><td>6</td><td>18</td><td>1</td><td>计划 A: 31 件 ≈14.5k(含流量域)</td><td>A+C 合并对账 = 31 件 14,530 行, 与计划 core 底数(31 件 14,525)吻合。</td></tr>
+<tr><td><b>B</b></td><td>26</td><td>8,971</td><td>3</td><td>18</td><td>5</td><td>计划 B1≈3.2k + B2≈5.8k</td><td>实测 8,971 行, 与计划合计 ≈9k 吻合; B1/B2 边界本批按文件级未拆, 评审轮可按 service/model/status vs 其余二分。</td></tr>
+<tr><td><b>C</b></td><td>6</td><td>4,841</td><td>2</td><td>4</td><td>0</td><td>计划 C: ≈5.5k</td><td>实测 4,841 行, 较计划 ≈5.5k 低约 12%; 六件构成与计划口径一致。</td></tr>
+<tr><td><b>D</b></td><td>19</td><td>5,832</td><td>0</td><td>14</td><td>5</td><td>计划 D: 19 件 ≈5.8k</td><td>实测 19 件 5,832 行, 与计划逐字吻合。</td></tr>
+<tr><td><b>E</b></td><td>27</td><td>8,306</td><td>2</td><td>20</td><td>5</td><td>计划 E: 27 件 ≈8.3k</td><td>实测 27 件 8,306 行, 与计划逐字吻合。</td></tr>
+<tr><td><b>F1</b></td><td>8</td><td>8,482</td><td>2</td><td>6</td><td>0</td><td>计划 F1: ≈9k</td><td>实测 8,482 行, 与计划 ≈9k 基本吻合; 成员在计划点名六件外补入 drawer.js/config_hub.js 两主干(计划「等」的确定化)。</td></tr>
+<tr><td><b>F2</b></td><td>15</td><td>5,756</td><td>15</td><td>0</td><td>0</td><td>计划 F2: ≈9k(按 drawer_tpl 14 件估)</td><td>实测 drawer_tpl 实为 13 件(计划写 14 件), 族合计 5,756 行, 计划 ≈9k 系高估(约 1.6 倍); 只记录, 不改计划。</td></tr>
+<tr><td><b>F3</b></td><td>81</td><td>25,115</td><td>20</td><td>56</td><td>5</td><td>计划 F3: js ≈8.6k + css 8.2k + html 4.5k</td><td>实测 js 12,369 + css/html 12,746 = 25,115 行; 高于计划 js 估值的差额即 F2 高估部分与 vendor/tpl html 的归置, 总量对账一致(全 static js 26,607 ≈ 计划 26,607)。</td></tr>
+<tr><td><b>GH</b></td><td>65</td><td>20,520</td><td>9</td><td>29</td><td>27</td><td>计划 G≈4.2k + H≈7k</td><td>实测 20,520 行, 远超计划 G+H ≈11.2k; 差异主因计划 §02 把 extensions+scripts 记为 ≈1.6k, 实测 scripts 16 件 8,564 行 + extensions 5 件 2,772 行。</td></tr>
+<tr><td><b>T</b></td><td>27</td><td>10,570</td><td>27</td><td>0</td><td>0</td><td>计划 T: 22 件 ≈10.4k</td><td>实测 .py 22 件恰 10,443 行 = 计划底数; 本矩阵另收 pyproject + 4 启动器(127 行)成 27 件 10,570, 口径为「全部源码面」。</td></tr>
+</table>
+<p class="cm">全仓对账: 后端 Python(src/ 全部 .py) 46,823 行 ≈ 计划 46.3k; 全 static js 26,607 行 = 计划 26,607 逐字吻合; css 8,202 行(计划 8,202)/ html 4,544 行(计划 4,544); gtm .py 10,443 行与计划逐字吻合。偏差集中在 scripts+extensions(计划 §02 记 ≈1.6k, 实测 11,336 行)与 F2 高估, 已在上表逐批记录; 计划正文不改。</p>
+<h3>十批文件矩阵</h3>
+<h4>批A · core/ 内核(qbmanager·taskqueue·state·module·qbapi) + modules/ 全部(流量域六件划出归批C)</h4>
+<p class="cm">25 件 / 9,689 行 · 新增 6 · 变更 18 · 未变 1 · 重点维度: R1 R2 R3 R6 R9 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/core/__init__.py</code></td><td>23</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/episodes.py</code></td><td>135</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/exporter.py</code></td><td>150</td><td>未变</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/module.py</code></td><td>439</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/__init__.py</code></td><td>36</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/grouping_mod.py</code></td><td>770</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/logging_mod.py</code></td><td>45</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/maintenance_mod.py</code></td><td>371</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/notify_mod.py</code></td><td>79</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/ops_mod.py</code></td><td>1266</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/relocate_mod.py</code></td><td>1388</td><td class="good">新增</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/relocate_units.py</code></td><td>905</td><td class="good">新增</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/rules_mod.py</code></td><td>478</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/speed_curve_mod.py</code></td><td>324</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/tracker_mod.py</code></td><td>122</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/qbapi.py</code></td><td>410</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/qbclient.py</code></td><td>68</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/qbmanager.py</code></td><td>967</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/state.py</code></td><td>294</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/taskqueue.py</code></td><td>265</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_source/__init__.py</code></td><td>7</td><td class="good">新增</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_source/agent.py</code></td><td>475</td><td class="good">新增</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_source/paths.py</code></td><td>115</td><td class="good">新增</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_source/reader.py</code></td><td>50</td><td class="good">新增</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/core/tvshows.py</code></td><td>507</td><td class="wr">变更</td><td>R1 R2 R3 R6 R9 R11</td></tr>
+</table>
+<h4>批B · hr/ 全域(service·model·status + channel·worker·parse·resolve·discovery·threadlifecycle·server·adapters 等; = 计划 B1+B2)</h4>
+<p class="cm">26 件 / 8,971 行 · 新增 3 · 变更 18 · 未变 5 · 重点维度: R1 R3 R5 R6 R7 R8 R9 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/hr/__init__.py</code></td><td>226</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/adapters/__init__.py</code></td><td>79</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/adapters/base.py</code></td><td>83</td><td>未变</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/adapters/btschool.py</code></td><td>36</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/adapters/carpt.py</code></td><td>72</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/adapters/nexusphp.py</code></td><td>222</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/bencode.py</code></td><td>161</td><td>未变</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/channel.py</code></td><td>442</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/discovery.py</code></td><td>558</td><td class="good">新增</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/events.py</code></td><td>228</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/fetcher.py</code></td><td>266</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/log.py</code></td><td>33</td><td class="good">新增</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/model.py</code></td><td>664</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/module.py</code></td><td>41</td><td>未变</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/parse.py</code></td><td>340</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/queue.py</code></td><td>182</td><td>未变</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/ratelimit.py</code></td><td>127</td><td>未变</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/report.py</code></td><td>384</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/resolve.py</code></td><td>462</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/runtime.py</code></td><td>545</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/server.py</code></td><td>538</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/service.py</code></td><td>1807</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/status.py</code></td><td>672</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/store.py</code></td><td>311</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/threadlifecycle.py</code></td><td>65</td><td class="good">新增</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/hr/worker.py</code></td><td>427</td><td class="wr">变更</td><td>R1 R3 R5 R6 R7 R8 R9 R11</td></tr>
+</table>
+<h4>批C · 流量域六件(traffic_store·traffic_grid·traffic_limits·curves·traffic_sample_mod·traffic_snapshot_mod; 在 core/ 下也归此批)</h4>
+<p class="cm">6 件 / 4,841 行 · 新增 2 · 变更 4 · 未变 0 · 重点维度: R3 R5 R7 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/core/curves.py</code></td><td>142</td><td class="wr">变更</td><td>R3 R5 R7 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/traffic_sample_mod.py</code></td><td>1622</td><td class="wr">变更</td><td>R3 R5 R7 R11</td></tr>
+<tr><td><code>src/auto_qb/core/modules/traffic_snapshot_mod.py</code></td><td>365</td><td class="good">新增</td><td>R3 R5 R7 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_grid.py</code></td><td>791</td><td class="wr">变更</td><td>R3 R5 R7 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_limits.py</code></td><td>317</td><td class="good">新增</td><td>R3 R5 R7 R11</td></tr>
+<tr><td><code>src/auto_qb/core/traffic_store.py</code></td><td>1604</td><td class="wr">变更</td><td>R3 R5 R7 R11</td></tr>
+</table>
+<h4>批D · config/ 全部</h4>
+<p class="cm">19 件 / 5,832 行 · 新增 0 · 变更 14 · 未变 5 · 重点维度: R2 R4</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/config/__init__.py</code></td><td>85</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/errors.py</code></td><td>11</td><td>未变</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/impact.py</code></td><td>69</td><td>未变</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/loaders.py</code></td><td>665</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/migrations.py</code></td><td>314</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/models.py</code></td><td>528</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/schema/__init__.py</code></td><td>192</td><td>未变</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/schema/fields.py</code></td><td>204</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/schema/groups.py</code></td><td>695</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/schema/hr.py</code></td><td>209</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/schema/rules.py</code></td><td>309</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/schema/trackers.py</code></td><td>177</td><td>未变</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/site_presets.py</code></td><td>111</td><td>未变</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/validation/__init__.py</code></td><td>85</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/validation/core.py</code></td><td>361</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/validation/curves.py</code></td><td>99</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/validation/rules.py</code></td><td>337</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/validation/sections.py</code></td><td>917</td><td class="wr">变更</td><td>R2 R4</td></tr>
+<tr><td><code>src/auto_qb/config/writer.py</code></td><td>464</td><td class="wr">变更</td><td>R2 R4</td></tr>
+</table>
+<h4>批E · webui/ py(server·routes·commands·runtime·views·tool_client 等)</h4>
+<p class="cm">27 件 / 8,306 行 · 新增 2 · 变更 20 · 未变 5 · 重点维度: R2 R8 R9 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/webui/__init__.py</code></td><td>41</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/commands.py</code></td><td>1439</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/module.py</code></td><td>148</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/runtime.py</code></td><td>1677</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/__init__.py</code></td><td>38</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/auth.py</code></td><td>187</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/common.py</code></td><td>110</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/context.py</code></td><td>77</td><td>未变</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/factory.py</code></td><td>33</td><td>未变</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/lifecycle.py</code></td><td>222</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/__init__.py</code></td><td>21</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/config.py</code></td><td>181</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/events.py</code></td><td>81</td><td>未变</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/fs.py</code></td><td>312</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/groups.py</code></td><td>59</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/hr.py</code></td><td>245</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/keys.py</code></td><td>123</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/sites.py</code></td><td>59</td><td>未变</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/state.py</code></td><td>153</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/system.py</code></td><td>66</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/torrent_cmds.py</code></td><td>377</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/torrent_detail.py</code></td><td>233</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/routes/traffic_monitor.py</code></td><td>396</td><td class="good">新增</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/static_ui.py</code></td><td>59</td><td>未变</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/server/traffic_qb.py</code></td><td>369</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/tool_client.py</code></td><td>437</td><td class="good">新增</td><td>R2 R8 R9 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/views.py</code></td><td>1163</td><td class="wr">变更</td><td>R2 R8 R9 R11</td></tr>
+</table>
+<h4>批F1 · static 主干大件(计划点名六件 app·dt_table·drawer_templates·config_editor·dialogs·commands + 抽屉宿主 drawer.js 与配置中枢 config_hub.js; 成员确定化口径见注记)</h4>
+<p class="cm">8 件 / 8,482 行 · 新增 2 · 变更 6 · 未变 0 · 重点维度: R8 R9 R10</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/app.js</code></td><td>985</td><td class="wr">变更</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/commands.js</code></td><td>995</td><td class="wr">变更</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/config_editor.js</code></td><td>1463</td><td class="wr">变更</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/config_hub.js</code></td><td>1471</td><td class="wr">变更</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/dialogs.js</code></td><td>962</td><td class="wr">变更</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer.js</code></td><td>1519</td><td class="wr">变更</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_templates.js</code></td><td>959</td><td class="good">新增</td><td>R8 R9 R10</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/dt_table.js</code></td><td>128</td><td class="good">新增</td><td>R8 R9 R10</td></tr>
+</table>
+<h4>批F2 · static 抽屉族: drawer_tpl/ 13 件 + drawer_head.js + drawer_store.js</h4>
+<p class="cm">15 件 / 5,756 行 · 新增 15 · 变更 0 · 未变 0 · 重点维度: R8 R9</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_head.js</code></td><td>35</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_store.js</code></td><td>451</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/01-general-hero-tall.js</code></td><td>362</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/02-general-cards-low.js</code></td><td>362</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js</code></td><td>425</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/04-trackers-status-cards-tall.js</code></td><td>387</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/05-trackers-health-groups-low.js</code></td><td>476</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/06-trackers-table-collapsed.js</code></td><td>364</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/07-peers-dashboard-tall.js</code></td><td>468</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/08-peers-groups-low.js</code></td><td>428</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/09-peers-density-collapsed.js</code></td><td>284</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js</code></td><td>549</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js</code></td><td>577</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/12-content-space-treemap-collapsed.js</code></td><td>534</td><td class="good">新增</td><td>R8 R9</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/drawer_tpl/90-peers-stub-bridge.js</code></td><td>54</td><td class="good">新增</td><td>R8 R9</td></tr>
+</table>
+<h4>批F3 · static 其余 js(34 件) + 全部 CSS(20 件) + 全部 HTML(27 件, 含 tpl/ 24 件; vendor 2 件为第三方压缩件)</h4>
+<p class="cm">81 件 / 25,115 行 · 新增 20 · 变更 56 · 未变 5 · 重点维度: R8 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>src/auto_qb/webui/static/atlas/css/components.css</code></td><td>700</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/atlas/css/dialogs.css</code></td><td>636</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/atlas/css/views.css</code></td><td>621</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/atlas/index.html</code></td><td>208</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/atlas/style.css</code></td><td>218</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/console/css/components.css</code></td><td>671</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/console/css/dialogs.css</code></td><td>562</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/console/css/views.css</code></td><td>452</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/console/index.html</code></td><td>212</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/console/style.css</code></td><td>195</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/base.css</code></td><td>79</td><td>未变</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/components.css</code></td><td>381</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/dialogs.css</code></td><td>636</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/themes/frost.css</code></td><td>101</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/themes/galaxy.css</code></td><td>95</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/themes/golden.css</code></td><td>103</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/themes/ocean.css</code></td><td>104</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/themes/orbit.css</code></td><td>98</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/tokens.css</code></td><td>42</td><td>未变</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/css/views.css</code></td><td>818</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/index.html</code></td><td>214</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/prism/js/theme.js</code></td><td>109</td><td>未变</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/add_torrent.js</code></td><td>839</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/auth.js</code></td><td>201</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/boot.js</code></td><td>133</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/columns.js</code></td><td>890</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/config_rules.js</code></td><td>308</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/console_hub.css</code></td><td>1528</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/ctl_bits.js</code></td><td>89</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/ctx_menu.js</code></td><td>344</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/ctx_menu_custom.js</code></td><td>329</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/decorate.js</code></td><td>358</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/delete_flow.js</code></td><td>355</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/dt_table.css</code></td><td>162</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/fetch_low.js</code></td><td>53</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/filters.js</code></td><td>300</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/format.js</code></td><td>185</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/hr.js</code></td><td>371</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/hr_status.js</code></td><td>680</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/lifecycle.js</code></td><td>404</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/menu.js</code></td><td>383</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/overlay_fit.js</code></td><td>73</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/polling.js</code></td><td>414</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js</code></td><td>1077</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/scope_audit.js</code></td><td>58</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/selection.js</code></td><td>584</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/shortcuts.js</code></td><td>1442</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/shows.js</code></td><td>187</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/sort.js</code></td><td>172</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/state.js</code></td><td>617</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/table.js</code></td><td>329</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/combo-input.html</code></td><td>107</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/ctl-bits.html</code></td><td>69</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/ctx-menus.html</code></td><td>147</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/dialog-shell.html</code></td><td>39</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/dialogs-mgr.html</code></td><td>179</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/dialogs.html</code></td><td>121</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/dock.html</code></td><td>10</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/drawer-head.html</code></td><td>60</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/drawer.html</code></td><td>223</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/groups.html</code></td><td>59</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/list-shell.html</code></td><td>48</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/move-dialog.html</code></td><td>51</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/overlays.html</code></td><td>49</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/popovers.html</code></td><td>314</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/settings-detail.html</code></td><td>518</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/settings.html</code></td><td>306</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/shows.html</code></td><td>84</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/statusbar.html</code></td><td>81</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/topbar.html</code></td><td>237</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/torrents.html</code></td><td>28</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/traffic-card.html</code></td><td>295</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/xtpl-cells-dt.html</code></td><td>192</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/xtpl-cells.html</code></td><td>317</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/tpl/xtpl.html</code></td><td>376</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/traffic_card.js</code></td><td>20</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/triggers.js</code></td><td>317</td><td class="good">新增</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/ui_feedback.js</code></td><td>578</td><td class="wr">变更</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/vendor/uPlot.iife.min.js</code></td><td>2</td><td>未变</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/vendor/vue.global.prod.js</code></td><td>9</td><td>未变</td><td>R8 R11</td></tr>
+<tr><td><code>src/auto_qb/webui/static/shared/view.js</code></td><td>159</td><td class="wr">变更</td><td>R8 R11</td></tr>
+</table>
+<h4>批GH · rules/ + torrents/ + infra/ + tray/ + 入口(auto-qb.py·__main__.py·cli.py·__init__.py) + auto_qb/tools/ + scripts/(16 件 py) + extensions/(5 件 js)</h4>
+<p class="cm">65 件 / 20,520 行 · 新增 9 · 变更 29 · 未变 27 · 重点维度: R1 R5 R6 R7 R8 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>extensions/hr-fetch-proxy/background.js</code></td><td>1434</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>extensions/hr-fetch-proxy/discovery.js</code></td><td>117</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>extensions/hr-fetch-proxy/normalize.js</code></td><td>113</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>extensions/hr-fetch-proxy/options.js</code></td><td>1085</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>extensions/hr-fetch-proxy/site-caps.js</code></td><td>23</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/bench_expr.py</code></td><td>258</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/check_command_drift.py</code></td><td>164</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/check_context_caps.py</code></td><td>262</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/dev_webui.py</code></td><td>198</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/gen_ext_icons.py</code></td><td>107</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/hr_ext_stub.py</code></td><td>248</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/hr_fetch_experiment.py</code></td><td>863</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/port_kill.py</code></td><td>44</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/qb_capture.py</code></td><td>1559</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/sim_autoqb.py</code></td><td>56</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/sim_baseline.py</code></td><td>326</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/sim_fsmock.py</code></td><td>230</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/sim_qb.py</code></td><td>2079</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/sim_run.py</code></td><td>950</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/sync_agent_skills.py</code></td><td>185</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/ui_harness.py</code></td><td>979</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>scripts/update_config_key_surface.py</code></td><td>56</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto-qb.py</code></td><td>10</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/__init__.py</code></td><td>28</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/__main__.py</code></td><td>7</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/cli.py</code></td><td>211</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/__init__.py</code></td><td>15</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/alias_fs.py</code></td><td>885</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/autostart.py</code></td><td>98</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/errors.py</code></td><td>22</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/file_access.py</code></td><td>394</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/locking.py</code></td><td>140</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/logging.py</code></td><td>151</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/notify.py</code></td><td>310</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/relocate_journal.py</code></td><td>144</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/store_recovery.py</code></td><td>85</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/utils.py</code></td><td>1435</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/infra/versioning.py</code></td><td>186</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/__init__.py</code></td><td>8</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/actions/__init__.py</code></td><td>43</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/actions/basic.py</code></td><td>183</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/actions/checking.py</code></td><td>207</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/actions/full_checking.py</code></td><td>153</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/actions/skip_checking.py</code></td><td>33</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/actions/transfer.py</code></td><td>113</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/base.py</code></td><td>314</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/checking_meta.py</code></td><td>120</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/conditions.py</code></td><td>259</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/__init__.py</code></td><td>46</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/env.py</code></td><td>477</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/errors.py</code></td><td>22</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/eval.py</code></td><td>203</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/lexer.py</code></td><td>170</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/parser.py</code></td><td>252</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/expr/types.py</code></td><td>107</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/rules/registry.py</code></td><td>30</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/tools/__init__.py</code></td><td>6</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/tools/finalize_watch.py</code></td><td>272</td><td class="good">新增</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/torrents/__init__.py</code></td><td>51</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/torrents/compat.py</code></td><td>132</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/torrents/record.py</code></td><td>481</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/torrents/store.py</code></td><td>761</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/torrents/view.py</code></td><td>64</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/tray/__init__.py</code></td><td>27</td><td>未变</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+<tr><td><code>src/auto_qb/tray/app.py</code></td><td>529</td><td class="wr">变更</td><td>R1 R5 R6 R7 R8 R11</td></tr>
+</table>
+<h4>批T · tools/global-traffic-monitor/ 全部: src/gtm 10 件 + tests 12 件 + pyproject + 4 启动器(claim/launch); README 与 uv.lock 属文档/生成物不入集</h4>
+<p class="cm">27 件 / 10,570 行 · 新增 27 · 变更 0 · 未变 0 · 重点维度: R1 R3 R5 R7 R11</p>
+<table>
+<tr><th>文件</th><th>行数</th><th>变更态</th><th>重点维度</th></tr>
+<tr><td><code>tools/global-traffic-monitor/claim.cmd</code></td><td>18</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/claim.sh</code></td><td>14</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/launch.cmd</code></td><td>18</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/launch.sh</code></td><td>14</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/pyproject.toml</code></td><td>63</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/__init__.py</code></td><td>13</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/__main__.py</code></td><td>507</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/config.py</code></td><td>332</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/identity.py</code></td><td>450</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/installer.py</code></td><td>578</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/notifier.py</code></td><td>237</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/sampler.py</code></td><td>380</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/server.py</code></td><td>519</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/storage.py</code></td><td>685</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/src/gtm/units.py</code></td><td>138</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/conftest.py</code></td><td>59</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/manual_e2e_relay.py</code></td><td>230</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_config.py</code></td><td>377</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_identity.py</code></td><td>686</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_installer.py</code></td><td>815</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_main_run.py</code></td><td>812</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_notifier.py</code></td><td>734</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_sampler.py</code></td><td>540</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_server.py</code></td><td>1128</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_smoke.py</code></td><td>47</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_storage.py</code></td><td>1034</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+<tr><td><code>tools/global-traffic-monitor/tests/test_units.py</code></td><td>142</td><td class="good">新增</td><td>R1 R3 R5 R7 R11</td></tr>
+</table>
 </div>
 </body>
 </html>
