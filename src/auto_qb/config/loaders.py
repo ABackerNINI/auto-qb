@@ -248,7 +248,7 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
     2. 默认映射: tracker 为空 -> match_trackers 用档案已知 announce 域在同命名空间查表,
        恰好 1 个命中即自动绑定(用户零配置);
     解析结果派生填充 TrackerConfig.hr_check(adapter/URL/路径/参数/listing 来自档案,
-    required_seeding_time 来自绑定站点的 hr 规则(required + extra, 超额线 3× 判据),
+    required_seeding_time 来自绑定站点的 hr 规则基准 required_total_seeding_time(req+extra, 超额线 3× 判据),
     refresh_interval/idle_refresh_interval 来自配置, URL = https://{档案 web_domain}{page_path}, 与用户 domains
     写法无关); 派生视图的 tracker 字段回填解析出的条目名。未启用不绑定; 绑不上/绑多个/
     显式键不存在/唯一性/缺 hr 段由 validate_config 独立完成, 这里假定配置已合法。
@@ -283,9 +283,7 @@ def _resolve_hr_site_bindings(hr_check: HrCheckConfig, trackers: Dict[str, Track
             download_path=preset.download_path,
             page_param=preset.page_param,
             listing=preset.listing,
-            required_seeding_time=(
-                float(hr_rule.required_seeding_time + hr_rule.extra_seeding_time) if hr_rule is not None else 0.0
-            ),
+            required_seeding_time=(float(hr_rule.required_total_seeding_time) if hr_rule is not None else 0.0),
         )
 
 

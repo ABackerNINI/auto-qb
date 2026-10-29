@@ -398,7 +398,7 @@ class WebviewMixin:
           与来源标记同批非文字化; 不得在 JS 里重算匹配, 只消费本布尔)
         - hr_excluded_by: 排除命中来源 token("tag" / "category" / "tag+category", 未命中 = ""),
           供弹窗依据行说明「按什么排除」—— 匹配单点在 record.hr_excluded_by, 前端只映射文字
-        - hr_req_time: 要求做种时长(秒) = required_seeding_time + extra_seeding_time
+        - hr_req_time: 要求做种时长(秒) = required_total_seeding_time(req + extra)
         - hr_req_ratio: 要求分享率(0 = 不要求)
         - hr_state / hr_state_text / hr_reason: 站点侧判定(hr / verified_non_hr / unknown /
           exempt=超龄豁免) + 中文说法 + 依据; 接入站点才非空(未接入 = "", 前端据此不显示三态行)
@@ -470,7 +470,7 @@ class WebviewMixin:
             "hr_excluded_by":
                 excluded_by,
             "hr_req_time":
-                hr.required_seeding_time + hr.extra_seeding_time,
+                hr.required_total_seeding_time,
             "hr_req_ratio":
                 hr.required_share_ratio,
             "hr_state":

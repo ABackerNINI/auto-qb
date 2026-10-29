@@ -18,7 +18,8 @@
 - test_set_category_same: 目标分类相同 -> 无操作
 - test_set_category_dry_run: dry-run 只返回不调用
 - test_add_hr_tag_or_category_transferred_unsatisfied: 转移种/纯辅种(downloaded=0)未做种满 -> 打 HR 标签(全量纳入, 计划 26-09-30-0559)
-- test_add_hr_tag_or_category_seed_exempt: 超额老种跳过不打标(未接入站用 hr 基准 / 已接入站用 hr_check 基准 / 基准 0 不跳过)
+- test_add_hr_tag_or_category_seed_exempt: 超额老种跳过不打标(未接入站回落 req+extra 基准, 做种落在豁免线内打达标标签 / 已接入站用 hr_check 基准 / 基准 0 不跳过)
+- test_seed_exempt_baseline_fallback_includes_extra: _seed_exempt_baseline 回落基准 = req+extra(未接入站与达标判据同基准, issue 26-10-29-1310)
 - test_add_hr_tag_or_category_excess_but_scope_still_tags: 超额老种被动命中考察中仍打 HR 标签(站点权威)
 - test_add_hr_tag_or_category_released_no_tag: 放行记录(未列出/终态/免罪)不打标
 - test_add_hr_tag_or_category_not_satisfied: 触发但未达标 -> 加普通标签
@@ -245,10 +246,11 @@ def test_add_hr_tag_or_category_transferred_unsatisfied():
 
 
 def test_add_hr_tag_or_category_seed_exempt():
-    """_add_hr_tag_or_category: 超额老种(做种 >= 3x 基准)跳过不打标, 基准同源三段(计划 26-09-30-0559 §4)
+    """_add_hr_tag_or_category: 超额老种(做种 >= 3x 基准)跳过不打标, 基准三段(计划 26-09-30-0559 §4)
 
-    已接入站用 hr_check.required_seeding_time(与取数侧对象集排除线同源), 未接入站回落
-    hr.required_seeding_time; 基准 0 时跳过线不生效(与取数侧 > 0 前提一致)。
+    已接入站用 hr_check.required_seeding_time(loader 按 req+extra 派生), 未接入站回落
+    hr.required_total_seeding_time(req+extra, issue 26-10-29-1310 拍板 —— 旧口径只按 req
+    已废: 豁免线与达标判据对齐); 基准 0 时跳过线不生效(与取数侧 > 0 前提一致)。
     """
     from auto_qb.config.models import SiteHrCheckConfig
 
@@ -260,8 +262,15 @@ def test_add_hr_tag_or_category_seed_exempt():
         conf.hr = _hr_rule(add_tag="HR", add_category="", add_tag_for_satisfied="HRDONE", add_category_for_satisfied="")
         tor = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2, seeding_time=10 * 86400)
         tor.tracker_conf = conf
-        # (a) 未接入站: 基准 = hr.required_seeding_time(3D), 做种 10D >= 9D -> 跳过, 零调用
-        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is False
+        # (a) 未接入站: 基准 = hr.required_total_seeding_time(3D+12H=3.5D), 跳过线 3x3.5D=10.5D;
+        # 做种 10D < 10.5D 不跳过, 做种满 req+extra 打达标标签(旧口径 3x3D=9D 会跳过 —— 行为翻转点)
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
+        assert ("add_tags", ["HRDONE"]) in client.calls
+        # (a2) 同站做种 11D >= 10.5D: 超额跳过, 零调用
+        client.calls.clear()
+        tor2 = FakeTorrent(tags="", downloaded=0, total_size=100 * 1024**2, seeding_time=11 * 86400)
+        tor2.tracker_conf = conf
+        assert mgr.ctx.maintenance.add_hr_tag_or_category(tor2, dry_run=False) is False
         assert client.calls == []
         # (b) 已接入站: 基准 = hr_check.required_seeding_time(5D), 10D < 15D -> 不跳过, 做种满打达标标签
         conf.hr_check = SiteHrCheckConfig(
@@ -269,7 +278,7 @@ def test_add_hr_tag_or_category_seed_exempt():
         )
         assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HRDONE"]) in client.calls
-        # (c) 基准 0: 跳过线不生效, 正常分流
+        # (c) 基准 0: 跳过线不生效, 正常分流(req 与 extra 须同时置 0 —— 新口径基准 = req+extra)
         client.calls.clear()
         conf.hr_check = None
         conf.hr = _hr_rule(
@@ -279,9 +288,33 @@ def test_add_hr_tag_or_category_seed_exempt():
             add_category_for_satisfied="",
             required_seeding_time=0,
             required_seeding_time_raw="",
+            extra_seeding_time=0,
         )
         assert mgr.ctx.maintenance.add_hr_tag_or_category(tor, dry_run=False) is True
         assert ("add_tags", ["HRDONE"]) in client.calls
+
+
+def test_seed_exempt_baseline_fallback_includes_extra():
+    """_seed_exempt_baseline: 未接入站回落基准 = req+extra(与达标判据同基准, issue 26-10-29-1310)
+
+    旧实现回落只取 required(漏 extra): 夹具 3D+12H 下断言 3.5D 在旧口径红、收敛后绿。
+    """
+    from auto_qb.config.models import SiteHrCheckConfig
+    from auto_qb.core.modules.maintenance_mod import _seed_exempt_baseline
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = _mgr(os.path.join(td, "state.json"))
+        conf = mgr.config.trackers["HHan"]
+        conf.hr = _hr_rule()
+        tor = FakeTorrent()
+        tor.tracker_conf = conf
+        # 未接入站: 回落 = req + extra(3D + 12H = 3.5D)
+        assert _seed_exempt_baseline(tor) == 3 * 86400 + 12 * 3600
+        # 已接入站: 站点预设值直取(loader 已按 req+extra 派生)
+        conf.hr_check = SiteHrCheckConfig(
+            enabled=True, tracker="x", hr_page_url="https://x.com/myhr.php", required_seeding_time=5 * 86400.0
+        )
+        assert _seed_exempt_baseline(tor) == 5 * 86400.0
 
 
 def test_add_hr_tag_or_category_excess_but_scope_still_tags():

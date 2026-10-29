@@ -476,6 +476,6 @@ class TorrentRecord:
     def _local_satisfied(self) -> bool:
         """本地达标判据: 做种时长 >= 要求 + 额外, 或分享率达标(ratio 通道独立功能, 保留)"""
         hr = self.tracker_conf.hr
-        seeding_ok = self.seeding_time >= (hr.required_seeding_time + hr.extra_seeding_time)
+        seeding_ok = self.seeding_time >= hr.required_total_seeding_time
         ratio_ok = hr.required_share_ratio > 0 and self.ratio >= hr.required_share_ratio
         return seeding_ok or ratio_ok

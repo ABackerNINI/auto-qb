@@ -65,6 +65,17 @@ class HRRule:
     exclude_tags: List[str] = field(default_factory=list)
     exclude_categories: List[str] = field(default_factory=list)
 
+    @property
+    def required_total_seeding_time(self) -> int:
+        """站点要求做种基准(秒) = required + extra(单一表示, issue 26-10-29-1310)
+
+        「这颗种子要做多久才算完」的唯一算式: 本地达标判据(record._local_satisfied)、
+        取数侧超额线(loader 派生 SiteHrCheckConfig.required_seeding_time)、打标侧超额
+        豁免线回落(maintenance_mod._seed_exempt_baseline)、WEBUI 展示(views.hr_req_time)
+        全部读它, 不再各自手算 req+extra —— 加一个时间字段只改这里一处。
+        """
+        return self.required_seeding_time + self.extra_seeding_time
+
 
 @dataclass
 class HrChannelConfig:

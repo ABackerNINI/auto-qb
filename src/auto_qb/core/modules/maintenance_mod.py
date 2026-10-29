@@ -27,18 +27,19 @@ logger = logging.getLogger(__name__)
 
 
 def _seed_exempt_baseline(rec: TorrentRecord) -> float:
-    """超额跳过线的做种要求基准(秒)(计划 26-09-30-0559 §4)
+    """超额跳过线的做种要求基准(秒)(计划 26-09-30-0559 §4; 基准收敛 issue 26-10-29-1310)
 
-    已接入站点(hr_check 存在且启用)用站点档案预设 hr_check.required_seeding_time ——
-    与取数侧对象集排除线同源, 同一颗种子不出现「取数跳过但打标不跳」的劈叉;
-    未接入站点回落本地 hr.required_seeding_time。基准 <= 0 时调用方跳过线不生效
-    (与取数侧 required_seeding_time > 0 前提一致)。
+    已接入站点(hr_check 存在且启用)用站点档案预设 hr_check.required_seeding_time
+    (loader 派生自 HRRule.required_total_seeding_time, 即 req+extra), 未接入站点回落
+    本地 hr.required_total_seeding_time —— 两路同取 req+extra, 与取数侧对象集排除线
+    及本地达标判据同一基准, 同一颗种子不出现「取数跳过但打标不跳」的劈叉。
+    基准 <= 0 时调用方跳过线不生效(与取数侧 required_seeding_time > 0 前提一致)。
     """
     conf = rec.tracker_conf
     site_conf = conf.hr_check
     if site_conf is not None and site_conf.enabled:
         return site_conf.required_seeding_time
-    return float(conf.hr.required_seeding_time)
+    return float(conf.hr.required_total_seeding_time)
 
 
 class MaintenanceModule(BaseModule):
