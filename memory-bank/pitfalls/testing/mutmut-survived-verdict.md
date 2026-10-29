@@ -24,7 +24,7 @@
 - **守阵**: 无自动机检(这条是**流程口径**, 靠执行时守); 旁证可查 —— 三分类的「假存活」数与实测翻案数**必须逐位吻合**(rules 首轮 404 = 404, 两条独立路径互证)。若两者对不上, 说明有一侧判错了, 停手复核。
 - **复发**: 0
 
-### 同族坑(别混)
+## 同族坑(别混)
 
 - [mutation-pool-artifact](mutation-pool-artifact.md) —— 存活数是**池**的函数(池太窄 ⇒ 假存活), 与本条(池够宽但**工具**判错)互补: 那条靠加宽池解, 这条加宽池**无效**。
 - [mutation-revert-git-checkout](mutation-revert-git-checkout.md) —— 还原用 `git checkout` 会冲掉未提交守阵。
