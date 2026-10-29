@@ -49,19 +49,23 @@ def test_register_condition_decorator():
     assert "size" in CONDITIONS
     n = len(CONDITIONS)
 
-    @register_condition
-    class AlwaysTrue:
-        name = "always_true"
+    try:
 
-        def __init__(self, spec):
-            self.spec = spec
+        @register_condition
+        class AlwaysTrue:
+            name = "always_true"
 
-        def match(self, ctx):
-            return True
+            def __init__(self, spec):
+                self.spec = spec
 
-    assert "always_true" in CONDITIONS
-    assert len(CONDITIONS) == n + 1
-    assert create_condition({"always_true": None}).match(None)
+            def match(self, ctx):
+                return True
+
+        assert "always_true" in CONDITIONS
+        assert len(CONDITIONS) == n + 1
+        assert create_condition({"always_true": None}).match(None)
+    finally:
+        CONDITIONS.pop("always_true", None)
 
 
 def test_register_action_decorator():
@@ -69,17 +73,21 @@ def test_register_action_decorator():
     assert "start" in ACTIONS
     n = len(ACTIONS)
 
-    @register_action
-    class Noop:
-        name = "noop"
+    try:
 
-        def __init__(self, spec, ignore_error=False):
-            pass
+        @register_action
+        class Noop:
+            name = "noop"
 
-        def execute(self, ctx):
-            from auto_qb.rules.base import ActionResult
-            return ActionResult.ok("noop")
+            def __init__(self, spec, ignore_error=False):
+                pass
 
-    assert "noop" in ACTIONS
-    assert len(ACTIONS) == n + 1
-    assert create_action("noop", None, ignore_error=False).execute(None).is_ok
+            def execute(self, ctx):
+                from auto_qb.rules.base import ActionResult
+                return ActionResult.ok("noop")
+
+        assert "noop" in ACTIONS
+        assert len(ACTIONS) == n + 1
+        assert create_action("noop", None, ignore_error=False).execute(None).is_ok
+    finally:
+        ACTIONS.pop("noop", None)
