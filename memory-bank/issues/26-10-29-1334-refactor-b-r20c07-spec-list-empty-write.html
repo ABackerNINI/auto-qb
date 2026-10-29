@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r20c07-spec-list-empty-write">
+<meta name="issue-stamp" content="26-10-29-1334">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="config_rules.js spec 编辑八助手已无调用者，其中 ListItemRemove 空态写 [] 与全项目删键口径相反">
+<meta name="issue-summary" content="spec 列表增删删键口径的正确实现已由 hub-field→cfgItemRemove 接管，残留的 cfgSpecListItemRemove 等 8 个死人方法里空态仍写 []，是抄错边的入口">
+<title>config_rules.js spec 编辑八助手已无调用者，其中 ListItemRemove 空态写 [] 与全项目删键口径相反 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>config_rules.js spec 编辑八助手已无调用者，其中 ListItemRemove 空态写 [] 与全项目删键口径相反</h1>
+    <p class="lede">spec 列表增删删键口径的正确实现已由 hub-field→cfgItemRemove 接管，残留的 cfgSpecListItemRemove 等 8 个死人方法里空态仍写 []，是抄错边的入口</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1334-refactor-b-r20c07-spec-list-empty-write</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:34</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>「列表删空」的空态处理在 <code>config_rules.js</code> 里仍留着与全项目相反的一份：
+    <code>cfgSpecListItemRemove</code> 删到空时写 <code>[]</code>，而活路径（spec 列表现在由
+    <code>hub-field</code> 走通用 <code>cfgItemRemove</code>）与 <code>toggleKey</code> 的口径都是删键。
+    所幸该分支当前<b>不可达</b>——整族 spec 编辑助手已无调用者（死代码），所以是「抄错边的入口」而非在跑的缺陷。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">取证 2026-10-29 13:34，同步 1b7dd104。行号漂移靠下面 grep 词重定位。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/config_rules.js:103-108</code> · <code>cfgSpecListItemRemove</code>
+        ——<code>if (list.length) this.cfgSpecSet(...); else this.cfgSpecSet(..., [])</code>（空态写空表）。</li>
+      <li>同文件 <code>:77-117</code> 的八个助手（<code>cfgSpecRaw / cfgSpecSet / cfgSpecList /
+        cfgSpecText / cfgSpecBool / cfgSpecListItemSet / cfgSpecListItemAdd / cfgSpecListItemRemove</code>）
+        ——<code>grep -rn "cfgSpec" src/auto_qb/webui/static</code> 只见 <code>cfgSpecItems</code> 有外部调用者
+        （<code>shared/tpl/settings.html:257/281</code> 的 <code>hub-field</code>），其余互相引用成闭环，整族无入口。</li>
+      <li>既定口径（活）：<code>shared/config_editor.js:435-440</code> <code>cfgItemRemove</code>（空则
+        <code>cfgDelPath</code>）· <code>shared/config_editor.js:1448-1461</code> <code>toggleKey</code>
+        （注释写明两条理由：脏标记是全树对比 + <code>notify.channels</code> 类键空表过不了后端校验）·
+        <code>shared/config_rules.js:53-59</code> <code>cfgPluginRemove</code> ·
+        <code>shared/config_editor.js:950-955</code> <code>cfgCurvePointRemove</code>。</li>
+      <li>活路径为何不再走它：<code>cfgSpecItems</code> 把 list 形态 spec 映射成一个
+        <code>kind: str_list / pattern_list</code> 的通用字段（<code>config_rules.js:118-146</code>），
+        增删由 <code>hub-field</code> → <code>cfgItemAdd / cfgItemRemove</code> 处理，落点是删键。</li>
+      <li>既有守阵（只针对活路径）：<code>tests/test_webui_static_dom_page.py::test_frontend_keyed_list_toggle_deletes_key_when_emptied</code>
+        （<code>grep -n "toggleKey" tests/test_webui_static_dom_page.py</code>）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><b>分歧 1（键集）</b>：删空后 <code>[]</code> vs 键消失。前者改变全树 JSON → 脏标记认改动，
+        且 <code>notify.channels</code> 类键空表过不了后端「必须是非空列表」。</li>
+      <li><b>分歧 2（可达性）</b>：写 <code>[]</code> 的那一支目前无入口（八助手无调用者），
+        与三处删键实现同时存在于同一 JS 目录，后来者抄错边后才发现「合了却没生效/脏标记消不掉」。</li>
+      <li><b>判定</b>：(b) 无判据漂移、且分歧侧已死。审计原记录认为「规则 conditions/actions 空表是合法形状」
+        （<code>cfgRuleAdd</code> 建 <code>{conditions:[],actions:[]}</code>）故需人裁定——复核结论是这条<b>与本项无关</b>：
+        那是规则集骨架的创建，不是 spec 值列表的删除；spec 列表删空按既定口径就该删键（后端走缺省）。</li>
+      <li><b>为何仍值得做</b>：8 个死方法约 40 行（含一条与全项目相反的空态写法 + 一条
+        <code>cfgSpecPath</code> 之外无人用的 <code>cfgSpecSet</code>），删除零行为影响，收益是消掉唯一的「写空表」模板。</li>
+    </ul>
+  </section>
+
+  <section id="s3b">
+    <h2><span class="no">04</span>建议与验证</h2>
+    <p><b>建议</b>：删除 <code>config_rules.js:77-117</code> 的八个无调用者助手（保留在用的
+    <code>cfgSpecPath</code>（<code>:72</code>）与 <code>cfgSpecItems</code>（<code>:119</code>），
+    <code>cfgSpecPath</code> 仍在 <code>cfgSpecItems</code> 内被调用）。若出于「spec 增删将来要回来」的理由保留，
+    则必须把 <code>:107</code> 改成与 <code>cfgItemRemove</code> 同口径的删键并加注释指向
+    <code>toggleKey</code> 的两条理由——两者选一，不要留着写空表的分支。</p>
+    <p><b>验证</b>：① 删前跑 <code>grep -rn "cfgSpec\(List\|Set\|Raw\|Text\|Bool\)" src/auto_qb/webui/static</code>
+    确认外部调用为零（本次已确认）；② 删后跑 <code>pytest tests/test_webui_static_dom_page.py tests/test_config_schema.py -q</code>
+    应全绿（后者钉 <code>notify.channels</code> 空表被拒 + hidden 口径）；③ 静态守阵可加一条 grep 断言：
+    <code>config_rules.js</code> 内不得再出现以 <code>[]</code> 收尾的 <code>cfgSpecSet</code> 调用。
+    ④ 手工面：设置页 → 规则集 → 任一 list 形态插件（pattern_list 类）增删项，确认删空后配置树里该键消失
+    （再点保存不应出现「必须是非空列表」）。</p>
+  </section>
+
+  <section id="s3c">
+    <h2><span class="no">05</span>来源</h2>
+    <p>重复代码审查报告 §26 <b>R20-C-07</b>（B 类复核 2026-10-29）· 台账
+    <code>memory-bank/tasks/26-10-20-frontend-dup-code-audit.md:360-368</code>。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1334-refactor-b-r20c07-spec-list-empty-write.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r08e02-episode-pattern-family">
+<meta name="issue-stamp" content="26-10-29-1328">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="集数正则族两份(episodes 4 项 vs tvshows 7 项): 双向非对称, 只补守阵不合并">
+<meta name="issue-summary" content="两族同源已演化且互有对方不认的形态; 合并任一侧都改行为, 缺守阵导致静默漂移无信号">
+<title>集数正则族两份(episodes 4 项 vs tvshows 7 项): 双向非对称, 只补守阵不合并 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>集数正则族两份(episodes 4 项 vs tvshows 7 项): 双向非对称, 只补守阵不合并</h1>
+    <p class="lede">两族同源已演化且互有对方不认的形态; 合并任一侧都改行为, 缺守阵导致静默漂移无信号</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1328-refactor-b-r08e02-episode-pattern-family</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:28</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>集数标记正则族仍是两套：<code>core/episodes.py::_EPISODE_PATTERNS</code>（4 项，文件列表路径）与 <code>core/tvshows.py::_EPISODE_PATTERNS</code>（7 项，种子标题路径）。原报告记为「tvshows 是超集」，本轮实测该判断不成立 —— <strong>两族互有对方不认的形态</strong>（episodes 认 <code>ShowE05</code> 粘连，tvshows 不认；tvshows 认 <code>1x05</code>/<code>第5话</code>/区间续接，episodes 不认）。无任何用例把这一双向差异钉住，任何「顺手合并」都能全绿通过并静默改行为。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:28，HEAD 1b7dd104）的快照；重定位用 grep 关键词。实测命令：<code>.venv/Scripts/python.exe -c "from auto_qb.core import episodes as e, tvshows as t; ..."</code>。</p>
+    <ul>
+      <li><code>src/auto_qb/core/episodes.py:17-30</code>（grep <code>_EPISODE_PATTERNS</code>）：<code>第(\d)+集</code> / <code>[Ss]\d+[Ee](\d)</code> / <code>[Ee][Pp](\d)</code> / <code>[Ee](\d)</code>；协议是 <code>(regex, extractor-&gt;List[int])</code>，无边界预查、无区间续接、无中文数字。14-16 行注释自称「tvshows 子集」。</li>
+      <li><code>src/auto_qb/core/tvshows.py:126-173</code>（grep <code>_EPISODE_PATTERNS</code>）：SxxExx（含 <code>x</code>、区间续接 <code>-06</code>/<code>E06</code>、内嵌季号）、<code>1x05</code>、<code>第N[集话話]</code>（数字或中文数字、区间 <code>-~至到</code>）、<code>EP/Episode</code>、<code>E</code>、<code>- 05</code>、<code>[05]</code>；协议是 <code>(regex, extractor-&gt;三元组, is_bare)</code>，全部带左右边界预查。123-125 行注释自称「episodes 的超集」。</li>
+      <li>两条注释互指同一个已 <strong>Done</strong> 的 issue （<code>26-10-11-0207-refactor-core-episode-marker-dup</code>），但那条只做了排除集单点（<code>episodes.RESOLUTION_EXCLUDE</code> ↔ <code>tvshows._BARE_EXCLUDE</code>，tvshows.py:189），正则族本身原样保留。</li>
+      <li>文件列表侧只有一套：<code>tvshows.parse_files</code> 在 <code>tvshows.py:445</code> 直接复用 <code>_episodes.extract_episodes_from_names</code>。所以真正的两套是「种子标题解析（tvshows）」对「文件列表解析（episodes）」，不是两个包各扫同一输入。</li>
+      <li>实测非对称（同一文件名，两侧结果）：
+        <ul>
+          <li><code>ShowE05.mkv</code> — 文件侧 <code>[5]</code>；标题侧 <code>unknown</code>（<code>E</code> 模式要左边界）。</li>
+          <li><code>Show.第5话.mkv</code> — 文件侧 <code>[]</code>；标题侧 <code>S1E5</code>（<code>話</code> 只在 tvshows 里）。</li>
+          <li><code>Show.1x05.mkv</code> — 文件侧 <code>[]</code>；标题侧 <code>S1E5</code>。</li>
+          <li><code>Show.S01E05-E06.mkv</code> — 文件侧 <code>[5]</code>（丢 E06）；标题侧 <code>ep 5-6</code>。</li>
+          <li>次要：文件侧对 <code>E05</code> 无左边界、标题侧有；文件侧不做 <code>1 &lt;= start &lt;= 9999</code> 之外的区间终点收敛。</li>
+        </ul>
+      </li>
+      <li>守阵缺口：<code>tests/test_episodes.py</code> 只正测 <code>第x集/EP/E/SxxExx</code> 与优先级（:25-67），<strong>无一条负测</strong>断言 episodes 不认 <code>1x05</code>/<code>第五集</code>/<code>第5话</code>/区间续接；<code>tests/test_tvshows.py:101-106</code> 只正测 tvshows 侧。合并任一侧，两边测试都不会红。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>输入域不同</strong>：tvshows 解析含噪音的种子标题（发布组、分辨率、语言标记），必须靠边界预查防 <code>webdl5</code> 类误判；episodes 解析已规范化的文件列表，容忍度更高（<code>ShowE05</code> 也算）。这是两种输入口径，不是同一事实的两种写法。</li>
+      <li><strong>协议不同</strong>：列表版 extractor 返回 <code>List[int]</code>（天然支持一文件多集）；标题版返回 <code>(start, end, 内嵌季)</code> 三元组 + bare 标志（要点位、要季号回填）。「共享一个 pattern 列表 + 各自取子集」在此不成立：共有 4 个形态的正则体与捕获组语义都不同，取子集只能取到名字，取不到可执行体。</li>
+      <li><strong>合并的代价</strong>：文件侧改读标题版 → <code>ShowE05</code> 退化为不识别、<code>1x05/第5话</code> 被新识别（改自动打标行为）；标题侧改读文件版 → 失去边界与区间续接、且要重写 <code>_find_episode</code> 的点位/季回填逻辑。两个方向都动生产行为，收益仅是「少一份正则」。</li>
+    </ul>
+    <p>判定：<strong>(a) 业务正解不该合</strong>，可做且值得做的只有<strong>补守阵钉差异</strong>（对应报告给的第二条出路）。理由：合并收益是伪的（两族覆盖的输入与返回协议都不同，不是同一事实的两表示），而现状风险是真的 —— 注释把关系写成「超集/子集」，direction 写反一半，且零负测，后来者按注释「对齐」就会静默改掉自动打标与视图归档。不归 (b) 的「该合」：没有可保持行为的合并路径；不归 (c)：实测差异只造成「少识别」（漏标签/进未识别桶），未见错值或错季。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <p>不做正则合并，做三件事：① 在 <code>tests/test_episodes.py</code> 加一组负测（参数化）：<code>extract_episodes_from_names(["Show.1x05.mkv"])==[]</code>、<code>["Show.第五集.mkv"]==[]</code>、<code>["Show.第5话.mkv"]==[]</code>、<code>["Show.S01E05-E06.mkv"]==[5]</code>（钉住「文件侧不做区间续接」这一现状）；② 在 <code>tests/test_tvshows.py</code> 加一条对照：<code>parse_release("ShowE05.mkv").kind == unknown</code>（钉住标题侧左边界）；③ 把两处注释（episodes.py:14-16、tvshows.py:123-125）的「子集/超集」改成可核对的表述（「覆盖域不同：文件列表 vs 种子标题，互有对方不认的形态，见 tests/... 的对照用例」），并把指向 Done issue 的句子改为指向本 issue。</p>
+    <p>验证手段：新增用例即验证手段本身 —— 先在现实现上跑绿（证明钉的是现状而非愿望）；未来谁要合并，这组用例必红，从而强迫其显式改期望并说明行为 delta。补充可选判据：<code>grep -c "re.compile" src/auto_qb/core/episodes.py</code> 与 tvshows 侧计数不作为收益指标（数量不是目标）。</p>
+    <p>收益：把「合并会改行为」从注释里的口头声明变成可执行断言，成本约一小时、零生产风险；风险：无（只加测试与改注释）。<strong>重开条件</strong>：若确认要统一两族，正确路径不是合并正则，而是让 episodes 复用 <code>tvshows._find_episode</code> 的点位解析后再展开区间，届时须先跑样例集对比（本 issue 的负测会被有意改写），并单独立 bug/feat 单评估自动打标的行为 delta。</p>
+    <p>来源：重复代码审查报告 §11 R08-E02（B 类复核 2026-10-29）。原判定「只登记，先钉差异点」；本轮已钉住差异并推翻「超集」表述，故从未入池改为入池（范围收窄为守阵 + 注释纠偏）。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:28 — 入池，状态 <strong>Open</strong>（B 类复核批次 E；未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1328-refactor-b-r08e02-episode-pattern-family.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

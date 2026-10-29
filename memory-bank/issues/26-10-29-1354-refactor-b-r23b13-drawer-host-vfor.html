@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r23b13-drawer-host-vfor">
+<meta name="issue-stamp" content="26-10-29-1354">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮)">
+<meta name="issue-summary" content="drawer.html 非合并态 4 个 dt-host div + 桥的页签名数组是 DT_TAB_LABELS 之外的第二份页签清单, 加页签要改两处">
+<title>抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮) · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮)</h1>
+    <p class="lede">drawer.html 非合并态 4 个 dt-host div + 桥的页签名数组是 DT_TAB_LABELS 之外的第二份页签清单, 加页签要改两处</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1354-refactor-b-r23b13-drawer-host-vfor</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:54</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>抽屉种子详情「四内容页签的正文宿主」在合并态已由 <code>dtPairCols</code> 数据驱动，但<strong>非合并态仍是 4 个硬编码 <code>&lt;div class="dt-host"&gt;</code> + 桥循环里一个页签名数组</strong>（<code>['general','trackers','peers','content']</code>）—— 页签清单在 <code>DT_TAB_LABELS</code> 之外又多存了两份。加第五个内容页签要同时改 <code>DT_TAB_LABELS</code>、4 个 div、1 个数组；漏改 div 的表现是「新页签钮在、正文宿主不存在」= 整幅空白且无报错。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:54，HEAD 1b7dd104）的快照；重定位用 grep 符号名。</p>
+    <ul>
+      <li><strong>非合并态（硬编码）</strong> <code>shared/tpl/drawer.html:210-213</code>（grep <code>data-dt-host="general"</code>）：四行逐字写死
+        <code>&lt;div class="dt-host" v-show="dtHostOn('general')" data-dt-host="general"&gt;&lt;/div&gt;</code>（trackers/peers/content 同形）；
+        紧随的桥循环 <code>216-218</code> 又写一遍页签名：<code>&lt;template v-for="t in ['general', 'trackers', 'peers', 'content']" :key="'dtb-' + t"&gt;</code>。</li>
+      <li><strong>合并态（数据驱动）</strong> <code>drawer.html:199-205</code>：<code>v-for="col in dtPairCols"</code> + <code>v-show="dtHostOn(col.tab)"</code> + <code>:data-dt-host="col.tab"</code>，桥同在一列内。</li>
+      <li><strong>页签清单已有的单点</strong> <code>shared/drawer.js:51</code> <code>DT_TAB_LABELS = { general: "常规", trackers: "Tracker", peers: "用户", content: "内容" }</code>；
+        <code>drawer.js:159-161</code> <code>dtTabItems()</code> 投影成 <code>[{v,label}]</code>；页签钮已消费它（<code>drawer.html:52</code> <code>&lt;aq-seg v-else :items="dtTabItems" ...&gt;</code>）。
+        也就是说「按钮」这一半的收敛已在 26-10-20-2231 完成，<strong>宿主这一半没跟上</strong>。</li>
+      <li><strong>同一次收敛的另一半（对照）</strong> <code>drawer.js:46-49</code> <code>MERGE_PAIRS</code> → <code>drawer.js:164-172</code> <code>dtPairCols()</code>；合并态的宿主/列头/桥全部由它派生，模板零字面量。</li>
+      <li><strong>现有守阵</strong> <code>tests/test_webui_static_dom_panel.py:1578-1580</code> 逐页签断言 <code>drawer_tpl.count(f'data-dt-host="{tab}"') == 1</code>（静态字面量恰一份）；<code>1551-1552</code> 断言四个 host 名都在。收敛时必须同步改这两处（改成钉 <code>:data-dt-host="t.v"</code> 单点 + <code>dtTabItems</code> 四键），否则守阵判红。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>宿主从哪来</strong>：合并态 <code>MERGE_PAIRS → dtPairCols</code>（有单点）↔ 非合并态模板字面量（无单点）。</li>
+      <li><strong>桥的页签清单</strong>：合并态 <code>col.tab</code> ↔ 非合并态内联数组字面量。</li>
+      <li>是否有意分叉：<strong>无判据</strong>。两侧注释都是同一句「每页签一个 data-dt-host 宿主」（<code>207-208</code>），没有一处说非合并态为何必须写字面量。<strong>归类 (b)：无判据漂移，该合</strong>；不判 (c)——当前四个宿主齐全，无现网错误。</li>
+    </ul>
+    <p>判定：<strong>值得做</strong>（refactor / light）。① 重复真实：页签清单在单点之外还有 4 个 div + 1 个数组两处字面量；② 行为可保持：改为 <code>v-for="t in dtTabItems"</code> 后 DOM 仍是「4 个同级 div（顺序 general/trackers/peers/content）+ 其后 4 个桥锚」，无新增 wrapper（宿主本身就是挂载目标，不是单元格，不触 grid <code>:nth-child</code> 边界）；③ 可验证：静态守阵改写（见上）+ 既有 e2e <code>e2e/drawer-merge.spec.mjs</code> / <code>e2e/dt-table-layout-parity.spec.mjs</code> / <code>e2e/drawer-tables.spec.mjs</code>（宿主挂载与表格面）可跑；④ 收益中（页签清单真正一处，加页签零漏改）＞ 风险低（纯模板结构，无数据面）。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <p>非合并态两段都改吃 <code>dtTabItems</code>（<strong>不要再新增单点</strong>，<code>DT_TAB_LABELS</code> 就是它）：</p>
+    <ul>
+      <li><code>&lt;div v-for="t in dtTabItems" :key="'dth-' + t.v" class="dt-host" v-show="dtHostOn(t.v)" :data-dt-host="t.v"&gt;&lt;/div&gt;</code></li>
+      <li><code>&lt;template v-for="t in dtTabItems" :key="'dtb-' + t.v"&gt;&lt;aq-dt-bridge v-if="dtBridgeOn(t.v)" :key="dtBridgeKey(t.v)" :tab="t.v"&gt;&lt;/aq-dt-bridge&gt;&lt;/template&gt;</code></li>
+    </ul>
+    <p><strong>不要</strong>把宿主与桥合成一个 <code>v-for</code>（两个根节点需要 <code>&lt;template v-for&gt;</code> 包裹，桥会插到每个宿主后面 —— 兄弟序从「4 宿主 + 4 桥」变成「宿主,桥,宿主,桥」，虽无 CSS 依赖但属无谓的 DOM 变更，等价性验证成本变高）。</p>
+    <p>验证：① 静态守阵改写 <code>test_webui_static_dom_panel.py</code>（同函数内）：删「逐页签 count == 1」，改断言 <code>drawer_tpl.count(':data-dt-host=') == 1</code> + <code>dtTabItems</code> 由 <code>DT_TAB_LABELS</code> 投影（四键）+ <code>drawer_tpl</code> 里再无 <code>['general', 'trackers'</code> 字面量；② <code>pytest tests/test_webui_static_dom_panel.py -k drawer_form_judge</code> 绿；③ e2e <code>drawer-merge.spec.mjs</code>（合并/非合并切换后宿主可挂）与 <code>dt-table-layout-parity.spec.mjs</code> 绿。</p>
+    <p>来源：重复代码审查报告 §29 R23-B-13（B 类复核 2026-10-29）。原判定「W4 只做了一半的直接证据，收敛值得但风险低-中」；本轮重估：按钮侧已在 26-10-20-2231 收敛，剩余面只有宿主与桥数组，改动比原估更小，判值得做。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:54 — 入池，状态 <strong>Open</strong>（计划外，未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1354-refactor-b-r23b13-drawer-host-vfor.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

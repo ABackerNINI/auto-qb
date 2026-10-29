@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r21b04-hr-strip-variants">
+<meta name="issue-stamp" content="26-10-29-1341">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="抽屉 03 版式 HR 行整段缺 hr_state：同一颗种子比 01/02 少一行「能否删」结论">
+<meta name="issue-summary" content="HR 摘要三份各自演化，03 的 hrLine 不读 hr_state/hr_safety_text，触发态只给徽章不给删除安全档位结论与依据">
+<title>抽屉 03 版式 HR 行整段缺 hr_state：同一颗种子比 01/02 少一行「能否删」结论 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>分歧点与判定</a>
+    <a href="#s4"><span class="no">04</span>影响面</a>
+    <a href="#s5"><span class="no">05</span>定位锚点</a>
+    <a href="#s6"><span class="no">06</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s8"><span class="no">08</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>抽屉 03 版式 HR 行整段缺 hr_state：同一颗种子比 01/02 少一行「能否删」结论</h1>
+    <p class="lede">HR 摘要三份各自演化，03 的 hrLine 不读 hr_state/hr_safety_text，触发态只给徽章不给删除安全档位结论与依据</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1341-bug-b-r21b04-hr-strip-variants</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:41</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>种子详情抽屉的常规页签有三个版式（01 hero / 02 cards / 03 dossier），HR 摘要各写一份。同一颗 <code>hr_triggered</code> 的种子：01、02 会显示一行「删除安全档位结论 · 依据」（<code>hr_safety_text</code> 例如「在线·考察中」「本地·未达标」+ <code>hr_reason</code>），<strong>03 完全不显示这一行</strong> —— 只给「HR 已触发 · 未达标」徽章 + 要求做种/要求分享率。<code>hr_reason</code> 在 03 里只挂在整行 <code>title</code> 上（悬浮才见），<code>hr_safety_text</code>/<code>hr_state_text</code> 一个字都不出。发现场景：B 类复核批次 G 按报告 §27 逐项对读三份 <code>hr*</code> 实现时撞见。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:41，HEAD 1b7dd104）的快照；重定位用 grep 符号名。</p>
+    <ul>
+      <li><strong>01（有）</strong> <code>drawer_tpl/01-general-hero-tall.js:154-182</code> <code>hrStrip</code>，165-168：
+        <code>if (d.hr_state) { const line = (d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : ""); if (line) bits.push(...); }</code></li>
+      <li><strong>02（有）</strong> <code>drawer_tpl/02-general-cards-low.js:184-209</code> <code>hrBody</code>，196：
+        <code>if (d.hr_state) req.push((d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : ""));</code>
+        随后 197 把 <code>req</code> 数组 <code>join(" · ")</code> 成一行。</li>
+      <li><strong>03（缺）</strong> <code>drawer_tpl/03-general-dossier-collapsed.js:209-231</code> <code>hrLine</code>：触发态只有 218 <code>hr_req_time</code>、219 <code>hr_req_ratio</code>、220-227 <code>hr_site_lane</code> 两行；<strong>全程无 <code>d.hr_state</code></strong>。229-230 收尾把 <code>d.hr_reason</code> 挂到容器 <code>title</code>。同文件全文 grep <code>hr_state</code> = 0 命中。</li>
+      <li><strong>后端字段是齐的</strong>：<code>src/auto_qb/webui/views.py:459-490</code> 详情载荷同时给 <code>hr_state</code>（第 476 行）、<code>hr_state_text</code>（478）、<code>hr_reason</code>（480）、<code>hr_safety_text</code>（484）。⇒ 不是「数据没到前端」。</li>
+      <li><strong>已有成文口径指向「详情抽屉要显示这行」</strong>：<code>shared/hr.js:325-329</code> <code>hrStateLine(m)</code>，注释「站点侧三态行(详情抽屉): 结论(含来源档位) + 依据原文 —— 全由后端算好, 前端只拼展示; 未接入 hr_check 的站点 hr_state 为空 ⇒ 返回空串(不显示这行)」。主面板详情走这个方法；抽屉三变体各自内联手抄，03 那份抄漏了。</li>
+      <li><strong>旁证：01 多出的两个 chip 是死码，不算缺口</strong>。<code>01:178-179</code> 消费 <code>hr_tag</code>/<code>hr_tag_done</code>，而 <code>views.py:460-463</code> 两个分支都把这两字段填 <code>""</code> ⇒ 02/03 没有 chip 不是能力缺失。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>①文案三套</strong>：01「H&amp;R 已达标 / H&amp;R 未达标」、02「已触发 · 已达标 / 已触发 · 未达标」、03「HR 已触发 · 已达标 / HR 已触发 · 未达标」。同一布尔三种人话 —— 属观感，<strong>不建议</strong>在本项里顺手动（用户可见改动）。</li>
+      <li><strong>②tone 三套</strong>：01 <code>is-info|is-done|is-pending</code>、02 <code>""|is-done|is-hr</code>、03 <code>is-info|is-done|""</code>。03 未定义 <code>.dt03-hrline.is-pending</code>，但基础样式 <code>03:65</code> 已把 <code>b</code> 着色 <code>--hr-pending</code> ⇒ 差异只影响底色，仍属观感。</li>
+      <li><strong>③能力分叉（本次的实质）</strong>：03 触发态<strong>整段缺 <code>hr_state</code></strong>，用户拿不到「能否删」的最终结论与依据。判为 <strong>(c) 已构成用户可见差异</strong> —— 不是「03 说错了」，是「03 该说的不说」，且该结论正是 HR 判定的落点（能不能删，见 <code>hr/resolve.py:364-395</code> <code>safety_display</code> 的档位语义）。</li>
+      <li><strong>判定</strong>：按 B 类守则的类型例外（分歧已构成用户可见缺失）取 <code>bug / standard</code>。重复本身（3 份业务分支树）成立，但文案/tone 的合并会改观感，<strong>本项只做 ③ 补齐 + 结构收敛留作后续</strong>，不把三套文案绑进来。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>详情抽屉模板选 03（dossier 折叠档）+ 该种子 <code>hr_triggered=true</code>；<code>hr_excluded</code> 分支不受影响（03 已显示 <code>hr_safety_text</code>）。</td></tr>
+      <tr><td>影响范围</td><td>常规页签 03 版式的 HR 行；01/02 与主面板详情（走 <code>hr.js::hrStateLine</code>）均正常。不涉及接口与数据。</td></tr>
+      <tr><td>严重度</td><td>中 —— 漏结论而非错结论（不会误导，但同一颗种子在三个版式下信息面不等，选 03 就看不到能不能删）。</td></tr>
+    </table>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/drawer_tpl/03-general-dossier-collapsed.js:209</code> <code>function hrLine(ctx, d)</code>（取证 2026-10-29 13:41）· grep <code>hrLine</code> / <code>d.hr_state</code>（本文件 0 命中即病灶）</li>
+      <li>参照实现：<code>01-general-hero-tall.js:165-168</code>（<code>hrStrip</code>）、<code>02-general-cards-low.js:196</code>（<code>hrBody</code>）</li>
+      <li>口径单点：<code>shared/hr.js:325</code> <code>hrStateLine</code>（Vue mixin 方法，抽屉 ctx 未暴露，只能照措辞手拼）</li>
+      <li>字段来源：<code>src/auto_qb/webui/views.py:459-490</code>（<code>_seed_detail</code> 附近的 HR 字段装配）</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">待查（已排除：后端未提供字段 —— views.py:459-490 字段齐全；已排除：03 的 CSS/容器不支持 —— 追加一个 <code>&lt;span&gt;</code> 即可，与 01 同构；已排除：业务上 03 故意不要 —— 无注释、无 CSS 类、无测试说明此取舍，而 <code>hr.js::hrStateLine</code> 的注释反向声明「详情抽屉要显示」）。倾向：三份拷贝各自演化，03 抄写时字段集停在旧版，后续补 <code>hr_state</code> 的改动只落在 01/02。</div>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>建议修法<span class="opt">（可选）</span></h2>
+    <p><strong>最小修法（推荐先做，只补不改观感）</strong>：<code>03:219</code> 之后加一段与 01/02 同措辞的分支 —— <code>if (d.hr_state) { const line = (d.hr_safety_text || d.hr_state_text || "") + (d.hr_reason ? " · " + d.hr_reason : ""); if (line) bits.push(T`&lt;span&gt;${line}&lt;/span&gt;`); }</code>。三版式信息面即对齐，文案三套不动。</p>
+    <p><strong>结构性收敛（后续，可另开 refactor）</strong>：把三份的<em>业务分支树</em>抽成纯数据 <code>hrSummary(d) → { mode: "excluded"|"triggered"|"", satisfied, reqTime, reqRatio, stateLine, siteNeed, siteRemain }</code> 挂 <code>reg.helpers</code>（服务 3 处才够格；<code>helpers</code> 已 13 个，不要为单处再造）。<strong>不带文案</strong>：badge 文案与 tone 各变体自理，避免顺手改用户可见字面。</p>
+    <p>验证手段：① 静态守阵（<code>tests/test_webui_static_dom_panel.py</code> 抽屉变体族，参照 <code>test_drawer_variant_skeleton_single_point</code> 的「逐件对账」写法）：断言 01/02/03 三件源码各含 <code>hr_state</code> 消费 ≥1 处（当前 03 红、修后绿）；② 语义等价：对 <code>hr_state=""</code> 的种子断言三版式都不多出空行（现 03 已满足，修法须保持）；③ 手工/后续 e2e：三版式同种子对照（现有 e2e 只有 trackers/peers/content 的 <code>drawer-*</code> spec，常规页签无对账 spec，故先靠 ①）。</p>
+    <p>收益：同一颗种子三版式信息面一致，选 03 不再丢「能否删」；风险：低（纯展示追加，空值路径已被 <code>if (d.hr_state)</code> 拦住）。</p>
+    <p>来源：重复代码审查报告 §27 R21-B-04（B 类复核 2026-10-29）。原判定「只登记，③ 的字段补齐需人裁定（可能是版式有意省略）」；本轮重估：③ 有客观判据（后端供字段 + <code>hr.js::hrStateLine</code> 成文「详情抽屉」），且无任何「03 有意省略」的痕迹 ⇒ 改判成立即修。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:41 — 入池，状态 <strong>Open</strong>（B 类复核批次 G；未认领，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="hint">认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="hint">修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-29-1341-bug-b-r21b04-hr-strip-variants.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

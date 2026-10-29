@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r23a09-pop-item-a11y-contract">
+<meta name="issue-stamp" content="26-10-29-1335">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current">
+<meta name="issue-summary" content="同一 .pop-item 交互原语分三套可访问性口径，其中 combobox 自绘高亮却无 listbox/option/aria-activedescendant，读屏听不出当前高亮项">
+<title>浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current</h1>
+    <p class="lede">同一 .pop-item 交互原语分三套可访问性口径，其中 combobox 自绘高亮却无 listbox/option/aria-activedescendant，读屏听不出当前高亮项</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1335-bug-b-r23a09-pop-item-a11y-contract</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:35</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>同一个可点击行原语 <code>.pop-item</code> 被三种浮层复用，但可访问性契约是三套，且其中一套整段缺失：
+    五个 combobox（添加种子窗口的保存路径/分类/标签、设定位置 movePath、编辑弹窗 metaCat）已经是同一组件
+    <code>&lt;aq-combo-input&gt;</code>，键盘高亮靠 <code>hi</code> 索引 + <code>.on</code>/<code>data-hi</code> 自绘，
+    却没有 <code>role="combobox"/listbox/option</code>、没有 <code>aria-expanded</code>、没有
+    <code>aria-activedescendant</code> —— 读屏用户按 ↑↓ 时听不到「当前第几项、选中什么」，面板开关状态也不播报。</p>
+    <p>同族另外两处各自一套：列选择器项是 <code>role="button"</code> + <code>tabindex</code> + <code>aria-pressed</code>，
+    但只响应 <code>keyup.enter</code>（Space 无反应，与筛选器项不一致）；UI 切换项是 <code>&lt;a href&gt;</code> 导航语义，
+    但当前项只靠 <code>:class="{ on }"</code> 上色，没有 <code>aria-current</code>。</p>
+    <p>发现场景：2026-10 重复代码审查 R23-A-09 的 B 类复核（本轮重新核查），在 <code>src/auto_qb/webui/static/shared/tpl/</code>
+    逐处比对四类 <code>.pop-item</code> 调用点。注：审计当时是五处各自复写；本轮 <code>26-10-20-2230</code> 已把 combobox
+    骨架收敛成单组件，故修复面从五处缩到一处（本项因此比审计当时更值得做）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">取证 2026-10-29 13:35，同步 1b7dd104；路径前缀 <code>src/auto_qb/webui/static/shared/</code>。</p>
+<pre><code># 1) combobox 组件：输入框与候选行全无 ARIA（tpl/combo-input.html）
+42:    &lt;input :id="inputId" :ref="comboBindInput" :value="modelValue" class="add-dialog-input" type="text"
+43:           :placeholder="placeholder" autocomplete="off" spellcheck="false"
+44:           @focus="$emit('open')" @click.stop="$emit('open')"
+45:           @input="comboOnInput" @focusout="$emit('blur')" @keydown="$emit('keydown', $event)"&gt;
+63:      &lt;div v-if="menu" class="pop-menu add-pop" @mousedown.prevent @click.stop :ref="comboBindMenu"&gt;
+66:        &lt;div v-if="presetLabel" class="pop-item add-pop-item" @mousedown.prevent="onPick(presetValue)"&gt;
+70:          &lt;div v-for="(o, i) in options" :key="o" class="pop-item add-pop-item"
+71:               :class="{ on: i === hi }" :data-hi="i === hi ? '1' : '0'"
+72:               @mousedown.prevent="onPick(o)" @mousemove="comboOnHover(i, $event)"&gt;
+# → 无 role / aria-expanded / aria-controls / aria-activedescendant / aria-selected / 无候选 id
+# 高亮只写 JS 态：add_torrent.js:312 comboKeydown() 里 ctx.setHi(...)，模板只反映成 class 与 data-hi
+
+# 2) 列选择器项：有 role/tabindex/aria-pressed，但只有 Enter（tpl/topbar.html）
+76:                &lt;div v-for="c in def.columns" :key="c.key" class="pop-item col-menu-item"
+77:                     :class="{ locked: c.locked, on: colVisible(def.id, c.key) }"
+78:                     role="button" :tabindex="c.locked ? -1 : 0" :aria-pressed="colVisible(def.id, c.key)"
+79:                     @click="!c.locked &amp;&amp; toggleColumn(def.id, c.key)"
+80:                     @keyup.enter="!c.locked &amp;&amp; toggleColumn(def.id, c.key)"&gt;
+
+# 3) 筛选器项：同族但 Enter + Space 都有（tpl/topbar.html）
+207:                &lt;div v-for="o in f.options" :key="o.value" class="pop-item"
+208:                     :class="{ on: isFilterOn(f.field, o.value) }"
+209:                     role="button" tabindex="0" :aria-pressed="isFilterOn(f.field, o.value)"
+210:                     @click="toggleFilterValue(f.field, o.value)"
+211:                     @keyup.enter="toggleFilterValue(f.field, o.value)"
+212:                     @keyup.space.prevent="toggleFilterValue(f.field, o.value)"&gt;
+
+# 4) UI 切换项：&lt;a href&gt; 无 aria-current（tpl/topbar.html）
+139:                &lt;a v-for="o in uiOptions" :key="o.id" class="pop-item" :class="{ on: o.id === ui }" :href="o.href"
+140:                   @click="o.id === ui &amp;&amp; $event.preventDefault()"&gt;
+
+# 5) 右键菜单项：无 role / tabindex / 键盘（tpl/ctx-menus.html，入口 @contextmenu 仅鼠标）
+47:            &lt;div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" ... @data-item="it.id"
+57:                  &lt;div v-else class="ctx-item" :class="[sit.cls, { 'is-gated': sit.gated }]" :title="sit.title" :data-item="sit.id" @click="ctxRun(sit)"&gt;
+65:            &lt;div v-else class="ctx-item" :class="[it.cls, { 'is-gated': it.gated }]" ... @click="ctxRun(it)"&gt;
+
+# 6) 现状核对：整仓无 listbox / aria-activedescendant（本次 grep 结果为空）
+$ grep -rn "listbox\|aria-activedescendant" src/auto_qb/webui/static
+（无输出）
+
+# 7) 焦点可见性已有（不是本项缺口，供修复时不要重做）
+atlas/css/views.css:89        .pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+prism/css/components.css:157  .pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>纯键盘 + 读屏操作任一 combobox（必然）；列选择器里对项按 Space（必然无反应）；UI 切换面板打开后无法得知哪项是当前值（必然）。鼠标用户不受影响。</td></tr>
+      <tr><td>影响范围</td><td>5 个 combobox 调用点（<code>dialogs-mgr.html:49/70/83</code> 保存路径/分类/标签、<code>move-dialog.html:36</code> movePath、<code>popovers.html:55</code> metaCat，均经 <code>&lt;aq-combo-input&gt;</code> 继承同一份模板）+ 顶栏列选择器 + 顶栏 UI 切换；右键菜单族（<code>ctx-menus.html</code>）目前无任何键盘入口，属更大缺口但见 06 的分步建议。</td></tr>
+      <tr><td>严重度</td><td>中 —— 无数据错值、无静默改配置；纯辅助技术不可用（WCAG 4.1.2 Name/Role/Value、2.1.1 Keyboard 的实际不合规面）。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li>combobox 模板：<code>shared/tpl/combo-input.html:40-90</code>（<code>&lt;script type="text/x-template" id="tpl-combo-input"&gt;</code>）·
+        grep 词 <code>tpl-combo-input</code> / <code>add-pop-item</code>。</li>
+      <li>combobox 组件定义与键盘单点：<code>shared/add_torrent.js:781-834</code>（<code>window.AQ_COMBO_INPUT_COMPONENT</code>，props 见 <code>:796-833</code>）·
+        <code>shared/add_torrent.js:312</code> <code>comboKeydown()</code>（grep 词 <code>comboKeydown</code>）—— 高亮只写 <code>hi</code>，没有 ARIA 出口。</li>
+      <li>组件注册：<code>shared/app.js:936</code> <code>app.component("aq-combo-input", ...)</code>。</li>
+      <li>列选择器项：<code>shared/tpl/topbar.html:76-84</code>（grep 词 <code>col-menu-item</code>）。</li>
+      <li>筛选器项（正确参照）：<code>shared/tpl/topbar.html:207-215</code>（grep 词 <code>@keyup.space.prevent</code>）。</li>
+      <li>UI 切换项：<code>shared/tpl/topbar.html:139-145</code>（grep 词 <code>uiOptions</code>）。</li>
+      <li>右键菜单项：<code>shared/tpl/ctx-menus.html:47/57/65/75/81…</code>（grep 词 <code>ctx-item</code>）。</li>
+    </ul>
+    <p><b>来源</b>：重复代码审查报告 §29 <b>R23-A-09</b>（B 类复核 2026-10-29）· 台账
+    <code>memory-bank/tasks/26-10-20-frontend-dup-code-audit.md:1361-1368</code>。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">三套不是"谁抄错谁"，而是三条不同交互路线的历史演进产物（项可聚焦的多选、自绘高亮的 combobox、导航链接），
+    但<b>从未把判据写下来</b>：菜单式 / 选择式 / 导航式各该有哪几个属性、键盘该由项还是容器处理，
+    CSS 段头与模板注释都没有一句。于是每加一处浮层都按"就近抄一份"决定，combobox 那一路直接零 ARIA。
+    已排除：不是 <code>data-hi</code> 没生效（视觉高亮正常，见 <code>atlas/css/dialogs.css:213</code>），
+    也不是焦点样式缺失（<code>:focus-visible</code> 两个 UI 都有）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p><b>第 1 步（本件主干，收益最大、风险最低）—— combobox 补 ARIA，只改一处组件</b>：
+    输入框加 <code>role="combobox"</code> + <code>:aria-expanded="menu"</code> + <code>aria-autocomplete="list"</code> +
+    <code>:aria-controls</code>（面板 id，可由 <code>inputId + '-pop'</code> 派生）+ <code>:aria-activedescendant="hi &gt;= 0 ? optionId(hi) : null"</code>；
+    面板加 <code>role="listbox"</code> + 与上面同 id；候选项加 <code>role="option"</code> + <code>:id="optionId(i)"</code> +
+    <code>:aria-selected="i === hi"</code>。id 用 <code>inputId + '-opt-' + i</code> 由索引派生即可（同一帧内 <code>options</code> 是渲染源，
+    过滤后索引与视觉序一致；不需要把值编进 id）。预置行（<code>:66</code> 的 "(无分类)"）不参与键盘索引，给 <code>role="option"</code> 反而不对，
+    建议保持不可选语义（或标 <code>aria-hidden</code> 让读屏忽略其可点性）。五个调用点零改动即可继承。</p>
+    <p><b>第 2 步（同族口径补齐，各一行）</b>：列选择器项补 <code>@keyup.space.prevent</code>（与筛选器项完全同款 handler，
+    行为不变）；UI 切换项补 <code>:aria-current="o.id === ui ? 'page' : null"</code>（不改视觉，只补状态）。</p>
+    <p><b>第 3 步（把判据写下来，防第四次漂移）</b>：在 <code>shared/tpl/combo-input.html</code> 头注（已有大段契约注释，续写一段即可）
+    或 <code>atlas/css/components.css</code> 的 <code>.pop-item</code> 段头写三分类判据：
+    菜单式（<code>.ctx-item</code>，项可聚焦 + roving）／选择式（<code>.pop-item</code> 于 combobox，容器 <code>listbox</code> + <code>aria-activedescendant</code>）／
+    导航式（<code>&lt;a href&gt;</code> + <code>aria-current</code>）。新增浮层按此对号入座。</p>
+    <p><b>明确不做（重开条件）</b>：<code>ctx-item</code> 右键菜单整族键盘化（Shift+F10 / 菜单键入口 + roving tabindex）——
+    它是另一条独立能力缺口（入口本身只有 <code>@contextmenu</code>，见 <code>lifecycle.js:224-225</code>），
+    与本件的"口径三套"不同量级。重开条件：若后续需要键盘操作右键菜单，另立一件，本件的三分类契约正好是它的判据底稿。</p>
+    <p><b>验证手段</b>：① 静态守阵（本项目既有范式，加进 <code>tests/test_webui_static_dom_panel.py</code>）：
+    断言 <code>combo-input.html</code> 含 <code>role="combobox"</code>／<code>role="listbox"</code>／<code>aria-activedescendant</code>／
+    <code>aria-selected</code>，且候选项的 <code>:id</code> 与 <code>aria-activedescendant</code> 用同一 id 生成式；
+    断言列选择器项同时含 <code>@keyup.enter</code> 与 <code>@keyup.space.prevent</code>（防只补一处）。
+    ② 真浏览器比对：Chrome DevTools → Accessibility 树，展开任一 combobox 面板应看到 <code>combobox</code> 节点 +
+    <code>listbox</code> 子树，按 ↑↓ 时该节点 <code>activedescendant</code> 属性随 <code>hi</code> 变化（这是"等价性"的直接证据）。
+    ③ 回归面：纯视觉零变化（本件不碰 CSS 与布局），跑既有 <code>pytest tests/test_webui_static_dom_panel.py tests/test_webui_static_dom_page.py -q</code> 即可。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:35 — 入池，状态 <strong>Open</strong>（计划外，未修；B 类复核结论：分歧仍在且已构成 a11y 契约缺失，故按 bug/standard 立档，非原提议的"先立契约不急合"）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」（先看 <code>grep -rn "aria-activedescendant" src/auto_qb/webui/static</code> 是否仍为空）。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-29-1335-bug-b-r23a09-pop-item-a11y-contract.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

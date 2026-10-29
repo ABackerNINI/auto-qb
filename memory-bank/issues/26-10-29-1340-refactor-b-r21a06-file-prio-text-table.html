@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r21a06-file-prio-text-table">
+<meta name="issue-stamp" content="26-10-29-1340">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档">
+<meta name="issue-summary" content="优先级码→中文同一张表 5 份(4 份含 4 档)，setFilePriority 缺 4 档且回退 String(p)，4 档一进回执就显示「4」">
+<title>文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档</h1>
+    <p class="lede">优先级码→中文同一张表 5 份(4 份含 4 档)，setFilePriority 缺 4 档且回退 String(p)，4 档一进回执就显示「4」</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1340-refactor-b-r21a06-file-prio-text-table</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:40</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>「qB <code>files[].priority</code> 码 → 中文」这一张表在抽屉层有 5 份：4 份含 legacy 的 <code>4</code> 档、1 份（<code>setFilePriority</code> 的回执文案）缺 <code>4</code> 档并回退 <code>String(p)</code>。一旦有 <code>4</code> 档进了这个函数，toast 会打出「优先级已设为「4」」，而同一行在内容页签表格里显示「高」—— 同一事实两种人话。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:40，HEAD 1b7dd104）的快照；重定位用 grep 关键词。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/drawer.js:932</code>（<code>setFilePriority</code>）：
+        <code>const label = { 0: "不下载", 1: "正常", 6: "高", 7: "最高" }[p] || String(p);</code>
+        —— <strong>唯一缺 4 档的一份</strong>，回退是把码当文案（<code>String(p)</code>）。</li>
+      <li><code>shared/drawer.js:1443</code>（<code>drawerFileRows</code>，经典内容表行渲染）：
+        <code>const prio = (p) =&gt; ({ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }[p] ?? "正常");</code>
+        —— 含 4 档，回退「正常」。</li>
+      <li>变体侧 <code>PRIO_LABEL</code> 三份（<code>grep -n "PRIO_LABEL = {"</code>）：
+        <code>drawer_tpl/10-content-tree-detail-tall.js:38</code>、<code>11-content-treegrid-batch-low.js:39</code>、
+        <code>12-content-space-treemap-collapsed.js:27</code> —— 三份逐字节同，且与 <code>drawer.js:1443</code> 同键集（含 4）。</li>
+      <li>设置侧可达域（决定那份缺 4 的表今天会不会被打到）：
+        <code>10:39</code> <code>const PRIO_ORDER = [0, 1, 6, 7];</code>、<code>11:40</code> <code>const PRIO_CYCLE = [0, 1, 6, 7]; /* 旧值 4 = 高, 归入 6 位 */</code>、
+        <code>shared/tpl/ctx-menus.html:109-119</code> 四个 <code>@click="setFilePriority(0|1|6|7)"</code>。
+        ⇒ 当前三个入口都只发 0/1/6/7，<strong>4 档今天不可达</strong>。</li>
+      <li>注释已半漂：<code>drawer.js:923</code> 写「优先级 4 档(0=跳过 1=普通 6=高 7=最高)」，<code>drawer.js:1425</code> 写「0=跳过 1=普通 4|6=高 7=最高」—— 同一文件两处对 4 档是否存在各说一套。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>键集</strong>：4/5 份含 <code>4:"高"</code>，1/5 份不含。这不是「两派势均力敌」，而是<strong>一份孤立</strong>（报告 §27 R21-C-08 亦已确认）。</li>
+      <li><strong>回退语义</strong>：显示侧 <code>?? "正常"</code>、回执侧 <code>|| String(p)</code>。两者在键集内（0/1/6/7）输出逐字相同；差异只落在未知码上，而未知码今天不可产生。</li>
+      <li><strong>是否已达缺陷</strong>：否。断掉 <code>4</code> 档后，回执链当前无路径能收到 4；故不判 (c)，也<strong>不该</strong>按 bug 档入池。</li>
+      <li><strong>归类</strong>：(b) 无判据漂移 —— 4 档是 qB legacy「high」，显示侧承认它（现网旧种子还会回读到 4），回执侧漏它是漏同步而非有意区分；没有任何注释/文档给「回执表故意不含 4」提供判据。</li>
+    </ul>
+    <p>判定：<strong>值得做</strong>（refactor / light）。四条门槛：① 重复真实且 5 处；② 收敛后行为可保持 —— 两张表在可达域上逐字等价，只需把「回退值」做成参数；③ 可验证 —— 既有 <code>tests/test_webui_static_dom_panel.py</code> 的静态守阵族（读 <code>shared/</code> 源码断言字面，如 <code>test_drawer_tpl_registry_wiring</code> / <code>test_drawer_variant_skeleton_single_point</code>）即可钉「表只出现一处」；④ 收益（新优先级档/改文案只动一处，顺手堵掉 4 档回执坑）&gt; 风险（纯查表，零数据面）。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <p>合「表」不合「排版」：一张 <code>PRIO_TEXT = { 0:"不下载", 1:"正常", 4:"高", 6:"高", 7:"最高" }</code> 落一处，配一个带回退参数的取文函数 <code>prioText(p, dash)</code>（内部 <code>PRIO_TEXT[p] ?? dash</code>）。五处消费：<code>drawer.js:1443</code> 传 <code>"正常"</code>（现状不变）、<code>drawer.js:932</code> 传 <code>String(p)</code>（现状不变，但 4 档从此走「高」）、10/11/12 的 <code>PRIO_LABEL[p]</code> 改为该函数（三处均带 <code>|| "正常"</code> 语义，逐个对齐）。</p>
+    <p>落点约束：抽屉层的既有通道是 <code>reg.helpers</code>（<code>drawer_templates.js</code>，13 个公共骨架函数），核心层经 <code>window.AQB_DRAWER_TPL_REG</code> 也读得到；本项服务 5 处，<strong>不属于</strong>「只服务一处的第 14 个 helper」那种反模式。若实现者更愿把常量放 <code>drawer.js</code> 顶层再挂进注册表，同样可接受 —— 硬约束只有一条：<strong>字面表全仓只剩一份</strong>（含 <code>ctx-menus.html</code> 里那 4 个静态菜单项要不要由 JS 渲染，另议，不在本项范围）。顺带把 <code>drawer.js:923</code> 的「4 档」注释与 <code>:1425</code> 对齐。</p>
+    <p>验证手段：① 静态守阵（新增一条，放 <code>tests/test_webui_static_dom_panel.py</code> 抽屉变体族）：<code>shared/</code> 下 <code>"不下载"</code>+<code>"最高"</code> 同现的表字面仅 1 处，且 10/11/12 各出现 <code>PRIO_TEXT</code>/<code>prioText</code> 消费 ≥1 次、本地 <code>PRIO_LABEL</code> 零残留；② 等价性：对 <code>p ∈ {0,1,6,7}</code> 断言新旧输出逐字相同（可用 node 一行跑取文函数，或直接靠上条静态断言 + 现有 <code>drawer-content-variant-tables.spec.mjs</code> 回归）；③ 4 档补测：断言 <code>prioText(4, "4") === "高"</code>（现实现红，收敛后绿）。</p>
+    <p>收益：5 份表 → 1 份，新增优先级档/改中文只动一处；风险：极低（纯查表，无请求、无状态）。</p>
+    <p>来源：重复代码审查报告 §27 R21-A-06（B 类复核 2026-10-29），佐证 §27 R21-C-08。原判定「只登记，建议优先裁定 4 档归属」；本轮重估：4 档归属已有事实答案（显示侧承认 legacy，设置侧不发），无业务争议 ⇒ 改判值得做。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:40 — 入池，状态 <strong>Open</strong>（B 类复核批次 G；未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1340-refactor-b-r21a06-file-prio-text-table.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

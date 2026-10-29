@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r23b10-aqtable-hr-sort-dead">
+<meta name="issue-stamp" content="26-10-29-1348">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头">
+<meta name="issue-summary" content="设置页 HR 详情表列头点击/键盘均不触发排序(col.sortable 恒空 ⇒ headActivate 早退), 表头却恒显箭头">
+<title>HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头</h1>
+    <p class="lede">设置页 HR 详情表列头点击/键盘均不触发排序(col.sortable 恒空 ⇒ headActivate 早退), 表头却恒显箭头</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1348-bug-b-r23b10-aqtable-hr-sort-dead</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:48</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>设置页 → 某站点 HR 详情表 → 点任意列头: 无排序、无光标变化、第三次点击也回不到默认序。表头右缘能看到排序箭头位, 但列头「看着能点、点了没反应」。</p>
+    <p>发现场景: 重复代码审查 B 类复核(本专题)核对 R23-B-10「<code>aq-table</code> thead / grid 双分支排序箭头口径相反」时, 顺着「thead 分支没用到 <code>col.sortable</code>」这条线索读后端字段来源, 发现 HR 详情表的列定义**一个都没有** <code>sortable</code> 标记 —— 于是同一份表壳的两分支在能力判定上分叉成了「grid 能用 / thead 全哑」。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">取证 2026-10-29 13:44, 仓库 1b7dd104。以下为实际读到的代码片段(非转述)。</p>
+    <h3>① 组件层: thead 分支恒画箭头, 但 headActivate 先按 col.sortable 早退</h3>
+<pre><code># shared/tpl/xtpl.html:211-219  (mode === 'thead'）
+&lt;th v-for="col in cols" :key="col.key" class="sortable" :class="{ num: col.num }"
+    :aria-sort="headAriaSort(col)" :tabindex="col.sortable ? 0 : null"
+    @click="headActivate(col)" ...&gt;
+  &lt;span&gt;{{ col.label }}&lt;/span&gt;&lt;span class="arrow" :class="{ on: sortKey === col.key }"&gt;
+    &lt;svg class="ico" ...&gt;&lt;use :href="sortKey === col.key &amp;&amp; sortDir === 1 ? '#i-arrow-up' : '#i-arrow-down'"&gt;&lt;/use&gt;&lt;/svg&gt;&lt;/span&gt;&lt;/th&gt;
+
+# shared/tpl/xtpl.html:231-236  (grid 分支, 对照)
+&lt;span v-if="col.sortable" class="arrow"&gt;&lt;svg v-if="sortKey === col.key" ...&gt;
+
+# shared/table.js:97-101
+headActivate(col) {
+  if (!col.sortable) return;                    // ← 唯一入口在这里被门控
+  if (this.mode === "thead") this.$emit("sort", col.key);
+  else this.$root.setSort(col.key, this.tableId);
+}</code></pre>
+    <h3>② 数据层: HR 详情表列定义全部没有 sortable</h3>
+<pre><code># shared/hr_status.js:101-116
+const HR_TABLE_DEFS = {
+  hrDetail: {
+    label: "HR 明细表", features: { sort: true },
+    columns: [
+      { key: "lane", label: "档位" },          // 无 sortable
+      { key: "name", label: "名称" },          // 无 sortable
+      ... 10 列全部同形, 整文件 grep "sortable" 命中 0 处
+    ],
+  },
+# shared/hr_status.js:304-306
+hrsCols() { return HR_TABLE_DEFS.hrDetail.columns; }   // 原样返回, 不做能力补齐</code></pre>
+    <h3>③ 排序唯一入口: 组件 emit, 而 emit 永远不会发生</h3>
+<pre><code># shared/tpl/settings-detail.html:296-298
+&lt;tr is="vue:aq-table" mode="thead" table-id="hrDetail" :cols="hrsCols()"
+    :sort-key="hrsSortKeyOf(s.site)" :sort-dir="hrsSortDirOf(s.site)"
+    @sort="hrsSetSort(s.site, $event)"&gt;&lt;/tr&gt;
+# 全仓 grep hrsSetSort: 除定义(hr_status.js:289)外只有上面这一处调用点</code></pre>
+    <h3>④ 回归时点: a11y 补课把 click 内联换成受门控的 headActivate</h3>
+<pre><code># git show e33a8996^:src/auto_qb/webui/static/shared/tpl/xtpl.html (改动前)
+&lt;th ... class="sortable" :class="{ num: col.num }"
+    @click="$emit('sort', col.key)"&gt;      &lt;!-- 无条件 emit, HR 表能用 --&gt;
+
+# e33a8996 「引擎表头 a11y 补课」(issue 26-10-12-0800) 改为统一 headActivate,
+# 同笔新增 `if (!col.sortable) return;` —— grid 各表有 sortable 故无感, HR 表静默失去排序</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td class="todo">必现, 与数据量/配置无关: 设置页任一站点展开 HR 详情表(需该站点有 HR 明细行), 点任意列头。</td></tr>
+      <tr><td>影响范围</td><td class="todo">设置页 HR 详情表一处(thead 模式当前唯一调用点)。<code>hrsSetSort</code> 三态机/<code>hrsCompareRows</code>/<code>sortSel</code> 全套实现仍在但没有可达入口 —— 该表的排序能力整体不可用, 而非仅某一列失效。</td></tr>
+      <tr><td>严重度</td><td class="todo">中: 无数据错误、无报错、无白屏; 但用户可见的「能点却没反应」, 且列头箭头(平时 opacity:0, hover 0.45)与 <code>class="sortable"</code> 光标都在提示「可排序」。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>shared/table.js:97-101</code> · <code>AQ_TABLE_COMPONENT.methods.headActivate</code> · grep 词 <code>headActivate</code>(取证 2026-10-29 13:44)</li>
+      <li><code>shared/tpl/xtpl.html:211-219</code> · <code>tpl-aq-table</code> 的 <code>v-if="mode === 'thead'"</code> 分支 · grep 词 <code>mode === 'thead'</code></li>
+      <li><code>shared/tpl/xtpl.html:231-236</code> · 同模板 grid 分支的 <code>v-if="col.sortable"</code> 箭头门控(对照物)</li>
+      <li><code>shared/hr_status.js:101-116</code> · <code>HR_TABLE_DEFS.hrDetail.columns</code> · grep 词 <code>hrDetail</code></li>
+      <li><code>shared/hr_status.js:304-306</code> · <code>hrsCols</code>;  排序实现 <code>hrsSetSort</code> 在同文件 289 行</li>
+      <li><code>shared/tpl/settings-detail.html:296-298</code> · 唯一 <code>@sort</code> 接线点 · grep 词 <code>mode="thead"</code></li>
+      <li>回归时点: <code>git log -S "if (!col.sortable) return;" -- shared/table.js</code> → <code>e33a8996</code>(issue 26-10-12-0800)</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">根因已定位(非待查): 表壳两模式对「列是否可排序」的判定源不一致 —— grid 读 <code>col.sortable</code>, thead 既不读它(硬编码 <code>class="sortable"</code>、箭头恒渲染), 又在行为侧被 <code>headActivate</code> 的 <code>col.sortable</code> 门控拦住; 而 thead 唯一的调用方(HR 详情表)列定义从未标 <code>sortable</code>。视觉与行为各取一半, 两端都无法自证。</div>
+    <h3>分歧点逐条</h3>
+    <table>
+      <tr><th>#</th><th>维度</th><th>thead 分支(当前)</th><th>grid 分支(当前)</th><th>后果</th></tr>
+      <tr><td>1</td><td>箭头出现条件</td><td><code>&lt;span class="arrow"&gt;</code> 恒渲染, <code>&lt;svg&gt;</code> 也恒渲染</td><td><code>v-if="col.sortable"</code> 门控外层, 内层 <code>v-if="sortKey === col.key"</code></td><td>thead 对不可排序列也摆箭头位; 靠 CSS <code>.hr-detail-table th .arrow{opacity:0}</code> 藏起来, 语义仍错</td></tr>
+      <tr><td>2</td><td>可排序性判据</td><td><code>class="sortable"</code> 硬编码</td><td><code>{ sortable: col.sortable }</code> 由列定义决定</td><td>thead 把 10 列全标成可排序</td></tr>
+      <tr><td>3</td><td>点击/键盘行为</td><td colspan="2">两模式共用 <code>headActivate</code>, 其中 <code>if (!col.sortable) return;</code></td><td>thead 因判据 1/2 与列定义脱钩 ⇒ 全部列早退, <code>emit('sort')</code> 永不发出 ⇒ <code>hrsSetSort</code> 不可达</td></tr>
+      <tr><td>4</td><td>键盘可达</td><td><code>:tabindex="col.sortable ? 0 : null"</code> ⇒ 恒 null</td><td>可排序列 tabindex=0</td><td>HR 表列头连焦点都进不去, Enter/Space 无从触发</td></tr>
+      <tr><td>5</td><td>aria-sort</td><td colspan="2"><code>headAriaSort</code> 同门控 ⇒ 恒 null</td><td>与「看着能排」的视觉相反, 读屏反而「正确」地什么都不报</td></tr>
+    </table>
+    <p>判定: 这不是「两种合理口径」, 是同一判据(<code>col.sortable</code>)在视觉侧与行为侧被各用一半后产生的**静默失效**。原报告把它记成 B 类「无注释的用户可见差异」; 今天补查后端/注册表字段后升级为缺陷 —— thead 模式当前唯一消费方(<code>HR_TABLE_DEFS.hrDetail</code>)恰好是「零列可排序」的形态, 差异从「审美不一致」塌成「功能整体不可用」。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向: 让两模式共用**同一份**可排序判据, 且判据落在列定义(唯一事实源)上; 模板只呈现。</p>
+    <ol>
+      <li><b>首选(最小面)</b>: 在 <code>HR_TABLE_DEFS.hrDetail.columns</code> 上按真实能力补 <code>sortable: true</code>(<code>hrsCompareRows</code> 支持哪些 key, 就以哪些为准 —— 先读该函数, 别把全部 10 列一刀切), 并给 thead 分支补 <code>v-if="col.sortable"</code> 的箭头门控 + <code>:class</code> 里用 <code>col.sortable</code> 取代硬编码 <code>sortable</code>。两模式至此判据同源, 视觉与行为一致。</li>
+      <li><b>备选</b>: 若认定「HR 表列头排序本就不该有」(features 里的 <code>sort: true</code> 就需同步改), 则应删掉 <code>@sort</code> 接线与 thead 的箭头/可点样式, 把不可点说清楚 —— 但不能保留现在这种「箭头 + 光标 + 点击无声」。</li>
+    </ol>
+    <p>不推荐「在 thead 分支去掉 <code>headActivate</code> 门控」: 那会让不可排序列也能 emit, 把 <code>hrsSetSort</code> 的 key 校验责任推给调用方, 与 grid 分叉更大。</p>
+    <h3>验证手段</h3>
+    <ul>
+      <li>既有静态守阵可扩: <code>tests/test_webui_static_skins.py::test_frontend_hr_detail_table_wiring</code>(已断言三皮肤 <code>.hr-detail-table th.sortable</code> 等规则)与 <code>tests/test_webui_static_dom_panel.py</code> 的 <code>DT_TABLE.hasArrow</code> 段 —— 加一条「thead 分支含 <code>v-if="col.sortable"</code> 且 <code>HR_TABLE_DEFS.hrDetail.columns</code> 至少一列 <code>sortable: true</code>」的静态断言即可锁死回归。</li>
+      <li>等价性: 真浏览器开设置页 → HR 详情表 → 点同列三次, 行序应依次为「降序 / 升序 / 后端默认序」(<code>hrsCompareRows</code> + <code>hrsSortKeyOf</code> 既有语义), 且 <code>aria-sort</code> 与箭头同步。</li>
+      <li>回归面: thead 是当前唯一 <code>mode="thead"</code> 调用点(<code>grep 'mode="thead"'</code> 命中 settings-detail.html:296 + 模板注释), grid 四表不受影响。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>来源: <code>重复代码审查报告 §29 R23-B-10</code>（B 类复核 2026-10-29）—— 原记「thead 每列有箭头 / grid 仅当前列有, 用户可见差异且无注释」; 复核时沿 <code>col.sortable</code> 补查列定义后升级为缺陷。</li>
+      <li>2026-10-29 13:48 — 入池，状态 <strong>Open</strong>（计划外，未修，未认领）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-29-1348-bug-b-r23b10-aqtable-hr-sort-dead.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

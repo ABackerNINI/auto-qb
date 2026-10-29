@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r17b01-hr-absent-default">
+<meta name="issue-stamp" content="26-10-29-1259">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="「无 HR 配置」缺省在 expr 再抄一份记录侧守卫">
+<meta name="issue-summary" content="env._hr 自判 无 conf/无 hr 返 false, 与 record._hr_guard 的 未配 hr 不判定 重复; 可等价收敛为单一权威, satisfied 两侧差异另记">
+<title>「无 HR 配置」缺省在 expr 再抄一份记录侧守卫 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>「无 HR 配置」缺省在 expr 再抄一份记录侧守卫</h1>
+    <p class="lede">env._hr 自判 无 conf/无 hr 返 false, 与 record._hr_guard 的 未配 hr 不判定 重复; 可等价收敛为单一权威, satisfied 两侧差异另记</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1259-refactor-b-r17b01-hr-absent-default</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 12:59</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>「站点未配 HR 就不判定」这条缺省在表达式取值面又抄了一份：<code>env._hr</code> 自己判
+    <code>tracker_conf is None or not tracker_conf.hr</code> 返 false，而记录侧已把同一口径收成
+    单点 <code>record._hr_guard</code>（前一轮 issue <em>torrents-hr-entry-guard-dup</em> 刚把三处入口收口）。
+    表达式侧成了该口径的第四份拷贝，守卫日后加条件（例如数据源未同步）它不会跟随。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证<span class="opt">（2026-10-29 12:54 实测，git 1b7dd104）</span></h2>
+    <ul>
+      <li><code>src/auto_qb/rules/expr/env.py:99-107</code> · grep <code>def _hr(</code><br>
+        实际代码：<code>if tor.tracker_conf is None or not tor.tracker_conf.hr: return False</code>
+        —— 一句里同时表达「无 conf」与「无 hr 配置」，并自带注释「有定义的缺省, 不是错误」。
+        三个消费点：<code>tor.hr_condition_met</code>=<code>_hr("hr_managed")</code>、
+        <code>tor.hr_local_triggered</code>=<code>_hr("check_hr_condition")</code>、
+        <code>tor.hr_satisfied</code>=<code>_hr("check_hr_satisfied")</code>（env.py:314-316）。</li>
+      <li><code>src/auto_qb/torrents/record.py:385-393</code> · grep <code>def _hr_guard</code><br>
+        实际代码：<code>return not self.tracker_conf.hr or self.hr_excluded()</code>，
+        docstring 明写「站点未配 hr 或命中排除表」→ 三个入口 <code>check_hr_condition</code>(:409)、
+        <code>hr_managed</code>(:424)、<code>check_hr_satisfied</code>(:458) 顶部各调用一次。</li>
+      <li><code>src/auto_qb/rules/conditions.py:151-168</code> · grep <code>class HrCondition</code><br>
+        条件侧第三种写法：<code>conf is None</code> → <code>mode == "condition-not-met"</code>；
+        <code>conf.hr is None</code> → <code>mode != "condition-met"</code>（不调记录方法）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点逐条与判定</h2>
+    <ul>
+      <li><strong>① conf=None 时三档取值：两侧一致</strong> —— 条件侧 (False, True, False)；
+        表达式侧 <code>_hr</code> 全 False，反写 <code>not tor.hr_condition_met</code> 即 (False, True, False)。无分歧。</li>
+      <li><strong>② conf.hr=None 且 mode=satisfied：两侧相反</strong> —— 条件侧 True
+        （<code>conditions.py:162</code>，schema 帮助文案
+        <code>config/schema/rules.py:120-121</code>「没有要求 = 视为已满足」、测试
+        <code>tests/test_conditions.py:283</code> 都按 True 钉住）；表达式侧
+        <code>tor.hr_satisfied</code> 为 False（<code>_hr</code> 守卫生效、<code>tests/test_expr_eval.py:131</code> 钉住）。
+        这不是同一件事的两种写法：条件侧答「有无义务」，表达式侧答「HR 达标（可打标/可删）」——
+        WebUI 的「可删/不能删」徽章就走 <code>check_hr_satisfied</code>（<code>webui/views.py:453</code>），
+        若改成 True，所有无 HR 站点的种子会集体跳「已达标」。<strong>判 (a) 业务正解不该合，本次不动</strong>，
+        仅要求在两侧注释互指（见 04）。</li>
+      <li><strong>③ 「未配 hr 不判定」的判定语句本身被抄了 2 份</strong>（②之外的那部分）——
+        这是纯实现重复，且<strong>可等价收敛</strong>：记录侧三个入口已各自过守卫，
+        <code>_hr</code> 里那半句 <code>not tor.tracker_conf.hr</code> 是冗余判定，删掉行为逐字不变
+        （<code>tests/helpers.py:800/820/832</code> 的替身同样自带同一守卫）。<strong>判 (b) 该合</strong>。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议 + 验证手段</h2>
+    <ul>
+      <li><strong>建议 A（最小）</strong>：<code>_hr</code> 只保留 <code>tor.tracker_conf is None</code> 短路，
+        删掉 <code>or not tor.tracker_conf.hr</code>，把「未配 hr」交给记录侧守卫；<code>_hr</code> 退化为
+        「无 conf 兜底 + 委托」。</li>
+      <li><strong>建议 B（更彻底）</strong>：<code>_hr_guard</code> 改为
+        <code>self.tracker_conf is None or not self.tracker_conf.hr or self.hr_excluded()</code>，
+        <code>_hr</code> 直接 <code>bool(getattr(tor, method)())</code>，全仓「无配置不判定」只留一处。</li>
+      <li>顺带在 <code>_hr</code> / <code>HrCondition</code> 注释里互指 ②的差异（条件侧 True、表达式侧 False
+        各是哪个消费者要的），避免以后有人当成 bug 单边「修」掉。</li>
+      <li><strong>验证</strong>：等价性由既有测试守阵，无需新写行为断言 ——
+        <code>pytest tests/test_expr_eval.py -k "derived_values or legacy_condition_equivalence"</code>
+        （<code>:120-131</code> 无 conf 三值、<code>:385-414</code> 条件↔表达式等价表）、
+        <code>tests/test_conditions.py -k hr</code>、<code>tests/test_hr.py</code>。
+        若要更硬，可加一条「同一 ctx 下 <code>_hr</code> 与记录方法逐项相同」的参数化对拍（3 名字 × {无 conf, 无 hr, 有 hr}）。</li>
+      <li>改动范围仅 <code>rules/expr/env.py</code>（必要时 + <code>torrents/record.py</code> 一行守卫），不涉及条件侧语义。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>来源与状态</h2>
+    <p>来源：重复代码审查报告 §20 R17-B01（B 类复核 2026-10-29）。原判定「合并会改语义，只登记」——
+    复核后拆成两半：② 维持不合（已有用户可见契约），③ 可等价收敛，故入池。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 12:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1259-refactor-b-r17b01-hr-absent-default.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

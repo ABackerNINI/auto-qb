@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r10x03-exempt-baseline-single-source">
+<meta name="issue-stamp" content="26-10-29-1310">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra">
+<meta name="issue-summary" content="打标侧回落只用 hr.required, 取数/达标/视图侧用 required+extra, 同一事实四处手算; 收敛为 HRRule 派生属性">
+<title>HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra</h1>
+    <p class="lede">打标侧回落只用 hr.required, 取数/达标/视图侧用 required+extra, 同一事实四处手算; 收敛为 HRRule 派生属性</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1310-refactor-b-r10x03-exempt-baseline-single-source</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:10</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">dup-code-audit · B 类复核批次 D1</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>「一颗种子要种多久才算完」这一个事实在仓库里有四处手算：取数侧超额线用 <code>required+extra</code>、打标侧超额豁免线回落只用 <code>required</code>（漏 <code>extra</code>）、达标判据与视图展示各抄一遍加法 —— 打标侧函数注释还自称「与取数侧对象集排除线同源」，实际代码不同源。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证<span class="opt">取证 2026-10-29 13:10 · HEAD 1b7dd104</span></h2>
+    <ul>
+      <li><code>src/auto_qb/core/modules/maintenance_mod.py:29-41</code> · <code>_seed_exempt_baseline</code>（grep <code>_seed_exempt_baseline</code>）：
+        <code>site_conf = conf.hr_check; if site_conf is not None and site_conf.enabled: return site_conf.required_seeding_time; return float(conf.hr.required_seeding_time)</code> —— 回落分支<b>不含</b> <code>extra_seeding_time</code>；消费点 296-299（<code>seeding_time &gt;= SEED_EXEMPT_RATIO * baseline</code>）。docstring 33 行原文「与取数侧对象集排除线同源，同一颗种子不出现「取数跳过但打标不跳」的劈叉」。</li>
+      <li><code>src/auto_qb/config/loaders.py:286-288</code> · <code>_resolve_hr_site_bindings</code>：派生 <code>SiteHrCheckConfig.required_seeding_time = float(hr_rule.required_seeding_time + hr_rule.extra_seeding_time)</code>（注释 251 行「required + extra, 超额线 3× 判据」）。<b>这是打标侧站点分支的取值来源</b>。</li>
+      <li><code>src/auto_qb/hr/service.py:525</code> · 取数侧对象集现算传参 <code>site_conf.required_seeding_time</code>；判据在 <code>hr/service.py:1454</code> 与 <code>SEED_EXEMPT_RATIO</code>（<code>hr/service.py:112</code>）= 3.0 相乘。</li>
+      <li><code>src/auto_qb/torrents/record.py:478</code> · <code>_local_satisfied</code>：<code>seeding_time &gt;= (hr.required_seeding_time + hr.extra_seeding_time)</code>。</li>
+      <li><code>src/auto_qb/webui/views.py:473</code> · <code>hr_req_time = hr.required_seeding_time + hr.extra_seeding_time</code>。</li>
+      <li>守阵现状：<code>tests/helpers.py:1010-1025</code> <code>_hr_rule</code> 默认 <code>required=3D + extra=12H</code>（注释「默认匹配旧 '3D@70%+12H' 语义」）；<code>tests/test_mixins_tags.py:247-284</code> 三段都用它 —— (a) 段做种 10D，按现在的回落基准 3D 得 9D 线 ⇒ 跳过；按 req+extra 口径应是 <code>3×3.5D = 10.5D</code> ⇒ 不跳过。既有守阵已把「只按 req」这一侧钉死。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>已接入站点</strong>：打标侧读 <code>hr_check.required_seeding_time</code>（loader 派生 = req+extra），取数侧同一字段 —— 取值同源，<b>无分歧</b>。</li>
+      <li><strong>未接入站点</strong>：取数侧不存在（无 hr_check 即不取数），故只剩打标侧有意义；同一站配置下「达标」按 req+extra 判（record.py:478），「超额豁免」却按 req 判 ⇒ 两条语义不同的线。生产默认 <code>extra=0S</code>（loaders.py:342）时两者重合；但本仓测试夹具默认 <code>extra=12H</code>，即仓库自己在「3D@70%+12H」这个经典站型上就分叉：9D vs 10.5D。</li>
+      <li><strong>可观察后果</strong>：方向随 <code>extra/req</code> 比值翻转 —— <code>extra &lt; 2×req</code>（含默认站型 3D+12H）时 <code>3×req &gt; req+extra</code>，豁免线偏晚，达标已久的种子仍反复打 HRDONE（多留标，无害但与「打卡无信息量」初衷相悖）；<code>extra &gt; 2×req</code> 时 <code>3×req &lt; req+extra</code>，做种落在 <code>[3×req, req+extra)</code> 的种子义务未了结却被豁免跳过 ⇒ <b>静默漏 HR 标</b>。两条线都不报错、不打日志，运行期无法区分走了哪一条。</li>
+      <li><strong>判定</strong>：归 <strong>(b) 无判据漂移该合</strong>。理由：四处算的是同一事实（站点要求的做种基准），其中三处取 req+extra、一处只取 req，且没有任何注释/配置写明「未接入站故意不加 extra」；打标侧 docstring 的「同源」声明与代码相反，属注释级误判而非业务正解，不构成 (a)。同配置的已接入站（10.5D）与未接入站（9D）拿不同豁免线，也无判据支持。</li>
+      <li>不归 (c)：默认站型落在「多留标」的无害侧，无静默错值，未达「用户可见缺陷」的立 bug 门槛；但 <code>extra &gt; 2×req</code> 的配置会漏标，正是「必须钉一条判据、不能继续三对一」的理由。</li>
+    </ul>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <ul>
+      <li>在 <code>config/models.py</code> 的 <code>HRRule</code> 上开一个派生属性 <code>required_total_seeding_time</code>（= <code>required_seeding_time + extra_seeding_time</code>），作为「站点要求基准」唯一表示；四个消费点改读属性，<code>loaders.py:286-288</code> 也改读它（去掉手工加法）。</li>
+      <li><code>_seed_exempt_baseline</code> 回落分支改 <code>float(conf.hr.required_total_seeding_time)</code>，站点分支保持读 <code>hr_check.required_seeding_time</code>（loader 派生同值）；docstring 的「同源」改为可核对的表述（「两路同取 req+extra」），不再靠注释担保。</li>
+      <li>唯一行为 delta：未接入站且 <code>extra &gt; 0</code> 时豁免线由 <code>3×req</code> 抬到 <code>3×(req+extra)</code>（默认站型 9D → 10.5D），与「达标」判据对齐；生产默认 <code>extra=0S</code> 的部署零变化。若维护者判定「未接入站只按 req」为正解，则须在属性旁写明判据并把 <code>record.py:478</code> / <code>views.py:473</code> 一并改成 req —— 二选一，不允许继续三对一。</li>
+      <li>验证手段：① 既有三段守阵里两段要动 — (a) 段做种 10D 会由「跳过→零调用」翻为「打 HRDONE」；(c) 段本意是「基准 0 ⇒ 跳过线不生效」，但夹具只把 required 置 0、extra 仍是 12H，新口径下基准变 12H、10D 会被跳过，须显式把 extra 同时置 0 才保住原意。改写后先红后绿即是等价性证据；(b) 段原样通过。② 新增用例「未接入站 + <code>extra=12H</code>」直接断言基准 == <code>req+extra</code>（现实现红、收敛后绿）。③ 静态判据：<code>required_seeding_time + extra_seeding_time</code> 表达式在 <code>src/</code> 内计数由 3（loaders/record/views）降为 1（只剩属性定义处），可加进 <code>tests/test_docs_forms.py</code> 同族的结构守卫或单独一条 grep 型断言。④ 取数侧无需 e2e —— <code>test_hr_service.py::test_build_objects_excludes_terminal_verified_exempt</code> 已钉对象集排除线。</li>
+      <li>收益：消除注释与代码相反的「同源」谎言、抹掉已接入/未接入两套豁免线，并收掉「3 处手工加法 + 1 处漏算」的漂移面（加一个 hr 时间字段要改 4 个地方）；风险：低但不为零 —— 1 处行为 delta + 1 段既有守阵需改写，故入池等认领，不顺手改。</li>
+    </ul>
+    <p class="hint">来源：重复代码审查报告 §13 R10-X03（B 类复核 2026-10-29）。原判定「只登记（跨 core/hr 两包）」，本轮复核确认重复仍在且已漂移出实质差异，故改判值得做。相邻 R10-X02（计数器重置判据）维持「保持分层」不动。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:10 — 入池，状态 <strong>Open</strong>（B 类复核批次 D1；未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1310-refactor-b-r10x03-exempt-baseline-single-source.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

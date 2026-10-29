@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r18b01-parse-unit-ladder">
+<meta name="issue-stamp" content="26-10-29-1252">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback">
+<meta name="issue-summary" content="parse_speed 正则允许 &#x27;iB/S&#x27; 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛">
+<title>parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback</h1>
+    <p class="lede">parse_speed 正则允许 &#x27;iB/S&#x27; 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1252-bug-b-r18b01-parse-unit-ladder</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 12:52</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>重复代码审查 B 类复核（2026-10-29, 原编号 R18-B01）读到 <code>parse_time/parse_fsize/parse_speed</code> 三份同构解析器时发现: 三份的单位表白名单宽度不一致 —— <code>parse_fsize</code> 在算乘数前多一道 <code>unit not in units</code> 的显式检查, <code>parse_speed</code> 没有, 而它的正则 <code>[KMG]?i?B/S</code> 允许「无前缀 iB/S」这种单位表里不存在的写法。于是 <code>parse_speed("1iB/s")</code> 抛 <code>KeyError</code> 而不是 <code>ValueError</code>, 校验层 <code>_try</code> 只接 <code>ValueError</code> → 原样逃出 <code>load_config</code>, 用户看到 traceback 而不是「配置校验失败(...) 共 N 处」的聚合报错。</p>
+    <p>触发条件: config.yml 任一速度键写成无前缀 iB 形式（如 <code>1iB/s</code>），键面为 <code>trackers.*.upload_speed_limit</code> / <code>trackers.*.download_speed_limit</code> / <code>global_speed_limit_curve</code> 的 <code>upload_curve|download_curve</code> 速度值。平台无关。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">以下均为 2026-10-29 12:5x 现场取值（HEAD 1b7dd104），原文照贴。</p>
+    <h3>① 单元级: 同一非法输入, 两个解析器给的异常类不同</h3>
+<pre><code># .venv/Scripts/python.exe -c "from auto_qb.infra.utils import parse_speed, parse_fsize; ..."
+parse_speed '1iB/s'     -&gt; KeyError 'IB/S'
+parse_fsize '1iB/s'     -&gt; ValueError 无效大小格式: 1iB/s
+parse_speed '1iB'       -&gt; ValueError 无效速度格式: 1iB
+parse_fsize '1iB'       -&gt; ValueError 无效大小格式(需使用iB单位, 如 10MiB): 1iB
+parse_speed '1.5.5MiB/s' -&gt; ValueError could not convert string to float: '1.5.5'
+parse_fsize '1.5.5MiB/s' -&gt; ValueError 无效大小格式: 1.5.5MiB/s</code></pre>
+    <h3>② 端到端: load_config 抛的不是 ConfigError</h3>
+<pre><code># 把 config.yml 里的 upload_speed_limit: 0KiB/s 改成 1iB/s, 拷到临时目录后 load_config
+$ .venv/Scripts/python.exe -c "from auto_qb.config.loaders import load_config; load_config(sys.argv[1])" /tmp/xxx/cfg.yml
+... (配置 schema 迁移日志) ...
+KeyError : 'IB/S'</code></pre>
+    <p>与 <code>load_config</code> 自己的契约冲突：<code>src/auto_qb/config/loaders.py:561</code> 的 docstring 写「任何配置问题统一抛 ConfigError(文件读取/YAML 解析/校验失败)」。</p>
+    <h3>③ 差异的出处（贴两侧原文）</h3>
+<pre><code># src/auto_qb/infra/utils.py:257-263  parse_fsize —— 有白名单兜底
+m = re.match(r"^([\d.]+)\s*([KMGTP]?i?B)$", str(fsize_str).strip().upper(), re.IGNORECASE)
+if not m: raise ValueError(f"无效大小格式: {fsize_str}")
+value, unit = m.groups()
+if unit not in units:
+    raise ValueError(f"无效大小格式(需使用iB单位, 如 10MiB): {fsize_str}")
+return int(float(value) * units[unit])
+
+# src/auto_qb/infra/utils.py:270-275  parse_speed —— 没有这一步, 直接下标
+units = {"B/S": 1, "KIB/S": 1024, "MIB/S": 1024**2, "GIB/S": 1024**3}
+m = re.match(r"^([\d.]+)\s*([KMG]?i?B/S)$", str(speed_str).strip().upper(), re.IGNORECASE)
+if not m: raise ValueError(f"无效速度格式: {speed_str}")
+value, unit = m.groups()
+return int(float(value) * units[unit])        # &lt;-- "IB/S" 命中正则但不在表里 -> KeyError</code></pre>
+    <h3>④ 校验层只接 ValueError</h3>
+<pre><code># src/auto_qb/config/validation/core.py:137-144
+def _try(parse_fn, value, where, errors):
+    try:
+        return parse_fn(value)
+    except ValueError as e:          # KeyError 不在此列
+        errors.append(f"{where}: {e}")
+        return None
+
+# 调用点（无前置形状检查, 字符串直接进 parse_speed）
+# src/auto_qb/config/validation/sections.py:674-676   trackers.*.upload_speed_limit / download_speed_limit
+# src/auto_qb/config/validation/curves.py:99          曲线档位 speed_spec[direction_key]</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>速度类配置键写成无前缀 iB/S（<code>1iB/s</code> 是当前唯一能命中该分支的写法：正则 <code>[KMG]?iB/S</code> 允许 <code>i?B/S</code>，单位表只有 <code>B/S|KIB/S|MIB/S|GIB/S</code>）。手写 config.yml 与 WebUI 提交树两条路径都会走到。</td></tr>
+      <tr><td>影响范围</td><td>配置加载整体 fail-fast（这部分是既有设计，不新增停机面）；损失落在可诊断性上：本该是「配置校验失败, 共 N 处 / [i] config.trackers.HHan.upload_speed_limit: ...」的聚合报错，退化成裸 traceback，不知道是哪个键、也没跑完其余校验。同一路径上的曲线段（<code>global_speed_limit_curve</code>）同样。</td></tr>
+      <tr><td>严重度</td><td>低（输入本身非法，必然失败；错在报错形态与「统一 ConfigError」契约）。归 bug 而非 refactor 的理由：用户可见的错误形态退化，不是纯风格。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/infra/utils.py:266</code> · <code>parse_speed</code>（取证 2026-10-29 12:52；行号已相对原报告漂移，原报告记的是 torrents 下某文件 140-180 区间，现已收敛到 infra/utils）· grep 词: <code>def parse_speed</code></li>
+      <li><code>src/auto_qb/infra/utils.py:247</code> · <code>parse_fsize</code>（对照侧，含白名单兜底 261-262）</li>
+      <li><code>src/auto_qb/infra/utils.py:235</code> · <code>parse_time</code>（同族第三份，无此问题：<code>[SMHD]</code> 正则与单位表精确同宽）</li>
+      <li><code>src/auto_qb/config/validation/core.py:137</code> · <code>_try</code>（只捕获 ValueError）· grep 词: <code>def _try(parse_fn</code></li>
+      <li><code>src/auto_qb/config/validation/sections.py:676</code> / <code>curves.py:99</code> · parse_speed 的两个调用点 · grep 词: <code>_try(parse_speed</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p>三份解析器是「regex → 单位表 → 乘数」的同构副本（B 类分歧重复），单位白名单记在两处（正则字符类 + dict 键），只有 fsize 那份在两个白名单之间补了一道 <code>unit not in units</code>。speed 这份在演化中没跟上这一步，正则比 dict 宽一格，于是 <code>units[unit]</code> 直接下标抛 KeyError。换句话说：不是「speed 少写一行」的偶发疏漏，而是同构副本演化出的分歧——补哪个副本都只治一处。</p>
+    <p>已排除：① 非「校验层漏放行」——<code>_try</code> 捕获面窄是设计选择（ValueError = 用户输入错）；② 非 floats 解析差异——<code>1.5.5</code> 两侧都抛 ValueError，仅文案不同。</p>
+  </section>
+
+  <section id="s6">
+    <h3>方案 A（最小修，只治缺陷）</h3>
+    <p><code>parse_speed</code> 补上与 <code>parse_fsize</code> 同形的兜底：<code>if unit not in units: raise ValueError(f"无效速度格式(需使用iB单位, 如 10MiB/s): {speed_str}")</code>。代价 <code>+3</code> 行；不治「下一个副本再漂一次」。</p>
+    <h3>方案 B（收敛 + 缺陷一起治，推荐）</h3>
+    <p>抽一个私有阶梯 <code>_parse_quantity(raw, pattern, units, *, cast, empty_default, err)</code>，三个公有函数各留 3–5 行包装，**各自保留**：单位表、正则、报错文案、返回类型（time→float、fsize/speed→int）、空串语义（time/speed 空串→0，fsize 空串→ValueError）。<code>_parse_quantity</code> 内统一做 <code>if unit not in units: raise ValueError(err % raw)</code> —— 于是「正则比单位表宽」这一类漂移**结构上不可能再发生**。</p>
+    <p>明确<b>不做</b>：把三个函数合成一个带 <code>mode</code> 参数的函数（返回类型与空串语义三份都不同，参数化后每个调用点都要记 mode 语义，可读性净损）。</p>
+    <h3>验证手段</h3>
+    <ul>
+      <li>等价性守阵: 现有 <code>tests/test_utils.py:132-150</code>（happy path）+ <code>:434-475</code>（空串/非法/非 iB 单位）已覆盖两侧行为，改造前先跑绿作为基线；改造后同一批断言必须仍绿（这是「行为可保持」的判据）。</li>
+      <li>新增表驱动用例: 三函数 × {合法值, 空串, 纯非法串, 无前缀 iB（<code>1iB</code>/<code>1iB/s</code>）, 小数多段（<code>1.5.5MiB</code>）}，断言异常**类**（ValueError）而非仅断言「抛异常」——现有 3 处 <code>except ValueError</code> 写法已能接住，但表驱动才能固定 KeyError 不复现。</li>
+      <li>配置层守阵: 一条 <code>load_config</code> 用例（temp config，<code>trackers.X.upload_speed_limit: 1iB/s</code>），断言抛 <code>ConfigError</code> 且消息含 <code>upload_speed_limit</code> —— 钉住「任何配置问题统一抛 ConfigError」的契约。</li>
+    </ul>
+    <p class="hint">来源：重复代码审查报告 §21 R18-B01（B 类复核 2026-10-29）。原判定「抽通用解析器会损可读性，只登记」——复核后维持「不参数化 mode」的部分，但单位表宽度分歧已构成用户可见的错误形态退化，故升级为 bug 入池（方案 B 的可读性代价由「各函数保留自己的表与文案」吸收）。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 12:52 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-29-1252-bug-b-r18b01-parse-unit-ladder.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

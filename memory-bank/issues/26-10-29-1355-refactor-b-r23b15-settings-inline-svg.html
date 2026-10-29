@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r23b15-settings-inline-svg">
+<meta name="issue-stamp" content="26-10-29-1355">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="设置页搜索图标内联两遍且与 sprite #i-search 逐字同形">
+<meta name="issue-summary" content="settings.html 25/107 各写一份完整 search path, sprite 已有同形 #i-search; 图标来源二选一无纪律注释">
+<title>设置页搜索图标内联两遍且与 sprite #i-search 逐字同形 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>设置页搜索图标内联两遍且与 sprite #i-search 逐字同形</h1>
+    <p class="lede">settings.html 25/107 各写一份完整 search path, sprite 已有同形 #i-search; 图标来源二选一无纪律注释</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1355-refactor-b-r23b15-settings-inline-svg</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:55</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>设置页有 8 处内联 <code>&lt;svg&gt;</code> 画图标，而站内图标的正规来源是三皮肤 shell 的 sprite（<code>&lt;use href="#i-*"&gt;</code>，67 个 symbol）。其中<strong>放大镜在同一文件里内联了两遍</strong>（<code>25</code> 抬头搜索框、<code>107</code> tracker 聚焦搜索层），两处 path 逐字相同，且与 sprite 的 <code>#i-search</code> <strong>也逐字相同</strong> —— 同一图形存了三份。改图标风格（加粗 stroke / 换形状）会漏改其中一两处，没有任何报错，只表现为「同一页两个搜索框图标不一样」。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:55，HEAD 1b7dd104）的快照；重定位用 grep <code>class="hb-ico"</code> / <code>circle cx="7"</code>。</p>
+    <ul>
+      <li><strong>内联搜索 ×2（同文件）</strong> <code>shared/tpl/settings.html:25</code> 与 <code>:107</code>，两处逐字：
+        <code>&lt;svg class="hb-ico" viewBox="0 0 16 16"&gt;&lt;circle cx="7" cy="7" r="4.6"/&gt;&lt;path d="M10.6 10.6 14 14"/&gt;&lt;/svg&gt;</code>。</li>
+      <li><strong>sprite 同形 symbol</strong> <code>atlas/index.html:20</code> 与 <code>console/index.html</code> / <code>prism/index.html</code> 同段：
+        <code>&lt;symbol id="i-search" viewBox="0 0 16 16"&gt;&lt;circle cx="7" cy="7" r="4.6"/&gt;&lt;path d="M10.6 10.6 14 14"/&gt;&lt;/symbol&gt;</code>（几何逐字相同，viewBox 也相同）。</li>
+      <li><strong>设置页本来就吃 sprite（旁证）</strong> 同文件 <code>:60</code> <code>&lt;use :href="'#' + c.icon"&gt;</code>（分区卡）、<code>:91</code> <code>&lt;use :href="'#' + hubNow.icon"&gt;</code>；
+        该模板在三个 shell 都以 <code>{"src": "/shared/tpl/settings.html", "into": "app"}</code> 载入同文档（<code>atlas/index.html:138</code> / <code>console:142</code> / <code>prism:144</code>）—— <strong>跨皮肤依赖 sprite 这件事已经成立</strong>，不存在「console_hub.css 不能依赖各皮肤 sprite」的障碍。</li>
+      <li><strong>其余内联（各自仅一处，且无同形 symbol）</strong> <code>:82</code> 返回箭头 <code>M9.8 3.2 5 8l4.8 4.8</code>（sprite 无左向 chevron）；
+        <code>:154</code> / <code>:171</code> 加号 <code>M8 3v10M3 8h10</code>（sprite 的 <code>#i-plus</code> 是 <code>M8 3.4v9.2M3.4 8h9.2</code>，几何不同）；
+        <code>:174</code> 导入箭头 <code>M8 2v8M4.6 7 8 10.4 11.4 7M3 13h10</code>（<code>#i-download</code> 同构但坐标不同）；<code>:47</code> 警示三角在<strong>已注释块</strong>内（<code>43-54</code>，伪警示条暂隐藏）。</li>
+      <li><strong>尺寸/描边口径</strong> <code>shared/console_hub.css:290-299</code> <code>.hb-ico{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}</code> —— 内联与 sprite 谁进来都由这一个类给出同一描边，故换 <code>&lt;use&gt;</code> 不改变观感。</li>
+      <li><strong>既有守阵</strong> <code>tests/test_webui_static_skins.py::test_frontend_shell_sprite_login_parity</code>（<code>:1940</code>）钉三皮肤 sprite 段逐字相等 + symbol 数下限 67；
+        <code>tests/test_webui_static_dom_panel.py:1783</code> 已有「<code>#i-*</code> 引用必须命中 sprite 集合」的循环，但<strong>只扫 <code>drawer_tpl/*.js</code>，不扫 <code>shared/tpl/*.html</code></strong>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>搜索图标（×2）</strong>：内联 path ↔ sprite <code>#i-search</code>，<strong>几何逐字相同</strong> ⇒ 纯冗余，换 <code>&lt;use&gt;</code> 零视觉差。</li>
+      <li><strong>加号（×2）</strong>：内联 ↔ <code>#i-plus</code>，几何差 0.4 单位（3/10 vs 3.4/9.2）⇒ 换过去有微小可见变化，需拍板，<strong>本项不做</strong>。</li>
+      <li><strong>返回箭头 / 导入箭头</strong>：sprite 无对应 symbol ⇒ 若要统一须<strong>三皮肤同步加 symbol</strong>（改 3 份 80 行 sprite 段），成本 ≫ 收益，<strong>本项不做</strong>。</li>
+      <li>是否有意分叉：<strong>无判据</strong>。全文件没有一句注释说明「为何这几处内联」，而 26-10-20-2231 那次 sprite 统一也没回头收它。<strong>归类 (b)：无判据漂移</strong>，只对「逐字同形」的那两处可无风险收敛。</li>
+    </ul>
+    <p>判定：<strong>值得做</strong>（refactor / light，范围只取搜索图标这两处 + 一行纪律注释）。① 重复真实：同一 path 在仓内共 3 份（settings ×2 + 三皮肤 sprite 各 1）；② 行为可保持：<code>#i-search</code> 与内联 path 几何逐字相同、viewBox 相同、描边同样由 <code>.hb-ico</code> 给出 ⇒ 像素等价；③ 可验证：既有 sprite 三皮肤对齐守阵 + 把「<code>#i-*</code> 必须命中 sprite」的断言扩到 <code>shared/tpl/*.html</code>（否则将来引用到某皮肤缺的 symbol 会静默空白）+ 设置页抬头真浏览器截图比对；④ 收益中（消 2 份拷贝、图标来源纪律成文）＞ 风险极低（仅 2 行标记替换）。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <ul>
+      <li><code>settings.html:25</code> / <code>:107</code> 改为 <code>&lt;svg class="hb-ico" viewBox="0 0 16 16"&gt;&lt;use href="#i-search"&gt;&lt;/use&gt;&lt;/svg&gt;</code>（<code>:82</code> 那处已有 <code>aria-hidden="true"</code> 的写法可参照）。</li>
+      <li>在 <code>settings.html</code> 抬头段加一句注释写清<strong>图标来源纪律</strong>：能用 sprite 的一律 <code>&lt;use&gt;</code>；sprite 无对应 symbol 又只此一处的小图形才内联，并在注释里点名（返回箭头/导入箭头/<code>#i-plus</code> 几何不同）。</li>
+      <li>验证：① <code>tests/test_webui_static_dom_panel.py:1783</code> 的 <code>#i-*</code> 命中检查扩展到 <code>shared/tpl/*.html</code>（新断言：<code>settings.html</code> 里每个 <code>#i-[a-z0-9-]+</code> 都在三皮肤 sprite 集合内）；② <code>pytest tests/test_webui_static_skins.py -k sprite</code> + <code>pytest tests/test_webui_static_dom_panel.py -k variant_field_icons</code> 绿；③ 真浏览器打开设置页，抬头搜索框与 tracker 搜索层放大镜截图比对（预期逐像素相同，尺寸 15px、位置不变）。</li>
+    </ul>
+    <p>来源：重复代码审查报告 §29 R23-B-15（B 类复核 2026-10-29）。原判定「收益低-中，推荐 (a) 保持内联但抽常量」；本轮重估：① 抽常量在 in-DOM 模板里做不到（<code>&lt;template is&gt;</code> 不支持片段复用）；② 原推测的「console_hub.css 不敢依赖 sprite」已被设置页自身的 <code>:60</code>/<code>:91</code> 证伪 ⇒ 改判为「逐字同形的搜索图标直接换 <code>&lt;use&gt;</code>」，不再提抽常量方案。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:55 — 入池，状态 <strong>Open</strong>（计划外，未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1355-refactor-b-r23b15-settings-inline-svg.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

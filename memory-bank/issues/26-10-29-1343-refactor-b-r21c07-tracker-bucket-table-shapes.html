@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r21c07-tracker-bucket-table-shapes">
+<meta name="issue-stamp" content="26-10-29-1343">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="tracker 五桶文案表两种形状、字面散在 5 处(04/05/06)">
+<meta name="issue-summary" content="BUCKET{text,sev} 两份、GROUPS{text,cnt} 一份，另有 04 PILLS 与 05 计数条内联字面，改文案或加桶要动五处">
+<title>tracker 五桶文案表两种形状、字面散在 5 处(04/05/06) · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>tracker 五桶文案表两种形状、字面散在 5 处(04/05/06)</h1>
+    <p class="lede">BUCKET{text,sev} 两份、GROUPS{text,cnt} 一份，另有 04 PILLS 与 05 计数条内联字面，改文案或加桶要动五处</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1343-refactor-b-r21c07-tracker-bucket-table-shapes</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:43</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>tracker 五桶（未工作/未联系/更新中/工作/禁用）的<strong>中文文案</strong>是同一事实，但字面散在 5 处，且表有两套形状：04、06 的 <code>BUCKET</code>（<code>{text, sev}</code>）、05 的 <code>GROUPS</code>（<code>{key, text, cnt}</code>），外加 04 的 <code>PILLS</code> 与 05 的计数条 <code>stripHtml</code> 各自内联一遍字面。改一处桶文案要动五处，加第六桶（qB 将来加状态）要按两种形状分别扩。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:43，HEAD 1b7dd104）的快照；重定位用 grep <code>未联系</code>（该词只在桶文案里出现）。</p>
+    <ul>
+      <li><strong>04</strong> <code>shared/drawer_tpl/04-trackers-status-cards-tall.js:35-41</code>
+        <code>const BUCKET = { err: { text: "未工作", sev: 0 }, warn: { text: "未联系", sev: 1 }, upd: { text: "更新中", sev: 2 }, ok: { text: "工作", sev: 3 }, off: { text: "禁用", sev: 9 } };</code>（注释：「状态分桶 -&gt; 展示文案与排序权值」）</li>
+      <li><strong>06</strong> <code>06-trackers-table-collapsed.js:36-43</code>：同一张 <code>BUCKET</code>，五个 <code>text</code> 与五个 <code>sev</code> 逐字同。</li>
+      <li><strong>05</strong> <code>05-trackers-health-groups-low.js:41-48</code>：<code>GROUPS = [{ key:"err", text:"未工作", cnt:"正在拖后腿 · 优先处理" }, …]</code> —— 文案同，附加列换成 <code>cnt</code>（分区副标题话术），并用<strong>数组顺序</strong>承载「问题前置」的处理序。</li>
+      <li><strong>04 第二份</strong> <code>04:44-51</code> <code>PILLS</code>：<code>{ f:"warn", text:"未联系", cls:"pd-warn", tip:"未联系 = 黄" }</code> —— 文案第三次出现，附加列是 <code>cls/tip</code>。</li>
+      <li><strong>05 第二份</strong> <code>05:322-330</code> <code>stripHtml</code>：计数条里五个桶名直接写成字面，如
+        <code>&lt;span class="dt05-c"&gt;&lt;i style="background:var(--warn)"&gt;&lt;/i&gt;未联系 &lt;b&gt;${n.warn}&lt;/b&gt;&lt;/span&gt;</code> —— 文案第四次出现，且桶序/色族也在此硬编码。</li>
+      <li>⇒ 同一事实共 5 处（04 BUCKET / 04 PILLS / 05 GROUPS / 05 stripHtml / 06 BUCKET），两套形状；<code>sev</code> 全仓只在 04/06（<code>04:216</code> <code>const sev = bk.sev</code> 拼排序权值），<code>cnt</code> 只在 05。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>形状</strong>：对象（键 = 桶名，靠 <code>sev</code> 升序排）↔ 数组（顺序即处理序，元素带 <code>key</code>）。同一顺序事实两处编码：04/06 的顺序由 <code>sev 0/1/2/3/9</code> 表达，05 由数组下标表达，两者当前一致。</li>
+      <li><strong>附加列</strong>：<code>sev</code>（排序权值）vs <code>cnt</code>（副标题话术）vs <code>cls/tip</code>（胶囊色与悬浮说明）。<strong>消费场景不同，本身正当</strong> —— 分歧不在附加列，而在「文案与桶集」被复制了五遍。</li>
+      <li><strong>是否有意分叉</strong>：无判据。没有任何注释说明「04 的胶囊文案必须与 06 的桶表分开维护」；五份 <code>text</code> 当前完全一致，说明是<strong>复制而非演化</strong>。<strong>归类 (b)：无判据漂移，该合（只合文案与桶集，不合附加列与排版）</strong>；不判 (c) —— 五份字面目前一致，用户看不到错。</li>
+    </ul>
+    <p>判定：<strong>值得做</strong>（refactor / light）。① 重复真实（5 处，两形状）；② 行为可保持 —— 只把 <code>text</code> 抽成单源，<code>sev/cnt/cls/tip</code> 与各处顺序、DOM 结构全不动，字面逐字不变；③ 可验证 —— 静态守阵（<code>未联系</code> 在 <code>drawer_tpl/</code> 只允许 1 处命中）+ 现有 <code>tests/e2e/drawer-trackers-variant-tables.spec.mjs</code> / <code>drawer-trackers-reannounce.spec.mjs</code> 回归；④ 收益（改文案/加桶一处，避免「同一桶三版式三种写法」的未来漂移）&gt; 风险（低：纯查表 + 渲染装配不变）。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <p>一张表带全部列、各取所需：核心层落 <code>TRACKER_BUCKETS = { err: { text:"未工作", sev:0, order:0, cnt:"正在拖后腿 · 优先处理" }, warn: {…}, upd: {…}, ok: {…}, off: {…} }</code>，另导出 <code>TRACKER_BUCKET_ORDER = ["err","warn","upd","ok","off"]</code>（05 的分区顺序与 04/06 的 <code>sev</code> 升序同源，写一次即可）。04/06 的 <code>BUCKET[b].text/.sev</code>、05 的 <code>GROUPS</code> 全部改为读该表（05 仍用数组派生的局部视图，不直接持有字面）；04 <code>PILLS</code> 的 <code>text</code>、05 <code>stripHtml</code> 的五个桶名改读 <code>TRACKER_BUCKETS[k].text</code>（<code>cls/tip</code> 与色族仍留在各自文件 —— 那是版式语义）。</p>
+    <p>挂载位置：抽屉层已有 <code>reg.peers</code> 这种「判据命名空间」先例，本表属同类，建议一并挂同类命名空间（或 <code>reg.helpers</code>）；<strong>服务 3 个变体 5 个消费点才够格</strong>，不要为单处造 helper。</p>
+    <p>协同提醒：<code>bucketOf(ctx,t)</code>（状态码 → 桶）在 04/05/06 另有逐字三份，属 <strong>R21-B-05 / R21-C-05</strong> 的范围（不在本项）。若那件先落，本表应随 <code>bucketOf</code> 并入同一命名空间，避免出现两个半套的「tracker 判据单点」；本项<strong>不</strong>顺手改 <code>bucketOf</code>，只把文案表收单。</p>
+    <p>验证手段：① 静态守阵（<code>tests/test_webui_static_dom_panel.py</code> 抽屉变体族，写法参照 <code>test_drawer_variant_skeleton_single_point</code> ②「判据单点在核心 + 各变体经 const 消费 + 本地副本零残留」）：<code>drawer_tpl/</code> 下字面 <code>未联系</code> 命中数 == 1（在核心层表内），04/05/06 各出现 <code>TRACKER_BUCKETS</code> 消费 ≥1 次；② 等价性：五处取到的 <code>text</code> 与现状逐字相同（静态断言可覆盖），<code>sev</code> 值 0/1/2/3/9 不动 ⇒ 排序权值不变；③ e2e 回归 <code>drawer-trackers-variant-tables.spec.mjs</code>（三档表体）+ <code>drawer-trackers-reannounce.spec.mjs</code>，另手工过 04 胶囊/05 计数条/06 表头三处文案。</p>
+    <p>收益：桶文案与桶集从 5 处收成 1 处，新增第六桶或改中文只动一处；风险：低 —— 纯查表替换，DOM/class/顺序均不变。</p>
+    <p>来源：重复代码审查报告 §27 R21-C-07（B 类复核 2026-10-29）。原判定「只登记（一张表 {text,sev,cnt} 全列，两处各取所需）」；本轮重估：核对到实际是 5 处而非 3 处，且五份字面当前完全一致、无判据分歧 ⇒ 改判值得做。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:43 — 入池，状态 <strong>Open</strong>（B 类复核批次 G；未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1343-refactor-b-r21c07-tracker-bucket-table-shapes.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

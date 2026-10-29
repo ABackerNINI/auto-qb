@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r16b02-delta-cancel-helper">
+<meta name="issue-stamp" content="26-10-29-1321">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="webui 三桶同键抵消(R5)在 fold 与 publish 各写一份">
+<meta name="issue-summary" content="同键 upsert/removed 两路抵消这段规则在 _fold_delta_pending_locked 与 _publish_locked 分叉判定前逐字重写(后者自述「重跑一遍」), 抽一个 helper 收单点">
+<title>webui 三桶同键抵消(R5)在 fold 与 publish 各写一份 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>webui 三桶同键抵消(R5)在 fold 与 publish 各写一份</h1>
+    <p class="lede">同键 upsert/removed 两路抵消这段规则在 _fold_delta_pending_locked 与 _publish_locked 分叉判定前逐字重写(后者自述「重跑一遍」), 抽一个 helper 收单点</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1321-refactor-b-r16b02-delta-cancel-helper</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:21</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>「同键 upsert 与 removed 两路抵消」(R5: 同拍增删净变化为零, 不给客户端又删又发同一行)这段<strong>规则</strong>
+    在 runtime 里有两份逐字相同的实现, 且其中一份自述是另一份的重复:</p>
+    <ul>
+      <li><code>_fold_delta_pending_locked</code>: <code>for view in ("torrent","group","show")</code> → <code>both = upsert[v] &amp; removed[v]</code> 双向减。</li>
+      <li><code>_publish_locked</code> 分叉判定前: 同一段代码, 变量名换成 <code>bucket</code>;
+      注释自述「R5 交叉抵消前移 …… fold 落代段重跑一遍, 幂等」—— 即作者已知这是同一规则的第二次书写。</li>
+    </ul>
+    <p>两处必须同步改动: 改抵消口径(例如将来改成"removed 优先"或新增第 4 个桶)时漏一处, 后果是客户端
+    <strong>又收 delta 又收 removed</strong> 或漏删幽灵行 —— 这类错误不报错, 只在界面上表现为行不消失/闪烁。</p>
+    <p>报告原判"三处用途不同、合并收益有限"复核后<strong>部分成立</strong>: 推导段(<code>_drain_delta_locked</code>)与
+    归约段(<code>_reduce_delta</code>, 跨代单向 <code>rm -= up</code>)确属不同规则, 不该合; 但上面这两处是
+    <strong>同一规则的复制粘贴</strong>, 属可低成本收敛的部分。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li><code>src/auto_qb/webui/runtime.py:893-896</code>(取证 2026-10-29 13:21)· <code>_fold_delta_pending_locked</code> ·
+      grep <code>for view in ("torrent", "group", "show")</code></li>
+      <li><code>src/auto_qb/webui/runtime.py:1262-1265</code>(同上)· <code>_publish_locked</code> ·
+      grep <code>for bucket in ("torrent", "group", "show")</code></li>
+      <li>结构建造单点(已抽, 复用它做对照): <code>src/auto_qb/webui/runtime.py:115</code> · <code>_new_delta_buckets</code></li>
+      <li>不该合的两处(留档, 防误改): <code>runtime.py:682</code> <code>_drain_delta_locked</code>(逐视图推导)、
+      <code>runtime.py:1571</code> <code>_reduce_delta</code>(跨代窗口并集 + 单向让位)</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>抽一个模块级 helper(与 <code>_new_delta_buckets</code> 相邻), 两处都改调它:</p>
+<pre><code>def _cancel_delta_buckets(delta: dict) -> None:
+    """R5 同键抵消: 同一桶内同时 upsert+removed 的行净变化为零(幂等)。"""
+    upsert, removed = delta["upsert"], delta["removed"]
+    for view in upsert:
+        both = upsert[view] & removed[view]
+        upsert[view] -= both
+        removed[view] -= both</code></pre>
+    <p>注意两点: ① 循环改 <code>for view in upsert</code>(键空间即 <code>_new_delta_buckets</code> 的键), 新增桶不会再漏;
+    ② <code>_reduce_delta</code> 的 <code>rm -= up</code> 是跨代<strong>单向</strong>让位, <strong>不得</strong>换成这个 helper。</p>
+    <p>验证: <code>tests/test_webui_delta.py::test_same_tick_upsert_removed_cancel</code> ·
+    <code>tests/test_webui_delta_mirror.py::test_m4_same_tick_add_remove_and_pending_removed_overlap</code>
+    (现状即守阵, 纯粹抽取应逐字保持绿) + 静态守阵(可加): <code>runtime.py</code> 源码中不再出现字面量
+    <code>("torrent", "group", "show")</code> 的抵消块。</p>
+    <p class="hint">重开条件(报告原编号 R16-B02 的另两面): 若将来出现第 4 个桶维度(如 ep 行级增量), 则本 helper 已覆盖;
+    推导段/归约段仍各自独立, 不并入。来源: 重复代码审查报告 §19 R16-B02（B 类复核 2026-10-29）—— 原判"三处同族只登记",
+    本次拆分后仅抵消块值得做。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:21 — 入池，状态 <strong>Open</strong>（未认领；计划外问题，等用户指派）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1321-refactor-b-r16b02-delta-cancel-helper.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

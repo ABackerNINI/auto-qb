@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r13s01-lane-summary-twin">
+<meta name="issue-stamp" content="26-10-29-1327">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案">
+<meta name="issue-summary" content="同一各档摘要两处实现: 全深度/(全) 文案分叉, tag 回落与计数段格式各写一遍">
+<title>各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案</h1>
+    <p class="lede">同一各档摘要两处实现: 全深度/(全) 文案分叉, tag 回落与计数段格式各写一遍</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1327-refactor-b-r13s01-lane-summary-twin</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 13:27</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>同一个「各档波次摘要串」在两处各实现一遍：<code>hr/service.py::_lanes_summary_from</code>（刷新结果，CLI 刷新命令用）与 <code>hr/status.py::_lane_statuses</code> 里的 <code>parts</code>（站点状态快照，CLI 状态命令 + webui 用）。两处都在遍历 <code>FETCH_LANES</code>、拼 <code>档:标记N页M行(深度)/声明N 对不平</code>，但文案与回落规则已分叉：深度标记一侧 <code>(全深度)</code>、一侧 <code>(全)</code>；状态标记一侧用字典透传未知值、一侧用三元静默降级成 <code>-</code>。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">行号为取证时（2026-10-29 13:27，HEAD 1b7dd104）的快照；重定位用 grep 关键词。</p>
+    <ul>
+      <li><code>src/auto_qb/hr/service.py:1771-1785</code>（grep <code>_lanes_summary_from</code>）：
+        1778 <code>tag = {"ok": "[x]", LANE_FAILED: "x", LANE_IDLE: "-"}.get(st.status, st.status)</code>；
+        1782 <code>parts.append(f"{lane}:{tag}{st.pages}页{st.rows}行" + ("(全深度)" if st.full_depth else "") + counter)</code>；
+        counter 在 1779-1781 拼 <code>/声明{claim}</code> + <code> 对不平</code>。无 <code>detail</code> / <code>fail_streak</code> 段。</li>
+      <li><code>src/auto_qb/hr/status.py:294-300</code>（grep <code>(全)</code> / <code>各档波次</code>）：
+        295-299 <code>f"{lane}:{'[x]' if st.status == LANE_OK else ('x' if st.status == LANE_FAILED else '-')}"</code>
+        + <code>f"{st.pages}页{st.rows}行"</code> + <code>("(全)" if st.full_depth else "")</code> + <code>/声明{claim}</code> + <code> 对不平</code>。
+        同函数 287-292 另有 verbose 的 <code>ls.text</code>（该处用 <code>(全深度)</code>、含 detail/连续失效）。</li>
+      <li>消费面：<code>src/auto_qb/hr/report.py:373</code> 打 <code>result.lane_texts</code>（<code>hr</code> 刷新）；<code>report.py:240</code> 打 <code>st.lanes_text</code>（<code>hr status</code>）；<code>src/auto_qb/webui/static/shared/tpl/settings-detail.html:363</code> 打 <code>s.lanes_text</code>。⇒ 同一波次在 <code>hr</code> 与 <code>hr status</code> 两个命令里深度标签字面不同。</li>
+      <li>守阵现状（两套字符串都被测试钉死，说明是冻结的漂移而非漏同步）：
+        <code>tests/test_hr_status.py:663</code> <code>"A:[x]3页4行(全)/声明5 对不平 B:-0页0行 C:-0页0行"</code>、<code>:705</code> <code>"A:x3页4行(全)/声明7 ..."</code>、<code>:1006</code> 同款；
+        <code>tests/test_hr_report.py:1175</code> <code>lanes_text="A:[x]3页4行"</code>、<code>:1220</code> 断言 <code>ls.text</code> 的 <code>(全深度)</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><strong>深度标记字面</strong>：<code>(全深度)</code> ↔ <code>(全)</code>。同一布尔两种标签，且都出现在同一 CLI 的不同子命令里 —— 无判据支持。</li>
+      <li><strong>未知档位状态回落</strong>：service 侧 <code>dict.get(status, status)</code> 原样透传（将来加 <code>LANE_PARTIAL</code> 会直接打印 <code>partial</code>）；status 侧三元 else 分支一律 <code>-</code>（静默降级）。当前三值域 <code>{""/"ok"/"failed"}</code> 下等价，扩展路径已分叉。</li>
+      <li><strong>计数段</strong>：两侧都是 <code>/声明N</code> + <code> 对不平</code>，字面一致；差异只在 status 侧把深度标记放在 claim 之前 —— 属排版顺序，不属事实差异。</li>
+      <li><strong>缺档</strong>：两处都输出 <code>lane:无</code>，一致。</li>
+      <li><strong>detail / 连续失效波</strong>：只有 status 侧 verbose 串有；紧凑串不展示属有意取舍，不算分歧。</li>
+    </ul>
+    <p>判定：<strong>(b) 无判据漂移，该合（限「部件」层，不合并排版）</strong>。两处算的是同一事实（<code>wave.lanes</code> 的一行摘要），没有任何注释/文档写明「刷新命令说全深度、状态命令说全」是有意区分；<code>hr</code> 与 <code>hr status</code> 对同一波次给出不同深度标签即是漂移的可观察证据；tag 回落一侧透传一侧静默降级更无判据。不归 (a)：未发现「紧凑 vs verbose」之外的正当分叉（verbose 串本就单独存在，不参与本项收敛）。不归 (c)：无错值、无报错，未达「用户可见缺陷」的 bug 门槛。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证</h2>
+    <p>抽「部件」不抽「排版」：在 <code>hr/status.py</code>（或 <code>hr/model.py</code>，取决于依赖方向）落三个单点 —— <code>LANE_TAGS = {LANE_OK: "[x]", LANE_FAILED: "x", LANE_IDLE: "-"}</code>、<code>FULL_DEPTH_TEXT = "全深度"</code>、以及一个 <code>_lane_count_segment(st) -&gt; str</code>（<code>/声明N</code> + <code> 对不平</code>）。<code>_lanes_summary_from</code> 与 <code>_lane_statuses</code> 的 parts 各自保留现有排版模板，只改读这三个部件。深度标签统一取 <code>(全深度)</code>（与 verbose 串、webui 详情一致，须同步改 <code>test_hr_status.py:663/705/1006</code> 的期望串）。未知状态统一用 <code>LANE_TAGS.get(status, status)</code> 透传 —— 若维护者更愿静默 <code>-</code>，须把该选择写成常量旁的一句判据，二选一，不允许两侧各写一套。</p>
+    <p>验证手段：① 新增 <code>tests/test_hr_status.py</code> 同族用例，构造同一 wave fixture，断言 <code>service._lanes_summary_from(data.wave.lanes)</code> 与 <code>_lane_statuses(...)[1]</code> 在 tag / 深度 / 计数三部件上逐项一致（现实现红、收敛后绿）；② 既有 <code>:663/:705/:1006</code> 期望串的改动本身即等价性证据（除深度字面外逐字不变）；③ 静态判据：<code>src/</code> 内 <code>"[x]"</code> 映射与 <code>/声明</code> 拼接各只剩 1 处（可做成 grep 型断言）。</p>
+    <p>收益：6 行重复拼装收成 1 份，加档位状态 / 改深度文案只动一处，顺手消掉两命令文案不一致；风险：低 —— 纯展示层，唯一不可见行为 delta 是「未知状态回落」二选一，无数据面影响。</p>
+    <p>来源：重复代码审查报告 §16 R13-S01（B 类复核 2026-10-29）。原判定「先钉文案差异点再合，只登记」；本轮已钉住：硬差异只有深度标签字面与未知状态回落，无语义分歧 ⇒ 改判值得做。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 13:27 — 入池，状态 <strong>Open</strong>（B 类复核批次 E；未认领，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1327-refactor-b-r13s01-lane-summary-twin.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

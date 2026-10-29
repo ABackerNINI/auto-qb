@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r24b03-relocate-env-builder">
+<meta name="issue-stamp" content="26-10-29-1405">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口">
+<meta name="issue-summary" content="4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致">
+<title>relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口 · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口</h1>
+    <p class="lede">4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1405-refactor-b-r24b03-relocate-env-builder</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 14:05</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>四个 relocate 测试文件各写了一份「真临时目录 + HA/HB 双成员组 + 目标卷」的环境构建器，35 行骨架约 90% 逐字相同（同样的 <code>make_manager</code> → <code>FakeClient</code> → 建 src/dst/content → 每成员写 <code>b"x"*64</code> + <code>_fake_file</code> → <code>files_map</code> → 两个 <code>FakeTorrent</code> 同 save_path → <code>seed_store</code> → <code>server_state</code> → <code>relocate.enabled=True</code>），却在六个维度上各不相同，且只有两处能在注释里找到理由。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">取证 2026-10-29 14:05，基线 <code>1b7dd104</code>；行号为当时值。<code>grep -rn "def _make_env\|def _make_group_env\|def _env" tests/*.py</code></p>
+    <ul>
+      <li><code>tests/test_relocate_exec.py:70</code> <code>_make_env(td, file_count=2, subdir="Show", state="uploading", progress=1.0)</code> —— 约 28 处调用；<b>带</b> <code>_assign_new_torrent</code>、<b>设</b> <code>config.data_dir</code>、返回 <b>6 元</b>（含 files）</li>
+      <li><code>tests/test_relocate_paths.py:46</code> <code>_env(td, file_count=2, subdir="Show", state="pausedUP")</code> —— 约 15 处调用；同上，但初始态 pausedUP</li>
+      <li><code>tests/test_web_relocate.py:45</code> <code>_make_group_env(td, file_count=2, subdir="Show", free=1024**4)</code> —— 约 20 处调用；带 assign、<b>不设</b> data_dir、返回 <b>5 元</b>、声明大小 <b>100</b></li>
+      <li><code>tests/test_grouping_relocate.py:31</code> <code>_env(td, files=("Show/e00.mkv", "Show/e01.mkv"))</code> —— 约 9 处调用；<b>不</b> assign、<b>不设</b> data_dir、返回 <b>5 元</b>、入参是「任意相对路径元组」而非 file_count</li>
+      <li>另有一个同名近邻 <code>tests/webui_helpers.py:519</code> <code>_make_grouped_manager</code>：无真文件、无目标卷、不设 <code>relocate.enabled</code>，服务的是 Web 命令执行用例 —— <b>不属于</b>本族，不要一并合。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><b>初始 state：<code>uploading</code>（exec）vs <code>pausedUP</code>（其余三份）</b> —— (a) 真实场景差异：relocate 的第一件事就是把做种中的种子暂停，exec 从 <code>uploading</code> 起才能覆盖那一步。必须参数化保留。</li>
+      <li><b>分组登记：exec/paths/web 调 <code>grouping._assign_new_torrent("HA"/"HB")</code>，grouping_relocate 不调</b> —— (a) 差异有业务含义（前者要 group 表已建，后者测的是"链接在场时是否裂组"，故意让成员落在不同组）。参数化（<code>assign=True/False</code>）。</li>
+      <li><b>声明大小 64 vs 100</b> —— (b) 无判据漂移。<code>tests/test_web_relocate.py:64</code> 用 <code>_fake_file(name, 100)</code> 声明 100 字节，但同一循环里 <code>open(..., "wb")</code> 只写 <code>b"x"*64</code> —— <b>声明与磁盘不一致</b>；全文件没有任何断言读这个数值，其余三份都是 64/64 一致。收敛时统一成一个参数，默认取一致值（64），若认领人查到某用例依赖 100 再显式传。</li>
+      <li><b><code>mgr.config.data_dir</code>：只有 exec/paths 设</b> —— (b)。两处设、两处不设，都没有注释说明 <code>data_dir</code> 影响什么（journal 落盘位置），属抄写漏项；参数化（<code>data_dir=True/False</code>）即可，先保行为。</li>
+      <li><b>返回元组 5 元 vs 6 元</b> —— (b) 纯形态差异，统一为 6 元（5 元解包处补一个 <code>_</code>）。</li>
+      <li><b><code>free</code>：常量 <code>1&lt;&lt;40</code> 两份 vs 参数 <code>1024**4</code></b> —— 同值，无实质差异，收成一个默认参数。</li>
+      <li><b>入参形态：<code>files=</code> 相对路径元组 vs <code>file_count=</code></b> —— (b)。grouping 版真正需要的是"指定名字的成员"，用 <code>paths=None</code> 参数覆盖即可，不必留第二份构建器。</li>
+    </ul>
+    <p><b>判定：值得做。</b>①重复真实且量大（4 份 × 35 行，约 76 处调用）；②全部差异可参数化，断言与比较对象不变；③验证只跑四个模块即可；④风险低（纯测试侧），且不改就等于让"初始态/分组登记/data_dir"三个语义各自漂在四个文件里，下一个人读哪份取决于他打开哪个文件。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证手段</h2>
+    <ul>
+      <li>收一份 <code>relocate_env(td, *, file_count=2, subdir="Show", state="pausedUP", size=64, progress=1.0, assign=True, data_dir=True, free=1&lt;&lt;40, paths=None)</code>，落 <code>tests/helpers.py</code>（与既有 <code>pin_disk_usage</code> 同址）；若认领人判断 <code>helpers.py</code>（已 1381 行）过肥，可另立 <code>tests/relocate_helpers.py</code> —— 但不要再把第三份骨架留在测试文件里。</li>
+      <li>返回 <code>NamedTuple(mgr, client, src, dst, content, files)</code>，4 个文件改 import；<code>pin_disk_usage(monkeypatch)</code> 仍由用例自己调（它是能力钉，不是环境）。</li>
+      <li><b>验证</b>：改前后各跑 <code>commands run test.quick -- tests/test_relocate_exec.py tests/test_relocate_paths.py tests/test_web_relocate.py tests/test_grouping_relocate.py</code>，断言零改动、全绿；再 <code>grep -rn "def _make_env\|def _make_group_env\|def _env" tests/test_relocate_*.py tests/test_grouping_relocate.py</code> 应归零。</li>
+    </ul>
+    <p class="hint">来源：重复代码审查报告 §31 <b>R24-B-03</b>（B 类复核 2026-10-29）。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 14:05 — 入池，状态 <strong>Open</strong>（计划外，未认领；B 类复核重估后判"值得做"）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

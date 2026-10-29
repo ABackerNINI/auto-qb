@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="b-r24b08-endpoint-pointer-writer">
+<meta name="issue-stamp" content="26-10-29-1406">
+<meta name="issue-type" content="refactor">
+<meta name="doc-topic" content="dup-code-audit-b-recheck">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)">
+<meta name="issue-summary" content="同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵">
+<title>tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移) · refactor · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· refactor</div>
+    <h1>tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)</h1>
+    <p class="lede">同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-29 14:06</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p><code>endpoint.json</code>（工具侧写、auto-qb 侧读的唯一端点事实源）在 tests 里由<b>三份各自手写的载荷字面量</b>模拟写出：其中两份是 15 行逐字拷贝（只差 host/port/autostart_error 三参），第三份是"任意载荷直注"；三份的字段集与工具侧真实写手已经不一致（client 版少一个 <code>autostart_error</code>），而现有守阵只镜像<b>常量</b>（文件名 / schema 版本），<b>不镜像载荷字段集</b>。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>现状取证</h2>
+    <p class="hint">取证 2026-10-29 14:06，基线 <code>1b7dd104</code>。<code>grep -rn "def _write_pointer" tests/*.py</code></p>
+    <ul>
+      <li><code>tests/test_traffic_monitor_client.py:90</code> <code>_write_pointer(tmp_path, monkeypatch, *, token_path, schema=agent.ENDPOINT_SCHEMA) -&gt; str</code>：写 <code>tmp/pointer/endpoint.json</code>，载荷 10 键（host/port 取文件内常量 <code>POINTER_HOST="127.0.0.1"</code> / <code>POINTER_PORT=8099</code>，见 <code>:67-68</code>），<b>无 <code>autostart_error</code></b>。注释自述「载荷字段名与工具侧 gtm 的写出契约一致」。</li>
+      <li><code>tests/test_traffic_source_agent.py:83</code> <code>_write_pointer(..., *, token_path, host="127.0.0.1", port=8099, schema=..., autostart_error=None) -&gt; str</code>：同路径，载荷 <b>11 键</b>（多 <code>autostart_error</code>）。</li>
+      <li><code>tests/test_traffic_source_paths.py:33</code> <code>_write_pointer(tmp_path, monkeypatch, payload: dict) -&gt; None</code>：写到 <code>tmp/endpoint.json</code>（<b>无 pointer 子目录</b>），载荷<b>整字典直注</b>，用途是喂"最小合法指针 / schema 不匹配"等任意形态。</li>
+      <li>生产侧真实写手：<code>tools/global-traffic-monitor/src/gtm/server.py:216</code> <code>_write_endpoint</code>，11 键含 <code>autostart_error</code>；读侧 <code>src/auto_qb/core/traffic_source/agent.py:144-168</code> <code>parse_pointer</code> 用 <code>payload.get("autostart_error")</code>（缺键安全）。</li>
+      <li>现有守阵：<code>tests/test_traffic_source_agent.py:531</code> <code>test_pointer_constants_mirror_tool_side</code> 只 AST 比对 <code>POINTER_DIR_NAME / ENDPOINT_FILE_NAME / ENDPOINT_SCHEMA</code> —— <b>字段集无守阵</b>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>分歧点与判定</h2>
+    <ul>
+      <li><b>client 版缺 <code>autostart_error</code></b> —— (b) 无判据漂移。工具侧每次都会写这个键（可为 <code>null</code>），client 版的用例因此从未在"带该键的真实指针"上跑过；读侧 <code>.get()</code> 容错使后果仅为镜像不完整，<b>不构成假绿</b>（<code>autostart_error</code> 的解析有专门用例 <code>:189</code> 覆盖）。</li>
+      <li><b>paths 版"payload 直注"</b> —— (a) 不同意图（喂任意形态测读者容错），不该被抹平；但可以用 <code>payload=None</code> 参数挂在同一个写手上，不必保留第二份实现。</li>
+      <li><b>落盘路径 <code>tmp/pointer/</code> vs <code>tmp/</code></b> —— (b) 无判据。三处都 monkeypatch 了 <code>agent.endpoint_path</code>，路径本身不进断言，统一取 <code>pointer/</code> 子目录（更贴真实目录形态）即可。</li>
+    </ul>
+    <p><b>判定：值得做。</b>①两份 15 行逐字拷贝 + 一份 3 行同族，符合 <code>test-shared-micro-helper-dup</code> 已收口的规模门槛（该次含大量 ×2 族）；②合并后载荷只有<b>一处</b>镜像，工具侧新增字段时只需改一处；③验证只需跑三个模块，风险近零。收益不算大，但代价同样小，属"顺手做掉比留着划算"。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>收敛建议与验证手段</h2>
+    <ul>
+      <li><code>tests/helpers.py</code> 收 <code>write_endpoint_pointer(tmp_path, monkeypatch, *, token_path="", host="127.0.0.1", port=8099, schema=agent.ENDPOINT_SCHEMA, autostart_error=None, payload=None) -&gt; str</code>：<code>payload</code> 非空则原样写（覆盖 paths 版意图），否则按 11 键默认载荷写；统一 <code>tmp/pointer/endpoint.json</code>，统一 monkeypatch + 返回路径。</li>
+      <li>三处删本地定义改 import；<code>POINTER_HOST/POINTER_PORT</code> 常量保留在 client 测试里作调用参数（它们被断言引用，不是写手内部细节）。</li>
+      <li><b>可选（不强制）</b>：把 <code>test_pointer_constants_mirror_tool_side</code> 的镜像扩到"字段集"——AST 读 <code>gtm/server.py</code> 里 <code>payload = {...}</code> 的键集合，与测试写手的默认载荷键集合比对。价值是让"工具加字段、测试没跟上"从静默变成红；代价是绑到工具侧实现细节（<code>_write_endpoint</code> 改名/改结构就红）。认领人判断值不值得，本单只要求"写手合一"。</li>
+      <li><b>验证</b>：改前后各跑 <code>commands run test.quick -- tests/test_traffic_monitor_client.py tests/test_traffic_source_agent.py tests/test_traffic_source_paths.py</code>，断言零改动、全绿；<code>grep -rn "def _write_pointer" tests/*.py</code> 应归零。</li>
+    </ul>
+    <p class="hint">来源：重复代码审查报告 §31 <b>R24-B-08</b>（B 类复核 2026-10-29）。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-29 14:06 — 入池，状态 <strong>Open</strong>（计划外，未认领；B 类复核重估后判"值得做"，规模不大但代价同样小）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

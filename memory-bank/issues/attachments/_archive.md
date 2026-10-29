@@ -4,8 +4,30 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (47)
+## Open (69)
 
+- [refactor] [tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)](../26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html) — 同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵
+- [refactor] [relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口](../26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html) — 4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致
+- [refactor] [HrRefreshService 测试构造器 4 份 + 10 处内联未收口(参数面不够就绕过)](../26-10-29-1404-refactor-b-r24a03-hr-service-builder.html) — 4 个文件各有一份构造器(181/47/5 次调用), 另有 10 处内联; 根因是构造器参数面缺 data_dir/confs/sleeper/owner, 与已修的 QbManager 单点同根
+- [refactor] [tests 三份轮询等待助手(_wait_until/_wait_for)收口 helpers.wait_until](../26-10-29-1403-refactor-b-r24a02-wait-until-helpers.html) — 同一条 6 行轮询循环在 3 个测试文件各存一份, 超时返回语义与轮询步长无判据分叉; 收单点并参数化
+- [refactor] [设置页搜索图标内联两遍且与 sprite #i-search 逐字同形](../26-10-29-1355-refactor-b-r23b15-settings-inline-svg.html) — settings.html 25/107 各写一份完整 search path, sprite 已有同形 #i-search; 图标来源二选一无纪律注释
+- [refactor] [抽屉非合并态四页签宿主仍硬编码(dtTabItems 单点只覆盖按钮)](../26-10-29-1354-refactor-b-r23b13-drawer-host-vfor.html) — drawer.html 非合并态 4 个 dt-host div + 桥的页签名数组是 DT_TAB_LABELS 之外的第二份页签清单, 加页签要改两处
+- [bug] [HR 详情表表头排序全失效: thead 分支不认 col.sortable 却仍画箭头](../26-10-29-1348-bug-b-r23b10-aqtable-hr-sort-dead.html) — 设置页 HR 详情表列头点击/键盘均不触发排序(col.sortable 恒空 ⇒ headActivate 早退), 表头却恒显箭头
+- [refactor] [content 目录树构建与聚合两份且节点模型已分叉(hasAv/minAv vs av)](../26-10-29-1343-refactor-b-r21c06-content-file-tree-two-copies.html) — 10 与 12 各一份 newDir/buildTree/aggregate/findNode，聚合字段两套，同一算法改口径要改两处
+- [refactor] [tracker 五桶文案表两种形状、字面散在 5 处(04/05/06)](../26-10-29-1343-refactor-b-r21c07-tracker-bucket-table-shapes.html) — BUCKET{text,sev} 两份、GROUPS{text,cnt} 一份，另有 04 PILLS 与 05 计数条内联字面，改文案或加桶要动五处
+- [bug] [抽屉 03 版式 HR 行整段缺 hr_state：同一颗种子比 01/02 少一行「能否删」结论](../26-10-29-1341-bug-b-r21b04-hr-strip-variants.html) — HR 摘要三份各自演化，03 的 hrLine 不读 hr_state/hr_safety_text，触发态只给徽章不给删除安全档位结论与依据
+- [refactor] [文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档](../26-10-29-1340-refactor-b-r21a06-file-prio-text-table.html) — 优先级码→中文同一张表 5 份(4 份含 4 档)，setFilePriority 缺 4 档且回退 String(p)，4 档一进回执就显示「4」
+- [bug] [浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current](../26-10-29-1335-bug-b-r23a09-pop-item-a11y-contract.html) — 同一 .pop-item 交互原语分三套可访问性口径，其中 combobox 自绘高亮却无 listbox/option/aria-activedescendant，读屏听不出当前高亮项
+- [refactor] [config_rules.js spec 编辑八助手已无调用者，其中 ListItemRemove 空态写 [] 与全项目删键口径相反](../26-10-29-1334-refactor-b-r20c07-spec-list-empty-write.html) — spec 列表增删删键口径的正确实现已由 hub-field→cfgItemRemove 接管，残留的 cfgSpecListItemRemove 等 8 个死人方法里空态仍写 []，是抄错边的入口
+- [bug] [目录季标记锚定过窄: 「Season 2 (1080p)」类目录漏识别, 兜底静默归第 1 季](../26-10-29-1329-bug-b-r08e03-dir-season-anchor.html) — parse_files 只认整段三形态, 带后缀目录的季号丢失后 refine_with_files 默认归 1; 同一目录串标题模式解出 2
+- [refactor] [集数正则族两份(episodes 4 项 vs tvshows 7 项): 双向非对称, 只补守阵不合并](../26-10-29-1328-refactor-b-r08e02-episode-pattern-family.html) — 两族同源已演化且互有对方不认的形态; 合并任一侧都改行为, 缺守阵导致静默漂移无信号
+- [refactor] [各档摘要串两套: _lanes_summary_from 与 _lane_statuses parts 同事实两种文案](../26-10-29-1327-refactor-b-r13s01-lane-summary-twin.html) — 同一各档摘要两处实现: 全深度/(全) 文案分叉, tag 回落与计数段格式各写一遍
+- [refactor] [webui 三桶同键抵消(R5)在 fold 与 publish 各写一份](../26-10-29-1321-refactor-b-r16b02-delta-cancel-helper.html) — 同键 upsert/removed 两路抵消这段规则在 _fold_delta_pending_locked 与 _publish_locked 分叉判定前逐字重写(后者自述「重跑一遍」), 抽一个 helper 收单点
+- [bug] [webui 搜索结果行自建一份行构造（seeding_time 未量化 + 明细字段缺失）](../26-10-29-1320-bug-b-r16b01-search-row-view-converge.html) — search_torrents 的 _view 与 _member_view 各建一份行(覆盖 R16-B01/R19-B01): seeding_time 未走 view_field_value, 且缺 eta/num_*/downloaded 等字段, 搜索虚拟行展开明细列空白
+- [refactor] [HR 做种基准(超额豁免线)四处表示收敛为单点, 补回落侧漏算 extra](../26-10-29-1310-refactor-b-r10x03-exempt-baseline-single-source.html) — 打标侧回落只用 hr.required, 取数/达标/视图侧用 required+extra, 同一事实四处手算; 收敛为 HRRule 派生属性
+- [refactor] [traffic 天文件与 agg 解析纪律骨架二份收敛为单点](../26-10-29-1304-refactor-b-r07t06-v4-parse-skeleton.html) — parse_v4_day_text 与 parse_v4_agg_text 的头行门闩/坏行计数/撕裂尾豁免骨架逐字重复, 建议抽公共行循环驱动器、行型判定留回调
+- [refactor] [「无 HR 配置」缺省在 expr 再抄一份记录侧守卫](../26-10-29-1259-refactor-b-r17b01-hr-absent-default.html) — env._hr 自判 无 conf/无 hr 返 false, 与 record._hr_guard 的 未配 hr 不判定 重复; 可等价收敛为单一权威, satisfied 两侧差异另记
+- [bug] [parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback](../26-10-29-1252-bug-b-r18b01-parse-unit-ladder.html) — parse_speed 正则允许 'iB/S' 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
