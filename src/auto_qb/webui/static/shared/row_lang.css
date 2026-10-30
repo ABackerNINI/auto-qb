@@ -184,25 +184,30 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * (.g-name)自带 overflow: hidden(文本截断所需, prism views.css:288 / atlas components.css 同构),
  * 负偏移条在**任何滚动状态**下都被首格自身裁剪(barLeftWorld 12 < cellLeft 26, 横滚后更是
  * 叠加 scrollport 裁剪)⇒「左条没了」。行(.group-row)无 overflow 声明(三皮肤核实)且
- * position:relative(皮肤自带), 行 ::before 定位基于行 padding 盒 ⇒ left:0 恰是行 padding
- * 沟槽左缘 = 旧选中左条(views.css:459 left:0)的几何原位, 条右缘距文本起点 = 行 padding
+ * position:relative(皮肤自带), 行 ::before 定位基于行 padding 盒 ⇒ left:1px(2026-10-30
+ * 键盘锚点让位修: 原左缘 0 与 .kb-cursor 虚线 outline(offset:-1px, 画在行盒最外 1px,
+ * console_hub.css)在 x[0,1] 叠死、虚线穿条 —— 右让 1px 后条 [1,4] 与虚线 [0,1] 贴邻不重叠;
+ * flat/wave 行板左描边已归零, padding 盒左缘=border 盒左缘, 几何成立)= 旧选中左条
+ * (views.css:459 left:0)几何原位右让 1px, 条右缘距文本起点 = 行 padding
  * (var(--tbl-pad-x, 14px), 三皮肤 .group-row 同一表达式: prism views.css:276 / atlas
  * components.css:272 / console components.css:253)——文本零位移、列头对齐, 且不被任何
  * overflow 裁剪。规格 = 旧选中左条同款: top/bottom 14% 不满高 / 3px 宽 / 右侧圆角;
  * hover = 中性白条 120ms 渐入; 选中/半选 = accent 实色条(D4 追记: 左条颜色分家)。
  *
  * 左条两态几何(flat/wave 两组逐字一致):
- * - 未横滚(.group-table 无 .is-hscrolled): 条挂行 ::before, left:0 = 行 padding 沟槽,
+ * - 未横滚(.group-table 无 .is-hscrolled): 条挂行 ::before, left:1px = 行 padding 沟槽
+ *   左缘右让 1px(键盘锚点让位, 见上),
  *   随行在文档流里(横滚时自然随行滚出视野 —— 旧坑档 ③ 形态)。
  * - 横滚(.group-table.is-hscrolled, JS 三处单点打标): 行级沟槽条 content:none 摘除(防 1-2px
- *   滚动时与吸左条并存出双条), 改由吸左首格 ::before 在 left:0 出一条 2px 窄条 —— 首格
+ *   滚动时与吸左条并存出双条), 改由吸左首格 ::before 在 left:1px(同键盘锚点让位)出一条
+ *   2px 窄条 —— 首格
  *   sticky 钉在滚动容器左缘, 条在首格盒内不被自身 overflow:hidden 裁剪, 恒可见; 条压在
  *   文本起点上 2px, 可读性可接受(备选「右缘指示条 right:0」未采纳, 见任务报告)。
  * 成员行(.member-row)不带 .group-row 类, 本组规则零误伤; .rl-scope 外(抽屉)不命中。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 1px;
   top: 14%;
   bottom: 14%;
   width: 3px;
@@ -225,7 +230,7 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row > :first-child::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 1px;
   top: 14%;
   bottom: 14%;
   width: 2px;
@@ -357,14 +362,15 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 
 /* 名称列左条 —— 与 flat 完全同款(行 ::before 承载 + 横滚吸左首格窄条), 几何与两态口径
  * 见 flat 左条规则注释「左条两态几何」(两组逐字一致):
- * - 未横滚: 行 ::before, left:0 = 行 padding 沟槽左缘(= 旧选中左条几何原位);
- * - 横滚(.group-table.is-hscrolled): 沟槽条摘除, 吸左首格 ::before left:0 出 2px 窄条。
+ * - 未横滚: 行 ::before, left:1px = 行 padding 沟槽左缘右让 1px(键盘锚点让位, 见 flat 左条
+ *   规则注释「2026-10-30 键盘锚点让位修」; 几何推导两边逐字同构);
+ * - 横滚(.group-table.is-hscrolled): 沟槽条摘除, 吸左首格 ::before left:1px 出 2px 窄条。
  * hover = 中性白条 120ms 渐入; 选中/半选 = accent 实色条。wave 叠层序: 行 ::before(无
  * z-index)在行内常规层, 扫层 ::after(z-index:3)半透明覆盖其上 —— 与行板/首格同步承光。 */
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 1px;
   top: 14%;
   bottom: 14%;
   width: 3px;
@@ -387,7 +393,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row > :first-child::before {
   content: "";
   position: absolute;
-  left: 0;
+  left: 1px;
   top: 14%;
   bottom: 14%;
   width: 2px;
