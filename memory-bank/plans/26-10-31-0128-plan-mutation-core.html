@@ -198,7 +198,9 @@
 <p class="cm">拍板后回填: D 编号 · 结论 · 日期。未拍板前本计划不执行(计划边界: 不在计划里实施)。</p>
 <table>
   <tr><th>编号</th><th>结论</th><th>日期</th></tr>
-  <tr><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>D1</td><td>按 §03 的 W1→W9 出错代价顺序执行</td><td>26-10-31</td></tr>
+  <tr><td>D2</td><td>state.py / reader.py 的 no-tests 风险面: 开跑前先补定向用例进池再跑</td><td>26-10-31</td></tr>
+  <tr><td>D3</td><td>确认无并行会话跑变异时用默认镜像; 若检出并行冲毁迹象改专用镜像 <code>--mirror ~/auto-qb-mut-core</code> + <code>--children 3</code></td><td>26-10-31</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -217,7 +219,8 @@
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
-  <li><span class="tag">R0 · 26-10-31-0128</span> 初版。来源: 用户指令「写一个 core/ 的变异测试计划」。要点: 按 mutation-testing skill「派生计划」节骨架成文; core/ 32 文件 14,710 行摸底实测(wc -l + tests/ 全量 grep 建模块→池映射); 定调不做整包首轮(hr 整包 96 min 实测反推 core ≥2.5h), 直接拆 W1–W9 九轮按出错代价排序; 三个池面缺口立牌(state.py 仅 2 文件 / qbapi.py 4 文件对 54 def / reader.py 零引用); 三批分期可中断。零 src/ / tests/ 改动; 未执行审计(计划边界: 不在计划里实施)。</li>
+  <li><span class="tag">R1 · 26-10-31-0228</span> 拍板回填: D1/D2/D3 按推荐结论定案(见 §06), 计划转入执行。</li>
+<li><span class="tag">R0 · 26-10-31-0128</span> 初版。来源: 用户指令「写一个 core/ 的变异测试计划」。要点: 按 mutation-testing skill「派生计划」节骨架成文; core/ 32 文件 14,710 行摸底实测(wc -l + tests/ 全量 grep 建模块→池映射); 定调不做整包首轮(hr 整包 96 min 实测反推 core ≥2.5h), 直接拆 W1–W9 九轮按出错代价排序; 三个池面缺口立牌(state.py 仅 2 文件 / qbapi.py 4 文件对 54 def / reader.py 零引用); 三批分期可中断。零 src/ / tests/ 改动; 未执行审计(计划边界: 不在计划里实施)。</li>
 </ul>
 
 </div>
