@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="real-machine-test-standing">
+<meta name="issue-stamp" content="26-10-31-0641">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="real-machine-test">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="真机实测定期排期(常驻排期锚)">
+<meta name="issue-summary" content="常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md">
+<title>真机实测定期排期(常驻排期锚) · test · 常驻排期锚</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1760px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 44px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: #16241a; color: #8fc98f; border-color: #2f4a33; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  td code, th code { white-space: nowrap; }
+  section table { display: block; overflow-x: auto; }
+  .tscroll { overflow-x: auto; margin-bottom: 14px; }
+  #s3 table, #s7 table { display: table; overflow: visible; table-layout: fixed; width: 100%; min-width: 1180px; margin-bottom: 0; }
+  #s3 th:nth-child(1) { width: 62px; }
+  #s3 th:nth-child(2) { width: 190px; }
+  #s3 th:nth-child(3) { width: 430px; }
+  #s3 th:nth-child(4) { width: 250px; }
+  #s3 th:nth-child(5) { width: 86px; }
+  #s3 th:nth-child(6) { width: 70px; }
+  #s3 th:nth-child(7) { width: 92px; }
+  #s7 th:nth-child(1) { width: 62px; }
+  #s7 th:nth-child(2) { width: 96px; }
+  #s7 th:nth-child(3) { width: 96px; }
+  #s7 th:nth-child(4) { width: 170px; }
+  #s7 th:nth-child(5) { width: 300px; }
+  #s7 th:nth-child(6) { width: 380px; }
+  #s3 td code, #s3 th code, #s7 td code, #s7 th code { font-size: 11px; white-space: normal; }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+  @media (max-width: 1499px) {
+    .sheet { grid-template-columns: minmax(0, 1fr); padding: 36px 24px 64px; }
+    nav.toc { position: static; margin-bottom: 8px; }
+    nav.toc a { display: inline-block; border-left: none; padding: 4px 12px 4px 0; }
+    nav.toc .toc-foot { display: none; }
+    header.cover, section, footer { grid-column: 1; }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>这个锚是干什么的</a>
+    <a href="#s2"><span class="no">02</span>为什么不进提交闸门</a>
+    <a href="#s3"><span class="no">03</span>切片表与节奏</a>
+    <a href="#s4"><span class="no">04</span>怎么跑</a>
+    <a href="#s5"><span class="no">05</span>一轮的标准动作</a>
+    <a href="#s6"><span class="no">06</span>产物落在哪</a>
+    <a href="#s7"><span class="no">07</span>覆盖进度总表</a>
+    <a href="#s8"><span class="no">08</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      <strong>常驻锚: 状态恒 Open</strong> · 不是缺陷单<br>
+      规程见 testing/real-machine.md
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 常驻排期锚 · test</div>
+    <h1>真机实测定期排期(常驻排期锚)</h1>
+    <p class="lede">这是一条<b>常驻锚</b>, 不是一个待修的缺陷: 它固定住「连两个测试 qB 实例做真机实测 —— 按片排期、逐片验收、用例逐轮变硬」这件事的排期与覆盖进度。规程(硬约束 / 环境守卫 / 种子层 / 切片更新规则 / 漂移判定 / 成熟度)全在 <code>memory-bank/testing/real-machine.md</code>; 用例在 <code>tests-real/</code>; 命令走 <code>real</code> 包(RM00 建立)。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-31-0641-test-real-machine-test-standing</div></div>
+      <div class="item"><div class="k">建立时间</div><div class="v">2026-10-31 06:41</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge go">Open(常驻)</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">worktree auto-qb-clone5 / agent</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>这个锚是干什么的</h2>
+    <p>现有三条测试轨各有盲区: 单测全 Fake(不碰真 qB)、<code>e2e/</code> 打桩服务(不碰真 qB)、语料回放(<code>qb_capture</code> → <code>sim_qb</code>, 只覆盖真机的<b>数据面形态</b>)。剩下四类东西没有任何轨覆盖: <b>写侧真作用</b>(命令 / 打标 / 限速是否真落到 qB)、<b>qB 真行为</b>(回执、状态机、重启)、<b>真文件系统与进程</b>(移动、硬链接、托盘、开机自启)、<b>观感</b>(配色、跟手性)。存量 <code>checklists/manual-walkthrough.md</code> 里约 15 条"待真机走查"正是第四类 —— 挂了两个月, 因为没有排期机制。</p>
+    <p>这条锚只回答三件事: <b>要不要继续做</b>、<b>下一片做哪片</b>、<b>覆盖到哪了</b>。它<b>不</b>记流水(流水在各片基线切片), 也<b>不</b>替缺陷背书(实测发现的缺陷各自入池, 下一轮再修)。</p>
+    <div class="callout"><b>四段职责</b>(每段只在一个工位有权威): ①<b>排期锚</b>=本 issue(要不要做 / 先做哪片 / 覆盖到哪) → ②<b>规程</b>=<code>memory-bank/testing/real-machine.md</code>(硬约束 / 守卫 / 切片规则 / 漂移 / 成熟度) → ③<b>执行</b>=<code>.commands/real/</code> + <code>tests-real/</code> → ④<b>记录</b>=<code>testing/real-baselines/</code> 切片 + 本件 §07。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>为什么不进提交闸门</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>环境依赖</td><td>需要两个测试 qB 实例开机、种子状态可控、端口未被占。机器没开 / 实例没起就整片红 —— 这是环境, 不是代码</td></tr>
+      <tr><td>有副作用</td><td>会真改 qB 状态、真动文件系统、真重启进程。闸门链里不能有"改了就回不去"的步骤</td></tr>
+      <tr><td>代价</td><td>一片 ≈ 半天; 与"提交前几秒"不是同一量级, 挂上去等于每次提交都在排队</td></tr>
+      <tr><td>数字不可比</td><td>结论依赖真实种子库与环境指纹, 换实例 / 换 profile 就不可比; 不能进基线数字的单点</td></tr>
+      <tr><td>断言形态</td><td>断言的是外部可观测事实(qB API / 文件系统 / 进程), 失败常因环境漂移而非代码回归 —— 直接当闸门会大量假红</td></tr>
+    </table>
+    <div class="callout warn"><b>不走闸门 ≠ 不提交</b>: 用例代码、规程文档、片表更新<b>照常走 <code>ship.commit</code></b>(可复用性全靠这个); 只有"跑真机"这件事不在闸门链上。反过来, 闸门链里出现 <code>real.*</code> 调用一律视为缺陷。</div>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>切片表与节奏</h2>
+    <p><b>片 = 一个能独立排期、独立验收的验证面</b>, 不是文件清单。片号建立后不复用; 下线只划掉不删行。当前 11 片(RM00 是基建, 其余按"风险 × 副作用"排序):</p>
+    <div class="tscroll">
+    <table>
+      <tr><th>片</th><th>名称</th><th>路径 glob(判定漂移用)</th><th>主要验证面</th><th>可测层级</th><th>预算</th><th>状态</th></tr>
+      <tr>
+        <td><code>RM00</code></td>
+        <td>基建: guard / 伪 tracker / 双实例互传</td>
+        <td><code>tests-real/</code> · <code>.commands/real/</code> · <code>scripts/real_*.py</code></td>
+        <td>基建: 三层守卫 + L1/L2 可行性验证(验收三条见规程 §03)</td>
+        <td>L1·L2</td>
+        <td>1 次</td>
+        <td><span class="badge">待排期(最高)</span></td>
+      </tr>
+      <tr>
+        <td><code>RM01</code></td>
+        <td>连接·认证·启动</td>
+        <td><code>src/auto_qb/cli.py</code> · <code>tray/**</code> · <code>infra/autostart.py</code> · <code>infra/locking.py</code> · <code>webui/server/auth.py</code> · <code>webui/server/lifecycle.py</code> · <code>webui/server/factory.py</code></td>
+        <td>连不上 qB 的节流与提示 / token 原子落盘 / 端口与单实例锁 / 托盘菜单 / 开机自启</td>
+        <td>L0·L1</td>
+        <td>0.5 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM02</code></td>
+        <td>主循环·调度·持久化</td>
+        <td><code>core/qbmanager.py</code> · <code>core/taskqueue.py</code> · <code>core/state.py</code> · <code>core/module.py</code> · <code>infra/store_recovery.py</code></td>
+        <td>interval 真节拍 / 优雅退出落盘 / 非优雅终止的丢失窗口 / 热重载 / <code>queue_rebuilt</code> 相位</td>
+        <td>L1</td>
+        <td>0.5 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM03</code></td>
+        <td>规则引擎</td>
+        <td><code>src/auto_qb/rules/**</code> · <code>core/modules/rules_mod.py</code></td>
+        <td>条件命中 / 动作真作用于 qB(打标·分类·限速·删除) / 变量替换 / 表达式</td>
+        <td>L0·L1</td>
+        <td>1 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM04</code></td>
+        <td>辅种与分组</td>
+        <td><code>core/modules/grouping_mod.py</code> · <code>relocate_mod.py</code> · <code>relocate_units.py</code> · <code>torrents/**</code> · <code>infra/relocate_journal.py</code> · <code>infra/alias_fs.py</code></td>
+        <td>归组 key / 跨组文件冲突 / 缺失文件标记 / 跨盘移动 / journal 恢复</td>
+        <td>L0·L1</td>
+        <td>1 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM05</code></td>
+        <td>tracker·标签与分类清理</td>
+        <td><code>core/modules/tracker_mod.py</code> · <code>core/modules/maintenance_mod.py</code> · <code>config/site_presets.py</code></td>
+        <td>tracker 规则解析 / <code>delete_tags</code> 族 / <code>@tracker_tags</code> 引用 / 站点档案派生</td>
+        <td>L0·L1</td>
+        <td>0.5 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM06</code></td>
+        <td>HR 在线核实</td>
+        <td><code>src/auto_qb/hr/**</code> · <code>extensions/hr-fetch-proxy/**</code> · <code>webui/server/routes/hr.py</code></td>
+        <td>取数通道(扩展代理 / 本地端点) / 三态判定 / 频控 / 站点状态 / HR 排除表</td>
+        <td>L1·L2(站点侧需真实站点, 单独授权)</td>
+        <td>1 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM07</code></td>
+        <td>限速·流量曲线·全局流量</td>
+        <td><code>core/modules/speed_curve_mod.py</code> · <code>traffic_sample_mod.py</code> · <code>traffic_snapshot_mod.py</code> · <code>core/curves.py</code> · <code>core/traffic_source/**</code> · <code>core/traffic_limits.py</code> · <code>webui/server/routes/traffic_monitor.py</code> · <code>tools/global-traffic-monitor/**</code></td>
+        <td>限速下发与回读 / 曲线采样 / 流量源切换 / 重启尖峰缺口 / 全局流量聚合</td>
+        <td>L1·L2</td>
+        <td>1 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM08</code></td>
+        <td>WebUI 读侧</td>
+        <td><code>webui/views.py</code> · <code>webui/runtime.py</code> · <code>webui/server/routes/state.py</code> · <code>torrent_detail.py</code> · <code>sites.py</code> · <code>events.py</code> · <code>webui/static/shared/**</code></td>
+        <td>轮询分档 / 增量 delta / 视图 payload 收敛 / 大库首帧与滚动 / 详情抽屉</td>
+        <td>L1·L2</td>
+        <td>0.5 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM09</code></td>
+        <td>WebUI 写侧</td>
+        <td><code>webui/commands.py</code> · <code>webui/server/routes/torrent_cmds.py</code> · <code>groups.py</code> · <code>config.py</code> · <code>fs.py</code> · <code>keys.py</code> · <code>system.py</code> · <code>webui/static/js/**</code></td>
+        <td>右键命令真作用到 qB / 批量合单 / 乐观 UI pending→回滚 / 移动与重命名 / 配置保存与热重载</td>
+        <td>L0·L1</td>
+        <td>1 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+      <tr>
+        <td><code>RM10</code></td>
+        <td>通知·外部集成</td>
+        <td><code>core/modules/notify_mod.py</code> · <code>infra/notify.py</code> · <code>core/exporter.py</code> · <code>src/auto_qb/tools/**</code> · <code>extensions/**</code>(除 hr-fetch-proxy)</td>
+        <td>通知通道 / 导出 / 扩展安装与权限 / 工具客户端</td>
+        <td>L0</td>
+        <td>0.5 次</td>
+        <td><span class="badge">待排期</span></td>
+      </tr>
+    </table>
+    </div>
+    <p><b>排期顺序</b>: <code>RM00 → RM01 → RM02 → RM04 → RM03 → RM05 → RM06 → RM07 → RM09 → RM08 → RM10</code>(先解锁基建, 再按"写侧风险 × 副作用大小"推进; 读侧与观感放后面, 因为它们最不容易出真缺陷)。</p>
+    <div class="callout"><b>片表怎么改, 单点在规程 §05</b>(归属优先 / 开新片三条门槛 / 编号不复用 / 拆片阈值 / 并片阈值 / 下线不删行 / 改表必记账 / glob 自检)。本表<b>只放结果</b>, 规则不在本件复述 —— 复述必然两处各自演化。</div>
+    <div class="callout warn"><b>存量真机清单的处置</b>: <code>checklists/manual-walkthrough.md</code> 现在<b>冻结</b>(原样不动, 不置 Superseded)。<b>每片排期时</b>把属于本片的条目迁进该片用例集, 原文件对应行标 <code>已迁出 → RMxx</code>; 全部迁完再置 <code>Superseded</code> 并指向本件。不批量迁移 —— 片表还在长, 迁了要返工。</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>怎么跑</h2>
+    <p>命令一律走 task id, <b>不要手抄命令本体</b>(会被 <code>commands run doc.drift</code> 判红):</p>
+    <table>
+      <tr><th>task id</th><th>干什么</th><th>现状</th></tr>
+      <tr><td><code>real.guard</code></td><td>三层守卫自检: 端口 / 镜像路径白名单 · 目标实例种子全暂停 · 配置不是 <code>config.yml</code>; 不通过即非 0 退出</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.up</code> / <code>real.down</code></td><td>启动 / 重启 / 关闭<b>白名单内</b>的测试实例(先核镜像路径, 认不出归属就拒动)</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.pause-all</code></td><td>暂停目标实例全部种子(前置归零与收尾恢复各一次)</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.list</code></td><td>列出全部用例: id / 档位 / 需要哪层种子 / 是否 <code>[需活跃种子]</code></td><td>RM00 建立</td></tr>
+      <tr><td><code>real.run</code></td><td>跑单条用例(<code>--case RM06-01</code>); 真跑必须显式 <code>--yes</code>, 默认 dry-run</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.suite</code></td><td>跑一片全部用例(<code>--slice RM06</code>), 出本轮结论行供誊进 §07</td><td>RM00 建立</td></tr>
+      <tr><td><code>dev.webui</code></td><td>只开 WEB UI 连真机(自动任务全关, 数据目录独立) —— <b>读侧切片首选</b></td><td>✅ 现有</td></tr>
+      <tr><td><code>dev.run</code></td><td>真机跑完整主程序(写侧 / 调度切片), 一律先 <code>--dry-run</code></td><td>✅ 现有</td></tr>
+      <tr><td><code>dev.port-kill</code></td><td>按端口清残留(只传白名单端口 36595 / 36596)</td><td>✅ 现有</td></tr>
+    </table>
+    <p class="hint">RM00 之前没有 <code>real.*</code>: 手工核 guard 三项(端口 / 进程镜像路径 / 种子是否全 paused)后再跑 <code>dev.webui</code> 或 <code>dev.run</code>; RM00 之后一律走 <code>real.*</code>, 手工方式退役。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>一轮的标准动作</h2>
+    <p>排期指令形态固定:</p>
+    <pre><code>对「&lt;片名&gt;」做真机实测, 先写分步实施计划,
+参考 memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html
+与 memory-bank/testing/real-machine.md</code></pre>
+    <ol>
+      <li><b>定片</b>: 把片名映射到片号。映射不到 ⇒ 先按规程 §05 改片表(并入 / 开新片)并记 §08, 再开工。</li>
+      <li><b>漂移体检</b>: <code>git log &lt;§07 记的基线 commit&gt;..HEAD -- &lt;本片 glob&gt;</code>, 按规程 §07 三分类; 结论写进计划开头。首轮写"首轮, 无漂移面"。</li>
+      <li><b>环境自检</b>: <code>real.guard</code>(RM00 前手工核三项)。不过就不开跑 —— 不许为了跑通放宽"种子非活跃"。</li>
+      <li><b>写分步计划</b>(<code>plans/</code> HTML, 拍板后冻结), 必含四块: ① 用例清单(逐条 id + 当前档位 + 期望); ② <b>本轮哪条从 L(n) 升到 L(n+1)</b>(规程 §08 硬要求); ③ 标 <code>[需活跃种子]</code> 而跳过的条目 + 解锁条件; ④ 验收判据。</li>
+      <li><b>执行</b>: 逐条跑, 每条三态 —— <code>PASS</code> / <code>FAIL</code>(⇒ 按 scope-guard 入池 <code>bug</code> issue) / <code>BLOCKED</code>(环境或约束, 写明解锁条件)。<b>当轮不修</b>缺陷。</li>
+      <li><b>记录</b>: 新建 <code>testing/real-baselines/&lt;stamp&gt;-real-&lt;片&gt;.md</code>(用例数 / 档位分布 / PASS-FAIL-BLOCKED / 基线 commit / 环境指纹), 再更新 §07 该行。</li>
+      <li><b>收尾</b>: 用例照常 <code>ship.commit</code>; 缺陷已入池; <b>不立 <code>task</code> 档案</b>(本件即档案); 改过片表则 §08 已记。</li>
+    </ol>
+    <div class="callout warn"><b>§07 不更新等于这轮没做</b>: 基线切片是流水, §07 是刻度。只写切片不更新表, 下轮的漂移判定就没有基线 commit 可用。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>产物落在哪</h2>
+    <table>
+      <tr><th>产物</th><th>落点</th><th>权威</th></tr>
+      <tr><td>规程(怎么做)</td><td><code>memory-bank/testing/real-machine.md</code></td><td>硬约束 / 守卫 / 种子层 / 切片规则 / 漂移 / 成熟度</td></tr>
+      <tr><td>排期锚 + 片表 + 进度</td><td>本件</td><td>要不要做 / 先做哪片 / 覆盖到哪</td></tr>
+      <tr><td>每轮计划</td><td><code>memory-bank/plans/&lt;stamp&gt;-plan-real-&lt;片&gt;.html</code></td><td>这一轮怎么测、为什么这么测(拍板即冻结)</td></tr>
+      <tr><td>每轮实测数字</td><td><code>memory-bank/testing/real-baselines/&lt;stamp&gt;-real-&lt;片&gt;.md</code></td><td>用例数 / 档位分布 / 三态计数 / 基线 commit</td></tr>
+      <tr><td>用例</td><td><code>tests-real/&lt;rmNN&gt;_&lt;slug&gt;/</code></td><td>可复用的断言本体</td></tr>
+      <tr><td>命令与守卫</td><td><code>.commands/real/</code>(+ <code>scripts/real_*.py</code>)</td><td>三层守卫与运行入口</td></tr>
+      <tr><td>缺陷</td><td>各自的 <code>bug</code> / <code>perf</code> issue</td><td>每条独立排期</td></tr>
+    </table>
+    <p class="hint">真机数字<b>不进</b> <code>testing/baselines/</code>(那是 <code>test.full</code> 的单点); 也不进 <code>baseline.md</code> 口径段 —— 两套数字的采集面不同, 混在一起就没法纵向比。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>覆盖进度总表</h2>
+    <div class="callout"><b>本表是「覆盖到哪、每片多硬」的唯一事实源, 也是本件唯一的记录表</b> —— 每片实测完成(基线切片已落)后<b>必须同步更新本表</b>, 再收尾。片名与 glob 在 §03, 本表只放刻度与指针。</div>
+    <div class="tscroll">
+    <table>
+      <tr><th>片</th><th>上次实测</th><th>基线 commit</th><th>用例 L0/L1/L2/L3</th><th>本轮结论</th><th>指针(计划 · 切片 · 缺陷)</th></tr>
+      <tr>
+        <td><code>RM00</code></td><td>—</td><td>—</td><td>—</td>
+        <td><span class="badge">待排期(最高)</span> 解锁 L1/L2 的基建</td>
+        <td>—</td>
+      </tr>
+      <tr><td><code>RM01</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM02</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM03</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM04</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM05</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM06</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM07</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM08</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM09</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr><td><code>RM10</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+    </table>
+    </div>
+    <p class="hint">列口径: <b>上次实测</b>取该片最近一轮日期; <b>基线 commit</b> = 那轮实测时刻的 HEAD(漂移判定的唯一依据, 不许写"大概"); <b>用例档位</b>写分布如 <code>4/6/2/0</code>, 一轮里升档要看得见; <b>本轮结论</b>用四档: 待排期 / 已测(有缺陷在池) / 已测(全绿) / 已下线(Dropped); <b>指针</b>给计划与切片路径, 缺陷只给编号。表在窄视口下横向滚动。</p>
+    <div class="callout warn"><b>只搬指针, 不抄流水</b>: 本表不写"跑了 12 条用例、3 条 FAIL"这类明细 —— 那在切片里。手抄明细会与切片各自漂移。</div>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-31 06:41 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套实测还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。首版落 11 片(RM00 基建 + RM01–RM10), 规程落在 <code>testing/real-machine.md</code>, 记录口径另开 <code>testing/real-baselines/</code>。</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-31-0641-test-real-machine-test-standing.html · 常驻排期锚(standard 档) · 由 create-issue skill 入池; 状态恒 Open, 停止实测才 Dropped<br>
+    §07 覆盖进度总表: 每片实测完成后必须同步更新(规程见 testing/real-machine.md)
+  </footer>
+
+</div>
+</body>
+</html>

@@ -28,6 +28,7 @@
 | **建制品 / 翻状态 / 改版 / 收尾** | 命令化(一次逻辑动作 = 一条命令 + 一次填空): `kb.new <族>`(计划/档案/报告/基线/坑档/进展件)· `kb.status` · `kb.bump` · `kb.wrap` —— 口径与族清单见 [conventions/doc-forms.md](conventions/doc-forms.md)「创建/更新方式」 |
 | **跑项目命令** | `.commands/` 包(每包一 `config.toml`), 经 `commands` 引擎按 task id 调; 文档不许抄命令(`commands run doc.drift` 判红) |
 | **定期做变异测试审计(测试够不够硬)** | 怎么做 = skill `.agents/skills/mutation-testing/`(四段流程 / 三分类 / 派生计划模板); 命令 = `.commands/mutants/`; 证据 = [reports/26-10-08-0231](reports/26-10-08-0231-report-mutation-testing-feasibility.html); 排期锚 = [issues/26-10-08-0642](issues/26-10-08-0642-test-mutation-audit-standing.html) |
+| **定期做真机实测(连真实 qB 的写侧 / 真行为 / 观感)** | 怎么做 = [testing/real-machine.md](testing/real-machine.md)(硬约束 / 环境守卫 / 种子层 L0-L2 / 切片更新规则 / 漂移判定 / 成熟度 L0-L3); 片表与进度 = 排期锚 [issues/26-10-31-0641](issues/26-10-31-0641-test-real-machine-test-standing.html); 每轮数字 = `testing/real-baselines/` |
 
 ## 生成物 (冲突时**重跑脚本**, 不要手改)
 

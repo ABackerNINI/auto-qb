@@ -22,7 +22,7 @@
 | bug | 7 |
 | perf | 7 |
 | docs | 1 |
-| test | 1 |
+| test | 2 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [真机实测定期排期(常驻排期锚)](26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 q…
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autost…
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver…
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告…
