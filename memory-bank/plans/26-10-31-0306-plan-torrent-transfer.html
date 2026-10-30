@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="torrent-transfer">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-0306">
+<meta name="doc-updated" content="26-10-31-0306">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: torrent-transfer</div>
+<h1>种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单</h1>
+<p class="lede">把主 qB 的种子任务原样转移到用户在 WebUI 配置的其它下载器(qB 先行, Transmission 留接口暂不做)——保留分类/标签/保存路径/限速等字段且字段集按目标各配一套; 语义是「移动任务、不动数据」: 转移在后端执行, 前端经四支右键菜单「转移到」触发, 确认弹窗参照删除流四段式。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0306 · <b>doc-updated</b> 26-10-31-0306 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(26-10-31, 三轮问答 + 风险分析), 用户指令「原样转移种子到其它 qb/tr/其它下载器」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景与目标</h3>
+<p>PT 场景下需要在多个下载器之间搬家(换 qB 实例、分流做种)。现状只能手动逐个导出 .torrent 重加: 字段(分类/标签/路径/限速)全丢, 且常规重加必然触发重校验甚至重下载。本计划交付: 右键选中(单/多/整组/整剧) → 选目标下载器 → 确认 → 后端自动完成「导出 → 字段映射 → 目标添加 → 验证 → 删源」的移动管线; 目标下载器在「WebUI」设置卡里增删改配, 保留哪些字段按目标各配一套。</p>
+<h3>设计底线(不变量, 违反即错)</h3>
+<ol>
+  <li><b>数据文件永不移动、永不删除</b>——删源只删任务(<code>deleteFiles=false</code>);「转移」不含任何数据搬运。</li>
+  <li><b>任何不成功路径不碰源</b>——添加失败/验证超时/目标已存在/目标报 error → 源任务原样保留。</li>
+  <li><b>未完成种子绝不以跳检形式添加</b>——跳检添加未完成数据 = 假 100%, 必坏; 跳检开启时对未完成种子自动逐条降级为校验添加(D8)。</li>
+  <li><b>同机硬约束</b>——主 qB 与目标下载器必须同机, 转移后数据对目标可达; 转移后绝不重新下载。</li>
+  <li><b>凭据只从服务端出网</b>——前端不持有、不出网目标下载器凭据。</li>
+  <li>新配置键全部进 <code>validate_config</code> + <code>config/schema.py</code>(黄金法则 4), fail-fast 聚合报错。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>架构事实</b>(26-10-31 探索核实): 本项目是独立 daemon + 自托管 WebUI(FastAPI, <code>webui/server/factory.py:20</code>), 前端从不直连 qB, 全部走 <code>/api/*</code>(<code>shared/auth.js</code> <code>api()</code>); 这决定了转移必须在后端执行——浏览器直连目标 qB 会被 CORS 卡死, 且凭据不该进前端。</p>
+<p><b>可复用的现成管线</b>:</p>
+<ul>
+  <li>后端 <code>QbApi</code> facade 已有全部所需原语: <code>torrents_export</code>(<code>core/qbapi.py:320</code>)、<code>torrents_add</code>(:180)、分类/标签全套(:59-87)、单种子上下行限速(:126/:135)、share limits(:197)。</li>
+  <li>右键菜单: <code>shared/ctx_menu.js:23</code> 四支 <code>CTX_BRANCHES = [multi, episode, member, group]</code>, :103 有 <code>kind:"submenu"</code> 先例, episode 支本身就是多 hash 集合(<code>menu.js:157-160</code>); 布局可经 <code>config.web.ctx_menu</code> 定制。</li>
+  <li>批量管线: 选中解析 <code>selection.js:125-235</code> → <code>commands.js:749-752</code> <code>POST /api/torrents/bulk</code> → <code>waitCmd</code> 回执 + toast 三态 + 行内图标 <code>setRowIcon</code>。</li>
+  <li>确认弹窗范本: <code>shared/delete_flow.js:199</code>(删除流), modal 引擎 <code>ui_feedback.js:181</code>。</li>
+  <li>设置卡: 「WebUI」卡 <code>config_hub.js:254-263</code>, 二级页 <code>tpl/settings-detail.html:60</code>; 配置树读写走 <code>GET/PUT /api/config</code>(<code>server/routes/config.py:116/:134</code>), schema 单点 <code>config/schema/</code>。</li>
+</ul>
+<p><b>痛点</b>: 目前没有任何转移能力; 手动搬家丢字段、丢做种状态, 且无法做到「不动数据」。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>三层结构</h3>
+<table>
+  <tr><th>层</th><th>落点</th><th>内容</th></tr>
+  <tr><td>配置层</td><td><code>config.web.transfer</code> + WebUI 设置卡</td><td><code>targets[]</code>(名称/类型/base_url/用户名/密码/启用/per-target 字段集/转移后状态/跳检开关/路径映射表); schema + validate 同步</td></tr>
+  <tr><td>执行层</td><td>新模块 <code>src/auto_qb/transfer/</code></td><td>orchestrator(状态门/导出/映射/添加/验证/删源/失败分类) + adapter 注册表(<code>adapters/base.py</code> 协议 + qb 实现 + tr stub)</td></tr>
+  <tr><td>交互层</td><td>前端 shared</td><td>四支右键菜单「转移到」submenu + 确认弹窗四段式(参照删除流) + <code>waitCmd</code> 逐项结算</td></tr>
+</table>
+<h3>单种子执行流水(orchestrator)</h3>
+<pre><code>状态门(下载管线态拦截, §03 状态门)
+  → 源 export(QbApi.torrents_export, 取 .torrent bytes)
+  → 字段采集(按 per-target 字段集, 从源种子 properties/maindata 取当前值)
+  → 路径映射(有序前缀替换, 默认空 = 原样)
+  → 跳检决策(progress==100% 且目标跳检开 → skip_checking=true; 否则 false)
+  → adapter.add_torrent(bytes, fields, skip_check)
+  → 验证: 轮询目标 maindata, hash 出现 且 state ∉ {error, missingFiles}(10s 超时)
+  → 成功: 删源(仅任务, deleteFiles=false; 确认框勾选「仅本次保留源种子」则跳过)
+    失败: 源保留, 分类记录(export失败/已存在→跳过/认证失败/超时/error)</code></pre>
+<h3>状态门</h3>
+<ul>
+  <li><span class="bad">拦截</span>(不可转移, 预检写明原因): <code>metaDL</code>、<code>downloading</code>、<code>stalledDL</code>、<code>queuedDL</code>、<code>checkingDL</code>、<code>allocating</code>、<code>forcedDL</code>(下载管线态)、<code>missingFiles</code>(数据已丢)。</li>
+  <li><span class="good">放行</span>: UP 家族(uploading/stalledUP/pausedUP/stoppedUP/queuedUP/forcedUP/checkingUP)、<code>pausedDL</code>/<code>stoppedDL</code>(未完成但暂停, 走非跳检通路, 目标 recheck 保留进度续传余量)、<code>error</code>(按完成度走通用规则)。</li>
+  <li>跳检判定不看状态名看完成度: <code>progress == 100%</code> 且目标跳检开 → 跳检; 其余一律校验添加。同批混态逐种子判定, 结果注明「未完成, 已自动改为校验添加」。</li>
+</ul>
+<h3>per-target 字段集</h3>
+<table>
+  <tr><th>字段/开关</th><th>类型</th><th>新建模板默认</th><th>备注</th></tr>
+  <tr><td>保存路径</td><td>字段(锁死)</td><td class="good">必开(置灰)</td><td>同机硬约束下关掉 = 数据不可达, 违反不变量 1</td></tr>
+  <tr><td>分类 / 标签 / 分享率限制 / 做种时长限制 / 上行限速 / 下行限速</td><td>字段</td><td class="good">开</td><td>目标不支持的字段由 adapter 降级并在结果注明</td></tr>
+  <tr><td>超级做种</td><td>字段</td><td class="bad">关</td><td>高危项默认关</td></tr>
+  <tr><td>转移后状态</td><td>单选</td><td>保持原状态</td><td>备选「统一暂停」= 多一道人工闸</td></tr>
+  <tr><td>跳过校验</td><td>开关</td><td class="good">开</td><td>未完成种子自动降级, 见状态门</td></tr>
+  <tr><td>路径映射</td><td>规则表</td><td>空(原样)</td><td>有序 from→to 前缀替换, 首条命中生效, 只作用于保存路径终值</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>轮</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>W1<br>配置层</td>
+    <td><code>config/models.py</code> 加 <code>web.transfer</code>(targets 列表 + 字段集结构); schema <code>groups.py</code> WebUI 卡加「种子转移」块; <code>validate_config</code> 全量校验(类型枚举 qb/tr、URL 形状、字段集键闭合、映射规则 from/to 非空); 设置页目标编辑器(增删改、密码框遮显、测试连接按钮、字段 checkbox、状态单选、映射规则表编辑)。</td>
+    <td>非法 targets 被 validate 聚合报错不落盘; 合法配置经设置页保存重载无损; 测试连接按钮对 qb 目标真实探测并回显版本/错误。</td>
+  </tr>
+  <tr>
+    <td>W2<br>执行层</td>
+    <td><code>transfer/adapters/base.py</code> 协议: <code>capabilities() → set[str]</code> / <code>test_connection() → str</code> / <code>add_torrent(data: bytes, fields: dict, skip_check: bool) → AddResult</code>; 注册表按 type 实例化; qb adapter(基于 qbittorrent-api 新 Client 实例, 目标凭据); tr adapter stub(<code>test_connection()</code> 返回「暂未实现」); orchestrator 按 §03 流水实现, 串行逐种子, 失败分类枚举。</td>
+    <td>单元测试(mock qbittorrent-api)覆盖: 状态门矩阵全表、跳检降级、成功判定三态(出现/超时/error)、已存在=跳过且源保留、删源只删任务不删文件、映射替换首条命中。</td>
+  </tr>
+  <tr>
+    <td>W3<br>路由接入</td>
+    <td><code>POST /api/transfer/run</code>(body: target_id + hashes[])与 <code>POST /api/transfer/test</code>(目标 id), 走现有 Bearer 鉴权 + 同源 Origin 校验, 不加新豁免; 回执复用 cmd 管线(<code>waitCmd</code>); 逐种子结果结构 {hash, 状态: 成功/跳过/失败, 原因}。</td>
+    <td>HTTP 层测试: 未认证 401、跨站拒、逐种子结果与 orchestrator 分类一致、单种子失败不中断批次。</td>
+  </tr>
+  <tr>
+    <td>W4<br>前端交互</td>
+    <td><code>ctx_menu.js</code> 四支各加一级项「转移到」(kind:"submenu", 子项 = 启用目标列表, 空态灰项「未配置目标, 去设置」跳 WebUI 卡); 确认弹窗四段式参照 <code>delete_flow.js</code>: 预检(逐个 export 可用性 + 目标连通) → 明细(目标/数量/将跳过及原因/字段清单/改写路径预览/跳检警示/「仅本次保留源种子」勾选默认不勾) → 执行 → 逐项结算(toast 三态 + 行内图标)。</td>
+    <td>真机(<code>dev.run</code> + 真实双 qB)手工验收: 单选/多选/整组/整剧转移各一, 字段落位核对, 失败注入(错密码/已存在/下载中)各自得到正确反馈且源保留。</td>
+  </tr>
+  <tr>
+    <td>W5<br>收尾</td>
+    <td>全量测试新建基线切片(数字从实测誊写, 见 <code>kb.baseline</code>); 回写 <code>memory-bank/</code> 与根 README(功能清单)。</td>
+    <td><code>test.full</code> 通过; 基线切片登记; 文档回写完成。</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——全部决策已在 grilling 会话拍板, 结论见 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>决策点</th><th>结论(26-10-31 拍板)</th></tr>
+  <tr><td>D1</td><td>转移语义</td><td>移动任务: 目标添加成功后删源(仅任务, 不删文件); 确认框「仅本次保留源种子」勾选默认不勾</td></tr>
+  <tr><td>D2</td><td>数据策略</td><td>默认跳检添加、per-target 可切换; <b>定死主 qB 与目标同机</b>, 数据必须对目标可达, 不得重新下载、不得移动数据</td></tr>
+  <tr><td>D3</td><td>字段集粒度</td><td>per-target 各配一套; 保存路径锁死必开; 新建模板除超级做种外全开</td></tr>
+  <tr><td>D4</td><td>配置存放</td><td>挂「WebUI」设置卡, 配置树 <code>web.transfer</code>; 密码明文落 config.yml(与现有 qB 凭据同款), UI 遮显</td></tr>
+  <tr><td>D5</td><td>菜单结构</td><td>一级项「转移到」+ submenu(目标列表); <b>四支全挂</b>(multi/episode/member/group), group 支沿用现有 scope 解析(选中集优先, 否则整组成员)</td></tr>
+  <tr><td>D6</td><td>执行与失败</td><td>串行逐种子; 失败分类不中断批次; <b>批量无上限</b>; 不自动重试</td></tr>
+  <tr><td>D7</td><td>确认弹窗</td><td>参照删除流四段式(预检→明细→执行→结算), 含改写路径预览与「仅本次保留源种子」</td></tr>
+  <tr><td>D8</td><td>未完成种子</td><td>不禁止; 目标跳检开时自动逐条降级为校验添加; 下载管线态(metaDL/downloading/stalledDL/queuedDL/checkingDL/allocating)仍拦截; 风险分析通过(§07)</td></tr>
+  <tr><td>D9</td><td>转移后状态</td><td>per-target 单选: 保持原状态(默认)/ 统一暂停</td></tr>
+  <tr><td>D10</td><td>扩展接口</td><td><code>DownloaderAdapter</code> 协议(capabilities/test_connection/add_torrent(data, fields, skip_check)); 注册表按 type 实例化; TR 为 stub(test 即「暂未实现」), 不做假接口</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td class="wr">映射配错 → 目标 recheck 得 0%</td><td>路径映射规则写错前缀/目标盘符</td><td>确认弹窗展示被改写的保存路径预览(肉眼可查); 底线兜底: 数据文件全程不删, 最坏损失 = 任务元数据, 重加 .torrent 再 recheck 可恢复全部已有进度</td></tr>
+  <tr><td class="wr">「hash 出现」以 error 态出现</td><td>目标报路径无效等</td><td>成功判定收紧: hash 出现 <b>且</b> state ∉ {error, missingFiles}; error 即判失败、源保留</td></tr>
+  <tr><td>验证超时早于大种子 recheck 完成</td><td>超大种子校验超 10s</td><td>按 D1 口径 hash 出现即算接受; 文件不删故无数据损失, 见风险 1 的兜底</td></tr>
+  <tr><td>跳检 + 数据实际缺失</td><td>理论上同机不会发生</td><td>error 态判定兜底; 同机硬约束(D2)从根上消除</td></tr>
+  <tr><td>批量无上限拖长执行</td><td>一次转移数百种子</td><td>串行 + 逐条超时, 不并行不重试; 确认弹窗明示数量, 用户自担耗时; 行内图标可随时观察</td></tr>
+  <tr><td>凭据泄漏</td><td>config.yml 外流 / 日志外泄</td><td>明文仅限本机 config.yml(与现有 qB 凭据同款); UI 密码框遮显; 日志一律不落目标凭据</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0306</span> 初版: grilling 三轮问答 + 风险分析后设计树闭合, 拍板 D1-D10 全量落档; 方案三层结构(配置/执行/交互)、五轮实施分期(W1-W5)、状态门与跳检自动降级规则、风险与对策表。</li>
+</ul>
+
+</div>
+</body>
+</html>

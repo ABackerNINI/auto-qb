@@ -15,6 +15,7 @@
 
 ## Open
 
+- [26-10-31-0306] [种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单](26-10-31-0306-plan-torrent-transfer.html) — `torrent-transfer`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0217] [WebUI 主表暗主题背景重设计: 可交互模板选型](26-10-30-0217-plan-webui-main-table-dark-bg.html) — `webui-main-table-dark-bg`
