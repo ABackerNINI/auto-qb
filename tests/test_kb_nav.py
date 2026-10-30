@@ -735,6 +735,11 @@ def test_gsearch_clear_button() -> None:
     assert "S.q = \"\"" in text and "$(\"gq\").focus()" in text, "清词点击须清 S.q 且焦点还给输入框"
     btn = re.search(r'<button class="gclear"[^>]*>(.*?)</button>', text, re.S)
     assert btn and "<svg" in btn.group(1), "清词按钮须内联 SVG 图形 (禁 emoji / 字符叉)"
+    css = _shell_css()
+    assert ".gsearch svg" not in css and ".gsearch > svg" in css, (
+        "放大镜定位必须钉直接子代 (.gsearch > svg) —— 后代选择器会命中 #gclear 里的 ×, "
+        "给它套 absolute 导致 flex 居中失效 (2026-10-31 实测居中漂移)"
+    )
     gq = re.search(r'<input id="gq"[^>]*>', text)
     assert gq and "Esc" not in gq.group(0), "gq placeholder 不再写 (Esc 清空) —— 按钮是明面入口 (只涉 gq, cq 不动)"
 

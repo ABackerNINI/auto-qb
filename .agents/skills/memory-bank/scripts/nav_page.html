@@ -78,7 +78,8 @@
   }
   .gsearch input:focus { border-color: var(--cyan); }
   .gsearch input::placeholder { color: var(--faint); }
-  .gsearch svg { position: absolute; left: 9px; top: 8px; width: 13px; height: 13px; stroke: var(--faint); }
+  .gsearch > svg { position: absolute; left: 9px; top: 8px; width: 13px; height: 13px; stroke: var(--faint); }
+  /* 只钉直接子代放大镜 —— 后代选择器会把 #gclear 里的 × 也钉成 absolute, flex 居中失效 (实测居中漂移) */
   /* 清词按钮: 有词才显形 (syncGclear 同步); [hidden] 兜底必写 —— flex display 会盖掉 UA 的 hidden */
   .gclear {
     position: absolute; right: 6px; top: 8px; width: 17px; height: 17px; padding: 0;
