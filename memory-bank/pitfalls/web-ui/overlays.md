@@ -3,7 +3,7 @@
 > 摘要: 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序; 含浮层几何(视口钳位 / 尺寸估算)与 Esc 退栈顺序。
 > 触发: 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor, 视口钳位, 菜单高度, 溢出视口, 菜单项点不到, outside of the viewport, ESC 退栈, 退栈顺序, Esc 关错层, 两图同开, 层叠顺序
 
-**Refs:** memory-bank/tasks/26-10-13-memory-bank-kb-nav-esc.md, memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html, memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md
+**Refs:** memory-bank/tasks/26-10-13-memory-bank-kb-nav-esc.md, memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html, memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md, memory-bank/reports/26-10-31-0104-report-webui-speed-esc-vimium.html
 
 ### 全屏遮罩错误浮层无 dismiss 路径 = 整页操作锁 ≤ 轮周期
 

@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-31-0104] [WEBUI 限速浮层 Esc 需按三次: Vimium C 扩展吞键取证](26-10-31-0104-report-webui-speed-esc-vimium.html) — `webui-speed-esc-vimium`
 - [26-10-30-0237] [全项目第二次全面 Code Review（只读取证）](26-10-30-0237-report-full-code-review-2.html) — `full-code-review-2`
 - [26-10-22-0234] [qB/libtorrent 跳检机制源码核查 — seed_mode 语义、惰性哈希校验与标记可替代性](26-10-22-0234-report-skip-check-arch.html) — `skip-check-arch`
 - [26-10-20-0307] [右键菜单自定义布局 改版报告](26-10-20-0307-report-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`

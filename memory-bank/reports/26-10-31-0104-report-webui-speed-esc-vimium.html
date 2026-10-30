@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 限速浮层 Esc 需按三次: Vimium C 扩展吞键取证</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-speed-esc-vimium">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-0104">
+<meta name="doc-updated" content="26-10-31-0104">
+<meta name="doc-refs" content="memory-bank/pitfalls/web-ui/overlays.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: webui-speed-esc-vimium</div>
+<h1>WEBUI 限速浮层 Esc 需按三次: Vimium C 扩展吞键取证</h1>
+<p class="lede">「限速浮层要按三次 Esc」不是页面代码缺陷: 前两次 Esc 的 keydown 被 Edge 扩展 <b>Vimium C</b> 在扩展层整个吞掉(事件未到达页面), 第三次才放行 —— 页面侧退栈链第一次收到 Esc 就正确关窗(真机诊断日志实证)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0104 · <b>doc-updated</b> 26-10-31-0104 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户真机实测(<code>uv run auto-qb</code>, Edge, 三皮肤)报障「点击右下角限速显示弹出的速度限制窗口需按三次 Esc 才能退出」; 本轮在桩服务 + Playwright 上穷尽复现未果后, 转真机 Console 诊断定位到扩展吞键。
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p><b>根因: Vimium C 扩展拦截, 不在 auto-qb 代码。</b>Vimium C 的 content script 在 <code>document_start</code> 注册 keydown 监听, 注册序恒先于页面脚本; 它处理 Esc 时对事件 <code>stopPropagation</code>, 页面(含 <code>window</code> capture 档)完全收不到。用户在扩展设置中禁止捕获 Esc 后现象消失 —— 反向实证。</p>
+<p><b>页面代码无罪的判据:</b>Esc 退栈链(<code>lifecycle.js:101</code>)是无条件冒泡监听, 不查 <code>isComposing</code>/<code>defaultPrevented</code> —— 事件只要到达 <code>document</code> 必动作; <code>speedOpen</code> 排链上第 4 档(仅次确认框/添加对话框/统计面板), <code>closeSpeedDialog()</code> 一次置 false。真机诊断第三次 Esc 的日志: capture 档 <code>{kc:27, composing:false, prevented:false, target:'BODY'}</code> → bubble-doc → 400ms 后 <code>pop:false</code>, 即一次按键一次关窗, 行为完全正确。</p>
+<h3>我方代码缓解评估(均已否决, 2026-10-31 终态)</h3>
+<ul>
+  <li><b>keyup 兜底档 —— <span class="bad">已证伪</span></b>: 设计是在退栈链同点加 keyup 监听, keydown 未到达而 keyup 到达时兜底执行一次退栈动作(一次物理按键只走两条路径之一)。前提是「扩展只吞 keydown、放行 keyup」; 真机验证(用户实测, Vimium 捕获 Esc 开启): 限速浮层前两次 Esc 的 keyup logger 同样<b>零输出</b> —— Vimium C 对 keydown 与 keyup 一并吞掉, 该前提不成立, 方案作废。keydown/keyup 两通道皆断后, 页面侧不存在任何可感知该按键的事件(Esc 不触发 keypress), 且扩展 content script 注册序恒先于页面脚本, capture 档也抢不到 —— <b>代码侧无可行缓解</b>。</li>
+  <li><b>不建议</b>为此动退栈链顺序、给浮层加遮罩或改交互 —— 链本身在各浏览器上的行为已证正确, 改它对 Vimium 用户无益、对其他用户是纯回归风险。</li>
+  <li><b>正解(用户侧配置, 已验证有效)</b>: Vimium C 扩展设置中把本站加入排除列表或禁止捕获 Esc; 报障现象即消失。</li>
+</ul>
+
+<h2><span class="no">§02</span>证据快照</h2>
+<h4>① 桩服务 + Playwright 复现矩阵(全部 1 次 Esc 关窗, 均无法复现「三次」)</h4>
+<table>
+  <tr><th>序列 / 变量</th><th>结果</th></tr>
+  <tr><td>干净路径: 点 <code>.sb-spd.spd-down</code> → Esc</td><td class="good">1 次即关(activeElement=sp-down)</td></tr>
+  <tr><td>打开后主/备输入框打字(fill)、聚焦备用组</td><td class="good">1 次即关</td></tr>
+  <tr><td>先展开分组 + 选中行再开浮层</td><td class="good">1 次即关</td></tr>
+  <tr><td>atlas / prism / console 三皮肤</td><td class="good">各 1 次即关</td></tr>
+  <tr><td>Firefox 155(playwright, 追加安装)同路径</td><td class="good">1 次即关</td></tr>
+  <tr><td>CDP <code>Input.imeSetComposition</code> 组词态按 Esc</td><td class="good">Esc 照样到达退栈链并关窗(且 number 输入框不进组词)</td></tr>
+</table>
+<h4>② 真机 Console 诊断(Edge + Vimium C, 用户回贴原文)</h4>
+<pre><code>// 第 1、2 次 Esc: 无任何输出(连 window capture 档的 logger 都没打出来 ⇒ 事件未进页面)
+// 第 3 次 Esc:
+ESC capture: {kc: 27, composing: false, prevented: false, target: 'BODY'}
+ESC bubble-doc
+ESC after: {pop: false, modalMask: false, drawer: false, active: 'BODY'}</code></pre>
+<p>capture 无输出 = 吞键发生在扩展层(比 <code>window</code> capture 更早的只有扩展 content script); 第三次一到达就一次关窗 = 页面链行为正确。</p>
+<h4>③ 代码面核对</h4>
+<ul>
+  <li>退栈链 <code>src/auto_qb/webui/static/shared/lifecycle.js:101-108</code>: <code>speedOpen</code> 第 4 档; 点空白同语义收起(<code>:95</code>)。</li>
+  <li>快捷键引擎 <code>shortcuts.js:478</code>: <code>if (e.key === "Escape") return;</code> 固定键归退栈链, 引擎永不接。</li>
+  <li>全树无 <code>@keydown.stop</code>; capture 档 keydown 仅快捷键录制态(<code>shortcuts.js:1349</code>, 非录制时不存在); <code>hr.js</code>/<code>rowlang.js</code>/<code>config_hub.js::hubOnKey</code> 的 Esc 分支关闭态均早退, 不拦事件; <code>_cfgOnReloadKey</code> 只拦 F5/Ctrl+R。</li>
+  <li>包解析 editable(<code>uv run python -c "import auto_qb"</code> 指向本 clone <code>src/</code>), 桩与真机同一份前端静态文件, 排除版本偏斜。</li>
+</ul>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<p><b>方法:</b>①<code>scripts/ui_harness.py</code>(真 <code>create_app</code> + FakeClient, 端口 8099)+ Playwright Chromium 逐序列探针(脚本在系统 Temp, 未入库); ②CDP <code>Input.imeSetComposition</code> 模拟 IME; ③追加安装 playwright Firefox 155 排引擎变量; ④真机侧由用户执行 Console 诊断 snippet(capture + bubble 双档 logger + 浮层/焦点状态快照)。.</p>
+<p><b>局限:</b>①桩侧始终无法复现「三次」—— 吞键者只存在于用户浏览器扩展环境, 本地无 Vimium C 实例, 关键判定依赖用户真机的 Console 诊断与 keyup 验证; ②「Vimium C 是否吞 keyup」起初未测(报告中曾列为 keyup 兜底方案的前提), 后经用户真机实测<b>证伪</b>(keyup 同被吞), 方案随之作废 —— 本条为快照内的事实修正, 见 §01 终态; ③Edge 与探针 Chromium 同内核, 引擎差异未覆盖 Safari 类(项目不面向)。</p>
+
+</div>
+</body>
+</html>
