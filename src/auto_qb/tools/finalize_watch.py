@@ -27,6 +27,7 @@ import time
 from ..infra import alias_fs
 from ..infra import file_access
 from ..infra.relocate_journal import (
+    STOP_PHASES,
     acquire_pid,
     journal_path,
     read_journal,
@@ -168,7 +169,8 @@ def run(
     """guardian 主循环; 返回收尾结论(供 CLI 与测试断言)
 
     max_wait > 0 时超过该时长仍未等到 qB 退出 ⇒ 退出并保留 armed(不等无限久; auto-qb
-    侧 finalize_timeout 才是最终兜底)。
+    侧 finalize_timeout 才是最终兜底)。journal 任一写点被 write_journal 拒写(非终态
+    覆盖终态被前向合并挡下)⇒ 立即返回 stopped: auto-qb 已收口, 不再继续后续动作。
     """
     spec = read_spec(data_dir, job_id)
     if spec is None:
@@ -186,7 +188,10 @@ def run(
             if str(current.get("phase") or "") in STOP_PHASES:
                 return "stopped"
             if now - last_hb >= heartbeat:
-                write_journal(data_dir, job_id, {"phase": "armed", "pid": os.getpid(), "job_id": job_id})
+                # 拒写 = journal 已被 auto-qb 收口成终态(本行 read_journal 之后), 立即退休;
+                # 终态保护本体在 write_journal 的前向合并(两写者共用的单点)
+                if not write_journal(data_dir, job_id, {"phase": "armed", "pid": os.getpid(), "job_id": job_id}):
+                    return "stopped"
                 last_hb = now
             names = _qb_process_names()
             _host = str(spec.get("host") or "127.0.0.1")
@@ -197,15 +202,18 @@ def run(
                     down_since = now
                 if now - down_since >= stable:
                     if not _verify_dst(spec):
-                        write_journal(
+                        if not write_journal(
                             data_dir, job_id, {
                                 "phase": "failed",
                                 "reason": "verify_mismatch",
                                 "pid": os.getpid(),
                             }
-                        )
+                        ):
+                            return "stopped"
                         return "verify_mismatch"
-                    write_journal(
+                    # 删除意图落盘必须成功才动手: 拒写 = auto-qb 刚收口(如外部完成判 done),
+                    # 删除意图作废 —— 否则收口后链接仍被删, 对账面与现场双双失真
+                    if not write_journal(
                         data_dir,
                         job_id,
                         {
@@ -218,8 +226,11 @@ def run(
                                     "stable_secs": round(now - down_since, 1),
                                 },
                         },
-                    )
+                    ):
+                        return "stopped"
                     n = _delete_links(spec)
+                    # 最后的 removed 落盘不设闸: 链接已删完, 拒写只说明 auto-qb 终态已在
+                    # journal 里(它本身就是更好的记录), 收尾结论照常返回 removed
                     write_journal(
                         data_dir,
                         job_id,
@@ -242,9 +253,11 @@ def run(
         release_pid(data_dir, job_id)
 
 
-# journal 里出现这两个相位 = auto-qb 侧已收口(撤销/收尾完成), guardian 必须退出 ——
-# 否则一个已终结 job 的守护进程会永远每 10s 写心跳(armed 态本来就要等 qB 退出, 可能等几个月)
-STOP_PHASES = frozenset({"done", "cancelled"})
+# STOP_PHASES 从 relocate_journal 收编(单一事实源): journal 里出现这两个相位 =
+# auto-qb 侧已收口(撤销/收尾完成), guardian 必须退出 —— 否则一个已终结 job 的守护进程
+# 会永远每 10s 写心跳(armed 态本来就要等 qB 退出, 可能等几个月)。终态不被心跳/意图覆盖
+# 的保序在 write_journal 的前向合并里; 本进程任一写点被拒 ⇒ 立即 stopped(removing 被拒
+# 时一条链接都不删)。
 
 
 def main(argv=None) -> int:

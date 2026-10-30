@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate journal 双写者竞态: guardian 心跳可覆盖 auto-qb 终态相位">
 <meta name="issue-summary" content="finalize_watch 心跳无条件整包覆盖 journal, auto-qb 终态相位落在读-写间隙即被覆盖回 armed, 造成僵尸 guardian 与对账面相位失真">
 <title>relocate journal 双写者竞态: guardian 心跳可覆盖 auto-qb 终态相位 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0624-bug-relocate-journal-heartbeat-phase</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 08:51 — 认领（用户指派），状态 <strong>In Progress</strong></li>
+      <li>2026-10-30 08:51 — 已修，状态 <strong>Done</strong>。修法比 03 节建议更进一步: 不只挡心跳, guardian 的 removing/removed/failed 写同有覆盖终态的竞态窗口(三证稳定窗跨多个 poll, 窗口比心跳更大) —— 保序单点下沉到 <code>relocate_journal.write_journal</code> 前向合并(非终态不得覆盖终态 <code>done</code>/<code>cancelled</code>, 返回 False 表拒写), 两个写者共用一处; guardian 四个写点接住拒写即退休, 其中 <strong>removing 被拒不删链接</strong>(auto-qb 收口后删除意图作废)。<code>STOP_PHASES</code> 收编进 relocate_journal(单一事实源)。<code>max_wait</code> 维持 0: armed 态合法等待 qB 退出可达数月, 非零缺省反而周期性杀正常 guardian —— 僵尸防护由终态前向合并 + auto-qb 心跳过期重拉 + finalize_timeout 兜住。验证: <code>test.full</code> 4180 passed, 2 skipped, 覆盖率 99%(新增竞态回归 3 条)</li>
     </ul>
   </section>
 

@@ -26,6 +26,9 @@ test_guardian_removes_links_after_three_proofs 钉住; 本文件补其余出口�
 - test_run_stops_when_auto_qb_closed: journal 相位 done/cancelled(auto-qb 已收口) ⇒ 退出不等 qB
 - test_run_timeout_keeps_armed: max_wait 超时仍未凑齐三证 ⇒ timeout 退出(不等无限久)
 - test_run_verify_mismatch_keeps_links: 三证齐但目标侧数据不齐 ⇒ verify_mismatch 且不删链接
+- test_write_journal_refuses_nonterminal_over_terminal: journal 终态前向合并 —— 非终态写不进终态, 终态写终态仍 last-writer-wins
+- test_run_heartbeat_race_aborts_when_auto_qb_closes: 竞态回归 —— loop 顶读到非终态、心跳写前 auto-qb 已落 done ⇒ 拒写 ⇒ stopped
+- test_run_removal_aborts_when_auto_qb_closes: 竞态回归 —— 三证齐、removing 意图写前 auto-qb 已收口 ⇒ 拒写 ⇒ stopped 且一条链接不删
 - test_delete_links_skips_non_alias_and_bad_paths: 逐条删链接: 空路径/非别名/删失败的条目跳过(幂等)
 - test_verify_dst_empty_files_is_mismatch: 目标侧无文件清单 ⇒ 不齐(宁可不删)
 - test_verify_dst_missing_file_is_mismatch: 目标侧文件缺失/大小不符 ⇒ 不齐; 读取抛异常同口径
@@ -250,6 +253,69 @@ def test_run_verify_mismatch_keeps_links(tmp_path, monkeypatch):
     journal = relocate_journal.read_journal(data_dir, "jr-fw")
     assert journal["reason"] == "verify_mismatch"
     assert os.path.exists(link), "verify 不齐不得删链接"
+
+
+# ---------- _delete_links ----------
+
+
+def test_write_journal_refuses_nonterminal_over_terminal(tmp_path):
+    """journal 终态前向合并(竞态修复的本体): 非终态(armed 等)写不进终态 journal ——
+    否则 guardian 心跳落进 auto-qb 写 done 之后的读-写间隙, 终态被回退、guardian 成僵尸;
+    终态写终态(done/cancelled 互覆)仍 last-writer-wins, 终态覆盖非终态畅通"""
+    d = str(tmp_path)
+    assert relocate_journal.write_journal(d, "jr-t", {"phase": "armed"}) is True
+    assert relocate_journal.write_journal(d, "jr-t", {"phase": "done"}) is True, "终态覆盖非终态(auto-qb 收口)必须畅通"
+    assert relocate_journal.write_journal(d, "jr-t", {"phase": "armed", "pid": 1}) is False, "非终态写终态必须被拒"
+    assert relocate_journal.read_journal(d, "jr-t")["phase"] == "done", "被拒写不得改动 journal"
+    assert relocate_journal.write_journal(d, "jr-t", {"phase": "cancelled"}) is True, "终态写终态仍放行"
+    assert relocate_journal.read_journal(d, "jr-t")["phase"] == "cancelled"
+
+
+def test_run_heartbeat_race_aborts_when_auto_qb_closes(tmp_path, monkeypatch):
+    """竞态回归: loop 顶读到非终态、心跳写前 auto-qb 已落终态 ⇒ write_journal 拒写 ⇒
+    本轮立即 stopped, 不 sleep 到下一轮才看见收口"""
+    spec = _spec(tmp_path)
+    data_dir = str(tmp_path / "data")
+    relocate_journal.write_spec(data_dir, "jr-fw", spec)
+    relocate_journal.write_journal(data_dir, "jr-fw", {"phase": "done"})
+    # loop 顶的 read_journal 桩成空(模拟「读了旧值」), 心跳 write_journal 读磁盘真值(终态) ⇒ 拒写
+    monkeypatch.setattr(fw, "read_journal", lambda *a, **k: {})
+    assert fw.run(data_dir, "jr-fw", poll=0.0, sleep=lambda s: None) == "stopped"
+    assert relocate_journal.read_journal(data_dir, "jr-fw")["phase"] == "done", "终态不得被心跳回退"
+
+
+def test_run_removal_aborts_when_auto_qb_closes(tmp_path, monkeypatch):
+    """竞态回归: 三证齐、removing 意图落盘前 auto-qb 已收口 ⇒ 拒写 ⇒ stopped 且一条链接不删
+    (auto-qb 判外部完成 = 收口, 此时删链接与收口意图相悖)"""
+    link = tmp_path / "src" / "a.mkv"
+    spec = _spec(tmp_path, alias_paths=[str(link)])
+    os.link(tmp_path / "dst" / "a.mkv", link)
+    data_dir = str(tmp_path / "data")
+    relocate_journal.write_spec(data_dir, "jr-fw", spec)
+    relocate_journal.write_journal(data_dir, "jr-fw", {"phase": "done"})
+    calls = {"n": 0}
+
+    def _stale_then_real(*a, **k):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return {"phase": "armed", "ts": 1.0}  # loop 顶仍见 armed(读-写间隙)
+        return relocate_journal.read_journal(*a, **k)
+
+    monkeypatch.setattr(fw, "read_journal", _stale_then_real)
+    monkeypatch.setattr(fw, "_qb_process_names", lambda: ("explorer.exe", ))
+    monkeypatch.setattr(fw, "_port_refused", lambda *a, **k: True)
+    result = fw.run(
+        data_dir,
+        "jr-fw",
+        heartbeat=100.0,  # 心跳不到点, 走到 removing 写才撞上终态
+        stable=0.0,
+        poll=0.0,
+        clock=_clock_gen(start=0.0, step=10.0),
+        sleep=lambda s: None,
+    )
+    assert result == "stopped"
+    assert os.path.exists(link), "removing 意图被拒不删链接"
+    assert relocate_journal.read_journal(data_dir, "jr-fw")["phase"] == "done"
 
 
 # ---------- _delete_links ----------

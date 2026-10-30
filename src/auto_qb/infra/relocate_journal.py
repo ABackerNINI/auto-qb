@@ -2,8 +2,11 @@
 
 两本账的分工(§3.5「为什么需要两本账」):
 - state.json → relocate.jobs.<job_id>: **权威**, 唯一写者 = auto-qb 主循环线程;
-- <data_dir>/relocate/<job_id>.json: guardian 自述的 journal(相位/心跳/三证证据),
-  唯一写者 = guardian 进程。两个进程永不写同一份文件 ⇒ 不需要跨进程锁。
+- <data_dir>/relocate/<job_id>.json: guardian 自述的 journal(相位/心跳/三证证据)。
+  实际有**两个写者**: guardian 写心跳/收尾意图(armed/removing/removed/failed),
+  auto-qb 主循环写终态(done/cancelled)与意图回滚(armed) —— 无跨进程锁, 整包
+  last-writer-wins, 靠 write_journal 的「终态不得被非终态覆盖」前向合并保序
+  (两个写者都走该函数, 见其 docstring)。
 
 第三份文件 `<job_id>.spec.json` 是 auto-qb 写给 guardian 的**规格**: 路径可能含
 非 ASCII(§3.3 实测韩文名 + 括号), 一律不经命令行参数 —— 经文件传递。
@@ -57,12 +60,29 @@ def _read_json(path: str) -> Optional[dict]:
 
 # ---------- journal(guardian 写 / auto-qb 读) ----------
 
+# journal 里出现这两个相位 = auto-qb 侧已收口(撤销/收尾完成), guardian 必须退出 ——
+# 否则一个已终结 job 的守护进程会永远每 10s 写心跳(armed 态本来就要等 qB 退出, 可能等几个月)
+STOP_PHASES = frozenset({"done", "cancelled"})
 
-def write_journal(data_dir: str, job_id: str, payload: dict) -> None:
-    """写一条 journal(相位/心跳/证据); ts 缺省取当前墙钟"""
+
+def write_journal(data_dir: str, job_id: str, payload: dict) -> bool:
+    """写一条 journal(相位/心跳/证据); ts 缺省取当前墙钟; 返回是否落盘
+
+    整包 last-writer-wins 且无跨进程锁, 唯一必须守住的序: **非终态相位不得覆盖终态**
+    ——否则 guardian 的 armed 心跳落进 auto-qb「写终态」之后的读-写间隙, 终态被回退成
+    armed, guardian 看不到退休指令(僵尸进程 + 对账面相位失真)。写前读一次做前向合并:
+    竞态窗口从「整个循环轮次(毫秒级, 心跳 10s 一次)」收窄到本函数内部读-写的微秒级。
+    终态写终态(done/cancelled 互覆)仍 last-writer-wins。返回 False = 被拒写(对方已收口),
+    调用方(guardian)据此立即退休, 不再继续后续动作(尤其不得再删链接)。
+    """
     body = dict(payload or {})
     body.setdefault("ts", time.time())
+    current = _read_json(journal_path(data_dir, job_id))
+    if current is not None and str(current.get("phase") or "") in STOP_PHASES \
+            and str(body.get("phase") or "") not in STOP_PHASES:
+        return False
     _write_json(journal_path(data_dir, job_id), body)
+    return True
 
 
 def read_journal(data_dir: str, job_id: str) -> Optional[dict]:
