@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-30-0622">
 <meta name="issue-type" content="refactor">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0131-issue-traffic-agg-cov-parse-contract.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐">
 <meta name="issue-summary" content="parse_v4_agg_text 对 cov_s=0 语义合法行照单全收, 坏值可炸 rollup/merge 并逃逸恢复循环 —— 解析契约与写侧下限1不对齐">
 <title>v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0622-refactor-traffic-agg-cov-parse-contract</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,11 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 01:30 — 认领（用户指派「认领并修复」），复验 <strong>仍复现</strong>：on_agg_line 对 cov_s=0 照单收 / _recover_aggregates 只捕 OSError / v4_merge_agg 无 cov 守卫，三条断言在 HEAD 5885d7a6 逐条核实</li>
+      <li>2026-10-31 01:30 — 状态 <strong>Done</strong>。实际修法（取建议 A + C，B 不取 —— A 是根因修复，修后 rollup 的 ValueError 在解析产物上不可能再触发）：
+        ① parse 侧 on_agg_line 对 cov_s &lt; 1 抛 ValueError 按坏行整行跳过（与写侧 v4_hour_agg 下限 1 契约对齐，复用 _parse_v4_text 吞异常路径）；
+        ② v4_merge_agg 补 cov &lt;= 0 fail-closed 守卫（同 v4_rollup_agg 口径，注释言明正常输入到不了此处）。
+        验证：新增 test_v4_agg_parse_cov_floor_one_bad_line / test_v4_merge_agg_zero_cov_fail_closed，全量 test.full 4179 passed / 10 skipped / 覆盖率 99.18%（2026-10-31 实测）。</li>
     </ul>
   </section>
 

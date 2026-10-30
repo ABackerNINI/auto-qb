@@ -26,6 +26,9 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
 - test_v4_bucket_width_effective_dt: 桶宽 max(1, ceil(有效dt)) 各形态
 - test_v4_paths_dates_and_window: 按天目录与路径解析(§06.2)
 - test_v4_agg_roundtrip_and_legacy_8col: agg.dat roundtrip + 8 列旧行兜底 cov_s=3600(防御性保留)
+- test_v4_agg_parse_cov_floor_one_bad_line: 解析侧 cov_s 下限 1(issue 26-10-30-0622, 与写侧
+  v4_hour_agg 契约对齐)—— cov_s=0/-1 按坏行整行跳过, cov_s=1 边界合法, 8 列旧行兜底不受影响,
+  解析产物 rollup 上卷恒可(恢复路径回归)
 - test_v4_hour_agg_dt_weighted_degenerate_to_v2: dt 加权 hour 聚合, 等间隔退化公式对照钉住
 - test_v4_hour_agg_subsecond_coverage_floors_cov_to_one: 亚秒覆盖桶 cov_s 下限 1(行存在即有覆盖)——
   迟到补记重封桶的亚秒残余覆盖不再折 0, hour->day->month 逐级链恒可上卷(2026-10-13 真机
@@ -34,6 +37,8 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
 - test_v4_merge_agg_same_epoch_reseal_keeps_coverage: 同 epoch 重封合流 —— 迟到补记把已封桶
   重建再封时 cov 相加(非取残余), avg 按 cov 加权 / totals 取后封行 / 桶宽截断 / 异 kind-epoch
   fail-fast(2026-10-13 真机「重封替换丢覆盖」回归)
+- test_v4_merge_agg_zero_cov_fail_closed: 合流 cov<=0 fail-closed(issue 26-10-30-0622,
+  同 v4_rollup_agg 守卫)—— 双行零 cov 除零兜底, 单边零 cov 合法
 - test_v4_format_fail_fast_and_torn_tail: 序列化 fail-fast + 撕裂尾行豁免口径
 - test_v4_parse_discipline_dual_parser_same_verdict: 同纪律夹具双 parser 同判(issue 26-10-29-1304 R07-T06
   解析纪律收敛 _parse_v4_text 单点的行为守阵)—— 空文本/头行缺失与旧头行(整文件坏含头行本身)/
@@ -683,6 +688,32 @@ def test_v4_agg_roundtrip_and_legacy_8col():
     assert bad.bad_lines == 1 and bad.hours == ()
 
 
+def test_v4_agg_parse_cov_floor_one_bad_line():
+    """解析侧 cov_s 下限 1(issue 26-10-30-0622, 与写侧 v4_hour_agg 契约对齐): cov_s=0
+    语义非法行按坏行整行跳过(负值本就计坏), 好行不受牵连; 8 列旧行兜底不受影响;
+    解析产物全部 cov_s >= 1 -> rollup(v4_rollup_agg)的 Σcov > 0 前置在恢复路径上恒成立"""
+    text = _v4_day_text(
+        [
+            HEADER_LINE_V4,
+            "key,torrent:ABC",
+            "hour,1000,10,20,5,8,100,200,0",  # cov_s = 0: 写侧不产出的语义非法行 -> 坏行
+            "hour,2000,11,21,6,9,110,210,-1",  # 负值: _parse_nn_int 拒 -> 坏行
+            "hour,3000,12,22,7,10,120,220,1",  # 下限边界: cov_s = 1 合法
+            "day,86400,1,1,1,1,1,1,0",  # day 行同口径
+        ]
+    )
+    parsed = parse_v4_agg_text(text)
+    assert parsed.bad_lines == 3 and parsed.data_lines == 5  # 三条非法行(hour x2 + day)全计坏
+    assert parsed.hours == (AggRow("hour", 3000, 12, 22, 7, 10, 120, 220, 1), )
+    assert parsed.days == ()  # cov_s=0 的 day 行同样按坏行拦下
+    # 8 列旧行兜底 cov_s = 3600 不受下限影响
+    legacy = parse_v4_agg_text(_v4_day_text([HEADER_LINE_V4, "hour,1000,9,19,4,7,90,190"]))
+    assert legacy.hours[0].cov_s == 3600 and legacy.bad_lines == 0
+    # 恢复路径回归: 全零 cov 子行不再能到达 v4_rollup_agg(坏行已拦), 逐级聚合正常上卷
+    day = v4_rollup_agg("day", 86400, parsed.hours)
+    assert day.cov_s == 1
+
+
 def test_v4_hour_agg_dt_weighted_degenerate_to_v2():
     """dt 加权 hour 聚合(§04.1): avg = round(Σ(rate x dt)/cov) / cov 上界 3600 /
     totals 级末快照 / dt_i 恒等 interval_s 时严格退化为等间隔均值公式 round(Σrate/n)
@@ -755,6 +786,19 @@ def test_v4_merge_agg_same_epoch_reseal_keeps_coverage():
         v4_merge_agg(prev, AggRow("day", 100, 1, 1, 1, 1, 1, 1, 1))
     with pytest.raises(ValueError):
         v4_merge_agg(prev, AggRow("hour", 200, 1, 1, 1, 1, 1, 1, 1))
+
+
+def test_v4_merge_agg_zero_cov_fail_closed():
+    """合流 cov <= 0 fail-closed(issue 26-10-30-0622, 同 v4_rollup_agg 断言式守卫):
+    双行 cov 全零时加权除法是除零 —— 解析侧 cov_s 下限 1 后正常输入到不了这里,
+    守卫只对绕过解析的语义非法输入兜底; 单边零 cov 合法(等效另一侧原样加权)"""
+    zero = AggRow("hour", 100, 100, 200, 50, 80, 1000, 2000, 0)
+    with pytest.raises(ValueError):
+        v4_merge_agg(zero, AggRow("hour", 100, 300, 400, 90, 160, 1100, 2100, 0))
+    # 单边零 cov: cov = 0 + 1762 > 0, 合法(另一侧加权口径)
+    live = AggRow("hour", 100, 300, 400, 90, 160, 1100, 2100, 1762)
+    m = v4_merge_agg(zero, live)
+    assert m.cov_s == 1762 and m.dl_avg == 300 and m.dl_total == 1100
 
 
 def test_v4_rollup_strict_level_by_level():

@@ -806,7 +806,8 @@ def parse_v4_agg_text(text: str) -> V4ParsedAgg:
     """agg.dat 文本 -> V4ParsedAgg(纯函数; §02.2 + §04.4)
 
     头行必须恰为 HEADER_LINE_V4(缺失/不符整文件记坏, 同天文件口径); hour/day/month
-    行 9 列, 8 列旧行兜底 cov_s = 3600(防御性, v4 全新目录正常不出现); 同 kind 同
+    行 9 列, 8 列旧行兜底 cov_s = 3600(防御性, v4 全新目录正常不出现); cov_s 下限 1
+    (与写侧 v4_hour_agg 契约对齐, 违者按坏行 —— issue 26-10-30-0622); 同 kind 同
     epoch 重复行取最后一行(重封 = 追加行的读侧口径); 坏行纪律与天文件一致。
     返回按 kind 分列、epoch 升序。
     !解析纪律骨架(头行门闩 / data+bad 计数 / 空行注释跳 / split(",") / try-except /
@@ -819,6 +820,12 @@ def parse_v4_agg_text(text: str) -> V4ParsedAgg:
         if parts[0] in AGG_KINDS and len(parts) in (AGG_LEGACY_FIELDS, AGG_FIELDS):
             # 8 列旧行兜底 cov_s = 3600(§02.2 防御性)
             cov = _parse_nn_int(parts[8]) if len(parts) == AGG_FIELDS else HOUR_SECONDS
+            if cov < 1:
+                # 下限 1 与写侧契约对齐(§04.1「行存在即有覆盖」, v4_hour_agg cov_s 下限 1):
+                # cov_s = 0 的语义非法行若放行, rollup(_catch_up_level 全零 cov 子行)炸
+                # ValueError 逃逸恢复循环 / merge(v4_agg_obs_live)除零 —— 按坏行整行跳过
+                # (行型守卫复用 _parse_v4_text 的 ValueError 吞异常路径, issue 26-10-30-0622)
+                raise ValueError(f"cov_s 下限 1(行存在即有覆盖): {parts[8]}")
             row = AggRow(
                 kind=parts[0],
                 epoch=int(parts[1]),
@@ -1237,6 +1244,11 @@ def v4_merge_agg(prev: AggRow, row: AggRow) -> AggRow:
     if prev.kind != row.kind or prev.epoch != row.epoch:
         raise ValueError(f"合流要求同 kind 同 epoch: {prev.kind}/{prev.epoch} vs {row.kind}/{row.epoch}")
     cov = prev.cov_s + row.cov_s
+    if cov <= 0:
+        # fail-closed 同 v4_rollup_agg: 双行 cov 全零时下面的加权除法是除零(Web 线程炸)。
+        # 解析侧 cov_s >= 1(issue 26-10-30-0622)后正常输入到不了这里 —— 断言式守卫,
+        # 语义非法行在解析处就按坏行拦下
+        raise ValueError("合流无有效覆盖")
     merged = min(cov, _agg_width_s(prev))
     return AggRow(
         kind=prev.kind,
