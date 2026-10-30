@@ -19,10 +19,10 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 10 |
 | perf | 8 |
 | docs | 1 |
-| test | 1 |
+| test | 2 |
 | refactor | 5 |
 | feat | 20 |
 | chore | 5 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [bug] [rename 乐观失败回滚不还原抽屉 detail.name](26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败…
+- [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-p…
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver…
 - [bug] [relocate journal 双写者竞态: guardian 心跳可覆盖 auto-qb 终态相位](26-10-30-0624-bug-relocate-journal-heartbeat-phase.html) — finalize_wat…
 - [bug] [备用限速组缺非空闸, 读失败窗口提交即静默写 0/0](26-10-30-0622-bug-alt-limits-submit-empty-gate.html) — submitAltLim…
@@ -154,7 +156,7 @@
 - [test] [三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步)](26-10-20-2231-test-fe-tpl-shell-parity-guard.html) — 三 shell 除 he…
 - [bug] [Origin 头端口段非法时 _origin_allowed 抛未捕获 ValueError(跨站闸应变 fail-closed)](26-10-20-2230-bug-webui-origin-port-parse.html) — _origin_allo…
 
-> 更早的 **219** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **220** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
