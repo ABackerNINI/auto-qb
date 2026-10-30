@@ -1,0 +1,4 @@
+{
+  "36595": {"token": "qbt_<主实例 API key, 见 qB WebUI 选项>", "note": "有真实种子, L2 做种端"},
+  "36596": {"token": "", "note": "本机免鉴权(Address=127.0.0.1 + LocalHostAuth=false), 留空即可"}
+}

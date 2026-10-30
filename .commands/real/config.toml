@@ -1,0 +1,46 @@
+[pack]
+name      = "real"
+when      = "真机实测轨: 三层守卫 / 起停测试实例 / 跑 tests-real 用例(不挂提交闸门)"
+confirmed = true
+
+[tasks."real.guard"]
+run     = ["uv run python tests-real/runner.py guard"]
+timeout = 120
+when    = "真机实测开工第一步: 端口/镜像路径白名单 + 真实种子归零"
+note    = "不过即非 0 退出, 没有 --force 逃生门 —— 白名单只认 127.0.0.1:36595/36596 且镜像路径在 D:\\Programs\\qBittorrent-testing* 下"
+
+[tasks."real.list"]
+run     = ["uv run python tests-real/runner.py list"]
+timeout = 30
+when    = "看这一片有哪些用例(id / 文件 / 标题), 排期时定用例清单"
+note    = "用例 id 写在 docstring 首行 [RMxx-nn], 从这里抽; 新增用例不必改本包"
+
+[tasks."real.up"]
+run     = ["uv run python tests-real/runner.py up <args>"]
+timeout = 120
+when    = "测试实例没起时拉起它(只认白名单端口)"
+note    = "经 explorer.exe 拉起: 工具 shell 里 Start-Process / cmd start 起的 GUI 进程会随命令结束被杀(实测); <args> 传 --port 36595|36596, 不加 --dry-run 就真起"
+
+[tasks."real.down"]
+run     = ["uv run python tests-real/runner.py down <args>"]
+timeout = 120
+when    = "关掉测试实例(按镜像路径精确匹配, 不碰生产 qB)"
+note    = "<args> 传 --port 36595|36596; 默认真关, 想先看传 --dry-run"
+
+[tasks."real.pause-all"]
+run     = ["uv run python tests-real/runner.py pause-all <args>"]
+timeout = 120
+when    = "把目标实例全部种子暂停(手工版守卫; real.guard 已含此步)"
+note    = "<args> 传 --port 36595|36596"
+
+[tasks."real.run"]
+run     = ["uv run python tests-real/runner.py run <args>"]
+timeout = 3600
+when    = "跑单条用例"
+note    = "默认 dry-run, 必须 <args> 带 --case RM00-01 --yes 才真跑; 真跑会改 qB 状态/起停进程"
+
+[tasks."real.suite"]
+run     = ["uv run python tests-real/runner.py suite <args>"]
+timeout = 3600
+when    = "跑一片全部用例(一轮实测)"
+note    = "<args> 传 --slice RM00 --yes; 一片半天预算, 超了就按规程 §05 拆片"

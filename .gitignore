@@ -92,3 +92,9 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# 真机实测凭据(本地, 不进仓库)
+tests-real/config/instances.local.json
+
+# 真机实测用例的本地工作目录(种子内容落盘, qB 要真读)
+tests-real/.work/

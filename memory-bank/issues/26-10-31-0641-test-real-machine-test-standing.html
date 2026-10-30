@@ -272,7 +272,7 @@
     <p>命令一律走 task id, <b>不要手抄命令本体</b>(会被 <code>commands run doc.drift</code> 判红):</p>
     <table>
       <tr><th>task id</th><th>干什么</th><th>现状</th></tr>
-      <tr><td><code>real.guard</code></td><td>三层守卫自检: 端口 / 镜像路径白名单 · 目标实例种子全暂停 · 配置不是 <code>config.yml</code>; 不通过即非 0 退出</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.guard</code></td><td>守卫自检: 端口 / 镜像路径白名单 · <b>实例在线</b>(<code>connection_status</code> 不是 <code>disconnected</code>) · 目标实例种子全暂停 · 配置不是 <code>config.yml</code>; 不通过即非 0 退出</td><td>RM00 建立</td></tr>
       <tr><td><code>real.up</code> / <code>real.down</code></td><td>启动 / 重启 / 关闭<b>白名单内</b>的测试实例(先核镜像路径, 认不出归属就拒动)</td><td>RM00 建立</td></tr>
       <tr><td><code>real.pause-all</code></td><td>暂停目标实例全部种子(前置归零与收尾恢复各一次)</td><td>RM00 建立</td></tr>
       <tr><td><code>real.list</code></td><td>列出全部用例: id / 档位 / 需要哪层种子 / 是否 <code>[需活跃种子]</code></td><td>RM00 建立</td></tr>
@@ -325,9 +325,9 @@
     <table>
       <tr><th>片</th><th>上次实测</th><th>基线 commit</th><th>用例 L0/L1/L2/L3</th><th>本轮结论</th><th>指针(计划 · 切片 · 缺陷)</th></tr>
       <tr>
-        <td><code>RM00</code></td><td>—</td><td>—</td><td>—</td>
-        <td><span class="badge">待排期(最高)</span> 解锁 L1/L2 的基建</td>
-        <td>—</td>
+        <td><code>RM00</code></td><td>2026-10-31</td><td><code>BASECOMMIT</code></td><td>0/0/6/0</td>
+        <td><span class="badge go">已测(全绿)</span> L1/L2 已解锁</td>
+        <td>计划 <code>plans/26-10-31-0705-plan-real-machine-test.html</code> · 切片 <code>testing/real-baselines/26-10-31-0738-real-RM00.md</code> · 缺陷: 无</td>
       </tr>
       <tr><td><code>RM01</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
       <tr><td><code>RM02</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
@@ -349,6 +349,7 @@
     <h2><span class="no">08</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 06:41 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套实测还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。首版落 11 片(RM00 基建 + RM01–RM10), 规程落在 <code>testing/real-machine.md</code>, 记录口径另开 <code>testing/real-baselines/</code>。</li>
+      <li>2026-10-31 07:38 — <code>RM00</code> 实测完成: 三层守卫 / L1 正反向 / L2 双实例互传全绿, <strong>L1 与 L2 解锁</strong>, 后续片可直接引用。本轮把两处环境级卡点写进规程 §02.5(36596 监听端口与生产实例撞车、伪 tracker 不得回请求者自己)。下一片按排期顺序为 <code>RM01</code>。</li>
     </ul>
   </section>
 

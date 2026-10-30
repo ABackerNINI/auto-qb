@@ -33,11 +33,13 @@
 
 ## 02 环境与守卫
 
-### 2.1 三层守卫(全在 `tests-real/guard.py`, 入口 `real.guard`; 任何用例先过它)
+### 2.1 守卫(全在 `tests-real/guard.py`, 入口 `real.guard`; 任何用例先过它)
 
 1. **静态白名单** —— 端口 ∈ {36595, 36596}; 进程镜像路径前缀匹配; 配置路径不是 `config.yml`。
-2. **前置快照 + 归零** —— 记录当时所有 qB 进程与目标实例的种子清单; 对目标实例 `pause` 全部种子, 校验 `start_paused_enabled`。
-3. **运行期看门狗** —— 后台线程按 2s 轮询目标实例; 违规即暂停 + 记账; 超阈值中止并让本轮结论记 `ABORTED`(不是 PASS)。
+2. **在线核验** —— `connection_status` 必须不是 `disconnected`(`connected` / `firewalled` 都算通过)。
+   见 §2.5: 掉线时 qB 一个 announce 都不发, 而种子状态看起来完全正常 —— 不拦在门口, 整片结论都是假的。
+3. **前置快照 + 归零** —— 记录当时所有 qB 进程与目标实例的种子清单; 对目标实例 `pause` 全部种子, 校验 `start_paused_enabled`。
+4. **运行期看门狗** —— 后台线程按 2s 轮询目标实例; 违规即暂停 + 记账; 超阈值中止并让本轮结论记 `ABORTED`(不是 PASS)。
 
 收尾:**恢复快照**(把本轮 pause 过的种子恢复原状态; 本轮自造的种子/标签/分类**删干净**), 并重跑一次进程比对。
 
@@ -61,22 +63,47 @@
 
 `dev.webui` 起一份**关掉全部自动任务**的最小配置(只留同步快照 + WEB UI, 数据目录独立), 连真机 qB 看界面/试交互 —— 读侧切片(RM08)首选它, 不必跑完整主循环。注意它**仍会真写**: WebUI 上点"暂停"就是真暂停(这是测乐观 UI 的前提), 所以约束 1/2 一样适用。
 
+### 2.5 实例的硬事实(RM00 实测; 环境有变先改这里)
+
+**两个测试实例的 BT 监听端口**: 36595 = `26803`, 36596 = `60539`, 都绑在局域网 IP `192.168.1.122` 上。
+
+> 🔴 **36596 原本配的是 60537, 而生产实例 `D:\Programs\qBittorrent-2` 占着 60537**。撞车后果不是"慢", 是**该实例一个 announce 都不发**: 抢不到监听 socket ⇒ `/api/v2/transfer/info` 的 `connection_status` 变成 `disconnected` ⇒ libtorrent 认定自己离线, 连 tracker 都不联系, 所有种子永远停在 `stalledUP`/`stalledDL` 且 `status=1`(未联系)。
+> **所以 `real.up` 之后必须核一句 `connection_status`**: 只接受 `connected` / `firewalled`; 见到 `disconnected` 立刻换端口(`set_prefs(listen_port=...)`, 用 `socket.bind` 先探空), 不要往下测 —— 否则整片结论全是假红。
+
+**其它会让人白跑半小时的实测事实**:
+
+| 事实 | 影响 | 处置 |
+|---|---|---|
+| 两实例 `dl_limit = 1024`(1 KiB/s) | L2 互传 2MB 要半小时 | 用 `transfer_limits` fixture 临时钉 256 KiB/s, 结束还原 |
+| `/torrents/trackers` 会返回 `** [DHT] **` / `** [PeX] **` / `** [LSD] **` 伪条目 | 直接 `is_local_url` 会误报"非本机地址" | 断言前按 `url` 以 `http` 开头过滤 |
+| 种子是 private 时, 上述三条的 `msg` = 「这是私有 torrent」 | 正常现象, 不是错误 | 不要断言它们 status==0 |
+| `uploaded` 计数比 `progress` 慢一拍(实测差 ~20KB) | 临界断言会假红 | 用 `_wait` 等它追平, 或断言 `>= payload` 前先轮询 |
+| 36596 的 WebUI 是 `LocalHostAuth=false` | 带 token 反而 403 | `lib/qb.py` 已做一次鉴权降级, 不要"修"成报错 |
+| qB 5.2 字段名 | `upspeed`/`dlspeed`(不是 `up_speed`); 暂停用 `/torrents/stop` 与 `/torrents/start`; `/torrents/add` 返回 JSON 收据 | 已在 `lib/qb.py` 封装 |
+| 工具 shell 里 `Start-Process` / `cmd start` 起的 GUI 进程会随命令结束被杀 | 实例"启动成功"后消失 | 一律经 `explorer.exe`(`real.up` 已这么做) |
+| `--portable` **不是**合法命令行参数(传了会 0xc0000005 崩) | 实例崩溃, 看着像环境坏了 | 无参启动即可: 目录里有 `profile/` 就是 portable |
+
+**诊断入口(卡住时先跑它们, 别靠猜)**: `uv run python tests-real/tools/diag_l2.py [秒]`(双实例互传全过程: announce 计数 / tracker 视图 / TCP 连接表) 与 `tests-real/tools/diag_log.py <port> [行数]`(qB 日志尾部)。
+
 ## 03 种子层: L0 / L1 / L2
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |
 |---|---|---|---|---|---|
 | **L0** | 用实例里现成的真实种子 | 全程 `paused` | 只读数据面、观感、配置读写 | 零(不动真实种子) | ✅ 现在可用 |
-| **L1** | 构造种子, announce 指向本地伪 tracker(bencode, **零 peer**) | `stalledUP` / `paused`, **零外网流量** | 标签/分类/状态/限速下发/规则命中/HR 判定数据面 | 零(流量不出本机) | ⏳ 待 RM00 验证 |
-| **L2** | 36595 做种 + 36596 下载, 伪 tracker 回对端地址 | 真 `uploading`/`downloading` | 真实速率/进度/完成事件/做种时间/汇报 | 零(两端都打本地 tracker) | ⏳ 待 RM00 验证 |
+| **L1** | 构造种子, announce 指向本地伪 tracker(bencode, **零 peer**) | `stalledUP` / `paused`, **零外网流量** | 标签/分类/状态/限速下发/规则命中/HR 判定数据面 | 零(流量不出本机) | ✅ RM00 已验证 |
+| **L2** | 36595 做种 + 36596 下载, 伪 tracker 回对端地址 | 真 `uploading`/`downloading` | 真实速率/进度/完成事件/做种时间/汇报 | 零(两端都打本地 tracker) | ✅ RM00 已验证 |
 
-**L1 设计要点**: 伪 tracker 只需实现 `GET /announce` 返回 `d8:intervali1800e5:peers0:e`(零 peer)即够; 种子用 bencode 现造(`announce` = `http://127.0.0.1:<port>/announce`), 不要拿真实种子的 infohash 改 announce —— 那会让真实 tracker 仍被联系。
+**L1 设计要点**: 伪 tracker 只需实现 `GET /announce` 返回 `d8:intervali1800e5:peers0:e`(零 peer)即够; 种子用 bencode 现造(`announce` = `http://<本机局域网IP>:<port>/announce`), 不要拿真实种子的 infohash 改 announce —— 那会让真实 tracker 仍被联系。
 **L2 设计要点**: 伪 tracker 对 36596 的 announce 返回 36595 的 peer(`ip` + `port` 取自 qB 的监听端口), 两端都在本机 ⇒ 流量不出网卡。
+
+> ⚠️ **announce 不能写 `127.0.0.1`**: qB 的出站 socket 绑在以太网接口上(`current_network_interface`), 打 127.0.0.1 会 `WSAEADDRNOTAVAIL`, tracker 状态 4「该请求的地址无效」。一律用 `lib/net.py: local_host()` 取的局域网 IP —— 仍是本机, 流量仍不出网卡。
+> ⚠️ **伪 tracker 回包必须排除请求者自己**: 两实例同 IP 只差端口, 若把"自己"也回给它, 种子会去连自己, 而 qB 默认 `enable_multi_connections_from_same_ip=false`(同一 IP 只允许一条连接), 真正的 leech 会被挤掉 —— 现场表现是 `connections_count` 1→0 且零字节, 极易误判成加密/防火墙问题。`lib/tracker.py` 已按 announce 里的 `port` 排除。
 
 **RM00 验收三条**(全绿才解锁 L1/L2, 之后各片才允许引用):
 
-1. **L1 正向** —— 构造种子加入 36595 后, `GET /api/v2/torrents/info` 里该种子 `up_speed == 0 && dl_speed == 0` 持续 ≥60s, 且伪 tracker 收到 ≥1 次 announce。
+1. **L1 正向** —— 构造种子加入 36595 后, `GET /api/v2/torrents/info` 里该种子 `upspeed == 0 && dlspeed == 0` 持续 ≥60s, 且伪 tracker 收到 ≥1 次 announce。
 2. **L1 反向** —— 关掉伪 tracker 后种子进入 `error`/`stalledUP`, 且**无任何外网连接**(用连接表或域名黑名单断言), 证明流量物理上出不去。
-3. **L2** —— 36596 从 36595 拉取同一构造种子, `progress` 单调升至 1.0, 期间 `up_speed > 0` 持续 ≥10s, 完成后 36595 侧 `seeding_time` 增长; 全程两端 announce 只打本地伪 tracker。
+3. **L2** —— 36596 从 36595 拉取同一构造种子, `progress` 单调升至 1.0, 期间 `upspeed > 0` 持续 ≥10s, 完成后 36595 侧 `seeding_time` 增长; 全程两端 announce 只打本地伪 tracker。
 
 **退路(必须写进 RM00 计划)**: 若 qB 拒绝自定义 announce / 拒绝非标准端口 / 双实例拒绝互连 ⇒ L1 降级为"真实种子 + 全局暂停 + 只读断言", L2 直接置 `Dropped` 并写明原因 —— 不允许"再试试"把 RM00 撑成三次排期。
 
@@ -185,6 +212,7 @@
 | 每轮计划 | `plans/<stamp>-plan-real-<片>.html` | 这一轮怎么测、为什么这么测(拍板即冻结) |
 | 每轮实测数字 | `testing/real-baselines/<stamp>-real-<片>.md` | 用例数 / 档位分布 / PASS-FAIL-BLOCKED / 基线 commit |
 | 用例 | `tests-real/` | 可复用的断言本体 |
+| 诊断工具(非用例) | `tests-real/tools/` | 卡住时的现场采集, 不参与验收 |
 | 命令 | `.commands/real/` | 守卫与运行入口 |
 | 缺陷 | 各自的 `bug` / `perf` issue | 每条独立排期 |
 

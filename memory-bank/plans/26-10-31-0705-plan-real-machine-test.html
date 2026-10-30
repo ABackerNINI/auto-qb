@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>真机实测 RM00 基建: 守卫/伪 tracker/双实例互传</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-machine-test">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-0705">
+<meta name="doc-updated" content="26-10-31-0705">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-machine-test</div>
+<h1>真机实测 RM00 基建: 守卫/伪 tracker/双实例互传</h1>
+<p class="lede">用两个 portable 测试实例(36595/36596)+ 本地伪 tracker 造出<b>零外网流量</b>的假种子, 把真机实测从「人工暂停 + 人工目视」升级成<b>可复用的自动断言轨</b>; 本轮只做基建与 L1/L2 可行性验证, 不碰任何业务功能。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0705 · <b>doc-updated</b> 26-10-31-0705 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-10-31 两轮)定稿的规程 <code>memory-bank/testing/real-machine.md</code>; 排期锚 <code>issues/26-10-31-0641-test-real-machine-test-standing.html</code> §03 的 RM00 行; 用户指令「现在排 RM00」。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么</b>: 规程把真机实测切成 11 片, 但每片都卡在同一件事 —— 没有一个「不碰真实种子也能测」的种子来源。RM00 就是解开这个卡点的基建片: 它不通, 后面 10 片只能靠人工暂停 + 人工目视, 成熟度永远停在 L0。</p><p><b>做到什么算成</b>(验收三条, 与规程 §03 同源): ① L1 正向 —— 构造种子加进 36595 后 <code>upspeed==0 &amp;&amp; dlspeed==0</code> 持续 ≥60s 且伪 tracker 收到 ≥1 次 announce; ② L1 反向 —— 关掉伪 tracker 后种子进 error/stalledUP 且<b>无任何外网连接</b>; ③ L2 —— 36596 从 36595 拉完同一构造种子, 期间 <code>upspeed&gt;0</code> 持续 ≥10s, 完成后做种时间增长。</p><p><b>不变量(违反即中止, 不是警告)</b>: ① 只碰 <code>127.0.0.1:36595/36596</code>; ② 两个实例里的<b>真实种子全程 paused</b>, 运行期看门狗每 2s 复核; ③ 不动生产 qB(<code>D://Programs//qBittorrent-2</code> 与 <code>D://Programs//Files</code> 下那两个运行中的实例); ④ 构造种子的 announce 只指 <code>127.0.0.1</code>; ⑤ 不改 <code>src/</code>。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>2026-10-31 07:00 前后实测(命令走 <code>real.*</code> 之前的手工探测):</p><table><tr><th>事实</th><th>值</th></tr><tr><td>两实例版本</td><td>qBittorrent <b>v5.2.3</b>(单个 44 MB 静态 exe, 目录里带 <code>profile/</code> 即自动 portable)</td></tr><tr><td>36595</td><td>8 个真实种子, 全部 <code>stoppedUP</code>(非活跃), <code>listen_port=26803</code>, 有 tag <code>MISSING</code></td></tr><tr><td>36596</td><td>空库(0 种子), <code>listen_port=60537</code> → 执行中改为 <b>60539</b>(60537 被生产实例占着, 见 D4)</td></tr><tr><td>种子字段名</td><td><code>upspeed</code> / <code>dlspeed</code>(不是 <code>up_speed</code>; 按后者读会 KeyError)</td></tr></table><p><b>四个当场踩到的坑(全部已解, 写进 §07 与切片)</b>:</p><ol><li><b>工具 shell 起的 GUI 进程会被连带杀掉</b> —— <code>Start-Process</code> / <code>cmd start</code> 起的 qB 在命令结束后消失, 无崩溃事件(实测 pid 43224/43636 均如此); 经 <code>explorer.exe &lt;exe&gt;</code> 拉起才活过调用边界。</li><li><code>--portable</code> 不是 5.2.3 的参数(用户指出), 传了会走到异常路径(实测出现一次 <code>0xc0000005</code> 崩溃); 无参数启动即可。</li><li>本机有 <code>HTTP_PROXY</code>, urllib 直连 <code>127.0.0.1</code> 会拿到 <b>502 Bad Gateway</b>(代理转的); 必须 <code>ProxyHandler({})</code>。</li><li>36596 的 <b>API key 鉴权对本机恒 403</b>(换密钥、重启、换源 IP 都无效), 而 36595 同样配置正常 ⇒ 已把 36596 改成 <code>WebUI\Address=127.0.0.1</code> + <code>LocalHostAuth=false</code>(比原来 <code>0.0.0.0</code> 暴露到局域网<b>更安全</b>), 配置留了两份备份。</li></ol>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>: 假种子 + 伪 tracker ⇒ 种子处于「做种中但零流量」; 双实例互传 ⇒ 唯一的「真流量」通道, 且两端都只打本地 tracker。</p><table><tr><th>落点</th><th>内容</th></tr><tr><td><code>tests-real/lib/qb.py</code></td><td>极简 qB 客户端: 绕代理、Bearer 可选、403 自动降级免鉴权</td></tr><tr><td><code>tests-real/lib/bencode.py</code> + <code>torrent.py</code></td><td>bencode 编解码 + 造单文件 .torrent(announce 可指任意 URL)</td></tr><tr><td><code>tests-real/lib/tracker.py</code></td><td>伪 tracker: <code>/announce</code> 返回 bencode, peer 列表可配(默认零 peer), 记录每次 announce</td></tr><tr><td><code>tests-real/lib/guard.py</code></td><td>三层守卫: 端口/镜像路径白名单 · 种子归零 · 2s 看门狗</td></tr><tr><td><code>tests-real/runner.py</code></td><td>CLI: guard/up/down/pause-all/list/run/suite; 默认 dry-run, <code>--yes</code> 才真跑</td></tr><tr><td><code>tests-real/rm00_infra/</code></td><td>RM00-01..06 六条用例(pytest 兼容, 不进 <code>testpaths</code>); 编号见切片 §01</td></tr><tr><td><code>.commands/real/config.toml</code></td><td>task id 收口, 文档只写 id</td></tr></table><p><b>分期</b>: 本轮 = S1–S6(基建 + 三条验收)。<b>不做</b>: 任何业务功能实测(那是 RM01–RM10), 任何 <code>src/</code> 改动。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table><tr><th>步</th><th>内容</th><th>验收判据</th></tr><tr><td>S1</td><td>qb.py 客户端 + 绕代理</td><td>两实例 <code>/app/version</code> 均 200; 断网代理环境下不出现 502</td></tr><tr><td>S2</td><td>guard 三层(白名单/归零/看门狗)</td><td>非白名单端口被拒(退出码非 0); 真实种子被暂停后状态全为 stopped/paused</td></tr><tr><td>S3</td><td>伪 tracker + 种子构造</td><td>本地能起 tracker、能被 qB announce 到; 构造出的 .torrent 能被 qB 接受(不报 invalid)</td></tr><tr><td>S4</td><td>L1 用例(RM00-04 正向 / RM00-05 反向)</td><td>验收 ①② 全绿</td></tr><tr><td>S5</td><td>L2 用例(RM00-06)</td><td>验收 ③ 全绿, 或按退路判 <code>Dropped</code></td></tr><tr><td>S6</td><td>命令包 <code>real</code> + 切片记录</td><td><code>real.list</code> 能列出全部用例; <code>real.suite --slice RM00</code> 能跑通</td></tr></table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— 两处需要人定的已在执行中当场定掉, 记 §06(D1/D2)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table><tr><th>编号</th><th>结论</th><th>日期</th></tr><tr><td>D1</td><td>用户「现在排 RM00」= 授权本轮执行(含启动测试实例、造种子、跑 L1/L2 验证)</td><td>2026-10-31</td></tr><tr><td>D2</td><td>36596 的 API key 恒 403 ⇒ 改 <code>Address=127.0.0.1</code> + <code>LocalHostAuth=false</code>; 比原配置更安全, 备份两份</td><td>2026-10-31</td></tr><tr><td>D3</td><td>工具 shell 起 GUI 一律走 <code>explorer.exe</code>(否则被连带杀掉)</td><td>2026-10-31</td></tr><tr><td>D4</td><td><b>36596 的 BT 监听端口 60537 与生产实例 <code>qBittorrent-2</code>(pid 11676)撞车</b> ⇒ 抢不到 listen socket ⇒ <code>connection_status=disconnected</code> ⇒ libtorrent 一个 announce 都不发。改用 60539(先 <code>socket.bind</code> 探空), 经 <code>setPreferences</code> 落地; 并立硬规则: 起停后必须核 <code>connection_status</code> 只接受 <code>connected</code>/<code>firewalled</code></td><td>2026-10-31</td></tr><tr><td>D5</td><td>伪 tracker 回包<b>排除请求者自己</b>(按 announce 的 <code>port</code> 匹配)。两实例同 IP 只差端口, 回自己 ⇒ 种子连自己 ⇒ <code>enable_multi_connections_from_same_ip=false</code> 挤掉真 leech(现场: <code>connections_count</code> 1→0、零字节)</td><td>2026-10-31</td></tr><tr><td>D6</td><td>L2 互传用 <code>transfer_limits</code> fixture 把两端临时钉 256 KiB/s(实例自带 <code>dl_limit=1024</code>, 2MB 要半小时), 结束时按快照逐字还原 —— 不改环境语义, 只做临时覆盖</td><td>2026-10-31</td></tr></table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table><tr><th>风险</th><th>触发条件</th><th>处置</th></tr><tr><td>L2 不通(实例间连不上)</td><td>progress 长期 0 / 无 peer 连接</td><td>按规程退路: L2 置 <code>Dropped</code> 并写明原因, 不硬撑第三次排期</td></tr><tr><td>真实种子被误启</td><td>看门狗发现 upspeed/dlspeed &gt; 0</td><td>立即 pause + 记违规; ≥3 次中止本轮, 结论记 ABORTED</td></tr><tr><td>端口被生产实例占用</td><td>guard 发现端口归属不在白名单</td><td>拒跑(fail-closed), 不提供 --force。**BT 监听端口同理**: 起停后核 <code>connection_status</code>, 见 D4</td></tr><tr><td>qB 版本升级改变 API</td><td>字段名/端点 404 或 KeyError</td><td>先修 <code>tests-real/lib/qb.py</code> 再跑, 不绕过断言</td></tr><tr><td>实例"没报错但什么都没发生"</td><td>种子状态正常却零 announce / 零流量</td><td>先跑 <code>tools/diag_l2.py</code> 看 <code>connection_status</code> 与 announce 计数, 再怀疑加密/防火墙 —— 实测两次根因都在这两项(D4/D5)</td></tr></table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0705</span> 首版: 依规程 RM00 行 + 07:00 现场实测事实(两实例 v5.2.3 / 四个坑)成稿; 验收三条与退路照抄规程 §03, 不另立口径。</li>
+  <li><span class="tag">R1 · 26-10-31-0738</span> 执行补记: 追加 D4(60537 撞车 → 60539)/ D5(伪 tracker 排除请求者)/ D6(L2 临时限速 fixture); 用例由 5 条增至 6 条(新增 RM00-03「实例在线」), 全绿(112s)。L2 未走退路 —— 卡点不是"双实例拒绝互连", 是上面两个环境/建模缺陷, 修完即通。</li>
+</ul>
+
+</div>
+</body>
+</html>
