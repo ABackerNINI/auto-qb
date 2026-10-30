@@ -329,6 +329,8 @@ def main(argv: list[str] | None = None) -> int:
     # 4 ref 三处核对 —— 提交命令成功 ≠ ref 落稳(本环境 ref 写入会被静默丢弃); 必须赶在同步前拦下:
     #   同步拿 HEAD 当真值, ref 丢了会把旧 tip 当成本地提交推出去
     ok, detail = check_refs()
+    for line in detail:
+        print(line)  # ok 也可能带信息行(v5: packed 陈旧自动修复记录); 干净通过时为空
     if not ok:
         if message_matches_head(msg_file):
             # HEAD 消息与文件一致 → 分支 ref 已指向本次提交, 核对红只是 packed-refs 滞后一类
@@ -344,8 +346,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         else:
             emit(steps, "提交失败: ref 三处不一致 —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
-        for line in detail:
-            print(line)
         return 1  # 消息文件保留(仅当判不匹配 = 提交真没落到 ref): 现场未定, 别急着消费
 
     consume_message_file(msg_file, root)
@@ -419,10 +419,10 @@ def main(argv: list[str] | None = None) -> int:
             # 闸门复跑改了文件 → amend 又挪了一次 tip: 不登记的话, 成功行的 hash 第三次失真
             step(steps, f"闸门复跑: 合流后闸门改了 {len(dirty_r)} 个文件 → amend {before[:8]}→{head_now[:8]}")
             ok, detail = check_refs()  # amend 又是一次 ref 写入 —— 复核
+            for line in detail:
+                print(line)  # ok 也可能带信息行(v5: packed 陈旧自动修复记录); 干净通过时为空
             if not ok:
                 emit(steps, "提交失败: ref 三处不一致(amend 后) —— 提交可能没落稳; 确认无他人操作 .git 后按下方步骤处置")
-                for line in detail:
-                    print(line)
                 return 1
     sha = head_now[:8]
 

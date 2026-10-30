@@ -1,6 +1,6 @@
 # Git ref 核对
 
-> 摘要: ref 三处核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
+> 摘要: ref 核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住; packed-refs 陈旧形态 v5 起自动修复+放行); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
 > 触发: 提交后核对, ref, packed-refs, 分支被回退, staged 暴增, 上游未设置, 领先落后算不出
 
 ### ref 三处核对已内联进 ship.commit: `HEAD` == `refs/heads/<branch>` == packed-refs
@@ -23,12 +23,12 @@
 - **触发**: `verify_ref.py` 报 packed-refs 与 HEAD 不一致。
 - **判别**: 被 pack 过的分支更新时只写 **loose ref**(优先级更高), packed-refs 保留旧值直到下次 pack。
   先看 `HEAD` 与 `refs/heads/<branch>` 是否一致 —— **一致即落稳**。
-- **处置**: 备份 `.git` 后 `git pack-refs --all`。
+- **处置**: ✅ **已根治进脚本**(2026-10-31, `verify_ref.py` 输出契约 v5): 「HEAD==refs/heads==loose、
+  仅 packed 落后」这一形态 `check_refs` **自动跑 `git pack-refs --all` 刷新并放行**(B 判据: git 解析
+  ref 时 loose 优先于 packed, packed 旧值读不到, 三处本地真值一致即落稳; 刷不动也放行, 附一行说明)
+  —— 不再停手要人照配方。分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致)仍停手送被回退条目。
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
-  ✅ **停手指引已分流**(2026-10-07, `verify_ref.py` 输出契约 v4): 「HEAD==refs/heads==loose、仅
-  packed 落后」这一形态直接送本条(给 `pack-refs --all`), 不再指向「分支 ref 被回退」条目; 只有
-  分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致)才送被回退条目。
-- **复发: 6** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
+- **复发: 7** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
   自带处置指引指向「分支 ref 被回退」条目, 按其 `update-ref` 强制写回会治不了 packed-refs;
   靠 grep packed 才路由到本条。改进: 停手指引应把「loose==HEAD 但 packed 落后」这一形态
   直接送本条(指引属 verify_ref.py 代码, 尚未改)。②同日第二笔 ship.commit 照报(同形态
@@ -53,6 +53,15 @@
   —— **为什么没命中**: 不适用 —— ⑤ 的根治已生效, ship.commit 失败行**直接送本条**(给
   `git pack-refs --all`), 一步处置即过, 未走弯路。本笔为分流根治后的首例实证: 再次遇到该形态时
   不再误路由到「分支 ref 被回退」。
+  ⑦2026-10-31(kb.nav 清词按钮两笔提交轮): 同形态 HEAD==refs/heads==loose、仅 packed 落后,
+  两笔提交连续两次触发 —— **为什么没命中**: 不适用 —— 分流指引持续生效, 失败行即给配方;
+  本轮处置按⑥口径省略 format-patch 留底(pack-refs 只重写 packed-refs 一个文件, 对象零风险),
+  `git pack-refs --all` + verify-ref 一致 + ship.push 一步过。注: 本仓提交后 packed 不自动
+  刷新, 该形态会**常态化再现**, 失败行配方可信, 照做即可。
+  **根治**(2026-10-31 本轮, A+B 方案): ⑦ 的「常态化再现」是收进脚本的直接动机 —— `check_refs`
+  判出该形态即自动 `pack-refs --all` 并放行(A: 自动处置; B: 判据放宽为 loose==HEAD==refs/heads
+  为准), 每笔提交自愈, 手工处置路径退役; 守卫测试两条钉住(test_commit.py: 修复生效 / 刷不动也放行)。
+  此后本条**不再新增复发记录** —— 再见到该形态的 [STOP] 即为 v5 回退, 查 verify_ref.py 是否被改动。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃
 

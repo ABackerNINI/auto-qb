@@ -40,9 +40,10 @@
 - test_clean_tree_offline_keeps_both_exits 取不到远端真值(离线) → 如实说「取不到」+ 两条出路都摆出来
 - test_check_refs_pass_on_fresh_repo      ref 三处核对在干净仓库通过
 - test_classify_form_pure                 停手形态分流纯函数: packed 落后 vs 分支指针被回退
-- test_check_refs_packed_stale_routes_to_pack_refs
-                                          HEAD==refs/heads==loose、仅 packed 落后 → 送「packed-refs
-                                          陈旧」条目(pack-refs --all), 不再指向 update-ref(2026-10-07)
+- test_check_refs_packed_stale_autoheals  v5(2026-10-31): HEAD==refs/heads==loose、仅 packed 落后
+                                          → 自动 git pack-refs --all 刷新并放行(ok=True, 附修复记录)
+- test_check_refs_packed_stale_passes_when_heal_fails
+                                          v5 B 判据: pack-refs 刷不动也放行(loose==HEAD 为准, 附说明)
 - test_check_refs_branch_rollback_routes_to_rollback_entry
                                           分支指针真被回退/丢失 → 仍送「分支 ref 被回退」条目
 """
@@ -52,6 +53,7 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
+from subprocess import CompletedProcess
 
 import pytest
 
@@ -632,19 +634,36 @@ def test_classify_form_pure():
     assert verify_ref_mod.classify_form(sha, old, "", old) == "branch_rollback"  # loose 丢失
 
 
-def test_check_refs_packed_stale_routes_to_pack_refs(repo, monkeypatch):
-    """2026-10-07 实证形态: HEAD==refs/heads==loose, 仅 packed-refs 落后 —— 停手指引必须送
-    「packed-refs 陈旧」条目(git pack-refs --all), 不能指向「分支 ref 被回退」的 update-ref 配方。"""
+def test_check_refs_packed_stale_autoheals(repo, monkeypatch):
+    """v5(2026-10-31): HEAD==refs/heads==loose、仅 packed-refs 落后 → 自动 git pack-refs --all
+    并放行(ok=True), 附一行修复记录 —— 手工照配方处置已复发 7 次, 收进脚本(不再停手)。"""
     _git(repo, "pack-refs", "--all")  # develop 进 packed-refs(loose 文件被删)
     _commit_file(repo, "new.txt", "new\n", "new")  # 提交只写 loose → packed 落后
     ok, detail = verify_ref_mod.check_refs()
     text = "\n".join(detail)
-    assert not ok
-    assert "packed-refs 落后" in text
+    assert ok
+    assert "自动修复" in text
     assert "git pack-refs --all" in text
-    assert "「分支 ref 被回退」条目" not in text  # 不再把处置指向被回退条目
-    assert "建锚点防 GC" not in text  # 不再给被回退条目的配方
-    assert "update-ref refs/heads/develop" not in text  # 不再给治不好 packed 的 update-ref 配方
+    assert "[STOP]" not in text  # 该形态不再停手
+    # 修复真实生效: packed 已刷新到 HEAD —— 再核一遍直接干净通过(无信息行)
+    assert verify_ref_mod.packed_ref("develop") == _git(repo, "rev-parse", "HEAD")
+    ok2, detail2 = verify_ref_mod.check_refs()
+    assert ok2 and detail2 == []
+
+
+def test_check_refs_packed_stale_passes_when_heal_fails(repo, monkeypatch):
+    """v5 B 判据: pack-refs --all 刷不动(非 0)也放行 —— git 解析 ref 时 loose 优先于 packed,
+    HEAD==refs/heads==loose 三处一致即落稳, packed 落后仅是噪音; 只附一行说明, 不失败。"""
+    _git(repo, "pack-refs", "--all")
+    _commit_file(repo, "new.txt", "new\n", "new")
+    monkeypatch.setattr(
+        verify_ref_mod, "git_run", lambda *a, **k: CompletedProcess(["git", "pack-refs", "--all"], 1, "", "boom")
+    )
+    ok, detail = verify_ref_mod.check_refs()
+    text = "\n".join(detail)
+    assert ok
+    assert "未生效" in text and "放行" in text
+    assert "[STOP]" not in text
 
 
 def test_check_refs_branch_rollback_routes_to_rollback_entry(repo, monkeypatch):
