@@ -336,7 +336,7 @@ def migrate_legacy_config(path: str) -> Optional[str]:
     legacy = [name for name in _DURATION_FIELDS + _SIZE_FIELDS if name in raw and not isinstance(raw[name], str)]
     if not legacy:
         return None
-    config, errors = validate_payload(raw)
+    config, _ = validate_payload(raw)
     if config is None:
         return None  # 坏配置留给启动路径报错 (不在这里二次改写磁盘)
     save_config(path, config)

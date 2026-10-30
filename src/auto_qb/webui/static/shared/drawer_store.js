@@ -38,10 +38,8 @@ function _dtMergeRows(oldRows, newRows, keyOf) {
   const oldByKey = new Map();
   for (const r of oldRows) oldByKey.set(keyOf(r), r);
   const out = [];
-  const seen = new Set();
   for (const nw of newRows) {
     const k = keyOf(nw);
-    seen.add(k);
     const old = oldByKey.get(k);
     if (old !== undefined) { Object.assign(old, nw); out.push(old); }
     else out.push(nw);

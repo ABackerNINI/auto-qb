@@ -4,15 +4,13 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (53)
+## Open (51)
 
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)
 - [chore] [qbittorrent 三 str 键缺类型 fail-fast 校验](../26-10-30-0622-chore-config-qbittorrent-str-typecheck.html) — _validate_qbittorrent 的 username/password/api_key 无 isinstance(str) 检查, 键误写成容器时校验零报错运行期才炸
 - [refactor] [v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐](../26-10-30-0622-refactor-traffic-agg-cov-parse-contract.html) — parse_v4_agg_text 对 cov_s=0 语义合法行照单全收, 坏值可炸 rollup/merge 并逃逸恢复循环 —— 解析契约与写侧下限1不对齐
-- [chore] [注解/注释/文档契约卫生(第二次全项目评审合并条 2)](../26-10-30-0620-chore-annotation-comment-contract-hygiene.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: A-07(enabled 判据镜像对齐)+F1-02(app.js:206 指路修正)+T-04(gtm 进度注与 README 通知描述)
-- [chore] [死码/死导入/死分支批量清理(第二次全项目评审合并条 1)](../26-10-30-0620-chore-dead-code-batch-cleanup-2.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: 6 条死码登记(A-08/B-02/F2-01/F2-02/T-05/GH-02)+3 顺手项批量清理
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
@@ -65,7 +63,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (284)
+## Done (286)
 
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
 - [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](../26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退
@@ -74,6 +72,8 @@
 - [bug] [备用限速组缺非空闸, 读失败窗口提交即静默写 0/0](../26-10-30-0622-bug-alt-limits-submit-empty-gate.html) — submitAltLimits 无字段非空闸, /api/speed/mode 读失败窗口内提交把备用限速静默写成不限速, 打破「未改动的组不下发」承诺
 - [bug] [drawer 合并补给无条件 bump seq, 孤儿化在飞取数与 loading 门](../26-10-30-0622-bug-drawer-merge-seq-bump-conditional.html) — _drawerMergeSupply 即使两源都被门挡住也前进代际, 在飞页签取数被打成 stale 且门不清, gc 对双列停在加载中
 - [bug] [路由层数值字段裸转换, 畸形载荷 500 而非 400](../26-10-30-0622-bug-numeric-param-400-collect.html) — torrent_cmds/torrent_detail 五处裸 int()/float() 直转, 直调 API 传字符串抛 ValueError 变 500, 与同层三处 400 先例口径不一致
+- [chore] [注解/注释/文档契约卫生(第二次全项目评审合并条 2)](../26-10-30-0620-chore-annotation-comment-contract-hygiene.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: A-07(enabled 判据镜像对齐)+F1-02(app.js:206 指路修正)+T-04(gtm 进度注与 README 通知描述)
+- [chore] [死码/死导入/死分支批量清理(第二次全项目评审合并条 1)](../26-10-30-0620-chore-dead-code-batch-cleanup-2.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: 6 条死码登记(A-08/B-02/F2-01/F2-02/T-05/GH-02)+3 顺手项批量清理
 - [bug] [defer 命中任务仍计入 due 批次 max_tasks 预算, own_write 窗口内无关任务饥饿](../26-10-30-0616-bug-defer-due-budget.html) — deferral 让位任务重入堆但占用本轮预算, 组级 own_write TTL 10s 内同组任务逐 tick 占满预算, 无关任务饥饿、速率语义失真
 - [bug] [_load_jobs 对 MOVING job 恢复 issue=False, 崩溃窗口后 move_stalled 误判](../26-10-30-0616-bug-moving-phase-issue-restore.html) — persist 与 setLocation 之间崩溃重启后不补发 setLocation, 600s 后按 move_stalled 误判失败; recover_exec_phase 纯函数已备而全仓零调用
 - [bug] [relocate REBUILD/RESPAWN 无退避无上限, job.attempts 零消费](../26-10-30-0616-bug-rebuild-respawn-backoff.html) — 建链失败进 REMOVED-REBUILD-再失败循环每 1-2 tick 一轮 create-fail-delete, guardian respawn 每 tick 重拉进程, 均无退避无重试上限

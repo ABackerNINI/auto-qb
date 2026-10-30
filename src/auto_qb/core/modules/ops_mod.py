@@ -462,7 +462,7 @@ class OpsModule(BaseModule):
         主循环每轮调 `advance_due()` 推进一步, 等待超时由 `next_run_at()` 并入(第三条时间线),
         因此批量 N 个 job 是并行推进的: 整批耗时 ≈ 相位深度 × 步间隔, 与 N 基本无关。
         """
-        job, early = self._skip_begin(
+        _, early = self._skip_begin(
             hash, source, torrent, auto_start, has_reference, force, on_done=on_done, origin=origin
         )
         if early is not None:
@@ -484,7 +484,6 @@ class OpsModule(BaseModule):
 
         返回 `(job, None)` 表示已建 job; `(None, ActionResult)` 表示被拒/放弃(零副作用)。
         """
-        prefix = f"ops[{source}]"
         tor = torrent if torrent is not None else self._ctx.store.get(hash)
         if tor is None:
             return None, ActionResult.skip(_SKIP_GONE_MSG)

@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from qbittorrentapi import TorrentDictionary, Client
+from qbittorrentapi import Client
 
 from . import registry
 from ..infra import utils

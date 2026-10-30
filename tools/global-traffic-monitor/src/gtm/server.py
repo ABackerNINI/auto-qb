@@ -54,7 +54,7 @@ from typing import Any, Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
 from gtm import __version__
-from gtm.config import Config, ConfigHolder, config_to_payload, save_config, validate_payload
+from gtm.config import ConfigHolder, config_to_payload, save_config, validate_payload
 from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
 from gtm.sampler import Sampler
 from gtm.storage import ENDPOINT_SCHEMA, Storage, atomic_write_text, endpoint_path, remove_endpoint, write_endpoint

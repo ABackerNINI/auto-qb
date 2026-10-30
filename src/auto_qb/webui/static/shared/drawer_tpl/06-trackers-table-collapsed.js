@@ -311,13 +311,6 @@
     if (act === "del") { ctx.trackerRemove(url); }
   }
 
-  /* 视图偏好变化后的强制重渲染(sig 不含偏好, 置空 lastSig 即可) */
-  function rerender(host) {
-    ui.lastSig = "";
-    const ctx = host.__dtCtx;
-    if (ctx) _render(host, ctx);
-  }
-
   /* P3-4: 纯 span 模拟控件(msg 展开行 data-msg, 在引擎渲染的行容器内)的键盘触发 ——
    * Enter/Space 转发 click 委托; 焦点在原生 button 等自身会发 click 的元素上时不接管
    * (防 Enter 双重触发)。锚挂在宿主帧内, 事件委托照常命中。 */

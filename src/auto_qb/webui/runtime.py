@@ -41,7 +41,6 @@ from ..infra.logging import is_record_suppressed
 from .commands import (
     CMD_ID_COMMANDS,
     CMD_SLOW_MS,
-    DEFERRED_RECEIPT_COMMANDS,
     RC_UNCONFIRMED_PREFIX,
     REANNOUNCE_CONFIRM_TIMEOUT,
     REANNOUNCE_JUMP_TOL,

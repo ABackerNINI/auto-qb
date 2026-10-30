@@ -114,7 +114,7 @@ class WebUIModule(BaseModule):
                 logger.info("WEB UI 已停止(web.enabled=false)")
                 action = "stopped"
         # 监视器订阅按新配置收敛(S7, 幂等非阻塞): 联动开关/订阅开关/工具地址/回调端点任一变化,
-        # 都由客户顿现读配置重新判定 —— 与上面「仅监听身份变化才重启服务器」无耦合(改冷却秒数
+        # 都由客户端现读配置重新判定 —— 与上面「仅监听身份变化才重启服务器」无耦合(改冷却秒数
         # 不该拆服务器, 但该让心跳轮读到新值)
         self._subscriber.sync()
         return ApplyResult(self.name, action)

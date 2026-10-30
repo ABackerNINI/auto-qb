@@ -305,13 +305,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === 'poll-now') {
-    log('info', '命令', '收到命令: 立即拉取(来自选项页)');
-    pollAll('手动(选项页)')
-      .then(() => sendResponse({ ok: true }))
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
-    return true; // 异步 sendResponse
-  }
   if (msg && msg.type === 'refresh-now') {
     // 立即拉取(计划 26-09-30-0240): 请求后端立即开波(置一次性 force 旗标, 跳过复用窗与
     // 拉取间隔; 账号频控后端自己守) + 排空已生成的任务。首任务通常在波启动后数秒内入队,

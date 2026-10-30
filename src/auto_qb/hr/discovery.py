@@ -24,13 +24,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..infra.utils import atomic_write, is_loopback_host
+from ..infra.utils import atomic_write
 from .channel import ORIGIN_HEADER, origin_allowed, pairing_credential, pairing_display_code, pairing_needed
 from .server import (
     HrEndpointHandle,
     RejectThrottle,
     _EndpointServer,
-    _content_length,
     _header,
     _json,
     make_endpoint_handler,

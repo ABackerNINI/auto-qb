@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-30-0620">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-30-backend-deadcode-contract-hygiene.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="注解/注释/文档契约卫生(第二次全项目评审合并条 2)">
 <meta name="issue-summary" content="第二次全项目 code review(26-10-30-0237) P3 合并池位: A-07(enabled 判据镜像对齐)+F1-02(app.js:206 指路修正)+T-04(gtm 进度注与 README 通知描述)">
 <title>注解/注释/文档契约卫生(第二次全项目评审合并条 2) · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0620-chore-annotation-comment-contract-hygiene</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 — 认领（用户指派），状态 <strong>In Progress</strong>；开工复验三锚仍复现（A-07 docstring 写的就是 <code>is not False</code> 同族语义、代码却是 <code>is not True</code>, 反向实锤）</li>
+      <li>2026-10-30 — 已修，状态 <strong>Done</strong>。实际修法: A-07 门侧判据改 <code>enabled is False</code>（「启用」谓词 <code>is not False</code> 的补, 同一恒等判据族, 真 bool 下与原等价）; F1-02 段头注改指各变体 <code>rowsFn</code>（drawer_tabs.js 已删）; T-04 进度注按计划档状态行追平 S0-S9、通知描述与 README 开头段一起改零读盘直达口径（与 <code>gtm/notifier.py</code> 及 README「通知 (S4)」段取齐）。验证: <code>test.full</code> + <code>test.gtm</code> 全绿（数字见 kb.baseline）。认领档案: <code>memory-bank/tasks/26-10-30-backend-deadcode-contract-hygiene.md</code></li>
     </ul>
   </section>
 

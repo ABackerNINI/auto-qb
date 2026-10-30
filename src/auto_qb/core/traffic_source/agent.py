@@ -379,7 +379,7 @@ class TrafficSourceAgent:
         默认 True 保旧调用方语义; 闸门语义是「只有显式 False 才停」, 与 paths.source_enabled
         恒等判据同族(`is not False`)。
         """
-        if enabled is not True:
+        if enabled is False:  # 只有显式 False 才停(与 paths.source_enabled 的 `is not False` 同族恒等判据)
             return None
         now = self._clock()
         ep = probe(PROBE_TIMEOUT_S)

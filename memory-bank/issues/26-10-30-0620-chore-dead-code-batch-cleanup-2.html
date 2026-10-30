@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-30-0620">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-30-backend-deadcode-contract-hygiene.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="死码/死导入/死分支批量清理(第二次全项目评审合并条 1)">
 <meta name="issue-summary" content="第二次全项目 code review(26-10-30-0237) P3 合并池位: 6 条死码登记(A-08/B-02/F2-01/F2-02/T-05/GH-02)+3 顺手项批量清理">
 <title>死码/死导入/死分支批量清理(第二次全项目评审合并条 1) · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0620-chore-dead-code-batch-cleanup-2</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -108,6 +108,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 — 认领（用户指派），状态 <strong>In Progress</strong>；开工复验全部锚点仍复现（评审 HEAD 3d957597 → 现 af619efb，按符号/grep 重定位，F2-02 中 09 的 <code>rerender</code> 有真实调用点不在死码列，仅删死 chips）</li>
+      <li>2026-10-30 — 已修，状态 <strong>Done</strong>。实际修法: 逐成员删除死绑定/死导入/死变量/死分支 + 3 顺手项一并（09 的 chips 只删整帧重建分支那份, barHtml 构建器是真单点）; 验证: 六个改动态 JS <code>node --check</code> 全过 + <code>test.full</code> 与 <code>test.gtm</code> 全绿（数字见 kb.baseline 最新切片）。认领档案: <code>memory-bank/tasks/26-10-30-backend-deadcode-contract-hygiene.md</code></li>
     </ul>
   </section>
 

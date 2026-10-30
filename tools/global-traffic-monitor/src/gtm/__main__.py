@@ -93,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DIR",
         help="写进注册项的数据目录 (解析成绝对路径写死; 自启拉起不依赖环境变量)",
     )
-    uninstall = sub.add_parser("uninstall-autostart", help="卸载开机自启 (三平台, 幂等)")
+    sub.add_parser("uninstall-autostart", help="卸载开机自启 (三平台, 幂等)")
     sub.add_parser("endpoint", help="读发现指针打印当前端点 (host:port / token_path / data_dir; 端口随机后手工调试用)")
     claim = sub.add_parser(
         "claim",

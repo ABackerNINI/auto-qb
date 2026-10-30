@@ -203,7 +203,7 @@ const SHOW_COLUMNS = [
  *
  * !列 key 与行模型字段同名(表头 / 排序 / 值单元格三处靠它对齐)。抽屉行的数值字段有"显示值"与
  *   "原始值"两份(dlspeed 等是 fmtSpeedOrDash 出的字符串), 排序一律读 `_raw` 侧 —— 否则 "1.2 MiB"
- *   会按字典序排。见 shared/drawer_tabs.js 的行装配与 columns.js 的 `_sortVal`。
+ *   会按字典序排。见各变体(drawer_tpl/*.js)的 `rowsFn` 行装配与 columns.js 的 `_sortVal`。
  *
  * !act(操作)列是**动作槽**不是数据列: 无 label(表头留空)、不可排序、locked(隐藏了就没法删 tracker)。
  */

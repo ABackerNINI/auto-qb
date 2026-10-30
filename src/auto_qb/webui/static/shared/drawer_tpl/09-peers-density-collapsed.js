@@ -221,8 +221,6 @@
       cls: "dt09-empty", has: !!list.length, loading: !!loading, err: err,
       errText: "用户列表加载失败, 将在下次自动刷新时重试", emptyText: "暂无已连接用户",
     })) return;
-    const chips = FILTERS.filter((f) => f.key !== "bad" || countOf(list, "bad") > 0).map((f) =>
-      T`<button type="button" class="dt09-fchip${ui.filter === f.key ? " active" : ""}${f.key === "bad" ? " c-err" : ""}" data-f="${f.key}">${f.text} <b>${countOf(list, f.key)}</b></button>`).join("");
     /* 表格区 = 空 slot: anchFill 把保活的锚元素替换进 slot 位(U2) */
     const html = T`<div class="dt09-wrap">
       <div class="dt09-bar">${R(barHtml(list))}</div>
