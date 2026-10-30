@@ -13,7 +13,10 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
 - test_manager_state_delegate_roundtrip: record_execution/get_exec_record 经委托走 ctx.state(旧调用面不变)
 - test_state_service_roundtrip_standalone: 服务独立构造: 空->写入->落盘->重读带 schema 版本章
 - test_maybe_flush_via_service: 周期落盘到期触发/间隔内不重复/interval=0 关闭(语义与迁移前一致)
+- test_maybe_flush_boundary_is_inclusive: 到期判断含边界 —— now == next_flush_at 必须落盘(>= 收紧成 > 即红)
 - test_exec_history_prune_bounded_and_active_kept: 守阵(26-10-06-0028 A-03)——exec_history 日期淘汰+存量上限有界, 当日活跃键不被误清
+- test_prune_day_keys_boundary_and_zero_keep: prune_day_keys 单点直接守阵 —— 恰在 cutoff 的条目保留(< 严格小于)/早于淘汰;
+  keep_days=0(ops_mod skip_check_day 形态「只留当日」)当日保留、昨日淘汰
 - test_module_host_register_order_and_dup_fail_fast: 注册保序; 无名/重名 fail-fast
 - test_module_host_register_invokes_subscribe: 装配点回调 subscribe, 相位认领发生在注册时
 - test_module_host_lifecycle_order: start_all/apply_all 装配序, stop_all 逆序
@@ -137,6 +140,22 @@ def test_maybe_flush_via_service():
         assert not os.path.exists(path)
 
 
+def test_maybe_flush_boundary_is_inclusive():
+    """周期落盘到期判断含边界: now == next_flush_at 必须落盘
+
+    变异面: `now >= self.next_flush_at` 收紧成 `>` —— 恰好在到期点那一轮会漏写一次,
+    状态丢失窗口被拉长一个间隔, 本条即其红线。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "state.json")
+        svc = StateService(path)
+        svc.data["k"] = 1
+        svc.next_flush_at = 100.0
+        svc.maybe_flush(100.0, 30.0)  # now == 到期点: 必须落盘(含边界)
+        assert os.path.exists(path), "now == next_flush_at 必须落盘(边界含入)"
+        assert svc.next_flush_at == 130.0
+
+
 def test_exec_history_prune_bounded_and_active_kept():
     """守阵(26-10-06-0028 A-03): exec_history 键面有界 + 活跃键不被误清
 
@@ -189,6 +208,31 @@ def test_exec_history_prune_bounded_and_active_kept():
         hist = svc.data["exec_history"]
         assert "r_y:H" not in hist, "超上限先淘汰最旧的非当日记录"
         assert len(hist) == state_mod._EXEC_HISTORY_MAX_ENTRIES + 1, "当日记录全保留(活跃键不被误清)"
+
+
+def test_prune_day_keys_boundary_and_zero_keep():
+    """prune_day_keys 单点直接守阵(三种调用形态共用的淘汰口径, prune 前间接覆盖只走过 exec_history 形态)
+
+    - 边界含入: 恰在 cutoff(today - keep_days)当天的条目保留 —— 淘汰判据是严格小于;
+    - keep_days=0: 「只留当日」特例(ops_mod skip_check_day 形态, date_of 取值本身), 当日保留、昨日淘汰。
+    """
+    from datetime import datetime, timedelta
+
+    from auto_qb.core.state import prune_day_keys
+
+    today = datetime.now().date()
+    cutoff = (today - timedelta(days=7)).isoformat()
+    d = {
+        "too_old": (today - timedelta(days=8)).isoformat(),
+        "at_cutoff": cutoff,
+        "today": today.isoformat(),
+    }
+    prune_day_keys(d, today, 7, lambda k, v: v)
+    assert set(d) == {"at_cutoff", "today"}, "早于 cutoff 的淘汰, 恰在 cutoff 当天的保留(严格小于)"
+
+    d2 = {"yesterday": (today - timedelta(days=1)).isoformat(), "today": today.isoformat()}
+    prune_day_keys(d2, today, 0, lambda k, v: v)
+    assert set(d2) == {"today"}, "keep_days=0 = 只留当日(skip_check_day 形态)"
 
 
 # ---------- ModuleHost 骨架 ----------

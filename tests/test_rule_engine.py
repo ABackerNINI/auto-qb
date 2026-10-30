@@ -12,6 +12,8 @@
 - test_load_state_corrupt_without_backup_warns: 主文件损坏且备份不可用 -> 空状态 + 两条 WARNING(损坏/备份不可用)留痕
 - test_load_state_missing_file_is_silent: 首启(文件不存在)不告警 —— 与"损坏"区分
 - test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 只告警不抛
+- test_load_state_backup_unusable_falls_to_empty: 主文件损坏且备份**存在但也不可用** -> 空状态 + ERROR 留痕(正向对照: 备份可用先恢复)
+- test_load_state_invalid_encoding_treated_as_corrupt: 位翻转坏编码(UnicodeDecodeError)同算损坏走告警链; 正向对照: 合法内容同一路径原样返回
 - test_cleanup_orphan_tmp_removes_only_state_leftovers: 启动清理只删 `<state_file>.<随机>.tmp`; .bak / 别人的 .tmp / 空随机段不碰
 - test_cleanup_orphan_tmp_missing_dir_is_nonfatal: 状态目录不可列 -> 只告警不抛
 - test_cleanup_orphan_tmp_delete_failure_is_nonfatal: 单个文件删不掉(被占用) -> 只告警并继续清其余, 不抛
@@ -177,6 +179,54 @@ def test_load_state_recovered_writeback_failure_is_nonfatal():
         assert got == {"exec_history": {"r:h": {"ts": 1.0}}, "schema_version": STATE_V}, \
             "写回失败不能把已恢复出的状态也搭进去(.bak 由 save_state 写出, 自带版本章)"
         assert any("写回" in c[0][0] for c in warn.call_args_list), "写回失败要留痕"
+
+
+def test_load_state_backup_unusable_falls_to_empty():
+    """主文件损坏且备份**存在但也不可用** -> 空状态 + ERROR 留痕, 不许崩
+
+    与「没有备份文件」同处置但分支不同: `_read_backup_dict` 的 (None, "备份内容不可用") 支路
+    (备份读出来是 _CORRUPT)。正向对照先行: 同一现场备份可用时必须恢复成功。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        mgr = make_manager(state_file)
+        first = {"exec_history": {"r:h": {"ts": 1.0}}}
+        mgr.state = dict(first)
+        mgr.ctx.state.save()
+        mgr.state = {"exec_history": {"r:h": {"ts": 2.0}}}  # 第二版: .bak=first(首版无旧文件不凭空造 .bak)
+        mgr.ctx.state.save()
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        assert mgr.ctx.state.load() == {**first, "schema_version": STATE_V}, "对照: 备份可用必须恢复"
+        # 备份也损坏 -> 状态从空开始, 不得崩
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("{not json")
+        with open(bak_file, "w", encoding="utf-8") as f:
+            f.write("{also broken")
+        with mock.patch.object(qb_state.logger, "error") as err:
+            assert mgr.ctx.state.load() == {}
+        err_msgs = [c[0][0] for c in err.call_args_list]
+        assert any("备份" in m and "不可用" in m for m in err_msgs), "备份存在但不可用同样要 ERROR 留痕"
+
+
+def test_load_state_invalid_encoding_treated_as_corrupt():
+    """位翻转先坏编码(UnicodeDecodeError)与坏 JSON 同算损坏 —— 走告警链, 不许崩
+
+    `_read_state_file` 把 UnicodeDecodeError 与 JSONDecodeError 并入同一 _CORRUPT 态
+    (docstring 明文口径); 正向对照: 合法内容走同一路径原样返回。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        with open(state_file, "wb") as f:
+            f.write(b"\xff\xfe{\x00}")  # 非 UTF-8 字节
+        with mock.patch.object(qb_state.logger, "warning") as warn:
+            assert mgr.ctx.state.load() == {}, "编码坏 = 损坏, 无备份 -> 空状态"
+        assert any("损坏" in c[0][0] for c in warn.call_args_list), "编码损坏也要留 WARNING"
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)
+        assert mgr.ctx.state.load() == {"exec_history": {"k": 1}, "schema_version": STATE_V}, "对照: 合法内容原样返回"
 
 
 def test_load_state_no_version_field_then_save_stamps():
