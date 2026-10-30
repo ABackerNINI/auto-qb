@@ -7,10 +7,10 @@
 <title>全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="global-traffic-source-integration">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-17-0339">
-<meta name="doc-updated" content="26-10-31-0419">
-<meta name="doc-refs" content="memory-bank/plans/26-10-20-1316-plan-gtm-primary-registration.html">
+<meta name="doc-updated" content="26-10-31-0540">
+<meta name="doc-refs" content="memory-bank/plans/26-10-20-1316-plan-gtm-primary-registration.html, memory-bank/plans/26-10-31-0446-plan-global-traffic-source-acceptance.html">
 <style>
   :root {
     --bg: #10151a;
@@ -84,7 +84,7 @@
 <h1>全局流量来源:一键切换与自动拉起 · 集成层改版计划</h1>
 <p class="lede">把「全局流量来源」收成一处一键切换的开关;auto-qb 能自动发现并一次性拉起整机共享的流量监视器(免配端口与密钥),同时不削减工具的开机自启与多实例共享定位。</p>
 <div class="meta">
-  <b>编号</b> 26-10-17-0339 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 五轮收敛 + R1 就地改版,全部按推荐/用户拍板) &nbsp;·&nbsp; <b>状态</b> In Progress(S11–S18 与 S20 已实施;S19 真机验收待逐项授权)<br>
+  <b>编号</b> 26-10-17-0339 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 五轮收敛 + R1 就地改版,全部按推荐/用户拍板) &nbsp;·&nbsp; <b>状态</b> Done(S11–S20 已实施;S19 真机验收于 26-10-31 按 26-10-31-0446 桩测口径完成,记录见任务档案)<br>
   <b>行号基准</b> 本 clone @ 88e7e4ee(实施前需逐条复核漂移) &nbsp;·&nbsp; <b>提交</b> 各步骤独立提交, 收尾按 DoD<br>
   <b>产生方式</b> 会话内 grilling 五轮:第一轮 7 问 → 第二轮 9 问 → 第三轮 6 问(发现层推翻重画) → 第四轮 8 问(指针/数据分居 + 编译态) → 第五轮 6 问
 </div>
@@ -99,6 +99,7 @@
   <tr><td>R2</td><td>26-10-17-1447</td><td><b>取数路径收归工具指针</b>:删 <code>traffic_source.global_traffic_monitor.data_dir</code> 配置键与设置页字段(新增 <b>D20</b>),取数改走运行期单点 <code>core/traffic_source/paths.py</code>;D2/D17/§05/§10 同步,新增 S20。<b>不做配置版本升级</b>(测试期未上线,残留键按未知键报错、手工清理)</td></tr>
   <tr><td>R3</td><td>26-10-17-1930</td><td><b>承接缺陷修复计划</b>:新增独立计划 <code>26-10-17-1737-plan-global-traffic-source-integration-fixes.html</code>(Phase 1,修 9 项上线缺陷)。其中两处改判本文件:<b>① 修订 D1</b> —— 新增顶层 <code>traffic_source.enabled</code> 总开关(关闭即停取数 / 停订阅 / 停自动拉起;仍<b>不</b>引入 provider 之外的来源开关);<b>② 改 §05 盘上格式</b> —— 工具参数由数值改为复合串(<code>30S</code>/<code>10MiB</code>),工具侧新增同文法解析单点、读侧兼容旧数值一次性迁移。<b>快照解耦出 <code>speed_curve_mod</code> 与设置页合并卡</b>属重构,另立 Phase 2,不在本次范围</td></tr>
   <tr><td>R4</td><td>26-10-31-0419</td><td><b>文档漂移三修</b>(实现与验收口径零变更):① 头部状态补 <b>S20</b>(原文停在「S11–S18 已实施」,而 S20 于 26-10-17-14:47 已 Done);② §01「给未来读者的提示」原写「两份 <b>Open</b> 计划」,旧计划 <code>26-10-16-0541</code> 已 Done,改按现实表述并补链接;③ 变更记录表 <b>R1/R2 行序</b>按时间归位(原为 R0→R2→R1→R3)。<b>S19 真机验收仍未做</b>,状态保持 In Progress</td></tr>
+  <tr><td>R5</td><td>26-10-31-0540</td><td><b>S19 真机验收完成,状态收口 Done</b>:按改版验收计划 <code>26-10-31-0446</code>(桩测 · 仅 Windows 侧;qB 用 <code>FakeQbServer</code> 桩,不碰真实 qB)实施,四场景 + S19 定义后三波变更(修复 Phase 1 / 自启换轨 HKCU Run / Phase 2)新增面 A5.1–A5.8 + §08 十条判据逐项实测<b>全过</b>(「编译态可定位」N/A、「拉起不依赖 uv 升级模拟」由 D19 守阵单测覆盖);场景②走 B 级等价模拟(HKCU Run 值命令手工执行),<b>A 级真重启待用户补做</b>(结论不受影响)。逐项实测记录见任务档案 <code>tasks/26-10-31-backend-global-traffic-source-acceptance.md</code>;产出 1 条 P3 验收发现(issue <code>26-10-31-0537</code>:卸载自启后指针 autostart_registered 不即时回写,重启自愈)。§04 S19 节已补验收记录。</td></tr>
 </table>
 <div class="note"><b>R1 的起因:</b>原设计让 auto-qb 在拉起时条件计算 <code>--autostart true|false</code>(provider = 工具来源且用户未关过 ⇒ 真)。「把该旗标固化进启动器以解耦 CLI 形态」这一改法会与 D13 冲突 —— 它的<b>取值是可变的</b>,而 <code>false</code> 那一支正是「用户显式关过 ⇒ 不被装回」的防复活闸,固化成常量等于把闸门焊死。故改判为:<b>启动器只携带"顺带注册"这一个恒定意图,是否真注册由工具侧 config <code>autostart</code> 裁决</b> —— 判断权下放给状态的持有者,auto-qb 侧既不持有也不计算该状态。</div>
 
@@ -305,6 +306,7 @@ tools/global-traffic-monitor/                         <span class="cm"># 源码�
 <ul>
   <li>真机跑 <code>dev.run -- config.yml --dry-run</code> 起步,再真实运行:①工具未跑 → 自动拉起 → 订阅成功;②工具自启后重启机器 → auto-qb 探测到在跑、零拉起;③双 auto-qb 实例共享同一工具;④切回 TM 文件来源后工具参数保留但不参与取数。</li>
 </ul>
+<div class="note"><b>S19 验收完成(26-10-31,R5):</b>按改版验收计划 <code>26-10-31-0446</code>(桩测 · 仅 Windows 侧;qB 用 <code>FakeQbServer</code> 桩,不碰真实 qB)实施,四场景 + S19 定义后三波变更(修复 Phase 1 / 自启换轨 HKCU Run / Phase 2)新增面 A5.1–A5.8 + §08 十条判据逐项实测<b>全过</b>(2 项标注 N/A/单测覆盖);场景②走 B 级等价模拟(手工执行 HKCU Run 值命令),A 级真重启待用户补做(结论不受影响)。逐项实测记录见任务档案 <code>tasks/26-10-31-backend-global-traffic-source-acceptance.md</code>;产出 1 条 P3 验收发现(issue <code>26-10-31-0537</code>)。</div>
 <div class="exit"><b>出口</b>四条实测通过,并把实测数字写进基线切片与任务档案。</div>
 
 <h2><span class="no">05</span>默认参数与契约字段</h2>

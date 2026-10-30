@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="global-traffic-source-acceptance">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-0446">
+<meta name="doc-updated" content="26-10-31-0529">
+<meta name="doc-refs" content="memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html, memory-bank/plans/26-10-17-1737-plan-global-traffic-source-integration-fixes.html, memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html, memory-bank/tasks/26-10-31-backend-global-traffic-source-acceptance.md, memory-bank/issues/26-10-31-0537-bug-gtm-autostart-pointer-stale.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .chk { font-family: var(--mono); color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: global-traffic-source-acceptance</div>
+<h1>全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)</h1>
+<p class="lede">对主计划 26-10-17-0339 的 S19 真机验收做一次桩测化改版:qB 一律用桩、绝不触碰真实 qB;并把 S19 定义之后落地的三波变更(R2/S20、缺陷修复 Phase 1、Phase 2)全部纳入验收面;只测 Windows 侧。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0446 · <b>doc-updated</b> 26-10-31-0529 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令(26-10-31):「真机验收还未进行,先写一个验收计划;模块后续可能经过更改,先找到更改的文档一并纳入;验收过程使用桩,不碰真实 qB;仅测试 Windows 侧」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>:主计划 26-10-17-0339 的 S19(真机验收,四场景)至今没有逐项验收记录 —— R3 已核实「现网指针 + /status 探活 + 订阅在跑,但无逐项验收记录」,主计划因此停在 In Progress。而 S19 定义之后,该模块又经历了三波实质变更(§02),<b>按 S19 原文验收会漏掉大半新面</b>。本计划把验收基线对齐到今天的代码现实,并按用户拍板改用桩测口径。</p>
+<p><b>做到什么算成</b>:§04 的 A1–A7 每一步都有可勾选的实测判据;全过之后主计划 S19 具备收口条件(四场景 + 新增面全部有逐项实测记录,写进任务档案)。</p>
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>绝不触碰真实 qB</b>:验收配置的 <code>qbittorrent.host/port</code> 一律指向本机桩服务(<code>tests/helpers.py:459</code> 的 <code>FakeQbServer</code>,标准库 http.server、真机语义);不登录、不读写任何真实 qB 实例。</li>
+  <li><b>红线文件零接触</b>:不改 <code>config.yml</code>、不写 <code>auto-qb-data/</code>;验收配置的 <code>data_dir/state_file</code> 显式指到 <code>tmp-analysis/</code>(已 gitignore)下的独立目录。</li>
+  <li><b>仅 Windows 侧</b>:只验 <code>launch.cmd</code> / HKCU Run 注册表 / <code>DETACHED_PROCESS</code> 等 Windows 路径;POSIX 分支(<code>launch.sh</code>/systemd/plist)不在本轮验收范围(单测与 CI 另一侧已覆盖)。</li>
+  <li><b>现场可还原</b>:验收会停/起真实工具进程、读写用户级发现指针 —— 开工前备份 <code>endpoint.json</code> 与工具 config,验收后按 A7 还原。</li>
+  <li><b>逐步骤显式授权</b>:沿用主计划请求边界,每个 A 步骤开工前逐项确认(「继续」不算授权)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点:S19 定义后模块又改了什么</h2>
+<p>S19 原文四场景(主计划 §04):①工具未跑 → 自动拉起 → 订阅成功;②工具自启后重启机器 → 探测到在跑、零拉起;③双 auto-qb 实例共享同一工具;④切回 TM 文件来源后工具参数保留但不参与取数。以下三波变更发生在 S19 成文之后,<b>全部纳入本轮验收</b>:</p>
+<table>
+  <tr><th>#</th><th>变更(出处)</th><th>对验收的影响</th></tr>
+  <tr><td>1</td><td><b>R2/S20 就地改版</b>(主计划,26-10-17-1447):删 <code>traffic_source.global_traffic_monitor.data_dir</code> 配置键;取数收归运行期单点 <code>core/traffic_source/paths.py::dat_path()</code>,gtm 来源读发现指针 <code>data_dir</code></td><td>主计划 §08 已有对应判据(「取数路径单一事实源」),照验;验收全程断言配置面无 <code>data_dir</code> 键</td></tr>
+  <tr><td>2</td><td><b>缺陷修复 Phase 1</b>(26-10-17-1737,Done,S1–S8):新增 <code>traffic_source.enabled</code> 总开关(取数闸门 + off 快照 + expr 文案 + 前端灰显);工具侧 <code>POST /shutdown</code> + auto-qb 代理 + 「关闭工具」按钮;拉起去黑框(<code>launch.cmd</code> 改);设置页四修(provider≠gtm 整块隐藏 / 已就绪绿色 / 行对齐 / 删「打开工具设置」);工具参数改复合串格式(<code>"5S"</code>/<code>"1MiB"</code>,读侧兼容旧数值一次性迁移);S8 切源即刷新</td><td>S19 原文完全没有这些面 —— enabled 开关、shutdown、复合串、切源即刷新全部补进 A5;去黑框补进 A5.4</td></tr>
+  <tr><td>3</td><td><b>自启机制换轨</b>(dd4bccb8,26-10-18):<code>schtasks ONLOGON</code> 退役,改 <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code>(当前用户级、零提权、注册失败可见);连带关闭 issue 26-10-17-1455(自启提权静默失败)</td><td>S19 场景②与 §08「自启不被装回」的验收对象从计划任务改成 <b>HKCU Run 注册表值</b></td></tr>
+  <tr><td>4</td><td><b>Phase 2</b>(26-10-18-0813):流量快照所有权移交 <code>traffic_snapshot</code> 模块(段级契约 publish_source/publish_limit/publish_off;轮询载荷瘦身 —— <code>status.traffic</code> 不再带 history;<code>refresh_interval</code> 键);设置页三卡并一「流量与限速」(来源区搬进 <code>traffic-card.html</code>,通用层 show_if);gtm 正主注册与 claim(P1 身份模块/启动矩阵、P2 <code>claim</code> 子命令 + <code>claim.cmd</code> 双启动器、P3+P4 auto-qb 侧 claim 编排/设置页);批T 三缺陷收口(config 写临界区加锁 / http_host 回环约束 / day_rolled 方向检查);状态栏今日流量滞后修复(事件零读盘直达)</td><td>补 A5.5–A5.8;§08「抢输进程不占端口」的复现手段改用 Phase 2 的启动矩阵/claim 面</td></tr>
+</table>
+<div class="aside">不在本轮范围:<code>qb-traffic</code> 族(种子流量图)与 <code>gtm</code> 自身采样内核的既有测试面 —— 它们有独立计划与守阵,本轮只在冒烟口径内触及(工具能出数、图表能渲染)。</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>桩策略(谁真谁假)</h3>
+<table>
+  <tr><th>角色</th><th>真/桩</th><th>说明</th></tr>
+  <tr><td>qBittorrent</td><td><b class="wr">桩</b></td><td><code>FakeQbServer</code>(tests/helpers.py:459)以独立进程跑在本机:覆盖 auth/login、sync/maindata(rid 增量)、torrents/info|tags|categories、transfer/uploadLimit|downloadLimit 等;端口写进验收配置。未覆盖端点返回 404 —— 主循环若需要更多端点,在 runner 里子类补最小端点,<b>不改 tests/helpers.py</b>(范围守恒)</td></tr>
+  <tr><td>全局流量监视器(工具)</td><td><b class="good">真</b></td><td>真实工具进程:它只读本机网卡流量(psutil),天然不接触 qB;拉起链路(launch.cmd)、发现指针、随机端口、订阅、/shutdown 全走真实路径 —— 这正是 S19 要验的东西,不做假</td></tr>
+  <tr><td>auto-qb 主程序</td><td><b class="good">真</b></td><td><code>commands run dev.run -- &lt;验收yml&gt;</code> 真实运行(先 <code>--dry-run</code> 观察);探测/拉起/订阅编排不走注入单点,验生产路径</td></tr>
+  <tr><td>配置</td><td><b class="wr">验收专用</b></td><td>独立 yml ×2(双实例用),放 <code>tmp-analysis/acceptance-gts/</code>;<code>qbittorrent</code> 指桩、<code>data_dir/state_file</code> 指独立目录、<code>traffic_source.provider=global_traffic_monitor</code>、<code>tool_dir</code> 指向 <code>tools/global-traffic-monitor</code></td></tr>
+</table>
+<h3>分期</h3>
+<table>
+  <tr><th>期</th><th>步骤</th><th>内容</th></tr>
+  <tr><td>A 准备</td><td>A0</td><td>桩 qB runner + 两份验收配置 + 现场备份</td></tr>
+  <tr><td rowspan="4">B 主计划四场景</td><td>A1</td><td>场景①:未跑 → 自动拉起 → 订阅成功</td></tr>
+  <tr><td>A2</td><td>场景②:自启(HKCU Run)后重启机器 → 零拉起</td></tr>
+  <tr><td>A3</td><td>场景③:双 auto-qb 实例共享同一工具</td></tr>
+  <tr><td>A4</td><td>场景④:切回 TM 文件来源,工具参数保留不参与取数</td></tr>
+  <tr><td rowspan="2">C 变更新增面</td><td>A5</td><td>三波变更的 8 个新增验收面(A5.1–A5.8)</td></tr>
+  <tr><td>A6</td><td>主计划 §08 十条判据中未被 A1–A5 覆盖的余量逐条对账</td></tr>
+  <tr><td>D 收尾</td><td>A7</td><td>现场还原 + 验收记录落档 + 主计划状态收口</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤(每步开工前逐项授权)</h2>
+
+<h3>A0 · 准备</h3>
+<ul>
+  <li>建 <code>tmp-analysis/acceptance-gts/</code>:桩 qB runner(独立脚本,import <code>tests.helpers.FakeQbServer</code> 常驻前台跑并打印端口)、<code>acc-a.yml</code>/<code>acc-b.yml</code> 两份验收配置(各自独立 <code>data_dir</code>/<code>state_file</code> → 单实例锁天然不冲突)。</li>
+  <li><b>备份现场</b>:发现指针 <code>endpoint.json</code>(用户级平台目录 <code>global-traffic-monitor/</code>)与工具 config 各拷一份进工作区;记录当前 <code>HKCU\...\Run</code> 自启值与工具进程状态。</li>
+  <li>冒烟:起桩 qB → <code>commands run dev.run -- tmp-analysis/acceptance-gts/acc-a.yml --dry-run</code>,确认配置校验全过、qB 连上的是桩。</li>
+  <li><span class="chk">判据</span>:dry-run 日志显示 qB base_url 为桩端口;工作区内三件套(runner/两 yml/备份)齐;真实 config.yml 与 auto-qb-data/ 的 mtime 未变。</li>
+</ul>
+
+<h3>A1 · 场景①:工具未跑 → 自动拉起 → 订阅成功 <span class="tag">(主计划 S19①)</span></h3>
+<ul>
+  <li>前置:停掉现网工具进程(经设置页「关闭工具」或直接结束进程),确认指针仍在或已删 —— 两种起点各验一次(指针在 = 探活失败转拉起;指针缺 = 纯引导拉起)。</li>
+  <li>起桩 qB → 起实例 A(真实运行,非 dry-run)→ 设置页观察五态流转:<b class="wr">未运行 → 拉起中 → 已就绪</b>。</li>
+  <li><span class="chk">判据</span>:①顶栏/历史图/限速曲线出数(数据来自指针 data_dir,状态区「数据目录」= 指针值,配置面无 data_dir 键);②实例 A 日志里拉起动作只有「零参执行 launch.cmd」一步,无 uv/入口名/子命令拼装(§08「拉起不依赖 uv」);③指针 <code>host/port</code> 为随机端口,`gtm endpoint` 子命令打印与指针一致;④首次引导超时预算 120s 内探活成功。</li>
+</ul>
+
+<h3>A2 · 场景②:自启(HKCU Run)后重启机器 → 探测到在跑、零拉起 <span class="tag">(主计划 S19②,对象已换轨)</span></h3>
+<ul>
+  <li><b>B 级(等价模拟,先行)</b>:读 <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run</code> 的自启值 → 手工执行该值里的命令行(等价登录拉起)→ 工具起 → 再起实例 A → <span class="chk">判据</span>:探测到在跑、日志无 Popen(§08「工具在跑:零拉起」)、五态直达「已就绪」。</li>
+  <li><b>A 级(真重启,权威)</b>:用户配合真重启机器一次 → 登录后确认工具已自启 → 起实例 A → 同上判据。</li>
+  <li>顺带核:注册值命令行指向启动器(<code>launch.cmd</code> / Phase 2 的 <code>claim.cmd</code> 矩阵按身份);注册失败路径可见(非静默,dd4bccb8 的修复面)。</li>
+</ul>
+
+<h3>A3 · 场景③:双 auto-qb 实例共享同一工具 <span class="tag">(主计划 S19③)</span></h3>
+<ul>
+  <li>实例 A 在跑且已订阅 → 用 <code>acc-b.yml</code>(独立 data_dir/state_file)起实例 B。</li>
+  <li><span class="chk">判据</span>:①B 探测到工具在跑,跳过拉起(Popen 零调用);②A/B 各自订阅互不干扰 —— 两实例的顶栏/历史图数字同源推进、互不覆盖对方快照;③工具侧不因第二个订阅者出错(日志无异常);④对应 §08「多实例共享」。</li>
+</ul>
+
+<h3>A4 · 场景④:切回 TM 文件来源 <span class="tag">(主计划 S19④)</span></h3>
+<ul>
+  <li>设置页把 provider 切到 <code>traffic_monitor</code>,dat_path 指向一份 TM 格式 dat(取工具 data 目录 dat 的副本,见 D3)→ 保存。</li>
+  <li><span class="chk">判据</span>:①保存后历史图<b>立即</b>换为新来源数据、不等一个 interval(Phase 1 S8 切源即刷新);②<code>paths.dat_path()</code> 改走配置 dat_path(日志可证);③工具参数保留但不参与取数,工具进程<b>不</b>被自动关闭(关闭是显式动作);④provider=TM 时设置页工具区块整块隐藏(Phase 1 S6);⑤切回 gtm 再验一次往返,行为对称。</li>
+</ul>
+
+<h3>A5 · 变更新增面(§02 表的落点)</h3>
+<table>
+  <tr><th>#</th><th>验收面</th><th>步骤与判据</th></tr>
+  <tr><td>A5.1</td><td><code>traffic_source.enabled</code> 总开关(Phase 1 S1/S2)</td><td>关:取数停、订阅停、自动拉起停;历史图转 off 快照(state="off"、history 空);expr 门文案按关闭分支;不误伤曲线配置(不擅改 <code>global_speed_limit_curve.enabled</code>);桩 qB 上断言 <code>transfer/set*Limit</code> 无写入。<b>再验</b>:关→重启 auto-qb → 不拉起工具;开:一键恢复、可逆</td></tr>
+  <tr><td>A5.2</td><td>「关闭工具」+ <code>POST /shutdown</code>(Phase 1 S3/S4)</td><td>点关闭 → 确认框 → 经 auto-qb 代理打到工具控制面 → 工具进程退出、五态变「未运行」;enabled 落盘 false;重启 auto-qb 不再拉起(与 A5.1 呼应)</td></tr>
+  <tr><td>A5.3</td><td>自启 = HKCU Run + 不被装回(dd4bccb8;§08「自启不被装回」)</td><td>工具 config <code>autostart=false</code>(模拟用户关过)→ 走一次引导拉起 → <b>断言 Run 注册表值未被写回</b>、注册后端未被调用;恢复 true 再拉起 → 注册值出现且命令行正确;<code>POST /autostart</code> 拨动开关走通、失败回滚</td></tr>
+  <tr><td>A5.4</td><td>拉起去黑框(Phase 1 S5)</td><td>A1 拉起全程目检无可见控制台窗口;代码侧核 <code>agent.launch_tool</code> 的 <code>DETACHED_PROCESS</code>/CREATE_NO_WINDOW 旗标与 launch.cmd 现状一致</td></tr>
+  <tr><td>A5.5</td><td>「流量与限速」合并卡 + 设置页四修(Phase 1 S6 / Phase 2 P2-B)</td><td>首页单卡内来源区随 provider 真正显隐(通用层 show_if,不靠 tmProviderItems 手工过滤);「已就绪」绿色;状态行标签/值同缘;来源关闭时三区都有「流量来源已关闭」说明而非空白;三皮肤渲染正常</td></tr>
+  <tr><td>A5.6</td><td>快照段级契约 + 载荷瘦身(Phase 2 P2-A)</td><td>轮询响应 <code>status.traffic</code> 无 history 键(体积实测对比留档);历史图入口弹层照常;<code>/api/traffic/history</code> off 态返回 <code>{"state":"off","history":[]}</code>;无曲线配置时历史图仍有数据</td></tr>
+  <tr><td>A5.7</td><td>工具参数复合串 + 单位化(Phase 1 S7)</td><td>设置页工具参数呈下拉 + ? 说明,值为 <code>"5S"</code>/<code>"10MiB"</code> 复合串;保存后工具 config 生效、采样节奏随之变化;喂一份旧数值格式的工具 config 验证读取兼容 + 一次性迁移</td></tr>
+  <tr><td>A5.8</td><td>正主注册 / claim(Phase 2 P1–P4;§08「抢输进程不占端口」)</td><td>同时起两个工具实例:抢输者 fail-fast 退出、无监听端口、日志原因明确;在跑者身份不被抢;<code>claim</code> 子命令人工易主走通(claim.cmd);auto-qb 设置页显示工具身份/正主状态</td></tr>
+</table>
+
+<h3>A6 · 主计划 §08 判据对账</h3>
+<p>十条判据逐条标注「被 A1–A5 哪步覆盖 / 本步补验」,不漏项:<span class="chk">来源互斥(A4/A5.1)· 免配端口密钥(A1)· 自动拉起(A1/A2)· 多实例共享(A3)· 抢输不占端口(A5.8)· 编译态可定位(模拟 sys.frozen —— Windows 下若有编译产物则真验,否则标注代码分支已测)· 迁移等价(喂 v4 旧配置升 v5,取数行为不变、notes 逐键可读)· 守阵不受污染(工具跑起来后 <code>git status</code> 干净、tests/sidefx.py 全绿)· 拉起不依赖 uv(A1,加验:改启动器内容模拟工具升级后拉起仍成立)· 取数路径单一事实源(A1/A4,加验:改指针 data_dir 后取数路径随之变、删指针后取数为空且不回退 TM)</p>
+
+<h3>A7 · 收尾</h3>
+<ul>
+  <li>现场还原:工具自启值/config/指针恢复备份状态;provider 等验收配置不留存到生产;停桩 qB;工作区留档 <code>tmp-analysis/acceptance-gts/</code>(gitignore,不随提交)。</li>
+  <li>逐项结果写进任务档案(<code>commands run kb.new task --topic global-traffic-source-acceptance</code>,含每步实测证据);主计划 26-10-17-0339 的 S19 勾选、R 行追加与状态收口(<code>kb.bump</code>/<code>kb.status</code>)在用户确认验收结论后做。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>决策点</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>A2 场景②的重启路径</td><td>B 级等价模拟先行(手工执行 Run 值命令),A 级真重启由用户找时间补 —— 模拟能覆盖「探测到在跑零拉起」的全部逻辑面,只差「登录时序」这层系统行为</td><td>只做真重启(拖慢验收节奏)</td></tr>
+  <tr><td>D2</td><td>TM 来源 dat 文件的来源(A4)</td><td>拷工具 data 目录现成 dat 一份当 TM 输入(格式同族、最省事)</td><td>用 tests/ 里的 fixture dat</td></tr>
+  <tr><td>D3</td><td>验收工作区位置</td><td><code>tmp-analysis/acceptance-gts/</code>(已 gitignore,零提交负担)</td><td>test_yamls/(会被守阵当示例配置扫)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D0</td><td>验收口径三条由用户指令拍板:①全程用桩(qB 用桩);②不碰真实 qB;③仅测试 Windows 侧(POSIX 分支不验)</td><td>26-10-31</td></tr>
+  <tr><td>D1</td><td>A2 场景②走 B 级等价模拟先行,真重启由用户找时间补(§05 默认;已按此实施,B 级过)</td><td>26-10-31</td></tr>
+  <tr><td>D2</td><td>TM 来源 dat 直接用用户真机数据 <code>C:\Users\11059\Desktop\Projects\data\global-traffic-monitor-data</code>(验收取其副本,真机目录只读零接触)</td><td>26-10-31</td></tr>
+  <tr><td>D3</td><td>验收工作区 <code>tmp-analysis/acceptance-gts/</code>(§05 默认)</td><td>26-10-31</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>停现网工具影响正常监控</td><td>A1/A5.2 需要工具停止/重启</td><td>验收窗口与用户对好时间;A7 恢复原状;工具自身无状态损失(采样中断段属预期)</td></tr>
+  <tr><td>桩 qB 端点不全卡住主循环</td><td>主循环需要 FakeQbServer 未覆盖的端点</td><td>runner 里子类补最小端点(404→最小合法响应),<b>不改 tests/helpers.py</b>;补不动则把该步降级为 dry-run 观察 + 注入单点验证,并记档</td></tr>
+  <tr><td>验收写坏用户级真实指针/工具 config</td><td>指针目录与工具 config 是用户级真实文件</td><td>A0 全量备份;所有写入路径先演练读侧;A7 还原并 diff 核对</td></tr>
+  <tr><td>误触红线文件</td><td>验收配置复制自 config.yml 时手滑</td><td>验收 yml 从 minimal.yml 起步按需补键,不从 config.yml 拷;A0 判据含「config.yml/auto-qb-data mtime 未变」</td></tr>
+  <tr><td>真重启中断验收进程</td><td>A2 A 级路径</td><td>安排在 A1/A3/A4/A5 全部完成之后单独做;重启后只需补 A2 自身判据</td></tr>
+  <tr><td>Windows-only 结论被外推</td><td>验收记录被后人当跨平台证据引用</td><td>档案与主计划 R 行显式标注「仅 Windows 侧验收」</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0446</span> 初版:用户指令立项(S19 未验收;先找变更文档再写计划;桩测/不碰真实 qB/仅 Windows)。变更考古结论 —— S19 定义后三波变更(修复 Phase 1、自启换轨 HKCU Run、Phase 2)全部纳入验收面,见 §02;桩策略与四场景改版见 §03/§04。</li>
+  <li><span class="tag">R1 · 26-10-31-0529</span> 验收实施完成: D1/D2/D3 拍板回填; 四场景+三波变更新增面(A5.1-A5.8)+§08 对账全过(编译态 N/A); 1 条 P3 验收发现(卸载自启后指针 autostart_registered 不即时回写); A2 A级真重启待用户; 现场已还原; 逐项记录见任务档案 26-10-31-backend-global-traffic-source-acceptance</li>
+</ul>
+
+</div>
+</body>
+</html>

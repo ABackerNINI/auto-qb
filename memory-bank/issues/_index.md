@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 7 |
 | docs | 1 |
 | test | 1 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autost…
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver…
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告…
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_i…

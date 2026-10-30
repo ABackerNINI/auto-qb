@@ -9,12 +9,12 @@
 
 ## In Progress
 
-- [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
 ## Open
 
+- [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
 - [26-10-31-0306] [种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单](26-10-31-0306-plan-torrent-transfer.html) — `torrent-transfer`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
@@ -46,6 +46,7 @@
 - [26-10-18-0813] [流量与限速合并与流量快照解耦 (Phase 2)](26-10-18-0813-plan-global-traffic-source-phase2.html) — `global-traffic-source-phase2`
 - [26-10-17-1737] [全局流量来源联动缺陷修复 (Phase 1)](26-10-17-1737-plan-global-traffic-source-integration-fixes.html) — `global-traffic-source-integration-fixes`
 - [26-10-17-0527] [memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb](26-10-17-0527-plan-memory-bank-doc-pipeline.html) — `memory-bank-doc-pipeline`
+- [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-16-1509] [agg 行 totals 归属错位 · 修法三形态对照 · auto-qb](26-10-16-1509-plan-agg-hour-totals-attribution.html) — `qb-traffic-restart-spike-gap`
 - [26-10-16-0541] [全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb](26-10-16-0541-plan-global-traffic-monitor.html) — `global-traffic-monitor`
 - [26-10-16-0453] [HR 取数代理 · 工具栏图标候选 · 2026-10-16](26-10-16-0453-plan-hr-ext-icons.html) — `hr-ext-icons`

@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (47)
+## Open (48)
 
+- [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](../26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
