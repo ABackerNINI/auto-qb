@@ -19,7 +19,8 @@ v-for 消费 ctxItems/ctxSubItems, 判据链与子面板交互原样); ③接线
   无 cfg 渲染 == 默认序 + 补尾 + 隐藏槽位保留与恢复归位 + 跨层双向 + sep 增删与 token 分配 +
   次级空与只剩线不显示父项(D7) + 未知 id 容忍与 sep 一等公民 + 门控两态 + 结构项防嵌套 +
   动态 label + 置灰 title + ctxRun 分派 + 静态名(labelText)成对 + 动词族灰色后缀(四支 12 项,
-  计划 26-10-20-0145)
+  计划 26-10-20-0145) + 动态 submenu「转移到」(四支各一, 子项 vm 单点供给/无供给方空数组/
+  advanced 空不压父项/次级防嵌套/布局可隐藏, 计划 26-10-31-0306 T6)
 - test_ctx_custom_panel_wiring: 设置页「WebUI」卡接线守阵(W4) —— 卡片注册/hubNow/hubGo 复位/
   hubRestore 认它 + 模板 v-else-if 分支内四支 tab 与两个固定区(D17)+ 跳检开关绑 cmSkipCheck(D6)
   + app.js mixin + 三 manifest 装载序(ctx_menu.js < ctx_menu_custom.js < app.js)+ .ctx-custom-* 样式在
@@ -101,11 +102,12 @@ const vmWith = (ctxMenu, flagOver) => stubVm({
 });
 
 // ---- ① 默认布局硬编码钉(与静态模板四支 + 次级逐位平移; 改此项 = 默认菜单形态漂移, 必须显式 review)
+// transfer(计划 26-10-31-0306 T6): 四支各一项「转移到」, 同位次 = 删除线前(D5 一级项 + 动态子面板)
 const EXPECT = {
-  multi: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
-  episode: { order: ["resume", "pause", "reannounce", "sep:d1", "open-path", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
-  member: { order: ["resume", "pause", "reannounce", "sep:d1", "info", "sep:d2", "limits", "move", "rename", "meta", "sep:d3", "recheck", "skip_check", "export", "open-path", "sep:d4", "sub-more", "sep:d5", "delete"], hidden: [], sub: { order: ["queue-top", "queue-up", "queue-down", "queue-bottom", "sep:s1", "super-seeding", "force-start", "auto-tmm", "share-limits", "sep:s2", "copy-name", "copy-hash", "copy-magnet"], hidden: [] } },
-  group: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "sep:d2", "open-path", "qb-traffic", "sep:d3", "delete"], hidden: [], sub: { order: [], hidden: [] } },
+  multi: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "transfer", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
+  episode: { order: ["resume", "pause", "reannounce", "sep:d1", "open-path", "transfer", "sep:d2", "delete"], hidden: [], sub: { order: [], hidden: [] } },
+  member: { order: ["resume", "pause", "reannounce", "sep:d1", "info", "sep:d2", "limits", "move", "rename", "meta", "sep:d3", "recheck", "skip_check", "export", "open-path", "transfer", "sep:d4", "sub-more", "sep:d5", "delete"], hidden: [], sub: { order: ["queue-top", "queue-up", "queue-down", "queue-bottom", "sep:s1", "super-seeding", "force-start", "auto-tmm", "share-limits", "sep:s2", "copy-name", "copy-hash", "copy-magnet"], hidden: [] } },
+  group: { order: ["resume", "pause", "reannounce", "sep:d1", "recheck", "skip_check", "limits", "move", "meta", "export", "sep:d2", "open-path", "qb-traffic", "transfer", "sep:d3", "delete"], hidden: [], sub: { order: [], hidden: [] } },
 };
 for (const b of ["multi", "episode", "member", "group"]) {
   checks.push(["默认布局 " + b, eq(R.DEFAULT_CTX_LAYOUT[b], EXPECT[b])]);
@@ -114,7 +116,7 @@ let nItem = 0, nSep = 0;
 for (const b of ["multi", "episode", "member", "group"]) {
   for (const t of EXPECT[b].order) { if (t.indexOf("sep:") === 0) nSep++; else nItem++; }
 }
-checks.push(["一级计数 41 项 + 12 线", nItem === 41 && nSep === 12]);
+checks.push(["一级计数 45 项 + 12 线", nItem === 45 && nSep === 12]);
 let sItem = 0, sSep = 0;
 for (const t of EXPECT.member.sub.order) { if (t.indexOf("sep:") === 0) sSep++; else sItem++; }
 checks.push(["次级计数 11 项 + 2 线", sItem === 11 && sSep === 2]);
@@ -288,6 +290,27 @@ checks.push(["次级默认仅 member", eq(Object.keys(R.CTX_SUB_ITEM_DEFS), ["me
   checks.push(["分隔线项 note 恒空(不炸模板)", seps.every((i) => i.note === "")]);
 }
 
+// ---- ⑯ 动态 submenu「转移到」(计划 26-10-31-0306 T6): 父项走注册表(布局可定制), 子项由 vm 单点供给
+{
+  const sent = [{ id: "transfer:QB2", kind: "item", label: "QB2", act: () => {} }];
+  const vmProv = stubVm({ ctxTransferMenuItems: () => sent });
+  const par = M.methods.ctxItems.call(vmProv, "multi").filter((i) => i.id === "transfer")[0];
+  checks.push(["transfer 父项渲染且子项来自 vm 单点", !!par && par.kind === "submenu" && par.subName === "transfer" && par.subItems === sent]);
+  checks.push(["四支各有一个 transfer 父项", ["multi", "episode", "member", "group"].every((b) => M.methods.ctxItems.call(vmProv, b).filter((i) => i.id === "transfer").length === 1)]);
+  const vmNo = stubVm();
+  const bare = M.methods.ctxItems.call(vmNo, "group").filter((i) => i.id === "transfer")[0];
+  checks.push(["无供给方时子项空数组(父项仍在)", !!bare && bare.kind === "submenu" && Array.isArray(bare.subItems) && bare.subItems.length === 0]);
+  // D7 只管注册表次级: multi 支的 advanced 次级为空, 不得压掉 transfer 父项(空态在子面板里给)
+  checks.push(["multi 支 advanced 空不压 transfer 父项", ids(M.methods.ctxItems.call(stubVm(), "multi")).indexOf("transfer") >= 0]);
+  // 不可嵌套: 用户把 transfer 拖进次级用户序也不渲染
+  const vmNest = vmWith({ member: { order: R.DEFAULT_CTX_LAYOUT.member.order.filter((t) => t !== "transfer"), hidden: [], sub: { order: ["transfer", "queue-top"], hidden: [] } } });
+  checks.push(["次级不渲染 transfer 父项", ids(M.methods.ctxSubItems.call(vmNest, "member")).indexOf("transfer") < 0]);
+  // 定制一等公民: transfer 可经 web.ctx_menu 隐藏(槽位保留)
+  const vmHide = vmWith({ member: { order: R.DEFAULT_CTX_LAYOUT.member.order.slice(), hidden: ["transfer"], sub: { order: R.DEFAULT_CTX_LAYOUT.member.sub.order.slice(), hidden: [] } } });
+  const mergedHide = R.ctxMergeLayout("member", { member: { order: R.DEFAULT_CTX_LAYOUT.member.order.slice(), hidden: ["transfer"] } });
+  checks.push(["transfer 可经布局隐藏且槽位保留", ids(M.methods.ctxItems.call(vmHide, "member")).indexOf("transfer") < 0 && mergedHide.order.indexOf("transfer") >= 0]);
+}
+
 // ---- ⑬ ctxRun 分派: 调注册表 act 并透传 vm
 {
   let seen = null;
@@ -337,9 +360,10 @@ def test_ctx_menu_template_consumes_registry():
          的开端(字面量要分四支, 分四支就要四份骨架);
       2. 行菜单根块里 `.ctx-item` 骨架恰 2 份(一级项 + 次级面板项) —— 给项加属性只改这两处,
          多一份 = 有人又按支抄了一遍;
-      3. 「更多操作」父项结构: has-sub + ctx-caret + 子面板 v-for 消费 `ctxSubItems(ctxMenuKind())`
-         + CTX-05/06 交互三件(openSub/scheduleSubClose/toggleSub, 收起语义在 menu.js, 模板必须挂上)
-         + 钳位状态消费(subFlip/subTop);
+      3. submenu 父项结构: has-sub + ctx-caret + 子面板 v-for 消费 `it.subItems`(子项由注册表
+         渲染层就地解析 —— 2026-10-31 计划 26-10-31-0306 T6 起与动态「转移到」子面板共用一条
+         骨架, 面板名走 it.subName)+ CTX-05/06 交互三件(openSub/scheduleSubClose/toggleSub,
+         收起语义在 menu.js, 模板必须挂上) + 钳位状态消费(subFlip/subTop);
       4. 行菜单段不得再出现逐项 @click 分派(ctxAct/actTorrent/actEpisode/ctxDelete/… 直写)——
          项级唯一允许 ctxRun(it), 父项级唯一允许 toggleSub。
     """
@@ -366,10 +390,14 @@ def test_ctx_menu_template_consumes_registry():
     )
     assert row.count('class="ctx-item has-sub"') == 1, "「更多操作」父项骨架应恰 1 份(has-sub)"
 
-    # 3. 子面板结构(CTX-05/06 交互 + 钳位消费; D7 下次级空时注册表不出父项, 面板恒有内容)
-    assert "ctxSubItems(ctxMenuKind())" in row, "子面板未消费 ctxSubItems(ctxMenuKind())(支名同走单点)"
-    assert "has-sub" in row and "ctx-caret" in row, "缺「更多操作」父项结构(has-sub/ctx-caret)"
-    for call in ("openSub('advanced'", "scheduleSubClose()", "toggleSub('advanced'", "keepSub()"):
+    # 3. 子面板结构(CTX-05/06 交互 + 钳位消费; D7 下次级空时注册表不出父项, 面板恒有内容)。
+    #    2026-10-31(计划 26-10-31-0306 T6)起子面板两种质料共用一条骨架: 「更多操作」(advanced)
+    #    与「转移到」(transfer, 动态目标列表)—— 子项内容由注册表渲染层就地解析成 it.subItems,
+    #    子面板名走 it.subName(state.js subMenu: "" | "advanced" | "transfer"), 模板不再区分质料。
+    assert "it.subItems" in row, "子面板未消费 it.subItems(子项由注册表渲染层就地解析, 模板不区分质料)"
+    assert "subMenu === it.subName" in row, "子面板开合判据未走 it.subName(动态子面板与「更多操作」共用骨架)"
+    assert "has-sub" in row and "ctx-caret" in row, "缺 submenu 父项结构(has-sub/ctx-caret)"
+    for call in ("openSub(it.subName", "scheduleSubClose()", "toggleSub(it.subName", "keepSub()"):
         assert call in row, f"子面板缺交互 {call}(CTX-05 收起语义在 menu.js, 模板必须挂上)"
     assert "subFlip" in row and "subTop" in row, \
         "子面板缺钳位状态消费(flip-x / top; _subFitViewport 钳位结果要有绑定)"

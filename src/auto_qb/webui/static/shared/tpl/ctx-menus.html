@@ -9,9 +9,10 @@
                CTX_BRANCHES 同词 —— 2026-10-20 issue 26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup
                之前是四支各一份 .ctx-item 骨架, 给项加属性漏改一支即同族缺陷)与
                ②「更多操作」子面板的展开交互(CTX-05/06, 在 menu.js)。
-               渲染: ctxItems(ctxMenuKind()) 出一级可见项, ctxSubItems(ctxMenuKind()) 出次级可见项
-               (次级注册表现状只有 member 支有默认内容, 故 submenu 父项实际只出现在单种子支); 点击
-               走 ctxRun(it) 分派到注册表 act(原方法调用逐字平移, 动作链一行不动)。默认布局
+               渲染: ctxItems(ctxMenuKind()) 出一级可见项; submenu 父项的子项(it.subItems)由
+               注册表渲染层就地解析(「更多操作」= 注册表次级, 现状只有 member 支有默认内容;
+               「转移到」= 动态目标列表, 见下), 点击走 ctxRun(it) 分派到注册表 act(原方法调用
+               逐字平移, 动作链一行不动)。默认布局
                (不写 ctx_menu 时)与静态模板逐位一致 —— 零漂移由 node 电池(注册表层)与
                e2e menus.spec(渲染层)双守。逐项语义(门控/置灰/动态文案/图标)见注册表内注释:
                改项集改注册表单点, 别回本模板逐项直写(直写 = 四支人肉奇偶, 复发路径即
@@ -37,22 +38,28 @@
                都依赖单个目标的当前值); 要单目标操作请不选中任何行再右键。 -->
           <template v-for="it in ctxItems(ctxMenuKind())" :key="it.id">
             <div v-if="it.kind === 'sep'" class="ctx-sep"></div>
-            <!-- 「更多操作」父项: 唯一带子面板的 kind(注册表 kind: submenu, 现状只在单种子支)。
-                 FX-15 次级菜单(R10-14: 文案由"高级能力"改"更多操作" —— 装的都是 qB 常规种子
-                 控制, 不是"高级"能力); hover 与点击均可展开; CTX-06: 复制族(名称/哈希/magnet)
-                 由独立子面板并入本面板末尾 —— 一级只留这一个入口; 移出父项/面板后延迟收起
-                 (CTX-05, 180ms 宽限跨过 4px 缝, 见 menu.js openSub/keepSub/scheduleSubClose);
-                 子面板钳位在 menu.js _subFitViewport(估宽只管首帧方向, 精确收口在实测)。
-                 D7: 次级无可见项时注册表不出「更多操作」父项(单选项/空面板 = 半残 UI)。 -->
-            <div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" :class="{ open: subMenu === 'advanced' }" :data-item="it.id"
-                 @mouseenter="openSub('advanced', $event)" @mouseleave="scheduleSubClose()"
-                 @click.stop="toggleSub('advanced', $event)">
+            <!-- submenu 父项(注册表 kind: submenu): 唯一带子面板的 kind, 两种质料共用本骨架 ——
+                 ①「更多操作」(subName "advanced"): 子项 = 注册表次级(ctxRenderLayer level 1,
+                 现状只在单种子支; FX-15 次级菜单 R10-14: 文案由"高级能力"改"更多操作" —— 装
+                 的都是 qB 常规种子控制, 不是"高级"能力; CTX-06: 复制族由独立子面板并入本面板
+                 末尾 —— 一级只留这一个入口); D7: 次级无可见项时注册表不出父项(单选项/空面板
+                 = 半残 UI)。
+                 ②「转移到」(subName "transfer", 计划 26-10-31-0306 T6): 子项 = 启用转移目标
+                 列表(动态, ctx_menu.js CTX_DYN_SUB 口径), 无启用目标时为空态灰项「未配置目标,
+                 去设置」(点击跳 WebUI 设置卡)。
+                 hover 与点击均可展开; 移出父项/面板后延迟收起(CTX-05, 180ms 宽限跨过 4px 缝,
+                 见 menu.js openSub/keepSub/scheduleSubClose); 子面板钳位在 menu.js
+                 _subFitViewport(估宽只管首帧方向, 精确收口在实测)。子项内容已由注册表渲染层
+                 (ctx_menu.js ctxRenderLayer)就地解析成 it.subItems —— 模板不再区分质料。 -->
+            <div v-else-if="it.kind === 'submenu'" class="ctx-item has-sub" :class="{ open: subMenu === it.subName }" :data-item="it.id"
+                 @mouseenter="openSub(it.subName, $event)" @mouseleave="scheduleSubClose()"
+                 @click.stop="toggleSub(it.subName, $event)">
               <svg class="ico ico-sm" :class="it.icon.cls" viewBox="0 0 16 16"><use :href="it.icon.use"></use></svg><span class="ctx-text">{{ it.label }} <span v-if="it.note" class="ctx-note">{{ it.note }}</span></span>
               <svg class="ico ico-sm ctx-caret" viewBox="0 0 16 16"><use href="#i-chevron"></use></svg>
-              <div v-if="subMenu === 'advanced'" class="ctx-sub" :class="{ 'flip-x': subFlip }"
+              <div v-if="subMenu === it.subName" class="ctx-sub" :class="{ 'flip-x': subFlip }"
                    :style="{ top: subTop + 'px' }"
                    @click.stop @mouseenter="keepSub()">
-                <template v-for="sit in ctxSubItems(ctxMenuKind())" :key="sit.id">
+                <template v-for="sit in it.subItems" :key="sit.id">
                   <div v-if="sit.kind === 'sep'" class="ctx-sep"></div>
                   <div v-else class="ctx-item" :class="[sit.cls, { 'is-gated': sit.gated }]" :title="sit.title" :data-item="sit.id" @click="ctxRun(sit)">
                     <svg class="ico ico-sm" :class="sit.icon.cls" viewBox="0 0 16 16"><use :href="sit.icon.use"></use></svg><span class="ctx-text">{{ sit.label }} <span v-if="sit.note" class="ctx-note">{{ sit.note }}</span></span>

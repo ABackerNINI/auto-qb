@@ -207,7 +207,7 @@ window.AQB_STATE = {
       flags: { skip_check_menu: false, qb_traffic_enabled: false, ctx_menu: null },
       // FX-15: 右键菜单的次级菜单(flyout)展开态与翻转态 —— 一级只有一个「更多操作」子面板,
       // 队列/TMM/超级做种/强制启动/分享率限制/复制族 都在它里面(见 conventions/webui.md)
-      subMenu: "",        // "" | "advanced"
+      subMenu: "",        // "" | "advanced" | "transfer"(「转移到」动态子面板, 计划 26-10-31-0306 T6)
       subFlip: false,     // 子面板向左翻(父项靠右, 右展会伸出视口)
       // 子面板垂直位移(相对父项顶的 top 内联值, px): 子面板高(~12 项 ≈ 440px)锚在父项顶
       // - 6px, 父项靠视口下部时底会整段探出屏幕外 —— openSub 展开后实测上移收进视口
@@ -297,6 +297,10 @@ window.AQB_STATE = {
         test: null,     // 最近一次「测试连接」回执 { name, ok, text }; null = 无
         testing: "",    // 正在测试的目标名("" = 空闲; 防重复点击)
       },
+      // 种子转移目标缓存(计划 26-10-31-0306 T6; 方法在 transfer_flow.js): 菜单「转移到」
+      // 子项的读侧 —— GET /api/config 的 web.transfer.targets 原样缓存(整表替换), 登录后/
+      // 设置页保存后/展开子面板时刷新(transferTargetsReload), 渲染只读这里不另拉。
+      trTargets: [],
       // 区间起点(anchor)三字段(计划 26-10-02-0608 方案 B 起与光标同属键鼠统一模型):
       // 由鼠标普通/Ctrl(⌘)点击或键盘 Shift 手势原点落定(落起点 ≠ 选中, 只写这里);
       // **Shift 扩展期间不更新**(便于同一起点多次扩段)。解析/写入单点在 selection.js

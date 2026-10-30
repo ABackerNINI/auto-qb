@@ -21,8 +21,13 @@
   /* 四支分支名(与 triggers.js variant 口径一致; 支名单点 = menu.js::ctxMenuKind(), 模板的
    * ctxItems(ctxMenuKind()) 与容器 :data-kind 都读它, 静态守阵 T3 的比对面 = 该方法的四个返回值)。 */
   const CTX_BRANCHES = ["multi", "episode", "member", "group"];
-  /* 次级菜单名(state.js subMenu: "" | "advanced"; 全库仅此一个次级, 四支共用) */
+  /* 次级菜单名(state.js subMenu: "" | "advanced"; 四支共用) */
   const CTX_SUB_NAME = "advanced";
+  /* 动态 submenu 名(子项不在注册表里, 由 vm 单点提供; 当前唯一 = 转移, 计划 26-10-31-0306 D5):
+   * 子项来源 = transfer_flow.js::ctxTransferMenuItems(启用目标列表 / 无目标时空态灰项),
+   * 父项仍走本注册表(布局可经 web.ctx_menu 定制), 与「更多操作」共用同一套 submenu
+   * 骨架与展开交互(openSub/keepSub/scheduleSubClose 在 menu.js, 名字进 state.js subMenu)。 */
+  const CTX_DYN_SUB = "transfer";
   /* 门控键 -> flags 真值(与模板 v-if 逐字同径):
    *   skip_check_menu = web.skip_check_menu(fail-closed, 后端端点同步拒单)
    *   qb_traffic      = flags.qb_traffic_enabled(流量图入口, 无入口即无请求) */
@@ -67,6 +72,9 @@
       { id: "move", label: "设定位置…", icon: { cls: "ico-move", use: "#i-folder-open" }, act: (vm) => vm.ctxAct("location") },
       { id: "meta", label: "标签/分类…", icon: { cls: "ico-tag", use: "#i-tag" }, act: (vm) => vm.ctxMeta() },
       { id: "export", label: "导出 .torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.ctxAct("export") },
+      /* 「转移到」父项(计划 26-10-31-0306 D5): 子项 = 启用转移目标列表(动态, 不在本注册表 ——
+       * 来源与空态见 CTX_DYN_SUB 注释); 四支各一项, 同位次(删除线前) */
+      { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d2", kind: "sep" },
       { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.ctxDelete() },
     ],
@@ -78,10 +86,11 @@
       { id: "reannounce", label: "强制重新汇报", icon: { cls: "ico-sync", use: "#i-refresh" }, dyn: "reannounce", act: (vm) => vm.actEpisode("reannounce") },
       { id: "sep:d1", kind: "sep" },
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.episode.hashes[0]) },
+      { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d2", kind: "sep" },
       { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delEpisode() },
     ],
-    /* 单种子(menu.hash): 一级 14 项(含「更多操作」父项) + 5 线; 次级 11 项 + 2 线见 CTX_SUB_ITEM_DEFS */
+    /* 单种子(menu.hash): 一级 15 项(含「更多操作」「转移到」两个父项) + 5 线; 次级 11 项 + 2 线见 CTX_SUB_ITEM_DEFS */
     member: [
       { id: "resume", label: "启动", note: CTX_SEED_NOTE, icon: { cls: "ico-play", use: "#i-play" }, act: (vm) => vm.actTorrent("resume") },
       { id: "pause", label: "停止", note: CTX_SEED_NOTE, icon: { cls: "ico-pause", use: "#i-pause" }, act: (vm) => vm.actTorrent("pause") },
@@ -98,6 +107,7 @@
       { id: "skip_check", label: "跳过哈希校验…", icon: { cls: "ico-recheck", use: "#i-bolt" }, gate: "skip_check_menu", act: (vm) => vm.skipCheckTorrent() },
       { id: "export", label: "导出 .torrent", icon: { cls: "ico-export", use: "#i-download" }, act: (vm) => vm.exportTorrent() },
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("torrent", vm.menu.hash) },
+      { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d4", kind: "sep" },
       /* 「更多操作」父项: 次级内容 = CTX_SUB_ITEM_DEFS.member; D7 次级无可见项时不渲染父项 */
       { id: "sub-more", label: "更多操作", icon: { cls: "ico-tune", use: "#i-sliders" }, kind: "submenu" },
@@ -120,6 +130,7 @@
       { id: "sep:d2", kind: "sep" },
       { id: "open-path", label: "打开目标文件夹", icon: { cls: "ico-folder", use: "#i-folder-open" }, act: (vm) => vm.openTargetPath("group", vm.menu.key) },
       { id: "qb-traffic", label: "qB 口径流量图", icon: { cls: "", use: "#i-chart" }, gate: "qb_traffic", act: (vm) => vm.openQbGroup(vm.menu.key) },
+      { id: "transfer", label: "转移到", icon: { cls: "", use: "#i-external" }, kind: "submenu", subName: CTX_DYN_SUB },
       { id: "sep:d3", kind: "sep" },
       { id: "delete", label: "删除…", note: CTX_SEED_NOTE, icon: { cls: "", use: "#i-trash" }, danger: true, act: (vm) => vm.delGroup() },
     ],
@@ -249,9 +260,11 @@
   /* 渲染解析: 合并布局 -> 可见渲染项数组(顺序即渲染序)。
    *   - hidden 滤除(槽位在 order 里保留, 不重排)
    *   - gate 滤除(flags 关 = v-if 不渲染; 与模板 v-if 语义逐字同径)
-   *   - submenu 父项: 次级无可见项时不渲染(D7, 单选项菜单 = 半残 UI); 次级层 itself 不渲染
-   *     submenu(结构项不可嵌套, 定制块亦不提供它的跨层移动)
-   *   - 动态 label / 置灰 title 在此就地求值(vm = Vue 实例, 响应式依赖随渲染收集)
+ *   - submenu 父项: 注册表次级(advanced)无可见项时不渲染(D7, 单选项菜单 = 半残 UI); 动态
+ *     submenu(CTX_DYN_SUB)无注册表次级, 父项恒渲染(子项由 vm 单点供给, 含空态); 次级层
+ *     itself 不渲染 submenu(结构项不可嵌套, 定制块亦不提供它的跨层移动)
+ *   - 动态 label / 置灰 title 在此就地求值(vm = Vue 实例, 响应式依赖随渲染收集);
+ *     submenu 父项就地解析出 subName + subItems(模板一个骨架消费两种质料)
    */
   function ctxRenderLayer(branch, level, flags, vm) {
     const merged = ctxMergeLayout(branch, flags && flags.ctx_menu);
@@ -265,11 +278,23 @@
         continue;
       }
       if (def.kind === "submenu") {
-        if (level === 1) continue; // 次级里不渲染「更多操作」父项(不可嵌套)
-        if (ctxLayerVisibleCount(branch, 1, merged.sub, flags) === 0) continue; // D7
+        if (level === 1) continue; // 次级里不渲染 submenu 父项(不可嵌套)
+        if ((def.subName || CTX_SUB_NAME) === CTX_SUB_NAME
+          && ctxLayerVisibleCount(branch, 1, merged.sub, flags) === 0) continue; // D7: 注册表次级空不显示入口
+        // 动态 submenu(CTX_DYN_SUB)无注册表次级: 子项恒由 vm 单点供给(含空态), 父项恒渲染
       }
       if (def.gate && !ctxGateOk(def.gate, flags)) continue;
-      out.push(ctxRenderItem(def, vm, level));
+      const item = ctxRenderItem(def, vm, level);
+      if (def.kind === "submenu") {
+        const sub = def.subName || CTX_SUB_NAME;
+        item.subName = sub;
+        item.subItems = sub === CTX_SUB_NAME
+          ? ctxRenderLayer(branch, 1, flags, vm)  // 注册表次级 = 「更多操作」内容
+          : (sub === CTX_DYN_SUB && vm && typeof vm.ctxTransferMenuItems === "function"
+            ? vm.ctxTransferMenuItems()           // 动态子项(转移目标/空态), transfer_flow.js 单点
+            : []);
+      }
+      out.push(item);
     }
     return out;
   }
@@ -309,6 +334,7 @@
   window.AQB_CTX_MENU_REG = {
     CTX_BRANCHES,
     CTX_SUB_NAME,
+    CTX_DYN_SUB,
     CTX_ITEM_DEFS,
     CTX_SUB_ITEM_DEFS,
     DEFAULT_CTX_LAYOUT,

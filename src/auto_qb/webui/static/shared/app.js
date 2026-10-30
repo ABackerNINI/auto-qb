@@ -900,6 +900,7 @@ app.mixin(window.AQB_MENU);
 app.mixin(window.AQB_CTX_MENU);  // 行右键菜单注册表 + 布局解析(计划 26-10-20-0024 W2): 数据在 AQB_CTX_MENU_REG, 模板消费在 W3
 app.mixin(window.AQB_CTX_CUSTOM);  // 设置页「WebUI」卡右键菜单定制块(W4): 读写同一份 web.ctx_menu 草稿, 合并语义复用 AQB_CTX_MENU_REG
 app.mixin(window.AQB_TRANSFER_TARGETS);  // 设置页「WebUI」卡种子转移目标编辑器(计划 26-10-31-0306 W1/T5): 读写同一份 web.transfer 草稿, 模板件 AQ_TRANSFER_TARGETS_COMPONENT 见下
+app.mixin(window.AQB_TRANSFER_FLOW);  // 种子转移交互流(计划 26-10-31-0306 W4/T6): 右键菜单「转移到」读侧缓存 + 触发钩子单点 transferOpen(确认弹窗 T7 实现于其内)
 app.mixin(window.AQB_COMMANDS);
 app.mixin(window.AQB_ADD);
 app.mixin(window.AQB_SELECTION);

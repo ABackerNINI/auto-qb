@@ -296,6 +296,9 @@ window.AQB_MENU = {
      * left: calc(100% + 4px))—— 同步收起会在过缝瞬间关掉面板, 表现为"鼠标进不去子面板"。
      */
     openSub(name, ev) {
+      /* 动态子面板展开即对齐最新目标(计划 26-10-31-0306 T6): 缓存刷新是异步且渲染只读缓存
+       * (transfer_flow.js), 面板先按上次缓存显形、拉回后即时更新 —— 不阻塞展开, 失败保持旧值 */
+      if (name === "transfer" && typeof this.transferTargetsReload === "function") this.transferTargetsReload();
       this.keepSub();
       this.subMenu = name;
       this.subTop = -6; /* 每次展开现算垂直位移, 先复位回 CSS 默认基准 */

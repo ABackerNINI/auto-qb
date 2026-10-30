@@ -214,6 +214,7 @@ window.CONFIG_EDITOR = {
         // 主循环应用, PUT 回执先于应用落地 —— 立即拉一次之外再短延时补拉一次收窄竞态窗口
         // (竞态只朝 fail-closed 方向: 菜单暂藏, 后端 gate 仍真值兜底)。
         this.loadWebFlags();
+        this.transferTargetsReload();  // T6(计划 26-10-31-0306): 转移目标随保存刷新(菜单读侧缓存与磁盘树对齐)
         setTimeout(() => this.loadWebFlags(), 2000);
         return true;
       } catch (e) {

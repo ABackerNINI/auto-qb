@@ -243,6 +243,7 @@ window.AQB_LIFECYCLE = {
         this.lastRid = null;
         this.startPolling();
         this.loadWebFlags();  // R2(计划 26-10-02-1955 W1): 登录后取一次功能旗标(跳检菜单开关)
+        this.transferTargetsReload();  // T6(计划 26-10-31-0306): 预拉转移目标缓存(右键菜单「转移到」读侧; 方法在 transfer_flow.js)
         this._pullErrlogBoot();  // 通知 S3: 本机免鉴权路径的开页全量合并(密钥路径在 auth.js bootstrap)
         return;
       }
