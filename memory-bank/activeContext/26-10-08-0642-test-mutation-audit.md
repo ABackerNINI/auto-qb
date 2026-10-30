@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
-> 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/report/verify/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档。**config 包已全清**(七轮, 存活 893 → 443 / 杀死率 **90.02%**, 首轮入池 6 条 `test` issue 全实施)。**hr 包**: 首轮(R14)8027 变异 / 存活 2440(**69.2%**), 真洞按主题入池 6 条 `test` issue; 已实施 **R16**(service.py 第一批) / **R17**(model·store·queue) / **R18**(runtime·worker·fetcher·events·adapters·log) / **R19**(resolve·bencode·ratelimit·parse 判定内核与边界: 存活 **292→122**, 四文件 **93.48% / 76.45% / 92.25% / 95.40%**), 余 **2 条** issue(channel-server / display)。**rules / core 未派生计划**。档案 `tasks/26-10-08-test-mutation-audit.md`。
-> 最后活动: 2026-10-10 20:44
+> 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/report/verify/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档。**config 包已全清**(首轮 + 六实施轮, 杀死率 80.25% → **90.02%**); **hr 包已全清**(首轮 R14 + 七个模块轮 R16–R22, 真洞入池 6 条 `test` issue 全部实施); **rules 包已清**(R23 首轮, 名义 59.9% → 实测 71.8%, 60 簇守阵全过); **core 计划已派生**(`plans/26-10-31-0128`, W1–W9 九轮, 拍板后执行)。2026-10-31 常驻锚蒸馏改版: 只留 §07 覆盖进度总表一张记录表, 守阵 `check_mutation_anchor.py` 防流水回归。档案 `tasks/26-10-08-test-mutation-audit.md`。
+> 最后活动: 2026-10-31 01:57
 
 ## 已完成(详情见档案, 不在此复述)
 
@@ -48,12 +48,14 @@
 
 ## 正在进行
 
-- (无) —— R16 / R17 / R18 / R19 均已闭环。hr 包余 **2 条** `test` issue 未实施(channel-server / display), 属后续轮。
+- (无) —— config / hr / rules 各轮均已闭环; core 计划已派生待拍板(见未决项)。
 
 ## 未决项
 
-- **hr 首轮入池 6 条 `test` issue 已做 4 条**: R16 service.py 第一批(604 条中三函数) / R17 model·store·queue(全量) / R18 runtime·worker·fetcher·events·adapters·log(六文件全量) / R19 resolve·bencode·ratelimit·parse(四文件全量); 余 **2 条**未实施 —— `channel-server` / `display`。
+- **hr 首轮入池 6 条 `test` issue 已全部实施**(R16 service.py 第一批 / R17 model·store·queue / R18 runtime·worker·fetcher·events·adapters·log / R19 判定内核四文件 / R20 display / R21 channel-server / R22 service.py 余量)。
 - **config 真洞 issue 已全清**(6 条全实施); 余量仅剩 config 包内未逐条补测的 555 条 S4 未验证候选(按需另立轮)。
-- **service.py 其余函数未覆盖**(R16 余量: `_run_pages` / `_do_wave` / `_refresh_locked` / `_append_history` 等, 见 R16 切片「余量」节); `rules` / `core` **仍未派生计划**(对象优先级见可行性报告 §11)。
+- **core/ 待做**: 计划已派生(`plans/26-10-31-0128-plan-mutation-core.html`, W1–W9 九轮模块轮, 拍板后执行); `infra/` · `webui/server/` 估值最低可跳。
 - 常驻 issue 的认领链只有一条(本档案); 后续每轮若新增计划/档案, 记得同步 issue 的 `doc-refs`。
 - **回灌已落地**(R3/R12/R15): 命令包 `mutants.report` / `mutants.verify`; skill 硬约束 9–15 与形态级复验专节; 报告 §14。下次跑任一包都应走 task id, 别再手工拼 S4。
+
+**R1(2026-10-31 01:57):** 常驻锚蒸馏改版: 移除逐轮台账/逐轮状态日志(事实源=任务档案+基线切片), 只留 §07 覆盖进度总表; 修 hr 漏记 R22 与 core 计划指针漂移; §07 表格排版修复(版心放宽 + 窄视口目录移出栅格 + 固定列宽/路径不换行, 1280 视口实测零换行零滚动); 新增守阵 check_mutation_anchor.py(挂 kb.check+提交闸门, 3 条测试)防流水回归

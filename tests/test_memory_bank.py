@@ -121,6 +121,12 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 - test_memory_bank_instructions_match_current_structure: `memory-bank.instructions.md` 与当前结构一致 (2026-09-23 瘦身后针列表同步换过)
 - test_skill_cap_table_matches_cap_policy: SKILL.md 的 cap 表数值集合 == `_common.CAP_POLICY` (防手抄表漂移)
 - test_kb_scripts_import_cleanly: skill 的脚本都能 import
+
+常驻锚防流水守卫 (检查器 memory-bank skill 的 `scripts/check_mutation_anchor.py`, 2026-10-31 加):
+
+- test_mutation_anchor_guard_is_green_on_current_kb: 蒸馏改版后的常驻锚零违规 (§07 一张记录表 + 一行式状态日志)
+- test_mutation_anchor_guard_flags_ledger_log_and_round_numbers: 台账字样 / 白名单外节 / 逐轮流水数字 / 状态日志超限逐类判红; 清白件零误报
+- test_mutation_anchor_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧
 - test_gen_all_declares_exactly_all_indexes: gen_all.py 的产出集合 == 库内全部 `_index.md`(生成物全集单点)
 - test_gen_all_check_is_green: gen_all.py `--check` 在当前库上绿 (磁盘 == 生成结果)
 - test_gen_all_list_matches_outputs: `--list` 声明的路径集合 == collect() 实际产出 (白名单不得多/少)
@@ -957,6 +963,74 @@ def test_wording_guard_is_wired_into_kb_check() -> None:
 
     assert body, "kb/config.toml 里找不到 kb.check"
     assert "check_wording.py --check" in body.group(1), "check_wording.py --check 未挂进 kb.check"
+
+
+# ---------------------------------------------------------------------------
+# 常驻锚防流水守卫 (2026-10-31, 口径单点在 mutation-testing skill 的「四段职责」/ 硬约束 12)
+#
+# 为什么值得机检: 排期锚 §01 明写「它不记流水」, 但 §08「轮次台账」与逐轮状态日志恰恰长成了
+# 流水 —— 与任务档案/基线切片大面积重复, 重复必漂移 (实证: §07 hr 行漏记 R22、core 行计划
+# 指针落后)。2026-10-31 蒸馏改版后由 check_mutation_anchor.py 钉住; 检查器**进程内 import**。
+# ---------------------------------------------------------------------------
+
+
+def _mutation_anchor():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import check_mutation_anchor
+
+    return check_mutation_anchor
+
+
+def test_mutation_anchor_guard_is_green_on_current_kb() -> None:
+    """蒸馏改版后的常驻锚零违规 —— §07 覆盖进度总表一张记录表 + 一行式状态日志。"""
+    problems = _mutation_anchor().collect_violations(ROOT, MB)
+
+    assert not problems, ("常驻锚流水回归 (台账 / 逐轮日志写回锚里; 轮次明细的事实源是任务档案 + 基线切片):\n" + "\n".join(problems))
+
+
+def test_mutation_anchor_guard_flags_ledger_log_and_round_numbers(tmp_path: Path) -> None:
+    """四类判据逐类判红: 台账字样 / 白名单外节 / 逐轮流水数字 / 状态日志超限; 清白件零误报。"""
+    anchor = _mutation_anchor()
+    clean = (
+        "<html><body>"
+        "<h2><span class=\"no\">01</span>这个锚是干什么的</h2>"
+        "<section><h2><span class=\"no\">07</span>覆盖进度总表</h2></section>"
+        "<section><h2><span class=\"no\">08</span>状态变更日志</h2>"
+        "<ul><li>2026-10-08 06:42 — 建立, 状态 Open。</li></ul></section>"
+        "</body></html>"
+    )
+
+    assert anchor.scan_anchor(clean) == [], "清白件不得误报"
+
+    dirty = (
+        "<html><body>"
+        "<h2><span class=\"no\">08</span>轮次台账</h2>"
+        "<h2><span class=\"no\">09</span>自创节</h2>"
+        "<p>存活 604 → 502, 红验 481/540 KILLED, 坑复发 +1</p>"
+        "<section><h2>状态变更日志</h2><ul>" + "".join("<li>" + "长" * 400 + "</li>" for _ in range(9)) + "</ul></section>"
+        "</body></html>"
+    )
+    problems = anchor.scan_anchor(dirty)
+    joined = "\n".join(problems)
+
+    assert "台账回归" in joined and "轮次台账" in joined
+    assert "节白名单" in joined and "自创节" in joined
+    assert "存活对差" in joined and "逐轮红验数字" in joined and "坑复发计数" in joined
+    assert "日志体量" in joined, "9 条 × 400 字符的日志必须双限全红"
+
+
+def test_mutation_anchor_guard_is_wired_into_kb_check_and_gate() -> None:
+    """守卫必须挂在 kb.check 与提交闸门两侧 —— 不接线 = 没人跑, 漏闸门 = 静默红。
+
+    `test_commit_gate_covers_kb_check` 已按 run 列表推导闸门覆盖面; 本条把名字钉死, 防
+    kb.check 清单整行改名后两条测试同时静默失效。
+    """
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+
+    assert "check_mutation_anchor.py --check" in kb_cfg, "check_mutation_anchor.py 未挂进 kb.check"
+    assert "check_mutation_anchor.py --check" in gate_cfg, "check_mutation_anchor.py 未挂进提交闸门 (静默红)"
 
 
 def test_commit_gate_covers_kb_check() -> None:
