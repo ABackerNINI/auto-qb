@@ -73,6 +73,15 @@
 - **有界性双依据(缺一不可)**: ① `own_writes` 在同步应用到该 hash 新 `state` 时逐出(依赖 qB 缓存前进);
   ② **TTL 兜底** `_OWN_WRITE_TTL`(10s, 不依赖任何外部条件) —— 命令在 qB 侧未生效时靠它解除让位, 防任务饿死。
   只留 ① 等于把「任务不饿死」押在「qB 一定会前进」上, 那是隐藏假设。
+- **预算面(issue 26-10-30-0616, 已修)**: **让位者不占 `max_tasks` 预算** —— 让位发生在过闸时,
+  而旧实现先 `_pop_due(now, max_tasks)` 出队即计数, 组级 own_write(整组停 / size 一致性停种)
+  把同批同组任务整批让位时它们**各吃一个名额**, 组成员数 >= `max_tasks_per_tick`(缺省 20)时
+  同 tick 的无关任务一个都轮不到、一路饿到 TTL 退出, 速率语义(20 个/2s)窗口内失真。
+  现语义: `max_tasks` 只约束**可执行**名额, 让位者本轮先留在堆外(否则 `next_run=now` 会被
+  本轮重复弹出过闸), 执行批次之后统一回填; 让位扫描面另以 `max_tasks * _DEFER_SCAN_FACTOR`
+  封顶 —— **让位是"跳过"不是"执行", 放开预算后必须另有上界**, 否则一轮 tick 会把整条队列扫穿。
+  `run_due` 返回值同步改为**实际执行数**(不再含让位者)。改这条语义时先跑
+  `tests/test_taskqueue.py` 的两条守阵(预算 / 扫描上界)。
 - **登记点**: QbApi 四入口 `start/stop/pause/resume` 在 raw client 调用**成功后** `note_own_write`;
   纯内存态(同 `state_snapshot`), **不落盘**, 热重载 `reset_runtime` 清空。
 - **同一容器供两种语义用, 禁双轨**: `own_write_pending(hash, group=True)` 走组维度(deferral);

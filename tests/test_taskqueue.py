@@ -11,6 +11,8 @@
 - test_run_due_dies_on_false: handler False -> 消亡不重入, check 在途登记释放
 - test_run_due_exception_caught: handler 异常被捕获, 视为 REQUEUE 重入队
 - test_run_due_defer_gate_defers_then_resumes: defer_gate 命中 -> 本轮不执行、重入堆下一轮再判; 放行后执行(A 系 S2 D-1)
+- test_run_due_defer_gate_does_not_consume_budget: 让位者不占 max_tasks 预算 —— 整组让位时同 tick 无关任务仍被执行(issue 26-10-30-0616)
+- test_run_due_defer_scan_bounded: 让位扫描面上界 —— 让位者远超上界时不把整条队列扫穿(跳过不等于执行)
 - test_add_task_resets_by_default: add_task 默认重置断点(下次从头执行)
 - test_add_task_keep_progress: keep_progress=True 显式保存进度(断点保留续跑)
 - test_run_due_requeue_resets: 周期收尾重入队默认重置(不携带上一轮断点)
@@ -19,7 +21,7 @@
 """
 import time
 
-from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, RUNNING, Task, TaskQueue
+from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, RUNNING, Task, TaskQueue, _DEFER_SCAN_FACTOR
 
 
 def test_task_queue_schedule():
@@ -154,12 +156,75 @@ def test_run_due_defer_gate_defers_then_resumes():
     def gate(task):
         return "让位(测试)" if blocked["on"] else None
 
-    assert tq.run_due(now=now, defer_gate=gate) == 1, "本轮仍计入弹出数"
+    assert tq.run_due(now=now, defer_gate=gate) == 0, "让位者不计入返回的执行数(issue 26-10-30-0616)"
     assert ran == [], "命中 defer_gate 本轮不执行"
     assert t in tq._fast and t.state == PENDING, "命中者重入堆(下一轮再判), 不是消亡"
     blocked["on"] = False
     tq.run_due(now=now, defer_gate=gate)
     assert ran == ["H1"], "判据放行后照常执行(有界: 不会永久让位)"
+
+
+def test_run_due_defer_gate_does_not_consume_budget():
+    """守阵(issue 26-10-30-0616): 让位者**不占 max_tasks 预算** —— 同组任务整组让位时同 tick 无关任务仍被执行
+
+    场景: 组级 own_write(整组停 / size 一致性停种)把同批同组任务整批让位; 它们若不占名额,
+    预算才留给真正能做事的任务 —— 否则组成员数 >= max_tasks 时无关任务一路饿到 own_write TTL 退出。
+
+    红验: 把 run_due 退回「先 _pop_due(now, max_tasks) 再逐个过闸」-> 3 个让位任务吃满
+    budget=3, 排在其后的 FX 本轮不被弹出, `ran == ["FX"]` 断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    ran = []
+    for i in range(3):  # 同组任务: 更早到期(堆序在前), 全部命中 defer
+        tq.add_task(
+            Task(
+                "rule", f"g{i}", hash=f"G{i}", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED
+            ),
+            now=now - 1,
+        )
+    tq.add_task(
+        Task("rule", "free", hash="FX", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED),
+        now=now,
+    )
+
+    def gate(task):
+        return "让位(测试)" if task.hash.startswith("G") else None
+
+    assert tq.run_due(now=now, max_tasks=3, defer_gate=gate) == 1, "让位者不占名额, 预算留给真正执行的任务"
+    assert ran == ["FX"], "整组让位时同 tick 的无关任务不应被饿死"
+    assert {t.hash for t in tq._fast} == {"G0", "G1", "G2"}, "让位者重入堆待下一 tick 再判"
+
+
+def test_run_due_defer_scan_bounded():
+    """守阵(issue 26-10-30-0616): 让位扫描面有上界 —— 让位者铺满时一轮 tick 不把整条队列扫穿
+
+    让位是「跳过」不是「执行」: 预算放开给跳过面后必须有界(上界 max_tasks * _DEFER_SCAN_FACTOR),
+    否则整组让位(组成员可达数百)会让一轮 tick 把全队列遍历一遍。
+
+    红验: 去掉 _pop_due 的 scan_cap 判据(让位扫描无界) -> 排在队尾的 FX 被扫到并执行,
+    `ran == []` 断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    ran = []
+    cap = _DEFER_SCAN_FACTOR + 20
+    for i in range(cap):  # 远超扫描上界的一整组让位任务
+        tq.add_task(
+            Task(
+                "rule", f"g{i}", hash=f"G{i}", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED
+            ),
+            now=now - 1,
+        )
+    tq.add_task(
+        Task("rule", "free", hash="FX", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED),
+        now=now,
+    )
+
+    assert tq.run_due(now=now, max_tasks=1, defer_gate=lambda task: "让位(测试)" if task.hash != "FX" else None) == 0, \
+        "扫描上界内全是让位者 -> 本轮无执行(不把队尾任务一并扫出)"
+    assert ran == [], "让位者本轮一律不执行"
+    assert len(tq._fast) == cap + 1, "所有任务仍在队列中(让位者未消亡)"
 
 
 def test_add_task_resets_by_default():

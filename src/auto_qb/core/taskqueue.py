@@ -12,7 +12,7 @@
 import heapq
 import logging
 import time
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..torrents import TorrentStore
@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 # 任务状态
 PENDING = "pending"  # 排队中(等待到期)
 RUNNING = "running"  # 已被主循环取出执行
+
+# 让位扫描上界系数(见 _pop_due): 让位任务不占可执行预算, 但"跳过"的扫描面必须有界 ——
+# 以 max_tasks 的倍数封顶, 免得整组让位时一轮 tick 把整条队列扫穿(让位是跳过不是执行)。
+_DEFER_SCAN_FACTOR = 5
 
 # handler 返回值语义(替代裸 True/False):
 REQUEUE = True  # 按 interval 重新入队(周期任务继续)
@@ -207,7 +211,7 @@ class TaskQueue:
     # ---------- 到期执行 + 收尾 ----------
 
     def run_due(self, dry_run: bool = False, now: float = None, max_tasks: int = 0, defer_gate=None) -> int:
-        """执行所有到期任务并收尾(主循环 tick 的队列唯一入口)。返回执行的任务数。
+        """执行所有到期任务并收尾(主循环 tick 的队列唯一入口)。返回**实际执行**的任务数。
 
         先快照到期任务再逐个执行: 执行中途新入队的任务(如轮询子任务重新入队的
         规则任务)留到下一次 run_due, 避免同批重入导致未校验即误判失败。
@@ -215,37 +219,59 @@ class TaskQueue:
         消亡(不入队, kind=="check" 释放在途登记)。
 
         defer_gate(A 系 26-10-13-0540 S2 的 D-1 队列级闸门): 可选回调 task -> 原因字符串
-        (命中)/None(放行)。命中者**本轮不执行**, 以 next_run=now 重新入堆(下一次 run_due
-        立即再判, 不等任务自身 interval)—— 目标 hash/其组刚被自有停/起时, task 线全体消费
-        让位, 等快照回流后下一 tick 再决策。有界性由 own_writes 的逐出/TTL 给出(不依赖外部
-        条件): 逐出或 TTL 到期后 defer_gate 返回 None, 任务照常执行(不会饿死)。
+        (命中)/None(放行)。命中者**本轮不执行、也不占 max_tasks 预算**(issue 26-10-30-0616),
+        以 next_run=now 重新入堆(下一次 run_due 立即再判, 不等任务自身 interval)—— 目标
+        hash/其组刚被自有停/起时, task 线全体消费让位, 等快照回流后下一 tick 再决策。
+        有界性由 own_writes 的逐出/TTL 给出(不依赖外部条件): 逐出或 TTL 到期后 defer_gate
+        返回 None, 任务照常执行(不会饿死)。
+
+        返回数只统计**真正执行**的任务: 让位者既没做事也没消耗 qB 请求预算, 计进返回数会
+        让上面的速率语义(20 个/2s)在 own_write 窗口内失真(整组让位时窗口内接近空转)。
         """
         now = time.time() if now is None else now
-        due = self._pop_due(now, max_tasks)
+        due, deferred = self._pop_due(now, max_tasks, defer_gate)
         for task in due:
+            if self._run_one(task, dry_run):
+                self._requeue(task, now)
+            elif task.kind == "check":
+                self._active_checks.pop(task.hash, None)  # 消亡: 释放在途登记
+        # 让位者在执行批次之后统一回填: 预算结算期间它们不在堆里, 不会被本轮重复弹出过闸
+        for task in deferred:
+            heapq.heappush(self._fast, task)
+        return len(due)
+
+    def _pop_due(self, now: float, max_tasks: int, defer_gate=None) -> Tuple[List[Task], List[Task]]:
+        """弹出到期任务(按 next_run 时间优先), 返回 (可执行批次, 让位批次)
+
+        max_tasks 只约束**可执行**名额 —— 让位者不占预算(issue 26-10-30-0616): 组级
+        own_write(整组停 / size 一致性停种)会把同批同组任务整组让位, 若它们照旧各占一个
+        名额, 组成员数 >= max_tasks 时同 tick 的无关任务一个都轮不到、一路饿到 own_write
+        TTL 退出, 速率语义(max_tasks/2s)在该窗口失真。
+
+        两个有界性: ① 让位者本轮**先留在堆外**(由 run_due 在执行批次后回填), 否则
+        next_run=now 的它们会被本轮再次弹出、重复过闸; ② 扫描面以 max_tasks *
+        _DEFER_SCAN_FACTOR 封顶 —— 让位是"跳过"不是"执行", 不能让一轮 tick 把整条队列
+        扫穿。max_tasks<=0 表示不限(沿用内部语义, 与 config 侧的 >=1 校验无关)。
+        """
+        due: List[Task] = []
+        deferred: List[Task] = []
+        scan_cap = 0 if max_tasks <= 0 else max_tasks * _DEFER_SCAN_FACTOR
+        while (
+            (max_tasks <= 0 or len(due) < max_tasks) and (scan_cap <= 0 or len(due) + len(deferred) < scan_cap) and
+            self._fast and self._fast[0].next_run <= now
+        ):
+            task = heapq.heappop(self._fast)
             task.state = RUNNING
             if defer_gate is not None:
                 reason = defer_gate(task)
                 if reason:
                     task.state = PENDING
                     task.next_run = now  # 下一 run_due 再判(deferral 语义 = 让位下一 tick)
-                    heapq.heappush(self._fast, task)
+                    deferred.append(task)
                     logger.debug(f"任务[{task.log_tag}] | deferral 让位(下一 tick 重判): {reason}")
                     continue
-            if self._run_one(task, dry_run):
-                self._requeue(task, now)
-            elif task.kind == "check":
-                self._active_checks.pop(task.hash, None)  # 消亡: 释放在途登记
-        return len(due)
-
-    def _pop_due(self, now: float, max_tasks: int) -> List[Task]:
-        """弹出所有到期任务(按 next_run 时间优先), max_tasks 限制弹出数量"""
-        due = []
-        while (max_tasks <= 0 or len(due) < max_tasks) and self._fast and self._fast[0].next_run <= now:
-            task = heapq.heappop(self._fast)
-            task.state = RUNNING
             due.append(task)
-        return due
+        return due, deferred
 
     def _run_one(self, task: Task, dry_run: bool) -> bool:
         """执行任务 handler, 捕获异常; 返回 REQUEUE(周期继续)或 FINISHED(消亡/移交子任务)"""
