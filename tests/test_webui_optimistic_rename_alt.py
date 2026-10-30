@@ -8,6 +8,7 @@
 - test_on_truth_event_kind_injection_action_guard: 守阵二(plan §04 S1.3 / §07 行1): commands.js::onTruthEvent 的 kind 注入必须带 action 守卫 —— 只对 pause/resume 的 op 注入 kind(patch/prev/hold/ts 四写全在守卫块内), rename 等 action 的 op 保持原 patch(掺入 kind 会让 _optimisticSettled 逐键比对永远差一键, 对账判据被污染, op 挂到 8s 兜底才回滚且行名被错误弹回)
 - test_rename_optimistic_four_states_node: rename 四态 node 电池(plan §04 S5, 仿 pause/resume 乐观既有用例; 无 node 静默跳过): 真跑 commands.js + drawer.js 的 editRename 全链 —— 态1 贴上(POST 发出时行上已是新名, op grey=true/hold=false)/态2 回执 ok 转 hold(值覆盖保持, 陈旧快照回到来不弹回)/态3 失败回滚(原名恢复, op 清除)/态4 快照对齐清除(op 清除且显示保持新名不弹回); 附加: 3s 无回执兜底回滚 + §07 指定回归「rename 收到 truth 事件后 patch 仍只有 name」(对照: pause op 照旧注入 kind 转 hold)
 - test_alt_override_four_states_node: altOverride 四态 node 电池(plan §04 S2, 无 node 静默跳过): 真跑 dialogs.js 的 toggleAltSpeed/_altOverride* 与 sbAltOn 显示单点 —— 态1 预翻转(点击当帧 sbAltOn 已翻转且 3s 兜底武装)/态2 三路回滚(回执 error/发送失败/3s 无回执 -> 覆盖清除回落 server 值)/态3 确认清除(轮询带回一致值 -> 清除且零观感跳变; 带回旧值 -> 覆盖保留不弹回)/态4 8s 兜底清除(回执 ok 转 hold 后 8s 未确认 -> 清除; 旧 3s 兜底误触发被 needHold 守卫拦下); 另钉接线静态锚: sbAltOn override 优先 server 兜底 + polling.js statsServer 赋值后必调 _altOverrideReconcile + state.js data 声明 altOverride
+- test_alt_limits_empty_gate_node: altLimits 非空闸 node 电池(issue 26-10-30-0622, 无 node 静默跳过): 真跑 dialogs.js 的 submitAltLimits —— A /api/speed/mode 读失败窗口(altCurrent=null 两框回空)整组跳过零 POST / B 任一框为空同判(与 speedOvReady 同形) / C 未改动不下发 / D 改动照常 POST 载荷正确 / E 显式 0=不限速不拦
 """
 
 import json
@@ -402,3 +403,73 @@ def test_alt_override_four_states_node():
     assert re.search(r"altOverride:\s*null,", state), "state.js data 缺 altOverride 声明(覆盖态没有落点)"
 
     _run_node_probe(_ALT_NODE_PROBE, _shared_path("dialogs.js"))
+
+
+_ALT_LIMITS_PROBE = r"""
+const fs = require("fs");
+globalThis.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));   // dialogs.js(submitAltLimits/_postWaitCmd)
+const D = window.AQB_DIALOGS.methods;
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+
+const mkCtx = (altCurrent, up, down) => {
+  const posts = [];
+  const ctx = {
+    speedAlt: { up, down, busy: false },
+    speedMode: { altCurrent },
+  };
+  Object.assign(ctx, D);
+  ctx.api = async (url, opts) => { posts.push({ url, body: JSON.parse(opts.body) }); return { cmd_id: "c1" }; };
+  ctx.waitCmd = async () => ({ ok: true });
+  ctx.toast = () => {};
+  ctx._finishToast = () => {};
+  ctx.fmtLimit = () => "";   // okMsg 模板串构造时即取值, 桩成空不影响载荷断言
+  return { ctx, posts };
+};
+
+(async () => {
+  /* A(issue 26-10-30-0622 修复目标): /api/speed/mode 读失败窗口 altCurrent=null, _fillSpeedFields
+   * 两框回空, 用户只填主速点「应用」—— 整组必须跳过(返回 true 不挡主速), 零 POST。 */
+  const { ctx: cA, posts: pA } = mkCtx(null, "", "");
+  ok("A: 读失败窗口两框全空 -> 整组跳过(返回 true)", await D.submitAltLimits.call(cA) === true);
+  ok("A: 零 POST 且 busy 已复位", pA.length === 0 && cA.speedAlt.busy === false);
+
+  /* B: 任一框为空同判(与 speedOvReady 同形的非空闸) */
+  const { ctx: cB, posts: pB } = mkCtx({ upload_limit: 50, download_limit: 60 }, "", "60");
+  ok("B: 任一框为空 -> 整组跳过", await D.submitAltLimits.call(cB) === true && pB.length === 0);
+
+  /* C: 未改动不下发(既有承诺, 闸不得破坏它) */
+  const { ctx: cC, posts: pC } = mkCtx({ upload_limit: 50, download_limit: 60 }, "50", "60");
+  ok("C: 未改动 -> 不下发", await D.submitAltLimits.call(cC) === true && pC.length === 0);
+
+  /* D: 改动照常下发, 载荷数值正确 */
+  const { ctx: cD, posts: pD } = mkCtx({ upload_limit: 50, download_limit: 60 }, "50", "70");
+  ok("D: 改动 -> POST /api/speed/alt 载荷正确", await D.submitAltLimits.call(cD) === true &&
+    pD.length === 1 && pD[0].url === "/api/speed/alt" &&
+    pD[0].body.upload_kib === 50 && pD[0].body.download_kib === 70);
+
+  /* E: 显式 0 = 不限速照常下发(非空闸只拦空串, 不拦 0) */
+  const { ctx: cE, posts: pE } = mkCtx({ upload_limit: 50, download_limit: 60 }, "0", "60");
+  ok("E: 显式 0(不限速)照常下发", await D.submitAltLimits.call(cE) === true &&
+    pE.length === 1 && pE[0].body.upload_kib === 0 && pE[0].body.download_kib === 60);
+
+  process.stdout.write(JSON.stringify({
+    title: "altLimits空闸",
+    ok: checks.filter((c) => c[1]).length,
+    total: checks.length,
+    failed: checks.filter((c) => !c[1]).map((c) => c[0]),
+  }) + "\n");
+})().catch((e) => { console.error(e && e.stack || e); process.exit(1); });
+"""
+
+
+def test_alt_limits_empty_gate_node():
+    """altLimits 非空闸 node 电池(issue 26-10-30-0622): 真跑 dialogs.js 的 submitAltLimits
+
+    五案: A /api/speed/mode 读失败窗口(altCurrent=null 两框回空)整组跳过零 POST —— 修复目标,
+    闸前 Number("")||0=0 会把备用限速静默写成 0/0(不限速); B 任一框为空同判(与 speedOvReady
+    同形); C 未改动不下发(既有承诺不破); D 改动照常 POST 载荷正确; E 显式 0=不限速不拦。
+    api/waitCmd/toast 走最小桩, 其余真方法。无 node 静默跳过(与本文件既有电池同口径)。
+    """
+    _run_node_probe(_ALT_LIMITS_PROBE, _shared_path("dialogs.js"))

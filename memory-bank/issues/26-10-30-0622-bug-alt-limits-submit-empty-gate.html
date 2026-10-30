@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-30-0622">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-0835-webui-alt-limits-empty-gate.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="备用限速组缺非空闸, 读失败窗口提交即静默写 0/0">
 <meta name="issue-summary" content="submitAltLimits 无字段非空闸, /api/speed/mode 读失败窗口内提交把备用限速静默写成不限速, 打破「未改动的组不下发」承诺">
 <title>备用限速组缺非空闸, 读失败窗口提交即静默写 0/0 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0622-bug-alt-limits-submit-empty-gate</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,7 +99,19 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 — 用户指派认领，状态 <strong>In Progress</strong>。复验：HEAD <code>3e56ca4f</code> 现象仍在（<code>submitAltLimits</code> 现位于 dialogs.js:628，无字段非空闸，<code>Number("")||0</code> 路径原样）</li>
+      <li>2026-10-30 — 已修并验证，状态 <strong>Done</strong>。测试数字见 <code>commands run kb.baseline</code> 最新切片（<code>testing/baselines/26-10-30-0835-webui-alt-limits-empty-gate.md</code>）</li>
     </ul>
+    <h3>修复后补充</h3>
+    <p><b>实际修法（按建议一）</b>：<code>submitAltLimits</code> 入口补与 <code>speedOvReady</code> 同形的非空闸 ——
+      两框任一为空串或非有限数即整组跳过不下发（返回 <code>true</code> 不挡主速组提交），
+      对齐「未改动的组不下发」承诺；显式设不限速须输入 <code>0</code>，与主速组同口径。
+      建议二的「altCurrent 为 null 时禁用备用组两控件」未采纳：非空闸已堵死静默路径，
+      禁用控件会连带挡住「读失败恢复后手动重试」的正常路径，且两框在 alt 关闭时本就合理为空。</p>
+    <p><b>验证方式</b>：新增 node 电池 <code>test_alt_limits_empty_gate_node</code>（真跑 dialogs.js 的
+      <code>submitAltLimits</code>，api/waitCmd/toast 最小桩）五案 —— A 读失败窗口（altCurrent=null 两框回空）整组跳过零 POST /
+      B 任一框为空同判 / C 未改动不下发（既有承诺不破）/ D 改动照常 POST 载荷正确 / E 显式 0=不限速不拦。
+      闸移除即 A/B 案红（空串会走 POST）。全量 <code>commands run test.full</code> 绿（数字见上基线切片）。</p>
   </section>
 
   <footer>

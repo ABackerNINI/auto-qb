@@ -626,6 +626,12 @@ window.AQB_DIALOGS = {
       if (serverOn === ov.value) this._altOverrideClear();
     },
     async submitAltLimits() {
+      // 非空闸(issue 26-10-30-0622): 与 speedOvReady 同形 —— 两框任一为空 = 该组未确认,
+      // 整组跳过不下发(返回 true 不挡主速组)。/api/speed/mode 读失败窗口 altCurrent=null
+      // 时 _fillSpeedFields 把两框回空, 放行会让 Number("")||0 = 0 把备用限速静默写成
+      // 0/0(不限速), 打破「未改动的组不下发」; 显式设不限速须输入 0, 与主速组同口径。
+      if (this.speedAlt.up === "" || this.speedAlt.down === "" ||
+        !Number.isFinite(Number(this.speedAlt.up)) || !Number.isFinite(Number(this.speedAlt.down))) return true;
       const up = Math.max(0, Math.round(Number(this.speedAlt.up) || 0));
       const down = Math.max(0, Math.round(Number(this.speedAlt.down) || 0));
       const c = this.speedMode.altCurrent || {};
