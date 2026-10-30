@@ -7,9 +7,10 @@
 <title>种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="torrent-transfer">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-31-0306">
-<meta name="doc-updated" content="26-10-31-0306">
+<meta name="doc-updated" content="26-10-31-0608">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0608-torrent-transfer.md">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +75,7 @@
 <h1>种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单</h1>
 <p class="lede">把主 qB 的种子任务原样转移到用户在 WebUI 配置的其它下载器(qB 先行, Transmission 留接口暂不做)——保留分类/标签/保存路径/限速等字段且字段集按目标各配一套; 语义是「移动任务、不动数据」: 转移在后端执行, 前端经四支右键菜单「转移到」触发, 确认弹窗参照删除流四段式。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-0306 · <b>doc-updated</b> 26-10-31-0306 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-0306 · <b>doc-updated</b> 26-10-31-0608 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(26-10-31, 三轮问答 + 风险分析), 用户指令「原样转移种子到其它 qb/tr/其它下载器」
 </div>
 
@@ -200,6 +201,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-31-0306</span> 初版: grilling 三轮问答 + 风险分析后设计树闭合, 拍板 D1-D10 全量落档; 方案三层结构(配置/执行/交互)、五轮实施分期(W1-W5)、状态门与跳检自动降级规则、风险与对策表。</li>
+  <li><span class="tag">R1 · 26-10-31-0608</span> 实施完成: W1-W5 代码与自动化测试全落地(配置层 transfer targets/执行层 transfer 包+orchestrator/API /api/transfer/run·test/设置页目标编辑器+密码掩码下钻修复 T4.5/四支右键菜单「转移到」+四段式确认弹窗), 全量测试见 kb.baseline 最新切片; 真机验收(真实双 qB 手工转移核对)留待用户</li>
 </ul>
 
 </div>
