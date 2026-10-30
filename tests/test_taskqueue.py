@@ -18,6 +18,11 @@
 - test_run_due_requeue_resets: 周期收尾重入队默认重置(不携带上一轮断点)
 - test_reset_clears_breakpoint: Task.reset() 显式重置执行位置
 - test_deleted_torrent_tasks_die_naturally: 已删种子任务到期自然消亡并释放在途登记
+- test_has_task_lookup: (kind,name,hash) 三元组判重 —— 命中 / 任一字段不同不命中
+- test_has_named_lookup: has_named=internal+无 hash 特例转发 —— 同名命中 / 名不同 / 带 hash / 非 internal 不命中
+- test_named_lookup: named 按名取全局任务 —— 命中返回同一对象 / 缺失与形态不符返回 None
+- test_query_helpers_empty_queue: 空队列下 has_task/has_named/named/active_check_age 的反向对照
+- test_active_check_age_lookup: active_check_age —— 未登记 None / 登记后非负且量级有界 / 消亡释放回 None
 """
 import time
 
@@ -275,3 +280,85 @@ def test_deleted_torrent_tasks_die_naturally():
     assert tq.run_due(now=now) == 2
     assert tq.active_check_hashes() == set()
     assert tq.run_due(now=now + 60) == 0, "消亡后不应有残留"
+
+
+def test_has_task_lookup():
+    """has_task: (kind, name, hash) 三元组判重 —— 命中返回 True, 任一字段不同返回 False
+
+    种子级任务幂等判据(issue 26-10-01-2147): 两个创建入口共用, 语义错了重复入队无守阵。
+
+    红验: 三元组比较的任一 `==` 被变异(`and` 短路破坏) -> 「字段不同」断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    tq.add_task(Task("rule", "r", hash="H1"), now=now)
+    assert tq.has_task("rule", "r", "H1") is True, "三元组全匹配应命中"
+    assert tq.has_task("rule", "r", "H2") is False, "hash 不同不应命中"
+    assert tq.has_task("rule", "x", "H1") is False, "name 不同不应命中"
+    assert tq.has_task("check", "r", "H1") is False, "kind 不同不应命中"
+
+
+def test_has_named_lookup():
+    """has_named: 全局任务(internal + 无 hash)幂等判据 —— 同名命中; 名不同/带 hash/非 internal 不命中
+
+    模块任务自注册守卫(kernel-module-refactor P3): 重复注册必须无副作用, 判据太宽
+    (把带 hash 的种子级同名任务也算上)会误拦, 太窄(漏 internal 无 hash 形态)会漏拦。
+
+    红验: has_task("internal", name, "") 的实参被变异(kind/hash 换值) -> 「形态不符」断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    tq.add_task(Task("internal", "kernel", handler=lambda t, d: REQUEUE), now=now)
+    assert tq.has_named("kernel") is True, "internal+无 hash 同名应命中"
+    assert tq.has_named("other") is False, "名不同不应命中"
+    tq.add_task(Task("internal", "tagged", hash="H9", handler=lambda t, d: REQUEUE), now=now)
+    assert tq.has_named("tagged") is False, "internal 带 hash 不是全局任务形态, 不应命中"
+    tq.add_task(Task("rule", "kernel", hash="H1"), now=now)
+    assert tq.has_named("kernel") is True, "同名 rule 任务不应干扰 internal 判据"
+
+
+def test_named_lookup():
+    """named: 按名取全局任务(internal + 无 hash), 唯一用途是就地改节奏 —— 命中返回同一对象, 否则 None
+
+    红验: `not t.hash` / `kind == "internal"` 被翻转 -> 返回错误对象或 None, `is` 身份断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    internal = Task("internal", "kernel", payload="v1", handler=lambda t, d: REQUEUE)
+    tq.add_task(internal, now=now)
+    assert tq.named("kernel") is internal, "应返回队列中的同一对象(就地改节奏的前提)"
+    assert tq.named("missing") is None, "查无此名返回 None"
+    tq.add_task(Task("internal", "tagged", hash="H9", handler=lambda t, d: REQUEUE), now=now)
+    assert tq.named("tagged") is None, "internal 带 hash 不是全局任务形态"
+    tq.add_task(Task("rule", "kernel", hash="H1"), now=now)
+    assert tq.named("kernel") is internal, "同名 rule 任务不应被误返回"
+
+
+def test_query_helpers_empty_queue():
+    """查询四件套在空队列下的反向对照: 一律「未命中」语义"""
+    tq = TaskQueue()
+    assert tq.has_task("rule", "r", "H1") is False, "空队列 has_task 应为 False"
+    assert tq.has_named("kernel") is False, "空队列 has_named 应为 False"
+    assert tq.named("kernel") is None, "空队列 named 应为 None"
+    assert tq.active_check_age("H1") is None, "空队列 active_check_age 应为 None"
+
+
+def test_active_check_age_lookup():
+    """active_check_age: 在途登记时长(monotonic, 供 TTL 泄漏判据) —— 未登记 None / 登记后有界非负 / 消亡释放回 None
+
+    红验: `time.monotonic() - ts` 被变异(减号换加号) -> 时长爆到 monotonic 量级, 上界断言红;
+    `ts is None` 分支被翻转 -> 未登记时返回 None 断言红。
+    """
+    tq = TaskQueue()
+    assert tq.active_check_age("H1") is None, "未登记返回 None"
+    now = time.time()
+    tq.add_task(Task("check", "c", hash="H1", interval=60, handler=lambda t, d: REQUEUE), now=now)
+    age = tq.active_check_age("H1")
+    assert age is not None, "登记后应有时长"
+    assert isinstance(age, float) and 0.0 <= age < 60, "时长应为秒级小值(非负且远小于 TTL 量级)"
+    tq.run_due(now=now)
+    assert tq.active_check_age("H1") is not None, "handler REQUEUE 重入队不释放登记"
+    dying = Task("check", "c2", hash="H2", interval=60, handler=lambda t, d: FINISHED)
+    tq.add_task(dying, now=now)
+    tq.run_due(now=now)
+    assert tq.active_check_age("H2") is None, "消亡应释放在途登记"
