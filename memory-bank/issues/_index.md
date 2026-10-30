@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 8 |
 | perf | 8 |
 | docs | 1 |
 | test | 2 |
@@ -153,9 +153,8 @@
 - [refactor] [右键菜单 .ctx-item 渲染骨架 5 份(注册表已单点项集, 骨架未单点)](26-10-20-2231-refactor-fe-tpl-ctx-item-branch-dup.html) — ctx-menus.ht…
 - [refactor] [模板层列表行容器三明治 4 份 + 空态块 12 处(3 处无图标, 入池时记 11)](26-10-20-2231-refactor-fe-tpl-list-row-empty-dup.html) — row-pad 上下占位…
 - [refactor] [模板层开关 7 处 / 折叠段头 5 处 / 折叠交互 4 种 / 分段钮组 4 套](26-10-20-2231-refactor-fe-tpl-switch-fold-seg-dup.html) — hb-switch 7…
-- [test] [三份 index.html shell 的 sprite 段与 login 段缺守阵(现在靠人工三处同步)](26-10-20-2231-test-fe-tpl-shell-parity-guard.html) — 三 shell 除 he…
 
-> 更早的 **221** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **222** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
