@@ -306,9 +306,9 @@ def _method_body(text: str, fn: str) -> str:
 def test_scope_audit_wiring() -> None:
     """T6: 运行时审计接线(S4, 计划 26-10-10-2001 §5b/§6)。
 
-    审计是第三张网的运行时半张: 三出口各记账一次, e2e 断言环内无偏差。本守阵钉三件事:
-    1. 三出口(_actCore/_deleteFlow/_metaBulk)各恰一处 `_auditScope(` —— 出口收敛的运行时
-       消费点, 少一处 = 有出口绕开审计; 多一处 = 审计面被稀释(同一动作记两次账);
+    审计是第三张网的运行时半张: 各出口各记账一次, e2e 断言环内无偏差。本守阵钉三件事:
+    1. 四出口(_actCore/_deleteFlow/_metaBulk/transferOpen)各恰一处 `_auditScope(` ——
+       出口收敛的运行时消费点, 少一处 = 有出口绕开审计; 多一处 = 审计面被稀释(同一动作记两次账);
     2. 开关 `window.__AQB_AUDIT_SCOPE__` 全源码(含模板)无赋值点 —— 生产默认关是保守默认
        硬约束(黄金法则 2); 打开只允许发生在 e2e 的 Playwright 注入脚本里;
     3. 环有界(>50 挤出) —— 长会话不涨内存; 环单点在 scope_audit.js(不许散落第二处)。
@@ -317,13 +317,19 @@ def test_scope_audit_wiring() -> None:
     audit = all_text.get("scope_audit.js")
     assert audit, "shared/scope_audit.js 不存在(S4 审计单点被删?)"
 
-    # 1) 三出口各恰一处
-    outlets = {"commands.js": "_actCore", "delete_flow.js": "_deleteFlow", "dialogs.js": "_metaBulk"}
+    # 1) 四出口各恰一处(26-10-31-0306 T7 起加 transfer_flow::transferOpen —— 种子转移
+    #    是继命令/删除/元数据之后的第四个作用域消费出口, 账只记这一处)
+    outlets = {
+        "commands.js": "_actCore",
+        "delete_flow.js": "_deleteFlow",
+        "dialogs.js": "_metaBulk",
+        "transfer_flow.js": "transferOpen",
+    }
     for fname, fn in outlets.items():
         body = _method_body(all_text[fname], fn)
-        assert "this._auditScope(" in body, f"{fname}::{fn} 出口缺 _auditScope 记账(S4 三出口接线断裂)"
+        assert "this._auditScope(" in body, f"{fname}::{fn} 出口缺 _auditScope 记账(S4 出口接线断裂)"
     total = sum(t.count("this._auditScope(") for t in all_text.values())
-    assert total == 3, f"_auditScope 调用点共 {total} 处, 应恰为三出口各 1 处(多=审计面被稀释, 少=有出口绕开)"
+    assert total == len(outlets), (f"_auditScope 调用点共 {total} 处, 应恰为 {len(outlets)} 出口各 1 处(多=审计面被稀释, 少=有出口绕开)")
 
     # 2) 默认关: 开关只有读取, 没有任何赋值点(shared/*.js + tpl/*.html)
     for name, text in all_text.items():

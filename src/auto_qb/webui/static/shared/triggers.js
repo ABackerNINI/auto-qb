@@ -307,6 +307,10 @@ const TRIGGER_DEFS = {
     {
       "file": "transfer_targets.js", "fn": "ttTest", "ep": "/api/transfer/test",
       "scope": "none", "why": "设置页种子转移目标的连通性探测(计划 26-10-31-0306 W1/T5): 面板动作按目标名发给后端, 与选中/锚点无关"
+    },
+    {
+      "file": "transfer_flow.js", "fn": "_transferExec", "ep": "/api/transfer/run",
+      "scope": "sel|anchor", "why": "种子转移批次执行(计划 26-10-31-0306 W4/T7): hashes 来自右键菜单作用域快照(_ctxScope 闭包), 确认弹窗预检后才投递"
     }
   ]
 };

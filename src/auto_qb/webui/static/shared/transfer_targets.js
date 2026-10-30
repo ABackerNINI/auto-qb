@@ -68,6 +68,8 @@ const TT_TYPE_LABELS = { qb: "qBittorrent", tr: "Transmission(预留)" };
 /* 挂 window 供守阵探针(test_transfer_targets_editor.py)与未来复用方读取:
  * 与后端 TRANSFER_FIELD_KEYS 的逐位对账就从这里取, 不用正则剖 JS 源码。 */
 window.AQB_TRANSFER_FIELDS = TT_FIELDS;
+/* 类型展示名同款挂载(T7 确认弹窗的「目标」行复用, 不抄第二份标签表) */
+window.AQB_TRANSFER_TYPE_LABELS = TT_TYPE_LABELS;
 
 window.AQB_TRANSFER_TARGETS = {
   computed: {
