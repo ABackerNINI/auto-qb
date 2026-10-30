@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>kb.nav 多选与批量右键菜单</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-nav-multiselect">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-0143">
+<meta name="doc-updated" content="26-10-31-0337">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: kb-nav-multiselect</div>
+<h1>kb.nav 多选与批量右键菜单</h1>
+<p class="lede">给 kb.nav 导航页台账加文件管理器式多选（Ctrl/Shift 点击）与批量右键菜单——行属于选中集合时菜单升级为批量（如「复制仓库路径 · 3」一次复制 3 行）；交互逻辑参照 auto-qb webui <code>selection.js</code>/<code>menu.js</code> 既有口径，单文件 <code>nav_page.html</code> 内闭环，服务端零改动。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0143 · <b>doc-updated</b> 26-10-31-0337 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling 2026-10-31（两轮 13 问全部拍板，结论见 §06；参照实现 src/auto_qb/webui/static/shared/selection.js · menu.js）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景与目标</b>：kb.nav 台账目前只能单条交互——批量复制路径/隐藏/置顶要逐条右键。本计划给台账主表与置顶专区加多选，右键菜单按「行 ∈ 选区 → 整集合生效」升级为批量。<b>算成的标准</b>：①主表+置顶区可 Ctrl/Shift 多选且双区同亮；②右键批量四项全部可用，复制 N 件 = N 行文本；③Esc /「已选 N」chip / Ctrl+A 齐备；④<code>tests/test_kb_nav.py</code> 守阵扩条全绿。</p>
+<p><b>设计底线 / 不变量</b>：</p>
+<ul>
+  <li><b>纯前端会话态</b>：<code>nav_data.py</code>/<code>nav_server.py</code> 零改动；选区不落 localStorage（同 <code>S.sel</code> 口径）。</li>
+  <li><b>选区以 link 为键</b>：与可见性、双区显示解耦（置顶件双向显示，两处同亮）。</li>
+  <li><b>普通左键单击语义不破坏</b>：单击 = 单选高亮 + 开抽屉，<b>不动多选集</b>（auto-qb「普通点击不选中/不清选」口径，用户明确拒绝「单击清多选」——容易误触）。</li>
+  <li><b>右键不改选区</b>：不新增、不清空（auto-qb menu.js 口径）。</li>
+  <li><b>幂等（黄金法则 1）</b>：批量置顶/隐藏对已处于目标态的成员零副作用。</li>
+  <li><b>零列结构改动</b>：不加列、不加 td，<code>ledgerCells</code> 复用——列序守阵不触发。</li>
+  <li><b>file:// 静态导出同样可用</b>：剪贴板沿用现有双链路降级（<code>navigator.clipboard</code> → <code>execCommand</code>）。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>载体 <code>.agents/skills/memory-bank/scripts/nav_page.html</code>（1599 行单文件）。相关现状：</p>
+<ul>
+  <li><b>单选</b>：主表 <code>#aRows</code> 行为 <code>&lt;tr data-link&gt;</code>，单选态 <code>S.sel</code>（<code>tr.sel</code> 高亮 + 详情抽屉，nav_page.html:1025-1026、1347-1356）。</li>
+  <li><b>右键菜单</b>：<code>openCtx(x, y, link)</code> 硬编码<b>单 link</b>，固定 4 项（置顶/隐藏/打开原文/复制仓库路径，nav_page.html:1119-1133）；主表、pinZone、hidZone 三处 contextmenu 委托共用（1357-1362 / 1370-1375 / 1386-1391）；菜单点击分发在 1393-1402；<code>copyPath</code> 双链路降级（1138-1152）。</li>
+  <li><b>Esc 退栈链</b>已存在：overlay → ctxMenu → drawer → sel（1404-1431，计划 26-10-13-0324）。</li>
+  <li><b>渲染/状态</b>：<code>POLL_MS=30000</code> 轮询 re-render（1592）；pin/hide/筛选落 localStorage（765-839），<code>S.sel</code> 会话态。</li>
+  <li><b>置顶双向显示</b>：被 pin 的件照旧留在主表，主表/pinZone 两处同 <code>data-link</code>（renderPinZone 注释，nav_page.html:1049）。</li>
+</ul>
+<div class="aside"><b>痛点</b>：整理知识库时「把这一批过时的 issues 都隐藏」「把相关 5 件路径发给别人」都要逐条右键，N 件 = N 次操作。</div>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 状态模型</h3>
+<ul>
+  <li><code>S.multi</code>：link 数组（会话态，入栈序）；派生 <code>Set</code> 判成员。切视图即清空（§06 D5）。</li>
+  <li><code>S.multiAnchor</code>：Shift 扩段锚点 link（普通/Ctrl 点击落锚点，Shift 不动锚点——auto-qb 法则 2，可从同一起点多次扩段）。</li>
+  <li>渲染：<code>renderLedger</code>/<code>renderPinZone</code> 出行时按 link ∈ 选区挂 <code>class="msel"</code>——轮询 re-render 天然存活（状态在 S、DOM 重建时重挂）。</li>
+</ul>
+<h3>3.2 交互模型（照 auto-qb 口径）</h3>
+<table>
+  <tr><th>手势</th><th>语义</th><th>出处</th></tr>
+  <tr><td>普通左键单击</td><td>现行为：清单选高亮 → 该行 <code>S.sel</code> + 开抽屉；<b>不动 S.multi</b></td><td>selection.js onTorrentClick（D3）</td></tr>
+  <tr><td>Ctrl+click</td><td>切换该行多选态（同时落锚点），不开抽屉</td><td>同上（D1）</td></tr>
+  <tr><td>Shift+click</td><td>锚点→该行在当前可见序的<b>区间并入</b>选区（<code>new Set</code> 合并去重，锚点不动）；不开抽屉</td><td>selection.js shiftTorrentSel（D1）</td></tr>
+  <tr><td>右键（行 ∈ 选区）</td><td>菜单升级为<b>批量</b>：作用于整个选中集合（有序 link 数组快照，打开菜单那一刻冻结）</td><td>menu.js CTX-03（D4）</td></tr>
+  <tr><td>右键（行 ∉ 选区）</td><td>保持现状单条菜单，四项文案不变</td><td>同上（D4）</td></tr>
+  <tr><td>Esc</td><td>退栈链<b>末档</b>新增：其它层全关后再按 = 清空多选</td><td>（D9）</td></tr>
+  <tr><td>Ctrl+A</td><td>焦点不在输入框且台账视图：全选主表当前可见行，<code>preventDefault</code></td><td>（D11）</td></tr>
+</table>
+<h3>3.3 批量菜单语义</h3>
+<ul>
+  <li><b>文案带计数</b>（D12）：批量态每项加灰色 N 后缀，如 <code>隐藏条目 · 3</code>、<code>复制仓库路径 · 3</code>；单条态保持现状文案。菜单项动作走与单条<b>同一条分发链</b>，只是目标从 1 个 link 变 N 个。</li>
+  <li><b>置顶/隐藏动态单项幂等</b>（D6）：全已置顶 → 显示「取消置顶」，否则显示「置顶到专区」（动作 = 把未达态成员置到该态，已达态不动）；隐藏同理（选区在主表，恒为「隐藏条目」方向）。</li>
+  <li><b>打开原文</b>（D7）：逐个 <code>window.open</code>；N &gt; 5 先 <code>window.confirm("将打开 N 个标签页，继续？")</code>，取消则不动。被浏览器拦弹窗静默失败（同 copyPath 静默降级口径）。</li>
+  <li><b>复制仓库路径</b>（D8）：每行一个 <code>memory-bank/&lt;link&gt;</code>，顺序 = 主表当前可见序（<code>aFiltered()</code> 序）；被筛选掉但仍在选区的行追加在后（按 DATA.items 全量序）。</li>
+</ul>
+<h3>3.4 辅助件</h3>
+<ul>
+  <li><b>「已选 N」chip</b>（D10）：顶栏计数徽章，点击清空多选；N=0 隐藏。</li>
+  <li><b>双区同亮</b>（D13）：置顶件在主表与 pinZone 两处行都挂 <code>msel</code>；批量目标 = 选区 link 去重集。hidZone 不参与多选，右键保持单条（D2）。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p>单期落地（全部在 <code>nav_page.html</code> + <code>tests/test_kb_nav.py</code>，服务端零改动）；仅当守阵暴露结构问题时再拆期。</p>
+<table>
+  <tr><th>#</th><th>步骤</th><th>验收判据</th></tr>
+  <tr><td>1</td><td>状态与渲染：<code>S.multi</code>/<code>S.multiAnchor</code> 会话态；<code>renderLedger</code>/<code>renderPinZone</code> 挂 <code>msel</code> 类；<code>msel</code> 与 <code>sel</code> 样式同框可辨（<code>.msel</code> 用 accent 弱底、<code>.sel</code> 保持现状强调）</td><td>Ctrl 点主表行亮、轮询 30s 后仍亮；同 link 置顶区行同亮；<code>sel</code>+<code>msel</code> 并存不糊</td></tr>
+  <tr><td>2</td><td>点击手势：<code>aRows</code>/<code>pinZone</code> click 委托加 Ctrl/Shift 分支（Shift 前先按 auto-qb 顺序落锚点——先锚点后解析，防区间塌单行）；普通单击路径零改动</td><td>Ctrl 切换、Shift 区间并入、同锚点二次扩段累计；单击开抽屉且多选不动</td></tr>
+  <tr><td>3</td><td>右键升级：<code>openCtx</code> 目标从单 link 改为「该行 ∈ 选区 ? 选区有序快照 : [该行]」；批量态四项文案加 <code>· N</code>；右键不改选区</td><td>选区内右键菜单项带 N；选区外右键文案与现状逐字相同</td></tr>
+  <tr><td>4</td><td>批量动作分发：pin/hide 幂等批量（动态单项文案）；<code>copyPathN</code>（可见序 + 不可见追加，join "\n"）；<code>openN</code>（&gt;5 confirm）</td><td>混合态置顶后全达态；复制 N 件恰 N 行且顺序符合 §3.3；6 件弹 confirm、5 件不弹</td></tr>
+  <tr><td>5</td><td>辅助件：Esc 退栈末档清多选；顶栏「已选 N」chip（点击清空）；Ctrl+A（输入框焦点豁免 + preventDefault）</td><td>退栈序 overlay→ctxMenu→drawer→多选逐档；chip 计数随操作实时；Ctrl+A 不吞输入框</td></tr>
+  <tr><td>6</td><td>守阵：<code>tests/test_kb_nav.py</code> 扩条（S.multi 形状 / msel 类 / 幂等批量 / 文案 N / 复制顺序），同步文件头 docstring「测试计划」清单；<code>commands run test.full</code> + 新建基线切片</td><td>全绿；基线切片记实测数字</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 两轮 13 问已全部拍板，结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>选择机制 = Ctrl+click 切换 + Shift+click 区间<b>并入</b>（auto-qb shiftTorrentSel 口径）；无复选框列、无拖框</td><td>2026-10-31</td></tr>
+  <tr><td>D2</td><td>范围 = 主表 + <b>置顶专区</b>（用户指定）；隐藏区不参与多选</td><td>2026-10-31</td></tr>
+  <tr><td>D3</td><td>普通左键单击 = 开抽屉、<b>不清多选</b>（用户否决「单击清多选」；参照 auto-qb「普通点击不选中/不清选」）</td><td>2026-10-31</td></tr>
+  <tr><td>D4</td><td>右键 = 行 ∈ 选区 → 批量菜单；行 ∉ 选区 → 单条菜单；右键不改选区（参照 auto-qb menu.js CTX-03）</td><td>2026-10-31</td></tr>
+  <tr><td>D5</td><td>选区生命周期 = 纯会话态；轮询 re-render 保留；被过滤不可见行仍包含在批量目标里；切视图清空；不落 localStorage</td><td>2026-10-31</td></tr>
+  <tr><td>D6</td><td>批量 pin/hide = 动态单项幂等（全达态→反向文案，否则正向批量、已达态成员零副作用）</td><td>2026-10-31</td></tr>
+  <tr><td>D7</td><td>批量打开原文 = 逐个 window.open；<b>N &gt; 5 二次确认</b>（用户指定）；拦截静默失败</td><td>2026-10-31</td></tr>
+  <tr><td>D8</td><td>复制顺序 = 主表当前可见序（不可见选中行按全量序追加在后）；每行一个 <code>memory-bank/&lt;link&gt;</code></td><td>2026-10-31</td></tr>
+  <tr><td>D9</td><td>Esc = 退栈链末档清多选</td><td>2026-10-31</td></tr>
+  <tr><td>D10</td><td>顶栏「已选 N」chip + 点击清空</td><td>2026-10-31</td></tr>
+  <tr><td>D11</td><td>Ctrl+A = 全选主表当前可见行（输入框焦点豁免、preventDefault）</td><td>2026-10-31</td></tr>
+  <tr><td>D12</td><td>批量菜单文案带灰色 N 后缀；单条态文案不变</td><td>2026-10-31</td></tr>
+  <tr><td>D13</td><td>双区同亮：选区按 link 存，主表/置顶区同件都亮；批量目标去重</td><td>2026-10-31</td></tr>
+  <tr><td>D14</td><td>批量打开 &gt;5 的确认形式 = 原生 <code>window.confirm</code>（零新增 UI）</td><td>2026-10-31</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td><code>window.confirm</code> 打断用户手势链，其后的 <code>window.open</code> 可能被弹窗拦截</td><td>批量打开 &gt;5 且浏览器策略严</td><td>接受：拦截即静默失败（D7 口径），不重试不降级；实测若高频再议 overlay 确认层</td></tr>
+  <tr><td>浏览器扩展吞键（Vimium C 吞 Esc 有前科——提交 5885d7a6 取证）</td><td>用户装 Vimium 类扩展</td><td>已知坑无代码侧解；Esc 退栈链已有 IME 守卫与可见性判据，行为与现状一致，不新增风险面</td></tr>
+  <tr><td><code>msel</code> 与 <code>sel</code> 高亮同框视觉混淆（CSS 特异性互盖，同 pitfalls/web-ui/layout-css.md 三层底色坑型）</td><td>一行同时被单选和多选</td><td>两态底色用不同通道（accent 弱底 vs 现状强调），实施步骤 1 验收判据单列；踩坑按动作记 pitfalls/web-ui</td></tr>
+  <tr><td>菜单打开期间选区漂移（轮询 re-render / 用户再点击）</td><td>菜单存活 30s 轮询窗口重叠</td><td>openCtx 冻结 link 数组快照（auto-qb D5「打开时快照」口径）；菜单存活期点行先关菜单，不存在动作时目标集与文案 N 不一致</td></tr>
+  <tr><td>列序守阵误触</td><td>实施中顺手改 ledgerCells 列结构</td><td>不变量明确：不加列不加 td；review 时对照 <code>tests/test_kb_nav.py</code> 列序断言</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0143</span> 初版。来源：grilling 会话 2026-10-31（两轮 13 问，Q2/Q3/Q5/Q7 用户改判，其余按推荐）；交互口径参照 src/auto_qb/webui/static/shared/selection.js（onTorrentClick/shiftTorrentSel）与 menu.js（CTX-03 多选右键目标升级）。</li>
+  <li><span class="tag">R1 · 26-10-31-0319</span> R1 验收返工: msel 左条改专用靛蓝族与单击预览 cyan 色相分家(同色相只差明度实测混淆, 照 auto-qb R10-07); 批量打开被弹窗拦截由静默改 showError 提醒引导; 守阵断言扩两处, 冒烟 24 项全过</li>
+  <li><span class="tag">R2 · 26-10-31-0337</span> R2 验收返工: Shift 连选挡浏览器原生文字选中(mousedown 期 preventDefault + click 分支双保险, 普通点击的文本选择不挡); 冒烟 25 项全过</li>
+</ul>
+
+</div>
+</body>
+</html>

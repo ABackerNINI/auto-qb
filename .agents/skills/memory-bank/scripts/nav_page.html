@@ -31,6 +31,11 @@
     --hair-2: rgba(255,255,255,.14);
     --cyan: #56c8d7;
     --cyan-soft: rgba(86,200,215,.12);
+    /* 多选专用靛蓝族 (2026-10-31 验收反馈): 与单击预览的 cyan 分家 —— 同色相只差明度的两态
+       实测混淆 (auto-qb views.css R10-07 同款坑), 真值取自 auto-qb galaxy 主题 --sel-* 族 */
+    --msel-bar: #97a3f5;
+    --msel-bg: rgba(151,163,245,.16);
+    --msel-line: rgba(151,163,245,.5);
     --amber: #e2a55a;
     --amber-soft: rgba(226,165,90,.12);
     --green: #7fc79a;
@@ -275,6 +280,14 @@
   /* 置顶行强调: 淡 cyan 底 + 悬停加深; 列序/列宽与主表完全一致 (守阵 test_pin_zone_reuses_ledger_columns) */
   #v-ledger tbody tr.pin-row { background: rgba(86,200,215,.05); }
   #v-ledger tbody tr.pin-row:hover { background: var(--cyan-soft); }
+  /* 多选行 (Ctrl/Shift 手势, 计划 26-10-31-0143): 写在 .pin-row 之后 —— 同特异性靠源序,
+     专区行被多选时 msel 底色要盖过 pin-row 的强调底, 否则专区里看不出选中。
+     ⚠ 色相**分家** (2026-10-31 验收反馈, 照 auto-qb views.css R10-07 同款坑型): 首版 msel 用
+     cyan 降透明度, 与单击预览 tr.sel 满亮 cyan 只差明度 —— 实测"容易搞混"。现 msel 走专用
+     靛蓝族 (--msel-*) 满亮度左条 (多选 = 批量目标, 该是最醒目态), 与 sel 的 cyan 彻底分家。 */
+  #v-ledger tbody tr.msel { background: var(--msel-bg); box-shadow: inset 2px 0 0 var(--msel-bar); }
+  /* sel+msel 同框 = 多选视觉优先: 预览对象由右侧抽屉表明, 左条这格让给批量目标态 */
+  #v-ledger tbody tr.sel.msel { background: var(--msel-bg); box-shadow: inset 2px 0 0 var(--msel-bar); }
   /* # 栏里的实心图钉标记 (静态, 与标题栏的可点图钉区分) */
   .pinzone .pin-mark { display: inline-block; line-height: 0; color: var(--cyan); }
   .pinzone .pin-mark svg { width: 12px; height: 12px; fill: currentColor; stroke: currentColor; stroke-width: 1.6; }
@@ -343,6 +356,16 @@
   }
   .hidebtn:hover { color: var(--ink); border-color: var(--amber); }
   .hidebtn.on { color: var(--amber); border-color: rgba(226,165,90,.45); }
+  /* ============ 顶栏: 多选计数 chip (计划 26-10-31-0143) ============ */
+  /* [hidden] 兜底必写 (同 .pullbtn / .hidebtn): 本规则的 display 会盖掉 UA 的 [hidden]{display:none} */
+  .mselchip[hidden] { display: none; }
+  .mselchip {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    background: var(--msel-bg); color: var(--msel-bar); border: 1px solid var(--msel-line);
+    border-radius: 6px; padding: 5px 12px; font: 12px var(--sans); cursor: pointer;
+  }
+  .mselchip b { font-weight: 600; }
+  .mselchip:hover { color: var(--ink); border-color: var(--msel-bar); }
   .ctxmenu {
     position: fixed; z-index: 40; min-width: 168px; padding: 5px;
     background: var(--paper-3); border: 1px solid var(--hair-2); border-radius: 6px;
@@ -354,6 +377,8 @@
     color: var(--ink); font: 12.5px var(--sans); padding: 7px 10px; border-radius: 4px; cursor: pointer;
   }
   .ctxitem:hover { background: var(--cyan-soft); color: var(--cyan); }
+  /* 批量菜单计数后缀 (拍板 D12): 「动词 + 灰色 N」—— 用户点动作前就能看到作用面是 N 件 (防误伤) */
+  .ctxitem .n { color: var(--faint); font-size: 11px; margin-left: 7px; }
 
   /* ============ 视图 A: 详情抽屉 ============ */
   .drawer {
@@ -573,6 +598,8 @@
     <button data-view="console">控制台</button>
     <button data-view="cards">卡片墙</button>
   </div>
+  <!-- 多选计数 chip (计划 26-10-31-0143): 有选中才出现 (syncMultiChip 控制), 点击清空 (Esc 同款) -->
+  <button class="mselchip" id="mselChip" hidden title="清空多选 (Esc 亦可)">已选 <b>0</b> 件</button>
   <div class="readout" id="readout">载入中…</div>
   <!-- 拉取: 仅快进同步本仓库 (POST /api/pull); 静态导出 / file:// 下无服务端, 由 boot() 隐藏 -->
   <button class="pullbtn" id="pullBtn" title="仅快进同步本仓库 (拉取主线远端最新, 不自动 rebase / merge)">
@@ -737,6 +764,11 @@ const S = {
   /* A 台账 */
   aForms: new Set(FORM_ORD), aStatuses: new Set(KNOWN_ST), aTypes: new Set(TYPES),
   aLive: false, aChain: false, sort: "stamp", sel: null,
+  /* 多选 (Ctrl/Shift 手势, 计划 26-10-31-0143): 纯会话态不落盘 (同 sel 口径) —— multi = link
+     数组 (入栈序), multiAnchor = Shift 扩段锚点 (普通/Ctrl 点击落锚, Shift 不动锚点, 可从同一
+     起点多次扩段 —— auto-qb selection.js 法则 2)。derive() 绝不触碰 (同 pin 坑型, 否则 30s
+     轮询会洗掉选区); 切视图即清空 (拍板 D5, setView)。 */
+  multi: [], multiAnchor: null,
   /* 置顶 (pin): 纯前端偏好, 数组顺序即置顶序 (最近 pin 的在前)。只在 boot() 装载一次,
      derive() 永不触碰 —— 否则 30s 轮询会把 pin 洗掉 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。 */
   pins: [],
@@ -812,6 +844,84 @@ function hiddenZoneItems() {
     seen.add(x.link);
     return true;
   });
+}
+
+/* ---- 多选 (计划 26-10-31-0143, 拍板 D1-D13): 主表 + 置顶专区 Ctrl/Shift 手势, link 为键 ----
+   交互口径照 auto-qb webui selection.js: 普通单击不选中不清多选 (拍板 D3); Ctrl = 切换;
+   Shift = 锚点->该行在 aFiltered 可见序里的区间**并入** (去重合并, 锚点不动, 可从同一起点
+   多次扩段)。选区跨区同亮 (置顶件双向显示, 同 link 两处行都挂 msel)。 */
+const isMultiSel = link => S.multi.includes(link);
+const multiSet = () => new Set(S.multi);
+
+/* chip 单点同步: 显隐 + 计数 —— S.multi 的每个写入口都调它, chip 不在渲染循环里自己算 */
+function syncMultiChip() {
+  const chip = $("mselChip");
+  if (!chip) return;
+  chip.hidden = !S.multi.length;
+  const b = chip.querySelector("b");
+  if (b) b.textContent = String(S.multi.length);
+}
+
+function toggleMulti(link) {
+  const at = S.multi.indexOf(link);
+  if (at >= 0) S.multi.splice(at, 1); else S.multi.unshift(link);
+  S.multiAnchor = link;   /* 普通/Ctrl 点击落锚点; Shift 手势不写 (法则 2) */
+  syncMultiChip();
+  renderLedger();
+}
+
+/* Shift 扩段: 锚点失效兜底 = 被点行自身 (auto-qb _selAnchor 兜底链同款), 区间并入 */
+function shiftMulti(link) {
+  const list = aFiltered().map(i => i.link);
+  let a = list.indexOf(S.multiAnchor);
+  if (a < 0) a = list.indexOf(link);
+  const b = list.indexOf(link);
+  if (a < 0 || b < 0) return;
+  const [lo, hi] = a <= b ? [a, b] : [b, a];
+  const set = new Set(S.multi);
+  for (const l of list.slice(lo, hi + 1)) set.add(l);
+  S.multi = [...set];
+  syncMultiChip();
+  renderLedger();
+}
+
+/* 清空多选: Esc 退栈末档 / 顶栏 chip 点击 (拍板 D9/D10)。切视图清空不走这里 (setView 内联,
+   那时 S.view 已换、renderLedger 会渲染错视图)。 */
+function clearMulti() {
+  S.multi = [];
+  S.multiAnchor = null;
+  syncMultiChip();
+  renderLedger();
+}
+
+/* ---- 批量动作 (计划 26-10-31-0143): 与单条 togglePin/toggleHide 同一条链路, 幂等 ——
+   已达态成员零副作用 (拍板 D6 / 黄金法则 1); 文案随成员态动态取反向 (openCtx 内算)。 ---- */
+function togglePinBatch(links) {
+  const unpin = links.every(isPinned);   /* 全已置顶 -> 批量取消; 否则把未置顶的全置上 */
+  if (unpin) {
+    S.pins = S.pins.filter(l => !links.includes(l));
+  } else {
+    const fresh = links.filter(l => !isPinned(l));
+    for (let k = fresh.length - 1; k >= 0; k--) S.pins.unshift(fresh[k]);   /* 逆序 unshift = 保持 links 序 */
+  }
+  savePins();
+  renderLedger();
+}
+function toggleHideBatch(links) {
+  const unhide = links.every(isHidden);
+  if (unhide) {
+    S.hidden = S.hidden.filter(l => !links.includes(l));
+  } else {
+    for (const l of links) if (!isHidden(l)) S.hidden.push(l);
+  }
+  saveHidden();
+  /* 批量隐藏后把隐掉的 link 从选区剪掉 (拍板 D5 的边界情形: 隐藏件从所有内容视图退场,
+     留在选区里会让下一次批量菜单悄悄含不可见行); 批量恢复不剪 (行回来了)。 */
+  if (!unhide) {
+    S.multi = S.multi.filter(l => !isHidden(l));
+    syncMultiChip();
+  }
+  renderLedger();
 }
 
 /* ---- 筛选器持久化 (2026-10-05 用户报「刷新即重置」): 与 VIEW_KEY / PINS_KEY 同款纯前端偏好,
@@ -903,6 +1013,9 @@ function setView(v) {
   for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === v);
   for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + v);
   closeCtx();
+  /* 切视图清空多选 (拍板 D5): 避免用户在控制台 / 卡片墙里残留看不见的选区 —— 这里不调
+     clearMulti (它按台账视图渲染), S.view 已换, 只清状态 + 同步 chip, 靠 renderCurrent 重画。 */
+  if (S.multi.length) { S.multi = []; S.multiAnchor = null; syncMultiChip(); }
   renderCurrent();
 }
 function renderCurrent() {
@@ -1022,8 +1135,10 @@ function renderLedger() {
   const nHid = hiddenZoneItems().length;
   $("aCount").innerHTML = "<b>" + list.length + "</b> / " + (DATA.items.length - nHid) + " 件" +
     (nHid ? " · 已隐藏 " + nHid : "");
-  $("aRows").innerHTML = list.map((i, n) => `
-    <tr data-link="${esc(i.link)}"${S.sel === i.link ? ' class="sel"' : ""}>${ledgerCells(i, n)}</tr>`).join("");
+  /* 多选行挂 msel (拍板 D13): 状态在 S.multi, DOM 重建时重挂 —— 30s 轮询 re-render 选区天然存活 */
+  const ms = multiSet();
+  const rowCls = i => ((S.sel === i.link ? "sel " : "") + (ms.has(i.link) ? "msel" : "")).trim();
+  $("aRows").innerHTML = list.map((i, n) => `<tr data-link="${esc(i.link)}"${rowCls(i) ? ' class="' + rowCls(i) + '"' : ""}>${ledgerCells(i, n)}</tr>`).join("");
 
   if (S.sel) { if (byLink.has(S.sel)) renderDrawer(S.sel); else closeDrawer(); }
 }
@@ -1038,11 +1153,12 @@ function renderPinZone() {
   /* 列头/列宽单点 = 主表 thead: 直接克隆, 两表逐栏对齐由结构保证 (别在别处再写一份列定义) */
   const thead = document.querySelector("#v-ledger .ledgerwrap thead");
   const head = thead ? thead.outerHTML : "";
+  const ms = multiSet();
   zone.innerHTML =
     '<div class="pzhead">置顶 · PINNED <b>(' + items.length + ")</b>" +
     '<span class="pzhint">点图钉取消 · 点行打开原文</span></div>' +
     '<table class="pztable">' + head + "<tbody>" +
-    items.map(i => `<tr class="pin-row" data-link="${esc(i.link)}">${ledgerCells(i, 0, true)}</tr>`).join("") +
+    items.map(i => `<tr class="pin-row${ms.has(i.link) ? " msel" : ""}" data-link="${esc(i.link)}">${ledgerCells(i, 0, true)}</tr>`).join("") +
     "</tbody></table>";
 }
 
@@ -1115,16 +1231,25 @@ function renderDrawer(link) {
 }
 function closeDrawer() { $("drawer").classList.remove("open"); }
 
-/* ---- 右键菜单 (台账行): 三项无子菜单; 关闭 = 点空白 / Esc / 滚动 / 切视图 ---- */
+/* ---- 右键菜单 (台账行): 无子菜单; 关闭 = 点空白 / Esc / 滚动 / 切视图 ----
+   批量升级 (计划 26-10-31-0143, 拍板 D4): 被点的行 ∈ 当前选中集合且集合 > 1 行 → 菜单作用于
+   整个选区 (auto-qb menu.js CTX-03 口径), 文案带灰色 N (拍板 D12); 否则单条, 文案不变。 */
+function ctxTargets(link) {
+  return S.multi.length > 1 && S.multi.includes(link) ? S.multi.slice() : [link];
+}
 function openCtx(x, y, link) {
   const m = $("ctxMenu");
-  const pinned = isPinned(link);
+  const links = ctxTargets(link);
+  const n = links.length > 1 ? ' <span class="n">· ' + links.length + "</span>" : "";
+  /* 动态单项 (拍板 D6): 全达态 → 反向文案 (批量取消), 否则正向 (未达态成员全置上, 幂等) */
+  const allPinned = links.every(isPinned);
+  const allHidden = links.every(isHidden);
   m.innerHTML =
-    '<button class="ctxitem" data-act="pin">' + (pinned ? "取消置顶" : "置顶到专区") + "</button>" +
-    '<button class="ctxitem" data-act="hide">' + (isHidden(link) ? "取消隐藏" : "隐藏条目") + "</button>" +
-    '<button class="ctxitem" data-act="open">打开原文</button>' +
-    '<button class="ctxitem" data-act="copy">复制仓库路径</button>';
-  m.dataset.link = link;
+    '<button class="ctxitem" data-act="pin">' + (allPinned ? "取消置顶" : "置顶到专区") + n + "</button>" +
+    '<button class="ctxitem" data-act="hide">' + (allHidden ? "取消隐藏" : "隐藏条目") + n + "</button>" +
+    '<button class="ctxitem" data-act="open">打开原文' + n + "</button>" +
+    '<button class="ctxitem" data-act="copy">复制仓库路径' + n + "</button>";
+  m.dataset.links = JSON.stringify(links);   /* 打开那一刻冻结目标快照, 菜单存活期选区漂移不影响本次动作 */
   m.hidden = false;
   /* 贴边翻侧: 默认跟随光标, 右侧 / 下缘放不下时翻到光标另一侧, 不越出视口 */
   const r = m.getBoundingClientRect();
@@ -1135,20 +1260,42 @@ function closeCtx() {
   const m = $("ctxMenu");
   if (m && !m.hidden) { m.hidden = true; m.innerHTML = ""; }
 }
-function copyPath(link) {
-  const full = "memory-bank/" + link;
+/* 剪贴板低层: navigator.clipboard 优先, 非安全上下文 / file:// 降级 execCommand (静默) */
+function copyText(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(full).catch(() => { /* 非安全上下文 / 无权限: 静默 */ });
+    navigator.clipboard.writeText(text).catch(() => { /* 非安全上下文 / 无权限: 静默 */ });
     return;
   }
   try {
     const ta = document.createElement("textarea");
-    ta.value = full;
+    ta.value = text;
     document.body.appendChild(ta);
     ta.select();
     document.execCommand("copy");
     document.body.removeChild(ta);
   } catch (e) { /* 静默降级 */ }
+}
+/* 复制仓库路径: 单条一行; 批量 (拍板 D8) 每行一个, 顺序 = 主表当前可见序,
+   被筛选掉但仍在选区的行按 DATA.items 全量序追加在后 */
+function copyPaths(links) {
+  if (links.length === 1) return copyText("memory-bank/" + links[0]);
+  const visSet = new Set(aFiltered().map(i => i.link));
+  const order = aFiltered().map(i => i.link).concat(DATA.items.map(i => i.link).filter(l => !visSet.has(l)));
+  const want = new Set(links);
+  copyText(order.filter(l => want.has(l)).map(l => "memory-bank/" + l).join("\n"));
+}
+/* 打开原文: 逐个 window.open; 批量 >5 先原生 confirm 二次确认 (拍板 D7/D14, 取消则不动)。
+   被浏览器弹窗拦截的 open 返回 null (2026-10-31 验收反馈: 静默失效用户无从知晓) ——
+   记账后走 showError 浮层提醒 (与拉取失败同一提示通道, Esc 收), 引导允许弹窗后重试。 */
+function openLinks(links) {
+  if (links.length > 5 && !confirm("将打开 " + links.length + " 个标签页，继续？")) return;
+  let blocked = 0;
+  for (const l of links) {
+    if (!window.open(MB + l, "_blank")) blocked++;
+  }
+  if (blocked) showError("标签页被浏览器拦截",
+    esc(String(blocked)) + " / " + esc(String(links.length)) + " 个未打开 —— 弹出窗口被浏览器拦截。",
+    "在地址栏右侧允许本站弹出窗口 (或加入弹窗白名单) 后重试 · 按 Esc 关闭本提示。");
 }
 
 /* ============================================================
@@ -1344,11 +1491,22 @@ function wire() {
   });
 
   /* A */
+  /* Shift 连选防文字选中 (2026-10-31 验收反馈): 浏览器在 mousedown 期就扩展原生选区,
+     click 里的 preventDefault 已晚 —— 在两处表格上对 shift 手势挡 mousedown 默认行为;
+     普通点击不挡 (标题文本照常可选中复制) */
+  for (const id of ["aRows", "pinZone"]) {
+    $(id).addEventListener("mousedown", e => { if (e.shiftKey) e.preventDefault(); });
+  }
   $("aRows").addEventListener("click", e => {
     const pb = e.target.closest(".pinbtn");
     if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 免得图钉冒泡又弹详情抽屉 */
     const tr = e.target.closest("tr");
     if (!tr) return;
+    /* 多选手势先于普通单击分支 (计划 26-10-31-0143): Ctrl = 切换, Shift = 锚点区间并入 ——
+       两手势都不开抽屉、不动 S.sel; 普通单击 = 现行为 (单选高亮 + 抽屉), 不清多选 (拍板 D3) */
+    if (e.ctrlKey || e.metaKey) { toggleMulti(tr.dataset.link); return; }
+    if (e.shiftKey) { e.preventDefault(); shiftMulti(tr.dataset.link); return; }
+    S.multiAnchor = tr.dataset.link;   /* 普通点击落锚点 (auto-qb 键鼠衔接口径), 不动 S.multi */
     S.sel = tr.dataset.link;
     $("aRows").querySelectorAll("tr.sel").forEach(r => r.classList.remove("sel"));
     tr.classList.add("sel");
@@ -1365,7 +1523,12 @@ function wire() {
     const pb = e.target.closest(".pinbtn");
     if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 图钉 = 取消置顶, 免得冒泡又开原文 */
     const row = e.target.closest("tr.pin-row");
-    if (row) window.open(MB + row.dataset.link, "_blank");
+    if (!row) return;
+    /* 多选手势 (拍板 D2: 置顶区纳入) 与主表同款; Shift 区间按主表可见序解析 (置顶件双向显示) */
+    if (e.ctrlKey || e.metaKey) { toggleMulti(row.dataset.link); return; }
+    if (e.shiftKey) { e.preventDefault(); shiftMulti(row.dataset.link); return; }
+    S.multiAnchor = row.dataset.link;
+    window.open(MB + row.dataset.link, "_blank");
   });
   $("pinZone").addEventListener("contextmenu", e => {
     const row = e.target.closest("tr.pin-row");
@@ -1389,17 +1552,22 @@ function wire() {
     e.preventDefault();
     openCtx(e.clientX, e.clientY, row.dataset.link);
   });
-  /* 右键菜单: 选动作 + 点空白 / Esc / 滚动即收 */
+  /* 右键菜单: 选动作 (单条 / 批量同一条分发链, 目标 = openCtx 冻结的 links 快照) + 点空白 / Esc / 滚动即收 */
   $("ctxMenu").addEventListener("click", e => {
     const it = e.target.closest(".ctxitem");
     if (!it) return;
-    const link = $("ctxMenu").dataset.link;
-    if (it.dataset.act === "pin") togglePin(link);
-    else if (it.dataset.act === "hide") toggleHide(link);
-    else if (it.dataset.act === "open") window.open(MB + link, "_blank");
-    else if (it.dataset.act === "copy") copyPath(link);
+    let links = [];
+    try { links = JSON.parse($("ctxMenu").dataset.links || "[]"); } catch (err) { /* 畸形快照: 放弃本动作 */ }
+    if (links.length) {
+      if (it.dataset.act === "pin") togglePinBatch(links);
+      else if (it.dataset.act === "hide") toggleHideBatch(links);
+      else if (it.dataset.act === "open") openLinks(links);
+      else if (it.dataset.act === "copy") copyPaths(links);
+    }
     closeCtx();
   });
+  /* 多选计数 chip: 点击清空 (拍板 D10, Esc 末档同款走 clearMulti) */
+  $("mselChip").addEventListener("click", clearMulti);
   document.addEventListener("click", e => { if (!e.target.closest("#ctxMenu")) closeCtx(); });
   /* Esc 退栈 (计划 26-10-13-0324, 借鉴 webui lifecycle.js 退栈链): 一次按键退视觉最上档 ——
      退栈 order = visual z-order: overlay 遮罩 (z-50) 先于 ctxMenu (z-40) 先于 drawer (z-30),
@@ -1418,6 +1586,7 @@ function wire() {
     if (m && !m.hidden) { closeCtx(); return; }       // z-40 右键菜单
     const drawer = $("drawer");
     if (drawer.classList.contains("open")) { S.sel = null; closeDrawer(); return; }  // z-30 详情抽屉: 清选择 + 收
+    if (S.multi.length) { clearMulti(); return; }   // 多选档 (计划 26-10-31-0143, 拍板 D9): 收完浮层再退选区
     const selRows = $("aRows").querySelectorAll("tr.sel");
     if (selRows.length) { selRows.forEach(r => r.classList.remove("sel")); return; }  // 行选择退档
     const inInput = !!e.target.closest("input, textarea, select");
@@ -1442,6 +1611,23 @@ function wire() {
     $("gq").focus();
   }
   document.addEventListener("keydown", slashFocus);
+  /* Ctrl+A 全选 (计划 26-10-31-0143, 拍板 D11): 台账视图 + 非输入态 = 全选主表当前可见行;
+     输入框 / 下拉内不劫 (正常全选文本), 控制台 / 卡片墙不劫 (留浏览器默认)。
+     全选不落锚点 (下一次 Shift 兜底解析到被点行)。⚠ 监听调用点与函数名不得含 Esc 关键词
+     —— 守阵 test_esc_retreat_chain_single_point 数 document-level Esc 链必须恰一处。 */
+  function selectAllVisible(e) {
+    if (e.key !== "a" && e.key !== "A") return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (e.isComposing || e.keyCode === 229) return;   // IME 组合期不劫 (同 escRetreat 口径)
+    if (S.view !== "ledger" || !DATA) return;
+    if (e.target.closest("input, textarea, select")) return;
+    e.preventDefault();
+    S.multi = aFiltered().map(i => i.link);
+    S.multiAnchor = null;
+    syncMultiChip();
+    renderLedger();
+  }
+  document.addEventListener("keydown", selectAllVisible);
   window.addEventListener("scroll", closeCtx, true);
   $("sort").addEventListener("change", e => { S.sort = e.target.value; saveFilters(); renderLedger(); });
   $("dclose").onclick = () => { S.sel = null; closeDrawer(); };

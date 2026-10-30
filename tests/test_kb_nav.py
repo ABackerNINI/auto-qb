@@ -82,6 +82,12 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_esc_closes_drawer: drawer 档判据 open 类 (可见性) 且清 S.sel + closeDrawer 同步, 后于 ctxMenu 档
 - test_gsearch_clear_button: 全局搜索清词按钮在位 (内联 SVG / [hidden] 兜底 / syncGclear 单点同步 / 清词还焦点), placeholder 无 (Esc 清空)
 - test_slash_focuses_search: "/" 快捷键聚焦搜索框 (slashFocus 命名函数 / 输入态与 IME 不劫 / 挡默认行为), 注册点不混 Esc 关键词
+- test_shell_has_multiselect_state_and_gestures: 多选会话态 (S.multi/multiAnchor 不进持久化 / derive 不碰) + 主表与置顶区 Ctrl/Shift 手势排在改 S.sel 之前 + 普通单击不清多选
+- test_multiselect_renders_in_both_zones: 主表与置顶专区渲染都挂 msel (双区同亮) + CSS tr.msel 与 sel.msel 组合样式在位
+- test_ctx_menu_batch_upgrade: 右键批量升级单点 ctxTargets (集合>1 且行∈选区) + openCtx 冻结 links 快照 + 批量文案带 N + 分发走批量链
+- test_batch_actions_idempotent: 批量 pin/hide 幂等 (every 动态方向 / 过滤已达态 / 落盘链不绕开) + 批量隐藏剪出选区
+- test_multiselect_chrome_and_escapes: 顶栏已选N chip ([hidden] 兜底/点击清空) + Esc 退栈末档清多选 (序在 drawer 后 sel 前) + setView 清空 + Ctrl+A 台账非输入态全选
+- test_batch_copy_paths_and_open_links: copyText 双链路降级 + 批量复制每行一个按可见序 + 打开 >5 confirm 走 MB 路由
 """
 
 from __future__ import annotations
@@ -763,6 +769,171 @@ def test_slash_focuses_search() -> None:
     assert "Escape" not in listener.group(0) or "escRetreat" in listener.group(0), (
         "document 级 keydown 首个注册点混入 Esc 关键词 —— Esc 单点守阵 (test_esc_retreat_chain_single_point) 数的就是它"
     )
+
+
+def test_shell_has_multiselect_state_and_gestures() -> None:
+    """多选状态与手势 (计划 26-10-31-0143): S.multi/multiAnchor 纯会话态 (不进筛选器持久化,
+    derive() 不碰 —— 同 pin 坑型, 30s 轮询不得洗掉选区); 主表与置顶专区两处 click 委托都要有
+    Ctrl/Shift 分支, 且排在普通单击改 S.sel **之前**; 普通单击只落锚点不动 S.multi (拍板 D3)。
+    Shift 手势须挡原生文字选中 (2026-10-31 验收反馈): mousedown 期挡默认行为 (click 挡已晚)
+    + click 分支内 preventDefault 双保险, 普通点击不挡 (标题照常可选中复制)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    state = re.search(r"const S = \{(.*?)\n\};", text, re.S)
+    assert state and "multi: []" in state.group(1) and "multiAnchor: null" in state.group(1), (
+        "S 缺 multi/multiAnchor 会话态字段"
+    )
+    persist = re.search(r"function saveFilters\(\) \{(.*?)\n\}", text, re.S)
+    assert persist and "multi" not in persist.group(1), "multi 混进筛选器持久化 = 刷新复活 + 违背会话态口径"
+    derive = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert derive and "multi" not in derive.group(1), "derive() 碰 multi = 30s 轮询把选区洗掉 (同 pin 坑)"
+
+    main = re.search(r'\$\("aRows"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert main, "主表 click 委托不见了? 结构搬家要同步本守阵"
+    m = main.group(1)
+    assert "toggleMulti(tr.dataset.link)" in m and "shiftMulti(tr.dataset.link)" in m, "主表缺 Ctrl/Shift 多选手势"
+    assert "toggleMulti(" in m and m.index("toggleMulti(") < m.index("S.sel = "), (
+        "多选手势必须排在普通单击改 S.sel 之前 (Ctrl/Shift 早退, 不开抽屉)"
+    )
+    assert "S.multiAnchor = tr.dataset.link;" in m, "普通单击须落锚点 (auto-qb 键鼠衔接口径)"
+    assert "S.multi = " not in m and "clearMulti" not in m, "普通单击不得清多选 (拍板 D3: 容易误触)"
+
+    zone = re.search(r'\$\("pinZone"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert zone, "置顶专区 click 委托不见了"
+    z = zone.group(1)
+    assert "toggleMulti(row.dataset.link)" in z and "shiftMulti(row.dataset.link)" in z, (
+        "置顶专区缺 Ctrl/Shift 多选手势 (拍板 D2: 置顶区纳入)"
+    )
+
+    guard = re.search(r'for \(const id of \["aRows", "pinZone"\]\) \{(.*?)\n  \}', text, re.S)
+    assert guard and "e.shiftKey" in guard.group(1) and "e.preventDefault()" in guard.group(1), (
+        "缺 mousedown 期 shift 守卫 (浏览器在 mousedown 就扩展原生选区, click 挡已晚 —— 2026-10-31 验收反馈)"
+    )
+    assert 'if (e.shiftKey) { e.preventDefault(); shiftMulti(tr.dataset.link); return; }' in m, (
+        "主表 shift 分支缺 preventDefault (双保险)"
+    )
+    assert 'if (e.shiftKey) { e.preventDefault(); shiftMulti(row.dataset.link); return; }' in z, (
+        "置顶区 shift 分支缺 preventDefault (双保险)"
+    )
+
+
+def test_multiselect_renders_in_both_zones() -> None:
+    """多选渲染 (拍板 D13 双区同亮): 状态在 S.multi, 渲染时按 link 重挂 msel —— 主表与置顶专区
+    两处都要挂, 只挂一处 = 置顶件选中后在另一处看不见。CSS 侧 msel 与 sel 两态选择器都要在,
+    且 msel 左条走**专用靛蓝族** --msel-bar (2026-10-31 验收反馈: 首版 cyan 降透明度与单击预览
+    tr.sel 只差明度, 实测混淆 —— 照 auto-qb views.css R10-07 同款坑, 色相分家)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    ledger = re.search(r"function renderLedger\(\) \{(.*?)\n\}", text, re.S)
+    assert ledger and "multiSet()" in ledger.group(1) and "msel" in ledger.group(1), "主表渲染缺 msel 挂类"
+    zone = re.search(r"function renderPinZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone and "msel" in zone.group(1), "置顶专区渲染缺 msel 挂类 (双区同亮)"
+    css = _shell_css()
+    assert "#v-ledger tbody tr.msel" in css, "缺多选行高亮样式 tr.msel"
+    assert "#v-ledger tbody tr.sel.msel" in css, "缺 sel+msel 并存组合样式 (拍板 D3: 单击开抽屉不清多选, 两态会同框)"
+    msel_rule = re.search(r"#v-ledger tbody tr\.msel \{[^}]*\}", css)
+    assert msel_rule and "var(--msel-bar)" in msel_rule.group(0), "msel 左条未走专用靛蓝族 (色相分家)"
+    assert "rgba(86,200,215" not in msel_rule.group(0), "msel 回用 cyan 族 = 与单击预览只差明度 (验收反馈的混淆根因)"
+
+
+def test_ctx_menu_batch_upgrade() -> None:
+    """右键菜单批量升级 (拍板 D4/D12, auto-qb menu.js CTX-03 口径): 目标解析单点 ctxTargets
+    (行 ∈ 选区且集合 > 1 → 整集合快照, 否则单条); openCtx 冻结 links 快照 (dataset.links),
+    批量态四项文案带灰色 N (class="n"), 菜单点击按快照走批量分发链。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert "function ctxTargets(link)" in text, "缺右键目标解析单点 ctxTargets"
+    tgt = re.search(r"function ctxTargets\(link\) \{(.*?)\n\}", text, re.S)
+    assert tgt and "S.multi.length > 1" in tgt.group(1) and "S.multi.includes(link)" in tgt.group(1), (
+        "ctxTargets 判据必须是「集合 > 1 且行 ∈ 选区」(集合恰等于该行自身仍是单目标菜单)"
+    )
+    ctx = re.search(r"function openCtx\(.*?\{(.*?)\n\}", text, re.S)
+    assert ctx, "openCtx 不见了"
+    c = ctx.group(1)
+    assert "ctxTargets(link)" in c, "openCtx 必须经 ctxTargets 解析目标 (口径单点)"
+    assert 'm.dataset.links = JSON.stringify(links);' in c, "菜单须冻结 links 快照 (存活期选区漂移不影响本次动作)"
+    assert 'links.length > 1 ?' in c and 'class="n"' in c, "批量态文案缺灰色 N 后缀 (拍板 D12)"
+    for act in ('data-act="pin"', 'data-act="hide"', 'data-act="open"', 'data-act="copy"'):
+        assert act in c, f"批量升级后缺菜单项 {act}"
+    menu = re.search(r'\$\("ctxMenu"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert menu, "菜单点击分发不见了"
+    d = menu.group(1)
+    for call in ("togglePinBatch(links)", "toggleHideBatch(links)", "openLinks(links)", "copyPaths(links)"):
+        assert call in d, f"菜单分发缺批量动作 {call}"
+    assert "JSON.parse" in d, "分发须消费冻结快照 (dataset.links), 不得回读实时选区"
+
+
+def test_batch_actions_idempotent() -> None:
+    """批量 pin/hide 幂等 (拍板 D6 / 黄金法则 1): 动态单项文案来自 every(isPinned/isHidden),
+    动作对已达态成员零副作用; 批量隐藏后须把隐掉的 link 剪出选区 (隐藏件从所有内容视图退场,
+     留在选区里 = 下一次批量菜单悄悄含不可见行); 落盘链 savePins/saveHidden 不得绕开。"""
+    text = SHELL.read_text(encoding="utf-8")
+    pin = re.search(r"function togglePinBatch\(links\) \{(.*?)\n\}", text, re.S)
+    assert pin, "缺 togglePinBatch"
+    p = pin.group(1)
+    assert "links.every(isPinned)" in p, "批量 pin 缺动态方向判据 (全已置顶 -> 批量取消)"
+    assert "savePins()" in p, "批量 pin 绕开了 savePins 落盘链"
+    assert "isPinned(l)" in p, "批量 pin 须过滤已达态成员 (幂等)"
+    hide = re.search(r"function toggleHideBatch\(links\) \{(.*?)\n\}", text, re.S)
+    assert hide, "缺 toggleHideBatch"
+    h = hide.group(1)
+    assert "links.every(isHidden)" in h, "批量 hide 缺动态方向判据"
+    assert "saveHidden()" in h, "批量 hide 绕开了 saveHidden 落盘链"
+    assert "S.multi = S.multi.filter" in h, "批量隐藏后未把隐藏件剪出选区 (拍板 D5 边界情形)"
+
+
+def test_multiselect_chrome_and_escapes() -> None:
+    """多选辅助件 (拍板 D5/D9/D10/D11): 顶栏「已选 N」chip ([hidden] 兜底必写, 点击清空);
+    Esc 退栈链末档清多选 (排在 drawer 之后、遗留 tr.sel 之前); 切视图清空 (setView);
+    Ctrl+A = 台账视图 + 非输入态全选主表可见行 (preventDefault + IME 守卫, 监听不混 Esc 关键词)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'id="mselChip"' in text, "缺顶栏多选计数 chip"
+    css = _shell_css()
+    assert ".mselchip[hidden] { display: none; }" in css, "chip 缺 [hidden] 兜底 (display 会盖掉 UA hidden)"
+    assert "function syncMultiChip" in text, "缺 chip 单点同步函数"
+    assert '$("mselChip").addEventListener("click", clearMulti)' in text, "chip 点击未接清空"
+    assert "function clearMulti" in text, "缺清空多选单点"
+
+    chain = re.search(r"const escRetreat = \(e\) => \{(.*?)\n  \};", text, re.S)
+    assert chain and "clearMulti()" in chain.group(1), "Esc 退栈链缺多选档 (拍板 D9)"
+    b = chain.group(1)
+    assert b.index('drawer.classList.contains("open")') < b.index("clearMulti()"
+                                                                 ) < b.index('querySelectorAll("tr.sel")'), (
+                                                                     "多选档必须排在 drawer 之后、遗留 tr.sel 之前 (退栈序 = 视觉 z 序)"
+                                                                 )
+    setview = re.search(r"function setView\(v\) \{(.*?)\n\}", text, re.S)
+    assert setview and "S.multi = []" in setview.group(1), "切视图未清空多选 (拍板 D5: 别处残留看不见的选区)"
+
+    assert "function selectAllVisible" in text, "缺 Ctrl+A 全选处理"
+    sel = re.search(r"function selectAllVisible\(e\) \{(.*?)\n  \}", text, re.S)
+    s = sel.group(1)
+    assert 'e.key !== "a"' in s, "缺键位判据 a/A"
+    assert 'closest("input, textarea, select")' in s, "输入态不劫 (框内 Ctrl+A 是全选文本)"
+    assert 'S.view !== "ledger"' in s, "须限台账视图 (控制台/卡片墙留浏览器默认)"
+    assert "e.preventDefault()" in s and "S.multi = aFiltered().map(i => i.link);" in s, ("全选须挡默认行为且以主表可见行为准 (拍板 D11)")
+    assert "e.isComposing" in s and "keyCode === 229" in s, "缺 IME 组合期守卫 (同 escRetreat 口径)"
+    assert 'document.addEventListener("keydown", selectAllVisible)' in text, "selectAllVisible 须命名函数注册"
+
+
+def test_batch_copy_paths_and_open_links() -> None:
+    """批量复制与打开 (拍板 D7/D8/D14): 复制走双链路降级低层 copyText (clipboard 优先,
+    execCommand 兜底); 批量每行一个 memory-bank/<link>, 顺序 = 主表可见序 + 不可见选中行
+    按全量序追加; 打开 >5 先 confirm, 取消则不动; 被弹窗拦截 (open 返回 null) 走 showError
+    提醒引导允许弹窗 —— 2026-10-31 验收反馈: 静默失效用户无从知晓。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert "function copyText(" in text and "navigator.clipboard" in text and "execCommand" in text, (
+        "缺剪贴板双链路低层 copyText"
+    )
+    cp = re.search(r"function copyPaths\(links\) \{(.*?)\n\}", text, re.S)
+    assert cp, "缺 copyPaths"
+    c = cp.group(1)
+    assert 'links.length === 1' in c and '"memory-bank/" + links[0]' in c, "单条须直出 memory-bank/<link>"
+    assert "aFiltered()" in c, "批量复制顺序必须以主表可见序为基准 (拍板 D8)"
+    assert '.join("\\n")' in c, "批量复制须每行一个 (join 换行)"
+    ol = re.search(r"function openLinks\(links\) \{(.*?)\n\}", text, re.S)
+    assert ol, "缺 openLinks"
+    o = ol.group(1)
+    assert "links.length > 5" in o and "confirm(" in o, "批量打开 >5 缺二次确认 (拍板 D7/D14)"
+    assert "window.open(MB + l" in o, "打开须走 MB 前缀路由 (file:// 与 http 双模式)"
+    assert "if (!window.open(" in o and "blocked" in o, "缺弹窗拦截检测 (open 返回 null 须记账)"
+    assert "showError(" in o and "Esc" in o, "拦截须走 showError 提醒引导允许弹窗 (静默失效 = 2026-10-31 验收反馈)"
 
 
 # --------------------------------------------------------------------------- 服务层 (127.0.0.1 随机端口)

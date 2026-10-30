@@ -23,6 +23,7 @@
 
 ## Done
 
+- [26-10-31-0143] [kb.nav 多选与批量右键菜单](26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`
 - [26-10-30-0221] [实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流](26-10-30-0221-plan-full-code-review-2.html) — `full-code-review-2`
 - [26-10-30-0049] [rules/ 包变异测试审计 · 分步执行计划](26-10-30-0049-plan-mutation-audit.html) — `mutation-audit`
