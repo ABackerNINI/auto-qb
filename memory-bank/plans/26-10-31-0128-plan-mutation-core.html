@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>core/ 包变异测试审计 · 分步执行计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="mutation-core">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-0128">
+<meta name="doc-updated" content="26-10-31-0128">
+<meta name="doc-refs" content="memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: mutation-core</div>
+<h1>core/ 包变异测试审计 · 分步执行计划</h1>
+<p class="lede">对 <code>src/auto_qb/core/</code>(主循环 / 状态 / 限速, 32 文件 14,710 行)做变异测试定期审计: 不做整包首轮, 直接按模块拆 9 轮, 每轮走「跑 → 报告 → 三分类 → 手工确认 → 补测红验 → 同池复跑 → 切片 → 更锚」的完整协议。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0128 · <b>doc-updated</b> 26-10-31-0128 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「写一个 core/ 的变异测试计划」; 依据常驻锚 <code>26-10-08-0642-test-mutation-audit-standing</code> §03 优先级(core/ 为下一个待做大件)与 mutation-testing skill「派生计划」节
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>1.1 目标与边界</h3>
+<ul>
+  <li><b>目标 glob</b>: <code>**/core/**/*.py</code> —— 命中 32 个 .py(根 14 + <code>modules/</code> 13 + <code>traffic_source/</code> 3 + 3 个 <code>__init__</code>), 合计 <b>14,710 行</b>(入轮 14,644 行, 3 个 <code>__init__</code> 共 66 行不设轮)。</li>
+  <li><b>目标不是涨分</b>: 是「包内不再有不知道为什么活着的变异」—— 每条存活变异落进三分类之一(真洞 / 等价变异 / 假存活)并各有处置; 等价变异杀不掉是数学事实, 不追 100%(引可行性报告 §11)。</li>
+  <li><b>显式排除</b>: <code>hr/</code>(已有七模块轮)、<code>webui/</code>、<code>infra/</code>、JS 前端(无单元层, 前提不成立, 锚 §03); 需真实 qB 在场的真机行为验证(变异审计只在桩面跑)。</li>
+</ul>
+
+<h3>1.2 为什么 core 是下一个</h3>
+<ul>
+  <li>锚 §03 优先级表里 <code>config/</code> 已清(R13, 90.02%)、<code>hr/</code> 已做余量(R22 后六条 test issue 全清)、<code>rules/</code> 已清(R23); <code>core/</code> 是剩下的唯一大件, 锚里只有一行「主循环 / 限速」, 没有刻度。</li>
+  <li>core/ 是五条黄金法则里四条的主要落点: 幂等性(<code>taskqueue.py</code> 去重)、保守默认(限速面的跳检/强制汇报开关)、状态持久化(<code>state.py</code> state_file)、单一写线程(<code>taskqueue.py</code> 队列结构)—— 出错代价在全部包里最高。</li>
+  <li>覆盖率量不出强弱: 同为 98% 分支覆盖, 实测变异分数 <code>rules/</code> 55.5% vs <code>infra/utils.py</code> 72.5%(报告 §01)。core/ 的 98% 覆盖不构成「够硬」的证据。</li>
+</ul>
+
+<h3>1.3 设计不变量(违反即白跑)</h3>
+<ul>
+  <li>按模块切轮, 永不一把跑整包(实测全量在 37% / 74% 两处打挂 WSL); 每轮估变异 ≤ ~2,500。</li>
+  <li>池 = 定向的几个测试文件, 不用全 <code>tests/</code>; 每轮开跑前核「池覆盖目标函数面」(硬约束 9)。</li>
+  <li>全程走 <code>.commands/mutants/</code> 包的 task id, 计划与文档不抄命令本体(<code>doc.drift</code> 判红)。</li>
+  <li><code>process_isolation=forkserver</code>、<code>-n 0 --no-cov</code>、<code>--max-children 4</code>、文本层守阵 <code>--deselect</code> —— 均已内建在包脚本, 正常路径不手工拼。</li>
+  <li>基线不绿不开跑(<code>test.quick</code> 先过); 基线越红 verify 判据越弱。</li>
+  <li>量化只认 <code>mutants.run</code> 同目标同池复跑; 手搓变异只做形态复验与红验, 不进存活计数。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>2.1 已跑通的先例(本计划的成本锚点)</h3>
+<table>
+  <tr><th>包</th><th>规模</th><th>首轮实测</th><th>终态</th><th>对 core 的含义</th></tr>
+  <tr><td><code>config/</code></td><td>6 文件池</td><td>4,799 变异 / 80.25%, 单价锚点 0.134s/变异</td><td>七轮 → 90.02%</td><td>窄池下 verify 捞到 20% 假存活 —— 池定宽定窄直接改变 S4 的玩法</td></tr>
+  <tr><td><code>hr/</code></td><td>24 文件 / 15 文件池</td><td>8,027 变异 / 69.2%, 整包 96 min(撞 3600s 超时后续跑补齐)</td><td>七模块轮 → 各模块 87–100%</td><td><b>core 比 hr 还大 83%(行数), 整包首轮不可行</b>, 必须像 hr 后期那样按模块拆</td></tr>
+  <tr><td><code>rules/</code></td><td>18 .py / 16 文件池 / 470 fn</td><td>3,400 变异, 名义 59.9% → 实测 71.8%</td><td>R23 已清</td><td>名义分数含伪存活, 刻度以实测(apply→跑→还原)为准</td></tr>
+</table>
+
+<h3>2.2 core/ 的池面摸底(本次实测)</h3>
+<p>对 <code>tests/</code> 全量 grep 建立的「core 模块 → 测试文件」映射: 66 个测试文件引用 <code>auto_qb.core</code>, 但分布极不均。三个缺口要在对应轮次开跑前处理:</p>
+<table>
+  <tr><th>缺口</th><th>事实</th><th>后果</th></tr>
+  <tr><td><code>core/state.py</code>(294 行 / 17 def)</td><td>仅 <code>test_module_host.py</code>、<code>test_rule_engine.py</code> 两个文件直接引用</td><td>状态持久化黄金法则落点, 池最窄的那块; 池不覆盖的函数整片落 <code>no tests</code>, 连三分类都做不了(硬约束 9)</td></tr>
+  <tr><td><code>core/traffic_source/reader.py</code>(50 行 / 1 def)</td><td>零测试文件直接引用(仅可能被 agent 测试间接碰)</td><td>同上, W7 开跑前先核, 预期整文件 <code>no tests</code></td></tr>
+  <tr><td><code>core/qbapi.py</code>(410 行 / 54 def)</td><td>仅 4 个文件引用(<code>test_sync</code> / <code>test_snapshot_sync</code> / 两个 webui delta)</td><td>54 个 def 对 4 个池文件, 函数面大概率盖不全; W6 开跑前核对</td></tr>
+</table>
+<p>另: <code>qbmanager.py</code>(967 行 / 40 def)被 17 个测试文件引用、<code>module.py</code>(439 行)被 27 个引用 —— 这两块天然宽池, 按坑档 <code>mutation-pool-artifact.md</code>, 宽池下 <code>mutants.verify</code> 捞不到假存活(hr 实测 24/24 SURVIVED), S4 要直接读 diff 判真洞 vs 等价, 不耗在 verify 上。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 主线</h3>
+<p><b>不做整包首轮</b>(与 config/hr 不同的开局): core 行数是 hr 的 1.83 倍, 按 hr 校准的单轮长尾, 整包 ≥ 2.5h, 必撞 <code>mutants.run</code> 的 timeout 且 <code>no tests</code> 面会在报告里糊成一团。改为 <b>9 轮模块轮</b>, 每轮独立走完整 round protocol(skill 的 S1–S9), 每轮出一条自己的基线切片; 轮与轮之间没有依赖, 可穿插在任意会话执行。计划里轮次用 W1–W9 占位, <b>真实 R 号开工时先 fetch 远端任务档案再取</b>(多 clone 并行撞号先例: hr 轮与 config 轮都曾用 R11)。</p>
+
+<h3>3.2 九轮划分(按出错代价排序, 非按体量)</h3>
+<table>
+  <tr><th>轮</th><th>目标(行数)</th><th>估变异</th><th>估纯跑墙时<br><span class="cm">0.134–0.7 s/变异</span></th><th>定向池(tests/)</th></tr>
+  <tr><td><b>W1 状态与队列</b></td><td><code>state.py</code>(294) + <code>taskqueue.py</code>(291)</td><td>≈590</td><td>1–7 min</td><td><code>test_taskqueue</code> · <code>test_module_host</code> · <code>test_rule_engine</code>; <span class="wr">开跑前核 state 函数面, 缺则先扩池(候选: <code>test_sync</code> / <code>test_actions</code>)或先补 state 用例</span></td></tr>
+  <tr><td><b>W2 限速面</b></td><td><code>traffic_limits.py</code>(317) + <code>traffic_grid.py</code>(791)</td><td>≈1,110</td><td>2–13 min</td><td><code>test_traffic_limits</code> · <code>test_traffic_grid</code> · <code>test_traffic_sample</code> · <code>test_traffic_monitor_dat</code></td></tr>
+  <tr><td><b>W3 判定内核</b></td><td><code>tvshows.py</code>(509) + <code>episodes.py</code>(137) + <code>curves.py</code>(142)</td><td>≈790</td><td>2–9 min</td><td><code>test_tvshows</code> · <code>test_episodes</code> · <code>test_speed_curve</code> · <code>test_traffic_monitor_dat</code></td></tr>
+  <tr><td><b>W4 流量存储</b></td><td><code>traffic_store.py</code>(1,604)</td><td>≈1,600</td><td>4–19 min</td><td><code>test_traffic_store</code> · <code>test_traffic_grid</code> · <code>test_traffic_sample</code> · <code>test_traffic_limits</code> · <code>test_web_traffic_qb</code></td></tr>
+  <tr><td><b>W5 流量采样</b></td><td><code>modules/traffic_sample_mod.py</code>(1,622)</td><td>≈1,620</td><td>4–19 min</td><td><code>test_traffic_sample</code> · <code>test_traffic_limits</code> · <code>test_traffic_store</code></td></tr>
+  <tr><td><b>W6 编排与客户端</b></td><td><code>module.py</code>(439) + <code>qbmanager.py</code>(967) + <code>qbapi.py</code>(410) + <code>qbclient.py</code>(68) + <code>exporter.py</code>(150)</td><td>≈2,030</td><td>5–24 min</td><td><code>test_module_host</code> · <code>test_facade_modules</code> · <code>test_core_modules</code> · <code>test_qbmanager</code> · <code>test_manager_single_point</code> · <code>test_local_qb_service</code> · <code>test_sync</code> · <code>test_snapshot_sync</code> · <code>test_exporter</code>; <span class="wr">开跑前核 qbapi 54 def 的函数面</span></td></tr>
+  <tr><td><b>W7 快照与来源</b></td><td><code>modules/traffic_snapshot_mod.py</code>(365) + <code>traffic_source/</code>(agent 475 + paths 115 + reader 50)</td><td>≈1,005</td><td>2–12 min</td><td><code>test_traffic_snapshot</code> · <code>test_snapshot_sync</code> · <code>test_traffic_source_agent</code> · <code>test_traffic_source_paths</code> · <code>test_traffic_monitor_client</code> · <code>test_web_traffic_monitor</code> · <code>test_config_traffic_monitor</code>; <span class="wr">reader.py 预期 no tests, 先核再跑</span></td></tr>
+  <tr><td><b>W8 搬移面</b></td><td><code>modules/relocate_mod.py</code>(1,511) + <code>modules/relocate_units.py</code>(932)</td><td>≈2,440</td><td>5–28 min</td><td><code>test_relocate_exec</code> · <code>test_relocate_config</code> · <code>test_relocate_paths</code> · <code>test_relocate_units</code> · <code>test_grouping_relocate</code> · <code>test_web_relocate</code></td></tr>
+  <tr><td><b>W9 modules 余量</b></td><td><code>grouping_mod.py</code>(770) + <code>ops_mod.py</code>(1,265) + <code>maintenance_mod.py</code>(372) + <code>speed_curve_mod.py</code>(324) + <code>rules_mod.py</code>(478) + <code>tracker_mod.py</code>(122) + <code>notify_mod.py</code>(79) + <code>logging_mod.py</code>(45)</td><td>≈3,455</td><td>8–40 min</td><td><code>test_grouping</code> · <code>test_file_access</code> · <code>test_ops</code> · <code>test_actions</code> · <code>test_checking</code> · <code>test_logging</code> · <code>test_utils</code> · <code>test_modules_p5</code> · <code>test_core_modules</code> · <code>test_tracker</code> · <code>test_notify</code> · <code>test_mixins_tags</code> · <code>test_speed_curve</code>; <b>预拆点</b>: 撞超时 → 9a <code>grouping_mod</code>+<code>ops_mod</code>(2,035) / 9b 小件(1,420)</td></tr>
+</table>
+<p class="aside">合计 ≈14,640 变异(密度区间 0.84–1.23/行 ⇒ 12,300–18,000), 纯跑合计 ≈0.5–3h; 估算只用于排期, <b>每轮一律以实测为准</b>并原样记进切片(config 精化估算反例: 估 3,800 实测 4,799, +26%)。</p>
+
+<h3>3.3 测算口径</h3>
+<ul>
+  <li>变异密度 0.84–1.23/行(报告 §08 实测区间), 中值取 1.0; <b>不剔除「纯数据声明」行</b>去精化。</li>
+  <li>墙时不用 config 单价外推: hr 实测大包 ≈0.7s/变异且极不均匀(mutmut 按估计快的先跑, 前 85% 用 60 min, 余 15% 长尾再花 36 min); 排期按「每 1,000 变异 ≥12 min + 2x 余量」。</li>
+  <li>S4 全套件 verify 单价 ≈15s/条(config 窄池实测); 池宽的轮(W6)直接读 diff, 不走全量 verify。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>4.1 每轮标准步(一轮一收口, 不跨轮攒)</h3>
+<table>
+  <tr><th>步</th><th>动作</th><th>验收判据</th></tr>
+  <tr><td>S0 入场</td><td><code>commands run test.quick</code> 确认基线绿; <code>git fetch</code> 看远端任务档案轮次号, 取本轮真实 R 号(计划占位 W# → 实际 R#)</td><td>基线绿; R 号与远端档案不撞</td></tr>
+  <tr><td>S1 定池</td><td><code>commands run mutants.setup</code>(首次/镜像落后); 按 §03 表定池, 并<b>核函数面</b>: 对照目标文件的 def/class 清单与池测试的引用 —— 缺口按 W1/W6/W7 的预案先扩池或补用例</td><td>目标公开函数在池内都有对应用例; 核对结论写进切片</td></tr>
+  <tr><td>S2 跑轮</td><td><code>commands run mutants.run -- --target '&lt;本轮glob&gt;' --pool &lt;池文件...&gt;</code>; 有并行会话时加专用镜像 <code>--mirror ~/auto-qb-mut-core</code> + <code>--children 3</code></td><td>记录变异数 / 杀死率 / 耗时 / 工具版本 / 选择池(逐文件)</td></tr>
+  <tr><td>S3 导出+三分类</td><td><code>commands run mutants.report -- --target '&lt;本轮glob&gt;'</code> 拿<b>带 diff 的清单</b>; 逐条判 真洞 / 等价变异 / 假存活(人的动作, 不是工具输出)</td><td>每条存活变异有分类与一句理由; 不拿纯 id 清单分类</td></tr>
+  <tr><td>S4 手工确认</td><td>窄池轮: <code>commands run mutants.verify -- --from-report &lt;清单&gt;</code>(全套件 apply→跑→还原, 判据=与基线差集); 宽池轮(W6 等)或只有形态没 id: 直接读 diff 判 / 形态级手搓复验(定向池 ≈3s/条, 不进存活计数)</td><td>S4 覆盖条数与假存活数记进切片; TIMEOUT/UNKNOWN 不判死</td></tr>
+  <tr><td>S5 补测</td><td>确认的真洞各自入池(<code>test</code> 缺口 / <code>bug</code>, 填 <code>doc-refs</code>)或当场补断言; 守阵给「正向 + 反向对照」两种输入, 补完红验(同构变异→目标用例红→还原复绿, 锚点 <code>count != 1</code> 报 <code>ANCHOR-MISS</code> 停手), 再 <code>commands run test.full</code></td><td>红验全红(守阵不空转); src 零残留</td></tr>
+  <tr><td>S6 复跑</td><td>同目标<b>同池</b>再跑; 带新守阵先 cp 进镜像 + <code>--no-refresh</code>(否则被 <code>git checkout -f</code> 冲掉)</td><td>复跑存活 ≤ 首轮; 新增存活单独点出</td></tr>
+  <tr><td>S7 记录</td><td><code>commands run kb.new baseline</code> 立切片(字段: 目标/池/计数/杀死率/耗时/工具版本/children/机器; 首轮与复跑各一行; 真洞数+issue 链接; <code>**Refs:**</code> 指向任务档案); 任务档案追加轮次行</td><td>切片字段齐; <code>N passed</code> 只出现在切片里</td></tr>
+  <tr><td>S8 更锚</td><td>改常驻锚 §07 覆盖进度总表 core/ 行: 日期 / 变异数 / 杀死率 / 轮次 / 状态 / 切片链接(首跑插行, 状态 <code>待做</code> → <code>已做(余量在池)</code>)</td><td>日期与切片一致, 数字与切片逐位一致</td></tr>
+</table>
+
+<h3>4.2 分期</h3>
+<ul>
+  <li><b>第一批(W1–W3)</b>: 状态队列 / 限速 / 判定内核 —— 黄金法则落点与出错代价最高的三块, 共 ≈2,490 变异。</li>
+  <li><b>第二批(W4–W7)</b>: 流量面(存储 / 采样 / 快照来源)与编排客户端, 共 ≈6,260 变异; 其中 W6 是唯一宽池轮, S4 玩法切换。</li>
+  <li><b>第三批(W8–W9)</b>: 搬移面与 modules 余量, 共 ≈5,895 变异; 体量最大但出错代价相对低, 排最后。</li>
+  <li>批与批之间可以停: 每轮都有独立切片, 中断不留半成品; 恢复时 <code>commands run mutants.status</code> 回看镜像。</li>
+</ul>
+
+<h3>4.3 验收(可判定)</h3>
+<ul>
+  <li>每轮基线切片字段齐(skill「记录口径」必填清单), 首轮与复跑各一行。</li>
+  <li>确认的真洞 100% 已入池或已补测(带红验); 等价变异 / 假存活各有一句理由。</li>
+  <li>同池复跑存活数 ≤ 首轮; 任何「新增存活」有解释。</li>
+  <li>常驻锚 §07 的 core/ 行与最近切片逐位一致(skill 硬约束 12, 没更视为该轮未收尾)。</li>
+  <li>W1/W6/W7 三个函数面风险区(state.py / qbapi.py / reader.py)各有明确结论: 盖住了, 或 <code>no tests</code> 面已入池 issue。</li>
+  <li>整包收口后: core/ 状态从 <code>待做</code> 翻 <code>已做</code>, 锚 §03 优先级行补 ✔ 与刻度。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>轮次顺序</td><td>按 §03 的 W1→W9(出错代价优先: 黄金法则落点先跑)</td><td>按体量从小到大(更快出全套数字, 但高风险面后置)</td></tr>
+  <tr><td>D2</td><td>state.py / reader.py 的 no-tests 风险面</td><td>开跑前先补定向用例进池再跑(拿到的是 survived 刻度, 可三分类)</td><td>先跑拿 <code>no tests</code> 清单再补(快, 但那批变异连三分类都做不了, 该轮数字残缺)</td></tr>
+  <tr><td>D3</td><td>镜像策略</td><td>确认无并行会话跑变异时用默认镜像; 有并行则 <code>--mirror ~/auto-qb-mut-core</code> + <code>--children 3</code></td><td>全程专用镜像(略费磁盘 ~227MB, 但免疫撞车, 无需每次确认)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="cm">拍板后回填: D 编号 · 结论 · 日期。未拍板前本计划不执行(计划边界: 不在计划里实施)。</p>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>—</td><td>—</td><td>—</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>基线不红不开跑</td><td><code>test.quick</code> 挂</td><td>停手先修, 变异审计让路(工具会 <code>skipping mutation testing</code>)</td></tr>
+  <tr><td>WSL 打挂</td><td>池过宽 / children 过高 / 残留进程堆积</td><td><code>wsl --shutdown</code> 后重来, <code>--children</code> 降到 3; 回定向池</td></tr>
+  <tr><td>单轮超 60 min</td><td>实测变异远超估算(密度取上限 1.23)或长尾(参考 hr: 前 85%/后 15% = 60/36 min)</td><td>按模块再切(W9 已有 9a/9b 预拆点); 已跑一半不重跑 —— 绕过 <code>mutants.run</code>(它会 <code>rm -rf mutants</code>)在镜像里续跑, mutmut 只补余量</td></tr>
+  <tr><td>并行会话冲毁镜像</td><td>另一 clone 同时跑 <code>mutants.run</code>(共享默认镜像, 对方 <code>rm -rf mutants</code> 删掉本轮 .meta)</td><td>专用 <code>--mirror ~/auto-qb-mut-core</code> + <code>--children 3</code>(D3); 判别与处置见坑档 <code>pitfalls/testing/mutants-shared-mirror.md</code></td></tr>
+  <tr><td>宽池轮 verify 无用</td><td>W6(qbmanager 17 文件引用 / module 27 文件引用)</td><td>跳过全量 verify, 直接读 diff 判真洞 vs 等价(hr 实测宽池 24/24 SURVIVED / 0 假存活)</td></tr>
+  <tr><td>并发语义变异不稳定</td><td>taskqueue / qbmanager 的线程与定时器相关变异出 TIMEOUT 或 flaky 结果</td><td>TIMEOUT 是<b>未判定</b>不算杀死也不算存活; 复跑同一条确认, 仍超时的记「并发面工具盲区」不硬判</td></tr>
+  <tr><td>等价变异扎堆</td><td>state.py 序列化参数(indent/sort_keys 类)、日志文案、<code>__repr__</code></td><td>预期集中, 逐条记「为什么等价」不追; 判等价前先问「输入能不能区分派生值与字段默认」(config 轮教训: 内置档案三项恰同字段默认)</td></tr>
+  <tr><td>轮次撞号</td><td>多 clone 并行, 两会话各取同一 R 号(hr 轮与 config 轮都曾用 R11)</td><td>每轮 S0 先 <code>git fetch</code> 看远端任务档案; 合流时后到者重编号</td></tr>
+  <tr><td>静态守阵污染判据</td><td>池里有读源码文本做断言的守阵(test_core_modules 类)</td><td>靠包脚本 <code>set_conf.py</code> 的默认 deselect; 若整轮在基线就中断, 按坑档处置把文本层守阵移出判据</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0128</span> 初版。来源: 用户指令「写一个 core/ 的变异测试计划」。要点: 按 mutation-testing skill「派生计划」节骨架成文; core/ 32 文件 14,710 行摸底实测(wc -l + tests/ 全量 grep 建模块→池映射); 定调不做整包首轮(hr 整包 96 min 实测反推 core ≥2.5h), 直接拆 W1–W9 九轮按出错代价排序; 三个池面缺口立牌(state.py 仅 2 文件 / qbapi.py 4 文件对 54 def / reader.py 零引用); 三批分期可中断。零 src/ / tests/ 改动; 未执行审计(计划边界: 不在计划里实施)。</li>
+</ul>
+
+</div>
+</body>
+</html>
