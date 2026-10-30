@@ -23,6 +23,9 @@
 - test_named_lookup: named 按名取全局任务 —— 命中返回同一对象 / 缺失与形态不符返回 None
 - test_query_helpers_empty_queue: 空队列下 has_task/has_named/named/active_check_age 的反向对照
 - test_active_check_age_lookup: active_check_age —— 未登记 None / 登记后非负且量级有界 / 消亡释放回 None
+- test_run_due_passes_dry_run_to_handler: dry_run 传递契约 —— handler 第二实参收到 dry_run 标志(True/缺省 False 反向对照, 一条杀两条变异)
+- test_run_due_max_tasks_one_budget: max_tasks=1 预算恰好 1(变异面: 预算判据 <=0 收窄成 <=1); 对照 max_tasks=0 不限
+- test_pop_due_scan_cap_boundary: 让位者数==scan_cap 时第 scan_cap+1 位不被扫出(变异面: <scan_cap 放宽成 <=); 对照未用满时照常扫到
 """
 import time
 
@@ -362,3 +365,103 @@ def test_active_check_age_lookup():
     tq.add_task(dying, now=now)
     tq.run_due(now=now)
     assert tq.active_check_age("H2") is None, "消亡应释放在途登记"
+
+
+def test_run_due_passes_dry_run_to_handler():
+    """守阵(变异审计 W1, 一条杀两条): dry_run 传递契约 —— handler 第二实参必须收到 dry_run 标志
+
+    --dry-run 模式对任务路径的全部安全承诺都压在这条传递链上(run_due -> _run_one -> handler):
+    任一环丢实参, handler 体内 `if dry_run:` 恒 falsy, --dry-run 下全部任务真执行(真实写副作用)。
+
+    红验: `_run_one(task, dry_run)` 或 `task.handler(task, dry_run)` 的实参被换 None -> True 断言红;
+    缺省分支丢 dry_run -> False 断言红(反向对照同守阵)。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    seen = []
+    t = Task("rule", "x", hash="H1", interval=60, handler=lambda task, d: seen.append(d) or REQUEUE)
+    tq.add_task(t, now=now)
+    tq.run_due(now=now, dry_run=True)
+    assert seen == [True], "dry_run=True 必须原样传给 handler(--dry-run 契约)"
+    seen.clear()
+    tq.run_due(now=now + 60)
+    assert seen == [False], "缺省 dry_run=False 也必须原样传给 handler(反向对照)"
+
+
+def test_run_due_max_tasks_one_budget():
+    """守阵(变异审计 W1): max_tasks=1 时预算恰好 1 —— 速率语义(max_tasks/2s)的最小合法配置锚点
+
+    红验: `_pop_due` 预算判据 `max_tasks <= 0` 被变异成 `<= 1` -> max_tasks=1 时预算子句恒真,
+    一轮 tick 可执行至扫描上界(5 个), 返回数断言红。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    ran = []
+    for i in range(3):
+        tq.add_task(
+            Task(
+                "rule", f"t{i}", hash=f"H{i}", interval=60, handler=lambda task, dry: ran.append(task.hash) or REQUEUE
+            ),
+            now=now,
+        )
+    assert tq.run_due(now=now, max_tasks=1) == 1, "max_tasks=1 本轮只执行 1 个(预算语义)"
+    assert len(ran) == 1
+    assert tq.run_due(now=now, max_tasks=1) == 1 and len(ran) == 2, "其余到期任务下一 tick 继续"
+    # 反向对照: max_tasks=0(缺省)不限, 一次全执行 —— 预算语义只对 max_tasks>=1 生效
+    tq2 = TaskQueue()
+    ran2 = []
+    for i in range(3):
+        tq2.add_task(
+            Task(
+                "rule", f"t{i}", hash=f"H{i}", interval=60, handler=lambda task, dry: ran2.append(task.hash) or REQUEUE
+            ),
+            now=now,
+        )
+    assert tq2.run_due(now=now) == 3, "max_tasks=0 不限(内部语义)"
+
+
+def test_pop_due_scan_cap_boundary():
+    """守阵(变异审计 W1): 扫描面判据严格小于 —— 让位者数恰好用满 scan_cap 时, 第 scan_cap+1 位不得被扫出
+
+    红验: `_pop_due` 的 `< scan_cap` 被变异成 `<= scan_cap` -> 多扫 1 位, 排在让位组之后的
+    free 任务本轮被扫出执行, ran 断言红(与 test_run_due_defer_scan_bounded 的「远超上界」形态互补)。
+    """
+    tq = TaskQueue()
+    now = time.time()
+    ran = []
+    cap = 1 * _DEFER_SCAN_FACTOR  # max_tasks=1 -> scan_cap=5
+    for i in range(cap):  # 让位者数恰好 == scan_cap
+        tq.add_task(
+            Task(
+                "rule", f"g{i}", hash=f"G{i}", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED
+            ),
+            now=now - 1,
+        )
+    tq.add_task(
+        Task("rule", "free", hash="FX", interval=60, handler=lambda task, dry: ran.append(task.hash) or FINISHED),
+        now=now,
+    )
+    gate = lambda task: "让位(测试)" if task.hash != "FX" else None  # noqa: E731
+    assert tq.run_due(now=now, max_tasks=1, defer_gate=gate) == 0, "扫描面用满即停, 第 scan_cap+1 位不扫出"
+    assert ran == [], "让位者与越界位一律不执行"
+    assert len(tq._fast) == cap + 1, "全部任务仍在队列中(未被误消亡)"
+    # 反向对照: 让位者未用满扫描面(cap-1 个)时, free 照常被扫到并执行
+    tq2 = TaskQueue()
+    ran2 = []
+    for i in range(cap - 1):
+        tq2.add_task(
+            Task(
+                "rule",
+                f"g{i}",
+                hash=f"G{i}",
+                interval=60,
+                handler=lambda task, dry: ran2.append(task.hash) or FINISHED
+            ),
+            now=now - 1,
+        )
+    tq2.add_task(
+        Task("rule", "free", hash="FX", interval=60, handler=lambda task, dry: ran2.append(task.hash) or FINISHED),
+        now=now,
+    )
+    assert tq2.run_due(now=now, max_tasks=1, defer_gate=gate) == 1, "对照: 扫描面有余额, free 正常执行"
+    assert ran2 == ["FX"]

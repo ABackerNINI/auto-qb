@@ -14,7 +14,9 @@
 - test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 只告警不抛
 - test_load_state_backup_unusable_falls_to_empty: 主文件损坏且备份**存在但也不可用** -> 空状态 + ERROR 留痕(正向对照: 备份可用先恢复)
 - test_load_state_invalid_encoding_treated_as_corrupt: 位翻转坏编码(UnicodeDecodeError)同算损坏走告警链; 正向对照: 合法内容同一路径原样返回
-- test_cleanup_orphan_tmp_removes_only_state_leftovers: 启动清理只删 `<state_file>.<随机>.tmp`; .bak / 别人的 .tmp / 空随机段不碰
+- test_load_state_nondict_json_treated_as_corrupt: 守阵(变异审计 W1)——合法 JSON 但顶层非 dict([]) 同算损坏: WARNING + 备份链兜底, 不静默清空
+- test_load_state_migration_desc_recorded_and_materializable: 守阵(变异审计 W1)——真迁移发生时 migration_desc 非空且可物化落盘; 反向对照: 无迁移 desc 为空不落盘
+- test_cleanup_orphan_tmp_removes_only_state_leftovers: 启动清理只删 `<state_file>.<随机>.tmp`; .bak / 中段非 .tmp / 别人的 .tmp / 空随机段不碰
 - test_cleanup_orphan_tmp_missing_dir_is_nonfatal: 状态目录不可列 -> 只告警不抛
 - test_cleanup_orphan_tmp_delete_failure_is_nonfatal: 单个文件删不掉(被占用) -> 只告警并继续清其余, 不抛
 - test_cleanup_orphan_tmp_is_wired_after_lock: 接线守阵: 清理必须挂在 `self._lock.acquire()` 之后(未持锁时别的实例可能正在写)
@@ -229,6 +231,58 @@ def test_load_state_invalid_encoding_treated_as_corrupt():
         assert mgr.ctx.state.load() == {"exec_history": {"k": 1}, "schema_version": STATE_V}, "对照: 合法内容原样返回"
 
 
+def test_load_state_nondict_json_treated_as_corrupt():
+    """守阵(变异审计 W1): 合法 JSON 但顶层非 dict(数组/标量)同算损坏 —— 告警 + 备份链兜底, 不静默清空
+
+    「损坏时静默清空」根因的再现面: _read_state_file 的 isinstance 判据一旦放宽(变异 or True),
+    [] 原样返回、load 的 isinstance 兜底接住成静默 {} —— 损坏告警与备份恢复链全被绕过。
+
+    红验: `isinstance(data, dict)` 被变异(or True) -> 无 WARNING(告警断言红)且 .bak 不被启用(恢复断言红)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            f.write("[]")  # 合法 JSON, 顶层非 dict
+        mgr = make_manager(state_file)
+        with mock.patch.object(qb_state.logger, "warning") as warn:
+            assert mgr.ctx.state.load() == {}, "无备份: 空状态, 但必须走损坏链"
+        assert any("损坏" in c[0][0] for c in warn.call_args_list), "非 dict 顶层 = 损坏, 必须 WARNING 留痕"
+        # 备份链兜底: .bak 合法 -> 恢复备份内容(而不是静默从空开始)
+        with open(state_file + utils.BACKUP_SUFFIX, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}}, f)
+        assert mgr.ctx.state.load() == {"exec_history": {"k": 1}, "field_snapshots": {}, "schema_version": STATE_V}, \
+            "顶层非 dict 也必须走备份恢复链(v1 备份照常过迁移)"
+
+
+def test_load_state_migration_desc_recorded_and_materializable():
+    """守阵(变异审计 W1): 真迁移发生时 migration_desc 必须非空且可物化落盘(计划 26-09-26-0506)
+
+    描述丢失的回归后果: materialize_migration 早退 -> schema 迁移永不物化, 磁盘版本恒旧,
+    每次启动内存重放同一条链(幂等兜底所以不炸, 但与物化设计相悖)。
+
+    红验: `_migrate_state_dict` 的 `self.migration_desc = desc` 被变异成 None -> desc 非空断言红 +
+    materialize 早退不落盘(文件存在性断言红)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump({"exec_history": {"k": 1}}, f)  # 存量: 无 schema_version = v1
+        svc = qb_state.StateService(state_file)
+        svc.load()
+        assert svc.migration_desc, "v1 旧档装载发生真迁移, 描述必须非空"
+        svc.materialize_migration(dry_run=False)
+        assert json.loads(open(state_file, encoding="utf-8").read())["schema_version"] == STATE_V, \
+            "迁移必须可物化落盘(磁盘版本章)"
+
+        # 反向对照: 首启(文件不存在)无迁移 -> desc 为空串, materialize 不落盘(不伪造「已迁移」)
+        fresh = os.path.join(td, "fresh.json")
+        svc2 = qb_state.StateService(fresh)
+        svc2.load()
+        assert svc2.migration_desc == "", "无迁移时描述为空"
+        svc2.materialize_migration(dry_run=False)
+        assert not os.path.exists(fresh), "无迁移不得落盘"
+
+
 def test_load_state_no_version_field_then_save_stamps():
     """schema 版本链(计划 26-09-26-0506): 旧格式文件(无字段)按 v1 识别, 在内存沿链迁到当前版本; save 后文件带当前版本章"""
     with tempfile.TemporaryDirectory() as td:
@@ -323,6 +377,7 @@ def test_cleanup_orphan_tmp_removes_only_state_leftovers():
         orphans = [os.path.join(td, "state.json.ab12cd34.tmp"), os.path.join(td, "state.json.zz99.tmp")]
         keeps = [
             os.path.join(td, "state.json.bak"),  # 恢复凭据
+            os.path.join(td, "state.json.xyzzy"),  # 中段随机但非 .tmp: 长度闸救不下, 全靠 startswith+endswith 双判据(变异审计 W1 反例)
             os.path.join(td, "web.token.tmp"),  # 别人的临时文件
             os.path.join(td, "state.json..tmp"),  # 空随机段: 不是 mkstemp 的产物
         ]

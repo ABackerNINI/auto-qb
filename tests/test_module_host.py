@@ -15,6 +15,8 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
 - test_maybe_flush_via_service: 周期落盘到期触发/间隔内不重复/interval=0 关闭(语义与迁移前一致)
 - test_maybe_flush_boundary_is_inclusive: 到期判断含边界 —— now == next_flush_at 必须落盘(>= 收紧成 > 即红)
 - test_exec_history_prune_bounded_and_active_kept: 守阵(26-10-06-0028 A-03)——exec_history 日期淘汰+存量上限有界, 当日活跃键不被误清
+- test_exec_history_overflow_prunes_oldest_ts_not_key_order: 守阵(变异审计 W1)——溢出淘汰按 ts 最旧(与键名/插入序无关), 当日记录即使 ts 最旧也不进候选
+- test_exec_history_prune_defensive_defaults: 守阵(变异审计 W1, 低危防御面)——缺 date/ts 的记录不崩、按过期/最旧淘汰(永不淘汰也红)
 - test_prune_day_keys_boundary_and_zero_keep: prune_day_keys 单点直接守阵 —— 恰在 cutoff 的条目保留(< 严格小于)/早于淘汰;
   keep_days=0(ops_mod skip_check_day 形态「只留当日」)当日保留、昨日淘汰
 - test_module_host_register_order_and_dup_fail_fast: 注册保序; 无名/重名 fail-fast
@@ -208,6 +210,91 @@ def test_exec_history_prune_bounded_and_active_kept():
         hist = svc.data["exec_history"]
         assert "r_y:H" not in hist, "超上限先淘汰最旧的非当日记录"
         assert len(hist) == state_mod._EXEC_HISTORY_MAX_ENTRIES + 1, "当日记录全保留(活跃键不被误清)"
+
+
+def test_exec_history_overflow_prunes_oldest_ts_not_key_order():
+    """守阵(变异审计 W1): 溢出淘汰按 ts 最旧 —— 与键名字典序、dict 插入序双重解耦; 当日记录不进候选
+
+    既有守阵(test_exec_history_prune_bounded_and_active_kept)的溢出候选只有一条非当日记录,
+    「按 ts 排序」与「按键名/插入序取」分不出 —— 本条把 ts 序、键名序、插入序三者互相错开:
+
+    - ts 序与键名序相反(ts 最旧者键名最大) + ts 序与插入序相反(ts 最旧者插入最后):
+      排序键被删/换常数/换错键 -> 键名序或插入序的 ts 较新者被误删, 断言红。
+    - 当日记录 ts 全场最旧: 日期过滤 get("date") 被换 None/错键 -> 当日混进候选且恰被删, 断言红。
+    """
+    from datetime import datetime, timedelta
+
+    from auto_qb.core import state as state_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        svc = StateService(os.path.join(td, "state.json"))
+        today = datetime.now().date()
+        yesterday = (today - timedelta(days=1)).isoformat()
+        hist = {
+            "a_newer:H": {
+                "ts": 200.0,
+                "date": yesterday,
+                "hour": 0
+            },  # 键名最小 + 插入最先 + ts 较新
+        }
+        hist.update(
+            {
+                f"r{i}:H": {
+                    "ts": float(i) + 1.0,
+                    "date": today.isoformat(),
+                    "hour": 0
+                }
+                for i in range(state_mod._EXEC_HISTORY_MAX_ENTRIES - 2)
+            }
+        )
+        hist["t0:H"] = {"ts": 0.0, "date": today.isoformat(), "hour": 0}  # 当日且 ts 全场最旧
+        hist["z_oldest:H"] = {"ts": 100.0, "date": yesterday, "hour": 0}  # 键名最大 + 插入最后 + ts 最旧
+        svc.data["exec_history"] = hist  # 共 2001 条 -> 溢出 1
+        svc.record_execution("x", "y")
+        hist = svc.data["exec_history"]
+        assert "z_oldest:H" not in hist, "淘汰的是 ts 最旧的非当日记录"
+        assert "a_newer:H" in hist, "ts 较新者不因键名/插入序靠前被误删"
+        assert "t0:H" in hist, "当日记录即使 ts 全场最旧也不进溢出候选(活跃键不误清)"
+        assert len(hist) == state_mod._EXEC_HISTORY_MAX_ENTRIES + 1
+
+
+def test_exec_history_prune_defensive_defaults():
+    """守阵(变异审计 W1, 低危防御面): 缺 date / 缺 ts 的记录(仅损坏/手改 state 可达)—— 清理不崩且不滞留
+
+    行为契约(非实现细节): 键面清理对缺字段记录必须 fail-soft —— date 缺失按「已过期」淘汰,
+    ts 缺失按「最旧」淘汰; 换成 None 是 TypeError 崩 record_execution, 换成 "XXXX" 是永不淘汰,
+    两者都破坏「exec_history 键面有界」的不变量(模块头 _EXEC_HISTORY_* 常量注释)。
+    """
+    from datetime import datetime, timedelta
+
+    from auto_qb.core import state as state_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        svc = StateService(os.path.join(td, "state.json"))
+        svc.data["exec_history"] = {"bad:H": {"ts": 1.0, "hour": 0}}  # 缺 date
+        svc.record_execution("r", "h")  # 不得抛
+        hist = svc.data["exec_history"]
+        assert "bad:H" not in hist, "缺 date 记录按过期淘汰(不崩, 也不永不淘汰)"
+        assert "r:h" in hist
+
+        today = datetime.now().date()
+        yesterday = (today - timedelta(days=1)).isoformat()
+        svc2 = StateService(os.path.join(td, "s2.json"))
+        hist2 = {
+            f"r{i}:H": {
+                "ts": float(i) + 1.0,
+                "date": today.isoformat(),
+                "hour": 0
+            }
+            for i in range(state_mod._EXEC_HISTORY_MAX_ENTRIES - 1)
+        }
+        hist2["has_ts:H"] = {"ts": 100.0, "date": yesterday, "hour": 0}
+        hist2["nots:H"] = {"date": yesterday, "hour": 0}  # 缺 ts 的非当日记录
+        svc2.data["exec_history"] = hist2  # 共 2001 条 -> 溢出 1
+        svc2.record_execution("x", "y")  # 不得抛(缺 ts 记录参与排序)
+        hist2 = svc2.data["exec_history"]
+        assert "nots:H" not in hist2, "缺 ts 记录按 ts=0(最旧)淘汰, 不是排序崩溃"
+        assert "has_ts:H" in hist2, "淘汰只落在缺 ts 者, 不殃及 ts 较新的候选"
 
 
 def test_prune_day_keys_boundary_and_zero_keep():
