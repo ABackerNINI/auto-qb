@@ -49,7 +49,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_sel_group_member_linkage: 组 <-> 成员双向联动(2026-10-09 用户拍板, 取代 FX-11 互斥) ——
   单一写入口 _selAddGroup/_selDropGroup(组选中 = 组 key 与成员 hash 一起写入) + 成员侧回扫
   _selSyncGroups(组内成员全选 => 组入选, 撤到不全 => 组移出); 成员侧五个变更点全部回扫;
-  groupSelState 按成员完整度派生 selected(视觉兜底) / selectedCount 走 selHashSet 去重(组 key
+  groupSelState 按成员完整度派生 selected(视觉兜底; 2026-10-31 计划 26-10-30-2359 模板C 起
+  直通 _selState 多带 ratio 供半选左条按高度量化) / selectedCount 走 selHashSet 去重(组 key
   与其成员 hash 同时在集合里, 直接相加会数两遍) / _bulkTargets 剔除已被选中组覆盖的成员 hash
 - test_sel_visual_parity_and_site_cell: 成员行选中视觉与种子页种子行同形(三皮肤 CSS 成对:
   .member-row.selected 与 .group-row.selected 同一 tint 令牌(`--sel-bg`)且同吃左色条规则; 两条规则
@@ -1468,7 +1469,9 @@ def test_sel_group_member_linkage() -> None:
     gst = re.search(r"groupSelState\(g\) \{(.*?)\n    \},", sel, re.S)
     assert gst, "selection.js 找不到 groupSelState(组行选中态)"
     gb = gst.group(1)
-    assert "return { selected: st.selected, partial: st.partial };" in gb, (
+    # 2026-10-31(计划 26-10-30-2359 模板C): groupSelState 直通 _selState(返回多带 ratio,
+    # 按成员完整度派生 selected 的口径不变) —— 守阵 needle 跟着搬家, 语义不变
+    assert "return this._selState(this._groupHashes(g));" in gb, (
         "groupSelState 必须按成员完整度派生 selected(组内全选 => 组显示选中, 视觉兜底)"
     )
     cnt = re.search(r"selectedCount\(\) \{(.*?)\n    \},", sel, re.S)

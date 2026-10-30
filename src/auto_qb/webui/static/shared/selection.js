@@ -438,11 +438,12 @@ window.AQB_SELECTION = {
      */
     _selState(hashes) {
       const list = hashes || [];
-      if (!list.length) return { selected: false, partial: false };
+      if (!list.length) return { selected: false, partial: false, ratio: 0 };
       const set = this.selHashSet;
       let hit = 0;
       for (const h of list) if (set.has(h)) hit += 1;
-      return { selected: hit === list.length, partial: hit > 0 && hit < list.length };
+      /* ratio(计划 26-10-30-2359 模板C): 命中比例, 供半选左条按高度量化; 全选=1, 未选=0 */
+      return { selected: hit === list.length, partial: hit > 0 && hit < list.length, ratio: hit / list.length };
     },
     isMemberSelected(m) {
       return this.selHashSet.has(m.hash);
@@ -451,9 +452,14 @@ window.AQB_SELECTION = {
      * 兜底, 2026-10-09); 否则派生集合命中其**部分**成员 -> partial。
      * (典型场景: 在种子页选了某辅种组的几个种子, 切回辅种页该组应显示"半选"而非"没选") */
     groupSelState(g) {
-      if (this.isGroupSelected(g)) return { selected: true, partial: false };
-      const st = this._selState(this._groupHashes(g));
-      return { selected: st.selected, partial: st.partial };
+      if (this.isGroupSelected(g)) return { selected: true, partial: false, ratio: 1 };
+      return this._selState(this._groupHashes(g));
+    },
+    /* 组行比例变量(计划 26-10-30-2359 模板C, 拍板 D1): 半选时写 --sel-ratio, 左条高度 ∝ 选中比例;
+     * 全选/未选不写变量 —— CSS 侧 fallback=1(满高), 行为与改动前一致(保守默认)。 */
+    groupSelStyle(g) {
+      const st = this.groupSelState(g);
+      return st.partial ? { "--sel-ratio": String(st.ratio) } : {};
     },
     _showHashes(s) {
       const out = [];

@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 分组行左条区分全选与半选——三模板选型</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-sel-bar-partial-full">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-30-2359">
+<meta name="doc-updated" content="26-10-31-0019">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* ---------- §03 模板预览区(复刻主表行语言, 演示底色用应用同款 #0d1724) ---------- */
+  .tgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px; margin: 18px 0; }
+  .tcard { border: 1px solid var(--hair); padding: 16px 18px 14px; background: #121a21; }
+  .tcard > h3 { margin: 0 0 2px; font-size: 15.5px; }
+  .tcard .tl { color: var(--dim); font-size: 12.5px; margin: 0 0 12px; }
+  .tcard .rec { font-family: var(--mono); font-size: 10.5px; letter-spacing: .08em; color: var(--ok); border: 1px solid var(--hair); padding: 1px 7px; margin-left: 8px; vertical-align: 2px; }
+  .tcard ul { font-size: 12.5px; color: var(--dim); padding-left: 18px; margin-top: 10px; }
+  .tcard ul b { color: var(--ink); font-weight: 600; }
+
+  .demo { background: #0d1724; border: 1px solid #223040; padding: 6px 0; font-size: 12.5px; }
+  .d-head { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; color: #6f7d8a; padding: 2px 14px 4px; border-bottom: 1px solid #16222e; }
+  .d-row { position: relative; min-height: 30px; display: flex; align-items: center; padding: 0 14px; cursor: pointer; user-select: none; }
+  .d-row + .d-row { border-top: 1px solid #131f2a; }
+  .d-row.g { font-weight: 600; color: #e4eaef; }
+  .d-row.m { padding-left: 30px; color: #a2b0bd; font-weight: 400; }
+  .d-row:hover { background: rgba(255,255,255,.05); }
+  .d-row.m.on { background: color-mix(in srgb, #3aa6a6 13%, #0d1724); color: #dfe7ee; }
+  .d-row .cnt { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: #6f7d8a; }
+  .d-hint { font-family: var(--mono); font-size: 10px; color: #6f7d8a; padding: 6px 14px 0; }
+
+  /* 左条本尊: 与 row_lang.css 同款几何 —— 行 ::before, left:1px(键盘锚点 [0,1] 让位),
+     top/bottom 14% 不满高, 3px 宽, 右侧圆角。各模板只改 partial 态的表达。 */
+  .demo .d-row.g::before {
+    content: ""; position: absolute; left: 1px; top: 14%; bottom: 14%;
+    width: 3px; border-radius: 0 3px 3px 0;
+    background: #3aa6a6; opacity: 0; pointer-events: none;
+    transition: opacity .12s ease, background-color .12s ease, height .15s ease, top .15s ease;
+  }
+  .demo .d-row.g:hover::before { opacity: .35; }
+  .demo .d-row.g.full::before { opacity: 1; }
+
+  /* 模板现状(cur): partial 与 full 完全同款 —— 即当前 row_lang.css 行为 */
+  .tpl-cur .d-row.g.partial::before { opacity: 1; }
+
+  /* 模板 A 浓度分档: partial = 同条 42% 浓度(皮肤基线做法) */
+  .tpl-a .d-row.g.partial::before { opacity: .42; }
+
+  /* 模板 B 实心/空心: partial = 同几何描边空心条 */
+  .tpl-b .d-row.g.partial::before { opacity: 1; background: transparent; box-shadow: inset 0 0 0 1px #3aa6a6; }
+
+  /* 模板 C 比例高度: partial = 下锚短条, 高度 ∝ 选中比例(--ratio 由 JS 写入), 保底 8px */
+  .tpl-c .d-row.g.partial::before { opacity: 1; top: auto; height: max(8px, calc((100% - 28%) * var(--ratio, .5))); }
+
+  /* 横滚 2px 窄条预览(吸左首格窄条形态) */
+  .narrow { display: flex; gap: 22px; align-items: flex-end; background: #0d1724; border: 1px solid #223040; border-top: none; padding: 8px 14px 9px; font-family: var(--mono); font-size: 10px; color: #6f7d8a; }
+  .nb { display: flex; gap: 8px; align-items: center; }
+  .nb i { display: block; width: 2px; height: 20px; background: #3aa6a6; border-radius: 0 2px 2px 0; }
+  .tpl-cur .nb.p i { opacity: 1; }
+  .tpl-a .nb.p i { opacity: .42; }
+  .tpl-b .nb.p i { background: transparent; box-shadow: inset 1px 0 0 #3aa6a6; }
+  .tpl-c .nb.p i { height: max(5px, calc(20px * var(--nr, .6))); align-self: flex-end; margin-top: auto; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-sel-bar-partial-full</div>
+<h1>WebUI 分组行左条区分全选与半选——三模板选型</h1>
+<p class="lede">分组行左条目前对「组内全部种子选中」与「部分种子选中」渲染同一条 accent 实色条,本文档给出三个可交互模板(可点击行复现三态)供选型,拍板后按选定模板改 <code>row_lang.css</code> 的 partial 规则。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-30-2359 · <b>doc-updated</b> 26-10-31-0019 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令(2026-10-30 会话):「WEBUI选中分组中部分种子与全部种子的状态需要区分,目前的左边选中指示条是一样的,先设计3个简单可交互的模板供选择」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>目标</b>:在分组视图(辅种页/种子页分组模式)中,分组行左条对三种选中态——未选 / 部分选中 / 全部选中——给出一眼可辨的视觉区分。完成判据:任意选中组合下,仅凭左条(不看成员行)即可说出该组是全选还是半选。</p>
+<p><b>不变量</b>(来自 row_lang.css 既有定案,任何模板不得破坏):</p>
+<ul>
+  <li><b>文本零位移</b>:条落行 padding 沟槽,不推名称文本;几何 = 行 <code>::before</code>、<code>left:1px</code>、top/bottom 14% 不满高、3px 宽、右侧圆角(<code>row_lang.css:207-219</code>)。</li>
+  <li><b>键盘锚点让位</b>:条占 x[1,4],不与 <code>.kb-cursor</code> 虚线 outline 的 x[0,1] 叠死。</li>
+  <li><b>横滚窄条同步</b>:<code>.is-hscrolled</code> 时沟槽条 <code>content:none</code>,改吸左首格 2px 窄条——半选区分必须在窄条形态同样成立。</li>
+  <li><b>范围</b>:仅 <code>.rl-scope</code> 内的分组行——追剧页 show-row/ep-row 虽同名 <code>.group-row</code> 但不在 <code>.rl-scope</code>(走皮肤自带 42% 弱化条),不波及;成员行(<code>.member-row</code>)左条不动。frost/golden 主题行语言规则不命中(走皮肤自带的 42% 弱化条),不在本问题范围。</li>
+  <li><b>数据层不动</b>:<code>groupSelState</code>(<code>selection.js:453</code>)已返回 <code>selected/partial</code>,模板已挂类(<code>tpl/groups.html:25</code>)——纯视觉问题,除非选模板 C 需追加比例值。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>现状</b>:行语言(flat/wave)接管左条后,选中与半选共用同一规则——四组规则里 selected 与 partial 完全同款 <code>background: var(--rl-bar-on, var(--accent)); opacity: 1</code>:</p>
+<ul>
+  <li>flat 沟槽条:<code>row_lang.css:221-225</code>;wave 沟槽条:<code>row_lang.css:384-388</code></li>
+  <li>横滚吸左窄条:flat <code>row_lang.css:244-247</code>、wave <code>row_lang.css:407-411</code></li>
+</ul>
+<p><b>痛点证据</b>:皮肤基线本有区分——三皮肤 <code>views.css</code> 的 partial 条是同 accent 但 <code>opacity: .42</code> 的弱化条(atlas <code>views.css:240-242</code> / console <code>views.css:162-164</code> / prism <code>views.css:468-470</code>);行语言接管时「选中/半选显式重申 accent」把这一区分抹平了(flat <code>row_lang.css:122-125</code> 注释即此定案)。用户侧表现:组内勾 1 个种子和勾全部种子,分组行左条一模一样,无法快速定位"没选全"的组。</p>
+<div class="aside">复现:分组视图展开任一组 → 勾选组内部分种子 → 组行左条与全选组完全相同(accent 实色、同几何、同浓度)。</div>
+
+<h2><span class="no">§03</span>方案总览:三模板交互预览</h2>
+<p>先看<b>现状复刻</b>(与线上一致,partial 与 full 无区分),再对比三个模板。每张卡可交互:<b>点组行 = 全选/清空该组,点成员行 = 单独勾选</b>;初始状态分别摆了全选、半选、未选三态。卡底附<b>横滚 2px 窄条</b>形态的三态预览。</p>
+
+<div class="tgrid">
+  <div class="tcard tpl-cur">
+    <h3>现状复刻</h3>
+    <p class="tl">partial 与 full 同款 accent 实色条 —— 即当前 row_lang.css 行为,作对照基线。</p>
+    <div class="demo">
+      <div class="d-head">名称</div>
+      <div class="d-row g">组 A · 高清电影 <span class="cnt">5/5</span></div>
+      <div class="d-row m on">A-01.mkv</div>
+      <div class="d-row m on">A-02.mkv</div>
+      <div class="d-row m on">A-03.mkv</div>
+      <div class="d-row m on">A-04.mkv</div>
+      <div class="d-row m on">A-05.mkv</div>
+      <div class="d-row g">组 B · 剧集合集 <span class="cnt">2/4</span></div>
+      <div class="d-row m on">B-S01E01.mkv</div>
+      <div class="d-row m on">B-S01E02.mkv</div>
+      <div class="d-row m">B-S01E03.mkv</div>
+      <div class="d-row m">B-S01E04.mkv</div>
+      <div class="d-row g">组 C · 演唱会 <span class="cnt">0/3</span></div>
+      <div class="d-row m">C-Disc1.iso</div>
+      <div class="d-row m">C-Disc2.iso</div>
+      <div class="d-row m">C-Extras.mp4</div>
+      <div class="d-hint">点组行全选/清空 · 点成员行勾选</div>
+    </div>
+    <div class="narrow">
+      <span class="nb f"><i></i>全选</span>
+      <span class="nb p"><i></i>半选 2/4</span>
+      <span class="nb n"><i style="opacity:0"></i>未选</span>
+    </div>
+    <ul><li>半选不可辨 —— 本文档要修的问题本体。</li></ul>
+  </div>
+
+  <div class="tcard tpl-a">
+    <h3>模板 A · 浓度分档<span class="rec">推荐</span></h3>
+    <p class="tl">全选 = 实心 accent;半选 = 同条 42% 浓度。回归三皮肤既有做法,行语言接管前的原貌。</p>
+    <div class="demo">
+      <div class="d-head">名称</div>
+      <div class="d-row g full">组 A · 高清电影 <span class="cnt">5/5</span></div>
+      <div class="d-row m on">A-01.mkv</div>
+      <div class="d-row m on">A-02.mkv</div>
+      <div class="d-row m on">A-03.mkv</div>
+      <div class="d-row m on">A-04.mkv</div>
+      <div class="d-row m on">A-05.mkv</div>
+      <div class="d-row g partial">组 B · 剧集合集 <span class="cnt">2/4</span></div>
+      <div class="d-row m on">B-S01E01.mkv</div>
+      <div class="d-row m on">B-S01E02.mkv</div>
+      <div class="d-row m">B-S01E03.mkv</div>
+      <div class="d-row m">B-S01E04.mkv</div>
+      <div class="d-row g">组 C · 演唱会 <span class="cnt">0/3</span></div>
+      <div class="d-row m">C-Disc1.iso</div>
+      <div class="d-row m">C-Disc2.iso</div>
+      <div class="d-row m">C-Extras.mp4</div>
+      <div class="d-hint">点组行全选/清空 · 点成员行勾选</div>
+    </div>
+    <div class="narrow">
+      <span class="nb f"><i></i>全选</span>
+      <span class="nb p"><i></i>半选 2/4</span>
+      <span class="nb n"><i style="opacity:0"></i>未选</span>
+    </div>
+    <ul>
+      <li><b>改动最小</b>:四组规则各加一条 partial 弱化声明(或 <code>--rl-bar-partial</code> 变量)。</li>
+      <li><b>有先例</b>:皮肤基线 <code>views.css</code> 同构,frost/golden 用户看到的就是这个语义。</li>
+      <li>弱项:依赖色彩/透明度感知,弱光下 42% 与 hover 中性条需实机核对。</li>
+    </ul>
+  </div>
+
+  <div class="tcard tpl-b">
+    <h3>模板 B · 实心/空心</h3>
+    <p class="tl">全选 = 实心条;半选 = 同几何描边空心条(1px 内描边)。形状通道区分,不依赖透明度。</p>
+    <div class="demo">
+      <div class="d-head">名称</div>
+      <div class="d-row g full">组 A · 高清电影 <span class="cnt">5/5</span></div>
+      <div class="d-row m on">A-01.mkv</div>
+      <div class="d-row m on">A-02.mkv</div>
+      <div class="d-row m on">A-03.mkv</div>
+      <div class="d-row m on">A-04.mkv</div>
+      <div class="d-row m on">A-05.mkv</div>
+      <div class="d-row g partial">组 B · 剧集合集 <span class="cnt">2/4</span></div>
+      <div class="d-row m on">B-S01E01.mkv</div>
+      <div class="d-row m on">B-S01E02.mkv</div>
+      <div class="d-row m">B-S01E03.mkv</div>
+      <div class="d-row m">B-S01E04.mkv</div>
+      <div class="d-row g">组 C · 演唱会 <span class="cnt">0/3</span></div>
+      <div class="d-row m">C-Disc1.iso</div>
+      <div class="d-row m">C-Disc2.iso</div>
+      <div class="d-row m">C-Extras.mp4</div>
+      <div class="d-hint">点组行全选/清空 · 点成员行勾选</div>
+    </div>
+    <div class="narrow">
+      <span class="nb f"><i></i>全选</span>
+      <span class="nb p"><i></i>半选(浓度混合)</span>
+      <span class="nb n"><i style="opacity:0"></i>未选</span>
+    </div>
+    <ul>
+      <li><b>色弱友好</b>:形状差独立于颜色,辨识度上限最高。</li>
+      <li><b>窄条退化</b>:2px 窄条装不下"空心"——横滚态建议混合策略(窄条改浓度表达),见卡内预览。</li>
+      <li>3px 宽度下空心条实为「1px 边 + 1px 空 + 1px 边」的细双线,需实机核对可读性。</li>
+    </ul>
+  </div>
+
+  <div class="tcard tpl-c">
+    <h3>模板 C · 比例高度</h3>
+    <p class="tl">半选 = 下锚短条,高度 ∝ 选中比例(保底 8px);全选 = 满高。左条本身携带"选了多少"的量化信息。</p>
+    <div class="demo">
+      <div class="d-head">名称</div>
+      <div class="d-row g full">组 A · 高清电影 <span class="cnt">5/5</span></div>
+      <div class="d-row m on">A-01.mkv</div>
+      <div class="d-row m on">A-02.mkv</div>
+      <div class="d-row m on">A-03.mkv</div>
+      <div class="d-row m on">A-04.mkv</div>
+      <div class="d-row m on">A-05.mkv</div>
+      <div class="d-row g partial" style="--ratio:.5">组 B · 剧集合集 <span class="cnt">2/4</span></div>
+      <div class="d-row m on">B-S01E01.mkv</div>
+      <div class="d-row m on">B-S01E02.mkv</div>
+      <div class="d-row m">B-S01E03.mkv</div>
+      <div class="d-row m">B-S01E04.mkv</div>
+      <div class="d-row g">组 C · 演唱会 <span class="cnt">0/3</span></div>
+      <div class="d-row m">C-Disc1.iso</div>
+      <div class="d-row m">C-Disc2.iso</div>
+      <div class="d-row m">C-Extras.mp4</div>
+      <div class="d-hint">点组行全选/清空 · 点成员行勾选</div>
+    </div>
+    <div class="narrow">
+      <span class="nb f"><i></i>全选</span>
+      <span class="nb p" style="--nr:.6"><i></i>半选 2/4</span>
+      <span class="nb n"><i style="opacity:0"></i>未选</span>
+    </div>
+    <ul>
+      <li><b>信息量最大</b>:不点开就能看出 3/5 与 1/5 的差别。</li>
+      <li><b>动数据层</b>:<code>groupSelState</code> 需追加返回 ratio 并写 CSS 变量(<code>--sel-ratio</code>),超出"纯 CSS"范围。</li>
+      <li>比例悬殊时短条弱(靠保底值兜底);"满高=全选"需用户学习一次。</li>
+    </ul>
+  </div>
+</div>
+
+<h3>三模板对比</h3>
+<table>
+  <tr><th>维度</th><th>A 浓度分档</th><th>B 实心/空心</th><th>C 比例高度</th></tr>
+  <tr><td>改动面</td><td class="good">最小:4 组 partial 规则改色</td><td class="wr">小:partial 改形 + 窄条需混合策略</td><td class="bad">中:CSS + selection.js 返回 ratio + 写变量</td></tr>
+  <tr><td>辨识度</td><td>中(浓度通道)</td><td class="good">高(形状通道)</td><td>中~高(高度通道,细辨依赖比例差)</td></tr>
+  <tr><td>横滚 2px 窄条</td><td class="good">直接成立</td><td class="bad">退化,需混合策略</td><td class="good">直接成立</td></tr>
+  <tr><td>先例一致性</td><td class="good">三皮肤基线同构</td><td>无先例</td><td>无先例</td></tr>
+  <tr><td>信息量</td><td>三态</td><td>三态</td><td class="good">三态 + 量化比例</td></tr>
+</table>
+<p>落点(任一模板):<code>src/auto_qb/webui/static/shared/row_lang.css</code> 四组规则(flat/wave × 沟槽条/横滚窄条)为 partial 拆出独立表达;推荐同时新增 <code>--rl-bar-partial</code> 令牌与 <code>--rl-bar-on</code> 并列,皮肤侧零改动。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p><i>拍板 D1 后细化;以下为框架。</i></p>
+<ol>
+  <li><b>partial 表达落地</b>:row_lang.css 四组规则(flat/wave × 沟槽/窄条)给 partial 拆独立声明;新增 <code>--rl-bar-partial</code> 令牌(默认值随模板)。验收:分组页三态肉眼可辨,成员行零波及。</li>
+  <li><b>(仅模板 C)数据层</b>:<code>groupSelState</code>/<code>_selState</code> 返回 <code>ratio</code>(hit/total),app 渲染组行时写 <code>--sel-ratio</code>;模板类挂载同步。验收:勾选比例变化时条高平滑跟随。</li>
+  <li><b>状态序复验</b>:partial 规则保持在 hover 之上、与 selected 同序(声明序取赢链不重排);<code>kb-cursor</code> 虚线让位复验(x[0,1] vs 条[1,4])。</li>
+  <li><b>实机验证</b>:<code>commands run dev.run -- config.yml --dry-run</code> 起真机,Playwright 截图三态 + 横滚态;全量测试 <code>commands run test.full</code>,新基线切片记实测。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p class="cm">D1/D2 已拍板,结论迁 §06。</p>
+<table>
+  <tr><th>#</th><th>问题</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1(已拍板)</td><td>半选左条采用哪个模板</td><td>~~模板 A 浓度分档~~</td><td>—— 迁 §06</td></tr>
+  <tr><td>D2(已拍板)</td><td>是否叠加半选底色弱化(行板背景同步降档)</td><td>—— 迁 §06</td><td>——</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th><th>依据</th></tr>
+  <tr><td>D1</td><td>采用<b>模板 C 比例高度</b>。模板 A 的 42% 浓度与 hover 中性条(opacity .6)存在相撞风险,被否;B/C 均可,C 先行。</td><td>2026-10-31</td><td>用户拍板(会话指令)</td></tr>
+  <tr><td>D2</td><td>不做半选行板底色弱化,只动左条。</td><td>2026-10-31</td><td>默认(未要求叠加)</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<ul>
+  <li><b>3px 条辨析度不足</b>(模板 B 空心在 3px 宽度实为细双线):触发条件 = 实机截图后肉眼仍难辨;处置 = 该模板窄条混合策略推广到沟槽条,或回退模板 A。</li>
+  <li><b>hover 中性条与 42% 半选混淆</b>(模板 A):触发条件 = 弱光环境误读;处置 = hover 条降低浓度(.6→.35)或半选改 50% 实测校准。</li>
+  <li><b>横滚双条回归</b>:partial 新规则若漏掉 <code>.is-hscrolled</code> 分支会破坏"沟槽条 content:none"定案;对策 = 四组规则成对改 + Playwright 横滚截图验收。</li>
+  <li><b>声明序回归</b>:row_lang 状态序 hover &lt; zebra &lt; expanded &lt; search-hit &lt; selected;partial 插错位置会冲掉状态底;对策 = 改后跑行语言三态组合矩阵人工核对。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-30-2359</span> 初版:来源 = 用户指令(部分/全选左条需区分,先出三模板);要点 = 现状取证(row_lang.css 四组规则 selected/partial 同款,皮肤基线原有 42% 弱化被接管抹平)+ 三可交互模板(A 浓度分档 / B 实心空心 / C 比例高度)+ 对比表与待拍板 D1/D2。</li>
+  <li><span class="tag">R1 · 26-10-31-0019</span> 拍板 D1=模板C 比例高度/D2=不叠底色并实施: selection.js _selState/groupSelState 返回 ratio + groupSelStyle 写 --sel-ratio; groups.html 组行 style 合并; row_lang.css 四组 partial 规则拆独立下锚比例短条(flat/wave × 沟槽/横滚窄条, fallback=1 保守默认); 取证补记 shows 行不在 rl-scope 不波及</li>
+</ul>
+
+</div>
+<script>
+/* 模板交互:与主表交互语义同构 —— 点组行 = 全选/清空该组(groupSelState 双向联动),
+   点成员行 = 单独勾选。每个 .demo 独立初始化,状态仅存内存,无持久化。 */
+(function () {
+  document.querySelectorAll('.demo').forEach(function (demo) {
+    var rows = Array.prototype.slice.call(demo.querySelectorAll('.d-row'));
+    var cur = null;
+    rows.forEach(function (r) {
+      if (r.classList.contains('g')) { cur = r; r._members = []; }
+      else if (r.classList.contains('m')) { r._g = cur; cur._members.push(r); }
+    });
+    function render() {
+      rows.forEach(function (r) {
+        if (!r.classList.contains('g')) { r.classList.toggle('on', r._on); return; }
+        var total = r._members.length;
+        var hit = r._members.filter(function (m) { return m._on; }).length;
+        r._on = false;
+        r.classList.remove('full', 'partial');
+        r.querySelector('.cnt').textContent = hit + '/' + total;
+        if (hit === total && total > 0) r.classList.add('full');
+        else if (hit > 0) { r.classList.add('partial'); r.style.setProperty('--ratio', (hit / total).toFixed(3)); }
+      });
+      var nb = demo.parentElement.querySelector('.narrow .nb.p');
+      if (nb) {
+        var g = demo.querySelector('.d-row.g.partial') || demo.querySelector('.d-row.g.full');
+        if (g && g.classList.contains('partial')) nb.style.setProperty('--nr', (g._members.filter(function (m) { return m._on; }).length / g._members.length).toFixed(3));
+      }
+    }
+    rows.forEach(function (r) {
+      if (r.classList.contains('g')) {
+        r.addEventListener('click', function () {
+          var all = r._members.length && r._members.every(function (m) { return m._on; });
+          r._members.forEach(function (m) { m._on = !all; });
+          render();
+        });
+      } else {
+        r._on = r.classList.contains('on');
+        r.addEventListener('click', function () { r._on = !r._on; render(); });
+      }
+    });
+    render();
+  });
+})();
+</script>
+</body>
+</html>

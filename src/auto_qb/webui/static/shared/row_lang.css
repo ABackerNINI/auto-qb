@@ -206,7 +206,8 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * (var(--tbl-pad-x, 14px), 三皮肤 .group-row 同一表达式: prism views.css:276 / atlas
  * components.css:272 / console components.css:253)——文本零位移、列头对齐, 且不被任何
  * overflow 裁剪。规格 = 旧选中左条同款: top/bottom 14% 不满高 / 3px 宽 / 右侧圆角;
- * hover = 中性白条 120ms 渐入; 选中/半选 = accent 实色条(D4 追记: 左条颜色分家)。
+ * hover = 中性白条 120ms 渐入; 选中 = accent 实色满高条, 半选 = accent 下锚比例短条
+ * (26-10-30-2359 模板C, 高度 ∝ --sel-ratio; 取代旧「选中/半选同色同高」定案)。
  *
  * 左条两态几何(flat/wave 两组逐字一致):
  * - 未横滚(.group-table 无 .is-hscrolled): 条挂行 ::before, left:1px = 行 padding 沟槽
@@ -232,10 +233,23 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   pointer-events: none;
 }
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::before { opacity: .6; }
-html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before,
+/* 半选左条分家(计划 26-10-30-2359, 拍板 D1 = 模板C 比例高度): selected 保持实色满高条,
+ * partial = 同色**下锚短条**, 高度 ∝ 选中比例(--sel-ratio 由 selection.js groupSelStyle 写入,
+ * 0~1)。几何不变量不破: left:1px / 3px 宽 / bottom:14% 下缘与满高条对齐; 满高条区域 =
+ * 100% - 28%(top/bottom 各 14%), height = 区域 × ratio; max(8px,..) 保底可辨。
+ * fallback = 1(满高): 行未写变量(理论上不会, groupSelStyle 半选必写)时退化为旧行为 ——
+ * 保守默认, 不出现"错比例"。height 过渡 150ms 跟手勾选节奏。hover 中性条不受影响
+ * (partial opacity:1 压过 hover 的 .6, 组合态无歧义)。 */
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
+  top: auto;
+  height: max(8px, calc((100% - 28%) * var(--sel-ratio, 1)));
+  transition: opacity .12s ease, background-color .12s ease, height .15s ease;
 }
 /* 横滚态: 沟槽条让位给吸左首格窄条(几何见上「左条两态几何」)。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row::before {
@@ -255,10 +269,18 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   pointer-events: none;
 }
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row:hover > :first-child::before { opacity: .6; }
-html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before,
+html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+/* 横滚窄条半选: 与沟槽条同一比例表达(模板C, 见上方「半选左条分家」注释); 条盒高度基准 =
+ * 吸左首格(拉伸占满行高), 100% - 28% 表达式与沟槽条同构。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.partial > :first-child::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
+  top: auto;
+  height: max(8px, calc((100% - 28%) * var(--sel-ratio, 1)));
+  transition: opacity .12s ease, background-color .12s ease, height .15s ease;
 }
 
 /* ---- wave(B) 规则体 ---- */
@@ -395,10 +417,17 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   pointer-events: none;
 }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::before { opacity: .6; }
-html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+/* wave 沟槽条半选: 与 flat 同款比例表达(模板C, 注释单点在 flat「半选左条分家」)。 */
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
+  top: auto;
+  height: max(8px, calc((100% - 28%) * var(--sel-ratio, 1)));
+  transition: opacity .12s ease, background-color .12s ease, height .15s ease;
 }
 /* 横滚态: 沟槽条让位给吸左首格窄条(几何见上「左条两态几何」)。 */
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row::before {
@@ -418,10 +447,17 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   pointer-events: none;
 }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row:hover > :first-child::before { opacity: .6; }
-html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before,
+html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before {
+  background: var(--rl-bar-on, var(--accent, #3aa6a6));
+  opacity: 1;
+}
+/* wave 横滚窄条半选: 与 flat 同款比例表达(模板C, 注释单点在 flat「半选左条分家」)。 */
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.partial > :first-child::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
+  top: auto;
+  height: max(8px, calc((100% - 28%) * var(--sel-ratio, 1)));
+  transition: opacity .12s ease, background-color .12s ease, height .15s ease;
 }
 
 /* 「波即高亮」扫层(查证 26-10-30: 三皮肤全量 grep 无 .group-row::after 占用 —— ::after 只被
