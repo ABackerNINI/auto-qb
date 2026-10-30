@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qbittorrent 三 str 键缺类型 fail-fast 校验">
 <meta name="issue-summary" content="_validate_qbittorrent 的 username/password/api_key 无 isinstance(str) 检查, 键误写成容器时校验零报错运行期才炸">
 <title>qbittorrent 三 str 键缺类型 fail-fast 校验 · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0622-chore-config-qbittorrent-str-typecheck</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:22</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 — 用户指派认领，状态 <strong>In Progress</strong>；复验（HEAD <code>af619efb</code>）：现象仍在 —— <code>_validate_qbittorrent</code>（<code>sections.py:217</code>）仍仅 port 校验，三 str 键透传；运行期 <code>core/qbclient.py:59-66</code> 非空容器凭据原样传入 qB 客户端库（<code>or ""</code> 对非空容器不触发），失败形态属实</li>
+      <li>2026-10-30 — 已修，状态 <strong>Done</strong>：<code>_validate_qbittorrent</code> 补三键 <code>isinstance(str)</code> 循环（照 web.token 形态，空串合法=未配置语义）+ 测试 <code>test_validate_qbittorrent_str_keys</code>（容器值三报错/正常串与空串不误伤）；同族盘点（<code>log.file/format</code>、<code>grouping.missing_tag</code>、<code>skip_checking_tag</code> 等仍无类型检查）未纳入本件，待另行入池</li>
     </ul>
   </section>
 

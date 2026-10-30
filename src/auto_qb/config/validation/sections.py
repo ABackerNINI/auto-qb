@@ -223,6 +223,12 @@ def _validate_qbittorrent(spec, errors: List[str]) -> None:
     _check_unknown_keys(spec, KNOWN_QBITTORRENT_KEYS, "config.qbittorrent", errors)
     if "port" in spec:
         _try_port(spec["port"], "config.qbittorrent.port", errors)
+    # 三 str 键类型 fail-fast(与 web.token / hr_check.channel.token 同形态):
+    # 键误写成容器(缩进错位引入嵌套)时校验零报错、原样进 QbittorrentConfig,
+    # 运行期才在 qB 登录载荷/Bearer 头构造处炸出误导性连接错误
+    for key in ("username", "password", "api_key"):
+        if key in spec and not isinstance(spec[key], str):
+            errors.append(f"config.qbittorrent.{key}: 必须是字符串")
 
 
 def _validate_global_hr(spec, errors: List[str]) -> None:

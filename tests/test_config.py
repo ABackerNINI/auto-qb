@@ -98,6 +98,7 @@
 - test_validate_traffic_source_enabled_key
 - test_validate_value_errors_extended
 - test_validate_web_errors
+- test_validate_qbittorrent_str_keys
 """
 import logging
 import os
@@ -1721,6 +1722,17 @@ def test_validate_web_errors():
     assert any("config.web.port: 超出范围" in e for e in errors)
     errors = _errs({"web": {"skip_check_menu": "maybe"}})
     assert any("config.web.skip_check_menu" in e for e in errors)
+
+
+def test_validate_qbittorrent_str_keys():
+    """qbittorrent 三 str 键类型 fail-fast(26-10-30-0622): username/password/api_key 写成容器报错,
+    与 web.token / hr_check.channel.token 同形态 —— 否则校验零报错原样进 QbittorrentConfig,
+    运行期才在 qB 登录载荷/Bearer 头构造处炸出误导性连接错误; 空串合法(= 未配置语义)"""
+    errors = _errs({"qbittorrent": {"username": ["a"], "password": {"k": "v"}, "api_key": 123}})
+    assert any("config.qbittorrent.username: 必须是字符串" in e for e in errors), errors
+    assert any("config.qbittorrent.password: 必须是字符串" in e for e in errors), errors
+    assert any("config.qbittorrent.api_key: 必须是字符串" in e for e in errors), errors
+    assert _errs({"qbittorrent": {"username": "u", "password": "p", "api_key": ""}}) == []
 
 
 def test_load_web_skip_check_menu_tristate():
