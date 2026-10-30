@@ -106,6 +106,42 @@ class QbDownloaderAdapter(DownloaderAdapter):
             return self._apply_super_seeding(outcome)
         return outcome
 
+    # ---------- orchestrator 扩展点(验证轮询 / after_state=paused; 不进 ABC 协议,
+    # 调用方经 getattr 探测, 缺失即按"不支持"降级, 见 orchestrator._verify) ----------
+
+    def find_torrent(self, infohash: str) -> Optional[Dict[str, object]]:
+        """目标侧按 hash 查种子 maindata(orchestrator 验证轮询用, 计划 §03「验证」段)
+
+        查得返回该种子的 maindata(dict 形态); 查无返回 None。查询故障(网络噪声)
+        同样按 None 处理 —— 轮询方下一轮再试, 直到超时判 VERIFY_TIMEOUT: 宁可超时
+        保源, 不把一次查询故障升级成"目标没收到"的误判。
+        """
+        try:
+            found = self._client().torrents_info(torrent_hashes=infohash)
+        except Exception as exc:  # noqa: BLE001 —— 轮询期内任何故障都按"还没出现"处理
+            logger.warning("transfer: 目标验证查询失败(%s), 本轮按未出现处理", exc)
+            return None
+        if not found:
+            return None
+        rec = found[0]
+        if isinstance(rec, Mapping):
+            return dict(rec)
+        # 非 Mapping 兜底: 只取 orchestrator 关心的键(其余字段验证不需要)
+        return {key: getattr(rec, key, None) for key in ("hash", "state", "progress", "name", "save_path")}
+
+    def pause_torrent(self, infohash: str) -> bool:
+        """暂停目标侧种子(D9 after_state=paused 扩展点); True=调用成功
+
+        用 torrents_pause(全版本 qB 都在; qB 5.x 虽标记 deprecated 但仍有效),
+        不用 torrents_stop(4.x 老目标没有 /stop 端点)。qB 侧幂等, 已暂停再暂停无害。
+        """
+        try:
+            self._client().torrents_pause(torrent_hashes=infohash)
+        except Exception as exc:  # noqa: BLE001 —— 暂停失败由 orchestrator 注明, 不上抛
+            logger.warning("transfer: 目标暂停失败(%s)", exc)
+            return False
+        return True
+
     # ---------- 内部件 ----------
 
     def _client(self) -> Client:
