@@ -1526,3 +1526,34 @@
  * 阶段2 拍板(展开即全屏)后只存在于 .hr-full-modal 内, 限宽自然被放开规则盖住, 成对保留作双态钩子 */
 .hr-detail-table td.wrap { max-width: 150px; }
 .hr-full-modal .hr-detail-table td.wrap { max-width: none; }
+
+/* ---- E · 种子转移目标编辑器(.tr-tgt-*: 「WebUI」卡二级页, 计划 26-10-31-0306 W1/T5) ----
+ * 三皮肤共用层(与 .ctx-custom-* 同层); 本段只摆列表/编辑器/映射表的版式,
+ * 控件外观全复用 hb-* 件套(.hb-btn/.hb-input/.hb-select/.hb-badge/aq-switch)。 */
+.tr-tgt-empty { padding: 10px 14px 14px; }
+.tr-tgt-item { border-top: 1px solid var(--hairline); padding: 10px 14px; }
+.tr-tgt-item:first-of-type { border-top: 0; }
+.tr-tgt-item.open { background: var(--surface-1); }
+.tr-tgt-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tr-tgt-name { font-weight: 600; font-size: 13px; }
+.tr-tgt-url { flex: 1 1 auto; min-width: 120px; color: var(--fg-dim); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-tgt-acts { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.tr-tgt-test { margin: 6px 0 0; font-size: 12.5px; }
+.tr-tgt-test.ok { color: var(--green); }
+.tr-tgt-test.err { color: var(--error); }
+.tr-tgt-editor { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+.tr-tgt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.tr-tgt-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tr-tgt-f.tr-tgt-wide { grid-column: 1 / -1; }
+.tr-tgt-fl { font-size: 12px; color: var(--fg-dim); }
+.tr-tgt-sec { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.tr-tgt-sec-t { flex-basis: 100%; font-size: 12.5px; color: var(--fg-dim); }
+.tr-tgt-chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+.tr-tgt-chk input { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+.tr-tgt-chk input:disabled { cursor: not-allowed; }
+.tr-tgt-map { display: flex; align-items: center; gap: 8px; flex-basis: 100%; }
+.tr-tgt-map .hb-input { flex: 1 1 200px; }
+.tr-tgt-arrow { color: var(--fg-dim); flex: none; }
+.tr-tgt-saveerr { margin: 0 14px 12px; padding: 8px 10px; white-space: pre-wrap; font-size: 12.5px;
+  color: var(--error); border: 1px solid var(--error-line); border-radius: var(--radius-sm); }

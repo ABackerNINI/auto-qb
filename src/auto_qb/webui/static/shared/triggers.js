@@ -303,6 +303,10 @@ const TRIGGER_DEFS = {
     {
       "file": "config_hub.js", "fn": "tmClaim", "ep": "/api/traffic/monitor/claim",
       "scope": "none", "why": "全局流量来源: 以本安装重登记为正主(计划 26-10-20-1316 §03 D4/D5): 人工易主唯一通道, 有界前台跑工具侧 claim 启动器, 作用于外部工具进程与选中无关"
+    },
+    {
+      "file": "transfer_targets.js", "fn": "ttTest", "ep": "/api/transfer/test",
+      "scope": "none", "why": "设置页种子转移目标的连通性探测(计划 26-10-31-0306 W1/T5): 面板动作按目标名发给后端, 与选中/锚点无关"
     }
   ]
 };

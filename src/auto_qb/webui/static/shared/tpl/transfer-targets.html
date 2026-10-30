@@ -1,0 +1,139 @@
+<!-- 「种子转移」目标编辑器(计划 26-10-31-0306 W1/T5): x-template 注入 body(traffic-card.html
+     同范式) —— 本文件**只贡献模板**, 数据与动作一律经 $root 回调根实例(方法域在
+     shared/transfer_targets.js 的 tt* 系列); 组件里再写一份会触发 _scan_mixin_wiring 重名守阵。
+     挂载点: settings-detail.html 的 hub.view === 'webui' 分支(与右键菜单定制/跳检开关同卡)。
+     树形状与写回口径(整对象替换 / 空列表删键 / 密码遮显三件套)见 transfer_targets.js 头注释。
+     校验不在前端做平行实现: 非法配置由后端 validate_config 聚合 400 拦下, 报错经
+     cfg.saveError(config_editor.js)在列表下方原样展开(多行 pre-wrap)。 -->
+<script type="text/x-template" id="tpl-aq-transfer-targets">
+  <div class="hb-blk hb-cut tr-tgt">
+    <div class="hb-blk-hd">
+      <span class="bh-t">种子转移目标</span>
+      <span class="bh-n">把种子任务原样转移到这里的下载器(移动任务、不动数据); 保留哪些字段按目标各配一套</span>
+      <span class="bh-r">
+        <button class="hb-btn primary sm" @click="$root.ttAdd()">+ 新增目标</button>
+      </span>
+    </div>
+
+    <p v-if="!$root.ttList.length" class="hb-hp tr-tgt-empty">
+      还没有转移目标 —— 新增一个后, 种子右键菜单的「转移到」才会出现(菜单项只列已启用的目标)。
+    </p>
+
+    <div v-for="(t, i) in $root.ttList" :key="i" class="tr-tgt-item" :class="{ open: $root.trTgt.edit === i }">
+      <div class="tr-tgt-row">
+        <span class="tr-tgt-name">{{ $root.ttName(t) || '(未命名)' }}</span>
+        <span class="hb-badge on">{{ $root.ttTypeLabel(t.type) }}</span>
+        <span class="hb-badge" :class="$root.ttOn(t, 'enabled') ? 'on' : ''">{{ $root.ttOn(t, 'enabled') ? '已启用' : '未启用' }}</span>
+        <span class="tr-tgt-url">{{ t.base_url || '未配置地址' }}</span>
+        <span class="tr-tgt-acts">
+          <button class="hb-btn ghost sm" :disabled="!!$root.trTgt.testing" @click="$root.ttTest(i)">
+            {{ $root.trTgt.testing === $root.ttName(t) ? '测试中…' : '测试连接' }}
+          </button>
+          <button class="hb-btn ghost sm" @click="$root.ttToggleEditor(i)">{{ $root.trTgt.edit === i ? '收起' : '编辑' }}</button>
+          <button class="hb-btn ghost sm" @click="$root.ttRemove(i)">删除</button>
+        </span>
+      </div>
+      <p v-if="$root.trTgt.test && $root.trTgt.test.name === $root.ttName(t)"
+         class="tr-tgt-test" :class="$root.trTgt.test.ok ? 'ok' : 'err'">
+        {{ $root.trTgt.test.ok ? '连接成功: ' : '连接失败: ' }}{{ $root.trTgt.test.text }}
+      </p>
+
+      <div v-if="$root.trTgt.edit === i" class="tr-tgt-editor">
+        <div class="tr-tgt-grid">
+          <label class="tr-tgt-f">
+            <span class="tr-tgt-fl">名称</span>
+            <input class="hb-input" :value="t.name" @input="$root.ttSet(i, 'name', $event.target.value)">
+          </label>
+          <label class="tr-tgt-f">
+            <span class="tr-tgt-fl">类型</span>
+            <select class="hb-select" :value="t.type || 'qb'" @change="$root.ttSet(i, 'type', $event.target.value)">
+              <option value="qb">qBittorrent</option>
+              <option value="tr">Transmission(预留, 暂未实现)</option>
+            </select>
+          </label>
+          <label class="tr-tgt-f tr-tgt-wide">
+            <span class="tr-tgt-fl">地址</span>
+            <input class="hb-input" :value="t.base_url" placeholder="http://127.0.0.1:8080"
+                   @input="$root.ttSet(i, 'base_url', $event.target.value)">
+          </label>
+          <label class="tr-tgt-f">
+            <span class="tr-tgt-fl">用户名</span>
+            <input class="hb-input" :value="t.username" autocomplete="off"
+                   @input="$root.ttSet(i, 'username', $event.target.value)">
+          </label>
+          <div class="tr-tgt-f">
+            <span class="tr-tgt-fl">密码</span>
+            <!-- 密码三件套照抄 xtpl.html 密码分支(2026-10-20 报障): 表单形状(隐藏 username +
+                 password) + autocomplete=new-password + 非焦点 input 一律不写树(ttSecret)。
+                 恒显空串不回显已存密码; 键入即整值写树, 留空不动键 = 不修改。 -->
+            <form style="display:contents" @submit.prevent>
+              <input type="text" name="username" autocomplete="username" value="auto-qb" tabindex="-1"
+                     aria-hidden="true" style="display:none">
+              <input class="hb-input" type="password" autocomplete="new-password" value=""
+                     :placeholder="$root.ttSecretPlaceholder(t)" @input="$root.ttSecret($event, i)">
+            </form>
+          </div>
+          <label class="tr-tgt-f">
+            <span class="tr-tgt-fl">启用</span>
+            <aq-switch tip="启用后才会出现在种子右键菜单的「转移到」里; 转移是高风险动作, 默认关"
+                       :checked="$root.ttOn(t, 'enabled')" :on-change="(v) => $root.ttSetEnabled(i, v)"></aq-switch>
+          </label>
+          <label class="tr-tgt-f">
+            <span class="tr-tgt-fl">跳过校验</span>
+            <aq-switch tip="完成的种子跳过哈希校验直接做种; 未完成的种子自动降级为校验添加, 不会造假 100%"
+                       :checked="$root.ttOn(t, 'skip_check')" :on-change="(v) => $root.ttSetSkip(i, v)"></aq-switch>
+          </label>
+        </div>
+
+        <div class="tr-tgt-sec">
+          <span class="tr-tgt-sec-t">保留字段 <span class="hb-dim">保存路径锁死必开 —— 同机硬约束下关掉 = 目标侧数据不可达</span></span>
+          <label v-for="f in $root.ttFields()" :key="f.key" class="tr-tgt-chk">
+            <input type="checkbox" :checked="$root.ttFieldOn(t, f.key)" :disabled="!!f.locked"
+                   @change="$root.ttSetField(i, f.key, $event.target.checked)">
+            <span>{{ f.label }}</span>
+            <span v-if="f.locked" class="hb-dim">(锁死)</span>
+          </label>
+        </div>
+
+        <div class="tr-tgt-sec">
+          <span class="tr-tgt-sec-t">转移后状态</span>
+          <label class="tr-tgt-chk">
+            <input type="radio" :name="'tr-after-' + i" value="keep" :checked="(t.after_state || 'keep') === 'keep'"
+                   @change="$root.ttSet(i, 'after_state', 'keep')">
+            <span>保持原状态</span>
+          </label>
+          <label class="tr-tgt-chk">
+            <input type="radio" :name="'tr-after-' + i" value="paused" :checked="(t.after_state || 'keep') === 'paused'"
+                   @change="$root.ttSet(i, 'after_state', 'paused')">
+            <span>统一暂停</span>
+          </label>
+        </div>
+
+        <div class="tr-tgt-sec">
+          <span class="tr-tgt-sec-t">路径映射 <span class="hb-dim">有序 from → to 前缀替换, 首条命中生效; 默认空 = 原样(只作用于保存路径终值)</span></span>
+          <div v-for="(m, j) in $root.ttMapRows(t)" :key="j" class="tr-tgt-map">
+            <input class="hb-input" :value="m.from" placeholder="源前缀, 如 /downloads"
+                   @input="$root.ttMapSet(i, j, 'from', $event.target.value)">
+            <span class="tr-tgt-arrow">-></span>
+            <input class="hb-input" :value="m.to" placeholder="目标前缀, 如 /data"
+                   @input="$root.ttMapSet(i, j, 'to', $event.target.value)">
+            <span class="tr-tgt-acts">
+              <button class="ctx-custom-arrow" :disabled="j === 0" title="上移(表序即优先级)"
+                      @click="$root.ttMapMove(i, j, -1)">↑</button>
+              <button class="ctx-custom-arrow" :disabled="j === $root.ttMapRows(t).length - 1" title="下移"
+                      @click="$root.ttMapMove(i, j, 1)">↓</button>
+              <button class="hb-btn ghost sm" @click="$root.ttMapDel(i, j)">删除</button>
+            </span>
+          </div>
+          <button class="hb-btn ghost sm" @click="$root.ttMapAdd(i)">+ 添加映射规则</button>
+        </div>
+      </div>
+    </div>
+
+    <p v-if="$root.cfg.saveError" class="tr-tgt-saveerr">{{ $root.cfg.saveError }}</p>
+    <p class="ctx-custom-note">
+      目标与其它配置项一起保存(右上角「保存并应用」), 非法配置会被后端整体拒下并在上方列出全部问题;
+      保存成功后当前标签的右键菜单立即生效, 其它标签/浏览器刷新后生效。
+    </p>
+  </div>
+</script>

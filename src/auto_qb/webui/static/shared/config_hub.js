@@ -249,17 +249,22 @@ window.CONFIG_HUB = {
       /* 「WebUI」卡(计划 26-10-20-0024 W4, D6): 右键菜单布局定制 + 跳检开关(从「常规」的
        * WebUI 配置块迁入)。与「快捷键」同属客户端块 —— 但注意它**不是**纯客户端:
        * 布局落在 config.web.ctx_menu, 走全局 cfgSave 与 /api/webui/flags 下发, 所以脏标记/
-       * 保存/放弃全是配置树那一套, 不自建状态机。 */
+       * 保存/放弃全是配置树那一套, 不自建状态机。
+       * 26-10-31(计划 26-10-31-0306 W1/T5): 种子转移目标编辑器并入本卡(配置树 web.transfer),
+       * 同款「编辑直接落配置树」范式; 读数 = 菜单定制 + 目标数两段拼接。 */
+      const cmReadout = this.cmCardReadout ? this.cmCardReadout() : "";
+      const trReadout = this.ttCardReadout ? this.ttCardReadout() : "";
       cards.push({
         key: "webui",
         icon: "i-sliders",
         title: "WebUI",
         label: "WebUI",
-        desc: "右键菜单布局定制：重排、显隐、移进「更多操作」，以及跳检开关。",
+        desc: "右键菜单布局定制：重排、显隐、移进「更多操作」；跳检开关；种子转移目标管理。",
         lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；" +
-          "布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。跳检开关也搬到了这一张卡（键不变，仍是 config.yml 的 web.skip_check_menu）。",
+          "布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。跳检开关也搬到了这一张卡（键不变，仍是 config.yml 的 web.skip_check_menu）。" +
+          "「种子转移目标」也在这里配置：把种子任务原样转移到其它下载器（移动任务、不动数据），保留哪些字段按目标各配一套。",
         led: "on",
-        readout: this.cmCardReadout ? this.cmCardReadout() : "默认布局",
+        readout: [cmReadout, trReadout].filter(Boolean).join(" · ") || "默认布局",
         badges: [],
       });
       return cards;
@@ -294,9 +299,10 @@ window.CONFIG_HUB = {
       }
       if (this.hub.view === "webui") {
         // 「WebUI」卡(计划 26-10-20-0024 W4): 同款客户端块(布局键在 config 里, 但分区本身不进 schema)
+        // 26-10-31 起本卡还带种子转移目标编辑器(计划 26-10-31-0306 W1/T5), 页头说明一并交代
         return {
           key: "webui", label: "WebUI", icon: "i-sliders", title: "WebUI",
-          lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。",
+          lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。「种子转移目标」在下方：把种子任务原样转移到其它下载器（移动任务、不动数据），目标可以增删改配、逐目标测连通。",
         };
       }
       const schema = this.cfg.schema;
@@ -443,6 +449,8 @@ window.CONFIG_HUB = {
       if (key === "keys") this.kbPanelEnter();
       // 「WebUI」定制卡(W4): 进入即回单种子支, 并清掉上次的拖拽残留(拖到一半按 Esc/切走会留源)
       if (key === "webui") this.cmPanelEnter();
+      // 同卡的目标编辑器(W1/T5, 计划 26-10-31-0306): 收起展开中的编辑器与测试回执, 不带残留进分区
+      if (key === "webui" && this.ttPanelEnter) this.ttPanelEnter();
       // 「流量与限速」合并卡(B1/D13): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
       if (key === "traffic_limit") this.tmLoad();
       window.scrollTo({ top: 0 });

@@ -289,6 +289,14 @@ window.AQB_STATE = {
         drag: null,           // 拖拽源 { branch, level, idx, id }; null = 无拖拽
         over: null,           // 拖拽悬停落点 { level, idx }; null = 未落在行上
       },
+      // 种子转移目标编辑器(计划 26-10-31-0306 W1/T5; 方法在 transfer_targets.js): 与 ctxCust
+      // 同款 —— 编辑直接落在 cfg.tree.config.web.transfer(整对象替换写回, 脏标记/保存/放弃全走
+      // 全局 actbar), 本处只放**视图态**(展开编辑器的目标下标 / 测试连接回执), 不持久化。
+      trTgt: {
+        edit: -1,       // 展开编辑器的目标下标; -1 = 全部收起
+        test: null,     // 最近一次「测试连接」回执 { name, ok, text }; null = 无
+        testing: "",    // 正在测试的目标名("" = 空闲; 防重复点击)
+      },
       // 区间起点(anchor)三字段(计划 26-10-02-0608 方案 B 起与光标同属键鼠统一模型):
       // 由鼠标普通/Ctrl(⌘)点击或键盘 Shift 手势原点落定(落起点 ≠ 选中, 只写这里);
       // **Shift 扩展期间不更新**(便于同一起点多次扩段)。解析/写入单点在 selection.js

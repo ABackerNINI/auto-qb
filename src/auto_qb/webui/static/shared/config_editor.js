@@ -54,6 +54,10 @@ window.CONFIG_EDITOR = {
         loading: false,
         saving: false,
         error: "",  // 加载/保存错误(加载失败时整页替换; 保存失败走 toast)
+        /* 最近一次保存失败的后端报错原文(cfgSave 单点写入, 成功即清空)。后端 400 的聚合报错
+         * 是多行文本(「共 N 处」+ 逐条), toast 渲染会折行丢失结构 —— 需要原样展开的消费方
+         * (种子转移目标编辑器, 计划 26-10-31-0306 T5)在块内按 pre-wrap 显示它。 */
+        saveError: "",
         trackerKey: null,  // 站点编辑器当前选中站点
         trackerQuery: "",  // 站点二级页搜索框(不持久化, 与首页 hub.query 互不影响; 逻辑在 config_hub.js)
         ruleGroupKey: null,  // 规则集编辑器当前选中规则集
@@ -191,6 +195,7 @@ window.CONFIG_EDITOR = {
      * (保存失败却刷新 = 白丢改动; 既有按钮路径拿返回值不用, 零影响) */
     async cfgSave() {
       this.cfg.saving = true;
+      this.cfg.saveError = "";
       try {
         const result = await this.api("/api/config", { method: "PUT", body: JSON.stringify({ tree: this.cfg.tree }) });
         // 后端会把 R 级字段回退为磁盘旧值 → 重新拉取树保证 UI 与磁盘一致
@@ -212,6 +217,7 @@ window.CONFIG_EDITOR = {
         setTimeout(() => this.loadWebFlags(), 2000);
         return true;
       } catch (e) {
+        this.cfg.saveError = e.message || "未知错误";  // 供消费方原样展开聚合报错(toast 会折行)
         this.toast("保存失败: " + (e.message || "未知错误"), "error", 9000);
         return false;
       } finally {
@@ -233,6 +239,7 @@ window.CONFIG_EDITOR = {
       this.cfg.tree = null;
       this.cfg.baseline = "";
       this.cfg.error = "";
+      this.cfg.saveError = "";
       this.cfg.trackerKey = null;
       this.cfg.ruleGroupKey = null;
       this.cfg.openGroups = {};

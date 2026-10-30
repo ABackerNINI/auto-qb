@@ -899,6 +899,7 @@ app.mixin(window.AQB_SORT);
 app.mixin(window.AQB_MENU);
 app.mixin(window.AQB_CTX_MENU);  // 行右键菜单注册表 + 布局解析(计划 26-10-20-0024 W2): 数据在 AQB_CTX_MENU_REG, 模板消费在 W3
 app.mixin(window.AQB_CTX_CUSTOM);  // 设置页「WebUI」卡右键菜单定制块(W4): 读写同一份 web.ctx_menu 草稿, 合并语义复用 AQB_CTX_MENU_REG
+app.mixin(window.AQB_TRANSFER_TARGETS);  // 设置页「WebUI」卡种子转移目标编辑器(计划 26-10-31-0306 W1/T5): 读写同一份 web.transfer 草稿, 模板件 AQ_TRANSFER_TARGETS_COMPONENT 见下
 app.mixin(window.AQB_COMMANDS);
 app.mixin(window.AQB_ADD);
 app.mixin(window.AQB_SELECTION);
@@ -924,6 +925,9 @@ app.component("hub-field", window.HUB_FIELD_COMPONENT);
  * 卡内三区(数据来源 / 限速曲线 / 流量图采样)见 shared/tpl/traffic-card.html 头注。
  * 模板件 + $root 回调, 方法仍在 config_hub.js —— 这里只注册渲染器。 */
 app.component("aq-traffic-card", window.AQ_TRAFFIC_CARD_COMPONENT);
+/* 「种子转移」目标编辑器(计划 26-10-31-0306 W1/T5): 「WebUI」卡二级页的目标列表/编辑器,
+ * 模板件 + $root 回调(方法域在 transfer_targets.js 的 tt* 系列), 模板见 shared/tpl/transfer-targets.html。 */
+app.component("aq-transfer-targets", window.AQ_TRANSFER_TARGETS_COMPONENT);
 // 表格公共组件(计划 26-10-11-1722 P1/P2/P3): 表壳 <aq-table> + 行模型单元格渲染器
 // (<aq-member-cells> / <aq-group-cells> / <aq-torrent-cells> / <aq-show-cells> / <aq-ep-cells>)。
 // 它们只包**模板**(表头块 / 单元格分支链), 行为与状态仍在既有单点上 —— 组件模板经 $root 回调根实例。

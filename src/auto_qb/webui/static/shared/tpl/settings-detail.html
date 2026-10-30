@@ -151,6 +151,14 @@
                     分隔线是一等公民: 用户加的线可以删, 默认线只能隐藏(隐藏后位置仍保留在配置里)。
                   </p>
                 </div>
+
+                <!-- 种子转移目标(计划 26-10-31-0306 W1/T5): 目标列表 + 编辑器 + 测试连接。
+                     挂在「WebUI」卡(D4 拍板: 配置树 web.transfer); 与定制块同范式 —— 编辑直接落
+                     cfg.tree.config.web.transfer 整对象替换, 脏标记/保存/放弃全走全局 actbar。
+                     模板在 shared/tpl/transfer-targets.html(x-template 组件), 方法在
+                     shared/transfer_targets.js; 体量原因抽独立分片(单分片 560 行上限, 见
+                     test_webui_static_skins 的 settings-detail 例外额度注)。 -->
+                <aq-transfer-targets></aq-transfer-targets>
               </template>
 
               <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区; 2026-09-28 起默认折叠):
