@@ -43,6 +43,8 @@
 - test_finish_direct_survives_regroup_and_resume_failure: 单成员收口重归组+恢复都失败也 done
 - test_qb_up_caches_negative_probe: 「qB 在?」探测异常判不在并缓存 10s
 - test_apply_reconcile_finalize_done_and_rejected: 收尾动作两档(成员全散 done / setLocation 被拒 failed)
+- test_finalize_members_prefilters_file_table: 收尾预过滤(26-10-30-0616) —— files API 只发给
+  覆盖分支候选, job.hashes/mover/save_path 不在 src 的成员全免文件表
 - test_apply_reconcile_unknown_action_is_debug_only: 未知对账动作只落 DEBUG, 不改 job
 - test_step_finalize_skips_gone_member_and_pending_progress: 收尾轮询跳过已消失成员 / progress 未回 1 等窗口
 - test_entry_rule_move_to_confirm_and_empty_reasons
@@ -952,6 +954,41 @@ def test_apply_reconcile_finalize_done_and_rejected(tmp_path, monkeypatch):
     monkeypatch.setattr(mod2, "_finalize_members", lambda j: ("HA", ))
     mod2._apply_reconcile(_job(phase=ru.PHASE_REMOVED), {}, ru.ACT_FINALIZE)
     assert mod2._jobs["j1"].phase == ru.PHASE_FAILED and mod2._jobs["j1"].reason == "finalize_rejected"
+
+
+def test_finalize_members_prefilters_file_table(tmp_path):
+    """收尾集合预过滤(26-10-30-0616): files API 只发给覆盖分支候选
+
+    旧实现全库逐条先 rec.files(一次 HTTP)再按 save_path 过滤, qB 重启后走标准收尾
+    路径时单 tick 串行 N 次 HTTP, 大库主循环停摆分钟级; 判定实际只有目录别名的
+    覆盖分支(save_path==src)读内容根, job.hashes/mover 全短路免文件表。
+    """
+    calls = []
+
+    def _rec(h, save_path):
+        return types.SimpleNamespace(
+            save_path=save_path,
+            hash=h,
+            files=lambda client, _h=h: calls.append(_h) or [types.SimpleNamespace(name="a.mkv", size=1)],
+        )
+
+    store = types.SimpleNamespace(
+        by_hash={
+            "HA": _rec("HA", "R:/dst"),  # mover: 判定短路, 免文件表
+            "HB": _rec("HB", "R:/src"),  # 创建时成员: 判定短路, 免文件表
+            "HC": _rec("HC", "R:/src"),  # 覆盖分支候选: 唯一该取文件表的
+            "HX": _rec("HX", "R:/else"),  # save_path 不在 src: 免文件表
+        }
+    )
+    mod = _bare_mod(store=store, api=types.SimpleNamespace(client=object()))
+    job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS}, hashes=("HA", "HB"))
+    assert mod._finalize_members(job) == ("HB", "HC")
+    assert calls == ["HC"], f"只有覆盖分支候选才发 files API, 实际 {calls}"
+
+    calls.clear()
+    flat = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_FILE_LINKS}, hashes=("HA", "HB"))
+    assert mod._finalize_members(flat) == ("HB", )
+    assert calls == [], "逐文件链接 job 覆盖语义不成立, 全程零 files API"
 
 
 def test_apply_reconcile_unknown_action_is_debug_only(tmp_path):

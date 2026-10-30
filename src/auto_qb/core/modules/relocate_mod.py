@@ -730,11 +730,24 @@ class RelocateModule(BaseModule):
         logger.debug(f"relocate | job {job.job_id}: 对账动作 {action} 无处置")
 
     def _finalize_members(self, job: RelocateJob) -> tuple:
-        """动态收尾集合(§3.5 / D7): 创建时成员 ∪ 当前落在该作用域的成员, mover 跳过"""
+        """动态收尾集合(§3.5 / D7): 创建时成员 ∪ 当前落在该作用域的成员, mover 跳过
+
+        取数顺序(26-10-30-0616): 先零成本过滤再取文件表 —— 创建时成员与 mover 的
+        判定不看内容根, 新增候选先按 save_path==src 筛(单点 ru.finalize_scope_candidate),
+        只对筛剩者发 files API 算内容根; 全库逐条先取文件表会让大库主循环单 tick
+        串行 N 次 HTTP 停摆分钟级。判定单点仍在 ru.finalize_members(这里只是预筛)。
+        """
         store = self._ctx.store
+        api = self._ctx.api
         members = []
         for h, rec in store.by_hash.items():
-            fmap = self._file_map(rec, self._ctx.api.client) if self._ctx.api is not None else {}
+            if h == job.mover or h in job.hashes:
+                # 判定对这两类短路不看内容根 —— root 以 save_path 占位, 免文件表
+                members.append((h, rec.save_path, rec.save_path))
+                continue
+            if not ru.finalize_scope_candidate(job, rec.save_path):
+                continue
+            fmap = self._file_map(rec, api.client) if api is not None else {}
             root = ru.content_root_of(rec.save_path, list(fmap.keys()))
             members.append((h, rec.save_path, root))
         return ru.finalize_members(job, members)

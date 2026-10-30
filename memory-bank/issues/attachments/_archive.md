@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (54)
+## Open (53)
 
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在
@@ -13,7 +13,6 @@
 - [refactor] [v4 聚合解析侧 cov_s 缺下限, 与写侧契约不对齐](../26-10-30-0622-refactor-traffic-agg-cov-parse-contract.html) — parse_v4_agg_text 对 cov_s=0 语义合法行照单全收, 坏值可炸 rollup/merge 并逃逸恢复循环 —— 解析契约与写侧下限1不对齐
 - [chore] [注解/注释/文档契约卫生(第二次全项目评审合并条 2)](../26-10-30-0620-chore-annotation-comment-contract-hygiene.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: A-07(enabled 判据镜像对齐)+F1-02(app.js:206 指路修正)+T-04(gtm 进度注与 README 通知描述)
 - [chore] [死码/死导入/死分支批量清理(第二次全项目评审合并条 1)](../26-10-30-0620-chore-dead-code-batch-cleanup-2.html) — 第二次全项目 code review(26-10-30-0237) P3 合并池位: 6 条死码登记(A-08/B-02/F2-01/F2-02/T-05/GH-02)+3 顺手项批量清理
-- [perf] [_finalize_members 对全库种子先发 files API 再过滤, 大库主循环停摆分钟级](../26-10-30-0616-perf-finalize-members-filetable-filter.html) — ACT_FINALIZE 收尾集合计算逐条种子先取 torrents/files 再按 save_path 过滤, 单 tick 串行 N 次 HTTP; 应先过滤再取, job.hashes 成员免文件表
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
@@ -66,7 +65,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (283)
+## Done (284)
 
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
 - [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](../26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退
@@ -80,6 +79,7 @@
 - [bug] [relocate REBUILD/RESPAWN 无退避无上限, job.attempts 零消费](../26-10-30-0616-bug-rebuild-respawn-backoff.html) — 建链失败进 REMOVED-REBUILD-再失败循环每 1-2 tick 一轮 create-fail-delete, guardian respawn 每 tick 重拉进程, 均无退避无重试上限
 - [bug] [relocate 相位机入口缺 dry_run 短路, 恢复账本路径绕过 --dry-run 契约](../26-10-30-0616-bug-relocate-phase-dry-run-shortcircuit.html) — relocate 相位机 on_task_line/_step_move/_build_links/relocate_cancel 全程无 dry_run 闸, --dry-run 启动携恢复账本非终态 job 时真写下发/建删链接
 - [bug] [relocate 失败路径不消费 resume_hashes, 被暂停组成员永久停在暂停态](../26-10-30-0616-bug-resume-hashes-failure-path.html) — 迁移失败路径(move_rejected/stalled/internal_error/cancel_failed)只置 FAILED 不恢复 resume_hashes, 整组运行成员静默停留暂停态且无日志
+- [perf] [_finalize_members 对全库种子先发 files API 再过滤, 大库主循环停摆分钟级](../26-10-30-0616-perf-finalize-members-filetable-filter.html) — ACT_FINALIZE 收尾集合计算逐条种子先取 torrents/files 再按 save_path 过滤, 单 tick 串行 N 次 HTTP; 应先过滤再取, job.hashes 成员免文件表
 - [bug] [HR 位置证明三判据在 cutoff_done==0 时退化恒通过, 种子永续放行退出 HR 管束](../26-10-30-0550-bug-hr-cutoff-zero-position-proof.html) — cutoff_done==0 时 _freeze_terminal/_position_covered/_absence_proven_all 三处覆盖判据退化为恒通过, 终态冻结/观察期出口/批量签发三条路全部签发永续放行, 种子退出 HR 管束
 - [refactor] [tests 三份 endpoint.json 指针写手收口(载荷字段集缺 autostart_error 的镜像漂移)](../26-10-29-1406-refactor-b-r24b08-endpoint-pointer-writer.html) — 同一条发现指针载荷在 3 个 traffic 测试文件各写一份; client 版少写 autostart_error, paths 版直注任意载荷; 收一处写手 + 可选字段集守阵
 - [refactor] [relocate 环境构建器 4 份(HA/HB 双成员组骨架)六维分叉未收口](../26-10-29-1405-refactor-b-r24b03-relocate-env-builder.html) — 4 个 relocate 测试文件各写一份 35 行同构环境(共 76 处调用), 在初始 state/声明文件大小/分组登记/data_dir/返回元组/大小注入六处不一致

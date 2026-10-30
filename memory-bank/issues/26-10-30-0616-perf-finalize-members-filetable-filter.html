@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-30-0616">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="full-code-review-2">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-30-2328-relocate-finalize-filetable-prefilter.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="_finalize_members 对全库种子先发 files API 再过滤, 大库主循环停摆分钟级">
 <meta name="issue-summary" content="ACT_FINALIZE 收尾集合计算逐条种子先取 torrents/files 再按 save_path 过滤, 单 tick 串行 N 次 HTTP; 应先过滤再取, job.hashes 成员免文件表">
 <title>_finalize_members 对全库种子先发 files API 再过滤, 大库主循环停摆分钟级 · perf · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· perf</div>
+    <div class="kicker">计划外问题（已修）· perf</div>
     <h1>_finalize_members 对全库种子先发 files API 再过滤, 大库主循环停摆分钟级</h1>
     <p class="lede">ACT_FINALIZE 收尾集合计算逐条种子先取 torrents/files 再按 save_path 过滤, 单 tick 串行 N 次 HTTP; 应先过滤再取, job.hashes 成员免文件表</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0616-perf-finalize-members-filetable-filter</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -166,11 +166,15 @@ ACT_FINALIZE 的收尾集合计算对全库每一条种子先发 torrents/files 
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 06:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 23:19 — 用户指派认领，状态 <strong>Open → In Progress</strong></li>
+      <li>2026-10-30 23:21 — 修复完成，状态 <strong>In Progress → Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-30 23:19 仍复现 —— <code>_finalize_members</code> 现位于 <code>core/modules/relocate_mod.py:732-740</code>(原锚点 643-651, 行号漂移, 符号未变)；<code>record.py</code> 已迁至 <code>src/auto_qb/torrents/record.py:287</code>(原 <code>core/qbittorrent/torrents/</code>)。全库逐条 <code>rec.files(client)</code>(一次 HTTP)先于 save_path 过滤的现象未变，判定侧(<code>ru.finalize_members</code>)仍只有覆盖分支读内容根。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(与建议修法同向, 补了一处条件单点): 覆盖分支条件的前半段(目录别名且 <code>save_path==src</code>)抽成纯函数单点 <code>ru.finalize_scope_candidate(job, save_path)</code>(<code>relocate_units.py</code>), <code>finalize_members</code> 覆盖分支与 <code>_finalize_members</code> 预过滤同源复用 —— 两处条件不会漂移。<code>_finalize_members</code>(<code>relocate_mod.py:732</code>)取数顺序倒正: mover / <code>job.hashes</code> 成员直通(root 以 save_path 占位, 判定短路不读), 新增候选先按 <code>save_path==src</code> 筛, 只对筛剩者发 files API 算内容根; 全库逐条先取文件表的路径消除。</p>
+    <p><strong>验证方式</strong>: 新增 <code>test_finalize_scope_candidate_prefilter</code>(units —— 条件单点三态: 目录别名命中/save_path 不在 src/非目录别名)与 <code>test_finalize_members_prefilters_file_table</code>(exec —— 假 rec 计数 <code>files</code> 调用, 断言只有候选 HC 被取文件表、逐文件链接 job 全程零调用; 两条测试均已登记进两文件头部测试计划)。</p>
+    <p><strong>测试数字</strong>: <code>commands run test.quick</code>(2026-10-30 23:20, 本机)4182 passed, 2 skipped, 33.49s。</p>
   </section>
 
   <footer>

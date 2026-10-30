@@ -791,6 +791,17 @@ def resolve_physical(save_path: str, content_root: str, jobs: Sequence[RelocateJ
     return save_path
 
 
+def finalize_scope_candidate(job: RelocateJob, save_path: str) -> bool:
+    """收尾覆盖分支的零成本候选判定(save_path 维度, 免文件表)
+
+    finalize_members 覆盖分支条件的前半段(目录别名 job 且 save_path 已在 src),
+    也是 RelocateModule._finalize_members 预过滤的**单点**: 只有候选才值得发
+    files API 算内容根 —— 全库逐条先取文件表再过滤会让大库主循环单 tick 串行
+    N 次 HTTP 停摆分钟级(26-10-30-0616)。
+    """
+    return job.scope_covers_dir and _norm(save_path) == _norm(job.src)
+
+
 def finalize_members(job: RelocateJob, members: Sequence[Tuple[str, str, str]]) -> Tuple[str, ...]:
     """动态收尾集合(§3.5 / D7: 别名是作用域不是快照)
 
@@ -805,11 +816,10 @@ def finalize_members(job: RelocateJob, members: Sequence[Tuple[str, str, str]]) 
     """
     out = []
     seen = set()
-    covers = job.scope_covers_dir
     for h, sp, root in members:
         if h == job.mover or h in seen:
             continue
-        if h in job.hashes or (covers and _norm(sp) == _norm(job.src) and _within(job.scope, root)):
+        if h in job.hashes or (finalize_scope_candidate(job, sp) and _within(job.scope, root)):
             seen.add(h)
             out.append(h)
     return tuple(out)

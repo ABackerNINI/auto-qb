@@ -35,6 +35,7 @@
 - test_reconcile_table_rows
 - test_recover_exec_phase
 - test_resolve_physical_and_finalize_members
+- test_finalize_scope_candidate_prefilter
 - test_scope_hit_flat_does_not_cover_subdirs
 - test_stall_verdict_boundaries
 - test_within_empty_scope_never_matches
@@ -631,6 +632,19 @@ def test_resolve_physical_and_finalize_members():
         ("HC", S, os.path.join(S, "Show")),  # 同 save_path 下的别组(子目录)
     ]
     assert ru.finalize_members(flat_job, flat_members) == ("HB", )
+
+
+def test_finalize_scope_candidate_prefilter():
+    """收尾预过滤单点(26-10-30-0616): 只对目录别名且 save_path==src 的候选取文件表
+
+    finalize_members 覆盖分支条件的前半段抽成单点, 供 _finalize_members 预过滤复用 ——
+    两处条件漂移会让预筛漏掉该收的成员(或白取文件表)。
+    """
+    dir_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_DIR_ALIAS})
+    assert ru.finalize_scope_candidate(dir_job, S) is True  # 目录别名 + save_path==src
+    assert ru.finalize_scope_candidate(dir_job, os.path.join(S, "Other")) is False  # save_path 不在 src
+    flat_job = _job(phase=ru.PHASE_ARMED, plan={"form": ru.FORM_FILE_LINKS})
+    assert ru.finalize_scope_candidate(flat_job, S) is False  # 非目录别名: 覆盖语义不成立
 
 
 def test_scope_hit_flat_does_not_cover_subdirs():
