@@ -275,6 +275,10 @@ class RelocateJob:
     # 执行计划快照(P3 落账, 供重启后继续执行与 P6 收尾): {form, link_kind, scope,
     # files: [[相对路径, 大小], ...]}。不进纯判定, 只作恢复用事实。
     plan: Optional[dict] = None
+    # 是否已向 qB 下发过 setLocation(P3 落账, 供重启恢复判据消费): 账先落 state、指令后发
+    # (§3.5.1), 两步之间崩溃时这一位仍是 False —— 「qB 从未收到搬迁」在 qB 侧与「下发了
+    # 但没动静」不可分辨, 只有账上这一位能把两者分开, 重启据此补发一次而非静默等停滞超时。
+    move_issued: bool = False
 
     @property
     def is_terminal(self) -> bool:
@@ -734,6 +738,7 @@ def job_to_dict(job: RelocateJob) -> dict:
         "attempts": job.attempts,
         "last_error": job.last_error,
         "plan": job.plan,
+        "move_issued": job.move_issued,
     }
 
 
@@ -759,6 +764,7 @@ def job_from_dict(d) -> Optional[RelocateJob]:
             attempts=int(d.get("attempts") or 0),
             last_error=str(d.get("last_error") or ""),
             plan=d.get("plan") if isinstance(d.get("plan"), dict) else None,
+            move_issued=bool(d.get("move_issued")),
         )
     except (TypeError, ValueError):
         return None

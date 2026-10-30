@@ -119,8 +119,12 @@ P3-P6 执行体+组判定+三入口+guardian 收尾已落地(Fake qB 全替身);
 
 - 相位推进挂在模块 `on_task_line`(任务线 hook): 每 tick 只做**一个可观测推进**, 不在一次调用里
   跑完整个迁移 —— 大种子搬运跨很多 tick, 卡主循环会让整库同步停滞(验收判据「单步 < 50ms」)。
-- 搬: 暂停运行中成员 → 等自有暂停快照回流(`own_write_pending`) → 下发 setLocation(mover)。
-  **重启后不重发**(会排队/覆盖): `_load_jobs` 恢复的 job 一律 `issue=False`。
+- 搬: 暂停运行中成员 → 等自有暂停快照回流(`own_write_pending`) → 下发 setLocation(mover), 成功后
+  落账 `move_issued=True`(**账先落、指令后发**, 故这一位 = 「qB 确实收到过搬迁」)。
+  **重启不重发**(会排队/覆盖): 恢复时 `_load_jobs` 仍置 `issue=False`, 但改为**打 `recover` 标记**,
+  由 `_recover` 在拿到 qB 现场后按 `ru.recover_exec_phase` 三分流 —— 仍在搬 ⇒ 只轮询; 数据已到 dst ⇒
+  直接进 moved; 都没有 ⇒ 未下发过(崩溃窗口)就补发一次, 已下发过则交停滞判据
+  (issue 26-10-30-0616, 2026-10-30)。原「一律 `issue=False`」会把崩溃窗口的 job 静默拖到停滞超时。
 - 完成判据不看 qB 的 save_path(它在下发后立刻就是新值, 不可用作「搬完」信号), 而是
   「qB 已不在 moving 且目标侧文件数/大小全对齐」。
 - 停滞判据(D12): `stall_verdict(sample_grew, qb_moving, elapsed, warn_after, stall_timeout, stalled_for)` ——

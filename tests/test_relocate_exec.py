@@ -51,6 +51,10 @@
 - test_exec_skip_when_all_at_target
 - test_exec_unknown_stage_falls_back_to_arm
 - test_restart_does_not_reissue_setlocation
+- test_restart_reissues_setlocation_when_never_issued: 崩溃窗口(账已落/未下发) ⇒ 重启补发一次
+  setLocation(issue 26-10-30-0616; 旧实现一律 issue=False, 600s 后按 move_stalled 误判)
+- test_restart_recovers_to_moved_when_data_already_at_dst: 已下发且数据已在 dst ⇒ 直达 moved
+- test_restart_issued_without_evidence_keeps_polling: 已下发但无现场 ⇒ 不重发不立刻判失败
 - test_skip_check_skips_during_relocation
 ### 收口 / 退避守卫(issues 26-10-30-0616 批A: resume_hashes 失败路径 / dry_run 短路 / 重试退避)
 - test_fail_path_resumes_paused_members: 失败出口消费 resume_hashes(旧实现只在成功路径恢复)
@@ -540,6 +544,86 @@ def test_restart_does_not_reissue_setlocation(tmp_path, monkeypatch):
     mod2.on_task_line()
     assert [c for c in client.calls if c[0] == "set_location"] == [], "重启不得重发 setLocation"
     assert mod2.get_job(job_id).phase in (ru.PHASE_MOVING, ru.PHASE_WATCHING)
+
+
+def test_restart_reissues_setlocation_when_never_issued(tmp_path, monkeypatch):
+    """崩溃窗口(账已落、setLocation 未发出): 重启据 move_issued=False 补发一次, 不再静默等停滞超时
+
+    旧实现 _load_jobs 对 MOVING job 一律 issue=False ⇒ 补发永不发生, dst 恒空且 qB 不在
+    moving, 只会在 move_stall_timeout(600s)后按 move_stalled 误判失败(issue 26-10-30-0616)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    mod._state_jobs()[job_id]["move_issued"] = False  # 模拟「落账与下发之间」中断
+    client.calls.clear()
+    mgr.store.own_writes.clear()
+
+    mod2 = type(mod)(mgr.ctx)
+    mod2._conf = mgr.config.relocate
+    assert mod2._load_jobs() == 1
+    mod2.on_task_line()  # 第一个 tick 只定夺现场
+    assert [c for c in client.calls if c[0] == "set_location"] == [], "定夺现场这一 tick 不下发"
+    mod2.on_task_line()  # 第二个 tick 才真的补发
+    assert [c for c in client.calls if c[0] == "set_location"] == [("set_location", dst)], "必须补发一次"
+    job = mod2.get_job(job_id)
+    assert job.move_issued is True, "补发成功必须落账「已下发」"
+    assert job.phase == ru.PHASE_MOVING, job
+
+
+def test_restart_recovers_to_moved_when_data_already_at_dst(tmp_path, monkeypatch):
+    """重启恢复: 已下发且 dst 已有数据 ⇒ 按判据直接进 moved 校验(不重发、不等停滞超时)
+
+    只落一个文件 == 「搬了一半就中断」的现场: 常规轮询会一直等在 moving/stall_since 上,
+    恢复判据则立刻进 moved, 由 _dst_ready 给出 verify_mismatch(现场保留, 交人处理)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    first = files[0]
+    p = os.path.join(dst, *first.name.split("/"))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(b"x" * int(first.size))
+    mgr.store.by_hash["HA"].state = "pausedUP"
+    client.calls.clear()
+
+    mod2 = type(mod)(mgr.ctx)
+    mod2._conf = mgr.config.relocate
+    mod2._load_jobs()
+    mod2.on_task_line()
+    assert mod2.get_job(job_id).phase == ru.PHASE_MOVED, mod2.get_job(job_id)
+    mod2.on_task_line()
+    job = mod2.get_job(job_id)
+    assert (job.phase, job.reason) == (ru.PHASE_FAILED, "verify_mismatch"), job
+    assert [c for c in client.calls if c[0] == "set_location"] == [], "数据已在 dst 不得重发"
+
+
+def test_restart_issued_without_evidence_keeps_polling(tmp_path, monkeypatch):
+    """重启恢复: 已下发但 qB 不在 moving 且 dst 无数据 ⇒ 不重发、也不立刻判失败(交停滞判据)
+
+    快照滞后会让「刚下发还没动」与真停滞同形, 立刻判失败会误杀正常迁移 —— 保守默认。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    mgr.store.by_hash["HA"].state = "pausedUP"
+    client.calls.clear()
+
+    mod2 = type(mod)(mgr.ctx)
+    mod2._conf = mgr.config.relocate
+    mod2._load_jobs()
+    mod2.on_task_line()
+    job = mod2.get_job(job_id)
+    assert [c for c in client.calls if c[0] == "set_location"] == [], "已下发过不得重发"
+    assert job.phase in (ru.PHASE_MOVING, ru.PHASE_WATCHING) and job.reason == "", job
+    assert mod2._rt[job_id].get("recover") is None, "现场判据只判一次, 之后交常规轮询"
 
 
 def test_skip_check_skips_during_relocation(tmp_path, monkeypatch):

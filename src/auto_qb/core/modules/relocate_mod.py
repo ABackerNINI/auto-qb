@@ -192,7 +192,8 @@ class RelocateModule(BaseModule):
             if job is None:
                 continue
             self._jobs[jid] = job
-            # 恢复运行期进度: **不重发 setLocation**(会排队/覆盖, §3.5.1); 已建链接不重建
+            # 恢复运行期进度: 已建链接不重建; 要不要补发 setLocation 由 _recover 按 qB 现场
+            # 定夺(不能一律 False —— 账先落、指令后发, 两步之间崩溃的 job 会永远等不到搬迁)
             self._rt[jid] = {
                 "issue": False,
                 "started": time.monotonic(),
@@ -201,6 +202,7 @@ class RelocateModule(BaseModule):
                 "stall_since": 0.0,
                 "link_pos": len(job.alias_paths),
                 "links": list(job.alias_paths),
+                "recover": job.phase == ru.PHASE_MOVING,  # MOVING 现场待判(_recover 一个 tick 判一次)
             }
             n += 1
         self._sync_relocating()
@@ -227,6 +229,15 @@ class RelocateModule(BaseModule):
         self._sync_relocating()
         self._persist()
         return job
+
+    def _mark_issued(self, job: RelocateJob) -> RelocateJob:
+        """落账「已向 qB 下发过 setLocation」(重启恢复判据 _recover 消费; 幂等)
+
+        与 _persist 的先后是**账先落、指令后发**(§3.5.1): 本方法在 setLocation 返回之后才调,
+        故账上出现这一位 ⇔ qB 确实收到过搬迁。缺了它, 重启后「从未下发」与「下发了没动静」
+        在 qB 侧同形, 只能靠猜。
+        """
+        return job if job.move_issued else self._set_job(replace(job, move_issued=True))
 
     def _resume_members(self, job: RelocateJob) -> None:
         """恢复本 job 发起时被暂停的成员(幂等: 无暂停成员即 no-op)
@@ -303,11 +314,49 @@ class RelocateModule(BaseModule):
 
     # ---------- 搬: 轮询 / 停滞判据 / 长耗时转 watching ----------
 
+    def _recover(self, job: RelocateJob, rt: dict, mover) -> None:
+        """重启/重载后 MOVING job 的现场判据(每 job 只判一次, 判完交常规轮询)
+
+        账先落 state、setLocation 后下发(§3.5.1), 两步之间崩溃 ⇒ 重启后 qB 从未收到搬迁:
+        dst 恒空且 qB 不在 moving —— 这与「下发了但没动静」在 qB 侧**不可分辨**, 只有账上
+        move_issued 这一位能分开两者。判据走 ru.recover_exec_phase(qB 现场三分流):
+
+        - qB 仍在搬 ⇒ 继续轮询(不重发 setLocation, 会排队/覆盖);
+        - 数据已到 dst ⇒ 补做 moved 之后的步骤(不再从头等一轮停滞);
+        - 都没发生 ⇒ 未下发过就补发一次(此刻 qB 不在 moving, 无排队/覆盖风险); 已下发过
+          则只留一行日志并把停滞起点交常规判据 —— 快照滞后会让「刚下发还没动」看起来
+          和真停滞一样, 立刻判失败会误杀正常迁移(保守默认: 宁可等, 不可错杀)。
+        """
+        rt.pop("recover", None)
+        moving = "moving" in str(getattr(mover, "state", "") or "").lower()
+        at_dst = self._norm(getattr(mover, "save_path", "") or "") == self._norm(job.dst)
+        verdict = ru.recover_exec_phase(moving, at_dst, self._dst_size(job) > 0)
+        if verdict == ru.RECOVER_STALLED and not job.move_issued:
+            rt["issue"] = True
+            logger.warning(
+                f"relocate | job {job.job_id}: 恢复发现搬迁指令未发出(落账与下发之间中断), 补发 "
+                f"setLocation 一次(mover {job.mover[:8]} -> {job.dst})"
+            )
+            return
+        if verdict == ru.RECOVER_POLL:
+            logger.info(f"relocate | job {job.job_id}: 恢复: qB 仍在搬, 继续轮询(不重发 setLocation)")
+            return
+        if verdict == ru.RECOVER_RESUME:
+            logger.info(f"relocate | job {job.job_id}: 恢复: 数据已到 dst, 补做 moved 之后的步骤")
+            rt["stage"] = "verify"
+            self._set_job(replace(job, phase=ru.PHASE_MOVED))
+            return
+        logger.info(f"relocate | job {job.job_id}: 恢复: 未见搬迁现场(qB 不在 moving 且 dst 无数据), "
+                    f"交停滞判据(不重发不下判失败)")
+
     def _step_move(self, job: RelocateJob, rt: dict) -> None:
         store = self._ctx.store
         mover = store.by_hash.get(job.mover)
         if mover is None:
             self._fail(job, "torrent_gone", "搬迁中种子已不存在")
+            return
+        if rt.get("recover"):
+            self._recover(job, rt, mover)  # 一个 tick 只做「定夺现场」这一件事
             return
         if rt.get("issue", True):
             # 等自有暂停的快照回流(own_write_pending 语义): 未回流前不下发, 免得与暂停排队冲突
@@ -324,6 +373,7 @@ class RelocateModule(BaseModule):
             rt["sample_ts"] = 0.0
             rt["last_size"] = -1
             rt["stall_since"] = 0.0
+            self._mark_issued(job)  # 补发路径同样要落账, 否则下次重启还会当成崩溃窗口
             logger.info(f"relocate | job {job.job_id}: 已下发 qB 搬迁(mover {job.mover[:8]} -> {job.dst})")
             return
 
@@ -871,6 +921,7 @@ class RelocateModule(BaseModule):
             }
         self._ctx.api.torrents_set_location(torrent_hashes=[job.mover], location=job.dst)
         self._rt[job_id]["issue"] = False
+        self._mark_issued(job)  # 重启恢复靠这一位区分崩溃窗口(未下发)与真停滞(见 _recover)
         logger.info(f"relocate | job {job_id}: 迁移发起({len(records)} 成员, 形态 {unit.form}, mover {job.mover[:8]})")
         return {
             **verdict,

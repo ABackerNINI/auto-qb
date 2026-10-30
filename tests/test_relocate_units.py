@@ -28,7 +28,7 @@
 - test_evaluate_group_confirm_not_downgraded_by_later_block
 - test_evaluate_group_cross_volume_note
 - test_evaluate_group_form_reject_gate
-- test_job_dict_roundtrip
+- test_job_dict_roundtrip: job 落账 roundtrip(含 move_issued 往返 + 老账缺位按未下发)
 - test_job_from_dict_type_error_and_reconcile_fallthrough
 - test_plan_empty_files_reject
 - test_plan_hard_max_dir_kind_none_suffix
@@ -654,10 +654,13 @@ def test_scope_hit_flat_does_not_cover_subdirs():
 
 
 def test_job_dict_roundtrip():
-    """job 落账 roundtrip + 坏条目跳过(不炸)"""
+    """job 落账 roundtrip + 坏条目跳过(不炸); move_issued 必须随账往返(重启恢复判据消费)"""
     job = _job(plan={"form": "file_links", "link_kind": "hardlink", "files": [["Show/e00.mkv", 7]]})
     back = ru.job_from_dict(ru.job_to_dict(job))
     assert back == job
+    issued = _job(move_issued=True)
+    assert ru.job_from_dict(ru.job_to_dict(issued)).move_issued is True, "「已下发」不能丢(否则重启会重发)"
+    assert ru.job_from_dict({"job_id": "x"}).move_issued is False, "老账无该位 -> 按未下发处理"
     assert ru.job_from_dict(None) is None
     assert ru.job_from_dict({"hashes": []}) is None
     assert ru.job_from_dict("x") is None
