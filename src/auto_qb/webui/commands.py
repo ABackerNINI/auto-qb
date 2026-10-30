@@ -19,6 +19,8 @@ from qbittorrentapi import HTTP401Error, HTTP4XXError
 from ..config import Config
 from ..core.traffic_source import paths as traffic_paths
 from ..infra.utils import VIRTUAL_TRACKER_PREFIXES, mask_tracker_url, sanitize_tracker_url
+from ..transfer import TransferOrchestrator, TransferStatus, TransferAdapterError, create_adapter
+from ..transfer.adapters import TrDownloaderStub
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +143,8 @@ RESYNC_COMMANDS = frozenset(
         "bulk_torrents",
         "add_torrents",
         "skip_check_torrent",
+        # 种子转移(计划 26-10-31-0306 W3): 转移成功即删源任务, 改 qB 种子状态 —— 补刷新同族
+        "transfer_run",
     }
 )
 
@@ -166,6 +170,9 @@ DEFERRED_RECEIPT_COMMANDS = frozenset(
         "relocate_precheck",
         "relocate_precheck_add",
         "relocate_cancel",
+        # 种子转移(计划 26-10-31-0306 W3): 逐种子结果/版本信息经 truth 带出, handler 自写回执
+        "transfer_run",
+        "transfer_test",
     }
 )
 
@@ -329,6 +336,8 @@ class WebCommandsMixin:
             "relocate_precheck": self._cmd_relocate_precheck,
             "relocate_precheck_add": self._cmd_relocate_precheck_add,
             "relocate_cancel": self._cmd_relocate_cancel,
+            "transfer_run": self._cmd_transfer_run,
+            "transfer_test": self._cmd_transfer_test,
             "super_seeding": self._cmd_super_seeding,
             "force_start": self._cmd_force_start,
             "set_torrent_limits": self._cmd_set_torrent_limits,
@@ -767,6 +776,92 @@ class WebCommandsMixin:
             f"WEB UI | 撤销迁移 {job_id or '<空>'}(确认={bool(confirm)}): {result['cls']}" +
             (f" | 成本 {result.get('cost', {}).get('bytes')} 字节" if result.get("cost") else "")
         )
+
+    # ---- 种子转移(计划 26-10-31-0306 W3): 执行体在主循环线程同步串行, 单一写线程假设同 bulk ----
+
+    def _resolve_transfer_target(self, target_id: str, *, require_enabled: bool):
+        """按 name 从 web.transfer.targets 查目标 -> (target, None) 或 (None, 错误文案)
+
+        与路由层预检(routes/transfer.py._find_target)同字段判据(name 匹配 + enabled
+        开关都取自 TransferTargetConfig), 两处各薄查一遍 —— 路由层即时 400(前端免轮询),
+        本层兜底「投递-执行之间目标被删/停用」的热重载窗口: 查不到就写 error 回执,
+        绝不带残缺目标执行(任何不成功路径不碰源, 计划 §01)。
+        require_enabled: run 必须已启用(转移高风险, 保守默认); test 只要求存在
+        (设置页对未启用目标先行测连通, W1 验收口径)。
+        """
+        transfer = getattr(self.config.web, "transfer", None)
+        for target in (getattr(transfer, "targets", None) or ()):
+            if str(getattr(target, "name", "")) == target_id:
+                if require_enabled and not getattr(target, "enabled", False):
+                    return None, f"转移目标未启用: {target_id}(配置键 web.transfer.targets[].enabled)"
+                return target, None
+        return None, f"转移目标不存在: {target_id}(见配置键 web.transfer.targets)"
+
+    def _cmd_transfer_run(self, target_id: str = "", hashes=None, keep_source: bool = False, cmd_id: str = ""):
+        """WEB UI 命令: 执行一次转移批次(计划 26-10-31-0306 W3) —— 转发 transfer.TransferOrchestrator
+
+        串行逐种子在主循环线程**同步执行**(单一写线程假设; 批量无上限, 验证轮询期间
+        主循环被占用是计划 §03 已知形态, 与整组迁移执行同量级)。逐种子状态门/导出/
+        映射/添加/验证/删源全在 orchestrator(单一出处), 本层只聚合计数; 结果结构
+        TorrentTransferResult.to_receipt() 直出 {hash, 状态(成功/跳过/失败), 原因}。
+        回执形状(经 cmd 通道 truth): {results: [...], summary: {success, skipped, failed},
+        target: 目标名}; 批次不中断(D6), 单种子失败只结算本条。
+        """
+        target, err = self._resolve_transfer_target(str(target_id or ""), require_enabled=True)
+        if target is None:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", err)
+            return
+        req = [str(h) for h in (hashes or []) if h]
+        results = TransferOrchestrator(self.api).run_batch(target, req, keep_source=bool(keep_source))
+        summary = {status.value: 0 for status in TransferStatus}
+        for item in results:
+            summary[item.status.value] += 1
+        if cmd_id:
+            self._set_web_result(
+                cmd_id,
+                "ok",
+                truth={
+                    "results": [item.to_receipt() for item in results],
+                    "summary": summary,
+                    "target": target.name
+                },
+            )
+        logger.info(
+            f"WEB UI | 转移批次 -> {target.name}({len(req)}个): "
+            f"成功 {summary['success']} / 跳过 {summary['skipped']} / 失败 {summary['failed']}"
+        )
+
+    def _cmd_transfer_test(self, target_id: str = "", cmd_id: str = ""):
+        """WEB UI 命令: 测试目标下载器连通(计划 W3) —— create_adapter + test_connection
+
+        只读探测: 不写 state、不动 qB、目标侧零变更(仅登录 + 取版本)。成功回执
+        truth={info: 版本等描述}; 失败(TransferAdapterError, 含未知类型兜底)写 error
+        回执 —— 协议约定文案面向用户可直接回显, 本层不另加工。tr stub 的
+        test_connection 恒返回「暂未实现」文案而不抛(协议里唯一返回错误串的例外,
+        D10 不做假接口) —— 按不可用处理写 error 回执。
+        """
+        target, err = self._resolve_transfer_target(str(target_id or ""), require_enabled=False)
+        if target is None:
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", err)
+            return
+        try:
+            adapter = create_adapter(target)
+            info = adapter.test_connection()
+        except TransferAdapterError as exc:
+            logger.warning(f"WEB UI | 转移目标测试失败 {target.name}: {exc}")
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", str(exc) or "目标探测失败")
+            return
+        if isinstance(adapter, TrDownloaderStub):
+            if cmd_id:
+                self._set_web_result(cmd_id, "error", info)
+            logger.info(f"WEB UI | 转移目标测试 {target.name}: {info}")
+            return
+        if cmd_id:
+            self._set_web_result(cmd_id, "ok", truth={"info": info})
+        logger.info(f"WEB UI | 转移目标测试 {target.name}: {info}")
 
     def _cmd_super_seeding(self, hash: str, enable: bool = False):
         self._torrent_action(hash, "torrents_set_super_seeding", f"超级做种({'开' if enable else '关'})", enable=enable)

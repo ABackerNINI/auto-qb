@@ -1,7 +1,7 @@
 """test_web_route_manifest 测试计划: W0 结构守阵 + 路由金清单
 
 ## 测试计划(每个测试函数一条)
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog, 26-10-16-0541 S6 增 3 条 traffic/monitor, 26-10-16-0541 S7 增 1 条 traffic/monitor/notify, 26-10-17-0339 S17 增 1 条 traffic/monitor/relaunch, 26-10-20-1316 §03 增 1 条 traffic/monitor/claim): 86 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog, 26-10-16-0541 S6 增 3 条 traffic/monitor, 26-10-16-0541 S7 增 1 条 traffic/monitor/notify, 26-10-17-0339 S17 增 1 条 traffic/monitor/relaunch, 26-10-20-1316 §03 增 1 条 traffic/monitor/claim, 26-10-31-0306 W3 增 2 条 transfer/run+test): 89 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_route_cmd_passthrough_single_point: 守阵(issue webui-route-cmd-boilerplate-dup) 「路由→命令」透传 mechanics 只存于形状单点 —— 8 个 helper 各定义恰好一次 + 21 个收敛端点体只剩一行 helper 调用 + 三种逐字透传形状零复发(AST 静态; 行为等值由既有表驱动用例逐端点钉 cmd/payload)
 """
@@ -58,6 +58,8 @@ _GOLDEN_ROUTES = {
     ("GET", "/api/tags"),
     ("POST", "/api/tags"),
     ("POST", "/api/tags/remove"),
+    ("POST", "/api/transfer/run"),  # 种子转移执行(计划 26-10-31-0306 W3; 目标须存在且已启用)
+    ("POST", "/api/transfer/test"),  # 转移目标连通性测试(同上; 只读探测, 不要求已启用)
     ("POST", "/api/torrents/add"),
     ("POST", "/api/torrents/bulk"),
     ("GET", "/api/torrents/{hash}"),
@@ -109,7 +111,7 @@ _GOLDEN_ROUTES = {
 
 
 def test_web_route_manifest_frozen(web_env):
-    """路由金清单守阵: 86 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
+    """路由金清单守阵: 89 条 (method, path) 集合逐一钉死, 丢失/改名/方法变更即红
 
     (2026-10-07 编辑 tracker 下线, plan 26-10-07-0055 S2: 减 POST /api/torrents/{hash}/trackers/edit, 77->76;
      2026-10-16-0541 S6: 增 3 条 /api/traffic/monitor/* —— 全局流量监视器工具联动代理;
@@ -119,6 +121,7 @@ def test_web_route_manifest_frozen(web_env):
          2026-10-20-1316 §03: 增 1 条 /api/traffic/monitor/claim —— 来源卡「以本安装重登记」;
      2026-10-18-1604 P2: 增 2 条整组迁移预检(迁移/添加种子, 只读, 403 门控 relocate.enabled), 82->84)
      2026-10-18-1604 P7: 增 1 条撤销迁移(§3.5.1 界面入口补齐, 同一 403 门控), 84->85)
+     2026-10-31-0306 W3: 增 2 条 /api/transfer/*(种子转移执行 + 目标连通性测试, 走 cmd 管线 waitCmd 回执), 87->89)
 
     集合比对**不比顺序**: 拆分后按域 include_router, 跨 router 注册顺序与旧源码不再逐条
     一致 —— 已核实无同形路径冲突(每条 (method, path) 恰好一条路由, /api/torrents/bulk、
