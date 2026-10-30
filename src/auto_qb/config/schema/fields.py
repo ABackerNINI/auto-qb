@@ -172,6 +172,12 @@ NOTIFY_CHANNELS = ("platform", )  # v1 仅平台原生单渠道(按运行平台�
 # sample = 抽样 SHA1(更严, 更慢)。取值域单点在本表 —— validation/schema 两处引用同一对象。
 RELOCATE_VERIFY_MODES = ("size", "sample")
 
+# 种子转移(计划 26-10-31-0306 §03/D10): 目标下载器类型枚举(qb 先行, tr 留接口 stub)
+# 与转移后状态单选(keep = 保持原状态[默认] / paused = 统一暂停, D9)。
+# 取值域单点在本表 —— validation/sections 与 schema 声明引用同一对象。
+TRANSFER_TARGET_TYPES = ("qb", "tr")
+TRANSFER_AFTER_STATES = ("keep", "paused")
+
 EXECUTE_ONCE = ("never", "once", "daily", "hourly")
 
 STOP_IF = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")

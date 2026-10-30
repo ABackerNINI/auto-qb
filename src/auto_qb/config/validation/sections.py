@@ -4,10 +4,12 @@ import logging
 import re
 import sys
 from typing import List, Tuple
+from urllib.parse import urlsplit
 
 from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
-from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS, RELOCATE_VERIFY_MODES
+from ..models import TRANSFER_FIELD_KEYS
+from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS, RELOCATE_VERIFY_MODES, TRANSFER_AFTER_STATES, TRANSFER_TARGET_TYPES
 from .core import (
     _check_regex_patterns,
     _check_str_list,
@@ -51,7 +53,22 @@ KNOWN_RELOCATE_KEYS = {
     "low_space_warn",
 }
 
-KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu"}
+KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu", "transfer"}
+
+# 种子转移(计划 26-10-31-0306 §03): web.transfer 段与 target 条目的合法键
+KNOWN_TRANSFER_KEYS = {"targets"}
+KNOWN_TRANSFER_TARGET_KEYS = {
+    "name",
+    "type",
+    "base_url",
+    "username",
+    "password",
+    "enabled",
+    "fields",
+    "after_state",
+    "skip_check",
+    "path_map",
+}
 
 KNOWN_NOTIFY_KEYS = {"enabled", "min_level", "quiet_hours", "max_per_hour", "dedup_window", "channels"}
 
@@ -808,6 +825,107 @@ def _validate_ctx_menu(spec, where: str, errors: List[str]) -> None:
                 _validate_ctx_menu_layer(sub, f"{b_where}.sub", errors, _CTX_LAYER_KEYS)
 
 
+def _check_transfer_base_url(value, where: str, errors: List[str]) -> None:
+    """base_url URL 形状校验(计划 26-10-31-0306 W1): 须为 http(s)://host[:port] 形状"""
+    try:
+        parsed = urlsplit(value)
+    except ValueError as e:
+        errors.append(f"{where}: URL 无法解析: {e}")
+        return
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        errors.append(f"{where}: 须为 http(s) URL(如 http://127.0.0.1:8080): {value}")
+
+
+def _validate_transfer_fields(spec, where: str, errors: List[str]) -> None:
+    """per-target 字段集校验: 键闭合(TRANSFER_FIELD_KEYS 之外报错) + 值须为布尔 +
+    save_path 锁死必开(显式 false = 破坏同机硬约束[不变量: 目标侧数据必须可达], 配置期拒绝)"""
+    if not isinstance(spec, dict):
+        errors.append(f"{where}: 必须是字典(键: {'/'.join(TRANSFER_FIELD_KEYS)})")
+        return
+    _check_unknown_keys(spec, set(TRANSFER_FIELD_KEYS), where, errors)
+    for key in spec:
+        if key not in TRANSFER_FIELD_KEYS:
+            continue
+        parsed = _try(parse_bool, spec[key], f"{where}.{key}", errors)
+        if key == "save_path" and parsed is False:
+            errors.append(f"{where}.save_path: 保存路径锁死必开(同机硬约束: 关掉 = 目标侧数据不可达, 违反转移底线)")
+
+
+def _validate_transfer_path_map(spec, where: str, errors: List[str]) -> None:
+    """路径映射规则表校验(计划 §03): 列表条目 {from, to} 两侧非空; 键闭合复用 fs 的
+    KNOWN_PATH_MAP_ENTRY_KEYS(from/to 同名同义); 不查重复/前缀歧义 —— 有序前缀替换
+    首条命中生效是既定语义, 表序即优先级, 不算歧义"""
+    if not isinstance(spec, list):
+        errors.append(f"{where}: 必须是列表")
+        return
+    for i, item in enumerate(spec):
+        w = f"{where}[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{w}: 必须是字典 {{from, to}}")
+            continue
+        _check_unknown_keys(item, KNOWN_PATH_MAP_ENTRY_KEYS, w, errors)
+        for side in ("from", "to"):
+            value = str(item.get(side, "") or "").strip()
+            if not value:
+                errors.append(f"{w}.{side}: 不能为空")
+
+
+def _validate_transfer(spec, errors: List[str]) -> None:
+    """校验 config.web.transfer(种子转移, 计划 26-10-31-0306 W1): targets 列表逐项聚合校验
+
+    名称非空且全表唯一; type 枚举(qb/tr); base_url 非空时须为 http(s) URL 形状、enabled=true
+    时必须配置; 字段集键闭合 + save_path 锁死; after_state 单选; path_map 条目 from/to 非空。
+    全部进 errors 聚合不抛 —— 保存被 400 拦下, 不落盘。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.web.transfer: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_TRANSFER_KEYS, "config.web.transfer", errors)
+    raw = spec.get("targets")
+    if raw is None:
+        return
+    where = "config.web.transfer.targets"
+    if not isinstance(raw, list):
+        errors.append(f"{where}: 必须是列表")
+        return
+    seen_names: dict = {}
+    for i, item in enumerate(raw):
+        w = f"{where}[{i}]"
+        if not isinstance(item, dict):
+            errors.append(f"{w}: 必须是字典")
+            continue
+        _check_unknown_keys(item, KNOWN_TRANSFER_TARGET_KEYS, w, errors)
+        name = str(item.get("name", "") or "").strip()
+        if not name:
+            errors.append(f"{w}.name: 不能为空")
+        elif name in seen_names:
+            errors.append(f"{w}.name: 与 targets[{seen_names[name]}] 重名: {name}")
+        else:
+            seen_names[name] = i
+        if "type" in item and str(item["type"]) not in TRANSFER_TARGET_TYPES:
+            errors.append(f"{w}.type: 取值非法: '{item['type']}', 可选: {'/'.join(TRANSFER_TARGET_TYPES)}")
+        base_url = str(item.get("base_url", "") or "").strip()
+        if base_url:
+            _check_transfer_base_url(base_url, f"{w}.base_url", errors)
+        # enabled 缺省 False(models.TransferTargetConfig); 解析失败按 False 处理(错误已记录)
+        enabled = False
+        if "enabled" in item:
+            enabled = _try(parse_bool, item["enabled"], f"{w}.enabled", errors)
+            enabled = bool(enabled)
+        if enabled and not base_url:
+            errors.append(f"{w}.base_url: 目标启用时必须配置(须为 http(s) URL)")
+        if "after_state" in item and str(item["after_state"]) not in TRANSFER_AFTER_STATES:
+            errors.append(f"{w}.after_state: 取值非法: '{item['after_state']}', 可选: {'/'.join(TRANSFER_AFTER_STATES)}")
+        if "skip_check" in item:
+            _try(parse_bool, item["skip_check"], f"{w}.skip_check", errors)
+        if "fields" in item:
+            _validate_transfer_fields(item["fields"], f"{w}.fields", errors)
+        if "path_map" in item:
+            _validate_transfer_path_map(item["path_map"], f"{w}.path_map", errors)
+
+
 def _validate_web(spec, errors: List[str]) -> None:
     """校验 config.web 段(仅本机默认; token 留空 = 随机生成)"""
     if spec is None:
@@ -831,6 +949,8 @@ def _validate_web(spec, errors: List[str]) -> None:
         _try(parse_bool, spec["skip_check_menu"], "config.web.skip_check_menu", errors)
     if "ctx_menu" in spec:
         _validate_ctx_menu(spec["ctx_menu"], "config.web.ctx_menu", errors)
+    if "transfer" in spec:
+        _validate_transfer(spec["transfer"], errors)
 
 
 def _validate_notify(spec, errors: List[str]) -> None:

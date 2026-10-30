@@ -186,3 +186,4 @@ web.port
 web.skip_check_menu
 web.skip_local_verify
 web.token
+web.transfer

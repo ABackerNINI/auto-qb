@@ -31,6 +31,11 @@ from .models import (
     SiteHrCheckConfig,
     TrafficMonitorSourceConfig,
     TrafficSourceConfig,
+    TRANSFER_FIELD_KEYS,
+    TransferConfig,
+    TransferPathMapEntry,
+    TransferTargetConfig,
+    default_transfer_fields,
     WebConfig,
     PeriodCurve,
     QbittorrentConfig,
@@ -104,6 +109,48 @@ def load_grouping_config(spec: dict) -> GroupingConfig:
     )
 
 
+def _load_transfer_target(spec: dict) -> TransferTargetConfig:
+    """解析一个转移目标(web.transfer.targets[] 条目, 计划 26-10-31-0306 W1; 仅转换, 合法性由校验层保证)
+
+    fields: 缺失键补「新建模板默认」(default_transfer_fields, 计划 §03 表) —— loader 产出
+    键闭合的完整字段集, 下游(W2 执行层)不做缺键兜底; 显式值原样保留(往返无损)。
+    """
+    d = TransferTargetConfig()
+    raw_fields = spec.get("fields")
+    fields = default_transfer_fields()
+    if isinstance(raw_fields, dict):
+        for key in TRANSFER_FIELD_KEYS:
+            if key in raw_fields:
+                fields[key] = parse_bool(raw_fields[key])
+    raw_map = spec.get("path_map")
+    path_map = tuple(
+        TransferPathMapEntry(src=str(entry.get("from", "") or "").strip(), dst=str(entry.get("to", "") or "").strip())
+        for entry in raw_map if isinstance(entry, dict)
+    ) if isinstance(raw_map, list) else ()
+    return TransferTargetConfig(
+        name=str(spec.get("name", d.name) or "").strip(),
+        type=str(spec.get("type", d.type) or d.type),
+        base_url=str(spec.get("base_url", d.base_url) or "").strip(),
+        username=str(spec.get("username", d.username) or ""),
+        password=str(spec.get("password", d.password) or ""),
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        fields=fields,
+        after_state=str(spec.get("after_state", d.after_state) or d.after_state),
+        skip_check=_get(spec, "skip_check", d.skip_check, parse_bool),
+        path_map=path_map,
+    )
+
+
+def _load_transfer_config(spec) -> TransferConfig:
+    """解析 web.transfer 段(计划 26-10-31-0306 W1): targets 列表逐项转换; 空/缺省 = 未配置"""
+    if not isinstance(spec, dict):
+        return TransferConfig()
+    raw_targets = spec.get("targets")
+    if not isinstance(raw_targets, list):
+        return TransferConfig()
+    return TransferConfig(targets=tuple(_load_transfer_target(item) for item in raw_targets if isinstance(item, dict)))
+
+
 def load_web_config(spec: dict) -> WebConfig:
     """解析 web 段(仅转换, 合法性由 validate_config 保证)"""
     d = WebConfig()
@@ -117,6 +164,8 @@ def load_web_config(spec: dict) -> WebConfig:
         # ctx_menu 原样 dict 透传(计划 26-10-20-0024 W1): 形状由校验层把关, 项 id 语义由前端
         # 注册表解释(未知 id 前端补尾/忽略) —— loader 不解析内容, 换版本不丢布局
         ctx_menu=_get(spec, "ctx_menu", d.ctx_menu),
+        # 种子转移(计划 26-10-31-0306 W1): targets 列表解析成带模板默认的带类型结构
+        transfer=_load_transfer_config(spec.get("transfer")),
     )
 
 

@@ -52,7 +52,7 @@ import pytest
 import yaml
 
 from auto_qb.config import Config, load_config, schema
-from auto_qb.config.models import QbTraffic
+from auto_qb.config.models import QbTraffic, TransferConfig, TransferPathMapEntry, TransferTargetConfig
 from auto_qb.config.schema import HR_CHECK_SITES_FIELDS, RULE_FIELDS, TRACKER_FIELDS
 from auto_qb.config.validation import KNOWN_CONFIG_KEYS
 from auto_qb.config.validation.sections import KNOWN_PATH_MAP_ENTRY_KEYS
@@ -310,6 +310,67 @@ _LOADER_PROBES = {
                         }
                     }
             },
+        ),
+    # web.transfer(种子转移, 计划 26-10-31-0306 W1): schema 打 hidden 的整体段(ctx_menu 同款),
+    # 键面只入 web.transfer 一个叶键 —— 探针覆盖整个 targets 列表往返(loader 把 fields 缺键
+    # 补成「新建模板默认」, 期望值按补齐后的完整字段集写)
+    "web.transfer":
+        (
+            {
+                "targets":
+                    [
+                        {
+                            "name": "probe-target",
+                            "type": "tr",
+                            "base_url": "http://192.0.2.1:8081",
+                            "username": "probe-user",
+                            "password": "probe-pass",
+                            "enabled": "true",
+                            "fields":
+                                {
+                                    "save_path": "true",
+                                    "category": "false",
+                                    "tags": "true",
+                                    "share_ratio_limit": "false",
+                                    "seeding_time_limit": "true",
+                                    "up_limit": "false",
+                                    "down_limit": "true",
+                                    "super_seeding": "false",
+                                },
+                            "after_state": "paused",
+                            "skip_check": "false",
+                            "path_map": [{
+                                "from": "/data/Downloads",
+                                "to": "/mnt/downloads"
+                            }],
+                        }
+                    ]
+            },
+            TransferConfig(
+                targets=(
+                    TransferTargetConfig(
+                        name="probe-target",
+                        type="tr",
+                        base_url="http://192.0.2.1:8081",
+                        username="probe-user",
+                        password="probe-pass",
+                        enabled=True,
+                        fields={
+                            "save_path": True,
+                            "category": False,
+                            "tags": True,
+                            "share_ratio_limit": False,
+                            "seeding_time_limit": True,
+                            "up_limit": False,
+                            "down_limit": True,
+                            "super_seeding": False,
+                        },
+                        after_state="paused",
+                        skip_check=False,
+                        path_map=(TransferPathMapEntry(src="/data/Downloads", dst="/mnt/downloads"), ),
+                    ),
+                )
+            ),
         ),
     # notify 段(channels 豁免, 见 _LOADER_PROBE_EXCLUDED)
     "notify.enabled": ("true", True),

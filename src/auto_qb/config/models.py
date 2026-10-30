@@ -6,7 +6,7 @@
 """
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 DEFAULT_CONFIG_FILE = "config.yml"
 UNLIMITED_SPEED = "0KiB/s"
@@ -234,6 +234,73 @@ class AddEpisodeTagsConfig:
     add_tag_multi: str = "zE${episode_first}-${episode_last}"
 
 
+# 种子转移 per-target 字段集键闭合单点(计划 26-10-31-0306 §03): 校验(validate/sections)、
+# loader 补缺、模板默认都以本表为源; save_path 锁死必开(同机硬约束: 关掉 = 目标侧数据不可达)。
+TRANSFER_FIELD_KEYS = (
+    "save_path",
+    "category",
+    "tags",
+    "share_ratio_limit",
+    "seeding_time_limit",
+    "up_limit",
+    "down_limit",
+    "super_seeding",
+)
+
+
+def default_transfer_fields() -> Dict[str, bool]:
+    """新建 target 模板默认(计划 §03 字段集表): 除超级做种外全部字段开(保存路径锁死必开)"""
+    return {key: key != "super_seeding" for key in TRANSFER_FIELD_KEYS}
+
+
+@dataclass(frozen=True)
+class TransferPathMapEntry:
+    """web.transfer.targets[].path_map 单条映射: 保存路径前缀改写(计划 §03; YAML 键 from/to)
+
+    src: 源保存路径前缀(YAML 键 from); dst: 目标侧前缀(YAML 键 to)。
+    有序前缀替换, 首条命中生效; 默认空表 = 原样(不做任何改写)。
+    """
+    src: str
+    dst: str
+
+
+@dataclass
+class TransferTargetConfig:
+    """一个转移目标下载器(web.transfer.targets[] 条目, 计划 26-10-31-0306 §03 per-target 配置)
+
+    name: 目标名(全表唯一, 非空)
+    type: 下载器类型枚举(qb/tr; tr 留接口 stub)
+    base_url: 目标 Web UI 地址(http(s)://host[:port]; enabled=true 时必须配置)
+    username/password: 目标凭据(明文落 config.yml, 与主 qB 凭据同款; UI 遮显)
+    enabled: 启用开关; 默认 False(保守默认, 黄金法则 2 —— 转移是高风险动作)
+    fields: per-target 字段集(键闭合 = TRANSFER_FIELD_KEYS; loader 对缺失键补模板默认);
+      save_path 锁死必开, 显式 false 被校验拒绝
+    after_state: 转移后状态单选: keep = 保持原状态(默认) / paused = 统一暂停(D9)
+    skip_check: 跳过校验开关, 默认开; 未完成种子由执行层自动降级为校验添加(D2/D8)
+    path_map: 路径映射规则表(有序 from→to, 默认空 = 原样)
+    """
+    name: str = ""
+    type: str = "qb"
+    base_url: str = ""
+    username: str = ""
+    password: str = ""
+    enabled: bool = False
+    fields: Dict[str, bool] = field(default_factory=default_transfer_fields)
+    after_state: str = "keep"
+    skip_check: bool = True
+    path_map: Tuple[TransferPathMapEntry, ...] = ()
+
+
+@dataclass
+class TransferConfig:
+    """种子转移配置(web.transfer, 计划 26-10-31-0306 §03): 目标下载器列表
+
+    targets: 目标列表; 空(缺省) = 未配置任何目标, 转移功能不可用(交互层空态指路设置页)。
+    整段挂在 web 下, 不新增顶层段 —— 消费方(W2 执行层/设置页)只读本对象。
+    """
+    targets: Tuple[TransferTargetConfig, ...] = ()
+
+
 @dataclass
 class WebConfig:
     """WEB UI(辅种管理)配置
@@ -259,6 +326,8 @@ class WebConfig:
     skip_local_verify: bool = False
     skip_check_menu: bool = False
     ctx_menu: Optional[Dict[str, Any]] = None
+    # 种子转移(计划 26-10-31-0306 W1): 目标下载器配置; 空 = 未配置, 功能不可用(保守默认)
+    transfer: "TransferConfig" = field(default_factory=TransferConfig)
 
 
 @dataclass

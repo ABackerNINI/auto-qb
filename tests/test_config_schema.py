@@ -3,7 +3,7 @@
 ## 测试计划(每个测试函数一条)
 - test_top_level_keys_match_validation: schema 顶层键集合 == KNOWN_CONFIG_KEYS(防漏登记配置键)
 - test_object_section_keys_match_validation: 各对象段子键集合 == 对应 KNOWN_*_KEYS
-- test_notify_channels_hidden_from_ui_but_kept_in_contract: notify.channels 暂不图形化(2026-10-10 报障: 取消勾选写空列表 → 脏标记不消 + 保存被"必须是非空列表"拒) —— schema 保留该字段且打 hidden(键面守卫以 schema 为单点, 摘字段 = 判删键)/ hidden 声明面 = channels + web.ctx_menu + web.skip_check_menu 三处(后两者计划 26-10-20-0024: 设置页新卡「WebUI」客户端块编辑 + 同卡迁入的跳检开关, 通用编辑树表达不了) / KNOWN_NOTIFY_KEYS 仍有该键(存量配置合法)/ 校验仍接受 platform 条目、仍拒绝空列表
+- test_notify_channels_hidden_from_ui_but_kept_in_contract: notify.channels 暂不图形化(2026-10-10 报障: 取消勾选写空列表 → 脏标记不消 + 保存被"必须是非空列表"拒) —— schema 保留该字段且打 hidden(键面守卫以 schema 为单点, 摘字段 = 判删键)/ hidden 声明面 = channels + web.ctx_menu + web.skip_check_menu + web.transfer 四处(ctx_menu/skip_check_menu 计划 26-10-20-0024: 设置页新卡「WebUI」客户端块编辑 + 同卡迁入的跳检开关; transfer 计划 26-10-31-0306: 种子转移 targets 列表结构, 设置页「WebUI」卡目标编辑器承担) / KNOWN_NOTIFY_KEYS 仍有该键(存量配置合法)/ 校验仍接受 platform 条目、仍拒绝空列表
 - test_tracker_fields_match_validation: 站点字段集合 == KNOWN_TRACKER_KEYS
 - test_tracker_hr_fields_match_validation: 站点 hr 字段集合 == KNOWN_TRACKER_HR_KEYS
 - test_hr_sites_fields_match_validation: hr_check.sites 条目字段集合 == KNOWN_HR_SITE_KEYS
@@ -166,10 +166,11 @@ def test_notify_channels_hidden_from_ui_but_kept_in_contract():
                 walk(f.fields or ())
 
         walk((top, ))
-    assert sorted(hidden) == ["channels", "ctx_menu", "skip_check_menu"], (
-        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有三处: "
+    assert sorted(hidden) == ["channels", "ctx_menu", "skip_check_menu", "transfer"], (
+        f"hidden 声明面变了({sorted(hidden)}) —— 合法隐藏键只有四处: "
         "channels(UI 表达不出差异, 见报障 2026-10-10) / web.ctx_menu(设置页新卡「WebUI」客户端块编辑, 计划 26-10-20-0024) / "
-        "web.skip_check_menu(同卡迁入的跳检开关, W4 D6)"
+        "web.skip_check_menu(同卡迁入的跳检开关, W4 D6) / web.transfer(种子转移 targets 列表结构, "
+        "设置页「WebUI」卡目标编辑器承担, 计划 26-10-31-0306 W1)"
     )
 
     assert "channels" in KNOWN_NOTIFY_KEYS, "KNOWN_NOTIFY_KEYS 丢了 channels —— 存量配置里的该键会变成'未知键'"
