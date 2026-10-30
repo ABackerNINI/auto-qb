@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-integration">
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-10-17-0339">
-<meta name="doc-updated" content="26-10-30-0211">
+<meta name="doc-updated" content="26-10-31-0419">
 <meta name="doc-refs" content="memory-bank/plans/26-10-20-1316-plan-gtm-primary-registration.html">
 <style>
   :root {
@@ -84,7 +84,7 @@
 <h1>全局流量来源:一键切换与自动拉起 · 集成层改版计划</h1>
 <p class="lede">把「全局流量来源」收成一处一键切换的开关;auto-qb 能自动发现并一次性拉起整机共享的流量监视器(免配端口与密钥),同时不削减工具的开机自启与多实例共享定位。</p>
 <div class="meta">
-  <b>编号</b> 26-10-17-0339 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 五轮收敛 + R1 就地改版,全部按推荐/用户拍板) &nbsp;·&nbsp; <b>状态</b> In Progress(S11–S18 已实施;S19 真机验收待逐项授权)<br>
+  <b>编号</b> 26-10-17-0339 &nbsp;·&nbsp; <b>性质</b> 实施计划(经 grilling 五轮收敛 + R1 就地改版,全部按推荐/用户拍板) &nbsp;·&nbsp; <b>状态</b> In Progress(S11–S18 与 S20 已实施;S19 真机验收待逐项授权)<br>
   <b>行号基准</b> 本 clone @ 88e7e4ee(实施前需逐条复核漂移) &nbsp;·&nbsp; <b>提交</b> 各步骤独立提交, 收尾按 DoD<br>
   <b>产生方式</b> 会话内 grilling 五轮:第一轮 7 问 → 第二轮 9 问 → 第三轮 6 问(发现层推翻重画) → 第四轮 8 问(指针/数据分居 + 编译态) → 第五轮 6 问
 </div>
@@ -95,9 +95,10 @@
 <table>
   <tr><th style="width:70px">版本</th><th style="width:110px">时间</th><th>变更</th></tr>
   <tr><td>R0</td><td>26-10-17-0339</td><td>初版:grilling 五轮 36 问收敛,拍板 D1–D18(单一来源开关 / 发现指针 / 随机端口 / 数据落点 / 自启触发 / 设置页合并 …)</td></tr>
-  <tr><td>R2</td><td>26-10-17-1447</td><td><b>取数路径收归工具指针</b>:删 <code>traffic_source.global_traffic_monitor.data_dir</code> 配置键与设置页字段(新增 <b>D20</b>),取数改走运行期单点 <code>core/traffic_source/paths.py</code>;D2/D17/§05/§10 同步,新增 S20。<b>不做配置版本升级</b>(测试期未上线,残留键按未知键报错、手工清理)</td></tr>
   <tr><td>R1</td><td>26-10-17-0429</td><td><b>拉起与自启契约改版</b>:D10 改写为「工具侧启动器契约」并新增 <b>D19</b>;D13 收敛为「启动器恒定携带自启意图 + 工具 config 唯一裁决」,<b>删掉 auto-qb 的条件传参</b>;D2/D17/S17/§05 随之删掉 auto-qb 侧的 <code>autostart</code> 键(开关状态回归工具侧单点);§03/S11/S14/S16/§08/§09/§10 同步</td></tr>
+  <tr><td>R2</td><td>26-10-17-1447</td><td><b>取数路径收归工具指针</b>:删 <code>traffic_source.global_traffic_monitor.data_dir</code> 配置键与设置页字段(新增 <b>D20</b>),取数改走运行期单点 <code>core/traffic_source/paths.py</code>;D2/D17/§05/§10 同步,新增 S20。<b>不做配置版本升级</b>(测试期未上线,残留键按未知键报错、手工清理)</td></tr>
   <tr><td>R3</td><td>26-10-17-1930</td><td><b>承接缺陷修复计划</b>:新增独立计划 <code>26-10-17-1737-plan-global-traffic-source-integration-fixes.html</code>(Phase 1,修 9 项上线缺陷)。其中两处改判本文件:<b>① 修订 D1</b> —— 新增顶层 <code>traffic_source.enabled</code> 总开关(关闭即停取数 / 停订阅 / 停自动拉起;仍<b>不</b>引入 provider 之外的来源开关);<b>② 改 §05 盘上格式</b> —— 工具参数由数值改为复合串(<code>30S</code>/<code>10MiB</code>),工具侧新增同文法解析单点、读侧兼容旧数值一次性迁移。<b>快照解耦出 <code>speed_curve_mod</code> 与设置页合并卡</b>属重构,另立 Phase 2,不在本次范围</td></tr>
+  <tr><td>R4</td><td>26-10-31-0419</td><td><b>文档漂移三修</b>(实现与验收口径零变更):① 头部状态补 <b>S20</b>(原文停在「S11–S18 已实施」,而 S20 于 26-10-17-14:47 已 Done);② §01「给未来读者的提示」原写「两份 <b>Open</b> 计划」,旧计划 <code>26-10-16-0541</code> 已 Done,改按现实表述并补链接;③ 变更记录表 <b>R1/R2 行序</b>按时间归位(原为 R0→R2→R1→R3)。<b>S19 真机验收仍未做</b>,状态保持 In Progress</td></tr>
 </table>
 <div class="note"><b>R1 的起因:</b>原设计让 auto-qb 在拉起时条件计算 <code>--autostart true|false</code>(provider = 工具来源且用户未关过 ⇒ 真)。「把该旗标固化进启动器以解耦 CLI 形态」这一改法会与 D13 冲突 —— 它的<b>取值是可变的</b>,而 <code>false</code> 那一支正是「用户显式关过 ⇒ 不被装回」的防复活闸,固化成常量等于把闸门焊死。故改判为:<b>启动器只携带"顺带注册"这一个恒定意图,是否真注册由工具侧 config <code>autostart</code> 裁决</b> —— 判断权下放给状态的持有者,auto-qb 侧既不持有也不计算该状态。</div>
 
@@ -113,7 +114,7 @@
   <tr><td>旧 S10(真机验收)</td><td><b>并入本计划 §04 的 S19</b></td></tr>
   <tr><td>旧 §03 架构图 / §05 默认参数</td><td>被本计划 §03 / §05 取代</td></tr>
 </table>
-<div class="note"><b>给未来读者的提示:</b>两份 Open 计划分属两个 doc-topic,不是分叉;旧计划描述「工具怎么造」,本计划描述「auto-qb 怎么找到它、怎么切换来源、怎么免配拉起」。</div>
+<div class="note"><b>给未来读者的提示:</b>旧计划 <a style="color:var(--dim)" href="./26-10-16-0541-plan-global-traffic-monitor.html">26-10-16-0541</a>(已 Done)与本计划分属两个 doc-topic,不是分叉;旧计划描述「工具怎么造」,本计划描述「auto-qb 怎么找到它、怎么切换来源、怎么免配拉起」。</div>
 
 <h2><span class="no">02</span>拍板结论(grilling 收敛)</h2>
 <p>以下 19 条为五轮 grilling 与 R1 改版的全部决策(<b>D19</b> 为 26-10-17-0429 增补),实施不得再自行变更;确需变更按「同文件内变更记录 + 抬 doc-updated」处理。</p>

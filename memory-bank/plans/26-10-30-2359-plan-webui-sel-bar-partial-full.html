@@ -7,9 +7,9 @@
 <title>WebUI 分组行左条区分全选与半选——三模板选型</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-sel-bar-partial-full">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-30-2359">
-<meta name="doc-updated" content="26-10-31-0019">
+<meta name="doc-updated" content="26-10-31-0414">
 <style>
   :root {
     --bg: #10151a;
@@ -123,7 +123,7 @@
 <h1>WebUI 分组行左条区分全选与半选——三模板选型</h1>
 <p class="lede">分组行左条目前对「组内全部种子选中」与「部分种子选中」渲染同一条 accent 实色条,本文档给出三个可交互模板(可点击行复现三态)供选型,拍板后按选定模板改 <code>row_lang.css</code> 的 partial 规则。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-30-2359 · <b>doc-updated</b> 26-10-31-0019 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-30-2359 · <b>doc-updated</b> 26-10-31-0414 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令(2026-10-30 会话):「WEBUI选中分组中部分种子与全部种子的状态需要区分,目前的左边选中指示条是一样的,先设计3个简单可交互的模板供选择」
 </div>
 
@@ -331,6 +331,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-30-2359</span> 初版:来源 = 用户指令(部分/全选左条需区分,先出三模板);要点 = 现状取证(row_lang.css 四组规则 selected/partial 同款,皮肤基线原有 42% 弱化被接管抹平)+ 三可交互模板(A 浓度分档 / B 实心空心 / C 比例高度)+ 对比表与待拍板 D1/D2。</li>
   <li><span class="tag">R1 · 26-10-31-0019</span> 拍板 D1=模板C 比例高度/D2=不叠底色并实施: selection.js _selState/groupSelState 返回 ratio + groupSelStyle 写 --sel-ratio; groups.html 组行 style 合并; row_lang.css 四组 partial 规则拆独立下锚比例短条(flat/wave × 沟槽/横滚窄条, fallback=1 保守默认); 取证补记 shows 行不在 rl-scope 不波及</li>
+  <li><span class="tag">R2 · 26-10-31-0414</span> 实施收口并置 Done: §04 四步全量落地 —— <code>selection.js</code> <code>_selState</code>/<code>groupSelState</code> 追加 <code>ratio</code>(全选=1/未选=0)、新增 <code>groupSelStyle</code> 半选写行内 <code>--sel-ratio</code>; <code>tpl/groups.html</code> 组行 <code>:style</code> 合并 <code>groupSelStyle(g)</code>; <code>row_lang.css</code> 四组规则(flat/wave × 沟槽条/横滚吸左窄条)的 partial 拆出下锚比例短条, fallback=1 保守默认(行未写变量退化为旧行为)。不变量复验: 文本零位移、键盘锚点让位 [1,4]、<code>.is-hscrolled</code> 双条不回归、状态序 partial 仍在 hover 之上与 selected 同序; 追剧页 show/ep 行与 frost-golden 零波及。桩实机三态 + 横滚窄条实测(半选条高 ∝ 比例, 全选满高); test.full 全绿, 数字与基线见 kb.baseline 切片 <code>26-10-31-0024-webui-sel-bar-partial-full</code>; 守阵 <code>test_sel_group_member_linkage</code> needle 随重构迁移。</li>
 </ul>
 
 </div>

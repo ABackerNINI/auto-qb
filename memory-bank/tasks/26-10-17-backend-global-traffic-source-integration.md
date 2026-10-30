@@ -2,7 +2,7 @@
 
 **Status:** In Progress
 **Added:** 2026-10-17
-**Updated:** 2026-10-17
+**Updated:** 2026-10-31
 **Summary:** 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处 + 来源一键切换。grilling 五轮 36 问收敛(用户四次纠正), 推翻旧计划 26-10-16-0541 的配置落点/发现机制/自启触发/用户可见命名四组拍板, 产出独立计划 26-10-17-0339(Open, doc-topic `global-traffic-source-integration`, 拍板 D1–D19); R1 就地改版(拉起改走工具侧启动器 D19 + D13 收敛为「工具 config 唯一裁决」); 工具侧 S11(目录定位/数据落点/启动器)/S12(发现指针 + 锁锚点)/S13(随机端口 + `endpoint` 子命令)/S14(自启意图布尔开关 + config 回写 + 全称改名 + gitignore)已实施; S15(auto-qb 配置面合并 + v4→v5 升级链)已实施; S16(auto-qb 侧探测-引导拉起-订阅编排: 新增 `core/traffic_source/agent.py` 探测/缺席拉起/状态五态单点 + 可注入启动动作, 订阅方向改从发现指针取端点/密钥 = 删 tool_url/tool_token_path 读路径, 编排挂既有订阅线程每轮先确保可达再注册)已实施; S17(auto-qb 侧设置页合并: 旧过渡 stub 段退休[`GlobalTrafficMonitorConfig` 与 `Config.global_traffic_monitor` 删除, WebUIModule 段认领收缩为 `web`] + 「全局流量来源」单卡[provider 单选 + 选中面展开 + 五态状态区 + 立即拉起/重试/打开工具设置 + 自启开关读指针 + 文件选择器 + 工具参数高级折叠] + 曲线卡删来源字段 + `enabled` 由 provider 派生[修 `conf.enabled` 属性缺失隐患] + 新增 `POST /api/traffic/monitor/relaunch` 与 `WebUIModule.agent`/`request_relaunch`)已实施; S18(守阵补口 4 条[拉起不拼 uv/入口名的静态守阵 · 指针常量跨侧镜像 · 工具运行期目录 gitignore 覆盖 · provider 取数互斥] + 文档四处回写[docs/configuration.md 工具章节整段改版到随机端口/指针/启动器/自启裁决现实 · README · config-reference/keys.md 修 S15 遗留两处口径错 · 三条新坑] + 新基线切片)已实施; R2 就地改版(26-10-17-1447, 真机事故驱动: 工具已就绪但顶栏/历史图全空) = 新增 S20 并已实施: 删 `traffic_source.global_traffic_monitor.data_dir` 配置键与设置页字段, 取数路径收归工具发现指针(新运行期单点 `core/traffic_source/paths.py`, 旧 `active_dat_path()` 退休 = D20), 自启提权缺陷入池 issue 26-10-17-1455; S19 待逐项授权。
 **Topics:** global-traffic-source-integration
 
@@ -184,3 +184,5 @@
 **滚动面**: 本档案(R8 段 + 状态表 + Updated) · activeContext 切片 · 基线切片 · 三条新坑 · kb.index 重建。
 
 - 2026-10-17 14:58 R2: 删 traffic_source.global_traffic_monitor.data_dir 配置键与设置页字段, 取数路径收归 core/traffic_source/paths.py(工具来源读发现指针); 旧 active_dat_path() 退休; 键面基线/测试/文档/计划(新增 D20+S20)同步; 自启提权缺陷入池 issue 26-10-17-1455
+
+- 2026-10-31 04:21 计划 26-10-17-0339 文档漂移三修(头部状态补 S20 / §01 旧计划已 Done / 变更记录 R1-R2 行序归位), 补 R4 记档, doc-updated 抬到 26-10-31-0419; 状态保持 In Progress —— S19 真机验收四场景仍待逐项授权(现网指针 + /status 探活 + 订阅在跑, 但无逐项验收记录)

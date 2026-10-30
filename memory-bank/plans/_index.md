@@ -17,15 +17,15 @@
 
 - [26-10-31-0306] [种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单](26-10-31-0306-plan-torrent-transfer.html) — `torrent-transfer`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
-- [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
-- [26-10-30-0217] [WebUI 主表暗主题背景重设计: 可交互模板选型](26-10-30-0217-plan-webui-main-table-dark-bg.html) — `webui-main-table-dark-bg`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
 
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
+- [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`
 - [26-10-30-0221] [实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流](26-10-30-0221-plan-full-code-review-2.html) — `full-code-review-2`
+- [26-10-30-0217] [WebUI 主表暗主题背景重设计: 可交互模板选型](26-10-30-0217-plan-webui-main-table-dark-bg.html) — `webui-main-table-dark-bg`
 - [26-10-30-0049] [rules/ 包变异测试审计 · 分步执行计划](26-10-30-0049-plan-mutation-audit.html) — `mutation-audit`
 - [26-10-29-0308] [WEBUI 种子状态修复:新增 moving 类并封堵遗漏状态](26-10-29-0308-plan-webui-torrent-moving-state-kind.html) — `webui-torrent-moving-state-kind`
 - [26-10-29-0231] [qB 流量图 3d+ 视图空闲零值区显示无采样修复计划](26-10-29-0231-plan-qb-traffic-agg-idle-zero.html) — `qb-traffic-agg-idle-zero`

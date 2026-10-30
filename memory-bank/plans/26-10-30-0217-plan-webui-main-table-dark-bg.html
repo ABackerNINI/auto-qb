@@ -7,9 +7,9 @@
 <title>WebUI 主表暗主题背景重设计: 可交互模板选型</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-main-table-dark-bg">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-30-0217">
-<meta name="doc-updated" content="26-10-30-0332">
+<meta name="doc-updated" content="26-10-31-0414">
 <style>
   :root {
     --bg: #10151a;
@@ -163,7 +163,7 @@
 <h1>WebUI 主表暗主题背景重设计: 可交互模板选型</h1>
 <p class="lede">重设计主列表(主表)暗主题下的行/列背景语言——提供 4 套可交互模板(§03)供选型，主轴是「把行底从与页底纠缠的中间调里解放出来：要么干净地落在页底上(平板)，要么明确地浮起来(卡片)」。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-30-0217 · <b>doc-updated</b> 26-10-30-0332 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-30-0217 · <b>doc-updated</b> 26-10-31-0414 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话用户指令：「主表列背景色(暗主题)看着灰蒙蒙、界面很脏，需要重新设计；先设计几个简单的可交互 UI 模板供选择，模板写入计划文件」
 </div>
 
@@ -353,6 +353,7 @@
   <li><span class="tag">R8 · 26-10-30-0309</span> 用户目验追记四时序不连续(波与底色两层各自淡入淡出, 中间暗谷读成跳变) ⇒ B 的 M4 改终版「波即高亮」: 扫层=高亮终色白9%实色, scaleX 0→1 扩散 300ms forwards 驻留成持续高亮, 扫过即终值无二次渐入; hover 改底色规则整体删除(zebra 保留, 名称列与其它列同一层 overlay 终态一致)</li>
   <li><span class="tag">R9 · 26-10-30-0311</span> M2 并入模板 B(追记六): 名称列左条滑入与 A 同语言(hover 中性白条 120ms/选中 accent 实色条), B 选中条从 box-shadow 换成 ::before 统一, 名称列 padding-left 2→8px 让位; A 与 B 现同为 M1/M4+M2 组合</li>
   <li><span class="tag">R10 · 26-10-30-0332</span> grilling 六问收敛并回填: D1=A/B 双实施可切换默认A, D3=三皮肤暗主题全量(Q1b), D5=主题菜单分组+localStorage+head同步引擎, D6=移植性硬要求(shared/row_lang.css 单点 + .rl-scope 作用域类 + tint 令牌带回退, 新面采用=挂一个class); §03 增实施定稿段, §04 重写为六步, §05 全拍板归档, §07 增级联/作用域/亮主题排除/FOUC 四风险</li>
+  <li><span class="tag">R11 · 26-10-31-0414</span> 实施收口并置 Done: §04 六步按 §03 定稿全量落地 —— <code>shared/rowlang.js</code>(head 同步防 FOUC / <code>localStorage["autoqb.ui.rowlang"]</code> / 值域 flat|wave / <code>--mx</code> 委托)+ <code>shared/row_lang.css</code>(<code>html[data-rowlang]+.rl-scope</code> 单点规则 / 亮主题 <code>:not</code> 排除前缀 / tint 令牌带回退)+ topbar 菜单「主表行语言」分组(prism 复用 #theme-menu, 非 prism 独立按钮)+ 三皮肤 <code>index.html</code> 挂载(row_lang.css 在各皮肤 views.css 之后)+ <code>groups.html</code> 主表容器挂 <code>rl-scope</code>; 状态重锚后 expanded/search-hit 行板与首格合成表达式逐字相等。验收后三笔修正: 左条右让 1px 避键盘锚点虚线 / flat 行板与首格计算值表示统一(e2e 红清零) / 名称列 color-mix 闪变根治。边界(抽屉面/表头/列宽列序/排序筛选/芯片/行高字号/亮主题 frost-golden)机器核对零变化; test.full 全绿, 数字与基线见 kb.baseline 切片 <code>26-10-30-0419-webui-rowlang</code>; 守阵 <code>test_webui_static_skins</code> 覆盖挂载序与首格过渡同源。</li>
 </ul>
 
 </div>
