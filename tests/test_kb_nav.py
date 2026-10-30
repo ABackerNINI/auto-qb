@@ -80,6 +80,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_esc_ime_guard: 链首 IME 守卫 (isComposing || keyCode === 229) 排在退档之前
 - test_esc_closes_overlay_first: 遮罩退档 (hideError) 在链里排先于 ctxMenu/drawer 档 + CSS z 序同视觉层叠
 - test_esc_closes_drawer: drawer 档判据 open 类 (可见性) 且清 S.sel + closeDrawer 同步, 后于 ctxMenu 档
+- test_gsearch_clear_button: 全局搜索清词按钮在位 (内联 SVG / [hidden] 兜底 / syncGclear 单点同步 / 清词还焦点), placeholder 无 (Esc 清空)
+- test_slash_focuses_search: "/" 快捷键聚焦搜索框 (slashFocus 命名函数 / 输入态与 IME 不劫 / 挡默认行为), 注册点不混 Esc 关键词
 """
 
 from __future__ import annotations
@@ -715,6 +717,47 @@ def test_esc_closes_drawer() -> None:
     assert "S.sel = null" in branch and "closeDrawer()" in branch, "drawer 档必须清 S.sel 并收抽屉 (两处同步, 否则抽屉又弹)"
     assert body.index("closeCtx()"
                      ) < body.index('drawer.classList.contains("open")'), "drawer 档必须后于 ctxMenu 档 (z-30 < z-40)"
+
+
+# --------------------------------------------------------------------------- 搜索框: 清词按钮 + "/" 快捷键
+
+
+def test_gsearch_clear_button() -> None:
+    """全局搜索清词按钮: 有词才显形、点按清词并把焦点还给输入框、内联 SVG 无 emoji (code-style)。
+    显隐同步必须走 syncGclear 单点 —— gq 的 input / Esc 清词 / 清词按钮 / boot 回填四处共用,
+    各处各写一份即某处漂移出幽灵按钮或按钮失踪。placeholder 不写 "(Esc 清空)" (设计口径:
+    Esc 清词不在文档化交互里, 按钮才是明面入口)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'id="gclear"' in text, "缺清词按钮 #gclear"
+    assert ".gclear[hidden]" in text, ".gclear 缺 [hidden]{display:none} 兜底 (flex display 会盖掉 UA hidden)"
+    assert "function syncGclear" in text, "缺显隐同步单点 syncGclear()"
+    assert text.count("syncGclear(") >= 5, "gq 四个入口 (input / Esc / 按钮 / boot 回填) 都得过 syncGclear 同步"
+    assert "S.q = \"\"" in text and "$(\"gq\").focus()" in text, "清词点击须清 S.q 且焦点还给输入框"
+    btn = re.search(r'<button class="gclear"[^>]*>(.*?)</button>', text, re.S)
+    assert btn and "<svg" in btn.group(1), "清词按钮须内联 SVG 图形 (禁 emoji / 字符叉)"
+    gq = re.search(r'<input id="gq"[^>]*>', text)
+    assert gq and "Esc" not in gq.group(0), "gq placeholder 不再写 (Esc 清空) —— 按钮是明面入口 (只涉 gq, cq 不动)"
+
+
+def test_slash_focuses_search() -> None:
+    """"/" 快捷键聚焦全局搜索框: 命名函数 slashFocus + document 级注册恰一处; 输入态不劫
+    (closest input/textarea/select —— 在框里打 / 是正常字符), IME 组合期不劫 (keyCode 229 同判),
+    加修饰键不劫。命名函数注册是给 Esc 单点守阵让路的口径: 监听调用点里不得出现 Esc 关键词。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert "function slashFocus" in text, "缺 slashFocus 处理函数"
+    assert 'document.addEventListener("keydown", slashFocus)' in text, "slashFocus 须命名函数注册"
+    body = re.search(r"function slashFocus\(e\) \{(.*?)\n  \}", text, re.S)
+    assert body, "slashFocus 结构搬家要同步本守阵"
+    b = body.group(1)
+    assert 'e.key !== "/"' in b, "缺键位判据 /"
+    assert "e.isComposing" in b and "keyCode === 229" in b, "缺 IME 组合期守卫 (同 escRetreat 口径)"
+    assert 'closest("input, textarea, select")' in b, "输入态不劫 (框内打 / 是正常字符)"
+    assert "e.preventDefault()" in b and '$("gq").focus()' in b, "须挡下默认行为并聚焦 #gq"
+    listener = re.search(r'document\.addEventListener\("keydown"[^)]*\)', text)
+    assert listener, "缺 keydown 注册? 壳被改坏"
+    assert "Escape" not in listener.group(0) or "escRetreat" in listener.group(0), (
+        "document 级 keydown 首个注册点混入 Esc 关键词 —— Esc 单点守阵 (test_esc_retreat_chain_single_point) 数的就是它"
+    )
 
 
 # --------------------------------------------------------------------------- 服务层 (127.0.0.1 随机端口)

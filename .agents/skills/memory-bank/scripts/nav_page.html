@@ -74,11 +74,20 @@
   .gsearch { position: relative; flex: 0 1 400px; }
   .gsearch input {
     width: 100%; background: var(--paper-2); border: 1px solid var(--hair); color: var(--ink);
-    border-radius: 5px; padding: 7px 10px 7px 30px; font: 12.5px var(--sans); outline: none;
+    border-radius: 5px; padding: 7px 26px 7px 30px; font: 12.5px var(--sans); outline: none;
   }
   .gsearch input:focus { border-color: var(--cyan); }
   .gsearch input::placeholder { color: var(--faint); }
   .gsearch svg { position: absolute; left: 9px; top: 8px; width: 13px; height: 13px; stroke: var(--faint); }
+  /* 清词按钮: 有词才显形 (syncGclear 同步); [hidden] 兜底必写 —— flex display 会盖掉 UA 的 hidden */
+  .gclear {
+    position: absolute; right: 6px; top: 8px; width: 17px; height: 17px; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: none; border-radius: 4px; color: var(--faint); cursor: pointer;
+  }
+  .gclear:hover { color: var(--ink); background: var(--paper); }
+  .gclear[hidden] { display: none; }
+  .gclear svg { width: 10px; height: 10px; display: block; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
   .seg { display: flex; border: 1px solid var(--hair-2); border-radius: 6px; overflow: hidden; flex: none; }
   .seg button {
     background: var(--paper-2); color: var(--dim); border: none; padding: 6px 16px;
@@ -553,7 +562,10 @@
   <div class="brand">MB<span class="sep">//</span>NAV <small>memory-bank 四工位导航</small></div>
   <div class="gsearch">
     <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-    <input id="gq" type="text" placeholder="搜索标题 / 专题 / 摘要…  (Esc 清空)">
+    <input id="gq" type="text" placeholder="搜索标题 / 专题 / 摘要…">
+    <button class="gclear" id="gclear" hidden title="清空搜索词" aria-label="清空搜索词">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14M19 5L5 19"/></svg>
+    </button>
   </div>
   <div class="seg" id="seg">
     <button data-view="ledger" class="on">台账</button>
@@ -1310,15 +1322,24 @@ function renderCards() {
 /* ============================================================
    事件绑定 (一次性)
    ============================================================ */
+/* 清词按钮显隐单点: 有词才显形 —— gq 的 input / Esc 清词 / 清词按钮 / boot 回填四处共用,
+   少同步一处即按钮失踪或幽灵按钮 (空词时点不了还占位)。 */
+function syncGclear() {
+  $("gclear").hidden = !$("gq").value;
+}
 function wire() {
   $("seg").addEventListener("click", e => {
     const b = e.target.closest("button");
     if (b) setView(b.dataset.view);
   });
   $("pullBtn").addEventListener("click", doPull);
-  $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); saveFilters(); renderCurrent(); });
+  $("gq").addEventListener("input", e => { S.q = e.target.value.trim(); saveFilters(); renderCurrent(); syncGclear(); });
   $("gq").addEventListener("keydown", e => {
-    if (e.key === "Escape") { e.target.value = ""; S.q = ""; saveFilters(); renderCurrent(); }
+    if (e.key === "Escape") { e.target.value = ""; S.q = ""; saveFilters(); renderCurrent(); syncGclear(); }
+  });
+  /* 清词按钮: 清词后焦点还给输入框 (连续改词免再点); 只清搜索词, 不动筛选器与选择态 */
+  $("gclear").addEventListener("click", () => {
+    $("gq").value = ""; S.q = ""; saveFilters(); renderCurrent(); syncGclear(); $("gq").focus();
   });
 
   /* A */
@@ -1407,6 +1428,19 @@ function wire() {
     }
   };
   document.addEventListener("keydown", escRetreat);
+  /* "/" 快捷键: 非输入态一键聚焦全局搜索框 (浏览器惯例键位); 输入态 / 下拉内不劫 (正常打字);
+     IME 组合期不劫 (同 escRetreat 口径, keyCode 229 同判); 加修饰键不劫 (留给浏览器 / 系统)。
+     命名函数注册 —— 守阵数 document-level keydown 监听里含 Esc 关键词的必须恰一处,
+     本链与 Esc 无关, 别把那个词写进监听调用点。 */
+  function slashFocus(e) {
+    if (e.key !== "/") return;
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest("input, textarea, select")) return;
+    e.preventDefault();
+    $("gq").focus();
+  }
+  document.addEventListener("keydown", slashFocus);
   window.addEventListener("scroll", closeCtx, true);
   $("sort").addEventListener("change", e => { S.sort = e.target.value; saveFilters(); renderLedger(); });
   $("dclose").onclick = () => { S.sel = null; closeDrawer(); };
@@ -1535,6 +1569,7 @@ function boot() {
   $("gq").value = S.q;
   $("cq").value = S.cq;
   $("sort").value = S.sort;
+  syncGclear();   /* 回填了搜索词就得同步清词按钮显隐, 否则刷新后带词重开按钮失踪 */
   for (const b of document.querySelectorAll("#seg button")) b.classList.toggle("on", b.dataset.view === S.view);
   for (const id of ["v-ledger", "v-console", "v-cards"]) $(id).classList.toggle("on", id === "v-" + S.view);
 
