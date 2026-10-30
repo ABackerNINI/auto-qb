@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-30-0818">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-optimistic-ui">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0331-webui-rename-rollback-drawer-detail.md, memory-bank/pitfalls/web-ui/webui-optimistic-rollback-symmetry.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="rename 乐观失败回滚不还原抽屉 detail.name">
 <meta name="issue-summary" content="抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取">
 <title>rename 乐观失败回滚不还原抽屉 detail.name · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0818-bug-webui-rename-rollback-drawer-detail</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 08:18</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -143,7 +143,7 @@
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <div class="callout">待查(倾向:editRename 贴补丁时多写了 detail.name 而回滚面没有对称覆盖;是否该让 detail.name 走 hold 语义或失败时显式还原,待认领时定)</div>
+    <div class="callout">已定案（2026-10-31 修复时）：editRename 贴补丁时按 D3 把 detail.name 同步改新名，但 detail 是独立拉取的对象、不在 _forEachRow 三数组里 —— commands.js 的两条回滚出口（resolveOptimistic 失败分支 / _expirePending 3s 兜底）都只还原行，贴补丁面与回滚面不对称。</div>
   </section>
 
   <section id="s6">
@@ -155,11 +155,14 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 08:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 03:29 — 用户指派认领并修复，复验仍复现（见上）；状态 <strong>Open</strong> → <strong>Done</strong>（实际修法/验证方式/测试数字见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-31 03:29 仍复现</strong>（HEAD 4d885851）—— drawer.js::editRename 贴补丁时写 <code>detail.name</code>、commands.js 两条回滚出口均无 detail 还原写入，与取证锚点逐字一致。另核实影响面细节：drawerTitle 优先 memberByHash（行引用，行回滚自动跟随），仅 hash 不在视图三数组时回落 detail.name —— 恰是「行不在视图 + 抽屉开着」的组合，此时 applyOptimisticPatch 连 op.prev 都采不到，detail 是唯一旧名落点。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（2026-10-31，与建议修法同向、落点改道）</strong>：未在 editRename 内显式还原，而是收敛进 commands.js 回滚单点 —— 新增 <code>_syncDrawerRollback(hash, patch, rolled)</code>，两条回滚出口（resolveOptimistic 失败分支 / _expirePending 兜底）都把<strong>行同款回滚值</strong>（op.prev，兜底时 <code>t || op.prev</code>）对称写回 drawer.detail（只写 patch 出现过的键；抽屉不在该 hash / 已关时跳过）；editRename 贴补丁时把抽屉旧名回填进 op.prev，补上「行不在视图采不到 prev」时 detail 无原名可退的缺口。<strong>改道原因</strong>：editRename 内只还原显式失败会漏掉 3s 无回执兜底出口（本件触发条件明确含它）；且回滚值须与行同源 —— 兜底要回「最后已知真值」而非盲回点击时的旧值（pitfalls/web-ui/contract-api.md「"真值到达" ≠ "值覆盖结束"」条）。</p>
+    <p><strong>验证方式</strong>：扩展 tests/test_webui_optimistic_rename_alt.py 的 rename 四态 node 电池（真跑 commands.js + drawer.js）加 7 条断言 —— 失败 / 3s 兜底两出口 detail 还原原名；行不在视图时 op.prev.name 回填当回滚锚；抽屉在别的 hash / 已关时回滚不碰 detail；兜底时行与 detail 同回最后已知真值（不盲回 prev）。</p>
+    <p><strong>测试数字（2026-10-31 实测，4d885851 工作区，未提交）</strong>：rename四态 node 电池 <strong>25/25</strong> 过；全量 <code>commands run test.full</code> <strong>4190 passed, 2 skipped</strong>，覆盖率 <strong>99.28%</strong>（基线切片见 <code>commands run kb.baseline</code>）。</p>
   </section>
 
   <footer>

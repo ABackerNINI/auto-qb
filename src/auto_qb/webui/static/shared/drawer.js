@@ -885,10 +885,19 @@ window.AQB_DRAWER = {
        * **同一批对象引用**, 补丁落行即落索引, 无需(也不得)另写一份。
        * 回执链沿用 _editPost: ok 转 hold(值覆盖保持到快照 name 同意, 不弹回),
        * error / 发送异常 / 等待超时都返回 false -> resolveOptimistic(false) 回滚原名;
-       * 3s 无回执由 _expirePending 兜底回滚, 不留假状态。 */
+       * 3s 无回执由 _expirePending 兜底回滚, 不留假状态。
+       * 回滚面对称覆盖抽屉 detail(_syncDrawerRollback, issue 26-10-30-0818): 贴补丁时写了
+       * detail.name, 失败/超时两条回滚出口都必须把它还原, 否则抽屉标题回落分支停留新名直到重开。 */
+      const prevDetailName = (this.drawer.open && this.drawer.hash === hash && this.drawer.detail)
+        ? this.drawer.detail.name : null;
       this.applyOptimisticPatch([hash], "rename", { name: res.name });
-      if (this.drawer.open && this.drawer.hash === hash && this.drawer.detail) {
+      if (prevDetailName !== null) {
         this.drawer.detail.name = res.name;
+        /* hash 不在当前视图三数组时 applyOptimisticPatch 采不到 prev, detail 是该 hash 唯一的
+         * 旧名落点 —— 回填进 op.prev 让失败/超时回滚仍有原名可退(issue 26-10-30-0818);
+         * 行在视图时 prev.name 已采到真值, 不覆盖。 */
+        const op = this.pendingOps[hash];
+        if (op && op.prev.name === undefined) op.prev.name = prevDetailName;
       }
       const ok = await this._editPost(hash, "rename", { name: res.name }, "已重命名");
       this.resolveOptimistic([hash], ok);

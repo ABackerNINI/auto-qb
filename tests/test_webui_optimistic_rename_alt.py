@@ -6,7 +6,7 @@
 ## 测试计划(每个测试函数一条)
 - test_rename_optimistic_patch_precedes_post: 守阵一(plan §04 S5 / §07 行1): drawer.js::editRename 的 applyOptimisticPatch 调用点必须先于 POST(_editPost)、resolveOptimistic 必须在 POST 之后收口 —— 顺序倒了就是「先等回执再贴补丁」, 「点击当帧可见」整条设计作废; 另钉 patch 恰为 {name} 单键(§01 不变量: 值覆盖只盖「值来自我们」的字段)与 drawer.js 全文件 applyOptimisticPatch 调用点唯一
 - test_on_truth_event_kind_injection_action_guard: 守阵二(plan §04 S1.3 / §07 行1): commands.js::onTruthEvent 的 kind 注入必须带 action 守卫 —— 只对 pause/resume 的 op 注入 kind(patch/prev/hold/ts 四写全在守卫块内), rename 等 action 的 op 保持原 patch(掺入 kind 会让 _optimisticSettled 逐键比对永远差一键, 对账判据被污染, op 挂到 8s 兜底才回滚且行名被错误弹回)
-- test_rename_optimistic_four_states_node: rename 四态 node 电池(plan §04 S5, 仿 pause/resume 乐观既有用例; 无 node 静默跳过): 真跑 commands.js + drawer.js 的 editRename 全链 —— 态1 贴上(POST 发出时行上已是新名, op grey=true/hold=false)/态2 回执 ok 转 hold(值覆盖保持, 陈旧快照回到来不弹回)/态3 失败回滚(原名恢复, op 清除)/态4 快照对齐清除(op 清除且显示保持新名不弹回); 附加: 3s 无回执兜底回滚 + §07 指定回归「rename 收到 truth 事件后 patch 仍只有 name」(对照: pause op 照旧注入 kind 转 hold)
+- test_rename_optimistic_four_states_node: rename 四态 node 电池(plan §04 S5, 仿 pause/resume 乐观既有用例; 无 node 静默跳过): 真跑 commands.js + drawer.js 的 editRename 全链 —— 态1 贴上(POST 发出时行上已是新名, op grey=true/hold=false)/态2 回执 ok 转 hold(值覆盖保持, 陈旧快照回到来不弹回)/态3 失败回滚(原名恢复, op 清除)/态4 快照对齐清除(op 清除且显示保持新名不弹回); 附加: 3s 无回执兜底回滚 + 回滚对称面(issue 26-10-30-0818: 失败/兜底两出口抽屉 detail 还原原名; 行不在视图时 op.prev.name 回填抽屉旧名当回滚锚; 抽屉不在该 hash/已关时不碰 detail; 兜底行与 detail 同回最后已知真值) + §07 指定回归「rename 收到 truth 事件后 patch 仍只有 name」(对照: pause op 照旧注入 kind 转 hold)
 - test_alt_override_four_states_node: altOverride 四态 node 电池(plan §04 S2, 无 node 静默跳过): 真跑 dialogs.js 的 toggleAltSpeed/_altOverride* 与 sbAltOn 显示单点 —— 态1 预翻转(点击当帧 sbAltOn 已翻转且 3s 兜底武装)/态2 三路回滚(回执 error/发送失败/3s 无回执 -> 覆盖清除回落 server 值)/态3 确认清除(轮询带回一致值 -> 清除且零观感跳变; 带回旧值 -> 覆盖保留不弹回)/态4 8s 兜底清除(回执 ok 转 hold 后 8s 未确认 -> 清除; 旧 3s 兜底误触发被 needHold 守卫拦下); 另钉接线静态锚: sbAltOn override 优先 server 兜底 + polling.js statsServer 赋值后必调 _altOverrideReconcile + state.js data 声明 altOverride
 - test_alt_limits_empty_gate_node: altLimits 非空闸 node 电池(issue 26-10-30-0622, 无 node 静默跳过): 真跑 dialogs.js 的 submitAltLimits —— A /api/speed/mode 读失败窗口(altCurrent=null 两框回空)整组跳过零 POST / B 任一框为空同判(与 speedOvReady 同形) / C 未改动不下发 / D 改动照常 POST 载荷正确 / E 显式 0=不限速不拦
 """
@@ -142,7 +142,7 @@ const mkCtx = (rows, waitImpl) => {
   ctx.editRename = DM.editRename;
   ctx._editPost = DM._editPost;
   ctx.toast = () => {};
-  ctx.api = async () => { ctx.postSeenName = ctx.torrents[0].name; return { cmd_id: "c1" }; };
+  ctx.api = async () => { ctx.postSeenName = ctx.torrents[0] ? ctx.torrents[0].name : null; return { cmd_id: "c1" }; };
   ctx.waitCmd = waitImpl;
   ctx._fetchDrawerDetail = async () => {};
   ctx._editTargetHash = (h) => h || "H1";
@@ -183,6 +183,8 @@ const mkCtx = (rows, waitImpl) => {
     async () => ({ ok: false, error: "qB 拒绝" }));
   await c3.editRename();
   ok("态3: 失败回滚原名", c3.torrents[0].name === "旧名");
+  ok("态3: 抽屉 detail 对称还原原名(issue 26-10-30-0818 回滚对称面)",
+    c3.drawer.detail.name === "旧名");
   ok("态3: op 已清除(无残留 pending)", !c3.pendingOps["H1"]);
 
   /* ---- 态4: 快照对齐清除(清除后显示保持, 不弹回) --------------------------------- */
@@ -207,6 +209,45 @@ const mkCtx = (rows, waitImpl) => {
   c5.pendingOps["H1"].ts = Date.now() - 3500;   // 快进 3s(改 op.ts, 不用假时钟)
   c5._expirePending();
   ok("3s 无回执: 兜底回滚原名且清 op", c5.torrents[0].name === "旧名" && !c5.pendingOps["H1"]);
+  ok("3s 无回执: 抽屉 detail 同步兜底回滚原名(两条回滚出口都对称)", c5.drawer.detail.name === "旧名");
+
+  /* ---- 回滚对称面(issue 26-10-30-0818): 行不在视图 + 抽屉开着 --------------------- */
+  /* drawerTitle 在 hash 不在视图三数组时才回落 detail.name —— 恰是 detail 停新名的可见场景;
+   * 此时 applyOptimisticPatch 采不到行 prev, 靠 editRename 把抽屉旧名回填进 op.prev 当回滚锚。 */
+  const c8 = mkCtx([], () => new Promise(() => {}));   // 回执永不到: 卡住中间态观察
+  c8.editRename();
+  await flush(); await flush();
+  ok("行不在视图: detail 已贴新名且 op.prev.name 回填抽屉旧名(回滚锚)",
+    c8.torrents.length === 0 && c8.drawer.detail.name === "新名"
+    && !!c8.pendingOps["H1"] && c8.pendingOps["H1"].prev.name === "旧名");
+  c8.pendingOps["H1"] && c8.resolveOptimistic(["H1"], false);   // 手动走失败回滚
+  ok("行不在视图: 失败后 detail 还原原名(唯一旧名落点生效)",
+    c8.drawer.detail.name === "旧名" && !c8.pendingOps["H1"]);
+
+  /* ---- 回滚对称面守卫: 抽屉不在该 hash / 已关时回滚不碰 detail -------------------- */
+  const c9 = mkCtx([{ hash: "H1", name: "旧名", kind: "downloading" }],
+    async () => ({ ok: false, error: "qB 拒绝" }));
+  c9.drawer = { open: true, hash: "H2", detail: { name: "别的种子" } };
+  await c9.editRename();
+  ok("抽屉在别的 hash: 行照常回滚, detail 不被碰",
+    c9.torrents[0].name === "旧名" && c9.drawer.detail.name === "别的种子");
+  const c10 = mkCtx([{ hash: "H1", name: "旧名", kind: "downloading" }],
+    async () => ({ ok: false, error: "qB 拒绝" }));
+  c10.drawer = { open: false, hash: "H1", detail: { name: "陈旧拉取" } };
+  await c10.editRename();
+  ok("抽屉已关: 贴补丁不写 detail, 回滚也不碰(重开自然重拉)",
+    c10.drawer.detail.name === "陈旧拉取");
+
+  /* ---- 兜底回滚取「最后已知真值」: truthSnapshot 有该 hash 时 detail 与行同源 ----- */
+  /* 回执永不到但快照已带回新名(命令其实生效): 兜底必须回真值而非盲回 prev —— 行与 detail 同源。 */
+  const c11 = mkCtx([{ hash: "H1", name: "旧名", kind: "downloading" }], () => new Promise(() => {}));
+  c11.editRename();
+  await flush(); await flush();
+  c11._snapshotTruth({ torrents: [{ hash: "H1", name: "新名" }], singles: [], groups: [] });
+  c11.pendingOps["H1"].ts = Date.now() - 3500;
+  c11._expirePending();
+  ok("兜底: 行与 detail 都回最后已知真值(新名), 不盲回 prev 旧名",
+    c11.torrents[0].name === "新名" && c11.drawer.detail.name === "新名" && !c11.pendingOps["H1"]);
 
   /* ---- 守卫回归(plan §07 行1): rename 收到 truth 事件后 patch 仍只有 name -------- */
   const c6 = mkCtx([{ hash: "H1", name: "旧名", kind: "downloading" }], async () => ({ ok: true }));

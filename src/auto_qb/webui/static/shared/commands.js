@@ -396,6 +396,7 @@ window.AQB_COMMANDS = {
          * 有服务端现值就用它(它才是"最后已知真值"), 没有才退回 prev。 */
         const t = this.truthSnapshot && this.truthSnapshot.get(h);
         this._forEachRow(h, (row) => Object.assign(row, t || op.prev));
+        this._syncDrawerRollback(h, op.patch, t || op.prev);  // 抽屉 detail 对称还原(issue 26-10-30-0818)
         delete this.pendingOps[h];
       }
     },
@@ -438,6 +439,20 @@ window.AQB_COMMANDS = {
       for (const r of this.singles || []) if (r.hash === hash) fn(r);
       for (const g of this.groups || []) for (const m of g.members || []) if (m.hash === hash) fn(m);
     },
+    /* 回滚的抽屉对称面(issue 26-10-30-0818): editRename 贴补丁时把 drawer.detail.name 一并改成
+     * 新名(D3 覆盖面), 但 detail 是独立拉取的对象、不在 _forEachRow 三数组里 —— 失败/超时回滚
+     * 只还原行的话, 抽屉标题回落分支(drawerTitle 在 hash 不在视图时读 detail.name)会停留新名,
+     * 直到重开抽屉/下次拉详情才纠正。两个回滚出口(resolveOptimistic 失败分支 / _expirePending
+     * 兜底)都经这里把**行同款回滚值**(op.prev, 兜底时 t || op.prev)对称写回 detail; 抽屉没开着
+     * 或已切到别的 hash 就跳过 —— 重开时自然重新拉取。只写 patch 出现过的键且值取自 rolled,
+     * rolled 缺键(undefined)跳过, 不写垃圾。 */
+    _syncDrawerRollback(hash, patch, rolled) {
+      const d = this.drawer;
+      if (!d || !d.open || d.hash !== hash || !d.detail || !rolled) return;
+      for (const k of Object.keys(patch || {})) {
+        if (rolled[k] !== undefined) d.detail[k] = rolled[k];
+      }
+    },
     applyOptimistic(hashes, action) {
       const now = Date.now();
       for (const h of hashes || []) {
@@ -474,6 +489,7 @@ window.AQB_COMMANDS = {
           continue;
         }
         this._forEachRow(h, (row) => Object.assign(row, op.prev));  // 失败: 回滚
+        this._syncDrawerRollback(h, op.patch, op.prev);  // 抽屉 detail 对称还原(issue 26-10-30-0818)
         delete this.pendingOps[h];
       }
       this._markCmdSettle();  // pendingOps 的出口之一(失败回滚)
