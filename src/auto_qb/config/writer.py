@@ -41,9 +41,16 @@ ROOT_KEY = "config"
 # 敏感字段掩码: `/api/config` 把配置树整棵返回前端, qB 密码 / tracker passkey / WEB 密钥会明文
 # 进浏览器内存与截图。GET 时按**键名**掩码为哨兵, PUT/预览时由 unmask_tree 用磁盘旧值还原 ——
 # 哨兵即"用户未修改"的显式信号, 因此掩码不会把密码写成 "********"(那会直接毁掉生产配置)。
-# 只处理 dict 内的标量, 不进列表: 列表内项无法与磁盘旧值稳定对应, 掩码后还原不了。
+# 默认只处理 dict 内的标量, 不进列表: 列表内项无法与磁盘旧值稳定对应, 掩码后还原不了。
+# 唯一例外是 TRANSFER_TARGETS_PATH(见下) —— 该列表条目有 name 唯一键(校验层保证全表唯一),
+# 可与磁盘旧条目稳定配对, 做了定向支持。
 SENSITIVE_KEY_PARTS = ("password", "passkey", "token", "secret", "cookie", "authkey", "api_key")
 MASK_SENTINEL = "********"
+
+# 种子转移目标列表的键面路径(计划 26-10-31-0306 D4): mask/unmask 对它做**定向**列表下钻 ——
+# 条目形状是已知契约(KNOWN_TRANSFER_TARGET_KEYS, 敏感标量只有 password), 配对靠 name 唯一键。
+# 不做通用列表递归: 其它列表(如 path_map/trackers)没有稳定配对键, 掩了就还原不回。
+TRANSFER_TARGETS_PATH = (ROOT_KEY, "web", "transfer", "targets")
 
 
 @dataclass
@@ -73,18 +80,24 @@ def mask_tree(tree: Dict[str, Any]) -> Dict[str, Any]:
     """深拷贝配置树并把敏感键(键名含 SENSITIVE_KEY_PARTS)的非空标量替换为 MASK_SENTINEL
 
     空值不掩码: 空密码掩码后前端会以为"已设置密码", 反而误导。
+    唯一下钻的列表是 config.web.transfer.targets(见 TRANSFER_TARGETS_PATH): 条目 password
+    非空同样掩码 —— 与主 qB 密码同一套哨兵, 前端凭哨兵显示「已设置, 留空 = 不修改」。
     """
-    return _mask_node(tree)
+    return _mask_node(tree, ())
 
 
-def _mask_node(node: Any) -> Any:
+def _mask_node(node: Any, path: Tuple[str, ...]) -> Any:
     if not isinstance(node, dict):
         return node  # 列表整体不动(见 SENSITIVE_KEY_PARTS 注释: 无法稳定还原)
     out = {}
     for key, value in node.items():
         lowered = str(key).lower()
+        next_path = path + (str(key), )
         if isinstance(value, dict):
-            out[key] = _mask_node(value)
+            out[key] = _mask_node(value, next_path)
+            continue
+        if isinstance(value, list) and next_path == TRANSFER_TARGETS_PATH:
+            out[key] = [_mask_target_item(item) for item in value]
             continue
         if value not in (None, "") and any(part in lowered for part in SENSITIVE_KEY_PARTS):
             out[key] = MASK_SENTINEL
@@ -93,23 +106,90 @@ def _mask_node(node: Any) -> Any:
     return out
 
 
-def unmask_tree(tree: Dict[str, Any], old_tree: Dict[str, Any]) -> Dict[str, Any]:
+def _mask_target_item(item: Any) -> Any:
+    """targets 单条掩码: 只遮非空 password(条目契约 KNOWN_TRANSFER_TARGET_KEYS 里唯一敏感标量)
+
+    与 _mask_node 同口径: 空值不掩码。非 dict 条目(手编畸形)原样放行, 交给校验层报错。
+    """
+    if not isinstance(item, dict):
+        return item
+    out = dict(item)
+    if out.get("password") not in (None, ""):
+        out["password"] = MASK_SENTINEL
+    return out
+
+
+def unmask_tree(tree: Dict[str, Any], old_tree: Dict[str, Any], path: Tuple[str, ...] = ()) -> Dict[str, Any]:
     """就地还原哨兵: 值等于 MASK_SENTINEL 的键回填磁盘旧值(即"用户没改密码")
 
     旧值缺失或旧值本身就是哨兵时**保持哨兵不动** —— 宁可写成一个明显的占位串让人发现,
     也不要静默把密码写成空。返回同一棵树(便于链式调用)。
+    config.web.transfer.targets 列表按条目配对还原(见 _unmask_target_items)。
     """
     if not isinstance(tree, dict) or not isinstance(old_tree, dict):
         return tree
     for key, value in tree.items():
-        if isinstance(value, dict) and isinstance(old_tree.get(key), dict):
-            unmask_tree(value, old_tree[key])
+        old = old_tree.get(key)
+        next_path = path + (str(key), )
+        if isinstance(value, dict) and isinstance(old, dict):
+            unmask_tree(value, old, next_path)
+            continue
+        if isinstance(value, list) and isinstance(old, list) and next_path == TRANSFER_TARGETS_PATH:
+            _unmask_target_items(value, old)
             continue
         if value == MASK_SENTINEL:
-            old = old_tree.get(key)
             if old not in (None, MASK_SENTINEL):
                 tree[key] = old
     return tree
+
+
+def _unmask_target_items(items: List[Any], old_items: List[Any]) -> None:
+    """targets 列表的哨兵还原: 提交条目与磁盘旧条目配对, 就地回填旧密码
+
+    配对两轮(计划 26-10-31-0306 D4):
+    1. **按 name**(唯一键, 校验层保证全表非空唯一): 提交条目(无论哨兵与否)按名字认领旧条目,
+       哨兵条目当场回填 —— 删除/新增/改序后其余条目都能对上。
+    2. 剩余哨兵条目(典型 = 本轮**改名**了) vs 未被认领的旧条目: **数量相等才按下标配对**
+       —— 覆盖「只改名」; 数量不等说明同时增删过, 不猜, 哨兵原样留下(与 unmask_tree
+       「旧值缺失保持哨兵」同口径: 宁可留明显占位串让人发现, 不静默写错密码)。
+    旧密码缺失/本身是哨兵时同样不动(与顶层标量守卫一致)。
+    """
+    old_by_name: Dict[str, Any] = {}
+    for entry in old_items:
+        if isinstance(entry, dict):
+            name = str(entry.get("name", "") or "")
+            if name and name not in old_by_name:
+                old_by_name[name] = entry
+    consumed = set()  # 已按 name 认领的旧条目 id()
+    pending: List[dict] = []  # 名字没配上的哨兵条目(保序)
+    for entry in items:
+        if not isinstance(entry, dict):
+            continue
+        name = str(entry.get("name", "") or "")
+        if entry.get("password") != MASK_SENTINEL:
+            # 非哨兵(键入了新密码/留空/新建条目)无需还原, 但同名旧条目仍算被认领,
+            # 不给第二轮位置配对抢走
+            old = old_by_name.get(name)
+            if old is not None:
+                consumed.add(id(old))
+            continue
+        old = old_by_name.get(name)
+        if old is not None and id(old) not in consumed:
+            consumed.add(id(old))
+            _unmask_target_password(entry, old)
+        else:
+            pending.append(entry)
+    rest_old = [e for e in old_items if isinstance(e, dict) and id(e) not in consumed]
+    if len(pending) == len(rest_old):
+        for entry, old in zip(pending, rest_old):
+            _unmask_target_password(entry, old)
+
+
+def _unmask_target_password(entry: dict, old_entry: dict) -> None:
+    """单条回填: 与顶层标量同守卫 —— 旧值为 None/哨兵时保持哨兵, 其余(含空串)回填"""
+    old_password = old_entry.get("password")
+    if old_password not in (None, MASK_SENTINEL):
+        entry["password"] = old_password
 
 
 def _stamp_schema_version(tree: Dict[str, Any]) -> None:

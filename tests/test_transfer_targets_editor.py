@@ -26,6 +26,10 @@
   保存路径锁死置灰(disabled) + after_state 单选 + 路径映射 ↑↓/增删 + 测试连接按钮 +
   cfg.saveError 聚合报错展示(pre-wrap); state.js trTgt 视图态(不持久化, 无 localStorage);
   shared/console_hub.css 的 .tr-tgt-* 规则成对
+- test_tt_password_mask_sentinel_compat: 掩码哨兵兼容守阵(D4 掩码落地的前端配合) —— GET 后
+  树里 targets[].password 是后端掩码哨兵(writer.MASK_SENTINEL 单点导入), 编辑器只凭「非空」
+  判已设置(占位符提示「留空 = 不修改」, 空值 = 未设置); 前端 JS 与模板不得硬编码哨兵字面量
+  (掩码语义单点在后端, 第二份字面量 = 双哨兵漂移)
 """
 import json
 import os
@@ -318,3 +322,41 @@ def test_tt_editor_wiring():
     assert need, "模板未检出 .tr-tgt-* 类(守阵提取失效)"
     for cls in sorted(need):
         assert f".{cls}" in css, f"shared/console_hub.css 缺 .{cls} 规则(整段无样式)"
+
+
+# node 电池: 掩码哨兵下的密码状态判定(D4 掩码落地的前端配合) —— 不依赖 vm 全家桶,
+# 直取 methods 判 ttHasSecret / ttSecretPlaceholder 对哨兵值/空值/真值的口径
+_NODE_TT_SECRET_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+const vm = Object.assign({}, window.AQB_TRANSFER_TARGETS.methods);
+const sentinel = process.argv[2];
+console.log(JSON.stringify({
+  masked: { has: vm.ttHasSecret({ password: sentinel }), ph: vm.ttSecretPlaceholder({ password: sentinel }) },
+  empty: { has: vm.ttHasSecret({ password: "" }), ph: vm.ttSecretPlaceholder({ password: "" }) },
+  typed: { has: vm.ttHasSecret({ password: "typed-pw" }), ph: vm.ttSecretPlaceholder({ password: "typed-pw" }) },
+}));
+"""
+
+
+def test_tt_password_mask_sentinel_compat():
+    """掩码哨兵兼容守阵(D4): GET 后树里 targets[].password 是后端哨兵, 前端只凭「非空」判已设置
+
+    后端 /api/config 掩码后哨兵进树(留空 = 不修改语义靠 unmask_tree 按磁盘旧值还原), 编辑器
+    无需知道哨兵字面量: 非空(含哨兵)= 显示「已设置, 留空 = 不修改」, 空 = 未设置。前端 JS 与
+    模板不得硬编码哨兵字面量 —— 掩码语义单点在后端 writer.MASK_SENTINEL, 第二份字面量即漂移。
+    """
+    node = shutil.which("node")
+    if not node:
+        return
+    from auto_qb.config.writer import MASK_SENTINEL
+
+    rep = _run_node(node, _NODE_TT_SECRET_PROBE, _TT_JS, MASK_SENTINEL)
+    assert rep["masked"]["has"] is True, "哨兵值应判为已设置(占位符提示留空 = 不修改)"
+    assert "留空" in rep["masked"]["ph"], "哨兵值的占位符应提示「留空 = 不修改」"
+    assert rep["empty"]["has"] is False and rep["empty"]["ph"] == "未设置", "空密码应判为未设置"
+    assert rep["typed"]["has"] is True, "真值照旧判已设置"
+    for path in (_TT_JS, _TT_TPL):
+        with open(path, encoding="utf-8") as f:
+            assert MASK_SENTINEL not in f.read(), f"{os.path.basename(path)} 不得硬编码掩码哨兵字面量"

@@ -75,6 +75,10 @@
 - test_unmask_tree_init_and_guards: unmask_tree 非映射入口原样返回; 旧值缺失/旧值即哨兵时保持哨兵
 - test_unmask_tree_only_touches_sentinel_values: unmask_tree 只还原恰为哨兵的键, 用户真改的值不得被旧值覆盖
 - test_mask_tree_recurses_into_nested_dicts: mask_tree 递归进嵌套映射掩码深层敏感键; 空值不掩码; 原树不改
+- test_mask_tree_masks_transfer_target_passwords: targets 定向下钻(计划 26-10-31-0306 D4) —— 条目非空 password 掩码, 空密码/非敏感字段不动; 非定向键面的列表仍整体不动; 重复掩码幂等
+- test_transfer_targets_mask_roundtrip_write: GET→PUT 往返无损 —— 多条目各还原各的旧值, 重复还原零变化, 写盘后磁盘仍是各自真密码且无哨兵
+- test_unmask_transfer_targets_typed_and_new_entries: 用户真改的密码/新增条目的密码(含空)原样保留, 不得被旧值覆盖
+- test_unmask_transfer_targets_rename_and_delete_pairing: 配对两轮 —— name 为主, 等量剩余按下标兜底「只改名」; 删除后幸存者按 name 对上; 改名+删除(数量不等)不猜, 哨兵原样留下; 旧值缺失/即哨兵同守卫
 - test_set_path_rebuilds_non_mapping_mid_nodes: _set_path 复用已有 dict 中途节点(不丢兄弟键)/标量重建/缺失现场建
 - test_backup_skips_when_source_missing_and_keeps_encoding: _backup 源缺失零副作用; 按 dirname 建目录; utf-8 读写无损
 - test_materialize_unknown_host_old_key_dropped
@@ -767,6 +771,163 @@ def test_unmask_tree_guards_and_sentinel_old_value():
     # 旧值真实存在: 回填
     out = unmask_tree(copy.deepcopy(tree), {"config": {"password": "real"}})
     assert out["config"]["password"] == "real"
+
+
+# ---------------------------------------------- targets 掩码定向下钻(计划 26-10-31-0306 D4)
+
+_TRANSFER_YAML = (
+    "config:\n"
+    "  schema_version: 5\n"
+    "  qbittorrent:\n"
+    "    host: h\n"
+    "    port: 1\n"
+    "    username: u\n"
+    "    password: p\n"
+    "  web:\n"
+    "    transfer:\n"
+    "      targets:\n"
+    "        - name: a\n"
+    "          type: qb\n"
+    "          base_url: http://a:8080\n"
+    "          username: ua\n"
+    "          password: pa\n"
+    "          enabled: false\n"
+    "        - name: b\n"
+    "          type: qb\n"
+    "          base_url: http://b:8080\n"
+    "          username: ub\n"
+    "          password: pb\n"
+    "          enabled: false\n"
+    "          after_state: paused\n"
+)
+
+
+def test_mask_tree_masks_transfer_target_passwords():
+    """targets 定向下钻: 条目非空 password 掩码, 空密码与非敏感字段不动; 其它列表仍整体不动
+
+    只对 config.web.transfer.targets 这一条已知键面下钻(条目有 name 唯一键, 可与磁盘旧条目
+    稳定配对), 不做通用列表递归 —— 其它列表(path_map/trackers 等)没有稳定配对键, 掩了还原不回。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree
+
+    tree = {
+        "config":
+            {
+                "web":
+                    {
+                        "transfer":
+                            {
+                                "targets":
+                                    [
+                                        {
+                                            "name": "a",
+                                            "password": "pa",
+                                            "enabled": "false"
+                                        },
+                                        {
+                                            "name": "b",
+                                            "password": "",
+                                            "enabled": "true"
+                                        },
+                                    ]
+                            }
+                    },
+                "web_plain": {
+                    "targets": [{
+                        "name": "x",
+                        "password": "px"
+                    }]
+                },  # 非定向键面
+            }
+    }
+    masked = mask_tree(tree)
+    targets = masked["config"]["web"]["transfer"]["targets"]
+    assert targets[0]["password"] == MASK_SENTINEL, "targets 条目非空 password 应掩码"
+    assert targets[0]["name"] == "a" and targets[0]["enabled"] == "false", "非敏感字段不得被动到"
+    assert targets[1]["password"] == "", "空密码不掩码(否则前端以为已设置)"
+    assert masked["config"]["web_plain"]["targets"][0]["password"] == "px", "非定向键面的列表不下钻"
+    assert tree["config"]["web"]["transfer"]["targets"][0]["password"] == "pa", "掩码不得就地修改原树"
+    assert mask_tree(masked) == masked, "重复掩码幂等(哨兵再掩码仍是哨兵)"
+
+
+def test_transfer_targets_mask_roundtrip_write(tmp_path):
+    """GET→PUT 往返无损(多条目各还原各的旧值): 掩码保存后磁盘仍是各自真密码, 且二轮稳定"""
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree, unmask_tree
+
+    path = _make(tmp_path, _TRANSFER_YAML)
+    old = read_tree(path)
+    submitted = mask_tree(old)
+    targets = submitted["config"]["web"]["transfer"]["targets"]
+    assert targets[0]["password"] == MASK_SENTINEL and targets[1]["password"] == MASK_SENTINEL, \
+        "前置: GET 侧确实掩码了"
+
+    submitted["config"]["main_tick"] = "5s"  # 模拟用户只改了一个无关字段
+    unmask_tree(submitted, old)
+    assert targets[0]["password"] == "pa" and targets[1]["password"] == "pb", "各条目还原各自的旧值"
+    snapshot = copy.deepcopy(submitted)
+    unmask_tree(submitted, old)
+    assert submitted == snapshot, "重复还原必须零变化(幂等)"
+
+    write_tree(path, submitted, load_config(path), _bak(tmp_path))
+    text = _text(path)
+    assert "password: pa" in text and "password: pb" in text, f"磁盘应保留各自真密码: {text}"
+    assert MASK_SENTINEL not in text, "哨兵不得落盘"
+
+
+def test_unmask_transfer_targets_typed_and_new_entries():
+    """用户真改的密码/新增条目的密码(含空)原样保留 —— 哨兵之外的一律不还原"""
+    from auto_qb.config.writer import mask_tree, unmask_tree
+
+    old = {"config": {"web": {"transfer": {"targets": [{"name": "a", "password": "pa"}]}}}}
+    submitted = mask_tree(copy.deepcopy(old))
+    targets = submitted["config"]["web"]["transfer"]["targets"]
+    targets[0]["password"] = "new-pa"  # 用户在编辑器键入了新密码(留空 = 不修改语义的另一侧)
+    targets.append({"name": "c", "password": "pc"})  # 新增条目(带密码)
+    targets.append({"name": "d", "password": ""})  # 新增条目(未填密码)
+    unmask_tree(submitted, old)
+    assert targets[0]["password"] == "new-pa", "真改的密码不得被旧值覆盖"
+    assert targets[1]["password"] == "pc", "新增条目的密码原样保留"
+    assert targets[2]["password"] == "", "新增条目的空密码原样保留"
+
+
+def test_unmask_transfer_targets_rename_and_delete_pairing():
+    """条目配对两轮: 按 name 为主(唯一键), 等量剩余按下标兜底「只改名」; 数量不等不猜
+
+    改名是唯一 name 配不上的常见形态: 剩余数量相等时按下标配对(顺序未动 = 改名),
+    覆盖「改名但保留密码」; 数量不等说明同时增删过, 不猜 —— 哨兵原样留下, 与顶层标量
+    「旧值缺失保持哨兵」同口径(宁可留明显占位串让人发现, 不静默写错密码)。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    def _tree(targets):
+        return {"config": {"web": {"transfer": {"targets": targets}}}}
+
+    # 只改名: name 配不上, 等量剩余按下标兜底还原
+    old = _tree([{"name": "a", "password": "pa"}])
+    submitted = _tree([{"name": "x", "password": MASK_SENTINEL}])
+    unmask_tree(submitted, old)
+    assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == "pa", "只改名应按下标兜底还原"
+
+    # 删除后条目前移: 幸存者按 name 对上(下标已错位, 位置配对会写错)
+    old = _tree([{"name": "a", "password": "pa"}, {"name": "b", "password": "pb"}])
+    submitted = _tree([{"name": "b", "password": MASK_SENTINEL}])
+    unmask_tree(submitted, old)
+    assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == "pb"
+
+    # 改名 + 删除(剩余数量不等): 不猜, 哨兵原样留下
+    old = _tree([{"name": "a", "password": "pa"}, {"name": "b", "password": "pb"}])
+    submitted = _tree([{"name": "x", "password": MASK_SENTINEL}])
+    unmask_tree(submitted, old)
+    assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == MASK_SENTINEL
+
+    # 磁盘旧值本身是哨兵/缺失: 保持哨兵(与顶层标量同守卫, 宁可占位不可静默写空)
+    old = _tree([{"name": "a", "password": MASK_SENTINEL}])
+    submitted = _tree([{"name": "a", "password": MASK_SENTINEL}])
+    unmask_tree(submitted, old)
+    assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == MASK_SENTINEL
+    submitted = _tree([{"name": "a", "password": MASK_SENTINEL}])
+    unmask_tree(submitted, _tree([]))
+    assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == MASK_SENTINEL
 
 
 def test_stamp_schema_version_ignores_non_dict_cfg():

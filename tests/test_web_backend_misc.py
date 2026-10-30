@@ -14,6 +14,7 @@
 - test_web_token_existing_file_reused_without_rewrite: 已有合法 token 时直接复用文件现值, 不触达写盘路径(不重写不漂移)
 - test_web_token_write_interrupt_leaves_no_half_token: 写盘中断不留非空半截 token —— 经真实 atomic_write 跑"写一半抛错", 旧文件不被破坏、临时文件被清理, 下次调用重新生成(自愈)
 - test_config_tree_masks_secrets: /api/config 掩码敏感字段, 且"读取→原样保存"不会把密码写成占位串
+- test_config_tree_masks_transfer_target_passwords: /api/config 对 web.transfer.targets[].password 同哨兵掩码(D4) —— GET 不回明文, 原样保存磁盘仍是真密码且无哨兵
 - test_sites_missing_scans_and_builds_defaults: GET /api/sites/missing 未配置域名生成默认条目(domains/tags/占位限速/hr 示例值与 --export-yaml 同源); 已配置域名双向包含不重复
 - test_sites_missing_name_conflict_suffix: 站点名冲突(既有配置占用/批内同名) -> _N 后缀(与 CLI 导出同一套 gen_tracker_name)
 - test_sites_missing_all_covered_returns_empty: 全部域名已被覆盖 -> sites 空数组
@@ -284,6 +285,48 @@ def test_config_tree_masks_secrets(web_env):
     text = open(mgr.config_path, encoding="utf-8").read()
     assert "password: p" in text, f"原样保存不得把密码写成占位串: {text}"
     assert data["mask_sentinel"] not in text
+
+
+_TRANSFER_CONFIG_TEXT = (
+    "config:\n"
+    "  schema_version: 5\n"
+    "  qbittorrent:\n"
+    "    host: h\n"
+    "    port: 1\n"
+    "    username: u\n"
+    "    password: p\n"
+    "  web:\n"
+    "    transfer:\n"
+    "      targets:\n"
+    "        - name: a\n"
+    "          type: qb\n"
+    "          base_url: http://a:8080\n"
+    "          username: ua\n"
+    "          password: pa\n"
+    "          enabled: false\n"
+)
+
+
+@pytest.mark.parametrize("web_env", [{"config_text": _TRANSFER_CONFIG_TEXT}], indirect=True)
+def test_config_tree_masks_transfer_target_passwords(web_env):
+    """/api/config 对 web.transfer.targets[].password 同哨兵掩码(D4): GET 不回明文进浏览器
+
+    掩码往返无损: GET 后条目 password == 哨兵, 原样 PUT 回去(unmask_tree 按 name 配对还原)
+    磁盘仍是真密码; 哨兵不落盘。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = client.get("/api/config", headers=auth).json()
+    sentinel = data["mask_sentinel"]
+    targets = data["tree"]["config"]["web"]["transfer"]["targets"]
+    assert targets[0]["password"] == sentinel, "GET 不得把 targets 明文密码送进浏览器"
+    assert targets[0]["name"] == "a" and targets[0]["username"] == "ua", "非敏感字段不掩码"
+
+    resp = client.put("/api/config", headers=auth, json={"tree": data["tree"]})
+    assert resp.status_code == 200, resp.text
+    disk = open(mgr.config_path, encoding="utf-8").read()
+    assert "password: pa" in disk, f"原样保存不得把密码写成占位串: {disk}"
+    assert sentinel not in disk
 
 
 def _site_scan_env(web_env, trackers_by_hash):
