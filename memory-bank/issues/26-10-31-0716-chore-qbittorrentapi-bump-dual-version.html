@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="qbittorrentapi-bump-dual-version">
+<meta name="issue-stamp" content="26-10-31-0716">
+<meta name="issue-type" content="chore">
+<meta name="doc-topic" content="qb-5-3-upgrade">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="升库 qbittorrent-api==2026.8.1 -&gt; ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)">
+<meta name="issue-summary" content="pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -&gt; 升库 -&gt; 升 qB 5.3">
+<title>升库 qbittorrent-api==2026.8.1 -&gt; ==2026.10.1 支持双版本 qB(5.2.3/5.3.x) · chore · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 chore · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）· chore</div>
+    <h1>升库 qbittorrent-api==2026.8.1 -&gt; ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)</h1>
+    <p class="lede">pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -&gt; 升库 -&gt; 升 qB 5.3</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-31-0716-chore-qbittorrentapi-bump-dual-version</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 07:16</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">deps</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>qB 5.2.3 → 5.3.x 升级准备（报告 <code>memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html</code> §08）：把钉死的 <code>qbittorrent-api==2026.8.1</code>（<code>pyproject.toml:29</code>）升到 <code>==2026.10.1</code>（最新发布 tag）。库 v2026.10.1 官方声明支持 qB v5.3.0 / WebAPI 2.16.2, 同一库可同时服务 5.2.x 与 5.3（逐端点按实时探测的 WebAPI 版本门控, 非无脑发参）。<strong>升库不解决 setShareLimits 的 🔴</strong>（见 <code>bug/qbapi-share-limits-mode</code>, 修复与库版本解耦）——升库的价值在官方支持声明对齐 5.3 + 🔵 机会端点可用 + 跟随库 CI 对 master(5.4) 的持续验证。</p>
+    <p><strong>双版本支持策略</strong>：本项目不读 <code>app_version</code>, 版本差异靠字段探测与响应形态双认; 库逐端点按探测 WebAPI 版本门控, 同库同服 5.2.3 与 5.3.x。<strong>禁止开启</strong> <code>RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS</code>（开启后未入映射表的版本如 5.4.0alpha1 会被登录校验挡住, 默认 False 才是库对未知新版本的前向兼容姿态）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 库升级无痛性（P5b 源码级 diff + 实测, 2026-10-31, 取证仓库 D:\Projects\Else\qbittorrent-api）:
+# - git diff v2026.8.1..v2026.10.1 -- src/ : 零删除/零改名/零签名变化, 全部增量
+#   (新增可选参数 + 新方法 + 版本映射表+4 行)
+# - torrents/setShareLimits 签名两版完全一致; skip_checking/seedMode 双发原样保留
+#   (库 torrents.py:426-428, 2026.8.1 为 :423-425):
+#       "skip_checking": (None, is_skip_checking),
+#       "seedMode": (None, is_skip_checking),
+# - Python 要求仍 >=3.10(本项目 >=3.12 无冲突); 运行时依赖无变化
+# - CI 矩阵 QBT_VER 含 master(5.4 dev) 与 v5_3_x, 每轮全量测试
+# - 对本项目调用面(P4 §1.2 端点清单)逐组核对 100% 兼容, 零代码改动需求
+#
+# 下限不许降的依据: 旧库(<=2026.7)对 is_skip_checking 单发 skip_checking,
+# qB 5.3 只读 seedMode → 跳检/添加免校验会静默失效。本项目三个调用点
+# (ops_mod.py:843,1041 / webui/commands.py WebUI 添加)全走库。</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>执行本升级（纯 <code>pyproject.toml</code>/<code>uv.lock</code> 变更 + <code>commands run env.sync</code>）; 对 5.2 生产零行为差异</td></tr>
+      <tr><td>影响范围</td><td>依赖钉版与锁文件; 对 5.2.3 与 5.3.x 双版本同时生效; 跳检兼容性从此依赖库版本下限</td></tr>
+      <tr><td>严重度</td><td>中（不升则 5.3 无官方支持声明、🔵 机会端点不可用; 升级本身低风险但<strong>降版</strong>会静默破坏跳检）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>pyproject.toml:29</code>（取证 2026-10-31 07:11）· 依赖钉版 · grep <code>qbittorrent-api</code> —— 当前 <code>"qbittorrent-api==2026.8.1"</code> 改 <code>==2026.10.1</code></li>
+      <li><code>uv.lock</code> · 锁文件 · 升级后 <code>commands run env.sync</code> 重锁</li>
+      <li><code>src/auto_qb/core/qbclient.py:52-67</code>（取证 2026-10-31 07:11）· <code>new_client</code> · grep <code>new_client</code> —— 确认未设 <code>RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS</code>（保持不设）</li>
+      <li>库侧: <code>.venv/.../qbittorrentapi/torrents.py:423-428</code> · <code>torrents_add</code> · grep <code>seedMode</code> —— 双发逻辑, 升级后复验仍在</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">非缺陷, 依赖升级事项。前置约束单点: 跳检的 5.3 兼容完全依赖库的 skip_checking/seedMode 双发行为（自 #654 / v2026.8.1 起）, 因此钉版下限 2026.8.1 永不降。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <ul>
+      <li><code>pyproject.toml</code> 钉版 <code>qbittorrent-api==2026.10.1</code>（HEAD 比 tag 多的 8 提交全是依赖/CI, 不追 HEAD）→ <code>commands run env.sync</code> 同步锁文件。</li>
+      <li><strong>时序（每步独立可回滚）</strong>: ① 先合 facade 修复（<code>bug/qbapi-share-limits-mode</code>, 钉 2026.8.1 不动）→ ② 本件升库 → ③ 再升 qB 5.3。</li>
+      <li><strong>测试</strong>: 请求体级测试断言 <code>skip_checking</code> 与 <code>seedMode</code> 同发（防库回归, 两版库都过; 可与 facade 件的测试合并为一条）。</li>
+      <li><strong>真机走查（升 qB 5.3 后, 非本件阻塞）</strong>: 跳检全流程一次（导出→删除→重加→<code>zSkipChecked</code> 打标, 验证 seedMode 双发在真机 5.3 生效）。升库本身对 5.2 生产不需要专门真机回归。</li>
+      <li><strong>禁改项</strong>: 不开启 <code>RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS</code>; 不降版。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-31 07:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

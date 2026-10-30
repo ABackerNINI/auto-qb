@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-10-31-0548] [qBittorrent 5.2.3→5.3.x 上游变更与 libtorrent RC_2_1 影响分析](26-10-31-0548-report-qb-5-3-upgrade-impact.html) — `qb-5-3-upgrade-impact`
 - [26-10-31-0104] [WEBUI 限速浮层 Esc 需按三次: Vimium C 扩展吞键取证](26-10-31-0104-report-webui-speed-esc-vimium.html) — `webui-speed-esc-vimium`
 - [26-10-30-0237] [全项目第二次全面 Code Review（只读取证）](26-10-30-0237-report-full-code-review-2.html) — `full-code-review-2`
 - [26-10-22-0234] [qB/libtorrent 跳检机制源码核查 — seed_mode 语义、惰性哈希校验与标记可替代性](26-10-22-0234-report-skip-check-arch.html) — `skip-check-arch`

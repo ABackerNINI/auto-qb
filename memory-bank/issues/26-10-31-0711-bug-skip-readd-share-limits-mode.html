@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="skip-readd-share-limits-mode">
+<meta name="issue-stamp" content="26-10-31-0711">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="qb-5-3-upgrade">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)">
+<meta name="issue-summary" content="compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -&gt; 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传">
+<title>qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）· bug</div>
+    <h1>qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)</h1>
+    <p class="lede">compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -&gt; 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-31-0711-bug-skip-readd-share-limits-mode</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 07:11</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">torrents</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>qB 5.2.3 → 5.3.x 升级影响分析（报告 <code>memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html</code> §09 第 3 条）发现的<strong>行为回归（🟡, 条件触发）</strong>：qB 5.3 给 torrent 信息新增 <code>share_limits_mode</code> 字段（分享限制模式 Default/MatchAny/MatchAll）; 跳检流程「导出→删除→重加」时, 重加请求只回传 <code>RE_ADD_FIELDS</code> 列出的 6 个字段, 不含 <code>share_limits_mode</code> → 5.3 下跳检过的种子其分享限制模式被<strong>静默重置为 Default</strong>。5.2 无该字段, 不受影响。</p>
+    <p>与 <code>bug/qbapi-share-limits-mode</code> 同源（分享限制体系重构）但独立成件：一个是 setShareLimits 端点 400（硬破坏）, 一个是跳检重加字段缺口（数据回写缺失）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 证据 1 · RE_ADD_FIELDS 六字段, 无 share_limits_mode（本仓库 grep, 2026-10-31）:
+#   src/auto_qb/torrents/compat.py:45-52
+#     RE_ADD_FIELDS = ("seq_dl", "f_l_piece_prio", "ratio_limit", "seeding_time_limit",
+#                      "inactive_seeding_time_limit", "share_limit_action")
+#   注意区分: share_limit_action(已回传) != share_limits_mode(未回传)
+# 证据 2 · 跳检重加调用点不传 share_limits_mode:
+#   src/auto_qb/core/modules/ops_mod.py:1041-1057  _skip_add_call 的 torrents_add(...)
+#   含 share_limit_action=tor.share_limit_action 但无 share_limits_mode
+# 证据 3 · 上游(P2/P4): qB 5.3 sync/maindata 的 torrent 新增 share_limits_mode 键;
+#   本项目快照对新字段前向兼容落 _raw(record.py), 但重加不回传它 → 重置为 Default</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>qB 5.3.x + 用户把种子分享限制模式设为 MatchAny/MatchAll + 该种子经历跳检重加（三条件同时）</td></tr>
+      <tr><td>影响范围</td><td>仅跳检过的种子的分享限制模式被重置（ratio/seedTime 等限制值仍正确回传）; 默认 Default 模式用户无感知; 规则引擎不调分享限制</td></tr>
+      <tr><td>严重度</td><td>低-中（条件触发; 当前若无人用 MatchAny/MatchAll 则零影响, 可先记为已知限制）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/torrents/compat.py:45-52</code>（取证 2026-10-31 07:11）· <code>RE_ADD_FIELDS</code> · grep <code>RE_ADD_FIELDS</code> —— 补 <code>"share_limits_mode"</code>; 注意 <code>_SNAPSHOT_FIELDS</code>（compat.py:110）由它派生, 快照 slots 也要跟上</li>
+      <li><code>src/auto_qb/core/modules/ops_mod.py:1041-1057</code>（取证 2026-10-31 07:11）· <code>_skip_add_call</code> · grep <code>share_limit_action</code> —— torrents_add 调用补 <code>share_limits_mode</code> 透传</li>
+      <li>快照落点参照: <code>src/auto_qb/torrents/record.py</code> · <code>_raw</code> 前向兼容逻辑 · grep <code>_raw</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">已定位（非待查）：<code>RE_ADD_FIELDS</code> 与 <code>_skip_add_call</code> 定稿早于 qB 5.3 的 <code>share_limits_mode</code> 字段, 未纳入重加白名单。与库版本无关（字段透传层缺口）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>与 facade 修复同一拳路: ① <code>RE_ADD_FIELDS</code> 补 <code>"share_limits_mode"</code>（连带 <code>_SNAPSHOT_FIELDS</code> 派生与快照 slots）; ② <code>_skip_add_call</code> 的 <code>torrents_add(...)</code> 补 <code>share_limits_mode=tor.share_limits_mode</code> 透传。5.2 上该字段不存在时快照缺省, 传 None/缺省即可（库对 None 不发键）。时序上不阻塞升 qB 5.3——若用户确认不用 MatchAny/MatchAll, 可先记为已知限制, 升级后再补。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-31 07:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-10-31-0711-bug-skip-readd-share-limits-mode.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

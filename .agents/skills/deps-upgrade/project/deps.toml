@@ -1,0 +1,83 @@
+# deps-upgrade: project-local dependency watch/scan config (pure ASCII).
+# Read by ../scripts/check_updates.py; paths are relative to repo root.
+# This file is CONFIG ONLY: the script never writes here and keeps no
+# state/cache. Porting this skill to another project = replacing the
+# project/ directory only (schema documented in ../SKILL.md).
+
+[paths]
+lockfile = "uv.lock"
+pyproject = "pyproject.toml"
+
+# Updates to any dep listed here require JOINT analysis: upgrading one
+# changes the adaptation surface of the others. See project/impact-map.md.
+[joint]
+deps = ["qbittorrent", "libtorrent", "qbittorrent-api"]
+
+# ---------------------------------------------------------------------
+# watch-type: external target programs. They never enter uv.lock and
+# have NO bump action; an update produces compatibility analysis /
+# issues only. Branch lines are reported separately (stable vs dev).
+[[watch]]
+id = "qbittorrent"
+source = "github"
+repo = "qbittorrent/qBittorrent"
+# regex applied to a tag name to extract the plain version; first
+# capture group is used
+version_extract = "^release-(.+)$"
+note = "dependency surface = WebUI API via qbittorrent-api; see project/impact-map.md"
+
+  [[watch.lines]]
+  name = "stable"
+  tag_filter = "^release-5\\.3\\."
+  ref = "v5_3_x"
+
+  [[watch.lines]]
+  name = "dev"
+  tag_filter = "^release-5\\.4\\."
+  ref = "master"
+
+[[watch]]
+id = "libtorrent"
+source = "github"
+repo = "arvidn/libtorrent"
+version_extract = "^v(.+)$"
+note = "bundled inside qBittorrent; watched for behavior changes only, never bumped directly"
+
+  [[watch.lines]]
+  name = "RC_2_0"
+  tag_filter = "^v2\\.0\\."
+  ref = "RC_2_0"
+
+  [[watch.lines]]
+  name = "RC_2_1"
+  tag_filter = "^v2\\.1\\."
+  ref = "RC_2_1"
+
+# ---------------------------------------------------------------------
+# pin-type: everything in uv.lock; bumpable via pyproject pin + env.sync.
+[pin]
+scan = true
+exempt = []                          # lockfile names to skip (none today)
+bump_whitelist = ["patch", "minor"]  # delta types eligible for the green tier
+
+# ---------------------------------------------------------------------
+# support matrix anchors: versions this project has ANALYZED so far.
+# Policy: alpha/beta are tracked but never promised; rc + stable enter
+# the matrix. "analyzed" accepts exact match or "N.x" prefix wildcard.
+[[support]]
+dep = "qbittorrent"
+current = "5.2.3"                    # production qB the project talks to
+analyzed = ["5.2.3", "5.3.0"]
+anchor = "memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html"
+
+[[support]]
+dep = "libtorrent"
+current = "2.0.x (bundled in qB 5.2.3)"
+analyzed = ["2.0.x", "2.1.x"]        # line-level: bundled with qB, no per-tag promise
+anchor = "memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html"
+
+[[support]]
+dep = "qbittorrent-api"
+current = "2026.8.1"                 # pinned in pyproject.toml
+analyzed = ["2026.8.1", "2026.10.1"]
+anchor = "memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html"

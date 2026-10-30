@@ -4,8 +4,13 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (49)
+## Open (54)
 
+- [chore] [升库 qbittorrent-api==2026.8.1 -> ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)](../26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html) — pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -> 升库 -> 升 qB 5.3
+- [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入
+- [bug] [qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)](../26-10-31-0711-bug-skip-readd-share-limits-mode.html) — compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -> 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传
+- [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
+- [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](../26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)

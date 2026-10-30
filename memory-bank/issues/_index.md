@@ -19,17 +19,22 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 9 |
 | perf | 7 |
-| docs | 1 |
+| docs | 2 |
 | test | 2 |
 | refactor | 4 |
-| feat | 20 |
-| chore | 2 |
+| feat | 21 |
+| chore | 3 |
 | question | 6 |
 
 ## Open
 
+- [chore] [升库 qbittorrent-api==2026.8.1 -> ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)](26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html) — pyproject.to…
+- [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 tor…
+- [bug] [qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)](26-10-31-0711-bug-skip-readd-share-limits-mode.html) — compat.py RE…
+- [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…
+- [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/get…
 - [test] [真机实测定期排期(常驻排期锚)](26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 q…
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autost…
 - [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver…

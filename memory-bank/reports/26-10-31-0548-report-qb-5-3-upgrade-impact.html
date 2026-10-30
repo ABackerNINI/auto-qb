@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>qBittorrent 5.2.3→5.3.x 上游变更与 libtorrent RC_2_1 影响分析</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="qb-5-3-upgrade-impact">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-0548">
+<meta name="doc-updated" content="26-10-31-0650">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); scroll-margin-top: 16px; }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; scroll-margin-top: 16px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* 报告扩展: 目录导航 / 宽表横滚 / 影响档徽标 */
+  .toc { font-size: 13.5px; columns: 2; column-gap: 40px; border: 1px solid var(--hair-soft); padding: 14px 20px 14px 38px; margin: 0 0 34px; }
+  .toc div { break-inside: avoid; margin: 3px 0; }
+  .toc a { color: var(--dim); text-decoration: none; }
+  .toc a:hover { color: var(--accent-ink); }
+  .toc .n { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; margin-right: 8px; }
+  @media (max-width: 760px) { .toc { columns: 1; } }
+  .tblwrap { overflow-x: auto; margin: 16px 0; }
+  .tblwrap table { margin: 0; min-width: 720px; }
+  .tblwrap.compact table { font-size: 12.5px; }
+  .tblwrap.compact td, .tblwrap.compact th { padding: 5px 8px; }
+  .lv { display: inline-block; font-family: var(--mono); font-size: 10.5px; line-height: 1.7; padding: 0 6px; border: 1px solid; border-radius: 3px; letter-spacing: 0.04em; white-space: nowrap; }
+  .lv-r { color: #e89a9a; border-color: #623434; background: #2a1a1a; }
+  .lv-y { color: #e2b96e; border-color: #5c4a26; background: #2a2314; }
+  .lv-g { color: #8fc98f; border-color: #2f4a2f; background: #152418; }
+  .lv-b { color: #82bcd9; border-color: #2c4656; background: #14232c; }
+  .hash { font-family: var(--mono); font-size: 11.5px; color: var(--faint); }
+  .num { font-family: var(--mono); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: qb-5-3-upgrade-impact</div>
+<h1>qBittorrent 5.2.3→5.3.x 上游变更与 libtorrent RC_2_1 影响分析</h1>
+<p class="lede">结论先行:qB <code>release-5.2.3..HEAD</code>(382 提交,WebAPI 2.15.1→2.16.2)叠加 libtorrent RC_2_1(v2.1.2-40,261 提交)对本项目(auto-qb)总体友好——82 行影响矩阵去重后仅 <strong class="bad">1 条硬破坏</strong>(<code>torrents/setShareLimits</code> 新增必填参数),8 条行为变化、6 条新机会、67 条无影响;在 facade 补一个缺省形参即可安全升级。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0548 · <b>doc-updated</b> 26-10-31-0650 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> qBittorrent 上游升级可行性分析:四工位并行取证(P1 上游 382 提交分类 / P2 WebAPI 代码级 diff / P3 libtorrent RC_2_1 基线判定 / P4 本项目影响矩阵),本报告为 P5 汇总,把四份中间笔记蒸馏为一份可决策的快照;26-10-31 改版并入 P5b 专项(qbittorrent-api 支持度与升级路径,§08)。上游仓库 <code>D:\Projects\Else\qBittorrent</code>(范围 <code>release-5.2.3..HEAD=8182ae071</code>)与 <code>D:\Projects\Else\libtorrent</code>(分支 RC_2_1,HEAD=<code>53acefea9</code>);被分析仓库为本项目,全程只读未改码。
+</div>
+
+<nav class="toc">
+  <div><a href="#s01"><span class="n">§01</span>结论与影响统计</a></div>
+  <div><a href="#s02"><span class="n">§02</span>证据快照:版本定位与关键核验事实</a></div>
+  <div><a href="#s03"><span class="n">§03</span>方法与局限</a></div>
+  <div><a href="#s04"><span class="n">§04</span>qB 上游变更总览(382 提交 × 12 类)</a></div>
+  <div><a href="#s05"><span class="n">§05</span>WebUI API 变更专节(38 条端点级 / 10 条破坏)</a></div>
+  <div><a href="#s06"><span class="n">§06</span>libtorrent 专节(世代差 + 26 条可见行为变化)</a></div>
+  <div><a href="#s07"><span class="n">§07</span>对本项目的影响分析(依赖面 + 82 行矩阵)</a></div>
+  <div><a href="#s08"><span class="n">§08</span>qbittorrent-api 支持度与升级路径(P5b 专项)</a></div>
+  <div><a href="#s09"><span class="n">§09</span>建议动作清单(按优先级)</a></div>
+  <div><a href="#s10"><span class="n">§10</span>附录:输入笔记、方法说明与口径差异</a></div>
+  <div><a href="#s11"><span class="n">§11</span>变更记录</a></div>
+</nav>
+
+<h2 id="s01"><span class="no">§01</span>结论与影响统计</h2>
+
+<h3>1.1 一句话结论</h3>
+<p>升级目标(qB 5.2.3 → 5.3.x HEAD 线,WebAPI 2.16.2,libtorrent 后端可选 2.1 线)对 auto-qb 的<b>破坏面收敛到一处</b>:WebUI「分享限制」命令调用的 <code>torrents/setShareLimits</code> 在 5.3 要求新必填参数 <code>shareLimitsMode</code>(缺失直接 HTTP 400)。其余全部变更要么不在本项目使用范围内,要么被既有架构(单一 Facade 出口、字段存在性探测、<code>_raw</code> 前向兼容)天然吸收。唯一必改动作:<code>core/qbapi.py</code> 的 <code>torrents_set_share_limits</code> 增加 <code>share_limits_mode</code> 形参(缺省 <code>"Default"</code>),5.2 忽略未知参数、向后兼容,<b>可先合入再升级</b>。</p>
+
+<h3>1.2 影响统计(82 行矩阵,去重后独立结论)</h3>
+<table>
+<tr><th>档</th><th>条数</th><th>明细</th></tr>
+<tr><td><span class="lv lv-r">🔴 破坏</span></td><td class="num"><strong>1</strong></td><td><code>torrents/setShareLimits</code> 必带 <code>shareLimitsMode</code>(矩阵 A11 / B4 同源)</td></tr>
+<tr><td><span class="lv lv-y">🟡 行为变化</span></td><td class="num"><strong>8</strong></td><td>skip_checking(已被库双发缓解,条件性,A10/B1)、跳检重加不回传 <code>share_limits_mode</code>(A22)、rename 校验收紧(A27)、reannounce 真强制(B6/C3)、重复添加防护(B8)、会话速率 payload 口径(B11)、legacy TLS 禁用(C5)、seeding 时间记账修正(C11)</td></tr>
+<tr><td><span class="lv lv-b">🔵 新机会</span></td><td class="num"><strong>6</strong></td><td><code>transfer/getSpeedLimits</code>(A3)、<code>app/getFreeSpaceAtPathAction</code>(A9)、<code>session_state</code>(A21)、Lua 插件引擎(B17)、<code>ip_ban_alert</code>(C18)、新暴露 libtorrent 设置(C25)</td></tr>
+<tr><td><span class="lv lv-g">🟢 无影响</span></td><td class="num"><strong>67</strong></td><td>其余全部</td></tr>
+</table>
+
+<h3>1.3 为什么只有 1 条硬破坏(结构性利好)</h3>
+<ol>
+<li>所有 qB 调用收敛在单一 Facade(<code>src/auto_qb/core/qbapi.py</code>)与钉死版本的 <code>qbittorrent-api==2026.8.1</code>(pyproject.toml:29 / uv.lock:70)——该库版本已内置 5.3 参数兼容(seedMode 双发、Bearer 认证);</li>
+<li>无运行时版本号解析,版本差异全靠字段探测与响应形态双认(对 5.3 天然兼容);</li>
+<li>torrent 快照对新字段前向兼容(<code>_raw</code> 落袋,<code>record.py:144-160,192-196</code>),启动期字段契约只要求 5.3 仍保留的老字段;</li>
+<li>search / rss / torrentcreator / 导出目录等被破坏面全部不在使用范围内。</li>
+</ol>
+
+<h3>1.4 升级建议要点(详单见 §09;库支持度专项见 §08)</h3>
+<ol>
+<li><b>升级前修</b>:facade 增加 <code>share_limits_mode</code> 形参,<code>_cmd_set_share_limits</code> 显式传 <code>"Default"</code>,并补请求体级测试断言。<b>该修复与库版本解耦</b>(<code>share_limits_mode</code> 参数 2026.8.1 已有,钉死 2026.8.1 也能修,§8.4)。</li>
+<li><b>库版本口径</b>:下限 <code>qbittorrent-api==2026.8.1</code> 不许降——跳检(<code>is_skip_checking</code>)的 5.3 兼容完全依赖该库对 <code>skip_checking</code> 与 <code>seedMode</code> 的<b>双发</b>行为;<b>推荐升级到 2026.10.1</b>(纯增量,对本项目调用面 100% 兼容,§8.2)——但注意升库不解决 🔴(§8.3)。</li>
+<li><b>升级后走查</b>:跳检全流程、强制汇报回执口径、重复添加回执、流量采样速率读数、HR 达标时点(数值口径方向都是更准,但与旧基线数字不可直接对比)。</li>
+</ol>
+
+<h2 id="s02"><span class="no">§02</span>证据快照:版本定位与关键核验事实</h2>
+
+<h3>2.1 版本定位(已核验,P1 §0.1)</h3>
+<table>
+<tr><th>项</th><th>值</th></tr>
+<tr><td>HEAD</td><td><code>8182ae071</code> "Search: Show formal engine name in UI"(master)</td></tr>
+<tr><td>与 beta1 关系</td><td>release-5.3.0beta1(<code>99a508c62</code>)之后 51 提交</td></tr>
+<tr><td>release-5.3.0rc1</td><td><code>6ed6f8d53</code>(2026-09-28),<b>不在 HEAD 祖先链上</b>——是从 master 线 <code>d6d86ff1</code>(翻译同步)处侧分 1 个提交打的 tag</td></tr>
+<tr><td>master 走向</td><td>HEAD 线上已有 <code>e8f7c18ba</code> "Bump to 5.4.0alpha1",master 已进入 5.4.0 开发期</td></tr>
+<tr><td>release-5.2.4</td><td><code>a1e4649cb</code>(2026-09-28),stable 分支,<b>不是 HEAD 祖先</b>;其修复(case-only 改名 <code>e5e877caf</code>、二次启动崩溃 <code>d90ac100d</code>、文件描述符泄漏 <code>7a8e991da</code>、跳过重复添加源 <code>0c6756f70</code> 等)均已以 PR 形式并入本范围</td></tr>
+<tr><td>5.2.3 与 HEAD</td><td><b>5.2.3 不是 HEAD 祖先</b>(stable 分支),<code>5.2.3..HEAD</code> = HEAD 上不可从 5.2.3 到达的提交;部分条目(SameSite=Lax、X-Forwarded-Host 限制)实际已随 5.2.1~5.2.3 stable 发布,只是 master 侧合入晚于 5.2.3 分叉点</td></tr>
+<tr><td>WebAPI 版本</td><td>5.2.3 = <b>2.15.1</b> → HEAD = <b>2.16.2</b>(<code>src/webui/webapplication.h</code>);<code>WebAPI_Changelog.md</code> 2.15.2→2.16.2 全段落在本范围</td></tr>
+<tr><td>libtorrent 最低版</td><td>1.2.19 / 2.0.10(与 5.2.3 相同,见 <code>CMakeLists.txt:13-14</code>),<b>新增对 libtorrent 2.1(含 2.1.0 release)的构建支持</b>——2.0.x 与 2.1.x 都是合法后端,运行时选哪个由打包/构建决定</td></tr>
+<tr><td>Python(搜索插件运行时)</td><td>最低要求 <b>3.9 → 3.13</b>(<code>06736994c</code>)</td></tr>
+<tr><td>libtorrent RC_2_1</td><td>HEAD=<code>53acefea9</code>,describe <code>v2.1.2-40</code>;v2.1.0=2026-07-09,v2.1.2=2026-09-24,HEAD=2026-10-06(2.1.3 未发布,ChangeLog 已有条目)</td></tr>
+</table>
+
+<h3>2.2 规模与核对基线</h3>
+<ul>
+<li>qB 范围 <code>release-5.2.3..HEAD</code> 非合并提交 <b class="num">382</b> 条(<code>git log --oneline --no-merges | wc -l</code> 实测)。</li>
+<li>P2 方法面:<code>git diff release-5.2.3..HEAD -- src/webui/api/</code>(16 文件,+635/−310),<code>src/webui/api/</code> 下共 <b class="num">45</b> 条非合并提交;<code>authcontroller</code>、<code>logcontroller</code>、<code>clientdatacontroller</code>、<code>apistatus.h</code>、<code>apierror.{h,cpp}</code> <b>零改动</b>。</li>
+<li>libtorrent 范围 <code>v2.1.0..HEAD</code> 非合并提交 <b class="num">261</b> 条(任务输入写 280,实测 261,以实测为准);其中 <code>v2.1.2..HEAD</code>(将进 2.1.3)37 条。产品语义相关约 115 条,测试/CI/基准/文档/构建约 146 条。</li>
+<li>APIError→HTTP 状态映射(<b>未变</b>,供对照):BadParams→400,BadData→415,AccessDenied→403,Conflict→409,NotFound→404,Unauthorized→401;<code>MethodNotAllowedHTTPError</code>→<b>405</b>(<code>src/base/http/httperror.cpp:65</code>)。</li>
+</ul>
+
+<h3>2.3 影响结论依赖的关键代码事实</h3>
+<table>
+<tr><th>事实</th><th>出处</th><th>意义</th></tr>
+<tr><td>WebAPI 对<b>未知参数一律静默忽略</b>(params 是 QHash,controller 只读认识的键)</td><td>P2 §0</td><td>移除的参数不会报错、只会失效——「静默失效」类破坏的机理;也是 facade 先补缺省形参可向后兼容 5.2 的依据</td></tr>
+<tr><td><code>torrents/add</code> 的 <code>skip_checking</code> 在整个 WebAPI 层已无任何读取点(全仓仅剩 <code>addtorrentparams.cpp:61</code> 读旧 .fastresume 的兼容映射)</td><td>P2 §2.1</td><td>旧参数发送 = 静默走 <code>seedMode=false</code>,种子照加但<b>会做完整校验</b></td></tr>
+<tr><td><code>qbittorrent-api 2026.8.1</code> 对 <code>is_skip_checking</code> <b>同时双发</b> <code>skip_checking</code> 与 <code>seedMode</code>(库 torrents.py:423-425);<code>setShareLimits</code> 对 None 参数不发(库 torrents.py:1522,1552)</td><td>P4 §2.A</td><td>前者使本项目跳检在 5.3 下继续生效;后者正是唯一硬破坏的触发条件(本项目不传该参)</td></tr>
+<tr><td>POST-only 机制 = 方法白名单 <code>m_allowedMethod</code>(<code>webapplication.h:153</code>),被限端点收到 GET 返回 <b>405</b>(鉴权之后判定)</td><td>P2 §2.3</td><td>本项目的 <code>search/downloadTorrent</code>、<code>rss/setFeedRefreshInterval</code> 均未使用,无影响</td></tr>
+<tr><td>libtorrent <code>v2.1.0..HEAD</code> 的 settings_pack 枚举只做<b>尾部追加</b>(bool/int/string 段基址相互独立),默认值 diff 为空(已核实);2.0.x→2.1.0 则是大版本 ABI 断裂</td><td>P3 §2.9/§3.4</td><td>RC_2_1 内升级不破坏二进制兼容;qB 条件编译 <code>LIBTORRENT_VERSION_NUM &gt;= 20100</code> 与之自洽</td></tr>
+<tr><td><code>max_queued_disk_bytes</code> 默认 1 MiB → <b>100 MiB</b>(<code>src/settings_pack.cpp:255</code> 已核实,qB <code>a8ebce78f</code> 同步其 DiskQueueSize)</td><td>P3 §1.1/§3.4</td><td>高负载写队列反压点变化的环境注记</td></tr>
+<tr><td>本项目无裸 HTTP 调 qB(<code>scripts/qb_capture.py</code> 为 dev-only);全仓不读 <code>app_version</code>、不读写 qB 配置文件(config.ini)</td><td>P4 §1.1/§1.5</td><td>WebUI 配置键整体改名(<code>285f4cb11</code>,28 个键,迁移版本升至 11)对本项目<b>零影响</b></td></tr>
+</table>
+
+<h2 id="s03"><span class="no">§03</span>方法与局限</h2>
+
+<h3>3.1 四工位方法</h3>
+<table>
+<tr><th>工位</th><th>输入与手段</th><th>产出</th></tr>
+<tr><td>P1 上游提交</td><td><code>git log release-5.2.3..HEAD</code> 382 条逐条归类(12 类),官方 <code>Changelog</code>(5.3.0 Unreleased 段)、<code>release-5.2.4:Changelog</code>、<code>WebAPI_Changelog.md</code> 三方交叉印证</td><td>分类清单 + 18 条「自动化工具可感知」重点汇总</td></tr>
+<tr><td>P2 WebAPI 代码级</td><td><code>git diff -- src/webui/api/</code> 全量 + 逐提交 <code>git show</code> 核对 + 鉴权/路由层(<code>webapplication.{h,cpp}</code>)+ <code>WebAPI_Changelog.md</code> 逐条与代码对账</td><td>38 条端点级变更总表、10 条破坏性代码级细节、官方 changelog <b>未记载</b>的 8 项代码级事实</td></tr>
+<tr><td>P3 libtorrent</td><td>RC_2_1 仓库 <code>v2.1.0..HEAD</code> 261 条逐提交分类 + ChangeLog 2.1.0/2.1.1/2.1.2 段 + qB 侧适配提交(<code>e154c1a81</code>/<code>0be0a8a1f</code>/<code>2fd21ea91</code> 等)diff 反推;settings_pack 默认值 diff 与 ABI 核验</td><td>世代差(2.0.x→2.1.0)+ 26 条对做种/校验/announce/限速可见的行为变化</td></tr>
+<tr><td>P4 影响矩阵</td><td>被分析仓库源码 <b>grep 核对</b>(非文档推断)+ 装在项目 .venv 里的 <code>qbittorrent-api==2026.8.1</code> 实际请求行为(读库源码定位双发/不发逻辑)</td><td>82 行影响矩阵(A38+B18+C26)+ 优先级动作清单 + 对 P2 的两处实测修正</td></tr>
+</table>
+
+<h3>3.2 局限与边界条件</h3>
+<ol>
+<li><b>5.2.3 非 HEAD 祖先</b>:范围语义是「HEAD 上不可从 5.2.3 到达的提交」,不是「5.2.3 发布后的增量」;个别条目已随 5.2.1~5.2.3 stable 先行发布。按 5.2.3→5.3.x 做升级判断时不受影响(两个端点状态都是已核验的)。</li>
+<li><b>libtorrent 2.0.x→2.1.0 世代差未逐提交覆盖</b>:本地 clone 无 RC_2_0 本地分支;该层以 ChangeLog 段 + qB 适配提交反推覆盖,每条都有 qB 侧代码证据,但非穷举。</li>
+<li><b>计数口径</b>:P3 任务输入写 280,实测 <code>v2.1.0..HEAD</code> 非合并提交 261 条——本报告以 261 为准。</li>
+<li><b>P1 参数级细节以代码为准</b>:P1 按 WebAPI_Changelog + 提交标题归纳,端点参数级细节由 P2 的 diff 逐条落实;<code>src/app/upgrade.cpp</code> 迁移版本 8→9→11 的完整键名映射未展开(本项目不读写 qB 配置文件,不影响结论)。</li>
+<li><b>行号快照</b>:P4 的 文件:行号 以其分析时点的本仓库 HEAD 快照为准;引用前如代码已移动,以 grep 复核为准。</li>
+<li><b>升级目标未钉死</b>:HEAD 在 5.3.0rc1 tag 之后但 rc1 不在祖先链上,master 已 bump 5.4.0alpha1;实际升级应落在 5.3.0 正式版/后续 stable,届时需复核 HEAD 与发布 tag 之间的增量(尤其 WebAPI 版本号与本报告 2.16.2 的差异)。</li>
+<li><b>qB 5.3 尚未发布</b>:全部结论基于 master HEAD 源码,不承诺发布版行为不漂移;升级前应对 🔴/🟡 条目在真机 dry-run 复核。</li>
+</ol>
+
+<h2 id="s04"><span class="no">§04</span>qB 上游变更总览(382 提交 × 12 类)</h2>
+
+<p>官方 changelog 交叉印证结论:5.3.0(master <code>Changelog</code> 顶部 Unreleased 段)FEATURE 34 条 / WEBUI 33 条 / WEBAPI 4 条 / RSS 6 条 / SEARCH 3 条;5.2.4(stable)7 BUGFIX + 6 WEBUI + 1 OTHER,<b>全部能在本范围找到对应 master 提交</b>;<code>WebAPI_Changelog.md</code> 2.15.2→2.16.2 共 18 个 PR 段落逐条与代码核对<b>无虚报</b>(但 changelog 未记载的代码级事实见 §05.3)。</p>
+
+<h3>4.1 WebAPI / WebUI 后端(自动化最相关)</h3>
+<ul>
+<li><b>新增端点 9 个</b>:<code>transfer/pauseSession</code>/<code>resumeSession</code>(<code>fe4506e8c</code>)、<code>transfer/getSpeedLimits</code>/<code>setSpeedLimits</code>(<code>3d376efa4</code>)、<code>torrents/downloadFile</code>(<code>56bf1d0f7</code>)、<code>rss/cloneRule</code>(<code>7d05d798d</code>)、<code>rss/exportRules</code>/<code>importRules</code>(<code>13f4694e7</code>)、<code>app/getFreeSpaceAtPathAction</code>(<code>db96873cd</code>)、<code>X-API-Key</code> header 认证(<code>374c06fbb</code>)。</li>
+<li><b>参数/字段变化 15 项</b>:<code>torrents/add</code> 的 <code>skip_checking</code>→<code>seedMode</code>(<code>6e493381a</code>)与 <code>shareLimitsMode</code>(<code>5f946d1d9</code>)、全局/分类级分享限制体系(<code>80b5edbec</code>/<code>784a6e188</code>)、<code>search/status</code> +pattern/category/plugins(<code>b1fa46da8</code>)、<code>search/results</code> +engineFullName(<code>8182ae071</code>)、<code>server_state</code> +session_state/request_latency/queued_tracker_announces、<code>torrentcreator/status</code> 时间戳 epoch 化(<code>400d5c684</code>)等。</li>
+<li><b>移除/破坏 7 项</b>:<code>skip_checking</code> 移除、<code>search/downloadTorrent</code>/<code>rss/setFeedRefreshInterval</code> POST-only(<code>27a1fab8d</code>)、<code>app/preferences</code> 删 <code>export_dir</code>/<code>export_dir_fin</code>(<code>78bf5f0c7</code>)、删 <code>mail_notification_ssl_enabled</code>(<code>d76c82d3a</code>)、API key 会话不再种 cookie(<code>926d96111</code>)、controller 按需构造(<code>817b27ee1</code>)。</li>
+<li><b>认证/安全 14 项</b>:X-Forwarded-For 伪造绕过修复(<code>68a5d7e34</code>)、X-Forwarded-Host 仅反代开启时信任(<code>4445e89b7</code>)、Sec-Fetch-Site CSRF 检测(<code>3e0a08252</code>/<code>6a4582c8d</code>)、SameSite=Lax(<code>e61b301a6</code>)、server domain 锚定匹配(<code>35a37bb46</code>)、<b>会话数上限</b> <code>web_ui_sessions_count_limit</code>(<code>09bd46d1f</code>)、SSRF/SMTP 注入修复、API 不跨调用缓存结果(<code>f4acdced8</code>)、sync 增量正确性修复(<code>5dcbbf1f4</code>/<code>3af815319</code>/<code>d779e98f9</code>)等。</li>
+</ul>
+<p class="cm">代码级明细全部在 §05 展开。</p>
+
+<h3>4.2 行为语义变化(自动化工具可感知,P1 §2 十八条全录)</h3>
+<ol>
+<li><b><code>torrents/add</code> 参数替换</b>(<code>6e493381a</code>):<code>skip_checking</code> 移除 → <code>seedMode</code>;语义从「跳过校验」变为官方 seed mode。</li>
+<li><b>POST-only 端点</b>(<code>27a1fab8d</code>/<code>c2d016aba</code>):<code>search/downloadTorrent</code>、<code>rss/setFeedRefreshInterval</code>、<code>rss/cloneRule</code>、<code>rss/importRules</code>;GET 现在拿 405。</li>
+<li><b>WebAPI 认证面</b>(<code>374c06fbb</code>/<code>926d96111</code>/<code>68a5d7e34</code>/<code>4445e89b7</code>/<code>09bd46d1f</code>):X-API-Key、API key 无 cookie、X-Forwarded-* 收紧、会话数上限——脚本并发会话/反代部署需复核。</li>
+<li><b>分享限制体系重构</b>(<code>4974a96e1</code>):MatchAny/MatchAll 组合模式、<code>setShareLimits</code> 必带 <code>shareLimitsMode</code>、分类级限制(<code>784a6e188</code>)、限制变化即时刷新计时器(<code>3c2a58e1e</code>)、状态字段 <code>share_limits_mode</code>/<code>share_limit_action</code>。</li>
+<li><b>会话级暂停/恢复与「启动即暂停」</b>(<code>fe4506e8c</code>/<code>bc5a4ef28</code>/<code>2fd21ea91</code>):session_state;libtorrent 2.1 下会话以 paused flag 启动。</li>
+<li><b><code>torrents/reannounce</code> 真正强制</b>(<code>9a4beccc2</code>):之前可能受最小间隔限制而不实际 announce,现在真发。</li>
+<li><b>RSS 源限制与刷新节奏</b>(<code>3b7441ee4</code>/<code>dc28758d8</code> 等):自动下载仅 http(s)/magnet/infohash;刷新间隔指数退避。</li>
+<li><b>重复添加防护</b>(<code>0c6756f70</code>):已在添加流程中的种子源被跳过——并发投递第二次被忽略。</li>
+<li><b><code>torrents/add</code> 返回语义</b>(<code>a33c8b5f9</code>):tracker 合并场景不再误报 failed add。</li>
+<li><b>新装默认值变化</b>(<code>d688c2f8b</code>/<code>a8ebce78f</code>/<code>ef0095177</code>):Resolve peer countries 默认关;磁盘队列默认对齐 lt 2.1;更新源移除 FOSSHub。</li>
+<li><b>ETA/速度显示语义</b>(<code>4e17869c5</code>/<code>41519342c</code>):ETA 到秒;会话速度 = 各任务 payload 速率之和。</li>
+<li><b>torrentcreator 时间戳 epoch 化</b>(<code>400d5c684</code>)。</li>
+<li><b>搜索插件 Python ≥ 3.13</b>(<code>06736994c</code>)。</li>
+<li><b>libtorrent 2.1 兼容层</b>(<code>e154c1a81</code>/<code>0be0a8a1f</code>/<code>2604eb279</code>/<code>cd86b0d24</code>/<code>6303a90af</code>):错误消息 UTF-8、新设置 <code>max_allowed_in_request_queue</code>(WebAPI 键 <code>max_outstanding_block_requests</code>)、<code>seeding_outgoing_connections</code>。</li>
+<li><b>DHT bootstrap 更新 / magnet so 参数 / magnet tracker 过滤 / IP 段封禁 / infohash 过滤</b>(<code>76ac8268a</code>/<code>b204bb7ce</code>/<code>6d2dcf4d4</code>/<code>db72e0a04</code>/<code>707313033</code>)。</li>
+<li><b>.torrent 备份管理革新</b>(<code>78bf5f0c7</code>):export_dir 移除 → <code>torrent_files_backup_*</code> 系列。</li>
+<li><b>Lua 插件引擎落地</b>(<code>552766161</code>,+2797 行;<code>f6135aaec</code> 可编译期禁用):官方事件回调扩展点,可替代部分轮询。</li>
+<li><b>WebUI 前端行为</b>(<code>18aa92a55</code> 虚拟列表默认开、<code>5b134f449</code> 跳过添加对话框、<code>b1fa46da8</code> 搜索页签持久化):浏览器自动化的 DOM 与持久状态变化。</li>
+</ol>
+
+<h3>4.3 配置项(设置键)增删改</h3>
+<ul>
+<li><b>WebUI 设置键整体改名</b>(<code>285f4cb11</code>):<code>Preferences/WebUI/*</code> → <code>WebUI/*</code>(28 个键),迁移版本升至 11(<code>src/app/upgrade.cpp::migrateWebUISettings</code>)——直接读写 qBittorrent 配置文件的工具必改;本项目不读写该文件,零影响。</li>
+<li><b>清理过时设置键</b>(<code>500d7268d</code>):迁移版本 8→9,首次升级删除 KeyMapping 全部旧键。</li>
+<li><b>新增偏好键</b>(WebAPI <code>app/preferences</code>):<code>share_limits_mode</code>、<code>web_ui_sessions_count_limit</code>、<code>torrent_files_backup_*</code> ×5、<code>seeding_outgoing_connections</code>、<code>max_outstanding_block_requests</code>、<code>enable_multi_connections_from_same_peer_id</code>、<code>webtorrent_stun_server</code>、<code>i2p_pex_enabled</code>、<code>i2p_*_length_variance</code>、<code>mail_notification_encryption_type</code>、<code>store_search_jobs</code>/<code>store_search_job_results</code>、<code>confirm_remove_all_tags</code>/<code>confirm_remove_tracker_from_all_torrents</code>、<code>start_paused</code>/<code>shutdown_timeout</code>;磁盘 IO 类型新增 Pread/pwrite 选项(<code>66218b966</code>)。</li>
+<li><b>删除偏好键</b>:<code>export_dir</code>、<code>export_dir_fin</code>(<code>78bf5f0c7</code>)、<code>mail_notification_ssl_enabled</code>(<code>d76c82d3a</code>)。</li>
+</ul>
+
+<h3>4.4 其余八类(代表性条目)</h3>
+<table class="compact">
+<tr><th>类</th><th>代表条目(hash)</th></tr>
+<tr><td>WebUI 前端</td><td>多任务统一添加对话框 <code>7349a0422</code>、跳过添加对话框实现 <code>5b134f449</code>、传输列表全选 <code>9992d447a</code>、二级排序列 <code>fe7baea4c</code>、「Created On」列 <code>82d3147d5</code>、复制路径 <code>336366d02</code>、虚拟列表默认开 <code>18aa92a55</code>;MooTools 迁移/DynamicTable/行渲染性能重构批;修复批(键盘导航/列重排/Firefox 表头/Safari 对齐等)</td></tr>
+<tr><td>核心下载/会话/BitTorrent</td><td>分享限制重构 <code>4974a96e1</code>、计时器同步 <code>3c2a58e1e</code>、内容管理 <code>d63dec11b</code>/<code>68382a437</code>、magnet so <code>b204bb7ce</code>、IP 段封禁 <code>db72e0a04</code>、lt 2.1 适配族 <code>e154c1a81</code>/<code>0be0a8a1f</code>/<code>2fd21ea91</code>/<code>2604eb279</code>/<code>cd86b0d24</code>/<code>6303a90af</code>/<code>5acb01acb</code>/<code>a8ebce78f</code>、数据库事务死锁修复 <code>57b0a47d2</code></td></tr>
+<tr><td>Search 插件</td><td>engineFullName <code>8182ae071</code>、插件版本号规则放宽 <code>4df3aff93</code>、Python ≥3.13 <code>06736994c</code>、Lua/LuaBridge 内嵌 <code>4d3783a41</code>、插件特性可编译期禁用 <code>f6135aaec</code></td></tr>
+<tr><td>RSS / AutoDownloader</td><td>规则克隆 <code>7d05d798d</code>、导入导出 <code>13f4694e7</code>、SEF 正则修复 <code>e70d7e2e9</code>/<code>dbad5e10f</code>、刷新修复 <code>2351e63ff</code>/<code>3e4ac469a</code>/<code>8acadf68f</code>、指数退避 <code>dc28758d8</code>、源 scheme 白名单 <code>3b7441ee4</code></td></tr>
+<tr><td>GUI(桌面)</td><td>过滤器「强制开始」<code>26b0d3eb6</code>、工具栏打开目标文件夹 <code>2af75079f</code>、fd 泄漏修复 <code>7a8e991da</code>、统计面板 request_latency <code>e2697c1b9</code>、Windows ARM64 构建批、macOS 批、CET Shadow Stack 兼容 <code>496a5cb05</code></td></tr>
+<tr><td>构建 / 依赖 / CI</td><td>lt 2.1 构建支持 <code>e154c1a81</code>、CI lt-2.1 矩阵 <code>8df1926eb</code>、升至 2.1.0 release <code>f239bebc4</code>、C++23、zlib/expected-lite 升版、GHA CI 杂项约 30 条(无产品语义)</td></tr>
+<tr><td>崩溃 / bug 修复</td><td>法务通知期二次启动崩溃 <code>d90ac100d</code>、case-only 重命名 <code>e5e877caf</code>、日志目录相对路径 <code>52d3a960a</code>、代理凭据未编码 <code>9f6dfd9d4</code>、web seed 编码 <code>b65f0a914</code>;内部正确性/重构批约 50 条;配置文件无写权限不覆盖 <code>c8497576a</code></td></tr>
+<tr><td>版本 / 文档 / 杂项</td><td>Bump 5.3.0alpha1 <code>8d5b10712</code> / beta1 <code>26663c60a</code> / 5.4.0alpha1 <code>e8f7c18ba</code>、Changelog ×7、仓库新增 AGENTS.md <code>f317d5c37</code>、man page 补全 <code>93f2a22a6</code></td></tr>
+</table>
+
+<h2 id="s05"><span class="no">§05</span>WebUI API 变更专节(38 条端点级 / 10 条破坏)</h2>
+
+<h3>5.1 端点级变更总表(38 条)</h3>
+<div class="tblwrap compact">
+<table>
+<tr><th>#</th><th>端点</th><th>变更类型</th><th>旧→新</th><th>提交</th><th>兼容性</th></tr>
+<tr><td>1</td><td><code>transfer/pauseSession</code></td><td>新增(POST-only)</td><td>−→暂停整个 BT 会话</td><td class="hash">fe4506e8c</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>2</td><td><code>transfer/resumeSession</code></td><td>新增(POST-only)</td><td>−→恢复会话</td><td class="hash">fe4506e8c</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>3</td><td><code>transfer/getSpeedLimits</code></td><td>新增(GET)</td><td>−→<code>up_limit</code>/<code>dl_limit</code>/<code>alt_up_limit</code>/<code>alt_dl_limit</code></td><td class="hash">3d376efa4</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>4</td><td><code>transfer/setSpeedLimits</code></td><td>新增(POST-only)</td><td>−→四个参数全必填</td><td class="hash">3d376efa4</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>5</td><td><code>torrents/downloadFile</code></td><td>新增(GET/POST)</td><td>−→<code>hash</code>+<code>file</code>(索引或相对 content root 路径),流式返回已完成文件</td><td class="hash">56bf1d0f7</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>6</td><td><code>rss/cloneRule</code></td><td>新增(POST-only)</td><td>−→<code>sourceName</code>+<code>cloneName</code></td><td class="hash">7d05d798d</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>7</td><td><code>rss/exportRules</code></td><td>新增(GET)</td><td>−→返回 JSON(附件名 rss-downloader-rules.json)</td><td class="hash">13f4694e7</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>8</td><td><code>rss/importRules</code></td><td>新增(POST-only)</td><td>−→必须恰 1 个 multipart 文件,否则 400</td><td class="hash">13f4694e7</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>9</td><td><code>app/getFreeSpaceAtPathAction</code></td><td>新增(GET)</td><td>−→<code>path</code>→剩余空间字符串</td><td class="hash">db96873cd</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>10</td><td><code>torrents/add</code></td><td>参数变更</td><td><span class="lv lv-y">⚠</span> <code>skip_checking</code>(bool)移除→<code>seedMode</code>(bool);新增 <code>shareLimitsMode</code></td><td class="hash">6e493381a、5f946d1d9</td><td><span class="lv lv-y">破坏性</span>(见 5.2.1)</td></tr>
+<tr><td>11</td><td><code>torrents/setShareLimits</code></td><td>参数变更</td><td><span class="lv lv-r">⚠</span> <code>shareLimitsMode</code> 变为必填(缺失→400);内部改原子 <code>setShareLimits</code></td><td class="hash">80b5edbec、4974a96e1</td><td><span class="lv lv-r">破坏性</span>(见 5.2.2)</td></tr>
+<tr><td>12</td><td><code>torrents/createCategory</code></td><td>参数新增</td><td>+<code>ratioLimit</code>/<code>seedingTimeLimit</code>/<code>inactiveSeedingTimeLimit</code>/<code>shareLimitsMode</code>/<code>shareLimitAction</code>(均可选);<code>downloadPathEnabled</code> 非法值从静默忽略→400</td><td class="hash">784a6e188</td><td><span class="lv lv-g">兼容</span>(新校验边缘破坏)</td></tr>
+<tr><td>13</td><td><code>torrents/editCategory</code></td><td>参数变更</td><td><code>savePath</code> 不再必填;改「读现有选项+按传入字段覆盖」的部分更新;无变化不再 409/报错;空 <code>downloadPathEnabled</code> 清除 download path;+5 分享限制参数</td><td class="hash">784a6e188、4b429e4f4、16de018ca</td><td><span class="lv lv-g">兼容</span>(旧客户端传 savePath 仍可用)</td></tr>
+<tr><td>14</td><td><code>search/downloadTorrent</code></td><td>语义变更</td><td><span class="lv lv-y">⚠</span> POST-only:GET 现在 405 Method Not Allowed</td><td class="hash">27a1fab8d</td><td><span class="lv lv-y">破坏性</span></td></tr>
+<tr><td>15</td><td><code>rss/setFeedRefreshInterval</code></td><td>语义变更</td><td><span class="lv lv-y">⚠</span> POST-only:GET 现在 405</td><td class="hash">27a1fab8d</td><td><span class="lv lv-y">破坏性</span></td></tr>
+<tr><td>16</td><td><code>app/preferences</code></td><td>响应字段变更</td><td><span class="lv lv-y">⚠</span> 删 <code>export_dir</code>/<code>export_dir_fin</code>/<code>mail_notification_ssl_enabled</code>;+约 18 个新键(见 5.2.6)</td><td class="hash">78bf5f0c7、d76c82d3a 等</td><td><span class="lv lv-y">破坏性</span>(读删键得 undefined)+ 兼容</td></tr>
+<tr><td>17</td><td><code>app/setPreferences</code></td><td>参数变更</td><td>同步删/增上列键;<code>mail_notification_encryption_type</code>(枚举串);<code>share_limits_mode</code>;分享限制键改走 <code>setShareLimits</code></td><td class="hash">同上</td><td><span class="lv lv-g">兼容</span>(写已删键静默无效)</td></tr>
+<tr><td>18</td><td><code>search/status</code></td><td>响应字段新增</td><td>每 job +<code>pattern</code>/<code>category</code>/<code>plugins</code></td><td class="hash">b1fa46da8</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>19</td><td><code>search/results</code></td><td>响应字段新增</td><td>每条结果 +<code>engineFullName</code></td><td class="hash">8182ae071</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>20</td><td><code>search/*</code>(start/stop/status/results/delete)</td><td>语义变更</td><td>job 状态从 controller 成员移入全局 SearchJobManager:跨会话共享、可随偏好持久化(跨重启);并发上限仍 5</td><td class="hash">b1fa46da8</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>21</td><td><code>sync/maindata</code> server_state</td><td>响应字段新增</td><td>+<code>session_state</code>(bool,会话暂停中)+<code>request_latency</code>+<code>queued_tracker_announces</code></td><td class="hash">fe4506e8c、e2697c1b9、3477ee039</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>22</td><td><code>sync/maindata</code> torrents</td><td>响应字段新增</td><td>每 torrent +<code>share_limits_mode</code>(string:Default/MatchAny/MatchAll)</td><td class="hash">80b5edbec</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>23</td><td><code>sync/torrentPeers</code></td><td>响应字段新增</td><td>每 peer +<code>contribution</code>(float,对种子进度的贡献率)</td><td class="hash">5c769abc8</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>24</td><td><code>torrentcreator/status</code></td><td>响应字段类型变更</td><td><span class="lv lv-y">⚠</span> <code>timeAdded</code>/<code>timeStarted</code>/<code>timeFinished</code>:格式化文本→Unix epoch 秒(int);+<code>ignoreDotfiles</code></td><td class="hash">400d5c684、75455418d</td><td><span class="lv lv-y">破坏性</span>(文本解析会挂)</td></tr>
+<tr><td>25</td><td><code>torrentcreator/addTask</code></td><td>参数新增</td><td>+<code>ignoreDotfiles</code>(bool;缺省<b>默认 true</b>)</td><td class="hash">75455418d</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>26</td><td><code>torrents/fetchMetadata</code></td><td>语义变更</td><td>无效源记入黑名单,重复请求同一无效源直接 415(不再重复下载尝试);+排除文件名生效时文件带 <code>priority</code></td><td class="hash">0c5f84ef7</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>27</td><td><code>torrents/renameFile</code>/<code>renameFolder</code></td><td>校验收紧</td><td><code>isValidName</code>→<code>isValidFileName</code>(拦截路径分隔符等)</td><td class="hash">f18731f53</td><td><span class="lv lv-g">兼容</span>(边缘破坏)</td></tr>
+<tr><td>28</td><td><code>torrents/removeTags</code></td><td>内部改名</td><td><code>removeAllTags</code>→<code>clearTags</code>,语义不变</td><td class="hash">dce064bb3</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>29</td><td><code>torrents/info</code></td><td>内部</td><td><code>category</code>/<code>tag</code> 参数提取改 <code>Utils::Dict::get</code>(等价重写)</td><td class="hash">重构</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>30</td><td><code>X-API-Key</code> 认证</td><td>新增</td><td><span class="lv lv-y">⚠</span> header 认证(<code>x-api-key</code> 或 Authorization: Bearer 等价,同一 API-key 会话)</td><td class="hash">374c06fbb</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>31</td><td>API key 会话</td><td>语义变更</td><td><span class="lv lv-y">⚠</span> 不再种 cookie(纯 header;会话 id = API key 本身,同一 key 所有客户端共享会话状态与 sync 增量游标)</td><td class="hash">926d96111</td><td><span class="lv lv-y">破坏性</span>(依赖 cookie 的 API key 用法失效)</td></tr>
+<tr><td>32</td><td>API key 访问 <code>auth/*</code></td><td>语义变更</td><td><code>auth/*</code> + API key → 403 Forbidden</td><td class="hash">P2 §2.4-3</td><td><span class="lv lv-g">兼容</span>(库 api_key 分支本就不调 auth/login)</td></tr>
+<tr><td>33</td><td>会话数上限</td><td>新增偏好</td><td><span class="lv lv-y">⚠</span> <code>web_ui_sessions_count_limit</code>(int,<b>默认 15</b>,0=不限);超限 LRU 逐出最久未活动会话,被逐会话后续请求 403</td><td class="hash">09bd46d1f</td><td><span class="lv lv-y">破坏性</span>(并发脚本 &gt;15 会话场景)</td></tr>
+<tr><td>34</td><td><code>X-Forwarded-For</code></td><td>解析改写</td><td><span class="lv lv-y">⚠</span> 从右往左走:第一个非受信代理网段 hop 即客户端;链不可信直接用 TCP 对端地址;伪造 XFF 不再被采信</td><td class="hash">68a5d7e34</td><td><span class="lv lv-y">破坏性</span>(依赖 qB 侧 IP 白名单的部署)</td></tr>
+<tr><td>35</td><td><code>X-Forwarded-Host</code></td><td>收紧</td><td>仅在 WebUI 反代支持开启时读取;Host 域名匹配改锚定正则(<code>35a37bb46</code>),后缀绕过封死</td><td class="hash">4445e89b7</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>36</td><td>CSRF Sec-Fetch-Site</td><td>新增检测</td><td>有该头时只放行 same-origin/none,其余 401;无该头回落 Origin/Referer 同源比对(API 客户端不受影响);webroot 豁免</td><td class="hash">3e0a08252、6a4582c8d</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>37</td><td>会话 cookie</td><td>属性变更</td><td><code>SameSite=Lax</code>(HTTPS 非 Lax 场景用 SameSite=None)——浏览器侧变化,非浏览器工具无关</td><td class="hash">e61b301a6</td><td><span class="lv lv-g">兼容</span></td></tr>
+<tr><td>38</td><td>默认方法白名单</td><td>语义变更</td><td>无显式限制的端点现在接受 GET/POST/<b>HEAD</b>(5.2.3 默认只有 GET/POST)——对现有 GET 调用纯增益</td><td class="hash">P2 §2.4-9</td><td><span class="lv lv-g">兼容</span></td></tr>
+</table>
+</div>
+<p class="cm">注:P2 总表原 29 行端点级 + 认证会话层 9 条 = 38 条,上表为合并编排;⚠ 标记为破坏性条目(见 5.2)。</p>
+
+<h3>5.2 破坏性条目逐条展开(10 条)</h3>
+
+<h4>5.2.1 <code>torrents/add</code>:<code>skip_checking</code> → <code>seedMode</code>(<code>6e493381a</code>)</h4>
+<ul>
+<li>HEAD 代码:<code>const bool seedMode = parseBool(params()[u"seedMode"_s]).value_or(false);</code>(torrentscontroller.cpp <code>addAction()</code>)。</li>
+<li><code>skip_checking</code> 在整个 WebAPI 层已无任何读取点(全仓 grep 仅剩 <code>addtorrentparams.cpp:61</code> 的 <code>DEPRECATED_PARAM_SKIP_CHECKING</code>——读旧 .fastresume 的兼容映射,与 API 无关)。</li>
+<li><b>旧参数现在会静默忽略、不报错</b>:发送 <code>skip_checking=true</code> 的实际效果 = <code>seedMode=false</code> 默认值 → 种子正常添加但会做完整校验(旧客户端期望的「免校验直接做种」静默失效)。</li>
+<li>同端点新增 <code>shareLimitsMode</code>(string):取值经 <code>Utils::String::toEnum(..., Default)</code>,<b>非法字符串静默回退 Default</b>(与分类端点抛 400 不同,易踩)。</li>
+<li>返回语义:<code>a33c8b5f9</code>(core 侧)修复 tracker 合并场景误报 failed add。</li>
+</ul>
+
+<h4>5.2.2 <code>torrents/setShareLimits</code>:<code>shareLimitsMode</code> 必填(<code>80b5edbec</code>)</h4>
+<ul>
+<li>HEAD 代码:<code>requireParams({hashes, ratioLimit, seedingTimeLimit, inactiveSeedingTimeLimit, shareLimitAction, shareLimitsMode});</code></li>
+<li><b>缺失 <code>shareLimitsMode</code> → BadParams → HTTP 400</b>。旧调用方不带该参数直接失败(硬破坏,本项目唯一一条,见 §07)。</li>
+<li>非法值(非 Default/MatchAny/MatchAll)→ toEnum 静默回退 Default(与 <code>torrents/add</code> 一致;分类端点才抛错)。</li>
+<li>实现改为一次性 <code>torrent-&gt;setShareLimits(ShareLimits{...})</code> 替代旧四个 setter;缺参报错消息含参数名。</li>
+<li>关联:全局偏好 <code>share_limits_mode</code>;setPreferences 里该键非法值<b>静默回退 MatchAny</b>(注意回退值不是 Default)。</li>
+</ul>
+
+<h4>5.2.3 POST-only:<code>search/downloadTorrent</code>、<code>rss/setFeedRefreshInterval</code>(<code>27a1fab8d</code>)</h4>
+<ul>
+<li>机制:方法白名单 <code>m_allowedMethod</code>(<code>webapplication.h:153</code>,键为 {scope,action})。5.2.3 中这两个端点不在表内→默认允许 GET+POST;HEAD 在表内加 {POST}。</li>
+<li>旧 GET 请求现在的实际行为:<b>HTTP 405 Method Not Allowed</b>(body = "Method Not Allowed"),不是 401/404;405 在鉴权之后判定(鉴权失败仍 403 优先)。</li>
+<li>同族:<code>rss/cloneRule</code>/<code>rss/importRules</code>/<code>transfer/pauseSession</code>/<code>transfer/resumeSession</code> 出生即 POST-only。其余约 55 个既有 POST-only 端点无变化。</li>
+</ul>
+
+<h4>5.2.4 <code>app/preferences</code> 键删除 ×3(<code>78bf5f0c7</code>、<code>d76c82d3a</code>)</h4>
+<ul>
+<li>删 <code>export_dir</code>/<code>export_dir_fin</code>(core 移除 .torrent 导出目录,→ <code>torrent_files_backup_*</code> 系列)、删 <code>mail_notification_ssl_enabled</code>(→ <code>mail_notification_encryption_type</code>,string 枚举)。</li>
+<li>读删键得 undefined,写已删键静默无效。</li>
+</ul>
+
+<h4>5.2.5 <code>torrentcreator/status</code> 时间戳类型变更(<code>400d5c684</code>)</h4>
+<p><code>timeAdded</code>/<code>timeStarted</code>/<code>timeFinished</code> 从格式化文本 → Unix epoch 秒(int);文本解析代码会挂。另注意 <code>torrentcreator/addTask</code> 新参 <code>ignoreDotfiles</code> <b>缺省即 true</b>(changelog 未写默认值;旧版本无此选项=不忽略,新版本不传=忽略——语义翻转)。</p>
+
+<h4>5.2.6 <code>X-Forwarded-For</code> 解析改写(<code>68a5d7e34</code>)</h4>
+<ul>
+<li>旧(5.2.3):客户端 IP 在受信反代列表 → 取 XFF 列表中第一个全局 IP,找不到取列表第一个。</li>
+<li>新(<code>Utils::Net::resolveForwardedClientAddress</code>,<code>src/base/utils/net.cpp:212</code>):从 XFF <b>右往左</b>走;第一个不属于受信代理网段的 hop 即客户端;hop 解析失败→链不可信,直接用 TCP 对端地址;全部受信→取最左 hop。</li>
+<li>影响:伪造的 XFF 不再被采信;反代部署下 resolve_peer_countries/封禁/认证子网白名单的判定对象可能变化。依赖「按 IP 白名单免认证」时,受信代理网段必须覆盖实际代理链,否则白名单失效。</li>
+</ul>
+
+<h4>5.2.7 会话数上限默认 15(<code>09bd46d1f</code>)</h4>
+<p>新偏好 <code>web_ui_sessions_count_limit</code>(int,默认 15,0=不限)。<code>sessionStartImpl</code> 新建会话时先清过期会话,然后若 size ≥ limit <b>LRU 逐出</b>最久未活动会话直到有空位。并发脚本各持独立 SID 超过 15 个时,最老会话被顶掉→其后续请求 403(会话失效)。API key 会话同样计入(每个 key 一个)。</p>
+
+<h4>5.2.8 API key 会话不再种 cookie(<code>926d96111</code>)</h4>
+<p><code>setSessionCookie</code> 仅在 cookie 会话状态变更时发;API key 路径完全不进该分支。API key 会话是纯 header 认证、无 cookie 刷新;且<b>会话 id = API key 本身</b>——同一 key 的所有客户端共享一个会话状态(controller 实例、sync 增量缓冲共享)。API key 不能访问 <code>auth/*</code>(403)。</p>
+
+<h4>5.2.9 <code>torrents/add</code> / <code>setShareLimits</code> / setPreferences 的静默回退值不一致(P2 diff 新发现)</h4>
+<p><code>torrents/add</code> 与 <code>torrents/setShareLimits</code> 的非法 <code>shareLimitsMode</code> <b>静默回退 Default</b>;<code>app/setPreferences</code> 的 <code>share_limits_mode</code> 非法值<b>静默回退 MatchAny</b>;分类端点(createCategory/editCategory)非法值则抛 400。三处口径不一,写自动化时容易踩。</p>
+
+<h4>5.2.10 <code>createCategory</code> 的 <code>downloadPathEnabled</code> 校验收紧(<code>784a6e188</code>)</h4>
+<p><code>downloadPathEnabled</code> 非空但非法(bool 解析失败)→ 400;<b>5.2.3 是静默忽略</b>——边缘破坏。<code>editCategory</code> 特有:传空串 → 清除 download path(置 nullopt)。</p>
+
+<h3>5.3 官方 changelog 未记载的代码级事实(P2 逐条核对结论)</h3>
+<p><code>WebAPI_Changelog.md</code> 2.15.2→2.16.2 共 18 个 PR 段落逐条与代码对账:<b>全部能在 diff 落实,无虚报</b>;但以下代码级事实 changelog 未记载——①静默回退值(5.2.9);②<code>ignoreDotfiles</code> 默认 true;③API key 按 key 共享单会话(多客户端并发用同一 key 时 per-session 状态互相干扰);④会话上限默认 15;⑤<code>createCategory</code> 的 <code>downloadPathEnabled</code> 校验收紧;⑥<code>editCategory</code> 空 <code>downloadPathEnabled</code> 清除语义;⑦HEAD 方法默认放行;⑧错误响应路径重构(对 API 客户端不可见)。</p>
+
+<h3>5.4 sync 协议正确性修复(响应形状不变,增量内容可能不同)</h3>
+<ul>
+<li><code>5dcbbf1f4</code>:客户端未收到上一次 sync 数据时,把上次的增量并入本次(processMap/processHash/processList 增 initialSyncData,以 KEY_SUFFIX_REMOVED 恢复 removed 列表)——正确实现的客户端收到的是<b>本应早前收到</b>的完整增量;对有「增量只含最近变化」假设的客户端是行为变化。本项目 <code>store.py</code> 的 full/delta 合并语义兼容(P4 §1.5 判 🟢)。</li>
+<li><code>3af815319</code>:全量更新(full_update)用错 key 修复;<code>d779e98f9</code>:关闭 peer 国家解析时 sync 异常修复;<code>573ecbc3a</code>:peer <code>host_name</code> 解析与 GUI 共用解析器。</li>
+</ul>
+
+<h2 id="s06"><span class="no">§06</span>libtorrent 专节(世代差 + 26 条可见行为变化)</h2>
+
+<h3>6.1 世代差:2.0.x → v2.1.0(基线跳变,ChangeLog + qB 适配反推)</h3>
+<p>qB 5.2.3 时代实际可用基线是 libtorrent 2.0.x(2.0.10/2.0.11);5.3.x 通过 <code>LIBTORRENT_VERSION_NUM &gt;= 20100</code> 条件编译新增 2.1 线构建支持,CI 的 lt-2.1 目标已升至 2.1.0 release(<code>f239bebc4</code>)。这一层是运行行为差异的大头。</p>
+<h4>磁盘 I/O:新后端 pread_disk_io(最大变化)</h4>
+<ul>
+<li>libtorrent <code>5abab0509</code>(v2.1.0 内):新增多线程 preadv/pwritev 磁盘后端;<code>max_queued_disk_bytes</code> 默认 1 MiB → <b>100 MiB</b>(HEAD <code>src/settings_pack.cpp:255</code> 核实)。</li>
+<li>qB 侧:<code>e154c1a81</code> 新增 <code>DiskIOType::PreadPwrite = 4</code> 选项与 <code>customPreadDiskIOConstructor</code>;<code>a8ebce78f</code> 把 DiskQueueSize 默认值在 lt≥2.1 时改为 100 MiB;qB 磁盘 IO 类型新增 Pread/pwrite 选项(<code>66218b966</code>)——<b>自动化改 <code>disk_io_type</code> 偏好的取值面变了</b>。</li>
+</ul>
+<h4>API 变化(qB 适配提交逐条反推,libtorrent 侧均在 v2.1.0 内)</h4>
+<div class="tblwrap compact">
+<table>
+<tr><th>libtorrent 2.1 变化</th><th>qB 证据</th><th>对工具可见</th></tr>
+<tr><td><code>need_save_resume</code>(bool)→ <code>status.need_save_resume_data</code> 位标志(if_download_progress/if_config_changed/if_state_changed/if_metadata_changed/if_counters_changed)</td><td class="hash">e154c1a81 torrentimpl.cpp</td><td><b>resume 落盘节奏变化</b>:何时写 .fastresume 判定粒度变细</td></tr>
+<tr><td><code>add_torrent_params</code> 新增 <code>comment</code>/<code>created_by</code>/<code>creation_date</code></td><td class="hash">e154c1a81 TorrentImpl 构造</td><td>元数据随 resume 存活;qB WebUI 新增「创建时间」列(<code>82d3147d5</code>)</td></tr>
+<tr><td>重命名不再只改 file_storage:<code>torrent_status::renamed_files</code> + <code>lt::filenames{fs, renamed_files}</code> 视图</td><td class="hash">e154c1a81 actualFilePath(s)</td><td>重命名后路径查询口径变化(qB 修正)</td></tr>
+<tr><td>新建种 API:<code>lt::list_files()</code>/<code>create_file_entry</code> 取代 <code>add_files()</code>/<code>file_storage::add_file()</code></td><td class="hash">0be0a8a1f torrentcreator.cpp</td><td>Torrent Creator 行为路径变化,外部不可见;旧 API 弃用</td></tr>
+<tr><td><code>torrent_info::files()</code> 语义分裂,含 .pad 的内部布局用 <code>layout()</code></td><td class="hash">0be0a8a1f sessionimpl.cpp</td><td>文件计数/布局口径修正</td></tr>
+<tr><td><code>peer_blocked_alert::endpoint</code> → variant <code>ep</code>(TCP/µTP 端点)</td><td class="hash">0be0a8a1f</td><td>「filtered/privileged port」日志的端口取值来源变化</td></tr>
+<tr><td>错误消息改 UTF-8 <code>std::string</code>(不再要求 local 8bit)</td><td class="hash">2604eb279</td><td>非本地化环境错误日志编码修复</td></tr>
+<tr><td>2.1 会话以 paused flag 启动</td><td class="hash">2fd21ea91</td><td>启动序列:先建 paused 会话再按配置 resume;配合新 transfer/pauseSession</td></tr>
+<tr><td>新增 <code>post_file_status()</code>/<code>post_file_priorities()</code>;add_torrent_params 支持 v2 piece layer;resume 数据格式瘦身</td><td class="hash">ChangeLog 2.1.0</td><td>内部性能,外部一般不可见</td></tr>
+</table>
+</div>
+<h4>协议/行为(ChangeLog 2.1.0 段)</h4>
+<ul>
+<li><b>"fix tracker force announce"</b>——对应 qB <code>9a4beccc2</code>「reannounce 真正强制」。</li>
+<li>新增「hybrid 种不校验 v1 hash」选项;<code>load_torrent_limits</code> 新增 <code>max_directory_depth</code>;part file 路径可配置;支持 WebTorrent;<b>移除 BEP 17 web seed 支持(只留 BEP 19)</b>;弃用 <code>remap_files()</code>、<code>torrent_alert::torrent_name()</code>;i2p PEX(<code>9f6534734</code>);OpenSSL 最低 1.1.0;C++17 必需;<code>entry</code> 变标准 variant、string_view 化。</li>
+<li>构建默认不再包含 1.1 时代弃用函数(TORRENT_ABI 收紧)——旧二进制绑定直接编译失败。</li>
+</ul>
+
+<h3>6.2 v2.1.0..HEAD 分类概览(261 条)</h3>
+<p>产品语义相关约 115 条:磁盘 I/O 12、copy_file/文件操作/重命名/symlink 14、校验/哈希/merkle/hash picker 20、tracker/announce/DHT/网络 26、加密/握手 6、peer/传输/队列 14、任务状态/统计/做种语义 6、安全加固/内存安全约 20、API/ABI/绑定 13。测试/CI/基准/fuzzer/文档/构建约 146 条(无产品语义)。settings_pack 新增键仅 2 个(均尾部追加,不破坏 ABI):<code>apply_filter_to_dht</code>(bool,<b>默认 true</b>,<code>abc121b1e</code>)与 <code>max_webtorrent_offers</code>(int,默认 10,<code>ad48c19b3</code>);默认值 diff 为空(已核实)。</p>
+
+<h3>6.3 对做种/校验/announce/限速可见的 26 条行为变化(P3 §4 全录)</h3>
+
+<h4>announce / tracker</h4>
+<ol>
+<li>暂停会话不再把 tracker 卡在「已联系」状态(<code>3333a701f</code>/<code>6ec172252</code>)——qB 新 <code>transfer/pauseSession</code> 后再 resume,announce 立即可用,不会假死。</li>
+<li>tracker 列表含不支持的 URL scheme 不再空转 CPU(<code>c1698d585</code>);tracker source 归属修复(<code>17f01062c</code>);<b>空 tracker tier 不再写坏 resume 数据</b>(<code>6da7b9a5c</code>)——tracker 列表持久化完整性。</li>
+<li>2.1.0 内含 "fix tracker force announce"——配合 qB <code>9a4beccc2</code>,强制 reannounce 真正生效。</li>
+<li>UDP tracker 多 IP 解析中止修复(<code>1cc8632d4</code>/<code>32fae40b1</code>);UPnP 成功后发 external_ip_alert(<code>ce71b5b40</code>)。</li>
+<li>HTTPS tracker/web seed <b>禁用 legacy TLS</b>(<code>f29aabc48</code>)——老 TLS 端点会连不上。</li>
+</ol>
+
+<h4>校验 / 完整性</h4>
+<ol start="6">
+<li>force_recheck 不再积压 async_hash 任务(piece_picker 引入 generation,<code>63c45f16b</code>),校验读合并整 piece(<code>5810dbd19</code>)——<b>recheck 更快、更平滑</b>;自动重校验的脚本节奏变化。</li>
+<li>快速连续改文件优先级不再丢更新(<code>87de7810d</code>)——自动化批量设优先级后状态与预期一致。</li>
+<li>merkle/hash-picker 修复簇(<code>ca4e621c2</code>/<code>a6bd39eb0</code>/<code>d09a0dc75</code>/<code>aa07b2349</code> 等):v2 种哈希拒绝处理、无效证明不污染树——v2 种校验错误恢复更可靠。</li>
+<li>改优先级后 pread 预分配修复(<code>28e4c5700</code>)、rename 覆盖修复(<code>36582475f</code>)、被清洗文件名改回原名修复(<code>ff5b619ee</code>)——文件管理类操作更可预期。</li>
+<li>符号链接:不再跟随(<code>bafd5d5e3</code>,防越界写)、含 symlink 的移动/重命名被支持(<code>c94d5acbe</code>)——含链接的种子目录操作语义变化。</li>
+</ol>
+
+<h4>做种 / 分享限制 / 任务状态语义</h4>
+<ol start="11">
+<li>active/seeding/finished 时间记账重构并修多处错(<code>70404839e</code>)——<b>qB 分享限制(max seeding time / inactive seeding time)的数据源修正</b>,长做种任务计时不再漂移。</li>
+<li>不活跃任务变活跃立即计入 active limit(<code>51e2d70dc</code>/<code>6f5f722a5</code>)——active limit 触发时机变化。</li>
+<li>空闲任务的最后一次状态更新带零速率(<code>8cfbb4615</code>)——<b>sync/maindata / torrents/info 的速度字段会正确归零</b>,轮询速率的自动化不再看到卡住的旧速率。</li>
+<li>resume 落盘判定从 need_save_resume 布尔变为位标志(2.1.0;qB <code>e154c1a81</code>)——写盘时机粒度变化。</li>
+<li><code>num_blocks_written</code> 去重(<code>be61ae8f4</code>)、<code>download_queue_time</code> 毫秒换算修复(<code>94bffc252</code>)——统计口径修正。</li>
+<li>pread 写完成不再被 flush 拖到末尾(<code>fc941dcd7</code>/<code>5e84568c9</code>)——完成事件/进度回调更及时。</li>
+</ol>
+
+<h4>网络 / 连接</h4>
+<ol start="17">
+<li>IP filter 默认也应用于 DHT(<code>abc121b1e</code>,新键 <code>apply_filter_to_dht</code> 默认 true)——qB 的 IP 过滤现在连 DHT 流量一起挡;依赖「DHT 不受 filter」旧行为的场景需显式关掉。</li>
+<li>内部封禁 IP 发布 <code>ip_ban_alert</code>(<code>bc2df3c8c</code>;qB <code>72b27a66e</code> 写日志)——自动化可从日志监听封禁事件。</li>
+<li>无外网路由的点对点接口不再出站(<code>922226ede</code>)、DSCP 修复(<code>21958c9ad</code>)、接口枚举缓存(<code>77e9519b4</code>)——多网卡机器的出站接口选择更合理。</li>
+<li>MSE 握手大幅提速(DH 私钥指数 768bit→160bit <code>40d5f869c</code>、BIGNUM <code>495baf46e</code>、缓存 Montgomery context <code>bdcb0737b</code>、RC4 优化 <code>b3b8769b9</code>)——开协议加密时建连更快。</li>
+<li>web seed:v2 种请求合并跨文件边界修复(<code>4f9cb195a</code>)、重定向修复(<code>97be0f1ec</code>/<code>cc0c458bc</code>)、响应校验加固(<code>9f3ed15e4</code>)。</li>
+</ol>
+
+<h4>磁盘 / 性能</h4>
+<ol start="22">
+<li><code>max_queued_disk_bytes</code> 默认 1 MiB→100 MiB(<code>5abab0509</code>;qB <code>a8ebce78f</code>)——磁盘反压点变化;qB 偏好 DiskQueueSize 默认随之变。</li>
+<li>copy_file 提速/健壮性(<code>3b68ebcd2</code>/<code>d918e4152</code>/<code>64d51c2d3</code>/<code>9d94d9676</code>——复制途中源文件被截断→失败而不是复制残缺数据)。</li>
+<li>加载种子提速(<code>7ac2dbbc3</code> 非 hybrid 种不算另一 info-hash、<code>ff33f914a</code>/<code>07fbf05ad</code> SHA context 复用)。</li>
+</ol>
+
+<h4>暴露面(qB WebAPI,联到 P1/P2)</h4>
+<ol start="25">
+<li>qB 5.3 新增 libtorrent 设置暴露:<code>seeding_outgoing_connections</code>(<b>默认开</b>——做种时允许主动出连,影响连接行为)、<code>max_outstanding_block_requests</code>(默认 2000)、<code>enable_multi_connections_from_same_peer_id</code>(默认关,lt ≥ 2.0.13 门控);磁盘 IO 类型新选项 PreadPwrite;错误消息编码 UTF-8 修复(<code>2604eb279</code>)。</li>
+<li>2.1 会话以 paused flag 启动(qB <code>2fd21ea91</code>)——配合会话暂停/恢复 API,启动期 sync/maindata 的 session_state 观察点。</li>
+</ol>
+
+<h2 id="s07"><span class="no">§07</span>对本项目的影响分析(依赖面 + 82 行矩阵)</h2>
+
+<h3>7.1 依赖面盘点(源码 grep 核对,P4 §1)</h3>
+<ul>
+<li><b>唯一出口</b>:业务代码全部经 <code>src/auto_qb/core/qbapi.py</code>(QbApi Facade)→ <code>qbittorrentapi.Client</code>(库版本钉死 <code>==2026.8.1</code>,pyproject.toml:29 / uv.lock:70)。客户端构造在 <code>qbclient.py:52</code>(本地地址用关 trust_env 的 LocalQbClient)。</li>
+<li><b>无裸 HTTP 调 qB</b>(<code>scripts/qb_capture.py</code> 语料采集为 dev-only);e2e/、tools/、extensions/ 不碰 qB API。</li>
+<li><b>无运行时版本号解析</b>:全仓不读 <code>app_version</code>;版本差异用字段存在性探测——tracker 行含 <code>next_announce</code> 键 ⇒ qB 5.2+ epoch 语义(<code>webui/commands.py:381-401</code>);<code>torrents/add</code> 响应文本/JSON 双形态都认(<code>webui/commands.py:234-260</code>,坑档 <code>memory-bank/pitfalls/backend/qb-api.md</code>)。</li>
+<li><b>启动期字段契约</b>:全量轮校验 REQUIRED_TORRENT_FIELDS(21 必需 + 6 重加,<code>torrents/compat.py:19-113</code>),缺失 fail-fast 抛 QbCompatError;扩展字段缺失静默;<b>qB 新增字段自动落 <code>_raw</code></b> 前向兼容(<code>record.py:144-160,192-196</code>)——5.3 新增字段全部无害。</li>
+<li><b>登录/会话</b>:单 Client = 单 cookie 会话(<code>qbmanager.py:403-417</code>);重连 = 整个 Client 重建再登录。WebUI 线程共用同一 client,不另建会话。API Key 模式(配置 <code>qbittorrent.api_key</code>)时库走 Authorization: Bearer 纯 header(<code>qbclient.py:59-66</code>),库的 auth_log_in 在 api_key 分支<b>不发</b> auth/login(库 auth.py:92-101)——与 5.3「API key 不能访问 auth/*」不冲突。</li>
+</ul>
+
+<h4>端点清单(全部经 qbittorrent-api)</h4>
+<div class="tblwrap compact">
+<table>
+<tr><th>方向</th><th>端点</th><th>本项目调用点(代表)</th></tr>
+<tr><td rowspan="14"><b>写</b></td><td><code>torrents/add</code></td><td><code>core/modules/ops_mod.py:843,1041</code>(跳检重加,<code>is_skip_checking=True</code>)、<code>webui/commands.py:1409,1411</code>(可带 is_skip_checking)</td></tr>
+<tr><td><code>torrents/setShareLimits</code></td><td><code>core/qbapi.py:197</code> ← <code>webui/commands.py:801</code>(WebUI 唯一入口;<b>规则引擎不用</b>)</td></tr>
+<tr><td><code>torrents/pause/resume/stop/start</code></td><td><code>core/qbapi.py:96-124</code></td></tr>
+<tr><td><code>torrents/setUploadLimit/setDownloadLimit</code></td><td><code>core/qbapi.py:126-142</code></td></tr>
+<tr><td><code>torrents/setLocation</code></td><td><code>core/qbapi.py:144</code>(relocate)</td></tr>
+<tr><td><code>torrents/delete</code></td><td><code>core/qbapi.py:158</code>(跳检 keep_record=True 专用语义)</td></tr>
+<tr><td><code>torrents/recheck/reannounce</code></td><td><code>core/qbapi.py:183-187</code></td></tr>
+<tr><td><code>torrents/setSuperSeeding/setForceStart/setAutoManagement</code></td><td><code>core/qbapi.py:189-231</code></td></tr>
+<tr><td><code>torrents/addTags/removeTags/deleteTags/createTags</code></td><td><code>core/qbapi.py:59-81,301</code></td></tr>
+<tr><td><code>torrents/createCategory/editCategory/removeCategories/setCategory</code></td><td><code>core/qbapi.py:83-98,293-299</code>;<code>maintenance_mod.py:270</code>、<code>rules/actions/basic.py:94</code>、<code>webui/commands.py:1316-1323</code>(create/edit 只传 name/save_path)</td></tr>
+<tr><td><code>torrents/rename/renameFile/renameFolder</code></td><td><code>core/qbapi.py:222-291</code> ← <code>webui/commands.py:944,946</code></td></tr>
+<tr><td><code>torrents/topPriority/increase/decrease/bottom</code></td><td><code>core/qbapi.py:235-245</code></td></tr>
+<tr><td><code>transfer/setUploadLimit/setDownloadLimit</code>、<code>transfer/toggleSpeedLimitsMode</code></td><td><code>core/qbapi.py:370-372,410</code>(speed_curve + WebUI 手动覆盖)</td></tr>
+<tr><td><code>app/setPreferences</code>、<code>auth/login</code></td><td><code>core/qbapi.py:402</code>(<b>只写 alt_up_limit/alt_dl_limit 两键</b>)、<code>core/qbmanager.py:407</code></td></tr>
+<tr><td rowspan="9"><b>读</b></td><td><code>sync/maindata</code></td><td><code>torrents/store.py:187</code>(1.5s 同步线,rid 增量;不可用降级 torrents_info)</td></tr>
+<tr><td><code>sync/torrentPeers</code></td><td><code>webui/server/routes/torrent_detail.py:80</code>(抽屉按需轮询)</td></tr>
+<tr><td><code>torrents/info</code></td><td>17 处(qbapi 透传 + <code>_skip_fail:1030</code>、<code>_skip_step_gone:1095</code>、<code>qbmanager.py:962</code> debug 导出等)</td></tr>
+<tr><td><code>torrents/trackers</code></td><td><code>webui/views.py:240</code>、<code>webui/commands.py:389</code>(强制汇报基线)、<code>torrents/record.py:272</code></td></tr>
+<tr><td><code>torrents/files</code></td><td><code>torrents/record.py:292</code>、<code>torrent_detail.py:64</code>、<code>ops_mod.py:525</code></td></tr>
+<tr><td><code>torrents/pieceHashes</code></td><td><code>rules/actions/checking.py:162,169</code>(严格模式同哈希比对)</td></tr>
+<tr><td><code>torrents/export</code></td><td><code>ops_mod.py:1062</code>(跳检第一步)、<code>torrent_detail.py:226</code></td></tr>
+<tr><td><code>transfer/uploadLimit/downloadLimit</code>、<code>transfer/speedLimitsMode</code></td><td><code>core/qbapi.py:358-359,406</code></td></tr>
+<tr><td><code>app/preferences</code></td><td><code>core/qbapi.py:383</code>(读 alt_*)、<code>relocate_mod.py:604</code>(qB 存活探针)</td></tr>
+</table>
+</div>
+<p class="cm">未使用:search/* 全系、rss/* 全系、torrentcreator/*、torrents/fetchMetadata/parseMetadata、torrents/downloadFile、app/rotateAPIKey/deleteAPIKey、log/*。</p>
+
+<h4>对 qB 行为的隐性假设(逐条核对结果)</h4>
+<table class="compact">
+<tr><th>假设</th><th>位置</th><th>5.3 下状态</th></tr>
+<tr><td>状态字符串 missingfiles/checking 小写匹配</td><td><code>relocate_mod.py:619,767</code>、<code>grouping_mod.py</code></td><td>无状态枚举变更 → <span class="lv lv-g">🟢</span></td></tr>
+<tr><td>TorrentState 枚举 is_* 判定</td><td><code>webui/views.py:200-338</code></td><td><span class="lv lv-g">🟢</span></td></tr>
+<tr><td>next_announce/min_announce epoch 前跳=汇报成功</td><td><code>webui/commands.py:418-470</code></td><td>字段保留;reannounce 行为见 B6 → <span class="lv lv-y">🟡</span></td></tr>
+<tr><td>torrents/add 响应 success_count/failure_count JSON</td><td><code>webui/commands.py:234-260</code></td><td>保留;a33c8b5f9 修复误报 → <span class="lv lv-g">🟢</span></td></tr>
+<tr><td>qB 4xx 文案子串匹配(仅队列两条 hint)</td><td><code>webui/commands.py:273-296</code></td><td>匹配不到回落通用前缀,不炸 → <span class="lv lv-g">🟢</span></td></tr>
+<tr><td>限制哨兵 -1/-2、eta=8640000</td><td><code>record.py</code>/<code>compat.py</code></td><td><span class="lv lv-g">🟢</span></td></tr>
+<tr><td>sync 增量「逐键 diff、缺失=未变」</td><td><code>store.py:228-270</code></td><td>5.3 sync 修复只会<b>多发</b>本应早前收到的增量,合并语义兼容 → <span class="lv lv-g">🟢</span></td></tr>
+<tr><td>不读 qB 配置文件(config.ini)</td><td>全仓无 qBittorrent.ini 访问</td><td>WebUI 键改名(<code>285f4cb11</code>)零影响 → <span class="lv lv-g">🟢</span></td></tr>
+</table>
+
+<h3>7.2 影响矩阵 2.A:P2 端点级变更 38 条</h3>
+<div class="tblwrap compact">
+<table>
+<tr><th>#</th><th>上游变更</th><th>本项目使用点</th><th>档</th><th>依据(文件:行)</th><th>升级动作建议</th></tr>
+<tr><td>1</td><td><code>transfer/pauseSession</code> 新增(POST)</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>2</td><td><code>transfer/resumeSession</code> 新增(POST)</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>3</td><td><code>transfer/getSpeedLimits</code> 新增(一次读主+备四值)</td><td>现逐键读(transfer_upload_limit + app/preferences alt_*)</td><td><span class="lv lv-b">🔵</span></td><td><code>qbapi.py:349-406</code></td><td>可选:一次请求替代两处读,减少请求预算</td></tr>
+<tr><td>4</td><td><code>transfer/setSpeedLimits</code> 新增</td><td>未用(继续用 5.0 的 per-direction 端点,仍有效)</td><td><span class="lv lv-b">🔵</span></td><td><code>qbapi.py:362-372</code></td><td>可选</td></tr>
+<tr><td>5</td><td><code>torrents/downloadFile</code> 新增</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>6</td><td><code>rss/cloneRule</code> 新增(POST)</td><td>未用(rss 全系不用)</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>7</td><td><code>rss/exportRules</code> 新增</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>8</td><td><code>rss/importRules</code> 新增(POST-only)</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>9</td><td><code>app/getFreeSpaceAtPathAction</code> 新增</td><td>relocate 现用 server_state.free_space_on_disk + 本机探测</td><td><span class="lv lv-b">🔵</span></td><td><code>relocate_mod.py:1308</code></td><td>可选:按目标路径查空间比「同卷证明」更直接</td></tr>
+<tr><td>10</td><td>⚠<code>torrents/add</code>:skip_checking 移除→seedMode</td><td><b>关键结论:P2 判的「免校验静默失效」对本项目不成立</b>——库 2026.8.1 对 is_skip_checking <b>同时双发</b> skip_checking 与 seedMode(库 torrents.py:423-425),5.2 读旧参、5.3 读新参,两代都生效。三个调用点全走库</td><td><span class="lv lv-y">🟡</span></td><td><code>ops_mod.py:848,1055</code>、<code>webui/commands.py:1382</code>;库 torrents.py:423-425</td><td><b>守约束:qbittorrent-api==2026.8.1 下限不许降</b>(旧库单发 skip_checking 会静默失效);建议加请求体级测试断言双参数都发出</td></tr>
+<tr><td>11</td><td>⚠<code>torrents/setShareLimits</code>:shareLimitsMode 必填,缺失→400</td><td><code>webui/commands.py:801</code> 经 <code>qbapi.py:197</code> 调用,<b>不传</b> share_limits_mode;库默认 None→requests 丢弃该键→qB 5.3 requireParams 报 400。WebUI 分享限制命令整体报废(命令分发层捕获 4xx → error 回执,不崩程序)</td><td><span class="lv lv-r">🔴</span></td><td><code>webui/commands.py:787-813</code>、<code>qbapi.py:197-220</code>;库 torrents.py:1522,1552</td><td><b>升级前修</b>:facade 增加 share_limits_mode 形参,_cmd_set_share_limits 显式传 "Default"(5.2 忽略未知参数,向后兼容);前端可后续暴露三选一。<b>修复与库版本解耦</b>(share_limits_mode 参数 2026.8.1 已有,钉 2026.8.1 也能修,升库 ≠ 修复——§8.4)</td></tr>
+<tr><td>12</td><td><code>torrents/createCategory</code> +5 分享限制参数;downloadPathEnabled 非法值 400</td><td>只传 name(<code>maintenance_mod.py:270</code>、<code>basic.py:94</code>)或 name+save_path(<code>webui/commands.py:1316</code>)</td><td><span class="lv lv-g">🟢</span></td><td>同左</td><td>无</td></tr>
+<tr><td>13</td><td><code>torrents/editCategory</code>:savePath 不再必填、部分更新、幂等化</td><td>传 name+save_path(<code>qbapi.py:293</code>、<code>webui/commands.py:1320</code>)——旧形态向后兼容</td><td><span class="lv lv-g">🟢</span></td><td>同左</td><td>无</td></tr>
+<tr><td>14</td><td>⚠<code>search/downloadTorrent</code> POST-only(GET→405)</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>15</td><td>⚠<code>rss/setFeedRefreshInterval</code> POST-only</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>16</td><td>⚠<code>app/preferences</code> 删 export_dir/export_dir_fin/mail_notification_ssl_enabled</td><td>只读 alt_up_limit/alt_dl_limit(<code>qbapi.py:386-387</code>),.get 读取;其余读点是存活探针不取键</td><td><span class="lv lv-g">🟢</span></td><td><code>qbapi.py:383-388</code>、<code>relocate_mod.py:604</code></td><td>无</td></tr>
+<tr><td>17</td><td><code>app/setPreferences</code> 同步增删键</td><td>只写 alt_* 两键(增量语义)</td><td><span class="lv lv-g">🟢</span></td><td><code>qbapi.py:390-402</code></td><td>无</td></tr>
+<tr><td>18</td><td><code>search/status</code> +pattern/category/plugins</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>19</td><td><code>search/results</code> +engineFullName</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>20</td><td>search job 全局化/可持久化</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>21</td><td>server_state +session_state/request_latency/queued_tracker_announces</td><td>server_state 走合并字典,新键自动可见未消费</td><td><span class="lv lv-b">🔵</span></td><td><code>store.py:211-213</code></td><td>可选:session_state 可作「会话暂停中」观察点</td></tr>
+<tr><td>22</td><td>sync torrent +share_limits_mode</td><td>新键落 _raw 前向兼容自动接收;<b>但跳检重加不回传它</b>(RE_ADD_FIELDS 无此字段)→ 5.3 下跳检过的种子分享限制模式被静默重置为 Default(仅当用户用 MatchAny/MatchAll 时可见)</td><td><span class="lv lv-y">🟡</span></td><td><code>compat.py:45-52</code>、<code>ops_mod.py:1041-1057</code>;<code>record.py:144-160</code></td><td>若升级后启用 MatchAny/MatchAll:RE_ADD_FIELDS + _SNAPSHOT_FIELDS + _skip_add_call 三处补 share_limits_mode</td></tr>
+<tr><td>23</td><td>peer +contribution</td><td>不消费</td><td><span class="lv lv-g">🟢</span></td><td><code>torrent_detail.py:70-82</code></td><td>无</td></tr>
+<tr><td>24</td><td>⚠<code>torrentcreator/status</code> 时间戳文本→epoch</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>25</td><td><code>torrentcreator/addTask</code> +ignoreDotfiles(缺省 true)</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>26</td><td><code>torrents/fetchMetadata</code> 无效源黑名单(重复 415)</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>27</td><td><code>torrents/renameFile/renameFolder</code> 校验收紧(拒路径分隔符)</td><td><code>webui/commands.py:944,946</code>(用户输入直传)</td><td><span class="lv lv-y">🟡</span></td><td>同左</td><td>行为升级:非法名从「静默怪结果」变 4xx 可读回执(qb_reject_text 已兜底);无需改码,前端提示可后续加</td></tr>
+<tr><td>28</td><td><code>torrents/removeTags</code> 内部改名 clearTags</td><td>语义不变</td><td><span class="lv lv-g">🟢</span></td><td><code>qbapi.py:69-76</code></td><td>无</td></tr>
+<tr><td>29</td><td><code>torrents/info</code> 内部重写(等价)</td><td>透传</td><td><span class="lv lv-g">🟢</span></td><td><code>qbapi.py:307</code></td><td>无</td></tr>
+<tr><td>30</td><td>X-API-Key header 认证</td><td>项目已有 api_key 配置,库已实现 Bearer;5.3 行为兼容</td><td><span class="lv lv-g">🟢</span></td><td><code>qbclient.py:59-66</code>;库 auth.py:92-101</td><td>无</td></tr>
+<tr><td>31</td><td>API key 会话不种 cookie(纯 header)</td><td>api_key 模式本就无 cookie 依赖;单实例无并发共享问题</td><td><span class="lv lv-g">🟢</span></td><td>同上</td><td>无</td></tr>
+<tr><td>32</td><td>API key 不能访问 auth/*(403)</td><td>库 api_key 分支不发 auth/login;qbmanager.connect() 的 auth_log_in 落在库分支内</td><td><span class="lv lv-g">🟢</span></td><td><code>qbmanager.py:407</code>;库 auth.py:92</td><td>无</td></tr>
+<tr><td>33</td><td>⚠会话数上限默认 15(LRU 驱逐)</td><td>单实例 1 会话;多实例各 1;dev 脚本最多 4;auto-qb 是最活跃会话,驱逐最不可能命中;真被顶掉时库 403 自动重登录自愈</td><td><span class="lv lv-g">🟢</span></td><td><code>qbmanager.py:403-429</code>;<code>scripts/qb_capture.py:607-611</code></td><td>无(部署注记:同机大量第三方脚本+多实例时可调大该偏好)</td></tr>
+<tr><td>34</td><td>⚠X-Forwarded-For 解析改写(右往左)</td><td>本项目鉴权在<b>自己的 web 服务</b>(uvicorn proxy_headers=False,不信反代头);不依赖 qB 侧的 IP 白名单/BYPASS 子网</td><td><span class="lv lv-g">🟢</span></td><td><code>webui/server/lifecycle.py:184-187</code></td><td>无(注:若用户把 qB 挂反代且依赖 qB「认证子网白名单」,需复核受信代理网段——属部署面)</td></tr>
+<tr><td>35</td><td>X-Forwarded-Host 收紧</td><td>未依赖</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>36</td><td>CSRF Sec-Fetch-Site</td><td>API 客户端(库)不发 Sec-Fetch-* 头→回落 Origin/Referer 比对→非浏览器请求无 Origin → 放行(既有 5.2 行为)</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>37</td><td>会话 cookie SameSite=Lax</td><td>非浏览器客户端无关</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>38</td><td>默认方法白名单加 HEAD</td><td>纯增益</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+</table>
+</div>
+
+<h3>7.3 影响矩阵 2.B:P1 行为语义变化 18 条</h3>
+<div class="tblwrap compact">
+<table>
+<tr><th>#</th><th>上游变更</th><th>本项目使用点</th><th>档</th><th>依据</th><th>升级动作建议</th></tr>
+<tr><td>B1</td><td>torrents/add 参数替换</td><td>同 A10(库双发缓解)</td><td><span class="lv lv-y">🟡</span></td><td>同 A10</td><td>同 A10</td></tr>
+<tr><td>B2</td><td>POST-only ×2</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>B3</td><td>认证面(X-API-Key/会话上限/XFF)</td><td>同 A30-A34</td><td><span class="lv lv-g">🟢</span></td><td>同 A30-34</td><td>无</td></tr>
+<tr><td>B4</td><td>分享限制体系重构(MatchAny/MatchAll、分类级限制、setShareLimits 必带新参)</td><td>同 A11(🔴 同源)+ A22(重加不回传新字段)</td><td><span class="lv lv-r">🔴</span></td><td>同 A11/A22</td><td>同 A11;分类级限制是潜在新功能面</td></tr>
+<tr><td>B5</td><td>会话级暂停/恢复 +「启动即暂停」偏好</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>B6</td><td>torrents/reannounce 真正强制(配合 lt 2.1 fix force announce)</td><td>强制汇报五分支判定(<code>webui/commands.py:418-470</code>)</td><td><span class="lv lv-y">🟡</span></td><td>同左</td><td>行为改善:以前「没真发→落未确认」,现在真发→更多 confirmed;升级后走查一轮强制汇报回执口径即可</td></tr>
+<tr><td>B7</td><td>RSS 源 scheme 白名单/指数退避</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>B8</td><td>重复添加防护(处理中种子源被跳过)</td><td>WebUI/HR 并发投递同一 magnet 时第二份被静默忽略;_add_outcome 读 failure_count 判「已存在」的语义可能漂移(被跳过算成功还是失败依 qB 实现)</td><td><span class="lv lv-y">🟡</span></td><td><code>webui/commands.py:234-260,1409-1411</code></td><td>升级后用重复 magnet 实测一次添加回执;若计数口径变了,补 _add_outcome 分支</td></tr>
+<tr><td>B9</td><td>torrents/add tracker 合并不再误报 failed</td><td>_add_outcome 计数更准</td><td><span class="lv lv-g">🟢</span></td><td>同上</td><td>无</td></tr>
+<tr><td>B10</td><td>新装默认:Resolve peer countries 关</td><td>不消费 peer country</td><td><span class="lv lv-g">🟢</span></td><td><code>torrent_detail.py:70-82</code></td><td>无</td></tr>
+<tr><td>B11</td><td>会话速度=各任务 payload 之和(<code>41519342c</code>)</td><td>server_state.dl_info_speed/up_info_speed 是流量采样 z 判据与限速观测的输入;口径进一步统一为 payload(坑档已记录 5.2 速率即 payload 口径、alltime 含握手字节)</td><td><span class="lv lv-y">🟡</span></td><td><code>traffic_sample_mod.py:201</code>、<code>traffic_limits.py:160-161</code>;<code>memory-bank/pitfalls/backend/qb-api.md</code></td><td>升级后核对一轮流量采样/限速曲线的速率读数口径;预期变化很小</td></tr>
+<tr><td>B12</td><td>torrentcreator 时间戳 epoch 化</td><td>未用</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>B13</td><td>搜索插件 Python≥3.13</td><td>未用搜索</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>B14</td><td>libtorrent 2.1 兼容层(错误消息 UTF-8 等)</td><td>qb_reject_text 子串匹配不到就回落通用前缀</td><td><span class="lv lv-g">🟢</span></td><td><code>webui/commands.py:273-296</code></td><td>无</td></tr>
+<tr><td>B15</td><td>DHT bootstrap 更新/magnet so/magnet tracker 过滤/IP 段封禁/infohash 过滤</td><td>项目 torrents_addTrackers 走独立端点,不经 magnet;其余未依赖</td><td><span class="lv lv-g">🟢</span></td><td><code>qbapi.py:255-261</code></td><td>无</td></tr>
+<tr><td>B16</td><td>.torrent 导出目录移除(→ torrent_files_backup_*)</td><td>跳检/详情导出走 torrents/export <b>端点</b>(HEAD 仍存在,<code>torrentscontroller.h:115 exportAction</code>),备份自管在 state.skip_check_backup</td><td><span class="lv lv-g">🟢</span></td><td><code>ops_mod.py:1062</code>、<code>torrent_detail.py:226</code></td><td>无</td></tr>
+<tr><td>B17</td><td>Lua 插件引擎落地</td><td>未用</td><td><span class="lv lv-b">🔵</span></td><td>—</td><td>远期:事件回调可替代部分轮询(含 tracker 封禁、完成事件)</td></tr>
+<tr><td>B18</td><td>WebUI 前端重构/虚拟列表</td><td>项目不做 qB 浏览器自动化</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+</table>
+</div>
+
+<h3>7.4 影响矩阵 2.C:libtorrent RC_2_1 26 条</h3>
+<div class="tblwrap compact">
+<table>
+<tr><th>#</th><th>上游变更</th><th>本项目使用点</th><th>档</th><th>依据</th><th>升级动作建议</th></tr>
+<tr><td>C1</td><td>暂停会话不卡 tracker 状态</td><td>未用会话暂停</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C2</td><td>空 tracker tier 不写坏 resume/tracker source 修复</td><td>依赖 tracker 列表完整(trackers 端点读)</td><td><span class="lv lv-g">🟢</span></td><td><code>views.py:240</code> 等</td><td>无</td></tr>
+<tr><td>C3</td><td>force announce 真生效</td><td>同 B6</td><td><span class="lv lv-y">🟡</span></td><td>同 B6</td><td>同 B6</td></tr>
+<tr><td>C4</td><td>UDP tracker/UPnP 修复</td><td>无直接依赖</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C5</td><td>HTTPS tracker/web seed 禁用 legacy TLS</td><td>环境面:老 TLS 站点 tracker/web seed 会连不上(项目服务的 PT 站点一般没问题)</td><td><span class="lv lv-y">🟡</span></td><td>—</td><td>部署注记:升级后若某站连不上,先查 TLS 版本</td></tr>
+<tr><td>C6</td><td>force_recheck 不积压 + 校验读合并(recheck 提速)</td><td>checking/recheck 动作轮询节奏——更快完成只是少轮询,判定逻辑兼容</td><td><span class="lv lv-g">🟢</span></td><td><code>rules/actions/checking.py</code></td><td>无</td></tr>
+<tr><td>C7</td><td>快速连续改文件优先级不丢更新</td><td>WebUI 文件优先级命令受益</td><td><span class="lv lv-g">🟢</span></td><td><code>webui/commands.py:926-935</code></td><td>无</td></tr>
+<tr><td>C8</td><td>merkle/hash-picker 修复簇</td><td>v2 种校验更可靠</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C9</td><td>改优先级预分配/rename 覆盖/清洗文件名修复</td><td>文件管理操作更可预期</td><td><span class="lv lv-g">🟢</span></td><td><code>qbapi.py:263-291</code></td><td>无</td></tr>
+<tr><td>C10</td><td>symlink:不跟随 + 支持含链接的移动/重命名</td><td>项目 relocate 在 qB 外操作真实文件;种子内容含 symlink 的场景极罕见</td><td><span class="lv lv-g">🟢</span></td><td><code>relocate_mod.py</code></td><td>无</td></tr>
+<tr><td>C11</td><td>active/seeding/finished 时间记账重构修正</td><td>seeding_time 是 HR 达标判定(<code>record.py:476-481</code>)与规则条件、分享限制的输入——长做种任务计时不再漂移,达标/触发时点会与旧版本<b>有差异</b>(更准)</td><td><span class="lv lv-y">🟡</span></td><td><code>record.py:479</code>、<code>compat.py:33</code></td><td>升级后预期 HR 放行时点略变(修正方向);无需改码,走查确认</td></tr>
+<tr><td>C12</td><td>不活跃变活跃立即计入 active limit</td><td>不管理 active limit</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C13</td><td>空闲任务最后一次状态更新带零速率</td><td>速率正确归零后才从增量消失——_RATE_KEYS 新鲜度追踪的「无读数」告警更少</td><td><span class="lv lv-g">🟢</span></td><td><code>store.py:228-270</code></td><td>无</td></tr>
+<tr><td>C14</td><td>resume 落盘判定布尔→位标志</td><td>内部;监控 resume 的自动化才感知</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C15</td><td>num_blocks_written/download_queue_time 统计口径修正</td><td>未消费</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C16</td><td>pread 写完成不被 flush 拖延</td><td>完成事件更及时</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C17</td><td>IP filter 默认应用于 DHT(apply_filter_to_dht 默认 true)</td><td>项目不配 ipfilter;用户自配时行为收紧</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>部署注记</td></tr>
+<tr><td>C18</td><td>内部封禁发布 ip_ban_alert(qB 写日志)</td><td>未监听</td><td><span class="lv lv-b">🔵</span></td><td>—</td><td>可选:日志监听封禁事件进通知</td></tr>
+<tr><td>C19-C21</td><td>出站接口选择/DSCP/接口枚举缓存;MSE 握手提速;web seed 修复</td><td>无直接依赖</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C22</td><td>max_queued_disk_bytes 默认 1MiB→100MiB(qB DiskQueueSize 默认随之)</td><td>项目不读写该偏好</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无(高负载写队列行为不同的环境注记)</td></tr>
+<tr><td>C23-C24</td><td>copy_file 提速/加载种子提速</td><td>无直接依赖</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+<tr><td>C25</td><td>qB 新暴露 lt 设置(seeding_outgoing_connections 等)</td><td>未读写</td><td><span class="lv lv-b">🔵</span></td><td>—</td><td>可选:按需进配置编辑器</td></tr>
+<tr><td>C26</td><td>2.1 会话 paused flag 启动</td><td>内部启动序列;配合 C1/A21</td><td><span class="lv lv-g">🟢</span></td><td>—</td><td>无</td></tr>
+</table>
+</div>
+
+<h3>7.5 🔴 唯一硬破坏逐条展开</h3>
+<div class="aside">
+<p><span class="lv lv-r">🔴 A11 / B4</span> <b>WebUI「分享限制」命令在 qB 5.3 下整体报废</b>。</p>
+<ul>
+<li><b>链路</b>:<code>webui/commands.py:787-813</code> 的 <code>_cmd_set_share_limits</code> → <code>core/qbapi.py:197</code> 的 <code>torrents_set_share_limits</code> → 库 <code>torrents_setShareLimits</code>(库 torrents.py:1522,1552:<b>None 参数不发</b>)→ qB 5.3 <code>requireParams</code> 缺 <code>shareLimitsMode</code> → <b>HTTP 400</b>。</li>
+<li><b>影响面收敛</b>:仅 WebUI 分享限制单条命令(规则引擎不调该端点);失败形态是命令分发层捕获 4xx → error 回执,<b>不崩程序</b>。</li>
+<li><b>修法</b>:facade 增加 <code>share_limits_mode</code> 形参(缺省 <code>"Default"</code>),调用点显式传;5.2 忽略未知参数,<b>可先合入再升级</b>。同步补测试断言请求体含 <code>shareLimitsMode</code>。前端三选一(Default/MatchAny/MatchAll)可后续暴露。</li>
+</ul>
+</div>
+
+<h3>7.6 🟡 八条行为变化逐条展开</h3>
+<table class="compact">
+<tr><th>#</th><th>变化</th><th>使用点(文件:行)</th><th>说明与动作</th></tr>
+<tr><td><span class="lv lv-y">A10/B1</span></td><td>skip_checking → seedMode(条件性)</td><td><code>ops_mod.py:848,1055</code>、<code>webui/commands.py:1382</code></td><td>跳检免校验的 5.3 兼容完全依赖库 2026.8.1 双发(库 torrents.py:423-425);库版本回退才失效。守 <code>==2026.8.1</code> 下限 + 补请求体级测试 + 真机走查跳检全流程(导出→删除→重加→zSkipChecked 打标)</td></tr>
+<tr><td><span class="lv lv-y">A22</span></td><td>跳检重加不回传 share_limits_mode</td><td><code>compat.py:45-52</code>(RE_ADD_FIELDS)、<code>ops_mod.py:1041-1057</code>(_skip_add_call)</td><td>5.3 下跳检过的种子分享限制模式被静默重置为 Default(仅 MatchAny/MatchAll 用户可见)。启用新模式前补 RE_ADD_FIELDS + _SNAPSHOT_FIELDS + _skip_add_call 三处;不用则记为已知限制</td></tr>
+<tr><td><span class="lv lv-y">A27</span></td><td>renameFile/renameFolder 校验收紧</td><td><code>webui/commands.py:944,946</code></td><td>非法名(含路径分隔符)从「静默怪结果」变 4xx 可读回执;qb_reject_text 已兜底,无需改码</td></tr>
+<tr><td><span class="lv lv-y">B6/C3</span></td><td>reannounce 真正强制</td><td><code>webui/commands.py:418-470</code>(五分支判定)</td><td>confirmed 比例会上升(以前部分真发被节流吞掉);升级后走查一轮强制汇报回执,无需改码</td></tr>
+<tr><td><span class="lv lv-y">B8</span></td><td>重复添加防护</td><td><code>webui/commands.py:234-260,1409-1411</code></td><td>并发投递同一 magnet 第二份被静默忽略;_add_outcome 的计数口径可能漂移。升级后用重复 magnet/.torrent 各实测一次,核对 warn/error 回执</td></tr>
+<tr><td><span class="lv lv-y">B11</span></td><td>会话速率 payload 口径统一</td><td><code>traffic_sample_mod.py:201</code>、<code>traffic_limits.py:160-161</code></td><td>流量采样/限速曲线的速率读数口径核对;预期变化很小(坑档已记 5.2 即 payload 口径)</td></tr>
+<tr><td><span class="lv lv-y">C5</span></td><td>legacy TLS 禁用</td><td>环境面(非代码)</td><td>老 TLS 站点 tracker/web seed 连不上;PT 站点一般没问题。升级后若某站连不上先查 TLS 版本</td></tr>
+<tr><td><span class="lv lv-y">C11</span></td><td>seeding/active 时间记账修正</td><td><code>record.py:479</code>(HR 达标)、<code>compat.py:33</code></td><td>HR 放行时点与旧版本有差异(修正方向,更准);无需改码,走查确认;与旧基线数字不可直接对比</td></tr>
+</table>
+
+<h2 id="s08"><span class="no">§08</span>qbittorrent-api 支持度与升级路径(P5b 专项)</h2>
+
+<p>被分析仓库:<code>D:\Projects\Else\qbittorrent-api</code>(HEAD=<code>be35c50</code>,最新 tag <code>v2026.10.1</code>,<code>v2026.8.1..HEAD</code> 共 36 提交);本项目钉死 <code>qbittorrent-api==2026.8.1</code>(pyproject.toml:29)。关键行为均经实测验证:用 requests 直接 prepare 请求体验证 None 丢弃语义(urlencoded 与 multipart 两种形态)。</p>
+
+<h3>8.1 支持矩阵与门控机制:同库可同时服务 5.2.x 与 5.3</h3>
+<ul>
+<li><b>官方声明</b>:v2026.10.1 声明支持 qB v5.3.0 / WebAPI 2.16.2(README.md:12);<code>_version_support.py:79-90</code> 映射表 <code>v5.2.4→2.15.1</code>、<code>v5.3.0beta1/rc1/5.3.0→2.16.2</code>,<code>MOST_RECENT_SUPPORTED</code> = v5.3.0 / 2.16.2。CI 矩阵 <code>QBT_VER: [master, v5_3_x, v5_2_x, v5_1_x, v5_0_x, v4_6_x]</code>——<b>5.3.x 与 master(=5.4 dev)每轮 CI 全量测试</b>,5.4 若破坏端点会先在库的 CI 爆炸而不是用户侧。</li>
+<li><b>逐端点按探测版本门控</b>(非无脑发参):每个端点声明 <code>version_introduced</code>/<code>version_removed</code>,每次请求前 <code>_is_endpoint_supported_for_version</code>(request.py:735-770)用<b>实时探测</b>的 <code>app.web_api_version</code> 比较(每次 gating 都打一发 <code>GET /app/webapiVersion</code>,无缓存——门控端点每次调用 = 2 个 HTTP round trip)。版本不够 → 默认<b>静默跳过请求返回 None</b>(debug 日志);对<b>过新</b>的 qB(如 5.4 把 WebAPI 升到 2.17.x)所有 <code>version_introduced</code> 判定只会更宽松,不会误拦——库对「未知新版本」天然前向兼容。</li>
+<li><b>映射表成员判定默认不强制</b>:支持判定是精确字符串匹配(<code>Version.is_app_version_supported</code>),只在 <code>RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS=True</code> 时于登录后校验;auto-qb 未设该旗标(qbclient.py:52-67 只传 host/username/password/api_key/REQUESTS_ARGS)→ 未列入映射表的新版本照常工作。<b>同一库可同时服务 5.2.x 与 5.3</b>。</li>
+</ul>
+
+<h3>8.2 升级无痛性:v2026.8.1 → v2026.10.1 库自身 diff 结论</h3>
+<h4>36 提交构成(v2026.8.1..HEAD,HEAD=be35c50=v2026.10.1+8)</h4>
+<table>
+<tr><th>类别</th><th>数量</th><th>说明</th></tr>
+<tr><td><b>qB 支持特性(核心)</b></td><td class="num"><strong>4</strong></td><td><code>09de7cf</code> WebAPI 2.16.0 端点(#659,<b>torrents_add +share_limits_mode</b> 等);<code>9972fbb</code> WebAPI 2.16.2 端点(#678);<code>59b64b0</code> 支持 v5.2.4+v5.3.0rc1(#686,纯映射表);<code>8f6f243</code> 支持 v5.3.0(#689,发布收口)</td></tr>
+<tr><td>CI(含 qB 5.3 矩阵)</td><td class="num"><strong>4</strong></td><td><code>1462f98</code> CI 增加 qB v5_3_x dev 构建测试(#690)等</td></tr>
+<tr><td>测试/文档重构</td><td class="num"><strong>11</strong></td><td>全在 tests/(端点目录化测试、eventually() 迁移等)</td></tr>
+<tr><td>依赖/工具链 bump</td><td class="num"><strong>16</strong></td><td>pre-commit/ruff/mypy/uv/certifi/anyio/actions 等</td></tr>
+<tr><td>版本号</td><td class="num"><strong>1</strong></td><td>bump to v2026.10.0</td></tr>
+</table>
+<h4>src 全量 diff(<code>git diff v2026.8.1..v2026.10.1 -- src/</code>)与调用面判定</h4>
+<ul>
+<li><b>零删除 / 零改名 / 零签名变化</b>(diff 无任何 <code>-def</code>/<code>-xxx =</code> 行),全部为增量:新增可选参数 + 新方法 + 版本映射表 +4 行;<code>torrents/setShareLimits</code> 签名与 2026.8.1 完全一致;跳检 <code>skip_checking</code>/<code>seedMode</code> 双发逻辑原样保留(torrents.py:426-428);Python 要求仍 <code>&gt;=3.10</code>(本项目 <code>&gt;=3.12</code> 无冲突);运行时依赖无变化。</li>
+<li>对照 §07.1 端点清单<b>逐组核对全绿</b>:本项目用到的每个方法两版行为一致——<b>对本项目调用面 100% 兼容,零代码改动需求,零行为变化</b>。</li>
+<li>无 seedMode 逻辑改动:<code>share_limits_mode</code> 是更早的 #614 进来的(首个含它的 tag 为 v2026.7.0),本轮 36 提交一个都没碰它。</li>
+</ul>
+
+<h3>8.3 三连问结论</h3>
+<table>
+<tr><th>问题</th><th>结论</th></tr>
+<tr><td>库是否已支持 qB 5.3?</td><td><span class="lv lv-g">已支持</span> v2026.10.1 声明支持 v5.3.0 / WebAPI 2.16.2,CI 含 5.3.x 与 master(§8.1)。</td></tr>
+<tr><td>升级 2026.8.1→2026.10.1 无痛吗?</td><td><span class="lv lv-g">无痛</span> 纯增量、调用面 100% 兼容(§8.2),纯 pyproject/uv.lock 变更。</td></tr>
+<tr><td>setShareLimits(🔴)靠升级库修复吗?</td><td><span class="lv lv-r">不能</span> <b>关键事实</b>:<code>share_limits_mode</code> 参数在 2026.8.1 就已存在,两版行为完全一致——库把 None 值键交给 requests,<b>requests 对 urlencoded 与 multipart 都会丢弃 None 值键</b>(实测验证)→ 不传 <code>share_limits_mode</code> = 请求体无 <code>shareLimitsMode</code> = qB 5.3 照样 400。<b>升库 ≠ 修复</b>;修复只需 facade 显式传 <code>share_limits_mode="Default"</code>,钉死 2026.8.1 也能修——<b>库升级与本修复完全解耦</b>。</td></tr>
+</table>
+
+<h3>8.4 三情形对照表(行为已到代码级 + 实测级)</h3>
+<div class="tblwrap">
+<table>
+<tr><th>情形</th><th>qB 5.2.x(当前生产,WebAPI 2.15.1)</th><th>qB 5.3(WebAPI 2.16.2)</th></tr>
+<tr><td><b>① 只升库(v2026.10.1),代码不动</b></td><td><span class="lv lv-g">正常</span> facade 不传 <code>share_limits_mode</code> → 键不发 → 5.2 无此必填,行为与 2026.8.1 完全一致</td><td><span class="lv lv-r">依旧 400</span> 平值 None → requests 丢弃 → <code>shareLimitsMode</code> 缺失 → <code>requireParams</code> 拒绝,WebUI 分享限制命令仍报废。<b>升级库 ≠ 修复</b></td></tr>
+<tr><td><b>② 升库 + facade 显式传 <code>share_limits_mode="Default"</code></b></td><td><span class="lv lv-g">正常</span> 请求体多一个 <code>shareLimitsMode=Default</code>,5.2 忽略未知参数(§05.2 P2 A11 结论),无副作用</td><td><span class="lv lv-g">修复</span> 满足必填;语义 = 旧行为(用 qB 全局默认模式),规则引擎/WebUI 命令恢复</td></tr>
+<tr><td><b>③ 不升库(钉死 2026.8.1),只改 facade</b></td><td><span class="lv lv-g">正常</span> 同 ②</td><td><span class="lv lv-g">同样修复</span> <code>share_limits_mode</code> 参数 2026.8.1 已有,传 <code>"Default"</code> → 平值非 None → 正常发出。<b>库升级与本修复完全解耦</b></td></tr>
+</table>
+</div>
+<p class="cm">升库的价值不在修 🔴,而在:①官方支持声明覆盖 5.3(映射表/门控语义对齐);②🔵 机会端点可用(<code>transfer/getSpeedLimits</code>、<code>app/getFreeSpaceAtPathAction</code>、<code>transfer/pauseSession</code> 等,且带版本门控——在 5.2 上调用会静默返回 None,若采纳需注意这个静默语义);③跟随 CI 对 master(5.4)的持续验证。</p>
+
+<h3>8.5 推荐升级路径(三步,每步独立可回滚)</h3>
+<ol>
+<li><b>facade 修复先行(钉 2026.8.1 不动)</b>:<code>core/qbapi.py:197</code> 的 <code>torrents_set_share_limits</code> 增加 <code>share_limits_mode: str = "Default"</code> 形参 + <code>_cmd_set_share_limits</code> 透传 + 一条请求体级测试断言 <code>shareLimitsMode</code> 在请求体中(可顺手断言 skip_checking/seedMode 双发防库回归,该测试两版库都过)。合入后 2026.8.1 与 2026.10.1 都能通过,<b>不构成升级前置阻塞</b>。</li>
+<li><b>升库 pin 到 2026.10.1</b>:纯 pyproject/uv.lock 变更(HEAD 比 tag 多的 8 提交全是依赖/CI,无需追 HEAD);对 5.2 生产零行为差异,不需要专门真机回归。</li>
+<li><b>再升 qB 5.3</b>:真机走查范围小——①WebUI 分享限制命令回执(🔴 修复生效确认);②跳检全流程一次(导出→删除→重加→<code>zSkipChecked</code> 打标,验证 seedMode 双发在真机 5.3 生效);③强制汇报/重复 magnet 添加各实测一次(P4 B6/B8 口径走查,非库相关)。</li>
+</ol>
+<h4>两条注意事项</h4>
+<ul>
+<li><b>不要开启</b> <code>RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS</code>:开启后升 5.4.0alpha1 这类未入映射表的版本会被登录校验挡住;默认 False 才是库对「未知新版本」的前向兼容姿态。</li>
+<li><b>facade docstring 待顺手修</b>:<code>torrents_set_share_limits</code> 的 docstring 写「直传 None 会以字面量 "None" 发送给 qB」,与实测不符——requests 对 None 值键一律丢弃,实际风险方向相反(None 是「不发」而不是「发错」)。该调用点的 caller 已把 None 归一成 -2/-1,无实际影响,改 facade 时顺手更正描述即可。</li>
+</ul>
+
+<h2 id="s09"><span class="no">§09</span>建议动作清单(按优先级,P4 §4 誊写)</h2>
+<ol>
+<li><b>🔴 唯一硬破坏——WebUI 分享限制命令</b>:facade 增加 <code>share_limits_mode</code> 形参(缺省 <code>"Default"</code>),<code>_cmd_set_share_limits</code> 显式传;5.2 忽略未知参数,可先合入再升级。<b>修复与库版本解耦</b>(钉死 2026.8.1 也能修,见 §8.4)。同步补测试断言请求体含 <code>shareLimitsMode</code>;改 facade 时顺手更正其 docstring 对 None 语义的错误描述(§8.5 注意事项)。</li>
+<li><b>🟡 库版本口径(P5b 修订)</b>:①下限 <code>qbittorrent-api==2026.8.1</code> 不许降——跳检(<code>is_skip_checking</code>)的 5.3 兼容完全依赖该库对 <code>skip_checking</code> 与 <code>seedMode</code> 的双发行为;②<b>推荐升级到 2026.10.1</b>——纯增量、对本项目调用面 100% 兼容(§8.2),纯 pyproject/uv.lock 变更,但升库不解决 🔴(§8.3);③补一条请求体级测试(断言 <code>skip_checking</code> 与 <code>seedMode</code> 同发),防未来库回归;④升级 qB 后真机走查一次跳检全流程(导出→删除→重加→<code>zSkipChecked</code> 打标)。三步时序:facade 修复 → 升库 → 升 qB,每步独立可回滚(§8.5)。</li>
+<li><b>🟡 跳检重加字段缺口</b>:<code>RE_ADD_FIELDS</code>(compat.py:45-52)与 <code>_skip_add_call</code>(ops_mod.py:1041-1057)不含 <code>share_limits_mode</code>——5.3 下跳检会把 MatchAny/MatchAll 种子的限制模式重置为 Default。若启用新分享限制模式,升级前把该字段补进 RE_ADD_FIELDS + _SNAPSHOT_FIELDS + _skip_add_call 三处;不用则记为已知限制。</li>
+<li><b>🟡 强制汇报确认口径</b>(B6/C3):reannounce 真正强制后,五分支判定的 confirmed 比例会上升。升级后走查一轮强制汇报回执,无需改码。</li>
+<li><b>🟡 添加回执计数</b>(B8):重复添加防护 + tracker 合并误报修复会改变 _add_outcome 的输入分布。升级后用重复 magnet/.torrent 各实测一次,核对 warn/error 回执文案。</li>
+<li><b>🟡 数值口径漂移</b>(B11/C11):会话速率 payload 口径统一 + seeding/active 时间记账修正,影响流量采样、限速曲线、HR 达标时点——方向都是更准,但与旧基线数字不可直接对比。升级后新建测试基线切片重测(按 AGENTS.md 基线口径)。</li>
+<li><b>部署注记</b>(不改码):C5 legacy TLS(老 TLS 站点 tracker 连不上)、C17 IP filter 连 DHT 一起挡(用户自配 ipfilter 时)、A33 会话上限(多实例 + 大量第三方脚本时调大 <code>web_ui_sessions_count_limit</code>)、A34(qB 挂反代且用 qB 侧 IP 白名单时复核受信网段)。</li>
+<li><b>🔵 可选机会</b>(不紧急):<code>transfer/getSpeedLimits</code> 合并限速读(替代 transfer_uploadLimit + app/preferences alt_* 两处)、<code>app/getFreeSpaceAtPathAction</code> 改进 relocate 空间预检、<code>session_state</code>/<code>ip_ban_alert</code> 观测点、Lua 插件引擎作事件回调扩展点(替代部分轮询)。</li>
+</ol>
+
+<h2 id="s10"><span class="no">§10</span>附录:输入笔记、方法说明与口径差异</h2>
+
+<h3>10.1 输入笔记(P1-P5b,中间产物,markdown)</h3>
+<table>
+<tr><th>工位</th><th>路径</th><th>内容</th></tr>
+<tr><td>P1</td><td><code>D:\Projects\Else\qb-update-analysis-notes\p1-qb-commits.md</code></td><td>qB <code>release-5.2.3..HEAD</code> 382 提交 12 类分类清单 + 18 条自动化可感知汇总</td></tr>
+<tr><td>P2</td><td><code>D:\Projects\Else\qb-update-analysis-notes\p2-webui-api.md</code></td><td><code>src/webui/api/</code> 代码级 diff:38 条端点级变更 / 10 条破坏性代码级细节 / changelog 未记载事实</td></tr>
+<tr><td>P3</td><td><code>D:\Projects\Else\qb-update-analysis-notes\p3-libtorrent.md</code></td><td>libtorrent RC_2_1 基线判定 + v2.1.0..HEAD 261 提交分类 + 26 条可见行为变化</td></tr>
+<tr><td>P4</td><td><code>D:\Projects\Else\qb-update-analysis-notes\p4-impact.md</code></td><td>本项目 82 行影响矩阵(A38+B18+C26)+ 优先级动作清单</td></tr>
+<tr><td>P5b</td><td><code>D:\Projects\Else\qb-update-analysis-notes\p5b-qbittorrentapi-support.md</code></td><td>qbittorrent-api 对新版 qB 的支持分析:支持矩阵与门控机制 / v2026.8.1→v2026.10.1 库 diff / setShareLimits 修复与库版本解耦(36 提交实测分类 + requests None 丢弃实测)→ 本报告 §08</td></tr>
+</table>
+
+<h3>10.2 分析方法说明</h3>
+<ul>
+<li>上游变更全部从源码取证(<code>git log</code> / <code>git diff</code> / <code>git show</code> 逐提交核对),官方 changelog 只作交叉印证不作事实源;P2 对 <code>WebAPI_Changelog.md</code> 逐条对账确认「无虚报、但有未记载事实」。</li>
+<li>影响判断全部从被分析仓库源码 grep 核对(P4),非文档推断;库行为(<code>qbittorrent-api==2026.8.1</code> 的双发/不发逻辑)以 .venv 内库源码为准;P5b 对库升级无痛性与 None 丢弃语义另行实测(urlencoded 与 multipart 两种形态直接 prepare 请求体验证),被分析库仓库 <code>D:\Projects\Else\qbittorrent-api</code> 只读。</li>
+<li>影响档定义:🔴破坏(升级后直接失效/报错)/ 🟡行为变化(结果改变但不报错)/ 🟢无影响 / 🔵新机会。</li>
+<li>本报告为 P5 汇总(26-10-31 改版并入 P5b 库支持度专项),KB 建件走 <code>commands run kb.new report</code>、改版走 <code>commands run kb.bump</code>(时间戳/命名/头部/索引全派生);上游与被分析仓库全程只读。</li>
+</ul>
+
+<h3>10.3 P1-P5b 笔记之间的口径差异与取舍</h3>
+<ol>
+<li><b>P2 判「skip_checking 静默失效」vs P4 实测「不成立」</b>:P2 的判断对<b>裸 HTTP 调用方</b>成立;对本项目不成立——<code>qbittorrent-api 2026.8.1</code> 对 <code>is_skip_checking</code> 同时发 <code>skip_checking</code> 与 <code>seedMode</code>,5.3 读 seedMode,跳检继续生效,风险转移为「库版本回退才失效」。<b>报告按 P4 写</b>(以本项目实况为准),P2 判词在 §05.2.1 保留为上游通用结论。</li>
+<li><b>P2 判「setShareLimits 旧调用方直接失败」vs P4 确认「成立且唯一」</b>:两边一致,P4 补充了影响面收敛(WebUI 单命令、4xx 回执不崩程序)。报告按 P4 的影响面写。</li>
+<li><b>P3 计数口径</b>:任务输入写 280 条,实测 <code>v2.1.0..HEAD</code> 非合并提交 261 条——按 P3 实测 261 写(统计口径差异,不影响内容)。</li>
+<li><b>P1 归纳 vs P2 代码级</b>:P1 §12 自认「参数级细节以代码为准」,P2 diff 新发现 9 项 P1 未抓到的条目(静默回退值、ignoreDotfiles 默认 true、无效源黑名单、HEAD 放行、key 共享会话、会话上限默认 15 等)——端点级事实一律以 P2 为准。</li>
+<li><b>P5b vs P4「钉库」口径</b>:无冲突,P5b 强化了 P4——下限 2026.8.1 不许降(跳检双发依赖)维持不变;新增<b>推荐升级到 2026.10.1</b>(§8.2 纯增量、调用面 100% 兼容),并澄清「升库 ≠ 修 🔴」(share_limits_mode 参数 2026.8.1 已有,修复与库版本解耦,§8.3/§8.4)。§09 动作清单第 2 条已按此合流改写;P4 对 facade docstring 的 None 语义描述被 P5b 实测证伪,降级为「无实际影响、待顺手修」(§8.5)。</li>
+</ol>
+
+<h2 id="s11"><span class="no">§11</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R1 · 26-10-31-0650</span> 并入 P5b 专项(qbittorrent-api 支持度与升级路径): 新增 §08(支持矩阵与门控/36 提交 diff 结论/三连问/三情形对照/推荐三步路径+注意事项); §09 动作清单库版本条目按新口径改写(下限 2026.8.1 不许降+推荐升 2026.10.1, 升库!=修setShareLimits); §1.4/§7.2 A11 同步标注修复与库版本解耦; 附录补 P5b 笔记与口径差异条目, 原 §08/§09 顺延为 §09/§10</li>
+</ul>
+
+</div>
+</body>
+</html>
