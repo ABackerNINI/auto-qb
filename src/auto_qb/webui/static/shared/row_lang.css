@@ -18,19 +18,19 @@
  *
  * tint 令牌带回退约定: 所有半透明色一律 `var(--rl-*, 回退值)` 形式引用(禁裸 rgba 字面) ——
  * 暗主题现在零令牌工作; 未来亮主题或个别面微调时只需在承载容器上覆写令牌值, 不改结构规则:
- * - --rl-hover-tint  hover 行面 tint(回退 rgba(255,255,255,.12)); 仅 flat 行板消费
- * - --rl-hover-solid flat 吸左名称列 hover 纯色底(回退 color-mix: 不透明白按 12% 权重混页底,
+ * - --rl-hover-solid flat 行板+吸左名称列 hover 纯色底(回退 color-mix: 不透明白按 12% 权重混页底,
  *                    不透明合成色) —— 26-10-30 复验二修: 换掉 ::after opacity 方案(合成器独立
  *                    管线与行板主线程重绘帧错位); 复验三修: 混入色必须不透明+显式权重(带
  *                    alpha 的混入色会被 color-mix 把 alpha 平均成半透明结果, 横滚透底);
  *                    与行板过渡同一属性 background-color、同一份 views.css transition ⇒ 逐帧
- *                    相等; 仅 flat 首格消费
+ *                    相等; 行板与首格消费同一条(issue 26-10-30-0818 前仅首格, 行板原为 tint 形态)
  * - --rl-hairline    行间 1px 发丝线(回退 rgba(255,255,255,.06)); 仅 flat 消费
  * - --rl-bar         名称列左条 hover 中性白条(回退 rgba(255,255,255,.5))
  * - --rl-bar-on      名称列左条选中 accent 实色(回退链 var(--accent, #3aa6a6), 运行时取皮肤 --accent)
- * - --rl-sel-tint    选中/半选行 accent tint(回退 rgba(58,166,166,.10))
- * - --rl-sel-solid   flat 吸左名称列选中/半选纯色底(回退 color-mix: 不透明 accent 按 10% 权重
- *                    混页底, 不透明合成色); 仅 flat 首格消费(与 --rl-hover-solid 同管线, 见上)
+ * - --rl-sel-tint    选中/半选行 accent tint(回退 rgba(58,166,166,.10)); 仅 wave 行板/首格消费
+ * - --rl-sel-solid   flat 行板+吸左名称列选中/半选纯色底(回退 color-mix: 不透明 accent 按 10% 权重
+ *                    混页底, 不透明合成色); 行板与首格消费同一条(issue 26-10-30-0818 前仅首格;
+ *                    与 --rl-hover-solid 同管线, 见上)
  * - --rl-zebra-tint  wave 斑马行 tint(回退 rgba(255,255,255,.03))
  * - --rl-wave-tint   wave 扫层=高亮终色(回退 rgba(255,255,255,.12), 与 flat hover 同档 ——
  *                    验收修正: 旧 9% 与斑马 3% 过近, 用户读作"斑马纹与 hover 分不清")
@@ -69,7 +69,7 @@
  *   半透明覆盖不破坏名称列「不透明挡横滚」语义(那约束的是基础底色, 不禁上层叠加)。
  * ---------------------------------------------------------------- */
 
-/* ---- flat(A): 平板发丝线 — 行透明落页底, 行间 1px 发丝线, 无卡无描边无圆角无微抬 ---- */
+/* ---- flat(A): 平板发丝线 — 行底落页底, 行间 1px 发丝线, 无卡无描边无圆角无微抬 ---- */
 
 /* 行缝归零: 三皮肤 gap 5px(prism)/6px(atlas·console) 不一, flat 下行距 = 发丝线本身, 统一覆盖为 0。
  * 连动: 展开明细的 margin-top:-6px 是「吃掉行间 gap」的让位量, gap 归零后改回 0(否则倒扣 6px
@@ -77,19 +77,28 @@
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table { gap: 0; }
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.expanded + .detail { margin-top: 0; }
 
-/* 行板: 摘卡语言 —— background 透明落页底、描边归零只留底部发丝线、圆角 0、投影无、hover 不微抬。
- * 行 padding 维持皮肤原值(14px), 不在此覆盖。 */
+/* 行板: 摘卡语言 —— 底色取页底纯色、描边归零只留底部发丝线、圆角 0、投影无、hover 不微抬。
+ * 行 padding 维持皮肤原值(14px), 不在此覆盖。
+ * 底色**不透明取 var(--bg)**而非「background: transparent 落页底」(issue 26-10-30-0818): 两者
+ * 视觉恒等(页底就是 var(--bg) 平色, body 同源), 但 e2e 同帧守阵(e2e/main-table-pinned-hover/
+ * selected)按**计算值**逐帧/逐字比较 —— 行板透明 + 首格不透明的表示分家在 hover 过渡帧必然
+ * 错拍(行板 premultiplied 插值出半透明中间色, 首格全程不透明)。行板与首格必须同一表达式
+ * (坑档 frozen-column.md ⑩ 口径, 与下方 hover/选中底同批改齐)。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row {
-  background: transparent;
+  background: var(--bg, #0d1724);
   border: 0;
   border-bottom: 1px solid var(--rl-hairline, rgba(255,255,255,.06));
   border-radius: 0;
   box-shadow: none;
 }
-/* hover: 白 12% 渐入 + 去微抬。皮肤 :hover 的 border-color(var(--border-strong)) 会改掉发丝线颜色,
- * 同条重申回发丝线。transform 走 none —— 行是「读数行」不是「卡」, 不做拿起感(计划 §03 模板 A)。 */
+/* hover: 白 12% 纯色渐入 + 去微抬。行板与首格消费**同一条** --rl-hover-solid(表达式逐字相同):
+ * 旧「tint 叠页底」形态(rgba(255,255,255,.12))与其视觉恒等(premultiplied 推导见首格基础注释),
+ * 但计算值与首格的 color-mix 合成色表示分家(行板 rgba 白、首格合成色), 过渡帧错拍、稳态也不同串
+ * ⇒ atlas e2e 悬停同帧 3 例红(issue 26-10-30-0818)。皮肤 :hover 的 border-color(var(--border-strong))
+ * 会改掉发丝线颜色, 同条重申回发丝线。transform 走 none —— 行是「读数行」不是「卡」, 不做拿起感
+ * (计划 §03 模板 A)。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover {
-  background: var(--rl-hover-tint, rgba(255,255,255,.12));
+  background: var(--rl-hover-solid, color-mix(in srgb, rgb(255 255 255) 12%, var(--bg, #0d1724)));
   border-color: var(--rl-hairline, rgba(255,255,255,.06));
   transform: none;
 }
@@ -110,13 +119,14 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg, #0d1724);
 }
 
-/* 选中/半选基础: accent tint **叠页底**合成 ——
- * 坑档 frozen-column.md ⑩ 口径: 半透明状态底不许裸写替换行底; flat 行底 = 页底 var(--bg),
- * 行板与首格用同一表达式(逐字相等), 保证吸左首格与行板永远同承光底。排在本组 :hover 之后,
+/* 选中/半选基础: 与首格消费**同一条** --rl-sel-solid color-mix 纯色(表达式逐字相同)。旧形态
+ * 「sel tint linear-gradient 叠页底」与其视觉恒等(premultiplied 推导见首格基础注释), 但计算值
+ * 表示分家 —— 行板 backgroundColor = var(--bg) 纯色而首格 = mix 合成色, 选中 spec 的同底断言
+ * (行板/首格逐字相等 + 行板不透明)在 atlas 红 3 例(issue 26-10-30-0818)。排在本组 :hover 之后,
  * 特异性更高, hover 不冲掉选中底。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected,
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.partial {
-  background: linear-gradient(var(--rl-sel-tint, rgba(58,166,166,.10)), var(--rl-sel-tint, rgba(58,166,166,.10))), var(--bg, #0d1724);
+  background: var(--rl-sel-solid, color-mix(in srgb, rgb(58 166 166) 10%, var(--bg, #0d1724)));
 }
 
 /* 皮肤行级旧左条(.group-row.selected::before/.partial::before)不再摘除 —— 行语言的左条本尊
@@ -138,6 +148,10 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * **不透明白按 α·100% 权重**混页底: color-mix(in srgb, rgb(255 255 255) 12%, var(--bg))
  * = .12·255 + .88·C_bg —— 同一条式子, 逐通道恒等且结果不透明。选中 sel tint(α=.10u)同理
  * = color-mix(in srgb, rgb(58 166 166) 10%, var(--bg))。
+ * 行板同表达式(issue 26-10-30-0818, 2026-10-30): 行板 hover/选中底原本取「tint 叠页底」形态
+ * (与 color-mix 视觉恒等), 但计算值表示分家(行板半透明 tint / 首格不透明合成色)⇒ e2e 同帧守阵
+ * 按计算值逐帧/逐字比较在 atlas 红 6 例; 行板已改用与首格逐字相同的表达式(含基础底 var(--bg)),
+ * 本段推导对两侧一体成立, 恒等推导降级为历史备注。
  * ⚠color-mix 坑(上一版实际踩中): 混入**带 alpha** 的颜色(如 rgb(255 255 255 / .12))且不写
  * 权重 ⇒ 权重默认 50%/50%, premultiplied 结果 alpha = .5·.12 + .5·1 = .56 —— 产出半透明色
  * (横滚透底!)且白色实际权重只有一半(着色不足), 名称格恒久与行板不一致。混 tint 必须用
@@ -168,8 +182,8 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 }
 /* 选中/半选首格: color-mix 纯色底(与 hover 同管线同过渡源), **background 简写**顺带重置
  * image —— 声明序在 expanded/search-hit 镜像之后压掉它们的 gradient(选中行若同时展开,
- * 不能残留 sunken 渐层); 合成值 = sel tint 叠页底, 与行板 selected 表达式
- * (linear-gradient(sel,sel), var(--bg))逐通道一致(premultiplied 推导见首格基础注释)。
+ * 不能残留 sunken 渐层); 与行板 selected 消费**同一条** --rl-sel-solid(表达式逐字相同,
+ * issue 26-10-30-0818 前为「与 tint 叠页底形态逐通道一致」的等价推导)。
  * hover 规则已排除 selected/partial, 组合态无歧义 —— 选中行悬停保持选中底, 与行板一致。
  * ::after 覆盖层**整体撤销**(hover 与 selected 都改纯色, 不再需要层叠上下文承载 tint)。
  * 离散换底残留收敛一处: 仅 expanded/search-hit 的 gradient 镜像(点击触发态, 见上)。 */

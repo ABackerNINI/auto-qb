@@ -164,6 +164,12 @@
   在 views.css, atlas/console 在 components.css), 修后 Δ0。⚠ console 另有
   `.group-row.expanded:hover { background: var(--bg-sunken) }`(压过行板悬停) —— 不一起改则**悬停
   展开行**那一下又跌回半透明, 首格与行板重新分家; 判据是「凡自带 background 的展开态变体都要同款叠底」。
+  **同族拓展(2026-10-30, issue 26-10-30-0818)**: 行语言 flat(ba2a91be)把「同一表达式」弱化成
+  「视觉恒等」—— 行板取半透明 tint 叠页底、首格取 color-mix 不透明等价色, 肉眼逐帧一致
+  (premultiplied 恒等), 但 e2e 守阵按**计算值**比较(逐帧通道/稳态逐字)即红(atlas 6 例)。
+  判据再加一条: **行板与首格要逐字同一个表达式, 「数学上恒等」的另一种写法不算同** —— 恒等
+  推导对人不透明, 守阵读的是计算样式。另: prism 例全绿是无头亮主题假象
+  (testing/headless-prefers-light-theme-gate), 双皮肤绿≠两面都真正吃到待测规则。
 - **守阵**: `test_frontend_frozen_column_boundary_wiring`(静态钉 is-hscrolled 打标、三皮肤成对
   规则与首格 `align-self: stretch`);
   `test_frontend_pinned_first_cell_bg_per_face`(静态钉 search-hit 首格镜像、dt_table.css 八面

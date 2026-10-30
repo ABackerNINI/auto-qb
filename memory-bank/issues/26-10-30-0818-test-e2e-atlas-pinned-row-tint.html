@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="e2e-atlas-pinned-row-tint">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint">
 <meta name="issue-summary" content="main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在">
 <title>存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0818-test-e2e-atlas-pinned-row-tint</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 08:18</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-30 08:18 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 — 用户指派认领并修复，状态 <strong>In Progress</strong>；先复验再定位</li>
+      <li>2026-10-30 — 修复并验证，状态 <strong>Done</strong>（见下「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-30 仍复现 —— 只跑两个 spec（prism+atlas）16 例中 6 例红，全部在 atlas，与入池时一致。实测失败面比入池记录更具体：hover 3 例 = 行板 <code>rgba(255,255,255,0.12)</code> vs 首格 <code>oklab(...)</code>（逐帧通道差 ~255）；selected 3 例 = 选中行行板 backgroundColor <code>rgba(0,0,0,0)</code>（断言 A 不透明判据即红）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>根因</strong>：行语言 flat（默认 A，ba2a91be）把行板悬停/选中底换成「半透明 tint 叠页底」、首格换成「color-mix 不透明等价色」——视觉逐帧恒等（premultiplied 推导，row_lang.css 注释在案），但<strong>计算值表示分家</strong>，两个 spec 按计算值逐帧/逐字比较故红；选中例的 <code>rgba(0,0,0,0)</code> 是采样落在行板 transparent→不透明过渡起点。prism 全绿是<strong>无头假象</strong>（坑档 headless-prefers-light-theme-gate：无头落 frost 亮主题，行语言规则被 <code>:not([data-theme])</code> 前缀整体关闭，prism 测的是纯皮肤 CSS）——atlas 无主题引擎才真正吃到 flat 规则。违反既定口径「行板与首格用同一合成表达式」（pitfalls/web-ui/frozen-column.md ⑩；同文件 expanded/search-hit 本就同表达式）。<strong>属实现表示分家，非视觉回归</strong>。</p>
+    <p><strong>实际修法</strong>（与建议修法的「真回归修样式/断言过期改 spec」二选一不同，走第三条路——样式侧统一表示，视觉零变化）：shared/row_lang.css flat 段三处声明改与首格逐字相同的表达式——行板基础底 <code>transparent</code>→<code>var(--bg, #0d1724)</code>（与透明落页底视觉恒等，页底即 var(--bg) 平色）；行板 hover→<code>var(--rl-hover-solid, color-mix(...白12%...))</code>；行板 selected/partial→<code>var(--rl-sel-solid, color-mix(...accent10%...))</code>。<code>--rl-hover-tint</code> 令牌随之消亡（文档头摘除）；<code>--rl-sel-tint</code> 仍被 wave 段消费保留。e2e spec 零改动——守阵继续钉原缺陷（悬停竖带），且因两侧表达式/过渡全同，过渡帧与稳态计算值逐帧逐字相等。</p>
+    <p><strong>验证方式与数字</strong>：两 spec 复跑 16 passed（34.6s，prism+atlas 全绿）；test_webui_static_skins.py 23 passed；test.quick 4180 passed / 2 skipped（memory_bank 索引守卫首跑红为索引未重建，重建后复跑绿）；e2e 全量默认轮 366 passed / 0 failed / 10 skipped（12.5m）。</p>
   </section>
 
   <footer>
