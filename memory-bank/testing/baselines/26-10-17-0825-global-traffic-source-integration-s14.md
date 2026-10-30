@@ -20,5 +20,5 @@
 - `tools/global-traffic-monitor/README.md` —— 全称改名面(CLI 入口/命令/`--version`)+ `--autostart` 语义段 + 数据目录段(env `GLOBAL_TRAFFIC_MONITOR_DATA_DIR`、`instance.lock`/`endpoint.json`)+ `POST /autostart` 表格行补「成功回写 config autostart」+ 自启段注册项表 + 启动器说明
 - `tools/global-traffic-monitor/tests/test_smoke.py` / `test_config.py` / `test_installer.py` / `test_server.py` / `test_storage.py` —— `--version`/`usage` 断言全称; 默认值补 `c.autostart is True`; 新增 8 条用例(见上)
 - `.gitignore` —— 新增 `tools/global-traffic-monitor/data/` 与 `tools/global-traffic-monitor/run/`(第 15/16 行; `git check-ignore -v` 实证命中)
-- `memory-bank/pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(复发 +1 → 2: 裸跑工具侧套件未设 TMPDIR 落临时垃圾) · `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` · `memory-bank/activeContext/26-10-17-0339-traffic-source-integration.md` —— 本专题滚动面
+- `memory-bank/pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(复发 +1 → 2: 裸跑工具侧套件未设 TMPDIR 落临时垃圾) · `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` · `memory-bank/activeContext/26-10-17-0339-global-traffic-source-integration.md` —— 本专题滚动面
 - 未动(属计划内后续步骤, 非遗漏): `docs/configuration.md`(新段/新键)与根 `README.md` 回写 → **S18**(计划 §S18 明确); auto-qb 侧配置面/迁移链/探测拉起编排/设置页 → S15–S17; 真机验收 → S19

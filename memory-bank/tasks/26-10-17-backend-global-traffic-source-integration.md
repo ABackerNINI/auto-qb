@@ -51,7 +51,7 @@
 
 **未动(属计划内后续步骤, 非遗漏)**: `docs/configuration.md` 与工具 README 的旧 env 名 / 平台默认目录文案 → S14 改名面 + S18 文档回写; `data/`、`run/` 的 gitignore 与 `--autostart` 布尔开关 → S14。
 
-**滚动面**: 计划 HTML(本专题计划, 未在本轮改动) · 本档案新建(立档阈值命中: 跨会话 + ≥3 源文件 + 有计划文档) · activeContext 切片 `26-10-17-0339-traffic-source-integration.md`(S11 已实施段 + 待办) · 基线切片新建 · 坑档 `pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(新增) 与 `pitfalls/kb/discipline.md`(R1 改版教训) · kb.index 重建。随本专题「提交」入库。
+**滚动面**: 计划 HTML(本专题计划, 未在本轮改动) · 本档案新建(立档阈值命中: 跨会话 + ≥3 源文件 + 有计划文档) · activeContext 切片 `26-10-17-0339-global-traffic-source-integration.md`(S11 已实施段 + 待办) · 基线切片新建 · 坑档 `pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(新增) 与 `pitfalls/kb/discipline.md`(R1 改版教训) · kb.index 重建。随本专题「提交」入库。
 
 ### R2 · S12 实施 (2026-10-17 06:23)
 
@@ -186,3 +186,5 @@
 - 2026-10-17 14:58 R2: 删 traffic_source.global_traffic_monitor.data_dir 配置键与设置页字段, 取数路径收归 core/traffic_source/paths.py(工具来源读发现指针); 旧 active_dat_path() 退休; 键面基线/测试/文档/计划(新增 D20+S20)同步; 自启提权缺陷入池 issue 26-10-17-1455
 
 - 2026-10-31 04:21 计划 26-10-17-0339 文档漂移三修(头部状态补 S20 / §01 旧计划已 Done / 变更记录 R1-R2 行序归位), 补 R4 记档, doc-updated 抬到 26-10-31-0419; 状态保持 In Progress —— S19 真机验收四场景仍待逐项授权(现网指针 + /status 探活 + 订阅在跑, 但无逐项验收记录)
+
+- 2026-10-31 04:24 计划 26-10-17-0339 文档漂移三修(头部状态补 S20 / §01 旧计划已 Done / 变更记录 R1-R2 行序归位)并补 R4; 状态保持 In Progress —— S19 真机验收四场景仍待逐项授权(现网指针 + /status 探活 + 订阅在跑, 但无逐项验收记录)。本切片文件名由缩短 slug traffic-source-integration 归位为专题主键 global-traffic-source-integration(原 26-10-31-0421 重复切片已删); 旧文件名残留引用 8 处(本档案 1 + 基线切片 7)同步改指新路径, 全仓已无旧文件名残留

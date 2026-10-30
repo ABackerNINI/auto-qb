@@ -21,5 +21,5 @@
 - `src/auto_qb/webui/static/shared/triggers.js` —— 登记新端点 `POST /api/traffic/monitor/relaunch`
 - `tests/test_web_traffic_monitor.py` · `tests/test_web_traffic_monitor_notify.py` · `tests/test_traffic_monitor_client.py` —— 联动启用判据由 `.enabled=True` 改 `provider="global_traffic_monitor"`; disabled 用例断言新 reason; 新增 relaunch 三态用例; e2e 补 `global_traffic_monitor.data_dir` 令 provider=工具面时曲线取到同一 dat
 - `tests/test_config_traffic_monitor.py` · `tests/test_web_route_manifest.py` · `tests/webui_helpers.py` · `tests/helpers.py` —— 键面 / 路由清单 / 段认领基线随退休面更新
-- `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md`(R7 段 + 状态表 S17 Done + Updated) · `memory-bank/activeContext/26-10-17-0339-traffic-source-integration.md`(S17 已实施段 + 待办 + 摘要) · `memory-bank/pitfalls/backend/config-section-retire-across-steps.md`(增「动态设属性假绿」判别条 + 触发词) · 本基线切片 —— 本专题滚动面
+- `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md`(R7 段 + 状态表 S17 Done + Updated) · `memory-bank/activeContext/26-10-17-0339-global-traffic-source-integration.md`(S17 已实施段 + 待办 + 摘要) · `memory-bank/pitfalls/backend/config-section-retire-across-steps.md`(增「动态设属性假绿」判别条 + 触发词) · 本基线切片 —— 本专题滚动面
 - 未动(属计划内后续步骤, 非遗漏): `docs/configuration.md`(新段/新键)与根 `README.md` → **S18**(S17 无配置键面新增, 只删过渡 stub); 真机验收 → S19

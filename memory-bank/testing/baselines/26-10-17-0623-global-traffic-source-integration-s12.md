@@ -14,5 +14,5 @@
 - `tools/global-traffic-monitor/tests/test_storage.py` —— 锁用例改注入 `instance.lock`; 新增: 指针目录平台解析(win/mac/linux+XDG)、指针与锁落点、默认锁锚点非 data_dir、`write_endpoint`/`remove_endpoint` 幂等、旧数据目录叶名 `gtm` 不受重构影响; 头文档测试计划清单同步
 - `tools/global-traffic-monitor/tests/test_server.py` —— `make_server` 注入锁路径 + 指针路径 + 自启替身(保持 hermetic); 新增: 端点写十字段、退出删、`autostart_registered` 反映后端、抢输锁不占端口; 头文档清单同步
 - `tools/global-traffic-monitor/tests/test_notifier.py` —— 两处 `Storage` 装配补 `lock_path`(否则命中真实用户级目录)
-- `memory-bank/pitfalls/testing/test-lock-path-injection.md`(新增) · `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` · `memory-bank/activeContext/26-10-17-0339-traffic-source-integration.md` —— 本专题滚动面
+- `memory-bank/pitfalls/testing/test-lock-path-injection.md`(新增) · `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` · `memory-bank/activeContext/26-10-17-0339-global-traffic-source-integration.md` —— 本专题滚动面
 - 未动(属计划内后续步骤, 非遗漏): `docs/configuration.md` 与工具 `README.md` 的旧 env 名 / 平台默认目录 / 锁位置文案 → S14 改名面 + S18 文档回写; `--autostart` 布尔开关与 `data/`、`run/` 的 gitignore → S14; 随机端口与 `endpoint` 子命令 → S13

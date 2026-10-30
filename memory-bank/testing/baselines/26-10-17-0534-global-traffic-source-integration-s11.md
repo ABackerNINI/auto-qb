@@ -13,6 +13,6 @@
 - `tools/global-traffic-monitor/tests/test_storage.py` —— 增改用例 + 头文档测试计划清单同步
 - `tools/global-traffic-monitor/launch.cmd` / `launch.sh` —— 新增启动器(D19: 恒定 `--autostart`、不传 `--data-dir`、优先自带 venv 解释器、uv 仅兜底)
 - `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` —— 本专题立档(阈值命中: 跨会话 + ≥3 源文件 + 有计划文档)
-- `memory-bank/activeContext/26-10-17-0339-traffic-source-integration.md` —— S11 已实施段 + 待办
+- `memory-bank/activeContext/26-10-17-0339-global-traffic-source-integration.md` —— S11 已实施段 + 待办
 - `memory-bank/pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(新增) / `memory-bank/pitfalls/kb/discipline.md`(R1 改版教训)
 - 未动(属计划内后续步骤): `docs/configuration.md` 与工具 README 的旧 env 名 / 平台默认目录文案 → S14 改名面 + S18 文档回写

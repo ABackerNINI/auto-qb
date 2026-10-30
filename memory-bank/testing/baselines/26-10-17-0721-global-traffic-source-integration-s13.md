@@ -15,5 +15,5 @@
 - `tools/global-traffic-monitor/tests/test_config.py` —— 默认值 `http_port == 0`; 端口区间 0 由拒改收 + 负值拒; 头文档口径同步
 - `tools/global-traffic-monitor/tests/test_server.py` —— 头文档 + 5 条新用例(见上), hermetic 不变(注入指针/锁路径 + 端口 0)
 - `tools/global-traffic-monitor/README.md` —— 端口口径两处(8099 → 随机)、`endpoint` 命令行补入
-- `memory-bank/pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(复发 +1: 裸跑工具侧套件未设 TMPDIR 落临时垃圾) · `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` · `memory-bank/activeContext/26-10-17-0339-traffic-source-integration.md` —— 本专题滚动面
+- `memory-bank/pitfalls/testing/sandbox-tempfile-cwd-fallback.md`(复发 +1: 裸跑工具侧套件未设 TMPDIR 落临时垃圾) · `memory-bank/tasks/26-10-17-backend-global-traffic-source-integration.md` · `memory-bank/activeContext/26-10-17-0339-global-traffic-source-integration.md` —— 本专题滚动面
 - 未动(属计划内后续步骤, 非遗漏): CLI 脚本名/`prog`/env 名/指针锁文件名/用户级目录名/文案 + `run --autostart` 布尔开关 + `data/`、`run/` gitignore → S14; 工具 `README.md` 与 `docs/configuration.md` 旧文案 → S14/S18
