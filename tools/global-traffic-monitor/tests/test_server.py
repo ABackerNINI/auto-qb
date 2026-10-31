@@ -7,6 +7,8 @@
   未绑定 stop_event 仍 200; _run_loop 对置位即时响应 (不空等采样间隔).
 + T-01/T-02 (issue 26-10-30-0624): config 写临界区互斥 (PUT /config 与 /autostart 串行化,
   /autostart 读-改-写不丢并发 PUT 的参数); PUT /config 拒绝非回环 http_host.
++ 26-10-31-0537: POST /autostart 成功后 patch 发现指针 autostart 字段 (卸载/注册即时回写真值,
+  UI 开关不再漂移到重启); patch 失败只 WARNING 不阻断响应.
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -811,6 +813,83 @@ def test_autostart_failure_leaves_config_untouched(tmp_path) -> None:
     try:
         assert http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())[0] == 500
         assert holder.current.autostart is True  # 未被改成 false
+    finally:
+        server.stop()
+
+
+class StatefulAutostartBackend:
+    """替身自启后端 (issue 26-10-31-0537): is_registered 跟随 register/unregister 翻转 ——
+    现货态探测随之变, 供验证控制面操作后指针 autostart 字段即时 patch."""
+    def __init__(self, registered: bool):
+        self.registered = registered
+
+    def is_registered(self) -> bool:
+        return self.registered
+
+    def register(self) -> AutostartResult:
+        self.registered = True
+        return AutostartResult("registered", "已注册")
+
+    def unregister(self) -> AutostartResult:
+        self.registered = False
+        return AutostartResult("unregistered", "已卸载")
+
+
+def test_autostart_uninstall_patches_pointer_immediately(tmp_path) -> None:
+    """26-10-31-0537 回归: uninstall 成功后指针 autostart_registered 即时回写 false,
+    不再等到工具下次重启才自愈; 其余指针字段不被 patch 破坏."""
+    backend = StatefulAutostartBackend(registered=True)
+    server, *_rest, token = make_server(tmp_path, installer_factory=lambda data_dir: backend)
+    try:
+        pointer = tmp_path / "endpoint.json"
+        before = json.loads(pointer.read_text(encoding="utf-8"))
+        assert before["autostart_registered"] is True  # 前提: start() 现货态探到已注册
+        status, payload = http(server, "POST", "/autostart", body={"action": "uninstall"}, token=token.token())
+        assert status == 200 and payload["action"] == "unregistered"
+        after = json.loads(pointer.read_text(encoding="utf-8"))
+        assert after["autostart_registered"] is False  # 即时回写真值 (修复前停在 true)
+        assert after["autostart_error"] is None
+        assert after["port"] == server.port and after["pid"] == before["pid"]  # 其余字段原样保留
+    finally:
+        server.stop()
+
+
+def test_autostart_install_patches_pointer_and_clears_error(tmp_path) -> None:
+    """26-10-31-0537 对称面: install 成功后指针即时回写 true, 启动期 autostart_error 已过时一并清空."""
+    backend = StatefulAutostartBackend(registered=False)
+    reason = "启动期注册失败: 拒绝访问"
+    server, *_rest, token = make_server(tmp_path, installer_factory=lambda data_dir: backend, autostart_error=reason)
+    try:
+        pointer = tmp_path / "endpoint.json"
+        before = json.loads(pointer.read_text(encoding="utf-8"))
+        assert before["autostart_registered"] is False and before["autostart_error"] == reason
+        status, payload = http(server, "POST", "/autostart", body={"action": "install"}, token=token.token())
+        assert status == 200 and payload["action"] == "registered"
+        after = json.loads(pointer.read_text(encoding="utf-8"))
+        assert after["autostart_registered"] is True
+        assert after["autostart_error"] is None
+    finally:
+        server.stop()
+
+
+def test_autostart_pointer_patch_failure_only_warns(tmp_path, caplog) -> None:
+    """指针 patch 读失败 (指针损坏, 坏 JSON) 只 WARNING, 不阻断响应 —— 开关成败已由
+    config 回写与 200 裁决. 指针缺失 (FileNotFoundError) 则静默幂等 (无 patch 对象)."""
+    backend = StatefulAutostartBackend(registered=True)
+    server, *_rest, token = make_server(tmp_path, installer_factory=lambda data_dir: backend)
+    try:
+        pointer = tmp_path / "endpoint.json"
+        pointer.write_text("{not json", encoding="utf-8")  # 运行中指针被外力损坏 -> 读抛 ValueError
+        status, payload = http(server, "POST", "/autostart", body={"action": "uninstall"}, token=token.token())
+        assert status == 200 and payload["action"] == "unregistered"
+        assert any("patch 失败" in r.getMessage() for r in caplog.records)
+        # 缺失形态: 删掉指针后再开关一次, 不报错不补写 (patch 不是 create)
+        caplog.clear()
+        os.remove(pointer)
+        status, _ = http(server, "POST", "/autostart", body={"action": "uninstall"}, token=token.token())
+        assert status == 200
+        assert not pointer.exists()
+        assert not any("patch" in r.getMessage() for r in caplog.records)
     finally:
         server.stop()
 

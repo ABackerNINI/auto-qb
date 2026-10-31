@@ -3,7 +3,7 @@ summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五�
 ---
 
 > 摘要: 用户诉求「全局流量监视器设计不成熟, 特别是与 auto-qb 的联动」: ①auto-qb 一键自动拉起工具(免配端口/密钥) ②工具同时配置 Traffic Monitor 时怎么办 ③两处配置(限速曲线卡的 dat_path 与独立段 global_traffic_monitor)合并为一处, 来源一键切换。经 grilling 五轮 36 问收敛(用户四次纠正), 产出独立计划 `memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html`(doc-status Open, doc-topic `global-traffic-source-integration`)。**R1 就地改版**(26-10-17-0429): 用户指出「把 `--autostart` 固化进启动器」与 D13 冲突 ⇒ 启动器契约(D10 改写 + 新增 D19) + D13 收敛为「启动器恒定携带意图, 工具 config 唯一裁决」。
-> 最后活动: 2026-10-31 05:41
+> 最后活动: 2026-10-31 10:36
 
 # activeContext · global-traffic-source-integration(26-10-17-0339)
 
@@ -40,3 +40,5 @@ summary: 全局流量来源改版(一键切换 + 自动拉起) — grilling 五�
 **R3(2026-10-31 04:24):** 计划 26-10-17-0339 文档漂移三修(头部状态补 S20 / §01 旧计划已 Done / 变更记录 R1-R2 行序归位)并补 R4; 状态保持 In Progress —— S19 真机验收四场景仍待逐项授权(现网指针 + /status 探活 + 订阅在跑, 但无逐项验收记录)。本切片文件名由缩短 slug traffic-source-integration 归位为专题主键 global-traffic-source-integration(原 26-10-31-0421 重复切片已删)
 
 **R4(2026-10-31 05:41):** S19 真机验收完成(桩测·Windows 侧), 计划收口 Done, P3 发现入池 issue 26-10-31-0537
+
+**R5(2026-10-31 10:36):** 认领修复 issue 26-10-31-0537: gtm _autostart 成功路径新增 _patch_endpoint_autostart() 即时 patch 发现指针 autostart 字段(建议修法①; autostart_registered 现货态改写 + autostart_error 清空; 指针缺失静默/读坏只 WARNING 不阻断, Windows 下 FileNotFoundError 不可辨缺失/父路径异常已入坑档 platform-fs); 回归三案落 test_server.py, test.gtm 与 test.full 全绿(数字见 kb.baseline 切片 26-10-31-1018); issue 置 Done, 发现指针坑档补写点事实(⑤)

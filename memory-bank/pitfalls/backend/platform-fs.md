@@ -1,7 +1,7 @@
 # 平台与文件系统
 
 > 摘要: Windows / Linux 差异、长路径、稀疏文件、删除拦截层、事件循环断连噪音、批处理与 PATH 条目的写法坑 —— 与宿主环境强相关的一类坑。
-> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid, 目录 nlink, st_nlink, 进程表, tasklist, 平台分派
+> 触发: 锁文件, 平台差异, Windows, Linux, 长路径, 稀疏文件, 删不掉, 磁盘空间, 回收站, 盘满, WinError 10054, proactor, 断连噪音, asyncio, 批处理, cmd, .cmd, 行尾, CRLF, OEM 码页, PATH, MSYS, Git Bash, HTTPServer, 端口被占, SO_REUSEADDR, allow_reuse_address, getfqdn, 原子写, os.replace, 并发读者, WinError 5, 拒绝访问, 退避重试, 心跳, 实例注册表, 读不到不等于空表, taskkill, MSYS pid, 目录 nlink, st_nlink, 进程表, tasklist, 平台分派, FileNotFoundError, NotADirectoryError, ENOTDIR, 异常类型分流
 
 ### Windows 上 `HTTPServer` 默认的 `allow_reuse_address = 1` 会让「端口被占」检测失效
 
@@ -160,5 +160,23 @@
 - **处置**: 分三层测 —— ①解析本体(平台无关, 直接调 `_names_from_tasklist`/`_names_from_proc`/`_names_from_ps`);
   ②**分派**(三支都换替身, 按 `os.name` + `os.path.isdir("/proc")` 现查判据断言选中哪支); ③异常吞噬(三支都抛
   `OSError` → 返回空)。别用 `skipif` 绕 —— 跳过会让另一侧的专属行彻底不覆盖。
+
+### open() 的 FileNotFoundError 在 Windows 上区分不了「文件缺失」与「路径组件不是目录」
+
+- **触发**: 读侧降级按「异常类型分流失败形态」时 —— 例: 读发现指针文件, 想把
+  `FileNotFoundError` = 静默(没有对象可操作)、其它 `OSError` = WARNING(2026-10-31 实测,
+  issue 26-10-31-0537 的 patch 失败用例首跑红)。
+- **判别**: POSIX 上 `open("普通文件/子路径")` 抛 `NotADirectoryError`(ENOTDIR);
+  Windows 的 `CreateFile` 对同形路径返回 `ERROR_PATH_NOT_FOUND` → Python 映射成
+  **`FileNotFoundError`** —— 于是「目标文件不存在」与「父路径是普通文件」在 Windows
+  **同型不可辨**。对照: `os.makedirs` 不吃这套映射, 父路径是文件抛 `FileExistsError`
+  (WinError 183), 别拿一个 API 的实测外推另一个。
+- **处置**: 降级语义是「缺失 = 没有对象可操作」时, 把两种形态一并按缺失静默
+  (gtm `server._patch_endpoint_autostart` 的选择: patch 不是 create, 不补写);
+  真要区分只能额外 stat 父路径。用例要验「可观测的读失败降级」时选**可区分形态**
+  (坏 JSON → `ValueError`), 别用「父路径是文件」造 `FileNotFoundError` —— 会静默走
+  缺失分支, 用例误判成降级失效。
+- **守阵**: `tools/global-traffic-monitor/tests/test_server.py::test_autostart_pointer_patch_failure_only_warns`
+- **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)
 
 **Refs:** memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md

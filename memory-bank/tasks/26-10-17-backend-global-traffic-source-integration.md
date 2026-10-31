@@ -190,3 +190,5 @@
 - 2026-10-31 04:24 计划 26-10-17-0339 文档漂移三修(头部状态补 S20 / §01 旧计划已 Done / 变更记录 R1-R2 行序归位)并补 R4; 状态保持 In Progress —— S19 真机验收四场景仍待逐项授权(现网指针 + /status 探活 + 订阅在跑, 但无逐项验收记录)。本切片文件名由缩短 slug traffic-source-integration 归位为专题主键 global-traffic-source-integration(原 26-10-31-0421 重复切片已删); 旧文件名残留引用 8 处(本档案 1 + 基线切片 7)同步改指新路径, 全仓已无旧文件名残留
 
 - 2026-10-31 05:41 S19 真机验收完成(桩测·Windows 侧), 计划收口 Done, P3 发现入池 issue 26-10-31-0537
+
+- 2026-10-31 10:36 认领修复 issue 26-10-31-0537: gtm _autostart 成功路径新增 _patch_endpoint_autostart() 即时 patch 发现指针 autostart 字段(建议修法①; autostart_registered 现货态改写 + autostart_error 清空; 指针缺失静默/读坏只 WARNING 不阻断, Windows 下 FileNotFoundError 不可辨缺失/父路径异常已入坑档 platform-fs); 回归三案落 test_server.py, test.gtm 与 test.full 全绿(数字见 kb.baseline 切片 26-10-31-1018); issue 置 Done, 发现指针坑档补写点事实(⑤)

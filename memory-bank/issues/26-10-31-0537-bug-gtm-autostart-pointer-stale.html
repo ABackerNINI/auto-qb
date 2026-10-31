@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="global-traffic-source-integration">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-31-backend-global-traffic-source-acceptance.md, memory-bank/plans/26-10-31-0446-plan-global-traffic-source-acceptance.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="卸载自启后发现指针 autostart_registered 不即时回写真值">
 <meta name="issue-summary" content="POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈">
 <title>卸载自启后发现指针 autostart_registered 不即时回写真值 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0537-bug-gtm-autostart-pointer-stale</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 05:37</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">gtm 工具 (tools/global-traffic-monitor)</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">S19 桩测验收(计划 26-10-31-0446 A5.3)</div></div>
     </div>
@@ -161,11 +161,19 @@ endpoint.json → "autostart_registered": True             # 指针字段 = 旧�
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 05:37 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 10:18 — <strong>认领</strong>（用户本轮显式指派「认领并修复」），状态 <strong>In Progress</strong>。开工先复验：见下。</li>
+      <li>2026-10-31 10:18 — <strong>修复完成</strong>并验证，状态 <strong>Done</strong>。实际修法 / 验证方式 / 测试数字见下「修复后补充」。</li>
     </ul>
     <h3>复验</h3>
-    <p>入池时实测(2026-10-31 05:14)必现;验收后现场已还原,认领时先重跑锚点复验。</p>
+    <p><strong>复验：2026-10-31 10:18 根因仍在</strong>（认领后以代码锚点复验，当期 HEAD <code>4c4edd20</code>）。<code>_autostart</code> 成功路径只做 installer 注册/卸载 + config autostart 回写，全程不触碰发现指针；指针 <code>autostart_registered</code> 的唯一写点仍只有 <code>start()</code> 现货态探测 —— 与根因结论逐字一致。注：入池时的真机桩测现场为一次性环境已还原，未重跑真机复现，以代码事实为准。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（采纳建议修法①）：<code>_autostart</code> 成功路径（config 回写之后、响应之前）新增 <code>_patch_endpoint_autostart()</code>：读<b>现有</b>指针，<code>autostart_registered</code> 以现货态探测结果改写（与 <code>start()</code> 同一探测口径），整份原子写回 —— 指针与真值即时一致，UI 开关不再漂移到重启。两点与建议原文的偏差，均已注明理由：</p>
+    <ul>
+      <li><code>autostart_error</code> 一并清空：控制面操作成功后，启动期失败原因已过时（install 成功 = 已补救；uninstall 成功 = 已无注册可言）。同族过时字段，同一写点顺手一致。</li>
+      <li>指针<b>缺失时静默幂等不补写</b>（patch 不是 create）；读/写失败只 WARNING 不阻断 200 响应（与 §09/S12 同口径）。⚠ Windows 平台事实：<code>open()</code> 对「父路径是文件」也抛 <code>FileNotFoundError</code>（POSIX 是 <code>NotADirectoryError</code>），异常类型区分不了「指针缺失」与「路径组件异常」—— 处置：两种形态一律静默，可观测的读失败（坏 JSON → <code>ValueError</code>）走 WARNING。已记坑档 <code>pitfalls/backend/platform-fs.md</code>。</li>
+    </ul>
+    <p><b>验证方式</b>：新增回归三案（<code>tools/global-traffic-monitor/tests/test_server.py</code>）：①uninstall 后指针 <code>autostart_registered</code> 即时 false 且其余字段（port/pid）原样保留；②install 后即时 true 且启动期 <code>autostart_error</code> 清空；③指针损坏（坏 JSON）只 WARNING 不阻断 200 + 指针缺失再开关不报错不补写。</p>
+    <p><b>测试数字</b>：<code>commands run test.gtm</code> 429 passed / 2 skipped（覆盖率 99%，分区 TOTAL 全绿）；<code>commands run test.full</code> 4303 passed / 2 skipped —— 详见基线切片（<code>commands run kb.baseline</code>）。</p>
   </section>
 
   <footer>

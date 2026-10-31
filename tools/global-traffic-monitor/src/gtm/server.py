@@ -431,6 +431,9 @@ class ControlServer:
         错误映射 (供设置页开关判成败): 载荷非法 400 / 平台不支持 501 / 平台命令失败
         或前置条件缺失 500; 幂等 no-op 也是 200 (结果 action 区分 registered/skipped/
         unregistered/absent)。
+
+        发现指针同步 (issue 26-10-31-0537): 成功后 patch 指针的 autostart 字段 ——
+        否则 autostart_registered 停在旧值, UI 开关漂移到工具下次重启才自愈。
         """
         body, err = self._read_json(handler)
         if err is not None:
@@ -455,7 +458,35 @@ class ControlServer:
             save_config(self.config_path, new_config)
             self.config_holder.replace(new_config)
         logger.info("自启 %s: %s (config autostart=%s)", action, result.message, new_config.autostart)
+        self._patch_endpoint_autostart()  # 指针与真值即时一致 (失败只 WARNING, 见方法内)
         self._send(handler, 200, {"ok": True, "action": result.action, "message": result.message})
+
+    def _patch_endpoint_autostart(self) -> None:
+        """自启开关成功后 patch 发现指针的 autostart 字段 (issue 26-10-31-0537)。
+
+        指针 autostart_registered 的唯一写点原本只有 start() 现货态探测 —— 控制面
+        卸载/注册成功后指针停留在旧值, auto-qb 设置页开关漂移到工具下次重启才自愈。
+        这里读出**现有**指针、以现货态探测结果改写 autostart_registered 并把
+        autostart_error 清空 (控制面操作成功后, 启动期失败原因已过时), 整份原子写回。
+
+        指针缺失 (非 run 装配 / 已被 stop 删除) 不补写 —— patch 不是 create;
+        读失败 / 写失败只 WARNING 不阻断响应 (与 §09 / S12 同口径: 指针是发现便利,
+        不是运行前提, 开关操作本身的成败已由 config 回写与响应码裁决)。
+        """
+        try:
+            with open(self._endpoint_file, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if not isinstance(payload, dict):
+                logger.warning("发现指针 patch 跳过: 顶层非对象")
+                return
+            payload["autostart_registered"] = self._autostart_registered()
+            payload["autostart_error"] = None
+            write_endpoint(payload, path=self._endpoint_file)
+            logger.info("发现指针已 patch: autostart_registered=%s", payload["autostart_registered"])
+        except FileNotFoundError:
+            pass  # 指针缺失 (Windows 上父路径异常也映射成它) = 没有 patch 对象, 静默幂等
+        except (OSError, ValueError) as e:  # ValueError 覆盖 json.JSONDecodeError 子类
+            logger.warning("发现指针 autostart 字段 patch 失败 (不阻断响应): %s", e)
 
     def _shutdown(self, handler: "_Handler") -> None:
         """优雅退出 (26-10-17-1737 S3): 先回 200, 再置位 stop_event.
