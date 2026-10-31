@@ -4,8 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (55)
+## Open (59)
 
+- [feat] [e2e/冒烟环境开机自检: 端口占用/旧桩进程/npm i 缺失前置探测](../26-10-31-2226-feat-e2e-smoke-env-selfcheck.html) — 把 smoke.md 高频环境条目从读文档排障搬进工具: dev.e2e 前置自检 8099/8137 占用与桩进程活性
+- [feat] [doc-refs 认领链写法机械化: 生成器/模板接管双向声明](../26-10-31-2226-feat-kb-docrefs-bidirectional-automation.html) — kb.new/kb.index 建件时自动带 doc-refs meta 与反向 Refs 占位, 双向义务由机器保证
+- [feat] [写盘形态守卫: 行数/bytes-per-line 比值与 CRLF 形态抽验进闸门](../26-10-31-2226-feat-repo-writeform-guard.html) — 仓库侧写后机检(逐字节异常检测), 把编辑陷阱从读过文档才知道变成闸门当场红
+- [feat] [聚合读法机械化: 模板/CSS/JS 内容定位走机器索引](../26-10-31-2226-feat-webui-agg-content-map.html) — 生成聚合映射命令, 输出内容片段在 shared/tpl+css+JS 域的单点定位, 判别法从人读 frontend-split.md 变成跑命令
 - [bug] [强制汇报确认跟踪对不可达 tracker 的首报过早落 confirmed(ok 回执)](../26-10-31-1740-bug-webui-reannounce-premature-confirm.html) — RM09-04 实测: 死端口 tracker 的 reannounce 在 updating 在途瞬间即写 ok(日志+1ms), 随后 tracker 拒绝不纠正回执 —— 计划期望 RC_FAIL
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
