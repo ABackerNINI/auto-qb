@@ -324,7 +324,11 @@
         <td><span class="badge go">已测(全绿 9/9)</span> 托盘仅到 L1(L0 未目视)</td>
         <td>计划 <code>plans/26-10-31-0819-plan-rm01-startup.html</code> · 切片 <code>testing/real-baselines/26-10-31-0831-real-RM01.md</code> · 缺陷: 无(观察项 1 条转 RM07)</td>
       </tr>
-      <tr><td><code>RM02</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr>
+        <td><code>RM02</code></td><td>2026-10-31</td><td><code>eba6ee47</code></td><td>0/0/5/3</td>
+        <td><span class="badge stop">已测(有缺陷在池)</span> 7/8 绿; RM02-07 断连后不重连+刷屏(26-10-31-1029)</td>
+        <td>计划 <code>plans/26-10-31-0927-plan-real-RM02.html</code> · 切片 <code>testing/real-baselines/26-10-31-1041-real-RM02.md</code> · 缺陷: 26-10-31-1029 · 26-10-31-1030</td>
+      </tr>
       <tr><td><code>RM03</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
       <tr><td><code>RM04</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
       <tr><td><code>RM05</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
@@ -349,6 +353,7 @@
       <li>2026-10-31 08:53 — <code>RM01</code> 复跑<b>全绿 9/9</b>(27.4s, 连跑三轮无 flaky), 档位 <code>0/1/7/2</code>。阻塞项解除的根因不是 uv.lock: <code>tkinter</code> 属 CPython 标准库(Tcl/Tk 编译产物), 不可能出现在 lock 里 —— 真因是 <code>.venv</code> 的基解释器用了宿主 <code>H:\Programs\AutoClaw\resources\python</code>(裁剪版 3.13.12, 无 <code>_tkinter.pyd</code>/<code>tcl/</code>), 导致 <code>import customtkinter</code> 直接炸在 <code>__init__.py:6</code> —— <b>这个 venv 里 GUI 栈一直是死的</b>, 不只是托盘用例。已按 uv 管理的 CPython 3.13.15 重建 venv(带 Tk 8.6)+ <code>uv sync</code>; 重建后 <code>tests/</code> 4302 passed / 覆盖率 99.05%。另发现 <b><code>Popen.pid</code> ≠ 进程实际 pid</b>(venv 的 <code>python.exe</code> 是 47KB 启动器, 真解释器是子进程) ⇒ 按 pid 断言改用 <code>real_pid()</code>、强杀改 <code>taskkill /F /T</code>。</li>
       <li>2026-10-31 09:18 — 片表去重: §03 移除「状态」栏(与 §07 覆盖进度总表重复且持续飘移, 状态单点收口到 §07)。用户拍板。</li>
       <li>2026-10-31 09:27 — <code>RM02</code> 排期开工(计划 <code>plans/26-10-31-0927-plan-real-RM02.html</code>)。glob 自检发现 RM02 行 5 条 glob 全部漏 <code>src/auto_qb/</code> 前缀(与 RM01 同款缺陷, 零命中), 实测补前缀后 5/5 命中且无混入大件, 按 §05 规则 8 修正。另: 36595 重启后 pid 10204→41868; 本 clone 缺 gitignored 的 <code>tests-real/config/instances.local.json</code>(36595 的 API key 注册件), 已按 <code>lib/instances.py</code> 口径补建, guard 全绿。</li>
+      <li>2026-10-31 10:41 — <code>RM02</code> 实测完成: <b>7 通过 / 1 失败</b>(8 条, 官方轮 425.4s), 档位 <code>0/0/5/3</code>, 基线 commit <code>eba6ee47</code>。三条 L3 红验真跑过(dry-run 不落盘 / interval=0 不写盘 / 断连注入生效)。FAIL 1 条: <code>RM02-07</code> 运行期断连后<b>不自动重连</b>且逐拍 ERROR 刷屏(75s 内 39-45 条, 恢复代理 60s 无回连), 根因 = 断连处置置 client=None 后同步线 AttributeError 被 <code>_SYNC_UNAVAILABLE</code> 误分类、connect() 永不再被调用, 入池 <code>26-10-31-1029</code>(RM01 D1 移交以"缺陷在池"闭环)。计划外缺陷另入池 <code>26-10-31-1030</code>: 托盘模式进程内 SIGTERM 不生效(3/3)。环境: venv 基解释器又漂回无 Tk 的 H:\ 裁剪版(RM01 §04-5 同款坑复发), 已重建恢复; 新增 <code>lib/proxy.py</code> 断连注入/节拍观测基建; 新环境事实(qB 校验 Host 头 / loopback 拒连 ~2s / .bak 仅旧文件存在时生成)回写规程 §2.8。</li>
     </ul>
   </section>
 

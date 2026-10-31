@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 8 |
 | perf | 7 |
 | docs | 2 |
 | test | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: gr…
+- [bug] [运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)](26-10-31-1029-bug-qbmanager-disconnect-no-reconnect.html) — RM02-07 真机实测…
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/get…
 - [test] [真机实测定期排期(常驻排期锚)](26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 q…

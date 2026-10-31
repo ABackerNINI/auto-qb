@@ -16,6 +16,7 @@
 
 ## Open
 
+- [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](26-10-31-0927-plan-real-RM02.html) — `real-machine-rm02-plan`
 - [26-10-31-0705] [真机实测 RM00 基建: 守卫/伪 tracker/双实例互传](26-10-31-0705-plan-real-machine-test.html) — `real-machine-test`
 - [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`

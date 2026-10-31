@@ -143,6 +143,17 @@
 - **`port_free()` 不许用 `SO_REUSEADDR`**: Windows 上它的语义是"允许抢占别人正在监听的端口", `bind` 成功 ≠ 端口空闲。实测因此谎报"已释放", 紧接着重启撞 `Errno 10048`。裸 `bind` 才是可信探针。
 - **端口别复用**: 上一条用例刚停的进程, 监听套接字要过一小会儿才真正消失 —— 整片连跑时后一条抢到前一条刚释放的端口就 10048, 单跑不复现。`free_port()` 记会话内已用端口, 段(39000–39999)够大, 比 sleep 等它可靠。该段 39099 常被 WorkBuddy 自己的 `editor_sdk.exe` 占着, 探空会自动跳过。
 
+### 2.8 进程间网络与断连事实(RM02 实测, 2026-10-31)
+
+| 事实 | 现场表现 | 处置 |
+|---|---|---|
+| qB WebUI 校验 Host 头 | 经本地代理转发时保留原 Host(`127.0.0.1:<代理端口>`) → `/auth/login` 401(直连同 body 204) | `lib/proxy.py` 统一把 Host 改写成实例的 host:port 再转发 |
+| 本机 loopback 连接失败单次 ~2s | 连无监听端口的 connect 不是瞬时 RST; 托管模式首个 connect() 周期(detect_scheme http/https + login 三连)约 20-40s 才落第一条 ERROR | 断连类用例的等待窗按此放宽; 慢不是挂死 |
+| 热重载命令线 = `PUT /api/config` | 回执带 `changes`(顶层段名)与 `restart_required`; R 级段(data_dir/state_file/fs)提交即被回退旧值并报 restart_required | 触发 L2 重建的最小改动 = 改 `interval`(rules 模块认领段) |
+| 托盘模式 SIGTERM 无效 | graceful 跑壳(进程内 raise_signal)对 CLI rc=0 有效, 对 `--tray` 3/3 不退出(45s+ 仍存活; issue 26-10-31-1030) | 托盘进程收尾只能 `taskkill /F /T`; 托盘用例不验优雅退出 |
+| 断连后不自动重连(缺陷在池) | 运行期 qB 断开一次后, 每 main_tick 一条「主循环异常」ERROR(75s 内 39-45 条)且恢复后不回连 —— issue 26-10-31-1029 | RM02-07 记 FAIL; 修复后须真机回归 |
+| `.bak` 只在写盘前已有旧文件时生成 | fresh 目录首次优雅退出只有 state.json, 没有 `.bak`(atomic_write keep_backup 语义) | 要造 `.bak` 需先正常起停**两次** |
+
 > 并行陷阱: `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` **不生效**。官方入口 `real.suite` 传 `-n 0` 没问题, 直跑 `pytest tests-real/...` 会互相抢端口 —— `rm01_startup/conftest.py` 用一把文件锁兜住, 后续片照抄。
 
 ## 03 种子层: L0 / L1 / L2
