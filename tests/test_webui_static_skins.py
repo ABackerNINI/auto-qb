@@ -1,7 +1,7 @@
 """test_webui_static_skins 测试计划: webui 前端资产静态守阵: 皮肤清单 / CSS / 挂件类名
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态; 计划 26-10-31-2316 S2 起 @starting-style 计入容器型 at-rule、shared/fx/fx.js 以"待接线豁免"登记, S6 进 manifest 后删除)
 - test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤220 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 三皮肤 CSS 链接序(atlas/console: style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
 - test_frontend_skin_css_token_parity: 三皮肤令牌**名集**相等守阵(issue 26-10-20-2231) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 三份 index.html shell 内联段守阵(issue 26-10-20-2231) —— sprite 段(80 行/67 symbol)三皮肤逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, console 合法多一行皮肤说明注释)相等; symbol 数下限防"sprite 整体外提成共享文件后三份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须三皮肤同步"
@@ -90,7 +90,8 @@ def _assert_tags_balanced(text, label):
 
 
 # CSS 容器型 at-rule: "开块后下一行是嵌套规则"属正常写法, 不参与"漏闭合"判定
-_CSS_CONTAINER_AT = ("@media", "@supports", "@keyframes", "@container", "@layer", "@scope")
+# (@starting-style: Chrome 117+, 扁平写法 = 块内包选择器规则, 语义同容器型 —— fx 库入场原语用, 计划 26-10-31-2316 S2)
+_CSS_CONTAINER_AT = ("@media", "@supports", "@keyframes", "@container", "@layer", "@scope", "@starting-style")
 # 追剧视图的"集成员"两种写法(e.members / ep.members) —— 取 hash 必须经 memberHashesOf 归一
 _EP_MEMBERS_RE = re.compile(r"\b(?:ep|e)\.members\b")
 
@@ -281,6 +282,11 @@ def _scan_mixin_wiring(problems):
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
             if rel in refs:
+                continue
+            if rel == "shared/fx/fx.js":
+                # S2 fx 骨架(计划 26-10-31-2316): fx 挂载器交付时**暂无消费者**, 挂行要等
+                # S6 才进 tpl-manifest(由 boot.js 保序)。此处登记豁免 = "已登记的待接线件";
+                # S6 接线后清单引用自然命中 refs, 本豁免应随手删除。
                 continue
             problems.append(f"{rel} 未被 tpl-manifest 清单或 shell 静态 <script> 引用(拆分片段漏挂 -> 整块功能静默消失)")
 

@@ -1,0 +1,225 @@
+/* ====================================================================
+ * fx-presets.css -- fx 风格层 preset 配方: neon / glass / crisp
+ * ====================================================================
+ * 计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S2 步, D15: 3 套)
+ *
+ * 切换口: <html data-fx-preset="neon|glass|crisp"> —— 风格层令牌**整体替换**
+ * (计划 §03 两层变体模型), 不与组件层 data-fx 组合语义耦合。
+ * 未设预设 = fx.css :root 基线值(与 crisp 同值系); preset 块永远整体声明
+ * 下方令牌清单**全部成员**, 不许只覆盖其中几条 —— 半套替换 = preset 切换
+ * 时残留上一套的值, 且未来加令牌时"哪些套漏了"无从判起。
+ *
+ * 配方口径(S1 §02 A4 OpenProps 启示: 家族 x 强度档位):
+ *   neon  = 强档(弹簧 -3 / elastic / 时长靠上限) + 发光开(--fx-glow*)
+ *   glass = 中档(弹簧 -2 / sine-quadratic 系柔曲线) + 毛玻璃开(--fx-blur)
+ *   crisp = 基线档(无过冲: 弹簧族落回 --fx-ease-out 系 / 时长取下限)
+ *
+ * 扩展接口(新增 preset 的固定步骤):
+ *   1. 复制任一 preset 块, 换 data-fx-preset 值, 整体重声明下方全部令牌;
+ *   2. fx.js 的 REGISTRY.presets 加同名值(漏加 = 挂载器 audit 判未知预设);
+ *   3. 700 行帽: 本文件只放令牌配方, 规则/选择器一律不进(超帽按 preset 拆文件)。
+ * ==================================================================== */
+
+/* --------------------------------------------------------------------
+ * neon -- 强过冲 + 发光(强调戏剧性; 弹簧走 -3 强档, elastic 备多轮弹性场景)
+ * -------------------------------------------------------------------- */
+[data-fx-preset="neon"] {
+  /* 时长档: 反馈贴近基线(高频交互从紧), 入场/强调靠上限 */
+  --fx-dur-hover: 80ms;
+  --fx-dur-press: 60ms;
+  --fx-dur-fast: 120ms;
+  --fx-dur-enter: 280ms;
+  --fx-dur-exit: 180ms;
+  --fx-dur-modal: 320ms;
+  --fx-dur-modal-exit: 200ms;
+  --fx-dur-panel: 320ms;
+  --fx-dur-panel-exit: 200ms;
+  --fx-dur-tab: 240ms;
+  --fx-dur-toast: 260ms;
+  --fx-dur-toast-exit: 180ms;
+  --fx-dur-emphasis: 460ms;
+  --fx-dur-stagger: 40ms;
+  /* 曲线族: 入场换 snap(快起狠收), 过冲链全开 */
+  --fx-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --fx-ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --fx-ease-standard: cubic-bezier(0.33, 1, 0.68, 1);
+  --fx-ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --fx-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --fx-ease-back: cubic-bezier(0.34, 1.7, 0.64, 1);
+  --fx-ease-elastic: cubic-bezier(0.5, 1.4, 0.75, 1.3);
+  --fx-ease-linear: linear;
+  /* 弹簧族: 整族抬到强档(-1 也带可见回弹), 降级链同基线(bezier 前置) */
+  --fx-spring-1:
+    cubic-bezier(0.26, 1.26, 0.44, 1),
+    linear(0, 0.054 4.2%, 0.188 8.3%, 0.367 12.5%, 0.559 16.7%, 0.742 20.8%, 0.899 25%,
+           1.022 29.2%, 1.107 33.3%, 1.158 37.5%, 1.178 41.7%, 1.175 45.8%, 1.154 50%,
+           1.124 54.2%, 1.09 58.3%, 1.056 62.5%, 1.026 66.7%, 1.002 70.8%, 0.985 75%,
+           0.974 79.2%, 0.969 83.3%, 0.968 87.5%, 0.971 91.7%, 0.976 95.8%, 0.982);
+  --fx-spring-2:
+    cubic-bezier(0.32, 1.5, 0.58, 1),
+    linear(0, 0.095 4.2%, 0.324 8.3%, 0.61 12.5%, 0.885 16.7%, 1.102 20.8%, 1.239 25%,
+           1.295 29.2%, 1.282 33.3%, 1.222 37.5%, 1.14 41.7%, 1.055 45.8%, 0.985 50%,
+           0.937 54.2%, 0.914 58.3%, 0.913 62.5%, 0.928 66.7%, 0.951 70.8%, 0.977 75%,
+           0.999 79.2%, 1.015 83.3%, 1.024 87.5%, 1.026 91.7%, 1.023 95.8%, 1.016);
+  --fx-spring-3:
+    cubic-bezier(0.34, 1.72, 0.64, 1),
+    linear(0, 0.135 4.2%, 0.453 8.3%, 0.821 12.5%, 1.13 16.7%, 1.319 20.8%, 1.372 25%,
+           1.315 29.2%, 1.194 33.3%, 1.057 37.5%, 0.945 41.7%, 0.878 45.8%, 0.862 50%,
+           0.885 54.2%, 0.932 58.3%, 0.982 62.5%, 1.023 66.7%, 1.046 70.8%, 1.051 75%,
+           1.042 79.2%, 1.024 83.3%, 1.005 87.5%, 0.991 91.7%, 0.982 95.8%, 0.981);
+  /* 骨对: 跟随本套时长/曲线重算(成对定义, 不散用) */
+  --fx-pair-quick-in: var(--fx-dur-enter) var(--fx-ease-out);
+  --fx-pair-quick-out: var(--fx-dur-exit) var(--fx-ease-in);
+  --fx-pair-modal-in: var(--fx-dur-modal) var(--fx-ease-out);
+  --fx-pair-modal-out: var(--fx-dur-modal-exit) var(--fx-ease-in);
+  --fx-pair-panel-in: var(--fx-dur-panel) var(--fx-ease-out);
+  --fx-pair-panel-out: var(--fx-dur-panel-exit) var(--fx-ease-in);
+  --fx-pair-toast-in: var(--fx-dur-toast) var(--fx-ease-out);
+  --fx-pair-toast-out: var(--fx-dur-toast-exit) var(--fx-ease-in);
+  /* 位移/幅度: pop 幅度加大一档 */
+  --fx-lift: 2px;
+  --fx-enter-shift: 14px;
+  --fx-pop-scale: 0.94;
+  --fx-slip-x: 20px;
+  /* 风格供给面: 发光开 */
+  --fx-glow: 12px;
+  --fx-glow-c: color-mix(in srgb, currentColor 45%, transparent);
+  --fx-blur: 0px;
+  --fx-sheen-c: color-mix(in srgb, currentColor 60%, transparent);
+  --fx-sheen-op: 0.2;
+}
+
+/* --------------------------------------------------------------------
+ * glass -- 柔曲线 + 毛玻璃(冷却系; 弹簧走 -2 中档, 入场位移收小)
+ * -------------------------------------------------------------------- */
+[data-fx-preset="glass"] {
+  /* 时长档: 中间值, 入场稍长(柔曲线需要时长铺开) */
+  --fx-dur-hover: 90ms;
+  --fx-dur-press: 70ms;
+  --fx-dur-fast: 140ms;
+  --fx-dur-enter: 260ms;
+  --fx-dur-exit: 170ms;
+  --fx-dur-modal: 320ms;
+  --fx-dur-modal-exit: 220ms;
+  --fx-dur-panel: 320ms;
+  --fx-dur-panel-exit: 220ms;
+  --fx-dur-tab: 240ms;
+  --fx-dur-toast: 260ms;
+  --fx-dur-toast-exit: 190ms;
+  --fx-dur-emphasis: 420ms;
+  --fx-dur-stagger: 35ms;
+  /* 曲线族: sine 系(最柔, S1 §02 A2), 过冲收半档 */
+  --fx-ease-out: cubic-bezier(0.61, 1, 0.88, 1);
+  --fx-ease-in: cubic-bezier(0.12, 0, 0.39, 0);
+  --fx-ease-standard: cubic-bezier(0.37, 0, 0.63, 1);
+  --fx-ease-snap: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-ease-in-out: cubic-bezier(0.37, 0, 0.63, 1);
+  --fx-ease-back: cubic-bezier(0.34, 1.34, 0.64, 1);
+  --fx-ease-elastic: cubic-bezier(0.5, 1.14, 0.75, 1.14);
+  --fx-ease-linear: linear;
+  /* 弹簧族: 全族落 -2/-1 档 */
+  --fx-spring-1:
+    cubic-bezier(0.22, 1.12, 0.36, 1),
+    linear(0, 0.024 4.2%, 0.085 8.3%, 0.171 12.5%, 0.27 16.7%, 0.374 20.8%, 0.477 25%,
+           0.574 29.2%, 0.663 33.3%, 0.742 37.5%, 0.811 41.7%, 0.868 45.8%, 0.916 50%,
+           0.953 54.2%, 0.982 58.3%, 1.004 62.5%, 1.019 66.7%, 1.03 70.8%, 1.035 75%,
+           1.038 79.2%, 1.038 83.3%, 1.037 87.5%, 1.034 91.7%, 1.03 95.8%, 1.026);
+  --fx-spring-2:
+    cubic-bezier(0.3, 1.36, 0.54, 1),
+    linear(0, 0.054 4.2%, 0.188 8.3%, 0.367 12.5%, 0.559 16.7%, 0.742 20.8%, 0.899 25%,
+           1.022 29.2%, 1.107 33.3%, 1.158 37.5%, 1.178 41.7%, 1.175 45.8%, 1.154 50%,
+           1.124 54.2%, 1.09 58.3%, 1.056 62.5%, 1.026 66.7%, 1.002 70.8%, 0.985 75%,
+           0.974 79.2%, 0.969 83.3%, 0.968 87.5%, 0.971 91.7%, 0.976 95.8%, 0.982);
+  --fx-spring-3:
+    cubic-bezier(0.32, 1.5, 0.58, 1),
+    linear(0, 0.095 4.2%, 0.324 8.3%, 0.61 12.5%, 0.885 16.7%, 1.102 20.8%, 1.239 25%,
+           1.295 29.2%, 1.282 33.3%, 1.222 37.5%, 1.14 41.7%, 1.055 45.8%, 0.985 50%,
+           0.937 54.2%, 0.914 58.3%, 0.913 62.5%, 0.928 66.7%, 0.951 70.8%, 0.977 75%,
+           0.999 79.2%, 1.015 83.3%, 1.024 87.5%, 1.026 91.7%, 1.023 95.8%, 1.016);
+  /* 骨对 */
+  --fx-pair-quick-in: var(--fx-dur-enter) var(--fx-ease-out);
+  --fx-pair-quick-out: var(--fx-dur-exit) var(--fx-ease-in);
+  --fx-pair-modal-in: var(--fx-dur-modal) var(--fx-ease-out);
+  --fx-pair-modal-out: var(--fx-dur-modal-exit) var(--fx-ease-in);
+  --fx-pair-panel-in: var(--fx-dur-panel) var(--fx-ease-out);
+  --fx-pair-panel-out: var(--fx-dur-panel-exit) var(--fx-ease-in);
+  --fx-pair-toast-in: var(--fx-dur-toast) var(--fx-ease-out);
+  --fx-pair-toast-out: var(--fx-dur-toast-exit) var(--fx-ease-in);
+  /* 位移/幅度: 位移收小(浮动观感, 轻拿轻放) */
+  --fx-lift: 1px;
+  --fx-enter-shift: 10px;
+  --fx-pop-scale: 0.97;
+  --fx-slip-x: 14px;
+  /* 风格供给面: 毛玻璃开(组件配方消费; 禁用在全屏遮罩/吸顶层, PERF-01) */
+  --fx-glow: 0px;
+  --fx-glow-c: transparent;
+  --fx-blur: 10px;
+  --fx-sheen-c: color-mix(in srgb, #ffffff 40%, transparent);
+  --fx-sheen-op: 0.12;
+}
+
+/* --------------------------------------------------------------------
+ * crisp -- 基线档(无过冲, 直给; 与 fx.css :root 基线同值系, 显式成块以保
+ * 证"三套任选其一都是完整配方" -- 切到 crisp 不依赖回落)
+ * -------------------------------------------------------------------- */
+[data-fx-preset="crisp"] {
+  --fx-dur-hover: 80ms;
+  --fx-dur-press: 60ms;
+  --fx-dur-fast: 120ms;
+  --fx-dur-enter: 240ms;
+  --fx-dur-exit: 150ms;
+  --fx-dur-modal: 280ms;
+  --fx-dur-modal-exit: 180ms;
+  --fx-dur-panel: 280ms;
+  --fx-dur-panel-exit: 180ms;
+  --fx-dur-tab: 200ms;
+  --fx-dur-toast: 240ms;
+  --fx-dur-toast-exit: 170ms;
+  --fx-dur-emphasis: 360ms;
+  --fx-dur-stagger: 24ms;
+  /* 曲线族: quart 系(干脆利落, S1 §02 A2), 过冲关 */
+  --fx-ease-out: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-ease-in: cubic-bezier(0.5, 0, 0.75, 0);
+  --fx-ease-standard: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-ease-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --fx-ease-in-out: cubic-bezier(0.76, 0, 0.24, 1);
+  --fx-ease-back: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-ease-elastic: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-ease-linear: linear;
+  /* 弹簧族: 无过冲档 -- crisp 语义下整族回落到 bezier 快收曲线(linear() 不上) */
+  --fx-spring-1: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-spring-2: cubic-bezier(0.25, 1, 0.5, 1);
+  --fx-spring-3: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 骨对 */
+  --fx-pair-quick-in: var(--fx-dur-enter) var(--fx-ease-out);
+  --fx-pair-quick-out: var(--fx-dur-exit) var(--fx-ease-in);
+  --fx-pair-modal-in: var(--fx-dur-modal) var(--fx-ease-out);
+  --fx-pair-modal-out: var(--fx-dur-modal-exit) var(--fx-ease-in);
+  --fx-pair-panel-in: var(--fx-dur-panel) var(--fx-ease-out);
+  --fx-pair-panel-out: var(--fx-dur-panel-exit) var(--fx-ease-in);
+  --fx-pair-toast-in: var(--fx-dur-toast) var(--fx-ease-out);
+  --fx-pair-toast-out: var(--fx-dur-toast-exit) var(--fx-ease-in);
+  /* 位移/幅度: 取各档下限 */
+  --fx-lift: 1px;
+  --fx-enter-shift: 8px;
+  --fx-pop-scale: 0.97;
+  --fx-slip-x: 12px;
+  /* 风格供给面: 全关(装饰归零, 只剩时序) */
+  --fx-glow: 0px;
+  --fx-glow-c: transparent;
+  --fx-blur: 0px;
+  --fx-sheen-c: transparent;
+  --fx-sheen-op: 0;
+}
+
+/* --------------------------------------------------------------------
+ * 预设值未知时的兜底: 显式关掉风格供给面(未注册预设不会走到这里 -- fx.js
+ * audit 会报未知预设; 本块只防"预设值写错 + fx.js 缺位"双故障下发光失控)
+ * -------------------------------------------------------------------- */
+[data-fx-preset]:not([data-fx-preset="neon"]):not([data-fx-preset="glass"]):not([data-fx-preset="crisp"]) {
+  --fx-glow: 0px;
+  --fx-glow-c: transparent;
+  --fx-blur: 0px;
+  --fx-sheen-c: transparent;
+  --fx-sheen-op: 0;
+}

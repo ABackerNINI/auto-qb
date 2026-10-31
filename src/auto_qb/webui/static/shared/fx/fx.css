@@ -1,0 +1,206 @@
+/* ====================================================================
+ * fx.css -- fx 动效库基线: 令牌 + [data-fx] 基础规则 + 降级块
+ * ====================================================================
+ * 计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S2 步)
+ * 调研: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html (S1, §06 五条硬结论)
+ *
+ * 范围(S2): 只交付令牌体系与通用基线, 暂无消费者、不挂任何皮肤。
+ *   三套风格配方在 fx-presets.css(风格层, <html data-fx-preset="..."> 切换);
+ *   挂载器在 fx.js(单挂载器, 扫 data-fx / data-fx-variant 统一初始化)。
+ *
+ * 挂载约定(两层变体模型, 计划 §03):
+ *   组件层: data-fx="fade|rise|pop|slip|sheen|pulse"(动效名, 空格分隔可多值)
+ *           data-fx-variant="subtle|bold|spring"(强度变体, 可省)
+ *   风格层: <html data-fx-preset="neon|glass|crisp"> 整套令牌配方一键切换
+ *
+ * 降级哲学(D5 拍板): Chrome/Edge 全特性, Firefox/Safari 降级 = 无动效终态。
+ *   纯 CSS 特性缺失时该条声明整条作废(无害); linear() 弹簧族 = bezier 近似
+ *   在前、linear() 覆盖在后的降级链; @starting-style 不支持 = 直接落在终态。
+ *   不为旧浏览器保动效。
+ *
+ * 时序契约: 本文件不依赖任何 JS; fx.js 挂行未来进 tpl-manifest 由 boot.js
+ *   保序注入。本文件与 boot.js 零耦合, 单独 <link> 亦可独立生效。
+ *
+ * 令牌命名: 一律 --fx-* 前缀, 与四皮肤既有令牌名集(atlas/prism/console/
+ *   flux)零交集, 不参与皮肤令牌 parity 守阵的统计口径; 四皮肤共用 = 只引用
+ *   不重声明(风格差异走 preset 层, 不在本文件做皮肤特化)。
+ * ==================================================================== */
+
+:root {
+  /* ---- 时长档(S1 §03 B1 三方规范对照收敛; hover/press 取各档下限 = Apple HIG
+   *      高频交互从紧口径) ---- */
+  --fx-dur-hover: 80ms;        /* hover 反馈(80-100ms 档) */
+  --fx-dur-press: 60ms;        /* 按下/active(50-80ms 档) */
+  --fx-dur-fast: 120ms;        /* 小元素过渡: 开关/checkbox/色变(120-200ms 档下限) */
+  --fx-dur-enter: 250ms;       /* 通用入场(200-300ms 档) */
+  --fx-dur-exit: 160ms;        /* 通用退场(150-200ms 档; 退场恒比入场短) */
+  --fx-dur-modal: 300ms;       /* 弹窗/抽屉入场(S1 B1: 300ms 入) */
+  --fx-dur-modal-exit: 200ms;  /* 弹窗/抽屉退场(200ms 出, M3 官方例同值) */
+  --fx-dur-panel: 300ms;       /* 面板/抽屉入场(与弹窗同值, 语义分名以备分调) */
+  --fx-dur-panel-exit: 200ms;  /* 面板/抽屉退场 */
+  --fx-dur-tab: 220ms;         /* 页签切换(200-250ms 档) */
+  --fx-dur-toast: 250ms;       /* toast 入场 */
+  --fx-dur-toast-exit: 180ms;  /* toast 退场(展示时长与动画时长解耦, 归消费方) */
+  --fx-dur-emphasis: 400ms;    /* 强调类: pulse/sheen/pop-in(300-500ms 档下限) */
+  --fx-dur-stagger: 30ms;      /* stagger 步进(20-50ms 档; 仅限 <=8 个表面级联,
+                                    torrent 行禁全行 stagger -- S1 §04 C1 边界) */
+
+  /* ---- 曲线族(S1 §02 A2/A5 收敛集; 命名 = 用途, 数值可被 preset 整体替换) ---- */
+  --fx-ease-out: cubic-bezier(0.2, 0, 0, 1);        /* 入场/浮现(M3 emphasized-decelerate 系) */
+  --fx-ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);    /* 退场(M3 emphasized-accelerate 系) */
+  --fx-ease-standard: cubic-bezier(0.33, 1, 0.68, 1); /* 小过渡/颜色/阴影(easings cubic-out) */
+  --fx-ease-snap: cubic-bezier(0.16, 1, 0.3, 1);    /* 快而狠的强调入场(expo-out) */
+  --fx-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); /* 空间移动/位置交换(cubic-in-out) */
+  --fx-ease-back: cubic-bezier(0.34, 1.56, 0.64, 1);  /* 过冲 pop(back-out, 单次回弹) */
+  --fx-ease-elastic: cubic-bezier(0.5, 1.25, 0.75, 1.25); /* 强过冲(neon 档; 多轮弹性须 linear()) */
+  --fx-ease-linear: linear;                          /* 进度/扫过, 不用于空间移动 */
+
+  /* ---- 弹簧族(linear() 物理弹簧, Chrome 113+; 降级链 = bezier 近似在前、
+   *      linear() 覆盖在后 -- S1 §06 硬结论 2。采样点为阻尼弹簧 y(t) 的
+   *      等步长离散, 过冲幅度 = 家族强度档: -1 软(3.8%) / -2 中(17.8%) /
+   *      -3 强(29.5%)) ---- */
+  --fx-spring-1:
+    cubic-bezier(0.22, 1.12, 0.36, 1),
+    linear(0, 0.024 4.2%, 0.085 8.3%, 0.171 12.5%, 0.27 16.7%, 0.374 20.8%, 0.477 25%,
+           0.574 29.2%, 0.663 33.3%, 0.742 37.5%, 0.811 41.7%, 0.868 45.8%, 0.916 50%,
+           0.953 54.2%, 0.982 58.3%, 1.004 62.5%, 1.019 66.7%, 1.03 70.8%, 1.035 75%,
+           1.038 79.2%, 1.038 83.3%, 1.037 87.5%, 1.034 91.7%, 1.03 95.8%, 1.026);
+  --fx-spring-2:
+    cubic-bezier(0.3, 1.36, 0.54, 1),
+    linear(0, 0.054 4.2%, 0.188 8.3%, 0.367 12.5%, 0.559 16.7%, 0.742 20.8%, 0.899 25%,
+           1.022 29.2%, 1.107 33.3%, 1.158 37.5%, 1.178 41.7%, 1.175 45.8%, 1.154 50%,
+           1.124 54.2%, 1.09 58.3%, 1.056 62.5%, 1.026 66.7%, 1.002 70.8%, 0.985 75%,
+           0.974 79.2%, 0.969 83.3%, 0.968 87.5%, 0.971 91.7%, 0.976 95.8%, 0.982);
+  --fx-spring-3:
+    cubic-bezier(0.34, 1.56, 0.64, 1),
+    linear(0, 0.095 4.2%, 0.324 8.3%, 0.61 12.5%, 0.885 16.7%, 1.102 20.8%, 1.239 25%,
+           1.295 29.2%, 1.282 33.3%, 1.222 37.5%, 1.14 41.7%, 1.055 45.8%, 0.985 50%,
+           0.937 54.2%, 0.914 58.3%, 0.913 62.5%, 0.928 66.7%, 0.951 70.8%, 0.977 75%,
+           0.999 79.2%, 1.015 83.3%, 1.024 87.5%, 1.026 91.7%, 1.023 95.8%, 1.016);
+
+  /* ---- 入/退非对称骨对(S1 §06 硬结论 1: 曲线+时长成对定义、不成对独立调参;
+   *      用法: transition: opacity var(--fx-pair-modal-in), transform var(--fx-pair-modal-in);
+   *      值 = "<时长> <曲线>" 完整 transition 段, 可直接嵌进 shorthand) ---- */
+  --fx-pair-quick-in: var(--fx-dur-enter) var(--fx-ease-out);
+  --fx-pair-quick-out: var(--fx-dur-exit) var(--fx-ease-in);
+  --fx-pair-modal-in: var(--fx-dur-modal) var(--fx-ease-out);
+  --fx-pair-modal-out: var(--fx-dur-modal-exit) var(--fx-ease-in);
+  --fx-pair-panel-in: var(--fx-dur-panel) var(--fx-ease-out);
+  --fx-pair-panel-out: var(--fx-dur-panel-exit) var(--fx-ease-in);
+  --fx-pair-toast-in: var(--fx-dur-toast) var(--fx-ease-out);
+  --fx-pair-toast-out: var(--fx-dur-toast-exit) var(--fx-ease-in);
+
+  /* ---- 位移/幅度 tokens(S1 §03 B2: hover 抬升 1-2px / 入场位移 8-16px /
+   *      弹窗 scale 差 <=4%) ---- */
+  --fx-lift: 2px;              /* hover 抬升量 */
+  --fx-enter-shift: 12px;      /* 通用入场位移 */
+  --fx-pop-scale: 0.96;        /* pop 起始缩放(差 4%, 过大显廉价) */
+  --fx-slip-x: 16px;           /* 横向滑入距离(方向由各变体规则取正负) */
+
+  /* ---- 风格层供给面(preset 配方整体替换的槽位; 基线值 = 全关闭, 具体消费方:
+   *      sheen 用 --fx-sheen-c, 发光/毛玻璃类组件配方用 --fx-glow* / --fx-blur,
+   *      本文件基线规则不消费 glow/blur -- 供 S3+ 组件配方取用) ---- */
+  --fx-glow: 0px;              /* 发光 spread(0 = 关) */
+  --fx-glow-c: transparent;    /* 发光颜色 */
+  --fx-blur: 0px;              /* 毛玻璃半径(0 = 关; 禁用在遮罩/吸顶层, 见 PERF-01) */
+  --fx-sheen-c: transparent;   /* 扫光颜色 */
+  --fx-sheen-op: 0.14;         /* 扫光峰值不透明度 */
+}
+
+/* ====================================================================
+ * [data-fx] 基础规则
+ * --------------------------------------------------------------------
+ * 基线只动 opacity/transform(合成器友好, S1 §05 标注口径); 组件配方
+ * (S3+ / S6 挂载)可按需扩展 transition-property 列表, 不在本层加宽。
+ * ==================================================================== */
+
+/* 基线过渡: 入场骨对为默认(时长+曲线一次声明); transition-delay 留 stagger
+ * 槽(--fx-i 由挂载器/模板按序号写 0..N, 缺省 0 = 无延迟) */
+[data-fx] {
+  transition-property: opacity, transform;
+  transition-duration: var(--fx-dur-enter);
+  transition-timing-function: var(--fx-ease-out);
+  transition-delay: calc(var(--fx-i, 0) * var(--fx-dur-stagger));
+}
+
+/* ---- 入场原语: @starting-style 扁平写法(Chrome 117+; 不支持 = 无动效终态,
+ *      符合 D5)。元素首次渲染/从 display:none 出现时从起始态过渡到终态 ---- */
+@starting-style {
+  [data-fx~="fade"] { opacity: 0; }
+  [data-fx~="rise"] { opacity: 0; transform: translateY(var(--fx-enter-shift)); }
+  [data-fx~="pop"] { opacity: 0; transform: scale(var(--fx-pop-scale)); }
+  [data-fx~="slip"] { opacity: 0; transform: translateX(var(--fx-slip-x)); }
+}
+
+/* ---- 退场态: 挂载器写 data-fx-exit 后生效; 退场骨对(短+accelerate)整体
+ *      盖过入场默认与 variant 强度 -- 骨对不成对独立调参(S1 §06 结论 1);
+ *      stagger 槽在退场一律归零(退场不做级联) ---- */
+[data-fx][data-fx-exit] {
+  transition-duration: var(--fx-dur-exit);
+  transition-timing-function: var(--fx-ease-in);
+  transition-delay: 0s;
+  opacity: 0;
+}
+[data-fx~="rise"][data-fx-exit] { transform: translateY(calc(var(--fx-enter-shift) / 2)); }
+[data-fx~="slip"][data-fx-exit] { transform: translateX(calc(var(--fx-slip-x) / -2)); }
+[data-fx~="pop"][data-fx-exit] { transform: scale(var(--fx-pop-scale)); }
+
+/* ---- 强度变体(组件层第二维; 只调入场强度, 不碰退场骨对) ---- */
+[data-fx][data-fx-variant="subtle"] { transition-duration: var(--fx-dur-fast); }
+[data-fx][data-fx-variant="bold"] { transition-duration: var(--fx-dur-panel); }
+[data-fx][data-fx-variant="spring"] { transition-timing-function: var(--fx-spring-2); }
+/* bold+spring 组合 = 长时长 + 弹簧曲线(级联天然支持, 无需专写组合规则) */
+
+/* ====================================================================
+ * 注意力原语: sheen(扫光)/ pulse(脉动) -- @keyframes 类, 由挂载器写
+ * data-fx-play 触发一次性播放(重触发语义见 fx.js::play: 先跳终态再重放)
+ * ==================================================================== */
+
+@keyframes fx-sheen {
+  from { opacity: var(--fx-sheen-op); transform: translateX(-140%); }
+  to { opacity: 0; transform: translateX(460%); }
+}
+[data-fx~="sheen"] {
+  /* 扫光载体: 相对定位 + 裁边(挂在会裁切的容器上无副作用; 挂在依赖
+   * overflow 可见的元素上须评估 -- 组件配方落点时确认) */
+  position: relative;
+  overflow: hidden;
+}
+[data-fx~="sheen"]::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 36%;
+  background: linear-gradient(105deg, transparent, var(--fx-sheen-c), transparent);
+  opacity: 0;
+  transform: translateX(-140%);
+  pointer-events: none;
+}
+[data-fx~="sheen"][data-fx-play]::after { animation: fx-sheen var(--fx-dur-emphasis) var(--fx-ease-standard); }
+
+@keyframes fx-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+[data-fx~="pulse"][data-fx-play] { animation: fx-pulse var(--fx-dur-emphasis) var(--fx-ease-standard); }
+
+/* ====================================================================
+ * prefers-reduced-motion: reduce 降级块(硬惯例: 每个动效配套, 集中在
+ * 本块按动效逐条列出 -- 新增动效必须来这里补一行, 缺块即违规)
+ * ==================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  /* fade/rise/pop/slip 入场 + 各自退场: 时长/延迟归零 = 立即落到终态(D5:
+   * 降级目标 = 无动效终态, 不是隐藏) */
+  [data-fx],
+  [data-fx][data-fx-exit] {
+    transition-duration: 0s;
+    transition-delay: 0s;
+  }
+  /* sheen 扫光: 关闭(纯装饰, 无信息量 -- HIG: 动效不作关键信息唯一途径) */
+  [data-fx~="sheen"][data-fx-play]::after { animation: none; }
+  /* pulse 脉动: 关闭 */
+  [data-fx~="pulse"][data-fx-play] { animation: none; }
+}
