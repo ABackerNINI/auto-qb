@@ -79,7 +79,6 @@
   #s3 th:nth-child(4) { width: 250px; }
   #s3 th:nth-child(5) { width: 86px; }
   #s3 th:nth-child(6) { width: 70px; }
-  #s3 th:nth-child(7) { width: 92px; }
   #s7 th:nth-child(1) { width: 62px; }
   #s7 th:nth-child(2) { width: 96px; }
   #s7 th:nth-child(3) { width: 96px; }
@@ -160,7 +159,7 @@
     <p><b>片 = 一个能独立排期、独立验收的验证面</b>, 不是文件清单。片号建立后不复用; 下线只划掉不删行。当前 11 片(RM00 是基建, 其余按"风险 × 副作用"排序):</p>
     <div class="tscroll">
     <table>
-      <tr><th>片</th><th>名称</th><th>路径 glob(判定漂移用)</th><th>主要验证面</th><th>可测层级</th><th>预算</th><th>状态</th></tr>
+      <tr><th>片</th><th>名称</th><th>路径 glob(判定漂移用)</th><th>主要验证面</th><th>可测层级</th><th>预算</th></tr>
       <tr>
         <td><code>RM00</code></td>
         <td>基建: guard / 伪 tracker / 双实例互传</td>
@@ -168,7 +167,6 @@
         <td>基建: 三层守卫 + L1/L2 可行性验证(验收三条见规程 §03)</td>
         <td>L1·L2</td>
         <td>1 次</td>
-        <td><span class="badge">待排期(最高)</span></td>
       </tr>
       <tr>
         <td><code>RM01</code></td>
@@ -177,7 +175,6 @@
         <td>启动期提示与退出码(配置错/锁竞争干净退出) / token 原子落盘 / 端口与单实例锁 / 托盘菜单与双开唤起 / 开机自启</td>
         <td>L0·L1</td>
         <td>0.5 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM02</code></td>
@@ -186,7 +183,6 @@
         <td>interval 真节拍 / 优雅退出落盘 / 非优雅终止的丢失窗口 / 热重载 / <code>queue_rebuilt</code> 相位 / 连不上 qB 的失败节流与重连退避(RM01 拍板 D1 移交)</td>
         <td>L1</td>
         <td>0.5 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM03</code></td>
@@ -195,7 +191,6 @@
         <td>条件命中 / 动作真作用于 qB(打标·分类·限速·删除) / 变量替换 / 表达式</td>
         <td>L0·L1</td>
         <td>1 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM04</code></td>
@@ -204,7 +199,6 @@
         <td>归组 key / 跨组文件冲突 / 缺失文件标记 / 跨盘移动 / journal 恢复</td>
         <td>L0·L1</td>
         <td>1 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM05</code></td>
@@ -213,7 +207,6 @@
         <td>tracker 规则解析 / <code>delete_tags</code> 族 / <code>@tracker_tags</code> 引用 / 站点档案派生</td>
         <td>L0·L1</td>
         <td>0.5 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM06</code></td>
@@ -222,7 +215,6 @@
         <td>取数通道(扩展代理 / 本地端点) / 三态判定 / 频控 / 站点状态 / HR 排除表</td>
         <td>L1·L2(站点侧需真实站点, 单独授权)</td>
         <td>1 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM07</code></td>
@@ -231,7 +223,6 @@
         <td>限速下发与回读 / 曲线采样 / 流量源切换 / 重启尖峰缺口 / 全局流量聚合</td>
         <td>L1·L2</td>
         <td>1 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM08</code></td>
@@ -240,7 +231,6 @@
         <td>轮询分档 / 增量 delta / 视图 payload 收敛 / 大库首帧与滚动 / 详情抽屉</td>
         <td>L1·L2</td>
         <td>0.5 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM09</code></td>
@@ -249,7 +239,6 @@
         <td>右键命令真作用到 qB / 批量合单 / 乐观 UI pending→回滚 / 移动与重命名 / 配置保存与热重载</td>
         <td>L0·L1</td>
         <td>1 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
       <tr>
         <td><code>RM10</code></td>
@@ -258,7 +247,6 @@
         <td>通知通道 / 导出 / 扩展安装与权限 / 工具客户端</td>
         <td>L0</td>
         <td>0.5 次</td>
-        <td><span class="badge">待排期</span></td>
       </tr>
     </table>
     </div>
@@ -359,6 +347,7 @@
       <li>2026-10-31 08:19 — <code>RM01</code> 排期开工, 计划 <code>plans/26-10-31-0819-plan-rm01-startup.html</code>。开工自检发现<b>片表 glob 缺陷</b>: RM01 行 7 条 glob 里 <code>tray/**</code> 零命中 —— 代码实际在 <code>src/auto_qb/tray/</code>(<code>app.py</code> 529 行), 属<b>glob 写漏前缀而非片失效</b>, 按规程 §05 规则 8 修正为 <code>src/auto_qb/tray/**</code>, 其余 6 条同步补全 <code>src/auto_qb/</code> 前缀。另发现验证面「连不上 qB 的节流与提示」的实现全在 <code>core/qbmanager.py</code>(属 RM02 glob), 节流归属待拍板(计划 D1)。</li>
       <li>2026-10-31 08:31 — <code>RM01</code> 实测完成: <b>8 通过 / 1 阻塞</b>(14.4s), 档位 <code>0/0/7/2</code>。两条 L3 的红验真跑过(锁的「A 不在时必须能起」/ 端口释放的「强杀必须不干净」)。阻塞项 <code>RM01-09</code> 托盘双开: venv 解释器<b>缺 tkinter</b>(<code>No module named 'tkinter'</code>), 解锁条件 = 换带 Tk 的解释器。零业务缺陷。三条进程边界事实写进 <code>lib/app.py</code>(--dry-run 不启 WEB / Windows 外部 SIGTERM 等于强杀 / 配置须带 schema_version)。节流验证面按 D1 移交 RM02。观察项 1 条(未配流量源时启动打空路径 WARNING)转 RM07。</li>
       <li>2026-10-31 08:53 — <code>RM01</code> 复跑<b>全绿 9/9</b>(27.4s, 连跑三轮无 flaky), 档位 <code>0/1/7/2</code>。阻塞项解除的根因不是 uv.lock: <code>tkinter</code> 属 CPython 标准库(Tcl/Tk 编译产物), 不可能出现在 lock 里 —— 真因是 <code>.venv</code> 的基解释器用了宿主 <code>H:\Programs\AutoClaw\resources\python</code>(裁剪版 3.13.12, 无 <code>_tkinter.pyd</code>/<code>tcl/</code>), 导致 <code>import customtkinter</code> 直接炸在 <code>__init__.py:6</code> —— <b>这个 venv 里 GUI 栈一直是死的</b>, 不只是托盘用例。已按 uv 管理的 CPython 3.13.15 重建 venv(带 Tk 8.6)+ <code>uv sync</code>; 重建后 <code>tests/</code> 4302 passed / 覆盖率 99.05%。另发现 <b><code>Popen.pid</code> ≠ 进程实际 pid</b>(venv 的 <code>python.exe</code> 是 47KB 启动器, 真解释器是子进程) ⇒ 按 pid 断言改用 <code>real_pid()</code>、强杀改 <code>taskkill /F /T</code>。</li>
+      <li>2026-10-31 09:18 — 片表去重: §03 移除「状态」栏(与 §07 覆盖进度总表重复且持续飘移, 状态单点收口到 §07)。用户拍板。</li>
     </ul>
   </section>
 
