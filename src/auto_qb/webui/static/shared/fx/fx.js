@@ -17,7 +17,10 @@
  *     任何时刻可再调 AQB_FX.scan(), 已初始化的元素按标记跳过。
  *
  * data-fx 属性约定(与 fx.css 基线规则一一对应):
- *   data-fx="fade|rise|pop|slip|sheen|pulse"   动效名, 空格分隔可多值
+ *   data-fx="fade|rise|pop|slip|sheen|pulse|lift|glow|press"
+ *                                              动效名, 空格分隔可多值
+ *                                              (lift/glow/press = hover/press
+ *                                              反馈原语, S3 起入族)
  *   data-fx-variant="subtle|bold|spring"       强度变体, 可省
  *   <html data-fx-preset="neon|glass|crisp">   风格层整套配方(fx-presets.css)
  *   data-fx-exit                               退场态标记(挂载器写, 见 exit)
@@ -41,7 +44,7 @@
   /* 动效名/变体名/预设名注册表: fx.css 基线原语 + fx-presets.css 配方名。
    * 新增任一名 = CSS 与这里同轮补(漏补 = audit 恒报未知, 不会静默)。 */
   var REGISTRY = {
-    effects: ["fade", "rise", "pop", "slip", "sheen", "pulse"],
+    effects: ["fade", "rise", "pop", "slip", "sheen", "pulse", "lift", "glow", "press"],
     variants: ["subtle", "bold", "spring"],
     presets: ["neon", "glass", "crisp"],
   };

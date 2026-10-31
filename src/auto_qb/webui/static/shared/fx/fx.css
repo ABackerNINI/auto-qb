@@ -9,7 +9,9 @@
  *   挂载器在 fx.js(单挂载器, 扫 data-fx / data-fx-variant 统一初始化)。
  *
  * 挂载约定(两层变体模型, 计划 §03):
- *   组件层: data-fx="fade|rise|pop|slip|sheen|pulse"(动效名, 空格分隔可多值)
+ *   组件层: data-fx="fade|rise|pop|slip|sheen|pulse|lift|glow|press"
+ *           (动效名, 空格分隔可多值; lift/glow/press = hover/press 交互反馈
+ *           原语, S3 showcase 步入族 -- 报告 §05 D1 候选 1/2/5 的库化落点)
  *           data-fx-variant="subtle|bold|spring"(强度变体, 可省)
  *   风格层: <html data-fx-preset="neon|glass|crisp"> 整套令牌配方一键切换
  *
@@ -188,6 +190,57 @@
 [data-fx~="pulse"][data-fx-play] { animation: fx-pulse var(--fx-dur-emphasis) var(--fx-ease-standard); }
 
 /* ====================================================================
+ * 交互反馈原语: lift(抬升) / glow(辉光) / press(按压回弹) -- :hover /
+ * :active 状态驱动, 与入场原语(@starting-style)正交, 可多值共存
+ * (data-fx="rise lift")。报告 §05 D1 候选 1/2/5 的库化落点(S3)。
+ * 属性层: transform + box-shadow; box-shadow 属 paint 层, 按钮级小面积
+ * 可接受(报告 §05 标注口径)。降级: 三者均为 transition(无 @keyframes),
+ * 基线 RM 块已把时长归零, 下面 RM 段另按选择器显式压平位移/缩放。
+ * ==================================================================== */
+
+/* lift 抬升(D1 候选 1): hover 上浮 --fx-lift + 双层落影加深, active 压回;
+ * 落影取固定黑色系(fx 库不新增皮肤侧令牌, 阴影不需要随 preset 变) */
+[data-fx~="lift"] {
+  transition-property: opacity, transform, box-shadow;
+  transition-timing-function: var(--fx-ease-standard);
+  transition-duration: var(--fx-dur-hover);
+}
+[data-fx~="lift"]:hover {
+  transform: translateY(calc(-1 * var(--fx-lift)));
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+}
+[data-fx~="lift"]:active {
+  transform: translateY(0);
+  transition-duration: var(--fx-dur-press);
+}
+
+/* glow 辉光(D1 候选 2): hover 发光渐亮, 消费 preset 供给面 --fx-glow* /
+ * --fx-glow-c(neon 开 12px, glass/crisp 关 = 无辉光, preset 切换可对比);
+ * 时长走 --fx-dur-fast(120ms), 超 hover 100ms 软约束上限 -- 只标注不淘汰 */
+[data-fx~="glow"] {
+  transition-property: opacity, transform, box-shadow;
+  transition-timing-function: var(--fx-ease-standard);
+  transition-duration: var(--fx-dur-fast);
+}
+[data-fx~="glow"]:hover {
+  box-shadow: 0 0 var(--fx-glow) var(--fx-glow-c);
+}
+
+/* press 按压回弹(D1 候选 5): active 缩到 --fx-pop-scale(60ms 直给), 松开
+ * 用 ease-back 过冲回位; 静息态过渡 = 回弹段(fast + back-out), active 态
+ * 覆盖为按压段(press + standard) */
+[data-fx~="press"] {
+  transition-property: opacity, transform;
+  transition-timing-function: var(--fx-ease-back);
+  transition-duration: var(--fx-dur-fast);
+}
+[data-fx~="press"]:active {
+  transform: scale(var(--fx-pop-scale));
+  transition-timing-function: var(--fx-ease-standard);
+  transition-duration: var(--fx-dur-press);
+}
+
+/* ====================================================================
  * prefers-reduced-motion: reduce 降级块(硬惯例: 每个动效配套, 集中在
  * 本块按动效逐条列出 -- 新增动效必须来这里补一行, 缺块即违规)
  * ==================================================================== */
@@ -203,4 +256,12 @@
   [data-fx~="sheen"][data-fx-play]::after { animation: none; }
   /* pulse 脉动: 关闭 */
   [data-fx~="pulse"][data-fx-play] { animation: none; }
+  /* lift/glow/press 反馈原语: 时长归零 + 压平位移/缩放(hover 高亮/落影等
+   * 即时状态变化保留 -- 非动效信息, 不降级; glow 本就随 preset 供给面) */
+  [data-fx~="lift"],
+  [data-fx~="glow"],
+  [data-fx~="press"] { transition-duration: 0s; transition-delay: 0s; }
+  [data-fx~="lift"]:hover,
+  [data-fx~="lift"]:active { transform: none; }
+  [data-fx~="press"]:active { transform: none; }
 }

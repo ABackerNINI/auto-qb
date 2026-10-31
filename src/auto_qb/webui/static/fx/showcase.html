@@ -1,0 +1,1101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>fx showcase -- 动效候选挑选台(flux S3)</title>
+<!--
+  计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S3 步, D13)
+  调研: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html (S1, §05 候选表)
+  服务路径: static/fx/showcase.html -> /fx/showcase.html (FastAPI 静态根挂载)
+  资源: 经相对路径链 shared/fx 三件(fx.css / fx-presets.css / fx.js),
+        双击文件直接打开(file://)亦可用。
+  结构: 风格层切换器(preset) + 组件分区(每候选一张可交互样例卡) +
+        挑选辅助(选定/导出) + guide 合规总览 + 交接说明。
+  卡片数据在页尾内联脚本的 CARDS 数组里 -- T5 补组件 = 追加数组条目 +
+        占位分区改 status:"ready", 机制(渲染/演示/挑选/导出)全部复用。
+-->
+<link rel="stylesheet" href="../shared/fx/fx.css">
+<link rel="stylesheet" href="../shared/fx/fx-presets.css">
+<style>
+/* ====================================================================
+ * showcase 页内样式 -- 只放本页排版与样例组件的专属样式;
+ * 动效原语一律来自 shared/fx 库(令牌/规则), 页内不重复实现库能力。
+ * ==================================================================== */
+:root {
+  color-scheme: dark;
+  --bg: #10151a;
+  --ink: #e4eaef;
+  --dim: #a2b0bd;
+  --faint: #6f7d8a;
+  --hair: #26313a;
+  --hair-soft: #1c252d;
+  --card: #141b22;
+  --card-deep: #111820;
+  --accent: #6db3c9;
+  --accent-ink: #8fd0e0;
+  --warn: #e2a86e;
+  --ok: #8fc98f;
+  --no: #d98a8a;
+  --code-bg: #151d25;
+  --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  color-scheme: dark;
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0;
+}
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+code { font-family: var(--mono); font-size: 12px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid var(--hair); }
+.sheet { max-width: 1280px; margin: 0 auto; padding: 36px clamp(16px, 3vw, 40px) 90px; }
+
+/* ---- 头部: 标题 + 操作条 + 分区导航 ---- */
+.kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+h1 { font-size: 28px; line-height: 1.2; font-weight: 600; margin: 8px 0 6px; }
+.lede { color: var(--dim); font-size: 14.5px; margin: 0 0 16px; max-width: 72em; }
+.ops { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 12px; }
+.ops .grp { display: flex; gap: 6px; align-items: center; }
+.ops .grp-label { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0.06em; }
+.sec-nav { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; margin-bottom: 34px; }
+.sec-nav a { border-bottom: 0; color: var(--dim); }
+.sec-nav a:hover { color: var(--accent-ink); }
+.sec-nav .todo-lnk { color: var(--faint); }
+
+/* ---- 通用小钮(页面操作用, 非 .bt 展示件) ----
+ * 页面自己的操作按钮刻意走朴素形态, 与被评审的样例按钮拉开视觉距离,
+ * 避免观感混淆 */
+.ctl {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 28px; padding: 0 12px;
+  background: var(--card-deep); border: 1px solid var(--hair); border-radius: 5px;
+  color: var(--dim); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.ctl:hover { color: var(--ink); border-color: var(--accent); }
+.ctl.on { color: var(--accent-ink); border-color: var(--accent); }
+.ops label, .card-ops label { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; color: var(--dim); cursor: pointer; }
+
+/* ---- 分区与卡片 ---- */
+section { margin: 0 0 54px; }
+section > h2 { font-size: 20px; font-weight: 600; margin: 0 0 2px; padding-top: 14px; border-top: 1px solid var(--hair); }
+section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 4px; font-weight: 400; }
+.sec-note { color: var(--dim); font-size: 13.5px; margin: 4px 0 14px; max-width: 78em; }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+
+.card { background: var(--card); border: 1px solid var(--hair-soft); border-radius: 10px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.card.picked { border-color: var(--accent); }
+.stage {
+  background: var(--card-deep); border: 1px solid var(--hair-soft); border-radius: 8px;
+  min-height: 96px; padding: 18px 14px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center;
+}
+.m-name { font-weight: 600; font-size: 14px; }
+.m-name .cid { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-right: 8px; }
+.meta { display: grid; grid-template-columns: 74px 1fr; gap: 3px 8px; font-size: 12.5px; }
+.meta dt { color: var(--faint); }
+.meta dd { margin: 0; color: var(--dim); }
+.meta dd .good { color: var(--ok); }
+.meta dd .wr { color: var(--warn); }
+.card-ops { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; border-top: 1px dashed var(--hair-soft); padding-top: 9px; margin-top: auto; }
+.card-ops select {
+  background: var(--card-deep); color: var(--dim); border: 1px solid var(--hair);
+  border-radius: 4px; font: inherit; font-size: 12px; height: 24px;
+}
+.warntag { font-family: var(--mono); font-size: 10.5px; color: var(--warn); border: 1px solid var(--warn); border-radius: 3px; padding: 0 4px; margin-left: 6px; }
+
+/* ---- 占位分区(T5) ---- */
+.placeholder { border: 1px dashed var(--hair); border-radius: 10px; padding: 16px 18px; color: var(--faint); font-size: 13px; }
+.placeholder ul { margin: 8px 0 0; padding-left: 20px; }
+
+/* ---- 样例组件: 按钮(.bt 等价结构) ----
+ * 语义与 real .bt 一族对齐(conventions/webui.md「WEB UI 按钮体系」):
+ * .bt 次钮 / .primary 主 / .ghost 幽灵 / .danger 危险描边 / .danger-solid
+ * 危险实心 / .icon 图标钮 / .sm 小档。这里是 showcase 自建等价物,
+ * 三皮肤的真实 .bt 定义一行未动。 */
+.bt {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 34px; padding: 0 15px;
+  background: #1a232c; border: 1px solid var(--hair); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
+}
+.bt:hover { border-color: var(--accent); }
+.bt:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+.bt:disabled { opacity: 0.45; cursor: not-allowed; }
+.bt.primary { background: var(--accent); border-color: var(--accent); color: #0d1116; font-weight: 600; }
+.bt.ghost { background: transparent; border-color: transparent; color: var(--accent-ink); }
+.bt.danger { background: transparent; border-color: var(--no); color: var(--no); }
+.bt.danger-solid { background: var(--no); border-color: var(--no); color: #161010; font-weight: 600; }
+.bt.icon { width: 34px; padding: 0; }
+.bt.sm { height: 28px; padding: 0 11px; font-size: 12px; }
+.bt-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* D1-6 icon 附加变体(样例页内实现): hover 图标子元素微转+放大 */
+.bt.icon .fx-ico { transition: transform 100ms var(--fx-ease-standard, ease-out); }
+.bt.icon:hover .fx-ico { transform: rotate(8deg) scale(1.08); }
+.bt.icon:active .fx-ico { transform: rotate(0deg) scale(0.96); }
+/* 演示镜像(同终态; :hover 不可脚本化) */
+.bt.icon.fx-demo-hover .fx-ico { transform: rotate(8deg) scale(1.08); }
+
+/* 触发器桥: :hover/:active 无法脚本化, 演示按钮以镜像类复刻 fx 库
+ * hover/active 规则的同一终态(取值与 fx.css 保持一致; 库文件不引入演示钩子) */
+[data-fx~="lift"].fx-demo-hover {
+  transform: translateY(calc(-1 * var(--fx-lift)));
+  box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+}
+[data-fx~="glow"].fx-demo-hover { box-shadow: 0 0 var(--fx-glow) var(--fx-glow-c); }
+[data-fx~="press"].fx-demo-press { transform: scale(var(--fx-pop-scale)); }
+
+/* ---- 样例组件: 输入框(D5) ---- */
+.fx-field { position: relative; display: inline-block; width: 250px; }
+.fx-field input {
+  width: 100%; height: 34px; padding: 0 10px;
+  background: #151d25; border: 1px solid var(--hair); border-radius: 6px;
+  color: var(--ink); font: inherit; font-size: 13px;
+}
+.fx-field input::placeholder { color: var(--faint); }
+/* D5-1 下划线生长: 底边 ::after scaleX 自左生长 */
+.f-underline input { border-radius: 6px 6px 0 0; }
+.f-underline::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--accent); transform: scaleX(0); transform-origin: left;
+  transition: transform 120ms var(--fx-ease-standard, ease-out);
+}
+.f-underline:focus-within::after { transform: scaleX(1); }
+/* D5-2 ring 辉光圈 */
+.f-ring input { transition: box-shadow 100ms var(--fx-ease-standard, ease-out), border-color 100ms var(--fx-ease-standard, ease-out); }
+.f-ring input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
+/* D5-3 floating label */
+.f-float label {
+  position: absolute; left: 11px; top: 8px; color: var(--faint); font-size: 13px;
+  pointer-events: none; transform-origin: left top;
+  transition: transform 150ms var(--fx-ease-standard, ease-out), color 150ms var(--fx-ease-standard, ease-out);
+}
+.f-float input:focus + label,
+.f-float input:not(:placeholder-shown) + label { transform: translateY(-15px) scale(0.75); color: var(--accent-ink); }
+/* D5-4 底色微亮 */
+.f-tint input { transition: background-color 120ms var(--fx-ease-standard, ease-out); }
+.f-tint input:focus { outline: none; border-color: var(--accent); background-color: color-mix(in srgb, var(--accent) 6%, #151d25); }
+/* D5-5 shake-invalid: 校验失败微震 + 边框转 danger */
+.f-shake input { transition: border-color 120ms var(--fx-ease-standard, ease-out); }
+.f-shake.invalid input { border-color: var(--no); animation: fxShake 300ms var(--fx-ease-standard, ease-out); }
+@keyframes fxShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* ---- 样例组件: 页签(D7) ---- */
+.fx-tabs { width: 100%; max-width: 400px; border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; background: var(--card-deep); }
+.tb-row { position: relative; display: flex; gap: 2px; padding: 6px 8px 0; background: #131a21; border-bottom: 1px solid var(--hair-soft); }
+.tb {
+  position: relative; height: 30px; padding: 0 14px;
+  background: transparent; border: 0; color: var(--dim);
+  font: inherit; font-size: 13px; cursor: pointer;
+}
+.tb:hover { color: var(--ink); }
+.tb.active { color: var(--accent-ink); }
+.tb:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: -2px; }
+.tb-txt { display: inline-block; }
+.tb-ind { position: absolute; bottom: 0; left: 0; height: 2px; width: 0; background: var(--accent); transition: transform var(--fx-dur-tab, 220ms) var(--fx-ease-out, ease-out), width var(--fx-dur-tab, 220ms) var(--fx-ease-out, ease-out); }
+.tb-panel { padding: 13px 14px; min-height: 66px; color: var(--dim); font-size: 13px; }
+/* D7-4 方向感知滑动入场 */
+.tb-panel.dir-right { animation: fxTabDirR 200ms var(--fx-ease-out, ease-out); }
+.tb-panel.dir-left { animation: fxTabDirL 200ms var(--fx-ease-out, ease-out); }
+@keyframes fxTabDirR { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+@keyframes fxTabDirL { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+/* D7-5 活动文本与指示器同编队: 同曲线同起点微强调 */
+.fx-tabs.choir .tb-txt { transition: transform 120ms var(--fx-ease-out, ease-out); transform-origin: center bottom; }
+.fx-tabs.choir .tb.active .tb-txt { transform: scale(1.02); }
+
+/* ---- D1-4 ripple(样例页内实现, 入库与否是 T5/S6 决策点) ---- */
+.fx-ripple-host { position: relative; overflow: hidden; }
+.fx-ripple {
+  position: absolute; border-radius: 50%; pointer-events: none;
+  background: color-mix(in srgb, currentColor 35%, transparent);
+  transform: scale(0);
+  animation: fxRipple 380ms var(--fx-ease-out, ease-out) forwards;
+}
+@keyframes fxRipple { to { transform: scale(1); opacity: 0; } }
+
+/* ---- 页内 keyframes 的 reduced-motion 降级(硬惯例: 每个 @keyframes 配套) ---- */
+@media (prefers-reduced-motion: reduce) {
+  .fx-ripple { animation: none; opacity: 0; }
+  .f-shake.invalid input { animation: none; }
+  .tb-panel.dir-right, .tb-panel.dir-left { animation: none; }
+  .f-underline::after, .f-ring input, .f-float label, .f-tint input,
+  .bt.icon .fx-ico, .tb-ind, .fx-tabs.choir .tb-txt { transition-duration: 0s; }
+}
+
+/* ---- 机制自检条(给 T5 的入场原语样例) ---- */
+.mech { display: flex; flex-wrap: wrap; gap: 12px; }
+.mech .m-item {
+  background: var(--card-deep); border: 1px solid var(--hair-soft); border-radius: 8px;
+  padding: 12px; min-width: 130px; text-align: center;
+}
+.mech .m-item .box { padding: 10px 14px; background: #1a232c; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+
+/* ---- guide 合规总览 ---- */
+table.guide { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
+table.guide th { text-align: left; color: var(--faint); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; padding: 6px 8px; border-bottom: 1px solid var(--hair); }
+table.guide td { padding: 6px 8px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; color: var(--dim); }
+table.guide td:first-child { color: var(--ink); white-space: nowrap; }
+.good { color: var(--ok); }
+.wr { color: var(--warn); }
+
+/* ---- 导出弹层 ---- */
+.export-mask {
+  position: fixed; inset: 0; background: rgba(5, 8, 11, 0.72);
+  display: flex; align-items: center; justify-content: center; z-index: 60;
+}
+.export-mask[hidden] { display: none; }
+.export-box { width: min(680px, 92vw); background: var(--card); border: 1px solid var(--hair); border-radius: 10px; padding: 16px; }
+.export-box h3 { margin: 0 0 8px; font-size: 15px; }
+.export-box textarea {
+  width: 100%; height: 260px; resize: vertical;
+  background: var(--code-bg); color: var(--ink); border: 1px solid var(--hair);
+  border-radius: 6px; font-family: var(--mono); font-size: 12px; padding: 10px;
+}
+.export-ops { display: flex; gap: 8px; margin-top: 10px; justify-content: flex-end; }
+
+/* ---- 页脚 ---- */
+footer { border-top: 1px solid var(--hair); margin-top: 10px; padding-top: 14px; color: var(--faint); font-size: 12px; font-family: var(--mono); }
+footer .audit-line { color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<header>
+  <div class="kicker">FX SHOWCASE · flux 动效皮肤 · S3</div>
+  <h1>动效候选挑选台</h1>
+  <p class="lede">两层变体模型: 风格层(<code>&lt;html data-fx-preset&gt;</code>, 整套令牌配方一键切换) × 组件层(<code>data-fx</code> / <code>data-fx-variant</code>, 单组件行为变体)。每个候选一张可交互样例卡 -- 样例即真实组件, 标注「动什么属性 / 时长 / JS 依赖 / RM 降级 / 来源」, 勾选「选定」后底部导出清单交回 S4 人工挑选步。候选口径: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html §05, 「候选不淘汰、只标注」。</p>
+  <div class="ops">
+    <div class="grp" id="preset-grp">
+      <span class="grp-label">风格层 preset</span>
+      <button class="ctl" type="button" data-preset="">基线</button>
+      <button class="ctl" type="button" data-preset="neon">neon</button>
+      <button class="ctl" type="button" data-preset="glass">glass</button>
+      <button class="ctl" type="button" data-preset="crisp">crisp</button>
+    </div>
+    <div class="grp">
+      <span class="grp-label">挑选</span>
+      <button class="ctl" type="button" id="btn-export">导出选定清单</button>
+      <button class="ctl" type="button" id="btn-clear-picks">清空勾选</button>
+    </div>
+    <div class="grp">
+      <span class="grp-label">挂载器</span>
+      <button class="ctl" type="button" id="btn-audit">audit</button>
+    </div>
+  </div>
+  <nav class="sec-nav" id="sec-nav"></nav>
+</header>
+
+<main>
+  <section id="d1">
+    <h2><span class="no">D1 · 组件分区</span>按钮 .bt 一族</h2>
+    <p class="sec-note">样例为 showcase 自建的 <code>.bt</code> 等价结构, 语义链回 real <code>.bt</code> 一族(conventions/webui.md「WEB UI 按钮体系」: <code>.bt</code> 次钮 / <code>.primary</code> / <code>.ghost</code> / <code>.danger</code> / <code>.danger-solid</code> / <code>.icon</code> / <code>.sm</code>; 标准 34px, 小档 28px, 禁用 .45) -- 三皮肤真实定义一行未动。候选对一族六变体通用, 每卡用一个代表变体演示。素形参照(未挂 fx):</p>
+    <p class="sec-note bt-row">
+      <button class="bt" type="button">次钮</button>
+      <button class="bt primary" type="button">主钮</button>
+      <button class="bt ghost" type="button">幽灵</button>
+      <button class="bt danger" type="button">危险</button>
+      <button class="bt danger-solid" type="button">危险实心</button>
+      <button class="bt icon" type="button" aria-label="图标钮"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>
+      <button class="bt sm" type="button">小档</button>
+      <button class="bt primary" type="button" disabled>禁用 .45</button>
+    </p>
+    <div class="cards"></div>
+  </section>
+
+  <section id="d5">
+    <h2><span class="no">D5 · 组件分区</span>输入框 focus 态</h2>
+    <p class="sec-note">焦点可见性是可访问性必需 -- 所有 focus 候选的 RM 降级都「保留状态、只去动效」。点样例输入框或卡片「演示」钮触发 focus。</p>
+    <div class="cards"></div>
+  </section>
+
+  <section id="d7">
+    <h2><span class="no">D7 · 组件分区</span>页签切换</h2>
+    <p class="sec-note">对应引擎页签族 groups / torrents / shows / settings。点页签或卡片「演示」钮切换(演示 = 循环点下一枚)。</p>
+    <div class="cards"></div>
+  </section>
+
+  <section id="d2" class="todo-sec">
+    <h2><span class="no">D2 · 组件分区</span>弹窗 modal(占位, T5 落卡)</h2>
+    <div class="placeholder">
+      报告 §05 D2 共 6 条候选, 待 T5 落卡:
+      <ul>
+        <li>fade+rise+scale 标准入场(300ms 入 / backdrop 200ms)</li>
+        <li>退场对(180ms accelerate + backdrop 同步 fade)</li>
+        <li>zoom-out 反差入场(scale 1.08 收缩落位, 250ms)</li>
+        <li>backdrop blur 渐入(大面积 filter, showcase 需实测帧率标注)</li>
+        <li>danger tone 附加(headShake 微幅横摆或红色 glow 一次脉冲)</li>
+        <li>View Transitions 共享元素(按钮到弹窗缩放飞行, 可选高配)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="d3" class="todo-sec">
+    <h2><span class="no">D3 · 组件分区</span>抽屉(占位, T5 落卡)</h2>
+    <div class="placeholder">
+      报告 §05 D3 共 6 条候选(共壳 12 变体, 方向参数化), 待 T5 落卡:
+      <ul>
+        <li>slide+fade 主候选(300ms 入 / 200ms 出)</li>
+        <li>shadow-ahead 阴影先行(移动中投影渐强, paint 中等面积)</li>
+        <li>backdrop 渐暗+blur</li>
+        <li>push-content 内容让位(transform 版; 真推挤 width 版 layout 警示)</li>
+        <li>spring-slip 弹簧滑入(linear() 降级链)</li>
+        <li>parallax-layer 视差微配(遮罩滞后 50-80ms)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="d4" class="todo-sec">
+    <h2><span class="no">D4 · 组件分区</span>torrent 表格行(占位, T5 落卡)</h2>
+    <div class="placeholder">
+      报告 §05 D4 共 6 条候选(选中/锚点/光标三态; 高密度, <b>禁全行 stagger</b>), 待 T5 落卡:
+      <ul>
+        <li>cursor-hover 扫光(60-80ms, paint 单行)</li>
+        <li>selected 边条生长(::before scaleY, 120ms)</li>
+        <li>anchor 锚点脉冲(flash 600ms + scrollIntoView)</li>
+        <li>row-insert 新行浮现(150ms, 单行独立无 stagger)</li>
+        <li>row-remove 行退场(max-height 版 layout 警示, 与纯 transform 版对照落卡)</li>
+        <li>checkbox 快勾(scale 过冲 + stroke-dashoffset 划线)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="d6" class="todo-sec">
+    <h2><span class="no">D6 · 组件分区</span>toast / 通知(占位, T5 落卡)</h2>
+    <div class="placeholder">
+      报告 §05 D6 共 5 条候选, 待 T5 落卡:
+      <ul>
+        <li>slide+fade 入退场对(250ms 入 / 180ms 出, 骨对 --fx-pair-toast-*)</li>
+        <li>倒计时进度条(scaleX 1-0 linear, 与自动关闭同状态源)</li>
+        <li>队列重排 FLIP(View Transitions 或手写)</li>
+        <li>icon spring 弹入(--fx-spring 族 300ms)</li>
+        <li>danger glow 边缘脉冲(一次 400ms, 不循环)</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="guide">
+    <h2><span class="no">GUIDE</span>guide 合规总览</h2>
+    <p class="sec-note">计划 §01 软约束三条(非守阵, 「候选不淘汰、只标注」): ① 优先动 <code>transform</code>/<code>opacity</code>/<code>filter</code>(filter 限小型元素), 动布局属性的标 layout 警示; ② hover/按下反馈 ≤100ms, 入场 ≤400ms, torrent 行禁全行 stagger; ③ 每个 <code>@keyframes</code> 配 <code>prefers-reduced-motion: reduce</code> 降级块(这条是硬惯例)。下表汇总全部已落卡候选的符合度:</p>
+    <table class="guide">
+      <tr><th>候选</th><th>属性层</th><th>时效 vs 软约束</th><th>RM 降级</th><th>结论</th></tr>
+      <tr><td>D1-1 lift</td><td><span class="good">transform</span> + box-shadow(paint, 小面积)</td><td>hover 80ms / active 60ms -- 符合 ≤100ms</td><td>位移落影压平, 留即时状态</td><td class="good">符合</td></tr>
+      <tr><td>D1-2 glow</td><td><span class="wr">box-shadow(paint, 小面积)</span></td><td>120ms -- 超 hover 上限, 标注</td><td>时长归零, 终态即时</td><td class="wr">超时效标注, 保留</td></tr>
+      <tr><td>D1-3 sheen</td><td><span class="good">transform/opacity</span>(扫光条)</td><td>400ms emphasis -- 超 hover 上限, 标注</td><td>去动画(纯装饰)</td><td class="wr">超时效标注, 保留</td></tr>
+      <tr><td>D1-4 ripple</td><td><span class="good">transform/opacity</span></td><td>380ms -- 按压反馈档(350-400ms)内</td><td>不注入, 直接按压终态</td><td class="good">符合</td></tr>
+      <tr><td>D1-5 press</td><td><span class="good">transform</span></td><td>60ms / 120ms 回弹 -- 符合</td><td>去缩放</td><td class="good">符合</td></tr>
+      <tr><td>D1-6 icon 附加</td><td><span class="good">transform</span>(图标子元素)</td><td>100ms -- 档内(80-120ms 上限轻擦, 标注)</td><td>无动效</td><td class="good">符合(轻擦标注)</td></tr>
+      <tr><td>D5-1 下划线生长</td><td><span class="good">transform</span>(scaleX)</td><td>120ms -- focus 反馈从紧档</td><td>静态下划线(状态保留)</td><td class="good">符合</td></tr>
+      <tr><td>D5-2 ring 辉光圈</td><td><span class="wr">box-shadow(paint, 小面积)</span></td><td>100ms -- 符合</td><td>保留静态 ring(可访问性必需)</td><td class="good">符合</td></tr>
+      <tr><td>D5-3 floating label</td><td><span class="good">transform</span></td><td>150ms -- 小元素过渡档内</td><td>直切位置</td><td class="good">符合</td></tr>
+      <tr><td>D5-4 底色微亮</td><td><span class="wr">background-color(paint, 小面积)</span></td><td>120ms -- 符合</td><td>保留</td><td class="good">符合</td></tr>
+      <tr><td>D5-5 shake-invalid</td><td><span class="good">transform</span> + 边框色</td><td>300ms -- 反馈类偏长, 强反馈语义, 标注</td><td>只变色不震动</td><td class="wr">时效标注, 保留</td></tr>
+      <tr><td>D7-1 指示器滑移</td><td><span class="good">transform</span></td><td>220ms -- 页签档(200-250ms)内</td><td>瞬移</td><td class="good">符合</td></tr>
+      <tr><td>D7-2 内容 cross-fade</td><td><span class="good">opacity</span></td><td>250ms 内(100+150) -- 符合</td><td>直切</td><td class="good">符合</td></tr>
+      <tr><td>D7-3 View Transitions</td><td><span class="good">浏览器合成</span></td><td>250-300ms -- 符合; 期间 UI 不响应指针</td><td>不支持/RM: 直切(零分支)</td><td class="good">符合</td></tr>
+      <tr><td>D7-4 方向感知滑动</td><td><span class="good">transform/opacity</span></td><td>200ms -- 符合</td><td>fade 或直切</td><td class="good">符合</td></tr>
+      <tr><td>D7-5 文本+指示器同编队</td><td><span class="good">transform</span></td><td>120ms -- 符合</td><td>无(纯强调)</td><td class="good">符合</td></tr>
+    </table>
+  </section>
+
+  <section id="mech">
+    <h2><span class="no">MECH</span>机制自检 + 交接说明(T5)</h2>
+    <p class="sec-note">入场原语(fade / rise / pop / slip)的样例演示机制 = <code>display:none</code> 一帧后恢复, <code>@starting-style</code> 会重新播放入场; <code>--fx-i</code>(stagger 序号槽)只允许设在 ≤8 个表面级联的入场样例上(<b>hover/press 反馈样例绝不设 -- 否则交互被 delay 拖慢</b>; torrent 行禁全行 stagger)。T5 补组件: 在页尾 <code>CARDS</code> 数组追加条目 + 占位分区落卡, 渲染/演示/挑选/导出机制全部复用。ripple / 图标附加这两个「样例页内实现」的候选若被选定, 是否把实现提升进 fx 库(fx.js 加 ripple 助手 / fx.css 加图标子元素契约)是 T5/S6 的决策点。</p>
+    <div class="mech" id="mech-row"></div>
+  </section>
+
+  <section id="export">
+    <h2><span class="no">EXPORT</span>导出选定清单</h2>
+    <p class="sec-note">勾选各卡「选定」后导出 -- 产物为 JSON(组件 → 变体 → 当前 preset), 交回 S4 人工挑选步回填计划档案 §06。勾选状态在本会话内记忆(sessionStorage)。</p>
+    <p><button class="ctl" type="button" id="btn-export2">导出选定清单</button></p>
+  </section>
+</main>
+
+<footer>
+  <div>fx 库: shared/fx/fx.css + fx-presets.css + fx.js(零依赖, classic script) · 挂载器 API: AQB_FX.scan/audit/settle/play/exit/viewTransition/reduced/preset</div>
+  <div class="audit-line" id="audit-line">audit: (未运行)</div>
+</footer>
+
+</div>
+
+<div class="export-mask" id="export-mask" hidden>
+  <div class="export-box">
+    <h3>选定清单(JSON)</h3>
+    <textarea id="export-text" readonly spellcheck="false"></textarea>
+    <div class="export-ops">
+      <button class="ctl" type="button" id="btn-copy">复制</button>
+      <button class="ctl" type="button" id="btn-close-export">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script src="../shared/fx/fx.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  /* ==================================================================
+   * 卡片数据(T5 扩充点): 每条 = 一个候选变体一张可交互样例卡
+   *   id       报告 §05 编号(导出清单的主键)
+   *   sec      分区 id(d1/d5/d7/...)
+   *   name     变体名
+   *   fx       挂到样例上的 data-fx 值(无则 null -- 页内自实现样例)
+   *   warn     软约束警示标注(空串 = 无)
+   *   meta     标注六联: attr(动什么属性) / dur(时长) / js / rm / src / states
+   *   demo     演示类型: hover | press | attention | focus | shake |
+   *            ripple | hover-icon | slide | fade | vt | dir | choir | enter
+   *   sample   样例 HTML(真实组件结构)
+   * ================================================================== */
+  var CARDS = [
+    /* ---- D1 按钮 ---- */
+    {
+      id: "D1-1", sec: "d1", name: "lift 抬升+阴影分层", fx: "lift", demo: "hover", warn: "",
+      meta: {
+        attr: "transform + box-shadow(paint, 按钮小面积)",
+        dur: "hover 80ms / active 60ms, ease-standard",
+        js: "纯 CSS(fx.css 库规则)",
+        rm: "位移与落影压平, 留即时颜色变化",
+        src: "sliderrevolution《55 Best CSS Button Hover Effects》",
+        states: "hover = 上浮 --fx-lift + 落影加深; active = 压回; focus-visible = ring; disabled = 无动效"
+      },
+      sample: '<button class="bt primary" data-fx="lift" type="button">启动选中</button>'
+    },
+    {
+      id: "D1-2", sec: "d1", name: "glow 辉光", fx: "glow", demo: "hover", warn: "超 hover 100ms 软约束",
+      meta: {
+        attr: "box-shadow(paint, 按钮小面积)",
+        dur: "120ms(--fx-dur-fast), ease-standard",
+        js: "纯 CSS(fx.css 库规则, 消费 preset 供给面 --fx-glow*)",
+        rm: "时长归零, 终态即时; 辉光随 preset(neon 开 / glass·crisp 关)",
+        src: "uiverse.io 按钮集(prismic 汇编)",
+        states: "hover = 辉光渐亮(切 neon 可见, glass/crisp 档无辉光); disabled = 无"
+      },
+      sample: '<button class="bt primary" data-fx="glow" type="button">立即汇报</button>'
+    },
+    {
+      id: "D1-3", sec: "d1", name: "sheen 高光扫过", fx: "sheen", demo: "attention", warn: "总时长超 hover 软约束",
+      meta: {
+        attr: "transform/opacity(::after 扫光条, 合成器友好)",
+        dur: "400ms(--fx-dur-emphasis)",
+        js: "需触发口: 库规则吃 data-fx-play, 页内 mouseenter 与演示钮调 AQB_FX.play()",
+        rm: "去动画(扫光纯装饰, 无信息量)",
+        src: "uiverse.io Shiny Button",
+        states: "hover = 一次扫光; 重触发 = 跳终态再重放(play 语义, 不排队); 库规则自带 overflow:hidden + relative"
+      },
+      sample: '<button class="bt primary" data-fx="sheen" type="button">强制汇报</button>'
+    },
+    {
+      id: "D1-4", sec: "d1", name: "ripple 波纹", fx: null, demo: "ripple", warn: "",
+      meta: {
+        attr: "transform/opacity(波纹 span, 合成器友好)",
+        dur: "380ms, ease-out(按压反馈档 350-400ms)",
+        js: "需 JS(节点注入/清理) -- 样例页内实现; 若选定, 把 ripple 助手扩进 fx.js 是 T5/S6 决策点",
+        rm: "不注入波纹, 直接落按压终态(AQB_FX.reduced() 探测)",
+        src: "M2 choreography radial reaction",
+        states: "pointerdown = 波纹自点击点扩散; 并发 = 每次点击一枚, 450ms 自清理"
+      },
+      sample: '<button class="bt primary fx-ripple-host" type="button">删除选中</button>'
+    },
+    {
+      id: "D1-5", sec: "d1", name: "press-scale 按压回弹", fx: "press", demo: "press", warn: "",
+      meta: {
+        attr: "transform(scale)",
+        dur: "按下 60ms 直给 / 松开 120ms ease-back 过冲回位",
+        js: "纯 CSS(fx.css 库规则)",
+        rm: "去缩放",
+        src: "GSAP back.out 场景",
+        states: "active = scale(0.96); 松开 = 过冲回位; 可与 lift 多值共存(data-fx=\"lift press\")"
+      },
+      sample: '<button class="bt danger-solid" data-fx="press" type="button">确认删除</button>'
+    },
+    {
+      id: "D1-6", sec: "d1", name: "icon 变体附加", fx: null, demo: "hover-icon", warn: "80-120ms 轻擦上限",
+      meta: {
+        attr: "transform(图标子元素 scale/rotate)",
+        dur: "100ms",
+        js: "纯 CSS(样例页内实现, 作用面 = .fx-ico 子元素; 入库需先约定子元素类名契约)",
+        rm: "无动效",
+        src: "Apple HIG animated symbols 思路",
+        states: "hover = rotate(8deg)+scale(1.08); active = 回摆"
+      },
+      sample: '<button class="bt icon" type="button" aria-label="开始"><svg class="fx-ico" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg></button>'
+    },
+    /* ---- D5 输入框 focus 态 ---- */
+    {
+      id: "D5-1", sec: "d5", name: "下划线生长", fx: null, demo: "focus", warn: "",
+      meta: {
+        attr: "transform(::after scaleX, 合成器友好)",
+        dur: "120ms(--fx-dur-fast), ease-standard",
+        js: "纯 CSS(:focus-within)",
+        rm: "focus 即时显示静态下划线(状态保留)",
+        src: "M2/M3 text field active indicator",
+        states: "focus-within = 下划线自左生长; blur = 收合"
+      },
+      sample: '<span class="fx-field f-underline"><input type="text" placeholder="站点关键词" aria-label="演示输入框"></span>'
+    },
+    {
+      id: "D5-2", sec: "d5", name: "ring 辉光圈", fx: null, demo: "focus", warn: "",
+      meta: {
+        attr: "box-shadow(paint, 小面积)",
+        dur: "100ms",
+        js: "纯 CSS",
+        rm: "保留静态 ring(焦点可见性是可访问性必需, 不降级)",
+        src: "Tailwind/uiverse focus ring 惯例",
+        states: "focus = 3px 辉光圈展开 + 边框转 accent"
+      },
+      sample: '<span class="fx-field f-ring"><input type="text" placeholder="tracker URL" aria-label="演示输入框"></span>'
+    },
+    {
+      id: "D5-3", sec: "d5", name: "floating label 浮标签", fx: null, demo: "focus", warn: "",
+      meta: {
+        attr: "transform(translateY + scale 0.75)",
+        dur: "150ms, ease-standard",
+        js: "纯 CSS(:placeholder-shown 技巧)",
+        rm: "直切位置",
+        src: "M3 filled text field 官方交互",
+        states: "focus 或有值 = 标签上浮缩小; 空值失焦 = 落回"
+      },
+      sample: '<span class="fx-field f-float"><input type="text" placeholder=" " aria-label="演示输入框"><label>保存路径</label></span>'
+    },
+    {
+      id: "D5-4", sec: "d5", name: "底色微亮", fx: null, demo: "focus", warn: "",
+      meta: {
+        attr: "background-color(paint, 小面积)",
+        dur: "120ms",
+        js: "纯 CSS",
+        rm: "保留",
+        src: "uiverse.io/elements 输入框集",
+        states: "focus = 底色向 accent 6% 微亮"
+      },
+      sample: '<span class="fx-field f-tint"><input type="text" placeholder="分类过滤" aria-label="演示输入框"></span>'
+    },
+    {
+      id: "D5-5", sec: "d5", name: "shake-invalid 校验失败微震", fx: null, demo: "shake", warn: "300ms 反馈类偏长",
+      meta: {
+        attr: "transform(translateX ±3px) + 边框色",
+        dur: "300ms(摆动 3 次)",
+        js: "页内触发(.invalid class); 原生入口可走 :user-invalid(Chrome 119+, 支持度报告标注: 实测后定)",
+        rm: "只变色不震动",
+        src: "Apple HIG 反馈语义 + animate.css headShake",
+        states: "校验失败 = 微震 3 次 + 边框转 danger; 复演示自动摘 class"
+      },
+      sample: '<span class="fx-field f-shake"><input type="text" value="not-a-valid-path" aria-label="演示输入框"></span>'
+    },
+    /* ---- D7 页签切换 ---- */
+    {
+      id: "D7-1", sec: "d7", name: "指示器滑移", fx: null, demo: "slide", warn: "",
+      meta: {
+        attr: "transform(指示器 translateX/width)",
+        dur: "220ms(--fx-dur-tab), ease-out",
+        js: "需 JS 量旧/新 rect(页内实现; 挂载可改走 View Transitions 让浏览器 FLIP)",
+        rm: "瞬移",
+        src: "M2/M3 tabs animated indicator",
+        states: "点击页签 = 指示器滑到新位"
+      },
+      sample: ""
+    },
+    {
+      id: "D7-2", sec: "d7", name: "内容 cross-fade", fx: null, demo: "fade", warn: "",
+      meta: {
+        attr: "opacity",
+        dur: "出 100ms + 入 150ms(总 250ms 内)",
+        js: "页内时序(挂载可走纯 CSS 切 class 或 View Transitions 默认交叉淡化)",
+        rm: "直切(AQB_FX.reduced() 探测)",
+        src: "M3 transitions + chrome.dev view-transitions 默认行为",
+        states: "切换 = 旧面板淡出、新面板淡入"
+      },
+      sample: ""
+    },
+    {
+      id: "D7-3", sec: "d7", name: "View Transitions 全接管(推荐主候选)", fx: null, demo: "vt", warn: "",
+      meta: {
+        attr: "浏览器合成(整页快照交叉)",
+        dur: "250-300ms(浏览器默认; transition 期间 UI 不响应指针 -- 必须短)",
+        js: "AQB_FX.viewTransition(update) 一行探测, 不支持 = 直接执行更新(零分支)",
+        rm: "不支持/RM: 直切",
+        src: "chrome.dev view-transitions + css-tricks 实践",
+        states: "切换 = 整页快照交叉淡化(demo 页面上整页可感知, 属预期)"
+      },
+      sample: ""
+    },
+    {
+      id: "D7-4", sec: "d7", name: "方向感知滑动", fx: null, demo: "dir", warn: "",
+      meta: {
+        attr: "transform(translateX ±12px) + opacity",
+        dur: "200ms",
+        js: "需 JS 判方向(目标页签在当前左/右)",
+        rm: "fade 或直切(页 RM 块把 keyframes 关掉)",
+        src: "M2 choreography 空间关系原则(iOS segmented 惯例)",
+        states: "向右切 = 内容自右轻位移入; 向左切 = 自左; 轻位移, 不做全宽 slide"
+      },
+      sample: ""
+    },
+    {
+      id: "D7-5", sec: "d7", name: "页签文本+指示器同编队", fx: null, demo: "choir", warn: "",
+      meta: {
+        attr: "transform(指示器滑移 + 活动文本 scale 1.02)",
+        dur: "120ms 同曲线同起点(对称编排)",
+        js: "纯 CSS(配合 D7-1 的量测)",
+        rm: "无(纯强调)",
+        src: "M2 choreography symmetric transition",
+        states: "切换 = 指示器滑移 + 新活动文本微强调, 同步起落"
+      },
+      sample: ""
+    }
+  ];
+
+  /* 机制自检条: 四个入场原语(T5 的 enter 演示样例) */
+  var MECH_CARDS = [
+    { name: "fade", fx: "fade" },
+    { name: "rise", fx: "rise" },
+    { name: "pop", fx: "pop" },
+    { name: "slip", fx: "slip" }
+  ];
+
+  var PRESET_KEY = "fxsc.preset";
+  var PICKS_KEY = "fxsc.picks";
+  var cards = [];            /* 渲染后的卡片运行时对象 */
+  var currentPreset = "";
+
+  /* ---- 工具 ---- */
+
+  function $(sel, root) { return (root || document).querySelector(sel); }
+  function $all(sel, root) { return Array.prototype.slice.call((root || document).querySelectorAll(sel)); }
+
+  function store(key, val) {
+    try {
+      if (val === null) sessionStorage.removeItem(key);
+      else sessionStorage.setItem(key, val);
+    } catch (e) { /* 无痕模式等存储不可用: 会话内记忆降级为不记忆 */ }
+  }
+  function load(key) {
+    try { return sessionStorage.getItem(key); } catch (e) { return null; }
+  }
+
+  /* ---- 演示引擎 ---- */
+
+  /* 入场原语重放: display:none 一帧后恢复, @starting-style 重新播放入场 */
+  function replayEnter(el) {
+    el.style.display = "none";
+    void el.offsetWidth;
+    el.style.display = "";
+  }
+
+  /* hover/press 镜像类桥: :hover/:active 不可脚本化, 复刻同一终态后复位 */
+  function pulseClass(el, cls, holdMs) {
+    el.classList.add(cls);
+    setTimeout(function () { el.classList.remove(cls); }, holdMs || 900);
+  }
+
+  /* D1-4 ripple(样例页内实现) */
+  function spawnRipple(host, ev) {
+    if (window.AQB_FX && AQB_FX.reduced()) return; /* RM: 不注入, 直接按压终态 */
+    var r = host.getBoundingClientRect();
+    var d = Math.max(r.width, r.height) * 2;
+    var s = document.createElement("span");
+    s.className = "fx-ripple";
+    s.style.width = d + "px";
+    s.style.height = d + "px";
+    var cx = ev && typeof ev.clientX === "number" && (ev.clientX || ev.clientY) ? ev.clientX - r.left : r.width / 2;
+    var cy = ev && typeof ev.clientY === "number" && (ev.clientX || ev.clientY) ? ev.clientY - r.top : r.height / 2;
+    s.style.left = (cx - d / 2) + "px";
+    s.style.top = (cy - d / 2) + "px";
+    host.appendChild(s);
+    setTimeout(function () { s.remove(); }, 450);
+  }
+
+  /* D7 页签样例构造器(mode = slide|fade|vt|dir|choir) */
+  function makeTabs(mode) {
+    var names = ["组", "种子", "剧集"];
+    var texts = [
+      "组视图: 辅种分组按站点聚合 -- 行级动效候选在 D4(T5 落卡)。",
+      "种子视图: 平铺成员行, 高密度列表 -- 全行 stagger 是项目硬禁区。",
+      "剧集视图: 追剧集合行, 选中/锚点/光标三态同 D4 口径。"
+    ];
+    var wrap = document.createElement("div");
+    wrap.className = "fx-tabs" + (mode === "choir" ? " choir" : "");
+    var row = document.createElement("div"); row.className = "tb-row";
+    var ind = document.createElement("div"); ind.className = "tb-ind";
+    var panel = document.createElement("div"); panel.className = "tb-panel";
+    var btns = [];
+    var cur = 0;
+    var busy = false;
+
+    names.forEach(function (n, i) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "tb" + (i === 0 ? " active" : "");
+      var t = document.createElement("span"); t.className = "tb-txt"; t.textContent = n;
+      b.appendChild(t);
+      b.addEventListener("click", function () { go(i); });
+      row.appendChild(b);
+      btns.push(b);
+    });
+    row.appendChild(ind);
+    wrap.appendChild(row);
+    wrap.appendChild(panel);
+    panel.textContent = texts[0];
+
+    function setActive(i) {
+      btns[cur].classList.remove("active");
+      btns[i].classList.add("active");
+    }
+    function moveInd(i, anim) {
+      var b = btns[i];
+      if (!anim) ind.style.transition = "none";
+      ind.style.width = b.offsetWidth + "px";
+      ind.style.transform = "translateX(" + b.offsetLeft + "px)";
+      if (!anim) { void ind.offsetWidth; ind.style.transition = ""; }
+    }
+    function finish(i) { cur = i; busy = false; }
+
+    function go(i) {
+      if (busy || i === cur) return;
+      busy = true;
+      if (mode === "slide" || mode === "choir") {
+        setActive(i); moveInd(i, true); panel.textContent = texts[i];
+        setTimeout(function () { finish(i); }, 240);
+      } else if (mode === "fade") {
+        if (window.AQB_FX && AQB_FX.reduced()) {
+          setActive(i); moveInd(i, false); panel.textContent = texts[i]; finish(i);
+          return;
+        }
+        panel.style.transition = "opacity 100ms var(--fx-ease-in, ease-in)";
+        panel.style.opacity = "0";
+        setTimeout(function () {
+          setActive(i); moveInd(i, true); panel.textContent = texts[i];
+          panel.style.transition = "opacity 150ms var(--fx-ease-out, ease-out)";
+          panel.style.opacity = "1";
+          setTimeout(function () { finish(i); }, 160);
+        }, 110);
+      } else if (mode === "vt") {
+        function update() {
+          setActive(i); moveInd(i, false); panel.textContent = texts[i];
+        }
+        if (window.AQB_FX) AQB_FX.viewTransition(update);
+        else update();
+        setTimeout(function () { finish(i); }, 320);
+      } else if (mode === "dir") {
+        setActive(i); moveInd(i, true);
+        panel.textContent = texts[i];
+        panel.classList.remove("dir-right", "dir-left");
+        void panel.offsetWidth;
+        panel.classList.add(i > cur ? "dir-right" : "dir-left");
+        setTimeout(function () { finish(i); }, 220);
+      }
+    }
+
+    moveInd(0, false);
+    return {
+      el: wrap,
+      go: go,
+      next: function () { go((cur + 1) % names.length); },
+      /* 挂进 DOM 后复量测(构造时离线, offsetWidth 全 0) */
+      refresh: function () { moveInd(cur, false); }
+    };
+  }
+
+  /* 单卡演示分发 */
+  function runDemo(c) {
+    var el = c.sampleEl;
+    var target = el.hasAttribute("data-fx") ? el : (el.querySelector("[data-fx]") || el);
+    switch (c.demo) {
+      case "enter": replayEnter(el); break;
+      case "hover": pulseClass(target, "fx-demo-hover", 900); break;
+      case "press": pulseClass(target, "fx-demo-press", 260); break;
+      case "attention": if (window.AQB_FX) AQB_FX.play(target); break;
+      case "focus": {
+        var inp = el.querySelector("input");
+        if (inp) inp.focus();
+        break;
+      }
+      case "shake": {
+        el.classList.remove("invalid");
+        void el.offsetWidth;
+        el.classList.add("invalid");
+        setTimeout(function () { el.classList.remove("invalid"); }, 400);
+        break;
+      }
+      case "ripple": spawnRipple(target, null); break;
+      case "hover-icon": pulseClass(el, "fx-demo-hover", 500); break;
+      case "slide":
+      case "fade":
+      case "vt":
+      case "dir":
+      case "choir":
+        if (c.tabsObj) c.tabsObj.next();
+        break;
+    }
+  }
+
+  /* ---- 渲染 ---- */
+
+  function buildSample(c) {
+    var el;
+    if (c.demo === "slide" || c.demo === "fade" || c.demo === "vt" || c.demo === "dir" || c.demo === "choir") {
+      c.tabsObj = makeTabs(c.demo);
+      el = c.tabsObj.el;
+    } else {
+      var holder = document.createElement("div");
+      holder.innerHTML = c.sample;
+      el = holder.firstElementChild;
+    }
+    return el;
+  }
+
+  function renderCard(c) {
+    var art = document.createElement("article");
+    art.className = "card";
+    art.setAttribute("data-card", c.id);
+
+    var stage = document.createElement("div");
+    stage.className = "stage";
+    c.sampleEl = buildSample(c);
+    if (c.fx) c.sampleEl.setAttribute("data-fx", c.fx);
+    stage.appendChild(c.sampleEl);
+    if (c.demo === "ripple") {
+      c.sampleEl.addEventListener("pointerdown", function (ev) { spawnRipple(c.sampleEl, ev); });
+    }
+    if (c.tabsObj) c.tabsObj.refresh();
+    /* sheen 的 hover 触发接线: 库规则吃 data-fx-play, 悬停 = 一次扫光 */
+    if (c.fx && /\bsheen\b/.test(c.fx) && c.sampleEl.hasAttribute("data-fx")) {
+      c.sampleEl.addEventListener("mouseenter", function () {
+        if (window.AQB_FX) AQB_FX.play(c.sampleEl);
+      });
+    }
+
+    var meta = document.createElement("div");
+    var nameHtml = '<div class="m-name"><span class="cid">' + c.id + '</span>' + c.name +
+      (c.warn ? '<span class="warntag">' + c.warn + '</span>' : '') + '</div>';
+    var m = c.meta;
+    meta.innerHTML = nameHtml +
+      '<dl class="meta">' +
+      '<dt>动什么</dt><dd>' + m.attr + "</dd>" +
+      '<dt>时长</dt><dd>' + m.dur + "</dd>" +
+      '<dt>JS 依赖</dt><dd>' + m.js + "</dd>" +
+      '<dt>RM 降级</dt><dd>' + m.rm + "</dd>" +
+      '<dt>来源</dt><dd>' + m.src + "</dd>" +
+      '<dt>交互态</dt><dd>' + m.states + "</dd>" +
+      "</dl>";
+
+    var ops = document.createElement("div");
+    ops.className = "card-ops";
+    ops.innerHTML =
+      '<button class="ctl" type="button">演示</button>' +
+      (c.fx ? '<label>变体 <select><option value="">(默认)</option><option value="subtle">subtle</option><option value="bold">bold</option><option value="spring">spring</option></select></label>' : "") +
+      '<label><input type="checkbox" class="act-loop"> 循环</label>' +
+      '<label><input type="checkbox" class="act-pick"> 选定</label>';
+    var playBtn = $("button", ops);
+    var sel = $("select", ops);
+    var loopChk = $(".act-loop", ops);
+    var pickChk = $(".act-pick", ops);
+
+    playBtn.addEventListener("click", function () { runDemo(c); });
+    if (sel) {
+      sel.addEventListener("change", function () {
+        if (sel.value) c.sampleEl.setAttribute("data-fx-variant", sel.value);
+        else c.sampleEl.removeAttribute("data-fx-variant");
+        runDemo(c);
+      });
+    }
+    pickChk.addEventListener("change", function () {
+      art.classList.toggle("picked", pickChk.checked);
+      savePicks();
+    });
+
+    art.appendChild(stage);
+    art.appendChild(meta);
+    art.appendChild(ops);
+
+    c.art = art;
+    c.playBtn = playBtn;
+    c.loopChk = loopChk;
+    c.pickChk = pickChk;
+    return art;
+  }
+
+  /* 分区标题(h2 去掉 .no 编号行的净文本) */
+  function secTitle(sec) {
+    var h2 = $("h2", sec);
+    var clone = h2.cloneNode(true);
+    var no = $(".no", clone);
+    if (no) no.remove();
+    return clone.textContent.replace(/\s+/g, " ").trim();
+  }
+
+  function renderSections() {
+    var nav = $("#sec-nav");
+    CARDS.forEach(function (c) {
+      var sec = document.getElementById(c.sec);
+      if (!sec) return;
+      var box = $(".cards", sec);
+      if (!box) return;
+      box.appendChild(renderCard(c));
+      cards.push(c);
+    });
+    /* 分区导航: ready 分区 + 占位分区一并列出 */
+    $all("main > section").forEach(function (sec) {
+      var a = document.createElement("a");
+      a.href = "#" + sec.id;
+      a.textContent = secTitle(sec);
+      if (sec.classList.contains("todo-sec")) a.className = "todo-lnk";
+      nav.appendChild(a);
+    });
+  }
+
+  function renderMech() {
+    var row = $("#mech-row");
+    MECH_CARDS.forEach(function (mc, i) {
+      var item = document.createElement("div");
+      item.className = "m-item";
+      var box = document.createElement("div");
+      box.className = "box";
+      box.setAttribute("data-fx", mc.fx);
+      box.style.setProperty("--fx-i", String(i)); /* stagger 序号槽: 仅入场样例, 共 4 个 <= 8 */
+      box.textContent = mc.fx;
+      var btn = document.createElement("button");
+      btn.className = "ctl";
+      btn.type = "button";
+      btn.textContent = "重放";
+      btn.style.marginTop = "8px";
+      btn.addEventListener("click", function () { replayEnter(box); });
+      item.appendChild(box);
+      item.appendChild(document.createElement("br"));
+      item.appendChild(btn);
+      row.appendChild(item);
+    });
+  }
+
+  /* ---- 挑选辅助 ---- */
+
+  function savePicks() {
+    store(PICKS_KEY, JSON.stringify(cards.filter(function (c) { return c.pickChk.checked; }).map(function (c) { return c.id; })));
+  }
+  function restorePicks() {
+    var raw = load(PICKS_KEY);
+    if (!raw) return;
+    var ids;
+    try { ids = JSON.parse(raw); } catch (e) { return; }
+    cards.forEach(function (c) {
+      if (ids.indexOf(c.id) >= 0) {
+        c.pickChk.checked = true;
+        c.art.classList.add("picked");
+      }
+    });
+  }
+
+  function buildExport() {
+    var picks = cards.filter(function (c) { return c.pickChk.checked; }).map(function (c) {
+      var variant = c.sampleEl.getAttribute("data-fx-variant") || "";
+      return {
+        id: c.id,
+        component: secTitle(document.getElementById(c.sec)),
+        variant: c.name,
+        fx: c.fx || "(页内自实现: " + c.demo + ")",
+        data_fx_variant: variant,
+        warn: c.warn || ""
+      };
+    });
+    return JSON.stringify({
+      from: "static/fx/showcase.html",
+      exported: new Date().toISOString(),
+      preset: currentPreset || "(基线, 未设 data-fx-preset)",
+      picks_total: picks.length,
+      picks: picks
+    }, null, 2);
+  }
+
+  function openExport() {
+    $("#export-text").value = buildExport();
+    $("#export-mask").hidden = false;
+  }
+  function closeExport() { $("#export-mask").hidden = true; }
+
+  /* ---- 风格层切换器 ---- */
+
+  function applyPreset(v, persist) {
+    currentPreset = v || "";
+    if (v) document.documentElement.setAttribute("data-fx-preset", v);
+    else document.documentElement.removeAttribute("data-fx-preset");
+    $all("#preset-grp .ctl").forEach(function (b) {
+      b.classList.toggle("on", (b.getAttribute("data-preset") || "") === currentPreset);
+    });
+    if (persist) store(PRESET_KEY, currentPreset);
+  }
+
+  /* ---- audit 读出 ---- */
+
+  function runAudit() {
+    var line = $("#audit-line");
+    if (!window.AQB_FX) {
+      line.textContent = "audit: AQB_FX 缺失 -- fx.js 没挂上(静态信号: 挂行没进页面)";
+      return;
+    }
+    var r = AQB_FX.audit();
+    line.textContent = "audit: total=" + r.total +
+      " unmounted=" + r.unmounted.length +
+      " empty=" + r.empty.length +
+      " unknownEffect=" + r.unknownEffect.length +
+      " unknownVariant=" + r.unknownVariant.length +
+      " unknownPreset=" + (r.unknownPreset || "none") +
+      " ok=" + r.ok;
+  }
+
+  /* ---- 装配 ---- */
+
+  renderSections();
+  renderMech();
+  if (window.AQB_FX) AQB_FX.scan(); /* 幂等重扫: JS 动态插入的样例补挂载标记 */
+
+  /* preset 恢复(会话内记忆) */
+  var savedPreset = load(PRESET_KEY);
+  applyPreset(savedPreset || "", false);
+  $all("#preset-grp .ctl").forEach(function (b) {
+    b.addEventListener("click", function () { applyPreset(b.getAttribute("data-preset") || "", true); });
+  });
+
+  restorePicks();
+  $("#btn-export").addEventListener("click", openExport);
+  $("#btn-export2").addEventListener("click", openExport);
+  $("#btn-clear-picks").addEventListener("click", function () {
+    cards.forEach(function (c) { c.pickChk.checked = false; c.art.classList.remove("picked"); });
+    savePicks();
+  });
+  $("#btn-close-export").addEventListener("click", closeExport);
+  $("#export-mask").addEventListener("click", function (ev) { if (ev.target === this) closeExport(); });
+  $("#btn-copy").addEventListener("click", function () {
+    var ta = $("#export-text");
+    ta.select();
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(ta.value);
+    } else {
+      try { document.execCommand("copy"); } catch (e) { /* 复制失败: 文本已全选, 可手动 Ctrl+C */ }
+    }
+  });
+  $("#btn-audit").addEventListener("click", runAudit);
+  runAudit();
+
+  /* 循环演示引擎: 单一定时器轮询全部开了「循环」的卡, 不排队(重触发即重放) */
+  setInterval(function () {
+    cards.forEach(function (c) {
+      if (c.loopChk && c.loopChk.checked) runDemo(c);
+    });
+  }, 1700);
+})();
+</script>
+</body>
+</html>
