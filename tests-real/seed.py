@@ -42,9 +42,9 @@ from lib import guard, instances, torrent  # noqa: E402
 
 WORK = HERE / ".work" / "seeds"
 RAM_ROOT = Path("R:/qbt-fake")  # R 盘是内存盘: 大种子写这里, 免写盘代价(重启即清空)
-BIG_SIZE = 32 * 1024 * 1024     # ≥ 32M 才算"大种子", 默认落内存盘
-HUGE_SIZE = 2 * 1024 ** 3       # > 2G 原则上不许造: 要 --allow-huge + --reason 显式授权
-DEFAULT_SIZE = "256K"           # 默认 KB 级: 造种子是为了看状态, 不是为了塞满盘
+BIG_SIZE = 32 * 1024 * 1024  # ≥ 32M 才算"大种子", 默认落内存盘
+HUGE_SIZE = 2 * 1024**3  # > 2G 原则上不许造: 要 --allow-huge + --reason 显式授权
+DEFAULT_SIZE = "256K"  # 默认 KB 级: 造种子是为了看状态, 不是为了塞满盘
 ALLOWED_ROOTS = (HERE / ".work", RAM_ROOT)
 TAG = "real-fake"
 DEFAULT_PORT = instances.SECONDARY  # 36596: 空库, 拿它当草稿本
@@ -56,7 +56,7 @@ def parse_size(text: str) -> int:
     m = re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*([kmgt]?)i?b?\s*", text, re.I)
     if not m:
         raise SystemExit(f"看不懂的大小 {text!r}; 例: 8M / 1.5G / 512k / 1048576")
-    return int(float(m.group(1)) * {"": 1, "k": 1024, "m": 1024 ** 2, "g": 1024 ** 3, "t": 1024 ** 4}[m.group(2).lower()])
+    return int(float(m.group(1)) * {"": 1, "k": 1024, "m": 1024**2, "g": 1024**3, "t": 1024**4}[m.group(2).lower()])
 
 
 def fmt_size(n: float) -> str:
@@ -106,12 +106,13 @@ def _connect(port: int, pause_real: bool):
     qb = instances.make(port)
     status = guard.check_online(qb)
     # 只暂停/保护**真实**种子; 自造种子(real-fake)由本命令自己管, 不要顺手改它的状态
-    real = guard.snapshot(qb, skip_tags=(TAG,)) if pause_real else {}
+    real = guard.snapshot(qb, skip_tags=(TAG, )) if pause_real else {}
     return qb, rep, status, real
 
 
 def _fakes(qb) -> list[dict]:
-    return [t for t in qb.torrents() if TAG in (t.get("tags") or "").split(",")]
+    # 成员判断走 guard.tag_set(strip 版): qB 多标签是「, 」连接, 裸 split(",") 会漏(issue 26-10-31-1215)
+    return [t for t in qb.torrents() if TAG in guard.tag_set(t)]
 
 
 SETTLED = {"stalledUP", "stalledDL", "pausedUP", "pausedDL", "missingFiles", "error", "uploading", "downloading"}
@@ -167,8 +168,10 @@ def cmd_add(args) -> int:
     # > 2G 原则上不许造: 停下来要授权 + 原因(写文件前就拦, 不留半截垃圾)
     if size > HUGE_SIZE:
         if args.from_path:
-            print(f"[warn] 源文件 {fmt_size(size)} 超过 {fmt_size(HUGE_SIZE)} —— 本次不创建文件, 只是给它造种子"
-                  f"(qB 校验会读满 {fmt_size(size)})")
+            print(
+                f"[warn] 源文件 {fmt_size(size)} 超过 {fmt_size(HUGE_SIZE)} —— 本次不创建文件, 只是给它造种子"
+                f"(qB 校验会读满 {fmt_size(size)})"
+            )
         elif args.no_data:
             print(f"[warn] 只造元数据(--no-data), 不写 {fmt_size(size)} 的数据文件")
         elif not args.allow_huge:
@@ -178,11 +181,13 @@ def cmd_add(args) -> int:
                 f"  先想清楚是否真需要:\n"
                 f"    · 只想要一个「大尺寸」的种子看状态 ⇒ 用 --no-data(不落盘, 零代价)\n"
                 f"    · 只是要测分块/进度条 ⇒ KB~MB 级就够, 默认 256K\n"
-                f"  确实必须落盘, 请说明原因并显式授权: --allow-huge --reason \"<为什么要这么大的文件>\"")
+                f"  确实必须落盘, 请说明原因并显式授权: --allow-huge --reason \"<为什么要这么大的文件>\""
+            )
         elif not args.reason.strip():
             raise SystemExit(
                 f"暂停, 等待授权: --allow-huge 必须配 --reason \"<原因>\" —— 授权要留痕, 否则等于默认允许。\n"
-                f"  例: --allow-huge --reason \"RM07 测 3G 单文件的限速曲线\"")
+                f"  例: --allow-huge --reason \"RM07 测 3G 单文件的限速曲线\""
+            )
         else:
             print(f"[warn] 已授权创建 {fmt_size(size)} 的大文件(> {fmt_size(HUGE_SIZE)}): {args.reason.strip()}")
             print(f"[warn] 用完请 rm/clean; R: 重启即清空, 落磁盘的不会自己消失")
@@ -239,8 +244,10 @@ def cmd_add(args) -> int:
         raise SystemExit(f"加入失败: {exc}") from None
 
     t = _settle(qb, ih)
-    print(f"[ok] state={t.get('state')} progress={t.get('progress')} "
-          f"size={fmt_size(int(t.get('size') or 0))} save_path={t.get('save_path')}")
+    print(
+        f"[ok] state={t.get('state')} progress={t.get('progress')} "
+        f"size={fmt_size(int(t.get('size') or 0))} save_path={t.get('save_path')}"
+    )
     if args.no_data:
         print("[hint] --no-data: 只造了元数据, 没有数据文件 ⇒ 永远停在 progress 0(实测不会进 missingFiles)")
     elif not args.tracker and not args.paused:
@@ -258,8 +265,10 @@ def cmd_list(args) -> int:
         return 0
     print(f"{'infohash':<10}{'name':<30}{'size':>9}  {'progress':>8}  {'state':<14}save_path")
     for t in sorted(fakes, key=lambda x: x["name"]):
-        print(f"{t['hash'][:8]:<10}{t['name'][:29]:<30}{fmt_size(t['size']):>9}  "
-              f"{t['progress'] * 100:7.1f}%  {t['state']:<14}{t.get('save_path', '')}")
+        print(
+            f"{t['hash'][:8]:<10}{t['name'][:29]:<30}{fmt_size(t['size']):>9}  "
+            f"{t['progress'] * 100:7.1f}%  {t['state']:<14}{t.get('save_path', '')}"
+        )
     return 0
 
 
@@ -322,29 +331,42 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("add", help="造数据 + 造 .torrent + 加入实例")
-    p.add_argument("--size", default=DEFAULT_SIZE,
-                   help=f"大小, 支持 256K / 8M / 1.5G / 裸字节(默认 {DEFAULT_SIZE}, KB 级就够看状态); "
-                        f"给了 --from 就不用它; ≥{fmt_size(BIG_SIZE)} 默认落 R: 内存盘")
+    p.add_argument(
+        "--size",
+        default=DEFAULT_SIZE,
+        help=f"大小, 支持 256K / 8M / 1.5G / 裸字节(默认 {DEFAULT_SIZE}, KB 级就够看状态); "
+        f"给了 --from 就不用它; ≥{fmt_size(BIG_SIZE)} 默认落 R: 内存盘"
+    )
     p.add_argument("--from", dest="from_path", default="", help="拿现成文件造种子(大小自动取文件, 不动原文件)")
-    p.add_argument("--pattern", default="random", choices=torrent.PATTERNS,
-                   help="数据生成方式: random(默认, 由 salt 播种的确定性伪随机) / zeros(全零) / text(可读文本行)")
+    p.add_argument(
+        "--pattern",
+        default="random",
+        choices=torrent.PATTERNS,
+        help="数据生成方式: random(默认, 由 salt 播种的确定性伪随机) / zeros(全零) / text(可读文本行)"
+    )
     p.add_argument("--salt", default="", help="混进数据的盐; 默认取文件名 ⇒ 同参数重跑得同 infohash(幂等)")
     p.add_argument("--name", default="", help="种子里的文件名(默认 fake-<size>-<pattern>.bin)")
-    p.add_argument("--dir", default="", help=f"数据落点(只认 {ALLOWED_ROOTS[0]} 与 {ALLOWED_ROOTS[1]}; "
-                                            f"不给则小种子进 .work、大种子进 R:)")
+    p.add_argument(
+        "--dir", default="", help=f"数据落点(只认 {ALLOWED_ROOTS[0]} 与 {ALLOWED_ROOTS[1]}; "
+        f"不给则小种子进 .work、大种子进 R:)"
+    )
     p.add_argument("--out", default="", help=".torrent 落点(默认 tests-real/.work/seeds/<stem>.torrent)")
     p.add_argument("--tracker", default=None, help="announce URL; 不给则种子不带 announce(纯本地做种)")
     p.add_argument("--piece-len", type=int, default=torrent.PIECE_LEN, help=f"分块大小(默认 {torrent.PIECE_LEN})")
-    p.add_argument("--no-data", action="store_true",
-                   help="只造种子不落数据(永远 progress 0, 不占磁盘) —— 用来试「缺数据」的界面/逻辑")
+    p.add_argument("--no-data", action="store_true", help="只造种子不落数据(永远 progress 0, 不占磁盘) —— 用来试「缺数据」的界面/逻辑")
     p.add_argument("--no-add", action="store_true", help="只造文件和 .torrent, 不加入实例(不碰 qB)")
-    p.add_argument("--allow-huge", action="store_true",
-                   help=f"授权创建 > {fmt_size(HUGE_SIZE)} 的文件(必须同时给 --reason); 原则上不该用")
+    p.add_argument(
+        "--allow-huge", action="store_true", help=f"授权创建 > {fmt_size(HUGE_SIZE)} 的文件(必须同时给 --reason); 原则上不该用"
+    )
     p.add_argument("--reason", default="", help="授权原因, 与 --allow-huge 配套, 会打印出来留痕")
-    p.add_argument("--paused", action="store_true",
-                   help="加入后保持暂停(默认启动: 做种态 stalledUP; 无 announce ⇒ 仍是零流量)")
-    p.add_argument("--port", type=int, default=DEFAULT_PORT, choices=list(guard.WHITELIST_PORTS),
-                   help=f"加到哪个实例(默认 {DEFAULT_PORT})")
+    p.add_argument("--paused", action="store_true", help="加入后保持暂停(默认启动: 做种态 stalledUP; 无 announce ⇒ 仍是零流量)")
+    p.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        choices=list(guard.WHITELIST_PORTS),
+        help=f"加到哪个实例(默认 {DEFAULT_PORT})"
+    )
     p.add_argument("--yes", action="store_true", help="真造真加(默认 dry-run)")
     p.set_defaults(fn=cmd_add)
 

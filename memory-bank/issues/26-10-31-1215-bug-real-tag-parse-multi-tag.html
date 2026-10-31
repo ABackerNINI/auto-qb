@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="real-tag-parse-multi-tag">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明">
 <meta name="issue-summary" content="tests-real 的标签成员判断用裸 split(&quot;,&quot;)不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL">
 <title>真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1215-bug-real-tag-parse-multi-tag</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 12:15</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tests-real</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,20 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 12:15 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 00:47 — 认领（用户指派），状态 <strong>In Progress</strong>。复验：2026-11-01 00:47 锚点复核 —— <code>tests-real/seed.py</code> 的 <code>_fakes</code> 与 <code>tests-real/lib/guard.py</code> 的 <code>snapshot</code> 两处仍是裸 <code>split(",")</code> 无 strip，其余各片用例均已是 strip 版 <code>_tags_of</code>，与入池取证一致。</li>
+      <li>2026-11-01 00:50 — 修复并真机验证通过，状态 <strong>Done</strong>。修法：新增 <code>lib/guard.py::tag_set</code> 单点，<code>snapshot</code>/<code>seed.py::_fakes</code> 同改；真机复验 list/guard/rm 三面（详见上方「修复后补充」）。坑档：<code>memory-bank/pitfalls/testing/qb-tags-multi-split-strip.md</code>。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-01 00:49 <strong>真机复现</strong>（36596 空库造 256K 假种子，经 qB API 手动加第二标签 <code>MISSING</code>，tags 变 <code>MISSING, real-fake</code>，与取证现场同形）—— 修复前 <code>real.seed.list</code> 报「共 1 个种子，其中自造 0 个」，失明确认。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与建议修法同向，加了一步单点化）：在 <code>tests-real/lib/guard.py</code> 新增 <code>tag_set()</code> 作为标签解析单点（strip 版集合解析，丢弃空段），<code>guard.snapshot</code> 的 <code>ours()</code> 与 <code>seed.py::_fakes</code> 两处调用点同改走它；不再各自内联。单点化理由：各片用例已各自手写 4 处 <code>_tags_of</code>，lib/CLI 侧再散写两处，第三处迟早漏改。</p>
+    <p><strong>验证方式与结果</strong>（36596 真机，双标签种子 <code>8ff68af3</code>）：</p>
+<pre><code># 修复前(复验): 共 1 个种子, 其中自造 0 个 ← 失明
+# 修复后:
+real.seed.list      → 共 1 个种子, 其中自造 1 个(标签 real-fake), 列表可见
+lib/guard.snapshot  → skip_tags=('real-fake',) 保护面为空, 假种子未被计入保护面、未被暂停(state 保持 stalledUP)
+real.seed.rm --all  → 命中 1 个, 连数据删除; 复查 list 归 0, .work 残留已清</code></pre>
+    <p>回归面：改动仅在 <code>tests-real/</code>（用例基建，不挂提交闸门），主仓代码与 <code>tests/</code> 未动；全量测试基线数字见 <code>commands run kb.baseline</code>（本轮收尾新切片）。</p>
   </section>
 
   <footer>

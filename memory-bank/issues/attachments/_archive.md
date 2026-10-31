@@ -4,10 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (54)
+## Open (53)
 
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
-- [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](../26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: graceful 跑壳 raise_signal(SIGTERM) 对 CLI 模式有效、对 --tray 模式 3/3 无效(45s+ 后进程仍存活), 与 cli.py「所有模式一致」注释相悖
 - [bug] [运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)](../26-10-31-1029-bug-qbmanager-disconnect-no-reconnect.html) — RM02-07 真机实测: qB 断开期间每 2s 一条「主循环异常」ERROR(45+ 条/75s), 且恢复后 60s 仍不自动回连 —— client=None 后 connect() 永远不再被调用
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
@@ -66,7 +65,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (305)
+## Done (306)
 
 - [feat] [e2e/冒烟环境开机自检: 端口占用/旧桩进程/npm i 缺失前置探测](../26-10-31-2226-feat-e2e-smoke-env-selfcheck.html) — 把 smoke.md 高频环境条目从读文档排障搬进工具: dev.e2e 前置自检 8099/8137 占用与桩进程活性
 - [feat] [doc-refs 认领链写法机械化: 生成器/模板接管双向声明](../26-10-31-2226-feat-kb-docrefs-bidirectional-automation.html) — kb.new/kb.index 建件时自动带 doc-refs meta 与反向 Refs 占位, 双向义务由机器保证
@@ -74,6 +73,7 @@
 - [feat] [聚合读法机械化: 模板/CSS/JS 内容定位走机器索引](../26-10-31-2226-feat-webui-agg-content-map.html) — 生成聚合映射命令, 输出内容片段在 shared/tpl+css+JS 域的单点定位, 判别法从人读 frontend-split.md 变成跑命令
 - [bug] [组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)](../26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok.html) — RM09-06 实测: base64url 合法但不存在的组 key 走 /api/groups/{key}/pause 得 ok 回执且零效果零日志; 计划口径「只要不是静默成功」
 - [bug] [强制汇报确认跟踪对不可达 tracker 的首报过早落 confirmed(ok 回执)](../26-10-31-1740-bug-webui-reannounce-premature-confirm.html) — RM09-04 实测: 死端口 tracker 的 reannounce 在 updating 在途瞬间即写 ok(日志+1ms), 随后 tracker 拒绝不纠正回执 —— 计划期望 RC_FAIL
+- [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [test] [relocate reconcile 重建用例同树异时翻转(全量绿后单跑稳定红)](../26-10-31-0932-test-relocate-reconcile-flaky.html) — test_reconcile_rebuild_when_link_lost_but_qb_alive 同树 09:05 test.full 绿, 宿主重启后 09:15 起单跑稳定红(phase 卡 removed), venv 零变化非依赖 bump 引入, 疑时序/环境敏感, 根因待查
 - [chore] [filelock 3.32.6 -> 4.2.5 升级(major)](../26-10-31-0830-chore-infra-filelock-4-upgrade.html) — filelock 4.x 收紧参数校验并改 Timeout 语义; 本项目调用面仅 infra/locking.py 单点(FileLock(str, timeout=float) + Timeout), 风险偏低, 按 major 规则降档入池
 - [chore] [pyobjc 三件 12.2.2 -> 13.0 升级(major, macOS 专用传递依赖)](../26-10-31-0830-chore-pyobjc-13-macos-upgrade.html) — pyobjc-core/-cocoa/-quartz 是 pystray 的 macOS 专用传递依赖, Windows 运行时不安装, 实际影响约 0; 保持锁内跟随或随 pystray 侧处理

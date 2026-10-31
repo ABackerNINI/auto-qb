@@ -16,7 +16,7 @@ import time
 
 WHITELIST_PORTS = (36595, 36596)
 # testing 与 testing2 都落在这一前缀下; 生产实例(D:\Programs\qBittorrent-2 / Program Files)不在其中
-IMAGE_PREFIXES = ("D:\\Programs\\qBittorrent-testing",)
+IMAGE_PREFIXES = ("D:\\Programs\\qBittorrent-testing", )
 EXE = {
     36595: "D:\\Programs\\qBittorrent-testing\\qbittorrent.exe",
     36596: "D:\\Programs\\qBittorrent-testing2\\qbittorrent.exe",
@@ -34,11 +34,13 @@ def listening_pid(port: int) -> int | None:
     ⚠ 中文 Windows 的 netstat / powershell 输出是 GBK 代码页 —— 用默认 utf-8 解会
     UnicodeDecodeError 并把守卫打成"崩了", 所以显式按 gbk 解并容错。
     """
-    out = subprocess.run(["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True,
-                         encoding="gbk", errors="replace", timeout=20).stdout
+    out = subprocess.run(
+        ["netstat", "-ano", "-p", "tcp"], capture_output=True, text=True, encoding="gbk", errors="replace", timeout=20
+    ).stdout
     for line in out.splitlines():
         parts = line.split()
-        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[1].endswith(f":{port}") and parts[3].upper() == "LISTENING":
+        if len(parts) >= 5 and parts[0].upper() == "TCP" and parts[1].endswith(f":{port}"
+                                                                              ) and parts[3].upper() == "LISTENING":
             return int(parts[4])
     return None
 
@@ -48,7 +50,11 @@ def image_path(pid: int) -> str | None:
     try:
         r = subprocess.run(
             ["powershell", "-NoProfile", "-NonInteractive", "-Command", f"(Get-Process -Id {pid}).Path"],
-            capture_output=True, text=True, encoding="gbk", errors="replace", timeout=20,
+            capture_output=True,
+            text=True,
+            encoding="gbk",
+            errors="replace",
+            timeout=20,
         )
     except Exception:
         return None
@@ -83,8 +89,16 @@ def check_online(qb) -> str:
     if status == "disconnected":
         raise GuardError(
             f"端口 {qb.port} connection_status=disconnected —— 没有可用 BT 监听 socket"
-            f"(多半是 listen_port 被别的进程占用; 用 socket.bind 探一个空端口再 set_prefs(listen_port=...))")
+            f"(多半是 listen_port 被别的进程占用; 用 socket.bind 探一个空端口再 set_prefs(listen_port=...))"
+        )
     return status
+
+
+def tag_set(t: dict) -> set[str]:
+    """qB tags 字段的容错解析: qB 多标签用「, 」(逗号+空格)连接, 裸 split(",") 会把
+    第二个标签解析成带前导空格的串(" real-fake")而成员判断失明(issue 26-10-31-1215) ——
+    一律 strip 后判成员。所有「按标签认领种子」的判断都走这里, 不许自带裸 split。"""
+    return {x.strip() for x in (t.get("tags") or "").split(",") if x.strip()}
 
 
 def snapshot(qb, skip_tags: tuple[str, ...] = ()) -> dict:
@@ -94,8 +108,7 @@ def snapshot(qb, skip_tags: tuple[str, ...] = ()) -> dict:
     用例/命令自己管, 把它们一起暂停会让"我刚加的假种子怎么变成 stoppedUP 了"变成日常困惑。
     """
     def ours(t: dict) -> bool:
-        tags = set((t.get("tags") or "").split(","))
-        return bool(tags & set(skip_tags))
+        return bool(tag_set(t) & set(skip_tags))
 
     torrents = [t for t in qb.torrents() if not ours(t)]
     hashes = {t["hash"]: t["name"] for t in torrents}
@@ -113,12 +126,14 @@ def snapshot(qb, skip_tags: tuple[str, ...] = ()) -> dict:
 
 
 def active_torrents(qb, protected: set[str]) -> list[dict]:
-    return [t for t in qb.torrents() if t["hash"] in protected and (t["upspeed"] or t["dlspeed"] or t["state"] in ACTIVE_STATES)]
+    return [
+        t for t in qb.torrents()
+        if t["hash"] in protected and (t["upspeed"] or t["dlspeed"] or t["state"] in ACTIVE_STATES)
+    ]
 
 
 class Watchdog(threading.Thread):
     """第三层: 运行期复核。违规立刻暂停, 并累计计数交给调用方中止。"""
-
     def __init__(self, qb, protected: set[str], interval: float = 2.0, limit: int = 3):
         super().__init__(daemon=True)
         self.qb = qb
@@ -139,7 +154,14 @@ class Watchdog(threading.Thread):
             if bad:
                 self.qb.pause("|".join(t["hash"] for t in bad))
                 for t in bad:
-                    self.violations.append({"ts": time.time(), "hash": t["hash"], "name": t["name"], "state": t["state"]})
+                    self.violations.append(
+                        {
+                            "ts": time.time(),
+                            "hash": t["hash"],
+                            "name": t["name"],
+                            "state": t["state"]
+                        }
+                    )
             if len(self.violations) >= self.limit:
                 return
 
