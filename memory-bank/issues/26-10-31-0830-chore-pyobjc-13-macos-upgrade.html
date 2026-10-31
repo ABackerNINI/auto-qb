@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="deps-upgrade-2026-10">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="pyobjc 三件 12.2.2 -&gt; 13.0 升级(major, macOS 专用传递依赖)">
 <meta name="issue-summary" content="pyobjc-core/-cocoa/-quartz 是 pystray 的 macOS 专用传递依赖, Windows 运行时不安装, 实际影响约 0; 保持锁内跟随或随 pystray 侧处理">
 <title>pyobjc 三件 12.2.2 -&gt; 13.0 升级(major, macOS 专用传递依赖) · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0830-chore-pyobjc-13-macos-upgrade</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 09:07 — 置 <strong>In Progress</strong>（用户指派认领，实施升级）；复验 2026-10-31 09:07：现象仍在 —— uv.lock 三条目 pyobjc-core / pyobjc-framework-cocoa / pyobjc-framework-quartz 均 12.2.2（行 661 / 676 / 694），宿主 <code>pystray==0.19.5</code> 以 <code>sys_platform == 'darwin'</code> marker 引用 quartz</li>
+      <li>2026-10-31 09:28 — 置 <strong>Done</strong>。实际修法：一次 <code>uv lock --upgrade-package</code> 三件同升 12.2.2 → 13.0（重解析 45 包、恰此三件位移；三件精确互锁同族，frameworks 钉死 core 同版本，只能整体动）。与 §03 建议（不单独 bump）改道：用户本轮显式指令「认领并实施」覆盖该建议，建议原文保留于 §03。验证：①env.sync Windows 零安装动作（影响面 ≈ 0 的判断实测成立）；②diff hunk 全部落在三个 pyobjc 块内，锁内其余 42 包零位移；③<code>commands run test.full</code> 全绿（覆盖率门槛 99% 通过，数字见基线切片 <code>testing/baselines/26-10-31-0928-pyobjc-13-bump.md</code>，正文不重抄）</li>
     </ul>
   </section>
 
