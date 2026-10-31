@@ -33,15 +33,15 @@ def test_create_condition_unknown():
 
 
 def test_create_action_known():
-    """已知动作类型可创建"""
-    a = create_action("add_tags", ["X"], ignore_error=False)
+    """已知动作类型可创建(create_action 只收 名字+spec 两参, ignore_error 已随伪动作退役拆除)"""
+    a = create_action("add_tags", ["X"])
     assert a.name == "add_tags"
 
 
 def test_create_action_unknown():
     """未知动作直接索引注册表抛 KeyError"""
     with pytest.raises(KeyError):
-        create_action("nope", None, ignore_error=False)
+        create_action("nope", None)
 
 
 def test_register_condition_decorator():
@@ -79,7 +79,7 @@ def test_register_action_decorator():
         class Noop:
             name = "noop"
 
-            def __init__(self, spec, ignore_error=False):
+            def __init__(self, spec):
                 pass
 
             def execute(self, ctx):
@@ -88,6 +88,6 @@ def test_register_action_decorator():
 
         assert "noop" in ACTIONS
         assert len(ACTIONS) == n + 1
-        assert create_action("noop", None, ignore_error=False).execute(None).is_ok
+        assert create_action("noop", None).execute(None).is_ok
     finally:
         ACTIONS.pop("noop", None)

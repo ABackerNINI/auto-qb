@@ -1112,7 +1112,6 @@ def _example_rules_config():
                         "actions": [{
                             "add_tags": ["HHan", "seed-${required_seeding_time}"]
                         }],
-                        "stop_following_rules_if": "never",
                     },
                 "hr_done":
                     {
@@ -1129,7 +1128,6 @@ def _example_rules_config():
                                 "overwrite": False
                             }
                         }],
-                        "stop_following_rules_if": "conditions-met",
                     },
                 "stop_low_ratio":
                     {
@@ -1143,7 +1141,6 @@ def _example_rules_config():
                         }, {
                             "add_tags": ["low-ratio"]
                         }],
-                        "stop_following_rules_if": "action-failed",
                     },
             }
     }

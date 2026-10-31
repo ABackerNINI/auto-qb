@@ -47,13 +47,12 @@ RULE_FIELDS: Tuple[Field, ...] = (
     ),
     Field(
         "stop_following_rules_if",
-        "停止后续规则",
+        "停止后续规则(已退役)",
         "enum",
         default="conditions-met",
         options=STOP_IF,
-        help="什么情况下不再执行列表中排在后面的规则: conditions-met 条件满足并执行后停(默认); "
-        "conditions-not-met 条件不满足也停; action-failed 任一动作失败才停; all-actions-succeed 全部动作成功(无一失败)才停; "
-        "always 条件满足即停(与动作成败无关); never 不主动停。条件求值出错时无论配什么都停",
+        help="已退役键: 引擎为「每规则每种子独立任务」模型, 不存在「后续规则」链, 该键不再生效; "
+        "含此键的规则载入时自动转为未启用(enabled=false)并提示, 原内容原样保留 —— 请删除该键后重新启用",
     ),
 )
 

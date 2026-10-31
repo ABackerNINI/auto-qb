@@ -41,7 +41,7 @@ from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager, s
 # ---------- 事件规则辅助 ----------
 def _ev(trigger, actions, conditions=None, **kw):
     """构造事件规则 spec(单动作键)"""
-    spec = {"enabled": True, "trigger": trigger, "actions": actions, "stop_following_rules_if": "never"}
+    spec = {"enabled": True, "trigger": trigger, "actions": actions}
     if conditions:
         spec["conditions"] = conditions
     spec.update(kw)

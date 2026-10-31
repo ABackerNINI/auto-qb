@@ -693,7 +693,7 @@ def test_rebuild_benchmark_5000_seeds(capsys):
 
 def _p2a_ev(trigger, actions, conditions=None, **kw):
     """事件规则 spec(与 test_trigger_events._ev 同形, 本文件内联避免跨测试文件导入)"""
-    spec = {"enabled": True, "trigger": trigger, "actions": actions, "stop_following_rules_if": "never"}
+    spec = {"enabled": True, "trigger": trigger, "actions": actions}
     if conditions:
         spec["conditions"] = conditions
     spec.update(kw)

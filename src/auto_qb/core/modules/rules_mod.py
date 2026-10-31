@@ -40,6 +40,50 @@ from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 
 logger = logging.getLogger(__name__)
 
+# ---------- 两键退役(D1 配置升级路线, plan 26-11-01-0106 W1) ----------
+# 引擎不再消费 stop_following_rules_if / ignore_next_action_error; 载入层识别到含键规则
+# 即转未启用(enabled=false)+ 每次载入 warning(话术给出 ignore 的等价新写法)。不做运行时
+# 兼容(不自动映射), 配置原内容原样保留供用户改写 —— 本模块的禁用只作用于内存副本。
+RETIRED_CONTROL_KEYS = ("stop_following_rules_if", "ignore_next_action_error")
+RETIRED_IGNORE_EQUIV = "on_error: {policy: continue}"
+
+
+def retired_control_keys_in(spec) -> tuple:
+    """规则 spec 里出现的已退役控制键(规则级 stop_following_rules_if + actions 域伪动作项)
+
+    升级检测单点: 载入层(rules_mod.load_rules)与后续 webui 未启用徽标共用同一判定。
+    """
+    if not isinstance(spec, dict):
+        return ()
+    keys = [k for k in RETIRED_CONTROL_KEYS if k in spec]
+    for act in spec.get("actions") or []:
+        if isinstance(act, dict) and "ignore_next_action_error" in act and "ignore_next_action_error" not in keys:
+            keys.append("ignore_next_action_error")
+    return tuple(keys)
+
+
+def disable_retired_rule_spec(spec: dict) -> dict:
+    """含退役键的规则「转未启用」的内存副本: enabled 置 false + 剔除 actions 里的伪动作项
+
+    伪动作已不被引擎消费(直接构造 Rule 会按未知动作 ConfigError), 载入前须剔除; 规则级
+    stop_following_rules_if 键无消费方, 保留在副本里无害。配置原内容不动(只改内存副本)。
+    """
+    disabled = dict(spec)
+    disabled["enabled"] = False
+    disabled["actions"] = [
+        act for act in (spec.get("actions") or []) if not (isinstance(act, dict) and "ignore_next_action_error" in act)
+    ]
+    return disabled
+
+
+def _warn_retired_rule(name: str, keys: tuple) -> None:
+    """退役键升级提示(每次载入都报): 话术自带 ignore_next_action_error 的等价新写法"""
+    msg = (f"规则[{name}] 含已退役控制键 {', '.join(keys)}: 本次载入已转为未启用(enabled=false), "
+           "规则内容原样保留, 请改写后重新启用")
+    if "ignore_next_action_error" in keys:
+        msg += f"; ignore_next_action_error 的等价新写法: {RETIRED_IGNORE_EQUIV}"
+    logger.warning(msg)
+
 
 class RulesModule(BaseModule):
     """rules 模块: 规则加载 / 种子级规则任务 / 事件分派 / L2 结构重建"""
@@ -197,7 +241,13 @@ class RulesModule(BaseModule):
             if not isinstance(group, dict):
                 continue
             for rule_name, spec in group.items():
-                self.rules.append(Rule(f"{group_name}.{rule_name}", spec, self._manager))
+                name = f"{group_name}.{rule_name}"
+                retired = retired_control_keys_in(spec)
+                if retired:
+                    # D1 升级路线: 含退役键的规则转未启用 + 每次载入提示(升级检测, 不做运行时兼容)
+                    _warn_retired_rule(name, retired)
+                    spec = disable_retired_rule_spec(spec)
+                self.rules.append(Rule(name, spec, self._manager))
         self.enabled_rules = [r for r in self.rules if r.enabled]
         if self.rules:
             logger.info(f"加载规则 {len(self.rules)} 条(启用 {len(self.enabled_rules)} 条)")
@@ -249,17 +299,19 @@ class RulesModule(BaseModule):
             self._manager, self._manager.client, self._ctx.config, hash, dry_run, task=task, snapshot=snapshot
         )
 
-    def _run_rule(self, rule: Rule, ctx: RuleContext, error_log_prefix: str) -> bool:
+    def _run_rule(self, rule: Rule, ctx: RuleContext, error_log_prefix: str) -> str:
         """规则执行 + 异常日志骨架单点(issue 26-10-11-0207 R10): 三条执行路径共用 ——
-        process 抛异常记 ERROR(exc_info)不外抛(规则异常不致命)。返回 process 是否正常
-        返回(False = 抛了且已记日志), 调用方按各自路径处置(interval 路径 REQUEUE /
-        事件路径吞掉)。error_log_prefix 为日志行去掉 `: {e}` 的前缀。"""
+        process 抛异常记 ERROR(exc_info)不外抛(规则异常不致命), 返回空串; 正常返回 process
+        的 verdict(rules.base.VERDICT_*, W1 返回值契约收口)。引擎显式消费 = DEBUG 记每次
+        执行结论(可观测); W2 起按 error 档驱动 per-step 语义、W4 起进 per-run trace, 均以
+        本返回值为单点入口。error_log_prefix 为日志行去掉 `: {e}` 的前缀。"""
         try:
-            rule.process(ctx)
-            return True
+            verdict = rule.process(ctx)
         except Exception as e:
             logger.error(f"{error_log_prefix}: {e}", exc_info=True)
-            return False
+            return ""
+        logger.debug(f"规则[{rule.name}] {ctx.hash[:8]} | 执行结论: {verdict}")
+        return verdict
 
     def _handle_rule(self, rule: Rule, task: Task, dry_run: bool) -> bool:
         """种子级规则任务: 执行指定规则于该种子。
@@ -272,7 +324,7 @@ class RulesModule(BaseModule):
         if task.torrent is None:
             return FINISHED
         ctx = self._make_ctx(task.hash, dry_run, task=task)
-        if not self._run_rule(rule, ctx, f"任务[{task.log_tag}] | 规则执行异常"):
+        if self._run_rule(rule, ctx, f"任务[{task.log_tag}] | 规则执行异常") == "":
             return REQUEUE
         # 有未消费断点(pending 等待子任务恢复) -> 本轮不重入; 否则周期重入队
         return FINISHED if task.has_breakpoint else REQUEUE

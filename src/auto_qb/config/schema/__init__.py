@@ -163,8 +163,8 @@ def schema_payload() -> Dict[str, Any]:
                     list(NOTIFY_CHANNELS),
                 "execute_once":
                     list(EXECUTE_ONCE),
-                "stop_if":
-                    list(STOP_IF),
+                # stop_if 已随 stop_following_rules_if 退役(D1, plan 26-11-01-0106 W1):
+                # 前端不再提供该枚举下拉; 键面识别保留在 RULE_FIELDS/validation(升级检测)
                 "triggers":
                     list(TRIGGERS),
                 "checking_basic":

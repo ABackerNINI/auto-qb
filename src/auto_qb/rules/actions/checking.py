@@ -50,8 +50,8 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
     """
     name = "checking"
 
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
+    def __init__(self, spec):
+        super().__init__(spec)
         # spec 合法性(dict/已知键/basic_check/段结构/mode)由 config 校验阶段保证, 此处直接解析
         self.basic_check = str(spec["basic_check"])
         self.custom_program = str(spec.get("custom_basic_check_program_path") or "")

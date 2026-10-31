@@ -14,7 +14,7 @@
 - test_static_validation: 配置期语义校验(未知名/未知函数/参数个数/类型冲突/结果必须布尔)
 - test_expr_condition_matches: ExprCondition 正常匹配(编译期校验 + 运行期求值)
 - test_config_validation_rejects_bad_expr: config 校验把表达式错误聚合成可读报错
-- test_process_stops_on_condition_error: 求值出错 -> process 返回 (False, True)(出错即停规则)
+- test_process_stops_on_condition_error: 求值出错 -> process 返回 verdict=error(本条本轮跳过, W1 话术修正)
 - test_legacy_condition_equivalence: 旧 16 个条件逐条对拍等价表达式(同一 FakeTorrent 结果一致;
   冻钟跑两个时刻 —— 正午 + 23:59:30 端点分钟, 后者是时段判定精度分叉的守阵位)
 - test_traffic_values: 全局流量值(需 traffic_source 数据源)取值正确
@@ -84,7 +84,7 @@ from auto_qb.config.models import GlobalSpeedLimitCurve
 from auto_qb.config.validation.rules import _validate_expr_condition_spec, _validate_rules
 from auto_qb.infra import file_access
 from auto_qb.infra.file_access import UNDETERMINED, FileAccessError
-from auto_qb.rules.base import Rule
+from auto_qb.rules.base import VERDICT_ERROR, Rule
 from auto_qb.rules.expr import env as expr_env
 from auto_qb.config.schema.fields import STATE_ATTRS
 from auto_qb.rules.expr import ANY, BOOL, LIST, NUM, STR, compile_expr, evaluate, validate
@@ -318,9 +318,9 @@ def test_config_validation_rejects_bad_expr():
 def test_process_stops_on_condition_error():
     with tempfile.TemporaryDirectory() as td:
         mgr, _, ctx = _setup(td)
-        # server_state 未同步 -> 求值报错 -> 出错即停规则
+        # server_state 未同步 -> 求值报错 -> 本条规则本轮跳过(W1: 无「停止后续规则」死语义)
         rule = Rule("g.t", {"conditions": [{"expr": "sys.dl_speed > 1"}], "actions": []}, mgr)
-        assert rule.process(ctx) == (False, True)
+        assert rule.process(ctx) == VERDICT_ERROR
 
 
 def test_traffic_values():

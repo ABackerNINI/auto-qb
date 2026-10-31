@@ -34,7 +34,6 @@
 - test_print_details_missing_torrent: print_torrent_details 种子不存在 -> fail (P2-a)
 - test_checking_disabled_segment_skips: checking 未启用段 -> skip 有/无参考两指代 (P2-a)
 - test_checking_verified_reference_union_filters: verified_references 并集过滤(自身/快照外)且去重 (P2-a)
-- test_actions_ignore_error_passthrough: 六个动作类 __init__ 原样透传 ignore_error(丢实参/置 None 即失效)
 - test_actions_torrent_hash_scope: 各动作下发 qB 的 torrent_hashes 恒为本种子 hash(置 None = 全库副作用)
 - test_add_category_overwrite_switch: add_category 的 overwrite 开关读取(显式 true/false 与缺省)
 - test_add_remove_tags_string_spec_not_split: 字符串 spec 不得被 list() 拆成单字符
@@ -793,32 +792,6 @@ def test_checking_verified_reference_union_filters():
         action = _check_action(basic_check="filelist")
         refs = action._find_reference(ctx, ["H1", "H2"])
         assert [t.hash for t in refs] == ["H2"], "自身排除 / 快照外排除 / 与候选去重"
-
-
-def test_actions_ignore_error_passthrough():
-    """六个动作类 __init__ 必须把 ignore_error 原样交给基类
-
-    ignore_next_action_error 的运行时效果全靠这个属性: 任一子类把 super().__init__ 的第二
-    实参丢成 None / 省略, 规则链里「可忽略的失败」就升级成中断(后续动作不再执行)。
-    """
-    cases = [
-        (AddTagsAction, "TAG"),
-        (RemoveTagsAction, "TAG"),
-        (AddCategoryAction, {
-            "format": "AUTO"
-        }),
-        (CheckAction, {
-            "basic_check": "filelist"
-        }),
-        (MoveToAction, {
-            "path": r"R:\New"
-        }),
-        (UploadSpeedLimitAction, "1000KiB/s"),
-        (DownloadSpeedLimitAction, "1000KiB/s"),
-    ]
-    for cls, spec in cases:
-        assert cls(spec, True).ignore_error is True, f"{cls.__name__} 丢了 ignore_error"
-        assert cls(spec).ignore_error is False, f"{cls.__name__} 默认应为 False"
 
 
 def test_actions_torrent_hash_scope():

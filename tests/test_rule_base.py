@@ -6,15 +6,21 @@
 - test_rule_context_tracker_urls_and_conf: tracker URL 与配置解析(记录级 tracker_urls + tracker_conf)
 - test_rule_context_log_repr: 种子日志描述(describe 已移除由 log_repr 承担)
 - test_rule_context_hr_checks: HR 达标判定(做种时间/分享率)
-- test_rule_basic_process: 规则基本执行流程(条件满足 -> 动作执行)
-- test_rule_condition_not_met: 条件未满足 -> 不执行动作
+- test_rule_basic_process: 规则基本执行流程(条件满足 -> 动作执行, verdict=executed)
+- test_rule_condition_not_met: 条件未满足 -> 不执行动作(verdict=no_match)
 - test_rule_execute_once_dedup: execute_once=once 去重
-- test_rule_ignore_next_action_error: 忽略下一个动作错误
-- test_rule_condition_exception: 条件异常 -> 不执行且**停后续规则**(2026-09-20 拍板: 出错即停规则,
-  且故障优先于 stop_following_rules_if —— 配 never 也停)
-- test_rule_action_failed_stop: 动作失败且 stop 配置 -> 停止
-- test_rule_stop_if_never: stop_following_rules_if=never -> 不停止
-- test_rule_stop_if_all_actions_succeed: 全部动作成功 -> 停止
+- test_load_retired_stop_key_disables_rule: 载入检测 stop_following_rules_if -> 规则转未启用 + warning,
+  配置原内容原样保留(D1 升级路线, plan 26-11-01-0106 W1)
+- test_load_retired_ignore_key_warns_equivalent: 载入检测伪动作 ignore_next_action_error -> 转未启用 +
+  warning 话术含等价新写法 on_error: {policy: continue}
+- test_load_retired_keys_warn_every_load: 每次载入都提示(热重载重建也再报)
+- test_load_clean_rules_no_retired_warning: 无退役键的规则载入零告警且 enabled 原样(不带两键零行为变化)
+- test_rule_condition_exception: 条件异常 -> verdict=error, 本条本轮跳过且话术不再宣称「停止后续规则」
+- test_rule_action_failed_breaks_chain: 动作失败中断本条动作链(ignore_error 已退役拆除, 失败恒中断)
+- test_rule_action_failed_stop: 动作失败 verdict=executed(失败动作计已执行), 链中断无 stop 语义
+- test_rule_stop_if_never: stop 键退役: Rule 不再有 stop_if 消费面, 行为与不带键一致
+- test_rule_stop_if_all_actions_succeed: 六档退役: 六档取值引擎侧全部等价(无链间控制流)
+- test_rule_stop_if_conditions_not_met: conditions-not-met 退役: 条件不满足仅本条不执行
 - test_rule_cooldown_dedup: cooldown 冷却期内去重
 - test_rule_hourly_dedup: hourly 同小时去重
 - test_rule_context_files_cached: tor.files(client) 惰性缓存只拉一次
@@ -24,15 +30,15 @@
 - test_rule_context_log_repr_tracker_error: tracker 拉取异常 -> make_ctx 容错 tracker_conf None / log_repr Unknown
 - test_rule_context_hr_dlratio_not_met: 下载比例未达标 -> 触发/满足均 False
 - test_rule_context_hr_satisfied_by_ratio: 分享率达标 -> satisfied True
-- test_rule_process_action_exception: 动作异常 -> 容错为 fail 继续
-- test_rule_stop_if_conditions_not_met: 未匹配且 conditions-not-met -> 停链
+- test_rule_process_action_exception: 动作异常 -> 容错为 fail, verdict=executed
+- test_rule_pseudo_action_direct_construction_rejected: 绕过载入层直接构造 Rule 遇伪动作 -> ConfigError
+  (引擎不再消费 ignore_next_action_error, 载入层转未启用时才剔除)
 - test_rule_daily_dedup: execute_once=daily 同日已执行 -> 去重
 - test_rule_context_hr_no_conf: tracker 无 hr 配置 -> 触发/满足均 False
 - test_rule_context_hr_dlsize_not_met: dlsize 下载量未达标 -> 触发 False
 - test_rule_actions_skip_non_dict: actions 中非 dict 项 -> 跳过
 - test_rule_multi_condition_and: 多条件 AND: 全部满足才执行, 任一不满足不执行
 - test_rule_state_group_combined: 状态组合条件(is_complete&is_uploading)规则层仅对同时满足执行
-- test_rule_action_chain_ignore_continue: 动作链: 失败无 ignore 中断; ignore=true 继续执行后续
 - test_reannounce_without_dedup_warns: reannounce 未配去重 -> 构造期 WARNING; 配置后无告警
 - test_rule_context_api_fallback_to_client: manager 无 api 门面时退化 client (P2-a)
 - test_rule_init_non_dict_condition_skipped: conditions 非 dict 项跳过 (P2-a)
@@ -44,7 +50,6 @@
 - test_rule_process_unknown_status_continues_without_marking
 - test_rule_hourly_dedup_scope: hourly 仅「当日且同小时」去重, 跨小时/跨日均放行
 - test_rule_daily_dedup_scope: daily 当日记录去重, 昨日记录放行(and→or 会让昨日也去重)
-- test_rule_ignore_next_only_once: ignore_next 状态机: 初值 False / 只忽略紧随的一个失败 / 消费后复位
 - test_rule_enabled_key_read: enabled 键名读取(显式 false 必须停用, 缺省 true)
 - test_rule_once_dedup_with_record: once 有执行记录必须去重(无记录放行)
 - test_rule_cooldown_sub_second_boundary: 0 < cooldown <= 1 秒的冷却同样生效
@@ -56,11 +61,31 @@ import os
 import tempfile
 
 from auto_qb.config import TrackerConfig
-from auto_qb.rules.base import ActionResult, BaseAction, Rule, RuleContext
+from auto_qb.core.modules import rules_mod
+from auto_qb.rules.base import (
+    VERDICT_DEDUPED,
+    VERDICT_ERROR,
+    VERDICT_EXECUTED,
+    VERDICT_NO_MATCH,
+    VERDICT_NO_OP,
+    VERDICT_PENDING,
+    ActionResult,
+    BaseAction,
+    Rule,
+    RuleContext,
+)
 from auto_qb.rules.conditions import SizeCondition
 from auto_qb.rules.actions import AddTagsAction
 from auto_qb.infra import utils
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
+
+
+def _load_rules(mgr, rules_config):
+    """把规则配置灌进 manager 并走真实载入层 load_rules(两键检测/转未启用的被测单点)"""
+    mgr.config.rules_config = rules_config
+    rules = mgr.host.get("rules")
+    rules.load_rules()
+    return rules
 
 
 class _FailingAction(BaseAction):
@@ -151,7 +176,7 @@ def test_rule_context_hr_checks():
 
 
 def test_rule_basic_process():
-    """Rule 基本处理: 条件匹配执行动作, 返回 (handled, stop)"""
+    """Rule 基本处理: 条件匹配执行动作, 返回 verdict=executed"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -166,17 +191,15 @@ def test_rule_basic_process():
                 "actions": [{
                     "add_tags": ["DONE"]
                 }],
-                "stop_following_rules_if": "always",
             },
             mgr,
         )
-        handled, stop = rule.process(ctx)
-        assert handled and stop
+        assert rule.process(ctx) == VERDICT_EXECUTED
         assert ("add_tags", ["DONE"]) in client.calls
 
 
 def test_rule_condition_not_met():
-    """条件不满足: 不执行动作, stop 取决于 stop_following_rules_if=conditions-met"""
+    """条件不满足: 不执行动作, verdict=no_match"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -190,12 +213,10 @@ def test_rule_condition_not_met():
                 "actions": [{
                     "add_tags": ["DONE"]
                 }],
-                "stop_following_rules_if": "conditions-met",
             },
             mgr,
         )
-        handled, stop = rule.process(ctx)
-        assert not handled and not stop
+        assert rule.process(ctx) == VERDICT_NO_MATCH
         assert client.calls == []
 
 
@@ -207,61 +228,172 @@ def test_rule_execute_once_dedup():
         tor = FakeTorrent(tags="", size=100 * 1024**2)
         ctx = make_ctx(mgr, tor, client)
         rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "execute_once": "once"}, mgr)
-        h1, _ = rule.process(ctx)
-        assert h1
+        assert rule.process(ctx) == VERDICT_EXECUTED
         assert ("add_tags", ["X"]) in client.calls
-        # 第二次: 记录存在 -> 不执行(handled=False)
-        h2, _ = rule.process(ctx)
-        assert not h2
+        # 第二次: 记录存在 -> 去重拦下
+        assert rule.process(ctx) == VERDICT_DEDUPED
         assert client.calls.count(("add_tags", ["X"])) == 1
 
 
-def test_rule_ignore_next_action_error():
-    """ignore_next_action_error=true: 忽略下一条动作错误继续执行"""
-    with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
-        client = FakeClient()
-        ctx = make_ctx(mgr, FakeTorrent(tags="", category=""), client)
-        rule = Rule(
-            "g.test",
-            {"actions": [{
-                "remove_category": ""
-            }, {
-                "ignore_next_action_error": "true"
-            }, {
-                "add_tags": ["AFTER"]
-            }]},
-            mgr,
-        )
-        # remove_category 空分类 skip(非 fail); 验证 ignore 标志不影响 skip
-        handled, _ = rule.process(ctx)
-        assert handled
-        assert ("add_tags", ["AFTER"]) in client.calls
+# ---------------- 两键退役(D1 升级路线, plan 26-11-01-0106 W1): 载入层转未启用 + warning ----------------
 
 
-def test_rule_condition_exception():
-    """条件执行异常: 返回 (False, True) —— 不执行动作, 且**停止后续规则**
+def test_load_retired_stop_key_disables_rule():
+    """载入检测 stop_following_rules_if -> 规则转未启用 + warning; 配置原内容原样保留(D1)
 
-    2026-09-20 拍板「出错即停规则」: 判据都不可信时, 让后面的规则继续对这个种子做动作
-    才是真风险。故 stop=True, 且**故障优先于 stop_following_rules_if**(配 never 也停)。
+    变异面: 检测漏伪动作/漏规则级键、enabled 忘置 false、副本误改原配置, 任一都表现为
+    退役键规则照跑(死语义复活)或配置内容被改写。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        ctx = make_ctx(mgr, FakeTorrent(), FakeClient())
+        spec = {"enabled": True, "actions": [{"add_tags": ["X"]}], "stop_following_rules_if": "never"}
+        rules = _load_rules(mgr, {"g": {"r": spec}})
+        rule = rules.rules[0]
+        assert rule.enabled is False, "含退役键的规则载入即转未启用"
+        assert rule not in rules.enabled_rules, "未启用规则不进 enabled_rules"
+        assert spec["stop_following_rules_if"] == "never" and spec["enabled"] is True, \
+            "配置原内容必须原样保留供改写(内存副本禁用, 不回写)"
+
+
+def test_load_retired_ignore_key_warns_equivalent():
+    """载入检测伪动作 ignore_next_action_error -> 转未启用 + warning 话术含等价新写法
+
+    warning 必须给出 on_error: {policy: continue}(D1: 活键退场, 用了的用户规则停摆直到改写,
+    话术不带等价写法用户无从改起); 内存副本剔除伪动作项使 Rule 构造可通过。
+    """
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        spec = {
+            "enabled": True,
+            "actions": [{
+                "ignore_next_action_error": "true"
+            }, {
+                "add_tags": ["X"]
+            }],
+        }
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.core.modules.rules_mod")
+        handler = Grab(level=logging.WARNING)
+        lg.addHandler(handler)
+        lg.setLevel(logging.WARNING)
+        try:
+            rules = _load_rules(mgr, {"g": {"r": spec}})
+        finally:
+            lg.removeHandler(handler)
+        assert rules.rules[0].enabled is False
+        assert [a.name for a in rules.rules[0].actions] == ["add_tags"], \
+            "载入副本须剔除伪动作项(引擎不再消费, 直接构造会 ConfigError)"
+        msg = next(m for m in records if "g.r" in m)
+        assert "已退役" in msg and "enabled=false" in msg, msg
+        assert "on_error: {policy: continue}" in msg, f"warning 必须含等价新写法: {msg}"
+
+
+def test_load_retired_keys_warn_every_load():
+    """每次载入都提示: 同一配置重复 load_rules(启动/热重载重建)每次都再报 warning"""
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        spec = {"enabled": True, "actions": [], "stop_following_rules_if": "always"}
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.core.modules.rules_mod")
+        handler = Grab(level=logging.WARNING)
+        lg.addHandler(handler)
+        lg.setLevel(logging.WARNING)
+        try:
+            _load_rules(mgr, {"g": {"r": spec}})
+            _load_rules(mgr, {"g": {"r": spec}})
+        finally:
+            lg.removeHandler(handler)
+        hits = [m for m in records if "g.r" in m and "已退役" in m]
+        assert len(hits) == 2, f"每次载入都必须提示(得 {len(hits)} 次): {records}"
+
+
+def test_load_clean_rules_no_retired_warning():
+    """无退役键的规则载入零告警且 enabled 原样(不带两键载入零行为变化的对照面)"""
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.core.modules.rules_mod")
+        handler = Grab(level=logging.WARNING)
+        lg.addHandler(handler)
+        lg.setLevel(logging.WARNING)
+        try:
+            rules = _load_rules(
+                mgr, {"g": {
+                    "on": {
+                        "enabled": True,
+                        "actions": []
+                    },
+                    "off": {
+                        "enabled": False,
+                        "actions": []
+                    }
+                }}
+            )
+        finally:
+            lg.removeHandler(handler)
+        assert not records, f"无退役键不应有任何告警: {records}"
+        assert [r.enabled for r in rules.rules] == [True, False], "enabled 语义不得被载入层改写"
+
+
+def test_rule_condition_exception():
+    """条件求值异常: verdict=error, 本条本轮跳过; 日志话术不再宣称「停止后续规则」(W1 话术修正)
+
+    旧语义(2026-09-20 拍板「出错即停规则」)建立在「规则顺序链」上, 而现行执行模型是
+    「每规则每种子独立任务」, 根本不存在「后续规则」链 —— W1 删掉死语义只保留真实半径:
+    本条规则本轮不执行, 其它规则照常(plan 26-11-01-0106 G1)。
+    """
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(), client)
 
         class Boom:
             def match(self, ctx):
                 raise RuntimeError("boom")
 
-        rule = Rule("g.test", {"actions": []}, mgr)
+        rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}]}, mgr)
         rule.conditions = [Boom()]
-        handled, stop = rule.process(ctx)
-        assert handled is False and stop is True
+        records = []
 
-        # 故障优先: 即使规则自己配了 never, 出错也停(stop_following_rules_if 管的是正常语义)
-        rule_never = Rule("g.test2", {"actions": [], "stop_following_rules_if": "never"}, mgr)
-        rule_never.conditions = [Boom()]
-        assert rule_never.process(ctx) == (False, True)
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.rules.base")
+        handler = Grab(level=logging.DEBUG)
+        lg.addHandler(handler)
+        lg.setLevel(logging.DEBUG)
+        try:
+            assert rule.process(ctx) == VERDICT_ERROR
+        finally:
+            lg.removeHandler(handler)
+        assert client.calls == [], "条件出错不得执行动作"
+        err = next(m for m in records if "条件求值出错" in m and "g.test" in m)
+        assert "本条规则本轮跳过" in err, f"话术必须只宣称真实半径: {err}"
+        assert "停止后续规则" not in err, f"不得再宣称死语义: {err}"
 
 
 def test_rule_multi_condition_and():
@@ -285,17 +417,14 @@ def test_rule_multi_condition_and():
         )
         # 全部满足 -> 执行
         ctx = make_ctx(mgr, FakeTorrent(tags="HHan", size=200 * 1024**2), client)
-        handled, _ = rule.process(ctx)
-        assert handled
+        assert rule.process(ctx) == VERDICT_EXECUTED
         assert ("add_tags", ["DONE"]) in client.calls, f"应执行动作: {client.calls}"
         # tags 不满足 -> 不执行
         ctx2 = make_ctx(mgr, FakeTorrent(tags="OTHER", size=200 * 1024**2), client)
-        h2, _ = rule.process(ctx2)
-        assert not h2
+        assert rule.process(ctx2) == VERDICT_NO_MATCH
         # size 不满足 -> 不执行
         ctx3 = make_ctx(mgr, FakeTorrent(tags="HHan", size=50 * 1024**2), client)
-        h3, _ = rule.process(ctx3)
-        assert not h3
+        assert rule.process(ctx3) == VERDICT_NO_MATCH
         assert client.calls.count(("add_tags", ["DONE"])) == 1, "任一条件不满足不应执行动作"
 
 
@@ -318,42 +447,36 @@ def test_rule_state_group_combined():
         )
         # stalledUP: complete + uploading 均含 -> 执行
         ctx = make_ctx(mgr, FakeTorrent(state="stalledUP"), client)
-        h1, _ = rule.process(ctx)
-        assert h1 and ("add_tags", ["DONE"]) in client.calls, f"stalledUP 应执行: {client.calls}"
+        assert rule.process(ctx) == VERDICT_EXECUTED
+        assert ("add_tags", ["DONE"]) in client.calls, f"stalledUP 应执行: {client.calls}"
         # pausedUP: complete 含但 uploading 不含 -> 不执行
         ctx2 = make_ctx(mgr, FakeTorrent(state="pausedUP"), client)
-        h2, _ = rule.process(ctx2)
-        assert not h2
+        assert rule.process(ctx2) == VERDICT_NO_MATCH
         # downloading: 均不含 -> 不执行
         ctx3 = make_ctx(mgr, FakeTorrent(state="downloading"), client)
-        h3, _ = rule.process(ctx3)
-        assert not h3
+        assert rule.process(ctx3) == VERDICT_NO_MATCH
         assert client.calls.count(("add_tags", ["DONE"])) == 1, "非上传完成状态不应执行"
 
 
-def test_rule_action_chain_ignore_continue():
-    """动作链: 前动作失败且无 ignore -> 链中断; ignore_error=true -> 后续继续执行"""
+def test_rule_action_failed_breaks_chain():
+    """动作失败恒中断本条动作链(ignore_error 已随伪动作退役拆除, per-step on_error W2 引入)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
         rule = Rule("g.chain", {"actions": []}, mgr)
 
-        # 无 ignore: 失败中断, 后续动作不执行
         rule.actions = [_FailingAction("x"), AddTagsAction(["AFTER"])]
-        handled, _ = rule.process(ctx)
-        assert handled, "失败动作本身算已处理"
-        assert ("add_tags", ["AFTER"]) not in client.calls, f"失败且不 ignore 应中断动作链: {client.calls}"
+        assert rule.process(ctx) == VERDICT_EXECUTED, "失败动作本身算已执行"
+        assert ("add_tags", ["AFTER"]) not in client.calls, f"失败应中断动作链: {client.calls}"
 
-        # ignore_error=true: 失败后继续, 后续动作执行
-        rule.actions = [_FailingAction("x", ignore_error=True), AddTagsAction(["AFTER"])]
-        h2, _ = rule.process(ctx)
-        assert h2
-        assert ("add_tags", ["AFTER"]) in client.calls, f"ignore 后应继续执行后续动作: {client.calls}"
+        # 失败后允许重新执行(去重判据未触发时): 链中断只是本轮动作序列截断
+        rule2 = Rule("g.chain2", {"actions": [{"add_tags": ["OK"]}]}, mgr)
+        assert rule2.process(ctx) == VERDICT_EXECUTED
 
 
 def test_rule_action_failed_stop():
-    """stop_following_rules_if=action-failed: 动作失败时停链"""
+    """动作失败: verdict=executed(失败动作计已执行), 本条动作链中断"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
@@ -366,20 +489,19 @@ def test_rule_action_failed_stop():
                         "path": ""
                     }
                 }],  # 空 path -> fail
-                "stop_following_rules_if": "action-failed",
             },
             mgr,
         )
-        handled, stop = rule.process(ctx)
-        assert handled and stop, "动作失败仍算处理过, 且 stop=True"
+        assert rule.process(ctx) == VERDICT_EXECUTED
 
 
 def test_rule_stop_if_never():
-    """stop_following_rules_if=never: 动作成功但不停链"""
+    """stop_following_rules_if 键已退役: 载入检测到即转未启用 + warning(D1), 引擎侧无 stop 语义"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        # 引擎侧: Rule 不再读取该键(无 stop_if 属性), 行为与不带键完全一致
         rule = Rule(
             "g.test",
             {
@@ -393,44 +515,33 @@ def test_rule_stop_if_never():
             },
             mgr,
         )
-        handled, stop = rule.process(ctx)
-        assert handled and not stop
+        assert not hasattr(rule, "stop_if"), "引擎不得再有 stop_if 消费面"
+        assert rule.process(ctx) == VERDICT_EXECUTED
 
 
 def test_rule_stop_if_all_actions_succeed():
-    """stop_following_rules_if=all-actions-succeed: 全成功停链, 有失败不停链"""
+    """stop_following_rules_if=all-actions-succeed 六档退役: 六档取值同样触发载入转未启用"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
-        # 全部成功 -> stop
-        rule_ok = Rule(
-            "g.ok",
-            {
-                "actions": [{
-                    "add_tags": ["A"]
-                }],
-                "stop_following_rules_if": "all-actions-succeed"
-            },
-            mgr,
-        )
-        handled, stop = rule_ok.process(ctx)
-        assert handled and stop
-        # 有动作失败(空 path) -> 不停链
-        rule_fail = Rule(
-            "g.fail",
-            {
-                "actions": [{
-                    "move_to": {
-                        "path": ""
-                    }
-                }],
-                "stop_following_rules_if": "all-actions-succeed"
-            },
-            mgr,
-        )
-        handled, stop = rule_fail.process(ctx)
-        assert handled and not stop
+        for value in (
+            "conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never"
+        ):
+            rule = Rule(
+                "g.v",
+                {
+                    "actions": [{
+                        "add_tags": ["A"]
+                    }],
+                    "stop_following_rules_if": value
+                },
+                mgr,
+            )
+            # 引擎侧六档全部等价: 只按本规则自身语义执行动作, 无任何链间控制流
+            # (每档用新种子: add_tags 幂等 skip 会把 verdict 降成 no_op, 与六档等价性无关)
+            fresh_ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+            assert rule.process(fresh_ctx) == VERDICT_EXECUTED, value
 
 
 def test_rule_cooldown_dedup():
@@ -440,12 +551,10 @@ def test_rule_cooldown_dedup():
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
         rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "cooldown": "1H"}, mgr)
-        h1, _ = rule.process(ctx)
-        assert h1
+        assert rule.process(ctx) == VERDICT_EXECUTED
         assert client.calls.count(("add_tags", ["X"])) == 1
         # 冷却期内再次执行被去重
-        h2, _ = rule.process(ctx)
-        assert not h2
+        assert rule.process(ctx) == VERDICT_DEDUPED
         assert client.calls.count(("add_tags", ["X"])) == 1
 
 
@@ -456,10 +565,8 @@ def test_rule_hourly_dedup():
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
         rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "execute_once": "hourly"}, mgr)
-        h1, _ = rule.process(ctx)
-        assert h1
-        h2, _ = rule.process(ctx)
-        assert not h2
+        assert rule.process(ctx) == VERDICT_EXECUTED
+        assert rule.process(ctx) == VERDICT_DEDUPED
         assert client.calls.count(("add_tags", ["X"])) == 1
 
 
@@ -546,21 +653,16 @@ def test_rule_process_action_exception():
         class BoomAction:
             name = "boom"
 
-            def __init__(self):
-                self.ignore_error = False
-
             def execute(self, ctx):
                 raise RuntimeError("boom")
 
         rule = Rule("g.test", {"actions": []}, mgr)
         rule.actions = [BoomAction()]
-        handled, stop = rule.process(ctx)
-        assert handled, "动作异常容错为 fail, handled 仍为 True"
-        assert stop, "默认 stop_if=conditions-met: 条件匹配过即停链"
+        assert rule.process(ctx) == VERDICT_EXECUTED, "动作异常容错为 fail, 仍计已执行"
 
 
 def test_rule_stop_if_conditions_not_met():
-    """stop_following_rules_if=conditions-not-met: 未匹配时停链"""
+    """stop_following_rules_if=conditions-not-met 已退役: 条件不满足就只有本条不执行, 无停链语义"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         ctx = make_ctx(mgr, FakeTorrent(tags="", size=1), FakeClient())
@@ -577,8 +679,7 @@ def test_rule_stop_if_conditions_not_met():
             },
             mgr,
         )
-        handled, stop = rule.process(ctx)
-        assert not handled and stop, "未匹配且 stop_if=conditions-not-met -> (False, True)"
+        assert rule.process(ctx) == VERDICT_NO_MATCH
 
 
 def test_rule_daily_dedup():
@@ -588,10 +689,8 @@ def test_rule_daily_dedup():
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), client)
         rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}], "execute_once": "daily"}, mgr)
-        h1, _ = rule.process(ctx)
-        assert h1
-        h2, _ = rule.process(ctx)
-        assert not h2, "同日已执行 -> 去重"
+        assert rule.process(ctx) == VERDICT_EXECUTED
+        assert rule.process(ctx) == VERDICT_DEDUPED, "同日已执行 -> 去重"
         assert client.calls.count(("add_tags", ["X"])) == 1
 
 
@@ -731,8 +830,7 @@ def test_rule_process_action_skipped_not_executed():
         client = FakeClient()
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)  # 无标签 -> remove_tags 必 skip
         rule = Rule("g.test", {"actions": [{"remove_tags": ["nope"]}]}, mgr)
-        handled, _stop = rule.process(ctx)
-        assert handled is False, "skip 不算 executed"
+        assert rule.process(ctx) == VERDICT_NO_OP, "skip 不算 executed"
         assert not client.calls, "skip 动作不打 API"
         assert mgr.ctx.state.get_exec_record("g.test", ctx.hash) is None, "未执行不记历史"
 
@@ -764,8 +862,8 @@ def test_rule_condition_error_throttled_to_debug():
         logger.addHandler(handler)
         logger.setLevel(logging.DEBUG)
         try:
-            assert rule.process(ctx) == (False, True)  # 首次: ERROR
-            assert rule.process(ctx) == (False, True)  # 同因紧邻第二次: 节流 DEBUG
+            assert rule.process(ctx) == VERDICT_ERROR  # 首次: ERROR
+            assert rule.process(ctx) == VERDICT_ERROR  # 同因紧邻第二次: 节流 DEBUG
         finally:
             logger.removeHandler(handler)
             logger.setLevel(old_level)
@@ -784,8 +882,7 @@ def test_rule_hourly_record_stale_date_allows_rerun():
         mgr.ctx.state.record_execution("g.test", ctx.hash)  # 预置执行记录
         rec = mgr.ctx.state.get_exec_record("g.test", ctx.hash)
         rec["date"] = "2000-01-01"  # 篡改为昨日: 同小时判据失效 -> 允许再执行
-        handled, _stop = rule.process(ctx)
-        assert handled, "跨日记录不得拦下本次执行"
+        assert rule.process(ctx) == VERDICT_EXECUTED, "跨日记录不得拦下本次执行"
         assert ("add_tags", ["X"]) in client.calls
 
 
@@ -793,8 +890,7 @@ def test_rule_process_unknown_status_continues_without_marking():
     """动作返回未知状态(既非 ok/failed/skipped/pending): 后续动作照常执行, 但既不算成功也不算失败
 
     守的是处理链的**兜底分支**: 新增动作状态时若漏改这里, 规则会在该动作上静默中断 ——
-    本条钉住「未知状态不记 executed」, 让漏改表现为可见的行为差异而不是静默截断
-    (第二个返回值是 `stop_following_rules_if` 的判定, 与状态无关, 此处不断言)。
+    本条钉住「未知状态不记 executed」(verdict=no_op), 让漏改表现为可见的行为差异而不是静默截断。
     """
     from auto_qb.rules.base import ActionResult
 
@@ -813,8 +909,7 @@ def test_rule_process_unknown_status_continues_without_marking():
 
         rule = Rule("g.test", {"actions": [{"stop": True}]}, mgr)
         rule.actions = [_Weird()]
-        handled, _stop = rule.process(ctx)
-        assert handled is False, "未知状态不记 executed(既非成功也非失败)"
+        assert rule.process(ctx) == VERDICT_NO_OP, "未知状态不记 executed(既非成功也非失败)"
 
 
 def test_rule_hourly_dedup_scope():
@@ -858,54 +953,22 @@ def test_rule_daily_dedup_scope():
         assert rule._dedup_allowed(ctx) is True, "昨日记录 -> 放行"
 
 
-def test_rule_ignore_next_only_once():
-    """ignore_next_action_error 状态机: 初值 False / 只作用于紧随的一个动作 / 消费后复位
+def test_rule_pseudo_action_direct_construction_rejected():
+    """伪动作 ignore_next_action_error 引擎不再消费: 绕过载入层直接构造 Rule -> ConfigError
 
-    链 A 钉初值(首个失败必须中断), 链 B 钉「只忽略一次」(第二个失败仍中断) ——
-    初值置 True 或消费后不复位, 都会让规则在多次失败后继续执行真实种子动作。
+    旧 ignore_next 状态机(初值/只作用一次/消费后复位)随伪动作退役删除; 载入层转未启用时
+    会在内存副本里剔除伪动作项(见 test_load_retired_ignore_key_warns_equivalent), 因此只有
+    绕过载入层的直构路径会撞上 —— 按未知动作 fail-fast, 不得静默吞掉。
     """
+    import pytest
+
+    from auto_qb.config import ConfigError
+
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        client = FakeClient()
-        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
-
-        rule_a = Rule("g.a", {"actions": [{"move_to": {"path": ""}}, {"add_tags": ["A-AFTER"]}]}, mgr)
-        handled_a, _ = rule_a.process(ctx)
-        assert handled_a, "失败动作同样算 handled"
-        assert ("add_tags", ["A-AFTER"]) not in client.calls, "无标记的失败必须中断后续动作"
-
-        rule_b = Rule(
-            "g.b",
-            {
-                "actions":
-                    [
-                        {
-                            "ignore_next_action_error": "true"
-                        },
-                        {
-                            "move_to": {
-                                "path": ""
-                            }
-                        },  # 被忽略
-                        {
-                            "add_tags": ["B-AFTER"]
-                        },
-                        {
-                            "move_to": {
-                                "path": ""
-                            }
-                        },  # 标记已消费 -> 中断
-                        {
-                            "add_tags": ["B-NEVER"]
-                        },
-                    ]
-            },
-            mgr,
-        )
-        handled_b, _ = rule_b.process(ctx)
-        assert handled_b
-        assert ("add_tags", ["B-AFTER"]) in client.calls, "标记后的失败应被忽略, 后继动作照常执行"
-        assert ("add_tags", ["B-NEVER"]) not in client.calls, "标记只生效一次, 其后的失败仍中断"
+        with pytest.raises(ConfigError) as ei:
+            Rule("g.pseudo", {"actions": [{"ignore_next_action_error": "true"}, {"add_tags": ["X"]}]}, mgr)
+        assert "ignore_next_action_error" in str(ei.value) and "g.pseudo" in str(ei.value)
 
 
 def test_rule_enabled_key_read():
@@ -941,12 +1004,10 @@ def test_rule_cooldown_sub_second_boundary():
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
         rule = Rule("g.cd", {"actions": [{"add_tags": ["X"]}], "cooldown": "0.5S"}, mgr)
         assert rule.cooldown == 0.5
-        h1, _ = rule.process(ctx)
-        assert h1
+        assert rule.process(ctx) == VERDICT_EXECUTED
         assert client.calls.count(("add_tags", ["X"])) == 1
         assert rule._dedup_allowed(ctx) is False, "0.5S 冷却期内必须去重"
-        h2, _ = rule.process(ctx)
-        assert not h2, "0.5S 冷却期内不得重复执行"
+        assert rule.process(ctx) == VERDICT_DEDUPED, "0.5S 冷却期内不得重复执行"
         assert client.calls.count(("add_tags", ["X"])) == 1
 
 

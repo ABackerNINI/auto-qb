@@ -19,6 +19,17 @@ logger = logging.getLogger(__name__)
 # 条件求值出错日志的节流窗口(秒): 同规则同原因在此窗口内只报一次 ERROR
 _COND_ERR_THROTTLE = 300.0
 
+# process 返回契约(W1 收口, plan 26-11-01-0106 G1/G12): 单值 verdict, 由引擎
+# (core/modules/rules_mod._run_rule)显式消费 —— 记 DEBUG 结论供排障; W2 起按 error 档
+# 驱动 per-step 错误语义, W4 起进 per-run trace。旧 (handled, stop) 元组的 stop 档是死配置
+# (唯一调用点整体丢弃返回值), 已随 stop_following_rules_if 退役一并删除。
+VERDICT_NO_MATCH = "no_match"  # 条件不满足(含种子已删): 本轮未执行
+VERDICT_ERROR = "error"  # 条件求值出错: 本条规则本轮跳过, 不影响其它规则
+VERDICT_DEDUPED = "deduped"  # execute_once/cooldown 去重拦下
+VERDICT_NO_OP = "no_op"  # 条件满足且未被去重, 但无动作产生效果(空动作表/全 skip)
+VERDICT_PENDING = "pending"  # 动作等待异步完成: 断点已记录, 本轮中断待恢复
+VERDICT_EXECUTED = "executed"  # 本轮执行了动作(成功/失败均计; 续跑完成同)
+
 
 class ActionResult:
     """动作执行结果: success / failed / skipped / pending
@@ -84,9 +95,8 @@ class BaseAction(ABC):
 
     name: str = ""
 
-    def __init__(self, spec: Any, ignore_error: bool = False):
+    def __init__(self, spec: Any):
         self.spec = spec
-        self.ignore_error = ignore_error  # 由前一个 ignore_next_action_error 设置
 
     @abstractmethod
     def execute(self, ctx: "RuleContext") -> ActionResult:
@@ -147,7 +157,6 @@ class Rule:
         self.interval = utils.parse_time(str(spec.get("interval", "0S")))  # 规则扫描间隔, 0 = 每轮
         self.execute_once = str(spec.get("execute_once", "never"))
         self.cooldown = utils.parse_time(str(spec.get("cooldown", "0S")))
-        self.stop_if = str(spec.get("stop_following_rules_if", "conditions-met"))
         # 条件求值出错日志的节流状态(见 _log_condition_error)
         self._cond_err_key: Optional[str] = None
         self._cond_err_ts: float = 0.0
@@ -161,21 +170,18 @@ class Rule:
             except Exception as e:
                 raise ConfigError(f"规则 {self.name}: 条件 {cond_spec}: {e}") from e
 
-        # 解析动作序列, 处理 ignore_next_action_error 标志
+        # 解析动作序列(单键 dict)。伪动作 ignore_next_action_error 已退役(D1, plan
+        # 26-11-01-0106): 载入层(rules_mod.load_rules)识别后转未启用并在内存副本里剔除,
+        # 引擎不再消费 —— 绕过载入层直接构造 Rule 遇伪动作按未知动作 ConfigError。
         self.actions = []
-        ignore_next = False
         for act_spec in spec.get("actions") or []:
             if not isinstance(act_spec, dict):
                 continue
-            if "ignore_next_action_error" in act_spec:
-                ignore_next = utils.parse_bool(act_spec["ignore_next_action_error"])
-                continue
             name, value = next(iter(act_spec.items()))
             try:
-                self.actions.append(registry.create_action(name, value, ignore_next))
+                self.actions.append(registry.create_action(name, value))
             except Exception as e:
                 raise ConfigError(f"规则 {self.name}: 动作 {name}: {e}") from e
-            ignore_next = False
 
         # 高风险动作静态提醒: reannounce 高频触发会被 tracker 封号, 未配去重时给出告警
         # (动作内另有最小间隔运行时保护兜底)
@@ -186,11 +192,9 @@ class Rule:
         """所有条件必须全部满足(AND)"""
         return all(c.match(ctx) for c in self.conditions)
 
-    def process(self, ctx: RuleContext):
+    def process(self, ctx: RuleContext) -> str:
         """
-        处理一个种子. 返回 (handled, stop)
-        handled: 规则是否执行了动作(任一非 skip 结果, 含失败)
-        stop:    是否停止后续规则(stop_following_rules_if)
+        处理一个种子, 返回单值 verdict(模块级 VERDICT_* 常量, 消费方见常量区注释)。
 
         断点契约(与 taskqueue 的默认重置语义配合):
         - 读:   进入时只读 task.resume_index 判定续跑(不清零)
@@ -198,7 +202,7 @@ class Rule:
         - 清:   正常完成时清零; 异常路径不清零 —— 由 taskqueue 收尾默认重置兜底(下轮从头)
         """
         if ctx.torrent is None:
-            return False, False
+            return VERDICT_NO_MATCH
 
         ctx.rule_name = self.name
         task = ctx.task
@@ -211,23 +215,21 @@ class Rule:
             try:
                 matched = self.matches(ctx)
             except Exception as e:
-                # 出错即停规则(2026-09-20 拍板): 条件判据都不可信时, 让后面的规则继续对这个种子
-                # 做动作才是真风险 —— 故返回 stop=True, 且**优先于 stop_following_rules_if** 配置
-                # (即使该规则配了 never 也停)。故障半径是整条规则链, 所以日志是 ERROR 级。
+                # 条件求值出错: 本条规则本轮跳过, 其它规则照常(per-rule 任务模型里不存在
+                # 「后续规则」链 —— 旧日志「停止后续规则」是死语义, W1 话术修正, plan G1)
                 self._log_condition_error(ctx, e)
-                return False, True
+                return VERDICT_ERROR
             if not matched:
-                return False, self.stop_if == "conditions-not-met"
+                return VERDICT_NO_MATCH
             # 去重: execute_once / cooldown
             if not self._dedup_allowed(ctx):
-                return False, False
+                return VERDICT_DEDUPED
 
         log_repr = ctx.torrent.log_repr
         start = 0 if fresh else resume_index
         # 断点前动作已成功(校验通过才续跑): 续跑轮 ok_action 起点 True; 全新执行从 False 累计
         ok_action = not fresh
-        executed = False  # 本轮执行了非 skip 动作(ok/failed), 决定 handled
-        failed = False
+        executed = False  # 本轮执行了非 skip 动作(ok/failed)
         result = None
         for i, action in enumerate(self.actions):
             if i < start:
@@ -241,7 +243,7 @@ class Rule:
                 if task is not None:
                     task.resume_index = i + 1
                     logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
-                    return True, True  # handled=True(动作已提交), stop=True(中断后续规则)
+                    return VERDICT_PENDING  # 动作已提交, 断点已记录, 本轮中断待恢复
                 ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
                 executed = True
                 logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
@@ -252,10 +254,9 @@ class Rule:
                 logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
             elif result.is_failed:
                 executed = True
-                failed = True
                 logger.error(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
-                if not action.ignore_error:
-                    break
+                # 动作失败即中断本条动作链(per-step on_error 错误策略 W2 引入, plan G5)
+                break
             elif result.is_skipped:
                 logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
 
@@ -266,32 +267,22 @@ class Rule:
         if self.actions and not ctx.dry_run and ok_action:
             self.manager.ctx.state.record_execution(self.name, ctx.hash)
 
-        return executed or ok_action, self._should_stop(failed)
+        return VERDICT_EXECUTED if (executed or ok_action) else VERDICT_NO_OP
 
     def _log_condition_error(self, ctx: RuleContext, e: Exception) -> None:
         """条件求值出错的日志(ERROR 级 + 同因节流, 避免每 tick × 每种子刷屏)
 
         与连接异常日志节流同一套路: 同一规则同一类错误 5 分钟内只报一次, 其后转 DEBUG 计数;
-        换原因或冷却过后重新报。
+        换原因或冷却过后重新报。话术只宣称真实语义: 本条规则本轮跳过, 不涉及任何「后续规则」。
         """
         now = time.time()
         key = f"{type(e).__name__}:{e}"
         if key != self._cond_err_key or now - self._cond_err_ts > _COND_ERR_THROTTLE:
-            logger.error(f"规则[{self.name}] {ctx.torrent.log_repr} | 条件求值出错, 停止后续规则: {e}")
+            logger.error(f"规则[{self.name}] {ctx.torrent.log_repr} | 本条规则本轮跳过(条件求值出错): {e}")
             self._cond_err_key = key
             self._cond_err_ts = now
         else:
             logger.debug(f"规则[{self.name}] {ctx.torrent.log_repr} | 条件求值出错(已节流): {e}")
-
-    def _should_stop(self, failed: bool) -> bool:
-        """stop_following_rules_if 判定"""
-        if self.stop_if in ("conditions-met", "always"):
-            return True
-        if self.stop_if == "action-failed" and failed:
-            return True
-        if self.stop_if == "all-actions-succeed" and not failed:
-            return True
-        return False
 
     def _dedup_allowed(self, ctx: RuleContext) -> bool:
         """execute_once/cooldown 去重判断"""

@@ -2,12 +2,12 @@
 
 规则统一为"种子级任务"(由 tracker rules 引用绑定): process_torrent 兼容入口已删除,
 新增种子经 _refresh_torrents 匹配 tracker 后创建规则任务。规则核心语义
-(条件评估 -> 去重 -> 动作执行 -> stop 链)仍由 Rule.process(ctx) 承担, 本文件
-经种子绑定的规则列表逐个执行 process 验证核心逻辑(task_queue 调度细节见
-test_rule_interval)。
+(条件评估 -> 去重 -> 动作执行)仍由 Rule.process(ctx) 承担(W1 返回值契约收口为单值
+verdict), 本文件经种子绑定的规则列表逐个执行 process 验证核心逻辑(task_queue 调度细节见
+test_rule_interval; stop_following_rules_if 已退役, plan 26-11-01-0106 W1)。
 
 ## 测试计划(每个测试函数一条)
-- test_basic: 标签规则 + 变量替换 + stop_following_rules_if: never
+- test_basic: 标签规则 + 变量替换
 - test_category_auto_update_from_state: 分类按状态自动更新
 - test_category_explicit_overwrite_false: 显式不覆盖分类
 - test_hr_satisfied: HR 达标流程 + daily 去重(持久化后跨加载生效)
@@ -22,6 +22,7 @@ import tempfile
 import time
 
 from auto_qb.rules.actions import AddCategoryAction
+from auto_qb.rules.base import VERDICT_EXECUTED, VERDICT_PENDING
 from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_ctx, make_manager, seed_store
 
 
@@ -29,8 +30,8 @@ def _run_rules(mgr, client, tor, dry_run=False):
     """按种子绑定的规则列表逐个执行 Rule.process(ctx)
 
     与 _handle_rule 同语义(ctx 由 make_ctx 构造: client 绑定 + tracker_conf 匹配 +
-    store 对象身份直写); 返回任一规则是否处理(handled)。stop 链由调用方决定,
-    这里默认全部执行(任务队列中各规则任务是独立调度, 无跨规则 stop)。
+    store 对象身份直写); 返回任一规则是否执行了动作(verdict=executed/pending)。
+    各规则任务是独立调度, 无跨规则控制流(stop_following_rules_if 已退役)。
     """
     # make_ctx 副作用: 设 tor.tracker_conf (首次 _match_tracker_conf). 必须先于
     # _rules_for_torrent, 否则 conf=None 直接抛 AttributeError (按项目哲学早暴露).
@@ -38,13 +39,13 @@ def _run_rules(mgr, client, tor, dry_run=False):
     handled = False
     for rule in mgr.host.get("rules")._rules_for_torrent(tor):
         ctx = make_ctx(mgr, tor, client, dry_run=dry_run)
-        h, _stop = rule.process(ctx)
-        handled = handled or h
+        verdict = rule.process(ctx)
+        handled = handled or verdict in (VERDICT_EXECUTED, VERDICT_PENDING)
     return handled
 
 
 def test_basic():
-    """标签规则 + 变量替换 + stop_following_rules_if: never"""
+    """标签规则 + 变量替换"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file, tracker_rules=["@example_rules"])
@@ -134,7 +135,8 @@ def test_hr_satisfied():
 
 
 def test_stop_if_action_failed():
-    """种子已停止时 stop 动作幂等跳过(skipped 不算失败), 后续动作仍执行"""
+    """种子已停止时 stop 动作幂等跳过(skipped 不算失败), 后续动作仍执行
+    (函数名沿用历史, stop_following_rules_if 键已退役不再配置)"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file, tracker_rules=["@example_rules.stop_low_ratio"])
@@ -240,7 +242,6 @@ def test_rule_interval():
                             "actions": [{
                                 "add_tags": ["HHan"]
                             }],
-                            "stop_following_rules_if": "never",
                         },
                     "stop_low_ratio":
                         {
@@ -252,7 +253,6 @@ def test_rule_interval():
                             "actions": [{
                                 "stop": True
                             }],
-                            "stop_following_rules_if": "action-failed",
                         },
                 }
         }

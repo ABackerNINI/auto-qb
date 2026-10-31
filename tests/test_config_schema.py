@@ -412,9 +412,8 @@ def test_schema_payload_is_complete():
     assert payload["plugins"]["condition"] == schema.CONDITION_PLUGINS
     assert payload["plugins"]["action"] == schema.ACTION_PLUGINS
     # 常量分区覆盖前端下拉所需的全部选项表
-    for name in (
-        "triggers", "execute_once", "stop_if", "checking_modes", "hr_modes", "state_attrs", "hr_check_site_presets"
-    ):
+    # (stop_if 已随 stop_following_rules_if 退役移除, plan 26-11-01-0106 W1)
+    for name in ("triggers", "execute_once", "checking_modes", "hr_modes", "state_attrs", "hr_check_site_presets"):
         assert payload["constants"][name], f"constants 缺少 {name}"
     # 内置站点档案: 卡片渲染的数据源, 每条须含 id/adapter/双域(26-09-27-1930: web_domain 派生
     # 页面地址, tracker_domain 供映射制绑定状态行展示)
@@ -547,12 +546,12 @@ def test_schema_payload_constants_keys_exact():
     ``XXlog_levelsXX`` / ``LOG_LEVELS`` 这类大小写或前缀变体时, 抽查表里没有它, 于是存活。
     """
     payload = schema.schema_payload()
+    # stop_if 已随 stop_following_rules_if 退役移出 constants(plan 26-11-01-0106 W1), 余 11 项逐位钉死
     assert set(payload["constants"]) == {
         "log_levels",
         "notify_levels",
         "notify_channels",
         "execute_once",
-        "stop_if",
         "triggers",
         "checking_basic",
         "checking_modes",
@@ -570,7 +569,6 @@ def test_schema_payload_constants_values():
     assert payload["notify_levels"] == list(schema.NOTIFY_LEVELS)
     assert payload["notify_channels"] == list(schema.NOTIFY_CHANNELS)
     assert payload["execute_once"] == list(schema.EXECUTE_ONCE)
-    assert payload["stop_if"] == list(schema.STOP_IF)
     assert payload["triggers"] == list(schema.TRIGGERS)
     assert payload["checking_basic"] == list(schema.CHECKING_BASIC)
     assert payload["checking_modes"] == list(schema.CHECKING_MODES)

@@ -11,8 +11,8 @@ class MoveToAction(BaseAction):
     """移动种子到新路径"""
     name = "move_to"
 
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
+    def __init__(self, spec):
+        super().__init__(spec)
         self.path = str(spec.get("path", "")) if isinstance(spec, dict) else str(spec)
 
     def execute(self, ctx: RuleContext):
@@ -77,8 +77,8 @@ class _SpeedLimitAction(BaseAction):
     api_method = ""  # torrents_set_upload_limit / torrents_set_download_limit
     direction = ""  # 上传 / 下载
 
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
+    def __init__(self, spec):
+        super().__init__(spec)
         self.value = utils.parse_speed(str(spec))
 
     def execute(self, ctx: RuleContext):

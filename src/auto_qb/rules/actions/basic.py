@@ -22,8 +22,8 @@ class AddTagsAction(BaseAction):
     """添加标签, 支持 ${required_seeding_time} 变量"""
     name = "add_tags"
 
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
+    def __init__(self, spec):
+        super().__init__(spec)
         self.tags = list(spec) if isinstance(spec, list) else [spec]
 
     def execute(self, ctx: RuleContext):
@@ -43,8 +43,8 @@ class RemoveTagsAction(BaseAction):
     """删除标签, 支持 regex: 和 ${required_seeding_time} 变量"""
     name = "remove_tags"
 
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
+    def __init__(self, spec):
+        super().__init__(spec)
         self.patterns = list(spec) if isinstance(spec, list) else [spec]
 
     def execute(self, ctx: RuleContext):
@@ -67,8 +67,8 @@ class AddCategoryAction(BaseAction):
     """添加分类, 支持 ${required_seeding_time} 变量和 overwrite 覆盖"""
     name = "add_category"
 
-    def __init__(self, spec, ignore_error=False):
-        super().__init__(spec, ignore_error)
+    def __init__(self, spec):
+        super().__init__(spec)
         self.format = str(spec.get("format", ""))
         self.overwrite = utils.parse_bool(spec.get("overwrite", False))
 

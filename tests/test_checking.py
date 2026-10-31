@@ -93,6 +93,7 @@ from unittest.mock import patch
 from auto_qb.config import Config
 from auto_qb.rules.actions import RECHECK_FAIL_LIMIT, CheckAction
 from auto_qb.rules.actions.full_checking import bump_recheck_fail, recheck_fail_count
+from auto_qb.rules.base import VERDICT_EXECUTED, VERDICT_PENDING
 from auto_qb.rules.checking_meta import PieceCheckingStates, PollVerdict, is_piece_checking, poll_verdict
 from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, TaskQueue
 from helpers import drive_skip, FakeClient, FakeConfig, FakeTorrent, make_ctx, make_manager, seed_store
@@ -165,7 +166,6 @@ def make_check_cfg(
                             "tags": "需校验"
                         }],
                         "actions": actions,
-                        "stop_following_rules_if": "never",
                     },
             }
     }
@@ -229,7 +229,8 @@ def process_rule(mgr, client, tor, dry_run=False):
         out = rule.process(ctx)
         # 跳检自 S4 起是异步入口(规则侧拿 pending, 相位由微步线推进): 测试里驱动到终态
         drive_skip(mgr)
-        return out
+        # W1 verdict 契约(rules.base.VERDICT_*): 收敛为旧 handled 语义供既有断言使用
+        return out in (VERDICT_EXECUTED, VERDICT_PENDING)
     finally:
         mgr.api.torrents_delete = orig_delete
 
@@ -416,7 +417,7 @@ def test_checking_group_downloading_skips():
     d = FakeTorrent(hash="D1", name="D1", state="downloading")
     inject_group(mgr, "HASH123", "D1")
     seed_store(mgr, [t, d])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "组内下载中应跳过"
     assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
 
@@ -432,7 +433,7 @@ def test_checking_paused_incomplete_not_skip():
     inject_group(mgr, "HASH123", "PD1")
     seed_store(mgr, [t, pd])
     client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "暂停未完成不应跳过"
     run_queue(mgr)  # 首轮: 发送 recheck
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
@@ -447,7 +448,7 @@ def test_checking_no_group_uses_without_reference():
     t = make_target()
     seed_store(mgr, [t])
     client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     run_queue(mgr)  # 首轮: 发送 recheck
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
@@ -464,7 +465,7 @@ def test_checking_paused_completed_reference():
     p = FakeTorrent(hash="P1", name="P1", state="pausedUP")  # 暂停已完成: 有效参考
     inject_group(mgr, "HASH123", "P1")
     seed_store(mgr, [t, p])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, f"暂停完成参考应可用: {client.calls}"
     assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"跳检调用顺序: {client.calls}"
     add_call = [c for c in client.calls if c[0] == "add"][0]
@@ -482,7 +483,7 @@ def test_checking_complete_skipped():
     mgr.client = client
     t = make_target(state="stalledUP", progress=1.0)  # 已完成做种中
     seed_store(mgr, [t])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "已完成种子应跳过"
     assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
 
@@ -495,7 +496,7 @@ def test_checking_paused_complete_skipped():
     mgr.client = client
     t = make_target(state="pausedUP", progress=1.0)
     seed_store(mgr, [t])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "暂停已完成种子应跳过"
     assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
 
@@ -508,7 +509,7 @@ def test_checking_active_downloading_skipped():
     mgr.client = client
     t = make_target(state="downloading", progress=0.5)
     seed_store(mgr, [t])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "活跃下载中种子应跳过"
     assert client.calls == [], f"不应有任何客户端调用: {client.calls}"
 
@@ -540,7 +541,7 @@ def test_checking_filelist_reference_skip_checking():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, f"有参考应处理: {client.calls}"
     assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"跳检调用顺序: {client.calls}"
     add_call = [c for c in client.calls if c[0] == "add"][0]
@@ -557,7 +558,7 @@ def test_checking_no_reference_full_checking():
     t = make_target()
     client.torrents["HASH123"] = t  # 客户端里要有该种子: 跳检的重加确认与轮询仲裁直查都读它(提交前不再复核)
     t0 = time.time()
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "应提交校验"
     assert ("recheck", None) in client.calls, f"提交时即应同步发送 recheck: {client.calls}"
 
@@ -634,7 +635,7 @@ def test_checking_skip_dedup_across_rules():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "pausedUP"}
     t = make_target()  # pausedDL: 不自动开始, 重加后仍暂停, 规则B才能走到跨规则去重
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled and mgr.state["skip_check_day"]["HASH123"], "规则A应完成跳检并记录"
 
     # 模拟另一条规则B: 换规则名但同种子, 同日再跳检
@@ -662,7 +663,7 @@ def test_checking_no_reference_skip_checking_warns():
     client.torrents["HASH123"] = {"state": "stalledUP"}
     t = make_target()
     with patch("auto_qb.core.modules.ops_mod.logger.warning") as mw:
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
         assert handled
         assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"], f"{client.calls}"
         assert any("无参考跳检" in str(c) for c in mw.call_args_list), f"应有高风险警告: {mw.call_args_list}"
@@ -734,7 +735,7 @@ def test_checking_skip_backup_precedes_delete_and_cleared_on_success():
         return orig_delete(torrent_hashes=torrent_hashes, delete_files=delete_files)
 
     client.torrents_delete = spy_delete
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "前置: 跳检应完成"
     assert seen.get("file_at_delete"), f"备份必须先于删除落盘(否则缝隙内崩溃无凭据): {seen}"
     assert not mgr.state.get("skip_check_backup"), f"重加成功后应清理备份元数据: {mgr.state}"
@@ -759,7 +760,7 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
 
     client.torrents_delete = noop_delete
     with patch("auto_qb.core.modules.ops_mod.time.sleep"):  # 10 × 0.5s 确认轮询
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "放弃跳检以 fail 返回(fail 视为已处理)"
     assert not any(c[0] == "add" for c in client.calls), f"未确认消失前不得重加: {client.calls}"
     backup_file = os.path.join(os.path.dirname(mgr.state_file), "skip-check-backup", "HASH123.torrent")
@@ -778,7 +779,7 @@ def test_checking_skip_backup_failure_aborts_before_delete():
     client.torrents["HASH123"] = {"state": "pausedUP"}
     t = make_target()
     with patch.object(OpsModule, "_backup_torrent", side_effect=OSError("disk full")):
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert [c[0] for c in client.calls] == ["export"], f"备份失败不得删除/重加: {client.calls}"
     assert not mgr.state.get("skip_check_backup"), "备份失败不应留下元数据"
@@ -796,7 +797,7 @@ def test_checking_piecehashes_same():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert ("piece_hashes", "HASH123") in client.calls, f"应获取目标 piece hashes: {client.calls}"
     assert ("piece_hashes", "R1") in client.calls, f"应获取候选 piece hashes: {client.calls}"
@@ -816,7 +817,7 @@ def test_checking_piecehashes_diff():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
     assert ("export", None) not in client.calls, f"不应跳检: {client.calls}"
@@ -834,7 +835,7 @@ def test_checking_piecehashes_api_error():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "API 错误不应中断"
     assert ("recheck", None) in client.calls, f"应降级为 full-checking: {client.calls}"
 
@@ -854,7 +855,7 @@ def test_checking_custom_rc0():
     seed_store(mgr, [t, r])
     with patch("subprocess.run") as mrun:
         mrun.return_value = SimpleNamespace(returncode=0, stdout="ok", stderr="")
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
         assert handled
         args = mrun.call_args.args[0]
         assert args == [r"C:\check.exe", "R1", r"R:\Downloads"], f"程序参数: {args}"
@@ -876,7 +877,7 @@ def test_checking_custom_rc1():
     seed_store(mgr, [t, r])
     with patch("subprocess.run") as mrun:
         mrun.return_value = SimpleNamespace(returncode=1, stdout="", stderr="bad")
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
         assert handled
     assert ("recheck", None) in client.calls, f"无参考应走 full-checking: {client.calls}"
     assert ("export", None) not in client.calls, f"不应跳检: {client.calls}"
@@ -894,7 +895,7 @@ def test_checking_verified_reference_used():
     r = FakeTorrent(hash="R1", name="R1", state="pausedUP")  # 非上传候选, 仅靠 verified
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert ("export", "HASH123") in client.calls, f"verified 参考应走 with_reference 段: {client.calls}"
 
@@ -934,7 +935,7 @@ def test_checking_skip_guard_file_missing():
     mgr.client = client
     client.files = [SimpleNamespace(name="missing.bin", size=100)]
     t = make_target()
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "前置检查失败应跳过(不执行任何 API)"
     assert client.calls == [], f"前置失败不应有任何调用: {client.calls}"
 
@@ -952,7 +953,7 @@ def test_checking_skip_guard_file_size_mismatch():
         client.files = [SimpleNamespace(name="movie.mkv", size=999)]  # 期望 999, 实际 10
         t = make_target()
         t.save_path = td
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
         assert not handled, "前置检查失败应跳过(不执行任何 API)"
         assert client.calls == [], f"大小不符不应有任何调用: {client.calls}"
 
@@ -984,7 +985,7 @@ def test_checking_skip_partial_download_forbidden():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "pausedDL"}
     t = make_target(progress=0.4)
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "拒检以 fail 返回(fail 视为已处理), 非 skip"
     assert client.calls == [], f"不应发生导出/删除/重加: {client.calls}"
 
@@ -997,12 +998,12 @@ def test_checking_skip_dedup_same_day():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "stalledUP"}
     t = make_target()
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert [c[0] for c in client.calls] == ["export", "delete", "add", "add_tags", "start"]
 
     client.calls.clear()
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert not handled, "同日不应重复跳检"
     assert ("delete", False) not in client.calls, f"同日不应删除种子: {client.calls}"
 
@@ -1022,7 +1023,7 @@ def test_skip_check_tag_uses_global_config():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert ("add_tags", ["zGlobalTag"]) in client.calls, f"应使用全局 config 标签名: {client.calls}"
 
@@ -1038,7 +1039,7 @@ def test_skip_check_success_applies_tag():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert ("add_tags", ["zSkipChecked"]) in client.calls, f"跳检成功应打默认标签: {client.calls}"
     assert "zSkipChecked" in mgr.store.get("HASH123").tags_set, "Facade 应把标签同步到 store 记录"
@@ -1056,7 +1057,7 @@ def test_skip_check_tag_empty_disables():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert not any(c[0] == "add_tags" for c in client.calls), f"禁用打标时不应调用 add_tags: {client.calls}"
 
@@ -1077,7 +1078,7 @@ def test_skip_check_tag_failure_doesnt_fail_skip():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP")
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "打标失败不应使跳检失败"
     names = [c[0] for c in client.calls]
     assert "export" in names and "delete" in names and "add" in names, f"跳检四阶段应已完成: {client.calls}"
@@ -1096,7 +1097,7 @@ def test_skip_check_tagged_member_excluded_as_reference():
     r = FakeTorrent(hash="R1", name="R1", state="stalledUP", tags="zSkipChecked")  # 已完成但带跳检标签
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
-    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "无可用参考应走 without_reference 段"
     assert not any(c[0] == "export" for c in client.calls), f"带标成员不可作参考, 不应跳检: {client.calls}"
     assert ("recheck", None) in client.calls, f"应走 without_reference full-checking: {client.calls}"
@@ -1116,7 +1117,7 @@ def test_skip_check_tagged_verified_reference_excluded():
     inject_group(mgr, "HASH123", "R1")
     seed_store(mgr, [t, r])
     mgr.store.verified_references.add("R1")  # 即便历史 full-checking 晋升过, 带标仍排除
-    handled, _ = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled
     assert not any(c[0] == "export" for c in client.calls), f"带标 verified 参考应排除, 不应跳检: {client.calls}"
     assert ("recheck", None) in client.calls, f"应走 without_reference full-checking: {client.calls}"
@@ -1129,7 +1130,7 @@ def test_checking_dry_run():
     client = CheckingFakeClient()
     mgr.client = client
     t = make_target()
-    handled, _stop = process_rule(mgr, client, t, dry_run=True)
+    handled = process_rule(mgr, client, t, dry_run=True)
     assert handled, "dry-run 应正常返回"
     assert client.calls == [], f"dry-run 不应调用客户端: {client.calls}"
 
@@ -1195,7 +1196,7 @@ def test_checking_full_checking_send_error():
     client.torrents["HASH123"] = t  # P1 提交点实时复核读客户端: 复核须放行才能测到发送失败
     t0 = time.time()
     with patch("auto_qb.rules.base.logger.error") as mw:
-        handled, _stop = process_rule(mgr, client, t, dry_run=False)
+        handled = process_rule(mgr, client, t, dry_run=False)
         assert handled, "发送失败应返回失败结果(动作已执行)"
         assert any("发送 recheck 失败" in str(c) for c in mw.call_args_list), \
             f"应有失败警告: {mw.call_args_list}"
@@ -1614,7 +1615,7 @@ def test_checking_group_wait_external_entry_skip():
     b = make_target(hash="HB")
     seed_store(mgr, [a, b])
     inject_group(mgr, "HA", "HB")
-    handled, _stop = process_rule(mgr, client, b, dry_run=False)
+    handled = process_rule(mgr, client, b, dry_run=False)
     assert not handled, "组内有校验进行时应跳过"
     assert ("recheck", None) not in client.calls, "外部入口不等待也不提交"
 
@@ -1657,7 +1658,7 @@ def test_checking_skip_day_flushed_immediately():
     mgr.client = client
     client.torrents["HASH123"] = {"state": "pausedUP"}
     t = make_target()
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled and mgr.state["skip_check_day"]["HASH123"], "前置: 跳检应完成并记录"
     with open(mgr.state_file, "r", encoding="utf-8") as f:
         on_disk = json.load(f)
@@ -1703,7 +1704,7 @@ def test_checking_skip_gone_fails_at_export_with_clear_message():
         return orig_export(torrent_hashes=torrent_hashes, torrent_hash=torrent_hash, **kw)
 
     client.torrents_export = export_or_404
-    handled, _stop = process_rule(mgr, client, t, dry_run=False)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "导出失败按 fail 返回(fail 视为已处理)"
     assert not any(c[0] in ("delete", "add") for c in client.calls), f"不得删除/重加: {client.calls}"
     assert mgr.store.get("HASH123") is None, "失败路径应撤掉快照里的残留记录"

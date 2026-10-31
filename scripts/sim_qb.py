@@ -1777,8 +1777,6 @@ RULES_TMPL = """    sim_once_rules:
                       - ptfans_cc
             actions:
                 - print_torrent_details: true
-            stop_following_rules_if:
-                never
 """
 
 TRACKER_RULES_TMPL = """            rules:

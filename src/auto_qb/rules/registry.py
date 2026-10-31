@@ -25,6 +25,6 @@ def create_condition(spec: dict):
     return CONDITIONS[name](value)
 
 
-def create_action(name: str, value, ignore_error: bool = False):
+def create_action(name: str, value):
     """根据动作名与配置创建动作实例"""
-    return ACTIONS[name](value, ignore_error)
+    return ACTIONS[name](value)

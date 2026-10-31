@@ -38,9 +38,8 @@ config:
                 - upload_speed_limit: 2000KiB/s
                 - download_speed_limit: 2000KiB/s
 
-            stop_following_rules_if:
-                conditions-met # 可选: conditions-met, conditions-not-met, action-failed, all-actions-succeed, always, never
-                # 注意: action-failed依赖动作结果判定(skipped不算失败), 见"规则执行语义"章节
+            # stop_following_rules_if 已退役(plan 26-11-01-0106 W1): 引擎为「每规则每种子独立任务」
+            # 模型, 无「后续规则」链; 配置该键的规则载入时会被转为未启用(enabled=false)并提示
     trackers:
         ptfans_cc:
             domains:
