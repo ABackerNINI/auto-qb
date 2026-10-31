@@ -192,7 +192,19 @@
 | **热重载 trackers 段实测(RM05-02)** | PUT /api/config 回执 applied 且**无 restart_required**; 日志「rebound N」; 新 tags 下一维护节拍兑现; 旧标签不回撤(重绑只换 conf 不摘旧标) | 断言「rebound」+ 新标签兑现即可, 别咬「旧标被清」; tags 变更经树编辑 `tree["config"]["trackers"]["<条目>"]["tags"]` |
 | **hr_check.enabled=false 下站点派生零取数** | 站点条目 `hr_check.sites.<id>.enabled: true` 只走装载期派生, HR 线程不启动, 正向启动日志零「在线核实」痕迹 | 站点派生面可零外连实测(在线核实面归 RM06); 绑定校验要求被绑条目带 `hr` 段, 否则「已绑定站点…未配置 hr 段」ConfigError; 负向(绑0/绑2/未登记 id)走 `run_cli --dry-run` 退出码 + 「配置错误」文案(RM03-05 同款观测法) |
 
+### 2.12 HR 取数通道面的事实(RM06 实测, 2026-10-31)
+
+| 事实 | 现场表现 | 处置 |
+|---|---|---|
+| **产品侧 HR 取数唯一路径 = ChannelFetcher 经本地端点, 从不后端直连** | `build_channel_fetcher`(fetcher.py:252)唯一分支点: `channel.enabled=false` → NullFetcher(日志「本实例未启用取数通道」); 任务 URL 指向真实站点域但产品自己**从不外连** —— 本地桩替身在结构上覆盖全部数据面 | 零外连红线有结构性保障; 用例以 HTTP 扮演扩展即可, 真浏览器扩展归 L2(需授权) |
+| **扩展契约 = GET /api/hr/tasks + POST /api/hr/result, 回传过两道关** | 任务 id 确实派发过 + 域名一致; 鉴权无/错 token 401 且状态零写入, 非扩展 origin 403(拒绝进 RejectThrottle, 持续期间节流日志每 6h 提醒一次) | 桩回传前先 GET tasks 拿任务原文, 别自造 id; 回传内容直接用 `tests/hr_helpers.py` 的 myhr_page/LOGIN_PAGE 造, 行名粗配按「标题重合 ≥12 字符」设计命中/不命中对照 |
+| **假种子(downloaded=0)照进 HR 对象集, 打标全量纳入** | `runtime._anchors`(:456)对绑定了已启用站点条目的种子**无触发门**; `add_hr_tag_or_category`「其余全量纳入」含零下载转移种(maintenance_mod)—— RM03-04 的「零下载不触发」实为那次配置没配 add_tag 的观测 | 不用为「假种子进不了对象集」绕路; 用例直接配 `add_tag` 观察打标(qB API 回读, strip 口径) |
+| **三态分档各有专属日志文案** | 登录页回传 → ERROR「[HR 登录失效]…请在该浏览器里登录后无需其它操作」+ 波次 `error` 分档; 超时不回传 → WARNING「[HR 通道不可用]…等待浏览器扩展取数超时(Ns)」+ 波次 `no-channel`「保守回落本地兜底」且**锁正常释放**; 未命中 → INFO「本波签发『未列出』放行 N 条(覆盖范围内未命中)」; 日额耗尽 → 「档位 C 配额/间隔受限(日配额: 还差 Ns)」 | 咬文案断言分档, 别咬内部枚举; 超时路径配小 request_timeout(默认 180s)且断言「下一波照常收任务」(锁释放) |
+| **发现端点端口候选顺延 + 回环 pairing 默认关** | 显式 discovery_port 被占时按候选表顺延(默认 18788 起 +0/+1/+2 先绑先得), 启动日志「HR 发现端点已启动…(候选 …/…, 实绑 …)」; 回环 host 时 pairing 默认不强制 | 测试配置显式给独立发现端口防撞车; 端口探空裸 bind(§2.7) |
+| **波次加速: POST /api/hr/refresh force 旗标** | 「立即拉取已受理 N 个站点(取数线程将跳过复用窗与拉取间隔, 频控仍生效)」; 取数线程每 60s 自唤醒, 干等节拍会白烧时间 | 用例用 refresh 加速, 频控类断言(min_interval/日额)仍可测 —— force 不绕频控 |
+
 ## 03 种子层: L0 / L1 / L2
+
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |
 |---|---|---|---|---|---|
