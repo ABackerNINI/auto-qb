@@ -33,9 +33,10 @@
   [src/auto_qb/webui/runtime.py](../../../src/auto_qb/webui/runtime.py) `defer_receipt` / `flush_truths`
   (改种子状态的命令回执推迟到补刷新之后再写 —— 宣称落后于真值落地); 同文件 `check_pending` +
   [commands.py](../../../src/auto_qb/webui/commands.py) `_verdict_reannounce`(reannounce 只发指令
-  并登记确认跟踪, 回执由五分支纯函数对照 baseline 核实后给出, 结论 ∈ confirmed/rejected/pending,
-  pending 落 warn 第三态诚实标签不混入「失败」 —— 发出 ≠ 成功; plan 26-10-05-0923 落地,
-  判据方向事故详见 [announce-epoch-semantics](announce-epoch-semantics.md));
+  并登记确认跟踪, 回执由消解等待判定表纯函数对照 baseline 核实后给出 —— updating 恒不构成成功证据,
+  成功凭 working 转换/epoch 前跳, 失败凭 status 4/5/6+msg; 结论 ∈ confirmed/rejected/pending,
+  pending 落 warn 第三态诚实标签不混入「失败」 —— 发出 ≠ 成功; plan 26-10-05-0923 落地、
+  26-10-31-2354 改消解等待模型见下方复发条, 判据方向事故详见 [announce-epoch-semantics](announce-epoch-semantics.md));
   [src/auto_qb/core/modules/ops_mod.py](../../../src/auto_qb/core/modules/ops_mod.py) skip_check R2 实时
   复核 + `_poll_until`(动手前对 qB 短间隔直查确认); 同 webui/runtime.py WEB 命令真值直查红线(取不到就
   返回 None 不回落快照 —— 回落会把「读不到」伪装成「读到了旧值」)。本次修复点: 同文件 `OpsModule.recheck`
@@ -43,3 +44,10 @@
   R1 实时复核与 live 基线(S3/P1)。
 - **已知边界** (不在修复范围, 计划 §6.4 原话): seen_checking 已立起但校验进程被 qB 重启吞掉不续跑 ——
   该情形仍走向超时/失败侧的既有语义, 属既有边界, 本次未处理。
+- **复发 +1 (2026-10-31, issue 26-10-31-1740)**: RM09 真机实测死端口 tracker 强制汇报 +1ms 落假 ok ——
+  判定分支②把 updating(在途)当成功直证, 正是本档三问①「过程态当结果态」的原形。
+  **为什么没命中**: 初版判定(plan 26-10-05-0923)只收窄了 min 窗口, 「在途直证」本身没废;
+  排查轮路由到了 announce-epoch-semantics(方向语义)但没问「updating 算不算成功证据」。
+  修复: 消解等待模型(plan 26-10-31-2354) —— updating 全域退出成功证据面(源码事实: updating 在
+  请求发出前置位, 对成败零信息量), 成功凭 working 转换/epoch 前跳, 失败凭 status 4/5/6+msg;
+  守阵 `tests/test_web_commands.py` 三判定矩阵(语义翻转重写) + 真机 RM09-04 四态。

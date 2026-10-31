@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-write-side">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-2354">
+<meta name="doc-updated" content="26-11-01-0026">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-1740-bug-webui-reannounce-premature-confirm.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-write-side</div>
+<h1>reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据</h1>
+<p class="lede">把 reannounce 确认跟踪的「在途即成功」改为<strong>消解等待模型</strong>：<code>updating</code> 一律不构成成功证据，成功凭 working 转换 / epoch 前跳正证据，失败凭 status 4/5/6 + msg；可达 tracker 的回执时延 = 真实 RTT + ≤1 tick，零固定宽限。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-2354 · <b>doc-updated</b> 26-11-01-0026 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling（2026-10-31，用户指令「认领 issue 26-10-31-1740 + grilling 修复方案」；issue §6 建议修法被否决后重新设计）+ 两名研究员源码调查（qB v5.4.0alpha1 / libtorrent RC_2_1，Else 本地源码，事实均附文件:行号）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>背景</strong>：issue <code>26-10-31-1740</code>（RM09-04 真机实测：死端口 tracker 强制汇报在指令后 +1ms 即落 confirmed(ok)）。根因是 <code>_verdict_reannounce</code> 分支②把 <code>updating</code> 当成功直证——而源码事实表明 updating 在请求<strong>发出前置位</strong>（libtorrent <code>torrent.cpp:3571</code>），此时成败完全未知，「在途」与「即将失败」在该观测上不可分辨，正是 <code>pitfalls/backend/effect-confirmation.md</code> 三问①的假成功面。</p>
+<p><strong>完成判据</strong>：① min 缺失/从未联系行不再在途即 ok；② 可达 tracker 的 ok 回执无固定延迟（RTT+≤1 tick）；③ 拒绝证据（status 4/5/6+msg）及时落 rejected；④ 真机 RM09-04 转绿；⑤ 判定矩阵单测钉死。</p>
+<p><strong>设计底线/不变量</strong>：回执三桶语义只承诺诚实标签（ok/error/warn）；歧义保守落 pending；失败判据④<strong>逐行先于</strong>成功判据（防失败退避前跳被误判成功，libtorrent <code>announce_entry::failed()</code> 同样会前跳 next）；判定保持纯函数；等待期零 API 红线不变（照旧读 <code>torrents_trackers</code> 快照）；投递收敛、D1 推迟早回执、item 级 deadline 语义（<code>REANNOUNCE_*</code> 常量组）全部不动。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><strong>现状</strong>（行号取证 2026-10-31）：<code>src/auto_qb/webui/commands.py:466-470</code> 分支②——epoch 行 <code>updating or status==3</code> 且基线 min 缺失/为 0/已过期 → confirmed「announce 在途」；<code>runtime.py:588</code> <code>check_pending</code> 在指令 drain 后同 tick 跑首拍 → +1ms 终态。legacy 行（qB<5.2，无 epoch 字段）有无守卫的②同病。从未联系行无任何成功出口（主判据③判定域限基线 status≥2）。</p>
+<p><strong>源码事实</strong>（2026-10-31 调查）：</p>
+<ul>
+  <li>updating 在请求发出前置位、成功（<code>torrent.cpp:3860-3867</code> verified=true, updating=false, fails=0 → Working）或失败（<code>announce_entry.cpp:97</code> failed()）时清除——它对成败零信息量；</li>
+  <li><code>min_announce/next_announce</code> 在<strong>发送时</strong>即赋值 now（<code>torrent.cpp:3572-3573</code>），成功才覆写为 now+interval；min「从无到有」不是成功信号；</li>
+  <li>失败<strong>立即</strong>置 not-working（4/5/6，RST 即时不等超时/重试），且 <code>failed()</code> 按退避改写 next（首重试 ~17s）——next 前跳不是成功的排他信号；</li>
+  <li>qB 5.x 枚举已扩 <code>NotContacted=1, Working=2, NotWorking=4, TrackerError=5, Unreachable=6</code>（<code>trackerentrystatus.h:40-47</code>），现行④只认 4 会漏判 5/6。</li>
+</ul>
+<p><strong>issue §6 建议修法（固定宽限拍 ~2s）被否决的两个独立理由</strong>：①慢 announce 在宽限结束时仍在途，②照样假 ok——只修复快失败竞态；②固定 2s 代价造成不跟手（用户明确否决）。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>主线（落点单点：<code>commands.py::_verdict_reannounce</code> 纯函数 + <code>runtime.py</code> 超时文案）：<strong>废除②全域</strong>（epoch 与 legacy、min 缺失/为 0/已过期一概不再给 updating 任何确认效力，updating/status==3 恒 pending），新增③″与扩④：</p>
+<table>
+  <tr><th>序</th><th>判据（逐行先到先得，④' 最先）</th><th>结论</th></tr>
+  <tr><td>④'（扩）</td><td><code>status in {4,5,6}</code> 且 <code>msg</code> 非空</td><td>rejected（RC_FAIL_PREFIX+msg）；msg 空仍保守 pending</td></tr>
+  <tr><td>③″（新，epoch）</td><td><code>status==2</code> 且 <code>b_status</code> 非 None 且 <code>b_status != 2</code></td><td>confirmed（「tracker 状态转为 working」）；失败路径产不出 2，强正证据</td></tr>
+  <tr><td>③（不变）</td><td><code>b_next</code> 非空 且 <code>b_status&gt;=2</code> 且 <code>na &gt; b_next+tol</code></td><td>confirmed（「epoch 前跳」，reason 可带 min 同前跳佐证）</td></tr>
+  <tr><td>其余</td><td>含 <code>updating</code>/<code>status==3</code>、无变化的 4/5/6 空 msg 行等</td><td>pending（""）</td></tr>
+</table>
+<p>legacy 行：④' 同扩；③′（status 2←基线非 2，形状与③″一致，两模式可共用同一实现）保持；无守卫②废除 → updating 落 pending；仍无前跳判据。<code>runtime.py:616</code> 超时 warn 尾巴去「在途」：改「未观测到 working 转换/前跳/拒绝证据」。「announce 在途」文案与语义全量退役。</p>
+<p>回执时延口径（拍板 D4）：ok = 真实 RTT + ≤1 tick（qB 不带 high_priority，发送经定时器 ≤~1s）；rejected = 失败证据落地（死端口 RST 即时）+ ≤1 tick；窗口内无可分辨证据 → deadline 落 warn「未确认」。第一版不新增专用快拍。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<ol>
+  <li><strong>判定函数改造</strong>：<code>_verdict_reannounce</code> 按§03 新判定表重写，docstring 分支表同步重写（记 D1–D7 依据与源码事实）；<code>runtime.py:616</code> warn 文案。<strong>验收</strong>：步2 单测全绿。</li>
+  <li><strong>单测面</strong>（<code>tests/test_web_commands.py</code>）：epoch matrix（②在途→pending 语义翻转；③″ 新增 1→2 / 4→2 / 5→2 用例；④' 5/6+msg rejected、空 msg pending）；min_window_guard（「过期/缺失/0 后在途直证」用例翻转为 pending，docstring 记 D2 理由——<strong>语义变更重写，非弱化</strong>）；legacy matrix（②废除、④'扩）；同步文件头「## 测试计划」清单。<strong>验收</strong>：<code>commands run test.quick</code> 绿。</li>
+  <li><strong>真机验证</strong>（需用户起真机 qB）：<code>commands run real.run -- --case RM09-04 --yes</code>，<code>test_rm09_04_reannounce_three_states</code> 转绿；issue「复验/修复后补充」节回填实测日志。<strong>验收</strong>：用例绿 + issue 回填。</li>
+  <li><strong>回写</strong>：<code>pitfalls/backend/effect-confirmation.md</code> 库内范本段措辞对齐新判定表；本件踩的正是该坑档原则（在途≠成功），按 AGENTS 规则该条<strong>复发+1</strong>并写未命中原因；涉及代码事实的主题文档/根 README grep 后按需更新；<code>kb.bump</code> 落盘。</li>
+  <li><strong>收尾</strong>：<code>commands run test.full</code> 实测 → <code>kb.new baseline --total "…"</code> 誊写实测数字 → <code>kb.wrap</code>；commit/push 等用户显式「提交」再走 <code>ship.commit</code>。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——grilling 设计树已收敛（round 1 D1–D5、round 2 D6–D7 全部「按推荐」拍板），结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>拍板</th></tr>
+  <tr><td>D1</td><td>min 缺失/从未联系行改「消解等待」模型，弃固定宽限拍</td><td>2026-10-31 按推荐</td></tr>
+  <tr><td>D2</td><td>分支②对所有 epoch 行整体废除（含 min 已过期行）</td><td>2026-10-31 按推荐</td></tr>
+  <tr><td>D3</td><td>legacy 模式同修（无守卫②废除，③′/④ 保留并扩）</td><td>2026-10-31 按推荐</td></tr>
+  <tr><td>D4</td><td>第一版按主 tick 节奏，不加专用快拍；时延口径=RTT+≤1 tick</td><td>2026-10-31 按推荐</td></tr>
+  <tr><td>D5</td><td>验证阶段由用户起真机 qB（假种子+死端口，零外连口径不变）</td><td>2026-10-31 按推荐</td></tr>
+  <tr><td>D6</td><td>加③″：从未联系/曾失败行以「status 2←基线非 2」为成功正证据</td><td>2026-10-31 按推荐</td></tr>
+  <tr><td>D7</td><td>④判定域扩为 {4,5,6}+msg 非空（两模式同扩，空 msg 保守 pending）</td><td>2026-10-31 按推荐</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<ul>
+  <li><strong>R1 枚举落地差异</strong>：qB 5.x 真机对死端口回 4 还是 5/6 与调查口径可能有出入（RM09-04 既有证据是 4）。<em>处置</em>：真机断言以实测为准；④' 域含 4/5/6，实际返回哪个都命中，差异无害。</li>
+  <li><strong>R2 黑洞 tracker</strong>：DROP 型（无 RST）靠 tracker_completion_timeout 才报错，30s 窗口内可能无任何消解。<em>处置</em>：落 warn「未确认」诚实标签，接受；真机观测真实站点表现后再议。</li>
+  <li><strong>R2' 行为变化感知</strong>：min 已过期的曾成功行 ok 回执从 +1ms 变 RTT+≤1 tick。<em>处置</em>：D2 已接受；换的是不再假 ok。</li>
+  <li><strong>R3 既有断言修改</strong>：min_window_guard 等用例断言随语义翻转。<em>处置</em>：属语义变更重写而非弱化，docstring 记 D2 依据；不删任何用例。</li>
+  <li><strong>R4 基线竞态</strong>：基线在 API 调用后即刻读取，libtorrent 异步处理理论上可能已生效。<em>处置</em>：现状既有风险面不变（基线读取时序本轮不动）；消解判据均要求终态（2/4/5/6），瞬态误读概率极低。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-2354</span> <span class="tag">R0 · 26-10-31-2354</span> 初版：grilling 会话收敛产出（D1–D7 按推荐拍板）；源码事实来自两名研究员对 Else 本地 qB v5.4.0alpha1 / libtorrent RC_2_1 的一手调查（文件:行号见§02）；issue §6 建议修法（固定宽限拍）经两理由否决。</li>
+  <li><span class="tag">R1 · 26-11-01-0026</span> 实施完成(2026-11-01): 步1-5 全落地; 真机 RM09-04 四态全验(死端口 error/暂停 warn/伪 tracker ok 前跳全链/窗内推迟 warn), RM09 整片 10/10; test.full 4327 passed 与基线同数(切片 26-11-01-0025)。步3 场景改道: 死端口行 min_announce 恒在过去(发送时赋值无响应不改写), 推迟分支不可达 —— ok/推迟两态改由 FakeTracker(interval=1800, 响应带 min_interval)成功行承载; 用例聚合回执前缀断言改咬 truth.results(原 startswith 咬错字段, 首跑实测修正)。</li>
+</ul>
+
+</div>
+</body>
+</html>

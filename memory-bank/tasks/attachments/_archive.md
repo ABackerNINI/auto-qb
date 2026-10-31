@@ -4,9 +4,10 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (20)
+## In Progress (21)
 
 - [26-10-31-memory-bank-recurrence-tooling](../26-10-31-memory-bank-recurrence-tooling.md) 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
+- [26-10-31-webui-write-side](../26-10-31-webui-write-side.md) 修复 reannounce 确认跟踪对在途 tracker 过早落 ok(issue 26-10-31-1740)
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-10-17-backend-global-traffic-source-integration](../26-10-17-backend-global-traffic-source-integration.md) 全局流量来源一键切换 + 工具自动拉起(改版)
 - [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录

@@ -43,8 +43,16 @@ class _Handler(BaseHTTPRequestHandler):
             own_port = int(rec.get("port", 0))
         except ValueError:
             own_port = None
-        body = bencode.encode({"interval": self.tracker.interval,
-                               "peers": self.tracker.peers_payload(exclude_port=own_port)})
+        # min_interval 显式回传(= interval): libtorrent 对缺失键的回退语义不确定, 显式给出让
+        # min_announce = now + interval 确定(用例的「窗内推迟」分支依赖 min 在未来; RM00/RM07
+        # 用 interval=5, min=5 语义不变)
+        body = bencode.encode(
+            {
+                "interval": self.tracker.interval,
+                "min_interval": self.tracker.interval,
+                "peers": self.tracker.peers_payload(exclude_port=own_port)
+            }
+        )
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.send_header("Content-Length", str(len(body)))
@@ -80,7 +88,7 @@ class FakeTracker:
         return f"http://{local_host()}:{self.port}/announce"
 
     def start(self) -> "FakeTracker":
-        handler = type("_BoundHandler", (_Handler,), {"tracker": self})
+        handler = type("_BoundHandler", (_Handler, ), {"tracker": self})
         self._httpd = ThreadingHTTPServer((self.bind, 0), handler)
         self.port = self._httpd.server_address[1]
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 #   toSecondsSinceEpoch), 汇报成功 = next **前跳(变大)**; 把它当倒计时用(next 变小 = 被重置
 #   = 成功)方向正好相反 —— 判据方向的单点在 _verdict_reannounce 的 docstring。
 # 立即路径基础窗口(epoch 语义): reannounce 后 qB 立即重发 announce(私站响应通常 1~10s);
-# 30s 内仍未观测到前跳/在途/拒绝证据则落「未确认」(warn, 不再判「失败」)。
+# 30s 内仍未观测到 working 转换/前跳/拒绝证据则落「未确认」(warn, 不再判「失败」)。
 # 主循环 main_tick=2s -> 约 15 轮确认机会。
 REANNOUNCE_CONFIRM_TIMEOUT = 30.0
 # 前跳判定容差(秒, D2): next > 基线 next + TOL 才算成功证据; TOL=3.0 依 S0 真机探针复核
@@ -52,7 +52,7 @@ REANNOUNCE_BACKGROUND_MAX = 500
 # - 已受理·推迟 = RC_DEFERRED_PREFIX + "HH:MM" + "(后台继续核实, 结果见日志)"
 #                 (HH:MM 为基线 min_e 的本地时刻, 动态尾部不进常量; 括号段是固定尾文案)
 # - 未确认·停止 = RC_UNCONFIRMED_PREFIX + "种子已停止, qB 静默忽略强制汇报"
-# - 未确认·超时 = RC_UNCONFIRMED_PREFIX + "30s 内未观测到 epoch 前跳/在途/拒绝证据"
+# - 未确认·超时 = RC_UNCONFIRMED_PREFIX + "30s 内未观测到 working 转换/epoch 前跳/拒绝证据"
 #                 (legacy 超时 = RC_UNCONFIRMED_PREFIX + "旧版 qB 无 epoch 字段, 仅未观测到拒绝")
 RC_FAIL_PREFIX = "失败: tracker 未接受汇报(not working): "
 RC_DEFERRED_PREFIX = "已受理: 最小间隔未过期, 推迟至 "
@@ -433,21 +433,31 @@ class WebCommandsMixin:
         toSecondsSinceEpoch), 汇报成功 = next **前跳(变大)**; 旧实现把它当倒计时用
         (next 变小视为"被重置 = 成功")方向正好相反 —— "秒/毫秒通用"式臆测同罪。
 
-        epoch 行(基线行含 next, qB 5.2+)逐行判定, 任一行命中即结论(§3.1 五分支, ①stopped
-        在轮询侧直判不进本函数):
-          ② updating 或 status==3 -> confirmed, 但仅当该行基线 min 缺失/为 0/已过期(now >= min):
-             min 窗口未过期时的 updating 是推迟登记的假瞬态(S0 探针实证 ~0.9s, 非在途直证) -> 落 pending;
-          ③ next > b_next + tol -> confirmed(主判据; 判定域限基线 status>=2 且 b_next 非空的行,
-             规避未联系行 epoch 极值假前跳; 基线 min 同向前跳写入 reason 佐证, 不作必要条件);
-          ④ status==4 且 msg 非空 -> rejected(tracker 拒绝, 唯一可靠否定信号; 逐行先于 ②③ 判,
-             防 status4 行的 next 前跳只是重试排程被误判成成功); status==4 但 msg 空 -> 不判败
-             (歧义保守落 pending);
-          其余 -> pending("")
+        !!消解等待模型(plan 26-10-31-2354 D1/D2/D3; 事故 issue 26-10-31-1740): updating(旧版
+        API 的 status==3 同义)在 announce 请求**发出前置位**(libtorrent torrent.cpp:3571),
+        对成败零信息量 —— **任何模式下 updating 都不构成成功证据**。旧分支②「在途直证」是
+        死端口 tracker +1ms 假 ok 的事故根源, 已全域废除; 判定等 updating 消解:
+          成功 -> ③″ working 转换 / ③ epoch 前跳(正证据);
+          失败 -> ④′ status 4/5/6 + msg(死端口 RST 立即落地, 不等超时/重试);
+          消解不了 -> pending 到 deadline 由轮询侧落「未确认」诚实标签。
 
-        legacy 行(基线行无 next, qB < 5.2): 成功难证、失败可证 —— ② updating/status==3(无 min
-        信息, 不加守卫) / ③′ status 2<-基线非 2 / ④ 同上; **无前跳判据**。超时由轮询侧落
-        「未确认(旧版 qB 无 epoch 字段)」, 不假称成功 —— 与 pitfalls/backend/effect-confirmation.md
-        的证据门控口径一致, 回执语义只承诺诚实标签。
+        逐行判定, 任一行命中即结论(①stopped 在轮询侧直判不进本函数):
+          ④′ status in {4,5,6} 且 msg 非空 -> rejected(tracker 拒绝, 唯一可靠否定信号;
+             qB 5.x 枚举细分 TrackerError=5/Unreachable=6, 旧版只产 4; **逐行先于③″③判** ——
+             libtorrent failed() 按退避改写 next, 顺序反了会把重试排程误判成成功);
+             status 4/5/6 但 msg 空 -> 不判败(歧义保守落 pending);
+          ③″ status==2 且基线 status 非 None 非 2 -> confirmed(「tracker 状态转为 working」;
+             失败路径产不出 working(qB 侧 verified && fails==0 才置 2), 强正证据; 从未联系行/
+             曾失败行的唯一成功出口, plan D6);
+          ③  (epoch 行) next > b_next + tol -> confirmed(主判据; 判定域限基线 status>=2 且
+             b_next 非空, 规避未联系行 epoch 极值假前跳; 基线 min 同向前跳写入 reason 佐证,
+             不作必要条件 —— min_announce 在请求发出时即赋值(torrent.cpp:3572), 不是干净的成功信号);
+          其余 -> pending("")(含 updating/status==3 在途、min 窗口假瞬态、无变化行)。
+
+        legacy 行(基线行无 next, qB < 5.2)与 epoch 行共用④′③″, 区别只在无③前跳判据
+        (成功难证、失败可证); 超时由轮询侧落「未确认(旧版 qB 无 epoch 字段)」, 不假称成功
+        —— 与 pitfalls/backend/effect-confirmation.md 的证据门控口径一致, 回执语义只承诺
+        诚实标签。
 
         t0(指令登记时刻)当前判据未直接消费, 为 R1 干扰收窄预案(「前跳距指令 < 一 tick」)保留。
         """
@@ -460,23 +470,16 @@ class WebCommandsMixin:
             b_next = b.get("next")
             b_min = b.get("min")
             status = t.get("status")
-            updating = bool(t.get("updating"))
             msg = t.get("msg") or ""
-            # ④ 失败(tracker 拒绝, 唯一可靠否定信号; 两个模式同判, msg 空不武断判败)
-            if status == 4 and msg:
+            # ④′ 失败(tracker 拒绝, 唯一可靠否定信号; 两个模式同判, msg 空不武断判败;
+            #    逐行先于③″③判 —— 失败退避同样前跳 next, 顺序反了会把重试排程误判成成功)
+            if status in (4, 5, 6) and msg:
                 return "rejected", RC_FAIL_PREFIX + msg
+            # ③″ 成功正证据: 状态转为 working(失败路径产不出 working; plan D6; 原 legacy ③′ 收编)
+            if status == 2 and b_status is not None and b_status != 2:
+                return "confirmed", "tracker 状态转为 working"
             if b_next is None:
-                # legacy 行: ② 无守卫 + ③′ 变 working; 无前跳判据
-                if updating or status == 3:
-                    return "confirmed", "announce 在途"
-                if status == 2 and b_status is not None and b_status != 2:
-                    return "confirmed", "tracker 状态转为 working"
-                continue
-            # epoch 行: ② 在途直证(min 窗口守卫)
-            if updating or status == 3:
-                if b_min is None or b_min <= 0 or now >= b_min:
-                    return "confirmed", "announce 在途"
-                continue  # min 窗口未过期: updating 是推迟登记假瞬态, 落 pending
+                continue  # legacy 行: 无前跳判据(②在途直证已废, plan D3)
             # ③ 主判据: epoch 前跳(判定域限基线 status>=2 且 b_next 非空)
             na = t.get("next_announce")
             if na is not None and b_status is not None and b_status >= 2 and na > b_next + tol:

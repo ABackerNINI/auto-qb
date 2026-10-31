@@ -588,7 +588,7 @@ class WebUIRuntime:
     def check_pending(self) -> None:
         """每 tick 检查在途的强制汇报确认与推迟后台核实; 某 cmd_id 全部种子出结论后聚合写回执
 
-        逐 item 推进(判定链, 见 commands._verdict_reannounce 的五分支):
+        逐 item 推进(判定链, 见 commands._verdict_reannounce 的判定表·消解等待模型):
           item 级 deadline 超时 -> warn「未确认」(不再判「失败」) / store 快照 stopped 直判 ->
           qB 断连等待 / 调 _verdict_reannounce 出 confirmed(ok)/rejected(error)。
         全部 item 出结论后聚合三桶(D4=warn): 任一 error -> error; 否则任一 warn -> warn;
@@ -612,8 +612,8 @@ class WebUIRuntime:
                     # 超时落「未确认」(warn), 不与「失败」混淆; legacy 无 epoch 字段, 只承诺
                     # 「未观测到拒绝」的诚实标签
                     tail = (
-                        "旧版 qB 无 epoch 字段, 仅未观测到拒绝"
-                        if not it.get("epoch_mode") else f"{REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未观测到 epoch 前跳/在途/拒绝证据"
+                        "旧版 qB 无 epoch 字段, 仅未观测到拒绝" if not it.get("epoch_mode") else
+                        f"{REANNOUNCE_CONFIRM_TIMEOUT:.0f}s 内未观测到 working 转换/epoch 前跳/拒绝证据"
                     )
                     it["done"], it["status"], it["reason"] = True, "warn", RC_UNCONFIRMED_PREFIX + tail
                     continue

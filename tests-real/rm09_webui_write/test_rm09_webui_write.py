@@ -60,6 +60,7 @@ from auto_qb.webui.commands import (  # noqa: E402  回执文案契约单点(计
 from lib import app, instances, torrent  # noqa: E402
 from lib.bencode import encode  # noqa: E402
 from lib.net import local_host  # noqa: E402
+from lib.tracker import FakeTracker  # noqa: E402
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="本片断言含 Windows 特有语义(taskkill/盘符路径白名单)"),
@@ -75,7 +76,6 @@ SETTLED = {
 FAKE_TRACKER_HOST = local_host()
 ANNOUNCE = f"http://{FAKE_TRACKER_HOST}:1/announce"
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 绕 HTTP_PROXY(127.0.0.1 不走代理)
-
 
 # ---------------------------------------------------------------- 基座
 
@@ -352,12 +352,13 @@ def fake_one(
     piece_len: int = torrent.PIECE_LEN,
     paused: bool = False,
     sub: str = "src",
+    announce: str = ANNOUNCE,
 ) -> str:
-    """单文件假种子(带数据落盘; announce=本机死端口)。"""
+    """单文件假种子(带数据落盘; announce 默认本机死端口, 可传伪 tracker url)。"""
     savepath = case / sub
     os.makedirs(savepath, exist_ok=True)
     torrent.write_file(str(savepath / name), size, "random", name)
-    raw, ih = torrent.build_from_path(str(savepath / name), name, ANNOUNCE, piece_len)
+    raw, ih = torrent.build_from_path(str(savepath / name), name, announce, piece_len)
     _add_retry(qb, raw, str(savepath), ih)
     if paused:
         qb.pause(ih)
@@ -371,8 +372,9 @@ def fake_second_member(qb, savepath: Path, name: str, piece_len: int) -> str:
     return ih
 
 
-def fake_multi(qb, tname: str, files: list[tuple[str, int]], savepath: Path, salt: str,
-               piece_len: int = torrent.PIECE_LEN) -> str:
+def fake_multi(
+    qb, tname: str, files: list[tuple[str, int]], savepath: Path, salt: str, piece_len: int = torrent.PIECE_LEN
+) -> str:
     """多文件种子(子目录布局; RM04 同款造法)。files = [(含 tname 前缀的 posix 相对路径, 字节)]。"""
     blob = bytearray()
     for rel, size in files:
@@ -387,7 +389,10 @@ def fake_multi(qb, tname: str, files: list[tuple[str, int]], savepath: Path, sal
         "piece length": piece_len,
         "pieces": pieces,
         "private": 1,
-        "files": [{"path": rel.split("/")[1:], "length": size} for rel, size in files],
+        "files": [{
+            "path": rel.split("/")[1:],
+            "length": size
+        } for rel, size in files],
     }
     ih = hashlib.sha1(encode(info)).hexdigest()
     raw = encode({"info": info, "comment": "auto-qb real-machine test (fake seed)", "announce": ANNOUNCE})
@@ -454,20 +459,24 @@ def test_rm09_02_delete_two_modes(clean_fakes):
         dir_a, dir_b = case / "data_a", case / "data_b"
         for d in (dir_a, dir_b):
             os.makedirs(d, exist_ok=True)
-        raw_a, ih_a = torrent.build_from_path(str(torrent.write_file(str(dir_a / "rm09b_a.bin"), 256 * 1024)),
-                                              "rm09b_a.bin", ANNOUNCE)
-        raw_b, ih_b = torrent.build_from_path(str(torrent.write_file(str(dir_b / "rm09b_b.bin"), 256 * 1024)),
-                                              "rm09b_b.bin", ANNOUNCE)
+        raw_a, ih_a = torrent.build_from_path(
+            str(torrent.write_file(str(dir_a / "rm09b_a.bin"), 256 * 1024)), "rm09b_a.bin", ANNOUNCE
+        )
+        raw_b, ih_b = torrent.build_from_path(
+            str(torrent.write_file(str(dir_b / "rm09b_b.bin"), 256 * 1024)), "rm09b_b.bin", ANNOUNCE
+        )
         file_a, file_b = dir_a / "rm09b_a.bin", dir_b / "rm09b_b.bin"
 
         # 经 WebUI add 端点入列(顺带覆盖 add 收据形态; save_path 逐条给 —— 两枚各自独立落点目录)
         for raw, ih, save_path, tag in ((raw_a, ih_a, str(dir_a), "A"), (raw_b, ih_b, str(dir_b), "B")):
-            r = post_cmd(port, "/api/torrents/add", {
-                "files_b64": [base64.b64encode(raw).decode("ascii")],
-                "save_path": save_path,
-                "tags": [TAG],
-                "paused": False,
-            })
+            r = post_cmd(
+                port, "/api/torrents/add", {
+                    "files_b64": [base64.b64encode(raw).decode("ascii")],
+                    "save_path": save_path,
+                    "tags": [TAG],
+                    "paused": False,
+                }
+            )
             rc = wait_cmd(port, r["cmd_id"], desc=f"add({tag}) 回执")
             assert rc["status"] == "ok", f"add({tag}) 回执非 ok: {rc}"
         settle(qb, ih_a)
@@ -547,13 +556,17 @@ def test_rm09_03_bulk_mixed_and_gates(clean_fakes):
 
 
 def test_rm09_04_reannounce_three_states(clean_fakes):
-    """[RM09-04] 强制汇报回执三态: not working / 非活跃忽略 / 最小间隔推迟(确认跟踪全窗)
+    """[RM09-04] 强制汇报回执三态: not working / 非活跃忽略 / 成功 ok + 窗内推迟(消解等待模型全链)
 
-    前置: 基座 + 活跃(stalledUP)/暂停(stoppedUP)假种子各 1; min 间隔基线由首次 reannounce 建立。
-    副作用: reannounce_pending 账(内存态); 假种子对死端口 announce 尝试(零外连)。
-    回滚: real-fake 种子删净; 产品停机清内存账。
-    失败判据: 活跃+死端口回了成功语义(检查 announce 是否真死端口); 暂停种子也进确认跟踪;
-              三前缀互串(分档逻辑分叉); 回执永不写(reannounce_pending 泄漏)。
+    前置: 基座 + 活跃(stalledUP)/暂停(stoppedUP)假种子各 1(死端口) + 伪 tracker 假种子 1
+    (interval=1800, 成功后 min 在未来); min 间隔基线由实际 announce 建立。
+    副作用: reannounce_pending 账(内存态); 假种子对死端口/本地伪 tracker announce(零外连)。
+    回滚: real-fake 种子删净; 伪 tracker 停机; 产品停机清内存账。
+    失败判据: 活跃+死端口回了成功语义(检查 announce 是否真死端口); 可达 tracker 强制汇报不落 ok;
+              暂停种子也进确认跟踪; 三前缀互串(分档逻辑分叉); 回执永不写(pending 泄漏)。
+    注: 旧③「死端口行窗内二次 -> 推迟」在任何诚实判定下不可满足(min_announce 发送时即赋值、
+    无响应不改写, 死端口行 min 恒在过去, 推迟分支不可达; 首跑实测落 error=再次被拒的诚实标签),
+    推迟与 ok 两态改由伪 tracker 成功行承载(plan 26-10-31-2354 步3)。
     """
     with product_case("rm09_04") as (case, port, _proc):
         qb = clean_fakes
@@ -562,8 +575,9 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
         settle(qb, h_active)
         settle(qb, h_paused)
         wait_state(qb, h_active, "stalledUP", desc="活跃对照")
-        wait_until(lambda: str((qb.torrent(h_paused) or {}).get("state", "")).startswith("stopped"), 30,
-                   "暂停对照未进入 stopped 态")
+        wait_until(
+            lambda: str((qb.torrent(h_paused) or {}).get("state", "")).startswith("stopped"), 30, "暂停对照未进入 stopped 态"
+        )
         # 快照状态也要到位(reannounce 非活跃闸读快照 state, 滞后 1-2 拍会误落「非活跃忽略」)
         wait_in_store_state(port, h_active, "stalledUP")
         wait_in_store(port, h_active, h_paused)
@@ -572,7 +586,11 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
         r1 = post_cmd(port, f"/api/torrents/{h_active}/reannounce")
         rc1 = wait_cmd(port, r1["cmd_id"], timeout=50, desc="reannounce(活跃) 回执")  # 确认窗最长 30s + 余量
         assert rc1["status"] == "error", f"活跃+死端口应落失败桶: {rc1}"
-        assert str(rc1.get("error", "")).startswith(RC_FAIL_PREFIX), f"失败前缀不对: {rc1}"
+        # 聚合回执 error = 三桶计数文案 + 原因拼接, 不以 RC_FAIL_PREFIX 开头; 逐目标原因在 truth.results
+        # (§2.14: 断言咬 status 桶 + 前缀, 位置咬对 —— 首跑实测修正, 原 startswith 咬错字段)
+        assert RC_FAIL_PREFIX in str(rc1.get("error", "")), f"失败前缀不对: {rc1}"
+        reasons1 = [str(r.get("reason", "")) for r in rc1.get("truth", {}).get("results", [])]
+        assert any(s.startswith(RC_FAIL_PREFIX) for s in reasons1), f"逐目标原因缺失败前缀: {rc1}"
 
         # ② 暂停种子 → 非活跃前置闸(不发指令): 「未确认: 种子非活跃…」
         r2 = post_cmd(port, f"/api/torrents/{h_paused}/reannounce")
@@ -580,12 +598,38 @@ def test_rm09_04_reannounce_three_states(clean_fakes):
         assert rc2["status"] == "warn", f"暂停种子应落未确认桶(warn): {rc2}"
         assert rc2.get("error", "") == RC_UNCONFIRMED_PREFIX + REANNOUNCE_INACTIVE_SKIP, f"非活跃文案不对: {rc2}"
 
-        # ③ 同活跃种子窗内二次 reannounce → 最小间隔未过期, 推迟(确认跟踪 + 后台核实)
-        r3 = post_cmd(port, f"/api/torrents/{h_active}/reannounce")
-        rc3 = wait_cmd(port, r3["cmd_id"], timeout=50, desc="reannounce(窗内二次) 回执")
-        assert rc3["status"] == "warn" and str(rc3.get("error", "")).startswith(RC_DEFERRED_PREFIX), (
-            f"窗内二次 reannounce 应落「已受理: 推迟至」: {rc3}"
-        )
+        # ③ 成功 ok 回执 + 窗内推迟: 旧期望「死端口行窗内二次 -> 推迟」在任何诚实判定下不可满足
+        # (min_announce 发送时即赋值、无响应不改写, 死端口行 min 恒过去, 推迟分支不可达; 首跑实测
+        # 落 error=再次被拒的诚实标签)。改用本地伪 tracker 成功行验两条: ok 回执(前跳正证据全链路)
+        # 与推迟早回执(D1, min 在未来)。
+        with FakeTracker(interval=1800) as tr_ok:
+            h_ok = fake_one(qb, case, "rm09d_ok.bin", sub="ok", announce=tr_ok.url)
+            settle(qb, h_ok)
+            wait_state(qb, h_ok, "stalledUP", desc="伪 tracker 种子应纯本地做种")
+            wait_in_store_state(port, h_ok, "stalledUP")
+            wait_until(lambda: tr_ok.count(h_ok) >= 1, 60, "伪 tracker 未收到首报")
+
+            def tracker_rows():
+                return [
+                    t for t in json.loads(qb._call(f"/torrents/trackers?hash={h_ok}").decode("utf-8"))
+                    if str(t.get("url", "")).startswith("http")
+                ]
+
+            wait_until(lambda: any(t.get("status") == 2 for t in tracker_rows()), 30, "伪 tracker 行未转 working")
+            # ③ 前跳幅度 = 本轮强制汇报与上次 announce 的发送间隔, 需 > TOL=3s 才算成功证据
+            wait_until(lambda: time.time() - tr_ok.announces[-1]["ts"] > 5, 15, "距上次 announce 间隔不足")
+            r_ok = post_cmd(port, f"/api/torrents/{h_ok}/reannounce")
+            rc_ok = wait_cmd(port, r_ok["cmd_id"], timeout=50, desc="reannounce(伪 tracker) 回执")
+            assert rc_ok["status"] == "ok", f"可达 tracker 强制汇报应落 ok 桶: {rc_ok}"
+            assert tr_ok.count(h_ok) >= 2, "ok 回执前强制汇报应真的发起了一次 announce"
+            # 窗内二次: min_e = 上次成功响应的 min_interval(1800s) 在未来 -> 「已受理: 推迟至」早回执
+            r4 = post_cmd(port, f"/api/torrents/{h_ok}/reannounce")
+            rc4 = wait_cmd(port, r4["cmd_id"], timeout=20, desc="reannounce(窗内二次) 回执")
+            # 聚合 error = 计数文案开头(同①), 前缀断言咬包含 + truth.results 逐目标 reason
+            assert rc4["status"] == "warn" and RC_DEFERRED_PREFIX in str(rc4.get("error", "")
+                                                                        ), (f"窗内二次 reannounce 应落「已受理: 推迟至」: {rc4}")
+            reasons4 = [str(r.get("reason", "")) for r in rc4.get("truth", {}).get("results", [])]
+            assert any(s.startswith(RC_DEFERRED_PREFIX) for s in reasons4), f"逐目标原因缺推迟前缀: {rc4}"
 
 
 def test_rm09_05_move_rename_renamefs(clean_fakes):
@@ -611,8 +655,7 @@ def test_rm09_05_move_rename_renamefs(clean_fakes):
         r1 = post_cmd(port, f"/api/torrents/{h}/location", {"location": str(dst)})
         rc1 = wait_cmd(port, r1["cmd_id"], desc="location 回执")
         assert rc1["status"] == "ok", f"location 回执非 ok: {rc1}"
-        wait_until(lambda: norm((qb.torrent(h) or {}).get("save_path", "")) == norm(dst), 30,
-                   "qB save_path 未变到新目录")
+        wait_until(lambda: norm((qb.torrent(h) or {}).get("save_path", "")) == norm(dst), 30, "qB save_path 未变到新目录")
         assert (dst / "rm09epack" / "a.bin").is_file(), "新目录里没有数据文件(qB 没真搬)"
         wait_until(lambda: not (src / "rm09epack" / "a.bin").exists(), 30, "旧目录数据残留(qB 搬迁未收尾)")
 
@@ -623,8 +666,13 @@ def test_rm09_05_move_rename_renamefs(clean_fakes):
         wait_until(lambda: (qb.torrent(h) or {}).get("name") == "rm09e-renamed", 30, "qB name 未变")
 
         # ③ rename-fs: 文件名真变(torrents/files 回读)
-        r3 = post_cmd(port, f"/api/torrents/{h}/rename-fs",
-                      {"old_path": "rm09epack/a.bin", "new_path": "rm09epack/a2.bin", "is_folder": False})
+        r3 = post_cmd(
+            port, f"/api/torrents/{h}/rename-fs", {
+                "old_path": "rm09epack/a.bin",
+                "new_path": "rm09epack/a2.bin",
+                "is_folder": False
+            }
+        )
         rc3 = wait_cmd(port, r3["cmd_id"], desc="rename-fs 回执")
         assert rc3["status"] == "ok", f"rename-fs 回执非 ok: {rc3}"
 
@@ -742,7 +790,14 @@ def test_rm09_08_keys_roundtrip(clean_fakes):
         assert orig == {"schema_version": 1, "template": "aqb-default", "overrides": {}}, f"初始 keys 非默认表: {orig}"
         assert not keys_file.exists(), "从未自定义时不应有 keys 落盘文件"
 
-        doc = {"schema_version": 1, "template": "aqb-default", "overrides": {"play_pause": "Ctrl+KeyQ", "open_settings": ""}}
+        doc = {
+            "schema_version": 1,
+            "template": "aqb-default",
+            "overrides": {
+                "play_pause": "Ctrl+KeyQ",
+                "open_settings": ""
+            }
+        }
         echoed = web_req(port, "PUT", "/api/keys", doc)
         assert echoed == doc, f"PUT 回显与提交不一致: {echoed}"
         back = web_req(port, "GET", "/api/keys")
@@ -751,12 +806,26 @@ def test_rm09_08_keys_roundtrip(clean_fakes):
 
         # 负向①: 归一化串不符(小写/多段) → 422 且磁盘零触碰
         snap = keys_file.read_bytes()
-        code1, p1 = web_err(port, "PUT", "/api/keys", {"schema_version": 1, "template": "aqb-default", "overrides": {"x": "ctrl+q"}})
+        code1, p1 = web_err(
+            port, "PUT", "/api/keys", {
+                "schema_version": 1,
+                "template": "aqb-default",
+                "overrides": {
+                    "x": "ctrl+q"
+                }
+            }
+        )
         assert code1 == 422, f"非法归一化串应 422: {code1} {p1}"
         assert keys_file.read_bytes() == snap, "422 拒收竟触碰了磁盘(高优)"
 
         # 负向②: schema_version 不识别 → 422
-        code2, _p2 = web_err(port, "PUT", "/api/keys", {"schema_version": 2, "template": "aqb-default", "overrides": {}})
+        code2, _p2 = web_err(
+            port, "PUT", "/api/keys", {
+                "schema_version": 2,
+                "template": "aqb-default",
+                "overrides": {}
+            }
+        )
         assert code2 == 422, f"未知 schema_version 应 422: {code2}"
 
         # 还原快照原值并核齐
@@ -820,8 +889,13 @@ def test_rm09_10_transfer_unknown_target(clean_fakes):
 
         # 未知 target: 路由层预检 400 拒收不入队(run 要求启用 / test 只要求存在 —— 都卡在「不存在」)
         for path, body, tag in (
-            ("/api/transfer/test", {"target_id": "rm09-nope"}, "test"),
-            ("/api/transfer/run", {"target_id": "rm09-nope", "hashes": [h]}, "run"),
+            ("/api/transfer/test", {
+                "target_id": "rm09-nope"
+            }, "test"),
+            ("/api/transfer/run", {
+                "target_id": "rm09-nope",
+                "hashes": [h]
+            }, "run"),
         ):
             code, p = web_err(port, "POST", path, body)
             assert code == 400, f"transfer/{tag} 未知 target 应 400: {code} {p}"
