@@ -123,6 +123,28 @@
 > ⚠️ **`--no-data` 不是"缺文件态"**: 实测 qB 停在 `stalledDL` / progress 0, 不会进 `missingFiles`(`recheck` 也不进)。
 > 要测"文件被删"这条路径, 请在用例里加完种子再删文件。
 
+### 2.7 产品进程的硬事实(`tests-real/lib/app.py`, RM01 实测)
+
+要测产品自身(而不是 qB)时, 起停一律走 `lib/app.py`。四条语义与直觉不同, 不记住会白烧一轮:
+
+| 事实 | 现场表现 | 正确做法 |
+|---|---|---|
+| **`--dry-run` 不启 WEB 服务** | `webui/module.py:66` 是 `if dry_run or not web.enabled: return` —— 等 40s 也不会有"WEB UI 已启动" | WEB 类用例(启动日志/端口/token)**不带** dry-run; 只验进程边界才带 |
+| **Windows 上外部 SIGTERM 等于强杀** | `Popen.send_signal(SIGTERM)` 走 `TerminateProcess`: 退出码 1、`finally` 一行不跑、日志无收尾。`CTRL_C_EVENT` 也投递不到(子进程无控制台) | 优雅退出只能**进程内** `signal.raise_signal(SIGTERM)` 触发(`start(graceful_after=N)`); 或到 Linux 上从外部发 |
+| **配置必须写 `schema_version: 5`** | 否则每次启动走 v1→v5 迁移; 非 dry-run 时还会**改写**配置文件并留备份, 把临时目录搅浑 | `write_config()` 已带; 手写配置时别忘 |
+| **`Popen.pid` ≠ 进程实际 pid** | uv 给 venv 的 `Scripts/python.exe` 是 47KB **启动器**(基解释器 91KB), 真解释器是它的子进程 ⇒ 锁 meta / 日志里的 pid 与 `Popen.pid` 对不上 | 按 pid 断言用 `real_pid()`(读锁 meta); 杀进程用 `taskkill /F /T` —— 不带 `/T` 只杀启动器, 孤儿进程继续持锁, 用例就"测了个寂寞" |
+
+**GUI 栈依赖解释器带 Tk**(RM01 实测, 一次踩透): `tkinter` 是 CPython 标准库的一部分(Tcl/Tk 编译产物), **不是 PyPI 包, 不可能出现在 `uv.lock` 里** —— 所以 `env.sync` 全绿也不代表能跑界面。`customtkinter` / `pystray` 装得上, 但前者在 `__init__.py:6` 就 `from tkinter import ...`。
+判据一句话: `python -c "import customtkinter"` 过不了 ⇒ 这个 venv 的 GUI 面整体不可用, 任何"界面看起来对"的结论都只来自单测打桩。
+本机曾因此踩坑: `.venv` 建在宿主自带的裁剪版 Python(`H:\Programs\AutoClaw\resources\python`, 无 `_tkinter.pyd`/`tcl/`)上, 已改为 uv 管理的 CPython 3.13.15(带 Tk 8.6)重建。换机器/重建 venv 时先跑这一句。
+
+两个探针口径(踩过才写的):
+
+- **`port_free()` 不许用 `SO_REUSEADDR`**: Windows 上它的语义是"允许抢占别人正在监听的端口", `bind` 成功 ≠ 端口空闲。实测因此谎报"已释放", 紧接着重启撞 `Errno 10048`。裸 `bind` 才是可信探针。
+- **端口别复用**: 上一条用例刚停的进程, 监听套接字要过一小会儿才真正消失 —— 整片连跑时后一条抢到前一条刚释放的端口就 10048, 单跑不复现。`free_port()` 记会话内已用端口, 段(39000–39999)够大, 比 sleep 等它可靠。该段 39099 常被 WorkBuddy 自己的 `editor_sdk.exe` 占着, 探空会自动跳过。
+
+> 并行陷阱: `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` **不生效**。官方入口 `real.suite` 传 `-n 0` 没问题, 直跑 `pytest tests-real/...` 会互相抢端口 —— `rm01_startup/conftest.py` 用一把文件锁兜住, 后续片照抄。
+
 ## 03 种子层: L0 / L1 / L2
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |
@@ -250,6 +272,7 @@
 | 每轮计划 | `plans/<stamp>-plan-real-<片>.html` | 这一轮怎么测、为什么这么测(拍板即冻结) |
 | 每轮实测数字 | `testing/real-baselines/<stamp>-real-<片>.md` | 用例数 / 档位分布 / PASS-FAIL-BLOCKED / 基线 commit |
 | 用例 | `tests-real/` | 可复用的断言本体 |
+| 产品进程起停 | `tests-real/lib/app.py` | 临时配置生成 / 起停 / 抓日志 / 端口探空 / 注册表备份还原(见 §2.7) |
 | 手工造种子 | `tests-real/seed.py`(`real.seed*`) | 造/加/看/删假种子, 只服务手工探索, 不参与验收 |
 | 诊断工具(非用例) | `tests-real/tools/` | 卡住时的现场采集, 不参与验收 |
 | 命令 | `.commands/real/` | 守卫与运行入口 |

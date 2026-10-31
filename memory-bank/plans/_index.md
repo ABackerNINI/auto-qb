@@ -23,6 +23,7 @@
 
 ## Done
 
+- [26-10-31-0819] [真机实测 RM01 连接·认证·启动: 锁/端口/token/托盘/自启](26-10-31-0819-plan-rm01-startup.html) — `real-machine-rm01-startup`
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`

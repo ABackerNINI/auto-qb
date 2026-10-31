@@ -173,8 +173,8 @@
       <tr>
         <td><code>RM01</code></td>
         <td>连接·认证·启动</td>
-        <td><code>src/auto_qb/cli.py</code> · <code>tray/**</code> · <code>infra/autostart.py</code> · <code>infra/locking.py</code> · <code>webui/server/auth.py</code> · <code>webui/server/lifecycle.py</code> · <code>webui/server/factory.py</code></td>
-        <td>连不上 qB 的节流与提示 / token 原子落盘 / 端口与单实例锁 / 托盘菜单 / 开机自启</td>
+        <td><code>src/auto_qb/cli.py</code> · <code>src/auto_qb/tray/**</code> · <code>src/auto_qb/infra/autostart.py</code> · <code>src/auto_qb/infra/locking.py</code> · <code>src/auto_qb/webui/server/auth.py</code> · <code>src/auto_qb/webui/server/lifecycle.py</code> · <code>src/auto_qb/webui/server/factory.py</code></td>
+        <td>启动期提示与退出码(配置错/锁竞争干净退出) / token 原子落盘 / 端口与单实例锁 / 托盘菜单与双开唤起 / 开机自启</td>
         <td>L0·L1</td>
         <td>0.5 次</td>
         <td><span class="badge">待排期</span></td>
@@ -183,7 +183,7 @@
         <td><code>RM02</code></td>
         <td>主循环·调度·持久化</td>
         <td><code>core/qbmanager.py</code> · <code>core/taskqueue.py</code> · <code>core/state.py</code> · <code>core/module.py</code> · <code>infra/store_recovery.py</code></td>
-        <td>interval 真节拍 / 优雅退出落盘 / 非优雅终止的丢失窗口 / 热重载 / <code>queue_rebuilt</code> 相位</td>
+        <td>interval 真节拍 / 优雅退出落盘 / 非优雅终止的丢失窗口 / 热重载 / <code>queue_rebuilt</code> 相位 / 连不上 qB 的失败节流与重连退避(RM01 拍板 D1 移交)</td>
         <td>L1</td>
         <td>0.5 次</td>
         <td><span class="badge">待排期</span></td>
@@ -331,7 +331,11 @@
         <td><span class="badge go">已测(全绿)</span> L1/L2 已解锁</td>
         <td>计划 <code>plans/26-10-31-0705-plan-real-machine-test.html</code> · 切片 <code>testing/real-baselines/26-10-31-0738-real-RM00.md</code> · 缺陷: 无</td>
       </tr>
-      <tr><td><code>RM01</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
+      <tr>
+        <td><code>RM01</code></td><td>2026-10-31</td><td><code>95afcb84</code></td><td>0/1/7/2</td>
+        <td><span class="badge go">已测(全绿 9/9)</span> 托盘仅到 L1(L0 未目视)</td>
+        <td>计划 <code>plans/26-10-31-0819-plan-rm01-startup.html</code> · 切片 <code>testing/real-baselines/26-10-31-0831-real-RM01.md</code> · 缺陷: 无(观察项 1 条转 RM07)</td>
+      </tr>
       <tr><td><code>RM02</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
       <tr><td><code>RM03</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
       <tr><td><code>RM04</code></td><td>—</td><td>—</td><td>—</td><td><span class="badge">待排期</span></td><td>—</td></tr>
@@ -352,6 +356,9 @@
     <ul>
       <li>2026-10-31 06:41 — 建立, 状态 <strong>Open</strong>(常驻锚: 只要这套实测还在做, 它就停在 Open; 决定停做才置 <code>Dropped</code>)。首版落 11 片(RM00 基建 + RM01–RM10), 规程落在 <code>testing/real-machine.md</code>, 记录口径另开 <code>testing/real-baselines/</code>。</li>
       <li>2026-10-31 07:38 — <code>RM00</code> 实测完成: 三层守卫 / L1 正反向 / L2 双实例互传全绿, <strong>L1 与 L2 解锁</strong>, 后续片可直接引用。本轮把两处环境级卡点写进规程 §02.5(36596 监听端口与生产实例撞车、伪 tracker 不得回请求者自己)。下一片按排期顺序为 <code>RM01</code>。</li>
+      <li>2026-10-31 08:19 — <code>RM01</code> 排期开工, 计划 <code>plans/26-10-31-0819-plan-rm01-startup.html</code>。开工自检发现<b>片表 glob 缺陷</b>: RM01 行 7 条 glob 里 <code>tray/**</code> 零命中 —— 代码实际在 <code>src/auto_qb/tray/</code>(<code>app.py</code> 529 行), 属<b>glob 写漏前缀而非片失效</b>, 按规程 §05 规则 8 修正为 <code>src/auto_qb/tray/**</code>, 其余 6 条同步补全 <code>src/auto_qb/</code> 前缀。另发现验证面「连不上 qB 的节流与提示」的实现全在 <code>core/qbmanager.py</code>(属 RM02 glob), 节流归属待拍板(计划 D1)。</li>
+      <li>2026-10-31 08:31 — <code>RM01</code> 实测完成: <b>8 通过 / 1 阻塞</b>(14.4s), 档位 <code>0/0/7/2</code>。两条 L3 的红验真跑过(锁的「A 不在时必须能起」/ 端口释放的「强杀必须不干净」)。阻塞项 <code>RM01-09</code> 托盘双开: venv 解释器<b>缺 tkinter</b>(<code>No module named 'tkinter'</code>), 解锁条件 = 换带 Tk 的解释器。零业务缺陷。三条进程边界事实写进 <code>lib/app.py</code>(--dry-run 不启 WEB / Windows 外部 SIGTERM 等于强杀 / 配置须带 schema_version)。节流验证面按 D1 移交 RM02。观察项 1 条(未配流量源时启动打空路径 WARNING)转 RM07。</li>
+      <li>2026-10-31 08:53 — <code>RM01</code> 复跑<b>全绿 9/9</b>(27.4s, 连跑三轮无 flaky), 档位 <code>0/1/7/2</code>。阻塞项解除的根因不是 uv.lock: <code>tkinter</code> 属 CPython 标准库(Tcl/Tk 编译产物), 不可能出现在 lock 里 —— 真因是 <code>.venv</code> 的基解释器用了宿主 <code>H:\Programs\AutoClaw\resources\python</code>(裁剪版 3.13.12, 无 <code>_tkinter.pyd</code>/<code>tcl/</code>), 导致 <code>import customtkinter</code> 直接炸在 <code>__init__.py:6</code> —— <b>这个 venv 里 GUI 栈一直是死的</b>, 不只是托盘用例。已按 uv 管理的 CPython 3.13.15 重建 venv(带 Tk 8.6)+ <code>uv sync</code>; 重建后 <code>tests/</code> 4302 passed / 覆盖率 99.05%。另发现 <b><code>Popen.pid</code> ≠ 进程实际 pid</b>(venv 的 <code>python.exe</code> 是 47KB 启动器, 真解释器是子进程) ⇒ 按 pid 断言改用 <code>real_pid()</code>、强杀改 <code>taskkill /F /T</code>。</li>
     </ul>
   </section>
 

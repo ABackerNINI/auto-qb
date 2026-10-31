@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>真机实测 RM01 连接·认证·启动: 锁/端口/token/托盘/自启</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-machine-rm01-startup">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-0819">
+<meta name="doc-updated" content="26-10-31-0831">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-machine-rm01-startup</div>
+<h1>真机实测 RM01 连接·认证·启动: 单实例锁 / 端口 / token / 托盘 / 自启</h1>
+<p class="lede">RM00 解锁 L1/L2 之后的第一片业务实测。<b>这片测的全是「进程活着才有意义」的东西</b> —— 锁有没有真拦住第二个实例、强杀之后锁还回不回得来、端口被占时是明说还是装死、token 落了盘但有没有漏进日志、注册表里那行自启到底长什么样。单测里这些全是打桩, 只有真机上是真值。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0819 · <b>doc-updated</b> 26-10-31-0831 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 规程 <code>memory-bank/testing/real-machine.md</code> §04/§06/§08; 排期锚 <code>issues/26-10-31-0641-test-real-machine-test-standing.html</code> §03 的 RM01 行; 上一片基线 <code>testing/real-baselines/26-10-31-0738-real-RM00.md</code>; 用户指令「现在排 RM01」。
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么</b>: 规程 §04 把 RM01 定为「连接·认证·启动」, 预算 0.5 次 —— 它是片表里<b>唯一一片验证对象全是进程边界</b>的: 文件锁、监听端口、注册表、token 文件、托盘进程。这些能力的共同点是<b>单测只能打桩</b>(mock filelock / mock winreg / mock uvicorn), 而它们的真实失败模式恰恰在桩之外 —— 强杀后句柄有没有真释放、端口释放要不要等、注册表写进去的值别人读出来是不是那个形态。</p>
+<p><b>做到什么算成</b>(四条, 缺一条不算完):</p>
+<ol>
+  <li><b>9 条用例全部有结论</b> —— PASS 或 BLOCKED(写明原因与解锁条件), 不允许「没测但记成通过」。</li>
+  <li><b>至少 2 条到 L3</b>(红绿双验): 去掉前置条件后断言必须变红。本轮选 RM01-02(锁)与 RM01-07(端口释放) —— 这两条最容易写成「永远绿」的假断言。</li>
+  <li><b>环境复原</b>: <code>HKCU\...\Run\auto-qb</code> 回到原值(原本不存在则仍不存在)、无残留产品进程、临时目录清空、36595 的 8 个真实种子仍全部 <code>stoppedUP</code>。</li>
+  <li><b>记录落地</b>: 基线切片 <code>testing/real-baselines/&lt;stamp&gt;-real-RM01.md</code> + 锚 §07 该行 + 片表改动记 §08。</li>
+</ol>
+<p><b>不变量(违反即中止, 不是警告)</b>: ① 产品进程一律连 <b>36596</b>(空库)且带 <code>--dry-run</code>, 不连 36595; ② 不碰 36595 的 8 个真实种子; ③ 注册表<b>只动</b> <code>HKCU\Software\Microsoft\Windows\CurrentVersion\Run\auto-qb</code> 一个值, 先备份后恢复, 失败也走 <code>finally</code> 恢复; ④ 不改 <code>src/</code>(发现缺陷入池, 当轮不修); ⑤ WEB 端口一律用探空后的高端口, 不占 36595/36596, 也不碰生产 qB 的 WEB 端口。</p>
+
+<h2><span class="no">§02</span>开工自检: 定片 / glob / 漂移 / 环境</h2>
+<p>按规程 §06 的顺序做完四项, 结果如下(两项有发现):</p>
+<table>
+  <tr><th>项</th><th>结果</th></tr>
+  <tr><td><b>定片</b></td><td>RM01 = 连接·认证·启动, 预算 0.5 次, 排期顺序第 2 位(紧接 RM00)</td></tr>
+  <tr><td><b>漂移体检</b></td><td><b>首轮, 无漂移面</b> —— RM01 从无基线 commit, 按规程 §07「写不出 commit 的片从首轮重来」</td></tr>
+  <tr><td><b>glob 自检</b></td><td>7 条 glob 命中 6 条; <code>tray/**</code> <b>零命中</b> —— 实际代码在 <code>src/auto_qb/tray/</code>(<code>__init__.py</code> 27 行 + <code>app.py</code> 529 行)。判定: <b>glob 写漏前缀, 不是片失效</b>, 改成 <code>src/auto_qb/tray/**</code> 并记 §08</td></tr>
+  <tr><td><b>环境自检</b></td><td><code>real.guard</code> 两条 <code>[ok]</code>: 36595 pid=10204 / 36596 pid=39300, 均 <code>firewalled</code>; 真实种子 8 个全部暂停; 36596 空库</td></tr>
+  <tr><td><b>存量清单</b></td><td><code>checklists/manual-walkthrough.md</code> 的 15 条<b>全是 WebUI 观感项</b>, 无托盘/自启/锁/token 条目 ⇒ 本片<b>零迁移</b>(规程 §05 规则 9 空跑)</td></tr>
+</table>
+<p><b>边界发现(已拍板, 见 D1)</b>: 锚 §03 给 RM01 写的验证面里有「连不上 qB 的<b>节流</b>与提示」, 但节流的实现全在 <code>core/qbmanager.py</code> —— <code>_note_conn_failed</code>(仅状态转换时记一次)、<code>retry_warned</code>(重试只说明白一次)、<code>_reconnect_due</code>(2×→4× 指数退避)。那个文件是 <b>RM02 的 glob</b>, 且节流与主循环节拍/重连退避同源。处置: <b>节流归 RM02, RM01 只测「启动期的提示形态与退出码」</b>(配置错 → stderr 一行 + 退出码 1 + 无堆栈), 锚 §03 两行措辞已同步改。</p>
+
+<h2><span class="no">§03</span>本片用例清单(9 条)</h2>
+<p>全部落在 <code>tests-real/rm01_startup/</code>, 编号 <code>RM01-01..09</code>; 起停产品进程的公共件进 <code>tests-real/lib/app.py</code>。档位按规程 §08; 「前置」只写种子层与进程状态。</p>
+<table>
+  <tr><th>id</th><th>用例</th><th>档位</th><th>前置</th><th>期望(失败判据)</th></tr>
+  <tr><td><code>RM01-01</code></td><td>配置缺失 fail-fast</td><td>L2</td><td>无</td><td>退出码 1; stderr 含「配置错误」; <b>不含 <code>Traceback</code></b>(AutoQbError 走干净通道)</td></tr>
+  <tr><td><code>RM01-02</code></td><td>单实例锁拒绝第二实例</td><td><b>L3</b></td><td>实例 A 持锁</td><td>B 退出码 1 + stderr 含「另一实例已持有锁」与 A 的 PID; <code>state.lock.meta.json</code> 的 <code>pid</code> == A。<b>红验</b>: 停掉 A 后同样命令必须能起来(否则「被拒」这条断言是假的)</td></tr>
+  <tr><td><code>RM01-03</code></td><td>只读模式不持锁</td><td>L2</td><td>A 持锁</td><td><code>--export-torrents_info</code> 在 A 持锁时能跑(stderr 无锁错误) —— 只读出口与正常实例可并发</td></tr>
+  <tr><td><code>RM01-04</code></td><td>强杀后锁自动释放</td><td>L2</td><td>A 持锁</td><td><code>taskkill /F</code> 后<b>立刻</b>起 B 能持锁成功(不报锁竞争) —— 验 filelock 句柄随进程释放, 不做 PID 存活检测也不留死锁</td></tr>
+  <tr><td><code>RM01-05</code></td><td>启动日志 + token 落盘且不泄漏</td><td>L2</td><td>无</td><td>日志含「WEB UI 已启动: http://localhost:&lt;port&gt;」; <code>web.token</code> 存在且长度 ≥32; <b>日志全文不含 token 值</b>(只提示文件路径)</td></tr>
+  <tr><td><code>RM01-06</code></td><td>端口被占 → 显式失败不装死</td><td>L2</td><td>先用 socket 占住 <code>web.port</code></td><td>日志含「WEB UI 启动失败」+ 端口号; <b>进程不退出、不崩</b>(主循环继续); 释放端口后重启成功</td></tr>
+  <tr><td><code>RM01-07</code></td><td>SIGTERM 优雅退出 + 同端口立刻重启</td><td><b>L3</b></td><td>无</td><td>SIGTERM 后 5s 内退出码 0(走 <code>finally</code> 停 WEB/落盘/放锁); <b>立刻</b>用同端口重启能监听成功(无 Errno 10048)。<b>红验</b>: 换 <code>taskkill /F</code> 强杀后立刻重启 —— 若也能成, 说明这条断言没在验「优雅」, 要改成验退出码与落盘</td></tr>
+  <tr><td><code>RM01-08</code></td><td>开机自启注册表往返</td><td>L2</td><td>备份 <code>Run\auto-qb</code> 现值</td><td><code>enable</code> 后值 == <code>"&lt;解释器&gt;" "&lt;配置绝对路径&gt;" --tray</code> 形态且 <code>is_enabled</code> 为真; <code>disable</code> 后值消失; 再 <code>disable</code> 幂等不抛。收尾恢复原值</td></tr>
+  <tr><td><code>RM01-09</code></td><td>托盘双开唤起已运行实例</td><td>L1 + L0</td><td>GUI 会话; A 以 <code>--tray</code> 运行</td><td>L1: B 以 <code>--tray</code> 启动后<b>退出码 0</b>(不是报锁错), 且 A 的 IPC 收到 <code>show</code>; L0: 人眼确认 A 的窗口真的弹出</td></tr>
+</table>
+<p><b>受约束 2 影响而跳过的条目</b>: <b>无</b>。本片全部指向 36596 空库且带 <code>--dry-run</code>, 不需要活跃种子, 不触发「真实种子必须 paused」那条冲突 —— 这也是把它排在 RM00 之后立刻做的原因之一(0.5 次的片不该再被解锁条件拖一轮)。</p>
+<p><b>本轮档位升级</b>(规程 §08 硬要求): RM01-02 与 RM01-07 <b>直接按 L3 建</b>(带红验对照组)。首轮没有存量用例可「升一档」, 所以把加强放在新建时就做 —— 这两条正是最容易被写成恒绿的: 锁断言容易写成「B 报错就算过」(B 因别的原因报错也绿), 端口释放容易写成「重启成功就算过」(重启到别的端口也绿)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td>S1</td><td>片表修正(<code>tray/**</code> → <code>src/auto_qb/tray/**</code>; 节流验证面移交 RM02) + 本计划拍板冻结</td><td>锚 §03 两行更新 + §08 记一行; <code>doc.drift</code>/<code>kb.check</code> 全绿</td></tr>
+  <tr><td>S2</td><td><code>tests-real/lib/app.py</code>: 临时配置生成(指向 36596 / 独立 <code>data_dir</code> / 探空 web.port)、起停产品进程、抓日志、注册表备份恢复</td><td>能起一个产品进程并等到「WEB UI 已启动」; 停掉后无残留</td></tr>
+  <tr><td>S3</td><td>RM01-01..07(进程边界七条)</td><td>七条全绿; 两条 L3 的红验各自看到红</td></tr>
+  <tr><td>S4</td><td>RM01-08 注册表往返 / RM01-09 托盘双开</td><td>注册表收尾回原值; 托盘 L0 有目视记录(或 BLOCKED 写明)</td></tr>
+  <tr><td>S5</td><td>基线切片 + 锚 §07/§08 + 环境复原核对</td><td>切片落盘; <code>real.guard</code> 两实例仍 <code>[ok]</code>; 临时目录与进程零残留</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>三项已全部拍板</b>(2026-10-31 08:21, 见 §06 D1–D3), 无遗留项。计划自此冻结 —— 执行中如遇与冻结内容冲突的事实, 记 §10 变更记录, 不改口径。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D0</td><td>用户「现在排 RM01」= 授权本轮执行(含起停产品进程、写注册表自启项、起托盘)</td><td>2026-10-31</td></tr>
+  <tr><td>D1</td><td><b>节流归 RM02</b>: <code>core/qbmanager.py</code> 里的失败节流/退避随 RM02(主循环·调度)一起测; RM01 只验启动期提示形态与退出码。锚 §03 的 RM01/RM02 两行措辞同步改</td><td>2026-10-31</td></tr>
+  <tr><td>D2</td><td><b>RM01-09 做 L1, L0 如实记</b>: 只断言「第二实例退出码 0 + 第一实例 IPC 收到 show」; 人眼目视部分记「未确认」, 不硬撑成 PASS; GUI 起不来则整条 BLOCKED</td><td>2026-10-31</td></tr>
+  <tr><td>D3</td><td><b>WEB 端口取 39000–39999 随机探空</b>, 与 36595/36596/生产 WEB 端口互不重叠; 端口写进临时配置, 用完即弃</td><td>2026-10-31</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>产品进程真动了 36596 之外的东西</td><td>配置误指 36595 / 忘加 <code>--dry-run</code></td><td>临时配置由 <code>lib/app.py</code> <b>生成</b>而非手写, 端口写死 36596; 用例开头断言配置里的 <code>qbittorrent.port == 36596</code>, 不符直接红</td></tr>
+  <tr><td>注册表用例把用户的自启项搞丢</td><td>备份失败 / 中途异常</td><td>备份失败 ⇒ 整条 BLOCKED, 不写; 恢复走 <code>finally</code>; 收尾核对「原值不存在则仍不存在」</td></tr>
+  <tr><td>强杀后锁文件残留, 第二实例永远起不来</td><td><code>taskkill /F</code> 后 B 报锁竞争</td><td>这是<b>真缺陷</b>(filelock 句柄未随进程释放) ⇒ 入池 bug, 当轮不修; 用例记 FAIL 并附 lock/meta 内容</td></tr>
+  <tr><td>托盘进程起不来 / 起了没窗口</td><td>无 GUI 会话、pystray 异常</td><td>用 <code>explorer.exe</code> 拉起; 仍失败 ⇒ RM01-09 记 BLOCKED(写明「需桌面会话」), 不降级成 PASS</td></tr>
+  <tr><td>WEB 端口被别的进程抢走(测试期间)</td><td>端口探空与 bind 之间有竞态</td><td>探空后立刻起; 若仍撞 ⇒ 用例重试一次并换端口, 两次都撞记 BLOCKED</td></tr>
+  <tr><td>启动类日志用 WARNING 触发通知轰炸</td><td><code>notify</code> 开着</td><td>临时配置里关 <code>notify</code>; 顺带核「启动成功/失败」两条日志级别是否合规(INFO/ERROR)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0819</span> 首版: 依锚 §03 RM01 行 + 开工自检四项成稿。两处发现写进 §02: <code>tray/**</code> glob 漏前缀、节流验证面跨到 RM02 的 glob。用例 9 条, 其中 2 条按 L3 建(带红验)。</li>
+  <li><span class="tag">R1 · 26-10-31-0831</span> 执行完毕(<b>8 通过 / 1 阻塞</b>, 14.4s, 档位 0/0/7/2)。三处与冻结内容冲突的事实, 按"不改口径、只记变更"处理:
+    ① <b><code>--dry-run</code> 不启 WEB 服务</b>(<code>webui/module.py:66</code>), 故 §01 不变量①"一律带 <code>--dry-run</code>"对 RM01-05/06/07 不成立 —— 这三条改为**不带** dry-run(仍只连 36596 空库), 其余六条照旧带;
+    ② <b>Windows 上无法从外部投递 SIGTERM</b>(<code>Popen.send_signal</code> 走 TerminateProcess; Ctrl+C 因无控制台也到不了), RM01-07 的"发 SIGTERM"改为**进程内 <code>raise_signal</code>** 触发同一个 handler —— 验的仍是 handler 与收尾路径, 但验不到信号投递机制, 已在切片 §04-2 写明;
+    ③ <b>RM01-09 阻塞</b>: venv 解释器缺 tkinter, 托盘起不来, 记 BLOCKED(不降级成 PASS), 解锁条件写进切片 §04-5。
+    另: <code>port_free()</code> 的 <code>SO_REUSEADDR</code> 在 Windows 上会谎报端口空闲(导致 10048 假红), 已改为裸 bind; 端口改为**会话内不复用**。</li>
+  <li><span class="tag">R2 · 26-10-31-0853</span> <b>复跑全绿 9/9</b>(27.4s, 连跑三轮), 档位改 <code>0/1/7/2</code> —— R1 记的阻塞项解除。三件事:
+    ① <b>托盘阻塞的根因不是 uv.lock</b>: <code>tkinter</code> 是 CPython 标准库(Tcl/Tk 编译产物), 不进 lock; 真因是 <code>.venv</code> 基解释器用了宿主裁剪版 3.13.12(<code>H:\Programs\AutoClaw\resources\python</code>, 无 <code>_tkinter.pyd</code>/<code>tcl/</code>), 于是 <code>import customtkinter</code> 在 <code>__init__.py:6</code> 就炸 —— <b>整个 GUI 栈在这个 venv 里一直是死的</b>, 不只影响托盘用例;
+    ② 处置: 按 uv 管理的 CPython 3.13.15(带 Tk 8.6)<code>uv venv --clear</code> 重建 + <code>uv sync</code>; 重建后 <code>tests/</code> 4302 passed / 覆盖率 99.05%, RM01 九条全绿;
+    ③ 新事实: <b><code>Popen.pid</code> ≠ 进程实际 pid</b>(venv 的 <code>python.exe</code> 是 47KB 启动器, 真解释器是其子进程) ⇒ 按 pid 断言改用 <code>real_pid()</code>(读锁 meta), 强杀改 <code>taskkill /F /T</code>(不带 <code>/T</code> 会留孤儿继续持锁, 用例"测了个寂寞")。
+    RM01-09 仍只到 <b>L1</b>: L0(窗口是否真弹到屏幕上)未目视, 按 D2 如实记。</li>
+</ul>
+
+</div>
+</body>
+</html>
