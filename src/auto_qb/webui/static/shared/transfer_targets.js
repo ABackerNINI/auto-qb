@@ -17,13 +17,14 @@
  *
  * 树形状(与磁盘 YAML 同构, 标量全为字符串 —— yaml.BaseLoader 语义):
  *   config.web.transfer.targets = [ { name, type("qb"|"tr"), base_url, username, password,
- *     enabled("true"/"false"), after_state("keep"|"paused"), skip_check("true"/"false"),
+ *     api_key, enabled("true"/"false"), after_state("keep"|"paused"), skip_check("true"/"false"),
  *     fields: { <字段键>: "true"/"false" }, path_map: [ {from, to}, ... ] }, ... ]
  *   合法性全由后端 validate_config 聚合把关(保存 400 拦下), 前端不做平行校验(两份规则必漂移)。
  *
- * 密码处理(计划 D4: 明文落 config.yml, UI 遮显):
- *   树里 targets[].password 是明文, 但**绝不回显** —— 输入框恒显空串, 占位符只提示"已设置/未设置";
- *   键入即整值写树(留空不动键 = 不修改)。自动填充三件套照抄 xtpl.html 密码分支(2026-10-20 报障):
+ * 密码/API Key 处理(计划 D4: 明文落 config.yml, UI 遮显; issue 26-11-01-0335 起 api_key 同款):
+ *   树里 targets[].password / api_key 是明文(GET /api/config 下发时后端已掩码成哨兵), 但**绝不
+ *   回显** —— 输入框恒显空串, 占位符只提示"已设置/未设置"; 键入即整值写树(留空不动键 = 不修改,
+ *   焦点下清空 = 清除)。自动填充三件套照抄 xtpl.html 密码分支(2026-10-20 报障):
  *   表单形状(隐藏 username + password) + autocomplete="new-password" + 非焦点 input 事件不写树。
  *
  * 测试连接: 走 POST /api/transfer/test(经 cmd 管线回执, 与 bulk 同族); 目标必须**已保存**
@@ -99,6 +100,7 @@ window.AQB_TRANSFER_TARGETS = {
         base_url: "",
         username: "",
         password: "",
+        api_key: "",
         enabled: "false",
         after_state: "keep",
         skip_check: "true",
@@ -128,12 +130,13 @@ window.AQB_TRANSFER_TARGETS = {
     ttName(target) {
       return String((target && target.name) || "").trim();
     },
-    ttHasSecret(target) {
-      return !!(target && String(target.password || "") !== "");
+    ttHasSecret(target, key) {
+      const k = key || "password";
+      return !!(target && String(target[k] || "") !== "");
     },
-    /* 密码输入框占位: 只提示状态, 绝不回显已存值 */
-    ttSecretPlaceholder(target) {
-      return this.ttHasSecret(target) ? "已设置, 留空 = 不修改" : "未设置";
+    /* 密码/API Key 输入框占位: 只提示状态, 绝不回显已存值 */
+    ttSecretPlaceholder(target, key) {
+      return this.ttHasSecret(target, key) ? "已设置, 留空 = 不修改" : "未设置";
     },
 
     /* ---------------------------------------------------------- 列表与编辑器 */
@@ -249,16 +252,17 @@ window.AQB_TRANSFER_TARGETS = {
       this.ttPatch(i, { path_map: rows });
     },
 
-    /* ---------------------------------------------------------- 密码(遮显 + 防自动填充)
+    /* ---------------------------------------------------------- 密码/API Key(遮显 + 防自动填充)
      * 三件套照抄 xtpl.html 密码分支(2026-10-20 报障「进常规就脏」):
-     * 表单形状由模板出, 这里守"非焦点 input 事件一律不写树"并把显示拉回空串。 */
-    ttSecret(ev, i) {
+     * 表单形状由模板出, 这里守"非焦点 input 事件一律不写树"并把显示拉回空串。
+     * key 缺省 password(既有调用面不变), api_key 框显式指键(issue 26-11-01-0335)。 */
+    ttSecret(ev, i, key) {
       const el = ev.target;
       if (document.activeElement !== el) {
         el.value = "";
         return;
       }
-      this.ttPatch(i, { password: el.value });
+      this.ttPatch(i, { [key || "password"]: el.value });
     },
 
     /* ---------------------------------------------------------- 测试连接

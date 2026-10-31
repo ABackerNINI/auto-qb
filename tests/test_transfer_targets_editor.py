@@ -14,21 +14,24 @@
   的键与序 == models.TRANSFER_FIELD_KEYS 逐位; node 真跑 ttAdd 落树的新建模板 fields 与
   default_transfer_fields 逐键相等(两处各抄一份默认布尔表 = 漂移必红)
 - test_tt_write_shape_passes_config_contract: node 真跑编辑器**写路径**(ttAdd/ttSet/ttSetEnabled/
-  ttSetField/ttSetSkip/ttMapAdd/ttMapSet/ttMapMove/ttMapDel/ttRemove + ttSecret + ttTest),
-  产出的 config.web.transfer 必须过 validate_config 零错误; 空表删键(不写空列表);
-  ttRemove 走 confirmDialog 确认; 密码框非焦点 input 不写树(自动填充防线); ttTest:
-  脏树/未保存拒发 + 已保存走 POST /api/transfer/test -> waitCmd, ok/error 两态都回显
+  ttSetField/ttSetSkip/ttMapAdd/ttMapSet/ttMapMove/ttMapDel/ttRemove + ttSecret(密码与
+  api_key 两键) + ttTest), 产出的 config.web.transfer 必须过 validate_config 零错误;
+  空表删键(不写空列表); ttRemove 走 confirmDialog 确认; 密码/API Key 框非焦点 input 不写树
+  (自动填充防线); ttTest: 脏树/未保存拒发 + 已保存走 POST /api/transfer/test -> waitCmd,
+  ok/error 两态都回显
 - test_tt_editor_wiring: 静态接线守阵 —— app.js mixin(window.AQB_TRANSFER_TARGETS) +
   app.component("aq-transfer-targets"); 三份 manifest 成对登记且装载序
   ctx_menu_custom.js < transfer_targets.js < app.js(与分片 transfer-targets.html);
   settings-detail.html 的 hub.view === 'webui' 分支挂载 <aq-transfer-targets>; 模板:
-  密码框 autocomplete="new-password" 且恒显空串(无 :value="t.password" 回显已存密码) +
-  保存路径锁死置灰(disabled) + after_state 单选 + 路径映射 ↑↓/增删 + 测试连接按钮 +
-  cfg.saveError 聚合报错展示(pre-wrap); state.js trTgt 视图态(不持久化, 无 localStorage);
-  shared/console_hub.css 的 .tr-tgt-* 规则成对
-- test_tt_password_mask_sentinel_compat: 掩码哨兵兼容守阵(D4 掩码落地的前端配合) —— GET 后
-  树里 targets[].password 是后端掩码哨兵(writer.MASK_SENTINEL 单点导入), 编辑器只凭「非空」
-  判已设置(占位符提示「留空 = 不修改」, 空值 = 未设置); 前端 JS 与模板不得硬编码哨兵字面量
+  密码框与 API Key 框(issue 26-11-01-0335)autocomplete="new-password" 且恒显空串
+  (无 :value="t.password" / :value="t.api_key" 回显) + 保存路径锁死置灰(disabled) +
+  after_state 单选 + 路径映射 ↑↓/增删 + 测试连接按钮 + cfg.saveError 聚合报错展示
+  (pre-wrap); state.js trTgt 视图态(不持久化, 无 localStorage); shared/console_hub.css
+  的 .tr-tgt-* 规则成对
+- test_tt_password_mask_sentinel_compat: 掩码哨兵兼容守阵(D4 掩码落地的前端配合;
+  issue 26-11-01-0335 起 api_key 与 password 同款) —— GET 后树里 targets[].password /
+  api_key 是后端掩码哨兵(writer.MASK_SENTINEL 单点导入), 编辑器只凭「非空」判已设置
+  (占位符提示「留空 = 不修改」, 空值 = 未设置); 前端 JS 与模板不得硬编码哨兵字面量
   (掩码语义单点在后端, 第二份字面量 = 双哨兵漂移)
 """
 import json
@@ -103,15 +106,19 @@ out.mapAfterMove = vm.cfg.tree.config.web.transfer.targets[0].path_map;
 vm.ttMapDel(0, 0);       // 删掉首位(换位后的原次条) -> 剩一条
 out.mapOne = vm.cfg.tree.config.web.transfer.targets[0].path_map;
 
-// ---- ④ 密码: 非焦点 input 一律不写树; 焦点键入写树
+// ---- ④ 密码/API Key: 非焦点 input 一律不写树; 焦点键入写树
 const elFake = {};
 global.document = { activeElement: {} };   // 焦点在别处 = 自动填充形态
 vm.ttSecret({ target: elFake }, 0);        // activeElement !== el -> 不写
 out.secretAfterUnfocused = vm.cfg.tree.config.web.transfer.targets[0].password;
+out.apiKeyAfterUnfocused = vm.cfg.tree.config.web.transfer.targets[0].api_key;
 global.document.activeElement = elFake;    // 聚焦(真实键入/粘贴必先聚焦)
 elFake.value = "s3cret";
-vm.ttSecret({ target: elFake }, 0);        // activeElement === el -> 写树
+vm.ttSecret({ target: elFake }, 0);        // activeElement === el -> 写树(缺省键 = password)
 out.secretAfterTyped = vm.cfg.tree.config.web.transfer.targets[0].password;
+elFake.value = "tok-xyz";
+vm.ttSecret({ target: elFake }, 0, "api_key");   // 显式指键 -> 写 api_key
+out.apiKeyAfterTyped = vm.cfg.tree.config.web.transfer.targets[0].api_key;
 delete global.document;
 
 // ---- ⑤ 删除确认: 拒绝 = 不动; 确认 = 移行且编辑器下标随动
@@ -242,9 +249,11 @@ def test_tt_write_shape_passes_config_contract():
     }], (f"映射 ↑↓ 换位语义不对: {rep['mapAfterMove']}")
     assert rep["mapOne"] == [{"from": "/downloads", "to": "/data"}], f"映射删除语义不对: {rep['mapOne']}"
 
-    # ---- ③ 密码遮显防线: 非焦点 input 不写树, 焦点键入写树(自动填充坑档同款判据)
+    # ---- ③ 密码/API Key 遮显防线: 非焦点 input 不写树, 焦点键入写树(自动填充坑档同款判据)
     assert rep["secretAfterUnfocused"] == "", "非焦点 input 事件把值写进了树(自动填充会凭空造脏)"
     assert rep["secretAfterTyped"] == "s3cret", "焦点键入未写树"
+    assert rep["apiKeyAfterUnfocused"] == "", "API Key 框非焦点 input 把值写进了树(同款防线失效)"
+    assert rep["apiKeyAfterTyped"] == "tok-xyz", "API Key 焦点键入未写到 api_key 键"
 
     # ---- ④ 删除确认 + 编辑器下标随动 + 空表删键
     assert rep["denied"] == 1, "确认框拒绝后目标被删了(删除必须先确认)"
@@ -290,10 +299,14 @@ def test_tt_editor_wiring():
 
     tpl = open(_TT_TPL, encoding="utf-8").read()
     assert 'type="text/x-template" id="tpl-aq-transfer-targets"' in tpl, "x-template id 变了(组件找不到模板)"
-    # 密码遮显三件套(xtpl.html 密码分支同款): autocomplete + 恒空显 + 非焦点不写树
+    # 密码/API Key 遮显三件套(xtpl.html 密码分支同款): autocomplete + 恒空显 + 非焦点不写树
     assert 'autocomplete="new-password"' in tpl, "密码框缺 autocomplete=new-password(自动填充会造脏)"
     assert "$root.ttSecret($event, i)" in tpl, "密码写回未走 ttSecret(非焦点 input 会把填充值写进树)"
     assert ':value="t.password"' not in tpl and ":value=\"$root.ttHasSecret" not in tpl, ("密码框不得绑定树值回显(已存密码明文不得出现在界面)")
+    # API Key(issue 26-11-01-0335): 与密码同款三件套, 显式指键写回
+    assert "$root.ttSecret($event, i, 'api_key')" in tpl, "API Key 框写回未走 ttSecret 显式指键"
+    assert "$root.ttSecretPlaceholder(t, 'api_key')" in tpl, "API Key 框占位符未走 ttSecretPlaceholder 指键"
+    assert ':value="t.api_key"' not in tpl, "API Key 框不得绑定树值回显(已存 api_key 不得出现在界面)"
     # 保存路径锁死: disabled + 锁死标注
     assert ':disabled="!!f.locked"' in tpl, "字段 checkbox 未按 locked 置灰(保存路径必须锁死必开)"
     # 单选/映射/测试连接
@@ -324,8 +337,9 @@ def test_tt_editor_wiring():
         assert f".{cls}" in css, f"shared/console_hub.css 缺 .{cls} 规则(整段无样式)"
 
 
-# node 电池: 掩码哨兵下的密码状态判定(D4 掩码落地的前端配合) —— 不依赖 vm 全家桶,
-# 直取 methods 判 ttHasSecret / ttSecretPlaceholder 对哨兵值/空值/真值的口径
+# node 电池: 掩码哨兵下的密码/API Key 状态判定(D4 掩码落地的前端配合 + issue 26-11-01-0335
+# api_key 同款) —— 不依赖 vm 全家桶, 直取 methods 判 ttHasSecret / ttSecretPlaceholder
+# 对哨兵值/空值/真值的口径
 _NODE_TT_SECRET_PROBE = r"""
 const fs = require("fs");
 global.window = {};
@@ -336,16 +350,20 @@ console.log(JSON.stringify({
   masked: { has: vm.ttHasSecret({ password: sentinel }), ph: vm.ttSecretPlaceholder({ password: sentinel }) },
   empty: { has: vm.ttHasSecret({ password: "" }), ph: vm.ttSecretPlaceholder({ password: "" }) },
   typed: { has: vm.ttHasSecret({ password: "typed-pw" }), ph: vm.ttSecretPlaceholder({ password: "typed-pw" }) },
+  akMasked: { has: vm.ttHasSecret({ api_key: sentinel }, "api_key"), ph: vm.ttSecretPlaceholder({ api_key: sentinel }, "api_key") },
+  akEmpty: { has: vm.ttHasSecret({ api_key: "" }, "api_key"), ph: vm.ttSecretPlaceholder({ api_key: "" }, "api_key") },
+  akTyped: { has: vm.ttHasSecret({ api_key: "tok-xyz" }, "api_key"), ph: vm.ttSecretPlaceholder({ api_key: "tok-xyz" }, "api_key") },
 }));
 """
 
 
 def test_tt_password_mask_sentinel_compat():
-    """掩码哨兵兼容守阵(D4): GET 后树里 targets[].password 是后端哨兵, 前端只凭「非空」判已设置
+    """掩码哨兵兼容守阵(D4): GET 后树里 targets[].password / api_key 是后端哨兵, 前端只凭「非空」判已设置
 
-    后端 /api/config 掩码后哨兵进树(留空 = 不修改语义靠 unmask_tree 按磁盘旧值还原), 编辑器
-    无需知道哨兵字面量: 非空(含哨兵)= 显示「已设置, 留空 = 不修改」, 空 = 未设置。前端 JS 与
-    模板不得硬编码哨兵字面量 —— 掩码语义单点在后端 writer.MASK_SENTINEL, 第二份字面量即漂移。
+    后端 /api/config 掩码后哨兵进树(留空 = 不修改语义靠 unmask_tree 按磁盘旧值还原; api_key 与
+    password 同走 TARGET_SECRET_KEYS, issue 26-11-01-0335), 编辑器无需知道哨兵字面量:
+    非空(含哨兵)= 显示「已设置, 留空 = 不修改」, 空 = 未设置。前端 JS 与模板不得硬编码哨兵
+    字面量 —— 掩码语义单点在后端 writer.MASK_SENTINEL, 第二份字面量即漂移。
     """
     node = shutil.which("node")
     if not node:
@@ -357,6 +375,10 @@ def test_tt_password_mask_sentinel_compat():
     assert "留空" in rep["masked"]["ph"], "哨兵值的占位符应提示「留空 = 不修改」"
     assert rep["empty"]["has"] is False and rep["empty"]["ph"] == "未设置", "空密码应判为未设置"
     assert rep["typed"]["has"] is True, "真值照旧判已设置"
+    assert rep["akMasked"]["has"] is True, "api_key 哨兵值应判为已设置(占位符提示留空 = 不修改)"
+    assert "留空" in rep["akMasked"]["ph"], "api_key 哨兵值的占位符应提示「留空 = 不修改」"
+    assert rep["akEmpty"]["has"] is False and rep["akEmpty"]["ph"] == "未设置", "空 api_key 应判为未设置"
+    assert rep["akTyped"]["has"] is True, "api_key 真值照旧判已设置"
     for path in (_TT_JS, _TT_TPL):
         with open(path, encoding="utf-8") as f:
             assert MASK_SENTINEL not in f.read(), f"{os.path.basename(path)} 不得硬编码掩码哨兵字面量"

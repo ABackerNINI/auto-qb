@@ -73,6 +73,19 @@
                      :placeholder="$root.ttSecretPlaceholder(t)" @input="$root.ttSecret($event, i)">
             </form>
           </div>
+          <div class="tr-tgt-f">
+            <span class="tr-tgt-fl">API Key</span>
+            <!-- API Key(issue 26-11-01-0335): 与密码同款三件套(表单形状 + autocomplete +
+                 非焦点 input 一律不写树), 写回同走 ttSecret 但键指 api_key; 与密码二选一,
+                 占位符同款只提示状态不回显。 -->
+            <form style="display:contents" @submit.prevent>
+              <input type="text" name="username" autocomplete="username" value="auto-qb" tabindex="-1"
+                     aria-hidden="true" style="display:none">
+              <input class="hb-input" type="password" autocomplete="new-password" value=""
+                     :placeholder="$root.ttSecretPlaceholder(t, 'api_key')"
+                     @input="$root.ttSecret($event, i, 'api_key')">
+            </form>
+          </div>
           <label class="tr-tgt-f">
             <span class="tr-tgt-fl">启用</span>
             <aq-switch tip="启用后才会出现在种子右键菜单的「转移到」里; 转移是高风险动作, 默认关"
