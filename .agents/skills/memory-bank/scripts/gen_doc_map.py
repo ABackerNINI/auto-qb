@@ -27,6 +27,7 @@ pitfalls/kb/cap-counting.md「生成式跨形态视图」条的收口注记), �
 from __future__ import annotations
 
 import argparse
+import html
 import re
 import sys
 from pathlib import Path
@@ -101,7 +102,7 @@ def collect(mb: Path) -> list[dict]:
                     "topic": meta.get("doc-topic", ""),
                     "status": meta.get("doc-status", ""),
                     "stamp": _date_stamp(meta.get("doc-added", "")) or _stamp_of(path.name),
-                    "title": title.group(1).strip() if title else path.stem,
+                    "title": html.unescape(title.group(1)).strip() if title else path.stem,
                     "link": f"{kind}/{path.name}",
                     "refs": split_refs(meta.get("doc-refs", "")),
                 }
@@ -114,7 +115,7 @@ def collect(mb: Path) -> list[dict]:
                 "topic": meta.get("doc-topic", ""),
                 "status": meta.get("issue-status", ""),
                 "stamp": meta.get("issue-stamp", "") or _stamp_of(path.name),
-                "title": meta.get("issue-title", path.stem),
+                "title": html.unescape(meta.get("issue-title", path.stem)),
                 "link": f"issues/{path.name}",
                 "refs": split_refs(meta.get("doc-refs", "")),
             }

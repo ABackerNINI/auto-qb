@@ -13,6 +13,7 @@ tmp-analysis/nav-design/ 三套原型已验证的数据装配逻辑, 计划 26-1
 """
 from __future__ import annotations
 
+import html
 import sys
 from pathlib import Path
 
@@ -28,7 +29,9 @@ def _enrich_item(item: dict, mb: Path) -> None:
     path = mb / item["link"]
     meta: dict[str, str] = {}
     if path.suffix == ".html":
-        meta = dict(META_RE.findall(path.read_text(encoding="utf-8")))
+        # meta 值是 HTML 属性原文 (已转义): 数据层先反转义, 前端 esc() 只转义一次 —— 否则标题/
+        # 摘要里的 "->" 会显示成 "-&gt;" (2026-10-31 用户报; 同 gen_issues_index.meta 的口径)
+        meta = {k: html.unescape(v) for k, v in META_RE.findall(path.read_text(encoding="utf-8"))}
     if item["form"] == "issue":
         item["issue-type"] = meta.get("issue-type", "")
         item["issue-tier"] = meta.get("issue-tier", "")

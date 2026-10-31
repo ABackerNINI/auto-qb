@@ -88,6 +88,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_batch_actions_idempotent: 批量 pin/hide 幂等 (every 动态方向 / 过滤已达态 / 落盘链不绕开) + 批量隐藏剪出选区
 - test_multiselect_chrome_and_escapes: 顶栏已选N chip ([hidden] 兜底/点击清空) + Esc 退栈末档清多选 (序在 drawer 后 sel 前) + setView 清空 + Ctrl+A 台账非输入态全选
 - test_batch_copy_paths_and_open_links: copyText 双链路降级 + 批量复制每行一个按可见序 + 打开 >5 confirm 走 MB 路由
+- test_titles_and_meta_unescaped_in_data_layer: HTML 源里的实体 (issue-title / issue-summary / <title>) 在数据层反转义, 前端 esc 只转义一次 (否则 nav 显示 "-&gt;", 2026-10-31 用户报)
 """
 
 from __future__ import annotations
@@ -262,6 +263,35 @@ def test_collect_nav_issue_enrich_fields(tmp_path: Path) -> None:
     # doc-updated: HTML 有 meta 用 meta, 没有回落条目 stamp (issue 侧不写 doc-updated)
     assert by_link["plans/p1.html"]["doc-updated"] == "26-10-03-1200"
     assert issue["doc-updated"] == "26-10-04-0800"
+
+
+def test_titles_and_meta_unescaped_in_data_layer(tmp_path: Path) -> None:
+    """HTML 源里的实体必须在数据层反转义 (gen_doc_map.collect 的标题 + nav_data enrich 的 meta):
+    前端一律 esc() 当纯文本渲染, 数据层再带者 "-&gt;" 就双重转义 (2026-10-31 用户报;
+    口径同 gen_issues_index.meta —— issues/_index.md 因此一直是对的)。"""
+    mb = _stub_mb(tmp_path)
+    (mb / "issues" / "i2.html").write_text(
+        ISSUE_HTML.replace('content="stub issue"', 'content="filelock 3.32.6 -&gt; 4.2.5 升级(major)"').replace(
+            'content="stub summary for enrich test"', 'content="a &lt;b&gt; &amp; c"'
+        ),
+        encoding="utf-8",
+    )
+    (mb / "plans" / "p2.html").write_text(
+        PLAN_HTML.format(topic="t-esc", status="Open", added="26-10-05-1000", updated="26-10-05-1000").replace(
+            "<title>stub plan t-esc</title>", "<title>x &gt; y plan</title>"
+        ),
+        encoding="utf-8",
+    )
+
+    items = nav_data.collect_nav(mb)["items"]
+    by_link = {i["link"]: i for i in items}
+    assert by_link["issues/i2.html"]["title"] == "filelock 3.32.6 -> 4.2.5 升级(major)", "issue 标题不得残留实体"
+    assert by_link["issues/i2.html"]["issue-summary"] == "a <b> & c", "issue 摘要不得残留实体"
+    assert by_link["plans/p2.html"]["title"] == "x > y plan", "plan <title> 不得残留实体"
+
+    # 底层单点同验: gen_doc_map.collect() 本体 (闸门/守阵消费单点) 已反转义, nav 只是继承
+    raw = {i["link"]: i for i in gen_doc_map.collect(mb)}
+    assert raw["issues/i2.html"]["title"] == "filelock 3.32.6 -> 4.2.5 升级(major)"
 
 
 def test_collect_nav_stamp_from_data_not_clock(tmp_path: Path) -> None:
