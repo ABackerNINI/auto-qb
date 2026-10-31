@@ -26,7 +26,7 @@
 | 本次会话做到哪 | `activeContext/<stamp>-<topic>.md` |
 | 长期结论 / 已实现事实 | `progress/` 与主题文档 |
 
-## 命名 (新件强制; 存量 51 份豁免)
+## 命名 (新件强制; 存量豁免)
 
 - 新件: `YY-MM-DD-HHMM-<type>-<topic>.html`(时间戳用 `commands run kb.time stamp` 取当前值), `<type>` ∈ `plan` / `report`。
 - 存量计划与报告(2026-09-23 前)**不改名** —— 类型由所在目录 + `doc-type` meta 判定。

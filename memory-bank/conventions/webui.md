@@ -141,7 +141,7 @@
 
 - **适用**: 所有产出的单文件 HTML —— 计划文档 / issue 报告 / 交付物 / 演示页。**一律深色底 + 浅色字, 禁止浅底黑字**。
 - **配色口径**: `--bg` / `--paper` 亮度 ≈ `#0f…`~`#18…`, `--ink` 亮度 ≥ `#d8…`; 样式里**必须**写 `color-scheme: dark` —— 缺这条, 浏览器原生滚动条与表单控件不会跟着变深。
-- **制品模板正文区**(2026-10-17): skill `templates/{plan,report}.html` 的 `.sheet` = `max-width: 1280px; padding: 48px clamp(18px, 3.2vw, 44px) 80px` —— **版面自适应**: sheet 随视口流动、侧距随宽度伸缩, 正文/列表/表格/代码块同宽 (prose 不设 ch 上限, 右缘对齐); 窄视口 (≤1180px) 表格内代码允许断行防页面横向溢出。规格单点在模板自身(带注释), 存量 51 份自带内联 CSS 按冻结线豁免。
-- **存量**: `memory-bank/plans/` 25 份与 `memory-bank/issues/` 9 份已全部深色; 新产出若不是深色即为违规。
+- **制品模板正文区**(2026-10-17): skill `templates/{plan,report}.html` 的 `.sheet` = `max-width: 1280px; padding: 48px clamp(18px, 3.2vw, 44px) 80px` —— **版面自适应**: sheet 随视口流动、侧距随宽度伸缩, 正文/列表/表格/代码块同宽 (prose 不设 ch 上限, 右缘对齐); 窄视口 (≤1180px) 表格内代码允许断行防页面横向溢出。规格单点在模板自身(带注释); 存量自带内联 CSS 的件按冻结线(2026-10-17 模板正文区定型日)豁免, 不逐一计数 —— 存量数字随产出持续漂移, 以冻结线日期为界。
+- **存量**: `memory-bank/plans/`、`memory-bank/issues/`、`memory-bank/reports/` 的全部主题件已全量核查为深色(最近一次全量实测 2026-10-31, 此后不再回填计数 —— 计数随产出漂移, 违规与否只看「新产出是不是深色」); 新产出若不是深色即为违规。
 - **例外**: `resources/`(ui-component-libraries 设计观摩稿 + settings-page-templates 候选稿)**不套用** —— 那批白底极简(kenya-hara / pentagram / muller-brockmann)是设计本体。⚠ 遇到"统一主题"类要求, 先分清**交付物 vs 参考素材**, 别一把梭。
 - **命名**: 放 `memory-bank/plans/` 时命名 `YY-MM-DD-HHMM-<slug>.html`, 日期时间**用 `commands run kb.time stamp` 取当前值**, 不靠记忆。
