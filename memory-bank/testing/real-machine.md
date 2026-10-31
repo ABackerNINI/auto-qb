@@ -170,6 +170,18 @@
 | **搬迁窗口基本抓不住 state 30S 落盘周期** | 64M 跨卷搬迁数秒, 强杀后 state.json 常无在途 job(「恢复在途 job 0 条」≠ 恢复面失效) | journal 注入退路(RM04 计划 §03 批准): 停机态按 job_to_dict 形造 phase=moving/move_issued=true 账 + journal/spec, 重启走 `_recover` RESUME 分支; 另注意产品日志是**追加式**, 断言「最后一次启动」的日志行要等新行出现再取 |
 | **删 junction 绝不递归(重申 §08)** | `rm -r`/`shutil.rmtree` 对 junction 的行为按平台而异, 穿透即删真实数据 | 用 `os.walk(topdown)` 遇 reparse 点 `os.rmdir` 剪枝的 purge 形态(RM04 用例 `purge_tree` 可照抄) |
 
+### 2.10 规则引擎面的事实(RM03 实测, 2026-10-31)
+
+| 事实 | 现场表现 | 处置 |
+|---|---|---|
+| **规则绑定名 = `@规则集.规则名` 全名** | 日志行「规则[rm03_rules.xxx]」与 state.json 的 `exec_history` 键、去重记账全部用**带规则集前缀的全名**, 裸规则名不出现 | 咬规则日志/记账的断言按全名写锚点(RM03 首轮 7 条假红全挂在这) |
+| **规则 `interval` 键留空才是每轮语义** | `interval: 0S` 被配置校验拒绝(「必须为正时间」); 留空 = 每 tick 级别(队列归一化 1s) | 每轮检查的规则**省略 interval 键**, 不要写 0S |
+| **`execute_once` 合法枚举 = never/once/daily/hourly** | 「always」不是合法值, 校验即拒 | 「窗口内只执行一次」落 `once` |
+| **dry-run 管线照常分派规则** | --dry-run 下种子同步照常执行、interval/事件规则照常命中(日志有「规则[…] 动作[…] 成功」行), 动作经 ctx.dry_run 跳过 qB 写, 实测 ≥10 节拍零 qB 写(tags/category/限速全等) | dry-run 可作规则面的**零副作用观测窗**(RM03-09 实测); 注意它仍会读 qB 并跑完整主循环 |
+| **规则层去重的权威账在 state.json `exec_history`** | `record_execution` 只写内存, 优雅退出/周期落盘(≥30S)才刷盘; 动作级幂等(add_tags skip)是 DEBUG 级, INFO 日志不可见 —— 只数成功行分不出"去重失效" | 去重断言走 exec_history 的 ts(用 `graceful_after` 起产品拿落盘账), 不咬动作日志 |
+| **stop_following_rules_if 当前不生效(缺陷在池 26-10-31-1304)** | `Rule.process` 的 (handled, stop) 在唯一调用点被丢弃; 条件出错日志「停止后续规则」的措辞与实际行为不符 | 规则链止损语义别当已验事实引用; 修复后须真机回归 RM03-05 |
+| **hr 配置不牵动假种子(RM03-04 实测)** | tracker 条目带 `hr: {required_seeding_time: 3D}` 时, 假种子(零下载量)不触发 HR 在线核实/打标(触发条件是下载比例), `${required_seeding_time}` 变量替换照常工作 | RM03-04 口径可复用: 变量替换面用 hr 段驱动, 不需要 hr_check 站点接入 |
+
 ## 03 种子层: L0 / L1 / L2
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |

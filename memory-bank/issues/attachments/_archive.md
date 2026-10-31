@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (53)
+## Open (54)
 
+- [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](../26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: graceful 跑壳 raise_signal(SIGTERM) 对 CLI 模式有效、对 --tray 模式 3/3 无效(45s+ 后进程仍存活), 与 cli.py「所有模式一致」注释相悖
 - [bug] [运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)](../26-10-31-1029-bug-qbmanager-disconnect-no-reconnect.html) — RM02-07 真机实测: qB 断开期间每 2s 一条「主循环异常」ERROR(45+ 条/75s), 且恢复后 60s 仍不自动回连 —— client=None 后 connect() 永远不再被调用

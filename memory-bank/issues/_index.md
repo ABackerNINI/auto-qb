@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 10 |
 | perf | 7 |
 | docs | 2 |
 | test | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的…
 - [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: gr…
 - [bug] [运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)](26-10-31-1029-bug-qbmanager-disconnect-no-reconnect.html) — RM02-07 真机实测…
