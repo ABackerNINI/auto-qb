@@ -278,6 +278,8 @@
       <tr><td><code>real.list</code></td><td>列出全部用例: id / 档位 / 需要哪层种子 / 是否 <code>[需活跃种子]</code></td><td>RM00 建立</td></tr>
       <tr><td><code>real.run</code></td><td>跑单条用例(<code>--case RM06-01</code>); 真跑必须显式 <code>--yes</code>, 默认 dry-run</td><td>RM00 建立</td></tr>
       <tr><td><code>real.suite</code></td><td>跑一片全部用例(<code>--slice RM06</code>), 出本轮结论行供誊进 §07</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.seed</code></td><td>造一个假种子并加入实例: 可指定大小 / 落点 / 生成方式(<code>random|zeros|text</code>) / 用现成文件 / 不落数据; 默认不带 announce ⇒ 零外连。默认 256K; <b>&gt; 2G 原则上不造</b> —— 停下等授权, 必须 <code>--allow-huge --reason "&lt;原因&gt;"</code> 双写才放行</td><td>RM00 建立</td></tr>
+      <tr><td><code>real.seed.list</code> / <code>real.seed.rm</code> / <code>real.seed.clean</code></td><td>看 / 删自造种子(只认 <code>real-fake</code> 标签, 碰不到真实种子) / 清 <code>tests-real/.work</code> 与 <code>R:/qbt-fake</code> 残留</td><td>RM00 建立</td></tr>
       <tr><td><code>dev.webui</code></td><td>只开 WEB UI 连真机(自动任务全关, 数据目录独立) —— <b>读侧切片首选</b></td><td>✅ 现有</td></tr>
       <tr><td><code>dev.run</code></td><td>真机跑完整主程序(写侧 / 调度切片), 一律先 <code>--dry-run</code></td><td>✅ 现有</td></tr>
       <tr><td><code>dev.port-kill</code></td><td>按端口清残留(只传白名单端口 36595 / 36596)</td><td>✅ 现有</td></tr>

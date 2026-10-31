@@ -103,6 +103,8 @@
 <ul>
   <li><span class="tag">R0 · 26-10-31-0705</span> 首版: 依规程 RM00 行 + 07:00 现场实测事实(两实例 v5.2.3 / 四个坑)成稿; 验收三条与退路照抄规程 §03, 不另立口径。</li>
   <li><span class="tag">R1 · 26-10-31-0738</span> 执行补记: 追加 D4(60537 撞车 → 60539)/ D5(伪 tracker 排除请求者)/ D6(L2 临时限速 fixture); 用例由 5 条增至 6 条(新增 RM00-03「实例在线」), 全绿(112s)。L2 未走退路 —— 卡点不是"双实例拒绝互连", 是上面两个环境/建模缺陷, 修完即通。</li>
+  <li><span class="tag">R2 · 26-10-31-0748</span> 追加 <code>tests-real/seed.py</code> + <code>real.seed*</code> 四个 task: 造假种子从"只能写在用例里"变成"可参数化的手工命令"(大小 / 落点 / 生成方式 / 现成文件 / 是否落数据)。守卫同步加 <code>skip_tags</code>: 归零不再顺手暂停自造种子。默认 <b>256K</b>(KB 级够看状态), ≥32M 自动落 <code>R:/qbt-fake/</code>(内存盘, 免写盘代价)。</li>
+  <li><span class="tag">R3 · 26-10-31-0756</span> 大文件闸门: <b>&gt; 2G 原则上不造</b>。命令在写任何数据前停下等授权, 必须 <code>--allow-huge --reason "&lt;原因&gt;"</code> <b>双写</b>才放行(只给 <code>--allow-huge</code> 直接拒), 放行后打 <code>[warn]</code> 留痕。出口两条: 只要"大尺寸"属性 ⇒ <code>--no-data</code>(不落盘, 不受限); <code>--from</code> 不创建文件 ⇒ 源文件超 2G 只告警。四个分支均已实测。</li>
 </ul>
 
 </div>

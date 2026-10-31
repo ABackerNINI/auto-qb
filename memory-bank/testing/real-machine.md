@@ -85,6 +85,44 @@
 
 **诊断入口(卡住时先跑它们, 别靠猜)**: `uv run python tests-real/tools/diag_l2.py [秒]`(双实例互传全过程: announce 计数 / tracker 视图 / TCP 连接表) 与 `tests-real/tools/diag_log.py <port> [行数]`(qB 日志尾部)。
 
+### 2.6 手工探索: 假种子命令(`real.seed*`)
+
+需要"随手造个种子看看界面 / 状态 / 标签 / 限速"时用它, 不必先写一条用例:
+
+| 命令 | 干什么 |
+|---|---|
+| `real.seed` | 造数据 + 造 `.torrent` + 加入实例(`add`) |
+| `real.seed.list` | 列出自造种子(hash / 名字 / 大小 / 进度 / 状态 / 落点) |
+| `real.seed.rm` | 删自造种子(`--all` / `--name` / `--hash` 前缀; 默认连数据) |
+| `real.seed.clean` | 清 `tests-real/.work/` 与 `R:/qbt-fake/` 下的残留(不碰 qB 里的条目) |
+
+参数: `--size 256K|8M|1.5G|512k`(**默认 256K**, KB 级就够看状态) · `--pattern random|zeros|text` ·
+`--dir <落点>`(只认 `tests-real/.work/` 与 `R:/qbt-fake/`) · `--from <现成文件>`(大小自动取文件, 不动原文件) ·
+`--no-data` · `--paused` · `--piece-len` · `--port 36595|36596`(默认 36596, 空库当草稿本) ·
+`--allow-huge --reason "<原因>"`(> 2G 才用得上) · `--yes`(不加就只打印计划)。
+
+五条口径:
+
+- **默认 KB 级, 不要造大种子**: 造种子的目的是"看状态/走分支", 256K 已经够(16 个 piece, 校验瞬完)。
+  真正需要大小时(测进度条、测分块、测限速曲线)再显式给 `--size`。
+- **> 2G 原则上不造**: 命令会**停下来等授权** —— 必须 `--allow-huge --reason "<原因>"` 双写才放行,
+  只给 `--allow-huge` 会被拒(授权要留痕, 否则等于默认允许), 放行后打印 `[warn]` 留痕。理由是三个代价叠加:
+  占盘/占内存盘、qB 校验要**读满一遍**、清理最容易漏(尤其落到真磁盘的)。想清楚了再分两条路走:
+  只要"大尺寸"这个属性看状态 ⇒ `--no-data`(不落盘, 零代价, 不受限); 要真数据 ⇒ 先问自己 1G 行不行。
+  `--from <现成文件>` 不创建文件、只造种子, 源文件超 2G 只告警不拦。
+- **≥ 32M 自动落 `R:/qbt-fake/`**: R 盘是**内存盘**(约 52 GB 可用), 写多少都不心疼; 但**重启即清空**,
+  所以大种子只当次会话有效。要长期留着就显式 `--dir` 指到磁盘(仍在允许的落点内)。R: 不可用时自动退回 `.work` 并提示会真写盘。
+- **默认不带 announce** ⇒ 纯本地做种(`stalledUP`、progress 100%、零外连)。要 announce 请在用例里用
+  `FakeTracker` —— CLI 是短命进程, 起不了活到你看完的 tracker。
+- **自造种子一律打 `real-fake` 标签** ⇒ list / rm / clean 只认这个标签, 碰不到真实种子; 守卫的归零
+  (`guard.snapshot(skip_tags=("real-fake",))`)也会跳过它们 —— 否则"刚加的假种子怎么变成 `stoppedUP` 了"
+  会变成日常困惑。
+
+`clean` 默认把 `tests-real/.work/` 与 `R:/qbt-fake/` **两处都扫**(含空目录壳子), 越界拒跑。
+
+> ⚠️ **`--no-data` 不是"缺文件态"**: 实测 qB 停在 `stalledDL` / progress 0, 不会进 `missingFiles`(`recheck` 也不进)。
+> 要测"文件被删"这条路径, 请在用例里加完种子再删文件。
+
 ## 03 种子层: L0 / L1 / L2
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |
@@ -212,6 +250,7 @@
 | 每轮计划 | `plans/<stamp>-plan-real-<片>.html` | 这一轮怎么测、为什么这么测(拍板即冻结) |
 | 每轮实测数字 | `testing/real-baselines/<stamp>-real-<片>.md` | 用例数 / 档位分布 / PASS-FAIL-BLOCKED / 基线 commit |
 | 用例 | `tests-real/` | 可复用的断言本体 |
+| 手工造种子 | `tests-real/seed.py`(`real.seed*`) | 造/加/看/删假种子, 只服务手工探索, 不参与验收 |
 | 诊断工具(非用例) | `tests-real/tools/` | 卡住时的现场采集, 不参与验收 |
 | 命令 | `.commands/real/` | 守卫与运行入口 |
 | 缺陷 | 各自的 `bug` / `perf` issue | 每条独立排期 |

@@ -33,6 +33,29 @@ timeout = 120
 when    = "把目标实例全部种子暂停(手工版守卫; real.guard 已含此步)"
 note    = "<args> 传 --port 36595|36596"
 
+[tasks."real.seed"]
+run     = ["uv run python tests-real/seed.py add <args>"]
+timeout = 600
+when    = "造一个假种子并加入测试实例(手工探索用: 指定大小/落点/生成方式/是否落数据)"
+note    = "默认 dry-run, 加 --yes 才真造真加; 默认 256K(KB 级就够看状态), 关键参数 --size 8M | --pattern random|zeros|text | --dir <落点> | --from <现成文件> | --no-data(不落数据) | --paused | --port 36596。落点只认 tests-real/.work/ 与 R:/qbt-fake/: ≥32M 自动落 R:(内存盘, 免写盘代价, 重启即清空)。> 2G 原则上不造, 命令会停下来等授权, 必须 --allow-huge --reason \"<原因>\" 双写才放行(只给 --allow-huge 会被拒), 只造元数据用 --no-data 不受限。默认不给 announce ⇒ 纯本地做种、零外连; 自造种子一律打 real-fake 标签, 与真实种子互不相干"
+
+[tasks."real.seed.list"]
+run     = ["uv run python tests-real/seed.py list <args>"]
+timeout = 120
+when    = "看实例里有哪些自造种子(hash / 名字 / 大小 / 进度 / 状态 / 落点)"
+
+[tasks."real.seed.rm"]
+run     = ["uv run python tests-real/seed.py rm <args>"]
+timeout = 300
+when    = "删掉自造种子(默认连数据一起删; 只认 real-fake 标签, 碰不到真实种子)"
+note    = "<args> 传 --all 或 --name X 或 --hash 前缀, 加 --yes 才真删; --keep-data 保留数据文件"
+
+[tasks."real.seed.clean"]
+run     = ["uv run python tests-real/seed.py clean <args>"]
+timeout = 300
+when    = "清掉 tests-real/.work 与 R:/qbt-fake 下残留的数据与 .torrent(不碰 qB 里的条目)"
+note    = "两处都扫(含空目录壳子), 越界直接拒跑; 加 --yes 才真删"
+
 [tasks."real.run"]
 run     = ["uv run python tests-real/runner.py run <args>"]
 timeout = 3600

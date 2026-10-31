@@ -87,15 +87,23 @@ def check_online(qb) -> str:
     return status
 
 
-def snapshot(qb) -> dict:
-    """第二层: 记录真实种子(哈希 → 名称)并全部暂停。"""
-    torrents = qb.torrents()
+def snapshot(qb, skip_tags: tuple[str, ...] = ()) -> dict:
+    """第二层: 记录真实种子(哈希 → 名称)并全部暂停。
+
+    `skip_tags`: 带这些标签的种子**既不暂停也不计入保护面** —— 自造种子(real-fake)本来就该由
+    用例/命令自己管, 把它们一起暂停会让"我刚加的假种子怎么变成 stoppedUP 了"变成日常困惑。
+    """
+    def ours(t: dict) -> bool:
+        tags = set((t.get("tags") or "").split(","))
+        return bool(tags & set(skip_tags))
+
+    torrents = [t for t in qb.torrents() if not ours(t)]
     hashes = {t["hash"]: t["name"] for t in torrents}
     if hashes:
         qb.pause("|".join(hashes))
         deadline = time.time() + 15
         while time.time() < deadline:
-            still = [t for t in qb.torrents() if t["state"] in ACTIVE_STATES]
+            still = [t for t in qb.torrents() if t["hash"] in hashes and t["state"] in ACTIVE_STATES]
             if not still:
                 break
             time.sleep(0.5)
