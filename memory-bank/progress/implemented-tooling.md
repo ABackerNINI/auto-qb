@@ -52,7 +52,7 @@
   + Origin 回环校验 + `_PULL_LOCK` 串行化; 静态导出 / file:// 无服务端, 按钮隐藏。守阵 `tests/test_kb_nav.py`
   +11(壳按钮骨架 / 分类纯逻辑 / 非仓库·游离 HEAD·离线·分叉·本地领先·快进六场景 / 端点 403 护栏 + 404 +
   结果回传), **数据层 nav_data.py 零改动**, 服务层新增 POST 路由与 git 编排。基线 2553 passed + 4 skipped /
-  99%(切片 [26-10-05-0324](../testing/baselines/26-10-05-0324-kb-nav-pull.md))。
+  99%(切片 [26-10-05-0324](../testing/baselines/attachments/26-10-05-0324-kb-nav-pull.md))。
 
 - **kb.nav 跟进轮九~十七 (2026-10-05~13, 专题 kb-nav-page, 切片 26-10-04-0952)**: 导航页壳 `nav_page.html` 单文件多轮改, 数据/服务层零改动 —— ⑨状态徽章三层底色口径 (台账 `.chip.st-*` 与控制台 `.rs.st-*` 共用透明度阶梯, 底/边/字三通道; 根因 `.chip{color:--dim}` 同特异性后盖状态文字色 + cyan/green 令牌明度几乎相同靠 alpha 拉开); ⑩顶栏专用令牌 `--chrome` (用户撤销后还原 `--paper`, 反向守阵 `test_topbar_surface_is_left_at_paper`); ⑪台账列标题行 `thead th` 改 `--chrome` (列头与数据行同 `--bg` 差 0 读不出表头; 相邻面逐面过, 克隆同款表头必须跟着改); ⑫置顶专区表头修 (`--chrome` 抬 #232e3b→#2b3947, 强调过的行挤明度空间, 合成色真算); ⑬隐藏功能 (独立键 `mb-nav-hidden`, 复用 pin 骨架, 隐藏区 `#hidZone` 同构, 四处退场单点); ⑭类型栏 (issue-type chip, 列序守阵扩); ⑮类型栏空值去占符 (`"·"`→`""`); ⑯Esc 退栈计划 26-10-13-0324 (拉取失败全屏锁 = doPull 失败弹 `#overlay` z-50 全屏遮罩, POLL_MS 30000 ⇒ ≤30s 不可点击); ⑰Esc 退栈实施 `escRetreat()` 单链 (退栈 order = visual z-order overlay→ctxMenu→drawer→sel, IME 组合期守卫, 判据用可见性, 遮罩退最上档即消锁; 守阵 +4 single_point/ime_guard/overlay_first/closes_drawer). 各轮基线切片见 kb.baseline; 判据单点 [pitfalls/web-ui/layout-css.md](../pitfalls/web-ui/layout-css.md) 状态徽章/顶栏/表头面同色条 + [pitfalls/web-ui/poll-reseed-filter.md](../pitfalls/web-ui/poll-reseed-filter.md)。
 

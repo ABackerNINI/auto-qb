@@ -64,5 +64,5 @@
   classList 均无; `.member-row` 无前缀版是活类勿混; 废弃锚点 = delete_flow.js:202 注释「DLG-01
   成员明细已移除」), prism 皮肤本就无此类。三处移除: atlas/css/views.css 成员明细整块 10 行 +
   console/css/views.css 整块 11 行 + ui_feedback.js 白名单摘 "modal-members" (8 内滚区 → 7 类)。
-  基线 [26-10-04-0403](../testing/baselines/26-10-04-0403-webui-modal-members-dead-class-removal.md):
+  基线 [26-10-04-0403](../testing/baselines/attachments/26-10-04-0403-webui-modal-members-dead-class-removal.md):
   test.full 2423 passed + 3 skipped, 29.88s, TOTAL 99% (与 0353 持平)。随本专题入库。

@@ -4,7 +4,7 @@
 >
 > 最后活动: 2026-10-11 22:59
 
-**Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md,memory-bank/testing/baselines/26-10-11-2259-webui-drawer-refactor-w2.md
+**Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md,memory-bank/testing/baselines/attachments/26-10-11-2259-webui-drawer-refactor-w2.md
 
 ## 本轮完成 (W2)
 

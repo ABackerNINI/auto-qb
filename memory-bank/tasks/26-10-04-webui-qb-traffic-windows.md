@@ -40,4 +40,4 @@
 
 ## 进度日志
 
-- **2026-10-04 04:58**: 全部实现完成, `commands run test.quick` 2442 passed + 4 skipped 预验 → `test.full` **2442 passed + 4 skipped / 29.62s / 覆盖率 99%**(14361 语句 / 135 未覆盖 / 4864 分支 / 106 partial), 相对上基线(26-10-04-0412: 2441+4)**净增 1 用例**(`test_build_grid_extended_windows`)。基线切片 [baselines/26-10-04-0458](../testing/baselines/26-10-04-0458-webui-qb-traffic-windows.md)。未验证面: 真机换窗走查(短窗桶数/刻度文案/轮询续拉)待用户; 改动留工作树未提交。
+- **2026-10-04 04:58**: 全部实现完成, `commands run test.quick` 2442 passed + 4 skipped 预验 → `test.full` **2442 passed + 4 skipped / 29.62s / 覆盖率 99%**(14361 语句 / 135 未覆盖 / 4864 分支 / 106 partial), 相对上基线(26-10-04-0412: 2441+4)**净增 1 用例**(`test_build_grid_extended_windows`)。基线切片 [baselines/26-10-04-0458](../testing/baselines/attachments/26-10-04-0458-webui-qb-traffic-windows.md)。未验证面: 真机换窗走查(短窗桶数/刻度文案/轮询续拉)待用户; 改动留工作树未提交。

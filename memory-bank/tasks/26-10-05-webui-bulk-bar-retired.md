@@ -40,4 +40,4 @@
 
 ## 进度日志
 
-- **2026-10-05 03:07**(单会话完成): S1-S6 全量实施。改动面 = 1 模板(topbar.html) + 6 CSS + 7 JS + 1 冒烟脚本(ui_smoke.cjs) + tests/test_web.py + conventions/webui.md + testing/smoke.md。test.full **2542 passed + 4 skipped / 99% / 49.79s**(两次采样约 50~53s; 基线 [26-10-05-0307](../testing/baselines/26-10-05-0307-webui-bulk-bar-retired.md))。改动留在工作树, 等用户显式提交指令。
+- **2026-10-05 03:07**(单会话完成): S1-S6 全量实施。改动面 = 1 模板(topbar.html) + 6 CSS + 7 JS + 1 冒烟脚本(ui_smoke.cjs) + tests/test_web.py + conventions/webui.md + testing/smoke.md。test.full **2542 passed + 4 skipped / 99% / 49.79s**(两次采样约 50~53s; 基线 [26-10-05-0307](../testing/baselines/attachments/26-10-05-0307-webui-bulk-bar-retired.md))。改动留在工作树, 等用户显式提交指令。

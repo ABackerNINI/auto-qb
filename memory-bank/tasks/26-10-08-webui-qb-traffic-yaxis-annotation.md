@@ -56,4 +56,4 @@
 - **2026-10-08 05:5x** 落码 S1–S4(8 个文件: 组件 / state / 模板 / 三皮肤 CSS / 两测试文件); `node --check` 通过; node 电池实测 `_qbYRange` 5 例 + `_qbGapRuns` 5 例全过。
 - **2026-10-08 05:5x** 守阵落码 + **红验三次**(①去掉峰值保底 → 电池「峰值超固定上限按峰值显示」红; ②摘 `drawClear` 钩子 → 红; ③断 y range 接线 → 红), 每次还原复绿。
 - **2026-10-08 05:5x** 验证: `test.quick` **2772 passed + 4 skipped**; `test.full` **2772 passed + 4 skipped / 0 failed / 48.44s / TOTAL 99%**(16476/165/5694/149); `npm run test:e2e:fast` **8 passed**(含渲染健康无运行时错误); 真浏览器加载 vendor + 组件跑注解钩子自检 —— 零 pageerror, 带钩子 27937 vs 不带 18067 已绘制像素。
-- **2026-10-08 05:59** 收尾回写: issue 置 **Done** + `doc-refs` 回填(认领链双向闭合); 新建本档案 + 基线切片 [26-10-08-0559](../testing/baselines/26-10-08-0559-webui-qb-traffic-yaxis-annotation.md); `conventions/webui.md` 流量方向色族消费面补注画布注解层同源取色; activeContext 切片; `kb.index` + `gen_issues_index` 重建。
+- **2026-10-08 05:59** 收尾回写: issue 置 **Done** + `doc-refs` 回填(认领链双向闭合); 新建本档案 + 基线切片 [26-10-08-0559](../testing/baselines/attachments/26-10-08-0559-webui-qb-traffic-yaxis-annotation.md); `conventions/webui.md` 流量方向色族消费面补注画布注解层同源取色; activeContext 切片; `kb.index` + `gen_issues_index` 重建。

@@ -3,7 +3,7 @@
 **Status:** Done
 **Added:** 2026-10-04
 **Updated:** 2026-10-04 07:40
-**Summary:** 用户拍板把「先 sync 再 ship.commit」两步合成一条: agent 直接 `ship.commit`, 脚本负责同步 + 推送, 同步(冲突/断网)失败才由 agent 介入。编排翻转为**提交先行**: 闸门 → 暂存 → 提交 → ref 核对#1 → 消费消息 → 内部同步(树净, 分叉 rebase 恒可自动) → [rebase 真合入远端 → 闸门复跑 + amend] → 内联推送。同步失败从「提交失败」改判「推送未完成」(退出码仍 0, 别重新提交); 旧「先提交是死锁」论断作废, 独立 sync 的树脏失败行改带两条出路(stash 配方 / 提交先行); 回写件合流交脚本 rebase + 生成物自动化解兜底(取代 2026-09-26「先合并远端再收尾」的手工纪律)。test.pkg 100 passed(+6 真仓用例); test.full 2442 passed + 3 skipped / 99%(基线 [26-10-04-0752](../testing/baselines/26-10-04-0752-commands-commit-first-sync.md))。
+**Summary:** 用户拍板把「先 sync 再 ship.commit」两步合成一条: agent 直接 `ship.commit`, 脚本负责同步 + 推送, 同步(冲突/断网)失败才由 agent 介入。编排翻转为**提交先行**: 闸门 → 暂存 → 提交 → ref 核对#1 → 消费消息 → 内部同步(树净, 分叉 rebase 恒可自动) → [rebase 真合入远端 → 闸门复跑 + amend] → 内联推送。同步失败从「提交失败」改判「推送未完成」(退出码仍 0, 别重新提交); 旧「先提交是死锁」论断作废, 独立 sync 的树脏失败行改带两条出路(stash 配方 / 提交先行); 回写件合流交脚本 rebase + 生成物自动化解兜底(取代 2026-09-26「先合并远端再收尾」的手工纪律)。test.pkg 100 passed(+6 真仓用例); test.full 2442 passed + 3 skipped / 99%(基线 [26-10-04-0752](../testing/baselines/attachments/26-10-04-0752-commands-commit-first-sync.md))。
 **Topics:** commands-commit-first-sync
 
 ## 原始请求

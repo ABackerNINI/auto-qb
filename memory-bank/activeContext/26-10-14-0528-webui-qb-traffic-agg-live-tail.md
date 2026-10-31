@@ -8,7 +8,7 @@
 
 ## 现在做到哪
 
-S7 五步全部落地, 守阵与全量回归全绿(数字见基线切片 `baselines/26-10-14-0528-webui-qb-traffic-agg-live-tail.md`):
+S7 五步全部落地, 守阵与全量回归全绿(数字见基线切片 `baselines/attachments/26-10-14-0528-webui-qb-traffic-agg-live-tail.md`):
 
 1. **`LiveTail` 第 8 字段 `pending_agg`**(`core/traffic_store.py`): 缺省空 = 纯磁盘 agg 读, 向后兼容既有 7 参位置构造; docstring 与模块头补 S7 口径。
 2. **写侧发布**(`core/modules/traffic_sample_mod.py`): 模块级纯函数 `_pending_agg_rows(agg, now)` 产出未封口部分行 —— 开放小时(dt 加权)+ 当日(`day_hours` ∪ 开放小时部分行 rollup)+ 当月(`month_days` ∪ 当日部分行 rollup); `_publish_live_tail` 发布面从 raw 键扩到 agg 键。day/month 两级包 try/except 三型(Windows 假时钟 OSError, 坑档已记)。

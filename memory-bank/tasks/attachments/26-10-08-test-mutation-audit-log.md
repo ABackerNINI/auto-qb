@@ -57,7 +57,7 @@
   - **存活 −121 / 新增存活 0**(逐 id 对差; 被新守阵杀死者按文件: sections 74 · core 23 · migrations 7 · curves 7 · loaders 6 · writer 3 · impact 1)。验收 #3 达标(**772 ≤ 893**)。
 - **S7 记录**: 基线切片 `testing/baselines/26-10-08-0902-mutants-config.md`; 真洞余量按**主题**入池 **6 条** `test` issue(`26-10-08-0903-test-config-mutation-{loop-guards,boundary-guards,loader-defaults,writer-tail,schema-surface,validator-strings}`); 环境坑入池 `26-10-08-0758-bug-mutants-status-wsl` + 坑档 `pitfalls/testing/mutants-wsl-shell.md`。
 - **环境坑(本机)**: WSL 登录壳实为 zsh —— `cd X` 改真实 cwd, 但 `$PWD` 与 `$()` 仍报 WSL 启动目录 ⇒ `mutants.status` 恒报 `mutmut=no`(实际已装; **不影响 `mutants.run`**)。排障耗时约 30min。详见坑档。
-- **收尾实测**: `commands run test.full` 全绿(覆盖率 99%, 未覆盖与 partial 各较上基线 −1)—— 数字见基线切片 [26-10-08-0902](../../testing/baselines/26-10-08-0902-mutants-config.md)。
+- **收尾实测**: `commands run test.full` 全绿(覆盖率 99%, 未覆盖与 partial 各较上基线 −1)—— 数字见基线切片 [26-10-08-0902](../../testing/baselines/attachments/26-10-08-0902-mutants-config.md)。
 - **未做 / 遗留**: 220 条真洞候选中, 复跑新杀的 121 条覆盖了其中一部分(其余落在未 S4 验证的 555 条里), **余量未逐条补测**(按主题入池等排期); 未 commit/push(用户未说「提交」)。
 
 
@@ -77,7 +77,7 @@
   - 坑补「本机 WSL 登录壳是 zsh」与「结果怎么读」两条指针; 反模式补 4 条。
 - **证据报告(§14 新增)**: `reports/26-10-08-0231-…html` 加「config 包首轮实测」节(数字 + 三条流程修正 + 假存活比例 19.7%), 变更记录顺延为 §15, 抬 `doc-updated`。
 - **常驻排期锚**: §03 标注 config 首轮进度与数字; §04 命令表补 2 个 task; §05 标准动作改走 task id; §07 台账补 R1/R2; §08 记一条「回灌经验」(状态仍 `Open`)。
-- **收尾实测**: `test.pkg` 全绿(154 条, 与上基线同批); `test.full` 见基线切片 [26-10-08-0920](../../testing/baselines/26-10-08-0920-mutation-audit-tooling.md); `doc.drift` 0 处手抄; `kb.check` 全过; `doc.caps` 无新增债务。
+- **收尾实测**: `test.pkg` 全绿(154 条, 与上基线同批); `test.full` 见基线切片 [26-10-08-0920](../../testing/baselines/attachments/26-10-08-0920-mutation-audit-tooling.md); `doc.drift` 0 处手抄; `kb.check` 全过; `doc.caps` 无新增债务。
 - **未做**: 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-08 R5 — 修 issue 26-10-08-0758(mutants.status WSL 失真)
@@ -88,7 +88,7 @@
 - **修法**(采纳 issue 建议第 1 项): `.commands/mutants/scripts/mutants.py` 的 `cmd_status` 四条回显改 `cd {mq} && <直接命令>` 形态(与 `cmd_run` 一致), 单次 wsl 调用内并列多条, 保持一屏回显。绝对路径方案未采纳(改动面更大)。**附带闭合**: 原末行 `test -f pyproject.toml && grep -m1 only_mutate …` 在镜像未跑过 `run` 时回非零 ⇒ 只读回显却报 `[FAIL]`; 改 `|| echo 'only_mutate = (未写, 先跑一轮 run)'` 兜底, 实测恢复 `[ok]`。
 - **验证**: 修复后同命令实测 `mutmut=yes` / `mutants=87M` / `head=6214c4f3`(与 `git -C <mirror> rev-parse` 现查一致)/ `not_killed=827`, 退出码 0(`[ok]`)。三条失真行全部恢复; `run`/`setup`/`report`/`verify` 未受影响(全程 `cd X && cmd`, 本轮未改)。
 - **回写**: issue 置 `Done`(封面徽标 + `issue-status` meta 两处 + 状态日志 + 复验行 + 修复后补充); 坑档 `pitfalls/testing/mutants-wsl-shell.md` 标注「工具侧已修」; 包内 `references/why.md` 排障表该条改「已修」、诚实交代节更新; skill `mutation-testing` 的坑条同步。
-- **收尾实测**: `commands run test.full` 覆盖口径与上基线逐位持平(见基线切片 [26-10-08-0958](../../testing/baselines/26-10-08-0958-mutants-status-wsl.md)); `kb.index` 20 生成物 / `kb.check` 主键与认领链全过 / `doc.drift` 0 处 / `doc.links` 过。存量红 2 项(无关文件 `activeContext/26-10-08-0713` 的裸 passed 数字, 已 stash 回退验证与本轮无关)与存量 cap 债务 3 项未动(范围守恒)。
+- **收尾实测**: `commands run test.full` 覆盖口径与上基线逐位持平(见基线切片 [26-10-08-0958](../../testing/baselines/attachments/26-10-08-0958-mutants-status-wsl.md)); `kb.index` 20 生成物 / `kb.check` 主键与认领链全过 / `doc.drift` 0 处 / `doc.links` 过。存量红 2 项(无关文件 `activeContext/26-10-08-0713` 的裸 passed 数字, 已 stash 回退验证与本轮无关)与存量 cap 债务 3 项未动(范围守恒)。
 - **未做**: 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-08 R6 — config 第二轮: 校验器字符串键名 + 短路运算符(issue 26-10-08-0903-validator-strings)
@@ -122,8 +122,8 @@
 - **S6 复跑(同 74 条 + 补测, 排除既有红守卫)**: **51 KILLED / 23 SURVIVED**(首轮有效判据 71 SURVIVED ⇒ 存活 **−48, −68%**)。
 - **余 22 条经逐一验证 = 等价变异**(无法杀死): `_validate_tree` 的 tempfile 参数(`encoding=None/UTF-8`、`suffix` 变体、`"w"`) · `yaml.dump` 参数(`allow_unicode`、`default_flow_style` —— 临时文件解析等价) · `_validate_tree__mutmut_1`(`tmp_path=""` 与 None 同为假值) · `_backup__mutmut_3` / `backup_versioned__mutmut_7`(`parent=None` —— `utils.atomic_write` 内部自带 `makedirs(dirname, exist_ok=True)`, 纵深冗余不可观测) · `_backup__mutmut_14` / `_build_doc__mutmut_8`(删 `open` 的 `"r"`, 默认即 `"r"`) · `_build_doc__mutmut_2`(`doc=""` 与 None 同路) · `_fallback_readonly_fields__mutmut_4/5`(`split(None)` / `split("XX.XX")` —— readonly 路径全不含点, 返回同一单元素列表)。
 - **真洞 1 条当场杀死**: `_validate_tree__mutmut_29`(finally 守卫的 `and` → `or`)—— 新增 `test_validate_tree_finally_guard_skips_none_tmp_path`(mock 造临时文件创建失败, 断言原始 OSError 原样冒出; `or` 会变 `stat(None)` TypeError)。**⇒ 71 真洞 = 48 复跑杀 + 1 当场杀 = 49 已清, 22 条等价(不追)**。
-- **S7 记录**: 基线切片 [26-10-08-1144-mutants-config-writer-tail](../../testing/baselines/26-10-08-1144-mutants-config-writer-tail.md); 新坑档 [read-source-static-guard-mutation](../../pitfalls/testing/read-source-static-guard-mutation.md); 本档案 R7; 常驻锚 §07/§08/§09 同步(config 行补第 3 个切片指针, 台账补 R7); writer-tail issue 状态与变更日志更新。
-- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1144](../../testing/baselines/26-10-08-1144-mutants-config-writer-tail.md)(2 failed 为既有债务 `tests/test_memory_bank.py` 两条读源码守卫, 远端已在 R6 后修复, 本轮基线 `f9101a33` 上复跑已转绿); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) / `doc.links` / `doc.drift`(0 处) / `doc.caps`(无新增债务) 全过。
+- **S7 记录**: 基线切片 [26-10-08-1144-mutants-config-writer-tail](../../testing/baselines/attachments/26-10-08-1144-mutants-config-writer-tail.md); 新坑档 [read-source-static-guard-mutation](../../pitfalls/testing/read-source-static-guard-mutation.md); 本档案 R7; 常驻锚 §07/§08/§09 同步(config 行补第 3 个切片指针, 台账补 R7); writer-tail issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1144](../../testing/baselines/attachments/26-10-08-1144-mutants-config-writer-tail.md)(2 failed 为既有债务 `tests/test_memory_bank.py` 两条读源码守卫, 远端已在 R6 后修复, 本轮基线 `f9101a33` 上复跑已转绿); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) / `doc.links` / `doc.drift`(0 处) / `doc.caps`(无新增债务) 全过。
 - **未做 / 遗留**: 其余 4 条 config 真洞 issue(loop-guards / boundary-guards / loader-defaults / schema-surface)未实施; 未重跑 `mutants.run` 全包(writer 单文件非 mutmut 目标粒度, 本轮是**对既有 74 条候选的 S4 重判 + 补测复跑**); 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-08 R8 — 实施 schema-surface 真洞 issue(27 条 S4 候选复验 + 补 6 守阵)
@@ -137,8 +137,8 @@
   - **踩坑(工具侧)**: 主仓 `src/auto_qb/config/schema/__init__.py` 是 **CRLF** 行尾, 红验脚本按 LF 拼多行锚点会「静默匹配不上」(报 ANCHOR-MISS 而非假绿); 另外手抄缩进空格数极易差 1(**实测差 1 空格 → 锚点长度 52 vs 51**), 已改用 `" " * 16` 拼接规避。
 - **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config_schema.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4190** · 存活 **573** · `no tests` **36** → 杀死率 **87.31%**(R6 基线 653 存活 / 85.66%)。
   - **逐 id 对差: 新杀 83 / 新增存活 3**。归因拆分: **26 条 = 本轮补测**(与红验 26/26 逐 id 对应); **57 条集中在 writer 模块** —— 镜像 12:07 刷新到 `origin/develop` 时纳入了 `fcc3cd69`(R7 的 22 守阵), 而 R6 基线(10:16)时点尚未包含它, **非本轮补测**, 已在切片里如实标注。新增存活 3 条(`writer.x__backup__mutmut_12/15/19`)为归类漂移、非退化。
-- **S7 记录**: 基线切片 [26-10-08-1229](../../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md); 本档案 R8; 常驻锚 §07/§08/§09 同步(config 行补第 4 个切片指针); schema-surface issue 状态与变更日志更新。
-- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1229](../../testing/baselines/26-10-08-1229-mutants-config-schema-surface.md)(`src/` 零改动, 新增用例 +6)。
+- **S7 记录**: 基线切片 [26-10-08-1229](../../testing/baselines/attachments/26-10-08-1229-mutants-config-schema-surface.md); 本档案 R8; 常驻锚 §07/§08/§09 同步(config 行补第 4 个切片指针); schema-surface issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-08-1229](../../testing/baselines/attachments/26-10-08-1229-mutants-config-schema-surface.md)(`src/` 零改动, 新增用例 +6)。
 - **未做 / 遗留**: 其余 3 条 config 真洞 issue(loop-guards / boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-09 R9 — 派生 hr 计划(未执行)
@@ -152,7 +152,7 @@
   - 池 = 15 个定向测试文件 / **457 fn**(`test_hr_service` 103 · `test_hr_parse` 47 · `test_hr_runtime` 37 · `test_hr_resolve` 36 · `test_hr_server` 36 · `test_hr_worker` 33 · `test_hr_store` 31 · `test_hr_report` 28 · `test_hr_status` 26 · `test_hr_channel` 22 · `test_hr_fetcher_channel` 15 · `test_hr_bencode` 14 · `test_hr_queue` 14 · `test_hr_ratelimit` 10 · `test_hr_multisite` 5)。核过池无「读源码文本」守阵 ⇒ 默认 `--deselect` 与本轮无关。
   - 排除面: `hr/__init__.py` / `log.py` / `module.py`(re-export / 薄封装); `test_hr.py`(HR 规则, 属 rules 轮) · `test_hr_config.py`(属 config 轮, 已做) · `test_web_hr.py` + `webui/server/routes/hr.py`(属 webui 轮)。
   - 步骤 S1–S8 全走 task id(`mutants.setup` → `mutants.run` → `mutants.report` + 三分类 → `mutants.verify` → 补测 → 复跑 → 记录 → **S8 更新常驻锚 §07**); 附 Windows 兜底 `mutants.gremlins` 与「单轮超 30 min 按模块再切」停手点。
-- **收尾**: `kb.index` 重建生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; 常驻锚 §07 `hr/` 行指针补计划链接 + §08 台账 + §09 日志同步。`test.full` 数字见基线切片 [26-10-09-1522](../../testing/baselines/26-10-09-1522-test-mutation-audit-hr-plan.md)(`src/` 与 `tests/` 零改动)。
+- **收尾**: `kb.index` 重建生成物(计划已进 `plans/_index.md`); `kb.check`(主键 / 认领链 / 回写措辞 / 日期守卫)与 `doc.links` 全过; 常驻锚 §07 `hr/` 行指针补计划链接 + §08 台账 + §09 日志同步。`test.full` 数字见基线切片 [26-10-09-1522](../../testing/baselines/attachments/26-10-09-1522-test-mutation-audit-hr-plan.md)(`src/` 与 `tests/` 零改动)。
 - **未做**: 未执行审计(计划边界: 不在计划里实施)。
 
 ### 2026-10-09 R10 — 实施 loop-guards 真洞 issue(30 条 continue/break 候选复验 + 补 18 守阵)
@@ -165,8 +165,8 @@
 - **红验 34/34 RED**: 30 条按 dump 的 hunk 正文块**逐字节**套同构变异(保留 CRLF)→ 目标用例变红 → `git checkout --` 还原(`src/` 零残留); 余 4 条(`_validate_trigger_action_compat` 两条 / `_validate_rules` 两条)因 continue 行带行尾注释未被首轮「纯 continue 行」提取式命中, **手工合成**同构变异后同样变红。
 - **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4230** · 存活 **533** · `no tests` **36** → 杀死率 **88.14%**(R8 基线 573 存活 / 87.31%)。
   - **存活 573 → 533(−40) / 新增存活 0**。归因: **21 条 = 本轮定向候选**(与 S4 逐 id 对应)· **2 条 = `_validate_trigger_action_compat__mutmut_25/32`**(真 `continue→break`, 行尾注释致首轮提取式漏收, 由新守阵杀死)· **17 条 = 同循环旁支变异**(`_validate_curve_points` 8/13/42 · gslc 98/113/115/137-140/159 · trigger_compat 26 · `_validate_fs` 50/111/112 · `_validate_tag_lists` 3/4)。
-- **S7 记录**: 基线切片 [26-10-09-1611-mutants-config-loop-guards](../../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md); 本档案 R10; 常驻锚 §07(config 行补第 5 个切片指针)/§08/§09 同步; loop-guards issue 状态与变更日志更新。
-- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-09-1611](../../testing/baselines/26-10-09-1611-mutants-config-loop-guards.md)(相对上基线 passed **+18** = 本轮新增用例, 未覆盖 **−2** / partial **−2**, `src/` 零改动)。
+- **S7 记录**: 基线切片 [26-10-09-1611-mutants-config-loop-guards](../../testing/baselines/attachments/26-10-09-1611-mutants-config-loop-guards.md); 本档案 R10; 常驻锚 §07(config 行补第 5 个切片指针)/§08/§09 同步; loop-guards issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-09-1611](../../testing/baselines/attachments/26-10-09-1611-mutants-config-loop-guards.md)(相对上基线 passed **+18** = 本轮新增用例, 未覆盖 **−2** / partial **−2**, `src/` 零改动)。
 - **未做 / 遗留**: 其余 2 条 config 真洞 issue(boundary-guards / loader-defaults)未实施; 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-10 R11 — 实施 loader-defaults 真洞 issue(手搓形态复验 + 补 7 守阵)
@@ -185,8 +185,8 @@
 - **红验 40/40 KILLED**: 同脚本逐条 apply → 跑池内两文件 → 原字节还原(`src/` 零残留)。首版 `chan.token` 仍存活(用例只给了 `token` 显式值)→ 补反面对照后转 KILLED。
 - **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4287** · 存活 **476** · `no tests` 36 → 杀死率 **89.33%**(R10 基线 533 存活 / 88.14%)。
   - **逐 id 对差: 新杀 57 / 新增存活 0**, 且 **57 条全部落在 `config/loaders`** —— 与本轮守阵面逐模块一致, 无旁支归因争议(对比 R8 的「57 条来自镜像纳入他人守阵」)。
-- **S7 记录**: 基线切片 [26-10-10-0925](../../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md); 本档案 R11; 常驻锚 §07(config 行补第 6 个切片指针)/§08/§09 同步; loader-defaults issue 状态与变更日志更新。
-- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-0925](../../testing/baselines/26-10-10-0925-mutants-config-loader-defaults.md)(本轮 7 个新守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **S7 记录**: 基线切片 [26-10-10-0925](../../testing/baselines/attachments/26-10-10-0925-mutants-config-loader-defaults.md); 本档案 R11; 常驻锚 §07(config 行补第 6 个切片指针)/§08/§09 同步; loader-defaults issue 状态与变更日志更新。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-0925](../../testing/baselines/attachments/26-10-10-0925-mutants-config-loader-defaults.md)(本轮 7 个新守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
 - **踩到的已记坑**: [redverify-anchor-lineendings](../../pitfalls/testing/redverify-anchor-lineendings.md) **复发 +1** —— 本轮变异形态是「删整行」, 脚本在 bytes 层比对却拿 str 锚点 ⇒ 6 条 `bind.*` 恒 `hits=0`; 另有 2 条单行锚点在两个函数里各出现一次(`count=2`)。**为什么没命中**: 坑里写的是「CRLF 让多行锚点失配 / 手抄缩进差 1」, 本轮是**第三种形态**(字节层类型失配 + 函数级重复锚点), 首版照写仍会踩; 但坑里那句「`count != 1` 必须报错停手」的兜底**生效了**(报 `ANCHOR-MISS` 而非假绿), 属守阵按预期工作。已把形态三补进坑档。
 - **未做 / 遗留**: config 真洞 issue 尚余 **boundary-guards** 一条未实施; 「形态级手搓复验」的做法当时未回灌 skill(R12 补上); 未 commit/push(用户未说「提交」)。
 
@@ -198,7 +198,7 @@
   - **② 等价变异的一类新形态**(三分类节): **派生值恰等于字段默认**时, 「删实参 / 默认值换 None」在所有现存输入上都看不出差别 → 是等价变异但看着像真洞。判等价前先问「我造的输入能把派生值与字段默认区分开吗」, 区分不开就先造输入(合成非默认档案 / 「键在」与「键缺」反向对照), 再下结论。
 - **同步落点**: 证据报告 §14「这轮与后续轮次给流程的**五条**修正」第五条(原「三条」标题实为四条, 顺手改对)+ §15 变更记录一行 + 抬 `doc-updated`; 命令包深读 `references/why.md` 新增「什么时候**不用** `mutants.verify`」; 常驻锚 §05 标准动作改「两路」、§06 产物表补红验坑档行、§09 日志; skill 另补 3 条反模式(手搓条数当存活数报 / 守阵只给「键在」一种输入 / 判等价前不问输入能否区分)与坑指针(四种锚点失配形态)。
 - **踩到的已记坑**: 无(本轮纯文档)。
-- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1000](../../testing/baselines/26-10-10-1000-mutation-audit-skill-feedback.md)(`src/` 与 `tests/` **零改动**); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1000](../../testing/baselines/attachments/26-10-10-1000-mutation-audit-skill-feedback.md)(`src/` 与 `tests/` **零改动**); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
 - **未做**: 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-10 R13 — 实施 boundary-guards 真洞 issue(手搓形态复验 + 补 5 守阵)
@@ -215,8 +215,8 @@
 - **与「建议」的差异**: 额外发现**建议没覆盖的两类** —— ①**逐字节**位移(既有用例取 1023KiB/1025MiB 这种「隔一档」值, 挡不住只挪 1 字节)②**分支只有「通过」侧**(`flush` 的「须为整数秒」append 语句被删也全绿)。
 - **S6 复跑(同目标同池 + 补测, 硬约束 11)**: 先 `cp` 新 `tests/test_config.py` + `tests/test_hr_config.py` 进镜像再 `--no-refresh` —— 变异 **4799** · 杀 **4320** · 存活 **443** · `no tests` **36** → 杀死率 **90.02%**(R11 基线 476 存活 / 89.33%)。
   - **逐 id 对差: 新杀 33 / 新增存活 0**, 且 **33 条全部落在 `config/validation`**(sections 31: `_validate_hr_check` 12 · `_validate_hr_site_entry` 12 · `_validate_qb_traffic` 7; core 2)—— 与本轮守阵面逐模块一致、无旁支归因争议。
-- **S7 记录**: 基线切片 [26-10-10-1045](../../testing/baselines/26-10-10-1045-mutants-config-boundary-guards.md); 本档案 R13; 常驻锚 §07(config 行杀死率补 `90.02%`、轮次补 `R13`、切片指针补 boundary-guards 切片)/§08/§09 同步; boundary-guards issue 状态置 `Done` 与变更日志更新。
-- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1045](../../testing/baselines/26-10-10-1045-mutants-config-boundary-guards.md)(本轮新增 5 个守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **S7 记录**: 基线切片 [26-10-10-1045](../../testing/baselines/attachments/26-10-10-1045-mutants-config-boundary-guards.md); 本档案 R13; 常驻锚 §07(config 行杀死率补 `90.02%`、轮次补 `R13`、切片指针补 boundary-guards 切片)/§08/§09 同步; boundary-guards issue 状态置 `Done` 与变更日志更新。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1045](../../testing/baselines/attachments/26-10-10-1045-mutants-config-boundary-guards.md)(本轮新增 5 个守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
 - **未做 / 遗留**: config 首轮入池的 6 条 `test` issue **已全部实施完毕**(余量仅剩 config 包内未逐条补测的 555 条 S4 未验证候选, 按需另立轮); hr / rules / core 计划仍未执行; 未 commit/push(用户未说「提交」)。
 ### 2026-10-10 R14 — hr 包首轮审计(执行计划 26-10-09-1459)
 
@@ -228,5 +228,5 @@
 - **S5 处置**: 真洞**按主题入池 6 条 `test` issue**(`26-10-10-1108-test-hr-mutation-{service-engine,judgment-core,channel-server,serialization,runtime-worker,display}`), 各带函数级分布 + dump 指针 + `doc-refs`。**零 `src/` / `tests/` 改动**(纯入池)。
 - **S6 复跑**: **N/A** —— 本轮无代码/测试改动, 复跑无数值意义。按计划 §5 停手点(整包单轮 96 min 远超 30 min), 补测+复跑**按模块拆分**为后续轮次(每条池内 issue 实施时各自复跑, 单模块成本远低于整包)。
 - **S7/S8 记录**: 基线切片 `testing/baselines/26-10-10-1108-mutants-hr.md`; 常驻锚 §03/§07/§08/§09 全部同步(硬约束 12)。
-- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-10-1108](../../testing/baselines/26-10-10-1108-mutants-hr.md)(`src/` 零改动)。
+- **收尾实测**: `commands run test.full` 数字见基线切片 [26-10-10-1108](../../testing/baselines/attachments/26-10-10-1108-mutants-hr.md)(`src/` 零改动)。
 - **未做 / 遗留**: 2440 条存活未逐条判读(按主题入池等排期); 补测与复跑未做(按模块拆后续轮); 未 commit/push(用户未说「提交」)。

@@ -58,7 +58,7 @@
 - **摸底(只读)**: 走 `memory-bank/README.md` 细路由建立心智模型; 实测各包/子面行数与文件数(后端 8 包、前端静态、tests)作为轮次切分依据; 核对既有制品避免重复 —— 已有全项目 Code Review(`26-10-05-0951`)与变异审计(专题 `mutation-audit`)覆盖缺陷/测试硬度, 但**无一次系统性重复代码审查**(仅零散 refactor issue)。
 - **产物**: `plans/26-10-10-2333-plan-dup-code-audit.html` —— §01 背景与目标(含与既有审查的不重叠声明) · §02 四类口径 + 记录七字段 · §03 两段式方法与工具 · §04 27 轮分步清单(Phase 0→4) · §05 每轮六步微步骤 · §06 产出与归档 · §07 停手点与风险 · §08 验收 · §09 变更记录。
 - **待拍板**: ①报告形态(默认滚动报告; 备选每阶段冻结 3 份); ②起步轮(默认轮 01 `config/schema/`; 备选先跑轮 00 工具冒烟)。
-- **收尾实测**: `commands run test.full` → 数字见基线切片 [26-10-10-2356](../testing/baselines/26-10-10-2356-dup-code-audit-plan.md)(本轮零 `src/`、零 `tests/` 改动, 与上基线持平); `test_docs_forms.py` 11 passed(计划 meta / 命名 / dark 主题 / 索引自洽); `kb.check` 主键纪律 / 认领链 / 回写措辞 / 日期守卫全过; `kb.index` 重建生成物(计划已进 `plans/_index.md`)。
+- **收尾实测**: `commands run test.full` → 数字见基线切片 [26-10-10-2356](../testing/baselines/attachments/26-10-10-2356-dup-code-audit-plan.md)(本轮零 `src/`、零 `tests/` 改动, 与上基线持平); `test_docs_forms.py` 11 passed(计划 meta / 命名 / dark 主题 / 索引自洽); `kb.check` 主键纪律 / 认领链 / 回写措辞 / 日期守卫全过; `kb.index` 重建生成物(计划已进 `plans/_index.md`)。
 - **未做 / 遗留**: 未执行任何轮次(计划边界: 只定轮次不改码); 未做轮 00 的工具冒烟(pylint / jscpd 噪声阈值) —— 待起步轮确定后执行。
 
 ### 2026-10-11 R1 — Phase 0 + 轮 01–04(config 全包)

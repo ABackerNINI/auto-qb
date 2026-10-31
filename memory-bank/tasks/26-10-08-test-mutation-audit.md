@@ -33,7 +33,7 @@
   - 证据报告 `reports/26-10-08-0231-…html` §14「三条流程修正」→ **四条**(新增「每轮实施后同步常驻锚覆盖进度总表」), §15 变更记录补 26-10-08-0935 一行, 抬 `doc-updated`;
   - 命令包深读 `.commands/mutants/references/why.md` 新增「跑完之后: 数字要落到哪几处」小节(四落点表 + 两处勿混警告)。
 - **口径自查**: 表中两个「已做」行均有切片链接、日期/变异数/杀死率与切片逐位一致; 表内无 `N passed`(不触回写守卫判据族 B)。
-- **收尾实测**: `commands run test.full` → **2785 passed + 4 skipped / 覆盖率 99%**(与上基线 26-10-08-0920 逐位持平, 本轮零 `src/`、零 `tests/` 改动); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) / `doc.links` / `doc.drift`(0 处) / `doc.caps`(无新增债务) 全过。基线切片 [26-10-08-0939](../testing/baselines/26-10-08-0939-mutation-audit-standing-table.md)。
+- **收尾实测**: `commands run test.full` → **2785 passed + 4 skipped / 覆盖率 99%**(与上基线 26-10-08-0920 逐位持平, 本轮零 `src/`、零 `tests/` 改动); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) / `doc.links` / `doc.drift`(0 处) / `doc.caps`(无新增债务) 全过。基线切片 [26-10-08-0939](../testing/baselines/attachments/26-10-08-0939-mutation-audit-standing-table.md)。
 - **未做**: 未 commit/push(用户未说「提交」)。
 
 ## 实现计划
@@ -87,9 +87,9 @@
   - **逐 id 对差(R14 service.py 存活 604 → 本轮 502)**: **新杀 103 · 新增存活 1**(净 **−102**)。新杀按函数: `_run_downloads` **43** · `_finish_wave` **38** · `_stop_condition` **12**(三目标函数 **93**)+ 旁支 10(`_do_wave` 2 · `_run_pages` 2 · `_retention_check` 2 · `__init__` 1 · `_refresh_locked` 1 · `_mark_fetch_failed_lane` 1 · `refresh_site` 1)。
   - **新增存活 1 条** `limits_for__mutmut_5`(`site_confs.get(site)` → `get(None)`): **经全套件(15 文件)手工复验确认为真存活, 不是退化** —— 疑为 R14「共享镜像崩溃 + 续跑」留下的编号/归类漂移(R14 dump 里 `limits_for` 只有 m2/m4)。已作为余量记入切片。
   - **为什么目标收窄仍可比**: mutmut 逐文件生成变异, 单条是否被池杀死只取决于该变异 + 池; R14 的 service.py 存活数来自整包目标的同一份池 ⇒ 两者 service.py 存活集合可直接对差。
-- **S7 记录**: 基线切片 [26-10-10-1408](../testing/baselines/26-10-10-1408-mutants-hr-service.md); 本档案 R16; 常驻锚 §07(`hr/` 行补切片指针 + R16)/§08/§09 同步; 坑档 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 补形态四 + 复发 +1。
+- **S7 记录**: 基线切片 [26-10-10-1408](../testing/baselines/attachments/26-10-10-1408-mutants-hr-service.md); 本档案 R16; 常驻锚 §07(`hr/` 行补切片指针 + R16)/§08/§09 同步; 坑档 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 补形态四 + 复发 +1。
 - **issue 状态**: 置 **`In Progress`**(非 `Done`)—— 604 条里本轮只覆盖三个函数(163 条面), 其余 12+ 函数(余量清单见切片「余量」节)留后续轮。
-- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1408](../testing/baselines/26-10-10-1408-mutants-hr-service.md)(本轮新增 30 用例, `src/` 零改动)。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-1408](../testing/baselines/attachments/26-10-10-1408-mutants-hr-service.md)(本轮新增 30 用例, `src/` 零改动)。
 - **未做 / 遗留**: `service.py` 其余函数未覆盖; 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-10 R17 — hr/model·store·queue 序列化与持久化守阵(issue 26-10-10-1108-serialization)
@@ -100,7 +100,7 @@
 - **红验 245/271 KILLED**(脚本 `tmp-analysis/r17_redverify.py`, dump 驱动同构变异逐条 apply → 定向守阵 → 原字节还原; 自检 271 条 apply 后 `ast.parse` 通过 + revert 字节恒等; 超时类变异对子进程设 30s 超时按「未绿=被杀」)。**坑 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 复发 +1(新增形态五)**: ①dump 的 hunk 行号是**函数相对**(首版按文件行号 ⇒ 271 条全失配)②mutmut id 的 `ǁ` 分隔符**字形不可靠**③去缩进对 **docstring 续行不生效**; 处置与形态四同源(函数体范围定位 + strip 内容唯一命中 + 按缩进位移复原)。
 - **S6 复跑(同池, 目标按文件收窄)**: `**/hr/model.py` / `store.py` / `queue.py` + R14 同一份 15 文件池 + `--no-refresh`(先 `cp` 三个改过的测试文件进镜像) → **model 844 变异/杀 843/存活 1(99.88%)** · **store 205/192/13(93.66%)** · **queue 140/126/12+超时 2(90.00%)**; 对 R14 **逐文件存活对差 271 → 28**(净 −243)。本轮存活 26 条 = **全部等价**(与红验逐 id 一致)。
 - **新坑 [mutants-mirror-dirty-worktree](../pitfalls/testing/mutants-mirror-dirty-worktree.md)**: 专用镜像的 `queue.py` 残留上一轮被中断的 mutmut apply 变异体(`left = deadline + time.monotonic()`), 而 `git status`/`git diff`/`git update-index --really-refresh` **全判净**(同长度替换 ⇒ stat 缓存跳过内容比对); 开跑前 sha1 核对时发现并 `git checkout -f -- src/` 复位。另: 红验脚本被 `TaskStop` 硬杀时 `finally` 未跑, 主仓 `src/` 留了变异体 —— 事后 `git checkout -- src/` 复位。
-- **S7/S8 记录**: 基线切片 [26-10-10-1458](../testing/baselines/26-10-10-1458-mutants-hr-serialization.md); 常驻锚 §07/§08/§09 同步; serialization issue 置 `Done`。**收尾实测**: `test.full` 全绿(数字见切片)。**未做**: 其余 4 条 hr `test` issue(judgment-core / channel-server / runtime-worker / display)未实施; 未 commit/push。
+- **S7/S8 记录**: 基线切片 [26-10-10-1458](../testing/baselines/attachments/26-10-10-1458-mutants-hr-serialization.md); 常驻锚 §07/§08/§09 同步; serialization issue 置 `Done`。**收尾实测**: `test.full` 全绿(数字见切片)。**未做**: 其余 4 条 hr `test` issue(judgment-core / channel-server / runtime-worker / display)未实施; 未 commit/push。
 
 ### 2026-10-10 R18 — hr/runtime·worker·fetcher·events·adapters·log 守阵(issue 26-10-10-1108-runtime-worker)
 
@@ -111,7 +111,7 @@
 - **坑 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 复发 +1(新增形态六)**: dump 的 hunk **带上下文行**, 且**去缩进对 docstring 续行不生效**(同 hunk 内代码行 −4 / docstring 行 −0)⇒ 不能拿「首行缩进差」当统一位移(首版整块替换把上下文行也吃掉, 6 条 APPLY-ERROR)。处置 = 只用 `-` 行定位与取缩进; 歧义时用整块定位但只替换 `-` 区间。另记两条判据污染防护: 开工先 `git checkout -- src/`(残留变异体让锚点整体失配, 实测 `parse_page m44`)+ 变异体可能写出仓外产物(runtime `data_dir=None` 变体在仓根造 `None/hr/*.json`); **红验跑着时不要手工改同一文件**(手工 `git checkout` 会把正在跑的变异体还原, 实测把 worker 的 `start m10` / `request_refresh m11` 伪判成 SURVIVED)。
 - **S6 复跑(同池, 目标按文件收窄)**: 9 个目标 + R14 同一份 15 文件池 + **新建 `tests/test_hr_events.py`**(池变更如实记: events/log 此前无专属池文件, 按硬约束 9 补池)+ `--no-refresh`(先 `cp` 5 个测试文件进镜像)。逐文件杀死率 **log 90.00% · events 94.37% · fetcher 98.08% · adapters/`__init__` 100% · base 100% · carpt 100% · nexusphp 99.48% · runtime 95.20% · worker 97.07%**; 六文件存活 **386 → 34**(净 −352)。
   - **一条假存活(本轮实证)**: worker S6 的 11 条存活里 `stop__mutmut_1`(`timeout: float = 10.0 → 11.0`)**手工同构复验为 KILLED**(池内 `test_stop_default_timeout_is_ten_seconds` 必红) —— 疑与坑 `mutants-mirror-dirty-worktree` 同源(**同长度替换**让 stat/缓存比对失效); 以红验为准记为假存活。
-- **S7/S8 记录**: 基线切片 [26-10-10-1940](../testing/baselines/26-10-10-1940-mutants-hr-runtime-worker.md); 常驻锚 §07/§08/§09 同步(硬约束 12); runtime-worker issue 置 `Done`(六文件全覆盖)。**收尾实测**: `test.full` 全绿(数字见切片); `kb.index` 20 生成物。**未做**: hr 真洞 issue 尚余 **judgment-core / channel-server / display** 三条未实施; 未 commit/push(用户未说「提交」)。
+- **S7/S8 记录**: 基线切片 [26-10-10-1940](../testing/baselines/attachments/26-10-10-1940-mutants-hr-runtime-worker.md); 常驻锚 §07/§08/§09 同步(硬约束 12); runtime-worker issue 置 `Done`(六文件全覆盖)。**收尾实测**: `test.full` 全绿(数字见切片); `kb.index` 20 生成物。**未做**: hr 真洞 issue 尚余 **judgment-core / channel-server / display** 三条未实施; 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-10 R19 — hr/ 判定内核与边界四文件守阵(issue 26-10-10-1108-judgment-core)
 
@@ -122,8 +122,8 @@
   - **坑 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 复发 +1(新增形态七)**: 首版 applier 改用「整段 hunk(上下文行 + 删除行)」定位后, 取**首行**缩进作 `add` 行缩进基准 —— hunk 首行是 `def`/docstring(缩进 0)而被改行在函数体内(缩进 4)时, 重排出的 `add` 行**丢缩进** ⇒ `IndentationError` ⇒ pytest 收集失败被**伪判 KILLED**(首版红验 242/292, 与 S6 严重不符; 实测 bencode `bdecode m3` 等 ~52 条虚高)。处置: 缩进基准改取**首个删除行**对应的源行, 并在 apply 后 `ast.parse` 自检(不通过记 `APPLY-ERROR` 而非跑测试)。**「命中数 != 1 停手」的兜底仍生效**(报 `ANCHOR-MISS` 而非假绿)。已把形态七补进坑档。
   - **一次采样抖动(如实记)**: ratelimit 的 S6 **首跑**为 130 杀 / 12 存活(91.55%), 复跑 **131 / 11**(92.25%) —— 差的一条 `next_allowed_at__mutmut_10`(把 `rng` 换成 `None` 走全局随机)与池内该用例的随机抖动判据有关; 复跑与红验一致, 取 131 / 11。
 - **S6 复跑(同池, 目标按文件收窄)**: 四个目标 `**/hr/<file>.py` + R14 同一份 15 文件池 + `--no-refresh`(先 `cp` 4 个改过的测试文件进镜像) —— **resolve 353 变异 / 杀 330 / 存活 23(93.48%)** · **bencode 310 / 237 / 69+4超时(76.45%)** · **ratelimit 142 / 131 / 11(92.25%)** · **parse 326 / 311 / 15(95.40%)**; 对 R14 **逐文件存活对差 292 → 122**(净 **−170**)。
-- **S7/S8 记录**: 基线切片 [26-10-10-2044](../testing/baselines/26-10-10-2044-mutants-hr-judgment-core.md); 本档案 R19; 常驻锚 §07(`hr/` 行补四文件单模块数字与切片指针)/§08/§09 同步(硬约束 12); judgment-core issue 置 `Done`。
-- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-2044](../testing/baselines/26-10-10-2044-mutants-hr-judgment-core.md)(本轮新增 47 守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
+- **S7/S8 记录**: 基线切片 [26-10-10-2044](../testing/baselines/attachments/26-10-10-2044-mutants-hr-judgment-core.md); 本档案 R19; 常驻锚 §07(`hr/` 行补四文件单模块数字与切片指针)/§08/§09 同步(硬约束 12); judgment-core issue 置 `Done`。
+- **收尾实测**: `commands run test.full` 全绿, 数字见基线切片 [26-10-10-2044](../testing/baselines/attachments/26-10-10-2044-mutants-hr-judgment-core.md)(本轮新增 47 守阵; `src/` 零改动); `kb.index`(20 生成物)/ `kb.check`(主键 / 认领链 / 回写 / 日期全过)/ `doc.links` / `doc.drift`(0 处)/ `doc.caps`(无新增债务)全过。
 - **未做 / 遗留**: hr 真洞 issue 尚余 **channel-server / display** 两条未实施; 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-15 R20 — hr/ 展示导出面两文件守阵(issue 26-10-10-1108-display)
@@ -135,8 +135,8 @@
   - **新坑 [redverify-pycache-stale-verdict](../pitfalls/testing/redverify-pycache-stale-verdict.md)**: 首版红验**假 SURVIVED** —— `.pyc` 缓存判据 `(mtime, size)` 在**等长替换**(`get(None, view.channel_state)` ↔ `get(view.channel_state, None)`, 同长)+ **秒级 mtime 碰撞**(0.5s/条)下两条相同 ⇒ 子进程 import **复用上一条变异体的字节码**, 跑的不是当前文件 ⇒ 假存活且**稳定复现**(前两次全量给出逐条一致的 149/106 假数)。判别 = 「单跑 KILLED、全量 SURVIVED」; 处置 = 子进程加 `-B` + `PYTHONDONTWRITEBYTECODE=1` **并**开工清 `__pycache__`(只设环境变量不够: 旧 `.pyc` 仍被读)。与 `mutants-mirror-dirty-worktree`(git stat 缓存)同族。
   - **坑 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 复发 +1(新增形态八)**: 首版只用「删除行序列」定位, 27 条报 `ANCHOR-MISS(2)` —— 同一行文本(`file=out` / `print("-" * 92, file=out)`)在**同一函数体内出现多次**。处置 = 二级锚点: 用「上下文行 + 删除行」的 strip 序列(跳过 `+` 行)再定位, 唯一命中后按 `-` 行在序列中的偏移取替换区间; 两级皆不唯一才报 ANCHOR-MISS。**「命中数 != 1 停手」的兜底仍生效**(27 条先报 `ANCHOR-MISS(2)` 而非静默取首个)。
 - **S6 复跑(同池, 目标按文件收窄)**: 两个目标 `**/hr/status.py` / `report.py` + R14 同一份 15 文件池 + `--no-refresh`(先 `cp` 2 个改过的测试文件进镜像) —— **status 733 变异 / 杀 715 / 存活 18(97.54%)** · **report 691 / 650 / 41(94.07%)**; 对 R14 **逐文件存活对差 540 → 59**(净 **−481**), 存活 id 与红验逐条吻合。
-- **S7/S8 记录**: 基线切片 [26-10-15-0846](../testing/baselines/26-10-15-0846-mutants-hr-display.md); 本档案 R20; 常驻锚 §07(`hr/` 行补两文件单模块数字与切片指针)/§08/§09 同步(硬约束 12); display issue 置 `Done`。
-- **收尾实测**: `commands run test.full` **3277 passed + 4 skipped / 0 failed**(覆盖率 TOTAL 99%, 16866 语句 / 158 未覆盖); 数字见基线切片 [26-10-15-0846](../testing/baselines/26-10-15-0846-mutants-hr-display.md)(本轮新增 54 守阵; `src/` 零改动); `kb.index`(21 生成物)/ `kb.check` / `doc.links` / `doc.drift` / `doc.caps`。
+- **S7/S8 记录**: 基线切片 [26-10-15-0846](../testing/baselines/attachments/26-10-15-0846-mutants-hr-display.md); 本档案 R20; 常驻锚 §07(`hr/` 行补两文件单模块数字与切片指针)/§08/§09 同步(硬约束 12); display issue 置 `Done`。
+- **收尾实测**: `commands run test.full` **3277 passed + 4 skipped / 0 failed**(覆盖率 TOTAL 99%, 16866 语句 / 158 未覆盖); 数字见基线切片 [26-10-15-0846](../testing/baselines/attachments/26-10-15-0846-mutants-hr-display.md)(本轮新增 54 守阵; `src/` 零改动); `kb.index`(21 生成物)/ `kb.check` / `doc.links` / `doc.drift` / `doc.caps`。
 - **未做 / 遗留**: hr 真洞 issue 尚余 **channel-server** 一条未实施; 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-15 R21 — hr/channel·server 本地通道与端点守阵(issue 26-10-10-1108-channel-server)
@@ -146,7 +146,7 @@
 - **S5 补测**: **23 新守阵** —— `tests/test_hr_channel.py` 11 · `tests/test_hr_server.py` 12; 两文件头部「## 测试计划」同步(server 补 R21 段 16 行条目)。**全绿**(test.quick 收面含两文件)。
 - **红验 195/321 KILLED**(脚本 `tmp-analysis/r20_redverify.py` —— dump 驱动同构变异逐条 apply → 定向守阵变红 → 原字节还原; 自检 apply 后 `ast.parse` + revert 字节恒等): channel **63/121**(61 自动 + 2 条 `ANCHOR-MISS(2)` 的 `""→"XXXX"` 双命中, 手工同构复验两位各 KILLED)· server **132/200**; 余 **126** 条逐 id 判等价(与 S3 逐 id 一致: 61+77+1 减 13 条现被既有/新守阵杀)。**坑 [redverify-anchor-lineendings](../pitfalls/testing/redverify-anchor-lineendings.md) 复发 +1(形态九)**: 续行缩进复原按 `min` 位移 —— docstring 续行位移少代码行(去缩进不生效)⇒ 按 min 失复原 ⇒ `IndentationError` 被伪判 SURVIVED(首版 180/321, 与 S6 不符; 处置改按 `max` 位移 + `ast.parse` 自检记 `APPLY-ERROR` 而非跑测试)。另记事实: **按目标跑里 `.meta` 只末目标存**(channel 的 meta 被 server 跑冲掉, 判据取 diff 清单/复生成)。
 - **S6 复跑(同池, 目标按文件收窄)**: `**/hr/channel.py` / `**/hr/server.py` + R14 同一份 15 文件池 + `--no-refresh`(先 `cp` 两改过的测试文件进镜像)—— **channel 540 变异 / 杀 483 / 存活 57(89.44%)** · **server 550 / 482 / 67+超时 1(87.64%)**; 对复跑基线 **两文件存活 321 → 125**(净 **−196**)。
-- **S7/S8 记录**: 基线切片 [26-10-15-0927](../testing/baselines/26-10-15-0927-mutants-hr-channel-server.md); 本档案 R21; 常驻锚 §07(`hr/` 行补两文件单模块数字与切片指针)/§08/§09 同步(硬约束 12); channel-server issue 置 `Done`(两文件全覆盖)。**收尾实测**: `test.full` 全绿(数字见切片)。**未做 / 遗留**: hr 真洞 issue 六条全部实施(display 由并行合流 R20); 随提交一并 push。
+- **S7/S8 记录**: 基线切片 [26-10-15-0927](../testing/baselines/attachments/26-10-15-0927-mutants-hr-channel-server.md); 本档案 R21; 常驻锚 §07(`hr/` 行补两文件单模块数字与切片指针)/§08/§09 同步(硬约束 12); channel-server issue 置 `Done`(两文件全覆盖)。**收尾实测**: `test.full` 全绿(数字见切片)。**未做 / 遗留**: hr 真洞 issue 六条全部实施(display 由并行合流 R20); 随提交一并 push。
 
 ### 2026-10-15 R22 — hr/service.py 波次引擎余量函数守阵(issue 26-10-10-1108-service-engine)
 
@@ -155,7 +155,7 @@
 - **S3 三分类** + **S5 补测**: 补 **29 新守阵**(`tests/test_hr_service.py` R22 节, 145 → 184 用例; 助手 `_StoppedFetcher` / `_RecordingCounterAdapter` / `_marks_page` / `_real_adapter` / `_site_file_json`), 已同步该文件 docstring「## 测试计划」R22 段 48 条目。
 - **红验 38/62 KILLED**(脚本 `tmp-analysis/r20_redverify.py` —— dump 驱动同构变异逐条 apply → 定向守阵变红 → 原字节还原; MAP 62 条 = 12 大族各抽 2 + 5 新函数面全量 + `_absence_proven_all` 10 条全量): 首轮 **33/62** 暴露 **5 条真洞**(`_sign_releases` 命中首条 break 漏签 / `_freeze_terminal` 失效档条目 break 漏退役 / `_advance_observation` 出口 streak 未断 等)⇒ 当场补 **3 守阵** + 加强 **1 守阵** ⇒ 复验 **5/5 KILLED**; 余 24 条逐条判等价(理由归 6 类: 形参默认值不可达 6 · 属性恒存在/形参未使用 5 · 被后续赋值/兜底覆盖 5 · 判据边界在真实取值域不可分 5 · 参数在给定路径不参与计算 2 · 测试面不可观测 1; 清单 `tmp-analysis/r20_equiv_reasons.md`)。**调试实录**: `_run_pages__mutmut_4` 红验判 SURVIVED, 初疑缓存/apply 失效, 用 `faulthandler` + 逐圈打印实测 ⇒ 真相是 while 体尾部 `if not progressed: break` 兜底 ⇒ **等价**(非漏杀)。**红验脚本自身修三处 bug**: `parse_dump` 首版把所有条目写进同一 `None` key / 模块级 mutmut id 前缀是 `x_`(剥 2)非 `x__` / MAP key 的 func 段需归一化(类内保留前导下划线、模块级剥 `x_`)。
 - **S6 复跑(同池, 目标收窄单模块)**: `**/hr/service.py` + R14 同一份 15 文件池 + `--no-refresh`(先 `cp` 改过的 `tests/test_hr_service.py` 进镜像) —— **2102 变异 / 杀 1794 / 存活 308 / 0 超时 / 0 no tests(杀死率 85.35%)**, 墙时 27m12s; 对开工前态 **逐 id 对差 491 → 308**(净 **−183** = 新杀 187 / 新增存活 4)。**4 条新增存活**经全套件手工同构复验均 SURVIVED(`tmp-analysis/r20_verify4.py`, 3274 passed)⇒ 真存活(非假存活), 与前态差异**疑为 mutmut 编号漂移**(本轮 S6 前有一次被中断跑批, 镜像 `mutants/` 留半轮缓存)。
-- **S7/S8 记录**: 基线切片 [26-10-15-0922](../testing/baselines/26-10-15-0922-mutants-hr-service.md); 本档案 R22; 常驻锚 §07(`hr/` 行补 service.py 余量轮数字与切片指针)/§08/§09 同步(硬约束 12); service-engine issue 置 `Done`(service.py 全覆盖)。**收尾实测**: `test.full` **3274 passed + 4 skipped / 0 failed / 覆盖率 99%**; `kb.index`/`kb.check`/`doc.links`/`doc.drift`/`doc.caps` 全绿。**未做 / 遗留**: hr 真洞 issue 六条全部实施; 随提交一并 push(提交时远端已领先 3 提交, 手工合流后改记 R22)。
+- **S7/S8 记录**: 基线切片 [26-10-15-0922](../testing/baselines/attachments/26-10-15-0922-mutants-hr-service.md); 本档案 R22; 常驻锚 §07(`hr/` 行补 service.py 余量轮数字与切片指针)/§08/§09 同步(硬约束 12); service-engine issue 置 `Done`(service.py 全覆盖)。**收尾实测**: `test.full` **3274 passed + 4 skipped / 0 failed / 覆盖率 99%**; `kb.index`/`kb.check`/`doc.links`/`doc.drift`/`doc.caps` 全绿。**未做 / 遗留**: hr 真洞 issue 六条全部实施; 随提交一并 push(提交时远端已领先 3 提交, 手工合流后改记 R22)。
 
 ### 2026-10-30 R23 — rules 包首轮变异审计(计划 26-10-30-0049)
 
@@ -166,8 +166,8 @@
 - **S4/S5 归并与补测**: 284 真洞 → **60 簇**(A 17 簇/79 条 · B 25 簇/80 条 · C 18 簇/125 条, 覆盖 284/284)→ 补 **60 条守阵**分 A/B/C 三批, **逐簇红验**(打补丁 → 目标用例红 → 还原 → 绿)**全通过**; 改动 7 个测试文件(`test_actions` / `test_rule_base` / `test_rule_engine` / `test_expr_eval` / `test_expr_parse` / `test_conditions` / `test_checking`)。
 - **S6 复跑(同目标同池)**: **3400 变异 / 杀 2240 / 存活 1148 / 超时 12**, 墙时 4m52s。⚠ 这个存活数**仍含 614 条表类工具伪存活**, 不作验收数字。**真实验收 = 284 条真洞逐条实测 → KILLED 284 / 仍 SURVIVED 0**, 守阵零缺口。
 - **边界(未覆盖, 需另开轮)**: ①`RECHECK_FAIL_LIMIT` 的上限比较在 `core/modules/ops_mod.py:233`, **不在 rules 包内** ⇒ 计划假设的高危面本轮覆盖不到, 需单开 ops_mod 轮; ②transfer 的路径拼接/冲突/跨盘逻辑在 `core/modules/relocate_mod.py`, 不在 `actions/transfer.py`; ③18 条超时未做三分类(其中 `expr.lexer.x__read_string__mutmut_4` 在 150s 内已刷 F, 实质 KILLED)。
-- **S7 记录**: 基线切片 [26-10-30-0549-mutants-rules](../testing/baselines/26-10-30-0549-mutants-rules.md)(含目标/池/计数/双口径杀死率/耗时/工具/机器/真洞与簇数/边界 1–5); 坑档 `pitfalls/testing/mutmut-survived-verdict.md`。**S8(常驻锚 §07 rules/ 行)本轮未做** —— 留给主控或后续会话(硬约束 12)。
-- **收尾实测**: `test.full` 全绿(数字见基线切片 [26-10-30-0549](../testing/baselines/26-10-30-0549-mutants-rules.md)); `kb.index` / `kb.check` 全过。
+- **S7 记录**: 基线切片 [26-10-30-0549-mutants-rules](../testing/baselines/attachments/26-10-30-0549-mutants-rules.md)(含目标/池/计数/双口径杀死率/耗时/工具/机器/真洞与簇数/边界 1–5); 坑档 `pitfalls/testing/mutmut-survived-verdict.md`。**S8(常驻锚 §07 rules/ 行)本轮未做** —— 留给主控或后续会话(硬约束 12)。
+- **收尾实测**: `test.full` 全绿(数字见基线切片 [26-10-30-0549](../testing/baselines/attachments/26-10-30-0549-mutants-rules.md)); `kb.index` / `kb.check` 全过。
 - **未做 / 遗留**: 未 commit/push(用户未说「提交」)。
 
 ### 2026-10-31 R24 — 常驻锚蒸馏改版 + 防流水守阵

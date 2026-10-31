@@ -334,6 +334,15 @@ def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
         for ref in refs:
             target = root / ref
             if not target.exists():
+                # 归档回退 (2026-10-31 R3 体积轮, 计划 26-10-31-0534): baselines 老切片外迁进
+                # testing/baselines/attachments/ 后, 声明方的 doc-refs/Refs 仍写原顶层路径
+                # (冻结 HTML 与 tasks 档案按存根策略不改写), 存在性按归档位置解析 ——
+                # 纪律不放松: 目标仍必须真实存在, 反向声明照常校验。
+                if ref.startswith(f"{mb_rel}/testing/baselines/"):
+                    archived = root / f"{mb_rel}/testing/baselines/attachments" / ref.rsplit("/", 1)[1]
+                    if archived.is_file():
+                        target = archived
+            if not target.exists():
                 hint = ""
                 if VISUAL_SEP_RE.search(ref):
                     hint = " (ref 内含视觉分隔符 —— 多目标须英文逗号分隔, 整串被当成了单一路径)"

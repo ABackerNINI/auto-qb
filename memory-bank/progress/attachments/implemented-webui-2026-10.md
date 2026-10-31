@@ -16,7 +16,7 @@
   77→76); S3 收口切换原子批(详情 API mask 前置于缓存 + `_cmd_remove_tracker` 改道 mask 比对/原文传 qB/
   0·2+ 命中报错); S4 守阵 5 组(详情 mask/删除 roundtrip/编辑端点 404/405/汇报基线原文/缓存源头 canary)
   逐组红验全过(全红→还原复绿); code-style「凭据脱敏」条升级越界即脱敏。test.full 2698 passed + 4 skipped /
-  98.54%(基线 [26-10-07-0337](../../testing/baselines/26-10-07-0337-tracker-url-sanitize-planb-s4b.md));
+  98.54%(基线 [26-10-07-0337](../../testing/baselines/attachments/26-10-07-0337-tracker-url-sanitize-planb-s4b.md));
   真机走查未做(无 qB 环境待用户验证), 计划外发现(commands.py:257 虚拟前缀第三处 / static_ui.py:46 POST
   恒 405)未修, 明细见档案进度日志。
 - **WEBUI 列对齐几何缺陷修复: 把手槽与列头文字排版解耦**(2026-10-06, 计划
@@ -33,7 +33,7 @@
   `e2e/smoke.spec.mjs`「右对齐列表头↔值盒模型差 ≤1px 且值格不居中」(红绿双验)。实测盒模型差
   group/torrent 1px、detail 0px(改前 11/10), 排序后 ≤1(改前 21~22), 三主题一致; `dev.e2e` 6 passed;
   test.full 2676 passed + 4 skipped / 99%(基线
-  [26-10-06-1037](../../testing/baselines/26-10-06-1037-webui-column-alignment-fix.md))。坑档
+  [26-10-06-1037](../../testing/baselines/attachments/26-10-06-1037-webui-column-alignment-fix.md))。坑档
   [pitfalls/web-ui/header-cell-gutter](../../pitfalls/web-ui/header-cell-gutter.md); 范围外: 设置页 HR 表① 的
   14px(机制不同, `<table>`+`hrsCols()` 无列模型, 待单独排期)。
 
@@ -49,7 +49,7 @@
   一键清空 / 点外关 / Esc 关); D2 采纳: SSE 断线沿发一条 error toast 自动落历史, 重试期不重复。
   守阵: 前端静态 6 条(tests/test_webui_error_history.py)+ 后端行为 7 条(tests/test_webui_backend_errlog.py)
   + 路由金清单 `/api/errlog`(77→78); test.full 2649 passed + 4 skipped / 98%(基线
-  [26-10-06-0413](../../testing/baselines/26-10-06-0413-webui-toast-error-history-done.md)); 三皮肤真机
+  [26-10-06-0413](../../testing/baselines/attachments/26-10-06-0413-webui-toast-error-history-done.md)); 三皮肤真机
   走查未做(CLI 会话, 无真机浏览器 + 真实 qB), 待用户真机验证。
   **2026-10-09 面板改名「通知」+ 陈述型通知出口**(用户报「列偏好空存储提示会遮挡测试截图, 每次测试都
   触发; 并把『错误历史』改为『通知』」): 该提示原先是 `columns.js` 运行时往 `body` 插的 fixed 横幅
@@ -75,7 +75,7 @@
   改为「status」(ok/error/warn)。§05 十一组用例全落地净增 +7; 新坑档
   [pitfalls/backend/announce-epoch-semantics](../../pitfalls/backend/announce-epoch-semantics.md);
   test.full 2610 passed + 4 skipped / 98%(基线
-  [26-10-05-1202](../../testing/baselines/26-10-05-1202-reannounce-confirm-rework.md)); 档案
+  [26-10-05-1202](../../testing/baselines/attachments/26-10-05-1202-reannounce-confirm-rework.md)); 档案
   [tasks/26-10-05-backend-reannounce-confirm-rework](../../tasks/26-10-05-backend-reannounce-confirm-rework.md)(Done)。
 
 - **WEB UI 危险动作防护: 重新校验确认框 + 跳检前置条件三分流预检**(2026-10-05, 计划
@@ -93,7 +93,7 @@
   一测 + 红验探针先红后恢复; T13/T24 首版经红验暴露突变盲区升级, 坑档
   [pitfalls/testing/static-guard-mutation](../../pitfalls/testing/static-guard-mutation.md));
   test.full 2576 passed + 4 skipped / 99%(基线
-  [26-10-05-0737](../../testing/baselines/26-10-05-0737-webui-danger-guards.md)); 档案
+  [26-10-05-0737](../../testing/baselines/attachments/26-10-05-0737-webui-danger-guards.md)); 档案
   [tasks/26-10-05-webui-danger-guards](../../tasks/26-10-05-webui-danger-guards.md)(Done)。
 
 - **WEB UI 复述型 tooltip 全量移除 67 处 + 不复活守卫**(2026-10-04, 判定报告
@@ -104,6 +104,6 @@
   R3 截断兜底 / R4 信息增量 / R5 不可发现交互+后果预告 五类判据判定, 移除 67 / 保留 66; 悬浮提示唯一
   通道仍是 shared/ui_feedback.js `.aq-tip` 拦截层, 移除 = 纯删 title 属性, 三皮肤零成对改; dialogs.js
   A5(statusbar 统计项)按报告「精简」只去复述半句。守阵: test_removed_redundant_tooltips_stay_removed
-  (tests/test_web.py)断言代表性已删文案不写回。全量基线 [testing/baselines/26-10-04-0900](../../testing/baselines/26-10-04-0900-webui-tooltip-declutter.md);
+  (tests/test_web.py)断言代表性已删文案不写回。全量基线 [testing/baselines/26-10-04-0900](../../testing/baselines/attachments/26-10-04-0900-webui-tooltip-declutter.md);
   档案 [tasks/26-10-04-webui-tooltip-declutter](../../tasks/26-10-04-webui-tooltip-declutter.md)(Done)。
 

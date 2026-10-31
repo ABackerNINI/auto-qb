@@ -37,4 +37,4 @@
 
 ## 进度日志
 
-- **2026-09-29 23:16 (Done)**: 单轮完成(复验 → 实施 → 守阵红验 → 改后 A/B → test.full **1760 passed + 2 skipped / 91%**, 30.90s)。详见基线切片 [26-09-29-2316](../testing/baselines/26-09-29-2316-webui-dialog-hover-keynav.md) 与 issue「修复后补充」。待「提交」指令由 ship.commit 入库。
+- **2026-09-29 23:16 (Done)**: 单轮完成(复验 → 实施 → 守阵红验 → 改后 A/B → test.full **1760 passed + 2 skipped / 91%**, 30.90s)。详见基线切片 [26-09-29-2316](../testing/baselines/attachments/26-09-29-2316-webui-dialog-hover-keynav.md) 与 issue「修复后补充」。待「提交」指令由 ship.commit 入库。

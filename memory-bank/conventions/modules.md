@@ -62,4 +62,4 @@ manager 上的旧名兼容层(`_WEB_STATE_ALIAS` 20 字段 + `__getattr__`/`__se
 
 **反复活机检常驻**(兼容层复活是历史上别名层的成因): 退役名单永久留档在 `plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json`(逐名类别/消费方/目标名/波次 + meta.disposal 注记), 守阵 `tests/test_qbmanager_alias_freeze.py` 据此 AST 机检 —— **退役名在 QbManager 复活 / 别名表或转发 dunder 重建即红**, facade 在位性与 kernel 不退化同面机检; 另有 `test_qbmanager_source_has_no_web_state_fields`(名单读分诊清单)防主循环源码直写表现层旧字段。**新代码一律用新名**(模块方法 / `self.web.*` / ctx 服务 / `host.get(...)`), 往 manager 加回旧名 = 守阵红。
 
-处置四波留档: W0 逐名分诊 + 冻结守阵立桩; W1 src 侧消费方改新名口(路由/规则动作/checking_meta 宿主收敛 StateService, `_hr_view_fields` 公开化); W2 测试面按模块域四批 + 补漏迁净; W3 删本体 + 守阵转反复活 + 四场景 sim 走查回放全 PASS(基线 `memory-bank/testing/baselines/26-10-01-0800-w3-alias-layer-retired.md`)。
+处置四波留档: W0 逐名分诊 + 冻结守阵立桩; W1 src 侧消费方改新名口(路由/规则动作/checking_meta 宿主收敛 StateService, `_hr_view_fields` 公开化); W2 测试面按模块域四批 + 补漏迁净; W3 删本体 + 守阵转反复活 + 四场景 sim 走查回放全 PASS(基线 `memory-bank/testing/baselines/attachments/26-10-01-0800-w3-alias-layer-retired.md`)。

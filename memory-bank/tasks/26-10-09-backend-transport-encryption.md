@@ -52,5 +52,5 @@
   - HR 端点: `ThreadingHTTPServer` 仅监听 `127.0.0.1:8788`, 明文 HTTP, `X-Hr-Token` + origin 白名单 + 任务 URL 白名单 + 任务绑定; 扩展侧 `normalize.js` 把协议硬编码 `http`。
 - **外部调研要点(2026-10-09 核对)**: MDN 安全上下文(`127.0.0.0/8`/`::1`/`localhost`/`*.localhost` 属 potentially trustworthy; `http://<私网IP>` 不属); Chrome 142(官方 2025-09-29 公告)推 Local Network Access 权限; mkcert 本地受信 CA; Caddy 内部 CA; Tailscale/WireGuard/SSH 隧道。
 - **报告产出**: `reports/26-10-09-1529-report-transport-encryption-feasibility.html`(14 节: 问题与口径 / 结论速览 / 现状盘点 / 威胁模型 / 方案总览 / B HTTPS+本地 CA / C 反代 / D 应用层 AEAD 深评 / E VPN 隧道 / 安全上下文与 LNA / 对比矩阵 / 落地路径 / 与本仓约定衔接 / 附录)。
-- **收尾实测**: `commands run test.full` → **2850 passed + 4 skipped, 覆盖率 99%**(与上基线 26-10-09-1522 逐位持平, 本轮零 `src/`、零 `tests/` 改动); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) 全绿。基线切片 [26-10-09-1529](../testing/baselines/26-10-09-1529-transport-encryption.md)。
+- **收尾实测**: `commands run test.full` → **2850 passed + 4 skipped, 覆盖率 99%**(与上基线 26-10-09-1522 逐位持平, 本轮零 `src/`、零 `tests/` 改动); `kb.index`(20 生成物) / `kb.check`(主键 / 认领链 / 回写 / 日期全过) 全绿。基线切片 [26-10-09-1529](../testing/baselines/attachments/26-10-09-1529-transport-encryption.md)。
 - **待跟踪变量**(写入报告 §14): ①Chrome LNA 对扩展(<code>chrome-extension://</code>)是否豁免官方未明确, 需 Chrome 142+ 实测; ②LNA 对「公网域名反代访问 WebUI」的影响。

@@ -9,7 +9,7 @@
 > 口径(零新增测试函数); 真浏览器三皮肤 + 四档窄视口实测不越界、tooltip 正常、零 pageerror。已闭环。
 > 最后活动: 2026-10-16 03:00
 
-**Refs:** memory-bank/tasks/26-10-09-webui-qb-traffic-seed-header-controls.md,memory-bank/testing/baselines/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md,memory-bank/testing/baselines/26-10-16-0300-webui-qb-traffic-statbar-align.md
+**Refs:** memory-bank/tasks/26-10-09-webui-qb-traffic-seed-header-controls.md,memory-bank/testing/baselines/attachments/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md,memory-bank/testing/baselines/attachments/26-10-16-0300-webui-qb-traffic-statbar-align.md
 
 - 任务档案: [26-10-09-webui-qb-traffic-seed-header-controls](../tasks/26-10-09-webui-qb-traffic-seed-header-controls.md) —— 三轮的根因/取舍/实测数字都在档案, 本切片只留指针。
 - 落地(纯前端静态层 + 测试侧, Python 产品代码零改动): `shared/tpl/drawer.html` —— 种子头部不挂控件组;

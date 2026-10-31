@@ -22,7 +22,9 @@
   详见 `memory-bank/pitfalls/testing/patching.md`「路径归一化」条。
 - 允许"锚点"后缀(`path.md#sec`)—— 只校验 `path.md` 是否存在。
 - **历史留档例外**: `memory-bank/plans/*.html` · `memory-bank/reports/*.html` 与 `memory-bank/issues/*.html` 不扫(它们冻结在成文那天,
-  按存根策略本就允许指向旧路径)。
+  按存根策略本就允许指向旧路径); `memory-bank/testing/baselines/attachments/` 下的归档切片同样不扫 ——
+  基线切片是"写完不改"的不可变快照(testing/baseline.md 口径段), R3 体积轮(计划 26-10-31-0534)逐字节
+  原样外迁进深一层, 内部相对链接必然整体位移, 不许为过机检改写快照内容。
 - 默认扫 `memory-bank/` 与 `.github/`(后者是规则载体, 也有链接); `--all` 再加 `docs/` 与根级 md。
 """
 
@@ -50,9 +52,15 @@ EXTRA_DIRS = ("docs", )
 
 
 def is_frozen(path: pathlib.Path) -> bool:
-    """历史留档: 按存根策略允许指向旧路径, 不扫 (`plans/` 与 `reports/` 的 HTML 制品 + issue 报告)。"""
+    """历史留档: 按存根策略允许指向旧路径, 不扫 (`plans/` 与 `reports/` 的 HTML 制品 + issue 报告)。
+
+    另含 `testing/baselines/attachments/` 的归档切片 (R3 体积轮外迁, 逐字节快照不许改写,
+    内部相对链接外迁后必然整体位移) —— 同属"冻结在成文那天"的历史留档。
+    """
     parts = path.parts
-    return path.suffix == ".html" and ("plans" in parts or "reports" in parts or "issues" in parts)
+    if path.suffix == ".html" and ("plans" in parts or "reports" in parts or "issues" in parts):
+        return True
+    return path.parent.name == "attachments" and path.parent.parent.name == "baselines"
 
 
 def _entries(directory: pathlib.Path, cache: dict[str, frozenset[str]]) -> frozenset[str]:

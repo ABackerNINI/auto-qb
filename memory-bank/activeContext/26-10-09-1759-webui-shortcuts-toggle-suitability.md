@@ -9,4 +9,4 @@
 - 未做: 4 条「有条件」(详情页签 `Alt+1~5` / `Enter` / 限速 `L` / 设置 `Ctrl+,`)与 49 条「不适合」按用户「其余待定」维持原状; 真机实弹走查(逐键实测)留给用户。
 - 下一步(待用户拍板): 是否推进 4 条「有条件」条目 —— 详情页签 `Alt+1~5` 可补「同页签再按 ⇒ 关」升级为完整切换; `Enter` / `L` / `Ctrl+,` 报告建议保持现状(语义漂移 / 关闭丢输入 / 页面导航无关闭态)。
 
-**Refs:** memory-bank/reports/26-10-09-1731-report-webui-shortcuts-toggle-suitability.html,memory-bank/tasks/26-09-28-webui-keyboard-shortcuts.md,memory-bank/testing/baselines/26-10-09-1759-webui-shortcuts-toggle-suitability.md,memory-bank/testing/baselines/26-10-10-0856-webui-shortcuts-toggle-suitability.md
+**Refs:** memory-bank/reports/26-10-09-1731-report-webui-shortcuts-toggle-suitability.html,memory-bank/tasks/26-09-28-webui-keyboard-shortcuts.md,memory-bank/testing/baselines/attachments/26-10-09-1759-webui-shortcuts-toggle-suitability.md,memory-bank/testing/baselines/attachments/26-10-10-0856-webui-shortcuts-toggle-suitability.md

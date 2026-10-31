@@ -12,5 +12,5 @@
 ## 本专题关键坐标
 
 - 任务档案: `memory-bank/tasks/26-10-11-webui-dup-code-fixes.md`(R4 续轮段 + 子任务表 #10)
-- 基线切片: `memory-bank/testing/baselines/26-10-15-0532-webui-route-cmd-boilerplate-dup.md`
+- 基线切片: `memory-bank/testing/baselines/attachments/26-10-15-0532-webui-route-cmd-boilerplate-dup.md`
 - 改动源文件: `src/auto_qb/webui/server/routes/{torrent_cmds,groups,torrent_detail}.py` + 守阵 `tests/test_web_route_manifest.py`

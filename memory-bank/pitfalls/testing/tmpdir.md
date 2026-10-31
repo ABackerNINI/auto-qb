@@ -99,6 +99,6 @@
   从临时目录上溯命中**家目录杂散 `.git`**(期望 `None` 实得家目录), 以及 `-n 8` 并行下 `_snap_dirs()`
   全局集合比较跨 worker 互见临时快照目录(串行只剩前者)。**先查临时目录再怀疑代码回归**。
 - **处置**: 恢复 R 盘(TMPDIR 目标可建目录)即可消掉「家目录 .git」那条; 集合比较的跨 worker 竞态与盘无关,
-  属测试设计面(识别与无关性证据见基线切片 [../../testing/baselines/26-10-16-1551-ship-commit-omitted-note.md](../../testing/baselines/26-10-16-1551-ship-commit-omitted-note.md)「包内脚本测试」节)。
+  属测试设计面(识别与无关性证据见基线切片 [../../testing/baselines/26-10-16-1551-ship-commit-omitted-note.md](../../testing/baselines/attachments/26-10-16-1551-ship-commit-omitted-note.md)「包内脚本测试」节)。
   沙箱拒写 R 盘的另一种「TMPDIR 等于没设」见 [sandbox-full-run.md](sandbox-full-run.md)。
   （同日收口: ① 家目录空 `.git` 由机主移除; ② 竞态已按「用例私有临时根」修复 —— `test_snapshot.py::_private_tmp`(子进程 TMPDIR 一并隔离), 红绿双验通过。）

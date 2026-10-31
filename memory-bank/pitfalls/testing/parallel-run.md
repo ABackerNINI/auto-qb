@@ -95,7 +95,7 @@
   ⇒ 并行下**分支 partial 多 1**(语句数一致), 换默认口径时留意。
   - ⚠ **同一份代码连跑也允许 ±3 行未覆盖的抖动** (2026-10-06 实测: `2be3fe79..0e278f12` 零 `src/` 零
     `tests/` 改动, 相邻两次 `test.full` 都是 16021/163/5472/143, 而上一时期基线是 16021/**166**/5472/**144**
-    —— 见基线 [../../testing/baselines/26-10-06-0713-agents-md-slim.md](../../testing/baselines/26-10-06-0713-agents-md-slim.md))。
+    —— 见基线 [../../testing/baselines/26-10-06-0713-agents-md-slim.md](../../testing/baselines/attachments/26-10-06-0713-agents-md-slim.md))。
     ⇒ **看数字先看 passed 与语句总数**, 未覆盖差 1–3 行先抽样补跑再定性, 不要直接判回归。
 
 ### 项目文档里"并行不行"的那条理由是错的

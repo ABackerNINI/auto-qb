@@ -9,4 +9,4 @@
 - 未做: 无代码改动; 未拍板落地方案。
 - 下一步(待用户拍板): 是否立项「阶段 1 暴露即加密闸门 + 阶段 2 一键本地 CA」; 阶段 2 涉及新增 `cryptography`/`trustme` 依赖与 `web.tls.*` 配置键(须进 `validate_config` + `config/schema`)。
 
-**Refs:** memory-bank/reports/26-10-09-1529-report-transport-encryption-feasibility.html,memory-bank/testing/baselines/26-10-09-1529-transport-encryption.md,memory-bank/tasks/26-10-09-backend-transport-encryption.md
+**Refs:** memory-bank/reports/26-10-09-1529-report-transport-encryption-feasibility.html,memory-bank/testing/baselines/attachments/26-10-09-1529-transport-encryption.md,memory-bank/tasks/26-10-09-backend-transport-encryption.md

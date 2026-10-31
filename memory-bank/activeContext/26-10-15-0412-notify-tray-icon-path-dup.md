@@ -1,9 +1,9 @@
 # 认领并修复 notify↔tray icon 路径推导重复(R19-A01)
 
-> 摘要: 用户指令「认领并修复 memory-bank/issues/26-10-11-0352-refactor-notify-tray-icon-path-dup.html」。复验仍复现(源码随包迁移到 src/auto_qb/ 后行号未变, notify:48 与 tray/app:31-32 两级 dirname 表达式逐字同)→ 按 issue 建议的第二支「notify 导出 ICON_ICO、tray 引用」落地: **infra/notify.py 的 ICON_ICO 成为包 assets 目录推导唯一处**, tray/app.py 改为 import 该常量(ICON_PNG 由同目录派生), 全仓两级 dirname 表达式 3 处 → 1 处, **零行为变化**(运行期探针: 两模块 ICON_ICO 字节同、指向真实文件)。改动 2 个源文件(notify / tray-app), 未新增测试——既有守阵 test_notify_icon_ico_points_to_real_file 继续钉「路径指向真实文件」, 且低于立档阈值(3 源文件)故未建任务档案。issue 状态流水 Open → In Progress → Done; 全量测试数字见基线切片 `memory-bank/testing/baselines/26-10-15-0423-notify-tray-icon-path-dup.md`。
+> 摘要: 用户指令「认领并修复 memory-bank/issues/26-10-11-0352-refactor-notify-tray-icon-path-dup.html」。复验仍复现(源码随包迁移到 src/auto_qb/ 后行号未变, notify:48 与 tray/app:31-32 两级 dirname 表达式逐字同)→ 按 issue 建议的第二支「notify 导出 ICON_ICO、tray 引用」落地: **infra/notify.py 的 ICON_ICO 成为包 assets 目录推导唯一处**, tray/app.py 改为 import 该常量(ICON_PNG 由同目录派生), 全仓两级 dirname 表达式 3 处 → 1 处, **零行为变化**(运行期探针: 两模块 ICON_ICO 字节同、指向真实文件)。改动 2 个源文件(notify / tray-app), 未新增测试——既有守阵 test_notify_icon_ico_points_to_real_file 继续钉「路径指向真实文件」, 且低于立档阈值(3 源文件)故未建任务档案。issue 状态流水 Open → In Progress → Done; 全量测试数字见基线切片 `memory-bank/testing/baselines/attachments/26-10-15-0423-notify-tray-icon-path-dup.md`。
 > 最后活动: 2026-10-15 04:23
 
-**Refs:** memory-bank/issues/26-10-11-0352-refactor-notify-tray-icon-path-dup.html,memory-bank/testing/baselines/26-10-15-0423-notify-tray-icon-path-dup.md
+**Refs:** memory-bank/issues/26-10-11-0352-refactor-notify-tray-icon-path-dup.html,memory-bank/testing/baselines/attachments/26-10-15-0423-notify-tray-icon-path-dup.md
 
 ## 正在进行
 

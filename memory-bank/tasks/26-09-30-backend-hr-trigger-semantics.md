@@ -40,8 +40,8 @@
 
 ## 进度日志
 
-- **2026-09-30 07:09**: 全量落地。test.full **1806 passed + 3 skipped / 91%**(12602 语句 / 995 未覆盖, 24.9s, rc=0), 较上基线 26-09-30-0555(1802)净增 4 条(打标三分 +3 / 结构断言 +1), 语义反转改写 8 测试文件。真机 dry-run 走查: 零 ERROR/Traceback, 未达标转移种按新语义在维护轮进入 HR 打标分流(dry-run 不落盘), RecursionError 无复发。基线切片 [testing/baselines/26-09-30-0709](../testing/baselines/26-09-30-0709-hr-trigger-semantics.md)。**未提交**。
+- **2026-09-30 07:09**: 全量落地。test.full **1806 passed + 3 skipped / 91%**(12602 语句 / 995 未覆盖, 24.9s, rc=0), 较上基线 26-09-30-0555(1802)净增 4 条(打标三分 +3 / 结构断言 +1), 语义反转改写 8 测试文件。真机 dry-run 走查: 零 ERROR/Traceback, 未达标转移种按新语义在维护轮进入 HR 打标分流(dry-run 不落盘), RecursionError 无复发。基线切片 [testing/baselines/26-09-30-0709](../testing/baselines/attachments/26-09-30-0709-hr-trigger-semantics.md)。**未提交**。
 - 范围外发现(未动, 待用户决定是否入池): `webui/static/shared/config_hub.js:93` 仍在文档化已废弃配置键 `hr_check.unknown_policy`(26-09-28-1932 判定收口已删该键, models.py 注释可证) —— config 编辑器提示文案漂移。
-- **2026-09-30 07:47**: 上面那条范围外漂移用户拍板直接修(未入池): config_hub.js HUB_HELP 删 `hr_check.unknown_policy` 死条目(8 行, rel 引用的 verified_ttl 同批已删); 「未核实怎么算」v3 语义硬编码为行 4 本地兜底, 由 schema hr.py sites.enabled help 承载, webui grep 无其它残留。先合并远端 87f3437(危险操作独立操作层波)再复测: **1829 passed + 3 skipped / 91%**(基线 [26-09-30-0747](../testing/baselines/26-09-30-0747-webui-config-hub-drift.md)), 与上基线 1210 通过数持平, 零测试增删。修复 + 收尾回写随本轮提交入库。
+- **2026-09-30 07:47**: 上面那条范围外漂移用户拍板直接修(未入池): config_hub.js HUB_HELP 删 `hr_check.unknown_policy` 死条目(8 行, rel 引用的 verified_ttl 同批已删); 「未核实怎么算」v3 语义硬编码为行 4 本地兜底, 由 schema hr.py sites.enabled help 承载, webui grep 无其它残留。先合并远端 87f3437(危险操作独立操作层波)再复测: **1829 passed + 3 skipped / 91%**(基线 [26-09-30-0747](../testing/baselines/attachments/26-09-30-0747-webui-config-hub-drift.md)), 与上基线 1210 通过数持平, 零测试增删。修复 + 收尾回写随本轮提交入库。
 
 **Refs:** memory-bank/plans/26-09-30-0559-plan-hr-trigger-semantics.html, memory-bank/testing/baselines/26-09-30-0709-hr-trigger-semantics.md, memory-bank/testing/baselines/26-09-30-0747-webui-config-hub-drift.md

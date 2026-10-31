@@ -5,7 +5,7 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
-- **HR 排除落到取数侧: 稳态降频对「已排除种子」恢复生效 (2026-10-08~17, 计划 [26-10-08-1249](../plans/26-10-08-1249-plan-hr-exclude-steady.html) Done · 档案 [26-10-08-backend-hr-exclude-steady](../tasks/26-10-08-backend-hr-exclude-steady.md) Done · 报告 [26-10-08-1235](../reports/26-10-08-1235-report-hr-exclude-steady.html))**: 判据单点 `TorrentRecord.hr_excluded()` 原只被判定侧/展示侧消费, 取数侧 `_build_objects` 排除链只有终态/放行/超额三档 ⇒ 被排除种子仍进对账对象集 ⇒ `steady = anchors_known and not objects` 恒假 ⇒ `idle_refresh_interval`(24H) 永不生效(实测两波间隔 16h55m)。方案 B 落地: `HrAnchor` 末加 `excluded` 位 (`hr_anchor()` 透传 `self.hr_excluded()`), `_build_objects` 循环顶部第四档跳过(置于漂移回炉之前 ⇒ 撤销排除即恢复, 不产生不可逆残留); 命中集 `local_hashes` 仍从全量锚点构建 ⇒「排除 ≠ 不认识」, 站点行仍按本地命中处理、不误下 `.torrent`。守阵 4 条 + 红验。下游项(排除种子终态行身份下载)随计划 [26-10-09-1057](../plans/26-10-09-1057-plan-hr-exclude-terminal-download.html) 闭环: 名称候选面收窄为受管集 `local_names_managed`(对上游 §7.2 不变项的有意修正, 已在 1249 §08 追加指针)。**S5 真机复核 26-10-17 用户确认生效**(`wave.idle_mode=true` / 日志「稳态降频」/ 请求量下降); 全量套件与守卫证据见基线切片 [26-10-09-1124](../testing/baselines/26-10-09-1124-hr-exclude-terminal-download.md)(最终代码态, 其后 hr 域零改动)。
+- **HR 排除落到取数侧: 稳态降频对「已排除种子」恢复生效 (2026-10-08~17, 计划 [26-10-08-1249](../plans/26-10-08-1249-plan-hr-exclude-steady.html) Done · 档案 [26-10-08-backend-hr-exclude-steady](../tasks/26-10-08-backend-hr-exclude-steady.md) Done · 报告 [26-10-08-1235](../reports/26-10-08-1235-report-hr-exclude-steady.html))**: 判据单点 `TorrentRecord.hr_excluded()` 原只被判定侧/展示侧消费, 取数侧 `_build_objects` 排除链只有终态/放行/超额三档 ⇒ 被排除种子仍进对账对象集 ⇒ `steady = anchors_known and not objects` 恒假 ⇒ `idle_refresh_interval`(24H) 永不生效(实测两波间隔 16h55m)。方案 B 落地: `HrAnchor` 末加 `excluded` 位 (`hr_anchor()` 透传 `self.hr_excluded()`), `_build_objects` 循环顶部第四档跳过(置于漂移回炉之前 ⇒ 撤销排除即恢复, 不产生不可逆残留); 命中集 `local_hashes` 仍从全量锚点构建 ⇒「排除 ≠ 不认识」, 站点行仍按本地命中处理、不误下 `.torrent`。守阵 4 条 + 红验。下游项(排除种子终态行身份下载)随计划 [26-10-09-1057](../plans/26-10-09-1057-plan-hr-exclude-terminal-download.html) 闭环: 名称候选面收窄为受管集 `local_names_managed`(对上游 §7.2 不变项的有意修正, 已在 1249 §08 追加指针)。**S5 真机复核 26-10-17 用户确认生效**(`wave.idle_mode=true` / 日志「稳态降频」/ 请求量下降); 全量套件与守卫证据见基线切片 [26-10-09-1124](../testing/baselines/attachments/26-10-09-1124-hr-exclude-terminal-download.md)(最终代码态, 其后 hr 域零改动)。
 
 - **站点接入数据白屏修复: hr.js methods 裸调用缺 `this.` (2026-09-25, `c00fc94`)**: `hrSiteLine` 三处裸调 `fmtDuration`/`fmtSize`, 未接入站点时数据分支不进不响, Vue 3 渲染 ReferenceError 卸整树 = 全页白屏; 补 `this.` 修复, 桩服务加 `--hr-site` 注入堵替身盲区。判据 → [pitfalls/web-ui/vue-reactivity.md](../pitfalls/web-ui/vue-reactivity.md)。
 - **限速曲线手动保护日志节流 (2026-09-26, `16f1adc`)**: 手动保护分支逐轮 INFO 刷屏(手动值是持续状态); 抽 `_log_manual_skip`(进入/变化记 INFO + 每 1h 提醒, 其余 DEBUG, 退出清记忆) + `_MANUAL_REMIND_GAP` 常量; 节流不是行为开关, 不加配置键。判据 → [pitfalls/ops/alert-levels.md](../pitfalls/ops/alert-levels.md)。
@@ -30,7 +30,7 @@
   B2 原子翻转(B2-1..B2-3 合并前 squash, 2632 passed + 4 skipped / 98.50% / 28.1s, 机检零残留) →
   B3 收尾(配置配比口径 N2 入 models/loaders 注释; v3 计划 §02.1 条款级取代; dry-run 真机零 ERROR)。
   字节对照三档全落报告 §07 推演区间: 满速活跃天 -12.5% / 低速 -22.3% / 空闲天 -98.9%(基线
-  [26-10-06-0132](../testing/baselines/26-10-06-0132-qb-traffic-v4-delta-b3.md), test.full 2632
+  [26-10-06-0132](../testing/baselines/attachments/26-10-06-0132-qb-traffic-v4-delta-b3.md), test.full 2632
   passed + 4 skipped / 98% / 27.8s)。格式契约单点 = traffic_store.py 模块 docstring。档案
   [tasks/26-10-05-backend-qb-traffic-v4-delta](../tasks/26-10-05-backend-qb-traffic-v4-delta.md)。
   - **追加(2026-10-16): z 行扩「末端快照对」列(形态 D)** —— 修空闲 z 游程期 agg hour 行 totals 归属错位: 封口把已知
@@ -53,7 +53,7 @@
   + ops_mod 模块头判定纪律 (新异步操作接入 = 新 source, 判定必须走证据门控)。等价性红线不破:
   周期观测纯快照读零 API, 直查只在决定性时刻。新增用例 15 条 (A3/B3/C3/D4/E2) + 既有适配 27 处;
   test.full 2530 passed + 4 skipped / 99% (基线
-  [26-10-04-2256](../testing/baselines/26-10-04-2256-ops-recheck-effect-confirmation.md))。
+  [26-10-04-2256](../testing/baselines/attachments/26-10-04-2256-ops-recheck-effect-confirmation.md))。
   五棒串行子智能体实施 (S1-S4, 编排者核验提交), 档案
   [tasks/26-10-04-backend-ops-recheck-effect-confirmation](../tasks/26-10-04-backend-ops-recheck-effect-confirmation.md)。
 
@@ -70,7 +70,7 @@
   下载方 `torrents_stop(dl_hashes)`(绝不传整组) + 消除循环(discard 过期组对, 下次重现再触发);
   ④Web 组视图组名旁 cross_group_conflict `#i-warn` 标记(warned 集合派生 + view_changed 显式置脏兜底)。
   新增用例 19 条(config_schema 3 / grouping 15[平台 skipif 拆分] / web 1); test.full 2441 passed +
-  4 skipped / 99% / 36.16s(基线 [26-10-04-0412](../testing/baselines/26-10-04-0412-cross-group-conflict-detection.md));
+  4 skipped / 99% / 36.16s(基线 [26-10-04-0412](../testing/baselines/attachments/26-10-04-0412-cross-group-conflict-detection.md));
   真机走查留待用户。档案 [tasks/26-10-04-backend-cross-group-conflict](../tasks/26-10-04-backend-cross-group-conflict.md)
 
 - **热重载 L2 重建后种子级任务补建: RulesModule 订阅 full_round (2026-10-04, issue
@@ -193,4 +193,4 @@
 - **可分辨边界**: `ChannelStatus` 增「被拒接触」面(401/403; 不污染 `last_contact_ts`); 401 日志由每分钟 ERROR
   改为状态变化 + 6h 的 WARNING; 通道静默文案按 `rejected` / `web_active` / `none` 三档分叉, 不再用一句问句让用户猜。
 - **WebUI 活跃信号**: 判据取「WebUI 是否活跃」单信号(不判断同机/同源) —— 活跃 ⇒ 可见告警, 不活跃 ⇒ 静默。
-- 基线: [testing/baselines/26-10-09-0931-hr-fault-domain.md](../testing/baselines/26-10-09-0931-hr-fault-domain.md)(2836 passed)。
+- 基线: [testing/baselines/26-10-09-0931-hr-fault-domain.md](../testing/baselines/attachments/26-10-09-0931-hr-fault-domain.md)(2836 passed)。

@@ -4,7 +4,7 @@
 **Added:** 2026-10-09
 **Updated:** 2026-10-09 12:07
 **Topics:** webui-qb-traffic-charts
-**Summary:** 用户报「上次更改使种子流量图的时间视图选择按钮和纵轴模式选择按钮弄消失了」。根因 = **2026-10-08 版式改只接了一个形态宿主**: 时间档位(`.qb-tabs`, 13 档)与纵轴控件(`.qb-tools`)自正文上提到头部时, 只加进了**流量形态头部**(`v-if="drawer.kind === 'traffic'"`, 全局/分组两挂点); 而**种子流量图**走的是**种子形态头部**(`v-else`, `kind === "seed"` + `tab === "traffic"`, 见 `qbCurScope` 的 torrent 分支)—— 该头部没有这段控件 ⇒ 种子「流量」页签的档位/纵轴整组消失(提交信息「三挂点(全局/分组/单种)共用同一段头部」的前提不成立: 单种与另两挂点**不共用头部**)。修法 = 种子形态头部补同款控件组(`.qb-headctl` 包裹, 整体占满第二行, 门 = `qbCurScope === 'torrent'`), 三皮肤 `views.css` 补 `.qb-headctl` 版式。**零 JS 改动**(绑定/清单全在根实例 mixin); 守阵只**改写**既有断言口径未新增测试函数。test.full 全绿 / 0 failed / TOTAL 99%(精确数字见基线切片 [26-10-09-0740](../testing/baselines/26-10-09-0740-webui-qb-traffic-seed-header-controls.md)); 真浏览器三皮肤实测控件齐全且不越界、零 pageerror。**第 2 轮(同日, 用户更正落点)**: 用户判定控件放种子头部「太挤、小窗口下会变形」, 控件组改落**图下统计栏**(`.hist-summary` 内 `.qb-statctl`, 排在「下载累计」之后, 落点容器 `.qb-headctl` 随之退役), 统计栏本体渲染门放宽为 `qbCurSummary || qbCurScope === 'torrent'`(首载/错误态无汇总时控件仍可见); **全局/分组流量形态零改动**(控件仍在流量形态头部)。零 JS 改动; 守阵仍只改写断言口径未新增测试函数。**第 3 轮(同日)**: 统计栏常驻口径注解「累计为窗口内增量(断线期不计)」退场, 改为**上传累计 / 下载累计两个读数的悬浮提示**(`:title="qbCurSummaryHint"`, 文案单点不变); 统计栏随之由两行收回**单行**, 第 2 轮「图少约 31px」的代价消失。零 CSS 改动。
+**Summary:** 用户报「上次更改使种子流量图的时间视图选择按钮和纵轴模式选择按钮弄消失了」。根因 = **2026-10-08 版式改只接了一个形态宿主**: 时间档位(`.qb-tabs`, 13 档)与纵轴控件(`.qb-tools`)自正文上提到头部时, 只加进了**流量形态头部**(`v-if="drawer.kind === 'traffic'"`, 全局/分组两挂点); 而**种子流量图**走的是**种子形态头部**(`v-else`, `kind === "seed"` + `tab === "traffic"`, 见 `qbCurScope` 的 torrent 分支)—— 该头部没有这段控件 ⇒ 种子「流量」页签的档位/纵轴整组消失(提交信息「三挂点(全局/分组/单种)共用同一段头部」的前提不成立: 单种与另两挂点**不共用头部**)。修法 = 种子形态头部补同款控件组(`.qb-headctl` 包裹, 整体占满第二行, 门 = `qbCurScope === 'torrent'`), 三皮肤 `views.css` 补 `.qb-headctl` 版式。**零 JS 改动**(绑定/清单全在根实例 mixin); 守阵只**改写**既有断言口径未新增测试函数。test.full 全绿 / 0 failed / TOTAL 99%(精确数字见基线切片 [26-10-09-0740](../testing/baselines/attachments/26-10-09-0740-webui-qb-traffic-seed-header-controls.md)); 真浏览器三皮肤实测控件齐全且不越界、零 pageerror。**第 2 轮(同日, 用户更正落点)**: 用户判定控件放种子头部「太挤、小窗口下会变形」, 控件组改落**图下统计栏**(`.hist-summary` 内 `.qb-statctl`, 排在「下载累计」之后, 落点容器 `.qb-headctl` 随之退役), 统计栏本体渲染门放宽为 `qbCurSummary || qbCurScope === 'torrent'`(首载/错误态无汇总时控件仍可见); **全局/分组流量形态零改动**(控件仍在流量形态头部)。零 JS 改动; 守阵仍只改写断言口径未新增测试函数。**第 3 轮(同日)**: 统计栏常驻口径注解「累计为窗口内增量(断线期不计)」退场, 改为**上传累计 / 下载累计两个读数的悬浮提示**(`:title="qbCurSummaryHint"`, 文案单点不变); 统计栏随之由两行收回**单行**, 第 2 轮「图少约 31px」的代价消失。零 CSS 改动。
 **Refs:** memory-bank/testing/baselines/26-10-09-0740-webui-qb-traffic-seed-header-controls.md,memory-bank/testing/baselines/26-10-09-1114-webui-qb-traffic-seed-statbar-controls.md,memory-bank/testing/baselines/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md,memory-bank/pitfalls/web-ui/drawer-multi-form-hosts.md
 
 ## 原始请求
@@ -42,7 +42,7 @@
 - **2026-10-09 07:3x** 落码 S1–S2: `drawer.html` 种子头部加 `.qb-headctl`; 三皮肤 `views.css` 各加 5 行 `.qb-headctl` 规则。复核: 两处控件组内层 826 字符逐字相等、`qbSetYAxisMode(` 计数 6、`dt-select`/`drawer-fold`/`drawer-close` 计数仍各 2。
 - **2026-10-09 07:3x** 守阵改写 S3(只改断言口径, 零新增测试函数); `commands run test.one -- tests/test_webui_static_dom_panel.py` **29 passed**。
 - **2026-10-09 07:3x** 真浏览器验证 S5: 临时桩(`tmp-analysis/`, 已 gitignore)复用 `scripts/ui_harness.py` 的合成种子设施 + 打开 `qb_traffic` 旗标; Playwright 三皮肤 1440x900 走真实手势(双击种子行 → 点「流量」页签): 三皮肤全 PASS(档位 13 / 纵轴 3 / 控件框 29,523 1388x26 / 头部 65px / 零 pageerror), 截图目检确认为「标题+五页签」第一行、控件组第二行的两行头部。临时桩与截图已删。
-- **2026-10-09 07:40** `commands run test.full` **2817 passed + 4 skipped / 0 failed / 36.35s / TOTAL 99%**(16479/162/5696/146); 新建基线切片 [26-10-09-0740](../testing/baselines/26-10-09-0740-webui-qb-traffic-seed-header-controls.md); 新坑写进坑档 [drawer-multi-form-hosts](../pitfalls/web-ui/drawer-multi-form-hosts.md); 本档案 + activeContext 切片 + `progress/implemented-webui-history.md` 回写; `kb.index` 重建。
+- **2026-10-09 07:40** `commands run test.full` **2817 passed + 4 skipped / 0 failed / 36.35s / TOTAL 99%**(16479/162/5696/146); 新建基线切片 [26-10-09-0740](../testing/baselines/attachments/26-10-09-0740-webui-qb-traffic-seed-header-controls.md); 新坑写进坑档 [drawer-multi-form-hosts](../pitfalls/web-ui/drawer-multi-form-hosts.md); 本档案 + activeContext 切片 + `progress/implemented-webui-history.md` 回写; `kb.index` 重建。
 
 ## 第 2 轮(同日 11:14): 落点更正 —— 控件改落图下统计栏
 
@@ -78,7 +78,7 @@
 - **2026-10-09 11:0x** 澄清轮: 就落点问用户(两个「放头部」选项), 用户改口「放图下统计栏, 即『下载累计』后」。
 - **2026-10-09 11:0x** 落码 R2-S1/R2-S2 + 守阵改写 R2-S3; `commands run test.one -- tests/test_webui_static_dom_panel.py` 定向 31 passed。
 - **2026-10-09 11:0x** 真浏览器验证 R2-S5(临时桩复用 `scripts/ui_harness.py` 合成种子 + 打开 `qb_traffic` 旗标 + 合成流量响应; Playwright 三皮肤 1440x900 真实手势 + 窄视口四档 + 分组右键「qB 口径流量图」对照): 全部通过、零 pageerror; 临时桩与截图已删。
-- **2026-10-09 11:14** `commands run test.full` 全绿 / 0 failed / 45.9s / TOTAL 99%(精确数字见基线切片 [26-10-09-1114](../testing/baselines/26-10-09-1114-webui-qb-traffic-seed-statbar-controls.md)); 坑档 [drawer-multi-form-hosts](../pitfalls/web-ui/drawer-multi-form-hosts.md) 补第 2 轮口径; 本档案 + activeContext 切片 + `progress/implemented-webui-history.md` 回写; `kb.index` 重建。
+- **2026-10-09 11:14** `commands run test.full` 全绿 / 0 failed / 45.9s / TOTAL 99%(精确数字见基线切片 [26-10-09-1114](../testing/baselines/attachments/26-10-09-1114-webui-qb-traffic-seed-statbar-controls.md)); 坑档 [drawer-multi-form-hosts](../pitfalls/web-ui/drawer-multi-form-hosts.md) 补第 2 轮口径; 本档案 + activeContext 切片 + `progress/implemented-webui-history.md` 回写; `kb.index` 重建。
 
 ## 第 3 轮(同日 12:07): 统计栏口径注解改为两个累计读数的悬浮提示
 
@@ -105,4 +105,4 @@
 
 - **2026-10-09 11:2x** 读码定位: `qbCurSummaryHint` 的消费点只有抽屉统计栏那一处 `.hist-hint`; 确认 `.hist-hint` 在 `popovers.html` 另有消费 ⇒ CSS 不能删。
 - **2026-10-09 11:3x** 落码 R3-S1 + 守阵改写 R3-S2; `commands run test.one -- tests/test_webui_static_dom_panel.py` 定向 31 passed; 真浏览器 R3-S3(三皮肤 + 分组形态对照)通过、零 pageerror; 临时桩与截图已删(截图 `tmp-analysis/seed-traffic-hint-tooltip.png` 留档)。
-- **2026-10-09 12:07** 用户「提交」→ 会话开工同步 `同步成功 5b139aaa`(812be13d→5b139aaa, 本地未提交改动原样保留); 收尾回写(本档案 / 基线切片 [26-10-09-1207](../testing/baselines/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md) / activeContext 切片 / `progress/implemented-webui-history.md`); `kb.index` 重建。
+- **2026-10-09 12:07** 用户「提交」→ 会话开工同步 `同步成功 5b139aaa`(812be13d→5b139aaa, 本地未提交改动原样保留); 收尾回写(本档案 / 基线切片 [26-10-09-1207](../testing/baselines/attachments/26-10-09-1207-webui-qb-traffic-seed-hint-tooltip.md) / activeContext 切片 / `progress/implemented-webui-history.md`); `kb.index` 重建。

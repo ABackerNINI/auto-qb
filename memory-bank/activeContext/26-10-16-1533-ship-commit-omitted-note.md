@@ -4,7 +4,7 @@
 > 最后活动: 2026-10-16 17:04
 > 状态: Done
 
-**Refs:** memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html,memory-bank/tasks/26-10-16-ship-commit-omitted-note.md,memory-bank/testing/baselines/26-10-16-1551-ship-commit-omitted-note.md
+**Refs:** memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html,memory-bank/tasks/26-10-16-ship-commit-omitted-note.md,memory-bank/testing/baselines/attachments/26-10-16-1551-ship-commit-omitted-note.md
 
 ## 本轮落点(代码事实)
 
@@ -14,7 +14,7 @@
 - `memory-bank/pitfalls/git/ship-commit-staged-delete.md`: 变体二补一行「提示已按索引状态分组, 不再混称『未纳入』」(含与本变体实测的对照)。
 - `memory-bank/pitfalls/testing/tmpdir.md`: 新条目「约定盘缺席/不可见 → TMPDIR 静默回落」(识别口径 + 同日收口注)。
 - `memory-bank/issues/26-10-16-1523-bug-ship-commit-omitted-note.html`: Open → In Progress(15:33, 复验后)→ Done(15:51); 认领链双向(本切片/档案 Refs ↔ issue doc-refs)。
-- `memory-bank/testing/baselines/26-10-16-1551-ship-commit-omitted-note.md`: 本专题基线(test.full / 定向 / 红绿双验 / 既有失败记录)。
+- `memory-bank/testing/baselines/attachments/26-10-16-1551-ship-commit-omitted-note.md`: 本专题基线(test.full / 定向 / 红绿双验 / 既有失败记录)。
 
 ## 未做(有意, 范围守恒)
 

@@ -9,7 +9,7 @@
 
 - 三份 issue 复验(锚点均在, win-dll 行号漂移按 grep 事实定位)后置 `In Progress`, 修复完成置 `Done`, 状态变更日志逐条留痕(含实际修法/验证方式/测试数字)。
 - 改动面: `src/auto_qb/infra/utils.py`(_split_url / _hosts_of / _win_dll + _WIN_KERNEL32_SIGNATURES) + `src/auto_qb/infra/file_access.py`(_probe/_probe_path) + `tests/test_sim_corpus.py`(静态守阵期望表) + `scripts/sim_fsmock.py`(MockCoverage 覆盖说明); 全部过 `dev.fmt`。
-- 验证: 定向 `test_utils.py` + `test_file_access.py` 全绿; 收口 `test.full` 全绿 —— 实测数字唯一权威在基线切片 `testing/baselines/26-10-12-2125-infra-dup-code-fixes.md`(看数字 `commands run kb.baseline`, 此处不手抄)。
+- 验证: 定向 `test_utils.py` + `test_file_access.py` 全绿; 收口 `test.full` 全绿 —— 实测数字唯一权威在基线切片 `testing/baselines/attachments/26-10-12-2125-infra-dup-code-fixes.md`(看数字 `commands run kb.baseline`, 此处不手抄)。
 - 未 commit / 未 push(用户未要求); 重复代码审查主线(Phase 2 前端轮 20–23 / Phase 3 测试横切 24–25 / Phase 4 汇总 26)仍未开工。
 
 ## 第二轮(2026-10-15 单会话收口 · 用户指派「认领并修复」第 4 条)
@@ -18,5 +18,5 @@
 - 修法(取 issue「建议」第一支, 零行为变化): `infra/autostart.py` 6 处(`is_enabled`/`enable`/`disable` 的 win/darwin 分支)经包内相对导入 `from .utils import is_mac, is_windows` 改调 `is_windows()`/`is_mac()` —— `is_windows` 匹配 `"win"` 前缀已覆盖 `"win32"`, 语义逐字等价; `sys` 导入保留(`sys.executable` 仍用)。`tray/app.py:204` 改调 `utils.is_windows()`(模块级已导入 utils), `import sys` 随之移除(该文件唯一用途)。未采纳「抽 `_platform()` 枚举」支: 调用点改函数调用即收口, 枚举是新抽象面, 保守口径不扩。
 - 新增静态守阵 `tests/test_utils.py::test_platform_detect_single_point_static_guard`: 扫 src/ 全部 .py 禁裸 `sys.platform.startswith`(单点自身豁免; notify.py 取平台字符串值作标识非 startswith 判据, 不拦); 红验 = 临时注入旁路判红后删除临时文件。
 - 改动面: `src/auto_qb/infra/autostart.py` + `src/auto_qb/tray/app.py` + `tests/test_utils.py`(守阵 + 测试计划清单同步) + 本 issue 状态流转; 全部过 `dev.fmt`。
-- 验证: 定向 `test_utils.py`+`test_ui.py`+`test_tray.py` 全绿(coverage 未达标为子集运行预期); 收口 `test.full` 全绿 —— 实测数字唯一权威在基线切片 `testing/baselines/26-10-15-0422-infra-platform-detect-bypass-dup.md`(看数字 `commands run kb.baseline`, 此处不手抄)。
+- 验证: 定向 `test_utils.py`+`test_ui.py`+`test_tray.py` 全绿(coverage 未达标为子集运行预期); 收口 `test.full` 全绿 —— 实测数字唯一权威在基线切片 `testing/baselines/attachments/26-10-15-0422-infra-platform-detect-bypass-dup.md`(看数字 `commands run kb.baseline`, 此处不手抄)。
 - infra 余 1 条(`infra-fmt-ladder-dup`)仍留 `Open`。

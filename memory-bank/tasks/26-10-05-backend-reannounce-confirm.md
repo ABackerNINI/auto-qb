@@ -46,4 +46,4 @@
 ## 进度日志
 
 - 2026-10-05: 开工同步 911af7ef; 完成全部调研与报告; 结论单点见报告 §1 —— qB 5.2+ 的 `torrents/trackers` 已有可用的持久正向信号, 现判定失效根因是 epoch/倒计时语义错位。三个待真机确认点(未联系行的 epoch 值 / 立即路径跳幅 / 推迟路径同值移动)与只读探针列在报告 §8。
-- 2026-10-05 收尾: `commands run kb.index` 重建(20 生成物); `commands run test.full` 2589 passed + 4 skipped / 99% / 36.78s(纯文档轮零代码改动, 增量 +13 来自并行会话已入库 develop 的用例; 基线 [26-10-05-0907](../testing/baselines/26-10-05-0907-reannounce-confirm-research.md))。待用户「提交」指令后走 `ship.commit`。
+- 2026-10-05 收尾: `commands run kb.index` 重建(20 生成物); `commands run test.full` 2589 passed + 4 skipped / 99% / 36.78s(纯文档轮零代码改动, 增量 +13 来自并行会话已入库 develop 的用例; 基线 [26-10-05-0907](../testing/baselines/attachments/26-10-05-0907-reannounce-confirm-research.md))。待用户「提交」指令后走 `ship.commit`。

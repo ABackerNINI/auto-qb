@@ -10,6 +10,9 @@
   `# <数字> —— <事件>` / `> 摘要:` / `> 基线时间: YYYY-MM-DD HH:MM`(排序键, 选填 `> 档案:`),
   正文放 TOTAL / 耗时 / 增量明细 —— 体例照最新一条切片抄。**切片写完不改**(不可变的一次性快照)。
 - **看基线**: `commands run kb.baseline`(默认最近 3 条, 最新一条恒为当前事实源; 排障 `--all` / `-n N` 看全量)。
+- **老切片在 `baselines/attachments/`**(2026-10-31 R3 外迁, 计划 26-10-31-0534): 最近 3 条外的历史切片
+  逐字节原样归档在该子目录, 全量清单见 [baselines/attachments/_archive.md](baselines/attachments/_archive.md)
+  (不可变快照仅供深排障; 该清单不是 `_index.md`, 不参与索引)。
 - **无 `_index.md` 是特性, 也不许补** —— 时间戳文件名即索引, 缓存式索引比没有更危险。
 - **其它文档一律引用不手抄** (2026-10-08 方案 C, 已上守卫): README / AGENTS.md / progress /
   档案 / activeContext / 计划只写量级与"见 kb.baseline" —— 数字抄一份多一处漂移。

@@ -647,7 +647,7 @@
 | `tests/test_web.py` 不存在; 16 新模块在位, 329 函数集合恒等且各恰存活一次      | ✅ 校验 ①② 证据见 §S2–§S7; 16 文件 AST 并集 == 329, 0 dup                          |
 | 每新文件 docstring 反幽灵且 312 条目守恒                               | ✅ 校验 ③(各批累计 312)                                                          |
 | 单文件 ≤2,500 行                                              | ✅ 实测最大 `test_webui_static_dom_panel.py` **2,230** 行                        |
-| `test.full` ≥ 开工基线(2771+4), 覆盖率 ≥98%, 口径 -n 4            | ✅ **2771+4 / 99%**(逐位持平); 新基线切片 [26-10-08-0525](../../testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md) |
+| `test.full` ≥ 开工基线(2771+4), 覆盖率 ≥98%, 口径 -n 4            | ✅ **2771+4 / 99%**(逐位持平); 新基线切片 [26-10-08-0525](../../testing/baselines/attachments/26-10-08-0518-backend-test-web-split-s7s8.md) |
 | 活引用更新完毕, 全仓验收 grep 干净                                     | ✅ 见下                                                                        |
 | kb 回写闭环                                                   | ✅ 本档 Done / 计划 Done / 切片迁出 / kb.index 重建                                  |
 
@@ -668,14 +668,14 @@
 - **2026-10-08 02:5x** S1: AST 扫描(脚本落 `tmp-analysis/`)—— 382 顶层函数 = 327 `test_*` + 2 `testhr_*` + 53 辅助; `pytest --collect-only` = **337 项 / 329 函数**; docstring 条目 312(0 幽灵, 17 缺口); 节结构 15 标记; 辅助/常量「定义→使用」传递闭包 → 16 辅助 + 3 常量上收 conftest。
 - **2026-10-08 02:5x** S1 门: 映射表 329 fn 全覆盖零遗漏, 与 AST 逐名对账通过; 四处分歧(节 3 命名 / 节 2 对半 / conftest 增量 / 计数漂移)记入 §P-01, 待用户拍板。
 - **2026-10-08 02:5x** **P-01/P-02 拍板(用户裁决)**: ①节 3 拆两份 —— 18 流量 → `test_web_traffic_qb.py`, 37 杂项 → `test_web_backend_misc.py`(HR 系 6 条未并入 hr); ②节 2 按内容分 `panel`(28)/`page`(27); ③节 1 维持 14/7; ④共享件 —— 仅 `web_env` fixture 进 conftest, 16 个非 fixture 跨文件辅助 + 3 常量进新建 `tests/webui_helpers.py` 显式导入。据此目标文件数 15→**16**; 映射表与归属表按拍板重算并回写本档。
-- **2026-10-08 02:58** 收尾(用户「提交」): DoD —— 复测 `test.full` **2771 passed + 4 skipped / 16476-165-5694-149 / 99% / 56.3s**(与上基线逐位持平), 新建开工基线切片 [26-10-08-0258](../../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md); 本档补 `**Refs:**` 认领链(挂基线切片); 切片「最后活动」刷新; `kb.index` 重建。
+- **2026-10-08 02:58** 收尾(用户「提交」): DoD —— 复测 `test.full` **2771 passed + 4 skipped / 16476-165-5694-149 / 99% / 56.3s**(与上基线逐位持平), 新建开工基线切片 [26-10-08-0258](../../testing/baselines/attachments/26-10-08-0258-backend-test-web-split-s0s1.md); 本档补 `**Refs:**` 认领链(挂基线切片); 切片「最后活动」刷新; `kb.index` 重建。
 - **2026-10-08 03:05** 推送落地(用户拍板): `ship.commit` 提交成功(`e9f82d66`)但推送失败 —— 新分支 `feat/test-web-split` 在 Gitee 不存在, `run_sync` 取不到远端 ref 即报「拿不到远端」(新分支无法自举)。用户拍板**改落 `develop`**: `develop` 快进到远端 tip `1a5f0262` → cherry-pick 本次提交(`136a42bf`)→ `ship.push`; 临时分支删除, S2–S7 亦在 develop 上做。
 - **2026-10-08 03:17** S2 会话开工: `commands run my-commit-flow.sync` → `已同步 591797e5`。**发现工作区脏**: 本档有一笔提交后写入的**陈旧草稿**(mtime 03:12:59 晚于提交 03:12:11, 缺 02:58/03:05 两条日志与 `**Refs:**` 行)⇒ 按「提交态为准」`git checkout --` 复原, 未把回退内容带进本批。
 - **2026-10-08 03:2x** S2: 写 `scripts/split_test_web.py`(AST 切块 + 映射表读取 + 归属闭包 + import 裁剪 + docstring 逐条重分布 + 校验 4 条 + 内容/行守恒)。开发中修掉两处保真缺陷: ①`ast.get_docstring` 求值转义吃掉 `\\p{L}` → 改**从源行切片**取 docstring; ②`webui_helpers.py` 自我 import(共享辅助互相引用) → 共享名扣掉本文件已定义者。导入分组按源分组号保留。
 - **2026-10-08 03:2x** S2 演练(不触生产): `--out-dir R:/Temp/auto-qb/split-drill-s2 --report --collect` → 校验 1-4 + 内容/行守恒全绿; collect-only **337 项 / 329 函数名 == 源**; 块体行 14,180 逐行搬移。
 - **2026-10-08 03:2x** S2 红验 3 条(临时副本注入): 6/6 通过(基线绿 / 4 注入必红 / 撤回复绿), 命中行见 §S2 表。
 - **2026-10-08 03:2x** S2 纠偏落档: 日志辅助类跨 3 文件(非「内聚随节 13」)→ 共享件 21 项; 新坑入 [pitfalls/testing/ast-migration-fidelity.md](../../pitfalls/testing/ast-migration-fidelity.md)。`commands run test.quick` = **2771 passed + 4 skipped**(与开工基线逐位持平, 未动 tests/ 与 src/ 任何一行)。
-- **2026-10-08 03:32** S2 收尾 DoD: `commands run test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99% / 53.65s** —— 与开工基线切片 [26-10-08-0258](../../testing/baselines/26-10-08-0258-backend-test-web-split-s0s1.md) **逐位持平**(本批只动 `scripts/` 与 kb 文档, 不触 src/tests) ⇒ **不新建重复切片**(两片全同是噪声); `kb.index` 重建、`kb.check` 全绿(仅存量「切片数 93 > 70」债务, 不拦提交)。
+- **2026-10-08 03:32** S2 收尾 DoD: `commands run test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99% / 53.65s** —— 与开工基线切片 [26-10-08-0258](../../testing/baselines/attachments/26-10-08-0258-backend-test-web-split-s0s1.md) **逐位持平**(本批只动 `scripts/` 与 kb 文档, 不触 src/tests) ⇒ **不新建重复切片**(两片全同是噪声); `kb.index` 重建、`kb.check` 全绿(仅存量「切片数 93 > 70」债务, 不拦提交)。
 - **2026-10-08 03:50** S3 会话开工: `commands run my-commit-flow.sync` → `已同步 b6a5a588`; 读计划全文 + 任务档案 + 忆坑(ast-migration-fidelity / bulk-rename / single-file-coverage-gate)。工作区净。
 - **2026-10-08 03:5x** S3 演练(不触生产): 先在 `R:/Temp/aqb-split-s3` 副本跑批 → **暴露批模式 4 处校验器缺陷**(仅全量模式验证过): ①校验1 误比余量 → 「多出 21」; ②内容守恒未含未选中桶 → 「354 块未落」; ③余量重复 helpers/conftest + 行守恒含 conftest → 「多 441 行」; ④collect-only 收集整 tests/ → rc=4。逐条修复(见 §S3 表)。
 - **2026-10-08 03:5x** S3 修复后演练(保真): 在 gitignore 的 `tmp-analysis/split-rehearsal/`(整 `tests/` 副本)跑批 → 校验 1–4 + 内容/行守恒**全绿**, collect-only **337 项 / 329 名 == 源**; 两新文件 `19 passed`(2 失败为副本路径致 `STATIC_ROOT` 失准的演练假象, 生产无此问题)。副本已清理。
@@ -704,4 +704,4 @@
 - **2026-10-08 05:0x** S7 格式化 + 验证: `dev.fmt` 四新文件(yapf 去尾空行)⇒ 终值 `route_manifest` **134** / `keys` **321** / `skip_check` **257** / `longtail` **824** 行; `test.one` 四新文件 **45 passed**; `test.quick` = **2771 passed + 4 skipped**; `test.full` = **2771 passed + 4 skipped / TOTAL 16476/165/5694/149 / 99%**(与开工基线逐位持平 ⇒ 纯移动)。
 - **2026-10-08 05:0x** S7 脚本去留(用户拍板): 计划默认删; 用户拍板**保留复用** ⇒ `git mv scripts/split_test_web.py memory-bank/archive/split_test_web.py` + 新增 [README](../../archive/README.md); 修 `REPO` 解析为「向上找 `.git`」(移入子目录后原式失效), 冒烟确认 `REPO` 指向仓库根。
 - **2026-10-08 05:1x** S8 全仓活引用处置: 活代码 17 处 + 活文档(pitfalls 等)23 处逐条改指新文件(守阵指针按 16 新文件 AST「名→文件」表机械改; 通用引用改 `test_web_*.py`); 历史档案/快照不改; `split_test_web.py` 文件名自带子串属合法形态不改。机械重写脚本落 `tmp-analysis/`(已删)。
-- **2026-10-08 05:1x** S8 收口 DoD: 新建基线切片 [26-10-08-0525](../../testing/baselines/26-10-08-0518-backend-test-web-split-s7s8.md); 本档 Status → Done、切片迁出、计划 doc-status → Done、`kb.index` 重建; 守阵(no_duplicate / docs_forms / doc_map / kb.check / test_memory_bank)全绿。
+- **2026-10-08 05:1x** S8 收口 DoD: 新建基线切片 [26-10-08-0525](../../testing/baselines/attachments/26-10-08-0518-backend-test-web-split-s7s8.md); 本档 Status → Done、切片迁出、计划 doc-status → Done、`kb.index` 重建; 守阵(no_duplicate / docs_forms / doc_map / kb.check / test_memory_bank)全绿。

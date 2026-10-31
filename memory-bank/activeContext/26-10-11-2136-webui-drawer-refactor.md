@@ -8,7 +8,7 @@
 
 ## 本轮完成 (W0 + W1)
 
-- **W0 冻结基线(零代码)**: 跑全量 `test.full` 与 e2e 记现状, 新基线切片 [testing/baselines/26-10-11-2136-webui-drawer-refactor-w0w1.md](../testing/baselines/26-10-11-2136-webui-drawer-refactor-w0w1.md)。建「抽屉 DOM dump」临时探针: 打开种子详情 → 四页签(Tracker/用户/内容/常规)+ 回常规, 取 `.drawer-dock` `innerHTML`, 归一 40 位 hash / 大小速度单位 / 时长 / 时刻 等易变位; 双皮肤各 5 项 = 10 项。用后把探针移出 `e2e/`(留 `tmp-analysis/` 备复用), 不扰动 e2e 用例计数。
+- **W0 冻结基线(零代码)**: 跑全量 `test.full` 与 e2e 记现状, 新基线切片 [testing/baselines/attachments/26-10-11-2136-webui-drawer-refactor-w0w1.md](../testing/baselines/attachments/26-10-11-2136-webui-drawer-refactor-w0w1.md)。建「抽屉 DOM dump」临时探针: 打开种子详情 → 四页签(Tracker/用户/内容/常规)+ 回常规, 取 `.drawer-dock` `innerHTML`, 归一 40 位 hash / 大小速度单位 / 时长 / 时刻 等易变位; 双皮肤各 5 项 = 10 项。用后把探针移出 `e2e/`(留 `tmp-analysis/` 备复用), 不扰动 e2e 用例计数。
 - **W1 数据层抽离(零观感变化)**: 新增 `shared/drawer_store.js`, `window.AQB_DRAWER_STORE.methods` 收 `_fetchDrawerDetail|Trackers|Files|Peers` · `_drawerLoadSeq`/`_drawerStale` · `_drawerWait`/`_drawerWaitSources`/`_drawerDone` · `_drawerBusyArm|Disarm`/`_drawerSwitchEnd` · `_loadDrawerTab` · `_switchDrawerTarget` · `_startDrawerPoll`/`_stopDrawerPoll` · `_drawerMergeSupply` · `_drawerNormPeers`; `drawer.js`(1435 → 1169 行)删除定义只余调用点。接线 = `app.mixin(window.AQB_DRAWER_STORE)` + 三 shell `tpl-manifest` 各加一行(排在 `drawer.js` 之前)。
 - **验收**: A/B DOM dump 两侧 sha256 **相同**; 全量 `test.full` 与 e2e 与上基线**逐位一致**(数字见基线切片, 不手抄)。
 

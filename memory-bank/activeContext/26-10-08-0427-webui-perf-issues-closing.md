@@ -11,7 +11,7 @@
 - e2e 全量复跑 **94 passed / 10 skipped / 0 failed**（3.5m）—— 顺带发现本机缺 `@playwright/test`, `npm install` 后跑通。
 - P2 仿真复测: verdict OK, avg_interval=2.139 s / drift_max=0.801 s（原 2.87 / 1.22）, tracebacks=0。
 - 新件入池 `26-10-08-0411-perf-webui-api-state-pagination`（perf / standard / topic `webui-polling`）。
-- test.full **2771 passed + 4 skipped / 99%**（42.68s）见基线 [26-10-08-0427](../testing/baselines/26-10-08-0427-webui-perf-issues-closing.md)（相对上基线逐位持平, 本轮 `src/`+`tests/` 零改动）。
+- test.full **2771 passed + 4 skipped / 99%**（42.68s）见基线 [26-10-08-0427](../testing/baselines/attachments/26-10-08-0427-webui-perf-issues-closing.md)（相对上基线逐位持平, 本轮 `src/`+`tests/` 零改动）。
 - `kb.index` 20 个生成物 + `kb.check` 全绿（主键纪律 / 认领链双向闭环 / 回写措辞 / 日期守卫）。
 
 ## 正在进行

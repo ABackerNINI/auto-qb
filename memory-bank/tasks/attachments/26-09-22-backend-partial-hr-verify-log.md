@@ -677,7 +677,7 @@
   T1–T6 七用例 (adapter 覆写注入器经 monkeypatch build_adapter) + hr_helpers 计数条片段/分页区间形页面
   夹具 + docstring 测试计划同步。**红验闭环**: 临时移除 `and not depth_broken` ⇒ T2/T5① 变红 (其余
   1754 绿), 还原后全绿 —— 守阵钉在闸门上。全量 **1756 passed + 3 skipped / 90%** (12358/999,
-  test.full 22.9s), 基线切片 [26-09-29-2147](../../testing/baselines/26-09-29-2147-hr-counter-m1.md);
+  test.full 22.9s), 基线切片 [26-09-29-2147](../../testing/baselines/attachments/26-09-29-2147-hr-counter-m1.md);
   HR 模块新增行全覆盖 (base 100%, 其余未覆盖行均为既有遗留)。P1 拍板已由「实施 M1」实质成立;
   P2 校准策略 / P3 备选项 / P4 样张采集已当面询问用户待答。**未提交**(等用户显式指令)。
   实施中发现的计划外事项 (未动, 待拍板): ①既有 `fail_streak` 无清零点 (model.py 注释称「干净波清零」
@@ -732,7 +732,7 @@
   该门。真机走查(连续 ≥2 波逐档对平 + 人为缺口验证冻结自愈)待用户侧执行。全量 **1767 passed +
   3 skipped / 91%**(12396 语句 / 999 未覆盖, test.full 21.4s; 42502f29 合并
   远端 WebUI 三修复后复测, 开工基线 9241760), 基线切片
-  [26-09-29-2317](../../testing/baselines/26-09-29-2317-hr-counter-m2.md)。**未提交**(等用户显式指令)。
+  [26-09-29-2317](../../testing/baselines/attachments/26-09-29-2317-hr-counter-m2.md)。**未提交**(等用户显式指令)。
 
 
 ## 2026-09-30 外迁段(M1 修复轮 22:12, 档案触顶腾挪, 原样搬运)

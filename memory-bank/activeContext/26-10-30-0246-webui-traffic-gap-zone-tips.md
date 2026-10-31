@@ -2,6 +2,6 @@
 
 > 摘要: 种子流量图缺口悬停改按「数据链之外 / 链中段」分区段出文案(不再统一归因成程序未运行或 qB 断联), 空态三句与累计注解同步中性化, 斜纹只标记链中段; 补 e2e 真鼠标悬停守阵(种子三区段 + 全局主语分支, 双皮肤 4 例全绿并通过变异红验)
 > 最后活动: 2026-10-30 02:51
-**Refs:** memory-bank/testing/baselines/26-10-30-0251-webui-traffic-gap-zone-tips.md · memory-bank/pitfalls/testing/uplot-hover-hit-area.md
+**Refs:** memory-bank/testing/baselines/attachments/26-10-30-0251-webui-traffic-gap-zone-tips.md · memory-bank/pitfalls/testing/uplot-hover-hit-area.md
 
 **R0(2026-10-30 02:46):** 种子流量图缺口悬停改按「数据链之外 / 链中段」分区段出文案(不再统一归因成程序未运行或 qB 断联), 空态三句与累计注解同步中性化, 斜纹只标记链中段; 补 e2e 真鼠标悬停守阵(种子三区段 + 全局主语分支, 双皮肤 4 例全绿并通过变异红验)
