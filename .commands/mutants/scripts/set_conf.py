@@ -32,6 +32,7 @@ from pathlib import Path
 DEFAULT_DESELECT = (
     "tests/test_sim_corpus.py::test_fs_mock_coverage_static_guard",
     "tests/test_web_seed_center.py::test_api_enqueue_wakes_main_loop",
+    "tests/test_traffic_store.py::test_v4_parse_skeleton_single_point",
 )
 
 # also_copy 推导时的排除项: vcs / 依赖 / 生成物 / 本工具自身产物 —— 都不该进 mutants/ 副本。

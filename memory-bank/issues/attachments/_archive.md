@@ -4,12 +4,34 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (50)
+## Open (72)
 
+- [bug] [mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失](../26-10-31-1539-bug-mutation-tooling-deselect-guards.html) — W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律
+- [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条: 单文件轮 rm -rf 清注册表致跨目标 APPLY_FAIL、dump 伪 hunk 行号致 git apply 失败、flaky 集污染 verify 差集
+- [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
+- [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
+- [test] [core/ tvshows CJK 中文数字变异存活: 「百」语义 2 条低危](../26-10-31-1212-test-core-w3-mutation-cjk-numerals.html) — W3 低危簇2: cjk_int_27(百=100变200)+find_season_14(第百季收进季号), cjk_int_23 待定随簇备注, W3 池无守阵
+- [test] [core/ curves 别名/坏行变异存活: normalize_period「D」+ parse_dat 坏行计数 3 条低危](../26-10-31-1212-test-core-w3-mutation-curves-alias-badlines.html) — W3 低危簇7: normalize_7/8(别名 D 被拒)+parse_dat_19(坏行计数 2→1), W3 池无守阵
+- [test] [core/ curves 单位换算边界变异存活: merge_direction 1 条低危(簇余 3 条已销账)](../26-10-31-1212-test-core-w3-mutation-curves-unit-edges.html) — W3 低危簇8 缩簇: 原簇 kib_5/floor_6/kib_1 已 C2a 销账, 仅余 merge_4(1 B/s 档速被当 0 不限速)
+- [test] [core/ episodes 目录未剥离变异存活: names 4 条低危合 1 参数化](../26-10-31-1212-test-core-w3-mutation-episodes-dir-strip.html) — W3 低危簇6: names_5/9/14/16 目录段未剥离(空格切/左切/反斜杠/分隔串失效)同族, 一个参数化用例全杀
+- [test] [core/ tvshows 组名括号变异存活: is_groupish/strip_group 3 条低危](../26-10-31-1212-test-core-w3-mutation-group-brackets.html) — W3 低危簇3: is_groupish_2/4(lower 反转)+strip_group_19(恒取尾候选), [Show][Subs][05] 标题取错, W3 池无守阵
+- [test] [core/ tvshows 键归一变异存活: 尾 bigram/空格折叠 2 条低危 + 归一循环死循环 2 条](../26-10-31-1212-test-core-w3-mutation-key-normalize.html) — W3 低危簇4: normalize_key_25+title_and_key_37 低危补测; normalize_key_34/38 timeout 死循环(DoS 形态)随簇记 bug 备注处置=代码侧
+- [test] [core/ tvshows 标题尾 trim 变异存活: title_and_key_30 1 条低危](../26-10-31-1212-test-core-w3-mutation-title-trim.html) — W3 低危簇5: title_and_key_30 尾 strip 字符集失效, 标题残留「 -」/右括号, 展示面污染, W3 池无守阵
+- [test] [core/ tvshows 年份/bare 边界变异存活: bare_ok/区间终点/目录季/日期 9 条低危](../26-10-31-1211-test-core-w3-mutation-year-bare-edges.html) — W3 低危簇1: bare_ok_9/10/11/12+find_episode_24/32+dir_season_13/14+find_date_18, 年份窗口/集数上下界/目录季/非法日期, W3 池无守阵
+- [test] [core/ limits 坏字节读侧容错变异存活 6 条低危](../26-10-31-0823-test-core-w2-mutation-badbytes-read.html) — W2 未逐条 verify 低危簇 B: rdl_8/18 + rday_25/29/34/35(坏字节文件 UnicodeDecodeError/LookupError 未捕获, 读侧降级契约破坏)
+- [test] [core/ grid ±1s 边界与窗端点几何变异存活 10 条低危](../26-10-31-0823-test-core-w2-mutation-boundary-grid.html) — W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)
+- [test] [core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危](../26-10-31-0823-test-core-w2-mutation-broke-contract.html) — W2 未逐条 verify 低危簇 I: vgo_80/83/105/117 + vrft_15/25 + vtp_101(断链桶冒充 0 线/w=0 除零/单侧游程摊配)
+- [test] [core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危](../26-10-31-0823-test-core-w2-mutation-empty-meta-grid.html) — W2 未逐条 verify 低危簇 H(缩并): bg_21(桶宽下限 1→2 伤亚 2s 采样) + gfn_6(sample_interval 实参静默丢弃)
+- [test] [core/ limits 护栏计数/节流变异存活 3 条低危](../26-10-31-0823-test-core-w2-mutation-guard-counter.html) — W2 未逐条 verify 低危簇 D: guard_1/9/14(按天重置失效/节流失效刷 WARNING)
+- [test] [core/ limits 解析边角变异存活: 坏行/撕裂/负值 4 条低危](../26-10-31-0823-test-core-w2-mutation-parse-edges.html) — W2 未逐条 verify 低危簇 A: parse_4/9/37/38(行内空白/撕裂尾/负值边角), W2 池无守阵
+- [test] [core/ limits 记录器/缓存防御面变异存活 3 条低危](../26-10-31-0823-test-core-w2-mutation-recorder-defense.html) — W2 未逐条 verify 低危簇 C: obs_7/8(非 Mapping 状态防御) + rday_10(缺失哨兵空串化)
+- [test] [core/ grid 同桶快照/混桶家族变异存活 8 条低危](../26-10-31-0823-test-core-w2-mutation-snapshot-mixbucket.html) — W2 未逐条 verify 低危簇 G: vsp_95/96/97/98/105/107/112/115(同刻快照最新性/混桶 is_raw/覆盖值取错通道)
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
+- [bug] [state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达)](../26-10-31-0458-bug-state-read-encoding-guard.html) — core/state.py _read_state_file 的 encoding="utf-8" 零守阵: 变异测试坐实删掉它全套件照绿(UTF-8 宿主分不出), locale 打桩在 CPython 3.13 不可达; 回归后果 = Windows GBK 生产机读 UTF-8 state 误入损坏链/静默清空
+- [bug] [TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行](../26-10-31-0449-bug-taskqueue-dry-run-chain.html) — core/taskqueue.py 的 dry_run 传递链断裂(变异测试坐实): _run_one 收到 None, dry_run=True 时 handler 仍真执行, --dry-run 模式对任务路径产生真实写副作用
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
