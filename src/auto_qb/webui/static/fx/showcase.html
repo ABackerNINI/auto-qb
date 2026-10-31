@@ -19,6 +19,11 @@
         语义标注) + 挑选辅助(选定/导出) + guide 合规总览 + 交接说明。
   卡片数据在页尾内联脚本的 CARDS 数组里 -- T5 补组件 = 追加数组条目 +
         占位分区改 status:"ready", 机制(渲染/演示/挑选/导出)全部复用。
+  S4 复验补: 切换器旁挂当前档状态条(role=status, 切档即更新) + 切档 toast;
+        页面 chrome(操作条/分区标题条/卡区容器)按 <html data-fx-preset> 作用域
+        消费 fx 供给面令牌(neon 辉光 / glass 毛玻璃 / crisp 纯平, 页内样式不动库);
+        对比区三栏各加一个静态风格签名元素 + 迷你毛玻璃面板改「glass 半透磨砂 /
+        neon·crisp 不透明纯面」, 静态截图三栏两两可辨。
 -->
 <link rel="stylesheet" href="../shared/fx/fx.css">
 <link rel="stylesheet" href="../shared/fx/fx-presets.css">
@@ -49,7 +54,13 @@
 }
 * { box-sizing: border-box; }
 body {
-  background: var(--bg);
+  /* 底色带两团极低反差的色晕(固定): backdrop-filter 的 blur 只对「背后的内容」
+   * 生效 -- 纯平色底上 blur(10px) 与 none 视觉零差(即 S4 复验「都是毛玻璃」的
+   * 根因之一)。色晕给 glass 档的磨砂面板提供可被磨开的内容, 深色主题观感不变。 */
+  background:
+    radial-gradient(1100px 520px at 12% -8%, rgba(109, 179, 201, 0.09), transparent 60%),
+    radial-gradient(900px 460px at 90% 2%, rgba(143, 208, 224, 0.06), transparent 55%),
+    var(--bg);
   color: var(--ink);
   color-scheme: dark;
   font-family: var(--sans);
@@ -92,6 +103,41 @@ h1 { font-size: 28px; line-height: 1.2; font-weight: 600; margin: 8px 0 6px; }
 /* 激活态辉光消费供给面: neon 档发光、glass/crisp 档只换描边(全页 preset 差异信号) */
 .ctl.on { color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent); }
 .ops label, .card-ops label { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; color: var(--dim); cursor: pointer; }
+
+/* ---- S4 复验补: 当前 preset 状态条(切换器旁, 切档即更新) ---- */
+#preset-status {
+  display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 60ch;
+  padding: 3px 10px; border: 1px solid var(--hair); border-radius: 5px;
+  background: var(--card-deep); font-size: 12px; color: var(--dim); line-height: 1.5;
+}
+#preset-status .ps-name { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--accent-ink); flex: none; }
+
+/* ---- S4 复验补: 页面 chrome 对 preset 的全局可见反应 ----
+ * 页内样式按 <html data-fx-preset> 作用域消费 fx 供给面令牌(glow/blur/sheen),
+ * 不动 fx 库; 基线(无属性)不命中任何块 = 兜底令牌的纯平观感 -- 与 crisp 接近
+ * 但时长/曲线档不同(fx.css :root vs crisp 块), 见状态条文案。 */
+/* neon: 操作条带辉光, 分区标题微发光, 卡片描边转 accent */
+html[data-fx-preset="neon"] .ops {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+  box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent);
+}
+html[data-fx-preset="neon"] section > h2 { text-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent); }
+html[data-fx-preset="neon"] .card { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair-soft)); }
+/* glass: 操作条/导出盒毛玻璃化(blur 消费 --fx-blur), 顶部高光线与描边消费 --fx-sheen-c;
+ * 卡区容器半透(blur 大面积上 40 张卡会踩 PERF-01, 卡面只做半透不做 backdrop) */
+html[data-fx-preset="glass"] .ops,
+html[data-fx-preset="glass"] .export-box {
+  background: color-mix(in srgb, var(--card-deep) 72%, transparent);
+  backdrop-filter: blur(var(--fx-blur, 0px));
+  border-color: color-mix(in srgb, var(--fx-sheen-c) 45%, var(--hair));
+  box-shadow: inset 0 1px 0 0 var(--fx-sheen-c);
+}
+html[data-fx-preset="glass"] section > h2 { border-top-color: var(--fx-sheen-c); }
+html[data-fx-preset="glass"] .card { background: color-mix(in srgb, var(--card) 84%, transparent); }
+html[data-fx-preset="glass"] .stage { background: color-mix(in srgb, var(--card-deep) 84%, transparent); }
+/* crisp: 显式纯平(供给面全关; 显式声明仅作对照可读, 值与兜底一致) */
+html[data-fx-preset="crisp"] .ops,
+html[data-fx-preset="crisp"] .card { box-shadow: none; backdrop-filter: none; }
 
 /* ---- 分区与卡片 ---- */
 section { margin: 0 0 54px; }
@@ -168,18 +214,55 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 .pc-item { display: flex; flex-direction: column; gap: 4px; }
 /* 元素旁的 plain language 标注: 讲该处各档差在哪, 不用令牌名 */
 .pc-tag { margin: 0; font-size: 11.5px; color: var(--faint); line-height: 1.45; padding-left: 8px; border-left: 2px solid var(--hair); }
-/* 迷你组件 1: 毛玻璃信息小面板(渐变底 + 半透明浮层, blur 随档位) */
+/* 迷你组件 1: 毛玻璃信息小面板 -- S4 复验改造:
+ * 底加高反差斜条纹(blur 10px 会把条纹磨匀, 与 none 的锐利条纹一眼可辨 --
+ * 原来只有平滑渐变, blur 前后几乎零差, 是「三栏都像毛玻璃」的根因);
+ * 浮层默认不透明纯面(neon/crisp/基线档), 仅 glass 档(供给面开)改半透 + 消费
+ * --fx-blur 的磨砂, 与各档真实生产语义一致。 */
 .pc-blurbox {
   height: 64px; border-radius: 8px; position: relative; overflow: hidden;
-  background: linear-gradient(115deg, #274352, #6db3c9 45%, #1a232c 78%, #8fd0e0);
+  background:
+    repeating-linear-gradient(115deg, rgba(255, 255, 255, 0.30) 0 10px, transparent 10px 26px),
+    linear-gradient(115deg, #274352, #6db3c9 45%, #1a232c 78%, #8fd0e0);
 }
 .pc-blur-panel {
   position: absolute; top: 10px; bottom: 10px; left: 10px; width: 62%;
   display: flex; flex-direction: column; justify-content: center; gap: 1px; padding: 0 10px;
-  background: rgba(20, 27, 34, 0.5); border: 1px solid var(--hair); border-radius: 6px;
+  background: #141b22; border: 1px solid var(--hair); border-radius: 6px;
   color: var(--ink);
-  backdrop-filter: blur(var(--fx-blur));
+  backdrop-filter: blur(var(--fx-blur, 0px));
 }
+.pc-panel[data-fx-preset="glass"] .pc-blur-panel { background: rgba(20, 27, 34, 0.5); }
+
+/* ---- 三栏静态风格签名(S4 复验补) ----
+ * 每栏一个消费供给面令牌的静态元素(未补供, 未 hover): neon 栏 glow 供给开 =
+ * 常亮辉光条; glass 栏 blur 供给开 = 高反差彩条上的磨砂贴片; crisp 栏供给全关 =
+ * 纯平细线框。静态截图三栏两两可辨。 */
+.pc-sig { display: flex; flex-direction: column; gap: 4px; }
+.pc-sig-demo { min-height: 44px; display: flex; align-items: center; }
+/* neon 签名: 常亮辉光强调条(glow 走 currentColor, 抬到 --ink 亮度保证深底可辨) */
+.pc-sig-bar {
+  display: inline-block; width: 76px; height: 12px; border-radius: 6px;
+  background: var(--accent-ink); color: var(--ink);
+  box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent),
+              0 0 calc(var(--fx-glow, 0px) * 2) var(--fx-glow-c, transparent);
+}
+/* glass 签名: 高反差彩条上的磨砂贴片(blur 消费 --fx-blur) */
+.pc-sig-glass .pc-sig-demo {
+  padding: 12px; border-radius: 6px; overflow: hidden;
+  background: repeating-linear-gradient(115deg, #8fd0e0 0 14px, #274352 14px 28px, #e4eaef 28px 38px);
+}
+.pc-sig-frost {
+  display: inline-block; padding: 5px 12px; border-radius: 5px;
+  background: rgba(20, 27, 34, 0.45); border: 1px solid var(--hair);
+  color: var(--ink); font-size: 11.5px;
+  backdrop-filter: blur(var(--fx-blur, 0px));
+}
+/* crisp 签名: 纯平细线框(无 glow 无 blur 无 sheen, 1px 描边即全部装饰) */
+.pc-sig-crisp .pc-sig-demo {
+  padding: 12px; border: 1px solid var(--faint); border-radius: 6px; background: transparent;
+}
+.pc-sig-frame { font-size: 11.5px; color: var(--dim); letter-spacing: 0.04em; }
 .pc-bt-title { font-weight: 600; font-size: 12px; }
 .pc-bt-sub { font-size: 10.5px; color: var(--dim); }
 /* 迷你组件 2: 按钮对(主钮 press / 次钮 glow+sheen; 次钮用浅色字, 发光走
@@ -610,10 +693,11 @@ footer .audit-line { color: var(--dim); }
   <div class="ops">
     <div class="grp" id="preset-grp">
       <span class="grp-label">风格层 preset</span>
-      <button class="ctl" type="button" data-preset="">基线</button>
+      <button class="ctl" type="button" data-preset="" title="不设 data-fx-preset, 兜底令牌配方, 供对照">基线</button>
       <button class="ctl" type="button" data-preset="neon">neon</button>
       <button class="ctl" type="button" data-preset="glass">glass</button>
       <button class="ctl" type="button" data-preset="crisp">crisp</button>
+      <span id="preset-status" role="status"><span class="ps-name">基线</span><span class="ps-desc"></span></span>
     </div>
     <div class="grp">
       <span class="grp-label">挑选</span>
@@ -636,7 +720,7 @@ footer .audit-line { color: var(--dim); }
         <label><input type="checkbox" id="pc-slow">慢放 3x</label>
       </span>
     </h2>
-    <p class="sec-note">看什么: 先看<b>装饰差</b> -- 毛玻璃只有 glass 开、hover 发光只有 neon 有; 再点「同时演示」看<b>运动差</b> -- 同一入场三栏同帧起跑, 时长 280 / 260 / 240ms、曲线各异(开「慢放 3x」更明显)。</p>
+    <p class="sec-note">看什么: 先看每栏第一行的<b>静态风格签名</b> -- 不 hover 不点击三栏即明显不同(neon 常亮辉光条 / glass 彩条上的磨砂贴片 / crisp 纯平细线框), 「供给面开/关」即此意; 再点「同时演示」看<b>运动差</b> -- 同一入场三栏同帧起跑, 时长 280 / 260 / 240ms、曲线各异(开「慢放 3x」更明显)。</p>
     <div class="pc-grid">
       <div class="pc-panel" data-fx-preset="neon">
         <div class="pc-head">
@@ -644,9 +728,13 @@ footer .audit-line { color: var(--dim); }
           <span class="pc-mood">发光与强调, 视觉最热烈 -- 动效常配辉光与明显位移, 回弹收得最足</span>
         </div>
         <div class="pc-stage">
+          <div class="pc-item pc-sig pc-sig-neon">
+            <div class="pc-sig-demo"><i class="pc-sig-bar" aria-hidden="true"></i></div>
+            <p class="pc-tag">静态签名: 常亮辉光强调条 -- glow 供给开(12px), 不 hover 也亮</p>
+          </div>
           <div class="pc-item">
             <div class="pc-blurbox"><div class="pc-blur-panel"><span class="pc-bt-title">任务面板</span><span class="pc-bt-sub">3 个种子 · 排队中</span></div></div>
-            <p class="pc-tag">毛玻璃: 仅 glass 开(10px); neon / crisp 是普通半透明, 无模糊</p>
+            <p class="pc-tag">毛玻璃: 仅 glass 开(10px), 条纹被磨匀; neon 是不透明纯面, 条纹锐利</p>
           </div>
           <div class="pc-item pc-btns">
             <div class="bt-col">
@@ -674,9 +762,13 @@ footer .audit-line { color: var(--dim); }
           <span class="pc-mood">毛玻璃质感 + 柔和曲线 -- 层次靠模糊与半透明, 轻拿轻放</span>
         </div>
         <div class="pc-stage">
+          <div class="pc-item pc-sig pc-sig-glass">
+            <div class="pc-sig-demo"><span class="pc-sig-frost">磨砂贴片</span></div>
+            <p class="pc-tag">静态签名: 高反差彩条上的磨砂贴片 -- blur 供给开(10px), 彩条被磨匀</p>
+          </div>
           <div class="pc-item">
             <div class="pc-blurbox"><div class="pc-blur-panel"><span class="pc-bt-title">任务面板</span><span class="pc-bt-sub">3 个种子 · 排队中</span></div></div>
-            <p class="pc-tag">毛玻璃: 仅 glass 开(10px); neon / crisp 是普通半透明, 无模糊</p>
+            <p class="pc-tag">毛玻璃: 仅 glass 开(10px), 条纹被磨匀 + 半透磨砂浮层</p>
           </div>
           <div class="pc-item pc-btns">
             <div class="bt-col">
@@ -704,9 +796,13 @@ footer .audit-line { color: var(--dim); }
           <span class="pc-mood">纯净克制, 零装饰 -- 只留最必要的运动, 反馈快而不抢眼</span>
         </div>
         <div class="pc-stage">
+          <div class="pc-item pc-sig pc-sig-crisp">
+            <div class="pc-sig-demo"><span class="pc-sig-frame">纯平细线框</span></div>
+            <p class="pc-tag">静态签名: 1px 细线框, 零发光零模糊 -- 供给面全关</p>
+          </div>
           <div class="pc-item">
             <div class="pc-blurbox"><div class="pc-blur-panel"><span class="pc-bt-title">任务面板</span><span class="pc-bt-sub">3 个种子 · 排队中</span></div></div>
-            <p class="pc-tag">毛玻璃: 仅 glass 开(10px); neon / crisp 是普通半透明, 无模糊</p>
+            <p class="pc-tag">毛玻璃: 仅 glass 开(10px); crisp 是不透明纯面, 条纹锐利</p>
           </div>
           <div class="pc-item pc-btns">
             <div class="bt-col">
@@ -1410,6 +1506,16 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
 
   var PRESET_KEY = "fxsc.preset";
   var PICKS_KEY = "fxsc.picks";
+
+  /* 四档状态条文案(S4 复验补): 基线 = 未设属性, 走 fx.css :root 兜底令牌, 供给面
+   * 全关 -- 观感与 crisp 接近但时长/曲线档不同(250ms 系 vs 240ms 系), 文案必须
+   * 讲清这点, 避免误读「基线 = crisp」。 */
+  var PRESET_INFO = {
+    "": { name: "基线", desc: " -- 未设风格, 兜底令牌: 无装饰, 观感接近 crisp 但曲线/时长档不同, 作三档共同参照" },
+    neon: { name: "neon", desc: " -- 发光与强调, 视觉最热烈: 辉光开启, 弹簧过冲最强" },
+    glass: { name: "glass", desc: " -- 毛玻璃与柔曲线: 模糊开启, 面板半透, 曲线最柔" },
+    crisp: { name: "crisp", desc: " -- 纯净克制零装饰: 供给面全关, 只留最快时序" }
+  };
   var cards = [];            /* 渲染后的卡片运行时对象 */
   var currentPreset = "";
 
@@ -2129,6 +2235,32 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
 
   /* ---- 风格层切换器 ---- */
 
+  /* 状态条: 当前档名 + 一句话定位, 切档即更新(S4 复验补) */
+  function updatePresetStatus() {
+    var info = PRESET_INFO[currentPreset] || PRESET_INFO[""];
+    var nameEl = $("#preset-status .ps-name");
+    var descEl = $("#preset-status .ps-desc");
+    if (nameEl) nameEl.textContent = info.name;
+    if (descEl) descEl.textContent = info.desc;
+  }
+
+  /* 切档轻量反馈: 复用右下角 toast 宿主吐一条当前档定位语(仅用户点击时,
+   * 初始恢复不吐); 展示时长与动画时长解耦口径同 D6。 */
+  function presetSwitchToast(v) {
+    var info = PRESET_INFO[v] || PRESET_INFO[""];
+    var host = ensureToastHost();
+    while (host.children.length >= 6) host.lastElementChild.remove(); /* 循环档同款限流 */
+    var t = document.createElement("div");
+    t.className = "tst";
+    t.setAttribute("data-fx", "rise");
+    t.innerHTML = TST_ICONS.info +
+      '<span class="tst-txt"><span class="tst-title">风格层 preset: ' + info.name + "</span>" +
+      '<span class="tst-sub">' + info.desc.replace(/^ -- /, "") + "</span></span>";
+    host.prepend(t);
+    if (window.AQB_FX) AQB_FX.scan(); /* 幂等重扫: 动态插入的 data-fx 补挂载标记 */
+    setTimeout(function () { dismissToast(t, false); }, 3000);
+  }
+
   function applyPreset(v, persist) {
     currentPreset = v || "";
     if (v) document.documentElement.setAttribute("data-fx-preset", v);
@@ -2136,6 +2268,8 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     $all("#preset-grp .ctl").forEach(function (b) {
       b.classList.toggle("on", (b.getAttribute("data-preset") || "") === currentPreset);
     });
+    updatePresetStatus();
+    if (persist) presetSwitchToast(currentPreset); /* 初始恢复(persist=false)不吐 toast */
     if (persist) store(PRESET_KEY, currentPreset);
   }
 
