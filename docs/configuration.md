@@ -715,7 +715,6 @@ config:
                 - start: true                      # 开始
                 - stop: true                       # 暂停
                 - print_torrent_details: true      # 打印种子详情到日志(只读留档; on_torrent_deleted 唯一允许动作)
-                - ignore_next_action_error: true   # 忽略下一个动作的错误继续执行 🚧
                 - add_tags:                        # 添加标签，支持变量
                     - tag-format1
                 - remove_tags:                     # 删除标签，支持正则和变量
@@ -730,9 +729,6 @@ config:
                 - reannounce: true                 # ⚠️ 强制汇报 tracker(有风险) 🚧
                 - upload_speed_limit: 1000KiB/s    # 上传速度，不覆盖单数值
                 - download_speed_limit: 1000KiB/s  # 下载速度，不覆盖单数值
-            # 可选: conditions-met / conditions-not-met / action-failed /
-            #       all-actions-succeed / always / never
-            stop_following_rules_if: conditions-met # 🚧
     trackers:
         tracker1:
             domains:
@@ -786,7 +782,13 @@ config:
 | `move_to`                                     | 移动保存路径                                                                               |
 | `reannounce`                                  | 强制汇报 tracker (⚠️ __<font color="red">有风险!</font>__)                                 |
 | `upload_speed_limit` / `download_speed_limit` | 单种上传 / 下载限速 （⚠️ 注意上传限速过低有风险）                                            |
-| `ignore_next_action_error`                    | 忽略下一个动作的错误继续执行（仅对下一个动作起效）                                           |
+
+> **已退役键**（plan 26-11-01-0106 W1）：`stop_following_rules_if`（规则级）与伪动作
+> `ignore_next_action_error` 不再被引擎消费——配置校验仍识别两键用于升级检测：含键规则在
+> **载入时自动转为未启用**（enabled=false）并出警告，配置原内容原样保留供改写；Web UI 规则卡
+> 会对含键规则显示「未启用·含退役键」徽标与升级提示。改写指引：`ignore_next_action_error` 的
+> 等价新写法为 `on_error: {policy: continue}`（`on_error` 随 W2 落地）；确需「首中即停」请等
+> 引擎级 `evaluation` 选项（W4）。
 
 ### 去重与一次执行
 
@@ -801,8 +803,10 @@ config:
 
 - 每个动作返回统一结果：`success` / `failed` / `skipped`
 - `failed`：qB 返回失败或出错；`skipped`：条件不满足（如标签已存在、分类已设置），**不算失败**
-- `stop_following_rules_if: action-failed` 只对 `failed` 生效，`skipped` 不影响
-- `ignore_next_action_error` 只对下一个动作生效，忽略 `failed` 继续执行
+- 动作 `failed` 会**中断本条动作链**（后续动作不再执行）；错误策略（失败继续 / 重试）随 per-step
+  `on_error` 配置落地（W2）。条件求值出错时本条规则本轮跳过，不影响其它规则
+- 旧的 `stop_following_rules_if` / `ignore_next_action_error` 已退役（见上节「已退役键」），
+  不再有任何停止 / 忽略语义
 
 ### 状态映射表
 

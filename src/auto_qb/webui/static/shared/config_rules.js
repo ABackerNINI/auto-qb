@@ -5,10 +5,11 @@
  * 结构映射(YAML 形状):
  *   <规则集>_rules:
  *       <规则名>:
- *           enabled/trigger/interval/execute_once/cooldown/stop_following_rules_if/watch_fields:
- *                       规则级字段(schema.rule_fields, 「触发与节奏」折叠段, hub-field 通用渲染)
+ *           enabled/trigger/interval/execute_once/cooldown/watch_fields:
+ *                       规则级字段(schema.rule_fields, 「触发与节奏」折叠段, hub-field 通用渲染;
+ *                       stop_following_rules_if 已退役, 键面保留识别, 见 cfgRuleRetiredKeys)
  *           conditions: [{<插件名>: <spec>}, ...]
- *           actions:    [{<插件名>: <spec>}, ...]   # 或 {ignore_next_action_error: true} 伪动作
+ *           actions:    [{<插件名>: <spec>}, ...]
  *
  * spec 形态由 schema 的 Plugin.spec_kind 决定: str/enum/speed 单值, bool 开关, list 列表, object 子表单。
  * 动作可选集合按 trigger 过滤(与后端 validation 的删除触发白名单同源)。
@@ -30,8 +31,34 @@ window.CONFIG_RULES = {
     cfgPluginEntry(groupKey, ruleName, listName, index) {
       return this.cfgPluginList(groupKey, ruleName, listName)[index] || null;
     },
-    isIgnoreNext(entry) {
+    /* 两键退役检测(D1, plan 26-11-01-0106 W1): stop_following_rules_if /
+     * ignore_next_action_error 已退场 —— 载入层(rules_mod)把含键规则转未启用 + warning,
+     * 但不回写 config.yml; webui 直接从规则 spec 检测键名出升级提示面(未启用徽标 + 卡脚
+     * 提示), 判定口径与后端 retired_control_keys_in 同源(规则级键 + actions 域伪动作项)。 */
+    cfgRuleRetiredKeys(groupKey, ruleName) {
+      const spec = this.cfgRaw(this.cfgRulePath(groupKey, ruleName));
+      if (!spec || typeof spec !== "object") return [];
+      const keys = [];
+      if ("stop_following_rules_if" in spec) keys.push("stop_following_rules_if");
+      if ((spec.actions || []).some((a) => this.cfgIsRetiredAction(a))) {
+        keys.push("ignore_next_action_error");
+      }
+      return keys;
+    },
+    /* actions 域伪动作项识别(退役键自身): 不再当可渲染动作(hubPluginText 显示退役标记) */
+    cfgIsRetiredAction(entry) {
       return !!(entry && typeof entry === "object" && "ignore_next_action_error" in entry);
+    },
+    /* 卡脚升级提示(单点口径, 模板只引用; 话术与后端 _warn_retired_rule 对齐) */
+    cfgRuleRetiredHint(groupKey, ruleName) {
+      const keys = this.cfgRuleRetiredKeys(groupKey, ruleName);
+      if (!keys.length) return "";
+      let msg = "含已退役控制键(" + keys.join(", ") + "): 引擎载入时自动转为未启用(enabled=false), "
+        + "规则内容原样保留, 请改写后重新启用";
+      if (keys.includes("ignore_next_action_error")) {
+        msg += "; ignore_next_action_error 的等价新写法: on_error: {policy: continue}";
+      }
+      return msg;
     },
     cfgPluginName(entry) {
       if (!entry || typeof entry !== "object") return "";
@@ -177,7 +204,8 @@ window.CONFIG_RULES = {
     /* ---------------------------------------------------------- 规则级字段(触发与节奏)
      *
      * 规则卡除条件/动作外还有一排规则级字段(trigger/interval/execute_once/cooldown/
-     * stop_following_rules_if/watch_fields) —— 全部来自 schema.rule_fields(后端已在
+     * watch_fields; stop_following_rules_if 已退役但键面保留识别, 仍随 rule_fields 渲染
+     * 并带「已退役」帮助文案) —— 全部来自 schema.rule_fields(后端已在
      * /api/config/schema 载荷里), 用 cfgFlatten 展开成通用字段项交给 hub-field 渲染,
      * 控件形态(枚举下拉/数值+单位/列表)与帮助、「?」、条件显隐(show_if)零特判复用。 */
     /* 触发时机的中文短标签(卡头摘要与「触发与节奏」摘要共用单点) */

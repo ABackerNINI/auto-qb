@@ -33,20 +33,41 @@
 ## Rule.process() 执行语义 (base.py, 核心函数)
 
 ```
-process(ctx) -> (handled: bool, stop: bool)
+process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_* 常量
 ```
 
-1. **断点续跑**: 若 `ctx.task.has_breakpoint` (resume_index 非空) → 从断点动作继续, **跳过条件评估与去重** (用于 full-checking pending 后的恢复); 断点只在正常完成时消费清零, 异常路径由 taskqueue 收尾默认重置兜底 (下轮从头)。
-2. **条件评估**: `matches()` = 所有条件 AND; **条件抛异常 → 出错即停规则** (2026-09-20 拍板): ERROR 级日志(含规则名/表达式/种子/原因, 同因 5 分钟节流) + 返回 `handled=False, stop=True` —— 判据都不可信时, 让后面的规则继续对这个种子做动作才是真风险。**故障优先于 `stop_following_rules_if`**(配 `never` 也停)。旧条件与 `expr` 同样适用。
-3. **去重**: `_dedup_allowed` (见下节) 不通过 → 不执行。
+> **返回值契约已收口** (2026-11-01, plan 26-11-01-0106 W1): 旧的 `(handled, stop)` 二元组
+> 中 `stop` 档自始无人消费(唯一调用点整体丢弃), `handled` 同样漂移 —— 现收口为引擎
+> (`rules_mod._run_rule`)显式消费的单值 verdict: 每次执行 DEBUG 记结论供排障, W2 起按
+> `error` 档驱动 per-step 错误语义、W4 起进 per-run trace, 均以该返回值为单点入口。
+
+| verdict | 含义 |
+|---------|------|
+| `no_match` | 条件不满足(含种子已删): 本轮未执行 |
+| `error` | 条件求值出错: 本条规则本轮跳过, 不影响其它规则 |
+| `deduped` | execute_once/cooldown 去重拦下 |
+| `no_op` | 条件满足且未被去重, 但无动作产生效果(空动作表/全 skip) |
+| `pending` | 动作等待异步完成: 断点已记录, 本轮中断待恢复 |
+| `executed` | 本轮执行了动作(成功/失败均计; 续跑完成同) |
+
+1. **断点续跑**: 若 `ctx.task.resume_index` 非空 → 从断点动作继续, **跳过条件评估与去重** (用于 full-checking pending 后的恢复); 断点只在正常完成时消费清零, 异常路径由 taskqueue 收尾默认重置兜底 (下轮从头)。
+2. **条件评估**: `matches()` = 所有条件 AND; **条件抛异常 → 本条规则本轮跳过** (2026-09-20 拍板的行为不变, W1 话术收口): ERROR 级日志(含规则名/表达式/种子/原因, 同因 5 分钟节流) + 返回 `VERDICT_ERROR` —— 每规则每种子独立任务模型里不存在「后续规则」链, 出错只影响本条本轮, 其它规则照常。旧条件与 `expr` 同样适用。
+3. **去重**: `_dedup_allowed` (见下节) 不通过 → `VERDICT_DEDUPED`。
 4. **动作顺序执行**:
    - `ActionResult.ok` → `ok_action=True`, 记录日志继续。
    - `ActionResult.skip` → 不算失败, 继续 (如标签已存在)。
-   - `ActionResult.fail` → `failed=True`; 若该动作未设 `ignore_error` → **break** 中断后续动作。
-   - `ActionResult.pending` → 任务队列驱动时: 记录 `task.resume_index = i+1`, 返回 `(True, True)` 中断 (`_handle_rule` 检测断点返回 False 不重入; 校验轮询子任务完成后按情况重新入队); 无任务时视为成功继续。
+   - `ActionResult.fail` → `failed=True`, **break** 中断本条动作链 (per-step `on_error` 错误策略 W2 引入, plan G5)。
+   - `ActionResult.pending` → 任务队列驱动时: 记录 `task.resume_index = i+1`, 返回 `VERDICT_PENDING` 中断 (`_handle_rule` 检测断点返回 False 不重入; 校验轮询子任务完成后按情况重新入队); 无任务时视为成功继续。
 5. **执行历史**: `ok_action` 且非 dry_run 且有动作 → `manager.record_execution(name, hash)` (幂等去重依据)。注意: 只要有任一动作成功就记录, 包括后续动作失败的场合 (断点续跑时 ok_action 初始为 True)。
-6. **stop 计算** (`stop_following_rules_if`): `conditions-met`(默认, 匹配即停) / `always` → stop=True; `action-failed` 且 failed → True; `all-actions-succeed` 且 not failed → True; `conditions-not-met` → 不匹配时 stop=True; `never` → 永不停。
-7. 返回 `handled`: `not result.is_skipped` (最后一个动作非 skipped); 空循环(断点后无动作)时返回 `ok_action`。
+6. 返回: `VERDICT_EXECUTED`(本轮执行了非 skip 动作或任一成功) / `VERDICT_NO_OP`(条件满足但无动作产生效果)。
+
+### 两键退役 (plan 26-11-01-0106 W1, D1 配置升级路线)
+
+`stop_following_rules_if` 与伪动作 `ignore_next_action_error` 已退役, **引擎零消费**:
+
+- **载入层** (`rules_mod.disable_retired_rule_spec`): 检测到含键规则 → 内存副本转**未启用** (enabled=false) + 剔除 actions 里的伪动作项; 配置原内容**不回写、原样保留**供改写; **每次载入**出 warning, 话术给出 `ignore_next_action_error` 的等价新写法 `on_error: {policy: continue}` (on_error 随 W2 落地)。
+- **键面保留识别**: schema/RULE_FIELDS 与校验侧仍识别两键(用于升级检测), webui 规则卡对含键规则显示「未启用·含退役键」徽标与卡脚升级提示(检测单点 `cfgRuleRetiredKeys`, 与后端 `retired_control_keys_in` 同口径)。
+- **绕过载入层**直接构造 Rule 遇伪动作按未知动作 ConfigError; 需「首中即停」→ 等引擎级 `evaluation` 枚举位 (W4); 需「动作失败继续」→ `on_error: {policy: continue}` (W2)。
 
 ### 去重语义 (`execute_once` / `cooldown`)
 
@@ -58,11 +79,11 @@ process(ctx) -> (handled: bool, stop: bool)
 
 ### ActionResult 四态
 
-| 状态 | 含义 | 对 stop_following_rules_if=action-failed 的影响 |
+| 状态 | 含义 | 对执行流的影响 |
 |------|------|------|
-| `success` | 动作执行成功 (dry-run 也返回 success) | 不算失败 |
-| `skipped` | 条件不满足未执行 (标签已存在/已设置/状态不符/段未启用) | 不影响 |
-| `failed` | API 非 200 / 抛异常 / 前置检查未通过 | 触发 |
-| `pending` | 已提交等待异步完成 (仅 full-checking), 规则中断待恢复 | 中断执行流 |
+| `success` | 动作执行成功 (dry-run 也返回 success) | 继续后续动作 |
+| `skipped` | 条件不满足未执行 (标签已存在/已设置/状态不符/段未启用) | 不算失败, 继续 |
+| `failed` | API 非 200 / 抛异常 / 前置检查未通过 | **break** 中断本条动作链 (per-step `on_error` 错误策略 W2 引入) |
+| `pending` | 已提交等待异步完成 (仅 full-checking), 规则中断待恢复 | 记断点并返回 `VERDICT_PENDING` |
 
-`ignore_next_action_error: true` 是伪动作: Rule 构造时解析, 给**下一个**动作设 `ignore_error=True`, 失败不 break 继续执行。
+`ignore_next_action_error` 伪动作已退役 (plan 26-11-01-0106 W1): 载入层识别后转未启用 + warning, 引擎不再消费; 等价新写法 `on_error: {policy: continue}` (W2)。见上节「两键退役」。

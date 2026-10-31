@@ -33,6 +33,7 @@
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_frontend_password_field_ignores_autofill: 密码框的浏览器/密码管理器自动填充不得写进配置树(2026-10-20 报障「进常规就显示有改动还没保存」)—— 模板密码分支须 autocomplete=new-password 且写回走 setSecret, setSecret 须按「是否焦点」判据(未聚焦不写树并回填显示)
 - test_frontend_config_default_ladder_single_point: schema→默认值梯单点守阵(issue 26-10-20-2231 / R20-C-05) —— 三入口(可选段 cfgDefaultForField / 插件 spec / 插件 section)不得再各写一份「按 schema 形状造初值」的循环(插件侧零手搓循环、enum 首选项默认值全仓一处、旧 cfgPluginDefaultSpec/Section 零残留); 三个单点(cfgDefaultScalar/cfgDefaultForFields/cfgDefaultForPlugin)各定义一处且入口只转调; 有 node 时真跑语义电池钉行为(插件 bool="true" vs 字段 bool="false" / list=[] / enum=options[0] / str=placeholder / object 只填必填且子段按全字段口径 / 未知形态沿用子表单 / 可选段非 object=[])
+- test_frontend_retired_rule_keys_upgrade_surface: 两键退役升级提示面守阵(plan 26-11-01-0106 W1/D1) —— 旧伪动作判断 isIgnoreNext 及「忽略下一个动作的错误」友好话术零残留; 退役键检测/提示单点(cfgRuleRetiredKeys/cfgIsRetiredAction/cfgRuleRetiredHint)在 config_rules.js 各定义一处; settings.html 规则卡「未启用·含退役键」徽标(hb-badge warn)与卡脚提示接线齐全(webui 侧自测键名, 不依赖后端回写 config.yml); hubPluginText 退役标记判定必须在 meta 判空之前(退役键不在插件索引); 有 node 时真跑语义电池(四规则形态 × 检测/提示/动作行人话)
 - test_frontend_cols_empty_hint_is_not_a_floating_banner
 - test_frontend_list_row_pad_and_empty_single_point
 """
@@ -1376,6 +1377,112 @@ def test_frontend_config_default_ladder_single_point():
         res = json.loads(proc.stdout.strip())
         assert res["total"] >= 11, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
         assert not res["failed"], ("schema→默认值梯行为漂移: " + "、".join(res["failed"]) + " —— 三处合并前各自保留的口径被改掉了(新条目可能过不了后端校验)")
+
+
+_NODE_RETIRED_KEYS_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+eval(fs.readFileSync(process.argv[2], "utf8"));
+eval(fs.readFileSync(process.argv[3], "utf8"));
+const M = Object.assign({}, window.CONFIG_EDITOR.methods, window.CONFIG_RULES.methods, window.CONFIG_HUB.methods);
+const RULES = {
+  clean: { enabled: "true", trigger: "interval", conditions: [], actions: [{ add_tags: ["x"] }] },
+  stopOnly: { enabled: "true", stop_following_rules_if: "conditions-met", conditions: [], actions: [{ add_tags: ["x"] }] },
+  ignoreOnly: { enabled: "true", conditions: [], actions: [{ ignore_next_action_error: "true" }, { add_tags: ["x"] }] },
+  both: { enabled: "true", stop_following_rules_if: "never", conditions: [], actions: [{ ignore_next_action_error: "true" }] },
+};
+const ctx = Object.assign({
+  cfg: { tree: { config: { example_rules: RULES } } },
+  cfgConfigPath() { return ["config"]; },
+  cfgPluginIndex: { add_tags: { name: "add_tags", label: "添加标签", spec_kind: "list" } },
+}, M);
+const J = (v) => JSON.stringify(v);
+const keys = (rn) => ctx.cfgRuleRetiredKeys("example_rules", rn);
+const hint = (rn) => ctx.cfgRuleRetiredHint("example_rules", rn);
+const checks = [
+  ["无退役键规则 → [](徽标/卡脚不渲染)", J(keys("clean")) === "[]" && hint("clean") === ""],
+  ["规则级 stop_following_rules_if 被识别", J(keys("stopOnly")) === J(["stop_following_rules_if"])],
+  ["actions 域伪动作被识别", J(keys("ignoreOnly")) === J(["ignore_next_action_error"])],
+  ["两键并存全识别(口径=后端 retired_control_keys_in)", J(keys("both")) === J(["stop_following_rules_if", "ignore_next_action_error"])],
+  ["cfgIsRetiredAction 只认伪动作项", ctx.cfgIsRetiredAction({ ignore_next_action_error: "true" }) && !ctx.cfgIsRetiredAction({ add_tags: ["x"] })],
+  ["stop-only 提示宣称转未启用且不开 on_error 空票(等价写法尚未落地)", hint("stopOnly").includes("未启用") && !hint("stopOnly").includes("on_error")],
+  ["含 ignore 的提示给等价新写法 on_error: {policy: continue}", hint("ignoreOnly").includes("on_error: {policy: continue}")],
+  ["退役伪动作行显示退役标记(不再当动作)", ctx.hubPluginText({ ignore_next_action_error: "true" }) === "已退役: ignore_next_action_error"],
+  ["正常动作行人话不受影响", ctx.hubPluginText({ add_tags: ["x"] }).indexOf("添加标签") === 0],
+];
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_retired_rule_keys_upgrade_surface():
+    """两键退役升级提示面守阵(plan 26-11-01-0106 W1, D1/D8)
+
+    stop_following_rules_if / ignore_next_action_error 已随 W1 退场: 载入层(rules_mod)把
+    含键规则转未启用 + warning, 但**不回写 config.yml** —— webui 是主配置面, 升级提示必须
+    在界面上可见(不能只靠日志)。本守阵钉:
+
+    1. 旧伪动作判断(isIgnoreNext)与其友好话术「忽略下一个动作的错误」零残留 —— 留着就是
+       把退役键当活键展示;
+    2. 检测/提示单点(cfgRuleRetiredKeys / cfgIsRetiredAction / cfgRuleRetiredHint)在
+       config_rules.js 各定义一处, 模板只引用不重算;
+    3. settings.html 规则卡升级提示面接线齐全: 卡头「未启用·含退役键」徽标(hb-badge warn,
+       与现有 dark 主题令牌同族) + 卡脚提示(话术含等价新写法);
+    4. hubPluginText 的退役标记判定必须在 meta 判空**之前** —— 退役键不在插件索引里,
+       meta 恒空, 判空先行会让该分支永远走不到(静默回落裸键名);
+    5. 有 node 时真跑语义电池 9 项: 四规则形态(无键/仅规则级/仅伪动作/两键并存)×
+       检测/提示/动作行人话, 把「webui 自测键名」这条口径钉在行为上。
+
+    无 node 的机器只跑静态那一半(与默认值梯守阵同口径, 不引入 pytest skip)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
+    hub = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    tpl = open(os.path.join(shared, "tpl", "settings.html"), encoding="utf-8").read()
+
+    # 1. 旧伪动作判断零残留(连友好话术一起)
+    assert "isIgnoreNext" not in ru + hub + tpl, \
+        "isIgnoreNext 残留 —— 伪动作已退役, 不得再按活键判断/展示(plan 26-11-01-0106 W1)"
+    assert "忽略下一个动作的错误" not in hub + tpl, \
+        "「忽略下一个动作的错误」话术残留 —— 退役键按升级提示展示, 不再当动作能力"
+    # 2. 检测/提示单点各定义一处(config_rules.js)
+    for fn in ("cfgRuleRetiredKeys", "cfgIsRetiredAction", "cfgRuleRetiredHint"):
+        defs = re.findall(rf"^    {fn}\(", ru, re.M)
+        assert len(defs) == 1, f"{fn} 定义 {len(defs)} 处(应为 1, config_rules.js) —— 口径单点漂移"
+    assert "cfgRuleRetiredKeys(" in ru and "cfgIsRetiredAction(" in ru, "退役键检测单点缺失"
+    # 3. 模板接线: 徽标 + 卡脚提示(缺一处 = 升级提示面不可见, 只剩日志)
+    assert 'v-if="cfgRuleRetiredKeys(cfg.ruleGroupKey, rn).length"' in tpl and 'hb-badge warn' in tpl, \
+        "settings.html 规则卡缺「未启用·含退役键」徽标(D1: 升级提示要在 webui 可见)"
+    assert "cfgRuleRetiredHint(cfg.ruleGroupKey, rn)" in tpl, \
+        "settings.html 规则卡缺卡脚升级提示(等价新写法入口断了)"
+    # 4. hubPluginText 退役标记在 meta 判空之前(退役键无插件元数据, 判空先行 = 分支死)
+    m = re.search(r"\n    hubPluginText\(entry\) \{\n(.*?)\n    \},", hub, re.S)
+    assert m, "config_hub.js 找不到 hubPluginText(改名或挪走了? 同步本守阵)"
+    body = m.group(1)
+    assert "cfgIsRetiredAction" in body, "hubPluginText 未做退役标记判定(伪动作回潮裸键名展示)"
+    assert body.index("cfgIsRetiredAction") < body.index("cfgPluginMeta(entry)"), \
+        "hubPluginText 退役标记判定落到了 meta 判空之后 —— 退役键不在插件索引, 该分支永远走不到"
+
+    # 5. 有 node 时真跑语义电池(行为面)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [
+                node,
+                "-e",
+                _NODE_RETIRED_KEYS_PROBE,
+                os.path.join(shared, "config_editor.js"),
+                os.path.join(shared, "config_rules.js"),
+                os.path.join(shared, "config_hub.js"),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, f"退役键 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
+        res = json.loads(proc.stdout.strip())
+        assert res["total"] >= 9, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert not res["failed"], ("退役键提示面行为漂移: " + "、".join(res["failed"]) + " —— 检测/提示口径被改掉了")
 
 
 _NODE_LIST_EMPTY_PROBE = r"""

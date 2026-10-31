@@ -939,10 +939,13 @@ window.CONFIG_HUB = {
     },
     /* 条件 / 动作一行人话: 插件名 + 简短取值 */
     hubPluginText(entry) {
+      /* 伪动作 ignore_next_action_error 已退役(D1, plan 26-11-01-0106 W1): 不再当动作显示,
+       * 按退役键标记 —— 升级提示面(未启用徽标/卡脚提示)由 cfgRuleRetiredHint 单点承接。
+       * 判定须在 meta 判空之前: 退役键不在插件索引里, meta 恒空。 */
+      if (this.cfgIsRetiredAction(entry)) return "已退役: ignore_next_action_error";
       const meta = this.cfgPluginMeta(entry);
       if (!meta) return this.cfgPluginName(entry) || "—";
       const name = meta.label || this.cfgPluginName(entry);
-      if (this.isIgnoreNext(entry)) return "忽略下一个动作的错误";
       const kind = meta.spec_kind;
       if (kind === "bool") return `${name}（${String(entry[meta.name]) === "true" ? "是" : "否"}）`;
       const raw = entry[meta.name];
