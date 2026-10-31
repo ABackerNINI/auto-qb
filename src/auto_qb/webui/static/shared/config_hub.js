@@ -943,6 +943,8 @@ window.CONFIG_HUB = {
        * 按退役键标记 —— 升级提示面(未启用徽标/卡脚提示)由 cfgRuleRetiredHint 单点承接。
        * 判定须在 meta 判空之前: 退役键不在插件索引里, meta 恒空。 */
       if (this.cfgIsRetiredAction(entry)) return "已退役: ignore_next_action_error";
+      /* choose 编排块(W3-B): 不在插件索引里, meta 恒空 —— 须在 meta 判空之前给出行话 */
+      if (this.cfgIsChooseEntry(entry)) return "动作分支(choose)";
       const meta = this.cfgPluginMeta(entry);
       if (!meta) return this.cfgPluginName(entry) || "—";
       const name = meta.label || this.cfgPluginName(entry);

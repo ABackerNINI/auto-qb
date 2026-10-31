@@ -1,7 +1,7 @@
 # 条件与动作 (含 expr 速查)
 
-> 摘要: 条件组合树 (`all`/`any`/`not`, W3) + 13 种条件 + `expr` 速查 + 12 种动作 + 限速单数值保护 + 状态映射表 + 变量替换。
-> 触发: 条件, 组合树, all, any, not, 逗号分组, 动作, expr, 表达式, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
+> 摘要: 条件组合树 (`all`/`any`/`not`, W3) + choose 编排块 (`choose`/`default`/`when`/`then`, W3-B) + 13 种条件 + `expr` 速查 + 12 种动作 + 限速单数值保护 + 状态映射表 + 变量替换。
+> 触发: 条件, 组合树, all, any, not, 逗号分组, 动作, choose, 分支, default, when, then, expr, 表达式, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
 
 ## 条件组合树 (W3, plan 26-11-01-0106)
 
@@ -19,6 +19,35 @@ conditions:
 - **求值**: 递归 + 短路(all 首个 False / any 首个 True 后不再求值其后叶子); 叶子求值异常 -> `verdict: error` 本条规则本轮不命中, 不影响其它规则(W2 语义)。
 - **fail-fast**: 组合键拼错按「未知条件」报错; 多键节点 / `all`/`any` 值非列表 / `not` 孩子非节点 / 嵌套超 16 层(`CONDITION_TREE_MAX_DEPTH`, compat 单点)全部在载入校验期拒绝。
 - **「逗号分组」映射(G4)**: 各条件的行内分组/OR 语义**全部留在叶子内**, normalize 零改写(逐条件核对表 = `compat.CONDITION_GROUPING_MAP`; `tags` 组内逗号=AND、`state` 组内 `&`=AND 且**非逗号**, 组间都是列表=OR)。组合树的 `any`/`not` 是新增显式写法, 不改写既有叶子语义; `hr` 的双语义分歧(`conditions.py` 无站点/无 HR 分支 vs 表达式侧 `tor.hr_satisfied`)维持现状不单边改齐。
+
+## choose 编排块 (W3-B, plan 26-11-01-0106 G6/D3)
+
+动作序列扁平无分支的补位(G6): 动作列表项可为 `choose` 编排块, 与普通动作项混排 —— `choose: [{when: <条件树节点>, then: [动作项...]}, ...]` + 可选 `default: [动作项...]`。
+
+```yaml
+actions:
+  - add_tags: ["基础"]                   # 普通动作项与 choose 混排, 按序执行
+  - choose:
+      - when:                            # when 与 conditions 同款组合树(可嵌套 all/any/not)
+          all:
+            - size: ">=10GiB"
+            - state: ["is_uploading"]
+        then:
+          - upload_speed_limit: 5MiB/s   # then 内是普通动作项(含 on_error, 与顶层同语义)
+      - when: {hr: condition-met}        # 按序求 when, 首个命中执行其 then(其后分支短路)
+        then:
+          - add_tags: ["HR-watch"]
+    default:                             # 全部未命中时执行; 省略且无命中 = 空操作(no_op)
+      - add_tags: ["check-manual"]
+```
+
+- **求值**: 按序求 when, 首个命中执行其 then(其后分支**短路不再求值**); 无命中且有 `default` 执行 default; 无命中且无 default = 空操作(与空动作表一致, `verdict: no_op`)。
+- **错误策略**: then/default 内动作失败按其自身 `on_error` 三档分派, **与顶层动作同一语义单点**(base.py `_dispatch_result`, 无第二语义分支); choose 本体无 on_error(策略挂块内动作项)。块内 retry 的断点记 choose 块首(续跑轮整块重新求值重新分派), pending 记块后(块内不细粒度续跑)。
+- **嵌套约束**: `choose` 内不再允许 `choose`(编排块只允许一层, 防递归爆炸; 校验器 fail-fast + 引擎构造期双拦); when 条件树深度复用 `CONDITION_TREE_MAX_DEPTH`(16 层, 从 1 起独立计, 与顶层 conditions 同口径)。
+- **fail-fast**: 块级键面 `choose`/`default`、分支键面 `when`/`then`(compat.CHOOSE_KNOWN_KEYS / CHOOSE_BRANCH_KEYS 单点); 缺 when / 缺 then / choose 非列表 / 空分支列表 / then·default 非 list / 嵌套 choose / when 内未知条件全部在载入校验期拒绝, 坐标按树形如实报(`choose[i].when` / `choose[i].then[j]`)。
+- **normalize 单点**: choose 结构识别/分支建树/块内动作缺省 on_error 注入全在 `config/compat.normalize_choose_block`(幂等); when 扁平列表同样包隐式 `all`。
+- **触发白名单**: `on_torrent_deleted` 的动作白名单同样约束 choose 块内 then/default 的动作(删除后种子无活现场, 块内动作同径拒绝)。
+- 样例: `test_yamls/test_actions/test_choose.yml`。
 
 ## 13 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
 
@@ -54,7 +83,7 @@ conditions:
 | `trackers` | `["tracker1"]` | 匹配 tracker_conf.name (配置名, 非域名); 或关系; 支持 `:ignore_case` |
 | `tracker_group` | `["国内"]` | 匹配站点 `groups` 字段声明的分组 (站点配置层声明, 不写种子, 与 grouping 辅种种子分组无关); 或关系; 支持 `regex:`/`:ignore_case`; 无 tracker_conf 一律 False (2026-09-15) |
 | `state` | `["is_complete&is_uploading"]` | 组内 `&` 连接为与, 组间或; 直接取 `state_enum` 枚举属性 (is_checking/is_downloading/is_complete/is_uploading/is_errored/is_stopped) |
-| `hr` | `"condition-met"` | `condition-met`(需管束 = `hr_managed`: 考察中 ∨ 无站点证据/未接入且未达标, 26-09-30-0559 触发语义重构 —— 旧「本机下载触发」语义迁往表达式 `tor.hr_local_triggered`) / `condition-not-met`(补集) / `satisfied`(义务已了单条件: 站点达标结论 ∨ 做种时长/分享率达标, 不再有触发前置); 依赖 tracker_conf.hr, 无 HR 配置一律 False |
+| `hr` | `"condition-met"` | `condition-met`(需管束 = `hr_managed`: 考察中 ∨ 无站点证据/未接入且未达标, 26-09-30-0559 触发语义重构 —— 旧「本机下载触发」语义迁往表达式 `tor.hr_local_triggered`) / `condition-not-met`(补集) / `satisfied`(义务已了单条件: 站点达标结论 ∨ 做种时长/分享率达标, 不再有触发前置); 依赖 tracker_conf.hr, 无 HR 可判定显式分支(2026-11-01 按现行为修正, W3-A 报告计划外发现): 未匹配站点(`tracker_conf=None`)仅 `condition-not-met` 为真; 站点已匹配但无 HR 配置(`conf.hr=None`)非 `condition-met` 全真(`satisfied=True`, 与表达式侧 `tor.hr_satisfied` 同场景恒 false 是有意分歧勿单边改齐) |
 | `date_time` | `{day_of_month: 1-31, day_of_week: 1-7, time: "10:00-23:00"}` | 全部可省略(省略=不检查); 区间 `a-b` 或单值; time 支持跨午夜; day_of_week 用 isoweekday (1=周一) |
 | `seedtime` | `"<24H"` | 比较 seeding_time (秒) |
 | `upload_ratio` | `">1.5"` | 比较 ratio |

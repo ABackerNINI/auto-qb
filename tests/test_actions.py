@@ -1118,8 +1118,10 @@ def _on_error_rule(mgr, first_on_error=None, first_behavior="fail"):
         act_spec["on_error"] = first_on_error
     rule = Rule("g.oe", {"actions": [act_spec, {"type": "add_tags", "params": ["Y"]}]}, mgr)
     calls = []
-    rule.actions[0] = _StubAction("first", first_behavior, calls)
-    rule.actions[1] = _StubAction("second", "ok", calls)
+    # W3-B 起 process 迭代 self.steps(choose 块与普通动作同占一步): 换桩时 steps/actions 同步替换
+    rule.steps[0] = ("action", _StubAction("first", first_behavior, calls), rule.steps[0][2])
+    rule.steps[1] = ("action", _StubAction("second", "ok", calls), rule.steps[1][2])
+    rule.actions = [rule.steps[0][1], rule.steps[1][1]]
     return rule, calls
 
 
@@ -1253,7 +1255,8 @@ def test_on_error_retry_recovers_after_success():
                     raise RuntimeError("stub boom")
                 return ActionResult.fail("stub fail") if behavior == "fail" else ActionResult.ok("stub ok")
 
-        rule.actions[0] = _Scripted()
+        rule.steps[0] = ("action", _Scripted(), rule.steps[0][2])  # W3-B: steps 是执行单点
+        rule.actions[0] = rule.steps[0][1]
         ctx = make_ctx(mgr, tor, client)
         ctx.task = task
         assert rule.process(ctx) == VERDICT_RETRY, "首跑失败返回 RETRY"

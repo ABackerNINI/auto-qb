@@ -252,68 +252,79 @@
                     </div>
                     <div class="hb-rule-flow">
                       <div class="hb-flow-grp">
-                        <div class="hb-flow-grp-hd">条件<span class="fg-hint">全部满足才执行</span></div>
-                        <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'conditions')" :key="i" class="hb-step">
-                          <div class="hb-step-bar">
-                            <span class="st-n">{{ i + 1 }}</span>
-                            <span class="st-t">{{ hubPluginText(entry) }}</span>
-                            <span class="st-r">
-                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, -1)">↑</button>
-                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'conditions', i, 1)">↓</button>
-                              <button class="hb-btn danger sm" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'conditions', i)">✕</button>
-                            </span>
-                          </div>
-                          <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'conditions', i)"
-                                     :key="hubKey(item.path)" :item="item"></hub-field>
-                        </div>
-                        <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'conditions').length" class="hb-hp">
+                        <div class="hb-flow-grp-hd">条件<span class="fg-hint">组合树: 全部/任一/不满足, 可嵌套</span></div>
+                        <!-- 条件组合树编辑器(W3-A/W3-B, D2): 草稿载入即归一形, 递归组件 aq-cond-node
+                             (模板 tpl/rule-tree.html), 增删改全部写树形 —— 保存即写新形态 -->
+                        <aq-cond-node v-if="cfgCondHasTree(cfg.ruleGroupKey, rn)"
+                                      :path="cfgCondRootPath(cfg.ruleGroupKey, rn)" :depth="1"></aq-cond-node>
+                        <p v-else class="hb-hp">
                           没配条件 = 这条规则总是执行
                         </p>
-                        <select class="hb-select" :value="''" @change="hubPickPlugin(cfg.ruleGroupKey, rn, 'conditions', $event)">
+                        <select v-if="!cfgCondRootComboOpen(cfg.ruleGroupKey, rn)" class="hb-select" :value="''"
+                                @change="cfgCondRootAdd(cfg.ruleGroupKey, rn, 'leaf', $event.target.value); $event.target.value = ''">
                           <option value="">＋ 添加条件…</option>
                           <option v-for="p in cfgConditionOptions()" :key="p.name" :value="p.name">{{ p.label }}</option>
                         </select>
                       </div>
                       <div class="hb-flow-grp">
-                        <div class="hb-flow-grp-hd">动作<span class="fg-hint">按顺序执行</span></div>
+                        <div class="hb-flow-grp-hd">动作<span class="fg-hint">按顺序执行, 支持分支(choose)</span></div>
                         <div v-for="(entry, i) in cfgPluginList(cfg.ruleGroupKey, rn, 'actions')" :key="i"
                              class="hb-step" :class="hubStepClass(entry)">
-                          <div class="hb-step-bar">
-                            <span class="st-n">{{ i + 1 }}</span>
-                            <span class="st-t">{{ hubPluginText(entry) }}</span>
-                            <span class="st-r">
-                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
-                              <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
-                              <button class="hb-btn danger sm" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
-                            </span>
-                          </div>
-                          <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
-                                     :key="hubKey(item.path)" :item="item"></hub-field>
-                          <div v-if="!cfgIsRetiredAction(entry)" class="hb-oe-row">
-                            <span class="hb-lb">失败策略</span>
-                            <select class="hb-select" :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'policy')"
-                                    @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'policy', $event.target.value)">
-                              <option v-for="p in cfgOnErrorPolicies()" :key="p" :value="p">{{ p }}</option>
-                            </select>
-                            <template v-if="cfgOnErrorIsRetry(cfg.ruleGroupKey, rn, i)">
-                              <span class="hb-lb">重试次数</span>
-                              <input class="hb-input" type="number" min="0" step="1"
-                                     :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'retries')"
-                                     @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'retries', $event.target.value)">
-                              <span class="hb-lb">重试间隔(秒)</span>
-                              <input class="hb-input" type="number" min="1" step="1"
-                                     :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'backoff')"
-                                     @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'backoff', $event.target.value)">
-                            </template>
-                          </div>
+                          <!-- choose 编排块(W3-B, D8): 分支编辑器独立组件(aq-choose-block, tpl/rule-tree.html) -->
+                          <template v-if="cfgIsChooseEntry(entry)">
+                            <div class="hb-step-bar">
+                              <span class="st-n">{{ i + 1 }}</span>
+                              <span class="st-t">动作分支(choose)</span>
+                              <span class="st-r">
+                                <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
+                                <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
+                                <button class="hb-btn danger sm" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
+                              </span>
+                            </div>
+                            <aq-choose-block :group-key="cfg.ruleGroupKey" :rule-name="rn" :index="i"></aq-choose-block>
+                          </template>
+                          <template v-else>
+                            <div class="hb-step-bar">
+                              <span class="st-n">{{ i + 1 }}</span>
+                              <span class="st-t">{{ hubPluginText(entry) }}</span>
+                              <span class="st-r">
+                                <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, -1)">↑</button>
+                                <button class="hb-btn ghost sm" @click="cfgPluginMove(cfg.ruleGroupKey, rn, 'actions', i, 1)">↓</button>
+                                <button class="hb-btn danger sm" @click="cfgPluginRemove(cfg.ruleGroupKey, rn, 'actions', i)">✕</button>
+                              </span>
+                            </div>
+                            <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
+                                       :key="hubKey(item.path)" :item="item"></hub-field>
+                            <div v-if="!cfgIsRetiredAction(entry)" class="hb-oe-row">
+                              <span class="hb-lb">失败策略</span>
+                              <select class="hb-select" :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'policy')"
+                                      @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'policy', $event.target.value)">
+                                <option v-for="p in cfgOnErrorPolicies()" :key="p" :value="p">{{ p }}</option>
+                              </select>
+                              <template v-if="cfgOnErrorIsRetry(cfg.ruleGroupKey, rn, i)">
+                                <span class="hb-lb">重试次数</span>
+                                <input class="hb-input" type="number" min="0" step="1"
+                                       :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'retries')"
+                                       @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'retries', $event.target.value)">
+                                <span class="hb-lb">重试间隔(秒)</span>
+                                <input class="hb-input" type="number" min="1" step="1"
+                                       :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'backoff')"
+                                       @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'backoff', $event.target.value)">
+                              </template>
+                            </div>
+                          </template>
                         </div>
                         <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'actions').length" class="hb-hp">
                           未配置动作 = 规则只做条件判断, 不会执行任何操作
                         </p>
-                        <select class="hb-select" :value="''" @change="hubPickPlugin(cfg.ruleGroupKey, rn, 'actions', $event)">
-                          <option value="">＋ 添加动作…</option>
-                          <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
-                        </select>
+                        <div class="hb-add-row">
+                          <select class="hb-select" :value="''" @change="hubPickPlugin(cfg.ruleGroupKey, rn, 'actions', $event)">
+                            <option value="">＋ 添加动作…</option>
+                            <option v-for="p in cfgActionOptions(cfg.ruleGroupKey, rn)" :key="p.name" :value="p.name">{{ p.label }}</option>
+                          </select>
+                          <button class="hb-btn sm" title="按条件分支执行不同动作(W3-B)"
+                                  @click="cfgChooseAdd(cfg.ruleGroupKey, rn)">＋ 分支(choose)</button>
+                        </div>
                       </div>
                     </div>
                     <div v-if="cfgRuleRetiredHint(cfg.ruleGroupKey, rn)" class="hb-rule-foot">

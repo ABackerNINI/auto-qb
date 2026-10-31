@@ -187,8 +187,12 @@ window.CONFIG_EDITOR = {
     },
     cfgSetTree(tree) {
       if (!tree || typeof tree !== "object") tree = { config: {} };
-      if (!tree.config || typeof tree.config !== "object") tree.config = {};
+      if (!tree.config || typeof tree !== "object") tree.config = {};
       this.cfg.tree = tree;
+      // 规则草稿就地规范化(plan 26-11-01-0106 D2/W3-A/W3-B): conditions 旧扁平列表包隐式 all
+      // 树 + actions 旧扁平/混合形翻译规范形并注入缺省 on_error + choose 键面保留 —— 打开即
+      // 显示归一形、保存即写新形态; 归一在基线快照之前, 打开不误报脏(后端 normalize 幂等同构)
+      this.cfgNormalizeRulesDraft();
       this.cfg.baseline = JSON.stringify(tree);
     },
     /* 返回 Boolean: 保存是否成功 —— 「保存并刷新」那条路径要靠它决定刷不刷新

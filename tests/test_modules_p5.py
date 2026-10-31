@@ -851,6 +851,13 @@ class _W2FailStub:
         return ActionResult.fail("stub fail")
 
 
+def _w2_swap_action(rule, plugin):
+    """W3-B 起 process 迭代 self.steps(choose 块与普通动作同占一步): 换桩时 steps/actions 同步替换"""
+    on_error = rule.steps[0][2]
+    rule.steps[0] = ("action", plugin, on_error)
+    rule.actions[0] = plugin
+
+
 def _w2_retry_rule(mgr, name="g.w2", retries=2, backoff=30, behavior="fail"):
     from auto_qb.rules.base import Rule
 
@@ -872,7 +879,7 @@ def _w2_retry_rule(mgr, name="g.w2", retries=2, backoff=30, behavior="fail"):
         },
         mgr,
     )
-    rule.actions[0] = _W2FailStub(behavior)
+    _w2_swap_action(rule, _W2FailStub(behavior))
     return rule
 
 
@@ -940,7 +947,7 @@ def test_w2_handle_rule_attempt_reset_on_non_retry():
         seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
         rules = mgr.host.get("rules")
         rule = _w2_retry_rule(mgr, behavior="ok", retries=2)  # 动作成功
-        rule.actions[0] = _W2OkStub()
+        _w2_swap_action(rule, _W2OkStub())
         task = Task("rule", rule.name, hash="H1", store=mgr.store, interval=300)
         task.attempt = 5  # 模拟重启前遗留的高残值(重启后归零可接受, 残值也不得炸)
         assert rules._handle_rule(rule, task, False) == REQUEUE
@@ -981,7 +988,7 @@ def test_w2_event_rule_retry_requeue():
         assert rules._handle_event_rule(rule, task, None, False) == REQUEUE
         assert task.attempt == 2
         # 续跑成功: FINISHED 消亡(事件语义保持一次性但可恢复), attempt 归零
-        rule.actions[0] = _W2OkStub()
+        _w2_swap_action(rule, _W2OkStub())
         assert rules._handle_event_rule(rule, task, None, False) == FINISHED
         assert task.attempt == 0 and task.resume_index is None
 

@@ -7,9 +7,12 @@ from qbittorrentapi import TorrentState
 from ...infra.utils import parse_bool
 from ..compat import (
     ACTION_ENTRY_KEYS,
+    CHOOSE_BRANCH_KEYS,
+    CHOOSE_KNOWN_KEYS,
     CONDITION_COMBO_KEYS,
     CONDITION_TREE_MAX_DEPTH,
     normalize_action_entry,
+    normalize_conditions,
 )
 from ..schema.fields import (
     # 枚举族单点(issue 26-10-11-0031): 取值域/白名单只在 schema/fields 声明, 本包引用派生
@@ -169,8 +172,9 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                 else:
                     for i, a in enumerate(acts):
                         # 动作项只认规范化后形态 {type, params}(normalize 在校验前已转换;
-                        # 旧扁平单键形仅在校验器入口经单点漏斗 translate, 见 _validate_action_entry)
-                        _validate_action_entry(a, f"{where}.actions[{i}]", i + 1, registry.ACTIONS, errors)
+                        # 旧扁平单键形仅在校验器入口经单点漏斗 translate, 见 _validate_action_entry);
+                        # choose 编排块(W3-B)同径分流, gate 传给 when 条件树的 expr 门控
+                        _validate_action_entry(a, f"{where}.actions[{i}]", i + 1, registry.ACTIONS, errors, gate=gate)
             # 触发时机 × 动作兼容白名单: 某触发器下不适用动作在 config 阶段直接拒绝(见 04 规则系统)
             _validate_trigger_action_compat(spec, where, errors)
 
@@ -353,7 +357,9 @@ def _validate_condition_leaf(name: str, value, where: str, errors: List[str], ga
             deep(value, f"{where}.{name}", errors)
 
 
-def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors: List[str]) -> None:
+def _validate_action_entry(
+    entry, where: str, ordinal: int, known: dict, errors: List[str], gate=None, allow_choose: bool = True
+) -> None:
     """actions 列表项校验: 只认规范化后形态 {type, params, on_error}(plan 26-11-01-0106 §3.2/W2-A/W2-B)
 
     normalize_legacy_rules 已在载入链把旧扁平单键形/混合形翻译成规范形并注入缺省 on_error;
@@ -365,6 +371,8 @@ def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors:
     与「第 N 个动作」序号话术, 不暴露 params 结构路径。
     伪动作 ignore_next_action_error 键面保留识别(W1/D1 升级检测), params 仍按布尔校验;
     引擎不消费(载入层转未启用时剔除)。
+    choose 编排块(W3-B, plan G6/D3)同径分流到 _validate_choose_block; allow_choose=False
+    (choose 块内 then/default)时嵌套 choose 直接拒绝(编排块只允许一层, 防递归爆炸)。
     """
     if not isinstance(entry, dict):
         errors.append(f"{where}: 必须是字典")
@@ -373,6 +381,12 @@ def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors:
         errors.append(f"{where}: 值不能为空(留空请删除该项)")
         return
     norm = normalize_action_entry(entry)
+    if isinstance(norm, dict) and "choose" in norm:
+        if not allow_choose:
+            errors.append(f"{where}: choose 内不允许嵌套 choose(编排块只允许一层)")
+            return
+        _validate_choose_block(norm, where, known, errors, gate)
+        return
     if not isinstance(norm, dict) or "type" not in norm:
         errors.append(f"{where}: 第 {ordinal} 个动作必须是单键字典(旧形)或 {{type, params, on_error}}(新形): {sorted(entry)}")
         return
@@ -395,6 +409,58 @@ def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors:
     deep = _PLUGIN_SPEC_VALIDATORS.get(name)
     if deep:
         deep(norm["params"], f"{where}.{name}", errors)
+
+
+def _validate_choose_block(entry: dict, where: str, known: dict, errors: List[str], gate=None) -> None:
+    """choose 编排块校验(W3-B, plan 26-11-01-0106 G6/D3): 键面/分支结构/when 条件树/then+default 动作项
+
+    - 键面 {choose, default}(compat.CHOOSE_KNOWN_KEYS 单点), 未知键 fail-fast;
+    - choose 必须是非空分支列表; 每个分支 {when, then}(compat.CHOOSE_BRANCH_KEYS 单点):
+      when 必填且过 normalize_conditions 单点后按条件组合树校验(与 conditions 同款,
+      expr 门控 gate 照传; 深度复用 CONDITION_TREE_MAX_DEPTH, 从 1 起独立计);
+      then 必须是动作项列表(逐项 _validate_action_entry, allow_choose=False 拦嵌套);
+    - default 可选, 同 then 校验; 无命中且无 default = 空操作(引擎语义), 不强制配 default。
+
+    坐标口径: choose 块内按树形如实报(choose[i].when / choose[i].then[j])—— choose 本就是
+    新写法(无 legacy 扁平坐标可回映射), 与手写条件树同口径。
+    """
+    unknown = set(entry) - set(CHOOSE_KNOWN_KEYS)
+    if unknown:
+        errors.append(f"{where}: 未知键 {sorted(unknown)}, 可用键: {sorted(CHOOSE_KNOWN_KEYS)}")
+        return
+    branches = entry.get("choose")
+    if not isinstance(branches, list):
+        errors.append(f"{where}.choose: 必须是分支列表 [{{when, then}}, ...]")
+        return
+    if not branches:
+        errors.append(f"{where}.choose: 分支列表不能为空(无条件分支请删除整个 choose 块)")
+        return
+    for bi, br in enumerate(branches):
+        bwhere = f"{where}.choose[{bi}]"
+        if not isinstance(br, dict):
+            errors.append(f"{bwhere}: 必须是字典 {{when, then}}")
+            continue
+        br_unknown = set(br) - set(CHOOSE_BRANCH_KEYS)
+        if br_unknown:
+            errors.append(f"{bwhere}: 未知键 {sorted(br_unknown)}, 可用键: {sorted(CHOOSE_BRANCH_KEYS)}")
+        if "when" not in br:
+            errors.append(f"{bwhere}: 缺少 when(分支条件)")
+        else:
+            _validate_condition_tree(normalize_conditions(br["when"]), f"{bwhere}.when", errors, gate)
+        if "then" not in br:
+            errors.append(f"{bwhere}: 缺少 then(命中后执行的动作项列表, 空列表 = 无操作)")
+        elif not isinstance(br["then"], list):
+            errors.append(f"{bwhere}.then: 必须是列表(动作项)")
+        else:
+            for j, a in enumerate(br["then"]):
+                _validate_action_entry(a, f"{bwhere}.then[{j}]", j + 1, known, errors, gate=gate, allow_choose=False)
+    if "default" in entry:
+        default = entry["default"]
+        if not isinstance(default, list):
+            errors.append(f"{where}.default: 必须是列表(动作项)")
+        else:
+            for j, a in enumerate(default):
+                _validate_action_entry(a, f"{where}.default[{j}]", j + 1, known, errors, gate=gate, allow_choose=False)
 
 
 def _validate_on_error(value, where: str, errors: List[str]) -> None:
@@ -444,7 +510,27 @@ def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -
     for i, entry in enumerate(acts):
         if not isinstance(entry, dict):
             continue  # 结构错误由 _validate_action_entry 报, 这里不重复
-        name = normalize_action_entry(entry).get("type")  # 规范化形态取动作名(单点漏斗)
+        norm = normalize_action_entry(entry)  # 规范化形态取动作名(单点漏斗)
+        if "choose" in norm:
+            # choose 编排块(W3-B): 块内 then/default 的动作同样受白名单约束
+            # (执行现场与顶层一致: 删除后种子无活现场, 块内动作也无意义)
+            brs = norm.get("choose")
+            if isinstance(brs, list):
+                for bi, br in enumerate(brs):
+                    if not isinstance(br, dict):
+                        continue
+                    thens = br.get("then")
+                    if isinstance(thens, list):
+                        for j, a in enumerate(thens):
+                            _deleted_trigger_check_action(
+                                a, allowed, f"{where}.actions[{i}].choose[{bi}].then[{j}]", errors
+                            )
+            defaults = norm.get("default")
+            if isinstance(defaults, list):
+                for j, a in enumerate(defaults):
+                    _deleted_trigger_check_action(a, allowed, f"{where}.actions[{i}].default[{j}]", errors)
+            continue
+        name = norm.get("type")
         if not name or name == "ignore_next_action_error":
             continue  # 结构残缺交 _validate_action_entry 报; 伪动作不参与白名单
         if name not in allowed:
@@ -452,3 +538,14 @@ def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -
                 f"{where}.actions[{i}]: 动作 '{name}' 不适用于 trigger 'on_torrent_deleted'"
                 f"(删除后种子无活现场), 允许: {sorted(allowed)}"
             )
+
+
+def _deleted_trigger_check_action(a, allowed, where: str, errors: List[str]) -> None:
+    """on_torrent_deleted 白名单单项核对(choose 块内动作用, W3-B): 结构残缺交 _validate_action_entry 报"""
+    if not isinstance(a, dict):
+        return
+    name = normalize_action_entry(a).get("type")
+    if not name or name == "ignore_next_action_error":
+        return
+    if name not in allowed:
+        errors.append(f"{where}: 动作 '{name}' 不适用于 trigger 'on_torrent_deleted'(删除后种子无活现场), 允许: {sorted(allowed)}")

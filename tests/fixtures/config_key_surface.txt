@@ -20,6 +20,10 @@ version: 5
 <任意>_rules.*.actions.checking.without_reference.auto_start
 <任意>_rules.*.actions.checking.without_reference.enabled
 <任意>_rules.*.actions.checking.without_reference.mode
+<任意>_rules.*.actions.choose
+<任意>_rules.*.actions.choose.then
+<任意>_rules.*.actions.choose.when
+<任意>_rules.*.actions.default
 <任意>_rules.*.actions.download_speed_limit
 <任意>_rules.*.actions.move_to
 <任意>_rules.*.actions.move_to.path

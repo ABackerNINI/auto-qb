@@ -22,6 +22,15 @@
  *    只要往这列加一项, 默认值规则由 cfgDefaultScalar 统一给(issue 26-10-20-2231)。 */
 const SPEC_SCALAR_KINDS = ["str", "speed", "expr", "enum", "bool"];
 
+/* 条件组合树 UI 嵌套软上限(W3-B): 后端硬上限 16 层(CONDITION_TREE_MAX_DEPTH), UI 到这里
+ * 就不再给「添加组合」入口(防误操作嵌出不可维护的深树); 仍可手写 YAML 超出。 */
+const CFG_COND_UI_MAX_DEPTH = 8;
+
+/* choose 编排块键面(W3-B, 与后端 compat.CHOOSE_KNOWN_KEYS / CHOOSE_BRANCH_KEYS 同源) */
+const CFG_CHOOSE_KEYS = ["choose", "default"];
+const CFG_CHOOSE_BRANCH_KEYS = ["when", "then"];
+const CFG_COND_COMBO_KEYS = ["all", "any", "not"];
+
 window.CONFIG_RULES = {
   methods: {
     /* ---------------------------------------------------------- 列表与条目 */
@@ -81,7 +90,12 @@ window.CONFIG_RULES = {
     cfgPluginAdd(groupKey, ruleName, listName, pluginName) {
       const path = [...this.cfgRulePath(groupKey, ruleName), listName];
       const list = [...this.cfgPluginList(groupKey, ruleName, listName)];
-      list.push({ [pluginName]: this.cfgDefaultForPlugin(this.cfgPluginIndex[pluginName]) });
+      // W3-B(D2)起写规范形 {type, params, on_error}(载入链 normalize 幂等同构), 不再写旧扁平形
+      list.push({
+        type: pluginName,
+        params: this.cfgDefaultForPlugin(this.cfgPluginIndex[pluginName]),
+        on_error: { ...this.cfgOnErrorDefaults() },
+      });
       this.cfgSetPath(path, list);
     },
     cfgPluginRemove(groupKey, ruleName, listName, index) {
@@ -103,19 +117,24 @@ window.CONFIG_RULES = {
 
     /* ---------------------------------------------------------- spec 读写 */
 
-    cfgSpecPath(groupKey, ruleName, listName, index, extra) {
-      const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
+    cfgSpecPathAt(entryPath, extra) {
+      /* 路径版 spec 定位(W3-B): entryPath = 动作/条件条目(单键 dict 或规范形)的路径 */
+      const entry = this.cfgRaw(entryPath);
       const name = this.cfgPluginName(entry);
       // 规范形 {type, params, on_error}: spec 落在 params 键; 扁平/混合形: spec 落在动作名键
       const specKey = entry && typeof entry === "object" && "type" in entry ? "params" : name;
-      return [...this.cfgRulePath(groupKey, ruleName), listName, index, specKey, ...(extra || [])];
+      return [...entryPath, specKey, ...(extra || [])];
     },
-    /* spec 的渲染项: 统一映射为通用字段项, 从而复用同一套控件(无 YAML 片段兜底) */
-    cfgSpecItems(groupKey, ruleName, listName, index) {
-      const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
+    cfgSpecPath(groupKey, ruleName, listName, index, extra) {
+      return this.cfgSpecPathAt([...this.cfgRulePath(groupKey, ruleName), listName, index], extra);
+    },
+    /* spec 的渲染项: 统一映射为通用字段项, 从而复用同一套控件(无 YAML 片段兜底)
+     * 路径版 cfgSpecItemsAt(W3-B)是本体 —— 供条件树叶节点(组合树路径)与动作卡共用 */
+    cfgSpecItemsAt(entryPath) {
+      const entry = this.cfgRaw(entryPath);
       const meta = this.cfgPluginMeta(entry);
       if (!meta) return [];
-      const specPath = this.cfgSpecPath(groupKey, ruleName, listName, index);
+      const specPath = this.cfgSpecPathAt(entryPath);
       if (meta.spec_kind === "object") return this.cfgFlatten(meta.fields, specPath, 1, specPath);
       const raw = meta.spec_kind === "list" ? (meta.item_kind === "pattern" ? "pattern_list" : "str_list") : meta.spec_kind;
       // expr = 表达式: 用多行文本框(单行放不下), 校验交给后端配置期解析
@@ -138,6 +157,9 @@ window.CONFIG_RULES = {
           owner: [],
         }
       ];
+    },
+    cfgSpecItems(groupKey, ruleName, listName, index) {
+      return this.cfgSpecItemsAt([...this.cfgRulePath(groupKey, ruleName), listName, index]);
     },
     /* 表达式「试算」(expr 条件的按钮): 调后端 /api/expr/eval
      *
@@ -242,9 +264,9 @@ window.CONFIG_RULES = {
     cfgRuleSetEnabled(groupKey, ruleName, on) {
       this.cfgSetBool([...this.cfgRulePath(groupKey, ruleName), "enabled"], on);
     },
-    /* 卡头摘要(折叠时也能看出规则规模) */
+    /* 卡头摘要(折叠时也能看出规则规模); 条件数 = 组合树叶子数(W3-A 树形, W3-B 起草稿已归一) */
     cfgRuleSummary(groupKey, ruleName) {
-      const conds = this.cfgPluginList(groupKey, ruleName, "conditions").length;
+      const conds = this.cfgCondCount(this.cfgCondRootPath(groupKey, ruleName));
       const acts = this.cfgPluginList(groupKey, ruleName, "actions").length;
       return `${this.cfgTriggerLabel(this.cfgRuleTrigger(groupKey, ruleName))} · 条件 ${conds} · 动作 ${acts}`;
     },
@@ -339,5 +361,405 @@ window.CONFIG_RULES = {
       }
       return notes.join("; ");
     },
+
+    /* ---------------------------------------------------------- 草稿规范化(D2, W3-A/W3-B)
+     * cfgSetTree 载入链单点调用: 规则集草稿树**就地**规范化 ——
+     *   - conditions: 旧扁平单键 dict 列表 -> 包隐式 `all:` 树(W3-A, 与后端
+     *     compat.normalize_conditions 同构);
+     *   - actions: 旧扁平/混合形 -> {type, params, on_error} 规范形 + 缺省 on_error 注入
+     *     (W2-B 混合形写侧升级为全规范形写侧, plan D2); choose 编排块键面保留(W3-B),
+     *     then/default 内动作项同样归一。
+     * 效果: 打开设置页显示的即归一形(D2 验收前半), 保存即写新形态(验收后半) —— 后端
+     * 载入链 normalize 幂等, 双侧同构零差异。基线快照在归一后建立, 打开不误报脏。 */
+    cfgNormalizeRulesDraft() {
+      const root = this.cfgRaw(["config"]);
+      if (!root || typeof root !== "object") return;
+      for (const [gk, group] of Object.entries(root)) {
+        if (!gk.endsWith("_rules") || !group || typeof group !== "object") continue;
+        for (const spec of Object.values(group)) {
+          if (!spec || typeof spec !== "object" || Array.isArray(spec)) continue;
+          if (Array.isArray(spec.conditions)) spec.conditions = { all: spec.conditions };
+          if (Array.isArray(spec.actions)) spec.actions = spec.actions.map((a) => this.cfgNormalizeActionEntryDraft(a));
+        }
+      }
+    },
+    /* JS 镜像的单动作项漏斗(与后端 compat.normalize_action_entry 同构, 幂等): 只做形状
+     * 翻译与缺省注入, 非法形状原样透传交后端校验器按扁平坐标报 */
+    cfgNormalizeActionEntryDraft(entry) {
+      if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+      if ("choose" in entry) {
+        const out = { ...entry };
+        if (Array.isArray(entry.choose)) {
+          out.choose = entry.choose.map((br) => {
+            if (!br || typeof br !== "object" || Array.isArray(br)) return br;
+            if (!("when" in br) && !("then" in br)) return br;
+            const nb = { ...br };
+            if (Array.isArray(br.when)) nb.when = { all: br.when };
+            if (Array.isArray(br.then)) nb.then = br.then.map((x) => this.cfgNormalizeActionEntryDraft(x));
+            return nb;
+          });
+        }
+        if (Array.isArray(entry.default)) out.default = entry.default.map((x) => this.cfgNormalizeActionEntryDraft(x));
+        return out;
+      }
+      if (!("type" in entry)) {
+        const keys = Object.keys(entry).filter((k) => k !== "on_error");
+        if (keys.length === 1) {
+          const name = keys[0];
+          entry = {
+            type: name,
+            params: entry[name],
+            ...Object.fromEntries(Object.entries(entry).filter(([k]) => k !== name)),
+          };
+        }
+      }
+      if ("type" in entry && entry.type !== "ignore_next_action_error") {
+        const def = this.cfgOnErrorDefaults();
+        if (!("on_error" in entry)) return { ...entry, on_error: { ...def } };
+        const oe = entry.on_error;
+        if (oe && typeof oe === "object" && !Array.isArray(oe)) {
+          const missing = Object.keys(def).filter((k) => !(k in oe));
+          if (missing.length) entry = { ...entry, on_error: { ...def, ...oe } };
+        }
+      }
+      return entry;
+    },
+
+    /* ---------------------------------------------------------- 条件组合树编辑器(W3-A/W3-B, D2/D8)
+     * conditions 规范化后是**一个节点**(组合 {all/any/not} 或叶子), 编辑器按树形递归渲染
+     * (组件 aq-cond-node, 模板 tpl/rule-tree.html); 路径即树坐标(path 数组直达 cfg 树),
+     * 增删改全部写树形 —— D2: 打开显示归一形, 保存写新形态。深径软上限
+     * CFG_COND_UI_MAX_DEPTH(UI 不再给「添加组合」入口), 硬上限 16 在后端 fail-fast。 */
+    cfgCondRootPath(groupKey, ruleName) {
+      return [...this.cfgRulePath(groupKey, ruleName), "conditions"];
+    },
+    cfgCondHasTree(groupKey, ruleName) {
+      return this.cfgExists(this.cfgCondRootPath(groupKey, ruleName));
+    },
+    cfgCondNodeRaw(path) {
+      const node = this.cfgRaw(path);
+      return node && typeof node === "object" && !Array.isArray(node) ? node : null;
+    },
+    cfgCondNodeKey(path) {
+      const node = this.cfgCondNodeRaw(path);
+      return node ? Object.keys(node)[0] || "" : "";
+    },
+    cfgCondComboLabel(key) {
+      return { all: "全部满足", any: "任一满足", not: "不满足" }[key] || key;
+    },
+    /* 组合节点(all/any)的孩子列表路径; not 的孩子是单节点(路径 [..., "not"]) */
+    cfgCondChildrenPath(path) {
+      return [...path, this.cfgCondNodeKey(path)];
+    },
+    cfgCondChildren(path) {
+      const v = this.cfgRaw(this.cfgCondChildrenPath(path));
+      return Array.isArray(v) ? v : [];
+    },
+    cfgCondChildPath(path, i) {
+      return [...this.cfgCondChildrenPath(path), i];
+    },
+    /* 组合键切换(all/any/not): 值随键搬 —— 切到 not 时列表收敛为第一个孩子(空列表给
+     * {all: []} 占位, 树形恒合法), 切回 all/any 时单节点包成列表 */
+    cfgCondSetCombo(path, key, newKey) {
+      const node = this.cfgCondNodeRaw(path);
+      if (!node || !CFG_COND_COMBO_KEYS.includes(newKey)) return;
+      const value = node[key];
+      let nv = value;
+      if (newKey === "not") nv = Array.isArray(value) ? (value.length ? value[0] : { all: [] }) : value;
+      else if (key === "not") nv = value === null || value === undefined ? [] : [value];
+      this.cfgSetPath(path, { [newKey]: nv });
+    },
+    /* 在组合节点(path 处, all/any)添加孩子: 叶子条件或空组合节点 */
+    cfgCondAddAt(path, kind, name) {
+      if (!name) return;
+      const item = kind === "group" ? { [name]: [] } : { [name]: this.cfgDefaultForPlugin(this.cfgPluginIndex[name]) };
+      const list = [...this.cfgCondChildren(path), item];
+      this.cfgSetPath(this.cfgCondChildrenPath(path), list);
+    },
+    /* 根级添加(设置页条件区下拉): 无树 -> 建隐式 all; 根是 all/any -> 追加孩子;
+     * 根是叶子/not -> 包一层 all(合法树形, 语义 = all[原根, 新项]) */
+    cfgCondRootAdd(groupKey, ruleName, kind, name) {
+      const rp = this.cfgCondRootPath(groupKey, ruleName);
+      const node = this.cfgCondNodeRaw(rp);
+      if (!node) {
+        this.cfgSetPath(rp, kind === "group" ? { [name]: [] } : { all: [{ [name]: this.cfgDefaultForPlugin(this.cfgPluginIndex[name]) }] });
+        return;
+      }
+      const key = Object.keys(node)[0];
+      if (key === "all" || key === "any") {
+        this.cfgCondAddAt(rp, kind, name);
+        return;
+      }
+      const first = kind === "group" ? { [name]: [] } : { [name]: this.cfgDefaultForPlugin(this.cfgPluginIndex[name]) };
+      this.cfgSetPath(rp, { all: [node, first] });
+    },
+    /* 根是否为展开的 all/any 组合(决定设置页条件区是否渲染根级「添加」下拉) */
+    cfgCondRootComboOpen(groupKey, ruleName) {
+      const key = this.cfgCondNodeKey(this.cfgCondRootPath(groupKey, ruleName));
+      return key === "all" || key === "any";
+    },
+    /* 删除 path 处的节点: 从父列表移除; 父列表因此变空则整节点向上收敛退场
+     * (根节点退场 = 删 conditions 键 = 无条件直过, 与提示话术同语义) */
+    cfgCondRemoveAt(path) {
+      const listPath = path.slice(0, -1);
+      const holder = this.cfgRaw(listPath);
+      if (!Array.isArray(holder)) {
+        this.cfgDelPath(listPath);  // 根节点: conditions 单键 dict 所在, 删 conditions 键
+        return;
+      }
+      const list = [...holder];
+      list.splice(path[path.length - 1], 1);
+      if (list.length) {
+        this.cfgSetPath(listPath, list);
+        return;
+      }
+      const nodePath = listPath.slice(0, -1);  // 空组合节点自身路径(含组合键名, 如 [..., "conditions", "all"])
+      const grand = this.cfgRaw(nodePath.slice(0, -1));
+      if (Array.isArray(grand)) {
+        this.cfgCondRemoveAt(nodePath);  // 祖父也是列表(嵌套组合): 递归向上收敛
+      } else {
+        this.cfgDelPath(nodePath);  // 祖父是规则 spec: 删组合键(根即 conditions 键) = 无条件直过
+      }
+    },
+    /* 同层排序(父须为列表) */
+    cfgCondMoveAt(path, delta) {
+      const listPath = path.slice(0, -1);
+      const list = this.cfgRaw(listPath);
+      if (!Array.isArray(list)) return;
+      const i = path[path.length - 1];
+      const target = i + delta;
+      if (target < 0 || target >= list.length) return;
+      const nl = [...list];
+      const [moved] = nl.splice(i, 1);
+      nl.splice(target, 0, moved);
+      this.cfgSetPath(listPath, nl);
+    },
+    cfgCondCanMove(path, delta) {
+      const list = this.cfgRaw(path.slice(0, -1));
+      if (!Array.isArray(list)) return false;
+      const target = path[path.length - 1] + delta;
+      return target >= 0 && target < list.length;
+    },
+    /* 条件树叶节点的 spec 渲染项(路径版; 与动作卡共用 cfgSpecItemsAt 的字段映射) */
+    cfgCondSpecItems(path) {
+      return this.cfgSpecItemsAt(path);
+    },
+    /* 组合树叶子计数(卡头摘要用): 组合节点递归, 叶子计 1 */
+    cfgCondCount(path) {
+      const node = this.cfgCondNodeRaw(path);
+      if (!node) return 0;
+      const key = Object.keys(node)[0];
+      if (key === "all" || key === "any") {
+        return (Array.isArray(node[key]) ? node[key] : []).reduce(
+          (n, _c, i) => n + this.cfgCondCount([...path, key, i]), 0
+        );
+      }
+      if (key === "not") return this.cfgCondCount([...path, "not"]);
+      return 1;
+    },
+    cfgCondUiMaxDepth() {
+      return CFG_COND_UI_MAX_DEPTH;
+    },
+
+    /* ---------------------------------------------------------- choose 编排块编辑器(W3-B, D8)
+     * 动作列表项含 "choose" 键即编排块(草稿已归一, 键面 {choose, default}); 编辑器
+     * (组件 aq-choose-block, 模板 tpl/rule-tree.html): 分支 = when 条件树(aq-cond-node)
+     * + then 动作项列表, 外加可选 default; 块内动作项与顶层动作卡同语义(on_error 控件
+     * 走路径版 cfgOnError*At 单点)。嵌套约束: choose 内不再给 choose 入口(后端 fail-fast)。 */
+    cfgIsChooseEntry(entry) {
+      return !!entry && typeof entry === "object" && !Array.isArray(entry) && "choose" in entry;
+    },
+    cfgChooseAdd(groupKey, ruleName) {
+      const path = [...this.cfgRulePath(groupKey, ruleName), "actions"];
+      const list = [...this.cfgPluginList(groupKey, ruleName, "actions")];
+      list.push({ choose: [{ when: { all: [] }, then: [] }] });
+      this.cfgSetPath(path, list);
+    },
+    cfgChooseBranches(groupKey, ruleName, i) {
+      const v = this.cfgRaw([...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose"]);
+      return Array.isArray(v) ? v : [];
+    },
+    cfgChooseBranchPath(groupKey, ruleName, i, bi) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose", bi];
+    },
+    cfgChooseBranchWhenPath(groupKey, ruleName, i, bi) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose", bi, "when"];
+    },
+    cfgChooseBranchAdd(groupKey, ruleName, i) {
+      const path = [...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose"];
+      this.cfgSetPath(path, [...this.cfgChooseBranches(groupKey, ruleName, i), { when: { all: [] }, then: [] }]);
+    },
+    cfgChooseBranchRemove(groupKey, ruleName, i, bi) {
+      const path = [...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose"];
+      const list = [...this.cfgChooseBranches(groupKey, ruleName, i)];
+      list.splice(bi, 1);
+      if (list.length) this.cfgSetPath(path, list);
+      else this.cfgListEntryRemove([...this.cfgRulePath(groupKey, ruleName), "actions", i]);  // 分支空了整块退场
+    },
+    cfgChooseHasDefault(groupKey, ruleName, i) {
+      return this.cfgExists([...this.cfgRulePath(groupKey, ruleName), "actions", i, "default"]);
+    },
+    cfgChooseDefaultToggle(groupKey, ruleName, i, on) {
+      const path = [...this.cfgRulePath(groupKey, ruleName), "actions", i, "default"];
+      if (on) this.cfgSetPath(path, []);
+      else this.cfgDelPath(path);
+    },
+    /* 通用列表条目移除(路径版): 列表空则整键摘除 */
+    cfgListEntryRemove(entryPath) {
+      const listPath = entryPath.slice(0, -1);
+      const list = this.cfgRaw(listPath);
+      if (!Array.isArray(list)) return;
+      const nl = [...list];
+      nl.splice(entryPath[entryPath.length - 1], 1);
+      if (nl.length) this.cfgSetPath(listPath, nl);
+      else this.cfgDelPath(listPath);
+    },
+    /* 动作项增删排(路径版): choose 的 then/default 与顶层动作列表共用 */
+    cfgActionEntryAddAt(listPath, pluginName) {
+      if (!pluginName) return;
+      const list = Array.isArray(this.cfgRaw(listPath)) ? [...this.cfgRaw(listPath)] : [];
+      list.push({
+        type: pluginName,
+        params: this.cfgDefaultForPlugin(this.cfgPluginIndex[pluginName]),
+        on_error: { ...this.cfgOnErrorDefaults() },
+      });
+      this.cfgSetPath(listPath, list);
+    },
+    cfgActionEntryMoveAt(entryPath, delta) {
+      const listPath = entryPath.slice(0, -1);
+      const list = this.cfgRaw(listPath);
+      if (!Array.isArray(list)) return;
+      const i = entryPath[entryPath.length - 1];
+      const target = i + delta;
+      if (target < 0 || target >= list.length) return;
+      const nl = [...list];
+      const [moved] = nl.splice(i, 1);
+      nl.splice(target, 0, moved);
+      this.cfgSetPath(listPath, nl);
+    },
+    cfgActionEntryCanMove(entryPath, delta) {
+      const list = this.cfgRaw(entryPath.slice(0, -1));
+      if (!Array.isArray(list)) return false;
+      const target = entryPath[entryPath.length - 1] + delta;
+      return target >= 0 && target < list.length;
+    },
+    /* choose then/default 的动作项路径与列表(设置页模板坐标辅助) */
+    cfgThenList(groupKey, ruleName, i, bi) {
+      const v = this.cfgRaw([...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose", bi, "then"]);
+      return Array.isArray(v) ? v : [];
+    },
+    cfgThenEntryPath(groupKey, ruleName, i, bi, j) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose", bi, "then", j];
+    },
+    cfgDefaultList(groupKey, ruleName, i) {
+      const v = this.cfgRaw([...this.cfgRulePath(groupKey, ruleName), "actions", i, "default"]);
+      return Array.isArray(v) ? v : [];
+    },
+    cfgDefaultEntryPath(groupKey, ruleName, i, j) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "default", j];
+    },
+    cfgDefaultListPath(groupKey, ruleName, i) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "default"];
+    },
+    cfgThenListPath(groupKey, ruleName, i, bi) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "choose", bi, "then"];
+    },
+
+    /* on_error 控件的路径版(W3-B, choose 块内动作项用): 顶层动作卡仍用 (g, r, i) 签名族,
+     * 两族同口径(缺省同源 / 非缺省才写树 / 全缺省整键摘除), 勿各改一套 */
+    cfgOnErrorPathAt(entryPath, key) {
+      return [...entryPath, "on_error", key];
+    },
+    cfgOnErrorValueAt(entryPath, key) {
+      const def = this.cfgOnErrorDefaults()[key];
+      return String(this.cfgVal(this.cfgOnErrorPathAt(entryPath, key), def));
+    },
+    cfgOnErrorIsRetryAt(entryPath) {
+      return this.cfgOnErrorValueAt(entryPath, "policy") === "retry";
+    },
+    cfgOnErrorSetAt(entryPath, key, value) {
+      this.cfgSetPath(this.cfgOnErrorPathAt(entryPath, key), String(value));
+      const base = [...entryPath, "on_error"];
+      const cur = this.cfgRaw(base);
+      if (!cur || typeof cur !== "object") return;
+      const def = this.cfgOnErrorDefaults();
+      if (Object.keys(cur).every((k) => String(cur[k]) === String(def[k]))) this.cfgDelPath(base);
+    },
   },
+};
+
+/* ---------------------------------------------------------- 组件定义(W3-A/W3-B, D2/D8)
+ * 模板在 shared/tpl/rule-tree.html(x-template, tpl-manifest 注入 body); 本文件在 HTML 里
+ * 排在 app.js 之前(app.js 末尾 app.component(...) 读 window.AQ_*), 与 ctl_bits.js 同范式
+ * —— **组件只贡献模板与 props, 不持有任何业务状态**, 读写一律经 $root 回到 CONFIG_RULES
+ * 方法族(aq-cond-node 递归渲染条件组合树; aq-choose-block 渲染 choose 编排块)。
+ * 在组件里复写一份方法会触发 _scan_mixin_wiring 的重名守阵(被 Vue 合并策略盖掉的那份
+ * 永不执行且不报错)。回调 prop 而非 emit: 与三件套同口径(见 ctl_bits.js 头注)。 */
+
+/* 条件组合树节点 <aq-cond-node>(递归): path = 节点在 cfg 树中的坐标(数组), depth = 层深。
+ * 组合节点(all/any/not)渲染键切换 + 孩子递归 + 添加/删除/排序; 叶子渲染与旧条件卡同款
+ * (hub-field spec 控件走 cfgCondSpecItems 单点)。节点形状非法时给占位提示(保存会被
+ * 后端校验拒绝, 前端不吞不装)。 */
+window.AQ_COND_NODE_COMPONENT = {
+  name: "aq-cond-node",
+  props: {
+    path: { type: Array, required: true },
+    depth: { type: Number, default: 1 },
+  },
+  computed: {
+    node() {
+      return this.$root.cfgCondNodeRaw(this.path);
+    },
+    comboKey() {
+      return this.node ? this.$root.cfgCondNodeKey(this.path) : "";
+    },
+    isCombo() {
+      return ["all", "any", "not"].includes(this.comboKey);
+    },
+    label() {
+      return this.$root.cfgCondComboLabel(this.comboKey);
+    },
+    children() {
+      return this.$root.cfgCondChildren(this.path);
+    },
+    notChildPath() {
+      return [...this.path, "not"];
+    },
+    canMoveUp() {
+      return this.$root.cfgCondCanMove(this.path, -1);
+    },
+    canMoveDown() {
+      return this.$root.cfgCondCanMove(this.path, 1);
+    },
+    canAddGroup() {
+      return this.depth < this.$root.cfgCondUiMaxDepth();
+    },
+  },
+  methods: {
+    childPath(i) {
+      return [...this.path, this.comboKey, i];
+    },
+  },
+  template: "#tpl-aq-cond-node",
+};
+
+/* choose 编排块 <aq-choose-block>(W3-B, D8): 分支(when 条件树 + then 动作项列表)按序 +
+ * 可选 default。groupKey/ruleName/index 定位块在 cfg 树中的坐标; then/default 动作项渲染
+ * 与顶层动作卡同构(spec 字段 + on_error 控件), 块内不再提供 choose 入口(编排块一层)。 */
+window.AQ_CHOOSE_BLOCK_COMPONENT = {
+  name: "aq-choose-block",
+  props: {
+    groupKey: { type: String, required: true },
+    ruleName: { type: String, required: true },
+    index: { type: Number, required: true },
+  },
+  computed: {
+    branches() {
+      return this.$root.cfgChooseBranches(this.groupKey, this.ruleName, this.index);
+    },
+    hasDefault() {
+      return this.$root.cfgChooseHasDefault(this.groupKey, this.ruleName, this.index);
+    },
+  },
+  template: "#tpl-aq-choose-block",
 };

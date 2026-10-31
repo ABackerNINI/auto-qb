@@ -82,6 +82,12 @@ from auto_qb.infra import utils
 from helpers import FakeClient, FakeTorrent, _hr_rule, make_ctx, make_manager
 
 
+def _install_actions(rule, plugins):
+    """测试注动作步(W3-B 起 process 迭代 self.steps, choose 块与普通动作同占一步):
+    插件实例 -> 执行步(缺省 on_error), 取代此前直接赋 rule.actions 的注入形"""
+    rule.steps = [("action", a, Rule._resolve_on_error(None)) for a in plugins]
+
+
 def _load_rules(mgr, rules_config):
     """把规则配置灌进 manager 并走真实载入层 load_rules(两键检测/转未启用的被测单点)"""
     mgr.config.rules_config = rules_config
@@ -511,7 +517,7 @@ def test_rule_action_failed_breaks_chain():
         ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
         rule = Rule("g.chain", {"actions": []}, mgr)
 
-        rule.actions = [_FailingAction("x"), AddTagsAction(["AFTER"])]
+        _install_actions(rule, [_FailingAction("x"), AddTagsAction(["AFTER"])])
         assert rule.process(ctx) == VERDICT_EXECUTED, "失败动作本身算已执行"
         assert ("add_tags", ["AFTER"]) not in client.calls, f"失败应中断动作链: {client.calls}"
 
@@ -702,7 +708,7 @@ def test_rule_process_action_exception():
                 raise RuntimeError("boom")
 
         rule = Rule("g.test", {"actions": []}, mgr)
-        rule.actions = [BoomAction()]
+        _install_actions(rule, [BoomAction()])
         assert rule.process(ctx) == VERDICT_EXECUTED, "动作异常容错为 fail, 仍计已执行"
 
 
@@ -955,7 +961,7 @@ def test_rule_process_unknown_status_continues_without_marking():
                 return ActionResult("weird", "未知状态")
 
         rule = Rule("g.test", {"actions": [{"stop": True}]}, mgr)
-        rule.actions = [_Weird()]
+        _install_actions(rule, [_Weird()])
         assert rule.process(ctx) == VERDICT_NO_OP, "未知状态不记 executed(既非成功也非失败)"
 
 

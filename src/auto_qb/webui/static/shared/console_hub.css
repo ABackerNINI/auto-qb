@@ -1563,3 +1563,27 @@
 .tr-tgt-arrow { color: var(--fg-dim); flex: none; }
 .tr-tgt-saveerr { margin: 0 14px 12px; padding: 8px 10px; white-space: pre-wrap; font-size: 12.5px;
   color: var(--error); border: 1px solid var(--error-line); border-radius: var(--radius-sm); }
+
+/* ---- 规则结构树编辑器(W3-A/W3-B, plan 26-11-01-0106 D2/D8) ----
+ * 条件组合树节点(.hb-cond-*)与 choose 编排块(.hb-branch-*)的版式; 三皮肤共用层单点
+ * (组件 aq-cond-node / aq-choose-block, 模板 tpl/rule-tree.html)。 */
+.hb-cond-node { min-width: 0; }
+.hb-cond-node + .hb-cond-node { margin-top: 6px; }
+.hb-cond-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.hb-cond-hd .hb-select { width: auto; }
+.hb-cond-k { font: 600 12px/1 var(--hb-font-display); padding: 4px 8px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent, var(--fg-muted)) 14%, transparent); }
+.hb-cond-k.k-not { color: var(--warn, var(--fg)); }
+.hb-cond-ops { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+.hb-cond-kids { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--fg-muted) 22%, transparent); }
+.hb-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.hb-choose { display: flex; flex-direction: column; gap: 8px; }
+.hb-branch { border: 1px solid color-mix(in srgb, var(--fg-muted) 22%, transparent);
+  border-radius: var(--radius-sm); padding: 8px 10px; }
+.hb-branch-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hb-branch-tag { font: 600 12px/1 var(--hb-font-display); color: var(--fg-muted); }
+.hb-branch-when { margin-bottom: 6px; }
+.hb-branch-when > .hb-lb, .hb-branch-then > .hb-lb { display: inline-block; margin-bottom: 4px;
+  font-size: 12px; color: var(--fg-dim); }
+.hb-branch-then .hb-step { margin-bottom: 6px; }
+.hb-choose-foot { display: flex; gap: 8px; }

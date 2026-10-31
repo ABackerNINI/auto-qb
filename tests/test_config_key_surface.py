@@ -21,6 +21,8 @@
   hr_check.channel/add_episode_tags …)。
 - 动态段归一通配: trackers.*(TRACKER_FIELDS), hr_check.sites.*(HR_CHECK_SITES_FIELDS),
   <任意>_rules.*(RULE_FIELDS + 全部条件/动作插件 spec), fs.path_map.* 条目键(KNOWN_PATH_MAP_ENTRY_KEYS)。
+  规则结构键单点派生: conditions 组合键(compat.CONDITION_COMBO_KEYS, W3-A)+ choose 编排块键
+  (compat.CHOOSE_KNOWN_KEYS / CHOOSE_BRANCH_KEYS, W3-B)。
 - **边界**: 限速曲线段内部键(traffic_source/curves/阶梯点)是 validation/curves.py 内联字面量,
   无常量可派生, v1 不入面(要纳入先提常量); 默认值/文案/UI 元数据(如 tone)不是结构, 永不入面;
   键不变、语义改义没有结构信号, 拦不住, 靠评审与档案。
@@ -52,7 +54,7 @@ import pytest
 import yaml
 
 from auto_qb.config import Config, load_config, schema
-from auto_qb.config.compat import CONDITION_COMBO_KEYS
+from auto_qb.config.compat import CHOOSE_BRANCH_KEYS, CHOOSE_KNOWN_KEYS, CONDITION_COMBO_KEYS
 from auto_qb.config.models import QbTraffic, TransferConfig, TransferPathMapEntry, TransferTargetConfig
 from auto_qb.config.schema import HR_CHECK_SITES_FIELDS, RULE_FIELDS, TRACKER_FIELDS
 from auto_qb.config.validation import KNOWN_CONFIG_KEYS
@@ -115,6 +117,13 @@ def build_config_key_surface() -> set:
     # 与插件名平级(组合键/条件名二选一的单键节点)—— 键面单点 compat.CONDITION_COMBO_KEYS
     for combo in CONDITION_COMBO_KEYS:
         surface.add(f"<任意>_rules.*.conditions.{combo}")
+    # choose 编排块键面(W3-B, plan 26-11-01-0106 G6/D3): actions 列表项的编排块键,
+    # 键面单点 compat.CHOOSE_KNOWN_KEYS / CHOOSE_BRANCH_KEYS(when/then 为分支内层,
+    # 落 .actions.choose.when 形态; default 与 choose 同层)
+    for choose_key in CHOOSE_KNOWN_KEYS:
+        surface.add(f"<任意>_rules.*.actions.{choose_key}")
+    for branch_key in CHOOSE_BRANCH_KEYS:
+        surface.add(f"<任意>_rules.*.actions.choose.{branch_key}")
     for kind, container in (("condition", "conditions"), ("action", "actions")):
         for plugin in schema.plugin_table()[kind]:
             base = f"<任意>_rules.*.{container}.{plugin.name}"

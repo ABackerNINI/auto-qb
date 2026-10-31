@@ -40,6 +40,13 @@
   cfgOnError* 方法族单点(config_rules.js); settings.html 动作卡失败策略行(policy 三档下拉 +
   retry 档 retries/backoff 数字输入)接线齐全; 有 node 时真跑语义电池(缺省值同源读侧/混合形与
   规范形识别/非缺省才写树/全缺省整键摘除)
+- test_frontend_rule_tree_and_choose_editor: 规则结构树 + choose 编辑器守阵(plan 26-11-01-0106
+  W3-A/W3-B, D2/D8) —— 草稿规范化单点(cfgNormalizeRulesDraft 恰在 cfgSetTree 挂一次: conditions
+  扁平包 all 树 + actions 规范形 + choose 键面保留, 打开即归一形/保存写新形态); 条件树方法族
+  (cfgCond*)与 choose 方法族(cfgChoose*/cfgAction*At/cfgOnError*At)在 config_rules.js 各定义一处;
+  settings.html 挂 <aq-cond-node> 与 <aq-choose-block>(旧扁平条件写入路径 hubPickPlugin
+  conditions 零残留), tpl/rule-tree.html 双模板 + 三清单接线 + app.js 注册 + 共用层 CSS 成对;
+  有 node 时真跑语义电池(归一幂等/树形读侧/建树切换删除收敛/choose 分支增删与 on_error 路径版)
 """
 import base64
 import json
@@ -1474,6 +1481,204 @@ const checks = [
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
+
+_NODE_RULE_TREE_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+eval(fs.readFileSync(process.argv[2], "utf8"));
+const M = Object.assign({}, window.CONFIG_EDITOR.methods, window.CONFIG_RULES.methods);
+const ctx = Object.assign({
+  cfg: {
+    tree: { config: { example_rules: {
+      legacy: { enabled: "true",
+                conditions: [{ size: ">=1MiB" }, { path: ["/a"] }],
+                actions: [{ add_tags: ["x"] }, { checking: { basic_check: "filelist" } }] },
+      treeform: { enabled: "true",
+                  conditions: { any: [{ size: ">=1MiB" }, { not: { tags: "HR" } }] },
+                  actions: [{ type: "add_tags", params: ["y"] }] },
+      chooser: { enabled: "true",
+                 actions: [{ choose: [{ when: [{ size: ">=1MiB" }], then: [{ add_tags: ["T"] }] }],
+                            default: [{ add_tags: ["D"] }] }] },
+      leafroot: { enabled: "true", conditions: { size: "" } },
+      switcher: { enabled: "true", conditions: { all: [{ size: "" }] } },
+    } } },
+    schema: { constants: {
+      on_error_policies: ["stop", "continue", "retry"],
+      on_error_defaults: { policy: "stop", retries: 3, backoff: 60 },
+    } },
+  },
+  cfgConfigPath() { return ["config"]; },
+  cfgPluginIndex: {
+    add_tags: { name: "add_tags", label: "添加标签", spec_kind: "list" },
+    size: { name: "size", label: "大小", spec_kind: "str", placeholder: "" },
+  },
+}, M);
+const J = (v) => JSON.stringify(v);
+const t = () => ctx.cfg.tree.config.example_rules;
+const rp = (rn) => ctx.cfgCondRootPath("example_rules", rn);
+const DEF_OE = J({ policy: "stop", retries: 3, backoff: 60 });
+const checks = [
+  // ---- 草稿规范化(D2): 打开即归一形, 保存即写新形态 ----
+  ["cfgNormalizeRulesDraft: 扁平 conditions 包隐式 all(叶子零触碰)",
+    (ctx.cfgNormalizeRulesDraft(), J(t().legacy.conditions) === J({ all: [{ size: ">=1MiB" }, { path: ["/a"] }] }))],
+  ["cfgNormalizeRulesDraft: 树形 conditions 零改写",
+    J(t().treeform.conditions) === J({ any: [{ size: ">=1MiB" }, { not: { tags: "HR" } }] })],
+  ["cfgNormalizeRulesDraft: 扁平动作翻译规范形 + 缺省 on_error 注入",
+    J(t().legacy.actions[0]) === J({ type: "add_tags", params: ["x"], on_error: { policy: "stop", retries: 3, backoff: 60 } })],
+  ["cfgNormalizeRulesDraft: choose 键面保留 + when 包 all + then/default 注入缺省",
+    J(t().chooser.actions[0].choose[0].when) === J({ all: [{ size: ">=1MiB" }] })
+    && J(t().chooser.actions[0].choose[0].then[0]) === J({ type: "add_tags", params: ["T"], on_error: { policy: "stop", retries: 3, backoff: 60 } })
+    && t().chooser.actions[0].default[0].type === "add_tags"],
+  ["cfgNormalizeRulesDraft 幂等(重复归一零差异)",
+    (ctx.cfgNormalizeRulesDraft(), ctx.cfgNormalizeRulesDraft(), true)],
+  // ---- 条件树读侧 ----
+  ["cfgCondNodeKey: 树形根键", ctx.cfgCondNodeKey(rp("treeform")) === "any"],
+  ["cfgCondChildren: 组合孩子数", ctx.cfgCondChildren(rp("treeform")).length === 2],
+  ["cfgCondCount: 叶子计数(not 孩子计入)", ctx.cfgCondCount(rp("treeform")) === 2],
+  // ---- 条件树写侧 ----
+  ["cfgCondRootAdd: 无树建隐式 all",
+    (ctx.cfgCondRootAdd("example_rules", "none", "leaf", "size"),
+     t().none.conditions.all.length === 1 && t().none.conditions.all[0].size !== undefined)],
+  ["cfgCondRootAdd: 组合根追加孩子(any 列表尾插)",
+    (ctx.cfgCondRootAdd("example_rules", "treeform", "leaf", "size"),
+     J(t().treeform.conditions) === J({ any: [{ size: ">=1MiB" }, { not: { tags: "HR" } }, { size: "" }] }))],
+  ["cfgCondRootAdd: 叶子根包 all 再加(合法树形)",
+    (ctx.cfgCondRootAdd("example_rules", "leafroot", "leaf", "size"),
+     t().leafroot.conditions.all.length === 2 && t().leafroot.conditions.all[0].size !== undefined)],
+  ["cfgCondSetCombo: all 切 not 收敛单孩子 / not 切回 all 包列表",
+    (ctx.cfgCondSetCombo(rp("switcher"), "all", "not"),
+     J(t().switcher.conditions) === J({ not: { size: "" } }),
+     ctx.cfgCondSetCombo(rp("switcher"), "not", "all"),
+     J(t().switcher.conditions) === J({ all: [{ size: "" }] }))],
+  ["cfgCondRemoveAt: 空列表向上收敛删 conditions 键(无条件直过)",
+    (ctx.cfgCondRemoveAt(rp("none").concat(["all", 0])),
+     !("conditions" in t().none))],
+  // ---- choose 编辑器 ----
+  ["cfgIsChooseEntry 识别 choose 编排块", ctx.cfgIsChooseEntry(t().chooser.actions[0]) && !ctx.cfgIsChooseEntry(t().legacy.actions[0])],
+  ["cfgChooseBranches / cfgThenList 读侧",
+    ctx.cfgChooseBranches("example_rules", "chooser", 0).length === 1
+    && ctx.cfgThenList("example_rules", "chooser", 0, 0).length === 1],
+  ["cfgChooseBranchAdd: 追加分支(when 初始 {all: []})",
+    (ctx.cfgChooseBranchAdd("example_rules", "chooser", 0),
+     J(t().chooser.actions[0].choose[1].when) === J({ all: [] }))],
+  ["cfgActionEntryAddAt: then 加动作写规范形(缺省 on_error)",
+    (ctx.cfgActionEntryAddAt(ctx.cfgThenListPath("example_rules", "chooser", 0, 1), "add_tags"),
+     J(ctx.cfgThenList("example_rules", "chooser", 0, 1)[0]) === J({ type: "add_tags", params: [], on_error: { policy: "stop", retries: 3, backoff: 60 } }))],
+  ["cfgOnErrorValueAt/SetAt 路径版: 非缺省写树/全缺省摘除",
+    (ctx.cfgOnErrorSetAt(ctx.cfgThenEntryPath("example_rules", "chooser", 0, 1, 0), "policy", "continue"),
+     ctx.cfgOnErrorValueAt(ctx.cfgThenEntryPath("example_rules", "chooser", 0, 1, 0), "policy") === "continue",
+     ctx.cfgOnErrorSetAt(ctx.cfgThenEntryPath("example_rules", "chooser", 0, 1, 0), "policy", "stop"),
+     !("on_error" in ctx.cfgThenList("example_rules", "chooser", 0, 1)[0]))],
+  ["cfgListEntryRemove: then 删动作后 then 键随空摘除",
+    (ctx.cfgListEntryRemove(ctx.cfgThenEntryPath("example_rules", "chooser", 0, 1, 0)),
+     !("then" in t().chooser.actions[0].choose[1]))],
+  ["cfgChooseDefaultToggle: 关 = default 键摘除 / 开 = 空列表落位",
+    (ctx.cfgChooseDefaultToggle("example_rules", "chooser", 0, false),
+     !("default" in t().chooser.actions[0]),
+     ctx.cfgChooseDefaultToggle("example_rules", "chooser", 0, true),
+     J(t().chooser.actions[0].default) === J([]))],
+];
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_rule_tree_and_choose_editor():
+    """规则结构树 + choose 编辑器守阵(plan 26-11-01-0106 W3-A/W3-B, D2/D8)
+
+    本守阵钉(静态 + 有 node 时行为):
+    1. 草稿规范化单点(D2): cfgNormalizeRulesDraft 在 config_editor.cfgSetTree 恰挂一次 ——
+       conditions 旧扁平列表包隐式 all 树 + actions 旧扁平/混合形翻译 {type, params, on_error}
+       规范形并注入缺省 on_error + choose 键面保留(W3-B), 打开即归一形、保存即写新形态;
+       旧扁平条件写入路径(hubPickPlugin conditions)零残留;
+    2. 条件树方法族(cfgCond*)与 choose 方法族(cfgChoose*/cfgActionEntry*/cfgOnError*At/
+       cfgListEntryRemove)在 config_rules.js 各定义一处(单点不拆分);
+    3. settings.html 挂 <aq-cond-node>(组合树编辑入口 + 根级添加下拉)与 <aq-choose-block>
+       (choose 卡), 动作区有「添加分支」按钮; tpl/rule-tree.html 双 x-template 恰一份,
+       三皮肤清单接线 + app.js 注册 + 共用层 CSS(.hb-cond-node/.hb-branch)成对;
+    4. 有 node 时真跑语义电池: 归一幂等 / 树形读侧(根键/孩子/叶子计数)/ 建树-切换-删除收敛
+       (空列表向上收敛删 conditions 键 = 无条件直过)/ choose 分支增删 + then 动作规范形写入 +
+       on_error 路径版三档控件 + default 开关。
+
+    无 node 的机器只跑静态那一半(与本文件其它守阵同口径, 不引入 pytest skip)。
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
+    ce = open(os.path.join(shared, "config_editor.js"), encoding="utf-8").read()
+    hub = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    tpl = open(os.path.join(shared, "tpl", "settings.html"), encoding="utf-8").read()
+    tree_tpl = open(os.path.join(shared, "tpl", "rule-tree.html"), encoding="utf-8").read()
+    app = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
+    css = open(os.path.join(shared, "console_hub.css"), encoding="utf-8").read()
+
+    # 1. 草稿规范化单点: cfgSetTree 恰挂一次; 旧扁平条件写入路径零残留
+    assert ce.count("cfgNormalizeRulesDraft()") == 1, "cfgSetTree 必须恰挂一次草稿规范化(D2 单点)"
+    assert "hubPickPlugin(cfg.ruleGroupKey, rn, 'conditions'" not in tpl, \
+        "旧扁平条件写入路径残留 —— 条件区应写组合树(D2)"
+    for fn in (
+        "cfgNormalizeRulesDraft",
+        "cfgNormalizeActionEntryDraft",
+        "cfgCondRootPath",
+        "cfgCondNodeKey",
+        "cfgCondSetCombo",
+        "cfgCondAddAt",
+        "cfgCondRootAdd",
+        "cfgCondRemoveAt",
+        "cfgCondMoveAt",
+        "cfgCondSpecItems",
+        "cfgCondCount",
+        "cfgIsChooseEntry",
+        "cfgChooseAdd",
+        "cfgChooseBranches",
+        "cfgChooseBranchAdd",
+        "cfgChooseBranchRemove",
+        "cfgChooseDefaultToggle",
+        "cfgListEntryRemove",
+        "cfgActionEntryAddAt",
+        "cfgActionEntryMoveAt",
+        "cfgThenList",
+        "cfgThenEntryPath",
+        "cfgDefaultList",
+        "cfgDefaultEntryPath",
+        "cfgOnErrorPathAt",
+        "cfgOnErrorValueAt",
+        "cfgOnErrorSetAt",
+        "cfgSpecItemsAt",
+    ):
+        defs = re.findall(rf"^    {fn}\(", ru, re.M)
+        assert len(defs) == 1, f"{fn} 定义 {len(defs)} 处(应为 1) —— 条件树/choose 方法族被拆分"
+    # 2. settings.html 接线: 组合树挂载 + 根级添加 + choose 卡与「添加分支」
+    assert ":path=\"cfgCondRootPath(cfg.ruleGroupKey, rn)\"" in tpl, "settings.html 条件区缺 <aq-cond-node> 挂载(D2/D8)"
+    assert "cfgCondRootAdd(cfg.ruleGroupKey, rn" in tpl, "settings.html 缺根级「添加条件」下拉(无条件直过入口断了)"
+    assert "<aq-choose-block" in tpl and "cfgChooseAdd(cfg.ruleGroupKey, rn)" in tpl, \
+        "settings.html 缺 choose 编排块卡/「添加分支」入口(W3-B/D8)"
+    # 3. 模板/注册/清单/CSS 成对
+    for tpl_id in ("tpl-aq-cond-node", "tpl-aq-choose-block"):
+        assert tree_tpl.count(f'id="{tpl_id}"') == 1, f"rule-tree.html 里 {tpl_id} 必须恰一份"
+    assert 'app.component("aq-cond-node", window.AQ_COND_NODE_COMPONENT);' in app, "app.js 缺 aq-cond-node 注册"
+    assert 'app.component("aq-choose-block", window.AQ_CHOOSE_BLOCK_COMPONENT);' in app, "app.js 缺 aq-choose-block 注册"
+    for ui in _UI_ALL:
+        shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        assert shell.count('{"src": "/shared/tpl/rule-tree.html", "into": "body"}') == 1, f"{ui} 清单缺 rule-tree.html 分片"
+    assert ".hb-cond-node" in css and ".hb-branch" in css, "共用层 CSS 缺规则结构树版式段(三皮肤共用单点 console_hub.css)"
+    assert "cfgIsChooseEntry" in hub, "hubPluginText 缺 choose 行话分支(choose 不在插件索引, 裸键名展示)"
+    # 4. 有 node 时真跑语义电池
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [
+                node, "-e", _NODE_RULE_TREE_PROBE,
+                os.path.join(shared, "config_editor.js"),
+                os.path.join(shared, "config_rules.js")
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, f"规则树 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
+        res = json.loads(proc.stdout.strip())
+        assert res["total"] >= 16, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert not res["failed"], ("条件树/choose 编辑器行为漂移: " + "、".join(res["failed"]))
 
 
 def test_frontend_action_on_error_control():

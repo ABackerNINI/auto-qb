@@ -1,4 +1,4 @@
-"""规则兼容层: 载入规范化单点 normalize_legacy_rule(plan 26-11-01-0106 §3.2, W2-A/W2-B/W3-A)
+"""规则兼容层: 载入规范化单点 normalize_legacy_rule(plan 26-11-01-0106 §3.2, W2-A/W2-B/W3-A/W3-B)
 
 本模块是 **legacy 规则词汇的唯一容身处**(防漂移铁律): 旧扁平语法只允许在这里被翻译成
 引擎/校验器唯一可见的规范化形态, 引擎(rules)与校验器(config.validation)禁止出现
@@ -37,6 +37,17 @@ validate_config 之前)—— 归一后的形态才进校验器, 校验器报错
   已把含键规则转未启用); checking 动作子段内部结构不动(with/without_reference、
   pending/resume、未知键 fail-fast 契约原样保留)。
 
+编排块侧(W3-B, plan G6/D3 choose 转正):
+- 动作列表项可为 `{choose: [{when: <条件树节点>, then: [动作项...]}, ...], default: [动作项...](可选)}`
+  —— when 与 conditions 同款组合树节点(叶子经 normalize_conditions 幂等建树, 扁平列表同样
+  包隐式 all), then/default 内是普通动作项(逐项过 normalize_action_entry, 同样注入缺省
+  on_error); choose 本体无 on_error(错误策略挂在块内每个动作项上, 与顶层同语义)。
+- choose 是**编排块不是插件动作**: 归一后保留 `{choose: [...], default?: [...]}` 键面,
+  不翻译成 {type, params} 形(引擎与校验器都按 "choose" 键识别); 嵌套约束 = choose 内
+  then/default 不再允许 choose(编排块只允许一层, 防递归爆炸; 校验器 fail-fast, 引擎
+  构造期同口径兜底)—— 深度防线上 choose 的 when 条件树复用 CONDITION_TREE_MAX_DEPTH
+  (从 1 起独立计, 与顶层 conditions 同款)。
+
 幂等: normalize(normalize(x)) == normalize(x) —— 已规范形(含完整 on_error / 已是树形
 conditions)原样返回, 重复载入/热重载零差异; 缺省注入只补缺失键不改已配置值。本函数对
 非法形状(非 dict/多键/on_error 非 dict)不报错不丢数据, 原样透传交校验器按扁平坐标报。
@@ -47,6 +58,14 @@ from .schema.fields import ON_ERROR_DEFAULTS
 
 # 动作规范化形态的键面(W2-B 扩 on_error; fail-fast 键面单点, 校验器引用)
 ACTION_ENTRY_KEYS = ("type", "params", "on_error")
+
+# choose 编排块键面(W3-B, plan G6/D3): 动作列表项含 "choose" 键即编排块, 只认这两个键,
+# 其它键 fail-fast(校验器引用; "choose" 键与插件动作名同层判别 —— choose 不在 ACTIONS
+# 注册表里, 不可能撞名, 校验器先按 choose 分流)
+CHOOSE_KNOWN_KEYS = ("choose", "default")
+
+# choose 分支键面(W3-B): 每个分支 {when: <条件树节点>, then: [动作项...]}, when 必填
+CHOOSE_BRANCH_KEYS = ("when", "then")
 
 # 条件组合树键面(W3-A, plan G4): 规范化 conditions 的组合节点只认这三个键,
 # 其它键 = 条件名(须在 rules.registry.CONDITIONS 注册, 校验器 fail-fast 未知名)
@@ -100,9 +119,56 @@ CONDITION_GROUPING_MAP = {
 _RETIRED_PSEUDO_ACTION = "ignore_next_action_error"
 
 
+def normalize_action_list(items: Any) -> Any:
+    """动作项列表逐项归一(choose 的 then/default 用, W3-B): 非 list 原样透传交校验器报"""
+    if not isinstance(items, list):
+        return items
+    return [normalize_action_entry(a) for a in items]
+
+
+def normalize_choose_block(entry: dict) -> dict:
+    """choose 编排块归一(W3-B, plan G6/D3; 幂等)
+
+    - `{choose: [分支...], default?: [动作项...]}` 键面保留(choose 是编排块不是插件动作,
+      不翻译成 {type, params} 形); 分支逐个归一: when 过 normalize_conditions 单点
+      (扁平列表同样包隐式 all), then 过 normalize_action_list(动作项同样注入缺省 on_error);
+      default 同 then。分支的未知键 / 非法形状(分支非 dict、then 非 list)原样保留,
+      交校验器按 choose 坐标 fail-fast(本函数只做形状归一不吞错误);
+    - choose 本体无 on_error(错误策略挂在块内动作项上); 嵌套 choose 不在此拦(交校验器
+      与引擎构造期双侧拦, 与「非法形状原样透传」的容器定位一致)。
+
+    幂等: normalize_choose_block(normalize_choose_block(x)) == normalize_choose_block(x)
+    (when 建树与动作项归一都幂等, 归一一次后收敛稳定)。
+    """
+    out = {k: v for k, v in entry.items() if k not in CHOOSE_KNOWN_KEYS}
+    branches = entry.get("choose")
+    if isinstance(branches, list):
+        nb = []
+        for br in branches:
+            if isinstance(br, dict) and ("when" in br or "then" in br):
+                nbr = {}
+                if "when" in br:
+                    nbr["when"] = normalize_conditions(br["when"])
+                if "then" in br:
+                    nbr["then"] = normalize_action_list(br["then"])
+                for k, v in br.items():  # 未知键原样保留, 交校验器 fail-fast
+                    if k not in nbr:
+                        nbr[k] = v
+                nb.append(nbr)
+            else:
+                nb.append(br)
+        out["choose"] = nb
+    else:
+        out["choose"] = branches  # 非 list(缺失/异形)原样透传交校验器报
+    if "default" in entry:
+        out["default"] = normalize_action_list(entry["default"])
+    return out
+
+
 def normalize_action_entry(entry: Any) -> Any:
     """单个动作列表项归一(幂等): 旧形/混合形 -> `{type, params, on_error}` 规范形
 
+    - choose 编排块(含 "choose" 键, W3-B)走 normalize_choose_block 单点, 键面保留;
     - 旧扁平单键 dict `{name: value}` -> `{type: name, params: value}`;
     - webui W2 动作卡写出的混合形 `{name: value, on_error: {...}}` -> 规范形(on_error 透传);
     - 已规范形(含 "type" 键)走缺省注入: 无 on_error 补全缺省对象, on_error 缺子键补缺省值
@@ -112,6 +178,8 @@ def normalize_action_entry(entry: Any) -> Any:
       交校验器按扁平坐标报结构错;
     - 参数值(含 checking 子段 dict)原样透传, 嵌套结构零触碰。
     """
+    if isinstance(entry, dict) and "choose" in entry:
+        return normalize_choose_block(entry)
     if isinstance(entry, dict) and "type" not in entry:
         keys = [k for k in entry if k != "on_error"]
         if len(keys) == 1:  # 旧扁平单键形 / 混合形(动作键 + 可选 on_error)

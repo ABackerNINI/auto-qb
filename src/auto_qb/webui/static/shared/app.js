@@ -948,6 +948,12 @@ app.component("aq-combo-input", window.AQ_COMBO_INPUT_COMPONENT);
 app.component("aq-switch", window.AQ_SWITCH_COMPONENT);
 app.component("aq-fold", window.AQ_FOLD_COMPONENT);
 app.component("aq-seg", window.AQ_SEG_COMPONENT);
+/* 规则结构树编辑两件(plan 26-11-01-0106 W3-A/W3-B, D2/D8): <aq-cond-node> 条件组合树节点
+ * (递归 —— 组合节点 all/any/not 增删嵌套 + 叶子编辑, 模板 tpl/rule-tree.html, 定义在
+ * config_rules.js)与 <aq-choose-block> choose 编排块编辑器(when 条件树 + then 动作列表 +
+ * default)。组件只贡献模板: 读写一律经 $root 回 CONFIG_RULES 的 cfgCond 系与 cfgChoose 系方法。 */
+app.component("aq-cond-node", window.AQ_COND_NODE_COMPONENT);
+app.component("aq-choose-block", window.AQ_CHOOSE_BLOCK_COMPONENT);
 /* 对话框外壳(收敛 issue 26-10-20-2231 / R23-A-02·A-03·A-08): <aq-modal>(遮罩+.modal+标题头+中部+动作栏)
  * 覆盖全部带遮罩对话框, <aq-modal-head>(标题头五段)另供无遮罩异形 speed-pop 直拼 —— 11 处手抄
  * 三段式外壳只此一份(tpl/dialog-shell.html), 中部走插槽; 行为仍是既有单点(maskDownSelf/

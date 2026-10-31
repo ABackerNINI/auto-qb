@@ -1,0 +1,183 @@
+<!-- 规则结构树编辑模板(W3-A/W3-B, plan 26-11-01-0106 D2/D8): x-template 两件
+       <aq-cond-node>    条件组合树节点(递归): 组合节点 all/any/not(键切换/孩子递归/增删排)
+                          或叶子(与旧条件卡同款的 hub-field spec 控件)。
+       <aq-choose-block> choose 编排块(W3-B): 分支(when 条件树 + then 动作项列表)按序
+                          + 可选 default; then/default 动作项与顶层动作卡同构。
+     组件定义在 shared/config_rules.js(AQ_COND_NODE_COMPONENT / AQ_CHOOSE_BLOCK_COMPONENT),
+     注册在 app.js —— 组件只贡献模板, 读写一律经 $root 回 CONFIG_RULES 方法族(cfgCond*/cfgChoose*)。
+     样式类(.hb-cond-*/.hb-branch-*)在 shared/console_hub.css(三皮肤共用层单点)。 -->
+
+<script type="text/x-template" id="tpl-aq-cond-node">
+  <div class="hb-cond-node">
+    <template v-if="node">
+      <!-- 组合节点: all/any(孩子列表) / not(单孩子) -->
+      <template v-if="isCombo">
+        <div class="hb-cond-hd">
+          <span class="hb-cond-k" :class="'k-' + comboKey">{{ label }}</span>
+          <select class="hb-select sm" :value="comboKey" title="切换组合方式"
+                  @change="$root.cfgCondSetCombo(path, comboKey, $event.target.value)">
+            <option v-for="k in ['all', 'any', 'not']" :key="k" :value="k">{{ $root.cfgCondComboLabel(k) }}</option>
+          </select>
+          <span class="hb-cond-ops">
+            <button class="hb-btn ghost sm" :disabled="!canMoveUp" title="上移"
+                    @click="$root.cfgCondMoveAt(path, -1)">&#8593;</button>
+            <button class="hb-btn ghost sm" :disabled="!canMoveDown" title="下移"
+                    @click="$root.cfgCondMoveAt(path, 1)">&#8595;</button>
+            <button class="hb-btn danger sm" title="删除该组" @click="$root.cfgCondRemoveAt(path)">&#10005;</button>
+          </span>
+        </div>
+        <div class="hb-cond-kids">
+          <aq-cond-node v-if="comboKey === 'not'" :path="notChildPath" :depth="depth + 1"></aq-cond-node>
+          <template v-else>
+            <aq-cond-node v-for="(c, i) in children" :key="$root.hubKey($root.cfgCondChildPath(path, i))"
+                          :path="$root.cfgCondChildPath(path, i)" :depth="depth + 1"></aq-cond-node>
+            <div class="hb-add-row">
+              <select class="hb-select" :value="''" title="添加一个条件叶子"
+                      @change="$root.cfgCondAddAt(path, 'leaf', $event.target.value); $event.target.value = ''">
+                <option value="">&#65291; 添加条件&#8230;</option>
+                <option v-for="p in $root.cfgConditionOptions()" :key="p.name" :value="p.name">{{ p.label }}</option>
+              </select>
+              <select v-if="canAddGroup" class="hb-select" :value="''" title="添加一个嵌套组合"
+                      @change="$root.cfgCondAddAt(path, 'group', $event.target.value); $event.target.value = ''">
+                <option value="">&#65291; 添加组合&#8230;</option>
+                <option value="all">全部满足(all)</option>
+                <option value="any">任一满足(any)</option>
+                <option value="not">不满足(not)</option>
+              </select>
+              <span v-else class="fg-hint" title="后端硬上限 16 层">组合嵌套已达编辑器上限</span>
+            </div>
+          </template>
+        </div>
+      </template>
+      <!-- 叶子节点: 与旧条件卡同款 -->
+      <div v-else class="hb-step">
+        <div class="hb-step-bar">
+          <span class="st-n">{{ depth }}</span>
+          <span class="st-t">{{ $root.hubPluginText(node) }}</span>
+          <span class="hb-cond-ops">
+            <button class="hb-btn ghost sm" :disabled="!canMoveUp" title="上移"
+                    @click="$root.cfgCondMoveAt(path, -1)">&#8593;</button>
+            <button class="hb-btn ghost sm" :disabled="!canMoveDown" title="下移"
+                    @click="$root.cfgCondMoveAt(path, 1)">&#8595;</button>
+            <button class="hb-btn danger sm" title="删除该条件" @click="$root.cfgCondRemoveAt(path)">&#10005;</button>
+          </span>
+        </div>
+        <hub-field v-for="item in $root.cfgCondSpecItems(path)"
+                   :key="$root.hubKey(item.path)" :item="item"></hub-field>
+      </div>
+    </template>
+    <p v-else class="hb-hp">条件节点形状异常(保存时会被校验拒绝, 请删除本项)</p>
+  </div>
+</script>
+
+<script type="text/x-template" id="tpl-aq-choose-block">
+  <div class="hb-choose">
+    <div v-for="(br, bi) in branches" :key="bi" class="hb-branch">
+      <div class="hb-branch-hd">
+        <span class="hb-branch-tag">分支 {{ bi + 1 }}</span>
+        <span class="fg-hint">when 满足时执行 then</span>
+        <span class="hb-cond-ops">
+          <button class="hb-btn ghost sm" :disabled="!$root.cfgActionEntryCanMove($root.cfgChooseBranchPath(groupKey, ruleName, index, bi), -1)" title="上移"
+                  @click="$root.cfgActionEntryMoveAt($root.cfgChooseBranchPath(groupKey, ruleName, index, bi), -1)">&#8593;</button>
+          <button class="hb-btn danger sm" title="删除该分支" @click="$root.cfgChooseBranchRemove(groupKey, ruleName, index, bi)">&#10005;</button>
+        </span>
+      </div>
+      <div class="hb-branch-when">
+        <span class="hb-lb">当(when)</span>
+        <aq-cond-node :path="$root.cfgChooseBranchWhenPath(groupKey, ruleName, index, bi)" :depth="1"></aq-cond-node>
+      </div>
+      <div class="hb-branch-then">
+        <span class="hb-lb">则(then)</span>
+        <div v-for="(a, j) in $root.cfgThenList(groupKey, ruleName, index, bi)" :key="j" class="hb-step">
+          <div class="hb-step-bar">
+            <span class="st-n">{{ j + 1 }}</span>
+            <span class="st-t">{{ $root.hubPluginText(a) }}</span>
+            <span class="hb-cond-ops">
+              <button class="hb-btn ghost sm" :disabled="!$root.cfgActionEntryCanMove($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), -1)"
+                      @click="$root.cfgActionEntryMoveAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), -1)">&#8593;</button>
+              <button class="hb-btn ghost sm" :disabled="!$root.cfgActionEntryCanMove($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 1)"
+                      @click="$root.cfgActionEntryMoveAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 1)">&#8595;</button>
+              <button class="hb-btn danger sm" @click="$root.cfgListEntryRemove($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j))">&#10005;</button>
+            </span>
+          </div>
+          <hub-field v-for="item in $root.cfgSpecItemsAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j))"
+                     :key="$root.hubKey(item.path)" :item="item"></hub-field>
+          <div class="hb-oe-row">
+            <span class="hb-lb">失败策略</span>
+            <select class="hb-select" :value="$root.cfgOnErrorValueAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 'policy')"
+                    @change="$root.cfgOnErrorSetAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 'policy', $event.target.value)">
+              <option v-for="p in $root.cfgOnErrorPolicies()" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <template v-if="$root.cfgOnErrorIsRetryAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j))">
+              <span class="hb-lb">重试次数</span>
+              <input class="hb-input" type="number" min="0" step="1"
+                     :value="$root.cfgOnErrorValueAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 'retries')"
+                     @change="$root.cfgOnErrorSetAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 'retries', $event.target.value)">
+              <span class="hb-lb">重试间隔(秒)</span>
+              <input class="hb-input" type="number" min="1" step="1"
+                     :value="$root.cfgOnErrorValueAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 'backoff')"
+                     @change="$root.cfgOnErrorSetAt($root.cfgThenEntryPath(groupKey, ruleName, index, bi, j), 'backoff', $event.target.value)">
+            </template>
+          </div>
+        </div>
+        <select class="hb-select" :value="''"
+                @change="$root.cfgActionEntryAddAt($root.cfgThenListPath(groupKey, ruleName, index, bi), $event.target.value); $event.target.value = ''">
+          <option value="">&#65291; 添加动作&#8230;</option>
+          <option v-for="p in $root.cfgActionOptions(groupKey, ruleName)" :key="p.name" :value="p.name">{{ p.label }}</option>
+        </select>
+      </div>
+    </div>
+    <div v-if="hasDefault" class="hb-branch hb-branch-default">
+      <div class="hb-branch-hd">
+        <span class="hb-branch-tag">兜底</span>
+        <span class="fg-hint">default: 所有分支都未命中时执行</span>
+        <span class="hb-cond-ops">
+          <button class="hb-btn danger sm" title="移除 default" @click="$root.cfgChooseDefaultToggle(groupKey, ruleName, index, false)">&#10005;</button>
+        </span>
+      </div>
+      <div class="hb-branch-then">
+        <div v-for="(a, j) in $root.cfgDefaultList(groupKey, ruleName, index)" :key="j" class="hb-step">
+          <div class="hb-step-bar">
+            <span class="st-n">{{ j + 1 }}</span>
+            <span class="st-t">{{ $root.hubPluginText(a) }}</span>
+            <span class="hb-cond-ops">
+              <button class="hb-btn ghost sm" :disabled="!$root.cfgActionEntryCanMove($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), -1)"
+                      @click="$root.cfgActionEntryMoveAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), -1)">&#8593;</button>
+              <button class="hb-btn ghost sm" :disabled="!$root.cfgActionEntryCanMove($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 1)"
+                      @click="$root.cfgActionEntryMoveAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 1)">&#8595;</button>
+              <button class="hb-btn danger sm" @click="$root.cfgListEntryRemove($root.cfgDefaultEntryPath(groupKey, ruleName, index, j))">&#10005;</button>
+            </span>
+          </div>
+          <hub-field v-for="item in $root.cfgSpecItemsAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j))"
+                     :key="$root.hubKey(item.path)" :item="item"></hub-field>
+          <div class="hb-oe-row">
+            <span class="hb-lb">失败策略</span>
+            <select class="hb-select" :value="$root.cfgOnErrorValueAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 'policy')"
+                    @change="$root.cfgOnErrorSetAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 'policy', $event.target.value)">
+              <option v-for="p in $root.cfgOnErrorPolicies()" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <template v-if="$root.cfgOnErrorIsRetryAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j))">
+              <span class="hb-lb">重试次数</span>
+              <input class="hb-input" type="number" min="0" step="1"
+                     :value="$root.cfgOnErrorValueAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 'retries')"
+                     @change="$root.cfgOnErrorSetAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 'retries', $event.target.value)">
+              <span class="hb-lb">重试间隔(秒)</span>
+              <input class="hb-input" type="number" min="1" step="1"
+                     :value="$root.cfgOnErrorValueAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 'backoff')"
+                     @change="$root.cfgOnErrorSetAt($root.cfgDefaultEntryPath(groupKey, ruleName, index, j), 'backoff', $event.target.value)">
+            </template>
+          </div>
+        </div>
+        <select class="hb-select" :value="''"
+                @change="$root.cfgActionEntryAddAt($root.cfgDefaultListPath(groupKey, ruleName, index), $event.target.value); $event.target.value = ''">
+          <option value="">&#65291; 添加动作&#8230;</option>
+          <option v-for="p in $root.cfgActionOptions(groupKey, ruleName)" :key="p.name" :value="p.name">{{ p.label }}</option>
+        </select>
+      </div>
+    </div>
+    <div class="hb-choose-foot">
+      <button class="hb-btn sm" @click="$root.cfgChooseBranchAdd(groupKey, ruleName)">&#65291; 添加分支</button>
+      <button v-if="!hasDefault" class="hb-btn sm" @click="$root.cfgChooseDefaultToggle(groupKey, ruleName, index, true)">&#65291; 添加兜底(default)</button>
+    </div>
+  </div>
+</script>

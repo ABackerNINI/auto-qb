@@ -212,6 +212,89 @@ def _eval_condition_node(node, ctx: "RuleContext") -> bool:
     return payload.match(ctx)
 
 
+# ---------------------------------------------------------------------------
+# choose 编排块(W3-B, plan 26-11-01-0106 G6/D3)
+#
+# 动作列表项可为 {choose: [{when, then}...], default?: [...]}, 与普通动作项混排:
+#   - when 与 conditions 同款组合树节点(经 compat.normalize_conditions 建树单点 +
+#     _build_condition_node 构造, 深度复用 CONDITION_TREE_MAX_DEPTH 从 1 起独立计);
+#   - then/default 内是普通动作项(含 on_error), 经 normalize_action_entry 同一单点漏斗;
+#   - 嵌套约束 = choose 内不再允许 choose(编排块只允许一层, 防递归爆炸; 校验器 fail-fast
+#     在先, 此处构造期同口径兜底)。求值口径见 Rule.process 与 _pick_choose_branch。
+# ---------------------------------------------------------------------------
+
+
+class ChooseBranch:
+    """choose 单个分支的运行时形态: when 条件树 + then 动作步(插件实例与 on_error 对齐)"""
+
+    __slots__ = ("tree", "actions", "on_error")
+
+    def __init__(self, tree, actions: list, on_error: list):
+        self.tree = tree
+        self.actions = actions
+        self.on_error = on_error
+
+
+class ChooseBlock:
+    """choose 块运行时形态: 分支列表(按序求 when, 首个命中执行其 then)+ 可选 default 动作步"""
+
+    __slots__ = ("branches", "default_actions", "default_on_error")
+
+    def __init__(self, branches: list, default_actions: list, default_on_error: list):
+        self.branches = branches
+        self.default_actions = default_actions
+        self.default_on_error = default_on_error
+
+
+def _build_action_steps(entries, rule_name: str, allow_choose: bool = True) -> List[tuple]:
+    """动作列表 -> 执行步列表(Rule 构造期, W3-B): ("action", 插件实例, on_error) / ("choose", ChooseBlock)
+
+    - 每项过 normalize_action_entry 单点漏斗(幂等, 与载入链同源; choose 项内部归一到
+      normalize_choose_block, 键面 {choose, default} 保留);
+    - choose 项: 各分支 when 过 normalize_conditions + _build_condition_node 建树(深度复用
+      CONDITION_TREE_MAX_DEPTH, 从 1 起独立计), then/default 递归本函数(allow_choose=False
+      拦嵌套 choose —— 编排块只允许一层, 校验器 fail-fast 在先, 此处构造期兜底);
+    - 非 dict 项跳过(与旧扁平列表容错同口径 P2-a); 动作构造异常包装 ConfigError 携带规则名。
+    """
+    steps: List[tuple] = []
+    for act_spec in entries or []:
+        if not isinstance(act_spec, dict):
+            continue
+        act = normalize_action_entry(act_spec)
+        if isinstance(act, dict) and "choose" in act:
+            if not allow_choose:
+                raise ConfigError(f"规则 {rule_name}: choose 内不允许嵌套 choose(编排块只允许一层)")
+            steps.append(("choose", _build_choose_block(act, rule_name)))
+            continue
+        name, value = act.get("type"), act.get("params")
+        try:
+            plugin = registry.create_action(name, value)
+            on_error = Rule._resolve_on_error(act.get("on_error"))
+        except Exception as e:
+            raise ConfigError(f"规则 {rule_name}: 动作 {name}: {e}") from e
+        steps.append(("action", plugin, on_error))
+    return steps
+
+
+def _build_choose_block(act: dict, rule_name: str) -> ChooseBlock:
+    """choose 归一块 -> ChooseBlock 运行时形态(W3-B): when 建树 + then/default 动作步"""
+    branches: List[ChooseBranch] = []
+    for bi, br in enumerate(act.get("choose") or []):
+        if not isinstance(br, dict):
+            raise ConfigError(f"规则 {rule_name}: choose 分支[{bi}]: 必须是字典 {{when, then}}: {br!r}")
+        try:
+            tree = _build_condition_node(normalize_conditions(br.get("when")), rule_name)
+        except Exception as e:
+            raise ConfigError(f"规则 {rule_name}: choose 分支[{bi}].when: {e}") from e
+        thens = br.get("then")
+        if not isinstance(thens, list):
+            raise ConfigError(f"规则 {rule_name}: choose 分支[{bi}].then: 必须是列表(动作项)")
+        bsteps = _build_action_steps(thens, rule_name, allow_choose=False)
+        branches.append(ChooseBranch(tree, [s[1] for s in bsteps], [s[2] for s in bsteps]))
+    default_steps = _build_action_steps(act.get("default") or [], rule_name, allow_choose=False)
+    return ChooseBlock(branches, [s[1] for s in default_steps], [s[2] for s in default_steps])
+
+
 class Rule:
     """一条规则插件: 条件列表 + 动作列表 + 执行语义, 由 QbManager 统一加载与调度"""
     def __init__(self, name: str, spec: dict, manager: Any):
@@ -252,22 +335,23 @@ class Rule:
         # 伪动作 ignore_next_action_error 已退役(D1): 载入层(rules_mod.load_rules)识别后
         # 转未启用并在内存副本里剔除, 引擎不再消费 —— 绕过载入层直接构造 Rule 遇伪动作
         # 按未知动作 ConfigError。
-        self.actions = []
-        self.action_on_error: List[dict] = []  # 与 self.actions 对齐的 per-action 错误策略(W2 G5)
-        for act_spec in spec.get("actions") or []:
-            if not isinstance(act_spec, dict):
-                continue
-            act = normalize_action_entry(act_spec)
-            name, value = act.get("type"), act.get("params")
-            try:
-                self.actions.append(registry.create_action(name, value))
-                self.action_on_error.append(self._resolve_on_error(act.get("on_error")))
-            except Exception as e:
-                raise ConfigError(f"规则 {self.name}: 动作 {name}: {e}") from e
+        # choose 编排块(W3-B): 动作项含 "choose" 键即编排块(经同一单点漏斗 normalize_choose_block
+        # 归一), 与普通动作项混排进执行步列表; choose 内不允许嵌套 choose(校验器 fail-fast 在先,
+        # 构造期同口径兜底)。
+        self.steps: List[tuple] = _build_action_steps(spec.get("actions"), self.name, allow_choose=True)
+        # 顶层普通动作插件实例(choose 步不进此列): 兼容既有消费面(测试/摘要); 执行循环走 steps
+        self.actions = [s[1] for s in self.steps if s[0] == "action"]
+        self.action_on_error: List[dict] = [s[2] for s in self.steps if s[0] == "action"]  # 与 self.actions 对齐(W2 G5)
 
         # 高风险动作静态提醒: reannounce 高频触发会被 tracker 封号, 未配去重时给出告警
-        # (动作内另有最小间隔运行时保护兜底)
-        if any(a.name == "reannounce" for a in self.actions) and self.execute_once == "never" and self.cooldown <= 0:
+        # (动作内另有最小间隔运行时保护兜底); choose 块内动作同样计入
+        all_plugins = [s[1] for s in self.steps if s[0] == "action"]
+        for s in self.steps:
+            if s[0] == "choose":
+                for br in s[1].branches:
+                    all_plugins.extend(br.actions)
+                all_plugins.extend(s[1].default_actions)
+        if any(a.name == "reannounce" for a in all_plugins) and self.execute_once == "never" and self.cooldown <= 0:
             logger.error(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
 
     def matches(self, ctx: RuleContext) -> bool:
@@ -297,12 +381,16 @@ class Rule:
         处理一个种子, 返回单值 verdict(模块级 VERDICT_* 常量, 消费方见常量区注释)。
 
         断点契约(与 taskqueue 的默认重置语义配合):
-        - 读:   进入时只读 task.resume_index 判定续跑(不清零)
+        - 读:   进入时只读 task.resume_index 判定续跑(不清零); 索引单位 = 执行步(self.steps,
+                W3-B 起 choose 块与普通动作同占一步 —— 无 choose 的规则 steps 与 actions 1:1,
+                既有断点语义不变)
         - 写:   动作返回 pending 时记录断点并中断, 由校验轮询子任务按结果重新入队;
                 动作失败且 on_error.policy=retry 时(W2/R3)同样挂断点(= 失败动作索引)并置
                 task.retry_delay=backoff, 返回 VERDICT_RETRY —— 引擎按任务级 requeue 处理,
                 队列收尾按 backoff 推迟下次到期(无 run 内 sleep)。续跑轮跳过条件评估与去重,
-                重试计数 task.attempt 由引擎维护(上限 retries, 耗尽按 stop 收场)
+                重试计数 task.attempt 由引擎维护(上限 retries, 耗尽按 stop 收场)。
+                choose 块内(W3-B 自定口径): pending 挂块后(块内不细粒度续跑), retry 挂块首
+                (续跑轮整块重新求值重新分派)—— resume_index 是扁平整数, 块内不细编码
         - 清:   正常完成时清零(连同 attempt 归零); 异常路径不清零 —— 由 taskqueue 收尾
                 默认重置兜底(下轮从头)
         """
@@ -335,61 +423,73 @@ class Rule:
         # 断点前动作已成功(校验通过才续跑): 续跑轮 ok_action 起点 True; 全新执行从 False 累计
         ok_action = not fresh
         executed = False  # 本轮执行了非 skip 动作(ok/failed)
-        result = None
-        for i, action in enumerate(self.actions):
-            if i < start:
-                continue  # 跳过断点前已执行的动作
-            on_error = self.action_on_error[i] if i < len(self.action_on_error) else self._resolve_on_error(None)
-            try:
-                result = action.execute(ctx)
-            except Exception as e:
-                result = ActionResult.fail(f"异常: {e}")
-            if result.is_pending:
-                # 异步等待: 记录断点并中断本规则, 由轮询子任务按结果重新入队恢复
-                if task is not None:
-                    task.resume_index = i + 1
-                    logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
-                    return VERDICT_PENDING  # 动作已提交, 断点已记录, 本轮中断待恢复
-                ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
-                executed = True
-                logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
-                continue
-            if result.is_ok:
-                ok_action = True
-                executed = True
-                logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
-            elif result.is_failed:
-                executed = True
-                # per-step 错误策略(W2, plan G5): 失败与动作内异常同径, 三档分派 ——
-                # stop(默认)= 现行失败即止; continue = 记账后继续后续动作(替代旧布尔 ignore);
-                # retry = 任务级 requeue(断点挂失败动作 + backoff 推迟, 上限 retries, 耗尽按 stop)。
-                policy = on_error.get("policy", "stop")
-                if policy == _POLICY_CONTINUE:
-                    logger.warning(
-                        f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败(continue, 继续后续动作): {result.message}"
-                    )
+        stopped = False
+        for si, step in enumerate(self.steps):
+            if si < start:
+                continue  # 跳过断点前已执行的步
+            if step[0] == "action":
+                action, on_error = step[1], step[2]
+                result = self._execute_action(action, ctx)
+                disp = self._dispatch_result(action, result, on_error, ctx, log_repr)
+                if disp == "pending":
+                    # 异步等待: 记录断点并中断本规则, 由轮询子任务按结果重新入队恢复
+                    if task is not None:
+                        task.resume_index = si + 1
+                        logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
+                        return VERDICT_PENDING  # 动作已提交, 断点已记录, 本轮中断待恢复
+                    ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
+                    executed = True
                     continue
-                if policy == _POLICY_RETRY and task is not None:
-                    retries = int(on_error.get("retries", 3))
-                    if task.attempt < retries:
-                        backoff = float(on_error.get("backoff", 60))
-                        task.resume_index = i  # 断点挂失败动作: 续跑轮从本动作重试(跳过条件与去重)
-                        task.retry_delay = backoff  # 引擎 requeue 时按此推迟下次到期(无 run 内 sleep)
-                        logger.warning(
-                            f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败"
-                            f"(retry {task.attempt + 1}/{retries}, {backoff:g}s 后重试): {result.message}"
-                        )
+                if disp == "ok":
+                    ok_action = True
+                    executed = True
+                elif disp in ("continue", "stop"):
+                    executed = True  # 失败动作本身算已执行(W2 前语义, 与策略档无关)
+                    if disp == "stop":
+                        stopped = True
+                        break
+                elif disp == "retry":
+                    # 断点挂失败动作: 续跑轮从本动作重试(跳过条件与去重);
+                    # retry_delay 已由 _dispatch_result 置入 task(requeue 无 run 内 sleep)
+                    task.resume_index = si
+                    return VERDICT_RETRY
+                # skip: 只记 DEBUG(_dispatch_result 单点已记), 不影响 ok/executed
+            else:  # choose 编排块(W3-B, plan G6/D3)
+                chosen = self._pick_choose_branch(step[1], ctx, log_repr)
+                if chosen is None:
+                    # when 求值异常: 与顶层条件求值异常同语义(保守: 求值出错不误入 default),
+                    # 本条规则本轮按 error 收场, 不影响其它规则
+                    return VERDICT_ERROR
+                actions, on_errors = chosen
+                for action, on_error in zip(actions, on_errors):
+                    result = self._execute_action(action, ctx)
+                    disp = self._dispatch_result(action, result, on_error, ctx, log_repr)
+                    if disp == "pending":
+                        if task is not None:
+                            # choose 步粒度(W3-B 自定口径): 断点记块后(si + 1), 分支内已提交
+                            # 动作视为完成, 同分支其后动作本轮中断后不续(块内不细粒度续跑)
+                            task.resume_index = si + 1
+                            logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 等待异步: {result.message}")
+                            return VERDICT_PENDING
+                        ok_action = True  # 无任务(外部入口, 不应发生): 视为成功继续
+                        executed = True
+                        continue
+                    if disp == "ok":
+                        ok_action = True
+                        executed = True
+                    elif disp in ("continue", "stop"):
+                        executed = True  # 失败动作本身算已执行(与顶层同口径)
+                        if disp == "stop":
+                            stopped = True
+                            break
+                    elif disp == "retry":
+                        # choose 块内 retry(W3-B 自定口径): 断点记块首(si) —— 续跑轮整块重新
+                        # 执行, when 按当时现场重新求值重新分派(语义 = 重新分派); attempt/retries
+                        # 计数与顶层同径(retry_delay 已由 _dispatch_result 置入 task)
+                        task.resume_index = si
                         return VERDICT_RETRY
-                    logger.error(
-                        f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败"
-                        f"(重试 {retries} 次仍失败, 中止本条动作链): {result.message}"
-                    )
+                if stopped:
                     break
-                logger.error(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
-                # 动作失败即中断本条动作链(stop 默认档; retry 耗尽同径)
-                break
-            elif result.is_skipped:
-                logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
 
         # 正常完成(含续跑完成): 消费断点(异常路径不清, 由 taskqueue 收尾默认重置兜底);
         # attempt 同步归零 —— 下轮全新执行不继承上一轮的 retry 计数
@@ -397,10 +497,77 @@ class Rule:
             task.resume_index = None
             task.attempt = 0
 
-        if self.actions and not ctx.dry_run and ok_action:
+        if self.steps and not ctx.dry_run and ok_action:
             self.manager.ctx.state.record_execution(self.name, ctx.hash)
 
         return VERDICT_EXECUTED if (executed or ok_action) else VERDICT_NO_OP
+
+    @staticmethod
+    def _execute_action(action, ctx: "RuleContext") -> ActionResult:
+        """单动作执行: 插件内异常兜成 failed 结果(与失败同径走 on_error 三档分派, W2 语义)"""
+        try:
+            return action.execute(ctx)
+        except Exception as e:
+            return ActionResult.fail(f"异常: {e}")
+
+    def _dispatch_result(self, action, result: ActionResult, on_error: dict, ctx: "RuleContext", log_repr: str) -> str:
+        """动作结果处置单点(W2 on_error 三档, plan G5; W3 起 choose 内外共用 —— 无第二语义分支)
+
+        返回处置字: ok / skip / continue / stop / pending / retry。
+        - stop(默认)= 现行失败即止; continue = 记账后继续后续动作(替代旧布尔 ignore);
+        - retry = 任务级 requeue(上限 retries, 耗尽按 stop): 本方法置 task.retry_delay=backoff,
+          断点(resume_index)由调用方按所在层写入(顶层动作步挂失败动作, choose 步挂块首 ——
+          两层断点粒度不同, 见 process); 无任务(外部入口)时 retry 档退化按 stop 收场;
+        - 日志(成功/失败/跳过/等待话术)也在此单点, 调用方不重复记。
+        """
+        if result.is_pending:
+            return "pending"
+        if result.is_ok:
+            logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
+            return "ok"
+        if result.is_failed:
+            policy = str(on_error.get("policy", "stop"))
+            if policy == _POLICY_CONTINUE:
+                logger.warning(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败(continue, 继续后续动作): {result.message}")
+                return "continue"
+            if policy == _POLICY_RETRY and ctx.task is not None:
+                retries = int(on_error.get("retries", 3))
+                if ctx.task.attempt < retries:
+                    backoff = float(on_error.get("backoff", 60))
+                    ctx.task.retry_delay = backoff  # 引擎 requeue 时按此推迟下次到期(无 run 内 sleep)
+                    logger.warning(
+                        f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败"
+                        f"(retry {ctx.task.attempt + 1}/{retries}, {backoff:g}s 后重试): {result.message}"
+                    )
+                    return "retry"
+                logger.error(
+                    f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败"
+                    f"(重试 {retries} 次仍失败, 中止本条动作链): {result.message}"
+                )
+                return "stop"
+            logger.error(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
+            # 动作失败即中断本条动作链(stop 默认档; retry 耗尽同径)
+            return "stop"
+        logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
+        return "skip"
+
+    def _pick_choose_branch(self, block: ChooseBlock, ctx: "RuleContext", log_repr: str):
+        """choose 分支选择(W3-B, plan G6/D3): 按序求 when, 首个命中执行其 then; 无命中且有
+        default 执行 default; 无命中且无 default = 空操作(返回空动作表, 与空动作表同语义)。
+
+        when 求值异常: 记 ERROR(与顶层条件求值异常同款节流)并返回 None —— 调用方按
+        VERDICT_ERROR 收场(保守: 求值出错不误入 default, 与「条件异常 -> 本条本轮不命中」
+        同一失败哲学)。"""
+        for br in block.branches:
+            try:
+                if _eval_condition_node(br.tree, ctx):
+                    return br.actions, br.on_error
+            except Exception as e:
+                self._log_condition_error(ctx, e)
+                return None
+        if block.default_actions:
+            return block.default_actions, block.default_on_error
+        return [], []
 
     def _log_condition_error(self, ctx: RuleContext, e: Exception) -> None:
         """条件求值出错的日志(ERROR 级 + 同因节流, 避免每 tick × 每种子刷屏)
