@@ -246,9 +246,14 @@
  * ==================================================================== */
 @media (prefers-reduced-motion: reduce) {
   /* fade/rise/pop/slip 入场 + 各自退场: 时长/延迟归零 = 立即落到终态(D5:
-   * 降级目标 = 无动效终态, 不是隐藏) */
+   * 降级目标 = 无动效终态, 不是隐藏)。强度变体规则(下方 subtle/bold/spring)
+   * 特异性更高, 这里必须按同选择器补齐, 否则变体时长在 RM 下漏压
+   * (S3 showcase 实测: 弹窗面板 data-fx-variant="bold" 时 300ms 过渡带进 RM) */
   [data-fx],
-  [data-fx][data-fx-exit] {
+  [data-fx][data-fx-exit],
+  [data-fx][data-fx-variant="subtle"],
+  [data-fx][data-fx-variant="bold"],
+  [data-fx][data-fx-variant="spring"] {
     transition-duration: 0s;
     transition-delay: 0s;
   }

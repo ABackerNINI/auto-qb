@@ -41,6 +41,7 @@
   --code-bg: #151d25;
   --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
   --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  --fdr-w: 320px;              /* D3 抽屉宽(push 让位与面板共用同一宽度单点) */
 }
 * { box-sizing: border-box; }
 body {
@@ -227,6 +228,199 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 }
 @keyframes fxRipple { to { transform: scale(1); opacity: 0; } }
 
+/* ---- 样例组件: 弹窗(D2) -- 真触发: 点按钮开真覆盖层, 演示钮等同触发 ----
+ * overlay 挂 body(不在 .stage 内, fixed 定位干净); 面板入场优先复用 fx 库
+ * 原语 data-fx="rise pop"(变体 bold = --fx-dur-modal 300ms), backdrop 与
+ * 专属变体页内实现, 时长/曲线一律取 fx 库令牌。zoom/VT 两卡不用库原语
+ * (zoom 是 1.08 反差收, 库无此原语; VT 走浏览器 morph, 叠 starting-style
+ * 会双重动画)。 */
+.fmd {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+}
+.fmd[hidden] { display: none; }
+.fmd-backdrop {
+  position: absolute; inset: 0; background: rgba(5, 8, 11, 0.6);
+  transition: opacity var(--fx-dur-modal-exit) var(--fx-ease-out);
+}
+@starting-style {
+  .fmd-backdrop { opacity: 0; }
+  .fmd-blur .fmd-backdrop { opacity: 0; backdrop-filter: blur(0px) brightness(1); }
+}
+.fmd.closing .fmd-backdrop {
+  opacity: 0;
+  transition: opacity var(--fx-pair-modal-out);
+}
+.fmd-panel {
+  position: relative; width: min(420px, 92vw);
+  background: var(--card); border: 1px solid var(--hair); border-radius: 12px;
+  padding: 18px; box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
+}
+.fmd-panel h3 { margin: 0 0 6px; font-size: 15px; }
+.fmd-panel p { margin: 0 0 14px; color: var(--dim); font-size: 13px; }
+.fmd-ops { display: flex; gap: 8px; justify-content: flex-end; }
+/* 退场: 库 data-fx-exit 骨对, 页内只把时长覆盖为弹窗档(库基础退场 160ms) */
+.fmd .fmd-panel[data-fx-exit] { transition-duration: var(--fx-dur-modal-exit); }
+/* D2-3 zoom-out 反差入场(scale 1.08 收缩落位; 页内 keyframes, display:none
+ * 出入会重启动画, 无需 JS) */
+.fmd-zoom .fmd-panel { animation: fmdZoomIn var(--fx-dur-modal-exit) var(--fx-ease-standard); }
+@keyframes fmdZoomIn { from { opacity: 0; transform: scale(1.08); } }
+.fmd.closing .fmd-panel:not([data-fx]) { animation: fmdPanelOut var(--fx-dur-modal-exit) var(--fx-ease-in) forwards; }
+@keyframes fmdPanelOut { to { opacity: 0; transform: translateY(6px) scale(0.96); } }
+/* D2-4 backdrop blur 渐入(PERF-01 场景: 大面积 filter, 帧率基准见 MECH 区) */
+.fmd-blur .fmd-backdrop {
+  backdrop-filter: blur(8px) brightness(0.6);
+  transition: opacity var(--fx-dur-modal-exit) var(--fx-ease-out),
+              backdrop-filter var(--fx-dur-modal-exit) var(--fx-ease-standard);
+}
+/* D2-5 danger tone: 红边 + glow 脉冲一次 + headShake 接力(时序页内排) */
+.fmd-danger .fmd-panel { border-color: var(--no); }
+.fmd-danger .fmd-panel.fmd-glowpulse { animation: fmdDangerGlow 400ms var(--fx-ease-standard); }
+@keyframes fmdDangerGlow {
+  0% { box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6), 0 0 0 0 rgba(217, 138, 138, 0.55); }
+  40% { box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6), 0 0 22px 2px rgba(217, 138, 138, 0.55); }
+  100% { box-shadow: 0 24px 60px -20px rgba(0, 0, 0, 0.6), 0 0 0 0 rgba(217, 138, 138, 0); }
+}
+.fmd-danger .fmd-panel.fmd-shake { animation: fmdHeadShake 350ms var(--fx-ease-standard); }
+@keyframes fmdHeadShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px); }
+  30% { transform: translateX(3px); }
+  45% { transform: translateX(-2px); }
+  60% { transform: translateX(1px); }
+}
+
+/* ---- 样例组件: 抽屉(D3) -- 共壳: 一套 .fdr 结构, kind 类只换曲线/阴影/遮罩 ---- */
+.fdr { position: fixed; inset: 0; z-index: 50; }
+.fdr[hidden] { display: none; }
+.fdr-backdrop {
+  position: absolute; inset: 0; background: rgba(5, 8, 11, 0.55);
+  opacity: 0;
+  transition: opacity var(--fx-pair-panel-out);
+}
+.fdr.open .fdr-backdrop { opacity: 1; transition: opacity var(--fx-pair-panel-in); }
+.fdr-blurbg .fdr-backdrop { backdrop-filter: blur(4px); }
+.fdr-parallax.open .fdr-backdrop { transition-delay: 60ms; } /* 仅入场滞后; 退场走基础规则同步 */
+.fdr-panel {
+  position: absolute; top: 0; bottom: 0; right: 0; width: var(--fdr-w, 320px);
+  background: var(--card); border-left: 1px solid var(--hair);
+  padding: 16px; overflow: auto;
+  transform: translateX(105%); opacity: 0;
+  transition: transform var(--fx-pair-panel-in), opacity var(--fx-pair-panel-in),
+              box-shadow var(--fx-pair-panel-in);
+}
+.fdr-panel h3 { margin: 0 0 10px; font-size: 15px; }
+.fdr-info { margin: 0 0 12px; display: grid; grid-template-columns: 70px 1fr; gap: 5px 8px; font-size: 13px; }
+.fdr-info dt { color: var(--faint); }
+.fdr-info dd { margin: 0; color: var(--dim); }
+.fdr-tip { color: var(--faint); font-size: 12px; margin: 0 0 14px; }
+.fdr.open .fdr-panel { transform: none; opacity: 1; }
+.fdr.closing .fdr-panel {
+  transform: translateX(105%); opacity: 0;
+  transition: transform var(--fx-pair-panel-out), opacity var(--fx-pair-panel-out),
+              box-shadow var(--fx-pair-panel-out);
+}
+.fdr.closing .fdr-backdrop { opacity: 0; }
+/* D3-2 shadow-ahead: 移动中投影渐强, 落位(settled)后收缩为常规阴影 */
+.fdr-shadow.open .fdr-panel { box-shadow: -20px 0 40px rgba(0, 0, 0, 0.5); }
+.fdr-shadow.open.settled .fdr-panel {
+  box-shadow: -8px 0 22px rgba(0, 0, 0, 0.35);
+  transition: transform var(--fx-pair-panel-in), opacity var(--fx-pair-panel-in),
+              box-shadow 180ms var(--fx-ease-standard);
+}
+/* D3-4 push-content: 主栏真实让位(transform 版; width 真推挤 = layout 警示) */
+.sheet.fdr-pushed {
+  transform: translateX(calc(-1 * var(--fdr-w, 320px)));
+  transition: transform var(--fx-dur-panel) var(--fx-ease-in-out);
+}
+/* D3-5 spring-slip: 双属性按序配对(opacity 在前)让 transform 吃 linear() 弹簧 */
+.fdr-spring .fdr-panel {
+  transition-property: opacity, transform;
+  transition-duration: 340ms;
+  transition-timing-function: var(--fx-spring-2);
+}
+
+/* ---- 样例组件: torrent 表格行(D4) -- 高密度行, 禁全行 stagger(硬口径) ---- */
+.frt { flex: 1 1 100%; border: 1px solid var(--hair); border-radius: 8px; overflow: hidden; background: var(--card-deep); font-size: 12.5px; }
+.frt-head { display: flex; gap: 10px; padding: 7px 12px; background: #131a21; color: var(--faint); font-family: var(--mono); font-size: 11px; border-bottom: 1px solid var(--hair-soft); }
+.frt-body { max-height: 250px; overflow: auto; }
+.frt-row {
+  position: relative; display: flex; gap: 10px; align-items: center; padding: 8px 12px;
+  border-bottom: 1px solid var(--hair-soft);
+  transition: background-color 70ms var(--fx-ease-standard); /* D4-1: hover 档下限 */
+}
+.frt-row:last-child { border-bottom: 0; }
+.frt-row::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--accent); transform: scaleY(0); transform-origin: top;
+  transition: transform 120ms var(--fx-ease-standard);
+}
+.frt-row:hover, .frt-row.fx-demo-hover { background: #1b2530; }
+.frt-row.sel { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.frt-row.sel::before { transform: scaleY(1); }
+.frt-chk {
+  flex: none; width: 16px; height: 16px; border: 1px solid var(--faint); border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center; color: transparent; cursor: pointer;
+}
+.frt-chk svg path { stroke-dasharray: 14; stroke-dashoffset: 14; transition: stroke-dashoffset 120ms var(--fx-ease-standard) 40ms; }
+.frt-row.done .frt-chk { border-color: var(--accent); color: var(--accent); animation: frtChkPop 120ms var(--fx-ease-back); }
+.frt-row.done .frt-chk svg path { stroke-dashoffset: 0; }
+@keyframes frtChkPop { from { transform: scale(0.6); } }
+.frt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.frt-size, .frt-st { color: var(--dim); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
+.frt-row.frt-flash { animation: frtFlash 600ms var(--fx-ease-standard); }
+@keyframes frtFlash {
+  0% { background-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+  40% { background-color: color-mix(in srgb, var(--accent) 8%, transparent); }
+  60% { background-color: color-mix(in srgb, var(--accent) 22%, transparent); }
+  100% { background-color: transparent; }
+}
+.frt-row.frt-in { animation: frtRowIn 150ms var(--fx-ease-out); }
+@keyframes frtRowIn { from { opacity: 0; transform: translateY(-4px); } }
+.frt-row.frt-out { animation: frtRowOut 160ms var(--fx-ease-in) forwards; }
+@keyframes frtRowOut { to { opacity: 0; transform: scaleY(0.95); } }
+/* 对照版: 动 max-height/padding = layout(每帧 reflow), 报告 D4-5 明示二选一对照 */
+.frt-row.frt-outl { animation: frtRowOutL 200ms var(--fx-ease-in) forwards; overflow: hidden; }
+@keyframes frtRowOutL {
+  from { max-height: 44px; opacity: 1; }
+  to { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
+}
+
+/* ---- 样例组件: toast(D6) -- 真触发: 共用右下角 toast 宿主(aria-live) ---- */
+.tst-host {
+  position: fixed; right: 18px; bottom: 18px; z-index: 55;
+  display: flex; flex-direction: column; gap: 8px; width: 300px; pointer-events: none;
+}
+.tst {
+  pointer-events: auto; position: relative; display: flex; gap: 9px; align-items: flex-start;
+  background: var(--card); border: 1px solid var(--hair); border-radius: 8px;
+  padding: 10px 12px; overflow: hidden; font-size: 13px;
+  box-shadow: 0 10px 30px -12px rgba(0, 0, 0, 0.55);
+}
+.tst-ico { flex: none; margin-top: 1px; }
+.tst-ico.info { color: var(--accent-ink); }
+.tst-ico.ok { color: var(--ok); }
+.tst-ico.err { color: var(--no); }
+.tst-ico.spring { animation: tstIcoSpring 300ms var(--fx-spring-2); } /* 单属性动画取降级链 bezier 头 */
+@keyframes tstIcoSpring { from { transform: scale(0.5); } }
+.tst-txt { flex: 1; min-width: 0; }
+.tst-title { display: block; font-weight: 600; font-size: 13px; }
+.tst-sub { display: block; color: var(--dim); font-size: 12px; }
+.tst-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent);
+  transform-origin: left; animation: tstCount var(--tst-life, 4s) var(--fx-ease-linear) forwards;
+}
+@keyframes tstCount { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+.tst.tst-danger { border-color: var(--no); }
+.tst.tst-danger.tst-glow { animation: tstGlow 400ms var(--fx-ease-standard); }
+@keyframes tstGlow {
+  0% { box-shadow: 0 0 0 0 rgba(217, 138, 138, 0); }
+  35% { box-shadow: 0 0 18px 2px rgba(217, 138, 138, 0.5); }
+  100% { box-shadow: 0 0 0 0 rgba(217, 138, 138, 0); }
+}
+/* 退场: 库 data-fx-exit 骨对, 页内只把时长覆盖为 toast 档 */
+.tst[data-fx-exit] { transition-duration: var(--fx-dur-toast-exit); }
+
 /* ---- 页内 keyframes 的 reduced-motion 降级(硬惯例: 每个 @keyframes 配套) ---- */
 @media (prefers-reduced-motion: reduce) {
   .fx-ripple { animation: none; opacity: 0; }
@@ -234,6 +428,19 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   .tb-panel.dir-right, .tb-panel.dir-left { animation: none; }
   .f-underline::after, .f-ring input, .f-float label, .f-tint input,
   .bt.icon .fx-ico, .tb-ind, .fx-tabs.choir .tb-txt { transition-duration: 0s; }
+  /* D2 弹窗: 全部去动效直接显示/关闭 */
+  .fmd-backdrop { transition-duration: 0s; transition-delay: 0s; }
+  .fmd-zoom .fmd-panel, .fmd.closing .fmd-panel:not([data-fx]),
+  .fmd-danger .fmd-panel.fmd-glowpulse, .fmd-danger .fmd-panel.fmd-shake { animation: none; }
+  /* D3 抽屉: 同上 */
+  .fdr-backdrop, .fdr-panel { transition-duration: 0s; transition-delay: 0s; }
+  .sheet.fdr-pushed { transition-duration: 0s; }
+  /* D4 行: 过渡/一次性动画全关, 静态终态保留 */
+  .frt-row { transition-duration: 0s; transition-delay: 0s; }
+  .frt-row.frt-flash, .frt-row.frt-in, .frt-row.frt-out, .frt-row.frt-outl,
+  .frt-row.done .frt-chk { animation: none; }
+  /* D6 toast: 进度条留静态满条(信息冗余: 文本仍在), 其余动画关 */
+  .tst-bar, .tst-ico.spring, .tst.tst-danger.tst-glow { animation: none; }
 }
 
 /* ---- 机制自检条(给 T5 的入场原语样例) ---- */
@@ -243,6 +450,13 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   padding: 12px; min-width: 130px; text-align: center;
 }
 .mech .m-item .box { padding: 10px 14px; background: #1a232c; border-radius: 6px; font-family: var(--mono); font-size: 12px; }
+
+/* ---- 帧率抽查(S3 DoD: showcase 页内可复跑的基准) ---- */
+.perf { margin-top: 14px; }
+.perf-out {
+  margin-top: 8px; font-family: var(--mono); font-size: 12px;
+  color: var(--dim); line-height: 1.9; white-space: pre-line;
+}
 
 /* ---- guide 合规总览 ---- */
 table.guide { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 12px; }
@@ -329,63 +543,28 @@ footer .audit-line { color: var(--dim); }
     <div class="cards"></div>
   </section>
 
-  <section id="d2" class="todo-sec">
-    <h2><span class="no">D2 · 组件分区</span>弹窗 modal(占位, T5 落卡)</h2>
-    <div class="placeholder">
-      报告 §05 D2 共 6 条候选, 待 T5 落卡:
-      <ul>
-        <li>fade+rise+scale 标准入场(300ms 入 / backdrop 200ms)</li>
-        <li>退场对(180ms accelerate + backdrop 同步 fade)</li>
-        <li>zoom-out 反差入场(scale 1.08 收缩落位, 250ms)</li>
-        <li>backdrop blur 渐入(大面积 filter, showcase 需实测帧率标注)</li>
-        <li>danger tone 附加(headShake 微幅横摆或红色 glow 一次脉冲)</li>
-        <li>View Transitions 共享元素(按钮到弹窗缩放飞行, 可选高配)</li>
-      </ul>
-    </div>
+  <section id="d2">
+    <h2><span class="no">D2 · 组件分区</span>弹窗 modal</h2>
+    <p class="sec-note">真触发样例: 点卡内按钮开<b>真覆盖层</b>(dialog 语义 + Esc 可关), 卡片「演示」钮等同触发, 每按一次 = 开/关交替。面板入场优先复用 fx 库原语 <code>data-fx="rise pop"</code>(变体 bold = <code>--fx-dur-modal</code> 300ms), backdrop 与专属变体页内实现、令牌一律取 fx 库。zoom 与 VT 两卡刻意不走库原语(zoom 是 1.08 反差收, 库无此原语; VT 走浏览器 morph, 叠 @starting-style 会双重动画)。RM: 全部去动效直接显示/关闭。</p>
+    <div class="cards"></div>
   </section>
 
-  <section id="d3" class="todo-sec">
-    <h2><span class="no">D3 · 组件分区</span>抽屉(占位, T5 落卡)</h2>
-    <div class="placeholder">
-      报告 §05 D3 共 6 条候选(共壳 12 变体, 方向参数化), 待 T5 落卡:
-      <ul>
-        <li>slide+fade 主候选(300ms 入 / 200ms 出)</li>
-        <li>shadow-ahead 阴影先行(移动中投影渐强, paint 中等面积)</li>
-        <li>backdrop 渐暗+blur</li>
-        <li>push-content 内容让位(transform 版; 真推挤 width 版 layout 警示)</li>
-        <li>spring-slip 弹簧滑入(linear() 降级链)</li>
-        <li>parallax-layer 视差微配(遮罩滞后 50-80ms)</li>
-      </ul>
-    </div>
+  <section id="d3">
+    <h2><span class="no">D3 · 组件分区</span>抽屉</h2>
+    <p class="sec-note">真触发样例(点按钮开真抽屉)。共壳多变体: 一套 <code>.fdr</code> 结构, kind 类只换曲线/阴影/遮罩; 方向参数化(四方向 x 语义), showcase 统一演示右侧, 方向只是 translateX 取正负。push-content 卡会让页面主栏<b>真实让位</b>(transform 版; width 真推挤版属 layout 警示, 只标注不落实现)。</p>
+    <div class="cards"></div>
   </section>
 
-  <section id="d4" class="todo-sec">
-    <h2><span class="no">D4 · 组件分区</span>torrent 表格行(占位, T5 落卡)</h2>
-    <div class="placeholder">
-      报告 §05 D4 共 6 条候选(选中/锚点/光标三态; 高密度, <b>禁全行 stagger</b>), 待 T5 落卡:
-      <ul>
-        <li>cursor-hover 扫光(60-80ms, paint 单行)</li>
-        <li>selected 边条生长(::before scaleY, 120ms)</li>
-        <li>anchor 锚点脉冲(flash 600ms + scrollIntoView)</li>
-        <li>row-insert 新行浮现(150ms, 单行独立无 stagger)</li>
-        <li>row-remove 行退场(max-height 版 layout 警示, 与纯 transform 版对照落卡)</li>
-        <li>checkbox 快勾(scale 过冲 + stroke-dashoffset 划线)</li>
-      </ul>
-    </div>
+  <section id="d4">
+    <h2><span class="no">D4 · 组件分区</span>torrent 表格行(选中/锚点/光标三态)</h2>
+    <p class="sec-note">高密度行<b>禁全行 stagger</b>(硬口径): 刷新类候选只做单行独立浮现/退场, 整表刷新走 cross-fade 或 View Transitions 思路(见 D7-3, 不在此重复落卡)。行可交互: selected 卡点行切选中, checkbox 卡点格子勾选。row-remove 按报告要求落<b>对照双卡</b>(纯 transform 版 vs max-height 版), 破例点在各自 meta 标注。</p>
+    <div class="cards"></div>
   </section>
 
-  <section id="d6" class="todo-sec">
-    <h2><span class="no">D6 · 组件分区</span>toast / 通知(占位, T5 落卡)</h2>
-    <div class="placeholder">
-      报告 §05 D6 共 5 条候选, 待 T5 落卡:
-      <ul>
-        <li>slide+fade 入退场对(250ms 入 / 180ms 出, 骨对 --fx-pair-toast-*)</li>
-        <li>倒计时进度条(scaleX 1-0 linear, 与自动关闭同状态源)</li>
-        <li>队列重排 FLIP(View Transitions 或手写)</li>
-        <li>icon spring 弹入(--fx-spring 族 300ms)</li>
-        <li>danger glow 边缘脉冲(一次 400ms, 不循环)</li>
-      </ul>
-    </div>
+  <section id="d6">
+    <h2><span class="no">D6 · 组件分区</span>toast / 通知</h2>
+    <p class="sec-note">真触发样例: 点按钮吐<b>真 toast</b>(共用右下角 toast 宿主, <code>aria-live="polite"</code>; 循环档自动限流防堆积)。展示时长与动画时长解耦 -- 自动关闭归 JS 状态源, 动画时长走 fx 库 toast 骨对令牌。</p>
+    <div class="cards"></div>
   </section>
 
   <section id="guide">
@@ -409,13 +588,42 @@ footer .audit-line { color: var(--dim); }
       <tr><td>D7-3 View Transitions</td><td><span class="good">浏览器合成</span></td><td>250-300ms -- 符合; 期间 UI 不响应指针</td><td>不支持/RM: 直切(零分支)</td><td class="good">符合</td></tr>
       <tr><td>D7-4 方向感知滑动</td><td><span class="good">transform/opacity</span></td><td>200ms -- 符合</td><td>fade 或直切</td><td class="good">符合</td></tr>
       <tr><td>D7-5 文本+指示器同编队</td><td><span class="good">transform</span></td><td>120ms -- 符合</td><td>无(纯强调)</td><td class="good">符合</td></tr>
+      <tr><td>D2-1 标准入场</td><td><span class="good">transform/opacity</span>(面板+backdrop)</td><td>入 300ms / 退 200ms 骨对 -- 入场档内</td><td>全部去动效直接显示/关闭</td><td class="good">符合</td></tr>
+      <tr><td>D2-2 退场对</td><td><span class="good">transform/opacity</span></td><td>退 200ms accelerate(库骨对 --fx-pair-modal-out; 报告 180ms 同档) -- 符合</td><td>立即关闭</td><td class="good">符合</td></tr>
+      <tr><td>D2-3 zoom-out 反差</td><td><span class="good">transform/opacity</span></td><td>250ms -- 入场档内</td><td>终态</td><td class="good">符合</td></tr>
+      <tr><td>D2-4 backdrop blur 渐入</td><td><span class="wr">filter(大面积, 合成器)</span></td><td>200ms -- 符合; S3 页内基准: 过渡 21.5 fps / 静置 53.7 fps(有头快照, longtask 0)</td><td>直接终态模糊</td><td class="wr">过渡期掉帧是四组最重, 静置无级差 -- S4 实测裁决</td></tr>
+      <tr><td>D2-5 danger tone</td><td><span class="good">transform</span> + <span class="wr">box-shadow</span></td><td>glow 400ms + headShake 350ms -- 强调档(300-500ms)内</td><td>去动效留静态红边</td><td class="good">符合(强调档)</td></tr>
+      <tr><td>D2-6 VT 共享元素</td><td><span class="good">浏览器合成</span></td><td>250-300ms(浏览器默认) -- 符合</td><td>不支持/RM: 普通打开</td><td class="good">符合</td></tr>
+      <tr><td>D3-1 slide+fade</td><td><span class="good">transform/opacity</span></td><td>入 300ms / 出 200ms 骨对 -- 符合</td><td>无动效直接开合</td><td class="good">符合</td></tr>
+      <tr><td>D3-2 shadow-ahead</td><td><span class="wr">box-shadow(paint, 面板级中等面积)</span></td><td>与 slide 同步 300ms + 落位收缩 180ms -- 入场档内</td><td>常规静态阴影</td><td class="wr">paint 标注, 保留</td></tr>
+      <tr><td>D3-3 backdrop 渐暗+blur</td><td><span class="good">opacity/filter</span>(遮罩, blur 4px 小半径)</td><td>250ms 与面板同步 -- 符合</td><td>静态半透明遮罩</td><td class="wr">filter 小半径, 标注</td></tr>
+      <tr><td>D3-4 push-content(transform 版)</td><td><span class="good">transform</span>(width 真推挤版 = <span class="wr">layout 警示</span>, 只标注不落实现)</td><td>300ms ease-in-out -- 符合</td><td>直接切换</td><td class="good">符合(transform 版)</td></tr>
+      <tr><td>D3-5 spring-slip</td><td><span class="good">transform</span>(linear() 弹簧, 降级链)</td><td>340ms -- 入场档(≤400ms)内</td><td>RM 时长归零落终态(bezier 头亦被 RM 压平)</td><td class="good">符合</td></tr>
+      <tr><td>D3-6 parallax-layer</td><td><span class="good">opacity</span>(遮罩滞后 60ms)</td><td>300ms + delay 60ms(仅入场) -- 符合</td><td>同步</td><td class="good">符合</td></tr>
+      <tr><td>D4-1 cursor-hover 扫光</td><td><span class="wr">background-color(paint, 单行)</span></td><td>70ms -- hover 档下限, 符合</td><td>保留 hover 底色(非动效信息, 不降级)</td><td class="good">符合</td></tr>
+      <tr><td>D4-2 selected 边条</td><td><span class="good">transform</span>(::before scaleY) + 底色</td><td>120ms -- 符合</td><td>无动画直接着色</td><td class="good">符合</td></tr>
+      <tr><td>D4-3 anchor 锚点脉冲</td><td><span class="wr">background flash(paint, 单行)</span> + 合成滚动</td><td>600ms 一次性(2 次淡出) -- 强调档内, 非高频路径</td><td>behavior:auto 瞬时定位 + 去脉冲留静态高亮</td><td class="good">符合(一次性)</td></tr>
+      <tr><td>D4-4 row-insert</td><td><span class="good">transform/opacity</span>(单行)</td><td>150ms, 单行独立无 stagger -- 符合(硬口径)</td><td>无动效</td><td class="good">符合</td></tr>
+      <tr><td>D4-5 row-remove(transform 版)</td><td><span class="good">transform/opacity</span>(单行)</td><td>160ms accelerate -- 符合</td><td>立即删除</td><td class="wr">下方行瞬跳, 对照标注</td></tr>
+      <tr><td>D4-5L row-remove(max-height 版)</td><td><span class="wr">max-height/padding(layout 警示)</span></td><td>200ms -- 时长符合, 属性层违规</td><td>立即删除</td><td class="wr">layout 警示, 保留作对照</td></tr>
+      <tr><td>D4-6 checkbox 快勾</td><td><span class="good">transform</span> + stroke-dashoffset(SVG)</td><td>120ms -- 符合</td><td>直切</td><td class="good">符合</td></tr>
+      <tr><td>D6-1 slide+fade 骨对</td><td><span class="good">transform/opacity</span></td><td>入 250ms / 出 180ms 骨对 -- 符合</td><td>直接显示/移除</td><td class="good">符合</td></tr>
+      <tr><td>D6-2 倒计时进度条</td><td><span class="good">transform</span>(scaleX linear)</td><td>条时长 = 展示时长(与关闭同状态源) -- 非交互反馈, 无上限约束</td><td>静态无进度条(信息冗余: 文本仍在)</td><td class="good">符合</td></tr>
+      <tr><td>D6-3 队列重排 FLIP</td><td><span class="good">浏览器合成</span>(View Transitions)</td><td>200-250ms(浏览器默认) -- 符合</td><td>瞬时重排</td><td class="good">符合</td></tr>
+      <tr><td>D6-4 icon spring 弹入</td><td><span class="good">transform</span>(spring 曲线)</td><td>300ms -- 入场档内</td><td>直切</td><td class="good">符合</td></tr>
+      <tr><td>D6-5 danger glow 脉冲</td><td><span class="wr">box-shadow(paint, 小面积)</span></td><td>400ms 仅一次 -- 强调档内</td><td>静态红边</td><td class="good">符合(一次性)</td></tr>
     </table>
   </section>
 
   <section id="mech">
     <h2><span class="no">MECH</span>机制自检 + 交接说明(T5)</h2>
-    <p class="sec-note">入场原语(fade / rise / pop / slip)的样例演示机制 = <code>display:none</code> 一帧后恢复, <code>@starting-style</code> 会重新播放入场; <code>--fx-i</code>(stagger 序号槽)只允许设在 ≤8 个表面级联的入场样例上(<b>hover/press 反馈样例绝不设 -- 否则交互被 delay 拖慢</b>; torrent 行禁全行 stagger)。T5 补组件: 在页尾 <code>CARDS</code> 数组追加条目 + 占位分区落卡, 渲染/演示/挑选/导出机制全部复用。ripple / 图标附加这两个「样例页内实现」的候选若被选定, 是否把实现提升进 fx 库(fx.js 加 ripple 助手 / fx.css 加图标子元素契约)是 T5/S6 的决策点。</p>
+    <p class="sec-note">入场原语(fade / rise / pop / slip)的样例演示机制 = <code>display:none</code> 一帧后恢复, <code>@starting-style</code> 会重新播放入场; <code>--fx-i</code>(stagger 序号槽)只允许设在 ≤8 个表面级联的入场样例上(<b>hover/press 反馈样例绝不设 -- 否则交互被 delay 拖慢</b>; torrent 行禁全行 stagger)。S3a 后补的 4 组组件走「构造器卡」: CARDS 条目带 <code>ctor</code> 字段(modal/drawer/rows/toast), buildSample 分发到对应 make* 构造器, comp.demo() 承接演示钮与循环档 -- 弹窗/抽屉/toast 均为真触发。ripple / 图标附加 / zoom-out 这几个「样例页内实现」的候选若被选定, 是否把实现提升进 fx 库(fx.js 加 ripple 助手 / fx.css 加图标子元素契约与反差缩放原语)是 S4/S6 的决策点。</p>
     <div class="mech" id="mech-row"></div>
+    <div class="perf">
+      <button class="ctl" type="button" id="btn-perf">帧率抽查(约 16s)</button>
+      <div class="perf-out" id="perf-out">对最重的 4 个样例做页内基准: 350ms 节奏连触发 4s, rAF 计帧 + longtask 统计 -- backdrop blur(D2-4) / sheen(D1-3) / 弹窗入退场(D2-1) / 行插入(D4-4)。数值以跑基准当时的环境为准, S4 裁决请用有头浏览器复测。
+S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为当时环境快照, 不作裁决): 有头 -- D2-4 blur 过渡 21.5 fps / blur 静置维持 53.7 fps / D1-3 sheen 74.5 / D2-1 弹窗 62.1 / D4-4 行插入 53.8; headless -- blur 35.7 / sheen 59.5 / 弹窗 60.0 / 行插入 60.0。结论向: blur 过渡期是唯一明显掉帧项(大面积 filter 逐帧重模糊), 静置维持无负载级差; 余项接近满帧。</div>
+    </div>
   </section>
 
   <section id="export">
@@ -450,15 +658,19 @@ footer .audit-line { color: var(--dim); }
 
   /* ==================================================================
    * 卡片数据(T5 扩充点): 每条 = 一个候选变体一张可交互样例卡
-   *   id       报告 §05 编号(导出清单的主键)
-   *   sec      分区 id(d1/d5/d7/...)
+   *   id       报告 §05 编号(导出清单的主键; D4-5L = 报告 D4-5 的对照实现)
+   *   sec      分区 id(d1/d5/d7/d2/d3/d4/d6)
    *   name     变体名
    *   fx       挂到样例上的 data-fx 值(无则 null -- 页内自实现样例)
    *   warn     软约束警示标注(空串 = 无)
    *   meta     标注六联: attr(动什么属性) / dur(时长) / js / rm / src / states
    *   demo     演示类型: hover | press | attention | focus | shake |
-   *            ripple | hover-icon | slide | fade | vt | dir | choir | enter
+   *            ripple | hover-icon | slide | fade | vt | dir | choir | enter |
+   *            open(弹窗/抽屉开关交替) | rows(行级操作) | spawn(吐 toast)
    *   sample   样例 HTML(真实组件结构)
+   *   ctor     构造器卡(S3a 后补 4 组): modal | drawer | rows | toast --
+   *            buildSample 分发到 make* 构造器, comp.demo() 承接演示与循环;
+   *            kind 字段是构造器内部的变体名
    * ================================================================== */
   var CARDS = [
     /* ---- D1 按钮 ---- */
@@ -655,6 +867,298 @@ footer .audit-line { color: var(--dim); }
         states: "切换 = 指示器滑移 + 新活动文本微强调, 同步起落"
       },
       sample: ""
+    },
+    /* ---- D2 弹窗(构造器卡, 真触发) ---- */
+    {
+      id: "D2-1", sec: "d2", ctor: "modal", kind: "std", name: "fade+rise+scale 标准入场", fx: null, demo: "open", warn: "",
+      meta: {
+        attr: "transform/opacity(面板 + backdrop 分层)",
+        dur: "入 300ms ease-out(--fx-dur-modal) / 退 200ms ease-in(--fx-dur-modal-exit); backdrop 200ms",
+        js: "面板 = fx 库原语 data-fx=\"rise pop\"(变体 bold)+ @starting-style; 开关时序页内编排",
+        rm: "全部去动效直接显示/关闭(fx 库 RM 块 + 页内 RM 块)",
+        src: "M3 dialog 模式(官方 ~400ms, 压到 300ms)",
+        states: "打开 = backdrop 淡入 + 面板上浮缩放落位; 关闭 = 面板走库退场骨对 + backdrop 同步淡出"
+      },
+      sample: ""
+    },
+    {
+      id: "D2-2", sec: "d2", ctor: "modal", kind: "exitpair", name: "退场对(编排骨对)", fx: null, demo: "open", warn: "",
+      meta: {
+        attr: "transform/opacity(面板 translateY(6px) scale 收场 + backdrop fade)",
+        dur: "退 200ms accelerate(--fx-pair-modal-out; 报告 180ms 同档, 库骨对 200ms)",
+        js: "退场 = 库 data-fx-exit 态 + 页内等时序后收起 overlay",
+        rm: "立即关闭",
+        src: "M3 退场 accelerate 模式",
+        states: "演示 = 开/关交替, 循环档看退场对; 入场骨对同 D2-1"
+      },
+      sample: ""
+    },
+    {
+      id: "D2-3", sec: "d2", ctor: "modal", kind: "zoom", name: "zoom-out 反差入场", fx: null, demo: "open", warn: "",
+      meta: {
+        attr: "transform(scale 1.08 收缩落位) + opacity",
+        dur: "250ms ease-standard",
+        js: "纯 CSS keyframes(页内; 库无 1.08 反差原语, 入库与否是 S4/S6 决策点)",
+        rm: "终态",
+        src: "Apple HIG transitions 语义 + macOS sheet 惯例",
+        states: "打开 = 面板自 1.08 缩到 1 落位(iOS overlay 质感)"
+      },
+      sample: ""
+    },
+    {
+      id: "D2-4", sec: "d2", ctor: "modal", kind: "blur", name: "backdrop blur 渐入", fx: null, demo: "open", warn: "大面积 filter, 帧率实测标注",
+      meta: {
+        attr: "backdrop-filter(blur 0->8px + brightness 0.6, 大面积) + opacity",
+        dur: "backdrop 200ms; 面板仍走 300ms 骨对",
+        js: "纯 CSS(@starting-style); 帧率数字跑 MECH 区「帧率抽查」",
+        rm: "直接终态模糊",
+        src: "M3 scrim + glass 惯例(uiverse/CodePen 常见配方); 即 PERF-01 嵌套毛玻璃风险场景",
+        states: "打开 = 遮罩渐暗渐糊; 大面积 filter 是全部候选里唯一的大面积合成器负载"
+      },
+      sample: ""
+    },
+    {
+      id: "D2-5", sec: "d2", ctor: "modal", kind: "danger", name: "danger tone 附加(headShake+glow)", fx: null, demo: "open", warn: "强调档偏长, 一次性",
+      meta: {
+        attr: "transform(横摆 x ±4px 衰减) + box-shadow(红 glow 一次)",
+        dur: "glow 400ms 先行, headShake 350ms 接力(入场落位后)",
+        js: "纯 CSS keyframes + 页内时序(串行不重叠)",
+        rm: "去动效留静态红边",
+        src: "animate.css attention seekers(headShake)+ 报告 D2-5",
+        states: "danger 弹窗打开 = 红 glow 脉冲一次 + 微幅横摆, 不循环"
+      },
+      sample: ""
+    },
+    {
+      id: "D2-6", sec: "d2", ctor: "modal", kind: "vt", name: "View Transitions 共享元素", fx: null, demo: "open", warn: "可选高配",
+      meta: {
+        attr: "浏览器合成(触发钮 -> 面板共享元素 morph)",
+        dur: "250-300ms(浏览器默认)",
+        js: "AQB_FX.viewTransition 一行探测, 不支持 = 普通打开(零分支)",
+        rm: "不支持/RM: 普通打开(Chrome 对 RM 自动跳过 VT 动画)",
+        src: "chrome.dev view-transitions",
+        states: "打开 = 触发钮与面板打 view-transition-name, 自动缩放飞行"
+      },
+      sample: ""
+    },
+    /* ---- D3 抽屉(构造器卡, 真触发) ---- */
+    {
+      id: "D3-1", sec: "d3", ctor: "drawer", kind: "slide", name: "slide+fade 主候选", fx: null, demo: "open", warn: "",
+      meta: {
+        attr: "transform(translateX 100%->0) + opacity",
+        dur: "入 300ms ease-out(--fx-pair-panel-in) / 出 200ms ease-in(--fx-pair-panel-out)",
+        js: "纯 CSS class 切换(共壳: 方向参数化, showcase 统一演示右侧)",
+        rm: "无动效直接开合",
+        src: "M3 applying-transitions(entrance/exit 模式)",
+        states: "打开 = 面板自右滑入+淡入; 关闭 = 反向滑出"
+      },
+      sample: ""
+    },
+    {
+      id: "D3-2", sec: "d3", ctor: "drawer", kind: "shadow", name: "shadow-ahead 阴影先行", fx: null, demo: "open", warn: "paint 中等面积",
+      meta: {
+        attr: "box-shadow(paint, 面板级中等面积)",
+        dur: "与 slide 同步 300ms 渐强, 落位后 180ms 收缩为常规阴影",
+        js: "纯 CSS + 落位后切 settled 类(页内 setTimeout)",
+        rm: "常规静态阴影",
+        src: "M3 elevation 提示空间关系(choreography)",
+        states: "移动中投影渐强 -> 落位收缩, 空间关系提示"
+      },
+      sample: ""
+    },
+    {
+      id: "D3-3", sec: "d3", ctor: "drawer", kind: "blurbg", name: "backdrop 渐暗+blur", fx: null, demo: "open", warn: "blur 4px 小半径, 标注",
+      meta: {
+        attr: "opacity + backdrop-filter(遮罩, blur 0->4px)",
+        dur: "250ms 与面板同步",
+        js: "纯 CSS",
+        rm: "静态半透明遮罩",
+        src: "uiverse 弹层配方 + M3 scrim",
+        states: "打开 = 遮罩 0->0.55 + blur 渐入; 小半径, 与 D2-4 大面积档区分"
+      },
+      sample: ""
+    },
+    {
+      id: "D3-4", sec: "d3", ctor: "drawer", kind: "push", name: "push-content 内容让位(transform 版)", fx: null, demo: "open", warn: "width 真推挤 = layout 警示, 只标注",
+      meta: {
+        attr: "transform(主栏 translateX(-抽屉宽), 与面板同宽度单点 --fdr-w)",
+        dur: "300ms ease-in-out(与面板 decouple, 对称 in-out)",
+        js: "页内切 .sheet 类(transform 版); 同步宽度靠共享 CSS 变量",
+        rm: "直接切换",
+        src: "M2 choreography transform 模式",
+        states: "打开 = 页面主栏真实让位 + 抽屉滑入; 关闭 = 复位"
+      },
+      sample: ""
+    },
+    {
+      id: "D3-5", sec: "d3", ctor: "drawer", kind: "spring", name: "spring-slip 弹簧滑入(Chrome 高配)", fx: null, demo: "open", warn: "",
+      meta: {
+        attr: "transform(linear() 物理弹簧, 过冲 3-5px 再回落)",
+        dur: "340ms --fx-spring-2(降级链: bezier 近似在前, linear() 覆盖在后)",
+        js: "纯 CSS(双属性按序配对: opacity 在前, transform 吃 linear() 弹簧)",
+        rm: "RM 时长归零落终态",
+        src: "OpenProps --ease-spring-*",
+        states: "打开 = 滑入过冲回落; 曲线族令牌直接取 fx 库弹簧族"
+      },
+      sample: ""
+    },
+    {
+      id: "D3-6", sec: "d3", ctor: "drawer", kind: "parallax", name: "parallax-layer 视差微配", fx: null, demo: "open", warn: "",
+      meta: {
+        attr: "opacity(遮罩变化滞后面板)",
+        dur: "面板 300ms; 遮罩同曲线滞后 60ms(delay 仅入场, 退场同步)",
+        js: "纯 CSS(transition-delay 编排)",
+        rm: "同步",
+        src: "M2 choreography sequential 原则",
+        states: "打开 = 遮罩渐暗慢半拍, 层次感"
+      },
+      sample: ""
+    },
+    /* ---- D4 torrent 表格行(构造器卡) ---- */
+    {
+      id: "D4-1", sec: "d4", ctor: "rows", kind: "hover", name: "cursor-hover 扫光", fx: null, demo: "rows", warn: "",
+      meta: {
+        attr: "background-color(paint, 单行小面积)",
+        dur: "70ms(hover 档下限, Apple HIG 高频交互从紧)",
+        js: "纯 CSS(:hover; 演示用镜像类 fx-demo-hover 复刻同终态)",
+        rm: "保留 hover 底色(非动效信息, 不降级)",
+        src: "HIG frequent interactions avoid motion + 表格惯例",
+        states: "hover = 行底色渐亮; 高密度行, 禁全行 stagger(硬口径)"
+      },
+      sample: ""
+    },
+    {
+      id: "D4-2", sec: "d4", ctor: "rows", kind: "selected", name: "selected 边条生长", fx: null, demo: "rows", warn: "",
+      meta: {
+        attr: "transform(::before scaleY) + 底色着色(paint)",
+        dur: "120ms ease-standard",
+        js: "纯 CSS; 点行切选中(真实交互)",
+        rm: "无动画直接着色",
+        src: "M3 navigation drawer active indicator 模式",
+        states: "选中 = 行首 3px 边条自上生长 + 底色 8% accent"
+      },
+      sample: ""
+    },
+    {
+      id: "D4-3", sec: "d4", ctor: "rows", kind: "anchor", name: "anchor 锚点脉冲", fx: null, demo: "rows", warn: "",
+      meta: {
+        attr: "background flash(paint, 单行) + scrollIntoView(合成滚动)",
+        dur: "flash 600ms(2 次淡出, 一次性) + smooth 滚动",
+        js: "需 JS(scrollIntoView + 一次性 class)",
+        rm: "behavior:auto 瞬时定位 + 去脉冲(留静态高亮)",
+        src: "find-in-page 高亮惯例 + animate.css flash 家族",
+        states: "定位 = 平滑滚到目标行 + flash 后回静息"
+      },
+      sample: ""
+    },
+    {
+      id: "D4-4", sec: "d4", ctor: "rows", kind: "insert", name: "row-insert 新行浮现", fx: null, demo: "rows", warn: "",
+      meta: {
+        attr: "transform/opacity(单行 translateY(-4px))",
+        dur: "150ms, 单行独立无 stagger(项目硬口径)",
+        js: "纯 CSS(插入时挂 class); 整表刷新走 cross-fade/View Transitions 是另一路线(见 D7-3)",
+        rm: "无动效",
+        src: "本计划约束(禁 stagger)+ M3 medium 短端",
+        states: "新行浮现, 其余行不动; 演示每次插一行"
+      },
+      sample: ""
+    },
+    {
+      id: "D4-5", sec: "d4", ctor: "rows", kind: "remove", name: "row-remove 行退场(纯 transform 版)", fx: null, demo: "rows", warn: "下方行瞬跳(对照 D4-5L)",
+      meta: {
+        attr: "transform/opacity(单行 scaleY 0.95)",
+        dur: "160ms ease-in(accelerate)",
+        js: "需 JS 等动画结束再真删",
+        rm: "立即删除",
+        src: "animate.css fadeOut 家族 + M3 退场模式",
+        states: "删除 = 行淡出微收; 下方行瞬跳补位(对照卡看 layout 版)"
+      },
+      sample: ""
+    },
+    {
+      id: "D4-5L", sec: "d4", ctor: "rows", kind: "removel", name: "row-remove 行退场(max-height 对照版)", fx: null, demo: "rows", warn: "layout 警示(动 max-height/padding)",
+      meta: {
+        attr: "max-height + padding(layout, 每帧 reflow!) + opacity",
+        dur: "200ms ease-in",
+        js: "同左(等动画结束再真删)",
+        rm: "立即删除",
+        src: "报告 D4-5 要求的对照实现(行高恒定时常用)",
+        states: "删除 = 行收拢推下方行, 无瞬跳但代价是每帧 layout"
+      },
+      sample: ""
+    },
+    {
+      id: "D4-6", sec: "d4", ctor: "rows", kind: "check", name: "checkbox 快勾", fx: null, demo: "rows", warn: "",
+      meta: {
+        attr: "transform(scale 0.6->1 过冲) + stroke-dashoffset(SVG 划线)",
+        dur: "pop 120ms back-out; 划线 120ms(延迟 40ms)",
+        js: "纯 CSS; 点格子勾选(真实交互)",
+        rm: "直切",
+        src: "animate.css bounceIn 微缩版(uiverse checkbox 常见)",
+        states: "勾选 = 格子过冲弹出 + 对勾划线; 取消反向"
+      },
+      sample: ""
+    },
+    /* ---- D6 toast(构造器卡, 真触发) ---- */
+    {
+      id: "D6-1", sec: "d6", ctor: "toast", kind: "pair", name: "slide+fade 入退场对", fx: null, demo: "spawn", warn: "",
+      meta: {
+        attr: "transform/opacity(自下 12px 浮入)",
+        dur: "入 250ms ease-out(--fx-dur-toast 档) / 出 180ms(--fx-dur-toast-exit, 页内覆盖库退场)",
+        js: "入场 = fx 库 @starting-style(data-fx=\"rise\"); 退场 = AQB_FX.exit 等 transitionend 再真删",
+        rm: "直接显示/移除",
+        src: "M3 snackbar 模式 + animate.css fadeInUp/Down 命名",
+        states: "出现 = 浮入; 消失 = 沉回+淡出后节点移除"
+      },
+      sample: ""
+    },
+    {
+      id: "D6-2", sec: "d6", ctor: "toast", kind: "count", name: "倒计时进度条", fx: null, demo: "spawn", warn: "",
+      meta: {
+        attr: "transform(scaleX 1->0, linear)",
+        dur: "条时长 = 展示时长(4s), 与自动关闭同一状态源(同一 setTimeout 值写进 --tst-life)",
+        js: "需 JS(毫秒数写 CSS 变量, 幂等)",
+        rm: "静态无进度条(信息冗余: 文本仍在)",
+        src: "M3 snackbar 计时惯例(uiverse toast 常见配方)",
+        states: "出现起条匀速走完, 走完即自动关"
+      },
+      sample: ""
+    },
+    {
+      id: "D6-3", sec: "d6", ctor: "toast", kind: "queue", name: "队列重排 FLIP(View Transitions)", fx: null, demo: "spawn", warn: "",
+      meta: {
+        attr: "浏览器合成(旧 toast 让位 morph)",
+        dur: "200-250ms(浏览器默认)",
+        js: "AQB_FX.viewTransition 包插入/移除; 不支持 = 瞬时重排(零分支)",
+        rm: "瞬时重排(Chrome 对 RM 自动跳过 VT 动画)",
+        src: "chrome.dev view-transitions + FLIP 惯例(aerotwist)",
+        states: "新条推入 = 旧条平滑上移; 每次演示推一条"
+      },
+      sample: ""
+    },
+    {
+      id: "D6-4", sec: "d6", ctor: "toast", kind: "icon", name: "icon spring 弹入", fx: null, demo: "spawn", warn: "",
+      meta: {
+        attr: "transform(tone 图标 scale 0.5->1)",
+        dur: "300ms --fx-spring-2(单属性动画取降级链 bezier 头; linear() 生效面 = 双属性过渡, 见 D3-5)",
+        js: "纯 CSS(mount 动画)",
+        rm: "直切",
+        src: "OpenProps spring 家族",
+        states: "出现 = tone 图标弹簧放大落位"
+      },
+      sample: ""
+    },
+    {
+      id: "D6-5", sec: "d6", ctor: "toast", kind: "danger", name: "danger glow 边缘脉冲", fx: null, demo: "spawn", warn: "paint(小面积)",
+      meta: {
+        attr: "box-shadow(红 glow, 边缘)",
+        dur: "400ms, 仅一次不循环",
+        js: "纯 CSS(mount 动画)",
+        rm: "静态红边",
+        src: "animate.css attention seekers(flash 一次化改造)",
+        states: "error toast 出现 = 边缘 glow 脉冲一次, 静息留红边"
+      },
+      sample: ""
     }
   ];
 
@@ -809,8 +1313,362 @@ footer .audit-line { color: var(--dim); }
     };
   }
 
-  /* 单卡演示分发 */
+  /* ---- D2 弹窗样例构造器(kind: std|exitpair|zoom|blur|danger|vt) ----
+   * 真触发: 点卡内按钮开真覆盖层(挂 body, dialog 语义 + Esc 可关)。
+   * demo() = 开/关交替; forceClose() 供帧率基准收尾(跳过动画直接复位)。 */
+  function makeModal(c) {
+    var kind = c.kind;
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "bt " + (kind === "danger" ? "danger" : "primary");
+    trigger.textContent = kind === "vt" ? "打开弹窗(共享元素)" : "打开弹窗";
+
+    var overlay = document.createElement("div");
+    overlay.className = "fmd fmd-" + kind;
+    overlay.hidden = true;
+    overlay.innerHTML =
+      '<div class="fmd-backdrop"></div>' +
+      '<div class="fmd-panel" role="dialog" aria-modal="true" aria-label="演示弹窗">' +
+      "<h3>删除选中种子</h3>" +
+      "<p>将移除 3 个任务及其副本文件, 该操作不可撤销。</p>" +
+      '<div class="fmd-ops">' +
+      '<button class="bt sm" type="button" data-act="close">取消</button>' +
+      '<button class="bt sm danger-solid" type="button" data-act="close">确认删除</button>' +
+      "</div></div>";
+    var panel = $(".fmd-panel", overlay);
+    if (kind === "std" || kind === "exitpair" || kind === "blur" || kind === "danger") {
+      panel.setAttribute("data-fx", "rise pop");
+      panel.setAttribute("data-fx-variant", "bold"); /* bold = --fx-dur-panel 300ms = 弹窗入场档 */
+    }
+    if (kind === "vt") {
+      trigger.style.viewTransitionName = "fmd-vt-trigger";
+      panel.style.viewTransitionName = "fmd-vt-panel";
+    }
+    document.body.appendChild(overlay);
+
+    var state = "closed"; /* closed | open | closing */
+    var escHandler = null;
+
+    function armDanger() {
+      if (window.AQB_FX && AQB_FX.reduced()) return; /* RM: 留静态红边即可 */
+      panel.classList.add("fmd-glowpulse");
+      setTimeout(function () {
+        panel.classList.remove("fmd-glowpulse");
+        panel.classList.add("fmd-shake");
+      }, 430);
+    }
+    function open() {
+      if (state !== "closed") return;
+      state = "open";
+      if (kind === "vt" && window.AQB_FX) {
+        AQB_FX.viewTransition(function () { overlay.hidden = false; });
+      } else {
+        overlay.hidden = false;
+      }
+      if (kind === "danger") armDanger();
+      var fb = panel.querySelector("button");
+      if (fb) fb.focus();
+      escHandler = function (ev) { if (ev.key === "Escape") close(); };
+      document.addEventListener("keydown", escHandler);
+    }
+    function finishClose() {
+      overlay.hidden = true;
+      overlay.classList.remove("closing");
+      panel.classList.remove("fmd-shake", "fmd-glowpulse");
+      panel.removeAttribute("data-fx-exit");
+      if (escHandler) { document.removeEventListener("keydown", escHandler); escHandler = null; }
+      state = "closed";
+    }
+    function close() {
+      if (state !== "open") return;
+      if (!window.AQB_FX || AQB_FX.reduced()) { finishClose(); return; }
+      state = "closing";
+      panel.setAttribute("data-fx-exit", ""); /* 库退场骨对(页内把时长覆盖为 --fx-dur-modal-exit) */
+      overlay.classList.add("closing");
+      setTimeout(finishClose, 260);
+    }
+
+    trigger.addEventListener("click", open);
+    overlay.addEventListener("click", function (ev) {
+      var t = ev.target.closest ? ev.target.closest("[data-act]") : null;
+      if (t) close();
+    });
+    return {
+      el: trigger,
+      demo: function () { if (state === "open") close(); else open(); },
+      forceClose: function () { if (state !== "closed") finishClose(); }
+    };
+  }
+
+  /* ---- D3 抽屉样例构造器(kind: slide|shadow|blurbg|push|spring|parallax) ----
+   * 共壳: 一套 .fdr 结构, kind 类只换曲线/阴影/遮罩; 面板常在 DOM
+   * (display:none 起止), 开关 = .open/.closing 类切换, 过渡曲线全在 CSS。 */
+  function makeDrawer(c) {
+    var kind = c.kind;
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "bt primary";
+    trigger.textContent = "打开抽屉";
+
+    var overlay = document.createElement("div");
+    overlay.className = "fdr fdr-" + kind;
+    overlay.hidden = true;
+    overlay.innerHTML =
+      '<div class="fdr-backdrop"></div>' +
+      '<div class="fdr-panel" role="dialog" aria-modal="true" aria-label="演示抽屉">' +
+      "<h3>传输详情</h3>" +
+      '<dl class="fdr-info">' +
+      "<dt>状态</dt><dd>做种中</dd>" +
+      "<dt>进度</dt><dd>100%</dd>" +
+      "<dt>上传速度</dt><dd>2.4 MiB/s</dd>" +
+      "<dt>Tracker</dt><dd>已连接</dd>" +
+      "</dl>" +
+      '<p class="fdr-tip">共壳样例: 方向参数化(四方向 x 语义), showcase 统一演示右侧。</p>' +
+      '<button class="bt sm" type="button" data-act="close">关闭</button>' +
+      "</div>";
+    document.body.appendChild(overlay);
+
+    var state = "closed";
+    var settleTimer = null;
+    var escHandler = null;
+
+    function open() {
+      if (state !== "closed") return;
+      state = "open";
+      overlay.hidden = false;
+      void overlay.offsetWidth; /* 脱离 display:none 后再挂 open 态, 过渡才有起点 */
+      overlay.classList.add("open");
+      if (kind === "push") {
+        var sh = $(".sheet");
+        if (sh) sh.classList.add("fdr-pushed");
+      }
+      if (kind === "shadow") {
+        settleTimer = setTimeout(function () { overlay.classList.add("settled"); }, 380);
+      }
+      escHandler = function (ev) { if (ev.key === "Escape") close(); };
+      document.addEventListener("keydown", escHandler);
+    }
+    function finishClose() {
+      overlay.hidden = true;
+      overlay.classList.remove("open", "closing", "settled");
+      var sh = $(".sheet");
+      if (sh) sh.classList.remove("fdr-pushed");
+      if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+      if (escHandler) { document.removeEventListener("keydown", escHandler); escHandler = null; }
+      state = "closed";
+    }
+    function close() {
+      if (state !== "open") return;
+      if (!window.AQB_FX || AQB_FX.reduced()) { finishClose(); return; }
+      state = "closing";
+      overlay.classList.remove("open");
+      overlay.classList.add("closing");
+      setTimeout(finishClose, 240);
+    }
+
+    trigger.addEventListener("click", open);
+    overlay.addEventListener("click", function (ev) {
+      var t = ev.target.closest ? ev.target.closest("[data-act]") : null;
+      if (t) close();
+    });
+    return {
+      el: trigger,
+      demo: function () { if (state === "open") close(); else open(); },
+      forceClose: function () { if (state !== "closed") finishClose(); }
+    };
+  }
+
+  /* ---- D4 torrent 表格行样例构造器(kind: hover|selected|anchor|insert|remove|removel|check) ----
+   * 高密度行样例: 禁全行 stagger(硬口径), 所有动效单行独立。 */
+  var FRT_DATA = [
+    ["ubuntu-24.04.1-desktop-amd64.iso", "5.8 GiB", "做种"],
+    ["debian-12.7.0-amd64-DVD-1.iso", "4.7 GiB", "下载中"],
+    ["fedora-workstation-41-x86_64.iso", "2.3 GiB", "做种"],
+    ["archlinux-2024.11.01-x86_64.iso", "1.2 GiB", "做种"],
+    ["linuxmint-22-cinnamon-64bit.iso", "2.9 GiB", "暂停"],
+    ["rocky-9.4-x86_64-dvd.iso", "10.2 GiB", "做种"],
+    ["alpine-standard-3.20.3-x86_64.iso", "210 MiB", "做种"],
+    ["kali-linux-2024.4-live-amd64.iso", "3.6 GiB", "下载中"]
+  ];
+
+  function makeRows(c) {
+    var kind = c.kind;
+    var wrap = document.createElement("div");
+    wrap.className = "frt";
+    var head = document.createElement("div");
+    head.className = "frt-head";
+    head.innerHTML = '<span class="frt-chk"></span><span class="frt-name">名称</span><span class="frt-size">大小</span><span class="frt-st">状态</span>';
+    var body = document.createElement("div");
+    body.className = "frt-body";
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+
+    function pick(i) { return FRT_DATA[Math.abs(i) % FRT_DATA.length]; }
+    function buildRow(d) {
+      var r = document.createElement("div");
+      r.className = "frt-row";
+      var chk = document.createElement("span");
+      chk.className = "frt-chk";
+      chk.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      var name = document.createElement("span");
+      name.className = "frt-name";
+      name.textContent = d[0];
+      var size = document.createElement("span");
+      size.className = "frt-size";
+      size.textContent = d[1];
+      var st = document.createElement("span");
+      st.className = "frt-st";
+      st.textContent = d[2];
+      r.appendChild(chk);
+      r.appendChild(name);
+      r.appendChild(size);
+      r.appendChild(st);
+      return r;
+    }
+    var n = kind === "anchor" ? 14 : 8; /* anchor 加高滚动区, scrollIntoView 才有位移 */
+    for (var i = 0; i < n; i++) body.appendChild(buildRow(pick(i)));
+
+    function resetBody() {
+      body.innerHTML = "";
+      for (var k = 0; k < 8; k++) body.appendChild(buildRow(pick(k)));
+    }
+    function demo() {
+      var r = body.children[Math.min(2, body.children.length - 1)];
+      if (kind === "hover") {
+        pulseClass(r, "fx-demo-hover", 700);
+      } else if (kind === "selected") {
+        r.classList.toggle("sel");
+      } else if (kind === "anchor") {
+        var last = body.children[body.children.length - 1];
+        last.classList.remove("frt-flash");
+        void last.offsetWidth;
+        last.classList.add("frt-flash");
+        var smooth = !(window.AQB_FX && AQB_FX.reduced());
+        last.scrollIntoView({ behavior: smooth ? "smooth" : "auto", block: "center" });
+        setTimeout(function () { last.classList.remove("frt-flash"); }, 700);
+      } else if (kind === "insert") {
+        var nr = buildRow(pick(i + body.children.length));
+        nr.classList.add("frt-in");
+        body.prepend(nr);
+        nr.addEventListener("animationend", function () { nr.classList.remove("frt-in"); }, { once: true });
+        while (body.children.length > 16) body.lastElementChild.remove(); /* 循环档防堆积 */
+      } else if (kind === "remove" || kind === "removel") {
+        if (body.children.length <= 3) resetBody(); /* 循环档: 删到见底就静默补回 */
+        var first = body.firstElementChild;
+        first.classList.add(kind === "remove" ? "frt-out" : "frt-outl");
+        var done = false;
+        var fin = function () {
+          if (done) return;
+          done = true;
+          first.remove();
+        };
+        first.addEventListener("animationend", fin, { once: true });
+        setTimeout(fin, 320);
+      } else if (kind === "check") {
+        r.classList.toggle("done");
+      }
+    }
+
+    /* 真实交互: selected 卡点行切选中, check 卡点格子勾选 */
+    wrap.addEventListener("click", function (ev) {
+      var row = ev.target.closest ? ev.target.closest(".frt-row") : null;
+      if (!row) return;
+      if (kind === "selected") row.classList.toggle("sel");
+      if (kind === "check") row.classList.toggle("done");
+    });
+    return { el: wrap, demo: demo };
+  }
+
+  /* ---- D6 toast 样例构造器(kind: pair|count|queue|icon|danger) ----
+   * 真触发: 所有 toast 卡共用右下角宿主(aria-live), 循环档限流防堆积。 */
+  var TST_ICONS = {
+    info: '<svg class="tst-ico info" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 11v5"/></svg>',
+    ok: '<svg class="tst-ico ok" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5 11 15.5 16 9.5"/></svg>',
+    err: '<svg class="tst-ico err" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg>'
+  };
+  var tstHost = null;
+  var tstSeq = 0;
+
+  function ensureToastHost() {
+    if (tstHost && tstHost.isConnected) return tstHost;
+    tstHost = document.createElement("div");
+    tstHost.className = "tst-host";
+    tstHost.setAttribute("aria-live", "polite");
+    document.body.appendChild(tstHost);
+    return tstHost;
+  }
+  function dismissToast(t, useVT) {
+    if (useVT && window.AQB_FX) { AQB_FX.viewTransition(function () { t.remove(); }); return; }
+    if (!window.AQB_FX || AQB_FX.reduced()) { t.remove(); return; }
+    AQB_FX.exit(t, function () { t.remove(); });
+  }
+  function spawnToast(kind) {
+    var host = ensureToastHost();
+    while (host.children.length >= 6) host.lastElementChild.remove(); /* 循环档限流 */
+    var t = document.createElement("div");
+    var life = 3200;
+    if (kind === "pair") {
+      t.className = "tst";
+      t.setAttribute("data-fx", "rise");
+      t.innerHTML = TST_ICONS.info +
+        '<span class="tst-txt"><span class="tst-title">已加入下载队列</span>' +
+        '<span class="tst-sub">骨对: 250ms 入 / 180ms 出</span></span>';
+    } else if (kind === "count") {
+      life = 4000;
+      t.className = "tst";
+      t.setAttribute("data-fx", "rise");
+      t.style.setProperty("--tst-life", life + "ms");
+      t.innerHTML = TST_ICONS.ok +
+        '<span class="tst-txt"><span class="tst-title">配置已保存</span>' +
+        '<span class="tst-sub">倒计时与自动关闭同源(4s)</span></span>' +
+        '<i class="tst-bar" aria-hidden="true"></i>';
+    } else if (kind === "queue") {
+      life = 2600;
+      t.className = "tst";
+      tstSeq++;
+      t.innerHTML = TST_ICONS.info +
+        '<span class="tst-txt"><span class="tst-title">队列重排 #' + tstSeq + "</span>" +
+        '<span class="tst-sub">View Transitions: 旧条自动让位</span></span>';
+    } else if (kind === "icon") {
+      t.className = "tst";
+      t.setAttribute("data-fx", "rise");
+      t.innerHTML = TST_ICONS.ok.replace("tst-ico ok", "tst-ico ok spring") +
+        '<span class="tst-txt"><span class="tst-title">校验通过</span>' +
+        '<span class="tst-sub">tone 图标 spring 弹入(300ms)</span></span>';
+    } else if (kind === "danger") {
+      life = 3600;
+      t.className = "tst tst-danger tst-glow";
+      t.setAttribute("data-fx", "rise");
+      t.innerHTML = TST_ICONS.err +
+        '<span class="tst-txt"><span class="tst-title">上传失败</span>' +
+        '<span class="tst-sub">tracker 超时; glow 脉冲一次(400ms)</span></span>';
+    }
+    if (kind === "queue") {
+      var insert = function () {
+        host.prepend(t);
+        while (host.children.length > 4) host.lastElementChild.remove();
+      };
+      if (window.AQB_FX) AQB_FX.viewTransition(insert);
+      else insert();
+    } else {
+      host.prepend(t);
+      if (window.AQB_FX) AQB_FX.scan(); /* 幂等重扫: 动态插入的 data-fx 补挂载标记 */
+    }
+    setTimeout(function () { dismissToast(t, kind === "queue"); }, life);
+    return t;
+  }
+  function makeToast(c) {
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "bt primary";
+    trigger.textContent = "吐一个 toast";
+    trigger.addEventListener("click", function () { spawnToast(c.kind); });
+    return { el: trigger, demo: function () { spawnToast(c.kind); } };
+  }
+
+  /* 单卡演示分发: 构造器卡由 comp.demo() 承接, 其余走演示类型 switch */
   function runDemo(c) {
+    if (c.comp) { c.comp.demo(); return; }
     var el = c.sampleEl;
     var target = el.hasAttribute("data-fx") ? el : (el.querySelector("[data-fx]") || el);
     switch (c.demo) {
@@ -846,7 +1704,11 @@ footer .audit-line { color: var(--dim); }
 
   function buildSample(c) {
     var el;
-    if (c.demo === "slide" || c.demo === "fade" || c.demo === "vt" || c.demo === "dir" || c.demo === "choir") {
+    if (c.ctor === "modal") { c.comp = makeModal(c); el = c.comp.el; }
+    else if (c.ctor === "drawer") { c.comp = makeDrawer(c); el = c.comp.el; }
+    else if (c.ctor === "rows") { c.comp = makeRows(c); el = c.comp.el; }
+    else if (c.ctor === "toast") { c.comp = makeToast(c); el = c.comp.el; }
+    else if (c.demo === "slide" || c.demo === "fade" || c.demo === "vt" || c.demo === "dir" || c.demo === "choir") {
       c.tabsObj = makeTabs(c.demo);
       el = c.tabsObj.el;
     } else {
@@ -1055,6 +1917,71 @@ footer .audit-line { color: var(--dim); }
       " ok=" + r.ok;
   }
 
+  /* ---- 帧率抽查(S3 DoD): 页内可复跑的基准 ----
+   * 方法: 对目标卡以 350ms 节奏连触演示 4s, rAF 计帧 + PerformanceObserver
+   * 统计 longtask(>50ms)。数值以跑基准当时的环境为准, S4 裁决用有头复测。 */
+  function benchCard(card, ms) {
+    return new Promise(function (resolve) {
+      var frames = 0;
+      var longs = 0;
+      var obs = null;
+      try {
+        obs = new PerformanceObserver(function (list) { longs += list.getEntries().length; });
+        obs.observe({ entryTypes: ["longtask"] });
+      } catch (e) { obs = null; }
+      var t0 = performance.now();
+      runDemo(card);
+      var driver = setInterval(function () { runDemo(card); }, 350);
+      function tick() {
+        frames++;
+        if (performance.now() - t0 < ms) {
+          requestAnimationFrame(tick);
+        } else {
+          clearInterval(driver);
+          if (obs) obs.disconnect();
+          if (card.comp && card.comp.forceClose) card.comp.forceClose();
+          var secs = (performance.now() - t0) / 1000;
+          resolve({ id: card.id, fps: Math.round((frames / secs) * 10) / 10, longs: longs });
+        }
+      }
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function runBench() {
+    var btn = $("#btn-perf");
+    var out = $("#perf-out");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    out.textContent = "基准运行中(约 16s)...";
+    var plan = [
+      { id: "D2-4", label: "D2-4 backdrop blur 渐入" },
+      { id: "D1-3", label: "D1-3 sheen 扫光" },
+      { id: "D2-1", label: "D2-1 弹窗 fade+rise+scale 入/退" },
+      { id: "D4-4", label: "D4-4 row-insert 行浮现" }
+    ];
+    var results = [];
+    function next(i) {
+      if (i >= plan.length) {
+        var lines = plan.map(function (p) {
+          var r = null;
+          for (var k = 0; k < results.length; k++) if (results[k].id === p.id) r = results[k];
+          if (!r) return p.label + ": (卡片缺失)";
+          return p.label + ": " + r.fps + " fps / longtask " + r.longs;
+        });
+        out.textContent =
+          "页内基准结果(以跑基准当时的环境为准, S4 裁决用有头复测):\n" + lines.join("\n");
+        btn.disabled = false;
+        return;
+      }
+      var card = null;
+      for (var k = 0; k < cards.length; k++) if (cards[k].id === plan[i].id) card = cards[k];
+      if (!card) { next(i + 1); return; }
+      benchCard(card, 4000).then(function (r) { results.push(r); next(i + 1); });
+    }
+    next(0);
+  }
+
   /* ---- 装配 ---- */
 
   renderSections();
@@ -1087,6 +2014,7 @@ footer .audit-line { color: var(--dim); }
     }
   });
   $("#btn-audit").addEventListener("click", runAudit);
+  $("#btn-perf").addEventListener("click", runBench);
   runAudit();
 
   /* 循环演示引擎: 单一定时器轮询全部开了「循环」的卡, 不排队(重触发即重放) */
