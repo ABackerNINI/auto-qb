@@ -683,7 +683,10 @@ class RelocateModule(BaseModule):
                     f"保留现场交人处理: 通常是权限不足, 修好后重新发起即可",
                 )
                 return
-            if time.monotonic() - float(rt.get("rebuild_ts") or 0.0) < ru.REBUILD_BACKOFF:
+            # None = 从未重建过, 不吃退避; 旧写法 or 0.0 会把开机后前 REBUILD_BACKOFF 秒全算成退避窗口
+            # (monotonic 0 点是开机时刻, 见 pitfalls/testing/monotonic-warn-sentinel.md, issue 26-10-31-0932)
+            rebuild_ts = rt.get("rebuild_ts")
+            if rebuild_ts is not None and time.monotonic() - float(rebuild_ts) < ru.REBUILD_BACKOFF:
                 logger.debug(f"relocate | job {job.job_id}: 重建链接退避中(距上次 < {ru.REBUILD_BACKOFF}s), 本轮跳过")
                 return
             rt["rebuild_ts"] = time.monotonic()
@@ -1020,7 +1023,10 @@ class RelocateModule(BaseModule):
         首次拉起(rt 无记录)不受退避影响, 与「刚武装」时的 _spawn_guardian 直调同口径。
         """
         now = time.monotonic()
-        if now - float(rt.get("respawn_ts") or 0.0) < ru.RESPAWN_BACKOFF:
+        # None = 首拉不受退避(方法 docstring 口径); 旧写法 or 0.0 会把开机后前 RESPAWN_BACKOFF 秒全算成退避窗口
+        # (monotonic 0 点是开机时刻, 见 pitfalls/testing/monotonic-warn-sentinel.md, issue 26-10-31-0932)
+        respawn_ts = rt.get("respawn_ts")
+        if respawn_ts is not None and now - float(respawn_ts) < ru.RESPAWN_BACKOFF:
             logger.debug(f"relocate | job {job.job_id}: guardian 重拉退避中(距上次 < {ru.RESPAWN_BACKOFF}s), 本轮跳过")
             return
         rt["respawn_ts"] = now
