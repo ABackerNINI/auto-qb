@@ -2407,7 +2407,7 @@ def test_kb_tier_migrate_dry_run_default_and_apply(tmp_path: Path) -> None:
 
     # --- 主档: 指针行 + 摘要判据单点仍在, 叙事已迁出
     main_text = pit.read_bytes().decode("utf-8")
-    assert "> 已外迁:" in main_text and f"]({att.name})" in main_text, "指针指向附件相对路径"
+    assert "> 已外迁:" in main_text and f"](attachments/{att.name})" in main_text, "指针指向附件相对路径"
     assert "判据单点一句话" in main_text, "摘要判据单点必须留在主档可读位置"
     assert "事故时间线" not in main_text, "叙事段应已迁出"
 

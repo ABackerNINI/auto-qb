@@ -1,6 +1,7 @@
 # 工具数据默认落进仓库内工具目录: 不 ignore 就把运行态写进 git status
 
 > 摘要: 把工具的默认数据目录从用户级改到「安装目录/data」(因为自启/被拉起时 cwd 不可信)后, 源码态的 data_dir 就落在**仓库内** —— 不补 .gitignore, 工具一跑 `git status` 就脏, 提交闸门会把 history_traffic.dat / 临时物当成改动。
+> 等级: L0
 > 触发: git status, 运行期数据, data/, run/, .gitignore, 树脏, 工具数据目录, 误提交
 
 ### 运行期数据默认落仓库内时, 忽略项是提交纪律的一部分

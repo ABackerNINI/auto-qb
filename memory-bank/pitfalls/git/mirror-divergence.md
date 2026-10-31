@@ -1,6 +1,7 @@
 # GitHub 镜像 develop 同补丁分叉
 
 > 摘要: 镜像远端 develop 领先 N 笔 ≠ 有新内容 —— 可能是与本地某笔**同补丁不同 SHA** 的重复件(双端各推了一份)。直接 merge 会撞出成片 add/add + content 假冲突。判据三件套: git cherry → patch-id → 逐文件 blob 比对; 证明同源后冲突全取我方, 合并树必须与 HEAD 零差异。
+> 等级: L0
 > 触发: GitHub, 镜像, 远端分叉, develop 领先, merge 冲突, add/add, 同补丁, 补丁等价, patch-id, git cherry, blob 比对, 取我方, FETCH_HEAD, ls-remote 真值
 
 ### 镜像同补丁分叉的判别与合并 (2026-10-16 实证: 06edcbcb ≡ 本地 9a80bd00)

@@ -1,6 +1,7 @@
 # rebase --continue 前索引必须全暂存(git 2.55): 生成物自动化解只 add 冲突集会卡死
 
 > 摘要: 分叉 rebase 撞生成物冲突, 走「取一侧 + 重跑生成器」自动化解时: 重跑会把**其它干净自动合并**的白名单生成物也改出未暂存修改(MM 态), 而脚本只 `git add` 冲突集(unmerged 那几个) —— `rebase --continue` 在 git 2.55 上对此报「You must edit all merge conflicts...」并拒绝, 回滚后对外的失败行仍是「需解决冲突…手动合流」, 误导性极强(其实没有任何未解冲突, `ls-files -u` 为空)。手动解: `git add` **全部**改动路径(至少所有 MM 白名单件)再 continue。2026-10-15 提交 4d268762 时实测两连败(ship.commit 内部 sync + 独立 sync 均因此失败行)。
+> 等级: L0
 > 触发: rebase, rebase --continue, 生成物自动化解, MM 状态, 未暂存修改, sync 失败行, 需解决冲突, git 2.55, 索引不干净
 
 ### 自动化解的最后一公里: add 的范围小于改动的范围

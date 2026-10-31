@@ -61,7 +61,7 @@ NO_GUARD_MARK = "无需守阵"  # 头部区明确判定「无需守阵」(计划
 # 附件命名: 沿用 pitfalls/web-ui/attachments/ 既有形态 (<stem>-<stamp>-<desc>.md 的变体,
 # desc 放前面便于同专题多段外迁按名排序)
 ATTACH_NAME = "{stem}-migrated-{stamp}.md"
-POINTER_LINE = "> 已外迁: 叙事整段迁至 [{name}]({name}) (kb.tier migrate {stamp}; 判据单点见上方摘要)"
+POINTER_LINE = "> 已外迁: 叙事整段迁至 [{name}](attachments/{name}) (kb.tier migrate {stamp}; 判据单点见上方摘要)"
 
 # 正文起点: 首个 `## ` / `### ` 行 (前者覆盖叙述型文档, 后者覆盖坑档条目)
 BODY_START_RE = re.compile(r"^#{2,3}\s")

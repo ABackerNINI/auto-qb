@@ -1,6 +1,7 @@
 # Git 推送
 
 > 摘要: 提交闸门依赖 `TMPDIR` 约定(默认盘会假红); 判"推没推上"只认 `ls-remote` 对比本地 HEAD —— 该核对已内联进 ship 脚本(结果行「提交成功 <hash>」), 手动 ls-remote 仅在报「无法核实」时; Gitee 间歇性卡住 / `Recv failure` 已由 git 层「单次超时 20s + 有界重试 3 次」兜住(2026-10-06, 不再要手工补推); 镜像只给超时且允许滞后, 成败都不提(26-09-28 定调)。
+> 等级: L0
 > 触发: push, 推送, 提交闸门, 推没推上, Gitee, GitHub, 镜像, 卡住, 重试, 超时, 补推, CI action
 
 **Refs:** memory-bank/tasks/26-10-06-commands-git-retry-timeout.md,memory-bank/tasks/26-10-17-ship-commit-clean-tree-routing.md

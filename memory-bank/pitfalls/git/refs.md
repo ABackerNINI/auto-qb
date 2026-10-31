@@ -1,6 +1,7 @@
 # Git ref 核对
 
 > 摘要: ref 核对已内联进 `ship.commit`(静默通过; 只看 commit 输出会被骗, 由脚本兜住; packed-refs 陈旧形态 v5 起自动修复+放行); 本 shell 里 `refs/remotes/*` 的写入会被静默丢弃 —— sync/push 脚本判据因此只认 ls-remote 现查真值。
+> 等级: L1
 > 触发: 提交后核对, ref, packed-refs, 分支被回退, staged 暴增, 上游未设置, 领先落后算不出
 
 ### ref 三处核对已内联进 ship.commit: `HEAD` == `refs/heads/<branch>` == packed-refs
@@ -28,40 +29,10 @@
   ref 时 loose 优先于 packed, packed 旧值读不到, 三处本地真值一致即落稳; 刷不动也放行, 附一行说明)
   —— 不再停手要人照配方。分支指针真被回退/丢失(HEAD 与 refs/heads/loose 不一致)仍停手送被回退条目。
   ⚠ 不要靠 `update-ref` —— 它只写 loose, 治不了 packed-refs。
-- **复发: 7** —— ①2026-10-07 ship.commit 核 ref 步照报。**为什么没命中**: ship.commit 的失败行
-  自带处置指引指向「分支 ref 被回退」条目, 按其 `update-ref` 强制写回会治不了 packed-refs;
-  靠 grep packed 才路由到本条。改进: 停手指引应把「loose==HEAD 但 packed 落后」这一形态
-  直接送本条(指引属 verify_ref.py 代码, 尚未改)。②同日第二笔 ship.commit 照报(同形态
-  HEAD==loose、packed 落后) —— **为什么没命中**: ①的改进注只记了没改代码, 停手指引仍指向
-  「分支 ref 被回退」; 本轮已知坑档按 pack-refs 处置一步过。附: 该场景下提交确已落稳,
-  ship.commit 现按 HEAD 消息匹配照常消费消息文件(26-10-07 残留修复), 处置后只需补 ship.push。
-  ③同日第三笔(本轮): 同形态 HEAD==loose、packed 落后 —— **为什么没命中**: 停手指引仍指向
-  「分支 ref 被回退」(verify_ref.py 未改), 执行者按开工硬规先读 git/_index 才路由到本条;
-  照本条备份 .git 后 `git pack-refs --all` 处置一步过, 未照停手指引跑 update-ref。
-  ④同日第四笔: 同形态 HEAD==loose、packed 落后 —— **为什么没命中**: 停手指引仍未改,
-  本轮靠任务档案 20:57 先例行直接路由; 处置 = `format-patch -1 <sha> --stdout` 留底(43KB,
-  未整份拷 .git —— pack-refs 只重写 packed-refs 一个文件, 对象零风险) + `git pack-refs --all`
-  + verify-ref 一致 + ship.push 一步过。
-  ⑤同日第五笔(计划 26-10-07-2127 S1 提交轮): 同形态 HEAD==loose(4ab844a6)、packed 落后
-  —— **为什么没命中**: 停手指引仍指向「分支 ref 被回退」(verify_ref.py 未改); 本轮执行者
-  grep `packed-refs` 直接路由到本条, 未按停手指引跑 update-ref。照④配方: format-patch
-  留底 24KB(放仓库外 $TEMP, 防被扫进下次暂存) + pack-refs --all + verify-ref 一致 +
-  ship.push 补推一步过(该会话报本轮共撞 5 次, 其中一次假红由补笔提交触发, 未再单开回写提交以免递归)。
-  **本轮据此根治**: `verify_ref.py` 停手指引按形态分流(新增 `classify_form`), 「三处本地真值一致、
-  仅 packed 落后」直接送本条; 并加两条守卫测试(test_commit.py)钉住分流, 防再回退。
-  ⑥2026-10-10(文案对齐 qB 报告轮): 同形态 HEAD==refs/heads==loose(`fb2f93f7`)、仅 packed 落后
-  —— **为什么没命中**: 不适用 —— ⑤ 的根治已生效, ship.commit 失败行**直接送本条**(给
-  `git pack-refs --all`), 一步处置即过, 未走弯路。本笔为分流根治后的首例实证: 再次遇到该形态时
-  不再误路由到「分支 ref 被回退」。
-  ⑦2026-10-31(kb.nav 清词按钮两笔提交轮): 同形态 HEAD==refs/heads==loose、仅 packed 落后,
-  两笔提交连续两次触发 —— **为什么没命中**: 不适用 —— 分流指引持续生效, 失败行即给配方;
-  本轮处置按⑥口径省略 format-patch 留底(pack-refs 只重写 packed-refs 一个文件, 对象零风险),
-  `git pack-refs --all` + verify-ref 一致 + ship.push 一步过。注: 本仓提交后 packed 不自动
-  刷新, 该形态会**常态化再现**, 失败行配方可信, 照做即可。
-  **根治**(2026-10-31 本轮, A+B 方案): ⑦ 的「常态化再现」是收进脚本的直接动机 —— `check_refs`
-  判出该形态即自动 `pack-refs --all` 并放行(A: 自动处置; B: 判据放宽为 loose==HEAD==refs/heads
-  为准), 每笔提交自愈, 手工处置路径退役; 守卫测试两条钉住(test_commit.py: 修复生效 / 刷不动也放行)。
-  此后本条**不再新增复发记录** —— 再见到该形态的 [STOP] 即为 v5 回退, 查 verify_ref.py 是否被改动。
+- **复发 7 次(2026-10-07~10-31)后根治**: 曾长期靠停手指引误路由到「分支 ref 被回退」; 2026-10-31 起
+  `check_refs` 判出该形态即自动 `pack-refs --all` 并放行(v5, 每笔提交自愈, 手工处置路径退役),
+  守卫测试两条钉住(test_commit.py)。**本条不再新增复发记录** —— 再见到该形态的 [STOP] 即为 v5 回退,
+  查 verify_ref.py 是否被改动。
 
 ### 本工具 shell 里 `refs/remotes/<远端>/*` 的写入会被静默丢弃
 

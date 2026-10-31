@@ -1,6 +1,7 @@
 # 未推送分支的 ship 死锁: sync 先于 push, 而它只认同名远端分支
 
 > 摘要: 本工具 shell 里 `refs/remotes/*` 写入被**静默丢弃** (见 refs.md), ship 脚本一律以 `ls-remote` 现查远端真值为判据 —— 一条**从未推送过**的特性分支, `run_sync` 拿不到远端同名分支直接失败「拿不到远端 <remote>/<branch> (离线?)」; 而 `run_push` 的**第一件事**就是 `run_sync` ⇒ 未推送分支永远推不上去 (鸡生蛋死锁)。网络是通的 (curl / ls-remote 其它分支都正常), 失败行却写着「离线?」—— 别被误导去查网络。
+> 等级: L0
 > 触发: 未推送分支, 新特性分支, 首次推送, push 失败, 拿不到远端, ls-remote, 离线, 死锁, chicken-and-egg, sync 先于 push, run_sync, run_push, my-commit-flow.push, 开工同步失败
 
 **Refs:** memory-bank/pitfalls/git/refs.md

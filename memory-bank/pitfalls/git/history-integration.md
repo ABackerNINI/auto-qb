@@ -1,43 +1,16 @@
 # Git 历史整合 (merge / rebase / 重放)
 
 > 摘要: 历史整合(merge/rebase/stash)曾因删除拦截层批量删 `.git/objects` 而被禁 —— 该问题 2026-09-25 已修复, **禁令解除**; 本文件保留作事故档案与恢复手册, 高风险历史整合前仍建议 `cp -a .git <备份>`。**同步一律 `commands run my-commit-flow.sync`(自动快进 / 分叉自动 rebase 保线性), 本文的手工同步配方已退役删除。**
+> 等级: L1
 > 触发: 落后主线要同步, 想跑 git rebase, git merge, 合并, 变基, .git 损坏, 事故恢复
 
 ## ✅ 状态: 禁令已解除 (2026-09-25)
 
 拦截层根因已修复, rebase / merge / stash 恢复可用; 以下为事故档案与仍有效的判据/恢复手册 —— 高风险历史整合前照旧先 `cp -a .git <备份>`。
 
-## 两条禁令 (已解除)
+## 事故档案(压缩): 禁令年代的历史教训
 
-### ❗「非快进合并 + 工作区脏」会删掉整个 `.git` 对象库 (重大事故)
-
-- **触发**: 工作区有未提交改动时做**非快进**合并。
-- **判别**: git 2.55 在**非快进合并**时**无条件**调 `git stash create`, 工作区脏就要真写 stash 对象,
-  而工具环境的删除拦截层会顺着这次写入把 `.git/objects/**` **批量删进回收站**(git 原生 unlink 绝不会走回收站)。
-  实测矩阵: 非快进 + 干净 = 安全; **非快进 + 脏 = 必炸**(关沙箱 / 换 git / `merge.autoStash=false` 都无效);
-  快进 + 脏 = 安全。
-- **处置**: **合并前先把工作区弄干净**(先提交, 或把改动移出仓库); 高风险 git 操作前 `cp -a .git <备份>`。
-  **记不住细节就记这句: 非快进 + 脏 = 必炸。**
-
-### ❗❗ `git rebase` 在本工具 shell 里同样会毁 `.git`, 而且「干净工作区」也照毁
-
-- **触发**: 落后主线, 想用 rebase 变基(2026-09-21 连续两次 + 2026-09-22 第三次, 共 3 次事故)。
-- **判别**: **根因** —— 本机 git config 里有 **`rebase.autosquash=true`** ⇒ 每次 rebase 都被当成**交互式** rebase
-  起 sequencer, 而 `core.editor` 指向 `code --wait` ⇒ 第一次报
-  `error: could not mark as interactive: No such file or directory`, 事后 `.git/refs/heads/` 整个目录 +
-  `.git/logs/` 被删、当前提交对象也没了; 第二次加了 `GIT_SEQUENCE_EDITOR=:` + `GIT_EDITOR=:` +
-  `-c rebase.autosquash=false` 仍以 **SIGTERM** 收场, `.git` 只剩 `COMMIT_EDITMSG` 与 `FETCH_HEAD`。
-  ⇒ 只要 rebase 报 `could not mark as interactive`, **立刻停手, 别重试**。
-- **处置**: ~~禁用 rebase~~(旧环境处置, 已解除), 改用下面的"可用替代"。
-
-### ❗ rebase 第三次事故形态不同: 判别法要放宽到"HEAD 读不出来"
-
-- **触发**: 第二次重试(以为换掉 editor 就好了)。
-- **判别**: `git rebase FETCH_HEAD` 报 `fatal: unable to read tree <刚提交的 sha>`, 随后 `HEAD` 变
-  `bad object`、`git status` 直接 `fatal` —— 现场是 **`.git/objects/<新提交前两位>/` 整个目录不存在**
-  (本次 `objects/83/`), 而 `refs/heads/develop` 内容与 `.git/rebase-merge/` 都还在
-  ⇒ 拦截层删的是"刚写入的**对象**", 与 09-21 那两次(删 `refs/heads/` 整目录)**不是同一种形态**。
-- **处置**: **只要 rebase 后 HEAD 读不出来, 就是对象被删了, 别再试第二条 rebase 命令。**
+禁令年代(2026-09-21~09-25, 已解除)的 3 次事故, 各留一句: ①非快进合并 + 工作区脏 ⇒ 拦截层顺 stash 写入把 `.git/objects/**` 批量删进回收站; ②`rebase.autosquash=true` + `core.editor=code --wait` 让 rebase 走交互式 sequencer, `refs/heads/` 整目录被删; ③第三形态删的是**刚写入的对象**(`objects/<xx>/` 整目录不存在), HEAD 读不出来。共同教训: **高风险 git 操作前 `cp -a .git <仓库外备份>`**(备份 30 秒可弃, 炸了靠它 30 秒复原); 若日后再见同类症状(HEAD 读不出 / 成片对象消失), 立刻停手别重试, 按下文「事故恢复」处置。
 
 ## 同步路径 (v3): 脚本化 —— 手工配方已退役
 
@@ -55,15 +28,12 @@
 
 ### 通用教训: 与 `my-commit-flow` skill 的建议冲突时, 以本机事实为准
 
-- **触发**: 落后 + 脏, 想照 skill 的《最常见组合》节做(它写"**先提交 → rebase → 推送**")。
-- **判别**: 那条对**普通环境**是对的, 但**本环境下 rebase 这一步必炸**(见上)。
-  skill 是**跨项目通用资产**, conventions 规定不得往里写本仓库事实 ⇒ 这个冲突**永远不会在 skill 里被提示**
-  (第三次事故就是照 skill 踩的)。
-- **处置**: 执行者自己要在跑 rebase 前先读本条; 同步走脚本化路径(见「同步路径 (v3)」)。
-  `fetch` / `add` / `commit` / `reset` / `push` 实测安全; 涉及历史整合的优先让用户在自己终端做。
-- **复发**: 1 —— 2026-09-24 "让工作区变干净再 rebase"被原样搬进包内 `commit.py` docstring 与
-  references/README(顺序写成"先提交再快进"); 为什么没命中: 没有任何机检扫包内文档;
-  三处已订正为"先同步远端、后提交", 再复发就加 grep 闸门。
+- **触发**: 照跨项目通用文档(skill / 外部教程)的建议跑本机 git 操作。
+- **判别**: skill 是**跨项目通用资产**, conventions 规定不得往里写本仓库事实 ⇒ 本机特殊性与 skill 建议的
+  冲突**永远不会在 skill 里被提示**(禁令年代的第三次事故就是照 skill 踩的); 本机特殊性以 `AGENTS.md`
+  与本目录坑档为准。
+- **处置**: 同步 / 历史整合一律走脚本化路径(`commands run my-commit-flow.sync`, 见「同步路径 (v3)」),
+  别照通用文档手工拼流程。
 
 ### 事故恢复: 成本取决于有没有 `cp -a .git` 备份
 
@@ -91,6 +61,5 @@
   ③`git restore --worktree -- <路径...>` 从索引还原(**不动 HEAD、不动索引**, 比 `checkout --` 更窄);
   ④还原后**立刻复查** `git status --short`, 确认没有再次被删;
   ⑤`git fsck --no-progress` 确认 0 broken link(排除对象库受损这种更严重的情况)。
-- **复发**: 1 —— 2026-09-23 快进后复踩(19 个文件)。**为什么没命中**: 本条上一版的标题写的是
-  "**非快进**合并后…", 执行者读到的是一条"不适用于我"的规则, 于是没做预防性检查。
-  **教训: 标题里的适用限定要写到事实的最宽边界, 别拿单次实例的形态去限定整条规则。**
+- **教训**(复发 1 次后沉淀): 标题里的适用限定要写到事实的最宽边界 —— 本条上一版标题写成"**非快进**合并后…",
+  执行者读到一条"不适用于我"的规则, 快进复踩(19 个文件)没做预防性检查。别拿单次实例的形态去限定整条规则。
