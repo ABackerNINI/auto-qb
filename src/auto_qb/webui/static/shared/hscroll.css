@@ -16,7 +16,7 @@
  * display:none 才不绘制。`.group-table::-webkit-scrollbar` 特异性 (0,1,1) 压过 `*::-webkit-scrollbar`
  * (0,0,1) —— 不依赖书写顺序(本文件排在皮肤文件之后是双保险, 不是唯一依据)。Firefox 走 scrollbar-width。
  *
- * 令牌: 只用 --border-strong / --fg-dim / --fg-muted / --statusbar-h(三皮肤均已定义),
+ * 令牌: 只用 --border-strong / --accent / --statusbar-h(三皮肤 + prism 五主题均已定义),
  * 不写死色值、不写死 34px(状态栏高度改了指示条自动跟着走)。
  */
 
@@ -50,16 +50,24 @@
 /* 淡入比淡出快(150ms): 出现要及时, 消失可以缓一点(过渡属性仍只有 opacity / height) */
 .hscroll-pill.on { opacity: 1; pointer-events: auto; transition-duration: 150ms; }
 
-/* hover 与拖拽同观感: 加粗到 7px + 轨道提亮, 让指针落在细条上也有"抓到了"的反馈 */
+/* hover 与拖拽只**加粗**, 不改任何颜色 —— 早先是把轨道提亮到 --fg-dim, 而滑块用 --fg-muted,
+ * 两者同属中性灰系, 一提亮就几乎同色(实测滑块/轨道对比度 静息 2.78~3.79:1 → hover 1.21~1.74:1,
+ * golden 主题 1.21:1 基本等于同色), 可拖动部分反而更难辨认(2026-11-01 用户反馈)。
+ * 现在: 轨道恒为中性 --border-strong, 滑块用主题强调色 --accent(与轨道分属两个色系),
+ * hover 只把高度 5px -> 7px —— 交互反馈仍在, 对比度不会再被自己拉平。
+ * !守阵 test_frontend_hscroll_indicator_wiring 判据 7b 双向钉住这两条(滑块必须是 --accent;
+ *   hover 规则体内不得出现 background)。 */
 .hscroll-pill:hover,
-.hscroll-pill.drag { height: 7px; background: var(--fg-dim); }
+.hscroll-pill.drag { height: 7px; }
 
-/* 滑块底座: 几何全由 JS 内联决定, 这里只保证它贴合轨道 */
+/* 滑块底座: 几何全由 JS 内联决定, 这里只保证它贴合轨道。
+ * 颜色取 --accent(主题强调色, 三皮肤 + prism 五主题都声明): 与中性轨道不同色系, 一眼能分出
+ * 「哪一段是能拖的」。 */
 .hscroll-pill > i {
   position: absolute;
   top: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--fg-muted); /* 比 hover 态轨道(--fg-dim)再亮一档, 悬停加粗时滑块仍可辨 */
+  background: var(--accent);
   pointer-events: none;        /* 指针事件统一落在轨道上, 拖动不因滑块抢占而抖 */
 }

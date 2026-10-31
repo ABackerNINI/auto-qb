@@ -2953,6 +2953,26 @@ def test_frontend_hscroll_indicator_wiring():
             f"胶囊永不{'显示' if cls == 'on' else '加粗/保持可见'}(零报错)"
         )
 
+    # 判据 7b: 色系契约 —— 滑块与轨道必须分属两个色系, 且 hover 不许改轨道色(2026-11-01 用户反馈)
+    # 初版: 轨道 hover 提亮到 --fg-dim, 滑块用 --fg-muted, 两者同属中性灰系 ⇒ 一提亮就几乎同色,
+    # 实测对比度 静息 2.78~3.79:1 → hover 1.21~1.74:1(golden 1.21 基本等于同色), 可拖动部分
+    # 反而更难辨认。修法 = 轨道恒中性 --border-strong, 滑块换主题强调色 --accent, hover 只加粗。
+    # 这条断言钉两件事: ①滑块必须用 --accent(不是任何灰阶令牌); ②hover/.drag 规则体内**不得**
+    # 出现 background —— 一旦有人"顺手给 hover 加个提亮", 滑块与轨道的对比度会被自己拉平, 而这
+    # 种退化在真浏览器里只表现为"看起来糊在一起", 没有任何报错。
+    thumb_body = re.search(r"\.hscroll-pill > i\s*\{([^}]*)\}", hcss)
+    assert thumb_body, "shared/hscroll.css 找不到 `.hscroll-pill > i` 规则体(选择器在但块解析不到, 同步本守阵)"
+    assert "var(--accent)" in thumb_body.group(1), (
+        "滑块(`.hscroll-pill > i`)没用主题强调色 var(--accent) —— 与中性轨道同属灰系时"
+        "两者亮度接近, 用户分不出哪一段能拖(2026-11-01 报障形态)"
+    )
+    hover_body = re.search(r"\.hscroll-pill:hover,\s*\.hscroll-pill\.drag\s*\{([^}]*)\}", hcss)
+    assert hover_body, "shared/hscroll.css 找不到 `.hscroll-pill:hover, .hscroll-pill.drag` 规则体(同步本守阵)"
+    assert "background" not in hover_body.group(1), (
+        "hover/.drag 规则体里出现了 background —— hover 改轨道色会改变滑块与轨道的对比度: "
+        "早先提到 --fg-dim 后与滑块几乎同色(实测 1.21~1.74:1), 交互反馈请只走高度"
+    )
+
     # 判据 8: syncHeadScroll 尾部仍调 _hscrollSync(删了 = 胶囊永不出现)
     anchor = "syncHeadScroll(ev, page) {"
     assert anchor in cols_js, "columns.js 缺横滚同步单点 syncHeadScroll(ev, page)(被删/改名? 同步本守阵)"

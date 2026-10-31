@@ -150,7 +150,7 @@
   <tr><td>轨道宽</td><td><code>width: min(300px, 48vw)</code></td><td>1440 宽下约占 21%，够醒目又不到系统滚动条的存在感；小屏由 <code>48vw</code> 兜底不撑破（26-11-01 用户验收「有点小」后由 160px 上调）</td></tr>
   <tr><td>纵向位置</td><td><code>bottom: calc(var(--statusbar-h) + 8px)</code></td><td>贴内容区底缘、不压状态栏的 1px 分界线；高度走令牌不写死 34px（加粗到 5px 后由 6px 上抬到 8px 留呼吸）</td></tr>
   <tr><td>高度 / 圆角</td><td>静息 5px → hover·拖拽 7px；<code>border-radius: 999px</code></td><td>细到几乎不占视觉重量；交互时给一点物理反馈（26-11-01 由 3/4px 上调）</td></tr>
-  <tr><td>配色</td><td>底 <code>--border-strong</code>；hover·拖拽 <code>--fg-dim</code></td><td>与原生 thumb 同源令牌；令牌名集三皮肤相等（守阵 <code>test_frontend_skin_css_token_parity</code>），共享层可安全引用</td></tr>
+  <tr><td>配色</td><td>轨道恒 <code>--border-strong</code>（任何状态都不改色）；滑块 <code>--accent</code>；hover·拖拽只加粗</td><td>两者分属中性色系与主题强调色系，一眼能分出「哪一段能拖」。<b>hover 不许改轨道色</b> —— 首版是 hover 提到 <code>--fg-dim</code>、滑块用 <code>--fg-muted</code>，同属灰系 ⇒ 一提亮几乎同色（实测对比度静息 2.78~3.79:1 → hover 1.21~1.74:1，golden 1.21 等于同色），2026-11-01 用户反馈后改判；令牌名集三皮肤相等，共享层可安全引用</td></tr>
   <tr><td>滑块宽</td><td><code>max(32px, 轨道宽 × clientWidth / scrollWidth)</code></td><td>32px 是「抓得住」的下限</td></tr>
   <tr><td>滑块位移</td><td><code>(scrollLeft / (scrollWidth - clientWidth)) × (轨道宽 - 滑块宽)</code></td><td>标准映射，两端严格对齐</td></tr>
   <tr><td>触发带（纵向）</td><td><code>状态栏上缘 - 24 ≤ clientY &lt; 状态栏上缘</code></td><td>内容区最底部 24px，<b>上下界都要写</b> —— 只写下界时状态栏那 34px 也命中（26-11-01 用户验收当场指出）</td></tr>
