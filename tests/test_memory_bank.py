@@ -40,6 +40,8 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 - test_kb_slice_cap_and_count_are_debt_not_blocking: 切片尺寸 / 条数 → warns(债务); 命名 / 三行头仍判红
 - test_kb_active_render_respects_byte_budget: kb.active 默认字节预算截取(30KB 内联上限), 页脚留总数, --all / -n N 逃生
 - test_context_caps_hard_and_debt_split: `check_context_caps.py` 的 AGENTS.md 只在 `HARD_CAPS`、不进债务组
+- test_context_caps_files_mode_wiring: `check_context_caps.py` 认 `--files`(闸门收窄方案 D) —— 非帽点传入时空组不打印、rc 0
+- test_check_caps_only_scopes_kb_walk: `check_caps(only=)` 只算传入文件(方案 D) —— 集内报债务、集外不读不报, None=全量不变
 - test_doc_links_are_not_broken: 全库相对链接存在性 (检查器 memory-bank skill 的 `scripts/check_doc_links.py`, 2026-10-06 从根 `scripts/` 迁入)
 - test_doc_links_rejects_windows_normalized_targets: 存在性按 Linux 口径判 —— 结尾点(`kb/...`) / 大小写不符 判坏链, 本机 Windows 的路径归一化不得让它恒绿 (2026-10-11 CI 单条红的根因)
 
@@ -674,6 +676,57 @@ def test_context_caps_hard_and_debt_split() -> None:
     assert "AGENTS.md" not in module.SKILL_CAPS and "AGENTS.md" not in module.READ_BUDGET_CAPS, (
         "AGENTS.md 不得出现在债务组 —— 它没有挂账通道"
     )
+
+
+def test_context_caps_files_mode_wiring(monkeypatch) -> None:
+    """`check_context_caps.py --files`(方案 D): 传入非帽点文件 → 各组落空仍能打印, rc 0。
+
+    空组必须被剪掉而不是 `max()` 崩 —— 收窄后「传入文件没有任何帽点」是常态
+    (改的是普通 KB 文档时, 三条 caps run 里命中的那条就属此形)。
+    硬规定语义不变断言: AGENTS.md 不在改动集 → 硬规定组整组不出现。
+    """
+    import importlib.util
+    from contextlib import redirect_stdout
+
+    import io
+
+    spec = importlib.util.spec_from_file_location(
+        "check_context_caps_files", ROOT / "scripts" / "check_context_caps.py"
+    )
+    assert spec and spec.loader, "缺少 scripts/check_context_caps.py"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monkeypatch.setattr(sys, "argv", ["check_context_caps.py", "--files", "memory-bank/not-a-cap-point.md"])
+    buf = io.StringIO()
+    with redirect_stdout(buf):
+        rc = module.main()
+    out = buf.getvalue()
+    assert rc == 0, out
+    assert "硬规定" not in out, "AGENTS.md 不在改动集时硬规定组必须整组跳过"
+    assert "无阻塞项" in out
+
+
+def test_check_caps_only_scopes_kb_walk(tmp_path: Path) -> None:
+    """`check_caps(only=)` 收窄读取面(方案 D): 集内超限报债务, 集外超限不读不报; 缺省 None 行为不变。
+
+    收窄必须**只动面、不动严重度**: 分级单点(`HARD_CAP_ROLES`)与此参数正交 —— 集内文件照旧
+    按角色分级, 集外文件连 `char_count` 都不跑(这正是收窄的收益所在)。
+    """
+    checker = _kb_checker()
+    root, mb = tmp_path, tmp_path / "memory-bank"
+    (mb / "evergreen").mkdir(parents=True)
+    (mb / "evergreen" / "_about.md").write_text("# t\n> 摘要: x\n> 触发: y\n", encoding="utf-8")
+    for name in ("big-a.md", "big-b.md"):
+        (mb / "evergreen" / name).write_text("# 大\n> 摘要: x\n> 触发: y\n" + "x" * 30_000, encoding="utf-8")
+
+    problems_full, warns_full = checker.check_caps(root, mb)
+    debts_full, _ = checker.split_warns(warns_full)
+    assert len(debts_full) == 2, debts_full
+
+    problems, warns = checker.check_caps(root, mb, only={"memory-bank/evergreen/big-a.md"})
+    debts, _ = checker.split_warns(warns)
+    assert not problems
+    assert len(debts) == 1 and "big-a.md" in debts[0], debts
 
 
 def test_memory_bank_instructions_match_current_structure() -> None:

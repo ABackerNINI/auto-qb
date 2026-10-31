@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>提交闸门按改动收窄优化</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="commit-gate-scope">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-0434">
+<meta name="doc-updated" content="26-11-01-0537">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-01-test-commit-gate-scope.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: commit-gate-scope</div>
+<h1>提交闸门按改动收窄优化</h1>
+<p class="lede">提交闸门固定开销按「本次改动」收窄：drift 全库扫描改查改动的 md、十条 KB 校验并行跑、caps 债务计算面按改动收窄、test.pkg 按改动包收窄；test.quick 经拍板本轮不动。设计主轴：拦截面不弱化，改动清单一律复用预检 <code>&lt;changed:GLOB&gt;</code> 展开这一单点，闸门脚本不自查 git。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-0434 · <b>doc-updated</b> 26-11-01-0537 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> AutoClaw 会话 2026-11-01「提交闸门优化」：agent 逐闸门盘点并实测 → 用户确认方向，拍板 test.quick 暂不改动、先出本计划
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景。</b>提交闸门是 <code>ship.commit</code> 的前置机检（11 条，定义在 <code>.commands/my-commit-flow/.my-commit-flow.toml</code>）。2026-11-01 逐条实测（本机单次热跑）发现固定开销集中在四处：<code>check_command_drift</code> <b>每次提交</b>全库扫 md（6.1s，match 为空串）；memory-bank 十连检改任何 KB 文件就<b>串行</b>跑十条全库校验（合计 6.2s）；<code>test.pkg</code> 改任一包就整跑 154 个真实 git 子进程用例（约 73s）；<code>test.quick</code> 改 src/tests 就全套跑（约 27s）。典型墙钟：纯代码提交约 35s（其中 drift 的 6s 与代码毫无关系），KB 提交的文档机检约 13.5s。</p>
+<p><b>目标：</b>不弱化拦截面的前提下降固定开销——纯代码提交不再为 drift 付 6s；KB 提交的十连检关键路径从串行 6.2s 压到并行后约 3.5s；改单包时 test.pkg 只跑该包。算成的标准：S1–S3 各自验收判据全绿，且复测数字回写本计划。</p>
+<p><b>设计底线（不变量）：</b></p>
+<ul>
+  <li><b>改动清单单点</b> = 预检 <code>changed_files()</code>（staged+unstaged）。方案 A/C 一律经 <code>&lt;changed:GLOB&gt;</code> 展开消费，<b>闸门脚本不自查 git</b> —— <code>ship.commit</code> 在 rebase 后会用同一份 <code>present</code> 清单复跑闸门，脚本自查 git 在复跑阶段语义就错了（树已净，status 查不到本次改动）。</li>
+  <li><b>守阵不动</b>：<code>tests/test_memory_bank.py::test_commit_gate_covers_kb_check</code> 用正则在闸门配置里逐字找 <code>&lt;脚本&gt; --check</code> —— 十连检的 run 清单一条不能删、不能合，并行化只能落在引擎层。</li>
+  <li><b>沉默即成功契约</b>：全过静默、失败才说话；失败行 (note, cmd, rc, secs, tail) 结构与「取第一条失败」语义保持，失败顺序 = 配置序（确定性）。</li>
+  <li><b>保守回退</b>：展开失败按既有语义 STOP 不降级；改动面判定拿不准时宁可全量跑。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>机制现状。</b><code>_pipeline.py::run_gates</code> 是双层串行 for（闸门逐条 × run 逐条，<code>run_capture</code> 阻塞等完）；<code>&lt;changed:GLOB&gt;</code>/<code>&lt;each:GLOB&gt;</code> 已有改动级展开，无匹配即整条静默跳过；<code>hit()</code> 按路径前缀/子串判触发。11 条闸门逐条盘点：</p>
+<table>
+<tr><th>闸门</th><th>触发 (match)</th><th>现状扫描面</th><th>实测</th><th>裁定</th></tr>
+<tr><td><code>check_command_drift</code></td><td>所有提交</td><td>全部 md（SCAN_GLOBS：根部四件 + memory-bank/** + .github/** + skills/** + 包 README，900+ 文件）</td><td>6.1s</td><td class="good">A：收窄</td></tr>
+<tr><td>memory-bank 十连检</td><td>memory-bank/</td><td>全库（timekit 两遍 rglob；doc_map 走 919 份文档）</td><td>合计 6.2s，串行</td><td class="good">B：并行</td></tr>
+<tr><td><code>test.pkg</code></td><td>.commands/ · 引擎</td><td>154 个真实 git 子进程用例全跑</td><td>约 73s</td><td class="good">C：按包</td></tr>
+<tr><td><code>test.quick</code></td><td>src/ · tests/</td><td>全套用例（-n 8）</td><td>约 27s</td><td class="bad">不动（D1）</td></tr>
+<tr><td><code>check_doc_links</code></td><td>memory-bank/ · docs/ · AGENTS.md</td><td>全树链接</td><td>0.51s</td><td>搁置（收窄会漏「指向改动路径的他件」——改名坏链落在别的文件里）</td></tr>
+<tr><td><code>check_context_caps</code></td><td>AGENTS.md · skills · memory-bank/</td><td>全部帽点文件（KB 角色走全库 rglob）</td><td>0.57s</td><td class="good">D：收窄（2026-11-01 纳入）</td></tr>
+<tr><td><code>gen_issues_index --check</code></td><td>issues/</td><td>全目录重建对比</td><td>0.15s</td><td>不动（索引是单文件，已便宜）</td></tr>
+<tr><td><code>gen_active_recent --check</code></td><td>activeContext/</td><td>切片目录</td><td>0.14s</td><td>不动</td></tr>
+<tr><td><code>dev.fmt</code></td><td>src/ · tests/</td><td>只碰 <code>&lt;changed:*.py&gt;</code></td><td>约 1s</td><td class="good">已是改动级</td></tr>
+<tr><td>脚本冒烟</td><td>skills · .commands/</td><td>只冒烟改动的脚本（<code>&lt;each:--help&gt;</code>）</td><td>快</td><td class="good">已是改动级</td></tr>
+<tr><td><code>sync_agent_skills</code></td><td>所有提交</td><td>幂等同步全 skill 链接</td><td>约 1s</td><td>不动（同步非检查，靠每次提交兜住拉取来的改动）</td></tr>
+</table>
+<p class="aside">实测口径：python 直跑各脚本 <code>--check</code>（本机 2026-11-01 单次热跑，含解释器启动）；test.pkg / test.quick 引 <code>.commands/test/config.toml</code> 注记的 2026-10-08 实测值（-n 8）。数字用于量级判断，验收时以同口径复测为准。</p>
+<p class="aside">复测（2026-11-01 实施后，同一口径经 <code>run_gates</code> 真跑）：drift 纯代码改动三条 run 全跳 = 0.00s（原每次提交 6.1s）、改 md 单条 0.28s、改注册表全量单条 6.39s；caps 改 KB 单条 0.36s（原全量 0.57s）、改 AGENTS.md 单条 0.07s；十连检并行 ran=11 耗时 4.25s（关键路径 timekit ≈3.6s；S2 验收线 ≤4.0s 按 10 条口径订立，实施时上游已加至 11 条 —— 收益 6.2s→4.25s，落在并行化理论下限附近）；test.pkg 纯代码改动两条 run 全跳 = 0.00s。回归面：test.pkg 与 test.quick 全绿（总数只写一处，见 <code>commands run kb.baseline</code>）。</p>
+<p><b>痛点一：drift 与本次改动无关地全量跑。</b>手抄漂移只有两个引入途径：(a) 本次改动的 md；(b) 命令注册表 / 骨架提取逻辑变化（<code>.commands/**/config.toml</code>、引擎 <code>.agents/skills/commands/scripts/</code>）使旧副本在新判据下漂移。(a) 只需扫改动文件，(b) 才需要全量——现状两者不分，一律全量。</p>
+<p><b>痛点二：十连检串行。</b>十条互相独立的校验逐条跑：timekit 3.5s（<code>mb.rglob</code> 两遍全库）/ gen_doc_map 1.0s（919 份文档）/ 其余 8 条合计约 1.7s。串行合计 6.2s，并行后关键路径 = timekit 约 3.5s。</p>
+<p><b>痛点三：test.pkg 不分包。</b>154 个用例是真实 git 子进程场景（init/push/rebase，IO 密集），改 <code>.commands/kb/</code> 单包脚本时引擎与其它包未动，仍整跑约 73s。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>方案 A（P0）：check_command_drift 按改动收窄</h3>
+<p><b>落点</b>：<code>scripts/check_command_drift.py</code> 加两种模式 + 闸门 run 由一条拆三条（match 保持空串，触发命中后由展开自选）：</p>
+<pre><code># .my-commit-flow.toml —— check_command_drift 闸门的 run 由一条拆三条
+run = ["python scripts/check_command_drift.py --files &lt;changed:*.md&gt;",                                # (1) 只扫本次改动的 md
+       "python scripts/check_command_drift.py --full &lt;changed:.commands/**/config.toml&gt;",            # (2) 注册表变了 → 全量
+       "python scripts/check_command_drift.py --full &lt;changed:.agents/skills/commands/scripts/*.py&gt;"] # (3) 骨架提取逻辑变了 → 全量</code></pre>
+<p>展开语义现成：任一 run 的 <code>&lt;changed:GLOB&gt;</code> 无匹配即整条静默跳过 —— 纯代码提交三条全跳（省 6.1s）；改 md 只扫改动文件；改注册表/引擎脚本才全量。<code>--files</code> 模式对传入文件仍逐个过 SCAN_GLOBS 归属与 EXEMPT 豁免再逐行比对骨架；无参直跑维持现状全量（兼容既有调用与手工）。</p>
+<p><b>为什么改脚本不改 match</b>：md 散布在根部/memory-bank/.agents/.commands 多处，用 match 复刻 SCAN_GLOBS 就是第二处演化点；脚本内收窄让 SCAN_GLOBS 保持单点。</p>
+<h3>方案 B（P0）：十连检并行化（引擎层）</h3>
+<p><b>落点</b>：<code>_pipeline.py::run_gates</code> —— 命中闸门展开后的命令扁平清单按配置序提交线程池（池上限见 D2），每条命令保留自己的 note/timeout；失败全量收集、按提交序排序（确定性），调用方仍取第一条。run 清单零改动，守阵原样。<code>run_capture</code> 的看门狗/杀树/超时语义原样沿用（线程只等 subprocess，Windows 下安全）。收益：十连检 6.2s → 约 3.5s；冒烟闸门的 <code>&lt;each:--help&gt;</code> 逐脚本启动同样吃到并行。</p>
+<p><b>明确不做</b>：把十条 run 合并进一个 wrapper 脚本并发跑 —— 守阵逐字匹配 <code>&lt;脚本&gt; --check</code>，合并即把防静默红设计架空（§01 底线 2）。</p>
+<h3>方案 C（P1）：test.pkg 按包收窄</h3>
+<p><b>落点</b>：test 包新增 script 型 task <code>test.pkg.scoped</code>（wrapper python 脚本内置 TMPDIR 设置，不走 cmd.exe 引号配方；<code>--full</code> 时转调 <code>run.py run test.pkg</code>，配方单点不复制）。闸门一条 run 换两条：</p>
+<pre><code>run = ["python &lt;skill-dir:commands&gt;/scripts/run.py run test.pkg.scoped -- &lt;changed:.commands/**&gt;",                       # 包文件改动 → 收窄到受影响包
+       "python &lt;skill-dir:commands&gt;/scripts/run.py run test.pkg.scoped --full -- &lt;changed:.agents/skills/commands/**&gt;"]  # 引擎改动 → 整跑</code></pre>
+<p>归并规则（默认拍板 D4）：改动文件按 <code>.commands/&lt;包&gt;/</code> 前缀归并出受影响包集合，只收这些包的测试目录；受影响包 ≥2 或命中引擎 → 直接整跑。两条 run 都命中时 scoped + full 各跑一次（full 已覆盖，scoped 白跑一趟，罕见、接受）。</p>
+<h3>方案 D（P1）：check_context_caps 按改动收窄（2026-11-01 用户拍板纳入）</h3>
+<p><b>落点</b>：<code>scripts/check_context_caps.py</code> 加 <code>--files</code> 模式 + KB 角色 cap 的单点 <code>check_kb_structure.check_caps</code> 加可选 <code>only</code> 参数（默认 None = 行为不变）+ 闸门 run 一拆三条（match 不变）：</p>
+<pre><code>run = ["python scripts/check_context_caps.py --files &lt;changed:AGENTS.md&gt;",          # (1) AGENTS.md 改了 → 硬规定
+       "python scripts/check_context_caps.py --files &lt;changed:.agents/skills/**&gt;",  # (2) skill 改了 → SKILL/阅读预算 cap
+       "python scripts/check_context_caps.py --files &lt;changed:memory-bank/**&gt;"]     # (3) KB 改了 → KB 角色 cap</code></pre>
+<p><b>语义</b>：硬规定不变——AGENTS.md 超限且改动命中仍 STOP（展开传来的就是改动文件，与现状 <code>rel in changed</code> 等价）；债务计算面收窄到改动文件。<b>代价（D5 拍板接受）</b>：未改动文件的存量债务不再每次提交重复提醒，可见性收敛到「该文件被改时 + 清理会话 <code>doc.caps --strict</code>」——与方案 A 同一档「落后到下一次提交」模式。无参直跑维持现状全量（<code>doc.caps</code> 与手工兼容）。</p>
+<h3>不做清单</h3>
+<ul>
+  <li><code>test.quick</code> 改动级选测 —— D1 拍板暂不动（§06）。</li>
+  <li><code>check_doc_links</code> 收窄 —— 收益约 0.5s，且会漏「指向改动路径的他件」（改名坏链落在别的文件里），搁置。</li>
+  <li><code>sync_agent_skills</code> —— 同步非检查，设计上靠每次提交兜住拉取来的改动，收窄即失效。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td>方案 A：check_command_drift.py 加 --files/--full 模式（补包测试用例）+ 闸门 run 拆三条（配置注释写明三条各自的触发理由）</td><td>① 改 md 手抄命令 → 闸门红；② 纯代码改动 → 三条 run 全部展开跳过（排障路径确认）；③ 改 .commands/*/config.toml 不改 md → 全量扫仍红；④ test.quick 与 kb.check 绿</td></tr>
+<tr><td>S2</td><td>方案 B：run_gates 并发化（线程池，上限 D2）+ test_pipeline 并发语义用例</td><td>① test.pkg 全绿；② KB 提交实测十连检合计 ≤4.0s（同 §02 口径复测）；③ 人为弄红一条 → 失败行指对是哪条、tail 完整、顺序 = 配置序；④ manual / 展开失败路径行为不变</td></tr>
+<tr><td>S3</td><td>方案 C：test.pkg.scoped task + 闸门两条 run</td><td>① 改单包 → 只跑该包用例且绿，耗时显著下降（实测落数）；② 改引擎 → 整跑；③ 受影响包 ≥2 → 整跑；④ ship.commit 复跑阶段行为一致</td></tr>
+<tr><td>S4</td><td>方案 D：check_context_caps.py --files 模式 + check_caps 加 only 参数 + 闸门三条 run</td><td>① AGENTS.md 超限且改动命中仍 STOP（用例钉）；② 改 KB 文件只算改动文件的角色 cap（only 过滤红绿双验）；③ 无匹配 run 静默跳过；④ check_caps 默认行为不变（既有用例全绿）</td></tr>
+<tr><td>S5</td><td>收尾：复测数字回写本计划（kb.bump 加 R 行）；新坑按动作写坑档并 kb.index；test.full + 基线切片按收尾 DoD</td><td>DoD 全过，ship.commit 全绿</td></tr>
+</table>
+<p>实施顺序 A → B → C：A 最独立先行；B 动引擎、C 动 test 包与闸门配置，各自独立成提交。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— D2–D5 已于 2026-11-01 全部拍板（迁 §06）。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>编号</th><th>日期</th><th>结论</th><th>拍板人</th><th>备注</th></tr>
+<tr><td>D1</td><td>2026-11-01</td><td><b>test.quick 暂不改动</b>，不纳入本计划范围</td><td>用户（会话内）</td><td>后续若做，前提 = 先论证改动→测试映射的保守性（命名约定映射或 pytest-testmon）；闸门是推送前最后防线，假绿不可接受</td></tr>
+<tr><td>D2</td><td>2026-11-01</td><td>并发池上限 = <b>4</b></td><td>用户（按推荐）</td><td>「pytest 独占池」保留为 R3 的处置手段</td></tr>
+<tr><td>D3</td><td>2026-11-01</td><td>drift 全量扫触发面 = <b>.commands/**/config.toml + 引擎 .agents/skills/commands/scripts/*.py</b></td><td>用户（按推荐）</td><td>骨架提取只受这两处影响，触发面精确</td></tr>
+<tr><td>D4</td><td>2026-11-01</td><td>test.pkg.scoped 归并 = <b>受影响包 ≥2 即整跑 + 引擎必整跑</b></td><td>用户（按推荐）</td><td>包间夹具依赖审计暂不做</td></tr>
+<tr><td>D5</td><td>2026-11-01</td><td><b>check_context_caps 纳入本计划</b>（新增方案 D）：债务计算面改改动面，存量债务靠 <code>doc.caps --strict</code> 收口</td><td>用户</td><td>硬规定不变；AGENTS.md 拦截语义逐字不动</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>编号</th><th>风险</th><th>触发条件</th><th>对策</th></tr>
+<tr><td>R1</td><td>drift 收窄后漏触发全量扫</td><td>骨架提取逻辑移到窄 glob 之外的位置（引擎辅助模块不在 scripts/*.py）</td><td>D3 触发面以「能影响 task_commands()/skeleton() 输出的文件」做一次依赖核对；包测试加「改 config.toml 必全量」钉子</td></tr>
+<tr><td>R2</td><td>并发化破坏失败语义 / 看门狗</td><td>线程池与 run_capture 交互、顺序敏感</td><td>失败全量收集按提交序排序；超时/杀树沿用 run_capture；test_pipeline 语义用例钉死</td></tr>
+<tr><td>R3</td><td>并发下 test.quick 与小命令抢 CPU，墙钟反而变长</td><td>低核数机器 + 重型闸门同批命中</td><td>D2 备选：pytest 类独占池；S2 实测对比决定</td></tr>
+<tr><td>R4</td><td>test.pkg.scoped 包间夹具耦合漏跑</td><td>用例借用其它包的夹具/常量</td><td>D4 保守档（≥2 包即整跑）；上线首两周跟踪漏跑线索，发现即入池（create-issue）</td></tr>
+<tr><td>R5</td><td>复跑阶段（rebase 后）行为漂移</td><td>复跑时树已净，改动清单与首跑不同</td><td>改动清单单点不变（复跑复用同一 present 清单，§01 底线 1）；S1/S3/S4 验收显式覆盖复跑路径</td></tr>
+<tr><td>R6</td><td>caps 存量债务从提交输出消失，遗忘清理</td><td>超限文件长期不被触碰</td><td>清理口径单点 = <code>doc.caps --strict</code>（债务非空 rc=1）；方案 D 段已注明取舍（D5）</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-0434</span> 初版：2026-11-01 会话「提交闸门优化」。11 条闸门逐条盘点与实测（§02 表）；D1 拍板 test.quick 不动；收 A/B/C 三案，D2–D4 待拍板。</li>
+  <li><span class="tag">R1 · 26-11-01-0505</span> check_context_caps 纳入本计划(新增方案 D, 拍板 D5: 债务计算面改改动面, 硬规定不变); D2-D4 按推荐拍板迁 §06; §04 增 S4 分步; §07 增 R6</li>
+  <li><span class="tag">R2 · 26-11-01-0537</span> S1-S4 实施完成并复测: drift 纯代码提交三条 run 全跳 0.00s(原 6.1s)/caps 改 KB 0.36s(原 0.57s)/十连检并行 4.25s(串行 6.2s, 上游加至 11 条)/pkg 纯代码 0 条; 回归 test.pkg 与 test.quick 全绿(数字见 kb.baseline)</li>
+</ul>
+
+</div>
+</body>
+</html>

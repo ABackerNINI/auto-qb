@@ -6,6 +6,14 @@
 
 匹配按"命令骨架"而非逐字: 忽略引号风格 / 空格 / 路径差异 / 环境前缀, 只看关键 token 序列 ——
 否则改个空格就绕过。
+
+用法(2026-11-01 起, 计划 memory-bank/plans/26-11-01-0434 方案 A)
+----
+    python scripts/check_command_drift.py                    # 全量扫(无参兼容 doc.drift / 手工)
+    python scripts/check_command_drift.py --files <路径...>   # 只扫传入文件(仍逐个过 SCAN_GLOBS/EXEMPT)
+    python scripts/check_command_drift.py --full <路径...>    # --full 优先: 忽略位置参数, 强制全量
+                                                             # (注册表/骨架提取逻辑变了 → 旧副本可能在新判据下漂移)
+改动清单单点在提交预检(<changed:> 展开), 本脚本**不自查 git** —— 复跑阶段树已净, 自查就错了。
 """
 
 from __future__ import annotations
@@ -103,8 +111,13 @@ def find_skeletons() -> list[tuple[str, str, list[str]]]:
     return out
 
 
-def scan() -> list[tuple[str, int, str, str]]:
-    """[(文件, 行号, 命中的原文, 该改成哪个 task)]"""
+def scan(only: set[str] | None = None) -> list[tuple[str, int, str, str]]:
+    """[(文件, 行号, 命中的原文, 该改成哪个 task)]
+
+    `only` = 只扫这些仓库根相对路径(POSIX); None = 全量。候选集仍由 SCAN_GLOBS 的 `ROOT.glob`
+    现算(语义与全量**同源**, 不另写第二套匹配), `only` 只是把**读取与逐行比对**收窄到传入文件
+    —— 传入但不在 SCAN_GLOBS 内的路径天然落空, EXEMPT 豁免照常生效。
+    """
     skels = find_skeletons()
     if not skels:
         return []
@@ -114,6 +127,8 @@ def scan() -> list[tuple[str, int, str, str]]:
         files += [p for p in ROOT.glob(pat) if p.is_file()]
     for path in sorted(set(files)):
         rel = path.relative_to(ROOT).as_posix()
+        if only is not None and rel not in only:
+            continue
         # 包内 README 不享受 `.commands/` 的豁免: 豁免保护的是"定义", 不是"包内散文"
         if path.name != "README.md" and any(rel.startswith(e) for e in EXEMPT):
             continue
@@ -142,6 +157,9 @@ def _contains(line: list[str], sk: list[str]) -> bool:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="检查文档里有没有手抄已收录的命令")
     parser.add_argument("--list", action="store_true", help="只列出正在盯的命令骨架")
+    parser.add_argument("--files", nargs="*", metavar="PATH", help="只扫这些文件(仓库根相对, POSIX) —— 缺省全量; 空参兜底成全量(保守)")
+    parser.add_argument("--full", action="store_true", help="无视 --files 强制全量(注册表/骨架提取逻辑变化时, 旧副本可能在新判据下漂移)")
+    parser.add_argument("paths", nargs="*", metavar="PATH", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
     if args.list:
@@ -149,7 +167,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{tid.ljust(28)}{' '.join(sk)}")
         return 0
 
-    hits = scan()
+    if args.full:
+        only = None  # --full 优先: 位置参数(闸门展开附带的文件清单)整份忽略
+    else:
+        raw = args.files or args.paths
+        only = {p.replace("\\", "/").strip() for p in raw if p.strip()} or None if raw else None
+    hits = scan(only)
     if not hits:
         print("命令漂移检查: 无手抄(0 处)")
         return 0

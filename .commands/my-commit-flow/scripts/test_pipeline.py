@@ -15,7 +15,10 @@ classify_merge_probe)随检查表一起删除 —— 同步行分类改由 test_
 - GlobMatchTest                <changed:>/<each:> 的 GLOB 语义(**/ 跨目录)
 - ExpandTest                   占位符四类 + 展开失败 + each_limit + 空格引号
 - RunGatesTest                 闸门执行: 全过静默 / 失败留末 20 行 / 超时 / 人工闸门不执行 /
-                               展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废)
+                               展开失败不降级 / 无匹配**静默**跳过(v2 的那条 WARN 已废) /
+                               并发执行(方案 B): 失败按提交序确定 / ran 计数 / 展开失败排在执行失败前
+- GateScopingConfigTest        闸门收窄形态(计划 26-11-01-0434): drift 三条(--files/--full)/ caps 三条
+                               (--files)/ test.pkg 两条(scoped) 逐字钉死 + 脚本侧参数在位
 - GitRetryTest                 git 命令: 单次 20s 超时 + 有界重试(网络子命令失败即重试 / 非幂等本地写
                                不重试 / 只读命令仅超时与瞬时签名重试 / attempts=1 关重试 / retry_note)
 - MirrorNoRetryTest            GitHub 镜像只给超时不给重试 —— 静态守住 push.py 那一行(attempts=1)
@@ -136,8 +139,8 @@ class RunGatesTest(unittest.TestCase):
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
-    def _gate(self, cmd: str, auto: bool = True, timeout: int = 60) -> dict:
-        return {"match": [""], "run": [cmd], "auto": auto, "timeout": timeout, "note": "测试闸门"}
+    def _gate(self, cmd: str, auto: bool = True, timeout: int = 60, note: str = "测试闸门") -> dict:
+        return {"match": [""], "run": [cmd], "auto": auto, "timeout": timeout, "note": note}
 
     def test_passing_gate_is_silent(self) -> None:
         failures, manual, ran = _pipeline.run_gates([self._gate(f'"{PY}" -c "pass"')], ctx(self.root, []))
@@ -185,6 +188,79 @@ class RunGatesTest(unittest.TestCase):
         gates = [{"match": [""], "run": ["x"], "auto": True}]
         self.assertEqual(len(_pipeline.gates_for(["src/a.py"], gates)), 1)
         self.assertEqual(_pipeline.gates_for(["src/a.py"], [{"match": ["docs/"], "run": ["x"]}]), [])
+
+    def test_parallel_failure_order_is_config_order(self) -> None:
+        # 方案 B 并发执行不改变失败行语义: 全量收集、按提交序(=配置序)排列 —— 调用方取 failures[0]
+        cmd1 = PY + ' -c "import sys; print(\'a-boom\'); sys.exit(1)"'
+        cmd2 = PY + ' -c "import sys; print(\'b-boom\'); sys.exit(2)"'
+        gates = [self._gate(cmd1, note="g1"), self._gate(cmd2, note="g2")]
+        failures, _, ran = _pipeline.run_gates(gates, ctx(self.root, []))
+        self.assertEqual([f[0] for f in failures], ["g1", "g2"])
+        self.assertEqual([f[2] for f in failures], [1, 2])
+        self.assertEqual(ran, 2)
+
+    def test_expand_failure_precedes_exec_failures(self) -> None:
+        # 展开阶段先串行走完(配置序), 执行阶段才并发 —— 展开失败(rc=-2)恒排在执行失败之前
+        gates = [
+            self._gate(PY + ' -c "import sys; sys.exit(3)"', note="g-exec"),
+            self._gate("python <nope:x>", note="g-expand")
+        ]
+        failures, manual, _ = _pipeline.run_gates(gates, ctx(self.root, []))
+        self.assertEqual(failures[0][0], "g-expand")
+        self.assertEqual(failures[0][2], -2)
+        self.assertEqual(len(failures), 2)
+
+    def test_ran_counts_all_executed(self) -> None:
+        gates = [self._gate(PY + ' -c "pass"', note=f"g{i}") for i in range(5)]
+        _, _, ran = _pipeline.run_gates(gates, ctx(self.root, []))
+        self.assertEqual(ran, 5)
+
+
+class GateScopingConfigTest(unittest.TestCase):
+    """闸门配置的**按改动收窄形态**(计划 memory-bank/plans/26-11-01-0434, 2026-11-01 落地)。
+
+    drift / caps / test.pkg 三条闸门各自一拆多 run, 靠 `<changed:GLOB>` 无匹配即整条静默跳过
+    实现收窄 —— run 清单的 glob 形态被改坏(拼错 / 删条)时收窄变**漏检**, 这里逐字钉死;
+    脚本侧的 --files/--full 参数与配置引用两侧同钉(引用在、实现不在 = 展开即炸, 反之 = 漏检)。
+    """
+
+    CONFIG = Path(__file__).resolve().parent.parent / ".my-commit-flow.toml"
+    ROOT = Path(__file__).resolve().parents[3]
+
+    def setUp(self) -> None:
+        self.text = self.CONFIG.read_text(encoding="utf-8")
+
+    def test_drift_gate_scoped_runs(self) -> None:
+        for frag in (
+            '"python scripts/check_command_drift.py --files <changed:*.md>"',
+            '"python scripts/check_command_drift.py --full <changed:.commands/**/config.toml>"',
+            '"python scripts/check_command_drift.py --full <changed:.agents/skills/commands/scripts/*.py>"',
+        ):
+            self.assertIn(frag, self.text, f"drift 闸门缺 run 行: {frag}")
+
+    def test_caps_gate_scoped_runs(self) -> None:
+        for frag in (
+            '"python scripts/check_context_caps.py --files <changed:AGENTS.md>"',
+            '"python scripts/check_context_caps.py --files <changed:.agents/skills/**>"',
+            '"python scripts/check_context_caps.py --files <changed:memory-bank/**>"',
+        ):
+            self.assertIn(frag, self.text, f"caps 闸门缺 run 行: {frag}")
+
+    def test_pkg_gate_scoped_runs(self) -> None:
+        for frag in (
+            '"python <skill-dir:commands>/scripts/run.py run test.pkg.scoped -- <changed:.commands/**>"',
+            '"python <skill-dir:commands>/scripts/run.py run test.pkg.scoped --full -- <changed:.agents/skills/commands/**>"',
+        ):
+            self.assertIn(frag, self.text, f"test.pkg 闸门缺 run 行: {frag}")
+
+    def test_scoped_modes_exist_in_scripts(self) -> None:
+        # 只钉旗标名本身, 不钉 argparse 写法 —— yapf 会把多行 add_argument 重排(实测 2026-11-01);
+        # 强形态(逐字 run 行)由上面三条守住, 这里只保证"配置引用的模式脚本侧真的存在"。
+        drift = (self.ROOT / "scripts" / "check_command_drift.py").read_text(encoding="utf-8")
+        caps = (self.ROOT / "scripts" / "check_context_caps.py").read_text(encoding="utf-8")
+        self.assertIn('"--files"', drift)
+        self.assertIn('"--full"', drift)
+        self.assertIn('"--files"', caps)
 
 
 class GitRetryTest(unittest.TestCase):

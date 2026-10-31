@@ -189,7 +189,10 @@ def trim_hint(role: str, cap: int) -> str:
             "外迁同目录 `attachments/` 并原位留一行指针")
 
 
-def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> tuple[list[str], list[str]]:
+def check_caps(root: Path,
+               mb: Path,
+               roles: tuple[str, ...] = DEFAULT_ROLES,
+               only: set[str] | None = None) -> tuple[list[str], list[str]]:
     """每个文件 ≤ 其角色的 cap。返回 (问题, 警告) —— ⚠ 警告里**混装两类**, 用 `split_warns` 分。
 
     严重度**在源码单点决定**, 两个消费者 (pytest / `doc.caps`) 都不再各判一次 (2026-09-30):
@@ -197,11 +200,17 @@ def check_caps(root: Path, mb: Path, roles: tuple[str, ...] = DEFAULT_ROLES) -> 
     - 其余角色的尺寸超限 → **warns 里的债务行**(带 `DEBT_MARK`: 不拦提交, 提交时派生输出 + 转告用户);
     - 下限 `CAP_MIN_WARN` 的「过小」→ **warns 里的提示行**(不带标记, 只是建议)。
     ❗返回的是 (问题, 警告) 而不是 (问题, 债务) —— 别拿 `len(warns)` 当债务数。
+
+    `only`(2026-11-01, 计划 26-11-01-0434 方案 D): 只算这些仓库根相对路径 —— 候选仍全量枚举
+    (便宜), 不在集内的跳过 `char_count`(读取才是大头); None = 全量, 既有消费者不变。
+    严重度单点不受影响: 硬规定/债务的分级仍只看角色, 与扫多大面无关。
     """
     problems: list[str] = []
     warns: list[str] = []
     for path in _cap_candidates(root, mb, roles):
         rel = _mb_rel(root, path)
+        if only is not None and rel not in only:
+            continue
         role = __import__("_common").role_of(rel)
         if role not in roles:
             continue

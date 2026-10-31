@@ -25,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 # Windows GBK 控制台兑底: git 输出含 emoji(gitmoji 首行)时 GBK 编不出来会让 print 直接
@@ -477,6 +478,11 @@ def expand_run(cmd: str, ctx: dict) -> tuple[list[str], str | None]:
 
 # ------------------------------------------------------------------ 闸门执行(沉默即成功)
 
+# 并发池上限(2026-11-01 拍板 D2, 计划 26-11-01-0434): 展开后的闸门命令在此池内并发执行。
+# 4 = 十连检 10 条竞争适度, 低配机 spawn 压力可控; pytest 类重型闸门本身单条, 若实测它与
+# 并行小命令互相拖慢(计划 §07 R3), 处置 = 改这里降并发或给 pytest 类命令独占池。
+GATE_WORKERS = 4
+
 
 def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, float, str]], list[str], int]:
     """执行命中的 `auto = true` 闸门 —— **全过即静默**(v3 契约), 失败才说话。
@@ -487,10 +493,16 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
     - manual: 非自动闸门的展开命令(不执行; 调用方决定要不要提示 —— 本仓库配置里没有这类)。
     - ran: 真正执行过的命令条数。
     - `<each:>` / `<changed:>` 无匹配文件 → **按设计静默跳过**(它们只盯本次改动)。
+
+    执行模型(2026-11-01, 计划 26-11-01-0434 方案 B): 两阶段 —— 先**串行展开**全部命中闸门
+    (顺序 = 配置序; 冒烟摘除的 print 只发生在这里), 再把展开出的命令按提交序丢进线程池并发跑
+    (`GATE_WORKERS`)。失败全量收集后**按提交序**排列(展开失败在前, 两者都确定), 调用方
+    「取 failures[0]」的语义不变; run_capture 的看门狗/杀树/超时语义逐条原样沿用 —— 线程只
+    等 subprocess, Windows 下安全。2026-11-01 前是双层串行 for(十连检 6.2s 全走墙钟)。
     """
     failures: list[tuple[str, str, int, float, str]] = []
     manual: list[str] = []
-    ran = 0
+    jobs: list[tuple[str, str, int]] = []  # (note, 命令, timeout) —— 提交序 = 配置序
     for gate in hits:
         note = gate.get("note", "(无 note)")
         timeout = int(gate.get("timeout", 600))
@@ -506,18 +518,38 @@ def run_gates(hits: list[dict], ctx: dict) -> tuple[list[tuple[str, str, int, fl
                 manual.extend(cmds)
                 continue
             for real in cmds:
-                t0 = time.monotonic()
-                # 走 run_capture(shell 模式): 闸门命令串同样会撞 Windows 的 CreateProcess / 管道挂死,
-                # 且闸门带超时语义 —— 看门狗到点杀**整棵进程树**, 比裸 subprocess.run(timeout=…)
-                # 只杀直接子进程更彻底(根因见模块顶「子进程防挂死」段)。
-                proc = run_capture(real, cwd=str(ctx["root"]), timeout=timeout, shell=True)
-                rc = proc.returncode
-                out = (proc.stdout or "") + (proc.stderr or "")
-                secs = time.monotonic() - t0
-                ran += 1
-                if rc != 0:
-                    lines = [l for l in out.splitlines() if l.strip()]
-                    failures.append((note, real, rc, secs, "\n".join(lines[-20:])))
+                jobs.append((note, real, timeout))
+
+    def _run(job: tuple[str, str, int]) -> tuple[int, float, str] | None:
+        # 返回 None = 通过; (rc, secs, tail) = 失败。线程池内不许让异常逃走 —— 例外按
+        # rc=-1 收成失败(与超时同码), 不中断其余命令的收集。
+        _note, real, timeout = job
+        t0 = time.monotonic()
+        try:
+            # 走 run_capture(shell 模式): 闸门命令串同样会撞 Windows 的 CreateProcess / 管道挂死,
+            # 且闸门带超时语义 —— 看门狗到点杀**整棵进程树**, 比裸 subprocess.run(timeout=…)
+            # 只杀直接子进程更彻底(根因见模块顶「子进程防挂死」段)。
+            proc = run_capture(real, cwd=str(ctx["root"]), timeout=timeout, shell=True)
+            rc = proc.returncode
+            out = (proc.stdout or "") + (proc.stderr or "")
+        except Exception as exc:  # noqa: BLE001 —— 兜底成失败, 闸门红比静默崩好
+            rc, out = -1, f"执行异常: {exc}"
+        secs = time.monotonic() - t0
+        if rc == 0:
+            return None
+        lines = [l for l in out.splitlines() if l.strip()]
+        return rc, secs, "\n".join(lines[-20:])
+
+    ran = len(jobs)
+    if jobs:
+        with ThreadPoolExecutor(max_workers=min(GATE_WORKERS, len(jobs))) as pool:
+            results = list(pool.map(_run, jobs))
+    else:
+        results = []
+    for (note, real, _timeout), res in zip(jobs, results):
+        if res is not None:
+            rc, secs, tail = res
+            failures.append((note, real, rc, secs, tail))
     return failures, manual, ran
 
 

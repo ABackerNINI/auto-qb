@@ -37,6 +37,7 @@ import 它**(与 `tests/test_memory_bank.py` 同做法) —— 不在两处各�
     python scripts/check_context_caps.py             # 默认: 只有 AGENTS.md 超限且本次改了它 → 退出码 1
     python scripts/check_context_caps.py --strict    # 收口模式: 债务非空(或 AGENTS.md 超限) → 退出码 1
     python scripts/check_context_caps.py --quiet     # 只打印非 PASS 项
+    python scripts/check_context_caps.py --files <路径...>  # 只算传入文件的 cap(闸门 <changed:> 通道, 2026-11-01 方案 D)
 """
 
 from __future__ import annotations
@@ -148,9 +149,11 @@ def _kb_checker():
     return None
 
 
-def kb_cap_rows() -> tuple[list[tuple[str, str]], str, str]:
+def kb_cap_rows(only: set[str] | None = None) -> tuple[list[tuple[str, str]], str, str]:
     """知识库角色 cap 的债务行 —— 由 skill 单点现算, 剔除 `agents`(它走硬规定行)。
 
+    `only`(2026-11-01 方案 D): 只算这些 memory-bank/ 相对路径(None = 全量) —— 直通
+    `check_caps` 的同名参数, 收窄的是**读取面**, 严重度单点不动。
     返回 ([(相对路径, 详情)], 硬错误, 软提示):
     - **硬错误**: 剔除硬规定角色后 `check_caps` 仍报 problem —— 说明严重度单点被绕过, 抬成 STOP;
     - **软提示**: skill / memory-bank 目录找不到 ⇒ **只报告, 不拦** —— "KB 没检查到"是环境
@@ -164,7 +167,7 @@ def kb_cap_rows() -> tuple[list[tuple[str, str]], str, str]:
         return [], "", f"未找到 {mb} —— KB 角色 cap 未检查"
     # 剔除硬规定角色: AGENTS.md 单列在「硬规定」组, 不进债务清单、不累计进债务数
     roles = tuple(r for r in checker.DEFAULT_ROLES if r not in checker.HARD_CAP_ROLES)
-    problems, warns = checker.check_caps(REPO_ROOT, mb, roles)
+    problems, warns = checker.check_caps(REPO_ROOT, mb, roles, only=only)
     rows = []
     for line in warns:
         # 只挑**债务**行: warns 里还混着下限 `CAP_MIN_WARN` 的"文件过小"建议 —— 那是提示不是欠债,
@@ -182,14 +185,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="检查 IDE 上下文注入上限与包内文档的阅读预算(2026-09-30 起: 除 AGENTS.md 外均为债务)")
     parser.add_argument("--strict", action="store_true", help="收口模式: 债务非空(或 AGENTS.md 超限) → 退出码 1")
     parser.add_argument("--quiet", action="store_true", help="只打印非 PASS 项")
+    parser.add_argument(
+        "--files",
+        nargs="*",
+        metavar="PATH",
+        help="只算这些文件(仓库根相对, POSIX)的 cap —— 缺省全量; 空参兜底成全量(保守)。"
+        "提交闸门经 <changed:> 传入本次改动(2026-11-01 方案 D), 传来的就是改动文件,"
+        "硬规定的「改动命中」判定因此直接成立"
+    )
     args = parser.parse_args()
 
-    changed = changed_files()
+    scope: set[str] | None = None  # None = 全量(无参兼容 doc.caps / 手工)
+    if args.files:
+        scope = {p.replace("\\", "/").strip() for p in args.files if p.strip()} or None
+    changed = scope if scope is not None else changed_files()
     rows: list[tuple[str, str, str]] = []
 
     # ---- 1. 硬规定: 超了内容真的会被截断, 不降级、不挂账 ----
     rows.append((GROUP, "硬规定 (不降级 · 不挂账)", ""))
     for rel, limit in sorted(HARD_CAPS.items()):
+        if scope is not None and rel not in scope:
+            continue  # 收窄: 本次没改的帽点不进报告(硬规定语义不变 —— 传入即改动)
         path = REPO_ROOT / rel
         if not path.is_file():
             rows.append((WARN, rel, "配置里声明了但文件不存在"))
@@ -211,6 +227,8 @@ def main() -> int:
     # ---- 2. SKILL / 阅读预算: 债务 (不拦提交) ----
     rows.append((GROUP, "两份 SKILL.md / 包内阅读预算 (债务)", ""))
     for rel, limit in sorted({**SKILL_CAPS, **READ_BUDGET_CAPS}.items()):
+        if scope is not None and rel not in scope:
+            continue  # 收窄: 债务只算本次改动的文件(D5)
         path = REPO_ROOT / rel
         if not path.is_file():
             rows.append((WARN, rel, "配置里声明了但文件不存在"))
@@ -223,19 +241,30 @@ def main() -> int:
                          " 本会话不修"))
 
     # ---- 3. 知识库角色 cap: 债务 (由 skill 单点现算) ----
-    rows.append((GROUP, "知识库角色 cap (债务 · 由 skill 单点现算)", ""))
-    kb_rows, kb_hard, kb_soft = kb_cap_rows()
-    for rel, detail in kb_rows:
-        rows.append((DEBT, rel, f"超 cap: {detail}"))
-    if kb_hard:
-        # 剔除 agents 后仍报 problem = 严重度单点被绕过; 抬成阻塞
-        rows.append((STOP, "check_kb_structure", kb_hard))
-    if kb_soft:
-        rows.append((WARN, "check_kb_structure", kb_soft))
-    if not kb_rows and not kb_hard and not kb_soft:
-        rows.append((PASS, "(全部 KB 角色)", "均在 cap 内"))
+    kb_scope = None if scope is None else {r for r in scope if r.startswith("memory-bank/")}
+    if scope is None or kb_scope:  # 收窄: 本次没改 memory-bank/ 就整段跳过
+        rows.append((GROUP, "知识库角色 cap (债务 · 由 skill 单点现算)", ""))
+        kb_rows, kb_hard, kb_soft = kb_cap_rows(kb_scope)
+        for rel, detail in kb_rows:
+            rows.append((DEBT, rel, f"超 cap: {detail}"))
+        if kb_hard:
+            # 剔除 agents 后仍报 problem = 严重度单点被绕过; 抬成阻塞
+            rows.append((STOP, "check_kb_structure", kb_hard))
+        if kb_soft:
+            rows.append((WARN, "check_kb_structure", kb_soft))
+        if not kb_rows and not kb_hard and not kb_soft:
+            rows.append((PASS, "(全部 KB 角色)", "均在 cap 内"))
 
-    width = max(len(r[1]) for r in rows if r[0] != GROUP)
+    # 收窄模式可能整组落空(传入文件没有帽点) —— 空组与空报告都要能打印, 不能 max() 崩
+    pruned: list[tuple[str, str, str]] = []
+    for i, r in enumerate(rows):
+        if r[0] == GROUP:
+            nxt = rows[i + 1] if i + 1 < len(rows) else None
+            if nxt is None or nxt[0] == GROUP:
+                continue  # 空组不打印
+        pruned.append(r)
+    rows = pruned
+    width = max((len(r[1]) for r in rows if r[0] != GROUP), default=0)
     print("\n上下文上限检查:\n")
     for level, rel, detail in rows:
         if level == GROUP:
