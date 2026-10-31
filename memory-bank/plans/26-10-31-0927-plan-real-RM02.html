@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM02">
+<meta name="plan-stamp" content="26-10-31-0927">
+<meta name="doc-topic" content="real-machine-rm02-plan">
+<title>RM02 主循环·调度·持久化 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 70ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 20px; font-weight: 600; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin-bottom: 14px; max-width: none; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--good); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.lv { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: var(--good-bg); color: var(--good); border-color: #2f4a33; }
+  .badge.stop { background: #2a1919; color: #e08e8e; border-color: #4a2c2c; }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .case .kv { margin-bottom: 6px; font-size: 14px; }
+  .case .kv .k { display: inline-block; min-width: 64px; font-family: var(--display); font-size: 11.5px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); margin-right: 8px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">真机实测轨 · 分步实施计划 · 排期锚 issue 26-10-31-0641</div>
+  <h1>RM02 主循环·调度·持久化</h1>
+  <p class="lede">对「主循环·调度·持久化」片做真机实测的排期准备与分步计划。本计划只准备、不执行: 用例代码、<code>real.run</code>/<code>real.suite</code> 由下一代理照本计划落刀。验证面对准规程 §04 片表 RM02 行 + RM01 拍板 D1 移交的「连不上 qB 的失败节流与重连退避」。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-0927</div></div>
+    <div class="item"><div class="k">切片</div><div class="v">RM02(片表 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">0.5 次(半天), 用例 8 条</div></div>
+    <div class="item"><div class="k">基线 commit</div><div class="v">4e8582fd(首轮)</div></div>
+    <div class="item"><div class="k">前置</div><div class="v">RM00 基建全绿(L1/L2 解锁)· RM01 9/9</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(漂移体检 + 环境自检)</h2>
+    <h3>漂移体检</h3>
+    <div class="callout good"><b>首轮, 无漂移面。</b>RM02 无基线 commit(规程 §06 步骤 2 / §07: 写不出基线的片从首轮重来)。本轮用例落地后, 基线 commit 记实测时刻 HEAD, 下一片/下次回归用它做 <code>git log &lt;base&gt;..HEAD -- src/auto_qb/core/ src/auto_qb/infra/ tests-real/</code>。</div>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 09:26 实测)</h3>
+    <pre><code>[ok] real.guard (1.0s)
+  [ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停
+  [ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+    <ul>
+      <li>两实例 <code>connection_status=firewalled</code>(§2.5 口径: 不是 <code>disconnected</code> 即通过), 白名单端口与镜像路径核对通过, 配置非仓库根 <code>config.yml</code>。</li>
+      <li>开工前 36595 曾 403: 本 clone 缺 gitignored 的 <code>tests-real/config/instances.local.json</code>(36595 的 API key 注册件, <code>LocalHostAuth=true</code>), 已按 <code>lib/instances.py</code> 口径补建(key 单点 = 该实例自身 <code>profile/qBittorrent/config/qBittorrent.ini</code> 的 <code>WebUI\APIKey</code>), 之后 guard 全绿。期间 36595 经 <code>real.up</code> 重启过一次, <b>pid 10204 → 41868</b>。</li>
+      <li>36596 空库(0 种子)免鉴权 —— 本片产品进程<b>只连 36596</b>; 36595 的 8 个真实种子全程 paused, 本片不碰。</li>
+    </ul>
+    <h3>glob 自检(规程 §05 规则 8)</h3>
+    <div class="callout"><b>命中前 5 条 glob 全部零命中 —— 漏 <code>src/auto_qb/</code> 前缀</b>(与 RM01 排期同款缺陷, 已按规则 8 修正锚件 §03 并记 §08)。补前缀后实测 <code>ls</code>: 5/5 命中, 分别为 <code>src/auto_qb/core/qbmanager.py</code> / <code>core/taskqueue.py</code> / <code>core/state.py</code> / <code>core/module.py</code> / <code>src/auto_qb/infra/store_recovery.py</code>, 无混入大件, 片边界不糊, 不拆不并。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读大文件)</h2>
+    <table>
+      <tr><th>验证面</th><th>实现单点</th><th>关键行为(外部可观测口径)</th></tr>
+      <tr><td>interval 真节拍</td><td><code>qbmanager.run()</code>(qbmanager.py:447)双时间线: 同步线 <code>sync_interval</code>(默认 1.5s, 钳制 ≤ main_tick)+ 任务线 <code>main_tick</code>(默认 2.0s, models.py:536); <code>_throttle</code>(qbmanager.py:100, 有 5500 倍空转的回归背景)</td><td>进程对 qB 的 API 请求呈稳定周期; 启动日志「主循环 2s, 默认任务间隔 …」</td></tr>
+      <tr><td>优雅退出落盘</td><td><code>run()</code> 的 <code>finally</code>: <code>host.stop_all()</code> → <code>state.save()</code>(仅非 dry-run)→ 放锁; 优雅 SIGTERM 只能进程内 <code>raise_signal</code>(<code>lib/app.py</code> <code>graceful_after</code>)</td><td>退出后 state_file 被写过、日志有「收到停止信号」、锁清干净、退出码 0</td></tr>
+      <tr><td>非优雅终止丢失窗口</td><td><code>state.maybe_flush</code>(state.py:233), 间隔 <code>state_save_interval</code>(默认 120s, 下限 30s, 0=关; models.py:540); dry-run 不落盘</td><td>运行期 state_file mtime 按 interval 推进; <code>taskkill /F /T</code> 后丢失 ≤ interval</td></tr>
+      <tr><td>热重载</td><td><code>apply_new_config</code>(qbmanager.py:682): L0 即换 Config 对象, 主循环<b>每轮现读</b> <code>main_tick</code>/<code>sync_interval</code>/<code>state_save_interval</code>(impact.py KERNEL_SECTIONS); R 闸: state_file/data_dir/fs 变更 → restart_required 拒绝</td><td>节拍即时变为新值; R 闸变更被拒且进程不死</td></tr>
+      <tr><td>queue_rebuilt 相位</td><td><code>events.emit("queue_rebuilt")</code>(qbmanager.py:819); 幂等判据 <code>has_named</code>(taskqueue.py:172); 连续第二次重建照常送达(module.py:295 的 suppressed 旗标设计)</td><td>重建后全局任务不重不丢(日志「创建全局任务 N 个」计数不翻倍)</td></tr>
+      <tr><td>连不上 qB: 首连失败</td><td><code>run()</code> 首连循环: 非托管 fail-fast <code>QbConnectError</code> 退出码 1; 托管模式(stop_event)按 main_tick 重试, 重试 WARNING 只打一次(<code>retry_warned</code>)</td><td>退出码与日志条数符合模式</td></tr>
+      <tr><td>运行期断连: 节流与重连退避(RM01 D1 移交)</td><td><code>_note_conn_failed</code>(issue A-07: 仅状态转换记一次, 断开期间静默)+ <code>_reconnect_due</code> 指数退避 main_tick→2×→4×…, 上限 <code>RECONNECT_MAX_INTERVAL=30s</code>(qbmanager.py:96,360); 恢复后 <code>_note_conn_ok</code> INFO 收尾 + 退避归零</td><td>断开期间错误日志不逐拍刷屏; 重试间隔递增 ≤30s; qB 恢复后自动接上</td></tr>
+      <tr><td>state 损坏恢复(持久化兜底)</td><td><code>store_recovery.py</code>(<code>recover_corrupt_file</code>/<code>quarantine_bad_file</code>)+ <code>state.load()</code> 主文件损坏回退 <code>.bak</code> 并<b>自愈写回</b>; <code>cleanup_orphan_tmp</code> 清孤儿 tmp</td><td>损坏后启动不崩: 用 .bak / 隔离坏件, 日志「用了备份」</td></tr>
+    </table>
+    <p>注: RM01 留下的观察项「未配流量源时启动打空路径 WARNING」归 RM07 glob(<code>core/traffic_source/</code>), 本片不接。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(8 条, docstring 首行 <code>[RM02-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm02_loop/</code>, 跑法 <code>commands run real.suite -- --slice RM02 --yes</code>(<code>-n 0</code>)。真实种子全程 paused, 全部条目<b>不需要活跃种子</b>。四行要点按规程 §09, 供执行代理照写 docstring。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-01</span><span class="ttl">interval 真节拍: 同步线/任务线周期与配置一致</span><span class="badge lv">L2</span><span class="badge">L0/L1 种子层(零种子即可)</span></div>
+      <div class="bd"><p>起非 dry-run 产品进程连 36596, 中间垫<b>本地 TCP 代理</b>(新建 <code>tests-real/lib/proxy.py</code>, 仅转发+记录请求时间戳, 与 RM02-07 共用; 见 §07 风险 1)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 36596 在线 firewalled、空库; 代理 listen 39000-39999 探空端口(不复用); 配置 <code>schema_version: 5</code>、qB 地址指代理端口、<code>main_tick=2</code>/<code>sync_interval=1.5</code>。</li>
+        <li><b>副作用</b>: 无(对 qB 零写; 只读快照请求)。</li>
+        <li><b>回滚</b>: 停进程 + 关代理 + 删用例目录。</li>
+        <li><b>失败判据</b>: 同步线请求间隔众数偏离 1.5s >±20%; 或出现无请求的死段; 或请求频率达到 <code>_throttle</code> 回归特征(数百次/秒)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-02</span><span class="ttl">优雅退出落盘: state_file 立即落盘 + 锁清理</span><span class="badge lv">L2</span><span class="badge">L0(零种子)</span></div>
+      <div class="bd"><p><code>graceful_after=N</code> 跑壳进程内自投 SIGTERM(RM01-07 同法), 但<b>非 dry-run</b> —— dry-run 退出不落盘是设计口径, 本条验的正是落盘。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM02-01 基座(不经代理也行, 直连 36596); 启动前记 state_file mtime。</li>
+        <li><b>副作用</b>: 用例目录写 state.json / state.lock(随目录清理); 36596 零写。</li>
+        <li><b>回滚</b>: 停进程 + 删用例目录。</li>
+        <li><b>失败判据</b>: 日志无「收到停止信号, 退出主循环」/ 退出码非 0 / state.json mtime 未前进 / 锁 meta 残留(与 RM01-07 口径一致)。<b>红验对照(升 L3 通道)</b>: 同法 dry-run 跑一遍, state.json 必须不被写 —— 否则「落盘」断言恒绿。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-03</span><span class="ttl">非优雅终止丢失窗口 ≤ state_save_interval</span><span class="badge lv">L2(带负向对照, L3 潜力)</span><span class="badge">L0(零种子)</span></div>
+      <div class="bd"><p>周期落盘 <code>maybe_flush</code> 的外部可观测面就是 state_file 的 mtime 序列。</p>
+      <ul class="four">
+        <li><b>前置</b>: 配置 <code>state_save_interval=30</code>(校验下限, 不得更低); 非 dry-run 运行 ≥70s。</li>
+        <li><b>副作用</b>: 用例目录 state.json 多次改写; 进程被 <code>taskkill /F /T</code> 强杀。</li>
+        <li><b>回滚</b>: 删用例目录(强杀进程已死, 无需停)。</li>
+        <li><b>失败判据</b>: 运行期内 mtime 推进次数 &lt;1; <code>taskkill</code> 后最后写入距 kill 时刻 > interval+裕量; <b>负向对照</b>: <code>state_save_interval=0</code> 时运行期内 mtime 不前进(0=关)必须成立 —— 对照不红则本条按 L3 验收不合格。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-04</span><span class="ttl">热重载: L0 键即时生效 + R 闸拒绝</span><span class="badge lv">L2</span><span class="badge">L0(零种子)</span></div>
+      <div class="bd"><p>经 WEB 命令线提交新配置触发 <code>apply_new_config</code>(端点细节属 RM09 写侧, 本条只断言内核生效面)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM02-01 基座(带代理, 便于观测节拍); WEB 启用(不带 dry-run)。</li>
+        <li><b>副作用</b>: 运行期改写用例目录的临时配置文件。</li>
+        <li><b>回滚</b>: 停进程 + 删用例目录。</li>
+        <li><b>失败判据</b>: 提交 <code>main_tick</code> 变更后代理观测节拍未变; 提交 <code>state_file</code>/data_dir 变更未被拒(restart_required 丢失); 进程意外退出或配置文件被迁移改写搅浑。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-05</span><span class="ttl">queue_rebuilt 相位: 连续两次重建, 全局任务不重不丢</span><span class="badge lv">L2</span><span class="badge">L0(零种子)</span></div>
+      <div class="bd"><p>相位本身是进程内事件, 外部可观测面 = 全局任务注册日志计数与重建后的执行行为。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM02-04(热重载通道可用, 连续触发两次 L2 重建)。</li>
+        <li><b>副作用</b>: 同 RM02-04。</li>
+        <li><b>回滚</b>: 同 RM02-04。</li>
+        <li><b>失败判据</b>: 第二次重建后日志「创建全局任务 N 个」的 N 翻倍(has_named 幂等被打穿); 或重建后全局任务消失(连续重建第二次应照常送达的语义丢失)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-06</span><span class="ttl">连不上 qB·首连失败: 非托管 fail-fast / 托管重试节流</span><span class="badge lv">L2</span><span class="badge">无种子</span></div>
+      <div class="bd"><p>配置指向<b>无监听的空端口</b>(39000-39999 探空, 不是任何 qB 实例 —— 不触碰白名单约束)。与 RM01-01 的配置错误通道不同, 这里 qB 在线性失败。</p>
+      <ul class="four">
+        <li><b>前置</b>: 无(不起真实 qB 连接; 两小节分别用非托管与托管模式起进程)。</li>
+        <li><b>副作用</b>: 无(进程自然退出 / 由 stop_event 停)。</li>
+        <li><b>回滚</b>: 删用例目录。</li>
+        <li><b>失败判据</b>: 非托管退出码 != 1 或 stderr 带堆栈; 托管模式重试 WARNING 逐拍刷屏(条数 ≫1)或首连成功(端口意外有人听 —— 探空要复核)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-07</span><span class="ttl">运行期断连: 失败日志节流 + 重连指数退避 + 恢复自动接上(红验)</span><span class="badge lv">L3</span><span class="badge">L0(零种子)</span></div>
+      <div class="bd"><p>RM01 拍板 D1 移交的验证面。断连注入用本地代理掐断(产品↔代理↔36596), <b>不碰 qB 进程</b>。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM02-01 代理基座; 非 dry-run 连上后运行 ≥60s 掐断代理, 再等 ≥30s(退避上限)恢复。</li>
+        <li><b>副作用</b>: 无(对 qB 零写; 掐断的是本机代理)。</li>
+        <li><b>回滚</b>: 恢复代理 → 停进程 → 删用例目录。</li>
+        <li><b>失败判据</b>: 断开期间连接失败 ERROR/WARNING 行数 &gt; 转换次数(逐拍刷屏 = A-07 回归); 重试间隔不递增或 &gt;30s 上限失守; 恢复代理后 60s 内未自动回连(无 INFO 收尾)。红验即断连注入本身: 掐断后节流与退避断言必须仍可区分两种实现(逐拍 vs 转换), 注入不生效(日志无变化)记 BLOCKED 不硬撑。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM02-08</span><span class="ttl">state 损坏恢复: .bak 回退 + 自愈写回 + 孤儿 tmp 清理</span><span class="badge lv">L2</span><span class="badge">L0(零种子)</span></div>
+      <div class="bd"><p>持久化兜底面(store_recovery.py + state.load 自愈), 损坏注入即天然负向对照。</p>
+      <ul class="four">
+        <li><b>前置</b>: 先正常起停一次生成合法 state.json + .bak; 停机态把主文件写坏(截断/乱字节); 另案: 留一个孤儿 <code>.tmp</code>。</li>
+        <li><b>副作用</b>: 用例目录 state.json 被自愈重写; 孤儿 tmp 被删。</li>
+        <li><b>回滚</b>: 删用例目录。</li>
+        <li><b>失败判据</b>: 启动崩溃或退出码非 0; 未从 .bak 恢复(内容不回); 恢复了但未写回主文件(下次 save 再坏); 日志缺「用了备份」类提示; 孤儿 tmp 残留。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>RM02 首轮全部新建, 按 RM00 先例「新建即档」计: 预计初始档位 <b>L0/L1/L2/L3 = 0/0/7/1</b>。</p>
+    <ul>
+      <li><b>本轮升档 = RM02-02、RM02-03 各带一条红验对照通道</b>(dry-run 不落盘 / interval=0 必须不中途写盘), 执行时红验真跑过即按 L3 计 —— 与 RM01 两条 L3 同口径(红验不是写了对照组就完, 必须看到红)。</li>
+      <li><b>RM02-07 设计即 L3</b>: 断连注入本身就是负向操作, 「注入后断言必须仍能变红」内建在失败判据里。</li>
+      <li>若执行中红验无法成真(如 dry-run 分支根本走不到), 如实降档记 L2 并写原因, 不硬撑档位。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <ul>
+      <li><b><code>[需活跃种子]</code> 跳过条目: 无。</b>本片八条全部只依赖「实例在线 + 零种子/零流量」(L0 层即够), 与约束 2(真实种子全程非活跃)零冲突。RM02 片表「可测层级」标 L1, 本计划按基建现状(L1/L2 已解锁)直接上自动断言, 未用满不是妥协 —— 调度/持久化面没有需要速率曲线的断言。</li>
+      <li><b>L0 人工目视项: 本片 0 条。</b>主循环·调度·持久化没有观感面(观感归 RM08/RM10)。按用户拍板口径备忘: 执行中若发现任何需要人眼确认的断言(如日志措辞歧义导致机器判不了), 一律记 <span class="badge stop">BLOCKED</span>, 解锁条件 = 用户目视, 不得代签。</li>
+      <li><b>潜在 BLOCKED 预登记(非种子约束, 环境面)</b>: RM02-04/05 依赖 WEB 命令线提交配置的端点 —— 若执行时发现端点行为与内核契约对不上, 按 §06 步骤 5 记 BLOCKED 并注端点归属 RM09, <b>当轮不修</b>。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><code>real.suite --slice RM02 --yes</code> 全绿: 8 条全部 <code>PASS</code>; 出现 <code>FAIL</code> ⇒ 按 scope-guard 入池 bug issue, 当轮不修; 出现 <code>BLOCKED</code> ⇒ 写明解锁条件, 不计入"做完"。</li>
+      <li>六条验证面逐条有着落: 节拍(RM02-01)·优雅退出落盘(02)·丢失窗口(03)·热重载(04)·queue_rebuilt(05)·连不上 qB 的节流与退避(06+07, D1 移交闭环)·state 兜底(08)。</li>
+      <li>至少一条红验真跑过并看到红(RM02-02/03 的对照或 RM02-07 的注入), 档位分布如实记进 <code>testing/real-baselines/&lt;stamp&gt;-real-RM02.md</code>。</li>
+      <li>基线 commit 记实测时刻 HEAD; 锚件 §07 RM02 行同步(状态/L 分布/基线); 新增环境事实回写规程 §2.5/§2.7(如代理基建、退避实测数字)。</li>
+      <li>本轮踩到已记的坑 ⇒ 该条「复发」+1, 并写一句为什么没命中。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>代理基建是本轮唯一新增件</b>: <code>tests-real/lib/proxy.py</code> 只做本机转发 + 时间戳记录, listen 端口走 39000-39999 探空且会话内不复用(§2.7 端口两条硬事实); 裸 bind 探测, 禁 <code>SO_REUSEADDR</code>。它只服务 RM02-01/04/07, 别做成通用 HTTP 解析器。</li>
+      <li><b>配置一律 <code>schema_version: 5</code> + 走 <code>lib/app.py</code></b>: 否则 v1→v5 迁移改写临时目录搅浑配置面; <code>Popen.pid</code> ≠ 真实 pid, 按 pid 断言用 <code>real_pid()</code>, 杀进程 <code>taskkill /F /T</code>。</li>
+      <li><b>优雅退出只能进程内 raise_signal</b>(graceful_after 跑壳), Windows 外部 SIGTERM = 强杀 —— RM02-02 与 03 的退出方式别搞混(02 优雅 / 03 强杀)。</li>
+      <li><b>时长预算</b>: RM02-03 要跑 ≥70s、RM02-07 断开观测 ≥30s + 恢复等待, 单条用例分钟级, 整片预计 5-10 分钟 —— 别把慢当挂死, 也别把 <code>real.suite</code> 的超时配小了。</li>
+      <li><b>state_save_interval 校验下限 30s</b>(0 除外): 想缩窗口观测别写 5s —— validate_config 会 fail-fast, 那是黄金法则 4 不是 bug。</li>
+      <li><b>dry-run 不落盘是设计口径</b>: RM02-02 红验对照看到 dry-run 不写 state.json 是预期绿, 别记缺陷。</li>
+      <li><b>36595 只在 guard 里出现</b>, 本片产品进程只连 36596; <code>tests-real/config/instances.local.json</code> 已补建(gitignored, 含实例 API key), <b>不要提交也不要改名</b>。</li>
+      <li><b>片内 conftest 照抄 RM01 的文件锁串行基座</b>(pytest.ini <code>-n 8</code> 下 xdist_group 不生效), 8 条都会起真实进程/抢端口。</li>
+      <li><b>日志断言只咬结构化锚点</b>(「收到停止信号」「创建全局任务 N 个」「用了备份」), 别咬整句措辞 —— 措辞归单测, 真机只验"发生了"。</li>
+    </ol>
+  </section>
+
+  <footer>排期准备件, 拍板即冻结(规程 §06 步骤 4)。执行产生的实测数字落 <code>memory-bank/testing/real-baselines/</code>, 本件不回填结果。准备: 2026-10-31 09:27, 分支 real/rm02-rm10 @ 4e8582fd。</footer>
+</div>
+</body>
+</html>
