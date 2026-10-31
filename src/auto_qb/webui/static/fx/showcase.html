@@ -11,8 +11,10 @@
   服务路径: static/fx/showcase.html -> /fx/showcase.html (FastAPI 静态根挂载)
   资源: 经相对路径链 shared/fx 三件(fx.css / fx-presets.css / fx.js),
         双击文件直接打开(file://)亦可用。
-  结构: 风格层切换器(preset) + 组件分区(每候选一张可交互样例卡) +
-        挑选辅助(选定/导出) + guide 合规总览 + 交接说明。
+  结构: 风格层切换器(preset) + 三套 preset 对比区(S4 补: 同组样例固定三档并排
+        + 差异表) + 组件分区(每候选一张可交互样例卡; 供给门控候选演示态强制
+        补供 + supply 生产语义标注) + 挑选辅助(选定/导出) + guide 合规总览 +
+        交接说明。
   卡片数据在页尾内联脚本的 CARDS 数组里 -- T5 补组件 = 追加数组条目 +
         占位分区改 status:"ready", 机制(渲染/演示/挑选/导出)全部复用。
 -->
@@ -79,9 +81,14 @@ h1 { font-size: 28px; line-height: 1.2; font-weight: 600; margin: 8px 0 6px; }
   height: 28px; padding: 0 12px;
   background: var(--card-deep); border: 1px solid var(--hair); border-radius: 5px;
   color: var(--dim); font: inherit; font-size: 12.5px; cursor: pointer;
+  /* 页面自身消费 fx 令牌: 切 preset 后操作钮的过渡时长/曲线随之变化 */
+  transition: color var(--fx-dur-hover, 80ms) var(--fx-ease-standard, ease-out),
+              border-color var(--fx-dur-hover, 80ms) var(--fx-ease-standard, ease-out),
+              box-shadow var(--fx-dur-fast, 120ms) var(--fx-ease-standard, ease-out);
 }
 .ctl:hover { color: var(--ink); border-color: var(--accent); }
-.ctl.on { color: var(--accent-ink); border-color: var(--accent); }
+/* 激活态辉光消费供给面: neon 档发光、glass/crisp 档只换描边(全页 preset 差异信号) */
+.ctl.on { color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent); }
 .ops label, .card-ops label { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; color: var(--dim); cursor: pointer; }
 
 /* ---- 分区与卡片 ---- */
@@ -91,7 +98,8 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 .sec-note { color: var(--dim); font-size: 13.5px; margin: 4px 0 14px; max-width: 78em; }
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
 
-.card { background: var(--card); border: 1px solid var(--hair-soft); border-radius: 10px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--card); border: 1px solid var(--hair-soft); border-radius: 10px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; transition: border-color var(--fx-dur-fast, 120ms) var(--fx-ease-standard, ease-out); }
+.card:hover { border-color: var(--hair); }
 .card.picked { border-color: var(--accent); }
 .stage {
   background: var(--card-deep); border: 1px solid var(--hair-soft); border-radius: 8px;
@@ -111,6 +119,56 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   border-radius: 4px; font: inherit; font-size: 12px; height: 24px;
 }
 .warntag { font-family: var(--mono); font-size: 10.5px; color: var(--warn); border: 1px solid var(--warn); border-radius: 3px; padding: 0 4px; margin-left: 6px; }
+
+/* ---- 供给面生产语义标注(消费 preset 供给面的候选卡) ----
+ * 供给面门控是 D6 拍板的生产设计(fx-presets.css 配方整体替换): glow/blur/sheen
+ * 类效果在各档开或关由 preset 配方决定。挑选台要求每个候选在每个 preset 下演示
+ * 可见 -- 供给门控卡由卡级强制补供(见下), 各档真实表现看顶部对比区 + 本标注。 */
+.supply-tag {
+  font-family: var(--mono); font-size: 10.5px; color: var(--accent-ink);
+  border: 1px solid var(--accent); border-radius: 3px; padding: 1px 5px;
+  display: inline-block; margin: 2px 0 0;
+}
+/* ---- 演示态强制供给(仅 showcase 层, 不回写 fx 库 preset 配方) ----
+ * 卡级局部覆盖供给令牌: 供给面关掉的档(glass/crisp/基线)下效果恒可见。
+ * 颜色取 accent-ink/白系固定值, 保证深色卡面上肉眼可辨 -- 生产里 glow 走
+ * currentColor, primary 钮的字色是深色 -> 辉光也偏深, 深底难辨(对比区用
+ * 浅色字钮展示真实观感)。 */
+.fx-force-glow {
+  --fx-glow: 12px;
+  --fx-glow-c: color-mix(in srgb, var(--accent-ink) 60%, transparent);
+}
+.fx-force-sheen {
+  --fx-sheen-c: color-mix(in srgb, #ffffff 72%, transparent);
+  --fx-sheen-op: 0.42;
+}
+
+/* ---- 三套 preset 对比区(顶部) ----
+ * 面板级 data-fx-preset 作用域: fx-presets.css 的配方块是属性选择器, 挂在任意
+ * 元素上即对该子树整体生效(就近覆盖 <html> 上的档位) -- 同一组样例固定三种
+ * 配方并排, 供给面开/关与时长/曲线气质一眼可辨。展示的是各档真实表现(未补供)。 */
+.pc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; }
+.pc-panel { background: var(--card); border: 1px solid var(--hair-soft); border-radius: 10px; padding: 12px 12px 14px; }
+.pc-head { display: flex; gap: 8px; align-items: baseline; margin-bottom: 10px; }
+.pc-head b { font-size: 14px; }
+.pc-head span { font-family: var(--mono); font-size: 11px; color: var(--faint); }
+.pc-stage {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  background: var(--card-deep); border: 1px solid var(--hair-soft); border-radius: 8px; padding: 12px;
+}
+.pc-blurbox {
+  flex: 1 1 100%; height: 62px; border-radius: 8px; position: relative; overflow: hidden;
+  background: linear-gradient(115deg, #274352, #6db3c9 45%, #1a232c 78%, #8fd0e0);
+}
+.pc-blur-panel {
+  position: absolute; top: 10px; bottom: 10px; left: 10px; width: 58%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(20, 27, 34, 0.5); border: 1px solid var(--hair); border-radius: 6px;
+  font-size: 12px; color: var(--ink);
+  backdrop-filter: blur(var(--fx-blur));
+}
+.pc-rise-row { display: inline-flex; gap: 8px; align-items: center; }
+.pc-rise { display: inline-block; padding: 7px 13px; background: #1a232c; border: 1px solid var(--hair); border-radius: 6px; font-family: var(--mono); font-size: 12px; }
 
 /* ---- 占位分区(T5) ---- */
 .placeholder { border: 1px dashed var(--hair); border-radius: 10px; padding: 16px 18px; color: var(--faint); font-size: 13px; }
@@ -492,7 +550,7 @@ footer .audit-line { color: var(--dim); }
 <header>
   <div class="kicker">FX SHOWCASE · flux 动效皮肤 · S3</div>
   <h1>动效候选挑选台</h1>
-  <p class="lede">两层变体模型: 风格层(<code>&lt;html data-fx-preset&gt;</code>, 整套令牌配方一键切换) × 组件层(<code>data-fx</code> / <code>data-fx-variant</code>, 单组件行为变体)。每个候选一张可交互样例卡 -- 样例即真实组件, 标注「动什么属性 / 时长 / JS 依赖 / RM 降级 / 来源」, 勾选「选定」后底部导出清单交回 S4 人工挑选步。候选口径: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html §05, 「候选不淘汰、只标注」。</p>
+  <p class="lede">两层变体模型: 风格层(<code>&lt;html data-fx-preset&gt;</code>, 整套令牌配方一键切换) × 组件层(<code>data-fx</code> / <code>data-fx-variant</code>, 单组件行为变体)。顶部「三套风格对比区」固定三档并排展示各 preset 真实气质(含供给面开/关); 下方每个候选一张可交互样例卡 -- 样例即真实组件, 标注「动什么属性 / 时长 / JS 依赖 / RM 降级 / 来源」, 供给门控候选(glow/sheen 类)的演示已强制补供并挂 supply 标注说明各档真实表现。勾选「选定」后底部导出清单交回 S4 人工挑选步。候选口径: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html §05, 「候选不淘汰、只标注」。</p>
   <div class="ops">
     <div class="grp" id="preset-grp">
       <span class="grp-label">风格层 preset</span>
@@ -515,6 +573,54 @@ footer .audit-line { color: var(--dim); }
 </header>
 
 <main>
+  <section id="compare">
+    <h2><span class="no">PRESET · 三套风格对比区</span>neon / glass / crisp 同台对照</h2>
+    <p class="sec-note">三份<b>同一组样例</b>分别固定在 neon / glass / crisp 配方下(面板级 <code>data-fx-preset</code> 作用域, 就近覆盖 <code>&lt;html&gt;</code> 档位), 展示的是<b>各档真实表现</b>: 供给面开的档效果可见、关的档整条不可见 -- 这正是选定后的生产语义(下方卡片区对供给门控候选做了演示态强制补供, 这里是未补供的对照组)。每组样例: 毛玻璃面板(消费 <code>--fx-blur</code>) / glow 辉光钮(hover) / sheen 扫光钮(点按) / press 按压(按住看缩放) / rise 入场重放(看时长与曲线档)。</p>
+    <div class="pc-grid">
+      <div class="pc-panel" data-fx-preset="neon">
+        <div class="pc-head"><b>neon</b><span>强档: 弹簧-3 / 发光开 / snap 快收</span></div>
+        <div class="pc-stage">
+          <div class="pc-blurbox"><span class="pc-blur-panel">毛玻璃(消费 --fx-blur)</span></div>
+          <button class="bt" data-fx="glow" type="button">glow(hover)</button>
+          <button class="bt" data-fx="sheen" type="button" data-pc-sheen>sheen(点按)</button>
+          <button class="bt" data-fx="press" type="button">press(按住)</button>
+          <span class="pc-rise-row"><span class="pc-rise" data-fx="rise">rise 入场</span><button class="ctl" type="button" data-pc-replay>重放</button></span>
+        </div>
+      </div>
+      <div class="pc-panel" data-fx-preset="glass">
+        <div class="pc-head"><b>glass</b><span>中档: 弹簧-2 / 毛玻璃开 / sine 柔曲线</span></div>
+        <div class="pc-stage">
+          <div class="pc-blurbox"><span class="pc-blur-panel">毛玻璃(消费 --fx-blur)</span></div>
+          <button class="bt" data-fx="glow" type="button">glow(hover)</button>
+          <button class="bt" data-fx="sheen" type="button" data-pc-sheen>sheen(点按)</button>
+          <button class="bt" data-fx="press" type="button">press(按住)</button>
+          <span class="pc-rise-row"><span class="pc-rise" data-fx="rise">rise 入场</span><button class="ctl" type="button" data-pc-replay>重放</button></span>
+        </div>
+      </div>
+      <div class="pc-panel" data-fx-preset="crisp">
+        <div class="pc-head"><b>crisp</b><span>基线档: 无过冲 / 供给面全关 / 只剩时序</span></div>
+        <div class="pc-stage">
+          <div class="pc-blurbox"><span class="pc-blur-panel">毛玻璃(消费 --fx-blur)</span></div>
+          <button class="bt" data-fx="glow" type="button">glow(hover)</button>
+          <button class="bt" data-fx="sheen" type="button" data-pc-sheen>sheen(点按)</button>
+          <button class="bt" data-fx="press" type="button">press(按住)</button>
+          <span class="pc-rise-row"><span class="pc-rise" data-fx="rise">rise 入场</span><button class="ctl" type="button" data-pc-replay>重放</button></span>
+        </div>
+      </div>
+    </div>
+    <table class="guide">
+      <tr><th>对照项</th><th>neon(强档)</th><th>glass(中档)</th><th>crisp(基线档)</th></tr>
+      <tr><td>弹簧族</td><td>-3 强档(过冲 29.5%, 全族带回弹)</td><td>-2/-1 中软档(过冲收半)</td><td>全落 bezier 快收, 无过冲</td></tr>
+      <tr><td>曲线族气质</td><td>snap 快起狠收; back/elastic 过冲全开</td><td>sine 系最柔; 过冲收半档</td><td>quart 系干脆; 过冲关</td></tr>
+      <tr><td>时长档</td><td>enter 280 / emphasis 460 / tab 240 / stagger 40ms</td><td>enter 260 / emphasis 420 / tab 240 / stagger 35ms</td><td>enter 240 / emphasis 360 / tab 200 / stagger 24ms</td></tr>
+      <tr><td>位移/幅度</td><td>lift 2px / 入场位移 14px / pop 0.94</td><td>lift 1px / 入场位移 10px / pop 0.97</td><td>lift 1px / 入场位移 8px / pop 0.97</td></tr>
+      <tr><td>glow 发光</td><td class="good">开: 12px, currentColor 45%</td><td>关</td><td>关</td></tr>
+      <tr><td>blur 毛玻璃</td><td>关</td><td class="good">开: 10px</td><td>关</td></tr>
+      <tr><td>sheen 扫光</td><td class="good">开: currentColor 60%, 峰值 0.2</td><td class="wr">开(弱): 白 40%, 峰值 0.12</td><td>关</td></tr>
+      <tr><td>与卡片区的关系</td><td colspan="3">供给门控候选(glow/sheen 类)在卡片区已做演示态强制补供, 挑选时恒可见; 本表与对比区展示的是选定后各 preset 档下的真实表现</td></tr>
+    </table>
+  </section>
+
   <section id="d1">
     <h2><span class="no">D1 · 组件分区</span>按钮 .bt 一族</h2>
     <p class="sec-note">样例为 showcase 自建的 <code>.bt</code> 等价结构, 语义链回 real <code>.bt</code> 一族(conventions/webui.md「WEB UI 按钮体系」: <code>.bt</code> 次钮 / <code>.primary</code> / <code>.ghost</code> / <code>.danger</code> / <code>.danger-solid</code> / <code>.icon</code> / <code>.sm</code>; 标准 34px, 小档 28px, 禁用 .45) -- 三皮肤真实定义一行未动。候选对一族六变体通用, 每卡用一个代表变体演示。素形参照(未挂 fx):</p>
@@ -671,6 +777,10 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
    *   ctor     构造器卡(S3a 后补 4 组): modal | drawer | rows | toast --
    *            buildSample 分发到 make* 构造器, comp.demo() 承接演示与循环;
    *            kind 字段是构造器内部的变体名
+   *   force    演示态强制供给(S4 实测反馈后补): glow | sheen -- 消费 preset
+   *            供给面的候选, 供给面关掉的档(glass/crisp/基线)下整条不可见,
+   *            卡级局部覆盖供给令牌让演示恒可见(仅 showcase 层, 不回写库配方)
+   *   supply   供给面生产语义标注文案(渲染成卡面 supply-tag)
    * ================================================================== */
   var CARDS = [
     /* ---- D1 按钮 ---- */
@@ -688,6 +798,8 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     },
     {
       id: "D1-2", sec: "d1", name: "glow 辉光", fx: "glow", demo: "hover", warn: "超 hover 100ms 软约束",
+      force: "glow",
+      supply: "glow 受 preset 供给面控制: neon 开 / glass 关 / crisp 关(生产色随 currentColor); 本卡演示已强制补供恒可见",
       meta: {
         attr: "box-shadow(paint, 按钮小面积)",
         dur: "120ms(--fx-dur-fast), ease-standard",
@@ -700,6 +812,8 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     },
     {
       id: "D1-3", sec: "d1", name: "sheen 高光扫过", fx: "sheen", demo: "attention", warn: "总时长超 hover 软约束",
+      force: "sheen",
+      supply: "sheen 受 preset 供给面控制: neon 开 / glass 弱(白 40%, 峰值 0.12) / crisp 关; 本卡演示已强制补供恒可见",
       meta: {
         attr: "transform/opacity(::after 扫光条, 合成器友好)",
         dur: "400ms(--fx-dur-emphasis)",
@@ -907,6 +1021,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     },
     {
       id: "D2-4", sec: "d2", ctor: "modal", kind: "blur", name: "backdrop blur 渐入", fx: null, demo: "open", warn: "大面积 filter, 帧率实测标注",
+      supply: "生产语义: 毛玻璃配方消费 --fx-blur(glass 开 10px / neon·crisp 关); 本卡样例固定 8px 演示, 不随 preset",
       meta: {
         attr: "backdrop-filter(blur 0->8px + brightness 0.6, 大面积) + opacity",
         dur: "backdrop 200ms; 面板仍走 300ms 骨对",
@@ -968,6 +1083,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     },
     {
       id: "D3-3", sec: "d3", ctor: "drawer", kind: "blurbg", name: "backdrop 渐暗+blur", fx: null, demo: "open", warn: "blur 4px 小半径, 标注",
+      supply: "生产语义: 同 D2-4 消费 --fx-blur(glass 开); 本卡样例固定 4px 演示, 不随 preset",
       meta: {
         attr: "opacity + backdrop-filter(遮罩, blur 0->4px)",
         dur: "250ms 与面板同步",
@@ -1728,6 +1844,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     stage.className = "stage";
     c.sampleEl = buildSample(c);
     if (c.fx) c.sampleEl.setAttribute("data-fx", c.fx);
+    if (c.force) c.sampleEl.classList.add("fx-force-" + c.force); /* 演示态强制供给(卡级局部覆盖供给令牌) */
     stage.appendChild(c.sampleEl);
     if (c.demo === "ripple") {
       c.sampleEl.addEventListener("pointerdown", function (ev) { spawnRipple(c.sampleEl, ev); });
@@ -1745,6 +1862,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
       (c.warn ? '<span class="warntag">' + c.warn + '</span>' : '') + '</div>';
     var m = c.meta;
     meta.innerHTML = nameHtml +
+      (c.supply ? '<div class="supply-tag">supply: ' + c.supply + '</div>' : "") +
       '<dl class="meta">' +
       '<dt>动什么</dt><dd>' + m.attr + "</dd>" +
       '<dt>时长</dt><dd>' + m.dur + "</dd>" +
@@ -1987,6 +2105,18 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
   renderSections();
   renderMech();
   if (window.AQB_FX) AQB_FX.scan(); /* 幂等重扫: JS 动态插入的样例补挂载标记 */
+
+  /* 三套 preset 对比区接线: sheen 点按播放 / rise 重放(面板各自固定档位) */
+  $all("#compare [data-pc-sheen]").forEach(function (b) {
+    b.addEventListener("click", function () { if (window.AQB_FX) AQB_FX.play(b); });
+  });
+  $all("#compare [data-pc-replay]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var row = b.closest(".pc-rise-row");
+      var box = row ? row.querySelector(".pc-rise") : null;
+      if (box) replayEnter(box);
+    });
+  });
 
   /* preset 恢复(会话内记忆) */
   var savedPreset = load(PRESET_KEY);
