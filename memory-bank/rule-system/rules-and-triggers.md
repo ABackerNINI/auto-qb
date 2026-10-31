@@ -71,7 +71,8 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 
 - **载入层** (`rules_mod.disable_retired_rule_spec`): 检测到含键规则 → 内存副本转**未启用** (enabled=false) + 剔除 actions 里的伪动作项; 配置原内容**不回写、原样保留**供改写; **每次载入**出 warning, 话术给出 `ignore_next_action_error` 的等价新写法 `on_error: {policy: continue}` (on_error 随 W2 落地)。
 - **键面保留识别**: schema/RULE_FIELDS 与校验侧仍识别两键(用于升级检测), webui 规则卡对含键规则显示「未启用·含退役键」徽标与卡脚升级提示(检测单点 `cfgRuleRetiredKeys`, 与后端 `retired_control_keys_in` 同口径)。
-- **绕过载入层**直接构造 Rule 遇伪动作按未知动作 ConfigError; 需「首中即停」→ 等引擎级 `evaluation` 枚举位 (W4); 需「动作失败继续」→ `on_error: {policy: continue}` (W2)。
+- **绕过载入层**直接构造 Rule 遇伪动作按未知动作 ConfigError; 需「首中即停」→ `evaluation: first_match`
+  (W4 枚举位已占坑, 本版本占位未实现, 见下节); 需「动作失败继续」→ `on_error: {policy: continue}` (W2)。
 
 ### 去重语义 (`execute_once` / `cooldown`)
 
@@ -106,3 +107,33 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 - webui: 动作卡「失败策略」控件(config_rules.js `cfgOnError*` 方法族), 默认值与后端
   schema constants 同源; 全部为缺省值时不写树。
 - exec_history 去重键口径不受影响: 键 = `规则名:hash`, hash = 种子 infohash, **不含 spec 序列化**。
+
+### evaluation 求值模式枚举位 (plan 26-11-01-0106 W4/D4)
+
+规则级可选键 `evaluation: all|first_match`, 默认 `all` = 现状(每轮完整求值条件并执行全部动作)。
+`first_match` 是**占位键值, 本版本不实现**(D4 拍板): 校验放行先占坑(`schema/fields.py`
+`EVALUATION_MODES` 单点), 引擎对非 `all` 值在 Rule 构造期显式 WARNING 后按 `all` 处理, 行为零变化
+—— 后续实现「首中即停」时键面/校验零改动。webui 规则编辑下拉取自 rule_fields 的 options, 无额外前端键。
+
+### per-run trace (plan 26-11-01-0106 W4/D5)
+
+`Rule.process()` 每次调用装配一条 trace, 写入 `state["rule_traces"]["{规则名}:{hash}"]`
+(维度 = 规则 x 种子 hash), 回答「这条规则这次为什么没跑/跑了什么」:
+
+- 单条内容: `verdict` 结论 + `conditions` 逐叶子求值明细(顺序 = 实际求值顺序, 短路可见;
+  choose 分支叶子带 `b` 分支号) + `actions` 每步结果(`st` 状态 / `disp` 处置 / `msg` 截断消息) +
+  retry/断点信号(`retry: {attempt, delay}` / `resume: 断点索引`) + dry-run `dry` 标记;
+  `ts`/`date` 排序字段由 state 层补齐。
+- 截断口径(两层合围): 写入侧条件明细叶子条数 <= 32(超出保留头部 + `{"clip": 丢弃数}` 标记)、
+  错误/消息串 <= 200 字符(`rules/base.py` `_TRACE_*`); state 层单条序列化 <= 2048 字节
+  (`_TRACE_ENTRY_MAX_BYTES`, 超限降级为截断存根, 保留 verdict 与排序字段)。
+- 体积红线: 每维度环形保留最近 **5** 条 + 保留期 **7** 天 + 全键面总条目上限 **300** 条
+  (`core/state.py` `_TRACE_*` 常量, 固定值不开配置面) —— 与单条 2KiB 上限相乘, 体积硬上界
+  600KiB < **1 MiB** 红线(压测用例 test_rule_trace; 实测数字见 kb.baseline)。
+- prune 复用 `_prune_exec_history` 同款机制(`_evict_oldest` / `prune_day_keys` 单点, 不复制逻辑):
+  日期淘汰按维度最新条目定维龄(维度内条目紧密成簇), 总量逐出走同一排序口径 —— 唯一差异是
+  trace 无去重语义, 上限逐出当日记录也参与(`keep_today=False`)。
+- trace 是排障辅助**无去重语义**, 与 exec_history(去重依据)同键口径互不迁移, 不动既有键面;
+  写入在单一写线程内(process 只在主循环线程被调), 落盘语义随 `state_save_interval`;
+  记录失败只 DEBUG, 不影响规则执行。保守默认: trace 默认开且轻量(无开关键, 常量兜底体积);
+  条件不命中的运行同样落一条(这正是排障诉求), 未被调度的规则零开销。

@@ -1,6 +1,6 @@
 """schema 规则集段: 规则字段 + 条件/动作插件 spec 元数据"""
 from typing import Tuple
-from .fields import CHECKING_BASIC, CHECKING_MODES, EXECUTE_ONCE, Field, HR_MODES, Plugin, STOP_IF, TRIGGERS
+from .fields import CHECKING_BASIC, CHECKING_MODES, EVALUATION_MODES, EXECUTE_ONCE, Field, HR_MODES, Plugin, STOP_IF, TRIGGERS
 
 RULE_FIELDS: Tuple[Field, ...] = (
     Field("enabled", "启用", "bool", default="true", help="关闭后该规则不参与任何匹配与执行"),
@@ -44,6 +44,15 @@ RULE_FIELDS: Tuple[Field, ...] = (
         "time",
         default="0S",
         help="距上次成功执行不足该时间就先跳过(优先级高于「执行一次」); 0 = 不冷却",
+    ),
+    Field(
+        "evaluation",
+        "求值模式",
+        "enum",
+        default="all",
+        options=EVALUATION_MODES,
+        help="占位枚举位(plan 26-11-01-0106 D4): all = 每轮完整求值条件并执行全部动作(现状); "
+        "first_match 预留给「首中即停」语义, 本版本未实现 —— 配置后按 all 处理并出 warning",
     ),
     Field(
         "stop_following_rules_if",

@@ -35,6 +35,34 @@ _CORRUPT = object()
 _EXEC_HISTORY_KEEP_DAYS = 30
 _EXEC_HISTORY_MAX_ENTRIES = 2000
 
+# per-run trace 键面(W4, plan 26-11-01-0106 D5): state["rule_traces"]["{规则名}:{hash}"] = [条目...]
+# 维度 = (规则 × 种子 hash), 定位「这条规则这次为什么没跑/跑了什么」的排障辅助, **无去重语义**
+# —— 与 exec_history(去重依据)同键口径但互不迁移, 新键面不碰既有数据。固定常量而非配置键
+# (数据保留期不是行为开关, 与上面 _EXEC_HISTORY_* 同判):
+# - 每维度环形 _TRACE_KEEP_PER_DIM 条(计划拍板 3–5, 取上界 5: 单条已截断, 总量另有硬上限兜底);
+# - 保留期 _TRACE_KEEP_DAYS 天: trace 的排障现场价值短, 远短于 exec_history 的 30 天;
+# - 全键面总条目上限 _TRACE_MAX_ENTRIES 与单条序列化体积上限 _TRACE_ENTRY_MAX_BYTES 相乘
+#   给出体积硬上界(plan W4 验收②的 1 MiB 红线): 300 x 2 KiB = 600 KiB 字节, 留 JSON 缩进
+#   与键名开销余量; trace 无去重语义, 总量逐出当日记录也参与(见 _prune_rule_traces)。
+_TRACE_KEEP_PER_DIM = 5
+_TRACE_KEEP_DAYS = 7
+_TRACE_MAX_ENTRIES = 300
+_TRACE_ENTRY_MAX_BYTES = 2048
+
+
+def _evict_oldest(items, overflow: int, today_iso: str, keep_today: bool = True) -> list:
+    """上限逐出的排序口径单点(exec_history 与 rule_traces 共用): 按 ts 升序挑最旧淘汰,
+    非当日记录优先 —— 「当日活跃键不被误清」由 keep_today 声明: exec_history 的去重活跃键
+    一律保留(当日全保); rule_traces 无去重语义, 当日也参与逐出以硬保证体积上界。
+    返回 (标识, 记录) 对列表, 容器删除由调用方按各自形状执行(dict 整键删 / 维度列表过滤)。
+    """
+    ordered = sorted((kv for kv in items if kv[1].get("date") != today_iso), key=lambda kv: kv[1].get("ts", 0))
+    evict = ordered[:overflow]
+    if not keep_today and len(evict) < overflow:
+        todays = sorted((kv for kv in items if kv[1].get("date") == today_iso), key=lambda kv: kv[1].get("ts", 0))
+        evict = evict + todays[: overflow - len(evict)]
+    return evict
+
 
 def prune_day_keys(d: dict, today: date, keep_days: int, date_of) -> None:
     """state 日键按日期淘汰的单点(仅主循环线程调用; 幂等)
@@ -266,19 +294,71 @@ class StateService:
         }
 
     def _prune_exec_history(self, history: dict, today: date) -> None:
-        """exec_history 键面清理: 早于保留期的记录(prune_day_keys 单点) + 超上限时最旧的非当日记录(仅主循环线程)"""
+        """exec_history 键面清理: 早于保留期的记录(prune_day_keys 单点) + 超上限时最旧的非当日记录(仅主循环线程)
+
+        上限逐出的排序口径走 _evict_oldest 单点(与 rule_traces 共用; keep_today=True =
+        当日记录一律保留, 守去重活跃键 —— 语义与重构前逐位一致)。
+        """
         prune_day_keys(history, today, _EXEC_HISTORY_KEEP_DAYS, lambda k, v: v.get("date", ""))
         overflow = len(history) - _EXEC_HISTORY_MAX_ENTRIES
         if overflow > 0:
-            candidates = sorted(
-                (kv for kv in history.items() if kv[1].get("date") != today.isoformat()),
-                key=lambda kv: kv[1].get("ts", 0),
-            )
-            for k, _ in candidates[:overflow]:
+            for k, _ in _evict_oldest(list(history.items()), overflow, today.isoformat(), keep_today=True):
                 del history[k]
 
     def get_exec_record(self, rule_name: str, hash: str) -> Optional[dict]:
         return self.data.get("exec_history", {}).get(f"{rule_name}:{hash}")
+
+    # ---------- per-run trace(规则排障, W4) ----------
+
+    def record_rule_trace(self, rule_name: str, hash: str, entry: dict) -> None:
+        """记录一次规则运行的 trace(per-run, 维度 = 规则名:hash; 仅主循环线程调用)
+
+        内容由调用方(Rule.process, rules/base.py)装配: verdict 结论 + 条件求值明细(已逐字段
+        截断) + 动作步结果 + retry/断点信号; ts/date 由本方法补齐(环形/逐出的排序字段, 与
+        exec_history 同口径)。幂等: 一次 process 调用恰好一条; 重复运行只是各追加一条并按
+        环形/上限逐出, 不产生重复副作用。写入发生在单一写线程内, 落盘语义随 state_save_interval。
+        """
+        now = datetime.now()
+        item = {**entry, "ts": now.timestamp(), "date": now.date().isoformat()}
+        # 单条体积兜底: 调用方已逐字段截断, 这里对整条序列化**字节量**兜底(中文经 UTF-8
+        # 膨胀, 字节口径才对得上磁盘占用); 超限降级为截断存根(保留 verdict 与排序字段) ——
+        # 排障明细价值让位于 1 MiB 红线(plan W4 验收②, 红线是硬保证不是软目标)。
+        if len(json.dumps(item, ensure_ascii=False, default=str).encode("utf-8")) > _TRACE_ENTRY_MAX_BYTES:
+            item = {
+                "ts": item["ts"],
+                "date": item["date"],
+                "verdict": str(entry.get("verdict", "")),
+                "truncated": True,
+            }
+        traces = self.data.setdefault("rule_traces", {})
+        dim = traces.setdefault(f"{rule_name}:{hash}", [])
+        dim.append(item)
+        if len(dim) > _TRACE_KEEP_PER_DIM:
+            del dim[: len(dim) - _TRACE_KEEP_PER_DIM]
+        self._prune_rule_traces(traces, now.date())
+
+    def _prune_rule_traces(self, traces: dict, today: date) -> None:
+        """rule_traces 键面清理(_prune_exec_history 同款机制: 保留期 + 上限逐出; 仅主循环线程, 幂等)
+
+        - 日期淘汰: 维度最新条目早于保留期整维删除(prune_day_keys 单点复用 —— 维度内条目
+          按运行时间紧密成簇, 以最新条目定维龄; 零条目维度立即删除);
+        - 环形: 每维度只留最近 _TRACE_KEEP_PER_DIM 条(写入侧已裁, 此处兜底);
+        - 总量上限: 超出 _TRACE_MAX_ENTRIES 按 _evict_oldest 淘汰 —— trace 无去重语义,
+          当日记录也参与逐出(keep_today=False), 与单条体积上限相乘即 1 MiB 硬上界。
+        """
+        prune_day_keys(traces, today, _TRACE_KEEP_DAYS, lambda k, v: v[-1].get("date", "") if v else "")
+        for dim in traces.values():
+            if len(dim) > _TRACE_KEEP_PER_DIM:
+                del dim[: len(dim) - _TRACE_KEEP_PER_DIM]
+        overflow = sum(len(v) for v in traces.values()) - _TRACE_MAX_ENTRIES
+        if overflow > 0:
+            evict_ids = {id(e) for _, e in _evict_oldest(
+                [(k, e) for k, v in traces.items() for e in v], overflow, today.isoformat(), keep_today=False
+            )}
+            for k in traces:
+                traces[k] = [e for e in traces[k] if id(e) not in evict_ids]
+            for k in [k for k, v in traces.items() if not v]:
+                del traces[k]
 
     # ---------- 字段变化基线 ----------
 

@@ -19,6 +19,7 @@ from ..schema.fields import (
     CHECKING_BASIC,
     CHECKING_MODES,
     DELETED_ALLOWED_ACTIONS,
+    EVALUATION_MODES,
     EXECUTE_ONCE,
     FIELD_WATCH_ALLOWED,
     ON_ERROR_POLICIES,
@@ -28,13 +29,15 @@ from ..schema.fields import (
 )
 from .core import _check_regex_patterns, _check_unknown_keys, _try, _try_time
 
-# 规则 spec 已知键(watch_fields 仅 on_torrent_field_changed 触发时机下允许)
+# 规则 spec 已知键(watch_fields 仅 on_torrent_field_changed 触发时机下允许;
+# evaluation 为 W4/D4 占位枚举位: 校验放行 all|first_match, 引擎按 all 处理)
 RULE_KNOWN_KEYS = {
     "enabled",
     "trigger",
     "interval",
     "execute_once",
     "cooldown",
+    "evaluation",
     "conditions",
     "actions",
     "stop_following_rules_if",
@@ -158,6 +161,8 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                 )
             if "trigger" in spec and spec["trigger"] not in TRIGGERS:
                 errors.append(f"{where}: trigger 取值非法: '{spec['trigger']}', 可选: {'/'.join(TRIGGERS)}")
+            if "evaluation" in spec and spec["evaluation"] not in EVALUATION_MODES:
+                errors.append(f"{where}: evaluation 取值非法: '{spec['evaluation']}', 可选: {'/'.join(EVALUATION_MODES)}")
             if "watch_fields" in spec:
                 _validate_watch_fields(spec, where, errors)
             conds = spec.get("conditions")

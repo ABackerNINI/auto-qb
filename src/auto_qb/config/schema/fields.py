@@ -190,6 +190,12 @@ ON_ERROR_POLICIES = ("stop", "continue", "retry")
 # normalize 单点对缺省 on_error 注入本表快照(补齐缺省字段), webui 控件默认值同源
 ON_ERROR_DEFAULTS = {"policy": "stop", "retries": 3, "backoff": 60}
 
+# evaluation 引擎参数(plan 26-11-01-0106 W4/D4): 规则级可选键, 只留 schema 枚举位 ——
+# 默认 all = 现状(每规则每种子独立任务, 无「后续规则」链, 每轮完整求值并执行全部动作);
+# first_match 为占位键值不实现(D4 拍板): 校验放行键位先占坑, 引擎对非 all 值显式 warning
+# 按 all 处理(rule-system/rules-and-triggers.md 注明), 后续实现首中即停时键面零改动。
+EVALUATION_MODES = ("all", "first_match")
+
 STOP_IF = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
 TRIGGERS = (

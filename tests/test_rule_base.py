@@ -58,6 +58,10 @@
   也不放行, 规则永久静默)
 - test_rule_condition_exception_other_rules_unaffected: 条件异常 per-step 语义(G2/W2) —— 出错
   规则 verdict=error 本轮跳过, 其它规则照常执行; 全程无「停止后续规则」话术
+- test_rule_evaluation_default_all_no_warning: evaluation 引擎参数(W4/D4) —— 键缺省 = all,
+  零告警零行为变化
+- test_rule_evaluation_first_match_placeholder_warning: evaluation=first_match 占位枚举 ——
+  构造期显式 WARNING, 引擎按 all 处理(行为与 all 逐位一致)
 """
 import os
 import tempfile
@@ -1098,3 +1102,71 @@ def test_rule_cooldown_expired_allows_rerun():
         rec = mgr.ctx.state.get_exec_record("g.cd", ctx.hash)
         rec["ts"] = datetime.now().timestamp() - 7200  # 2 小时前 -> 1H 冷却早已过期
         assert rule._dedup_allowed(ctx) is True, "冷却已过期 -> 必须放行"
+
+
+def test_rule_evaluation_default_all_no_warning():
+    """evaluation 引擎参数(W4/D4): 键缺省 = all, 零告警零行为变化"""
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), FakeClient())
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.rules.base")
+        handler = Grab(level=logging.DEBUG)
+        lg.addHandler(handler)
+        lg.setLevel(logging.DEBUG)
+        try:
+            rule = Rule("g.ev", {"conditions": [{"size": ">=1MiB"}], "actions": [{"add_tags": ["X"]}]}, mgr)
+            assert rule.evaluation == "all"
+            assert rule.process(ctx) == VERDICT_EXECUTED
+        finally:
+            lg.removeHandler(handler)
+        assert not [m for m in records if "evaluation" in m], "默认取值零告警"
+
+
+def test_rule_evaluation_first_match_placeholder_warning():
+    """evaluation=first_match 占位枚举(W4/D4 拍板不实现): 构造期显式 WARNING, 引擎按 all 处理
+    —— 行为与 all 逐位一致(完整求值 + 全动作执行), 键位先占坑后续实现零改键面"""
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.rules.base")
+        handler = Grab(level=logging.DEBUG)
+        lg.addHandler(handler)
+        lg.setLevel(logging.DEBUG)
+        try:
+            rule = Rule(
+                "g.ev",
+                {
+                    "evaluation": "first_match",
+                    "conditions": [{
+                        "size": ">=1MiB"
+                    }],
+                    "actions": [{
+                        "add_tags": ["X"]
+                    }],
+                },
+                mgr,
+            )
+            assert rule.evaluation == "first_match"
+            assert rule.process(ctx) == VERDICT_EXECUTED, "按 all 处理: 条件满足照常执行"
+        finally:
+            lg.removeHandler(handler)
+        warn = next(m for m in records if "evaluation" in m)
+        assert "first_match" in warn and "按 all 处理" in warn, f"占位话术: {warn}"
+        assert ("add_tags", ["X"]) in client.calls

@@ -25,6 +25,25 @@ logger = logging.getLogger(__name__)
 # 条件求值出错日志的节流窗口(秒): 同规则同原因在此窗口内只报一次 ERROR
 _COND_ERR_THROTTLE = 300.0
 
+# per-run trace 内容截断口径(W4, plan 26-11-01-0106 D5): 条件明细叶子条数与错误/消息串长
+# 在写入侧截断, 整条序列化体积兜底在 StateService.record_rule_trace(单条字节上限)——
+# 两层合围保证 trace 键面体积有硬上界(1 MiB 红线, 压测见 test_rule_trace)。
+_TRACE_MSG_MAX_CHARS = 200
+_TRACE_COND_MAX_ITEMS = 32
+
+
+def _trace_clip(text, limit: int = _TRACE_MSG_MAX_CHARS) -> str:
+    """trace 字段截断: 异常/消息串定长截断(排障留头即可)"""
+    s = str(text)
+    return s if len(s) <= limit else s[:limit - 3] + "..."
+
+
+def _trace_cond_name(payload) -> str:
+    """trace 叶子条件名: 插件约定有 name 属性, 但内存直构的哑条件(测试桩)可能没有 ——
+    求值明细是排障辅助, 不能因取名失败反过来弄错 verdict(缺 name 回退类名)"""
+    return str(getattr(payload, "name", "") or type(payload).__name__)
+
+
 # process 返回契约(W1 收口, plan 26-11-01-0106 G1/G12; W2 扩 retry 档): 单值 verdict, 由引擎
 # (core/modules/rules_mod._run_rule)显式消费 —— 记 DEBUG 结论供排障; W2 起按 error/retry 档
 # 驱动 per-step 错误语义, W4 起进 per-run trace。旧 (handled, stop) 元组的 stop 档是死配置
@@ -200,16 +219,35 @@ def _build_condition_node(node, rule_name: str, depth: int = 1):
         raise ConfigError(f"规则 {rule_name}: 条件 {node}: {e}") from e
 
 
-def _eval_condition_node(node, ctx: "RuleContext") -> bool:
-    """组合树递归求值: all/any 生成器短路, not 取反, 叶子交插件 match(异常上抛)"""
+def _eval_condition_node(node, ctx: "RuleContext", trace=None, btag=None) -> bool:
+    """组合树递归求值: all/any 生成器短路, not 取反, 叶子交插件 match(异常上抛)
+
+    trace(W4): 传入 list 时逐叶子留求值明细({"c": 条件名, "r": 结果} / 出错 {"c":..., "e": 截断
+    异常串}), 顺序 = 实际求值顺序(短路可见)—— 与无 trace 路径共用同一套求值代码, 无第二语义
+    分支; btag 为 choose 分支标记(叶子属 choose 分支 i 时记 "b": i), 顶层叶子不带。
+    """
     kind, payload = node
     if kind == "all":
-        return all(_eval_condition_node(c, ctx) for c in payload)
+        return all(_eval_condition_node(c, ctx, trace, btag) for c in payload)
     if kind == "any":
-        return any(_eval_condition_node(c, ctx) for c in payload)
+        return any(_eval_condition_node(c, ctx, trace, btag) for c in payload)
     if kind == "not":
-        return not _eval_condition_node(payload, ctx)
-    return payload.match(ctx)
+        return not _eval_condition_node(payload, ctx, trace, btag)
+    try:
+        res = bool(payload.match(ctx))
+    except Exception as e:
+        if trace is not None:
+            rec = {"c": _trace_cond_name(payload), "e": _trace_clip(f"{type(e).__name__}: {e}")}
+            if btag is not None:
+                rec["b"] = btag
+            trace.append(rec)
+        raise
+    if trace is not None:
+        rec = {"c": _trace_cond_name(payload), "r": res}
+        if btag is not None:
+            rec["b"] = btag
+        trace.append(rec)
+    return res
 
 
 # ---------------------------------------------------------------------------
@@ -312,6 +350,12 @@ class Rule:
         self.interval = utils.parse_time(str(spec.get("interval", "0S")))  # 规则扫描间隔, 0 = 每轮
         self.execute_once = str(spec.get("execute_once", "never"))
         self.cooldown = utils.parse_time(str(spec.get("cooldown", "0S")))
+        # evaluation 引擎参数(W4/D4): 只留 schema 枚举位, 默认 all = 现状; first_match 是占位
+        # 键值(校验放行先占坑), 本版本不实现 —— 非 all 值显式 warning 后按 all 处理, 行为零变化
+        # (键位先占坑, 后续版本实现首中即停时键面/校验零改动)。
+        self.evaluation = str(spec.get("evaluation", "all"))
+        if self.evaluation != "all":
+            logger.warning(f"规则[{self.name}] evaluation={self.evaluation} 为占位枚举位, 本版本未实现, 按 all 处理")
         # 条件求值出错日志的节流状态(见 _log_condition_error)
         self._cond_err_key: Optional[str] = None
         self._cond_err_ts: float = 0.0
@@ -354,11 +398,13 @@ class Rule:
         if any(a.name == "reannounce" for a in all_plugins) and self.execute_once == "never" and self.cooldown <= 0:
             logger.error(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
 
-    def matches(self, ctx: RuleContext) -> bool:
-        """组合树求值(W3-A): 无条件 = 直过; 有条件 = 树形递归(旧扁平列表 = 隐式 all, 语义不变)"""
+    def matches(self, ctx: RuleContext, trace=None) -> bool:
+        """组合树求值(W3-A): 无条件 = 直过; 有条件 = 树形递归(旧扁平列表 = 隐式 all, 语义不变)
+
+        trace(W4): 传入 list 时逐叶子留求值明细(见 _eval_condition_node), 供 per-run trace。"""
         if self.condition_tree is None:
             return True
-        return _eval_condition_node(self.condition_tree, ctx)
+        return _eval_condition_node(self.condition_tree, ctx, trace)
 
     @staticmethod
     def _resolve_on_error(raw: Any) -> dict:
@@ -377,8 +423,52 @@ class Rule:
             raise ConfigError(f"on_error 取值非法: {raw}: {e}") from e
 
     def process(self, ctx: RuleContext) -> str:
+        """处理一个种子, 返回单值 verdict(模块级 VERDICT_* 常量, 消费方见常量区注释)。
+
+        W4 per-run trace 包装(plan 26-11-01-0106 D5): 每次调用装配一条 trace(条件求值明细/
+        动作步结果/断点与 retry 信号, 逐字段截断)并经 StateService.record_rule_trace 写入
+        state 键面 rule_traces(维度 = 本规则名:种子 hash, 环形/保留期/上限逐出在 state 层
+        单点)。写入在单一写线程内(process 只在主循环线程被调), 落盘语义随
+        state_save_interval; trace 是排障辅助, 记录失败只 DEBUG 不影响执行。同一次调用恰好
+        一条(幂等); 续跑轮(pending/retry 恢复)是独立一次调用 = 独立一条, 与断点信号互相
+        指认。执行本体见 _process(断点契约的完整口径在其 docstring)。
         """
-        处理一个种子, 返回单值 verdict(模块级 VERDICT_* 常量, 消费方见常量区注释)。
+        trace: Dict[str, Any] = {"conditions": [], "actions": []}
+        try:
+            verdict = self._process(ctx, trace)
+        except Exception as e:  # _process 未兜住的异常: 留痕后原样上抛(引擎 _run_rule 记 ERROR)
+            trace["verdict"] = "exception"
+            trace["error"] = _trace_clip(f"{type(e).__name__}: {e}")
+            self._trace_record(ctx, trace)
+            raise
+        trace["verdict"] = verdict
+        task = ctx.task
+        if task is not None:
+            if task.resume_index is not None:  # pending/retry 挂上的断点(断点信号)
+                trace["resume"] = task.resume_index
+            if verdict == VERDICT_RETRY:  # retry_delay 已由 _dispatch_result 置入 task
+                trace["retry"] = {"attempt": task.attempt, "delay": task.retry_delay}
+        if ctx.dry_run:
+            trace["dry"] = True
+        # 条件明细条数上限(极端宽树截断, 保留头部 + 计数标记; 整条体积兜底在 state 层)
+        conds = trace["conditions"]
+        if len(conds) > _TRACE_COND_MAX_ITEMS:
+            dropped = len(conds) - _TRACE_COND_MAX_ITEMS + 1
+            del conds[_TRACE_COND_MAX_ITEMS - 1:]
+            conds.append({"clip": dropped})
+        self._trace_record(ctx, trace)
+        return verdict
+
+    def _trace_record(self, ctx: RuleContext, trace: dict) -> None:
+        """trace 落账单点: 经 ctx.state.record_rule_trace 写入(单一写线程内); 失败只 DEBUG"""
+        try:
+            self.manager.ctx.state.record_rule_trace(self.name, ctx.hash, trace)
+        except Exception as e:
+            logger.debug(f"规则[{self.name}] {ctx.hash[:8]} | trace 记录失败(不影响执行): {e}")
+
+    def _process(self, ctx: RuleContext, trace: Dict[str, Any]) -> str:
+        """
+        process 执行本体(trace 明细收集见 process 包装; 断点契约原文如下)。
 
         断点契约(与 taskqueue 的默认重置语义配合):
         - 读:   进入时只读 task.resume_index 判定续跑(不清零); 索引单位 = 执行步(self.steps,
@@ -395,10 +485,13 @@ class Rule:
                 默认重置兜底(下轮从头)
         """
         if ctx.torrent is None:
+            trace["note"] = "种子已删, 无现场"
             return VERDICT_NO_MATCH
 
         ctx.rule_name = self.name
         task = ctx.task
+        trace_conds = trace["conditions"]
+        trace_acts = trace["actions"]
 
         # 断点只读: 有断点 -> 续跑(跳过条件评估与去重)
         resume_index = task.resume_index if task is not None else None
@@ -406,11 +499,12 @@ class Rule:
 
         if fresh:
             try:
-                matched = self.matches(ctx)
+                matched = self.matches(ctx, trace_conds)
             except Exception as e:
                 # 条件求值出错: 本条规则本轮跳过, 其它规则照常(per-rule 任务模型里不存在
                 # 「后续规则」链 —— 旧日志「停止后续规则」是死语义, W1 话术修正, plan G1)
                 self._log_condition_error(ctx, e)
+                trace["error"] = _trace_clip(f"{type(e).__name__}: {e}")
                 return VERDICT_ERROR
             if not matched:
                 return VERDICT_NO_MATCH
@@ -431,6 +525,15 @@ class Rule:
                 action, on_error = step[1], step[2]
                 result = self._execute_action(action, ctx)
                 disp = self._dispatch_result(action, result, on_error, ctx, log_repr)
+                trace_acts.append(
+                    {
+                        "step": si,
+                        "name": action.name,
+                        "st": result.status,
+                        "disp": disp,
+                        "msg": _trace_clip(result.message)
+                    }
+                )
                 if disp == "pending":
                     # 异步等待: 记录断点并中断本规则, 由轮询子任务按结果重新入队恢复
                     if task is not None:
@@ -455,15 +558,26 @@ class Rule:
                     return VERDICT_RETRY
                 # skip: 只记 DEBUG(_dispatch_result 单点已记), 不影响 ok/executed
             else:  # choose 编排块(W3-B, plan G6/D3)
-                chosen = self._pick_choose_branch(step[1], ctx, log_repr)
+                chosen = self._pick_choose_branch(step[1], ctx, log_repr, trace_conds)
                 if chosen is None:
                     # when 求值异常: 与顶层条件求值异常同语义(保守: 求值出错不误入 default),
                     # 本条规则本轮按 error 收场, 不影响其它规则
+                    trace["error"] = trace_conds[-1].get("e", "choose when 求值出错") if trace_conds else "choose when 求值出错"
                     return VERDICT_ERROR
-                actions, on_errors = chosen
+                actions, on_errors, br_label = chosen
                 for action, on_error in zip(actions, on_errors):
                     result = self._execute_action(action, ctx)
                     disp = self._dispatch_result(action, result, on_error, ctx, log_repr)
+                    trace_acts.append(
+                        {
+                            "step": si,
+                            "name": action.name,
+                            "st": result.status,
+                            "disp": disp,
+                            "br": br_label,
+                            "msg": _trace_clip(result.message)
+                        }
+                    )
                     if disp == "pending":
                         if task is not None:
                             # choose 步粒度(W3-B 自定口径): 断点记块后(si + 1), 分支内已提交
@@ -551,23 +665,32 @@ class Rule:
         logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
         return "skip"
 
-    def _pick_choose_branch(self, block: ChooseBlock, ctx: "RuleContext", log_repr: str):
+    def _pick_choose_branch(self, block: ChooseBlock, ctx: "RuleContext", log_repr: str, trace=None):
         """choose 分支选择(W3-B, plan G6/D3): 按序求 when, 首个命中执行其 then; 无命中且有
         default 执行 default; 无命中且无 default = 空操作(返回空动作表, 与空动作表同语义)。
 
+        返回 (动作列表, on_error 列表, 分支标记): 标记 = 命中分支序号(int) / "default" / None
+        (空操作), 供 trace 内层动作记录归属(W4)。
         when 求值异常: 记 ERROR(与顶层条件求值异常同款节流)并返回 None —— 调用方按
         VERDICT_ERROR 收场(保守: 求值出错不误入 default, 与「条件异常 -> 本条本轮不命中」
-        同一失败哲学)。"""
-        for br in block.branches:
+        同一失败哲学)。trace 非 None 时分支求值明细记入 trace(叶子带 "b": 分支号) +
+        分派结论({"choose": 分支号/"default"/"none"}), 顺序与实际求值一致。"""
+        for bi, br in enumerate(block.branches):
             try:
-                if _eval_condition_node(br.tree, ctx):
-                    return br.actions, br.on_error
+                if _eval_condition_node(br.tree, ctx, trace, btag=bi):
+                    if trace is not None:
+                        trace.append({"choose": bi})
+                    return br.actions, br.on_error, bi
             except Exception as e:
                 self._log_condition_error(ctx, e)
                 return None
         if block.default_actions:
-            return block.default_actions, block.default_on_error
-        return [], []
+            if trace is not None:
+                trace.append({"choose": "default"})
+            return block.default_actions, block.default_on_error, "default"
+        if trace is not None:
+            trace.append({"choose": "none"})
+        return [], [], None
 
     def _log_condition_error(self, ctx: RuleContext, e: Exception) -> None:
         """条件求值出错的日志(ERROR 级 + 同因节流, 避免每 tick × 每种子刷屏)

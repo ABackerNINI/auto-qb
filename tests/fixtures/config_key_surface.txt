@@ -57,6 +57,7 @@ version: 5
 <任意>_rules.*.conditions.upload_ratio
 <任意>_rules.*.cooldown
 <任意>_rules.*.enabled
+<任意>_rules.*.evaluation
 <任意>_rules.*.execute_once
 <任意>_rules.*.interval
 <任意>_rules.*.stop_following_rules_if

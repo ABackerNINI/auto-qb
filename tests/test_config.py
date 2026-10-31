@@ -31,6 +31,8 @@
 - test_validate_integer_and_str_list_guards: integer=True 拒小数 / 字符串列表空白项报错 / state_file 空白串报错(拦截侧语义)
 - test_validate_fs_reports_all_entries: fs.path_map 逐条报错不被前一条非法截断(continue 而非 break)
 - test_validate_rule_spec: 规则 spec 键/取值域/未知条件动作/多键项报错
+- test_validate_rule_evaluation_enum: evaluation 枚举位(W4/D4) —— all|first_match 放行(占坑),
+  其它取值报错, 键缺省 = 默认 all
 - test_validate_state_condition_spec: state 条件非法 is_* 属性/裸枚举成员名报错
 - test_validate_checking_action_spec: checking 动作 spec 深度校验聚合报错(非dict/缺键/非法值/段/未知键);
   守阵(26-10-06-0028 D-02)——with_reference/without_reference 子段键面 fail-fast(enabeld/autostart 拼错报未知键,
@@ -609,6 +611,19 @@ def test_validate_rule_spec():
         assert "未知条件 'sizee'" in err, err
         assert "必须是单键字典" in err, err
         assert "未知动作 'star'" in err, err
+
+
+def test_validate_rule_evaluation_enum():
+    """evaluation 枚举位(W4/D4): all|first_match 放行(first_match 为占坑键值不实现),
+    其它取值报错; 键缺省 = 默认 all 不报错"""
+    head = "config:\n  example_rules:\n    rule1:\n      actions:\n        - add_tags: [X]\n"
+    with tempfile.TemporaryDirectory() as td:
+        assert _load_errors(td, head) == "", "键缺省 = 默认 all"
+        assert _load_errors(td, head + "      evaluation: all\n") == "", "all 合法"
+        assert _load_errors(td, head + "      evaluation: first_match\n") == "", "first_match 占坑放行"
+        err = _load_errors(td, head + "      evaluation: sometimes\n")
+        assert "evaluation 取值非法: 'sometimes'" in err, err
+        assert "all/first_match" in err, err
 
 
 def test_validate_state_condition_spec():
