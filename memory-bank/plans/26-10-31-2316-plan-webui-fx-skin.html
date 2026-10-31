@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 动效皮肤 flux 分步实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-fx-skin">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-2316">
+<meta name="doc-updated" content="26-10-31-2316">
+<meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-fx-skin</div>
+<h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
+<p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-10-31-2316 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>目标</h3>
+<ul>
+  <li><b>动效组件库</b>：覆盖 WEBUI 大部分交互元素(按钮/弹窗/列表/标签/输入框/浮层等)，同一组件提供<b>多种动效变体</b>供选择，交互动效(hover/点击/入场/切换)齐全。</li>
+  <li><b>可直接挂载</b>：组件库以 <code>data-fx</code> 属性约定 + 单挂载器交付，往元素上加一个属性即生效——统一入口、单一维护点、漏挂载可检测。</li>
+  <li><b>华丽但跟手</b>：华丽度交给用户在 showcase 上挑选精修；跟手性以<b>设计指南</b>(软约束)约束候选池，不作硬守阵。</li>
+  <li><b>新皮肤 flux</b>：以 console 为基础 fork，只做 dark 系列；多风格 preset 候选(neon/glass/crisp)，挑选后落定 1 套为主、其余留在库里可切回。</li>
+</ul>
+
+<h3>设计底线(不变量)</h3>
+<ul>
+  <li><b>零依赖</b>：纯 CSS + 原生 JS，不引入任何运行时动效库(借鉴其设计，不引其代码)。</li>
+  <li><b>存量隔离</b>：atlas / prism / console 三皮肤的文件一行不改；存量动效(约 145 处 transition、42 个 <code>@keyframes</code>)不收编。</li>
+  <li><b>只换视觉不改名</b>：类名与 DOM 结构被 JS 耦合(列宽拖拽、ctx-menu 挂钩)，flux 遵守 <code>conventions/webui.md</code> 既有纪律。</li>
+  <li><b>令牌名集相等</b>：flux 令牌名必须与三皮肤齐(缺名 = <code>var()</code> 声明计算值阶段整条静默作废)，并扩展守阵收编 flux。</li>
+  <li><b>既有惯例不破</b>：<code>prefers-reduced-motion</code> 降级块照写；新元素 tooltip 走原生 <code>title</code> 不自造浮层；新增交互入口走 <code>triggers.js</code> + webui-scope C1-C5 契约。</li>
+</ul>
+
+<h3>动效设计指南(软约束，非守阵)</h3>
+<p class="aside">候选拗不淘汰、只标注。每条动效变体在 showcase 页标注"合成器友好 / 交互反馈时效"，用户筛选精修时参考；确有表现力需要、实测不卡的允许破例。</p>
+<ul>
+  <li>优先动 <code>transform</code> / <code>opacity</code> / <code>filter</code>(filter 限小型元素)；动布局属性(<code>width/height/top/left</code>)的候选标注 <span class="wr">layout</span> 警示但不禁止。</li>
+  <li>hover/按下反馈目标 ≤100ms，入场动效 ≤400ms；高密度列表(torrent 行)不做全行 stagger。</li>
+  <li>每个 <code>@keyframes</code> 配 <code>prefers-reduced-motion: reduce</code> 降级块(这是硬惯例，不属软约束)。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>WEBUI 形态</h3>
+<ul>
+  <li>FastAPI 静态挂载(<code>src/auto_qb/webui/server/factory.py:20</code>)，无 Jinja、无服务端渲染；<code>static_ui.py::mount_static_ui</code> 把 <code>webui/static/</code> 整目录挂在 <code>/</code>，根路径按 cookie <code>autoqb_ui</code> 307 重定向到上次使用的 UI。<b>无前端构建链</b>：Vue 3 全局构建(vendor 预编译产物) + <code>window.AQB_XXX</code> mixin 域 + 24 个 <code>shared/tpl/*.html</code> 模板分片由 <code>boot.js</code> fetch→注入→放行链装载。</li>
+  <li>三皮肤同构：atlas / prism / console 各自 <code>style.css → components → views → dialogs</code>，尾部接共用层 <code>shared/console_hub.css</code>(1559 行)；链接序由守阵钉死。<b>「新增 UI = <code>static/&lt;名字&gt;/</code> 一个目录，无需后端改动」是既有惯例。</b></li>
+  <li>皮肤无中央注册表：目录即 URL，cookie 记忆；但模板分片内用 <code>&lt;template v-if="ui === '…'"&gt;</code> 做皮肤分支——新皮肤 <code>flux</code> 作第四个 <code>ui</code> 值时，<code>ui !== 'prism'</code> 类分支自动涵盖，<b>精确匹配分支(<code>ui === 'atlas'</code> / <code>ui === 'console'</code>)需逐个盘点</b>。</li>
+</ul>
+
+<h3>守阵现状(<code>tests/test_webui_static_skins.py</code>)</h3>
+<table>
+  <tr><th>守阵</th><th>位置</th><th>对本计划的意义</th></tr>
+  <tr><td>令牌名集 parity</td><td><code>:2025</code></td><td><b>硬编码枚举 <code>("atlas","console")</code>+prism</b> —— flux 默认不被收编，收编与否是决策(D14: 收编)</td></tr>
+  <tr><td>模板分片接线 + CSS 体量帽</td><td><code>:1754</code></td><td>挂行顺序、link 序受钉；atlas components.css 已顶 700 行帽(pitfall <code>css-file-line-cap</code>)，fx 库要预留分文件</td></tr>
+  <tr><td>按钮体系成对</td><td><code>:2066</code></td><td><code>.bt</code> 六变体三皮肤成对定义，flux fork 后自动继承，改动须同步</td></tr>
+  <tr><td>transition parity</td><td><code>:2866</code></td><td>既有动效一致性守阵，flux 变更后是否扩展收编在 S5 评估</td></tr>
+  <tr><td>静态 bundle 健康</td><td><code>:1712</code></td><td>shared/ 新增文件须过体检</td></tr>
+</table>
+<p>另有 DOM 接线测试(<code>test_webui_static_dom_page.py</code> 34 个、<code>…panel.py</code> 61 个)与 Playwright e2e 42 spec 兜底。</p>
+
+<h3>痛点</h3>
+<ul>
+  <li>动效是有存量无体系：145 处 transition / 42 个 keyframes 分散在三皮肤 CSS 里，同名效果多处实现，改一处要过三处守阵——这是「新皮肤另起炉灶、存量不收编」(D8)的动机。</li>
+  <li>华丽度无候选可比较：现有动效都是单配方，用户要「同一组件多种动效供选择」，需要 showcase 矩阵而不是逐个改皮肤试。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>落点架构</h3>
+<pre><code>static/
+├── shared/fx/                 <span class="cm">← fx 库单点(D7)：动效唯一维护点</span>
+│   ├── fx.js                  <span class="cm">   挂载器：扫 data-fx 属性统一初始化 + 漏挂载检测</span>
+│   ├── fx.css                 <span class="cm">   动效基线：令牌 + [data-fx] 基础规则 + 降级块</span>
+│   └── fx-presets.css         <span class="cm">   风格 preset：neon / glass / crisp 三套令牌配方 + 变体</span>
+├── fx/showcase.html           <span class="cm">← 挑选界面(D13)：P0 组件 × 3 preset × 变体矩阵</span>
+└── flux/                      <span class="cm">← 新皮肤(D14)：fork console，只做 dark，唯一消费者</span></code></pre>
+
+<h3>两层变体模型</h3>
+<table>
+  <tr><th>层</th><th>挂载口</th><th>语义</th><th>示例</th></tr>
+  <tr><td>组件层</td><td><code>data-fx="btn" data-fx-variant="glow"</code></td><td>单组件的行为变体(换一个属性值=换一个动效)</td><td>按钮: glow / sheen / lift / flat…</td></tr>
+  <tr><td>风格层</td><td><code>&lt;html data-fx-preset="neon"&gt;</code></td><td>整套风格一键切换(令牌配方整体替换)</td><td>neon / glass / crisp</td></tr>
+</table>
+<p>同一 HTML 结构上，组件层挑「这个按钮用哪种动效」，风格层挑「整站什么气质」——showcase 页两层都可实时切换对比，挑选结果落定后写死进 flux。</p>
+
+<h3>组件覆盖清单</h3>
+<table>
+  <tr><th>批次</th><th>组件</th></tr>
+  <tr><td><b>P0</b>(showcase 首批、S6 挂载)</td><td>按钮(<code>.bt</code> 一族: primary/ghost/danger/danger-solid/icon/sm)、弹窗(modal，含 tone 分级)、抽屉(12 变体共壳)、列表行(torrent 表格行，选中/锚点/光标三态)、输入框(focus 态)、toast/通知、页签切换(groups/torrents/shows/settings)</td></tr>
+  <tr><td><b>P1</b>(S7)</td><td>标签/badge、进度条、开关、右键菜单、状态栏、dock、登录遮罩、busy 骨架、数字滚动(速度/体积实时数据)</td></tr>
+  <tr><td><span class="bad">不做</span></td><td>自定义 tooltip 浮层(纪律: 原生 <code>title</code>，<code>.aq-tip</code> 单例不动)</td></tr>
+</table>
+
+<h3>兼容与降级(D5)</h3>
+<ul>
+  <li>Chrome/Edge：全特性(<code>@property</code>、<code>:has()</code>、<code>color-mix()</code>、View Transitions、scroll-driven animations)。</li>
+  <li>Firefox/Safari：自动降级——纯 CSS 特性缺失时该条声明整条作废(无害)；View Transitions 一行 <code>if (document.startViewTransition)</code> 探测；scroll-driven 动效自然缺席。<b>降级目标 = 无动效终态，不为旧浏览器保动效。</b></li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>步骤</th><th>内容</th><th>验收判据(DoD)</th></tr>
+  <tr>
+    <td><b>S1</b></td>
+    <td>桌面调研</td>
+    <td>读 Material Design 3 motion 规范、Apple HIG motion、GSAP easing 体系、Motion One/OpenProps token 设计、animate.css 命名法、Uiverse 类动效 demo 集的成熟模式。产出：easing 曲线库、时长/距离分级表、值得借鉴的编排模式清单、<b>每组件候选动效清单</b>(进 showcase 的原料)。落 <code>memory-bank/reports/</code>。</td>
+    <td>调研报告落盘并双向补链；候选动效清单覆盖全部 P0 组件(每组件 ≥3 个变体候选)；<code>commands run test.full</code> 无涉(纯文档)不跑基线。</td>
+  </tr>
+  <tr>
+    <td><b>S2</b></td>
+    <td>fx 骨架</td>
+    <td><code>shared/fx/fx.css + fx-presets.css + fx.js</code>：两层变体令牌体系、neon/glass/crisp 三套 preset 空配方、reduced-motion 降级、挂载器(含漏挂载检测)。暂无消费者、不挂任何皮肤。</td>
+    <td>bundle 健康守阵过；文件体量不触 700 行帽(超即分文件)；<code>test.full</code> 全绿。</td>
+  </tr>
+  <tr>
+    <td><b>S3</b></td>
+    <td>showcase 页</td>
+    <td><code>static/fx/showcase.html</code>：P0 组件 × 3 preset × 变体矩阵，交互态(hover/active/focus/disabled)标注，风格切换器，每候选标注指南符合度(合成器友好/时效/破例说明)。经 FastAPI 访问，与真实挂载同源同令牌。</td>
+    <td>起服务 <code>/fx/showcase.html</code> 可开；chrome devtools 录制抽查帧率；P0 组件每组件 ≥3 变体可切；<code>test.full</code> 全绿。</td>
+  </tr>
+  <tr>
+    <td><b>S4</b></td>
+    <td>挑选(人工步)</td>
+    <td>用户上 showcase 定主 preset + 各组件动效落选名单；挑选结论回填本档案(§06 追加)。</td>
+    <td>选定清单落档；无代码变更。</td>
+  </tr>
+  <tr>
+    <td><b>S5</b></td>
+    <td>flux fork</td>
+    <td>复制 <code>static/console/</code> → <code>static/flux/</code>，改令牌<b>取值</b>不动令牌<b>名</b>；盘点 <code>shared/tpl/*.html</code> 与 shared JS 里全部 <code>ui ===</code> 精确匹配分支，补 flux 分支；扩展守阵(<code>_UI_ALL</code> 加 flux，令牌 parity / wiring 收编)；transition parity 守阵是否收编 flux 在此步评估定案。</td>
+    <td><code>/flux/</code> 可启动且功能与 console 等价(DOM 接线测试扩展后全绿)；令牌 parity 守阵含 flux 后全绿；三旧皮肤 diff 为零。</td>
+  </tr>
+  <tr>
+    <td><b>S6</b></td>
+    <td>P0 挂载</td>
+    <td>S4 选定动效挂进 flux：fx 挂行进 flux 的 tpl-manifest(顺序受 wiring 守阵钉)，P0 组件逐个上 <code>data-fx</code>；与存量样式冲突的 console 旧配方在 flux 内替换。</td>
+    <td>P0 全组件动效生效(实机 <code>dev.run --dry-run</code> + 浏览器实测)；<code>test.full</code> 全绿；reduced-motion 下降级正确。</td>
+  </tr>
+  <tr>
+    <td><b>S7</b></td>
+    <td>P1 + 精修</td>
+    <td>P1 组件挂载；帧率实测记录；用户精修轮(允许破指南的动效在此定稿)。</td>
+    <td>P1 全生效；精修结论回填 §06；<code>test.full</code> 全绿。</td>
+  </tr>
+  <tr>
+    <td><b>S8</b></td>
+    <td>收尾</td>
+    <td><code>conventions/webui.md</code> 增 fx 章节(挂载口约定/两层变体/降级哲学单点)；后续风格 preset 入档(见 §05)；<code>test.full</code> 基线切片记实测数字。</td>
+    <td>文档回写完成、双向补链齐；基线切片 <code>kb.new baseline</code> 落盘。</td>
+  </tr>
+</table>
+<p class="cm">S1→S2→S3 串行；S4 与 S5 无依赖可并行(均不碰对方文件)；S6 起串行。每个编码步收尾走 memory-bank skill 5 步 DoD。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无遗留——15 项决策已于 2026-10-31 全部拍板(见 §06)。以下为<b>明确不在本计划内的后续任务</b>(本档案只登记，不排期)：</p>
+<ul>
+  <li><b>更多风格 preset</b>(D15): retro(CRT 扫描线/像素感)等第 4+ 套候选，配方接口已在两层变体模型里预留，随时可加。</li>
+  <li><b>存量动效收编</b>(D8): atlas/prism/console 的 145 处 transition / 42 keyframes 迁入 fx 库统一管理——大工程，需要时另立计划。</li>
+  <li><b>动效指南硬化</b>: 若精修后某类坑反复出现(如 layout 属性过渡卡顿)，可把指南对应条目升级为守阵。</li>
+</ul>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>决策点</th><th>结论</th><th>备选(未选)</th></tr>
+  <tr><td>D1</td><td>技术路线</td><td>零依赖自研(CSS 变量 + data-fx + 原生 JS)，调研借鉴不引依赖</td><td>引入 GSAP/Motion One 运行时</td></tr>
+  <tr><td>D2</td><td>挂载口</td><td><code>data-fx</code> 属性驱动 + 单挂载器，class 组合作文档兜底</td><td>纯 CSS class 组合</td></tr>
+  <tr><td>D3</td><td>跟手约束强度</td><td>降为设计指南(§01)不作硬守阵，用户筛选精修</td><td>四条硬规矩作准入门槛</td></tr>
+  <tr><td>D4</td><td>实施顺序</td><td>showcase 先行挑选 → 挂进新皮肤 flux</td><td>直接在现有控制台边做边调</td></tr>
+  <tr><td>D5</td><td>浏览器目标</td><td>Chrome/Edge 全特性，Firefox/Safari 降级到无动效终态</td><td>为三家保动效一致</td></tr>
+  <tr><td>D6</td><td>华丽度基调</td><td>分层混合，不预先定死风格，做候选</td><td>单一定调(科幻/克制二选一)</td></tr>
+  <tr><td>D7</td><td>fx 库落点</td><td><code>static/shared/fx/</code> 单点，flux 先当唯一消费者</td><td>放 flux 目录内后补上提</td></tr>
+  <tr><td>D8</td><td>存量动效</td><td>只管新皮肤，三皮肤存量不碰不收编</td><td>顺手全局收编</td></tr>
+  <tr><td>D9</td><td>组件范围</td><td>P0/P1 按 §03 清单，自定义 tooltip 不做</td><td>—</td></tr>
+  <tr><td>D10</td><td>新皮肤名</td><td><code>flux</code></td><td>pulse / aurora / neon</td></tr>
+  <tr><td>D11</td><td>—</td><td class="cm">与 D3 合并(同属约束强度议题)</td><td>—</td></tr>
+  <tr><td>D12</td><td>调研深度</td><td>桌面调研提炼模式，不逐库试装</td><td>2-3 库实装对比</td></tr>
+  <tr><td>D13</td><td>showcase 位置</td><td><code>static/fx/showcase.html</code> 经 FastAPI 访问</td><td>独立单 HTML 双击即开</td></tr>
+  <tr><td>D14</td><td>flux 生成方式</td><td>fork console + 守阵 <code>_UI_ALL</code> 收编</td><td>引用 console CSS + overlay</td></tr>
+  <tr><td>D15</td><td>preset 数量</td><td>3 套(neon/glass/crisp)，其它风格入 §05 后续任务</td><td>4 套(含 retro)</td></tr>
+</table>
+<p class="cm">D11 为编号占位：第 1 轮提问 Q11 与 Q3 同议题，结论并入 D3；编号保留以免拍板号断档误读。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>fx 文件超 700 行帽</td><td>S2/S3 写作中单文件逼近 700 行</td><td>按职责预分三文件(fx/fx-presets/showcase 自带)；再超继续分并把新 link 序钉进 wiring 守阵。</td></tr>
+  <tr><td>flux 令牌静默失效</td><td>fork 时令牌名缺失或 S6 新令牌只在 flux 声明</td><td>S5 扩展令牌 parity 守阵收编 flux，红即停；新令牌先补四皮肤声明再消费。</td></tr>
+  <tr><td><code>ui ===</code> 分支漏盘</td><td>S5 盘点遗漏精确匹配分支，flux 下功能缺失</td><td>盘点以 grep 全量清单为准逐条过；DOM 接线测试扩展到 flux 兜底。</td></tr>
+  <tr><td>华丽动效实测卡顿</td><td>showcase/挂载后长列表或弹窗掉帧</td><td>指南标注先行；实测不卡才留，卡则该变体标注淘汰或限元素尺寸；torrent 行禁 stagger 已入清单。</td></tr>
+  <tr><td>fx.js 与 boot.js 时序冲突</td><td>挂载器抢跑(模板未注入)或晚跑(动效闪变)</td><td>fx 挂行进 tpl-manifest 由 boot.js 保序；挂载器幂等，可在 DOM 就绪后重复扫。</td></tr>
+  <tr><td>降级浏览器行为分歧被误报为 bug</td><td>Firefox/Safari 下「动效没生效」</td><td>降级哲学(D5)写进 fx 库 README 段与 webui.md fx 章节，先查浏览器再查代码。</td></tr>
+  <tr><td>console 后续演进带动 flux 漂移</td><td>未来改 console 期望 flux 同步(或反之)</td><td>D14 已拍板隔离；同步需求按 scope-guard 走 issue/另立计划，不顺手改。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-2316</span> 初版：会话 grilling 三轮 15 项决策拍板后成文。要点：零依赖 fx 库(shared/fx/ 单点、两层变体) + showcase 挑选流 + fork console 成 flux(只 dark)；S1-S8 八步，S4 人工挑选为里程碑；三皮肤存量隔离是第一不变量。</li>
+</ul>
+
+</div>
+</body>
+</html>

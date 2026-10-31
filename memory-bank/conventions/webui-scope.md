@@ -2,6 +2,7 @@
 
 > 摘要: 「选中 / 锚点 / 光标」三态作用域 + C1–C5 一致性契约 + 触发点登记表位置 —— 判断「这次动作作用在谁身上」的唯一口径出处。
 > 触发: 选中与触发不一致, 作用域, scope, 右键菜单作用于谁, 批量动作目标, 菜单变体, 触发点登记, 新增动作入口
+**Refs:** memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
 来源: 计划 `memory-bank/plans/26-10-10-2001-plan-webui-selection-trigger-parity.html`(专题 `webui-selection-trigger-parity`)。本文是该计划的**口径单点**; 实现进度与路线在计划与任务档案里, 本文不复述。
 

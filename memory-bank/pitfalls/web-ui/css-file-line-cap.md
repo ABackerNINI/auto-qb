@@ -13,3 +13,4 @@
 - **复发**: 1 (2026-10-20): 为展开态补注释时把 atlas `components.css` 顶到 702 行。**为何没命中**: 动手前确实量了行数, 但用的是 `(Get-Content $f).Count` —— 它对 UTF-8 中文/CRLF 混排文件**少计**(同一文件实测 649, Python 逐行 700), 于是“还有 51 行余量”是假信号; 真到提交时才被 `test_frontend_template_split_wiring` 抓住。**新增判据**: 量行数只用 `wc -l` 或 Python `sum(1 for _ in open(p, encoding='utf-8'))`, **不要**用 PowerShell `(Get-Content).Count`; 撞满后又不能再加行时, 用「行内注记」(`.sel { /* … */ background: … }`) 保持行数不变 —— 本次就是这样把 702 拉回 700 的。
 
 > 该守阵同时钉三件事, 报红时先分辨是哪条分支: 行数超限的措辞是 `<file> NNN 行, 超 700 行`; 顺序问题的措辞是 `CSS 链接顺序漂移`。
+**Refs:** memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html

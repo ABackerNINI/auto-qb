@@ -11,8 +11,9 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (4)
+## Open (5)
 
+- [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](../26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
 - [26-10-31-0705] [真机实测 RM00 基建: 守卫/伪 tracker/双实例互传](../26-10-31-0705-plan-real-machine-test.html) — `real-machine-test`
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](../26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](../26-10-31-0128-plan-mutation-core.html) — `mutation-core`

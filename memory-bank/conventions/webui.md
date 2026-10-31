@@ -2,7 +2,7 @@
 
 > 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、HTML dark 主题 —— 前端产出口径的唯一出处。
 > 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用
-**Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html
+**Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html, memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
 ## WEB UI 菜单/入口分层原则 (2026-09-17 用户明确要求记入)
 
