@@ -96,7 +96,9 @@ window.AQB_COLUMNS = {
     },
 
     /* ---------------- 主表横滚指示条(计划 26-11-01-0553 S3) ----------------
-     * 入口只有 syncHeadScroll 尾部一处: 容器 scroll 天然覆盖拖动 / 滚轮 / 键盘 / 程序化 scrollLeft。
+     * 几何入口是 syncHeadScroll 尾部(容器 scroll 天然覆盖拖动 / 滚轮 / 键盘 / 程序化 scrollLeft);
+     * 但**发现容器**的入口是热区 mousemove(_hscrollHot -> _hscrollTarget), 不依赖曾经滚过 ——
+     * 文档级监听由 _ensureHeadObserver 在挂载时绑上, 纯鼠标用户第一次伸进底部热区就能召唤出胶囊。
      * 只认主表三视图: 抽屉变体面(shared/tpl/xtpl.html:360)也走 syncHeadScroll, 但传的是抽屉表 id ——
      * 抽屉列集窄、横滚罕见, 不配指示条(D4/R5)。这条判定必须留在**建 DOM 之前**,
      * 否则抽屉面滚一下就在 body 里留下一个永远不用的胶囊。
@@ -113,7 +115,6 @@ window.AQB_COLUMNS = {
       if (!el) return;
       HSCROLL_IND.el = el;
       HSCROLL_IND.page = page;
-      const pill = this._hscrollPill();
       const sw = el.scrollWidth;
       const cw = el.clientWidth;
       HSCROLL_IND.overflow = sw > cw;
@@ -121,6 +122,10 @@ window.AQB_COLUMNS = {
         this._hscrollShow();
         return;
       }
+      /* !建 DOM 挪到溢出判定**之后**: 宽窗无溢出是常态, 那时连隐形节点都不多留一个
+       * (D10 保守默认: 常态下指示条完全不可见); 也免得热区每次进入都白建一次。
+       * trackW 要读 pill.clientWidth, 故 _hscrollPill() 必须排在量 trackW 之前。 */
+      const pill = this._hscrollPill();
       // 轨道宽实测(不硬编码 160): CSS 是 min(160px, 42vw), 窄屏会缩
       const trackW = pill.clientWidth;
       const thumbW = Math.min(trackW, Math.max(32, Math.round((trackW * cw) / sw)));
@@ -133,8 +138,8 @@ window.AQB_COLUMNS = {
       this._hscrollObserve(el);
       this._hscrollShow();
     },
-    /* 惰性单例: 首次横滚才建 DOM(模块加载时一个节点都不多)。结构固定为 CSS 契约里的
-     * <div class="hscroll-pill"><i></i></div>, 挂 body 末尾(shared/hscroll.css 注释钉死)。 */
+    /* 惰性单例: 首次**量到横向余量**才建 DOM(模块加载时、宽窗无溢出时, 一个节点都不多)。
+     * 结构固定为 CSS 契约里的 <div class="hscroll-pill"><i></i></div>, 挂 body 末尾(shared/hscroll.css 注释钉死)。 */
     _hscrollPill() {
       if (HSCROLL_IND.pill) return HSCROLL_IND.pill;
       const pill = document.createElement("div");
@@ -144,7 +149,12 @@ window.AQB_COLUMNS = {
       document.body.appendChild(pill);
       HSCROLL_IND.pill = pill;
       HSCROLL_IND.thumb = thumb;
-      this._hscrollBind(pill);
+      /* pill 级监听就地绑(与建 DOM 同生共死); 文档级监听(热区 + resize)与 pill 无关,
+       * 已改为挂载即绑 —— 见 _hscrollBind 的注释。 */
+      pill.addEventListener("pointerdown", (ev) => this._hscrollDown(ev));
+      pill.addEventListener("pointermove", (ev) => this._hscrollMove(ev));
+      pill.addEventListener("pointerup", (ev) => this._hscrollUp(ev));
+      pill.addEventListener("pointercancel", (ev) => this._hscrollUp(ev));
       return pill;
     },
     /* 状态栏实测高: 优先量 .statusbar(状态条可能不渲染 -> 量不到时回落令牌), 再回落 34。
@@ -162,8 +172,12 @@ window.AQB_COLUMNS = {
       return HSCROLL_IND.sbH;
     },
     /* 文档级监听只挂一次(守卫 bound): 热区 mousemove + window resize。
+     * !必须**挂载即绑**, 不能等第一次横向滚动: 纯鼠标用户没有拖拽入口(D7), 正是最需要指示条的人;
+     *   若仍挂在 _hscrollPill() 里, 他们永远等不到 —— 不横滚 -> 不建 DOM -> 不挂监听 -> 永远不建。
+     * 调用点: _ensureHeadObserver 第一行(shared/lifecycle.js 每次渲染都走), 自带 bound 守卫,
+     *   重复调用零成本; 放在其 ResizeObserver 早退分支**之前**, 老浏览器降级路径也能绑上。
      * 热区只在 pointer: fine 下挂(R10): 触屏没有 hover 语义, 触摸横滚本就原生可用, 不退化。 */
-    _hscrollBind(pill) {
+    _hscrollBind() {
       if (HSCROLL_IND.bound) return;
       HSCROLL_IND.bound = true;
       if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) {
@@ -174,10 +188,24 @@ window.AQB_COLUMNS = {
         if (HSCROLL_IND.el) this._hscrollSync(HSCROLL_IND.el, HSCROLL_IND.page);
         this._hscrollShow();
       }, { passive: true });
-      pill.addEventListener("pointerdown", (ev) => this._hscrollDown(ev));
-      pill.addEventListener("pointermove", (ev) => this._hscrollMove(ev));
-      pill.addEventListener("pointerup", (ev) => this._hscrollUp(ev));
-      pill.addEventListener("pointercancel", (ev) => this._hscrollUp(ev));
+    },
+    /* 当前可见的主表容器。三视图 v-if 互斥, 最多命中一个; 三个 ref 都是普通 div.group-table
+     * (groups.html:18 groupTable / torrents.html:4 torrentTable / shows.html:5 showTable),
+     * 不是组件实例, 无需取 $el。
+     * !不依赖「曾经滚过」: 热区召唤是首次发现容器的唯一时机, 读 HSCROLL_IND.el 在这里恒为 null。
+     * 判定用 getClientRects().length(本文件 _headEl 的既有口径): 未渲染 / display:none 的元素
+     * 按未渲染处理, 不会误取到一个量不出宽度的空壳。 */
+    _hscrollTarget() {
+      const refs = [
+        ["groupTable", "group"],
+        ["torrentTable", "torrent"],
+        ["showTable", "show"],
+      ];
+      for (const [name, page] of refs) {
+        const el = this.$refs[name];
+        if (el && el.getClientRects().length) return { el, page };
+      }
+      return null;
     },
     /* 热区 handler(R1: 落在热路径上, 每次 mousemove 都跑): 只做一次 clientY 比较,
      * 状态没变立刻返回 —— 不读布局属性、不写 DOM。状态**变化**才重算几何(重算时机 ②)。 */
@@ -186,7 +214,12 @@ window.AQB_COLUMNS = {
       if (hot === HSCROLL_IND.hot) return;
       HSCROLL_IND.hot = hot;
       // 进入那一刻重算: 列宽 / 可见列变化后 scrollWidth 可能已变, 陈旧几何在这里被修正
-      if (hot && HSCROLL_IND.el) this._hscrollSync(HSCROLL_IND.el, HSCROLL_IND.page);
+      /* !每次进入都重新解析容器, 不复用 HSCROLL_IND.el: 视图切换后旧容器已 detach,
+       * scrollWidth 归零 -> overflow 被误判为假(同源 bug, 一并修掉)。 */
+      if (hot) {
+        const t = this._hscrollTarget();
+        if (t) this._hscrollSync(t.el, t.page);
+      }
       this._hscrollShow();
     },
     /* 可见性单点: 有横向余量 且 (在热区 或 拖拽中) 才 .on。拖动期间不淡出(D7)。
@@ -390,6 +423,7 @@ window.AQB_COLUMNS = {
      *   而且只在元素真的换了才发生, 不是每帧。
      * 降级: 无 ResizeObserver(很老的浏览器)时退回"每次渲染同步一次", 行为与改动前一致。 */
     _ensureHeadObserver() {
+      this._hscrollBind();  // 挂载即绑横滚指示条的文档级监听(自带 bound 守卫); 必须早于下方早退分支
       if (typeof ResizeObserver === "undefined") {
         this._syncHeadHeight();
         return;
