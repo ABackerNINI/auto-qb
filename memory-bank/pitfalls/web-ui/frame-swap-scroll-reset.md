@@ -1,6 +1,7 @@
 # 变体表格体整帧换清宿主子树后滚动容器 scrollTop 现算落 0 —— 缺成对恢复即列表跳
 
 > 摘要: 变体表格体整帧换清宿主子树后滚动容器 scrollTop 现算落 0 —— 缺成对恢复即列表跳
+> 等级: L0
 > 触发: 点击跳动, 列表跳, 整列表位移, 滚动位落 0, 整帧换, replaceChildren, withScroll, scrollTop 现算, 滚到中间再点后跳, 数据回路重拉后跳, rerender 单点重渲后跳, 瞬态自回位, 0.x 秒后回位, CSS 动画重播, 入场动画重播, anchFill 摘插锚, 锚保活, page-in, 长生命周期元素, 逐帧采样
 **Refs:** memory-bank/tasks/26-10-14-webui-content-click-jump.md
 

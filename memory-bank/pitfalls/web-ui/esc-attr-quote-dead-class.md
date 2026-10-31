@@ -1,6 +1,7 @@
 # 字符串 DOM 拼属性: 插值出的引号会被转义 —— 类名带引号 = CSS 静默失效
 
 > 摘要: 用 `dtHtml`(esc 单点)拼标签时, 属性名与引号必须写在**字面量部分**, 插值只能是「属性值」—— 把整段属性文本(`' class="virtual"'` / `' class="' + cls + '"'`)当插值传进去, esc 会把引号转成 `&quot;`, HTML 解析时再还原成类名里的引号字符: 元素 `class` 的实际值是 `"virtual"`(含引号)而不是 `virtual`, 于是 `.drawer-table tr.virtual` / `tr.skipped` / `tr.sel` 这类规则一条都不命中, 且没有任何报错 —— 只有把渲染结果 dump 出来逐字节比才看得见。
+> 等级: L0
 > 触发: 字符串拼 DOM, dtHtml 属性, esc 引号, 类名带引号, 条件类名, classList 不生效, 跳过态没变灰, 选中行没高亮, 属性拼进插值, A/B dump 逐字节比
 
 **Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md

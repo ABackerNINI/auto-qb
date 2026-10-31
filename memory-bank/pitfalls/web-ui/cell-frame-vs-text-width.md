@@ -1,6 +1,7 @@
 # 强调框/整格线挂 grid 单元格 div 上随列宽 (筛选强调框宽度错误)
 
 > 摘要: 表格行是 grid, 值单元格 div 被拉满整列宽 —— 把强调框(`.f-cell.f-on` 的 inset box-shadow)或整格线挂在这个 div 上, 框随**列宽**而非文字宽。修法 = 包一层贴文字的内联块包裹层(`.m-dur` 的 `.dur-body` / 保存路径的 `.sp-body`)承载强调与点击, 省略号职责随框走(`max-width:100%` + overflow hidden)。chip 类(site/tag/cat)是 inline 元素天然贴文字, 不中招。
+> 等级: L0
 > 触发: 筛选强调框, f-on, f-cell, 强调框宽度错误, 框随列宽, 不贴文字, g-save-path, sp-body, dur-body, 保存路径, 路径筛选, 整格线, hr-line, grid 单元格, 拉满列宽, inset box-shadow, 点筛选框太大
 
 **Refs:** memory-bank/tasks/26-10-09-webui-path-filter-frame-width.md,memory-bank/testing/baselines/26-10-09-2112-webui-path-filter-frame-width.md

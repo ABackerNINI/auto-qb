@@ -1,6 +1,7 @@
 # 弹窗条件类切高度: 必须带 transition, 增长只能朝下, 过渡期浮层不许伸出滚动容器, 净空要重测
 
 > 摘要: 弹窗条件类切高度: 必须带 transition, 增长只能朝下(居中容器里增高会把内容顶到光标底下), 过渡期浮层不许伸出滚动容器(否则闪滚动条), 过渡期量的净空要重测
+> 等级: L0
 > 触发: 弹窗太小, 高度跳变, 下拉展开高度跳变, pop-open, 条件类切高度, padding-bottom 过渡, 打开即展开下拉, 点选项就提交, 过渡期限高误限, 设定位置对话框, 下拉出现后自动弹回, 下拉一闪就没了, 点下拉框面板自己收起, 点一次就选中了, 连点两次命中候选, 面板顶到光标底下, 输入行上移, 内容上移, align-items center, 增长方向, 弹窗向上长高, 一瞬间出现滚动条, 闪滚动条, 滚动条一闪, 内容横向跳, 挤一个滚动条宽, 预留是过渡的, overflow-y auto, scrollHeight 撑大, 面板伸出 body, 下拉消失时闪滚动条, 收层闪滚动条, 离场淡出期溢出, transition pop-leave, 开关挂状态还是挂事实, has() 选择器
 **Refs:** memory-bank/tasks/26-10-29-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-10-29-0149-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-10-29-0224-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-10-29-0249-webui-move-dialog-pick-geometry.md
 

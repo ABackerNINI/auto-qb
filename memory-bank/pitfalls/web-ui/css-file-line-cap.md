@@ -1,6 +1,7 @@
 # 单 CSS 文件 700 行体量上限(atlas components.css 已卡满)
 
 > 摘要: 单 CSS 文件 700 行体量上限(atlas components.css 已卡满)
+> 等级: L0
 > 触发: 追加 CSS 规则, 三套皮肤成对改, test_frontend_template_split_wiring 红, Get-Content 少计行数, 行数测量假余量, 702 行
 
 ### 追加共享 CSS 规则前先量行数 —— atlas `css/components.css` 恰好 700 行零余量, 往里加一行就红

@@ -1,6 +1,7 @@
 # 浏览器扩展 ↔ 本地端点
 
 > 摘要: 扩展是**装在用户浏览器里**的交付物 —— pytest 跑不到它的运行期, 而浏览器 API 的报错几乎全指向不了根因; 2026-09-24 用户实测踩到两条(裸域名喂给权限 API / 端点没起只报 `Failed to fetch`), 2026-09-25 又踩到一条(`active:false` 的后台标签仍被抬出来抢版面)。另含 MV3 落盘设施(运行日志/台账)的 storage 口径与 promise 串行链自引用死锁(静默, 无报错), 以及 2026-10-16 加的可见性信号(徽标)两条: 计划里的图形符号不能抄进代码、写台账与读台账不能并发。2026-10-28 补第四条: **站点 origin 是可选权限, 重装/重载扩展会静默清空**, 症状与「端点没起」同为一句 `Failed to fetch` 而动作相反。
+> 等级: L0
 > 触发: 浏览器扩展, chrome 扩展, MV3, permissions.request, Invalid value for origin pattern, Missing scheme separator, Failed to fetch, host_permissions, optional_host_permissions, permissions.getAll, permissions.contains, 站点未授权, 重装扩展, 重新加载扩展, 可选权限丢失, no-permission, 零行, 结构完好但清单为 0, localhost, 127.0.0.1, 本地端点, 归一化用户输入, 后台标签, tabs.create, active false, 抢焦点, 弹窗, 隐藏窗口, windows.create, 直取, fetch, credentials include, SameSite, 登录页, 离屏, offscreen, popup, 运行日志, 日志分级, 环形缓冲, storage.local, 防抖落盘, promise 死锁, 串行链, 徽标, badge, setBadgeText, setBadgeBackgroundColor, 图形符号, ASCII, 台账, instanceHealth, Promise.all 顺序
 **Refs:** memory-bank/plans/26-10-29-0147-plan-hr-ext-site-permission.html
 

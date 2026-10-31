@@ -1,6 +1,7 @@
 # 经典表行 CSS width:fit-content 漏进变体卡片栅格(卡片不填格·两列间长空隙)
 
 > 摘要: 三皮肤经典表对引擎行容器 `.group-row` 写了 `width:fit-content; min-width:100%`(经典 flex 列容器里靠 min-width 兜底成整行宽, 内容超宽才横滚)。变体把 `.group-table` 覆盖成 **grid** 并用 `min-width:0` 拆掉兜底后, `width:fit-content` 就**直接生效**了 —— grid 项宽度非 auto 时不参与默认 `justify-self:stretch`, 卡片收缩到内容宽(实测 ~330px / 695px 格), 两列卡片之间留下 ~700px 永久空洞, 且卡宽随内容漂移(实体 330 vs 虚拟 378, 违反「宽度统一」)。用户报障口径「真实 tracker 卡片与虚拟卡片之间有很长的空隙, 虚拟卡片后方也有空隙」(2026-10-12, 04 状态卡片栅格)。修法 = 变体卡片规则显式 `width:auto`(+ 静态守阵钉死)。
+> 等级: L0
 > 触发: width:fit-content, min-width, justify-self stretch, group-row, 卡片不填满, 栅格空隙, 两列中间大洞, 长空隙, 卡片宽度不一致, 虚拟卡后方空白, dt04, 状态卡片栅格, 经典表 CSS 继承, grid 项拉伸
 
 **Refs:** memory-bank/testing/baselines/26-10-13-0008-webui-dt04-card-grid-fill-width.md,memory-bank/activeContext/26-10-06-0751-webui-detail-panel-design.md

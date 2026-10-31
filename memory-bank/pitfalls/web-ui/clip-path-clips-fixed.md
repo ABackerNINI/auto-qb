@@ -1,6 +1,7 @@
 # clip-path / transform 祖先会裁剪或位移 fixed 后代
 
 > 摘要: 祖先带 `clip-path`(console/atlas 皮肤的 `.hb-cut` 切角)或 `transform` 时, 其内 `position: fixed` 后代的「相对视口」语义被改写成「相对该祖先」—— `clip-path` 表现为**绘制裁剪**(全屏层只剩与祖先重叠的部分可点/可见), 而**入场动画里的瞬时 `transform`** 表现为**位移后回弹**(fixed 元素先落在祖先盒对应的位置, 动画结束 transform 归 none 再跳回视口位置, 用户看到"先出现在中间再移到下方"的闪烁)。两种症状同一根因, 修法都是让 fixed 后代脱离会生成 containing block 的祖先。覆盖式全屏层一律写成块盒的**兄弟节点**(或确保祖先链无 clip-path/transform/filter), 不靠 z-index 救。
+> 等级: L0
 > 触发: fixed 全屏不显示, 覆盖层只显示一部分, 弹窗被裁剪, 全屏遮罩点不到, clip-path, 切角, hb-cut, z-index 调不动, fixed 后代, 设置页覆盖层, 全屏层错位, 底部动作条先出现在中间再下移, 状态栏闪烁, 保存条闪烁, 切设置页闪烁, page-in, transform 动画, containing block, 包含块, ce-page, hb-actbar
 **Refs:** memory-bank/tasks/26-10-02-webui-hr-status-display.md
 

@@ -1,6 +1,7 @@
 # color-mix 混入带 alpha 的颜色且不写权重会产出半透明色
 
 > 摘要: color-mix 混入带 alpha 的颜色且不写权重会产出半透明色
+> 等级: L0
 > 触发: color-mix, 半透明合成, tint 合成, 不透明基色, 吸左首格
 
 ### color-mix 想做「tint 叠不透明底」时混入带 alpha 的颜色且不写权重 ⇒ 半透明结果

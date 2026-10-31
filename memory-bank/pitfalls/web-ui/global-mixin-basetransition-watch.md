@@ -1,11 +1,7 @@
 # 全局 mixin 写 watch 选项会被 `<transition>` 的 BaseTransition 假实例吃掉, getter 求值即抛 TypeError
 
-> 摘要: `app.mixin()` 全局注入的对象若带 `watch: { someState() {} }`, Vue 会把该 watcher 注册进**一切**
-> 组件实例 —— 包括内置 `<transition>` 在内部渲染时创建的 BaseTransition **假实例**(无 data 面)。
-> 这些假实例上求值 watch getter(如 `this.qbCurData`)即抛 TypeError, 且**每个 transition 抛一条**
-> (实测 13 个 `<transition>` = 13 条报错), 页面功能不受影响但控制台刷屏、pageerror 巡检全红。
-> 全局 mixin 需要响应某状态的场合, 改在根实例 `mounted()` 里 `$watch` 单发注册(带数据面守卫
-> `if (!this.drawer) return` 跳过假实例), `beforeUnmount` 摘除。
+> 摘要: `app.mixin()` 全局注入的对象若带 `watch: { someState() {} }`, Vue 会把该 watcher 注册进**一切**组件实例 —— 包括内置 `<transition>` 在内部渲染时创建的 BaseTransition **假实例**(无 data 面)。这些假实例上求值 watch getter(如 `this.qbCurData`)即抛 TypeError, 且**每个 transition 抛一条**(实测 13 个 `<transition>` = 13 条报错), 页面功能不受影响但控制台刷屏、pageerror 巡检全红。全局 mixin 需要响应某状态的场合, 改在根实例 `mounted()` 里 `$watch` 单发注册(带数据面守卫 `if (!this.drawer) return` 跳过假实例), `beforeUnmount` 摘除。
+> 等级: L0
 > 触发: 全局 mixin, app.mixin, watch 选项, transition, BaseTransition, TypeError, drawerTpl, 变体, 根实例 $watch
 > 收口: 2026-10-06, drawer_templates.js 改根实例 mounted $watch 单发注册(数据面守卫), 见文件头「S6 接入说明」
 

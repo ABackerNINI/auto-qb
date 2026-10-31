@@ -1,6 +1,7 @@
 # 自绘 .aq-tip 靠「hover 时摘 title」压原生气泡, 摘不干净叠出双 tooltip
 
 > 摘要: 全局自绘 tooltip(.aq-tip, 调度单点 shared/ui_feedback.js)若靠「hover 时摘掉 title 属性 + 离开还原」压制原生气泡, 摘除时机永远追不上 title 的出现时机: ①模板**嵌套带 title 结构**(statusbar.html 的 .sb-today > .sb-hist / .sb-stats > .sb-item / .sb-speed > .sb-spd), 只摘最内层时原生气泡借外层祖先 title 还魂; ②`:title` 绑定随轮询逐轮变值, Vue patch 在悬浮期间把 title 重写回去而 mouseover 不再触发; ③**Vue 把指针下节点整个换掉时指针不动、mouseover 根本不触发**, 新节点带着 title 直接入 DOM(前两轮修法对此全盲) —— 三条路都让原生气泡复活, 与 350ms 自绘浮层叠出双 tooltip(用户先后报「多数元素有两个」与「两 tooltip 交替出现」)。定稿修法(2026-10-04 三轮): **原生 tooltip 断供式** —— MutationObserver 盯全文档, title 属性任何时刻出现即刻迁进 data-aq-tip 并删掉原属性, DOM 里不存在 title, 原生气泡从根上无从弹出。
+> 等级: L0
 > 触发: 双 tooltip, 两个 tooltip, 状态栏 tooltip, aq-tip, 嵌套 title, 祖先 title, 原生气泡还魂, Vue 重写 title, 轮询 title 变值, 节点替换 title, statusbar, sb-today, sb-stats, sb-speed, ui_feedback
 > 收口: 2026-10-04 三轮定稿, ui_feedback.js 改 MutationObserver 断供式(title→data-aq-tip 单向迁移, 不还原), test.full 2423 passed + Playwright 冒烟 8 项全过
 

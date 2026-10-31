@@ -1,6 +1,7 @@
 # 抽屉 open 与 kind 是正交维度
 
 > 摘要: 三挂点(全局/分组/单种流量图)并入抽屉后, `drawer.open`(开合)与 `drawer.kind`(形态: seed/traffic)是两个正交维度 —— 判"面板开着"不能代替判"面板是种子详情形态"。流量形态的抽屉 `hash` 恒空、`tab` 恒为 `general`、页签按钮不渲染种子四签: 只判 open 的入口会把空 hash 打进 `/api/torrents//<hash 为空的路径>` 拿 404, 或被 `tab === tab` 早退吃掉(按了没反应)。
+> 等级: L0
 > 触发: drawer.open, drawer.kind, 流量形态, 种子形态, 全局流量图, 分组流量图, Alt+1, Alt+5, 详情面板打不开, tracker 列表获取失败, peer 列表获取失败, Not Found, /api/torrents//trackers, 空 hash, 按了没反应, _kbDrawerTab, drawerTab
 
 ### 只判 `drawer.open` 的抽屉入口在流量形态下打出空 hash 请求

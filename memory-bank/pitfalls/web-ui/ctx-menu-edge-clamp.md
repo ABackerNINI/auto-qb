@@ -1,6 +1,7 @@
 # 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达
 
 > 摘要: 视口钳位 e2e: 锚点不贴缘的断言恒真; 左缘 clamp 真实手势结构不可达
+> 等级: L0
 > 触发: 视口钳位, 左缘, 右缘, ctx-menu, EDGE, e2e 断言, 恒真, 顺带断言, 红验, clientX, 滚动容器左缘
 
 **Refs:** memory-bank/issues/26-10-20-0148-test-webui-ctx-menu-left-edge.html

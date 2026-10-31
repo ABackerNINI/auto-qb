@@ -1,6 +1,7 @@
 # 单档化后「档制判据」不得散落成字面量(缺省/兜底/候选集各写一处必然漂移)
 
 > 摘要: 移除「经典 / 变体」两档制的一方时(删经典档或删变体档), 真正危险的不是删组件, 而是**档制判据散落在四五处**: 菜单候选集(`[{id:"classic"}].concat(options(tab))`)、缺省读侧(`readSel` 的 out 初始化)、各消费方(`|| CLASSIC`、`|| "classic"` 五处)、渲染失败兜底(`this.drawerTplSel[st.tab] = CLASSIC`)、持久化写侧(`|| "classic"`)。删掉经典档后这些字面量**全部静默失真** —— 不缺报错、不白屏, 只表现为「某页签偶发改不动模板」「菜单永远只有一个项」「刷新后选择回落」。判据: 任何「档位/模板/渲染路径」的集合变更, 先把判据收成**一个注册表 API 组**(可用性 + 缺省档 + 候选集), 再让所有点消费; 收口后全层不得再出现 `|| CLASSIC` 类字面量(静态守阵可钉)。
+> 等级: L0
 > 触发: 档制单档化, 删经典档, 删变体档, defaultSel, CLASSIC_TABS, hasClassic, choices, 缺省档, 渲染失败兜底, 补落经典, 菜单只有一个项, 菜单候选集, 兜底失真, readSel, dtPersistSel, 旧存值回落, drawerTplSel 缺键
 
 **Refs:** memory-bank/tasks/26-10-14-webui-detail-classic-removal.md

@@ -1,6 +1,7 @@
 # 拆分与统一后的前端守阵口径
 
 > 摘要: 模板/样式/内核三层拆分 + 单一语义模板收敛(2026-09-27)后, 找前端内容与加守阵的固定口径 —— 一律读「聚合」, 模板级 UI 差异只走「差异口」, data/生命周期不许进 app.mixin。
+> 等级: L0
 > 触发: 改守阵, 找模板内容, 加断言, 两套 UI 差异, 拆分, 聚合读法, 差异口, ui-diff, 根选项, app.mixin, hub-field, boot.js, 冒烟等价, 搬迁方法体, 拆文件守阵假红, v-if 链跨分片, 新分区, settings.html 上限, 默认值梯, cfgDefaultScalar, cfgDefaultForFields, cfgDefaultForPlugin, 新增条目初值
 
 **Refs:** memory-bank/tasks/26-10-11-webui-drawer-refactor.md, memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md
@@ -63,13 +64,13 @@
   (shortcuts.js AQB_KEYS, 2026-09-30); W6 后端存储接入时同形态。
 - **复发**: 0
 
-### 新增 shared/ 片段文件的接线清单(三份清单 + app.mixin + prism 的 210 行硬顶)
+### 新增 shared/ 片段文件的接线清单(三份清单 + app.mixin + prism 的 shell 218 行硬顶)
 
 - **触发**: 往 `shared/` 下**新增一个 `.js` 片段文件**(不是改现有文件), 或新增一个 `shared/tpl/*.html` **模板分片**。
 - **判别**: 漏一处都**静默或半静默** —— ①`.js` 漏进 `tpl-manifest.scripts` / `.html` 漏进 `parts` → 文件根本不加载, 页面不报错、那块功能整块不存在(盘上有、清单没挂的 `tpl/*.html` 还会被 `test_frontend_template_split_wiring` 的**孤儿分片**项单独判红); ②三份 shell 的清单必须**逐项一致**(清单等价断言比对的是**解析后的 manifest**, 不是 shell 文本); ③`.js` 里写了 `^window.X = {` 却没接 `app.mixin` → `_scan_mixin_wiring` 判「定义了 window.X 但 app.js 没有 app.mixin」(**模板分片无此步** —— 它只贡献 markup)。
-- **处置**: `.js` 按「加文件 → 三份 `index.html` 的 `scripts` 各加一行 → `app.js` 补 `app.mixin(window.X)`」; `.html` 按「加文件 → 三份 `index.html` 的 `parts` 各加一行(`into` 取 `app`/`body`/`.选择器`)」。**⚠ 两个体量硬顶必须同时算**: ①`prism/index.html` 贴着 shell 上限 **210 行**(atlas/console 各有 2~4 行余量, 但别赌 —— 三份都要按上限管); ②**单分片 ≤400 行**(`settings-detail.html` 单独给到 560)。`tpl/xtpl.html` 收行模型单元格渲染器时会**先撞 400 行**(P3 实测: 302 + 211 = 513)⇒ 必须另开一个分片(`tpl/xtpl-cells.html`), 而不是硬塞。
+- **处置**: `.js` 按「加文件 → 三份 `index.html` 的 `scripts` 各加一行 → `app.js` 补 `app.mixin(window.X)`」; `.html` 按「加文件 → 三份 `index.html` 的 `parts` 各加一行(`into` 取 `app`/`body`/`.选择器`)」。**⚠ 两个体量硬顶必须同时算**: ①shell 上限 **218 行**, prism 已贴满(实测 26-10-31: prism 218 / console 217 / atlas 213 —— 但别赌, 三份都要按上限管); ②**单分片 ≤400 行**(`settings-detail.html` 单独给到 560)。`tpl/xtpl.html` 收行模型单元格渲染器时会**先撞 400 行**(P3 实测: 302 + 211 = 513)⇒ 必须另开一个分片(`tpl/xtpl-cells.html`), 而不是硬塞。
 - **腾行**: 加清单行时 shell 超顶,**先从该 shell 腾掉一行**(纯排版空行优先 —— atlas/console 各有空行可删; prism 无空行时**把两个相邻的 `parts` 数组项合并到同一行**是安全的: JSON 空白不参与解析, 清单等价断言比对的是 `json.loads` 结果)。合并**只对 `parts` 做**; `scripts` 保持一行一项(它是加载序的阅读面)。
-- **守阵**: `_scan_mixin_wiring`(list/注入双向) + `test_frontend_template_split_wiring`(清单完整性 / 三 shell 清单等价 / 孤儿分片 / shell ≤210 / 单分片 ≤400) + `test_frontend_static_bundle_health` 的 shell 行数上限。
+- **守阵**: `_scan_mixin_wiring`(list/注入双向) + `test_frontend_template_split_wiring`(清单完整性 / 三 shell 清单等价 / 孤儿分片 / shell ≤218 / 单分片 ≤400) + `test_frontend_static_bundle_health` 的 shell 行数上限。
 - **复发**: 0
 
 ### 再拆前端大文件: 等价性验证 = 切割自验 + 真 API stub 冒烟 DOM 比对
@@ -163,7 +164,7 @@
 - **处置**: 新分区一律作 `v-else-if="hub.view === '<key>'"` 加在 **settings.html 末尾**(rules 分支之后、
   settings-detail.html 的 `v-else-if speed` 之前), 与链自然续接。该分支若要渲染本段通用键(通用 `v-else`
   分支不再命中), 用 `<hub-field>` + 一个返回叶子字段的 helper(`cfgFlatten` 同源)显式渲染 —— 别抄通用块模板。
-  ⚠ 体量: `settings.html` 单分片上限 400 行, S6(计划 26-10-16-0541)加分区后已到 **392** —— 下次再加内容前
-  先把某个视图拆成独立分片(sanctioned 路径), 别硬塞。
+  ⚠ 体量: `settings.html` 单分片上限 400 行; S6(计划 26-10-16-0541)加分区后曾到 **392**, 其后视图已拆出
+  独立分片(实测 26-10-31: 313)—— 再逼近 400 先拆(sanctioned 路径), 别硬塞。
 - **守阵**: `test_frontend_template_split_wiring`(shell ≤212 / 单分片 ≤400 / 聚合标签配平)+ `test_webui_static_dom_page`。
 - **复发**: 0

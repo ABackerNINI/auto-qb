@@ -1,6 +1,7 @@
 # 自绘 .aq-tip 定位: 锚点脱离文档 / 竖向末尾夹取, 都会把浮层压到元素身上
 
 > 摘要: 全局自绘 tooltip(.aq-tip, 调度单点 `shared/ui_feedback.js`)的定位缺陷, 都表现为「位置错误 / 浮层盖住它描述的元素」: ①(首轮)`show()` 的 350ms 延时窗口内锚点被 Vue 轮询整个换掉 → 拿到已脱离文档的节点, `getBoundingClientRect()` 全 0, 浮层落视口左上角 `(8,6)`; ②(首轮)竖向末尾无条件夹回视口, 底缘锚点被浮层压住; ③(二轮 2026-10-07)**显示期锚定失活** —— 定位只在 `show()` 做一次, 此后锚点被轮询重建(换节点)或移位(布局/折叠), 浮层留在原地漂移; 键盘 `focusin` 路径无指针坐标(NaN)无法走指针重解析。
+> 等级: L0
 > 触发: tooltip 位置错误, tooltip 挡住元素, tooltip 跑到左上角, aq-tip, ui_feedback, show 定位, getBoundingClientRect 全 0, 脱离文档, detached, 节点替换, 350ms 延时, 状态栏 tooltip, 上传速度 tooltip, sb-spd, 浮层压住锚点, 夹取, 锚点漂移, tooltip 留在原地, reacquire, rAF 帧环, 键盘 tooltip 错位, focusin NaN
 > 收口: 2026-10-04 05:25 `show()` 改「锚点 `!isConnected` 时按 `mouseover` 记下的指针坐标 `elementFromPoint()` 重解析 + 竖向任何分支不越过锚点」; 2026-10-07 11:42 二轮加「place() 定位单点 + reacquire() 语义重解析 + watch()/tick() rAF 帧环显示期保活」, test.full 2717 passed + 4 skipped / 99%(基线 26-10-07-1142)
 **Refs:** memory-bank/tasks/26-10-07-webui-detail-panel-followups.md

@@ -1,6 +1,7 @@
 # 列状态持久化 (列宽 / 显隐 / 列序)
 
 > 摘要: 列偏好"时不时被重置"的全部已知机制 —— 双轨模型是当前定案(前四轮修复都栽在把意图与派生混在一个字段里); 另有一条**应用之外**的通道: 浏览器站点级"关闭窗口时清除 Cookie 和站点数据"。
+> 等级: L0
 > 触发: 改列设置, 列宽被重置, localStorage, 列隐藏, 列序, 拖列宽, colHidden, colOrder, colWidths, 浏览器重启, 偏好全回默认, 关闭窗口时清除站点数据, SESSION_ONLY
 
 **Refs:** memory-bank/tasks/26-10-09-webui-notice-panel-exit.md

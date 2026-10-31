@@ -1,6 +1,7 @@
 # 部分受理被回执成 error: 按回执二态驱动 UI 行为必然错一头
 
 > 摘要: 部分受理被回执成 error: 按回执二态驱动 UI 行为必然错一头
+> 等级: L0
 > 触发: 部分成功, 部分受理, 添加种子回执, 命令回执三态, warn 回执, 添加窗口不消失, 关窗判据, 批量添加
 **Refs:** memory-bank/tasks/26-10-18-webui-add-partial-receipt.md
 

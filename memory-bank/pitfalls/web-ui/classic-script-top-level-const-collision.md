@@ -1,6 +1,7 @@
 # classic script 顶层 let/const 跨文件共享全局词法环境: 多文件同名顶层常量 = 全页面瘫
 
 > 摘要: classic script(非 module 的 `<script>`)的顶层 `let/const` 不进 `window` 而是进**全局词法环境**, 所有 `<script>` 标签共享这一个环境 —— 两个文件各自写 `const FIT = ...`, 后装载的那个直接 `SyntaxError: Identifier 'FIT' has already been declared` 整份文件不执行; 而本项目的静态守阵全是**源码字符串比对**, 看不见这种"只在真实浏览器解析期暴露"的错, 结果是 mixin 未注册、整页瘫, e2e 每例对一个瘫页等 30s 超时, 看起来像"机器慢了"。
+> 等级: L0
 > 触发: 顶层 const 撞名, classic script 全局词法环境, SyntaxError, mixin 未注册, 白屏, AQB_OVERLAY_FIT, 静态守阵看不见, 多 js 文件同名常量, 顶层 let, let/const, 跨文件撞名
 > 收口: 2026-10-22 07:05 全部别名收进**方法内作用域**(aq-tip IIFE 内合法), 新增第 5 类守阵 `test_webui_static_dom_panel.py::test_overlay_fit_single_point` 的跨文件顶层 const/let 撞名扫描(双文件变异红验); test.full 3999 passed / 2 skipped / 99%, e2e 全量 340 passed / 10 skipped 逐位持平(基线 26-10-22-0646)
 **Refs:** memory-bank/tasks/26-10-22-webui-overlay-fit.md, memory-bank/testing/baselines/26-10-22-0646-webui-overlay-fit.md

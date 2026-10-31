@@ -1,6 +1,7 @@
 # 强调线沿 border-radius 画成弧 (筛选底线不直)
 
 > 摘要: 列表筛选选中强调(`.f-on`: 站点/标签/分类胶囊 + 站点/路径文本格)若用 `box-shadow: inset 0 -Npx 0 0 currentColor` 画底线, 线会**沿 border-radius 走** —— 在胶囊(radius:999px)上画成两端翘起的弧, 不是笔直横线(用户报「改为笔直的横线」)。且 `border-radius` 单独**不裁后代**, 换 `::after` 画线时必须给宿主 `overflow:hidden`, 否则直线两端会戳出圆角轮廓。处置 = 绝对定位 `::after`(left/right:0·bottom:0·height:2px·background:currentColor) + 宿主 `position:relative; overflow:hidden`; 不用 `background-image`(会与 `.f-cell:hover`/`.site-chip.<状态>` 的 `background` 互相覆盖)。
+> 等级: L0
 > 触发: 改筛选强调线, f-on, 下划线不直, 底线成弧, 两端翘起, 胶囊下划线, inset box-shadow 圆角, border-radius 不裁后代, 笔直横线, ::after 底线, overflow hidden 裁边, 强调线形状
 
 **Refs:** memory-bank/tasks/26-10-10-webui-filter-underline.md,memory-bank/testing/baselines/26-10-10-1807-webui-filter-underline.md

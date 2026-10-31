@@ -1,6 +1,7 @@
 # 右键菜单分支项集漂移 (单组 vs 多选)
 
 > 摘要: `shared/tpl/ctx-menus.html` 的右键菜单按上下文分四支, 其中 `menu.multi`(多选批量)与 `v-else`(单组)是**同一批动作的两条入口** —— 给一支加动作项时漏了另一支, 两条路径项集就静默分叉, 用户在某条路径上「找不到该动作」(不报错、不白屏, 纯"菜单里没这个选项")。
+> 等级: L0
 > 触发: 加右键菜单项, 改 ctx-menus.html, 单组菜单缺选项, 多选批量菜单, 项集不一致, 菜单缺项
 
 **Refs:** memory-bank/tasks/26-10-09-webui-ctx-menu-group-actions.md

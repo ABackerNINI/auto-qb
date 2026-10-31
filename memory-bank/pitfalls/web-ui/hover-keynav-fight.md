@@ -1,6 +1,7 @@
 # 键盘导航与悬停高亮同源打架(下拉/列表选中项闪烁)
 
 > 摘要: 下拉/列表组件把悬停(@mouseenter 直写高亮状态 + CSS :hover 与活动项同款样式)与键盘活动项(↑↓)接到同一个高亮状态上 —— 静止光标钉住旧高亮, 且浏览器在行动画/滚动/DOM 变更后给静止光标补发合成 hover 事件把活动项拽回光标行, 上下键时选中项交替闪烁。处置 = 悬停接管走 mousemove + 位移门限(3px), CSS 只留活动项类一条高亮路。**滚动跟随禁用 scrollIntoView**(它逐层滚动所有可滚祖先): 手动差值调 `scrollTop`, 且**以菜单/列表根为界**, 否则会连弹窗自己的 `.add-dialog-body` 一起滚 —— 症状是「弹窗内容从上往下滑一次」(2026-10-29 复发 1, 见条目 2)。
+> 等级: L0
 > 触发: 改下拉列表键盘导航, 加悬停高亮, 上下键选中项闪烁乱跳, mouseenter, 双高亮, 合成 hover 事件, scrollIntoView, combobox, 活动项, 弹窗内容滑动, 文案从上往下滑, 选中候选后再点下拉, _hiScroll, 高亮滚动跟随, 逐级滚动祖先, 祖先滚动容器
 **Refs:** memory-bank/testing/baselines/26-10-29-0412-webui-move-dialog-pick-geometry.md
 
