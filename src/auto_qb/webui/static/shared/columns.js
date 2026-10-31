@@ -7,6 +7,30 @@
  * !本文件在 HTML 里必须排在 app.js **之前**(app.js 末尾要读 window.AQB_COLUMNS);
  *   用到的列模型常量(TABLE_COLUMNS / MIN_COL_PX / STATE_RANK …)仍单点定义在 app.js 顶部。
  */
+/* ============ 主表横滚指示条(计划 26-11-01-0553 S3) ============
+ * 原生横条已被 shared/hscroll.css 彻底隐藏, 这里补回「拖动横滚」这一唯一会丢的能力:
+ * 一根悬浮在状态栏上缘的 3px 胶囊, 指针伸到内容区底部 24px 带内才淡入(D5), 可拖可点轨道跳转。
+ *
+ * 为什么状态压在模块级闭包里: 本片段只有 methods(无 data / 无 mounted), 由 app.mixin 注入
+ * **同一个** Vue 实例 —— 指示条是跨视图单例(三主表 v-if 互斥, 同时最多一个), 状态放进组件
+ * data 反而要占命名空间、还得靠生命周期初始化。故一切状态在 HSCROLL_IND 里, DOM 惰性创建。
+ * !变量名带 _IND 后缀: 各片段都是经典脚本, 顶层 const 共用全局词法作用域, 撞名即整页 SyntaxError。
+ */
+const HSCROLL_IND = {
+  pill: null,      // 轨道单例(.hscroll-pill), 惰性创建
+  thumb: null,     // 滑块(.hscroll-pill > i), 几何由 JS 写内联样式决定
+  el: null,        // 最近一次 _hscrollSync 收到的主表容器(热区召唤时拿它重算)
+  page: null,      // 该容器的表 id
+  overflow: false, // 该容器当前是否有横向余量(热区 handler 只读这个布尔, 不读布局)
+  hot: false,      // 指针是否在底部热区
+  drag: null,      // 拖拽会话 { id, x, left, maxThumb, maxScroll }
+  bound: false,    // 文档级监听只挂一次
+  ro: null,        // ResizeObserver(观察当前主表容器)
+  roEl: null,
+  raf: 0,
+  sbH: -1,         // 状态栏实测高缓存; -1 = 未量(window resize 时清)
+};
+
 window.AQB_COLUMNS = {
   methods: {
     toggleColMenu(ev) {
@@ -68,6 +92,182 @@ window.AQB_COLUMNS = {
       // 首列吸左边界提示(见皮肤 CSS 的 .is-hscrolled 规则): 横滚非零 = 有列滑进吸左首格下方
       ev.target.classList.toggle("is-hscrolled", x > 0);
       head.classList.toggle("is-hscrolled", x > 0);
+      this._hscrollSync(ev.target, page);  // 第四个消费方(计划 26-11-01-0553 S3): 底部横滚指示条
+    },
+
+    /* ---------------- 主表横滚指示条(计划 26-11-01-0553 S3) ----------------
+     * 入口只有 syncHeadScroll 尾部一处: 容器 scroll 天然覆盖拖动 / 滚轮 / 键盘 / 程序化 scrollLeft。
+     * 只认主表三视图: 抽屉变体面(shared/tpl/xtpl.html:360)也走 syncHeadScroll, 但传的是抽屉表 id ——
+     * 抽屉列集窄、横滚罕见, 不配指示条(D4/R5)。这条判定必须留在**建 DOM 之前**,
+     * 否则抽屉面滚一下就在 body 里留下一个永远不用的胶囊。
+     *
+     * !重算时机只有四个: ①容器 scroll(本函数) ②热区进入那一刻 ③ResizeObserver(容器盒变)
+     *   ④window resize(清状态栏高缓存 + 重算)。
+     * 刻意**不**在列应用路径(6 处 colWidths 写入点)显式触发, 也不挂 MutationObserver:
+     * 改列宽 / 隐藏列会让 scrollWidth 变而容器盒子不变(RO 观察不到), 但那一刻指示条必然不可见
+     * (它只在热区里显示), 陈旧几何没人观察得到; 下一次进入热区时 ② 用同一份本函数修正。
+     * 为一个观察不到的瞬时值挂 MutationObserver = 每次行 DOM 变更都付一次回调, 不值。
+     */
+    _hscrollSync(el, page) {
+      if (page !== "group" && page !== "torrent" && page !== "show") return;
+      if (!el) return;
+      HSCROLL_IND.el = el;
+      HSCROLL_IND.page = page;
+      const pill = this._hscrollPill();
+      const sw = el.scrollWidth;
+      const cw = el.clientWidth;
+      HSCROLL_IND.overflow = sw > cw;
+      if (!HSCROLL_IND.overflow) {  // 无横向余量: 不写几何, 也不该留任何痕迹
+        this._hscrollShow();
+        return;
+      }
+      // 轨道宽实测(不硬编码 160): CSS 是 min(160px, 42vw), 窄屏会缩
+      const trackW = pill.clientWidth;
+      const thumbW = Math.min(trackW, Math.max(32, Math.round((trackW * cw) / sw)));
+      const maxScroll = sw - cw;
+      const maxThumb = Math.max(0, trackW - thumbW);
+      const at = maxScroll > 0 ? (el.scrollLeft / maxScroll) * maxThumb : 0;
+      const thumb = HSCROLL_IND.thumb;
+      thumb.style.width = thumbW + "px";
+      thumb.style.transform = "translateX(" + Math.round(at) + "px)";
+      this._hscrollObserve(el);
+      this._hscrollShow();
+    },
+    /* 惰性单例: 首次横滚才建 DOM(模块加载时一个节点都不多)。结构固定为 CSS 契约里的
+     * <div class="hscroll-pill"><i></i></div>, 挂 body 末尾(shared/hscroll.css 注释钉死)。 */
+    _hscrollPill() {
+      if (HSCROLL_IND.pill) return HSCROLL_IND.pill;
+      const pill = document.createElement("div");
+      pill.className = "hscroll-pill";
+      const thumb = document.createElement("i");
+      pill.appendChild(thumb);
+      document.body.appendChild(pill);
+      HSCROLL_IND.pill = pill;
+      HSCROLL_IND.thumb = thumb;
+      this._hscrollBind(pill);
+      return pill;
+    },
+    /* 状态栏实测高: 优先量 .statusbar(状态条可能不渲染 -> 量不到时回落令牌), 再回落 34。
+     * 值缓存到 window resize(④) —— 热区 handler 每次 mousemove 都要用它, 不能每次都量。 */
+    _hscrollStatusbarH() {
+      if (HSCROLL_IND.sbH >= 0) return HSCROLL_IND.sbH;
+      let h = 0;
+      const bar = document.querySelector(".statusbar");
+      if (bar) h = bar.getBoundingClientRect().height;
+      if (!h) {
+        const tok = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--statusbar-h"));
+        h = Number.isFinite(tok) ? tok : 0;
+      }
+      HSCROLL_IND.sbH = h > 0 ? h : 34;
+      return HSCROLL_IND.sbH;
+    },
+    /* 文档级监听只挂一次(守卫 bound): 热区 mousemove + window resize。
+     * 热区只在 pointer: fine 下挂(R10): 触屏没有 hover 语义, 触摸横滚本就原生可用, 不退化。 */
+    _hscrollBind(pill) {
+      if (HSCROLL_IND.bound) return;
+      HSCROLL_IND.bound = true;
+      if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) {
+        document.addEventListener("mousemove", (ev) => this._hscrollHot(ev), { passive: true });
+      }
+      window.addEventListener("resize", () => {
+        HSCROLL_IND.sbH = -1;  // 状态栏高随媒体查询变(窄屏折行 / 状态条隐藏)
+        if (HSCROLL_IND.el) this._hscrollSync(HSCROLL_IND.el, HSCROLL_IND.page);
+        this._hscrollShow();
+      }, { passive: true });
+      pill.addEventListener("pointerdown", (ev) => this._hscrollDown(ev));
+      pill.addEventListener("pointermove", (ev) => this._hscrollMove(ev));
+      pill.addEventListener("pointerup", (ev) => this._hscrollUp(ev));
+      pill.addEventListener("pointercancel", (ev) => this._hscrollUp(ev));
+    },
+    /* 热区 handler(R1: 落在热路径上, 每次 mousemove 都跑): 只做一次 clientY 比较,
+     * 状态没变立刻返回 —— 不读布局属性、不写 DOM。状态**变化**才重算几何(重算时机 ②)。 */
+    _hscrollHot(ev) {
+      const hot = ev.clientY >= window.innerHeight - this._hscrollStatusbarH() - 24;
+      if (hot === HSCROLL_IND.hot) return;
+      HSCROLL_IND.hot = hot;
+      // 进入那一刻重算: 列宽 / 可见列变化后 scrollWidth 可能已变, 陈旧几何在这里被修正
+      if (hot && HSCROLL_IND.el) this._hscrollSync(HSCROLL_IND.el, HSCROLL_IND.page);
+      this._hscrollShow();
+    },
+    /* 可见性单点: 有横向余量 且 (在热区 或 拖拽中) 才 .on。拖动期间不淡出(D7)。
+     * 淡入淡出过渡全由 CSS 给, 这里只切 class, 不加停留定时器(D5 明确否掉)。 */
+    _hscrollShow() {
+      const pill = HSCROLL_IND.pill;
+      if (!pill) return;
+      pill.classList.toggle("on", HSCROLL_IND.overflow && (HSCROLL_IND.hot || !!HSCROLL_IND.drag));
+    },
+    /* 按下: 落在滑块上 -> 直接拖; 落在轨道其余位置 -> 先把滑块中心移到点击处
+     * (标准映射的逆运算), 再进入拖动 —— 点完就能接着拖, 与原生条同手感(D7)。 */
+    _hscrollDown(ev) {
+      const pill = HSCROLL_IND.pill;
+      const el = HSCROLL_IND.el;
+      const thumb = HSCROLL_IND.thumb;
+      if (!pill || !el || !thumb || !HSCROLL_IND.overflow) return;
+      if (ev.button) return;  // 只认主键(右键 / 中键不接管)
+      const maxScroll = el.scrollWidth - el.clientWidth;
+      if (maxScroll <= 0) return;
+      const trackW = pill.clientWidth;
+      const thumbW = thumb.offsetWidth;
+      const maxThumb = Math.max(0, trackW - thumbW);
+      let left = el.scrollLeft;
+      const box = pill.getBoundingClientRect();
+      const tb = thumb.getBoundingClientRect();
+      // 滑块是 pointer-events: none, 事件恒落在轨道上 —— 只能按几何判「点在不在滑块里」
+      if (!(ev.clientX >= tb.left && ev.clientX <= tb.right)) {
+        const ratio = maxThumb > 0 ? (ev.clientX - box.left - thumbW / 2) / maxThumb : 0;
+        el.scrollLeft = Math.max(0, Math.min(1, ratio)) * maxScroll;
+        left = el.scrollLeft;
+      }
+      HSCROLL_IND.drag = { id: ev.pointerId, x: ev.clientX, left, maxThumb, maxScroll };
+      pill.classList.add("drag");
+      if (pill.setPointerCapture) pill.setPointerCapture(ev.pointerId);
+      this._hscrollShow();  // .drag 已置 -> 即便此刻热区判定为假也保持可见
+      ev.preventDefault();
+    },
+    /* 拖动: ΔclientX 反算 scrollLeft(标准映射的逆运算)。**不手工调 syncHeadScroll** ——
+     * 程序化写 scrollLeft 同样触发原生 scroll 事件, 表头位移 / --head-pin-x / is-hscrolled 照常同步;
+     * 手工再调一次 = 双份逻辑, 迟早漂移(R2)。 */
+    _hscrollMove(ev) {
+      const d = HSCROLL_IND.drag;
+      const el = HSCROLL_IND.el;
+      if (!d || !el || ev.pointerId !== d.id) return;
+      if (!d.maxThumb) return;  // 滑块占满轨道 = 无处可拖
+      el.scrollLeft = d.left + ((ev.clientX - d.x) / d.maxThumb) * d.maxScroll;
+    },
+    /* 抬起 / 取消: 摘 .drag、释放 capture, 然后**重新**按热区判定是否保留 .on ——
+     * 抬起时指针很可能已经离开热区(拖到视口外 / 向下滑出), 沿用旧 hot 会让胶囊留在屏上。 */
+    _hscrollUp(ev) {
+      const d = HSCROLL_IND.drag;
+      if (!d || ev.pointerId !== d.id) return;
+      HSCROLL_IND.drag = null;
+      const pill = HSCROLL_IND.pill;
+      if (pill) {
+        pill.classList.remove("drag");
+        if (pill.hasPointerCapture && pill.hasPointerCapture(ev.pointerId)) pill.releasePointerCapture(ev.pointerId);
+      }
+      HSCROLL_IND.hot = ev.clientY >= window.innerHeight - this._hscrollStatusbarH() - 24;
+      this._hscrollShow();
+    },
+    /* 照 _ensureHeadObserver 的范式(本文件 L186 一带): 只观察当前主表容器, 元素换了才重挂;
+     * 回调 rAF 合并(同一帧多次变化只重算一次); 无 ResizeObserver 时降级为不挂 ——
+     * 此时容器盒变化仍会在下一次进入热区(②)或容器 scroll(①)时被修正。 */
+    _hscrollObserve(el) {
+      if (typeof ResizeObserver === "undefined") return;
+      if (el === HSCROLL_IND.roEl) return;  // 元素没换: 什么都不做(不触发任何布局读取)
+      HSCROLL_IND.roEl = el;
+      if (HSCROLL_IND.ro) {
+        HSCROLL_IND.ro.disconnect();
+        HSCROLL_IND.ro = null;
+      }
+      HSCROLL_IND.ro = new ResizeObserver(() => this._hscrollQueue());
+      HSCROLL_IND.ro.observe(el);
+    },
+    _hscrollQueue() {
+      if (HSCROLL_IND.raf) return;  // 同一帧内多次变化合并为一次
+      HSCROLL_IND.raf = requestAnimationFrame(() => {
+        HSCROLL_IND.raf = 0;
+        if (HSCROLL_IND.el) this._hscrollSync(HSCROLL_IND.el, HSCROLL_IND.page);
+      });
     },
 
     /* ------------------------------------------------ 列状态(宽/隐/自适应) */
