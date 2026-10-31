@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-0830">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="deps-upgrade-2026-10">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/pitfalls/backend/deps-upgrade-2026-10.md, memory-bank/testing/baselines/26-10-31-1023-deps-upgrade-2026-10.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="fastapi 0.141.1 -&gt; 0.162.0 与 uvicorn 0.53.0 -&gt; 0.54.0 升级(0.x 降档入池)">
 <meta name="issue-summary" content="fastapi/uvicorn 有 minor 更新; 0.x minor 按 deps-upgrade 规则当 major 降档, 调用面为整个 webui/server, 需人工评估后 bump">
 <title>fastapi 0.141.1 -&gt; 0.162.0 与 uvicorn 0.53.0 -&gt; 0.54.0 升级(0.x 降档入池) · chore · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0830-chore-webui-fastapi-uvicorn-upgrade</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -153,11 +153,23 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 10:05 — 用户显式指派「认领并实施」，复验通过后开工，状态 <strong>In Progress</strong></li>
+      <li>2026-10-31 10:20 — 已修并验证（pin 4 包联动 + notify 签名 1 处改道；test.full 4295 passed / 真机冒烟 PASS），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-31 10:05 仍复现 —— <code>pyproject.toml:34-35</code> 仍为 <code>fastapi==0.141.1</code> / <code>uvicorn==0.53.0</code>，锁内实测 <code>0.141.1 / 0.53.0 / starlette 1.6.0 / pydantic 2.13.5</code>。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：按建议修法走，一处改道 —— fastapi/pydantic 新校验行为拦了既有对外契约，详见下。</p>
+    <ul>
+      <li>pin 抬升：<code>pyproject.toml</code> <code>fastapi==0.141.1 → 0.162.0</code>、<code>uvicorn==0.53.0 → 0.54.0</code>；<code>env.sync</code> 后锁内到位，但 uv 保守解析把传递依赖留在旧版 —— 显式 <code>uv lock --upgrade-package starlette --upgrade-package pydantic</code> 联动到 <code>starlette 1.10.0</code> / <code>pydantic 2.14.2</code>（pydantic-core 2.46.5 → 2.50.2）。</li>
+      <li><b>改道点（1 处源码）</b>：<code>routes/traffic_monitor.py</code> 的 <code>api_tm_notify</code> 签名 <code>body: dict = None → body: dict | None = None</code>。新 fastapi/pydantic 把 JSON <code>null</code> 也在校验层拦成 422，走不到 handler 的「事件体非法 → 400」闸，破坏「工具契约漂移必须响亮且 400」的对外契约；Optional 放行 <code>null</code>/无体到 <code>_parse_notify_event</code> 保持 400 契约，数组/标量体仍被校验层 422（同样响亮）。签名旁 docstring 已注记缘由。</li>
+    </ul>
+    <p><b>验证方式</b>：</p>
+    <ul>
+      <li><code>commands run test.full</code>：<b>4295 passed, 10 skipped</b>，覆盖率 <b>99%</b>（21803 stmts）。</li>
+      <li>真机冒烟（真 uvicorn 绑随机回环端口 + 真实 HTTP 请求，一次性脚本不入库）：无 token → <b>401</b>；带 token <code>/api/state</code> → <b>200</b> 快照合法；notify <code>null</code> 体 → <b>400「事件体必须是 JSON 对象」</b>；notify 数组体 → <b>422</b>；静态 UI <code>GET /</code> → <b>200</b>；<code>stop_web_server</code> 干净退出。</li>
+      <li><code>dev.run -- config.yml --dry-run</code> <b>未走通</b>：在配置校验层被生产配置自身的问题拦下（<code>hr_check.channel.port == discovery_port</code> 相同），发生在 fastapi 加载之前，与本升级无关 —— 生产配置是红线文件未动，是否入池交由用户决定。</li>
+    </ul>
   </section>
 
   <footer>

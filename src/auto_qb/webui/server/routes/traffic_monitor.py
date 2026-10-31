@@ -318,7 +318,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         return {"ok": True, "exit_code": result.exit_code, "output": result.output}
 
     @router.post(NOTIFY_PATH)
-    def api_tm_notify(body: dict = None):
+    def api_tm_notify(body: dict | None = None):
         """工具通知接收面(S7): 累计流量阈值事件 -> 主循环零读盘补丁今日流量(26-10-21 改制)
 
         链路(§04 S7; 26-10-21 事件零读盘补丁): 校验 -> 事件号去重 -> 当日判定 -> `_enqueue`
@@ -342,6 +342,11 @@ def build_router(ctx: WebContext) -> APIRouter:
         - `disabled`: 联动总开关关(保守默认, §07 黄金法则 2) —— 含来源总开关
           `traffic_source.enabled=false`(S1/D1, 26-10-17-1737: 关源即停一切取数, 通知不触发刷新);
         - 400: 事件体非法(工具契约漂移必须响亮报错, 不静默按 0 记账)。
+
+        `body: dict | None` 的 `| None` 是**故意**的(fastapi 0.162 起 `body: dict` 会把
+        JSON null 也在校验层拦成 422, 走不到 handler 的 400 闸): Optional 放行 null/无体
+        到 `_parse_notify_event`, 保持「事件体非法 -> 400」的对外契约; 数组/标量体仍被
+        校验层 422(同样响亮)。
         """
         manager.web.touch()
         event = _parse_notify_event(body)
