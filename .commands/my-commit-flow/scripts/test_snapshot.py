@@ -9,7 +9,7 @@
 跑法: python <包>/scripts/test_snapshot.py  ·  uv run pytest .commands -q --no-cov (test.pkg 口径)
 
 ## 测试计划
-- SnapshotUnitTest       `_pack_dir` / `_find_repo_root` / `_sweep_old` 的纯函数行为
+- SnapshotUnitTest       `_pack_dir` / `_find_repo_root`(目录须含 HEAD——空壳 `.git` 不算仓库, 26-10-31 事故回归阵; 文件形态 = worktree) / `_sweep_old` 的纯函数行为
 - RespawnGuardTest       已在快照里 / 纯信息入口 → 不复制; 四个入口脚本都装了守卫
 - SnapshotEndToEndTest   真子进程: 重入用副本 · 免疫 · 采纳 · 退出码透传 · import 不重入 · 存在性比较限定在用例私有临时根(`-n 8` 并行安全)
 - RootInjectionTest      `_ship_config.find_root()` 认 `COMMAND_FLOW_REPO_ROOT`
@@ -135,10 +135,25 @@ class SnapshotUnitTest(unittest.TestCase):
 
     def test_find_repo_root_walks_up_to_git(self) -> None:
         repo = self.root / "repo"
-        (repo / ".git").mkdir(parents=True)
+        (repo / ".git" / "HEAD").mkdir(parents=True)  # 真仓库 git init 即建 HEAD
         deep = repo / "a" / "b"
         deep.mkdir(parents=True)
         self.assertEqual(_snapshot._find_repo_root(deep), repo)
+
+    def test_find_repo_root_accepts_worktree_git_file(self) -> None:
+        wt = self.root / "wt"
+        (wt / "a").mkdir(parents=True)
+        (wt / ".git").write_text("gitdir: ../main/.git/worktrees/wt\n", encoding="utf-8")
+        self.assertEqual(_snapshot._find_repo_root(wt / "a"), wt)
+
+    def test_find_repo_root_ignores_shell_git_dir_without_head(self) -> None:
+        # 26-10-31 事故回归阵: 家目录被塞空壳 `.git` 目录(0 文件无 HEAD) + TMPDIR 回落用户
+        # 资料区 ⇒ walk-up 曾误判仓库根。判据加 HEAD 存在性后, 空壳不算仓库, walk 穿过它继续。
+        shell = self.root / "shell"
+        (shell / ".git").mkdir(parents=True)  # 无 HEAD
+        deep = shell / "a" / "b"
+        deep.mkdir(parents=True)
+        self.assertIsNone(_snapshot._find_repo_root(deep), "空壳 .git 目录不是仓库根")
 
     def test_find_repo_root_returns_none_outside_repo(self) -> None:
         lonely = self.root / "lonely"

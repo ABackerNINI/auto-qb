@@ -56,9 +56,18 @@ def _pack_dir(entry_file: str) -> Path:
 
 
 def _find_repo_root(start: Path) -> Path | None:
-    """从 start 向上找 `.git`(目录或 worktree 的 `.git` 文件); 找不到返回 None(不注入, 让脚本走自己的兜底)。"""
+    """从 start 向上找 `.git`; 找不到返回 None(不注入, 让脚本走自己的兜底)。
+
+    判据分形态: `.git` **目录**必须含 `HEAD`(真仓库 `git init` 即建, 空壳/半初始化目录不算
+    —— 26-10-31 事故: 家目录被塞了个空 `.git`, TMPDIR 回落到用户资料区时 walk-up 在此误判
+    仓库根, 把 REPO_ROOT 注进无关运行); `.git` **文件** = worktree 指针, 本身即真标记, 直接算命中。
+    """
     for parent in (start, *start.parents):
-        if (parent / ".git").exists():
+        marker = parent / ".git"
+        if marker.is_dir():
+            if (marker / "HEAD").exists():
+                return parent
+        elif marker.is_file():
             return parent
     return None
 
