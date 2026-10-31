@@ -43,10 +43,17 @@ run     = ["python <skill-dir:memory-bank>/scripts/gen_all.py --check",
            "python <skill-dir:memory-bank>/scripts/check_mutation_anchor.py --check",
            "python <skill-dir:memory-bank>/scripts/check_doc_templates.py --check",
            "python <skill-dir:memory-bank>/scripts/timekit.py --check",
-           "python <skill-dir:memory-bank>/scripts/check_status_drift.py --check"]
+           "python <skill-dir:memory-bank>/scripts/check_status_drift.py --check",
+           "python <skill-dir:memory-bank>/scripts/check_html.py --check"]
 timeout = 120
 when    = "改完知识库先自查，或提交前确认索引自洽"
-note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + 回写措辞守卫(tasks/ 与 activeContext/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + 常驻锚防流水守卫(check_mutation_anchor: 排期锚只记「包/模块·时间·大致成果·指针」, 台账/逐轮日志写回 = 红, 2026-10-31 加) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加) + 状态漂移守卫(check_status_drift: progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦, C 清单与完成断言只提示, 2026-10-31 加)"
+note    = "--check 只校验不写；要在回写代码**之后**跑，否则改到一半必然红。2026-10-03 起生成物四条收成 `gen_all.py --check`(集合单点, 同 kb.index); 其余 = gen_doc_map 主键校验(已无物化文件, 2026-09-29 起查孤儿) + activeContext/基线切片校验 + 回写措辞守卫(tasks/ 与 activeContext/ 不得写「待提交」这类时点相对断言, 2026-10-07 加) + **新增面检查(check_doc_templates: 冻结线之后新建的族文件——命名/头部字段/状态词表/无残留 SLOT, 2026-10-17 P1 加; 存量豁免)** + 常驻锚防流水守卫(check_mutation_anchor: 排期锚只记「包/模块·时间·大致成果·指针」, 台账/逐轮日志写回 = 红, 2026-10-31 加) + timekit 日期守卫(文件名/元数据/正文三层, 2026-10-06 加) + 状态漂移守卫(check_status_drift: progress 判据节反链 x Open / issue badge vs meta / status-unreadable 硬拦, C 清单与完成断言只提示, 2026-10-31 加) + HTML 结构守卫(check_html: 闭合标签缺右尖括号静默吞正文类 —— 2026-11-01 两起实测事故, L1 行级正则 + L2 stdlib 解析器残缺名校验双网, script/style 区遮蔽防 JS 字面量误报, 全库 645 件 <2s; 更广的规范级伤害归 kb.html-audit 的 v.Nu 巡检)"
+
+[tasks."kb.html-audit"]
+run     = ["python <skill-dir:memory-bank>/scripts/check_html.py --vnu --all <args>"]
+timeout = 300
+when    = "全库 HTML 规范级巡检(W3C v.Nu): 嵌套违规/未转义尖括号/烂属性等 L1+L2 抓不到的伤害; jar 在 .tools/(gitignored, 缺时自动下载, 需 java)"
+note    = "只报告不拦(存量 error 属债务, 清理走专门会话); 闸门侧另有增量 --strict 行只查本次改动的 HTML(改谁谁达标)"
 
 [tasks."kb.nav"]
 run     = ["python <skill-dir:memory-bank>/scripts/nav_server.py <args>"]

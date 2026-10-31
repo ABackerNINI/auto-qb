@@ -317,7 +317,7 @@
     <li><strong>新扩展 + 旧后端</strong>: 发现无果(旧后端无发现端点) ⇒ 退手动配置, 即今天的流程; 日志给一句「未发现本机实例, 请手动配置」。</li>
     <li><strong>配置语义</strong>: <code>hr_check.channel.port</code> 默认 <code>0</code>(自动); <code>validate_config</code> 与 schema 同步放开 0 值; WebUI 设置页端口项渲染为「自动(推荐)/ 固定端口(高级)」。</li>
     <li><strong>token 口径不变</strong>: 仍自动生成到 <code>&lt;data_dir&gt;/hr.token</code>(0600); 路线 A 由发现响应携带, 路线 B 在管道握手时校验——文件始终是信任锚, 人也能打开核对。</li>
-    <li><strong>文档同步</strong>: <code>extensions/hr-fetch-proxy/README.md</code> 的配置章节、<code>docs/</code下通道说明、排障表(「Failed to fetch」清单收敛为「未发现实例」一条)需随实施更新。</li>
+    <li><strong>文档同步</strong>: <code>extensions/hr-fetch-proxy/README.md</code> 的配置章节、<code>docs/</code>下通道说明、排障表(「Failed to fetch」清单收敛为「未发现实例」一条)需随实施更新。</li>
   </ul>
 </section>
 

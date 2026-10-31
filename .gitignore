@@ -98,3 +98,6 @@ tests-real/config/instances.local.json
 
 # 真机实测用例的本地工作目录(种子内容落盘, qB 要真读)
 tests-real/.work/
+
+# 本机工具缓存(vnu.jar 等, 首跑自动下载; 不进仓库)
+/.tools/

@@ -181,6 +181,15 @@ status-unreadable 三档硬拦 rc=1, C 反链x In Progress / D 完成断言两�
 - test_status_drift_anomaly_on_unreadable_status: 缺 `**Status:**` / 词表外值 / 反链目标缺失 / issue-status meta 缺失 → status-unreadable 异常, rc=1 (doc-status-meta.md: ring, 不静默丢)
 - test_status_drift_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧(与 test_mutation_anchor_guard_is_wired_into_kb_check_and_gate 同旨)
 - test_wrap_reports_status_drift_lists: kb.wrap 尾部打印 C/D 清单(空打「无」), 硬拦非空附「状态漂移硬拦非空…」提示行, wrap 退出码与结果不因此改变
+
+HTML 结构守卫 (检查器 memory-bank skill 的 `scripts/check_html.py`, 2026-11-01 加, **进程内
+import**; L1 行级正则 + L2 stdlib 解析器残缺标签名校验双网, script/style 区遮蔽防 JS 字面量
+误报; 全库存量基线 = 零命中, 命中即新增 —— 无存量豁免清单; 更广的规范级伤害归 `--vnu` 巡检):
+
+- test_html_guard_flags_broken_endtag_and_passes_clean: `</code)` 缺 `>` 双网命中(L1 行级 + L2 残缺名), 补 `>` 后零命中 —— 26-11-01 两起事故(issues/26-11-01-0334 s2-s7 掉左栏 / reports/26-10-14-1110:320)的最小复现形态钉住
+- test_html_guard_ignores_script_literal_regex: `<script>` 内 JS 字面量 `replace(/</g, …)` 不判红(存量实况 plans/26-09-25-2043:502; 分词器 script data 态不认标签, L1 遮蔽 + L2 CDATA 态双保险, 首跑实测无遮蔽时全库误报)
+- test_html_guard_corpus_zero_hits: 全库 645 件 HTML 存量零命中(冻结线起点)
+- test_html_guard_wired_into_kb_check_and_gate: 守卫挂进 kb.check 与提交闸门两侧(同 test_mutation_anchor 钉法), v.Nu 增量闸门行与 kb.html-audit 巡检任务同鍗住
 """
 
 from __future__ import annotations
@@ -3137,3 +3146,63 @@ def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
     assert "状态漂移硬拦非空, 先 commands run kb.status 处理(部分完成翻 In Progress)再收尾" in out
     assert "[C 清单: 反链 x In Progress] 无" in out and "[D 清单: 完成断言] 无" in out
     assert len(list((mb2 / "activeContext").glob("*-drift-hard.md"))) == 1, "机械面照常完成"
+
+
+# ---------------------------------------------------------------------------
+# HTML 结构守卫 (检查器 memory-bank skill 的 `scripts/check_html.py`, 2026-11-01 加, 进程内 import)。
+# ---------------------------------------------------------------------------
+
+
+def _check_html():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import check_html
+
+    return check_html
+
+
+def test_html_guard_flags_broken_endtag_and_passes_clean() -> None:
+    """`</code)` 缺 `>` 双网命中 (L1 行级 + L2 残缺名), 补 `>` 后零命中。
+
+    26-11-01 两起事故的最小复现形态: 分词器把 `</code): 目标 …。</p` 整段吃进非法尾标签,
+    `<code>` 永不闭合, 其后内容全部嵌进它 (issues/26-11-01-0334 s2-s7 掉左栏 /
+    reports/26-10-14-1110:320 同型)。⚠ 正则不许写成单 lookahead: 引擎会把 `</title>`
+    回溯成 `</titl`+`e` 穿过否定前瞻而全库误报 (首跑实测, 见脚本内注释)。
+    """
+    m = _check_html()
+    broken = "<p>记录 <code>x.md</code): 目标 qB。</p><section><h2>02</h2></section>"
+    problems = m.check_text(broken)
+    assert any("闭合标签缺" in p for p in problems), f"L1 应命中: {problems}"
+    assert any("残缺标签名" in p for p in problems), f"L2 应命中: {problems}"
+    assert not m.check_text(broken.replace("</code):", "</code>):")), "补 `>` 后应零命中"
+
+
+def test_html_guard_ignores_script_literal_regex() -> None:
+    """`<script>` 内 JS 字面量 `replace(/</g, …)` 不判红 (存量实况 plans/26-09-25-2043:502)。
+
+    分词器在 script data 态不把 `</g,` 当标签 —— L1 遮蔽 script/style 区, L2 走解析器自身
+    CDATA 态, 双保险同判; 没有遮蔽时 L1 会全库误报 (2026-11-01 首跑实测)。
+    """
+    m = _check_html()
+    text = "<html><body><script>var x = a.replace(/</g, '&lt;').replace(/>/g, '&gt;');</script></body></html>"
+    assert not m.check_text(text), "script 内字面量不得判红"
+
+
+def test_html_guard_corpus_zero_hits() -> None:
+    """全库存量基线 = 零命中 (2026-11-01 起冻结: 命中即新增, 无存量豁免清单)。"""
+    m = _check_html()
+    files = m.collect_files(MB, None)
+    assert files, "memory-bank 下没有 HTML?"
+    bad = [str(f) for f in files if m.check_text(f.read_bytes().decode("utf-8"))]
+    assert not bad, f"存量 HTML 结构命中 (修好后有人又写坏了?): {bad[:5]}"
+
+
+def test_html_guard_wired_into_kb_check_and_gate() -> None:
+    """守卫挂进 kb.check 与提交闸门两侧 (同 test_mutation_anchor 钉法, 防静默红);
+    v.Nu 增量闸门行 (`<changed:>` 只查本次改动) 与 kb.html-audit 全库巡检任务同在。"""
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+    assert "check_html.py --check" in kb_cfg, "check_html.py 未挂进 kb.check"
+    assert "check_html.py --check" in gate_cfg, "check_html.py 未挂进提交闸门 (静默红)"
+    assert "--vnu --strict <changed:memory-bank/**/*.html>" in gate_cfg, "v.Nu 增量闸门行缺失"
+    assert "kb.html-audit" in kb_cfg, "kb.html-audit 巡检任务缺失"
