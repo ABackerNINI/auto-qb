@@ -182,6 +182,16 @@
 | **stop_following_rules_if 当前不生效(缺陷在池 26-10-31-1304)** | `Rule.process` 的 (handled, stop) 在唯一调用点被丢弃; 条件出错日志「停止后续规则」的措辞与实际行为不符 | 规则链止损语义别当已验事实引用; 修复后须真机回归 RM03-05 |
 | **hr 配置不牵动假种子(RM03-04 实测)** | tracker 条目带 `hr: {required_seeding_time: 3D}` 时, 假种子(零下载量)不触发 HR 在线核实/打标(触发条件是下载比例), `${required_seeding_time}` 变量替换照常工作 | RM03-04 口径可复用: 变量替换面用 hr 段驱动, 不需要 hr_check 站点接入 |
 
+### 2.11 tracker·标签面的事实(RM05 实测, 2026-10-31)
+
+| 事实 | 现场表现 | 处置 |
+|---|---|---|
+| **qB 全局标签定义独立于种子存活** | 种子删除/逐种子摘标都不带走定义; `GET /torrents/tags` 列定义, `createTags`/`deleteTags` 表单逗号分隔多值可用(v5.2.3) | 清场必须显式删定义层; RM05-06 前提「add→remove 后定义残留」实测成立, 可作无种子对照的造法 |
+| **delete_tags 与站点标签「互相打架」是同节拍振荡** | 种子级维护每 interval 重打 tracker tags(qB addTags **隐式重建已删定义**), 与全局删除成对发生(先删后打), 干净窗亚秒级, 外部轮询采样不可稳定观测 —— schema delete_tags 的 risk 文案明载此预期, 非缺陷 | 这类组合的断言走: 删除日志命中集 == 展开期望 + **不被重打的孤儿标签永久消失**(定义级删除的存在性证明) + 对照标签全采样恒在; 不做「任意时刻定义不在」的快照断言 |
+| **多匹配「第一个」= 配置书写序** | `match_tracker_confs` 按 config dict 顺序返回 `confs[0]`(不排序), WARNING「种子匹配到多个 tracker 配置, 使用第一个」一行同时点出全部命中条目名 | 要防「按名字序假绿」, 条目键故意让字母序与书写序相反(RM05-01 的 zz/aa 手法); `write_cfg` 必须 `sort_keys=False` |
+| **热重载 trackers 段实测(RM05-02)** | PUT /api/config 回执 applied 且**无 restart_required**; 日志「rebound N」; 新 tags 下一维护节拍兑现; 旧标签不回撤(重绑只换 conf 不摘旧标) | 断言「rebound」+ 新标签兑现即可, 别咬「旧标被清」; tags 变更经树编辑 `tree["config"]["trackers"]["<条目>"]["tags"]` |
+| **hr_check.enabled=false 下站点派生零取数** | 站点条目 `hr_check.sites.<id>.enabled: true` 只走装载期派生, HR 线程不启动, 正向启动日志零「在线核实」痕迹 | 站点派生面可零外连实测(在线核实面归 RM06); 绑定校验要求被绑条目带 `hr` 段, 否则「已绑定站点…未配置 hr 段」ConfigError; 负向(绑0/绑2/未登记 id)走 `run_cli --dry-run` 退出码 + 「配置错误」文案(RM03-05 同款观测法) |
+
 ## 03 种子层: L0 / L1 / L2
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |
