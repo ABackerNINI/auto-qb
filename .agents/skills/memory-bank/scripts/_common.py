@@ -669,17 +669,19 @@ def html_set_refs(text: str, target_rel: str) -> str:
 def md_set_refs(text: str, target_rel: str) -> str:
     """md 认领链: 并入/插入 `**Refs:**` 行 (仓库根相对 posix, 英文逗号; 幂等)。
 
-    只动元数据行; md 只认**首个** `**Refs:**` 行 (gen_doc_map 口径)。插入锚点链 (与存量
-    形态一致): 已有 `**Refs:**` → 并值; 有 `**Topics:**` → 其后插 (档案形态); 三行头的最后
-    一个 `>` 行后 (坑档/基线/切片形态); 都没有 → `# 标题` 行后。
+    只动元数据行; md 只认**首个** `**Refs:**` 行 (gen_doc_map 口径)。**空值占位行也算已有声明**
+    (模板自带 `**Refs:**` 空 placeholder, 2026-10-31 起) —— 原位并值, 绝不另插一行 (复发 8 的 md 形态:
+    另插一行让空值/旧值赢过新值)。插入锚点链 (与存量形态一致): 已有 `**Refs:**` → 并值; 有
+    `**Topics:**` → 其后插 (档案形态); 三行头的最后一个 `>` 行后 (坑档/基线/切片形态); 都没有 →
+    `# 标题` 行后。
     """
-    m = re.search(r"^\*\*Refs:\*\*\s*(.+?)\s*$", text, re.MULTILINE)
+    m = re.search(r"^\*\*Refs:\*\*[ \t]*(.*?)[ \t]*$", text, re.MULTILINE)
     if m:
         refs = split_refs(m.group(1))
         if target_rel in refs:
             return text
         merged = ", ".join([*refs, target_rel])
-        return re.sub(r"^(\*\*Refs:\*\*\s*).*$", lambda mm: mm.group(1) + merged, text, count=1, flags=re.MULTILINE)
+        return re.sub(r"^\*\*Refs:\*\*[ \t]*.*?$", lambda mm: "**Refs:** " + merged, text, count=1, flags=re.MULTILINE)
     line = f"**Refs:** {target_rel}"
     anchor = re.search(r"^(\*\*Topics:\*\*\s*.+)$", text, re.MULTILINE)
     if anchor:

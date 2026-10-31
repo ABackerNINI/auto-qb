@@ -313,6 +313,35 @@ def check_status_vocabulary(items: list[dict]) -> int:
     return 0
 
 
+HTML_DOCREFS_ANCHOR = '<meta name="doc-refs"'
+MD_REFS_LINE_RE = re.compile(r"^\*\*Refs:\*\*", re.MULTILINE)
+
+
+def check_duplicate_declarations(mb: Path) -> list[str]:
+    """重复声明检测 (复发 8 根因的机检, 2026-10-31): 解析器 (search / dict(findall))
+
+    只读第一个声明, 多余行静默塌缩 —— 「翻状态时另插一行 doc-refs meta, 模板空值赢过新插行」
+    就是这样静默失效的。HTML 多行 `doc-refs` meta / md 多行 `**Refs:**` 都判红; 病根在
+    声明方: 原位改值 (kb.ref / set_html_meta / md_set_refs 都只动已有声明行), 删多余行。
+    """
+    problems: list[str] = []
+    for path in sorted(mb.rglob("*.html")):
+        n = path.read_text(encoding="utf-8").count(HTML_DOCREFS_ANCHOR)
+        if n > 1:
+            problems.append(
+                f"{path.relative_to(mb.parent).as_posix()}: {n} 行 doc-refs meta —— 解析器只读第一条"
+                "(空值/旧值赢过新插行, 复发 8 形态); 病根在声明方: 原位改值, 删多余行"
+            )
+    for path in sorted(mb.rglob("*.md")):
+        n = len(MD_REFS_LINE_RE.findall(path.read_text(encoding="utf-8")))
+        if n > 1:
+            problems.append(
+                f"{path.relative_to(mb.parent).as_posix()}: {n} 行 **Refs:** —— 解析器只读第一行;"
+                "段内引用改正文提及, 声明只留头部一行"
+            )
+    return problems
+
+
 def check_claim_chain(items: list[dict], root: Path, mb: Path) -> list[str]:
     """认领链双向校验: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明本件。
 
@@ -399,6 +428,14 @@ def main() -> int:
             rc = 1
         else:
             print("认领链 OK: 声明引用的件全部双向闭环")
+        dups = check_duplicate_declarations(mb)
+        if dups:
+            sys.stderr.write("重复声明 (解析器只读第一个声明, 多余行静默塌缩 —— 复发 8 形态):\n")
+            for p in dups:
+                sys.stderr.write(f"  {p}\n")
+            rc = 1
+        elif rc == 0:
+            print("重复声明 OK: 无多行 doc-refs meta / 多行 **Refs:**")
         return rc
     if args.topic:
         return render_topic(items, args.topic)

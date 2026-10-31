@@ -1980,11 +1980,12 @@ def test_new_doc_refs_auto_chains_bidirectionally(tmp_path: Path) -> None:
         assert rc == 1 and why in err, f"{bad_refs} 必须拒绝 ({why}): {err}"
         assert not list((mb / "plans").glob("*-plan-bad-refs.html")), "fail-fast 不得落半文件"
 
-    # 无 --refs → 与 P1 行为一致 (无 doc-refs meta, 无反向补链行)
+    # 无 --refs → 与 P1 行为一致 (无反向补链行); doc-refs meta 模板自带**空值占位** (2026-10-31 起,
+    # issue 26-10-31-2226-feat-kb-docrefs-bidirectional-automation: 建件即带占位, 回填走原位改值)
     rc, out, err = run("plan", "--title", "无引用", "--topic", "no-refs")
     assert rc == 0, err
     noref = list((mb / "plans").glob("*-plan-no-refs.html"))
-    assert "doc-refs" not in noref[0].read_text(encoding="utf-8")
+    assert '<meta name="doc-refs" content="">' in noref[0].read_text(encoding="utf-8")
     assert "已双向补链" not in out
 
 

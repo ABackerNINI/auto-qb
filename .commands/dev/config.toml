@@ -36,11 +36,25 @@ note    = "必须 uv run —— 裸 python 会缺 qbittorrentapi。⚠ 本命令
 doc     = "../../memory-bank/pitfalls/testing/harness-is-stub-server.md"
 
 [tasks."dev.e2e"]
-run     = ["npx playwright test <args>"]
+run     = ["uv run python scripts/e2e_selfcheck.py", "npx playwright test <args>"]
 timeout = 1200
 when    = "改前端后跑 WEB UI 真浏览器冒烟（e2e/ 全量集; 桩服务由 webServer 自动起）"
-note    = "timeout=1200s: 2026-10-16 全量套件 280 例实测 10.9m ≈ 654s —— 旧 600s 预算被引擎到点强杀(历史: 2026-10-06 默认轮 164s; U2 后 194 用例 ~356s 顶满旧 360s, 2026-10-12 放宽到 600s) ⇒ 再放宽到 1200s(≈1.8× 实测, 留慢机器的余量; 套件再涨就该重估 —— 拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、8137 残留; 根因与实测见 doc); 端口固定 8137 且 reuseExistingServer=false, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): ①commands run dev.e2e ②E2E_CMD_RESULT=error commands run dev.e2e ③E2E_CMD_RESULT=hang commands run dev.e2e ④E2E_SKIP_CHECK=off commands run dev.e2e ⑤E2E_HR_SCENE=empty commands run dev.e2e(或 off) ⑥E2E_TORRENTS=3000 commands run dev.e2e"
+note    = "前置自检已挂 run 列表首条(2026-10-31, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): node_modules/@playwright/test 缺失、e2e 端口被占/桩归属、8099 残留桩, 自检不过不进 spec, 修复动作在 NEXT: 行; 单跑: commands run dev.e2e-check。timeout=1200s: 2026-10-16 全量套件 280 例实测 10.9m ≈ 654s —— 旧 600s 预算被引擎到点强杀(历史: 2026-10-06 默认轮 164s; U2 后 194 用例 ~356s 顶满旧 360s, 2026-10-12 放宽到 600s) ⇒ 再放宽到 1200s(≈1.8× 实测, 留慢机器的余量; 套件再涨就该重估 —— 拆轮或与 CI 分工, 别再靠调数字顶)。日常门禁跑 fast 子集: npm run test:e2e:fast（--grep @fast, 分钟级）; 本 task 是全量。收尾已由 e2e/global-teardown.mjs 兜底, 工具 shell 里也能跑完并退出(Windows 上 Playwright 自带的 taskkill 走 spawnSync + 管道 stdio, 本机必 EBUSY, 不兜会用例全 PASS 但命令永不退出、8137 残留; 根因与实测见 doc); 端口固定 8137 且 reuseExistingServer=false, 别改成复用; 模式矩阵 env 参数化(计划 26-10-06-0708 S0): E2E_CMD_RESULT=ok|error|hang / E2E_SKIP_CHECK=on|off / E2E_HR_SCENE=on|empty|off / E2E_TORRENTS=N, 默认 ok/on/on/300, 改动的参数才传给桩命令; S7 矩阵轮六行(串行人跑, 每轮独立起桩): ①commands run dev.e2e ②E2E_CMD_RESULT=error commands run dev.e2e ③E2E_CMD_RESULT=hang commands run dev.e2e ④E2E_SKIP_CHECK=off commands run dev.e2e ⑤E2E_HR_SCENE=empty commands run dev.e2e(或 off) ⑥E2E_TORRENTS=3000 commands run dev.e2e"
 doc     = "../../memory-bank/pitfalls/testing/playwright-teardown.md"
+
+[tasks."dev.e2e-check"]
+run     = ["uv run python scripts/e2e_selfcheck.py <args>"]
+timeout = 120
+when    = "跑 e2e/冒烟前单跑环境自检: node_modules/@playwright/test 在位、e2e 端口(默认 8137, 随 E2E_PORT)未占用、8099 残留桩告警"
+note    = "只读不动手(不杀进程不装包), 修复动作在 NEXT: 行; --blocking <端口> 换拦断面(--blocking 8099 可给 dev.harness 做同款前置), --warn 空串关 8099 告警; 占用归属看命令行里的 clone 路径, 判据单点见 doc"
+doc     = "../../memory-bank/pitfalls/testing/smoke.md"
+
+[tasks."dev.ui-map"]
+run     = ["uv run python scripts/ui_content_map.py <args>"]
+timeout = 60
+when    = "找前端内容落点: 给关键词单点输出它在 shell 内联/shared/tpl/css/JS 域的位置与挂载面"
+note    = "frontend-split.md 聚合读法的机器索引(判别法从人读变跑命令); 输出含 tpl 挂载面(orphan 检出)/css head-link 序/JS 清单序(清单不等价会标红); 多关键词空格分隔, --regex 走正则; 只读不写"
+doc     = "../../memory-bank/pitfalls/web-ui/frontend-split.md"
 
 [tasks."dev.port-kill"]
 run     = ["uv run python scripts/port_kill.py <args>"]

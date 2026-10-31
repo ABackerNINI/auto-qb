@@ -190,4 +190,4 @@
   前提是**替身 trackers 带 `status` / `next_announce`** —— FakeClient 默认只返回 url ⇒ **永远无结论**。
 - **处置**: 改这条链路时先补齐替身字段, 否则测的是空壳。
 
-**Refs:** memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html, memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md
+（关联件见头部 **Refs:** 行 —— 原段内 **Refs:** 是其子集, 2026-10-31 随重复声明守卫收敛删除）

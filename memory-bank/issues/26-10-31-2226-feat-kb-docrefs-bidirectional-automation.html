@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-2226">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="kb-recurrence-three-piles">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="doc-refs 认领链写法机械化: 生成器/模板接管双向声明">
 <meta name="issue-summary" content="kb.new/kb.index 建件时自动带 doc-refs meta 与反向 Refs 占位, 双向义务由机器保证">
 <title>doc-refs 认领链写法机械化: 生成器/模板接管双向声明 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-2226-feat-kb-docrefs-bidirectional-automation</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 22:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 22:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 23:40 — 认领（档案 memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md），状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 00:05 — 修完（模板占位 + kb.ref + 重复声明机检 + 写入器空值修复），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-31 23:40 仍复现 —— <code>gen_doc_map</code> 用 <code>search()</code>/<code>dict(findall)</code> 读取，重复 meta 行静默塌缩（第一个赢），无机检；<code>md_set_refs</code> 对空值 <code>**Refs:**</code> 行不认（正则要求非空），会对空占位另插一行。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法（四件，比建议更宽——顺手修了写入器缺陷）: ①kb.new 模板自带空值占位（HTML meta / md **Refs:** 行，7 族全覆盖），人只填值；②<code>_common.md_set_refs</code> 修「空值占位行不认会另插一行」缺陷；③新命令 <code>kb.ref</code>（set_doc_refs.py）: 声明方原位并值 + 目标自动反向声明，目标未落盘（复发 6）/重复声明行（复发 8）整笔拒写，plans/reports 拒作目标（复发 5 收敛法）；④<code>kb.docmap --check</code> 增重复声明检测（此前 search() 与 dict(findall) 一前一后，重复行静默塌缩读不到）。存量 3 件重复声明收敛（第二处均为首处子集，信息无损）。验证: 新增守阵 8 用例 + 受影响面守阵全绿，kb.check 认领链/重复声明双 OK。</p>
   </section>
 
   <footer>

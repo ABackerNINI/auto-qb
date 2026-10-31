@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-2226">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="kb-recurrence-three-piles">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="写盘形态守卫: 行数/bytes-per-line 比值与 CRLF 形态抽验进闸门">
 <meta name="issue-summary" content="仓库侧写后机检(逐字节异常检测), 把编辑陷阱从读过文档才知道变成闸门当场红">
 <title>写盘形态守卫: 行数/bytes-per-line 比值与 CRLF 形态抽验进闸门 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-2226-feat-repo-writeform-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 22:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -159,11 +159,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 22:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 23:40 — 认领（档案 memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md），状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 00:05 — 修完（test_kb_writeform.py 三查进闸门），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-31 23:40 仍复现 —— 实证件 bytes-per-line=3.8（18,579B/4,935 行）仍在；另发现 <code>tasks/26-10-13-backend-seed-state-writeback.md</code> 头部 5 行带裸 CR（<code>\r  \n</code> 形态）；全仓 rg 无 bytes-per-line/裸 CR 类守卫。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法: <code>tests/test_kb_writeform.py</code> 进 test.full 闸门（全量非抽样），字节级三查: ①裸 CR（\r 后不是 \n，双重转换/控制字符残留）；②同文件 CRLF+LF 混排；③逐字符一行（行数≥300 且 bytes-per-line&lt;8，阈值来自全仓标定）。全 CRLF 不判红（.gitattributes eol=lf 下 blob 侧必归一，存量工作区属层 3 暂缓范围，docstring 已记口径）。存量处置: 实证件（18,579B/4,935 行）行结构无法无损复原 → 冻结豁免清单（含防空挂断言）；复验时新发现的 <code>tasks/26-10-13-backend-seed-state-writeback.md</code> 头部 5 裸 CR（\r+硬换行双空格形态）已修。红验: 三类突变件全部判红，还原后绿。</p>
   </section>
 
   <footer>

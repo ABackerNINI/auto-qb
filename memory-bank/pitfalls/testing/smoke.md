@@ -16,6 +16,9 @@
 - **处置**: 模式矩阵 env 参数化(计划 26-10-06-0708 §3.2)—— `E2E_CMD_RESULT=ok|error|hang` /
   `E2E_SKIP_CHECK=on|off` / `E2E_HR_SCENE=on|empty|off` / `E2E_TORRENTS=N`, 每轮独立起桩
   (六行命令见 `.commands/dev/config.toml` 的 `dev.e2e` note)。
+  开机自检 (2026-10-31 机械化, issue 26-10-31-2226-feat-e2e-smoke-env-selfcheck): `dev.e2e` 首条已挂
+  `scripts/e2e_selfcheck.py` —— node_modules/@playwright/test 缺失、e2e 端口占用(含占用进程身份/clone 归属)
+  当场给 NEXT 修复动作, 不过不进 spec; 单跑 `commands run dev.e2e-check`。
 
 ### Playwright 从哪来: 优先仓库内 `node_modules`, 没有才挂 `NODE_PATH`
 

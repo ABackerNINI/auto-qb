@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-2226">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="kb-recurrence-three-piles">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="聚合读法机械化: 模板/CSS/JS 内容定位走机器索引">
 <meta name="issue-summary" content="生成聚合映射命令, 输出内容片段在 shared/tpl+css+JS 域的单点定位, 判别法从人读 frontend-split.md 变成跑命令">
 <title>聚合读法机械化: 模板/CSS/JS 内容定位走机器索引 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-2226-feat-webui-agg-content-map</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 22:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 22:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 23:40 — 认领（档案 memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md），状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 00:05 — 修完（scripts/ui_content_map.py + dev.ui-map），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-31 23:40 仍复现 —— commands 全包无内容映射 task；<code>frontend-split.md</code> 判据全部是人读规则形态。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法: <code>scripts/ui_content_map.py</code> + dev 包新 task <code>dev.ui-map</code>。四域扫描（聚合口径与测试侧聚合助手同源）: 三 shell（命中按行分类 manifest/head/link/sprite/#app 内联）、shared/tpl + drawer_tpl（附挂载面与 orphan 检出）、static 全部 css（附 head link 皮肤与序）、shared/皮肤 js（附清单序 #k/N，清单不等价标红）。验证: site-chip / tpl-aq-site-chip / filterFromChip 多域命中实测（83 处/11 处），挂载面与清单序读数正确。与建议一致（落在 dev 包而非 kb/web）。frontend-split.md 已降为解释 + 指针。</p>
   </section>
 
   <footer>

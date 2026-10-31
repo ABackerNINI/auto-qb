@@ -60,6 +60,12 @@ when    = "新建计划/任务档案: 一次逻辑动作 = 一条命令 + 一次
 note    = "建后必填 SLOT(守卫拦残留); --refs 走 D4 双向补链(2026-10-17 P2: 目标件自动反向声明, 只动元数据行, 幂等); 目标已存在即 rc=1; 档案撞名按 slug 查重(含跨 clone ../auto-qb-*/)"
 timeout = 60
 
+[tasks."kb.ref"]
+run     = ["python <skill-dir:memory-bank>/scripts/set_doc_refs.py <args>"]
+when    = "认领链回填一条命令: 声明方原位并值 + 目标自动反向声明 (双向义务机器保证, 人只给值)"
+note    = "拦死两类复发形态: 目标未落盘整笔拒写(先回填后落盘, 复发 6) / 声明方已有重复声明行拒写(另插一行, 复发 8); plans/reports 不作目标(复发 5 收敛法); 幂等, 只动元数据行; <args> = <path> --add <ref>[,<ref>...] [--no-reverse]"
+timeout = 60
+
 [tasks."kb.status"]
 run     = ["python <skill-dir:memory-bank>/scripts/flip_status.py <args>"]
 when    = "翻转文档状态 (计划/报告 doc-status 5 词表 · 档案 **Status:** 4 词表): 词表校验/抬时间戳/重建索引全派生, 终态带提醒"

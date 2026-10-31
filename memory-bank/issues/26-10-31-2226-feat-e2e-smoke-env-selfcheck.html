@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-2226">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="kb-recurrence-three-piles">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e/冒烟环境开机自检: 端口占用/旧桩进程/npm i 缺失前置探测">
 <meta name="issue-summary" content="把 smoke.md 高频环境条目从读文档排障搬进工具: dev.e2e 前置自检 8099/8137 占用与桩进程活性">
 <title>e2e/冒烟环境开机自检: 端口占用/旧桩进程/npm i 缺失前置探测 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-2226-feat-e2e-smoke-env-selfcheck</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 22:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -159,11 +159,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 22:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 23:40 — 认领（档案 memory-bank/tasks/26-10-31-memory-bank-recurrence-tooling.md），状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 00:05 — 修完（自检挂 dev.e2e run 首条 + 独立 dev.e2e-check），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-31 23:40 仍复现 —— <code>dev.e2e</code> run 列表无任何前置探测（仅 <code>npx playwright test</code>）；本 clone node_modules 在位（@playwright/test 已装），「新 clone 从未 npm i」形态在其它 clone 仍会发生。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法: <code>scripts/e2e_selfcheck.py</code> 挂进 <code>dev.e2e</code> run 列表首条（引擎逐条执行、非 0 即停 ⇒ 不过不进 spec）+ 独立 task <code>dev.e2e-check</code>。三查: node_modules/@playwright/test 在位（缺失给 <code>npm i --no-save @playwright/test@1.63.0</code>）、e2e 端口占用（Get-NetTCPConnection + Win32_Process.CommandLine 给占用进程身份与 clone 归属，不走 curl——代理下 curl 判据不可靠）、8099 残留告警（<code>--blocking 8099</code> 可给 dev.harness 同款前置）。验证: 通过路径 + 占用失败路径（[FAIL] + WHY/NEXT + rc=1 + 身份可见）双实测，E2E_PORT 跟随正确。与建议修法一致。</p>
   </section>
 
   <footer>

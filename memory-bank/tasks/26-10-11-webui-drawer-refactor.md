@@ -134,7 +134,7 @@
 - **验收**: stub 四路径 e2e 10 passed(双皮肤; 手势三件套: 排序/拖宽落盘/右键隐藏落盘 + 刷新双偏好回放); 红验: gen 恒定注入→路径C 两皮肤红→还原绿; 主视图零改动。
 - **数字**: `test.full` 3132 passed + 4 skipped(+1 桥守阵); 全量 e2e 176 passed + 10 skipped(+10 桥验证 spec); 基线切片 26-10-12-0641。
 
-**Refs:** memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html
+- **关联**: 审计报告与重审计划 memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html (正文提及, 不进认领链; 原段内 **Refs:** 与头部重复, 2026-10-31 随重复声明守卫收敛)
 
 ### 2026-10-12 · 表格统一偏差审计 (重审计划的前置输入)
 
@@ -142,7 +142,7 @@
 - **审计结论(联合口径, 含前计划 1722)**: 偏差是一条两计划链条 —— 1722(表格公共组件)在 A+C 系统正主完成(主视图 4 表 + HR 3 表进引擎, P0–P5 落地), 但 P6 前向契约悬置未交付、条件性 DOM 适配被 W7 恢复变体后静默激活; 2106 承接抽屉重构时把目标函数从「表格统一」换成「一套渲染技术」(P0 前提偏差), 且「不考虑兼容 ≠ 可退役」——1722 写的是「预留接入面」, W5/W6 执行成「删宿主」。全局达成率重算 10/18 表面(主视图 4 + HR 3 + 经典 3 已统一), 变体侧 0% —— 8 个列表变体仍是手搓表格(0/8 拖宽、0/8 右键隐藏、0/8 列偏好持久化, 4/8 自带手搓排序状态机); 配套 P1 范围(W2 只圈经典)、P2 验收(目标从未进验收函数)、P3 测试(零守阵钉交互同源)、P4 文档(债务未入账)。
 - **报告**: memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html (表格全景 × 能力矩阵 × 维护点账本 × 偏差清单 × 整改方向 A/B/C)。
 
-**Refs:** memory-bank/reports/26-10-12-0455-report-webui-drawer-table-unification-audit.html,memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html
+- **关联**: 审计报告与重审计划 memory-bank/plans/26-10-12-0527-plan-webui-drawer-table-rework.html (正文提及, 不进认领链; 原段内 **Refs:** 与头部重复, 2026-10-31 随重复声明守卫收敛)
 
 ## 待办 / 移交
 

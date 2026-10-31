@@ -11,6 +11,8 @@
 - **触发**: 给前端加守阵 / 找某段模板或样式在哪 / 断言某成员存在。
 - **判别**: 拆分后单读 `index.html` / `atlas/style.css` / `app.js` 会**假绿或假红** —— 模板在 `shared/tpl/*.html`、atlas 样式在 `css/{components,views,dialogs}.css`、根组件成员在 `state.js`/`lifecycle.js`、方法域在 `auth.js`/`polling.js`/`view.js`。
 - **处置**: 统一走聚合助手 —— 模板 `_ui_aggregate(ui)`(shell 内联段 + 分片按 tpl-manifest 清单序)、CSS `_ui_css_aggregate(ui)`(按 shell link 序, 级联序=link 序)、JS `_app_bundle_text()`(清单序整包); 清单本身就是单一来源(tpl-manifest / head link / manifest scripts), 别在守阵里另抄一份顺序。
+  机器索引 (2026-10-31, issue 26-10-31-2226-feat-webui-agg-content-map): `commands run dev.ui-map -- <关键词>`
+  单点输出四域(shell 内联/tpl/css/JS)落点 + tpl 挂载面 + css link 序 + JS 清单序, 本节降为解释。
 
 ### 模板级 UI 差异只走「差异口」, 私拷副本即红
 
