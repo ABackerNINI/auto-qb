@@ -8,6 +8,7 @@
 
 > 摘要: 规则怎么定义与绑定、触发时机、`Rule.process()` 执行语义、去重语义与 ActionResult 四态。
 > 触发: 规则定义, 绑定, 触发时机, trigger, process, execute_once, cooldown, ActionResult
+**Refs:** memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html
 
 ## 规则的定义与绑定
 

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>规则引擎重设计调研报告</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="rule-engine-redesign">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-01-0057">
+<meta name="doc-updated" content="26-11-01-0057">
+<meta name="doc-refs" content="memory-bank/rule-system/rules-and-triggers.md, memory-bank/issues/26-10-31-1304-bug-rules-stop-following-dead.html, memory-bank/plans/26-11-01-0106-plan-rule-engine-redesign.html, memory-bank/tasks/26-11-01-rule-engine-redesign.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* 本报告追加: §03 成熟系统逐个拆的可折叠排版 (details/summary, 纯 HTML, 无外部依赖) */
+  details { border: 1px solid var(--hair-soft); margin: 10px 0; background: rgba(255,255,255,0.012); }
+  details[open] { background: rgba(255,255,255,0.022); }
+  summary { cursor: pointer; padding: 9px 14px; font-family: var(--display); font-size: 14.5px; font-weight: 600; color: var(--ink); }
+  summary::marker { color: var(--accent); }
+  summary .tag { font-weight: 400; margin-left: 8px; }
+  details > div { padding: 2px 16px 10px; }
+  .pill { font-family: var(--mono); font-size: 10.5px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--hair); color: var(--dim); letter-spacing: 0.05em; white-space: nowrap; }
+  .pill.dead { color: var(--no); border-color: #4a3438; }
+  .pill.hi { color: var(--warn); border-color: #4a3d2c; }
+  .pill.ok { color: var(--ok); border-color: #2f4230; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: rule-engine-redesign</div>
+<h1>规则引擎重设计调研报告</h1>
+<p class="lede">结论:规则系统的执行模型已从「规则顺序链」演进为「每规则每种子独立任务 + 事件即时分派」,但 <code>stop_following_rules_if</code>、<code>ignore_next_action_error</code> 与 <code>process</code> 返回值契约仍停留在旧链式模型且在生产路径被整体丢弃——建议以「承认无链」为前提删除死配置,引入 8 个最小原语(组合树条件 / per-step on_error / choose 块 / 引擎级 mode 与 evaluation / 具名状态 / per-run trace / 单一 registry)完成重设;证据基于 2026-11-01 对 <code>c32a0bdc</code> 的双线取证(代码事实清单 + 7 类成熟系统调研)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-0057 · <b>doc-updated</b> 26-11-01-0057 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> issue 26-10-31-1304 <code>rules-stop-following-dead</code>(实证 stop 六档全为死配置)+ issue 26-10-01-2211(用户既有诉求「重新梳理两键语义:命名、默认值、组合行为」);重设计开工前的可行性调研,现状取证与方案调研分两路并行,证据基线 <code>c32a0bdc</code>
+</div>
+
+<h2><span class="no">§01 · 结论先行</span>核心矛盾与决策建议</h2>
+
+<div class="aside"><b>根因一句话</b>:执行模型已经从「同一 Tracker 引用下的规则顺序链」演进为「每规则每种子独立任务 + 事件即时分派」,但控制流语义(<code>stop_following_rules_if</code>)、容错语义(<code>ignore_next_action_error</code>)和调用契约(<code>process</code> 返回的 <code>handled</code>/<code>stop</code>)还停留在旧链式模型上,且返回值在生产路径被整体丢弃——「规则」这一个抽象同时承担了<b>触发、条件、动作序列、去重、链间控制流</b>五种职责,后两种在现行架构里已无承载点。</div>
+
+<h3>三条判断</h3>
+<ul>
+  <li><b>死配置要删,不要做实。</b><code>stop_following_rules_if</code> 六档全部无消费者(§02 G1),条件出错日志宣称「停止后续规则」与实际行为不符。修复方向取 issue 1304 报告的②:承认无链、降级配置;确需「首中即停」时以<b>引擎级一等参数</b>(easy-rules 的 <code>skipOnFirst*</code> 模式)表达,而非规则字段。</li>
+  <li><b>控制流不要藏进数据字段。</b><code>{"ignore_next_action_error": true}</code> 是一条「没有动作语义的动作」;成熟系统(HA / Zapier / easy-rules)无一例外把错误策略做成 <b>per-step options 对象</b>或<b>引擎级参数</b>——步骤元数据与动作内容分离。</li>
+  <li><b>规则间不级联是特性不是缺陷。</b>ECA 学术共识:级联触发是 termination 问题的根源,必须显式收口;跨规则协作的正确答案是把状态做成<b>可引用的具名共享状态</b>(HA helper entity 模式),让规则通过读写状态间接通信。</li>
+</ul>
+
+<h3>建议形态(8 个最小原语,详见 §06)</h3>
+<p>trigger(已有)→ 条件组合树 <code>all/any/not</code> → 动作序列 + 每步 <code>on_error</code> → <code>choose</code> 分支块 → 引擎参数 <code>mode</code>/<code>evaluation</code> → 具名状态 → per-run trace → 单一 registry。<b>明确不做</b>:Rete/增量匹配、规则间级联、规则依赖图、通用循环、图灵完备表达式语言。选型蓝本是 Home Assistant automation——与本项目「事件 + 定时 + 实体状态 + 动作序列」场景同构度最高,其 <code>mode</code> / <code>continue_on_error</code> / <code>try-except</code> / <code>trace</code> 四件套可直接对照;Drools 只学语义词汇不学匹配算法,Rete 对「每种子 × 十来条规则的一次性快照求值」属过度设计。</p>
+
+<h2><span class="no">§02 · 现状事实(证据快照)</span>架构 · 两异味 · 缺口 G1–G13</h2>
+<p class="tag">快照 = 取证当时现场(基线 c32a0bdc),后续不改;行号均指该基线。</p>
+
+<h3>2.1 模块布局(<code>src/auto_qb/rules/</code>,8 py + 2 子包,~2740 行)</h3>
+<table>
+  <tr><th>文件</th><th>行数</th><th>职责</th></tr>
+  <tr><td><code>base.py</code></td><td>314</td><td><code>ActionResult</code>(四态 ok/failed/skipped/pending, :23)、<code>BaseCondition</code>(:69)、<code>BaseAction</code>(:82)、<code>RuleContext</code>(:97)、<code>Rule</code>(:133)</td></tr>
+  <tr><td><code>conditions.py</code></td><td>259</td><td>13 个内置条件插件(path/size/tags/category/trackers/tracker_group/state/hr/date_time/seedtime/upload_ratio/expr/freespace)</td></tr>
+  <tr><td><code>actions/</code></td><td>732</td><td>basic(add_tags/remove_tags/add_category/remove_category/start/stop/print_torrent_details)、checking(跳检)、full_checking(强校验+轮询)、transfer(move_to/限速)</td></tr>
+  <tr><td><code>expr/</code></td><td>1277</td><td>表达式条件:lexer/parser/eval/env(<code>tor.*</code>/<code>tracker.*</code>/<code>sys.*</code>/freespace() 等)</td></tr>
+  <tr><td><code>registry.py</code></td><td>30</td><td>装饰器注册表 CONDITIONS/ACTIONS,按名工厂</td></tr>
+  <tr><td><code>checking_meta.py</code></td><td>120</td><td>full-checking 轮询常量与 <code>poll_verdict</code> 纯函数</td></tr>
+</table>
+<p>规则 spec 键面单点在 <code>config/validation/rules.py:22</code> <code>RULE_KNOWN_KEYS = {enabled, trigger, interval, execute_once, cooldown, conditions, actions, stop_following_rules_if, watch_fields}</code>;条件/动作均为单键 dict 列表。调度宿主 <code>core/modules/rules_mod.py</code>(478 行):interval 路径每规则每种子建独立 Task(<code>_create_torrent_tasks</code> :437 → <code>_handle_rule</code> :264 → <code>_run_rule</code> :252),事件路径 <code>_dispatch_events</code>(:286)五种触发器逐条分派(<code>_apply_event_rule</code> :381)。<b>规则之间没有真正的顺序执行模型</b>——每条 interval 规则各自 interval 到期各自跑。<span class="pill hi">规则相关合计 ~3860 行(含 schema 309 / validation 337 / rules_mod 478)</span></p>
+
+<h3>2.2 两异味语义拆解</h3>
+<table>
+  <tr><th style="width:12%">异味</th><th>schema / 校验</th><th>求值与真实行为</th><th>意图 vs 实际</th></tr>
+  <tr>
+    <td><code>stop_following_rules_if</code><br><span class="pill dead">死配置</span></td>
+    <td><code>config/schema/rules.py:48-57</code> 6 档枚举 <code>STOP_IF = (conditions-met, conditions-not-met, action-failed, all-actions-succeed, always, never)</code>,默认 conditions-met;校验 <code>validation/rules.py:141-145</code> 只查取值域</td>
+    <td><code>base.py:150</code> 解析为 <code>self.stop_if</code>;:220/:269/<code>_should_stop</code>(:286-294)参与计算返回值 <code>(handled, stop)</code>。调用点仅 base.py 3 处,生产代码<b>无任何消费者</b>(G1)</td>
+    <td>意图:控制「排在后面的规则还执不执行」(链式止损/互斥)。<b>该链式模型在现行任务化架构里不存在</b>;测试(test_rule_base.py :169/193/262/356-428/563-576/797 等 ~12 处)全部只测 Rule 单体返回值,无一测端到端 stop 被消费</td>
+  </tr>
+  <tr>
+    <td><code>ignore_next_action_error</code><br><span class="pill dead">伪动作项</span></td>
+    <td>不是 Plugin 无条目;校验在 <code>validation/rules.py:302-303</code> 按名字特判只查布尔,:331 在 on_torrent_deleted 白名单里 <code>continue</code> 跳过</td>
+    <td><code>base.py:164-178</code> 构造期遍历 actions,遇该伪动作项则不建动作,把布尔塞给紧随动作的构造参数(<code>registry.py:28</code> → <code>BaseAction.ignore_error</code>, base.py:87-89);运行期 :257 <code>if not action.ignore_error: break</code></td>
+    <td>意图:这一步失败没关系,继续走后面动作。因动作列表是「单键 dict 序列」无处放 per-action 选项,造出<b>前缀声明式伪动作</b>,作用域跨条目(「紧随一个动作」)</td>
+  </tr>
+</table>
+
+<h3>2.3 完备性缺口 G1–G13</h3>
+<table>
+  <tr><th style="width:6%">#</th><th style="width:30%">缺口</th><th>证据(基线 c32a0bdc)</th><th style="width:9%">档位</th></tr>
+  <tr><td>G1</td><td><b>stop 语义整体是死配置</b>:六档全不生效</td><td><code>process</code> 返回 <code>(handled, stop)</code>,唯一调用点 <code>_run_rule</code>(<code>rules_mod.py:257-258</code>)<b>丢弃返回值</b>;interval 路径每规则独立任务无「链」,事件路径 <code>_dispatch_trigger_rules</code>(:364)逐条触发无 stop 门;条件出错日志「停止后续规则」(<code>base.py:280</code>)措辞与实际行为不符</td><td><span class="pill dead">最重</span></td></tr>
+  <tr><td>G2</td><td>条件求值出错 = 整条规则硬停 + 矛盾语义</td><td><code>base.py:212-218</code> 返回 <code>stop=True</code> 但无人消费,实际效果只是本条本轮不执行、下一 tick 照常再评估,日志宣称停了;错误粒度只有规则级,无条件级隔离/降级</td><td><span class="pill hi">重</span></td></tr>
+  <tr><td>G3</td><td>规则间零通信原语</td><td>规则 A 无法引用规则 B 的执行结果;唯一间接通道是副作用 + <code>state.exec_history</code>(仅引擎内部去重用,配置不可引用)</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G4</td><td>条件组合能力分层</td><td>条件列表内只有 AND(<code>base.py:187</code> <code>all(...)</code>);OR/NOT 靠「列表内逗号分组」的 per-条件约定或整体迁 <code>expr</code>——两套语义并存且有意分歧(hr 条件 <code>conditions.py:160-163</code> 与 <code>expr/env.py</code> 的 <code>tor.hr_satisfied</code>,注释明言勿单边改齐)</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G5</td><td>动作错误处理粒度粗</td><td>只有 fail/异常两类;<code>ignore_error</code> 是布尔前缀声明(作用于紧随一个动作,状态机在 Rule 构造期 <code>base.py:166-178</code>);无重试、无失败分支、无 on_error 动作、无部分成功语义</td><td><span class="pill hi">重</span></td></tr>
+  <tr><td>G6</td><td>动作序列无法分支/循环</td><td>actions 是扁平有序列表,唯一「分支」是 checking 动作内部 with/without_reference 子段(<code>schema/rules.py:226-275</code>);「找到参考种子走 A 否则走 B」不能作为一等规则结构表达</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G7</td><td>去重状态是黑盒</td><td>execute_once/cooldown 依据 <code>exec_history</code>(state 文件),配置只能设粒度,不能引用自定义状态、不能跨规则共享去重键;<code>daily</code>/<code>hourly</code> 判定在 <code>base.py:307-313</code> 硬编码</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G8</td><td>幂等责任转嫁给用户</td><td>非幂等动作必须手动配 execute_once/cooldown,否则每 tick 重复执行(reannounce 有静态告警 <code>base.py:182-183</code> + 运行期 10 分钟最小间隔兜底,其它动作无兜底)</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G9</td><td>扩展新动作改动面跨 4 处</td><td>①actions/*.py 写类+装饰器 ②<code>schema/rules.py</code> ACTION_PLUGINS 加 Plugin ③复杂 spec 加深度校验器 ④新 trigger 不适配还要动 <code>DELETED_ALLOWED_ACTIONS</code>/<code>_validate_trigger_action_compat</code> 与 rules_mod 分派分支;配置面同步全靠手动</td><td><span class="pill hi">重</span></td></tr>
+  <tr><td>G10</td><td>watch_fields 取值域冻结</td><td><code>FIELD_WATCH_ALLOWED = ("tags", "category")</code>(<code>fields.py:195</code>),扩展字段要同时改 store 检测、校验、schema</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G11</td><td>触发器 × 动作兼容表手工维护</td><td>on_torrent_deleted 只许 <code>print_torrent_details</code>(<code>DELETED_ALLOWED_ACTIONS</code>, <code>validation/rules.py:314-337</code>);新动作默认不在白名单,静默「不适用于」</td><td><span class="pill">缺</span></td></tr>
+  <tr><td>G12</td><td>handled 返回值同样无人消费</td><td><code>process</code> 精心计算的 <code>handled</code>(<code>base.py:269</code>)在 <code>_run_rule</code> 一并丢弃——返回值契约整体悬空,可测试性靠单测直调 Rule,与生产路径脱节</td><td><span class="pill hi">重</span></td></tr>
+  <tr><td>G13</td><td>配置表达力与 schema 覆盖差</td><td>schema 声明 13 条件 + 12 动作 + 7 规则字段;生产 config.yml 只用到 2 条件(path)+ 2 动作(add_tags/checking)+ 5 字段——大量表达力从未被真实使用,反而背着 stop_following_rules_if 这类死配置</td><td><span class="pill">缺</span></td></tr>
+</table>
+
+<h3>2.4 历史包袱与可保留机制</h3>
+<ul>
+  <li><b>issue 26-10-31-1304(Open,未修)</b>:实证 G1,已定位根因并给两个修法方向(①做实规则链代价大;②承认无链、降级配置+改日志话术,倾向②)。代码现状与之完全一致。</li>
+  <li><b>issue 26-10-01-2211(Open,便签)</b>:「重新梳理两键语义」与本次重设动机同源。</li>
+  <li><b>report 26-09-27-0047(rule-iyuu-stop-guard)</b>:条件侧表达力够,动作侧只有 stop 一种压制手段,12 个动作无「禁止下载」开关,只能 reactive 不能 preventive(与 G6 相关,未修)。</li>
+  <li><b>memory-bank/rule-system/rules-and-triggers.md(基线 2026-09-05)</b>:<code>handled</code> 描述已漂移(文档写「最后一个动作非 skipped」,代码改为「本轮任一非 skip」),且不知道 stop 是死配置(写于 issue 1304 之前)。</li>
+  <li><b>健全、重设可保留</b>:条件求值出错停规则 + 节流日志(2026-09-20 拍板)、expr 条件配置期 fail-fast + 数据源门控(<code>validation/rules.py:235-263</code> GATED_NAMES)、checking 子段未知键 fail-fast(26-10-06-0028)、断点续跑契约(pending/resume_index)。</li>
+</ul>
+
+<h3>2.5 测试与生产配置现状</h3>
+<p>测试面:test_rule_base.py 48 例/986 行、test_actions.py 50 例/1095 行、test_checking.py 75 例/1958 行、test_trigger_events.py 27 例/741 行、test_rules_core.py 9 例/293 行、test_modules_p5.py 20 例/819 行、test_config.py 96 例(含规则校验段)。stop/ignore 两键直接测试点约 12 处,<b>全部测 Rule 单体返回值,无一测端到端 stop 消费</b>。</p>
+<p>生产 config.yml(键名级,只读未改):3 个规则集 4 条规则——<code>add_r_tag</code>(on_torrent_added + path regex + add_tags)、<code>i_rule</code>/<code>h_rule</code>(interval 30M + checking)、<code>hhan_checking_rules.rule</code>(interval 5M + 恒真条件 + checking);tracker 侧 <code>rules:</code> 引用 hhan_checking_rules。<b>未使用</b>:stop_following_rules_if、ignore_next_action_error、execute_once、watch_fields、expr 及 11/13 条件、10/12 动作。</p>
+
+<h2><span class="no">§03 · 成熟系统逐个拆</span>七类系统的执行模型与错误策略</h2>
+<p>「触发→条件→动作」三段式是所有成熟系统的最大公约数;分歧只出现在<b>编排</b>(谁先谁后)、<b>错误策略</b>(每步怎么失败)、<b>执行语义</b>(全执行/首中即停/agenda)三个维度。逐个展开(默认收起,点开细读)。</p>
+
+<details>
+<summary>Drools(Rete/PHREAK)<span class="tag">只学词汇,不学算法</span></summary>
+<div>
+  <p>核心抽象:事实(working memory)+ 规则(when-then)+ 匹配网络 + agenda。插入事实 → Rete/PHREAK 增量算出所有匹配(activation)→ 放入 agenda → 按 salience 逐条 fire,fire 中的动作可再插入事实触发新一轮匹配。条件用 DSL(when 子句)模式匹配 + join 编译进网络节点;错误处理引擎层不管,consequence 是任意 Java 代码。编排词汇:<code>salience</code>(数值优先级)、<code>agenda-group</code>(分组+setFocus)、<code>activation-group</code>(组内首条 fire 后取消其余,XOR)、<code>ruleflow</code>(显式流程图)。</p>
+  <p><b>为何对本项目过度设计</b>:Rete 解决「N 条规则 × M 个事实,事实频繁增量变化时避免全量重匹配」;本项目事实 = 单个种子的字段快照、规则十来条、每次事件都是一次性「拿快照→顺序求值」,网络节点缓存毫无收益。该学的是<b>语义词汇</b>(salience / activation-group =「首中即停」的组化表达),不是匹配算法。</p>
+</div>
+</details>
+
+<details>
+<summary>OPA/Rego 与 Google CEL<span class="tag">表达式策略引擎路线</span></summary>
+<div>
+  <p>OPA:策略即代码,PDP/PEP 分离——引擎只做「给输入,回决策」,执行完全归应用,带 decision log 审计;Rego 是 Datalog 血统。<b>OPA 只回答「是否允许/给什么结论」,不执行副作用动作</b>。CEL:设计目标就是「不做成规则引擎」——非图灵完备(保证终止)、纯表达式无副作用、纳秒-微秒级可预期开销、compile-once-eval-many;Kubernetes admission / IAM Conditions 用它做条件求值层,编排/动作/状态全留宿主。</p>
+  <p><b>边界结论</b>:表达式引擎路线 = 条件表达力↑、编排能力 = 0,把 G6(动作编排)完全排除在语言之外——<b>条件用表达式、动作仍用结构化列表</b>恰是最优切分,而不是全盘 Rego 化。Go 的 expr / Grafana alerting 走同款路线。</p>
+</div>
+</details>
+
+<details>
+<summary>json-rules-engine(JS)<span class="tag">条件组合代数</span></summary>
+<div>
+  <p>规则 = <code>{conditions, event}</code>;conditions 是<b>递归组合树</b>:组合节点 <code>all/any/not</code> 任意嵌套,叶节点 <code>{fact, operator, value}</code>,fact 可为计算型(async)或 JSONPath 深挖。<code>engine.run(facts)</code> 默认全部规则独立求值互不影响,无内置顺序/优先级——复杂分支一律用嵌套条件表达;每条规则求值结果(成功/失败及失败事实)可回收,天然支持「哪个条件没过」的可观测性。错误处理:动作 = 声明 event 由外层消费,fact 求值异常有 <code>on('failure')</code> 钩子。</p>
+  <p><b>最有价值的点</b>:组合树是 13 种硬编码条件算子的替代方案——新增条件只需新增 operator,NOT/OR 组合逻辑零成本获得。</p>
+</div>
+</details>
+
+<details>
+<summary>easy-rules(Java,维护模式)<span class="tag">停止语义的一等参数化</span></summary>
+<div>
+  <p><code>Rule = name, description, priority, condition(facts), action(facts)</code>;priority 小者先执行,顺序执行全部规则(没有 Rete)。<code>RulesEngineParameters</code> 就是「停止语义的一等参数化」,是对本项目 G1 最直接的对照:</p>
+  <table>
+    <tr><th>参数</th><th>默认</th><th>语义</th></tr>
+    <tr><td><code>skipOnFirstAppliedRule</code></td><td>false</td><td>首条命中即停</td></tr>
+    <tr><td><code>skipOnFirstNonTriggeredRule</code></td><td>false</td><td>首条条件不满足即停(顺序链场景)</td></tr>
+    <tr><td><code>skipOnFirstFailedRule</code></td><td>false</td><td>首条失败即停</td></tr>
+    <tr><td><code>rulePriorityThreshold</code></td><td>MAX_INT</td><td>超过优先级阈值即停</td></tr>
+  </table>
+  <p>四个布尔开关在<b>引擎层</b>消费 <code>fire</code> 的返回信号,而不是让用户在 condition/action 里塞哨兵字段;默认全 false = 全执行。失败定义:action 抛异常 = 该规则 failed;不设 skip 时默认继续下一条,失败详情经 rule listener 回调暴露。<code>CompositeRule</code> 把多条规则打包成一条(组内按 priority 顺序)。</p>
+</div>
+</details>
+
+<details>
+<summary>IFTTT / Zapier 管道<span class="tag">per-step error policy</span></summary>
+<div>
+  <p>Zapier 每步结果是一个<b>枚举状态机</b>:<code>success / errored / halted / filtered</code>,而非布尔。关键区分:<b>errored</b>(平台/瞬时故障,可 autoreplay 重试)vs <b>halted</b>(该次数据问题,重试无意义,只停本次 run)。per-step 策略组合:①Filter step(前置校验,失败 = 正常结束而非错误——把可预料的失败转化为条件)②Paths(显式分支,每分支自带条件)③Autoreplay(run 级重试)④错误通知。<b>没有 per-step try/catch</b>——答案是「预料到的失败用 Filter 前置消化」。IFTTT 更简单(trigger→filter code→action,基本无错误策略),反面印证「策略要给足而不是做多」。</p>
+</div>
+</details>
+
+<details>
+<summary>ECA(active database 学术经典)<span class="tag">级联必须收口</span></summary>
+<div>
+  <p>经典语义 <code>ON event IF condition DO action</code> 之外的两个关键设计点:<b>Coupling mode</b>(规则与触发事务的耦合:immediate / deferred / detached——对应本项目「事件即时分派 vs interval 轮询」,其实已隐式拥有两种 mode);<b>Cascading 与 termination</b>(规则动作触发新事件→级联激活其他规则;学术结论:级联必须<b>显式收口</b>——或禁止、或最大迭代数、或优先级选择,否则 non-termination 是必然事故)。</p>
+  <p><b>对本项目</b>:G3 的正确答案不是做级联,而是 ECA 文献的反面教训——明确「规则间不级联」是特性不是缺陷;跨规则协作用共享状态间接通信,不直接触发。</p>
+</div>
+</details>
+
+<details open>
+<summary>Home Assistant automation<span class="tag">与本项目最同构,设计蓝本</span></summary>
+<div>
+  <p>HA automation = <code>trigger + condition + action</code>,与本项目几乎一一对应,但把本项目缺失的承载点全部做成了一等公民:</p>
+  <table>
+    <tr><th style="width:24%">本项目缺口</th><th>HA 对应设计</th></tr>
+    <tr><td>触发模型</td><td>trigger 列表(事件/状态变化/时间/区间/模板);<b>明确「对变化反应,不对持续状态反应」</b>——状态类判断放 condition,触发只认 change</td></tr>
+    <tr><td>条件组合(G4)</td><td>默认全部 AND;OR/NOT 用 <code>and/or/not</code> 组合块显式包裹(= json-rules-engine 组合树思路)</td></tr>
+    <tr><td>动作编排(G6)</td><td>action 是脚本化序列,内建 building block:<code>choose</code>(if/elif 分支+default)、<code>if/then/else</code>、<code>repeat</code>(count/while/until/for_each)、<code>wait</code>、<code>parallel</code>——分支是<b>动作域内的显式语法块</b>,不是伪动作项</td></tr>
+    <tr><td>单步错误策略(G5)</td><td>每步可写 <code>continue_on_error: true</code>(失败继续)与 <code>enabled: false</code>(按模板条件跳过)——<b>per-step options 对象</b>,与动作类型无关的横切属性;默认失败 = 中止本次 run</td></tr>
+    <tr><td>结构化失败处理</td><td>2024.10 起内建 <code>try / except(error filter + error_variables) / finally</code> 块</td></tr>
+    <tr><td>重试</td><td>不在每步内建 retry,重试由用户用 repeat/wait 表达,保持原语少</td></tr>
+    <tr><td>并发重叠语义</td><td><b><code>mode</code>: single(默认,重触发忽略)/ restart(杀旧起新)/ queued / parallel</b>,配套 <code>max</code>、<code>max_exceeded</code>——本项目「每规则×每种子独立任务」缺的并发重叠策略一等表达</td></tr>
+    <tr><td>去重/状态(G7/G3)</td><td>无内建去重;状态一律外置(helper entity/timer),规则间通信 = 读同一 helper——可引用共享状态,而非引擎内建黑盒</td></tr>
+    <tr><td>可观测性</td><td><b>trace 系统</b>:每次 run 记录每步 verdict(命中/跳过/错误、各条件求值结果),保留最近 N 条——「为什么这条自动化没跑」有确定性答案</td></tr>
+    <tr><td>优先级</td><td><b>没有规则间优先级</b>——规则独立,顺序问题在单条规则的 action 序列内解决</td></tr>
+  </table>
+</div>
+</details>
+
+<h2><span class="no">§04 · 横切设计原语</span>一个「完备」规则引擎的正交维度</h2>
+<ol>
+  <li><b>触发模型</b>:事件即时 / 轮询 / 混合。要点:触发只认「变化」,持续状态判断归条件(ECA coupling mode;HA 的 react-to-changes 原则)。</li>
+  <li><b>条件组合代数</b>:两选一——①结构化递归树 <code>all/any/not</code>(json-rules-engine、HA)②受限表达式(CEL/expr)。比「13 种枚举算子」可演进:新增只是新增 operator/函数,组合零成本。</li>
+  <li><b>规则间编排</b>:谱系「无编排(独立执行)→ priority 排序 → 首中即停组(activation-group/CompositeRule)→ 显式流程图(ruleflow)」。成熟共识:<b>默认无编排</b>,需要时给 priority + skipOnFirstApplied 两三个参数即可覆盖 90% 场景;链式依赖(下条规则依赖上条副作用)是公认反模式。</li>
+  <li><b>执行语义</b>:全执行 / 首中即停 / agenda。小系统取前二;easy-rules 证明「全执行为默认 + 3 个 skip 开关」即可参数化全部语义。</li>
+  <li><b>错误处理(per-step policy)</b>:每步独立 options:<code>continue_on_error</code>、结构化 try/except/finally、失败分类(errored=可重试瞬时 / halted=数据性,Zapier)、run 级 autoreplay。<b>错误策略是横切属性,挂在步骤上,不是动作类型的一部分</b>。</li>
+  <li><b>状态与去重</b>:内建黑盒去重 vs 可引用共享状态。成熟系统(HA)选<b>外置共享状态</b>:去重、跨规则通信(G3)、跨轮次记忆(G7)统一为同一原语「规则可读写的具名状态」。</li>
+  <li><b>并发/重叠语义</b>:同规则同主体再次触发怎么办——single/restart/queued/parallel(HA <code>mode</code>);事件+定时混合系统的必备维度。</li>
+  <li><b>可观测性</b>:per-run trace——每步 verdict(通过/跳过/错误+原因、条件求值细节)持久化最近 N 条(HA trace / OPA decision log 同款)。</li>
+  <li><b>可演进性(插件注册)</b>:条件/动作 = 向单一注册表注册的 <code>(类型名, 求值/执行函数, schema 声明)</code> 三元组;schema 从注册表<b>生成</b>(json-rules-engine operator 注册、CEL 函数库注册模式),杜绝「加一个动作改 4 处」(G9)。</li>
+</ol>
+
+<h2><span class="no">§05 · 反模式对照</span>本项目异味 ↔ 成熟系统正确做法</h2>
+<table>
+  <tr><th style="width:20%">反模式</th><th style="width:38%">本项目实例</th><th>成熟系统做法</th></tr>
+  <tr><td>控制流藏进数据字段</td><td><code>{"ignore_next_action_error": true}</code> 伪动作项</td><td>per-step options 对象(HA <code>continue_on_error</code>);步骤元数据与动作内容分离,schema 上就不可能出现「一条没有动作语义的动作」</td></tr>
+  <tr><td>死配置/结果码无消费者</td><td><code>stop_following_rules_if</code> 的 <code>(handled, stop)</code> 被丢弃</td><td>停止语义做成<b>引擎级一等参数</b>(easy-rules <code>skipOnFirst*</code>),引擎层消费信号;要么实现要么删除,不留宣称语义的日志</td></tr>
+  <tr><td>布尔吞掉失败分类</td><td><code>ignore_error: true/false</code></td><td>失败是枚举态(error/halted/filtered,Zapier)而非布尔;策略(重试/继续/中止/降级)与失败类别正交</td></tr>
+  <tr><td>规则间隐式链依赖</td><td><code>stop_following_rules_if</code> 暗含的「后续规则」概念</td><td>无顺序时不要在词汇里引入「后续」;排序需求显式给 priority(easy-rules)</td></tr>
+  <tr><td>前置声明式副作用</td><td><code>ignore_next_action_error</code> 作用于「紧随一个动作」——跨条目作用域</td><td>作用域与步骤绑定:选项写在<b>那一步自己身上</b>,永不跨条目</td></tr>
+  <tr><td>异常=静默硬停+误导日志</td><td>条件求值异常→规则级停 +「停止后续规则」文案(<code>base.py:280</code>)</td><td>默认策略显式声明(继续/中止),每步 verdict 进 trace(HA),失败可解释</td></tr>
+  <tr><td>匹配引擎过度设计</td><td>(若引入 Rete/规则链)</td><td>先问「事实是否持续增量变化」;一次性快照求值用顺序循环即可(Drools 自己也在往惰性 PHREAK 退)</td></tr>
+  <tr><td>schema 与实现双写</td><td>加动作改 4 处(G9)</td><td>注册表单点注册,schema/文档/校验从注册表派生</td></tr>
+  <tr><td>内建黑盒状态</td><td>去重状态不可引用(G7)</td><td>状态原语外置且具名,规则可读写、可观测</td></tr>
+</table>
+
+<h2><span class="no">§06 · 建议与边界</span>最小完备原语集与「明确不做」</h2>
+
+<h3>6.1 逐条映射(缺口 → 成熟系统做法 → 建议)</h3>
+<table>
+  <tr><th style="width:22%">缺口</th><th style="width:36%">成熟系统做法</th><th>对本项目建议</th></tr>
+  <tr><td>G1 <code>stop_following_rules_if</code> 死配置</td><td>easy-rules <code>skipOnFirstAppliedRule</code>(引擎级参数,消费者 = 引擎本身)</td><td><b>降级采纳</b>:规则内不再有此字段;确需首中即停,在执行器层给 <code>evaluation: all / first_match</code>(或 priority + stop_on_first_match)引擎参数;当前无消费者则先<b>删除</b>该字段与误导日志</td></tr>
+  <tr><td>G2 条件异常 = 规则硬停 + 矛盾日志</td><td>HA 默认失败中止 run 但每步 verdict 进 trace;easy-rules 默认继续下一条</td><td><b>采纳 per-step 语义</b>:条件异常 = 该规则本次不命中(verdict=error 记入 trace),<b>绝不停别的规则</b>;引擎级才允许定义停</td></tr>
+  <tr><td>G3 规则间零通信</td><td>HA helper entity(共享外置状态);ECA 级联被学术共识否定</td><td><b>采纳共享状态原语</b>:具名 state(已有 state_file 承载),条件/动作可读写;明确不做规则间级联触发</td></tr>
+  <tr><td>G5 <code>ignore_error</code> 布尔 + 伪动作项</td><td>HA <code>continue_on_error</code>(per-step);Zapier errored/halted 分类</td><td><b>采纳</b>:删除伪动作项;每动作一个 <code>on_error: {policy: stop/continue/retry}</code>,retry 带 count+backoff;布尔映射为 policy 两档做兼容迁移</td></tr>
+  <tr><td>G6 扁平动作列表无分支</td><td>HA <code>choose/repeat/if</code>;Zapier Paths</td><td><b>降级采纳</b>:先加 <code>choose</code>(条件组→子序列+default)一个块,覆盖「禁止下载」类场景;repeat/wait 按需再加,不做循环图灵化</td></tr>
+  <tr><td>G7 去重黑盒</td><td>HA 外置 helper 状态</td><td><b>采纳</b>:去重状态改为具名可引用状态(引擎内建去重作为该状态的预置模式保留)</td></tr>
+  <tr><td>G9 动作 4 处手动同步</td><td>operator/注册表单点 + schema 派生</td><td><b>采纳</b>:单一 registry(类型名→执行函数+schema+文档片段),validate/文档/CLI 从 registry 生成</td></tr>
+  <tr><td>G13 schema 膨胀</td><td>CEL 非图灵完备够用即可;组合树替代枚举膨胀</td><td><b>删除为主</b>:组合树(AND/OR/NOT)+ 少量叶子算子替代平行枚举;未用条目标 deprecated 或直接删,示例配置只保留真实使用面</td></tr>
+</table>
+
+<h3>6.2 最小完备原语集候选(8 项)</h3>
+<p>完备判据:能表达「触发→条件→动作序列→单步错误策略→去重」且无伪语法;不复杂判据:无 Rete/规则链/级联。</p>
+<ol>
+  <li><b>trigger</b>(已有):<code>on_torrent_added / on_field_changed / interval</code>,保留事件+轮询混合;补 HA 原则进文档——持续状态判断写条件,不写轮询。</li>
+  <li><b>conditions 组合树</b>:叶子 <code>{field, operator, value}</code> + 组合 <code>all/any/not</code>(递归),替代 13 枚举;条件求值异常 = verdict:error,规则不命中,不影响他规则(修 G2/G4)。</li>
+  <li><b>actions 有序序列 + 每步 options</b>:<code>{type, params, on_error: {policy: stop|continue|retry, retries, backoff}, enabled}</code>;policy 替代 <code>ignore_error</code> 与伪动作项(修 G5);<code>stop</code> 仅中止本规则本次 run。</li>
+  <li><b><code>choose</code> 块</b>(唯一新增编排块):<code>{choose: [{when: &lt;cond树&gt;, then: [...]}], default: [...]}</code>——动作域内分支,G6 的最小子集。</li>
+  <li><b>执行语义引擎参数</b>(每规则可选):<code>mode</code>(single/restart/queued,借 HA)+ 可选 <code>evaluation: all|first_match</code>(借 easy-rules skipOnFirstAppliedRule)——以引擎层一等参数替代 <code>stop_following_rules_if</code>(修 G1)。</li>
+  <li><b>具名状态</b>:规则可读写的键值状态(去重 = 预置模式,跨规则通信 = 读写共享键),落 state_file(修 G3/G7)。</li>
+  <li><b>per-run trace</b>:每种子×每规则每次求值记录每步 verdict(条件树结果、动作结果、错误类别),保留最近 N 条(修可观测性,支撑排障)。</li>
+  <li><b>单一 registry</b>:条件/动作/块统一注册(类型→函数+schema+文档),schema 与校验从注册表生成(修 G9,顺带收编 G13/G10/G11)。</li>
+</ol>
+
+<pre><code><span class="cm"># 6.3 目标形态示例(YAML 示意, 非本次实现; 中文注释)</span>
+<span class="cm"># 规则 spec: 组合树条件 + 每步 on_error + choose 分支</span>
+<span class="cm">rule:</span>
+  <span class="cm">trigger: on_torrent_added          # 事件即时分派 (已有)</span>
+  <span class="cm">mode: single                        # 引擎参数: 同种子重触发忽略 (借 HA)</span>
+  <span class="cm">conditions:</span>
+    <span class="cm">any:                              # 组合树: OR (替代「逗号分组」约定)</span>
+      <span class="cm">- { field: path,  operator: contains, value: "/movies/" }</span>
+      <span class="cm">- all:                            # 嵌套 AND</span>
+          <span class="cm">- { field: size, operator: ">=", value: "10GiB" }</span>
+          <span class="cm">- not: { field: tags, operator: contains_any, value: [archived] }</span>
+  <span class="cm">actions:</span>
+    <span class="cm">- type: add_tags</span>
+      <span class="cm">params: { tags: [auto] }</span>
+      <span class="cm">on_error: { policy: retry, retries: 3, backoff: 60s }   # 每步选项, 不再是伪动作项</span>
+    <span class="cm">- choose:                          # 动作域内显式分支 (G6 最小子集)</span>
+        <span class="cm">- when: { field: category, operator: exists }</span>
+          <span class="cm">then: [ { type: add_tags, params: { tags: [has-cat] } } ]</span>
+      <span class="cm">default: [ { type: add_category, params: { category: uncategorized } } ]</span>
+</code></pre>
+
+<h3>6.4 明确不做(不复杂边界)</h3>
+<ul>
+  <li><b>Rete / 增量匹配</b>——事实非持续增量变化,一次性快照求值用顺序循环即可。</li>
+  <li><b>规则间直接级联触发</b>——ECA 学术共识的反面教训;跨规则协作走具名状态。</li>
+  <li><b>规则依赖图 / 显式流程图</b>——90% 场景「默认无编排 + 两三个引擎参数」已覆盖。</li>
+  <li><b>通用循环(repeat/while)</b>——choose 先行,循环按需再加,不做图灵化。</li>
+  <li><b>图灵完备表达式语言</b>——如需更强条件表达,届时再评估内嵌 CEL 类表达式作叶子求值器。</li>
+</ul>
+
+<h2><span class="no">§07 · 方法与局限</span>怎么取的证 · 边界在哪</h2>
+<h3>方法</h3>
+<ul>
+  <li><b>双线并行取证</b>:线 1(现状)对基线 <code>c32a0bdc</code> 逐文件核对 <code>src/auto_qb/rules/</code>、<code>config/schema|validation</code>、<code>core/modules/rules_mod.py</code> 与 7 个规则测试文件,落成事实清单 + G1–G13 缺口表;线 2(调研)对 Drools / OPA / CEL / json-rules-engine / easy-rules / Zapier·IFTTT / ECA / Home Assistant 八个系统核对其执行模型、错误策略与编排原语(凭官方文档与学术文献),两线产物在 §02/§03–§05 各自承载。</li>
+  <li><b>生产配置只读核对</b>:config.yml 只做键名级统计(3 规则集 4 条规则、实际使用面),未读取凭据、未改动文件。</li>
+</ul>
+<h3>局限</h3>
+<ul>
+  <li><b>静态证据</b>:全部结论来自代码阅读与测试面统计,未跑真机复现 stop 丢弃行为(该行为已由 issue 26-10-31-1304 实证,本报告直接引用)。</li>
+  <li><b>文献时效</b>:成熟系统的行为(如 HA try/except 2024.10 引入、Drools PHREAK 惰性化)以调研当时公开文档为准,版本演进后个别细节可能漂移;横切结论(原语维度、反模式)不依赖单版本细节。</li>
+  <li><b>口径边界</b>:G13 的「生产使用 2 条件 + 2 动作」是键名级统计,不含参数组合的真实多样性;<code>expr/</code> 1277 行只做职责层评估,未逐函数审计其求值语义与 hr 分歧细节(仅引用 <code>conditions.py:160-163</code> 注释明言的「有意分歧」)。</li>
+  <li><b>快照属性</b>:本报告为 report 族(出厂即 Done),记录取证当时现场;后续重设计若拍板不同方向,以新 plan 文档为准,不在本报告上改写。</li>
+</ul>
+
+</div>
+</body>
+</html>

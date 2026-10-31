@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>规则引擎重设计方案</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="rule-engine-redesign">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-0106">
+<meta name="doc-updated" content="26-11-01-0216">
+<meta name="doc-refs" content="memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html, memory-bank/tasks/26-11-01-rule-engine-redesign.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: rule-engine-redesign</div>
+<h1>规则引擎重设计方案</h1>
+<p class="lede">以调研报告 <a href="../reports/26-11-01-0057-report-rule-engine-redesign.html">26-11-01-0057</a>(唯一事实源)为底,承认「无链」的任务/事件执行模型:两键退场走<b>配置升级路线</b>(D1)——载入检测到 <code>stop_following_rules_if</code>/<code>ignore_next_action_error</code> 即把该规则转为<b>未启用</b>并出 warning(webui 可见),原内容保留供改写,不做运行时兼容;分期引入新原语:per-step <code>on_error</code>(W2)、条件组合树 + <code>choose</code> 块(D3 转正,W3)、per-run trace 与 <code>evaluation</code> 枚举位(W4)、单一 registry(W5);<code>mode</code> 与具名状态按 D6 <b>移出本期</b>(设计说明保留,见 §03.4)。<code>config.yml</code> 零改加载与 <code>exec_history</code> 兼容是全程硬约束,实施范围 W1–W5 全序列(D7),每期独立可交付可回退;webui 是主配置面,编辑控件随期同步(D8)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-0106 · <b>doc-updated</b> 26-11-01-0216 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 调研报告 26-11-01-0057 定稿后的方案轮(现状 G1–G13 与成熟系统调研均以报告为唯一事实源,本方案不重新调研);动机源头 issue 26-10-31-1304 <code>rules-stop-following-dead</code> + issue 26-10-01-2211(两键语义重梳);现状基线 <code>c32a0bdc</code>,compat 面另对工作区 config.yml 做了只读键名核对
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>1.1 为什么做</h3>
+<p>执行模型已从「规则顺序链」演进为「每规则每种子独立任务 + 事件即时分派」,但三处旧链式遗留在生产路径悬空:① <code>stop_following_rules_if</code> 六档全为死配置(<code>process</code> 返回的 <code>(handled, stop)</code> 被 <code>_run_rule</code> 整体丢弃,G1/G12);② <code>ignore_next_action_error</code> 伪动作项把控制流藏进数据字段、作用域跨条目(G5)——注意它是<b>活键</b>:引擎确实在消费它,只是语义错位,生产 config.yml 未用但外部用户可能在用;③ 条件异常 = 规则硬停 + 「停止后续规则」矛盾日志(G2)。同时缺错误策略、编排分支、可观测性与单点注册(G4/G6/G9 等)。</p>
+<div class="aside"><b>配置面前提(D1 拍板新增)</b>:本项目已全面转为 webui 配置,用户不手改 config.yml。因此两键退场的升级提示必须<b>在 webui 可见</b>(未启用徽标/规则卡提示面),不能只靠日志;webui 编辑器是本方案所有配置面改动的第一呈现面。</div>
+
+<h3>1.2 做到什么程度算成</h3>
+<ol>
+  <li><b>两键退场(升级路线,D1)</b>:载入层识别两键 → 含键规则转<b>未启用</b>(enabled=false)+ 每次载入 warning,话术给出 <code>ignore_next_action_error</code> 的等价新写法(<code>on_error: {policy: continue}</code>);原规则内容在配置中原样保留供用户改写;<b>不做运行时兼容</b>(不做 ignore→on_error 自动映射);引擎侧不再消费两键;<code>process</code> 返回值契约收口为被引擎显式消费的 verdict,<code>base.py:280</code> 误导话术修正(G1/G5/G12)。</li>
+  <li><b>错误策略一等化</b>:每动作可声明 <code>on_error</code>(policy 三档,retry = 任务级 requeue),条件异常降为「本条本轮不命中」且可解释(G2/G5)。</li>
+  <li><b>表达力最小完备</b>:组合树 <code>all/any/not</code> 替代隐式 AND 与「逗号分组」约定(G4),<code>choose</code> 块覆盖动作分支(G6,D3 转正);<b>不做</b>报告 §6.4 边界外的任何东西(Rete / 级联 / 依赖图 / 通用循环 / 图灵完备表达式)。</li>
+  <li><b>可观测</b>:per-run trace 按(规则×种子 hash)维度环形保留,回答「这条规则为什么没跑/跑了什么」。</li>
+  <li><b>单点注册</b>:新增动作/条件从「改 4 处」(G9)降为改 1 处,schema/校验/兼容表从 registry 派生;未用条目全部保留(G13)。</li>
+</ol>
+<p>移出本期(D6):<code>mode</code>(同种子重触发策略)与具名共享状态——设计说明与升格触发条件保留在 §03.4,出现真实跨规则协作诉求或引擎引入并发时立项。</p>
+
+<h3>1.3 设计底线(不变量,优先级高于以上目标)</h3>
+<ul>
+  <li><b>config.yml 生产红线零改</b>:现有规则在新引擎下<b>零改加载</b>,旧行为语义逐条保持(条件 AND、动作顺序、cooldown 去重、checking 子段契约)。兼容靠<b>载入层规范化</b>完成,不写一次性迁移脚本改用户配置。</li>
+  <li><b>state_file <code>exec_history</code> 兼容</b>:去重键口径(<code>规则名:hash</code>)与 prune 语义不随重构改变;既有历史数据载入不丢、去重行为不回退(重置一次去重窗口 = 生产事故面)。</li>
+  <li><b>黄金法则不破</b>:幂等靠 state_file 去重语义保持;单一写线程(单规则线程)假设不引入绕开者;fail-fast(新配置键全进 <code>validate_config</code> + <code>config/schema.py</code>);保守默认(所有新原语默认值 = 现状行为,见 §03)。</li>
+  <li><b>分期独立可交付</b>:任意一期停工,系统都处于语义自洽、测试全绿的状态。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>证据快照全部来自报告 §02(基线 <code>c32a0bdc</code>),此处只留方案直接消费的事实;行号均指该基线。</p>
+
+<h3>2.1 结构与使用面</h3>
+<ul>
+  <li><code>src/auto_qb/rules/</code> 8 py + 2 子包约 2740 行;加上 schema 309 / validation 337 / <code>rules_mod.py</code> 478,规则相关合计约 3860 行。规则 spec 键面单点在 <code>config/validation/rules.py:22</code> <code>RULE_KNOWN_KEYS</code>(10 键,含两处死键)。</li>
+  <li>生产 config.yml(只读键名核对):<b>3 个规则集共 5 条规则</b>(<code>add_r_tag</code> 事件触发 + <code>i_rule</code>/<code>r_rule</code>/<code>h_rule</code>/<code>hhan_checking_rules.rule</code> interval 轮询)。报告 §2.5 记「3 规则集 4 条」,现场核对 <code>r_rule</code> 在列,以 config.yml 为准;迁移清单按 5 条覆盖。<code>stop_following_rules_if</code> 生产未使用(<b>死键</b>);<code>ignore_next_action_error</code> 生产未用但为引擎实际消费的<b>活键</b>(外部用户可能使用,退场走 D1 升级路线);真实使用面 = 1 条件(path)+ 1 动作(checking)+ add_tags 动作 + cooldown 字段。所有规则均为旧扁平语法(单键 dict 条件/动作),其中 hhan 规则 <code>conditions: ''</code>(恒真)。配置入口已全面转为 webui 编辑器(用户不手改 config.yml),webui 是本方案配置改动的主呈现面。</li>
+  <li>测试面:test_rule_base 48 例 / test_actions 50 例 / test_checking 75 例 / test_trigger_events 27 例 / test_rules_core 9 例 / test_modules_p5 20 例 / test_config 96 例;stop/ignore 两键直接测试点约 12 处,<b>全部测 Rule 单体返回值,无一测端到端 stop 消费</b>——印证返回值契约悬空。</li>
+  <li>两死键在 <code>test_yamls/</code> 出现 5 处(<code>test_checking_full_checking.yml</code> 等),并有 <code>tests/fixtures/config_key_surface.txt</code> 键面守卫需要同步。</li>
+</ul>
+
+<h3>2.2 缺口 → 修法对照(G1–G13,摘自报告 §2.3/§6.1)</h3>
+<table>
+  <tr><th style="width:8%">#</th><th style="width:40%">缺口</th><th>本方案修法(原语 / 动作)</th><th style="width:10%">分期</th></tr>
+  <tr><td>G1</td><td><b>stop 六档全为死配置</b>,条件出错日志宣称「停止后续规则」与实际不符</td><td>两键退场走升级路线(D1):载入转未启用 + warning;误导话术修正;确需首中即停 → 引擎级 <code>evaluation</code> 枚举位(D4)</td><td>W1(日志/转未启用)/ W4(枚举位)</td></tr>
+  <tr><td>G2</td><td>条件异常 = 规则硬停 + 矛盾语义,错误粒度只有规则级</td><td>per-step 语义:条件异常 = verdict:error,本条本轮不命中,绝不停他规则</td><td>W2</td></tr>
+  <tr><td>G3</td><td>规则间零通信原语</td><td><b>移出本期</b>(D6):具名共享状态设计说明与升格条件保留(§03.4),出现真实跨规则协作诉求时立项</td><td>—</td></tr>
+  <tr><td>G4</td><td>条件组合只有隐式 AND,OR/NOT 靠「逗号分组」约定,与 expr 两套语义并存</td><td>组合树 <code>all/any/not</code>;「逗号分组」在规范化单点按条件枚举映射,hr 双语义分歧维持现状不单边改齐</td><td>W3</td></tr>
+  <tr><td>G5</td><td><code>ignore_error</code> 布尔前缀声明 + 伪动作项,无重试/失败分支</td><td>伪动作退场(D1:转未启用 + warning 带等价写法);每步 <code>on_error: {policy: stop|continue|retry}</code>,布尔映射 continue</td><td>W1(退场)/ W2(立)</td></tr>
+  <tr><td>G6</td><td>动作序列扁平无分支</td><td><code>choose</code> 块(唯一新增编排块,按 D3)</td><td>W3</td></tr>
+  <tr><td>G7</td><td>去重状态黑盒,daily/hourly 硬编码</td><td><b>移出本期</b>(D6):内建去重维持现状;具名状态随 G3 一并移出(§03.4)</td><td>—</td></tr>
+  <tr><td>G8</td><td>幂等责任转嫁用户(非幂等动作须手配 execute_once/cooldown)</td><td>本期不单独修;trace 暴露重复执行后按需加预置去重模式</td><td>—</td></tr>
+  <tr><td>G9</td><td>扩展动作改 4 处</td><td>单一 registry(类型名→执行函数+schema+文档),派生收口</td><td>W5</td></tr>
+  <tr><td>G10</td><td>watch_fields 取值域冻结</td><td>registry 派生时顺带收编</td><td>W5</td></tr>
+  <tr><td>G11</td><td>触发器 × 动作兼容表手工维护,新动作静默「不适用」</td><td>兼容声明进 registry 条目</td><td>W5</td></tr>
+  <tr><td>G12</td><td><code>handled</code> 返回值同样无人消费</td><td>与 G1 同一刀:返回值契约收口为引擎消费的 verdict</td><td>W1</td></tr>
+  <tr><td>G13</td><td>schema 表达力与真实使用面差(13 条件用 1、12 动作用 2)</td><td>组合树替代枚举膨胀;未用条目<b>全部保留</b>(拍板 26-11-01,其它用户可能在用),registry 化只做派生收口不删条目</td><td>W5</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 主线:退 → 立 → 收</h3>
+<ul>
+  <li><b>退</b>(W1):两键按 D1 走配置升级路线——键面保留识别(schema/validation 侧用于升级检测),载入检测到即把含键规则转<b>未启用</b> + warning(每次载入提示,webui 可见),原内容原样保留供改写,引擎侧不再消费;同时收口 <code>(handled, stop)</code> 悬空契约、修正误导日志话术。「要么实现要么删除,不留宣称语义的日志」(报告 §05 反模式结论)——引擎不再有死路径,键面退场由升级提示承接。</li>
+  <li><b>立</b>(W2–W4):per-step <code>on_error</code>(W2)→ 组合树 + <code>choose</code>(W3,D3 转正)→ trace + <code>evaluation</code> 枚举位(W4);每步默认值 = 现状行为(保守默认),旧配置零改等价;webui 编辑控件随期同步(D8)。</li>
+  <li><b>收</b>(W5):单一 registry 收编 schema 派生 / 兼容表 / watch_fields / 键面守卫(G9/G10/G11/G13,未用条目全部保留)。</li>
+</ul>
+
+<h3>3.2 兼容层设计(硬约束的落点)</h3>
+<p>核心是一个<b>载入规范化单点</b>(下称 <code>normalize_legacy_rule()</code>,规划中的新函数,建设期钉在 W2——W1 无归一需求,R7):config 解析后、<b>schema 校验之前</b>把旧扁平语法规范成引擎唯一可见的新形态(位置钉死:normalize 在校验前,归一后的形态才进校验器)。要点:</p>
+<table>
+  <tr><th style="width:34%">旧形态(生产/测试现场)</th><th>规范化结果</th></tr>
+  <tr><td>条件 <code>- path: [...]</code>(单键 dict 列表)</td><td>叶子节点,整列表包一层隐式 <code>all:</code>(语义 = 现行 <code>base.py:187</code> 的 <code>all(...)</code>)</td></tr>
+  <tr><td>「逗号分组」约定(G4)</td><td><b>不做全局一刀切 any</b>:按条件枚举逐一核对映射表——<code>tags</code>/<code>state</code> 等行内分隔符 = AND、条件组间 = OR(以 <code>conditions.py</code> 现行为准);本期只承诺生产已出现形态,每个条件类型单独写映射测试</td></tr>
+  <tr><td><code>conditions: ''</code>(hhan 规则)</td><td>normalize <b>天然不见</b>:空串经 <code>_strip_none</code>(<code>validation/core.py:106-128</code>)在载入前已整键剔除,与现行「无条件 = 直接过」等价——兼容表特此注记,勿在 normalize 里为空串再建分支</td></tr>
+  <tr><td>动作 <code>- add_tags: [...]</code>(单键 dict)</td><td><code>{type: add_tags, params: [...]}</code>,缺省 <code>on_error: {policy: stop}</code>(= 现行失败即止)</td></tr>
+  <tr><td><code>stop_following_rules_if</code> / <code>ignore_next_action_error</code></td><td><b>不归一、不映射</b>(D1:不做运行时兼容):载入层识别即把该规则转未启用 + warning,原键在配置中原样保留;normalize 只处理仍在服务的 legacy 语法</td></tr>
+</table>
+<div class="aside">防漂移约束:引擎与校验器<b>只认规范化后形态</b>,禁止出现「读 legacy 键」的第二语义分支——避免 G4 的 hr 双语义分歧(<code>conditions.py:160-163</code> 有意分歧)在更大尺度重演。<code>normalize_legacy_rule()</code> 是 legacy 词汇的唯一容身处,配专项守卫测试 + 生产 5 条规则的规范化快照比对。两条附注(R1):① <b>错误定位回映射</b>——校验器报错时看到的已是归一形,报错话术必须把归一形坐标翻回用户写的扁平坐标(如「第 2 个动作」而非归一后的结构路径);② <b>不得改变规则命名</b>——命名复合形 <code>组.规则</code> 是 <code>exec_history</code> 去重键的前半,normalize 只动 conditions/actions 结构,键名原样透传。</div>
+<ul>
+  <li><b>exec_history 兼容</b>:去重键 = <code>规则名:hash</code>(<code>core/state.py:281</code>),hash 输入口径保持现状(spec 序列化原样),重构不改其输入;W4 trace 是<b>新增键面</b>,不迁移既有 exec_history;载入回归测试断言旧 state 文件读入后去重判定不变。</li>
+  <li><b>checking 子段契约</b>:with/without_reference、pending/resume 断点续跑、未知键 fail-fast(26-10-06-0028 拍板)全部原样保留,规范化不动 checking 内部结构。</li>
+</ul>
+
+<h3>3.3 目标形态(YAML 示意,非本次实现;改写自报告 §6.3)</h3>
+<pre><code><span class="cm"># 规则 spec 目标形态; 旧扁平语法载入时规范化为该形态, config.yml 本身不改</span>
+<span class="cm">rule:</span>
+  <span class="cm">trigger: on_torrent_added      # 触发器(已有, 不动)</span>
+  <span class="cm">evaluation: all                 # 引擎参数: 只留 schema 枚举位 (W4), 默认 all=现状,</span>
+  <span class="cm">                                # first_match 不实现 (D4)</span>
+  <span class="cm">conditions:</span>
+    <span class="cm">all:                          # 组合树; 旧单键 dict 列表 → 隐式 all</span>
+      <span class="cm">- path: { regex: ["^R:/Download/PTing/"] }   # 叶子兼容现有 13 条件</span>
+  <span class="cm">actions:</span>
+    <span class="cm">- type: add_tags</span>
+      <span class="cm">params: ["R"]</span>
+      <span class="cm">on_error: { policy: stop }   # 缺省 = 现行「失败即止」; 可 continue / retry(任务级 requeue)</span>
+    <span class="cm">- choose:                     # 动作域分支 (W3, D3 拍板本期做)</span>
+      <span class="cm">- when: {...}</span>
+      <span class="cm">  then: [...]</span>
+      <span class="cm">default: [...]</span>
+<span class="cm"># 两键退场示意: 若规则带 stop_following_rules_if / ignore_next_action_error,</span>
+<span class="cm"># 载入即转 enabled: false + warning(每次载入提示, webui 未启用徽标可见),</span>
+<span class="cm"># 原内容在配置中原样保留供改写; 不做运行时兼容 (D1)</span>
+</code></pre>
+
+<h3>3.4 移出本期原语的设计说明(D6,升格时现成约束)</h3>
+<p>以下两组原语<b>不进本期实施</b>,设计在此存档;升格触发条件:<b>出现真实跨规则协作诉求,或引擎引入并发</b>时立项。</p>
+<ul>
+  <li><b>引擎级 <code>mode</code></b>(同规则同种子重触发策略):设计为规则级可选键,single(默认,= 事件路径现状:任务在跑则忽略重触发)/ restart / queued 三档;restart 需任务取消原语,牵动面最大。</li>
+  <li><b>具名共享状态</b>:规则可读写 state_file 具名键,规则间零通信原语的补位;明确不做级联。升格时的<b>现成约束(原 W4 收口三件套)</b>:① 键命名空间——具名键统一挂在规则名前缀下,防跨规则误写;② 可见性顺序——读写均在单一写线程内串行,写入随 state_save_interval 落盘,读方只见上一落盘态;③ prune 上限——具名键面复用 exec_history 同款保留期 + 上限逐出机制,防止无上限增长(键面进 validate 白名单)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<p>实施总范围已拍板为 <b>W1–W5 全序列(D7)</b>。分期按<b>错误代价</b>排序:先退两键(拖着是误导与事故面)→ 再上错误策略(修最重的行为缺陷)→ 再上编排块(纯增量)→ 最后 registry 化(动面最大,放最后且前四期全绿后开工)。每期独立可交付、可回退。</p>
+<table>
+  <tr><th style="width:8%">期</th><th style="width:26%">主题(修的 G)</th><th>内容要点</th><th style="width:30%">验收判据</th></tr>
+  <tr>
+    <td>W1</td>
+    <td><b>两键退场(升级路线)</b><br>(G1/G5/G12 + 话术)</td>
+    <td>载入层识别两键 → 含键规则转<b>未启用</b>(enabled=false)+ warning(<b>每次载入都提示</b>;话术给出 <code>ignore_next_action_error</code> 的等价新写法 <code>on_error: {policy: continue}</code>);schema/validation 侧<b>保留两键识别</b>(用于升级检测),引擎侧不再消费——删 base.py <code>stop_if</code>·<code>_should_stop</code> 链路与伪动作特判,<code>process</code> 返回值契约收口(引擎显式消费 verdict,删「计算后丢弃」),12 个动作类构造器 <code>ignore_error</code> 参数一并拆除;<code>base.py:280</code> 日志改「本条规则本轮跳过(条件求值出错)」;webui:<code>config_rules.js</code> 死键判断移除 + 未启用徽标/提示面(D8)。改动面 4 处(R2):<code>webui/static/shared/config_rules.js</code>(伪动作判断 :34 及注释 :8/:11/:180/:196)、<code>tests/helpers.py</code> <code>_example_rules_config</code>(3 条规则带 stop 键)、<code>scripts/sim_qb.py:1780</code>、<code>config/schema/__init__.py:166</code> constants 派生件(删 stop_if——<code>test_schema_payload_constants_keys_exact</code> 逐位钉死 12 项会炸,须同步);test_yamls 5 处死键样例与 <code>config_key_surface.txt</code> 按「键面保留识别 + 载入转未启用」新语义改写;<code>rule-system/rules-and-triggers.md</code> 回写(handled 漂移一并)</td>
+    <td>① test_rule_base stop/ignore 相关约 12 处改写为「载入转未启用 + warning 话术含等价写法」断言,全量绿;② <code>dev.run -- config.yml --dry-run</code> 通过且 config.yml 未改动;③ 规则行为与 W1 前逐条等价(现网 5 条规则无两键使用,行为面不受影响);④ webui 规则卡对含键规则显示未启用徽标/升级提示面</td>
+  </tr>
+  <tr>
+    <td>W2</td>
+    <td><b>错误策略</b><br>(G2/G5)</td>
+    <td>动作 options 对象 <code>{type, params, on_error: {policy, retries, backoff}}</code>,默认 <code>policy: stop</code>(= 现状);<code>continue</code> 替代旧布尔;<code>retry</code> 语义 = <b>任务级 requeue</b>(R3):动作失败且 policy=retry 时 <code>_handle_rule</code> <b>不 sleep</b>,返回 REQUEUE 并把下次到期时间按 backoff 推迟,attempt 计数挂 Task(断点续跑同款机制;重启后 attempt 归零可接受)——禁止 run 内 sleep,守黄金法则 3/5(单一写线程);条件求值异常 → verdict:error,本条本轮不命中、不影响他规则,不再有 stop 语义日志;<code>normalize_legacy_rule()</code> 建设期钉在本期落地(R7);webui 加 on_error 控件(D8)</td>
+    <td>① test_actions 新增 on_error 三档 × 失败/异常矩阵,现有 50 例语义不变;② 条件异常单测:断言本规则跳过 + 他规则照常 + 无「停止后续」话术;③ retry 单测:requeue 后到期时间按 backoff 推进、无 run 内 sleep、重启后 attempt 归零不炸;④ 新键全进 <code>validate_config</code> 与 <code>config/schema.py</code>(守卫测试查);⑤ 生产 5 条规则规范化快照比对零差异(normalize 落地金标准)</td>
+  </tr>
+  <tr>
+    <td>W3</td>
+    <td><b>组合树 + choose</b><br>(G4/G6)</td>
+    <td>组合树 <code>all/any/not</code> 递归 + 叶子兼容现有 13 条件;「逗号分组」按 §3.2 映射表在 <code>normalize_legacy_rule()</code> 映射(tags/state 行内分隔符 = AND、组间 = OR,逐条件写测试);hr 双语义分歧维持现状(报告 §02 注释证据,不单边改齐);<code>choose: [{when, then}], default</code> <b>本期做</b>(D3 转正);schema/深度校验/键面同步;webui 加组合树/choose 编辑器(D8)</td>
+    <td>① 组合树求值单测(嵌套/短路/叶子异常路径);② 生产 5 条规则规范化快照比对零差异(旧行为等价金标准);③ choose 分支/default 单测 + test_yamls 样例;④ fail-fast:未知组合键校验报错;⑤ webui 编辑器打开旧规则显示规范化新形态、保存即写新形态(D2)</td>
+  </tr>
+  <tr>
+    <td>W4</td>
+    <td><b>trace + evaluation 枚举位</b><br>(G1 收口/可观测;D6 缩期)</td>
+    <td>per-run trace 按 D5:维度 = <b>(规则 × 种子 hash)</b>,每维度环形保留最近 3–5 条,单条体积上限(条件树明细截断),state_file <b>新键面</b>,复用 exec_history 的 prune 机制;<code>evaluation: all|first_match</code> 只留 schema 枚举位、默认 all、<b>不实现</b> first_match(D4);mode 与具名状态已移出本期(D6,设计说明见 §03.4)</td>
+    <td>① 排障端到端例:从 state 读 trace 能回答「这条规则这次为什么没跑」;② state 体积红线压测:构造极端条件树与高频种子,断言 trace 键面总体积 ≤ <b>1 MiB</b> 红线(截断/逐出生效;红线数字 W4 开工时对照实测 state 体积复核);③ 旧 state 文件载入回归:exec_history 去重判定不变</td>
+  </tr>
+  <tr>
+    <td>W5</td>
+    <td><b>单一 registry 收口</b><br>(G9/G10/G11/G13)</td>
+    <td>条件/动作/块统一注册三元组(类型名 → 执行函数 + schema 声明 + 文档片段);触发器 × 动作兼容表、watch_fields 取值域改从注册表条目声明/派生;schema 与校验从 registry 生成;<b>未用条目全部保留</b>(G13 拍板:其它用户可能在用),registry 化只做派生收口不删条目。导入方向(R6)二选一定案:<b>(a) 推荐</b>——schema 声明留在 config.schema,registry 条目按名引用,派生走延迟访问器(躲 rules→config 导入环,<code>base.py:13</code> 顶层 <code>from ..config import</code>);(b) Field/Plugin 下沉叶子模块。G9 表述修正(R6):原「改 4 处」中 2 处已被现有守卫测试(<code>test_condition_plugins_cover_registry</code>/<code>test_action_plugins_cover_registry</code>)覆盖,W5 实际收口的是<b>深度校验器分发</b>与<b>触发器 × 动作兼容表</b>两处</td>
+    <td>① 演示测试:「新增一个哑动作只改 1 处」;② 深度校验器分发与兼容表改派生后,手写 vs 派生双跑 diff 清零再切换;③ <code>config_key_surface.txt</code> 守卫更新;④ 文档片段派生件与 <code>rule-system/rules-and-triggers.md</code> 一致;⑤ test_config 96 例规则段按派生口径校准后仍绿</td>
+  </tr>
+</table>
+
+<h3>4.1 测试策略(现有测试面的改写/保留)</h3>
+<table>
+  <tr><th style="width:26%">测试面</th><th style="width:10%">例数</th><th>处置</th></tr>
+  <tr><td>test_rule_base</td><td>48</td><td>stop/ignore 相关约 12 处<b>改写</b>(W1:改「载入转未启用 + warning 话术含等价写法」——不再断言校验拒绝;W2:改 on_error 语义),其余保留</td></tr>
+  <tr><td>test_actions</td><td>50</td><td><b>保留</b>(动作本体不动);W1 拆 12 个动作类构造器 <code>ignore_error</code> 参数,相关构造断言同步;W2 叠加 on_error 矩阵</td></tr>
+  <tr><td>test_checking</td><td>75</td><td><b>保留</b>(checking 子段契约不动,compat 层保证);test_yamls 5 处死键样例 W1 按 D1 新语义改写</td></tr>
+  <tr><td>test_trigger_events</td><td>27</td><td><b>保留</b>(原计划的 W4 mode 行为例随 D6 取消)</td></tr>
+  <tr><td>test_rules_core</td><td>9</td><td><b>改写</b>(W1 返回值契约收口直接影响)</td></tr>
+  <tr><td>test_modules_p5</td><td>20</td><td><code>_run_rule</code> 消费点相关<b>改写</b>(W1);W4 增 trace 例(mode 例随 D6 取消)</td></tr>
+  <tr><td>test_config</td><td>96</td><td>规则校验段随键面变化<b>改写</b>(W1 两键识别语义、W3 组合树、W5 派生口径),其余保留</td></tr>
+  <tr><td>test_registry.py</td><td>—</td><td>W1:12 动作类构造器 <code>ignore_error</code> 签名拆除后 <code>create_action</code> 相关断言同步(R2)</td></tr>
+  <tr><td>test_config_schema.py</td><td>—</td><td>W1:constants 守卫 <code>test_schema_payload_constants_keys_exact</code>(12 项逐位钉死)随 stop_if 删除同步;W5:插件覆盖守卫(<code>test_condition_plugins_cover_registry</code>/<code>test_action_plugins_cover_registry</code>)已存在,派生口径变化时校准</td></tr>
+  <tr><td>新增 test_rule_compat</td><td>—</td><td><code>normalize_legacy_rule()</code> 专项(<b>W2 起随层落地</b>,R7):生产 5 条规则快照比对 + 「逗号分组」逐条件映射 + <code>conditions: ''</code> 注记(断言空串被 <code>_strip_none</code> 前置剔除、normalize 不另建分支)+ 错误定位回映射 + 命名复合形 <code>组.规则</code> 透传 + 旧 state 载入回归</td></tr>
+</table>
+<p>每期收尾跑 <code>commands run test.full</code> 并新建基线切片记实测数字;不做 W 期之间的大爆炸合并。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p><b>已全部拍板,结论迁 §06(26-11-01 grilling 轮)</b>;实施总范围拍板(D7)与 webui 同步拍板(D8)、G13 未用条目处置拍板亦在此轮回填 §06。本清单清空。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th style="width:8%">D#</th><th style="width:16%">结论</th><th style="width:14%">日期</th><th>备注(偏离推荐的理由 / 影响的分期)</th></tr>
+  <tr>
+    <td>D1</td>
+    <td><b>两键退场 = 配置升级路线</b></td>
+    <td>26-11-01</td>
+    <td>载入检测到 <code>stop_following_rules_if</code>/<code>ignore_next_action_error</code> → 含键规则转<b>未启用</b>(enabled=false)+ warning(每次载入提示),原规则内容在配置中原样保留供改写;<b>不做运行时兼容</b>(不做 ignore→on_error 自动映射)。注意 <code>ignore_next_action_error</code> 是活键:用了它的外部用户该规则停摆直到改写,warning 话术必须给出等价新写法。配置面前提:本项目已全面转为 webui 配置,升级提示要在 webui 可见(未启用徽标/提示面),不能只靠日志。偏离原推荐「校验直接报错」;影响 W1(语义从删键改为识别+转未启用)、§01/§02/§07</td>
+  </tr>
+  <tr>
+    <td>D2</td>
+    <td><b>旧扁平语法 = 永久并存</b></td>
+    <td>26-11-01</td>
+    <td><code>normalize_legacy_rule()</code> 载入规范化单点;webui 编辑器打开旧规则时显示规范化后的新形态,保存即写新形态;旧形态只在不被触碰的规则里经载入层存活。与原推荐一致;影响 §3.2/W3 验收</td>
+  </tr>
+  <tr>
+    <td>D3</td>
+    <td><b>choose = 本期做</b></td>
+    <td>26-11-01</td>
+    <td>W3 落地 <code>choose: [{when, then}], default</code>,webui 同步出 choose 编辑器(D8)。与原推荐一致</td>
+  </tr>
+  <tr>
+    <td>D4</td>
+    <td><b>evaluation = 只留 schema 枚举位</b></td>
+    <td>26-11-01</td>
+    <td>默认 all,不实现 first_match。与原推荐一致;影响 W4</td>
+  </tr>
+  <tr>
+    <td>D5</td>
+    <td><b>trace 按 (规则×种子 hash) 维度环形</b></td>
+    <td>26-11-01</td>
+    <td>每维度最近 3–5 条,单条体积上限(条件树明细截断),state_file 新键面,复用 prune 机制;验收给 state 体积红线压测(W4 验收含 1 MiB 红线数字)。偏离原推荐「每规则 20 条」——维度更细、条数更少、总量受红线约束</td>
+  </tr>
+  <tr>
+    <td>D6</td>
+    <td><b>mode / 具名状态移出本期</b></td>
+    <td>26-11-01</td>
+    <td>方案保留两者设计说明与升格触发条件(出现真实跨规则协作诉求 / 引擎引入并发时立项,见 §03.4);W4 缩为 trace + evaluation 枚举位。原收口三件套(键命名空间/可见性顺序/prune 上限)转写进设计说明作升格现成约束。偏离原推荐「本期实现 single/queued」;影响 W4/G3/G7</td>
+  </tr>
+  <tr>
+    <td>D7</td>
+    <td><b>实施范围 = W1–W5 全序列</b></td>
+    <td>26-11-01</td>
+    <td>每期独立可交付、可回退;写进 §04 开头。</td>
+  </tr>
+  <tr>
+    <td>D8</td>
+    <td><b>webui 可视化编辑随期同步</b></td>
+    <td>26-11-01</td>
+    <td>W2 加 on_error 控件、W3 加组合树/choose 编辑器、W1 移除 <code>config_rules.js</code> 死键判断 + 升级提示面;webui 是主配置面为前提。影响全部分期改动面</td>
+  </tr>
+  <tr>
+    <td>G13</td>
+    <td><b>未用条目 = 全部保留</b></td>
+    <td>26-11-01</td>
+    <td>其它用户可能在用;registry 化只做派生收口不删条目。影响 W5(原「deprecated 标注或删除」备选作废)</td>
+  </tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th style="width:22%">风险</th><th style="width:34%">触发条件</th><th>处置</th></tr>
+  <tr><td>compat 双语义漂移(G4 hr 分歧重演)</td><td>引擎/校验器出现按 legacy 键分支的代码,或「逗号分组」映射与某条件的既有约定语义不一致</td><td>规范化单点铁律(引擎只认规范化形态)+ test_rule_compat 守卫 + 生产 5 条规则快照比对;「逗号分组」映射按条件枚举逐条核对(以 <code>conditions.py</code> 现行为准),hr 双语义分歧明确维持现状、注释回写</td></tr>
+  <tr><td>升级路线伤及活键用户</td><td>外部用户在用 <code>ignore_next_action_error</code>(活键),D1 转未启用后该规则<b>停摆</b>直到改写</td><td>warning 话术自带等价写法(<code>on_error: {policy: continue}</code>)+ webui 未启用徽标/提示面保证可见性(不只靠日志);下轮可加宽限期(如 N 版内仅告警不转未启用)作为升级路线的退路</td></tr>
+  <tr><td>state 膨胀(trace)</td><td>trace 维度多(规则×种子)且单条含条件树明细</td><td>D5 拍板:每维度环形 3–5 条 + 单条体积上限(明细截断);复用 <code>_prune_exec_history</code> 同款机制(保留期 + 上限逐出单点);W4 验收含 state 体积红线压测(≤ 1 MiB,开工时对照实测复核)</td></tr>
+  <tr><td>返回值契约收口牵连过广</td><td>W1 改 <code>process</code> 契约牵动 test_rule_base(~12)/test_rules_core(9)/test_modules_p5(部分)</td><td>W1 独立成期、改动面收敛在 rules/base + 校验 + 夹具;失败可整期回退;改写断言以「外部可观测行为」为准而非内部返回值</td></tr>
+  <tr><td>registry 派生改 schema 生成引入回归</td><td>W5 把手写 schema/校验改为派生时,口径与现行为有出入</td><td>放最后一期且前四期全绿后开工;派生口径先做双跑对比(手写 vs 派生的校验结果 diff 清零后再切换);<code>config_key_surface.txt</code> 守卫兜底键面变化</td></tr>
+  <tr><td>去重窗口意外重置</td><td>重构无意改变 exec_history 键或 hash 输入</td><td>去重键口径冻结为现状(规则名:hash,输入=现有 spec 序列化);旧 state 载入回归测试进 test_rule_compat;W4 trace 只新增键面(具名状态已随 D6 移出本期)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-0106</span> 初版:基于调研报告 26-11-01-0057(G1–G13 + 8 原语候选)产出重设计方案;设计主轴「承认无链」;compat 硬约束落为载入规范化单点;分期 W1–W5(死语义→错误策略→组合树/choose→引擎参数/状态/trace→registry);待拍板 D1–D6。生产 config.yml 只读键名核对补记:<b>5 条规则</b>(报告记 4,<code>r_rule</code> 现场在列),两死键生产未使用。</li>
+  <li><span class="tag">R1 · 26-11-01-0216</span> 拍板定稿为 R1 改版:grilling 轮 D1-D8 + 红队 R1-R8 全部落稿——两键退场改配置升级路线(载入转未启用+warning,webui 提示面,不做运行时兼容)、choose 转正 W3、evaluation 只留枚举位、trace 按(规则×种子)维度环形 3-5 条+1MiB 体积红线、mode/具名状态移出本期(设计说明存 §03.4)、W5 补导入方向二选一与 G9 表述修正、兼容表 4 处修订(_strip_none 注记/逐条件映射表/校验前定位回映射/命名复合形透传)、W2 retry 改任务级 requeue、normalize 钉 W2、§05 清空迁 §06</li>
+</ul>
+
+</div>
+</body>
+</html>

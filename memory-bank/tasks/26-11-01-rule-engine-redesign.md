@@ -1,0 +1,51 @@
+# 26-11-01-rule-engine-redesign — 规则引擎重设计与重设计方案
+
+**Status:** In Progress
+**Added:** 2026-11-01
+**Updated:** 2026-11-01
+**Summary:** 规则引擎重设计:现状取证(G1-G13 缺口,stop 六档死配置/伪动作异味)→ 成熟方案调研(Drools/OPA/CEL/json-rules-engine/easy-rules/Zapier/ECA/HA,8 原语)→ 调研报告 26-11-01-0057 → 方案 26-11-01-0106(R0→grilling 拍板 D1-D8 + 红队 R1-R8 修订 → R1 定稿);实施 W1-W5 待开工
+**Topics:** rule-engine-redesign
+**Refs:** memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html, memory-bank/plans/26-11-01-0106-plan-rule-engine-redesign.html
+
+## 原始请求
+
+1. 规则引擎重新设计:当前规则引擎感觉不完备,特别是 `stop_following_rules_if` / `ignore_next_action_error` 这种语法有异味。
+2. 调研成熟的解决方案,做一个完备的规则引擎;注意完备不代表复杂。
+3. 流程:先调研写一个报告,然后 grilling 一个方案。
+4. 组织方式:拆解任务后派子智能体分阶段依次实施(防长任务 token 膨胀与进度丢失);主会话只委派与总结,不实施;完成后等提交指令。<!-- wording:allow -->
+
+## 思考过程与决策
+
+四阶段流水(各阶段独立子智能体,主会话只委派):①现状分析——根因:执行模型已演进为「每规则×每种子独立任务+事件分派」,但 stop_following_rules_if(六档死配置,`(handled, stop)` 返回值被 `_run_rule` 丢弃)/ignore_next_action_error(伪动作)/返回值契约仍停留在旧链式模型(缺口 G1-G13,证据见报告 §02);②调研——Drools/OPA/CEL/json-rules-engine/easy-rules/Zapier/ECA/HA 七系拆解,「控制流藏进数据字段」在成熟系统全部是一等配置项;蓝本选 HA automation(场景最同构);③报告 26-11-01-0057 定稿(出厂即 Done);④方案 26-11-01-0106 R0 草稿 → 红队拷打(R1-R8:改动面漏 webui/sim_qb/夹具/schema 派生件、retry 阻塞主循环、trace 维度、registry 导入环、mode/具名状态现网价值≈0)→ grilling 轮用户拍板 D1-D8 → R1 定稿。
+
+**拍板结论(26-11-01,详见计划 §06)**:D1 两键退场走配置升级路线(载入转未启用+warning,不做运行时兼容;webui 为配置面前提);D2 旧扁平语法永久并存(normalize 单点,webui 编辑保存即新形态);D3 choose 本期做;D4 evaluation 只留枚举位;D5 trace 按(规则×种子)维度环形 3-5 条+体积截断;D6 mode/具名状态移出本期(留设计说明+升格条件);D7 本期 W1-W5 全序列;D8 webui 可视化编辑随期同步;G13 未用条目全保留。
+
+## 实现计划
+
+按计划 26-11-01-0106 R1 的 W1-W5 分期实施(每期独立可交付可回退,详细内容要点与验收判据见计划 §04):W1 两键退场(升级路线+R2 四处改动面)→ W2 on_error 错误策略(retry=任务级 requeue)+ normalize_legacy_rule() 落地 → W3 条件组合树+choose+webui 编辑器 → W4 per-run trace(D5 维度)+ evaluation 枚举位 → W5 单一 registry 收口(导入方向推荐 schema 留 config.schema+延迟访问器)。每期收尾跑 `commands run test.full` 并建基线切片。
+
+## 子任务状态表
+
+| 步 | 内容 | 状态 |
+|---|---|---|
+
+| S1 | 现状分析(规则引擎架构+两异味+缺口清单) | Done(2026-11-01) |
+| S2 | 成熟方案调研(七系拆解+原语提炼+反模式) | Done(2026-11-01) |
+| S3 | 调研报告落盘 26-11-01-0057(守卫全绿) | Done(2026-11-01) |
+| S4 | 方案草稿 26-11-01-0106 R0(W1-W5+D1-D6) | Done(2026-11-01) |
+| S5 | 红队 grilling 拷打(R1-R8 修订清单) | Done(2026-11-01) |
+| S6 | 用户 grilling 拍板(D1-D8 共识) | Done(2026-11-01) |
+| S7 | 方案 R1 定稿(kb.bump,守卫全绿) | Done(2026-11-01) |
+| S8 | W1 两键退场(升级路线) | Open |
+| S9 | W2 on_error 错误策略+normalize 落地 | Open |
+| S10 | W3 组合树+choose+webui 编辑器 | Open |
+| S11 | W4 per-run trace+evaluation 枚举位 | Open |
+| S12 | W5 单一 registry 收口 | Open |
+
+## 进度日志
+
+### R0 · 立档 (2026-11-01)
+
+调研与方案轮完成:报告 26-11-01-0057(出厂即 Done)+ 方案 26-11-01-0106(R0→R1 定稿,doc-status Open 待实施);D1-D8 全部拍板;实施 S8-S12 待开工。本轮未动代码,未跑 test.full(无基线切片)。cap 债务 8 项存量已转告(doc.caps 现算为准)。
+
+- 2026-11-01 02:19 调研与方案轮完成: 报告 26-11-01-0057 定稿 + 方案 26-11-01-0106 R1 定稿(D1-D8 拍板), 实施 W1-W5 待开工
