@@ -150,7 +150,7 @@
 | qB WebUI 校验 Host 头 | 经本地代理转发时保留原 Host(`127.0.0.1:<代理端口>`) → `/auth/login` 401(直连同 body 204) | `lib/proxy.py` 统一把 Host 改写成实例的 host:port 再转发 |
 | 本机 loopback 连接失败单次 ~2s | 连无监听端口的 connect 不是瞬时 RST; 托管模式首个 connect() 周期(detect_scheme http/https + login 三连)约 20-40s 才落第一条 ERROR | 断连类用例的等待窗按此放宽; 慢不是挂死 |
 | 热重载命令线 = `PUT /api/config` | 回执带 `changes`(顶层段名)与 `restart_required`; R 级段(data_dir/state_file/fs)提交即被回退旧值并报 restart_required | 触发 L2 重建的最小改动 = 改 `interval`(rules 模块认领段) |
-| 托盘模式 SIGTERM 无效 | graceful 跑壳(进程内 raise_signal)对 CLI rc=0 有效, 对 `--tray` 3/3 不退出(45s+ 仍存活; issue 26-10-31-1030) | 托盘进程收尾只能 `taskkill /F /T`; 托盘用例不验优雅退出 |
+| 托盘模式 SIGTERM 无效(已修) | ~~graceful 跑壳对 `--tray` 3/3 不退出~~ 根因修正: 非「Tk 吞 KeyboardInterrupt」—— 异常跳出 mainloop 后 TrayUi.run 收尾被整段跳过, 进程退出挂在 pystray 非 daemon 线程的 threading._shutdown(见坑档 backend/tray-sigterm-teardown) | 已修(2026-11-01, issue 26-10-31-1030 置 Done): SIGTERM 换装投递 quit 事件与菜单「退出」合流 + run() 收尾挂 finally; 真机复验 3/3 优雅退出 rc=0(数字见 kb.baseline); 托盘用例现在可验优雅退出 |
 | 断连后不自动重连(缺陷在池) | 运行期 qB 断开一次后, 每 main_tick 一条「主循环异常」ERROR(75s 内 39-45 条)且恢复后不回连 —— issue 26-10-31-1029 | RM02-07 记 FAIL; 修复后须真机回归 |
 | `.bak` 只在写盘前已有旧文件时生成 | fresh 目录首次优雅退出只有 state.json, 没有 `.bak`(atomic_write keep_backup 语义) | 要造 `.bak` 需先正常起停**两次** |
 

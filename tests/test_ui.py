@@ -22,6 +22,7 @@
 """
 import logging
 import os
+import signal
 from types import SimpleNamespace
 import sys
 import threading
@@ -363,11 +364,14 @@ def test_run_join_timeout_warns(tmp_path, monkeypatch):
     saved_level = tray_logger.level
     tray_logger.setLevel(logging.INFO)
     tray_logger.addHandler(grab)
+    # issue 26-10-31-1030 起 run() 会换装 SIGTERM handler(进程全局态) —— 进出恢复, 不污染同 worker 后续用例
+    saved_sigterm = signal.getsignal(signal.SIGTERM)
     try:
         rc = ui.run()
     finally:
         tray_logger.removeHandler(grab)
         tray_logger.setLevel(saved_level)
+        signal.signal(signal.SIGTERM, saved_sigterm)
     assert rc == 0, "超时路径不应抛异常, 退出码 0"
     assert joins == [10], "join 预算应为 10s"
     assert ui._manager_thread.is_alive(), "模拟超时: join 返回后线程应仍存活"

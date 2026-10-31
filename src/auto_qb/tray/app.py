@@ -6,6 +6,9 @@
 - manager 线程: manager.run(dry_run, stop_event, pause_event) —— 主循环整体在后台线程,
   仍是任务队列/state_file 的唯一修改者
 - 通知/IPC 线程: 现状不变
+- 信号: SIGTERM 由 run() 换装为「投递 quit 事件」(与托盘菜单「退出」合流, issue 26-10-31-1030);
+  handler 在主线程执行、只向事件队列投递意图, 不碰共享状态 —— cli 注册的 KeyboardInterrupt
+  版 handler 只覆盖托盘启动早期(换装前)窗口, 因为异常路径会跳过 run() 的收尾并挂死进程退出
 跨线程通道唯一: queue.Queue(UI 动作) + Event + 只读快照(status_snapshot/UiLogHandler);
 UI 从不直接跨线程调用控件。
 
@@ -15,6 +18,7 @@ UI 从不直接跨线程调用控件。
 import logging
 import os
 import queue
+import signal
 import threading
 import time
 import webbrowser
@@ -486,10 +490,35 @@ class TrayUi:
 
     # ---------- 编排 ----------
 
+    def _sigterm_to_quit(self, signum, frame):
+        """SIGTERM -> 投递 quit 事件(issue 26-10-31-1030): 与托盘菜单「退出」合流, 走同一条
+        停止编排(root.quit -> mainloop 返回 -> run() 收尾), 不走 KeyboardInterrupt 异常路径。
+
+        为什么不 raise: cli 注册的 KeyboardInterrupt 版 handler 在托盘模式下, 异常从 Tk 回调栈
+        冒出会跳过 run() 里 mainloop 之后的全部收尾(停托盘/停 manager/状态落盘), 而进程退出
+        又挂在 pystray 非 daemon 线程上 —— 实测 70s+ 不退。首个信号后改 SIG_IGN: 收尾期间
+        再到的 SIGTERM 不打断收尾(与 cli 版同口径)。handler 在主线程字节码边界执行,
+        queue.put 线程安全, 不碰任何共享状态 —— 单一写线程纪律不破; Ctrl+C 的
+        KeyboardInterrupt 路径由 run() 的 finally 收尾兜底。
+        """
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        self.events.put(("quit", None))
+
+    def _install_sigterm_quit(self) -> None:
+        """注册 SIGTERM -> quit 事件 handler(须主线程调用); 注册失败静默 —— 与 cli 的
+        _install_sigterm_handler 同口径, Ctrl+C 不受影响。
+        """
+        try:
+            signal.signal(signal.SIGTERM, self._sigterm_to_quit)
+        except (OSError, ValueError):
+            pass
+
     # 豁免(plan 26-10-01-2157 §3 T2.1): 阻塞式真实 Tk mainloop + manager 后台线程完整生命周期
     # (连接 qB/状态落盘/退出预算), 任何替身跑法都只是假编排 —— 只能真窗口验证
+    # (run() 的退出编排与 SIGTERM 换装有 headless 守阵, 见 tests/test_tray.py)
     def run(self) -> int:  # pragma: no cover
         """阻塞运行直至用户退出; 返回进程退出码"""
+        self._install_sigterm_quit()
         self.ipc.start()
         self._manager_thread = threading.Thread(
             target=self.manager.run,
@@ -499,22 +528,29 @@ class TrayUi:
         )
         self._manager_thread.start()
         self.root.after(POLL_MS, self._poll)
-        self.root.mainloop()
-        # mainloop 结束(托盘"退出"/root.quit): 依序停托盘 -> 停主循环(落盘) -> 清理 IPC
-        self.stop_event.set()
-        # 主循环的等待同时响应 stop_event 与命令唤醒两个事件(见 qbmanager._wait_next),
-        # 停止信号按 STOP_POLL_INTERVAL 分段才被察觉; 这里一并唤醒, 让退出立即生效。
-        self.manager.wake()
-        if self._icon is not None:
-            self._icon.stop()
-        if self._manager_thread is not None:
-            # issue 26-09-21-1347: 预算 5s -> 10s(长 qB 调用/大库 tick 可能吃满 5s); 超时仍未退
-            # 只能放弃(daemon 线程随进程终止) —— UI 线程不得补写 state(唯一写者纪律), 但须明示。
-            self._manager_thread.join(timeout=10)
-            if self._manager_thread.is_alive():
-                logger.warning("主循环未在 10s 退出预算内收尾, 本次运行期状态未落盘")
-        self.ipc.stop()
-        logging.getLogger("auto_qb").removeHandler(self.log_handler)
+        try:
+            self.root.mainloop()
+        finally:
+            # mainloop 结束(托盘"退出"/SIGTERM 合流的 quit 事件 -> root.quit; 或异常解开 ——
+            # 托盘模式 Ctrl+C 的 KeyboardInterrupt 会从 Tk 回调栈冒出): 依序停托盘 -> 停主循环
+            # (落盘) -> 清理 IPC。收尾必须 finally 兜底: pystray run_detached 起的线程非 daemon
+            # (_win32.py: threading.Thread 无 daemon 参数), 异常路径若跳过 icon.stop(), 进程退出
+            # 会挂在 threading._shutdown(issue 26-10-31-1030 实证: "Shutting down..." 已打而
+            # 进程 70s+ 不退)。异常本身不吞: 收尾后照常上抛, 交 cli 统一捕获。
+            self.stop_event.set()
+            # 主循环的等待同时响应 stop_event 与命令唤醒两个事件(见 qbmanager._wait_next),
+            # 停止信号按 STOP_POLL_INTERVAL 分段才被察觉; 这里一并唤醒, 让退出立即生效。
+            self.manager.wake()
+            if self._icon is not None:
+                self._icon.stop()
+            if self._manager_thread is not None:
+                # issue 26-09-21-1347: 预算 5s -> 10s(长 qB 调用/大库 tick 可能吃满 5s); 超时仍未退
+                # 只能放弃(daemon 线程随进程终止) —— UI 线程不得补写 state(唯一写者纪律), 但须明示。
+                self._manager_thread.join(timeout=10)
+                if self._manager_thread.is_alive():
+                    logger.warning("主循环未在 10s 退出预算内收尾, 本次运行期状态未落盘")
+            self.ipc.stop()
+            logging.getLogger("auto_qb").removeHandler(self.log_handler)
         return 0
 
 

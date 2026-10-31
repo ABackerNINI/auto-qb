@@ -1,9 +1,11 @@
 """test_tray 测试计划: tray 逻辑缝 (plan 26-10-01-2157 §3 T2.1 / P2-b)
 
 只测 headless 可测的纯逻辑缝 (UiLogHandler / IPC 端口文件协议 / poll 队列消费 / 状态->UI 映射
-/ uptime 格式化 / 日志目录推导 / 动作分派 / run_tray 错误包装)。widget 构建主体
-(_build_window / _card / _build_tray / run) 属真实窗口域, 在 src/auto_qb/tray/app.py 按块
-pragma 豁免 (逐块理由见源码), 不在此伪造 GUI 栈。TrayUi 实例经 __new__ 绕过 __init__ 的
+/ uptime 格式化 / 日志目录推导 / 动作分派 / run() 退出编排与 SIGTERM 换装 / run_tray 错误包装)。
+widget 构建主体
+(_build_window / _card / _build_tray) 属真实窗口域, 在 src/auto_qb/tray/app.py 按块
+pragma 豁免 (逐块理由见源码), 不在此伪造 GUI 栈; run() 的退出编排与 SIGTERM 换装用替身驱动
+(issue 26-10-31-1030, test_ui.py 的 run 打桩先例)。TrayUi 实例经 __new__ 绕过 __init__ 的
 widget 构建, 手工装配最小字段集 (manager 用 tests/helpers.make_manager 的真实 QbManager)。
 ctx.notify 用四公开口替身 (enabled_state/is_enabled/set_enabled) —— 真挂载会启动真实通知
 链路 (conftest 虽拦执行, 但 handler 会话级残留污染), 通知模块自身行为由其专属测试覆盖。
@@ -47,6 +49,10 @@ ctx.notify 用四公开口替身 (enabled_state/is_enabled/set_enabled) —— �
 - test_toggle_autostart_disables_when_enabled: 已启用 -> disable
 - test_toggle_autostart_enables_when_disabled: 未启用 -> enable(config_path)
 - test_toggle_autostart_error_shows_warning: enable 抛 AutoQbError -> 弹窗不外抛
+- test_sigterm_to_quit_enqueues_quit_and_rearms_ignore: SIGTERM handler 本体只投递 quit 事件 + 改 SIG_IGN (不 raise, 不碰共享状态)
+- test_install_sigterm_quit_swallows_registration_failure: signal.signal 注册失败 (OSError) 静默跳过 (与 cli 同口径)
+- test_run_normal_exit_teardowns_and_installs_sigterm_quit: mainloop 正常返回 -> handler 已换装 + 收尾依序全跑 + manager 线程收干净
+- test_run_mainloop_exception_still_teardowns: mainloop 抛 KeyboardInterrupt -> 收尾照跑且异常上抛 (收尾不得被异常跳过)
 - test_run_tray_wraps_generic_init_failure: 初始化任意异常 -> 包成 AutoQbError ("托盘 UI 初始化失败")
 - test_run_tray_reraises_autoqb_error: AutoQbError 原样重抛 (不二次包装)
 - test_trayui_init_sets_appid_before_first_window: TrayUi.__init__ 里 AUMID 设置先于 _build_window (时序钉死, issue 26-10-02-0727)
@@ -59,6 +65,7 @@ import ctypes
 import logging
 import os
 import queue
+import signal
 import socket
 import struct
 import sys
@@ -804,6 +811,111 @@ def test_toggle_autostart_error_shows_warning(monkeypatch, tmp_path):
         assert recorded and "自启注册失败" in recorded[0][1], "AutoQbError -> 弹窗提示不外抛"
     finally:
         _cleanup_tray_handlers()
+
+
+# ============================ SIGTERM 合流与 run() 收尾兜底 (issue 26-10-31-1030) ============================
+
+
+class _IconStopStub:
+    """pystray Icon 替身: 只记录 stop() 调用 (run() 收尾断言用)"""
+    def __init__(self):
+        self.stopped = False
+
+    def stop(self):
+        self.stopped = True
+
+
+class _IpcStub:
+    """ShowIpcServer 替身: 只记录 start/stop 次序 (不绑端口不写文件)"""
+    def __init__(self):
+        self.calls = []
+
+    def start(self):
+        self.calls.append("start")
+
+    def stop(self):
+        self.calls.append("stop")
+
+
+@contextlib.contextmanager
+def _sigterm_handler_saved():
+    """SIGTERM 处置是进程全局态: 触碰它的用例进出恢复, 不污染同 worker 后续用例"""
+    old = signal.getsignal(signal.SIGTERM)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, old)
+
+
+def _make_run_ui(tmp_path, mainloop_body):
+    """装配 run() 可 headless 驱动的最小 TrayUi: 真 manager (run 换桩) + 替身 root/ipc/icon
+
+    manager 线程用真 threading.Thread 跑桩函数 (stop_event 置位即退), join(10) 必然赶得上 ——
+    退出编排的真实次序与线程收尾因此可断言 (test_run_join_timeout_warns 同族打桩)。
+    """
+    mgr = make_manager(str(tmp_path / "state.json"))
+
+    def quick_run(dry_run, stop_event, pause_event):
+        stop_event.wait(timeout=10)
+
+    mgr.run = quick_run
+    ui = _make_tray_ui(mgr)
+    ui.root.mainloop = mainloop_body  # _RootStub 无 mainloop, 实例属性注入
+    ui.ipc = _IpcStub()
+    ui._icon = _IconStopStub()
+    return ui
+
+
+def test_sigterm_to_quit_enqueues_quit_and_rearms_ignore():
+    """handler 本体: 只投递 ("quit", None) 并改 SIG_IGN —— 不 raise 不碰共享状态, 消费端由 poll 用例覆盖"""
+    ui = TrayUi.__new__(TrayUi)
+    ui.events = queue.Queue()
+    with _sigterm_handler_saved():
+        ui._sigterm_to_quit(signal.SIGTERM, None)  # 直调 handler: 验行为, 不依赖真实信号投递
+        assert signal.getsignal(signal.SIGTERM) is signal.SIG_IGN, "首个信号后必须改 SIG_IGN(收尾不被二次打断)"
+    assert ui.events.get_nowait() == ("quit", None), "必须投递 quit 事件, 与托盘菜单「退出」同一条停止路径"
+    assert ui.events.empty(), "handler 除 quit 事件外不得有其它副作用"
+
+
+def test_install_sigterm_quit_swallows_registration_failure(monkeypatch):
+    """signal.signal 注册失败(非主线程/平台不支持)静默跳过 —— 与 cli._install_sigterm_handler 同口径"""
+    def boom(*args, **kwargs):
+        raise OSError("signal only works in main thread")
+
+    monkeypatch.setattr(tray_app.signal, "signal", boom)
+    ui = TrayUi.__new__(TrayUi)
+    ui._install_sigterm_quit()  # 不抛
+
+
+def test_run_normal_exit_teardowns_and_installs_sigterm_quit(tmp_path):
+    """mainloop 正常返回: SIGTERM handler 已换装; 收尾依序全跑, manager 线程收干净, rc=0"""
+    mainline = []
+    ui = _make_run_ui(tmp_path, lambda: mainline.append("mainloop"))
+    with _sigterm_handler_saved():
+        rc = ui.run()
+        assert rc == 0
+        assert signal.getsignal(signal.SIGTERM) == ui._sigterm_to_quit, \
+            "run() 必须换装 SIGTERM -> quit 事件 handler(异常版 handler 会跳过托盘收尾)"
+        assert mainline == ["mainloop"]
+        assert ui.stop_event.is_set(), "收尾必须置 stop_event(manager 侧收尾落盘靠它)"
+        assert ui._icon.stopped, "收尾必须停托盘(pystray 非 daemon 线程, 不停则进程退出挂死)"
+        assert ui.ipc.calls == ["start", "stop"], "IPC 先 start 后 stop"
+        assert not ui._manager_thread.is_alive(), "正常路径 manager 线程必须在 10s 退出预算内收干净"
+
+
+def test_run_mainloop_exception_still_teardowns(tmp_path):
+    """mainloop 抛 KeyboardInterrupt(托盘模式 Ctrl+C 形态): 收尾照跑且异常上抛 —— 不得被异常跳过"""
+    def boom():
+        raise KeyboardInterrupt
+
+    ui = _make_run_ui(tmp_path, boom)
+    with _sigterm_handler_saved():
+        with pytest.raises(KeyboardInterrupt):
+            ui.run()
+        assert ui.stop_event.is_set(), "异常路径收尾仍必须置 stop_event"
+        assert ui._icon.stopped, "异常路径仍必须停托盘(issue 26-10-31-1030: 跳过 = 进程退出挂死)"
+        assert ui.ipc.calls == ["start", "stop"], "异常路径仍必须清理 IPC"
+        assert not ui._manager_thread.is_alive()
 
 
 # ============================ run_tray 错误包装 ============================

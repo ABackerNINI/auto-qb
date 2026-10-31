@@ -38,8 +38,8 @@ pytestmark = [
 WORK = Path(__file__).resolve().parents[1] / ".work" / "rm02"
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 绕 HTTP_PROXY(127.0.0.1 不走代理)
 
-
 # ---------------------------------------------------------------- 基座
+
 
 def case_dir(name: str) -> Path:
     d = WORK / name
@@ -113,8 +113,14 @@ def write_cfg(
     return cfg
 
 
-def start(cfg: Path, case: Path, *, dry_run: bool = False, graceful_after: float | None = None,
-          extra_args: list[str] | None = None) -> app.AppProc:
+def start(
+    cfg: Path,
+    case: Path,
+    *,
+    dry_run: bool = False,
+    graceful_after: float | None = None,
+    extra_args: list[str] | None = None
+) -> app.AppProc:
     """起产品进程(复用 lib/app.py 的跑壳与 AppProc, 只绕过 36596 断言 —— 配置已自查)"""
     if graceful_after is not None:
         cmd = [str(app.PY), str(app._graceful_runner(case)), str(cfg), str(graceful_after)]
@@ -125,8 +131,13 @@ def start(cfg: Path, case: Path, *, dry_run: bool = False, graceful_after: float
     if extra_args:
         cmd.extend(extra_args)
     popen = subprocess.Popen(
-        cmd, cwd=str(app.ROOT), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        cmd,
+        cwd=str(app.ROOT),
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env={
+            **os.environ, "PYTHONIOENCODING": "utf-8"
+        },
     )
     return app.AppProc(popen, case, cfg)
 
@@ -152,7 +163,8 @@ def records_in(case: Path, t0: float, t1: float) -> list[tuple[float, str, str]]
 
 def web_req(port: int, method: str, path: str, body: dict | None = None) -> dict:
     req = urllib.request.Request(
-        f"http://127.0.0.1:{port}{path}", method=method,
+        f"http://127.0.0.1:{port}{path}",
+        method=method,
         data=json.dumps(body).encode("utf-8") if body is not None else None,
     )
     if body is not None:
@@ -175,6 +187,7 @@ def sync_gaps(proxy: TcpProxy, window: float, skip: int = 1, since: float | None
 
 
 # ---------------------------------------------------------------- RM02-01
+
 
 def test_rm02_01_interval_cadence():
     """[RM02-01] interval 真节拍: 同步线请求周期与 sync_interval 一致, 无死段无空转
@@ -212,6 +225,7 @@ def test_rm02_01_interval_cadence():
 
 
 # ---------------------------------------------------------------- RM02-02
+
 
 def test_rm02_02_graceful_exit_saves_state():
     """[RM02-02] 优雅退出落盘: state.json 退出即写 + 锁 meta 清干净; 红验: dry-run 必须不写
@@ -261,6 +275,7 @@ def test_rm02_02_graceful_exit_saves_state():
 
 
 # ---------------------------------------------------------------- RM02-03
+
 
 def test_rm02_03_flush_window():
     """[RM02-03] 非优雅终止丢失窗口 <= state_save_interval; 红验: interval=0 必须不中途写盘
@@ -321,6 +336,7 @@ def test_rm02_03_flush_window():
 
 
 # ---------------------------------------------------------------- RM02-04
+
 
 def test_rm02_04_hot_reload_l0_and_rgate():
     """[RM02-04] 热重载: L0 键(main_tick/sync_interval)即时生效 + R 闸(data_dir)拒绝
@@ -384,6 +400,7 @@ def test_rm02_04_hot_reload_l0_and_rgate():
 
 # ---------------------------------------------------------------- RM02-05
 
+
 def test_rm02_05_queue_rebuilt_idempotent():
     """[RM02-05] queue_rebuilt 相位: 连续两次 L2 重建, 全局任务不重不丢
 
@@ -435,12 +452,13 @@ def test_rm02_05_queue_rebuilt_idempotent():
 
 # ---------------------------------------------------------------- RM02-06
 
+
 def test_rm02_06_first_connect_fail():
     """[RM02-06] 连不上 qB·首连失败: 非托管 fail-fast 退出码 1 / 托管重试节流不刷屏
 
     前置: 配置指向无监听的空端口(39000-39999 探空, 不是任何 qB 实例); 不起真实 qB 连接。
-          托管小节经 --tray 起常驻进程(Windows 上 SIGTERM 对 Tk 主循环无效 —— 本轮实测,
-          托管进程不验优雅退出, 收尾 taskkill /F /T)。
+          托管小节经 --tray 起常驻进程(本用例只验重试节流不验优雅退出, 收尾 taskkill /F /T;
+          SIGTERM 优雅退出已由 issue 26-10-31-1030 修复并单独验证, 不在本用例验证面)。
     副作用: 无(非托管进程自然退出; 托管进程被强杀)。
     回滚: 删用例目录。
     失败判据: 非托管退出码 != 1 或 stderr 带堆栈或缺「无法连接 qBittorrent」; 托管模式
@@ -485,6 +503,7 @@ def test_rm02_06_first_connect_fail():
 
 
 # ---------------------------------------------------------------- RM02-07
+
 
 def test_rm02_07_disconnect_throttle_and_backoff():
     """[RM02-07] 运行期断连: 失败日志节流 + 重连退避(不逐拍) + 恢复自动接上(红验/L3)
@@ -532,8 +551,10 @@ def test_rm02_07_disconnect_throttle_and_backoff():
         # ---- 恢复: 60s 内应自动回连(INFO 收尾), 同步线恢复
         px.restore()
         ok = p.wait_log("已重新连接 qBittorrent", 60)
-        assert ok, (f"恢复代理后 60s 内未自动回连(无「已重新连接 qBittorrent」INFO 收尾); "
-                    f"断开窗口日志: {[r[2][:110] for r in bad_lv[:6]]}; 此后日志尾部:\n{p.log()[-1200:]}")
+        assert ok, (
+            f"恢复代理后 60s 内未自动回连(无「已重新连接 qBittorrent」INFO 收尾); "
+            f"断开窗口日志: {[r[2][:110] for r in bad_lv[:6]]}; 此后日志尾部:\n{p.log()[-1200:]}"
+        )
         n0 = len(px.requests())
         assert px.wait_requests(n0 + 2, 15), "回连 INFO 有了但同步线请求没恢复"
     finally:
@@ -544,6 +565,7 @@ def test_rm02_07_disconnect_throttle_and_backoff():
 
 
 # ---------------------------------------------------------------- RM02-08
+
 
 def test_rm02_08_state_corruption_recovery():
     """[RM02-08] state 损坏恢复: .bak 回退 + 自愈写回 + 孤儿 tmp 清理

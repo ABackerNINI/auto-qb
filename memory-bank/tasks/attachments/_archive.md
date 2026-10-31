@@ -33,9 +33,10 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (255)
+## Done (256)
 
 - [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
+- [26-11-01-backend-tray-sigterm-quit](../26-11-01-backend-tray-sigterm-quit.md) 托盘模式 SIGTERM 优雅退出: handler 换装 quit 事件合流 + run() 收尾挂 finally 兜底(issue 26-10-31-1030)
 - [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
 - [26-10-11-webui-drawer-refactor](../26-10-11-webui-drawer-refactor.md) 种子详情面板重构(字符串 DOM 变体 → Vue 面板)
 - [26-10-31-memory-bank-doc-guard-filename-scope-fix](../26-10-31-memory-bank-doc-guard-filename-scope-fix.md) 新增面守卫圈面改文件名 stamp 前缀: 堵缺 doc-added 手写新件逃逸洞 (RM02-RM10 事故)

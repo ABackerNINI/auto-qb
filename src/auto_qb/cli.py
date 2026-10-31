@@ -51,6 +51,9 @@ def _install_sigterm_handler() -> None:
     SIGTERM 默认处置直接杀进程, 主循环 finally 的停 WEB/HR -> 状态落盘 -> 放锁全不走,
     运行态丢失上界 = state_save_interval(默认 120s)。handler 在主线程执行, 抛出的
     KeyboardInterrupt 从主循环栈冒出, 写点全在主循环线程, 不破单一写线程红线。
+    托盘模式例外: KeyboardInterrupt 从 Tk mainloop 冒出会跳过 TrayUi.run 的收尾编排, 进程
+    退出又挂在 pystray 非 daemon 线程上(issue 26-10-31-1030) —— TrayUi.run 换装为「投递 quit
+    事件」的 handler, 与托盘菜单「退出」合流; 本 handler 只覆盖托盘启动早期(换装前)的窗口。
     注册失败(非主线程 / 平台不支持)静默跳过 —— 与改动前行为一致, Ctrl+C 不受影响。
     """
     try:
@@ -137,7 +140,8 @@ def main():
     ):
         parser.error("--hr-confirm-empty 与其它 HR 模式互斥(它本身是写操作, 单独执行)")
 
-    # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(所有模式一致; KeyboardInterrupt 统一在下面捕获)
+    # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(非托盘模式经 KeyboardInterrupt 在下面捕获;
+    # 托盘模式由 TrayUi.run 换装 quit 事件 handler —— 异常路径跳过托盘收尾会挂死进程退出, issue 26-10-31-1030)
     _install_sigterm_handler()
 
     manager = None

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-1030">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="real-machine-rm02">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-01-backend-tray-sigterm-quit.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出">
 <meta name="issue-summary" content="RM02 轮实测: graceful 跑壳 raise_signal(SIGTERM) 对 CLI 模式有效、对 --tray 模式 3/3 无效(45s+ 后进程仍存活), 与 cli.py「所有模式一致」注释相悖">
 <title>托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1030-bug-tray-sigterm-ignored</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 10:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tray</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,25 @@ trial 2: still alive 70s after start (SIGTERM@25s 无效)
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 10:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 01:05 — 认领（用户指派「认领并修复」），状态 <strong>Open → In Progress</strong>。复验：`26-11-01 00:58` 仍复现（独立复验: 同 graceful 跑壳 SIGTERM@25s, 进程 70s 不退）。复验<b>修正了根因认知</b>: KeyboardInterrupt 并未被 Tk 回调层吞掉 —— 产品日志已见 `Shutting down...`（cli 捕获处）, 真正断点是 KeyboardInterrupt 把 <code>TrayUi.run()</code> mainloop 之后的收尾编排（停托盘/停 manager/清 IPC）整段跳过, 而 pystray <code>run_detached</code> 线程非 daemon（<code>pystray/_win32.py:130</code>）, 进程退出挂在 threading._shutdown —— 纯 tkinter 最小实验亦证 after 回调里的 KeyboardInterrupt 能从 mainloop 传播出来。</li>
+      <li>2026-11-01 01:23 — 修复完成，状态 <strong>In Progress → Done</strong>（修法/验证见「修复后补充」; 档案 memory-bank/tasks/26-11-01-backend-tray-sigterm-quit.md; 全量与真机数字见 kb.baseline 26-11-01-0119）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：<code>26-11-01 00:58</code> 仍复现(独立复验: 同 graceful 跑壳 SIGTERM@25s, 70s 不退; 根因认知修正见状态日志与「修复后补充」)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(2026-11-01, 档案 <code>memory-bank/tasks/26-11-01-backend-tray-sigterm-quit.md</code>):</p>
+    <ul>
+      <li><strong>根因修正</strong>: KeyboardInterrupt 并未被 Tk 吞 —— 复验日志已见 cli 捕获点 <code>Shutting down...</code>, 纯 tkinter 最小实验亦证 after 回调里的 KeyboardInterrupt 能从 mainloop 传播。真断点: 异常把 <code>TrayUi.run()</code> mainloop 之后的收尾编排(停托盘/停 manager/清 IPC)整段跳过, 而进程退出挂在 pystray <code>run_detached</code> 非 daemon 线程(<code>pystray/_win32.py:130</code>)的 threading._shutdown 上(daemon 的 manager 线程还在继续重试连接)。</li>
+      <li><strong>修法</strong>(采纳建议方向 a/b 合流 + 补一档): ①tray 模式 SIGTERM handler 换装为「投递 quit 事件」(<code>TrayUi._sigterm_to_quit</code>/<code>_install_sigterm_quit</code>, <code>run()</code> 开头换装, 首信号后 SIG_IGN) —— 与托盘菜单「退出」同一条停止编排; ②<code>run()</code> 收尾移入 finally —— Ctrl+C 等异常路径也保证收尾后上抛(关的是「异常跳过收尾」这一类)。§05 的根因与 §06 的前提「被吞」描述按复验证据改道, 建议方向本身被采纳。</li>
+      <li><code>cli.py</code>「所有模式一致」注释如实化(非托盘经 KeyboardInterrupt / 托盘由 TrayUi 换装交接)。</li>
+    </ul>
+    <p><strong>验证方式</strong>:</p>
+    <ul>
+      <li>headless 守阵 4 条(<code>tests/test_tray.py</code>): handler 本体只投递 quit 事件+SIG_IGN / 注册失败静默 / run 正常退出编排含换装断言 / run 异常路径收尾; 红绿双验(raise 突变、finally 退化突变各命中对应守阵后精确还原)。</li>
+      <li>真机回归: graceful 跑壳 SIGTERM@25s 对 <code>--tray</code> 3/3 于 27.0s 退出 rc=0, 无「主循环未在 10s 退出预算内收尾」WARNING, ui.port 清理, stderr 无堆栈(修复前同法 3/3 观测 70s 不退)。qB 两实例当时不在线, 与 RM02-06 的 dead-port 等价(本件证据已声明 qB 无关)。</li>
+      <li>托盘菜单「退出」与 SIGTERM 现为同一代码路径(quit 事件); 菜单点击本体属人工验收面。</li>
+      <li>全量测试数字: 见 kb.baseline(26-11-01-0119-tray-sigterm-quit), 不在本报告手抄。</li>
+    </ul>
   </section>
 
   <footer>
