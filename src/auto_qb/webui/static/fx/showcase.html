@@ -24,6 +24,13 @@
         消费 fx 供给面令牌(neon 辉光 / glass 毛玻璃 / crisp 纯平, 页内样式不动库);
         对比区三栏各加一个静态风格签名元素 + 迷你毛玻璃面板改「glass 半透磨砂 /
         neon·crisp 不透明纯面」, 静态截图三栏两两可辨。
+  S4 复验二修(用户反馈: 切档无感 + D7-3 全页闪烁): (1) chrome 反应增强 --
+        neon 双圈辉光扩到页头标题/卡容器, glass 操作条加高反差后衬色晕条纹
+        (.ops-halo, blur 才有东西可磨), 每张卡样例容器加消费供给面的 accent
+        顶线(.stage::before), 状态条/lede 文案讲透「改什么/在哪看」;
+        (2) VT 范围收敛 -- :root 关 view-transition-name 默认参与, D7-3 页签
+        容器 / D2-6 触发钮+面板 / D6-3 队列 toast 逐条独立命名, 过渡只发生在
+        演示区, 页面其余区域(循环演示)不进快照不被冻结。
 -->
 <link rel="stylesheet" href="../shared/fx/fx.css">
 <link rel="stylesheet" href="../shared/fx/fx-presets.css">
@@ -106,38 +113,109 @@ h1 { font-size: 28px; line-height: 1.2; font-weight: 600; margin: 8px 0 6px; }
 
 /* ---- S4 复验补: 当前 preset 状态条(切换器旁, 切档即更新) ---- */
 #preset-status {
-  display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 60ch;
+  display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; max-width: 78ch;
   padding: 3px 10px; border: 1px solid var(--hair); border-radius: 5px;
   background: var(--card-deep); font-size: 12px; color: var(--dim); line-height: 1.5;
 }
 #preset-status .ps-name { font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em; color: var(--accent-ink); flex: none; }
 
-/* ---- S4 复验补: 页面 chrome 对 preset 的全局可见反应 ----
+/* ---- S4 复验二修: 页面 chrome 对 preset 的全局可见反应 ----
+ * F3 首版人眼无感的根因(Playwright 四档全页两两像素差实测): 反应面只有操作条
+ * 一圈 12px/45% 淡辉光 + 1px 描边微变色 + h2 文字阴影, 对齐区域比较下页头标题/
+ * 卡片样例区像素差为 0% -- 幅度在感知阈值之下。二修三件事:
+ *   1) neon 辉光提亮加大(双圈阴影, 页头标题常亮); glass 给操作条加高反差
+ *      后衬色晕条纹(blur 才有东西可磨, F3 教训); 卡片样例容器统一加消费
+ *      供给面的 accent 顶线(档档可辨, 见下方 .stage::before);
+ *   2) 反应面从「操作条一圈」扩到页头标题/分区标题/全部卡容器;
+ *   3) 状态条文案讲透「改什么/在哪看」(见脚本 PRESET_INFO)。
  * 页内样式按 <html data-fx-preset> 作用域消费 fx 供给面令牌(glow/blur/sheen),
  * 不动 fx 库; 基线(无属性)不命中任何块 = 兜底令牌的纯平观感 -- 与 crisp 接近
  * 但时长/曲线档不同(fx.css :root vs crisp 块), 见状态条文案。 */
-/* neon: 操作条带辉光, 分区标题微发光, 卡片描边转 accent */
-html[data-fx-preset="neon"] .ops {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
-  box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent);
+/* 操作条容器 + glass 档毛玻璃可见性后衬:
+ * blur 只对「背后的内容」生效, 纯平深底上 blur(10px) 与 none 视觉零差 --
+ * halo 常在 DOM 但默认 opacity 0(非 glass 档零观感影响), glass 档显形:
+ * 被磨砂盖住的部分被磨匀, 露出条外的部分保持锐利, 一眼可辨磨砂边界。 */
+.ops-wrap { position: relative; }
+.ops-halo {
+  position: absolute; inset: -7px -4px; border-radius: 9px; pointer-events: none;
+  opacity: 0;
+  background:
+    repeating-linear-gradient(115deg, rgba(228, 234, 239, 0.20) 0 12px, transparent 12px 30px),
+    radial-gradient(420px 150px at 15% 25%, rgba(109, 179, 201, 0.5), transparent 70%),
+    radial-gradient(360px 140px at 52% 85%, rgba(226, 168, 110, 0.42), transparent 70%),
+    radial-gradient(460px 160px at 86% 30%, rgba(143, 208, 224, 0.48), transparent 70%);
 }
-html[data-fx-preset="neon"] section > h2 { text-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent); }
-html[data-fx-preset="neon"] .card { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair-soft)); }
-/* glass: 操作条/导出盒毛玻璃化(blur 消费 --fx-blur), 顶部高光线与描边消费 --fx-sheen-c;
- * 卡区容器半透(blur 大面积上 40 张卡会踩 PERF-01, 卡面只做半透不做 backdrop) */
+.ops { position: relative; }
+html[data-fx-preset="glass"] .ops-halo { opacity: 1; }
+/* neon: 辉光开 -- 操作条双圈辉光, 页头标题/分区标题常亮, 卡容器描边转 accent */
+html[data-fx-preset="neon"] .ops {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--hair));
+  box-shadow: 0 0 var(--fx-glow, 0px) color-mix(in srgb, var(--accent-ink) 40%, transparent),
+              0 0 calc(var(--fx-glow, 0px) * 3) color-mix(in srgb, var(--accent-ink) 25%, transparent);
+}
+html[data-fx-preset="neon"] h1 {
+  text-shadow: 0 0 calc(var(--fx-glow, 0px) * 1.2) color-mix(in srgb, var(--accent-ink) 70%, transparent),
+               0 0 calc(var(--fx-glow, 0px) * 3) color-mix(in srgb, var(--accent) 45%, transparent);
+}
+html[data-fx-preset="neon"] section > h2 {
+  text-shadow: 0 0 var(--fx-glow, 0px) color-mix(in srgb, var(--accent-ink) 60%, transparent);
+  border-top-color: color-mix(in srgb, var(--accent) 45%, var(--hair));
+}
+html[data-fx-preset="neon"] .card { border-color: color-mix(in srgb, var(--accent) 55%, var(--hair-soft)); }
+html[data-fx-preset="neon"] .ctl.on {
+  box-shadow: 0 0 var(--fx-glow, 0px) color-mix(in srgb, var(--accent-ink) 65%, transparent),
+              0 0 calc(var(--fx-glow, 0px) * 2.5) color-mix(in srgb, var(--accent-ink) 35%, transparent);
+}
+/* glass: 操作条/状态条/导出盒毛玻璃化(blur 消费 --fx-blur, 后衬见 .ops-halo),
+ * 顶部高光线与描边消费 --fx-sheen-c; 卡区容器半透(blur 大面积上 40 张卡会踩
+ * PERF-01, 卡面只做半透不做 backdrop) */
 html[data-fx-preset="glass"] .ops,
+html[data-fx-preset="glass"] #preset-status,
 html[data-fx-preset="glass"] .export-box {
-  background: color-mix(in srgb, var(--card-deep) 72%, transparent);
+  background: color-mix(in srgb, var(--card-deep) 68%, transparent);
   backdrop-filter: blur(var(--fx-blur, 0px));
-  border-color: color-mix(in srgb, var(--fx-sheen-c) 45%, var(--hair));
+  border-color: color-mix(in srgb, var(--fx-sheen-c) 60%, var(--hair));
   box-shadow: inset 0 1px 0 0 var(--fx-sheen-c);
 }
-html[data-fx-preset="glass"] section > h2 { border-top-color: var(--fx-sheen-c); }
+html[data-fx-preset="glass"] section > h2 { border-top-color: color-mix(in srgb, var(--fx-sheen-c) 75%, transparent); }
 html[data-fx-preset="glass"] .card { background: color-mix(in srgb, var(--card) 84%, transparent); }
 html[data-fx-preset="glass"] .stage { background: color-mix(in srgb, var(--card-deep) 84%, transparent); }
 /* crisp: 显式纯平(供给面全关; 显式声明仅作对照可读, 值与兜底一致) */
 html[data-fx-preset="crisp"] .ops,
 html[data-fx-preset="crisp"] .card { box-shadow: none; backdrop-filter: none; }
+
+/* ---- 每张卡样例容器的 accent 顶线: 「所有组件都响应 preset」的最小兑现 ----
+ * 消费供给面的静态元素, 不 hover 不点击即随档变化:
+ * neon = 发光粗线(glow 供给开) / glass = 半透高光线(sheen 供给开) /
+ * crisp = 1px 纯平细线 / 基线 = 弱 accent 线(兜底供给面关, 只剩静态底色)。
+ * 只加 ::before 装饰层, 不碰各卡自身演示动效; 样例内无依赖远祖包含块的
+ * 绝对定位元素, .stage 加 position:relative 不改任何样例的定位行为。 */
+.stage { position: relative; }
+.stage::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  border-radius: 7px 7px 0 0;
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+html[data-fx-preset="neon"] .stage::before {
+  height: 3px;
+  background: var(--accent-ink);
+  box-shadow: 0 0 var(--fx-glow, 0px) color-mix(in srgb, var(--accent-ink) 60%, transparent),
+              0 0 calc(var(--fx-glow, 0px) * 2) color-mix(in srgb, var(--accent-ink) 35%, transparent);
+}
+html[data-fx-preset="glass"] .stage::before {
+  height: 3px;
+  background: color-mix(in srgb, var(--fx-sheen-c) 85%, transparent);
+}
+html[data-fx-preset="crisp"] .stage::before { height: 1px; background: var(--faint); border-radius: 0; }
+
+/* ---- View Transitions 范围收敛(S4 复验二修) ----
+ * 默认 VT 对整页 root 做快照替换: 过渡的约 250ms 里整页被旧快照盖住, 循环
+ * 演示等持续动画全部冻结 -- 感知为「点页签全页闪一下」。root 关掉默认参与
+ * (html 不进快照), 快照只覆盖显式打了 view-transition-name 的演示区(D7-3
+ * 页签容器 / D2-6 触发钮+面板 / D6-3 队列 toast 逐条), 页面其余区域保持实时
+ * 渲染; 时长走 UA 默认约 250ms 交叉淡化(<=400ms 口径), ::view-transition
+ * 覆盖层随过渡结束自动拆除, 无伪元素残留。 */
+:root { view-transition-name: none; }
 
 /* ---- 分区与卡片 ---- */
 section { margin: 0 0 54px; }
@@ -689,7 +767,8 @@ footer .audit-line { color: var(--dim); }
 <header>
   <div class="kicker">FX SHOWCASE · flux 动效皮肤 · S3</div>
   <h1>动效候选挑选台</h1>
-  <p class="lede">两层变体模型: 风格层(<code>&lt;html data-fx-preset&gt;</code>, 整套令牌配方一键切换) × 组件层(<code>data-fx</code> / <code>data-fx-variant</code>, 单组件行为变体)。顶部「三套风格对比区」固定三档并排展示各 preset 真实气质(含供给面开/关); 下方每个候选一张可交互样例卡 -- 样例即真实组件, 标注「动什么属性 / 时长 / JS 依赖 / RM 降级 / 来源」, 供给门控候选(glow/sheen 类)的演示已强制补供并挂 supply 标注说明各档真实表现。勾选「选定」后底部导出清单交回 S4 人工挑选步。候选口径: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html §05, 「候选不淘汰、只标注」。</p>
+  <p class="lede">两层变体模型: 风格层(<code>&lt;html data-fx-preset&gt;</code>, 整套令牌配方一键切换) × 组件层(<code>data-fx</code> / <code>data-fx-variant</code>, 单组件行为变体)。顶部「三套风格对比区」固定三档并排展示各 preset 真实气质(含供给面开/关); 下方每个候选一张可交互样例卡 -- 样例即真实组件, 标注「动什么属性 / 时长 / JS 依赖 / RM 降级 / 来源」, 供给门控候选(glow/sheen 类)的演示已强制补供并挂 supply 标注说明各档真实表现。勾选「选定」后底部导出清单交回 S4 人工挑选步。候选口径: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html §05, 「候选不淘汰、只标注」。切档可见性: 页面 chrome(操作条辉光/毛玻璃、页头标题、卡容器描边)与每张卡样例容器的 accent 顶线都消费供给面令牌, 四档静态即辨; 动效差异(时长/曲线/弹簧)用对比区「同时演示」同帧对比或「慢放 3x」看。</p>
+  <div class="ops-wrap"><i class="ops-halo" aria-hidden="true"></i>
   <div class="ops">
     <div class="grp" id="preset-grp">
       <span class="grp-label">风格层 preset</span>
@@ -708,6 +787,7 @@ footer .audit-line { color: var(--dim); }
       <span class="grp-label">挂载器</span>
       <button class="ctl" type="button" id="btn-audit">audit</button>
     </div>
+  </div>
   </div>
   <nav class="sec-nav" id="sec-nav"></nav>
 </header>
@@ -1165,14 +1245,14 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
       sample: ""
     },
     {
-      id: "D7-3", sec: "d7", name: "View Transitions 全接管(推荐主候选)", fx: null, demo: "vt", warn: "",
+      id: "D7-3", sec: "d7", name: "View Transitions 页签切换(推荐主候选)", fx: null, demo: "vt", warn: "",
       meta: {
-        attr: "浏览器合成(整页快照交叉)",
-        dur: "250-300ms(浏览器默认; transition 期间 UI 不响应指针 -- 必须短)",
+        attr: "浏览器合成(演示区快照交叉)",
+        dur: "约 250ms(浏览器默认; 过渡覆盖层存在期间 UI 不响应指针 -- 必须短)",
         js: "AQB_FX.viewTransition(update) 一行探测, 不支持 = 直接执行更新(零分支)",
         rm: "不支持/RM: 直切",
         src: "chrome.dev view-transitions + css-tricks 实践",
-        states: "切换 = 整页快照交叉淡化(demo 页面上整页可感知, 属预期)"
+        states: "切换 = 页签容器快照交叉淡化; 快照范围收敛在演示区(root 关默认参与, S4 复验修: 默认整页快照会把循环演示冻结一瞬, 感知为全页闪烁)"
       },
       sample: ""
     },
@@ -1270,7 +1350,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
         js: "AQB_FX.viewTransition 一行探测, 不支持 = 普通打开(零分支)",
         rm: "不支持/RM: 普通打开(Chrome 对 RM 自动跳过 VT 动画)",
         src: "chrome.dev view-transitions",
-        states: "打开 = 触发钮与面板打 view-transition-name, 自动缩放飞行"
+        states: "打开 = 触发钮与面板打 view-transition-name, 自动缩放飞行; 快照范围收敛在这两个元素(root 关默认参与, 页面其余区域不进快照)"
       },
       sample: ""
     },
@@ -1466,7 +1546,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
         js: "AQB_FX.viewTransition 包插入/移除; 不支持 = 瞬时重排(零分支)",
         rm: "瞬时重排(Chrome 对 RM 自动跳过 VT 动画)",
         src: "chrome.dev view-transitions + FLIP 惯例(aerotwist)",
-        states: "新条推入 = 旧条平滑上移; 每次演示推一条"
+        states: "新条推入 = 旧条平滑上移; 每次演示推一条。快照范围收敛: 每条 toast 打独立 view-transition-name(root 关默认参与, 页面其余区域不进快照)"
       },
       sample: ""
     },
@@ -1507,14 +1587,18 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
   var PRESET_KEY = "fxsc.preset";
   var PICKS_KEY = "fxsc.picks";
 
-  /* 四档状态条文案(S4 复验补): 基线 = 未设属性, 走 fx.css :root 兜底令牌, 供给面
-   * 全关 -- 观感与 crisp 接近但时长/曲线档不同(250ms 系 vs 240ms 系), 文案必须
-   * 讲清这点, 避免误读「基线 = crisp」。 */
+  /* 四档状态条文案(S4 复验二修): 前两句为共享的「改什么/在哪看」讲透段 --
+   * F3 首版只有档位一句话, 用户感知不到切档改了什么; 二修明确指出反应位置
+   * (页面 chrome + 卡片样例顶线)与动效差的观察口(对比区同演/慢放)。第三句
+   * 按档给本档特征; 基线 = 未设属性, 走 fx.css :root 兜底令牌, 供给面全关 --
+   * 观感与 crisp 接近但时长/曲线档不同(250ms 系 vs 240ms 系), 文案必须讲清,
+   * 避免误读「基线 = crisp」。short 供切档 toast(单行口径)。 */
+  var PRESET_HOWTO = "改什么: 全页时长/曲线/弹簧配方 + 装饰供给面(辉光/毛玻璃/高光)开或关。在哪看: 页面 chrome 与卡片样例顶线随档变化; 动效时长差用对比区「同时演示/慢放 3x」看";
   var PRESET_INFO = {
-    "": { name: "基线", desc: " -- 未设风格, 兜底令牌: 无装饰, 观感接近 crisp 但曲线/时长档不同, 作三档共同参照" },
-    neon: { name: "neon", desc: " -- 发光与强调, 视觉最热烈: 辉光开启, 弹簧过冲最强" },
-    glass: { name: "glass", desc: " -- 毛玻璃与柔曲线: 模糊开启, 面板半透, 曲线最柔" },
-    crisp: { name: "crisp", desc: " -- 纯净克制零装饰: 供给面全关, 只留最快时序" }
+    "": { name: "基线", desc: PRESET_HOWTO + "。本档: 未设属性的兜底令牌 -- 供给面同样全关, 与 crisp 像是同一档(差异在时序档: 250ms 系 vs 240ms 系), 供三档共同参照", short: "兜底令牌: 供给面全关, 与 crisp 观感接近(差异在时序档)" },
+    neon: { name: "neon", desc: PRESET_HOWTO + "。本档: 辉光开 -- 操作条/页头标题/卡顶线常亮发光, 弹簧过冲最强", short: "辉光开: 操作条/标题/卡顶线常亮发光, 弹簧最强" },
+    glass: { name: "glass", desc: PRESET_HOWTO + "。本档: 毛玻璃开 -- 操作条背后色晕条纹被磨砂, 卡面半透, 曲线最柔", short: "毛玻璃开: 操作条磨砂(背后色晕被磨匀), 卡面半透" },
+    crisp: { name: "crisp", desc: PRESET_HOWTO + "。本档: 供给面显式全关, 只剩纯平细线 -- 与基线像是因为基线兜底本就无装饰, 差异只在时序档(240/60ms 系 vs 250/80ms 系)", short: "供给面全关: 纯平细线, 与基线像(差异在时序档)" }
   };
   var cards = [];            /* 渲染后的卡片运行时对象 */
   var currentPreset = "";
@@ -1597,6 +1681,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     wrap.appendChild(row);
     wrap.appendChild(panel);
     panel.textContent = texts[0];
+    if (mode === "vt") wrap.style.viewTransitionName = "fx-tabs-vt"; /* VT 范围收敛: 只快照本演示区(html root 已关默认参与) */
 
     function setActive(i) {
       btns[cur].classList.remove("active");
@@ -1970,6 +2055,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
       life = 2600;
       t.className = "tst";
       tstSeq++;
+      t.style.viewTransitionName = "tst-q-" + tstSeq; /* VT 范围收敛: 逐条独立命名, 推入/让位走元素级 morph(html root 已关默认参与) */
       t.innerHTML = TST_ICONS.info +
         '<span class="tst-txt"><span class="tst-title">队列重排 #' + tstSeq + "</span>" +
         '<span class="tst-sub">View Transitions: 旧条自动让位</span></span>';
@@ -2255,7 +2341,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     t.setAttribute("data-fx", "rise");
     t.innerHTML = TST_ICONS.info +
       '<span class="tst-txt"><span class="tst-title">风格层 preset: ' + info.name + "</span>" +
-      '<span class="tst-sub">' + info.desc.replace(/^ -- /, "") + "</span></span>";
+      '<span class="tst-sub">' + (info.short || info.desc.replace(/^ -- /, "")) + "</span></span>";
     host.prepend(t);
     if (window.AQB_FX) AQB_FX.scan(); /* 幂等重扫: 动态插入的 data-fx 补挂载标记 */
     setTimeout(function () { dismissToast(t, false); }, 3000);
