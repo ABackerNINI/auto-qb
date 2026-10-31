@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM04">
+<meta name="plan-stamp" content="26-10-31-1042">
+<meta name="doc-topic" content="real-machine-rm04-plan">
+<title>RM04 辅种与分组 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 70ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 20px; font-weight: 600; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 12px 14px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); }
+  td code, th code { white-space: nowrap; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin-bottom: 14px; max-width: none; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--good); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.lv { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: var(--good-bg); color: var(--good); border-color: #2f4a33; }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .case .kv { margin-bottom: 6px; font-size: 14px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">真机实测轨 · 分步实施计划 · 排期锚 issue 26-10-31-0641</div>
+  <h1>RM04 辅种与分组</h1>
+  <p class="lede">对「辅种与分组」片做真机实测的排期准备与分步计划。本计划只准备、不执行: 用例代码、<code>real.run</code>/<code>real.suite</code> 由执行代理照本计划落刀。验证面对准规程 §04 片表 RM04 行: <b>归组 key / 跨组文件冲突 / 缺失文件标记 / 跨盘移动 / journal 恢复</b>。本片是文件系统副作用面 —— 用例会真动文件(移动/建链/改名), 回滚路径逐条写清。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1042</div></div>
+    <div class="item"><div class="k">切片</div><div class="v">RM04(片表 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">1 次(半天), 用例 8 条</div></div>
+    <div class="item"><div class="k">基线 commit</div><div class="v">首轮(实测时刻 HEAD 记切片)</div></div>
+    <div class="item"><div class="k">前置</div><div class="v">RM00 基建全绿(L1/L2 解锁)· RM01 9/9 · RM02 7/8(缺陷在池)</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(漂移体检 + 环境自检 + glob 自检)</h2>
+    <h3>会话同步(硬性步骤, 先行)</h3>
+    <div class="callout warn"><b><code>my-commit-flow.sync</code> 两跑均 FAIL</b>: <code>拿不到远端 origin/real/rm02-rm10 (离线?)</code>。实查 <code>git ls-remote --heads origin</code>: Gitee 上只有 <code>develop</code>/<code>feature_rules</code>/<code>master</code>, <b>不存在 <code>refs/heads/real/rm02-rm10</code></b> —— 本工作分支从未推远端(RM01/RM02 各轮收尾也未推)。属「无远端分支可对」而非「落后」: 本地 HEAD <code>c35c448a</code> 即唯一事实源, 网络通(同一秒 ls-remote 有回包)。已记锚件 §08; 工作分支推送与否交用户拍板, 本轮继续。</div>
+    <h3>漂移体检</h3>
+    <div class="callout good"><b>首轮, 无漂移面。</b>RM04 无基线 commit(规程 §06 步骤 2 / §07: 首轮写「首轮, 无漂移面」)。本轮 glob 命中文件清单(补前缀后实测 <code>git ls-files</code>, 共 10 件): <code>src/auto_qb/core/modules/grouping_mod.py</code>(770 行)· <code>relocate_mod.py</code>(1511)· <code>relocate_units.py</code>(932)· <code>src/auto_qb/torrents/</code>5 件(__init__/compat/record/store/view, 共 1489)· <code>src/auto_qb/infra/relocate_journal.py</code>(164)· <code>src/auto_qb/infra/alias_fs.py</code>(885)。本轮用例落地后基线 commit 记实测时刻 HEAD, 下次回归对这套 glob 跑 <code>git log &lt;base&gt;..HEAD</code>。</div>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 10:38 实测)</h3>
+    <pre><code>[ok] real.guard (0.8s)
+  [ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停
+  [ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+    <ul>
+      <li>两实例 <code>connection_status=firewalled</code>(§2.5 口径: 非 <code>disconnected</code> 即通过), 白名单端口与镜像路径核对通过, 配置非仓库根 <code>config.yml</code>。与 RM02 轮同一环境指纹(两 pid 未变)。</li>
+      <li>落点实测: <code>R:/qbt-fake/</code> 存在(内存盘), <code>tests-real/.work/</code> 存在(内含 rm02 残留目录, 由 clean 口径处理)。</li>
+      <li>关键谓词实测(uv venv, qbittorrentapi 3.13.15): <b><code>TorrentState("stalledDL").is_downloading == True</code> 且 <code>is_stopped == False</code></b> —— 即 §2.6 实测的 <code>--no-data</code> 假种子(stalledDL)满足 <code>_is_active_download</code>(grouping_mod.py:410)的「下载中」谓词(配合 <code>amount_left &gt; 0</code>), <b>零外连即可当跨组冲突的下载方</b>, 全片不需要 L2 互传。</li>
+    </ul>
+    <h3>glob 自检(规程 §05 规则 8)</h3>
+    <div class="callout"><b>命中前 6 条 glob 全部零命中 —— 漏 <code>src/auto_qb/</code> 前缀</b>(RM01/RM02 同款缺陷第三次复发, 已按规则 8 修正锚件 §03 并记 §08)。补前缀后实测 6/6 命中(清单见上), <code>torrents/**</code> 命中 5 个小文件无混入大件, 片边界不糊, 不拆不并。<b>坑已复发三次</b>: 下一片(RM03)排期时大概率同款, 建议直接预判。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读)</h2>
+    <table>
+      <tr><th>验证面</th><th>实现锚点(文件:行号)</th><th>外部可观测口径</th></tr>
+      <tr><td>归组 key</td><td><code>group_key_of</code>(grouping_mod.py:41)= (path_normalize(save_path), 排序文件相对路径元组); 归组入口 <code>_assign_to_group</code>(:352, 键首元走物理位置解析 <code>_physical_dir</code>:185); 触发源 <code>_on_torrents_added</code>(:118)/<code>_handle_state_transitions</code>(:310)/<code>_handle_save_path_changes</code>(:269)</td><td>归组本身<b>无日志</b>: 断言数据源用产品 WEB 只读端点的 groups 视图(<code>web_view.py</code>, RM08 glob 内 —— 本片只作数据源不作验证面), 或组副作用日志</td></tr>
+      <tr><td>组内大小一致性</td><td><code>_check_size_consistency</code>(grouping_mod.py:370, 归组时一次): {路径:大小} 映射不一致 → 警告 + 整组暂停</td><td>日志「文件大小不一致, 暂停整组」(:380)+ qB API 两成员 state 变 stopped</td></tr>
+      <tr><td>跨组文件冲突</td><td><code>_check_cross_group_file_conflicts</code>(grouping_mod.py:603): 物理路径展开(<code>_cross_physical_key</code>:73, normcase+别名解析)→ 交叉事件 → MISSING 豁免 → 激活(存在下载中参与者 <code>_is_active_download</code>:410)→ 警告 + 暂停涉事下载方。开关 <code>grouping.cross_group_conflict_check</code> 默认<b>关</b>(models.py:220)</td><td>日志「跨组文件交叉(2组) | 共享物理文件 …」(:718)+ 下载方被 <code>torrents_stop</code>; dry-run 只报告不暂停</td></tr>
+      <tr><td>缺失文件标记</td><td><code>_check_missing_files</code>(grouping_mod.py:438): 触发源 = 种子被删/上传转暂停/进 errored/路径变化; 文件丢失 → 整组暂停 + <code>missing_tag</code>(默认 MISSING)标签; <code>.!qB</code> 过渡态容忍(:449 docstring); 开关 <code>grouping.check_missing_files</code> 默认开</td><td>日志「文件丢失, 暂停整组并添加标签」(:524)+ qB API 成员 tags 含 MISSING 且 stopped</td></tr>
+      <tr><td>跨盘移动</td><td>入口三件套共用 <code>relocate_execute</code>(relocate_mod.py:782): 闸门 → 暂停成员 → <code>torrents_set_location</code>(<code>_step_move</code>:352, <b>搬字节全是 qB 干的</b>)→ 相位机 moving→moved→armed→…→done(<code>relocate_units.py:58-68</code>); 建链 <code>_build_links</code>(:491, 目录别名建在 src 内容根/逐文件建在 src); 穿透校验 <code>_penetration_ok</code>(:544)。WebUI 命令线 <code>POST /api/torrents/{hash}/location</code>(torrent_cmds.py:230)与预检/撤销端点(:143/:165/:181); <code>relocate.enabled</code> 默认 false(models.py:535)</td><td>qB API save_path 变 dst; dst 侧文件 size 对齐; src 内容根变链接(<code>alias_fs.alias_kind_of</code>:585); job 账落 <code>&lt;data_dir&gt;/relocate/&lt;job_id&gt;.json</code>(relocate_journal.py:28-42)phase=done; 日志「已下发 qB 搬迁」(:374)</td></tr>
+      <tr><td>journal 恢复</td><td>启动恢复 <code>_load_jobs</code>(relocate_mod.py:186, 日志「恢复在途 job N 条」:109); 崩溃窗口定夺 <code>_recover</code>(:317, 三证: qb_moving/save_path_at_dst/dst_has_data); 对账 <code>_step_reconcile</code>(:631 读 journal+heartbeat)→ <code>reconcile</code>(relocate_units.py:897)/<code>recover_exec_phase</code>(:858); 心跳过期 <code>GUARDIAN_HEARTBEAT_MAX_AGE=60s</code>(:883)→ ACT_RESPAWN。journal 形态: journal/spec/pid 三件(relocate_journal.py:33-42)</td><td>强杀产品后重启: 日志「恢复在途 job」+ job 相位继续推进到 done; journal 文件在 <code>&lt;data_dir&gt;/relocate/</code> 下可查</td></tr>
+    </table>
+    <p><b>边界注记(归属优先, 规程 §05 规则 1)</b>: guardian 执行体 <code>src/auto_qb/tools/finalize_watch.py</code> 按 glob 归 <code>RM10</code>(tools/**), 但它是 relocate journal 恢复机制的一环(qB 退出后删链接的独立进程)。本片 journal 恢复用例只验<b>产品侧</b>(<code>relocate_mod</code>/<code>relocate_units</code>/<code>relocate_journal</code> 均在本片 glob 内), guardian 自身生命周期(独立进程/三证判退出)留给 RM10, 不在本片抢。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(8 条, docstring 首行 <code>[RM04-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm04_relocate/</code>, 跑法 <code>commands run real.suite -- --slice RM04 --yes</code>(<code>-n 0</code>)。真实种子全程 paused; <b>全部条目用 L1 假种子(零外连), 不需要 L2 互传、不需要活跃真实种子</b>。假种子一律 <code>real-fake</code> 标签(<code>real.seed</code> 自带)。配置一律 <code>schema_version: 5</code>、<code>data_dir</code> 指用例临时目录(journal/spec/pid 随目录清理, <b>不得指到仓库根 <code>auto-qb-data/</code></b>)。产品进程只连 36596(空库); 36595 仅 guard 出现。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-01</span><span class="ttl">归组 key: 同文件列表归同组 + 异文件列表不同组(对照)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×3</span></div>
+      <div class="bd"><p>构造关键: 两假种子必须<b>同 save_path 同文件列表</b>才同组(key 含 save_path)。用 <code>--no-data</code> 两枚同名种子(或 <code>--from</code> 同一文件分别加入), 第三枚不同文件列表同 save_path 作对照。归组无日志, 断言走产品 WEB 只读端点 groups 视图。</p>
+      <ul class="four">
+        <li><b>前置</b>: 产品非 dry-run 连 36596, <code>grouping.enabled=true</code>(默认); 36596 加 3 枚 <code>--no-data</code> 假种子(A/B 同名同 save_path, C 异名同 save_path), 默认 256K 档。</li>
+        <li><b>副作用</b>: 36596 加 3 假种子(real-fake); 零文件系统写。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 停产品进程 + 删用例目录; 对照收尾核 36596 无 real-fake 残留。</li>
+        <li><b>失败判据</b>: A/B 未归同组; 或 A/B/C 归成一组(对照红验失效 —— 若异文件列表也归同组, 主断言恒绿, 本条按 L2 降档记); 或归组触发组内大小一致性误报暂停(3 枚全 --no-data 同名则大小一致, 出现「大小不一致」日志即误报)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-02</span><span class="ttl">组内大小一致性: 同文件列表不同大小 → 警告 + 整组暂停</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×2(--no-data 异尺寸)</span></div>
+      <div class="bd"><p><code>--no-data</code> 的文件表来自种子元数据(不落盘), 用 <code>--size 256K</code> 与 <code>--size 512K</code> 各造一枚<b>同名</b>种子 → 相对路径相同、声明大小不同 → <code>_size_mismatch</code> 命中。构造细节(种子命名是否随尺寸变)由执行代理按 <code>seed.py</code> 实况落刀, 必要时手写 <code>--from</code> 双文件布局。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM04-01 基座; 两枚 --no-data 假种子, 同名同 save_path、声明大小不同。</li>
+        <li><b>副作用</b>: 36596 加 2 假种子; 整组被暂停(假种子, 允许)。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删用例目录。</li>
+        <li><b>失败判据</b>: 日志无「文件大小不一致, 暂停整组」; 或两成员未变 stopped; 或把单成员组也判了不一致(误报)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-03</span><span class="ttl">缺失文件标记: 真删文件 → MISSING 标签 + 整组暂停(红验对照)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×2(带数据)</span></div>
+      <div class="bd"><p>⚠ §2.6 硬事实: <code>--no-data</code> 不是缺文件态(停在 stalledDL, recheck 也不进 missingFiles) —— 本条必须<b>带数据造种子再真删文件</b>。触发源用「种子由上传转暂停」: 加带数据假种子 → start(stalledUP) → 删数据文件 → stop → 触发扫描。两枚同组验「整组」面。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 两枚带数据假种子(256K, 落 <code>tests-real/.work/rm04/c3/</code>)成组; start 后删数据文件再 stop。</li>
+        <li><b>副作用</b>: 真删用例目录下数据文件; 两假种子被加 MISSING 标签并暂停。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>(连数据)+ 删用例目录 + <b>清 MISSING 标签</b>(用例收尾自清, guard 收尾兜底)。</li>
+        <li><b>失败判据</b>: 成员 tags 不含 MISSING; 或只有一枚被标(整组面丢失); 或未删文件的<b>对照组</b>(另一组同法 stop 但不删文件)也被打标 —— 对照必须不打标, 否则主断言恒绿, 本条降 L2 记; 或 <code>.!qB</code> 过渡态被误判(本条不造该窗口, 出现即如实记 BLOCKED 并注明)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-04</span><span class="ttl">跨组文件冲突: 交叉 + 下载中参与者 → 警告 + 暂停下载方(MISSING 豁免对照)</span><span class="badge lv">L2(豁免对照真跑即 L3)</span><span class="badge">L1 假种子 ×3(--no-data 当下载方)</span></div>
+      <div class="bd"><p>配置 <code>grouping.cross_group_conflict_check: true</code>(默认关, 测试配置显式开)。场景 1(同 save_path 文件部分重叠): 组 A 带数据完整(stalledUP), 组 B <code>--no-data</code>(stalledDL, 实测满足 <code>_is_active_download</code> 谓词, 零外连)。别名同物理目录场景(junction)归入本条可选加分, 不强制 —— 跨盘建链面 RM04-05 已覆盖。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座 + <code>cross_group_conflict_check: true</code>; 组 A: 一枚带数据 2 文件种子; 组 B: 一枚 --no-data 种子(文件表与 A 部分重叠)。</li>
+        <li><b>副作用</b>: 36596 加 2-3 假种子; B(下载方)被暂停。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删用例目录 + 清冲突过程产生的标签/状态。</li>
+        <li><b>失败判据</b>: 无「跨组文件交叉」警告; 或下载方未被暂停; 或完成侧(非下载方)被误暂停(D2: 只停下载中成员); <b>豁免对照</b>: 给 A 侧打 <code>missing_tag</code> 后事件必须被豁免(无警告无暂停) —— 对照不豁免即豁免分支失效, 如实记; 开关关(false)时零警告的默认关校验并入本条收尾。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-05</span><span class="ttl">跨盘移动主链: R:→D: 真跨卷 relocate 到 phase=done + 目录别名</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1(带数据 256K)</span></div>
+      <div class="bd"><p><b>跨盘口径写死</b>: src = <code>R:/qbt-fake/rm04/c5/</code>(内存盘), dst = <code>tests-real/.work/rm04/c5/dst/</code>(D: 真磁盘)—— 两落点都在 <code>real.seed --dir</code> 白名单内, 且是真跨卷(R: vs D:), <b>不用同盘换目录冒充</b>(那验不了 same_volume 分支)。配置 <code>relocate.enabled: true</code> + <code>alias_file_threshold: 1</code>(压低使目录别名路径确定性成立; junction 可跨卷, 硬链接不可 —— 若种子布局使建链走逐文件形态, R:→D: 跨卷硬链接必败 → 走 alias_partial 收尾, 该分支作为备选断言, 见失败判据)。触发: 产品 WEB 命令线 <code>POST /api/torrents/{hash}/location</code>。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座 + relocate 配置如上; 假种子(256K)落 R: 盘; 产品启动时应有「整组迁移已启用(恢复在途 job 0 条), 已完成本机链接能力探测」日志(relocate_mod.py:109)。</li>
+        <li><b>副作用</b>: qB 真搬数据(R:→D: 复制); src 内容根被换成 junction 指向 dst; <code>&lt;data_dir&gt;/relocate/</code> 落 journal/spec/pid; dst 目录新写。</li>
+        <li><b>回滚</b>: <b>删 junction 只 <code>os.rmdir</code> 本体, 绝对禁止递归删</b>(递归删 junction 会穿透目标删真实数据); 删 dst 目录树; <code>real.seed.rm</code>; 删用例目录(含 data_dir/relocate)。</li>
+        <li><b>失败判据</b>: qB save_path 未变 dst(注意 Windows 反斜杠形态, 断言前归一); dst 侧文件 size 不齐; src 内容根未成链接或 <code>alias_kind_of</code> 非 junction; 经原路径穿透 stat 读不到同 size; journal 未落 phase=done; 日志无「已下发 qB 搬迁」。备选分支: 若建链走逐文件形态且跨卷必败, 断言改为「零数据搬回 + 转收尾路径(phase=removed, reason=alias_partial, 已建链接删净)」—— 两条路必须走通一条, 两条都不达即 FAIL。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-06</span><span class="ttl">journal 恢复: 搬迁中强杀产品 → 重启恢复在途 job → 推进到 done</span><span class="badge lv">L3(注入即负向)</span><span class="badge">L1 假种子 ×1(带数据 64M 落 R:)</span></div>
+      <div class="bd"><p>用 64M 种子(--size 64M, 落 R: 内存盘不心疼)拉长 qB 搬运窗口; 命中「已下发 qB 搬迁」日志即 <code>taskkill /F /T</code> 产品进程(phase=moving 已落账), 重启产品。若 64M 仍搬太快抓不到窗口, <b>退路 = journal 注入</b>: 手工按 relocate_journal 口径写 <code>phase=moving</code> journal + spec + job 账(构造细节按 <code>_load_jobs</code>(relocate_mod.py:186)/<code>_recover</code>(:317)实况落刀), 不硬撑真杀。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM04-05 基座; 种子 64M 落 R:; 搬迁下发后强杀产品。</li>
+        <li><b>副作用</b>: 产品进程被强杀; 重启后继续对 qB setLocation(幂等)并建链; journal 推进到 done。</li>
+        <li><b>回滚</b>: 同 RM04-05(junction 非递归删 + 删 dst + real.seed.rm + 删用例目录)。</li>
+        <li><b>失败判据</b>: 重启日志无「恢复在途 job 1 条」(计 0 条 = 恢复面失效, 红验即此); job 卡在 moving 不再推进; dst/链接/journal 终态不符 RM04-05 同款判据; 恢复过程把已搬好的数据再搬一遍(对账判据应幂等, <code>save_path_at_dst</code> 三证)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-07</span><span class="ttl">journal 异常形态兜底: 损坏 journal / 孤儿 pid 不崩 + 走到终态</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>持久化兜底面与 RM02-08 同思路, 打在 relocate journal 上: 非终态 job 在场时注入坏 journal(截断 JSON, <code>_read_json</code>(relocate_journal.py:52)应返回 None 回退现场定夺)与孤儿 <code>.pid</code>(指向不存在进程, <code>acquire_pid</code>:115 / <code>_alive</code>:131 应判死可抢)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM04-06 崩溃窗口(或真杀或注入), 在重启前把 journal 写坏 + 留孤儿 pid。</li>
+        <li><b>副作用</b>: journal 被产品按现场定夺重写; 孤儿 pid 被覆盖/释放。</li>
+        <li><b>回滚</b>: 同 RM04-05。</li>
+        <li><b>失败判据</b>: 产品启动崩溃或退出码非 0; job 永不终态(卡死); 日志出现未捕获异常堆栈; 孤儿 pid 永久阻塞 job(对账永 WAIT)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM04-08</span><span class="ttl">保存路径变化 → 重归组 + 缺文件扫描触发(归组 key 的路径变化面)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>绕过 relocate 闸门、直接用 <code>lib/qb.py</code> 对 qB 发 <code>set-torrents-location</code>(qB 原生搬种子到新目录)→ 产品 <code>_handle_save_path_changes</code>(grouping_mod.py:269)检测路径变化 → 重归组(新 key)。同法顺带验「重归组即触发缺文件扫描」的触发面(RM04-03 的第三触发源, 不删文件, 只验扫描被触发且文件齐全时零动作)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 两枚带数据假种子成组落 <code>tests-real/.work/rm04/c8/src/</code>; qB 直改位置到 <code>.work/rm04/c8/moved/</code>。</li>
+        <li><b>副作用</b>: qB 真搬数据(用例目录内); 组 key 变化。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>(连数据)+ 删 <code>.work/rm04/c8/</code> + 删用例目录。</li>
+        <li><b>失败判据</b>: groups 视图无新 key/仍持旧 key; 成员从组里丢失(重归组丢成员 = <code>_leave_group</code> 幂等被打破); 文件齐全却被打 MISSING(重归组触发扫描误报); 出现「路径不可判定」警告(:482, fs.path_map 未命中 —— 若测试布局踩中该分支, 记 BLOCKED 并注明 path_map 配置缺口, 当轮不修)。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>RM04 首轮全部新建, 按 RM00/RM02 先例「新建即档」计: 预计初始档位 <b>L0/L1/L2/L3 = 0/0/5/3</b>。</p>
+    <ul>
+      <li><b>本轮升档 = RM04-01、RM04-03 各带一条对照红验</b>(异文件列表必须不同组 / 不删文件必须不打标 —— 对照场景主断言必须能变红, 否则降 L2 如实记), <b>RM04-06 设计即 L3</b>(崩溃注入本身就是负向操作, 「恢复在途 job 计 0 条」即红)。</li>
+      <li>RM04-04 的 MISSING 豁免对照真跑过即按 L3 计(豁免分支是独立判定路径, 不是主断言换皮)。</li>
+      <li>若执行中红验无法成真(对照场景构造不出来/谓词在真机上分叉), 如实降档并写原因, 不硬撑档位。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <ul>
+      <li><b><code>[需活跃种子]</code> 跳过条目: 无。</b>关键依据是本轮实测的环境事实: <code>stalledDL</code>(<code>--no-data</code> 假种子)满足 <code>_is_active_download</code> 的下载中谓词且零外连 —— 跨组冲突的「下载中参与者」不需要 L2 互传就能成立。全部 8 条与约束 2(真实种子全程非活跃)零冲突; RM04 片表「可测层级」标 L0·L1, 本计划按基建现状直接上自动断言, 未用 L2 不是妥协 —— 归组/移动/journal 面没有需要速率曲线的断言。</li>
+      <li><b>L0 人工目视项: 本片 0 条。</b>归组/文件系统/journal 没有观感面(观感归 RM08/RM09)。按用户已拍板口径执行: 发现任何需要人眼确认的断言一律记 <span class="badge stop">BLOCKED</span>, 解锁条件 = 用户目视, 不得代签。</li>
+      <li><b>潜在 BLOCKED 预登记</b>: ① RM04-01/08 依赖产品 WEB 只读端点取 groups 视图 —— 端点形态对不上时按 §06 步骤 5 记 BLOCKED 并注归属 RM08 读侧, 当轮不修; ② RM04-08 若踩中 fs.path_map「路径不可判定」分支(:482), 记 BLOCKED 注 path_map 配置缺口。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><code>real.suite --slice RM04 --yes</code> 跑完: 8 条全部 <code>PASS</code>; <code>FAIL</code> ⇒ 按 scope-guard 入池 bug issue 当轮不修; <code>BLOCKED</code> ⇒ 写明解锁条件, 不计入"做完"。</li>
+      <li>五个验证面逐条有着落: 归组 key(01+08)· 组内一致性/跨组冲突(02+04)· 缺失文件标记(03)· 跨盘移动(05)· journal 恢复(06+07)。</li>
+      <li>至少两条红验真跑过并看到红(RM04-01/03 的对照或 RM04-06 的注入), 档位分布如实记进 <code>testing/real-baselines/&lt;stamp&gt;-real-RM04.md</code>。</li>
+      <li>基线 commit 记实测时刻 HEAD; 锚件 §07 RM04 行同步(状态/L 分布/基线); 新增环境事实(搬运窗口实测时长/junction 形态实测/stalledDL 谓词)回写规程 §2.6 或新增 §2.9。</li>
+      <li>收尾核净: 36596 无 real-fake 残留、无 MISSING/冲突标签残留、<code>tests-real/.work/rm04/</code> 与 <code>R:/qbt-fake/rm04/</code> 清空、junction 删净(且未穿透目标)。</li>
+      <li>本轮踩到已记的坑 ⇒ 该条「复发」+1, 并写一句为什么没命中(glob 漏前缀已是第三次复发, 必须写)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9)</h2>
+    <p>逐条过了 <code>memory-bank/checklists/manual-walkthrough.md</code>(含 W6 分档表), <b>属于 RM04 验证面(归组 key/跨组冲突/缺文件/跨盘移动/journal 恢复)的条目: 0 条</b> —— 本片不发生迁移, <code>manual-walkthrough.md</code> 本轮不改。判定明细:</p>
+    <ul>
+      <li><b>全部条目是 WebUI 观感/数据面/写侧</b>: 设置页刷新保持、种子页筛选器、Console Hub 五主题、主循环×WebUI 解耦、跟手性、新修 4 处、热路径体感、状态栏速度/今日流量、可用性列、最近活动列、时间点列切换、列设置多标签页、TASK011-015 → 归 RM08(读侧观感)/RM09(写侧/乐观 UI)/RM10, 不错收进 RM04。</li>
+      <li><b>两条边缘条目交执行代理复核</b>(初判归 RM09, 非本片): ①「辅种组整组暂停: 组行一直灰不闪绿」—— 验的是右键命令乐观态观感, 不是归组逻辑本身; ②「追剧页右键打开目标文件夹」—— 涉及文件夹打开(文件系统边缘)但验证面是右键命令真作用 + shell 调起, 不涉 relocate/归组。若复核有异议, 归属裁定记锚件 §08, 不在本片静默扩面。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>junction 回滚红线(本片最大的数据安全点)</b>: 删目录别名只 <code>os.rmdir</code> 链接本体, <b>绝对禁止递归删穿过链接</b>(rm -r / shutil.rmtree 对 junction 的行为按平台而异, 穿透即删真实数据)。产品侧 guardian 删链接是逐条非递归(relocate_journal.py 头注), 用例回滚同口径。</li>
+      <li><b>搬运窗口时序</b>: 256K 搬运在 R:→D: 上瞬时完成, RM04-06 靠 64M 拉窗口仍可能太快 —— 退路 journal 注入已写在计划里, 优先真杀、注入兜底, 两条都不行记 BLOCKED 不硬撑。<code>move_stall_timeout</code> 默认 600s 不会中途误判, 但若测试配置改小要注意。</li>
+      <li><b>配置键三点</b>: <code>relocate.enabled</code> 默认 false(不开则三入口 403/blocked, fail-closed); <code>grouping.cross_group_conflict_check</code> 默认 false(RM04-04 显式开); <code>alias_file_threshold: 1</code> 压低使目录别名确定性成立。这些键已存在, 不新增键, 不触黄金法则 4。</li>
+      <li><b>归组断言无直连日志</b>: 归组本身不打日志, 数据源走产品 WEB 只读端点 groups 视图 —— 端点形态执行代理先探再写断言, 对不上记 BLOCKED(归属 RM08), 别在用例里内修端点。</li>
+      <li><b>假种子构造口径</b>: 同组要求同 save_path 同文件列表(key 含 save_path); --no-data 停 stalledDL 且文件表来自元数据(RM04-02 的异尺寸、RM04-04 的下载方都靠它); 缺文件态必须带数据真删(§2.6 红字)。种子命名与 save_path 的精确对应关系以 <code>seed.py</code> 实况为准, 计划给的是意图不是逐字节脚本。</li>
+      <li><b>落点纪律</b>: 假种子数据与 dst 只落 <code>tests-real/.work/</code> 与 <code>R:/qbt-fake/</code>(real.seed --dir 白名单口径); 产品 <code>data_dir</code> 指用例临时目录 —— journal/spec/pid 与 state.json 随目录清理, 不碰仓库根 <code>auto-qb-data/</code>(红线)。R: 内存盘重启即清空, 大种子当次会话有效, 收尾 <code>real.seed.clean</code>。</li>
+      <li><b>跨卷别名形态</b>: junction 可跨卷、硬链接不可、symlink 需特权(Windows)—— R:→D: 场景下逐文件形态大概率走 alias_partial 失败收尾, 这是<b>合法分支</b>不是缺陷(RM04-05 失败判据已双路写明); 若想稳定看 dir alias, 种子布局带子目录(内容根非 save_path 本身)。</li>
+      <li><b>进程面照抄前两片</b>: 配置 <code>schema_version: 5</code> + 走 <code>lib/app.py</code>; 按 pid 断言用 <code>real_pid()</code>; 杀进程 <code>taskkill /F /T</code>; conftest 文件锁串行基座照抄 RM01/RM02(pytest.ini <code>-n 8</code> 下 xdist_group 不生效); 日志断言只咬结构化锚点(「已下发 qB 搬迁」「恢复在途 job」「文件丢失」「跨组文件交叉」「文件大小不一致」), 别咬整句措辞。</li>
+      <li><b>guardian 边界</b>: <code>tools/finalize_watch.py</code> 归 RM10 glob; 本片用例不主动验证 guardian 独立进程行为(三证判退出/心跳写盘由它自做), RM04-07 若观察到 guardian 被对账拉起(ACT_RESPAWN), 如实记录现象即可, 不深验。</li>
+      <li><b>gB 直改位置(RM04-08)用 <code>lib/qb.py</code> 连 36596 发</b>, 不经产品 —— 绕开 relocate 闸门正是本意(验产品的路径变化检测); qB 搬完旧目录会留壳, 回滚删 <code>.work/rm04/c8/</code> 整树即可。</li>
+    </ol>
+  </section>
+
+  <footer>排期准备件, 拍板即冻结(规程 §06 步骤 4)。执行产生的实测数字落 <code>memory-bank/testing/real-baselines/</code>, 本件不回填结果。准备: 2026-10-31 10:42, 分支 real/rm02-rm10 @ c35c448a(本地, 远端无同名分支)。</footer>
+</div>
+</body>
+</html>

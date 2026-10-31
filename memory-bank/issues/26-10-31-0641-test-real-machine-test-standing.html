@@ -195,7 +195,7 @@
       <tr>
         <td><code>RM04</code></td>
         <td>辅种与分组</td>
-        <td><code>core/modules/grouping_mod.py</code> · <code>relocate_mod.py</code> · <code>relocate_units.py</code> · <code>torrents/**</code> · <code>infra/relocate_journal.py</code> · <code>infra/alias_fs.py</code></td>
+        <td><code>src/auto_qb/core/modules/grouping_mod.py</code> · <code>relocate_mod.py</code> · <code>relocate_units.py</code> · <code>src/auto_qb/torrents/**</code> · <code>src/auto_qb/infra/relocate_journal.py</code> · <code>src/auto_qb/infra/alias_fs.py</code></td>
         <td>归组 key / 跨组文件冲突 / 缺失文件标记 / 跨盘移动 / journal 恢复</td>
         <td>L0·L1</td>
         <td>1 次</td>
@@ -354,6 +354,7 @@
       <li>2026-10-31 09:18 — 片表去重: §03 移除「状态」栏(与 §07 覆盖进度总表重复且持续飘移, 状态单点收口到 §07)。用户拍板。</li>
       <li>2026-10-31 09:27 — <code>RM02</code> 排期开工(计划 <code>plans/26-10-31-0927-plan-real-RM02.html</code>)。glob 自检发现 RM02 行 5 条 glob 全部漏 <code>src/auto_qb/</code> 前缀(与 RM01 同款缺陷, 零命中), 实测补前缀后 5/5 命中且无混入大件, 按 §05 规则 8 修正。另: 36595 重启后 pid 10204→41868; 本 clone 缺 gitignored 的 <code>tests-real/config/instances.local.json</code>(36595 的 API key 注册件), 已按 <code>lib/instances.py</code> 口径补建, guard 全绿。</li>
       <li>2026-10-31 10:41 — <code>RM02</code> 实测完成: <b>7 通过 / 1 失败</b>(8 条, 官方轮 425.4s), 档位 <code>0/0/5/3</code>, 基线 commit <code>eba6ee47</code>。三条 L3 红验真跑过(dry-run 不落盘 / interval=0 不写盘 / 断连注入生效)。FAIL 1 条: <code>RM02-07</code> 运行期断连后<b>不自动重连</b>且逐拍 ERROR 刷屏(75s 内 39-45 条, 恢复代理 60s 无回连), 根因 = 断连处置置 client=None 后同步线 AttributeError 被 <code>_SYNC_UNAVAILABLE</code> 误分类、connect() 永不再被调用, 入池 <code>26-10-31-1029</code>(RM01 D1 移交以"缺陷在池"闭环)。计划外缺陷另入池 <code>26-10-31-1030</code>: 托盘模式进程内 SIGTERM 不生效(3/3)。环境: venv 基解释器又漂回无 Tk 的 H:\ 裁剪版(RM01 §04-5 同款坑复发), 已重建恢复; 新增 <code>lib/proxy.py</code> 断连注入/节拍观测基建; 新环境事实(qB 校验 Host 头 / loopback 拒连 ~2s / .bak 仅旧文件存在时生成)回写规程 §2.8。</li>
+      <li>2026-10-31 10:42 — <code>RM04</code> 排期开工(计划 <code>plans/26-10-31-1042-plan-real-RM04.html</code>, 8 条用例)。glob 自检发现 RM04 行 6 条 glob 全部漏 <code>src/auto_qb/</code> 前缀(RM01/RM02 同款缺陷, 零命中), 按 §05 规则 8 修正锚件 §03; 补前缀后实测 6/6 命中(<code>torrents/**</code> 命中 5 个小文件, 无混入大件), 片边界不糊, 不拆不并。另: 会话开工同步发现 Gitee 上<b>不存在</b> <code>refs/heads/real/rm02-rm10</code>(本工作分支未推远端), 同步失败属"无远端分支可对", 非落后。</li>
     </ul>
   </section>
 
