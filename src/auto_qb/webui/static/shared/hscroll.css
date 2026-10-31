@@ -34,9 +34,9 @@
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(var(--statusbar-h) + 6px);
-  width: min(160px, 42vw);
-  height: 3px;
+  bottom: calc(var(--statusbar-h) + 8px);
+  width: min(300px, 48vw);
+  height: 5px;
   border-radius: 999px;
   background: var(--border-strong);
   z-index: 25;
@@ -50,9 +50,9 @@
 /* 淡入比淡出快(150ms): 出现要及时, 消失可以缓一点(过渡属性仍只有 opacity / height) */
 .hscroll-pill.on { opacity: 1; pointer-events: auto; transition-duration: 150ms; }
 
-/* hover 与拖拽同观感: 加粗到 4px + 轨道提亮, 让指针落在细条上也有"抓到了"的反馈 */
+/* hover 与拖拽同观感: 加粗到 7px + 轨道提亮, 让指针落在细条上也有"抓到了"的反馈 */
 .hscroll-pill:hover,
-.hscroll-pill.drag { height: 4px; background: var(--fg-dim); }
+.hscroll-pill.drag { height: 7px; background: var(--fg-dim); }
 
 /* 滑块底座: 几何全由 JS 内联决定, 这里只保证它贴合轨道 */
 .hscroll-pill > i {

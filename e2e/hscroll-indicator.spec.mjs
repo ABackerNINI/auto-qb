@@ -6,10 +6,11 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
 /**
  * 主表横滚指示条的行为面守阵(计划 26-11-01-0553 S5; 实现 = shared/hscroll.css + shared/columns.js)。
  *
- * **钉的是什么**: 原生横条被彻底隐藏后, 底部 3px 胶囊是唯一的横向可达入口 —— ①窄窗下列真的溢出时
- * 原生条**不占条槽**(否则每行底部白丢 10px 且胶囊与条槽叠在一起); ②隐藏条槽后仍能横滚; ③指针伸到
- * 内容区底部 24px 热区带内胶囊才淡入(常态零痕迹); ④拖胶囊真的改 `scrollLeft`, 且**表头跟着同步**
- * (R2: 拖动是程序化写 scrollLeft, 只信"scroll 事件会触发"的推断不够); ⑤宽窗无溢出时热区内也不出现。
+ * **钉的是什么**: 原生横条被彻底隐藏后, 底部胶囊(300x5, hover 7)是唯一的横向可达入口 ——
+ * ①窄窗下列真的溢出时原生条**不占条槽**(否则每行底部白丢 10px 且胶囊与条槽叠在一起); ②隐藏条槽后
+ * 仍能横滚; ③指针伸到内容区底部 24px 热区带内胶囊才淡入(常态零痕迹); ④拖胶囊真的改 `scrollLeft`,
+ * 且**表头跟着同步**(R2: 拖动是程序化写 scrollLeft, 只信"scroll 事件会触发"的推断不够);
+ * ⑤宽窗无溢出时热区内也不出现; ⑥召唤范围(纵向不含状态栏 / 横向只认胶囊邻域 / Shift+滚轮也召唤)。
  *
  * **为什么静态守阵(S4, tests/test_webui_static_skins.py)不够**: 那条只能读源码文本 —— 它看得出
  * `display: none` 在不在、link 挂没挂, 但看不出**几何是否真的生效**: `::-webkit-scrollbar{display:none}`
@@ -24,6 +25,8 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *   · 拖动 + 表头同步 —— 只跑辅种表。三视图共用**同一份** `syncHeadScroll` 与同一个胶囊单例
  *     (columns.js 里没有按 page 分支的实现), 换视图再验一遍等于验同一个单点, 只是多花一次加载。
  *   · 宽窗负例 —— 只跑辅种表一次(同上: 无溢出路径在 `_hscrollSync` 里也是单点早退)。
+ *   · 召唤范围(不含状态栏 / 横向只认胶囊邻域 / Shift+滚轮) —— 只跑辅种表一次。三条判据全在
+ *     `_hscrollBand` / `_hscrollInPillSpan` / `_hscrollWheel` 三个单点里, 与视图无关。
  * 皮肤仍走 SKINS 双跑: 胶囊外观与 `--statusbar-h` 是三皮肤各自声明的, 热区 y 由实测状态栏高算出,
  * 换皮肤能抓到"某皮肤状态栏更高 → 热区带错位"。console 皮肤不在 e2e 覆盖内(既有全局口径), 其一致性
  * 由静态守阵覆盖, 故不动 SKINS。
@@ -265,6 +268,72 @@ for (const skin of SKINS) {
       expect(st.on, `宽窗热区内胶囊被点亮了(无横向余量却给"可横滚"提示, D10)`).toBe(false);
       expect(st.opacity, `宽窗热区内胶囊 opacity=${st.opacity}(应为 0)`).toBe(0);
       expect(st.exists && st.opacity > 0.01, `宽窗下出现了可见胶囊(exists=${st.exists}, opacity=${st.opacity})`).toBe(false);
+    });
+
+    /* ---------- 4. 召唤范围 + Shift+滚轮(2026-11-01 用户验收后补) ----------
+     * 三条都是**用户当场指出的**行为, 静态守阵一条也抓不到(全是运行时几何/事件判据):
+     *   a. 纵向带**不含状态栏** —— 初版只写下界 `clientY >= innerHeight - 状态栏高 - 24`, 少了上界,
+     *      于是状态栏那 34px 也落在带内; 状态栏是常用控件区(铃铛/速度/限速), 移过去不该召唤胶囊。
+     *   b. 横向**不是全屏宽** —— 初版只判 clientY, 鼠标扫过底部右侧的速度/限速区也会召唤;
+     *      现在只认胶囊本身的邻域(胶囊宽 + 左右各 40px)。
+     *   c. **Shift+滚轮 / 触控板双指横滚时亮出**, 停手 1.5s 自落 —— 这类用户不需要伸到热区,
+     *      但横滚时同样缺位置反馈。
+     * 只跑辅种表: 三条判据都在 columns.js 的单点里(_hscrollBand / _hscrollInPillSpan / _hscrollWheel),
+     * 与视图无关; 换视图只是多花一次加载。 */
+    test(`召唤范围: 不含状态栏 / 不限全屏宽 / Shift+滚轮 @fast (${skin})`, async ({ page }) => {
+      collectRuntimeErrors(page);
+      await page.setViewportSize(NARROW);
+      await openView(page, skin, 'groups');
+
+      const geo = await readGeo(page);
+      expect(geo.sw, `前置: 列未溢出(${geo.sw} <= ${geo.cw}) —— 本用例验不到召唤行为`).toBeGreaterThan(geo.cw);
+
+      const hot = await hotSpot(page);
+      const sbCenterY = Math.round(hot.ih - hot.sbH / 2);   // 状态栏正中
+      const midY = Math.round(hot.ih / 2);                  // 内容区中部(离带很远)
+
+      // 基线: 指针在内容区中部 -> 不出现(证明下面的"不出现"不是因为它压根没亮过)
+      await page.mouse.move(hot.x, midY);
+      await page.waitForTimeout(300);
+      expect((await pillState(page)).on, '前置: 指针在内容区中部却亮了胶囊').toBe(false);
+
+      // a. 状态栏本身不召唤
+      await page.mouse.move(hot.x, sbCenterY);
+      await page.waitForTimeout(350);
+      expect((await pillState(page)).on,
+        `指针在状态栏(y=${sbCenterY})却亮了胶囊 —— 热区带把状态栏也算进去了(应只到状态栏上缘为止)`).toBe(false);
+
+      // b. 带内但横向远离胶囊(视口左缘)也不召唤
+      await page.mouse.move(20, hot.y);
+      await page.waitForTimeout(350);
+      expect((await pillState(page)).on,
+        `指针在热区带内但 x=20(远离居中的胶囊)却亮了胶囊 —— 横向判据退化成全屏宽`).toBe(false);
+
+      // b'. 回到胶囊正上方 -> 该出现(证明 a/b 的"没出现"不是因为整条链坏了)
+      await page.mouse.move(hot.x, hot.y, { steps: 4 });
+      await expect.poll(async () => (await pillState(page)).on, {
+        message: `指针移到胶囊正上方(y=${hot.y})仍不亮 —— 热区判据被改坏了(或横向窗口太窄)`,
+        timeout: 4_000,
+      }).toBe(true);
+
+      // c. Shift+滚轮: 先把指针移出热区(否则 hot 会一直兜着), 再横滚
+      await page.mouse.move(hot.x, midY);
+      await page.waitForTimeout(300);
+      expect((await pillState(page)).on, '前置: 指针已移出热区却仍亮着').toBe(false);
+
+      await page.keyboard.down('Shift');
+      await page.mouse.wheel(0, 200);   // Shift+纵向滚轮 = 浏览器原生横滚
+      await page.keyboard.up('Shift');
+      await expect.poll(async () => (await pillState(page)).on, {
+        message: 'Shift+滚轮后胶囊没亮 —— 横滚时没有任何位置反馈',
+        timeout: 2_000,
+      }).toBe(true);
+
+      // 停手 1.5s 后自落(留 300ms 给 200ms 淡出过渡 + 定时器抖动)
+      await expect.poll(async () => (await pillState(page)).on, {
+        message: 'Shift+滚轮停手 1.5s 后胶囊没落下 —— 停留定时器没生效, 它会一直挂在屏上',
+        timeout: 4_000,
+      }).toBe(false);
     });
   });
 }

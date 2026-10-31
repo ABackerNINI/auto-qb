@@ -9,7 +9,10 @@
  */
 /* ============ 主表横滚指示条(计划 26-11-01-0553 S3) ============
  * 原生横条已被 shared/hscroll.css 彻底隐藏, 这里补回「拖动横滚」这一唯一会丢的能力:
- * 一根悬浮在状态栏上缘的 3px 胶囊, 指针伸到内容区底部 24px 带内才淡入(D5), 可拖可点轨道跳转。
+ * 一根悬浮在状态栏上缘的胶囊(300x5, hover 7), 两条召唤路径:
+ *   ① 指针伸进内容区底部 24px 带内(D5) —— 纵向带**不含状态栏**, 横向只认胶囊邻域(宽 + 左右各 40px);
+ *   ② Shift+滚轮 / 触控板双指横滚时亮出, 停手 1.5s 自落(2026-11-01 用户追加)。
+ * 可拖、可点轨道跳转。
  *
  * 为什么状态压在模块级闭包里: 本片段只有 methods(无 data / 无 mounted), 由 app.mixin 注入
  * **同一个** Vue 实例 —— 指示条是跨视图单例(三主表 v-if 互斥, 同时最多一个), 状态放进组件
@@ -22,7 +25,11 @@ const HSCROLL_IND = {
   el: null,        // 最近一次 _hscrollSync 收到的主表容器(热区召唤时拿它重算)
   page: null,      // 该容器的表 id
   overflow: false, // 该容器当前是否有横向余量(热区 handler 只读这个布尔, 不读布局)
-  hot: false,      // 指针是否在底部热区
+  hot: false,      // 指针是否在底部热区(纵向带内 **且** 横向落在胶囊邻域)
+  bandIn: false,   // 指针是否已在纵向带内(每次入带只重算一次几何, 之后逐帧只做算术)
+  pillW: 0,        // 胶囊实测宽(热区横向判据用; 由 _hscrollSync 量, 热路径上不读布局)
+  wheelOn: false,  // Shift/触控板横滚召唤中(停手 1.5s 后自落)
+  wheelT: 0,       // 上述停留定时器句柄
   drag: null,      // 拖拽会话 { id, x, left, maxThumb, maxScroll }
   bound: false,    // 文档级监听只挂一次
   ro: null,        // ResizeObserver(观察当前主表容器)
@@ -126,8 +133,9 @@ window.AQB_COLUMNS = {
        * (D10 保守默认: 常态下指示条完全不可见); 也免得热区每次进入都白建一次。
        * trackW 要读 pill.clientWidth, 故 _hscrollPill() 必须排在量 trackW 之前。 */
       const pill = this._hscrollPill();
-      // 轨道宽实测(不硬编码 160): CSS 是 min(160px, 42vw), 窄屏会缩
+      // 轨道宽实测(不硬编码): CSS 是 min(300px, 48vw), 窄屏会缩
       const trackW = pill.clientWidth;
+      HSCROLL_IND.pillW = trackW;  // 热区横向判据的输入: 在这里量一次, 逐帧 mousemove 只做算术
       const thumbW = Math.min(trackW, Math.max(32, Math.round((trackW * cw) / sw)));
       const maxScroll = sw - cw;
       const maxThumb = Math.max(0, trackW - thumbW);
@@ -182,12 +190,36 @@ window.AQB_COLUMNS = {
       HSCROLL_IND.bound = true;
       if (window.matchMedia && window.matchMedia("(pointer: fine)").matches) {
         document.addEventListener("mousemove", (ev) => this._hscrollHot(ev), { passive: true });
+        document.addEventListener("wheel", (ev) => this._hscrollWheel(ev), { passive: true });
       }
       window.addEventListener("resize", () => {
         HSCROLL_IND.sbH = -1;  // 状态栏高随媒体查询变(窄屏折行 / 状态条隐藏)
         if (HSCROLL_IND.el) this._hscrollSync(HSCROLL_IND.el, HSCROLL_IND.page);
         this._hscrollShow();
       }, { passive: true });
+    },
+    /* Shift+滚轮 / 触控板双指横滚的召唤路径(2026-11-01 用户追加): 这类用户不需要把指针伸到
+     * 底部带, 但横滚时同样缺位置反馈 —— 横滚期间把胶囊亮出来, 停手 1.5s 后自落。
+     * 判据 = 指针落在那张主表上 且 有横向意图(shiftKey 或 |deltaX| > |deltaY|)。
+     * !不在每次 wheel 里重算几何: 紧随其后的容器 scroll 事件会走 syncHeadScroll 更新;
+     *   这里只在「胶囊还没建出来」或「换了张表」时补一次, 免得每次滚轮都读一遍布局。 */
+    _hscrollWheel(ev) {
+      const horiz = ev.shiftKey || Math.abs(ev.deltaX) > Math.abs(ev.deltaY);
+      if (!horiz) return;
+      const t = this._hscrollTarget();
+      if (!t) return;
+      // 指针要在这张表上: contains 走节点关系, 不读布局(wheel 频率不低)
+      if (!(ev.target instanceof Node) || !t.el.contains(ev.target)) return;
+      if (!HSCROLL_IND.pill || HSCROLL_IND.el !== t.el) this._hscrollSync(t.el, t.page);
+      if (!HSCROLL_IND.overflow) return;
+      HSCROLL_IND.wheelOn = true;
+      this._hscrollShow();
+      if (HSCROLL_IND.wheelT) clearTimeout(HSCROLL_IND.wheelT);
+      HSCROLL_IND.wheelT = setTimeout(() => {
+        HSCROLL_IND.wheelT = 0;
+        HSCROLL_IND.wheelOn = false;
+        this._hscrollShow();
+      }, 1500);
     },
     /* 当前可见的主表容器。三视图 v-if 互斥, 最多命中一个; 三个 ref 都是普通 div.group-table
      * (groups.html:18 groupTable / torrents.html:4 torrentTable / shows.html:5 showTable),
@@ -207,27 +239,54 @@ window.AQB_COLUMNS = {
       }
       return null;
     },
-    /* 热区 handler(R1: 落在热路径上, 每次 mousemove 都跑): 只做一次 clientY 比较,
-     * 状态没变立刻返回 —— 不读布局属性、不写 DOM。状态**变化**才重算几何(重算时机 ②)。 */
+    /* 热区纵向带 = [状态栏上缘 - 24px, 状态栏上缘) —— **不含状态栏本身**(D5)。
+     * !早先写成单边 `clientY >= innerHeight - 状态栏高 - 24`, 少了上界 ⇒ 状态栏那 34px 也落在带内
+     * (状态栏是常用控件区, 不该召唤滚动条)。2026-11-01 用户验收指出后补上上界。 */
+    _hscrollBand(ev) {
+      const bottom = window.innerHeight - this._hscrollStatusbarH();  // 状态栏上缘
+      return ev.clientY >= bottom - 24 && ev.clientY < bottom;
+    },
+    /* 横向判据: 指针要落在胶囊**本身**的邻域内(左右各放 40px 余量), 不是全屏宽都算。
+     * !早先只判 clientY ⇒ 鼠标扫过底部右侧的速度/限速区也召唤胶囊(2026-11-01 用户验收指出)。
+     * 只读缓存(HSCROLL_IND.pillW), 热路径上不量布局。 */
+    _hscrollInPillSpan(ev) {
+      const w = HSCROLL_IND.pillW;
+      if (!w) return false;
+      return Math.abs(ev.clientX - window.innerWidth / 2) <= w / 2 + 40;
+    },
+    /* 热区 handler(R1: 落在热路径上, 每次 mousemove 都跑): 纵向两次比较 + 横向一次减法,
+     * 不读布局、不写 DOM; 状态没变立刻返回。**入带那一刻**才重算几何(重算时机 ②)。 */
     _hscrollHot(ev) {
-      const hot = ev.clientY >= window.innerHeight - this._hscrollStatusbarH() - 24;
-      if (hot === HSCROLL_IND.hot) return;
-      HSCROLL_IND.hot = hot;
-      // 进入那一刻重算: 列宽 / 可见列变化后 scrollWidth 可能已变, 陈旧几何在这里被修正
-      /* !每次进入都重新解析容器, 不复用 HSCROLL_IND.el: 视图切换后旧容器已 detach,
-       * scrollWidth 归零 -> overflow 被误判为假(同源 bug, 一并修掉)。 */
-      if (hot) {
+      if (!this._hscrollBand(ev)) {
+        HSCROLL_IND.bandIn = false;  // 出带: 下次入带要重新量一次几何
+        if (HSCROLL_IND.hot) {
+          HSCROLL_IND.hot = false;
+          this._hscrollShow();
+        }
+        return;
+      }
+      if (!HSCROLL_IND.bandIn) {
+        HSCROLL_IND.bandIn = true;
+        // 进入那一刻重算: 列宽 / 可见列变化后 scrollWidth 可能已变, 陈旧几何在这里被修正
+        /* !每次入带都重新解析容器, 不复用 HSCROLL_IND.el: 视图切换后旧容器已 detach,
+         * scrollWidth 归零 -> overflow 被误判为假(同源 bug, 一并修掉)。
+         * 顺带把 pillW 刷成最新(视口变了轨道宽会变)。 */
         const t = this._hscrollTarget();
         if (t) this._hscrollSync(t.el, t.page);
       }
+      const hot = HSCROLL_IND.overflow && this._hscrollInPillSpan(ev);
+      if (hot === HSCROLL_IND.hot) return;
+      HSCROLL_IND.hot = hot;
       this._hscrollShow();
     },
-    /* 可见性单点: 有横向余量 且 (在热区 或 拖拽中) 才 .on。拖动期间不淡出(D7)。
-     * 淡入淡出过渡全由 CSS 给, 这里只切 class, 不加停留定时器(D5 明确否掉)。 */
+    /* 可见性单点: 有横向余量 且 (在热区 或 拖拽中 或 横滚召唤中) 才 .on。拖动期间不淡出(D7)。
+     * 淡入淡出过渡全由 CSS 给, 这里只切 class。**热区路径不加停留定时器**(D5);
+     * 唯一的时间驱动来源是 Shift+滚轮的 1.5s 自落(2026-11-01 用户拍板, 见 _hscrollWheel)。 */
     _hscrollShow() {
       const pill = HSCROLL_IND.pill;
       if (!pill) return;
-      pill.classList.toggle("on", HSCROLL_IND.overflow && (HSCROLL_IND.hot || !!HSCROLL_IND.drag));
+      const on = HSCROLL_IND.overflow && (HSCROLL_IND.hot || !!HSCROLL_IND.drag || HSCROLL_IND.wheelOn);
+      pill.classList.toggle("on", on);
     },
     /* 按下: 落在滑块上 -> 直接拖; 落在轨道其余位置 -> 先把滑块中心移到点击处
      * (标准映射的逆运算), 再进入拖动 —— 点完就能接着拖, 与原生条同手感(D7)。 */
@@ -278,7 +337,12 @@ window.AQB_COLUMNS = {
         pill.classList.remove("drag");
         if (pill.hasPointerCapture && pill.hasPointerCapture(ev.pointerId)) pill.releasePointerCapture(ev.pointerId);
       }
-      HSCROLL_IND.hot = ev.clientY >= window.innerHeight - this._hscrollStatusbarH() - 24;
+      /* 抬起后重判热区: 拖到视口外再松手时指针往往已不在带内, 沿用旧 hot 会让胶囊留在屏上。
+       * 纵向按带判(不含状态栏); 横向**不再判胶囊邻域** —— 刚拖完手可能停在轨道两端之外,
+       * 那时摘掉会显得"一松手就没了", 交给下一次 mousemove 按正常判据收。 */
+      const inBand = this._hscrollBand(ev);
+      HSCROLL_IND.bandIn = inBand;
+      HSCROLL_IND.hot = inBand && HSCROLL_IND.overflow;
       this._hscrollShow();
     },
     /* 照 _ensureHeadObserver 的范式(本文件 L186 一带): 只观察当前主表容器, 元素换了才重挂;
