@@ -60,8 +60,18 @@ const TR_GATE_ALLOWED_STATES = [
   "pausedDL", "stoppedDL", "error",
 ];
 
+/* 分隔符归一(比对口径单点, 与后端 orchestrator._path_sep_norm 同语义): 反斜杠归一为
+ * 正斜杠, 单字符换单字符保长 —— 折叠空间命中位置/长度回原串仍成立(见 pitfalls/backend/
+ * fs-pathmap-tristate 的「折叠空间匹配、原串切片」纪律), 不做大小写折叠, 不动 to。
+ * 两处漂移 = 弹窗预览与实际改写不一致, 守阵 test_tf_map_save_path_parity 双向用例对账。 */
+function trSepNorm(p) {
+  return String(p == null ? "" : p).replace(/\\/g, "/");
+}
 /* 保存路径改写(前端预览单点, 语义与 orchestrator.map_save_path 逐位一致):
  * 有序 from->to 前缀替换、首条命中生效、无命中原样; 只作用于保存路径终值(调用方保证)。
+ * 比对在分隔符归一空间(trSepNorm)进行 —— from 配成正斜杠、save_path 是 qB Windows
+ * 回读的反斜杠形态(或反之)同样命中; 命中后仍对**原串**做前缀替换(归一保长,
+ * from.length 在原串上成立), to 原样拼接不做归一。
  * 入参 rules 是配置树形状([{from, to}, ...], 标量全字符串); 挂 window 供守阵探针
  * 用后端真函数对账, 不用正则剖 JS 源码。 */
 function trMapSavePath(savePath, rules) {
@@ -69,7 +79,7 @@ function trMapSavePath(savePath, rules) {
   const list = Array.isArray(rules) ? rules : [];
   for (const rule of list) {
     const from = String((rule && rule.from != null) ? rule.from : "");
-    if (from && sp.startsWith(from)) {
+    if (from && trSepNorm(sp).startsWith(trSepNorm(from))) {
       return String((rule && rule.to != null) ? rule.to : "") + sp.slice(from.length);
     }
   }

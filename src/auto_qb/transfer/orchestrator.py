@@ -178,15 +178,30 @@ def _field_of(record: object, key: str, default: Any = None) -> Any:
     return default
 
 
+def _path_sep_norm(p: str) -> str:
+    """路径分隔符归一(比对口径单点): 反斜杠归一为正斜杠
+
+    只做单字符换单字符的替换 —— 保长, 因此折叠空间里的命中位置/长度在原串上仍成立
+    (命中后回原串做前缀替换, 见 map_save_path; 与 fs-pathmap-tristate 的「折叠空间
+    匹配、原串切片」同纪律)。不做大小写折叠(变长映射会错位), 不动 to 的语义。
+    前端预览侧同口径单点: webui/static/shared/transfer_flow.js 的 trSepNorm —— 两处
+    漂移 = 弹窗预览与实际改写不一致, 守阵 test_tf_map_save_path_parity 双向用例对账。
+    """
+    return p.replace("\\", "/")
+
+
 def map_save_path(save_path: str, rules: Sequence[Any]) -> str:
     """路径映射: 有序 from->to 前缀替换, 首条命中生效, 只作用于保存路径终值
 
     rules: TransferPathMapEntry 序列(src=from 前缀, dst=to 前缀); 空表 = 原样。
+    比对在分隔符归一空间(_path_sep_norm)进行 —— from 配成正斜杠、save_path 是 qB
+    Windows 回读的反斜杠形态(或反之)同样命中; 命中后仍对**原串**做前缀替换
+    (归一保长, len(src) 在原串上成立), dst/to 原样拼接不做归一。
     """
     for rule in rules:
         src = str(getattr(rule, "src", "") or "")
         dst = str(getattr(rule, "dst", "") or "")
-        if src and save_path.startswith(src):
+        if src and _path_sep_norm(save_path).startswith(_path_sep_norm(src)):
             return dst + save_path[len(src):]
     return save_path
 

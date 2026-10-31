@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (52)
+## Open (51)
 
-- [feat] [路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中](../26-11-01-0334-feat-torrent-transfer-pathmap-sep.html) — path_map 配错形态时静默原样落; 前端预览同语义所以诚实, 无数据风险, 属可用性陷阱
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
@@ -66,8 +65,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (308)
+## Done (309)
 
+- [feat] [路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中](../26-11-01-0334-feat-torrent-transfer-pathmap-sep.html) — path_map 配错形态时静默原样落; 前端预览同语义所以诚实, 无数据风险, 属可用性陷阱
 - [feat] [e2e/冒烟环境开机自检: 端口占用/旧桩进程/npm i 缺失前置探测](../26-10-31-2226-feat-e2e-smoke-env-selfcheck.html) — 把 smoke.md 高频环境条目从读文档排障搬进工具: dev.e2e 前置自检 8099/8137 占用与桩进程活性
 - [feat] [doc-refs 认领链写法机械化: 生成器/模板接管双向声明](../26-10-31-2226-feat-kb-docrefs-bidirectional-automation.html) — kb.new/kb.index 建件时自动带 doc-refs meta 与反向 Refs 占位, 双向义务由机器保证
 - [feat] [写盘形态守卫: 行数/bytes-per-line 比值与 CRLF 形态抽验进闸门](../26-10-31-2226-feat-repo-writeform-guard.html) — 仓库侧写后机检(逐字节异常检测), 把编辑陷阱从读过文档才知道变成闸门当场红

@@ -19,6 +19,14 @@
 - test_keep_source_flag_skips_delete: 仅本次保留源种子 -> 不删源且原因注明
 - test_path_map_first_rule_wins: 两条规则都命中前缀 -> 只第一条生效
 - test_path_map_no_match_or_empty_passthrough: 空映射/无命中 -> 保存路径原样
+- test_map_save_path_sep_norm_fwd_from_hits_backslash_sp: 正斜杠 from 对反斜杠 save_path
+  命中(issue 26-11-01-0334)—— 归一空间比对, 原串前缀替换(to 原样不归一)
+- test_map_save_path_sep_norm_bwd_from_hits_fwdslash_sp: 反斜杠 from 对正斜杠 save_path
+  命中(双向同语义)
+- test_map_save_path_sep_norm_miss_kept: 归一后仍非真前缀(内容不同)不命中 -> 原样
+- test_map_save_path_sep_norm_exact_still_hits: 同形态精确匹配不回归
+- test_map_save_path_sep_norm_first_rule_wins: 混分隔符两条规则都命中 -> 首条生效
+- test_map_save_path_empty_from_or_sp_unchanged: 空 from 规则跳过 / 空 save_path 不动(既有行为不变)
 - test_batch_continues_after_skipped_seed: [成功, 被门拦, 成功] -> 3 条结果顺序完整
 - test_batch_unexpected_exception_does_not_interrupt: 单种子添加抛未预期异常 -> 本条失败其余照常
 - test_after_state_paused_pauses_before_delete: after_state=paused -> 暂停目标且发生在删源之前
@@ -46,6 +54,7 @@ from auto_qb.transfer.orchestrator import (
     TransferOutcomeCode,
     TransferOrchestrator,
     TransferStatus,
+    map_save_path,
 )
 
 HASH_A = "a" * 40
@@ -387,6 +396,53 @@ def test_path_map_no_match_or_empty_passthrough(monkeypatch, rules):
     adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}])
     _run(monkeypatch, qb, _make_target(path_map=rules), [HASH_A], adapter=adapter)
     assert adapter.add_calls[0]["fields"]["save_path"] == "D:/data/Torrents"
+
+
+# ---------- 路径映射: 分隔符归一比对(issue 26-11-01-0334, 纯函数直测) ----------
+
+
+def test_map_save_path_sep_norm_fwd_from_hits_backslash_sp():
+    """正斜杠 from 对反斜杠 save_path 命中: 归一空间比对, 原串前缀替换(to 原样不归一)"""
+    got = map_save_path(r"D:\data\seeds\tr-map", [TransferPathMapEntry(src="D:/data/seeds", dst="X:/alias")])
+    assert got == "X:/alias" + r"\tr-map"
+
+
+def test_map_save_path_sep_norm_bwd_from_hits_fwdslash_sp():
+    """反斜杠 from 对正斜杠 save_path 命中(双向同语义)"""
+    got = map_save_path("D:/data/seeds/tr-map", [TransferPathMapEntry(src=r"D:\data\seeds", dst=r"X:\alias")])
+    assert got == r"X:\alias/tr-map"
+
+
+def test_map_save_path_sep_norm_miss_kept():
+    """归一后仍非真前缀(内容不同)不命中 -> 原样"""
+    rules = [TransferPathMapEntry(src="D:/data/other", dst="X:/alias")]
+    assert map_save_path(r"D:\data\seeds\tr-map", rules) == r"D:\data\seeds\tr-map"
+    # 归一不能把"真前缀"放宽成任意重叠: seeds != seedx
+    assert map_save_path("D:/data/seedx/tr-map", [TransferPathMapEntry(src=r"D:\data\seeds", dst="X:/alias")]) \
+        == "D:/data/seedx/tr-map"
+
+
+def test_map_save_path_sep_norm_exact_still_hits():
+    """同形态精确匹配不回归(修复前后同行为)"""
+    assert map_save_path("D:/data/seeds/tr-map", [TransferPathMapEntry(src="D:/data/seeds", dst="X:/alias")]) \
+        == "X:/alias/tr-map"
+    assert map_save_path(r"D:\data\seeds\tr-map", [TransferPathMapEntry(src=r"D:\data\seeds", dst=r"X:\alias")]) \
+        == r"X:\alias\tr-map"
+
+
+def test_map_save_path_sep_norm_first_rule_wins():
+    """混分隔符两条规则都命中 -> 首条生效(有序语义不变)"""
+    rules = (
+        TransferPathMapEntry(src=r"D:\data", dst="Y:/first"),
+        TransferPathMapEntry(src="D:/data/seeds", dst="Z:/second"),
+    )
+    assert map_save_path("D:/data/seeds/tr-map", rules) == "Y:/first/seeds/tr-map"
+
+
+def test_map_save_path_empty_from_or_sp_unchanged():
+    """空 from 规则跳过 / 空 save_path 不动(既有边界行为不变)"""
+    assert map_save_path("D:/a", [TransferPathMapEntry(src="", dst="X:")]) == "D:/a"
+    assert map_save_path("", [TransferPathMapEntry(src="D:/a", dst="X:")]) == ""
 
 
 # ---------- 批次行为(D6) ----------

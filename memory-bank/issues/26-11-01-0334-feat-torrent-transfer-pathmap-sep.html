@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中">
 <meta name="issue-summary" content="path_map 配错形态时静默原样落; 前端预览同语义所以诚实, 无数据风险, 属可用性陷阱">
 <title>路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中 · feat · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· feat</div>
+    <div class="kicker">计划外问题（已修）· feat</div>
     <h1>路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中</h1>
     <p class="lede">path_map 配错形态时静默原样落; 前端预览同语义所以诚实, 无数据风险, 属可用性陷阱</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0334-feat-torrent-transfer-pathmap-sep</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 03:34</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -142,8 +142,8 @@ path_map: [{from: "D:\...\seeds\tr-map3", to: ".../tr-map3-alias"}]  (反斜杠)
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：TODO）</div>
+    <p class="hint">修复时已确认：<code>map_save_path</code>（及前端 <code>trMapSavePath</code>）对 from 与 save_path 做**裸字符串**前缀比对，不做任何分隔符归一 —— qB Windows 回读的 save_path 是反斜杠形态，from 按常见书写习惯配成正斜杠时 <code>startswith</code> 首字符即失败，静默走「无命中 → 原样」分支；反向（反斜杠 from 对正斜杠 save_path）同构。与平台差异（Windows 形态）叠加后成为配置可用性陷阱。</p>
+    <div class="callout">根因：前缀比对在原始串上进行、无分隔符归一空间；命中失败与「确实无规则」同形，无告警无日志。</div>
   </section>
 
   <section id="s6">
@@ -155,11 +155,15 @@ path_map: [{from: "D:\...\seeds\tr-map3", to: ".../tr-map3-alias"}]  (反斜杠)
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 03:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 — 认领，状态 <strong>In Progress</strong>（修法取候选①分隔符归一化，用户已拍板）</li>
+      <li>2026-11-01 — 修复完成（候选①），<code>commands run test.quick</code> 全绿，状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-01（认领时）仍复现 —— 直接调用 <code>orchestrator.map_save_path</code>：正斜杠 from 对反斜杠 save_path 与反斜杠 from 对正斜杠 save_path 双向均静默原样返回；同形态精确匹配仍正常命中。锚点行号核对：<code>orchestrator.py</code> 的 <code>startswith(src)</code> 现位于 189 行，<code>transfer_flow.js</code> 的 <code>sp.startsWith(from)</code> 现位于 72 行，与取证一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（即候选①，未改道）</strong>：比对前把 from 与 save_path 在**分隔符归一空间**（反斜杠→正斜杠，单字符换单字符**保长**，故命中位置/长度回原串仍成立）做前缀比对；命中后仍对**原串**做前缀替换（<code>to</code> 原样拼接不归一，目标路径形态由用户配置）。两端各抽命名归一化口径并注释互指：后端 <code>orchestrator.py</code> 新增 <code>_path_sep_norm</code>（<code>map_save_path</code> 比对改走归一空间，~186-216 行），前端 <code>transfer_flow.js</code> 新增 <code>trSepNorm</code>（<code>trMapSavePath</code> 同语义，~63-90 行）。不做候选②的编辑器实时提示。边界行为不变：空 from 规则跳过、空 save_path 原样、有序首条命中生效、不做大小写折叠（变长折叠错位纪律见 pitfalls/backend/fs-pathmap-tristate）。</p>
+    <p><strong>验证方式</strong>：①认领时锚点复验（双向错形态均静默原样、同形态精确匹配正常）；②后端纯函数直测 6 条新增（双向命中 / 归一后仍非真前缀不命中 / 同形态不回归 / 混分隔符首条命中 / 空边界）；③前端守阵 <code>test_tf_map_save_path_parity</code> 用例 8→10 组，新增双向错形态两两对表 + 语义自证断言；④全量回归。</p>
+    <p><strong>测试数字（2026-11-01 实测）</strong>：定向 <code>test.one</code> 两文件 57 passed in 0.50s；全量 <code>commands run test.quick</code> <strong>4365 passed, 2 skipped in 63.12s</strong>。</p>
   </section>
 
   <footer>

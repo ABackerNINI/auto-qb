@@ -13,9 +13,11 @@ orchestrator.gate_verdict 同口径); export 可用性与目标连通性后置�
 
 ## 测试计划(每个测试函数一条)
 - test_tf_map_save_path_parity: 前端 trMapSavePath ↔ 后端 orchestrator.map_save_path
-  逐位同语义(node 喂树形状 [{from,to}], python 喂 TransferPathMapEntry(src,dst), 八组
+  逐位同语义(node 喂树形状 [{from,to}], python 喂 TransferPathMapEntry(src,dst), 十组
   用例两两对表): 空表原样 / 首条命中生效(有序) / 真前缀才命中 / 无命中原样 / 空 from
-  规则跳过 / 前缀恰等 / 只替换一次(命中即返回, 不再吃后续规则)
+  规则跳过 / 前缀恰等 / 只替换一次(命中即返回, 不再吃后续规则) / 分隔符错形态双向命中
+  (正斜杠 from 对反斜杠 sp、反斜杠 from 对正斜杠 sp —— 分隔符归一化口径, issue
+  26-11-01-0334, 与后端 _path_sep_norm 同语义单点对账)
 - test_tf_gate_states_match_backend: 状态门预演集(window.AQB_TRANSFER_GATE_STATES)与
   orchestrator 的 _DOWNLOAD_PIPELINE_STATES/_ALLOWED_STATES/_MISSING_FILES_STATE 逐位
   相等 —— 预演「将跳过」与执行段真门判据漂移 = 弹窗承诺与回执不一致
@@ -72,6 +74,8 @@ const cases = [
   { sp: "/a/d", rules: [{ from: "", to: "/x" }, { from: "/a", to: "/y" }] },
   { sp: "/a", rules: [{ from: "/a", to: "/x" }] },
   { sp: "/a/b", rules: [{ from: "/a", to: "/x" }, { from: "/a/b", to: "/y" }] },
+  { sp: "D:\\data\\seeds\\tr-map", rules: [{ from: "D:/data/seeds", to: "X:/alias" }] },
+  { sp: "D:/data/seeds/tr-map", rules: [{ from: "D:\\data\\seeds", to: "X:\\alias" }] },
 ];
 const out = cases.map((c) => f(c.sp, c.rules));
 console.log(JSON.stringify(out));
@@ -109,13 +113,18 @@ def test_tf_map_save_path_parity():
         ("/a/d", [("", "/x"), ("/a", "/y")]),
         ("/a", [("/a", "/x")]),
         ("/a/b", [("/a", "/x"), ("/a/b", "/y")]),
+        (r"D:\data\seeds\tr-map", [("D:/data/seeds", "X:/alias")]),
+        ("D:/data/seeds/tr-map", [(r"D:\data\seeds", r"X:\alias")]),
     ]
     for (sp, rules), got_fe in zip(cases, fe):
         be = map_save_path(sp, [TransferPathMapEntry(src=a, dst=b) for a, b in rules])
         assert got_fe == be, (f"改写预览与执行段映射语义漂移: save_path={sp!r} rules={rules} "
                               f"前端={got_fe!r} 后端={be!r}")
-    # 语义自证(非镜像): 首条命中生效(第二条不吃)、无命中原样、真前缀才命中
+    # 语义自证(非镜像): 首条命中生效(第二条不吃)、无命中原样、真前缀才命中;
+    # 分隔符错形态(issue 26-11-01-0334)双向命中且只替换前缀段(to 原样不归一)
     assert fe[1] == "/x/b/c" and fe[2] == "/y/c" and fe[3] == "/abc/d" and fe[4] == "/nope/d"
+    assert fe[8] == "X:/alias" + r"\tr-map", fe[8]
+    assert fe[9] == r"X:\alias" + "/tr-map", fe[9]
 
 
 def test_tf_gate_states_match_backend():
