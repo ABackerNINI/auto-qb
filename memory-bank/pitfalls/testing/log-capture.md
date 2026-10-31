@@ -23,8 +23,12 @@
   - **2026-10-22 清偿(issue 26-10-21-0502)**: 历史 7 份局部副本(helpers/webui_helpers/hr_service/hr_worker/
     modules_p6/speed_curve/traffic_sample)已全部删除并改调 `capture_logs`, 全仓再无第二份模块 logger 采集器;
     `test_tray._capture_on_module_logger` 是"包装调用方自备 handler"的另一语义, 不在收敛面。
-- **复发**: 2(原记于 stubs-sim「make_manager 清 root handlers」条, 2026-09-27 外迁至此; 2026-10-01 W2 issue
-  清偿轮两个独立认领子智能体先后撞同一坑, 均改临时 handler 直挂模块 logger 才断言到)。
+- **复发**: 3(原记于 stubs-sim「make_manager 清 root handlers」条, 2026-09-27 外迁至此; 2026-10-01 W2 issue
+  清偿轮两个独立认领子智能体先后撞同一坑, 均改临时 handler 直挂模块 logger 才断言到; 2026-11-01
+  test_locking.py::test_release_file_lock_none_and_failure_logger 手写局部捕获器未显式 setLevel ——
+  单跑/净树恒挂, 全量靠邻居泄漏的 root level 偶发绿, xdist 邻居不定后在本轮全量也红)。
   为什么没命中(首次): 旧判别只写"用例体内建 manager"这层, 没料到 root level 与 xdist 两个更底层的伤害面;
   为什么没命中(二次): 认领轮按 issue 档案直接动码, 没走「动代码前先读 pitfalls/testing/ 索引」的路由。
+  为什么没命中(三次): issue 26-10-11-0240 认领轮新增用例没走「新用例一律 capture_logs」的处置口径,
+  手写捕获器漏 setLevel; 「上一轮全量绿」造成了测试本身没问题的错觉, 直到下一轮换邻居才暴露。
 - ⚠ **同症状异因(2026-10-12 补)**: 断言 `any(...)` 为 False 还有**第二种根因** —— 不是 caplog 没采到, 而是**生产代码压根没打那条日志**(如节流哨兵把首次告警吞了)。判别: 用 `capture_logs` / 直连 `logging.basicConfig` 复跑仍是空 ⇒ 问题在日志**产生侧**而非**采集侧** ⇒ 见 [monotonic-warn-sentinel.md](monotonic-warn-sentinel.md)(本机绿、CI 全新 VM 红那一类)。

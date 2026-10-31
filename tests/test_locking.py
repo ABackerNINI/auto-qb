@@ -19,7 +19,7 @@ import pytest
 from auto_qb.config import ConfigError
 from auto_qb.infra.errors import AutoQbError
 from auto_qb.infra.locking import SingleInstanceLock, SingleInstanceLockError
-from helpers import FakeConfig, make_manager
+from helpers import FakeConfig, capture_logs, make_manager
 
 
 def test_lock_acquire_release_basic(tmp_path):
@@ -146,13 +146,9 @@ def test_release_file_lock_none_and_failure_logger():
         def release(self):
             raise RuntimeError("句柄已坏")
 
-    logger = logging.getLogger("auto_qb.test.locking")
-    seen = []
-    handler = logging.Handler()
-    handler.emit = lambda rec: seen.append(rec)
-    logger.addHandler(handler)
-    try:
-        release_file_lock(_Boom(), logger=logger, what="测试锁")
-    finally:
-        logger.removeHandler(handler)
-    assert any(r.levelno == logging.DEBUG and "释放测试锁失败" in r.getMessage() for r in seen), seen
+    # 采集走统一 helper(pitfalls/testing/log-capture.md): 手写局部捕获器必须给 logger
+    # 显式 setLevel —— root 默认 WARNING 时 debug() 在 logger 层就被拦, 自建 handler 恒空,
+    # 单跑/净树必挂, 全量只是靠邻居测试泄漏的 root level 才偶发绿(xdist 邻居不定 -> 间歇)。
+    with capture_logs("auto_qb.test.locking") as cap:
+        release_file_lock(_Boom(), logger=logging.getLogger("auto_qb.test.locking"), what="测试锁")
+    assert any(r.levelno == logging.DEBUG and "释放测试锁失败" in r.getMessage() for r in cap.records), cap.messages
