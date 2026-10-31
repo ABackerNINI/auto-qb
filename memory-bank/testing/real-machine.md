@@ -222,7 +222,7 @@
 | **「写序号单调」外部不可观测** | `write_seq` 只进读缓存键(server/context.py RoCache), 不出现在任何端点载荷 | 命令线消费时序的可观测代理 = 回执 `ts` 单调 + `wait_ms/exec_ms` 埋点齐全 |
 | **GET /api/config 树根 = 整份 YAML 文档** | 段在 `tree["config"]` 之下, PUT 回执 `changes` 收顶层段名, 非 R 级键无 restart_required(RM02-04 口径一致) | 改树走 `tree["config"]["<段>"]`(RM05-02 同款配方); 断言落盘用 yaml 解析, 不咬字符串 |
 | **reannounce 确认跟踪首拍即判(缺陷在池 26-10-31-1740)** | 指令 drain 后同 tick 首判(+1ms): tracker 行 updating 在途 + 基线 min_announce 缺失 → 直接 confirmed 终态, 死端口 announce 随后的拒绝(status 4)不纠正已写 ok 回执 | 不可达 tracker 的「失败/推迟」回执期望不可达; 等缺陷修复后真机回归 RM09-04①/③ |
-| **组命令对空组静默(缺陷在池 26-10-31-1740)** | 形状合法但不存在的组 key → `_group_action` 零下发零日志, drain 恒 ok(exec_ms 0.0); 畸形 key 才 400(「分组标识无效」) | 未知 key 的负向断言按实况(缺陷修复前勿期望 error 回执); reannounce_group 空组已有显式 error 口径(commands.py:559) |
+| **组命令对空组显式 error(已修, 原 26-10-31-1740)** | 形状合法但 store 查无此组的 key → `_group_action`/`_cmd_delete_group` 走 `_group_empty_receipt` 兜底: WARNING 日志 + error 回执「组不存在或已被解散」; 成员已删光档文案「组内种子不存在或已被删除」; 畸形 key 仍 400(「分组标识无效」) | 未知 key 负向断言可期望 error 回执(回执在 handler 写, drain 靠 `cmd_id not in results` 不覆盖); reannounce 空组分支收编进同一兜底单点(commands.py `_group_empty_receipt`) |
 | **`/api/torrents/add` 的 save_path 逐条给** | 一条 add 命令一个 save_path(多文件一次入列共享落点); 独立落点拆多条 add 命令 | 文件经 base64 `files_b64` 随 JSON 提交; 回执由 handler 依 qB 收据写 ok/partial/fail |
 | **rename-fs 的 old_path 相对 save_path 且含内容根** | 多文件种子传 `包名/文件名`(非裸文件名); `/torrents/files` 回读 name = 完整相对路径 | 断言锚点 = files 名单 + 磁盘文件双验; location 移动后路径基准随 save_path 走 |
 | **产品快照状态滞后 qB 1-2 拍(写侧闸门版)** | reannounce 非活跃闸读快照 state —— 只等 hash 进 flat 视图就发命令, 会读到 checkingUP(∈ REANNOUNCE_BLOCKED_STATES)而误落「非活跃忽略」 | 活跃态前置命令先 `wait_in_store_state`(等快照 state==stalledUP); 仅等 hash 存在不够(§2.9 的进度滞后同族) |

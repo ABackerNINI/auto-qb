@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (56)
+## Open (55)
 
-- [bug] [组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)](../26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok.html) — RM09-06 实测: base64url 合法但不存在的组 key 走 /api/groups/{key}/pause 得 ok 回执且零效果零日志; 计划口径「只要不是静默成功」
 - [bug] [强制汇报确认跟踪对不可达 tracker 的首报过早落 confirmed(ok 回执)](../26-10-31-1740-bug-webui-reannounce-premature-confirm.html) — RM09-04 实测: 死端口 tracker 的 reannounce 在 updating 在途瞬间即写 ok(日志+1ms), 随后 tracker 拒绝不纠正回执 —— 计划期望 RC_FAIL
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
@@ -68,8 +67,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (299)
+## Done (300)
 
+- [bug] [组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)](../26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok.html) — RM09-06 实测: base64url 合法但不存在的组 key 走 /api/groups/{key}/pause 得 ok 回执且零效果零日志; 计划口径「只要不是静默成功」
 - [test] [relocate reconcile 重建用例同树异时翻转(全量绿后单跑稳定红)](../26-10-31-0932-test-relocate-reconcile-flaky.html) — test_reconcile_rebuild_when_link_lost_but_qb_alive 同树 09:05 test.full 绿, 宿主重启后 09:15 起单跑稳定红(phase 卡 removed), venv 零变化非依赖 bump 引入, 疑时序/环境敏感, 根因待查
 - [chore] [filelock 3.32.6 -> 4.2.5 升级(major)](../26-10-31-0830-chore-infra-filelock-4-upgrade.html) — filelock 4.x 收紧参数校验并改 Timeout 语义; 本项目调用面仅 infra/locking.py 单点(FileLock(str, timeout=float) + Timeout), 风险偏低, 按 major 规则降档入池
 - [chore] [pyobjc 三件 12.2.2 -> 13.0 升级(major, macOS 专用传递依赖)](../26-10-31-0830-chore-pyobjc-13-macos-upgrade.html) — pyobjc-core/-cocoa/-quartz 是 pystray 的 macOS 专用传递依赖, Windows 运行时不安装, 实际影响约 0; 保持锁内跟随或随 pystray 侧处理

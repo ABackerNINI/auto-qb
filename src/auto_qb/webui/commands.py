@@ -191,7 +191,16 @@ _OPTIMISTIC_BULK_ACTIONS = frozenset({"pause", "resume"})
 # set_torrent_location(计划 26-10-18-1604 P5): 整组迁移开时 handler 自写回执(带闸门判定
 # truth: 集体相位/二次确认/拒绝原因), 故 drain 必须把 cmd_id 传下去 —— 与 bulk_torrents
 # 同形态(「谁写回执」与「要不要传 cmd_id」是两件事)。
-CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {"bulk_torrents", "set_torrent_location"}
+# pause/resume/delete_group(issue 26-10-31-1740): 常规回执仍由 drain 的 defer_receipt 写,
+# 但「key 形状合法而 store 查无此组/成员已空」时 handler 要写显式 error 回执(不再静默 ok)
+# —— 错误分支得拿到 cmd_id; handler 写过回执时 drain 靠 `cmd_id not in results` 不覆盖。
+CMD_ID_COMMANDS = DEFERRED_RECEIPT_COMMANDS | {
+    "bulk_torrents",
+    "set_torrent_location",
+    "pause_group",
+    "resume_group",
+    "delete_group",
+}
 
 
 def is_deferred_receipt(cmd: str, args: Optional[dict] = None) -> bool:
@@ -492,12 +501,28 @@ class WebCommandsMixin:
     # 日志动词」, 改判空/调用形状/日志口径极易漏改另一半 —— 按 (method, verb) 参数化后, 每个
     # _cmd_* 仍是一行, 但形状只有一份(方法名以字符串传, 便于守阵钉命令->方法映射)。
 
-    def _group_action(self, key: tuple, method: str, verb: str) -> None:
-        """整组动作单点: 取组内 hash -> 调 qB 方法 -> 一条日志(空组不下发, 与既有行为一致)"""
+    def _group_empty_receipt(self, cmd_id: str, key: tuple, verb: str) -> None:
+        """组命令空兜底(issue 26-10-31-1740): key 形状合法但 store 查无此组 / 成员已全部不在
+        快照时, 不发指令之外还必须留痕 —— WARNING 日志 + 显式 error 回执, 不再静默 ok
+
+        修复前 _group_action/_cmd_delete_group 空 hashes 直接返回, drain 侧 RESYNC 通路恒补
+        ok 回执 —— 直调 API / 前端视图过期时「点了没反应」且零日志可查。两档文案区分根因:
+        key 不在 store.groups = 组已解散或 key 传错(视图过期); 在但成员空 = 成员执行时刻已
+        全部不在快照(对齐 _cmd_reannounce_group 既有口径, issue 26-10-06-0028 E-03)。
+        """
+        reason = "组不存在或已被解散" if key not in self.store.groups else "组内种子不存在或已被删除"
+        logger.warning(f"WEB UI | {verb}整组跳过: {reason}({key[0]})")
+        if cmd_id:
+            self._set_web_result(cmd_id, "error", reason)
+
+    def _group_action(self, key: tuple, method: str, verb: str, cmd_id: str = "") -> None:
+        """整组动作单点: 取组内 hash -> 调 qB 方法 -> 一条日志; 空组走 _group_empty_receipt"""
         hashes = self._group_hashes(key)
         if hashes:
             getattr(self.api, method)(torrent_hashes=hashes)
             logger.info(f"WEB UI | {verb}整组({len(hashes)}个种子)")
+        else:
+            self._group_empty_receipt(cmd_id, key, verb)
 
     def _torrent_action(self, hash: str, method: str, verb: str, **kwargs) -> None:
         """单种子动作单点: 快照里还在才下发(删后点击静默忽略) -> 一条日志; kwargs 直传 qB 方法"""
@@ -521,11 +546,11 @@ class WebCommandsMixin:
         getattr(self.api, method)(upload_kib=int(upload_kib or 0), download_kib=int(download_kib or 0))
         logger.info(f"WEB UI | {verb}: 上 {upload_kib} / 下 {download_kib} KiB/s")
 
-    def _cmd_pause_group(self, key: tuple):
-        self._group_action(key, "torrents_pause", "暂停")
+    def _cmd_pause_group(self, key: tuple, cmd_id: str = ""):
+        self._group_action(key, "torrents_pause", "暂停", cmd_id)
 
-    def _cmd_resume_group(self, key: tuple):
-        self._group_action(key, "torrents_resume", "开始")
+    def _cmd_resume_group(self, key: tuple, cmd_id: str = ""):
+        self._group_action(key, "torrents_resume", "开始", cmd_id)
 
     def _reannounce_active(self, hashes: List[str]) -> List[str]:
         """按快照状态过滤出真正可汇报的种子(第二道闸, 判据见 REANNOUNCE_BLOCKED_STATES)
@@ -556,17 +581,19 @@ class WebCommandsMixin:
                 f"WEB UI | 强制汇报整组({len(active)}/{len(hashes)}个种子活跃, "
                 f"跳过 {len(hashes) - len(active)} 个非活跃), 等待 tracker 确认"
             )
-        elif cmd_id:
-            # 组内成员执行时刻已全部不在快照(组快照渲染后成员被删光): 不发指令也不登记跟踪,
-            # 必须显式给 error 回执 —— 否则前端 waitCmd 挂到自身超时才弹「超时」; 对齐同文件
-            # _cmd_reannounce_torrent 对缺失的显式回执口径(issue 26-10-06-0028 E-03)
-            self._set_web_result(cmd_id, "error", "组内种子不存在或已被删除")
+        else:
+            # 空 hashes: 组不存在(视图过期 / 直调传错 key)或成员已全部不在快照 —— 统一走空兜底
+            # (WARNING 日志 + 显式 error 回执, 文案与判据单点在 _group_empty_receipt;
+            # 旧的「仅 cmd_id 时写回执」口径 = issue 26-10-06-0028 E-03, 已收编进兜底)
+            self._group_empty_receipt(cmd_id, key, "强制汇报")
 
-    def _cmd_delete_group(self, key: tuple, delete_files: bool = False):
+    def _cmd_delete_group(self, key: tuple, delete_files: bool = False, cmd_id: str = ""):
         hashes = self._group_hashes(key)
         if hashes:
             self.api.torrents_delete(torrent_hashes=hashes, delete_files=delete_files)
             logger.info(f"WEB UI | 删除整组({len(hashes)}个种子, delete_files={delete_files})")
+        else:
+            self._group_empty_receipt(cmd_id, key, "删除")
 
     def _cmd_pause_torrent(self, hash: str):
         self._torrent_action(hash, "torrents_pause", "暂停")

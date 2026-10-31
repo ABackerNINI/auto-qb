@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-write-side">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)">
 <meta name="issue-summary" content="RM09-06 实测: base64url 合法但不存在的组 key 走 /api/groups/{key}/pause 得 ok 回执且零效果零日志; 计划口径「只要不是静默成功」">
 <title>组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 17:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -157,9 +157,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 17:40 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 — 用户指派认领，状态 <strong>In Progress</strong>。复验：代码层锚点复核仍复现 —— <code>_group_action</code>/<code>_cmd_delete_group</code> 空 hashes 静默返回(不发指令不写账不落日志)，drain 侧 RESYNC 通路对 <code>cmd_id not in results</code> 恒补 ok 回执; 三命令均不在 <code>CMD_ID_COMMANDS</code>，cmd_id 根本不传 handler。畸形 key 400 分支不受影响。</li>
+      <li>2026-10-31 — 修复完成，状态 <strong>Done</strong>（实际修法见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>见状态日志 In Progress 行 —— 代码层锚点复核确认仍复现。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法</strong>(与建议修法「下沉单点」同向, 另加两处收敛): commands.py 新增 <code>_group_empty_receipt(cmd_id, key, verb)</code> 兜底单点 —— 空组时 WARNING 日志 + 显式 error 回执, 文案两档区分根因: key 不在 <code>store.groups</code> = 「组不存在或已被解散」(视图过期/直调传错), 在但成员空 = 「组内种子不存在或已被删除」(对齐 26-10-06-0028 E-03 既有口径)。挂接面: ①<code>_group_action</code>(pause/resume 整组共用)与 <code>_cmd_delete_group</code> 空分支走兜底; ②<code>_cmd_reannounce_group</code> 既有 elif 分支收编进同一单点(顺带补上它「无 cmd_id 直调时零日志」的缺口); ③pause_group/resume_group/delete_group 加入 <code>CMD_ID_COMMANDS</code>(常规 ok 回执仍由 drain 的 defer_receipt 写, handler 写过 error 时 drain 靠既有 <code>cmd_id not in results</code> 守卫不覆盖)。</p>
+    <p><strong>验证方式</strong>: 新增 <code>tests/test_web_commands.py::test_group_commands_unknown_key_error_receipt</code> —— 查无此组四命令(pause/resume/delete/reannounce)零 qB 调用 + 四条 error 回执文案正确 + 四条 WARNING 日志; 成员删光档第二档文案; 存活组回执通路不回归(照旧 drain ok)。已红验: 移除修复跑该用例判红, 恢复后转绿。</p>
+    <p><strong>测试数字</strong>(2026-10-31, commands run test.full): 4308 passed / 2 skipped / 3 failed —— 其中 2 条(test_docs_forms::test_artifacts_meta_complete / test_status_vocabulary)为远端同步带入的存量失败(26-10-31 RM02-RM09 计划件缺 doc-status meta, 与本修无关, 另行处理), 1 条(test_memory_bank::test_gen_all_check_is_green)为改状态后索引未重建所致、重建 <code>kb.index</code> 后已转绿(复跑 16 passed / 2 failed 存量)。覆盖率 TOTAL 99.06%(门槛 99%)。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

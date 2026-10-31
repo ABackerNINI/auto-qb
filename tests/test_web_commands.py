@@ -36,6 +36,7 @@
 - test_reannounce_stopped_midwindow_direct_verdict: 窗口内暂停直判(下一 tick warn「种子已停止」, 不等 deadline)
 - test_reannounce_background_verify_and_cap: 推迟后台核实(达 min_e 出结论落 INFO/WARNING 日志并移除/逾时 DEBUG 静默移除/500 上限丢最旧 WARNING)
 - test_cmd_group_actions_skip_missing_group: 组 key 不存在/成员不在快照 -> 空 hashes 不调 API
+- test_group_commands_unknown_key_error_receipt: 组命令空兜底(issue 26-10-31-1740) —— key 形状合法但 store 查无此组/成员已空 -> 不发指令 + WARNING 日志 + 显式 error 回执(drain 不覆盖); 存活组照常 ok 回执
 - test_cmd_reload_config_delegates: reload_config 命令委托 apply_new_config
 - test_add_outcome_fail_branch: _add_outcome 全拒档(Mapping 三值最右档 "fail")
 - test_bulk_limits_each_direction_independently: limits 单方向时另一方向守卫整条跳过(P0-T0.2 早退矩阵)
@@ -1619,6 +1620,64 @@ def test_cmd_group_actions_skip_missing_group():
         mgr.web.commands.put(("pause_group", {"key": ("R:/nonexistent", ("y.mkv", ))}))  # 组 key 不存在
         mgr.web.consume_commands()
         assert client.calls == [], f"空组不应调用 qB API: {client.calls}"
+
+
+def test_group_commands_unknown_key_error_receipt():
+    """组命令空兜底(issue 26-10-31-1740): key 形状合法但 store 查无此组 / 成员已全部不在快照
+    -> 不发指令 + WARNING 日志 + 显式 error 回执, drain 不得再用 ok 覆盖
+
+    修复前: _group_action/_cmd_delete_group 空 hashes 静默返回, drain 侧 RESYNC 通路恒补
+    ok —— 直调 API / 前端视图过期时回执 ok、零效果、零日志。两档文案区分根因(查无此组 vs
+    成员已删光); reannounce 的空组分支收编进同一兜底单点。红验: 兜底拆掉(空组静默返回)
+    则回执判红 + 日志判红。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, key = _make_grouped_manager(td)
+        unknown = ("R:/no-such-group", ("y.mkv", ))
+        with capture_logs("auto_qb.webui.commands") as cap:
+            for cmd, payload in (
+                ("pause_group", {
+                    "key": unknown
+                }),
+                ("resume_group", {
+                    "key": unknown
+                }),
+                ("delete_group", {
+                    "key": unknown,
+                    "delete_files": True
+                }),
+                ("reannounce_group", {
+                    "key": unknown
+                }),
+            ):
+                mgr.web.commands.put((cmd, {**payload, "cmd_id": f"c-{cmd}"}))
+            mgr.web.consume_commands()
+        assert client.calls == [], f"查无此组不得调用 qB API: {client.calls}"
+        for cmd in ("pause_group", "resume_group", "delete_group", "reannounce_group"):
+            r = mgr.web.results[f"c-{cmd}"]
+            assert r["status"] == "error", f"{cmd}: 必须 error 回执(drain 恒 ok 已废): {r}"
+            assert "组不存在或已被解散" in r["error"], f"{cmd}: 文案区分根因: {r['error']}"
+        assert sum("整组跳过: 组不存在或已被解散" in m for m in cap.messages) == 4, cap.messages
+    with tempfile.TemporaryDirectory() as td:
+        # 成员执行时刻已全部不在快照(组还在 store.groups): 第二档文案
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.store.remove_torrent("HA")
+        mgr.store.remove_torrent("HB")
+        assert mgr._group_hashes(key) == [], "前置: 组内成员已全部不在快照"
+        for cmd in ("pause_group", "delete_group"):
+            mgr.web.commands.put((cmd, {"key": key, "cmd_id": f"m-{cmd}"}))
+        mgr.web.consume_commands()
+        assert client.calls == [], f"成员空不得调用 qB API: {client.calls}"
+        for cmd in ("pause_group", "delete_group"):
+            r = mgr.web.results[f"m-{cmd}"]
+            assert r["status"] == "error" and "组内种子不存在或已被删除" in r["error"], r
+    with tempfile.TemporaryDirectory() as td:
+        # 存活组不回归: 正常路径照旧由 drain 写 ok(handler 不写, defer_receipt 通路不变)
+        mgr, client, key = _make_grouped_manager(td)
+        mgr.web.commands.put(("pause_group", {"key": key, "cmd_id": "ok-alive"}))
+        mgr.web.consume_commands()
+        assert client.calls == [("pause", ["HA", "HB"])], client.calls
+        assert mgr.web.results["ok-alive"]["status"] == "ok", "存活组回执通路不变"
 
 
 def test_cmd_reload_config_delegates():
