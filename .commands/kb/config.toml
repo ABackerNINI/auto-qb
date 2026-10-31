@@ -77,3 +77,9 @@ run     = ["python <skill-dir:memory-bank>/scripts/wrap_session.py <args>"]
 when    = "收尾机械面: 抬切片最后活动 + 追加 R 行 / 同专题档案 Updated + 进度日志日期行 / 重建索引"
 note    = "只做机械面(D6: 蒸馏与判断仍是 agent 的活); 切片不存在则按模板建(零 SLOT, 判断剩余 0); 基线数字不自动化(A4)"
 timeout = 60
+
+[tasks."kb.tier"]
+run     = ["python <skill-dir:memory-bank>/scripts/kb_tier.py <args>"]
+when    = "知识库分级清理 L0-L3 (计划 26-10-31-0534): list 列该级文件 / set 头部区第 4 行打标 / migrate L2 叙事外迁 attachments / purge L3 删除(三闸门)"
+note    = "四动作(D15): migrate 与 purge 高危默认 dry-run, purge 强制 --apply 且三闸门(守阵齐全/全仓反向引用清零/头部 > 观察通过: 日期标记)任一不过全或无拒绝; 标记行 > 等级: L<n> 在头部区(首个 ## 之前), 生成器只解析三行头具名字段不受干扰; migrate 原文逐字节搬、相对链接自动加 ../ 一层、写完回读校验行尾; R0 只建能力, 不调用 purge 删真实文件"
+timeout = 60
