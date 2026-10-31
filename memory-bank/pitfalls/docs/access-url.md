@@ -1,6 +1,7 @@
 # 给用户的访问地址只能写 localhost
 
 > 摘要: 启动日志 / README / dev 脚本里指向本程序 WEB UI 的地址**只能**写 `localhost`, 不能写 `127.0.0.1`(2026-09-25 落地, 起因: 两者在浏览器眼里是两个 origin, 且 `127.0.0.1` 那份 localStorage 更容易被浏览器清掉); 而**绑定地址** `config.web.host` 恰恰相反 —— 必须留 `127.0.0.1`, 两件事混在一个变量里写就是本坑的复发形态。
+> 等级: L0
 > 触发: 启动日志, WEB UI 已启动, 访问地址, 打开浏览器, 127.0.0.1, localhost, origin 隔离, localStorage 被清, 偏好回默认, 改文档里的地址, dev_webui, display_host
 
 ## 绑定地址 ≠ 展示地址

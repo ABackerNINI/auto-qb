@@ -1,6 +1,7 @@
 # skill 装载与脚本路径
 
 > 摘要: skill 里的脚本路径一律写 `<skill-dir>/scripts/…`; 项目级 skill 只挂 `.codebuddy/skills` 一处。
+> 等级: L0
 > 触发: 写 skill, 装 skill, skill 不出现, 脚本路径, find_root, 脚本找不到
 
 ### skill 里的脚本路径要写 `<skill-dir>/scripts/...`

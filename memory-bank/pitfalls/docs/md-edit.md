@@ -1,6 +1,7 @@
 # 改 md 档案时用替换片段吞掉相邻字段
 
 > 摘要: 在 Markdown 文档(尤其 `memory-bank/tasks/*.md` / `activeContext/*.md` 的头部元数据块)上做字符串替换时, 把**下一行的字段标签**一起卷进 `old` 会静默删掉它 —— md 没有闭合标签, 删了不报错, 渲染出来只是"少了一个字段"。
+> 等级: L0
 > 触发: 改任务档案, 改 activeContext 切片, 头部元数据, Status/Updated/Summary 字段, 字符串替换, 替换片段吞掉整行, Markdown 静默丢失
 
 ## 头部元数据是行级字段: `old` 不要跨到下一行的标签

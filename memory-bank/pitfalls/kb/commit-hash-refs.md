@@ -1,6 +1,7 @@
 # KB 引用的提交 hash 会被 rebase 打断悬空
 
 > 摘要: KB(backtick / `<code>` / `commit <hash>` 语境)里记 feature 分支提交, 分支 rebase 并入 develop 后旧 hash 对象不可解析; 守卫(kb.check / test_docs_forms)不查可解析性, 静默累积。另: `git cat-file --batch-check` 只报存在性不报类型, 旧 commit 被 GC 后同前缀 blob/tree 会顶占前缀, 核对结果「时好时坏」。
+> 等级: L0
 > 触发: KB 里写 commit hash, rebase 合流, 悬空 hash, cat-file missing, 按图索骥找不到提交, hash 时好时坏
 
 **Refs:** memory-bank/tasks/26-10-06-memory-bank-dangling-hash-refs.md

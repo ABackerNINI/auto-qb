@@ -1,6 +1,7 @@
 # HTML 制品的 `doc-status` 取值: 不在 5 词表 ⇒ 索引**静默漏收**
 
 > 摘要: `plans/` `reports/` 的 `<meta name="doc-status">` 不在 5 词表(`Open`/`In Progress`/`Done`/`Dropped`/`Superseded`)时, 该件不落任何分区 ⇒ **静默漏收**。修复前 `kb.index` 仍打印「已生成 N 个生成物」、零警告, `kb.check` / `kb.docmap --check` / `doc.links` 全绿, 只有 `test.full`(`test_docs_forms.py::test_status_vocabulary`)才红。2026-10-16 已把检查**提前到根因**(生成器 fail-fast + 闸门同源校验, 见处置)。诱因通常是写了「语义上像状态、但不在表里」的词(如 `Draft`)。
+> 等级: L0
 > 触发: 新建计划/报告, doc-status, 状态词, 索引漏收, kb.index 已生成但件不在索引, Draft, test_status_vocabulary
 
 **Refs:** memory-bank/tasks/26-10-16-memory-bank-doc-status-vocab-guard.md

@@ -1,6 +1,7 @@
 # 工作区写入守卫整文件扫描: 既有 token/Authorization 字面量会拦住对该文件的任何工具写入
 
 > 摘要: 工作区写入守卫(artifact_secret_detected)扫的是**落盘后的整份文件**, 不是本次新增文本 —— 文件里既有 `token: ""`(空串初值)或测试夹具里的 `Authorization` 头这类「长得像凭据赋值」的历史行时, 对该文件的 edit/apply_patch/write **任何一次**都会被拦, 且报错行号指向既有行而非本次改动。绕过(换工具直改)被守卫自己禁止; 唯一正道 = 如实把误判证据交给用户裁定, 批准后用**锚点替换脚本**(断言锚点唯一、不动既有行)落盘, 事后在档案里留痕。
+> 等级: L0
 > 触发: 写入被拦, artifact_secret_detected, 键名 token, Authorization, 凭据字面量误判, state.js 写不进, 测试文件写不进, 整文件扫描
 **Refs:** memory-bank/testing/baselines/26-10-21-1408-webui-dialog-shell-single-point.md
 

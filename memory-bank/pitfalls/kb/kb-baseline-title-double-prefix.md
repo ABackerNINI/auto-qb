@@ -1,6 +1,7 @@
 # kb.new baseline 的 --total 会自动拼进标题, title 里再带一份就双前缀
 
 > 摘要: kb.new baseline 的 --total 会自动拼进标题, title 里再带一份就双前缀
+> 等级: L0
 > 触发: kb.new, baseline, 标题双前缀, --total, 基线切片, new_doc.py, 誊写
 
 ### kb.new baseline 的 `--total` 会自动拼进标题, title 里再带一份就双前缀
