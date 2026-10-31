@@ -4,9 +4,8 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (22)
+## In Progress (20)
 
-- [26-10-31-memory-bank-recurrence-tooling](../26-10-31-memory-bank-recurrence-tooling.md) 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-10-17-backend-global-traffic-source-integration](../26-10-17-backend-global-traffic-source-integration.md) 全局流量来源一键切换 + 工具自动拉起(改版)
 - [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
@@ -20,7 +19,6 @@
 - [26-10-18-memory-bank-doc-topics-composite-split](../26-10-18-memory-bank-doc-topics-composite-split.md) 复合 Topics 键收敛单主键: 约定收紧 + 机检 + 存量 8 份回归
 - [26-10-18-webui-selection-size-summary](../26-10-18-webui-selection-size-summary.md) WEBUI 选中摘要: 种子个数 + 合计/实际占用大小
 - [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
-- [26-10-11-webui-drawer-refactor](../26-10-11-webui-drawer-refactor.md) 种子详情面板重构(字符串 DOM 变体 → Vue 面板)
 - [26-09-28-webui-keyboard-shortcuts](../26-09-28-webui-keyboard-shortcuts.md) WEBUI 键盘快捷键(可自定义): 成熟方案调研 + 存储定案
 - [26-10-08-deps-sandbox-yapf-hang](../26-10-08-deps-sandbox-yapf-hang.md) 沙箱内 yapf 挂住/刷磁盘: 引擎超时杀整棵树 + 项目内 yapf
 - [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）
@@ -34,8 +32,9 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (252)
+## Done (253)
 
+- [26-10-11-webui-drawer-refactor](../26-10-11-webui-drawer-refactor.md) 种子详情面板重构(字符串 DOM 变体 → Vue 面板)
 - [26-10-31-memory-bank-doc-guard-filename-scope-fix](../26-10-31-memory-bank-doc-guard-filename-scope-fix.md) 新增面守卫圈面改文件名 stamp 前缀: 堵缺 doc-added 手写新件逃逸洞 (RM02-RM10 事故)
 - [26-10-31-test-snapshot-git-marker-validity](../26-10-31-test-snapshot-git-marker-validity.md) 快照 _find_repo_root 判据加 .git/HEAD 有效性校验: 空壳标记不算仓库根
 - [26-10-11-webui-optimistic-bulk-desync](../26-10-11-webui-optimistic-bulk-desync.md) WEBUI 批量跳检后「批量开始」状态脱节修复(真值出口 + 前端回滚 + 快照回写)
