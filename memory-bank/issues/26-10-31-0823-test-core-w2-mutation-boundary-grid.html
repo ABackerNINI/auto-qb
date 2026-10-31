@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="core-w2-mutation-boundary-grid">
+<meta name="issue-stamp" content="26-10-31-0823">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="mutation-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="core/ grid ±1s 边界与窗端点几何变异存活 10 条低危">
+<meta name="issue-summary" content="W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)">
+<title>core/ grid ±1s 边界与窗端点几何变异存活 10 条低危 · test · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· test</div>
+    <h1>core/ grid ±1s 边界与窗端点几何变异存活 10 条低危</h1>
+    <p class="lede">W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-boundary-grid</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>W2 轮 core 变异审计(<code>traffic_grid.py</code>)中,<b>±1s 边界/窗端点几何</b>主题 10 条真洞未逐条 verify、W2 池无守阵,按簇批量入池。<b>缩簇说明(C2a 修正)</b>:原表列 11 条中 <code>vsp_60</code> 已在 C2a 轮补测销账——不再入池;<code>vsp_160</code> 经核不在本簇(也不在四.6 其余簇)且已改判等价(V4PointEntry 恒相等比较),无需剔除。危害档 = 低危/边角:</p>
+    <ul>
+      <li><code>vsp_43</code> — null 界 <code>null_lo &lt;= t</code>→<code>&lt;</code>:恰在回看下界的 null 标记被丢(真洞·极低)。</li>
+      <li><code>vsp_44</code> — <code>t &lt; t1</code>→<code>t &lt;= t1</code>:floor 恰为 t1 的 n 槽多出窗外 null 点(真洞·极低)。</li>
+      <li><code>vsp_52</code> — <code>ts &gt;= t1</code>→<code>ts &gt; t1</code>:恰在 t1 的观测槽被消费(v2 口径明示 &gt;= t1 不消费),窗尾多桶(真洞·低)。</li>
+      <li><code>vsp_155</code> — marks 界 <code>null_lo &lt;= t</code>→<code>&lt;</code>:同 vsp_43(真洞·极低)。</li>
+      <li><code>vsp_156</code> — <code>t &lt; t1</code>→<code>t &lt;= t1</code>:同 vsp_44(真洞·极低)。</li>
+      <li><code>vsp_158</code> — null 点 rank 0→1:同刻 null/obs 同 rank → 稳定排序回退插入序,null 落观测之后,「null 在先」契约破(真洞·低)。</li>
+      <li><code>fb_9</code> — ceil 公式 <code>interval-1</code>→<code>-2</code>:t1-first ≡ 1 (mod interval) 时少一个尾桶,窗尾 1 秒缺口(真洞·低)。</li>
+      <li><code>bg_52</code> — day 窗日期集 <code>t1-1</code>→<code>t1+1</code>:now ≡ 23:59:59 时多铺一日桶(真洞·极低)。</li>
+      <li><code>bg_53</code> — <code>t1-1</code>→<code>t1-2</code>:now ≡ 00:00:01 时丢当日桶(真洞·极低)。</li>
+      <li><code>vtp_62</code> — 摊配门槛 <code>&gt;</code>→<code>&gt;=</code>:span 恰等 max(2w,60) 时多摊一批(真洞·极低)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li><code>src/auto_qb/core/traffic_grid.py</code> · <code>v4_series_points</code> / <code>_floor_buckets</code> / <code>build_grid</code> / <code>v4_totals_points</code>(取证 2026-10-31)。</li>
+      <li>来源 dump(W2 轮 mutants.report,行号为条目起点):<code>R:\Temp\auto-qb\mutants\26-10-31-0545-core-traffic-grid-py-mutants-dump.txt</code> — vsp_43 L449 · vsp_44 L461 · vsp_52 L485 · vsp_155 L713 · vsp_156 L725 · vsp_158 L737 · fb_9 L11 · bg_52 L105 · bg_53 L117 · vtp_62 L829;判读见 <code>tmp-analysis/mut-core-w2-classify.md</code> §二各函数表 + §四.6 簇 F。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>补一轮 ±1s 边界守阵(NOW 锚 monkeypatch 可控):ts==t1 槽不消费(vsp_52)、null 标记恰在回看界(vsp_43/155)、floor==t1(vsp_44/156)、r≡1 尾桶几何(fb_9)、0:00:01/23:59:59 日期锚(bg_52/53)、span==max(2w,60) 摊配边界(vtp_62)、同刻 null+obs 排序(vsp_158,可并入簇 G 混桶几何)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-31-0823-test-core-w2-mutation-boundary-grid.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

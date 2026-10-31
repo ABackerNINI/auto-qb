@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="core-w2-mutation-empty-meta-grid">
+<meta name="issue-stamp" content="26-10-31-0823">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="mutation-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危">
+<meta name="issue-summary" content="W2 未逐条 verify 低危簇 H(缩并): bg_21(桶宽下限 1→2 伤亚 2s 采样) + gfn_6(sample_interval 实参静默丢弃)">
+<title>core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危 · test · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· test</div>
+    <h1>core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危</h1>
+    <p class="lede">W2 未逐条 verify 低危簇 H(缩并): bg_21(桶宽下限 1→2 伤亚 2s 采样) + gfn_6(sample_interval 实参静默丢弃)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-empty-meta-grid</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>W2 轮 core 变异审计(<code>traffic_grid.py</code>)中,<b>空态 meta/宽桶/实参丢弃</b>主题真洞未逐条 verify、W2 池无守阵,按簇批量入池。<b>大幅缩簇说明(C2a 修正)</b>:原表列 10 条中 <code>bmg_6/7/8/10/18/19/20/21</code> 已随 <code>bmg_3</code> 在 C2a 轮顺手杀销账(空态 meta 一套守阵覆盖全字段)——不再入池,本簇缩并至 2 条。危害档 = 低危:</p>
+    <ul>
+      <li><code>bg_21</code> — 桶宽 max 下限 <code>1</code>→<code>2</code>:采样间隔 ∈ (0,2)(main_tick&gt;0 允许 0.5/1s)时小窗桶宽被强抬到 2s;池用 1.5/30 撞不出(真洞·低)。</li>
+      <li><code>gfn_6</code> — <code>grid_for_now</code> 的 sample_interval 实参删除(落默认 30):实参被静默丢弃;现役 src 无生产调用方,池守阵恰传 30=默认撞不出(真洞·低)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <ul>
+      <li><code>src/auto_qb/core/traffic_grid.py</code> · <code>build_grid</code>(grep 词 <code>max(</code> 桶宽下限)与 <code>grid_for_now</code>(取证 2026-10-31)。</li>
+      <li>来源 dump(W2 轮 mutants.report,行号为条目起点):<code>R:\Temp\auto-qb\mutants\26-10-31-0545-core-traffic-grid-py-mutants-dump.txt</code> — bg_21 L225 · gfn_6 L237;判读见 <code>tmp-analysis/mut-core-w2-classify.md</code> §二「build_grid/grid_for_now」表 + §四.6 簇 H。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>补守阵:si=1.0 直构断言小窗桶宽不被抬(bg_21);<code>grid_for_now</code> 传非默认间隔断言生效(gfn_6;或按 classify 处置改在池备注「现役无生产调用方」降级处理)。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-10-31-0823-test-core-w2-mutation-empty-meta-grid.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
