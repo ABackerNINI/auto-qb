@@ -25,6 +25,7 @@
 - test_transfer_target_name_required_and_unique
 - test_transfer_type_and_after_state_enum
 - test_transfer_base_url_shape_and_required_when_enabled
+- test_transfer_target_api_key_load_and_unknown_keys_guard
 - test_transfer_section_shape_errors
 - test_transfer_enum_constants_are_schema_derived
 """
@@ -146,6 +147,21 @@ def test_transfer_fields_missing_keys_fill_template_defaults():
         if key == "tags":
             continue
         assert fields[key] is expected, key
+
+
+def test_transfer_target_api_key_load_and_unknown_keys_guard():
+    """api_key(issue 26-11-01-0335): 合法装载/往返无损 + 缺省空串; 未知键口径不回归(拼错键仍被拒)"""
+    assert TransferTargetConfig().api_key == ""  # 缺省 = 未配置, 走密码登录
+    target = dict(_VALID_TARGET, api_key="qbt_probe_key")
+    assert _validate_transfer({"targets": [target]}) == []
+    loaded = _write_and_load({"targets": [target]})
+    assert loaded.targets[0].api_key == "qbt_probe_key"  # 往返无损
+    # 未写 api_key 的目标: 落模板默认空串(与 username/password 同口径)
+    without_key = _write_and_load({"targets": [{"name": "t1"}]})
+    assert without_key.targets[0].api_key == ""
+    # 未知键口径不回归: 加了 api_key 不等于放宽键闭合, 拼错仍报未知键
+    errors = _validate_transfer({"targets": [dict(_VALID_TARGET, apikey="qbt_probe_key")]})
+    assert any("未知键 ['apikey']" in e for e in errors), errors
 
 
 # ---------------- 非法 targets 聚合报错不落盘(§04-W1 验收判据) ----------------

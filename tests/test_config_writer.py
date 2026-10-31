@@ -79,6 +79,7 @@
 - test_transfer_targets_mask_roundtrip_write: GET→PUT 往返无损 —— 多条目各还原各的旧值, 重复还原零变化, 写盘后磁盘仍是各自真密码且无哨兵
 - test_unmask_transfer_targets_typed_and_new_entries: 用户真改的密码/新增条目的密码(含空)原样保留, 不得被旧值覆盖
 - test_unmask_transfer_targets_rename_and_delete_pairing: 配对两轮 —— name 为主, 等量剩余按下标兜底「只改名」; 删除后幸存者按 name 对上; 改名+删除(数量不等)不猜, 哨兵原样留下; 旧值缺失/即哨兵同守卫
+- test_transfer_target_api_key_mask_and_unmask: targets 条目 api_key 与 password 同套哨兵(issue 26-11-01-0335) —— 非空掩码/空不掩/GET→PUT 还原旧值; 逐键判定(只改 password 不动 api_key 哨兵, 反之亦然)
 - test_set_path_rebuilds_non_mapping_mid_nodes: _set_path 复用已有 dict 中途节点(不丢兄弟键)/标量重建/缺失现场建
 - test_backup_skips_when_source_missing_and_keeps_encoding: _backup 源缺失零副作用; 按 dirname 建目录; utf-8 读写无损
 - test_materialize_unknown_host_old_key_dropped
@@ -928,6 +929,57 @@ def test_unmask_transfer_targets_rename_and_delete_pairing():
     submitted = _tree([{"name": "a", "password": MASK_SENTINEL}])
     unmask_tree(submitted, _tree([]))
     assert submitted["config"]["web"]["transfer"]["targets"][0]["password"] == MASK_SENTINEL
+
+
+def test_transfer_target_api_key_mask_and_unmask():
+    """targets 条目 api_key 与 password 同套哨兵(issue 26-11-01-0335): 非空掩码/空不掩/还原旧值; 逐键判定互不覆盖"""
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree, unmask_tree
+
+    old = {
+        "config":
+            {
+                "web":
+                    {
+                        "transfer":
+                            {
+                                "targets":
+                                    [
+                                        {
+                                            "name": "a",
+                                            "password": "pa",
+                                            "api_key": "qbt_key"
+                                        },
+                                        {
+                                            "name": "b",
+                                            "password": "pb",
+                                            "api_key": ""
+                                        },
+                                    ]
+                            }
+                    }
+            }
+    }
+    submitted = mask_tree(copy.deepcopy(old))
+    targets = submitted["config"]["web"]["transfer"]["targets"]
+    assert targets[0]["api_key"] == MASK_SENTINEL, "非空 api_key 应与 password 同掩码"
+    assert targets[0]["password"] == MASK_SENTINEL
+    assert targets[1]["api_key"] == "", "空 api_key 不掩码(与空密码同口径)"
+
+    # 逐键判定: 用户真改了 password、api_key 留哨兵 -> 只回填 api_key, 新 password 不被旧值覆盖
+    targets[0]["password"] = "new-pa"
+    unmask_tree(submitted, old)
+    assert targets[0]["password"] == "new-pa", "真改的 password 不得被旧值覆盖"
+    assert targets[0]["api_key"] == "qbt_key", "哨兵 api_key 还原为磁盘旧值"
+    assert targets[1]["password"] == "pb" and targets[1]["api_key"] == ""
+
+    # 只改 api_key: password 哨兵不受影响, 同一轮各回各的
+    old2 = {"config": {"web": {"transfer": {"targets": [{"name": "a", "password": "pa", "api_key": "old_key"}]}}}}
+    submitted2 = mask_tree(copy.deepcopy(old2))
+    t2 = submitted2["config"]["web"]["transfer"]["targets"]
+    t2[0]["api_key"] = "new_key"
+    unmask_tree(submitted2, old2)
+    assert t2[0]["api_key"] == "new_key", "真改的 api_key 不得被旧值覆盖"
+    assert t2[0]["password"] == "pa", "未动的 password 哨兵照常还原"
 
 
 def test_stamp_schema_version_ignores_non_dict_cfg():

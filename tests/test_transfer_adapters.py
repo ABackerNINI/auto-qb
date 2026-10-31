@@ -9,6 +9,8 @@
 - test_qb_test_connection_login_failed: LoginFailed -> 抛 TransferAdapterError(文案含"登录失败")
 - test_qb_test_connection_unreachable: APIConnectionError -> 抛 TransferAdapterError(文案含"无法连接")
 - test_qb_test_connection_reuses_client: 同一 adapter 多次探测复用同一 client(单批一个连接)
+- test_qb_build_client_passes_api_key: 带 api_key 的目标 -> Client 收到 api_key 原值(Bearer 直连, issue 26-11-01-0335)
+- test_qb_build_client_empty_api_key_maps_to_none: api_key 空串(缺省)-> Client 收到 None(密码登录路径, 行为零变化)
 - test_qb_add_field_mapping: 字段键 -> torrents/add 参数映射(category/tags/ratio_limit/seeding_time_limit/upload_limit/download_limit)
 - test_qb_add_save_path_and_skip_check: save_path 必带 + skip_check 透传为 is_skip_checking(开/关两向)
 - test_qb_add_text_ok_result: 旧形态纯文本 "Ok." -> ADDED
@@ -47,6 +49,7 @@ from auto_qb.transfer.adapters import (
     adapter_type_known,
     create_adapter,
 )
+from auto_qb.transfer.adapters import qb as qb_adapter_module
 from auto_qb.transfer.adapters.qb import _normalize_tags
 
 # ---------- 构造助手 ----------
@@ -149,6 +152,34 @@ def test_qb_test_connection_reuses_client(monkeypatch):
     adapter.test_connection()
     adapter.test_connection()
     assert len(calls) == 1
+
+
+def _capture_build_client(monkeypatch, target) -> dict:
+    """替换 qb 模块单点 Client 捕获构造参数(打真 _build_client, 不联网)"""
+    captured = {}
+
+    def fake_client(**kwargs):
+        captured.update(kwargs)
+        return MagicMock()
+
+    monkeypatch.setattr(qb_adapter_module, "Client", fake_client)
+    QbDownloaderAdapter(target)._build_client()
+    return captured
+
+
+def test_qb_build_client_passes_api_key(monkeypatch):
+    """带 api_key 的目标 -> Client 收到 api_key 原值(qB 5.x Bearer 直连, issue 26-11-01-0335)"""
+    captured = _capture_build_client(monkeypatch, _make_target(api_key="qbt_probe_key"))
+    assert captured["api_key"] == "qbt_probe_key"
+    assert captured["host"] == "http://127.0.0.1:8081"
+    assert captured["username"] == "user"
+    assert captured["password"] == "pass"
+
+
+def test_qb_build_client_empty_api_key_maps_to_none(monkeypatch):
+    """api_key 空串(缺省)-> Client 收到 None, 与主 qB(qbclient.new_client)同口径 —— 走密码登录, 行为零变化"""
+    captured = _capture_build_client(monkeypatch, _make_target())
+    assert captured["api_key"] is None
 
 
 # ---------- qb: add_torrent 字段映射 ----------

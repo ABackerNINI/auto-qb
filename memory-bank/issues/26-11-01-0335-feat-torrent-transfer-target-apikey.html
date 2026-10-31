@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标">
 <meta name="issue-summary" content="主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password">
 <title>转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0335-feat-torrent-transfer-target-apikey</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 03:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,9 +155,10 @@ qbittorrent-api Client(host=..., username/password=None) -> LoginFailed  # adapt
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 03:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 04:06 — 认领开工（后端：模型/装载/校验键集/schema/adapter 透传；前端设置页归下一任务），状态 <strong>In Progress</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-01 04:06 仍复现 —— <code>transfer/adapters/qb.py</code> · <code>_build_client</code>（现 156 行）仍只传 host/username/password，未透传 api_key；<code>config/models.py</code> · <code>TransferTargetConfig</code>（现 268 行）无 api_key 字段。参照实现 <code>core/qbclient.py</code> · <code>new_client</code> 的 <code>api_key=... or None</code> 口径未变，照抄即可。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

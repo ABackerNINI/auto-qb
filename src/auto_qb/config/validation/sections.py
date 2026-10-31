@@ -63,6 +63,7 @@ KNOWN_TRANSFER_TARGET_KEYS = {
     "base_url",
     "username",
     "password",
+    "api_key",
     "enabled",
     "fields",
     "after_state",

@@ -155,10 +155,13 @@ class QbDownloaderAdapter(DownloaderAdapter):
 
     def _build_client(self) -> Client:
         """按目标凭据新建独立 Client(不复用主 qB 连接; 超时与主链路同一单点)"""
+        # api_key(qB 5.x Web UI 的 API Key): 非空时库走 Authorization: Bearer 直连, 跳过密码登录
+        # —— 与主 qB(qbclient.new_client)同口径: 空串等价未配置, 按原密码登录路径, 行为零变化。
         return Client(
             host=self.target.base_url,
             username=self.target.username or None,
             password=self.target.password or None,
+            api_key=self.target.api_key or None,
             REQUESTS_ARGS={"timeout": REQUESTS_TIMEOUT},
         )
 

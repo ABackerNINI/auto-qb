@@ -272,6 +272,7 @@ class TransferTargetConfig:
     type: 下载器类型枚举(qb/tr; tr 留接口 stub)
     base_url: 目标 Web UI 地址(http(s)://host[:port]; enabled=true 时必须配置)
     username/password: 目标凭据(明文落 config.yml, 与主 qB 凭据同款; UI 遮显)
+    api_key: 目标 Web UI 的 API Key(qB 5.x; 非空时经 Authorization: Bearer 直连, 不再走密码登录)
     enabled: 启用开关; 默认 False(保守默认, 黄金法则 2 —— 转移是高风险动作)
     fields: per-target 字段集(键闭合 = TRANSFER_FIELD_KEYS; loader 对缺失键补模板默认);
       save_path 锁死必开, 显式 false 被校验拒绝
@@ -284,6 +285,7 @@ class TransferTargetConfig:
     base_url: str = ""
     username: str = ""
     password: str = ""
+    api_key: str = ""  # 与主 qB(QbittorrentConfig.api_key)同款; 空串 = 未配置, 走密码登录
     enabled: bool = False
     fields: Dict[str, bool] = field(default_factory=default_transfer_fields)
     after_state: str = "keep"

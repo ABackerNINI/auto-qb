@@ -133,6 +133,7 @@ def _load_transfer_target(spec: dict) -> TransferTargetConfig:
         base_url=str(spec.get("base_url", d.base_url) or "").strip(),
         username=str(spec.get("username", d.username) or ""),
         password=str(spec.get("password", d.password) or ""),
+        api_key=str(spec.get("api_key", d.api_key) or ""),
         enabled=_get(spec, "enabled", d.enabled, parse_bool),
         fields=fields,
         after_state=str(spec.get("after_state", d.after_state) or d.after_state),
