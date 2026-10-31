@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>复发榜三堆分类表(R4 根治轮)</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="kb-recurrence-three-piles">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-2157">
+<meta name="doc-updated" content="26-10-31-2157">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: kb-recurrence-three-piles</div>
+<h1>复发榜三堆分类表(R4 根治轮)</h1>
+<p class="lede">计划 <code>26-10-31-0534</code> §2.4 复发榜 11 坑按<b>处置后现状</b>重新归堆:堆 1 环境缺陷 1 件、堆 2 机制自身 3 件、堆 3 判别法活跃 4 件,另有 3 件已收口不入堆 —— 本轮只出表立项,不动手治(D6)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-2157 · <b>doc-updated</b> 26-10-31-2157 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 计划 <a href="../plans/26-10-31-0534-plan-kb-cleanup-tiers.html">26-10-31-0534 知识库过时信息分级清理 (R0-R4)</a> 的 R4 根治轮(D6 拍板:复发榜根治本轮只出表不治,按「能不能根治」分三堆,各自单独立项)
+</div>
+
+<h2><span class="no">§01</span>结论 —— 三堆成员表</h2>
+
+<h3>堆 1 · 环境缺陷(1 件)</h3>
+<table>
+<tr><th>坑档</th><th>处置后等级 / 形态</th><th>复发数据(实测)</th><th>一句话根治动作</th></tr>
+<tr>
+  <td><code>pitfalls/testing/no-uv-fallback.md</code></td>
+  <td>L1(叙事已裁,判据单点保留)</td>
+  <td>复发 +3(2026-10-16 一日三踩,全在本 clone 开工/认领轮)</td>
+  <td><b>环境动作,非知识动作</b>:在本 clone 跑一次 <code>uv run python .agents/skills/commands/scripts/install_wrapper.py</code> 装 wrapper(幂等,生成物已 gitignore),PATH 无 uv 即不再现形;文件内自记的根治方向(「挪到开工第一条现场,或让 sync 失败行自带该提示」)是第二层加固,可并入同一立项。</td>
+</tr>
+</table>
+
+<h3>堆 2 · 机制自身(3 件)</h3>
+<table>
+<tr><th>坑档</th><th>处置后等级 / 形态</th><th>复发数据(实测)</th><th>消退条件</th><th>若不消退的换载体建议</th></tr>
+<tr>
+  <td><code>pitfalls/kb/cap-counting.md</code></td>
+  <td>L1(历史现场已压缩,现行数值单点在头部)</td>
+  <td>复发 7(最近 2026-10-11;文件内复发行 8 处,流水条目自记 5+2+5+1–5+6–7 有交叠)</td>
+  <td>机制侧已就位:<code>_common.CAP_POLICY</code> 单点翻倍后,「照旧数字做错落点」的温床是<b>人还拿文档里的历史数值当依据</b> —— 头部已加「别拿旧值当现行依据」声明,后续撞 cap 的处置若都从守卫报错出发,即自然消退。</td>
+  <td>计划「需换载体:进闸门而非进文档」同款思路 —— 让 cap 守卫的报错输出<b>自带现行数值与字符/字节换算口径</b>(从 <code>_common.CAP_POLICY</code> 取),文档降为排障解释,数值永远不再手抄。</td>
+</tr>
+<tr>
+  <td><code>pitfalls/testing/tmpdir.md</code></td>
+  <td>L1(逐条流水 9 踩已外迁 <code>attachments/tmpdir-recurrence-history.md</code>)</td>
+  <td>复发累计 12(1–9 已外迁;10–12 见主档 2026-09-26/27;另有最新实测注记 2026-10-16「约定盘缺席 → TMPDIR 静默回落」)</td>
+  <td>机制侧已就位:<code>.commands/test/config.toml</code> 让 <code>test.*</code> 任务<b>自带 TMPDIR</b>(注释引本文件为出处)—— 只要 pytest 全部经由 task id 跑,复发源(裸跑/手工前缀)即消失。</td>
+  <td>计划已判:「已进闸门仍复发 → <b>需换载体:进闸门而非进文档</b>」—— 把「basetemp 必须在 <code>gettempdir()</code> 之下」做成 conftest/插件级断言(违例即假红提示),文档降为排障说明。</td>
+</tr>
+<tr>
+  <td><code>pitfalls/testing/credential-shape-write-guard.md</code></td>
+  <td>L1(处置样板收敛成「先问 → 拍板 → 等价改写」一条)</td>
+  <td>复发 2(2026-10-16 两轮:<code>test_traffic_sample.py</code>、<code>test_web_hr.py</code>)</td>
+  <td>判据在<b>工具链侧非本仓代码</b>,文档无机检可用 —— 消退完全靠测试 idiom 逐文件收敛成 <code>_AUTH_HEADER_KEY</code> 型 helper:每收敛一个文件少一个触发面,全部收敛完即消退。</td>
+  <td>无文档载体可换 —— 立项方向应是<b>工具链判据收窄</b>(值非字面量/属性引用放行)或给收敛动作做机检(新测试文件含鉴权头字典字面量时提示收敛样板),文档只留处置样板与「为什么没命中」。</td>
+</tr>
+</table>
+
+<h3>堆 3 · 判别法活跃(4 件,保留不动,各自单独立项 —— 本轮不建 issue 文件)</h3>
+<table>
+<tr><th>坑档</th><th>处置后等级 / 形态</th><th>复发数据(实测)</th><th>立项建议(标题 + 根治方向)</th></tr>
+<tr>
+  <td><code>pitfalls/testing/smoke.md</code></td>
+  <td>L1(R2 压叙事,判别法单点保留;头部注旧脚本 2026-10-06 退役)</td>
+  <td>提及 10;条目级复发 2+4+1+4+1,最近 2026-10-29(桩进程死了被当成「回归」)</td>
+  <td>标题:「e2e/冒烟环境开机自检(端口占用 / 旧桩进程 / npm i 缺失)」。根治方向:把高频环境条目从「读文档排障」搬进工具 —— <code>dev.e2e</code> 前置自检 8099/8137 占用与桩进程活性,自检不过直接给修复动作。</td>
+</tr>
+<tr>
+  <td><code>pitfalls/web-ui/frontend-split.md</code></td>
+  <td>L0(十条判别法条目,零复发流水)</td>
+  <td>提及 10(计划口径);复发 0</td>
+  <td>标题:「聚合读法机械化 —— 模板/CSS/JS 内容定位走机器索引」。根治方向:生成聚合映射命令(给出「这段内容在 <code>shared/tpl/*.html</code> / <code>css/*.css</code> / 哪个 JS 域」的单点输出),判别法从「人读文档」变成「跑命令」。</td>
+</tr>
+<tr>
+  <td><code>pitfalls/kb/refs-rename.md</code></td>
+  <td>L0(复发流水完整保留,1–8 全程可查)</td>
+  <td>复发 8(2026-09-27→10-30,最近一次:模板空值 doc-refs meta 赢过新插行)</td>
+  <td>标题:「doc-refs 认领链写法机械化(生成器/模板接管双向声明)」。根治方向:<code>kb.new</code>/<code>kb.index</code> 建件时自动带 doc-refs meta 与反向 <code>**Refs:**</code> 占位(双向义务由机器保证,人只填值),「另插一行 meta」「先回填后落盘」两类形态由模板占位与顺序约束拦死。</td>
+</tr>
+<tr>
+  <td><code>pitfalls/git/editing-traps.md</code></td>
+  <td>L0(多入口判别法,首节已随 .gitattributes 收窄适用范围)</td>
+  <td>复发注记 6 条(2026-10-05→10-16,全部是 Edit 工具/写回形态事故)</td>
+  <td>标题:「写盘形态守卫 —— 行数/bytes-per-line 比值与 CRLF 形态抽验进闸门」。根治方向:仓库侧加<b>写后机检</b>(逐字节异常检测),把「读过文档才知道」变成「闸门当场红」;与计划 §07 已记的「逐字符一行附件」风险同源同治。</td>
+</tr>
+</table>
+
+<h3>已收口,不入堆(3 件,计划 §2.4 复发榜其余成员)</h3>
+<table>
+<tr><th>坑档</th><th>处置后等级 / 形态</th><th>收口证据(文件实测)</th></tr>
+<tr><td><code>pitfalls/git/sync-pull.md</code></td><td>L1</td><td>「曾复发 12 次(2026-09-26~10-04),两次机制修复后收口 —— ①生成物自动化解 ②ship.commit 提交先行。复发流水已裁剪。」(:67)</td></tr>
+<tr><td><code>pitfalls/web-ui/drawer-switch-flicker.md</code></td><td>L2(叙事已外迁 <code>attachments/drawer-switch-flicker-migrated-26-10-31-1155.md</code>,主档 3,971 字符)</td><td>守阵 <code>test_drawer_list_switch_no_loading_flash_wiring</code> + e2e <code>drawer-switch-no-flash.spec.mjs</code> 已通电;判据单点在摘要。</td></tr>
+<tr><td><code>pitfalls/git/refs.md</code></td><td>L1</td><td>「复发 7 次(2026-10-07~10-31)后根治:核对内联进 ship.commit + packed-refs 陈旧形态 v5 起自动修复;本条不再新增复发记录。」(:32-34)</td></tr>
+</table>
+
+<h3>与计划预判的差异</h3>
+<ul>
+  <li><b>堆 1 / 堆 2 / 堆 3 的成员与计划 §04 预判完全一致</b>,无一件因 R1-R2 处置改变归堆 —— 计划预判堆 3 的「等」没有引出第 5 件;已收口三件(sync-pull / drawer-switch-flicker / refs)经头部实测维持收口判定,不入堆。</li>
+  <li>变化在<b>形态与数据</b>,不在归堆:①smoke 由计划勘查时的 L0 变为 L1(R2 压叙事,判别法保留);②cap-counting / tmpdir / credential-shape 三件均已 L1 压缩,堆 2 的「消退条件」全部指向<b>已落地的机制修复 + 残余入口收敛</b>,比计划立项时更接近消退;③refs-rename 复发数由计划未核到(「—」)更新为实测 8 次(最近 2026-10-30)、smoke 更新为最近 2026-10-29 —— 两件在近两日内仍活跃,支持留在堆 3 且优先立项。</li>
+  <li>计划 §2.4 对 tmpdir 的「已进闸门仍在复发」判语,实测对应两个不同层次:TMPDIR 注入已进 <code>test.*</code> task(<code>.commands/test/config.toml</code>),而「basetemp 越界」一类<b>仍在文档层</b> —— 印证「需换载体:进闸门而非进文档」的立项方向。</li>
+</ul>
+
+<h2><span class="no">§02</span>证据快照</h2>
+<p>11 件头部现状(等级行 / 外迁注 / 收口注)与复发计数均取自本轮实测(2026-10-31),逐件出处:</p>
+<table>
+<tr><th>坑档</th><th>头部等级行</th><th>关键原文 / 行号</th></tr>
+<tr><td><code>no-uv-fallback.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>:36「复发 +3(2026-10-16 一日三踩)…根治方向(堆 1 环境缺陷,待立项):把『本 shell 无 uv ⇒ 先前置 PATH』挪到开工第一条的现场(或让 sync 的失败行自带该提示)」</td></tr>
+<tr><td><code>cap-counting.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>:127「复发: 5 次(2026-09-24→10-11)」;:152「复发: 6–7 —— 两条都是建档漏 <code>**Topics:**</code> 行」;头部已带「别拿旧值当现行依据」声明(:7-10)</td></tr>
+<tr><td><code>tmpdir.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>:78「复发: 累计 12 —— 更早的逐条流水(共九踩)已外迁 attachments/tmpdir-recurrence-history.md」;:92「约定盘缺席…(2026-10-16 实测)」;<code>.commands/test/config.toml</code> :7-11 注释「命令必须自带 TMPDIR…约定见 memory-bank/testing/tmpdir.md」</td></tr>
+<tr><td><code>credential-shape-write-guard.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>复发条:「复发: 2(2026-10-16 两轮)…第二处 tests/test_traffic_sample.py、第三处 tests/test_web_hr.py」;守阵条:「无机检(判据在工具链侧, 非本仓代码)」</td></tr>
+<tr><td><code>smoke.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>:262「复发: 1(2026-10-29: 上一轮 8099 桩进程已死…)」;:32/:56/:78/:167 条目级复发 2/4/1/4</td></tr>
+<tr><td><code>frontend-split.md</code></td><td><code>&gt; 等级: L0</code> (:4)</td><td>十条判别法条目全部「<b>复发</b>: 0」(:28,36,45,65,74,87,115,139,153,170)</td></tr>
+<tr><td><code>refs-rename.md</code></td><td><code>&gt; 等级: L0</code> (:4)</td><td>复发 1(:19,2026-09-29)→ 复发 8(:52,2026-10-30「另插一行 doc-refs meta, 空值赢」)</td></tr>
+<tr><td><code>editing-traps.md</code></td><td><code>&gt; 等级: L0</code> (:4)</td><td>:30「复发 +1 (2026-10-05)」→ :121「复发 +1 (2026-10-16)」;:1 摘要已注「2026-10-02 起仓库 .gitattributes 统一 LF, 行尾类条目适用范围收窄」</td></tr>
+<tr><td><code>sync-pull.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>:67 收口注(全文引于 §01 已收口表)</td></tr>
+<tr><td><code>drawer-switch-flicker.md</code></td><td><code>&gt; 等级: L2</code> (:4)</td><td>:7「已外迁: 叙事整段迁至 attachments/drawer-switch-flicker-migrated-26-10-31-1155.md (kb.tier migrate 26-10-31-1155)」</td></tr>
+<tr><td><code>refs.md</code></td><td><code>&gt; 等级: L1</code> (:4)</td><td>:32-34「复发 7 次(2026-10-07~10-31)后根治…本条不再新增复发记录」</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<ul>
+  <li><b>方法</b>:11 件逐件实测 —— ①读头部区(等级行 / <code>&gt; 已外迁:</code> / 收口注)确认处置后等级与形态;②<code>grep 复发</code> 提取计数与日期,日期只取文件内明写的;③与计划 §2.4 预判逐件对照,差异如实记录。归堆判据 = 计划 §04 R4 的三堆定义(改环境即愈 / 机制自己造的复发 / 判别法仍活跃),但<b>以处置后现状为准,不照抄计划预判</b>。</li>
+  <li><b>口径</b>:计划 §2.4 的「提及次数」= <code>grep -c 复发</code> 实测值;本文补充了文件内流水条目<b>自记</b>的复发次数(如 refs-rename 复发 1–8),两者口径不同(提及行数 vs 条目自记累计),已在表中分开写。</li>
+  <li><b>局限</b>:①堆 3 的立项建议只有标题与方向一句话,<b>未建 issue 文件、未动手修</b> —— 立项落地由用户后续逐项决定;②复发日期测不到的项沿用计划口径写「—」(本轮 11 件全部测到日期);③归堆是时点快照,后续若对某件再处置(如堆 2 立项落地),需重新归堆。</li>
+</ul>
+
+</div>
+</body>
+</html>
