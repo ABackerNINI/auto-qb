@@ -31,6 +31,47 @@ config:
         skip_local_verify: true
         skip_check_menu: true
 
+        ctx_menu:
+            member:
+                order:
+                  - resume
+                  - pause
+                  - open-path
+                  - reannounce
+                  - copy-name
+                  - sep:d1
+                  - info
+                  - sep:d2
+                  - limits
+                  - move
+                  - rename
+                  - meta
+                  - sep:d3
+                  - recheck
+                  - export
+                  - skip_check
+                  - sep:d4
+                  - sub-more
+                  - sep:d5
+                  - delete
+                hidden:
+                  - sep:d2
+                sub:
+                    order:
+                      - queue-top
+                      - queue-up
+                      - queue-down
+                      - queue-bottom
+                      - sep:s1
+                      - super-seeding
+                      - force-start
+                      - auto-tmm
+                      - share-limits
+                      - sep:s2
+                      - copy-hash
+                      - copy-magnet
+                    hidden: []
+
     # 主动通知: WARNING 及以上日志推送平台原生通知(默认关闭)
     notify:
         enabled: true              # 启用主动通知
@@ -76,8 +117,8 @@ config:
         enabled: true
         channel:
             enabled: true
-            port: 18788
-            token: 123456
+            port: 0
+            # token: 123456
 
             extension_id: obdcncpkinclbpjhfmnakkgcjobbenig
         sites:
@@ -89,10 +130,6 @@ config:
                 refresh_interval: 5H
     global_speed_limit_curve:
         interval: 10M
-        traffic_source:
-          - traffic_monitor:   # Traffic Monitor: 流量监控软件, 可记录每天使用流量
-                dat_path: "D:/Programs/TrafficMonitor/history_traffic.dat"
-            # 后续可能支持接入其它软件来源
         curves:
           - curve:
                 period: DAY
@@ -501,9 +538,14 @@ config:
             rules:
               - '@add_drive_letter_tag_rules'
               - "@skip_checking_rules"
-    schema_version: 4
+    schema_version: 5
     qb_traffic:
         enabled: true
         sample_interval: 1.5S
         raw_window: 30D
         rollup_window: 1000000D
+    traffic_source:
+        provider: global_traffic_monitor
+        traffic_monitor:
+            dat_path: D:/Programs/TrafficMonitor/history_traffic.dat
+        enabled: true
