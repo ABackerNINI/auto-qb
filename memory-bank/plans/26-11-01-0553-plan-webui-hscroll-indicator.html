@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 主表横向滚动条隐藏与底部紧凑指示条</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-hscroll-indicator">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-0553">
+<meta name="doc-updated" content="26-11-01-0553">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-hscroll-indicator</div>
+<h1>WEBUI 主表横向滚动条隐藏与底部紧凑指示条</h1>
+<p class="lede">把横向滚动条从表格容器里彻底拿掉，换成一个只在「伸手够底部」时才淡入、且只占 160px 宽的悬浮指示条 —— 少种子时横在屏幕中部的那条粗线消失，横向滚动的可达性不降。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-0553 · <b>doc-updated</b> 26-11-01-0553 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户报障「只有几个种子时横向滚动条出现在中间，很显眼也很丑」→ 一轮 grilling（6 轮问答、11 项拍板，见 §06）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>要解决的问题</h3>
+<p>主表（种子 / 辅种 / 追剧）列宽超出视口时，横向滚动条画在 <code>.group-table</code> 容器的底边上；而该容器的高度<b>等于内容高度</b> ⇒ 只有几个种子时，这条 10px 粗的横线横在视口正中，读作一条与内容毫无关系的噪声带。用户原话：「在只有几个种子时横向滚动条出现在中间很显眼也很丑」。</p>
+
+<h3>设计主轴</h3>
+<p>不在「把原生条调得好看一点」上做文章，而是<b>把横条从容器里拿走</b>：原生条彻底隐藏，另给一个悬浮在状态栏上缘的紧凑指示条，只在指针伸到内容区底缘时淡入。判断依据是 §02 的几何推导 —— 原生条在长列表下也藏在整页最底部，本来就不是一个可用控件，为它保留条件分支等于给一个死控件付监听器与列宽抖动的代价。</p>
+
+<h3>不变量（违反即方案作废）</h3>
+<ol>
+  <li><b>表格几何链路不动</b>：<code>.layout</code> / <code>.torrents-dock</code> / <code>.group-table</code> 三者的高度关系保持现状 —— 行窗口（<code>columns.js</code> 的 <code>_winViewH</code>）、吸底面板、吸顶表头的前提全挂在这条链上。任何「撑高容器把条推走」的做法都在动这条链，故否。</li>
+  <li><b>只动 <code>.group-table</code> 的横条</b>：页面竖滚动条、<code>.status-strip</code> 窄屏横条、<code>.drawer-body</code> 等一律不碰。</li>
+  <li><b>可达性不降</b>：Shift+滚轮 / 触控板双指 / 触摸屏横滚保持原样，并新增一个「热区召唤 + 可拖」的入口（今天纯鼠标用户没有拖拽入口）。</li>
+  <li><b>单点</b>：隐藏规则一处（<code>shared/hscroll.css</code>）、横滚同步一处（<code>syncHeadScroll</code>）、指示条逻辑一处（<code>columns.js</code>）。不许在别处再写第二份。</li>
+  <li><b>保守默认</b>：不给任何「可横滚」提示（无右缘渐隐、无一次性引导），常态下指示条完全不可见。</li>
+</ol>
+
+<h3>算成什么样</h3>
+<ul>
+  <li>少种子 + 列溢出时，视口中部没有任何滚动条痕迹，且 <code>offsetHeight - clientHeight === 0</code>（无条槽）。</li>
+  <li>指针伸到内容区底部 24px 带内，出现一条 3px 胶囊；拖动它，表格真的横滚，表头 <code>--head-pin-x</code> 与 <code>.is-hscrolled</code> 首列提示同步跟随。</li>
+  <li>三皮肤（prism / atlas / console）行为一致，静态守阵与 e2e 双绿。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>几何：横条为什么会在屏幕中部</h3>
+<table>
+  <tr><th>环节</th><th>事实</th><th>出处</th></tr>
+  <tr><td>横条挂在谁身上</td><td><code>.group-table { overflow-x: auto }</code>，原生横条画在容器底边</td><td>prism <code>css/views.css:149</code> · atlas <code>css/components.css:211</code> · console <code>css/components.css:199</code></td></tr>
+  <tr><td>容器高度由谁定</td><td><code>.torrents-dock</code> 是 <code>flex column</code>，<code>.group-table</code> 是 <code>flex: 1 1 auto</code> —— 但没有自由空间可占</td><td>prism <code>css/dialogs.css:404-405</code> · atlas <code>css/dialogs.css:16-17</code> · console <code>css/dialogs.css:10-11</code></td></tr>
+  <tr><td>自由空间去哪了</td><td><code>.layout { align-items: start }</code> ⇒ <code>.content</code> 不被拉伸，高度 = 内容高度</td><td>prism <code>css/views.css:48-50</code> · atlas/console <code>css/components.css:143-145</code></td></tr>
+  <tr><td>条的尺寸与配色</td><td><code>*::-webkit-scrollbar { height: 10px }</code>，thumb 取 <code>--border-strong</code></td><td>prism <code>css/base.css:14-19</code> · atlas <code>style.css:166-171</code> · console <code>style.css:147-152</code></td></tr>
+  <tr><td>三个滚动容器</td><td>三主表共用 <code>.group-table</code>，各自接 <code>@scroll="syncHeadScroll($event, '&lt;page&gt;')"</code></td><td><code>shared/tpl/groups.html:18</code> · <code>torrents.html:4</code> · <code>shows.html:5</code></td></tr>
+</table>
+<p>把前四行连起来：容器高 = 内容高 ⇒ <b>横条永远画在「最后一行下方」</b>。于是同一条控件在两种场景下表现完全不同：</p>
+<ul>
+  <li><b>只有几个种子</b>：容器底边就在视口上半部 ⇒ 横条横在屏幕中部，与内容无关，最刺眼（本次报障场景）。</li>
+  <li><b>种子很多</b>：容器底边 = 整页最底部 ⇒ 横条要滚到列表末尾才看得见，<b>实际上不是可用控件</b>。</li>
+</ul>
+<aside class="aside">这条推导是「彻底隐藏」而非「条件隐藏 / 撑高推走」的根据：长列表下它本来就没用，保留条件分支只是为一个几乎不出现的控件付监听器与 10px 列宽抖动的代价。</aside>
+
+<h3>今天能怎么横滚</h3>
+<ul>
+  <li>Shift+滚轮 / 触控板双指 / 触摸屏 —— 浏览器原生，无需接线。</li>
+  <li>拖拽 —— <b>全仓没有实现</b>：<code>scrollLeft</code> 只有读取（<code>columns.js:61-71</code> 的 <code>syncHeadScroll</code>），唯一写入是 <code>drawer_templates.js:185</code> 的程序化跳转。</li>
+  <li>Shift 键本身已被区间选择占用（<code>selection.js</code> 六处 <code>shiftKey</code> 判断）⇒ 不能拿它当「显示指示条」的修饰键。</li>
+</ul>
+
+<h3>同款缺陷的旁支</h3>
+<p><code>.group-table</code> 不止主表：抽屉表引擎 <code>shared/tpl/xtpl.html:359</code> 也挂它，同样吃 <code>overflow-x: auto</code>，抽屉里也会出现「条贴在最后一行下方」的同款观感。本方案把隐藏规则覆盖到所有 <code>.group-table</code>（一个选择器），但<b>指示条只给主表三视图</b>（见 D4 / R5）。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p>两半：<b>A 隐藏</b>（纯 CSS，覆盖所有 <code>.group-table</code>）+ <b>B 替代</b>（底部紧凑指示条，只给主表三视图）。A 单独成立（隐藏本身就是用户要的），B 是为补回「拖拽」这个唯一会丢的能力。</p>
+
+<h3>A · 隐藏原生横条（新文件 <code>shared/hscroll.css</code>）</h3>
+<pre><code><span class="cm">/* 三皮肤共用, link 排在皮肤 views.css 之后(级联序同 row_lang.css)</span>
+.group-table { scrollbar-width: none; }             <span class="cm">/* Firefox */</span>
+.group-table::-webkit-scrollbar { display: none; }  <span class="cm">/* Chromium / WebKit */</span>
+</code></pre>
+<p>为什么放共享层而不是三份 <code>views.css</code>：三皮肤 <code>index.html</code> 的 <code>/shared/*.css</code> 链接集<b>逐字相同</b>（守阵 <code>test_frontend_template_split_wiring</code> 钉清单一致），新增共享文件仍是三份 HTML 各加一行，但<b>规则本体只有一份</b>，不会像三份 <code>views.css</code> 那样日后各自漂移。<code>shared/row_lang.css</code> 就是现成先例（结构/行为类规则放共享层，link 排在皮肤 <code>views.css</code> 之后靠级联序赢）。</p>
+<p>为什么要 <code>display: none</code> 而不只写 <code>scrollbar-width</code>：全局 <code>*::-webkit-scrollbar { height: 10px }</code> 仍在，Chromium 系靠后者决定是否绘制；元素级 <code>.group-table::-webkit-scrollbar</code> 特异性 (0,1,1) 压过 <code>*::-webkit-scrollbar</code> (0,0,1)，不依赖书写顺序。</p>
+<p>隐藏后 <code>.group-table</code> 不再产生纵向溢出（容器高度由内容驱动，结构性无竖向滚动），所以整条隐藏不会误伤竖条。</p>
+
+<h3>B · 底部紧凑指示条</h3>
+<table>
+  <tr><th>参数</th><th>取值</th><th>理由</th></tr>
+  <tr><td>横向位置</td><td><code>left: 50%; transform: translateX(-50%)</code></td><td>居中对称，位置不暗示任何内容几何；右对齐会撞状态栏右侧的速度/限速区，左对齐易被读成行内进度条</td></tr>
+  <tr><td>轨道宽</td><td><code>width: min(160px, 42vw)</code></td><td>1440 宽下约占 11%，「精致小巧」的量级；小屏由 <code>42vw</code> 兜底不撑破</td></tr>
+  <tr><td>纵向位置</td><td><code>bottom: calc(var(--statusbar-h) + 6px)</code></td><td>贴内容区底缘、不压状态栏的 1px 分界线；高度走令牌不写死 34px</td></tr>
+  <tr><td>高度 / 圆角</td><td>静息 3px → hover·拖拽 4px；<code>border-radius: 999px</code></td><td>细到几乎不占视觉重量；交互时给一点物理反馈</td></tr>
+  <tr><td>配色</td><td>底 <code>--border-strong</code>；hover·拖拽 <code>--fg-dim</code></td><td>与原生 thumb 同源令牌；令牌名集三皮肤相等（守阵 <code>test_frontend_skin_css_token_parity</code>），共享层可安全引用</td></tr>
+  <tr><td>滑块宽</td><td><code>max(32px, 轨道宽 × clientWidth / scrollWidth)</code></td><td>32px 是「抓得住」的下限</td></tr>
+  <tr><td>滑块位移</td><td><code>(scrollLeft / (scrollWidth - clientWidth)) × (轨道宽 - 滑块宽)</code></td><td>标准映射，两端严格对齐</td></tr>
+  <tr><td>触发带</td><td><code>clientY ≥ innerHeight - 状态栏高 - 24</code></td><td>内容区最底部 24px，<b>不含状态栏</b>（状态栏是常用控件区，不该召唤滚动条）</td></tr>
+  <tr><td>淡入 / 淡出</td><td>150ms / 200ms，无停留定时器</td><td>掠过时淡入没走完就离开，观感几乎不可见；不加定时器是给一个已经很低的风险付复杂度</td></tr>
+  <tr><td>交互</td><td>拖动改 <code>scrollLeft</code>；点轨道跳转；拖动期间不淡出；<code>user-select: none</code></td><td>既然替代原生条，就得承担原生条的交互；否则用户本能去拖却拖不动</td></tr>
+  <tr><td>z-index</td><td>25</td><td>低于状态栏 30、列拖虚影 120；高于行</td></tr>
+  <tr><td>覆盖范围</td><td>仅当前可见主表（三视图 <code>v-if</code> 互斥，同时最多一个）</td><td>抽屉面不配指示条，见 R5</td></tr>
+</table>
+
+<h3>D 决策表</h3>
+<table>
+  <tr><th>编号</th><th>结论</th><th>落点</th></tr>
+  <tr><td>D1</td><td>彻底隐藏原生横条，不做「少行隐藏 / 多行保留」的条件分支</td><td><code>shared/hscroll.css</code></td></tr>
+  <tr><td>D2</td><td>覆盖<b>所有</b> <code>.group-table</code>（主表三视图 + 抽屉变体面）</td><td><code>shared/hscroll.css</code></td></tr>
+  <tr><td>D3</td><td>隐藏规则落共享层新文件，三皮肤 <code>index.html</code> 各加一条 link，紧随 <code>shared/row_lang.css</code> 之后</td><td>3 份 <code>index.html</code></td></tr>
+  <tr><td>D4</td><td>替代物 = 底部紧凑指示条，<b>仅主表三视图</b></td><td><code>columns.js</code></td></tr>
+  <tr><td>D5</td><td>触发 = 内容区底部 24px 热区（不含状态栏），150ms 淡入 / 200ms 淡出，无停留定时器</td><td><code>columns.js</code></td></tr>
+  <tr><td>D6</td><td>形态 = 居中胶囊 <code>min(160px, 42vw)</code> × 3px，圆角 999px，<code>--border-strong</code>，距状态栏上缘 6px，z-index 25</td><td><code>shared/hscroll.css</code></td></tr>
+  <tr><td>D7</td><td>可拖 + 点轨道跳转，拖动期间不淡出</td><td><code>columns.js</code></td></tr>
+  <tr><td>D8</td><td>逻辑挂进 <code>columns.js</code>（<code>syncHeadScroll</code> 的第四个消费方），零新 JS 文件、零 manifest 改动</td><td><code>shared/columns.js</code></td></tr>
+  <tr><td>D9</td><td>验证 = 静态守阵 + e2e 几何量，两者都要</td><td><code>tests/test_webui_static_skins.py</code> · <code>e2e/</code></td></tr>
+  <tr><td>D10</td><td>不给任何「可横滚」提示（无右缘渐隐、无一次性引导）</td><td>—</td></tr>
+  <tr><td>D11</td><td>竖滚动条与其它横向滚动容器（<code>.status-strip</code> / <code>.drawer-body</code>）不动</td><td>—</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>S1</td>
+    <td>新建 <code>shared/hscroll.css</code>：两条隐藏声明 + 指示条样式（<code>.hscroll-pill</code> / <code>.hscroll-pill.on</code> / <code>.hscroll-pill.drag</code>）。样式只用令牌，不写死颜色；不出现 emoji / 图形符号。</td>
+    <td>文件存在；含 <code>scrollbar-width: none</code> 与 <code>::-webkit-scrollbar</code> + <code>display: none</code>；指示条规则齐全</td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td>三皮肤 <code>index.html</code> 各加 <code>&lt;link rel="stylesheet" href="/shared/hscroll.css"&gt;</code>，位置紧随 <code>/shared/row_lang.css</code> 之后（prism 约 :21 / atlas :14 / console :17）。</td>
+    <td>三份 <code>/shared/*.css</code> 链接集仍逐字相同；<code>test_frontend_template_split_wiring</code> 绿</td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td><code>columns.js</code> 接线：①惰性创建单例 <code>.hscroll-pill</code> 挂 <code>body</code>；②<code>syncHeadScroll</code> 尾部调 <code>_hscrollSync(ev.target)</code> 更新几何；③<code>document</code> 上挂一个 <code>mousemove</code>，只做一次 <code>clientY</code> 比较、状态变化才切 class；④<code>pointerdown/move/up</code> 实现拖动与点轨道跳转；⑤<code>ResizeObserver</code>（照 <code>columns.js:186-206</code> 的 <code>_headObs</code> 范式）+ 列应用路径触发重算（可见列/列宽变化时 <code>scrollWidth</code> 会变而 <code>ResizeObserver</code> 观察不到）。</td>
+    <td>热区外指示条 <code>opacity: 0</code> 且 <code>pointer-events: none</code>；热区内淡入；拖动后 <code>scrollLeft</code> 变化且表头 <code>--head-pin-x</code> 同步；无横滚余量时不出现</td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td>静态守阵：<code>tests/test_webui_static_skins.py</code> 新增一条，钉三皮肤 HTML 都挂了 <code>hscroll.css</code>、该文件含两条隐藏声明、<code>columns.js</code> 里 <code>_hscrollSync</code> 接线锚点在位、<code>syncHeadScroll</code> 仍带 <code>is-hscrolled</code> 打标（既有守阵不回归）。</td>
+    <td>新测试红绿双验：删掉任一皮肤 link 即红、删掉 <code>display: none</code> 即红</td>
+  </tr>
+  <tr>
+    <td>S5</td>
+    <td>e2e（桩服务 + 真浏览器）：窄窗触发列溢出后断言 —— ①<code>offsetHeight - clientHeight === 0</code>（无条槽）；②<code>scrollWidth &gt; clientWidth</code>（仍可横滚）；③鼠标移入内容区底部 24px 带后胶囊 <code>opacity</code> 非 0；④拖动后 <code>scrollLeft</code> 变化且表头 <code>--head-pin-x</code> 同值。</td>
+    <td>4 条全绿；宽窗（无溢出）时胶囊永不出现</td>
+  </tr>
+  <tr>
+    <td>S6</td>
+    <td>回写：<code>memory-bank/conventions/webui.md</code> 或 <code>pitfalls/web-ui/</code> 记一条「<code>.group-table</code> 横条几何 + 隐藏口径」；计划状态 <code>Open → In Progress → Done</code>；按收尾 DoD 跑 <code>commands run test.full</code> 并新建基线切片。</td>
+    <td><code>commands run kb.docmap --check</code> 绿；基线切片记实测数字</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无 —— 11 项（D1–D11）已在会话内全部拍板，见 §06。实施中若冒出计划外缺陷，按 scope-guard 入池 <code>memory-bank/issues/</code>，<b>不就地改</b>。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>彻底隐藏（否掉条件隐藏 / 撑高推走 / 保留原生条）</td><td>26-11-01</td></tr>
+  <tr><td>D2</td><td>覆盖所有 <code>.group-table</code>，含抽屉变体面</td><td>26-11-01</td></tr>
+  <tr><td>D3</td><td>共享层新文件 <code>shared/hscroll.css</code> + 三皮肤各一条 link（首轮曾定「三皮肤 views.css 各一条」，因 C 进入共享层而改判）</td><td>26-11-01</td></tr>
+  <tr><td>D4</td><td>指示条只给主表三视图，抽屉面不配</td><td>26-11-01</td></tr>
+  <tr><td>D5</td><td>热区 = 内容区底部 24px、不含状态栏；150ms 淡入、无停留定时器（首轮曾定「指针进入表格区即淡入」，因等于常驻而否决）</td><td>26-11-01</td></tr>
+  <tr><td>D6</td><td>居中胶囊 <code>min(160px, 42vw)</code> × 3px，距状态栏 6px（用户追加约束「精致小巧，不能占整个屏宽」，否掉满屏宽轨道）</td><td>26-11-01</td></tr>
+  <tr><td>D7</td><td>可拖 + 点轨道跳转</td><td>26-11-01</td></tr>
+  <tr><td>D8</td><td>逻辑进 <code>columns.js</code>，不新建 JS 模块</td><td>26-11-01</td></tr>
+  <tr><td>D9</td><td>静态守阵 + e2e 双验</td><td>26-11-01</td></tr>
+  <tr><td>D10</td><td>不给「可横滚」提示</td><td>26-11-01</td></tr>
+  <tr><td>D11</td><td>竖条与其它横向滚动容器不动</td><td>26-11-01</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险 / 触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>热区 <code>mousemove</code> 落在热路径上（每次移动都触发）</td><td>处理体只做一次 <code>clientY</code> 比较、不读布局属性；状态不变不写 DOM（class 切换才是唯一副作用）</td></tr>
+  <tr><td>R2</td><td>拖动改 <code>scrollLeft</code> 后表头不同步</td><td>程序化改 <code>scrollLeft</code> 同样会触发 <code>scroll</code> 事件 ⇒ <code>syncHeadScroll</code> 照常跑；S5 ④ 用真浏览器钉死（不能只信推断）</td></tr>
+  <tr><td>R3</td><td>160px 轨道映射到数千 px 内容，拖动精度粗（1px ≈ N px）</td><td>接受：这是「粗调 + 可达」的控件，精调走 Shift+滚轮；点轨道跳转覆盖大跨度移动</td></tr>
+  <tr><td>R4</td><td>隐藏原生条后 <code>clientWidth</code> 多出 10px，列宽/溢出判定变化</td><td>隐藏是静态生效（不做运行时切换）⇒ 无跳动；列宽由列模型重算，不缓存旧值。S5 宽窗用例确认「不溢出时不出条」</td></tr>
+  <tr><td>R5</td><td>抽屉变体面隐藏了原生条却没有指示条 ⇒ 该处横滚无可见入口</td><td>抽屉列集窄、横滚罕见；若用户报障，按 D4 扩展指示条到抽屉面（届时需处理多实例同屏），本轮不赌</td></tr>
+  <tr><td>R6</td><td>三份 <code>index.html</code> 的 link/manifest 漂移</td><td>守阵 <code>test_frontend_template_split_wiring</code> 已钉清单一致；本次新增 link 必须三份同轮加，S4 再补一条显式钉 <code>hscroll.css</code></td></tr>
+  <tr><td>R7</td><td>状态栏高度变化（<code>--statusbar-h</code> 非 34px）导致指示条压线或悬空</td><td><code>bottom</code> 与热区判定都读令牌/实测高度，不写死 34</td></tr>
+  <tr><td>R8</td><td>与吸顶表头（z-index 5）、列拖虚影（120）、状态栏（30）层级打架</td><td>25 已排在状态栏之下、虚影之上；若与抽屉/弹层冲突，弹层均高于 30，不受影响</td></tr>
+  <tr><td>R9</td><td>热区与「点击最后一行下缘」重叠，误召</td><td>3px 细线 + 150ms 淡入 ⇒ 掠过几乎不可见；指示条仅在可见时 <code>pointer-events: auto</code>，不拦行点击</td></tr>
+  <tr><td>R10</td><td>触屏设备无 hover 语义，热区无从触发</td><td>热区监听只在 <code>pointer: fine</code> 下挂；触摸横滚本就原生可用，不退化</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-0553</span> 初版：来自一轮 grilling（Q1 策略 A+C、Q2 范围、Q3 共享层、Q5 双验、Q6 位置、Q7 触发时机否决案、Q8 可拖、Q9 覆盖、Q10 落点、末轮居中胶囊）。核心结论 = 原生横条彻底隐藏 + 底部紧凑指示条按热区召唤。</li>
+</ul>
+
+</div>
+</body>
+</html>

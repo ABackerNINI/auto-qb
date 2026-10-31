@@ -19,6 +19,7 @@
 
 ## Open
 
+- [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0106] [规则引擎重设计方案](26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2354] [reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据](26-10-31-2354-plan-webui-write-side.html) — `webui-write-side`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
