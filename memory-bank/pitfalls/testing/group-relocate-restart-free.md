@@ -1,6 +1,7 @@
 # Fake qB 驱动迁移执行体的两个断言陷阱(ActionResult.ok 恒真 / 硬链接删目标不悬空)
 
 > 摘要: 写迁移执行体测试时两处「看起来对、其实恒真/恒假」的断言形态 —— `ActionResult.ok` 是 classmethod 不是属性; 同卷硬链接下删目标路径不会造出悬空链接。
+> 等级: L0
 > 触发: ActionResult,is_ok,硬链接,悬空,迁移执行体,jar
 
 ### `result.ok` 恒真: 那是 **classmethod**, 不是布尔属性

@@ -1,6 +1,7 @@
 # IAB 冒烟点击超时 ≠ 页面缺陷 —— 连打动作与前端重渲染的竞态
 
 > 摘要: 用 IAB 浏览器 (Playwright surface) 对 kb.nav 这类「动作即整段重渲染 innerHTML」的单文件页做冒烟时, 多个 locator 动作挤在一个 cell 里连打 (间隔 ≤150ms), 后继动作可能报 `Timeout waiting for locator` —— 事后独立观测页面状态全是正确值, 埋点 (捕获阶段 click 日志 + 全局状态变量采样) 也复现不出。是自动化侧竞态, 不是被测功能坏了。
+> 等级: L0
 > 触发: 冒烟中 locator click 超时; 想断定「功能有 bug」之前; 冒烟脚本连续动作 (右键菜单 → 开关按钮 → 专区内按钮) 后继点击超时。
 
 **触发**: 动作 A (点右键菜单项 / 切视图) 触发同步重渲染, 动作 B 的 locator 解析/命中与重渲染窗口相撞, IAB 后端报 3s actionability 超时; 同一序列带 `waitForTimeout` 拉开间隔或单独重跑即绿。本轮实测 (2026-10-06 kb.nav 隐藏区冒烟): `#hidBtn` 点击后 `#hidZone .unhidebtn` 超时两次, 带埋点复现两次均单次触发、状态正确。

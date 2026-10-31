@@ -1,6 +1,7 @@
 # 节流哨兵用 0.0 会吞掉首次告警: monotonic() 的原点是开机时刻
 
 > 摘要: `time.monotonic()` 的 0 点是**机器开机时刻**(Linux `CLOCK_MONOTONIC` / Windows `GetTickCount64`), 不是"很久以前" —— 拿 `0.0` 当「从未告警」哨兵时, 节流判据 `now - 0.0 >= 3600` 在**开机不满 1 小时**的机器上判假, **首次告警被静默吞掉**。dev 机 uptime 常达数十小时故恒绿, 只有 CI 全新 VM 会红; 失败签名与"caplog 没采到"完全一样, 极易误判成 caplog 的坑。2026-10-12 流量图限速历史 W1 的两条 caplog 断言(GitHub CI 红 2 条)正是此因。
+> 等级: L0
 > 触发: CI 红, 本机绿, 平台无关的 CI 红, caplog 断言 False, 告警没打出来, 首次告警被吞, 节流, throttle, 哨兵, sentinel, time.monotonic, uptime, 全新 VM, 日志断言, 重启后翻转, 退避, backoff, 开机窗口, 重建被跳过
 
 **Refs:** memory-bank/tasks/26-10-12-webui-traffic-limit-history.md

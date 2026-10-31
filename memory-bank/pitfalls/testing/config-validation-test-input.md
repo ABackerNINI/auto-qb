@@ -1,6 +1,7 @@
 # 配置校验类测试的输入构造：BaseLoader 标量全为字符串 + _strip_none 先剥空串
 
 > 摘要: 给 config 校验器写测试时, 走 `load_config`/`_load_errors` 这条真实链路(而非直调校验函数)最省事, 但**输入必须先过两道加工**再进校验器: ①YAML 用 **BaseLoader** 读, **所有标量一律是字符串** —— `- 123` 读成 `"123"`、`enabled: true` 读成 `"true"`; ②`_strip_none` 在进 `validate_config` 之前**剥掉 `""` 与 `None`**(含**列表项**)。于是「`_check_str_list` 的第 N 项不是字符串」这类**类型分支**, 用标量(`123`)或空串(`''`)当列表项**根本进不去** —— 前者已是合法字符串, 后者被 `_strip_none` 提前删掉(列表还非空 → 不报错), 测试会「写对了断言却拿不到错误」。要打到该分支, 列表项必须是**嵌套容器**(如 `- [x]` / `- {}`), 它既不是字符串、也不会被 `_strip_none` 删。
+> 等级: L0
 > 触发: 写 config 校验测试, 校验器测试, _load_errors, load_config, BaseLoader, 标量全是字符串, 空串被剥, _strip_none, _check_str_list, 第 N 项必须是非空字符串, 类型分支进不去, 断言拿不到错误, YAML 输入构造, 列表项类型
 
 **Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-09-1611-mutants-config-loop-guards.md

@@ -1,6 +1,7 @@
 # 测试替身的共享可变类属性
 
 > 摘要: helpers 的 `FakeConfig` 段对象是类属性(dataclass/dict/list), 任一测试原地改
+> 等级: L0
 > (`mgr.config.grouping.enabled = True`)会泄漏到之后所有 `make_manager` 实例 —— 是否爆雷
 > 只取决于 xdist 把哪些测试分进同一 worker。已根修: 实例化时深拷贝可变默认。
 > 触发: FakeConfig, 类属性, 测试隔离, xdist 分布, 偶发失败, make_manager, 原地改配置

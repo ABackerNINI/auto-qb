@@ -1,6 +1,7 @@
 # 闸门"冒烟探活"会真的执行动作 (`argv or []` 吃参数)
 
 > 摘要: `parse_args(argv or [])` 在 CLI 直跑时把真实 `sys.argv` 整个丢掉 —— 冒烟闸门加的 `--help` 被当"无参", 于是 `sync.py --help` **真跑一次同步**、`push.py --help` **真推一次推送**; 修法是 `None` 才回退 `sys.argv`(显式 `[]` 仍是测试的动作入口), 并在 `_pipeline` 展开侧加 `|--with-safety` 让无参即真动作的脚本不参与 `--help` 冒烟。
+> 等级: L0
 > 触发: 冒烟闸门, --help, --safety, parse_args, argv or [], 陌生参数被当无参, 闸门真跑动作, 真推送, sync.py --help, push.py --help, 探测与动作同形, `<each:>` 展开侧过滤, action-without-args
 
 **Refs:** memory-bank/tasks/26-10-03-commands-argv-flag-swallowed.md

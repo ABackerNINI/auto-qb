@@ -1,6 +1,7 @@
 # 测试构造单点参数面不足导致内联旁路
 
 > 摘要: 测试构造单点参数面不足导致内联旁路
+> 等级: L0
 > 触发: 内联构造, make_manager, 单点旁路, 装配样板, FakeConfig, QbManager, 段覆盖, 测试构造器, builder
 
 **Refs:** memory-bank/issues/26-10-21-0502-refactor-test-manager-builder-params-dup.html, memory-bank/tasks/26-10-22-test-manager-builder-params-dup.md

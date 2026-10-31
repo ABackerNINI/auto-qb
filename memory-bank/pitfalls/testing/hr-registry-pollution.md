@@ -1,6 +1,7 @@
 # HR 实例注册表被测试污染
 
 > 摘要: 测试期 `hr.runtime` 的注册表路径必须被 conftest 重定向到临时目录 —— 用例的 `data_dir` 是每例唯一的 `tmp_path`, 不隔离就是**每个用例往用户真实 `%LOCALAPPDATA%/auto-qb-hr/instances.json` 追加一条死条目**(实测跑一次 `test_hr_runtime.py` 净增 24 条), 累积后被扩展「立即发现」在 TTL 窗口内整批采纳成无关实例。
+> 等级: L0
 > 触发: 加 hr runtime 测试, 发现端点测试, 扩展发现列表出现无关实例, 主实例连不上 Failed to fetch, instances.json 无界增长, 写 app-data, 注册表条目堆积, 测试污染用户数据
 
 ### 测试不得写用户真实 HR 实例注册表

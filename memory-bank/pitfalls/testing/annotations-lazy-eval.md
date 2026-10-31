@@ -1,6 +1,7 @@
 # 注解惰性求值让「typing 名字没导入」在导入期隐身
 
 > 摘要: Python 3.14 起 PEP 649 让注解默认惰性求值 —— 模块级注解引用未导入的 typing 名字(如 Dict)在导入期**不报错**, 只在 ≤3.13 的解释器上炸; import-all 守卫必须显式 `inspect.get_annotations(obj, eval_str=True)` 强制求值才能跨版本抓住, 且守卫对已注入的 bug 还可能**假绿灯**(守卫写完必须红验)。
+> 等级: L0
 > 触发: Dict, typing, 注解, NameError, import 报错, 3.14, PEP 649, 惰性求值, import-all, 守卫, 假绿灯, 红验
 
 ### 同一 bug 在不同 clone 上一边炸一边静默 (2026-09-27)

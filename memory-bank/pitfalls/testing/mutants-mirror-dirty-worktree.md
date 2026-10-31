@@ -1,6 +1,7 @@
 # 变异镜像工作树残留上一轮 apply 的变异体，而 `git status` 看不出来
 
 > 摘要: `mutants.run` / `mutants.verify` 是**就地改源码**的(`mutmut apply` 把变异体写进镜像 `src/`), 正常路径跑完会还原。但上一轮被**中断**(超时被杀 / `TaskStop` / 崩)时, 变异体可能**留在镜像工作树里**, 而 `git status` / `git diff` / `git update-index --really-refresh` **全判净**(替换前后**字节数相同**时 git 的 stat 缓存直接跳过内容比对)。后果: 下一次 `--no-refresh` 轮**带着一个已被变异的源码**开跑, 该文件的变异体集合与基线都不再是 develop, 结果不可信 —— 而且**没有任何报错**。判别: 跑 `--no-refresh` 前, 别信 `git status`, 直接 `grep` 目标文件的关键行(或 `git checkout -f -- src/` 无条件还原)。实测残留: hr 专用镜像 `~/auto-qb-mut-hr` 的 `queue.py` 留着 `left = deadline + time.monotonic()`(= `wait__mutmut_19`)。
+> 等级: L0
 > 触发: 变异测试, mutmut, 镜像残留, 工作树脏, apply 未还原, 中断, TaskStop, 超时被杀, --no-refresh, git status 判净, stat 缓存, 同长度替换, git diff 看不出, git checkout -f, 基线污染
 
 **Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-10-10-1458-mutants-hr-serialization.md

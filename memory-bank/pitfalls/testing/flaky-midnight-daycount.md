@@ -1,6 +1,7 @@
 # 用例循环 ts+i 跨本地零点把按天计数清零 —— 距零点时段必红 flaky
 
 > 摘要: 用例喂 `observe(ts+i)` 循环(i 到阈值+30)拿 `ts = int(time.time())` 时, 距本地零点 &lt;循环跨度秒的跑必红 —— 生产代码按天重置计数是**正确**语义, 用例未固定「同一天」致阈值永不达, 告断言红。修法锚循环起点当日 00:01 走仓库现单点 `v4_day_epoch`(本地口径, 与 `v4_epoch_date_str` 一致), **别**用 `//86400*86400`(UTC 秒对齐, 非 UTC+0 日界错位即新 flaky)。2026-10-13 流量图限速历史两条用例实证; 2026-10-19/20 两轮扩形(按日文件 / 秒分精度 / 锚 base 不锚 now); **2026-10-22 四轮实证两种同族新形态: 导入时求值的 `date.today()` 模块常量(通知面 6 条)与「用例 now 镜像服务端窗口」的几何分档断言(qb 端点面 1 条, 00:00:00-00:00:30 窗口)**。
+> 等级: L0
 > 触发: flaky, 跨零点, 距零点, 必红时段, 按天计数, 阈值永不达, 循环 ts+i, 跨天清零, v4_day_epoch, 86400, 当日 00:01, 正午锚点, 按日文件, 秒精度, 分钟精度, 冻结时钟, 假墙钟, 时刻相关, CI 偶发红, 00:00-00:10, 派生量翻天, 必须留真钟, 锚 base 不锚 now, 假钟参数化, traffic_qb, 跨日长洞判 0 而非 null, 导入时求值, 模块级常量, date.today 常量, 调用时求值, 工厂, 镜像断言, 几何分档, 空桶, 00:00:00-00:00:30, 入口钉钟, 收集期, 运行期
 
 **Refs:** memory-bank/issues/26-10-12-2338-test-traffic-limits-guard-midnight-flaky.html, memory-bank/issues/26-10-19-0013-test-test-midnight-bombs.html, memory-bank/issues/26-10-20-0024-test-traffic-qb-global-24h-midnight.html, memory-bank/testing/baselines/26-10-22-0102-test-midnight-window-jitter.md

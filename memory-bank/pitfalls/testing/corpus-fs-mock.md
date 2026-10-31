@@ -1,6 +1,7 @@
 # 语料回放 / 磁盘 mock 表
 
 > 摘要: 脱敏要连"藏在 .gz 里的第二层 key"一起做; 窗口合并必须按序推进; 回放 config 的 tracker 段不能只信权威映射。
+> 等级: L0
 > 触发: 语料回放, disk.json, fs mock, 窗口合并, tracker 段, 脱敏 key, 反查表, group_exact
 
 ### 脱敏要连"藏在 .gz 里的第二层 key"一起做

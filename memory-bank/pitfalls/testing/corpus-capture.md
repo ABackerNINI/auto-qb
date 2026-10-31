@@ -1,6 +1,7 @@
 # 真机语料抓取 / 脱敏
 
 > 摘要: `scripts/qb_capture.py` 实施时实测的一批坑 —— 代理、rid 序列、秒分辨率时钟、伪名化撞车、判据空壳。
+> 等级: L0
 > 触发: 抓语料, 脱敏, qb_capture, 代理, rid, 伪名化, 等价类判据, 红验, argparse
 
 ### 工具 shell 里 `HTTP_PROXY` 会让 `requests` 连不上本机 qB, 且报的是 **404** 不是连接错

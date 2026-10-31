@@ -1,6 +1,7 @@
 # 测试夹具留模型默认固定端口 —— 并行撞端口污染「无 WARNING」断言
 
 > 摘要: 测试夹具不覆盖「固定端口 + 连号候选表」的服务端口(`HrChannelConfig.discovery_port` 模型默认 **18788**, 候选表 18788/18789/18790 也是写死的), `-n 8` 并行下多个 worker 同时绑、再叠加本机**真实实例常驻**(2026-10-16 netstat 实测 PID 19168 占着 18788)⇒ 三个候选全被占 ⇒ `HrDiscoveryServer.start()` 记一条 WARNING「候选端口全部被占」⇒ 污染「生命周期消息只记 INFO」类断言, 表现为**偶发判红**(取决于真实实例在不在 + worker 调度)。修法: 夹具显式 `discovery_port=0`(0 = 关闭发现, `_build_discovery` 直接返回 None), 没有候选表就没有碰撞面。
+> 等级: L0
 > 触发: 加 hr runtime 测试, 发现端口, discovery_port, 固定端口, 18788, 并行偶发红, WARNING 污染 INFO 断言, caplog 断言偶发, 端口被占, 真实实例占端口, xdist 端口冲突, make_config
 
 ### 测试夹具不得沿用模型默认的固定端口

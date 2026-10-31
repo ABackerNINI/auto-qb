@@ -1,6 +1,7 @@
 # 热重载守阵的 MagicMock 配置会让新模块把 Mock 段误判成「段变」而真启服务器/真重挂
 
 > 摘要: apply_new_config 的守阵惯用 `mock.MagicMock()` 当新配置(替身区只钉住自己关心的段)。内核化
+> 等级: L0
 > 重构后每次热重载会对全部模块无条件广播 apply, 模块靠「新旧配置段整段相等」短路 —— Mock 段是新
 > 取的属性对象, 永远不等于旧段, 于是新挂的模块会走「段变」分支: webui 会**真启 uvicorn 服务器**
 > (host/port 是 Mock), logging/notify 会真重挂。P1(钉 logging/notify 段)与 P2(补钉 web 段)连续两

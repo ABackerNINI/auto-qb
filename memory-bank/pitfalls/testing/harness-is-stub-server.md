@@ -1,6 +1,7 @@
 # dev.harness 是常驻桩服务, 不是断言合集
 
 > 摘要: `dev.harness` 只起一个 **uvicorn 常驻服务**(脚本末尾 `uvicorn.run(...)` 阻塞, 包内 timeout 900s), **不跑任何断言**; 它的 `when` 曾写「浏览器冒烟（真浏览器跑前端断言合集）」, 与命令实际形态不符 —— 按"冒烟闸门"跑它会**挂到超时**(2026-10-11 实测后台跑 6 分钟零输出, 只能 TaskStop)。断言面在 `commands run dev.e2e`(Playwright 自带 webServer 自动起/收桩)。`dev.harness` 的正确用途 = 手动开浏览器看 / 给外部工具连桩。包内 `when`/`note`/`doc` 已一并订正。
+> 等级: L0
 > 触发: 跑前端冒烟; dev.harness 卡住不退出; 后台任务无输出; "断言合集"跑哪条命令
 
 ## 触发 / 判别 / 处置

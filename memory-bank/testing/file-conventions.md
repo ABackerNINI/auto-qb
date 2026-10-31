@@ -62,12 +62,14 @@
   待报删除 / 降级 / 异常 / `reset_sync`), 以及 QbManager 接线(增量轮不做 schema 校验、变化集与冲突脏组)。
 - **处置**: 改同步层**必须同步此文件**。
 
-### `test_impact.py` 直接测分级表而非被测端
+### `test_impact.py` 直接测变更影响分析(diff + R 闸)
 
-- **触发**: 改分级表或新增配置项。
-- **判别**: 它用真实 `Config()`(字段默认即全默认实例)构造新旧配置做 diff, 分级表外字段用 `SimpleNamespace` 替身
-  (验证"未列出默认 L2"); 含 `_diff_flat` / `_diff_trackers` / `max_level` / `restart_required_paths` 直测。
-- **处置**: **必须同步此文件** —— 新增配置项未补表 ⇒ 默认 L2; 分级错误会让热重载**静默不生效**或**误要求重启**。
+- **触发**: 改 `config/impact.py`(diff / R 级重启闸)或新增配置顶层段。
+- **判别**: 级别表(L0/L1/L2)退役后它测两件事 —— `diff_config_impacts` 做**顶层段级** diff
+  (粒度 = 段, 段内嵌套不展开; 一侧多出/独有的段按变更报告, **无「默认 L2」兜底**; 变更按段名排序),
+  以及 `restart_required_paths` 的 R 闸(`RESTART_SECTIONS` = state_file / data_dir / fs, 命中即拒绝热应用提示重启)。
+- **处置**: **必须同步此文件** —— 新增顶层段必须落到「某模块 `sections()` 认领 or `KERNEL_SECTIONS` or
+  `RESTART_SECTIONS`」之一(守阵 `test_modules_p6`), 段变了之后做什么由认领模块 apply 自判。
 
 ### `test_memory_bank.py` 守知识库结构(不覆盖 src)
 

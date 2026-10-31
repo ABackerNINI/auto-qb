@@ -1,6 +1,7 @@
 # 后台长跑 (dev.sim / dev.run) 停不干净: 杀了外层, python 子进程还活着占着锁与端口
 
 > 摘要: 本工具环境里 `commands run dev.sim/dev.run` 这类长跑命令挂后台后, TaskStop / kill 只杀外层 (uv 或 commands 包装进程), 真正的 python 子进程继续持有 state.lock / 日志文件 / 端口 —— 复跑撞锁 (`Device or resource busy`) 或端口占用; 必须按命令行匹配进程再补一刀。
+> 等级: L0
 > 触发: 后台进程, dev.run 停不下来, state.lock 删不掉, Device or resource busy, 端口占用, TaskStop, 杀进程, 孤儿进程
 
 ### TaskStop 之后锁/端口仍被占

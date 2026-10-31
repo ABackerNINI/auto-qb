@@ -1,6 +1,7 @@
 # 桩上验证配置保存流: 版本章物化 / reload 不应用 / 按端口杀桩
 
 > 摘要: ui_harness 桩的 /api/config GET 读**磁盘树**, PUT 过**版本闸门**(writer._reject_stale_version 对缺 config.schema_version 的提交树一律拒绝) —— 桩不物化配置文件时 GET 树缺章 ⇒ 「保存并应用」在桩上恒 400「提交的配置树缺少 schema_version」, 保存流完全测不到(2026-10-10 规则卡冒烟实证)。修法已落桩: boot 期物化带版本章的最小合法配置(scripts/ui_harness.py::_materialize_config, load_config 自校验, 模板漂移 = 桩拒绝启动)。另: exec kill 掉桩会话杀的是 uv 包装进程, python 子进程不死仍占端口。
+> 等级: L0
 > 触发: 桩/e2e 上测「保存并应用」; 桩 PUT 恒 400 缺 schema_version; 杀桩后端口仍被占
 
 ## 触发 / 判别 / 处置

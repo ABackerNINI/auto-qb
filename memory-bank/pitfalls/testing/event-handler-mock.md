@@ -1,6 +1,7 @@
 # 相位 handler 的 mock 失效 (EventBus 注册期绑定)
 
 > 摘要: `mock.patch.object(模块实例, "_on_xxx")` 拦不住 EventBus 已注册的相位 handler —— 注册期捕获的是绑定方法对象, patch 换的是实例属性, 总线里的引用不变; 守相位接线用「订阅计数 + emit 返回值」, 守行为直调真 handler。
+> 等级: L0
 > 触发: EventBus, 相位, subscribe, mock.patch.object, handler 断言, assert_called_once, P5 守阵
 
 ### patch 实例属性后 emit 仍走旧 handler (kernel-module-refactor P4 踩到)

@@ -1,6 +1,7 @@
 # 手工跑 coverage 报表 / 导出 JSON 的命名陷阱
 
 > 摘要: 手工做覆盖率分析时, 导出文件叫 `.coverage.json` 会被 coverage 当成并行数据文件去读, 报 `Couldn't use data file ... not a database` + `Combined 0 files, 1 file errored`, 看着像数据坏了其实报表仍正确; 换个名字即免。
+> 等级: L0
 > 触发: coverage report, coverage json, 导出覆盖率, not a database, CoverageWarning, Combined 0 files, 缺口分析
 
 ### 导出文件叫 `.coverage.json` → `coverage report` 报 not-a-database 告警

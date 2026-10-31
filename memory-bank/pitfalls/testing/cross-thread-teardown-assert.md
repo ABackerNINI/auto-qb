@@ -1,6 +1,7 @@
 # 跨线程收尾的终态断言不能单点采样
 
 > 摘要: starlette 1.6 把 SSE 的同步生成器包进 `iterate_in_threadpool`, 它跑在 anyio 工作线程里; 该线程帧里的最后一个引用(`item`/`func`/`args` 元组)是在 `call_soon_threadsafe` **之后**才 `del` 的 —— 而正是同一次调用(写 self-pipe)唤醒消费端 ⇒ 消费端 `aclose()` 返回时工作线程可能还没走到那几个 `del`, 此刻采样 `subscriber_count()` 会读到 1(CI windows job 2026-10-16 红 `assert 1 == 0`)。生产语义无误, 缺的是**有界等待**: 退订必须发生, 但不保证与 aclose 在同一瞬间发生。
+> 等级: L0
 > 触发: 跨线程终态断言, 断流退订, subscriber_count, anyio 工作线程, iterate_in_threadpool, 生成器 finally 退订, 单点采样, 竞态, 偶发红, 句柄堆叠, aclose 后仍订阅, gc.collect 不生效
 
 ### 断流退订: `aclose()` 回来时引用链未必已断

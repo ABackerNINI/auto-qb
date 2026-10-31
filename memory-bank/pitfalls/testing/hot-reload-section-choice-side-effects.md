@@ -1,6 +1,7 @@
 # 热重载路径测试选「活配置段」会触发该段模块 apply 的真实副作用(notify 段会泄漏真 handler)
 
 > 摘要: 驱动 apply_new_config 的测试(段认领兜底/回执/级别语义类)如果改的是 notify 这类「apply 有
+> 等级: L0
 > 全局动作」的段 —— NotifyModule.apply 对段变会 `_mount(force=True)`, **配置未启用也真挂载**
 > NotifyHandler 到 "auto_qb" 根 logger 且测试不摘 —— 全局状态泄漏进后续测试
 > (实测: test_notify::test_setup_notify_disabled 的「不挂载」断言被它打红, 单跑恒绿、全量才炸)。

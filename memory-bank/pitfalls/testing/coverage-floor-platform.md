@@ -1,6 +1,7 @@
 # 覆盖率闸单阈值在双 OS 上必有一侧恒红, 且 pytest-cov 的阈值改 config.option 不生效
 
 > 摘要: 覆盖率闸单阈值在双 OS 上必有一侧恒红 —— Windows 独有代码(ctypes/junction/注册表后端)在 Linux 上跑不到, 实测 Windows 99.27% / Linux **98.74%**, 于是 `--cov-fail-under=99` 让 ubuntu CI 恒红而 Windows 正常。修法是**按平台定档**(Windows 99 / 其余 98.5), 且阈值**不能**在 `pytest_configure` 里改 `config.option` —— pytest-cov 早在 `pytest_load_initial_conftests` 就用**早期解析的命名空间**建好了插件, 之后只读自己那份, 改 `config.option` / `session.config.option` 全部静默无效(闸门反而彻底失效, 比红更危险)。必须改插件实例 `config.pluginmanager.getplugin("_cov").options.cov_fail_under`。
+> 等级: L0
 > 触发: 覆盖率闸, cov-fail-under, 双 OS, ubuntu CI 恒红, pytest-cov, config.option 不生效, 平台定档, 分母不同, Windows 独有代码
 
 ### 单一覆盖率阈值 + 双 OS ⇒ 必有一侧恒红 (2026-10-30)

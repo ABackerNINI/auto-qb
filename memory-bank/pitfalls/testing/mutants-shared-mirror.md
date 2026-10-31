@@ -1,6 +1,7 @@
 # 多 clone 并行共用 WSL 镜像: 对方的 `rm -rf mutants` 会删掉你正在跑的结果
 
 > 摘要: 变异测试镜像默认是 `~/auto-qb-mut`, **多会话共用**; 而 `mutants.run` 每次都 `rm -rf mutants mutmut-cache.db`。并行会话一开跑, 就会把你**正在跑**的 `mutants/<pkg>/*.meta` 一起删掉 —— 你在下一次结果落盘时崩在 `FileNotFoundError: mutants/.../<file>.meta`(实测: hr 首轮在 5125/8027 处崩, 已跑的 85% 作废)。判别特征: `ps` 里有两份 `mutmut run`; 镜像 `pyproject.toml` 的 `only_mutate` 不是你设的目标; `mutants/` 下出现**别人目标**的 `.meta`。处置: 每会话用专用镜像 `--mirror '~/auto-qb-mut-<pkg>'`, 并存时把 `--children` 降到 3。
+> 等级: L0
 > 触发: 多 clone 并行, 共享镜像, 并行会话, rm -rf mutants, FileNotFoundError, .meta 被删, mutmut 崩, only_mutate 被改, 专用镜像, --mirror, --children
 
 **Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md
