@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-hscroll-indicator">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-01-0553">
-<meta name="doc-updated" content="26-11-01-0633">
+<meta name="doc-updated" content="26-11-01-0707">
 <meta name="doc-refs" content="memory-bank/pitfalls/web-ui/hscroll-indicator.md, memory-bank/testing/baselines/26-11-01-0638-webui-hscroll-indicator.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 主表横向滚动条隐藏与底部紧凑指示条</h1>
 <p class="lede">把横向滚动条从表格容器里彻底拿掉，换成一个只在「伸手够底部」时才淡入、且只占 160px 宽的悬浮指示条 —— 少种子时横在屏幕中部的那条粗线消失，横向滚动的可达性不降。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-01-0553 · <b>doc-updated</b> 26-11-01-0633 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-01-0553 · <b>doc-updated</b> 26-11-01-0707 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户报障「只有几个种子时横向滚动条出现在中间，很显眼也很丑」→ 一轮 grilling（6 轮问答、11 项拍板，见 §06）
 </div>
 
@@ -147,13 +147,15 @@
 <table>
   <tr><th>参数</th><th>取值</th><th>理由</th></tr>
   <tr><td>横向位置</td><td><code>left: 50%; transform: translateX(-50%)</code></td><td>居中对称，位置不暗示任何内容几何；右对齐会撞状态栏右侧的速度/限速区，左对齐易被读成行内进度条</td></tr>
-  <tr><td>轨道宽</td><td><code>width: min(160px, 42vw)</code></td><td>1440 宽下约占 11%，「精致小巧」的量级；小屏由 <code>42vw</code> 兜底不撑破</td></tr>
-  <tr><td>纵向位置</td><td><code>bottom: calc(var(--statusbar-h) + 6px)</code></td><td>贴内容区底缘、不压状态栏的 1px 分界线；高度走令牌不写死 34px</td></tr>
-  <tr><td>高度 / 圆角</td><td>静息 3px → hover·拖拽 4px；<code>border-radius: 999px</code></td><td>细到几乎不占视觉重量；交互时给一点物理反馈</td></tr>
+  <tr><td>轨道宽</td><td><code>width: min(300px, 48vw)</code></td><td>1440 宽下约占 21%，够醒目又不到系统滚动条的存在感；小屏由 <code>48vw</code> 兜底不撑破（26-11-01 用户验收「有点小」后由 160px 上调）</td></tr>
+  <tr><td>纵向位置</td><td><code>bottom: calc(var(--statusbar-h) + 8px)</code></td><td>贴内容区底缘、不压状态栏的 1px 分界线；高度走令牌不写死 34px（加粗到 5px 后由 6px 上抬到 8px 留呼吸）</td></tr>
+  <tr><td>高度 / 圆角</td><td>静息 5px → hover·拖拽 7px；<code>border-radius: 999px</code></td><td>细到几乎不占视觉重量；交互时给一点物理反馈（26-11-01 由 3/4px 上调）</td></tr>
   <tr><td>配色</td><td>底 <code>--border-strong</code>；hover·拖拽 <code>--fg-dim</code></td><td>与原生 thumb 同源令牌；令牌名集三皮肤相等（守阵 <code>test_frontend_skin_css_token_parity</code>），共享层可安全引用</td></tr>
   <tr><td>滑块宽</td><td><code>max(32px, 轨道宽 × clientWidth / scrollWidth)</code></td><td>32px 是「抓得住」的下限</td></tr>
   <tr><td>滑块位移</td><td><code>(scrollLeft / (scrollWidth - clientWidth)) × (轨道宽 - 滑块宽)</code></td><td>标准映射，两端严格对齐</td></tr>
-  <tr><td>触发带</td><td><code>clientY ≥ innerHeight - 状态栏高 - 24</code></td><td>内容区最底部 24px，<b>不含状态栏</b>（状态栏是常用控件区，不该召唤滚动条）</td></tr>
+  <tr><td>触发带（纵向）</td><td><code>状态栏上缘 - 24 ≤ clientY &lt; 状态栏上缘</code></td><td>内容区最底部 24px，<b>上下界都要写</b> —— 只写下界时状态栏那 34px 也命中（26-11-01 用户验收当场指出）</td></tr>
+  <tr><td>触发带（横向）</td><td>胶囊邻域：<code>|clientX - 视口中心| ≤ 胶囊宽/2 + 40px</code></td><td>不是全屏宽都算 —— 否则鼠标扫过底部右侧的速度/限速区也召唤（26-11-01 用户验收当场指出）；判据只读缓存的胶囊宽，热路径不读布局</td></tr>
+  <tr><td>第二召唤路径</td><td>Shift+滚轮 / 触控板双指横滚（<code>shiftKey</code> 或 <code>|deltaX| &gt; |deltaY|</code>）亮出，停手 1.5s 自落</td><td>这类用户不会把指针伸到内容区底缘，但横滚时同样缺位置反馈（26-11-01 用户追加）</td></tr>
   <tr><td>淡入 / 淡出</td><td>150ms / 200ms，无停留定时器</td><td>掠过时淡入没走完就离开，观感几乎不可见；不加定时器是给一个已经很低的风险付复杂度</td></tr>
   <tr><td>交互</td><td>拖动改 <code>scrollLeft</code>；点轨道跳转；拖动期间不淡出；<code>user-select: none</code></td><td>既然替代原生条，就得承担原生条的交互；否则用户本能去拖却拖不动</td></tr>
   <tr><td>z-index</td><td>25</td><td>低于状态栏 30、列拖虚影 120；高于行</td></tr>
@@ -168,7 +170,7 @@
   <tr><td>D3</td><td>隐藏规则落共享层新文件，三皮肤 <code>index.html</code> 各加一条 link，紧随 <code>shared/row_lang.css</code> 之后</td><td>3 份 <code>index.html</code></td></tr>
   <tr><td>D4</td><td>替代物 = 底部紧凑指示条，<b>仅主表三视图</b></td><td><code>columns.js</code></td></tr>
   <tr><td>D5</td><td>触发 = 内容区底部 24px 热区（不含状态栏），150ms 淡入 / 200ms 淡出，无停留定时器</td><td><code>columns.js</code></td></tr>
-  <tr><td>D6</td><td>形态 = 居中胶囊 <code>min(160px, 42vw)</code> × 3px，圆角 999px，<code>--border-strong</code>，距状态栏上缘 6px，z-index 25</td><td><code>shared/hscroll.css</code></td></tr>
+  <tr><td>D6</td><td>形态 = 居中胶囊 <code>min(300px, 48vw)</code> × 5px（hover 7px），圆角 999px，<code>--border-strong</code>，距状态栏上缘 8px，z-index 25</td><td><code>shared/hscroll.css</code></td></tr>
   <tr><td>D7</td><td>可拖 + 点轨道跳转，拖动期间不淡出</td><td><code>columns.js</code></td></tr>
   <tr><td>D8</td><td>逻辑挂进 <code>columns.js</code>（<code>syncHeadScroll</code> 的第四个消费方），零新 JS 文件、零 manifest 改动</td><td><code>shared/columns.js</code></td></tr>
   <tr><td>D9</td><td>验证 = 静态守阵 + e2e 几何量，两者都要</td><td><code>tests/test_webui_static_skins.py</code> · <code>e2e/</code></td></tr>
@@ -249,6 +251,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-01-0553</span> 初版：来自一轮 grilling（Q1 策略 A+C、Q2 范围、Q3 共享层、Q5 双验、Q6 位置、Q7 触发时机否决案、Q8 可拖、Q9 覆盖、Q10 落点、末轮居中胶囊）。核心结论 = 原生横条彻底隐藏 + 底部紧凑指示条按热区召唤。</li>
   <li><span class="tag">R1 · 26-11-01-0633</span> S1-S5 全部落地: 原生横条隐藏(shared/hscroll.css 三皮肤挂载) + columns.js 指示条接线(热区召唤/拖动/点轨道) + 静态守阵 9 条判据 + e2e 10 用例; 返工一次(监听挂错位置); 坑档见 pitfalls/web-ui/</li>
+  <li><span class="tag">R2 · 26-11-01-0707</span> 验收后修订 R2: 触发带补纵向上界(不含状态栏)与横向胶囊邻域(非全屏宽), 新增 Shift+滚轮召唤(停手 1.5s 自落), 胶囊 160x3 上调到 300x5(hover 7); e2e 补召唤范围用例</li>
 </ul>
 
 </div>
