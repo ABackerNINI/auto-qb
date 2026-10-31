@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 10 |
+| bug | 12 |
 | perf | 7 |
 | docs | 2 |
 | test | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [bug] [组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)](26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok.html) — RM09-06 实测:…
+- [bug] [强制汇报确认跟踪对不可达 tracker 的首报过早落 confirmed(ok 回执)](26-10-31-1740-bug-webui-reannounce-premature-confirm.html) — RM09-04 实测:…
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的…
 - [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: gr…

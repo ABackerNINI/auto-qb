@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (54)
+## Open (56)
 
+- [bug] [组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)](../26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok.html) — RM09-06 实测: base64url 合法但不存在的组 key 走 /api/groups/{key}/pause 得 ok 回执且零效果零日志; 计划口径「只要不是静默成功」
+- [bug] [强制汇报确认跟踪对不可达 tracker 的首报过早落 confirmed(ok 回执)](../26-10-31-1740-bug-webui-reannounce-premature-confirm.html) — RM09-04 实测: 死端口 tracker 的 reannounce 在 updating 在途瞬间即写 ok(日志+1ms), 随后 tracker 拒绝不纠正回执 —— 计划期望 RC_FAIL
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](../26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: graceful 跑壳 raise_signal(SIGTERM) 对 CLI 模式有效、对 --tray 模式 3/3 无效(45s+ 后进程仍存活), 与 cli.py「所有模式一致」注释相悖
