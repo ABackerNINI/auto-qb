@@ -106,6 +106,8 @@
 - **留皮肤内的是真差异, 不许顺手抹平**(守阵反向钉): `.drawer-tabs button.active` 令牌(atlas/console `--accent` vs prism `--accent-hi/--accent-line`) / `.hr-vsrc`·`.hr-pres` 描边(prism `--border-soft` vs 另两皮肤 `--border`) / `.hr-sub` 字体(prism `--font-mono` vs 字面等宽栈)。`test_frontend_hr_detail_table_wiring` 断言这三条**必须在各皮肤自己的 CSS 里**。
 - **守阵量程**: 判「三皮肤成对」用 `_ui_css_effective(ui)`(= 皮肤聚合 + shell 挂的 shared CSS, link 序), **不是** `_ui_css_aggregate(ui)`(只含本皮肤) —— 后者在规则搬走后恒红。判据原理见 `pitfalls/testing/assertions.md`「守阵的量程」条。
 - **新族入共用层的顺序**: 先搬逐字同的(最安全), 差异多的最后; 一族一改一回归, 不整文件对拷。
+- **共用层不止 `console_hub.css`**: 按主题独立成文件的共用层同样成立 —— 现有 `shared/row_lang.css`(行语言)与 `shared/hscroll.css`(主表横滚: 原生横条隐藏 + 底部指示条)。挂载位置同样是各皮肤 `views.css` **之后**(link 序即级联序), 皮肤自有 CSS 内**不得**写第二份同类规则(副本 = 日后各自漂移, 静态守阵反向钉住)。
+- 新增此类文件的门槛与判据、以及 `.group-table` 横条几何 / 两条隐藏声明 / 指示条契约与三个静默故障, 见 `pitfalls/web-ui/hscroll-indicator.md`(本文件不复述)。
 
 ## WEB UI busy 骨架单点 (2026-10-21, issue 26-10-20-2231)
 

@@ -10,16 +10,16 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (5)
+## Open (4)
 
-- [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](../26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0106] [规则引擎重设计方案](../26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](../26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](../26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (180)
+## Done (181)
 
+- [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](../26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0434] [提交闸门按改动收窄优化](../26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
 - [26-10-31-2354] [reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据](../26-10-31-2354-plan-webui-write-side.html) — `webui-write-side`
 - [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](../26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`

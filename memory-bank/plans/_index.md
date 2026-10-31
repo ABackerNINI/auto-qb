@@ -18,7 +18,6 @@
 
 ## Open
 
-- [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0106] [规则引擎重设计方案](26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
@@ -26,6 +25,7 @@
 
 ## Done
 
+- [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0434] [提交闸门按改动收窄优化](26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
 - [26-10-31-2354] [reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据](26-10-31-2354-plan-webui-write-side.html) — `webui-write-side`
 - [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`
@@ -85,9 +85,8 @@
 - [26-10-11-2106] [种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划](26-10-11-2106-plan-webui-drawer-refactor.html) — `webui-drawer-refactor`
 - [26-10-11-2040] [批量跳检后「批量开始」状态脱节 · 修复方案](26-10-11-2040-plan-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
 - [26-10-11-1722] [WEBUI 表格公共组件 · 从辅种表/追剧表抽公共表壳 — 分步实施计划](26-10-11-1722-plan-webui-table-component.html) — `webui-table-component`
-- [26-10-10-2333] [全仓重复代码审查 · 分步执行计划](26-10-10-2333-plan-dup-code-audit.html) — `dup-code-audit`
 
-> 更早的 **120** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **121** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
