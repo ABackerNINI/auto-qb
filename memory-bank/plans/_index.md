@@ -16,6 +16,7 @@
 
 ## Open
 
+- [26-10-31-1042] [RM04 辅种与分组 · 真机实测分步计划](26-10-31-1042-plan-real-RM04.html) — `real-machine-rm04-plan`
 - [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](26-10-31-0927-plan-real-RM02.html) — `real-machine-rm02-plan`
 - [26-10-31-0705] [真机实测 RM00 基建: 守卫/伪 tracker/双实例互传](26-10-31-0705-plan-real-machine-test.html) — `real-machine-test`
 - [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`

@@ -156,6 +156,20 @@
 
 > 并行陷阱: `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` **不生效**。官方入口 `real.suite` 传 `-n 0` 没问题, 直跑 `pytest tests-real/...` 会互相抢端口 —— `rm01_startup/conftest.py` 用一把文件锁兜住, 后续片照抄。
 
+### 2.9 归组/迁移面与假种子进管线的事实(RM04 实测, 2026-10-31)
+
+| 事实 | 现场表现 | 处置 |
+|---|---|---|
+| **「未匹配 tracker 配置」的种子跳过整条 torrents_added 管线** | 无 announce 的假种子不进 `matched_added`(qbmanager 实况: tracker_conf 匹配失败即 `continue`) ⇒ **归组/维护/限速全不发生**, groups 视图恒空 | 假种子必须带 announce 且测试配置 trackers 段有对应 domains 条目。announce 用 `http://<本机IP>:1/announce`(本机死端口, 连接即 RST 零外连); 别用假域名 —— 那要走 DNS 出外网 |
+| **qB 5.2 `/torrents/add` 对重复 infohash 返回 409 Conflict** | 复跑同 infohash 的用例收到 409 | 409 时删旧副本重加, **绝不收养** —— 收养会把上轮的预打标/预暂停状态带进本跑, 触发源(上传转暂停/新增)永不触发, 假 FAIL 自续(RM04 实测毒化两轮) |
+| **产品 store 快照滞后 qB 实际进度 1-2 个同步拍** | qB 侧 progress 已 1.0, 立刻触发 relocate 会被 GATE_INCOMPLETE 拒 | 等 groups 视图成员 progress==1.0 再触发(视图随进度置脏重建, 单向前进无回退竞态) |
+| **qB 多标签以「, 」(逗号+空格)连接** | 产品打上 MISSING 后 tags = `MISSING, real-fake` | 标签成员判断必须 strip(`{x.strip() for x in tags.split(",")}`); 裸 split 对双标签失明 —— 已入池 26-10-31-1215(seed.py/guard.py), 用例侧各自防御 |
+| **relocate 目标目录不存在 ⇒ GATE_SPACE 不可判定拒绝** | disk_usage 打不存在的路径 → fail-closed blocked | 用例预建 dst 即可, 合法闸门非缺陷 |
+| **单成员组恒走 FORM_DIRECT(qB 自搬, 无别名无 journal)** | ×1 假种子的 relocate 不产生别名/ journal, 锚点是「迁移发起」非「已下发 qB 搬迁」(后者只在重启补发路径出现) | 要验目录别名主链: 多成员组(≥2 枚同表种子, 同内容异 piece_len 区分 infohash)+ 子目录布局 + `alias_file_threshold: 1` + 命令线 POST body `confirm: true` |
+| **armed job 可不经 qB 退出收口** | 对账表 `link_present + qb_up + 全员 at_dst → ACT_DONE_EXTERNAL`: phase=done(reason=external) + journal phase=done | 用例可用 qB 原生 setLocation 让其余成员跟进 dst 即时收口; guardian「qB 退出删链接」路径归 RM10 |
+| **搬迁窗口基本抓不住 state 30S 落盘周期** | 64M 跨卷搬迁数秒, 强杀后 state.json 常无在途 job(「恢复在途 job 0 条」≠ 恢复面失效) | journal 注入退路(RM04 计划 §03 批准): 停机态按 job_to_dict 形造 phase=moving/move_issued=true 账 + journal/spec, 重启走 `_recover` RESUME 分支; 另注意产品日志是**追加式**, 断言「最后一次启动」的日志行要等新行出现再取 |
+| **删 junction 绝不递归(重申 §08)** | `rm -r`/`shutil.rmtree` 对 junction 的行为按平台而异, 穿透即删真实数据 | 用 `os.walk(topdown)` 遇 reparse 点 `os.rmdir` 剪枝的 purge 形态(RM04 用例 `purge_tree` 可照抄) |
+
 ## 03 种子层: L0 / L1 / L2
 
 | 层 | 怎么造 | 种子状态 | 能测什么 | 风险 | 现状 |

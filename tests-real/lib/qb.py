@@ -136,3 +136,16 @@ class Qb:
     def delete(self, hashes: str, delete_files: bool = True) -> None:
         data = urllib.parse.urlencode({"hashes": hashes, "deleteFiles": "true" if delete_files else "false"}).encode()
         self._call("/torrents/delete", data, "application/x-www-form-urlencoded")
+
+    def set_location(self, hashes: str, location: str) -> None:
+        """qB 原生搬种子(RM04-08 绕产品闸门用: 验产品的 save_path 变化检测面)"""
+        data = urllib.parse.urlencode({"hashes": hashes, "location": location}).encode()
+        self._call("/torrents/setLocation", data, "application/x-www-form-urlencoded")
+
+    def add_tags(self, hashes: str, tags: str) -> None:
+        data = urllib.parse.urlencode({"hashes": hashes, "tags": tags}).encode()
+        self._call("/torrents/addTags", data, "application/x-www-form-urlencoded")
+
+    def remove_tags(self, hashes: str, tags: str) -> None:
+        data = urllib.parse.urlencode({"hashes": hashes, "tags": tags}).encode()
+        self._call("/torrents/removeTags", data, "application/x-www-form-urlencoded")
