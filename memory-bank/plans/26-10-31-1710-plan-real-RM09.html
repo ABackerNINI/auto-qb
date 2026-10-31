@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM09">
+<meta name="plan-stamp" content="26-10-31-1710">
+<meta name="doc-topic" content="real-machine-rm09-plan">
+<title>RM09 WebUI 写侧 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --stop: #e08f8f; --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 74ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair); }
+  h2 .no { color: var(--accent); margin-right: 10px; font-size: 15px; letter-spacing: 0.08em; }
+  h3 { font-family: var(--display); font-size: 15.5px; font-weight: 600; color: var(--accent-ink); margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 88ch; }
+  ul, ol { margin: 0 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--hair-soft); }
+  .callout { border-left: 3px solid var(--accent); background: var(--hair-soft); padding: 10px 16px; border-radius: 0 6px 6px 0; margin: 12px 0 16px; max-width: 90ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 13.5px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 11px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); background: var(--hair-soft); }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 9px; border-radius: 10px; border: 1px solid var(--hair); color: var(--dim); margin-left: 6px; white-space: nowrap; }
+  .badge.lv { color: var(--accent-ink); border-color: var(--accent); }
+  .badge.skip { color: var(--warn); border-color: var(--warn); }
+  .case { border: 1px solid var(--hair); border-radius: 8px; margin: 0 0 14px; overflow: hidden; }
+  .case .hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding: 10px 16px; background: var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .case .cid { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 14.5px; margin-right: 10px; }
+  .case .ttl { font-weight: 600; font-size: 14.5px; flex: 1; min-width: 40%; }
+  .case .bd { padding: 12px 16px 14px; }
+  .case .bd p { margin-bottom: 8px; }
+  ul.four { list-style: none; margin: 8px 0 0 0; border-top: 1px dashed var(--hair); padding-top: 8px; }
+  ul.four li { font-size: 13px; color: var(--dim); margin-bottom: 4px; padding-left: 14px; text-indent: -14px; }
+  ul.four li b { color: var(--ink); }
+  .hint { color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">Real-machine slice plan · RM09</div>
+  <h1>RM09 WebUI 写侧 · 真机实测分步计划</h1>
+  <p class="lede">WebUI 写侧命令真作用到 qB、批量合单、延迟回执机制、组命令、移动与重命名、配置保存与 keys 写读、fs 写侧、种子转移端点。本计划只做排期准备(定片/漂移体检/glob 自检/环境自检/用例设计), 不含执行; 执行按本计划逐条跑, 三态记账。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1710</div></div>
+    <div class="item"><div class="k">片</div><div class="v">RM09(常驻锚 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">1 次(半天)</div></div>
+    <div class="item"><div class="k">用例</div><div class="v">10 条 · L2×7 / L3×3</div></div>
+    <div class="item"><div class="k">种子层</div><div class="v">L1 假种子 · 零真实种子活跃</div></div>
+    <div class="item"><div class="k">漂移体检</div><div class="v">首轮, 无漂移面</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + glob 自检 + 驱动形态取舍)</h2>
+    <h3>会话同步(2026-10-31 17:00 实测)</h3>
+    <p><code>commands run my-commit-flow.sync</code> <b>失败(离线)</b>: 「拿不到远端 origin/real/rm02-rm10 (离线?) —— 联网后重跑」。本轮为本地排期准备(计划 + 锚件 glob 修正 + 迁出标注), 产出本地 commit 不推送; 联网后由下一会话开工同步兜底补齐(本分支本就不推远端, RM03/RM05/RM07 先例)。</p>
+    <h3>漂移体检(§07)</h3>
+    <p><b>RM09 无基线 commit → 首轮, 无漂移面</b>(§07: 没有基线 commit 的首轮写"首轮, 无漂移面")。本轮实测完成后把实测时刻 HEAD 记进切片与锚件 §07。</p>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 17:07 实测)</h3>
+    <p><code>[ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停</code><br>
+       <code>[ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></p>
+    <p>guard 绿(<code>firewalled</code> 按 §2.1 通过)。真实种子全程暂停, 约束 2 对本片全部用例天然成立——本片写侧判据全部落在 <b>real-fake 假种子</b>与产品配置面上, <b>删除/移动/重命名只对自造种子操作</b>(红线), 不需要真实种子活跃。</p>
+    <h3>glob 自检(规程 §05 规则 8, 2026-10-31 17:05 实测)</h3>
+    <p>锚件 §03 RM09 行原 8 条 glob <b>全部漏 <code>src/auto_qb/</code> 前缀</b>(RM01–RM07 同款缺陷<b>第八次复发</b>; 原样 pathspec 命中 0), 且原行 <code>webui/static/js/**</code> 目录<b>不存在</b>——真实 JS 落点是 <code>static/shared/</code>(44 js + drawer_tpl 13 + vendor 2)与 <code>static/prism/js/</code>(1)。已按规则 8 修正为全前缀写法, JS 面收拢为 <code>src/auto_qb/webui/static/**/*.js</code>; 另发现种子转移路由 <code>webui/server/routes/transfer.py</code>(计划 26-10-31-0306 W3, <code>/api/transfer/run</code> + <code>/api/transfer/test</code>, 命令字 <code>transfer_run</code>/<code>transfer_test</code> 走 commands.py 分发表)此前未归属任何片, 按规则 1(归属优先: 其执行体 <code>_cmd_transfer_run</code> 就在 commands.py)并入本行。锚件 §08 已记账(17:10 li)。补正后 <code>git ls-files</code> 实测命中 <b>67 个文件</b>(产品侧 py 7 + static js 60), 全属 WebUI 写侧, 无混入大件, 片边界不糊, 不拆不并(规则 1/2 不触发)。</p>
+    <p>产品侧命中清单: <code>webui/commands.py</code>(1534 行, 命令实现单点) · <code>webui/server/routes/torrent_cmds.py</code>(378 行) · <code>groups.py</code>(59) · <code>config.py</code>(181) · <code>fs.py</code>(312) · <code>keys.py</code>(123) · <code>system.py</code>(66) · <code>transfer.py</code> · <code>webui/static/**/*.js</code>(60, 其中写侧行为核心 = <code>static/shared/commands.js</code> 乐观 UI/回执轮询)。</p>
+    <h3>驱动形态取舍(写侧怎么驱动)</h3>
+    <p>断言形态 = <b>直接 HTTP 调产品 WEB 端点(不经浏览器 UI——UI 交互归 RM08/观感)</b>, 逐条两级断言: ①<b>端点回执</b>(POST 端点返回 <code>queued</code>+<code>cmd_id</code>; 延迟回执命令轮询 <code>GET /api/cmd/{cmd_id}</code>, system.py:42) + ②<b>qB API 回读真作用</b>(状态/保存路径/文件名/定义层真变了)。两种形态取舍:</p>
+    <ul>
+      <li><b>完整主程序形态(本片统一采用)</b>: <code>lib/app.py</code> + tests-real 派生配置、非 dry-run 起 WEB(RM07 同款基座)。理由: 命令消费挂在<b>主循环命令线</b>(<code>webui/module.py:131</code> <code>on_command_line → web.consume_commands()</code>, runtime.py:498), 回执、reannounce 确认跟踪(<code>check_pending</code>)、写序号与真值推送全在这条线上——只有完整形态口径最全。</li>
+      <li><b>dev.webui 安全模式(§2.4, 仅作手工探索备选)</b>: 最小配置只停<b>任务线</b>(interval=86400S), 同步线 1.5S 与命令线照常——理论上命令仍会被消费; 但确认跟踪/回执时序与完整形态未做对照, <b>用例统一走完整形态防两形态分叉</b>; 执行代理想随手试一条命令时可用它(约束 1/2 照样适用, §2.4「它仍会真写」)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读; 文件:行号为 2026-10-31 HEAD <code>a142b38e</code> 锚点)</h2>
+    <table>
+      <tr><th>验证面</th><th>代码锚点</th><th>外部可观测断言面</th></tr>
+      <tr>
+        <td>右键命令真作用到 qB(单发)</td>
+        <td><code>torrent_cmds.py</code> 透传形状 helper(<code>_cmd_hash</code>:63 / <code>_cmd_enable</code>:69 / <code>_cmd_field</code>:73 / <code>_cmd_str_list</code>:87)+ 端点表(:76 pause · :80 resume · :84 reannounce · :88 delete · :99 recheck · :103 skip-check · :197 super-seeding · :201 force-start · :205 limits · :216 share-limits · :229 location · :238 rename · :242 queue · :246 auto-tmm · :250/:254 trackers · :259 files/priority · :269 rename-fs); 命令实现单点 <code>commands.py</code> 分发表(:325-360, <code>WebCommandsMixin</code> :317)</td>
+        <td>POST 回执 <code>queued</code>+<code>cmd_id</code> → <code>/api/cmd/{cmd_id}</code> ok 回执 → qB API 回读(state/save_path/name/files 真变); hash 不在快照时主循环侧静默跳过(端点注释)</td>
+      </tr>
+      <tr>
+        <td>批量合单</td>
+        <td><code>POST /api/torrents/bulk</code>(torrent_cmds.py:280-342): hashes+组键混合(DLG-02)· limits/location 扩展(W2)· skip_check force(W3)· 路由层 400 校验(limits 全空 / location 空路径 / 负限速); 执行体 <code>_cmd_bulk_torrents</code>(commands.py), 乐观动作集 <code>_OPTIMISTIC_BULK_ACTIONS={"pause","resume"}</code>(commands.py:185)</td>
+        <td>一次入队单命令展开组成员合并去重; 聚合回执 summary 计数; 路由层 400 拒收(不入队); 不存在 hash 进 skip 计数</td>
+      </tr>
+      <tr>
+        <td>延迟回执机制</td>
+        <td><code>GET /api/cmd/{cmd_id}</code>(system.py:42); <code>CMD_ID_COMMANDS</code>(commands.py:194 = 延迟回执集 + bulk + set_torrent_location)· reannounce 确认窗口常量(:34-58, RC_FAIL/RC_DEFERRED/RC_UNCONFIRMED 前缀 + REANNOUNCE_INACTIVE_SKIP :100)· <code>_register_reannounce_pending</code>(:596)· <code>check_pending</code>(命令线)· 慢命令账 CMD_SLOW_MS(:228)</td>
+        <td>回执文案三态: 「失败: tracker 未接受汇报(not working)」/「已受理: 最小间隔未过期, 推迟至 …」/「种子非活跃(…), qB 静默忽略强制汇报」; 回执时序与序号</td>
+      </tr>
+      <tr>
+        <td>组命令</td>
+        <td><code>groups.py:40-52</code>: <code>/api/groups/{key}/pause|resume|reannounce|delete</code> 透传单点(:23 注释)+ <code>GET /api/traffic/qb/group/{key}</code>(:27); 命令字 pause_group 等(commands.py:325-328)</td>
+        <td>组命令 → 成员(假种子)全员 qB 回读 state 变; 未知 key 的拒收行为</td>
+      </tr>
+      <tr>
+        <td>移动与重命名</td>
+        <td><code>/location</code>(:229, confirm 透传 = 整组迁移别名 P5)· <code>/rename</code>(:238)· <code>/rename-fs</code>(:269, old_path/new_path/is_folder); <code>_cmd_set_torrent_location</code>/<code>_cmd_rename_torrent</code>/<code>_cmd_rename_fs</code>(commands.py:345-352)</td>
+        <td>qB 回读 save_path/name/files 真变 + 数据文件真被 qB 搬(单成员组恒 FORM_DIRECT, §2.9)</td>
+      </tr>
+      <tr>
+        <td>配置保存(WebUI 通道)</td>
+        <td><code>config.py</code>: <code>GET /api/config</code>(:116)· <code>PUT /api/config</code>(:133)· <code>/api/config/preview</code>(:162)· public/schema/expr 辅助(:21/:95/:56)</td>
+        <td>回执 applied + changes(顶层段名) + restart_required(R 级口径); 临时 data_dir 配置文件真落盘。热重载机制本身 = RM02-04 已测, 只回归引用</td>
+      </tr>
+      <tr>
+        <td>keys 写读回</td>
+        <td><code>keys.py</code>: <code>GET /api/keys</code>(:94)· <code>PUT /api/keys</code>(:102)</td>
+        <td>写后回读一致; 非法载荷拒收</td>
+      </tr>
+      <tr>
+        <td>fs 写侧</td>
+        <td><code>fs.py</code>: <code>GET /api/paths</code>(:82)· <code>GET /api/fs/dirs</code>(:120)· <code>POST /api/fs/mkdir</code>(:173)· <code>POST /api/open-path</code>(:216); 白名单根前缀检查(:116 rr.startswith)</td>
+        <td>mkdir 白名单根内真建目录 + dirs 回读; 根外路径拒收(越界闸门)。open-path 真弹资源管理器 = 观感, 归 RM08</td>
+      </tr>
+      <tr>
+        <td>种子转移端点</td>
+        <td><code>transfer.py</code>: <code>POST /api/transfer/run</code>(:43, {target_id, hashes, keep_source})· <code>POST /api/transfer/test</code>(:69, 只读探测); <code>_cmd_transfer_run</code>/<code>_cmd_transfer_test</code>(commands.py:800/:835); 路由层目标预检(:24)</td>
+        <td>未知 target_id 的错误回执与零状态变化; 只读探测回执。正向真转移需第二下载器 → 跳过项</td>
+      </tr>
+      <tr>
+        <td>乐观 UI(前端, 本片只保服务端面)</td>
+        <td><code>static/shared/commands.js</code>: <code>applyOptimistic</code>(:669, 补丁先于 POST)· <code>resolveOptimistic</code> 失败回滚(:491)· <code>_expirePending</code> 3s 兜底回滚(:377)· 抽屉对称回滚(:442); 后端乐观动作集(commands.py:185)</td>
+        <td><b>服务端可观测面</b>(回执到达/真值推送/写序号)已由 01/03/04 覆盖; <b>is-pending 压暗与回滚的视觉瞬间 = 浏览器渲染行为</b>, 真机轨不可脚本断言 → BLOCKED 用户目视(§05)</td>
+      </tr>
+    </table>
+    <div class="callout">
+      <b>与已测面的「同一件事不测三遍」切分(规程 §00)</b>: <b>PUT /api/config 热重载机制</b>(changes/restart_required/R 级回退/L2 重建)已由 RM02-04 实测; <b>trackers 段热重载</b>已由 RM05-02 实测; <b>限速下发与回读口径</b>(transfer 端点/奇数手动保护)已由 RM03-03/RM05-03/RM07 实测; <b>整组迁移闸门与目录别名</b>已由 RM04 实测。RM09 不复测这四件, 只在用例里<b>引用</b>其口径。本片<b>新增面</b>集中在: WebUI 写侧端点 → 命令队列 → qB 真作用的<b>全链路</b>(此前各片只测了业务模块发起的写, 没测用户从 WebUI 发起的写)、批量合单、延迟回执三态、组命令、fs/keys 写侧、配置保存的 WebUI 落盘通道。
+    </div>
+    <h3>验证口径(种子层与幂等)</h3>
+    <ul>
+      <li><b>L1 假种子</b>(announce = <code>http://&lt;本机局域网IP&gt;:1/announce</code> 死端口, <code>real-fake</code> 标签, 零外连; §2.9: 必须带 announce 且测试配置 trackers 段有对应 domains 条目, 否则不进 matched 管线——但<b>右键命令面不走归组管线</b>, 直接按 hash 命中快照, 只有所在<b>组</b>的用例(RM09-06)才需要真归组)。假种子缺省态 <code>stalledUP</code>(纯本地做种, §2.6)——reannounce 用例的"活跃"判据用它, 暂停对照用 <code>stoppedUP</code>。</li>
+      <li><b>幂等(§09)</b>: 每条用例开跑先清自己造的种子/标签/分类(<code>real.seed.rm --all</code> 口径), 收尾删干净; 删除用例的重加走 <code>/api/torrents/add</code>(顺带覆盖 add 端点回执形态)。</li>
+      <li><b>回执等待</b>: 命令线节拍级(队列归一化 1s), 回执用 <code>_wait</code> 轮询 <code>/api/cmd/{cmd_id}</code>, 不 sleep 死等; reannounce 确认窗最长 30s(REANNOUNCE_CONFIRM_TIMEOUT), 断言前留足窗长。</li>
+      <li><b>删除/移动/重命名只对自造 real-fake 种子</b>(红线); 移动落点只认 <code>tests-real/.work/</code> 与 <code>R:/qbt-fake/</code>(§2.6), 目标目录预建(§2.9 GATE_SPACE fail-closed)。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(10 条, docstring 首行 <code>[RM09-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm09_webui_write/</code>, 跑法 <code>commands run real.suite -- --slice RM09 --yes</code>(<code>-n 0</code>; 文件锁防端口抢, rm01 先例)。共享基座: 产品完整主程序非 dry-run 连 36596(空库), 各条独立起停, data_dir 独立临时目录; 假种子一律 <code>real-fake</code> 标签; 全部命令走 HTTP 端点直调, <b>零外连断言兜底: 每条收尾核外连计数 0 + announce 死端口</b>。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-01</span><span class="ttl">单发右键命令真作用: pause/resume 全链路(端点回执 → 命令线消费 → qB 状态真变)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>加 1 枚假种子(stalledUP), <code>POST /api/torrents/{hash}/pause</code>(torrent_cmds.py:76)→ 回执 queued+cmd_id → <code>GET /api/cmd/{cmd_id}</code> ok → qB API 回读 state 变 <code>stoppedUP</code>(qB 5.2 暂停语义, §2.5); <code>/resume</code>(:80)回读回 stalledUP。顺带断言写序号单调(回执序号)与命令线消费时序(1s 节拍内 _wait 到)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子; 记录回读前原态。</li>
+        <li><b>副作用</b>: 假种子状态切换两次。</li>
+        <li><b>回滚</b>: <code>real.seed.rm</code> 删净。</li>
+        <li><b>失败判据</b>: 回执 ok 但 qB 状态不变(命令线断链/写错实例——高优 FAIL); 回执永不到达(轮询超时, 消费面断); 断言咬 pausedUP 旧枚举(qB 5.2 口径错, 用例侧事故)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-02</span><span class="ttl">删除命令双态: delete_files=false 种子消失数据还在 / true 数据真删</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>两枚假种子各自落独立目录: ①<code>POST /api/torrents/{hash}/delete</code>(:88, delete_files=false)→ 回执 ok → qB <code>torrents/info</code> 不再含该 hash, <b>数据文件仍在盘上</b>; ②delete_files=true(:88 同端点)→ 回执 ok → info 无该 hash 且<b>数据文件被 qB 删</b>(文件系统断言)。回执 ok 后 qB 侧消失可能慢一拍, _wait 轮询再断言。加种子经 <code>POST /api/torrents/add</code>(:344)走 WebUI 通道(顺带覆盖 add 收据形态, qB 5.2 返回 JSON 收据 §2.5)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 两枚假种子(独立落点目录, 路径记录)。</li>
+        <li><b>副作用</b>: 两枚种子及数据被删(自造, 可重建)。</li>
+        <li><b>回滚</b>: 删残留目录 + 用例开跑先清同类种子(幂等)。</li>
+        <li><b>失败判据</b>: false 态连数据一起删了(delete_files 透传破, 高优 FAIL——会真删用户数据语义面, 必须红); true 态种子没了文件还在(qB delete_files 语义没透传到); 回执 error(qB 拒绝, 看 qb_reject_text 提示链)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-03</span><span class="ttl">批量合单: hashes+组键混合一次入队 → 聚合回执计数 + 路由层 400 拒收 + skip 计数负向</span><span class="badge lv">L3(负向对照内建)</span><span class="badge">L1 假种子 ×2 + 归组 1 组</span></div>
+      <div class="bd"><p><code>POST /api/torrents/bulk</code>(:280): <code>action=pause</code> 载荷 hashes=[h1]+keys=[组key](DLG-02 混合模式)→ 回执 queued+cmd_id → 聚合回执 summary.ok 计数 = 2 → qB 回读两枚全 stoppedUP。负向红验: ①<code>action=limits</code> 两方向全空 → <b>400 路由层拒收</b>(不入队, 无 cmd_id); ②<code>dl_limit=-1</code> → 400(「不能为负数」); ③含不存在 hash → 正常入队但聚合回执 <b>skip 计数</b>(主循环侧静默跳过语义)。乐观集(pause/resume ∈ _OPTIMISTIC_BULK_ACTIONS, commands.py:185)只影响前端补丁, 服务端回执面相同——注明不复测前端。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 2 假种子 + 1 归组(announce+domains 配置, §2.9); 组 key 按 URL 编码态口径传。</li>
+        <li><b>副作用</b>: 2 假种子状态切换。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删临时配置目录。</li>
+        <li><b>失败判据</b>: 混合模式只生效一半(组展开或 hash 合并丢目标——合单语义破, 高优 FAIL); 非法载荷入队而非 400(fail-fast 破); 不存在 hash 让整批失败(应 skip 不得连坐); summary 计数与 qB 实际不符。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-04</span><span class="ttl">强制汇报回执三态: not working / 非活跃忽略 / 最小间隔推迟(确认跟踪全窗)</span><span class="badge lv">L3(三态对照内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>同一会话三态各断(回执前缀常量 commands.py:57-100): ①活跃假种子(stalledUP, announce=死端口)<code>POST /api/torrents/{hash}/reannounce</code>(:84)→ <code>/api/cmd/{cmd_id}</code> 回执「<b>失败: tracker 未接受汇报(not working)</b>」(死端口连接失败, 零外连); ②暂停(stoppedUP)种子 reannounce → 「<b>种子非活跃(暂停/停止/…), qB 静默忽略强制汇报</b>」(REANNOUNCE_INACTIVE_SKIP); ③同活跃种子 30s 窗内二次 reannounce → 「<b>已受理: 最小间隔未过期, 推迟至 …</b>」(RC_DEFERRED, 确认跟踪 <code>_register_reannounce_pending</code>:596 + check_pending)。确认窗语义: 「未确认」不是 FAIL, 是设计态——回执断言只咬前缀三分类, 到 deadline 前留 _wait 窗长。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 活跃/暂停假种子各 1; min间隔基线由首次 reannounce 建立。</li>
+        <li><b>副作用</b>: reannounce_pending 账(内存态); 假种子对死端口 announce 尝试。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>; 产品停机清内存账。</li>
+        <li><b>失败判据</b>: 活跃+死端口回了「未确认/成功」之外的成功语义(qB 真接受了——检查 announce 是否真死端口); 暂停种子也进了确认跟踪(非活跃前置闸破); 三前缀互串(分档逻辑分叉); 回执永不写(reannounce_pending 泄漏)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-05</span><span class="ttl">移动与重命名: location 真搬文件 + rename 改名 + rename-fs 改文件名(qB 回读三连)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>单枚假种子: ①<code>POST /api/torrents/{hash}/location</code>(:229, 预建目标目录于允许落点)→ qB 回读 <code>save_path</code>==新目录 + 数据文件真在新目录(qB 自搬, 单成员组恒 FORM_DIRECT, §2.9——锚点是 save_path/文件, <b>不断言别名/journal</b>); ②<code>/rename</code>(:238)→ 回读 name 变; ③<code>/rename-fs</code>(:269, old_path/new_path/is_folder=false)→ qB <code>torrents/files</code> 回读文件名变。回滚: 删种子 + 清两个落点目录。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子(落点记录); 目标目录预建(GATE_SPACE fail-closed, §2.9)。</li>
+        <li><b>副作用</b>: 数据文件被 qB 跨目录搬一次; 名称/文件名改两次。</li>
+        <li><b>回滚</b>: <code>real.seed.rm</code>(连数据) + 清新旧两目录残留。</li>
+        <li><b>失败判据</b>: save_path 回读没变(移动链路断, 高优 FAIL); 旧文件残留新目录为空(qB 没真搬); rename-fs 回执 ok 但 files 名单没变; 断言别名/journal(单成员组到不了那支, 口径错)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-06</span><span class="ttl">组命令真作用: 组 pause → 成员全员停 + 未知 key 拒收</span><span class="badge lv">L2</span><span class="badge">L1 归组假种子 ×2</span></div>
+      <div class="bd"><p>2 枚同组假种子(announce+domains, §2.9): <code>POST /api/groups/{key}/pause</code>(groups.py:40)→ 回执 ok → qB 回读<b>两名成员</b>全 stoppedUP; <code>/resume</code>(:44)对照回读恢复。负向: 不存在的 key → 端点行为按实况断(路由层拒收或错误回执), 只要不是「静默成功」; <code>GET /api/traffic/qb/group/{key}</code>(:27)读侧顺带核组视图在线。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 同组假种子 ×2(等归组视图成员出现再发命令)。</li>
+        <li><b>副作用</b>: 2 假种子状态切换。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>。</li>
+        <li><b>失败判据</b>: 命令只作用了部分成员(组展开破, 高优 FAIL); 未知 key 静默成功(无账); 回执 ok 但成员状态参差。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-07</span><span class="ttl">配置保存 WebUI 落盘通道: GET → 树编辑 → PUT applied → 磁盘配置文件真变</span><span class="badge lv">L2</span><span class="badge">L1 基座(可零种子)</span></div>
+      <div class="bd"><p><code>GET /api/config</code>(config.py:116)取树 → 改一个<b>非 R 级</b>顶层键(选 interval 类, RM02-04 口径: R 级段 data_dir/state_file/fs 提交即回退)→ <code>PUT /api/config</code>(:133)→ 回执 applied + changes 含该段 + <b>无 restart_required</b> → 断言临时 data_dir 的配置文件内容真落盘(字节级比对改的键)。热重载机制本身(L2 重建/rebound)<b>只回归引用 RM02-04/RM05-02, 不复测</b>。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座; 落盘前配置文件字节快照。</li>
+        <li><b>副作用</b>: 运行配置被改一处(临时配置, 非红线 config.yml)。</li>
+        <li><b>回滚</b>: 产品随起停还原(临时 data_dir 删除即净); 或 PUT 回原值。</li>
+        <li><b>失败判据</b>: 回执 applied 但磁盘文件没变(落盘通道断, 高优 FAIL); 改的键丢了(树合并分叉); 非 R 级键报 restart_required(新事实, 如实记不定性, 引用 RM02-04 R 闸口径)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-08</span><span class="ttl">keys 写读回: PUT /api/keys → GET 回读一致 + 非法载荷拒收</span><span class="badge lv">L2</span><span class="badge">L1 基座(可零种子)</span></div>
+      <div class="bd"><p><code>GET /api/keys</code>(keys.py:94)记录原值快照 → <code>PUT /api/keys</code>(:102)写一组测试键 → 回读一致(结构+值); 负向: 非法载荷(缺字段/错型)→ 4xx 拒收且原值不坏。收尾按快照还原。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座; keys 原值快照。</li>
+        <li><b>副作用</b>: 产品 keys 存储被写一次。</li>
+        <li><b>回滚</b>: PUT 回快照原值。</li>
+        <li><b>失败判据</b>: 写后读不一致(写通道断); 非法载荷静默接受(fail-fast 破, 高优 FAIL); 还原后与原快照字节不齐。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-09</span><span class="ttl">fs 写侧: mkdir 白名单根内真建 + 越界根外拒收(负向真红)</span><span class="badge lv">L3(负向真红)</span><span class="badge">L1 基座(可零种子)</span></div>
+      <div class="bd"><p><code>GET /api/paths</code>(fs.py:82)拿允许根 → <code>POST /api/fs/mkdir</code>(:173)根内新目录 → 目录真建(os.path.isdir)+ <code>GET /api/fs/dirs</code>(:120)回读含它 → 删净。红验: 根外路径(如 <code>C:\Windows\Temp</code> 或仓库根外)<code>mkdir</code> → 4xx 拒收(:116 白名单前缀闸门)+ 目录不存在。/api/open-path(:216)真弹资源管理器=<b>观感交互归 RM08</b>, 本用例不调它。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座; 目标目录不存在(先探空)。</li>
+        <li><b>副作用</b>: 白名单根内新建一个空目录(用例自删)。</li>
+        <li><b>回滚</b>: 删该目录; 越界负向零副作用(拒收验证)。</li>
+        <li><b>失败判据</b>: 越界 mkdir 成功(白名单闸破——安全面高优 FAIL); 根内 mkdir 回执 ok 但目录没建; dirs 回读不含新建目录(读侧装配分叉)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM09-10</span><span class="ttl">种子转移端点负向: 未知 target_id 的 run/test 拒收且零状态变化</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>基座不配任何转移目标: <code>POST /api/transfer/test</code>(transfer.py:69, 只读探测)未知 target_id → 路由层目标预检(:24)错误回执, 零状态变化; <code>POST /api/transfer/run</code>(:43)未知 target_id + 假种子 hash → 拒收回执, qB 回读种子原态未动。正向真转移(第二下载器收种)→ 跳过项(§05, 解锁=授权配置第二测试下载器)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子(记录原态); 不配 transfer targets。</li>
+        <li><b>副作用</b>: 无(两请求都应被预检拦下)。</li>
+        <li><b>回滚</b>: 删种子。</li>
+        <li><b>失败判据</b>: 未知 target 竟然入了队或改了种子状态(预检闸破, 高优 FAIL); test 端点产生写副作用(只读语义破); 5xx 泄漏(应为结构化错误回执)。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>首轮全量建档, 目标分布 <code>0/0/7/3</code>(L2×7: 01/02/05/06/07/08/10; L3×3: 03/04/09)。三条 L3 的红验都在用例内建: 03 路由层 400 三连 + skip 计数 / 04 回执三态互为对照 / 09 越界拒收真红。</p>
+    <p><b>本轮升档</b>: manual-walkthrough「主循环×WebUI 解耦」子项②「右键命令(暂停/删除/汇报/限速…)照常生效」原是 <b>L0 目视条目</b>, 本轮迁出并直接落到 <b>L2/L3 用例集</b>(RM09-01/02/04/05/06 覆盖暂停/删除/汇报/移动重命名四类)——满足「每轮至少 1 条升一档」硬要求(L0→L2/L3, 迁出即升档)。</p>
+    <p><b>备选升档(执行轮余量触发, 不占硬要求)</b>: 若执行轮时间有余, RM09-06 可升 L3——加「组命令对无成员空组」的负向对照; 或 RM09-10 升 L3——配一个指向死端口的假 target 验 run 的失败回执链。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <table>
+      <tr><th>条目</th><th>跳过原因</th><th>解锁条件</th></tr>
+      <tr>
+        <td><b>乐观 UI 视觉面(BLOCKED)</b>: is-pending 压暗瞬间 / 失败回滚的视觉闪动 / 组行颜色 / 右键菜单弹出与跟手(commands.js 全套补丁-回滚行为的<b>渲染面</b>)</td>
+        <td>浏览器渲染行为, HTTP 直调观测不到; 观感/L0 归 RM08 读侧与用户目视(§08: 只有 perceptions 人眼能判的进真机轨, 但断言只能人做)</td>
+        <td><b>用户真机目视</b>(manual-walkthrough 对应条目逐条勾; 服务端回执面已由 RM09-01/03/04 覆盖, 目视失败时对照 <code>[perf] 命令 … via=</code> console 行)</td>
+      </tr>
+      <tr>
+        <td><b>右键菜单/列设置/抽屉等 UI 交互面</b>: 弹层、拖拽、多标签同步等(commands.js/columns.js 交互面)</td>
+        <td>浏览器交互归 e2e 轨与 RM08; 真机轨按 §00 准入判据只收 qB 真执行/真文件系统/人眼三类, 交互细节不满足</td>
+        <td><b>用户真机目视</b>(归 RM08 排期)</td>
+      </tr>
+      <tr>
+        <td><b>/api/open-path 真弹资源管理器</b>(fs.py:216; 「追剧页打开目标文件夹」走查项走它)</td>
+        <td>端点会真弹 Explorer 窗口, 自动化断言"窗口弹出"不可脚本化; 交互点按面归 RM08</td>
+        <td><b>用户真机目视</b>(归 RM08); 端点参数校验/越界拒收面已并入 RM09-09 口径, 若执行代理认为必要可顺带断言其 4xx 分支</td>
+      </tr>
+      <tr>
+        <td><b>配置保存与热重载机制复测</b>: R 级回退 / L2 重建 / rebound / trackers 段热重载</td>
+        <td><b>与 RM02-04/RM05-02 已测面重叠</b>——只写回归引用(RM09-07 只测 WebUI 保存通道的落盘新面, 机制不复测)</td>
+        <td>—(引用即覆盖; 若 RM09-07 实测与 RM02-04 口径冲突, 按新事实记账)</td>
+      </tr>
+      <tr>
+        <td><b>种子转移正向真执行</b>: transfer_run 把种子真搬到第二下载器</td>
+        <td>需要配置第二真实下载器目标(跨实例写), 超出本片"单产品实例 + 白名单 qB"边界; 本轮只测负向拒收(RM09-10)</td>
+        <td><b>授权配置第二测试下载器</b>(白名单内)并明确转移写侧归属(归 RM09 追加或新片按规则 2 拍板)</td>
+      </tr>
+      <tr>
+        <td><b>[需活跃种子] 条目</b>: <b>无</b></td>
+        <td>全部写侧判据落在假种子(L1, 不受约束 2)与产品配置面; reannounce 的"活跃"用 stalledUP 假种子(§2.6 纯本地做种即达)</td>
+        <td>—</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><b>验证面全数有着落</b>: 单发命令真作用(01/02/05)· 批量合单(03)· 延迟回执机制(01/03/04)· 组命令(06)· 配置保存与 keys 写读(07/08)· fs 写侧(09)· 种子转移端点负向(10)——每个面至少一条三态记账。</li>
+      <li><b>≥3 条 L3 红验真跑过见红</b>(03/04/09); 「同一件事不测三遍」切分兑现: 热重载机制/限速口径/整组迁移闸门零复测, 只引用口径。</li>
+      <li><b>两级断言形态成立</b>: 每条写侧用例都是「端点回执 + qB API 回读真作用」双证据, 不咬内部实现(§09)。</li>
+      <li><b>观感面 BLOCKED 记账明确</b>: 乐观 UI 视觉/右键菜单/open-path 弹窗逐条列解锁条件, 服务端可观测面无遗漏(对照 §02 映射表)。</li>
+      <li><b>零外连红线全程成立</b>: announce 死端口、无真实站点连接; 每条收尾外连计数 0。</li>
+      <li><b>实例还原干净</b>: 自造种子/标签/分类/目录/keys 还原删净(删除类用例重点核查——它的副作用本就是"删"), guard 复跑绿。</li>
+      <li><b>记录闭环</b>: 切片落 <code>testing/real-baselines/&lt;stamp&gt;-real-RM09.md</code>(基线 commit=实测时刻 HEAD), 锚件 §07 RM09 行同步; 迁出行执行代理已落实(§07); 新环境事实回写规程(候选 §2.14)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9, 首现迁出)</h2>
+    <p>本片是第一片有真迁出的: 排期指令点名三条疑似, 逐条判定如下(<b>原文件标注已落实</b>——「主循环×WebUI 解耦」行已加迁出注):</p>
+    <table>
+      <tr><th>条目</th><th>判定</th><th>依据</th></tr>
+      <tr>
+        <td>「主循环 × WebUI 解耦」(<code>5691c6f</code>)——子项②右键命令(暂停/删除/汇报/限速…)照常生效</td>
+        <td><b>✅ 部分迁出 → RM09</b>(写侧可脚本断言面)</td>
+        <td>「照常生效」= 命令真作用到 qB, 恰是本片核心验证面, 迁入 RM09-01(暂停)/02(删除)/04(汇报)/05(移动重命名)——限速单种下发已由 RM03-03/RM05-03 实测, 引用不复测。原行子项①(视图刷新)③(主循环开销)与②的「乐观态正常落回」视觉面仍目视, 留 RM08(原行已注)</td>
+      </tr>
+      <tr>
+        <td>「辅种组整组暂停行色(修复验真)」(<code>4019a57</code>)——组行应一直灰不闪绿</td>
+        <td><b>❌ 不迁出, 留 RM08</b>(观感)</td>
+        <td>判据是<b>行色</b>(修复前后差异在渲染时序), HTTP 直调观测不到 is-pending 类切换; 其写侧命令本身(组暂停真作用)已由 <b>RM09-06</b> 覆盖——但该走查条的判据(闪不闪绿)不是脚本断言面。若目视仍闪, console <code>[perf] 命令 … via=</code> 行是排障入口(原条已写)</td>
+      </tr>
+      <tr>
+        <td>「追剧页打开目标文件夹」(<code>c888fba</code>)——剧→集→种子三级各点一次</td>
+        <td><b>❌ 不迁出, 留 RM08</b>(交互观感)</td>
+        <td>判据是"点了之后该弹的弹出来"(三级点按流程 + Explorer 窗口弹出), 全是 UI 交互; 底层端点 /api/open-path 已映射(fs.py:216), 其参数校验面归 RM09-09 口径顺带。RM08 执行时若认为需要端点级 4xx 断言可并入其用例集</td>
+      </tr>
+    </table>
+    <p>清单其余条目(设置页分区保持/Console Hub 视觉/跟手性/列设置/相对时间/可用性列/状态栏流量视觉等)与前六片判定一致: 观感/读侧, 归 RM08 或已闭环, 本片不动。清单<b>保持冻结</b>(未全部迁完, 不置 Superseded)。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>回执依赖主循环命令线</b>: 产品必须完整主程序非 dry-run(<code>--dry-run</code> 不启 WEB, §2.7; 命令消费在 module.py:131 命令线钩子)。回执用 <code>_wait</code> 轮询 <code>/api/cmd/{cmd_id}</code>(system.py:42), 别 sleep 死等也别假设同步返回——POST 的 200 只代表「入了队」。</li>
+      <li><b>删除是不可逆写</b>: RM09-02 只对 <code>real-fake</code> 标签的自造种子发 delete; 目标 hash 必须来自用例自己 add 的回执, <b>绝不从实例种子清单里挑</b>(pause-all 前置下真实种子全 stoppedUP, 名字像也不行); delete_files=false 的语义断言(数据还在)是防"真删用户数据"语义破的关键红验, 别删。</li>
+      <li><b>reannounce 三态的时序坑</b>: 「已受理: 推迟至」依赖首次 reannounce 建立的 min 间隔基线——三态子步骤顺序别乱(先活跃失败, 再窗内推迟); 确认跟踪到 deadline(REANNOUNCE_CONFIRM_TIMEOUT=30s)才写终态回执, 「未确认」是设计态不是 FAIL; 死端口 announce 用 <code>http://&lt;本机局域网IP&gt;:1/announce</code>(别用假域名走 DNS 出外网, §2.9)。</li>
+      <li><b>qB 5.2 状态枚举</b>: 暂停=<code>stoppedUP</code>(不是 pausedUP), 端点语义经 /torrents/stop-start(§2.5); 删除后 qB info 消失可能慢一拍, 轮询再断言; 多标签「, 」连接口径(RM05 坑)在本片标签类命令若涉及, 记得 strip。</li>
+      <li><b>移动的三个前置</b>: 目标目录预建(GATE_SPACE fail-closed, §2.9); 落点只认 <code>tests-real/.work/</code> 与 <code>R:/qbt-fake/</code>; 单成员组恒 FORM_DIRECT——断言 save_path 与文件真搬, <b>别断言别名/journal</b>(那支只有重启补发路径到得了)。</li>
+      <li><b>组命令需要真归组</b>: RM09-06 的假种子必须带 announce 且测试配置 trackers 有 domains 条目(§2.9), 等归组视图出现成员再发命令; 组 key 传参按端点的 URL 编码态口径(<code>_group_key_param</code>, torrent_cmds.py bulk 段注释)。</li>
+      <li><b>PUT /api/config 写的是运行配置</b>: 测试配置在临时 data_dir(非红线 config.yml); 改键选非 R 级(interval 类), R 级段(data_dir/state_file/fs)提交即回退+restart_required(RM02-04 口径)——想验 R 级回退去引用 RM02-04, 别在本片重测。</li>
+      <li><b>keys 还原纪律</b>: RM09-08 写前快照、写后还原、还原后字节比对——keys 是鉴权面, 残留脏键可能影响同会话后续用例的端点鉴权。</li>
+      <li><b>转移端点只测负向</b>: 正向 transfer_run 会真把种子搬去 target 下载器——未授权配第二下载器前别碰; test 端点断言「零写副作用」。</li>
+      <li><b>并行陷阱重申</b>: 直跑 pytest 会 <code>-n 8</code> 抢端口——沿用 rm01 conftest 文件锁先例或走 <code>real.suite</code>(§2.8)。Windows 收尾停产品走 lib/app.py(taskkill /F /T 口径, §2.7), 别手工发信号。</li>
+    </ol>
+  </section>
+
+  <p class="hint" style="margin-top:40px">排期准备件(拍板即冻结) · 锚件 issues/26-10-31-0641 §03/§08 · 规程 memory-bank/testing/real-machine.md · 生成: 2026-10-31 17:10, HEAD a142b38e</p>
+</div>
+</body>
+</html>
