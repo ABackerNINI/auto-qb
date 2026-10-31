@@ -6,11 +6,11 @@
 
 ## In Progress (22)
 
+- [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-10-31-memory-bank-recurrence-tooling](../26-10-31-memory-bank-recurrence-tooling.md) 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
 - [26-10-31-webui-write-side](../26-10-31-webui-write-side.md) 修复 reannounce 确认跟踪对在途 tracker 过早落 ok(issue 26-10-31-1740)
 - [26-11-01-memory-bank-html-syntax-guard](../26-11-01-memory-bank-html-syntax-guard.md) HTML 坏标签机检守卫(闭合标签缺右尖括号吞正文类) + vnu 巡检
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
-- [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-10-17-backend-global-traffic-source-integration](../26-10-17-backend-global-traffic-source-integration.md) 全局流量来源一键切换 + 工具自动拉起(改版)
 - [26-10-31-deps-qb-5-3-support](../26-10-31-deps-qb-5-3-support.md) qB 5.3 双版本支持落地(facade/重加/升库)
 - [26-10-31-memory-bank-kb-nav-multiselect](../26-10-31-memory-bank-kb-nav-multiselect.md) kb.nav 多选与批量右键菜单

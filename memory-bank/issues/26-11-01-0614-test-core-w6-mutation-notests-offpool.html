@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="core-w6-mutation-notests-offpool">
+<meta name="issue-stamp" content="26-11-01-0614">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="mutation-audit">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数">
+<meta name="issue-summary" content="W6(R30) S2 实测 qbapi 147 + qbmanager 10 no-tests: S1 函数面核对定性为池外触达登记非缺口单, 零扩池(W8/W9 轮自然覆盖 qbapi 面, 后续轮仍不覆盖再议扩池)">
+<title>core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">auto-qb · 计划外问题（未修）· test</div>
+    <h1>core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数</h1>
+    <p class="lede">W6(R30) S2 实测 qbapi 147 + qbmanager 10 no-tests: S1 函数面核对定性为池外触达登记非缺口单, 零扩池(W8/W9 轮自然覆盖 qbapi 面, 后续轮仍不覆盖再议扩池)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-01-0614-test-core-w6-mutation-notests-offpool</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 06:14</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>W6(R30) core 包宽池轮变异审计（任务档案 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code>，R30=W6）S2 实测：qbapi.py 270 变异中 <strong>147 no tests</strong>、qbmanager.py 615 中 <strong>10 no tests</strong>（reconnect ×2 / status_snapshot ×8）。</p>
+    <p>S1 函数面核对（53 def 逐一对照池引用）定性：两条 no-tests 面<strong>全部是「池外触达」</strong>——由本轮池（10 文件）之外的测试/模块触达（webui commands getattr 动态派发 / webui routes / transfer adapters / W8-W9 模块池 / hr·tray·ui 池），<strong>不存在「真正零触达」函数</strong>，不作缺口单追。本件为检索留档（防后续轮把 no-tests 误读成覆盖缺口），非排期承诺。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <ul>
+      <li>S2 实测（WSL mutmut 3.8.0，取证 2026-11-01）：qbapi.py 270 变异 = 杀 60 + 存活 63 + <strong>no tests 147</strong>（杀死率 22.22% 为「池内」口径）；qbmanager.py 615 = 杀 329 + 存活 261 + 超时 15 + <strong>no tests 10</strong>。</li>
+      <li>qbapi 池触达分账（S1 §1）：池直触达 27 成员（test_sync / test_snapshot_sync / test_qbapi_wire）+ 经 qbmanager 间接 3（set_upload_limit / set_download_limit / set_share_limits，qbmanager:904/906/924）。</li>
+      <li>池外触达清单（qbapi 侧 147 条全部落于下列面）：<strong>webui commands getattr 动态派发</strong>（commands.py:522-546，静态 grep 不可见）19 个：torrents_pause / torrents_resume / torrents_set_force_start / torrents_top_priority / torrents_increase_priority / torrents_decrease_priority / torrents_bottom_priority / torrents_edit_category / torrents_create_tags / set_alt_speed_limits / torrents_rename / torrents_set_share_limits / torrents_set_auto_management / torrents_add_trackers / torrents_remove_trackers / torrents_file_priority / torrents_rename_folder / torrents_rename_file / torrents_remove_categories；<strong>webui routes</strong>（torrent_detail.py）3 个：get_global_speed_limits / get_alt_speed_limits / get_speed_limits_mode；<strong>transfer/adapters/qb.py</strong> 1 个：torrents_set_super_seeding；<strong>core/modules/relocate_mod.py（W8 池）</strong>2 个：torrents_pause / torrents_resume；<strong>speed_curve_mod.py（W9 池）</strong>2 个：get_global_speed_limits / set_global_speed_limits。</li>
+      <li>qbmanager 10 条（reconnect ×2 / status_snapshot ×8）由 test_hr_status / test_hr_server / test_hr_runtime / test_tray / test_ui 触达（S1 §2），属池外触达。</li>
+      <li>dump/results：<code>tmp-analysis/w6-r30/26-11-01-0313-core-qbapi-py-mutants-dump.txt</code>（210 = 63 survived + 147 no tests）与同目录 results、<code>S1-function-surface.md</code>（tmp-analysis 为 gitignore 工作区，仅本 clone；判读结论已摘录进本件）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>仅在「目标=qbapi.py / qbmanager.py、池=10 文件」的 W6 口径下出现；换池/换轮次口径数字即变，非产品缺陷。</td></tr>
+      <tr><td>影响范围</td><td>survived 刻度不含这 157 条（no tests 无 diff 可判）→ qbapi 22.22% 杀死率是池内下界，不代表全函数面；功能面本身有测试（webui/transfer/模块池），缺的只是「变异可观测性」。</td></tr>
+      <tr><td>严重度</td><td>低（记账面）—— S5a 已把块 B 判定的 qbapi 43 条中危接线真洞用 FakeClient 参数断言守阵补杀（28 守阵红验 128/128，commit 8e073df7），no-tests 面与真洞面无重叠遗留。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/core/qbapi.py</code>（取证 2026-11-01）· 53 def · 池外派发单点 <code>src/auto_qb/webui/commands.py:522-546</code>（grep getattr 动态派发区，静态 grep 对「谁调 facade」不可见）。</li>
+      <li><code>src/auto_qb/core/qbmanager.py</code> · <code>def reconnect</code> / <code>def status_snapshot</code>（reconnect ×2 / status_snapshot ×8）。</li>
+      <li>判读单点：<code>tmp-analysis/w6-r30/S1-function-surface.md</code> §1/§2（gitignore 工作区，仅本 clone）。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">非缺陷。池按「同步/快照/导出/接线」功能面圈定，webui delta 与模块池（W8 relocate / W9 speed_curve）触达面天然在池外 —— 是<strong>池口径与函数面口径的差</strong>，不是测试缺失。已排除：真正零触达函数（S1 逐 def 核对为 0）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <ul>
+      <li><strong>不扩池</strong>：W8/W9 轮跑 relocate_mod / speed_curve_mod 池时自然触达 qbapi 对应面（reconnect / status_snapshot 同理由 hr/tray/ui 池覆盖），qbapi no-tests 面预计随轮次自然收敛。</li>
+      <li>若 W9 之后仍有 no-tests 残留再议扩池（候选：把 test_hr_runtime 或 webui 命令线最小池纳入）。</li>
+      <li>记账口径维持：no-tests = 池外触达，不进三分类、不作缺口单追（与 W2-W5 各轮 no-tests 口径一致）。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-01 06:14 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-01-0614-test-core-w6-mutation-notests-offpool.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

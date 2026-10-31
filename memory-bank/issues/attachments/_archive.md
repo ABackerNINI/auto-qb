@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (74)
+## Open (76)
 
+- [test] [core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数](../26-11-01-0614-test-core-w6-mutation-notests-offpool.html) — W6(R30) S2 实测 qbapi 147 + qbmanager 10 no-tests: S1 函数面核对定性为池外触达登记非缺口单, 零扩池(W8/W9 轮自然覆盖 qbapi 面, 后续轮仍不覆盖再议扩池)
+- [test] [core/ W6 终态残留记账: 超时盲区 16 条(qbmanager 15 + exporter 1, 含 4 条 TypeError 空转环复跑改判预期)+ 存疑 6 条 §H 清单](../26-11-01-0614-test-core-w6-mutation-timeout-doubt-ledger.html) — W6 守阵覆盖 329/332 后的残留留账: 超时盲区 16(并发面工具盲区, 复跑前不硬判)+ 存疑 6(§H 形态级手搓复验候选), 检索留档非排期承诺
 - [bug] [无块 LiveTail 发布用陈旧旧块间隔: 改间隔复位窗口违反 LiveTail.interval_s 契约](../26-11-01-0050-bug-traffic-sample-livetail-stale-interval.html) — W5 实证: 改间隔后 _reset_block 复位窗口(8 字段不含 interval_s)内无块 LiveTail 发布取旧块间隔, 违反 traffic_store.py:511「无块时取当前生效采样间隔」契约
 - [test] [core/ traffic_sample_mod W5 终态存疑注记: _agg_credit_day_file_9 零槽块可达性未闭合](../26-11-01-0050-test-core-w5-mutation-dayfile-zeroblock-doubt.html) — W5 守阵覆盖后唯一余量: _agg_credit_day_file_9(空块支 break, 零槽块 parser 可达性存疑)+ 同主题 _agg_flush_series_13(空桶防御支)判等价前提未实测
 - [bug] [mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失](../26-10-31-1539-bug-mutation-tooling-deselect-guards.html) — W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律
