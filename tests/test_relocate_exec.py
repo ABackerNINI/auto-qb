@@ -68,6 +68,8 @@
 - test_rebuild_backoff_blocks_within_window: 退避窗口内不重建(旧实现每 1-2 tick 一轮建删)
 - test_rebuild_capped_then_failed_keeps_scene: 重建达上限 ⇒ failed 留现场(不再永不终态)
 - test_reconcile_respawn_backoff_not_every_tick: guardian 重拉退避(旧实现每 tick 拉一次进程)
+- test_rebuild_first_attempt_not_backoff_on_fresh_boot: 开机窗口 —— monotonic < REBUILD_BACKOFF 时首次重建不得被 0.0 哨兵退避吞掉(issue 26-10-31-0932)
+- test_respawn_first_spawn_not_backoff_on_fresh_boot: 开机窗口 —— monotonic < RESPAWN_BACKOFF 时 guardian 首拉不受退避(issue 26-10-31-0932)
 """
 import os
 import time
@@ -340,6 +342,30 @@ def test_reconcile_rebuild_when_link_lost_but_qb_alive(tmp_path, monkeypatch):
         assert os.path.exists(p), p
 
 
+def test_rebuild_first_attempt_not_backoff_on_fresh_boot(tmp_path, monkeypatch):
+    """开机窗口: monotonic < REBUILD_BACKOFF 时首次重建不得被退避吞掉(issue 26-10-31-0932)
+
+    rt 里没有 rebuild_ts = 「从未重建」, 不是「开机那一刻重建过」; 旧实现拿 0.0 兜底,
+    而 monotonic() 0 点是开机时刻, 开机不满 300s 的机器上退避判据恒真, 重建被静默跳过
+    (同树 09:05 全量绿、重启后 09:15 起单跑稳定红的翻转点)。
+    """
+    pin_disk_usage(monkeypatch)
+    monkeypatch.setattr(time, "monotonic", lambda: 120.0)  # 模拟开机 2 分钟
+    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    mod._qb_up = lambda: True
+    relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_REMOVED, "ts": time.time()})
+    mod._remove_links(mod.get_job(job_id).alias_paths)
+    for h in ("HA", "HB"):
+        mgr.store.by_hash[h].save_path = src
+        mgr.store.by_hash[h].state = "pausedUP"
+
+    _run_ticks(mod, 4)
+    job = mod.get_job(job_id)
+    assert job.phase == ru.PHASE_ARMED, (job.phase, job.reason)
+    for p in job.alias_paths:
+        assert os.path.exists(p), p
+
+
 def test_reconcile_respawn_guardian_on_stale_heartbeat(tmp_path, monkeypatch):
     """armed + 链接在 + 心跳过期(且退避窗口已过) ⇒ 重拉 guardian"""
     mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
@@ -364,6 +390,26 @@ def test_reconcile_respawn_backoff_not_every_tick(tmp_path, monkeypatch):
     for _ in range(5):
         mod.on_task_line()
     assert spawned == [], f"退避窗口内不得每 tick 重拉: {spawned}"
+
+
+def test_respawn_first_spawn_not_backoff_on_fresh_boot(tmp_path, monkeypatch):
+    """开机窗口: monotonic < RESPAWN_BACKOFF 时 guardian 首拉不受退避(issue 26-10-31-0932)
+
+    _respawn_guardian 的 docstring 口径是「首次拉起(rt 无记录)不受退避影响」; 旧实现 0.0 兜底
+    在开机不满 60s 的机器上连首拉也静默吞掉 —— 与重建退避同一处缺陷的孪生实例。
+    """
+    pin_disk_usage(monkeypatch)
+    monkeypatch.setattr(time, "monotonic", lambda: 30.0)  # 模拟开机 30 秒
+    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    mod._qb_up = lambda: True
+    relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_ARMED, "ts": time.time() - 999})
+    spawned.clear()
+    # rt 不落盘(重启由 qB 现场恢复) —— 守护进程重启后重拉记录清零, 这正是「首拉」的真实形态;
+    # _armed_env 的对账 tick 已写过 respawn_ts, 弹掉还原首拉现场
+    mod._rt[job_id].pop("respawn_ts", None)
+    assert "respawn_ts" not in mod._rt[job_id], "前提: rt 无重拉记录(首拉)"
+    mod.on_task_line()
+    assert spawned == [job_id], f"开机窗口内首拉不得被退避吞掉: {spawned}"
 
 
 def test_reconcile_failed_gone_and_timeout(tmp_path, monkeypatch):

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-reconcile-flaky">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate reconcile 重建用例同树异时翻转(全量绿后单跑稳定红)">
 <meta name="issue-summary" content="test_reconcile_rebuild_when_link_lost_but_qb_alive 同树 09:05 test.full 绿, 宿主重启后 09:15 起单跑稳定红(phase 卡 removed), venv 零变化非依赖 bump 引入, 疑时序/环境敏感, 根因待查">
 <title>relocate reconcile 重建用例同树异时翻转(全量绿后单跑稳定红) · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0932-test-relocate-reconcile-flaky</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 09:32</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -134,7 +134,7 @@ E       assert 'removed' == 'armed'</code></pre>
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td>同树不同时刻：09:05 绿 → 09:15 起稳定红；宿主重启后 -n 0 / -n 8 均必现。翻转边界（是否与墙钟时刻/重启事件相关）未定位，待查。</td></tr>
-      <tr><td>影响范围</td><td>仅此一条测试用例；生产 relocate 代码无涉 —— 危害是污染后续轮次的红绿判读（易被当成新回归排查）。</td></tr>
+      <tr><td>影响范围</td><td>仅此一条测试用例；生产 relocate 代码无涉 —— 危害是污染后续轮次的红绿判读（易被当成新回归排查）。<strong>（2026-10-31 认领轮订正：根因在生产侧</strong> —— 开机窗口内 relocate 的首次链接重建与 guardian 首拉被退避静默吞掉，自愈最多推迟 300s / 60s，判定正确性不受影响；生产表现是「重启后头几分钟对账动作延迟」，见 05 / 07。<strong>）</strong></td></tr>
       <tr><td>严重度</td><td>中（测试可信度受损；非产线行为缺陷，不改变当日全量绿结论）。</td></tr>
     </table>
   </section>
@@ -153,7 +153,7 @@ E       assert 'removed' == 'armed'</code></pre>
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：本轮 uv.lock pyobjc 12.2.2→13.0 依赖 bump —— venv 零变化（env.sync checked 41 包无安装动作）、三件 darwin 专用不进 Windows 环境，且同树 09:05 全量先绿；并行负载亦非必要条件 —— -n 0 单跑同红。）</div>
+    <div class="callout"><strong>已定位（2026-10-31 认领轮）</strong>：<code>relocate_mod.py</code> 重建退避（取证时 :686）与 guardian 重拉退避（取证时 :1023）以 <code>or 0.0</code> 当「从未发生」哨兵，而 <code>time.monotonic()</code> 的 0 点是<strong>开机时刻</strong> —— 开机不满 <code>REBUILD_BACKOFF=300s</code> / <code>RESPAWN_BACKOFF=60s</code> 的机器上退避判据恒真，首次重建 / 首拉被静默跳过，phase 卡 <code>removed</code>、reason 空。翻转边界即开机后 5 分钟红窗：09:05 绿 = uptime &gt; 300s；重启后 09:15 起红 = uptime &lt; 300s。红验：探针把 <code>monotonic</code> 钉 120.0 复跑锚点，精确复现 <code>('removed', '')</code>。0.0 哨兵随 26-10-30-0616 批A 引入退避机制而来。已排除项维持原判：依赖 bump / 并行负载与本翻转无关。</div>
   </section>
 
   <section id="s6">
@@ -166,11 +166,15 @@ E       assert 'removed' == 'armed'</code></pre>
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 09:32 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 09:53 — 认领（用户指派「认领并修复」），状态 <strong>In Progress</strong></li>
+      <li>2026-10-31 10:03 — 已修并验证，状态 <strong>Done</strong>（实际修法见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-10-31 09:53 按预测出窗（「已消失」），机制已探针确定性复现</strong> —— 本机开机 09:22:51，uptime 25min &gt; REBUILD_BACKOFF=300s，锚点单跑绿（1 passed, 3.46s）；issue 取证的 09:2x 恰落在该次开机后 5 分钟红窗内。红验：pytest 探针把 <code>time.monotonic</code> 钉在 120.0（模拟开机 2 分钟）复跑锚点，精确复现原文签名 <code>AssertionError: ('removed', '')</code> @ tests/test_relocate_exec.py:338。根因：<code>relocate_mod.py:686</code>（重建退避）与 <code>:1023</code>（guardian 重拉退避）以 <code>or 0.0</code> 当「从未发生」哨兵，而 monotonic() 的 0 点是<strong>开机时刻</strong> —— 开机不满 300s / 60s 的机器上退避判据恒真，首次重建 / 首拉被静默跳过，phase 卡 removed。0.0 哨兵随 26-10-30-0616 批A 引入退避机制而来。已排除项维持原判：依赖 bump / 并行负载均与本翻转无关。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：<code>relocate_mod.py</code> 两处退避判据的哨兵 <code>rt.get("rebuild_ts") or 0.0</code> / <code>rt.get("respawn_ts") or 0.0</code> 改 None 哨兵（<code>is not None</code> 才比窗口）——「从未重建 / 从未拉起」不再被当成「开机那一刻发生过」，首次重建与 guardian 首拉不吃退避，与 <code>_respawn_guardian</code> docstring 既有口径（「首次拉起(rt 无记录)不受退避影响」）对齐；退避本身（距上次动作 &lt; 窗口则跳过）语义与常量逐字不变，未扩配置键面。建议修法的两个廉价定位实验（跨时刻复跑 / 沿退避窗口与时间源找翻转点）即本轮实际路径；定位到根因在生产侧后修生产代码，测试断言一字未动。</p>
+    <p><strong>验证方式</strong>：红绿双验 —— 修复前 pytest 探针把 <code>time.monotonic</code> 钉 120.0 复跑锚点，精确复现原文签名 <code>AssertionError: ('removed', '')</code> @ tests/test_relocate_exec.py:338；修复后同探针转绿。新增 2 条开机窗口守阵（<code>test_rebuild_first_attempt_not_backoff_on_fresh_boot</code> 钉 120.0 / <code>test_respawn_first_spawn_not_backoff_on_fresh_boot</code> 钉 30.0，respawn 用例以「守护进程重启后 rt 不落盘、弹掉 respawn_ts 还原首拉现场」建模），旧实现下即红、本机不再依赖重启窗口才能现形；既有退避两条用例（显式设 <code>rebuild_ts</code>/<code>respawn_ts</code>）零改动照绿。</p>
+    <p><strong>测试数字</strong>：见 <code>commands run kb.baseline</code> —— 切片 <code>26-10-31-1003-relocate-reconcile-fresh-boot-backoff</code>（数字只写那里一处）。</p>
   </section>
 
   <footer>
