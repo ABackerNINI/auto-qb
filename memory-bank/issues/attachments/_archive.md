@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (57)
 
-- [chore] [filelock 3.32.6 -> 4.2.5 升级(major)](../26-10-31-0830-chore-infra-filelock-4-upgrade.html) — filelock 4.x 收紧参数校验并改 Timeout 语义; 本项目调用面仅 infra/locking.py 单点(FileLock(str, timeout=float) + Timeout), 风险偏低, 按 major 规则降档入池
 - [chore] [pyobjc 三件 12.2.2 -> 13.0 升级(major, macOS 专用传递依赖)](../26-10-31-0830-chore-pyobjc-13-macos-upgrade.html) — pyobjc-core/-cocoa/-quartz 是 pystray 的 macOS 专用传递依赖, Windows 运行时不安装, 实际影响约 0; 保持锁内跟随或随 pystray 侧处理
 - [chore] [pillow 12.3.0 -> 13.0.0 升级(major, 含约 40 个 CVE 修复)](../26-10-31-0830-chore-tray-pillow-13-upgrade.html) — Pillow 13.0 移除既定弃用项并修复约 40 个 CVE(3 critical/12 high), 安全激励强; 本项目仅 tray/app.py 一处懒导入 Image, 风险很低
 - [chore] [fastapi 0.141.1 -> 0.162.0 与 uvicorn 0.53.0 -> 0.54.0 升级(0.x 降档入池)](../26-10-31-0830-chore-webui-fastapi-uvicorn-upgrade.html) — fastapi/uvicorn 有 minor 更新; 0.x minor 按 deps-upgrade 规则当 major 降档, 调用面为整个 webui/server, 需人工评估后 bump
@@ -70,8 +69,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (290)
+## Done (291)
 
+- [chore] [filelock 3.32.6 -> 4.2.5 升级(major)](../26-10-31-0830-chore-infra-filelock-4-upgrade.html) — filelock 4.x 收紧参数校验并改 Timeout 语义; 本项目调用面仅 infra/locking.py 单点(FileLock(str, timeout=float) + Timeout), 风险偏低, 按 major 规则降档入池
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)

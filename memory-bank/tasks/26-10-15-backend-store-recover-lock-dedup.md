@@ -19,7 +19,7 @@
 - **语义差异保留判据**(issue 建议点名的两处 + 实测第三处): hr 有 schema 迁移/版本回退即拒(recoverable=False 不挪也不从备份猜)、坏文件挪走留证、结论拼 `read_error`; state 有 `_CORRUPT` 三态、future 版本 fail-fast(不算损坏)、原地保留、立即自愈写回且失败不阻断启动。单点只收「顺序纪律 + 挪文件 + (数据, 原因) 契约」, 消息/日志/迁移/写回全部留调用方。
 - **不合并的第三处差异**: state 的 `_write_back_recovered`(立即自愈写回, OSError 只告警)与 hr 的 commit 期 `keep_backup=not recovered_from_backup` —— 时机/载荷/异常口径都不同; 且 `test_load_state_recovered_writeback_failure_is_nonfatal` 按 `qb_state.utils.atomic_write` 打补丁(模块属性), 抽走会把补丁面打穿。只各保留 + 在 infra/store_recovery docstring 以第 3 条纪律互指。
 - **锁收口的粒度**: 不做「锁类统一」—— SingleInstanceLock 有 meta 伴生/固定超时 0/CLI 错误通道, hr 有 per-site 路径/可配超时/HrLockBusy 领域异常, 强并类会改错误语义; 只收 filelock 依赖与构造/释放纪律(`open_file_lock` / `release_file_lock`), Timeout→领域异常的翻译留各自调用方。
-- **filelock 版本事实**: 本仓锁定 3.32.6, `BaseFileLock` 已无 `_lock_file` 属性(句柄由库内 fd 生命周期自理), 旧 `_lock_file.close()` 仅作旧版兜底(AttributeError 静默跳过) —— `release_file_lock` 内保留兜底并注明, 行为与改前等价(改前该方法同样静默跳过)。
+- **filelock 版本事实**: 本仓锁定 4.2.5(2026-10-31 由 3.32.6 bump, issue 26-10-31-0830), `BaseFileLock` 已无 `_lock_file` 属性(句柄由库内 fd 生命周期自理; 4.2.5 复验仍如此), 旧 `_lock_file.close()` 仅作旧版兜底(AttributeError 静默跳过) —— `release_file_lock` 内保留兜底并注明, 行为与改前等价(改前该方法同样静默跳过)。
 
 ## 实现计划
 

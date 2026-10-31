@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="deps-upgrade-2026-10">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="filelock 3.32.6 -&gt; 4.2.5 升级(major)">
 <meta name="issue-summary" content="filelock 4.x 收紧参数校验并改 Timeout 语义; 本项目调用面仅 infra/locking.py 单点(FileLock(str, timeout=float) + Timeout), 风险偏低, 按 major 规则降档入池">
 <title>filelock 3.32.6 -&gt; 4.2.5 升级(major) · chore · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0830-chore-infra-filelock-4-upgrade</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,17 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 09:00 — 用户指派认领并实施，状态 <strong>In Progress</strong>；复验通过（见上）</li>
+      <li>2026-10-31 09:07 — 修完验证全绿，状态 <strong>Done</strong>（实际修法/验证/数字见「修复后补充」；基线切片 26-10-31-0907-filelock-4-bump）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: 2026-10-31 09:00 仍成立 —— 调用面确认仅 <code>infra/locking.py:21</code>(<code>from filelock import FileLock, Timeout</code>, grep <code>from filelock</code> 全仓唯一命中)与 <code>infra/locking.py:35</code> FileLock 构造; timeout 全为 float, 静态守阵 <code>tests/test_store_recovery.py::test_filelock_dependency_single_point_in_infra_locking</code> 在位。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <ul>
+      <li><strong>实际修法</strong>: 与建议修法一致(改 pin → env.sync → test.full), 零码改道 —— <code>pyproject.toml</code> pin <code>==3.32.6</code> → <code>==4.2.5</code>, <code>uv.lock</code> 随 env.sync 重锁。4.x 移除了内部 <code>_lock_file</code> 属性, 但 <code>release_file_lock</code> 的兜底 close 本就包在 try/except 里(无该属性即静默跳过, 注释已预写该差异), 无需改码。</li>
+      <li><strong>验证方式</strong>: ①升级后 smoke —— <code>Timeout</code> 仍可从 <code>filelock</code> 根导入, acquire/release/is_locked 语义不变, <code>timeout=0</code> 竞争路径二次 acquire 抛 <code>Timeout</code> 如期(即 <code>SingleInstanceLockError</code> 翻译来源), 释放后重取正常; ②issue 建议的真机双实例互传场景本轮未跑(无真机会话), 锁行为已由竞争路径 smoke + 测试套件覆盖, 留待下次真机轨顺带核验。</li>
+      <li><strong>测试数字</strong>: <code>commands run test.full</code> 全绿 —— 4302 passed, 2 skipped in 243.00s, TOTAL 21803 stmts / 145 miss / 7400 branch / 121 partial / 99%(基线切片 <code>26-10-31-0907-filelock-4-bump</code>, 见 kb.baseline)。</li>
+    </ul>
   </section>
 
   <footer>
