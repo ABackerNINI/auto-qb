@@ -33,7 +33,7 @@ run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:403
         web.flush_truths()               # 推迟回执无条件落(:526; 异常路径兜底 :564-565)
         if not dry_run:
             ctx.state.maybe_flush(...)   # 周期落盘(:534-535, 间隔 state_save_interval)
-        重连检测(:540-545) + 断开期间退避重连(:557-558)
+        重连检测(:540 附近, 门是 _ran_line) + 断连稳态守卫/退避重连(:573 附近)
         _wait_next(stop_event, _wake_event, min(next_sync_at, next_tick_at, 微步线到期) - now)
     finally:                             # (:573-580)
         host.stop_all()                  # 模块停用(装配逆序); 状态落盘与锁释放留在其后
@@ -93,7 +93,8 @@ Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event`
 **连接管理(首连 + 运行期重连)**:
 - **首连失败语义分裂是刻意的**(`qbmanager.py:441-449`): 非托管模式(stop_event=None)抛 `QbConnectError` → CLI 干净退出码 1(fail-fast, docker/compose 靠 restart 策略重拉); 托管模式按 main_tick 重试直至成功或收到停止(托盘应用保持常驻)。
 - **运行期断开**: tick 内 `APIConnectionError` 节流 —— 仅"连接态→断开"转换时记一次 ERROR, 断开期间每 tick 重试失败静默(防 qB 宕机刷屏); 同时置 `client=None` 并按 `_reconnect_due` **指数退避**重连(`qbmanager.py:339-351`: main_tick → 2× → 4× …, 上限 `RECONNECT_MAX_INTERVAL=30s`, 常量 `:93` —— 每 tick 无脑重建 Client 含 netrc/代理解析, 纯属空转), 连接成功 `_reset_reconnect_backoff` 归零。
-- **恢复检测**: 任一条时间线跑通后若 `_last_conn_ok is False` 则置 True 并记一次 INFO「已重新连接 qBittorrent」(`:540-545`)——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。
+- **断连稳态守卫(issue 26-10-31-1029, 2026-11-01)**: 主循环分派线之前先判 `client is None and _last_conn_ok is False` —— 命中即**跳过全部请求线**, 直接 `_reconnect_due` → `connect()`(成功后本轮立即补一次同步), 两条时间线照常推进(防空转)。判据必须是二元组: `_last_conn_ok=False` 只由断连转换单点置位, 单看 `client is None` 会误伤启动/热重载窗口。为什么必须拦: None client 误入同步线时 AttributeError 被 store `_SYNC_UNAVAILABLE` 误分类成「qB 不支持 sync/maindata」降级再二次 AttributeError, 穿进 except Exception 逐拍刷「主循环异常」, 且该路径不调 `connect()` —— 断连态从此无出口, qB 恢复后永不回连。
+- **恢复检测**: 门是 `_ran_line`(本轮真有线跑成功), 非 `sync_due/tick_due` —— 守卫轮两条 due 都可为真却没线跑, 若照旧翻转, 守卫下一轮就被 `_last_conn_ok=True` 绕开。有线跑通且 `_last_conn_ok is False` 时置 True 并记一次 INFO「已重新连接 qBittorrent」——`connect()` 仅启动时调用一次, 运行期断开/恢复只能由 tick 翻转(否则 UI 永远显示断开)。非 `APIConnectionError` 异常照常记 "主循环异常"(exc_info=True)。
 
 `run_due` 内部: 先快照到期任务再逐个执行 (异常捕获内联; 执行中途重新入队的任务留到下一轮), 收尾:
 - handler 返回 **FINISHED** → 任务消亡, kind=="check" 释放在途校验标记 (典型: 种子已删除, 由 handler 的删除守卫判定)。

@@ -36,6 +36,7 @@
 - test_tick_refresh_error_continues: 主循环内 _refresh_torrents 抛异常被捕获, 下一 tick 继续
 - test_run_stopiteration_from_tick_not_swallowed: 守阵(26-10-02-0442)——_tick 的 StopIteration 在 except Exception 之前单独接住并重抛, 不得吞掉后继续下一拍
 - test_run_exception_backs_off_next_tick: 守阵(26-10-02-0728)——主循环 except Exception 路径必须把 next_*_at 推到 max(原值, now+main_tick) 退避, 不得 wait_for=0 快速重试
+- test_run_client_none_reconnects_without_error_spam: 守阵(26-10-31-1029)——断连稳态(client=None+_last_conn_ok=False)跳过请求线走 _reconnect_due 重连, 成功即补同步并记「已重新连接」, 不得落「主循环异常」逐拍刷屏且 connect() 不再被调
 - test_execute_due_respects_max: 每 tick 最多执行 max_tasks_per_tick 个, 超额留队列
 - test_tick_no_due_task_empty_queue: 任务队列空时 tick 不执行任何任务
 - test_refresh_added_no_tracker_match_skips: 新增种子未匹配 tracker 配置 -> 警告并跳过
@@ -737,12 +738,82 @@ def test_run_exception_backs_off_next_tick():
         assert all(g >= 0.15 for g in gaps), f"异常拍之间必须退避 >= main_tick(0.2s): {gaps}"
 
 
+def test_run_client_none_reconnects_without_error_spam():
+    """回归守阵(issue 26-10-31-1029): 断连稳态必须走重连判定, 不得落进请求线
+
+    修复前: except APIConnectionError 分支置 client=None 后, 未到 _reconnect_due 时下一拍
+    照常跑同步线 —— store 把 AttributeError(None client 误入 _SYNC_UNAVAILABLE)当「qB 不
+    支持 sync/maindata」降级, 回退 torrents_info 再次 AttributeError, 穿到 except Exception
+    记「主循环异常」逐拍 ERROR; 且该路径不调 connect(), qB 恢复后永不回连。
+    修法: 主循环加断连稳态守卫(client=None 且 _last_conn_ok=False)——跳过请求线, 直接
+    _reconnect_due → connect(), 成功后本轮立即补同步并记「已重新连接 qBittorrent」。
+    红验(修复前): AttributeError 路径逐拍炸「主循环异常」, connect() 首连后再不被调,
+    无回连 INFO —— 本用例当时判红(红验兜底 60 拍后置位停止信号, 防用例挂死)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.main_tick = 0.05
+        mgr.config.sync_interval = 0.05
+        stop_event = threading.Event()
+        connect_attempts: list = []
+
+        def fake_connect():
+            connect_attempts.append(1)
+            n = len(connect_attempts)
+            if n == 1:
+                # 启动首连成功(与真 connect 同语义: 成功即留下非 None client)
+                mgr.client = mock.Mock()
+                return True
+            if n == 2:
+                # 首次重连仍失败(真实现中 new_client 抛 APIConnectionError: client 保持 None)
+                return False
+            # 第二次重连成功(qB 恢复): 真 connect 成功路径 = 落 client + _note_conn_ok
+            stop_event.set()
+            mgr.client = mock.Mock()
+            mgr._note_conn_ok()
+            return True
+
+        tick_calls: list = []
+
+        def boom_tick(dry_run, force=False):
+            # 模拟 issue 现场态: 断连转换早已记录(_last_conn_ok=False), client 停在 None,
+            # 同步线误入 None client 炸 AttributeError(修复前从这里逐拍刷「主循环异常」)
+            tick_calls.append(1)
+            if len(tick_calls) >= 60:  # 红验兜底: 修复前 AttributeError 路径无出口, 防用例挂死
+                stop_event.set()
+            mgr._last_conn_ok = False
+            mgr.client = None
+            raise AttributeError("'NoneType' object has no attribute 'torrents_info'")
+
+        mgr.connect = fake_connect
+        mgr._tick = mock.Mock(side_effect=boom_tick)
+        mgr._sync_line = mock.Mock()
+        mgr._task_line = mock.Mock()
+        with mock.patch("auto_qb.core.qbmanager.logger") as mock_logger:
+            mgr.run(dry_run=True, stop_event=stop_event)
+        assert mgr._tick.call_count == 1, (f"断连后请求线必须被守卫跳过, _tick 只应首轮执行一次, 实际 {mgr._tick.call_count}")
+        assert len(connect_attempts) == 3, f"应走到第 3 次 connect(重连成功): {len(connect_attempts)}"
+        assert mgr._sync_line.call_count == 1, "重连成功后守卫应立即补一次同步, 不等下一节拍"
+        errors = [str(c.args[0]) for c in mock_logger.error.call_args_list]
+        spam = [m for m in errors if "主循环异常" in m]
+        assert len(spam) == 1, f"「主循环异常」只应首轮一条(断连后由守卫接管), 实际 {len(spam)}: {errors}"
+        infos = [str(c.args[0]) for c in mock_logger.info.call_args_list]
+        assert any("已重新连接 qBittorrent" in m for m in infos), f"重连成功必须记 INFO 收尾: {infos}"
+
+
 def test_connect_throttle_repeated_failures():
     """连接失败节流: 主循环内 _tick 多次抛 APIConnectionError 只记录一次错误, 断开期间静默不刷屏"""
     with tempfile.TemporaryDirectory() as td:
         state_file = os.path.join(td, "state.json")
         mgr = make_manager(state_file)
-        mgr.connect = mock.Mock(return_value=True)
+
+        # connect 替身与真实现同语义(26-10-31-1029): 成功必须留下非 None client ——
+        # 否则断连稳态守卫会把 None client 拦在请求线之外, 三次线级失败序列走不到
+        def fake_connect():
+            mgr.client = mock.Mock()
+            return True
+
+        mgr.connect = mock.Mock(side_effect=fake_connect)
         # 第一次失败记录, 第二次失败静默, 第三次抛 KeyboardInterrupt 退出循环
         mgr._refresh_torrents = mock.Mock(
             side_effect=[APIConnectionError("conn down"),

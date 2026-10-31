@@ -569,8 +569,28 @@ class QbManager(
                         # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
                         # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
                         _t_line = time.time() if (cmd_changed_state and not dry_run) else 0.0
-                        if sync_due and tick_due:
+                        _ran_line = False  # 本轮是否真有线跑成功(连接恢复检测的门, 26-10-31-1029)
+                        if self.client is None and self._last_conn_ok is False:
+                            # 断连稳态(issue 26-10-31-1029): 不执行任何请求线, 直接走重连判定。
+                            # 判据是二元组: _last_conn_ok=False 只由断连转换单点 _note_conn_failed
+                            # 置位, 它与 client=None 同现即「已记录断连且客户端已置空」的稳态;
+                            # 单看 client is None 会把「启动/热重载窗口的未连接」误伤进来。
+                            # 为什么必须拦下: 同步线对 None client 无守卫, AttributeError 会被
+                            # store._SYNC_UNAVAILABLE 误分类成「qB 不支持 sync/maindata」降级,
+                            # 回退 torrents_info 再次 AttributeError 穿到 except Exception(「主循环
+                            # 异常」逐拍 ERROR 刷屏); 该路径不经过 APIConnectionError 分支,
+                            # connect() 永远不再被调用 —— 断连态从此外无出口, qB 恢复后也不会回连。
+                            # 复用既有指数退避(_reconnect_due)与转换节流(失败只在状态转换记一次),
+                            # 成功后本轮立即补一次同步让真值回流, 不等下一节拍。
+                            if self._reconnect_due(main_tick) and self.connect():
+                                self._sync_line(dry_run, force=cmd_forced)
+                            # 线没跑也要推进两条时间线: 否则 next_sync_at 停在过去的到期值,
+                            # wait_for 恒算出 0, while True 立即进下一拍空转(26-10-02-0728 同款判据)
+                            next_sync_at = time.time() + sync_interval
+                            next_tick_at = time.time() + main_tick
+                        elif sync_due and tick_due:
                             self._tick(dry_run, force=cmd_forced)
+                            _ran_line = True
                             next_tick_at = time.time() + main_tick
                             # 补刷新只在「按时到的」或「这次真拿到了变化」时才重设同步节拍:
                             # 读到同一份节流缓存的白刷不能把下一次校正推后一个周期(S4)
@@ -578,10 +598,12 @@ class QbManager(
                                 next_sync_at = time.time() + sync_interval
                         elif sync_due:
                             self._sync_line(dry_run, force=cmd_forced)
+                            _ran_line = True
                             if sync_due_by_time or self._sync_moved():
                                 next_sync_at = time.time() + sync_interval
                         elif tick_due:
                             self._task_line(dry_run, force=cmd_forced)
+                            _ran_line = True
                             next_tick_at = time.time() + main_tick
                         # !无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
                         # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
@@ -601,9 +623,12 @@ class QbManager(
                         # web 真值弧单测不可达(truth_pending 仅 web 启用时非空; 26-10-02-0441)
                         if _wait_truth and getattr(self.web, "truth_pending", None):  # pragma: no cover
                             next_sync_at = time.time() + TRUTH_RETRY_S
-                        # 连接恢复检测: 上面任一条线跑通即 API 可达(connect() 仅启动时调用一次,
-                        # 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")
-                        if (sync_due or tick_due) and self._last_conn_ok is False:
+                        # 连接恢复检测: 上面任一条线**真跑成功**(_ran_line)即 API 可达(connect() 仅
+                        # 启动时调用一次, 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")。
+                        # !门必须是 _ran_line 而非 sync_due/tick_due(26-10-31-1029): 断连稳态守卫轮
+                        # 两条 due 都可为真却没有任何线跑 —— 若此处翻转, 守卫下一轮就被 _last_conn_ok
+                        # =True 绕开, 断连态重新失去出口。
+                        if _ran_line and self._last_conn_ok is False:
                             self._note_conn_ok()
                     except AutoQbError:
                         raise  # 致命错误(配置/qB 兼容)穿透到 CLI 干净退出, 不落入"主循环异常"继续跑

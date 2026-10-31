@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="real-machine-rm02">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)">
 <meta name="issue-summary" content="RM02-07 真机实测: qB 断开期间每 2s 一条「主循环异常」ERROR(45+ 条/75s), 且恢复后 60s 仍不自动回连 —— client=None 后 connect() 永远不再被调用">
 <title>运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · 已修 · bug</div>
     <h1>运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)</h1>
     <p class="lede">RM02-07 真机实测: qB 断开期间每 2s 一条「主循环异常」ERROR(45+ 条/75s), 且恢复后 60s 仍不自动回连 —— client=None 后 connect() 永远不再被调用</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1029-bug-qbmanager-disconnect-no-reconnect</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 10:29</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -160,11 +160,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 10:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 02:14 — 用户指派认领，状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 02:28 — 修复完成，状态 <strong>Done</strong>（实际修法 / 验证方式 / 测试数字见下「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：26-11-01 02:14 锚点逐条重跑，<strong>仍复现</strong>（代码级）—— <code>store.py:19</code> 的 <code>_SYNC_UNAVAILABLE</code> 仍含 AttributeError；主循环 <code>except APIConnectionError</code> 分支仍只在 <code>_reconnect_due</code> 到期时调 <code>connect()</code>；<code>client=None</code> 后同步线无守卫、<code>connect()</code> 仍无其它调用出口。真机 RM02-07 复跑留待修复后一并回归。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（采建议修法 a，另加一道恢复检测门）：主循环分派线之前加断连稳态守卫 —— 判据二元组 <code>client is None and _last_conn_ok is False</code>（后者只由断连转换单点 <code>_note_conn_failed</code> 置位，单看 client=None 会误伤启动/热重载窗口），命中即跳过全部请求线，直接 <code>_reconnect_due</code> → <code>connect()</code>（成功后本轮立即补一次同步），两条时间线照常推进（防空转，与 26-10-02-0728 同款判据）。另把「连接恢复检测」的门从 <code>sync_due/tick_due</code> 改为新局部旗标 <code>_ran_line</code>（本轮真有线跑成功）—— 实测中守卫轮两条 due 都可为真却没线跑，照旧翻转会把守卫下一轮绕开（首版实现踩到，被新增用例当场抓出）。store 的 <code>_SYNC_UNAVAILABLE</code> 含 AttributeError 系测试替身缺方法所必需，守卫生效后 None client 不再可达该路径，<strong>不另改</strong>。</p>
+    <p><strong>验证方式</strong>：新增回归用例 <code>tests/test_qbmanager.py::test_run_client_none_reconnects_without_error_spam</code>（断连稳态跳线 / 重连 / 成功即补同步 / 「已重新连接」INFO / 「主循环异常」仅首轮一条，五断言）；红验 = 守卫条件临时短路后用例判红（<code>_tick</code> 逐拍 60 次、connect 不再被调，与 issue 现场一致），还原后绿。<code>test_connect_throttle_repeated_failures</code> 的 connect 替身同步补「成功即落非 None client」语义。</p>
+    <p><strong>测试数字</strong>：<code>commands run test.full</code> 全量绿 —— 4353 passed, 2 skipped, 226.43s，覆盖率 99%（基线切片 <code>memory-bank/testing/baselines/26-11-01-0228-qbmanager-disconnect-guard.md</code>）。真机 RM02-07 回归（断 75s+恢复）未跑（需真实 qB + 本地 TCP 代理环境），单测面已覆盖等价时序，留待下次真机轨一并回归。</p>
   </section>
 
   <footer>
