@@ -4,8 +4,11 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (54)
 
+- [feat] [转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标](../26-11-01-0335-feat-torrent-transfer-target-apikey.html) — 主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password
+- [bug] [转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底](../26-11-01-0334-bug-torrent-transfer-duplicate-409.html) — 已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导
+- [feat] [路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中](../26-11-01-0334-feat-torrent-transfer-pathmap-sep.html) — path_map 配错形态时静默原样落; 前端预览同语义所以诚实, 无数据风险, 属可用性陷阱
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3

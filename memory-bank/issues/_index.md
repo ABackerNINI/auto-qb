@@ -19,17 +19,20 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 8 |
 | perf | 7 |
 | docs | 2 |
 | test | 2 |
 | refactor | 4 |
-| feat | 21 |
+| feat | 23 |
 | chore | 2 |
 | question | 6 |
 
 ## Open
 
+- [feat] [转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标](26-11-01-0335-feat-torrent-transfer-target-apikey.html) — 主 qB 有 api_k…
+- [bug] [转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底](26-11-01-0334-bug-torrent-transfer-duplicate-409.html) — 已存在→期望「跳过」,…
+- [feat] [路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中](26-11-01-0334-feat-torrent-transfer-pathmap-sep.html) — path_map 配错形…
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/get…
