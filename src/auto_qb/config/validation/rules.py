@@ -5,6 +5,7 @@ from typing import List
 from qbittorrentapi import TorrentState
 
 from ...infra.utils import parse_bool
+from ..compat import ACTION_ENTRY_KEYS, normalize_action_entry
 from ..schema.fields import (
     # 枚举族单点(issue 26-10-11-0031): 取值域/白名单只在 schema/fields 声明, 本包引用派生
     CHECKING_BASIC,
@@ -160,7 +161,9 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                     errors.append(f"{where}.actions: 必须是列表")
                 else:
                     for i, a in enumerate(acts):
-                        _validate_plugin_entry(a, f"{where}.actions[{i}]", registry.ACTIONS, "动作", errors, gate)
+                        # 动作项只认规范化后形态 {type, params}(normalize 在校验前已转换;
+                        # 旧扁平单键形仅在校验器入口经单点漏斗 translate, 见 _validate_action_entry)
+                        _validate_action_entry(a, f"{where}.actions[{i}]", i + 1, registry.ACTIONS, errors)
             # 触发时机 × 动作兼容白名单: 某触发器下不适用动作在 config 阶段直接拒绝(见 04 规则系统)
             _validate_trigger_action_compat(spec, where, errors)
 
@@ -284,8 +287,9 @@ _PLUGIN_SPEC_VALIDATORS = {
 
 
 def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: List[str], gate=None) -> None:
-    """conditions/actions 列表项校验: 单键字典 + 名称已注册(多键/空值会被静默丢弃, 必须报错);
-    已注册名称再做 spec 深度校验(_PLUGIN_SPEC_VALIDATORS)
+    """conditions 列表项校验(条件保持扁平单键 dict 形, normalize 透传锚定): 单键字典 + 名称
+    已注册(多键/空值会被静默丢弃, 必须报错); 已注册名称再做 spec 深度校验(_PLUGIN_SPEC_VALIDATORS)。
+    动作列表项走 _validate_action_entry(规范化形态 {type, params}, plan 26-11-01-0106 W2-A)。
 
     gate: 表达式取值的数据源门控上下文(仅 expr 条件用, 需要看配置里数据源是否配置)
     """
@@ -311,6 +315,47 @@ def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: Li
             deep(entry[name], f"{where}.{name}", errors)
 
 
+def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors: List[str]) -> None:
+    """actions 列表项校验: 只认规范化后形态 {type, params}(plan 26-11-01-0106 §3.2/W2-A)
+
+    normalize_legacy_rules 已在载入链把旧扁平单键形翻译成规范形; 直达校验器的输入(测试/
+    程序内构造)里的扁平单键形经同一单点漏斗(config.compat.normalize_action_entry)翻译后
+    按同一套逻辑校验 —— 这里没有按 legacy 键分支的第二语义, 只有坐标翻译。
+
+    R1① 错误定位回映射: 报错话术用用户写的扁平坐标 —— 动作名子路径(actions[i].<动作名>)
+    与「第 N 个动作」序号话术, 不暴露 params 结构路径。
+    伪动作 ignore_next_action_error 键面保留识别(W1/D1 升级检测), params 仍按布尔校验;
+    引擎不消费(载入层转未启用时剔除)。
+    """
+    if not isinstance(entry, dict):
+        errors.append(f"{where}: 必须是字典")
+        return
+    if len(entry) == 0:
+        errors.append(f"{where}: 值不能为空(留空请删除该项)")
+        return
+    norm = normalize_action_entry(entry)
+    if not isinstance(norm, dict) or "type" not in norm:
+        errors.append(f"{where}: 第 {ordinal} 个动作必须是单键字典(旧形)或 {{type, params}}(新形): {sorted(entry)}")
+        return
+    name = str(norm["type"])
+    if name == "ignore_next_action_error":
+        _try(parse_bool, norm.get("params"), f"{where}.{name}", errors)
+        return
+    if name not in known:
+        errors.append(f"{where}: 未知动作 '{name}', 可用: {sorted(known)}")
+        return
+    unknown = set(norm) - set(ACTION_ENTRY_KEYS)
+    if unknown:
+        errors.append(f"{where}: 未知键 {sorted(unknown)}, 可用键: {sorted(ACTION_ENTRY_KEYS)}")
+        return
+    if "params" not in norm:
+        errors.append(f"{where}: 动作 '{name}' 缺少 params(动作参数)")
+        return
+    deep = _PLUGIN_SPEC_VALIDATORS.get(name)
+    if deep:
+        deep(norm["params"], f"{where}.{name}", errors)
+
+
 def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -> None:
     """触发时机 × 动作兼容白名单(决策见 04 规则系统触发时机表)
 
@@ -325,11 +370,11 @@ def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -
     allowed = DELETED_ALLOWED_ACTIONS
     acts = spec.get("actions") or []
     for i, entry in enumerate(acts):
-        if not isinstance(entry, dict) or len(entry) != 1:
-            continue  # 结构错误由 _validate_plugin_entry 报, 这里不重复
-        name = next(iter(entry))
-        if name == "ignore_next_action_error":
-            continue  # 伪动作不参与白名单
+        if not isinstance(entry, dict):
+            continue  # 结构错误由 _validate_action_entry 报, 这里不重复
+        name = normalize_action_entry(entry).get("type")  # 规范化形态取动作名(单点漏斗)
+        if not name or name == "ignore_next_action_error":
+            continue  # 结构残缺交 _validate_action_entry 报; 伪动作不参与白名单
         if name not in allowed:
             errors.append(
                 f"{where}.actions[{i}]: 动作 '{name}' 不适用于 trigger 'on_torrent_deleted'"

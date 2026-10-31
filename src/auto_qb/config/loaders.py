@@ -43,6 +43,7 @@ from .models import (
     TrackerConfig,
 )
 from . import site_presets
+from .compat import normalize_legacy_rules
 from .validation import _strip_none, validate_config
 
 
@@ -618,6 +619,9 @@ def load_config(config_path: str) -> Config:
     # 显式留空的键视为未配置(走默认值), 再全量校验(聚合全部错误一次性反馈, fail-fast)
     data = _strip_none(data)
     migrate_config_schema(data, config_path)
+    # 载入规范化单点(plan 26-11-01-0106 §3.2, 位置钉死): 归一后的形态才进校验器,
+    # 引擎与校验器只认规范化后形态 —— legacy 词汇唯一容身在 config/compat.py
+    normalize_legacy_rules(data)
     errors = validate_config(data)
     if errors:
         detail = "\n".join(f"  [{i + 1}] {e}" for i, e in enumerate(errors))

@@ -34,6 +34,7 @@ import logging
 import time
 from typing import List, Optional
 
+from ...config.compat import normalize_action_entry
 from ...rules import Rule, RuleContext
 from ..module import AppContext, ApplyResult, BaseModule
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
@@ -52,13 +53,17 @@ def retired_control_keys_in(spec) -> tuple:
     """规则 spec 里出现的已退役控制键(规则级 stop_following_rules_if + actions 域伪动作项)
 
     升级检测单点: 载入层(rules_mod.load_rules)与后续 webui 未启用徽标共用同一判定。
+    动作项先过兼容层单点漏斗(normalize_action_entry, 幂等)再取动作名 —— 载入链上游
+    (load_config)已把 spec 规范化成 {type, params}, 直收旧扁平单键形的调用方(测试/内存
+    Config)同样识别, 不在此重写第二套形状判断。
     """
     if not isinstance(spec, dict):
         return ()
     keys = [k for k in RETIRED_CONTROL_KEYS if k in spec]
     for act in spec.get("actions") or []:
-        if isinstance(act, dict) and "ignore_next_action_error" in act and "ignore_next_action_error" not in keys:
-            keys.append("ignore_next_action_error")
+        if isinstance(act, dict) and normalize_action_entry(act).get("type") == "ignore_next_action_error":
+            if "ignore_next_action_error" not in keys:
+                keys.append("ignore_next_action_error")
     return tuple(keys)
 
 
@@ -67,11 +72,13 @@ def disable_retired_rule_spec(spec: dict) -> dict:
 
     伪动作已不被引擎消费(直接构造 Rule 会按未知动作 ConfigError), 载入前须剔除; 规则级
     stop_following_rules_if 键无消费方, 保留在副本里无害。配置原内容不动(只改内存副本)。
+    动作项经兼容层单点漏斗识别(normalize_action_entry), 规范形/旧扁平形都剥。
     """
     disabled = dict(spec)
     disabled["enabled"] = False
     disabled["actions"] = [
-        act for act in (spec.get("actions") or []) if not (isinstance(act, dict) and "ignore_next_action_error" in act)
+        act for act in (spec.get("actions") or [])
+        if not (isinstance(act, dict) and normalize_action_entry(act).get("type") == "ignore_next_action_error")
     ]
     return disabled
 

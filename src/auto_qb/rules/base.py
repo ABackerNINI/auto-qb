@@ -11,6 +11,7 @@ from . import registry
 from ..infra import utils
 from ..torrents import TorrentRecord
 from ..config import Config, ConfigError
+from ..config.compat import normalize_action_entry
 # from ..qbmanager import QbManager
 from ..core.qbapi import QbApi
 
@@ -170,14 +171,19 @@ class Rule:
             except Exception as e:
                 raise ConfigError(f"规则 {self.name}: 条件 {cond_spec}: {e}") from e
 
-        # 解析动作序列(单键 dict)。伪动作 ignore_next_action_error 已退役(D1, plan
-        # 26-11-01-0106): 载入层(rules_mod.load_rules)识别后转未启用并在内存副本里剔除,
-        # 引擎不再消费 —— 绕过载入层直接构造 Rule 遇伪动作按未知动作 ConfigError。
+        # 解析动作序列(规范化形态 {type, params}, plan 26-11-01-0106 §3.2 W2-A): 载入链
+        # (load_config -> normalize_legacy_rules)已把旧扁平单键 dict 翻译成规范形; 这里对每项
+        # 再过一次单点漏斗(config.compat.normalize_action_entry, 幂等) —— 引擎只认规范形,
+        # 没有「读 legacy 键」的第二语义分支, 兼容层唯一容身在 config/compat.py。
+        # 伪动作 ignore_next_action_error 已退役(D1): 载入层(rules_mod.load_rules)识别后
+        # 转未启用并在内存副本里剔除, 引擎不再消费 —— 绕过载入层直接构造 Rule 遇伪动作
+        # 按未知动作 ConfigError。
         self.actions = []
         for act_spec in spec.get("actions") or []:
             if not isinstance(act_spec, dict):
                 continue
-            name, value = next(iter(act_spec.items()))
+            act = normalize_action_entry(act_spec)
+            name, value = act.get("type"), act.get("params")
             try:
                 self.actions.append(registry.create_action(name, value))
             except Exception as e:
