@@ -16,6 +16,8 @@
 
 ## Open
 
+- [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](26-10-31-1922-plan-real-RM10.html) — `real-machine-rm10-plan`
+- [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](26-10-31-1754-plan-real-RM08.html) — `real-machine-rm08-plan`
 - [26-10-31-1710] [RM09 WebUI 写侧 · 真机实测分步计划](26-10-31-1710-plan-real-RM09.html) — `real-machine-rm09-plan`
 - [26-10-31-1605] [RM07 限速·流量曲线·全局流量 · 真机实测分步计划](26-10-31-1605-plan-real-RM07.html) — `real-machine-rm07-plan`
 - [26-10-31-1350] [RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)](26-10-31-1350-plan-real-RM06.html) — `real-machine-rm06-plan`
