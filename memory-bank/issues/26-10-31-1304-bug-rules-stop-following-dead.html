@@ -110,7 +110,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>RM03「规则引擎」真机实测(plan <code>memory-bank/plans/26-10-31-1228-plan-real-RM03.html</code>, 用例 RM03-05)撞见: 三条规则挂在同一 tracker 引用下, 第 2 条配运行期必错表达式 <code>(1 / 0) &gt; 0</code> —— 产品打出 ERROR「条件求值出错, 停止后续规则」, 第 2 条自身动作确实没跑, 但<strong>排在它后面的第 3 条规则照常执行并打了标</strong>。与平台/配置无关(纯规则链语义), 复跑一次稳定复现。</p>
+    <p>RM03「规则引擎」真机实测(plan <code>memory-bank/plans/26-10-31-1228-plan-real-rm03.html</code>, 用例 RM03-05)撞见: 三条规则挂在同一 tracker 引用下, 第 2 条配运行期必错表达式 <code>(1 / 0) &gt; 0</code> —— 产品打出 ERROR「条件求值出错, 停止后续规则」, 第 2 条自身动作确实没跑, 但<strong>排在它后面的第 3 条规则照常执行并打了标</strong>。与平台/配置无关(纯规则链语义), 复跑一次稳定复现。</p>
   </section>
 
   <section id="s2">

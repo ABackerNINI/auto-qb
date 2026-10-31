@@ -110,7 +110,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>RM09 真机实测(plan <code>plans/26-10-31-1710-plan-real-RM09.html</code> 用例 RM09-04)发现。场景: 活跃假种子(stalledUP)的 announce 指本机死端口 <code>http://&lt;局域网IP&gt;:1/announce</code>(零外连, §2.9 口径), 经 WebUI <code>POST /api/torrents/{hash}/reannounce</code> 强制汇报, 轮询 <code>/api/cmd/{cmd_id}</code> 等回执。</p>
+    <p>RM09 真机实测(plan <code>plans/26-10-31-1710-plan-real-rm09.html</code> 用例 RM09-04)发现。场景: 活跃假种子(stalledUP)的 announce 指本机死端口 <code>http://&lt;局域网IP&gt;:1/announce</code>(零外连, §2.9 口径), 经 WebUI <code>POST /api/torrents/{hash}/reannounce</code> 强制汇报, 轮询 <code>/api/cmd/{cmd_id}</code> 等回执。</p>
     <p>计划期望 ① 落「失败: tracker 未接受汇报(not working)」(RC_FAIL); 实测首报落 <strong>ok(confirmed)</strong> —— 确认跟踪在指令登记后 ~1ms 就读到 tracker 行 updating(在途)并按「在途直证」写终态回执, 死端口 announce 稍后的真实拒绝(status 4 + msg)不再纠正已写的 ok。与冻结计划的失败判据「活跃+死端口回了成功语义」精确命中。</p>
   </section>
 

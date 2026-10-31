@@ -322,6 +322,12 @@ def main(argv: list[str] | None = None) -> int:
         filename = f"{args.topic}.md"
         values = {"TITLE": args.title, "TRIGGERS": args.triggers}
 
+    # --- 派生不变量守卫: 拼出的文件名必须合族命名正则 (单点 `_common` 与 check_doc_templates
+    # 同源)。SLUG_RE/领域枚举是主闸, 这里防的是「建件端正则与守卫端正则各自演化」的失配 ——
+    # 建件时就红, 不等建完进了检查面才发现建出来的件守卫自拒。
+    if not spec.naming_re.match(filename):
+        return _fail(f"派生文件名不合 {family} 族命名正则 ({spec.naming_re.pattern}): {filename}")
+
     # --- 目标路径 (坑档带 `--class` 第二段子目录; 其余族单段)
     if family == "pitfall":
         target = mb / spec.dir / args.doc_class / filename

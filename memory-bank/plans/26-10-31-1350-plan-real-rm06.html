@@ -3,9 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="plan-slug" content="plan-real-RM06">
-<meta name="plan-stamp" content="26-10-31-1350">
 <meta name="doc-topic" content="real-machine-rm06-plan">
+<meta name="doc-type" content="plan">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-1350">
+<meta name="doc-updated" content="26-10-31-1550">
+
 <title>RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)</title>
 <style>
   :root {
@@ -63,6 +66,7 @@
   <div class="kicker">真机实测轨 · 分步实施计划 · 排期锚 issue 26-10-31-0641</div>
   <h1>RM06 HR 在线核实(L1 数据面)</h1>
   <p class="lede">对「HR 在线核实」片做真机实测的排期准备与分步计划。本计划只准备、不执行: 用例代码、<code>real.run</code>/<code>real.suite</code> 由执行代理照本计划落刀。<b>范围拍板(用户已定, 硬边界): 本轮只做 L1 数据面</b> —— 取数通道(扩展代理/本地端点)、三态判定、频控、站点状态、HR 排除表, 全部本地可验。<b>L2 站点侧(真实站点取数)一律 BLOCKED, 解锁条件 = 用户单独授权</b>(逐条见 §05)。<span class="badge stop">零外连红线</span> 任何用例不得产生真实站点请求 —— 产品侧 HR 取数<b>唯一路径</b>是 <code>ChannelFetcher</code> 经本地端点队列(<code>fetcher.py:252</code> 唯一分支点: 通道关 = NullFetcher, <b>从不后端直连</b>), 测试扮演扩展角色对本地端点回传本地构造的 HTML, 结构上就不出网卡; 正向之外各条另加「无外连」断言兜底。</p>
+<div class="meta"><b>doc-added</b> 26-10-31-1350 · <b>doc-updated</b> 26-10-31-1550 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)</div>
   <div class="meta-row">
     <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1350</div></div>
     <div class="item"><div class="k">切片</div><div class="v">RM06(片表 §03)</div></div>
@@ -253,7 +257,7 @@
   </section>
 
   <footer>
-    26-10-31-1350-plan-real-RM06.html · RM06 HR 在线核实(L1 数据面)排期计划 · 体例对齐 26-10-31-1312-plan-real-RM05 · 规程单点 memory-bank/testing/real-machine.md<br>
+    26-10-31-1350-plan-real-rm06.html · RM06 HR 在线核实(L1 数据面)排期计划 · 体例对齐 26-10-31-1312-plan-real-RM05 · 规程单点 memory-bank/testing/real-machine.md<br>
     本计划拍板即冻结; 执行产物落 testing/real-baselines/&lt;stamp&gt;-real-RM06.md + 锚件 §07/§08 同步
   </footer>
 </div>

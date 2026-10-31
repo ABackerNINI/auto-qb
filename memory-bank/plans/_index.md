@@ -16,15 +16,6 @@
 
 ## Open
 
-- [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](26-10-31-1922-plan-real-RM10.html) — `real-machine-rm10-plan`
-- [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](26-10-31-1754-plan-real-RM08.html) — `real-machine-rm08-plan`
-- [26-10-31-1710] [RM09 WebUI 写侧 · 真机实测分步计划](26-10-31-1710-plan-real-RM09.html) — `real-machine-rm09-plan`
-- [26-10-31-1605] [RM07 限速·流量曲线·全局流量 · 真机实测分步计划](26-10-31-1605-plan-real-RM07.html) — `real-machine-rm07-plan`
-- [26-10-31-1350] [RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)](26-10-31-1350-plan-real-RM06.html) — `real-machine-rm06-plan`
-- [26-10-31-1312] [RM05 tracker·标签与分类清理 · 真机实测分步计划](26-10-31-1312-plan-real-RM05.html) — `real-machine-rm05-plan`
-- [26-10-31-1228] [RM03 规则引擎 · 真机实测分步计划](26-10-31-1228-plan-real-RM03.html) — `real-machine-rm03-plan`
-- [26-10-31-1042] [RM04 辅种与分组 · 真机实测分步计划](26-10-31-1042-plan-real-RM04.html) — `real-machine-rm04-plan`
-- [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](26-10-31-0927-plan-real-RM02.html) — `real-machine-rm02-plan`
 - [26-10-31-0705] [真机实测 RM00 基建: 守卫/伪 tracker/双实例互传](26-10-31-0705-plan-real-machine-test.html) — `real-machine-test`
 - [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
@@ -33,6 +24,15 @@
 
 ## Done
 
+- [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`
+- [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](26-10-31-1754-plan-real-rm08.html) — `real-machine-rm08-plan`
+- [26-10-31-1710] [RM09 WebUI 写侧 · 真机实测分步计划](26-10-31-1710-plan-real-rm09.html) — `real-machine-rm09-plan`
+- [26-10-31-1605] [RM07 限速·流量曲线·全局流量 · 真机实测分步计划](26-10-31-1605-plan-real-rm07.html) — `real-machine-rm07-plan`
+- [26-10-31-1350] [RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)](26-10-31-1350-plan-real-rm06.html) — `real-machine-rm06-plan`
+- [26-10-31-1312] [RM05 tracker·标签与分类清理 · 真机实测分步计划](26-10-31-1312-plan-real-rm05.html) — `real-machine-rm05-plan`
+- [26-10-31-1228] [RM03 规则引擎 · 真机实测分步计划](26-10-31-1228-plan-real-rm03.html) — `real-machine-rm03-plan`
+- [26-10-31-1042] [RM04 辅种与分组 · 真机实测分步计划](26-10-31-1042-plan-real-rm04.html) — `real-machine-rm04-plan`
+- [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](26-10-31-0927-plan-real-rm02.html) — `real-machine-rm02-plan`
 - [26-10-31-0819] [真机实测 RM01 连接·认证·启动: 锁/端口/token/托盘/自启](26-10-31-0819-plan-rm01-startup.html) — `real-machine-rm01-startup`
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`

@@ -110,7 +110,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>RM02 真机实测(RM02-07, 计划 <code>memory-bank/plans/26-10-31-0927-plan-real-RM02.html</code>): 产品进程经本地 TCP 代理连 36596, 运行期把代理掐断 75s 模拟 qB 宕机, 再恢复代理。预期(A-07/D1 验证面): 断开期间连接失败 ERROR 只在状态转换记一次, 断开静默, 恢复后自动回连并打「已重新连接 qBittorrent」INFO 收尾。</p>
+    <p>RM02 真机实测(RM02-07, 计划 <code>memory-bank/plans/26-10-31-0927-plan-real-rm02.html</code>): 产品进程经本地 TCP 代理连 36596, 运行期把代理掐断 75s 模拟 qB 宕机, 再恢复代理。预期(A-07/D1 验证面): 断开期间连接失败 ERROR 只在状态转换记一次, 断开静默, 恢复后自动回连并打「已重新连接 qBittorrent」INFO 收尾。</p>
     <p>实测: 掐断后第 2 个 sync 轮起, 每 ~2s(main_tick)一条 <code>主循环异常: 'NoneType' object has no attribute 'torrents_info'</code> ERROR(带堆栈)刷屏; <b>恢复代理后 60s 内无任何回连, 刷屏持续</b> —— 进程停在永久断连态直到重启。另有一条误导性 WARNING(见证据)。</p>
   </section>
 

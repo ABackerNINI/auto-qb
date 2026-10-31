@@ -57,8 +57,11 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
   二次调用抬最后活动 + 追加 R 行; 同专题档案抬 Updated + 进度日志日期行 (A5)
 - test_checker_three_mutations_judged_red: 红绿双验 —— 填完 = 基准绿; 三类突变 (删状态行 /
   词表外值 / 留 SLOT) 逐类判红, 每类还原后复绿 (证明绿不是恒绿)
-- test_checker_freeze_line_exempts_stock: 冻结线之前 (档案日期 26-10-16 / plan doc-added 0735)
-  的缺陷件豁免; 之后 (26-10-17 / 0740) 入检查面判红 (D3 存量冻结只拦新增)
+- test_checker_freeze_line_exempts_stock: 冻结线之前 (档案日期 26-10-16 / plan·report 文件名
+  stamp 0735) 的缺陷件豁免; 之后 (26-10-17 / 0740) 入检查面判红 (D3 存量冻结只拦新增)
+- test_checker_catches_new_plan_missing_doc_added: 手写新计划缺 doc-added 必判红 (26-10-31 修
+  RM02-RM10 九件无状态计划事故的回归阵: 原按文件自身 doc-added 圈面, 缺头部新件整件逃逸;
+  修复后圈面 = 文件名 stamp 前缀, 与文件招供无关)
 - test_family_registry_matches_templates: 模板烤进去的出厂值与 `_common.FAMILIES` 同源
   (设计底线: 不造第二套词表/命名规则)
 - test_doc_templates_checker_is_wired: 检查器挂在 kb.check 与提交闸门两侧 (不接线 = 没人跑;
@@ -1444,9 +1447,9 @@ def test_checker_freeze_line_exempts_stock(tmp_path: Path) -> None:
     """冻结线语义 (D3 存量冻结只拦新增): 线之前的缺陷件豁免, 之后入检查面判红。
 
     档案族命名只到天 (YY-MM-DD), 文件名分不出当天线前/线后 —— 口径取「日期 ≥ 冻结日」
-    入检查面 (既有当天档案均合规); HTML 族按 doc-added 精确到分。
-    P3 扩两个扫描面: report (doc-added 精确到分, 同 plan 判据) 与 baseline (stamp
-    前缀, 同切片判据) —— 坑档/进展件命名无时间戳, 不在扫描面 (既有守卫兜底)。
+    入检查面 (既有当天档案均合规); plan/report/baseline 同按**文件名 stamp 前缀**圈面
+    (26-10-31 修: 不读文件自身 meta —— 缺头部新件不再逃逸, 见事故回归阵)。
+    坑档/进展件命名无时间戳, 不在扫描面 (既有守卫兜底)。
     """
     checker = _doc_templates()
     mb = tmp_path / "memory-bank"
@@ -1492,6 +1495,32 @@ def test_checker_freeze_line_exempts_stock(tmp_path: Path) -> None:
     assert any("plan-new" in p for p in problems), "线后 plan 的缺陷必须判红"
     assert any("report-new" in p for p in problems), "线后 report 的词表外值必须判红"
     assert any("base-new" in p for p in problems), "线后 baseline 的缺头部字段必须判红"
+
+
+def test_checker_catches_new_plan_missing_doc_added(tmp_path: Path) -> None:
+    """事故回归阵 (26-10-31, RM02-RM10 九件无状态计划): 手写新 plan 缺 doc-added 必判红。
+
+    原圈面按**文件自身 doc-added** 决定扫不扫 —— 缺头部的手写新件整件逃逸 (豁免自噬:
+    越缺字段越查不到)。修复后圈面 = 文件名 stamp 前缀, 与文件招供无关; 本阵钉住
+    「头部残缺 ≠ 免检」, 防圈面判据回退。
+    """
+    checker = _doc_templates()
+    mb = tmp_path / "memory-bank"
+    (mb / "plans").mkdir(parents=True)
+
+    handmade = (
+        '<html><head><meta charset="UTF-8">'
+        '<meta name="doc-topic" content="handmade-escape">'
+        "</head><body></body></html>"
+    )
+    (mb / "plans" / "26-10-31-0927-plan-real-rm99.html").write_text(handmade, encoding="utf-8")
+
+    problems, checked = checker.check_new_faces(tmp_path, mb)
+
+    assert checked == 1, f"缺 doc-added 的新件必须入检查面 (不再整件跳过): {checked}"
+    assert any("rm99" in p for p in problems), f"手写新件缺头部必须判红: {problems}"
+    assert any("doc-status" in p for p in problems), "缺 doc-status 要在问题清单里"
+    assert any("doc-added" in p for p in problems), "缺 doc-added 要在问题清单里"
 
 
 def test_family_registry_matches_templates() -> None:

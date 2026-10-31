@@ -108,7 +108,7 @@ run   = ["python <skill-dir:memory-bank>/scripts/gen_tasks_index.py --check",
          "python <skill-dir:memory-bank>/scripts/timekit.py --check"]
 auto  = true
 timeout = 60
-note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面); check_doc_templates --check (2026-10-17 P1 加: 冻结线之后新建族文件的命名/头部/状态词表/无残留 SLOT, 存量豁免); check_mutation_anchor --check (2026-10-31 加: 常驻锚防流水, 台账/逐轮日志写回 = 红)"
+note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线切片结构 + 回写措辞: 生成物与滚动面都必须自洽 (整目录一条闸门, 不再按子目录各配一条); timekit --check 拦未来日期 / 坏体例 (2026-10-06 加); gen_baseline_recent / check_wording (2026-10-11 加, 补齐 kb.check 覆盖面); check_doc_templates --check (2026-10-17 P1 加: 冻结线之后新建族文件的命名/头部/状态词表/无残留 SLOT, 存量豁免; 2026-10-31 修: plan/report 圈面改文件名 stamp 前缀, 堵「缺 doc-added 手写新件整件逃逸」洞, RM02-RM10 事故); check_mutation_anchor --check (2026-10-31 加: 常驻锚防流水, 台账/逐轮日志写回 = 红)"
 
 [[gates]]
 match = ["memory-bank/activeContext/"]

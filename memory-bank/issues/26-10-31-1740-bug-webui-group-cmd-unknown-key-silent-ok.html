@@ -110,7 +110,7 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>RM09 真机实测(plan <code>plans/26-10-31-1710-plan-real-RM09.html</code> 用例 RM09-06)发现。场景: 对 <code>/api/groups/{key}/pause</code> 传一个 <strong>base64url 形状合法但 store 里不存在的组 key</strong>(直调 API / 前端视图过期时的真实形态), 轮询回执。</p>
+    <p>RM09 真机实测(plan <code>plans/26-10-31-1710-plan-real-rm09.html</code> 用例 RM09-06)发现。场景: 对 <code>/api/groups/{key}/pause</code> 传一个 <strong>base64url 形状合法但 store 里不存在的组 key</strong>(直调 API / 前端视图过期时的真实形态), 轮询回执。</p>
     <p>计划口径(RM09-06 负向): 「不存在的 key → 端点行为按实况断(路由层拒收或错误回执), <strong>只要不是「静默成功」</strong>」; 失败判据「未知 key 静默成功(无账)」。实测正是静默成功: 回执 ok、零效果、零日志。</p>
   </section>
 

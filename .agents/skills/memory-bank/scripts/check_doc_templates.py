@@ -10,9 +10,12 @@
 
 **冻结线 = 实施日 stamp 常量** (`FREEZE_LINE`): 之前 = 存量, 一律豁免 (先例: doc-forms 51 份
 旧命名豁免 / `check_wording` 的 FROZEN 常数 —— 防漂移靠守卫拦新增, 不回头改存量)。
+⚠ **圈面判据 = 文件名自身** (stamp 前缀 / 日期前缀), **不读文件内部任何 meta** (26-10-31 修:
+plan/report 原按文件自身 doc-added 圈面, 缺头部的手写新件整件逃逸 —— 豁免自噬「越缺字段越查不到」,
+RM02-RM10 九件无状态计划事故; 文件名永远带创建 stamp, 判新旧不需要文件自己招供)。
 ⚠ 档案族命名只到天 (`YY-MM-DD`), 文件名分不出「当天冻结线之前/之后」—— 口径取
 **文件名日期 ≥ 冻结日**入检查面 (当天既有档案均合规; 这是日期精度下的可行判据)。
-⚠ 分不清新旧的面 (缺 doc-added / 非日期前缀命名的存量 / **无时间戳的坑档与进展件**)
+⚠ 分不清新旧的面 (非日期前缀命名的存量 / **无时间戳的坑档与进展件**)
 跳过, 由既有守卫 (docmap 主键 / timekit / check_kb_structure 三行头与坑档三字段 / gen_active_recent)
 兜底 —— 坑档 (`pitfalls/<类>/<主题>.md`) 与进展件 (`progress/<主题>.md`) 命名不带时间戳,
 **无法与存量区分**, 故不在冻结线扫描面内 (计划 §06「冻结线之后新建」的可判定边界)。
@@ -178,21 +181,23 @@ def check_new_faces(root: Path, mb: Path) -> tuple[list[str], int]:
 
     plans = mb / "plans"
     if plans.is_dir():
+        # 圈面 = 文件名 stamp 前缀 (与 baseline/slice 同款; 26-10-31 修): 不读文件自身
+        # doc-added —— 缺头部的手写新件照样扫 (RM02-RM10 事故: 旧判据下整件逃逸)。
         for path in sorted(plans.glob("*.html")):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            added = dict(META_RE.findall(text)).get("doc-added", "")
-            if not STAMP_VALUE_RE.match(added) or added < FREEZE_LINE:
-                continue  # 分不清新旧 (缺/坏 doc-added) 或存量 —— 跳过, 既有守卫兜底
+            if not STAMP_PREFIX_RE.match(path.name):
+                continue
+            if path.name[:13] < FREEZE_LINE:
+                continue
             checked += 1
             problems += [f"{rel_posix(path, root)}: {p}" for p in validate_file(path, "plan", path.name)]
 
     reports = mb / "reports"
     if reports.is_dir():
-        # 与 plan 同判据 (doc-added 精确到分); 出厂即 Done, 词表同 5 词
+        # 与 plan 同判据 (文件名 stamp 前缀; 26-10-31 修): 出厂即 Done, 词表同 5 词
         for path in sorted(reports.glob("*.html")):
-            text = path.read_text(encoding="utf-8", errors="replace")
-            added = dict(META_RE.findall(text)).get("doc-added", "")
-            if not STAMP_VALUE_RE.match(added) or added < FREEZE_LINE:
+            if not STAMP_PREFIX_RE.match(path.name):
+                continue
+            if path.name[:13] < FREEZE_LINE:
                 continue
             checked += 1
             problems += [f"{rel_posix(path, root)}: {p}" for p in validate_file(path, "report", path.name)]

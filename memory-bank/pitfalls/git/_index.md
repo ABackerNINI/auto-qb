@@ -25,3 +25,4 @@
 | [subagent-mixed-workspace.md](subagent-mixed-workspace.md) | 子智能体(配额耗尽等)半途夭折不会回滚它已落盘的改动 —— 计划内改动与计划外动作在同一批文件里混杂交织, 直接续派会在脏底子上叠新错。 | 子智能体夭折, 配额耗尽, 混合工作区, 计划外改动, git status 白名单, 续派 |
 | [sync-pull.md](sync-pull.md) | 开工同步**无豁免** —— 问答/只读分析轮次也必须先同步; `status -sb` 的 ahead/behind 是快照; 未提交改动 + 行尾会让快进合并被拒(树脏场景两条出路: stash 配方或提交先行 —— 2026-10-04 起 ship.commit 提交先行… | git fetch, git pull, 同步上游, 落后, 只读轮次, 问答轮次, 开工同步口径, 行尾, 快进合并被拒, 树脏, 重叠, stash, 死锁, keep 分支, 镜像线 |
 | [unpushed-branch-sync.md](unpushed-branch-sync.md) | 本工具 shell 里 `refs/remotes/*` 写入被**静默丢弃** (见 refs.md), ship 脚本一律以 `ls-remote` 现查远端真值为判据 —— 一条**从未推送过**的特性分支, `run_sync` 拿不到远端同名分支直接失败「拿不到远端 <… | 未推送分支, 新特性分支, 首次推送, push 失败, 拿不到远端, ls-remote, 离线, 死锁, chicken-and-egg, sync 先于 push, run_sync, run_push, my-commit-flow… |
+| [windows-case-only-rename.md](windows-case-only-rename.md) | Windows 仅大小写改名: write_bytes 打开旧文件, unlink 把原文件删掉 | 大小写改名, case rename, write_bytes, 改名后文件消失, git status 意外 D, ignorecase |
