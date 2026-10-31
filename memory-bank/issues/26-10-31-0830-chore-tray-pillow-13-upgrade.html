@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="deps-upgrade-2026-10">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="pillow 12.3.0 -&gt; 13.0.0 升级(major, 含约 40 个 CVE 修复)">
 <meta name="issue-summary" content="Pillow 13.0 移除既定弃用项并修复约 40 个 CVE(3 critical/12 high), 安全激励强; 本项目仅 tray/app.py 一处懒导入 Image, 风险很低">
 <title>pillow 12.3.0 -&gt; 13.0.0 升级(major, 含约 40 个 CVE 修复) · chore · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· chore</div>
+    <div class="kicker">计划外问题（已修）· chore</div>
     <h1>pillow 12.3.0 -&gt; 13.0.0 升级(major, 含约 40 个 CVE 修复)</h1>
     <p class="lede">Pillow 13.0 移除既定弃用项并修复约 40 个 CVE(3 critical/12 high), 安全激励强; 本项目仅 tray/app.py 一处懒导入 Image, 风险很低</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0830-chore-tray-pillow-13-upgrade</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:30</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,11 +155,18 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:30 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 09:18 — 用户指派认领并实施（本会话一轮走完认领→复验→修），同轮修完置 <strong>Done</strong>；基线切片 26-10-31-0917-tray-pillow-13</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-10-31（认领后开工时）锚点仍在 —— <code>src/auto_qb/tray/app.py:188</code> <code>from PIL import Image</code>（grep <code>from PIL</code> src 下唯一命中），全仓库 PIL 消费面仅 <code>Image.open(ICON_PNG)</code>（app.py:312）一处；<code>pyproject.toml:32</code> 仍 <code>pillow==12.3.0</code>。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与建议修法一致，零码改动）：<code>pyproject.toml</code> pin <code>pillow==12.3.0 -&gt; 13.0.0</code> → <code>commands run env.sync</code>（uv.lock 仅 pillow 一包重锁 13.0.0，其余 44 包零变动）→ <code>commands run test.full</code>。</p>
+    <p><strong>验证方式与测试数字</strong>（详见基线切片 <code>memory-bank/testing/baselines/26-10-31-0917-tray-pillow-13.md</code>，见 kb.baseline）：</p>
+    <ul>
+      <li>全量：复跑 <strong>4302 passed + 2 skipped in 183.44s</strong>，覆盖率门槛 99% 通过（TOTAL 99%）；首跑 4301 + 1 failed + 2 skipped，失败点 <code>test_web_longtail.py::test_api_traffic_qb_global_live_tail_realtime</code> 为 30s 时间桶边界抖动（与 PIL 无导入关系，单跑复验 passed），非本次引入。</li>
+      <li>托盘图标冒烟：PIL 13.0.0 下 <code>Image.open(icon.png)</code> 正常（PNG RGBA 256x256，open/load/convert RGBA 通过）—— 即 pystray 消费的唯一 API 面。</li>
+      <li>真机托盘渲染未在本轮验证（需桌面会话 + 真实 qB，<code>_build_tray</code> 为 <code># pragma: no cover</code>），归真机实测轨（切片 26-10-31-0651-real-machine-test）下次跑时顺带确认。</li>
+    </ul>
   </section>
 
   <footer>
