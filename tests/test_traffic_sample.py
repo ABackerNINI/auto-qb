@@ -189,7 +189,63 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_v4_write_io_full_day_2s_interval
 - test_v4_write_io_full_day_30s_interval
   data_dir 为空时零操作(不封游程不 flush)
+
+W5(R29) S5 补测守阵(mutcore 审计 core/modules/traffic_sample_mod.py; 三分类/红验对应单点
+tmp-analysis/mut-core-w5-classify.md, 中危真洞全盖 + 低危按簇代表, bug 面不入此列):
+- test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg: 块首游程零漂移支游标标称推进 + 块首游程
+  槽位端点含(agg 逐区间 dt 断言)(_append_record_128 / _record_slots_9/12 / _agg_feed_8)
+- test_w5_blockhead_run_drift_dt_and_cursor: 块首游程显式 dt = 实测跨度且游标复位实测点; run_len==2
+  不走单槽支、游程内部零覆盖入账(_append_record_116/117/124/125/126 + _append_record_93)
+- test_w5_blockhead_run_drift_boundary_exact_tol: 块首游程漂移判据恰 250ms 压线不写 dt(_append_record_107)
+- test_w5_blockhead_run_rollback_clamp_dt_min_1: 块首游程回拨钳制 dt_ms=1(_append_record_113)
+- test_w5_nonhead_zero_drift_run_no_dt: 非块首多槽游程零漂移不写 dt(_append_record_142)
+- test_w5_n_prefix_split_zero_run_no_crash: n 前缀拆块实参带 end_ts, z 游程新块首不崩(_append_record_54)
+- test_w5_counter_reset_split_zero_run_no_crash: 计数器重置关块实参带 end_ts 不崩(_append_record_65)
+- test_w5_day_boundary_seal_uses_current_readings: 跨天封口末端锚点 = 本轮读数(_advance_run_10/11/13/14)
+- test_w5_zrun_time_valve_seals_at_exact_86400: 时间支保险闸恰 86400s 封口(_advance_run_76)
+- test_w5_q3_slot_accounting_runs_and_flush_reset: Q3 槽计数 r=1/游程=run_len/flush 复位
+  (_append_record_96/97/175 + _flush_series_37)
+- test_w5_persist_warn_cycle_resets_after_success: 落盘告警节流成功复位/首败 WARNING/连败一次
+  (_flush_series_29 / __init___8 / _agg_append_12/16/17)
+- test_w5_agg_append_empty_false_nonempty_true: _agg_append 空批 False 契约(_agg_append_2)
+- test_w5_dry_run_full_chain_zero_write: dry-run 全链路零落盘 + 数据门不开(on_task_line_5 /
+  _sample_global_24 / _torrent_has_data_8/9 / _agg_append_3 / _agg_trim_1)
+- test_w5_problem_torrents_do_not_truncate_round: 问题种子不截断采样轮 + 连续 null 不崩
+  (_sample_torrents_44/41/25/57/22)
+- test_w5_single_direction_global_records_raw: 单方向活跃全局轮出 r 不进 z 游程(_sample_global_25)
+- test_w5_active_filter_1bps_boundary: 活跃过滤 1 B/s 边界(_sample_torrents_5/7)
+- test_w5_interval_change_closes_idle_block: 改间隔关纯空闲块, 新旧 interval 分块
+  (_close_blocks_for_interval_change_11/13/14)
+- test_w5_main_tick1_quantize_and_warn_once: main_tick=1 档量化 ceil + 失配告警一次(_apply_interval_17/40)
+- test_w5_interval_change_audit_log_and_first_round_silent: 采样率变化审计 INFO / 首轮不虚假
+  (_apply_interval_52 / __init___12)
+- test_w5_live_tail_empty_shell_no_truncation: 活尾空信息键不截断其后系列(_publish_live_tail_37)
+- test_w5_live_tail_head_pending_false_chain: head_pending=False 活尾游标链倒推(_publish_live_tail_65)
+- test_w5_live_tail_no_buffer_interval_contract: 无块活尾 interval_s 契约(_publish_live_tail_63)
+- test_w5_counter_reset_audit_logs: 重置审计 INFO 键/方向/关块留痕(sample_series_14/15/22/26/27/34 /
+  _close_block_and_reopen_1 / _append_record_66/71)
+- test_w5_latest_mirror_fields_complete: latest 镜像字段契约含 null 点(sample_series_43/47/49 /
+  _touch_null_run_2)
+- test_w5_init_sentinels_and_disabled_recovery: 恢复哨兵初值 + 未启用零恢复(__init___23/24 /
+  _recover_aggregates_2)
+- test_w5_pending_agg_rows_day_partition: 活尾日行跨日分片(_pending_agg_rows_27/34/37)
+- test_w5_pending_agg_rows_month_partition: 活尾月行归档(_pending_agg_rows_63/55)
+- test_w5_recover_single_month_row_no_reappend: 恰 1 个月行恢复不崩 + 水位幂等(_recover_series_22/23/19/20/114)
+- test_w5_recover_midday_restart_catchup_and_open_hour: 午间重启补算/开放小时/当日累计器
+  (_recover_series_81/93 / _catch_up_level_11/18)
+- test_w5_ingest_acc_same_day_multi_hour: day 累计器同日多 hour 追加(_ingest_acc_10)
+- test_w5_day_reseal_merges_into_month: day 重封月级合流行(_agg_ingest_day_3)
+- test_w5_credit_day_file_null_slots_then_raw_credited: 离线记账 n 槽不截断后继(_agg_credit_day_file_52)
+- test_w5_credit_day_file_z_tail_end_anchor_cross_file: 离线 z 尾槽末端摊配 + 跨文件边界
+  (_agg_credit_day_file_64 / _recover_series_57)
+- test_w5_evict_audit_log: 按龄淘汰审计 INFO(_maybe_evict_32)
+- test_w5_recover_oserror_warning_carries_key: 恢复失败 WARNING 含系列键(_recover_aggregates_37)
+- test_w5_recovery_stats_elapsed_bounded: 恢复埋点 elapsed_s 有界(_recover_aggregates_39)
+- test_w5_agg_error_log_type_and_rewarn_after_recovery: 封口失败 ERROR 类型 + 恢复后再告警
+  (_agg_flush_all_7/10 / _agg_reset_after_error_4)
+- test_w5_recover_diag_watermark_bound_log: 读集诊断 INFO 水位来源(_recover_series_67/69/71/72)
 """
+import logging
 import os
 import threading
 import time
@@ -3224,3 +3280,943 @@ def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
     mgr.config.data_dir = ""
     mod.stop()
     assert GLOBAL_SERIES_KEY in mod._open_runs  # data_dir 为空: 零操作
+
+
+# ---------- W5(R29) S5 补测守阵(mutcore 审计 core/modules/traffic_sample_mod.py) ----------
+# 三分类与红验对应关系单点: tmp-analysis/mut-core-w5-classify.md(守阵只落断言本体);
+# 档位: 中危真洞全盖 + 低危按簇代表; bug 面(_publish_live_tail_59)与假存活(__init___13)不在此列。
+
+
+def _w5_ts(*args) -> float:
+    """固定本地时刻 -> epoch 秒(恢复/跨天用例的确定性时钟, 不用 _local_epoch 防午夜翻车)"""
+    return datetime(*args).timestamp()
+
+
+def _w5_mgr(tmp_path, monkeypatch, clock, **conf_kw):
+    """W5 守阵公共装配: 固定时钟 + 30s 采样档(键可覆盖)"""
+    kw = {"enabled": True, "sample_interval": 30, "flush_interval": 10**9}
+    kw.update(conf_kw)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    return _mgr_with_traffic(tmp_path, QbTraffic(**kw))
+
+
+def test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg(tmp_path, monkeypatch):
+    """块首游程零漂移支(常态形态): 游标标称推进(不反向/不塌缩) + 块首游程槽位端点含
+    (agg 逐区间 dt 断言) —— _append_record_128 / _record_slots_9/12 / _agg_feed_8"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)  # r@t0(块 A)
+    _flush(mod)  # 块 A 落盘关块, 信用滞留
+    mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    for _ in range(3):  # 空闲 z 游程 3 样本(t0+30..t0+90)
+        clock.advance(30)
+        _run_sample(mgr)
+    mod._seal_run(GLOBAL_SERIES_KEY)  # 封 z -> 块首 z(run_len 3, 零漂移: span 60 = 标称)
+    assert mod._buffers[GLOBAL_SERIES_KEY].projected_ts == t0 + 90.0  # 游标 = anchor+(run_len-1)*interval
+    mgr.store.server_state = server_state(alltime_dl=5_000_300, alltime_ul=3_000_100)
+    clock.advance(30)
+    _run_sample(mgr)  # t0+120: r 零漂移(游标标称推进 -> 不写 dt)
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    assert parsed.bad_lines == 0
+    blocks = [b for b in parsed.blocks if b.start_epoch == int(t0 + 30)]
+    assert len(blocks) == 1
+    z, r2 = blocks[0].records
+    assert isinstance(z, V4ZeroRun) and z.run_len == 3 and z.dt_ms is None
+    assert isinstance(r2, V4Sample) and r2.dt_ms is None
+    # agg 面: 块首游程槽位 [anchor..cursor] 端点含 -> 游程内恰 2 个 30s 零速区间; 逐区间 dt 断言
+    h0 = int(t0) // HOUR_SECONDS * HOUR_SECONDS
+    samples = mod._agg_states[GLOBAL_SERIES_KEY].pending[h0]
+    assert [round(s.dt_s, 6) for s in samples] == [30.0, 30.0, 30.0, 30.0]  # r 信用+2 游程区间+r 引导
+    assert round(sum(s.dt_s for s in samples), 6) == 120.0
+
+
+def test_w5_blockhead_run_drift_dt_and_cursor(tmp_path, monkeypatch):
+    """块首游程显式 dt 支: dt_ms = 实测跨度(span*1000)且游标推到实测点; run_len==2 不走
+    单槽支、游程内部零覆盖入账 —— _append_record_116/117/124/125/126 + _append_record_93"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    _flush(mod)
+    mgr.store.server_state = _idle_state()
+    clock.advance(30)
+    _run_sample(mgr)  # z@t0+30
+    clock.advance(62)
+    _run_sample(mgr)  # z@t0+92(游程内实测间隔 62s -> 块首游程 span 62 vs 标称 30 -> 显式 dt)
+    clock.advance(30)
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)  # t0+122: r 封 z -> dt 62000, 游标 = anchor+62 = t0+92; r 零漂移
+    buf = mod._buffers[GLOBAL_SERIES_KEY]
+    z, r = buf.records
+    assert isinstance(z, V4ZeroRun) and z.dt_ms == 62000  # dt = 实测跨度(run_len 2 不走单槽支)
+    assert isinstance(r, V4Sample) and r.dt_ms is None  # 游标已复位实测点: r 零漂移
+    assert buf.projected_ts == t0 + 122.0
+    h0 = int(t0) // HOUR_SECONDS * HOUR_SECONDS
+    samples = mod._agg_states[GLOBAL_SERIES_KEY].pending[h0]
+    assert [round(s.dt_s, 6) for s in samples] == [30.0, 62.0, 30.0]  # r 信用 + 游程内部 62s + 末端结算
+
+
+def test_w5_blockhead_run_drift_boundary_exact_tol(tmp_path, monkeypatch):
+    """块首游程漂移判据边界: |span-标称| 恰 250ms 不写 dt(判据为 > 非 >=)—— _append_record_107"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    _flush(mod)
+    mgr.store.server_state = _idle_state()
+    clock.advance(30)
+    _run_sample(mgr)  # z@t0+30
+    clock.advance(30.25)
+    _run_sample(mgr)  # z@t0+60.25(游程内 30.25s: span 30.25 vs 标称 30 -> 恰压线)
+    clock.advance(30)
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)  # t0+90.25: r 封 z: 恰 250ms 不写 dt
+    buf = mod._buffers[GLOBAL_SERIES_KEY]
+    z, r = buf.records
+    assert isinstance(z, V4ZeroRun) and z.dt_ms is None  # 压线不写 dt
+    assert isinstance(r, V4Sample) and r.dt_ms is None
+    assert buf.projected_ts == t0 + 90.0  # 零漂移支: 游标标称推进(漂移余量保留)
+
+
+def test_w5_blockhead_run_rollback_clamp_dt_min_1(tmp_path, monkeypatch):
+    """块首游程回拨钳制: 末端仅高出 B.start 亚毫秒 -> dt_ms = max(1, 实测) = 1 —— _append_record_113"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    _flush(mod)
+    mgr.store.server_state = _idle_state()
+    clock.advance(30.0002)
+    _run_sample(mgr)  # z@t0+30.0002(B.start = t0+30, 末端仅 +0.2ms)
+    clock.advance(0.0002)
+    _run_sample(mgr)  # z@t0+30.0004(run_len 2)
+    clock.advance(30)
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)  # r 封 z: span = 0.4ms -> dt_ms = max(1, round(0.4)) = 1
+    z = mod._buffers[GLOBAL_SERIES_KEY].records[0]
+    assert isinstance(z, V4ZeroRun) and z.dt_ms == 1
+
+
+def test_w5_nonhead_zero_drift_run_no_dt(tmp_path, monkeypatch):
+    """非块首多槽游程标称 = run_len*interval: 零漂移不写 dt —— _append_record_142"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    _flush(mod)
+    mgr.store.server_state = _idle_state()
+    for _ in range(2):  # z1(t0+30, t0+60)
+        clock.advance(30)
+        _run_sample(mgr)
+    clock.advance(30)
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)  # t0+90: r 封 z1 -> 块首游程(dt 60000, 游标复位)
+    mgr.store.server_state = _idle_state()
+    for _ in range(3):  # z2(t0+120..t0+180) 非块首
+        clock.advance(30)
+        _run_sample(mgr)
+    clock.advance(30)
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)  # t0+210: r 封 z2(非块首: 标称 90, 零漂移)
+    z1, r1, z2, r2 = mod._buffers[GLOBAL_SERIES_KEY].records
+    assert isinstance(z1, V4ZeroRun) and z1.dt_ms is None  # 块首零漂移(常规采样间隔)
+    assert isinstance(z2, V4ZeroRun) and z2.dt_ms is None  # 非块首零漂移: 不写 dt(变异在此破)
+    assert isinstance(r2, V4Sample) and r2.dt_ms is None  # 游标标称推进
+
+
+def test_w5_n_prefix_split_zero_run_no_crash(tmp_path, monkeypatch):
+    """n-only 前缀拆块: 拆块实参携带 end_ts —— 新块首为 run_len>=2 z 游程不崩
+    (_append_record_54; 真实序列: 断连 -> 重连空闲 -> 恢复传输)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    mgr.store.server_state = server_state(alltime_dl=None)  # 关键字段缺失 -> n 游程
+    for _ in range(2):
+        clock.advance(30)
+        _run_sample(mgr)
+    mgr.store.server_state = _idle_state()  # 重连空闲: n->z 换型封 n(run_len 2), z 游程开
+    for _ in range(2):
+        clock.advance(30)
+        _run_sample(mgr)
+    mgr.store.server_state = server_state()  # 恢复传输: r 封 z -> n 前缀拆块, z 成新块首
+    clock.advance(30)
+    _run_sample(mgr)  # 变异(end_ts=None)在新块首游程 span 处 TypeError
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    assert parsed.bad_lines == 0 and len(parsed.blocks) == 2
+    b1, b2 = parsed.blocks
+    assert (b1.dl_base, b1.up_base) == (None, None)  # n 前缀 3 列 B 无基线块
+    assert [r.run_len for r in b1.records] == [2] and isinstance(b1.records[0], V4NullRun)
+    assert len(b2.records) == 2 and isinstance(b2.records[0], V4ZeroRun) and b2.records[0].run_len == 2
+    assert isinstance(b2.records[1], V4Sample)
+
+
+def test_w5_counter_reset_split_zero_run_no_crash(tmp_path, monkeypatch):
+    """计数器重置关块: 拆块实参携带 end_ts —— 重置记录为 run_len>=2 z 游程不崩
+    (_append_record_65; 真实序列: z 开启快照低于块内最近 totals)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    _run_sample(mgr)
+    clock.advance(30)
+    mgr.store.server_state = server_state(alltime_dl=5_100_000, alltime_ul=3_100_000)
+    _run_sample(mgr)  # 块内最近 totals 5.1M/3.1M
+    mgr.store.server_state = _idle_state(alltime_dl=100, alltime_ul=50)  # 空闲期计数器回落
+    for _ in range(2):  # z 游程(开启快照 100/50)
+        clock.advance(30)
+        _run_sample(mgr)
+    mgr.store.server_state = server_state(alltime_dl=200, alltime_ul=60)
+    clock.advance(30)
+    _run_sample(mgr)  # r 封 z -> z 记录 totals 100 < 5.1M -> 强制关块重开(变异在拆块实参)
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    assert parsed.bad_lines == 0 and len(parsed.blocks) == 2
+    b2 = parsed.blocks[1]
+    assert (b2.dl_base, b2.up_base) == (100, 50)  # 新块基线 = 重置后 totals
+    assert isinstance(b2.records[0], V4ZeroRun) and b2.records[0].run_len == 2
+    assert isinstance(b2.records[1], V4Sample)
+
+
+def test_w5_day_boundary_seal_uses_current_readings(tmp_path, monkeypatch):
+    """跨天封口末端锚点用本轮读数(docstring 明文): 增长 totals 的全局 z 游程跨 00:00 封口
+    -> z 行末端列 = 本轮读数 —— _advance_run_10/11/13/14"""
+    clock = _Clock(now=_w5_ts(2026, 6, 1, 23, 58, 0))
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    mgr.store.server_state = _idle_state(alltime_dl=1000, alltime_ul=5000)
+    for i in range(1, 6):  # 23:58:00..00:00:00(5 样本, 末样本跨 0 点): totals 逐轮增长(合法形态)
+        if i > 1:
+            clock.advance(30)
+        mgr.store.server_state = _idle_state(alltime_dl=1000 + i * 400, alltime_ul=5000 + i * 200)
+        _run_sample(mgr)
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, _w5_ts(2026, 6, 1, 23, 59, 0))
+    assert parsed.bad_lines == 0 and len(parsed.blocks) == 1
+    z = parsed.blocks[0].records[0]
+    assert isinstance(z, V4ZeroRun) and z.run_len == 4
+    assert z.dl_total_end == 1000 + 5 * 400  # 本轮(00:00:00)读数, 非上一轮跟踪值
+    assert z.up_total_end == 5000 + 5 * 200
+
+
+def test_w5_zrun_time_valve_seals_at_exact_86400(tmp_path, monkeypatch):
+    """时间支保险闸边界: ts-start 恰 86400s 必须封口(游程跨度不超天级)—— _advance_run_76;
+    跨天判据与闸判据同函数, 钉边界须隔离日期支(monkeypatch 日期串恒定)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    monkeypatch.setattr(ts_mod, "v4_epoch_date_str", lambda ts: "D")  # 隔离跨天支, 只钉闸边界
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    mod._advance_run(GLOBAL_SERIES_KEY, t0, "z", 100, 200)
+    for i in range(1, 2881):  # 30s 步进至恰 86400s
+        mod._advance_run(GLOBAL_SERIES_KEY, t0 + i * 30, "z")
+    assert GLOBAL_SERIES_KEY not in mod._open_runs  # 恰 86400s 已封口
+    z = mod._buffers[GLOBAL_SERIES_KEY].records[0]
+    assert isinstance(z, V4ZeroRun) and z.run_len == 2881
+
+
+def test_w5_q3_slot_accounting_runs_and_flush_reset(tmp_path, monkeypatch):
+    """Q3 槽计数: r=1/游程=run_len/块首单槽游程=1, flush 复位 0 —— _append_record_96/97/175
+    + _flush_series_37(直查 buf.slots)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # 块首 r: slots 1
+    assert mod._buffers[GLOBAL_SERIES_KEY].slots == 1
+    mgr.store.server_state = _idle_state()
+    for _ in range(5):
+        clock.advance(30)
+        _run_sample(mgr)
+    mgr.store.server_state = server_state()
+    clock.advance(30)
+    _run_sample(mgr)  # 非块首 z 游程 run_len 5 + 封口 r: slots 1+5+1 = 7
+    assert mod._buffers[GLOBAL_SERIES_KEY].slots == 7
+    _flush(mod)  # 落盘成功: 槽计数复位 0
+    assert mod._buffers[GLOBAL_SERIES_KEY].slots == 0
+    mgr.store.server_state = _idle_state()
+    clock.advance(30)
+    _run_sample(mgr)  # 单样本空闲
+    mgr.store.server_state = server_state()
+    clock.advance(30)
+    _run_sample(mgr)  # 块首单槽游程(z run_len 1) + r: slots 0+1+1 = 2
+    assert mod._buffers[GLOBAL_SERIES_KEY].slots == 2
+
+
+def test_w5_persist_warn_cycle_resets_after_success(tmp_path, monkeypatch):
+    """落盘告警节流记忆: 成功即复位(原始与 agg 两侧)/首败 WARNING/连败只一次 ——
+    _flush_series_29 / __init___8 / _agg_append_12/16/17"""
+    class _FlakyV4Store:
+        def __init__(self):
+            self.raw_ok = False
+            self.agg_ok = False
+
+        def append_records(self, *a):
+            if not self.raw_ok:
+                raise OSError("raw boom")
+
+        def append_agg_rows(self, *a):
+            if not self.agg_ok:
+                raise OSError("agg boom")
+
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    mod._v4store = _FlakyV4Store()
+    row = AggRow("hour", int(clock.now) // HOUR_SECONDS * HOUR_SECONDS, 1, 1, 1, 1, 1, 1, 30)
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
+        _run_sample(mgr)
+        _flush(mod)  # 首败: WARNING(非「持续」降级)
+        mod._v4store.raw_ok = True
+        clock.advance(30)
+        _run_sample(mgr)
+        _flush(mod)  # 成功: 复位
+        mod._v4store.raw_ok = False
+        clock.advance(30)
+        _run_sample(mgr)
+        _flush(mod)  # 再败: 又是 WARNING(成功复位)
+        mod._v4store.raw_ok = True
+        clock.advance(30)
+        _run_sample(mgr)
+        _flush(mod)  # 再成功: 复位(agg 面共用同一记忆, 先归零)
+        mod._agg_append(GLOBAL_SERIES_KEY, (row, ))  # agg 首败: WARNING
+        mod._agg_append(GLOBAL_SERIES_KEY, (row, ))  # agg 连败: DEBUG「持续」
+        mod._v4store.agg_ok = True
+        mod._agg_append(GLOBAL_SERIES_KEY, (row, ))  # agg 成功: 复位
+        mod._v4store.agg_ok = False
+        mod._agg_append(GLOBAL_SERIES_KEY, (row, ))  # agg 再败: WARNING
+    warns = [r for r in cap.records if r.levelno == logging.WARNING and "落盘失败" in r.getMessage()]
+    raw_warns = [r for r in warns if "批量落盘失败" in r.getMessage()]
+    agg_warns = [r for r in warns if "agg 行落盘失败" in r.getMessage()]
+    assert len(raw_warns) == 2 and len(agg_warns) == 2
+    sustained = [r for r in cap.records if "持续" in r.getMessage()]
+    assert len(sustained) == 1 and all(r.levelno == logging.DEBUG for r in sustained)
+
+
+def test_w5_agg_append_empty_false_nonempty_true(tmp_path):
+    """_agg_append 返回契约(docstring 明文「测试用」): 空批 False / 实写 True —— _agg_append_2"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
+    mod = mgr.host.get("qb_traffic")
+    row = AggRow("hour", 1699999200, 1, 1, 1, 1, 1, 1, 30)
+    assert mod._agg_append(GLOBAL_SERIES_KEY, ()) is False  # 空批: 未写文件
+    assert mod._agg_append(GLOBAL_SERIES_KEY, (row, )) is True  # 反向对照: 实写返回 True
+
+
+def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
+    """dry-run 全链路零落盘(观测写盘属真实副作用): 主文件/agg/裁剪/限速历史全静默,
+    单种数据门不开(不开游程) —— on_task_line_5 / _sample_global_24 / _torrent_has_data_8/9
+    / _agg_append_3 / _agg_trim_1"""
+    h0 = int(1_700_000_000) // HOUR_SECONDS * HOUR_SECONDS
+    clock = _Clock(now=h0 - 7200 + 10)
+    monkeypatch.setattr(ts_mod, "time", clock)
+    # data_dir 先于模块构造注入: _limits_rec 构造期取值(observe 的 persistence_on 面才可达)
+    mgr = make_manager(str(tmp_path / "state.json"), data_dir=str(tmp_path))
+    mgr.client = FakeClient()
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=30, flush_interval=60, rollup_window=60.0)
+    st = TrafficV4Store(str(tmp_path))
+    st.append_agg_rows(GLOBAL_SERIES_KEY, (AggRow("hour", h0 - 10800, 7, 9, 3, 4, 500, 600, 3600), ))
+    day = v4_epoch_date_str(clock.now)
+    os.makedirs(os.path.dirname(st.series_day_path("torrent:A1", day)), exist_ok=True)
+    with open(st.series_day_path("torrent:A1", day), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nkey,torrent:A1\n")  # A1 有历史数据: 数据门在真实运行会开
+    mgr.store.by_hash["A1"] = active_torrent("A1", dlspeed=0, upspeed=0)
+    mgr.store.by_hash["A2"] = active_torrent("A2")  # 活跃种子: 内存照常推进
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=True)
+
+    def snapshot():
+        root = tmp_path / "qb-traffic-v4"
+        out = {}
+        for dirpath, _dirs, files in os.walk(root):
+            for name in files:
+                p = os.path.join(dirpath, name)
+                out[os.path.relpath(p, root)] = open(p, "rb").read()
+        return out
+
+    before = snapshot()
+    mgr.store.server_state = server_state(up_rate_limit=100, dl_rate_limit=50)
+    mod.on_task_line(False)  # t0: r(时钟线首拍即采)
+    clock.advance(30)
+    mod.on_task_line(False)  # t0+30: r(信用结算)
+    clock.now = h0 - 3600 + 30  # 跳到 hour(h0-7200) 完结之后
+    mod.on_task_line(False)  # 采样 + flush 驱动: hour 封口(agg append/trim 门)+ 内存推进
+    assert snapshot() == before  # 零新文件零改写(agg append/裁剪/主文件/限速历史全静默)
+    assert "torrent:A1" not in mod._open_runs  # 数据门 dry-run 不开(不开游程)
+    assert "torrent:A2" in mod.latest and mod.latest["torrent:A2"].dl_rate == 512  # 内存照常
+
+
+def test_w5_problem_torrents_do_not_truncate_round(tmp_path, monkeypatch):
+    """单种采样轮不被问题种子截断: 从未传输/空闲游程/缺字段活跃/缺字段空闲在前,
+    健康种子在后照常出 r; 连续两轮 null 不崩 —— _sample_torrents_44/41/25/57/22"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    st = TrafficV4Store(str(tmp_path))
+    day = v4_epoch_date_str(clock.now)
+    for h in ("A1", "A3"):  # 有历史数据(数据门开)
+        os.makedirs(os.path.dirname(st.series_day_path(f"torrent:{h}", day)), exist_ok=True)
+        with open(st.series_day_path(f"torrent:{h}", day), "w", encoding="utf-8", newline="\n") as f:
+            f.write(f"{HEADER_LINE_V4}\nkey,torrent:{h}\n")
+    t2 = active_torrent("A2")  # 活跃缺字段: null 游程(字段事后置 None, FakeTorrent 构造要数值)
+    t2.downloaded = None
+    t3 = active_torrent("A3", dlspeed=0, upspeed=0)  # 空闲有数据缺字段
+    t3.downloaded = None
+    seed_store(
+        mgr,
+        [
+            active_torrent("A0", dlspeed=0, upspeed=0),  # 从未传输(无目录)
+            active_torrent("A1", dlspeed=0, upspeed=0),  # 空闲有数据: 首轮开 z 游程
+            t2,
+            t3,
+            active_torrent("A4"),  # 健康活跃
+        ],
+    )
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    assert "torrent:A4" in mod.latest and mod.latest["torrent:A4"].dl_rate == 512
+    assert "torrent:A1" in mod._open_runs and mod._open_runs["torrent:A1"].kind == "z"
+    clock.advance(30)
+    _run_sample(mgr)  # 第二轮: A1 空闲推进/A2 连续 null(变异在 ts)/A4 照常
+    assert mod.latest["torrent:A4"].ts == t0 + 30  # 健康种子每轮都被采到
+
+
+def test_w5_single_direction_global_records_raw(tmp_path, monkeypatch):
+    """零速判(方向性样本常态): 仅单方向活跃的全局轮出 r 不进 z 游程 —— _sample_global_25"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=2048)
+    _run_sample(mgr)
+    mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=0)
+    clock.advance(30)
+    _run_sample(mgr)
+    recs = mod._buffers[GLOBAL_SERIES_KEY].records
+    assert [(r.dl_rate, r.up_rate) for r in recs] == [(0, 2048), (1024, 0)]  # 两轮都出 r
+    assert GLOBAL_SERIES_KEY not in mod._open_runs  # 不开 z 游程
+    assert mod.latest[GLOBAL_SERIES_KEY].up_rate == 0  # latest 照常推进
+
+
+def test_w5_active_filter_1bps_boundary(tmp_path, monkeypatch):
+    """活跃过滤边界: dlspeed=1 / upspeed=1(1 B/s 合法读数)不被当空闲 ——
+    _sample_torrents_5/7(已开游程形态: 应封口 + r)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    st = TrafficV4Store(str(tmp_path))
+    day = v4_epoch_date_str(clock.now)
+    os.makedirs(os.path.dirname(st.series_day_path("torrent:HASHA", day)), exist_ok=True)
+    with open(st.series_day_path("torrent:HASHA", day), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nkey,torrent:HASHA\n")
+    tor = active_torrent("HASHA", dlspeed=0, upspeed=0)
+    seed_store(mgr, [tor])
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # 空闲: z 游程开
+    assert "torrent:HASHA" in mod._open_runs
+    tor.dlspeed = 1  # 1 B/s 合法读数: 活跃 -> 封 z + r
+    clock.advance(30)
+    _run_sample(mgr)
+    assert mod.latest["torrent:HASHA"].dl_rate == 1
+    assert "torrent:HASHA" not in mod._open_runs
+    tor.dlspeed = 0
+    tor.upspeed = 0
+    clock.advance(30)
+    _run_sample(mgr)  # 再空闲: z 游程重开
+    tor.upspeed = 1  # up 位 1 B/s: 同判据
+    clock.advance(30)
+    _run_sample(mgr)
+    assert mod.latest["torrent:HASHA"].up_rate == 1
+
+
+def test_w5_interval_change_closes_idle_block(tmp_path, monkeypatch):
+    """改间隔关块覆盖纯空闲块(z/n): 旧块落盘 + 新块带新 interval(新旧数据分块各有 interval)
+    —— _close_blocks_for_interval_change_11/13/14"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    _flush(mod)
+    mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    for _ in range(2):
+        clock.advance(30)
+        _run_sample(mgr)
+    mod._seal_run(GLOBAL_SERIES_KEY)  # 封 z1 -> 纯空闲块(块首 z, 无 r 行)
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=45, flush_interval=10**9)
+    mgr.store.server_state = _idle_state(alltime_dl=5_000_300, alltime_ul=3_000_100)
+    for _ in range(2):  # 改间隔后空闲(45s 档)
+        clock.advance(45)
+        _run_sample(mgr)
+    mgr.store.server_state = server_state(alltime_dl=5_000_600, alltime_ul=3_000_200)
+    clock.advance(45)
+    _run_sample(mgr)  # r 封 z2 -> 新块首(45s 档)
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    assert parsed.bad_lines == 0
+    assert [b.interval_s for b in parsed.blocks] == [30.0, 30.0, 45.0]  # 块A/纯空闲块(旧interval)/新块(新interval)
+    assert [r.run_len for r in parsed.blocks[1].records] == [2]
+    assert isinstance(parsed.blocks[2].records[0], V4ZeroRun)
+
+
+def test_w5_main_tick1_quantize_and_warn_once(tmp_path, monkeypatch):
+    """main_tick=1.0 合法档量化口径: 1.5s 档 ceil 到 2.0 且失配告警恰一次(D5)——
+    _apply_interval_17(量化) / _apply_interval_40(告警门)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.config.main_tick = 1.0
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=1.5, flush_interval=10**9)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
+        _run_sample(mgr)
+        assert mod._effective_interval == 2.0  # ceil(1.5/1.0) = 2(非 1.5 原样)
+        clock.advance(2)
+        _run_sample(mgr)
+    assert sum(1 for r in cap.records if "非 main_tick" in r.getMessage()) == 1  # 失配只告警一次
+
+
+def test_w5_interval_change_audit_log_and_first_round_silent(tmp_path, monkeypatch):
+    """采样率变化审计 INFO: 首轮不虚假告「变化」/ 真变化必留痕 ——
+    __init___12(_effective_interval 初值) / _apply_interval_52"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap1:
+        _run_sample(mgr)
+    assert "采样率变化" not in cap1.text  # 首轮只立基线: 无虚假「变化」INFO
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=45, flush_interval=10**9)
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
+        clock.advance(30)
+        _run_sample(mgr)
+    assert "采样率变化" in cap2.text  # 改间隔关块留痕口径
+
+
+def test_w5_live_tail_empty_shell_no_truncation(tmp_path, monkeypatch):
+    """活尾发布空信息键(shell 缓冲)不截断其后系列: 多空壳 + 信息键共存,
+    信息键 tail 恒在 —— _publish_live_tail_37(continue->break 截断)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    tors = [active_torrent(f"H{i:02d}") for i in range(60)]
+    seed_store(mgr, tors)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # 全部出 r
+    _flush(mod)  # 全部落盘: 60 个 torrent shell 缓冲滞留(round_keys 未清)
+    for tor in tors:  # 转为「缺字段空闲」: 本轮被跳过, shell 键仍留在键集且无活尾信息
+        tor.dlspeed = 0
+        tor.upspeed = 0
+        tor.downloaded = None
+    clock.advance(30)
+    _run_sample(mgr)  # global 出 r(信息键); 发布时键集 = 1 信息键 + 60 空壳
+    tail = mod.live_tail
+    assert GLOBAL_SERIES_KEY in tail and len(tail[GLOBAL_SERIES_KEY].records) == 1  # 信息键不被截断
+    assert not any(k.startswith("torrent:") for k in tail)  # 空壳不留快照
+
+
+def test_w5_live_tail_head_pending_false_chain(tmp_path, monkeypatch):
+    """活尾 head_pending=False(块头已落盘)+ 开放游程: 槽位从写侧游标链倒推(非 0 起点均摊)
+    —— _publish_live_tail_65(projected_ts 强制 0); 快照与落盘重算恒等"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state()
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    _run_sample(mgr)
+    _flush(mod)  # 块 A 关闭
+    mgr.store.server_state = _idle_state()
+    for _ in range(2):  # z1(t0+30, t0+60)
+        clock.advance(30)
+        _run_sample(mgr)
+    mod._seal_run(GLOBAL_SERIES_KEY)  # 封 z1 -> 纯空闲块块首游程(游标 t0+60)
+    for _ in range(2):  # z2 开放游程(t0+90, t0+120)
+        clock.advance(30)
+        _run_sample(mgr)
+    _flush(mod)  # 块 [z1] 落盘(块头已写), 块开放不关
+    clock.advance(30)
+    _run_sample(mgr)  # t0+150: z2 推进 + 发布(head_pending=False)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert tail.block_open and not tail.head_pending
+    tail_slots = v4_live_tail_slots(tail)
+    assert [s.ts for s in tail_slots] == [t0 + 90.0, t0 + 120.0, t0 + 150.0]  # 链锚点 = 游标
+    mgr.store.server_state = server_state()
+    clock.advance(30)
+    _run_sample(mgr)  # t0+180: r 封 z2
+    _flush(mod)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    blk = [b for b in parsed.blocks if b.start_epoch == int(t0 + 30)][0]  # 块 [z1, z2, r](块 A 是此前 r)
+    file_slots = v4_block_slots(blk)
+    assert tuple(tail_slots) == file_slots[2:5]  # 快照(开放游程段) == 落盘重算(恒等口径)
+
+
+def test_w5_live_tail_no_buffer_interval_contract(tmp_path, monkeypatch):
+    """无块时活尾 interval_s 取当前生效采样间隔(LiveTail 契约)—— _publish_live_tail_63"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = _idle_state()
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # 首轮空闲: 开放 z 游程、无任何记录(无缓冲)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert not tail.block_open and tail.open_run is not None
+    assert tail.interval_s == 30.0  # 契约: 无块取生效间隔(非退化 1)
+    slots = v4_live_tail_slots(tail)
+    assert slots[0].dt_s == 30.0  # 单槽 dt_s = interval(非 1)
+    assert slots[0].ts == float(int(tail.open_run.start))
+
+
+def test_w5_counter_reset_audit_logs(tmp_path, monkeypatch):
+    """计数器重置审计面: 增量重置 INFO 带系列键+方向(下载/上传)+ 强制关块重立基线 INFO
+    —— sample_series_14/15/22/26/27/34 / _close_block_and_reopen_1 / _append_record_66/71"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    tor = active_torrent("HASH9")
+    seed_store(mgr, [tor])
+    mgr.store.server_state = _idle_state()  # 全局保持空闲(隔离单种面)
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # r(totals 5M/3M)
+    tor.downloaded, tor.uploaded = 1000, 500  # 计数器回落(两方向同时)
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
+        clock.advance(30)
+        _run_sample(mgr)
+    assert "torrent:HASH9 下载累计计数器回落" in cap.text  # 键+方向丢真/乱码在此断言破
+    assert "torrent:HASH9 上传累计计数器回落" in cap.text
+    assert "强制关块重立基线" in cap.text  # 关块审计 INFO 丢失在此断言破
+
+
+def test_w5_latest_mirror_fields_complete(tmp_path, monkeypatch):
+    """latest 排障镜像字段契约: ts/up_total/up_session 全真(含 null 点 ts)——
+    sample_series_43/47/49 / _touch_null_run_2"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    t0 = clock.now
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)
+    pt = mod.latest[GLOBAL_SERIES_KEY]
+    assert pt.ts == t0 and pt.up_total == 20_000_000 and pt.up_session == 2_000_000
+    assert pt.dl_total == 10_000_000 and pt.dl_session == 1_000_000
+    mgr.store.server_state = server_state(alltime_dl=None)  # 关键字段缺失 -> null 点
+    clock.advance(30)
+    _run_sample(mgr)
+    null_pt = mod.latest[GLOBAL_SERIES_KEY]
+    assert null_pt.ts == t0 + 30  # null 点时刻不失真
+    assert null_pt.dl_rate is None and null_pt.dl_total is None
+
+
+def test_w5_init_sentinels_and_disabled_recovery(tmp_path):
+    """恢复哨兵契约(「None = 未启用/未恢复」)+ 未启用零恢复零目录 ——
+    __init___23/24 / _recover_aggregates_2"""
+    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=False))
+    mod = mgr.host.get("qb_traffic")
+    assert mod.recovery_reads is None and mod.recovery_stats is None  # 哨兵初值
+    mod.start(mgr.ctx, dry_run=False)
+    assert mod.recovery_reads is None and mod.recovery_stats is None  # 关闭态: 恢复不跑
+    assert not (tmp_path / "qb-traffic-v4").exists()  # 未启用零文件零目录
+    mgr2 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True))  # 反向对照: 启用态恢复落属性
+    mod2 = mgr2.host.get("qb_traffic")
+    mod2.start(mgr2.ctx, dry_run=False)
+    assert mod2.recovery_reads == {} and isinstance(mod2.recovery_stats, dict)
+
+
+def test_w5_pending_agg_rows_day_partition(tmp_path):
+    """活尾日行跨日分片(纯函数探针): 昨日残值发布昨日日行 / 今日 partial 提日且
+    前一日已封口小时不并入 —— _pending_agg_rows_27/34/37"""
+    now = _w5_ts(2026, 6, 2, 0, 10, 0)
+    y_day, y_hour = int(_w5_ts(2026, 6, 1, 0, 0, 0)), int(_w5_ts(2026, 6, 1, 10, 0, 0))
+    t_day = int(_w5_ts(2026, 6, 2, 0, 0, 0))
+    y_row = AggRow("hour", y_hour, 100, 200, 50, 80, 1000, 2000, 3600)
+    # 场景 a: 昨日残值且无今日合成段 -> 昨日日行照常发布(累计器+残值)
+    agg_a = ts_mod.SeriesAgg(day_epoch=y_day, day_hours=[y_row])
+    rows_a = ts_mod._pending_agg_rows(agg_a, None, now)
+    assert any(r.kind == "day" and r.epoch == y_day for r in rows_a)
+    # 场景 b: 今日 pending partial + day_epoch 停昨日 -> 提日到今日, 昨日已封口小时不并入
+    agg_b = ts_mod.SeriesAgg(day_epoch=y_day, day_hours=[y_row])
+    agg_b.pending[t_day] = [V4HourSample(100, 50, 1000, 2000, 60.0)]
+    rows_b = ts_mod._pending_agg_rows(agg_b, None, now)
+    day_rows = [r for r in rows_b if r.kind == "day"]
+    assert len(day_rows) == 1 and day_rows[0].epoch == t_day  # 提日(不出 None epoch 空日行)
+    assert day_rows[0].cov_s == 60  # 只含今日 partial(昨日 3600s 不并入)
+
+
+def test_w5_pending_agg_rows_month_partition(tmp_path):
+    """活尾月行归档(纯函数探针): day 部分行并入当月月行 / 月界窗口上月月行照常发布
+    —— _pending_agg_rows_63 / _pending_agg_rows_55"""
+    now = _w5_ts(2026, 6, 2, 0, 10, 0)
+    june, may = int(_w5_ts(2026, 6, 1, 0, 0, 0)), int(_w5_ts(2026, 5, 1, 0, 0, 0))
+    t_day = int(_w5_ts(2026, 6, 2, 0, 0, 0))
+    june_day_row = AggRow("day", june, 100, 200, 50, 80, 1000, 2000, 3600)
+    # 场景 a: 当月已有封口 day 行 + 今日 pending hour -> 月行含今日 day 部分行
+    agg_a = ts_mod.SeriesAgg(month_epoch=june, month_days=[june_day_row])
+    agg_a.pending[t_day] = [V4HourSample(100, 50, 1000, 2000, 60.0)]
+    rows_a = ts_mod._pending_agg_rows(agg_a, None, now)
+    month_a = [r for r in rows_a if r.kind == "month"]
+    assert len(month_a) == 1 and month_a[0].epoch == june
+    assert month_a[0].cov_s == 3660  # 3600(已封 day) + 60(今日 day 部分行并入)
+    # 场景 b: 月界窗口: month_epoch 停上月 -> 上月月行照常发布(本月日行不混入)
+    may_day_row = AggRow("day", int(_w5_ts(2026, 5, 15, 0, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600)
+    agg_b = ts_mod.SeriesAgg(month_epoch=may, month_days=[may_day_row])
+    agg_b.pending[t_day] = [V4HourSample(100, 50, 1000, 2000, 60.0)]
+    rows_b = ts_mod._pending_agg_rows(agg_b, None, now)
+    months_b = [r for r in rows_b if r.kind == "month"]
+    assert [r.epoch for r in months_b] == [may]  # 上月行在, 本月行不抢归档
+    assert months_b[0].cov_s == 3600  # 只含上月子行
+
+
+def test_w5_recover_single_month_row_no_reappend(tmp_path, monkeypatch):
+    """恢复水位幂等: 恰 1 个月行恢复不崩(运营进入第二月常态)且已有月不重 append
+    —— _recover_series_22/23 / 19/20/114"""
+    month_row = AggRow("month", int(_w5_ts(2026, 6, 1, 0, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600)
+    day_row = AggRow("day", int(_w5_ts(2026, 6, 15, 0, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600)
+    hour_row = AggRow("hour", int(_w5_ts(2026, 6, 15, 10, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600)
+    st = TrafficV4Store(str(tmp_path))
+    st.append_agg_rows(GLOBAL_SERIES_KEY, (hour_row, day_row, month_row))
+    text = _agg_text(tmp_path, GLOBAL_SERIES_KEY)
+    clock = _Clock(now=_w5_ts(2026, 7, 2, 12, 0, 0))
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock, rollup_window=1000000 * 86400.0)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)  # 恰 1 个月行: 变异(months[+1]/[-2])在此 IndexError
+    assert _agg_text(tmp_path, GLOBAL_SERIES_KEY) == text  # 水位幂等: 零追加(月水位不丢)
+    assert mod.recovery_reads[GLOBAL_SERIES_KEY]["day_dates"] == ()
+
+
+def test_w5_recover_midday_restart_catchup_and_open_hour(tmp_path, monkeypatch):
+    """午间重启恢复综合守阵: 水位前小时不重算不截断 / 完结小时补算 / 开放小时重建 pending
+    / 当日累计器重建且当日不出补算行 —— _recover_series_81/93 / _catch_up_level_11/18"""
+    now = _w5_ts(2026, 6, 3, 11, 50, 30)
+    wm_hour = int(_w5_ts(2026, 6, 2, 10, 0, 0))
+    st = TrafficV4Store(str(tmp_path))
+    st.append_agg_rows(
+        GLOBAL_SERIES_KEY,
+        (
+            AggRow("hour", wm_hour, 100, 200, 50, 80, 1000, 2000, 3600),
+            AggRow("day", int(_w5_ts(2026, 6, 2, 0, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600),
+        ),
+    )
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        "2026-06-02",
+        (int(_w5_ts(2026, 6, 2, 9, 0, 10)), 30),
+        (V4Sample(100, 50, 1000, 2000), V4Sample(100, 50, 1100, 2100)),
+        (1000, 2000),
+    )  # 水位前小时(09:00 <= wm 10:00): 不重算
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        "2026-06-03",
+        (int(_w5_ts(2026, 6, 3, 8, 0, 10)), 30),
+        (V4Sample(100, 50, 1200, 2200), V4Sample(100, 50, 1300, 2300)),
+        (1200, 2200),
+    )  # 今日已完结小时 08:00: 补算
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        "2026-06-03",
+        (int(_w5_ts(2026, 6, 3, 11, 30, 10)), 30),
+        (V4Sample(100, 50, 3000, 4000), V4Sample(100, 50, 3100, 4100)),
+        (3000, 4000),
+    )  # 今日开放小时 11:00: pending 重建
+    clock = _Clock(now=now)
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, GLOBAL_SERIES_KEY))
+    assert [h.epoch for h in parsed.hours] == [wm_hour, int(_w5_ts(2026, 6, 3, 8, 0, 0))]  # 补算恰 1 小时
+    assert [d.epoch for d in parsed.days] == [int(_w5_ts(2026, 6, 2, 0, 0, 0))]  # 当日不出补算日行
+    assert mod.recovery_stats["hours"] == 1
+    h11 = int(_w5_ts(2026, 6, 3, 11, 0, 0))
+    pending = mod._agg_states[GLOBAL_SERIES_KEY].pending[h11]
+    assert len(pending) == 1 and pending[0].dt_s == 30  # 开放小时数据保留
+    assert mod._agg_states[GLOBAL_SERIES_KEY].day_epoch == int(_w5_ts(2026, 6, 3, 0, 0, 0))  # 当日累计器重建
+    clock.advance(30)
+    mgr.store.server_state = server_state()
+    _run_sample(mgr)  # 恢复后首轮采样不崩(pending=None 变异在 publish 处 TypeError)
+
+
+def test_w5_ingest_acc_same_day_multi_hour(tmp_path, monkeypatch):
+    """day 累计器同日多 hour 追加(常态每日): 两个完结小时逐级并入, 日行 cov 全量
+    —— _ingest_acc_10"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    key = GLOBAL_SERIES_KEY
+    h1 = int(clock.now) // HOUR_SECONDS * HOUR_SECONDS
+    h2 = h1 + HOUR_SECONDS
+    agg = mod._agg_state(key)
+    agg.pending[h1] = [V4HourSample(100, 50, 1000, 2000, 1800.0)]
+    agg.pending[h2] = [V4HourSample(80, 40, 1100, 2100, 1800.0)]
+    mod._agg_flush_series(key, h2 + 3610)  # 两个完结小时封口 -> day 累计器
+    assert len(agg.day_hours) == 2  # 同日追加(第二 hour 不被丢)
+    assert agg.day_epoch == v4_day_epoch(h1)
+    mod._agg_flush_series(key, h1 + 90000)  # 翻日: 日行落盘
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, key))
+    assert [h.epoch for h in parsed.hours] == [h1, h2]
+    assert len(parsed.days) == 1 and parsed.days[0].cov_s == 3600  # 日行 cov = 两 hour 全量
+    assert parsed.days[0].dl_avg == 90  # 逐级 cov 加权 (100*1800+80*1800)/3600
+
+
+def test_w5_day_reseal_merges_into_month(tmp_path):
+    """day 重封月级合流(docstring 明文, 2026-10-13 真机 bug 形态): 同 epoch 迟到补记再封
+    落批为合流行(cov 全量)—— _agg_ingest_day_3"""
+    d = int(_w5_ts(2026, 6, 15, 0, 0, 0))
+    full = AggRow("day", d, 100, 200, 50, 80, 1000, 2000, 86400)
+    partial = AggRow("day", d, 500, 700, 300, 400, 1500, 2500, 60)
+    agg = ts_mod.SeriesAgg(month_epoch=v4_month_epoch(d), month_days=[full])
+    rows_out = []
+    TrafficSampleModule._agg_ingest_day(agg, partial, rows_out)
+    assert rows_out[0].cov_s == 86400  # 合流行(非残余 60)
+    assert rows_out[0].dl_total == 1500  # totals 取后封行
+    assert len(agg.month_days) == 1 and agg.month_days[0].cov_s == 86400  # 月累计器持合流行
+
+
+def test_w5_credit_day_file_null_slots_then_raw_credited(tmp_path):
+    """离线恢复逐槽记账: n 槽(null 期)不贡献但**不截断**其后槽位入账 ——
+    _agg_credit_day_file_52(continue->break; 断连恢复常态)"""
+    h0 = int(1_700_000_000) // HOUR_SECONDS * HOUR_SECONDS
+    start = h0 + 600
+    blk = V4Block(
+        start,
+        30,
+        1000,
+        2000,
+        (V4Sample(100, 50, 1000, 2000), V4NullRun(2), V4Sample(100, 50, 1000, 2000), V4Sample(100, 50, 1000, 2000)),
+    )
+    pending = {}
+    TrafficSampleModule._agg_credit_day_file(pending, parse_v4_day_text(format_v4_day_text("global", (blk, ))), None)
+    samples = pending[h0]
+    assert [round(s.dt_s, 6) for s in samples] == [30.0, 30.0]  # n 前只首区间 + n 后 r-r 区间
+    assert all(s.dl_rate == 100 for s in samples)
+
+
+def test_w5_credit_day_file_z_tail_end_anchor_cross_file(tmp_path, monkeypatch):
+    """恢复跨天文件结算: z 尾槽上下文取**末端摊配值**(非开启快照)且跨文件连续边界
+    照常入账(00:00 边界信用不丢)—— _agg_credit_day_file_64 / _recover_series_57"""
+    st = TrafficV4Store(str(tmp_path))
+    st.append_agg_rows(
+        GLOBAL_SERIES_KEY, (AggRow("hour", int(_w5_ts(2026, 6, 1, 10, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600), )
+    )
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        "2026-06-01",
+        (int(_w5_ts(2026, 6, 1, 23, 58, 30)), 30),
+        (V4ZeroRun(3, 1000, 2000, None, 1300, 2300), ),
+        (1000, 2000),
+    )  # 23:58:30..23:59:30(3 槽), 末端摊配 1300/2300
+    st.append_records(
+        GLOBAL_SERIES_KEY,
+        "2026-06-02",
+        (int(_w5_ts(2026, 6, 2, 0, 0, 0)), 30),
+        (V4Sample(100, 50, 1400, 2400), ),
+        (1400, 2400),
+    )  # 次日 00:00:00(跨文件连续边界 gap 30s)
+    clock = _Clock(now=_w5_ts(2026, 6, 2, 12, 0, 0))
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    parsed = parse_v4_agg_text(_agg_text(tmp_path, GLOBAL_SERIES_KEY))
+    assert [h.epoch for h in parsed.hours] == [int(_w5_ts(2026, 6, 1, 10, 0, 0)), int(_w5_ts(2026, 6, 1, 23, 0, 0))]
+    tail_hour = parsed.hours[1]
+    assert tail_hour.cov_s == 90  # 游程内 2 区间 + 跨文件边界 1 区间(变异断链在此 60)
+    assert (tail_hour.dl_total, tail_hour.up_total) == (1300, 2300)  # 末端摊配值(变异退化开启快照在此 1000/2000)
+    assert tail_hour.dl_avg == 0  # z 游程速率恒 0
+
+
+def test_w5_evict_audit_log(tmp_path, monkeypatch):
+    """按龄淘汰审计 INFO(删文件动作唯一留痕)—— _maybe_evict_32"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock, rollup_window=7 * 86400.0)
+    conf = mgr.config.qb_traffic
+    st = TrafficV4Store(str(tmp_path))
+    old = v4_epoch_date_str(clock.now - 30 * 86400)
+    os.makedirs(os.path.dirname(st.series_day_path("torrent:OLD", old)), exist_ok=True)
+    with open(st.series_day_path("torrent:OLD", old), "w", encoding="utf-8", newline="\n") as f:
+        f.write(f"{HEADER_LINE_V4}\nkey,torrent:OLD\n")
+    mod = mgr.host.get("qb_traffic")
+    mod._persistence_on = True
+    mod._last_evict_check = None
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
+        mod._maybe_evict(conf, clock.now)
+    assert "按龄淘汰" in cap.text  # 淘汰留痕(变异 logger.info(None) 在此破)
+    assert not os.path.exists(st.series_day_path("torrent:OLD", old))
+
+
+def test_w5_recover_oserror_warning_carries_key(tmp_path, monkeypatch):
+    """聚合恢复失败 WARNING(排障归因面): 内容含系列键与异常 —— _recover_aggregates_37"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    _write_day_file(tmp_path, GLOBAL_SERIES_KEY, v4_epoch_date_str(clock.now))
+    monkeypatch.setattr(TrafficV4Store, "read_agg", lambda self, key: (_ for _ in ()).throw(OSError("disk dead")))
+    mod = mgr.host.get("qb_traffic")
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
+        mod.start(mgr.ctx, dry_run=False)
+    assert "聚合恢复失败" in cap.text and "global" in cap.text and "disk dead" in cap.text
+
+
+def test_w5_recovery_stats_elapsed_bounded(tmp_path, monkeypatch):
+    """恢复埋点 elapsed_s 有界(机检指标与「耗时 Ns」留痕不失真)—— _recover_aggregates_39"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    mod.start(mgr.ctx, dry_run=False)
+    assert 0 <= mod.recovery_stats["elapsed_s"] < 5  # 变异(-> +t0)在此 ~3.4e9
+
+
+def test_w5_agg_error_log_type_and_rewarn_after_recovery(tmp_path, monkeypatch):
+    """聚合封口失败善后: ERROR 含原异常类型名 + 恢复健康后再错重新告警 ——
+    _agg_flush_all_7 / _agg_reset_after_error_4 / _agg_flush_all_10"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mod = mgr.host.get("qb_traffic")
+    orig = TrafficSampleModule._agg_flush_series
+    state = {"boom": True}
+
+    def flaky(self, key, now):
+        if state["boom"]:
+            raise RuntimeError("agg boom")
+        return orig(self, key, now)
+
+    monkeypatch.setattr(TrafficSampleModule, "_agg_flush_series", flaky)
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap1:
+        mod._agg_states[GLOBAL_SERIES_KEY] = ts_mod.SeriesAgg()
+        mod._agg_flush_all(clock.now)
+    assert sum(1 for r in cap1.records if r.levelno == logging.ERROR) == 1
+    assert "RuntimeError" in cap1.text  # 异常类型不失真(变异记 NoneType 在此破)
+    state["boom"] = False
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap2:
+        mod._agg_states[GLOBAL_SERIES_KEY] = ts_mod.SeriesAgg()
+        mod._agg_flush_all(clock.now)  # 恢复健康: 零 ERROR 且记忆清除
+    assert sum(1 for r in cap2.records if r.levelno == logging.ERROR) == 0
+    state["boom"] = True
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap3:
+        mod._agg_flush_all(clock.now)  # 再错: 重新告警一次
+    assert sum(1 for r in cap3.records if r.levelno == logging.ERROR) == 1
+
+
+def test_w5_recover_diag_watermark_bound_log(tmp_path, monkeypatch):
+    """恢复读集 >2 天诊断 INFO: 下界来源 = 水位日(非 fallback)且日期为读集首日 ——
+    _recover_series_67/69/71/72"""
+    base = _w5_ts(2026, 6, 10, 12, 0, 0)
+    clock = _Clock(now=base)
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock, rollup_window=30 * 86400.0)
+    st = TrafficV4Store(str(tmp_path))
+    st.append_agg_rows(
+        GLOBAL_SERIES_KEY, (AggRow("hour", int(_w5_ts(2026, 6, 5, 10, 0, 0)), 100, 200, 50, 80, 1000, 2000, 3600), )
+    )
+    for i in range(6):  # 6 个天文件(读集 >2: 诊断 INFO 触发)
+        _write_day_file(tmp_path, GLOBAL_SERIES_KEY, v4_epoch_date_str(base - i * 86400))
+    mod = mgr.host.get("qb_traffic")
+    with capture_logs("auto_qb.core.modules.traffic_sample_mod") as cap:
+        mod.start(mgr.ctx, dry_run=False)
+    assert "水位日 2026-06-05" in cap.text and "陈旧" in cap.text  # 来源=水位日(非 fallback)
