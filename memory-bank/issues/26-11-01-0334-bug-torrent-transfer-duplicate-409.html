@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底">
 <meta name="issue-summary" content="已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导">
 <title>转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0334-bug-torrent-transfer-duplicate-409</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 03:34</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -155,11 +155,14 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 03:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 — 认领修复，状态 <strong>In Progress</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-01 仍复现 —— 锚点重跑（grep 现文件 <code>Conflict409Error</code> / <code>_looks_like_duplicate</code> / <code>_result_from_exception</code>）：<code>_result_from_exception</code>（现 186–192 行）的 409 分支（188 行）仅 <code>isinstance(exc, Conflict409Error) and _looks_like_duplicate(str(exc))</code> 命中才判 skipped，无探针兜底；对照 Mapping 分支 <code>_interpret_result</code>（162–178 行）在 173 行有 <code>probe_hash and self._hash_exists(probe_hash)</code> 兜底 —— 与取证一致，问题仍在。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（2026-11-01）：与建议修法一致（409 异常分支加探针兜底），实现上抽了共享私有 helper <code>_probe_duplicate</code> —— Mapping 分支 <code>_interpret_result</code>（<code>qb.py</code> 165–181 行）的原行内兜底与异常分支 <code>_result_from_exception</code>（190–202 行）都改走同一 helper（205–210 行），查重逻辑单点不漂移。判据顺序：409 且文案命中 needle → skipped；409 无文案（qB 5.2 形态，body 仅 <code>b'Conflict'</code>）→ 探针兜底：<code>probe_hash</code> 非空且 <code>_hash_exists</code> 查得 → skipped「目标已存在(添加被拒且目标查得同 hash)」，查不到（含查询故障，沿用 <code>_hash_exists</code> 的保守口径）才落 failed。模块 docstring 的「已存在判定」同步补第 3 条路。</p>
+    <p><strong>验证方式</strong>：新增 2 用例（<code>tests/test_transfer_adapters.py</code> 261/274 行：<code>test_qb_add_conflict409_plain_probe_hash_exists</code> 无文案 409 + 目标查得同 hash → SKIPPED；<code>test_qb_add_conflict409_plain_probe_hash_absent</code> 无文案 409 + 查无 → FAILED；全 mock 不联网），已登记进该文件头「## 测试计划」清单。</p>
+    <p><strong>测试数字</strong>（2026-11-01 实测）：<code>commands run test.one -- tests/test_transfer_adapters.py</code> 30 passed；<code>commands run test.quick</code> 全量 <strong>4355 passed, 2 skipped</strong>（68.86s），副作用台账越界 0 条。</p>
   </section>
 
   <footer>

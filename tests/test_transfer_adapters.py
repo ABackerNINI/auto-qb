@@ -18,6 +18,8 @@
 - test_qb_add_rejected_probe_hash_absent: 全部被拒 + 探针 hash 目标查无 -> FAILED
 - test_qb_add_rejected_without_probe: 全部被拒且无探针 hash -> FAILED(不查重)
 - test_qb_add_conflict409_duplicate: 抛 Conflict409Error 且文案含已存在 -> SKIPPED
+- test_qb_add_conflict409_plain_probe_hash_exists: 抛无文案 409(qB 5.2 形态) + 探针 hash 目标查得 -> SKIPPED(异常分支探针兜底)
+- test_qb_add_conflict409_plain_probe_hash_absent: 无文案 409 + 探针 hash 目标查无 -> FAILED
 - test_qb_add_connection_error_failed: 调用异常(网络) -> FAILED 态返回, 不上抛
 - test_qb_add_missing_save_path_fails: save_path 缺失 -> FAILED 且未发起 torrents_add
 - test_qb_add_empty_data_raises: data 空字节 -> TypeError(编程错误)
@@ -254,6 +256,30 @@ def test_qb_add_conflict409_duplicate(monkeypatch):
     adapter = _qb_adapter(monkeypatch, client)
     result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d"}, skip_check=False)
     assert result.status is AddStatus.SKIPPED
+
+
+def test_qb_add_conflict409_plain_probe_hash_exists(monkeypatch):
+    # qB 5.2 对重复 infohash 回无文案 409(body 仅 b'Conflict'): 异常分支与 Mapping
+    # 分支同一探针兜底 —— 查得同 hash 判已存在(跳过), 不再误报失败(issue 26-11-01-0334)
+    client = MagicMock()
+    client.torrents_add.side_effect = Conflict409Error("Conflict")
+    client.torrents_info.return_value = [{"hash": "ABC123"}]
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d", "infohash": "ABC123"}, skip_check=False)
+    assert result.status is AddStatus.SKIPPED
+    assert result.ok is True
+    assert result.infohash == "ABC123"
+
+
+def test_qb_add_conflict409_plain_probe_hash_absent(monkeypatch):
+    # 无文案 409 且目标查无同 hash: 查不到才落失败(保守口径, 保留源)
+    client = MagicMock()
+    client.torrents_add.side_effect = Conflict409Error("Conflict")
+    client.torrents_info.return_value = []
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d", "infohash": "ABC123"}, skip_check=False)
+    assert result.status is AddStatus.FAILED
+    assert result.ok is False
 
 
 def test_qb_add_connection_error_failed(monkeypatch):

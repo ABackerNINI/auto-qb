@@ -15,11 +15,14 @@ per-target 字段键 -> 目标参数映射(capabilities 单点, 键名单点 con
   super_seeding       -> 添加成功且 hash 可得时 torrents/setSuperSeeding 补一发
                          (torrents/add 无此参数; 不可得/失败只在 reason 注明, 不翻状态)
 
-已存在判定(计划 §03「目标已存在 -> 跳过」): 两条路 ——
-  1) 响应文本含已存在类文案(跨版本子串匹配, qB 文案随版本/语言漂移, 尽力而为);
+已存在判定(计划 §03「目标已存在 -> 跳过」): 三条路 ——
+  1) 响应/异常文本含已存在类文案(跨版本子串匹配, qB 文案随版本/语言漂移, 尽力而为);
   2) 响应为"全部被拒"且 fields["infohash"] 探针可得时, 到目标查一次同 hash 是否已在
      (单次 torrents_info)。添加被**受理**(Ok./success_count>0)时不再查重 —— 此时
      hash 已在可能是本次添加本身; 精确的添加前查重是 orchestrator(T3) 的预检职责。
+  3) 抛 Conflict409Error 且文案未命中 1) 的 needle 时, 同样走 2) 的探针兜底
+     (qB 5.2 对重复 infohash 回无文案 409, body 仅 b'Conflict', 见 issue
+     26-11-01-0334; 实测 2026-11-01 real-baselines/26-11-01-0244)。
 """
 from __future__ import annotations
 
@@ -170,8 +173,9 @@ class QbDownloaderAdapter(DownloaderAdapter):
             infohash = str(ids[0]) if ids else ""
             if failure > 0 and (success + pending) == 0:
                 # 全部被拒且响应不带原因: 有探针 hash 就到目标查一次同 hash
-                if probe_hash and self._hash_exists(probe_hash):
-                    return AddResult.skipped("目标已存在(添加被拒且目标查得同 hash)", infohash=probe_hash, ignored_fields=ignored)
+                skipped = self._probe_duplicate(probe_hash, ignored)
+                if skipped is not None:
+                    return skipped
                 return AddResult.failed(f"目标拒绝添加({detail})", infohash=infohash, ignored_fields=ignored)
             if (success + pending) > 0:
                 return AddResult.added(f"目标已受理({detail})", infohash=infohash, ignored_fields=ignored)
@@ -184,12 +188,27 @@ class QbDownloaderAdapter(DownloaderAdapter):
         return AddResult.failed(f"目标拒绝添加(响应: {text.strip() or '空响应'})", ignored_fields=ignored)
 
     def _result_from_exception(self, exc: Exception, probe_hash: str, ignored: tuple) -> AddResult:
-        """调用异常 -> 三态: 409 里夹带已存在文案 = 跳过; 其余一律失败(原因带异常原文)"""
-        if isinstance(exc, Conflict409Error) and _looks_like_duplicate(str(exc)):
-            return AddResult.skipped(f"目标已存在({exc})", infohash=probe_hash, ignored_fields=ignored)
+        """调用异常 -> 三态: 409 = 跳过或探针兜底(文案命中 needle / 探针查得同 hash),
+        其余一律失败(原因带异常原文)"""
+        if isinstance(exc, Conflict409Error):
+            if _looks_like_duplicate(str(exc)):
+                return AddResult.skipped(f"目标已存在({exc})", infohash=probe_hash, ignored_fields=ignored)
+            # qB 5.2 对重复 infohash 回无文案 409(body 仅 b'Conflict'): 与 Mapping
+            # 分支同一探针兜底, 查得同 hash = 已存在(跳过), 查不到才落失败
+            skipped = self._probe_duplicate(probe_hash, ignored)
+            if skipped is not None:
+                return skipped
         if isinstance(exc, LoginFailed):
             return AddResult.failed("目标登录失败(检查用户名/密码)", infohash=probe_hash, ignored_fields=ignored)
         return AddResult.failed(f"目标添加请求失败({exc})", infohash=probe_hash, ignored_fields=ignored)
+
+    def _probe_duplicate(self, probe_hash: str, ignored: tuple) -> Optional[AddResult]:
+        """探针查重兜底(两处复用: Mapping 分支 / 409 异常分支): 有探针 hash 且目标
+        查得同 hash -> skipped「目标已存在」; 无探针/查不到(含查询故障) -> None,
+        调用方继续按失败处理(与 _hash_exists 的保守口径一致)"""
+        if probe_hash and self._hash_exists(probe_hash):
+            return AddResult.skipped("目标已存在(添加被拒且目标查得同 hash)", infohash=probe_hash, ignored_fields=ignored)
+        return None
 
     def _hash_exists(self, infohash: str) -> bool:
         """目标是否已有同 hash 种子(单次 torrents_info; 查询失败按不存在处理 ——
