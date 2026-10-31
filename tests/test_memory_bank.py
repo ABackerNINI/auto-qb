@@ -130,6 +130,24 @@ memory-bank skill 的 `scripts/flip_status.py` / `bump_doc.py`, **进程内 impo
 - test_mutation_anchor_guard_is_green_on_current_kb: 蒸馏改版后的常驻锚零违规 (§07 一张记录表 + 一行式状态日志)
 - test_mutation_anchor_guard_flags_ledger_log_and_round_numbers: 台账字样 / 白名单外节 / 逐轮流水数字 / 状态日志超限逐类判红; 清白件零误报
 - test_mutation_anchor_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧
+
+kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 memory-bank skill 的
+`scripts/kb_tier.py`, **进程内 import**, tmp 夹具不碰真实 memory-bank/):
+
+- test_kb_tier_set_marks_and_fails_fast: set 插入为头部区第 4 行 (前三行零触碰) / 已有等
+  级行原地改值 / 同值幂等不写盘 / 非法等级与不存在文件与生成物·附件·库外路径 fail-fast /
+  头部区不足 4 行插在头部区末尾 / CRLF 文件插入行保持 \\r\\n
+- test_kb_tier_list_separates_unmarked: list 列出该等级全部文件 (行数/字符数); 未打标件
+  (无 `> 等级:` 行) 区分呈现 —— L0 视图全列待定件, 其它级只给一行汇总; 非法等级拒绝
+- test_kb_tier_migrate_dry_run_default_and_apply: migrate 默认 dry-run 零写盘; --apply 后
+  正文段逐字节搬 attachments/ (行数与 \\r\\n 计数与原文一致, 字节差只允许来自相对链接的
+  `../` 前缀; scheme/根相对/锚点链接不动), 主档留 `> 已外迁:` 指针且摘要判据单点仍在;
+  CRLF 文件整段搬后行尾形态不变; 迁后重跑跳过 (无正文段)
+- test_kb_tier_purge_gates_all_or_nothing: purge 默认 dry-run 不删; 非 L3 拒绝; 三闸门逐
+  条触发 —— ①无守阵且头部无「无需守阵」②全仓反向引用未清零 ③头部缺 `> 观察通过:` 标
+  记 —— 任一不过全体拒绝 (全或无, 删零个) 且 rc=1; 三闸门全过 + --apply 才真删
+- test_kb_tier_is_registered: kb.tier 已收录进 .commands/kb (收录协议 when/note 必填;
+  与 test_kb_status_and_bump_are_registered 同旨)
 - test_gen_all_declares_exactly_all_indexes: gen_all.py 的产出集合 == 库内全部 `_index.md`(生成物全集单点)
 - test_gen_all_check_is_green: gen_all.py `--check` 在当前库上绿 (磁盘 == 生成结果)
 - test_gen_all_list_matches_outputs: `--list` 声明的路径集合 == collect() 实际产出 (白名单不得多/少)
@@ -701,7 +719,7 @@ def test_kb_scripts_import_cleanly() -> None:
     for name in (
         "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
         "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording", "new_doc",
-        "wrap_session", "check_doc_templates", "flip_status", "bump_doc"
+        "wrap_session", "check_doc_templates", "flip_status", "bump_doc", "kb_tier"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -2184,3 +2202,295 @@ def test_checker_report_mutations_judged_red(tmp_path: Path) -> None:
         assert problems, f"突变「{name}」必须判红: {problems}"
         report.write_text(original, encoding="utf-8")
         assert checker.validate_file(report, "report") == [], f"还原「{name}」后必须复绿"
+
+
+# ---------------------------------------------------------------------------
+# kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534)
+#
+# 实现在 memory-bank skill 的 `scripts/kb_tier.py`, 本文件**进程内 import** (同 P2 口径);
+# 夹具全部在 tmp, 只读面不碰真实 memory-bank/。验收: 计划 §04 R0 表 —— 四动作 +
+# 守阵测试; 保守默认 = migrate / purge 高危动作默认 dry-run。
+# ---------------------------------------------------------------------------
+
+
+def _kb_tier():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import kb_tier
+
+    return kb_tier
+
+
+def _tier_fixture(tmp_path: Path) -> Path:
+    """kb.tier 夹具: 最小可跑的 pitfalls/git/ (只建 kb.tier 扫描的那一层)。"""
+    mb = tmp_path / "memory-bank"
+    (mb / "pitfalls" / "git").mkdir(parents=True)
+    return mb
+
+
+def _tier_pitfall(mb: Path, stem: str, crlf: bool = False) -> Path:
+    """标准坑档夹具: 三行头 + `### ` 条目正文 (含各类链接, 供 migrate 断言)。"""
+    body = (
+        f"# {stem}\n"
+        "\n"
+        "> 摘要: 判据单点一句话。\n"
+        "> 触发: git, sync\n"
+        "\n"
+        "### 旧叙事\n"
+        "\n"
+        "- 判别: 见 [运行口径](../../testing/run.md) 与 [同目录](refs.md)。\n"
+        "- 外链: [文档](https://example.com/a.md) 与 [锚点](#sec) 原样。\n"
+        "- 叙事: 事故时间线。\n"
+    )
+    if crlf:
+        body = body.replace("\n", "\r\n")
+    path = mb / "pitfalls" / "git" / f"{stem}.md"
+    path.write_bytes(body.encode("utf-8"))
+    return path
+
+
+def test_kb_tier_set_marks_and_fails_fast(tmp_path: Path) -> None:
+    """kb.tier set: 插入为头部区第 4 行 / 原地改值 / 幂等 / 非法值与坏路径 fail-fast;
+    头部区不足 4 行插在头部区末尾; CRLF 文件插入行保持 CRLF 行尾。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    tier = _kb_tier()
+    mb = _tier_fixture(tmp_path)
+    pit = _tier_pitfall(mb, "sync-pull")
+
+    def run(*argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    # --- 插入为头部区第 4 行, 前三行零触碰 (mb 相对路径形态)
+    rc, out, err = run("set", "pitfalls/git/sync-pull.md", "L2")
+    assert rc == 0, err
+    lines = pit.read_bytes().decode("utf-8").splitlines(keepends=True)
+    assert lines[3] == "> 等级: L2\n", lines[:5]
+    assert lines[0] == "# sync-pull\n" and lines[2].startswith("> 摘要:"), "前三行零触碰"
+
+    # --- 已有等级行 → 原地改值 (行数不变, 其它行不动)
+    rc, out, err = run("set", "pitfalls/git/sync-pull.md", "L0")
+    assert rc == 0 and "L2 -> L0" in out.replace("→", "->"), out
+    lines2 = pit.read_bytes().decode("utf-8").splitlines(keepends=True)
+    assert len(lines2) == len(lines) and lines2[3] == "> 等级: L0\n" and lines2[4] == lines[4]
+
+    # --- 同值幂等: 不写盘
+    before = pit.read_bytes()
+    rc, out, err = run("set", "pitfalls/git/sync-pull.md", "L0")
+    assert rc == 0 and "幂等" in out, out
+    assert pit.read_bytes() == before, "幂等打标不得改文件"
+
+    # --- 非法等级 / 不存在文件 / 生成物 全 fail-fast (拒绝时不得改文件)
+    rc, _, err = run("set", "pitfalls/git/sync-pull.md", "L9")
+    assert rc == 1 and "词表" in err, f"非法等级必须拒绝: {err}"
+    assert pit.read_bytes() == before, "拒绝时不得改文件"
+    rc, _, err = run("set", "pitfalls/git/nope.md", "L2")
+    assert rc == 1 and "文件不存在" in err, err
+    (mb / "pitfalls" / "git" / "_index.md").write_text("# idx\n", encoding="utf-8")
+    rc, _, err = run("set", "pitfalls/git/_index.md", "L2")
+    assert rc == 1 and "生成物" in err, f"生成物必须拒绝: {err}"
+
+    # --- 头部区不足 4 行 → 插在头部区末尾 (首个 ## 之前)
+    short = mb / "pitfalls" / "git" / "short-head.md"
+    short.write_text("# 短头\n\n## 正文\n", encoding="utf-8", newline="\n")
+    rc, _, err = run("set", "pitfalls/git/short-head.md", "L3")
+    assert rc == 0, err
+    assert short.read_text(encoding="utf-8").splitlines() == ["# 短头", "", "> 等级: L3", "## 正文"]
+
+    # --- CRLF 文件: 插入行保持 \r\n (写盘形态不漂移)
+    crlf_pit = _tier_pitfall(mb, "crlf-file", crlf=True)
+    rc, _, err = run("set", "pitfalls/git/crlf-file.md", "L1")
+    assert rc == 0, err
+    assert "> 等级: L1\r\n" in crlf_pit.read_bytes().decode("utf-8")
+
+
+def test_kb_tier_list_separates_unmarked(tmp_path: Path) -> None:
+    """kb.tier list: 列出该等级全部文件 (行数/字符数); 未打标件区分呈现 ——
+    L0 视图全列待定件, 其它级只给一行汇总; 非法等级拒绝。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    tier = _kb_tier()
+    mb = _tier_fixture(tmp_path)
+    _tier_pitfall(mb, "alpha")
+    _tier_pitfall(mb, "beta")
+    _tier_pitfall(mb, "gamma")
+
+    def run(*argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    rc, _, err = run("set", "pitfalls/git/alpha.md", "L3")
+    assert rc == 0, err
+    rc, _, err = run("set", "pitfalls/git/beta.md", "L2")
+    assert rc == 0, err
+
+    # --- L3 视图: 只列 alpha; 未打标件给一行汇总 (不逐件刷屏)
+    rc, out, err = run("list", "--level", "L3")
+    assert rc == 0, err
+    assert "pitfalls/git/alpha.md" in out and "1 件" in out, out
+    assert "行" in out and "字符" in out, "条数/字符数必须呈现"
+    assert "pitfalls/git/beta.md" not in out and "pitfalls/git/gamma.md" not in out, out
+    assert "未打标 1 件" in out, "其它级视图未打标件只给汇总行"
+
+    # --- L0 视图: 未打标件逐件列出 (判据缺失 = 待定, 与已打标 L0 区分)
+    rc, out, err = run("list", "--level", "L0")
+    assert rc == 0, err
+    assert "pitfalls/git/gamma.md" in out and "待定" in out, f"L0 视图必须全列未打标件: {out}"
+
+    # --- 非法等级拒绝
+    rc, _, err = run("list", "--level", "L9")
+    assert rc == 1 and "词表" in err, err
+
+
+def test_kb_tier_migrate_dry_run_default_and_apply(tmp_path: Path) -> None:
+    """kb.tier migrate: 默认 dry-run 零写盘; --apply 后正文段逐字节搬 attachments/
+    (行数与 \r\n 计数与原文一致, 字节差只允许来自相对链接的 ../ 前缀), 主档留指针且
+    摘要判据单点仍在; CRLF 文件行尾形态不变; 迁后重跑跳过 (无正文段)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    tier = _kb_tier()
+    mb = _tier_fixture(tmp_path)
+    pit = _tier_pitfall(mb, "old-story")
+    crlf_pit = _tier_pitfall(mb, "old-crlf", crlf=True)
+
+    def run(*argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    for name in ("old-story", "old-crlf"):
+        rc, _, err = run("set", f"pitfalls/git/{name}.md", "L2")
+        assert rc == 0, err
+
+    original = pit.read_bytes()
+    orig_text = original.decode("utf-8")
+    orig_body = orig_text[orig_text.index("### "):]
+    crlf_original = crlf_pit.read_bytes()
+    crlf_body = crlf_original.decode("utf-8")[crlf_original.decode("utf-8").index("### "):]
+
+    # --- 默认 dry-run: 只打印, 零写盘
+    rc, out, err = run("migrate", "--level", "L2")
+    assert rc == 0 and "dry-run" in out, out
+    assert not (mb / "pitfalls" / "git" / "attachments").exists(), "dry-run 不得建附件目录"
+    assert pit.read_bytes() == original and crlf_pit.read_bytes() == crlf_original
+
+    # --- --apply: 附件 = 原正文段逐字节 + 相对链接 ../ 前缀 (唯一允许的字节差)
+    rc, out, err = run("migrate", "--level", "L2", "--apply")
+    assert rc == 0, err
+    att_dir = mb / "pitfalls" / "git" / "attachments"
+    att = next(att_dir.glob("old-story-migrated-*.md"))
+    att_bytes = att.read_bytes()
+    att_text = att_bytes.decode("utf-8")
+    assert "(../../../testing/run.md)" in att_text, "已带 ../ 的相对链接要再加一层"
+    assert "(../refs.md)" in att_text, "同目录相对链接加一层 ../"
+    assert "(https://example.com/a.md)" in att_text, "scheme 绝对链接不动"
+    assert "(#sec)" in att_text, "纯锚点不动"
+    # 行尾形态校验: 行数与 \r\n 计数与原文一致; 字节差恰为两处 ../ 前缀 (各 3 字节)
+    assert att_text.count("\r\n") == orig_body.count("\r\n")
+    assert att_text.count("\n") - att_text.count("\r\n") == orig_body.count("\n") - orig_body.count("\r\n")
+    assert len(att_bytes) == len(orig_body.encode("utf-8")) + 6, "字节差必须恰为两处 ../ 前缀"
+    assert "事故时间线" in att_text and "### 旧叙事" in att_text, "叙事段原样在附件"
+
+    # --- CRLF 文件: 整段搬后行尾形态不变
+    crlf_att = next(att_dir.glob("old-crlf-migrated-*.md"))
+    crlf_att_text = crlf_att.read_bytes().decode("utf-8")
+    assert "\r\n" in crlf_att_text and crlf_att_text.count("\r\n") == crlf_body.count("\r\n")
+
+    # --- 主档: 指针行 + 摘要判据单点仍在, 叙事已迁出
+    main_text = pit.read_bytes().decode("utf-8")
+    assert "> 已外迁:" in main_text and f"]({att.name})" in main_text, "指针指向附件相对路径"
+    assert "判据单点一句话" in main_text, "摘要判据单点必须留在主档可读位置"
+    assert "事故时间线" not in main_text, "叙事段应已迁出"
+
+    # --- 迁后重跑: 主档已无正文段, 跳过不报错
+    rc, out, err = run("migrate", "--level", "L2")
+    assert rc == 0 and "无正文段" in out, out
+
+
+def test_kb_tier_purge_gates_all_or_nothing(tmp_path: Path) -> None:
+    """kb.tier purge: 默认 dry-run 不删; 非 L3 拒绝; 三闸门逐条触发 —— ①无守阵且
+    头部无「无需守阵」②全仓反向引用未清零 ③头部缺 `> 观察通过:` 标记 —— 任一不过
+    全体拒绝 (全或无) 且 rc=1; 三闸门全过 + --apply 才真删。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    tier = _kb_tier()
+    mb = _tier_fixture(tmp_path)
+    names = ("g1-ok", "g2-backref", "g3-no-observe", "g4-no-guard", "g5-no-guard-ok")
+    paths = {n: _tier_pitfall(mb, n) for n in names}
+
+    def run(*argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    for n in names:
+        rc, _, err = run("set", f"pitfalls/git/{n}.md", "L3")
+        assert rc == 0, err
+
+    def _head_add(path: Path, line: str) -> None:
+        """头部区等级行后加一行 (夹具的观察通过 / 无需守阵标记)。"""
+        text = path.read_bytes().decode("utf-8")
+        path.write_bytes(text.replace("> 等级: L3\n", f"> 等级: L3\n{line}\n", 1).encode("utf-8"))
+
+    # g1: 守阵 + 观察通过 (应可删); g2: 守阵 + 观察通过但被引用 (闸门2);
+    # g3: 守阵但缺观察通过 (闸门3); g4: 无守阵 (闸门1); g5: 头部「无需守阵」+ 观察通过
+    _head_add(paths["g1-ok"], "> 观察通过: 2026-10-30")
+    _head_add(paths["g2-backref"], "> 观察通过: 2026-10-30")
+    _head_add(paths["g5-no-guard-ok"], "> 无需守阵: 判据进的是文档不是代码")
+    _head_add(paths["g5-no-guard-ok"], "> 观察通过: 2026-10-30")
+    for n in ("g1-ok", "g2-backref", "g3-no-observe"):
+        text = paths[n].read_bytes().decode("utf-8")
+        paths[n].write_bytes(
+            text.replace("### 旧叙事\n", "### 旧叙事\n\n- 处置: 守阵: `tests/test_x.py::test_y`\n", 1).encode("utf-8")
+        )
+    (mb / "README.md").write_text("引用: 见 [g2](pitfalls/git/g2-backref.md)。\n", encoding="utf-8")
+
+    def exists(n: str) -> bool:
+        return paths[n].is_file()
+
+    # --- 非 L3 拒绝 (L0-L2 是保留/降噪/外迁, 不是删除面)
+    rc, _, err = run("purge", "--level", "L2")
+    assert rc == 1 and "只接受" in err, err
+
+    # --- 默认 dry-run: 闸门逐条报告, 一个都不删
+    rc, out, err = run("purge", "--level", "L3")
+    assert all(exists(n) for n in names), "dry-run 不得删文件"
+    assert "闸门2" in out and "g2-backref" in out, out
+    assert "闸门3" in out and "g3-no-observe" in out, out
+    assert "闸门1" in out and "g4-no-guard" in out, out
+
+    # --- --apply 但有闸门未过: 全或无, 连三闸门全过的 g1/g5 也不删, rc=1
+    rc, out, err = run("purge", "--level", "L3", "--apply")
+    assert rc == 1, f"存在闸门未过必须拒绝: {out}"
+    assert all(exists(n) for n in names), "全或无: 一个都不许删"
+    assert "闸门1" in out and "闸门2" in out and "闸门3" in out, out
+
+    # --- 处置: 清反向引用 + 补观察通过 + g4 补「无需守阵」→ 三闸门全过, 真删
+    (mb / "README.md").unlink()
+    _head_add(paths["g3-no-observe"], "> 观察通过: 2026-10-30")
+    _head_add(paths["g4-no-guard"], "> 无需守阵: 判据进的是文档不是代码")
+    _head_add(paths["g4-no-guard"], "> 观察通过: 2026-10-30")
+    rc, out, err = run("purge", "--level", "L3", "--apply")
+    assert rc == 0, f"三闸门全过必须真删: {out}\n{err}"
+    assert not any(exists(n) for n in names), "全部删除"
+
+
+def test_kb_tier_is_registered() -> None:
+    """kb.tier 已收录进 .commands/kb (收录协议: 不接线 = 没人跑; when 与 note 必填)。"""
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    body = re.search(r'^\[tasks\."kb\.tier"\]\n(.*?)(?=^\[|\Z)', kb_cfg, re.S | re.M)
+    assert body, "kb.tier 未收录进 .commands/kb (收录协议)"
+    assert "kb_tier.py" in body.group(1), "kb.tier 的 run 必须指到 kb_tier.py"
+    assert 'when    = "' in body.group(1), "kb.tier 缺 when (收录协议必填)"
+    assert 'note    = "' in body.group(1), "kb.tier 缺 note (收录协议必填)"
