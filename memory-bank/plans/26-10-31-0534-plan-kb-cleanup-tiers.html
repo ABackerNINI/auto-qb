@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>知识库过时信息分级清理 (R0-R4)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="kb-cleanup-tiers">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-10-31-0534">
+<meta name="doc-updated" content="26-10-31-0538">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: kb-cleanup-tiers</div>
+<h1>知识库过时信息分级清理 (R0-R4)</h1>
+<p class="lede">把 memory-bank 的条目按「还有没有用」分成 L0–L3 四级，逐级降噪 / 外迁 / 待删，用新命令 <code>kb.tier</code> 承载批量动作；分五轮推进 —— 先建工具、再试点、再铺开，本计划内<span class="wr">不删除任何文件</span>。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-0534 · <b>doc-updated</b> 26-10-31-0538 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户 2026-10-31 指令(过时信息清理 + 分级 + 复发榜) · grilling 三轮拍板(D1–D16) · 全库只读勘查(pitfalls / conventions / tasks / plans / testing / issues / reports / activeContext)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>目标</h3>
+<p>降低 agent 读库的 token 消耗与噪音、消除自相矛盾的过时约束，同时<span class="good">不丢历史</span> —— 「删掉」和「不用每次都读」是两件事，本计划只做后者，前者留到观察期之后单独授权。</p>
+
+<h3>设计主轴</h3>
+<p>按<b>价值维度</b>分级，而不是按时间一刀切。理由：本库 37 天产出 710 条基线切片（≈19 条/天）、124 条活动切片（≈3.9 条/天），日历时间与「有没有被验证过」几乎不相关 —— 一条 9 月的坑档可能仍是唯一判据单点，一条上周的档案可能已经完全失效。</p>
+
+<h3>设计底线 / 不变量</h3>
+<ol>
+  <li><b>本计划不删除任何文件</b>（R0–R3 只打标与外迁；删除最早在 R3 之后单独一轮，且需再次显式授权）—— 见 §05 P1。</li>
+  <li><b>判别法不随叙事搬走</b>：L1 / L2 处置后，主档摘要里的判据单点必须仍在主档可读位置。搬走的只是叙事、事故时间线、踩错的路。</li>
+  <li><b>生成物不手改</b>：所有 <code>_index.md</code> 由 <code>kb.index</code> 生成，任何改名 / 删除 / 改摘要后一律重跑生成器，冲突的解法是重跑不是人工合并。</li>
+  <li><b>外迁原文逐字节原样搬</b>，不手抄 —— 手抄会引入不可见的行尾 / 缩进漂移（<code>pitfalls/git/editing-traps.md</code> 记的就是这类事故）。</li>
+  <li><b>保守默认</b>：<code>kb.tier</code> 所有高风险动作默认 dry-run，<code>purge</code> 强制 <code>--apply</code>，闸门不通过直接退出。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>2.1 库体量</h3>
+<table>
+  <tr><th>目录</th><th>文件数</th><th>体积</th><th>索引 cap 占用</th><th>完结率</th><th>判定</th></tr>
+  <tr><td><code>pitfalls/</code></td><td>268（250 主题 + 16 索引 + 2 附件）</td><td>2.0M</td><td>—</td><td>—</td><td class="bad">主要清理对象</td></tr>
+  <tr><td><code>tasks/</code></td><td>299</td><td>4.4M</td><td class="bad">28,744 字符 = 114%（已越线）</td><td>92%（250/272）</td><td class="bad">最紧急</td></tr>
+  <tr><td><code>testing/</code>（baselines 710）</td><td>723</td><td>3.8M</td><td>—</td><td>—</td><td class="wr">默认只可见 3 条</td></tr>
+  <tr><td><code>issues/</code></td><td>350</td><td>5.2M</td><td>15,983 = 63%</td><td>86%（299/348）</td><td class="good">有 CLOSED_KEEP 兜住</td></tr>
+  <tr><td><code>plans/</code></td><td>184</td><td>7.5M</td><td class="wr">23,306 = 92%（零出口）</td><td>95%（169/177）</td><td class="wr">无出口</td></tr>
+  <tr><td><code>reports/</code></td><td>73</td><td>3.4M</td><td>10,045 = 39%</td><td>100%</td><td class="good">不动</td></tr>
+  <tr><td><code>activeContext/</code></td><td>125</td><td>714K</td><td>无索引（故意）</td><td>124 切片 &gt; 阈值 70</td><td class="wr">只 WARN 不判红</td></tr>
+  <tr><td><code>conventions/</code></td><td>9</td><td>101K</td><td>—</td><td>—</td><td class="wr">数字过时 + 20 处失效锚点</td></tr>
+  <tr><td colspan="2"><b>合计</b></td><td><b>28M</b></td><td colspan="3">2,095 文件</td></tr>
+</table>
+
+<h3>2.2 pitfalls 冗余形态（抽样深读 + 复发计数推断）</h3>
+<table>
+  <tr><th>类</th><th>主题文件</th><th>行数</th><th>A 已解决</th><th>B 叙事冗余</th><th>C 约束过时</th><th>D 仍活跃</th></tr>
+  <tr><td>git</td><td>15</td><td>850</td><td>3</td><td>5</td><td class="bad">4</td><td>3</td></tr>
+  <tr><td>web-ui</td><td>82</td><td>3,474</td><td>25</td><td class="wr">30</td><td>8</td><td>19</td></tr>
+  <tr><td>backend</td><td>42</td><td>1,727</td><td>22</td><td>8</td><td>4</td><td>8</td></tr>
+  <tr><td>testing</td><td>77</td><td>2,897</td><td>30</td><td>22</td><td>8</td><td>17</td></tr>
+  <tr><td>ops</td><td>9</td><td>436</td><td>2</td><td>3</td><td class="bad">3</td><td>1</td></tr>
+  <tr><td>kb</td><td>19</td><td>748</td><td>3</td><td class="wr">8</td><td>4</td><td>4</td></tr>
+  <tr><td>docs</td><td>6</td><td>196</td><td>2</td><td>1</td><td>1</td><td>2</td></tr>
+  <tr><td><b>合计</b></td><td><b>250</b></td><td><b>10,328</b></td><td><b>87 (35%)</b></td><td><b>77 (31%)</b></td><td><b>32 (13%)</b></td><td><b>54 (22%)</b></td></tr>
+</table>
+<p class="aside">口径提醒：宣传的 15,690 行里有 <b>4,955 行来自附件</b>，而 <code>web-ui/attachments/drawer-switch-flicker-2026-10-04-07-recurrences.md</code> 是<b>逐字符一行</b>的写坏产物（18,579 字节折成 4,935 行，bytes-per-line=3，全库唯一）。<b>按行数决策会被它带偏</b>，本计划一律按字符数决策。</p>
+
+<h3>2.3 明确过时的约束（与 AGENTS.md / 代码 直接冲突）</h3>
+<table>
+  <tr><th>文件</th><th>过时在哪</th><th>冲突点</th><th>证据</th></tr>
+  <tr><td><code>git/history-integration.md</code></td><td>整节详述「rebase 照毁 .git」禁令</td><td>同文件 :8 与 AGENTS.md:73 都声明禁令 2026-09-25 已解除 —— <b>自相矛盾</b></td><td>:12-41 禁令详述；<b>:59 仍写「本环境下 rebase 必炸」</b></td></tr>
+  <tr><td><code>kb/cap-counting.md</code></td><td>用旧 cap 数字 3,000 / 6,000</td><td>现 <code>_common.CAP_POLICY</code>：pitfall=12,000、<code>*/_index.md</code>=25,200 —— 照旧数字会导出<b>错的落点决策</b></td><td>:116-124、:129、:136</td></tr>
+  <tr><td><code>git/editing-traps.md</code></td><td>以 <code>core.autocrlf=true</code> 为前提写行尾归一</td><td>实测本机 <code>input</code>；<code>.gitattributes</code> <code>* text=auto eol=lf</code> 压过全局；<b>与本文件 :8「改 input」直接打架</b></td><td>:134-138 vs :8</td></tr>
+  <tr><td><code>ops/prod-files.md</code></td><td>全文禁令口吻「不许改 / 不许提交」</td><td>已被机器执行：<code>.my-commit-flow.toml</code> <code>red_lines</code> 预检直接拒交</td><td>全文 26 行，尤 :12-13、:22-26</td></tr>
+  <tr><td><code>git/sync-pull.md</code></td><td>旧「<code>git diff &gt; 备份.patch</code>」配方已删除，叙述仍占篇幅</td><td><code>pipeline.md:148</code>：解禁后由 stash 解锁配方 + 自动 rebase 取代</td><td>:43、:57</td></tr>
+  <tr><td><code>conventions/webui.md</code></td><td>「plans 25 份 / issues 9 份」「存量 51 份」</td><td>实测 dark 覆盖 177/177、348/348；数字与现状差 7–38 倍</td><td>:144-145（<code>doc-forms.md:29</code> 同病）</td></tr>
+  <tr><td><code>rule-system/conditions-and-actions.md</code></td><td>「17 种条件」</td><td>代码 <code>@register_condition</code> 实测 <b>13</b>；已扩散到 <code>_about.md:3</code>、<code>_index.md:6,14</code></td><td>:3、:6</td></tr>
+</table>
+
+<h3>2.4 复发榜 —— 踩过多次的坑</h3>
+<p>「提及次数」= 全文件 <code>grep -c 复发</code> 实测值；日期只在已核到时填写，未核的写「—」（不编造）。</p>
+<table>
+  <tr><th>坑档</th><th>提及 / 复发</th><th>最近</th><th>现状判据</th><th>归堆</th></tr>
+  <tr><td><code>kb/cap-counting.md</code></td><td>17 / 复发 7</td><td>2026-10-11</td><td>cap 外迁机制<b>自身是它自己的头号客户</b></td><td>堆 2 机制自身</td></tr>
+  <tr><td><code>git/sync-pull.md</code></td><td>11</td><td>2026-10-04</td><td><code>ship.commit</code> 提交先行后，stash 配方已退役</td><td>已收口</td></tr>
+  <tr><td><code>web-ui/frontend-split.md</code></td><td>10</td><td>—</td><td>—</td><td>堆 3 判别法活跃</td></tr>
+  <tr><td><code>testing/smoke.md</code></td><td>10</td><td>2026-10-29</td><td>e2e 仍活跃，是唯一前端渲染覆盖口径</td><td>堆 3 判别法活跃</td></tr>
+  <tr><td><code>kb/refs-rename.md</code></td><td>9</td><td>—</td><td>—</td><td>堆 3 判别法活跃</td></tr>
+  <tr><td><code>git/editing-traps.md</code></td><td>8 / 复发 +2</td><td>2026-10-16</td><td>写盘形态事故，多入口（生成器 / 脚本 / Edit 工具）</td><td>堆 3 判别法活跃</td></tr>
+  <tr><td><code>web-ui/drawer-switch-flicker.md</code></td><td>5 / <b>复发至第九次</b></td><td>2026-10-13</td><td>静态守阵 <code>test_drawer_list_switch_no_loading_flash_wiring</code> + e2e <code>drawer-switch-no-flash.spec.mjs</code> 已通电</td><td>已收口（叙事外迁首选）</td></tr>
+  <tr><td><code>testing/tmpdir.md</code></td><td>3 / <b>累计 12</b>（9 条已外迁）</td><td>2026-10-16</td><td>已写进 <code>.my-commit-flow.toml</code> pytest 闸门<b>仍在复发</b> —— 文档条目这种载体拦不住</td><td>堆 2 机制自身</td></tr>
+  <tr><td><code>testing/no-uv-fallback.md</code></td><td>3 / 复发 +3</td><td>2026-10-16</td><td>本 clone PATH 无 <code>uv</code>，是<b>环境缺陷</b>不是知识缺陷</td><td>堆 1 环境缺陷</td></tr>
+  <tr><td><code>testing/credential-shape-write-guard.md</code></td><td>3 / 复发 +2</td><td>2026-10-16</td><td>写守卫误报，每碰新测试文件就现形</td><td>堆 2 机制自身</td></tr>
+  <tr><td><code>git/refs.md</code></td><td>2 / 复发 7</td><td>2026-10-31</td><td>ref 核对已内联 <code>ship.commit</code></td><td>已收口</td></tr>
+</table>
+<p class="aside"><b>三个堆的性质完全不同</b>：堆 1 改环境即愈（装 wrapper）；堆 2 是本轮清理的<b>副产品</b>，清理完自然消退；堆 3 是<b>仍然活跃</b>的判别法，本轮不动（L0）。把三堆混在一起治会把清理任务撑爆 —— 见 §04 R4。</p>
+
+<h3>2.5 机制缺口（根因）</h3>
+<p>现有防线只有两条：<b>cap 外迁</b>（治文件体积，不治条目数）与 <b>CLOSED_KEEP</b>（治索引，不治目录体积）。<b>缺的第三条是「按价值 / 时间分级」。</b></p>
+<ul>
+  <li>外迁的触发条件<b>只有「主文件撞 cap」</b> —— 完结与外迁是两条独立的轴，一条已完结但没撞 cap 的条目会被无限期保留在原地。</li>
+  <li><code>attachments/</code> 在 <code>EXCLUDED_DIRS</code>、<b>不计 cap</b> —— 所以外迁<b>只治 cap、不治目录体积</b>。<code>issues/attachments/_archive.md</code> 107KB 就是明证：索引降下来了，目录一点没小。</li>
+  <li><code>plans/</code> 与 <code>tasks/</code> 连 <code>CLOSED_KEEP</code> 都没有（<code>issues/</code> 有），这条防线可以直接复制。</li>
+</ul>
+
+<h3>2.6 机器已判定的债务清单（<code>doc.caps</code> + <code>kb.check</code> 实测，非估算）</h3>
+<table>
+  <tr><th>文件</th><th>实测</th><th>cap</th><th>角色</th><th>归入</th></tr>
+  <tr><td><code>pitfalls/testing/smoke.md</code></td><td>14,763</td><td>12,000</td><td>pitfall</td><td>R1/R2 · <b>复发榜成员（10 提及）</b></td></tr>
+  <tr><td><code>pitfalls/web-ui/frozen-column.md</code></td><td>14,691</td><td>12,000</td><td>pitfall</td><td>R2 铺开</td></tr>
+  <tr><td><code>pitfalls/testing/redverify-anchor-lineendings.md</code></td><td>14,596</td><td>12,000</td><td>pitfall</td><td>R2 铺开 · <b>复发 9</b></td></tr>
+  <tr><td><code>pitfalls/web-ui/frontend-split.md</code></td><td>13,810</td><td>12,000</td><td>pitfall</td><td>R2 铺开 · <b>复发榜成员（10 提及）</b></td></tr>
+  <tr><td><code>tasks/_index.md</code></td><td class="bad">28,744</td><td>25,200</td><td>index-auto</td><td>R3 · <b>已越线，CLOSED_KEEP 直接解</b></td></tr>
+  <tr><td><code>tasks/26-10-20-frontend-dup-code-audit.md</code></td><td class="bad">127,962</td><td>48,000</td><td>task</td><td>R3 · 单文件超 2.7 倍</td></tr>
+  <tr><td><code>progress/implemented-core.md</code></td><td>21,058</td><td>20,000</td><td>evergreen</td><td>R3 体积</td></tr>
+  <tr><td><code>activeContext/26-10-15-0728-qb-traffic-restart-spike-gap.md</code></td><td>19,375</td><td>12,000</td><td>切片</td><td>R3 · 蒸馏进 <code>progress/</code></td></tr>
+  <tr><td><code>activeContext/26-10-16-0541-global-traffic-monitor.md</code></td><td>14,478</td><td>12,000</td><td>切片</td><td>R3 · 蒸馏进 <code>progress/</code></td></tr>
+  <tr><td>切片数 124</td><td class="wr">124 &gt; 70</td><td>70</td><td>—</td><td>R3 · 把 14 天未动的切片蒸馏后删除</td></tr>
+</table>
+<p class="aside"><b>交叉印证（本计划最重要的证据之一）</b>：四条超 cap 的 pitfall 里，有 <b>三条同时出现在 §2.4 复发榜</b>（<code>smoke</code> 10 提及 / <code>frontend-split</code> 10 提及 / <code>redverify</code> 复发 9）。<b>复发叙事就是 cap 的主要来源</b> —— 这直接支持 D2「L1 删叙事不挪位置」的选择：治了叙事，cap 债务大概率自己消失，不需要把判别法也搬走。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>3.1 四级生命周期</h3>
+<table>
+  <tr><th>级</th><th>含义</th><th>判据</th><th>处置</th><th>位置</th></tr>
+  <tr><td><b>L0</b> 活跃</td><td>判别法仍常被引、近期仍复发</td><td>近两轮内有复发，或守阵字段为空但判别法是唯一单点</td><td>原样保留</td><td>主档</td></tr>
+  <tr><td><b>L1</b> 降噪</td><td>规则有用，只是啰嗦</td><td>结论已收口，但复发流水 / 踩错的路 / 事故时间线占了大半篇幅</td><td>删叙事，<b>不挪位置</b>，判别法不动</td><td>主档</td></tr>
+  <tr><td><b>L2</b> 外迁</td><td>整段只剩排障价值</td><td>已彻底解决，叙事对日常判断零贡献</td><td>整段搬 <code>attachments/</code>，主档留指针</td><td>附件</td></tr>
+  <tr><td><b>L3</b> 待删</td><td>观察期满，可批量清</td><td>L2 + 守阵齐全 + 反向引用清零 + 跨越 2 轮零复发</td><td><b>本计划不执行删除</b>（见 §05 P1）</td><td>附件</td></tr>
+</table>
+<p><b>为什么 L1 不直接合并进 L2</b>：那批约 77 个文件正是日常最可能撞上的，搬走就多一次跳转；而 <code>attachments/</code> 不计 cap，<b>搬过去的东西永远不会被 cap 守卫再提醒一次</b>。</p>
+
+<h3>3.2 分级标记落点</h3>
+<p>写在主题文件<b>头部区第 4 行</b>：<code>&gt; 等级: L2</code>。已查证：生成器只解析三行头的三个具名字段（<code># 标题</code> / <code>&gt; 摘要:</code> / <code>&gt; 触发:</code>），头部区是「首个 <code>## </code> 之前的行」，<b>额外行不干扰索引生成</b>。<span class="wr">不建总表</span>（D8 选 A：访问频率不高，总表的收益不抵它与文件的漂移成本）。</p>
+
+<h3>3.3 五轮分期</h3>
+<table>
+  <tr><th>轮</th><th>范围</th><th>动作</th><th>性质</th><th>产出</th></tr>
+  <tr><td><b>R0</b> 工具</td><td>新建 <code>kb.tier</code></td><td>四动作 + 守阵测试 + 基线切片</td><td class="wr">代码</td><td>批量能力就位</td></tr>
+  <tr><td><b>R1</b> 试点</td><td><code>pitfalls/git/</code> + <code>ops/</code>（24 文件）</td><td>定级 → L1 删叙事 / L2 外迁 / L3 打标 → 验证 → 重跑索引</td><td>文档</td><td>判据校准</td></tr>
+  <tr><td><b>R2</b> 铺开</td><td>其余 5 类（226 文件）</td><td>套用 R1 判据，按批推进</td><td>文档</td><td>全库定级完成</td></tr>
+  <tr><td><b>R3</b> 体积</td><td><code>tasks/</code> <code>plans/</code> <code>testing/baselines/</code> <code>activeContext/</code></td><td>补 <code>CLOSED_KEEP</code> 出口 + 老基线外迁 + 切片蒸馏</td><td class="wr">代码 + 文档</td><td>索引回落 cap 内</td></tr>
+  <tr><td><b>R4</b> 根治</td><td>复发榜 11 个高频坑</td><td><b>只分堆 + 立项，不动手</b></td><td>文档</td><td>三堆分类表</td></tr>
+</table>
+<p class="aside"><b>R0 必须最先做</b>：R1 打标、R2 批量外迁的工具就是 <code>kb.tier</code>。若按原顺序（R4 才做命令），R1/R2 得手工打 250 个文件的标、手工搬外迁段 —— 既慢又必然漂移。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>R0 · 工具轮：建 <code>kb.tier</code></h3>
+<table>
+  <tr><th>动作</th><th>命令形态</th><th>默认</th><th>说明</th></tr>
+  <tr><td>列出</td><td><code>kb.tier list --level L3</code></td><td>打印</td><td>列出该等级全部文件（含条数 / 字符数）</td></tr>
+  <tr><td>打标</td><td><code>kb.tier set &lt;file&gt; L2</code></td><td>写一行</td><td>写头部区第 4 行 <code>&gt; 等级:</code></td></tr>
+  <tr><td>外迁</td><td><code>kb.tier migrate --level L2</code></td><td class="good">dry-run</td><td>搬 <code>attachments/</code>，主档留指针，<b>自动处理链接 <code>../</code> 前缀</b></td></tr>
+  <tr><td>删除</td><td><code>kb.tier purge --level L3 --apply</code></td><td class="good">dry-run</td><td>强制 <code>--apply</code>；内置三道闸门，任一不过即拒绝</td></tr>
+</table>
+<ul>
+  <li><b>落点</b>：脚本 <code>.agents/skills/memory-bank/scripts/kb_tier.py</code>（与其余 <code>kb.*</code> 同目录），在 <code>.commands/kb/config.toml</code> 加 <code>[tasks."kb.tier"]</code>。</li>
+  <li><b>守阵测试</b>：新增测试并同步该文件头部 docstring 的「## 测试计划」清单（AGENTS.md 硬要求）。</li>
+  <li><b>验收</b>：<code>test.full</code> 全绿 + 新建基线切片（<code>kb.new baseline</code> 从实测输出誊写）+ <code>kb.check</code>。</li>
+</ul>
+
+<h3>R1 · 试点轮：<code>git/</code> + <code>ops/</code>（24 文件）</h3>
+<ol>
+  <li>逐个定级，写入 <code>&gt; 等级:</code> 行。</li>
+  <li>L1：删叙事（复发流水、踩错的路、事故时间线），判别法与摘要里的判据单点一字不动。</li>
+  <li>L2：整段原样搬 <code>attachments/</code>，主档留一行指针；<b>顺带修正 §2.3 表里的过时约束</b>（这几条正好都在 git / ops 两类里）。</li>
+  <li>L3：只打标，不删。</li>
+  <li>验证：<code>doc.caps</code> + <code>kb.check</code> + <code>doc.links</code> + <code>test.full</code>（试点轮跑全量）+ 重跑 <code>kb.index</code>。</li>
+</ol>
+
+<h3>R2 · 铺开轮：其余 5 类（226 文件）</h3>
+<p>套用 R1 校准后的判据。分批粒度见 §05 P2。每批只跑 <code>test.quick</code> + <code>doc.caps</code> + <code>doc.links</code>（外迁会引发链接深度变化，必须当场验），<b>轮末再跑一次 <code>test.full</code></b>。</p>
+
+<h3>R3 · 体积轮：索引与目录</h3>
+<ul>
+  <li><b><code>tasks/</code> 与 <code>plans/</code> 补 <code>CLOSED_KEEP=60</code></b>（与 <code>issues/</code> 同值、同一套常量语义），全量清单另落 <code>attachments/_archive.md</code>。粗算 <code>tasks/</code> 保留 82 条（60 完结 + 22 在办）后索引约 8.7k 字符，安全落回 25,200 cap 内。</li>
+  <li><b><code>reports/</code> 不动</b>：cap 才 39%，且 69 份是审计 / 决策依据 —— 藏起来比占索引更糟。</li>
+  <li><code>testing/baselines/</code>：老切片外迁（口径已明说「最新一条 = 事实源，老的是不可变快照」，信息损失最小，收益/风险比最高）。</li>
+  <li><code>activeContext/</code>：配<b>蒸馏节奏</b>而非一次性清理 —— 完结专题沉淀进 <code>progress/</code> 后删切片。</li>
+  <li>验收：<code>test.full</code>（含新增 CLOSED_KEEP 守阵）+ <code>doc.caps</code>（验证索引回落）+ <code>kb.check</code>。</li>
+</ul>
+
+<h3>R4 · 根治轮：复发榜三堆</h3>
+<table>
+  <tr><th>堆</th><th>成员</th><th>性质</th><th>根治方向（本轮只立项）</th></tr>
+  <tr><td>堆 1 环境缺陷</td><td><code>no-uv-fallback</code></td><td>本 clone PATH 无 <code>uv</code></td><td>装 wrapper 即愈，属环境动作不是知识动作</td></tr>
+  <tr><td>堆 2 机制自身</td><td><code>cap-counting</code> · <code>tmpdir</code> · <code>credential-shape-write-guard</code></td><td>机制自己造的复发</td><td>清理完自然消退；<code>tmpdir</code> 已进闸门仍复发说明需换载体（进闸门而非进文档）</td></tr>
+  <tr><td>堆 3 判别法活跃</td><td><code>smoke</code> · <code>frontend-split</code> · <code>refs-rename</code> · <code>editing-traps</code> 等</td><td>判别法仍常被引</td><td><b>保留 L0 不动</b>，各自单独立项</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>问题</th><th>默认（推荐）</th><th>备选</th></tr>
+  <tr><td><b>P1</b></td><td>R3 之后是否真的执行 L3 批量删除？</td><td class="good"><b>不执行。</b>本计划内零删除；删除需单轮显式授权 + 三闸门全过（守阵齐全 / 反向引用清零 / 跨越 2 轮零复发）</td><td>授权后由 <code>kb.tier purge --level L3 --apply</code> 执行</td></tr>
+  <tr><td><b>P2</b></td><td>R2 铺开的分批粒度？</td><td class="good"><b>按类分 5 批</b>（web-ui / backend / testing / kb / docs），一类一批、批间可停</td><td>按等级横向切（先全库定级再一次处置）—— 一次性改动面太大，回滚困难</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>议题</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>清理范围</td><td><b>一并纳入但分多轮</b>：pitfalls 主题层 + 单列「索引与目录体积」支线</td><td>2026-10-31</td></tr>
+  <tr><td>D2</td><td>分级体系</td><td><b>四级</b> L0–L3；L1 只删叙事<b>不挪位置</b>（那批最常撞上，搬走多一次跳转，且附件不计 cap 不会再被提醒）</td><td>2026-10-31</td></tr>
+  <tr><td>D3</td><td>定级方式</td><td><b>分多步</b>：先试点再铺开</td><td>2026-10-31</td></tr>
+  <tr><td>D4</td><td>删除授权</td><td><b>本轮只外迁 + 打标，一个文件都不删</b>；删除留到观察期后</td><td>2026-10-31</td></tr>
+  <tr><td>D5</td><td>是否动代码</td><td><b>撤回「不动代码」约束</b> —— CLOSED_KEEP 出口与本轮一并做掉，免得后续返工</td><td>2026-10-31</td></tr>
+  <tr><td>D6</td><td>复发榜根治</td><td><b>本轮只出表不治</b>，按「能不能根治」分三堆，各自单独立项</td><td>2026-10-31</td></tr>
+  <tr><td>D7</td><td>轮次切法</td><td><b>四轮 + 后加 R0</b>；R3 不承诺把索引压回 cap 内（不给自己做不到的承诺）</td><td>2026-10-31</td></tr>
+  <tr><td>D8</td><td>标记落点</td><td><b>A：只写进每个文件头</b>，不建总表（访问频率不高）</td><td>2026-10-31</td></tr>
+  <tr><td>D9</td><td>观察期算法</td><td><b>按轮次不按日历</b>（一天 19 条基线，日历时间无意义）：跨越 2 轮 + 零复发 + 守阵齐全 + 反向引用清零</td><td>2026-10-31</td></tr>
+  <tr><td>D10</td><td>批量能力形态</td><td><b>做成新命令 <code>kb.tier</code></b>（撤回原「不动代码」时的 grep 方案）</td><td>2026-10-31</td></tr>
+  <tr><td>D11</td><td>每轮验收</td><td>R1 试点跑 <code>test.full</code>；R2 每批 <code>test.quick</code> + <code>doc.caps</code> + <code>doc.links</code>，轮末再 <code>test.full</code></td><td>2026-10-31</td></tr>
+  <tr><td>D12</td><td>计划文档</td><td><b>授权新建</b>本文件</td><td>2026-10-31</td></tr>
+  <tr><td>D13</td><td>执行顺序</td><td><b>插 R0 工具轮在最前</b>：先建 <code>kb.tier</code> 再试点，否则 R1/R2 得手工打 250 个标</td><td>2026-10-31</td></tr>
+  <tr><td>D14</td><td>CLOSED_KEEP 覆盖范围</td><td><code>tasks/</code> 与 <code>plans/</code> 各 <b>60</b>；<code>reports/</code> 不动（39% 且是决策依据）</td><td>2026-10-31</td></tr>
+  <tr><td>D15</td><td><code>kb.tier</code> 能力</td><td><b>四动作、高危默认 dry-run、<code>purge</code> 强制 <code>--apply</code></b></td><td>2026-10-31</td></tr>
+  <tr><td>D16</td><td>观察轮次的机器判据</td><td><b>B：机器判两条（守阵 + 反向引用），人判一条（跨 2 轮零复发）</b> —— 轮次不是机器可读状态，为它建模成本远超收益</td><td>2026-10-31</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td><b>误删仍活跃的判别法</b></td><td>250 个主题文件里 <b>64 个压根没写 <code>守阵</code> 字段</b> —— 没有守阵就等于「根因有没有进代码/测试」这个判据缺失，凭「很久没复发」判死必然误杀</td><td>无守阵字段的条目<b>不进 L3</b>；要进必须先补齐守阵或明确判定「无需守阵」</td></tr>
+  <tr><td><b>反向引用断链</b></td><td><code>conventions/webui.md:82,107,124</code>、<code>webui-scope.md:71-74</code>、<code>AGENTS.md:11</code> 都在点名具体坑档；<code>modules.md:21</code>、<code>checking.md</code> 亦然</td><td>删除 / 改名前 <code>grep -rn</code> 全仓（<b>含 <code>conventions/</code>、<code>AGENTS.md</code>、skill 的 <code>references/</code></b>）</td></tr>
+  <tr><td><b>外迁后链接位移</b></td><td>附件深度 +1，所有相对链接要前缀一层 <code>../</code></td><td>搬完立刻跑 <code>doc.links</code> 收口</td></tr>
+  <tr><td><b>复制现有附件的写坏形态</b></td><td>唯一 web-ui 附件是<b>逐字符一行</b>（4,935 行 / 18,579 字节 / bytes-per-line=3），与 <code>editing-traps.md</code> 自己记的写盘事故同源</td><td>按<b>原换行风格原样写回</b>，写完验 <code>bytes/行 数比</code> 与 <code>b.count(b"\r\n")</code>；该 artifact 不计 cap 所以守卫抓不到，只有人读能发现</td></tr>
+  <tr><td><b>手改了生成物</b></td><td>8 个 <code>_index.md</code> 头部明写「本文件是生成物，不要手改」</td><td>任何改名 / 删除 / 改摘要后重跑 <code>kb.index</code>；冲突的解法是重跑不是合并</td></tr>
+  <tr><td><b><code>**Refs:**</code> 双向认领链断</b></td><td>如 <code>drawer-switch-flicker.md:5</code> 声明了 Refs 到 tasks 档案，<code>gen_doc_map --check</code> 要求双向</td><td>删 / 移文件时同步清理 token，否则 <code>kb.check</code> 一片红</td></tr>
+  <tr><td><b>误判「外迁 = 已解决」</b></td><td><code>attachments/</code> 不计 cap ⇒ 外迁<b>只治 cap、不治目录体积</b>（<code>issues/attachments/_archive.md</code> 107KB 为证）</td><td>验收看两个数字：索引字符数 <b>和</b> 目录体积，别只看前者</td></tr>
+  <tr><td><b>AGENTS.md 撞上限</b></td><td>现 7,282 / 8,000 字符，余量 718，每轮净增 100–300，约 2–3 轮触顶</td><td>若本计划要给 AGENTS.md 加路由指针，<b>先外迁 §提交/PR / §命令 / Git ref 详述</b>（可释放 ≈2,500–3,000 字符）；§黄金法则与 §红线不可迁</td></tr>
+  <tr><td><b>附件全量清单撞 cap</b></td><td>给 plans / tasks 补 <code>attachments/_archive.md</code> 时</td><td>清单文件<b>不要叫 <code>_index.md</code></b>（会被 <code>index-auto</code> 套 25,200 cap），沿用 <code>_archive.md</code> 命名</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-10-31-0534</span> 初版。来源：用户 2026-10-31「清理过时信息 + 分级 + 复发榜」指令 → grilling 三轮拍板（D1–D16）→ 全库只读勘查（三个 Explore 并行，覆盖 pitfalls / conventions / 其余 7 个目录）。要点：①冗余主形态是「结论已收口但叙事没删」（B 类 31%）而非「坑本身过时」；②根因是缺「按价值分级」这第三条防线；③R0 工具轮必须最先做；④本计划内零删除。</li>
+  <li><span class="tag">R1 · 26-10-31-0538</span> 补 §2.6 机器实测债务清单(7+3 项)与「复发叙事是 cap 主要来源」的交叉印证</li>
+</ul>
+
+</div>
+</body>
+</html>
