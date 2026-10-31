@@ -1,6 +1,7 @@
 # uPlot 悬停类断言: 参考盒必须是 `.u-over`, 不是画布宿主
 
 > 摘要: 给 uPlot 图写「悬停第 N 个桶」类 e2e 断言时, 拿宿主 `.qb-chart-host` 的盒子推像素会落到**交互面之外** —— uPlot 收不到 mousemove, hoverIdx 回落 -1, 且报错指向 tooltip 而非几何、看不出病因; 真正的交互面是宿主内那个 `.u-over`(实测宿主宽 1382px 时它从 x+84 起、宽 1273)。等距栅格下桶 index 与 px 严格线性, 两点标定即能解出任意桶的落点。
+> 等级: L0
 > 触发: 悬停断言, hoverIdx -1, 落点到图外, u-over, qb-chart-host, uPlot 交互面, 纵轴槽, 84px, 桶 index 转 px, 两点标定, e2e 点画布, tooltip 不出现
 **Refs:** memory-bank/testing/baselines/26-10-30-0251-webui-traffic-gap-zone-tips.md
 

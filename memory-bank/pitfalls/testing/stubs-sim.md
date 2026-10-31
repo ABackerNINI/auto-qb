@@ -1,6 +1,7 @@
 # 桩与仿真保真度
 
 > 摘要: 测试替身"长得像"不等于"够用"; 仿真端最容易变成"自以为在测"的测假陷阱。
+> 等级: L0
 > 触发: 写替身, FakeClient, FakeTorrent, FakeQbServer, sim_qb, 仿真, 判据空壳, 反向对照, 回执判定, FakeConfig, 假配置, 新配置键, 替身漂移, 枚举成员, dev 脚本, ui_harness, 字段名, dl_speed, up_speed, peers, 对端速度
 
 **Refs:** memory-bank/tasks/26-10-10-webui-peers-speed-field.md

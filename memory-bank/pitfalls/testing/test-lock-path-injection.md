@@ -1,6 +1,7 @@
 # S12 后测试装配 Storage 必须注入 lock_path, 否则命中真实用户级目录
 
 > 摘要: 工具侧 `Storage` 的默认锁锚点(S12/D8)从 `data_dir` 迁到用户级指针目录(`%LOCALAPPDATA%/global-traffic-monitor/instance.lock` 等) —— 于是 `Storage(str(tmp_path))` 后直接 `acquire_lock()` 的测试**不再动 tmp**, 而是去锁真实用户目录: 沙箱内 `os.makedirs` 报 `PermissionError [WinError 5]`, 沙箱外更隐蔽(污染真实目录 / 跨用例互相抢锁)。修法 = 每处装配显式传 `lock_path=<tmp>/instance.lock`, 发现指针同理传 `endpoint_file=<tmp>/endpoint.json`。
+> 等级: L0
 > 触发: 加/改工具侧测试, Storage, acquire_lock, 真实用户目录, PermissionError WinError 5, 拒绝访问, AppData, LOCALAPPDATA, global-traffic-monitor, instance.lock, endpoint.json, 锁锚点, 跨用例抢锁, S12
 
 ## 现象与处置(2026-10-17 实测, 专题 26-10-17-0339 S12)

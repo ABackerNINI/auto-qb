@@ -1,6 +1,7 @@
 # qB API 耗时的真机标定口径
 
 > 摘要: 标定 qB API 耗时(如 tracker 取数预算)时, 三个坑会把数字或结论带偏: 路径式 `/torrents/{hash}/trackers` 不存在(404)、该实例对带 SID cookie 的请求回 404、每次新建连接会把 TCP 建连算进单次耗时(实测 27 倍差)。
+> 等级: L0
 > 触发: 真机标定, 耗时测量, tracker 取数预算, qB API, 404, 连接复用, keep-alive, P95
 **Refs:** memory-bank/plans/26-10-19-2007-plan-webui-site-alerts.html
 

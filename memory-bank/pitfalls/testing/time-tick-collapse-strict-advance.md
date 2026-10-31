@@ -1,6 +1,7 @@
 # 挂钟严格推进断言的本机粒度坍缩: 背靠背 time.time() 同值
 
 > 摘要: 挂钟严格推进断言的本机粒度坍缩: 背靠背 time.time() 同值(判别须追基线值来源 —— 活钟读数才中招, 夹具常量天然稳, 2026-10-22 实证误报一例)
+> 等级: L0
 > 触发: ts 推进, time.time 同值, 背靠背, 粒度坍缩, 严格大于断言, 递增假钟, monkeypatch time, flaky, traffic_view, _publish
 **Refs:** memory-bank/testing/baselines/26-10-22-0121-time-tick-collapse-strict-advance.md
 

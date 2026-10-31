@@ -1,6 +1,7 @@
 # 测试副作用与环境
 
 > 摘要: 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底 —— 收尾有越界项即让本次 pytest 失败。
+> 等级: L0
 > 触发: 加测试, 越界, 副作用, sidefx, subprocess, 落盘, state_file, 并发跑测试
 
 ### 测试不得产生真实系统副作用, 由 `tests/sidefx.py` 记账 + 会话级守阵兜底

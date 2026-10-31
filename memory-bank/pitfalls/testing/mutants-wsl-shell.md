@@ -1,6 +1,7 @@
 # WSL 里 `cd` 改了真实 cwd, 但 `$PWD` / `$(...)` 仍报启动目录
 
 > 摘要: 本机 WSL(`Ubuntu-26.04`, 登录壳实为 zsh 5.9)里 `cd X && cmd` 会真的在 X 下执行, 但 **`$PWD` 与 `$(...)` 命令替换仍报 WSL 的启动目录**(即调用方的 Windows cwd 映射成的 `/mnt/d/...`)。凡「先 cd 再用 `$(...)` 取相对路径 / cwd」的脚本都会**静默读到错目录**, 不报错、看着像正常。`mutants.status` 因此在本机恒报 `mutmut=no`(实际装了), `mutants.run` 不受影响(它全程用 `cd X && cmd` 直连)。
+> 等级: L0
 > 触发: WSL, wsl.exe, bash -lc, zsh, 命令替换, $(), $PWD, cd 不生效, 相对路径读错, mutants.status, mutmut=no, 镜像目录, 路径漂移
 
 **Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md

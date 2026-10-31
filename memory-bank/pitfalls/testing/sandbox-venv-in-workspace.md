@@ -1,6 +1,7 @@
 # 沙箱工作区里新建的 venv 读不到自己的 pyvenv.cfg (exit 107)
 
 > 摘要: agent 沙箱给工作区目录打了 Low 完整性标签 + 沙箱 capability ACE, 在**工作区内**新建的 venv, 其 `Scripts/python.exe` 读不到**同目录的** `pyvenv.cfg` —— 报 `Cannot read ... pyvenv.cfg` / exit 107 (`uv run` 另报 `uv trampoline failed to spawn Python child process: permission denied (os error 5)`); 重建 venv 无效, 把同一份 venv 拷到工作区外即正常。处置 = `UV_PROJECT_ENVIRONMENT` 指到工作区外。
+> 等级: L0
 > 触发: exit 107, Cannot read pyvenv.cfg, pyvenv.cfg 不可读, uv run 失败, 工具 venv 坏, permission denied os error 5, uv trampoline, venv 重建无效, gtm 测试跑不了, UV_PROJECT_ENVIRONMENT
 **Refs:** memory-bank/tasks/26-10-21-test-gtm-coverage-gate.md
 

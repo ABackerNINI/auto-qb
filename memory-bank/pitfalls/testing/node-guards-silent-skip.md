@@ -1,6 +1,7 @@
 # node 守阵在本机静默跳过 = 假绿, 阈值类改动必配红验
 
 > 摘要: 扩展行为守阵(`tests/test_extension_proxy.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass**
+> 等级: L0
 > (docstring 明示的同口径), 于是「test.full 全绿」对这一层守阵是**假绿灯**: 09d4109(26-09-27)把 site-caps.js
 > 阈值提至 page 60/时·600/日、torrent 50/时·200/日, 但三条钉旧值 10/50 的守阵红了**一天没人看见** ——
 > 改阈值的人跑的是无 node 的全量。教训: ①改 site-caps 阈值必须真跑 node 沙箱守阵(守阵里的魔法数字与

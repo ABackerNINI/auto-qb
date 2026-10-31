@@ -1,6 +1,7 @@
 # 冒烟桩绕过生产推导函数 → 与生产判定失真(增量被静默降级为 full)
 
 > 摘要: 桩直改字段/手写派生产物(绕过生产单点函数)当时能过, 生产侧后来加了**以生产函数副作用为判据**的新判定后, 桩链路静默退化成另一条路径 —— 表现是「生产对、桩错」且无报错。本仓实例: ui_harness 直写 delta_fields 绕过 store._apply, S5b 给 flush_views 加 keyed 判定(rounds_applied 前进才算键级源)后, 桩真值轮恒 unkeyed → **恒 full**(S4→S5b 间事故, 2ca5491f 修复)。
+> 等级: L0
 > 触发: ui_harness, 冒烟桩, delta_fields, rounds_applied, keyed, unkeyed_command_source, 恒 full, store._apply, 桩失真, 手写派生字段, view_changed, 增量降级
 **Refs:** memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/pitfalls/testing/stubs-sim.md
 

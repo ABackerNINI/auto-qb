@@ -1,6 +1,7 @@
 # dev.sim 工作根的 B1 哨兵: 预建空目录不写哨兵, 第二次起跑必被拒
 
 > 摘要: `scripts/sim_qb.py` 的 `prepare_root` 只在 root 目录**不存在**时才写哨兵 `.auto-qb-sim-root`; 自己先 `mkdir` 出来的空目录第一次跑会被当"合法空目录"放过但不留哨兵, 跑过一次目录非空后, 之后每次起 sim 都撞 `B1: --root 已存在且非空, 但缺哨兵`。
+> 等级: L0
 > 触发: dev.sim, B1, 哨兵, sim root, 已存在且非空, BoundaryViolation, 删除场景
 
 ### 预建 root 目录 → 首跑过了, 复跑 B1 拒绝

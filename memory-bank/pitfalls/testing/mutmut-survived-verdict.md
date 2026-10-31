@@ -1,6 +1,7 @@
 # mutmut 的 survived 判定不可靠: 存活必须 apply + 跑池实测, 且 verify 曾因基线常红恒判 KILLED(已修)
 
 > 摘要: mutmut 报 `survived` 的变异, 把那条 diff **手工 apply 回去、跑一遍定向池**, 池会直接变红 —— 也就是说它其实**早就被杀死了**。rules 首轮实测: 1364 条存活/超时里 **404 条是伪存活(29.6%)**, 名义杀死率 59.9% 比真实 71.8% **低估 12 个点**; 表类(`expr/env.py` 的 `NAME_TABLE`/`FUNC_TABLE`)伪存活率高达 **49.3%**(303/614)。另一条腿当时也断了: `mutants.verify` 走**全量套件**, 而全量套件在本机 Linux 侧有 **3 个既有平台失败**(`test_alias_fs.py` ×2 · `test_relocate_paths.py` ×1), 基线常红 ⇒ 任何变异恒判 **KILLED**(**2026-10-30 已修: 判据改基线差集, 且 3 条平台失败也修绿 —— 两条测试缺 `_WIN_ONLY` 标记 · 一条断言吃到 POSIX `realpath` 的 lstat, 见处置 3**)。两条路都不可信时 ⇒ 存活判定**只能**逐条「apply → 跑定向池 → 还原」实测, 判据是「池能不能抓住」, 不是工具说什么。
+> 等级: L0
 > 触发: 变异测试, mutmut, 存活不可信, 假存活, survived 误报, verify 恒 KILLED, 基线常红, 全杀等于没杀, 表类变异不生效, import 期函数, process_isolation, 杀死率虚低, apply 跑池还原
 **Refs:** memory-bank/testing/baselines/26-10-30-0549-mutants-rules.md, memory-bank/tasks/26-10-08-test-mutation-audit.md
 

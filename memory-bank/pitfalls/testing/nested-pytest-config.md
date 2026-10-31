@@ -1,6 +1,7 @@
 # 嵌套子包跑 pytest 拾取仓库根 ini
 
 > 摘要: 仓库内子目录独立包(自带 pyproject+venv)内 `uv run pytest` 会向上拾取仓库根 pytest.ini, rootdir 上移, 根 ini 的 addopts(-n/--cov 等)在子包 venv 不可用 → unrecognized arguments 直接报错
+> 等级: L0
 > 触发: 在 tools/ 下「仓库内嵌套、自带 pyproject 与 venv 的独立子包」内跑 pytest
 
 **Refs:** memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md

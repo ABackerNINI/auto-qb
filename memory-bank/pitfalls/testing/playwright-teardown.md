@@ -1,6 +1,7 @@
 # Playwright webServer 收尾挂死: **带管道 stdio** 的 `spawnSync` 必 EBUSY => 杀不掉子进程, 端口不释放
 
 > 摘要: 本机 node 的 `spawnSync` **只要带管道 stdio**(`'pipe'` 或默认)就 EBUSY —— `stdio: 'ignore'` / `'inherit'` 正常, 且与可执行文件无关(连 `process.execPath` 即 node.exe 自己都一样), 也**不是**文件句柄/杀软占用(重试 5 次 + 延迟全 EBUSY, 是确定性的, 不是竞态)。而 Playwright 1.63 停 webServer 用的正是 `spawnSync('taskkill /pid <pid> /T /F', {shell:true})`(**默认管道 stdio**) —— 失败被它 try/catch 静默吞掉, 子进程没死、stdio 管道关不掉, `waitForCleanup` 永不 resolve => 用例全 PASS 但命令永不退出、桩服务残留占着端口。
+> 等级: L0
 > 触发: dev.e2e 不退出, 测试全过但挂住, webServer 收尾, spawnSync EBUSY, 管道 stdio, taskkill 无效, 端口不释放, 桩服务残留, waitForCleanup, Playwright 挂死, @playwright/test 缺失, node_modules, npm install, ERR_MODULE_NOT_FOUND
 **Refs:** memory-bank/tasks/26-10-06-test-playwright-e2e.md
 

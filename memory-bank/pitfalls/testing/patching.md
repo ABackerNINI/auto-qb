@@ -1,6 +1,7 @@
 # 平台差异与打桩 (Windows / Linux)
 
 > 摘要: 「Windows 全绿 / Linux 全红」的**五类根因**与"归错类比不修更危险"的教训 —— 平台相关测试必须以 `monkeypatch` 固定平台; 末一类最隐蔽: **Windows 路径归一化(结尾点/空格被剥、大小写不敏感)让"路径存在性"判据在本机恒真**, 2026-10-11 一条坏的相对链接连过三道本机防线、只在 Linux CI 红; 另记一条**本工具 shell 注入 `PYTHONUTF8=1` 造出的假红**(2026-09-25 已修: 环境揭出引擎码页回退真缺陷, GetACP + 测试钉缝双修)。
+> 等级: L1
 > 触发: CI 红, Linux CI, 平台差异, monkeypatch, WSL, normcase, dir_fd, 平台专属模块, 码页, GBK, cp936, PYTHONUTF8, 假红, 路径归一化, 结尾点, 大小写不敏感, exists, 坏链, 省略号占位
 
 **Refs:** memory-bank/tasks/26-10-04-test-ci-platform.md,memory-bank/tasks/26-10-11-doc-links-strict-check.md
@@ -21,21 +22,18 @@
   patch `qbmanager.Client` **无效**(`connect()` 走的是 `qbclient.new_client`)⇒
   **patch 真正被调用的名字**, 与网络解耦。
 - **处置**: 见下条判别法。
-- **复发** +1 —— 2026-10-02 (覆盖率提升轮 P0/P1/P2, 计划 `26-10-01-2157`; 2026-10-04 修复):
-  该轮新增的 **Windows 分支用例**只在 Windows 侧验收, 推上 `develop` 后 **Linux CI 连红 10 条**
+- **复发** +1 —— 新增的 **Windows 分支用例**只在 Windows 侧验收, 推上 `develop` 后 **Linux CI 连红 10 条**
   (`test_utils` 的 Shell/PIDL/user32 组 5 条 + `test_tray` 的 `_set_windows_appid` 组 3 条 +
   `test_ui::test_autostart_error_paths` + `test_expr_eval::test_more_getters_and_funcs`)。
   四类形态: ① `ctypes.windll` / `ctypes.WINFUNCTYPE` 在 POSIX **不存在**(直取属性即 AttributeError);
   ② `winreg` 是 Windows 专属模块(`import winreg` → ModuleNotFoundError); ③ `os.path` 在 POSIX 是
   `posixpath`, 反斜杠不当分隔符(`_win_reuse_title_candidates("R:\\")` 的盘根断言必红);
   ④ 真值断言写死 Windows 盘符(`exists("C:/")`)。
-  **为什么没命中**: 本轮只动 `tests/` + 在 Windows 侧跑 `test.full`, 提覆盖率时只问"这行覆盖上没有",
-  没问"这条在 Linux 上会怎样" —— 判别法没被路由到**写测试**这个动作上。
+  (为什么没命中: 提覆盖率时只问"这行覆盖上没有", 没问"这条在 Linux 上会怎样" —— 判别法没被路由到**写测试**这个动作上。)
   **处置**: ① `ctypes.windll`/`WINFUNCTYPE` 用 `_shim_posix_ctypes`(POSIX 补门面, Windows 不装走真门面);
   ② `winreg` 用 `setitem(sys.modules, "winreg", 替身)`(替身要给 `setattr` 覆盖的入口留占位, 否则撞
   "属性必须已存在"); ③ Windows 路径语义用显式 `ntpath`; ④ 真值改用 `tmp_path` 这类跨平台真实存在的路径。
-  **判据**: 改完必须在 **Linux 容器**里跑全量(见下节), 与 Windows 侧**两侧都绿**才算完 ——
-  本轮 Linux = 2440 passed + 6 skipped / 覆盖率 98.69%(修前 10 failed / 98.04%)。
+  **判据**: 改完必须在 **Linux 容器**里跑全量(见下节), 与 Windows 侧**两侧都绿**才算完。
 
 ### ❗本工具 shell 注入 `PYTHONUTF8=1` —— "本地码页回退"假红(**2026-09-25 已修: 一半是环境, 一半真缺陷**)
 

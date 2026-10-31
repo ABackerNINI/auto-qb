@@ -1,6 +1,7 @@
 # 单文件跑测试时覆盖率门槛假红 (test.one / 裸 pytest <file>)
 
 > 摘要: 只跑单个测试文件时, 全部用例绿但收尾仍打 `FAIL Required test coverage of <门槛>% not reached. Total coverage: ~18%` —— 覆盖率**全局门槛**只对全量收集有意义, 部分运行收集面小必然红, 用例本身全过。**`commands run test.one` 已内置 `--no-cov`(2026-10-05 修复)**, 该假红此后只在**裸跑** `uv run pytest tests/x.py -q` 时仍会出现; 判据看 `N passed` / `FAILED` 行, 不要被 FAIL 行骗去修代码。
+> 等级: L0
 > 触发: test.one, 单文件, 单测一个文件, coverage FAIL, not reached, 18%, 假红, 排查单个用例, 裸跑 pytest 单文件
 
 **Refs:** memory-bank/tasks/26-10-16-backend-global-traffic-monitor.md

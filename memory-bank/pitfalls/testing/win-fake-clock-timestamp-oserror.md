@@ -1,6 +1,7 @@
 # Windows 上 1970 前假时钟过 datetime.timestamp() 抛 OSError(不是 ValueError)
 
 > 摘要: 生产纯函数新增「缺 self 状态时按传入 now 现场推算本地日/月 epoch」的回落分支, 被既有用例的 1970 附近假时钟(流量族惯用 `H1 = 11 * HOUR = 39600` 量级)首次触达 —— Windows 上 `datetime.timestamp()` 对 1970 前**本地**日期抛 `OSError [Errno 22] Invalid argument`, 一批与本次改动无关的既有用例在 Windows 面红、Linux 面绿。修法 = 两级推算包 `try/except (ValueError, OSError, OverflowError)` 静默缺级: 生产时钟恒正(≥1.7×10^9)该面不可达, 纯增益面缺一级只回到改动前形态。通用教训: 新读侧函数被假时钟 first-touch 时, 本地时间换算的异常面要按平台放宽, 且**别改用例时钟迁就实现**。
+> 等级: L0
 > 触发: Windows, 假时钟, 1970, timestamp, OSError, Errno 22, Invalid argument, v4_day_epoch, v4_month_epoch, 无关用例集体红, Linux 绿 Windows 红, 新增读侧函数, 本地时间换算, 异常型平台差分
 
 **Refs:** memory-bank/tasks/26-10-14-webui-qb-traffic-agg-live-tail.md

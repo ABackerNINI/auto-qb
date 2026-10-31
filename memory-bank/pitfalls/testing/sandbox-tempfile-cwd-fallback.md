@@ -1,6 +1,7 @@
 # 沙箱内跑工具自体套件: tempfile 静默回退 cwd, 临时垃圾落进工具目录
 
 > 摘要: 工具(`tools/global-traffic-monitor`)是独立 uv 项目, 其套件不在根 `testpaths` 内 ⇒ 跑它时**不带**根 `test.*` 包的 `TMPDIR` 收口; 若又在本 agent 沙箱内跑, `H:\Temp` 与 `%TEMP%` 对 uv 子进程都不可写 ⇒ python `tempfile.gettempdir()` 候选目录全失败后**静默回落 cwd** ⇒ 测试临时文件(随机名文件 + `pytest-of-<user>/`)落进工具目录, `git status` 变脏。
+> 等级: L0
 > 触发: 跑工具侧测试, 工具套件, global-traffic-monitor, 临时目录, TMPDIR, 沙箱, 临时垃圾, git status 脏, tmp 文件, pytest-of
 
 ## 现象与处置(2026-10-17 实测, 专题 26-10-17-0339 S11)

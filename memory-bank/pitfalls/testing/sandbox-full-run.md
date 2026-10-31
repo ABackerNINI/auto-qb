@@ -1,6 +1,7 @@
 # 工具沙箱内跑全量会假红: 沙箱拒写 R:\Temp, TMPDIR 等于没设
 
 > 摘要: 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的测试命令, 沙箱拒写 R 盘 ⇒ `TMPDIR` 建不了目录 ⇒ pytest 回落 `H:\Temp`(重解析点读不了) ⇒ **点号全过却在收尾崩**, 看着像回归实为沙箱拦截; 关沙箱即消失。
+> 等级: L0
 > 触发: 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红
 
 ## 现象与处置(2026-09-24 实测; 从 testing/tmpdir.md 拆出)

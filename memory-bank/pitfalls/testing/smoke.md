@@ -1,6 +1,7 @@
 # 浏览器冒烟 (Windows 上可做, 长期能力)
 
 > 摘要: `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法
+> 等级: L1
 > (部分条目源自旧单页冒烟脚本时代 —— 该脚本 2026-10-06 已退役, 判据对 e2e 新轨同样成立)。
 > 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因, 回归, 验错对象, 旧进程, 旧页签, 桩服务死了, 皮肤差异, prism 正常 atlas 异常, 服务端发出的字节
 **Refs:** memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md
@@ -9,7 +10,7 @@
 
 - **触发**: 改任何前端渲染逻辑。
 - **判别**: 能力 = `scripts/ui_harness.py`(真 create_app+QbManager+FakeClient+合成种子+命令泵,
-  由 `playwright.config.mjs` 的 webServer 托管) + `e2e/` 八个 spec(@playwright/test, 双皮肤,
+  由 `playwright.config.mjs` 的 webServer 托管) + `e2e/` 42 个 spec(@playwright/test, 双皮肤,
   按断言块拆分)。前端渲染**pytest 覆盖不到** ⇒ **改前端必跑 `npm run test:e2e:fast`(@fast 门禁);
   触碰乐观 UI/菜单/列设置加跑对应 spec; 全量矩阵轮收尾/排障串行人跑**。
 - **处置**: 模式矩阵 env 参数化(计划 26-10-06-0708 §3.2)—— `E2E_CMD_RESULT=ok|error|hang` /
@@ -28,11 +29,7 @@
   (❗ESM 的 `import` 不认 `NODE_PATH` —— 旧单页脚本是 CJS 才用得了它, e2e 轨道一律走 npm 解析);
   版本对齐 `@playwright/test@1.63` ↔ `chromium-1243`;
   换不到退回 `chromium.launch({channel:"msedge"})`(**Edge 恒可用**)。
-  复发: 1 —— 2026-10-02 npx 缓存已空(只剩空 hash 目录; 浏览器二进制 chromium-1243 仍在
-  `%LOCALAPPDATA%\ms-playwright`) ⇒ 当时改用**仓库外**一次性 `npm i playwright-core@1.63`
-  (如 `~/.aqb-smoke-deps`); 2026-10-06 起仓库内已有, 这条降为备选。
-  复发: 2 —— 2026-10-18 `auto-qb-clone4`(**新 clone, 从未 npm i**)认领 issue 26-10-18-2122 跑
-  `commands run dev.e2e` 直接红: 报头先是一行无害的
+  复发: 2 —— **新 clone 从未 npm i** 时跑 `commands run dev.e2e` 直接红: 报头先是一行无害的
   `npm warn exec The following package was not found and will be installed: playwright@1.64.1`,
   跟着 `Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@playwright/test' imported from
   playwright.config.mjs` —— **npx 自作主张装的是 `playwright` 包, 不是配置要的 `@playwright/test`**,
@@ -56,17 +53,15 @@
   别指望 `dev.harness` 会返回; 不要 `(cmd &)`;
   ②起完**立刻看 harness 日志首行**(打印监听地址与种子/组数), 端口被占就换端口;
   ③怀疑服务不对先 `curl <base>/prism/` 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
-  复发: 2 —— 2026-09-28 多 clone 下 8099 被别会话残留 harness 占用, 换 `--port` 即过(路由没到本文件); 勿杀占用进程。
-  2026-10-03 本会话开工 8099 再次被残留 harness 占用 —— netstat 现查 + 换端口零损耗, 判据(查监听 + curl 页面而非 /api)直接命中。
-  复发: 3 —— 同日变体: 直接**复用**了 8099 残留服务做交互探针, 改完代码验证"全 PASS"其实验的是**别的 clone 的旧代码**
-  (多 clone 工作区下残留 harness serve 的是它自己 clone 的静态目录; 12 项探针在旧代码上照样大半通过, 假信心比超时更危险)。
+  复发: 4 —— 多 clone 下 8099/8137 反复被**别会话 / 别 clone 的残留 harness** 占用(uvicorn 起不来只打
+  `[Errno 10048]` 一行, 后台起桩任务全 failed 但无一行有效日志), 换 `E2E_PORT` 复跑即过, 勿杀占用进程;
+  直接**复用**残留服务做交互探针, 改完代码验证"全 PASS"其实验的是**别的 clone 的旧代码**
+  (残留 harness serve 的是它自己 clone 的静态目录; 12 项探针在旧代码上照样大半通过, 假信心比超时更危险)。
   判据: 怀疑服务归属时 `page.evaluate` fetch 静态 JS 比对特征串(如刚加的方法名), 不在 ⇒ 服务不是本 clone 的。
   处置: 改代码验证类冒烟**一律自己起桩**(后台任务 + 新端口), 残留服务只读不验。
-  复发: 4 —— 2026-10-14 修「必现列背景不一致」时 8137 被 **auto-qb-clone5** 的残留 harness 占用(uvicorn 起不来只打
-  `[Errno 10048]` 一行, 三次后台起桩任务全 failed 但无一行有效日志); 且本环境有 HTTP_PROXY 透明代理,
-  `curl` 直连 8137 拿到的是代理的 502「upstream connect failed」, 而 node/Playwright 直连却 200 ——
-  **curl 通不通不能当判据**, 以 `Get-NetTCPConnection -LocalPort 8137 -State Listen` 现查归属为准
-  (PowerShell 查到 pid 20876, cmd 是 clone5 的 .venv)。换 `E2E_PORT=8237` 复跑即过, 未杀占用进程。
+  代理变体: 本环境有 HTTP_PROXY 透明代理, `curl` 直连被占端口拿到的是代理的 502「upstream connect failed」,
+  而 node/Playwright 直连却 200 —— **curl 通不通不能当判据**, 以
+  `Get-NetTCPConnection -LocalPort N -State Listen` 现查归属为准。
 
 ### 「冒烟整体执行 — elementHandle.click: Timeout」≠ 桩没起来 —— 归因先做 HEAD stash 对照
 
@@ -80,9 +75,8 @@
 - **处置**: ①先跑对照再动代码 —— 命中存量 flaky 不顺手修, 记录位置与签名即可;
   ②超时中断该皮肤后续断言(含末尾 console.error 总检), 汇报写"中断点之前全部通过"而不是"冒烟全绿"。
   本条暂无守阵(点击拦截面随布局漂移, 静态判不出)。
-  复发: 1 —— 2026-10-04 HR 历史表③ S5 三皮肤冒烟 3/3 复现(追剧集行 Ctrl+click 块同位置同签名),
-  按本条目做 HEAD 档案对照 4/4 实锤存量; 为什么没命中: 本轮桩走查按既有处置口径①绕行未修
-  (命中存量不顺手修, 只记位置与签名)。
+  复发: 1 —— HR 历史表③ 同位置同签名 3/3 复现, 按本条目做 HEAD 档案对照 4/4 实锤存量;
+  按既有处置口径①绕行未修(命中存量不顺手修, 只记位置与签名)。
 
 ### 页面 hidden 态(VS Code 内置页 / 未 bringToFront)
 
@@ -170,9 +164,9 @@
   `clickRow` 加 `opts.point`(相对行盒偏移, 默认 8,8 不变), 成员行调用方传**第二格**(`.m-state`,
   无交互后代)偏移, 且偏移从 DOM 现算(`el.children[1]`), 不硬编码列宽。用例:
   `e2e/shift-select-anchor.spec.mjs` 的 `memberPoint`。
-- **复发**: 3 (2026-10-01 首记 → 2026-10-04 冒烟复发 1 次 → 2026-10-09 e2e 双击成员行再撞;
-  后两次都是「知道要点名称列, 但没意识到 force 不改落点 + 集行名称格叫 .ep-name」; 2026-10-19
-  第四次是**纪律本身的漏洞**——"成员行点自身即可"没区分几何中心与行左缘, 而 clickRow 恰恰用后者)。
+- **复发**: 4 —— 后三次都是判据盲点复发: 「知道要点名称列, 但没意识到 force 不改落点 + 集行名称格
+  叫 .ep-name」; 最后一次是**纪律本身的漏洞**——"成员行点自身即可"没区分几何中心与行左缘, 而 clickRow
+  恰恰用后者(三条判据已在上文两条实测里)。
 
 ### 行高于视口时 scrollIntoView(center) 把落点推出视口: elementFromPoint 恒回 (null), 5 拍空转
 

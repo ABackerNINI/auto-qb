@@ -1,6 +1,7 @@
 # 沙箱里的工具写不了自己的缓存目录 → 不报错, 而是紧循环烧 CPU + 刷磁盘 + 挂住
 
 > 摘要: agent 工具 shell 的沙箱按**白名单**放行写操作。工具若把自己的缓存写到白名单外(本仓实测: yapf 的语法缓存 `%LOCALAPPDATA%\Google\YAPF\Cache`), 而该目录**已存在**却写不进, 失败路径可能不是报错而是**紧循环**: CPython `tempfile._mkstemp_inner` 在 Windows 上把 `PermissionError` 当成"重名"继续换名重试 ⇒ 命令**挂住 + 100% 单核 + 持续写磁盘**, 且**全程没有任何报错**。姊妹形态(2026-10-16): 沙箱把 `LOCALAPPDATA` 裁成空串时, `uv python list` 之类的托管命令会把缓存目录解析成 **CWD 相对路径** —— 仓库根落 45MB 部分下载垃圾, 且该命令本身先挂住 120s。
+> 等级: L0
 > 触发: 沙箱, sandbox, 工具挂住, yapf 挂住, 高CPU, 一直写磁盘, 缓存目录, mkstemp, NamedTemporaryFile, 白名单, AppData, platformdirs, 提交闸门卡住, 闸门超时后仍在跑, LOCALAPPDATA 为空, uv python list 挂住, 仓库根 Python 目录, 缓存落 CWD, 部分下载垃圾
 
 ### 判别与处置

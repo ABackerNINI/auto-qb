@@ -1,6 +1,7 @@
 # UI 冒烟工装: 无头浏览器 + Vue 生产版句柄
 
 > 摘要: 前端视觉改动的真浏览器冒烟: Vue 生产版拿不到 `app._instance`、无头 Edge 的 virtual-time 与 SSE 坑 —— 都有固定解法。
+> 等级: L0
 > 触发: UI 冒烟, 截图, 无头浏览器, 弹窗驱动, Vue 实例, createApp, 截图工装
 
 ### Vue 3 生产版 `app._instance` 恒为 null, 链路静默拿不到组件代理

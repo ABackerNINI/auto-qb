@@ -1,6 +1,7 @@
 # 并行跑测试 (pytest-xdist)
 
 > 摘要: **已设为默认**(`pytest.ini` 的 `addopts = -n 8`, 2026-10-08 由 `-n 4` 上调) —— 全量 21s → **7.6s**(带覆盖率); sidefx 台账已用 `workeroutput` 回传汇总, 「越界 0 条」不再消失。⚠ `-n 0` 曾对**包脚本那批真实临时仓库用例**挂住 —— 根因是 **Windows `subprocess` 无限挂死**(非仓库逻辑), 2026-10-03 用 `_pipeline.run_capture` 看门狗修复(见下节); 覆盖率分支 partial 与串行差 1。**并行甜点= -n 8, 不是 `-n auto`**(32 worker 打满机器, `test.pkg` 会 2 failed + 16 errors) —— 见下节「甜点随笔例体量与负载形态变」。
+> 等级: L0
 > 触发: 并行, 并发跑测试, xdist, -n, 加速, 多进程, 跑得慢, 闸门, 端口冲突, 台账不打印, 串行挂住, 提交卡死, test.pkg, -n 0, subprocess 挂死, CreateProcess
 
 ### ⚠ `-n 0` 曾对 my-commit-flow 的真实仓库用例**挂住**(2026-10-03, 根因已定位并修复)

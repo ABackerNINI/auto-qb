@@ -1,6 +1,7 @@
 # 临时目录与跑全量
 
 > 摘要: 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设收尾会崩, 别手工加前缀。
+> 等级: L1
 > 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集, R 盘缺席, 回落 TEMP, 快照守阵
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
@@ -12,10 +13,9 @@
   (`is_temp_path` / `policy_allows_known_effects` / `recorder_installed_and_records` /
   `rmtree_dir_fd_entries_not_flagged`)+ 1 条 ERROR, **看着像真失败, 实为临时目录搬家的假红**。
 - **处置**: 正确姿势 `uv run pytest tests -q --no-cov --basetemp "H:/Temp/<新目录>"` → 与基线一致。
-- **复发**: 2 —— 2026-09-23 复踩: `--basetemp=R:/Temp/auto-qb/pa_bt`(在 TMPDIR `R:/Temp/auto-qb/tests`
-  **之外**)跑全量, 又是 4 failed + 1 error, 同形。**为什么没命中: 路由到了但文件没读** ——
-  [../../testing/run.md](../../testing/run.md) 末行明确指向本文件, 没顺着点开就自己开测,
-  把已记的坑当"新发现"重踩。同日复核: basetemp 落在 `tempfile.gettempdir()` **之内**即不假红
+- **复发**: 2 —— `--basetemp` 落在 TMPDIR **之外**(如 `R:/Temp/auto-qb/pa_bt`)跑全量再次同形假红
+  (为什么没命中: 路由到了 [../../testing/run.md](../../testing/run.md) 却没顺着点开本文件)。
+  同日复核: basetemp 落在 `tempfile.gettempdir()` **之内**即不假红
   (`--basetemp=R:/Temp/auto-qb/tests/bt` 实测越界 0 条、守卫全绿)。
 
 ### 测试基线的临时目录与覆盖率文件必须落在仓库外, 且 basetemp 目录本身必须**不存在**

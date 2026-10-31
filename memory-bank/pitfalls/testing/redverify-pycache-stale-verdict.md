@@ -1,6 +1,7 @@
 # 红验逐条 apply 时 `.pyc` 缓存未失效，读到上一条变异体 ⇒ 假 SURVIVED（等长替换 + 秒级 mtime 碰撞）
 
 > 摘要: 红验/`mutants.verify` 这类「逐条 apply 变异体 → 跑 pytest → 还原」的循环里，同一条源码行若被**等长替换**（如 `get(None, view.channel_state)` ↔ `get(view.channel_state, None)`），且相邻两条的 apply/跑/还原在**同一秒内**完成，则 Python 的 `.pyc` 缓存判据 `(源文件 mtime, size)` **两条都相同**（mtime 秒级精度 + size 因为等长也相同）⇒ 子进程 import 时**直接复用上一条变异体编译出的字节码**，实际跑的还是上一轮的代码。后果：本该被守阵杀掉的变异报 **SURVIVED**（假存活），且**没有任何报错**；在同一份 dump 上重复跑还会**稳定复现**同一批假存活（不是偶发抖动）。与 [mutants-mirror-dirty-worktree](mutants-mirror-dirty-worktree.md) 同族（同是「等长替换让缓存比对失效」，那档是 git stat 缓存判净，本条是 Python 字节码缓存判新）。判别: 同一条变异**单跑 KILLED、全量跑 SURVIVED**（或反之）就要怀疑缓存；实测 hr display 轮 `_print_site m23/m24`（`CHANNEL_TEXTS.get` 的两个实参互换，等长）稳定假 SURVIVED。处置: 跑测试的子进程加 `-B` / `PYTHONDONTWRITEBYTECODE=1` **并**开工前清 `__pycache__`（`PYTHONDONTWRITEBYTECODE` 只禁写新缓存，**已有的旧 `.pyc` 仍会被读**）；`.pytest_cache` 由 `-p no:cacheprovider` 另管，与本条无关。
+> 等级: L0
 > 触发: 红验, 变异测试, mutmut, apply, 同构变异, 假存活, 假 SURVIVED, pyc, pycache, __pycache__, 字节码缓存, 缓存未失效, mtime 秒级, size 相同, 等长替换, 同长度替换, PYTHONDONTWRITEBYTECODE, python -B, importlib 缓存, 单跑 KILLED 全量 SURVIVED
 
 **Refs:** memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/pitfalls/testing/mutants-mirror-dirty-worktree.md, memory-bank/testing/baselines/26-10-15-1200-mutants-hr-display.md
