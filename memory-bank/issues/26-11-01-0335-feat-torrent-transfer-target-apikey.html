@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标">
 <meta name="issue-summary" content="主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password">
 <title>转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标 · feat · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· feat</div>
+    <div class="kicker">计划外问题（已修）· feat</div>
     <h1>转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标</h1>
     <p class="lede">主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0335-feat-torrent-transfer-target-apikey</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 03:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,11 +156,14 @@ qbittorrent-api Client(host=..., username/password=None) -> LoginFailed  # adapt
     <ul>
       <li>2026-11-01 03:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-01 04:06 — 认领开工（后端：模型/装载/校验键集/schema/adapter 透传；前端设置页归下一任务），状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 — 修复完成（后端 <code>26cdbe48</code> + 前端 <code>88a6aceb</code>，见上「修复后补充」），全量回归 <code>commands run test.full</code> 通过（见 <code>kb.baseline</code>），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-01 04:06 仍复现 —— <code>transfer/adapters/qb.py</code> · <code>_build_client</code>（现 156 行）仍只传 host/username/password，未透传 api_key；<code>config/models.py</code> · <code>TransferTargetConfig</code>（现 268 行）无 api_key 字段。参照实现 <code>core/qbclient.py</code> · <code>new_client</code> 的 <code>api_key=... or None</code> 口径未变，照抄即可。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（2026-11-01，即建议修法，未改道；分后端/前端两个提交落）：后端（commit <code>26cdbe48</code>）—— <code>TransferTargetConfig</code> 加 <code>api_key: str = ""</code>，loaders 装载、<code>KNOWN_TRANSFER_TARGET_KEYS</code>、schema（<code>groups.py</code> web.transfer 段 help 文案）同步；<code>_build_client</code> 照 <code>qbclient.new_client</code> 口径透传 <code>api_key=... or None</code>（空串=未配置）。<code>writer.py</code> 目标掩码/还原从只覆盖 password 扩为 <code>TARGET_SECRET_KEYS=(password, api_key)</code>，还原改逐键判定只回填仍为哨兵的键 —— 否则新键经 <code>GET /api/config</code> 明文泄漏。前端（commit <code>88a6aceb</code>）—— <code>transfer-targets.html</code> 密码字段后新增 API Key 输入框（隐藏 username 形状 + <code>autocomplete=new-password</code> + 非焦点不写树，复用既有密码哨兵遮显机制）；<code>transfer_targets.js</code> 的 <code>ttSecret</code>/<code>ttHasSecret</code>/<code>ttSecretPlaceholder</code> 泛化为按键参（缺省 password，既有调用面不变），新建模板补 api_key 空串。保存走同一条 <code>cfgSave</code>→<code>PUT /api/config</code>；GET 侧后端哨兵掩码已就绪，前端凭非空判已设置、不硬编码哨兵字面量。</p>
+    <p><strong>验证方式</strong>：①新增后端单测 4 条（配置装载 / adapter 透传 / 空串映射 None / writer 掩码还原双向，落 <code>test_transfer_config.py</code> / <code>test_transfer_adapters.py</code> / <code>test_config_writer.py</code>）；②前端守阵 <code>test_transfer_targets_editor.py</code> 补 3 处对账（非焦点不写树 / 显式指键 / 禁回显）；③全量回归 <code>commands run test.full</code> 全绿。</p>
+    <p><strong>测试数字</strong>（2026-11-01 实测）：全量 <code>commands run test.full</code> <strong>4365 passed, 2 skipped</strong>（共 4367 条，187.16s），覆盖率 99%（21840 stmts / 144 miss）。</p>
   </section>
 
   <footer>

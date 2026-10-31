@@ -58,15 +58,15 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (4)
+## In Progress (2)
 
-- [feat] [转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标](../26-11-01-0335-feat-torrent-transfer-target-apikey.html) — 主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password
-- [bug] [转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底](../26-11-01-0334-bug-torrent-transfer-duplicate-409.html) — 已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (309)
+## Done (311)
 
+- [feat] [转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标](../26-11-01-0335-feat-torrent-transfer-target-apikey.html) — 主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password
+- [bug] [转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底](../26-11-01-0334-bug-torrent-transfer-duplicate-409.html) — 已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导
 - [feat] [路径映射不做分隔符归一化: 正斜杠 from 对 Windows 反斜杠 save_path 静默不命中](../26-11-01-0334-feat-torrent-transfer-pathmap-sep.html) — path_map 配错形态时静默原样落; 前端预览同语义所以诚实, 无数据风险, 属可用性陷阱
 - [feat] [e2e/冒烟环境开机自检: 端口占用/旧桩进程/npm i 缺失前置探测](../26-10-31-2226-feat-e2e-smoke-env-selfcheck.html) — 把 smoke.md 高频环境条目从读文档排障搬进工具: dev.e2e 前置自检 8099/8137 占用与桩进程活性
 - [feat] [doc-refs 认领链写法机械化: 生成器/模板接管双向声明](../26-10-31-2226-feat-kb-docrefs-bidirectional-automation.html) — kb.new/kb.index 建件时自动带 doc-refs meta 与反向 Refs 占位, 双向义务由机器保证

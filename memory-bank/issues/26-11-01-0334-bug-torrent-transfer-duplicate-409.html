@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底">
 <meta name="issue-summary" content="已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导">
 <title>转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底</h1>
     <p class="lede">已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0334-bug-torrent-transfer-duplicate-409</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 03:34</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -156,6 +156,7 @@
     <ul>
       <li>2026-11-01 03:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-01 — 认领修复，状态 <strong>In Progress</strong></li>
+      <li>2026-11-01 — 修复完成（见上「修复后补充」），全量回归 <code>commands run test.full</code> 通过（见 <code>kb.baseline</code>），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-01 仍复现 —— 锚点重跑（grep 现文件 <code>Conflict409Error</code> / <code>_looks_like_duplicate</code> / <code>_result_from_exception</code>）：<code>_result_from_exception</code>（现 186–192 行）的 409 分支（188 行）仅 <code>isinstance(exc, Conflict409Error) and _looks_like_duplicate(str(exc))</code> 命中才判 skipped，无探针兜底；对照 Mapping 分支 <code>_interpret_result</code>（162–178 行）在 173 行有 <code>probe_hash and self._hash_exists(probe_hash)</code> 兜底 —— 与取证一致，问题仍在。</p>
