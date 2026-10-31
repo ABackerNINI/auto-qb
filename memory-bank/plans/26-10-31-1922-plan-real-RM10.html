@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM10">
+<meta name="plan-stamp" content="26-10-31-1922">
+<meta name="doc-topic" content="real-machine-rm10-plan">
+<title>RM10 通知·外部集成 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --stop: #e08f8f; --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 74ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair); }
+  h2 .no { color: var(--accent); margin-right: 10px; font-size: 15px; letter-spacing: 0.08em; }
+  h3 { font-family: var(--display); font-size: 15.5px; font-weight: 600; color: var(--accent-ink); margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 88ch; }
+  ul, ol { margin: 0 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--hair-soft); }
+  .callout { border-left: 3px solid var(--accent); background: var(--hair-soft); padding: 10px 16px; border-radius: 0 6px 6px 0; margin: 12px 0 16px; max-width: 90ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 13.5px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 11px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); background: var(--hair-soft); }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 9px; border-radius: 10px; border: 1px solid var(--hair); color: var(--dim); margin-left: 6px; white-space: nowrap; }
+  .badge.lv { color: var(--accent-ink); border-color: var(--accent); }
+  .badge.skip { color: var(--warn); border-color: var(--warn); }
+  .case { border: 1px solid var(--hair); border-radius: 8px; margin: 0 0 14px; overflow: hidden; }
+  .case .hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding: 10px 16px; background: var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .case .cid { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 14.5px; margin-right: 10px; }
+  .case .ttl { font-weight: 600; font-size: 14.5px; flex: 1; min-width: 40%; }
+  .case .bd { padding: 12px 16px 14px; }
+  .case .bd p { margin-bottom: 8px; }
+  ul.four { list-style: none; margin: 8px 0 0 0; border-top: 1px dashed var(--hair); padding-top: 8px; }
+  ul.four li { font-size: 13px; color: var(--dim); margin-bottom: 4px; padding-left: 14px; text-indent: -14px; }
+  ul.four li b { color: var(--ink); }
+  .hint { color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">Real-machine slice plan · RM10</div>
+  <h1>RM10 通知·外部集成 · 真机实测分步计划</h1>
+  <p class="lede">收尾片(排期顺序最后一环): 通知通道(平台原生 toast: AUMID 注册表面 + 日志→通知管线进程级)、YAML 模板导出(真实 qB 只读扫描 → 本地文件)、RM04 遗留的 guardian 删链路径(finalize_watch 三证→校验→删链)、工具客户端参数与互斥面。本计划只做排期准备(定片/漂移体检/glob 自检/环境自检/用例设计), 不含执行; 执行按本计划逐条跑, 三态记账。<b>拍板口径: 真实外发红线在本片的具体形态 = toast 只断言进程/日志级(计划预申报: RM10-04 会在桌面弹少量真实 toast)· 导出只写 <code>tests-real/.work/rm10/</code> 白名单落点 · 不真装浏览器扩展 · L0 观感一律 BLOCKED 解锁=用户目视。</b></p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1922</div></div>
+    <div class="item"><div class="k">片</div><div class="v">RM10(常驻锚 §03, 末片)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">0.5 次(半天)</div></div>
+    <div class="item"><div class="k">用例</div><div class="v">8 条 · L2×5 / L3×3</div></div>
+    <div class="item"><div class="k">种子层</div><div class="v">L0 真实种子只读(仅 RM10-01 连 qB)· 其余进程本地面零种子依赖 · 零 real-fake</div></div>
+    <div class="item"><div class="k">漂移体检</div><div class="v">首轮, 无漂移面</div></div>
+    <div class="item"><div class="k">驱动</div><div class="v">真 CLI(导出) + 进程内直调(notify/guardian)</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + glob 自检 + 驱动形态)</h2>
+    <h3>会话同步(2026-10-31 19:14 实测)</h3>
+    <p><code>commands run my-commit-flow.sync</code> <b>失败</b>: 「拿不到远端 origin/real/rm02-rm10 (离线?)」。核验: <code>git ls-remote --heads origin real/rm02-rm10</code> 空 —— Gitee 上<b>不存在</b>该分支(本工作分支未推远端), 属「无远端分支可对」非落后(RM04/RM03/RM05/RM06/RM08 先例)。本轮为本地排期准备(计划 + 锚件 glob 修正), 产出本地 commit 不推送。</p>
+    <h3>漂移体检(§07)</h3>
+    <p><b>RM10 无基线 commit(锚件 §07 该行为「—/待排期」)→ 首轮, 无漂移面</b>。本轮实测完成后把实测时刻 HEAD 记进切片与锚件 §07。</p>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 19:22 实测)</h3>
+    <p><code>[ok] 36595 pid=41868 vv5.2.3 connected 真实种子 8 个, 已全部暂停</code><br>
+       <code>[ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></p>
+    <p>guard 绿。本片是全序列种子依赖最轻的一片: 只有 RM10-01 连真实 qB(36595, tracker 域名<b>只读</b>扫描), 其余 7 条全是进程本地面(注册表/子进程/journal/别名), <b>零真实种子活跃、零外连、零假种子</b> —— 约束 2 天然成立, 连 real-fake 标签都用不上。</p>
+    <h3>glob 自检(规程 §05 规则 8, 2026-10-31 19:22 实测)</h3>
+    <p>锚件 §03 RM10 行原 5 条 glob 中<b>前 3 条漏 <code>src/auto_qb/</code> 前缀</b>(<code>core/modules/notify_mod.py</code> / <code>infra/notify.py</code> / <code>core/exporter.py</code> 原样 pathspec 命中 0)—— RM01–RM09 同款缺陷<b>第十次复发</b>; 后 2 条(<code>src/auto_qb/tools/**</code> / <code>extensions/**</code>)本就正确。已按规则 8 修正为本行现值(全前缀), 锚件 §08 记账(19:22 li)。补正后 <code>git ls-files</code> 实测命中 <b>5 个文件共 830 行</b>: <code>notify_mod.py</code> 79 · <code>notify.py</code> 310 · <code>exporter.py</code> 150 · <code>finalize_watch.py</code> 285 · <code>tools/__init__.py</code> 6。全属通知·导出·guardian 面, 无混入大件, 片边界不糊, 不拆不并(规则 1/2 不触发)。两条附带事实:</p>
+    <ul>
+      <li><b><code>extensions/**</code>(除 hr-fetch-proxy)命中 0 文件</b>: 仓库现仅 hr-fetch-proxy 一个扩展(RM06 已测, 引用不复测)。本片「扩展安装与权限」验证面<b>无在片文件</b> → 不设用例(见 §05); 该 glob 保留为前瞻位, 新扩展落位后按规则 1 并入。片整体仍有 5 命中, 不触发规则 6 下线。</li>
+      <li><b>仓库根 <code>tools/global-traffic-monitor/**</code>(29 文件, 独立 uv 包, 自带单测)不在本片 glob 内</b>: 锚件写的 <code>src/auto_qb/tools/**</code> 前缀是有意区分, gtm 从未入片。且用户生产 gtm 正在本机运行(RM07 实测: 指针指向另一 clone, autostart 已注册)—— 任何写侧探测都会真写用户运行中的服务。归属待拍板(并入则改 glob + 预算重估), 本轮零触碰(见 §05)。</li>
+    </ul>
+    <h3>驱动形态(三种, 按验证面分派)</h3>
+    <ul>
+      <li><b>真 CLI(仅 RM10-01/02)</b>: <code>uv run python -m auto_qb --config &lt;tests-real 派生配置&gt; --export-yaml &lt;.work/rm10/…&gt; [--dry-run|--only-missing]</code>(cli.py:71-81)。连 36595 只读扫描, 输出落 <code>tests-real/.work/rm10/</code> 白名单落点。注意 exporter 会<b>原样重读 config_path</b>(exporter.py:130)—— 配置必须是 tests-real 派生件, 红线 <code>config.yml</code> 零触碰(guard 拦截 + 本计划口径双保险)。</li>
+      <li><b>进程内直调(RM10-03/04/08)</b>: 直接构造 <code>NotifyConfig</code>/<code>PlatformChannel</code>/<code>setup_notify</code>(notify.py:273)驱动真实代码路径 —— 真注册表写(HKCU)、真 PowerShell 子进程。不跑完整主循环: notify_mod 的挂载/卸载生命周期是进程内部状态, 外部可观测面与本组同一 toast 通道, 不单列用例。</li>
+      <li><b>finalize_watch.run 短参直调(RM10-05/06/07)</b>: <code>run(data_dir, job_id, heartbeat=0.2, stable=0.5, poll=0.1, max_wait=…)</code>(finalize_watch.py:158 注入参数全齐), spec 落 <code>&lt;data_dir&gt;/relocate/&lt;job_id&gt;.spec.json</code>(docstring 单点), journal 助手在 <code>infra/relocate_journal.py</code>(journal_path:33 / write_journal:68 / STOP_PHASES={"done","cancelled"}:65 / read_spec:108 / acquire_pid:115)。<b>无需 qB 参与</b>: spec 的 <code>host/port</code> 指向本机死端口(非白名单实例、无监听的探空端口), <code>_proc_absent</code> 的实例级口径「端点拒连 ⇒ 证一成立」(finalize_watch.py:103-117, P7 真机实测的同机多实例问题恰因此口径而可本地构造)—— 三证秒齐, 不碰任何真 qB。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读; 文件:行号为 2026-10-31 HEAD <code>a46d513c</code> 锚点)</h2>
+    <table>
+      <tr><th>验证面</th><th>代码锚点</th><th>外部可观测断言面</th></tr>
+      <tr>
+        <td>导出(YAML 模板)</td>
+        <td>CLI 入口 <code>--export-yaml/--only-missing/--dry-run</code>(cli.py:71-81 → export_yaml:16) · <code>export_yaml_template</code>(exporter.py:100: 扫种子→collect_all_tracker_hostnames:27→find_missing_domains:39→gen_tracker_name:69→build_tracker_entry:81→写文件, 尾部带 <code>schema_version</code>) · 域名去重/特殊标签大写 <code>capitalize_special_tag</code>(exporter.py:48)</td>
+        <td>输出文件存在且 YAML 可解析; trackers 条目域名集 == qB 实际种子 tracker 域名聚合(按 url 以 http 开头过滤 ** [DHT] ** 伪条目, §2.5)− 测试配置已配域; 文件尾带当前 schema_version; dry_run 零写; 双跑字节一致; 输出<b>纯本地文件</b>, 可真跑(落点白名单内)</td>
+      </tr>
+      <tr>
+        <td>通知通道: AUMID 注册表面</td>
+        <td><code>PlatformChannel.__init__</code>(notify.py:94, win32 分派)→ <code>_ensure_appid_registered</code>(:118)→ <code>_register_appid_registry</code>(:133: 写 <code>HKCU\Software\Classes\AppUserModelId\AutoQB.UI</code> DisplayName="auto-qb" + IconUri=assets/icon.ico, 幂等覆盖; 失败回退 AUMID :42)· <code>_legacy_shortcut_paths</code>(:110, 清理弃用 .lnk "AutoQB.UI.lnk"/"AutoQB.lnk":51)</td>
+        <td>注册表键存在且值逐字一致(真注册表写, 约束面②); 幂等重跑值稳定; 预置的 legacy .lnk 被清理; 失败回退路径(注册表拒绝写 → AUMID 回退值)与 DEBUG 日志</td>
+      </tr>
+      <tr>
+        <td>通知通道: 日志→通知管线</td>
+        <td><code>NotifyHandler.emit</code>(notify.py:228: enabled 门 → is_record_suppressed → 防自环 NOTIFY_LOGGER_PREFIX:34 → quiet_hours 先于节流 → throttle.allow(key) → 入队)· <code>NotifyThrottle</code>(:54, max_per_hour + dedup_window)· <code>_drain</code>(:254 → channel.send:145 真 PowerShell 子进程, 失败仅 DEBUG:152)· <code>setup_notify</code>(:273)</td>
+        <td><b>「发送尝试」级断言</b>(外发红线口径): 发送尝试 = <code>_build_windows</code> 产物 powershell.exe 子进程的出现(进程表采样)· ERROR 记录 → 恰 1 次尝试; WARNING(min_level=ERROR)→ 零; quiet_hours 覆盖 → 零; 同源消息双发 → 恰 1(dedup); enabled=false → 零(红验)。toast 是否真弹出/内容/来源名 = L0 观感 → 用户目视</td>
+      </tr>
+      <tr>
+        <td>通知通道: 致命旁路</td>
+        <td><code>notify_fatal</code>(notify.py:299; 调用点 cli.py:206 顶层异常出口)</td>
+        <td>绕过 handler/节流直发恰 1 次(进程级); 自身再抛错不放大(cli 出口语义)</td>
+      </tr>
+      <tr>
+        <td>guardian 删链(RM04 遗留迁入)</td>
+        <td><code>finalize_watch.run</code>(finalize_watch.py:158: 三证 = _proc_absent:103 + _port_refused:44 + stable 窗口 → _verify_dst:120(file_access 长路径通道)→ journal removing(:216, 带 qb_down_evidence)→ _delete_links:143(非递归幂等, alias_fs.kind_of 判后删)→ removed:234)· 终态挡删 STOP_PHASES={"done","cancelled"}(relocate_journal.py:65, 前向合并:81)· pid 互斥 acquire_pid(:115)</td>
+        <td>结论串三态 <code>removed</code>/<code>verify_mismatch</code>/<code>stopped</code>/<code>timeout</code>/<code>no_spec</code>/<code>already_running</code>; journal 相位链落盘可读; 别名(junction)真删而 dst 原文件零触碰; 校验不齐时<b>一个链接都不删</b>(保守默认, 黄金法则 2 的真机兑现); armed 心跳相位与 qb_down_evidence 载荷</td>
+      </tr>
+    </table>
+    <div class="callout">
+      <b>与已测面的「同一件事不测三遍」切分(规程 §00)</b>: <b>alias 建链/搬数/穿透/journal 恢复</b>已由 RM04 覆盖(引用不复测; 本片只验 guardian 在 qB 退出后的<b>删链半边</b> —— RM04 记账明确的遗留); <b>journal 前向合并/终态保护的机制面</b>已由 RM04 验过(本片只在用例里消费它的可观测结果); <b>配置热重载/通道保存</b>已由 RM02/RM09; <b>HR 扩展(hr-fetch-proxy)安装与权限</b>已由 RM06; <b>NotifyThrottle/quiet_hours 跨午夜等边界数学</b>归单测(内存态决策, 无真机面), 引用不复测。
+    </div>
+    <h3>验证口径(外发红线与幂等)</h3>
+    <ul>
+      <li><b>外发红线在本片的逐条兑现</b>: ①v1 通知仅 platform 单渠道(<code>loaders.py:173</code>, channels 校验), 无 Webhook/邮件代码面 → 无外发端点可触; ②toast = 本机 OS 通知, 只断言进程/日志级, 且 RM10-04 最多触发 ~4 条真实 toast(计划预申报, 见 §05); ③导出输出只落 <code>tests-real/.work/rm10/</code>(白名单落点), 文件内容含真实 tracker 域名但<b>不外发、收尾即清</b>; ④不真装浏览器扩展; ⑤gtm 零触碰。</li>
+      <li><b>注册表回滚口径</b>: AUMID 键是产品有意写入的 HKCU 键(每进程构造期幂等覆盖)。RM10-03 开跑先记键的<b>存在性快照</b>: 键在测试前已存在 → 保留(产品态); 测试前不存在 → 收尾删除还原。legacy .lnk 只清理<b>用例自造</b>的探针件。</li>
+      <li><b>幂等(§09)</b>: 各条自建临时物(spec/journal/别名/探针 .lnk/导出件)全部落 <code>tests-real/.work/rm10/</code> 前缀目录, 收尾整目录删除; guardian 用例的 job_id 一律 <code>rm10-*</code> 前缀防撞。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(8 条, docstring 首行 <code>[RM10-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm10_notify_export/</code>, 跑法 <code>commands run real.suite -- --slice RM10 --yes</code>(<code>-n 0</code>)。共享基座: 临时根 <code>tests-real/.work/rm10/</code>; 各条独立自备/自清临时物; 仅 RM10-01/02 需要连 qB。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-01</span><span class="ttl">导出正向: 真 CLI 全量导出, 域名集与真实 qB 对照</span><span class="badge lv">L2</span><span class="badge">L0 真实种子只读</span></div>
+      <div class="bd"><p>36595(真实种子 8 枚全 paused)上跑 <code>python -m auto_qb --config &lt;tests-real 派生&gt; --export-yaml .work/rm10/export-full.yml</code>; 断言: 文件生成、YAML 可解析、<code>config.schema_version</code> == 当前版本、trackers 键集的域名 == 从 qB <code>/torrents/trackers</code> 聚合的域名集(过滤伪条目)− 派生配置已配域, tracker 名生成不冲突(<code>gen_tracker_name</code> taken 集)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 36595 connected; tests-real 派生配置(tracker 段与真实域零重叠时对照最干净); .work/rm10/ 已建。</li>
+        <li><b>副作用</b>: 只读 qB; 写 .work/rm10/export-full.yml 一个本地文件。</li>
+        <li><b>回滚</b>: 删 .work/rm10/。</li>
+        <li><b>失败判据</b>: 文件缺失 / YAML 解析失败 / 域名集与 qB 聚合不符(多、漏、错) / schema_version 缺失或过期。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-02</span><span class="ttl">导出负向对照: dry-run 零写 / only-missing 骨架 / 双跑幂等</span><span class="badge lv">L3</span><span class="badge">L0 真实种子只读</span></div>
+      <div class="bd"><p>同 36595 三连: ①<code>--dry-run</code> → 日志照打「已导出」但<b>输出文件必须不存在</b>(写路径零触碰); ②<code>--only-missing</code> → 骨架只含 <code>config.trackers</code> 键(无其它段回显), 已配域不出现; ③同参数双跑 → 输出字节级一致(idempotent, tracker 名不漂移)。红验: 故意把期望域名集错一位/摘掉 dry_run 判断 → 断言必须红。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM10-01。</li>
+        <li><b>副作用</b>: 写 .work/rm10/export-missing.yml; dry_run 轮零写。</li>
+        <li><b>回滚</b>: 删 .work/rm10/。</li>
+        <li><b>失败判据</b>: dry_run 轮文件出现(写侧失守) / 骨架含非 trackers 段 / 双跑字节漂移。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-03</span><span class="ttl">AUMID 注册表面: 键值逐字 / 幂等 / legacy .lnk 清理</span><span class="badge lv">L2</span><span class="badge">真注册表(HKCU)</span></div>
+      <div class="bd"><p>进程内构造 <code>PlatformChannel()</code>; 断言 <code>HKCU\Software\Classes\AppUserModelId\AutoQB.UI</code> 存在、DisplayName=="auto-qb"、IconUri==assets/icon.ico 绝对路径; 重复构造值稳定(幂等覆盖写); 预置探针 <code>AutoQB.UI.lnk</code> 于 Start Menu\Programs → 构造后消失(legacy 清理)。附: 键值回退路径(注册表故意拒写场景如无处断则记 L2 部分通过, 回退值断言降为代码走读)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 记录 AUMID 键开跑前存在性快照; 探针 .lnk 自造。</li>
+        <li><b>副作用</b>: 真写 HKCU 一个键(产品有意行为); 删自造探针 .lnk。</li>
+        <li><b>回滚</b>: 开跑前键不存在 → 删除还原; 在 → 原样; 探针 .lnk 已删不补。</li>
+        <li><b>失败判据</b>: 键缺失 / 值与常量不符 / 重复构造漂移 / 探针 .lnk 残留。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-04</span><span class="ttl">通知管线进程级: 发送尝试计数(节流/档位/免打扰/去重)</span><span class="badge lv">L3</span><span class="badge">真 PowerShell 子进程</span></div>
+      <div class="bd"><p>测试配置 <code>NotifyConfig(enabled=True, min_level=ERROR, max_per_hour=3, dedup_window=…)</code> 经 <code>setup_notify</code> 挂真 handler + 真 <code>PlatformChannel</code>; 以「powershell.exe 子进程出现次数」为发送尝试计数(进程表采样窗口): ①emit ERROR → 窗口内恰 1 次尝试; ②emit WARNING → 零; ③quiet_hours 覆盖当前时刻 → ERROR 零尝试; ④同源消息双发 → 仍恰 1(dedup); ⑤红验: enabled=False 重挂 → ERROR 零尝试(摘掉开关断言必须红)。⚠ 本条会在用户桌面弹 ≤4 条真实 toast(进程级断言的物理副产物, 计划预申报, 见 §05)。</p>
+      <ul class="four">
+        <li><b>前置</b>: .work/rm10/ 临时数据目录; 采样窗口 ≥ TIMEOUT_S(10s)防误判; 各子步间清 throttle 态(重挂 handler)。</li>
+        <li><b>副作用</b>: 桌面 toast ≤4 条; PowerShell 子进程 ≤4 个(自然退出)。</li>
+        <li><b>回滚</b>: close handler(logging.shutdown 路径), 无持久物。</li>
+        <li><b>失败判据</b>: ERROR 零尝试 / WARNING 出尝试 / 免打扰出尝试 / 双发 2 次 / enabled=False 仍尝试。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-05</span><span class="ttl">guardian 删链正向(RM04 遗留): 三证 → verify → removing → removed</span><span class="badge lv">L2</span><span class="badge">进程本地, 零 qB</span></div>
+      <div class="bd"><p>本地构造: .work/rm10/guardian/data/relocate/&lt;job&gt;.spec.json(files=真实小文件清单 rel+size, dst=真目录, alias_paths=[真 junction 别名, 用 alias_fs 产品同款通道建], host=127.0.0.1, port=&lt;探空死端口&gt;); 跑 <code>finalize_watch.run(job, heartbeat=0.2, stable=0.5, poll=0.1)</code>。断言: 返回 "removed"; journal 相位链 armed(心跳)→removing(含 qb_down_evidence 三字段)→removed(checks.links_removed==N); junction 真删; dst 文件一个不少。</p>
+      <ul class="four">
+        <li><b>前置</b>: 死端口经 socket 探空确认; 别名用 alias_fs 建(判 kind 才算数); job_id 前缀 rm10-。</li>
+        <li><b>副作用</b>: 建/删 .work 内 junction 与小文件; 写 spec/journal/pid 文件。</li>
+        <li><b>回滚</b>: 删 .work/rm10/guardian/ 整目录(别名已删即终态; 未删则先 remove_alias 再清)。</li>
+        <li><b>失败判据</b>: 结论非 removed / 相位链缺失或乱序 / 链接未删 / dst 文件被误碰。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-06</span><span class="ttl">guardian 负向对照: verify_mismatch 零删链 / 终态挡删 stopped</span><span class="badge lv">L3</span><span class="badge">进程本地, 零 qB</span></div>
+      <div class="bd"><p>同 RM10-05 基座两路: ①spec.files 故意错 size(或缺一条)→ 返回 "verify_mismatch"、journal failed/verify_mismatch、<b>别名一个不删</b>(保守默认: 宁可不删 —— 黄金法则 2 的真机红验); ②三证凑齐前预写 journal 终态 phase=done → run 返回 "stopped"、零删除、journal 终态未被心跳覆盖(前向合并)。红验: ①路若删了链断言即红(这正是本条的判据本体)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同 RM10-05; ②路先 write_journal(done) 再 run。</li>
+        <li><b>副作用</b>: 同 RM10-05(①路别名必须存活)。</li>
+        <li><b>回滚</b>: 删 .work/rm10/guardian/。</li>
+        <li><b>失败判据</b>: ①路删了任何链接 / 结论错 / 终态被心跳覆盖 / ②路动了别名。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-07</span><span class="ttl">guardian 参数与互斥面: no_spec / already_running / timeout</span><span class="badge lv">L2</span><span class="badge">进程本地, 零 qB</span></div>
+      <div class="bd"><p>①空 data_dir → "no_spec"(零动作); ②先 acquire_pid 占锁再 run → "already_running"(单 guardian 不变量); ③spec 就绪但 qB「在跑」面(port=真死端口改不了就换路: max_wait=1 且 port 指向一个<b>可连</b>的哑监听 socket)→ "timeout" 到期退出、零删除、armed 心跳已落盘。附 CLI 形状: <code>python -m auto_qb.tools.finalize_watch</code> 缺 --data-dir/--job → argparse 非 0。</p>
+      <ul class="four">
+        <li><b>前置</b>: 哑监听 socket 用例内自起自关(本机回环, 非白名单实例端口)。</li>
+        <li><b>副作用</b>: .work 内 spec/journal/pid 文件; 哑 socket 短暂监听。</li>
+        <li><b>回滚</b>: 删 .work/rm10/guardian/, 关 socket, release_pid。</li>
+        <li><b>失败判据</b>: 结论串错 / 占锁下第二实例仍动手 / timeout 路删了链接或无 armed 心跳。</li>
+      </ul></div>
+    </div>
+
+    <div class="case"><div class="hd"><span class="cid">RM10-08</span><span class="ttl">notify_fatal 致命旁路: 直发恰 1 次 / 防自环</span><span class="badge lv">L2</span><span class="badge">真 PowerShell 子进程</span></div>
+      <div class="bd"><p>①进程内调 <code>notify_fatal("rm10 test", config)</code> → 发送尝试恰 1 次(进程级, 同 RM10-04 计数法), 且不受 handler 未挂载/max_per_hour=0 影响(旁路语义); ②防自环: 挂真 handler 后经 <code>auto_qb.notify</code> 前缀 logger emit → 零尝试(NOTIFY_LOGGER_PREFIX 门); ③cli.py:206 形状: notify_fatal 抛错不放大(注 fake config 逼失败路径, 断言进程存活)。</p>
+      <ul class="four">
+        <li><b>前置</b>: .work/rm10/ 临时目录; 采样窗口同 RM10-04。</li>
+        <li><b>副作用</b>: 桌面 toast ≤2 条(计入 §05 预申报总额)。</li>
+        <li><b>回滚</b>: 无持久物。</li>
+        <li><b>失败判据</b>: 直发零尝试或多次 / 自环 logger 触发尝试 / notify_fatal 异常逃逸。</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>本片首轮, <b>无存量用例可升档</b> —— 按 RM08/RM09 先例, 以<b>新用例直接立 L3</b> 兑现 §08: <b>RM10-02 / RM10-04 / RM10-06 三条直立 L3</b>(负向对照内建: dry_run 零写红验 / enabled=false 与「ERROR 必有尝试」双对照 / verify_mismatch 零删链红验)。目标分布 <code>L0/L1/L2/L3 = 0/0/5/3</code>。执行中若某条 L3 的红验跑不出红(破坏后仍绿), 按口径该条降 L2 并记账判据缺陷。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 跳过项与解锁条件(含「留给用户目视清单」汇总)</h2>
+    <table>
+      <tr><th>项</th><th>跳过形态</th><th>解锁条件</th></tr>
+      <tr>
+        <td><b>toast 观感面</b>: 弹出与否 / 来源显示名(auto-qb) / 图标 / 正文换行 / urgent 折叠形态</td>
+        <td><span class="badge skip">BLOCKED (L0)</span> 人眼判据, 脚本不可断言; RM10-04/08 执行时桌面会弹真实 toast, 用户顺路目视即完成本项</td>
+        <td><b>用户目视</b>(RM10-04/08 运行当场, 或事后从操作中心看历史)</td>
+      </tr>
+      <tr>
+        <td><b>扩展安装与权限面</b>: 清单/权限声明/加载</td>
+        <td><span class="badge skip">BLOCKED (面为空)</span> <code>extensions/**</code>(除 hr-fetch-proxy)命中 0 文件 —— 仓库现仅 hr-fetch-proxy(RM06 已测, 引用不复测); 真装浏览器扩展真授权 = 用户浏览器域, <b>永远用户解锁</b></td>
+        <td>新扩展代码落位 → 按 §05 规则 1 并入本片重排; 真装/真授权 = 用户</td>
+      </tr>
+      <tr>
+        <td><b>gtm 工具</b>(仓库根 <code>tools/global-traffic-monitor/**</code>, 29 文件)</td>
+        <td><span class="badge skip">BLOCKED (归属未拍板)</span> 不在 RM10 glob 内(<code>src/auto_qb/tools/**</code> 有意区分); 用户生产 gtm 正在运行(RM07 实测), 写侧探测会真写运行中服务 —— 本轮零触碰</td>
+        <td>用户拍板归属: 并入本片(改 glob + 预算重估)或另开片; 用户授权探测窗口后才能碰</td>
+      </tr>
+      <tr>
+        <td><b>Webhook / 邮件通知渠道</b></td>
+        <td><span class="badge skip">不存在(非 BLOCKED)</span> v1 仅 platform 单渠道(loaders.py:173, NotifyConfig channels 校验保证), 无代码面无用例可设</td>
+        <td>未来新增渠道 → 规则 1 并入 + 外发红线重评(届时才需要本地桩 HTTP 接收端)</td>
+      </tr>
+      <tr>
+        <td><b>NotifyThrottle / quiet_hours 边界数学</b>(跨午夜 / 配额翻窗 / dedup 前 80 字符口径)</td>
+        <td><span class="badge skip">引用单测</span> 内存态决策, 无真机面(§00 准入反膨胀)</td>
+        <td>—(RM10-04 只在真机面复验其「外部可观测行为」)</td>
+      </tr>
+      <tr>
+        <td><b>notify_mod 挂载/卸载/热重载生命周期</b></td>
+        <td><span class="badge skip">引用已测面</span> 进程内部状态; 外部可观测面与 RM10-04 同通道; 热重载机制 RM02/RM09 已覆盖</td>
+        <td>—</td>
+      </tr>
+    </table>
+    <p class="hint">预申报总额: 本轮真实 toast 弹出 ≤6 条(RM10-04 ≤4 + RM10-08 ≤2), 全部计划内、进程级断言的物理副产物; 除此之外零任何形态外发(零网络、零注册表外写入、零白名单外落盘)。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ul>
+      <li><b>全数有结论</b>: 8 条三态各归其位, <b>PASS ≥ 6</b>; FAIL 一律按 scope-guard 入池 bug(当轮零修码); BLOCKED 仅限 §05 预登记项, 计划外 BLOCKED 要在切片 §04 写明为何计划没料到。</li>
+      <li><b>三条 L3 红验真跑过</b>: RM10-02(dry_run 零写红验)· RM10-04(双对照)· RM10-06(verify_mismatch 零删链红验)—— 破坏后必须见红, 否则降 L2 记账。</li>
+      <li><b>RM04 遗留收口</b>: guardian 删链路径(armed job 经 ACT_DONE_EXTERNAL 收口后的删链半边)由 RM10-05/06/07 三态覆盖(removed 正向 / verify_mismatch 保守 / stopped 终态挡)→ 锚件 §08 记一条收口, RM04 行遗留注记同步。</li>
+      <li><b>外发红线零违规</b>: 真实种子 8 枚零触碰(RM10-01 纯只读); 零网络外发; 注册表只有 HKCU AUMID 一键且按快照回滚; 落盘全在 .work/rm10 白名单; toast ≤ 计划预申报额。</li>
+      <li><b>收尾核净</b>: .work/rm10/ 整目录删除; 探针 .lnk / 哑 socket / pid 锁零残留; guard 复跑绿; 基线 commit 记进切片 §01 与锚件 §07(RM10 行状态翻转)。</li>
+      <li><b>常驻锚收官</b>: RM10 是排期顺序末片 —— 全部片完成后按锚件口径评估常驻锚的归宿(停止实测才 Dropped, 该决定属用户)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9, RM10 片逐条)</h2>
+    <p>2026-10-31 对 <code>checklists/manual-walkthrough.md</code>(119 行, 冻结中)全清单逐条比对: <b>零命中 —— 本片迁出 0 条</b>。判定过程: 全清单条目均为 WebUI 观感/走查域(设置页、列设置、状态栏、种子页列、跟手性、追剧页右键、时间列等; 已迁出 3+1 条均落 RM08/RM09), 无任何条目涉及通知通道 / 导出 / 扩展 / 工具客户端 —— grep「通知/导出/扩展/webhook/toast/tools」全清单零命中。清单维持冻结(未全迁完, RM08 遗留的 error 态造法等目视项仍在), 不置 Superseded。本片 L0 观感(toast 目视)是<b>新立</b>的留用户项, 不来自该清单。</p>
+  </section>
+
+  <footer style="margin-top:40px; padding-top:14px; border-top:1px solid var(--hair); color:var(--faint); font-size:12.5px;">
+    26-10-31-1922-plan-real-RM10.html · RM10 通知·外部集成 · 真机实测排期计划(拍板即冻结) · 规程单点 memory-bank/testing/real-machine.md
+  </footer>
+</div>
+</body>
+</html>
