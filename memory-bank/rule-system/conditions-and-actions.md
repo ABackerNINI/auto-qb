@@ -87,6 +87,7 @@ conditions:
 | `date_time` | `{day_of_month: 1-31, day_of_week: 1-7, time: "10:00-23:00"}` | 全部可省略(省略=不检查); 区间 `a-b` 或单值; time 支持跨午夜; day_of_week 用 isoweekday (1=周一) |
 | `seedtime` | `"<24H"` | 比较 seeding_time (秒) |
 | `upload_ratio` | `">1.5"` | 比较 ratio |
+| `expr` | `'(tor.size >= 10GiB) and (tor.ratio > 1.5)'` | 一行表达式自由组合种子字段与额外值(语义覆盖全部旧条件, 可与旧条件混用 AND), 完整语法/取值表/门控见上节速查; spec 深度校验在配置期完成(compile + validate + 数据源门控), 表格补记 2026-11-01(W5 registry 文档一致性核对: 注册表中此条原先漏列) |
 | `freespace` | `{path: "R:/", amount: "<100GiB"}` | shutil.disk_usage; path 为空 → False; OSError(盘不可读/盘符掉线) → 抛 `ExprError` 停规则(2026-10-06 拍板 P-07, 绝不降级成假值 —— 与映射 miss / expr 形式 `freespace()` 同口径; 磁盘故障时规则显式停 + ERROR, 不再静默失活) |
 
 比较表达式统一: `> < >= <= == = !=` 前缀, 缺省 `==`; 值解析失败在构造时抛 (fail-fast)。

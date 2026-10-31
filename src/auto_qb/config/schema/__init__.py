@@ -17,7 +17,8 @@
    前端提交的仍是 YAML 形状树, 由 load_config 走与启动完全相同的校验路径。
 2. **键集合必须与 validation.KNOWN_*_KEYS 完全一致** —— 由 tests/test_config_schema.py 守卫,
    新增配置键若忘记登记此处, 守卫测试直接失败(保证"每一项配置都可图形化")。
-3. **插件表必须覆盖 registry 注册的全部插件** —— 同样由守卫测试保证(15 条件 / 12 动作)。
+3. **插件表必须覆盖 registry 注册的全部插件** —— 同样由守卫测试保证(13 条件 / 12 动作;
+   W5 起本表从 registry 条目按名派生, 见 plugin_table)。
 4. 热重载级别不在此声明: 三张手写级别表(L0/L1/L2)已随 hot-reload-simplify W4 退役,
    现由 config/impact.py 的 R 级重启闸(RESTART_SECTIONS)+ 各消费模块 apply 自判承载
    (换对象即生效为默认语义), 避免双份维护。
@@ -139,13 +140,22 @@ def readonly_config_paths() -> Tuple[str, ...]:
 
 
 def plugin_table() -> Dict[str, Tuple[Plugin, ...]]:
-    """插件元数据表: {"condition": (...), "action": (...)}"""
-    return {"condition": CONDITION_PLUGINS, "action": ACTION_PLUGINS}
+    """插件元数据表: {"condition": (...), "action": (...)}
+    W5/G9 派生: 表 = registry 条目**按名引用**本包声明(声明作者单点仍是 .rules 手写元组,
+    方向 R6-a, 延迟导入躲 rules->config 环); 新增插件只注册 registry 一处即入表
+    (演示测试验收①), 声明零复制。守卫测试钉住派生序 == 手写声明序。
+    """
+    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+
+    return {"condition": registry.condition_plugins(), "action": registry.action_plugins()}
 
 
 def plugins_by_kind(kind: str) -> Dict[str, Plugin]:
-    """按插件名索引的元数据(供前端按名查 spec 结构)"""
-    return {p.name: p for p in (CONDITION_PLUGINS if kind == "condition" else ACTION_PLUGINS)}
+    """按插件名索引的元数据(供前端按名查 spec 结构); 未知 kind 落 action 兜底(既有契约)"""
+    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+
+    table = registry.condition_plugins() if kind == "condition" else registry.action_plugins()
+    return {p.name: p for p in table}
 
 
 def schema_payload() -> Dict[str, Any]:

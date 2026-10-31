@@ -16,12 +16,12 @@ from ..compat import (
 )
 from ..schema.fields import (
     # 枚举族单点(issue 26-10-11-0031): 取值域/白名单只在 schema/fields 声明, 本包引用派生
+    # (W5 起 watch_fields/兼容表消费面改走 registry 派生访问器, schema 侧同名常量冻结为
+    #  双跑对账基准; DELETED_ALLOWED_ACTIONS/FIELD_WATCH_ALLOWED 仍由包 __init__ 重导出)
     CHECKING_BASIC,
     CHECKING_MODES,
-    DELETED_ALLOWED_ACTIONS,
     EVALUATION_MODES,
     EXECUTE_ONCE,
-    FIELD_WATCH_ALLOWED,
     ON_ERROR_POLICIES,
     STATE_ATTRS,
     STOP_IF,
@@ -126,7 +126,8 @@ def _expr_gate(data) -> _ExprGate:
 def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
     """规则集 spec 校验: 键/取值域/conditions-actions 结构; 条件与动作名称经 registry 延迟导入校验
 
-    已注册插件的 spec 深度校验也在此进行(_PLUGIN_SPEC_VALIDATORS, 如 state 的 is_* 属性、
+    已注册插件的 spec 深度校验也在此进行(分发表 _plugin_spec_validators 从 registry 条目
+    validator 声明派生, W5/G9; 如 state 的 is_* 属性、
     checking 的段结构)—— 配置正确性检查全部集中在 config 校验阶段 fail-fast,
     插件类(conditions/actions)假定配置正确, 不再自查; 尚未迁移的解析类错误
     (如 size 比较表达式的 int 解析)仍由 Rule 构造时的自然异常暴露(同为启动期 fail-fast)。
@@ -184,10 +185,23 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
             _validate_trigger_action_compat(spec, where, errors)
 
 
+def _watch_fields_allowed() -> tuple:
+    """on_torrent_field_changed 可监听字段取值域(W5/G10 派生): registry 条件条目 watchable_field 声明
+
+    取值域与条件名同源 —— 可事件化的种子字段由其对应条件条目声明(v1 = tags/category);
+    手写基准 FIELD_WATCH_ALLOWED(schema/fields)冻结为双跑对账锚点(test_registry_derived
+    钉住派生 == 基准), 消费面已切派生。
+    """
+    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+
+    return registry.watch_fields_allowed()
+
+
 def _validate_watch_fields(spec: dict, where: str, errors: List[str]) -> None:
     """watch_fields 校验(fail-fast 清单, 计划 26-09-27-1438 §06):
     仅 trigger: on_torrent_field_changed 下允许出现(其它 trigger 下出现即报错);
-    必须是非空列表且逐项落在 FIELD_WATCH_ALLOWED。"""
+    必须是非空列表且逐项落在取值域(W5/G10: registry 条目 watchable_field 声明派生)。"""
+    allowed = _watch_fields_allowed()
     if str(spec.get("trigger", "interval")) != "on_torrent_field_changed":
         errors.append(
             f"{where}: watch_fields 仅在 trigger: on_torrent_field_changed 下允许配置"
@@ -196,14 +210,15 @@ def _validate_watch_fields(spec: dict, where: str, errors: List[str]) -> None:
     wf = spec["watch_fields"]
     if (
         not isinstance(wf, list) or not wf or
-        not all(isinstance(x, str) and x.strip() and x.strip() in FIELD_WATCH_ALLOWED for x in wf)
+        not all(isinstance(x, str) and x.strip() and x.strip() in allowed for x in wf)
     ):
-        errors.append(f"{where}: watch_fields 必须是非空列表, 取值限: {'/'.join(FIELD_WATCH_ALLOWED)}")
+        errors.append(f"{where}: watch_fields 必须是非空列表, 取值限: {'/'.join(allowed)}")
 
 
-def _validate_state_condition_spec(value, where: str, errors: List[str]) -> None:
+def _validate_state_condition_spec(value, where: str, errors: List[str], gate=None) -> None:
     """state 条件 spec 深度校验: 每组仅接受 TorrentState 的 is_* 类别属性
 
+    gate: expr 专属的数据源门控上下文, 本校验器不消费(派生分发统一签名, W5)。
     裸枚举成员名(如 UPLOADING)在枚举实例上恒真值, 必须拒绝; 非法名若放行会在
     运行时每轮抛 AttributeError 被规则引擎吞成 WARNING(掩盖配置笔误)。
     """
@@ -214,8 +229,11 @@ def _validate_state_condition_spec(value, where: str, errors: List[str]) -> None
                 errors.append(f"{where}: 非法状态属性 '{s}', 可选: {'/'.join(STATE_ATTRS)}")
 
 
-def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None:
-    """checking 动作 spec 深度校验: dict/已知键/basic_check/段结构/mode"""
+def _validate_checking_action_spec(value, where: str, errors: List[str], gate=None) -> None:
+    """checking 动作 spec 深度校验: dict/已知键/basic_check/段结构/mode
+
+    gate: expr 专属的数据源门控上下文, 本校验器不消费(派生分发统一签名, W5)。
+    """
     if not isinstance(value, dict):
         errors.append(f"{where}: checking 动作只接受 dict 配置, 旧字符串形式已移除, 请参考示例改写")
         return
@@ -242,9 +260,10 @@ def _validate_checking_action_spec(value, where: str, errors: List[str]) -> None
             errors.append(f"{where}.{seg}.mode 取值非法: '{sub.get('mode', '')}', 可选: {list(CHECKING_MODES)}")
 
 
-def _validate_tags_condition_spec(value, where: str, errors: List[str]) -> None:
+def _validate_tags_condition_spec(value, where: str, errors: List[str], gate=None) -> None:
     """tags 条件 spec 正则校验: 列表(组间或)的每组成员内逗号分隔模式, regex: 主体须可编译
-    (非字符串等类型错误由 Rule 构造时的自然异常暴露, 此处仅查正则, 与 _check_regex_patterns 同风格)"""
+    (非字符串等类型错误由 Rule 构造时的自然异常暴露, 此处仅查正则, 与 _check_regex_patterns 同风格;
+    gate = expr 专属的门控上下文, 本校验器不消费, 派生分发统一签名 W5)"""
     groups = value if isinstance(value, list) else [value]
     for g in groups:
         if isinstance(g, str):
@@ -282,24 +301,57 @@ def _validate_expr_condition_spec(value, where: str, errors: List[str], gate=Non
             )
 
 
-def _validate_pattern_list_spec(value, where: str, errors: List[str]) -> None:
-    """category/trackers 条件与 remove_tags 动作 spec 正则校验: 列表或单值, 每项 regex: 主体须可编译"""
+def _validate_pattern_list_spec(value, where: str, errors: List[str], gate=None) -> None:
+    """category/trackers 条件与 remove_tags 动作 spec 正则校验: 列表或单值, 每项 regex: 主体须可编译
+
+    gate: expr 专属的数据源门控上下文, 本校验器不消费(派生分发统一签名, W5)。
+    """
     items = value if isinstance(value, list) else [value]
     _check_regex_patterns(items, where, errors)
 
 
-# 插件 spec 深度校验分发(键为插件名): 配置正确性检查全部集中在 config 校验阶段,
-# 插件类(conditions/actions)假定配置正确, 不再自查
-_PLUGIN_SPEC_VALIDATORS = {
+# ---------------------------------------------------------------------------
+# 插件 spec 深度校验分发(W5/G9 派生收口, plan 26-11-01-0106): 配置正确性检查全部集中在
+# config 校验阶段, 插件类(conditions/actions)假定配置正确, 不再自查。
+#
+# 分发不再手工按插件名维护: 哪个插件有深度校验、用哪个校验器, 由 registry 条目的
+# validator 声明派生(_plugin_spec_validators); 校验器**实现**仍单点在本模块
+# (_SPEC_VALIDATOR_IMPLS, 校验逻辑集中 config 不下放插件类)。手写表冻结为
+# _PLUGIN_SPEC_VALIDATORS_BASELINE 作双跑对账锚点(test_registry_derived 钉住派生 == 基准)。
+# ---------------------------------------------------------------------------
+
+# W5 冻结手写基准(双跑对账锚点, 消费面已切派生; 改派生口径须先让双跑 diff 清零)
+_PLUGIN_SPEC_VALIDATORS_BASELINE = {
     "state": _validate_state_condition_spec,
-    # expr 不走这里: 它需要数据源门控上下文, 由 _validate_plugin_entry 单独分发
     "checking": _validate_checking_action_spec,
     "tags": _validate_tags_condition_spec,
     "category": _validate_pattern_list_spec,
     "trackers": _validate_pattern_list_spec,
     "tracker_group": _validate_pattern_list_spec,
     "remove_tags": _validate_pattern_list_spec,
+    # expr 原不走此表(需数据源门控上下文 gate); W5 统一进派生分发, 实现签名带 gate
+    "expr": _validate_expr_condition_spec,
 }
+
+# 校验器实现单点(键 = registry 条目 validator 声明名): 校验逻辑集中在 config 校验阶段
+_SPEC_VALIDATOR_IMPLS = {
+    "state": _validate_state_condition_spec,
+    "checking": _validate_checking_action_spec,
+    "tags": _validate_tags_condition_spec,
+    "pattern_list": _validate_pattern_list_spec,
+    "expr": _validate_expr_condition_spec,
+}
+
+
+def _plugin_spec_validators() -> dict:
+    """插件 spec 深度校验分发表(W5/G9 派生): 插件名 -> 校验器, 从 registry 条目 validator 声明派生
+
+    条目 validator 声明了实现表里不存在的名字 = registry 与本模块脱节 —— KeyError 显式炸出
+    (fail-fast, 守卫测试在导入期即对账, 不静默缺省)。
+    """
+    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+
+    return {e.name: _SPEC_VALIDATOR_IMPLS[e.validator] for e in registry.iter_entries() if e.validator}
 
 
 def _validate_condition_tree(node, where: str, errors: List[str], gate=None, depth: int = 1, top: bool = True) -> None:
@@ -354,12 +406,12 @@ def _validate_condition_leaf(name: str, value, where: str, errors: List[str], ga
         _try(parse_bool, value, f"{where}.{name}", errors)
     elif name not in registry.CONDITIONS:
         errors.append(f"{where}: 未知条件 '{name}', 可用: {sorted(registry.CONDITIONS)}")
-    elif name == "expr":  # 表达式需要额外的门控上下文, 不走统一的深度校验分发
-        _validate_expr_condition_spec(value, f"{where}.{name}", errors, gate)
     else:
-        deep = _PLUGIN_SPEC_VALIDATORS.get(name)
+        # W5/G9: 深度校验分发从 registry 条目 validator 声明派生(expr 的数据源门控上下文
+        # gate 经统一签名透传, 仅 expr 实现消费)
+        deep = _plugin_spec_validators().get(name)
         if deep:
-            deep(value, f"{where}.{name}", errors)
+            deep(value, f"{where}.{name}", errors, gate=gate)
 
 
 def _validate_action_entry(
@@ -411,7 +463,7 @@ def _validate_action_entry(
         return
     if "on_error" in norm:
         _validate_on_error(norm["on_error"], f"{where}.on_error", errors)
-    deep = _PLUGIN_SPEC_VALIDATORS.get(name)
+    deep = _plugin_spec_validators().get(name)
     if deep:
         deep(norm["params"], f"{where}.{name}", errors)
 
@@ -499,6 +551,18 @@ def _validate_on_error(value, where: str, errors: List[str]) -> None:
                 errors.append(f"{where}: backoff 必须 > 0(秒): {backoff}")
 
 
+def _deleted_allowed_actions() -> tuple:
+    """on_torrent_deleted 允许动作白名单(W5/G11 派生): registry 动作条目 deleted_ok 声明
+
+    兼容声明随动作注册进 registry 条目(G11「兼容声明进条目」); 手写基准
+    DELETED_ALLOWED_ACTIONS(schema/fields)冻结为双跑对账锚点(test_registry_derived
+    钉住派生 == 基准), 消费面已切派生。
+    """
+    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+
+    return registry.deleted_allowed_actions()
+
+
 def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -> None:
     """触发时机 × 动作兼容白名单(决策见 04 规则系统触发时机表)
 
@@ -510,7 +574,7 @@ def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -
     trigger = str(spec.get("trigger", "interval"))
     if trigger != "on_torrent_deleted":
         return
-    allowed = DELETED_ALLOWED_ACTIONS
+    allowed = _deleted_allowed_actions()
     acts = spec.get("actions") or []
     for i, entry in enumerate(acts):
         if not isinstance(entry, dict):

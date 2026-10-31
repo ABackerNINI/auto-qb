@@ -11,7 +11,9 @@
 import pytest
 
 from auto_qb.rules.registry import (
+    ACTION_ENTRIES,
     ACTIONS,
+    CONDITION_ENTRIES,
     CONDITIONS,
     create_action,
     create_condition,
@@ -66,6 +68,8 @@ def test_register_condition_decorator():
         assert create_condition({"always_true": None}).match(None)
     finally:
         CONDITIONS.pop("always_true", None)
+        # W5 派生口径: 名称字典与条目字典平行, 清理须两侧同弹(残条目会污染派生守卫)
+        CONDITION_ENTRIES.pop("always_true", None)
 
 
 def test_register_action_decorator():
@@ -91,3 +95,5 @@ def test_register_action_decorator():
         assert create_action("noop", None).execute(None).is_ok
     finally:
         ACTIONS.pop("noop", None)
+        # W5 派生口径: 名称字典与条目字典平行, 清理须两侧同弹(残条目会污染派生守卫)
+        ACTION_ENTRIES.pop("noop", None)

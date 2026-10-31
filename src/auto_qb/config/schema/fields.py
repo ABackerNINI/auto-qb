@@ -207,7 +207,9 @@ TRIGGERS = (
 )
 
 # on_torrent_field_changed 可监听字段白名单(v1, 计划 26-09-27-1438 D2): state 已有专属触发时机,
-# amount_left 高频变化事件化即噪音, 均不入列
+# amount_left 高频变化事件化即噪音, 均不入列。
+# W5/G10 起**声明源 = registry 条件条目的 watchable_field**(与条件名同源), 本表冻结为
+# 双跑对账基准(test_registry_derived 钉住派生 == 本表); 消费面走 registry 派生访问器。
 FIELD_WATCH_ALLOWED = ("tags", "category")
 
 CHECKING_BASIC = ("filelist", "piecehashes", "custom")
@@ -223,4 +225,6 @@ STATE_ATTRS = ("is_downloading", "is_uploading", "is_complete", "is_checking", "
 # on_torrent_deleted 允许的动作白名单: 删除后种子无活现场, 现存动作几乎都对已删种子无意义,
 # 仅允许"不依赖活现场"的只读/记录类动作(如 print_torrent_details)。未来通知/记录类动作加入此集合。
 # 空集合 = 禁止任何动作(on_torrent_deleted 仅作语义占位)。其它触发时机不设白名单(全部动作可用)。
+# W5/G11 起**声明源 = registry 动作条目的 deleted_ok**(兼容声明进条目), 本表冻结为
+# 双跑对账基准(test_registry_derived 钉住派生 == 本表); 消费面走 registry 派生访问器。
 DELETED_ALLOWED_ACTIONS = ("print_torrent_details", )

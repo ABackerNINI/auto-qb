@@ -137,3 +137,23 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
   写入在单一写线程内(process 只在主循环线程被调), 落盘语义随 `state_save_interval`;
   记录失败只 DEBUG, 不影响规则执行。保守默认: trace 默认开且轻量(无开关键, 常量兜底体积);
   条件不命中的运行同样落一条(这正是排障诉求), 未被调度的规则零开销。
+
+### 单一 registry 派生收口 (plan 26-11-01-0106 W5/G9-G11/G13)
+
+条件/动作/choose 编排块统一入册 `rules/registry.py`, 注册条目 = **三元组**
+`类型名 -> 执行函数 + schema 声明 + 文档片段`:
+
+- **声明按名引用**(R6 方向 a): schema 声明留在 `config/schema/rules.py`(作者单点不变),
+  registry 条目按名引用, 派生消费走延迟访问器(函数内 import, 躲 rules->config 导入环);
+  新条目(如测试/演示)可自带声明直接注册。
+- **派生消费面**(新增插件只注册 registry 一处即全链路可用): ①深度校验器分发
+  (`config/validation/rules.py::_plugin_spec_validators`, 校验器实现仍单点在 config);
+  ②触发器 x 动作兼容表(on_torrent_deleted 白名单 = 动作条目 `deleted_ok` 声明派生);
+  ③watch_fields 取值域(条件条目 `watchable_field` 声明派生, 与条件名同源);
+  ④webui schema 插件表(`config/schema/plugin_table` 从条目派生)。choose 编排块
+  同册(`BLOCK_ENTRIES`, 执行形态类在 base 侧注册, 键面按名引用 compat 常量)。
+- **双跑守卫**: 三处手写基准冻结在原位(`_PLUGIN_SPEC_VALIDATORS_BASELINE` /
+  `DELETED_ALLOWED_ACTIONS` / `FIELD_WATCH_ALLOWED`), 派生 == 基准 diff 清零由
+  `tests/test_registry_derived.py` 钉住; 演示测试(同文件)证明新增哑动作只改 1 处。
+- **G13 拍板**: 未用条目(13 条件用 1 / 12 动作用 2)全部保留, registry 化只做派生收口
+  不删条目; choose 编排块无插件工厂(执行内联在 `Rule.process`), 仅入册键面与文档片段。

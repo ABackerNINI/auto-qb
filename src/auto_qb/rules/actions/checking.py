@@ -16,7 +16,7 @@ from .skip_checking import SkipCheckingMixin
 logger = logging.getLogger(__name__)
 
 
-@register_action
+@register_action(validator="checking")
 class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
     """校验动作(checking): 用 basic_check 确定参考种子, 按有/无参考分段执行
 

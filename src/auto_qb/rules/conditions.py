@@ -46,7 +46,7 @@ class SizeCondition(BaseCondition):
         return utils.compare(self.op, ctx.torrent.size, self.value)
 
 
-@register_condition
+@register_condition(validator="tags", watchable_field="tags")
 class TagsCondition(BaseCondition):
     """标签条件: 每组内逗号分隔为与, 组间为或, 支持 regex:/:ignore_case 和 ${required_seeding_time}"""
     name = "tags"
@@ -72,7 +72,7 @@ class TagsCondition(BaseCondition):
         return False
 
 
-@register_condition
+@register_condition(validator="pattern_list", watchable_field="category")
 class CategoryCondition(BaseCondition):
     """分类条件: 列表为或关系, 支持 regex:/:ignore_case"""
     name = "category"
@@ -85,7 +85,7 @@ class CategoryCondition(BaseCondition):
         return any(utils.match_value(category, [str(pat)]) for pat in self.patterns)
 
 
-@register_condition
+@register_condition(validator="pattern_list")
 class TrackersCondition(BaseCondition):
     """tracker 条件: 匹配 tracker 配置名, 列表为或关系, 支持 regex:/:ignore_case"""
     name = "trackers"
@@ -99,7 +99,7 @@ class TrackersCondition(BaseCondition):
         return any(any(utils.match_value(n, [str(pat)]) for n in names) for pat in self.patterns)
 
 
-@register_condition
+@register_condition(validator="pattern_list")
 class TrackerGroupCondition(BaseCondition):
     """站点分组条件: 匹配站点 groups 字段声明的分组, 列表为或关系, 支持 regex:/:ignore_case
 
@@ -117,7 +117,7 @@ class TrackerGroupCondition(BaseCondition):
         return any(any(utils.match_value(g, [str(pat)]) for g in groups) for pat in self.patterns)
 
 
-@register_condition
+@register_condition(validator="state")
 class StateCondition(BaseCondition):
     """状态条件: qB TorrentState 枚举类别属性(is_downloading/is_uploading/is_complete/
     is_checking/is_stopped/is_paused/is_errored), 与 qB 官方语义一致, 每组内 & 连接为与,
@@ -216,7 +216,7 @@ class UploadRatioCondition(BaseCondition):
         return utils.compare(self.op, ctx.torrent.ratio, self.value)
 
 
-@register_condition
+@register_condition(validator="expr")
 class ExprCondition(BaseCondition):
     """表达式条件: 一行表达式, 自由组合种子字段与额外值(当前时间 / 盘空间 / 全局计数…)
 

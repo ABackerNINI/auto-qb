@@ -38,7 +38,7 @@ class AddTagsAction(BaseAction):
         return ActionResult.ok(f"{new}")
 
 
-@register_action
+@register_action(validator="pattern_list")
 class RemoveTagsAction(BaseAction):
     """删除标签, 支持 regex: 和 ${required_seeding_time} 变量"""
     name = "remove_tags"
@@ -147,7 +147,7 @@ class StopAction(BaseAction):
         return ActionResult.ok("暂停")
 
 
-@register_action
+@register_action(deleted_ok=True)
 class PrintTorrentDetailsAction(BaseAction):
     """打印种子详细信息到日志(只读, 不对种子做任何操作)
 

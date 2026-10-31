@@ -284,6 +284,20 @@ class ChooseBlock:
         self.default_on_error = default_on_error
 
 
+# choose 编排块入册(W5 单一 registry, plan 26-11-01-0106 G6/G9): 编排块与条件/动作统一入册。
+# 注册点在本模块而非 registry —— base 顶层 import registry, registry 反向引用 base 的
+# ChooseBlock 会成环; 键面按名引用 config.compat.CHOOSE_KNOWN_KEYS(条目延迟访问器解析)。
+registry.register_block(
+    "choose",
+    ChooseBlock,
+    doc="动作域分支编排块: choose: [{when: <条件树节点>, then: [动作项...]}, ...] + 可选 default: [动作项...]; "
+    "按序求 when 首个命中执行其 then(其后分支短路), 无命中且有 default 执行 default, 否则空操作(no_op); "
+    "块内动作失败按其自身 on_error 三档分派(与顶层动作同语义单点), choose 本体无 on_error; "
+    "块内不允许嵌套 choose(编排块只允许一层)",
+    keys_ref="CHOOSE_KNOWN_KEYS",
+)
+
+
 def _build_action_steps(entries, rule_name: str, allow_choose: bool = True) -> List[tuple]:
     """动作列表 -> 执行步列表(Rule 构造期, W3-B): ("action", 插件实例, on_error) / ("choose", ChooseBlock)
 
