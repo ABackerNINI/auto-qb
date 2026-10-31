@@ -14,11 +14,13 @@
 - test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
 - test_parse_history_dat_bad_lines: 脏行计数 / 非法日期 / 重复日期取最后
 - test_aggregate_periods: day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)
+- test_aggregate_nd_window_multi_digit: ND 窗口两位数 N(30D)精确求和 —— 前导数字截断(30D->3D)不得缩水 (W3-S5)
 - test_curve_speed_plan_b: 全程分档覆盖(首档覆盖低端, 边界, 末档延续)
 - test_curve_speed_last_tier_clamp_matrix: 末档 clamp 边界矩阵(各档内部不变/恰好压线/超末档取末档速度/末档 0 显式放开)
 - test_speed_curve_beyond_last_tier_clamps_both_directions: 双向累计超末档 -> 写末档速度值而非解除限速(任务集成)
 - test_merge_direction_after_clamp_takes_strictest: 多曲线各自超末档 -> clamp 到末档速度后合并, 取最严仍正确(SPD-01/D5)
 - test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None) / KiB 半值进位
+- test_speed_unit_conversion_boundaries: kib_to_bytes / bytes_to_kib_floor 边界(0/1/负/半值; kib_1 负值契约锁, 上游不可达的防御分支) (W3-S5)
 - test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
 - test_speed_curve_global_task_uses_own_interval: 曲线配置专属 interval
 - test_speed_curve_global_task_not_registered: 未配置 -> 不创建
@@ -586,6 +588,24 @@ def test_aggregate_periods():
     assert curves.aggregate(rows, "1D", date(2026, 9, 10)) == (0, 0)
 
 
+def test_aggregate_nd_window_multi_digit():
+    """ND 窗口两位数 N: 30D 按 N=30 取 [today-29d, today] 整窗求和
+
+    W3-S5(aggregate_20: period[:-1] -> period[:1]): 30D 被截成 3D -> 窗口缩水,
+    全局限速按错窗口决策。单位数窗口(3D/2D)对截断变异免疫, 必须用两位数 N 才能杀;
+    反向对照: 单位数 3D 截断前后同值。
+    """
+    today = date(2026, 9, 30)
+    rows = [
+        (date(2026, 9, 30), 1 * GIB, 1 * GIB),  # 窗口内(30D 与 3D 都含)
+        (date(2026, 9, 10), 2 * GIB, 2 * GIB),  # 仅 30D 含
+        (date(2026, 9, 1), 4 * GIB, 4 * GIB),  # 仅 30D 含(窗口起点 today-29d = 09-01, 含端点)
+        (date(2026, 8, 15), 8 * GIB, 8 * GIB),  # 窗口外
+    ]
+    assert curves.aggregate(rows, "30D", today) == (7 * GIB, 7 * GIB)
+    assert curves.aggregate(rows, "3D", today) == (1 * GIB, 1 * GIB)
+
+
 def test_curve_speed_plan_b():
     """全程分档覆盖: 首档覆盖低端 / 边界落在"达到阈值"档 / 末档延续"""
     pts = _points(FULL_UPLOAD)
@@ -682,6 +702,26 @@ def test_merge_direction_and_bytes_to_kib():
     assert curves.bytes_to_kib(6 * MIB) == 6144
     assert curves.bytes_to_kib(int(0.5 * MIB)) == 512
     assert curves.bytes_to_kib(int(0.25 * MIB)) == 256  # 半值进位
+
+
+def test_speed_unit_conversion_boundaries():
+    """kib_to_bytes / bytes_to_kib_floor 边界(0/1/负/半值)—— 此前全套件零覆盖
+
+    kib_1 契约锁: 负 KiB 上游不可达(qbapi 旧版 -1 标记已停用, 曲线目标 speed 来自
+    config 非负域), 属防御分支 —— 断言行为锁契约, 不判真洞(W3-S5)。
+    """
+    # kib_to_bytes: 0 = 不限速; 1 KiB/s 是合法正值不得抹 0(kib_5); 负值归 0(kib_1 契约锁)
+    assert curves.kib_to_bytes(0) == 0
+    assert curves.kib_to_bytes(1) == 1024
+    assert curves.kib_to_bytes(-1) == 0
+    # bytes_to_kib_floor: 整除向下, 0/负数归 0; 1 B 不足 1 KiB 归 0(floor_6: 负值不得漏成负 KiB)
+    assert curves.bytes_to_kib_floor(0) == 0
+    assert curves.bytes_to_kib_floor(1) == 0
+    assert curves.bytes_to_kib_floor(1024) == 1
+    assert curves.bytes_to_kib_floor(1536) == 1
+    assert curves.bytes_to_kib_floor(-1) == 0
+    assert curves.bytes_to_kib_floor(-1024) == 0
+    assert curves.bytes_to_kib_floor(None) == 0
 
 
 # ---------- 集成: 任务注册 / handler ----------

@@ -29,9 +29,14 @@
 - [x] 非 bare 集数起点 0 跳过(E0) (P2-a)
 - [x] 剧名归一化 bigram 噪音成对剔除 (P2-a)
 - [x] parse_files 目录段无季标记继续向后 (P2-a)
+- [x] 零位标记名空段 title/key 皆空串 (title_and_key_4/5); 全 groupish 括号候选取尾候选不崩 (strip_group_22) (W3-S5)
+- [x] parse_files 首文件无季继续扫后续文件 (parse_files_20); 标点剥除进聚合键 (normalize_key_15/16) (W3-S5)
+- [x] 两轮扫描: 零位 bare 不劫持「季在中间、集在季后」的切分 (find_episode_2/11); 区间终点 999 合法 (find_episode_31) (W3-S5)
+- [x] 名称标记优先: 带集数/日期且带 key 的结果不被文件集数改写 (refine_1) (W3-S5)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
 - test_bare_trailing_without_context_not_matched
+- test_bracket_only_all_groupish_candidates
 - test_bare_zero_not_episode
 - test_bracket_form
 - test_bracket_only_title_picks_last_candidate
@@ -48,6 +53,8 @@
 - test_empty_or_noise_name_keyless
 - test_episode_before_season
 - test_episode_patterns
+- test_episode_range_end_999_kept
+- test_episode_scan_after_season_beats_zero_position_bare
 - test_episode_wins_over_date
 - test_find_episode_non_bare_zero_skipped
 - test_find_season_out_of_range_and_earliest_kept
@@ -61,16 +68,19 @@
 - test_noise_tokens_stripped
 - test_normalization_equivalence
 - test_normalize_key_bigram_noise
+- test_normalize_key_strips_punctuation
 - test_parse_files_multi_season_dir_unknown
 - test_parse_files_no_season
 - test_parse_files_s01_dir_and_zh_marker
 - test_parse_files_season_and_episodes
 - test_parse_files_season_dir_non_suffix_tail_unknown
 - test_parse_files_season_dir_with_suffix
+- test_parse_files_season_in_later_file
 - test_parse_files_season_scan_skips_non_matching_parts
 - test_range_end_from_resolution_dropped
 - test_refine_explicit_episode_untouched
 - test_refine_name_season_not_inferred
+- test_refine_name_episode_and_date_untouched
 - test_refine_no_usable_files_unchanged
 - test_refine_season_from_files
 - test_refine_season_from_suffixed_dir
@@ -80,6 +90,7 @@
 - test_season_pack
 - test_sxe_season_not_double_counted
 - test_unknown
+- test_zero_position_marker_name_keyless
 """
 import pytest
 
@@ -474,3 +485,83 @@ def test_parse_files_season_scan_skips_non_matching_parts():
     assert season is None
     season2, _ = parse_files([r"SomeShow/Season 02/file.mkv", r"Other/ep01.mkv"])
     assert season2 == 2
+
+
+# ---------------- W3 变异审计定向补测 (S5, 2026-10-31) ----------------
+# 真洞清单与守阵断言形态: tmp-analysis/mut-core-w3-classify.md「S4 verify 对账」(中危 9 条)
+
+
+def test_zero_position_marker_name_keyless():
+    """零位标记名("[01] ..."): 标记前段为空, title/key 皆空串(进未识别桶)
+
+    title_and_key_4/5: 空段返回值被换成 "XXXX" -> 全部零位标记名误并进同一个假聚合桶
+    (误并几乎不可发现, 本模块取向的头号恶); 展示面(title)与聚合面(key)两面都锁。
+    """
+    for name in ("[01]", "[01] Show Name"):
+        r = p(name)
+        assert r.key == "", f"{name!r} key 应为空串: {r}"
+        assert r.title == "", f"{name!r} title 应为空串: {r}"
+
+
+def test_bracket_only_all_groupish_candidates():
+    """全括号候选均为组名特征: 取最后一个候选作标题(不崩、不取纯数字)
+
+    strip_group_22(or->and): 全 groupish 候选时 (空 and cands)[-1] IndexError,
+    parse_release 对 "[Subs][RAW][05]" 类命名整类崩溃。
+    """
+    r = p("[Subs][RAW][05]")
+    assert r.title == "RAW"
+    assert r.kind == KIND_EPISODE
+    assert (r.season, r.ep_start) == (1, 5)
+
+
+def test_parse_files_season_in_later_file():
+    """首个文件无季不放弃: 继续扫后续文件, 季目录不在首位也能找到
+
+    parse_files_20(break 条件反转): 首个文件无季即放弃 -> 丢季 -> refine 兜底误归 S1。
+    """
+    assert parse_files(["Show/file.mkv", "Season 02/E05.mkv"])[0] == 2
+    # 反向对照: 首个文件已带季, 结果不变
+    assert parse_files(["Season 02/E05.mkv", "Show/file.mkv"])[0] == 2
+
+
+def test_normalize_key_strips_punctuation():
+    """标点剥除进聚合键: "Show: Name" / "Re:Zero" 类标题标点不残留(同剧异写不误拆)
+
+    normalize_key_15/16: 剥除正则加 XX 边界 / 替换串变 "XX XX" -> 标点残留或污染聚合键。
+    """
+    assert tvshows._normalize_key("Show: Name") == "show name"
+    assert tvshows._normalize_key("Re:Zero") == "re zero"  # 无空格粘连的标点同样剥除
+
+
+def test_episode_scan_after_season_beats_zero_position_bare():
+    """两轮扫描: 有季标记时先在季标记之后找集数, 零位 bare 标记不得劫持切分
+
+    find_episode_2/11(第一轮扫描被废 / search 丢 pos): "[05]" 在 0 位被选中 ->
+    标题丢、key 空进未识别桶。断言形态取「零位 bare + 季 + 季后集数」组合;
+    注: 无季的 "[05] Show.S01E05" 两形态同结果, 杀不动(classify 守阵形态已修正)。
+    """
+    r = p("[05] Show S2 - 05 [1080p]")
+    assert r.title == "Show" and r.key == "show"
+    assert (r.season, r.ep_start) == (2, 5)
+
+
+def test_episode_range_end_999_kept():
+    """区间终点 999 合法(end > 999 才判异常): S01E05-999 是 5-999 的区间包
+
+    find_episode_31(>999 -> >=999): end==999 的合法区间被砍成单集。
+    """
+    r = p("Show.Name.S01E05-999")
+    assert (r.ep_start, r.ep_end) == (5, 999)
+
+
+def test_refine_name_episode_and_date_untouched():
+    """名称标记优先于文件推断: 带集数/日期且带 key 的结果不被文件集数改写
+
+    refine_1(or->and): 早退门被废 -> S01E05 被 EP01 改写、DATE 被改 EPISODE;
+    两个 kind 各断言一份。反向对照(季包确实被文件展开)见 test_refine_season_pack。
+    """
+    parsed = p("Show.Name.S01E05.1080p")
+    assert refine_with_files(parsed, ["Season 1/Show.S01E01.mkv"]) == parsed
+    dated = p("Show.Name.2026.09.15.1080p")
+    assert refine_with_files(dated, ["Season 1/Show.S01E01.mkv"]) == dated
