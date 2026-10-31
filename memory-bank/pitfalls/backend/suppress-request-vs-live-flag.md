@@ -1,6 +1,7 @@
 # 总线事件协议: 一符两义的字段必须拆(请求位 != live 旗标)
 
 > 摘要: EventBus suppress 曾把「重放保护请求」与「事件分派相位的抑制」混在一个 `_suppressed` 字段上 —— 注释宣称"窗口只盖两个事件相位", 实现却在置位点到下轮轮首之间吞掉一切 emit, 连续两次 L2 重建时第二次的 queue_rebuilt 静默丢失(issue 26-10-01-0750)。教训: 状态字段一符两义时注释只能描述其中一个语义, 判别与修复都以实现为准, 然后拆字段。
+> 等级: L0
 > 触发: 改 EventBus, 改 suppress, 抑制窗口, 重建窗口内 emit, 相位丢失, 事件被吞, queue_rebuilt, 重放保护, 一符两义, 注释与实现不符, set_suppressed, take_suppressed
 
 ## 触发

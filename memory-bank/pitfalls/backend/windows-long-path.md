@@ -1,6 +1,7 @@
 # Windows 长路径(MAX_PATH 260)
 
 > 摘要: 超过 MAX_PATH 的路径在 Windows 上**裸路径一律失败**, 而失败方式有**三种**(给假 / 抛错 / 静默退化), 同一根因会在不同层伪装成不同症状 —— 前缀、比较、打开、删除四处各有坑。
+> 等级: L0
 > 触发: 长路径, MAX_PATH, 260, `\\?\`, 扩展长度前缀, 路径过长, 打不开文件夹, 打开目标文件夹, open_path, PIDL, SHParseDisplayName, SHOpenFolderAndSelectItems, ShellExecute, ShellExecuteExW, SEE_MASK_INVOKEIDLIST, 进入目录, 打开目录, isdir, scandir, realpath, normcase, path_normalize, rmtree, WinError 3, WinError 2, 深目录, 中文长名
 
 **Refs:** memory-bank/tasks/26-10-11-webui-open-path-resolve.md

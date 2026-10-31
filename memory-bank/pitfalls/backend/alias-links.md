@@ -1,6 +1,7 @@
 # 链接能力探测: reparse 结构 / 1314 二义性 / drvfs 只在挂载选项里
 
 > 摘要: 链接能力探测: reparse 结构 / 1314 二义性 / drvfs 只在挂载选项里
+> 等级: L0
 > 触发: 别名, junction, symlink, 硬链接, reparse, REPARSE_DATA_BUFFER, MountPointReparseBuffer, 1314, 提权, 长路径, drvfs, WSL, 9p, /proc/mounts, 能力探测, 跨 OS, 链接不可见, 建链成功但读不了
 **Refs:** memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md
 

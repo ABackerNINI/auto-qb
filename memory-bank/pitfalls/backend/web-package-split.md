@@ -1,6 +1,7 @@
 # web/ 包拆分波次的新坑 (2026-09-22)
 
 > 摘要: web.py → web/ 包拆分(plan 26-09-22-1857)实打实撞出来的四条 —— FastAPI 懒解析路由、包内 logger 命名、__file__ 基准降级、生成脚本转义陷阱。
+> 等级: L0
 > 触发: 拆 web/ 包, 改 factory, include_router, app.routes, getLogger, __file__, 生成脚本, 金清单守阵
 
 ### 新版 FastAPI 的 `include_router` 不再平铺路由

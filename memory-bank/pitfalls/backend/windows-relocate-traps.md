@@ -1,6 +1,7 @@
 # Windows 进程探测/长路径/组键迁移三处陷阱
 
 > 摘要: Windows 进程探测/长路径/组键迁移三处陷阱>   
+> 等级: L0
 > 触发: os.kill, TerminateProcess, guardian, 进程探测, 长路径, os.path.getsize, 组键迁移, 增量视图, 孤儿行, scope_hit
 
 ### `os.kill(pid, 0)` 在 Windows 会**杀掉**被探测进程 —— 进程存活探测自噬循环

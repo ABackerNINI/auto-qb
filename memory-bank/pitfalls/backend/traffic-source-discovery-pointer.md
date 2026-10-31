@@ -1,6 +1,7 @@
 # 发现指针是唯一事实源: 用户级目录 + 探活判定, 不是数据目录 + pid
 
 > 摘要: 工具发现层若把指针/锁放进 data_dir 或拿 pid 判存活, 一旦 `--data-dir` 改过、进程崩了留 pid、或按 cwd 推目录(自启时 cwd 是 system32)就全错。正解: 指针与锁锚用户级平台目录(与数据目录解耦)、就绪只认 `GET /status` 200、锁在绑端口前 acquire、两侧常量镜像同值。
+> 等级: L0
 > 触发: endpoint.json, 发现指针, 全局流量来源, global-traffic-monitor, 探活, 未运行, 拉不起来, data_dir, pid, 残留指针
 **Refs:** memory-bank/plans/26-10-20-1316-plan-gtm-primary-registration.html
 

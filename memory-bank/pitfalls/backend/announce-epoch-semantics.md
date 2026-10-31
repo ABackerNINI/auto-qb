@@ -1,6 +1,7 @@
 # 「绝对时间被当倒计时」—— epoch 字段按剩余量比较, 判据方向反了恒不触发
 
 > 摘要: qB 5.2(WebAPI 2.13.0)起 `torrents/trackers` 的 `next_announce`/`min_announce` 是 **Unix epoch 绝对秒**(qB 源码 `toSecondsSinceEpoch`, PR #23045 "seconds since epoch"), 旧汇报确认判据 `na < b_na - 60` 却按**倒计时语义**写(值应变小)—— 而汇报成功 = 重新调度 = next_announce **前跳(变大)**, 判据方向反了恒假: 不抛错、不报警, 只表现为确认窗口走满 30s **恒误报「失败」**。修法(plan 26-10-05-0923, 2026-10-05 落地): 方向反转为主判据 `next > b_next + TOL`(TOL=3.0s) + 证据门控(在途直证/status4+msg 判败/停止直判/超时落 warn 第三态) + 基线 status≥2 极值守卫 + min 窗口假瞬态守卫。
+> 等级: L0
 > 触发: next_announce, min_announce, epoch, 前跳, 倒计时, 绝对时间, 相对时间, 汇报确认, 强制汇报, reannounce, trackers, 确认超时, 恒误报, 误报失败, TOL, updating, 假瞬态, 判据方向
 
 **Refs:** memory-bank/tasks/26-10-05-backend-reannounce-confirm-rework.md

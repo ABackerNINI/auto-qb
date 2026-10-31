@@ -1,6 +1,7 @@
 # ctypes windll 调用不绑 argtypes: x64 上静默失效
 
 > 摘要: 用 `ctypes.windll.user32.XXX(...)` 直调 Windows API 时**不声明 argtypes/restype**, 参数按 32 位 int 传, 而 `HWND` / `HWND_TOPMOST` 这类"指针宽度"参数的高 32 位是寄存器残留值 —— 调用**返回失败却 GetLastError 为 0**, 且是否翻车取决于残留值 ⇒ 表现为"有概率失效"。2026-09-30 实测: `SetWindowPos(hwnd, HWND_TOPMOST, ...)` 同一窗口同一时刻, 未绑签名 ret=0 且 Z 序纹丝不动, 绑了签名 ret=1 立刻抬到顶层。
+> 等级: L0
 > 触发: ctypes, windll, WinDLL, argtypes, restype, 静默失败, GetLastError 为 0, x64, 传参, HWND, 指针宽度, 寄存器残留, 有概率, SetWindowPos, SetForegroundWindow, GetClassNameW, GetWindowTextW, Shell API, 封装注册键, 实参求值顺序, 安全网, WINFUNCTYPE 缺失, 签名表工厂, _win_dll, Linux CI 红
 
 ### 每个 API 都得绑死 argtypes —— 不绑时是"随机失效"而不是"报错"

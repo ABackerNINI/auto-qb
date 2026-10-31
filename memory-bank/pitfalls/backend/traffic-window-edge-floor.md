@@ -1,6 +1,7 @@
 # 流量图读侧窗过滤: null 标记取整下偏的 1 秒边界带
 
 > 摘要: `traffic_grid.v4_series_points` 的真空/断连 null 标记时间**向下取整**(`int(prev_chain_end)` / `floor(ts)`), 而观测点的保留判据是「覆盖桶触及窗口左界」(`ceil(ts) >= t0`)—— 两判据不同源。停机/断连恰落 `(t0-1, t0)` 时标记取整后 = `t0-1` 落窗外被丢, 种子点却仍保留 ⇒ 差分链误接、离线期字节误归恢复首桶(假尖峰)。修法(issue 26-10-08-0141, 2026-10-08 落地): null 点窗过滤下界放宽 1 秒(`_V4_NULL_FLOOR_S`)与种子点保留带精确对齐。
+> 等级: L0
 > 触发: 改读侧窗过滤, 改窗首种子外扩, 改归桶/真空判定, 改 null 点, 改 v4_series_points, 假尖峰, 恢复首桶, 取整, 边界带
 
 **Refs:** memory-bank/tasks/26-10-08-webui-qb-traffic-seed-vacuum.md

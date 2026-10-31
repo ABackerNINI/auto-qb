@@ -1,6 +1,7 @@
 # Shell 打开的资源管理器窗口不弹到顶层
 
 > 摘要: 后台进程经 `SHOpenFolderAndSelectItems` / `os.startfile` 弹资源管理器时, 新窗口**有概率被压在当前前台窗口后面** —— Windows 前台锁不允许后台进程抢前台; 必须打开后找回窗口、抬 Z 序, 再尽力争取焦点。⚠ 2026-09-30 二次报障查出**真根因另有其人**: 置前链路里所有 `ctypes.windll.user32.*` 调用都没绑 `argtypes`, HWND 按 32 位传 → **返回 0 且 GetLastError 为 0**的随机失效 —— 见 [ctypes-x64-argtypes.md](ctypes-x64-argtypes.md)。
+> 等级: L0
 > 触发: 打开目标文件夹, open-path, open_path, 资源管理器, explorer, 不弹到顶层, 不置前, 后台窗口, 前台锁, foreground, SetForegroundWindow, AttachThreadInput, SwitchToThisWindow, SetWindowPos, TOPMOST, argtypes, 托盘菜单, 弹窗在后面, 有概率
 
 ### 后台进程弹的资源管理器窗口有概率不到顶层 —— 打开后要主动置前

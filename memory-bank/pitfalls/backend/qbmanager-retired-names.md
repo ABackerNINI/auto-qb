@@ -1,6 +1,7 @@
 # qbmanager 命名与别名冻结
 
 > 摘要: QbManager 上抽新方法/加新属性时, 命名会撞**别名冻结守阵**(`tests/test_qbmanager_alias_freeze.py`)——退役旧名(分诊清单 `26-10-01-0350-plan-web-state-alias-disposal.triage.json` 里 category=forward 的成员与 alias_layer.fields)禁止在 QbManager 上复活, 守阵红验报「退役旧名在 QbManager 上复活」。这**不是守阵误报**, 是命名撞车: 换一个名字即可, 不要去改分诊清单或删守阵。
+> 等级: L0
 > 触发: qbmanager, 抽方法, 抽私有方法, 重构命名, _load_state, 退役名, alias_freeze, 复活, 分诊清单, QbManager 新方法
 
 **Refs:** memory-bank/tasks/26-10-10-backend-dup-code-audit.md,memory-bank/plans/26-10-01-0350-plan-web-state-alias-disposal.triage.json

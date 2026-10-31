@@ -1,6 +1,7 @@
 # 重启恢复判据不能从外部现场反推「指令是否下发过」
 
 > 摘要: 「先落账、后下发」的恢复点若按相位一律置 issue=False, 崩溃窗口(外部系统从未收到指令)在两处现场上与「发了没动静」同形 ⇒ 静默等到停滞超时误判失败; 判据必须靠账上「已下发」位分流, 且两条下发路径都要落账
+> 等级: L0
 > 触发: 重启恢复, 崩溃恢复, 崩溃窗口, setLocation 补发, move_issued, 恢复判据, 账上事实, 下发路径, _load_jobs, recover_exec_phase, 死代码判据
 **Refs:** memory-bank/issues/26-10-30-0616-bug-moving-phase-issue-restore.html
 

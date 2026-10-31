@@ -1,6 +1,7 @@
 # 「最近一轮」快照不排空, 下轮才覆盖 —— 消费侧必须联合轮次计数防残值误判
 
 > 摘要: 增量快照(`last_added` / `last_removed` / `delta_fields`)是「最近一轮」语义 —— **不排空, 下一轮 `_apply` 才覆盖写**。无新应用轮时它们是**残值**: 单独当键源会把上一轮的变更重复发布或把无键轮误判成有键轮(归约回空 delta → delta 客户端漏变更)。消费侧判定必须联合 `rounds_applied`(轮次计数前进)防残值误判。S5b 镜子 fuzz 220 轮抓到(effdc31a)。
+> 等级: L0
 > 触发: last_added, last_removed, delta_fields, rounds_applied, 残值, 最近一轮, keyed, 增量键源, 快照语义, 消费判定, fuzz, 纯命令源
 **Refs:** memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/pitfalls/testing/stub-bypass-apply.md
 

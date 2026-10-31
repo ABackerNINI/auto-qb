@@ -1,6 +1,7 @@
 # Windows ONLOGON 计划任务注册需提权: 非提权进程 rc=1「拒绝访问」, 与 Program Blacklist 的 WinError 5 同指纹
 
 > 摘要: Windows ONLOGON 计划任务注册需提权: 非提权进程 rc=1「拒绝访问」, 与 Program Blacklist 的 WinError 5 同指纹
+> 等级: L0
 > 触发: 开机自启, autostart, schtasks, ONLOGON, 计划任务, 拒绝访问, 提权, UAC, 自启注册失败, HKCU Run, 注册表自启, Run 值 260
 
 ### 用 `schtasks /SC ONLOGON` 做「开机自启」= 必然要提权, 而无人值守路径上没人点 UAC

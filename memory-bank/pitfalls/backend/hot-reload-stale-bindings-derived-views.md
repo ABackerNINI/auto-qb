@@ -1,6 +1,7 @@
 # 热重载换 Config 对象后, 存量记录的绑定与派生判定不会自动跟进 —— 绑定结果要显式收敛, 非快照字段要显式置脏
 
 > 摘要: 「换对象 ≠ 下游自动跟进」家族三段 —— ①存量 `TorrentRecord.tracker_conf` 仍指向旧 Config 的 `TrackerConfig`, 重绑只有 L2 结构重建与 full_round 补 None 两条路, 配置值类变更(如 `hr_check`)两条都不触发 ⇒ 判定/锚点/规则段读到旧值(修: 认领模块 apply 显式重绑, `tracker:rebound N`); ②HR 判定这类「非 store 快照字段」的派生值变化(取数线程发布新视图)没有置脏消费方 ⇒ WebUI 快照停在旧值(修: 新鲜度基线 + flush_views 比对置脏); ③L2 重建换新 TaskQueue 后种子级任务(内置维护 + interval 规则)随旧队列丢弃且 torrents_added 对存量不触发 ⇒ 维护面停摆到重启(修: 创建入口幂等 + rules 订阅 full_round 补建, issue 26-10-01-2147)。实报(2026-10-03): 热重载开启站点 HR 在线核实后 WebUI 恒显「本地·达标」, 重启进程才显「在线·已达标」。
+> 等级: L0
 > 触发: 热重载, apply, 重绑, tracker_conf, hr_check, hr 规则段, 判定不刷新, 本地·达标, WebUI 快照, 置脏, revision, 取数, rebuild_runtime, 种子级任务, 补建, has_task, 任务面, full_round
 
 ### 绑定结果持的是旧对象 —— 换 Config ≠ 存量记录自动重绑

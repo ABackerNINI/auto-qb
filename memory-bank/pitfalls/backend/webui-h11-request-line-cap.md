@@ -1,6 +1,7 @@
 # 组 key 随请求行走, h11 16KB 未完成事件上限间歇性拦掉组级命令
 
 > 摘要: 组级路由把整组 key(base64url(组路径+全组文件相对路径))放进请求行; h11 缺省 16KB「未完成事件」上限在**头分片到达且停在未完成态**时判非法 —— 头一次性完整到达反而不触发, 所以症状间歇(大组「启动整组」时好时坏)。修法 = uvicorn.Config 显式放宽 `h11_max_incomplete_event_size`(lifecycle.py, 1MiB, 0.53.0 原生透传)。
+> 等级: L0
 > 触发: WEB 传输层,h11,请求行,组 key,Invalid HTTP request received,Receive buffer too long,MUST_CLOSE,uvicorn,启动整组,间歇性 400
 **Refs:** memory-bank/testing/baselines/26-10-21-0435-webui-h11-request-line-cap.md
 

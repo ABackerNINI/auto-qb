@@ -1,6 +1,7 @@
 # 行为细节 (易误判为 bug)
 
 > 摘要: 后端一批"看着像 bug 其实是特性"的行为 —— 改之前先确认它是不是有意设计。
+> 等级: L0
 > 触发: 改规则, 改主循环, 改归组, 改缺文件扫描, 改限速, 改状态持久化, 改 web 服务生命周期
 
 ### 奇数限速保护 (`(limit/1024)%2==1` 跳过) 是特性不是 bug
@@ -85,13 +86,15 @@
 - **判别**: 仅"连接态→断开"转换记一次 ERROR, 恢复记一次 INFO; **非 `APIConnectionError` 照常记"主循环异常"**。
 - **处置**: 别为"日志太少"去加日志 —— 那会刷屏; 要排查就看那两次转换记录。
 
-### 配置热重载的两处"看着像 bug"的现状(**未改动**)
+### 配置热重载现状: 级别表已退役, diff 只到段粒度(**有意设计, 不是缺陷**)
 
-- **触发**: 读 `_diff_flat` / 热重载逻辑。
-- **判别**: ①`_diff_flat` 的分支条件是"两侧都是纯 dict", 真实 Config 的 L0 段是 dataclass ⇒
-  实际产出**整段单条变更**(级别判定仍正确, 只是**粒度粗**);
-  ②`max_level` / `restart_required_paths` 当前**无生产调用**(Web 与 qbmanager 各自内联)。
-- **处置**: ①属已知粒度问题; ②属**清理候选**。两者都不是缺陷, 改动前先确认影响面。
+- **触发**: 读 `config/impact.py` / 热重载逻辑, 或想给变更 diff 加细粒度。
+- **判别**: W4 后 L0/L1/L2 手写级别表已退役(plan 26-09-30-1819, 见 `config/impact.py` 模块
+  docstring)—— 「哪些段变了之后要做什么」是各模块 apply 的自判知识(整段相等即短路);
+  `diff_config_impacts` 只回**顶层段**变更(段内嵌套不展开, **粒度粗是有意设计**, 级别表退役后
+  无粒度消费方); `restart_required_paths`(R 闸)有生产调用单点:
+  `config/writer.py::_prepare` 与 `qbmanager.apply_new_config`。
+- **处置**: 别把「段级 diff」当缺陷改细; R 闸段清单单点在 `RESTART_SECTIONS`(state_file/data_dir/fs)。
 
 ### 主循环节流必须经模块级 `_throttle(stop_event, main_tick)`
 

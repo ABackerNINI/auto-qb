@@ -1,6 +1,7 @@
 # qB API 与数据层
 
 > 摘要: qB 版本差异、`sync/maindata` 增量语义、`torrents/add` 的响应形态与选项缺省语义、`TorrentRecord` 的唯一所有权 —— 改数据层前必读。
+> 等级: L0
 > 触发: 改 qbapi, 改 store, 改 TorrentRecord, 改 apply_sync, 加种子字段, 全局限速, qB 状态, 添加种子, torrents/add, 添加后开始, stopped, autoTMM, 自动种子管理, 添加选项, optional 缺省, 添加回执, WEB UI 命令被 qB 拒绝, 409, Conflict409
 
 **Refs:** memory-bank/tasks/26-10-09-webui-qb-command-reject.md,memory-bank/tasks/26-10-10-webui-peers-speed-field.md
