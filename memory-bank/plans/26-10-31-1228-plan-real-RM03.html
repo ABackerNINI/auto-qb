@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM03">
+<meta name="plan-stamp" content="26-10-31-1228">
+<meta name="doc-topic" content="real-machine-rm03-plan">
+<title>RM03 规则引擎 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 70ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 20px; font-weight: 600; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 12px 14px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); }
+  td code, th code { white-space: nowrap; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin-bottom: 14px; max-width: none; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--good); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.lv { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: var(--good-bg); color: var(--good); border-color: #2f4a33; }
+  .badge.stop { background: #2a1518; color: #e08a94; border-color: #4a2c31; }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .case .kv { margin-bottom: 6px; font-size: 14px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">真机实测轨 · 分步实施计划 · 排期锚 issue 26-10-31-0641</div>
+  <h1>RM03 规则引擎</h1>
+  <p class="lede">对「规则引擎」片做真机实测的排期准备与分步计划。本计划只准备、不执行: 用例代码、<code>real.run</code>/<code>real.suite</code> 由执行代理照本计划落刀。验证面对准规程 §04 片表 RM03 行: <b>条件命中 / 动作真作用于 qB(打标·分类·限速·删除) / 变量替换 / 表达式</b>。本片是纯 qB 副作用面 —— 动作真写 qB(打标/分类/限速/启停), 全部用 L1 假种子(死端口 announce, 零外连), 「删除」面只删自造种子。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1228</div></div>
+    <div class="item"><div class="k">切片</div><div class="v">RM03(片表 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">1 次(半天), 用例 9 条</div></div>
+    <div class="item"><div class="k">基线 commit</div><div class="v">首轮(实测时刻 HEAD 记切片)</div></div>
+    <div class="item"><div class="k">前置</div><div class="v">RM00 基建全绿(L1/L2 解锁)· RM01 9/9 · RM02 7/8 · RM04 8/8(缺陷均在池)</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + glob 自检)</h2>
+    <h3>会话同步(硬性步骤, 先行)</h3>
+    <div class="callout warn"><b><code>my-commit-flow.sync</code> FAIL</b>: <code>拿不到远端 origin/real/rm02-rm10 (离线?)</code>(2026-10-31 12:22 实测)。与 RM04 排期轮同一形态 —— 本工作分支无远端同名分支可对, 属「无远端分支可对/离线不阻塞本地排期」, 非落后。本地 HEAD <code>4f5f2d9e</code>, 树净无未提交改动。工作分支推送与否交用户拍板, 本轮继续。</div>
+    <h3>漂移体检</h3>
+    <div class="callout good"><b>首轮, 无漂移面。</b>RM03 无基线 commit(规程 §06 步骤 2 / §07: 首轮写「首轮, 无漂移面」)。本轮 glob 命中文件清单(补前缀后实测 <code>git ls-files</code>, 共 19 件): <code>src/auto_qb/rules/</code> 18 件 —— 根 4 件(base.py 314 行 / conditions.py 259 / registry.py 30 / checking_meta.py 120)· <code>actions/</code> 7 件(__init__/basic 183/checking 207/full_checking 153/skip_checking 33/transfer 113)· <code>expr/</code> 7 件(__init__/env 477/errors 22/eval 203/lexer 170/parser 252/types 107, 共 2938 行) + <code>src/auto_qb/core/modules/rules_mod.py</code>(478 行)。本轮用例落地后基线 commit 记实测时刻 HEAD, 下次回归对这套 glob 跑 <code>git log &lt;base&gt;..HEAD</code>。</div>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 12:27 实测)</h3>
+    <pre><code>[ok] real.guard (0.7s)
+  [ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停
+  [ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+    <ul>
+      <li>两实例 <code>connection_status=firewalled</code>(§2.5 口径: 非 <code>disconnected</code> 即通过), 白名单端口与镜像路径核对通过, 配置非仓库根 <code>config.yml</code>。与 RM02/RM04 轮同一环境指纹(两 pid 未变)。</li>
+      <li>规则动作全落在 36596(空库, 真实种子 0 个)—— 打标/分类/限速/启停/删除全部只碰自造种子。</li>
+    </ul>
+    <h3>glob 自检(规程 §05 规则 8)</h3>
+    <div class="callout"><b>命中前 2 条 glob 中 <code>core/modules/rules_mod.py</code> 零命中 —— 漏 <code>src/auto_qb/</code> 前缀</b>(RM01/RM02/RM04 同款缺陷<b>第四次复发</b>, 已按规则 8 修正锚件 §03 RM03 行并记 §08, 12:28 实测)。<code>src/auto_qb/rules/**</code> 一支原本就带前缀, 实测命中 18 件。补前缀后 2/2 命中(清单见上), 全属规则引擎面, 无混入大件, 片边界不糊, 不拆不并。</div>
+    <div class="callout warn"><b>边界注记(不改片表, 如实记)</b>: ① <code>rules/actions/</code> 里 checking 三件(checking.py/full_checking.py/skip_checking.py + checking_meta.py, 共 513 行)在 glob 内但<b>不在锚件 §03 RM03 验证面四项里</b>(校验/跳检动作面) —— 本轮不立用例, 归属裁定(并入 RM03 后续轮 / 另立)交用户拍板, 不自行拆并片。② 变量替换实现 <code>utils.replace_vars</code>(<code>src/auto_qb/infra/utils.py:827</code>)在 glob 外 —— 本片只验它的<b>消费点效果</b>(打标/分类的标签串), 不动 utils 本体。③ 删除: 规则动作注册表实测 <b>12 个动作无 delete 类</b>(actions/__init__.py 全量导出核对), 锚件验证面「删除」本轮落刀为 <code>on_torrent_deleted</code> 触发面(RM03-06); 验证面措辞是否修订交用户拍板, 本轮不改 §03 验证面文字。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读)</h2>
+    <table>
+      <tr><th>验证面</th><th>实现锚点(文件:行号)</th><th>外部可观测口径</th></tr>
+      <tr><td>规则加载与绑定</td><td><code>load_rules</code>(rules_mod.py:185)· 绑定 <code>_rules_for_torrent</code>(:214, tracker_conf.rules 的 <code>@规则集</code> 引用, <code>_resolve_refs</code>:417)· 引用校验 <code>config/validation/rules.py:43</code>(引用不存在运行时静默不执行)· Rule 解析条件/动作链 <code>rules/base.py:135-183</code></td><td>绑定为纯内存面, 无直连断言 —— 效果经动作作用于 qB 后回读; 「未匹配 tracker 配置的种子规则全跳过」是绑定死门(§2.9 第①条), 用对照种子验</td></tr>
+      <tr><td>触发面</td><td>interval: <code>_create_rule_task</code>(rules_mod.py:227, 规则内置 interval, 0S=每轮)→ <code>_handle_rule</code>(:264, 周期重入队)· 存量补建 <code>_on_full_round</code>(:81)· 事件: <code>_dispatch_events</code>(:286)—— on_torrent_added(:351)/on_torrent_deleted(:322, 删除前快照 snapshot)/on_torrent_state_enum_changed(:330, store.state_changed)/on_torrent_field_changed(:341, watch_fields 交集 :372)· 一次性 rule-event Task(:381)</td><td>interval 规则随主循环节拍执行; 事件规则即时分派; 断言 qB 侧效果 + 产品日志(「事件规则[名]」「任务[…]| 规则执行异常」)</td></tr>
+      <tr><td>条件命中</td><td><code>Rule.matches</code>(base.py:185, 全条件 AND)· 条件全集 <code>rules/conditions.py</code>: path:22 / size:38(<code>_in_range</code>:13) / tags:50 / category:76 / trackers:89 / tracker_group:103 / state:121 / hr:139 / date_time / seedtime / upload_ratio / <b>expr:227</b>(compile_expr+validate 装载期) / freespace· 条件出错即停规则 ERROR(base.py:212-218, 优先于 stop_following_rules_if)· 去重 execute_once/cooldown(base.py:148-149, <code>_dedup_allowed</code>:296)</td><td>命中与否经「动作打没打标」回读 + 日志; 条件异常日志 ERROR 级含规则名</td></tr>
+      <tr><td>动作作用于 qB</td><td><code>Rule.process</code>(base.py:189, 断点 resume_index/pending 中断/stop_if)· <code>actions/basic.py</code>: add_tags:20 / remove_tags:41(regex: 模式, <code>_expand_patterns</code>:61) / add_category:65(<code>torrents_create_category</code>:94) / remove_category:102 / start:115 / stop:134 / print_torrent_details:150· <code>actions/transfer.py</code>: move_to:9 / reannounce:53(MIN_INTERVAL 保护) / <b>限速 <code>_SpeedLimitAction</code>:75</b>(<code>torrents_set_upload_limit</code>/<code>torrents_set_download_limit</code>:96; skip 三态: 奇数 KiB 手动不覆盖 :92「用户已设置」/ 值相同 :94「已设置」)</td><td>全部经 qB API 回读: tags / category / dl_limit·up_limit / state; 日志行「规则[名] … | 动作[名] 成功: …」</td></tr>
+      <tr><td>变量替换</td><td><code>utils.replace_vars</code>(infra/utils.py:827, glob 外): 仅 <code>${required_seeding_time}</code> ← <code>tracker_conf.hr.required_seeding_time_raw</code>(原文如 "3D"); <b>无 hr 配置留原文不替换</b>(:835)· 消费点: add_tags(basic.py:33)/remove_tags(:46)/add_category(:78)</td><td>标签/分类串里出现替换后的值(keep-3D); 无 hr 的 tracker 条目下标签保持字面 <code>${required_seeding_time}</code></td></tr>
+      <tr><td>表达式</td><td><code>ExprCondition</code>(conditions.py:227)· 装载期 <code>compile_expr</code>+<code>validate</code>(errors.py ExprError → ConfigError)· 求值 <code>expr/eval.py:26</code>(昂贵值缓存 :82)· 取值环境 <code>expr/env.py</code>: _attr:84 / _state:91 / _hr:99 / _age:117 / _server_state:129 / _count:151 / _traffic:181 / disk_usage_value:214 / freespace 等函数</td><td>expr 条件命中 → 动作执行; 坏语法装载期被拒(ConfigError); 求值异常 → 条件出错停规则 ERROR + 动作不执行</td></tr>
+    </table>
+    <p><b>配置面锚点</b>: 规则集定义在 <code>rules:</code> 段, tracker 条目以 <code>rules: [@规则集]</code> 引用(config/validation/rules.py:43 校验引用存在); 测试配置 <code>schema_version: 5</code>, trackers 条目 <code>domains</code> 须覆盖假种子 announce 的 hostname(死端口 <code>http://&lt;本机IP&gt;:1/announce</code>, §2.9 第①条 —— 无匹配 tracker 配置则 tracker_conf=None, interval 补建(rules_mod.py:99)与事件分派(:356)双路跳过, 规则面整个不发生)。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(9 条, docstring 首行 <code>[RM03-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm03_rules/</code>, 跑法 <code>commands run real.suite -- --slice RM03 --yes</code>(<code>-n 0</code>)。<b>全部条目用 L1 假种子(死端口 announce, 零外连), 不需要 L2 互传、不需要活跃真实种子</b> —— 限速面只验「下发 + API 回读」, 速率曲线归 RM07。假种子一律 <code>real-fake</code> 标签; 种子数据只落 <code>tests-real/.work/rm03/</code> 与 <code>R:/qbt-fake/rm03/</code>(<code>real.seed --dir</code> 白名单); 产品 <code>data_dir</code> 指用例临时目录, <b>不得指仓库根 <code>auto-qb-data/</code></b>(红线)。产品进程只连 36596(空库); 36595 仅 guard 出现。共享基座: 测试配置 trackers ≥1 条目(domains=[本机局域网IP], <code>lib/net.py:local_host()</code> 口径)引用规则集 <code>@rm03</code>。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-01</span><span class="ttl">条件命中·interval 主链: size 条件分流 + 异尺寸对照(红验内建)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>规则 trigger=interval(0S=每轮)、conditions=<code>size</code> 落 256K 档、actions=<code>add_tags [rm03-hit]</code>。A(256K)应命中打标, B(512K)不得命中 —— 异尺寸种子就是负向对照, 不依赖人工构造对照场景。</p>
+      <ul class="four">
+        <li><b>前置</b>: 产品非 dry-run 连 36596, 主循环 interval 取测试配置小节拍; 假种子 A(--size 256K)/B(--size 512K) 各带死端口 announce, 均匹配同一 tracker 条目(引 @rm03)。</li>
+        <li><b>副作用</b>: 36596 加 2 假种子; A 被打 rm03-hit 标签。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清 rm03-* 标签 + 删用例目录; 收尾核 36596 无 real-fake/rm03 残留。</li>
+        <li><b>失败判据</b>: 跨 ≥3 个节拍后 A 仍无标签; <b>B 也被打标(条件分流失效, 对照必须能红 —— 红不了本条降 L2 记)</b>; 日志出现「规则执行异常」; 或 A/B 压根没进管线(tracker 匹配死门, 查 announce 与 domains 口径后记 BLOCKED)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-02</span><span class="ttl">on_torrent_added 即时分派 → add_category(动作真建分类并赋给种子)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>规则 trigger=on_torrent_added、actions=<code>add_category rm03-added</code>。加种子后<b>不等节拍</b>, 事件规则即时分派 —— 与 RM03-01 的周期路径互补, 两条触发路径各验一条。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 规则集追加本规则; 新加 1 枚假种子(复跑遇 qB 5.2 重复 infohash 409 → 删旧重加, <b>不收养</b>, §2.9 第②条)。</li>
+        <li><b>副作用</b>: 加 1 假种子; qB categories 出现 rm03-added 且该种子 category=rm03-added。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删分类(qB API categories/delete)+ 删用例目录。</li>
+        <li><b>失败判据</b>: categories 无 rm03-added; 或分类建了种子未赋上(add 与赋值两步断开); 或需要等到下一节拍才生效(事件即时语义丢失)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-03</span><span class="ttl">限速动作: 下发 + API 回读 + 奇数 KiB 手动限速不覆盖(负向红验)</span><span class="badge lv">L3(负向内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>规则 actions=<code>download_speed_limit "64KiB/s"</code> + <code>upload_speed_limit "128KiB/s"</code>(偶数, 避开手动谓词)。种子甲初始限速 ≠ 目标 → 下发后 API 回读断言; 种子乙<b>预置奇数 KiB 限速</b>(如 2001KiB/s, <code>is_manual_speed_limit</code> utils.py:793 项目约定)→ 动作必须 skip「用户已设置」且限速原样 —— 负向对照不依赖注入, 预置即成。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 两枚假种子; 乙先经 qB API 置 dl_limit/up_limit=2001*1024。</li>
+        <li><b>副作用</b>: 甲的限速被改; 乙不动。</li>
+        <li><b>回滚</b>: API 复位甲限速(0)+ <code>real.seed.rm --all</code> + 删用例目录。</li>
+        <li><b>失败判据</b>: 甲回读 dl_limit≠64KiB/s 或 up_limit≠128KiB/s(以 torrents/info 回读为准, <b>验证口径写死 = API 回读, 不咬日志</b>); 乙限速被覆盖(手动保护失效, 负向必须红 —— 红不了如实降 L2); 重复节拍反复下发不 skip「已设置」(日志刷屏)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-04</span><span class="ttl">变量替换: ${required_seeding_time} → hr raw; 无 hr 留原文(对照)</span><span class="badge lv">L2(对照内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>两个 tracker 条目分流: 条目甲 domains=[本机IP] 带 hr 配置(required_seeding_time_raw="3D"), 条目乙 domains=[localhost] 无 hr(localhost 走本机 hosts 解析, connect 死端口同样零外连; 匹配按 hostname 不含端口 —— 双 conf 分流必须靠不同 host, 执行代理实况核对 <code>utils.match_tracker_confs</code>)。规则 add_tags <code>["keep-${required_seeding_time}"]</code>。⚠ hr 配置可能牵动 HR 模块(RM06 面)—— 若对假种子发起在线核实/在线动作, 记 BLOCKED 注明, 当轮不修。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座但 trackers 双条目如上; 两枚假种子 announce 分别指 <code>http://&lt;本机IP&gt;:1/announce</code> 与 <code>http://localhost:1/announce</code>。</li>
+        <li><b>副作用</b>: 加 2 假种子; 甲标签 keep-3D, 乙标签字面 <code>keep-${required_seeding_time}</code>。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清标签 + 删用例目录。</li>
+        <li><b>失败判据</b>: 甲标签未替换出 3D; 乙标签不是原文(无 hr 被替换成空串/抛错 —— replace_vars 留原文语义被破坏); HR 模块对假种子发起在线动作(记 BLOCKED)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-05</span><span class="ttl">表达式条件: 求值命中打标 + 坏表达式负向(装载期/运行期)</span><span class="badge lv">L3(负向内建)</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>正向: 规则 conditions=<code>expr: size > 100000 && state == "stalledUP"</code>(或等价命中式, 函数调用如 <code>len(name)</code> 作加分)→ 打标。负向两路: ①装载期 —— 坏语法表达式在 config 校验/规则加载即 ConfigError(dry-run 起程即验, 不进用例主断言); ②运行期 —— 求值异常的合法语法表达式 → 条件出错停规则 ERROR(base.py:212-218)且动作不执行。运行期错误式的具体写法由执行代理按 <code>expr/env.py</code> 实况挑(造不出时降级只验装载期并如实记)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 规则集含 expr 正向规则(± 运行期负向规则); 1 枚 256K 假种子。</li>
+        <li><b>副作用</b>: 1 假种子; 正向命中打标。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清标签 + 删用例目录。</li>
+        <li><b>失败判据</b>: 正向不命中(求值结果与真机字段实况分叉, 如 stalledUP 实为别的枚举 —— 按实况修期望值重跑一次, 仍不中记 FAIL); 运行期负向表达式<b>静默通过</b>(无 ERROR 无 ConfigError 且动作照跑 —— 停规则语义失效)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-06</span><span class="ttl">删除触发面 on_torrent_deleted: 删自造种子 → 快照留档(只删 real-fake)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>规则 trigger=on_torrent_deleted、actions=<code>print_torrent_details</code>(删除面唯一合法只读动作: 种子已从 store 移除, 用删除前快照作 ctx.torrent, rules_mod.py:302/322-327)。⚠ 规则引擎<b>无删除种子的动作类</b>(注册表 12 动作实测核对), 本条验的是「删除事件触发规则」; 删除对象<b>只用自造种子</b>(real.seed.rm / qB API 删), 绝不碰真实种子。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 1 枚假种子已在库; 规则集含本规则。</li>
+        <li><b>副作用</b>: 删除 1 枚自造种子(本就要删, 无额外副作用)。</li>
+        <li><b>回滚</b>: 无残留(种子已删); 删用例目录; 断言只认假种子 hash。</li>
+        <li><b>失败判据</b>: 删除后产品日志无该规则 print_torrent_details 输出(快照路径失效); 输出里种子字段全空(快照没接上); 真实种子删除(若有)误触发本规则 —— 断言日志只出现假种子 hash。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-07</span><span class="ttl">启停与清理向动作: stop→start 状态往返 + remove_tags(regex:)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>一条规则串两个动作组验动作序列语义: ①add_tags [rm03-t1, rm03-t2] → remove_tags <code>["regex:rm03-t\\d+"]</code> → tags 收敛为不含 rm03-t*(且 real-fake 仍在 —— regex 收紧不误伤管理标签); ②stop → state 变 stopped → start 恢复(stalledUP 族)。动作顺序执行语义(process 逐动作)顺带覆盖。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 1 枚带数据假种子(可 start 做种); 规则集含本规则。</li>
+        <li><b>副作用</b>: 种子被暂停又恢复; 标签加又删。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>(连数据)+ 清残留标签 + 删用例目录; <b>regex 若误删 real-fake 导致 seed.rm 失明, 收尾按 hash 兜底删</b>(26-10-31-1215 双标签坑仍在池)。</li>
+        <li><b>失败判据</b>: regex 未命中应删标签或删掉了 real-fake; stop 后 state 未变 stopped / start 后未恢复; 动作顺序错乱(先 remove 后 add 的标签残留)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-08</span><span class="ttl">去重语义: execute_once=always 与 cooldown 的规则层去重</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>两条规则各配 <code>execute_once: always</code> 与 <code>cooldown: 60S</code>, actions=add_tags 不同标签。跨 ≥3 个节拍观察: 首轮执行后不再执行。<b>断言陷阱</b>: add_tags 动作本身幂等(重复 skip「标签已存在」)—— 去重断言必须走<b>规则层</b>(规则名 + 非重复执行的日志形态), 别被动作级幂等骗过去重失效。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 1 枚假种子; 观察窗 ≥3 节拍。</li>
+        <li><b>副作用</b>: 2 个标签。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清标签 + 删用例目录。</li>
+        <li><b>失败判据</b>: execute_once=always 后续节拍仍反复进动作(规则层去重失效); cooldown 未到期仍执行; 断言口径落在动作幂等上(假绿 —— 执行代理自查)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM03-09</span><span class="ttl">dry-run 面: 条件命中但零 qB 写(约束面负向)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p><code>dev.run --dry-run</code>(不带 WEB, §2.7)起产品连 36596: 库里已有 1 枚假种子, dry_run 分派贯穿 <code>_dispatch_events</code>/动作(ctx.dry_run → 动作跳 API 调用, basic.py:39/transfer.py:85 等各动作自查)。断言 qB 侧零标签/零分类/零限速变化。<b>BLOCKED 预登记</b>: dry-run 下种子同步是否照常执行未实测(RM02 只验了不落盘)—— 若 dry-run 根本不拉种子清单则规则见不到种子, 本条记 BLOCKED 注「dry-run 管线不分派」, 不硬撑。</p>
+      <ul class="four">
+        <li><b>前置</b>: 先非 dry-run 加 1 枚假种子并停产品; 换 dry-run 配置起产品。</li>
+        <li><b>副作用</b>: qB 侧零写(这正是被验对象); 产品侧仅日志。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 停产品 + 删用例目录。</li>
+        <li><b>失败判据</b>: dry-run 下 qB 侧出现标签/分类/限速变化(高优 FAIL, 约束面被破坏); 全程零规则命中日志且确认管线不分派 → 记 BLOCKED 非 FAIL。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>RM03 首轮全部新建, 按 RM00/RM02/RM04 先例「新建即档」计: 预计初始档位 <b>L0/L1/L2/L3 = 0/0/6/3</b>(RM03-01/03/05 三条 L3, 其余 L2; RM03-09 若 BLOCKED 按 L2-BLOCKED 如实记)。</p>
+    <ul>
+      <li><b>本轮升档 = 三条红验真跑过才保 L3</b>: RM03-01 异尺寸对照必须能红 / RM03-03 奇数 KiB 手动限速必须不覆盖 / RM03-05 运行期负向必须停规则 ERROR —— 红不出来按计划内规则如实降档写原因, 不硬撑。</li>
+      <li>RM03-04 的「无 hr 留原文」是替换语义的对照面, 真跑过即按半条红验计(它在同一断言里, 不单列档位)。</li>
+      <li>checking 动作面(checking.py/full_checking.py/skip_checking.py)本轮零用例(§01 边界注记, 归属待拍板)—— 若拍板并入 RM03, 下一轮以「判据变」规则升档补齐。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <ul>
+      <li><b><code>[需活跃种子]</code> 跳过条目: 无。</b>四个验证面全部不依赖真实传输: 条件命中的谓词字段(size/state/tags/category)L1 假种子全具备; 限速面验「下发 + API 回读」, 不需要速率曲线(曲线归 RM07); 删除面删自造种子。全部 9 条与约束 2(真实种子全程非活跃)零冲突。片表「可测层级」标 L0·L1, 本计划按基建现状直接上自动断言(L1 假种子承载), 与 RM04 同口径。</li>
+      <li><b>L0 人工目视项: 本片 0 条。</b>规则引擎没有观感面(观感归 RM08/RM09)。按用户已拍板口径执行: 发现任何需要人眼确认的断言一律记 <span class="badge stop">BLOCKED</span>, 解锁条件 = 用户目视, 不得代签。</li>
+      <li><b>潜在 BLOCKED 预登记</b>: ① RM03-01/05 假种子不进管线(tracker 匹配死门)→ 排查 announce/domains 口径后仍不通记 BLOCKED; ② RM03-04 hr 配置牵动 HR 模块在线动作 → 记 BLOCKED 注归属 RM06; ③ RM03-09 dry-run 管线不分派 → 记 BLOCKED。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><code>real.suite --slice RM03 --yes</code> 跑完: 9 条全部 <code>PASS</code>; <code>FAIL</code> ⇒ 按 scope-guard 入池 bug issue 当轮不修; <code>BLOCKED</code> ⇒ 写明解锁条件, 不计入"做完"。</li>
+      <li>四个验证面逐条有着落: 条件命中(01/05/08)· 动作真作用于 qB —— 打标(01/07)· 分类(02)· 限速(03)· 删除触发面(06)· 启停(07)· 变量替换(04)· 表达式(05)。</li>
+      <li>至少两条红验真跑过并看到红(01 异尺寸对照 / 03 奇数限速 / 05 负向表达式), 档位分布如实记进 <code>testing/real-baselines/&lt;stamp&gt;-real-RM03.md</code>。</li>
+      <li>基线 commit 记实测时刻 HEAD; 锚件 §07 RM03 行同步(状态/L 分布/基线); 新增环境事实(假种子进规则管线的 announce 口径实测 / hr 配置是否牵动 HR 模块 / dry-run 管线是否分派)回写规程(新增 §2.10 或并入 §2.9)。</li>
+      <li>收尾核净: 36596 无 real-fake 残留、无 rm03-* 标签与分类残留、限速复位(无残留 64/128KiB 单种限速)、<code>tests-real/.work/rm03/</code> 与 <code>R:/qbt-fake/rm03/</code> 清空。</li>
+      <li>本轮踩到已记的坑 ⇒ 该条「复发」+1, 并写一句为什么没命中(<b>glob 漏前缀已第四次复发, 必须写</b>)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9)</h2>
+    <p>逐条过了 <code>memory-bank/checklists/manual-walkthrough.md</code>(含 W6 分档表), <b>属于 RM03 验证面(条件命中/动作作用于 qB/变量替换/表达式)的条目: 0 条</b> —— 本片不发生迁移, <code>manual-walkthrough.md</code> 本轮不改。判定明细:</p>
+    <ul>
+      <li><b>全部条目是 WebUI 观感/数据面/写侧</b>: 设置页刷新保持、种子页筛选器、Console Hub 五主题、主循环×WebUI 解耦、跟手性、新修 4 处、热路径体感、状态栏速度/今日流量、可用性列、最近活动列、时间点列切换、列设置多标签页、TASK011-015 → 归 RM08(读侧观感)/RM09(写侧/乐观 UI)/RM10, 不错收进 RM03。</li>
+      <li><b>一条易误收条目特别说明</b>: 「主循环×WebUI 解耦 ② 右键命令(暂停/删除/汇报/限速…)照常生效」—— 验的是 <b>WebUI 右键命令线</b>(RM09 写侧), 不是规则引擎动作; 规则动作与右键命令是两条入口(规则经 Rule.process, 右键经命令线), 本片不收。</li>
+      <li>RM04 轮遗留的两条边缘条目(辅种组整组暂停乐观态 / 追剧页打开目标文件夹)初判仍归 RM09, 与本片无关。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>「删除」验证面的落刀口径</b>: 规则动作注册表实测 12 个动作(add_tags/remove_tags/add_category/remove_category/start/stop/print_torrent_details/move_to/reannounce/upload·download_speed_limit/check), <b>没有删除种子的动作</b> —— RM03-06 落刀为 on_torrent_deleted 触发面; 删除对象只用自造种子(real.seed 造的), <b>绝不碰真实种子</b>(红线)。锚件 §03 验证面措辞是否修订交用户拍板。</li>
+      <li><b>tracker 绑定是规则面的前置死门(本片最大假红源)</b>: tracker_conf=None 的种子 interval 补建(rules_mod.py:99)与事件分派(:356)双路跳过 —— 假种子必须带死端口 announce 且测试配置 trackers 条目 domains 覆盖其 hostname、并 <code>rules: [@rm03]</code> 引用。匹配按 hostname(<b>不含端口</b>), 多 conf 分流用不同 host(本机IP vs localhost, 都是本机零外连; 别用假域名 —— 走 DNS 出外网)。</li>
+      <li><b>qB 5.2 重复 infohash 409</b>: 复跑删旧重加, 不收养(§2.9 第②条, RM04 被毒化两轮的教训); 收养会把预打标/预暂停状态带进来, 触发源永不触发。</li>
+      <li><b>限速断言口径</b>: 只认 API 回读(torrents/info 的 dl_limit/up_limit), 不咬日志措辞; 目标值用偶数 KiB(奇数 = 手动限速项目约定, utils.py:793); skip 三态(用户已设置/已设置/下发)各自有断言, 别混。</li>
+      <li><b>去重断言陷阱</b>: add_tags 动作级幂等(重复 skip「标签已存在」)会掩盖 execute_once/cooldown 失效 —— 断言必须走规则层日志形态, 见 RM03-08。</li>
+      <li><b>remove_tags regex 过宽会删 real-fake 管理标签</b> → real.seed.list/rm 全盲(26-10-31-1215 双标签坑在池): 模式收紧到 rm03- 前缀 + 收尾按 hash 兜底删。</li>
+      <li><b>hr 配置牵动 RM06 面</b>: RM03-04 需要带 hr 段的 tracker 条目 —— 若 HR 模块对假种子发起在线核实/在线动作, 记 BLOCKED 注归属, 当轮不修不放宽。</li>
+      <li><b>表达式期望值按真机实况校一次</b>: expr 取值环境的字段实况(如 state 枚举字符串形态)与单测桩可能有别 —— 正向不中先按实况修期望值重跑一次, 仍不中才记 FAIL; 运行期负向式造不出来 → 降级只验装载期 ConfigError 并如实记档。</li>
+      <li><b>进程面照抄前几片</b>: 配置 <code>schema_version: 5</code> + 走 <code>lib/app.py</code>; 按 pid 断言用 <code>real_pid()</code>; 杀进程 <code>taskkill /F /T</code>; conftest 文件锁串行基座照抄 RM01/RM02(pytest.ini <code>-n 8</code> 下 xdist_group 不生效); 日志断言只咬结构化锚点(「规则[名]」「事件规则[名]」「规则执行异常」), 别咬整句措辞; 产品日志追加式, 断言「最后一次启动」要等新行出现。</li>
+      <li><b>多标签形态</b>: qB 多标签以「, 」连接 —— 用例侧读 tags 一律 strip 后判成员(26-10-31-1215 口径), 别裸 split。</li>
+    </ol>
+  </section>
+
+  <footer>排期准备件, 拍板即冻结(规程 §06 步骤 4)。执行产生的实测数字落 <code>memory-bank/testing/real-baselines/</code>, 本件不回填结果。准备: 2026-10-31 12:28, 分支 real/rm02-rm10 @ 4f5f2d9e(本地, 开工同步离线失败)。</footer>
+</div>
+</body>
+</html>
