@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM05">
+<meta name="plan-stamp" content="26-10-31-1312">
+<meta name="doc-topic" content="real-machine-rm05-plan">
+<title>RM05 tracker·标签与分类清理 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 70ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 20px; font-weight: 600; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 12px 14px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); }
+  td code, th code { white-space: nowrap; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin-bottom: 14px; max-width: none; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--good); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.lv { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: var(--good-bg); color: var(--good); border-color: #2f4a33; }
+  .badge.stop { background: #2a1518; color: #e08a94; border-color: #4a2c31; }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .case .kv { margin-bottom: 6px; font-size: 14px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">真机实测轨 · 分步实施计划 · 排期锚 issue 26-10-31-0641</div>
+  <h1>RM05 tracker·标签与分类清理</h1>
+  <p class="lede">对「tracker·标签与分类清理」片做真机实测的排期准备与分步计划。本计划只准备、不执行: 用例代码、<code>real.run</code>/<code>real.suite</code> 由执行代理照本计划落刀。验证面对准规程 §04 片表 RM05 行: <b>tracker 规则解析 / <code>delete_tags</code> 族 / <code>@tracker_tags</code> 引用 / 站点档案派生</b>。本片是纯 qB 副作用面 —— 打标/删标/删标签定义/限速全部真写 qB, 全部用 L1 假种子(死端口 announce, 零外连), <b>产品进程只连 36596(空库, 真实种子 0 个)</b>; <code>delete_tags</code> 族是删标签动作, 只对自造 real-fake 种子/标签操作, 回滚路径写死(§03 各条 + §08 风险 1/2), <b>绝不碰真实种子的标签</b>。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1312</div></div>
+    <div class="item"><div class="k">切片</div><div class="v">RM05(片表 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">0.5 次(半天), 用例 7 条(≤8, 取舍见 §05)</div></div>
+    <div class="item"><div class="k">基线 commit</div><div class="v">首轮(实测时刻 HEAD 记切片)</div></div>
+    <div class="item"><div class="k">前置</div><div class="v">RM00 基建全绿(L1/L2 解锁)· RM02 7/8 · RM04 8/8 · RM03 8/9(缺陷均在池)</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + glob 自检)</h2>
+    <h3>会话同步(硬性步骤, 先行)</h3>
+    <div class="callout warn"><b><code>my-commit-flow.sync</code> FAIL</b>: <code>拿不到远端 origin/real/rm02-rm10 (离线?)</code>(2026-10-31 13:05 实测)。与 RM04/RM03 排期轮同一形态 —— 离线不阻塞本地排期, 非落后。本地 HEAD <code>ab4a0076</code>(RM03 实测完成提交), 树净无未提交改动。继续, 推送交用户拍板。</div>
+    <h3>漂移体检</h3>
+    <div class="callout good"><b>首轮, 无漂移面。</b>RM05 无基线 commit(规程 §06 步骤 2 / §07: 首轮写「首轮, 无漂移面」)。本轮 glob 命中文件清单(补前缀后 <code>git ls-files</code> 实测, 共 3 件 605 行): <code>src/auto_qb/core/modules/tracker_mod.py</code>(122 行)· <code>src/auto_qb/core/modules/maintenance_mod.py</code>(372 行)· <code>src/auto_qb/config/site_presets.py</code>(111 行)。本轮用例落地后基线 commit 记实测时刻 HEAD, 下次回归对这套 glob 跑 <code>git log &lt;base&gt;..HEAD</code>。</div>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 13:09 实测)</h3>
+    <pre><code>[ok] real.guard (0.8s)
+  [ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停
+  [ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+    <ul>
+      <li>两实例 <code>connection_status=firewalled</code>(§2.5 口径: 非 <code>disconnected</code> 即通过), 白名单端口与镜像路径核对通过, 配置非仓库根 <code>config.yml</code>。与 RM02/RM04/RM03 轮同一环境指纹(两 pid 未变)。</li>
+      <li><b>产品进程只连 36596</b>(空库, 真实种子 0 个)—— 打标/删标/删标签定义/限速全部只落在自造种子与自造标签上; 36595(真实种子 8 个)只出 guard, 任何用例不得指向它 —— 这是本片红线(§08 风险 1)。</li>
+    </ul>
+    <h3>glob 自检(规程 §05 规则 8)</h3>
+    <div class="callout"><b>3 条 glob 全部零命中 —— 漏 <code>src/auto_qb/</code> 前缀</b>(RM01/RM02/RM04/RM03 同款缺陷<b>第五次复发</b>, 已按规则 8 修正锚件 §03 RM05 行并记 §08, 13:12 实测)。补前缀后 <code>git ls-files</code> 实测 3/3 命中(清单见上), 全属 tracker·标签面, 无混入大件(最大 maintenance_mod.py 372 行), 片边界不糊, 不拆不并。</div>
+    <div class="callout warn"><b>边界注记(不改片表, 如实记)</b>: ① <code>@tracker_tags</code> 的展开单点在 <code>config/loaders.py:693</code>(<code>_expand_tracker_tags_refs</code>, glob 外; <code>infra/utils.py:679</code> <code>match_tag_patterns</code> 同样 glob 外)—— 本片只验它们的<b>消费点效果</b>(delete_tags 任务删掉的标签集合), 不动 loaders/utils 本体, 与 RM03 对 <code>replace_vars</code> 同口径。② maintenance 模块还认领 <code>maintenance_tag_mode</code>(on_change 外部变化触发, maintenance_mod.py:131-134)与 <code>add_episode_tags</code>(集数标签, :196)两个段 —— 均不在锚件 §03 RM05 验证面四项里, 本轮不立用例, 归属裁定交用户拍板, 不自行拆并片。③ 站点档案派生只验<b>装载期</b>(绑定成功/失败与校验报错); HR 在线取数面归 RM06(需真实站点, 单独授权), 本轮 <code>hr_check.enabled=false</code> 全局总开关保持关闭(§08 风险 8)。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读)</h2>
+    <table>
+      <tr><th>验证面</th><th>实现锚点(文件:行号)</th><th>外部可观测口径</th></tr>
+      <tr><td>tracker 规则解析(匹配/重绑/限速认领)</td><td>匹配 <code>TrackerModule.match</code>(tracker_mod.py:80, utils.match_tracker_confs utils.py:599, 多匹配 WARNING 降级用第一个 :90-92)· 热重载重绑 <code>apply</code>(:43, trackers 段相等短路 :46, qB 断开跳过 :48, 「rebound N」日志 :55)· 全量轮补绑 <code>_on_full_round</code>(:63, 只补 conf=None)· added 管线限速认领 <code>apply_speed_limit</code>(:97, <code>_apply_single_speed_limit</code>:103: 同值跳过 :112 / 手动限速不覆盖 :116 <code>is_manual_speed_limit</code> utils.py:793)</td><td>匹配效果经种子级维护消费后回读 tags; 限速经 torrents/info 回读 dl_limit/up_limit; 重绑看「rebound N」日志; 多匹配看 WARNING 行</td></tr>
+      <tr><td>delete_tags 族</td><td>种子级维护 <code>handle_maintenance</code>(maintenance_mod.py:117, 消费 tracker_conf.tags/remove_tags/remove_similar_tags; on_change 开关 :131-134 本轮不测)· <code>add_tags</code>:165 / <code>remove_tags</code>:181(match_tag_patterns utils.py:679)· <code>remove_similar_tags</code>:215(大小写对照, 精确相等保留)· 骨架单点 <code>_apply_tag_changes</code>:145 · 全局任务自注册 <code>_register_global_tasks</code>:100(delete_tags/delete_tags_if_has_no_torrents 按 config.interval 每轮入队)· <code>handle_delete_tags</code>:345(全量标签定义全删)· <code>handle_delete_tags_if_has_no_torrents</code>:359(<code>tag_usage</code>:368 使用数为 0 才删)· 共用骨架 <code>_purge_matched_tags</code>:323(<code>torrents_delete_tags</code>:341 —— <b>删定义, 波及实例全部种子</b>)</td><td>种子 tags 回读(torrents/info)+ qB 全局标签表(定义级); 「彻底删除标签」「彻底删除无种子的标签」日志行</td></tr>
+      <tr><td>@tracker_tags 引用</td><td>展开单点 <code>_expand_tracker_tags_refs</code>(config/loaders.py:693, <b>glob 外</b>; tracker_tags 并集 = 所有 tracker 条目 tags 去重保序 :646)· 消费点 delete_tags / delete_tags_if_has_no_torrents 两键(loaders.py:647-650)· 引用判定用剥后缀 body(:703, regex:/ignore_case 后缀随引用保留 :705)</td><td>delete_tags 任务删掉的标签集合 == tracker 条目 tags 并集(消费点效果); 展开是装载期 —— 配置校验后即定值</td></tr>
+      <tr><td>站点档案派生</td><td>档案表 <code>SITE_PRESETS</code>(site_presets.py:50, btschool/carpt 两档案; <code>page_url</code>:42)· <code>find_preset</code>:74(小写归一)· <code>match_trackers</code>:83(双向子域容错 <code>t == d or t.endswith("." + d) or d.endswith("." + t)</code>, 只查不报)· <code>preset_for_web_host</code>:99(旧键迁移用, 本轮不测)· 派生消费 <code>_resolve_hr_site_bindings</code>(loaders.py:308-336: 显式直取 &gt; 默认查表, hr_check 视图回填)· 校验 validation/sections.py:384(未登记 id / 绑不上 / 绑多个报错)</td><td>装载期: 绑定成功 = 启动无 ConfigError; 负向(未登记 id / 绑 0 / 绑 2)= 启动即 ConfigError 聚合(fail-fast, RM03-05 装载期同款观测法)</td></tr>
+    </table>
+    <p><b>配置面锚点</b>: 测试配置 <code>schema_version: 5</code>; trackers 条目 <code>domains</code> 须覆盖假种子 announce 的 hostname(死端口 <code>http://&lt;本机IP&gt;:1/announce</code>, <code>lib/net.py:local_host()</code> 口径; §2.9 第①条 —— 无匹配 tracker 配置则整条 added 管线跳过); <code>delete_tags</code> 全局任务在 start/queue_rebuilt 自注册(maintenance_mod.py:73-76/84-86), L2 热重载重建队列后按新值重挂。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(7 条, docstring 首行 <code>[RM05-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm05_tracker_tags/</code>, 跑法 <code>commands run real.suite -- --slice RM05 --yes</code>(<code>-n 0</code>)。<b>全部条目用 L1 假种子(死端口 announce, 零外连), 不需要 L2 互传、不需要活跃真实种子</b>。假种子一律 <code>real-fake</code> 标签; 种子数据只落 <code>tests-real/.work/rm05/</code> 与 <code>R:/qbt-fake/rm05/</code>(<code>real.seed --dir</code> 白名单); 产品 <code>data_dir</code> 指用例临时目录, <b>不得指仓库根 <code>auto-qb-data/</code></b>(红线)。共享基座: 产品非 dry-run 只连 36596, 测试配置 trackers 恰 1 条目(名 <code>rm05site</code>, domains=[本机局域网IP], <code>lib/net.py:local_host()</code> 口径)引用本片所需字段; 主循环 interval 取测试配置小节拍; <b>所有标签模式收紧到 <code>rm05-</code> 前缀</b>, 任何配置里不得出现能匹配 <code>real-fake</code> 或真实标签的宽泛模式。各条独立起停产品(配置不同), 互不共享实例状态。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-01</span><span class="ttl">tracker 匹配三分流: 精确命中 / 不匹配零管线 / 多匹配 WARNING 降级(对照内建)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×3</span></div>
+      <div class="bd"><p>tracker 条目甲 domains=[本机IP] tags=[rm05-hit]; 条目乙 domains=[本机IP] tags=[rm05-second](与甲同域, 制造双匹配)。种子 A(announce=本机IP:1)→ 命中, 进管线被打甲的 rm05-hit; 种子 B(announce=<code>http://127.0.0.1:1/announce</code>, hostname 127.0.0.1 不匹配任何 domains)→ conf=None, <b>整条 added 管线跳过</b>(§2.9 第①条在此是预期负向): 零标签零限速; 种子 C(同 A 的 announce)→ 双匹配: WARNING「种子匹配到多个 tracker 配置, 使用第一个」+ 只打配置书写顺序第一个条目的 rm05-hit, 不打 rm05-second。</p>
+      <ul class="four">
+        <li><b>前置</b>: 测试配置 trackers 双条目如上(顺序甲→乙); 3 枚假种子(A/C 用本机IP announce, B 用 127.0.0.1 announce —— 同为本机死端口, 零 DNS 零外连)。</li>
+        <li><b>副作用</b>: 36596 加 3 假种子; A/C 被打 rm05-hit。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清 rm05-* 标签 + 删用例目录; 收尾核 36596 无 real-fake/rm05 残留。</li>
+        <li><b>失败判据</b>: A 未被打标(匹配语义分叉); <b>B 也被打标(死门失效, 负向必须能红 —— 红不了本条降 L2 记)</b>; C 同时有 rm05-second(多匹配降级失效); 日志无 WARNING(多匹配静默); 或 A/B/C 压根不进 qB(种子侧问题记 BLOCKED)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-02</span><span class="ttl">热重载重绑: trackers 段变 → 存量记录 rebound → 新 tags 兑现</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>起产品(trackers 条目 tags=[rm05-v1]), 加 1 枚假种子, 等首个节拍打上 rm05-v1。然后经 <code>PUT /api/config</code> 热重载把该条目 tags 改为 [rm05-v2](trackers 段变 → <code>TrackerModule.apply</code> 重绑存量记录, tracker_mod.py:43-55)。断言: 产品日志出现「rebound 1」; 后续节拍种子被打上 rm05-v2(rm05-v1 可残留在种子上 —— remove_tags 未配, 重绑只换 conf 不回撤旧标, 按「新 conf 生效」断言, 不咬「旧标被清」)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 产品带 WEB(热重载命令线要 PUT /api/config, §2.8); 1 枚假种子已按 v1 绑定打标; 本条配置<b>不配 delete_tags</b>(全局任务重挂会混入第二种生效路径, 排除干扰)。</li>
+        <li><b>副作用</b>: 1 假种子; 标签 rm05-v1、rm05-v2。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清标签 + 删用例目录。</li>
+        <li><b>失败判据</b>: 无「rebound」日志(段相等短路误触发 —— 查 PUT body 是否真改了 trackers); 重绑后新节拍仍打 rm05-v1 而非 rm05-v2(存量记录未真重绑, 读到旧配置对象); PUT 回执 restart_required 且 trackers 变更被回退(则本条降级为「重启生效」路径并如实记)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-03</span><span class="ttl">tracker 单种限速认领: added 即下发 + 手动限速不覆盖(负向内建)</span><span class="badge lv">L3(负向内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>trackers 条目配 <code>upload_speed_limit: 128KiB/s</code> + <code>download_speed_limit: 64KiB/s</code>(偶数, 避开手动谓词)。种子甲加入 → added 管线即时下发(tracker_mod.py:97, 不等节拍), API 回读断言。种子乙<b>加种前先经 qB API 预置奇数 KiB 限速</b>(如 2001KiB/s)→ <code>is_manual_speed_limit</code> 命中, 动作 skip 且限速原样 —— 负向对照预置即成, 不依赖注入。与 RM03-03(规则动作限速)是两条触发路径, 谓词同源, 本条只认领 tracker 路径。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座 + 条目限速字段; 甲直接加; 乙先经 qB API 置 dl_limit/up_limit=2001*1024 后再加(或加完立即置 —— added 管线同值跳过 :112 恰好构成第三态断言, 执行代理按实况二选一并记档)。</li>
+        <li><b>副作用</b>: 甲的限速被改; 乙不动。</li>
+        <li><b>回滚</b>: API 复位甲限速(0)+ <code>real.seed.rm --all</code> + 删用例目录。</li>
+        <li><b>失败判据</b>: 甲回读 dl_limit≠64KiB/s 或 up_limit≠128KiB/s(以 torrents/info 回读为准, <b>验证口径写死 = API 回读, 不咬日志</b>); 乙限速被覆盖(手动保护失效, 负向必须红 —— 红不了如实降 L2)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-04</span><span class="ttl">种子级标签族: add_tags / remove_tags(regex) / remove_similar_tags 大小写对照(对照内建)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>trackers 条目 tags=[rm05-keep, RM05-SIM] + remove_tags=[regex:rm05-drop.*] + remove_similar_tags=true。种子预打标 [rm05-drop-x, rm05-sim] 后加入: 维护管线(handle_maintenance → add_tags/remove_tags/remove_similar_tags)后最终 tags 应为 <code>real-fake, rm05-keep, RM05-SIM</code> —— rm05-drop-x 被 regex 删; rm05-sim 被 remove_similar_tags 删(与 RM05-SIM 大小写不同); rm05-keep 精确属于 tracker tags 不被误删; real-fake 全程不动。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座如上; 1 枚假种子, 加种前先经 qB API 预打标 [rm05-drop-x, rm05-sim](复跑遇 409 删旧重加, 不收养)。</li>
+        <li><b>副作用</b>: 1 假种子及其标签增删。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清残留 rm05-* 标签 + 删用例目录; <b>若 regex 误删 real-fake 导致 seed.rm 失明, 收尾按 hash 兜底删</b>(26-10-31-1215 双标签坑仍在池)。</li>
+        <li><b>失败判据</b>: rm05-drop-x 残留(regex 未命中)或 real-fake 被误删(过宽, 负向必须红 —— 红不了如实降 L2); rm05-sim 残留(相似标签失效)或 RM05-SIM 被误删(精确相等保护失效); rm05-keep 未打上; 断言读 tags 未 strip(多标签「, 」形态失明)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-05</span><span class="ttl">delete_tags 全局删标签 + @tracker_tags 引用展开(消费点效果, 对照内建)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>trackers 条目 tags=[rm05-g1, rm05-g2]; 配置 <code>delete_tags: ["@tracker_tags", "regex:rm05-orphan.*"]</code>。种子预打标 [rm05-orphan-a, rm05-g1, rm05-ctrl] 后加入(维护管线会再打 rm05-g1/rm05-g2 —— add_tags 幂等无碍)。全局任务每轮跑: @tracker_tags 展开为 [rm05-g1, rm05-g2](装载期定值)→ 定义级删除; regex 删 rm05-orphan-a。跨 ≥3 节拍断言: 种子 tags 收敛为 <code>real-fake, rm05-ctrl</code>(rm05-g1 随定义删除被摘), qB 全局标签表无 rm05-g1/g2/orphan-a; <b>rm05-ctrl 不在任何模式内, 必须存活</b> —— 负向对照。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座如上; 1 枚假种子加种前预打标(409 处置同前)。</li>
+        <li><b>副作用</b>: 1 假种子; 三个标签定义被删(都在 36596 空库, 波及面只含自造种子)。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清残留 rm05-* 标签定义(qB API torrents_delete_tags, 模式仍限 rm05-)+ 删用例目录。</li>
+        <li><b>失败判据</b>: rm05-g1/g2/orphan-a 定义残留(任务未跑或展开为空); <b>rm05-ctrl 被删(@tracker_tags 展开失控或模式过宽, 负向必须红)</b>; real-fake 被删(红线级, 立即停手按 hash 兜底 + 入池); 展开结果含非 tracker tags 的条目(引用语义分叉)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-06</span><span class="ttl">delete_tags_if_has_no_torrents: 使用中保留 / 无种子删除(对照内建)</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>配置 <code>delete_tags_if_has_no_torrents: ["regex:rm05-un.*"]</code>(不配 delete_tags, 两任务隔离)。造两个匹配模式的标签定义: rm05-used-1(打在假种子上, 使用数 1)与 rm05-unused-1(定义存在但零种子使用)。跨 ≥3 节拍断言: rm05-unused-1 定义被删, <b>rm05-used-1 定义与种子上的标签都原样</b> —— 使用中/无种子对照内建。</p>
+      <ul class="four">
+        <li><b>前置</b>: 同基座; 1 枚假种子; rm05-unused-1 定义的造法 = 先对假种子 <code>torrents_add_tags</code> 再 <code>torrents_remove_tags</code>(qB 保留无种子的标签定义; <b>执行代理先实测确认 qB 5.2 定义确会残留</b>, 若定义随删走不通 → 本条降级为「种子删除后残留定义被清」路径或记 BLOCKED, 不硬撑)。</li>
+        <li><b>副作用</b>: 1 假种子; rm05-unused-1 定义被删。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清残留 rm05-* 定义 + 删用例目录。</li>
+        <li><b>失败判据</b>: rm05-used-1 被删(使用数判定失效, 负向必须红 —— 红不了如实降 L2); rm05-unused-1 残留(tag_usage/全量标签快照分叉); 两任务互相污染(本条配置无 delete_tags 却见「彻底删除标签」日志)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM05-07</span><span class="ttl">站点档案派生(装载期): 双向子域容错绑定 + 绑 0/绑 2/未登记 id ConfigError</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×0</span></div>
+      <div class="bd"><p>纯装载期面, 不需要种子。正向两写法: <code>hr_check.sites.btschool.enabled: true</code>(全局 <code>hr_check.enabled: false</code> 保持关 —— HR 取数线程不启动, 零外连) + tracker 条目 domains ① [pt.btschool.club](精确)② [btschool.club](子域容错: 档案 tracker_domain pt.btschool.club endswith ".btschool.club")—— 两份配置各自启动均无 ConfigError(派生成功)。负向三份: ③ domains 只有本机IP(绑 0)④ 两个条目都配 pt.btschool.club(绑 2)⑤ <code>hr_check.sites.nosite.enabled: true</code>(未登记 id)—— 各自启动即 ConfigError 聚合(fail-fast)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 5 份最小配置(正向 2 + 负向 3), 各起停一次产品(dry-run 即可? 不行 —— 装载期校验在 dry-run 前照走, §2.7 dry-run 不启 WEB 不碍装载; 执行代理按 <code>lib/app.py</code> 实况选最便宜起法); 无种子。</li>
+        <li><b>副作用</b>: 零 qB 写(装载期面); 产品侧仅进程起停与日志。</li>
+        <li><b>回滚</b>: 停产品 + 删用例目录; 无实例残留。</li>
+        <li><b>失败判据</b>: 正向启动报 ConfigError(容错口径与 match_trackers 实现分叉, 以 site_presets.py:88-89 注释口径为准修期望重跑一次, 仍红记 FAIL); 负向静默通过(校验漏网 —— 高优 FAIL); 产品在校验失败时仍起了主循环(fail-fast 破坏)。注意: 正向若观察到任何对真实站点的取数尝试(hr_check.enabled=false 下不该有)→ 高优 FAIL 入池。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>RM05 首轮全部新建, 按 RM00/RM02/RM04/RM03 先例「新建即档」计: 预计初始档位 <b>L0/L1/L2/L3 = 0/0/2/5</b>(RM05-01/03/04/05/06 五条 L3 —— 对照内建, 对照种子/标签预置即成, 不依赖注入; RM05-02/07 两条 L2)。</p>
+    <ul>
+      <li><b>本轮升档 = 五条对照负向真跑过才保 L3</b>: 01 不匹配种子必须零标签 / 03 手动限速必须不覆盖 / 04 real-fake 必须幸存 + 精确标签不误删 / 05 对照标签必须存活 / 06 使用中标签必须保留 —— 红不出来按计划内规则如实降档写原因, 不硬撑。</li>
+      <li>RM05-07 的负向(ConfigError)不另计 L3: 无 qB 写侧断言, 保持 L2 如实记。</li>
+      <li>边界注记两段(maintenance_tag_mode=on_change / add_episode_tags)本轮零用例(§01, 归属待拍板)—— 若拍板并入 RM05, 下一轮以「判据变」规则升档补齐。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <ul>
+      <li><b><code>[需活跃种子]</code> 跳过条目: 无。</b>四个验证面全部不依赖真实传输: 匹配/标签/删标签的谓词字段(hostname/tags)L1 假种子全具备; 限速面验「下发 + API 回读」, 不需要速率曲线(曲线归 RM07); 站点档案派生是装载期面(零种子)。全部 7 条与约束 2(真实种子全程非活跃)零冲突。片表「可测层级」标 L0·L1, 本计划按基建现状直接上自动断言(L1 假种子承载), 与 RM03/RM04 同口径。</li>
+      <li><b>L0 人工目视项: 本片 0 条。</b>tracker·标签面没有观感面(观感归 RM08/RM09)。按用户已拍板口径执行: 发现任何需要人眼确认的断言一律记 <span class="badge stop">BLOCKED</span>, 解锁条件 = 用户目视, 不得代签。</li>
+      <li><b>潜在 BLOCKED 预登记</b>: ① RM05-01/03/04/05 假种子不进管线(tracker 匹配死门)→ 排查 announce/domains 口径后仍不通记 BLOCKED; ② RM05-06 无种子标签定义在 qB 5.2 不残留 → 改路径或记 BLOCKED(见用例前置); ③ RM05-02 PUT 回执 restart_required 回退 trackers 变更 → 降级「重启生效」路径或记 BLOCKED。</li>
+      <li><b>预算取舍(≤8 条纪律)</b>: 7 条入本轮; on_change 维护模式与集数标签两面<b>不立用例</b>(验证面四项未列, 归属待拍板)—— 若强行并入会超出 0.5 次预算, 按规程 §05 规则 4 属「拆/并」决策, 不在本轮硬扛。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><code>real.suite --slice RM05 --yes</code> 跑完: 7 条全部 <code>PASS</code>; <code>FAIL</code> ⇒ 按 scope-guard 入池 bug issue 当轮不修; <code>BLOCKED</code> ⇒ 写明解锁条件, 不计入"做完"。</li>
+      <li>四个验证面逐条有着落: tracker 规则解析(01/02/03)· delete_tags 族 —— 种子级(04)· 全局(05/06)· @tracker_tags 引用(05)· 站点档案派生(07)。</li>
+      <li>至少三条对照负向真跑过并看到红(01 零标签对照 / 03 手动限速 / 04·05·06 幸存对照), 档位分布如实记进 <code>testing/real-baselines/&lt;stamp&gt;-real-RM05.md</code>。</li>
+      <li>基线 commit 记实测时刻 HEAD; 锚件 §07 RM05 行同步(状态/L 分布/基线); 新增环境事实(无种子标签定义是否残留 / 热重载 trackers 段是否 restart_required / hr_check.enabled=false 下站点派生是否零取数)回写规程(并入 §2.9/§2.10 或新增)。</li>
+      <li>收尾核净: 36596 无 real-fake 残留、无 rm05-* 标签与定义残留、限速复位(无残留 64/128KiB 单种限速)、<code>tests-real/.work/rm05/</code> 与 <code>R:/qbt-fake/rm05/</code> 清空、guard 复跑绿。</li>
+      <li>本轮踩到已记的坑 ⇒ 该条「复发」+1, 并写一句为什么没命中(<b>glob 漏前缀已第五次复发, 必须写</b>; 26-10-31-1215 双标签坑同样高频风险)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9)</h2>
+    <p>逐条过了 <code>memory-bank/checklists/manual-walkthrough.md</code>(含 W6 分档表), <b>属于 RM05 验证面(tracker 规则解析/delete_tags 族/@tracker_tags 引用/站点档案派生)的条目: 0 条</b> —— 本片不发生迁移, <code>manual-walkthrough.md</code> 本轮不改。判定明细:</p>
+    <ul>
+      <li><b>全部条目是 WebUI 观感/数据面/写侧</b>: 设置页刷新保持、种子页筛选器、Console Hub 五主题、主循环×WebUI 解耦、跟手性、新修 4 处、热路径体感、状态栏速度/今日流量、可用性列、最近活动列、时间点列切换、列设置多标签页、TASK011-015 → 归 RM08(读侧观感)/RM09(写侧/乐观 UI)/RM10, 不错收进 RM05。</li>
+      <li><b>一条易误收条目特别说明</b>: 种子页筛选器「点标签/分类/站点/路径, 弹层应直接有选项且计数 = 种子数」—— 验的是 <b>WebUI 筛选器渲染与计数口径</b>(RM08 读侧), 不是本片的标签删除/派生; 标签数据的产生与删除在 RM05, 筛选器显示归 RM08, 本片不收。</li>
+      <li>RM03 轮遗留的边缘条目初判(maintenance_tag_mode/集数标签归属)与本片迁移判定无关 —— 清单里本就没有对应条目。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>delete_tags 族是删<b>定义</b>的全局动作(本片最大红线源)</b>: <code>torrents_delete_tags</code>(maintenance_mod.py:341)删的是 qB 全局标签定义, 波及实例<b>全部种子</b> —— 所以产品进程<b>只连 36596(空库, 真实种子 0)</b>, 36595 只出 guard; 测试配置里所有模式收紧到 <code>rm05-</code> 前缀, <b>绝不出现 <code>.*</code>/<code>real-fake</code> 可匹配的宽泛模式</b>。若实测发现 real-fake 被删: 立即停手按 hash 兜底 + 入池, 不继续跑后续条目。</li>
+      <li><b>real-fake 管理标签保护</b>: remove_tags 的 regex、remove_similar_tags 的大小写对照、delete_tags 的模式, 三处都可能误伤 real-fake → real.seed.list/rm/guard 全盲(26-10-31-1215 双标签坑仍在池): 模式收紧 + tracker tags 列表绝不放 real-fake 变体 + 收尾按 hash 兜底删; 用例读 tags 一律 strip 后判成员(qB 多标签「, 」连接)。</li>
+      <li><b>tracker 匹配死门是双向的</b>: 正向种子必须死端口 announce(<code>http://&lt;本机IP&gt;:1/announce</code>)且 domains 覆盖其 hostname(匹配按 hostname 不含端口); 负向种子用 <code>127.0.0.1</code> hostname(零 DNS 零外连)—— <b>别用假域名造负向</b>(要走 DNS 出外网); conf=None 的种子零动作是预期, 不是缺陷。</li>
+      <li><b>多匹配「第一个」按配置书写顺序</b>: match 返回 confs[0](tracker_mod.py:93), 顺序来自配置 dict; RM05-01 断言按配置里条目书写顺序写期望, 别按字母序猜; 复跑改序会假红。</li>
+      <li><b>qB 5.2 重复 infohash 409</b>: 复跑删旧重加, 不收养(§2.9 第②条, RM04 被毒化两轮的教训); 预打标种子(RM05-04/05/06)复跑时尤其注意 —— 收养会把上轮标签状态带进来。</li>
+      <li><b>限速断言口径</b>: 只认 API 回读(torrents/info 的 dl_limit/up_limit), 不咬日志; 目标值偶数 KiB(奇数 = 手动限速项目约定 utils.py:793); RM05-03 与 RM03-03 谓词同源但触发路径不同(added 管线 vs 规则动作), 失败时先分清是哪条路径的红。</li>
+      <li><b>全局任务节奏与隔离</b>: delete_tags 两任务按 config.interval 每轮入队(maintenance_mod.py:100-110), 观察窗 ≥3 节拍; 两任务共享 <code>_purge_matched_tags</code> 骨架但配置键独立 —— RM05-06 特意不配 delete_tags 以隔离; RM05-02 热重载会重挂全局任务(:84-86), 该条配置不配 delete_tags 防混入。</li>
+      <li><b>HR 零外连(红线级)</b>: RM05-07 全局 <code>hr_check.enabled: false</code> 保持关闭, sites 条目 enabled 只走装载期派生 —— 在线核实面归 RM06(需真实站点, 单独授权)。若实测发现 enabled=false 仍有对真实站点的取数尝试 → 高优 FAIL 立即入池并停跑该条后续配置。</li>
+      <li><b>无种子标签定义的残留是待实测事实</b>: RM05-06 依赖「qB 保留零使用标签定义」—— qB 5.2 行为先实测确认再写断言; 若定义随删, 按用例前置的降级路径走, 不硬撑。</li>
+      <li><b>进程面照抄前几片</b>: 配置 <code>schema_version: 5</code> + 走 <code>lib/app.py</code>; 按 pid 断言用 <code>real_pid()</code>; 杀进程 <code>taskkill /F /T</code>; conftest 文件锁串行基座照抄(pytest.ini <code>-n 8</code> 下 xdist_group 不生效); 产品日志追加式, 断言「最后一次启动」要等新行出现; 日志断言只咬结构化锚点(「rebound」「彻底删除标签」「匹配到多个 tracker 配置」), 别咬整句措辞。</li>
+    </ol>
+  </section>
+
+  <footer>排期准备件, 拍板即冻结(规程 §06 步骤 4)。执行产生的实测数字落 <code>memory-bank/testing/real-baselines/</code>, 本件不回填结果。准备: 2026-10-31 13:12, 分支 real/rm02-rm10 @ ab4a0076(本地, 开工同步离线失败)。</footer>
+</div>
+</body>
+</html>
