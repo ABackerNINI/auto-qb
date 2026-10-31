@@ -32,6 +32,16 @@ P0 是纯加法(契约 + 状态服务 + ctx 接线), 本文件锁住三件事:
 - test_base_module_defaults_are_noops: BaseModule 基类默认 —— sections() 空元组 / start-stop 无操作
   (「只减样板, 不引入隐藏行为」; 基类若给 sections 默认非空会污染段认领守阵)
 - test_state_service_save_failure_logs_and_swallows: save 落盘 OSError 记 ERROR 不外抛(状态写失败不打挂主循环)
+- test_appcontext_fresh_service_slots_default_none: 守阵(W6 变异审计)—— fresh ctx 全部 12 个服务/句柄槽位默认 None
+- test_base_module_apply_default_receipt_is_empty: 守阵(W6)—— BaseModule.apply 默认空回执 module=""
+- test_register_global_tasks_no_queue_returns_zero: 守阵(W6)—— task_queue=None 未装配边缘返回 0
+- test_register_global_tasks_wires_internal_task_fields: 守阵(W6)—— 全局任务接线: kind=internal/name/interval/handler 逐位透传
+- test_register_global_tasks_idempotent_skips_named: 守阵(W6)—— 同名任务幂等跳过(黄金法则 1)
+- test_register_global_tasks_logs_created_count: 守阵(W6)—— 创建全局任务 N 个 INFO 审计日志
+- test_eventbus_fresh_bus_state_and_zero_subscriber_emit: 守阵(W6)—— fresh 总线请求位 False; 零订阅相位 emit 返回 0 不崩
+- test_module_host_register_nameless_object_fail_fast: 守阵(W6)—— 无 name 属性模块注册 fail-fast
+- test_run_task_line_and_micro_line_pass_flags_verbatim: 守阵(W6)—— task/micro 线 hook 按原值透传 force/dry_run, on_micro_line 按名探测
+- test_next_micro_run_at_aggregates_and_skips_absent: 守阵(W6)—— 微步到期聚合: 过滤缺席/None, 取 min
 """
 import json
 import os
@@ -565,3 +575,196 @@ def test_state_service_save_failure_logs_and_swallows(monkeypatch):
             state_mod.logger.removeHandler(handler)
         assert any("保存状态文件失败" in r.getMessage() for r in seen), seen
         assert svc.data == {"k": 1}, "内存状态不得因落盘失败被清"
+
+
+# ---------- W6(R30) 变异审计守阵: module.py 真洞补测 ----------
+
+
+def test_appcontext_fresh_service_slots_default_none():
+    """守阵(变异审计 W6, 极低危): fresh ctx 的全部服务/句柄槽位默认必须是 None(不是 "")
+
+    AppContext 12 个槽位(store/api/state/notify/web/task_queue/trackers/maintenance/ops/
+    traffic_snapshot/relocate/grouping)默认 None -> "" 同构变异: 生产路径 QbManager.__init__
+    立即挂入覆盖全部槽位, 仅 fresh-ctx 契约断言可区分 —— 本条即该契约的红线。
+    """
+    from auto_qb.core.module import AppContext
+
+    ctx = AppContext(object())
+    for slot in (
+        "store",
+        "api",
+        "state",
+        "notify",
+        "web",
+        "task_queue",
+        "trackers",
+        "maintenance",
+        "ops",
+        "traffic_snapshot",
+        "relocate",
+        "grouping",
+    ):
+        assert getattr(ctx, slot) is None, f"fresh ctx 的 ctx.{slot} 默认必须是 None"
+
+
+def test_base_module_apply_default_receipt_is_empty():
+    """守阵(变异审计 W6, 极低危): BaseModule.apply 默认空回执 module=""
+
+    默认回执的 module 字段是 self.name(基类 "") —— 换 None 即回执契约被破。
+    """
+    receipt = BaseModule().apply(object(), object())
+    assert receipt == ApplyResult(module="", action="none", detail=""), "默认回执: module='', action='none'"
+
+
+def test_register_global_tasks_no_queue_returns_zero():
+    """守阵(变异审计 W6, 极低危): ctx.task_queue=None(未装配边缘)返回 0 且不入队"""
+    from types import SimpleNamespace
+
+    queue = _RecordingQueue()
+    ctx = SimpleNamespace(task_queue=None)
+    assert BaseModule().register_global_tasks(ctx, [("x", lambda: None, 1.0)]) == 0
+    assert queue.added == []
+
+
+def test_register_global_tasks_wires_internal_task_fields():
+    """守阵(变异审计 W6, 中危): 全局任务接线逐位透传 kind=internal / name / interval / handler
+
+    register_global_tasks 是 speed_curve / maintenance 共用的注册单点: kind 换名 ->
+    has_named 去重失配(重复注册堆积双份周期任务); interval/handler 丢失 -> 任务静默失效
+    或从分钟级变每秒发车。本条把 Task 四要素全部钉住。
+    """
+    from types import SimpleNamespace
+
+    queue = _RecordingQueue()
+    ctx = SimpleNamespace(task_queue=queue)
+    h1, h2 = lambda: None, lambda: None  # noqa: E731
+    n = BaseModule().register_global_tasks(ctx, [("curve_tick", h1, 300.0), ("maint_tick", h2, 60.0)])
+    assert n == 2
+    assert queue.has_named_queries == ["curve_tick", "maint_tick"], "幂等判据必须按任务名查询"
+    assert [t.kind for t in queue.added] == ["internal", "internal"], "全局任务 kind 必须是 internal(去重判据)"
+    assert [t.name for t in queue.added] == ["curve_tick", "maint_tick"]
+    assert [t.interval for t in queue.added] == [300.0, 60.0], "interval 必须按 spec 透传(丢参变每秒发车)"
+    assert queue.added[0].handler is h1 and queue.added[1].handler is h2, "handler 必须按 spec 透传"
+
+
+def test_register_global_tasks_idempotent_skips_named():
+    """守阵(变异审计 W6, 中危): 已在队列的同名任务幂等跳过(黄金法则 1)"""
+    from types import SimpleNamespace
+
+    queue = _RecordingQueue()
+    queue.named.add("curve_tick")
+    ctx = SimpleNamespace(task_queue=queue)
+    n = BaseModule().register_global_tasks(ctx, [("curve_tick", lambda: None, 300.0)])
+    assert n == 0, "同名任务已存在 -> 不重复入队"
+    assert queue.added == []
+
+
+def test_register_global_tasks_logs_created_count(caplog):
+    """守阵(变异审计 W6, 低危): 入队后记「创建全局任务 N 个」INFO 审计日志(名单丢真即红)"""
+    import logging
+    from types import SimpleNamespace
+
+    caplog.set_level(logging.INFO, logger="auto_qb.core.module")
+    ctx = SimpleNamespace(task_queue=_RecordingQueue())
+    BaseModule().register_global_tasks(ctx, [("curve_tick", lambda: None, 300.0), ("maint_tick", lambda: None, 60.0)])
+    assert any("创建全局任务 2 个" in r.getMessage() for r in caplog.records), caplog.text
+
+
+def test_eventbus_fresh_bus_state_and_zero_subscriber_emit():
+    """守阵(变异审计 W6, 低危): fresh 总线请求位/旗标为 False; 零订阅相位 emit 返回 0 不崩
+
+    - fresh _replay_requested=True -> qbmanager 首轮即消费请求位, 首轮 added 相位被误抑制;
+    - 零订阅相位 emit 的缺省 () -> None: tuple(None) TypeError(防御默认面)。
+    """
+    bus = EventBus()
+    assert bus.replay_requested is False, "fresh 总线不得自带抑制请求位"
+    assert bus.suppressed is False
+    assert bus.emit("no_subscribers_phase") == 0, "零订阅相位: 无订阅者可调, 返回 0 且不得崩"
+
+
+def test_module_host_register_nameless_object_fail_fast():
+    """守阵(变异审计 W6, 低危): 无 name 属性的模块注册必须 fail-fast(getattr 缺省 "" 不可放行)"""
+    log = []
+    host, _, _ = _host_with(log, ["a"])
+    with pytest.raises(ValueError):
+        host.register(object())  # 无 name 属性: 缺省 "" -> `if not name` 必须拦下
+
+
+def test_run_task_line_and_micro_line_pass_flags_verbatim():
+    """守阵(变异审计 W6): task/micro 线 hook 按原值透传 force/dry_run; on_micro_line 按名探测
+
+    - run_task_line 的 hook(None): force=True(强制刷新)传成 falsy, 表现层强制预取失效;
+    - run_micro_line 的 getattr 探测名被改写 -> 微步线 hook 全部失联(ops 跳检相位机停摆);
+    - run_micro_line 的 hook(None): dry_run=True(只观察)传成 falsy, 跳检相位机可能真发 qB 写。
+    """
+    log = []
+
+    class TaskHook(BaseModule):
+        name = "task_hook"
+
+        def __init__(self):
+            self.args = []
+
+        def on_task_line(self, force):
+            self.args.append(force)
+
+    class MicroHook(BaseModule):
+        name = "micro_hook"
+
+        def __init__(self):
+            self.args = []
+
+        def on_micro_line(self, dry_run):
+            self.args.append(dry_run)
+
+    task_hook, micro_hook = TaskHook(), MicroHook()
+    host = ModuleHost(object(), EventBus())
+    host.register(_Recorder("plain", log))
+    host.register(task_hook)
+    host.register(micro_hook)
+    host.run_task_line(force=True)
+    assert task_hook.args == [True] and task_hook.args[0] is True, "force 必须原值透传"
+    host.run_micro_line(dry_run=True)
+    assert micro_hook.args == [True] and micro_hook.args[0] is True, "dry_run 必须原值透传且 hook 按名被调到"
+
+
+def test_next_micro_run_at_aggregates_and_skips_absent():
+    """守阵(变异审计 W6, 中危): 微步到期聚合 —— 缺方法模块跳过, None 过滤, 取 min
+
+    next_micro_run_at 全家族变异(hasattr 恒 False / 探测名改写 / 过滤行失效 / is None 反转 /
+    min(None)): 任一态都表现为「恒 None(微步饿死)」或「TypeError 崩溃」, 本条以混合模块
+    组合一次钉死。
+    """
+    due_early, due_late, due_none = _DueModule("d1", 3.0), _DueModule("d2", 1.0), _DueModule("d3", None)
+    host = ModuleHost(object(), EventBus())
+    host.register(_Recorder("plain", []))  # 无 next_micro_run_at 属性: 必须被跳过
+    host.register(due_early)
+    host.register(due_none)
+    host.register(due_late)
+    assert host.next_micro_run_at() == 1.0, "取全部到期值的 min; 缺席模块与 None 报值不参与"
+
+
+class _DueModule(BaseModule):
+    """固定报到期时刻的假模块(next_micro_run_at 守阵用)"""
+    def __init__(self, name, value):
+        self.name = name
+        self.value = value
+
+    def next_micro_run_at(self):
+        return self.value
+
+
+class _RecordingQueue:
+    """记录 has_named 查询与 add_tasks 收货的假队列(register_global_tasks 守阵用)"""
+    def __init__(self):
+        self.named = set()
+        self.added = []
+        self.has_named_queries = []
+
+    def has_named(self, name):
+        self.has_named_queries.append(name)
+        return name in self.named
+
+    def add_tasks(self, tasks):
+        self.added.extend(tasks)
+        self.named.update(t.name for t in tasks)

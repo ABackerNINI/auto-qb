@@ -33,6 +33,13 @@ DEFAULT_DESELECT = (
     "tests/test_sim_corpus.py::test_fs_mock_coverage_static_guard",
     "tests/test_web_seed_center.py::test_api_enqueue_wakes_main_loop",
     "tests/test_traffic_store.py::test_v4_parse_skeleton_single_point",
+    # W6(R30) 宽池轮新增: 以下 5 条读 core 目标源码文本(qbmanager/module 经 getsource/read_text
+    # 或全 src 扫描), 在变异树里对 src 文本敏感 —— 同 R28 test_v4_parse_skeleton 先例 deselect。
+    "tests/test_qbmanager.py::test_periodic_flush_is_wired_in_run_loop",
+    "tests/test_qbmanager.py::test_qbmanager_source_has_no_web_state_fields",
+    "tests/test_core_modules.py::test_no_private_notify_access_from_outside",
+    "tests/test_facade_modules.py::test_kernel_run_wiring_delegates_to_host",
+    "tests/test_sync.py::test_no_synthetic_state_write_site",
 )
 
 # also_copy 推导时的排除项: vcs / 依赖 / 生成物 / 本工具自身产物 —— 都不该进 mutants/ 副本。

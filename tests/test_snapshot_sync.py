@@ -30,6 +30,13 @@ Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() �
 - test_speed_limits_sync_record
 - test_start_stop_syncs_state
 - test_torrents_delete_removes_from_snapshot
+- test_qbapi_delete_default_keeps_files_false: 守阵(W6 变异审计, 高危)—— delete 默认 delete_files=False 透传(跳检 delete+readd 依赖)
+- test_qbapi_write_ops_wire_exact_kwargs: 守阵(W6, 中危)—— facade 写操作对 raw client 的调用参数逐位断言(接线族)
+- test_qbapi_start_stop_note_own_write_store_side: 守阵(W6)—— start/stop 登记 own_writes(deferral 判据面)
+- test_qbapi_delete_tags_store_side_removal: 守阵(W6)—— delete_tags 经 apply_tag_removal 摘除快照标签
+- test_qbapi_read_fallback_wires_hash_to_client: 守阵(W6)—— store 未命中直连路径把 hash 传给 client
+- test_qbapi_store_cache_hit_skips_repeat_client_call: 守阵(W6)—— 记录惰性缓存命中后不再直连 client
+- test_qbapi_passthrough_positional_and_rid_default: 守阵(W6, 极低危)—— *args 透传与 sync_maindata rid 默认 0
 """
 import os
 import tempfile
@@ -37,6 +44,7 @@ from unittest import mock
 
 from auto_qb.core.qbapi import QbApi
 from auto_qb.rules import RuleContext
+from auto_qb.torrents import TorrentStore
 
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager, seed_store
 
@@ -288,3 +296,134 @@ def test_qbapi_read_ops_fallback_on_cache_miss():
         assert mgr.api.torrents_files("H1") == client.torrents_files("H1")
         # 快照命中 H2: files 走记录缓存
         assert mgr.api.torrents_files("H2") == t2.files(mgr.api.client)
+
+
+# ---------- W6(R30) 变异审计守阵: qbapi.py facade -> raw client 接线族 ----------
+
+
+def test_qbapi_delete_default_keeps_files_false():
+    """守阵(变异审计 W6, 高危): torrents_delete 不传 delete_files 时默认 False 透传给 client
+
+    ops_mod 跳检 delete+readd 依赖默认 False(调用点不传参) —— 默认翻 True 即跳检流程直接
+    删盘(不可逆数据删除面)。delete_files 键整参丢失同样在此拦下(显式契约)。
+    """
+    client = mock.MagicMock()
+    api = QbApi(client, mock.MagicMock())
+    api.torrents_delete(torrent_hashes="H1")
+    client.torrents_delete.assert_called_once_with(torrent_hashes="H1", delete_files=False)
+
+
+def test_qbapi_write_ops_wire_exact_kwargs():
+    """守阵(变异审计 W6, 中危): 写操作 facade 对 raw client 的调用参数逐位断言(接线族)
+
+    池此前只断言 store 侧效果, client 接线参数(hashes/limit/category/name/location)全体
+    无断言 —— 换 None/丢参即写意图被扭曲(qB 400 或全量作用域)。用 Mock client 一次钉死
+    整族; store 侧效果由既有快照守阵覆盖, 两侧互补。
+    """
+    client = mock.MagicMock()
+    api = QbApi(client, mock.MagicMock())
+    api.torrents_add_tags(tags=["T"], torrent_hashes="H1")
+    client.torrents_add_tags.assert_called_once_with(tags=["T"], torrent_hashes="H1")
+    api.torrents_remove_tags(tags=["T"], torrent_hashes="H1")
+    client.torrents_remove_tags.assert_called_once_with(tags=["T"], torrent_hashes="H1")
+    api.torrents_create_category(name="HR")
+    client.torrents_create_category.assert_called_once_with(name="HR")
+    api.torrents_set_category(category="HR", torrent_hashes="H1")
+    client.torrents_set_category.assert_called_once_with(category="HR", torrent_hashes="H1")
+    api.torrents_set_upload_limit(torrent_hashes="H1", limit=1024)
+    client.torrents_set_upload_limit.assert_called_once_with(torrent_hashes="H1", limit=1024)
+    api.torrents_set_download_limit(torrent_hashes="H1", limit=2048)
+    client.torrents_set_download_limit.assert_called_once_with(torrent_hashes="H1", limit=2048)
+    api.torrents_set_location(torrent_hashes="H1", location=r"R:\New")
+    client.torrents_set_location.assert_called_once_with(torrent_hashes="H1", location=r"R:\New")
+    api.torrents_start(torrent_hashes="H1")
+    client.torrents_start.assert_called_once_with(torrent_hashes="H1")
+    api.torrents_stop(torrent_hashes="H1")
+    client.torrents_stop.assert_called_once_with(torrent_hashes="H1")
+    api.torrents_delete(torrent_hashes=["H1"], delete_files=False)
+    client.torrents_delete.assert_called_once_with(torrent_hashes=["H1"], delete_files=False)
+
+
+def test_qbapi_start_stop_note_own_write_store_side():
+    """守阵(变异审计 W6, 中危): start/stop 后 store.own_writes 必须登记目标 hash
+
+    own_writes 是 deferral 判据的来源(G4/G6 陈旧-放行窗口) —— note_own_write(None) 即
+    意图登记丢失, 闸门失效。
+    """
+    store = TorrentStore()
+    store.by_hash = {"H1": FakeTorrent(hash="H1", name="A", state="stalledUP")}
+    api = QbApi(mock.MagicMock(), store)
+    api.torrents_start(torrent_hashes="H1")
+    assert "H1" in store.own_writes, "start 意图必须登记 own_writes"
+    store.own_writes.clear()
+    api.torrents_stop(torrent_hashes="H1")
+    assert "H1" in store.own_writes, "stop 意图必须登记 own_writes"
+
+
+def test_qbapi_delete_tags_store_side_removal():
+    """守阵(变异审计 W6, 中危): delete_tags 经 store.apply_tag_removal 摘除快照标签
+
+    用 Mock client 隔离替身的同名摘除副作用(FakeClient 会顺手改共享对象, 掩盖 store 侧
+    登记丢失) —— apply_tag_removal(None/空表)即 tag_usage 陈旧 -> 清理误判面。
+    """
+    store = TorrentStore()
+    r1 = FakeTorrent(hash="H1", name="A", tags="X,Y", state="stalledUP")
+    r2 = FakeTorrent(hash="H2", name="B", tags="X", state="stalledUP")
+    store.by_hash = {"H1": r1, "H2": r2}
+    client = mock.MagicMock()
+    api = QbApi(client, store)
+    api.torrents_delete_tags(tags=["X"])
+    client.torrents_delete_tags.assert_called_once_with(tags=["X"])
+    assert r1.tags_set == {"Y"}, "标签定义删除必须从所有快照记录摘除"
+    assert r2.tags_set == set()
+
+
+def test_qbapi_read_fallback_wires_hash_to_client():
+    """守阵(变异审计 W6, 中危): store 未命中直连路径必须把 hash 原样传给 client
+
+    trackers/files 的 fallback 是第二条读路径(与 store 缓存路径口径一致) —— 传 None 即
+    对 qB 错误请求(空/错数据)。
+    """
+    store = TorrentStore()
+    client = mock.MagicMock()
+    trackers_payload = [{"url": "https://hdchina.org/announce.php", "status": 0}]
+    files_payload = [{"name": "a.mkv"}]
+    client.torrents_trackers.return_value = trackers_payload
+    client.torrents_files.return_value = files_payload
+    api = QbApi(client, store)
+    out = api.torrents_trackers("H1")
+    client.torrents_trackers.assert_called_once_with("H1")
+    assert len(out) == 1 and out[0]["status"] == 0, "直连路径结果原样回传(经 mask 不改字段集)"
+    assert api.torrents_files("H1") == files_payload
+    client.torrents_files.assert_called_once_with("H1")
+
+
+def test_qbapi_store_cache_hit_skips_repeat_client_call():
+    """守阵(变异审计 W6, 低危): 快照命中走记录惰性缓存, 重复读不再直连 client
+
+    store.get 旁路(None/恒未命中)即每读一次打一次 qB(请求量面) —— 二次调用计数为红线。
+    """
+    store = TorrentStore()
+    store.by_hash = {"H1": FakeTorrent(hash="H1", name="A", state="stalledUP")}
+    client = mock.MagicMock()
+    client.torrents_trackers.return_value = [{"url": "https://x.example/announce"}]
+    client.torrents_files.return_value = [{"name": "f"}]
+    api = QbApi(client, store)
+    api.torrents_trackers("H1")
+    api.torrents_trackers("H1")
+    assert client.torrents_trackers.call_count == 1, "第二次读必须走记录惰性缓存"
+    api.torrents_files("H1")
+    api.torrents_files("H1")
+    assert client.torrents_files.call_count == 1, "第二次读必须走记录惰性缓存"
+
+
+def test_qbapi_passthrough_positional_and_rid_default():
+    """守阵(变异审计 W6, 极低危): 透传契约 —— *args 位置实参原样透传; sync_maindata rid 默认 0"""
+    client = mock.MagicMock()
+    api = QbApi(client, mock.MagicMock())
+    api.torrents_add("positional")
+    client.torrents_add.assert_called_once_with("positional")
+    api.torrents_info("H1")
+    client.torrents_info.assert_called_once_with("H1")
+    api.sync_maindata()
+    client.sync_maindata.assert_called_once_with(rid=0)

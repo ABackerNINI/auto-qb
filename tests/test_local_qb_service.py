@@ -13,6 +13,8 @@
 - test_connect_and_refresh_over_real_http: 端到端: connect + 一次 _refresh_torrents 真实拉取 sync 填充 store
 - test_fake_server_files_endpoint_serializes_objects: 假服务 torrents/files 必须回 JSON 可序列化数组(真机语义)
 - test_main_loop_throttled_by_main_tick: 节流回归守卫: 非托管模式主循环 tick 频率受 main_tick 约束
+- test_new_client_wires_credentials_to_client_cls: 守阵(W6 变异审计)—— new_client 把 username/password/api_key/
+  host/超时逐位传给客户端构造(远程分支; api_key 非空启用 Bearer, 空 api_key 传 None)
 """
 import os
 import time
@@ -156,3 +158,40 @@ def test_main_loop_throttled_by_main_tick(tmp_path):
         assert elapsed >= 0.9, f"主循环应跑满观测窗口, 实际 {elapsed:.2f}s"
         assert hits <= 10, f"main_tick=0.2s 下 {elapsed:.2f}s 内 tick 应约 5 次(节流生效), 实际 {hits} —— 主循环在空转"
         assert hits >= 2, f"节流不应把主循环拖到几乎不执行, 实际 {hits}"
+
+
+# ---------- W6(R30) 变异审计守阵: qbclient.py 凭据接线 ----------
+
+
+def test_new_client_wires_credentials_to_client_cls(monkeypatch):
+    """守阵(变异审计 W6): new_client 把凭据逐位传给客户端构造(远程分支)
+
+    池此前只断言 new_client 被调, 不看构造参数 -> 用户名/密码/api_key 全族无断言。api_key 非空时库走
+    Authorization: Bearer 直连(只给密钥不给密码的配置形态); 空 api_key 传 None(不启用 Bearer)。
+    """
+    from auto_qb.core import qbclient
+
+    made = []
+
+    class _FakeClientCls:
+        def __init__(self, **kwargs):
+            made.append(kwargs)
+
+    monkeypatch.setattr(qbclient, "Client", _FakeClientCls)
+    cfg = QbittorrentConfig(host="qb.example.com", port=8080, username="u", password="p", api_key="KEY")
+    qbclient.new_client(cfg)
+    assert made == [
+        {
+            "host": cfg.base_url,
+            "username": "u",
+            "password": "p",
+            "api_key": "KEY",
+            "REQUESTS_ARGS": {
+                "timeout": qbclient.REQUESTS_TIMEOUT
+            },
+        }
+    ], made
+    made.clear()
+    cfg2 = QbittorrentConfig(host="qb.example.com", port=8080, username="u", password="p")
+    qbclient.new_client(cfg2)
+    assert made[0]["api_key"] is None, "空 api_key 必须传 None(不启用 Bearer 直连)"
