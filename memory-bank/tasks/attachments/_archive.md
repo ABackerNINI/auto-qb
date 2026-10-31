@@ -4,11 +4,12 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (20)
+## In Progress (21)
 
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-10-17-backend-global-traffic-source-integration](../26-10-17-backend-global-traffic-source-integration.md) 全局流量来源一键切换 + 工具自动拉起(改版)
 - [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
+- [26-10-31-deps-qb-5-3-support](../26-10-31-deps-qb-5-3-support.md) qB 5.3 双版本支持落地(facade/重加/升库)
 - [26-10-31-memory-bank-kb-nav-multiselect](../26-10-31-memory-bank-kb-nav-multiselect.md) kb.nav 多选与批量右键菜单
 - [26-10-30-backend-gtm-review-t-fixes](../26-10-30-backend-gtm-review-t-fixes.md) gtm 批T 三缺陷收口: config 写锁 / http_host 回环 / day_rolled 方向
 - [26-10-29-backend-hr-ext-site-permission](../26-10-29-backend-hr-ext-site-permission.md) HR 扩展缺站点权限的可见化与失败分类修正
@@ -32,8 +33,10 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (250)
+## Done (252)
 
+- [26-10-31-memory-bank-doc-guard-filename-scope-fix](../26-10-31-memory-bank-doc-guard-filename-scope-fix.md) 新增面守卫圈面改文件名 stamp 前缀: 堵缺 doc-added 手写新件逃逸洞 (RM02-RM10 事故)
+- [26-10-31-test-snapshot-git-marker-validity](../26-10-31-test-snapshot-git-marker-validity.md) 快照 _find_repo_root 判据加 .git/HEAD 有效性校验: 空壳标记不算仓库根
 - [26-10-11-webui-optimistic-bulk-desync](../26-10-11-webui-optimistic-bulk-desync.md) WEBUI 批量跳检后「批量开始」状态脱节修复(真值出口 + 前端回滚 + 快照回写)
 - [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测

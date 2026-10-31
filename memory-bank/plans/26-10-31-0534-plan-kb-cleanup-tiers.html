@@ -7,9 +7,9 @@
 <title>知识库过时信息分级清理 (R0-R4)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="kb-cleanup-tiers">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-0534">
-<meta name="doc-updated" content="26-10-31-0538">
+<meta name="doc-updated" content="26-10-31-2208">
 <meta name="doc-refs" content="memory-bank/testing/baselines/26-10-31-0934-kb-cleanup-tiers.md, memory-bank/testing/baselines/26-10-31-1029-kb-cleanup-tiers-r1.md, memory-bank/testing/baselines/26-10-31-1216-kb-cleanup-tiers-r2.md, memory-bank/testing/baselines/26-10-31-2145-kb-cleanup-tiers.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>知识库过时信息分级清理 (R0-R4)</h1>
 <p class="lede">把 memory-bank 的条目按「还有没有用」分成 L0–L3 四级，逐级降噪 / 外迁 / 待删，用新命令 <code>kb.tier</code> 承载批量动作；分五轮推进 —— 先建工具、再试点、再铺开，本计划内<span class="wr">不删除任何文件</span>。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-0534 · <b>doc-updated</b> 26-10-31-0538 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-0534 · <b>doc-updated</b> 26-10-31-2208 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 2026-10-31 指令(过时信息清理 + 分级 + 复发榜) · grilling 三轮拍板(D1–D16) · 全库只读勘查(pitfalls / conventions / tasks / plans / testing / issues / reports / activeContext)
 </div>
 
@@ -297,6 +297,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-31-0534</span> 初版。来源：用户 2026-10-31「清理过时信息 + 分级 + 复发榜」指令 → grilling 三轮拍板（D1–D16）→ 全库只读勘查（三个 Explore 并行，覆盖 pitfalls / conventions / 其余 7 个目录）。要点：①冗余主形态是「结论已收口但叙事没删」（B 类 31%）而非「坑本身过时」；②根因是缺「按价值分级」这第三条防线；③R0 工具轮必须最先做；④本计划内零删除。</li>
   <li><span class="tag">R1 · 26-10-31-0538</span> 补 §2.6 机器实测债务清单(7+3 项)与「复发叙事是 cap 主要来源」的交叉印证</li>
+  <li><span class="tag">R2 · 26-10-31-2208</span> 执行实录：五轮(R0-R4)全部完成——R0 kb.tier 四动作上线(list/set/migrate/purge, purge 三闸门全或无), 修 2 个实现真 bug(purge 部分删除、migrate 非幂等/指针缺前缀), test.full 4299→4309(净增守阵); R1 试点(git 15+ops 9): L0×16/L1×6/L2×2, 试点面 −16.6% 字符, 修 3 处过时约束(history-integration/editing-traps/sync-pull)+prod-files 口吻; R2 铺开(226 件): 全库 250 主题件打标 L0×230/L1×17/L2×3/L3×0, 零删除, pitfalls 主题层 −3.9% 字符, redverify cap 债清偿(7→6), 数字漂移修正 5 处; R3 体积: CLOSED_KEEP=60 出口(tasks/_index 28,868→10,062、plans/_index 23,678→10,574 落回 cap 内, 各建 _archive.md), baselines 713 条外迁 attachments(保留最新 3), activeContext 蒸馏删 11 件切片(130→119); R4 三堆分类报告 reports/26-10-31-2157-report-kb-recurrence-three-piles.html(堆1×1/堆2×3/堆3×4, 已收口 3 件不入堆), conventions/rule-system 过时计数修正(17→13 种条件等)。遗留: doc.caps 6 项存量债务(smoke/frontend-split/frozen-column/progress×2/tasks 大档案); activeContext 119&gt;70 按节奏留后续拍; L3 purge 能力就位但 0 件适用(观察期未过)。数字均为此前各轮汇报实测。</li>
 </ul>
 
 </div>

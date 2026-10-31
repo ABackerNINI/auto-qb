@@ -20,7 +20,6 @@
 ## Open
 
 - [26-10-31-0705] [真机实测 RM00 基建: 守卫/伪 tracker/双实例互传](26-10-31-0705-plan-real-machine-test.html) — `real-machine-test`
-- [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
@@ -37,6 +36,7 @@
 - [26-10-31-1042] [RM04 辅种与分组 · 真机实测分步计划](26-10-31-1042-plan-real-rm04.html) — `real-machine-rm04-plan`
 - [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](26-10-31-0927-plan-real-rm02.html) — `real-machine-rm02-plan`
 - [26-10-31-0819] [真机实测 RM01 连接·认证·启动: 锁/端口/token/托盘/自启](26-10-31-0819-plan-rm01-startup.html) — `real-machine-rm01-startup`
+- [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`
@@ -86,19 +86,8 @@
 - [26-10-09-1243] [06 变体逐行汇报倒计时换真 per-tracker 口径 — 实施计划](26-10-09-1243-plan-webui-per-tracker-reannounce.html) — `webui-detail-panel-templates`
 - [26-10-09-1057] [HR 排除种子终态行身份下载短路 · 分步实施计划 · auto-qb](26-10-09-1057-plan-hr-exclude-terminal-download.html) — `hr-steady-throttle`
 - [26-10-09-0821] [HR 故障归属分层拆分 · 分步实施计划 · auto-qb](26-10-09-0821-plan-hr-fault-domain.html) — `hr-fault-domain`
-- [26-10-08-1249] [HR 排除落到取数侧 (方案 B) 分步实施计划 · auto-qb](26-10-08-1249-plan-hr-exclude-steady.html) — `hr-steady-throttle`
-- [26-10-08-1217] [计划 · 辅种页/追剧页支持种子详情面板](26-10-08-1217-plan-webui-drawer-groups-shows.html) — `webui-detail-panel-redesign`
-- [26-10-08-0720] [config/ 包变异测试审计 · 分步执行计划](26-10-08-0720-plan-mutation-config.html) — `mutation-audit`
-- [26-10-07-2336] [tests/test_web.py 拆分实施计划](26-10-07-2336-plan-test-web-split.html) — `test-web-split`
-- [26-10-07-2127] [实施计划 · qB 流量图区间平均口径 + 万桶级治理 · auto-qb](26-10-07-2127-plan-qb-traffic-rate-basis.html) — `qb-traffic-rate-basis`
-- [26-10-07-0414] [实施计划 · WebUI rid 式增量同步 · auto-qb](26-10-07-0414-plan-webui-delta-sync.html) — `webui-delta-sync`
-- [26-10-07-0055] [tracker URL 源头脱敏 · 方案B 分步实施计划](26-10-07-0055-plan-tracker-url-sanitize-planb.html) — `tracker-url-source-sanitize`
-- [26-10-06-1009] [WEBUI 列对齐彻底修复 · 分步实施计划](26-10-06-1009-plan-webui-column-alignment.html) — `webui-column-alignment`
-- [26-10-06-0838] [种子详情面板重构 · 15 模板全量实施(可切换) — 实施计划](26-10-06-0838-plan-webui-detail-panel-redesign.html) — `webui-detail-panel-redesign`
-- [26-10-06-0708] [实施计划 · ui_smoke.cjs 分批迁移到 @playwright/test · auto-qb](26-10-06-0708-plan-playwright-e2e.html) — `playwright-e2e`
-- [26-10-06-0103] [实施计划 · 全项目 Code Review 发现分批修复(六批 28 issue) · auto-qb](26-10-06-0103-plan-full-code-review-remediation.html) — `full-code-review-remediation`
 
-> 更早的 **104** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **115** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

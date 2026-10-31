@@ -4,22 +4,33 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**。
 > 每条链接指回 `plans/` 下的制品原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (3)
+## In Progress (4)
 
+- [26-10-31-1119] [qBittorrent 5.3.x 双版本支持落地计划(facade 修复→升库→升 qB→走查→回写)](../26-10-31-1119-plan-qb-5-3-support.html) — `qb-5-3-support`
 - [26-10-31-0306] [种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单](../26-10-31-0306-plan-torrent-transfer.html) — `torrent-transfer`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (5)
+## Open (4)
 
 - [26-10-31-0705] [真机实测 RM00 基建: 守卫/伪 tracker/双实例互传](../26-10-31-0705-plan-real-machine-test.html) — `real-machine-test`
-- [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](../26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](../26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
 - [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](../26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (164)
+## Done (175)
 
+- [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](../26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`
+- [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](../26-10-31-1754-plan-real-rm08.html) — `real-machine-rm08-plan`
+- [26-10-31-1710] [RM09 WebUI 写侧 · 真机实测分步计划](../26-10-31-1710-plan-real-rm09.html) — `real-machine-rm09-plan`
+- [26-10-31-1605] [RM07 限速·流量曲线·全局流量 · 真机实测分步计划](../26-10-31-1605-plan-real-rm07.html) — `real-machine-rm07-plan`
+- [26-10-31-1350] [RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)](../26-10-31-1350-plan-real-rm06.html) — `real-machine-rm06-plan`
+- [26-10-31-1312] [RM05 tracker·标签与分类清理 · 真机实测分步计划](../26-10-31-1312-plan-real-rm05.html) — `real-machine-rm05-plan`
+- [26-10-31-1228] [RM03 规则引擎 · 真机实测分步计划](../26-10-31-1228-plan-real-rm03.html) — `real-machine-rm03-plan`
+- [26-10-31-1042] [RM04 辅种与分组 · 真机实测分步计划](../26-10-31-1042-plan-real-rm04.html) — `real-machine-rm04-plan`
+- [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](../26-10-31-0927-plan-real-rm02.html) — `real-machine-rm02-plan`
+- [26-10-31-0819] [真机实测 RM01 连接·认证·启动: 锁/端口/token/托盘/自启](../26-10-31-0819-plan-rm01-startup.html) — `real-machine-rm01-startup`
+- [26-10-31-0534] [知识库过时信息分级清理 (R0-R4)](../26-10-31-0534-plan-kb-cleanup-tiers.html) — `kb-cleanup-tiers`
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](../26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](../26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](../26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`
