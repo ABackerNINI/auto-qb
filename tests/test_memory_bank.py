@@ -140,9 +140,12 @@ kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 me
 - test_kb_tier_list_separates_unmarked: list 列出该等级全部文件 (行数/字符数); 未打标件
   (无 `> 等级:` 行) 区分呈现 —— L0 视图全列待定件, 其它级只给一行汇总; 非法等级拒绝
 - test_kb_tier_migrate_dry_run_default_and_apply: migrate 默认 dry-run 零写盘; --apply 后
-  正文段逐字节搬 attachments/ (行数与 \\r\\n 计数与原文一致, 字节差只允许来自相对链接的
+  正文段逐字节搬 attachments/ (行数与 \r\n 计数与原文一致, 字节差只允许来自相对链接的
   `../` 前缀; scheme/根相对/锚点链接不动), 主档留 `> 已外迁:` 指针且摘要判据单点仍在;
-  CRLF 文件整段搬后行尾形态不变; 迁后重跑跳过 (无正文段)
+  CRLF 文件整段搬后行尾形态不变; 迁后重跑按指针幂等跳过
+- test_kb_tier_migrate_skips_already_migrated: migrate 幂等闸 —— 主档已带 `> 已外迁:` 指针
+  的文件一律跳过, 即使残留 `## ` 段也不二次外迁、不产生第二份附件、dry-run/--apply 都零写盘
+  (R1 实测: git/ 已迁档会被旧逻辑重复处理)
 - test_kb_tier_purge_gates_all_or_nothing: purge 默认 dry-run 不删; 非 L3 拒绝; 三闸门逐
   条触发 —— ①无守阵且头部无「无需守阵」②全仓反向引用未清零 ③头部缺 `> 观察通过:` 标
   记 —— 任一不过全体拒绝 (全或无, 删零个) 且 rc=1; 三闸门全过 + --apply 才真删
@@ -2411,9 +2414,59 @@ def test_kb_tier_migrate_dry_run_default_and_apply(tmp_path: Path) -> None:
     assert "判据单点一句话" in main_text, "摘要判据单点必须留在主档可读位置"
     assert "事故时间线" not in main_text, "叙事段应已迁出"
 
-    # --- 迁后重跑: 主档已无正文段, 跳过不报错
+    # --- 迁后重跑: 主档已带指针, 按幂等闸跳过 (不进外迁清单、零写盘)
     rc, out, err = run("migrate", "--level", "L2")
-    assert rc == 0 and "无正文段" in out, out
+    assert rc == 0 and "幂等跳过" in out, out
+
+
+def test_kb_tier_migrate_skips_already_migrated(tmp_path: Path) -> None:
+    """kb.tier migrate 幂等闸: 主档已带 `> 已外迁:` 指针的文件一律跳过 —— 即使残留
+    `## ` 正文段也不二次外迁、不产生第二份附件 (R1 实测: git/ 已迁档会被旧逻辑重复处理)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    tier = _kb_tier()
+    mb = _tier_fixture(tmp_path)
+    # 已迁档形态: 头部 + 指针行 + 残留 `## ` 段 (迁后又手工补写过的极端形态)
+    pit = mb / "pitfalls" / "git" / "migrated-already.md"
+    pit.write_text(
+        "# migrated-already\n"
+        "\n"
+        "> 摘要: 判据单点一句话。\n"
+        "> 等级: L2\n"
+        "> 触发: git, sync\n"
+        "\n"
+        "> 已外迁: 叙事整段迁至 [migrated-already-migrated-26-10-31-0952.md]"
+        "(attachments/migrated-already-migrated-26-10-31-0952.md) (kb.tier migrate 26-10-31-0952)\n"
+        "\n"
+        "## 迁后残留段\n"
+        "\n"
+        "- 迁后又手工补写的内容。\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    before = pit.read_bytes()
+
+    def run(*argv: str) -> tuple[int, str, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = tier.main(["--root", str(tmp_path), "--mb-dir", str(mb), *argv])
+        return rc, out.getvalue(), err.getvalue()
+
+    # --- dry-run: 按指针幂等跳过, 不进外迁清单、不建附件目录、主档零改动
+    rc, out, err = run("migrate", "--level", "L2")
+    assert rc == 0, err
+    assert "幂等跳过" in out and "migrated-already" in out, out
+    assert "将外迁" not in out, "已迁档不得进外迁清单"
+    assert not (mb / "pitfalls" / "git" / "attachments").exists()
+    assert pit.read_bytes() == before
+
+    # --- --apply 也不写盘: 零新附件、主档零改动
+    rc, out, err = run("migrate", "--level", "L2", "--apply")
+    assert rc == 0, err
+    assert "幂等跳过" in out, out
+    assert not (mb / "pitfalls" / "git" / "attachments").exists(), "不得产生第二份附件"
+    assert pit.read_bytes() == before, "主档零改动"
 
 
 def test_kb_tier_purge_gates_all_or_nothing(tmp_path: Path) -> None:

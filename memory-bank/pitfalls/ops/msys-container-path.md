@@ -1,6 +1,7 @@
 # Git Bash 会把 docker 的容器内路径参数也做 POSIX→Windows 转换
 
 > 摘要: 工具 shell 是 Git Bash, `docker exec / docker run / docker compose run` 的**容器内**路径参数(如 `/data/web.token`、`/config/x.yml`)会被 MSYS 按"POSIX 绝对路径"自动改写成 Windows 形态(`D:/Program Files/Git/data/web.token`) —— 命令能跑、退出码正常, 但容器里报「找不到文件/配置文件读取失败」, 看着像容器坏了其实是参数在进容器前就被改了。
+> 等级: L0
 > 触发: docker exec, docker run, docker compose run, 容器路径, 找不到文件, 配置文件读取失败, Git Bash, 路径转换, MSYS, web.token, token 文件
 
 ## 现象与判别

@@ -1,6 +1,7 @@
 # 容器化后, 一切"读宿主磁盘 / 调宿主程序 / 用桌面"的能力都会静默降级
 
 > 摘要: 程序读的是 **qB 报回来的宿主保存路径**(如 `D:\Downloads\x`), 而容器里没有这块盘 ⇒ `os.path.exists` 恒 False、`realpath` 被拼成 `/app/D:/Downloads`; slim 镜像又缺 `xdg-open` / `notify-send` ⇒ 打开文件夹 404(挂了盘则 500)、通知静默返回 False。**最危险的是缺文件扫描**: 它把"看不见"当成"文件没了", 直接 `torrents_stop` 暂停整组 + 打 `MISSING` 标签 —— 真实写入 qB, 而 `check_missing_files` 默认 `true`、事件触发(非每轮) ⇒ 表现为"时不时一批种子被无故暂停"。26-09-27 起映射方案已落地(fs.path_map + 文件访问层), 映射 miss 不再误判缺失。
+> 等级: L0
 > 触发: docker, 容器, compose, 打开目标文件夹, open-path, 目录浏览, fs/dirs, mkdir, 缺文件, MISSING 标签, 跳检, check_filelist, exists(), disk_total, notify-send, xdg-open, 托盘, TZ, host.docker.internal
 
 **Refs:** memory-bank/plans/26-09-27-1407-plan-docker-fs-wrapper-pathmap.html,memory-bank/reports/26-09-27-1352-report-docker-fs-wrapper-pathmap.html,memory-bank/plans/26-09-25-2241-plan-docker-deploy.html

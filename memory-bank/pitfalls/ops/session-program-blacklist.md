@@ -1,6 +1,7 @@
 # 会话内的「程序黑名单」: 系统命令被拦, 真机冒烟做不了 (WinError 5 是双重误导)
 
 > 摘要: 本工具的**命令安全策略**把某些系统程序列入 Program Blacklist (实测 `schtasks.exe`)。从 Bash / PowerShell 工具起的**任何**进程链一旦碰到它, 整条调用失败, 且第一层报错是 `PermissionError: [WinError 5] 拒绝访问。` 落在 `subprocess` 的 `CreateProcess` 上 —— 看着像权限/文件系统问题, 真判据是 stderr 末段那条 `PROGRAM BLOCKED BY SECURITY POLICY ... This block cannot be approved or bypassed from the current command`。⇒ 依赖该程序的动作(计划任务注册、`schtasks` 查询、任何以它为前置的真机冒烟)**在本会话内不可完成**, 这不是代码 bug。处置 = 降级冒烟 + 明确报告缺口, **绝不换壳重试**(消息本身明令禁止)。
+> 等级: L0
 > 触发: 计划任务, schtasks, 真机冒烟, 命令被拦, Program Blacklist, 程序黑名单, 命令安全策略, PermissionError, WinError 5, 拒绝访问, CreateProcess, 沙箱, 系统命令不可用, 自启注册, installer 验收, launchctl, systemctl, 换壳重试
 
 ## 现象与判别 (2026-10-16, gtm S5 自启 installer 轮)

@@ -14,6 +14,8 @@ L2 外迁(整段搬 attachments/, 主档留指针) / L3 待删(观察期满, pur
                         则插在头部区末尾)。只接受 L0/L1/L2/L3, 表外值 rc=1。
 - migrate --level L2    整段叙事外迁: 首个正文行 (`## ` / `### `) 起到文件尾**逐字节原样**搬
                         pitfalls/<类>/attachments/<stem>-migrated-<stamp>.md, 主档留一行指针。
+                        主档已带「已外迁」指针的文件一律幂等跳过 —— 迁过的文件即使残留
+                        `## ` 段也不二次外迁、不产生第二份附件。
                         附件深度比主档深一层, 相对链接自动加一层 `../` 前缀 (唯一允许的字节差,
                         行数与 \\r\\n 计数必须与原文一致, 写完回读校验)。默认 dry-run。
 - purge --level L3      删除该等级文件。默认 dry-run; 必须显式 --apply; 三道闸门任一不过
@@ -62,6 +64,8 @@ NO_GUARD_MARK = "无需守阵"  # 头部区明确判定「无需守阵」(计划
 # desc 放前面便于同专题多段外迁按名排序)
 ATTACH_NAME = "{stem}-migrated-{stamp}.md"
 POINTER_LINE = "> 已外迁: 叙事整段迁至 [{name}](attachments/{name}) (kb.tier migrate {stamp}; 判据单点见上方摘要)"
+# 已外迁标记(行首前缀): migrate 见到即幂等跳过 —— 迁过的文件即使残留 `## ` 段也不二次外迁
+MIGRATED_MARK = "> 已外迁:"
 
 # 正文起点: 首个 `## ` / `### ` 行 (前者覆盖叙述型文档, 后者覆盖坑档条目)
 BODY_START_RE = re.compile(r"^#{2,3}\s")
@@ -235,6 +239,11 @@ def _cmd_migrate(root: Path, mb: Path, level: str, apply: bool) -> int:
     for path in _pitfall_files(mb):
         lines = _read_lines(path)
         if _tier_of(lines, _head_end(lines)) != level:
+            continue
+        # 幂等闸: 主档已带「已外迁」指针 = 迁过的文件, 一律跳过 ——
+        # 即使残留 `## ` 段(如迁后又手工补写)也不二次外迁, 不产生第二份附件
+        if any(ln.startswith(MIGRATED_MARK) for ln in lines):
+            print(f"跳过 {rel_posix(path, root)}: 主档已带「{MIGRATED_MARK}」指针 —— 此前已外迁, 幂等跳过")
             continue
         cls = _pitfall_class(path, mb)
         if cls is None:

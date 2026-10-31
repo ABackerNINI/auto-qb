@@ -1,6 +1,7 @@
 # 管道下按错的编码出/解中文 = 乱码但静默(子进程 + 引擎自身)
 
 > 摘要: Windows 上被管道接住的 Python 子进程按**本地码页(cp936)**输出 stdout, 而调用方按 UTF-8 硬解 ⇒ 中文变一串 U+FFFD; 退出码照旧 0, **一个报错都没有** —— 只有人读输出时才发现。**反方向也一样会炸**: 非 Python 子进程(如 node)输出就是 UTF-8, 而 `text=True` 按 locale 去解 ⇒ 直接抛 `UnicodeDecodeError`。再一变体(2026-10-02): AI 工具壳大输出落盘预览在截断点切进多字节字符时整段按 GBK 重解 —— 数据无损, 读落盘日志即真值。
+> 等级: L0
 > 触发: 输出乱码, 乱码, 中文变问号, U+FFFD, 子进程 stdout, cp936, GBK, PYTHONIOENCODING, 引擎打印外部输出, 包装脚本, 命令行工具输出, UnicodeDecodeError, subprocess text=True, node 输出, encoding, 引擎自身 stdout, run.py 打印, 管道输出, 部分终端乱码, reconfigure, _utf8_self_stdio, PowerShell 捕获, Console.OutputEncoding, -NoProfile, AI 工具终端乱码, chcp 无效, 鍒涘缓, ConPTY, 大输出落盘, persisted output, 预览乱码, outputLimit, 截断点, 30KB, 块缓冲, line_buffering, flush, 输出滞留, 常驻服务无输出, 看不到 log, 无输出, netstat, 表头本地化, 解析恒 0, 探针假 0, 外部命令表头, 测量脚本零值自检, 重定向, UTF-16, Out-File, cmd 转发, FF FE
 
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
