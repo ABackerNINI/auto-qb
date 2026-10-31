@@ -1,6 +1,6 @@
 # 26-11-01-test-commit-gate-scope — 提交闸门按改动收窄优化实施
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-01
 **Updated:** 2026-11-01
 **Summary:** 提交闸门按改动收窄优化实施

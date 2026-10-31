@@ -4,16 +4,14 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (24)
+## In Progress (22)
 
 - [26-10-31-memory-bank-recurrence-tooling](../26-10-31-memory-bank-recurrence-tooling.md) 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
 - [26-10-31-webui-write-side](../26-10-31-webui-write-side.md) 修复 reannounce 确认跟踪对在途 tracker 过早落 ok(issue 26-10-31-1740)
 - [26-11-01-memory-bank-html-syntax-guard](../26-11-01-memory-bank-html-syntax-guard.md) HTML 坏标签机检守卫(闭合标签缺右尖括号吞正文类) + vnu 巡检
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
-- [26-11-01-test-commit-gate-scope](../26-11-01-test-commit-gate-scope.md) 提交闸门按改动收窄优化实施
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-10-17-backend-global-traffic-source-integration](../26-10-17-backend-global-traffic-source-integration.md) 全局流量来源一键切换 + 工具自动拉起(改版)
-- [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
 - [26-10-31-deps-qb-5-3-support](../26-10-31-deps-qb-5-3-support.md) qB 5.3 双版本支持落地(facade/重加/升库)
 - [26-10-31-memory-bank-kb-nav-multiselect](../26-10-31-memory-bank-kb-nav-multiselect.md) kb.nav 多选与批量右键菜单
 - [26-10-30-backend-gtm-review-t-fixes](../26-10-30-backend-gtm-review-t-fixes.md) gtm 批T 三缺陷收口: config 写锁 / http_host 回环 / day_rolled 方向
@@ -36,11 +34,13 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (256)
+## Done (258)
 
 - [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
+- [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
 - [26-11-01-backend-tray-sigterm-quit](../26-11-01-backend-tray-sigterm-quit.md) 托盘模式 SIGTERM 优雅退出: handler 换装 quit 事件合流 + run() 收尾挂 finally 兜底(issue 26-10-31-1030)
 - [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
+- [26-11-01-test-commit-gate-scope](../26-11-01-test-commit-gate-scope.md) 提交闸门按改动收窄优化实施
 - [26-10-11-webui-drawer-refactor](../26-10-11-webui-drawer-refactor.md) 种子详情面板重构(字符串 DOM 变体 → Vue 面板)
 - [26-10-31-memory-bank-doc-guard-filename-scope-fix](../26-10-31-memory-bank-doc-guard-filename-scope-fix.md) 新增面守卫圈面改文件名 stamp 前缀: 堵缺 doc-added 手写新件逃逸洞 (RM02-RM10 事故)
 - [26-10-31-test-snapshot-git-marker-validity](../26-10-31-test-snapshot-git-marker-validity.md) 快照 _find_repo_root 判据加 .git/HEAD 有效性校验: 空壳标记不算仓库根

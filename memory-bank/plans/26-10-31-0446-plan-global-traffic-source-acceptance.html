@@ -7,9 +7,9 @@
 <title>全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="global-traffic-source-acceptance">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-0446">
-<meta name="doc-updated" content="26-10-31-0529">
+<meta name="doc-updated" content="26-11-01-0714">
 <meta name="doc-refs" content="memory-bank/plans/26-10-17-0339-plan-global-traffic-source-integration.html, memory-bank/plans/26-10-17-1737-plan-global-traffic-source-integration-fixes.html, memory-bank/plans/26-10-18-0813-plan-global-traffic-source-phase2.html, memory-bank/tasks/26-10-31-backend-global-traffic-source-acceptance.md, memory-bank/issues/26-10-31-0537-bug-gtm-autostart-pointer-stale.html">
 <style>
   :root {
@@ -73,7 +73,7 @@
 <h1>全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)</h1>
 <p class="lede">对主计划 26-10-17-0339 的 S19 真机验收做一次桩测化改版:qB 一律用桩、绝不触碰真实 qB;并把 S19 定义之后落地的三波变更(R2/S20、缺陷修复 Phase 1、Phase 2)全部纳入验收面;只测 Windows 侧。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-0446 · <b>doc-updated</b> 26-10-31-0529 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-0446 · <b>doc-updated</b> 26-11-01-0714 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令(26-10-31):「真机验收还未进行,先写一个验收计划;模块后续可能经过更改,先找到更改的文档一并纳入;验收过程使用桩,不碰真实 qB;仅测试 Windows 侧」
 </div>
 
@@ -172,7 +172,7 @@
 </table>
 
 <h3>A6 · 主计划 §08 判据对账</h3>
-<p>十条判据逐条标注「被 A1–A5 哪步覆盖 / 本步补验」,不漏项:<span class="chk">来源互斥(A4/A5.1)· 免配端口密钥(A1)· 自动拉起(A1/A2)· 多实例共享(A3)· 抢输不占端口(A5.8)· 编译态可定位(模拟 sys.frozen —— Windows 下若有编译产物则真验,否则标注代码分支已测)· 迁移等价(喂 v4 旧配置升 v5,取数行为不变、notes 逐键可读)· 守阵不受污染(工具跑起来后 <code>git status</code> 干净、tests/sidefx.py 全绿)· 拉起不依赖 uv(A1,加验:改启动器内容模拟工具升级后拉起仍成立)· 取数路径单一事实源(A1/A4,加验:改指针 data_dir 后取数路径随之变、删指针后取数为空且不回退 TM)</p>
+<p>十条判据逐条标注「被 A1–A5 哪步覆盖 / 本步补验」,不漏项:<span class="chk">来源互斥(A4/A5.1)· 免配端口密钥(A1)· 自动拉起(A1/A2)· 多实例共享(A3)· 抢输不占端口(A5.8)· 编译态可定位(模拟 sys.frozen —— Windows 下若有编译产物则真验,否则标注代码分支已测)· 迁移等价(喂 v4 旧配置升 v5,取数行为不变、notes 逐键可读)· 守阵不受污染(工具跑起来后 <code>git status</code> 干净、tests/sidefx.py 全绿)· 拉起不依赖 uv(A1,加验:改启动器内容模拟工具升级后拉起仍成立)· 取数路径单一事实源(A1/A4,加验:改指针 data_dir 后取数路径随之变、删指针后取数为空且不回退 TM)</span></p>
 
 <h3>A7 · 收尾</h3>
 <ul>
@@ -212,6 +212,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-31-0446</span> 初版:用户指令立项(S19 未验收;先找变更文档再写计划;桩测/不碰真实 qB/仅 Windows)。变更考古结论 —— S19 定义后三波变更(修复 Phase 1、自启换轨 HKCU Run、Phase 2)全部纳入验收面,见 §02;桩策略与四场景改版见 §03/§04。</li>
   <li><span class="tag">R1 · 26-10-31-0529</span> 验收实施完成: D1/D2/D3 拍板回填; 四场景+三波变更新增面(A5.1-A5.8)+§08 对账全过(编译态 N/A); 1 条 P3 验收发现(卸载自启后指针 autostart_registered 不即时回写); A2 A级真重启待用户; 现场已还原; 逐项记录见任务档案 26-10-31-backend-global-traffic-source-acceptance</li>
+  <li><span class="tag">R2 · 26-11-01-0714</span> 验收收口: A0-A7 全部执行完毕、验收结论全过(证据与子任务表见任务档案 26-10-31-backend-global-traffic-source-acceptance.md); 场景②按用户 D1 拍板以 B 级等价模拟收口, A 级真重启留用户侧补做(结论不受影响); P3 发现已入池 26-10-31-0537; 状态翻 Done</li>
 </ul>
 
 </div>

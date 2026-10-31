@@ -1,8 +1,8 @@
 # 26-10-31-backend-global-traffic-source-acceptance — 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-10-31
-**Updated:** 2026-10-31
+**Updated:** 2026-11-01
 **Summary:** 按验收计划 26-10-31-0446 完成主计划 26-10-17-0339 S19 的桩测化真机验收:四场景 + 三波变更新增面(A5.1–A5.8)+ §08 十条判据逐项实测,全过(2 项标注 N/A/单测覆盖);现场已还原;产出 1 条 P3 级验收发现。
 **Topics:** backend-global-traffic-source-acceptance
 **Refs:** memory-bank/plans/26-10-31-0446-plan-global-traffic-source-acceptance.html, memory-bank/issues/26-10-31-0537-bug-gtm-autostart-pointer-stale.html
@@ -64,4 +64,4 @@
 
 **现场还原核验**:无 python 进程;`%LOCALAPPDATA%\global-traffic-monitor\` 已删;HKCU Run 无工具自启值;`tools/global-traffic-monitor/data/` 已删(验收期创建);用户真机数据目录(`Desktop/Projects/data/global-traffic-monitor-data/`)四文件原样未动。
 
-**遗留**:①A2 A 级真重启待用户方便时补做(结论不受影响);②P3 发现是否入池待用户;③主计划 26-10-17-0339 的 S19 勾选/状态收口待用户确认验收结论后执行;④工作区 `tmp-analysis/acceptance-gts/` 留档(gitignored)。
+**遗留**:①A2 A 级真重启待用户方便时补做(结论不受影响);②P3 发现已入池 issue 26-10-31-0537;③主计划 26-10-17-0339 的 S19 勾选/状态收口已执行(26-10-31 05:40, 主计划 R5, doc-status 已翻 Done);④工作区 `tmp-analysis/acceptance-gts/` 留档(gitignored)。

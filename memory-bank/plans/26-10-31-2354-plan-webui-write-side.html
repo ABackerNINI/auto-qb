@@ -7,9 +7,9 @@
 <title>reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-write-side">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-2354">
-<meta name="doc-updated" content="26-11-01-0026">
+<meta name="doc-updated" content="26-11-01-0714">
 <meta name="doc-refs" content="memory-bank/issues/26-10-31-1740-bug-webui-reannounce-premature-confirm.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据</h1>
 <p class="lede">把 reannounce 确认跟踪的「在途即成功」改为<strong>消解等待模型</strong>：<code>updating</code> 一律不构成成功证据，成功凭 working 转换 / epoch 前跳正证据，失败凭 status 4/5/6 + msg；可达 tracker 的回执时延 = 真实 RTT + ≤1 tick，零固定宽限。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2354 · <b>doc-updated</b> 26-11-01-0026 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2354 · <b>doc-updated</b> 26-11-01-0714 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling（2026-10-31，用户指令「认领 issue 26-10-31-1740 + grilling 修复方案」；issue §6 建议修法被否决后重新设计）+ 两名研究员源码调查（qB v5.4.0alpha1 / libtorrent RC_2_1，Else 本地源码，事实均附文件:行号）
 </div>
 
@@ -85,7 +85,7 @@
 <p><strong>设计底线/不变量</strong>：回执三桶语义只承诺诚实标签（ok/error/warn）；歧义保守落 pending；失败判据④<strong>逐行先于</strong>成功判据（防失败退避前跳被误判成功，libtorrent <code>announce_entry::failed()</code> 同样会前跳 next）；判定保持纯函数；等待期零 API 红线不变（照旧读 <code>torrents_trackers</code> 快照）；投递收敛、D1 推迟早回执、item 级 deadline 语义（<code>REANNOUNCE_*</code> 常量组）全部不动。</p>
 
 <h2><span class="no">§02</span>现状与痛点</h2>
-<p><strong>现状</strong>（行号取证 2026-10-31）：<code>src/auto_qb/webui/commands.py:466-470</code> 分支②——epoch 行 <code>updating or status==3</code> 且基线 min 缺失/为 0/已过期 → confirmed「announce 在途」；<code>runtime.py:588</code> <code>check_pending</code> 在指令 drain 后同 tick 跑首拍 → +1ms 终态。legacy 行（qB<5.2，无 epoch 字段）有无守卫的②同病。从未联系行无任何成功出口（主判据③判定域限基线 status≥2）。</p>
+<p><strong>现状</strong>（行号取证 2026-10-31）：<code>src/auto_qb/webui/commands.py:466-470</code> 分支②——epoch 行 <code>updating or status==3</code> 且基线 min 缺失/为 0/已过期 → confirmed「announce 在途」；<code>runtime.py:588</code> <code>check_pending</code> 在指令 drain 后同 tick 跑首拍 → +1ms 终态。legacy 行（qB&lt;5.2，无 epoch 字段）有无守卫的②同病。从未联系行无任何成功出口（主判据③判定域限基线 status≥2）。</p>
 <p><strong>源码事实</strong>（2026-10-31 调查）：</p>
 <ul>
   <li>updating 在请求发出前置位、成功（<code>torrent.cpp:3860-3867</code> verified=true, updating=false, fails=0 → Working）或失败（<code>announce_entry.cpp:97</code> failed()）时清除——它对成败零信息量；</li>
