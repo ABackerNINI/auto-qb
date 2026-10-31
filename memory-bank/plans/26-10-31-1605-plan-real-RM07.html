@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM07">
+<meta name="plan-stamp" content="26-10-31-1605">
+<meta name="doc-topic" content="real-machine-rm07-plan">
+<title>RM07 限速·流量曲线·全局流量 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --stop: #e08f8f; --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 74ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair); }
+  h2 .no { color: var(--accent); margin-right: 10px; font-size: 15px; letter-spacing: 0.08em; }
+  h3 { font-family: var(--display); font-size: 15.5px; font-weight: 600; color: var(--accent-ink); margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 88ch; }
+  ul, ol { margin: 0 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--hair-soft); }
+  .callout { border-left: 3px solid var(--accent); background: var(--hair-soft); padding: 10px 16px; border-radius: 0 6px 6px 0; margin: 12px 0 16px; max-width: 90ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 13.5px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 11px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); background: var(--hair-soft); }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 9px; border-radius: 10px; border: 1px solid var(--hair); color: var(--dim); margin-left: 6px; white-space: nowrap; }
+  .badge.lv { color: var(--accent-ink); border-color: var(--accent); }
+  .badge.skip { color: var(--warn); border-color: var(--warn); }
+  .case { border: 1px solid var(--hair); border-radius: 8px; margin: 0 0 14px; overflow: hidden; }
+  .case .hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding: 10px 16px; background: var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .case .cid { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 14.5px; margin-right: 10px; }
+  .case .ttl { font-weight: 600; font-size: 14.5px; flex: 1; min-width: 40%; }
+  .case .bd { padding: 12px 16px 14px; }
+  .case .bd p { margin-bottom: 8px; }
+  ul.four { list-style: none; margin: 8px 0 0 0; border-top: 1px dashed var(--hair); padding-top: 8px; }
+  ul.four li { font-size: 13px; color: var(--dim); margin-bottom: 4px; padding-left: 14px; text-indent: -14px; }
+  ul.four li b { color: var(--ink); }
+  .hint { color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">Real-machine slice plan · RM07</div>
+  <h1>RM07 限速·流量曲线·全局流量 · 真机实测分步计划</h1>
+  <p class="lede">限速曲线查档下发 qB 全局限速、qB 口径流量采样与重启缺口、流量源三态与切换、全局流量聚合与工具状态面。本计划只做排期准备(定片/漂移体检/glob 自检/环境自检/用例设计), 不含执行; 执行按本计划逐条跑, 三态记账。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1605</div></div>
+    <div class="item"><div class="k">片</div><div class="v">RM07(常驻锚 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">1 次(半天)</div></div>
+    <div class="item"><div class="k">用例</div><div class="v">10 条 · L2×7 / L3×3</div></div>
+    <div class="item"><div class="k">种子层</div><div class="v">L1 为主 · RM07-08 用 L2 互传</div></div>
+    <div class="item"><div class="k">漂移体检</div><div class="v">首轮, 无漂移面</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + glob 自检)</h2>
+    <h3>会话同步(2026-10-31 16:00 实测)</h3>
+    <p>已同步: rebase 到 Gitee <code>develop</code>(真改写 HEAD: 旧 <code>df0f3f9d</code> → 新 <code>4cab03cf</code>; 两处<b>生成物</b> <code>issues/_index.md</code> 与 <code>issues/attachments/_archive.md</code> 撞车, 按 AGENTS.md「生成物自动化解」取一侧 + <code>commands run kb.index</code> 重建自证, 手写件零冲突)。远端无 <code>refs/heads/real/rm02-rm10</code>(本工作分支不推远端, RM03/RM05 先例)。</p>
+    <h3>漂移体检(§07)</h3>
+    <p><b>RM07 无基线 commit → 首轮, 无漂移面</b>(§07: 没有基线 commit 的首轮写"首轮, 无漂移面")。本轮实测完成后把实测时刻 HEAD 记进切片与锚件 §07。</p>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 15:57 实测)</h3>
+    <p><code>[ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停</code><br>
+       <code>[ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></p>
+    <p>guard 绿(<code>firewalled</code> 按 §2.1 通过)。真实种子全程暂停, 约束 2 对本片全部用例天然成立——本片查档/采样/聚合判据都是<b>数据与配置面</b>, 不需要真实种子活跃。</p>
+    <h3>glob 自检(规程 §05 规则 8, 2026-10-31 16:05 实测)</h3>
+    <p>锚件 §03 RM07 行原 8 条 glob 中 <b>6 条漏 <code>src/auto_qb/</code> 前缀</b>(RM01–RM06 同款缺陷第七次复发; 原样 pathspec 命中 0)。已按规则 8 修正, 并把曲线采样面两实现文件并入(<code>core/traffic_store.py</code> 1616 行 · <code>core/traffic_grid.py</code> 791 行——traffic_sample_mod 的存储与逐格聚合单点, 原行漏出)。锚件 §08 已记账(16:05 li)。补正后 <code>git ls-files</code> 实测命中 <b>41 个文件</b>(产品侧 12 + <code>tools/global-traffic-monitor/**</code> 29), 全属限速·流量面, 无混入大件, 片边界不糊, 不拆不并(规则 1/2 不触发)。</p>
+    <p>产品侧命中清单: <code>core/modules/speed_curve_mod.py</code>(324 行) · <code>core/modules/traffic_sample_mod.py</code>(1622 行) · <code>core/modules/traffic_snapshot_mod.py</code>(365 行) · <code>core/curves.py</code>(142 行) · <code>core/traffic_source/</code>(agent 475 / paths 115 / reader 50 / __init__ 7) · <code>core/traffic_limits.py</code>(317 行) · <code>core/traffic_store.py</code> · <code>core/traffic_grid.py</code> · <code>webui/server/routes/traffic_monitor.py</code>(401 行)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读; 文件:行号为 2026-10-31 HEAD 锚点)</h2>
+    <table>
+      <tr><th>验证面</th><th>代码锚点</th><th>外部可观测断言面</th></tr>
+      <tr>
+        <td>限速下发与回读(全局)</td>
+        <td><code>speed_curve_mod.handle_speed_limit_curve</code>(speed_curve_mod.py:153-262): 读 dat → <code>curves.aggregate</code>(curves.py:76)逐曲线查档 → <code>curve_speed</code>(:95)/<code>merge_direction</code>(:107)同向取最严 → 手动保护(:206-213, <code>is_manual_speed_limit</code> 奇数 KiB)→ <code>set_global_speed_limits</code>(:229)→ <code>get_global_speed_limits</code> 回读(:242-250)→ <code>publish_limit</code>(:298)发布快照 limit 段</td>
+        <td>qB 偏好 <code>upload_limit</code>/<code>download_limit</code>(KiB)回读精确命中; 产品日志「限速曲线 | 设置全局限速: …」; 快照 limit 段 state=ok 且 actual==target; 手动跳过时 reasons 含 code=manual</td>
+      </tr>
+      <tr>
+        <td>曲线采样</td>
+        <td><code>traffic_sample_mod.handle_traffic_sample</code>(traffic_sample_mod.py:573)· 首样只立基线不出增量(:488, :797)· 间隔配比 WARNING(<code>_apply_interval</code>:659-692)· 关块重开(:694)· 计数器重置审计 <code>_close_block_and_reopen</code>(:1069)· v4 存储单点 <code>_get_v4_store</code>(:932)→ <code>traffic_store.py</code></td>
+        <td>data_dir 临时目录落 v4 采样文件; 日志 WARNING(非整倍配比)/INFO(reset_log); 文件内容可按 store 口径读回</td>
+      </tr>
+      <tr>
+        <td>流量源切换</td>
+        <td><code>traffic_source/paths.py</code>: <code>source_enabled</code>(:44)/<code>dat_path</code>(:71, 唯一入口 R2/D20)/<code>source_identity</code>(:86, 切源即刷新判定单点)· <code>traffic_snapshot_mod.refresh</code>(traffic_snapshot_mod.py:198-229, 来源刷新唯一执行路径 A5/D11: off/stale/ok 三结局)</td>
+        <td>启动/配置保存触发刷新的日志行(INFO off 文案 / WARNING stale); 快照 source 段三态与 periods/history 换血</td>
+      </tr>
+      <tr>
+        <td>重启尖峰缺口</td>
+        <td>traffic_sample_mod.py:243(<code>dl_session</code> qB 重启归零)· :488(重启后首样只立基线不出增量, 首窗 null)· :1070-1077(reset_log 审计)</td>
+        <td>产品重启后首窗无假尖峰(采样文件无异常增量块); 「重启恢复与 catch-up」日志</td>
+      </tr>
+      <tr>
+        <td>全局流量聚合</td>
+        <td><code>traffic_snapshot_mod</code> history/periods 发布(:95-113)· <code>traffic_limits.py</code> SpeedLimitRecorder/LimitsCache(:130/:225, 限速事件账)· <code>webui/server/routes/traffic_monitor.py</code>: status(:206, 五态恒 200)/config(:218 全量覆盖)/autostart/relaunch/shutdown/claim(:240-320)/notify(NOTIFY_PATH)· <code>tools/global-traffic-monitor/**</code>(gtm 工具仓)</td>
+        <td><code>GET /api/traffic/monitor/status</code> 五态(not_installed/launching/launch_failed/not_running/ready)+ reachable; 快照 history/periods 行数与今日聚合值</td>
+      </tr>
+    </table>
+    <div class="callout">
+      <b>与已测面的「同一件事不测三遍」切分(规程 §00)</b>: 限速的 <b>qB API 回读口径</b>与<b>单种级限速下发+奇数 KiB 手动保护</b>已由 RM03-03(规则动作限速)、RM05-03(tracker 限速认领)两测过; <b>PUT /api/config 热重载机制</b>已由 RM02-04 测过。RM07 不再复测这三件, 只在用例里<b>引用</b>其口径(回读精确命中/奇数判手动/热重载回执 changes); 本片<b>新增面</b>集中在: 全局(非单种)曲线查档→qB 全局偏好下发、曲线采样与 v4 存储、流量源三态与切换、重启缺口、工具状态端点。热重载切源(RM07-03)只断言「配置一保存立刻触发一次刷新」的切源语义, 不复测热重载机制本身。
+    </div>
+    <h3>验证口径(种子层与本地造源)</h3>
+    <ul>
+      <li><b>L1 假种子</b>(死端口 announce <code>http://&lt;本机局域网IP&gt;:1/announce</code>, <code>real-fake</code> 标签, 零外连; §2.9: 必须带 announce 且测试配置 trackers 有对应 domains 条目才进管线)。限速曲线查档判据是 <b>dat 文件里的历史字节</b>, 不是实时速率——全部限速类用例 L1 足够, <b>无需真实速率</b>。</li>
+      <li><b>L2 互传</b>(仅 RM07-08): 36595 做种 + 36596 下载, 本地伪 tracker; <b>transfer_limits fixture 钉速</b>(tests-real/conftest.py:80, 规程 §2.5: 两实例默认 dl_limit=1024 的坑——临时钉 256 KiB/s, 结束还原), 否则 2MB 要传半小时。</li>
+      <li><b>本地流量源造法</b>(零外连): 配置 <code>traffic_source.provider="traffic_monitor"</code> + <code>traffic_source.traffic_monitor.dat_path</code> 指向临时 dat 文件——按 <code>curves.parse_history_dat</code>(core/curves.py:48, scale=KB 默认)<b>口径</b>手工造行; 坏行/空文件路径也是验证面。gtm 工具来源本轮<b>不真安装</b>(见 §05 跳过项), 只测 status 端点五态。</li>
+      <li><b>未配流量源</b> = 缺省配置(provider=traffic_monitor, dat_path 空, enabled 缺省 True)——即 RM01 观察项现场, 归 RM07-01。</li>
+      <li><b>全局限速回读</b>: 经产品曲线任务管线(不是用例直写 qB 偏好); 用例预置场景时用 qB 原生 <code>setPreferences</code>(偶数/奇数 KiB 现场), 收尾一律还原到预置前值。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(10 条, docstring 首行 <code>[RM07-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm07_traffic/</code>, 跑法 <code>commands run real.suite -- --slice RM07 --yes</code>(<code>-n 0</code>; 文件锁防端口抢, rm01 先例)。共享基座: 产品非 dry-run 连 36596(空库), 各条独立起停; 产品 data_dir 各条独立临时目录(隔离 v4 采样文件与限速事件账 <code>traffic_limits</code> 的日文件); 假种子一律 <code>real-fake</code> 标签; dat/announce/工具全本地, <b>零外连断言兜底: 每条收尾核外连计数 0 + 产品日志无真实站点连接痕迹</b>。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-01</span><span class="ttl">RM01 观察项收口: 未配流量源启动 → 「读取流量数据失败()」空路径 WARNING 仍复现且不崩</span><span class="badge lv">L2</span><span class="badge">L1 基座(可零种子)</span></div>
+      <div class="bd"><p>缺省配置(traffic_source.enabled 缺省 True, provider=traffic_monitor, dat_path 空)启动产品。断言: 启动日志有「<code>流量快照 | 读取流量数据失败(): [Errno 2] No such file or directory: ''</code>」WARNING(RM01 §04-6 观察项原文); 重复启动每次都打(非一次性); 进程不崩、主循环照常跑完节拍; 真实异常文本跟随在其后(观察项记录的「易带偏排查方向」形态)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 缺省测试配置(不配 traffic_source 数据源), data_dir 独立临时目录; 无需种子。</li>
+        <li><b>副作用</b>: 产品起停一次; 临时目录。</li>
+        <li><b>回滚</b>: 删临时目录; 实例无写。</li>
+        <li><b>失败判据</b>: 无该 WARNING(行为已变——如实回写锚件 §08 收口观察项, 按实况定档, 不硬凹旧文案); 启动崩溃或主循环不跑(高优 FAIL); WARNING 一次性不再现(节流语义与观察项矛盾, 记新事实)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-02</span><span class="ttl">来源刷新三态 off/stale/ok: 总开关关 → off 快照零读盘; 缺 dat → stale 清历史; 本地 dat → ok 发布</span><span class="badge lv">L3(三态对照内建)</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>同一产品会话依次切三态, 断言 <code>refresh</code>(traffic_snapshot_mod.py:198)三结局各就各位: ①<code>traffic_source.enabled=false</code> → INFO「来源总开关关闭(traffic_source.enabled=false), 发布 off 快照」+ off 理由文案「流量来源已关闭」, <b>零 WARNING 零读盘</b>; ②enabled=true + dat_path 指不存在文件 → WARNING「读取流量数据失败(&lt;路径&gt;)」+ source=stale 且 periods/history 清空; ③指向手工造的本地 dat(含当日行)→ source=ok + history/periods 发布, 行数与今日聚合值与造的行一致。三态互为对照(红验内建)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座; 临时 dat 文件(按 <code>curves.parse_history_dat</code> 口径造, 先读该函数 20 行别猜格式)。</li>
+        <li><b>副作用</b>: 临时 dat; 配置热改(traffic_source 段)。</li>
+        <li><b>回滚</b>: 删临时 dat + 配置还原(或直接停产品, 各条独立起停天然隔离)。</li>
+        <li><b>失败判据</b>: off 态仍打 WARNING(闸门 paths.source_enabled 未拦); stale 态残留旧 history(未清 periods/history); ok 态聚合值与造行不符(parse 口径分叉); 断言咬内部实现而非日志/快照/HTTP(口径错)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-03</span><span class="ttl">流量源切换即刷新: source_identity 变化 → 配置一保存立刻触发一次刷新换血</span><span class="badge lv">L2</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>同一会话内先指 datA(ok 态), 热改 <code>traffic_source.traffic_monitor.dat_path</code> 指向 datB(内容不同: 行数/今日值不同)。断言: 配置保存<b>立刻</b>触发一次刷新(S8「切源即刷新」, 判定单点 <code>source_identity</code> paths.py:86)——不等 refresh_interval 到期; 快照 periods/history 换血为 datB 的行; 日志有对应刷新痕迹。热重载回执口径引用 RM02-04(changes/restart_required), 不复测热重载机制。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座; 两份内容可区分的本地 dat。</li>
+        <li><b>副作用</b>: 临时 dat ×2; 热改配置。</li>
+        <li><b>回滚</b>: 删临时 dat; 配置随起停还原。</li>
+        <li><b>失败判据</b>: 切源后不刷新(要等 refresh_interval 才换血——「切源即刷新」契约破, FAIL); 换血后行数仍是 datA(身份指纹没把 dat_path 算进判定——paths.py:91 只取配置事实, 注意实测口径); 回执报 restart_required(traffic_source 段若被划 R 级是新事实, 如实记不定性)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-04</span><span class="ttl">限速曲线主链: 本地 dat 查档 → qB 全局限速下发 → 偶数 KiB 回读精确命中 → 快照 limit 段 ok</span><span class="badge lv">L3(改档对照)</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>配置 <code>global_speed_limit_curve</code>(enabled=true, curves 两条 period 曲线, upload/download_points 给出偶数 KiB 档, interval 显式配小防白等), 本地 dat 造出足够今日累计字节使查档命中目标档。断言: qB 偏好 <code>upload_limit</code>/<code>download_limit</code> 回读=曲线目标(偶数 KiB 精确命中, RM03-03 回读口径引用); 日志「限速曲线 | 设置全局限速: …」+「累计上传/下载 …」; 快照 limit 段 state=ok 且 actual==target; 同向多曲线取最严(两曲线命中不同档时取严者, <code>merge_direction</code> 语义)。红验: 换 dat 使累计字节跨档 → 下一曲线轮限速跟着改档(第二档命中, 对照真跑)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 曲线配置 + 临时 dat(字节量按 points 档位设计好); 用例前记录 qB 当前全局限速原值。</li>
+        <li><b>副作用</b>: <b>改写实例全局偏好 upload/download_limit</b>(实例级, 影响 36596 全部传输)。</li>
+        <li><b>回滚</b>: 恢复预置前原值(§2.5 坑: 两实例默认 1024, 按前快照还原非想当然); 删临时 dat。</li>
+        <li><b>失败判据</b>: 回读≠目标(下发链路断, 高优 FAIL); actual 与 target 不一致且无 read_failed 原因码(回读降级语义破); 改档后限速不动(查档/基线推进分叉); 收尾忘还原全局限速(测试侧事故, 立即修)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-05</span><span class="ttl">全局限速手动保护: 预置奇数 KiB → 曲线命中但 skip 不覆盖; 改回偶数 → 覆盖恢复</span><span class="badge lv">L3(负向真红)</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>用 qB 原生 setPreferences 预置 <code>download_limit=1025</code>(奇数 KiB, 手动现场), 曲线配置目标 1024。断言: ≥2 个曲线轮 qB 原值 1025 原样(奇数「疑似手动设置」不覆盖, speed_curve_mod.py:206-213); 快照 limit 段 reasons 含 code=manual + 文案「下载限速 1025KiB/s 为奇数(疑似手动设置), 本轮不覆盖」; 同轮 upload 侧(偶数)照常下发(逐方向独立)。红验: 改回偶数 1024 → 下一轮覆盖恢复 + reasons 清 + 「已退出手动保护」节流记忆清(:214-217)。与 RM03-03/RM05-03 同口径但<b>全局层是新面</b>。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 曲线配置 + 预置奇数限速(原生 API 直发); 原值快照。</li>
+        <li><b>副作用</b>: 全局偏好被预置/还原; 临时 dat。</li>
+        <li><b>回滚</b>: 恢复预置前原值; 删临时 dat。</li>
+        <li><b>失败判据</b>: 奇数被覆盖(手动保护失效, 高优 FAIL); upload 侧被连带跳过(逐方向独立破); 改偶数后仍不覆盖(退出路径断, 红验不红→如实降档); 断言咬内部枚举而非 reasons/qB 回读(口径错)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-06</span><span class="ttl">曲线任务短路三路: enabled=false → disabled 零触碰; 来源关 → REQUEUE 零发布; dry-run → 零 qB 写</span><span class="badge lv">L2</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>三条短路各验: ①<code>global_speed_limit_curve.enabled=false</code> → publish_limit("disabled"), 不读 dat 不写 qB(偏好原值); ②<code>traffic_source.enabled=false</code> → 曲线任务直接 REQUEUE(<code>speed_curve_mod:160-169</code>), 零日志零发布, 且不与来源模块抢「谁写的 state」(A4); ③<code>--dry-run</code> + 全配置 → dry_run 发布(target 有值 actual=None), 零 qB 写(引用 RM02 dry-run 红验口径)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 临时 dat + 三份变体配置(各独立起停)。</li>
+        <li><b>副作用</b>: 产品起停 ×3; 临时目录 ×3。</li>
+        <li><b>回滚</b>: 删临时目录。</li>
+        <li><b>失败判据</b>: 任一短路路径仍写 qB 偏好(保守默认破, 高优 FAIL); enabled=false 仍读 dat(S1/D1 闸门失守); dry-run 出现 actual 读数(§2.7 --dry-run 不启 WEB——此路需经 CLI/任务侧观测, 排不通记 BLOCKED 如实报)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-07</span><span class="ttl">qB 口径采样主链 + 重启尖峰缺口: 采样落 v4 store → 产品重启 → 首样只立基线不出增量(首窗 null)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p><code>qb_traffic.enabled=true</code>(sample_interval 最小档, flush_interval 下限 60s)起产品, 1 枚假种子进库。断言: data_dir 落 v4 采样文件(全局+单种两系列); 重启产品(优雅退出 <code>graceful_after</code>)→ 重启后首窗为 null(只立基线不出增量, traffic_sample_mod.py:488/797)——<b>重启尖峰缺口</b>不出现假增量块; 无计数器重置时日志零 reset_log 审计行; 暂停态种子系列进 null run(:831 <code>_touch_null_run</code>)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + qb_traffic 配置 + 1 假种子; 采样文件读取按 store 口径(执行前读 traffic_store.py 存储段头注释)。</li>
+        <li><b>副作用</b>: 1 假种子; v4 采样文件落临时 data_dir。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删临时目录。</li>
+        <li><b>失败判据</b>: 重启后首窗出现非零增量(假尖峰, 「重启尖峰缺口」验证面 FAIL); 两系列缺一(单种/全局装配分叉); 产品重启后采样不恢复(catch-up 链路断); 断言咬文件内部二进制而非 store 读回 API/日志(口径错)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-08</span><span class="ttl">L2 互传真实速率聚合: 采样随互传增长 → 今日聚合字节增长 → 曲线查档消费真数据</span><span class="badge lv">L2</span><span class="badge">L2 互传(transfer_limits 钉速)</span></div>
+      <div class="bd"><p>36595 做种 + 36596 下载同一构造种子(本地伪 tracker), <b>transfer_limits fixture 钉 256 KiB/s</b>(§2.5)。断言: 采样全局系列 up/down &gt; 0 持续(≥10s, RM00 口径); 单种系列对应 infohash 增长; 今日聚合字节随互传单调增长; (联动可选)曲线配置低档时真数据足以跨档——限速查档消费的是真累计而非摆设。上传计数滞后一拍的坑用 <code>_wait</code> 轮询(§2.5)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 双实例 + 伪 tracker + 钉速 fixture + qb_traffic 配置; 假种子 announce 指本地伪 tracker。</li>
+        <li><b>副作用</b>: 两实例各 1 假种子; 实例限速被 fixture 临时改写。</li>
+        <li><b>回滚</b>: fixture 还原两端限速 + <code>real.seed.rm --all</code>(两端)+ 删临时目录。</li>
+        <li><b>失败判据</b>: 互传零字节(连不上自己——查 §2.5 伪 tracker 排除请求者/监听端口坑, 排不通记 BLOCKED); 聚合不增长(采样或聚合装配断); 钉速没生效导致白等超时(测试侧事故)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-09</span><span class="ttl">采样间隔配比与关块重开: 非整倍 main_tick → WARNING+调整; 变更 interval → 关块重开; flush 边界负向</span><span class="badge lv">L2</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>①<code>sample_interval</code> 与 main_tick 非整倍 → WARNING(traffic_sample_mod.py:680)+ effective 调整生效(实际采样节奏按调整后); ②运行期热改 sample_interval → <code>_close_blocks_for_interval_change</code>(:694)关块重开, 旧块封口无脏尾; ③负向(装载期): flush_interval&lt;60 / sample_interval&gt;600 / sample_interval&lt;main_tick → validate_config 聚合报错(config 校验口径, 引用 RM03-05 装载期负向观测法 <code>run_cli --dry-run</code> 退出码+「配置错误」文案)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 三组配置变体(独立起停)。</li>
+        <li><b>副作用</b>: 产品起停 ×3; 临时目录。</li>
+        <li><b>回滚</b>: 删临时目录。</li>
+        <li><b>失败判据</b>: 非整倍无 WARNING(D5 告警记忆缺失——同因只告一次也要有第一次); 关块重开后旧块尾部数据丢(封口分叉); 非法配置被静默接受(fail-fast 破, 高优 FAIL)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM07-10</span><span class="ttl">工具状态端点五态: 未安装 gtm → /api/traffic/monitor/status 恒 200 + reachable=false + 五态语义</span><span class="badge lv">L2</span><span class="badge">L1 基座</span></div>
+      <div class="bd"><p>不安装 gtm 工具的基座上打 <code>GET /api/traffic/monitor/status</code>(traffic_monitor.py:206): 恒 200(不抛 5xx)+ state ∈ 五态(not_installed/not_running 为主)+ reachable=false + 结构完整(enabled/state/tool_url/pid/data_dir/autostart_*/error/claim_note); <code>enabled=false</code> 时仍照查(设置页启用前预验证语义, `_source_status` 不看开关); 密钥文件缺失路径 → 降级 not_running + error 文案(:105-110)。PUT /config 对未就绪工具 → 502(:228)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座(无 gtm 安装痕迹); WebUI 起(非 dry-run)。</li>
+        <li><b>副作用</b>: 无(只读端点; agent 指针探测只读)。</li>
+        <li><b>回滚</b>: 无需。</li>
+        <li><b>失败判据</b>: 非 200(5xx 泄漏——「恒 200 + 结构化结果」契约破); enabled=false 时端点 4xx/5xx(照查语义破); 五态字段缺失(前端渲染面会炸, 引用 RM08 前置)。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>首轮全量建档, 目标分布 <code>0/0/7/3</code>(L2×7: 01/03/06/07/08/09/10; L3×3: 02/04/05)。三条 L3 的红验都在用例内建: 02 三态互为对照 / 04 改档跨档对照 / 05 奇数保护负向+退出恢复对照。</p>
+    <p><b>本轮升档</b>: <code>RM07-01</code> 从 RM01 观察项的 L1(人判读日志文本, 锚件 §08 08:31 li)升 <b>L2</b>(脚本断言 WARNING 文案+每次启动复现+主循环照常)——满足「每轮至少 1 条升一档」硬要求。</p>
+    <p><b>备选升档(执行轮余量触发, 不占硬要求)</b>: 若执行轮时间有余, <code>RM07-10</code> 可升 L3——用仓库内 <code>tools/global-traffic-monitor</code>(<code>uv run</code> 本地起, 连 36596 白名单实例, 零外连)做「not_running → ready」真翻转对照; 时间不够不勉强, 如实记。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <table>
+      <tr><th>条目</th><th>跳过原因</th><th>解锁条件</th></tr>
+      <tr>
+        <td><b>L0 目视项(全片 BLOCKED)</b>: WebUI 今日流量图渲染 / 状态栏「今日流量」双色与箭头 / 限速浮层弹出手感 / 五主题下流量可视面</td>
+        <td>约束 2 与 L0 目视定义(§08): 目视只能人做; 该面主体归 RM08(WebUI 读侧), 本片只保数据面聚合(RM07-02/07/08)</td>
+        <td><b>用户真机目视</b>(走查时逐条勾 manual-walkthrough 对应目视条目)</td>
+      </tr>
+      <tr>
+        <td><b>gtm 真工具链路</b>: 安装+claim 认领+autostart 注册表+notify 事件零读盘补丁今日流量(publish_event)+launch_tool 真拉起</td>
+        <td>需在本机安装/注册系统级工具(installer 写注册表), 超出白名单实例边界</td>
+        <td><b>用户授权在本机安装并注册 gtm</b>; 若走仓库内 <code>uv run</code> 形态(不安装不注册)则 RM07-10 备选升档已覆盖一半</td>
+      </tr>
+      <tr>
+        <td><b>[需活跃种子] 条目</b>: <b>无</b></td>
+        <td>限速查档判据是 dat 历史字节不是实时速率; 真实速率面已由 RM07-08 的 <b>L2 互传(假种子, 不受约束 2)</b>覆盖; 约束 2 只限真实种子, 假种子 L1/L2 已解锁(RM00)</td>
+        <td>—</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><b>五验证面全数有着落</b>: 限速下发与回读(04/05/06)· 曲线采样(07/08/09)· 流量源切换(01/02/03)· 重启尖峰缺口(07)· 全局流量聚合(02/07/08/10)——每个面至少一条三态记账。</li>
+      <li><b>RM01 观察项收口</b>: RM07-01 三态落定, 结论(仍复现/已变)回写锚件 §08, 观察项不再悬账。</li>
+      <li><b>≥3 条 L3 红验真跑过见红</b>(02/04/05); 「同一件事不测三遍」切分兑现: 单种限速/热重载机制零复测, 只引用口径。</li>
+      <li><b>零外连红线全程成立</b>: dat/announce/伪 tracker/工具全部本机; 每条收尾外连计数 0。</li>
+      <li><b>实例还原干净</b>: 全局限速恢复预置前值(36595 也要查——fixture 可能动过两端), 自造种子/dat/临时目录删净, guard 复跑绿。</li>
+      <li><b>记录闭环</b>: 切片落 <code>testing/real-baselines/&lt;stamp&gt;-real-RM07.md</code>(基线 commit=实测时刻 HEAD), 锚件 §07 RM07 行同步; 新环境事实回写规程(候选 §2.13)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9)</h2>
+    <p>逐条判 <code>memory-bank/checklists/manual-walkthrough.md</code>(111 行, 约 15 条目): 全部条目为<b>前端观感/交互目视项</b>(设置页分区保持、筛选器、Console Hub 视觉、跟手性、列设置、相对时间、可用性列等)或<b>已闭环迁出</b>(视图重建收口); 与流量相关仅两条——「状态栏今日流量视觉重做」与「点速度区弹限速浮层」——其待验面是<b>视觉与交互(观感)</b>, 归 RM08 读侧面, 且其数据面(status.totals/聚合)本片 RM07-02/07/08 已覆盖。判定: <b>迁出 0 条</b>, 清单保持冻结。与前五片(RM02–RM06 均 0 条)一致。</p>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>全局限速是实例级偏好</b>: RM07-04/05 改写 36596(和可能的 36595)全部传输的 upload/download_limit——<b>预置前必须快照原值, 收尾必须还原</b>(§2.5: 两实例默认 dl_limit=1024 是坑也是原值); 忘还原会毒化后续所有片的 L2 互传与真实种子行为。</li>
+      <li><b>奇数 KiB 阈值口径</b>: <code>is_manual_speed_limit</code> 判「奇数 KiB」——预置 1025(奇)做手动现场, 对照 1024(偶); 还原时按快照值不是想当然的 1024。</li>
+      <li><b>dat 格式别猜</b>: 执行前先读 <code>curves.parse_history_dat</code>(core/curves.py:48)与 <code>traffic_store.py</code> 存储段头注释各 20 行再造数据; 坏行(bad&gt;0)路径也是验证面(RM07-02/04 可顺带)。</li>
+      <li><b>曲线 interval 回退主 interval</b>: 不显式配曲线 interval 就跟主循环节拍走, 半天预算等不起——曲线 interval 显式配小; 但 sample_interval ≥ main_tick 是硬校验(RM07-09), 别配撞。</li>
+      <li><b>qb_traffic.enabled 默认 False</b>: 不开就是零任务零目录零文件; 开了之后 v4 store 落 data_dir——各条独立临时目录天然隔离, 收尾删目录即净。</li>
+      <li><b>切源刷新走 PUT /api/config</b>: traffic_source 段预期非 R 级(applied 无 restart_required); 若实测报 restart_required 属<b>新事实</b>, 如实记切片, 不定性为缺陷(引用 RM02-04 的 R 闸口径)。</li>
+      <li><b>RM01 观察项可能已被改</b>: 现行 refresh() 有总开关检查(enabled=false → INFO off 不 WARNING), 但缺省 enabled=True + 空 dat_path 仍走空路径(RM07-01 设计前提); 若实测行为已变, 按实况收口回写 §08, 不硬凹旧文案。</li>
+      <li><b>gtm status 端点只读但会探测</b>: agent 指针探测读指针目录/注册表, 全只读; 断言「恒 200」契约, 密钥缺失降级 not_running 不是缺陷。</li>
+      <li><b>并行陷阱重申</b>: 直跑 pytest 会 <code>-n 8</code> 抢端口——沿用 rm01 conftest 文件锁先例或走 <code>real.suite</code>(规程 §2.8)。</li>
+      <li><b>L2 互传现场(仅 RM07-08)</b>: 伪 tracker 必须排除请求者自己(§2.5 同 IP 单连接坑)、announce 用局域网 IP 非 127.0.0.1; transfer_limits fixture 结束还原(§2.5 钉速纪律)。</li>
+    </ol>
+  </section>
+
+  <p class="hint" style="margin-top:40px">排期准备件(拍板即冻结) · 锚件 issues/26-10-31-0641 §03/§08 · 规程 memory-bank/testing/real-machine.md · 生成: 2026-10-31 16:05, HEAD 4cab03cf</p>
+</div>
+</body>
+</html>

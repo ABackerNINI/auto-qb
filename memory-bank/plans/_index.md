@@ -16,6 +16,9 @@
 
 ## Open
 
+- [26-10-31-1605] [RM07 限速·流量曲线·全局流量 · 真机实测分步计划](26-10-31-1605-plan-real-RM07.html) — `real-machine-rm07-plan`
+- [26-10-31-1350] [RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)](26-10-31-1350-plan-real-RM06.html) — `real-machine-rm06-plan`
+- [26-10-31-1312] [RM05 tracker·标签与分类清理 · 真机实测分步计划](26-10-31-1312-plan-real-RM05.html) — `real-machine-rm05-plan`
 - [26-10-31-1228] [RM03 规则引擎 · 真机实测分步计划](26-10-31-1228-plan-real-RM03.html) — `real-machine-rm03-plan`
 - [26-10-31-1042] [RM04 辅种与分组 · 真机实测分步计划](26-10-31-1042-plan-real-RM04.html) — `real-machine-rm04-plan`
 - [26-10-31-0927] [RM02 主循环·调度·持久化 · 真机实测分步计划](26-10-31-0927-plan-real-RM02.html) — `real-machine-rm02-plan`
