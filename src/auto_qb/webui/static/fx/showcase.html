@@ -213,9 +213,11 @@ html[data-fx-preset="crisp"] .stage::before { height: 1px; background: var(--fai
  * 演示等持续动画全部冻结 -- 感知为「点页签全页闪一下」。root 关掉默认参与
  * (html 不进快照), 快照只覆盖显式打了 view-transition-name 的演示区(D7-3
  * 页签容器 / D2-6 触发钮+面板 / D6-3 队列 toast 逐条), 页面其余区域保持实时
- * 渲染; 时长走 UA 默认约 250ms 交叉淡化(<=400ms 口径), ::view-transition
- * 覆盖层随过渡结束自动拆除, 无伪元素残留。 */
+ * 渲染; 时长显式钉 250ms(<=400ms 口径硬化: UA 默认虽也是约 250ms, 但慢机
+ * 上实测会漂到 320-340ms, 钉住防漂移), ::view-transition 覆盖层随过渡结束
+ * 自动拆除, 无伪元素残留。 */
 :root { view-transition-name: none; }
+::view-transition-group(*) { animation-duration: 250ms; }
 
 /* ---- 分区与卡片 ---- */
 section { margin: 0 0 54px; }
@@ -520,7 +522,9 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 }
 @starting-style {
   .fmd-backdrop { opacity: 0; }
-  .fmd-blur .fmd-backdrop { opacity: 0; backdrop-filter: blur(0px) brightness(1); }
+  /* 只有反例对照(半径直动)需要把 blur 起点 claim 到 0px; 治本版 blur 恒定,
+   * 起点 opacity: 0 由上面基础规则覆盖 */
+  .fmd-blur.fmd-blur-legacy .fmd-backdrop { opacity: 0; backdrop-filter: blur(0px) brightness(1); }
 }
 .fmd.closing .fmd-backdrop {
   opacity: 0;
@@ -542,12 +546,27 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 @keyframes fmdZoomIn { from { opacity: 0; transform: scale(1.08); } }
 .fmd.closing .fmd-panel:not([data-fx]) { animation: fmdPanelOut var(--fx-dur-modal-exit) var(--fx-ease-in) forwards; }
 @keyframes fmdPanelOut { to { opacity: 0; transform: translateY(6px) scale(0.96); } }
-/* D2-4 backdrop blur 渐入(PERF-01 场景: 大面积 filter, 帧率基准见 MECH 区) */
+/* D2-4 backdrop blur 渐入 -- 治本版(PERF-01): 静态预磨砂层 + opacity 交叉渐入。
+ * 磨砂结果只算一次(blur/brightness 恒定, 不进 transition), 过渡只动 opacity
+ * (合成器动画, 优先 transform/opacity 口径), 视觉语义仍是 blur 渐入。
+ * 生产推荐口径: 不动画 blur 半径本身 -- 半径过渡逐帧重算 backdrop-filter,
+ * 是 S3 实测全部候选里唯一明显掉帧项(帧率对照见 MECH 区)。 */
 .fmd-blur .fmd-backdrop {
   backdrop-filter: blur(8px) brightness(0.6);
+}
+/* 反例对照(卡内开关切 .fmd-blur-legacy): blur 半径直动 = 逐帧重算
+ * backdrop-filter, 保留作帧率对照, 供 S4 挑选时实测两种实现的差距 */
+.fmd-blur.fmd-blur-legacy .fmd-backdrop {
   transition: opacity var(--fx-dur-modal-exit) var(--fx-ease-out),
               backdrop-filter var(--fx-dur-modal-exit) var(--fx-ease-standard);
 }
+/* D2-4 对照开关的卡内样式(stage 内小号提示, 不进 ops 区) */
+.fmd-blur-ctl {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11.5px; color: var(--dim); cursor: pointer;
+  flex-basis: 100%; justify-content: center;
+}
+.fmd-blur-ctl input { accent-color: var(--accent); }
 /* D2-5 danger tone: 红边 + glow 脉冲一次 + headShake 接力(时序页内排) */
 .fmd-danger .fmd-panel { border-color: var(--no); }
 .fmd-danger .fmd-panel.fmd-glowpulse { animation: fmdDangerGlow 400ms var(--fx-ease-standard); }
@@ -995,9 +1014,9 @@ footer .audit-line { color: var(--dim); }
       <tr><td>D2-1 标准入场</td><td><span class="good">transform/opacity</span>(面板+backdrop)</td><td>入 300ms / 退 200ms 骨对 -- 入场档内</td><td>全部去动效直接显示/关闭</td><td class="good">符合</td></tr>
       <tr><td>D2-2 退场对</td><td><span class="good">transform/opacity</span></td><td>退 200ms accelerate(库骨对 --fx-pair-modal-out; 报告 180ms 同档) -- 符合</td><td>立即关闭</td><td class="good">符合</td></tr>
       <tr><td>D2-3 zoom-out 反差</td><td><span class="good">transform/opacity</span></td><td>250ms -- 入场档内</td><td>终态</td><td class="good">符合</td></tr>
-      <tr><td>D2-4 backdrop blur 渐入</td><td><span class="wr">filter(大面积, 合成器)</span></td><td>200ms -- 符合; S3 页内基准: 过渡 21.5 fps / 静置 53.7 fps(有头快照, longtask 0)</td><td>直接终态模糊</td><td class="wr">过渡期掉帧是四组最重, 静置无级差 -- S4 实测裁决</td></tr>
+      <tr><td>D2-4 backdrop blur 渐入</td><td><span class="wr">filter(大面积, 合成器)</span></td><td>200ms -- 符合; S4 页内基准(预磨砂版): 过渡 23 fps / 静置维持 56 fps(有头 chromium 156, longtask 0)</td><td>直接终态模糊</td><td class="wr">剩余点击停顿 = 每次打开 3 帧约 50ms 的全屏磨砂重算, 成本随磨砂面积放大(40% 面积磨砂实测零停顿) -- 预磨砂已把重算次数压到下限, 详见 MECH 帧率抽查</td></tr>
       <tr><td>D2-5 danger tone</td><td><span class="good">transform</span> + <span class="wr">box-shadow</span></td><td>glow 400ms + headShake 350ms -- 强调档(300-500ms)内</td><td>去动效留静态红边</td><td class="good">符合(强调档)</td></tr>
-      <tr><td>D2-6 VT 共享元素</td><td><span class="good">浏览器合成</span></td><td>250-300ms(浏览器默认) -- 符合</td><td>不支持/RM: 普通打开</td><td class="good">符合</td></tr>
+      <tr><td>D2-6 VT 共享元素</td><td><span class="good">浏览器合成</span></td><td>钉 250ms; S4 实测: 点击->回调 ~4ms / 过渡起 18-57ms(旧快照捕获+新态渲染, 约 2-3 帧平台下限) / 总时长 298-327ms -- 符合(<=400ms)</td><td>不支持/RM: 普通打开</td><td class="good">符合</td></tr>
       <tr><td>D3-1 slide+fade</td><td><span class="good">transform/opacity</span></td><td>入 300ms / 出 200ms 骨对 -- 符合</td><td>无动效直接开合</td><td class="good">符合</td></tr>
       <tr><td>D3-2 shadow-ahead</td><td><span class="wr">box-shadow(paint, 面板级中等面积)</span></td><td>与 slide 同步 300ms + 落位收缩 180ms -- 入场档内</td><td>常规静态阴影</td><td class="wr">paint 标注, 保留</td></tr>
       <tr><td>D3-3 backdrop 渐暗+blur</td><td><span class="good">opacity/filter</span>(遮罩, blur 4px 小半径)</td><td>250ms 与面板同步 -- 符合</td><td>静态半透明遮罩</td><td class="wr">filter 小半径, 标注</td></tr>
@@ -1026,7 +1045,7 @@ footer .audit-line { color: var(--dim); }
     <div class="perf">
       <button class="ctl" type="button" id="btn-perf">帧率抽查(约 16s)</button>
       <div class="perf-out" id="perf-out">对最重的 4 个样例做页内基准: 350ms 节奏连触发 4s, rAF 计帧 + longtask 统计 -- backdrop blur(D2-4) / sheen(D1-3) / 弹窗入退场(D2-1) / 行插入(D4-4)。数值以跑基准当时的环境为准, S4 裁决请用有头浏览器复测。
-S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为当时环境快照, 不作裁决): 有头 -- D2-4 blur 过渡 21.5 fps / blur 静置维持 53.7 fps / D1-3 sheen 74.5 / D2-1 弹窗 62.1 / D4-4 行插入 53.8; headless -- blur 35.7 / sheen 59.5 / 弹窗 60.0 / 行插入 60.0。结论向: blur 过渡期是唯一明显掉帧项(大面积 filter 逐帧重模糊), 静置维持无负载级差; 余项接近满帧。</div>
+S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D2-4 预磨砂版连触发 23 fps / 静置维持 56 fps / 卡内反例(blur 半径直动) 25 fps / D1-3 sheen 62 / D2-1 弹窗 62 / D4-4 行插入 58-64; headless -- blur 35 / sheen 59 / 弹窗 60 / 行插入 60。分段打点: 单次打开的点击停顿 = 3 帧各约 50ms 的全屏磨砂重算(反例直动为 4-5 帧 -- chromium 156 已对半径动画做重算合并, 故连触发基准两者同量级; 预磨砂仍是生产口径: 重算次数下限, 不依赖引擎合并行为)。重算成本随磨砂面积放大: 40% 面积磨砂实测零停顿 -- 大面积毛玻璃的点击期停顿是面积单点, CSS 侧(预磨砂 / opacity 交叉 / 常驻层)均无法消除, 生产按此口径评估面积与半径。D2-6 VT(钉 250ms 后): 点击->回调 ~4ms / 过渡起 18-57ms(旧快照捕获+新态渲染, 约 2-3 帧平台下限) / 总时长 298-327ms, <=400ms 达标。</div>
     </div>
   </section>
 
@@ -1318,15 +1337,15 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
       sample: ""
     },
     {
-      id: "D2-4", sec: "d2", ctor: "modal", kind: "blur", name: "backdrop blur 渐入", fx: null, demo: "open", warn: "大面积 filter, 帧率实测标注",
-      supply: "生产语义: 毛玻璃配方消费 --fx-blur(glass 开 10px / neon·crisp 关); 本卡样例固定 8px 演示, 不随 preset",
+      id: "D2-4", sec: "d2", ctor: "modal", kind: "blur", name: "backdrop blur 渐入", fx: null, demo: "open", warn: "预磨砂层实现(治本); 卡内可切反例对照",
+      supply: "生产语义: 毛玻璃配方消费 --fx-blur(glass 开 10px / neon·crisp 关); 推荐口径 = 静态预磨砂层 + opacity 过渡, 不动画 blur 半径本身(半径过渡反复重算 backdrop-filter; S4 复测: 预磨砂把重算压到每次打开的下限, 剩余停顿是全屏磨砂面积单点, 见 MECH 区); 本卡样例固定 8px 演示, 不随 preset",
       meta: {
-        attr: "backdrop-filter(blur 0->8px + brightness 0.6, 大面积) + opacity",
+        attr: "opacity(预磨砂层交叉渐入; backdrop-filter 恒 blur 8px + brightness 0.6, 只算一次)",
         dur: "backdrop 200ms; 面板仍走 300ms 骨对",
-        js: "纯 CSS(@starting-style); 帧率数字跑 MECH 区「帧率抽查」",
+        js: "纯 CSS(@starting-style); 帧率对照跑 MECH 区「帧率抽查」或卡内反例开关",
         rm: "直接终态模糊",
-        src: "M3 scrim + glass 惯例(uiverse/CodePen 常见配方); 即 PERF-01 嵌套毛玻璃风险场景",
-        states: "打开 = 遮罩渐暗渐糊; 大面积 filter 是全部候选里唯一的大面积合成器负载"
+        src: "M3 scrim + glass 惯例; 治本版 = 计划 §01「优先 transform/opacity」: 磨砂结果只算一次, 过渡走合成器; 反例对照 = blur 半径直动(反复重算 backdrop-filter)",
+        states: "打开 = 预磨砂遮罩 opacity 渐入(blur 恒定); 勾选卡内「反例对照」后改走旧实现(半径 0->8px 直动); S4 实测: 剩余点击停顿是全屏磨砂重算本身(约 3 帧 x 50ms), 成本随面积放大, 详见 MECH 区"
       },
       sample: ""
     },
@@ -1350,7 +1369,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
         js: "AQB_FX.viewTransition 一行探测, 不支持 = 普通打开(零分支)",
         rm: "不支持/RM: 普通打开(Chrome 对 RM 自动跳过 VT 动画)",
         src: "chrome.dev view-transitions",
-        states: "打开 = 触发钮与面板打 view-transition-name, 自动缩放飞行; 快照范围收敛在这两个元素(root 关默认参与, 页面其余区域不进快照)"
+        states: "打开 = 触发钮与面板打 view-transition-name, 自动缩放飞行; 快照范围收敛在这两个元素(root 关默认参与, 页面其余区域不进快照); 时长显式钉 250ms(<=400ms 口径硬化)"
       },
       sample: ""
     },
@@ -1751,6 +1770,23 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     trigger.type = "button";
     trigger.className = "bt " + (kind === "danger" ? "danger" : "primary");
     trigger.textContent = kind === "vt" ? "打开弹窗(共享元素)" : "打开弹窗";
+    /* D2-4 反例对照开关: 勾选后下次打开走旧实现(blur 半径直动), 两种实现的
+     * 过渡期帧率差可直接在 MECH 区页内基准里对比 */
+    var legacyChk = null;
+    var el = trigger;
+    if (kind === "blur") {
+      el = document.createElement("div");
+      el.className = "fmd-blur-host";
+      el.appendChild(trigger);
+      legacyChk = document.createElement("label");
+      legacyChk.className = "fmd-blur-ctl";
+      legacyChk.innerHTML = '<input type="checkbox"> 反例对照: blur 半径直动(旧实现, 逐帧重算 backdrop-filter)';
+      var chk = legacyChk.querySelector("input");
+      chk.addEventListener("change", function () {
+        overlay.classList.toggle("fmd-blur-legacy", chk.checked);
+      });
+      el.appendChild(legacyChk);
+    }
 
     var overlay = document.createElement("div");
     overlay.className = "fmd fmd-" + kind;
@@ -1789,14 +1825,28 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
     function open() {
       if (state !== "closed") return;
       state = "open";
+      if (kind === "blur" && legacyChk) {
+        /* 每次打开按开关当前态同步实现(循环档下切换也生效) */
+        var chk = legacyChk.querySelector("input");
+        overlay.classList.toggle("fmd-blur-legacy", !!(chk && chk.checked));
+      }
       if (kind === "vt" && window.AQB_FX) {
-        AQB_FX.viewTransition(function () { overlay.hidden = false; });
+        /* VT: 回调内只做最小 DOM 变更(挂载 + 焦点内聚), 回调外零 DOM 写 --
+         * startViewTransition 先捕获旧快照再跑回调, 回调外的改动会进不进
+         * 快照取决于时机, 且推迟回调 = 推迟新态渲染。 */
+        AQB_FX.viewTransition(function () {
+          overlay.hidden = false;
+          var fb0 = panel.querySelector("button");
+          if (fb0) fb0.focus();
+        });
       } else {
         overlay.hidden = false;
       }
       if (kind === "danger") armDanger();
-      var fb = panel.querySelector("button");
-      if (fb) fb.focus();
+      if (kind !== "vt") {
+        var fb = panel.querySelector("button");
+        if (fb) fb.focus();
+      }
       escHandler = function (ev) { if (ev.key === "Escape") close(); };
       document.addEventListener("keydown", escHandler);
     }
@@ -1823,7 +1873,7 @@ S3 实测记录(Playwright chromium 1.63, 1440x960, longtask 全零; 数字为�
       if (t) close();
     });
     return {
-      el: trigger,
+      el: el,
       demo: function () { if (state === "open") close(); else open(); },
       forceClose: function () { if (state !== "closed") finishClose(); }
     };
