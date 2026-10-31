@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-0716">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="qb-5-3-upgrade">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-31-deps-qb-5-3-support.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="升库 qbittorrent-api==2026.8.1 -&gt; ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)">
 <meta name="issue-summary" content="pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -&gt; 升库 -&gt; 升 qB 5.3">
 <title>升库 qbittorrent-api==2026.8.1 -&gt; ==2026.10.1 支持双版本 qB(5.2.3/5.3.x) · chore · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0716-chore-qbittorrentapi-bump-dual-version</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 07:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">deps</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -174,11 +174,12 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 07:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 12:05 — 状态 Open → <strong>Done</strong>(修复完成)（计划 <code>26-10-31-1119-plan-qb-5-3-support</code> P3 实施完成;任务档案 <code>tasks/26-10-31-deps-qb-5-3-support.md</code>）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-31 12:05 认领时重跑锚点仍复现(<code>pyproject.toml:29</code> 仍钉 2026.8.1)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际动作</strong>(计划 <code>plans/26-10-31-1119-plan-qb-5-3-support.html</code> P3,档案 <code>tasks/26-10-31-deps-qb-5-3-support.md</code>):<code>pyproject.toml</code> 钉版 <code>2026.8.1 → 2026.10.1</code>,<code>env.sync</code> 重锁;不追 HEAD、不降版、不开启 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS(禁改项全部遵守)。<strong>复验三项</strong>:库 torrents.py:427-428 skip_checking/seedMode 双发原样保留 / qbclient.py 未设旗标 / setShareLimits 签名含 share_limits_mode。<strong>验证方式</strong>:请求体级守阵 <code>tests/test_qbapi_wire.py</code>(双发断言,库降版先红)+ 全量(数字见基线切片 <code>testing/baselines/26-10-31-1204-qb-5-3-p1p3-landing.md</code>)。<strong>真机跳检走查</strong>(升 qB 5.3 后验证 seedMode 双发在真机生效)随 P4,待 5.3 stable。</p>
   </section>
 
   <footer>

@@ -160,3 +160,21 @@
 - **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_peers_speed_keys_normalized`(适配单点在 +
   落袋走单点 + 桩键名与真 qB 同形); e2e `e2e/drawer-peers.spec.mjs`「上下行至少一格含数字」守卫。
 
+
+### 库透传参数的键名与 None 语义: 未知 kwargs 直并 data / None 值键丢弃 / RE_ADD_FIELDS 是 fail-fast 白名单
+
+- **触发**: 给 qbittorrent-api 方法传它签名里没有的参数(qB 新端点参数在旧库上透传, 如 5.3 的
+  `shareLimitsMode`); 或往 `torrents/compat.py::RE_ADD_FIELDS` 加字段。
+- **判别**: ①库对未知 kwargs 经 `request.py::_format_payload` **原样并入 POST data** —— 键名就是
+  wire 键名, snake_case 形参(如 `share_limits_mode=`)会发错键名、被 qB(未知参数一律静默忽略)
+  吞掉且零报错, 必须**camelCase**(`shareLimitsMode=`); ②None 值键在 urlencoded 与 multipart 下
+  被 requests **一律丢弃** —— 「传 None」=「不发」, 不是「发字面量 None」(facade docstring 历史
+  描述曾写反); ③`RE_ADD_FIELDS` 同时喂 `REQUIRED_TORRENT_FIELDS`(qbmanager 启动期对 qB torrent
+  info fail-fast), 加 5.3-only 字段会让 5.2 启动即报 `QbCompatError` —— 版本可选字段进
+  `_EXTENSION_FIELDS`。
+- **处置**: 透传新参数一律 camelCase 直发 kwarg(两版库同 wire, 见 ops_mod `_skip_add_call` 的
+  `shareLimitsMode=` 用法)并配请求体级守阵; 版本可选的 qB 新字段进 `_EXTENSION_FIELDS`
+  (+ record slot, 缺省 None = 不发), 不动 `RE_ADD_FIELDS`。
+- **守阵**: `tests/test_qbapi_wire.py`(真库 + 真 requests 栈经 FakeQbServer 按线上原文断言三件事);
+  `tests/test_torrents.py` 的 _SNAPSHOT_FIELDS↔record slots 同步守卫。
+- **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

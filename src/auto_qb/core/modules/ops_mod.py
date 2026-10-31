@@ -1052,6 +1052,11 @@ class OpsModule(BaseModule):
             seeding_time_limit=tor.seeding_time_limit,
             inactive_seeding_time_limit=tor.inactive_seeding_time_limit,
             share_limit_action=tor.share_limit_action,
+            # qB 5.3 新增分享限制模式, 重加须原样回传(否则被静默重置为 Default);
+            # camelCase kwarg: facade 纯透传, 库(2026.8.1 无具名参/2026.10.1 同理)对未知
+            # kwargs 经 _format_payload 并进 POST data —— 键名必须与服务端 camelCase 一致;
+            # 5.2 快照无该字段恒 None -> requests 对 None 值键不发(wire 完全不变)
+            shareLimitsMode=tor.share_limits_mode,
             is_skip_checking=True,
             is_stopped=True,
         )

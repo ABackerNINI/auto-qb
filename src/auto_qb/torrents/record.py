@@ -55,6 +55,9 @@ class TorrentRecord:
     seeding_time_limit: int = -2
     inactive_seeding_time_limit: int = -2
     share_limit_action: str = "Default"
+    # 分享限制模式(qB 5.3 新增字段, Default/MatchAny/MatchAll); 5.2 无该键恒 None:
+    # 跳检重加透传时库对 None 不发键(5.2 wire 不变), 5.3 原样回传防被重置为 Default
+    share_limits_mode: Optional[str] = None
     # ---- 传输/会话 ----
     downloaded_session: int = 0
     uploaded_session: int = 0

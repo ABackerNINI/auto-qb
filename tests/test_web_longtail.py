@@ -297,7 +297,8 @@ def test_web_commands_limits_partial_directions():
         mgr._cmd_set_share_limits("HA", ratio_limit=1.5)
         kinds = [c[0] for c in client.calls]
         assert kinds.count("set_upload_limit") == 1 and kinds.count("set_download_limit") == 1
-        assert client.calls[-1] == ("set_share_limits", (1.5, -2, -2)), "缺失维度按 -2(全局默认)补齐"
+        assert client.calls[-1] == ("set_share_limits", (1.5, -2, -2, "Default")), \
+            "缺失维度按 -2(全局默认)补齐; mode 恒传 Default(5.3 必填)"
 
 
 def test_web_commands_rename_fs_folder_branch():

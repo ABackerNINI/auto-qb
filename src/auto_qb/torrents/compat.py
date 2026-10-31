@@ -99,6 +99,11 @@ _EXTENSION_FIELDS = (
     "seen_complete",  # -1 = 从未见到完整副本
     "total_wasted",
     "popularity",
+    # 分享限制模式(qB 5.3 新增 torrent 字段; Default/MatchAny/MatchAll):
+    # 5.2 无该键 -> 保持 None -> 重加透传时库对 None 不发键(行为不变);
+    # 注意不进 RE_ADD_FIELDS —— 它同时喂 REQUIRED_TORRENT_FIELDS(启动期 fail-fast),
+    # 放进去会让 5.2 启动校验直接报缺字段
+    "share_limits_mode",
     # tracker 状态概要
     "has_tracker_error",
     "has_tracker_warning",
@@ -106,7 +111,7 @@ _EXTENSION_FIELDS = (
 )
 
 # 与 qbittorrentapi TorrentDictionary 一致的快照字段全表(refresh 时逐字段 in-place 更新):
-# 必需 21 + 重加升格 6 + 可选扩展 43 = 70
+# 必需 21 + 重加升格 6 + 可选扩展 44 = 71
 _SNAPSHOT_FIELDS = _REQUIRED_SNAPSHOT_FIELDS + RE_ADD_FIELDS + _EXTENSION_FIELDS
 
 # 版本兼容校验所需全字段(必需快照 + 重加字段): 扩展字段不做必需校验(老版本 qB 可能没有)

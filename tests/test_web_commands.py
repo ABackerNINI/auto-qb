@@ -629,7 +629,8 @@ def test_drain_web_commands_torrent_write_actions():
         assert client.calls[2] == ("set_force_start", True)
         assert client.calls[3] == ("set_upload_limit", 1024)
         assert client.calls[4] == ("set_download_limit", 2048)
-        assert client.calls[5] == ("set_share_limits", (1.5, -1, -2)), "share-limits 三值映射"
+        assert client.calls[5] == ("set_share_limits", (1.5, -1, -2, "Default")), \
+            "share-limits 三值映射 + mode 恒传 Default(5.3 必填参, 缺失 400)"
         assert client.calls[6] == ("set_location", "R:/Moved")
         assert client.calls[7] == ("rename", ("HA", "NewName")), "rename 参数形态(torrent_hash, new_torrent_name)"
         assert client.calls[8] == ("set_auto_tmm", True)
@@ -741,10 +742,11 @@ def test_drain_web_commands_share_limits_and_queue_mapping():
             mgr.web.commands.put(("queue_torrent", {"hash": "HA", "action": action}))
             mgr.web.consume_commands()
             assert client.calls[-1] == (want, ["HA"]), f"{action}: {client.calls[-1]}"
-        # share-limits 缺省维度 -2 补齐(库不过滤 None, 直传会以字面量 "None" 发给 qB)
+        # share-limits 缺省维度 -2 补齐; mode 恒传 Default(qB 5.3 必填 shareLimitsMode, 缺失 400;
+        # facade docstring 已修正 None 语义: 库对 None 值键一律不发, 非"发字面量 None")
         mgr.web.commands.put(("set_share_limits", {"hash": "HA", "ratio_limit": 2.0}))
         mgr.web.consume_commands()
-        assert client.calls[-1] == ("set_share_limits", (2.0, -2, -2)), client.calls[-1]
+        assert client.calls[-1] == ("set_share_limits", (2.0, -2, -2, "Default")), client.calls[-1]
         # 未知队列动作 -> error 回执且不调 API
         before = list(client.calls)
         mgr.web.commands.put(("queue_torrent", {"hash": "HA", "action": "middle", "cmd_id": "qerr"}))

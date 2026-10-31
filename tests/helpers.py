@@ -262,6 +262,10 @@ class FakeClient:
                     "contentLayout": contentLayout,
                     "ratio_limit": ratio_limit,
                     "seeding_time_limit": seeding_time_limit,
+                    "share_limit_action": share_limit_action,
+                    # camelCase kwarg 直透(与真库 _format_payload 对未知 kwargs 的并入行为一致):
+                    # 跳检重加回传分享限制模式(None = 5.2 快照缺省, 库不发键)
+                    "shareLimitsMode": kw.get("shareLimitsMode"),
                     "save_path": save_path,
                     "category": category,
                     "tags": tags,
@@ -417,9 +421,16 @@ class FakeClient:
         self.calls.append(("set_force_start", enable))
 
     def torrents_set_share_limits(
-        self, ratio_limit=None, seeding_time_limit=None, inactive_seeding_time_limit=None, torrent_hashes=None
+        self,
+        ratio_limit=None,
+        seeding_time_limit=None,
+        inactive_seeding_time_limit=None,
+        share_limits_mode=None,
+        torrent_hashes=None,
     ):
-        self.calls.append(("set_share_limits", (ratio_limit, seeding_time_limit, inactive_seeding_time_limit)))
+        self.calls.append(
+            ("set_share_limits", (ratio_limit, seeding_time_limit, inactive_seeding_time_limit, share_limits_mode))
+        )
 
     def torrents_rename(self, torrent_hash=None, new_torrent_name=None):
         self.calls.append(("rename", (torrent_hash, new_torrent_name)))
@@ -489,6 +500,9 @@ class FakeQbServer:
         self.client = client or FakeClient()
         self.abort = abort  # 见类 docstring: 收到请求即断开(制造 APIConnectionError)
         self.requests = []  # 请求台账 [(method, path, ts)]
+        # 原始请求体台账 [(route, raw_body)](请求体级守阵: form 按 parse_qs 可解,
+        # multipart 不解析由测试按原文断言; 见 _body)
+        self.bodies = []
         self.upload_limit = 0  # transfer/uploadLimit 读数(bytes/s)
         self.download_limit = 0
         self._httpd = ThreadingHTTPServer(("127.0.0.1", 0), self._make_handler())
@@ -548,9 +562,14 @@ class FakeQbServer:
                 return route, parse_qs(u.query)
 
             def _body(self) -> dict:
-                """读尽请求体(keep-alive 必须): 库以 form-encoded 发送, 兼容 JSON"""
+                """读尽请求体(keep-alive 必须): 库以 form-encoded 发送, 兼容 JSON;
+                原始体留档进 server.bodies(multipart 不解析, 测试按原文断言字段在位)"""
                 length = int(self.headers.get("Content-Length") or 0)
-                raw = self.rfile.read(length).decode("utf-8") if length else ""
+                raw = self.rfile.read(length).decode("utf-8", "replace") if length else ""
+                if raw:
+                    u = urlparse(self.path)
+                    route = u.path[len(server._PREFIX):].rstrip("/") if u.path.startswith(server._PREFIX) else u.path
+                    server.bodies.append((route, raw))
                 if not raw:
                     return {}
                 if raw.lstrip().startswith("{"):
@@ -656,6 +675,8 @@ class FakeTorrent:
         self.seeding_time_limit = kw.get("seeding_time_limit", None)
         self.inactive_seeding_time_limit = kw.get("inactive_seeding_time_limit", None)
         self.share_limit_action = kw.get("share_limit_action", None)
+        # qB 5.3 新增分享限制模式(已进 compat._SNAPSHOT_FIELDS; to_dict 全量导出需有该属性)
+        self.share_limits_mode = kw.get("share_limits_mode", None)
         self.tracker_conf = kw.get("tracker_conf", None)
         self.tor = self  # 原始 TorrentDictionary(自身), 提供 client 兼容访问
         self._tags_set = None

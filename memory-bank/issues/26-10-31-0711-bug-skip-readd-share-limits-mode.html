@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-0711">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="qb-5-3-upgrade">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-31-deps-qb-5-3-support.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)">
 <meta name="issue-summary" content="compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -&gt; 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传">
 <title>qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0711-bug-skip-readd-share-limits-mode</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 07:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">torrents</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -163,11 +163,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 07:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-31 12:05 — 状态 Open → <strong>Done</strong>(修复完成)（计划 <code>26-10-31-1119-plan-qb-5-3-support</code> P2 实施合入,落点改道见「修复后补充」;任务档案 <code>tasks/26-10-31-deps-qb-5-3-support.md</code>）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-10-31 12:05 认领时重跑锚点仍复现(锚点行号未漂移)。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(计划 <code>plans/26-10-31-1119-plan-qb-5-3-support.html</code> P2,档案 <code>tasks/26-10-31-deps-qb-5-3-support.md</code>)——<strong>与建议修法不同,落点改道</strong>:<code>share_limits_mode</code> 进 <code>_EXTENSION_FIELDS</code> 而非 <code>RE_ADD_FIELDS</code>——后者同时喂 <code>REQUIRED_TORRENT_FIELDS</code>(qbmanager.py:836 启动期对 qB torrent info fail-fast),放进去 5.2(无该字段)会启动即报 <code>QbCompatError</code>;_EXTENSION_FIELDS 同样并入 _SNAPSHOT_FIELDS 与快照 slots,快照捕获不受影响。record.py 增 slot <code>share_limits_mode: Optional[str] = None</code>(5.2 恒 None);<code>_skip_add_call</code> 透传用 <strong>camelCase kwarg <code>shareLimitsMode</code></strong>(snake_case 在 2026.8.1 会发错键名被 5.3 静默忽略)。</p>
+    <p><strong>验证方式</strong>:test_ops.py <code>test_skip_readd_carries_share_limits_mode</code> 两分支(5.3 快照 MatchAny 原样回传 / 5.2 缺省 None 不发键);请求体级 camelCase 透传守阵在 <code>tests/test_qbapi_wire.py</code>。<strong>测试数字</strong>:见基线切片 <code>testing/baselines/26-10-31-1204-qb-5-3-p1p3-landing.md</code>。<strong>真机确认</strong>随 P4(5.3 stable 后跳检全流程走查)。</p>
   </section>
 
   <footer>

@@ -199,6 +199,7 @@ class QbApi:
         ratio_limit: Optional[float] = None,
         seeding_time_limit: Optional[int] = None,
         inactive_seeding_time_limit: Optional[int] = None,
+        share_limits_mode: str = "Default",
         torrent_hashes: Optional[HashType] = None,
         **kwargs: Any,
     ):
@@ -208,13 +209,17 @@ class QbApi:
         - -2 = 使用全局分享限制默认值
         - -1 = 不限制
         - 其余正数 = 限制值(ratio_limit 为比例; seeding_time_limit/inactive_seeding_time_limit 为分钟)
-        调用方须保证三个维度均为具体数值(缺失按 -2 补齐), 库不会过滤 None,
-        直传 None 会以字面量 "None" 发送给 qB 导致参数无效。
+        调用方须保证三个维度均为具体数值(缺失按 -2 补齐)。
+        share_limits_mode: Default/MatchAny/MatchAll(库签名 Literal | None); "Default" = 跟随
+        qB 全局分享限制模式(即 5.2 旧行为)。qB 5.3 起该端点把 shareLimitsMode 列为必填
+        (缺失直接 400), 而库对 None 值键一律不发(requests 对 urlencoded/multipart 的 None
+        值键都丢弃) —— 所以缺省用 "Default" 显式发参, 不用 None: 5.2 忽略未知参数, 无副作用。
         """
         return self._client.torrents_set_share_limits(
             ratio_limit=ratio_limit,
             seeding_time_limit=seeding_time_limit,
             inactive_seeding_time_limit=inactive_seeding_time_limit,
+            share_limits_mode=share_limits_mode,
             torrent_hashes=torrent_hashes,
             **kwargs,
         )

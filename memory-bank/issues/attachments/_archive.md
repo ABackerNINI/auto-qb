@@ -4,11 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (53)
+## Open (50)
 
-- [chore] [升库 qbittorrent-api==2026.8.1 -> ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)](../26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html) — pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -> 升库 -> 升 qB 5.3
-- [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入
-- [bug] [qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)](../26-10-31-0711-bug-skip-readd-share-limits-mode.html) — compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -> 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
@@ -65,13 +62,16 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (296)
+## Done (299)
 
 - [test] [relocate reconcile 重建用例同树异时翻转(全量绿后单跑稳定红)](../26-10-31-0932-test-relocate-reconcile-flaky.html) — test_reconcile_rebuild_when_link_lost_but_qb_alive 同树 09:05 test.full 绿, 宿主重启后 09:15 起单跑稳定红(phase 卡 removed), venv 零变化非依赖 bump 引入, 疑时序/环境敏感, 根因待查
 - [chore] [filelock 3.32.6 -> 4.2.5 升级(major)](../26-10-31-0830-chore-infra-filelock-4-upgrade.html) — filelock 4.x 收紧参数校验并改 Timeout 语义; 本项目调用面仅 infra/locking.py 单点(FileLock(str, timeout=float) + Timeout), 风险偏低, 按 major 规则降档入池
 - [chore] [pyobjc 三件 12.2.2 -> 13.0 升级(major, macOS 专用传递依赖)](../26-10-31-0830-chore-pyobjc-13-macos-upgrade.html) — pyobjc-core/-cocoa/-quartz 是 pystray 的 macOS 专用传递依赖, Windows 运行时不安装, 实际影响约 0; 保持锁内跟随或随 pystray 侧处理
 - [chore] [pillow 12.3.0 -> 13.0.0 升级(major, 含约 40 个 CVE 修复)](../26-10-31-0830-chore-tray-pillow-13-upgrade.html) — Pillow 13.0 移除既定弃用项并修复约 40 个 CVE(3 critical/12 high), 安全激励强; 本项目仅 tray/app.py 一处懒导入 Image, 风险很低
 - [chore] [fastapi 0.141.1 -> 0.162.0 与 uvicorn 0.53.0 -> 0.54.0 升级(0.x 降档入池)](../26-10-31-0830-chore-webui-fastapi-uvicorn-upgrade.html) — fastapi/uvicorn 有 minor 更新; 0.x minor 按 deps-upgrade 规则当 major 降档, 调用面为整个 webui/server, 需人工评估后 bump
+- [chore] [升库 qbittorrent-api==2026.8.1 -> ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)](../26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html) — pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -> 升库 -> 升 qB 5.3
+- [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入
+- [bug] [qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)](../26-10-31-0711-bug-skip-readd-share-limits-mode.html) — compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -> 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](../26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在

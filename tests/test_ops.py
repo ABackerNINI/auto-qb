@@ -51,6 +51,7 @@
 - test_skip_check_force_semantics: T19 force 仅豁越 cls=force(G5/G7)并留 WARNING+INFO 审计; blocked(G3/G6/G8/filelist)一律硬拒; 签名缺省 False
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
 - test_skip_check_deferred_on_own_write: 跳检让位(A 系 26-10-13-0540 S2 D-2) —— 目标或其组刚被自有停/起(快照未回流) -> 让位不决策, 零副作用
+- test_skip_readd_carries_share_limits_mode: (qb-5-3, issue 26-10-31-0711-bug-skip-readd-share-limits-mode) 重加回传分享限制模式: 5.3 快照带 share_limits_mode -> camelCase kwarg 原样透传(防 MatchAny/MatchAll 被静默重置为 Default); 5.2 快照恒 None -> 传 None 库不发键(wire 不变)
 """
 import copy
 import inspect
@@ -899,6 +900,39 @@ def test_skip_check_no_sleep_polling_and_keeps_record():
     assert t.progress == 0.0 and t.state == "stoppedDL", "运行状态不得被跳检路径写入(只等 qB 上报)"
     names = [c[0] for c in client.calls]
     assert names == ["export", "delete", "add", "add_tags"], f"相位序应为一轮一调用: {names}"
+
+
+def test_skip_readd_carries_share_limits_mode():
+    """测试(qb-5-3): 跳检重加回传分享限制模式 —— qB 5.3 给 torrent 新增 share_limits_mode
+    (Default/MatchAny/MatchAll), 重加只回传白名单字段时新模式被静默重置为 Default。
+    5.3 快照带该字段 -> camelCase kwarg 原样透传; 5.2 快照无该字段(恒 None) -> 传 None,
+    库对 None 值键不发键(5.2 wire 不变)。issue 26-10-31-0711-bug-skip-readd-share-limits-mode。
+    """
+    # 5.3 形态: 快照捕获到非默认模式 -> 重加原样带回
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t53 = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0, share_limits_mode="MatchAny")
+    seed_store(mgr, [t53])
+    client.torrents["HASH123"] = t53
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"跳检应完成: {r}"
+    add_call = next(c for c in client.calls if c[0] == "add")
+    assert add_call[1]["shareLimitsMode"] == "MatchAny", \
+        f"重加须回传原模式(防静默重置为 Default): {add_call[1]}"
+
+    # 5.2 形态: 快照无该字段(缺省 None) -> 透传 None(库不发键, wire 不变)
+    mgr2 = make_mgr(FakeConfig())
+    client2 = FakeClient()
+    mgr2.client = client2
+    t52 = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr2, [t52])
+    client2.torrents["HASH123"] = t52
+    r2 = mgr2.ctx.ops.skip_check("HASH123", source="web")
+    assert r2.is_ok, f"跳检应完成: {r2}"
+    add_call2 = next(c for c in client2.calls if c[0] == "add")
+    assert add_call2[1]["shareLimitsMode"] is None, \
+        f"5.2 快照缺省应透传 None(库不发键): {add_call2[1]}"
 
 
 def test_skip_submit_async_scheduler_and_failure_isolation():

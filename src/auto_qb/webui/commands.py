@@ -886,7 +886,8 @@ class WebCommandsMixin:
         seeding_time_limit: Optional[int] = None,
         inactive_seeding_time_limit: Optional[int] = None,
     ):
-        """种子分享限制; 缺失维度按 -2(使用全局默认)补齐 —— 库不过滤 None, 直传会发字面量 "None"
+        """种子分享限制; 缺失维度按 -2(使用全局默认)补齐; share_limits_mode 恒传 "Default"
+        (= qB 全局分享限制模式, 即 5.2 旧行为; 5.3 起该端点必填此参, 缺失 400)
 
         哨兵语义(与 qbittorrent-api torrents_set_share_limits 文档一致):
         -2 = 使用全局分享限制默认值; -1 = 不限制; 正数 = 限制值(比例/分钟)。
@@ -897,11 +898,12 @@ class WebCommandsMixin:
             ratio_limit=-2.0 if ratio_limit is None else float(ratio_limit),
             seeding_time_limit=-2 if seeding_time_limit is None else int(seeding_time_limit),
             inactive_seeding_time_limit=-2 if inactive_seeding_time_limit is None else int(inactive_seeding_time_limit),
+            share_limits_mode="Default",
             torrent_hashes=[hash],
         )
         logger.info(
             f"WEB UI | 种子 {hash[:8]} 分享限制更新(ratio={ratio_limit}, seeding_time={seeding_time_limit}, "
-            f"inactive={inactive_seeding_time_limit}; -1=不限制, -2=用全局)"
+            f"inactive={inactive_seeding_time_limit}, mode=Default; -1=不限制, -2=用全局)"
         )
 
     def _relocate_receipt(self, cmd_id: str, items: list, what: str) -> None:
