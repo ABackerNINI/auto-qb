@@ -1,6 +1,7 @@
 # SVG 图表鼠标映射与 aspect-ratio 压扁
 
 > 摘要: 内联 SVG 图表(viewBox + aspect-ratio)的鼠标坐标换算若假设"SVG 铺满容器", 一旦 CSS 把高度压扁(preserveAspectRatio 居中 letterbox)映射整体错位; 共享 CSS 里残留的固定 height 会以特异性压过主题的 aspect-ratio 静默复现此症。
+> 等级: L0
 > 触发: 改图表悬停, 改 SVG 尺寸, 改图表 CSS, 图表 tooltip 不跟手, 十字线偏移, 图看起来偏窄, letterbox
 
 ### SVG 悬停换算必须按"实际渲染缩放"算, 不能假设铺满容器

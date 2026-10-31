@@ -1,6 +1,7 @@
 # 渲染 / 静态资源 / 两套 UI
 
 > 摘要: 模板与 CSS 的静默失效(挂件类名错配、规则被吞、变体被覆盖、注入落点找不到)与"两套 UI 必须成对改"的纪律; 另收 Vue 过渡钩子的接线与几何登记、详情面板变体的通知驱动渲染。
+> 等级: L0
 > 触发: 改模板, 改 CSS, 加挂件类, 改主题, 两套 UI, 白屏, 静默失效, 缓存, 过渡, 过渡动画, 过渡钩子, transition, before-enter, 组件变体, 删死代码, 死类判定, 混合选择器, 动态类名, 删模板连带清 CSS, boot.js, 注入落点, manifest into, 停靠面板, 变体, _dtNotify, 详情面板, 跳过重建, sig, skipUnchanged, 倒计时, next_announce, 时间基准, dtHtml, dtRaw, R(), 模板转义, 裸标签, 标签透出, offnote, 类名撞名, 容器类, 行修饰, hb-ro, 只读行变窄, 文字自动换行, max-width 接管, 折叠头, 可折叠段头, aria-expanded, aria-hidden, getByRole, aq-fold, aq-switch, aq-seg, 分段钮, 小控件, ctl-bits
 
 ### 变体渲染是通知驱动的: 状态翻转后必须补一发 _dtNotify, 否则停在旧态到下一拍轮询

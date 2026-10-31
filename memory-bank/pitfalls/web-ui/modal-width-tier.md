@@ -1,6 +1,7 @@
 # 弹窗宽度档位与内容形态错配: 编辑框骑通用基档, 长值被输入框裁掉
 
 > 摘要: 弹窗宽度档位与内容形态错配: 编辑框骑通用基档, 长值被输入框裁掉
+> 等级: L0
 > 触发: 弹窗太小, 对话框太小, 重命名弹窗, modal 宽度, 宽度档位, --modal-w-base, --modal-w-add, rename-dialog, 输入框裁掉, 长名显示不全, 种子名显示不全, 弹窗宽度档, cls 附加类, _openModal cls, 编辑对话框宽度
 **Refs:** memory-bank/tasks/26-10-19-webui-modal-width-tier.md
 

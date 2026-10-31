@@ -1,6 +1,7 @@
 # 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭
 
 > 摘要: 能力判据源分裂: 视觉侧硬编码 + 行为侧门控 = 「看着能点、点了没反应」的静默全灭
+> 等级: L0
 > 触发: 补门控, a11y 补课, headActivate, col.sortable, sortable, thead, 表头排序失效, 点了没反应, 视觉与行为分叉, 判据同源, 唯一调用方
 **Refs:** memory-bank/issues/26-10-29-1348-bug-b-r23b10-aqtable-hr-sort-dead.html
 

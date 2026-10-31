@@ -1,6 +1,7 @@
 # 非活跃种子禁强制汇报(qB 口径)
 
 > 摘要: 「非活跃种子不允许强制汇报」这条 qB 对齐规则, 三处最容易做错 —— ①**判定读 `kind` 而不读 qB 原始 `state`**: `kind` 现 7 档(error/checking/paused/downloading/seeding/**moving**/other; moving 于 2026-10-29 补), 而 qbittorrent-api 把 `queuedDL`/`queuedUP` 归进 is_downloading/is_uploading ⇒ 其 kind 落成 downloading/seeding, 单看 kind 会把**排队**种子当活跃放行(而 qB 自己正是拿 `isQueued` 置灰的); **同一个坑的反向版本**: 补了 moving 档之后它虽然"看 kind 判得出来", 但后端 `state_enum` 的谓词**依然不包含它**, 所以后端那张表照样得按 `state` 串写 —— 前后端判据必须同表, 只改一边必立刻报红; ②**只接一个入口**: 强制汇报有四条入口(右键菜单四支 / 键盘 Shift+A / 详情面板 tracker 重报钮 / 程序化 `torrentCmd`), 只改右键 = 键盘与详情面板绕得过去, "不允许"就不成立; ③**置灰样式压不住 base**: 菜单项图标另有 `.ico-sync`(0,2,0), 变体动作钮 hover 是 (0,3,0), 05 失败区更有 (0,4,0) —— 不显式抬特异性就会出现"文字灰、图标仍蓝"或"置灰了还能 hover 亮起"的半灰态。
+> 等级: L0
 > 触发: 强制汇报, reannounce, 非活跃, 暂停种子, 排队种子, 搬迁中, moving, queuedDL, stoppedUP, checkingResumeData, is-gated, 置灰, 按钮变灰, 右键置灰, qB 口径, aa189a7, issue 12080, kind 判不出排队, state 原文, isPaused isChecking isQueued
 > 更新: 2026-10-29 —— moving 进同张表并升第 7 档 kind(处境: [26-10-29-0308-plan-webui-torrent-moving-state-kind.html](../../plans/26-10-29-0308-plan-webui-torrent-moving-state-kind.html))
 

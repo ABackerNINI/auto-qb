@@ -1,6 +1,7 @@
 # 乐观补丁覆盖面扩到行以外时, 回滚面必须同点对称
 
 > 摘要: 给乐观补丁加第二个覆盖面(如抽屉 detail)时, 失败/超时回滚若只还原行, 新覆盖面就停留假状态 —— 贴与回滚必须经同一单点对称, 且「行采不到 prev」的场景要有独立回滚锚
+> 等级: L0
 > 触发: 乐观 UI, 乐观补丁, 回滚, 覆盖面, 对称, 抽屉 detail, drawer.detail, applyOptimisticPatch, applyOptimistic, 贴补丁, 失败回滚, 兜底回滚
 **Refs:** memory-bank/issues/26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html
 

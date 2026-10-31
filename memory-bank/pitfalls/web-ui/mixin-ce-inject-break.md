@@ -1,6 +1,7 @@
 # Vue 全局 mixin 给每个组件 provide ce: 中间层组件缺透传, 插槽内注入链静默断裂
 
 > 摘要: 全局 mixin(CONFIG_EDITOR)给**每个**组件都挂 `provide(){ce:this}` + 空 cfg 树 —— 把根模板段头抽成中间层组件时, 若它不把注入到的 ce 原样透传, 插槽里的 hub-field 会注入到**该组件实例**: 字段恒显 schema 默认值还带「默认」徽标、拨动不脏树、「保存并应用」永不出现、磁盘不动(重启无效), 而与走 `$root` 的同源读数自相矛盾, 全程零报错。修法 = 中间层组件补 `inject:["ce"]` + `provide(){ce:this.ce}`(范式样本 aq-traffic-card / CE_FIELD_BASE); 守阵必须钉**非缺省态**与写路径往返 —— 默认态断言与断裂回落值同形, 恒真。
+> 等级: L0
 > 触发: Vue provide/inject, 全局 mixin, CONFIG_EDITOR, ce 透传, 插槽注入断裂, aq-fold, hub-field, 开关不显示磁盘值, 默认徽标, 设置页开关无效, 保存并应用不出现, 改配置重启无效, 组件插槽内容注入
 
 ### 把根模板段头抽成中间层组件: 插槽里的 provide 消费者改注入到它, 配置编辑器读写全落空还不报错

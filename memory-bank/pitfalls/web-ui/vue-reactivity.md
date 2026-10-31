@@ -1,6 +1,7 @@
 # Vue 语义与 SVG
 
 > 摘要: Vue Options API 的四类静默白屏(computed 当函数 / 带参 computed / 三者同名 / methods 里裸调用跨模块 methods)与 SVG 属性大小写 —— 都**没有运行时提示**。
+> 等级: L0
 > 触发: 改前端模板, 改 computed, 改 methods, 改 SVG, 加图标, 白屏, 整块不渲染, 裸调用, 漏 this
 
 ### computed 在模板里是**属性**, 不能当函数调用

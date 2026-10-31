@@ -1,6 +1,7 @@
 # 键盘切页后旧页签残留焦点框 (focus-visible 的 keydown 重估)
 
 > 摘要: 鼠标点过的页签持有 DOM 焦点, 键盘切页(1/2/3)不动焦点; Chromium 在 keydown 分发时把焦点元素重估为 :focus-visible ⇒ 旧页签画出残留 outline。分发期间 matches(":focus-visible") 已翻转, **不能**用它区分焦点来源; 修复靠维护不变式(切页后导航焦点 == 活动页签, 否则 blur 归还 body), 单点 view.js::syncNavFocus。
+> 等级: L0
 > 触发: 键盘切页, 页签残留高亮框, 残留 outline, focus-visible, 焦点残留, 数字键切视图, 切页, tab 焦点, 修键盘导航
 **Refs:** memory-bank/tasks/26-10-02-webui-nav-focus.md
 

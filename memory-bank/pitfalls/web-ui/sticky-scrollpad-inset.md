@@ -1,6 +1,7 @@
 # 滚动容器 padding 内缩 sticky 视矩形 (吸顶/吸底条贴边缝漏字)
 
 > 摘要: sticky 的视矩形被**滚动容器自身的 padding 内缩** —— top:0 实际停在 padding-top 之下、bottom:0 实际停在 padding-bottom 之上, 中途滚动时数据行文字从这两条缝里漏出来; 行级 grid 表格的吸顶列头与吸底汇总条会同时中招(两档极端不露缝, 只有中途露)。修法 = 负 inset 抵消 padding(top:-14px / bottom:-20px), 或把 padding 移出滚动容器(结构性大改, 一般不值)。守阵量「吸顶条顶缘 == 滚动容器可视顶缘」的几何齐平。
+> 等级: L0
 > 触发: 吸顶, 吸底, sticky, 滚动容器 padding, drawer-body, 表头吸顶, 统计条吸底, 漏出文字, 行文字漏出, 顶部漏字, 底部漏字, 中途滚动, 未到顶, 没到底, dt11, 树表批量, drawer_tpl, 负 inset, sticky 缝隙
 
 ### 吸顶/吸底 sticky 条与滚动容器 padding 之间的缝

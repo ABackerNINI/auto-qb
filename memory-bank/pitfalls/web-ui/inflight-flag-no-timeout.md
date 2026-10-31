@@ -1,6 +1,7 @@
 # 单向「请求在途」标志 + 无超时请求 = 自愈路径被自身封死
 
 > 摘要: 前端「loading 置真 → await 请求 → finally 复位」是最常见的形状, 但裸 `fetch` 没有超时 ⇒ 请求悬挂时 `await` 永不返回、`finally` 永不执行, 而轮询 tick 又拿**同一个标志**当跳过判据 ⇒ 复位路径被自己挡住(图表停在旧帧、无提示、不自愈, 只能手动刷新); 同族的第二个入口是「`await` 之后才排下一拍」的定时器链(悬挂即**永久停表**, 连标志都没有)。处置 = 请求级超时(把悬挂变成一次可报的失败) + 在用标志加计时兜底, 两层一起上。
+> 等级: L0
 > 触发: 前端轮询, 轮询停了, 图表停在旧帧, 数据不再更新, 加载卡死, loading 不复位, 不自愈, 手动刷新才恢复, fetch 无超时, AbortController, 请求悬挂, TCP 半开, 信号丢失
 
 **Refs:** memory-bank/tasks/26-10-16-webui-chart-fetch-timeout.md,memory-bank/tasks/26-10-16-webui-raw-fetch-timeout.md

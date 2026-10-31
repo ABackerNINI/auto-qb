@@ -1,6 +1,7 @@
 # Teleport 目标缺失: 生产版静默不挂子节点, 卸载时抛 TypeError 打断整次 patch
 
 > 摘要: 把 `<teleport :to="<选择器>">` 挂到**目标元素不在文档**的时刻, Vue 生产版会**静默跳过子节点挂载**(无任何警告, 只有 dev 版打 `Invalid Teleport target`), 之后卸载这个 teleport 时 `TeleportImpl.remove` 会遍历那些**从未挂载**的 children 去 `unmount`, 对 `null` component 解构抛 `TypeError: Cannot destructure property 'bum' of 'e' as it is null` —— 异常从 `patchChildren` 里冒出来, **整次 patch 中断**, 页面停在半渲染态(用户所见「切换后内容消失 / 布局卡在旧态 / 再切也回不去」)。判据的**求值时机**是全部难点: 布局换代的 patch 顺序是「先拆旧分支(旧锚随之离场) → 再挂新分支」, 父级渲染里求值的判据在**拆之前**跑, 那一拍旧目标还在 ⇒ 判真; 只有把判据放进 **teleport 自己的挂载拍**(承载它的组件自己的渲染拍)才拿到真值。
+> 等级: L0
 > 触发: teleport 目标缺失, Invalid Teleport target, 生产版静默, patch 中断, 内容消失, 半渲染态, 合并态切换, 门跨越, v-if 换代, 锚离场, 桥锚, aq-dt-bridge, dtBridgeOn, dtBridgeTargetOn, Cannot destructure property bum, unmountComponent null
 **Refs:** memory-bank/tasks/26-10-14-webui-drawer-merge-bridge-guard.md
 

@@ -1,6 +1,7 @@
 # 列表行可见带: 「几何在视口内」≠「看得见」(上下各压一层 chrome)
 
 > 摘要: 键盘光标滚动跟随把「目标行几何在视口内」当成「看得见」, 但列表的上下边各压着一层随正文滚动的 chrome —— 顶部是吸在顶栏下缘的吸顶列头 `.group-head`(sticky, top = `--head-h - 1px`), 底部是固定状态栏 `.statusbar`(fixed, 高 `--statusbar-h`), 面板开着时底部还多一个停靠面板。只拿顶栏高 `_headH` 当上界、`window.innerHeight` 当下界算落点, 光标行会停在 chrome 背后: 用 `Home`/`End`(或一路 ↑↓)把光标移到**首个 / 末个种子**时"只显示一半"(2026-10-09 用户报障)。**同族的第二面是"一次移动几行"**: PageUp/PageDown 按整窗高算一屏, 面板一开可见带只剩一半 ⇒ 每翻一屏**跳过一半行**。**同族的第三面是"坐标系"**: 无光标回落(`_kbViewportRow`)的渲染行扫描把**文档坐标** `vTop/vBot`(= `scrollY + 上界`)与**视口坐标** `getBoundingClientRect()` 同框比较, 仅 `scrollY=0` 成立, 滚过一屏后全判"出视口" ⇒ 退化成跳极值行(↓ 回顶 / ↑ 落底)。处置 = 上下各收一个单点 `_kbViewTop()` / `_kbViewBottom()`(只出**视口坐标**), 所有"这行看得见吗 / 这一屏有几行"的判定只走它们, 前缀和那一支按需自行加回 `scrollY`。
+> 等级: L0
 > 触发: 键盘移到第一个种子只显示一半, 最后一个种子只显示一半, 翻页跳行, 翻一屏跳过行, PageDown 少看几行, 无光标回落, 跳极值行, 落回列表顶, 落到列表底, 追剧页键盘, 光标行被列头盖住, 光标行被状态栏盖住, 看不见当前行, 滚动跟随落点, 可见带, 一屏行数, 吸顶列头, group-head, statusbar, _headH, innerHeight, _winViewH, _kbViewportRow, 文档坐标, 视口坐标, scrollY, 首行不可见, 末行不可见, Home, End, PageUp, PageDown, 滚动跟随算错
 **Refs:** memory-bank/tasks/26-10-09-webui-kbd-scroll-band.md
 

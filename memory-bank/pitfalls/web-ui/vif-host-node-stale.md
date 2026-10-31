@@ -1,6 +1,7 @@
 # v-if 拆建后模块级缓存的宿主节点失效: "已挂载"缓存的是节点身份, 节点会死缓存不会
 
 > 摘要: 详情面板 aside 被 v-if 拆掉重建后, 变体宿主换了新节点, 而核心层模块级缓存 `_dtMounted` 仍持**旧节点**引用 —— 挂载函数看到"已挂"直接返回, 变体渲染进新宿主无人接管, 页签整幅空白; general/content 页签无独立通知源(不像 traffic/files 有数据轮询触发重渲), **永不自愈**。处置 = watch(drawerVisible) 种子支路进场补 `$nextTick(_dtSync)` 重挂, `_dtSync` 幂等(已挂且 `isConnected` 才跳过)。
+> 等级: L0
 > 触发: 切设置页返回详情面板空白, v-if 重建, 宿主节点失效, _dtMounted, 变体宿主, detached 引用, $nextTick 重挂, watch drawerVisible, 种子支路, 页签空白, 永不自愈, isConnected, 挂载缓存
 **Refs:** memory-bank/tasks/26-10-07-webui-detail-panel-followups.md
 

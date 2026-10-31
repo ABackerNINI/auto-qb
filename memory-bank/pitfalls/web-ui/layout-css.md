@@ -1,6 +1,7 @@
 # 样式 / 布局 / 表格
 
 > 摘要: 行宽口径、表头吸顶、两表逐栏对齐、sticky 层叠、flex 挤压、flex 子项错行、特异性之争、状态色分不出 —— 前端版式类的固定判据。
+> 等级: L0
 > 触发: 改 CSS, 布局, 表格, 滚动条, 表头吸顶, sticky, flex, flex-basis, 对齐, 未对齐, 没对齐, 错行, 文字高低不一, 后者更高, 统计栏, 工具条, 图例, align-items, stretch, 垂直居中, 基线, align-items baseline, 省略号, 媒体查询, 颜色不对, 按钮, 控件变形过高, 控件尺寸, 两态分不出, 状态色, 徽章底色, 底色相近, 同亮度, 顶栏, 标题栏, 状态栏, 表头, 列标题行, thead, 底色与其余部分难区分, 同色, 明度差不足, chrome 底色, UA 默认色, 两表对齐, 逐栏对齐, 列宽不一致, table-layout, scrollbar-gutter, 置顶专区
 
 ### 行宽口径 = `fit-content; min-width: 100%`, 且行内单元格必须 `min-width: 0`

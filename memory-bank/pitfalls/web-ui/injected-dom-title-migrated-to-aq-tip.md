@@ -1,12 +1,7 @@
 # JS/变体注入的 DOM 带 title 属性会被全局 MutationObserver 立刻迁走成 data-aq-tip, title 读不回来
 
-> 摘要: 全局自绘 tooltip 的「原生 title 断供式」机制(shared/ui_feedback.js 的 MutationObserver)对
-> **一切**新出现的 title 属性做单向迁移 —— 不只 Vue 模板渲染, **JS 手工插值出的 DOM(innerHTML /
-> dtHtml 模板串 / createElement 后 setAttribute)同样在入 DOM 的观察器批次里被即刻摘掉 title、
-> 改写为 data-aq-tip**。后果: ①插入后读 `el.getAttribute("title")` 恒为 null(想要原文案读
-> `data-aq-tip`); ②CSS/测试选择器 `[title]` 永远匹配不上(要写 `[data-aq-tip]`); ③Playwright
-> `get_attribute("title")` 返回 null 不是 bug。变体层(模板变体自管 DOM)的悬浮提示**不需要也
-> 不应该自建 tooltip** —— title 照写, .aq-tip 自动承接。
+> 摘要: 全局自绘 tooltip 的「原生 title 断供式」机制(shared/ui_feedback.js 的 MutationObserver)对 **一切**新出现的 title 属性做单向迁移 —— 不只 Vue 模板渲染, **JS 手工插值出的 DOM(innerHTML / dtHtml 模板串 / createElement 后 setAttribute)同样在入 DOM 的观察器批次里被即刻摘掉 title、 改写为 data-aq-tip**。后果: ①插入后读 `el.getAttribute("title")` 恒为 null(想要原文案读 `data-aq-tip`); ②CSS/测试选择器 `[title]` 永远匹配不上(要写 `[data-aq-tip]`); ③Playwright `get_attribute("title")` 返回 null 不是 bug。变体层(模板变体自管 DOM)的悬浮提示**不需要也 不应该自建 tooltip** —— title 照写, .aq-tip 自动承接。
+> 等级: L0
 > 触发: 变体 DOM, title 属性, data-aq-tip, getAttribute null, [title] 选择器, MutationObserver, ui_feedback, 悬浮提示, Playwright title
 > 收口: 2026-10-06, 详情面板 15 变体巡检核实断供管道对变体 DOM 同样生效(切换器/动作钮悬浮提示正常)
 

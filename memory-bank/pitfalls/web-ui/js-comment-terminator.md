@@ -1,6 +1,7 @@
 # JS 注释体内的 `*/` 会提前终止块注释, node --check 仍绿、运行时才炸
 
 > 摘要: JS 块注释以第一个 `*/` 结束 —— 注释文字里再出现 `*/`(如 `Key*/Digit*` 想表达通配前缀)会把注释提前砍断, 尾巴落成**代码态**; 与 CSS 版(见 css-comment-terminator)不同, 尾巴常能被解析成正则字面量等合法语法, `node --check` 与全部静态守阵都绿, 直到页面首次执行该文件才抛 ReferenceError 整站白屏。
+> 等级: L0
 > 触发: 写 JS 注释, 注释里出现 星号斜杠, Digit is not defined, pageerror 白屏, node check 全绿, shortcuts.js
 
 ### 注释文字里的 `*/` = 提前终止 + 尾巴变代码(运行时才炸)

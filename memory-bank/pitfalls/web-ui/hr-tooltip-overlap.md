@@ -1,6 +1,7 @@
 # 做种时长列(HR 弹窗)的原生 :title 与悬停弹窗叠出遮挡
 
 > 摘要: 做种时长列已用 HR 在线核实悬停弹窗(@mouseenter/@mouseleave 触发)承载来源/安全档位结论; 若再在单元格挂原生 `:title="hrDurHint(m)"`, 浏览器原生 title 与自定义弹窗在同一 hover 上叠出, 原生 title 还常被弹窗 DOM 盖住, 表现为「被遮挡的提示」+「来源:未核实」等多余气泡。状态/站点/分类/标签等短文本列本就无需 :title, 挂上只增噪音。处置 = 做种时长列只保留 HR 弹窗触发, 摘掉原生 :title; 短文本列一律不挂 :title。
+> 等级: L0
 > 触发: 做种时长, HR 在线核实, hrDurHint, 来源:未核实, 被遮挡的 tooltip, 弹窗叠出, 列 tooltip, 状态列, 站点列, 分类列, 标签列, seeding_time, hrPopEnter, hrSrcClass
 
 ## 条目

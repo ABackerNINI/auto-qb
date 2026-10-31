@@ -1,6 +1,7 @@
 # 遮罩关窗用 @click.self: 拖选文字/拖动的 mouseup 落在遮罩上会被判成"点空白关窗"
 
 > 摘要: `.modal-mask` 上写 `@click.self="closeX"` 判的是 click 事件的 target, 而 click 由 mousedown 与 mouseup 的**公共祖先**派发(DOM 规范)—— 在对话框里的输入框按下左键拖选文字、鼠标终点落到遮罩上抬手, 公共祖先就是遮罩本身, 于是"拖选文字"被判成"点空白关窗"(用户原话: 选个标签文字, 抬手窗口没了)。修法 = 遮罩成对挂 `@mousedown="maskDownSelf"` + `@mouseup.self="maskCloseIfArmed(closeX)"`: 只在"这一笔 mousedown 也从遮罩起手"时才关; 任何落在对话框内部的 mousedown 都会把臂位清掉, 不会累积。
+> 等级: L0
 > 触发: 遮罩关窗, click.self, 拖选文字窗口消失, 拖选后弹窗自己关了, mouseup 公共祖先, 点空白关窗误判, mousedown 起手位置, 添加种子窗口消失, 弹窗误关, text selection, 拖拽抬手
 
 ## 条目

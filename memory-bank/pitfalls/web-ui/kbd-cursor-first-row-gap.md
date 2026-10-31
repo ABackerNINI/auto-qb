@@ -1,6 +1,7 @@
 # 键盘光标首行虚线贴住吸顶列头: 行间有 gap 但首行与列头 0 间隙
 
 > 摘要: 键盘光标首行虚线贴住吸顶列头: 行间有 gap 但首行与列头 0 间隙
+> 等级: L0
 > 触发: 光标虚线上边缘被遮挡, 第一个种子虚线, kb-cursor 上边被压, 首行贴着列头, 虚线缺一半, 键盘光标上边看不见, 三主表首行, torrents-dock group-table, padding-top
 **Refs:** memory-bank/tasks/26-10-20-webui-kbd-cursor-first-row.md
 

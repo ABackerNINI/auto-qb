@@ -1,6 +1,7 @@
 # 收起展开态时键盘光标悬空在链外
 
 > 摘要: 收起展开态只复位展开态、不动 `kbCursor` ⇒ 光标仍指着已随收起卸载的明细行, 虚线框被宿主连坐带走, 观感是"锚点被清了"
+> 等级: L0
 > 触发: Esc 收起, 展开态收起, 光标消失, kb-cursor 悬空, 明细行卸载
 
 **Refs:** memory-bank/tasks/26-10-22-webui-kbd-esc-collapse-cursor.md
