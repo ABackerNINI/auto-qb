@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 动效桌面调研报告(fx 库与 flux 皮肤输入)</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-fx-skin">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-10-31-2340">
+<meta name="doc-updated" content="26-10-31-2340">
+<meta name="doc-refs" content="memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  a { color: var(--accent-ink); text-decoration: none; border-bottom: 1px solid var(--hair); }
+  a:hover { border-bottom-color: var(--accent); }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .src { font-size: 12px; color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: webui-fx-skin</div>
+<h1>WEBUI 动效桌面调研报告(fx 库与 flux 皮肤输入)</h1>
+<p class="lede">零依赖(纯 CSS + 原生 JS)约束下的动效桌面调研成文:从 MD3 / Apple HIG / GSAP / Motion One / OpenProps / animate.css / Uiverse 七路来源提炼出 easing 曲线库、时长分级、编排模式与 7 组 P0 组件共 39 条候选动效,直接作为 showcase 页与 fx 库 token 设计的原料。原始笔记见<a href="attachments/26-10-31-fx-research-notes.md">附件 26-10-31-fx-research-notes.md</a>,归属计划 <a href="../plans/26-10-31-2316-plan-webui-fx-skin.html">26-10-31-2316-plan-webui-fx-skin</a>(S1 桌面调研步)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-10-31-2340 · <b>doc-updated</b> 26-10-31-2340 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 计划 <a href="../plans/26-10-31-2316-plan-webui-fx-skin.html">26-10-31-2316-plan-webui-fx-skin</a> S1a 步产出的桌面调研笔记(<a href="attachments/26-10-31-fx-research-notes.md">attachments/26-10-31-fx-research-notes.md</a>),本报告将其成文为正式调研报告
+</div>
+
+<h2><span class="no">§01</span>结论摘要</h2>
+<p>零依赖约束不构成动效表现力的硬上限——MD3 的 token 体系、OpenProps 的「家族 × 强度档位」曲线分层、View Transitions + <code>@starting-style</code> 两个 Chrome 原生特性,足以覆盖 fx 库需要的全部编排能力;JS 侧只留「挂载器 + 重触发跳终态 + 少量 rect 测量」的薄层。7 组 P0 组件每组件产出 5-6 条候选(共 39 条,§05),全部标注属性层 / 时长曲线 / JS 依赖 / reduced-motion 降级,供 showcase 页逐组件挑选。</p>
+<p><b>调研来源(七路)</b>:</p>
+<ul>
+  <li><b>Material Design 3</b> — motion easing/duration token 规格(m3.material.io,SPA 页面数值经搜索摘要核对);另回溯 MD2 choreography 编排模式。</li>
+  <li><b>Apple HIG Motion</b> — 反馈/引导/过渡三语义与动效礼仪(developer.apple.com,<code>.md</code> 端点直取全文)。</li>
+  <li><b>GSAP Eases 文档</b> — 「家族 × 方向 × 场景」命名法与 UI 场景推荐(gsap.com)。</li>
+  <li><b>Motion One / motion.dev</b> — stagger 工具形态与快速上手范式(motion.dev)。</li>
+  <li><b>OpenProps</b> — <code>src/easing.css</code> 源码级 token 分层设计(github.com/argyleink/open-props)。</li>
+  <li><b>animate.css</b> — 变体命名法与 attention-seekers 家族词表(animate.style)。</li>
+  <li><b>Uiverse / prismic / sliderrevolution demo 集</b> — 按钮/输入框/弹层的现成 CSS 配方池;另取 chrome.dev 的 View Transitions 与 scroll-driven animations 文档、css-tricks 实践文。</li>
+</ul>
+<p class="aside">每条候选的原始出处 URL 保留在附件笔记与 §05 表格「来源」列,快照性质——链接可能随时间失效,数值以笔记成文时为准。</p>
+
+<h2><span class="no">§02</span>easing 曲线库(证据快照 A)</h2>
+
+<h3>A1 · Material Design 3 token 体系(系统级锚点)</h3>
+<table>
+  <tr><th>token</th><th>cubic-bezier</th><th>适用</th></tr>
+  <tr><td><code>emphasized</code></td><td><code>(0.2, 0, 0, 1)</code></td><td>大型/表达性过渡默认,轻微慢起快收 + 急收尾,M3 的「签名曲线」</td></tr>
+  <tr><td><code>emphasized-accelerate</code></td><td><code>(0.3, 0, 0.8, 0.15)</code></td><td><b>退场</b>专用,元素离开屏幕</td></tr>
+  <tr><td><code>emphasized-decelerate</code></td><td><code>(0.05, 0.7, 0.1, 1)</code></td><td><b>入场</b>专用,快起缓收</td></tr>
+  <tr><td><code>standard</code></td><td><code>(0.2, 0, 0, 1)</code></td><td>小型功能过渡(与 emphasized 同值,语义区分用)</td></tr>
+  <tr><td><code>standard-accelerate</code></td><td><code>(0.3, 0, 1, 1)</code></td><td>小型元素退场</td></tr>
+  <tr><td><code>standard-decelerate</code></td><td><code>(0, 0, 0, 1)</code></td><td>小型元素入场</td></tr>
+  <tr><td><code>linear</code></td><td><code>(0, 0, 1, 1)</code></td><td>进度/倒计时类,不用于空间移动</td></tr>
+</table>
+<p class="src">M2 遗留曲线(大量现成 CSS 抄的是这套,识别用):<code>standard (0.4, 0, 0.2, 1)</code> 即浏览器 <code>ease-in-out</code> 加强版;<code>decelerate (0, 0, 0, 1)</code> 即 <code>ease-out</code> 终极版;<code>accelerate (0.3, 0, 1, 1)</code>。<span class="cm">来源: m3.material.io/styles/motion/easing-and-duration/tokens-specs(页面为 Angular SPA,数值经搜索摘要核对)</span></p>
+
+<h3>A2 · easings.net 家族(带精确 cubic-bezier,零依赖直接可用)</h3>
+<table>
+  <tr><th>家族</th><th>out 变体</th><th>in 变体</th><th>inOut 变体</th><th>视觉性格</th></tr>
+  <tr><td>sine</td><td><code>(0.61, 1, 0.88, 1)</code></td><td><code>(0.12, 0, 0.39, 0)</code></td><td><code>(0.37, 0, 0.63, 1)</code></td><td>最柔,适合缓慢/循环</td></tr>
+  <tr><td>quad (=GSAP power1)</td><td><code>(0.5, 1, 0.89, 1)</code></td><td><code>(0.11, 0, 0.5, 0)</code></td><td><code>(0.45, 0, 0.55, 1)</code></td><td>温和通用</td></tr>
+  <tr><td>cubic (=power2)</td><td><code>(0.33, 1, 0.68, 1)</code></td><td><code>(0.32, 0, 0.67, 0)</code></td><td><code>(0.65, 0, 0.35, 1)</code></td><td>UI 过渡主力</td></tr>
+  <tr><td>quart (=power3)</td><td><code>(0.25, 1, 0.5, 1)</code></td><td><code>(0.5, 0, 0.75, 0)</code></td><td><code>(0.76, 0, 0.24, 1)</code></td><td>干脆利落</td></tr>
+  <tr><td>quint (=power4)</td><td><code>(0.22, 1, 0.36, 1)</code></td><td><code>(0.64, 0, 0.78, 0)</code></td><td><code>(0.83, 0, 0.17, 1)</code></td><td>冲刺感,大位移入场</td></tr>
+  <tr><td>expo</td><td><code>(0.16, 1, 0.3, 1)</code></td><td><code>(0.7, 0, 0.84, 0)</code></td><td><code>(0.87, 0, 0.13, 1)</code></td><td>极快起/急收,戏剧性</td></tr>
+  <tr><td>circ</td><td><code>(0, 0.55, 0.45, 1)</code></td><td><code>(0.55, 0, 1, 0.45)</code></td><td><code>(0.85, 0, 0.15, 1)</code></td><td>类 power 但中段更陡</td></tr>
+  <tr><td>back</td><td><code>(0.34, 1.56, 0.64, 1)</code></td><td><code>(0.36, 0, 0.66, -0.56)</code></td><td><code>(0.68, -0.6, 0.32, 1.6)</code></td><td>过冲回弹,弹性强调</td></tr>
+  <tr><td>elastic / bounce</td><td colspan="3">不可用 cubic-bezier 表达,须 <code>@keyframes</code> 或 CSS <code>linear()</code></td><td>物理弹性</td></tr>
+</table>
+<p class="src"><span class="cm">来源: easings.net(数值为该项目 canonical 值)</span></p>
+
+<h3>A3 · GSAP 体系(映射到 bezier 与场景)</h3>
+<ul>
+  <li>家族 = power1-4 / sine / expo / circ / back / elastic / bounce / steps × in / out / inOut;GSAP 默认 ease 是 <code>power1.out</code>。</li>
+  <li>UI 场景推荐:<code>power1.out</code>/<code>power2.out</code> = 最安全反馈/过渡;<code>back.out</code> = pop-in、按钮点击回弹;<code>elastic.out</code> = 通知/玩趣场景(<span class="wr">慎用</span>,弹跳多轮容易腻);<code>steps()</code> = 像素/CRT 风格(retro preset 预留)。</li>
+  <li><code>slow</code>(SlowMo)/<code>rough</code>(抖动)在 EasePack,core 没有;对应需求用 bezier/<code>linear()</code> 近似。</li>
+</ul>
+<p class="aside">结论:GSAP 的价值是「家族 × 方向 × 场景」命名法而非曲线本身——曲线 A2 已全覆盖。<span class="cm">来源: gsap.com/docs/v3/Eases/</span></p>
+
+<h3>A4 · OpenProps 令牌设计(现成的零依赖 token 层,高度可抄结构)</h3>
+<ul>
+  <li>分级 1-5(不是 1-4/1-6),越大越陡:<code>--ease-1..5</code>(对称)、<code>--ease-in-1..5</code>、<code>--ease-out-1..5</code>、<code>--ease-in-out-1..5</code>。样例:<code>--ease-out-2: cubic-bezier(0, 0, .5, 1)</code>、<code>--ease-out-5: cubic-bezier(0, 0, 0, 1)</code>、<code>--ease-in-out-5: cubic-bezier(.9, 0, .1, 1)</code>。</li>
+  <li><b>overshoot 家族用 cubic-bezier 可表达</b>:<code>--ease-elastic-1..5 = (.5, .75/1/1.25/1.5/1.75, .75, 1.25)</code>——y2=1.25 过冲强度分 5 档,这就是纯 CSS 弹性。</li>
+  <li><b>spring / bounce 用 CSS <code>linear()</code> 函数</b>(cubic-bezier 表达不了的物理曲线):<code>--ease-spring-1..5</code>、<code>--ease-bounce-1..5</code> 全是超长 <code>linear(0, 0.006, 0.025 2.8%, ...)</code> 采样点列表。Chrome 113+ 支持——正好命中计划 D5 决策「Chrome/Edge 全特性、其余降级」:Firefox/Safari 声明整条作废,降级写法 = 先写 bezier 再写 <code>linear()</code> 覆盖。</li>
+  <li>设计启示:fx 库 token 分层照抄「家族 × 强度档位」结构,强度档位直接当 preset(neon 用大档 / glass 用中档 / crisp 用小档)是天然映射。</li>
+</ul>
+<p class="src"><span class="cm">来源: github.com/argyleink/open-props(src/easing.css;unpkg.com/open-props@latest/easing.css)</span></p>
+
+<h3>A5 · fx 库建议收敛集(候选,showcase 后可裁)</h3>
+<table>
+  <tr><th>fx token</th><th>建议值</th><th>场景</th></tr>
+  <tr><td><code>--fx-ease-out</code></td><td><code>(0.2, 0, 0, 1)</code></td><td>入场/浮现(M3 emphasized 兼容 most cases)</td></tr>
+  <tr><td><code>--fx-ease-in</code></td><td><code>(0.3, 0, 0.8, 0.15)</code></td><td>退场</td></tr>
+  <tr><td><code>--fx-ease-standard</code></td><td><code>(0.33, 1, 0.68, 1)</code></td><td>小过渡/颜色/阴影</td></tr>
+  <tr><td><code>--fx-ease-snap</code></td><td><code>(0.16, 1, 0.3, 1)</code></td><td>快而狠的强调入场</td></tr>
+  <tr><td><code>--fx-ease-back</code></td><td><code>(0.34, 1.56, 0.64, 1)</code></td><td>过冲 pop</td></tr>
+  <tr><td><code>--fx-ease-elastic</code></td><td><code>(0.5, 1.25, 0.75, 1.25)</code></td><td>强过冲(neon 档)</td></tr>
+  <tr><td><code>--fx-ease-linear</code></td><td><code>linear</code></td><td>进度/扫过</td></tr>
+  <tr><td><code>--fx-ease-spring</code></td><td>OpenProps <code>--ease-spring-3</code> 的 linear() 值</td><td>Chrome 弹簧,带 bezier 降级</td></tr>
+</table>
+
+<h2><span class="no">§03</span>时长/距离分级表(证据快照 B)</h2>
+
+<h3>B1 · 三方规范对照 → fx 建议档</h3>
+<table>
+  <tr><th>语义</th><th>MD3 token/建议</th><th>Apple HIG</th><th>demo 集/社区常用</th><th>fx 建议档</th></tr>
+  <tr><td>hover 反馈</td><td>short1-2 (50-100ms)</td><td>极短,"brief and precise"</td><td>100-200ms</td><td><b>80-100ms</b></td></tr>
+  <tr><td>按下/active</td><td>short1 (50ms)</td><td>—</td><td>50-100ms</td><td><b>50-80ms</b></td></tr>
+  <tr><td>小元素过渡(开关/checkbox)</td><td>short4 (200ms)</td><td>—</td><td>150-250ms</td><td><b>120-200ms</b></td></tr>
+  <tr><td>入场(卡片/面板)</td><td>medium (250-450ms), emphasized-decelerate</td><td>0.2-0.5s 总区间</td><td>250-350ms</td><td><b>200-300ms</b>(项目上限 400ms)</td></tr>
+  <tr><td>退场</td><td><b>比入场短</b>, emphasized-accelerate, ~150-250ms</td><td>—</td><td>150-250ms</td><td><b>150-200ms</b></td></tr>
+  <tr><td>弹窗/抽屉</td><td>medium 长端 300-450ms 入 / 200ms 出</td><td>—</td><td>300ms / 200ms</td><td><b>300ms 入 / 200ms 出</b></td></tr>
+  <tr><td>页签切换</td><td>short4-medium (200-300ms)</td><td>—</td><td>200-250ms</td><td><b>200-250ms</b></td></tr>
+  <tr><td>强调(pop/pulse)</td><td>—</td><td>—</td><td>300-600ms</td><td><b>300-500ms</b></td></tr>
+  <tr><td>全屏/大位移</td><td>long 500-1000ms</td><td>—</td><td>—</td><td>本项目基本用不到(P0 无全屏过渡)</td></tr>
+  <tr><td>toast 入场/退场</td><td>—</td><td>—</td><td>250ms / 150-200ms</td><td><b>250ms / 180ms</b>(展示时长与动画时长解耦)</td></tr>
+</table>
+<p class="src"><span class="cm">来源: MD3 tokens-specs + 搜索摘要;Apple HIG Motion 全文;animate.css 速度档(<code>faster 500ms / fast 800ms / 默认 1s / slow 2s / slower 3s</code>——UI 组件库不应照抄 animate.css 的秒级时长,那是展示动画规模);motion.dev stagger 例 0.1s。</span></p>
+
+<h3>B2 · 距离/位移建议</h3>
+<ul>
+  <li>小反馈位移(hover 抬升):1-2px;入场位移:8-16px(元素级)/ 24-100%(抽屉全宽);弹窗 scale:0.96→1(≤4% 差,过大显廉价)。</li>
+  <li>M3「距离越长时长越长」原则:位移每翻倍,时长约 ×1.3-1.5。</li>
+  <li>Apple HIG 额外原则:频繁交互的 UI 不加动效、动效应可被取消(不必等动画播完才能继续操作)——对 torrent 表格行和按钮这类高频交互,时长档取各档<b>下限</b>。</li>
+</ul>
+
+<h2><span class="no">§04</span>编排模式清单(证据快照 C)</h2>
+
+<h3>C1 · stagger(sequential transition,MD2 choreography)</h3>
+<ul>
+  <li>适用边界:<b>卡片/弹窗内部区块</b>、toast 队列、抽屉内段落这类「少量(≤8 个)表面」的顺序浮现;每项 delay 步进 20-50ms(不是逐项串行),同 duration 同 easing 级联。</li>
+  <li><span class="bad">明确不适用: torrent 高密度表格行</span>(项目硬约束)。列表刷新的替代:整表一次 cross-fade 或 View Transitions root 默认交叉淡化,不做行级 stagger。</li>
+  <li class="src"><span class="cm">来源: m2.material.io/design/motion/choreography.html(sequential/symmetric/radial reaction);motion.dev <code>stagger(0.1)</code> 工具形态。</span></li>
+</ul>
+
+<h3>C2 · enter/exit 非对称编排</h3>
+<ul>
+  <li>M3 系统性结论:<b>入场 decelerate + 时长长,退场 accelerate + 时长短</b>(dialog 400ms 入 / 200ms 出是官方例)。退场快是因为用户已经拿到结果,退场只需「干净消失」。</li>
+  <li>fx 库应把这对(曲线+时长)作为一个「编排骨对」成对定义,而不是两条独立 token。</li>
+  <li class="src"><span class="cm">来源: m3.material.io tokens-specs 及 applying-easing-and-duration(官方例: emphasized-decelerate 入 / emphasized-accelerate 出)。</span></li>
+</ul>
+
+<h3>C3 · View Transitions API(零依赖库里最「免费」的编排工具)</h3>
+<ul>
+  <li>同文档用法:<code>document.startViewTransition(() => updateDOM())</code> + 共享元素打 <code>view-transition-name</code>;浏览器自动做旧/新快照交叉过渡与 FLIP 位移。<code>if (document.startViewTransition)</code> 一行探测,Firefox/Safari 天然走无动效终态——与计划 D5 降级决策完美对齐。</li>
+  <li>适合:<b>页签切换</b>(old/new 内容交叉淡化+自定义曲线)、<b>弹窗共享元素放大</b>(按钮→dialog)、<b>列表过滤/排序的行位移</b>(row 移动自动 FLIP)、<b>抽屉开合</b>。</li>
+  <li>成本/风险:transition 期间整页被快照伪元素盖住,动效 250-400ms 内 UI 不响应指针——必须短;<code>::view-transition-old/new()</code> 可用 CSS 换曲线;大量行打 <code>view-transition-name</code> 有内存成本(torrent 表只在选中的行上打)。</li>
+  <li class="src"><span class="cm">来源: developer.chrome.com/docs/web-platform/view-transitions;css-tricks.com 同文档实践;MDN View_Transition_API。</span></li>
+</ul>
+
+<h3>C4 · CSS scroll-driven animations</h3>
+<ul>
+  <li><code>animation-timeline: scroll()/view()</code> 把动画进度绑到滚动位置,纯 CSS 无 JS。适合:侧栏阅读进度、列表视口边缘渐隐遮罩、P1 的长列表视差。P0 七组组件里基本没有刚需——<b>登记为 P1 工具,不为 P0 强加</b>。</li>
+  <li class="src"><span class="cm">来源: developer.chrome.com/docs/css-ui/scroll-driven-animations;scroll-driven-animations.style;MDN animation-timeline。</span></li>
+</ul>
+
+<h3>C5 · @starting-style + discrete transition(Chrome 117+,纯 CSS enter/exit 的另一半拼图)</h3>
+<ul>
+  <li><code>dialog[open]</code>、<code>.toast</code> 这类从 <code>display:none</code> 出现的元素,<code>@starting-style</code> 提供初始态,<code>transition-behavior: allow-discrete</code> 让 display 参与过渡——<b>零 JS 的弹窗/toast 入退场</b>,退场靠关闭前加 class + <code>transitionend</code> 兜底或 View Transitions。Firefox/Safari 下作废 = 无动效终态,符合降级哲学。</li>
+  <li class="src"><span class="cm">来源: developer.chrome.com/docs/css-ui/transitions-after-display-changes(同类模式);MDN @starting-style。</span></li>
+</ul>
+
+<h3>C6 · animate.css 命名法(变体命名参考,非曲线参考)</h3>
+<ul>
+  <li>结构:<code>animate__</code> 前缀 + 基类 <code>animated</code> + 家族 × 方向 × In/Out × 强度(<code>Big</code>)/角方向(<code>TopLeft</code>);工具类时长(delay/repeat/speed)用 CSS 变量(<code>--animate-duration</code>)可覆盖——<b>与 fx 两层变体模型同构</b>:<code>data-fx-variant</code> 对应家族+强度,<code>data-fx-preset</code> 对应 duration 全局变量。</li>
+  <li>可抄:方向词表(up/down/left/right/topLeft/…)、强度分级(Big)、「attention seekers」家族名(pulse/headShake/tada/jello——toast/danger tone 可用)。</li>
+  <li class="src"><span class="cm">来源: animate.style。</span></li>
+</ul>
+
+<h3>C7 · Apple HIG motion 语义(设计哲学输入)</h3>
+<ul>
+  <li>三语义:<b>反馈</b>(跟手势、简短精准)、<b>引导/状态传达</b>、<b>过渡</b>。高频交互的 UI 避免加动效;动效应可取消;移动大对象用 fade 替代长距离滑动;不要用动效作为传达关键信息的唯一途径(reduced-motion 不只是降级,是可访问性要求)。</li>
+  <li>对 fx 的落点:挂载器(fx.js)设计「重触发即跳终态」语义(动画未播完用户再点击→直接落到终态,不排队);toast 错误类信息必须有非动效冗余(声音/颜色/文本)。</li>
+  <li class="src"><span class="cm">来源: developer.apple.com/design/human-interface-guidelines/motion(全文已读,.md 端点可直取 markdown)。</span></li>
+</ul>
+
+<h2><span class="no">§05</span>每组件候选动效清单(showcase 直接原料)</h2>
+<p class="aside">标注约定:<span class="good">合成器友好</span> = 动 transform/opacity/filter;<span class="wr">paint</span> = 颜色/阴影/背景层(小面积可接受);<span class="bad">layout</span> = 动布局属性(警示);「JS」列 = 纯 CSS 还是要 fx.js 配合;「RM」列 = <code>prefers-reduced-motion</code> 降级。时长均对照计划软约束(hover ≤100ms,入场 ≤400ms)标注——个别候选超出软约束目标但按「只标注不淘汰」口径保留,见 §07 局限。原始逐条笔记(含全部出处 URL)见<a href="attachments/26-10-31-fx-research-notes.md">附件笔记 D 节</a>。</p>
+
+<h3>D1 · 按钮 <code>.bt</code> 一族(6 条)——适用 primary/ghost/danger/danger-solid/icon/sm</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>lift</b> 抬升+阴影分层</td><td>hover <code>translateY(-1~2px)</code> + box-shadow 双层投影,active <code>translateY(0)</code>;80-100ms <code>--fx-ease-standard</code></td><td><span class="good">transform</span></td><td>纯 CSS</td><td>去 transform 与阴影,只留颜色</td><td class="src">sliderrevolution《55 Best CSS Button Hover Effects》</td></tr>
+  <tr><td>2</td><td><b>glow</b> 辉光</td><td>hover <code>box-shadow: 0 0 Npx color-mix(in srgb, accent 45%, transparent)</code> 渐亮;100-150ms <span class="wr">超 hover 软约束上限,标注</span></td><td><span class="wr">paint(按钮面积小可接受)</span></td><td>纯 CSS</td><td>保持常亮或只留边框变色</td><td class="src">uiverse.io 按钮集(prismic 汇编)</td></tr>
+  <tr><td>3</td><td><b>sheen</b> 高光扫过</td><td><code>::after</code> 斜切高光条 <code>translateX(-100%)→100%</code>,hover 触发一次 400-500ms,需 <code>overflow:hidden</code>;hover 首帧 100ms 内高光进入可视区 <span class="wr">总时长超软约束,标注</span></td><td><span class="good">transform</span></td><td>纯 CSS</td><td>去动画</td><td class="src">uiverse.io Shiny Button</td></tr>
+  <tr><td>4</td><td><b>ripple</b> 波纹</td><td>pointerdown 注入 span,<code>scale(0)→scale(2.5)</code> + opacity 衰减 350-400ms emphasized-decelerate;限制同按钮并发数</td><td><span class="good">transform</span></td><td>需 fx.js(创建/清理节点)</td><td>不注入,直接落 active 终态</td><td class="src">M2 choreography "radial reaction"</td></tr>
+  <tr><td>5</td><td><b>press-scale</b> 按压回弹</td><td>active <code>scale(0.96)</code>,松开回 1 用 <code>--fx-ease-back</code> 过冲;50-80ms 触发 / 150ms 回弹</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>去 scale</td><td class="src">GSAP <code>back.out</code> 场景</td></tr>
+  <tr><td>6</td><td><b>icon 变体附加</b></td><td>图标按钮 hover 图标 <code>scale(1.1)</code> 或 rotate ±8°,active 过冲回摆;80-120ms</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>无动效</td><td class="src">Apple HIG "animated symbols" 思路</td></tr>
+</table>
+
+<h3>D2 · 弹窗 modal(6 条,含 tone 分级)</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>fade+rise+scale</b> 标准入场</td><td>backdrop opacity 0→1 200ms;面板 <code>opacity 0→1</code> + <code>translateY(12px) scale(0.96)→1</code> 300ms <code>--fx-ease-out</code>(emphasized-decelerate)</td><td><span class="good">transform/opacity</span></td><td>Chrome 纯 CSS(<code>@starting-style</code>)或 fx.js 加 class</td><td>全部去动效直接显示</td><td class="src">M3 dialog 模式(官方 ~400ms,压到 300ms)</td></tr>
+  <tr><td>2</td><td><b>退场对</b>(编排骨对)</td><td>关闭时面板 opacity→0 + <code>translateY(6px) scale(0.98)</code> 180ms <code>--fx-ease-in</code>,backdrop 同步 fade</td><td><span class="good">transform/opacity</span></td><td>需 fx.js 等 <code>transitionend</code> 再 <code>dialog.close()</code>(或 View Transitions 包一层)</td><td>立即关闭</td><td class="src">M3 退场 accelerate 模式</td></tr>
+  <tr><td>3</td><td><b>zoom-out</b> 反差入场</td><td>面板从 <code>scale(1.08)</code> 收缩落位(iOS 式 overlay 质感),250ms <code>--fx-ease-standard</code></td><td><span class="good">transform</span></td><td>纯 CSS</td><td>终态</td><td class="src">Apple HIG "transitions" 语义 + macOS sheet 惯例</td></tr>
+  <tr><td>4</td><td><b>backdrop blur 渐入</b></td><td><code>backdrop-filter: blur(0→8px) + brightness 0.6</code> 200ms</td><td><span class="wr">filter 合成器友好但大面积,showcase 标注实测帧率</span></td><td>纯 CSS</td><td>直接终态模糊</td><td class="src">M3 scrim + glass 惯例(uiverse/CodePen 常见配方)</td></tr>
+  <tr><td>5</td><td><b>danger tone 附加</b></td><td>danger 弹窗打开时面板一次 headShake 微幅横摆(x ±4px,3 次衰减)300-400ms,或红色 glow 一次脉冲;keyframes</td><td><span class="good">transform</span> / <span class="wr">box-shadow</span></td><td>纯 CSS</td><td>去动效留静态红边</td><td class="src">animate.css "attention seekers"(headShake)</td></tr>
+  <tr><td>6</td><td><b>View Transitions 共享元素</b>(可选高配)</td><td>触发按钮打 <code>view-transition-name</code>,<code>startViewTransition</code> 包 showModal,按钮→弹窗自动缩放飞行 250-300ms</td><td><span class="good">浏览器合成</span></td><td>需 fx.js 一行探测</td><td>不支持/RM: 普通打开</td><td class="src">chrome.dev view-transitions</td></tr>
+</table>
+
+<h3>D3 · 抽屉(6 条;共壳 12 变体,方向参数化:四方向 × 语义)</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>slide+fade</b>(主候选)</td><td>面板 <code>translateX/Y(±100%)→0</code> + opacity 300ms emphasized-decelerate 入 / <code>±100%</code> 200ms accelerate 出</td><td><span class="good">transform</span></td><td>纯 CSS(data-fx 挂 class)或 <code>@starting-style</code></td><td>无动效直接开合</td><td class="src">M3 applying-transitions(entrance/exit 模式)</td></tr>
+  <tr><td>2</td><td><b>shadow-ahead</b> 阴影先行</td><td>移动中面板投影从无到 <code>-20px 0 40px rgba(...)</code> 渐强,落位后收缩为常规阴影;与 slide 同步 300ms</td><td><span class="wr">paint(面积中等)</span></td><td>纯 CSS</td><td>常规静态阴影</td><td class="src">M3 "elevation 提示空间关系"模式(choreography)</td></tr>
+  <tr><td>3</td><td><b>backdrop 渐暗+blur</b></td><td>遮罩 rgba 0→0.5 + 可选 blur 4px,250ms 与面板同步</td><td><span class="good">opacity/filter</span></td><td>纯 CSS</td><td>静态半透明遮罩</td><td class="src">uiverse 弹层配方 + M3 scrim</td></tr>
+  <tr><td>4</td><td><b>push-content</b> 内容让位</td><td>主容器 <code>translateX(±drawer宽)</code> 300ms(与面板同曲线族,decouple 为对称 in-out);<span class="bad">若必须真推挤布局用 width,标注 layout</span></td><td><span class="good">transform</span>(替代方案 <span class="bad">layout</span>)</td><td>需 fx.js 或 CSS 变量同步宽度</td><td>直接切换</td><td class="src">M2 choreography "transform" 模式</td></tr>
+  <tr><td>5</td><td><b>spring-slip</b> 弹簧滑入(Chrome 高配)</td><td>入场改 <code>--fx-ease-spring</code>(linear() 函数)300-400ms,过冲 3-5px 再回落;降级链:先写 <code>cubic-bezier(0.34, 1.3, 0.64, 1)</code> 再写 linear() 覆盖</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>bezier 版或终态</td><td class="src">OpenProps <code>--ease-spring-*</code></td></tr>
+  <tr><td>6</td><td><b>parallax-layer</b> 视差微配</td><td>遮罩层位移/透明度变化滞后面板 50-80ms(编排延迟),层次感</td><td><span class="good">opacity</span></td><td>纯 CSS(第二动画 delay)</td><td>同步</td><td class="src">M2 choreography sequential 原则</td></tr>
+</table>
+
+<h3>D4 · torrent 表格行(6 条;选中/锚点/光标三态;高密度,禁全行 stagger)</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>cursor-hover 扫光</b></td><td>hover 行 <code>background-color</code> + <code>outline-color</code> 过渡 60-80ms(高频交互取下限,Apple HIG)</td><td><span class="wr">paint(行区域小、并行行少)</span></td><td>纯 CSS</td><td>保留 hover 底色(非动效信息,不降级)</td><td class="src">HIG "frequent interactions avoid motion" + 表格惯例</td></tr>
+  <tr><td>2</td><td><b>selected 边条生长</b></td><td>行首 <code>::before</code> 竖条 <code>scaleY(0)→1</code> 120ms <code>--fx-ease-standard</code> + 背景着色</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>无动画直接着色</td><td class="src">M3 navigation drawer active indicator 模式</td></tr>
+  <tr><td>3</td><td><b>anchor 锚点脉冲</b></td><td>定位行 background 一次 flash 脉冲 keyframes(600ms,2 次淡出)+ <code>scrollIntoView({behavior:'smooth'})</code>;滚动为合成</td><td><span class="wr">paint(单行,可接受)</span></td><td>需 fx.js 触发 scrollIntoView + 一次性 class</td><td><code>behavior:'auto'</code> 瞬时定位 + 去脉冲(保留静态高亮)</td><td class="src">浏览器 find-in-page 高亮惯例 + animate.css flash 家族</td></tr>
+  <tr><td>4</td><td><b>row-insert 新行浮现</b></td><td>刷新插入的新行 <code>opacity 0→1 + translateY(-4px)</code> 150ms,<b>单行独立、无 stagger</b></td><td><span class="good">transform/opacity</span></td><td>纯 CSS(插入时 class)或 View Transitions(行 group 交叉过渡)</td><td>无动效</td><td class="src">本计划约束(禁 stagger)+ M3 medium 短端</td></tr>
+  <tr><td>5</td><td><b>row-remove 行退场</b></td><td>内容 opacity→0 + <code>scaleY(0.95)</code> / max-height 收拢二选一(max-height 版 <span class="bad">layout</span> 警示;纯 transform 版有下方行瞬跳问题,showcase 对照给出);150-200ms accelerate</td><td><span class="good">transform/opacity</span> 或 <span class="bad">layout</span></td><td>JS 需监听结束再真删</td><td>立即删除</td><td class="src">animate.css fadeOut 家族 + M3 退场模式</td></tr>
+  <tr><td>6</td><td><b>checkbox 快勾</b></td><td>行内勾选框 <code>scale(0.6)→1</code> 过冲 120ms + 打勾 stroke-dashoffset 划线(SVG)</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>直切</td><td class="src">animate.css bounceIn 微缩版(uiverse checkbox demo 常见)</td></tr>
+</table>
+
+<h3>D5 · 输入框 focus 态(5 条)</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>下划线生长</b></td><td>底边 <code>::after scaleX(0)→1</code>,<code>transform-origin: left</code>,100-150ms;<code>:focus-within</code> 触发</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>focus 时直接显示静态下划线</td><td class="src">M2/M3 text field active indicator</td></tr>
+  <tr><td>2</td><td><b>ring 辉光圈</b></td><td>focus <code>box-shadow: 0 0 0 3px color-mix(accent 30%)</code> 100ms 展开</td><td><span class="wr">paint(小面积)</span></td><td>纯 CSS</td><td>保留静态 ring(焦点可见性是可访问性必需,不降级)</td><td class="src">Tailwind/uiverse focus ring 惯例</td></tr>
+  <tr><td>3</td><td><b>floating label</b> 浮标签</td><td>label <code>translateY + scale(0.75)</code> 150ms 上浮</td><td><span class="good">transform</span></td><td>纯 CSS(<code>:placeholder-shown</code> 技巧)或 fx.js</td><td>直接切换位置</td><td class="src">M3 filled text field 官方交互</td></tr>
+  <tr><td>4</td><td><b>底色微亮</b></td><td>focus 时 <code>background-color</code> 从 input 底色过渡到 <code>color-mix(accent 6%)</code> 120ms</td><td><span class="wr">paint(小面积)</span></td><td>纯 CSS</td><td>保留</td><td class="src">uiverse.io/elements 输入框集</td></tr>
+  <tr><td>5</td><td><b>shake-invalid</b> 校验失败微震</td><td>blur 校验失败时 <code>translateX</code> ±3px 摆动 3 次 300ms + 边框转 danger 色;<code>:user-invalid</code> 伪类 Chrome 119+ 支持差,实测后定</td><td><span class="good">transform</span></td><td>需 fx.js 判定或 <code>:user-invalid</code></td><td>只变色不震动</td><td class="src">Apple HIG 反馈语义 + animate.css headShake</td></tr>
+</table>
+
+<h3>D6 · toast / 通知(5 条)</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>slide+fade 入退场对</b></td><td>从顶部/底部边缘 <code>translateY(∓16px)</code> + opacity 0→1 250ms <code>--fx-ease-out</code> 入,反向 180ms <code>--fx-ease-in</code> 出</td><td><span class="good">transform/opacity</span></td><td>入场纯 CSS(<code>@starting-style</code>),退场 fx.js 加 class 后 <code>transitionend</code> 移除</td><td>直接显示/移除</td><td class="src">M3 snackbar 模式 + animate.css fadeInUp/Down 命名</td></tr>
+  <tr><td>2</td><td><b>倒计时进度条</b></td><td>底缘细条 <code>scaleX(1→0)</code> linear、时长 = 展示时长(fx.js 把秒数写进 CSS 变量,与自动关闭同一状态源,幂等)</td><td><span class="good">transform</span></td><td>需 fx.js</td><td>静态无进度条(信息冗余:文本仍在)</td><td class="src">M3 snackbar 计时惯例(uiverse toast 常见配方)</td></tr>
+  <tr><td>3</td><td><b>队列重排 FLIP</b></td><td>新 toast 推入时旧 toast 用 View Transitions 或手写 FLIP(fx.js 记录 old rect→transform 反演→过渡回位)200ms</td><td><span class="good">transform</span></td><td>需 fx.js</td><td>瞬时重排</td><td class="src">chrome.dev view-transitions(元素重排场景)+ FLIP 惯例(aerotwist.com)</td></tr>
+  <tr><td>4</td><td><b>icon spring 弹入</b></td><td>tone 图标 <code>scale(0.5)→1</code> 用 <code>--fx-ease-spring</code> 300ms(Chrome linear(),bezier 降级)</td><td><span class="good">transform</span></td><td>纯 CSS</td><td>直切</td><td class="src">OpenProps spring 家族</td></tr>
+  <tr><td>5</td><td><b>danger glow 边缘脉冲</b></td><td>error toast 出现时边框一次 glow 脉冲 keyframes 400ms(仅一次,不循环)</td><td><span class="wr">paint(小面积)</span></td><td>纯 CSS</td><td>静态红边</td><td class="src">animate.css attention seekers(flash 一次化改造)</td></tr>
+</table>
+
+<h3>D7 · 页签切换(5 条;groups/torrents/shows/settings)</h3>
+<table>
+  <tr><th>#</th><th>变体</th><th>动效与参数</th><th>属性层</th><th>JS</th><th>RM 降级</th><th>来源</th></tr>
+  <tr><td>1</td><td><b>指示器滑移</b>(animated indicator)</td><td>活动页签下条 <code>translateX()+scaleX()</code> 从旧位滑到新位 200-250ms <code>--fx-ease-out</code></td><td><span class="good">transform</span></td><td>需 fx.js 量旧/新 rect(或 View Transitions 让浏览器做 FLIP)</td><td>瞬移</td><td class="src">M2/M3 tabs "animated indicator"</td></tr>
+  <tr><td>2</td><td><b>内容 cross-fade</b></td><td>旧面板 opacity→0 100ms,新面板 0→1 150ms(总 ≤250ms)</td><td><span class="good">opacity</span></td><td>纯 CSS(切换 class)或 View Transitions 默认交叉淡化</td><td>直切</td><td class="src">M3 transitions + chrome.dev view-transitions 默认行为</td></tr>
+  <tr><td>3</td><td><b>View Transitions 全接管</b>(推荐主候选)</td><td><code>startViewTransition(() => swapTab())</code>,old/new 面板伪元素自定义 keyframes(emphasized 曲线),指示器元素打共享 <code>view-transition-name</code> 自动 FLIP;250-300ms</td><td><span class="good">浏览器合成</span></td><td>需 fx.js 一行探测</td><td>不支持/RM: 直切</td><td class="src">chrome.dev view-transitions + css-tricks 实践</td></tr>
+  <tr><td>4</td><td><b>方向感知滑动</b></td><td>fx.js 判断目标页签相对位置,<code>data-fx-dir="left|right"</code> 决定新内容 <code>translateX(±12px)</code> 入场方向(轻位移+fade,不做全宽 slide),200ms</td><td><span class="good">transform</span></td><td>需 fx.js 判方向</td><td>fade 或直切</td><td class="src">M2 choreography 空间关系原则(iOS segmented 惯例)</td></tr>
+  <tr><td>5</td><td><b>页签文本+指示器同编队</b></td><td>活动文本 <code>scale(1.02)</code> 微强调与指示器滑移同曲线同起点(对称编排),120ms</td><td><span class="good">transform</span></td><td>纯 CSS(配合 #1)</td><td>无</td><td class="src">M2 choreography "symmetric transition"</td></tr>
+</table>
+
+<h2><span class="no">§06</span>对 fx 库设计的 5 条影响结论</h2>
+<ol>
+  <li><b>入/退非对称「骨对」作为一等公民</b>:入场 decelerate + 长(200-300ms),退场 accelerate + 短(150-200ms),成对定义、不成对独立调参(M3 官方例:dialog 400ms 入 / 200ms 出)。</li>
+  <li><b>linear() 弹簧降级链</b>:OpenProps 的 <code>linear()</code> spring/bounce 家族让零依赖库拥有纯 CSS 物理弹性(Chrome 113+),降级链 = cubic-bezier 近似在前、<code>linear()</code> 覆盖在后——契合计划 D5「Chrome/Edge 全特性、其余降级」决策。</li>
+  <li><b>View Transitions + @starting-style 瘦身 fx.js</b>:这两个 Chrome 特性覆盖了「编排」与「display:none 进出场」两大原需 JS 的场景,fx.js 可瘦身为:挂载器 + 重触发跳终态 + 少量 rect 测量。</li>
+  <li><b>stagger 边界规范背书</b>:适用边界以 MD2 choreography 为准——少量表面级联 OK(≤8 个,步进 20-50ms),高密度行禁(项目已有硬约束,与规范一致,showcase 可放心标注)。</li>
+  <li><b>HIG 礼仪进文档段</b>:Apple HIG 补的维度是「语义与礼仪」——高频交互不加动效、动效可取消、关键信息非动效冗余;建议进 fx 库 README 段与 showcase 标注体系。</li>
+</ol>
+
+<h2><span class="no">§07</span>方法与局限</h2>
+<ul>
+  <li><b>方法</b>:纯桌面调研,不开浏览器实测。MD3 easing/duration 页为 Angular SPA,数值经搜索摘要交叉核对;Apple HIG 走 <code>.md</code> 端点直取全文;OpenProps 直接读 <code>src/easing.css</code> 源码;其余按官方文档与 demo 集逐条提炼,逐条标注出处 URL(全文见附件笔记)。</li>
+  <li><b>候选数</b>:7 组 P0 组件 × 每组件 5-6 条 = 39 条,满足计划 S1 DoD「每组件 ≥3 变体」。</li>
+  <li><b>与计划软约束的出入(已标注不淘汰)</b>:D1 glow(100-150ms)、D1 sheen(400-500ms)、D1 icon 附加(80-120ms)超出「hover ≤100ms」软约束目标;附件笔记头部「时长均 ≤ 项目上限」一句与上述三条不符,以 §05 表格内标注为准——按计划「候选拗不淘汰、只标注」口径保留,由 showcase 用户筛选时裁决。D2 backdrop blur、D3 shadow-ahead 属大面积 filter/paint,showcase 需实测帧率后定。</li>
+  <li><b>未覆盖</b>:所有曲线数值与时长档位未经真机渲染验证;Chrome 特性(<code>linear()</code>、View Transitions、<code>@starting-style</code>、<code>:user-invalid</code>)的版本边界以文档记载为准,showcase 阶段需实测;<code>:user-invalid</code> 支持度存疑已在 D5 标注「实测后定」。scroll-driven animations 仅登记为 P1 工具,未展开。</li>
+</ul>
+
+</div>
+</body>
+</html>
