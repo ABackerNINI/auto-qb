@@ -112,6 +112,44 @@ class StatusVocabularyError(ValueError):
     """
 
 
+# --------------------------------------------------------------------------- CLOSED_KEEP 出口
+# (计划 memory-bank/plans/26-10-31-0534-plan-kb-cleanup-tiers.html R3/D5/D14: tasks/ 与 plans/
+# 补齐 issues/ 已有的那条防线 —— 主索引的**已完结**分区只渲染最近 N 条, 全量清单另落归档索引。)
+
+# 主索引的已完结分区只保留最近 `CLOSED_KEEP` 条(控 index-auto cap): 档案/制品**原地不动**,
+# 只是不出主索引 —— 索引大小由常量钉住, 不再随完结条目数线性涨(issues 侧 2026-10-11 实测:
+# 243 条时无摘要口径已达 cap 108%, 砍摘要救不回来, 搬文件又打坏 `**Refs:**` 认领链)。
+# 语义与 create-issue 的 `gen_issues_index.CLOSED_KEEP` 同值同款(60); 跨 skill 不 import
+# (单点纪律, 见 gen_all._load_isolated) —— 两边各有一份常量, 由守阵
+# test_closed_keep_constants_match_issues 等值钉住, 不许漂移。
+CLOSED_KEEP = 60
+
+# 归档清单文件名: 故意**不叫 `_index.md`** —— 那会被 role_of 套成 index-auto(25,200 cap),
+# 全量清单必然超(计划 §07 风险表); `_archive.md` 不在任何 cap 扫描面。
+ARCHIVE_NAME = "_archive.md"
+
+# 归档清单相对所在目录的落点(与 create-issue 的 gen_issues_index.ARCHIVE_REL 同值)。
+# `<dir>/attachments/` 在 EXCLUDED_DIRS, 不计 cap。
+ARCHIVE_REL = f"attachments/{ARCHIVE_NAME}"
+
+
+def keep_closed_window(ordered: list, status: str, terminal: frozenset, keep: int = CLOSED_KEEP) -> tuple[list, int]:
+    """CLOSED_KEEP 出口的裁剪单点(gen_tasks_index / gen_docs_index 共用, 不各写一遍)。
+
+    `ordered` 须已按时间**倒序**(各生成器自己的排序键); 已完结状态(`status` ∈ `terminal`)
+    只保留最近 `keep` 条, 返回 (保留条目, 隐藏条数)。在办状态不受影响 —— 条数再多也原样返回。
+    """
+    if status not in terminal or len(ordered) <= keep:
+        return ordered, 0
+    return ordered[:keep], len(ordered) - keep
+
+
+def closed_hidden_note(hidden: int, dir_name: str, noun: str) -> str:
+    """主索引里「更早 N 条已出本索引」提示行 —— 形态与 gen_issues_index.render 同款。"""
+    return (f"> 更早的 **{hidden}** 条已出本索引 —— {noun}仍在 `{dir_name}/` 目录(未搬动), "
+            f"全量清单见 [{ARCHIVE_REL}]({ARCHIVE_REL}).")
+
+
 # --------------------------------------------------------------------------- 结构枚举
 
 # pitfalls 的类枚举。**扩类须三处同步**: 本常量 / 新建 `<class>/_about.md` / memory-bank/README.md 细路由。
@@ -160,6 +198,10 @@ def match_domain(topic: str) -> str | None:
 # 任务档案 4 词表 —— **单点**: `gen_tasks_index` 与 `check_doc_templates` 都 import 这里。
 # ⚠ 与 HTML 制品的 5 词表 (`DOC_STATUSES`) **不同**, 别互相套用 (doc-forms 状态词节同款警告)。
 TASK_STATUSES = ("In Progress", "Open", "Done", "Dropped")
+
+# 任务档案的完结态 (`TASK_STATUSES` 子集): gen_tasks_index 的 CLOSED_KEEP 出口用 ——
+# 与 `TERMINAL_DOC_STATUSES` 分开定义, 因为 4 词表里没有 `Superseded`, 别拿 5 词表硬套。
+TERMINAL_TASK_STATUSES = frozenset({"Done", "Dropped"})
 
 # 命名正则 (单点: `new_doc` 建件 / `check_doc_templates` 判新增面都 import 这里, 不手抄)。
 # ⚠ 切片用的 `SLICE_FILE_RE` 已在上方 (带时分避撞名); 档案用 `TASK_FILE_RE` (不带时分、
@@ -464,6 +506,8 @@ def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
     同一实现; 空串 (切片族无索引) → 空表。索引文件一律 LF (`newline="\\n"`, 同生成器口径)。
     `gen_kb_index` 走全量 build_all (坑档/进展件入索引; 与 `commands run kb.index` 同一实现,
     确定性幂等) —— 不是"只重建受影响目录", 集合单点不按调用点分裂。
+    tasks/plans 的归档索引 (`attachments/_archive.md`, CLOSED_KEEP 出口) 与主索引**同批**写,
+    缺了它 `gen_all --check` 恒红 —— 同 `gen_issues_index` 的同批纪律。
     """
     if not script:
         return []
@@ -475,11 +519,21 @@ def rebuild_index(root: Path, mb: Path, script: str) -> list[Path]:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding="utf-8", newline="\n")
             written.append(path)
+        # 归档索引与主索引**同批**生成 (CLOSED_KEEP 出口; 缺它 gen_all --check 恒红)。
+        for path, text in module.build_archives(root, mb).items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8", newline="\n")
+            written.append(path)
     elif script == "gen_tasks_index":
         path = mb / "tasks" / "_index.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(module.build(root, mb), encoding="utf-8", newline="\n")
         written.append(path)
+        # 归档索引与主索引**同批**生成 (CLOSED_KEEP 出口; 缺它 gen_all --check 恒红)。
+        archive = mb / "tasks" / ARCHIVE_REL
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        archive.write_text(module.build_archive(root, mb), encoding="utf-8", newline="\n")
+        written.append(archive)
     elif script == "gen_kb_index":
         for path, text in module.build_all(root, mb).items():
             path.parent.mkdir(parents=True, exist_ok=True)

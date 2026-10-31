@@ -16,10 +16,11 @@ warn 而不是 problem —— 守住"降级后的严重度仍然正确", 而不�
 
 ## 测试计划
 
-- test_tasks_index_and_files_are_bijective: `_index.md` 登记的键与 `tasks/*.md` 文件双向一致
+- test_tasks_index_and_files_are_bijective: 索引登记与档案一致(CLOSED_KEEP 语义) —— 登记键必有档案、**在办必登记**; 完结件允许超出 60 条窗口不出主索引(全量在归档)
 - test_slug_is_unique_ignoring_date_prefix: 去掉日期 / 编号前缀后 slug 唯一 + 索引同键只登记一次 (防并行分支同专题两份档案)
 - test_task_file_naming_and_sections: 文件名符合 `YY-MM-DD-<slug>.md`(兼容旧 `TASKnnn-<slug>.md`), 且五个必备章节齐全
-- test_task_status_matches_index_section: 档案 `**Status:**` 与索引所在分区一致
+- test_task_status_matches_index_section: 档案 `**Status:**` 与索引所在分区一致(被 CLOSED_KEEP 隐藏的完结件跳过)
+- test_tasks_archive_covers_all_files: 归档索引是全量 —— 每份档案(含被主索引隐藏的)都能在 `tasks/attachments/_archive.md` 查到
 - test_index_has_all_status_sections: 索引保留四个状态分区标题
 - test_index_is_regenerated: `_index.md` == memory-bank skill 的 `gen_tasks_index.py` 生成结果
 - test_active_context_has_no_rolled_up_session_log: 流水账只许住在 `activeContext/` 切片里, `activeContext.md` 本体不得出现 `^- 2026-` 行
@@ -156,6 +157,16 @@ kb.tier 分级清理四动作 (2026-10-31 R0, 计划 26-10-31-0534; 实现在 me
 - test_gen_all_list_matches_outputs: `--list` 声明的路径集合 == collect() 实际产出 (白名单不得多/少)
 - test_generated_indexes_are_lf_only: 生成物字节里无 CR —— 生成器 `write_text` 显式 `newline="\n"`, 防 Windows 上按 os.linesep 落成 CRLF 的"纯行尾噪音"
 - test_gen_cmd_hints_name_real_tasks: 生成物的"怎么重建"提示必须指向真能重建它的命令(`gen_cmd` 按脚本查表 + `kb.index` 覆盖面 ⊇ 闸门判红的生成物集合, 经 gen_all.py 单点收编后按声明核对; 2026-09-24 `_doc-map.md` 报错文案指错命令的机检)
+
+CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tasks 主索引的已完结区只留
+最近 60 条, 全量清单另落 `tasks/attachments/_archive.md`, 形态与 issues 侧同款; plans 侧守阵在 test_docs_forms.py):
+
+- test_closed_keep_trims_done_to_60_and_archives_full: Done 62 件 -> 主索引只留最近 60 条 + 隐藏提示; 归档全量(只列 slug 与标题, 不带摘要防链接位移)、链接带 ../ 指回原文; 在办分区不受影响
+- test_closed_keep_boundary_at_60: 第 60/61 条边界 —— 恰 60 条不裁无提示, 第 61 条起裁 1 条出提示
+- test_closed_keep_never_trims_inflight_and_dropped_also_trims: 在办条数再多不裁(只治完结堆积); Dropped 同属完结区一并裁
+- test_closed_keep_archive_same_batch_wiring: rebuild_index(kb.status/kb.bump 落点)主索引与归档同批落盘; 归档落 `tasks/attachments/_archive.md` 且故意不叫 `_index.md`(不套 index-auto cap)
+- test_closed_keep_constants_match_issues: 跨 skill 常量等值钉住 —— memory-bank 侧 CLOSED_KEEP/ARCHIVE_REL/完结状态集与 create-issue 的 gen_issues_index 同值同语义(跨 skill 不 import, 防两套实现漂移)
+- test_issues_closed_keep_behavior_unchanged: issues/ 零行为变化回归 —— 61 件 Done issue 主索引留 60 + 提示、归档全量(把改造前行为钉下来)
 """
 
 from __future__ import annotations
@@ -177,7 +188,11 @@ STATUSES = ("In Progress", "Open", "Done", "Dropped")
 REQUIRED_SECTIONS = ("## 原始请求", "## 思考过程与决策", "## 实现计划", "## 子任务状态表", "## 进度日志")
 
 # 非 `_index.md` 的生成物 —— 新增一个必须显式登记(详见 test_gen_all_declares_exactly_all_indexes)
-EXTRA_GENERATED = ("memory-bank/issues/attachments/_archive.md", )
+EXTRA_GENERATED = (
+    "memory-bank/issues/attachments/_archive.md",
+    "memory-bank/tasks/attachments/_archive.md",
+    "memory-bank/plans/attachments/_archive.md",
+)
 
 DATE_PREFIX_RE = re.compile(r"^\d{2}-\d{2}-\d{2}-")
 LEGACY_PREFIX_RE = re.compile(r"^TASK\d{3}-")
@@ -210,11 +225,30 @@ def _indexed_sections() -> dict[str, str]:
 
 
 def test_tasks_index_and_files_are_bijective() -> None:
+    """索引登记与档案文件的一致性 (CLOSED_KEEP 语义, 计划 26-10-31-0534 R3):
+
+    - 索引登记的每个键都必须有档案(不许登记悬空);
+    - 每份**在办**档案(In Progress / Open)必须登记在索引 —— CLOSED_KEEP 出口只许隐藏完结件,
+      在办永远可见(在办面是索引的常驻价值);
+    - 完结件(Done / Dropped)允许因超出 `CLOSED_KEEP` 窗口不出主索引 —— 全量清单在
+      `tasks/attachments/_archive.md`(test_tasks_archive_covers_all_files 兜底)。
+    """
     indexed = set(_indexed_sections())
     on_disk = {path.stem for path in _task_files()}
 
-    assert indexed == on_disk, (f"索引与档案文件不一致: 仅索引登记={sorted(indexed - on_disk)}, "
-                                f"仅有文件={sorted(on_disk - indexed)}")
+    dangling = indexed - on_disk
+    assert not dangling, f"索引登记了不存在的档案: {sorted(dangling)}"
+
+    in_flight_missing = {}
+    for path in _task_files():
+        if path.stem in indexed:
+            continue
+        match = STATUS_RE.search(path.read_text(encoding="utf-8"))
+        status = match.group(1) if match else "Open"
+        if status not in ("Done", "Dropped"):
+            in_flight_missing[path.name] = status
+    assert not in_flight_missing, (f"在办档案必须登记进索引(CLOSED_KEEP 只许隐藏完结件): "
+                                   f"{in_flight_missing}")
 
 
 def test_slug_is_unique_ignoring_date_prefix() -> None:
@@ -250,14 +284,28 @@ def test_task_file_naming_and_sections() -> None:
 
 
 def test_task_status_matches_index_section() -> None:
+    """档案 `**Status:**` 与索引所在分区一致 (CLOSED_KEEP 语义: 被出口隐藏的完结件跳过 ——
+    「哪些件允许不在索引」由 test_tasks_index_and_files_are_bijective 判, 这里只管登记了的)。"""
     sections = _indexed_sections()
     for path in _task_files():
+        if path.stem not in sections:
+            continue
         match = STATUS_RE.search(path.read_text(encoding="utf-8"))
         assert match, f"{path.name} 缺少 `**Status:**`"
         assert sections[
             path.stem
         ] == match.group(1), (f"{path.name} 档案 Status={match.group(1)} 与索引分区 "
                               f"`## {sections[path.stem]}` 不一致")
+
+
+def test_tasks_archive_covers_all_files() -> None:
+    """归档索引是**全量**: 每份档案(含被主索引隐藏的完结件)都必须能在
+    `tasks/attachments/_archive.md` 里查到 —— 出口"不丢历史"的底线。"""
+    archive = TASKS / "attachments" / "_archive.md"
+    assert archive.is_file(), "缺 tasks/attachments/_archive.md (跑 `commands run kb.index` 生成)"
+    text = archive.read_text(encoding="utf-8")
+    absent = [path.name for path in _task_files() if path.stem not in text]
+    assert not absent, f"归档清单缺这些档案: {absent}"
 
 
 def test_index_has_all_status_sections() -> None:
@@ -2547,3 +2595,185 @@ def test_kb_tier_is_registered() -> None:
     assert "kb_tier.py" in body.group(1), "kb.tier 的 run 必须指到 kb_tier.py"
     assert 'when    = "' in body.group(1), "kb.tier 缺 when (收录协议必填)"
     assert 'note    = "' in body.group(1), "kb.tier 缺 note (收录协议必填)"
+
+
+# --------------------------------------------------------------------------- CLOSED_KEEP 出口
+# (计划 memory-bank/plans/26-10-31-0534-plan-kb-cleanup-tiers.html R3/D5/D14: tasks 主索引的
+# 已完结区只保留最近 `CLOSED_KEEP` 条, 全量清单另落 `tasks/attachments/_archive.md` ——
+# 形态与 issues 侧 gen_issues_index 同款; plans 侧守阵在 tests/test_docs_forms.py。)
+
+
+def _closed_keep_module():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import gen_tasks_index
+
+    return gen_tasks_index
+
+
+def _closed_keep_fixture(tmp_path: Path, done: int = 0, dropped: int = 0, inflight: int = 0) -> tuple[Path, Path]:
+    """CLOSED_KEEP 夹具: `done` 件 Done + `dropped` 件 Dropped + `inflight` 件 In Progress。
+
+    排序键 `**Updated:**` 从 2001-01-01 起逐件递增一天 —— "最近 60 条"才有唯一答案;
+    001 号的摘要超长(> SUMMARY_MAX), "主索引截断 / 归档不截断"的对照正好用它。
+    """
+    from datetime import date, timedelta
+
+    mb = tmp_path / "memory-bank"
+    (mb / "tasks").mkdir(parents=True)
+    n = 0
+    for status, count in (("Done", done), ("Dropped", dropped), ("In Progress", inflight)):
+        for _ in range(count):
+            n += 1
+            slug = f"26-01-01-test-closed-keep-{n:03d}"
+            day = (date(2001, 1, 1) + timedelta(days=n - 1)).isoformat()
+            summary = f"档案 {n:03d} 摘要" + ("x" * 80 if n == 1 else "")
+            (mb / "tasks" / f"{slug}.md").write_text(
+                f"# {slug} - CLOSED_KEEP 档案 {n:03d}\n\n"
+                f"**Status:** {status}\n"
+                f"**Added:** {day}\n"
+                f"**Updated:** {day}\n"
+                f"**Summary:** {summary}\n"
+                f"**Topics:** closed-keep-{n:03d}\n",
+                encoding="utf-8",
+                newline="\n",
+            )
+    return tmp_path, mb
+
+
+def _index_section(text: str, status: str) -> str:
+    """切出主索引单一状态分区的正文(到下一个 `## ` 或文件尾)。"""
+    m = re.search(rf"^## {re.escape(status)}\n\n(.*?)(?=^## |\Z)", text, re.S | re.M)
+    assert m, f"索引缺状态分区 `## {status}`"
+    return m.group(1)
+
+
+def _entry_lines(section: str) -> list[str]:
+    return [line for line in section.splitlines() if line.startswith("- ")]
+
+
+def test_closed_keep_trims_done_to_60_and_archives_full(tmp_path: Path) -> None:
+    """阈值语义: Done 62 件 -> 主索引只留**最近 60** 条 + 一行隐藏提示; 归档是全量(只列 slug 与标题)。
+
+    档案原地不动(出口只治索引视图) —— 夹具文件一个不搬, 由"归档里每件都能反查"间接守住。
+    """
+    gen = _closed_keep_module()
+    root, mb = _closed_keep_fixture(tmp_path, done=62, inflight=2)
+
+    rendered = gen.build(root, mb)
+    done_section = _index_section(rendered, "Done")
+    assert len(_entry_lines(done_section)) == 60, "Done 区只保留最近 60 条"
+    assert "closed-keep-062" in done_section and "closed-keep-061" in done_section, "最近两件必须在"
+    assert "closed-keep-001" not in done_section and "closed-keep-002" not in done_section, "最老两件出索引"
+    assert "> 更早的 **2** 条已出本索引" in done_section, "隐藏提示行(形态同 issues 侧)"
+    assert "x" * 80 not in rendered, "主索引摘要按 SUMMARY_MAX 截断"
+
+    inflight_section = _index_section(rendered, "In Progress")
+    assert "closed-keep-063" in inflight_section and "closed-keep-064" in inflight_section, "在办不受影响"
+
+    archive = gen.build_archive(root, mb)
+    assert "closed-keep-001" in archive and "closed-keep-062" in archive, "归档是全量(被主索引隐藏的件也在)"
+    assert "x" * 80 not in archive, "归档行不带摘要 —— Summary 里可能带相对 tasks/ 的链接, 搬进 attachments 会位移成坏链"
+    assert "](../26-01-01-test-closed-keep-001.md)" in archive, "归档链接带 ../ 指回档案原文"
+
+
+def test_closed_keep_boundary_at_60(tmp_path: Path) -> None:
+    """第 60/61 条边界: 恰 60 条不裁、无提示; 第 61 条起裁 1 条并出提示 —— 跟 issues 侧同一口径。"""
+    gen = _closed_keep_module()
+
+    root, mb = _closed_keep_fixture(tmp_path, done=60)
+    rendered = gen.build(root, mb)
+    assert len(_entry_lines(_index_section(rendered, "Done"))) == 60
+    assert "更早的" not in rendered, "恰在阈值内不得出现隐藏提示"
+
+    root, mb = _closed_keep_fixture(tmp_path / "second", done=61)
+    rendered = gen.build(root, mb)
+    assert len(_entry_lines(_index_section(rendered, "Done"))) == 60
+    assert "> 更早的 **1** 条已出本索引" in _index_section(rendered, "Done")
+
+
+def test_closed_keep_never_trims_inflight_and_dropped_also_trims(tmp_path: Path) -> None:
+    """状态过滤: 在办(In Progress / Open)条数再多也不裁 —— 出口只治完结堆积; Dropped 同属完结区一并裁。"""
+    gen = _closed_keep_module()
+    root, mb = _closed_keep_fixture(tmp_path, done=61, dropped=61, inflight=65)
+
+    rendered = gen.build(root, mb)
+    inflight = _index_section(rendered, "In Progress")
+    assert len(_entry_lines(inflight)) == 65, "在办条目不受 CLOSED_KEEP 影响"
+    assert "更早的" not in inflight, "在办区不得出现隐藏提示"
+    for status in ("Done", "Dropped"):
+        section = _index_section(rendered, status)
+        assert len(_entry_lines(section)) == 60, f"{status} 区裁到 60"
+        assert "> 更早的 **1** 条已出本索引" in section
+
+
+def test_closed_keep_archive_same_batch_wiring(tmp_path: Path) -> None:
+    """归档清单与主索引**同批**落盘: `rebuild_index`(kb.status / kb.bump 的落点)两份都写 ——
+    缺了归档, `gen_all --check` / 生成器自身 `--check` 恒红(同 gen_issues_index 的同批纪律)。"""
+    gen = _closed_keep_module()
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    root, mb = _closed_keep_fixture(tmp_path, done=61)
+    written = _common.rebuild_index(root, mb, "gen_tasks_index")
+    assert {p.relative_to(mb).as_posix() for p in written} == {"tasks/_index.md", "tasks/attachments/_archive.md"}
+    archive = mb / "tasks" / "attachments" / "_archive.md"
+    assert archive.is_file(), "归档清单落 `tasks/attachments/`"
+    assert archive.read_text(encoding="utf-8") == gen.build_archive(root, mb)
+    # 命名与落点(计划 §07): 故意不叫 `_index.md` —— 那会被 role_of 套 index-auto 的 25,200 cap
+    assert _common.ARCHIVE_NAME == "_archive.md" and not _common.ARCHIVE_NAME.endswith("_index.md")
+    assert _common.ARCHIVE_REL == "attachments/_archive.md"
+    assert gen.ARCHIVE_REL is _common.ARCHIVE_REL, "生成器用 `_common` 单点, 不另抄一份"
+
+
+def test_closed_keep_constants_match_issues() -> None:
+    """跨 skill 常量等值钉住: memory-bank 侧与 create-issue 的 gen_issues_index 同值同语义。
+
+    跨 skill 不 import(单点纪律, 见 gen_all._load_isolated) —— 两边各有一份常量,
+    漂移由本守阵拦住: 60 与归档落点任一侧改动, 这里立刻红。
+    """
+    gen_all = _gen_all()
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import _common
+
+    ci_scripts = gen_all.find_skill_dir("create-issue", ROOT) / "scripts"
+    assert ci_scripts.is_dir(), "定位不到 create-issue skill"
+    issues_gen = gen_all._load_isolated(ci_scripts / "gen_issues_index.py", "_gen_issues_index_pin")
+    assert _common.CLOSED_KEEP == issues_gen.CLOSED_KEEP == 60, "两侧 CLOSED_KEEP 必须同值(D14: 同一套常量语义)"
+    assert _common.ARCHIVE_REL == issues_gen.ARCHIVE_REL == "attachments/_archive.md"
+    # 完结状态同一语义: issues 的 CLOSED_STATUSES == 制品 5 词表的完结子集
+    assert tuple(sorted(_common.TERMINAL_DOC_STATUSES)) == issues_gen.CLOSED_STATUSES
+
+
+def test_issues_closed_keep_behavior_unchanged(tmp_path: Path) -> None:
+    """issues/ 零行为变化回归: 61 件 Done issue -> 主索引只留最近 60 条 + 提示, 归档全量。
+
+    本轮没改 gen_issues_index.py 一行 —— 这条守阵把"改造前"的行为钉下来, 防将来重构漂移。
+    """
+    gen_all = _gen_all()
+    ci_scripts = gen_all.find_skill_dir("create-issue", ROOT) / "scripts"
+    issues_gen = gen_all._load_isolated(ci_scripts / "gen_issues_index.py", "_gen_issues_index_reg")
+    issues = tmp_path / "issues"
+    issues.mkdir()
+    for n in range(1, 62):
+        stamp = f"26-01-{n:02d}-0001"
+        (issues / f"{stamp}-bug-closed-keep-{n:03d}.html").write_text(
+            '<html><head>\n'
+            f'<meta name="issue-status" content="Done">\n'
+            f'<meta name="issue-stamp" content="{stamp}">\n'
+            f'<meta name="issue-title" content="CLOSED_KEEP issue {n:03d}">\n'
+            f'<meta name="issue-summary" content="issue {n:03d} 摘要">\n'
+            '</head><body>x</body></html>\n',
+            encoding="utf-8",
+            newline="\n",
+        )
+    items = issues_gen.collect(issues)
+    rendered = issues_gen.render(items, issues, tmp_path)
+    done_section = _index_section(rendered, "Done")
+    assert len(_entry_lines(done_section)) == 60, "issues 主索引 Done 区留最近 60 条"
+    assert "> 更早的 **1** 条已出本索引" in done_section
+    assert "closed-keep-001" not in done_section and "closed-keep-061" in done_section
+    archive = issues_gen.render_archive(items, issues, tmp_path)
+    assert "closed-keep-001" in archive and "closed-keep-061" in archive, "issues 归档仍是全量"

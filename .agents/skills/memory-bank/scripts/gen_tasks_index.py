@@ -25,7 +25,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from _common import TASK_STATUSES as STATUSES, find_root, gen_cmd, resolve_mb_dir  # noqa: E402
+from _common import (  # noqa: E402
+    ARCHIVE_REL, CLOSED_KEEP, TASK_STATUSES as STATUSES, TERMINAL_TASK_STATUSES,
+    closed_hidden_note, find_root, gen_cmd, keep_closed_window, resolve_mb_dir,
+)
 
 # 4 词表单点 = `_common.TASK_STATUSES` (2026-10-17 P1 收敛: 原先本地定义, `kb.new` / 检查器
 # 要同源校验档案状态行, 两处定义必然漂移)。
@@ -50,17 +53,25 @@ EMPTY_HINT = {
 # 口径 14,427(57%)仍 < cap ⇒ 仍是摘要顶爆, 继续压截断(压到 30 → 20,190, 余量 5,010 ≈ 还能容纳
 # ~40 个新档案)。⚠ 无摘要占比已从 48% 升到 57%, 条目数本身成为病根只是时间问题 —— 届时
 # 走 issues 侧同款出口(已完结档案只渲染最近 N 条 + 归档索引), 别条件反射抬 cap。
+# 2026-10-31 —— 后备出口兑现 (计划 26-10-31-0534 R3): 档案涨到 272(Done 250)索引 28,868 已越
+# cap(25,200), 无摘要口径 15,603(62%) ⇒ 摘要砍到 0 都救不回来, 病根确证是条目数本身。
+# 正解与 issues 侧同款: Done / Dropped 区只渲染最近 `CLOSED_KEEP` 条, 全量清单另落
+# `tasks/attachments/_archive.md`(不计 cap)。实测: 保留 60 条 + 在办 22 条 → 主索引 9,867(余量 15,333)。
 SUMMARY_MAX = 30
 
 
 def build_header(root: Path) -> str:
     cmd = gen_cmd(root, "gen_tasks_index.py")
+    archive_rel = ARCHIVE_REL
     return f"""# Tasks Index
 
 > **本文件是生成物, 不要手改** —— 由 `{cmd}` 扫描 `tasks/*.md` 的 `Status` / `Summary` / 标题生成; 新增或改状态后跑它重建即可, 合并冲突也只需重跑。
 > 档案命名 `YY-MM-DD-<slug>.md`(见 [memory-bank skill](../../.agents/skills/memory-bank/SKILL.md)); 旧编号保留在各档案的 `**Legacy-ID:**` 字段, 供历史文档回溯。
 > 粒度为**专题**(一个功能线一个档案, 不逐会话建文件); 历史流水账原文归档在各档案的 `## 历史会话纪要 (原文归档)` 段, 超 48 KB 的档案把该段移入 `tasks/attachments/`(索引守卫按 `tasks/*.md` 扫描, 不递归)。
 > 本索引里摘要按 `SUMMARY_MAX` **截断**(全文在档案里): 这样索引大小由**档案数**决定, 不随摘要写得多长而膨胀 —— 否则迟早撞 `index-auto` cap, 而靠"外迁老档案"化解会打坏外部引用。
+> **已完结状态**(Done / Dropped)只列**最近** `CLOSED_KEEP` 条(更老的**档案原地不动**, 只是不出本索引):
+> 条数涨到 250 时索引 28,868 已越 cap(25,200), 压摘要救不回来; 全量清单见
+> [{archive_rel}]({archive_rel}), 该目录不计 cap。
 > 日常短周期工作只记 [../activeContext/](../activeContext/_about.md) 的会话切片; 完成项沉淀进 [../progress.md](../progress.md)。
 > 机械守卫: `tests/test_memory_bank.py`(索引 == 生成结果 / slug 唯一 / 命名规范 / 状态分区 / 必备章节)。
 """
@@ -97,6 +108,7 @@ def collect(tasks_dir: Path) -> list[dict]:
 
 
 def render(items: list[dict], header: str) -> str:
+    """主索引: 已完结状态(Done / Dropped)只留最近 `CLOSED_KEEP` 条(档案原地不动, 只是不出索引)。"""
     out = [header]
     for status in STATUSES:
         group = [i for i in items if i["status"] == status]
@@ -105,7 +117,8 @@ def render(items: list[dict], header: str) -> str:
             out.append(EMPTY_HINT.get(status, "(暂无)"))
             out.append("")
             continue
-        for item in sorted(group, key=_sort_key, reverse=True):
+        ordered, hidden = keep_closed_window(sorted(group, key=_sort_key, reverse=True), status, TERMINAL_TASK_STATUSES)
+        for item in ordered:
             line = f"- [{item['slug']}] {item['title']}"
             if item["summary"]:
                 summary = item["summary"]
@@ -113,6 +126,39 @@ def render(items: list[dict], header: str) -> str:
                     summary = summary[:SUMMARY_MAX].rstrip() + "…"
                 line += f" - {summary}"
             out.append(line)
+        if hidden:
+            out.append("")
+            out.append(closed_hidden_note(hidden, "tasks", "档案"))
+        out.append("")
+    return "\n".join(out)
+
+
+def build_archive(root: Path, mb: Path) -> str:
+    """归档索引: 全量清单(只列 slug 与标题), 落 `tasks/attachments/`(不计 cap), 保住老档案的可检索性。
+
+    与 `_index.md` **同批**生成(`gen_all` / `rebuild_index` / 本脚本 main 都写两份) ——
+    缺了它 `--check` 恒红, 同 `gen_issues_index` 的同批纪律。
+    ⚠ 归档行**不带摘要**: 档案 `**Summary:**` 里可能带相对 `tasks/` 的链接, 搬进
+    `attachments/` 会位移成坏链(`check_doc_links` 实测首跑就抓出一批) —— 摘要全文点开档案就有。
+    """
+    items = collect(mb / "tasks")
+    out = [
+        "# Tasks 归档索引 (全量)",
+        "",
+        f"> **本文件是生成物, 不要手改** —— 由 `{gen_cmd(root, 'gen_tasks_index.py')}` 与 `_index.md` 同批生成;",
+        f"> 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。",
+        f"> 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。",
+        "",
+    ]
+    for status in STATUSES:
+        group = sorted((i for i in items if i["status"] == status), key=_sort_key, reverse=True)
+        out.append(f"## {status} ({len(group)})\n")
+        if not group:
+            out.append("(暂无)")
+            out.append("")
+            continue
+        for item in group:
+            out.append(f"- [{item['slug']}](../{item['slug']}.md) {item['title']}")
         out.append("")
     return "\n".join(out)
 
@@ -132,19 +178,25 @@ def main() -> int:
     root = Path(args.root).resolve() if args.root else find_root()
     mb = resolve_mb_dir(root, args.mb_dir)
     index = mb / "tasks" / "_index.md"
+    archive = mb / "tasks" / ARCHIVE_REL
 
     rendered = build(root, mb)
+    rendered_archive = build_archive(root, mb)
     if args.check:
-        current = index.read_text(encoding="utf-8") if index.exists() else ""
-        if current != rendered:
-            sys.stderr.write(f"{index.name} 与生成结果不一致, 请运行 {gen_cmd(root, 'gen_tasks_index.py')}\n")
-            return 1
-        return 0
+        ok = True
+        for path, target in ((index, rendered), (archive, rendered_archive)):
+            current = path.read_text(encoding="utf-8") if path.exists() else ""
+            if current != target:
+                sys.stderr.write(f"{path.name} 与生成结果不一致, 请运行 {gen_cmd(root, 'gen_tasks_index.py')}\n")
+                ok = False
+        return 0 if ok else 1
 
     # newline="\n": 生成物一律 LF —— write_text 默认按 os.linesep 翻换行, Windows 上会写成 CRLF
     # (纯行尾噪音, 见 pitfalls/git/editing-traps.md)。守阵 test_generated_indexes_are_lf_only。
     index.write_text(rendered, encoding="utf-8", newline="\n")
-    print(f"已生成 {index.relative_to(root)}")
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_text(rendered_archive, encoding="utf-8", newline="\n")
+    print(f"已生成 {index.relative_to(root)} 与 {archive.relative_to(root)}")
     return 0
 
 

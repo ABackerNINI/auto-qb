@@ -1,0 +1,290 @@
+# Tasks 归档索引 (全量)
+
+> **本文件是生成物, 不要手改** —— 由 `commands run kb.index` 与 `_index.md` 同批生成;
+> 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
+> 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
+
+## In Progress (20)
+
+- [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
+- [26-10-17-backend-global-traffic-source-integration](../26-10-17-backend-global-traffic-source-integration.md) 全局流量来源一键切换 + 工具自动拉起(改版)
+- [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
+- [26-10-31-memory-bank-kb-nav-multiselect](../26-10-31-memory-bank-kb-nav-multiselect.md) kb.nav 多选与批量右键菜单
+- [26-10-30-backend-gtm-review-t-fixes](../26-10-30-backend-gtm-review-t-fixes.md) gtm 批T 三缺陷收口: config 写锁 / http_host 回环 / day_rolled 方向
+- [26-10-29-backend-hr-ext-site-permission](../26-10-29-backend-hr-ext-site-permission.md) HR 扩展缺站点权限的可见化与失败分类修正
+- [26-10-21-webui-busy-skeleton](../26-10-21-webui-busy-skeleton.md) 前端 busy+try+反馈+finally 骨架收敛为三单点(issue 26-10-20-2231 认领修复)
+- [26-10-21-webui-css-rule-family-shared](../26-10-21-webui-css-rule-family-shared.md) 三皮肤 CSS 四规则族收敛进共用层(issue 26-10-20-2231 认领修复)
+- [26-10-21-webui-dialog-shell-single-point](../26-10-21-webui-dialog-shell-single-point.md) 前端对话框外壳三段式收敛: aq-modal 单点(遮罩手势/标题头/动作栏 + 管理对话框合并 + 行式明细合并)
+- [26-10-18-memory-bank-doc-topics-composite-split](../26-10-18-memory-bank-doc-topics-composite-split.md) 复合 Topics 键收敛单主键: 约定收紧 + 机检 + 存量 8 份回归
+- [26-10-18-webui-selection-size-summary](../26-10-18-webui-selection-size-summary.md) WEBUI 选中摘要: 种子个数 + 合计/实际占用大小
+- [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
+- [26-10-11-webui-drawer-refactor](../26-10-11-webui-drawer-refactor.md) 种子详情面板重构(字符串 DOM 变体 → Vue 面板)
+- [26-09-28-webui-keyboard-shortcuts](../26-09-28-webui-keyboard-shortcuts.md) WEBUI 键盘快捷键(可自定义): 成熟方案调研 + 存储定案
+- [26-10-08-deps-sandbox-yapf-hang](../26-10-08-deps-sandbox-yapf-hang.md) 沙箱内 yapf 挂住/刷磁盘: 引擎超时杀整棵树 + 项目内 yapf
+- [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）
+- [26-10-02-config-eol-unify-lf](../26-10-02-config-eol-unify-lf.md) 行尾统一 LF(仓库设防 + 全局 input)
+- [26-10-02-memory-bank-issue-clearance-roadmap](../26-10-02-memory-bank-issue-clearance-roadmap.md) Issue 全量清偿路线图(滚动执行)
+- [26-10-01-backend-transmission-compat](../26-10-01-backend-transmission-compat.md) 兼容 Transmission 可行性分析
+- [26-09-22-deps-version-management](../26-09-22-deps-version-management.md) 软件版本管理方案（版本号 / Tag / CHANGELOG / 发版流程）
+
+## Open (2)
+
+- [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
+- [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
+
+## Done (250)
+
+- [26-10-11-webui-optimistic-bulk-desync](../26-10-11-webui-optimistic-bulk-desync.md) WEBUI 批量跳检后「批量开始」状态脱节修复(真值出口 + 前端回滚 + 快照回写)
+- [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
+- [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
+- [26-10-30-backend-deadcode-contract-hygiene](../26-10-30-backend-deadcode-contract-hygiene.md) 第二次全项目评审 P3 合并池位收口: 死码批量清理与契约卫生
+- [26-10-30-test-mutants-verify-baseline-fix](../26-10-30-test-mutants-verify-baseline-fix.md) mutants.verify 判据修复: 基线常红致恒判 KILLED
+- [26-10-10-backend-dup-code-audit](../26-10-10-backend-dup-code-audit.md) 全仓重复代码审查(分步执行计划)
+- [26-10-11-backend-hr-dup-code-fix](../26-10-11-backend-hr-dup-code-fix.md) hr 重复代码重构(三轮共 9 条 refactor issue 认领与修复)
+- [26-10-11-backend-rules-dup-code-fix](../26-10-11-backend-rules-dup-code-fix.md) rules 重复代码重构(3 条 refactor issue 认领与修复)
+- [26-10-11-config-dup-code-fixes](../26-10-11-config-dup-code-fixes.md) config 包重复代码修复(dup-code-audit 7 issue)
+- [26-10-11-webui-dup-code-fixes](../26-10-11-webui-dup-code-fixes.md) webui 重复代码修复轮(报告 26-10-11-0033 §18/§19)
+- [26-10-15-backend-store-recover-lock-dedup](../26-10-15-backend-store-recover-lock-dedup.md) hr 恢复链与文件锁跨包收口(issue hr-store-recover-lock-family-dup 认领与修复)
+- [26-10-20-frontend-dup-code-audit](../26-10-20-frontend-dup-code-audit.md) Phase 2 前端重复代码审查(执行档案)
+- [26-10-29-webui-move-dialog-pick-geometry](../26-10-29-webui-move-dialog-pick-geometry.md) 设定位置对话框八修: 点选只回填 + 几何基线/过渡 + 增长只朝下 + 滚动条开关挂事实 + 面板非交互区不抢焦点 + 落点归属 + 高亮滚动跟随不碰祖先
+- [26-10-21-webui-drawer-variant-renderer-dup](../26-10-21-webui-drawer-variant-renderer-dup.md) 抽屉变体渲染器族三族重复收敛: 三态空帧单点 + peers 判据共用 + dt 值格模板合一 (issue 26-10-20-2231 认领修复)
+- [26-10-22-test-hr-row-key-surface-dup](../26-10-22-test-hr-row-key-surface-dup.md) HR 两张表行键面收单点(测试侧常量)
+- [26-10-22-test-log-capture-dup](../26-10-22-test-log-capture-dup.md) 测试日志捕获器 7 份实现收敛 helpers.capture_logs 单点
+- [26-10-22-test-manager-builder-params-dup](../26-10-22-test-manager-builder-params-dup.md) QbManager 构造单点扩参数, 89 处内联装配回收 + 静态守阵
+- [26-10-22-test-plan-docstring-guard](../26-10-22-test-plan-docstring-guard.md) 「## 测试计划」docstring 机械守阵落地与全量回填
+- [26-10-22-test-web-env-param-dup](../26-10-22-test-web-env-param-dup.md) web_env 参数化(config_text/client_addr)回收 web 测试内联旁路
+- [26-10-22-webui-aq-fold-ce-inject-break](../26-10-22-webui-aq-fold-ce-inject-break.md) 修 WEBUI 流量卡开关恒显启用且无法保存: aq-fold 补 ce 透传 + e2e 回归守阵
+- [26-10-22-webui-kbd-esc-collapse-cursor](../26-10-22-webui-kbd-esc-collapse-cursor.md) Esc 收起明细表后键盘光标退回被收起的父行
+- [26-10-22-webui-overlay-fit](../26-10-22-webui-overlay-fit.md) 浮层定位几何收敛 overlay_fit 单点
+- [26-10-22-webui-single-point-bypass-dup](../26-10-22-webui-single-point-bypass-dup.md) 前端单点已存在但被绕过 7 族收敛(cfgBool/hubKey/directionKey/Bearer/KiB/单位梯/hrGroupTitle)
+- [26-10-20-test-coverage-uplift-2](../26-10-20-test-coverage-uplift-2.md) 覆盖率门槛清偿与 99% 冲刺 · 第二阶段 (97.7% → 99%)
+- [26-10-21-test-dup-code-audit](../26-10-21-test-dup-code-audit.md) Phase 3 重复代码审查(测试与横切, 轮 24-25)
+- [26-10-21-test-gtm-coverage-gate](../26-10-21-test-gtm-coverage-gate.md) gtm 工具侧覆盖率门槛实施 (门禁落地 → 96 区间)
+- [26-10-20-test-traffic-qb-24h-midnight](../26-10-20-test-traffic-qb-24h-midnight.md) 修 24h 端点面用例的 00:00-00:10 跨零点时间炸弹
+- [26-10-20-webui-kbd-cursor-first-row](../26-10-20-webui-kbd-cursor-first-row.md) WEBUI 三主表首行键盘光标虚线贴住吸顶列头
+- [26-10-20-webui-menu-label-unify](../26-10-20-webui-menu-label-unify.md) WEBUI右键菜单文案统一:动词+灰色种子计数
+- [26-10-20-webui-pinned-first-cell-hover](../26-10-20-webui-pinned-first-cell-hover.md) WEBUI 必显列悬停闪竖带（首格过渡与行板不同源）
+- [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
+- [26-10-19-webui-modal-width-tier](../26-10-19-webui-modal-width-tier.md) 重命名弹窗加宽 860: modal 宽度档位修(cls 选项 + 三皮肤), 长种子名零裁剪
+- [26-10-19-webui-move-dialog-geometry](../26-10-19-webui-move-dialog-geometry.md) 设定位置弹窗几何修: 加宽 860 + 开层预留, 保存路径下拉完整落在对话框内
+- [26-10-19-webui-site-alerts](../26-10-19-webui-site-alerts.md) WEBUI 站点列状态提醒与逐目标汇报回执
+- [26-10-19-webui-site-chip-color](../26-10-19-webui-site-chip-color.md) 站点问题改色表达与 chip 图标收口
+- [26-10-07-webui-content-row-keyboard](../26-10-07-webui-content-row-keyboard.md) content 组可点击行/树图块键盘化(roving tabindex)
+- [26-10-07-webui-drawer-search-jump](../26-10-07-webui-drawer-search-jump.md) 种子详情面板/流量图在搜索/筛选时跳动修复
+- [26-10-14-webui-content-ck-inline](../26-10-14-webui-content-ck-inline.md) 内容页「树表批量」勾选框收进 name 格(ck 独立列退役)
+- [26-10-14-webui-content-click-jump](../26-10-14-webui-content-click-jump.md) 内容页树表点击跳动: 整帧换滚动位自保 + 动画重播(四复查定案)
+- [26-10-14-webui-content-table-controls-inline](../26-10-14-webui-content-table-controls-inline.md) 内容页表格交互件收编: 操作按钮/展开钮退出独立列
+- [26-10-14-webui-detail-classic-removal](../26-10-14-webui-detail-classic-removal.md) 移除种子详情面板的四内容页签经典 UI + 流量页签变体
+- [26-10-14-webui-drawer-cadence-main-beat](../26-10-14-webui-drawer-cadence-main-beat.md) 抽屉页签轮询节拍: 5s 固定改主节拍 currentPollMs()
+- [26-10-14-webui-peers-speed-track-removal](../26-10-14-webui-peers-speed-track-removal.md) 种子详情用户页速度数值下方多余暗色条: 行级速度微条 track 退役(07/08)
+- [26-10-17-webui-traffic-source-fixes](../26-10-17-webui-traffic-source-fixes.md) 全局流量来源联动缺陷修复 (Phase 1)
+- [26-10-18-backend-traffic-snapshot-merge](../26-10-18-backend-traffic-snapshot-merge.md) 流量快照解耦与「流量与限速」合并卡 (Phase 2)
+- [26-10-18-webui-add-partial-receipt](../26-10-18-webui-add-partial-receipt.md) WEBUI 部分种子添加失败(已存在)时添加窗口不消失 —— 三态回执修复
+- [26-10-18-webui-e2e-click-hedge-scale](../26-10-18-webui-e2e-click-hedge-scale.md) clickRow 落点对冲: 3000 规模高行(1220px > 视口)把落点推出视口 ⇒ 4 条恒红清偿
+- [26-10-08-backend-hr-exclude-steady](../26-10-08-backend-hr-exclude-steady.md) HR 排除在取数侧未生效 (稳态降频失效)
+- [26-10-10-webui-reannounce-inactive-gate](../26-10-10-webui-reannounce-inactive-gate.md) 非活跃种子禁强制汇报(qB 口径)
+- [26-10-15-webui-qb-traffic-restart-spike-gap](../26-10-15-webui-qb-traffic-restart-spike-gap.md) qB 流量图重启缝幻影尖峰与无采样区
+- [26-10-16-webui-hr-ext-icons](../26-10-16-webui-hr-ext-icons.md) HR 扩展工具栏图标重设计(A 版中继已入库)
+- [26-10-17-backend-gtm-autostart-hkcu-run](../26-10-17-backend-gtm-autostart-hkcu-run.md) gtm 开机自启改 HKCU Run（移除 schtasks 路径）
+- [26-10-17-memory-bank-doc-pipeline](../26-10-17-memory-bank-doc-pipeline.md) memory-bank 文档流水线: 建件与收尾命令化 (P1-P3)
+- [26-10-17-ship-commit-clean-tree-routing](../26-10-17-ship-commit-clean-tree-routing.md) ship.commit 树净拒跑按远端真值分流 + 核 ref 假红不再自相矛盾
+- [26-10-16-backend-taskqueue-sample-starvation](../26-10-16-backend-taskqueue-sample-starvation.md) 采样移出任务队列改挂时钟线(issue 26-10-16-0954 认领与修复)
+- [26-10-16-memory-bank-doc-status-vocab-guard](../26-10-16-memory-bank-doc-status-vocab-guard.md) doc-status 词表检查提前到根因(生成器 fail-fast + 闸门同源)
+- [26-10-16-ship-commit-omitted-note](../26-10-16-ship-commit-omitted-note.md) ship.commit 子集提示与实际提交面对齐(issue 26-10-16-1523 认领与修复)
+- [26-10-16-webui-chart-fetch-timeout](../26-10-16-webui-chart-fetch-timeout.md) 前端请求级超时 + 流量图 loading 悬挂兜底(issue 26-10-16-0954 认领与修复)
+- [26-10-16-webui-hr-ext-connect-selfheal](../26-10-16-webui-hr-ext-connect-selfheal.md) HR 扩展连接自愈与手动优先(计划立档)
+- [26-10-16-webui-hr-ext-connect-ui](../26-10-16-webui-hr-ext-connect-ui.md) HR 扩展「连接后端」区重排 + 实例状态入表(计划立档)
+- [26-10-16-webui-raw-fetch-timeout](../26-10-16-webui-raw-fetch-timeout.md) 前端旁路裸 fetch 收口(issue 26-10-16-1303 认领与修复)
+- [26-10-16-webui-table-resizer-handle](../26-10-16-webui-table-resizer-handle.md) 列宽拖拽把手: 粗细不一致根治 + hover 高亮/线压文字修复
+- [26-10-12-webui-traffic-limit-history](../26-10-12-webui-traffic-limit-history.md) qB 流量图限速线按当时值分段
+- [26-10-13-webui-detail-table-rebuild](../26-10-13-webui-detail-table-rebuild.md) WEBUI 种子详情表格重写(只重写表格, 变体全保留)
+- [26-10-15-backend-hr-channel-portless-remote](../26-10-15-backend-hr-channel-portless-remote.md) HR 取数通道「去端口 + 跨机」实施
+- [26-10-14-webui-drawer-merge-bridge-guard](../26-10-14-webui-drawer-merge-bridge-guard.md) 种子详情模板合并态切换时内容消失（Teleport 目标缺失 ⇒ patch 中断）
+- [26-10-12-webui-table-head-a11y](../26-10-12-webui-table-head-a11y.md) 引擎表头 a11y 补课(可排序表头语义与键盘可达, 方案 C)
+- [26-10-13-backend-global-traffic-source](../26-10-13-backend-global-traffic-source.md) 全局流量数据源信息滞后：成熟方案调研与自写独立监视小工具可行性
+- [26-10-13-memory-bank-kb-nav-esc](../26-10-13-memory-bank-kb-nav-esc.md) kb.nav Esc 退栈 (借鉴 webui 退栈设计)
+- [26-10-13-webui-move-dialog-combobox](../26-10-13-webui-move-dialog-combobox.md) 设定位置下拉+最近排序
+- [26-10-11-webui-frozen-col-boundary](../26-10-11-webui-frozen-col-boundary.md) 首列吸左边界提示(横滚残根被读成"状态列被名称列盖住")
+- [26-10-11-webui-table-component](../26-10-11-webui-table-component.md) WEBUI 表格公共组件(辅种表/追剧表抽公共表壳)
+- [26-10-12-webui-column-picker](../26-10-12-webui-column-picker.md) WEBUI「列」选择器信息架构重设计(调研 + 入池)
+- [26-10-12-webui-drawer-table-rework](../26-10-12-webui-drawer-table-rework.md) WEBUI 抽屉表格统一重写（U0–U5）
+- [26-10-12-webui-traffic-startup-recovery-on-demand](../26-10-12-webui-traffic-startup-recovery-on-demand.md) 流量启动恢复改为按需读取口径
+- [26-09-22-memory-bank-sync-rule-rework-check-started](../26-09-22-memory-bank-sync-rule-rework-check-started.md) 开工同步规则重写与 --check-started 开工自检
+- [26-09-27-webui-curve-chart](../26-09-27-webui-curve-chart.md) WEBUI 限速曲线预览图重构(按流量比例 + 末档∞封顶 + 悬停修正)
+- [26-10-10-webui-wording-unify](../26-10-10-webui-wording-unify.md) WEBUI 文案对齐 qB(全量术语排查)
+- [26-10-11-doc-links-strict-check](../26-10-11-doc-links-strict-check.md) 坏链判据收紧(Windows 归一化) + 容器代理透传
+- [26-10-11-webui-open-path-resolve](../26-10-11-webui-open-path-resolve.md) WEBUI 打开目标解析口径优化(文件优先 + 辅种组按单个 + 目录"进入")
+- [26-10-10-webui-filter-underline](../26-10-10-webui-filter-underline.md) 列表筛选选中强调改笔直下划线
+- [26-10-10-webui-notify-channels-hidden](../26-10-10-webui-notify-channels-hidden.md) 通知渠道设置项暂不图形化(Field.hidden)
+- [26-10-10-webui-peers-speed-field](../26-10-10-webui-peers-speed-field.md) 抽屉 peers 上下行恒 0 修复
+- [26-10-04-backend-qb-traffic-storage-v3](../26-10-04-backend-qb-traffic-storage-v3.md) qB 流量存储 v3 实施
+- [26-10-04-webui-qb-traffic-line-breaks](../26-10-04-webui-qb-traffic-line-breaks.md) WEBUI qB 流量图折线断裂取证与修复
+- [26-10-09-backend-hr-exclude-terminal-download](../26-10-09-backend-hr-exclude-terminal-download.md) HR 排除种子终态行仍下载 .torrent (无谓请求)
+- [26-10-09-backend-hr-steady-lane-skip](../26-10-09-backend-hr-steady-lane-skip.md) HR 稳态期跳过 B/C 档取数可行性
+- [26-10-09-webui-ctx-menu-group-actions](../26-10-09-webui-ctx-menu-group-actions.md) 单组右键菜单补齐(与多选批量菜单同项集)
+- [26-10-09-webui-drawer-collapse-removal](../26-10-09-webui-drawer-collapse-removal.md) WEBUI 种子详情面板折叠状态整体移除
+- [26-10-09-webui-kbd-group-members](../26-10-09-webui-kbd-group-members.md) 辅种/追剧页展开分组后键盘上下键选中分组成员
+- [26-10-09-webui-kbd-scroll-band](../26-10-09-webui-kbd-scroll-band.md) 键盘滚动跟随的可见带: 首个/末个种子不再只显示一半
+- [26-10-09-webui-notice-panel-exit](../26-10-09-webui-notice-panel-exit.md) 空存储提示改道通知面板 + 面板改名「通知」
+- [26-10-09-webui-path-filter-frame-width](../26-10-09-webui-path-filter-frame-width.md) 路径筛选强调框宽度贴文字(去列宽跟随)
+- [26-10-09-webui-per-tracker-reannounce](../26-10-09-webui-per-tracker-reannounce.md) 06 变体逐行汇报倒计时真 per-tracker 口径
+- [26-10-09-webui-qb-command-reject](../26-10-09-webui-qb-command-reject.md) WEB UI 命令层捕获 qB 业务拒绝(4xx)
+- [26-10-09-webui-qb-traffic-seed-header-controls](../26-10-09-webui-qb-traffic-seed-header-controls.md) 修回归: 种子流量图的时间档位/纵轴控件消失
+- [26-10-09-webui-rule-meta-fields](../26-10-09-webui-rule-meta-fields.md) WEBUI 规则卡「触发与节奏」段(规则级字段图形化)
+- [26-10-09-webui-selection-linkage](../26-10-09-webui-selection-linkage.md) 组↔成员选中双向联动 + 成员行站点列去方框/选中视觉对齐
+- [26-10-07-memory-bank-pending-wording](../26-10-07-memory-bank-pending-wording.md) 回写措辞: 禁时点相对的状态断言 + 机械守卫
+- [26-10-07-webui-qb-traffic-rate-basis](../26-10-07-webui-qb-traffic-rate-basis.md) 流量图速率口径调研(瞬时 · 区间平均 · 移动平均)
+- [26-10-08-backend-test-web-split](../26-10-08-backend-test-web-split.md) tests/test_web.py 拆分(15 域 → 15 平铺模块)
+- [26-10-08-test-webui-peers-harness](../26-10-08-test-webui-peers-harness.md) ui_harness 补合成 peers 数据 + e2e 覆盖 peers 页签内容渲染
+- [26-10-08-webui-qb-traffic-head-layout](../26-10-08-webui-qb-traffic-head-layout.md) 流量图版式改(控件上提头部 + 图例并入统计栏)
+- [26-10-08-webui-qb-traffic-seed-vacuum](../26-10-08-webui-qb-traffic-seed-vacuum.md) 流量图窗首种子 1 秒边界带真空断链修复
+- [26-10-08-webui-qb-traffic-yaxis-annotation](../26-10-08-webui-qb-traffic-yaxis-annotation.md) 流量图纵轴固定模式 + 画布注解层
+- [26-10-04-webui-tooltip-declutter](../26-10-04-webui-tooltip-declutter.md) WEBUI 复述型 tooltip 全量移除(67 处)+ 不复活守卫(含 26-10-07 二轮去冗与锚定下放)
+- [26-10-06-ship-rerun-stale-config](../26-10-06-ship-rerun-stale-config.md) 自我改写后仍用启动时那份配置: commit 的闸门复跑 + sync 的生成物自动化解
+- [26-10-06-webui-detail-panel](../26-10-06-webui-detail-panel.md) WEBUI 种子详情面板重构 · 设计模板轮 + 全量实施
+- [26-10-07-ship-self-snapshot](../26-10-07-ship-self-snapshot.md) my-commit-flow 自我改写版本撕裂: 快照自举可行性验证与治本方案
+- [26-10-07-webui-delta-sync-feasibility](../26-10-07-webui-delta-sync-feasibility.md) webui 增量同步(qB rid 式)可行性分析
+- [26-10-07-webui-detail-panel-audit-fixes](../26-10-07-webui-detail-panel-audit-fixes.md) 详情面板变体审计问题修复轮
+- [26-10-07-webui-detail-panel-followups](../26-10-07-webui-detail-panel-followups.md) 详情面板 followups 四修轮
+- [26-10-07-webui-perf-issues-recheck](../26-10-07-webui-perf-issues-recheck.md) 两条 WebUI perf issue 重构后复验
+- [26-10-07-webui-search-highlight](../26-10-07-webui-search-highlight.md) WEBUI 移除冗余的搜索命中行级高亮
+- [26-10-07-webui-tracker-url-sanitize](../26-10-07-webui-tracker-url-sanitize.md) tracker URL 源头脱敏（方案 B 实施）
+- [26-09-28-commands-shipflow-output-contract](../26-09-28-commands-shipflow-output-contract.md) my-commit-flow 输出契约 v3 (沉默即成功)
+- [26-09-29-webui-column-alignment](../26-09-29-webui-column-alignment.md) WEBUI 表格列对齐口径实施
+- [26-09-30-memory-bank-timekit](../26-09-30-memory-bank-timekit.md) memory-bank 取时间标准化 (UTC+8 单点 + 守卫 + 移植)
+- [26-10-05-backend-qb-traffic-v4-delta](../26-10-05-backend-qb-traffic-v4-delta.md) qB 流量 v4: 块头基线 delta 编码与按落盘切块
+- [26-10-06-commands-git-retry-timeout](../26-10-06-commands-git-retry-timeout.md) my-commit-flow: git 命令单次 20s 超时 + 有界重试 3 次
+- [26-10-06-docs-ui-smoke-comment-residue](../26-10-06-docs-ui-smoke-comment-residue.md) 注释残留: 改指已退役 ui_smoke.cjs 的 8 处
+- [26-10-06-memory-bank-dangling-hash-refs](../26-10-06-memory-bank-dangling-hash-refs.md) KB 悬空提交 hash 清理
+- [26-10-06-ship-self-rewrite-imports](../26-10-06-ship-self-rewrite-imports.md) ship.commit: 包脚本被内部同步改写后, 延迟 import 撞缓存旧模块
+- [26-10-06-test-playwright-e2e](../26-10-06-test-playwright-e2e.md) 把 Playwright 整合进项目: 修配置瑕疵 / 漂移 + 落地方案 A
+- [26-10-06-webui-ctx-menu-viewport](../26-10-06-webui-ctx-menu-viewport.md) 浮层菜单视口钳位: 常量估算改开层实测
+- [26-10-06-webui-frozen-first-column](../26-10-06-webui-frozen-first-column.md) 宽行点击落点: 表格首列吸左固定
+- [26-10-05-backend-hr-steady-throttle](../26-10-05-backend-hr-steady-throttle.md) HR 稳态降频 (idle_refresh_interval) 实施
+- [26-10-05-backend-reannounce-confirm-rework](../26-10-05-backend-reannounce-confirm-rework.md) 强制汇报确认机制重构实施
+- [26-10-05-backend-reannounce-confirm](../26-10-05-backend-reannounce-confirm.md) 强制汇报确认机制调研
+- [26-10-05-test-log-capture-helper](../26-10-05-test-log-capture-helper.md) 测试日志捕获统一 helper (认领 issue 26-10-04-2311)
+- [26-10-05-test-plan-docstring-drift](../26-10-05-test-plan-docstring-drift.md) 测试文件头部「## 测试计划」清单与实际函数漂移
+- [26-10-05-webui-bulk-bar-retired](../26-10-05-webui-bulk-bar-retired.md) WEBUI 批量控制条退役(批量动作统一走右键菜单)
+- [26-10-05-webui-danger-guards](../26-10-05-webui-danger-guards.md) WEBUI 危险动作防护(重检确认框 + 跳检前置条件)
+- [26-10-05-webui-qb-traffic-window-persist-shortcuts](../26-10-05-webui-qb-traffic-window-persist-shortcuts.md) 流量图窗口选择持久化 + 三条快捷键
+- [26-09-15-webui-qb-replacement](../26-09-15-webui-qb-replacement.md) WEB UI 替代 qB 界面 (波次一 ~ 波次三 + 复查)
+- [26-09-17-memory-bank-trigger-fix](../26-09-17-memory-bank-trigger-fix.md) Memory Bank 触发机制修复 (skill 缺失 + 立档纪律失败)
+- [26-09-19-webui-responsiveness](../26-09-19-webui-responsiveness.md) WEB UI 操作跟手性优化
+- [26-09-20-webui-statusbar-speed](../26-09-20-webui-statusbar-speed.md) WEBUI 状态栏上传/下载速度恒为 0
+- [26-09-22-backend-partial-hr-verify](../26-09-22-backend-partial-hr-verify.md) 部分种子 HR 的在线核实
+- [26-09-22-backend-qb-move-missing-tolerance](../26-09-22-backend-qb-move-missing-tolerance.md) qB 移动 .!qB 后缀误判缺文件修复
+- [26-09-22-memory-bank-activecontext-conflict](../26-09-22-memory-bank-activecontext-conflict.md) activeContext 多 clone 冲突治理
+- [26-09-22-memory-bank-dir-refactor](../26-09-22-memory-bank-dir-refactor.md) 知识库目录化重构 (分类 + 二级指针)
+- [26-09-23-commands-unified-surface](../26-09-23-commands-unified-surface.md) 项目命令统一调用面 (纯引擎 + 包式配置层)
+- [26-09-23-test-suite-perf](../26-09-23-test-suite-perf.md) 全量测试耗时归因与三处实测优化
+- [26-09-25-deps-docker-deploy](../26-09-25-deps-docker-deploy.md) Docker 部署方案 (调研 + 计划)
+- [26-09-25-webui-hr-safety-display](../26-09-25-webui-hr-safety-display.md) HR 在线核实的 WEB UI 呈现（删除安全档位 × 来源档位）
+- [26-09-26-webui-frontend-file-split](../26-09-26-webui-frontend-file-split.md) WEB UI 前端大文件拆分
+- [26-09-28-webui-settings-back-nav](../26-09-28-webui-settings-back-nav.md) WEBUI 设置二级页返回优化: 吸顶返回条(方案一) + Esc 返回(方案三)
+- [26-10-01-test-coverage-uplift](../26-10-01-test-coverage-uplift.md) 测试覆盖率提升分阶段计划
+- [26-10-03-webui-drawer-redesign](../26-10-03-webui-drawer-redesign.md) WEBUI 种子详情抽屉重设计
+- [26-10-03-webui-qb-traffic-charts](../26-10-03-webui-qb-traffic-charts.md) WebUI qB 口径流量图 (可行性 + 方案C 实施计划)
+- [26-10-04-backend-cross-group-conflict](../26-10-04-backend-cross-group-conflict.md) 跨组文件交叉检测与紧急处置 (计划 26-10-04-0107)
+- [26-10-04-backend-hotreload-torrent-task-restore](../26-10-04-backend-hotreload-torrent-task-restore.md) 热重载 L2 重建后种子级任务补建 (issue 26-10-01-2147)
+- [26-10-04-backend-ops-recheck-effect-confirmation](../26-10-04-backend-ops-recheck-effect-confirmation.md) recheck 轮询生效确认整体重设计 (证据门控)
+- [26-10-04-commands-commit-first-sync](../26-10-04-commands-commit-first-sync.md) ship.commit 提交先行: 同步/推送内联成一步
+- [26-10-04-test-ci-platform](../26-10-04-test-ci-platform.md) 修 Linux CI 平台差异连红(覆盖率提升轮的 Windows-only 用例)
+- [26-10-04-webui-hr-fetch-history](../26-10-04-webui-hr-fetch-history.md) WEBUI HR 在线核实拉取历史详情表
+- [26-10-04-webui-modal-scroll-chaining](../26-10-04-webui-modal-scroll-chaining.md) WebUI 弹窗滚轮穿透背景滚动 (报告 + 实施, 已完成)
+- [26-10-04-webui-qb-traffic-storage](../26-10-04-webui-qb-traffic-storage.md) qB 流量历史存储压缩与「速度 0 vs 断线」语义
+- [26-10-04-webui-qb-traffic-windows](../26-10-04-webui-qb-traffic-windows.md) WEBUI qB 流量图十档时间窗
+- [26-10-04-webui-traffic-color-swap](../26-10-04-webui-traffic-color-swap.md) WEBUI 上下行流量方向色交换 + 速度组图标统一 + 限速改灰
+- [26-10-02-webui-hr-status-display](../26-10-02-webui-hr-status-display.md) WEBUI HR 在线核实信息展示改造
+- [26-10-02-webui-multi-ctx-actions](../26-10-02-webui-multi-ctx-actions.md) WEBUI 多选右键菜单四项 + 跳检菜单开关
+- [26-10-03-backend-hr-hotreload-stale-display](../26-10-03-backend-hr-hotreload-stale-display.md) HR 热重载后 WebUI 停留「本地·达标」修复
+- [26-10-03-commands-argv-flag-swallowed](../26-10-03-commands-argv-flag-swallowed.md) 修 `argv or []` 吃参数(闸门冒烟真跑动作)
+- [26-10-03-commands-sync-generated-autoresolve](../26-10-03-commands-sync-generated-autoresolve.md) 同步时自动化解生成物索引冲突 (计划 26-10-03-1544 实施)
+- [26-10-03-webui-delete-tag-scope-confusion](../26-10-03-webui-delete-tag-scope-confusion.md) 全局/站点双设置作用域混淆分析与修复
+- [26-10-03-webui-password-form-a11y](../26-10-03-webui-password-form-a11y.md) WEBUI 密码字段两条 Chrome 可访问性警告修复
+- [26-10-01-webui-hr-detail-table](../26-10-01-webui-hr-detail-table.md) WEBUI HR 在线核实详情表
+- [26-10-02-backend-issues-clearance](../26-10-02-backend-issues-clearance.md) 用户指派批 7 条 issue 分阶段清偿(委派模式)
+- [26-10-02-backend-rules-ref-duplicate-reject](../26-10-02-backend-rules-ref-duplicate-reject.md) 站点引用规则拒绝重复
+- [26-10-02-hr-entry-last-seen-prune](../26-10-02-hr-entry-last-seen-prune.md) HrEntry.last_seen 写入点与 INDEX_RETENTION 清理复活
+- [26-10-02-hr-token-atomic-write](../26-10-02-hr-token-atomic-write.md) 后端 hr.token 生成改原子写
+- [26-10-02-web-auth-hardening](../26-10-02-web-auth-hardening.md) WebUI 鉴权面加固(CSRF/Host + 三小件)
+- [26-10-02-webui-esc-clear-filters](../26-10-02-webui-esc-clear-filters.md) WEBUI ESC 清除筛选兜底
+- [26-10-02-webui-hr-excluded-hover-pop](../26-10-02-webui-hr-excluded-hover-pop.md) WEBUI HR 排除辅种悬停弹窗补全
+- [26-10-02-webui-nav-focus](../26-10-02-webui-nav-focus.md) WEBUI 键盘切页旧页签残留焦点框修复
+- [26-10-02-webui-unsaved-changes-guard](../26-10-02-webui-unsaved-changes-guard.md) 设置页未保存改动防护(报告路线 U1-b: 自绘框 + 原生兜底)
+- [26-09-30-backend-kernel-module-refactor](../26-09-30-backend-kernel-module-refactor.md) QbManager 内核化重构: 微内核 + 插件式模块
+- [26-10-01-backend-eventbus-suppress-request-bit](../26-10-01-backend-eventbus-suppress-request-bit.md) EventBus suppress 请求位/live 旗标拆分(issue 0750)
+- [26-10-01-backend-web-state-alias-disposal](../26-10-01-backend-web-state-alias-disposal.md) 别名层处置: _WEB_STATE_ALIAS 与旧名委托层退役
+- [26-10-01-commands-shipflow-staged-delete-fix](../26-10-01-commands-shipflow-staged-delete-fix.md) issue 0128 清偿: commit.py 逐路径 add 撞已暂存删除
+- [26-10-01-docs-doc-drift-repair](../26-10-01-docs-doc-drift-repair.md) 知识库文档漂移分段修复
+- [26-10-01-docs-w6-skill-chores](../26-10-01-docs-w6-skill-chores.md) W6 技能清账: grill-me 删除收口 + hatch-pet 拍板回执
+- [26-10-01-test-audit-observation-clearance](../26-10-01-test-audit-observation-clearance.md) 内核化重构审计观察项 L4-L9 清偿 (四阶段)
+- [26-10-01-test-fakeconfig-shared-state-isolation](../26-10-01-test-fakeconfig-shared-state-isolation.md) issue 2311 清偿: FakeConfig 共享可变类属性顺序污染
+- [26-10-01-test-truth-hold-shadowed-guard](../26-10-01-test-truth-hold-shadowed-guard.md) issue 2212 清偿: 同名测试遮蔽, 真值守阵复活确认
+- [26-10-01-test-ui-smoke-clearance](../26-10-01-test-ui-smoke-clearance.md) issue 0602 双案清偿: 冒烟列宽守阵选键 + CTX-03 多选落点
+- [26-10-01-webui-readonly-fields](../26-10-01-webui-readonly-fields.md) issue 2135 清偿: WEBUI 设置页支持只读字段(程序托管/R 级)
+- [26-09-30-backend-hr-trigger-semantics](../26-09-30-backend-hr-trigger-semantics.md) HR 触发语义重构 (触发降级展示辅助 / 全量纳入)
+- [26-09-30-memory-bank-token-budget](../26-09-30-memory-bank-token-budget.md) memory-bank cap 翻倍 + commands list 平铺
+- [26-09-30-rule-dangerous-op-layer](../26-09-30-rule-dangerous-op-layer.md) 危险操作独立操作层 (rules → ops ← web)
+- [26-09-30-webui-tags-unfold](../26-09-30-webui-tags-unfold.md) WEBUI 标签列全量展开(+N 折叠移除)
+- [26-09-29-backend-hr-hot-apply](../26-09-29-backend-hr-hot-apply.md) HR 站点接入热重载「取数线程未启动」修复
+- [26-09-29-backend-hr-release-deadend](../26-09-29-backend-hr-release-deadend.md) HR「放行签发即作废」与端点未监听(白等 180s)修复
+- [26-09-29-webui-chip-click-filter](../26-09-29-webui-chip-click-filter.md) WEBUI 挂件点击即筛选
+- [26-09-29-webui-dialog-hover-keynav](../26-09-29-webui-dialog-hover-keynav.md) 弹窗下拉悬停接管: 分类/标签/编辑分类 mouseenter 与键盘活动项同源打架
+- [26-09-29-webui-hr-duration-req](../26-09-29-webui-hr-duration-req.md) 做种时长列/弹窗不再显示「要求」(未核/在线行)
+- [26-09-29-webui-tracker-focus-layer](../26-09-29-webui-tracker-focus-layer.md) 站点搜索改聚焦搜索层(方案C)
+- [26-09-15-docs-restructure](../26-09-15-docs-restructure.md) README 重构与配置文档分离
+- [26-09-26-webui-search-query-syntax](../26-09-26-webui-search-query-syntax.md) WEBUI 搜索强化(查询语法调研 → 实施)
+- [26-09-28-config-version-guard](../26-09-28-config-version-guard.md) 配置版本升级守卫: 键面基线冻结快照
+- [26-09-28-ext-log-noise-suppress](../26-09-28-ext-log-noise-suppress.md) 扩展日志连不上降噪: 故障期只打头尾
+- [26-09-28-webui-alt-speed-toggle](../26-09-28-webui-alt-speed-toggle.md) WebUI 备用速度切换(乌龟) + 主/备同窗限速弹窗
+- [26-09-28-webui-dialog-gap-warn-expand](../26-09-28-webui-dialog-gap-warn-expand.md) WEBUI 弹窗按钮排间隙 + 跳检警告塌缩展开
+- [26-09-28-webui-group-columns](../26-09-28-webui-group-columns.md) 辅种页扩列: 组级聚合 + 明细差异列 + hide 默认隐藏
+- [26-09-28-webui-progress-bar-width](../26-09-28-webui-progress-bar-width.md) WEBUI 进度条条长随百分比文本漂移(数值盒定宽)
+- [26-09-28-webui-settings-categorize-logs](../26-09-28-webui-settings-categorize-logs.md) 设置页分类回归修复: 「常规/日志」成块 + 运行日志默认折叠
+- [26-09-28-webui-sites-page-search](../26-09-28-webui-sites-page-search.md) 站点页搜索: 全字段匹配与多命中展示
+- [26-09-28-webui-tag-candidates](../26-09-28-webui-tag-candidates.md) WEBUI 标签候选剔除程序自动维护标签
+- [26-09-27-backend-log-levels-notify](../26-09-27-backend-log-levels-notify.md) 日志等级整改: 危险情况归 ERROR, 通知默认只推 ERROR
+- [26-09-27-config-hr-binding-mapping](../26-09-27-config-hr-binding-mapping.md) HR 在线核实绑定改映射制: 双域档案 + 已知映射零配置 + 旧键迁移 v1→v2
+- [26-09-27-rule-iyuu-stop-guard](../26-09-27-rule-iyuu-stop-guard.md) 规则系统可行性实验: 禁止 IYUU辅种 分类种子开始下载
+- [26-09-26-memory-bank-baseline-slice-per-file](../26-09-26-memory-bank-baseline-slice-per-file.md) 测试基线切片化(单文件改每条一档)
+- [26-09-26-my-commit-flow-merge-first-writeback](../26-09-26-my-commit-flow-merge-first-writeback.md) 提交流程「先合并远端, 再收尾回写」定稿
+- [26-09-26-schema-version-chain](../26-09-26-schema-version-chain.md) 落盘文件 schema 版本号与逐级升级链实施
+- [26-09-26-webui-button-system](../26-09-26-webui-button-system.md) WEB UI 按钮体系重构(星图 B 胶囊 / 棱镜 C 双色)
+- [26-09-26-webui-hr-popup](../26-09-26-webui-hr-popup.md) HR 悬停弹窗(做种时长/来源徽标 hover popover, T3 定稿)
+- [26-09-26-webui-long-path-open](../26-09-26-webui-long-path-open.md) WebUI 打开超长路径文件夹(Windows MAX_PATH 260)
+- [26-09-26-webui-settings-group-merge](../26-09-26-webui-settings-group-merge.md) 设置页分组合并: 日志/界面(WebUI)/通知/运行日志 并入「常规」
+- [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
+- [26-09-26-webui-torrent-meta-edit](../26-09-26-webui-torrent-meta-edit.md) WEB UI 种子级标签/分类即时编辑（添加/删除标签 + 设置分类）
+- [26-09-25-webui-ext-hr-logging](../26-09-25-webui-ext-hr-logging.md) 浏览器扩展运行日志(分级 + 环形上限 + 选项页④区)
+- [26-09-25-webui-log-level-filter](../26-09-25-webui-log-level-filter.md) 运行日志按等级查看恒空(生产格式无方括号)
+- [26-09-25-webui-page-location-persist](../26-09-25-webui-page-location-persist.md) 设置页刷新会回到种子页
+- [26-09-23-memory-bank-doc-forms](../26-09-23-memory-bank-doc-forms.md) 文档形态统一 (plans/reports 入库 + 四形态协议)
+- [26-09-24-webui-ctx-menu-multi-select](../26-09-24-webui-ctx-menu-multi-select.md) 多选右键菜单目标 = 整个选中集合
+- [26-09-24-webui-ctx-submenu](../26-09-24-webui-ctx-submenu.md) 右键次级菜单: 图标 hover 变灰 / 移出不消失 / 两个"更多"入口
+- [26-09-21-qb-corpus-capture-replay](../26-09-21-qb-corpus-capture-replay.md) 真机 qB 语料抓取 / 脱敏 / 离线回放
+- [26-09-21-webui-filter-data-and-color-flicker](../26-09-21-webui-filter-data-and-color-flicker.md) 种子页筛选器无数据 + 辅种组暂停后状态色闪烁
+- [26-09-20-webui-appjs-split](../26-09-20-webui-appjs-split.md) WEB UI `shared/app.js` 按域拆分为内核 + 15 个片段文件
+- [26-09-20-webui-column-prefs-reset](../26-09-20-webui-column-prefs-reset.md) WebUI 列设置（顺序/显隐/宽度）被多标签页整份覆盖
+- [26-09-20-webui-decoupling](../26-09-20-webui-decoupling.md) 主循环 × WebUI 解耦(门面 + 状态内聚)
+- [26-09-19-memory-bank-session-git-rules-sync](../26-09-19-memory-bank-session-git-rules-sync.md) 会话协议与 git 口径统一 (开工先拉分支 + 提交即推送)
+- [26-09-19-sim-client-5000](../26-09-19-sim-client-5000.md) 5000 种子仿真客户端 (独立安全/性能测试)
+- [26-09-19-webui-cols-store-version-audit](../26-09-19-webui-cols-store-version-audit.md) WEB UI 列状态存储键 `autoqb_cols_v?` 版本沿革审计与口径回写
+- [26-09-18-test-sidefx-guard](../26-09-18-test-sidefx-guard.md) 测试期真实系统副作用收口 (通知框 + 环境依赖假失败)
+- [26-09-18-webui-error-reason](../26-09-18-webui-error-reason.md) WEB UI 错误种子显示具体原因 (状态列 `error_reason`)
+- [26-09-18-webui-view-rebuild-scope](../26-09-18-webui-view-rebuild-scope.md) WEB UI 视图重建范围收口 (种子速度刷新滞后)
+- [26-09-14-memory-bank-migration](../26-09-14-memory-bank-migration.md) 知识库 (Memory Bank) 建设与仓库治理
+- [26-09-17-webui-component-libraries](../26-09-17-webui-component-libraries.md) UI 组件库 20 式 (设计风格库落地为可挑选的组件库)
+- [26-09-17-webui-fix-round10](../26-09-17-webui-fix-round10.md) WEB UI 第十轮修复 (16 项 · R10-01~R10-16)
+- [26-09-17-webui-fix-round11](../26-09-17-webui-fix-round11.md) WEB UI 第十一轮修复 (7 项 · 图标着色/明细排序/滚动条)
+- [26-09-17-webui-fix-round9](../26-09-17-webui-fix-round9.md) WEB UI 第九轮修复 (25 项 · FX-01~FX-25)
+- [26-09-15-backend-file-split](../26-09-15-backend-file-split.md) 后端大文件拆分
+- [26-09-15-backend-torrentrecord-fields](../26-09-15-backend-torrentrecord-fields.md) TorrentRecord 全字段缓存 (快照 21 → 70 字段)
+- [26-09-15-deps-env-modernization](../26-09-15-deps-env-modernization.md) 依赖管理与运行环境现代化 (uv / pyproject / venv 重建)
+- [26-09-15-rule-tracker-groups](../26-09-15-rule-tracker-groups.md) tracker 分组 (站点 groups 字段 + tracker_group 条件)
+- [26-09-15-webui-polish-and-redesign](../26-09-15-webui-polish-and-redesign.md) WEB UI 打磨轮次与棱镜重设计 (第六 ~ 八轮 + 双界面命名)
+- [26-09-15-webui-tvshows-view](../26-09-15-webui-tvshows-view.md) 追剧视图 (tvshows)
+
+## Dropped (0)
+
+(暂无)

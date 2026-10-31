@@ -114,9 +114,16 @@ def collect(root: Path, mb: Path) -> dict[Path, str]:
     out: dict[Path, str] = {}
 
     out.update(_mb_module("gen_kb_index").build_all(root, mb))
-    out[mb / "tasks" / "_index.md"] = _mb_module("gen_tasks_index").build(root, mb)
-    for kind, text in _mb_module("gen_docs_index").build(root, mb).items():
+    ti = _mb_module("gen_tasks_index")
+    out[mb / "tasks" / "_index.md"] = ti.build(root, mb)
+    # 归档索引: 主索引的已完结区只留最近 `CLOSED_KEEP` 条(控 cap), 全量清单另落这里 ——
+    # 与主索引**同批**生成, 否则各生成器 `--check` 会因它缺席而恒红 (同 issues 侧纪律)。
+    out[mb / "tasks" / ti.ARCHIVE_REL] = ti.build_archive(root, mb)
+    docs = _mb_module("gen_docs_index")
+    for kind, text in docs.build(root, mb).items():
         out[mb / kind / "_index.md"] = text
+    for archive, text in docs.build_archives(root, mb).items():
+        out[archive] = text
 
     ci_scripts = _skill_scripts("create-issue", root)
     if ci_scripts is None:
