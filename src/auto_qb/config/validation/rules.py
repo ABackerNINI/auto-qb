@@ -5,7 +5,12 @@ from typing import List
 from qbittorrentapi import TorrentState
 
 from ...infra.utils import parse_bool
-from ..compat import ACTION_ENTRY_KEYS, normalize_action_entry
+from ..compat import (
+    ACTION_ENTRY_KEYS,
+    CONDITION_COMBO_KEYS,
+    CONDITION_TREE_MAX_DEPTH,
+    normalize_action_entry,
+)
 from ..schema.fields import (
     # 枚举族单点(issue 26-10-11-0031): 取值域/白名单只在 schema/fields 声明, 本包引用派生
     CHECKING_BASIC,
@@ -154,11 +159,9 @@ def _validate_rules(rules_config: dict, errors: List[str], data=None) -> None:
                 _validate_watch_fields(spec, where, errors)
             conds = spec.get("conditions")
             if conds is not None:
-                if not isinstance(conds, list):
-                    errors.append(f"{where}.conditions: 必须是列表")
-                else:
-                    for i, c in enumerate(conds):
-                        _validate_plugin_entry(c, f"{where}.conditions[{i}]", registry.CONDITIONS, "条件", errors, gate)
+                # W3-A: normalize 已把旧扁平列表包成隐式 all 树, 校验器只认组合树
+                # (防漂移铁律: 没有「读 legacy 扁平列表」的第二语义分支)
+                _validate_condition_tree(conds, f"{where}.conditions", errors, gate)
             acts = spec.get("actions")
             if acts is not None:
                 if not isinstance(acts, list):
@@ -290,33 +293,64 @@ _PLUGIN_SPEC_VALIDATORS = {
 }
 
 
-def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: List[str], gate=None) -> None:
-    """conditions 列表项校验(条件保持扁平单键 dict 形, normalize 透传锚定): 单键字典 + 名称
-    已注册(多键/空值会被静默丢弃, 必须报错); 已注册名称再做 spec 深度校验(_PLUGIN_SPEC_VALIDATORS)。
-    动作列表项走 _validate_action_entry(规范化形态 {type, params}, plan 26-11-01-0106 W2-A)。
+def _validate_condition_tree(node, where: str, errors: List[str], gate=None, depth: int = 1, top: bool = True) -> None:
+    """conditions 组合树节点校验(W3-A, plan 26-11-01-0106 §3.2/G4): 只认规范化树形
+
+    节点 = 单键 dict: 组合键 all/any(值为节点列表) / not(值为单个节点) / 条件名(叶子, 须已注册)。
+    未知组合键(如 all 拼成 al)与未知条件名 fail-fast; 多键/空/非 dict 节点报结构错;
+    嵌套深度超 CONDITION_TREE_MAX_DEPTH(compat 单点)拒绝 —— 防递归爆炸, 不限制真实表达力。
+
+    R1① 错误定位回映射: 顶层 all 的孩子序号 = 用户写的扁平列表序号(normalize 保序 1:1 包裹),
+    报错坐标用「conditions[i]」扁平形; 更深的子树只可能来自用户手写的树形(或 webui 写出的
+    规范形态), 坐标按树形如实报出。
+    """
+    if depth > CONDITION_TREE_MAX_DEPTH:
+        errors.append(f"{where}: 组合树嵌套超过上限 {CONDITION_TREE_MAX_DEPTH} 层")
+        return
+    if not isinstance(node, dict):
+        errors.append(f"{where}: 必须是字典(组合键 {'/'.join(CONDITION_COMBO_KEYS)} 或单键条件)")
+        return
+    if len(node) == 0:
+        errors.append(f"{where}: 值不能为空(留空请删除该项)")
+        return
+    if len(node) > 1:
+        errors.append(f"{where}: 必须是单键字典(组合键 {'/'.join(CONDITION_COMBO_KEYS)} 或单个条件名): {sorted(node)}")
+        return
+    key = next(iter(node))
+    if key in ("all", "any"):
+        children = node[key]
+        if not isinstance(children, list):
+            errors.append(f"{where}.{key}: 必须是列表")
+            return
+        for i, child in enumerate(children):
+            # top + all: 顶层 all 的孩子 = 旧扁平列表条目(normalize 只对列表包 all, 保序 1:1),
+            # 坐标回映射成 conditions[i](R1①); 顶层 any 是用户手写树形, 按树形坐标如实报
+            child_where = f"{where}[{i}]" if (top and key == "all") else f"{where}.{key}[{i}]"
+            _validate_condition_tree(child, child_where, errors, gate, depth + 1, top=False)
+    elif key == "not":
+        _validate_condition_tree(node[key], f"{where}.not", errors, gate, depth + 1, top=False)
+    else:
+        _validate_condition_leaf(key, node[key], where, errors, gate)
+
+
+def _validate_condition_leaf(name: str, value, where: str, errors: List[str], gate=None) -> None:
+    """条件叶子校验: 名称已注册(未注册 = 未知条件, fail-fast) + spec 深度校验分发
 
     gate: 表达式取值的数据源门控上下文(仅 expr 条件用, 需要看配置里数据源是否配置)
     """
-    if not isinstance(entry, dict):
-        errors.append(f"{where}: 必须是字典")
-        return
-    if len(entry) == 0:
-        errors.append(f"{where}: 值不能为空(留空请删除该项)")
-        return
-    if len(entry) > 1:
-        errors.append(f"{where}: 必须是单键字典: {sorted(entry)}")
-        return
-    name = next(iter(entry))
+    from ...rules import registry  # 延迟导入: rules 包反向依赖 config, 顶层导入会循环
+
     if name == "ignore_next_action_error":
-        _try(parse_bool, entry[name], f"{where}.{name}", errors)
-    elif name not in known:
-        errors.append(f"{where}: 未知{kind} '{name}', 可用: {sorted(known)}")
-    elif name == "expr":  # 表达式需要额外的门控上下文, 不走统一的 3 参校验器
-        _validate_expr_condition_spec(entry[name], f"{where}.{name}", errors, gate)
+        # 退役键键面保留识别(W1/D1 升级检测): 误写进条件域仍按布尔校验, 引擎不消费
+        _try(parse_bool, value, f"{where}.{name}", errors)
+    elif name not in registry.CONDITIONS:
+        errors.append(f"{where}: 未知条件 '{name}', 可用: {sorted(registry.CONDITIONS)}")
+    elif name == "expr":  # 表达式需要额外的门控上下文, 不走统一的深度校验分发
+        _validate_expr_condition_spec(value, f"{where}.{name}", errors, gate)
     else:
         deep = _PLUGIN_SPEC_VALIDATORS.get(name)
         if deep:
-            deep(entry[name], f"{where}.{name}", errors)
+            deep(value, f"{where}.{name}", errors)
 
 
 def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors: List[str]) -> None:

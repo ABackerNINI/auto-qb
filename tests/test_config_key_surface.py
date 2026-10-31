@@ -52,6 +52,7 @@ import pytest
 import yaml
 
 from auto_qb.config import Config, load_config, schema
+from auto_qb.config.compat import CONDITION_COMBO_KEYS
 from auto_qb.config.models import QbTraffic, TransferConfig, TransferPathMapEntry, TransferTargetConfig
 from auto_qb.config.schema import HR_CHECK_SITES_FIELDS, RULE_FIELDS, TRACKER_FIELDS
 from auto_qb.config.validation import KNOWN_CONFIG_KEYS
@@ -110,6 +111,10 @@ def build_config_key_surface() -> set:
     surface.add("<任意>_rules")
     for field in RULE_FIELDS:
         _walk(field, f"<任意>_rules.*.{field.key}", surface)
+    # 条件组合树键(W3-A, plan 26-11-01-0106 G4): normalize 建树后 conditions 的组合键面,
+    # 与插件名平级(组合键/条件名二选一的单键节点)—— 键面单点 compat.CONDITION_COMBO_KEYS
+    for combo in CONDITION_COMBO_KEYS:
+        surface.add(f"<任意>_rules.*.conditions.{combo}")
     for kind, container in (("condition", "conditions"), ("action", "actions")):
         for plugin in schema.plugin_table()[kind]:
             base = f"<任意>_rules.*.{container}.{plugin.name}"

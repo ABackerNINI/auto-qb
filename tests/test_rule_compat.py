@@ -1,4 +1,4 @@
-"""test_rule_compat 测试计划: 规则兼容层(config/compat.py 载入规范化单点, plan 26-11-01-0106 §3.2 W2-A/W2-B)
+"""test_rule_compat 测试计划: 规则兼容层(config/compat.py 载入规范化单点, plan 26-11-01-0106 §3.2 W2-A/W2-B/W3-A)
 
 normalize_legacy_rule 是 legacy 规则词汇的唯一容身处: 引擎/校验器只认规范化后形态,
 禁止「读 legacy 键」的第二语义分支(防 G4 hr 双语义分歧重演)。本文件钉四件事:
@@ -13,20 +13,46 @@ normalize_legacy_rule 是 legacy 规则词汇的唯一容身处: 引擎/校验�
 ({policy: stop, retries: 3, backoff: 60}, schema.fields.ON_ERROR_DEFAULTS 单点)——
 「含缺省字段」与旧行为零变化等价(policy=stop 即现行失败即止), 快照按注入后形态重锚定。
 
+⚠ 快照金标准口径(W3-A 再重锚定): normalize 自 W3-A 起把旧扁平条件列表包成隐式
+`all:` 组合树(normalize_conditions 单点; 语义 = 现行 matches 的 all(...)), 各条件的
+行内分组/逗号语义全部留在叶子内(CONDITION_GROUPING_MAP 逐条件映射表), 快照 conditions
+按树形重锚定 —— 叶子逐位不变, 行为零变化。
+
 ## 测试计划(每个测试函数一条)
 - test_production_rules_snapshot: 生产 5 条规则(3 规则集)规范化快照比对 —— 金标准零差异:
-  归一输出逐位等于预期快照(W2-B 起动作含缺省 on_error), conditions 透传零差异
-  (来源: config.yml 191-285 行, 誊写夹具)
+  归一输出逐位等于预期快照(W2-B 动作含缺省 on_error; W3-A conditions 包隐式 all 树,
+  叶子零差异; 来源: config.yml 191-285 行, 誊写夹具)
 - test_snapshot_action_conversion_value_preserving: 快照动作转换保值 —— 每个规范化动作的
   (type, params) 与旧扁平形的 (键名, 值) 逐位相同(引擎 create_action 收到的 value 不变)
 - test_normalize_idempotent: 幂等 —— normalize(normalize(x)) == normalize(x)(旧形输入与
   已规范形输入各验一次; 已规范形零改写, 缺 on_error 的规范形补缺省后收敛)
+- test_normalize_conditions_builds_tree: 条件建树(W3-A) —— 扁平列表包隐式 all、树形 dict
+  原样透传、叶子逐位零触碰; normalize_conditions 自身幂等
+- test_combo_tree_evaluation: 组合树求值(W3-A) —— all/any/not 递归 + 嵌套 + 短路
+  (all 首个 False / any 首个 True 后叶子不再求值)+ 叶子异常上抛(process 兜 verdict:error)
+- test_condition_grouping_mapping: 「逗号分组」逐条件映射(W3-A/G4) —— tags 组内逗号=AND
+  组间=OR、state 组内&=AND 组间=OR 等 13 条件叶子语义经建树+引擎求值与现行为逐条等价;
+  hr 双语义分歧维持现状断言; CONDITION_GROUPING_MAP 覆盖 registry 全部条件
+- test_condition_grouping_map_covers_registry: 映射表覆盖守卫 —— 逐条件核对表
+  (CONDITION_GROUPING_MAP)与注册表条件集一致, 新增条件漏核对当场红
+- test_condition_grouping_mapping_freespace: freespace 叶子映射 —— dict{path, amount} 原样,
+  取数单点打桩(与 expr 侧 disk_usage_value 同口径)
+- test_condition_tree_depth_limit: 组合树深度上限 —— 嵌套 <=16 层通过, >16 层 fail-fast
+- test_engine_condition_tree_legacy_equivalent: 引擎等价 —— 旧扁平条件列表与规范化树形
+  构造的 Rule 建树同构、求值同果(隐式 all = 现行 all(...))
+- test_validator_accepts_tree_form: 校验器认树形 —— 手写 {all/any/not} 组合通过载入校验
+  且零再变换, 叶子深度校验照常分发
+- test_unknown_combo_key_fail_fast: 未知组合键 fail-fast(W3-A) —— all/any/not 拼错按
+  未知条件报、多键节点/组合值非列表/not 孩子非节点报结构错、深度超上限拒绝
+- test_condition_error_location_maps_back_flat: R1① 条件侧坐标回映射 —— 扁平列表条目的
+  校验错报 conditions[i] 扁平坐标; 深度校验错报 conditions[i].<条件名>; 树形子树按树形
+  坐标如实报出
 - test_on_error_default_injection: 缺省 on_error 注入(W2-B) —— 无 on_error 补全缺省对象、
   部分缺省补缺失键、已配置值零改写; 伪动作不注入; on_error 非 dict 原样透传交校验器报
 - test_on_error_mixed_form_normalized: webui 动作卡写出的混合形 {动作键: 值, on_error: {...}}
   经单点漏斗翻译成规范形 {type, params, on_error}(载入链与直达校验器两条路一致)
 - test_conditions_empty_string_no_branch: hhan `conditions: ''` 注记 —— 空串被 _strip_none
-  载入前整键剔除, normalize 不另建分支(不出现 all/any 组合键), 无条件 = 直接过语义保持
+  载入前整键剔除, normalize 不另建分支(不出现 all/any 组合键), 无条件 = 直过硬语义保持
 - test_normalize_bulk_names_and_keys_passthrough: normalize_legacy_rules 组键/规则键与
   spec 非 conditions/actions 键零触碰(R1② 命名透传; D1: 原内容不被载入规范化改写)
 - test_retired_pseudo_action_container_only: 伪动作 ignore_next_action_error 只做容器归一
@@ -37,7 +63,7 @@ normalize_legacy_rule 是 legacy 规则词汇的唯一容身处: 引擎/校验�
 - test_validator_accepts_normalized_form: 校验器只认规范化形态 —— 直接写 {type, params} 新形
   通过校验且载入零再变换; on_error(W2-B)合法取值通过、非法子键/取值/边界 fail-fast 拒绝
 - test_load_config_rules_normalized: 载入链顺序 —— load_config 后 cfg.rules_config 已是
-  规范化形态(校验前归一), conditions 原样透传
+  规范化形态(校验前归一), conditions 为隐式 all 树形(W3-A)
 - test_rule_name_composite_passthrough_exec_history: 复合形「组.规则」命名透传 —— 规范化
   配置载入后 Rule.name 保持「规则集.规则名」, exec_history 去重键「规则名:hash」前半不变
   (W2-B: on_error 注入不触碰键输入 —— 去重键 hash = 种子 infohash, 不含 spec 序列化)
@@ -51,15 +77,24 @@ import json
 import os
 import tempfile
 
+import pytest
 import yaml
 
 from auto_qb.config import ConfigError, load_config
-from auto_qb.config.compat import normalize_action_entry, normalize_legacy_rule, normalize_legacy_rules
+from auto_qb.config.compat import (
+    CONDITION_TREE_MAX_DEPTH,
+    CONDITION_GROUPING_MAP,
+    normalize_action_entry,
+    normalize_conditions,
+    normalize_legacy_rule,
+    normalize_legacy_rules,
+)
 from auto_qb.config.validation import _strip_none
 from auto_qb.core.modules import rules_mod
 from auto_qb.core.state import StateService
+from auto_qb.rules import registry
 from auto_qb.rules.actions import AddTagsAction
-from auto_qb.rules.base import VERDICT_EXECUTED, Rule
+from auto_qb.rules.base import VERDICT_ERROR, VERDICT_EXECUTED, Rule
 from helpers import FakeClient, FakeTorrent, make_ctx, make_manager
 
 # ---------------------------------------------------------------------------
@@ -181,8 +216,9 @@ def _default_on_error() -> dict:
 
 
 # 规范化金标准快照: 5 条规则(3 规则集)归一后的预期形态 —— 与引擎现行消费逐位等价
-# (conditions 原样; 动作 {type, params, on_error} 参数值与旧扁平形逐位相同 + W2-B 注入的
-# 缺省 on_error: policy=stop 即现行失败即止, 行为零变化), 快照按「含缺省字段」口径重锚定
+# (conditions W3-A 起为隐式 all 树形, 叶子逐位不变; 动作 {type, params, on_error} 参数值
+# 与旧扁平形逐位相同 + W2-B 注入的缺省 on_error: policy=stop 即现行失败即止, 行为零变化),
+# 快照按「含缺省字段 + 条件树形」口径重锚定
 _SNAPSHOT = {
     "add_drive_letter_tag_rules":
         {
@@ -191,9 +227,11 @@ _SNAPSHOT = {
                     "enabled": "true",
                     "trigger": "on_torrent_added",
                     "cooldown": "5M",
-                    "conditions": [{
-                        "path": ["regex:^R:/Download/PTing/", "regex:^R:/Download/ing/"]
-                    }],
+                    "conditions": {
+                        "all": [{
+                            "path": ["regex:^R:/Download/PTing/", "regex:^R:/Download/ing/"]
+                        }]
+                    },
                     "actions": [{
                         "type": "add_tags",
                         "params": ["R"],
@@ -211,9 +249,11 @@ _SNAPSHOT = {
                         "30M",
                     "cooldown":
                         "5M",
-                    "conditions": [{
-                        "path": ["regex:^I:/"]
-                    }],
+                    "conditions": {
+                        "all": [{
+                            "path": ["regex:^I:/"]
+                        }]
+                    },
                     "actions":
                         [
                             {
@@ -231,9 +271,11 @@ _SNAPSHOT = {
                         "30M",
                     "cooldown":
                         "5M",
-                    "conditions": [{
-                        "path": ["regex:^H:/"]
-                    }],
+                    "conditions": {
+                        "all": [{
+                            "path": ["regex:^H:/"]
+                        }]
+                    },
                     "actions":
                         [
                             {
@@ -251,9 +293,11 @@ _SNAPSHOT = {
                         "5M",
                     "cooldown":
                         "5M",
-                    "conditions": [{
-                        "path": ["regex:^R:/"]
-                    }],
+                    "conditions": {
+                        "all": [{
+                            "path": ["regex:^R:/"]
+                        }]
+                    },
                     "actions":
                         [
                             {
@@ -300,17 +344,19 @@ def _normalized_production_rules() -> dict:
 
 
 def test_production_rules_snapshot():
-    """生产 5 条规则规范化快照比对: 归一输出逐位等于预期快照(金标准零差异), conditions 透传"""
+    """生产 5 条规则规范化快照比对: 归一输出逐位等于预期快照(金标准零差异), 叶子零差异建树"""
     cfg = _normalized_production_rules()
     for group_name, group in _SNAPSHOT.items():
         assert group_name in cfg, f"缺规则集 {group_name}"
         for rule_name, expected in group.items():
             actual = cfg[group_name][rule_name]
             assert actual == expected, f"{group_name}.{rule_name} 规范化快照零差异被破坏"
-            # conditions 透传锚定: 归一前后 conditions 逐位相同(本期为现行消费形态, W3-A 才建树)
+            # 条件建树锚定(W3-A): 归一后 conditions = 隐式 all 树, 叶子与旧扁平列表逐位相同
             if "conditions" in expected:
                 raw = yaml.load(_PRODUCTION_RULES_YAML, Loader=yaml.BaseLoader)["config"][group_name][rule_name]
-                assert actual["conditions"] == raw["conditions"], f"{group_name}.{rule_name} conditions 应零差异透传"
+                assert actual["conditions"] == {
+                    "all": raw["conditions"]
+                }, (f"{group_name}.{rule_name} conditions 应为隐式 all 树且叶子零差异")
 
 
 def test_snapshot_action_conversion_value_preserving():
@@ -345,6 +391,7 @@ def test_normalize_idempotent():
         }],
     }
     once = normalize_legacy_rule(legacy)
+    assert once["conditions"] == {"all": [{"size": ">=1MiB"}, {"path": ["/a"]}]}, "扁平条件列表包隐式 all(W3-A)"
     assert normalize_legacy_rule(once) == once
     # 已规范形(含完整 on_error): 原样返回(同一内容), 且不新建 actions 列表项
     assert normalize_legacy_rule(once) == once
@@ -358,6 +405,340 @@ def test_normalize_idempotent():
     assert normalize_action_entry("oops") == "oops"
     assert normalize_action_entry({}) == {}
     assert normalize_action_entry({"a": 1, "b": 2}) == {"a": 1, "b": 2}
+
+
+# ------------------------- 组合树(W3-A): 建树 / 求值 / 映射 -------------------------
+
+
+def test_normalize_conditions_builds_tree():
+    """条件建树(W3-A): 扁平列表包隐式 all; 树形 dict 原样透传; 叶子逐位零触碰; 自身幂等"""
+    # 旧扁平单键 dict 列表 -> {"all": 列表}(序号 1:1 保留, R1① 扁平坐标回映射的依据)
+    flat = [{"size": ">=1MiB"}, {"path": ["/a"]}]
+    tree = normalize_conditions(flat)
+    assert tree == {"all": flat}, "隐式 all 包裹"
+    assert tree["all"] == flat, "叶子逐位零触碰(逗号分组语义留在叶内)"
+    # 已是树形(dict)原样透传: 组合节点 / 单条件节点 / 非法形状都交校验器, normalize 不吞
+    assert normalize_conditions({"all": [{"size": "1MiB"}]}) == {"all": [{"size": "1MiB"}]}
+    assert normalize_conditions({"any": [{"size": "1MiB"}]}) == {"any": [{"size": "1MiB"}]}
+    assert normalize_conditions({"not": {"size": "1MiB"}}) == {"not": {"size": "1MiB"}}
+    assert normalize_conditions({"path": "/a"}) == {"path": "/a"}
+    assert normalize_conditions("not-a-tree") == "not-a-tree", "非法形状原样透传交校验器报"
+    # 幂等: 建树一次后收敛稳定
+    assert normalize_conditions(tree) == tree
+    # normalize_legacy_rule 全链: 载入规范化对 conditions 建树, 其余键零触碰
+    spec = {"enabled": "true", "conditions": [{"size": ">=1MiB"}]}
+    norm = normalize_legacy_rule(spec)
+    assert norm["conditions"] == {"all": [{"size": ">=1MiB"}]}
+    assert spec["conditions"] == [{"size": ">=1MiB"}], "输入不被就地改写"
+
+
+class _Fixed:
+    """固定返回值的哑条件(求值/短路测试用): calls 记录被求值次数"""
+    def __init__(self, value):
+        self.value = value
+        self.calls = 0
+
+    def match(self, ctx):
+        self.calls += 1
+        return self.value
+
+
+class _Boom:
+    """求值即抛的哑条件: 用于断言短路后不被触达 / 异常上抛路径"""
+    def __init__(self):
+        self.calls = 0
+
+    def match(self, ctx):
+        self.calls += 1
+        raise RuntimeError("boom")
+
+
+def _eval_rule(tmp_path, tree):
+    """构造 Rule 并手动挂条件树(内存表示单测; spec 级路径由映射/载入测试覆盖)"""
+    mgr = make_manager(os.path.join(tmp_path, "state.json"))
+    ctx = make_ctx(mgr, FakeTorrent(tags="", size=100 * 1024**2), FakeClient())
+    rule = Rule("g.t", {"actions": []}, mgr)
+    rule.condition_tree = tree
+    return rule, ctx
+
+
+def test_combo_tree_evaluation(tmp_path):
+    """组合树求值(W3-A): all/any/not 递归 + 嵌套 + 短路 + 叶子异常上抛 -> verdict:error"""
+    t1, t2, f1, f2 = _Fixed(True), _Fixed(True), _Fixed(False), _Fixed(False)
+    boom = _Boom()
+
+    # all: 全真才真; any: 一真即真; not: 取反
+    rule, ctx = _eval_rule(tmp_path, ("all", [("leaf", t1), ("leaf", t2)]))
+    assert rule.matches(ctx) is True
+    rule, ctx = _eval_rule(tmp_path, ("all", [("leaf", t1), ("leaf", f1)]))
+    assert rule.matches(ctx) is False
+    rule, ctx = _eval_rule(tmp_path, ("any", [("leaf", f1), ("leaf", t1)]))
+    assert rule.matches(ctx) is True
+    rule, ctx = _eval_rule(tmp_path, ("not", ("leaf", f1)))
+    assert rule.matches(ctx) is True
+    rule, ctx = _eval_rule(tmp_path, ("not", ("leaf", t1)))
+    assert rule.matches(ctx) is False
+
+    # 嵌套: any( all(T,T), F ) = True; all( any(F,T), F ) = False
+    rule, ctx = _eval_rule(tmp_path, ("any", [("all", [("leaf", t1), ("leaf", t2)]), ("leaf", f1)]))
+    assert rule.matches(ctx) is True
+    rule, ctx = _eval_rule(tmp_path, ("all", [("any", [("leaf", f1), ("leaf", t1)]), ("leaf", f2)]))
+    assert rule.matches(ctx) is False
+
+    # 短路: all 首个 False 后 / any 首个 True 后, 其后叶子不再求值
+    rule, ctx = _eval_rule(tmp_path, ("all", [("leaf", f1), ("leaf", boom)]))
+    assert rule.matches(ctx) is False and boom.calls == 0, "all 短路: False 后不再求值"
+    rule, ctx = _eval_rule(tmp_path, ("any", [("leaf", t1), ("leaf", boom)]))
+    assert rule.matches(ctx) is True and boom.calls == 0, "any 短路: True 后不再求值"
+
+    # 叶子异常上抛: matches 抛 RuntimeError; process 兜成 verdict:error 本条本轮不命中(W2 语义)
+    rule, ctx = _eval_rule(tmp_path, ("all", [("leaf", _Boom())]))
+    with pytest.raises(RuntimeError):
+        rule.matches(ctx)
+    rule.actions = [AddTagsAction(["X"])]
+    assert rule.process(ctx) == VERDICT_ERROR, "条件异常 -> verdict:error, 本条本轮不命中"
+
+
+def test_engine_condition_tree_legacy_equivalent(tmp_path):
+    """引擎等价: 旧扁平条件列表与规范化树形构造的 Rule 求值同型同果(隐式 all = 现行 all(...))"""
+    mgr = make_manager(os.path.join(tmp_path, "state.json"))
+    tor = FakeTorrent(tags="HR", size=100 * 1024**2)
+    ctx = make_ctx(mgr, tor, FakeClient())
+    legacy = Rule("g.t", {"conditions": [{"size": ">=1MiB"}, {"tags": "HR"}], "actions": []}, mgr)
+    tree = Rule(
+        "g.t",
+        {
+            "conditions": {
+                "all": [{
+                    "size": ">=1MiB"
+                }, {
+                    "tags": "HR"
+                }]
+            },
+            "actions": []
+        },
+        mgr,
+    )
+
+    def tree_shape(node):
+        """树的类型形状(叶子按插件类名比, 实例身份不比)"""
+        kind, payload = node
+        if kind == "leaf":
+            return (kind, type(payload).__name__)
+        if kind == "not":
+            return (kind, tree_shape(payload))
+        return (kind, [tree_shape(c) for c in payload])
+
+    assert tree_shape(legacy.condition_tree) == tree_shape(tree.condition_tree), ("扁平形经单点漏斗建树后与手写树形同构")
+    assert legacy.matches(ctx) is True and tree.matches(ctx) is True
+
+
+def _mapping_rule(tmp_path, conditions, tor_kw=None, tracker_kw=None, no_tracker=False):
+    """映射测试辅助: 条件叶子经真实建树漏斗(normalize_legacy_rule -> Rule)构造, 返回求值结果"""
+    mgr = make_manager(os.path.join(tmp_path, "state.json"), tracker_kw=tracker_kw)
+    tor = FakeTorrent(**(tor_kw or {}))
+    ctx = make_ctx(mgr, tor, FakeClient())
+    if no_tracker:
+        tor.tracker_conf = None  # make_ctx 只在 None 时回填, 此后置 None = 模拟未匹配站点
+    spec = normalize_legacy_rule({"conditions": conditions, "actions": []})
+    return Rule("g.t", spec, mgr).matches(ctx)
+
+
+def test_condition_grouping_mapping(tmp_path):
+    """「逗号分组」逐条件映射(W3-A/G4): 13 条件叶子语义经建树+求值与现行为逐条等价
+
+    映射结论 = compat.CONDITION_GROUPING_MAP: 行内分隔符/列表 OR 语义全部留在叶子内,
+    normalize 零改写(只承诺生产已出现形态); hr 双语义分歧维持现状不单边改齐
+    (conditions.py:154-164 vs rules/expr/env.py _hr, 注释证据在叶内)。
+    """
+    # path: 列表=OR(无行内分组) —— 生产唯一在用条件, regex: 前缀原样
+    assert _mapping_rule(tmp_path, [{"path": ["regex:^R:/", "/nope/"]}]) is True
+    assert _mapping_rule(tmp_path, [{"path": ["/nope/", "/nada/"]}]) is False
+    # size: 单比较串
+    assert _mapping_rule(tmp_path, [{"size": ">=1MiB"}], tor_kw={"size": 100 * 1024**2}) is True
+    assert _mapping_rule(tmp_path, [{"size": ">=1TiB"}], tor_kw={"size": 100 * 1024**2}) is False
+    # tags: 组内逗号=AND, 组间列表=OR(叶子内语义, 不展开成 any)
+    assert _mapping_rule(tmp_path, [{"tags": ["HR,low", "z"]}], tor_kw={"tags": "HR,low"}) is True
+    assert _mapping_rule(tmp_path, [{"tags": ["HR,low"]}], tor_kw={"tags": "HR"}) is False, "组内逗号=AND"
+    assert _mapping_rule(tmp_path, [{"tags": ["nope", "HR"]}], tor_kw={"tags": "HR"}) is True, "组间列表=OR"
+    # category: 列表=OR
+    assert _mapping_rule(tmp_path, [{"category": ["regex:^HR", "x"]}], tor_kw={"category": "HR"}) is True
+    assert _mapping_rule(tmp_path, [{"category": ["x", "y"]}], tor_kw={"category": "HR"}) is False
+    # trackers: 列表=OR(默认 manager 装配 HHan 假站点, make_ctx 已匹配)
+    assert _mapping_rule(tmp_path, [{"trackers": ["nope", "HHan"]}]) is True
+    assert _mapping_rule(tmp_path, [{"trackers": "nope"}]) is False
+    # tracker_group: 列表=OR(站点 groups 声明)
+    assert _mapping_rule(tmp_path, [{"tracker_group": ["nope", "国内"]}], tracker_kw={"groups": ["国内"]}) is True
+    assert _mapping_rule(tmp_path, [{"tracker_group": "国外"}], tracker_kw={"groups": ["国内"]}) is False, "分组不符恒 False"
+    # state: 组内 &=AND(非逗号), 组间列表=OR(stalledUP: is_complete/is_uploading 真, is_downloading 假)
+    assert _mapping_rule(tmp_path, [{"state": ["is_complete&is_uploading", "is_downloading"]}]) is True
+    assert _mapping_rule(tmp_path, [{"state": ["is_complete&is_downloading"]}]) is False, "组内 &=AND"
+    assert _mapping_rule(tmp_path, [{"state": ["is_downloading", "is_uploading"]}]) is True, "组间列表=OR"
+    # hr: 单模式串; 双语义分歧维持现状(conditions.py:154-164 显式分支, 勿单边改齐):
+    # 分支一 tracker_conf=None(未匹配站点) —— 仅 condition-not-met 为真
+    assert _mapping_rule(tmp_path, [{"hr": "condition-not-met"}], no_tracker=True) is True
+    assert _mapping_rule(tmp_path, [{"hr": "condition-met"}], no_tracker=True) is False
+    assert _mapping_rule(tmp_path, [{"hr": "satisfied"}], no_tracker=True) is False
+    # 分支二 站点已匹配但无 HR 配置(conf.hr=None, tracker_kw 显式置空) —— 非 condition-met 全真;
+    # 其中 satisfied=True 与表达式侧 tor.hr_satisfied 同场景恒 false 有意分歧(那里答「可打标/可删」
+    # 达标语义, 本处答「有无义务」, 见 rules/expr/env.py _hr 注释)
+    hr_none = {"hr": None}
+    assert _mapping_rule(tmp_path, [{"hr": "condition-not-met"}], tracker_kw=hr_none) is True
+    assert _mapping_rule(tmp_path, [{"hr": "condition-met"}], tracker_kw=hr_none) is False
+    assert _mapping_rule(tmp_path, [{"hr": "satisfied"}], tracker_kw=hr_none) is True
+    # date_time: dict 区间串(确定性区间: 当日/当周必在 1-31 / 1-7 内)
+    assert _mapping_rule(tmp_path, [{"date_time": {"day_of_month": "1-31", "day_of_week": "1-7"}}]) is True
+    assert _mapping_rule(tmp_path, [{"date_time": {"day_of_month": "32"}}]) is False
+    # seedtime / upload_ratio: 单比较串
+    assert _mapping_rule(tmp_path, [{"seedtime": "<24H"}], tor_kw={"seeding_time": 0}) is True
+    assert _mapping_rule(tmp_path, [{"seedtime": ">24H"}], tor_kw={"seeding_time": 0}) is False
+    assert _mapping_rule(tmp_path, [{"upload_ratio": "<1.5"}], tor_kw={"ratio": 0.0}) is True
+    assert _mapping_rule(tmp_path, [{"upload_ratio": ">1.5"}], tor_kw={"ratio": 0.0}) is False
+    # expr: 单表达式串(叶子原样, 编译/语义校验不变)
+    assert _mapping_rule(tmp_path, [{"expr": "tor.size > 1MiB"}], tor_kw={"size": 100 * 1024**2}) is True
+
+
+def test_condition_grouping_mapping_freespace(tmp_path, monkeypatch):
+    """freespace 叶子映射: dict{path, amount} 原样; 取数单点打桩(与 expr 侧同口径)"""
+    monkeypatch.setattr("auto_qb.rules.conditions.disk_usage_value", lambda p, k: 100 * 1024**3)
+    assert _mapping_rule(tmp_path, [{"freespace": {"path": "R:/", "amount": ">1MiB"}}]) is True
+    assert _mapping_rule(tmp_path, [{"freespace": {"path": "R:/", "amount": "<1MiB"}}]) is False
+
+
+def test_condition_grouping_map_covers_registry():
+    """映射表覆盖守卫: 逐条件核对表(CONDITION_GROUPING_MAP)与注册表条件集一致"""
+    registered = set(registry.CONDITIONS)
+    assert set(CONDITION_GROUPING_MAP) == registered, (
+        "逗号分组映射表漏核对条件 —— 新增条件必须在 compat.CONDITION_GROUPING_MAP 补行内分组语义 "
+        "(计划 §3.2/G4: 以 conditions.py 现行为准逐条件核对)"
+    )
+
+
+def test_unknown_combo_key_fail_fast():
+    """未知组合键 fail-fast(W3-A): 拼错组合键按未知条件报; 多键/形状错/深度超限拒绝"""
+    # 组合键拼错(al/Al) -> 未知条件(不静默当叶子, 也不静默丢弃)
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n      conditions:\n        - al: [{size: \">=1MiB\"}]\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "未知条件 'al'" in err, err
+    # 多键节点(组合键 + 条件名混写)
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions: {all: [{size: \">=1MiB\"}], path: /a}\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "必须是单键字典" in err, err
+    # all/any 的值必须是列表; not 的孩子必须是节点
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions: {all: {size: \">=1MiB\"}}\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "conditions.all: 必须是列表" in err, err
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions: {not: \"size\"}\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "conditions.not" in err and "必须是字典" in err, err
+    # 空节点/顶层非字典
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions: {all: []}\n      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "conditions: 值不能为空" not in err, "all: [] 空列表 = 恒真, 与旧空列表语义一致, 合法: " + err
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n      conditions: \"oops\"\n      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "conditions: 必须是字典" in err, err
+
+
+def test_condition_tree_depth_limit():
+    """组合树深度上限(W3-A): 嵌套 <=16 层通过, >16 层 fail-fast(防递归爆炸)"""
+    def nested(k: int) -> dict:
+        node = {"size": ">=1MiB"}
+        for _ in range(k):
+            node = {"all": [node]}
+        return node
+
+    def _try_load(k: int) -> str:
+        flow = yaml.safe_dump(nested(k), default_flow_style=True).strip()
+        return _load_errors(
+            "config:\n  my_rules:\n    r1:\n"
+            f"      conditions: {flow}\n"
+            "      actions:\n        - add_tags: [\"A\"]\n"
+        )
+
+    assert _try_load(CONDITION_TREE_MAX_DEPTH - 1) == "", "上限内(16 层组合节点)合法"
+    err = _try_load(CONDITION_TREE_MAX_DEPTH)
+    assert f"组合树嵌套超过上限 {CONDITION_TREE_MAX_DEPTH} 层" in err, err
+
+
+def test_condition_error_location_maps_back_flat():
+    """R1① 条件侧坐标回映射: 扁平列表条目报 conditions[i]; 树形子树按树形坐标如实报"""
+    # 扁平列表条目的未知条件 -> conditions[0](不是 conditions.all[0])
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions:\n        - bogus_cond: 1\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "r1.conditions[0]: 未知条件 'bogus_cond'" in err, err
+    assert "conditions.all" not in err, err
+    # 深度校验错: 扁平坐标 conditions[i].<条件名>
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions:\n        - tags: ['regex:[x']\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "r1.conditions[0].tags[0]: 非法正则" in err, err
+    # 用户手写树形的子树错误 -> 树形坐标如实报(那里本就是树形写法, 无扁平坐标可回映射)
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions: {any: [{bogus_cond: 1}]}\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "r1.conditions.any[0]: 未知条件 'bogus_cond'" in err, err
+    err = _load_errors(
+        "config:\n  my_rules:\n    r1:\n"
+        "      conditions: {not: {bogus_cond: 1}}\n"
+        "      actions:\n        - add_tags: [\"A\"]\n"
+    )
+    assert "r1.conditions.not: 未知条件 'bogus_cond'" in err, err
+
+
+def test_validator_accepts_tree_form():
+    """校验器认树形: 手写 {all/any/not} 组合通过载入校验且零再变换; 叶子深度校验照常分发"""
+    cfg = _load_config_from_text(
+        "config:\n"
+        "  my_rules:\n"
+        "    r1:\n"
+        "      conditions:\n"
+        "        all:\n"
+        "          - any:\n"
+        "              - path: [\"regex:^I:/\"]\n"
+        "              - size: \">=1MiB\"\n"
+        "          - not: {trackers: nope}\n"
+        "      actions:\n"
+        "        - add_tags: [\"A\"]\n"
+    )
+    spec = cfg.rules_config["my_rules"]["r1"]
+    assert spec["conditions"] == {
+        "all": [
+            {
+                "any": [{
+                    "path": ["regex:^I:/"]
+                }, {
+                    "size": ">=1MiB"
+                }]
+            },
+            {
+                "not": {
+                    "trackers": "nope"
+                }
+            },
+        ]
+    }, "树形输入零再变换(幂等收敛), 引擎按树形求值"
 
 
 def test_on_error_default_injection():
@@ -453,7 +834,7 @@ def test_normalize_bulk_names_and_keys_passthrough():
     assert list(group) == ["规则名"], "规则键(命名后半)不得被改写"
     norm = group["规则名"]
     assert norm["enabled"] == "true" and norm["trigger"] == "on_torrent_added" and norm["cooldown"] == "5M"
-    assert norm["conditions"] == spec["conditions"]
+    assert norm["conditions"] == {"all": spec["conditions"]}, "conditions 建树(W3-A), 叶子逐位不变"
     assert norm["actions"] == [{"type": "add_tags", "params": ["R"], "on_error": _default_on_error()}]
     # 载入规范化不就地改写原 spec(D1: 配置原内容原样保留)
     assert json.dumps(spec, ensure_ascii=False) == original
@@ -677,7 +1058,7 @@ def test_validator_accepts_normalized_form():
 
 
 def test_load_config_rules_normalized():
-    """载入链顺序: load_config 后 cfg.rules_config 已是规范化形态(校验前归一), conditions 透传"""
+    """载入链顺序: load_config 后 cfg.rules_config 已是规范化形态(校验前归一), conditions 为隐式 all 树"""
     cfg = _load_config_from_text(
         "config:\n"
         "  my_rules:\n"
@@ -691,7 +1072,7 @@ def test_load_config_rules_normalized():
         "            basic_check: filelist\n"
     )
     spec = cfg.rules_config["my_rules"]["r1"]
-    assert spec["conditions"] == [{"path": ["regex:^I:/"]}], "conditions 透传零差异"
+    assert spec["conditions"] == {"all": [{"path": ["regex:^I:/"]}]}, "conditions 建树为隐式 all(W3-A)"
     assert spec["actions"] == [
         {
             "type": "checking",

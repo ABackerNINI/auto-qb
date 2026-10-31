@@ -368,7 +368,7 @@ def test_traffic_source_off_raises_closed_reason():
 
 def test_config_gate_for_traffic_names():
     """配置期门控: 数据源没配 -> 用到该名字即报错; 配了 -> 放行(见 _expr_gate)"""
-    spec = {"g": {"r": {"conditions": [{"expr": "(sys.upload_today > 1GiB)"}], "actions": []}}}
+    spec = {"g": {"r": {"conditions": {"all": [{"expr": "(sys.upload_today > 1GiB)"}]}, "actions": []}}}  # W3-A 树形键面
     with_source = {"traffic_source": {"traffic_monitor": {"dat_path": "/x"}}}
 
     errors: list = []
@@ -380,7 +380,18 @@ def test_config_gate_for_traffic_names():
     assert len(errors) == 1 and "无数据源" in errors[0]
     # 不涉及被门控名字的表达式不受影响
     errors.clear()
-    _validate_rules({"g": {"r": {"conditions": [{"expr": "(tor.size > 1GiB)"}], "actions": []}}}, errors, {})
+    _validate_rules(
+        {"g": {
+            "r": {
+                "conditions": {
+                    "all": [{
+                        "expr": "(tor.size > 1GiB)"
+                    }]
+                },
+                "actions": []
+            }
+        }}, errors, {}
+    )  # W3-A 树形
     assert errors == []
 
 

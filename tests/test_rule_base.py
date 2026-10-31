@@ -377,7 +377,7 @@ def test_rule_condition_exception():
                 raise RuntimeError("boom")
 
         rule = Rule("g.test", {"actions": [{"add_tags": ["X"]}]}, mgr)
-        rule.conditions = [Boom()]
+        rule.condition_tree = ("all", [("leaf", Boom())])  # W3-A: 条件树内存表示
         records = []
 
         class Grab(logging.Handler):
@@ -415,7 +415,7 @@ def test_rule_condition_exception_other_rules_unaffected():
                 raise RuntimeError("boom")
 
         bad = Rule("g.bad", {"actions": [{"add_tags": ["X"]}]}, mgr)
-        bad.conditions = [Boom()]
+        bad.condition_tree = ("all", [("leaf", Boom())])  # W3-A: 条件树内存表示
         good = Rule("g.good", {"actions": [{"add_tags": ["Y"]}]}, mgr)
         tor = FakeTorrent(tags="")
         ctx_bad = make_ctx(mgr, tor, client)
@@ -835,11 +835,13 @@ def test_rule_context_api_fallback_to_client():
 
 
 def test_rule_init_non_dict_condition_skipped():
-    """Rule 构造: conditions 中非 dict 项跳过(不崩溃不误建)"""
+    """Rule 构造: conditions 中非 dict 项跳过(不崩溃不误建; P2-a 口径在树形下保持)"""
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         rule = Rule("g.t", {"conditions": ["not-a-dict", {"size": ">=1MiB"}], "actions": []}, mgr)
-        assert len(rule.conditions) == 1
+        # W3-A: 扁平列表经单点漏斗包成隐式 all 树; 非 dict 项在建树时跳过, 仅剩 size 叶子
+        assert rule.condition_tree[0] == "all"
+        assert [kind for kind, _ in rule.condition_tree[1]] == ["leaf"]
 
 
 def test_rule_init_bad_condition_wraps_config_error():
@@ -893,7 +895,7 @@ def test_rule_condition_error_throttled_to_debug():
                 raise RuntimeError("boom-throttle")
 
         rule = Rule("g.test", {"actions": []}, mgr)
-        rule.conditions = [Boom()]
+        rule.condition_tree = ("all", [("leaf", Boom())])  # W3-A: 条件树内存表示
         # 挂模块 logger 自建 handler(禁 caplog, 见 pitfalls/testing/log-capture.md)
         logger = logging.getLogger("auto_qb.rules.base")
         records = []

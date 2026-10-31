@@ -30,6 +30,8 @@ version: 5
 <任意>_rules.*.actions.start
 <任意>_rules.*.actions.stop
 <任意>_rules.*.actions.upload_speed_limit
+<任意>_rules.*.conditions.all
+<任意>_rules.*.conditions.any
 <任意>_rules.*.conditions.category
 <任意>_rules.*.conditions.date_time
 <任意>_rules.*.conditions.date_time.day_of_month
@@ -40,6 +42,7 @@ version: 5
 <任意>_rules.*.conditions.freespace.amount
 <任意>_rules.*.conditions.freespace.path
 <任意>_rules.*.conditions.hr
+<任意>_rules.*.conditions.not
 <任意>_rules.*.conditions.path
 <任意>_rules.*.conditions.seedtime
 <任意>_rules.*.conditions.size

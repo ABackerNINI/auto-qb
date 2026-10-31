@@ -1159,7 +1159,7 @@ def test_validate_value_errors_extended():
         assert "config.hr: 未知键" in err, err
         assert "config.hr.overwrite_category" in err, err
         assert "config.trackers: 必须是字典" in err, err
-        assert "config.example_rules.r1.conditions: 必须是列表" in err, err
+        assert "config.example_rules.r1.conditions: 必须是字典" in err, err  # W3-A: 树形键面
         assert "config.example_rules.r1.actions: 必须是列表" in err, err
         assert "config.example_rules.r1: trigger 取值非法" in err, err
 
@@ -1246,7 +1246,7 @@ def test_validate_plugin_entry_and_notify_edges():
 
 
 def test_validate_trackers_and_rules_structure():
-    """trackers 非字典/规则集非字典/规则 spec 非字典/conditions-actions 非列表"""
+    """trackers 非字典/规则集非字典/规则 spec 非字典/conditions 非字典(W3-A 树形)-actions 非列表"""
     with tempfile.TemporaryDirectory() as td:
         text = (
             "config:\n"
@@ -1262,7 +1262,7 @@ def test_validate_trackers_and_rules_structure():
         assert "config.trackers: 必须是字典" in err, err
         assert "config.example_rules: 必须是字典(规则名 -> 规则spec)" in err, err
         assert "config.more_rules.r1: 必须是字典" in err, err
-        assert "config.more_rules.r2.conditions: 必须是列表" in err, err
+        assert "config.more_rules.r2.conditions: 必须是字典" in err, err  # W3-A: 树形键面
         assert "config.more_rules.r2.actions: 必须是列表" in err, err
 
 

@@ -1,7 +1,24 @@
 # 条件与动作 (含 expr 速查)
 
-> 摘要: 13 种条件 + `expr` 速查 + 12 种动作 + 限速单数值保护 + 状态映射表 + 变量替换。
-> 触发: 条件, 动作, expr, 表达式, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
+> 摘要: 条件组合树 (`all`/`any`/`not`, W3) + 13 种条件 + `expr` 速查 + 12 种动作 + 限速单数值保护 + 状态映射表 + 变量替换。
+> 触发: 条件, 组合树, all, any, not, 逗号分组, 动作, expr, 表达式, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
+
+## 条件组合树 (W3, plan 26-11-01-0106)
+
+规则的 `conditions` 规范化后是**一个节点**: 组合节点 `all: [节点...]` / `any: [节点...]` / `not: 节点`, 或叶子 `{条件名: spec}`。旧扁平单键 dict 列表由载入层 `config/compat.normalize_conditions` 包一层隐式 `all:`(语义 = 旧「列表内全部 AND」), 引擎与校验器只认树形(防漂移铁律: 不存在读 legacy 扁平列表的第二语义分支)。
+
+```yaml
+conditions:
+  all:                                  # 全部满足(旧扁平列表 = 隐式 all, 行为零变化)
+    - path: ["regex:^R:/"]              # 叶子: 13 种条件之一, spec 语义不变
+    - any:                              # 任一满足(嵌套/短路求值)
+        - tags: ["HR,low", "z"]         #   组内逗号=与, 组间=或(叶子内既有语义, 见下表)
+        - not: {trackers: nope}         # not 取反, 孩子是单个节点
+```
+
+- **求值**: 递归 + 短路(all 首个 False / any 首个 True 后不再求值其后叶子); 叶子求值异常 -> `verdict: error` 本条规则本轮不命中, 不影响其它规则(W2 语义)。
+- **fail-fast**: 组合键拼错按「未知条件」报错; 多键节点 / `all`/`any` 值非列表 / `not` 孩子非节点 / 嵌套超 16 层(`CONDITION_TREE_MAX_DEPTH`, compat 单点)全部在载入校验期拒绝。
+- **「逗号分组」映射(G4)**: 各条件的行内分组/OR 语义**全部留在叶子内**, normalize 零改写(逐条件核对表 = `compat.CONDITION_GROUPING_MAP`; `tags` 组内逗号=AND、`state` 组内 `&`=AND 且**非逗号**, 组间都是列表=OR)。组合树的 `any`/`not` 是新增显式写法, 不改写既有叶子语义; `hr` 的双语义分歧(`conditions.py` 无站点/无 HR 分支 vs 表达式侧 `tor.hr_satisfied`)维持现状不单边改齐。
 
 ## 13 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
 

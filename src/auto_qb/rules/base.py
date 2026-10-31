@@ -11,7 +11,11 @@ from . import registry
 from ..infra import utils
 from ..torrents import TorrentRecord
 from ..config import Config, ConfigError
-from ..config.compat import normalize_action_entry
+from ..config.compat import (
+    CONDITION_TREE_MAX_DEPTH,
+    normalize_action_entry,
+    normalize_conditions,
+)
 from ..config.schema.fields import ON_ERROR_DEFAULTS
 # from ..qbmanager import QbManager
 from ..core.qbapi import QbApi
@@ -152,6 +156,62 @@ class RuleContext:
         return rec if rec is not None else self.snapshot
 
 
+# ---------------------------------------------------------------------------
+# 条件组合树(W3-A, plan 26-11-01-0106 §3.2/G4)
+#
+# 规范化形态(config/compat.normalize_conditions 建树单点): conditions 是**一个节点** —
+#   组合节点 {all: [节点...]} / {any: [节点...]} / {not: 节点} 或叶子 {条件名: spec}。
+# 引擎只认树形(防漂移铁律: 没有「读 legacy 扁平列表」的第二语义分支); 旧扁平列表由
+# normalize 包隐式 all(语义 = 现行 matches 的 all(...)), 各条件的行内分组/OR 语义全部
+# 留在叶子内(逗号分组逐条件映射表见 compat.CONDITION_GROUPING_MAP)。
+#
+# 内存表示: ("all"|"any", [子节点...]) / ("not", 子节点) / ("leaf", 条件实例)。
+# 求值递归 + 天然短路(all/any 用生成器, 首个定性结果即停); 叶子 .match 异常上抛,
+# 由 Rule.process 兜成 verdict:error 本条本轮不命中(W2 语义, 不影响其它规则)。
+# ---------------------------------------------------------------------------
+
+
+def _build_condition_node(node, rule_name: str, depth: int = 1):
+    """构造期建树: 规范化节点 dict -> 内存节点; 名称/结构合法性由 config 校验保证
+    (黄金法则 4), 此处只对「程序内直接构造 Rule 的内存 spec」做形状兜底(ConfigError)。
+
+    容错口径与 W2-A 前一致(P2-a): all/any 列表里的非 dict 项跳过(不崩溃不误建);
+    not 的孩子必须是节点; 叶子构造异常包装 ConfigError 携带规则名。
+    """
+    if depth > CONDITION_TREE_MAX_DEPTH:
+        raise ConfigError(f"规则 {rule_name}: 条件组合树嵌套超过上限 {CONDITION_TREE_MAX_DEPTH} 层")
+    if not isinstance(node, dict) or len(node) != 1:
+        raise ConfigError(f"规则 {rule_name}: 条件节点必须是单键字典: {node!r}")
+    key, value = next(iter(node.items()))
+    if key in ("all", "any"):
+        if not isinstance(value, list):
+            raise ConfigError(f"规则 {rule_name}: 条件组合节点 {key}: 必须是列表")
+        children = []
+        for child in value:
+            if not isinstance(child, dict):
+                continue  # P2-a: 非 dict 项跳过(与旧扁平列表容错同口径)
+            children.append(_build_condition_node(child, rule_name, depth + 1))
+        return (key, children)
+    if key == "not":
+        return ("not", _build_condition_node(value, rule_name, depth + 1))
+    try:
+        return ("leaf", registry.create_condition(node))
+    except Exception as e:
+        raise ConfigError(f"规则 {rule_name}: 条件 {node}: {e}") from e
+
+
+def _eval_condition_node(node, ctx: "RuleContext") -> bool:
+    """组合树递归求值: all/any 生成器短路, not 取反, 叶子交插件 match(异常上抛)"""
+    kind, payload = node
+    if kind == "all":
+        return all(_eval_condition_node(c, ctx) for c in payload)
+    if kind == "any":
+        return any(_eval_condition_node(c, ctx) for c in payload)
+    if kind == "not":
+        return not _eval_condition_node(payload, ctx)
+    return payload.match(ctx)
+
+
 class Rule:
     """一条规则插件: 条件列表 + 动作列表 + 执行语义, 由 QbManager 统一加载与调度"""
     def __init__(self, name: str, spec: dict, manager: Any):
@@ -173,14 +233,17 @@ class Rule:
         self._cond_err_key: Optional[str] = None
         self._cond_err_ts: float = 0.0
 
-        self.conditions = []
-        for cond_spec in spec.get("conditions") or []:
-            if not isinstance(cond_spec, dict):
-                continue
-            try:
-                self.conditions.append(registry.create_condition(cond_spec))
-            except Exception as e:
-                raise ConfigError(f"规则 {self.name}: 条件 {cond_spec}: {e}") from e
+        # 条件组合树(W3-A): 载入链(load_config -> normalize_legacy_rules)已把旧扁平列表
+        # 包成隐式 all 树; 这里再过一次单点漏斗(config.compat.normalize_conditions, 幂等,
+        # 与动作 normalize_action_entry 同款)—— 引擎只认树形, 没有「读 legacy 扁平列表」
+        # 的第二语义分支, 兼容层唯一容身在 config/compat.py。无条件(键缺省) = 直过(现行语义)。
+        conds = normalize_conditions(spec.get("conditions"))
+        if conds is None:
+            self.condition_tree = None
+        elif isinstance(conds, dict):
+            self.condition_tree = _build_condition_node(conds, self.name)
+        else:
+            raise ConfigError(f"规则 {self.name}: conditions 必须是组合树字典: {conds!r}")
 
         # 解析动作序列(规范化形态 {type, params, on_error}, plan 26-11-01-0106 §3.2 W2-A/W2-B):
         # 载入链(load_config -> normalize_legacy_rules)已把旧扁平单键 dict 翻译成规范形并注入
@@ -208,8 +271,10 @@ class Rule:
             logger.error(f"规则[{self.name}] 含 reannounce 动作但未配置 execute_once/cooldown, 高频触发有封号风险")
 
     def matches(self, ctx: RuleContext) -> bool:
-        """所有条件必须全部满足(AND)"""
-        return all(c.match(ctx) for c in self.conditions)
+        """组合树求值(W3-A): 无条件 = 直过; 有条件 = 树形递归(旧扁平列表 = 隐式 all, 语义不变)"""
+        if self.condition_tree is None:
+            return True
+        return _eval_condition_node(self.condition_tree, ctx)
 
     @staticmethod
     def _resolve_on_error(raw: Any) -> dict:
