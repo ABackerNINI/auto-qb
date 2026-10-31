@@ -61,6 +61,17 @@
 - test_v4_agg_obs_live_merge_partial_and_residual
 - test_v4_grid_obs_window_and_snapshot_edges
   无需改动, 豁免桶 0 线按 0 计入组
+- test_v4_series_points_downstream_w_survives_bucket_merge: (mut-core W2 S5 守阵, vsp_75/vsp_120, 高)同桶多记录(混桶 z+raw / raw+raw)的覆盖桶宽 w 活着进下游 —— v4_rate_from_totals / v4_grid_obs 消费不 TypeError
+- test_v4_series_points_initial_nrun_mark: (vsp_5, 可达性已证: 块首 n 游程 = 程序开块时 qB 断连的合法形态, 写侧「3 列 B 无基线块」)序列首槽即 n 槽的断连标记必须发出
+- test_v4_grid_obs_up_channel_weighted_mean: (vgo_73/vgo_76)up 通道覆盖秒加权均值(对称缺口: dl 侧既有守阵, up 侧补齐)
+- test_v4_series_points_lookback_boundary_slots_kept: (vsp_59/vsp_60)回看界边界槽保留 —— 覆盖桶末端恰达 t0-86400 的 z 槽照收(判据错成桶起点/<= 会丢跨界槽)
+- test_v4_series_points_same_t_marks_and_obs_sort_stable: (vsp_163; vsp_160 复裁等价——同刻双标记条目恒相等, 元组比较经 == 短路不走 __lt__ 无 TypeError 面)同刻双 null 标记 + 同刻观测点 —— (t, rank) 排序键保序(null 在先), 键失守在 V4PointEntry 比较上 TypeError
+- test_v4_rate_from_totals_w1_bucket_rates: (vrft_16/vrft_26)w=1 桶速率照常派出(delta/w)不丢 None
+- test_v4_same_bucket_raw_mean_with_zero_dl_first: (vsp_82)raw+raw 同桶判定看 is_raw 旗不看速率列 —— 首记录 dl 速率 0 仍走均值支
+- test_v4_grid_obs_break_flag_survives_bucket_second_point: (vgo_60/vgo_62)断链旗跨同桶后继点存活(or 累积), 不被清成 0 线
+- test_build_month_grid_empty_meta_complete: (bmg_3, 顺手 bmg_6/_7/_8/_10/_18..)空月集兜底栅格 meta 仍齐全(name/segment/t0/t1/interval/buckets)
+- test_group_totals_up_sums_across_members: (gtp_28)组累计上行 = 逐成员差分再求和(多成员非零 up 增量, 此前池内 up 恒 0 撞不出)
+- test_group_totals_member_gap_does_not_truncate: (gtp_17)前位成员缺行是 continue 不是截断 —— 后位成员贡献照常计入
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -75,6 +86,7 @@ import pytest
 from auto_qb.core.traffic_grid import (
     BucketObs,
     MAX_RAW_BUCKETS,
+    MONTH_NOMINAL_S,
     V4PointEntry,
     WINDOW_SPECS,
     WindowGrid,
@@ -94,6 +106,7 @@ from auto_qb.core.traffic_grid import (
     v4_series_points,
     v4_series_slots,
     v4_totals_points,
+    _V4_SEAM_LOOKBACK_S,
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
     _bucket_delta,
@@ -1353,3 +1366,179 @@ def test_v4_grid_obs_window_and_snapshot_edges():
     assert obs[first].dl_total == 100 and obs[first].up_total == 200  # 覆盖末端最晚者胜(后到短覆盖不抢)
     assert obs[last].dl_rate == 400 and obs[last].dl_total == 300
     assert max(obs) == last  # 窗尾之后不铺桶
+
+
+# ---------- mut-core-audit W2 S5 定向补测(变异审计真洞守阵, tmp-analysis/mut-core-w2-classify.md 四.6) ----------
+
+
+def test_v4_series_points_downstream_w_survives_bucket_merge():
+    """(vsp_75/vsp_120, 高)同桶多记录的覆盖桶宽 w 必须活着进下游: 混桶(z+raw 与 raw+raw)
+    后经 v4_rate_from_totals / v4_grid_obs 消费 —— e[7](w)失守成 None 会在 w <= 0 比较处
+    TypeError(端点 500)。此前池内混桶用例未接下游, 撞不出"""
+    b = V4Block(
+        1000,
+        1,
+        10,
+        20,
+        (
+            V4Sample(1, 1, 10, 20),  # @1000.0, w=1, key 999
+            V4ZeroRun(1, 10, 20, dt_ms=400),  # @1000.4, key 1000
+            V4Sample(2, 2, 30, 40, dt_ms=400),  # @1000.8, key 1000: z+raw 混桶(vsp_120 支)
+            V4Sample(30, 40, 300, 400, dt_ms=400),  # @1001.2, key 1001
+            V4Sample(50, 60, 400, 500, dt_ms=400),  # @1001.6, key 1001: raw+raw 同桶(vsp_75 支)
+        ),
+    )
+    points = v4_series_points((b, ), 900, 2000)
+    assert [_p(p) for p in points] == [
+        (999, 1, 1, 10, 20),
+        (1000, 2, 2, 30, 40),  # 混桶: raw 优先, z 让位
+        (1001, 40, 50, 400, 500),  # raw+raw: 速率均值 + 最新行快照
+    ]
+    assert all(p.w == 1 for p in points)  # 覆盖桶宽取最大, 不失守成 None
+    out = v4_rate_from_totals(points)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (999, None, None),  # 窗首基线缺失
+        (1000, 20, 20),  # delta 20/20 / w 1
+        (1001, 370, 460),  # delta 370/460 / w 1
+    ]
+    g = WindowGrid("5m", 900, 2000, 1, "raw", tuple(range(900, 2000)))
+    obs = v4_grid_obs(out, g)  # 第二下游(v4_grid_obs 的 p.w <= 0 同判面)
+    assert obs[1001] == BucketObs(370, 460, 400, 500)
+
+
+def test_v4_series_points_initial_nrun_mark():
+    """(vsp_5)块首 n 游程的断连标记必须发出: 序列首槽即 n 槽时 last_was_null 初值 False
+    使首标记得以发出(变异成 True 吞掉序列开头的断连标记)。可达性已证: 块首 n 游程 =
+    程序开块时 qB 断连的合法形态(traffic_sample_mod._append_record「块首 n 游程不开基线,
+    3 列 B 无基线块」+「无基线块仅 n 游程合法」)"""
+    b = V4Block(1000, 30, None, None, (V4NullRun(3), V4Sample(1, 1, 1, 1, dt_ms=30000)))
+    points = v4_series_points((b, ), 900, 2000)
+    assert [_p(p) for p in points] == [
+        (1000, None, None, None, None),  # 块首 n 游程折叠的单个断连标记(首槽 1000.0)
+        (1060, 1, 1, 1, 1),  # n 终点 1060 + 30: 桶 [1060, 1090)
+    ]
+
+
+def test_v4_grid_obs_up_channel_weighted_mean():
+    """(vgo_73/vgo_76)up 通道覆盖秒加权均值(对称缺口: dl 侧既有断言、up 侧此前无人守)
+    —— 同桶两贡献点的 up 覆盖秒与加权和都必须累加(+=), 赋值变异在均值上显形"""
+    g = build_grid("24h", NOW, 30.0)
+    b0 = g.buckets[100]
+    pts = (
+        V4PointEntry(b0, 100, 100, 1000, 500, w=30),  # 覆盖 [b0, b0+30): up 30s x 100
+        V4PointEntry(b0 + 10, 0, 300, 1100, 900, w=10),  # 覆盖 [b0+10, b0+20): up 10s x 300
+    )
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(75, 150, 1000, 500)  # dl (100x30+0x10)/40=75; up (100x30+300x10)/40=150
+
+
+def test_v4_series_points_lookback_boundary_slots_kept():
+    """(vsp_59, 顺手 vsp_60)差分链窗外回看界(_V4_SEAM_LOOKBACK_S)边界槽保留: 覆盖桶末端
+    恰达 t0-86400 的 z 槽照收(「桶末端 >= 回看界」判据) —— 判据错成桶起点(key-w)或退化成
+    <= 会把跨界槽丢出链, 窗首摊配分母失真(池内全用小 epoch 撞不到回看界)"""
+    t0 = NOW
+    lo = t0 - _V4_SEAM_LOOKBACK_S
+    b = V4Block(lo, 60, 100, 50, (V4ZeroRun(3, 100, 50), V4Sample(2, 2, 300, 150, dt_ms=60000)))
+    points = v4_series_points((b, ), t0, t0 + 3600)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in points] == [
+        (lo - 60, 0, 0),  # 首槽 @lo: key = lo-60, 覆盖末端 = lo 恰达回看界 -> 保留
+        (lo, 0, 0),  # 槽 @lo+60
+        (lo + 60, 0, 0),  # 槽 @lo+120
+        (lo + 120, 2, 2),  # r @lo+180: 桶 [lo+120, lo+180)
+    ]
+
+
+def test_v4_series_points_same_t_marks_and_obs_sort_stable():
+    """(vsp_160, 顺手 vsp_163)同刻双 null 标记 + 同刻观测点的排序: rank 位 (t, rank) 保序
+    —— null 标记先于同刻观测点; 排序键失守(None / (t, entry))会在 V4PointEntry 比较上
+    TypeError。几何: 亚秒 n 游程折叠标记与块间真空标记落同一整秒 + 同刻观测桶"""
+    b1 = V4Block(1000, 30, 1, 1, (V4NullRun(2, dt_ms=600), V4Sample(1, 1, 1, 1, dt_ms=300)))
+    b2 = V4Block(2000, 30, 2, 2, (V4Sample(2, 2, 2, 2), ))
+    points = v4_series_points((b1, b2), 900, 3000)
+    assert [(p.t, p.dl_rate, p.w) for p in points] == [
+        (1000, None, 0),  # n 游程折叠标记(首槽 1000.0)
+        (1000, None, 0),  # 块间真空标记(t = 前块游标终值 1000.9 取整)—— 与上标记同刻
+        (1000, 1, 1),  # 同刻观测桶(样本 @1000.9, w=1, key 1000): null 标记排在其前
+        (1970, 2, 30),  # b2 观测点
+    ]
+
+
+def test_v4_rate_from_totals_w1_bucket_rates():
+    """(vrft_16/vrft_26)w=1 桶(1s 采样/亚秒 dt)速率照常派出(delta/w), 不丢 None ——
+    门槛错成 w <= 1 会把 1 秒桶的图面打成缺口(池内 rate 变换用例最小 w=29)"""
+    pts = (
+        V4PointEntry(970, 1, 1, 1000, 500, w=30),
+        V4PointEntry(1000, 5, 5, 1100, 600, w=1),  # delta 100/100 -> rate 100/100
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [(970, None, None), (1000, 100, 100)]
+    assert [(p.dl_total, p.up_total, p.w) for p in out] == [(1000, 500, 30), (1100, 600, 1)]  # totals/w 原样
+
+
+def test_v4_same_bucket_raw_mean_with_zero_dl_first():
+    """(vsp_82)raw+raw 同桶判定看 is_raw 旗(e[0])不看速率列 —— 首记录 dl 速率为 0 的
+    raw+raw 同桶仍走均值支(变异成 e[1] 会误走覆盖支, 第二条覆盖第一条)"""
+    b = V4Block(
+        1000,
+        1,
+        10,
+        20,
+        (
+            V4Sample(9, 9, 10, 20),  # @1000.0, w=1, key 999
+            V4Sample(9, 9, 20, 30, dt_ms=1200),  # @1001.2, w=2, key 1000
+            V4Sample(0, 100, 30, 40, dt_ms=400),  # @1001.6, w=1, key 1001(首条 dl 速率 0)
+            V4Sample(50, 200, 50, 60, dt_ms=400),  # @1002.0, w=1, key 1001(同桶第二条)
+        ),
+    )
+    points = v4_series_points((b, ), 900, 2000)
+    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [
+        (999, 9, 9, 10, 20),
+        (1000, 9, 9, 20, 30),
+        (1001, 25, 150, 50, 60),  # raw+raw 均值 (0+50)/2, (100+200)/2; 首条 dl=0 不破坏判定
+    ]
+
+
+def test_v4_grid_obs_break_flag_survives_bucket_second_point():
+    """(vgo_60, 顺手 vgo_62)断链旗必须跨同桶后继点存活(or 累积) —— 断链桶内第二个无缝点
+    不得清旗, 否则断链桶冒充 0 线(issue 26-10-16-0954 语义回退; 池内断链桶皆单点)"""
+    g = build_grid("24h", NOW, 30.0)
+    b0 = g.buckets[100]
+    pts = (
+        V4PointEntry(b0 - 60, 5, 5, 1000, 500, w=30),  # 覆盖 [b0-60, b0-30)
+        V4PointEntry(b0, None, None, 2000, 900, w=1),  # 覆盖起点 b0 > b0-30: 观测缝 -> 断链
+        V4PointEntry(b0 + 1, None, None, 2000, 900, w=1),  # 与前点无缝: broke=False
+    )
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(None, None, 2000, 900)  # 断链未知 != 0(后继点不得清旗)
+
+
+def test_build_month_grid_empty_meta_complete():
+    """(bmg_3, 顺手 bmg_6/_7/_8/_10/_18/_19/_20/_21)空月集兜底栅格 meta 仍齐全(name/
+    segment/interval/t0/t1/buckets) —— 下游 traffic_qb 直消费 grid 字段, 任一失守即空态面破"""
+    g = build_month_grid((), NOW)
+    assert g.name == "all" and g.segment == "month" and g.interval == MONTH_NOMINAL_S
+    assert g.t0 == NOW and g.t1 == NOW and g.buckets == ()
+
+
+def test_group_totals_up_sums_across_members():
+    """(gtp_28)组累计上行 = 逐成员先差分再**求和** —— 多成员非零 up 增量累加(赋值/反号
+    变异在第二成员上显形; 此前池内 up 增量恒 0 撞不出)"""
+    g = build_grid("24h", NOW, 30.0)
+    b0, b1 = g.buckets[10], g.buckets[11]
+    m1 = {b0: BucketObs(0, 0, 1000, 500), b1: BucketObs(0, 0, 1100, 700)}  # dl +100 / up +200
+    m2 = {b0: BucketObs(0, 0, 2000, 1000), b1: BucketObs(0, 0, 2100, 1400)}  # dl +100 / up +400
+    totals = group_totals_points([m1, m2], g, [False] * len(g.buckets))
+    assert totals[11] == {"t": b1, "dl": 200, "up": 600}
+
+
+def test_group_totals_member_gap_does_not_truncate():
+    """(gtp_17)成员本桶无行是 continue(自身链断)不是截断 —— **前位**成员缺行时后位成员的
+    贡献必须照常计入(此前池内用例缺行成员恰排末位, 撞不出)"""
+    g = build_grid("24h", NOW, 30.0)
+    b0, b1 = g.buckets[10], g.buckets[11]
+    m1 = {b0: BucketObs(0, 0, 1000, 500)}  # b1 无行(前位成员)
+    m2 = {b0: BucketObs(0, 0, 2000, 1000), b1: BucketObs(0, 0, 2100, 1400)}  # b1 +100/+400
+    mask = group_null_mask([m1, m2], g)
+    assert mask[11] is False  # m2 在 b1 有观测
+    totals = group_totals_points([m1, m2], g, mask)
+    assert totals[11] == {"t": b1, "dl": 100, "up": 400}

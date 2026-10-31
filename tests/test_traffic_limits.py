@@ -19,6 +19,17 @@
 - test_api_payload_limits_shape_and_same_source: payload 契约 D3″ —— 三端点响应恒带 limits 且同源同值(组/单种不另读文件), 空态未启用也恒在(= [])
 - test_module_wiring_sample_global_observes: 采样模块接线守阵 —— _sample_global 调 SpeedLimitRecorder.observe(真实模块实例 + 替身 server_state 触发落盘), dry_run 轮零写入
 - test_recorder_append_fail_arcs_bootstrap_and_throttle
+- test_parse_bad_line_continues_and_zero_down_roundtrip: (mut-core W2 S5 守阵, parse_24/34/43 + parse_41/42)坏行 continue 语义 —— 坏行(列数/非数值/负数)之后的有效行整段保留; down=0/up=0(不限速)合法值不被丢弃, 负数才豁免
+- test_parse_down_zero_roundtrip_recorder_restart_dedup: (parse_41/42)down=0 写读回路 —— 落盘的不限速事件读回末条做重启去重(解析层丢 0 会误判无记录而重复追加)
+- test_parse_torn_tail_complete_line_dropped_and_valid_kept: (parse_7/parse_12)撕裂尾判定 —— 缺换行的完整 3 列尾行必须丢弃; 丢弃只吃尾半行, 前一条有效行保留
+- test_recorder_single_event_and_empty_day_file_restart: (rdl_23/rdl_22, 高)退化天文件容错 —— 单事件文件(carry-only 天常态)末条读回不越界; 空文件 = 无记录不崩照常写事件
+- test_recorder_same_value_rounds_after_change_and_restart_dedup: (obs_53/boot_11/boot_12)基线推进 —— 变更事件后与重启去重命中后, 同值轮零追加(A->B->B 与重启后连续两拍)
+- test_recorder_cross_midnight_change_carry_plus_event: (obs_26/obs_27; rinit_6 复裁等价——初值死位, 首查两者同真值、之后恒被覆写 True)跨午夜硬切 + 值变更 = carry + 事件双行形态(observe 覆写 _bootstrapped 失守会每轮重 bootstrap 丢 carry 行)
+- test_recorder_empty_data_dir_disabled_and_cache_no_entry: (rinit_3/cinit_3)空 data_dir 整体禁用 —— observe 零操作零落盘, 读侧缓存不建条目
+- test_recorder_bad_byte_day_file_tolerated: (rdl_4/rdl_17)含坏字节天文件不炸重启去重(errors=replace 降级 + 坏行豁免, 末条有效事件照常读回)
+- test_recorder_guard_count_exact_threshold: (guard_7)护栏计数精确性 —— 恰 2000 条(阈值)静默, 第 2001 条才告警
+- test_events_for_window_boundary_events_at_t0_and_t1: (win_16/win_20)窗口端点 —— 恰在 t0 的事件只参与合成首事件不重复出段, 恰在 t1 的事件不进装配
+- test_events_for_window_adjacent_same_value_dedup_chain: (win_26, 防御面)同值去重游标推进 —— 窗内相邻同值事件(>=3 事件几何)只出一段
 """
 import logging
 import os
@@ -487,3 +498,176 @@ def test_recorder_append_fail_arcs_bootstrap_and_throttle(tmp_path):
     assert len(warns) == 1, f"告警必须节流成一条: {warns}"
     assert rec._last is None, "首轮失败不得推进基线"
     assert rec._last_date is None, "失败轮不得推进日期"
+
+
+# ---------- mut-core-audit W2 S5 定向补测(变异审计真洞守阵, tmp-analysis/mut-core-w2-classify.md 四.6) ----------
+
+
+def test_parse_bad_line_continues_and_zero_down_roundtrip():
+    """坏行豁免是「整行跳过」不是「截断」(parse_24/34/43): 坏行(列数/非数值/负数)之后的
+    有效行必须照常解析 —— 游标语义不存在(模块 docstring); down=0/up=0(不限速)是合法值
+    不得被解析层丢弃(parse_41/42), 只有负数才豁免 —— 正反两面对照"""
+    text = (
+        "100,1,2\n"
+        "bad-line\n"  # 列数坏行(1 列; 其后有效行必须保留)
+        "200,3,4\n"
+        "abc,1,2\n"  # 非数值坏行(3 列)
+        "400,5,6\n"
+        "300,1,2,3\n"  # 列数坏行(4 列)
+        "500,-1,7\n"  # 负数坏行
+        "600,8,0\n"  # down=0 = 不限速合法值
+        "700,0,9\n"  # up=0 同理
+    )
+    assert parse_limits_day_text(text) == (
+        (100, 1, 2),
+        (200, 3, 4),
+        (400, 5, 6),
+        (600, 8, 0),
+        (700, 0, 9),
+    )
+
+
+def test_parse_down_zero_roundtrip_recorder_restart_dedup(tmp_path):
+    """down=0 写读回路(parse_41/42): 记录器写入的不限速事件(down=0)经天文件落盘后,
+    重启去重读回末条必须还原 —— 解析层丢 0 会把去重判成「无记录」而重复追加假事件"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    _write_day(data_dir, date, f"{ts},1024,0\n")
+    r = SpeedLimitRecorder(data_dir)
+    r.observe(_state(1024, 0), ts + 30)  # 与末条相同 -> 去重零追加
+    assert _read_day(data_dir, date) == f"{ts},1024,0\n"
+
+
+def test_parse_torn_tail_complete_line_dropped_and_valid_kept():
+    """撕裂尾判定(parse_7/parse_12): 缺换行的**完整 3 列**尾行必须丢弃(崩溃残留形态之一,
+    不能误解析为事件); 撕裂丢弃只吃尾半行, 前一条有效行必须保留([:-1] 不能多吃一条)"""
+    assert parse_limits_day_text("100,1,2") == ()  # 无换行完整行: 撕裂尾丢弃
+    text = "100,1,2\n200,3,4\n500,42"  # 有效行 x2 + 撕裂尾
+    assert parse_limits_day_text(text) == ((100, 1, 2), (200, 3, 4))
+
+
+def test_recorder_single_event_and_empty_day_file_restart(tmp_path):
+    """(rdl_23/rdl_22, 高)重启去重读侧对退化天文件的容错: 单事件天文件(carry-only 天 =
+    每日常态)取末条不越界; 空天文件(崩溃可残留)= 无记录 —— 不崩, 按无记录写事件"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    # 单事件文件: 值相同 -> 去重零追加(不崩)
+    _write_day(data_dir, date, f"{ts},1024,2048\n")
+    r1 = SpeedLimitRecorder(data_dir)
+    r1.observe(_state(1024, 2048), ts + 30)
+    assert _read_day(data_dir, date) == f"{ts},1024,2048\n"
+    # 空文件: 无记录 -> 正常写事件(不崩)
+    _write_day(data_dir, date, "")
+    r2 = SpeedLimitRecorder(data_dir)
+    r2.observe(_state(5, 6), ts + 60)
+    assert _read_day(data_dir, date) == f"{ts + 60},5,6\n"
+
+
+def test_recorder_same_value_rounds_after_change_and_restart_dedup(tmp_path):
+    """基线推进语义(obs_53/boot_11/boot_12): 变更事件成功后内存基线必须推进到新值 ——
+    之后**同值轮零追加**(否则假翻转刷文件); 重启去重命中后基线同样立稳 —— 下一拍同值
+    零追加、不误判跨天 carry"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    # 变更后同值: A -> B -> B, 第三拍必须零追加(obs_53)
+    rec = SpeedLimitRecorder(data_dir)
+    rec.observe(_state(1024, 2048), ts)
+    rec.observe(_state(0, 4096), ts + 30)  # 变更 -> 追加
+    rec.observe(_state(0, 4096), ts + 60)  # 同值 -> 零追加
+    assert _read_day(data_dir, date) == f"{ts},1024,2048\n{ts + 30},0,4096\n"
+    # 重启去重命中 -> 连续同值两拍都零追加(boot_11/12)
+    r2 = SpeedLimitRecorder(data_dir)
+    r2.observe(_state(0, 4096), ts + 90)  # 去重命中
+    r2.observe(_state(0, 4096), ts + 120)  # 同值: 不得重复追加/误判 carry
+    assert _read_day(data_dir, date) == f"{ts},1024,2048\n{ts + 30},0,4096\n"
+
+
+def test_recorder_cross_midnight_change_carry_plus_event(tmp_path):
+    """(rinit_6)跨午夜硬切 + 值变更 = carry + 事件**双行**形态(模块 docstring 契约):
+    _bootstrapped 失守(每轮重走 bootstrap)会把新天当无记录处理, carry 行丢失"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    d1 = v4_epoch_date_str(ts)
+    rec = SpeedLimitRecorder(data_dir)
+    rec.observe(_state(1024, 2048), ts)
+    ts2 = ts + 90000  # 次日
+    d2 = v4_epoch_date_str(ts2)
+    assert d2 != d1
+    rec.observe(_state(0, 4096), ts2)
+    assert _read_day(data_dir, d2) == f"{ts2},1024,2048\n{ts2},0,4096\n"
+
+
+def test_recorder_empty_data_dir_disabled_and_cache_no_entry(tmp_path, monkeypatch):
+    """(rinit_3/cinit_3)空 data_dir = 整体禁用(防御语义, 对齐 _feature_on): observe
+    零操作零落盘、零状态推进, 读侧缓存不建条目 —— 变异成「落到相对目录 XXXX」会就地
+    写盘/建缓存条目(chdir 进 tmp_path 隔离, 变异产物不污染仓库)"""
+    monkeypatch.chdir(tmp_path)
+    rec = SpeedLimitRecorder("")
+    rec.observe(_state(1024, 2048), _anchored_ts())
+    assert rec._last is None and rec._last_date is None
+    cache = LimitsCache("")
+    assert cache.read_day("2026-10-20") == ()
+    assert cache._entries == {}
+    assert not os.path.exists("XXXX")
+
+
+def test_recorder_bad_byte_day_file_tolerated(tmp_path):
+    """(rdl_4/rdl_17)读侧容错契约: 含坏字节的天文件不炸重启去重 —— errors=replace 降级
+    解码 + 坏行豁免兜住, 末条有效事件照常读回; strict/未知处理器名会抛 UnicodeDecodeError/
+    LookupError 穿透 observe(只兜 OSError)"""
+    data_dir = str(tmp_path)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    p = limits_day_path(data_dir, date)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(f"{ts},1024,2048\n".encode() + b"\xff\xfe garbage\n")
+    r = SpeedLimitRecorder(data_dir)
+    r.observe(_state(1024, 2048), ts + 30)  # 去重命中(坏字节行被豁免), 不上抛
+    with open(p, "rb") as f:  # 测试 helper _read_day 是 strict utf-8, 坏字节文件须走字节读
+        lines = f.read().splitlines()
+    assert lines[0] == f"{ts},1024,2048".encode()
+    assert len(lines) == 2  # 去重命中: 不追加(坏字节行原样留在文件里, 不删数据)
+
+
+def test_recorder_guard_count_exact_threshold(tmp_path, caplog):
+    """(guard_7)护栏计数精确性: 恰 2000 条(阈值)不告警, 第 2001 条才告警 —— 计数步长/
+    按天重置/比较符的 off-by-one 都在此显形(此前池守阵只断言 any(), 撞不出步长变异)"""
+    from auto_qb.core import traffic_limits as tl
+
+    data_dir = str(tmp_path)
+    rec = SpeedLimitRecorder(data_dir)
+    ts = _anchored_ts()  # 2001s 跨度落在同一自然日(锚点见 _anchored_ts)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
+        for i in range(tl._LIMITS_DAILY_EVENT_WARN):
+            rec.observe(_state(1024 + (i % 2), 2048), ts + i)
+        assert not any("超常" in r.message for r in caplog.records)  # 恰达阈值: 静默
+        rec.observe(_state(1024, 2048), ts + tl._LIMITS_DAILY_EVENT_WARN)
+        assert any("超常" in r.message for r in caplog.records)  # 超过阈值: 告警
+
+
+def test_events_for_window_boundary_events_at_t0_and_t1(tmp_path):
+    """(win_16/win_20)窗口端点: 恰在 t0 的事件只参与合成首事件(不重复出段); 恰在 t1 的
+    事件不进装配([t0, t1) 契约)"""
+    data_dir = str(tmp_path)
+    cache = LimitsCache(data_dir)
+    t0 = _anchored_ts()
+    t1 = t0 + 3600
+    _write_day(data_dir, v4_epoch_date_str(t0), f"{t0 - 3600},1,1\n{t0},2,2\n{t1},9,9\n")
+    ev = limits_events_for_window(cache, t0, t1)
+    assert ev == [[t0, 2, 2]]
+
+
+def test_events_for_window_adjacent_same_value_dedup_chain(tmp_path):
+    """(win_26, 低, 防御面)同值去重游标推进: 去重判定后游标必须吃进当前值 —— 窗内相邻
+    同值事件(>=3 事件几何)只出一段(变异成 None 会让每条同值事件都重复出段)。生产写侧
+    只在值变化时追加, 该几何现实域近不可达, 守阵按防御面落(纯函数, 成本低)"""
+    data_dir = str(tmp_path)
+    cache = LimitsCache(data_dir)
+    ts = _anchored_ts()
+    _write_day(data_dir, v4_epoch_date_str(ts), f"{ts + 10},3,3\n{ts + 20},3,3\n{ts + 30},4,4\n")
+    ev = limits_events_for_window(cache, ts, ts + 3600)
+    assert ev == [[ts + 10, 3, 3], [ts + 30, 4, 4]]
