@@ -3,6 +3,7 @@
 > 摘要: 计划 26-10-31-0306 上轮真机验收入池的三处修复(26-11-01-0334 已存在 409 误判 bug / 26-11-01-0334 path_map 分隔符归一化 / 26-11-01-0335 transfer 目标 api_key 通路)后的定点再验收, 并解锁上轮 BLOCKED 的 UI-06c 单组支「选中集优先/否则整组成员」两分支补验; 面向与上轮同: API 驱动 `/api/transfer/test`·`/api/transfer/run` + 浏览器 GUI 黑盒, 8 真实种子全程 paused 零触碰。
 > 基线时间: 2026-11-01 03:1x–05:1x(手工两相位驱动, 非 real.suite —— 功能再验收而非 RM 切片, 用例为一次性驱动脚本, 落 tests-real/.work/transfer-accept/(results-api.md / results-ui.md, 已随收尾 real.seed.clean 清除), 断言口径与逐字证据全部誊入本切片)
 > 基线 commit: 07b0719c(实测时刻 HEAD; 含 4 修复 commit: f556b11f 409探针兜底 / 26cdbe48 api_key后端 / 88a6aceb api_key前端编辑器 / f731de07 path_map分隔符归一化)
+> hash 等价映射(2026-11-01 合流 rebase 改写, 内容零差异): 07b0719c->8a6b7b29, f556b11f->c0ecf7b9, 26cdbe48->4c014cff, 88a6aceb->07a90b1c, f731de07->59b3669a, fa0c2e11->b172f416; 本切片正文与 issue HTML 里引用的旧 hash 按此表换算
 > 环境: 36595 v5.2.3 connected pid=41868(8 真实种子 paused) / 36596 v5.2.3 firewalled pid=39300(与上轮同 pid); 两相位驱动: 相位1 config95.yml(主连接=36595, web :39000)→相位2 config96.yml(主连接=36596, web :39001), 产品配置来源 tests-real/.work/transfer-accept/(非仓库根 config.yml); 源端=产品主连接(orchestrator 只读主连接), 上轮方向 36595→36596 走相位1、TR-新 方向 36596→36595 走相位2, 同一 targets 表
 
 ## 01 验收数字
