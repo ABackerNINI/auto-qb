@@ -56,6 +56,8 @@
 - test_rule_never_not_deduped: never 有记录仍放行(对照 once 必须去重, 防 !=never 反转)
 - test_rule_cooldown_expired_allows_rerun: C32 守阵 —— cooldown 合取是 and(改 or -> 冷却过期
   也不放行, 规则永久静默)
+- test_rule_condition_exception_other_rules_unaffected: 条件异常 per-step 语义(G2/W2) —— 出错
+  规则 verdict=error 本轮跳过, 其它规则照常执行; 全程无「停止后续规则」话术
 """
 import os
 import tempfile
@@ -394,6 +396,49 @@ def test_rule_condition_exception():
         err = next(m for m in records if "条件求值出错" in m and "g.test" in m)
         assert "本条规则本轮跳过" in err, f"话术必须只宣称真实半径: {err}"
         assert "停止后续规则" not in err, f"不得再宣称死语义: {err}"
+
+
+def test_rule_condition_exception_other_rules_unaffected():
+    """条件异常 per-step 语义(G2/W2): 出错规则 verdict=error 本轮跳过, 其它规则照常执行
+
+    W1-A 已改话术, 本测补齐语义断言: 两规则同场, 坏条件规则 error、好规则 executed;
+    全部日志里无「停止后续规则」话术(执行模型是每规则每种子独立任务, 不存在后续规则链)。
+    """
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+
+        class Boom:
+            def match(self, ctx):
+                raise RuntimeError("boom")
+
+        bad = Rule("g.bad", {"actions": [{"add_tags": ["X"]}]}, mgr)
+        bad.conditions = [Boom()]
+        good = Rule("g.good", {"actions": [{"add_tags": ["Y"]}]}, mgr)
+        tor = FakeTorrent(tags="")
+        ctx_bad = make_ctx(mgr, tor, client)
+        ctx_good = make_ctx(mgr, FakeTorrent(tags=""), client)
+
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.rules.base")
+        handler = Grab(level=logging.DEBUG)
+        lg.addHandler(handler)
+        lg.setLevel(logging.DEBUG)
+        try:
+            assert bad.process(ctx_bad) == VERDICT_ERROR, "坏条件规则: 本条本轮跳过"
+            assert good.process(ctx_good) == VERDICT_EXECUTED, "他规则照常执行, 不受坏条件影响"
+        finally:
+            lg.removeHandler(handler)
+        assert ("add_tags", ["Y"]) in client.calls and ("add_tags", ["X"]) not in client.calls
+        assert any("本条规则本轮跳过" in m and "g.bad" in m for m in records), "出错规则有真实半径日志"
+        assert not any("停止后续" in m for m in records), f"全程不得出现死语义话术: {records}"
 
 
 def test_rule_multi_condition_and():

@@ -289,6 +289,23 @@
                           </div>
                           <hub-field v-for="item in cfgSpecItems(cfg.ruleGroupKey, rn, 'actions', i)"
                                      :key="hubKey(item.path)" :item="item"></hub-field>
+                          <div v-if="!cfgIsRetiredAction(entry)" class="hb-oe-row">
+                            <span class="hb-lb">失败策略</span>
+                            <select class="hb-select" :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'policy')"
+                                    @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'policy', $event.target.value)">
+                              <option v-for="p in cfgOnErrorPolicies()" :key="p" :value="p">{{ p }}</option>
+                            </select>
+                            <template v-if="cfgOnErrorIsRetry(cfg.ruleGroupKey, rn, i)">
+                              <span class="hb-lb">重试次数</span>
+                              <input class="hb-input" type="number" min="0" step="1"
+                                     :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'retries')"
+                                     @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'retries', $event.target.value)">
+                              <span class="hb-lb">重试间隔(秒)</span>
+                              <input class="hb-input" type="number" min="1" step="1"
+                                     :value="cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'backoff')"
+                                     @change="cfgOnErrorSet(cfg.ruleGroupKey, rn, i, 'backoff', $event.target.value)">
+                            </template>
+                          </div>
                         </div>
                         <p v-if="!cfgPluginList(cfg.ruleGroupKey, rn, 'actions').length" class="hb-hp">
                           未配置动作 = 规则只做条件判断, 不会执行任何操作

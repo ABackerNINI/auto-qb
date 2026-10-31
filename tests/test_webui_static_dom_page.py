@@ -36,6 +36,10 @@
 - test_frontend_retired_rule_keys_upgrade_surface: 两键退役升级提示面守阵(plan 26-11-01-0106 W1/D1) —— 旧伪动作判断 isIgnoreNext 及「忽略下一个动作的错误」友好话术零残留; 退役键检测/提示单点(cfgRuleRetiredKeys/cfgIsRetiredAction/cfgRuleRetiredHint)在 config_rules.js 各定义一处; settings.html 规则卡「未启用·含退役键」徽标(hb-badge warn)与卡脚提示接线齐全(webui 侧自测键名, 不依赖后端回写 config.yml); hubPluginText 退役标记判定必须在 meta 判空之前(退役键不在插件索引); 有 node 时真跑语义电池(四规则形态 × 检测/提示/动作行人话)
 - test_frontend_cols_empty_hint_is_not_a_floating_banner
 - test_frontend_list_row_pad_and_empty_single_point
+- test_frontend_action_on_error_control: 动作级 on_error 控件守阵(plan 26-11-01-0106 W2/D8) ——
+  cfgOnError* 方法族单点(config_rules.js); settings.html 动作卡失败策略行(policy 三档下拉 +
+  retry 档 retries/backoff 数字输入)接线齐全; 有 node 时真跑语义电池(缺省值同源读侧/混合形与
+  规范形识别/非缺省才写树/全缺省整键摘除)
 """
 import base64
 import json
@@ -1414,6 +1418,114 @@ const checks = [
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """
+
+_NODE_ON_ERROR_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+eval(fs.readFileSync(process.argv[1], "utf8"));
+eval(fs.readFileSync(process.argv[2], "utf8"));
+const M = Object.assign({}, window.CONFIG_EDITOR.methods, window.CONFIG_RULES.methods);
+const RULES = {
+  flat: { enabled: "true", actions: [{ add_tags: ["x"] }, { checking: { basic_check: "filelist" } }] },
+  mixed: { enabled: "true", actions: [{ add_tags: ["x"], on_error: { policy: "retry", retries: "5", backoff: "30" } }] },
+  canonical: { enabled: "true", actions: [{ type: "add_tags", params: ["x"], on_error: { policy: "continue" } }] },
+};
+const ctx = Object.assign({
+  cfg: {
+    tree: { config: { example_rules: RULES } },
+    schema: {
+      constants: {
+        on_error_policies: ["stop", "continue", "retry"],
+        on_error_defaults: { policy: "stop", retries: 3, backoff: 60 },
+      },
+    },
+  },
+  cfgConfigPath() { return ["config"]; },
+  cfgPluginIndex: { add_tags: { name: "add_tags", label: "添加标签", spec_kind: "list" } },
+}, M);
+const J = (v) => JSON.stringify(v);
+const val = (rn, i, k) => ctx.cfgOnErrorValue("example_rules", rn, i, k);
+const checks = [
+  ["缺省 policy = schema constants.on_error_defaults(stop)", val("flat", 0, "policy") === "stop"],
+  ["缺省 retries/backoff 同源(3/60)", val("flat", 0, "retries") === "3" && val("flat", 0, "backoff") === "60"],
+  ["混合形读已配置值", val("mixed", 0, "retries") === "5" && val("mixed", 0, "backoff") === "30"],
+  ["规范形读 policy", val("canonical", 0, "policy") === "continue"],
+  ["retry 档开关", ctx.cfgOnErrorIsRetry("example_rules", "mixed", 0) && !ctx.cfgOnErrorIsRetry("example_rules", "flat", 0)],
+  ["取值域单源 schema constants", J(ctx.cfgOnErrorPolicies()) === J(["stop", "continue", "retry"])],
+  ["写侧: 非缺省 policy 写混合形 on_error",
+    (ctx.cfgOnErrorSet("example_rules", "flat", 1, "policy", "continue"),
+     J(ctx.cfg.tree.config.example_rules.flat.actions[1].on_error) === J({ policy: "continue" }))],
+  ["写侧: retry 档附 retries/backoff 入树",
+    (ctx.cfgOnErrorSet("example_rules", "flat", 0, "policy", "retry"),
+     ctx.cfgOnErrorSet("example_rules", "flat", 0, "retries", "2"),
+     J(ctx.cfg.tree.config.example_rules.flat.actions[0].on_error) === J({ policy: "retry", retries: "2" }))],
+  ["写侧: 全缺省整键摘除(YAML 保持简洁)",
+    (ctx.cfgOnErrorSet("example_rules", "flat", 0, "policy", "stop"),
+     ctx.cfgOnErrorSet("example_rules", "flat", 0, "retries", "3"),
+     !("on_error" in ctx.cfg.tree.config.example_rules.flat.actions[0]))],
+  ["cfgPluginName 混合形取动作键(on_error 不是插件名)",
+    ctx.cfgPluginName({ add_tags: ["x"], on_error: {} }) === "add_tags"],
+  ["cfgPluginName 规范形取 type", ctx.cfgPluginName({ type: "add_tags", params: [] }) === "add_tags"],
+  ["cfgSpecPath 规范形落 params",
+    J(ctx.cfgSpecPath("example_rules", "canonical", "actions", 0)) === J(["config", "example_rules", "canonical", "actions", 0, "params"])],
+  ["cfgIsRetiredAction 规范形识别伪动作",
+    ctx.cfgIsRetiredAction({ type: "ignore_next_action_error", params: "true" })],
+];
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_action_on_error_control():
+    """动作级 on_error 控件守阵(plan 26-11-01-0106 W2/D8)
+
+    本守阵钉(静态 + 有 node 时行为):
+    1. cfgOnError* 方法族在 config_rules.js 各定义一处(单点不拆分);
+    2. settings.html 动作卡失败策略行接线齐全(policy 三档下拉 + retry 档 retries/backoff
+       数字输入), 伪动作项不渲染该行;
+    3. 读侧缺省值与后端 schema constants(on_error_policies/on_error_defaults)同源;
+    4. 写侧: 非缺省组合才写树(混合形 {动作键: 值, on_error: {...}}, 载入链 normalize
+       单点翻译规范形), 全缺省整键摘除;
+    5. 混合形/规范形动作项的名称/路径识别(cfgPluginName/cfgSpecPath/cfgIsRetiredAction)不因
+       on_error 键面扩展而漂移。
+
+    无 node 的机器只跑静态那一半(与默认值梯/两键守阵同口径。)
+    """
+    shared = os.path.join(STATIC_ROOT, "shared")
+    ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
+    tpl = open(os.path.join(shared, "tpl", "settings.html"), encoding="utf-8").read()
+
+    # 1. 方法族单点(各定义一处)
+    for fn in (
+        "cfgOnErrorDefaults", "cfgOnErrorPolicies", "cfgOnErrorPath", "cfgOnErrorValue", "cfgOnErrorIsRetry",
+        "cfgOnErrorSet"
+    ):
+        defs = re.findall(rf"^    {fn}\(", ru, re.M)
+        assert len(defs) == 1, f"{fn} 定义 {len(defs)} 处(应为 1) —— on_error 控件口径被拆分"
+    # 2. 模板接线: 失败策略行在动作卡内, 三档下拉 + retry 数字输入, 伪动作不渲染
+    assert "cfgOnErrorValue(cfg.ruleGroupKey, rn, i, 'policy')" in tpl, "settings.html 动作卡缺失败策略下拉(W2/D8)"
+    assert "cfgOnErrorIsRetry(cfg.ruleGroupKey, rn, i)" in tpl, "settings.html 缺 retry 档条件渲染"
+    assert tpl.count("cfgOnErrorSet(cfg.ruleGroupKey, rn, i") >= 3, "policy/retries/backoff 三个输入须都接 cfgOnErrorSet"
+    oe_row = re.search(r'<div [^>]*class="hb-oe-row"[^>]*>', tpl)
+    assert oe_row and "cfgIsRetiredAction(entry)" in oe_row.group(0), "伪动作项不应渲染 on_error 行"
+    # 3. 有 node 时真跑语义电池
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [
+                node,
+                "-e",
+                _NODE_ON_ERROR_PROBE,
+                os.path.join(shared, "config_editor.js"),
+                os.path.join(shared, "config_rules.js"),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, f"on_error node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
+        res = json.loads(proc.stdout.strip())
+        assert res["total"] >= 13, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert not res["failed"], ("on_error 控件行为漂移: " + "、".join(res["failed"]))
 
 
 def test_frontend_retired_rule_keys_upgrade_surface():

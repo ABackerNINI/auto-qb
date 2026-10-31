@@ -39,6 +39,8 @@ from .fields import (
     LOG_LEVELS,
     NOTIFY_CHANNELS,
     NOTIFY_LEVELS,
+    ON_ERROR_DEFAULTS,
+    ON_ERROR_POLICIES,
     Plugin,
     SIZE_UNITS,
     SPEC_KINDS,
@@ -71,6 +73,8 @@ __all__ = [
     "NOTIFY_LEVELS",
     "NOTIFY_CHANNELS",
     "EXECUTE_ONCE",
+    "ON_ERROR_POLICIES",
+    "ON_ERROR_DEFAULTS",
     "STOP_IF",
     "TRIGGERS",
     "CHECKING_BASIC",
@@ -163,6 +167,12 @@ def schema_payload() -> Dict[str, Any]:
                     list(NOTIFY_CHANNELS),
                 "execute_once":
                     list(EXECUTE_ONCE),
+                # 动作级错误策略(plan 26-11-01-0106 W2/G5): webui 动作卡 on_error 控件的
+                # 取值域与默认值(与后端 normalize 注入的缺省同源, schema/fields 单点)
+                "on_error_policies":
+                    list(ON_ERROR_POLICIES),
+                "on_error_defaults":
+                    dict(ON_ERROR_DEFAULTS),
                 # stop_if 已随 stop_following_rules_if 退役(D1, plan 26-11-01-0106 W1):
                 # 前端不再提供该枚举下拉; 键面识别保留在 RULE_FIELDS/validation(升级检测)
                 "triggers":

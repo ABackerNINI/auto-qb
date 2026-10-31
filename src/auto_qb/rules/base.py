@@ -12,6 +12,7 @@ from ..infra import utils
 from ..torrents import TorrentRecord
 from ..config import Config, ConfigError
 from ..config.compat import normalize_action_entry
+from ..config.schema.fields import ON_ERROR_DEFAULTS
 # from ..qbmanager import QbManager
 from ..core.qbapi import QbApi
 
@@ -20,8 +21,8 @@ logger = logging.getLogger(__name__)
 # 条件求值出错日志的节流窗口(秒): 同规则同原因在此窗口内只报一次 ERROR
 _COND_ERR_THROTTLE = 300.0
 
-# process 返回契约(W1 收口, plan 26-11-01-0106 G1/G12): 单值 verdict, 由引擎
-# (core/modules/rules_mod._run_rule)显式消费 —— 记 DEBUG 结论供排障; W2 起按 error 档
+# process 返回契约(W1 收口, plan 26-11-01-0106 G1/G12; W2 扩 retry 档): 单值 verdict, 由引擎
+# (core/modules/rules_mod._run_rule)显式消费 —— 记 DEBUG 结论供排障; W2 起按 error/retry 档
 # 驱动 per-step 错误语义, W4 起进 per-run trace。旧 (handled, stop) 元组的 stop 档是死配置
 # (唯一调用点整体丢弃返回值), 已随 stop_following_rules_if 退役一并删除。
 VERDICT_NO_MATCH = "no_match"  # 条件不满足(含种子已删): 本轮未执行
@@ -30,6 +31,16 @@ VERDICT_DEDUPED = "deduped"  # execute_once/cooldown 去重拦下
 VERDICT_NO_OP = "no_op"  # 条件满足且未被去重, 但无动作产生效果(空动作表/全 skip)
 VERDICT_PENDING = "pending"  # 动作等待异步完成: 断点已记录, 本轮中断待恢复
 VERDICT_EXECUTED = "executed"  # 本轮执行了动作(成功/失败均计; 续跑完成同)
+# 动作失败且 on_error.policy=retry(W2): 断点挂失败动作 + task.retry_delay=backoff, 引擎按
+# 任务级 requeue 处理(_handle_rule 返回 REQUEUE, 队列收尾按 backoff 推迟下次到期)—— 无 run 内
+# sleep(黄金法则 3/5)。重试上限 retries 由 process 按 task.attempt 判定, 耗尽后按 stop 收场。
+VERDICT_RETRY = "retry"
+
+# on_error 三档取值(与 schema.fields.ON_ERROR_POLICIES 同值; 取值合法性唯一入口是 config
+# 校验, 此处常量只作逐档分派与注释锚点)
+_POLICY_STOP = "stop"
+_POLICY_CONTINUE = "continue"
+_POLICY_RETRY = "retry"
 
 
 class ActionResult:
@@ -171,14 +182,15 @@ class Rule:
             except Exception as e:
                 raise ConfigError(f"规则 {self.name}: 条件 {cond_spec}: {e}") from e
 
-        # 解析动作序列(规范化形态 {type, params}, plan 26-11-01-0106 §3.2 W2-A): 载入链
-        # (load_config -> normalize_legacy_rules)已把旧扁平单键 dict 翻译成规范形; 这里对每项
-        # 再过一次单点漏斗(config.compat.normalize_action_entry, 幂等) —— 引擎只认规范形,
-        # 没有「读 legacy 键」的第二语义分支, 兼容层唯一容身在 config/compat.py。
+        # 解析动作序列(规范化形态 {type, params, on_error}, plan 26-11-01-0106 §3.2 W2-A/W2-B):
+        # 载入链(load_config -> normalize_legacy_rules)已把旧扁平单键 dict 翻译成规范形并注入
+        # 缺省 on_error; 这里对每项再过一次单点漏斗(config.compat.normalize_action_entry, 幂等)
+        # —— 引擎只认规范形, 没有「读 legacy 键」的第二语义分支, 兼容层唯一容身在 config/compat.py。
         # 伪动作 ignore_next_action_error 已退役(D1): 载入层(rules_mod.load_rules)识别后
         # 转未启用并在内存副本里剔除, 引擎不再消费 —— 绕过载入层直接构造 Rule 遇伪动作
         # 按未知动作 ConfigError。
         self.actions = []
+        self.action_on_error: List[dict] = []  # 与 self.actions 对齐的 per-action 错误策略(W2 G5)
         for act_spec in spec.get("actions") or []:
             if not isinstance(act_spec, dict):
                 continue
@@ -186,6 +198,7 @@ class Rule:
             name, value = act.get("type"), act.get("params")
             try:
                 self.actions.append(registry.create_action(name, value))
+                self.action_on_error.append(self._resolve_on_error(act.get("on_error")))
             except Exception as e:
                 raise ConfigError(f"规则 {self.name}: 动作 {name}: {e}") from e
 
@@ -198,14 +211,35 @@ class Rule:
         """所有条件必须全部满足(AND)"""
         return all(c.match(ctx) for c in self.conditions)
 
+    @staticmethod
+    def _resolve_on_error(raw: Any) -> dict:
+        """on_error 配置解析(构造期, plan W2/G5): config 校验是取值合法性的唯一入口, 此处
+        假定已通过校验(fail-fast); 兜底仅对「程序内直接构造 Rule 的内存 spec」补缺省形状 ——
+        缺键回 ON_ERROR_DEFAULTS(schema/fields 单点, 与 normalize 注入同源), 类型异常抛
+        ConfigError 由动作构造包装统一报。"""
+        oe = raw if isinstance(raw, dict) else {}
+        try:
+            return {
+                "policy": str(oe.get("policy", ON_ERROR_DEFAULTS["policy"])),
+                "retries": int(oe.get("retries", ON_ERROR_DEFAULTS["retries"])),
+                "backoff": float(oe.get("backoff", ON_ERROR_DEFAULTS["backoff"])),
+            }
+        except (TypeError, ValueError) as e:
+            raise ConfigError(f"on_error 取值非法: {raw}: {e}") from e
+
     def process(self, ctx: RuleContext) -> str:
         """
         处理一个种子, 返回单值 verdict(模块级 VERDICT_* 常量, 消费方见常量区注释)。
 
         断点契约(与 taskqueue 的默认重置语义配合):
         - 读:   进入时只读 task.resume_index 判定续跑(不清零)
-        - 写:   动作返回 pending 时记录断点并中断, 由校验轮询子任务按结果重新入队
-        - 清:   正常完成时清零; 异常路径不清零 —— 由 taskqueue 收尾默认重置兜底(下轮从头)
+        - 写:   动作返回 pending 时记录断点并中断, 由校验轮询子任务按结果重新入队;
+                动作失败且 on_error.policy=retry 时(W2/R3)同样挂断点(= 失败动作索引)并置
+                task.retry_delay=backoff, 返回 VERDICT_RETRY —— 引擎按任务级 requeue 处理,
+                队列收尾按 backoff 推迟下次到期(无 run 内 sleep)。续跑轮跳过条件评估与去重,
+                重试计数 task.attempt 由引擎维护(上限 retries, 耗尽按 stop 收场)
+        - 清:   正常完成时清零(连同 attempt 归零); 异常路径不清零 —— 由 taskqueue 收尾
+                默认重置兜底(下轮从头)
         """
         if ctx.torrent is None:
             return VERDICT_NO_MATCH
@@ -240,6 +274,7 @@ class Rule:
         for i, action in enumerate(self.actions):
             if i < start:
                 continue  # 跳过断点前已执行的动作
+            on_error = self.action_on_error[i] if i < len(self.action_on_error) else self._resolve_on_error(None)
             try:
                 result = action.execute(ctx)
             except Exception as e:
@@ -260,15 +295,42 @@ class Rule:
                 logger.info(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 成功: {result.message}")
             elif result.is_failed:
                 executed = True
+                # per-step 错误策略(W2, plan G5): 失败与动作内异常同径, 三档分派 ——
+                # stop(默认)= 现行失败即止; continue = 记账后继续后续动作(替代旧布尔 ignore);
+                # retry = 任务级 requeue(断点挂失败动作 + backoff 推迟, 上限 retries, 耗尽按 stop)。
+                policy = on_error.get("policy", "stop")
+                if policy == _POLICY_CONTINUE:
+                    logger.warning(
+                        f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败(continue, 继续后续动作): {result.message}"
+                    )
+                    continue
+                if policy == _POLICY_RETRY and task is not None:
+                    retries = int(on_error.get("retries", 3))
+                    if task.attempt < retries:
+                        backoff = float(on_error.get("backoff", 60))
+                        task.resume_index = i  # 断点挂失败动作: 续跑轮从本动作重试(跳过条件与去重)
+                        task.retry_delay = backoff  # 引擎 requeue 时按此推迟下次到期(无 run 内 sleep)
+                        logger.warning(
+                            f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败"
+                            f"(retry {task.attempt + 1}/{retries}, {backoff:g}s 后重试): {result.message}"
+                        )
+                        return VERDICT_RETRY
+                    logger.error(
+                        f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败"
+                        f"(重试 {retries} 次仍失败, 中止本条动作链): {result.message}"
+                    )
+                    break
                 logger.error(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 失败: {result.message}")
-                # 动作失败即中断本条动作链(per-step on_error 错误策略 W2 引入, plan G5)
+                # 动作失败即中断本条动作链(stop 默认档; retry 耗尽同径)
                 break
             elif result.is_skipped:
                 logger.debug(f"规则[{self.name}] {log_repr} | 动作[{action.name}] 跳过: {result.message}")
 
-        # 正常完成(含续跑完成): 消费断点(异常路径不清, 由 taskqueue 收尾默认重置兜底)
+        # 正常完成(含续跑完成): 消费断点(异常路径不清, 由 taskqueue 收尾默认重置兜底);
+        # attempt 同步归零 —— 下轮全新执行不继承上一轮的 retry 计数
         if task is not None:
             task.resume_index = None
+            task.attempt = 0
 
         if self.actions and not ctx.dry_run and ok_action:
             self.manager.ctx.state.record_execution(self.name, ctx.hash)

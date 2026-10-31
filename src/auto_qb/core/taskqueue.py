@@ -47,6 +47,8 @@ class Task:
         "interval",
         "state",
         "resume_index",
+        "attempt",
+        "retry_delay",
         "run_count",
         "created_at",
         "payload",
@@ -73,6 +75,12 @@ class Task:
         self.interval = interval  # 任务执行间隔, 秒(<=0 归一化为 1: 每 tick 级别)
         self.state = PENDING
         self.resume_index = None  # 规则任务断点(下一个要执行的动作索引); 默认记住位置, 重新入队后继续
+        # 动作级 retry 策略状态(plan 26-11-01-0106 W2/R3, 断点续跑同款机制, 挂 Task 不入 state):
+        # attempt = 该任务已重试次数(引擎在 retry requeue 时 +1, 成功/耗尽后归零); 重启随任务
+        # 重建归零(可接受, plan 拍板)。retry_delay = 本次 requeue 的推迟秒数(handler 设置,
+        # _requeue 消费后清零; >0 时 requeue 保留断点 = 从失败动作续跑)。
+        self.attempt = 0
+        self.retry_delay = 0.0
         self.run_count = 0
         self.created_at = time.time()
         self.payload = payload  # 可选: 任务附带数据(自定义)
@@ -88,6 +96,7 @@ class Task:
         add_task 默认重置, 仅 keep_progress=True 时保留断点。
         """
         self.resume_index = None
+        self.retry_delay = 0.0
 
     @property
     def has_breakpoint(self) -> bool:
@@ -142,9 +151,11 @@ class TaskQueue:
 
         断点语义: 默认重置任务(resume_index 清空, 下次从头执行); keep_progress=True 显式
         保存任务进度(断点保留, 下次从断点续跑) —— 仅供等待异步完成的子任务恢复 origin 使用。
+        默认重置同时清 retry_delay(重走完整流程的任务不带上一轮的 retry 推迟意图)。
         """
         if not keep_progress:
             task.resume_index = None
+            task.retry_delay = 0.0
         if task.kind == "check":
             if task.hash in self._active_checks:
                 return False
@@ -283,9 +294,20 @@ class TaskQueue:
         return REQUEUE
 
     def _requeue(self, task: Task, now: float):
-        """周期任务收尾: 默认重置断点后按任务内置 interval 重新入队(下一轮从头执行)"""
-        task.resume_index = None
+        """周期任务收尾: 默认重置断点后按任务内置 interval 重新入队(下一轮从头执行)
+
+        retry 策略例外(plan 26-11-01-0106 W2/R3): handler 已在 task.retry_delay 挂上推迟秒数
+        时按 backoff 推迟下次到期, 且保留断点(下次从失败动作续跑, 跳过条件评估与去重)——
+        重试若重走全流程会被 cooldown/execute_once 去重拦下, retry 语义即死。推迟靠改
+        next_run 完成, 无 run 内 sleep(黄金法则 3/5: 单一写线程, 让出队列等到期)。
+        """
+        delay = task.retry_delay
+        task.retry_delay = 0.0
+        if delay > 0:
+            task.next_run = now + delay
+        else:
+            task.resume_index = None
+            task.next_run = now + task.interval
         task.run_count += 1
         task.state = PENDING
-        task.next_run = now + task.interval
         heapq.heappush(self._fast, task)

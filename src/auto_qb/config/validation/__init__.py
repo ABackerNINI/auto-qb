@@ -22,6 +22,7 @@ from ..schema.fields import (
     DELETED_ALLOWED_ACTIONS,
     EXECUTE_ONCE,
     FIELD_WATCH_ALLOWED,
+    ON_ERROR_POLICIES,
     STOP_IF,
     TRIGGERS,
 )
@@ -86,4 +87,5 @@ __all__ = [
     "CHECKING_ACTION_KNOWN_KEYS",
     "CHECKING_BASIC",
     "CHECKING_MODES",
+    "ON_ERROR_POLICIES",
 ]

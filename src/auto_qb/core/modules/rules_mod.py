@@ -36,6 +36,7 @@ from typing import List, Optional
 
 from ...config.compat import normalize_action_entry
 from ...rules import Rule, RuleContext
+from ...rules.base import VERDICT_RETRY
 from ..module import AppContext, ApplyResult, BaseModule
 from ..taskqueue import FINISHED, REQUEUE, Task, TaskQueue
 
@@ -326,13 +327,21 @@ class RulesModule(BaseModule):
         - 种子已删除 -> False 任务消亡
         - pending 中断(校验提交, 断点已记录) -> False 本轮不重入, 由校验轮询子任务
           在完成后按情况重新入队(断点保留续跑 / reset 重走)
+        - retry 档(on_error.policy=retry, W2/R3) -> True 周期重入队, 但任务收尾按
+          process 挂上的 retry_delay(backoff) 推迟下次到期且保留断点(从失败动作续跑,
+          不被 cooldown/execute_once 去重拦下)—— 任务级 requeue, 无 run 内 sleep
         - 其余(含异常) -> True 周期重入队
         """
         if task.torrent is None:
             return FINISHED
         ctx = self._make_ctx(task.hash, dry_run, task=task)
-        if self._run_rule(rule, ctx, f"任务[{task.log_tag}] | 规则执行异常") == "":
+        verdict = self._run_rule(rule, ctx, f"任务[{task.log_tag}] | 规则执行异常")
+        if verdict == "":
             return REQUEUE
+        if verdict == VERDICT_RETRY:
+            task.attempt += 1  # 重试计数挂 Task(断点续跑同款机制; 重启随任务重建归零)
+            return REQUEUE  # retry_delay 已由 process 挂上, 队列收尾按 backoff 推迟
+        # attempt 归零不在此: process 正常完成路径单点清零(base.py 收尾), 引擎不重置第二份
         # 有未消费断点(pending 等待子任务恢复) -> 本轮不重入; 否则周期重入队
         return FINISHED if task.has_breakpoint else REQUEUE
 
@@ -442,7 +451,9 @@ class RulesModule(BaseModule):
 
         rule-event 任务不进入 _fast 队列: 事件即时分派不排队。process 返回 pending 时该
         Task 记录断点(resume_index)并作 origin, 由轮询子任务 add_task(origin, keep_progress=True)
-        重新入队, 下 tick _handle_event_rule 续跑。正常完成(无 pending)则 Task 不被入队, 自然消亡。
+        重新入队, 下 tick _handle_event_rule 续跑。返回 VERDICT_RETRY 时(on_error.policy=retry,
+        W2)同样走任务级 requeue: 本任务带断点按 backoff 推迟重入队(_handle_event_rule 以
+        REQUEUE 消费)。正常完成(无 pending/retry)则 Task 不被入队, 自然消亡。
         返回该 rule-event Task(供测试断言其断点状态)。
         """
         task = Task(
@@ -454,22 +465,30 @@ class RulesModule(BaseModule):
             handler=lambda t, d, r=rule, s=snapshot: self._handle_event_rule(r, t, s, d),
         )
         ctx = self._make_ctx(hash, dry_run, task=task, snapshot=snapshot)
-        self._run_rule(rule, ctx, f"事件规则[{rule.name}] {hash[:8]} | 执行异常")
+        verdict = self._run_rule(rule, ctx, f"事件规则[{rule.name}] {hash[:8]} | 执行异常")
+        if verdict == VERDICT_RETRY and self._ctx.task_queue is not None:
+            task.attempt += 1
+            # 带断点按 backoff 推迟重入队(add_task 的 now 即 next_run; keep_progress 保断点)
+            self._ctx.task_queue.add_task(task, now=time.time() + task.retry_delay, keep_progress=True)
         return task
 
     def _handle_event_rule(self, rule: Rule, task: Task, snapshot, dry_run: bool) -> bool:
-        """事件规则 rule-event 任务的断点续跑 handler(恒返回 FINISHED, 不自我周期循环).
+        """事件规则 rule-event 任务的断点续跑 handler(FINISHED 消亡; retry 档按 backoff requeue).
 
         种子已删除 -> 直接消亡(删除守卫); 否则重建 ctx(断点由轮询子任务
         add_task(keep_progress=True) 保留)续跑后续动作。续跑后再遇 pending(如连续多个
-        checking)由新的轮询子任务重新入队, 本 handler 恒 FINISHED —— rule-event 任务不按
-        interval 周期重入, 事件语义保持"一次性但可恢复"。
+        checking)由新的轮询子任务重新入队; 遇 VERDICT_RETRY 则返回 REQUEUE —— 队列收尾按
+        process 挂上的 retry_delay 推迟(有界: 上限 retries, 非周期自循环), 事件语义保持
+        "一次性但可恢复"。
         """
         if task.torrent is None:
             return FINISHED
         ctx = self._make_ctx(task.hash, dry_run, task=task, snapshot=snapshot)
-        self._run_rule(rule, ctx, f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常")
-        return FINISHED
+        verdict = self._run_rule(rule, ctx, f"事件规则[{rule.name}] {task.hash[:8]} | 续跑异常")
+        if verdict == VERDICT_RETRY:
+            task.attempt += 1
+            return REQUEUE  # retry_delay 已由 process 挂上, 队列收尾按 backoff 推迟
+        return FINISHED  # attempt 归零由 process 正常完成路径单点负责(与 _handle_rule 同口径)
 
     # ---------- tracker 引用 ----------
 

@@ -1077,6 +1077,12 @@
 .hb-step .st-t { min-width: 0; }
 .hb-step .st-r { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
 .hb-step.danger { border-color: var(--error-line, color-mix(in srgb, var(--error) 45%, transparent)); background: var(--error-soft); }
+/* 动作卡 on_error 行(plan 26-11-01-0106 W2/D8): 失败策略三档下拉 + retry 档 retries/backoff
+ * 数字输入; 控件簇与 .hb-ct 同款 flex, 数字输入缩宽避免拉满动作卡 */
+.hb-oe-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.hb-oe-row .hb-lb { padding-top: 0; font-size: 12px; color: var(--fg-dim); }
+.hb-oe-row .hb-select, .hb-oe-row .hb-input { flex: 0 1 auto; }
+.hb-oe-row .hb-input { width: 92px; }
 .hb-rule-foot { border-top: 1px solid var(--hairline); padding: 8px 14px 10px; }
 /* 规则卡「触发与节奏」段: 复用 hb-blk-hd 条状头(摘掉其底边, 由段自身的 hairline 底边统一收口)
  * + hb-row 通用行; 头部给 hover 反馈(可点折叠) */

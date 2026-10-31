@@ -9,7 +9,9 @@
  *                       规则级字段(schema.rule_fields, 「触发与节奏」折叠段, hub-field 通用渲染;
  *                       stop_following_rules_if 已退役, 键面保留识别, 见 cfgRuleRetiredKeys)
  *           conditions: [{<插件名>: <spec>}, ...]
- *           actions:    [{<插件名>: <spec>}, ...]
+ *           actions:    [{<插件名>: <spec>} | {<插件名>: <spec>, on_error: {...}}, ...]
+ *                       on_error(W2-B/D8): 动作级失败策略控件(见 cfgOnError* 方法族),
+ *                       读侧兼容规范形 {type, params, on_error}(cfgPluginName/cfgSpecPath)
  *
  * spec 形态由 schema 的 Plugin.spec_kind 决定: str/enum/speed 单值, bool 开关, list 列表, object 子表单。
  * 动作可选集合按 trigger 过滤(与后端 validation 的删除触发白名单同源)。
@@ -45,9 +47,12 @@ window.CONFIG_RULES = {
       }
       return keys;
     },
-    /* actions 域伪动作项识别(退役键自身): 不再当可渲染动作(hubPluginText 显示退役标记) */
+    /* actions 域伪动作项识别(退役键自身): 不再当可渲染动作(hubPluginText 显示退役标记)
+     * W2-B: 规范形 {type, params, on_error}(手写 YAML 经载入规范化的形态)同样识别。 */
     cfgIsRetiredAction(entry) {
-      return !!(entry && typeof entry === "object" && "ignore_next_action_error" in entry);
+      if (!entry || typeof entry !== "object") return false;
+      if ("type" in entry) return entry.type === "ignore_next_action_error";
+      return "ignore_next_action_error" in entry;
     },
     /* 卡脚升级提示(单点口径, 模板只引用; 话术与后端 _warn_retired_rule 对齐) */
     cfgRuleRetiredHint(groupKey, ruleName) {
@@ -62,7 +67,9 @@ window.CONFIG_RULES = {
     },
     cfgPluginName(entry) {
       if (!entry || typeof entry !== "object") return "";
-      const keys = Object.keys(entry);
+      if ("type" in entry) return String(entry.type); // 规范形(W2-B: {type, params, on_error})
+      // 扁平形 / webui 混合形({动作键: 值, on_error: {...}}): on_error 不是插件名
+      const keys = Object.keys(entry).filter((k) => k !== "on_error");
       return keys.length ? keys[0] : "";
     },
     cfgPluginMeta(entry) {
@@ -99,7 +106,9 @@ window.CONFIG_RULES = {
     cfgSpecPath(groupKey, ruleName, listName, index, extra) {
       const entry = this.cfgPluginEntry(groupKey, ruleName, listName, index);
       const name = this.cfgPluginName(entry);
-      return [...this.cfgRulePath(groupKey, ruleName), listName, index, name, ...(extra || [])];
+      // 规范形 {type, params, on_error}: spec 落在 params 键; 扁平/混合形: spec 落在动作名键
+      const specKey = entry && typeof entry === "object" && "type" in entry ? "params" : name;
+      return [...this.cfgRulePath(groupKey, ruleName), listName, index, specKey, ...(extra || [])];
     },
     /* spec 的渲染项: 统一映射为通用字段项, 从而复用同一套控件(无 YAML 片段兜底) */
     cfgSpecItems(groupKey, ruleName, listName, index) {
@@ -184,6 +193,45 @@ window.CONFIG_RULES = {
         { kind: meta.spec_kind, options: meta.options, placeholder: meta.placeholder },
         { boolOn: meta.spec_kind === "bool" }
       );
+    },
+
+    /* ---------------------------------------------------------- 动作 on_error(W2-B, D8)
+     * 动作卡「失败策略」控件: policy 三档(缺省 stop = 现行失败即止; continue 替代退役布尔;
+     * retry = 任务级 requeue, 附 retries/backoff 数字输入)。默认值取后端 schema constants
+     * (on_error_policies / on_error_defaults, 与载入链 normalize 注入的缺省同源)。
+     * 写树口径: 全部为缺省值时不写(与 hub-field「未动过的键不写进树」一致), 改出非缺省组合
+     * 才写 on_error —— 写出形态 = 动作键 + on_error 的混合形, 载入链 normalize 单点
+     * (config/compat.py)翻译成 {type, params, on_error} 规范形。 */
+    cfgOnErrorDefaults() {
+      const c = this.cfg.schema && this.cfg.schema.constants;
+      return (c && c.on_error_defaults) || { policy: "stop", retries: 3, backoff: 60 };
+    },
+    cfgOnErrorPolicies() {
+      const c = this.cfg.schema && this.cfg.schema.constants;
+      return (c && c.on_error_policies) || ["stop", "continue", "retry"];
+    },
+    cfgOnErrorPath(groupKey, ruleName, i, key) {
+      return [...this.cfgRulePath(groupKey, ruleName), "actions", i, "on_error", key];
+    },
+    cfgOnErrorValue(groupKey, ruleName, i, key) {
+      const def = this.cfgOnErrorDefaults()[key];
+      return String(this.cfgVal(this.cfgOnErrorPath(groupKey, ruleName, i, key), def));
+    },
+    cfgOnErrorIsRetry(groupKey, ruleName, i) {
+      return this.cfgOnErrorValue(groupKey, ruleName, i, "policy") === "retry";
+    },
+    cfgOnErrorSet(groupKey, ruleName, i, key, value) {
+      this.cfgSetPath(this.cfgOnErrorPath(groupKey, ruleName, i, key), String(value));
+      this.cfgOnErrorPruneIfDefault(groupKey, ruleName, i);
+    },
+    /* on_error 全部回缺省时整键摘除, YAML 保持简洁(后端 normalize 会注入同值缺省) */
+    cfgOnErrorPruneIfDefault(groupKey, ruleName, i) {
+      const def = this.cfgOnErrorDefaults();
+      const base = [...this.cfgRulePath(groupKey, ruleName), "actions", i, "on_error"];
+      const cur = this.cfgRaw(base);
+      if (!cur || typeof cur !== "object") return;
+      const clean = Object.keys(cur).every((k) => String(cur[k]) === String(def[k]));
+      if (clean) this.cfgDelPath(base);
     },
 
     /* ---------------------------------------------------------- 规则卡交互(启用/摘要) */

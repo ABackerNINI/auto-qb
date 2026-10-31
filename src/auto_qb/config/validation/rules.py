@@ -13,6 +13,7 @@ from ..schema.fields import (
     DELETED_ALLOWED_ACTIONS,
     EXECUTE_ONCE,
     FIELD_WATCH_ALLOWED,
+    ON_ERROR_POLICIES,
     STATE_ATTRS,
     STOP_IF,
     TRIGGERS,
@@ -38,6 +39,9 @@ CHECKING_ACTION_KNOWN_KEYS = {"basic_check", "custom_basic_check_program_path", 
 # checking 动作子段(with_reference / without_reference)已知键(与 schema CHECKING_SECTION_FIELDS 同键面;
 # 26-10-06-0028 D-02: 子段嵌套两层拼错概率不低, 未知键必须 fail-fast 而非运行时静默缺省)
 CHECKING_SECTION_KNOWN_KEYS = {"enabled", "mode", "auto_start"}
+
+# on_error 子对象已知键(plan 26-11-01-0106 W2/G5): 取值域 ON_ERROR_POLICIES(schema/fields 单点)
+ON_ERROR_KNOWN_KEYS = {"policy", "retries", "backoff"}
 
 
 def _check_rule_refs(refs: List[str], rules_config: dict, where: str, errors: List[str]) -> None:
@@ -316,11 +320,12 @@ def _validate_plugin_entry(entry, where: str, known: dict, kind: str, errors: Li
 
 
 def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors: List[str]) -> None:
-    """actions 列表项校验: 只认规范化后形态 {type, params}(plan 26-11-01-0106 §3.2/W2-A)
+    """actions 列表项校验: 只认规范化后形态 {type, params, on_error}(plan 26-11-01-0106 §3.2/W2-A/W2-B)
 
-    normalize_legacy_rules 已在载入链把旧扁平单键形翻译成规范形; 直达校验器的输入(测试/
-    程序内构造)里的扁平单键形经同一单点漏斗(config.compat.normalize_action_entry)翻译后
-    按同一套逻辑校验 —— 这里没有按 legacy 键分支的第二语义, 只有坐标翻译。
+    normalize_legacy_rules 已在载入链把旧扁平单键形/混合形翻译成规范形并注入缺省 on_error;
+    直达校验器的输入(测试/程序内构造)里的扁平单键形经同一单点漏斗(config.compat.
+    normalize_action_entry)翻译后按同一套逻辑校验 —— 这里没有按 legacy 键分支的第二语义,
+    只有坐标翻译。
 
     R1① 错误定位回映射: 报错话术用用户写的扁平坐标 —— 动作名子路径(actions[i].<动作名>)
     与「第 N 个动作」序号话术, 不暴露 params 结构路径。
@@ -335,7 +340,7 @@ def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors:
         return
     norm = normalize_action_entry(entry)
     if not isinstance(norm, dict) or "type" not in norm:
-        errors.append(f"{where}: 第 {ordinal} 个动作必须是单键字典(旧形)或 {{type, params}}(新形): {sorted(entry)}")
+        errors.append(f"{where}: 第 {ordinal} 个动作必须是单键字典(旧形)或 {{type, params, on_error}}(新形): {sorted(entry)}")
         return
     name = str(norm["type"])
     if name == "ignore_next_action_error":
@@ -351,9 +356,42 @@ def _validate_action_entry(entry, where: str, ordinal: int, known: dict, errors:
     if "params" not in norm:
         errors.append(f"{where}: 动作 '{name}' 缺少 params(动作参数)")
         return
+    if "on_error" in norm:
+        _validate_on_error(norm["on_error"], f"{where}.on_error", errors)
     deep = _PLUGIN_SPEC_VALIDATORS.get(name)
     if deep:
         deep(norm["params"], f"{where}.{name}", errors)
+
+
+def _validate_on_error(value, where: str, errors: List[str]) -> None:
+    """动作级错误策略 on_error 校验(plan 26-11-01-0106 W2/G5): dict/已知键/三档/retries/backoff 边界
+
+    fail-fast 聚合报错(黄金法则 4): 逐键收集全部错误而非遇错即返, 一次保存看全所有笔误。
+    normalize(校验前)已对缺省 on_error 注入缺省值, 这里看到的是补齐后的形态; 缺省 policy=stop
+    即现行「失败即止」, retries/backoff 仅 policy=retry 时被引擎消费(照常校验边界, 不因档位豁免)。
+    """
+    if not isinstance(value, dict):
+        errors.append(f"{where}: 必须是字典 {{policy, retries, backoff}}")
+        return
+    _check_unknown_keys(value, ON_ERROR_KNOWN_KEYS, where, errors)
+    if "policy" in value and value["policy"] not in ON_ERROR_POLICIES:
+        errors.append(f"{where}: policy 取值非法: '{value['policy']}', 可选: {'/'.join(ON_ERROR_POLICIES)}")
+    if "retries" in value:
+        try:
+            retries = int(value["retries"])
+        except (TypeError, ValueError):
+            errors.append(f"{where}: retries 必须是整数: {value['retries']}")
+        else:
+            if retries < 0:
+                errors.append(f"{where}: retries 必须 >= 0: {retries}")
+    if "backoff" in value:
+        try:
+            backoff = float(value["backoff"])
+        except (TypeError, ValueError):
+            errors.append(f"{where}: backoff 必须是数字(秒): {value['backoff']}")
+        else:
+            if backoff <= 0:
+                errors.append(f"{where}: backoff 必须 > 0(秒): {backoff}")
 
 
 def _validate_trigger_action_compat(spec: dict, where: str, errors: List[str]) -> None:

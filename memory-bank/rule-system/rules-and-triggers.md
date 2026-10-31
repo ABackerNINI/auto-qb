@@ -38,8 +38,8 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 
 > **返回值契约已收口** (2026-11-01, plan 26-11-01-0106 W1): 旧的 `(handled, stop)` 二元组
 > 中 `stop` 档自始无人消费(唯一调用点整体丢弃), `handled` 同样漂移 —— 现收口为引擎
-> (`rules_mod._run_rule`)显式消费的单值 verdict: 每次执行 DEBUG 记结论供排障, W2 起按
-> `error` 档驱动 per-step 错误语义、W4 起进 per-run trace, 均以该返回值为单点入口。
+> (`rules_mod._run_rule`)显式消费的单值 verdict: 每次执行 DEBUG 记结论供排障, W2 已按
+> `error`/`retry` 档驱动 per-step 错误语义、W4 起进 per-run trace, 均以该返回值为单点入口。
 
 | verdict | 含义 |
 |---------|------|
@@ -49,6 +49,7 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 | `no_op` | 条件满足且未被去重, 但无动作产生效果(空动作表/全 skip) |
 | `pending` | 动作等待异步完成: 断点已记录, 本轮中断待恢复 |
 | `executed` | 本轮执行了动作(成功/失败均计; 续跑完成同) |
+| `retry` | 动作失败且该动作 `on_error.policy: retry`(W2): 断点挂失败动作 + `task.retry_delay=backoff`, 引擎按任务级 requeue 处理(下次到期按 backoff 推迟, 从失败动作续跑, 不被去重拦下; 上限 retries, 耗尽按 stop 收场) |
 
 1. **断点续跑**: 若 `ctx.task.resume_index` 非空 → 从断点动作继续, **跳过条件评估与去重** (用于 full-checking pending 后的恢复); 断点只在正常完成时消费清零, 异常路径由 taskqueue 收尾默认重置兜底 (下轮从头)。
 2. **条件评估**: `matches()` = 所有条件 AND; **条件抛异常 → 本条规则本轮跳过** (2026-09-20 拍板的行为不变, W1 话术收口): ERROR 级日志(含规则名/表达式/种子/原因, 同因 5 分钟节流) + 返回 `VERDICT_ERROR` —— 每规则每种子独立任务模型里不存在「后续规则」链, 出错只影响本条本轮, 其它规则照常。旧条件与 `expr` 同样适用。
@@ -56,7 +57,10 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 4. **动作顺序执行**:
    - `ActionResult.ok` → `ok_action=True`, 记录日志继续。
    - `ActionResult.skip` → 不算失败, 继续 (如标签已存在)。
-   - `ActionResult.fail` → `failed=True`, **break** 中断本条动作链 (per-step `on_error` 错误策略 W2 引入, plan G5)。
+   - `ActionResult.fail` (含动作内异常, 异常转 fail 不外抛) → 按 per-step `on_error` 三档分派 (W2 落地, plan G5):
+     `stop`(缺省)= **break** 中断本条动作链; `continue` = 记 WARNING 后继续后续动作(替代退役布尔);
+     `retry` = 断点挂失败动作 + `task.retry_delay=backoff`, 返回 `VERDICT_RETRY` 引擎 requeue
+     (无 run 内 sleep, 黄金法则 3/5; 上限 retries, 耗尽按 stop)。无任务上下文(外部入口)retry 退化为 stop。
    - `ActionResult.pending` → 任务队列驱动时: 记录 `task.resume_index = i+1`, 返回 `VERDICT_PENDING` 中断 (`_handle_rule` 检测断点返回 False 不重入; 校验轮询子任务完成后按情况重新入队); 无任务时视为成功继续。
 5. **执行历史**: `ok_action` 且非 dry_run 且有动作 → `manager.record_execution(name, hash)` (幂等去重依据)。注意: 只要有任一动作成功就记录, 包括后续动作失败的场合 (断点续跑时 ok_action 初始为 True)。
 6. 返回: `VERDICT_EXECUTED`(本轮执行了非 skip 动作或任一成功) / `VERDICT_NO_OP`(条件满足但无动作产生效果)。
@@ -83,7 +87,22 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 |------|------|------|
 | `success` | 动作执行成功 (dry-run 也返回 success) | 继续后续动作 |
 | `skipped` | 条件不满足未执行 (标签已存在/已设置/状态不符/段未启用) | 不算失败, 继续 |
-| `failed` | API 非 200 / 抛异常 / 前置检查未通过 | **break** 中断本条动作链 (per-step `on_error` 错误策略 W2 引入) |
+| `failed` | API 非 200 / 抛异常 / 前置检查未通过 | 按动作 `on_error` 三档分派(W2): stop=break 中断链(缺省)/ continue=继续后续动作 / retry=任务级 requeue(backoff 推迟, 上限 retries) |
 | `pending` | 已提交等待异步完成 (仅 full-checking), 规则中断待恢复 | 记断点并返回 `VERDICT_PENDING` |
 
-`ignore_next_action_error` 伪动作已退役 (plan 26-11-01-0106 W1): 载入层识别后转未启用 + warning, 引擎不再消费; 等价新写法 `on_error: {policy: continue}` (W2)。见上节「两键退役」。
+`ignore_next_action_error` 伪动作已退役 (plan 26-11-01-0106 W1): 载入识别后转未启用 + warning, 引擎不再消费; 等价新写法 `on_error: {policy: continue}` (W2 已落地)。见上节「两键退役」。
+
+### 动作级错误策略 on_error (plan 26-11-01-0106 W2/G5)
+
+动作规范形 `{type, params, on_error: {policy, retries, backoff}}`:
+
+- `policy` 三档: `stop`(缺省 = 现行失败即止) / `continue` / `retry` (任务级 requeue, 见上)。
+- 缺省值: `retries=3`, `backoff=60` 秒 (`schema/fields.py` `ON_ERROR_DEFAULTS` 单点); 载入链
+  normalize 单点(`config/compat.py`)对每个动作注入缺省 on_error, 引擎/校验器只认规范化形态。
+- retry 语义: attempt 计数挂 Task(断点续跑同款机制, 重启随任务重建归零); `_handle_rule` 返回
+  REQUEUE 且队列收尾按 backoff 推迟 `next_run` 并保留断点(从失败动作续跑, 跳过条件与去重 ——
+  重试若重走全流程会被 cooldown/execute_once 拦下)。事件规则同语义(rule-event 任务带断点按
+  backoff 重入队, 续跑成功 FINISHED 消亡)。
+- webui: 动作卡「失败策略」控件(config_rules.js `cfgOnError*` 方法族), 默认值与后端
+  schema constants 同源; 全部为缺省值时不写树。
+- exec_history 去重键口径不受影响: 键 = `规则名:hash`, hash = 种子 infohash, **不含 spec 序列化**。

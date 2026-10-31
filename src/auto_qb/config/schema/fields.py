@@ -180,6 +180,16 @@ TRANSFER_AFTER_STATES = ("keep", "paused")
 
 EXECUTE_ONCE = ("never", "once", "daily", "hourly")
 
+# 动作级错误策略(plan 26-11-01-0106 W2/G5): 每动作 on_error = {policy, retries, backoff}
+# - stop(默认) = 现行「失败即止」; continue 替代已退役的 ignore_next_action_error 布尔(D1 无运行时映射);
+#   retry = 任务级 requeue(失败动作挂断点, 按 backoff 推迟下次到期, 最多 retries 次, 耗尽后按 stop 收场)
+# - 取值域与缺省值单点在本表 —— compat(normalize 注入)/validation(fail-fast)/schema payload 三处引用同一对象
+ON_ERROR_POLICIES = ("stop", "continue", "retry")
+
+# on_error 缺省值(保守默认 = 现状行为): policy stop 即现行语义, retries/backoff 仅 policy=retry 时消费;
+# normalize 单点对缺省 on_error 注入本表快照(补齐缺省字段), webui 控件默认值同源
+ON_ERROR_DEFAULTS = {"policy": "stop", "retries": 3, "backoff": 60}
+
 STOP_IF = ("conditions-met", "conditions-not-met", "action-failed", "all-actions-succeed", "always", "never")
 
 TRIGGERS = (

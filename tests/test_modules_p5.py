@@ -26,6 +26,15 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_p2a_handle_event_rule_resume_exception_caught: 断点续跑异常捕获, handler 恒 FINISHED (P2-a)
 - test_full_round_without_task_queue_is_noop: full_round 在 ctx.task_queue 缺失(重建中/停机后)时静默返回, 不打断相位分发
 - test_full_round_skips_unmatched_records
+- test_w2_handle_rule_retry_requeue_backoff: on_error=retry(W2/R3) _handle_rule 返回 REQUEUE
+  且队列收尾按 retry_delay(backoff) 推迟下次到期、保留断点(非 interval 重排)
+- test_w2_handle_rule_retry_exhausted_back_to_interval: retry 耗尽(attempt>=retries)按 stop
+  收场 -> attempt 归零、无 retry_delay, 队列按正常 interval 重排
+- test_w2_handle_rule_attempt_reset_on_non_retry: 非 retry verdict 消费后 attempt 归零
+  (重启重建任务 attempt=0 同口径, 不炸)
+- test_w2_handle_rule_retry_no_sleep: retry 全程无 run 内 sleep(黄金法则 3/5)
+- test_w2_event_rule_retry_requeue: 事件规则 retry 同走任务级 requeue(rule-event 任务带断点
+  按 backoff 重入队, 续跑成功后 FINISHED 消亡, 不自我周期循环)
 """
 import json
 import os
@@ -817,3 +826,172 @@ def test_full_round_without_task_queue_is_noop():
         mgr.store.by_hash["H1"] = SimpleNamespace(hash="H1", tracker_conf=object())
         mgr.ctx.task_queue = None
         assert rules._on_full_round(None) is None
+
+
+# ============================================================
+# W2 错误策略: retry = 任务级 requeue(plan 26-11-01-0106 W2/R3, 硬约束)
+# 动作失败且 policy=retry 时 _handle_rule 不 sleep, 返回 REQUEUE 并把下次到期时间按
+# backoff 推迟; attempt 计数挂 Task(断点续跑同款机制; 重启随任务重建归零)。
+# ============================================================
+
+
+class _W2FailStub:
+    """动作桩: 恒失败(retry 矩阵的失败源, 不触 qB)"""
+
+    name = "w2_fail_stub"
+
+    def __init__(self, behavior="fail"):
+        self._behavior = behavior
+
+    def execute(self, ctx):
+        if self._behavior == "raise":
+            raise RuntimeError("stub boom")
+        from auto_qb.rules.base import ActionResult
+
+        return ActionResult.fail("stub fail")
+
+
+def _w2_retry_rule(mgr, name="g.w2", retries=2, backoff=30, behavior="fail"):
+    from auto_qb.rules.base import Rule
+
+    rule = Rule(
+        name,
+        {
+            "actions":
+                [
+                    {
+                        "type": "add_tags",
+                        "params": ["X"],
+                        "on_error": {
+                            "policy": "retry",
+                            "retries": retries,
+                            "backoff": backoff
+                        }
+                    }
+                ]
+        },
+        mgr,
+    )
+    rule.actions[0] = _W2FailStub(behavior)
+    return rule
+
+
+def test_w2_handle_rule_retry_requeue_backoff():
+    """retry: _handle_rule 返回 REQUEUE, 队列收尾按 backoff 推迟下次到期且保留断点(非 interval 重排)"""
+    from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
+    from auto_qb.rules.base import VERDICT_RETRY
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
+        rules = mgr.host.get("rules")
+        rule = _w2_retry_rule(mgr)
+        queue = TaskQueue()
+        task = Task(
+            "rule",
+            rule.name,
+            hash="H1",
+            store=mgr.store,
+            interval=300,
+            handler=lambda t, d: rules._handle_rule(rule, t, d)
+        )
+        queue.add_task(task, now=1000.0)
+        executed = queue.run_due(now=1000.5, max_tasks=0)
+        assert executed == 1
+        assert task.attempt == 1, f"引擎消费 RETRY 信号后 attempt +1: {task.attempt}"
+        assert task.resume_index == 0, "断点保留(从失败动作续跑, 不被去重拦下)"
+        assert abs(task.next_run - 1030.5) < 1e-6, f"下次到期 = requeue 时刻 + backoff: {task.next_run}"
+        assert task.next_run != 1000.5 + task.interval, "不得按任务 interval 重排(backoff 优先)"
+
+
+def test_w2_handle_rule_retry_exhausted_back_to_interval():
+    """retry 耗尽(attempt>=retries)按 stop 收场 -> attempt 归零、无 retry_delay, 正常 interval 重排"""
+    from auto_qb.core.taskqueue import Task, TaskQueue
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
+        rules = mgr.host.get("rules")
+        rule = _w2_retry_rule(mgr, retries=2)
+        queue = TaskQueue()
+        task = Task(
+            "rule",
+            rule.name,
+            hash="H1",
+            store=mgr.store,
+            interval=300,
+            handler=lambda t, d: rules._handle_rule(rule, t, d)
+        )
+        task.attempt = 2  # 已耗尽
+        queue.add_task(task, now=1000.0)
+        queue.run_due(now=1000.5, max_tasks=0)
+        assert task.attempt == 0, "非 retry verdict 消费后 attempt 归零"
+        assert task.retry_delay == 0.0, "耗尽路径不挂推迟"
+        assert task.resume_index is None, "stop 收场不保留断点(下轮从头)"
+        assert abs(task.next_run - (1000.5 + task.interval)) < 1e-6, f"按正常 interval 重排: {task.next_run}"
+
+
+def test_w2_handle_rule_attempt_reset_on_non_retry():
+    """非 retry verdict 消费后 attempt 归零; 重启后任务重建 attempt=0 同口径, 高残值不炸"""
+    from auto_qb.core.taskqueue import REQUEUE, Task
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
+        rules = mgr.host.get("rules")
+        rule = _w2_retry_rule(mgr, behavior="ok", retries=2)  # 动作成功
+        rule.actions[0] = _W2OkStub()
+        task = Task("rule", rule.name, hash="H1", store=mgr.store, interval=300)
+        task.attempt = 5  # 模拟重启前遗留的高残值(重启后归零可接受, 残值也不得炸)
+        assert rules._handle_rule(rule, task, False) == REQUEUE
+        assert task.attempt == 0, "成功路径 attempt 归零"
+        # 重启口径: 新建任务 attempt 从 0 起步
+        assert Task("rule", "x", hash="H1", store=mgr.store).attempt == 0
+
+
+def test_w2_handle_rule_retry_no_sleep():
+    """retry 全程无 run 内 sleep(黄金法则 3/5: 单一写线程, 让出队列等到期)"""
+    from auto_qb.core.taskqueue import REQUEUE, Task
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
+        rules = mgr.host.get("rules")
+        rule = _w2_retry_rule(mgr, behavior="raise")
+        task = Task("rule", rule.name, hash="H1", store=mgr.store, interval=300)
+        with mock.patch("time.sleep", side_effect=AssertionError("run 内 sleep 禁止")):
+            assert rules._handle_rule(rule, task, False) == REQUEUE
+        assert task.retry_delay > 0, "推迟意图挂在 Task 上, 由队列收尾改 next_run 兑现"
+
+
+def test_w2_event_rule_retry_requeue():
+    """事件规则 retry 同走任务级 requeue: rule-event 任务带断点按 backoff 重入队, 续跑成功后 FINISHED"""
+    from auto_qb.core.taskqueue import FINISHED, REQUEUE
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        seed_store(mgr, [FakeTorrent(hash="H1", state="stalledUP")])
+        rules = mgr.host.get("rules")
+        rule = _w2_retry_rule(mgr, name="g.w2ev", retries=3, backoff=45)
+        task = rules._apply_event_rule(rule, "H1")
+        assert task.attempt == 1 and task.resume_index == 0, "requeue 前挂断点与计数"
+        assert task in mgr.ctx.task_queue._fast, "rule-event 任务带断点重入队"
+        assert task.next_run >= time.time() + 44, f"按 backoff 推迟重入队: {task.next_run}"
+        # 续跑仍失败: handler 返回 REQUEUE(队列收尾再按 backoff 推迟), 不自我 FINISH 消亡
+        assert rules._handle_event_rule(rule, task, None, False) == REQUEUE
+        assert task.attempt == 2
+        # 续跑成功: FINISHED 消亡(事件语义保持一次性但可恢复), attempt 归零
+        rule.actions[0] = _W2OkStub()
+        assert rules._handle_event_rule(rule, task, None, False) == FINISHED
+        assert task.attempt == 0 and task.resume_index is None
+
+
+class _W2OkStub:
+    """动作桩: 恒成功(retry 恢复路径)"""
+
+    name = "w2_ok_stub"
+
+    def execute(self, ctx):
+        from auto_qb.rules.base import ActionResult
+
+        return ActionResult.ok("stub ok")

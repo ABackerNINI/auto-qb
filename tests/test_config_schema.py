@@ -348,6 +348,7 @@ def test_validation_enums_are_schema_derived():
         "CHECKING_BASIC",
         "CHECKING_MODES",
         "DELETED_ALLOWED_ACTIONS",
+        "ON_ERROR_POLICIES",
     ):
         assert getattr(validation, name) is getattr(schema_fields, name), f"validation.{name} 偏离 schema 单点"
     assert sections.NOTIFY_CHANNELS is schema_fields.NOTIFY_CHANNELS, "NOTIFY_CHANNELS 偏离 schema 单点"
@@ -546,7 +547,8 @@ def test_schema_payload_constants_keys_exact():
     ``XXlog_levelsXX`` / ``LOG_LEVELS`` 这类大小写或前缀变体时, 抽查表里没有它, 于是存活。
     """
     payload = schema.schema_payload()
-    # stop_if 已随 stop_following_rules_if 退役移出 constants(plan 26-11-01-0106 W1), 余 11 项逐位钉死
+    # stop_if 已随 stop_following_rules_if 退役移出 constants(plan 26-11-01-0106 W1); W2 起加
+    # on_error_policies/on_error_defaults(plan 26-11-01-0106 W2), 共 13 项逐位钉死
     assert set(payload["constants"]) == {
         "log_levels",
         "notify_levels",
@@ -559,6 +561,8 @@ def test_schema_payload_constants_keys_exact():
         "state_attrs",
         "deleted_allowed_actions",
         "hr_check_site_presets",
+        "on_error_policies",
+        "on_error_defaults",
     }
 
 
@@ -575,6 +579,9 @@ def test_schema_payload_constants_values():
     assert payload["hr_modes"] == list(schema.HR_MODES)
     assert payload["state_attrs"] == list(schema.STATE_ATTRS)
     assert payload["deleted_allowed_actions"] == list(schema.DELETED_ALLOWED_ACTIONS)
+    # on_error 取值域/缺省值(W2): 与 normalize 注入、引擎解析同源(schema/fields 单点)
+    assert payload["on_error_policies"] == list(schema.ON_ERROR_POLICIES)
+    assert payload["on_error_defaults"] == dict(schema.ON_ERROR_DEFAULTS)
 
 
 def test_schema_payload_preset_key_metadata():
