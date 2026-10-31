@@ -1759,7 +1759,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤218 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤220 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -1769,14 +1769,15 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 218:
+        if n_shell > 220:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 218"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 220"
                 "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5/S6 各 +3; "
                 "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4; "
                 "W6 计划 26-10-13-0811 shared/dt_table.css 挂载(注释+link)+2; "
                 "issue 26-10-20-2231 prism/css/dialogs.css 挂载(注释+link)+2; "
-                "计划 26-10-30-0217 阶段2 shared/row_lang.css 挂载(注释+link)+2 → 218)"
+                "计划 26-10-30-0217 阶段2 shared/row_lang.css 挂载(注释+link)+2 → 218; "
+                "计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []

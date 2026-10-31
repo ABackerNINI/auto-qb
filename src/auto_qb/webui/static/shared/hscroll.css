@@ -1,0 +1,65 @@
+/* auto-qb WEB UI · 主表横滚(shared, 三皮肤共用): 原生横条隐藏 + 底部紧凑指示条外观
+ *
+ * 单点地位: 两件事都只在本文件声明 —— ① 隐藏 .group-table 的原生横向滚动条(视觉层);
+ * ② 底部指示条 .hscroll-pill 的全部外观。三皮肤(prism/atlas/console)index.html 各挂一条 link,
+ * 内容逐字共用; 皮肤路径内不得再出现同类规则(计划 26-11-01-0553)。
+ *
+ * 级联序: link 必须排在本皮肤 views.css **之后**(shell 里 link 序即级联序), 与 shared/row_lang.css
+ * 同层同序; prism 的 dialogs.css 仍须最后 —— 弹窗层是最后介入级联的本皮肤层。
+ *
+ * 分工: 隐藏规则覆盖**所有** .group-table(含抽屉变体面 —— 它们同样只有横向滚动, 原生横条同样难看);
+ * 指示条只给主表三视图(种子/辅种/追剧), 抽屉面不建 DOM(阶段 B 在 shared/columns.js 里按视图判定)。
+ *
+ * 为什么两条都要(只写 ::-webkit-scrollbar 或只写 scrollbar-width 都不够):
+ * 三皮肤全局都有 `*::-webkit-scrollbar { width: 10px; height: 10px }`(prism/css/base.css、
+ * atlas/style.css、console/style.css); Chromium 系「画不画」由元素级规则决定, 必须元素级
+ * display:none 才不绘制。`.group-table::-webkit-scrollbar` 特异性 (0,1,1) 压过 `*::-webkit-scrollbar`
+ * (0,0,1) —— 不依赖书写顺序(本文件排在皮肤文件之后是双保险, 不是唯一依据)。Firefox 走 scrollbar-width。
+ *
+ * 令牌: 只用 --border-strong / --fg-dim / --fg-muted / --statusbar-h(三皮肤均已定义),
+ * 不写死色值、不写死 34px(状态栏高度改了指示条自动跟着走)。
+ */
+
+/* ---- 1. 隐藏原生横条(选择器只有 .group-table: 页面竖条 / 状态栏 / 抽屉体天然不受影响) ---- */
+.group-table { scrollbar-width: none; }            /* Firefox */
+.group-table::-webkit-scrollbar { display: none; } /* Chromium / WebKit */
+
+/* ---- 2. 底部指示条(阶段 B 建 DOM) ----
+ * 阶段 B 的 DOM 约定(选择器在此钉死, 改动须同步改本注释):
+ *   <div class="hscroll-pill on"><i></i></div>     ← 挂 body 末尾, 三主表各一个
+ * 状态类: .on = 可见(该表有横向溢出); .drag = 拖拽中(与 hover 同观感)。
+ * 滑块 = 直接子元素 <i>: 宽度与位移由 JS 写内联 width / transform, 本文件只给底座样式。
+ */
+.hscroll-pill {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--statusbar-h) + 6px);
+  width: min(160px, 42vw);
+  height: 3px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  z-index: 25;
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  touch-action: none;                                    /* 拖动走 pointer 事件, 禁掉浏览器手势接管 */
+  transition: opacity 200ms var(--ease), height 200ms var(--ease); /* 淡出 200ms */
+}
+
+/* 淡入比淡出快(150ms): 出现要及时, 消失可以缓一点(过渡属性仍只有 opacity / height) */
+.hscroll-pill.on { opacity: 1; pointer-events: auto; transition-duration: 150ms; }
+
+/* hover 与拖拽同观感: 加粗到 4px + 轨道提亮, 让指针落在细条上也有"抓到了"的反馈 */
+.hscroll-pill:hover,
+.hscroll-pill.drag { height: 4px; background: var(--fg-dim); }
+
+/* 滑块底座: 几何全由 JS 内联决定, 这里只保证它贴合轨道 */
+.hscroll-pill > i {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--fg-muted); /* 比 hover 态轨道(--fg-dim)再亮一档, 悬停加粗时滑块仍可辨 */
+  pointer-events: none;        /* 指针事件统一落在轨道上, 拖动不因滑块抢占而抖 */
+}
