@@ -59,26 +59,26 @@ A bare run behaves exactly like `--check`: this checker is pure read-only (no wr
 exists, so there is nothing a --check gate could distinguish), --check is kept only so
 kb.check can wire it in the same shape as its sibling checkers.
 
-## 测试计划 (T2 implements these in tests/test_memory_bank.py)
-- test_status_drift_scripts_import_cleanly: module import stays clean (extend the existing
-  test_kb_scripts_import_cleanly name list with "check_status_drift").
-- test_status_drift_sections_are_whitelisted: only level>=2 headings starting with the
+## 测试计划 (implemented 2026-10-31 in tests/test_memory_bank.py -- entries checked off T2)
+- [x] scripts import cleanly: test_kb_scripts_import_cleanly name list extended with
+  "check_status_drift".
+- [x] test_status_drift_sections_are_whitelisted: only level>=2 headings starting with the
   judgement words (emoji/suffix tolerated) open a link-collecting section; H1 file titles
   and non-whitelisted sections are ignored; known-bugs.md only honours 已修复 sections.
-- test_status_drift_link_targets_resolved: `../tasks/...` style relative targets resolve to
+- [x] test_status_drift_link_targets_resolved: `../tasks/...` style relative targets resolve to
   the four families; external/anchor/attachment/other-family links are ignored; a markdown
   link title after the target does not break parsing; unresolved-in-family targets are
-  reported as anomalies, not crashes.
-- test_status_drift_gate_a_flags_open_backlinks: a whitelisted-section link to an Open
+  reported as anomalies, not crashes (asserted in the anomaly test).
+- [x] test_status_drift_gate_a_flags_open_backlinks: a whitelisted-section link to an Open
   target yields one `src:line -> target (status: Open)` row plus the kb.status hint; rc == 1.
-- test_status_drift_gate_b_badge_vs_meta: badge text contradicting meta issue-status fails;
+- [x] test_status_drift_gate_b_badge_vs_meta: badge text contradicting meta issue-status fails;
   a missing badge is tolerated (documented boundary); an "Open(常驻)" style parenthetical
-  suffix matches meta "Open"; missing/out-of-vocab meta is an anomaly (rc 1).
-- test_status_drift_gate_c_never_fails: In Progress backlinks are printed and rc stays 0
+  suffix matches meta "Open" (missing/out-of-vocab meta is asserted in the anomaly test).
+- [x] test_status_drift_gate_c_never_fails: In Progress backlinks are printed and rc stays 0
   when only tier C (and D) rows exist.
-- test_status_drift_gate_d_exemptions: negation prefixes / date lines / fenced code / inline
+- [x] test_status_drift_gate_d_exemptions: negation prefixes / date lines / fenced code / inline
   code are exempt; a naked done-word in an Open task body is listed; rc unaffected.
-- test_status_drift_anomaly_on_unreadable_status: missing `**Status:**` / status meta or an
+- [x] test_status_drift_anomaly_on_unreadable_status: missing `**Status:**` / status meta or an
   out-of-vocab value yields an anomaly row and rc == 1 (doc-status-meta.md: ring, not drop).
 """
 
@@ -386,6 +386,34 @@ def collect_done_assertions(mb: Path, cache: dict) -> list[str]:
     return hits
 
 
+def collect_tiers(mb: Path) -> tuple[list[str], list[str], list[str], list[str], list[str]]:
+    """All five tiers in one pass: (gate_a, gate_b, anomalies, gate_c, gate_d).
+
+    The single classification point for backlinks -> A/C and unreadable statuses -> anomalies;
+    wrap_session reuses this for its end-of-session drift report (lists only, never fails).
+    """
+    cache: dict[str, tuple[str | None, str]] = {}
+
+    # backlinks -> tiers A / C; unreadable statuses and dangling in-family links -> anomalies
+    backlinks, anomalies = collect_backlinks(mb)
+    gate_a: list[str] = []
+    gate_c: list[str] = []
+    for row in backlinks:
+        target_rel = rel_posix(row.target, mb.parent)
+        status, raw = read_status(row.target, row.kind, cache)
+        if status is None:
+            detail = "missing" if not raw else f"out-of-vocab: {raw!r}"
+            anomalies.append(f"{row.src_rel}:{row.lineno}: [status-unreadable] -> {target_rel} ({detail})")
+        elif status == OPEN_STATUS:
+            gate_a.append(f"{row.src_rel}:{row.lineno}: [backlink-x-Open] -> {target_rel} (status: {status})")
+        elif status == IN_PROGRESS_STATUS:
+            gate_c.append(f"{row.src_rel}:{row.lineno}: [backlink-x-InProgress] -> {target_rel} (status: {status})")
+
+    gate_b = collect_badge_drift(mb, anomalies)
+    gate_d = collect_done_assertions(mb, cache)
+    return gate_a, gate_b, anomalies, gate_c, gate_d
+
+
 # --------------------------------------------------------------------------- CLI
 
 
@@ -425,25 +453,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"memory-bank dir not found: {mb}\n")
         return 2
 
-    cache: dict[str, tuple[str | None, str]] = {}
-
-    # backlinks -> tiers A / C; unreadable statuses and dangling in-family links -> anomalies
-    backlinks, anomalies = collect_backlinks(mb)
-    gate_a: list[str] = []
-    gate_c: list[str] = []
-    for row in backlinks:
-        target_rel = rel_posix(row.target, mb.parent)
-        status, raw = read_status(row.target, row.kind, cache)
-        if status is None:
-            detail = "missing" if not raw else f"out-of-vocab: {raw!r}"
-            anomalies.append(f"{row.src_rel}:{row.lineno}: [status-unreadable] -> {target_rel} ({detail})")
-        elif status == OPEN_STATUS:
-            gate_a.append(f"{row.src_rel}:{row.lineno}: [backlink-x-Open] -> {target_rel} (status: {status})")
-        elif status == IN_PROGRESS_STATUS:
-            gate_c.append(f"{row.src_rel}:{row.lineno}: [backlink-x-InProgress] -> {target_rel} (status: {status})")
-
-    gate_b = collect_badge_drift(mb, anomalies)
-    gate_d = collect_done_assertions(mb, cache)
+    gate_a, gate_b, anomalies, gate_c, gate_d = collect_tiers(mb)
 
     _print_tier("A hard: backlink x Open", gate_a, tail=[f"hint: {GATE_A_HINT}"] if gate_a else None)
     _print_tier("B hard: issue cover badge vs issue-status meta", gate_b)

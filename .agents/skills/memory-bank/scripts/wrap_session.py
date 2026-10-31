@@ -8,6 +8,8 @@
   (日期属派生面, 裁定 A5 —— 轮内不逐行写日期, 收尾统一带)
 - 索引: 动了档案就重建 `tasks/_index.md` (与 `kb.index` 同一 build 实现)
 - 清单: 末尾输出剩余收尾清单 (基线? 新坑? 债务转告?) —— 收尾知识内嵌, 不必重读 DoD
+- 状态漂移: 尾部跑 check_status_drift 打印 C/D 清单 (空打「无」) —— 只提示不拦截, wrap
+  退出码不因此改变; 硬拦档 (A/B/异常) 非空时附一行 kb.status 提示
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/wrap_session.py --topic <slug> --did "一句话说清本轮做了什么"
@@ -161,6 +163,22 @@ def main(argv: list[str] | None = None) -> int:
     print("【条件】涉码轮 → commands run test.full, 数字誊写新基线切片 (裁定 A4); "
           "踩到新坑 → 写 pitfalls/<类>/<主题>.md; cap 债务转告用户另开会话清理")
     print("【可选】切片摘要/档案 Summary 精编 (复杂会话, 不计步)")
+
+    # --- 状态漂移扫描 (清单只提示, 不拦截: 不改变 wrap 的退出码与结果)
+    import check_status_drift  # noqa: PLC0415  (同进程 import, 与 gen_tasks_index 同款)
+
+    gate_a, gate_b, anomalies, gate_c, gate_d = check_status_drift.collect_tiers(mb)
+    print()
+    print("状态漂移扫描 (check_status_drift; 只提示, 不拦截):")
+    for label, rows in (("C 清单: 反链 x In Progress", gate_c), ("D 清单: 完成断言", gate_d)):
+        if not rows:
+            print(f"  [{label}] 无")
+            continue
+        print(f"  [{label}]")
+        for row in rows:
+            print(f"  {row}")
+    if gate_a or gate_b or anomalies:
+        print("状态漂移硬拦非空, 先 commands run kb.status 处理(部分完成翻 In Progress)再收尾")
     return 0
 
 

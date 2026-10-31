@@ -167,6 +167,20 @@ CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D5/D14, 2026-10-31 加; tas
 - test_closed_keep_archive_same_batch_wiring: rebuild_index(kb.status/kb.bump 落点)主索引与归档同批落盘; 归档落 `tasks/attachments/_archive.md` 且故意不叫 `_index.md`(不套 index-auto cap)
 - test_closed_keep_constants_match_issues: 跨 skill 常量等值钉住 —— memory-bank 侧 CLOSED_KEEP/ARCHIVE_REL/完结状态集与 create-issue 的 gen_issues_index 同值同语义(跨 skill 不 import, 防两套实现漂移)
 - test_issues_closed_keep_behavior_unchanged: issues/ 零行为变化回归 —— 61 件 Done issue 主索引留 60 + 提示、归档全量(把改造前行为钉下来)
+
+状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加, **进程内
+import**, tmp 夹具不碰真实 memory-bank/; 四档: A 反链x Open / B issue badge vs meta / 异常
+status-unreadable 三档硬拦 rc=1, C 反链x In Progress / D 完成断言两档清单只提示):
+
+- test_status_drift_sections_are_whitelisted: 判据词前缀开节(标题后缀/emoji 容忍), H1 文件题不是节, 同级/更高级标题关节, 深层子节留在节内; known-bugs.md 只认「已修复」节
+- test_status_drift_link_targets_resolved: 四族(tasks/issues/plans/reports)目标解析; 外链/纯锚点/四族外(pitfalls)/错后缀忽略; 链接带标题不破解析
+- test_status_drift_gate_a_flags_open_backlinks: 已实现节反链→Open 目标 → rc=1 + 漂移行 + 「kb.status 翻 In Progress」提示; roadmap/suggestions/evolution 与 H1 题下的同款反链不触发; 四族外目标不触发
+- test_status_drift_gate_b_badge_vs_meta: badge≠meta 红; badge==meta / 缺失(文档化边界) / 括注后缀「Open(常驻)」过; ASCII 字母后缀「Opened」红
+- test_status_drift_gate_c_never_fails: C+D 清单非空 rc=0 且原文打印 —— C/D 永不拦退出码
+- test_status_drift_gate_d_exemptions: 否定前缀(未/尚未/没有)/日期行/围栏代码/行内代码豁免; Open/In Progress 正文裸完成词列出; Done 正文完成词不列
+- test_status_drift_anomaly_on_unreadable_status: 缺 `**Status:**` / 词表外值 / 反链目标缺失 / issue-status meta 缺失 → status-unreadable 异常, rc=1 (doc-status-meta.md: ring, 不静默丢)
+- test_status_drift_guard_is_wired_into_kb_check_and_gate: 守卫已挂进 kb.check 与提交闸门两侧(与 test_mutation_anchor_guard_is_wired_into_kb_check_and_gate 同旨)
+- test_wrap_reports_status_drift_lists: kb.wrap 尾部打印 C/D 清单(空打「无」), 硬拦非空附「状态漂移硬拦非空…」提示行, wrap 退出码与结果不因此改变
 """
 
 from __future__ import annotations
@@ -770,7 +784,7 @@ def test_kb_scripts_import_cleanly() -> None:
     for name in (
         "_common", "gen_tasks_index", "gen_kb_index", "gen_docs_index", "gen_all", "check_kb_structure",
         "gen_active_recent", "gen_baseline_recent", "check_doc_links", "timekit", "check_wording", "new_doc",
-        "wrap_session", "check_doc_templates", "flip_status", "bump_doc", "kb_tier"
+        "wrap_session", "check_doc_templates", "flip_status", "bump_doc", "kb_tier", "check_status_drift"
     ):
         path = SKILL_SCRIPTS / f"{name}.py"
         assert path.is_file(), f"缺少 {path.relative_to(ROOT)}"
@@ -2778,3 +2792,348 @@ def test_issues_closed_keep_behavior_unchanged(tmp_path: Path) -> None:
     assert "closed-keep-001" not in done_section and "closed-keep-061" in done_section
     archive = issues_gen.render_archive(items, issues, tmp_path)
     assert "closed-keep-001" in archive and "closed-keep-061" in archive, "issues 归档仍是全量"
+
+
+# ---------------------------------------------------------------------------
+# 状态漂移守卫 (检查器 memory-bank skill 的 `scripts/check_status_drift.py`, 2026-10-31 加;
+# **进程内 import** + tmp 夹具, 不碰真实 memory-bank/ —— 与 flip_status/wrap 测试同一套模式)
+# ---------------------------------------------------------------------------
+
+
+def _status_drift():
+    if str(SKILL_SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SKILL_SCRIPTS))
+    import check_status_drift
+
+    return check_status_drift
+
+
+def _drift_fixture(tmp_path: Path) -> Path:
+    """漂移夹具: 最小可跑的 memory-bank (progress/tasks/issues/plans/reports)。"""
+    mb = tmp_path / "memory-bank"
+    for sub in ("progress", "tasks", "issues", "plans", "reports"):
+        (mb / sub).mkdir(parents=True)
+    return mb
+
+
+def _drift_task(mb: Path, name: str, status: str | None, body: str = "x") -> Path:
+    """tasks 档案夹具; status=None 造「缺 **Status:** 行」的异常件。"""
+    head = "" if status is None else f"**Status:** {status}\n"
+    path = mb / "tasks" / name
+    path.write_text(f"# {name[:-3]} - drift fixture\n\n{head}\n## 原始请求\n\n{body}\n", encoding="utf-8", newline="\n")
+    return path
+
+
+def _drift_issue(mb: Path, name: str, status: str | None, badge: str | None = None, body: str = "<p>x</p>") -> Path:
+    """issue 夹具; badge=None 造「无封面 badge」件 (文档化边界), status=None 造缺 meta 异常件。"""
+    badge_html = "" if badge is None else (
+        f'<div class="item"><div class="k">状态</div><div class="v"><span class="badge">{badge}</span></div></div>'
+    )
+    meta_html = "" if status is None else f'<meta name="issue-status" content="{status}">\n'
+    path = mb / "issues" / name
+    path.write_text(
+        f"<html><head>\n{meta_html}</head><body>{badge_html}{body}</body></html>\n", encoding="utf-8", newline="\n"
+    )
+    return path
+
+
+def _drift_doc(mb: Path, sub: str, name: str, status: str) -> Path:
+    """plan/report 夹具 (doc-status 5 词表)。"""
+    path = mb / sub / name
+    path.write_text(
+        f'<html><head>\n<meta name="doc-status" content="{status}">\n</head><body>x</body></html>\n',
+        encoding="utf-8",
+        newline="\n",
+    )
+    return path
+
+
+def _drift_run(tmp_path: Path, mb: Path) -> tuple[int, str, str]:
+    """进程内跑 check_status_drift.main (不 --quiet: 无硬拦时输出 all-clear 行)。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    drift = _status_drift()
+    out, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(out), redirect_stderr(err):
+        rc = drift.main(["--root", str(tmp_path), "--mb-dir", str(mb)])
+    return rc, out.getvalue(), err.getvalue()
+
+
+def test_status_drift_sections_are_whitelisted() -> None:
+    """判据词前缀开节 (标题后缀/emoji 容忍), H1 文件题不是节, 同级/更高级标题关节,
+    深层子节留在节内; known-bugs.md 只认「已修复」节 (判据: 只收白名单节内的反链)。"""
+    drift = _status_drift()
+    lines = [
+        "# 已实现 总览",  # H1 文件题不是节 (它描述文件主题, 不是完成断言)
+        "link [a](../tasks/h1.md) under H1",
+        "## 已实现 alpha",
+        "in section [t](../tasks/a.md)",
+        "### 已实现 sub",  # 更深层级: 自身也是白名单节, 但不关外层节
+        "inside sub",
+        "## 待实现 beta",  # 非判据词 + 同级: 关节且不开新节
+        "outside [u](../tasks/b.md)",
+        "## 已修复（gamma）✅",  # 后缀/emoji 容忍 (按前缀匹配, 真实文件会装饰标题)
+        "inside gamma",
+    ]
+
+    assert [n for n, _ in drift.iter_whitelisted_lines(lines, known_bugs_only=False)] == [4, 6, 10]
+    # known-bugs.md 口径: 只认「已修复」节 —— 已实现节不收
+    assert [n for n, _ in drift.iter_whitelisted_lines(lines, known_bugs_only=True)] == [10]
+
+
+def test_status_drift_link_targets_resolved(tmp_path: Path) -> None:
+    """四族目标解析; 外链/纯锚点/四族外(pitfalls)/错后缀忽略; 链接带标题不破解析
+    (判据: 只有落进 tasks/issues/plans/reports 的目标才算完成断言的反链)。"""
+    drift = _status_drift()
+    mb = _drift_fixture(tmp_path)
+    src = mb / "progress" / "implemented-x.md"
+
+    resolve = drift.resolve_family_target
+    assert resolve("../tasks/a.md", src, mb)[1] == "task"
+    assert resolve("../issues/a.html", src, mb)[1] == "issue"
+    assert resolve("../plans/a.html", src, mb)[1] == "plan"
+    assert resolve("../reports/a.html", src, mb)[1] == "report"
+    assert resolve("../tasks/a.md#sec", src, mb)[1] == "task", "锚点剥掉后照常解析"
+    for raw in ("https://example.com/a.md", "#sec", "../pitfalls/git/x.md", "../tasks/a.html", "../../outside.md"):
+        assert resolve(raw, src, mb) is None, raw
+
+    (mb / "tasks" / "a.md").write_text("**Status:** Open\n", encoding="utf-8")
+    (mb / "tasks" / "b.md").write_text("**Status:** Open\n", encoding="utf-8")
+    (mb / "issues" / "a.html").write_text("<html></html>\n", encoding="utf-8")
+    (mb / "progress" / "implemented-x.md").write_text(
+        "# link targets fixture\n"
+        "\n"
+        "## 已实现\n"
+        "\n"
+        "- plain [t](../tasks/a.md)\n"
+        '- title [t](../tasks/a.md "标题")\n'
+        "- anchor [t](../tasks/b.md#sec)\n"
+        "- external [t](https://example.com/a.md)\n"
+        "- pure anchor [t](#sec)\n"
+        "- other family [t](../pitfalls/git/x.md)\n"
+        "- wrong suffix [t](../tasks/a.html)\n"
+        "- issue [t](../issues/a.html)\n",
+        encoding="utf-8",
+    )
+
+    backlinks, missing = drift.collect_backlinks(mb)
+
+    assert [b.target.name for b in backlinks] == ["a.md", "a.md", "b.md", "a.html"], "带标题的链接目标照常解析"
+    assert all(b.kind == "task" for b in backlinks[:3]) and backlinks[3].kind == "issue"
+    assert missing == [], "库内存在的目标不进异常"
+
+
+def test_status_drift_gate_a_flags_open_backlinks(tmp_path: Path) -> None:
+    """A 档硬拦: 已实现节反链→Open 目标 → rc=1 + `src:line -> target (status: Open)` 漂移行
+    + 「kb.status 翻 In Progress」提示; roadmap/suggestions/evolution 与 H1 题下的同款反链
+    不触发; 四族外 (pitfalls) 目标不触发。"""
+    mb = _drift_fixture(tmp_path)
+    _drift_task(mb, "open.md", "Open")
+    _drift_doc(mb, "plans", "open-plan.html", "Open")
+    (mb / "pitfalls" / "git").mkdir(parents=True)
+    (mb / "pitfalls" / "git" / "x.md").write_text("x\n", encoding="utf-8")
+    same_link = "# other progress file\n\n## 已实现\n\n- task [t](../tasks/open.md)\n"
+    for name in ("roadmap.md", "suggestions.md", "evolution.md"):
+        (mb / "progress" / name).write_text(same_link, encoding="utf-8")
+    (mb / "progress" / "implemented-a.md").write_text(
+        "# gate A fixture\n"
+        "\n"
+        "## 已实现 alpha\n"
+        "\n"
+        "- task [t](../tasks/open.md)\n"
+        "- plan [t](../plans/open-plan.html)\n"
+        "- pitfall [p](../pitfalls/git/x.md)\n",
+        encoding="utf-8",
+    )
+    (mb / "progress" / "implemented-h1.md").write_text(
+        "# 已实现 but H1 is a file title\n"
+        "\n"
+        "- [t](../tasks/open.md)\n",
+        encoding="utf-8",
+    )
+
+    rc, out, err = _drift_run(tmp_path, mb)
+
+    assert rc == 1
+    rows = [line for line in out.split("\n") if "[backlink-x-Open]" in line]
+    assert len(rows) == 2, f"只有 implemented-a.md 白名单节里的 2 条反链该触发: {rows}"
+    assert "memory-bank/progress/implemented-a.md:5: [backlink-x-Open] -> memory-bank/tasks/open.md (status: Open)" in rows[
+        0]
+    assert "[backlink-x-Open] -> memory-bank/plans/open-plan.html (status: Open)" in rows[1]
+    assert "hint:" in out and "commands run kb.status" in out, "A 档必须带 kb.status 翻状态提示"
+    for excluded in ("roadmap", "suggestions", "evolution", "implemented-h1", "pitfalls"):
+        assert excluded not in out, f"{excluded} 不得进 A 档"
+    assert "2 hard finding(s)" in err
+
+
+def test_status_drift_gate_b_badge_vs_meta(tmp_path: Path) -> None:
+    """B 档硬拦: badge 文本 vs `<meta name="issue-status">` —— 不一致判红 (rc=1);
+    badge 缺失不判违规 (文档化边界); 括注后缀「Open(常驻)」与 meta Open 一致;
+    后缀是 ASCII 字母「Opened」= 另一个词, 不一致。"""
+    mb = _drift_fixture(tmp_path)
+    _drift_issue(mb, "b1-contradict.html", "Open", badge="Done")
+    _drift_issue(mb, "b2-equal.html", "Open", badge="Open")
+    _drift_issue(mb, "b3-no-badge.html", "Open", badge=None)
+    _drift_issue(mb, "b4-paren.html", "Open", badge="Open(常驻)")
+    _drift_issue(mb, "b5-ascii-suffix.html", "Open", badge="Opened")
+
+    rc, out, _err = _drift_run(tmp_path, mb)
+
+    assert rc == 1
+    rows = [line for line in out.split("\n") if "[badge-vs-meta]" in line]
+    assert len(rows) == 2, f"只有 b1/b5 该判红: {rows}"
+    assert "b1-contradict.html" in rows[0] and "badge='Done'" in rows[0] and "meta='Open'" in rows[0]
+    assert "b5-ascii-suffix.html" in rows[1] and "badge='Opened'" in rows[1]
+    for tolerated in ("b2-equal", "b3-no-badge", "b4-paren"):
+        assert tolerated not in out, f"{tolerated} 不得进 B 档 (缺失/一致/括注后缀都放行)"
+
+
+def test_status_drift_gate_c_never_fails(tmp_path: Path) -> None:
+    """C/D 清单永不拦退出码: 反链x In Progress 与完成断言都打印原文, rc=0
+    (清单是人工复核面, 不是闸门; 退出码只听 A/B/异常三档)。"""
+    mb = _drift_fixture(tmp_path)
+    _drift_task(mb, "inflight.md", "In Progress")
+    _drift_task(mb, "open-word.md", "Open", body="- 已完成 首版\n")
+    (mb / "progress" / "implemented-c.md"
+    ).write_text("# gate C fixture\n\n## 已实现\n\n- task [t](../tasks/inflight.md)\n", encoding="utf-8")
+
+    rc, out, _err = _drift_run(tmp_path, mb)
+
+    assert rc == 0, "C/D 非空不红"
+    assert "no hard drift (tiers A/B/anomalies empty)" in out
+    assert "== C list: backlink x In Progress (manual review): 1 ==" in out
+    assert "[backlink-x-InProgress] -> memory-bank/tasks/inflight.md (status: In Progress)" in out
+    assert "[done-assert]" in out and "open-word.md" in out, "D 清单照常打印"
+
+
+def test_status_drift_gate_d_exemptions(tmp_path: Path) -> None:
+    """D 档豁免面: 否定前缀 (未/尚未/没有 + 「还没有已实现」的实义形态) / 日期行 /
+    围栏代码 / 行内代码都不列; Open/In Progress 正文裸完成词列出 (带状态注记);
+    Done 正文完成词不列 (完结件正文说「已完成」天经地义)。"""
+    drift = _status_drift()
+    mb = _drift_fixture(tmp_path)
+    open_done = _drift_task(
+        mb,
+        "open-done.md",
+        "Open",
+        body=(
+            "- 已完成 首版\n"
+            "- 未完成 收尾\n"
+            "- 尚未完成 验收\n"
+            "- 没有完成 联调\n"
+            "- 还没有已实现的同类功能\n"
+            "- 2026-10-31 已完成 历史流水\n"
+            "- 口径 `已完成` 引述\n"
+            "```\n"
+            "- 已完成 围栏内\n"
+            "```\n"
+        ),
+    )
+    _drift_task(mb, "inflight-word.md", "In Progress", body="- 已修复 一个bug\n")
+    _drift_task(mb, "done-quiet.md", "Done", body="- 已完成 全部\n")
+    _drift_issue(mb, "open-h.html", "Open", body="<p>已完成</p>\n<p>引述 <code>已完成</code></p>\n<pre>已完成 围栏内</pre>\n")
+    _drift_issue(mb, "done-h.html", "Done", body="<p>已完成</p>\n")
+
+    rc, out, _err = _drift_run(tmp_path, mb)
+
+    assert rc == 0, "D 清单不红"
+    flagged = [line for line in out.split("\n") if "[done-assert]" in line]
+    assert len(flagged) == 3, f"每个在办载体恰 1 条裸完成词: {flagged}"
+    expect_line = open_done.read_text(encoding="utf-8").split("\n").index("- 已完成 首版") + 1
+    assert f"memory-bank/tasks/open-done.md:{expect_line}: [done-assert] word='已完成' (status: Open)" in flagged
+    assert any("inflight-word.md" in row and "word='已修复'" in row and "(status: In Progress)" in row for row in flagged)
+    assert any("open-h.html" in row and "(status: Open)" in row for row in flagged)
+    for exempt in ("done-quiet", "done-h", "未完成", "尚未", "没有", "还没有", "历史流水", "引述", "围栏内"):
+        assert exempt not in "\n".join(flagged), f"豁免形态不得入列: {exempt}"
+
+    # 否定前缀的实义命中形态 (单词直接跟在否定词后): 单测钉住豁免判定本身。
+    assert drift.scan_md_done_words("- 还没有已实现的功能") == []
+    assert drift.scan_md_done_words("- 已实现的功能") == [(1, "已实现")]
+
+
+def test_status_drift_anomaly_on_unreadable_status(tmp_path: Path) -> None:
+    """异常档硬拦 (rc=1): 缺 `**Status:**` / 词表外值 / 反链目标缺失 / issue-status meta
+    缺失 → status-unreadable 行 (doc-status-meta.md: 状态层坏了必须响铃, 不许静默丢)。"""
+    mb = _drift_fixture(tmp_path)
+    _drift_task(mb, "missing-status.md", None)
+    (mb / "tasks" / "bad-vocab.md").write_text("# bad vocab\n\n**Status:** Doing\n", encoding="utf-8")
+    _drift_issue(mb, "nostatus.html", None)
+    (mb / "progress" / "implemented-anom.md").write_text(
+        "# anomaly fixture\n"
+        "\n"
+        "## 已实现\n"
+        "\n"
+        "- missing status [t](../tasks/missing-status.md)\n"
+        "- bad vocab [t](../tasks/bad-vocab.md)\n"
+        "- ghost [t](../tasks/ghost.md)\n",
+        encoding="utf-8",
+    )
+
+    rc, out, _err = _drift_run(tmp_path, mb)
+
+    assert rc == 1
+    rows = [line for line in out.split("\n") if "[status-unreadable]" in line]
+    assert len(rows) == 4, f"四类异常各一条: {rows}"
+    assert any("target missing: memory-bank/tasks/ghost.md" in row for row in rows), "悬空反链是异常, 不是崩溃"
+    assert any("-> memory-bank/tasks/missing-status.md (missing)" in row for row in rows)
+    assert any("-> memory-bank/tasks/bad-vocab.md (out-of-vocab: 'Doing')" in row for row in rows)
+    assert any("nostatus.html" in row and "issue-status meta missing" in row for row in rows)
+
+
+def test_status_drift_guard_is_wired_into_kb_check_and_gate() -> None:
+    """守卫必须挂在 kb.check 与提交闸门两侧 —— 不接线 = 没人跑, 漏闸门 = 静默红
+    (与 test_mutation_anchor_guard_is_wired_into_kb_check_and_gate 同旨;
+    覆盖面一致性由 test_commit_gate_covers_kb_check 按 run 列表推导)。"""
+    kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
+    gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
+
+    assert "check_status_drift.py --check" in kb_cfg, "check_status_drift.py 未挂进 kb.check"
+    assert "check_status_drift.py --check" in gate_cfg, "check_status_drift.py 未挂进提交闸门 (静默红)"
+
+
+def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
+    """kb.wrap 尾部状态漂移扫描: C/D 清单打印原文 (空打「无」), 硬拦档 (A/B/异常) 非空
+    附「状态漂移硬拦非空…」提示行 —— 清单只提示, wrap 退出码与结果不因此改变。"""
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    wrap = _wrap()
+    _status_drift()  # 确保 wrap 同进程 import 的模块可加载 (与 test_kb_scripts_import_cleanly 同面)
+
+    def wrap_run(base: Path, mb: Path, topic: str, did: str) -> tuple[int, str]:
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = wrap.main(["--root", str(base), "--mb-dir", str(mb), "--topic", topic, "--did", did])
+        return rc, out.getvalue()
+
+    # --- 无漂移: 两档各打一行「无」, 无硬拦提示, wrap 照常成功
+    mb0 = _drift_fixture(tmp_path / "clean")
+    rc, out = wrap_run(tmp_path / "clean", mb0, "drift-clean", "无漂移收尾")
+    assert rc == 0
+    assert "状态漂移扫描 (check_status_drift; 只提示, 不拦截):" in out
+    assert "[C 清单: 反链 x In Progress] 无" in out and "[D 清单: 完成断言] 无" in out
+    assert "状态漂移硬拦非空" not in out
+
+    # --- C/D 漂移: 清单原文进 wrap 输出, wrap 仍成功且无硬拦提示
+    mb1 = _drift_fixture(tmp_path / "soft")
+    _drift_task(mb1, "inflight.md", "In Progress")
+    _drift_task(mb1, "open-word.md", "Open", body="- 已完成 首版\n")
+    (mb1 / "progress" /
+     "implemented-w.md").write_text("# wrap fixture\n\n## 已实现\n\n- task [t](../tasks/inflight.md)\n", encoding="utf-8")
+    rc, out = wrap_run(tmp_path / "soft", mb1, "drift-soft", "软漂移收尾")
+    assert rc == 0
+    assert "[backlink-x-InProgress] -> memory-bank/tasks/inflight.md (status: In Progress)" in out
+    assert "[done-assert]" in out and "open-word.md" in out
+    assert "状态漂移硬拦非空" not in out
+
+    # --- 硬拦漂移: 附提示行, 但 wrap 退出码与机械面 (建切片) 不受影响
+    mb2 = _drift_fixture(tmp_path / "hard")
+    _drift_task(mb2, "open.md", "Open")
+    (mb2 / "progress" / "implemented-h.md"
+    ).write_text("# wrap hard fixture\n\n## 已实现\n\n- task [t](../tasks/open.md)\n", encoding="utf-8")
+    rc, out = wrap_run(tmp_path / "hard", mb2, "drift-hard", "硬漂移收尾")
+    assert rc == 0, "清单与提示只提示不失败"
+    assert "状态漂移硬拦非空, 先 commands run kb.status 处理(部分完成翻 In Progress)再收尾" in out
+    assert "[C 清单: 反链 x In Progress] 无" in out and "[D 清单: 完成断言] 无" in out
+    assert len(list((mb2 / "activeContext").glob("*-drift-hard.md"))) == 1, "机械面照常完成"
