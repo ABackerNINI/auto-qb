@@ -203,6 +203,17 @@
 | **发现端点端口候选顺延 + 回环 pairing 默认关** | 显式 discovery_port 被占时按候选表顺延(默认 18788 起 +0/+1/+2 先绑先得), 启动日志「HR 发现端点已启动…(候选 …/…, 实绑 …)」; 回环 host 时 pairing 默认不强制 | 测试配置显式给独立发现端口防撞车; 端口探空裸 bind(§2.7) |
 | **波次加速: POST /api/hr/refresh force 旗标** | 「立即拉取已受理 N 个站点(取数线程将跳过复用窗与拉取间隔, 频控仍生效)」; 取数线程每 60s 自唤醒, 干等节拍会白烧时间 | 用例用 refresh 加速, 频控类断言(min_interval/日额)仍可测 —— force 不绕频控 |
 
+### 2.13 限速·流量面的事实(RM07 实测, 2026-10-31)
+
+| 事实 | 现场表现 | 处置 |
+|---|---|---|
+| **qB 5.2 全局限速权威面 = transfer 端点** | `app/preferences` 的 upload/download_limit 旧键已失效(静默无效); 产品 qbapi 读回走 `GET /transfer/{upload,download}Limit`(bytes/s, 整除向下 KiB), 写走 set 端点 | 用例预置/断言全局限速一律走 transfer 端点(qbapi 同路径), 不用 setPrefs |
+| **两实例 transfer 下载限速原值 = 1024B = 1 KiB(奇数)** | 曲线视角天然命中手动保护(奇数 KiB = 疑似手动)—— 想验曲线真下发必须先显式预置偶数现场 | 曲线类用例开工先 `setDownloadLimit` 偶数 KiB; 收尾按快照还原(§2.5 的 1024 是坑也是原值) |
+| **off 快照复位 limit 段, derive 优先级定顶层** | 来源 off → `publish_off` 把 limit 段复位 disabled; 曲线未配时无发布者再动它, 之后 ok 轮顶层 state 停在 `disabled` 而非 `ok` | 三态判据咬段级 `source.state`; 顶层 disabled 是 derive_state 设计语义非缺陷 |
+| **零传输种子不进采样集** | `_sample_torrents` 数据门 = 采样目录存在才采; 零传输假种子整体跳过不产目录; 「暂停态种子进 null run」(:831)是活跃但缺字段分支, 健康 qB 到不了 | 单种系列/重启首窗 null 的真数据面归 L2 互传; L1 只验全局系列 |
+| **纯空闲系列的开放 z 游程从不形成盘上旧块** | 记录只在封口时 append(`_append_record` 才开块)→ 切 interval 时「无开放块的开放游程不封」, 盘上恰一个新 interval 块、z 游程无缝横跨 | L1 断「新块带新 interval + 文件干净」; 「旧块封口」面需块内有 r 行(L2) |
+| **gtm 工具可能已在本机运行** | 发现指针指向机器级安装(RM07 实测: 指向另一 clone `D:\Projects\auto-qb`, state=ready, autostart 已注册)—— 「未安装 → not_installed」前提不一定成立 | 状态端点用例按实况双分支断言(ready 验就绪载荷 / 不可达验五态+error); **写端点(PUT /config 等)对就绪工具会真写用户安装, 跨 clone 红线, 一律不发**; provider=traffic_monitor 缺省下产品不订阅工具, 只读探测 |
+
 ## 03 种子层: L0 / L1 / L2
 
 
