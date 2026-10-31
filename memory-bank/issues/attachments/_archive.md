@@ -4,10 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (72)
+## Open (74)
 
+- [bug] [无块 LiveTail 发布用陈旧旧块间隔: 改间隔复位窗口违反 LiveTail.interval_s 契约](../26-11-01-0050-bug-traffic-sample-livetail-stale-interval.html) — W5 实证: 改间隔后 _reset_block 复位窗口(8 字段不含 interval_s)内无块 LiveTail 发布取旧块间隔, 违反 traffic_store.py:511「无块时取当前生效采样间隔」契约
+- [test] [core/ traffic_sample_mod W5 终态存疑注记: _agg_credit_day_file_9 零槽块可达性未闭合](../26-11-01-0050-test-core-w5-mutation-dayfile-zeroblock-doubt.html) — W5 守阵覆盖后唯一余量: _agg_credit_day_file_9(空块支 break, 零槽块 parser 可达性存疑)+ 同主题 _agg_flush_series_13(空桶防御支)判等价前提未实测
 - [bug] [mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失](../26-10-31-1539-bug-mutation-tooling-deselect-guards.html) — W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律
-- [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条: 单文件轮 rm -rf 清注册表致跨目标 APPLY_FAIL、dump 伪 hunk 行号致 git apply 失败、flaky 集污染 verify 差集
+- [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的

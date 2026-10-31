@@ -10,9 +10,9 @@
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Open">
-<meta name="issue-title" content="mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集(附实证轮次)">
-<meta name="issue-summary" content="W2-W4 累积工具债 3 条: 单文件轮 rm -rf 清注册表致跨目标 APPLY_FAIL、dump 伪 hunk 行号致 git apply 失败、flaky 集污染 verify 差集">
-<title>mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集(附实证轮次) · bug · 计划外问题</title>
+<meta name="issue-title" content="mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)">
+<meta name="issue-summary" content="W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建">
+<title>mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次) · bug · 计划外问题</title>
 <style>
   :root {
     --bg: #10151a;
@@ -96,8 +96,8 @@
 
   <header class="cover">
     <div class="kicker">计划外问题（未修）· bug</div>
-    <h1>mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集(附实证轮次)</h1>
-    <p class="lede">W2-W4 累积工具债 3 条: 单文件轮 rm -rf 清注册表致跨目标 APPLY_FAIL、dump 伪 hunk 行号致 git apply 失败、flaky 集污染 verify 差集</p>
+    <h1>mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)</h1>
+    <p class="lede">W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1539-bug-mutation-tooling-verify-channel</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 15:39</div></div>
@@ -110,11 +110,12 @@
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>W2–W4 三轮 core/ 变异审计累积的 mutants 工具链坑 3 条(档案 R26/R27/W4 均「待入池」注记, 本件合并建账)。共同点: 都直接打击 <code>mutants.verify</code> 判定的可信度或造成误判, 与生产代码无关:</p>
+    <p>W2–W4 三轮 core/ 变异审计累积的 mutants 工具链坑 3 条(档案 R26/R27/W4 均「待入池」注记, 本件合并建账)+ R29 轮补充形态 1 条(2026-11-01 追加)。共同点: 都直接打击 <code>mutants.verify</code> 判定的可信度或造成误判, 与生产代码无关:</p>
 <ol>
   <li><b>mutmut 单文件轮清注册表 → 跨目标 verify 恒 APPLY_FAIL</b>: <code>mutants.run</code> 每轮先 <code>rm -rf mutants mutmut-cache.db</code>, 该目录是 mutmut 的变异注册表, 单文件轮把其它目标的注册表一并清掉; 换目标直接 verify 时 mutmut 找不到变异体 → APPLY_FAIL。且 verify 对 APPLY_FAIL 只计数不自动续跑(收尾提示「重跑同一命令会自动重试」只提 TIMEOUT/FLAKY/UNKNOWN), 未判定会静默堆积。实证: R26(grid 16 条因注册表被清改走手工同构机械化, <code>tmp-analysis/mut-core-w2-classify.md</code>)。</li>
   <li><b>mutmut dump 伪 hunk 行号 + /mnt 空读假成功</b>: dump 的 <code>@@</code> 行号相对源码漂移, 拿它直接 <code>git apply</code> 大偏移搜索恒失败; 可靠做法=按 dump diff 定位唯一匹配行后<b>整文件 post-image cp</b>(S4 通道演进终点)。另: WSL <code>/mnt/*</code> 偶发空读使 GNU patch 静默 rc=0 假成功, apply 结论须以 post-image 通道复跑为准。实证: R27(档案「遗留/待入池」a/b 两条)。</li>
   <li><b>全套件 flaky 集污染 verify 差集判据</b>: relocate / web_views_reload / commands_engine wrapper / hr_discovery 绑定类用例随机红, verify 判据「新增失败 − 基线」会把这些当击杀信号。现有「复跑复现」门槛(FLAKY 判定)已挡掉误判——W4 S4 五条首轮记 FLAKY、复验全部落定未虚增假存活——但 verify 前仍须 deselect, 否则每条候选多一轮复验开销且日志噪声大。实证: R27(遗留 c)+ W4 S4(<code>tmp-analysis/mut-core-w4-classify.md</code> §S4)。</li>
+  <li><b>WSL VM 死亡窗口内 <code>_ensure_mirror</code> 把 <code>test -d .git</code> 失败误判为「镜像缺失」→ 尝试 <code>git clone</code> 重建</b>(R29 补充, 2026-11-01): WSL VM 被 OOM 杀掉的窗口里任何 <code>wsl.exe</code> 调用都失败(Wsl/Service/E_UNEXPECTED),<code>_ensure_mirror</code> 的存在性探测 <code>test -d {mirror}/.git</code> 拿到非零返回码即判「镜像缺失」走重建分支 —— <b>WSL 不可达 ≠ 镜像缺失</b>。R29 S4 轮 WSL VM 反复被杀 30+ 次,该误判路径多次触发,克隆均未遂(镜像核验完好: head 3275c1d4 / pytest 9.1.1 / timeout_multiplier=2 / mutants/ 注册表俱在),本次未造成实际损坏,但一次克隆成功即会毁掉整个专用镜像(含注册表与本地 pyproject/venv 钉版),属高危误判路径。实证: R29(<code>tmp-analysis/mut-core-w5-classify.md</code> §S4 环境事件实录 1)。</li>
 </ol>
   </section>
 
@@ -132,9 +133,9 @@
     <h2><span class="no">03</span>影响面</h2>
     <table>
   <tr><th>维度</th><th>结论</th></tr>
-  <tr><td>触发条件</td><td>①单文件轮之后换目标跑 verify; ②拿 dump 的伪 hunk 行号做 <code>git apply</code> 或经 <code>/mnt/*</code> 走 GNU patch; ③基线/池含 flaky 用例时跑 verify。</td></tr>
-  <tr><td>影响范围</td><td>mutants 命令包的 verify 判定链(APPLY_FAIL 堆积 / apply 假成功 / 差集污染多跑复验), 不涉 src/。</td></tr>
-  <tr><td>严重度</td><td>中 —— 不修则每轮 verify 结果可信度打折; 现有 FLAKY 复验门槛已兜住最坏的「假 KILLED」误判。</td></tr>
+  <tr><td>触发条件</td><td>①单文件轮之后换目标跑 verify; ②拿 dump 的伪 hunk 行号做 <code>git apply</code> 或经 <code>/mnt/*</code> 走 GNU patch; ③基线/池含 flaky 用例时跑 verify; ④WSL VM 死亡(如 OOM)窗口内启动/续跑任何 mutants 命令(<code>_ensure_mirror</code> 探测误判)。</td></tr>
+  <tr><td>影响范围</td><td>mutants 命令包的 verify 判定链(APPLY_FAIL 堆积 / apply 假成功 / 差集污染多跑复验 / 专用镜像被误判缺失而重建), 不涉 src/。</td></tr>
+  <tr><td>严重度</td><td>中 —— 不修则每轮 verify 结果可信度打折; 现有 FLAKY 复验门槛已兜住最坏的「假 KILLED」误判; 形态④的克隆一旦成功会毁专用镜像(注册表+钉版全失), 幸未遂但路径在高危侧。</td></tr>
 </table>
   </section>
 
@@ -143,6 +144,7 @@
     <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
     <ul>
   <li><code>.commands/mutants/scripts/mutants.py</code>(取证 2026-10-31)· <code>cmd_run</code> 内 <code>rm -rf mutants mutmut-cache.db</code> :245 附近(grep <code>rm -rf mutants</code>)· <code>_verdict</code> APPLY_FAIL 分支 :441(grep <code>APPLYFAIL</code>)· verify 循环 APPLY_FAIL 只计数 :546(grep <code>apply_failed</code>)· 收尾提示缺 APPLY_FAIL :564 附近(grep <code>未判定</code>)。</li>
+  <li>形态④锚点(取证 2026-11-01): 同文件 <code>_ensure_mirror</code> :198 · 存在性探测 <code>test -d {mirror}/.git</code> :201(grep <code>test -d</code>)· 误判后重建分支 <code>git clone -q --branch</code> :202-203。</li>
   <li>flaky 集成员(W2–W4 实测): tests/ 中 relocate / web_views_reload / commands_engine wrapper / hr_discovery 绑定类用例(grep <code>bind</code> test_hr_discovery)。</li>
 </ul>
   </section>
@@ -158,6 +160,7 @@
   <li>verify 入口先核目标注册表存在性, 缺了提示「先跑 mutants.run 该目标」或自动补跑, 不让 APPLY_FAIL 静默堆积; 收尾提示把 APPLY_FAIL 一并列入「未判定」。</li>
   <li>apply/dump 通道统一走「dump diff 定位唯一匹配行 → 整文件 post-image cp」, 弃 <code>git apply</code> 直 apply 与 <code>/mnt/*</code> patch; 两路结论不一致时以 post-image 为准。</li>
   <li>flaky 集落成 deselect 常量表(与姊妹件 <code>mutation-tooling-deselect-guards</code> 的 DEFAULT_DESELECT 同一张表维护), verify 前自动带上。</li>
+  <li><code>_ensure_mirror</code> 探测失败先区分「WSL 不可达」与「镜像缺失」: 先跑一条平凡 <code>wsl.exe</code> 探测(如 <code>wsl echo ok</code>), 不可达即 fail-fast 提示稍后重跑, 不进重建分支; 重建前若镜像目录已存在, 先做内容核验(head/注册表)再决定 clone。</li>
 </ol>
   </section>
 
@@ -165,6 +168,7 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 15:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 00:50 — 补充形态④（R29 S4 实证: WSL VM 死亡窗口 <code>_ensure_mirror</code> 把 <code>test -d .git</code> 失败误判为镜像缺失尝试 clone 重建, 克隆未遂镜像完好; 状态维持 <strong>Open</strong>）</li>
     </ul>
     <h3>复验</h3>
     <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
