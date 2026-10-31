@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM06">
+<meta name="plan-stamp" content="26-10-31-1350">
+<meta name="doc-topic" content="real-machine-rm06-plan">
+<title>RM06 HR 在线核实 · 真机实测分步计划(L1 数据面)</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 70ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 20px; font-weight: 600; margin-bottom: 12px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 12px 14px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--faint); }
+  td code, th code { white-space: nowrap; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin-bottom: 14px; max-width: none; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--good); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.lv { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  .badge.go { background: var(--good-bg); color: var(--good); border-color: #2f4a33; }
+  .badge.stop { background: #2a1518; color: #e08a94; border-color: #4a2c31; }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+  footer { margin-top: 48px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">真机实测轨 · 分步实施计划 · 排期锚 issue 26-10-31-0641</div>
+  <h1>RM06 HR 在线核实(L1 数据面)</h1>
+  <p class="lede">对「HR 在线核实」片做真机实测的排期准备与分步计划。本计划只准备、不执行: 用例代码、<code>real.run</code>/<code>real.suite</code> 由执行代理照本计划落刀。<b>范围拍板(用户已定, 硬边界): 本轮只做 L1 数据面</b> —— 取数通道(扩展代理/本地端点)、三态判定、频控、站点状态、HR 排除表, 全部本地可验。<b>L2 站点侧(真实站点取数)一律 BLOCKED, 解锁条件 = 用户单独授权</b>(逐条见 §05)。<span class="badge stop">零外连红线</span> 任何用例不得产生真实站点请求 —— 产品侧 HR 取数<b>唯一路径</b>是 <code>ChannelFetcher</code> 经本地端点队列(<code>fetcher.py:252</code> 唯一分支点: 通道关 = NullFetcher, <b>从不后端直连</b>), 测试扮演扩展角色对本地端点回传本地构造的 HTML, 结构上就不出网卡; 正向之外各条另加「无外连」断言兜底。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1350</div></div>
+    <div class="item"><div class="k">切片</div><div class="v">RM06(片表 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">1 次(半天), 用例 8 条(≤10)</div></div>
+    <div class="item"><div class="k">基线 commit</div><div class="v">首轮(实测时刻 HEAD 记切片)</div></div>
+    <div class="item"><div class="k">前置</div><div class="v">RM00 基建全绿(L1 解锁)· RM02 7/8 · RM04 8/8 · RM03 8/9 · RM05 7/7(缺陷均在池)</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + 残留清理 + glob 自检)</h2>
+
+    <h3>会话同步(2026-10-31 13:46 实测)</h3>
+    <p><code>commands run my-commit-flow.sync</code> FAIL ×2: <b>远端不存在 <code>refs/heads/real/rm02-rm10</code></b>(本工作分支从未推远端; <code>git ls-remote --heads origin</code> 实测只有 develop/feature_rules/master, 非离线)。本地 HEAD <code>1b4a93fb</code>(RM05 实测完成)。按 RM03/RM04/RM05 先例「无远端分支可对, 不阻塞本地排期」继续; 分支领先 origin/develop 9 / 落后 8, 推送与合流交用户拍板。</p>
+
+    <h3>漂移体检</h3>
+    <p><b>首轮, 无漂移面</b>(规程 §06 第 2 步: 没有基线 commit 的首轮写此结论)。RM06 glob 命中清单(实测, 供下轮漂移比对): <code>src/auto_qb/hr/**</code> 26 个 .py(含 adapters/ 4 件)· <code>extensions/hr-fetch-proxy/**</code> 16 个文件(manifest/background/discovery/normalize/site-caps 等)· <code>src/auto_qb/webui/server/routes/hr.py</code> 1 件。</p>
+
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 13:47 实测)</h3>
+    <pre>[ok] real.guard (0.7s)
+  [ok] 36595 pid=41868 vv5.2.3 firewalled 真实种子 8 个, 已全部暂停
+  [ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</pre>
+    <p>两实例 connection_status=<code>firewalled</code>(非 disconnected, §2.5 口径通过); 36596 空库当草稿本, 本片全部用例只连 36596。</p>
+
+    <h3>开工顺手清残留(2026-10-31 13:50 实测)</h3>
+    <p>36596 有 RM03 时代残留标签定义 12 个, 实例真实种子 0 个。经 qB API <code>POST /torrents/deleteTags</code> 清掉授权名单内 <b>10 个</b>: <code>rm03-hit / rm03-t1 / rm03-t2 / rm03-once / rm03-after / rm03-cool / rm03-expr-hit</code>(rm03-* ×7)+ <code>keep-${required_seeding_time} / keep-3D</code>(keep-* ×2)+ <code>MISSING</code>。删后剩 <code>real-fake</code>(假种子基建标签, 保留)与 <code>RM05-SIM</code>(<b>不在授权名单, 未动</b>, 交用户拍板是否清)。36596 种子数 0 核验后才删, 只删名单内标签。</p>
+
+    <h3>glob 自检(规程 §05 规则 8, 2026-10-31 13:50 实测)</h3>
+    <p>锚件 §03 RM06 行 3 条 glob 逐条实测: ① <code>src/auto_qb/hr/**</code> 命中 26 个 .py ✓; ② <code>extensions/hr-fetch-proxy/**</code> 命中 16 个文件 ✓(仓库根 extensions/, 本就正确); ③ <code>webui/server/routes/hr.py</code> <b>零命中 —— 漏 <code>src/auto_qb/</code> 前缀</b>(<b>RM01/RM02/RM04/RM03/RM05 同款缺陷第六次复发</b>; 真实路径 <code>src/auto_qb/webui/server/routes/hr.py</code>, 12.6KB)。按规则 8 已修锚件 §03 RM06 行 + §08 记账 li(13:50 时间实测)。修后 3/3 命中, 全属 HR 面无混入大件, 片边界不糊, 不拆不并。</p>
+    <div class="callout warn"><b>第六次复发必须写归因</b>: 锚件 §03 建表时按「模块在仓库根的旧印象」写路径, 每片自检才兜住。规程 §05 规则 8 只能"每轮发现", 拦不住"写错" —— 建议下轮片表维护时把「全部 glob 以 <code>git ls-files 'glob'</code> 零命中即查前缀」写成锚件 §03 表头旁注, 本轮不动片表其它行。</div>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读; 文件:行号为 2026-10-31 HEAD 锚点)</h2>
+    <table>
+      <tr><th>验证面</th><th>代码锚点(全在 RM06 glob 内)</th><th>本地可验的外部观测(断言口径)</th></tr>
+      <tr><td>取数通道 · 本地端点</td><td>端点四路常量 <code>API_TASKS/RESULT/SITES/REFRESH</code>(channel.py:40-44)· 服务 <code>HrChannelServer</code>(server.py:216, start:265 / 绑定身份 :218)· <code>make_endpoint_handler</code>(server.py:125)· 拒绝节流 <code>RejectThrottle</code>(server.py:87)· 鉴权 token+origin 双关(channel.py:164 <code>origin_allowed</code> / :148 <code>pairing_needed</code>; server.py docstring: 无 token/不符 401 不写状态, 非扩展 origin 403)</td><td>测试以 HTTP 客户端打 <code>http://127.0.0.1:&lt;port&gt;/api/hr/*</code>: 401/403/200 三态 + 回执结构; 实绑端口从产品日志/绑定回执取(port=0 随机)</td></tr>
+      <tr><td>取数通道 · 发现/配对</td><td><code>HrDiscoveryServer</code>(discovery.py:251; route:364 / pairing_required:311 / _discover_response:445)· <code>InstanceRegistry</code>(discovery.py:130)</td><td>GET 发现端点回执含数据端点 host:port 与 token(回环 pairing 默认关); 扩展视角「只配一个发现地址」可达</td></tr>
+      <tr><td>取数通道 · fetcher 分支与 URL 策略</td><td>唯一分支点 <code>build_channel_fetcher</code>(fetcher.py:236-253; channel.enabled=false ⇒ NullFetcher, 从不直连)· 异常族 <code>HrChannelTimeout/Stopped/Quota/LoginExpired/NoPermission/ExtensionNetwork</code>(fetcher.py:19-99)· <code>UrlPolicy</code>(channel.py:180; site_of:198 / allows:208 / require:218 —— SSRF 白名单在下发任务时卡死, 端点不收 URL 入参)</td><td>channel.enabled=false 起产品 ⇒ 日志「本实例未启用取数通道」且零端点零任务(§2.11 RM05-07 同源); 任务 URL 域名 == 站点档案域名(UrlPolicy 兑现)</td></tr>
+      <tr><td>三态判定</td><td><code>resolve_identity</code>(resolve.py:201)· <code>judge_record</code>(resolve.py:246)· <code>HrJudgement</code>(resolve.py:117; is_hr:135 / state_text:144)· 站点侧三态四消费点唯一入口(runtime.py:249)· 波次对象集 <code>_build_objects</code>(service.py:1416; 未对账∪考察中, 终态/放行/超额/排除出集)</td><td>三路输入全本地构造(见 §03 各条): 回传 HTML 行<b>命中</b>种子名 → index 出现条目 lane=A(考察中); <b>未命中</b> → 未列出放行记录(verified)且不再下发任务; <b>错误</b>(登录页回传/超时) → fetch-failed 档 + 状态错误分档。判定输出以 /api/hr/status + hr 站点文件 + qB 标签为外部观测</td></tr>
+      <tr><td>频控</td><td><code>HrLimits.merge</code>(ratelimit.py:42)· <code>quota_left</code>:61 / <code>try_consume</code>:66 / <code>jittered_interval</code>:76 / <code>next_allowed_at</code>:97 · 配置键 <code>min_interval / max_requests_per_day / max_pages_per_wave / allow_window / reuse_window</code>(config/models.py:129-139)· 波次预算受限分支(service.py:743-757「档位 X 配额/间隔受限(why)」)</td><td>stub 侧数收到的任务数与相邻任务间隔; 配小额(日额/每波页数)看截断 + 日志「配额/间隔受限」; <code>QuotaStatus</code> 经 /api/hr/status 回读</td></tr>
+      <tr><td>站点状态</td><td><code>SiteStatus</code>(status.py:150; site_status:314)· <code>lane_counts</code>:247 / <code>LaneStatus</code>:111 / <code>QuotaStatus</code>:134 / <code>entry_details</code>:431 / <code>history_rows</code>:551 · WebUI 路由五端点(routes/hr.py:86-245: confirm-empty / refresh / status / sites/{site}/entries / history, 前置 <code>_require_hr_runtime</code>:66)</td><td>经产品 WebUI 本地 HTTP 读 GET /api/hr/status、/api/hr/sites/&lt;site&gt;/entries、/api/hr/history, 断言结构字段与分档文案; HR 未起时前置守卫行为一并验</td></tr>
+      <tr><td>HR 排除表</td><td>配置键 <code>exclude_tags / exclude_categories</code>(config/models.py:65-66; 站点段与全局取并集去重保序, loaders.py:362)· 匹配现算单点 <code>_hr_exclusion_hits</code>(torrents/record.py:315)· <code>hr_excluded</code>:330(加/删排除标签下一轮判定即生效, 无需重启)· 判定短路 <code>_hr_guard</code>(record.py:385-394)· 对象集第四档排除(service.py:1441-1445)· 打标早退(maintenance_mod.py:289-291)</td><td>命中排除表的种子: 不进对象集(stub 收不到它的驱动任务)、不打 HR 标签; qB API 加/删排除标签作动态开关, 断言「下一轮生效」; 对照种子(不命中)照常进对象集 —— 负向对照内建。注: record.py / maintenance_mod.py 在 RM06 glob 外(RM04/RM05 片), 本片只经外部观测消费, 不改它们</td></tr>
+    </table>
+    <p><b>回传内容构造素材</b>(单测现成, 用例代码直接复用, 不新造): <code>tests/hr_helpers.py</code> 的 <code>myhr_page()</code>:94 / <code>row()</code>:137 / <code>LOGIN_PAGE</code>:17 / <code>EMPTY_TABLE_PAGE</code>:30 / <code>REVISED_PAGE</code>:27 / btschool·carpt 计数条 :68/:81。行名与种子名的粗配口径是「标题重合 ≥12 字符」(service.py:992 K=12 收窄候选集), 构造命中/未命中 HTML 时按此设计。<b>扩展代理通道用本地桩替身 = 成立</b>: 扩展与产品的全部契约就是「GET /api/hr/tasks 拿任务 → POST /api/hr/result 回传」, 桩在 HTTP 层扮演扩展即覆盖数据面; 真浏览器扩展(chrome 端安装/授权/真正抓站)归 L2 BLOCKED。三态输入构造: 命中=myhr 行名含种子名特征串; 未命中=行名全不重合; 错误=回传 LOGIN_PAGE(触发 HrLoginExpired)或不回传等 <code>request_timeout</code>(配置配小, 别傻等默认 180s)。</p>
+    <p><b>配置面锚点</b>: 测试配置 <code>schema_version: 5</code>; 启用面 = <code>hr_check.enabled: true</code> + <code>hr_check.channel.enabled: true</code>(token 显式写死测试值, 不靠随机落盘)+ <code>hr_check.sites.&lt;id&gt;.enabled: true</code>(站点 id 用内置档案, tracker 条目 domains 须绑上 —— §2.11 绑定校验要求条目带 <code>hr</code> 段)。假种子锚点口径(runtime.py:456-479 <code>_anchors</code>): 凡匹配「绑定了已启用站点」tracker 条目的种子都进对象集, <b>downloaded=0 的假种子照样进</b>(打标分流全量纳入含零下载, maintenance_mod.py:284 口径; RM03-04「零下载不触发」实为该次配置没配 add_tag 的观测, 不构成阻塞)。产品 data_dir 指用例临时目录, <b>不得指仓库根 auto-qb-data/</b>(红线)。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(8 条, docstring 首行 <code>[RM06-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm06_hr_channel/</code>, 跑法 <code>commands run real.suite -- --slice RM06 --yes</code>(<code>-n 0</code>)。共享基座: 产品非 dry-run 连 36596(空库); 测试配置 trackers 恰 1 条目(domains=[站点档案 tracker 域名]+[本机局域网IP], <code>lib/net.py:local_host()</code> 口径, 保证假种子进管线且站点绑定成功)带 <code>hr</code> 段; <code>hr_check.channel</code> 回环 + token 写死测试值 + <code>discovery_port</code> 显式独立端口(防 18788 撞车); 所有标签/分类模式收紧 <code>rm06-</code> 前缀, 不得出现能匹配 <code>real-fake</code> 或真实标签的宽泛模式; 假种子一律 <code>real-fake</code> 标签, 死端口 announce 零外连; 产品 data_dir 各条独立临时目录(隔离 hr 站点文件与 reuse_window 稳态)。各条独立起停产品。<b>零外连断言兜底: 每条收尾核产品日志无任何真实站点连接痕迹 + 用例期外连计数为 0</b>。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-01</span><span class="ttl">通道鉴权与发现: 无 token 401 / 错 token 401 / 非扩展 origin 403 / 正确 200 + 发现端点自动分发</span><span class="badge lv">L3(负向内建)</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>启用完整通道(hr_check.enabled + channel.enabled + sites.btschool)。对数据端点四连打: 无 token → 401 且状态零写入; 错 token → 401; 正确 token 但 origin 头非 chrome-extension → 403; token+origin 全对 → 200 拿到任务 JSON(结构含任务 id 与 URL)。另打发现端点: 回执含数据端点 host:port 与 token(回环 pairing 默认关, <code>pairing_required</code>=False), 扩展视角「一个发现地址拿到全部」兑现。错误 token 的拒绝进 <code>RejectThrottle</code> 状态(<code>rejected_contacts</code> 增长)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座配置如上; 1 枚假种子(绑站点条目, 保证任务队列非空可选); 读产品日志/绑定回执拿实绑端口。</li>
+        <li><b>副作用</b>: 1 假种子; hr.token/站点文件落临时 data_dir; 36596 无写。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删用例临时目录; 实例无残留。</li>
+        <li><b>失败判据</b>: 错 token 拿到 200(鉴权失效, 高优 FAIL); 正确凭据被 401/403(反向失效); 401 时状态仍被写(「401 且不写任何状态」契约破); 发现回执缺端口或 token; <b>任务 URL 域名不是站点档案域名(UrlPolicy 失守 = SSRF 红线级, 立即停手入池)</b>; 出现对 btschool 域名的真实连接(零外连红线, 立即停手)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-02</span><span class="ttl">任务下发与结果回传正向: 种子进对象集 → 页面任务 → 回传命中 HTML → 站点数据落 index</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>1 枚假种子(名含特征串)进对象集。stub 轮询 GET /api/hr/tasks 收到 myhr 页面任务(URL 按站点档案 page_url 形态); 按任务 id + 域名一致两道关回传本地构造的命中 HTML(<code>hr_helpers.myhr_page</code>, 行名与种子名粗配命中)。断言: 波次推进日志(档位/页); hr 站点文件 index 出现该站点条目; GET /api/hr/status 该站点 lane 计数含考察中; <code>local_hashes</code> 命中面生效(条目绑定到本地 infohash)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子; request_timeout 配小(如 20s)防挂。</li>
+        <li><b>副作用</b>: 1 假种子; hr 站点文件写临时 data_dir。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删临时目录。</li>
+        <li><b>失败判据</b>: 收不到任务(种子没进对象集 —— 查站点绑定/锚点链路, 排不通记 BLOCKED); 回传被拒(两道关口径与实现分叉); status 无考察中条目; index 落了错误 infohash(命中识别分叉)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-03</span><span class="ttl">三态判定·命中侧: 行命中 → 考察中管束 → HR 标签下发(全量纳入口径)</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>站点条目 hr 段配 <code>add_tag: rm06-hr</code>(+required_seeding_time)。回传命中 HTML(RM06-02 同款)使条目进 lane=A 考察中。断言: <code>hr_judgement</code> 判定 HR → <code>hr_managed</code>=True(考察中绝对权威)→ 维护管线把 <code>rm06-hr</code> 打上种子(qB API 回读 tags, strip 口径防双标签坑 26-10-31-1215); status 的 lane_counts 考察中 +1; 做种 0s &lt; required → 不打达标标签。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子 + add_tag 配置; 回传命中 HTML(可承接 RM06-02 的会话或独立起停)。</li>
+        <li><b>副作用</b>: 1 假种子被打 rm06-hr。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清 rm06-* 标签 + 删临时目录。</li>
+        <li><b>失败判据</b>: 考察中种子未被打 rm06-hr(管束/打标链路断); 打了达标标签(分流分叉); qB 回读 tags 缺 strip 导致断言假红(测试侧缺陷, 修用例不是修产品); 断言咬了内部实现而非 qB API/状态文件(口径错)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-04</span><span class="ttl">三态判定·未命中侧: 全不重合 → 未列出放行 → 放行记录生效 + 对照种子照常管束</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>两枚假种子: 甲名与 HTML 行全不重合, 乙名命中其中一行。一波回传后: 乙进考察中(RM06-03 同款); 甲得「未列出」放行记录(verified 落站点文件)—— 放行种子<b>不打</b> rm06-hr(RELEASED 短路), 且<b>下一波不再为甲下发任务</b>(出对象集; stub 侧计数为证)。对照内建: 乙仍受管束, 同一波对照真跑红绿双验。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 2 假种子(名设计好命中/不命中); 回传一份含两行的 HTML(一行命中乙, 一行与甲不重合)。</li>
+        <li><b>副作用</b>: 2 假种子; 乙被打 rm06-hr。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清 rm06-* 标签 + 删临时目录。</li>
+        <li><b>失败判据</b>: 甲被误判考察中/误打标(粗配过宽 —— K=12 语义分叉); 甲未得放行记录(对账侧漏); <b>放行记录未生效: 下一波甲仍出现在任务驱动集(对照必须红 —— 红不了如实降 L2)</b>; 乙反而被放行(命中识别反向失效)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-05</span><span class="ttl">三态判定·错误侧: 登录页回传 → HrLoginExpired 分档 + 超时不回传 → fetch-failed 档</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>两条子路径各起停一次产品(独立 data_dir)。① 回传 <code>LOGIN_PAGE</code> 内容: 波次记登录态失效(HrLoginExpired 路径, service.py:784), status 错误分档可见, 站点数据不被污染(无半写 index)。② 收任务后不回传等 <code>request_timeout</code>(配小): fetch-failed 档记中断(<code>_mark_fetch_failed_lane</code>), 锁最终释放(下一波还能收任务 —— request_timeout 存在的意义), status 体现中断。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子 ×2 段; ①② 各自独立临时目录。</li>
+        <li><b>副作用</b>: 1 假种子 ×2; 临时目录内站点文件。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删临时目录 ×2。</li>
+        <li><b>失败判据</b>: 登录页被当正常页面解析(分档失明, 站点数据被污染); 超时后站点锁永久持住(下一波收不到任务 —— 「该站再也不会刷新」正是 request_timeout 要防的事故); 超时未计失败(退避/记账漏); 断言等满默认 180s(测试侧配置漏, 修用例)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-06</span><span class="ttl">频控: min_interval 间隔兑现 + max_requests_per_day 日额截断 + status 配额回读</span><span class="badge lv">L3(负向内建)</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>配置 <code>min_interval</code> 配可观测值(如 5s)+ <code>max_requests_per_day: 2</code>(日额刻意配小)。stub 记录相邻任务时间戳: 间隔 ≥ min_interval(抖动只向上 +0~25%, 不向下)。制造第 3 次请求需求: 第 3 次拿不到任务, 波次日志「配额/间隔受限(why)」, <code>QuotaStatus</code> 经 /api/hr/status 显示日额耗尽(剩余 0)。负向对照内建: 日额前 2 次正常 —— 限额若失效, 第 3 次会照发, 红验即「数到第 3 个任务」。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子; request_timeout/min_interval 配小; 测试期贴近零点无妨(日窗重置 next_day_reset 不在本条断言面)。</li>
+        <li><b>副作用</b>: 1 假种子; 频控账本写临时 data_dir。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 删临时目录。</li>
+        <li><b>失败判据</b>: 相邻任务间隔 &lt; min_interval(频控失效, 高优); 日额 2 之后仍发第 3 个任务(<b>限额失效 —— 对照必须红</b>); status 配额数字与实际发出数不符(账实分叉); 为凑断言把 min_interval 配过大导致用例超 10 分钟(测试侧设计错, 修用例)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-07</span><span class="ttl">HR 排除表: 命中种子出对象集+不打标+动态开关生效, 对照种子照常</span><span class="badge lv">L3(对照内建)</span><span class="badge">L1 假种子 ×2</span></div>
+      <div class="bd"><p>全局 hr 段配 <code>exclude_tags: ["rm06-excl"]</code>(命中语法同 remove_tags/MatchPattern)。两枚假种子: 甲预打 <code>rm06-excl</code>, 乙不带。断言: 甲不进对象集(stub 一波收不到为甲驱动的任务)、<code>hr_excluded</code> 短路使甲不打 rm06-hr; 乙照常进对象集并按 RM06-03 路径打标 —— 对照内建。动态开关: 经 qB API 给乙加 <code>rm06-excl</code> → <b>下一轮判定即生效</b>(无需重启): 乙出对象集不再驱动任务; 再删标签 → 下一轮恢复进集(「撤销排除后重新进本循环」)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 2 假种子; 甲加种前预打标(409 处置按 §2.9 删旧重加, 不收养)。</li>
+        <li><b>副作用</b>: 2 假种子; 乙被打 rm06-hr; 标签 rm06-excl 增删。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code> + 清 rm06-* 标签与定义 + 删临时目录。</li>
+        <li><b>失败判据</b>: 甲仍进对象集或被打标(排除优先级失效 —— 最高优先级语义破, 高优); <b>乙加排除标签后仍驱动任务(「现算、下一轮生效」失效, 对照必须红)</b>; 删标签后乙永远不回来(恢复面断); 排除模式误匹配 real-fake(模式过宽, 红线级立即停手)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM06-08</span><span class="ttl">站点状态读面: /api/hr/status · entries · history 结构与分档 + HR 未起时前置守卫</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>承接一个有数据的会话(RM06-02/03 后状态): 经产品 WebUI 本地读三个只读端点, 断言结构与分档文案: /api/hr/status(站点聚合: lane 计数/配额/通道状态/发现状态)、/api/hr/sites/&lt;site&gt;/entries(条目明细: 档位/做种要求文本)、/api/hr/history(历史行结构, limit 生效)。另起一份 <code>hr_check.enabled=false</code> 的配置: 三端点按 <code>_require_hr_enabled/_require_hr_runtime</code> 守卫拒绝(状态码 + 文案), 且零取数痕迹(§2.11 口径复验到路由层)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座起一份带数据的(可复用 RM06-03 会话产物或重走一段); 另一份 hr 关闭配置。</li>
+        <li><b>副作用</b>: 零 qB 写(只读面); 临时目录。</li>
+        <li><b>回滚</b>: 删临时目录; 无实例残留。</li>
+        <li><b>失败判据</b>: 只读端点改写状态(confirm-empty/refresh 不在本条打, status/history 必须零写 —— 发现写痕迹即 FAIL); hr 关闭时端点仍 200(守卫失效); status 分档数字与站点文件实况不符(读面账实分叉); history 返回超 limit 条目。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>RM06 首轮全部新建, 按 RM02/RM04/RM03/RM05 先例「新建即档」计: 预计初始档位 <b>L0/L1/L2/L3 = 0/0/4/4</b>(RM06-01/04/06/07 四条 L3 —— 负向/对照内建, 错凭据、不重合行名、日额第 3 请求、排除标签动态开关全是预置即成, 不依赖注入; RM06-02/03/05/08 四条 L2)。</p>
+    <ul>
+      <li><b>本轮升档 = 四条对照负向真跑过才保 L3</b>: 01 错凭据必须被拒 / 04 放行种子下一波必须不再驱动任务 / 06 日额耗尽必须截断 / 07 排除标签必须下一轮生效 —— 红不出来按计划内规则如实降档写原因, 不硬撑。</li>
+      <li>RM06-05 的超时子路径不另计 L3: 等待型负向无预置对照, 保持 L2 如实记。</li>
+      <li>下轮升档候选(本轮不做): 解锁 L2 站点侧后, RM06-02/03/05 的回传内容从「本地构造 HTML」升为「真实站点页面」, 判据不变、输入变真 —— 按 §07「判据变」规则届时逐条降档重爬。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 约束跳过项与解锁条件</h2>
+    <ul>
+      <li><span class="badge stop">BLOCKED</span> <b>L2 站点侧 —— 本轮全部跳过, 解锁条件 = 用户单独授权(硬边界, 逐条列明)</b>:
+        <ul>
+          <li>真实站点取数端到端: 产品驱动 → 扩展真抓 <code>pt.btschool.club</code> 等真实站点页面 → 解析判定走真数据(涉及真实账号登录态与站点请求, 出本机)。</li>
+          <li>adapter 对真实站点 HTML 的线上核验: nexusphp/btschool/carpt 三 adapter 的 page_url/解析口径对真站现况(改版检测面)。</li>
+          <li>浏览器扩展真装真授权链路: chrome 扩展安装、<code>extension_id</code> origin 白名单真值、发现端点对真扩展的分发。</li>
+          <li>跨机形态: channel.host 配私网(NAS 形态)+ 配对码强制(<code>pairing</code> auto/on)的人工关口。</li>
+          <li>上表四条升档候选(§04)随本次解锁一并处理。</li>
+        </ul>
+      </li>
+      <li><span class="badge stop">BLOCKED</span> <b>L0 目视项: 「HR 在线核实」分区页观感(Console Hub 页尾 HR 站点状态合并区, manual-walkthrough 32 行所指的视觉面)</b> —— 归 RM08 读侧观感, 本片不立用例; 解锁条件 = 用户目视, 不得代签。</li>
+      <li><b><code>[需活跃种子]</code> 跳过条目: 无。</b>五个验证面全不依赖真实传输: 取数通道是本地 HTTP 面, 三态/频控/排除由回传内容与配置驱动, 站点状态是只读面。全部 8 条与约束 2(真实种子全程非活跃)零冲突。</li>
+      <li><b>潜在 BLOCKED 预登记</b>: ① RM06-02 假种子进不了对象集(站点绑定/锚点链路某环不通)→ 按 §02 配置锚点排查后仍不通记 BLOCKED; ② RM06-05 超时路径站点锁未释放(若是产品缺陷照 FAIL 入池, 别改判据硬凑 PASS); ③ 18788 发现端口被占(本机其它进程)→ 测试配置显式独立端口即可, 不构成阻塞; ④ /api/hr/refresh force 旗标若与节拍竞态导致任务重复, 按「stub 侧幂等消费」设计用例, 不当缺陷。</li>
+      <li><b>预算取舍(≤10 条纪律)</b>: 8 条入本轮。热点面不立用例: store 锁/隔离恢复(store.py)、report.py 走查报告、bencode.py .torrent 下载面、多实例 shared_dir 互通 —— 均有单测覆盖, 真机面待下轮按 §05 规则 1 归属拍板; 硬塞会超 1 次预算。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><code>real.suite --slice RM06 --yes</code> 跑完: 8 条全部 <code>PASS</code>; <code>FAIL</code> ⇒ 按 scope-guard 入池 bug issue 当轮不修; <code>BLOCKED</code> ⇒ 写明解锁条件, 不计入"做完"。</li>
+      <li>五个验证面逐条有着落: 取数通道(01/02 + 08 守卫侧)· 三态判定(02/03/04/05 三路各有着落)· 频控(06)· 站点状态(08)· HR 排除表(07)。</li>
+      <li>至少四条对照负向真跑过并看到红(01 错凭据 / 04 放行对照 / 06 日额截断 / 07 排除动态开关), 档位分布如实记进 <code>testing/real-baselines/&lt;stamp&gt;-real-RM06.md</code>。</li>
+      <li><b>零外连红线全程成立</b>: 每条用例收尾核无真实站点连接痕迹; 任何一条出现外连立即停手按事故处置。</li>
+      <li>基线 commit 记实测时刻 HEAD; 锚件 §07 RM06 行同步(状态/L 分布/基线); 新增环境事实回写规程(并入 §2.11 或新增 §2.12: 通道端点本地桩形态 / 假种子进对象集口径 / 频控可观测面)。</li>
+      <li>收尾核净: 36596 无 real-fake 残留、无 rm06-* 标签与定义残留、临时 data_dir 清理、<code>tests-real/.work/rm06/</code> 与 <code>R:/qbt-fake/rm06/</code> 清空、guard 复跑绿。</li>
+      <li>本轮踩到已记的坑 ⇒ 该条「复发」+1 并写一句为什么没命中(<b>glob 漏前缀第六次复发必须写</b>; 26-10-31-1215 双标签坑、§2.9 409 收养坑同为高频风险)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9)</h2>
+    <p>逐条过了 <code>memory-bank/checklists/manual-walkthrough.md</code>, <b>属于 RM06 验证面(取数通道/三态判定/频控/站点状态/HR 排除表)的条目: 0 条</b> —— 本片不发生迁移, <code>manual-walkthrough.md</code> 本轮不改。判定明细:</p>
+    <ul>
+      <li><b>唯一提及 HR 的条目(32 行)不属本片</b>: 「设置页(Console Hub)…『HR 站点状态』并入『HR 在线核实』分区页尾」—— 该条走查的是 Console Hub <b>视觉</b>(LED 三态/紧凑层级/? 浮窗/危险档描边/五主题输入框), HR 字样只是分区归属说明, 验证面归 RM08(读侧观感), 不错收进 RM06 数据面。</li>
+      <li><b>其余全部条目</b>(设置页刷新保持 / 列设置多标签页 / 状态栏速度与今日流量 / 可用性列 / 最近活动列 / 时间点列切换 / 追剧页右键 / TASK011-015 / 热路径体感等)均为 WebUI 观感/写侧, 归 RM08/RM09/RM10, 与 RM06 五验证面无交集。</li>
+    </ul>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>回传 HTML 的结构要对齐 adapter 解析器</b>: 行命中不只看名字重合, 表格要过 <code>parse.py</code> 的 <code>extract_table(header_key, header_column)</code> 与分页标记(<code>has_next_page</code> 的 myhr.php 口径)—— 直接改写 <code>tests/hr_helpers.py</code> 的 <code>myhr_page()/row()</code> 产物, 别手搓 HTML; 行名粗配按「标题重合 ≥12 字符」设计命中/未命中对照, <b>先单测本地跑一把 parse 确认命中再上真机</b>, 避免烧真机预算调 fixture。</li>
+      <li><b>回传两道关</b>: POST /api/hr/result 必须带派发过的任务 id + 域名一致 —— 回传前先 GET tasks 拿任务原文, 别自造 id; 被拒看 <code>RejectThrottle</code>/日志区分「关拒」与「鉴权拒」。</li>
+      <li><b>等待类断言别等默认值</b>: <code>request_timeout</code> 默认 180s、<code>min_interval</code> 默认 90s、<code>reuse_window</code> 默认 2h —— 测试配置全部配小; 波次触发可用 POST /api/hr/refresh(force 旗标)加速, 别干等节拍; 产品日志是追加式, 断言「最后一次启动」要等新行(§2.9)。</li>
+      <li><b>假种子进对象集的链路有三环</b>: tracker 条目 domains 绑上站点档案(§2.11 要求条目带 hr 段)+ 假种子 announce hostname 落在 domains 内(§2.9 死端口口径)+ hr_check.sites.&lt;id&gt;.enabled —— RM06-02 收不到任务时按这三环排查, 排查顺序: 启动日志 ConfigError → /api/hr/status 站点是否出现 → 锚点数(日志/状态)。</li>
+      <li><b>频控账本与站点文件在 data_dir/hr/</b>: 各条用独立临时 data_dir, 否则上一条的 verified 放行记录/日额账本会漏进下一条(RM06-04/07 的对照会被污染成假绿或假红); shared_dir 一律不配。</li>
+      <li><b>标签模式收紧 rm06- 前缀</b>(§03 基座): exclude_tags/正则绝不能写成能匹配 real-fake 的宽泛模式 —— RM05-04/05 的红验同款红线; 26-10-31-1215 双标签 strip 坑与 §2.9 409 收养坑照旧例防御。</li>
+      <li><b>发现端口与端口纪律</b>: discovery_port 显式配独立值(默认 18788 可能被占/撞其它实例), 数据端点 port=0 随机; 端口探空用裸 bind 不用 SO_REUSEADDR(§2.7); 段 39000-39999 有 WorkBuddy 占用风险。</li>
+      <li><b>glob 漏前缀坑第六次复发</b>(§01): 执行代理写用例锚点时先 <code>git ls-files '&lt;glob&gt;'</code> 自证, 别信锚件之外的路径印象。</li>
+    </ol>
+  </section>
+
+  <footer>
+    26-10-31-1350-plan-real-RM06.html · RM06 HR 在线核实(L1 数据面)排期计划 · 体例对齐 26-10-31-1312-plan-real-RM05 · 规程单点 memory-bank/testing/real-machine.md<br>
+    本计划拍板即冻结; 执行产物落 testing/real-baselines/&lt;stamp&gt;-real-RM06.md + 锚件 §07/§08 同步
+  </footer>
+</div>
+</body>
+</html>
