@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="plan-slug" content="plan-real-RM08">
+<meta name="plan-stamp" content="26-10-31-1754">
+<meta name="doc-topic" content="real-machine-rm08-plan">
+<title>RM08 WebUI 读侧 · 真机实测分步计划</title>
+<style>
+  :root {
+    --bg: #10151a; --ink: #e4eaef; --dim: #a2b0bd; --faint: #6f7d8a;
+    --hair: #26313a; --hair-soft: #1c252d; --accent: #5cc0cf; --accent-ink: #7fd3de;
+    --warn: #e2a86e; --warn-bg: #2a2119; --good: #8fc98f; --good-bg: #16241a;
+    --stop: #e08f8f; --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.65; }
+  .sheet { max-width: 1080px; margin: 0 auto; padding: 48px 36px 72px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 32px; font-weight: 600; line-height: 1.2; margin-bottom: 10px; }
+  .lede { color: var(--dim); max-width: 74ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); margin-bottom: 30px; }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  section { margin-top: 36px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair); }
+  h2 .no { color: var(--accent); margin-right: 10px; font-size: 15px; letter-spacing: 0.08em; }
+  h3 { font-family: var(--display); font-size: 15.5px; font-weight: 600; color: var(--accent-ink); margin: 18px 0 8px; }
+  p { margin-bottom: 10px; max-width: 88ch; }
+  ul, ol { margin: 0 0 12px 22px; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; border: 1px solid var(--hair-soft); }
+  .callout { border-left: 3px solid var(--accent); background: var(--hair-soft); padding: 10px 16px; border-radius: 0 6px 6px 0; margin: 12px 0 16px; max-width: 90ch; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-bg); }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 18px; font-size: 13.5px; }
+  th, td { border: 1px solid var(--hair); padding: 7px 11px; text-align: left; vertical-align: top; }
+  th { font-family: var(--display); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--dim); background: var(--hair-soft); }
+  .badge { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 9px; border-radius: 10px; border: 1px solid var(--hair); color: var(--dim); margin-left: 6px; white-space: nowrap; }
+  .badge.lv { color: var(--accent-ink); border-color: var(--accent); }
+  .badge.skip { color: var(--warn); border-color: var(--warn); }
+  .case { border: 1px solid var(--hair); border-radius: 8px; margin: 0 0 14px; overflow: hidden; }
+  .case .hd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; padding: 10px 16px; background: var(--hair-soft); border-bottom: 1px solid var(--hair-soft); }
+  .case .cid { font-family: var(--mono); font-weight: 700; color: var(--accent); font-size: 14.5px; margin-right: 10px; }
+  .case .ttl { font-weight: 600; font-size: 14.5px; flex: 1; min-width: 40%; }
+  .case .bd { padding: 12px 16px 14px; }
+  .case .bd p { margin-bottom: 8px; }
+  ul.four { list-style: none; margin: 8px 0 0 0; border-top: 1px dashed var(--hair); padding-top: 8px; }
+  ul.four li { font-size: 13px; color: var(--dim); margin-bottom: 4px; padding-left: 14px; text-indent: -14px; }
+  ul.four li b { color: var(--ink); }
+  .hint { color: var(--faint); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <div class="kicker">Real-machine slice plan · RM08</div>
+  <h1>RM08 WebUI 读侧 · 真机实测分步计划</h1>
+  <p class="lede">WebUI 读侧数据面: 轮询的服务端契约(合并端点/rid 门控)、增量 delta 协商归约、视图 payload 收敛、大库首帧、详情抽屉四端点、状态栏 totals 数据面(走查迁出)、SSE 推送通道、error_reason 载荷。本计划只做排期准备(定片/漂移体检/glob 自检/环境自检/用例设计), 不含执行; 执行按本计划逐条跑, 三态记账。<b>拍板口径: 观感/跟手性/视觉等 L0 人工目视项一律 BLOCKED, 解锁=用户目视 —— 本片可测面 = 读侧数据面</b>。</p>
+  <div class="meta-row">
+    <div class="item"><div class="k">stamp</div><div class="v">26-10-31-1754</div></div>
+    <div class="item"><div class="k">片</div><div class="v">RM08(常驻锚 §03)</div></div>
+    <div class="item"><div class="k">预算</div><div class="v">0.5 次(半天)</div></div>
+    <div class="item"><div class="k">用例</div><div class="v">8 条 · L2×7 / L3×1</div></div>
+    <div class="item"><div class="k">种子层</div><div class="v">L0 真实种子(只读) + L1 假种子 + RM08-06 用 L2 互传 · 零真实种子活跃</div></div>
+    <div class="item"><div class="k">漂移体检</div><div class="v">首轮, 无漂移面</div></div>
+    <div class="item"><div class="k">驱动</div><div class="v">dev.webui 安全模式(§2.4)</div></div>
+  </div>
+
+  <section id="s1">
+    <h2><span class="no">01</span>开工自检(会话同步 + 漂移体检 + 环境自检 + glob 自检 + 驱动形态)</h2>
+    <h3>会话同步(2026-10-31 17:47 实测)</h3>
+    <p><code>commands run my-commit-flow.sync</code> <b>失败</b>: 「拿不到远端 origin/real/rm02-rm10 (离线?)」。核验: <code>git ls-remote --heads origin real/rm02-rm10</code> 空 —— Gitee 上<b>不存在</b>该分支(本工作分支未推远端), 属「无远端分支可对」非落后(RM04/RM03/RM06 先例)。本轮为本地排期准备(计划 + 锚件 glob 修正 + 迁出标注), 产出本地 commit 不推送。</p>
+    <h3>漂移体检(§07)</h3>
+    <p><b>RM08 无基线 commit(锚件 §07 该行为「—/待排期」)→ 首轮, 无漂移面</b>。本轮实测完成后把实测时刻 HEAD 记进切片与锚件 §07。</p>
+    <h3>环境自检(<code>commands run real.guard</code>, 2026-10-31 17:54 实测)</h3>
+    <p><code>[ok] 36595 pid=41868 vv5.2.3 connected 真实种子 8 个, 已全部暂停</code><br>
+       <code>[ok] 36596 pid=39300 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></p>
+    <p>guard 绿(<code>firewalled</code> 按 §2.1 通过)。真实种子全程暂停, 约束 2 对本片全部用例天然成立: 读侧判据全部落在<b>只读端点</b> + real-fake 假种子 + L2 互传假种子(假种子不受约束 2, §01 注)上, <b>零真实种子活跃、零外连</b>(announce 一律死端口 <code>http://&lt;本机局域网IP&gt;:1/announce</code> 或纯本地无 announce, §2.6/§2.9)。</p>
+    <h3>glob 自检(规程 §05 规则 8, 2026-10-31 17:52 实测)</h3>
+    <p>锚件 §03 RM08 行原 7 条 glob <b>全部漏 <code>src/auto_qb/</code> 前缀</b>(RM01–RM09 同款缺陷<b>第九次复发</b>; 原样 pathspec 命中 0); 且裸名 <code>events.py</code> 有<b>歧义命中两处</b>: <code>src/auto_qb/hr/events.py</code>(HR 事件, 属 RM06 面)与 <code>src/auto_qb/webui/server/routes/events.py</code>(SSE 路由, 本片面)—— 修正时按读侧归属写全路径消歧。已按规则 8 修正为本行现值(全前缀 + events.py 全路径)。补正后 <code>git ls-files</code> 实测命中 <b>94 个文件</b>: 产品侧 py 6(<code>views.py</code> 1163 行 · <code>runtime.py</code> 1688 行 · <code>routes/state.py</code> 153 · <code>routes/torrent_detail.py</code> 233 · <code>routes/sites.py</code> 59 · <code>routes/events.py</code> 81)+ <code>static/shared/**</code> 88 件(js/css/tpl/vendor/png), 全属 WebUI 读侧, 无混入大件, 片边界不糊, 不拆不并(规则 1/2 不触发)。锚件 §08 已记账(17:54 li)。</p>
+    <h3>驱动形态(读侧怎么驱动)</h3>
+    <p><b>dev.webui 安全模式(§2.4)为本片首选驱动</b>: <code>scripts/dev_webui.py</code> 生成最小配置(interval=86400S 任务线全关 · sync_interval=1.5S 同步线照常 · 规则集零段 · grouping 只读归组 enabled · missing_tag 空 · web.enabled + <code>skip_local_verify: true</code> 回环免密钥, token 落 <code>data_dir/web.token</code>)连真机 qB。用例经 Popen 起它(--qb-port 36596 为主实例, 空库草稿本; --data-dir 独立临时目录), 等 web 端口听后<b>直接 HTTP 拉视图端点</b>, 逐条「端点载荷 + qB API/文件系统对照」两级断言(§09 只断言外部可观测)。要点:</p>
+    <ul>
+      <li><b>为什么不用完整主程序形态</b>(RM07/RM09 基座): 本片无一条判据依赖命令线/任务线 —— 命令消费、回执、乐观真值已由 RM09 全链路覆盖(引用不复测); 读侧的视图发布在 <b>Web 请求路径</b>上(<code>ensure_state</code> → 脏则 <code>_publish_locked</code>, runtime.py:1541-1544), dev.webui 的 1.5S 同步线 + 请求驱动即口径最全, 且任务线全关恰恰排除了规则/维护写的干扰面。</li>
+      <li><b>dev.webui 仍会真写</b>(§2.4): WebUI 上点暂停就是真暂停 —— 本片用例不点 UI、不发产品写命令, 仅有的 qB 侧变更(暂停假种子/删文件 recheck)都经 <b>qB API 直调</b>且只对 real-fake 种子。</li>
+      <li><b>约束 1/2 照样适用</b>: 只连 36595/36596; RM08-06 的 L2 互传用 RM00 已验证的 36595↔36596 假种子互传(零外网), 互传期间真实种子保持 paused(guard 看门狗在线)。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>验证面 → 代码映射(grep 实测, 未整读; 文件:行号为 2026-10-31 HEAD <code>e9deb4c2</code> 锚点)</h2>
+    <table>
+      <tr><th>验证面</th><th>代码锚点</th><th>外部可观测断言面</th></tr>
+      <tr>
+        <td>轮询分档(服务端契约面)</td>
+        <td><code>GET /api/state</code>(state.py:48, 合并端点: status+视图数组单请求) · <code>ensure_state</code>(runtime.py:1532, rid 版本门控: 一致即零回传) · <code>is_active</code>/WEB_VIEW_TTL=10s(runtime.py:439/58) · sync_interval=1.5S 下界(qbmanager.py:751); <b>前端分档常量</b> basePollMs ≤1000→1.5s / &gt;1000→2s / &gt;3000→3s(<code>static/shared/polling.js:258-270</code>)</td>
+        <td>rid 匹配 → 仅 <code>{rid, updated:false}</code> 零数组(响应体趋近零); rid 不匹配 → 全量+updated:true; status 段 traffic/server/totals <b>恒回传</b>不受 rid 门控(state.py:63-101)。前端分档节奏与退避 = e2e/views.spec.mjs 已断言, <b>引用不复测</b>; 本片只验服务端下界契约(1.5S sync 节拍下零回传拍形态)</td>
+      </tr>
+      <tr>
+        <td>增量 delta</td>
+        <td><code>api_state(delta=1)</code> 协商参数(state.py:49, P-01 定案) · <code>_DELTA_VIEWS={group,torrent,show}</code>(runtime.py:91) · <code>_reduce_delta</code>(runtime.py:1597, R3 窗外全量/R11 full 代断裂/R5 跨代让位) · 时间线 <code>_DELTA_TIMELINE_MAX=40</code> 代(runtime.py:87) · 行级脏登记 <code>note_error_reason_hashes</code>(runtime.py:478)</td>
+        <td>delta=1 首拍 full=true → 变更代回 <code>{rid, full:false, delta.upsert, removed}</code> 行级载荷(行内容=当前已发布视图); 未协商(无 delta=1)恒历史形状(无 full 键); 窗外(rid 缺省/0/未来/滑出 40 代)→ full=true; show 恒全量; rid==ver 零回传不受协商改变</td>
+      </tr>
+      <tr>
+        <td>视图 payload 收敛</td>
+        <td><code>VIEW_ARRAYS</code>(views.py:129: group=(groups,singles) · torrent=(torrents,) · show=(shows,groups,singles) — 追剧页必须连带成员索引, 否则永久空表) · 全量分支数组装配(runtime.py:1570-1580)</td>
+        <td>view=torrent 只含 torrents 键; view=group 含 groups+singles; view=show 三件套; 缺省/未知 view 回四份(保守默认); 字节数量级(torrent 视图 ≈ 全量四份的 1/4 量级); 与已测面切分: 前端消费侧(状态栏/追剧页修复)数据面落 RM08-06, 渲染面归目视</td>
+      </tr>
+      <tr>
+        <td>大库首帧与滚动数据面</td>
+        <td>首帧 = <code>rid=-1</code> 全量拍 · JSONResponse 快路径(state.py:97-104, 3000 种子 view=torrent 实测 189ms 基线) · 造数口径见 RM08-04(真实例 8 枚不够)</td>
+        <td>首帧端点耗时与响应字节(记实测数); 第二拍 rid 门控零回传耗时/字节; 大库下 totals 与行级求和仍一致(RM08-06 交叉)。滚动流畅度/行窗口化渲染 = e2e 与观感, 引用不复测</td>
+      </tr>
+      <tr>
+        <td>详情抽屉</td>
+        <td><code>torrent_detail.py</code>: <code>GET /api/torrents/{hash}</code>(:31, to_dict 全字段+site+HR 展示字段) · <code>/trackers</code>(:44, mask 先于缓存写入, 虚拟条目原样) · <code>/files</code>(:58) · <code>/peers</code>(:66); <code>_require_torrent</code> 未知 hash 4xx</td>
+        <td>detail 字段与 qB /torrents/info 同源一致(progress/state/save_path/name); trackers 含 ** [DHT] ** 类虚拟条目(§2.5)且真实条目 url 已 mask(原文不外发); files/peers 回读 200; 未知 hash 拒收</td>
+      </tr>
+      <tr>
+        <td>SSE 推送通道 + 只读辅助端点</td>
+        <td><code>events.py</code>: <code>POST /api/events/ticket</code>(:21, 一次性票据 30s TTL, 满额 503) · <code>GET /api/events</code>(:34, hello 帧 + SSE_KEEPALIVE_S=5s 心跳(runtime.py:68, 必须 &lt; WEB_VIEW_TTL 否则自锁) + touch 活跃标记); <code>sites.py</code>: <code>GET /api/sites/missing</code>(:29, 只读扫描, 断连 503 拒绝空扫描)</td>
+        <td>换票 → 连流收 hello; 空闲期 &lt;10s 内必有心跳帧(保活+活跃自证); 连流期间视图版本照常推进(与 RM08-01 交叉); 坏票/无票拒收; sites/missing 的 torrents/domains 计数与缺失域清单(测试配置 trackers 空时全部真实域为 missing)</td>
+      </tr>
+      <tr>
+        <td>状态栏 totals(走查迁出) + error_reason 载荷</td>
+        <td><code>_build_speed_totals</code>(views.py:764, store.by_hash 全量求和 dlspeed/upspeed, statusbar 修法 F1) · status.totals 恒回传(state.py:88-101, 不参与视图分片/rid 门控) · <code>_error_reason</code>(views.py:211: missingFiles→「文件丢失」; error→tracker 报错原文预取 <code>refresh_tracker_health</code> :304, 仅 Web 活跃时取 :979)</td>
+        <td>任意 view(尤其 view=torrent 无 groups 键)下 status.totals 恒在且 == 同载荷行级求和(同临界区发布, F2); 丢文件假种子 recheck 后行载荷 error_reason=="文件丢失" 且 delta 客户端本代即拿到(runtime.py:478 行级脏登记)。error 态原文分支 → 需造法, 跳过项</td>
+      </tr>
+    </table>
+    <div class="callout">
+      <b>与已测面的「同一件事不测三遍」切分(规程 §00)</b>: <b>写侧全链路</b>(命令回执/批量/组命令/配置落盘/keys/fs)已由 RM09 实测; <b>乐观 UI 服务端回执面</b>已由 RM09-01/03/04 覆盖; <b>WebUI 进程起停/token/端口</b>已由 RM01; <b>热重载/节拍/落盘</b>已由 RM02; <b>HR 取数通道</b>(hr.py 路由)已由 RM06 —— 均只引用不复测。本片<b>新增面</b>集中在: 读侧数据契约(rid/delta/VIEW_ARRAYS/恒回传段)、大库首帧外观数、详情抽屉与 SSE 读通道、走查项的迁出数据面(totals/error_reason)。
+    </div>
+    <h3>验证口径(种子层与幂等)</h3>
+    <ul>
+      <li><b>L1 假种子</b>(36596 草稿本): 默认无 announce 纯本地做种(stalledUP, §2.6); 需要变更信号时经 <b>qB API 直调暂停</b>(stoppedUP)—— delta 触发不依赖产品命令线。假种子一律 <code>real-fake</code> 标签。</li>
+      <li><b>L0 真实种子</b>(36595, 8 枚全程 paused): 只读对照用(RM08-05 detail/trackers mask 用真实 tracker 域名最有说服力; RM08-03 字节比可两实例各测一轮)。<b>绝不写真实种子</b>。</li>
+      <li><b>幂等(§09)</b>: 每条用例开跑先清自己造的种子(<code>real.seed.rm --all</code> 口径: 按 real-fake 标签), 收尾删净; 大库注入的 1200+ 枚零数据种子按同标签批量删除(qB /torrents/delete hashes 批量, delete_files=false —— 本就无数据)。</li>
+      <li><b>零外连兜底</b>: 每条收尾核外连计数 0; 假种子 announce 一律死端口或不带; RM08-06 互传两端 announce 只打本地伪 tracker(RM00 lib/tracker.py)。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>① 本片用例清单(8 条, docstring 首行 <code>[RM08-nn] …</code>)</h2>
+    <p>位置 <code>tests-real/rm08_webui_read/</code>, 跑法 <code>commands run real.suite -- --slice RM08 --yes</code>(<code>-n 0</code>; 文件锁防端口抢, rm01 先例)。共享基座: Popen 起 <code>scripts/dev_webui.py --qb-port 36596 --web-port &lt;探空段&gt; --data-dir &lt;临时&gt;</code>(§2.7 端口不复用口径), 等 web 端口听 + 首拍 200 才算起妥; 回环请求免 token(skip_local_verify); 各条独立起停收尾杀进程树(taskkill /F /T 口径, §2.7)。</p>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-01</span><span class="ttl">合并端点契约与 rid 门控: 单请求 status+视图 / 零回传拍 / 恒回传段</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×3</span></div>
+      <div class="bd"><p>3 枚假种子在场: ①<code>GET /api/state?view=torrent</code> 首拍(rid 缺省)→ 回 status(含 traffic/server/totals 段)+torrents 数组+rid+updated:true; ②原 rid 二连拍 → 仅 <code>{rid, updated:false}</code>, <b>无任何数组键</b>, 响应字节数 &lt; 首拍 5%; ③qB API 直调暂停 1 枚 → 等 sync 拍 → 同 rid 拍回 updated:true(版本推进); ④status 段恒回传验证: 零回传拍也不丢 traffic/server/totals 键(state.py:63-101 口径——注意零回传分支只回 {rid,updated}, 恒回传段在 updated 拍必在; 断言按 ensure_state 实际分支形态, 执行时以实况为准记录)。</p>
+      <ul class="four">
+        <li><b>前置</b>: dev.webui 基座连 36596 + 3 假种子; 首拍字节快照。</li>
+        <li><b>副作用</b>: 1 假种子被 qB API 暂停一次(可恢复)。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>; 停 dev.webui 删临时 data_dir。</li>
+        <li><b>失败判据</b>: rid 匹配仍回全量(门控破, 大库下白耗带宽——高优 FAIL); updated 拍缺 status 恒回传段(状态栏/连接态失灵根因); 零回传拍字节与全量同量级(门控形同虚设)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-02</span><span class="ttl">delta 增量协商归约: full/增量/窗外/未协商/show 恒全量 五对照</span><span class="badge lv">L3(负向对照内建)</span><span class="badge">L1 假种子 ×3</span></div>
+      <div class="bd"><p>同一会话五态各断: ①<code>GET /api/state?rid=-1&amp;view=torrent&amp;delta=1</code> → 首拍 <code>full:true</code> 全量; ②记录 rid 后 qB API 暂停 1 枚 → delta=1 复拍 → <code>full:false</code> + <code>delta.upsert</code> 恰含变更行(行内容==当前全量视图同 hash 行, R1 现取口径)+ <b>full 拍字节 ≫ 增量拍字节</b>; ③持陈旧 rid(手工回退 &lt; 时间线最旧, 如 rid=1 或进程内已滑出窗口的值)复拍 → <code>full:true</code>(R3/R10); ④<b>未协商对照</b>: 同请求去掉 delta=1 → 历史形状(无 full 键、数组全量)—— 未升级前端逐字节兼容闸(P-01); ⑤<code>view=show&amp;delta=1</code> → 恒全量(show ∉ _DELTA_VIEWS, 仍标 full:true)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 3 假种子; 时间线窗口内至少触发 1 代变更。</li>
+        <li><b>副作用</b>: 假种子状态切换 1-2 次。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>; 停基座。</li>
+        <li><b>失败判据</b>: 未协商请求也回了 full/delta 键(协商闸破——老前端把增量当全量吃会四数组 undefined 白屏, 高优 FAIL); 增量载荷行内容与当前视图不一致(R1 现取破); 变更行缺失或 removed/upsert 串位(R5 让位破); show 视图回了增量(启用矩阵破)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-03</span><span class="ttl">VIEW_ARRAYS payload 收敛: 四视图分片 + 缺省回退 + 字节量级</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×3</span></div>
+      <div class="bd"><p>3 枚未归组假种子(trackers 空, 全落 singles): ①<code>view=torrent</code> → 响应<b>只含</b> torrents 数组(无 groups/singles/shows 键), len(torrents)==3; ②<code>view=group</code> → 含 groups+singles 无 torrents/shows, len(singles)==3(groups 空属预期——归组管线不归本片面); ③<code>view=show</code> → shows+groups+singles 三件套(VIEW_ARRAYS 注释: 缺成员索引=追剧页永久空表, BUG-8 同款); ④<b>缺省/未知 view</b>(如 view=bogus)→ 四份全回(保守默认口径); ⑤字节量级: view=torrent 全量拍字节数 &lt; 无 view 全量拍的 40%(≈1/4 口径的宽松界)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 3 假种子(未归组态)。</li>
+        <li><b>副作用</b>: 无(纯只读)。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>; 停基座。</li>
+        <li><b>失败判据</b>: 分片键多回(收敛破——大库带宽/解析白耗)或少回(消费端拿 undefined, 高优 FAIL); 未知 view 报 500 而非回退四份(保守默认破); 字节比反而更大(分片失效)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-04</span><span class="ttl">大库首帧与滚动数据面: 1200 枚注入下的首拍耗时/字节 + 零回传拍</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1200(零数据)</span></div>
+      <div class="bd"><p><b>造数口径(真实例种子量不够, 预先写死)</b>: 用例内 bencode 循环造 1200 枚<b>零数据</b> .torrent(每枚唯一 infohash: 随机内容键; KB 级元数据, 不落数据盘, §2.6「--no-data」语义; <b>不带 announce</b>——读侧不需要归组管线), 经 qB API(<code>requests.Session</code> 复用连接)<b>直加 36596</b>(tags=real-fake), 记注入耗时(预期分钟级; qB 5.2 重复 infohash 409 时跳过该枚重造, §2.9); 等 sync 拍让 36596 flat 视图吞满(种子数==1200+基线)。断言: ①首帧 <code>rid=-1&amp;view=torrent</code> 端点耗时(上界 2s 宽松界防环境抖动——历史桩基线 3000 种子 189ms, 本用例 1200 枚应显著低于上界; <b>实测数如实记录</b>供回归比对)与响应字节; ②第二拍原 rid → 零回传, 耗时/字节趋近零; ③行数==注入数。可选加压档(执行轮时间余量触发, 不占必跑): 注至 3200 枚(前端 &gt;3000 分档边界之上)重复①②。滚动流畅度/行窗口化渲染 = 前端面, 引用 e2e 与目视不复测。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座连 36596(空库起步); 磁盘余量核对(1200 枚零数据只占元数据)。</li>
+        <li><b>副作用</b>: 36596 新增 1200+ 枚种子条目(qB 侧, 无数据文件)。</li>
+        <li><b>回滚</b>: 按 real-fake 标签批量 <code>/torrents/delete</code>(delete_files=false)删净 + <code>real.seed.rm --all</code> 复核 + guard 复跑。</li>
+        <li><b>失败判据</b>: 首帧耗时超上界(payload 收敛/JSONResponse 快路径回归——对照 189ms 基线定性); 零回传拍在大库下失效(RM08-01 门控面在大库退化, 高优 FAIL); 行数≠注入数(sync 吞吐或 409 处理破); 注入后 qB connection_status 变 disconnected(实例压垮——环境问题记 BLOCKED 不算产品缺陷)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-05</span><span class="ttl">详情抽屉四端点: detail 同源一致 + trackers mask + files/peers + 未知 hash 负向</span><span class="badge lv">L2</span><span class="badge">L0 真实种子 ×1(只读) + L1 假种子 ×1</span></div>
+      <div class="bd"><p>真实种子(36595, paused, 只读)+ 假种子(36596)各走一遍: ①<code>GET /api/torrents/{hash}</code> → torrent 对象 progress/state/save_path/name 与 qB <code>/api/v2/torrents/info</code> 同 hash 行一致(同源口径), 含 site 与 HR 展示字段键; ②<code>/trackers</code> → 含 <code>** [DHT] **</code> 类虚拟条目(§2.5 口径), <b>真实条目 url 已 mask</b>(≠原始 announce 原文——mask 先于缓存, plan 26-10-07-0055 S3), 私有种子 msg=「这是私有 torrent」不断言 status; ③<code>/files</code> <code>/peers</code> → 200 且结构合法(文件名单/qB 透传); ④负向: 未知 hash → 4xx(<code>_require_torrent</code>), 不是 500。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座; 36595 有真实种子(L0, guard 已 pause 全部), 36596 有 1 假种子。</li>
+        <li><b>副作用</b>: 无(纯只读)。</li>
+        <li><b>回滚</b>: 删假种子; 真实种子零触碰。</li>
+        <li><b>失败判据</b>: detail 字段与 qB 回读不一致(同源破——抽屉显示错数, 高优 FAIL); tracker 原文外发(mask 破, 域名泄漏面); 虚拟条目被当真实站点(assert 口径错, 用例侧); 未知 hash 500(错误处理面破)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-06</span><span class="ttl">状态栏 totals 修后复验(走查迁出): status.totals 恒回传 == 同载荷行级求和(非零速)</span><span class="badge lv">L2</span><span class="badge">L2 互传假种子 ×1(36595→36596)</span></div>
+      <div class="bd"><p>RM00 L2 口径: 36595 做种 + 36596 下载同枚构造种子(伪 tracker 回对端, 全本机零外网), dev.webui 连 36596。传输进行中(dlspeed&gt;0 稳态): ①<code>GET /api/state?view=torrent</code> → status.totals 键<b>存在</b>(种子页无 groups 键也恒回传——回潮探针, issue 26-09-20-1646 修法 F3); ②<b>同载荷一致性</b>: totals.dlspeed/upspeed == 该响应 torrents 数组各行 dlspeed/upspeed 之和(同临界区发布, views.py:764 求和源==store.by_hash==flat 源, 修法 F2; 此前桩实测漏 singles 少算 88.7% 的教训——合计必须含未归组); ③连续 3 拍复验(总量未知档 basePollMs 2s 节奏下取样)均一致(快照滞后不适用于同载荷——若不一致即发布口径分叉, 高优 FAIL); ④传输停止后 totals 回零速。状态栏<b>显示</b>本身 = 目视(留用户清单 #5)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 双实例基座 + L2 互传就位(RM00 fixture); 36596 侧 dev.webui 在跑。</li>
+        <li><b>副作用</b>: 两实例新增 1 枚互传假种子 + 数据文件(R:/qbt-fake 或 .work); 传输期间两实例该种子活跃(假种子, 不违约束 2)。</li>
+        <li><b>回滚</b>: 双侧 <code>real.seed.rm --all</code>(strip 口径防双标签失明, §2.9)+ 清落点 + 停伪 tracker。</li>
+        <li><b>失败判据</b>: view=torrent 下 totals 键缺失(修复回潮——状态栏恒 0 根因复发, 高优 FAIL); totals ≠ 行级求和(求和源分叉/漏 singles); 恒 0 而行速度非零(发布时序倒退——ensure_state 先后序回归)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-07</span><span class="ttl">SSE 推送通道与只读辅助端点: ticket 换票/hello/心跳 &lt;TTL + sites/missing 扫描</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1</span></div>
+      <div class="bd"><p>①<code>POST /api/events/ticket</code> → 回 {ticket, ttl}(30s); ②<code>GET /api/events?ticket=…</code>(流式读)→ 首帧 <code>event: hello</code>; ③空闲期持续读 ≥12s(WEB_VIEW_TTL=10s)→ 至少收到 1 条 <code>: keepalive</code>(SSE_KEEPALIVE_S=5s; 心跳同时 touch 自证活跃——间隔&lt;TTL 防自锁的契约面); ④连流期间触发一次变更(暂停假种子)→ 流上收到事件帧(命令回执/视图版本类信号)或复拍视图版本推进(二选一按实况, 推送面以「连接不饿死」为判据); ⑤负向: 无票/坏票/过期票连流 → 拒收(4xx), 不发 hello; ⑥<code>GET /api/sites/missing</code> → torrents 计数==实例种子数, 测试配置 trackers 空时 sites 含假种子 announce 域名(或真实种子域, 按 36596 空库口径断言结构与计数即可)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 假种子; 流式客户端 12s+ 读超时设置。</li>
+        <li><b>副作用</b>: 1 假种子状态切换; 1 条 SSE 连接(收尾关)。</li>
+        <li><b>回滚</b>: <code>real.seed.rm --all</code>; 停基座。</li>
+        <li><b>失败判据</b>: 12s 内零心跳帧(keepalive 破——连着的客户端被判不活跃 → 主循环停组装视图 → 自锁, 高优 FAIL); hello 前泄漏载荷(「只推信号与小真值, 绝不推全量」口径破); 坏票连流 200(鉴权闸破); sites/missing 在断连时回空扫描而非 503(空扫描冒充「没有缺失」口径破)。</li>
+      </ul></div></div>
+
+    <div class="case"><div class="hd"><span class="cid">RM08-08</span><span class="ttl">error_reason 数据面(missingFiles 分支, TASK015 姊妹): 行载荷「文件丢失」+ 行级 delta 即达</span><span class="badge lv">L2</span><span class="badge">L1 假种子 ×1(带数据)</span></div>
+      <div class="bd"><p>TASK015 走查项的数据面分支迁移(error 态原文分支不可造, 见 §05): 加 1 枚<b>带数据</b>假种子(256K, stalledUP)→ 记行载荷 error_reason==""(健康态空串口径)→ <b>qB API 删其数据文件 + recheck</b>(§2.6: 要测「文件被删」须真删文件; --no-data 造不出)→ 等 sync 拍 → 行 state 变 missingFiles 且 <code>error_reason=="文件丢失"</code>(views.py:214 状态即原因分支); <b>delta 即达</b>: delta=1 客户本代复拍 → 该行出现在 delta.upsert(runtime.py:478 行级脏登记, error_reason/site_alert 共用登记口); 状态列显示原文 = 目视(留用户清单 #7 姊妹条)。</p>
+      <ul class="four">
+        <li><b>前置</b>: 基座 + 1 带数据假种子(落点记录); 行载荷健康态基线。</li>
+        <li><b>副作用</b>: 假种子数据文件被删 + recheck 一次(qB 侧)。</li>
+        <li><b>回滚</b>: <code>real.seed.rm</code>(连数据口径此时为残缺态, 直接删条目)+ 清落点残留。</li>
+        <li><b>失败判据</b>: missingFiles 行 error_reason 非空串非「文件丢失」(取数单点分叉——前端不得按 state 猜原因的约定破); delta 客户下一拍拿不到新值(行级脏登记漏——增量客户端冻结在旧值, RM05 相对时间冻结同族坑); 健康态行带非空 error_reason(误报)。</li>
+      </ul></div></div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>② 档位与升档(规程 §08 硬要求)</h2>
+    <p>首轮全量建档, 目标分布 <code>0/0/7/1</code>(L2×7: 01/03/04/05/06/07/08; L3×1: 02——负向对照内建: 未协商对照/窗外回落/show 矩阵外三路红验)。读侧天然少 L3: 数据契约的「负向」多为协商闸与门控回落, 已集中在 RM08-02; RM08-05 的未知 hash 负向为用例内建子断言不计档。</p>
+    <p><b>本轮升档</b>: manual-walkthrough「WEBUI 状态栏上传/下载速度恒为 0」原是 <b>L0 目视复验条目</b>, 本片把其<b>数据面</b>(status.totals 恒回传 + 与行级求和同载荷一致)迁出落 <b>RM08-06</b> 用 L2 互传非零速实测——<b>L0→L2 迁出即升档</b>, 满足「每轮至少 1 条升一档」硬要求。次升档: TASK015 姊妹分支(missingFiles 的 error_reason 载荷)同为目视条目数据面迁出, 落 RM08-08(L0→L2)。</p>
+    <p><b>备选升档(执行轮余量触发, 不占硬要求)</b>: RM08-04 的 3200 枚加压档跑通并记录实测数后, 可将耗时断言从宽松界收紧为实测数的固定倍数界(升 L3 需补负向——如人为放大 payload 的对照, 若不可行则维持 L2 如实记录)。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>③ 跳过项与解锁条件(含「留给用户目视清单」汇总)</h2>
+    <h3>约束/边界跳过项(用例级)</h3>
+    <table>
+      <tr><th>条目</th><th>跳过原因</th><th>解锁条件</th></tr>
+      <tr>
+        <td><b>TASK015 error 态原文分支</b>: error 态种子状态列显示 tracker 原文(<code>rec.tracker_error_msg</code> 预取面)</td>
+        <td><b>需 error 态种子</b>——missingFiles 可造(删文件+recheck), 但 libtorrent <code>error</code> 态无已验证造法(死端口 announce 只进 tracker 状态不进种子 error; --no-data 停 stalledDL 不进 missingFiles, §2.6)</td>
+        <td><b>error 态种子造法</b>(或自然出现时抓取真机语料); 造法定后按 RM08-08 同款口径补断言(行载荷 error_reason==tracker 原文)</td>
+      </tr>
+      <tr>
+        <td><b>前端轮询分档常量与失败退避</b>(basePollMs 1.5/2/3s、pollFails 翻倍上限 15s)</td>
+        <td>浏览器 JS 行为, e2e/views.spec.mjs 已有分档断言(polling.js:253 注释自证)——「同一件事不测三遍」</td>
+        <td>—(引用 e2e; 若 e2e 覆盖被移除则在 e2e 轨补, 不进真机轨)</td>
+      </tr>
+      <tr>
+        <td><b>滚动流畅度/行窗口化渲染/切视图跟手</b>(renderMs&gt;50ms console 留痕面)</td>
+        <td>渲染与体感 = 观感; 真机轨按 §00 准入只收数据面, 体感判据只有人眼能做</td>
+        <td><b>用户真机目视</b>(目视清单 #8/#9); RM08-04 的耗时/字节实测数可作体感争议时的旁证</td>
+      </tr>
+      <tr>
+        <td><b>[需活跃种子] 条目</b>: <b>无</b></td>
+        <td>RM08-06 的非零速用 L2 互传<b>假种子</b>(假种子不受约束 2, §01 注); 真实种子全程 paused 只读</td>
+        <td>—</td>
+      </tr>
+    </table>
+    <h3>留给用户目视清单(BLOCKED 汇总, 14 条——目视时逐条勾; 对应 manual-walkthrough 原条目不迁出)</h3>
+    <ol>
+      <li><b>辅种组整组暂停行色</b>(4019a57): 右键整组暂停后组行一直灰、不闪做种绿(若仍闪, 记 console <code>[perf] 命令 … via=</code> 行)。</li>
+      <li><b>追剧页「打开目标文件夹」</b>(c888fba): 剧→集→种子三级右键各点一次, 应弹出对的目标文件夹; 顺带确认整剧开始/暂停/删除已恢复。</li>
+      <li><b>设置页刷新保持位置</b>(2026-09-25): 进设置页开任一分区按 F5 仍停原分区; 关浏览器重开同址仍停设置页原分区; 顶栏切页正常回落(注意走查条内注明的「浏览器清 Cookie 例外」不是复发)。</li>
+      <li><b>种子页筛选器</b>(4019a57①): 点标签/分类/站点/路径弹层直接有选项且计数=种子数(辅种页口径=组数属预期); 弹层不出空「暂无数据」。</li>
+      <li><b>状态栏速度显示复验</b>(26-09-20-1646 视觉半边): 状态栏上下行速度数字非恒 0、与传输实况一致(数据面已由 RM08-06 迁出实测; 目视看显示与跟手)。</li>
+      <li><b>状态栏「今日流量」视觉</b>(94c6857): 双色可分、箭头与数字间距、点速度区整组可弹限速浮层、五主题下 lime 历史图标协调。</li>
+      <li><b>TASK015 状态列视觉</b>(9723a76): 错误态种子状态列显示 tracker 原文而非笼统「错误」(姊妹: RM08-08 已验 missingFiles 行「文件丢失」载荷; 本条看渲染, 且需 error 态种子在场——与 §05 造法解锁同源)。</li>
+      <li><b>热路径提速体感</b>: 3000+ 种子库下切视图/滚动「迟一拍」是否消失(数据面耗时已由 RM08-04 迁出)。</li>
+      <li><b>跟手性三波次</b>: 右键菜单响应 / 切视图首帧 / 3000+ 滚动流畅。</li>
+      <li><b>本轮新修 4 处顺带走查</b>: 刷新停追剧页正常显示(非永久空白)/ 右键复制磁力真能复制 / 整组·整集暂停行立即变灰(is-pending 半透明)/ 混合状态组颜色口径。</li>
+      <li><b>Console Hub 视觉 5 项</b>: 首页 9 卡 LED 三态与读数 / 块→行层级紧凑度与 <code>?</code> 浮窗就近弹出+Esc 关 / 危险档红色·重要档橙色静息描边 / 五主题(含 frost/golden 亮色)输入件无隐形过曝 / 站点·规则·限速专段切角小标签与档位格。</li>
+      <li><b>列设置与时间口径跨标签</b>: 双标签各改列(隐藏+拖宽)互不覆盖(11382ed+6c1b7f4)/ 四时间点列表头右键相对·绝对切换与跨标签同步(067bffd)。</li>
+      <li><b>列显示文案</b>: 最近活动相对时间文案(N分钟/月/年前, 哨兵-1 留白)/ 可用性列负数与暂停值隐藏(0 保留); <b>顺带确认</b>抽屉两处老口径(drawer.js:442 可用性 -1.00 / :488 绝对时间)是否要一起改(原条遗留待确认项)。</li>
+      <li><b>主循环×WebUI 解耦</b>(5691c6f)子项①③: 各视图照常刷新、切页无空白 / 关闭网页后主循环无 Web 开销(判据在 DEBUG 日志, INFO 级不可脚本断言——执行代理如开 DEBUG 可顺带辅证, 不立用例)。</li>
+    </ol>
+    <div class="callout warn">
+      <b>目视清单纪律(用户已拍板)</b>: 以上 14 条子代理<b>不代替人眼</b>, 一律 BLOCKED, 解锁=用户真机目视; manual-walkthrough.md 对应行<b>保持原样</b>(仅 #5/#7 加迁出注——数据面半边迁出), 清单整体<b>保持冻结</b>(未全部迁完, 不置 Superseded)。
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>④ 验收判据(什么算这片做完)</h2>
+    <ol>
+      <li><b>验证面全数有着落</b>: 轮询契约(01)· 增量 delta(02)· payload 收敛(03)· 大库首帧(04)· 详情抽屉(05)· SSE 与辅助端点(07)· totals 数据面(06)· error_reason 数据面(08)——每个面至少一条三态记账; glob 六产品文件全部有用例触达(static/shared 引用口径)。</li>
+      <li><b>L3 红验真跑过见红</b>(RM08-02 的未协商/窗外/show 三对照); 「同一件事不测三遍」兑现: 写侧全链路/热重载/HR 通道/e2e 分档断言零复测, 只引用。</li>
+      <li><b>两级断言形态成立</b>: 每条读侧用例都是「端点载荷 + qB API/文件系统/字节量对照」双证据, 不咬内部实现(§09); RM08-06 的同载荷一致性断言是「修复回潮探针」级红验。</li>
+      <li><b>观感面 BLOCKED 记账明确</b>: 「留给用户目视清单」14 条逐条可勾, 每条注明对应 walkthrough 原条目与迁出状态; 数据面/观感半边的切分与 §07 判定表一致。</li>
+      <li><b>零外连红线全程成立</b>: announce 死端口/伪 tracker 本机回环; 每条收尾外连计数 0; 真实种子全程 paused(guard 看门狗零违规)。</li>
+      <li><b>实例还原干净</b>: 1200+ 枚大库注入种子批量删净(real-fake 标签复核 0 残留), 互传种子双侧删净, 临时 data_dir/落点清空, guard 复跑绿。</li>
+      <li><b>记录闭环</b>: 切片落 <code>testing/real-baselines/&lt;stamp&gt;-real-RM08.md</code>(基线 commit=实测时刻 HEAD; RM08-04 的耗时/字节实测数记切片 §03), 锚件 §07 RM08 行同步; 新环境事实回写规程(候选新 §2.15「WebUI 读侧面的事实」)。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>manual-walkthrough 迁出判定(规程 §05 规则 9, RM08 片逐条)</h2>
+    <p>判定口径(拍板): <b>可脚本断言的数据面 → 列迁出清单; 纯观感/人眼/浏览器交互 → 不迁出</b>, 原文件标「留用户真机走查(挂 RM08 观感面)」或留原样, 汇入 §05 目视清单。<b>原文件本轮只加两处迁出注(#5 状态栏 totals、#8 TASK015 姊妹分支), 其余行不动, 清单保持冻结。</b></p>
+    <table>
+      <tr><th>条目</th><th>判定</th><th>依据</th></tr>
+      <tr>
+        <td>「WEBUI 状态栏速度恒 0 修后复验」(26-09-20-1646 / d53ea63)</td>
+        <td><b>✅ 数据面迁出 → RM08-06</b>(L0→L2 升档)</td>
+        <td>修法 F1-F4 的外部契约 = <code>status.totals</code> 恒回传且==行级求和(走查条自记复验方式就是「直接 curl 两视图比对」); 显示半边(数字跟手/恒 0 观感)留目视清单 #5。原行加迁出注</td>
+      </tr>
+      <tr>
+        <td>「TASK015 错误种子原因」(9723a76)</td>
+        <td><b>✅ 部分迁出 → RM08-08</b>(missingFiles 分支); <b>error 态原文分支不迁出</b>(BLOCKED)</td>
+        <td>missingFiles 造法确定(删文件+recheck), 载荷 error_reason 可脚本断言; error 态分支需造法(§05), 原行加迁出注并留解锁条件</td>
+      </tr>
+      <tr>
+        <td>「热路径提速(3000+ 种子)」</td>
+        <td><b>✅ 数据面半边迁出 → RM08-04</b>; 体感半边留目视(#8)</td>
+        <td>首帧耗时/响应字节/零回传拍可脚本实测(走查条判据本身引「服务端 189→23.5ms」数字面); 「滚动流畅/迟一拍观感」人眼判。原行不动(半边迁出在计划记账)</td>
+      </tr>
+      <tr>
+        <td>「辅种组整组暂停行色(修复验真)」(4019a57②)</td>
+        <td><b>❌ 不迁出, 留目视</b>(清单 #1)</td>
+        <td>RM09 已判: 判据是行色渲染时序, HTTP 观测不到 is-pending 切换; 写侧命令真作用已被 RM09-06 覆盖但不等价于本条判据</td>
+      </tr>
+      <tr>
+        <td>「追剧页打开目标文件夹」(c888fba)</td>
+        <td><b>❌ 不迁出, 留目视</b>(清单 #2)</td>
+        <td>RM09 已判: 三级点按流程 + Explorer 弹窗 = UI 交互; /api/open-path 参数校验面已归 RM09-09 口径</td>
+      </tr>
+      <tr>
+        <td>「设置页刷新保持位置」(2026-09-25)</td>
+        <td><b>❌ 不迁出, 留目视</b>(清单 #3)</td>
+        <td>判据 = F5/重开浏览器后的停留位置——落盘键(autoqb.ui.page/hub.view)在 localStorage(浏览器侧), 服务端 HTTP 面不可观测; 涉及刷新/重开两种浏览器行为</td>
+      </tr>
+      <tr>
+        <td>「种子页筛选器计数」(4019a57①)</td>
+        <td><b>❌ 不迁出, 留目视</b>(清单 #4)</td>
+        <td>「弹层直接有选项且计数=种子数」的判据落在弹层渲染; 其数据前置(行载荷含 tags/category 等分组字段)已由 RM08-03 payload 收敛覆盖, 服务端无独立计数端点, 无可迁出的独立断言面</td>
+      </tr>
+      <tr>
+        <td>「状态栏今日流量视觉」(94c6857) · 「Console Hub 视觉 5 项」 · 「跟手性三波次」 · 「本轮新修 4 处」 · 「列设置/时间口径跨标签」 · 「最近活动/可用性列文案」 · 「解耦子项①③」</td>
+        <td><b>❌ 全部不迁出, 留目视</b>(清单 #6/#9-#14)</td>
+        <td>纯视觉(双色/图标/主题/描边/文案)、浏览器交互(剪贴板/双标签/右键)、或判据在 DEBUG 日志的目视项; format.js 逻辑已有单测+冒烟覆盖, 真机轨不重复</td>
+      </tr>
+      <tr>
+        <td>「视图重建范围收口」(W6)</td>
+        <td><b>— 已闭环迁出</b>(语料回放, 原清单已划掉)</td>
+        <td>既有判定不动; RM08-01 的 rid 门控面是其后继机制面, 不构成重复</td>
+      </tr>
+    </table>
+  </section>
+
+  <section id="s8">
+    <h2><span class="no">08</span>给执行代理的风险点</h2>
+    <ol>
+      <li><b>dev.webui 是前台长跑进程</b>: 用例里 Popen 起它后必须等「web 端口听 + 首拍 200」才算基座就绪(端口探空裸 bind, §2.7; 端口不复用防 10048); 收尾 taskkill /F /T 杀整树(Popen.pid≠真 pid, §2.7), 临时 data_dir 随手删。</li>
+      <li><b>大库注入是本片最重的一条</b>(RM08-04): 1200 枚注入预计分钟级, 放在 <b>靠后执行</b>; 注入用 Session 复用连接别每枚新连; 409(重复 infohash)跳过重造不收养(§2.9 毒化教训); 清理必须批量 delete + real-fake 复核 0 残留——残留种子会毒化后续各片; 若 36596 被压到 disconnected 记 BLOCKED(环境), 不当产品缺陷。</li>
+      <li><b>RM08-06 依赖 RM00 L2 fixture</b>: 互传两端都在本机但 announce 用局域网 IP(不打 127.0.0.1, §2.3 警告); 伪 tracker 回包排除请求者(§2.3); 互传期间 guard 看门狗在跑——确认它认得 real-fake 豁免(guard.snapshot skip_tags), 否则会被当违规暂停。</li>
+      <li><b>零回传拍与恒回传段的分支形态</b>: ensure_state 的 rid 一致分支只回 {rid, updated}——status 恒回传段在<b>该分支不存在</b>; 断言按实况分支写(RM08-01④已在计划里标注「以实况为准记录」), 别想当然让零回传拍也带 totals——那是 updated 拍的口径。</li>
+      <li><b>delta 断言咬载荷形状不咬内部代次</b>: 增量拍必须在触发变更后等 sync 拍再取(快照滞后 1-2 拍族, §2.9/§2.14); 时间线窗口 40 代, 测试内变更次数远够, 但 rid 取值都来自<b>响应里的 rid</b>, 别自造; 未协商对照的判据是「无 full 键的数组全量」, 逐字节兼容别放宽。</li>
+      <li><b>真实种子只读红线</b>: RM08-05 在 36595 上只发 GET; detail/trackers 断言别对真实种子发任何写端点; 36596 是草稿本(0 真实种子), 写操作全落它。</li>
+      <li><b>qB 5.2 口径沿用</b>: 暂停=stoppedUP(/torrents/stop); 多标签「, 」连接 strip 口径(§2.9); 虚拟 tracker 条目按 url 以 http 开头过滤(§2.5)。</li>
+      <li><b>并行陷阱</b>: 直跑 pytest 会 -n 8 抢端口——走 real.suite(-n 0)或沿用 rm01 conftest 文件锁(§2.8); SSE 用例的流式读要设读超时, 别让 12s 心跳窗变成挂死。</li>
+      <li><b>「同一件事不测三遍」纪律</b>: 执行中发现某断言与 RM09/RM02/RM06 已测口径重叠, 砍断言改引用, 别扩成复测; 本片预算 0.5 次, 8 条是上限。</li>
+    </ol>
+  </section>
+
+  <p class="hint" style="margin-top:40px">排期准备件(拍板即冻结) · 锚件 issues/26-10-31-0641 §03/§08 · 规程 memory-bank/testing/real-machine.md · 生成: 2026-10-31 17:54, HEAD e9deb4c2</p>
+</div>
+</body>
+</html>
