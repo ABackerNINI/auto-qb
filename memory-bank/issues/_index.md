@@ -22,7 +22,7 @@
 | bug | 9 |
 | perf | 5 |
 | docs | 2 |
-| test | 20 |
+| test | 21 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红](26-11-02-0413-test-webui-relocate-free-space-race.html) — 断言比较两次独立 dis…
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低…
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl…
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…
