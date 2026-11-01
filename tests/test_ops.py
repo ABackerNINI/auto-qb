@@ -52,6 +52,28 @@
 - test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
 - test_skip_check_deferred_on_own_write: 跳检让位(A 系 26-10-13-0540 S2 D-2) —— 目标或其组刚被自有停/起(快照未回流) -> 让位不决策, 零副作用
 - test_skip_readd_carries_share_limits_mode: (qb-5-3, issue 26-10-31-0711-bug-skip-readd-share-limits-mode) 重加回传分享限制模式: 5.3 快照带 share_limits_mode -> camelCase kwarg 原样透传(防 MatchAny/MatchAll 被静默重置为 Default); 5.2 快照恒 None -> 传 None 库不发键(wire 不变)
+- test_guard_recheck_scope_single: recheck 作用域必须单 hash(rc164 高危 None=全库重校验)
+- test_guard_skip_delete_scope_keep_record: 删除作用域单 hash + keep_record 防线 + web 无参考告警不泄漏(fn3, 含 has_reference=False 面)
+- test_guard_skip_finish_start_scope: 自动开始作用域单 hash(fn18 高危 None=全库开始)
+- test_guard_skip_readd_args_pin: 重加参数直传 pin(torrent_files/save_path/category/tags/contentLayout/stopped/seq/f_l/limits, ac 簇 + pr14)
+- test_guard_backup_meta_pin: 备份元数据键面 pin(bt38-43) + 备份目录名 pin(bt9/10)
+- test_guard_recover_backup_readd_pin: 崩溃恢复重加参数 pin(rb34/37/40/41/42/43/45/46/47/48/49/51/52/53/54/64)
+- test_guard_fail_keeps_backup_when_gone: 种子不在时 _skip_fail 必须保留恢复凭据(fl6 中危 info(None) 销毁凭据)
+- test_guard_drive_deadline_fail: 驱动超时必须 _skip_fail(job, msg) 收敛且返回原 job(dr8/10/11/13 崩溃卡死簇 + dr9/12 文案)
+- test_guard_step_exception_settles: 相位步进异常必须收敛结算(st5/7/8 + na2/4/5 except 逃逸簇)
+- test_guard_skip_submit_defaults_conservative: 缺省参数保守默认(ss3 WEB 不自动开始/ss5 rule 不自动豁越 + origin 保存 ss14/ss22/sb42/sb49/jn11/jn20)
+- test_guard_skip_begin_idempotent: 同 hash 在途幂等闸(sb8 失效=旧 job 被覆盖)
+- test_guard_force_does_not_bypass_blocked: force 只豁越 force 闸, 后置 blocked 必须硬拒(sg10)
+- test_guard_recheck_delete_branch_requeues_origin: 轮询期种子删除 -> rule origin 重入队(rc53)
+- test_guard_sections_pin_ops: ops sections 认领段名 pin(sec1/sec2 双杀)
+- test_guard_on_sync_line_once: 启动对账一次性开关(os1/os3/os4)
+- test_guard_arbitration_scope_single: 启动超时仲裁直查作用域单 hash(rc112 他人校验态劫持)
+- test_guard_drive_backoff_sleeps: GONE 重试退避真睡(dr22/rt11/gn14) + 重试删除作用域/keep_record(gn18/19/20/21/22)
+- test_guard_appeared_retry_attempts: APPEARED 重试 attempts 活性(na7 置 None=重加成功反报失败)
+- test_guard_gates_ghost_member_inflight: G7 幽灵成员在途必须安全出判(gd103/114/115 崩溃簇)
+- test_guard_checking_evidence_none_tor_safe: _checking_evidence tor=None 安全返回(ce3)
+- test_guard_settle_keep_progress_requeue: DONE 终态 origin 带 keep_progress 重入队(tl63/65/66) + 有参考 rule 不误告警(sb40/jn7)
+- test_guard_recheck_success_clears_cooldown: 校验成功清除失败冷却(rc74/77/81/82)
 """
 import copy
 import inspect
@@ -1564,3 +1586,514 @@ def test_skip_check_precheck_readonly():
     # 种子零变动
     assert t.state == "pausedDL" and t.progress == 0.0 and t2.state == "pausedUP" and t2.progress == 1.0
     assert client.torrents["HASH123"] is t and client.torrents["HDONE"] is t2
+
+
+# ============================================================
+# W9a(R33) S5 补测守阵: 真洞钉面(高危全库面 + except 逃逸簇 + 恢复/重加参数面)
+# ============================================================
+
+
+def _wrap_client(client, method, sink):
+    """包装 client.<method> 把 kwargs 记进 sink(高危 None="all" 全库面/参数 pin 的判定源)"""
+    orig = getattr(client, method)
+
+    def rec(**kw):
+        sink.append(kw)
+        return orig(**kw)
+
+    setattr(client, method, rec)
+    return sink
+
+
+def test_guard_recheck_scope_single():
+    """守阵(W9a rc164 高危): recheck 提交作用域必须是单 hash —— torrents_recheck(None) 在
+    qbittorrent-api 语义 = 全库种子重校验(I/O 风暴/PT 在线率灾难)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client)
+    r = mgr.ctx.ops.recheck("HA", source="web")
+    assert r.is_ok, f"web 源提交应成功: {r}"
+    assert client.recheck_hashes_calls == ["HA"], \
+        f"recheck 作用域必须是单 hash(不得 None=全库重校验): {client.recheck_hashes_calls}"
+
+
+def test_guard_skip_delete_scope_keep_record():
+    """守阵(W9a gn18/gn20 高危 + gn19/gn21/gn22 + fn3): 跳检删除作用域必须是单 hash 且
+    keep_record=True(delete+add 同上报间隔防线); web 源无「无参考跳检」告警泄漏"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    dels = _wrap_client(client, "torrents_delete", [])
+    with capture_ops_logs() as logs:
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"暂停未完成应完成跳检: {r}"
+    assert len(dels) == 1, f"删除恰一次: {dels}"
+    assert dels[0]["torrent_hashes"] == "HASH123", f"删除作用域必须单 hash(不得 None=全库摘登记): {dels}"
+    assert mgr.store.get("HASH123") is t, "keep_record 语义: 删除不得摘快照记录(残缺 patch 防线)"
+    assert not any("无参考跳检" in m for m in logs), "web 源不得泄漏规则侧无参考告警(fn3)"
+    # fn3 反面: web + 无参考 也不得告警(and→or 放宽即红)
+    mgr2 = make_mgr(FakeConfig())
+    client2 = FakeClient()
+    mgr2.client = client2
+    t2 = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr2, [t2])
+    client2.torrents["HASH123"] = t2
+    with capture_ops_logs() as logs2:
+        r2 = mgr2.ctx.ops.skip_check("HASH123", source="web", has_reference=False)
+    assert r2.is_ok
+    assert not any("无参考跳检" in m for m in logs2), "web 源即使无参考也不得泄漏规则侧告警(fn3)"
+
+
+def test_guard_skip_finish_start_scope():
+    """守阵(W9a fn18 高危): auto_start 收尾的开始作用域必须是单 hash —— torrents_start(None)
+    = 全库种子自动开始"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    starts = []
+
+    def rec_start(torrent_hashes=None, **kw):
+        starts.append(torrent_hashes)
+        return client.torrents_start.__wrapped__(torrent_hashes=torrent_hashes, **
+                                                 kw) if hasattr(client.torrents_start, "__wrapped__") else None
+
+    orig_start = FakeClient.torrents_start
+    client.torrents_start = lambda torrent_hashes=None, **kw: (
+        starts.append(torrent_hashes), orig_start(client, torrent_hashes=torrent_hashes, **kw)
+    ) and None
+    r = mgr.ctx.ops.skip_check("HASH123", source="web", auto_start=True)
+    assert r.is_ok, f"跳检应完成: {r}"
+    assert starts == ["HASH123"], f"自动开始作用域必须单 hash(不得 None=全库开始): {starts}"
+
+
+def test_guard_skip_readd_args_pin():
+    """守阵(W9a ac 簇 + pr14/pr16): 重加参数直传 pin —— torrent_files/保存路径/分类/标签/
+    内容布局/停种/顺序下载/首末块/分享限制全部原样回传, 布局丢失=重加即 missingFiles"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(
+        hash="HASH123",
+        state="stoppedDL",
+        progress=0.0,
+        save_path="R:/Downloads",
+        content_path="R:/Downloads/Test",
+        category="cat",
+        tags="tag1,tag2",
+        seq_dl=True,
+        f_l_piece_prio=True,
+        inactive_seeding_time_limit=42,
+        share_limit_action="ModeX",
+    )
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    adds = _wrap_client(client, "torrents_add", [])
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"跳检应完成: {r}"
+    assert len(adds) == 1, f"重加恰一次: {adds}"
+    a = adds[0]
+    assert a["torrent_files"] == [b"TORRENT-DATA"], f"必须带导出的 .torrent 数据: {a.get('torrent_files')}"
+    assert a["save_path"] == "R:/Downloads", "save_path 丢失=数据位置错(缺文件态)"
+    assert a["category"] == "cat" and a["tags"] == "tag1,tag2", "分类/标签不得丢失"
+    assert a["contentLayout"] == "Original", "内容布局必须推断回传(丢失=重加即 missingFiles)"
+    assert a["is_stopped"] is True, "重加必须显式停种"
+    assert a["is_skip_checking"] is True
+    assert a["is_sequential_download"] is True and a["is_first_last_piece_priority"] is True, "顺序下载偏好不得重置"
+    assert a["share_limit_action"] == "ModeX" and a["inactive_seeding_time_limit"] == 42, "分享限制属性不得重置"
+
+
+def test_guard_backup_meta_pin():
+    """守阵(W9a bt38/bt39/bt40/bt41/bt42/bt43 + bt9/bt10): 备份元数据键面 pin —— 恢复凭据
+    的 save_path/category/tags 键名与备份目录名是崩溃恢复的契约面"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_mgr(FakeConfig())
+        ops = mgr.ctx.ops
+        tor = FakeTorrent(hash="HB1", save_path="R:/X", category="cat", tags="t1,t2")
+        path = ops._backup_torrent(tor, b"DATA")
+        assert "skip-check-backup" in path, f"备份必须落专用子目录: {path}"
+        with open(path, "rb") as f:
+            assert f.read() == b"DATA"
+        meta = mgr.state["skip_check_backup"]["HB1"]
+        assert meta["save_path"] == "R:/X", "恢复元数据必须含 save_path"
+        assert meta["category"] == "cat" and meta["tags"] == "t1,t2", "恢复元数据必须含 category/tags"
+        assert meta["path"] == path and os.path.exists(path)
+        assert os.path.basename(os.path.dirname(path)) == "skip-check-backup", \
+            f"备份必须落 state 同级的 skip-check-backup 专用目录: {path}"
+
+
+def test_guard_recover_backup_readd_pin():
+    """守阵(W9a rb34/37/40/41/42/43/45/46/47/48/49/51/52/53/54/64): 崩溃恢复重加必须以
+    二进制备份数据 + 原保存路径/分类/标签 + 停种 seed_mode 下发(任一丢失=恢复恒失败/数据位置错)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_mgr(FakeConfig())
+        client = FakeClient()
+        mgr.client = client
+        keep = FakeTorrent(hash="HKEEP", state="pausedUP", progress=1.0)
+        seed_store(mgr, [keep])
+        client.torrents["HKEEP"] = keep  # by_hash 非空才过 on_sync_line 首闸
+        path = os.path.join(td, "HMISSING.torrent")
+        with open(path, "wb") as f:
+            f.write(b"dummy-torrent")
+        mgr.state.setdefault("skip_check_backup", {})["HMISSING"] = {
+            "path": path,
+            "save_path": r"R:\Downloads",
+            "category": "cat",
+            "tags": "tg",
+            "ts": 0,
+        }
+        adds = _wrap_client(client, "torrents_add", [])
+        mgr.ctx.ops.on_sync_line(True)
+        assert len(adds) == 1, f"崩溃于删除后的种子必须用备份重加: {client.calls}"
+        a = adds[0]
+        assert a["torrent_files"] == [b"dummy-torrent"], f"必须以二进制 .torrent 重加(文本模式读=恒失败): {a.get('torrent_files')}"
+        assert a["save_path"] == r"R:\Downloads", "重加必须回原保存路径"
+        assert a["category"] == "cat" and a["tags"] == "tg", "分类/标签必须回传"
+        assert a["is_skip_checking"] is True, "恢复重加必须 seed_mode(跳过校验)"
+        assert a["is_stopped"] is True, "恢复重加必须停种"
+
+
+def test_guard_fail_keeps_backup_when_gone():
+    """守阵(W9a fl6): _skip_fail 时种子确实不在 -> 恢复凭据(备份)必须保留 ——
+    torrents_info(None)=全库表会把「不在」误判成「还在」, 备份被销毁"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    other = FakeTorrent(hash="HOTHER", state="pausedUP", progress=1.0)
+    client.torrents["HOTHER"] = other  # 干扰种子: info(None) 的全库面会被它劫持
+    t = FakeTorrent(hash="HG", state="pausedDL", progress=0.0)
+    seed_store(mgr, [t])  # 只进快照不进客户端(种子已不在)
+    ops = mgr.ctx.ops
+    job = ops._skip_job_new("HG", t, "web", False, True)
+    ops._backup_torrent(t, b"cred")
+    assert "HG" in mgr.state["skip_check_backup"]
+    ops._skip_fail(job, "重加种子失败: boom")
+    assert "HG" in mgr.state["skip_check_backup"], "种子不在时备份(唯一恢复凭据)必须保留"
+    assert os.path.exists(mgr.state["skip_check_backup"]["HG"]["path"]), "备份文件不得被清"
+    assert mgr.store.get("HG") is None, "假账快照记录应被撤掉"
+
+
+def test_guard_drive_deadline_fail(monkeypatch):
+    """守阵(W9a dr8/dr10/dr11/dr13 + dr9/dr12): 驱动超时必须以 _skip_fail(job, msg) 收敛且
+    返回原 job —— 参数错位/裸 return 都会崩在调用侧或让 job 不结算卡死(跳检闸恒闭至重启)"""
+    from auto_qb.core.modules import ops_mod as ops_m
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HD1", state="pausedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HD1"] = t
+    ops = mgr.ctx.ops
+    job = ops._skip_job_new("HD1", t, "web", False, True)
+    monkeypatch.setattr(ops_m, "SKIP_DRIVE_TIMEOUT", 0.05)
+    ops._skip_step = lambda j: None  # 卡死相位: 永不推进到终态
+    ret = ops._skip_drive(job)
+    assert ret is job, "必须返回原 job(裸 return None 会在调用侧崩)"
+    assert job.phase == ops_m.SKIP_PHASE_FAILED, "超时必须落到失败终态"
+    assert job.error == "跳检执行超时(客户端未在期限内响应), 备份保留", f"失败文案必须原样: {job.error!r}"
+
+
+def test_guard_step_exception_settles(monkeypatch):
+    """守阵(W9a st5/st7/st8 + na2/na4/na5): 相位步进异常必须经 _skip_fail(job, msg) 收敛结算
+    —— except 块内的参数变异会直接逃逸成上抛崩 + job 不结算卡死"""
+    from auto_qb.core.modules import ops_mod as ops_m
+
+    def boom(_):
+        raise RuntimeError("boom")
+
+    # st 簇: handler 主链异常 -> 外层 except 收敛
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HS", state="pausedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HS"] = t
+    ops = mgr.ctx.ops
+    job = ops._skip_job_new("HS", t, "web", False, True)
+    job.phase = ops_m.SKIP_PHASE_GONE
+    monkeypatch.setattr(ops, "_skip_step_gone", boom)
+    ops._skip_step(job)
+    assert job.settled and job.result is not None and job.result.is_failed, "handler 异常必须收敛成失败终态"
+    assert "跳检执行异常" in job.result.message, f"失败文案应点明异常: {job.result.message}"
+    assert "HS" not in ops._skip_jobs, "job 必须出账(不结算=跳检闸恒闭)"
+    # na 簇: 重加失败 -> 内层 except 收敛且文案点明「重加种子失败」
+    mgr2 = make_mgr(FakeConfig())
+    client2 = FakeClient()
+    mgr2.client = client2
+    client2.add_error = RuntimeError("boom")
+    t2 = FakeTorrent(hash="HN", state="stoppedDL", progress=0.0)
+    seed_store(mgr2, [t2])
+    client2.torrents["HN"] = t2
+    ops2 = mgr2.ctx.ops
+    job2 = ops2._skip_job_new("HN", t2, "web", False, True)
+    job2.phase = ops_m.SKIP_PHASE_ADDING
+    job2.data = b"x"
+    job2.backup = "p"
+    ops2._skip_step(job2)
+    assert job2.settled and "重加种子失败" in job2.result.message, \
+        f"重加失败文案必须点明(逃逸进外层 except 即红): {job2.result.message}"
+
+
+def test_guard_skip_submit_defaults_conservative():
+    """守阵(W9a ss3/ss5 + ss14/ss22/sb42/sb49/jn11/jn20): 缺省参数保守默认 —— WEB 批量不传
+    auto_start 终态不得自动开始; 规则源不传 force 不得自动豁越 cls=force 闸; rule origin 必须随 job 保存"""
+    # ss3: WEB 批量缺省不自动开始
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client)
+    r = mgr.ctx.ops.skip_submit("HA", source="web")
+    assert r.is_pending, f"异步入口应受理: {r}"
+    assert mgr.ctx.ops._skip_jobs["HA"].auto_start is False, "WEB 缺省不得自动开始(保守默认)"
+    # ss5: 规则源缺省 force=False -> G5(同 hash 校验在途, cls=force)必须真拦
+    mgr2 = make_mgr(FakeConfig())
+    client2 = FakeClient()
+    mgr2.client = client2
+    seed_paused(mgr2, client2)
+    seed_inflight(mgr2, "HA")
+    r2 = mgr2.ctx.ops.skip_submit("HA", source="rule")
+    assert r2.is_failed and "校验" in r2.message, f"规则源缺省不得豁越 G5 force 闸: {r2}"
+    # origin: 规则断点随 job 保存(终态重入队的数据源)
+    mgr3 = make_mgr(FakeConfig())
+    client3 = FakeClient()
+    mgr3.client = client3
+    seed_paused(mgr3, client3)
+    origin = Task("rule", "rule-test", hash="HA", store=mgr3.store, handler=lambda task, d: REQUEUE)
+    r3 = mgr3.ctx.ops.skip_submit("HA", source="rule", origin=origin)
+    assert r3.is_pending
+    assert mgr3.ctx.ops._skip_jobs["HA"].origin is origin, "rule origin 必须随 job 保存(丢=规则任务悬空)"
+
+
+def test_guard_skip_begin_idempotent():
+    """守阵(W9a sb8): 同 hash 在途幂等闸 —— 第二次提交必须被拒且旧 job 原样
+    (闸失效=旧 job 的 on_done/origin 成孤儿)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)
+    ops = mgr.ctx.ops
+    job1 = ops._skip_job_new("HA", t, "web", False, True)
+    r = ops.skip_submit("HA", source="web")
+    assert "已在执行中" in r.message, f"幂等闸必须拒绝二次提交: {r}"
+    assert ops._skip_jobs["HA"] is job1, "旧 job 不得被覆盖"
+
+
+def test_guard_force_does_not_bypass_blocked():
+    """守阵(W9a sg10): force 只豁越 cls=force 的闸(G5), 后置 blocked(partial)必须照常硬拒 ——
+    豁越后 break 会把 blocked 闸连带豁越(垃圾块标有效)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedDL", progress=0.5)  # 0<p<1 -> partial blocked 在 G5 之后
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    seed_inflight(mgr, "HA")  # G5 force 在前
+    r = mgr.ctx.ops._skip_gates("HA", t, force=True)
+    assert r is not None and r.is_failed, f"force 豁越 G5 后 partial(blocked)必须硬拒: {r}"
+
+
+def test_guard_recheck_delete_branch_requeues_origin():
+    """守阵(W9a rc53): 轮询期种子被删 -> rule origin 必须默认重置重入队(条件反转=断点任务悬空丢失)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    rec = []
+    orig_at = mgr.task_queue.add_task
+    mgr.task_queue.add_task = lambda task, **kw: (rec.append((task, kw)), orig_at(task, **kw))[1]
+    mgr.store.by_hash.pop("HA")  # 轮询期间种子被删
+    run_queue(mgr, time.time() + 3)
+    assert any(tk is origin for tk, _ in rec), f"删除分支必须把 rule origin 重入队: {rec}"
+
+
+def test_guard_sections_pin_ops():
+    """守阵(W9a ops sec1/sec2, no tests 记账): 配置段认领名 pin —— 认领错位会让
+    skip_checking_tag 段成孤儿段"""
+    mgr = make_mgr(FakeConfig())
+    assert mgr.ctx.ops.sections() == ("skip_checking_tag", )
+
+
+def test_guard_on_sync_line_once():
+    """守阵(W9a os1/os3/os4): 启动对账一次性开关 —— 开关语义破(不置位/条件反转)会让
+    残留备份每轮被重复重加"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_mgr(FakeConfig())
+        client = FakeClient()
+        mgr.client = client
+        keep = FakeTorrent(hash="HKEEP", state="pausedUP", progress=1.0)
+        seed_store(mgr, [keep])
+        client.torrents["HKEEP"] = keep  # by_hash 非空才过首闸
+        path1 = os.path.join(td, "H1.torrent")
+        with open(path1, "wb") as f:
+            f.write(b"d1")
+        mgr.state.setdefault("skip_check_backup", {})["H1"] = {
+            "path": path1,
+            "save_path": "R:/",
+            "category": "",
+            "tags": ""
+        }
+        mgr.ctx.ops.on_sync_line(True)
+        assert len([c for c in client.calls if c[0] == "add"]) == 1, "首轮应对账重加"
+        path2 = os.path.join(td, "H2.torrent")
+        with open(path2, "wb") as f:
+            f.write(b"d2")
+        mgr.state.setdefault("skip_check_backup", {})["H2"] = {
+            "path": path2,
+            "save_path": "R:/",
+            "category": "",
+            "tags": ""
+        }
+        mgr.ctx.ops.on_sync_line(True)  # 进程内不复位: 不得再次对账
+        assert len([c for c in client.calls if c[0] == "add"]) == 1, f"对账每进程只跑一次: {client.calls}"
+
+
+def test_guard_arbitration_scope_single():
+    """守阵(W9a rc112): 启动超时仲裁直查必须单 hash —— torrents_info(None)=全库表, 任意
+    他种子的校验态会劫持宽限判定(双向失真)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    other = FakeTorrent(hash="HOTHER", state="checkingDL", progress=0.5)
+    client.torrents["HOTHER"] = other  # 干扰种子在客户端首位(mutation 下 info(None) 会拉它进仲裁)
+    t = seed_paused(mgr, client)  # pausedDL 非真校验态
+    origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
+    r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    now = time.time()
+    real_time = time.time
+    try:
+        time.time = lambda: now + 601.0
+        run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查(单 hash)见 pausedDL -> 判败
+    finally:
+        time.time = real_time
+    assert mgr.state["recheck_fails"]["HA"]["count"] == 1, \
+        "仲裁直查必须单 hash: 他人 checking 态不得劫持判定(误延长宽限=不计失败)"
+
+
+def test_guard_drive_backoff_sleeps(monkeypatch):
+    """守阵(W9a dr22 + rt11 + gn14): GONE 相位确认不到消失 -> 重试退避 10~50ms 必须真睡
+    (退避被跳过=存在性直查热轮询 API 轰炸; 退避归零=窗口内重试风暴)"""
+    from unittest.mock import patch
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    client.torrents_info = lambda **kw: [t]  # 恒报「仍在客户端」-> GONE 相位反复重试
+    dels = _wrap_client(client, "torrents_delete", [])
+    slept = []
+    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: slept.append(s)):
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "删除后种子仍在客户端" in r.message, f"重试耗尽应失败且文案点明: {r}"
+    assert slept and all(s > 0 for s in slept), f"10~50ms 退避必须真睡(跳过/归零即红): {slept}"
+    assert len(dels) == 5, f"初删 + 4 次重试删除: {[d.get('torrent_hashes') for d in dels]}"
+    assert all(d["torrent_hashes"] == "HASH123" for d in dels), \
+        f"删除(含重试)作用域必须单 hash(不得 None=全库摘登记): {dels}"
+    # keep_record 在 facade 消费(不透传 client): 重试删除若丢 keep_record, 快照记录会被当场摘除
+    assert mgr.store.get("HASH123") is t, "重试删除仍不得摘快照记录(keep_record 防线)"
+
+
+def test_guard_appeared_retry_attempts():
+    """守阵(W9a na7): APPEARED 相位 attempts 必须真置 0 —— 置 None 会让首次重试
+    (attempts+1)TypeError, 重加已成功反报失败且 FINISH 不跑(参考标记丢失)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    calls = {"n": 0}
+    orig_info = client.torrents_info
+
+    def fake_info(**kw):
+        calls["n"] += 1
+        if calls["n"] == 2:  # 首次重加确认回空 -> APPEARED 相位走一次重试
+            return []
+        return orig_info(**kw)
+
+    client.torrents_info = fake_info
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"重试后必须确认到种子并正常完成(APPEARED attempts 死存储置 None 即红): {r}"
+
+
+def test_guard_gates_ghost_member_inflight():
+    """守阵(W9a gd103/gd114/gd115): G7 幽灵成员(组表有登记、快照无记录)带在途校验时,
+    闸门判定必须安全出判(不得对 None 记录取属性崩溃)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    mgr.store.member_to_key["HA"] = "K"
+    mgr.store.member_to_key["HG"] = "K"  # 幽灵: 组表有、by_hash 无
+    mgr.store.groups["K"] = ["HA", "HG"]
+    mgr.store.group_sizes["K"] = {"HA": {"a.mkv": 100}, "HG": {"a.mkv": 100}}
+    seed_inflight(mgr, "HG")  # 幽灵成员的在途登记(kind=inflight, rec=None)
+    verdicts = mgr.ctx.ops._skip_gates_detail("HA", t)
+    g7 = [v for v in verdicts if v.gate == "G7"]
+    assert g7, f"幽灵成员在途应出 G7 判: {verdicts}"
+    assert "校验已提交" in g7[0].text, f"rec=None 时 detail 应走 else 文案(不得取 rec.state/rec.name): {g7[0].text}"
+
+
+def test_guard_checking_evidence_none_tor_safe():
+    """守阵(W9a ce3): _checking_evidence 对 tor=None(幽灵成员)必须安全返回 None ——
+    条件恒真化会对 None 取 .state 崩溃"""
+    mgr = make_mgr(FakeConfig())
+    assert mgr.ctx.ops._checking_evidence("HX", None) is None, "tor=None 必须安全返回 None"
+
+
+def test_guard_settle_keep_progress_requeue():
+    """守阵(W9a tl63/tl65/tl66 + sb40/jn7): DONE 终态 rule origin 必须带 keep_progress=True
+    重入队(断点续跑); 有参考的 rule 跳检不得误报无参考告警"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    origin = Task("rule", "rule-test", hash="HASH123", store=mgr.store, handler=lambda task, d: REQUEUE)
+    origin.resume_index = 4  # 断点标记: keep_progress 才保留
+    rec = []
+    orig_at = mgr.task_queue.add_task
+    mgr.task_queue.add_task = lambda task, **kw: (rec.append((task, kw)), orig_at(task, **kw))[1]
+    with capture_ops_logs() as logs:
+        r = mgr.ctx.ops.skip_submit("HASH123", source="rule", has_reference=True, origin=origin)
+        job = mgr.ctx.ops._skip_jobs["HASH123"]
+        mgr.ctx.ops._skip_drive(job)  # 同步驱动到终态(settle 的 origin 重入队发生在 _skip_settle)
+    assert r.is_pending and job.result is not None and job.result.is_ok, f"跳检应完成: {r} / {job.result}"
+    assert any(tk is origin and kw.get("keep_progress") is True for tk, kw in rec), \
+        f"DONE 终态 origin 必须带 keep_progress=True 重入队: {rec}"
+    assert not any("无参考跳检" in m for m in logs), "有参考的 rule 跳检不得误报无参考告警"
+
+
+def test_guard_recheck_success_clears_cooldown():
+    """守阵(W9a rc74/rc77/rc81/rc82): 校验成功必须清除失败冷却账(键面/账目任一漂移都会让
+    当日 rule recheck 被冷却多挡)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = seed_paused(mgr, client)
+    bump_recheck_fail(mgr.ctx.state, "HA")  # 预置 1 次失败账(低于上限)
+    r = mgr.ctx.ops.recheck("HA", source="rule")
+    assert r.is_pending, f"rule 源应 pending: {r}"
+    now = time.time()
+    t.state = "checkingDL"
+    run_queue(mgr, now + 1)  # 见生效证据, REQUEUE
+    t.state = "pausedDL"
+    t.progress = 1.0
+    run_queue(mgr, now + 3)  # 证据已立 + progress=1.0 -> SUCCESS
+    assert "HA" not in mgr.state["recheck_fails"], \
+        f"校验成功必须清除冷却账: {mgr.state.get('recheck_fails')}"

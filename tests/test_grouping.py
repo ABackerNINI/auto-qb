@@ -90,6 +90,30 @@
 - test_grouping_save_path_change_without_group_key_skipped
 - test_grouping_state_transitions_first_round_no_snapshot_skipped
 - test_grouping_third_party_link_alias_error_keeps_mark
+- test_guard_ck5_cross_physical_key_needs_dir_prefix: 物理键丢目录前缀 -> 不同组同名相对路径误判同物理路径(W9a ck5 高危)
+- test_guard_size_consistency_stop_scope_and_warning: 大小一致性暂停名单=组内成员精确列表(cs17 高危 None=全库) + 警告文案在(cs12/15) + dry-run 缺省不可达(ag40)
+- test_guard_missing_files_scan_dry_run_and_stop_scope: 缺文件扫描 dry-run 零副作用(sg27)+真实路径停组名单(mf77 高危)+缺失警告在(mf38)
+- test_guard_download_conflict_stop_scope: 下载冲突停组名单=成员精确列表(dc79 高危, dc68 过滤反转)
+- test_guard_download_conflict_incremental: 增量短路(dc2/dc7 高危): rounds>0+脏组在场必须真重算
+- test_guard_save_path_change_mixed_delta: delta 首条非 save_path 不得 break 截断重归组+扫描(sp6 高危)
+- test_guard_state_transitions_mixed_delta: state_changed 首条非触发不得 break 截断扫描(st16 高危) + dry-run 闸(st22)
+- test_guard_removed_scan_dry_run: 删除事件 dry-run 零真实副作用(rs3/12/14/16/17+hr8)
+- test_guard_dry_run_transitions_no_side_effect: transitions 相位 dry-run 会话零真实副作用(tr2/3/5/7/8)
+- test_guard_dry_run_torrents_added_no_side_effect: torrents_added 相位 dry-run 零真实副作用(ta3/5/8/10/12/13+an8/11)
+- test_guard_dry_run_post_no_side_effect: post 相位 dry-run 零真实副作用(po2/3/5/7/8/10/12+sp43/46/56)
+- test_guard_content_root_flat: 单文件平铺种子内容根=save_path 本身(cr18 平铺早退丢失)
+- test_guard_content_root_nested_first_segment: 嵌套内容根取首段(cr30 rsplit/cr35 恒 join)
+- test_guard_within_scope_contract: 作用域判定契约(含等于/子路径/尾斜杠 scope/POSIX 绝对路径)(ws1/3/9/10/14)
+- test_guard_physical_dir_layer2_alias_resolved: 第2层目录级别名必须真解析(pd23/25/26/27/29/30/33 失效簇)
+- test_guard_syscall_path_mapping: 容器映射命中必须返回映射路径(sy2 映射丢失)
+- test_guard_regroup_scope_members: 别名作用域重归组成员面(rg14/15/16/17/22/28/40)+回执计数(rg45-48)
+- test_guard_assign_move_cleans_old_and_dirty: 归组迁移幂等: 旧组摘除+新旧组双置脏(ag19/ag31/lv7)
+- test_guard_save_path_alias_no_churn: 别名在场成员不得被判路径变化(churn 簇 sp23/24/31/32/33)
+- test_guard_third_party_link_probe_and_discard: 第三方链接探测对象=代表文件(mk20)+判非链接必须消除标记(mk35)
+- test_guard_sections_pin_grouping: sections 认领段名 pin(sec1/sec2 双杀)
+- test_guard_relocating_window_scan: 搬迁窗口只让路在迁组(sg19 全盲/sg24 截断)
+- test_guard_cross_group_active_side_detected: 跨组交叉 ka 侧下载方必须检出(x76 激活半丢)
+- test_guard_cross_group_missing_exempt: kb 位 MISSING 组豁免不得误停补救下载方(x72)
 """
 import logging
 import os
@@ -100,7 +124,7 @@ from unittest import mock
 
 import pytest
 
-from helpers import FakeClient, FakeTorrent, _fake_file, grouping_cfg, make_manager, seed_store
+from helpers import FakeClient, FakeTorrent, _fake_file, capture_logs, grouping_cfg, make_manager, seed_store
 
 
 def _non_tag_calls(client):
@@ -2012,3 +2036,427 @@ def test_grouping_state_transitions_first_round_no_snapshot_skipped():
         mgr.store.state_changed = [("H1", FakeTorrent(state="pausedUP").state_enum)]
         grp._handle_state_transitions(False)
         assert client.calls == [], "首轮无快照不得触发扫描/暂停"
+
+
+# ============================================================
+# W9a(R33) S5 补测守阵: 真洞钉面(高危簇 + dry-run 击穿族 + 中危簇代表)
+# ============================================================
+
+
+def _record_stop_scope(client):
+    """包装 client.torrents_stop 记录每次调用的 torrent_hashes 实参(高位真洞 None="all" 全库面的判定源)"""
+    scope = []
+    orig = client.torrents_stop
+
+    def rec(torrent_hashes=None, **kw):
+        scope.append(torrent_hashes)
+        return orig(torrent_hashes=torrent_hashes, **kw)
+
+    client.torrents_stop = rec
+    return scope
+
+
+def test_guard_ck5_cross_physical_key_needs_dir_prefix():
+    """守阵(W9a ck5 高危): 物理键必须含目录前缀 —— 不同组共享常见相对路径(同名剧集文件)
+    不得因键丢目录前缀被误判「同一物理路径」(误警告+误停无辜组下载方)"""
+    from auto_qb.core.modules.grouping_mod import _cross_physical_key
+
+    k_a = _cross_physical_key(r"R:\GroupA", "poster.jpg")
+    k_b = _cross_physical_key(r"R:\GroupB", "poster.jpg")
+    assert k_a != k_b, f"不同目录的同名相对路径必须是不同物理键: {k_a!r} vs {k_b!r}"
+    assert k_a == _cross_physical_key(r"R:\GroupA", "poster.jpg"), "同输入物理键必须稳定"
+    k_c = _cross_physical_key(r"R:\GroupA", "sub\\poster.jpg")
+    assert k_c != k_a, "不同相对路径不得折叠成同键"
+
+
+def test_guard_size_consistency_stop_scope_and_warning():
+    """守阵(W9a cs17 高危 + cs12/cs15 + ag40): 大小一致性暂停名单必须是组内成员精确列表
+    (torrents_stop(torrent_hashes=None) 在 qbittorrent-api 语义 = 暂停全库, 灾难面);
+    警告必须含成员清单(审计日志丢真=低钉面); dry-run 缺省路径不暂停"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        stops = _record_stop_scope(client)
+        key = ("R:/Downloads", ("movie.mkv", ))  # 重归组键首元经 path_normalize(正斜杠), 必须同形
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.by_hash["H1"].name = "T1"
+        mgr.store.by_hash["H2"].name = "T2"
+        mgr.store.group_sizes[key]["H2"] = {"movie.mkv": 200}  # 与 H1 同名不同大小
+        with capture_logs("auto_qb.core.modules.grouping_mod") as cap:
+            grp._check_size_consistency(key, False)
+        assert stops == [["H1", "H2"]], f"暂停名单必须是成员精确列表(不得 None=全库): {stops}"
+        assert "文件大小不一致" in cap.text and "T1" in cap.text and "T2" in cap.text, \
+            f"警告不得丢失且须含成员清单: {cap.messages}"
+        # dry-run 缺省路径: 归组重入(同键) + dry_run=True -> 不得真实暂停
+        stops.clear()
+        grp._assign_to_group(mgr.store.by_hash["H2"], {"movie.mkv": 300}, True)
+        assert stops == [], f"dry_run=True 不得真实暂停(缺省击穿即红): {stops}"
+
+
+def test_guard_missing_files_scan_dry_run_and_stop_scope():
+    """守阵(W9a mf77 高危 + sg27 + mf38): 缺文件扫描 dry-run 只报告不暂停(闸门击穿即红);
+    真实路径整组暂停且名单=成员精确列表; 「文件缺失」警告不得整条丢失"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])  # stalledUP=完成侧, 均为有效代表
+        with capture_logs("auto_qb.core.modules.grouping_mod") as cap:
+            grp._scan_triggered_groups({key}, True)
+        assert stops == [], f"dry-run 缺文件扫描不得真实暂停(击穿即红): {stops}"
+        assert "文件缺失" in cap.text, f"缺失警告不得丢失: {cap.messages}"
+        grp._missing_scanned_keys.clear()  # 轮内去重集合: 两段独立扫描
+        grp._scan_triggered_groups({key}, False)
+        assert stops == [["H1", "H2"]], f"真实路径应停整组且名单精确: {stops}"
+
+
+def test_guard_download_conflict_stop_scope():
+    """守阵(W9a dc79 高危 + dc68): 下载冲突整组暂停名单=按 by_hash 过滤后的成员精确列表
+    (过滤反转 -> 暂停落空, 保护动作失效)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.by_hash["H1"] = FakeTorrent(hash="H1", state="stalledDL", progress=0.0, downloaded=0)
+        grp._check_download_conflicts(False)
+        assert stops == [["H1", "H2"]], f"mixed 冲突应停整组且名单精确(不得 None=全库/空表): {stops}"
+
+
+def test_guard_download_conflict_incremental():
+    """守阵(W9a dc2/dc7 高危): 增量模式(rounds_applied>0)脏组在场必须真重算 ——
+    dirty 读断(None)/早退条件反转都会让冲突检测整体死"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.by_hash["H1"] = FakeTorrent(hash="H1", state="stalledDL", progress=0.0, downloaded=0)
+        mgr.store.rounds_applied = 1
+        mgr.store.dirty_groups = {key}
+        grp._check_download_conflicts(False)
+        assert stops == [["H1", "H2"]], f"增量轮脏组冲突必须被检出并处置: {stops}"
+
+
+def test_guard_save_path_change_mixed_delta():
+    """守阵(W9a sp6 高危): delta_fields 常态混有非 save_path 条目, 首条不得 break 截断 ——
+    后续 save_path 变化的重归组+缺文件扫描必须照常发生"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.by_hash["H1"].save_path = r"R:\Elsewhere"
+        mgr.store.delta_fields = {"HG": {"name"}, "H1": {"save_path"}}  # 首条非 save_path
+        grp._handle_save_path_changes(False)
+        assert stops == [["H2"]], f"首条非 save_path delta 不得截断: H1 应重归组且原组触发扫描: {stops}"
+        assert mgr.store.member_to_key["H1"] != key, "save_path 变化的成员必须重归组"
+
+
+def test_guard_state_transitions_mixed_delta():
+    """守阵(W9a st16 高危 + st22): state_changed 常态混有非触发转移, 首条不得 break 截断 ——
+    后续触发转移(上传转暂停)的缺文件扫描必须照常发生; dry-run 传递不得击穿"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.state_snapshot = {
+            "H0": FakeTorrent(state="stalledUP").state_enum,
+            "H1": FakeTorrent(state="stalledUP").state_enum,
+        }
+        mgr.store.state_changed = [
+            ("H0", FakeTorrent(state="stalledDL").state_enum),  # 非触发转移在前
+            ("H1", FakeTorrent(state="pausedUP").state_enum),  # 上传转暂停触发在后
+        ]
+        grp._handle_state_transitions(False)
+        assert stops == [["H1", "H2"]], f"首条非触发转移不得截断扫描(H1 转移应触发缺文件处置): {stops}"
+        stops.clear()
+        grp._missing_scanned_keys.clear()  # 轮内去重: 两段独立扫描
+        grp._handle_state_transitions(True)
+        assert stops == [], f"dry-run 转移扫描不得真实暂停(st22 击穿即红): {stops}"
+
+
+def test_guard_removed_scan_dry_run():
+    """守阵(W9a rs3/rs12/rs14/rs16/rs17 + hr8): 删除事件 dry-run 会话零真实副作用 ——
+    dry_run 读取/传-delivery 任一点击穿 -> 真实暂停(红)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        grp._on_removed_scan(SimpleNamespace(payload={"hashes": ["H1"], "dry_run": True}))
+        assert stops == [], f"删除事件 dry-run 不得真实暂停(击穿即红): {stops}"
+        assert "H1" not in mgr.store.groups.get(key, []), "成员移出分组不是 dry-run 语义, 必须照常"
+
+
+def test_guard_dry_run_transitions_no_side_effect():
+    """守阵(W9a tr2/tr3/tr5/tr7/tr8): transitions 相位 dry-run 会话零真实副作用 ——
+    payload 恒带 dry_run 键, 键名/键位/传参任一变异都会让缺文件处置真实落库"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = (r"R:\Downloads", ("movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1", "H2"])
+        mgr.store.state_snapshot = {"H1": FakeTorrent(state="stalledUP").state_enum}
+        mgr.store.state_changed = [("H1", FakeTorrent(state="pausedUP").state_enum)]
+        grp._on_transitions(SimpleNamespace(payload={"dry_run": True}))
+        assert stops == [], f"dry-run transitions 相位不得真实暂停(击穿即红): {stops}"
+
+
+def test_guard_dry_run_torrents_added_no_side_effect():
+    """守阵(W9a ta3/ta5/ta8/ta10/ta12/ta13 + an8/an11): torrents_added 相位 dry-run 会话零真实副作用 ——
+    新种子归组仍发生(分组视图), 但大小一致性暂停必须被 dry-run 闸挡住"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        key = ("R:/Downloads", ("movie.mkv", ))  # 重归组键首元经 path_normalize(正斜杠), 必须同形
+        _seed_group(mgr.store, key, ["H1"], file_map={"movie.mkv": 100})
+        client.files_map["H2"] = [_fake_file("movie.mkv", 200)]  # 同名不同大小 -> 触发大小一致性
+        mgr.store.by_hash["H2"] = FakeTorrent(hash="H2", state="stalledUP", save_path="R:/Downloads")
+        grp._on_torrents_added(SimpleNamespace(payload={"hash": "H2", "dry_run": True}))
+        assert stops == [], f"dry-run 归组不得真实暂停大小不一致组(击穿即红): {stops}"
+        assert mgr.store.member_to_key.get("H2") == key, "dry-run 只挡外部动作, 归组本身必须发生"
+
+
+def test_guard_dry_run_post_no_side_effect():
+    """守阵(W9a po2/po3/po5/po7/po8/po10/po12 + sp43/sp46/sp56): post 相位 dry-run 会话零真实副作用 ——
+    保存路径重归组(大小一致性)/缺文件扫描/下载冲突三面的外部动作全部只报告"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        k1 = ("R:/Downloads", ("movie.mkv", ))  # 重归组键首元经 path_normalize(正斜杠), 必须同形
+        _seed_group(mgr.store, k1, ["H1", "H2"])
+        mgr.store.by_hash["H1"] = FakeTorrent(hash="H1", state="stalledDL", progress=0.0, downloaded=0)
+        k2 = ("R:/Downloads2", ("movie.mkv", ))
+        _seed_group(mgr.store, k2, ["H3"], file_map={"movie.mkv": 100})
+        mgr.store.by_hash["H1"].save_path = "R:/Downloads2"
+        mgr.store.group_sizes[k1]["H1"] = {"movie.mkv": 200}  # H1 缓存映射(与 H3 不同大小)
+        mgr.store.delta_fields = {"H1": {"save_path"}}
+        grp._on_post(SimpleNamespace(payload={"dry_run": True}))
+        assert stops == [], f"dry-run post 相位不得真实暂停(三面任一击穿即红): {stops}"
+        assert mgr.store.member_to_key["H1"] == k2, "dry-run 只挡外部动作, 重归组本身必须发生"
+
+
+def test_guard_content_root_flat():
+    """守阵(W9a cr18): 单文件平铺种子(常态)内容根 = save_path 本身 —— or→and 吞掉「全平铺早退」
+    会让内容根塌成 save_path/文件名, 组键物理解析失真(组裂)"""
+    from auto_qb.core.modules.grouping_mod import _content_root_of
+
+    assert _content_root_of("R:/D", ["movie.mkv"]) == "R:/D", "平铺单文件必须早退返回 save_path"
+    assert _content_root_of("R:/D", []) == "R:/D", "空文件表同样早退"
+    assert _content_root_of("", ["a.mkv"]) == "", "空 save_path 同样早退"
+
+
+def test_guard_content_root_nested_first_segment():
+    """守阵(W9a cr30/cr35): 嵌套内容根 = save_path/唯一顶层段; 多顶层段回退 save_path ——
+    rsplit 取末段/恒走 join 都会让目录别名作用域断裂"""
+    from auto_qb.core.modules.grouping_mod import _content_root_of
+
+    assert _content_root_of("R:/D", ["sub/deep/a.mkv", "sub/deep/b.mkv"]) == os.path.join("R:/D", "sub"), \
+        "唯一顶层段必须是首段(不是末段, 二层嵌套区分 split/rsplit)"
+    assert _content_root_of("R:/D", ["a/x.mkv", "b/y.mkv"]) == "R:/D", "多顶层段必须回退 save_path"
+
+
+def test_guard_within_scope_contract():
+    """守阵(W9a ws1/ws3/ws9/ws10/ws14): 作用域判定契约 —— 含等于/子路径/尾斜杠 scope 归一/
+    POSIX 绝对路径; 塌成恒 False 或仅全等都会让重归组组裂"""
+    from auto_qb.core.modules.grouping_mod import _within_scope
+
+    assert _within_scope("R:/D", "R:/D") is True, "scope 等于自身必须在域内"
+    assert _within_scope("R:/D", "R:/D/sub/f.mkv") is True, "子路径必须在域内"
+    assert _within_scope("R:/D", "R:/Other/f.mkv") is False, "域外必须为 False"
+    assert _within_scope("R:/D/", "R:/D/x") is True, "尾斜杠 scope 归一后必须在域内"
+    assert _within_scope("/data", "/data/sub") is True, "POSIX 绝对路径 scope 必须真"
+    assert _within_scope("/data", "/database") is False, "前缀串撞车不得误判在域内"
+
+
+def test_guard_physical_dir_layer2_alias_resolved(monkeypatch):
+    """守阵(W9a pd23/25/26/27/29/30/33): 第 2 层目录级别名解析必须真生效 —— save_path 本身是
+    junction 时解析结果才是组键首元; 判定/解析/比较任一点失效都会让静态别名两组不并组"""
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        sp = "R:/D/movie"
+        # 第 1 层: 迁移模块在场但无 job 覆盖(原样返回) —— 不得提前 return 短路第 2 层(pd23)
+        monkeypatch.setattr(grp._ctx, "relocate", SimpleNamespace(resolve_physical=lambda p, root: p))
+        monkeypatch.setattr(
+            grouping_mod.alias_fs,
+            "alias_kind_of",
+            lambda p: grouping_mod.alias_fs.KIND_JUNCTION if p == sp else None,
+        )
+
+        def fake_realpath(p):
+            if p != sp:
+                raise OSError("unexpected probe target")
+            return "T:/lib/movie"
+
+        monkeypatch.setattr(
+            grouping_mod.file_access,
+            "get_file_access",
+            lambda: SimpleNamespace(realpath_lexical=fake_realpath),
+        )
+        assert grp._physical_dir(sp, sp) == "T:/lib/movie", "junction 别名必须解析出物理目录"
+
+
+def test_guard_syscall_path_mapping(monkeypatch):
+    """守阵(W9a sy2 + pd26/pd27): 容器映射命中必须返回映射后的 syscall 路径 ——
+    `or path→and path` 会把映射丢掉, 第 2 层别名识别全灭"""
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        sp = "R:/D/movie"
+        monkeypatch.setattr(grp._ctx, "relocate", None)
+        monkeypatch.setattr(
+            grouping_mod.file_access,
+            "get_file_access",
+            lambda: SimpleNamespace(
+                map_to_container=lambda p: "C:/mapped" if p == sp else p,
+                realpath_lexical=lambda p: "T:/lib/movie" if p == sp else (_ for _ in ()).throw(OSError()),
+            ),
+        )
+        monkeypatch.setattr(
+            grouping_mod.alias_fs,
+            "alias_kind_of",
+            lambda p: grouping_mod.alias_fs.KIND_JUNCTION if p == "C:/mapped" else None,
+        )
+        assert grp._syscall_path(sp) == "C:/mapped", "映射命中必须返回映射路径"
+        assert grp._physical_dir(sp, sp) == "T:/lib/movie", "映射后的路径必须参与别名判定"
+
+
+def test_guard_regroup_scope_members():
+    """守阵(W9a rg14/15/16/17/22/28/40 + rg45/46/47/48): 别名作用域重归组 —— 本 job 成员与
+    scope 内非自有成员都必须重归组(scope 外/非 src 跳过), 主链循环不得提前截断; INFO 回执计数真实"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        client.files_map = {
+            "H1": [_fake_file("o.mkv", 100)],
+            "H3": [_fake_file("flat.mkv", 100)],  # 内容根在 scope 外
+            "H2": [_fake_file("sub/a.mkv", 100)],  # 内容根在 scope 内
+        }
+        for h, sp in (("H1", "R:/E"), ("H3", "R:/E"), ("H0", "R:/ZZZ"), ("H2", "R:/E")):
+            # H0: 非 src 成员在前(rg17 截断面); H3: src 内但内容根在 scope 外(rg40 截断面)
+            mgr.store.by_hash[h] = FakeTorrent(hash=h, state="pausedUP", save_path=sp)
+        with capture_logs("auto_qb.core.modules.grouping_mod") as cap:
+            n = grp.regroup_scope("R:/E/sub", src="R:/E", hashes=["H1"])
+        assert n == 2, f"H1(本 job)+H2(scope 内)必须重归组; H0/H3 跳过但不得截断循环: {n}"
+        assert mgr.store.member_to_key["H2"] == ("R:/E", ("sub/a.mkv", )), "H2 应按新文件表重归组(无别名=物理路径原样)"
+        assert "重归组 2 个种子" in cap.text, f"INFO 回执计数必须真实: {cap.messages}"
+
+
+def test_guard_assign_move_cleans_old_and_dirty():
+    """守阵(W9a ag19/ag31/lv7): 归组幂等迁移 —— 旧组必须摘除成员(幽灵双成员=成员数虚高/摘错组),
+    新旧组都必须登记置脏(漏登记=增量冲突重算跳组)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        key1 = ("R:/D1", ("a.mkv", ))
+        _seed_group(mgr.store, key1, ["H1"], file_map={"a.mkv": 100})
+        t = mgr.store.by_hash["H1"]
+        t.save_path = "R:/D2"
+        grp._assign_to_group(t, {"b.mkv": 100})
+        assert t.hash not in mgr.store.groups.get(key1, []), "旧组必须摘除成员(不得留幽灵)"
+        key2 = mgr.store.member_to_key["H1"]
+        assert key2 == ("R:/D2", ("b.mkv", )), "必须按新路径+新文件表归组"
+        assert key1 in mgr.store.dirty_groups, "旧组必须置脏(冲突重算覆盖)"
+        assert key2 in mgr.store.dirty_groups, "新组必须置脏(冲突重算覆盖)"
+
+
+def test_guard_save_path_alias_no_churn(monkeypatch):
+    """守阵(W9a churn 簇 sp23/24/31/32/33): 别名在场的成员 save_path 伪变化必须被物理解析
+    识别为「未变」—— content_root 传参任一变异都会让第 1 层 scope 提示错, 成员每轮被
+    leave+rejoin 同键(churn: 置脏+误触发扫描)"""
+    from auto_qb.core.modules import grouping_mod
+    from auto_qb.infra import utils
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        sp = "R:/D/alias"
+        key = ("T:/phys", ("sub/movie.mkv", ))
+        _seed_group(mgr.store, key, ["H1"], file_map={"sub/movie.mkv": 100})
+        mgr.store.by_hash["H1"].save_path = sp
+
+        def resolve_physical(p, root):
+            # 只有 (save_path, 内容根) 对才是本 job 的作用域登记; 其余原样返回(无覆盖)
+            if p == sp and utils.path_normalize(root) == "R:/D/alias/sub":
+                return "T:/phys"
+            return root
+
+        monkeypatch.setattr(grp._ctx, "relocate", SimpleNamespace(resolve_physical=resolve_physical))
+        monkeypatch.setattr(grouping_mod.alias_fs, "alias_kind_of", lambda p: None)  # 目录级非链接
+        mgr.store.delta_fields = {"H1": {"save_path"}}
+        grp._handle_save_path_changes(False)
+        assert mgr.store.member_to_key["H1"] == key, "别名在场的成员不得被判「路径又变了」"
+        assert mgr.store.group_key_migrations == set(), f"不得 churn(leave+rejoin 同键): {mgr.store.group_key_migrations}"
+        assert mgr.store.dirty_groups == set(), f"churn 会误置脏同键: {mgr.store.dirty_groups}"
+
+
+def test_guard_third_party_link_probe_and_discard(monkeypatch):
+    """守阵(W9a mk20/mk35): 第三方链接探测对象必须是 save_path+代表文件(不得漂成目录);
+    判非链接时必须消除旧标记(标记只增不减 = 误拒迁状态泄漏)"""
+    from auto_qb.core.modules import grouping_mod
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), check_missing_files=False)
+        key = ("T:/x", ("movie.mkv", ))
+        monkeypatch.setattr(
+            grouping_mod.file_access,
+            "get_file_access",
+            lambda: SimpleNamespace(map_to_container=lambda p: p),
+        )
+        monkeypatch.setattr(
+            grouping_mod.alias_fs,
+            "alias_kind_of",
+            lambda p: grouping_mod.alias_fs.KIND_SYMLINK if p.endswith("movie.mkv") else None,
+        )
+        grp._mark_third_party_link(key, "R:/D", {"movie.mkv": 100})
+        assert key in mgr.store.third_party_link_groups, "文件级链接代表种必须打标"
+        monkeypatch.setattr(grouping_mod.alias_fs, "alias_kind_of", lambda p: None)
+        grp._mark_third_party_link(key, "R:/D", {"movie.mkv": 100})
+        assert key not in mgr.store.third_party_link_groups, "判非链接必须消除旧标记"
+
+
+def test_guard_sections_pin_grouping():
+    """守阵(W9a grouping sec1/sec2, no tests 记账): 配置段认领名 pin —— 认领错位会让
+    grouping 段成孤儿段(热重载/配置认领面)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        assert grp.sections() == ("grouping", )
+
+
+def test_guard_relocating_window_scan():
+    """守阵(W9a sg19/sg24): 搬迁窗口只让路「成员在迁」的组 —— relocating 非空不得让全库
+    缺文件扫描静默跳过; 单组让路也不得截断后续触发组"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"))
+        stops = _record_stop_scope(client)
+        k1 = ("R:/D1", ("a.mkv", ))
+        k2 = ("R:/D2", ("b.mkv", ))
+        _seed_group(mgr.store, k1, ["H1", "H2"])
+        _seed_group(mgr.store, k2, ["H3"])
+        mgr.store.relocating_hashes = {"H1"}  # 仅 k1 的成员在迁
+        grp._scan_triggered_groups([k1, k2], False)  # list 传参: 迭代序确定(k1 在前)
+        assert stops == [["H3"]], f"k1 让路但 k2 必须照常扫描(全盲/截断即红): {stops}"
+
+
+def test_guard_cross_group_active_side_detected():
+    """守阵(W9a x76): 跨组交叉激活判定两半必须都在 —— ka(规范序前位)下载中而 kb 静态时
+    不得漏检(下载方继续覆盖他组数据)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        stops = _record_stop_scope(client)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B, state_a="downloading", state_b="stalledUP")
+        grp._check_cross_group_file_conflicts(dry_run=False)
+        assert stops == [["HA"]], f"ka 侧下载方必须被检出并暂停(激活半丢即红): {stops}"
+
+
+def test_guard_cross_group_missing_exempt():
+    """守阵(W9a x72): D3 豁免两半都必须生效 —— MISSING 组在 kb 位时, ka 侧重新下载属合法补救,
+    不得被误判激活而误停"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr, grp, client = _grp_env(os.path.join(td, "state.json"), cross_group_conflict_check=True)
+        stops = _record_stop_scope(client)
+        _seed_cross_pair(mgr.store, td, _OVERLAP_A, td, _OVERLAP_B, state_a="downloading", state_b="stalledUP")
+        mgr.store.by_hash["HB"].tags = "MISSING"  # kb 位带 MISSING 标签(豁免侧)
+        grp._check_cross_group_file_conflicts(dry_run=False)
+        assert stops == [], f"kb 位 MISSING 组应豁免该事件(不得误停 ka 侧补救下载方): {stops}"
