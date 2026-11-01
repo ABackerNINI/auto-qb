@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="sync-generated-whitelist-drift">
+<meta name="issue-stamp" content="26-11-01-2140">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="kb-sync-generated-resolve">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效">
+<meta name="issue-summary" content="分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解">
+<title>my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效</h1>
+    <p class="lede">分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-01-2140-bug-sync-generated-whitelist-drift</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 21:40</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">my-commit-flow 同步脚本 / 生成物自动化解</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-11-01 收尾一轮任务（core/ W9b 变异审计，档案 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code>）后做远端合流：把本地 37 笔提交 rebase 到远端新基 <code>6a390e76</code>。两次跑 <code>commands run my-commit-flow.sync</code> 都失败，且失败行<strong>不含冲突清单</strong>。</p>
+    <p>人工用 <code>git merge-tree --write-tree --name-only 6a390e76 1aed1a33</code>（非破坏性探测，不写工作树）查出冲突面只有 3 个文件，<strong>全部在 <code>gen_all.py --list</code> 的生成物白名单内</strong>。随后手动 rebase 逐轮化解 <strong>8 次</strong>，全部成功，<strong>零手写件冲突</strong>。</p>
+    <p>平台 Windows Git Bash，git 2.55。第一次失败的直接脏源是当时尚未被 .gitignore 忽略的未跟踪 <code>.tools/</code>（属「.gitignore 还没进本地 HEAD」的阶段性问题，与本次要记的缺陷无关，仅作背景）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-01 21:40 · 现场为 clone1（Windows Git Bash, git 2.55）
+
+## 失败行一（第一次）
+[失败] my-commit-flow.sync
+  同步失败: 树脏挡路 …      # 脏源 = 当时未忽略的未跟踪 .tools/，阶段性问题，非本缺陷
+
+## 失败行二（第二次）
+[失败] my-commit-flow.sync
+  同步失败需解决冲突 本地1aed1a33 远端6a390e76 —— rebase 已自动回滚, 手动合流(解冲突)后重跑
+# ↑ 失败行未给出任何冲突路径
+
+## 人工非破坏性探测冲突面
+$ git merge-tree --write-tree --name-only 6a390e76 1aed1a33
+memory-bank/issues/_index.md
+memory-bank/issues/attachments/_archive.md
+memory-bank/plans/_index.md
+# 3 条全部是生成物
+
+## 白名单行数差（同一命令，两棵树）
+# rebase 前（本地旧 tip 1aed1a33 树）: 21 行
+# rebase 进行中（同一命令再跑）:        23 行
+# 差的 2 条: memory-bank/plans/attachments/_archive.md
+#            memory-bank/tasks/attachments/_archive.md
+# 复核（2026-11-01 21:45，在当前树 HEAD bf0977db 上）:
+#   gen_all.py --list 共 23 行；逐条按 git cat-file -e 1aed1a33:&lt;path&gt; 核对，
+#   恰好这 2 条在 rebase 前的旧树里不存在 —— 与 21 vs 23 的两行差吻合，
+#   即白名单集合随树内容变化，不是常量。
+
+## 对照：人工合流
+# 手动 rebase 逐轮化解 8 次，全部成功；零手写件冲突。</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>分叉（本地领先多笔提交）+ 远端新基改变了生成物集合（新增 / 移除一个生成物路径）；每停一轮 rebase 都会重跑生成器</td></tr>
+      <tr><td>影响范围</td><td>多 clone 并行时每次合流都要人工介入（本轮 37 笔 / 8 轮）；失败行不给冲突清单，需自己 <code>merge-tree</code> 探测才能判断「其实全是生成物」</td></tr>
+      <tr><td>严重度</td><td>中 —— 不丢数据（失败即整体回滚），但把自动化的价值全吞掉，且失败行的可观测性反向误导「有手写件冲突」</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>.commands/my-commit-flow/scripts/sync.py:274</code>（取证 2026-11-01 21:45）· <code>_resolve_rebase</code> · grep 关键词 <code>_resolve_rebase</code> / <code>需解决冲突</code></li>
+      <li><code>.commands/my-commit-flow/scripts/sync.py:153</code> · <code>_whitelist</code>（在冲突循环内每轮重算：<code>sync.py:299</code>，按<strong>当时工作树</strong>求值）· grep <code>_whitelist</code></li>
+      <li><code>.commands/my-commit-flow/scripts/sync.py:316</code> · <code>git_run("add", "--", *sorted(conflicts))</code> —— 重跑后只暂存冲突集 · grep <code>sorted(conflicts)</code></li>
+      <li><code>.commands/my-commit-flow/scripts/sync.py:425</code> · <code>conflict_line</code> —— 失败行模板本身不含冲突清单（无观测面）· grep <code>conflict_line</code></li>
+      <li><code>.my-commit-flow.toml:37</code> · <code>generated_list_cmd</code>（值 = <code>gen_all.py --list</code>）· grep <code>generated_list_cmd</code></li>
+      <li><code>.agents/skills/memory-bank/scripts/gen_all.py:108</code> · <code>collect</code> —— 白名单与真正写出共用同一实现，集合由树内容决定 · grep <code>def collect</code></li>
+      <li>相邻坑档：<code>memory-bank/pitfalls/git/rebase-continue-needs-clean-index.md</code>（MM 态需全量暂存，本轮复发 +1）</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout"><strong>待查</strong> —— 下面两条是假设，不是结论；已实证 / 待验证分开写。</div>
+    <h3>已实证（事实）</h3>
+    <ul>
+      <li>冲突面 3 件全部在生成物白名单内（<code>merge-tree</code> 探测 + 8 轮人工化解零手写件冲突）。</li>
+      <li>白名单集合<strong>随树内容漂移</strong>：同一条 <code>--list</code> 命令在旧 tip 树给 21 行、在 rebase 中的树上给 23 行；差的 2 条（<code>plans/attachments/_archive.md</code>、<code>tasks/attachments/_archive.md</code>）确认为 rebase 前旧树里不存在的文件。</li>
+      <li>失败行不含冲突清单：<code>conflict_line</code>（<code>sync.py:425</code>）构造的模板里本就没有路径位。</li>
+    </ul>
+    <h3>假设 A（次要候选）：白名单求值时机</h3>
+    <p>重跑生成器时白名单是对<strong>半重放中的树</strong>求值的，因此集合与「rebase 前那次求值」不一致；重跑会写到旧快照以外的路径。<strong>待验证</strong>，因为按代码 <code>_whitelist</code> 是每轮循环重算（<code>sync.py:299</code>）而非 rebase 前求值一次 —— 它更可能以「重跑写出的路径不在 <code>git add</code> 覆盖范围 / 不在 <code>_modified_paths</code> 的 M 过滤里」的形态影响覆盖率，而不是直接触发拒绝。</p>
+    <p><strong>验证方法</strong>：合成一个仓（远端新基新增一个生成物路径 + 本地有与生成物重叠的提交），在 <code>_whitelist</code> / <code>_regen</code> / <code>_self_check</code> 三处打点，记录每轮求值的行数与集合差，并采集 <code>git status --short</code>。最小复现步骤：①在镜像 clone 造一个分叉（远端新基多一个生成物路径，如新增一个带 <code>_archive.md</code> 的文档族）；②本地造 1 笔以上会与该生成物重叠的提交；③跑 <code>commands run my-commit-flow.sync</code>，记录失败行与 <code>git status --short</code>。</p>
+    <h3>假设 B（主因候选）：重跑后只 add 冲突集</h3>
+    <p><code>_regen</code> 会把其它<strong>干净自动合并</strong>的白名单件改出「已暂存 + 又有未暂存修改」（MM 态），而 <code>sync.py:316</code> 只 <code>git add</code> 冲突集 ⇒ <code>rebase --continue</code> 被 git 拒绝 ⇒ 整体 abort ⇒ 对外仍是同一句「需解决冲突」失败行。机理与已记坑档 <code>pitfalls/git/rebase-continue-needs-clean-index.md</code> 同款，且能解释「第一轮冲突件（<code>issues/attachments/_archive.md</code>，本就在 21 行白名单内）也没被自动化解」。<strong>待验证</strong>：本轮失败时未采集 <code>git status --short</code> 现场，无法区分是 continue 被拒、<code>_regen</code> 非 0、还是 <code>_self_check</code> 未过。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <ul>
+      <li><strong>观测面（最小改动，建议先做）</strong>：失败行带上冲突清单（前 N 条 + 总数）与回滚原因分级（rebase 未落地 / 重跑失败 / 自证未过 / continue 被拒）。代价：改一处失败行模板 + 一处异常分派。</li>
+      <li><strong>暂存面</strong>：<code>_regen</code> 之后按「白名单 ∩ 全部改动路径（含新增）」一并 <code>git add</code>，而不是只 add 冲突集。代价：需把 <code>_modified_paths</code> 的 <code>--diff-filter=M</code> 扩到 A/M，并复核不会把手写件卷进来。</li>
+      <li><strong>求值时机</strong>：把白名单求值钉在「rebase 落地后的树」上，或对两次求值做差集告警。代价：需要在 rebase 中途的合法状态下求值，需先验证假设 A。</li>
+    </ul>
+    <p>三条互不冲突，可先做观测面让下次复现自带现场。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-01 21:40 — 入池，状态 <strong>Open</strong>（计划外，未修；发现于 core/ W9b 收尾的远端合流）</li>
+      <li>2026-11-01 21:45 — 补证据段：<code>--list</code> 21 / 23 行复核、<code>merge-tree</code> 冲突面、定位锚点（取证于 HEAD <code>bf0977db</code>）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-01-2140-bug-sync-generated-whitelist-drift.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

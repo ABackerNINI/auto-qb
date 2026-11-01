@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (81)
+## Open (82)
 
+- [bug] [my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效](../26-11-01-2140-bug-sync-generated-whitelist-drift.html) — 分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解
 - [test] [core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期](../26-11-01-2024-test-core-w9b-mutation-low-residue.html) — W9b(R34) S5a 守阵后余量: 全轮真洞 367(存活 351 + no tests 16) - 红验 280 = 87(rules 31 含 no-tests hr12 / maintenance 19 / speed_curve 30 / tracker 7, 中 4 + 低 83, 弃杀 4 在内); 主体为 INFO/WARNING/ERROR 审计文案丢真、webui reasons 展示键值、回执计数、窄触发面, 按簇判读留档不排期
 - [test] [core/ W9a grouping+ops 变异真洞余量 260 条批量判读留档(grouping 68 + ops 192, 低危文案/日志/窄触发面为主 + 极低 4), 不排期](../26-11-01-1711-test-core-w9a-mutation-low-residue.html) — W9a(R33) S5a 守阵后余量: 真洞 449 - 红验 189 = 260(grouping 68 / ops 192); 主体为 WARNING/INFO 审计文案、settle payload、窄触发 continue->break、strip(XX/XX) 面与极低 4, 按簇判读留档不排期
 - [test] [core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判](../26-11-01-1357-test-core-w8-relocate-mutation-blindspot-equivalence.html) — units 平台盲区 9 条(n11/16/17 归一桥/j8/9 拼接/t3/p102/eg235/246 长路径)在 Windows 套件全构造钉杀; mod st_reparse_tag 4 条 WSL 不可构造留池; 等价翻案 j13/lo2 改真洞已杀、w5 死代码改等价
