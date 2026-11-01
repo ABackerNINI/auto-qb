@@ -160,7 +160,7 @@
       <li><code>rules/</code> —— 规则引擎判据 <b>✔ 已做首轮(R23, 已清)</b></li>
       <li><code>hr/</code> —— HR 判定与做种要求链路 <b>✔ 已做首轮(R14) + 七个模块轮(R16–R22)</b>; 真洞按主题入池的 6 条 <code>test</code> issue 全清</li>
       <li><code>config/</code> —— fail-fast 校验 <b>✔ 已做首轮(R2) + 六个实施轮(R6/R7/R8/R10/R11/R13)</b>; 首轮入池的真洞 issue 已全清</li>
-      <li><code>core/</code> —— 主循环 / 限速 <b>✔ 已做首轮 + 六个模块轮(R25–R30, W1–W6)</b>; W7–W9 待做(计划 <code>26-10-31-0128</code>, 刻度见 §07)</li>
+      <li><code>core/</code> —— 主循环 / 限速 <b>✔ 已做首轮 + 七个模块轮(R25–R31, W1–W7)</b>; W8–W9 待做(计划 <code>26-10-31-0128</code>, 刻度见 §07)</li>
     </ol>
     <p><code>infra/</code> 与 <code>webui/server/</code> 估值最低(IO 胶水层, 变异多为等价或平凡杀死)。<b>入场练手</b>用 <code>infra/versioning.py</code> 或 <code>infra/utils.py</code>(流程已跑通, 成本低到跑错再跑一次无所谓)。</p>
     <p class="hint">节奏建议: 每周 / 每个 Release 前挑 1 个包; 季度做一次逐包累加(不要一把跑)。「全量」= 逐包跑完, 不是一次跑完。</p>
@@ -258,11 +258,11 @@
       <tr>
         <td><code>core/</code></td>
         <td>2026-11-01</td>
-        <td>6,890 <span class="hint">(W1: state.py 222 + taskqueue.py 174 · W2: traffic_limits.py 312 + traffic_grid.py 800 · W3: tvshows.py 310 + episodes.py 115 + curves.py 151 · W4: traffic_store.py 1,726 · W5: modules/traffic_sample_mod.py 1,805 · W6: 编排客户端五文件 1,275 · 池 3/4/5/10 文件)</span></td>
-        <td>W1 77.53%(首轮) → <b>84.09%</b>(补 9 守阵; 真洞 24 处置闭环) · W2 83.89%(首轮) → <b>88.58%</b>(补 22 守阵; 真洞 98 处置闭环 = 36 补测销账 + 43 条目批量入池 8 issue; 复跑新增存活 0) · W3 85.8%(首轮) → <b>88.19%</b>(补测销账 14 条 + 24 条目批量入池 8 issue; 复跑新增存活 0) · W4 89.45%(首轮) → <b>91.94%</b>(补 14 守阵; 真洞 73 处置闭环 = 37 补测销账 + 36 条目批量入池 2 issue; 复跑新增存活 0) · W5 89.07%(首轮) → <b>94.07%</b>(条目级复验修正口径, 全轮实测 93.91%; 补 38 守阵; 真洞 101 处置闭环 = 100 补测覆盖 + bug 面 1 入池 + 未盖 1 存疑注记; 复跑新增存活 0) · W6 51.61%(首轮) → <b>78.51%</b>(条目级复验修正口径, 全轮实测 78.20%; 补 67 守阵; 真洞 332 处置闭环 = 325 补测覆盖 + gtn_17 死循环盲区 1 + 残存活 6 留账[3 注记 + 3 签名默认极低]; 等价连带杀 17 条目级复验全稳定; 复跑新增存活 0; no tests 157 池外触达按 issue 口径不扩池)</td>
-        <td>R25(W1: state+taskqueue) / R26(W2: traffic_limits+grid) / R27(W3: tvshows+episodes+curves) / R28(W4: traffic_store) / R29(W5: traffic_sample_mod) / R30(W6: 编排客户端五文件)</td>
+        <td>8,000 <span class="hint">(W1: state.py 222 + taskqueue.py 174 · W2: traffic_limits.py 312 + traffic_grid.py 800 · W3: tvshows.py 310 + episodes.py 115 + curves.py 151 · W4: traffic_store.py 1,726 · W5: modules/traffic_sample_mod.py 1,805 · W6: 编排客户端五文件 1,275 · W7: 快照与来源四文件 1,110 · 池 3/4/5/10/7 文件)</span></td>
+        <td>W1 77.53%(首轮) → <b>84.09%</b>(补 9 守阵; 真洞 24 处置闭环) · W2 83.89%(首轮) → <b>88.58%</b>(补 22 守阵; 真洞 98 处置闭环 = 36 补测销账 + 43 条目批量入池 8 issue; 复跑新增存活 0) · W3 85.8%(首轮) → <b>88.19%</b>(补测销账 14 条 + 24 条目批量入池 8 issue; 复跑新增存活 0) · W4 89.45%(首轮) → <b>91.94%</b>(补 14 守阵; 真洞 73 处置闭环 = 37 补测销账 + 36 条目批量入池 2 issue; 复跑新增存活 0) · W5 89.07%(首轮) → <b>94.07%</b>(条目级复验修正口径, 全轮实测 93.91%; 补 38 守阵; 真洞 101 处置闭环 = 100 补测覆盖 + bug 面 1 入池 + 未盖 1 存疑注记; 复跑新增存活 0) · W6 51.61%(首轮) → <b>78.51%</b>(条目级复验修正口径, 全轮实测 78.20%; 补 67 守阵; 真洞 332 处置闭环 = 325 补测覆盖 + gtn_17 死循环盲区 1 + 残存活 6 留账[3 注记 + 3 签名默认极低]; 等价连带杀 17 条目级复验全稳定; 复跑新增存活 0; no tests 157 池外触达按 issue 口径不扩池) · W7 80.18%(首轮) → <b>93.96%</b>(补 31 守阵; 真洞 138 处置闭环 = 复跑实测全杀 138/138, 含 er_39/40 被函数级映射连带杀; 等价连带杀 15 逐 id 实证 12; 复跑新增存活 0; no tests 18 池内无直接触达按 issue 口径不扩池)</td>
+        <td>R25(W1: state+taskqueue) / R26(W2: traffic_limits+grid) / R27(W3: tvshows+episodes+curves) / R28(W4: traffic_store) / R29(W5: traffic_sample_mod) / R30(W6: 编排客户端五文件) / R31(W7: 快照与来源四文件)</td>
         <td><span class="badge go">已做(余量在池)</span></td>
-        <td><code>baselines/26-11-01-0722-mutation-core-w6-orchestrator.md</code><br><code>baselines/26-11-01-0218-mutation-core-w5-traffic-sample.md</code><br><code>baselines/26-10-31-1612-mutants-core-traffic-store.md</code><br><code>baselines/26-10-31-1227-mutants-core-tvshows-episodes-curves.md</code><br><code>baselines/26-10-31-0848-mutants-core-traffic-limits-grid.md</code><br><code>baselines/26-10-31-0518-mutants-core-state-taskqueue.md</code><br><code>plans/26-10-31-0128-plan-mutation-core.html</code>(W1–W9, W7 起待排)</td>
+        <td><code>baselines/26-11-01-1017-mutation-audit.md</code><br><code>baselines/26-11-01-0722-mutation-core-w6-orchestrator.md</code><br><code>baselines/26-11-01-0218-mutation-core-w5-traffic-sample.md</code><br><code>baselines/26-10-31-1612-mutants-core-traffic-store.md</code><br><code>baselines/26-10-31-1227-mutants-core-tvshows-episodes-curves.md</code><br><code>baselines/26-10-31-0848-mutants-core-traffic-limits-grid.md</code><br><code>baselines/26-10-31-0518-mutants-core-state-taskqueue.md</code><br><code>plans/26-10-31-0128-plan-mutation-core.html</code>(W1–W9, W8 起待排)</td>
       </tr>
       <tr>
         <td><code>infra/</code> · <code>webui/server/</code></td>

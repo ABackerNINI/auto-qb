@@ -22,7 +22,7 @@
 | bug | 12 |
 | perf | 6 |
 | docs | 2 |
-| test | 23 |
+| test | 24 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [core W7(R31) no-tests 面: agent._run_foreground 18 条变异池内无直接触达](26-11-01-0953-test-core-w7-mutation-run-foreground-notests.html) — agent.py _ru…
 - [test] [core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数](26-11-01-0614-test-core-w6-mutation-notests-offpool.html) — W6(R30) S2 实…
 - [test] [core/ W6 终态残留记账: 超时盲区 16 条(qbmanager 15 + exporter 1, 含 4 条 TypeError 空转环复跑改判预期)+ 存疑 6 条 §H 清单](26-11-01-0614-test-core-w6-mutation-timeout-doubt-ledger.html) — W6 守阵覆盖 329/…
 - [bug] [无块 LiveTail 发布用陈旧旧块间隔: 改间隔复位窗口违反 LiveTail.interval_s 契约](26-11-01-0050-bug-traffic-sample-livetail-stale-interval.html) — W5 实证: 改间隔后…
