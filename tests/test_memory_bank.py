@@ -3252,10 +3252,12 @@ def test_html_guard_corpus_zero_hits() -> None:
 
 def test_html_guard_wired_into_kb_check_and_gate() -> None:
     """守卫挂进 kb.check 与提交闸门两侧 (同 test_mutation_anchor 钉法, 防静默红);
-    v.Nu 增量闸门行 (`<changed:>` 只查本次改动) 与 kb.html-audit 全库巡检任务同在。"""
+    v.Nu 增量闸门行 (`<changed:>` 只查本次改动, 2026-11-01 扩面: 全仓改动 HTML 不限 memory-bank)
+    与 kb.html-audit 全库巡检任务同在。"""
     kb_cfg = (ROOT / ".commands" / "kb" / "config.toml").read_text(encoding="utf-8")
     gate_cfg = (ROOT / ".commands" / "my-commit-flow" / ".my-commit-flow.toml").read_text(encoding="utf-8")
     assert "check_html.py --check" in kb_cfg, "check_html.py 未挂进 kb.check"
     assert "check_html.py --check" in gate_cfg, "check_html.py 未挂进提交闸门 (静默红)"
-    assert "--vnu --strict <changed:memory-bank/**/*.html>" in gate_cfg, "v.Nu 增量闸门行缺失"
+    assert 'match = [".html"]' in gate_cfg, "v.Nu 闸门触发面未放开到全仓改动 HTML (静默漏)"
+    assert "--vnu --strict <changed:**/*.html>" in gate_cfg, "v.Nu 增量闸门行缺失"
     assert "kb.html-audit" in kb_cfg, "kb.html-audit 巡检任务缺失"

@@ -22,8 +22,9 @@ L2 解析 (stdlib html.parser): start/end 标签名必须匹配 `^[a-zA-Z][a-zA-
 ━━ v.Nu 巡检 (--vnu, 规范级, 需 java) ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 W3C 官方校验器 v.Nu (vnu.jar, ~32MB, 不进仓库): 落点 `<root>/.tools/vnu.jar` (gitignored),
 缺失时自动从 GitHub 下载。两种跑法:
-    --vnu <files...>   只查给定文件 —— 提交闸门用 `<changed:memory-bank/**/*.html>` 增量,
-                       配 `--strict` 有 error 即 rc=1 (改谁谁达标, 存量文件不进检查面)。
+    --vnu <files...>   只查给定文件 —— 提交闸门用 `<changed:**/*.html>` 增量 (2026-11-01 起
+                       全仓改动 HTML, 不限 memory-bank), 配 `--strict` 有 error 即 rc=1
+                       (改谁谁达标, 存量文件不进检查面)。
     --vnu --all        全库巡检 (实测 645 件 ~9s) —— 默认**只报告不拦** (存量 320 条 error
                        属债务, 清理走专门会话), `--strict` 才 rc=1。
 

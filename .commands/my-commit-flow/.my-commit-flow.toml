@@ -122,11 +122,14 @@ note  = "知识库索引 + 制品索引与专题视图 + 日期守卫 + 基线�
 # 元素, 排版错乱且浏览器零报错)。L1+L2 零依赖常驻判据随上一条闸门全库跑(<2s); 本条是**规范级
 # 增量面**: 本次改动的 HTML 才过 W3C v.Nu —— 改谁谁达标, 未触动的存量 320 条 error 不进闸门。
 # vnu.jar 在 <root>/.tools/(gitignored, 缺时自动下载 ~32MB, 需 java); 无 HTML 改动时跳过。
-match = ["memory-bank/"]
-run   = ["python <skill-dir:memory-bank>/scripts/check_html.py --vnu --strict <changed:memory-bank/**/*.html>"]
+# 2026-11-01 扩面: <changed:> 从 memory-bank/** 放开到全仓 —— memory-bank 外还有存量 HTML
+# (skill 骨架样例等), 改谁都该达标; match 用子串 ".html"(真有 HTML 改动才命中闸门,
+# 纯 md/py 提交不空跑, 无匹配仍走 <changed:> 的静默跳过语义)。
+match = [".html"]
+run   = ["python <skill-dir:memory-bank>/scripts/check_html.py --vnu --strict <changed:**/*.html>"]
 auto  = true
 timeout = 120
-note  = "HTML 规范级增量检查(v.Nu): 有 error 即 STOP; 修复后重跑, 或 commands run kb.html-audit 看全库报告"
+note  = "HTML 规范级增量检查(v.Nu): 全仓改动 HTML 都查(2026-11-01 起不限 memory-bank); 有 error 即 STOP; 修复后重跑, 或 commands run kb.html-audit 看全库报告"
 
 [[gates]]
 match = ["memory-bank/activeContext/"]

@@ -2,11 +2,11 @@
 
 > 摘要: check_html --vnu 首跑自举: GitHub 直连被墙且本机无 java
 > 触发: vnu, check_html, vnu.jar, java 不可用, SSL CERTIFICATE_VERIFY_FAILED, release-assets 超时, HTML 规范级检查
-**Refs:**
+**Refs:** memory-bank/tasks/26-11-01-memory-bank-html-syntax-guard.md
 
 ### check_html --vnu 首跑自举: 本机无 java + GitHub 直连被墙 → 闸门红在环境不在 HTML
 
-- **触发**: 任何 clone 首次提交含 `memory-bank/**/*.html` 改动的件 —— 上游新加的 vnu 闸门
+- **触发**: 任何 clone 首次提交含任意 `**/*.html` 改动的件(2026-11-01 闸门扩面后不限 memory-bank) —— 上游新加的 vnu 闸门
   (`check_html.py --vnu --strict`) 首跑要在 `<root>/.tools/vnu.jar`(gitignored, 逐 clone 自举)
   下载 v.Nu(32MB, GitHub releases), 并需要 PATH 上的 `java`; 2026-11-01 在 clone4 实测两处都断。
 - **判别**: 失败行闸门 note = 「HTML 规范级增量检查(v.Nu)…」; 输出尾部是
