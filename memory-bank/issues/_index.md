@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 13 |
+| bug | 14 |
 | perf | 6 |
 | docs | 2 |
 | test | 28 |
@@ -31,6 +31,7 @@
 ## Open
 
 - [bug] [my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效](26-11-01-2140-bug-sync-generated-whitelist-drift.html) — 分叉 rebase 冲突…
+- [bug] [WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction](26-11-01-2102-bug-webui-set-share-limits-missing-sharelimitaction.html) — QbApi.torren…
 - [test] [core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期](26-11-01-2024-test-core-w9b-mutation-low-residue.html) — W9b(R34) S5a…
 - [test] [core/ W9a grouping+ops 变异真洞余量 260 条批量判读留档(grouping 68 + ops 192, 低危文案/日志/窄触发面为主 + 极低 4), 不排期](26-11-01-1711-test-core-w9a-mutation-low-residue.html) — W9a(R33) S5a…
 - [test] [core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判](26-11-01-1357-test-core-w8-relocate-mutation-blindspot-equivalence.html) — units 平台盲区 9…

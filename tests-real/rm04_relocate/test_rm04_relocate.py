@@ -1,9 +1,11 @@
-"""RM04 辅种与分组 —— 八条真机用例(归组 key / 组内一致性 / 跨组冲突 / 缺失文件 / 跨盘移动 / journal)。
+"""RM04 辅种与分组 —— 九条真机用例(归组 key / 组内一致性 / 跨组冲突 / 缺失文件 / 跨盘移动 / journal / facade share_limits)。
 
-验证面对准冻结计划 plans/26-10-31-1042-plan-real-RM04.html §02 的六行代码映射:
+验证面对准冻结计划 plans/26-10-31-1042-plan-real-RM04.html §02 的六行代码映射(漂移复测轮
+plans/26-11-01-2033 追加 RM04-09: qbapi facade share_limits_mode):
 归组 key(group_key_of, 断言走产品 WEB 只读端点 GET /api/groups)· 组内大小一致性(警告+整组暂停)·
 跨组文件冲突(暂停下载方 + MISSING 豁免对照)· 缺失文件标记(带数据真删; --no-data 不是缺文件态)·
-跨盘移动主链(R:→D: 真跨卷, 目录别名 + 穿透 + journal phase=done)· journal 恢复与坏账兜底。
+跨盘移动主链(同卷口径 C:→C:, 目录别名 + 穿透 + journal phase=done; 真跨卷半边 BLOCKED)·
+journal 恢复与坏账兜底 · facade share_limits_mode 5.2.3 端到端(RM04-09)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 单成员组恒走 FORM_DIRECT(qB 自搬, 无别名无 journal)—— 目录别名链必须多成员组 + 子目录布局
@@ -11,12 +13,15 @@
 - 正常发起的搬迁锚点是「迁移发起」;「已下发 qB 搬迁」只出现在重启补发路径(_step_move);
 - 同一物理文件挂两枚同组种子(辅种本质)时, 两枚的 info 必须不同 ⇒ 用**不同 piece_len** 造
   (同内容不同分块 → 不同 infohash, 双双校验通过); 盐不同会让先写的成员校验失败;
-- 同卷证明闸门: qB 副实例 默认保存路径在 R: 盘(实测), 与 src 同卷 ⇒ 多成员跨卷可过 GATE_SAME_FS;
+- 同卷证明闸门(same_volume_proof): qB 副实例 free_space_on_disk 报的是它**默认 save_path** 那块卷。
+  环境1(36596 默认路径在 R: 盘)天然可证; 环境2 的 56590 默认 save_path 指向不存在的 R: 盘 ⇒
+  free_space_on_disk 恒 -1 ⇒ 证明必败 ⇒ 多成员组被 GATE_SAME_FS 拒(RM04-05 探针实测)。
+  解锁(造法校准, 测毕还原): 用例临时把 56590 save_path 改指 C: 现存目录, qB 立即报出 C: 真值;
 - journal 恢复的权威账在 state.json 的 relocate.jobs(job_to_dict 形), journal/spec/pid 是 guardian 侧账;
   相位落盘走 state_save_interval(30S)周期, 断言等待窗按 30s+ 裕量给。
 
 跑法: `commands run real.suite -- --slice RM04 --yes`(不要裸 pytest)。真实种子全程非活跃;
-八条全部 L1 假种子(零外连); 假种子一律 real-fake 标签; 落点只认 tests-real/.work/ 与 R:/qbt-fake/。
+九条全部 L1 假种子(零外连); 假种子一律 real-fake 标签; 落点只认 tests-real/.work/ 与 R:/qbt-fake/。
 """
 from __future__ import annotations
 
@@ -45,7 +50,23 @@ pytestmark = [
 ]
 
 WORK = Path(__file__).resolve().parents[1] / ".work" / "rm04"
-RAM = Path("R:/qbt-fake/rm04")  # 内存盘: 搬迁 src/大种子落点(重启即清空)
+
+
+def _ram_root() -> Path:
+    """搬迁 src/大种子落点: R: 盘在用 R:/qbt-fake/rm04(内存盘, 重启即清空);
+    R: 缺席(环境2 C盘机)退 .work/rm04/ram/ 真写盘(漂移复测计划 §04 S2 的盘探测回退)。"""
+    r = Path("R:/qbt-fake/rm04")
+    try:
+        r.mkdir(parents=True, exist_ok=True)
+        probe = r / ".probe"
+        probe.write_bytes(b"x")
+        probe.unlink()
+        return r
+    except OSError:
+        return WORK / "ram"
+
+
+RAM = _ram_root()
 TAG = "real-fake"
 MISSING_TAG = "MISSING"
 SETTLED = {
@@ -708,24 +729,42 @@ def test_rm04_04_cross_group_conflict_and_missing_exempt():
 # ================================================================ RM04-05
 
 
-def test_rm04_05_cross_volume_relocate_dir_alias():
-    """[RM04-05] 跨盘移动主链: R:→D: 真跨卷 relocate → 目录别名 + 穿透 + journal phase=done
+def test_rm04_05_same_volume_relocate_dir_alias():
+    """[RM04-05] 跨盘移动主链(同卷口径): C:→C: relocate → 目录别名 + 穿透 + journal phase=done
+                  + GATE_SPACE 拒绝负向对照(L3)
 
     前置: relocate.enabled=true + alias_file_threshold: 1; 两枚带数据多文件假种子(子目录
-          布局, 同文件列表同内容异 piece_len)在 R:/qbt-fake/rm04/rm04_05/src 成组;
-          dst = 用例目录 dst(D: 真磁盘, 真跨卷)。触发 = 产品 WEB
-          POST /api/torrents/{hash}/location (confirm=true, 目录别名提议需二次确认)。
-    副作用: qB 真搬数据(R:→D:); src 内容根变 junction 指向 dst; <data_dir>/relocate/ 落账。
-    回滚: 删 junction 只 os.rmdir 本体(禁递归删穿); 删光 real-fake 种子; 删用例目录 + RAM 树。
-    失败判据: 回执无 started; save_path 未变 dst(归一后比); dst 侧 size 不齐; src 内容根
-              未成 junction; 经原路径穿透读不到同 size; journal 未落 phase=done;
-              日志缺「迁移发起」/「已武装收尾」。
+          布局, 同文件列表同内容异 piece_len)在 RAM 落点(R: 盘缺席时退 .work/rm04/ram/)成组;
+          dst = 用例目录 dst(与本机唯一可写卷 C: 同卷 —— 真跨卷半边 BLOCKED, 计划 §04③)。
+    同卷证明解锁(造法校准, 探针实测): qB 副实例默认 save_path 指向不存在的 R: 盘 ⇒
+          free_space_on_disk 恒 -1 ⇒ same_volume_proof 必败 ⇒ 多成员组被 GATE_SAME_FS 拒;
+          用例临时把 56590 的 save_path 改指 C: 现存目录(qB 立即报出 C: 真值), 测毕逐字还原。
+    触发 = 产品 WEB POST /api/torrents/{hash}/location (confirm=true, 目录别名提议需二次确认)。
+    负向对照(先于主链, 红验 = 给足 dst 即过): dst 不预建 → GATE_SPACE「剩余空间不可判定」
+          拒绝 —— 回执 error + reasons 含 gate=space + 零 started 零「迁移发起」(零副作用)。
+    副作用: qB 真搬数据(C: 内); src 内容根变 junction 指向 dst; <data_dir>/relocate/ 落账;
+          副实例 save_path 临时改写(finally 还原并核验)。
+    回滚: 副实例 save_path 还原; 删 junction 只 os.rmdir 本体(禁递归删穿); 删光 real-fake 种子;
+          删用例目录 + RAM 树。
+    失败判据: dst 缺席却 started/「迁移发起」(闸门失守); 主链回执无 started; save_path 未变 dst
+              (归一后比); dst 侧 size 不齐; src 内容根未成 junction; 经原路径穿透读不到同 size;
+              journal 未落 phase=done; 日志缺「迁移发起」/「已武装收尾」; save_path 未还原。
     """
     case = case_dir("rm04_05")
     p = None
+    qb = qbfake()
+    orig_save_path = qb.prefs().get("save_path")
+    assert orig_save_path, "副实例 save_path 读取失败(鉴权/连不通?), 拒跑"
     try:
-        qb = qbfake()
         assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
+        # ---- 同卷证明解锁: save_path 临时改指 C: 现存目录(探针实测 free_space_on_disk 立即跟真值)
+        probe_dir = case / "qbsave"
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        qb.set_prefs(save_path=str(probe_dir))
+        time.sleep(0.5)
+        assert qb.prefs().get("save_path") == str(probe_dir), \
+            "save_path 临时改写未生效(同卷证明解锁不成立, 多成员组会被 GATE_SAME_FS 拒)"
+
         src = RAM / "rm04_05" / "src"
         dst = case / "dst"
         purge_tree(src.parent)
@@ -741,9 +780,19 @@ def test_rm04_05_cross_volume_relocate_dir_alias():
         wait_complete(qb, [h1, h2])
         assert wait_group(web_port, h1, {h1, h2}, 20, "两成员未成组(前提不成立)")
         wait_store_progress(web_port, [h1, h2])  # 闸门读产品快照, 等 1-2 个同步拍追平
-        dst.mkdir(parents=True, exist_ok=True)  # 目标卷空间闸门要读 dst(不存在 = 不可判定 = 拒)
 
-        # ---- 触发: 产品 WEB 命令线(目录别名提议 → confirm=true 过二次确认)
+        # ---- 负向对照(L3 兑现): dst 不存在 → GATE_SPACE 不可判定拒绝(零副作用)
+        result = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(dst), "confirm": True})
+        assert result.get("status") == "error", \
+            f"dst 缺席应被闸门 error 拒绝, 实际: {json.dumps(result, ensure_ascii=False)[:500]}"
+        neg_items = ((result or {}).get("truth") or {}).get("results") or []
+        neg_gates = [r.get("gate") for it in neg_items for r in (it.get("reasons") or [])]
+        assert "space" in neg_gates, f"拒绝原因缺 gate=space: {neg_gates}; items={json.dumps(neg_items, ensure_ascii=False)[:400]}"
+        assert not [it for it in neg_items if it.get("cls") == "started"], "dst 缺席却有 started 项(闸门失守)"
+        assert "迁移发起" not in log_text(case), "dst 缺席却出现「迁移发起」(负向对照零副作用失守)"
+
+        # ---- 主链: 预建 dst → 目录别名搬迁(confirm=true 过二次确认)
+        dst.mkdir(parents=True, exist_ok=True)
         result = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(dst), "confirm": True})
         item = one_started_item(result)
         job_id = item.get("job_id")
@@ -783,6 +832,10 @@ def test_rm04_05_cross_volume_relocate_dir_alias():
     finally:
         if p is not None:
             p.stop()
+        qb.set_prefs(save_path=orig_save_path)
+        time.sleep(0.3)
+        restored = qb.prefs().get("save_path")
+        assert restored == orig_save_path, f"副实例 save_path 未还原: {restored!r} != {orig_save_path!r}"
         rm_all_fakes(qbfake())
         purge_tree(case)
         purge_tree(RAM / "rm04_05")
@@ -1104,6 +1157,90 @@ def test_rm04_08_save_path_change_regroup():
         log = log_text(case)
         assert "文件丢失" not in log, "文件齐全却出现「文件丢失」日志"
         assert "路径不可判定" not in log, "踩中 fs.path_map「路径不可判定」分支(计划 §05: 记 BLOCKED 口径)"
+    finally:
+        if p is not None:
+            p.stop()
+        rm_all_fakes(qbfake())
+        purge_tree(case)
+
+
+# ================================================================ RM04-09
+
+
+def test_rm04_09_facade_share_limits_end_to_end():
+    """[RM04-09] facade share_limits_mode 5.2.3 端到端: WebUI set_share_limits → 恒发
+                  shareLimitsMode="Default" → qB 回读命中 + 不存在 hash 静默零副作用负向(L3)
+
+    前置: 副实例 1 枚带数据假种子(显式落点 .work/rm04/rm04_09)+ 产品进程连副实例
+          (写侧面基座同 RM04-01; 56590 localhost 免鉴权 = 环境2 标准配置)。
+    动作: WebUI 命令线 POST /api/torrents/{h}/share-limits(ratio_limit=3.5 / seeding_time_limit=90)。
+    断言: 入队回执形状(queued+cmd_id) + 终态回执 status=ok(5.2 忽略未知参 shareLimitsMode
+          —— facade 恒发 "Default", 库对 5.2 无副作用) + qB 侧 ratio_limit/seeding_time_limit
+          直接回读命中(不经产品快照) + 产品日志「分享限制更新」恰 1 行。
+    负向(L3, 回执形态开工探针已核实): 不存在 hash → store.get None 静默 return
+          (commands.py _cmd_set_share_limits 入口守卫), drain 仍补写 ok 回执 —— 断言 = 回执
+          ok 且「分享限制更新」日志行数零新增(该行只在 api 调用成功后打)且真实种子限值原样
+          (零副作用)。守卫若失守: qB 对不存在 hash 返回 404 → 回执 error 或日志出现行 → 红。
+    副作用: 副实例 1 枚假种子(带数据, 收尾连数据删); 假种子 ratio/seeding_time 限值被改。
+    回滚: 删光 real-fake 种子(连数据)+ 删用例目录。
+    失败判据: 回执非 ok; qB 回读值不符(facade 传参失真/库丢参); 日志缺「分享限制更新」;
+              不存在 hash 触发 qB 调用(404/回执 error)或改动了任何种子限值(静默 return 失守)。
+    """
+    case = case_dir("rm04_09")
+    p = None
+    try:
+        qb = qbfake()
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
+        cfg, web_port = write_cfg(case)
+        p = app.start(cfg, case)
+        assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
+
+        savepath = WORK / "rm04_09"
+        h = fake_with_data(qb, "rm04c9.bin", 256 * 1024, savepath, "rm04c9")
+        wait_complete(qb, [h])
+        wait_store_progress(web_port, [h])  # 等 store 快照收录该 hash(store.get 是命令入口守卫)
+
+        ratio, seed_minutes = 3.5, 90
+        base = log_text(case).count("分享限制更新")
+
+        # ---- 负向对照(L3): 不存在 hash → 静默 return 零 qB 调用零副作用
+        unknown = "0" * 40
+        result = cmd_post_and_wait(
+            web_port, f"/api/torrents/{unknown}/share-limits", {
+                "ratio_limit": ratio,
+                "seeding_time_limit": seed_minutes
+            }
+        )
+        assert result.get("status") == "ok", \
+            f"不存在 hash 应回执 ok(静默 return), 实际: {json.dumps(result, ensure_ascii=False)[:500]}"
+        assert log_text(case).count("分享限制更新") == base, \
+            "不存在 hash 却出现「分享限制更新」日志行(入口守卫失守, api 调用发生了)"
+        before = qb.torrent(h) or {}
+        assert float(before.get("ratio_limit") or 0) != ratio, "负向对照前提不成立: 主种子限值碰巧已是目标值"
+
+        # ---- 主链: WebUI 命令线 set_share_limits → facade 恒发 shareLimitsMode="Default" → 5.2 生效
+        result = cmd_post_and_wait(
+            web_port, f"/api/torrents/{h}/share-limits", {
+                "ratio_limit": ratio,
+                "seeding_time_limit": seed_minutes
+            }
+        )
+        assert result.get("status") == "ok", f"回执非 ok: {json.dumps(result, ensure_ascii=False)[:500]}"
+        wait_until(lambda: log_text(case).count("分享限制更新") == base + 1, 15, "日志缺「分享限制更新」行(命令没走到 api 调用)")
+
+        # qB 直接回读(不经产品快照): 5.2 忽略未知参 shareLimitsMode, 两维限值必须落上
+        def _readback():
+            t = qb.torrent(h) or {}
+            try:
+                return (float(t.get("ratio_limit")), int(t.get("seeding_time_limit"))) \
+                    if t.get("ratio_limit") is not None and t.get("seeding_time_limit") is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        got = wait_until(_readback, 20, "qB 侧 ratio_limit/seeding_time_limit 回读超时(快照缺字段)")
+        gr, gs = got
+        assert abs(gr - ratio) < 1e-6, f"ratio_limit 回读不符: 期望 {ratio}, 实得 {gr}(facade 传参失真?)"
+        assert gs == seed_minutes, f"seeding_time_limit 回读不符: 期望 {seed_minutes}, 实得 {gs}(facade 传参失真?)"
     finally:
         if p is not None:
             p.stop()

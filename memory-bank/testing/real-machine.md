@@ -191,6 +191,7 @@
 | **armed job 可不经 qB 退出收口** | 对账表 `link_present + qb_up + 全员 at_dst → ACT_DONE_EXTERNAL`: phase=done(reason=external) + journal phase=done | 用例可用 qB 原生 setLocation 让其余成员跟进 dst 即时收口; guardian「qB 退出删链接」路径归 RM10 |
 | **搬迁窗口基本抓不住 state 30S 落盘周期** | 64M 跨卷搬迁数秒, 强杀后 state.json 常无在途 job(「恢复在途 job 0 条」≠ 恢复面失效) | journal 注入退路(RM04 计划 §03 批准): 停机态按 job_to_dict 形造 phase=moving/move_issued=true 账 + journal/spec, 重启走 `_recover` RESUME 分支; 另注意产品日志是**追加式**, 断言「最后一次启动」的日志行要等新行出现再取 |
 | **删 junction 绝不递归(重申 §08)** | `rm -r`/`shutil.rmtree` 对 junction 的行为按平台而异, 穿透即删真实数据 | 用 `os.walk(topdown)` 遇 reparse 点 `os.rmdir` 剪枝的 purge 形态(RM04 用例 `purge_tree` 可照抄) |
+| **qB `free_space_on_disk` 报的是它默认 save_path 那块卷(relocate 同卷证明的隐藏前提, RM04 漂移轮实测)** | 默认路径所在盘缺席时(环境2 的 56590 指幽灵 R: 盘)恒 **-1** ⇒ `same_volume_proof` 必败 ⇒ 多成员组 relocate 被 GATE_SAME_FS 拒 —— 目录别名主链在环境2 直接不可达 | 用例临时把副实例 `save_path` 改指实存盘现存目录(qB 立即报出真值, 与本地 `disk_usage` 零漂移), 测毕逐字还原并断言(RM04-05 造法); 环境1 默认路径实存, 天然免疫 |
 
 ### 2.10 规则引擎面的事实(RM03 实测, 2026-10-31)
 
