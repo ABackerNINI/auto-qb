@@ -20,7 +20,7 @@ cd <mirror> && uv sync -q
 cd <mirror> && test -x .venv/bin/mutmut || uv pip install -q mutmut==3.8.0
 cd <mirror> && rm -rf mutants mutmut-cache.db
 cd <mirror> && .venv/bin/python .commands/mutants/scripts/set_conf.py --target '<glob>' --timeout-multiplier 15 --pool <files...>
-cd <mirror> && .venv/bin/mutmut run --max-children 4
+cd <mirror> && .venv/bin/mutmut run --max-children 3
 cd <mirror> && .venv/bin/mutmut results
 ```
 
@@ -146,7 +146,7 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 |---|---|---|
 | WSL 发行版 | `Ubuntu-26.04` | `--distro` 可换; `wsl.exe -l -v` 看全 |
 | 镜像仓 | `~/auto-qb-mut`(WSL 原生 ext4) | `--mirror` 可换; **别放 `/mnt/*`**(实测拷 116MB 要 52s); **多 clone 并行时各用一份**(如 `~/auto-qb-mut-hr`) |
-| 核数 | 8(`.wslconfig` 限) | Windows 侧 32 逻辑核; `--max-children` 默认 4(有并行会话时降到 3) |
+| 核数 | 8(`.wslconfig` 限) | Windows 侧 32 逻辑核; `--max-children` 默认 3(有并行会话时降到 2) |
 | 工具版本 | mutmut `3.8.0` / pytest-gremlins `1.11.2` | 常量在脚本顶部; 换版本要同步改这里 |
 | 结果目录 | `R:/Temp/auto-qb/mutants` | `--out` 可换; 别落仓内(报告 §10 #7) |
 
@@ -160,7 +160,7 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 整轮基线红在两条文本层守阵 | `mutants/` 把源码撑大, 读源码文本的守阵误报 | 它们在 `set_conf.py` 的 `DEFAULT_DESELECT`; **测试文件拆分后路径会漂移**(`test_web.py` 已拆成 `tests/test_web_*.py`), 报错时按新路径改这张表 |
 | 注册表类守阵(如 `test_actions_registry_complete`)在 clean test 里红, 但手跑 `mutants/` 树是绿的 | `process_isolation=fork` 继承的调用形态 | 已固定 `forkserver`(`set_conf.py` 硬写) |
 | 覆盖率闸 `FAIL Required test coverage of 98% not reached` | 子集跑必然不满足全库闸 | 已固定 `--no-cov`(`set_conf.py` 的 `pytest_add_cli_args`) |
-| WSL 整体失去响应 | 目标太大 / 池太宽 / `--max-children` 拉满 | `wsl --shutdown` 救回; 回按包 + 定向池 + `--children 4` |
+| WSL 整体失去响应 | 目标太大 / 池太宽 / `--max-children` 拉满 | `wsl --shutdown` 救回; 回按包 + 定向池 + `--children 3` |
 | `exec python: not found`(wrapper 端到端用例) | WSL 里通常只有 `python3` | `mutants.setup` 已补 `~/.local/bin/python` 软链(幂等) |
 | `mutants.status` 恒报 `mutmut=no`(实际已装) | WSL 登录壳实为 zsh —— `cd` 改了**真实** cwd, 但 `$PWD` / `$()` 仍报 WSL 启动目录; `status` 的 `$(test -x .venv/bin/mutmut ...)` 因此读错目录 | **已修(2026-10-08)**: `cmd_status` 的回显改 `cd {mq} && <直接命令>` 形态(不再用 `$()` 取相对路径); 顺带把末行 `only_mutate` 加 fallback(镜像未跑过 run 时不再误报 `[FAIL]`)。若又见到本现象, 核脚本是否被改回 `$()` 写法。详见坑档 [memory-bank/pitfalls/testing/mutants-wsl-shell.md](../../../memory-bank/pitfalls/testing/mutants-wsl-shell.md) |
 | 复跑时新加的守阵"没生效"(存活数不降) | `mutants.run` 默认 `git checkout -q -f -B develop FETCH_HEAD`, 会把镜像里**未提交的测试改动冲掉** | 先把新测试 `cp` 进镜像 `tests/`, 再 `mutants.run --no-refresh`(跳过刷新) |
@@ -171,7 +171,7 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | `verify` 跑得极慢 / 想中断 | 每条候选都要跑一遍**全套件**(实测 ~15s/条), 外加一遍基线 | 先 `mutants.report` 再用 `--only-status` 或手挑把候选缩小; 中断后重跑同一命令自动续(结果文件按输入清单定名, 已判定 id 跳过; `--fresh` 重头) |
 | 想用「本地新守阵」而不是 develop 的测试跑 verify | `verify` 默认刷新镜像(测试 = develop) | 加 `--no-refresh`(镜像里是什么测试就用什么) |
 | 跑到一半崩在 `FileNotFoundError: mutants/.../<file>.meta` | **并行会话**共用同一镜像, 对方的 `mutants.run` 执行了 `rm -rf mutants`, 删掉你正在跑的 `.meta` | 每会话用**专用镜像** `--mirror '~/auto-qb-mut-<pkg>'`(`report` / `verify` 带同一个); 并存时降 `--children`(实测 4+4 会互相拖慢)。判别与处置见坑档 [mutants-shared-mirror](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md) |
-| 大包单轮被 3600s timeout 截断 | `mutants.run` 的 `timeout = 3600`; 大包实测会超(hr: 8,027 变异 ≈96 min) | **别从零重跑**: 在镜像里 `cd <mirror> && .venv/bin/mutmut run --max-children 4` **续跑**(mutmut 对未变函数保留既有 `exit_code`, 跳过已有结果, 与整跑等价); 更稳的是按模块切 |
+| 大包单轮被 3600s timeout 截断 | `mutants.run` 的 `timeout = 3600`; 大包实测会超(hr: 8,027 变异 ≈96 min) | **别从零重跑**: 在镜像里 `cd <mirror> && .venv/bin/mutmut run --max-children 3` **续跑**(mutmut 对未变函数保留既有 `exit_code`, 跳过已有结果, 与整跑等价); 更稳的是按模块切 |
 | `only_mutate` 不是你设的目标 / `mutants/` 下出现别的包 | 同一个镜像被**另一个会话**改过配置 | 同上: 用专用镜像; 排障时先 `grep -m1 only_mutate <mirror>/pyproject.toml` 核对 |
 | 换目标跑 verify 全是 `APPLY_FAIL` | 上一轮 `mutants.run` 的 `rm -rf mutants` 清掉了该目标的注册表 | 先对目标重跑 `mutants.run`; `cmd_verify` 现已开跑前预检注册表并直接失败提示 |
 | verify 结果里 `APPLY_FAIL` 一直不减少 | 旧逻辑把 APPLY_FAIL 当成「已验」跳过 | **已修**: `_done_ids` 把 APPLY_FAIL 与 TIMEOUT/FLAKY/UNKNOWN 一起视为未判定, 重跑自动重试 |

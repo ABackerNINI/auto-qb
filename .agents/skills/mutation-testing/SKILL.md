@@ -50,7 +50,7 @@ user-invocable: true
 3. **`process_isolation = "forkserver"`** —— 默认 `fork` 会让注册表类守阵假红(同一份 `mutants/` 树手跑却是绿的, 极难归因)。
 4. **文本层守阵必须 `--deselect`** —— mutmut 把变异体写进同一份文件, 「读源码文本做断言」的守阵在基线就红, 整轮直接中断(结构性劣势, gremlins 没有)。当前清单见包的 `set_conf.py` 的 `DEFAULT_DESELECT`。新增/改名文本层守阵时**同步核这张表**; 漂移由包内 `test_mutants.py` 的 `DeselectTableTest` 对差守阵兜底(文件或函数改名即判红)。flaky 用例(端口绑定/并发类)另表维护在 `FLAKY_DESELECT`, run 与 verify 都自动 deselect。
 5. **必带 `-n 0 --no-cov`** —— 抵消 `pytest.ini` 的 addxdist `-n 4` 与覆盖率闸; 否则报错 / 零变异 / 子集跑必不达标。
-6. **`--max-children` 别拉满** —— WSL 只有 8 核(`.wslconfig` 限), 默认取 `os.cpu_count()` 会打挂; 包级轮用 4。
+6. **`--max-children` 别拉满** —— WSL 只有 8 核(`.wslconfig` 限), 默认取 `os.cpu_count()` 会打挂; 包级轮用默认 3。
 7. **基线不绿不开跑** —— 工具会直接跳过(实测 `skipping mutation testing because N baseline test(s) failed`); 先修基线。
 8. **镜像放 WSL 原生 ext4, 不放 `/mnt/*`** —— 经 `/mnt` 的 IO 慢到不可用(实测拷 116MB 要 52s); 用 `git clone` 而不是从 `/mnt` 拷。
 
@@ -80,12 +80,12 @@ user-invocable: true
     `rm -rf mutants`, 并行会话一开跑就把**你正在跑的** `mutants/<pkg>/*.meta` 一起删掉, 使你在下一次结果落盘时
     崩在 `FileNotFoundError: mutants/.../<file>.meta`(实测 hr 首轮在 5125/8027 处崩, 85% 作废)。
     用 `--mirror '~/auto-qb-mut-<pkg>'` 各占一份(`report` / `verify` 带**同一个** `--mirror`); 并存时把
-    `--children` 降到 3(对方 4)。判别(两份 `mutmut run` / `only_mutate` 被别人改 / `mutants/` 下出现别人目标的
+    `--children` 降到 2(对方 3)。判别(两份 `mutmut run` / `only_mutate` 被别人改 / `mutants/` 下出现别人目标的
     `.meta`)与处置见 [pitfalls/testing/mutants-shared-mirror.md](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md)。
 15. **整包单轮可能 >60 min, 且被截断后可续跑** —— `mutants.run` 的 timeout 是 3600s; hr(24 文件 / 8,027 变异)
     实测墙时 ≈96 min(报告 §08 的单价锚点是在 config 上量的, 大包慢数倍; 且 mutmut 按「估计快的先跑」,
     长尾吃掉大半)。撞超时后**不要从零重跑**: mutmut 对未变函数**保留既有 `exit_code`**, 直接在镜像里
-    `cd <mirror> && .venv/bin/mutmut run --max-children 4` 会**跳过已有结果、只补余量**, 与整跑等价
+    `cd <mirror> && .venv/bin/mutmut run --max-children 3` 会**跳过已有结果、只补余量**, 与整跑等价
     (实测: 60 min 到 6838/8027, 续跑 35m52s 补齐)。注意这条**必须绕过 `mutants.run`**(它每次都
     `rm -rf mutants` 把续跑点删掉); 结果照旧落 `mutants/*.meta`, 之后 `mutants.report` 正常读。
     **更稳的是先按模块切**(见「派生计划」§5 停手点)。
@@ -248,7 +248,7 @@ user-invocable: true
    - 为什么先它: 引报告 §11 的对象优先级, 或引 §09 的实测刻度(分数最低的先补)。
    - **显式排除**: 不在范围内的文件/行为。
 2. **测算基数**(用报告实测密度与单价外推, 别拍脑袋)
-   - 变异数 ≈ 行数 × 1.0(实测 0.84–1.23/行); 单轮时长 ≈ 变异数 × 0.134s(包级锚点, WSL 8 核 `--max-children 4`)。
+   - 变异数 ≈ 行数 × 1.0(实测 0.84–1.23/行); 单轮时长 ≈ 变异数 × 0.134s(包级锚点, WSL 8 核 `--max-children 4` 时实测; 现行默认 3, 该锚点未重测)。
      口径按**目标 glob 命中的全行**算就行 —— **别**自作聪明剔除「纯数据声明」行: config 首轮这么精化后估 ≈3,800,
      实测 **4,799**(+26%), 估算只用于排期, **首轮一律以实测为准**并原样记进切片。
    - **墙时别用单价外推(hr 首轮实测)**: 0.134s/变异是在 config(6 文件池)上量的; hr(24 文件 / 15 文件池)整体
