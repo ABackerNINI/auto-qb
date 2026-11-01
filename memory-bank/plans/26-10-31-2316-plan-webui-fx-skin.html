@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-10-31-2316">
+<meta name="doc-updated" content="26-11-01-0856">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-10-31-2316 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-0856 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -248,6 +248,44 @@
 </table>
 <p class="cm">D11 为编号占位：第 1 轮提问 Q11 与 Q3 同议题，结论并入 D3；编号保留以免拍板号断档误读。</p>
 
+<h3>S4 人工挑选结论(26-11-01)</h3>
+<p>用户在 showcase 完成挑选并导出 JSON,原始数据以附件为准:<code>memory-bank/plans/attachments/26-11-01-webui-fx-skin-s4-picks.json</code>(导出自 <code>static/fx/showcase.html</code>,2026-11-01T00:49:48Z)。<b>主 preset = glass</b>;共选定 <b>24 项</b>,按组件分组如下(warn 标注原样保留,空 = 无警示):</p>
+<table>
+  <tr><th>#</th><th>组件</th><th>选定变体</th><th>fx 供给</th><th>warn 标注</th></tr>
+  <tr><td>D1-2</td><td rowspan="5">按钮 <code>.bt</code> 一族</td><td>glow 辉光</td><td><code>glow</code>(fx 库)</td><td class="wr">超 hover 100ms 软约束</td></tr>
+  <tr><td>D1-3</td><td>sheen 高光扫过</td><td><code>sheen</code>(fx 库)</td><td class="wr">总时长超 hover 软约束</td></tr>
+  <tr><td>D1-4</td><td>ripple 波纹</td><td>页内自实现: ripple</td><td class="cm">—</td></tr>
+  <tr><td>D1-5</td><td>press-scale 按压回弹</td><td><code>press</code>(fx 库)</td><td class="cm">—</td></tr>
+  <tr><td>D1-6</td><td>icon 变体附加</td><td>页内自实现: hover-icon</td><td class="wr">80-120ms 轻擦上限</td></tr>
+  <tr><td>D5-2</td><td rowspan="3">输入框 focus 态</td><td>ring 辉光圈</td><td>页内自实现: focus</td><td class="cm">—</td></tr>
+  <tr><td>D5-3</td><td>floating label 浮标签</td><td>页内自实现: focus</td><td class="cm">—</td></tr>
+  <tr><td>D5-5</td><td>shake-invalid 校验失败微震</td><td>页内自实现: shake</td><td class="wr">300ms 反馈类偏长</td></tr>
+  <tr><td>D7-4</td><td>页签切换</td><td>方向感知滑动</td><td>页内自实现: dir</td><td class="cm">—</td></tr>
+  <tr><td>D2-3</td><td rowspan="2">弹窗 modal</td><td>zoom-out 反差入场</td><td>页内自实现: open</td><td class="cm">—</td></tr>
+  <tr><td>D2-5</td><td>danger tone 附加(headShake+glow)</td><td>页内自实现: open</td><td class="wr">强调档偏长, 一次性</td></tr>
+  <tr><td>D3-4</td><td>底部详情面板(抽屉)</td><td>push-content 内容上推(transform 版)</td><td>页内自实现: open</td><td class="wr">height 真让位 = layout 警示, 只标注</td></tr>
+  <tr><td>D4-1</td><td rowspan="6">torrent 表格行</td><td>cursor-hover 扫光</td><td>页内自实现: rows</td><td class="cm">—</td></tr>
+  <tr><td>D4-2</td><td>selected 边条生长</td><td>页内自实现: rows</td><td class="cm">—</td></tr>
+  <tr><td>D4-3</td><td>anchor 锚点脉冲</td><td>页内自实现: rows</td><td class="cm">—</td></tr>
+  <tr><td>D4-4L</td><td>row-insert 行插入(max-height 对照版)</td><td>页内自实现: rows</td><td class="wr">layout 警示(动 max-height)</td></tr>
+  <tr><td>D4-5L</td><td>row-remove 行退场(max-height 对照版)</td><td>页内自实现: rows</td><td class="wr">layout 警示(动 max-height/padding)</td></tr>
+  <tr><td>D4-6</td><td>checkbox 快勾</td><td>页内自实现: rows</td><td class="cm">—</td></tr>
+  <tr><td>D6-1</td><td rowspan="5">toast / 通知</td><td>slide+fade 入退场对</td><td>页内自实现: spawn</td><td class="cm">—</td></tr>
+  <tr><td>D6-2</td><td>倒计时进度条</td><td>页内自实现: spawn</td><td class="cm">—</td></tr>
+  <tr><td>D6-3</td><td>队列重排 FLIP(View Transitions)</td><td>页内自实现: spawn</td><td class="cm">—</td></tr>
+  <tr><td>D6-4</td><td>icon spring 弹入</td><td>页内自实现: spawn</td><td class="cm">—</td></tr>
+  <tr><td>D6-5</td><td>danger glow 边缘脉冲</td><td>页内自实现: spawn</td><td class="wr">paint(小面积)</td></tr>
+  <tr><td>D8-4</td><td>主表横滚指示条</td><td>变体 C: 缩放+淡入</td><td>页内自实现: spawn</td><td class="cm">—</td></tr>
+</table>
+<p class="cm"><b>落选即未列出</b>:showcase 中未出现在上表的候选一律视为落选——留库不挂载,后续要换装再按卡面标注启用。</p>
+
+<h4>S6 待办影响清单</h4>
+<ol>
+  <li><b>页内自实现候选的提升</b>:24 项中大量为「页内自实现」候选(ripple / hover-icon / focus 系 / shake / dir / zoom-out / open 系 / rows 系 / spawn 系)——showcase 卡面「选定才提升入库」的决策点已触发,S6 需把这些实现提升进 fx 库或 flux。</li>
+  <li><b>glass 配方开 glow 供给</b>:选定 glass 为主 preset,但 D1-2 glow / D1-3 sheen / D2-5 / D6-5 等 glow 系候选被选——glow 供给面 glass 配方默认关,flux 烘焙时需在 glass 配方上开 glow 供给(或按卡面 supply 标注的处理口径),S6 落实。</li>
+  <li><b>落选对照卡的处理口径</b>:行插入/退场选了 max-height 版(D4-4L / D4-5L),弹窗未选 backdrop blur 与 VT 共享元素(D2-4 / D2-6 落选),页签未选 VT 全接管(D7-4 方向感知入选)——S6 按 selected 实装,未选候选留库不挂载。</li>
+</ol>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -263,6 +301,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-10-31-2316</span> 初版：会话 grilling 三轮 15 项决策拍板后成文。要点：零依赖 fx 库(shared/fx/ 单点、两层变体) + showcase 挑选流 + fork console 成 flux(只 dark)；S1-S8 八步，S4 人工挑选为里程碑；三皮肤存量隔离是第一不变量。</li>
+  <li><span class="tag">R1 · 26-11-01-0856</span> S4 人工挑选结论回填: 主 preset glass + 24 项选定按组件分组落档(含 warn 原样), S6 待办影响三条(页内自实现提升/glass 开 glow 供给/落选留库不挂载); 原始导出 JSON 落 attachments/26-11-01-webui-fx-skin-s4-picks.json</li>
 </ul>
 
 </div>
