@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-11-02
 **Updated:** 2026-11-02
-**Summary:** 认领用户报障: WEBUI 单种子移动被外组 .!qB 误拦 —— 归因 relocate P5 三入口接线(现行决策) + qb_temp 收集层未走归属分类; 源码核实 lt 1.2/2.0 逐文件搬运后按归属三分收窄(own 拦 / foreign / unowned 降 note, D1), 计划 26-11-02-0134; 守阵三案+定向与全量绿(数字见 kb.baseline 26-11-02-0144); 顺带 drawer.js 移动失败 toast 文案; 真机复验留 Open
+**Summary:** 认领用户报障: WEBUI 单种子移动被外组 .!qB 误拦 —— 归因 relocate P5 三入口接线(现行决策) + qb_temp 收集层未走归属分类; 源码核实 lt 1.2/2.0 逐文件搬运后按归属三分收窄(own 拦 / foreign / unowned 降 note, D1), 计划 26-11-02-0134; 守阵三案+定向与全量绿(数字见 kb.baseline 26-11-02-0144); 顺带 drawer.js 移动失败 toast 文案; R1 同族第二例(空间/同卷闸门「叶子未建」误拦)按方案A收集层祖先回退(空间+同卷两处同一机制)+方案B note 文案对齐收口(数字见 kb.baseline 最新切片); 真机复验留 Open
 **Topics:** backend-relocate-qbtemp-narrow
 **Refs:** memory-bank/plans/26-11-02-0134-plan-relocate-qbtemp-narrow.html
 
@@ -13,6 +13,9 @@
 2. 「一个小问题顺手修改："已移动失败"改为"移动失败"」（同会话先行落地： drawer.js:768 okText「已移动」→「移动」， 失败 toast 随变「移动失败」）
 3. 「收窄后会不会影响安全，需要全面分析」（只读分析轮，产出逐形态×逐场景风险矩阵）
 4. 「写计划文档，然后按建议实施」
+5. 「先本地提交不推送」（commit c21d4386 未推送， 补推走 ship.push）
+6. 「先分析」复测报错 GATE_SPACE「目标卷剩余空间不可判定」（同族，分析轮产出根因链与方案表）
+7. 「并入之前的文档，按方案A+B修复」（D3 方案A / D4 方案B， 计划 R1）
 
 ## 思考过程与决策
 
@@ -35,6 +38,9 @@
 | S3 | 守阵：原用例升级语义 + 新增 foreign/unowned 两案 | Done(2026-11-02) |
 | S4 | test.full 全量 + 基线切片 | Done(2026-11-02) |
 | S5 | 真机复验：内容根含外组 .!qB 执行迁移，断言其原地不动（规程 testing/real-machine.md） | Open |
+| S6 | R1 方案A：_volume_free_resolved 空间祖先回退 + _same_volume_resolved 同卷上溯 | Done(2026-11-02) |
+| S7 | R1 方案B：same_fs 单成员 note 文案对齐实现 | Done(2026-11-02) |
+| S8 | R1 守阵：祖先回退四案（含整卷不可达仍硬拦）+ 定向与全量绿 | Done(2026-11-02) |
 
 ## 进度日志
 
@@ -43,3 +49,5 @@
 问答轮完成归因取证与全面安全分析后，用户拍板按建议实施。本轮：计划 `26-11-02-0134` 建档 → S1-S3 落地（relocate_mod 收集层三分 / relocate_units 文案同步 / 守阵三案）→ 定向 test.one 全绿（relocate 面全部用例）→ test.full 全量绿，数字见 kb.baseline 切片 `26-11-02-0144`；S5 真机复验留 Open。同轮顺带： drawer.js 单种子移动失败 toast 文案「已移动失败」→「移动失败」（用户显式要求，见原始请求 #2）。
 
 - 2026-11-02 01:46 qb_temp 闸门按归属收窄落地(plan 26-11-02-0134): relocate_mod 收集层把 ext 的 .!qB 剥后缀归属三分(own 对回本组→硬拦面; foreign/unowned 与普通条目同走归属分类降 notes), relocate_units 文案与 docstring 同步(gate id 不变), 守阵三案(foreign/unowned/own-matched)+全量绿数字见 kb.baseline 切片 26-11-02-0144; 依据 = lt RC_1_2/RC_2_0 aux::move_storage 逐文件搬运源码核实; S5 真机复验留 Open(计划与档案)
+
+- 2026-11-02 02:22 R1 同族第二例收口(用户复测报 GATE_SPACE 误拦, 拍板按方案A+B修复): relocate_mod 新增 _volume_free_resolved(空间祖先回退)/_same_volume_resolved(同卷上溯, 实施中发现同根因一并收口), 全链不可达维持硬拦; relocate_units same_fs 单成员 note 文案对齐(方案B); 守阵四案+定向 69 passed+全量绿数字见 kb.baseline 切片 26-11-02-0222; 计划 R1(26-11-02-0220)/档案 S6-S8 已并入

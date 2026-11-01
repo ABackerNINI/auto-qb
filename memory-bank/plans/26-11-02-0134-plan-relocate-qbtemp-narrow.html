@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-qbtemp-narrow">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-02-0134">
-<meta name="doc-updated" content="26-11-02-0134">
+<meta name="doc-updated" content="26-11-02-0220">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-02-backend-relocate-qbtemp-narrow.md">
 <style>
   :root {
@@ -100,6 +100,9 @@
 </table>
 <p><b>落点</b>：<code>src/auto_qb/core/modules/relocate_mod.py</code>（收集+分类）、<code>relocate_units.py</code>（仅 GroupFacts docstring 与闸门文案同步，gate id 不变）、<code>tests/test_web_relocate.py</code>、<code>tests/test_relocate_units.py</code>。三入口共用 <code>evaluate_group</code>，一处收窄全入口生效。</p>
 <p><b>决策表</b>：D1（unowned 处置）见 §06——采纳分析轮推荐 A（降 note）。</p>
+<h3>R1 增补（26-11-02-0220）：同族第二例 —— 空间/同卷闸门的「目标叶子未建」误报</h3>
+<p>用户复测报同类误拦：<code>GATE_SPACE</code>「目标卷剩余空间不可判定」。根因同族——收集层把「合法的暂不可见」交给硬拦：目标叶子目录尚未创建是迁移正常输入（libtorrent <code>move_storage</code> 落地即 <code>create_directories</code>，上轮源码已核），而 <code>shutil.disk_usage</code> 要求路径已存在（本机实证 missing → WinError 3）→ <code>target_free=None</code> → 硬拦；且同卷判定（<code>os.stat</code> 取 st_dev）在叶子未建时同样不可得 → 按跨卷保守处理让形态降级/拒绝（实施中发现，与空间同一机制一并收口）。用户配置无 <code>fs.path_map</code>（已核实），报错文案首位的「容器映射未覆盖」属容器实现语义，对 Local 场景误导。</p>
+<p><b>方案A（收集层祖先回退，两处同一机制）</b>：<code>_volume_free_resolved</code>（disk_usage 失败逐级上溯第一个可用层取卷剩余）与 <code>_same_volume_resolved</code>（same_volume None 逐级上溯第一个可读层比 st_dev）；上溯到根仍不可用/盘未就绪/UNC 不可达 → 维持 None → 硬拦照旧（保守默认不破）。junction/卷挂载点之下新建目录物理落在「最近存在祖先」所在卷，两处语义均正确。<b>方案B</b>：same_fs 单成员 note 文案对齐实现（原文「目标冲突/空间未预检」与实现不符，实为「其余闸门照跑」）。</p>
 
 <h2><span class="no">§04</span>实施步骤</h2>
 <table>
@@ -108,6 +111,8 @@
 <tr><td>S2</td><td><code>relocate_units</code>：GroupFacts docstring 与 <code>GATE_QB_TEMP</code> 文案随新口径同步（「内容根存在…」→「本组存在…」，gate id 不变）</td><td>闸门表测试文案断言同步，绿</td></tr>
 <tr><td>S3</td><td>守阵：<code>test_web_relocate.py</code> 原「外组孪生→blocked」用例改写为「外组→note+可迁」+ 新增 own-matched/unowned 两案；<code>test_relocate_units.py</code> 闸门表语义不变（facts 非空即拦），仅文案同步；两文件头部「## 测试计划」清单同步</td><td>红绿核对后 test.full 全绿</td></tr>
 <tr><td>S4</td><td>收尾 DoD：test.full 全量 + 新基线切片；立档 <code>tasks/</code>（阈值 2：改动 ≥3 源文件）；Refs 双向；kb.index</td><td>数字只进 kb.baseline，档案/切片引用不抄</td></tr>
+<tr><td>S5</td><td>R1 方案A：<code>_volume_free_resolved</code> 空间祖先回退 + <code>_same_volume_resolved</code> 同卷上溯（同一机制，实施中发现一并收口）</td><td>守阵四案（祖先命中/整卷不可达仍拦/裸名/空串）+ 定向与全量绿</td></tr>
+<tr><td>S6</td><td>R1 方案B：same_fs 单成员 note 文案对齐实现</td><td>既有单成员 note 断言仍绿（关键词保留）</td></tr>
 </table>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
@@ -118,6 +123,8 @@
 <tr><th>编号</th><th>决策点</th><th>结论</th><th>备选（被否）</th><th>日期/依据</th></tr>
 <tr><td>D1</td><td>unowned <code>.!qB</code>（孤儿残留）处置</td><td>降为 misc note</td><td>保留硬拦——逐文件搬运语义下无数据风险，孤儿文件不该永久锁死目录迁移</td><td>2026-11-02 用户「按建议实施」（采纳分析轮推荐 A）</td></tr>
 <tr><td>D2</td><td>是否收窄</td><td>收窄并实施</td><td>维持现状 / 仅入池——用户案例属高频误报，共享目录场景不可用</td><td>2026-11-02 用户「写计划文档， 然后按建议实施」</td></tr>
+<tr><td>D3</td><td>空间/同卷「叶子未建」误报处置</td><td>方案A：收集层祖先回退（空间 + 同卷两处同一机制）</td><td>单成员跳过 space 闸门（C，被否——放弃真实保护，跨卷 copy 中途失败有回滚窗口）</td><td>2026-11-02 用户「按方案A+B修复」</td></tr>
+<tr><td>D4</td><td>same_fs 单成员 note 文案与实现不符</td><td>方案B：文案对齐实现（其余闸门照跑）</td><td>放宽单成员预检（被否）</td><td>2026-11-02 用户「按方案A+B修复」</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -127,11 +134,13 @@
 <tr><td>归属误判（同目录同名不同内容）</td><td>外组文件名与本组文件名相同/互为剥后缀形态</td><td>两个误判方向均偏保守：误判外组→无主=继续拦；误判外组→本组=多拦一次。无放行风险</td></tr>
 <tr><td>TOCTOU 预检后状态漂移</td><td>预检通过到 qB 实际搬运之间外组开新下载</td><td>逐文件语义下无影响；本组成员已 pause + <code>GATE_MOVING</code>/<code>GATE_INCOMPLETE</code> 兜底</td></tr>
 <tr><td>守阵漏改导致收集层回归</td><td>未来重构 _group_facts 时恢复旧的整类抽取</td><td>三案守阵钉住收集层语义（foreign/unowned 不进 qb_temp、own-matched 必进），闸门表断言保留</td></tr>
+<tr><td>祖先回退语义边界（junction/挂载点/映射实现）</td><td>目标祖先链上有 junction/卷挂载点，或容器映射实现下叶层不可读</td><td>新建目录物理落在「最近存在祖先」所在卷——两处上溯语义均正确；映射实现逐层上溯同样适用；全链不可达维持硬拦（守阵钉住）</td></tr>
 </table>
 
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-02-0134</span> 初版：用户报障（WEBUI 移动种子被无关 <code>.!qB</code> 误拦）取证轮产出全面安全分析后，用户拍板「写计划文档， 然后按建议实施」。要点：libtorrent RC_1_2/RC_2_0 逐文件搬运语义源码核实 + qb_temp 按归属三分收窄（own 拦 / foreign note / unowned note=D1）。</li>
+  <li><span class="tag">R1 · 26-11-02-0220</span> 同族第二例收口（用户复测报 GATE_SPACE 误拦 + 拍板「并入之前的文档， 按方案A+B修复」）：方案A = 收集层祖先回退两处（<code>_volume_free_resolved</code> 空间 / <code>_same_volume_resolved</code> 同卷，实施中发现同卷同根因一并收口）；方案B = same_fs 单成员 note 文案对齐；守阵四案 + 全量绿（数字见 kb.baseline 最新切片）。</li>
 </ul>
 
 </div>

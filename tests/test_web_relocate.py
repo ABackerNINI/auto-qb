@@ -29,6 +29,8 @@
 - test_relocate_module_precheck_qb_temp_gate
 - test_relocate_module_precheck_qb_temp_foreign_demoted
 - test_relocate_module_precheck_qb_temp_unowned_demoted
+- test_relocate_volume_free_ancestor_fallback
+- test_relocate_module_space_gate_ancestor_and_missing
 - test_relocate_module_precheck_scandir_and_lstat_degraded
 - test_relocate_module_precheck_scandir_missing_root
 - test_relocate_module_start_and_apply_probe_wiring
@@ -219,6 +221,59 @@ def test_relocate_module_precheck_qb_temp_unowned_demoted(tmp_path, monkeypatch)
     assert item["cls"] == "ok", (item["cls"], item["reasons"])
     assert "qb_temp" not in [r["gate"] for r in item["reasons"]], item["reasons"]
     assert any("LEFTOVER-ORPHAN.mkv.!qB" in n for n in item.get("notes") or []), item.get("notes")
+
+
+def test_relocate_volume_free_ancestor_fallback(tmp_path):
+    """_volume_free_resolved: 叶子未建 -> 上溯最近存在祖先(plan R1 方案A); 裸名无分隔符 -> None
+
+    真盘实证: shutil.disk_usage 对不存在的目录抛 FileNotFoundError(WinError 3),
+    而目标目录尚未创建是迁移的正常输入(qB 落地时 libtorrent create_directories)。
+    """
+    from auto_qb.core.modules.relocate_mod import _volume_free_resolved
+    from auto_qb.infra.file_access import LocalFileAccess
+
+    fa = LocalFileAccess()
+    base = os.path.join(str(tmp_path), "existing-lib")
+    os.makedirs(base)
+    free_base = fa.disk_usage(base).free
+    # ① 已存在叶子: 原语义不变(自身卷)
+    assert _volume_free_resolved(fa, base) == free_base
+    # ② 叶子未建: 祖先卷(新建目录将落的卷, junction/挂载点语义下同为该卷)
+    assert _volume_free_resolved(fa, os.path.join(base, "NEW", "Show")) == free_base
+    # ③ 裸名无分隔符: 无卷可判 -> None
+    assert _volume_free_resolved(fa, "bare-name") is None
+    # ④ 空串/None 入参: -> None
+    assert _volume_free_resolved(fa, "") is None
+
+
+def test_relocate_module_space_gate_ancestor_and_missing(tmp_path, monkeypatch):
+    """空间闸门(方案A): 目标叶子未建 -> 祖先卷解析不再误拦; 整卷不可达 -> 仍硬拦
+
+    桩 disk_usage: 存在的路径回固定值(同卷证明可控), 不存在/不可达抛错 —— 真实
+    复刻 shutil.disk_usage 的失败形态(不存在即抛)。
+    """
+    from auto_qb.infra import file_access as fa_mod
+
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
+
+    def flaky(self, p):
+        clean = str(p).replace("\\\\?\\", "")
+        if "VOL-MISSING" in clean:
+            raise fa_mod.FileAccessError("卷不可达")
+        if not os.path.exists(clean):
+            raise FileNotFoundError(2, "系统找不到指定的路径", clean)
+        return fa_mod.DiskUsage(total=10**12, used=0, free=500_000_000)
+
+    monkeypatch.setattr(fa_mod.LocalFileAccess, "disk_usage", flaky)
+    mgr.store.server_state = {"free_space_on_disk": 500_000_000}
+    # ① 叶子未建(dst 存在): 祖先卷解析 => 无 space 闸门, 可迁移
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], os.path.join(dst, "NEWLIB", "Show"))[0]
+    assert "space" not in [r["gate"] for r in item["reasons"]], item["reasons"]
+    assert item["cls"] == "ok", (item["cls"], item["reasons"])
+    # ② 整卷不可达: 上溯全失败 => space 闸门照旧硬拦(真不可判定, 保守默认不破)
+    item2 = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], "VOL-MISSING:/newlib/Show")[0]
+    assert "space" in [r["gate"] for r in item2["reasons"]], item2["reasons"]
+    assert item2["cls"] == "blocked"
 
 
 def test_relocate_module_precheck_defensive_paths(tmp_path):

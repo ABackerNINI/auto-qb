@@ -77,6 +77,52 @@ def _top_children(files) -> set:
     return out
 
 
+def _volume_free_resolved(fa, target: str) -> Optional[int]:
+    """目标卷剩余(字节): 叶子目录未创建时上溯最近存在祖先(plan 26-11-02-0134 R1 方案A)
+
+    shutil.disk_usage 要求路径已存在 —— 目标目录尚未创建是迁移的正常输入(qB 落地时
+    libtorrent create_directories), 卷剩余对「将要新建的目录」是确定事实; junction /
+    卷挂载点之下新建目录物理落在「最近存在祖先」所在卷, 语义正确。逐级上溯第一个
+    可用层取 disk_usage; 上溯到根仍不可用(盘不存在/未就绪/UNC 不可达) => None,
+    交 GATE_SPACE 照旧硬拦(真不可判定, 保守默认不破)。
+    """
+    cur = str(target or "").strip().replace("\\", "/")
+    for _ in range(64):  # 层数上限: 防御病态超长/环状路径, 远超现实深度
+        if not cur:
+            return None
+        try:
+            return fa.disk_usage(cur).free
+        except Exception:  # noqa: BLE001 - 本层不可用(不存在/盘未就绪/不可达): 上溯
+            pass
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None  # 卷根已失败 => 整卷不可判定
+        cur = parent
+    return None
+
+
+def _same_volume_resolved(alias_fs_mod, sys_src: str, sys_target: str) -> Optional[bool]:
+    """同卷判定: 目标叶子未创建时上溯最近存在祖先比 st_dev(plan 26-11-02-0134 R1 方案A 同一机制)
+
+    alias_fs.same_volume 用 os.stat 取 st_dev, 叶子不存在 => None => 按跨卷保守处理,
+    文件链接形态会被降级/拒绝 —— 新建目录物理落在最近存在祖先所在卷, 与
+    _volume_free_resolved 同一语义。源侧可读, 故 None 只会来自目标层不可读:
+    逐层上溯第一个可读层即得判定; 全链不可读 => None(真不可判定)。
+    """
+    cur = str(sys_target or "").strip().replace("\\", "/")
+    for _ in range(64):
+        if not cur:
+            return None
+        verdict = alias_fs_mod.same_volume(sys_src, cur)
+        if verdict is not None:
+            return verdict
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None
+        cur = parent
+    return None
+
+
 class RelocateModule(BaseModule):
     """整组迁移模块: relocate 段认领 + P2 只读预检引擎(执行体随 P3)
 
@@ -1313,15 +1359,16 @@ class RelocateModule(BaseModule):
                 break
 
         # ---- 空间 / 同卷 / 同卷证明 ----
-        try:
-            target_free = fa.disk_usage(target).free
-        except Exception:  # noqa: BLE001
-            target_free = None
+        # 目标叶子未创建是迁移正常输入 => 上溯最近存在祖先取卷剩余(plan R1 方案A);
+        # 全链不可用 => None => GATE_SPACE 照旧硬拦(真不可判定)
+        target_free = _volume_free_resolved(fa, target)
         try:
             src_free = fa.disk_usage(save_path).free
         except Exception:  # noqa: BLE001
             src_free = None
-        same_vol = alias_fs.same_volume(self._syscall(save_path), self._syscall(target))
+        # 同卷判定: 目标叶子未建时 st_dev 不可得会按跨卷保守处理、让形态降级/拒绝 ——
+        # 上溯最近存在祖先比 st_dev(与 _volume_free_resolved 同一机制, plan R1 方案A)
+        same_vol = _same_volume_resolved(alias_fs, self._syscall(save_path), self._syscall(target))
         qb_free = (getattr(store, "server_state", None) or {}).get("free_space_on_disk")
         # 同卷证明的语义是「auto-qb 与 qB 看到同一批盘」: qB 的 free_space_on_disk 报的是
         # 它**默认保存路径**那块卷, 未必是本次迁移的源卷 —— 正向迁移(S->T)时源就是默认路径,

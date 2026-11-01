@@ -493,7 +493,10 @@ def evaluate_group(facts: GroupFacts) -> dict:
         if multi:
             _block(GATE_SAME_FS, text + " —— 只有独占情形(单成员组)可迁移")
         else:
-            notes.append(text + " —— 独占情形由 qB 自行搬运, 目标冲突/空间未预检")
+            notes.append(
+                text +
+                " —— 独占情形由 qB 自行搬运, 免同卷证明与链接能力; 其余闸门(冲突/空间/未落定/未收尾)照跑(plan 26-11-02-0134 R1 方案B: 原文「目标冲突/空间未预检」与实现不符)"
+            )
     if not facts.capability_ok:
         text = facts.capability_reason or "无法建出 qB 能读的链接"
         if multi:
