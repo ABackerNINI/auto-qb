@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>RM03 规则引擎 · 真机实测分步计划(漂移复测轮)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-machine-rm03-drift-plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-1031">
+<meta name="doc-updated" content="26-11-01-1031">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin: 14px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--ok); }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .case .kv { margin-bottom: 6px; font-size: 14px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-machine-rm03-drift-plan</div>
+<h1>RM03 规则引擎 · 真机实测分步计划(漂移复测轮)</h1>
+<p class="lede">对「规则引擎」片(RM03)做<b>漂移复测轮</b>真机实测的分步计划: 既有 9 条用例中 8 条复测 + RM03-05 判据变级重写, 另对 W1–W5 重设计新面(组合树 / choose / on_error / per-run trace / 退役键)与 11-01 拍板判归本片的 checking 跳检·全量面新增 8 条用例。设计主轴: 全部走 L1 假种子(死端口 announce, 零外连), 环境固定环境2(C盘机), 基线按「写不出 commit 从首轮重来」口径在本轮实测完成时重立。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-1031 · <b>doc-updated</b> 26-11-01-1031 · <b>doc-status</b> Open(待拍板 §05, 拍板即冻结) · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> RM03 漂移复测轮排期代理 · 常驻锚 issue 26-10-31-0641 §08(2026-11-01 漂移轮顺序 RM03→RM02→RM04→RM08/09 已拍板 + 跳检/全量归属 RM03 已拍板) · 分支 real/drift-261101 @ 9b2d158d(纯本地, 无远端)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>定片(规程 §06 步骤 1)</h3>
+<p>「规则引擎」→ <b>RM03</b>。依据: 锚件 §03 片表 RM03 行(名称「规则引擎」, glob = <code>src/auto_qb/rules/**</code> · <code>src/auto_qb/core/modules/rules_mod.py</code> · <code>src/auto_qb/core/modules/ops_mod.py</code>, 验证面含 11-01 拍板新补的「校验: 跳检/全量」); 排期依据 = 锚件 §08 2026-11-01 两条拍板(漂移轮顺序 RM03 第一; checking 执行体 <code>ops_mod.py</code> 判归 RM03, 本轮收口 checking 用例)。</p>
+<h3>漂移体检结论(规程 §06 步骤 2, 写进计划开头)</h3>
+<div class="callout warn"><b>判据变级 —— 降档重测轮, 且基线失效需重立。</b>锚件 §07 记的 RM03 基线 <code>2f06ccfe</code> 是 clone5 旧 lineage 短哈希, 本分支解析不到(bad revision)—— 按规程 §07「写不出 commit 从首轮重来」口径, 本轮<b>基线重立</b>: 执行段实测完成时的 HEAD 记为本轮基线 commit(锚件 §07 RM03 行同步回填)。漂移面按锚件 §08「遗漏面分析」的近似结论 + 本机 <code>git log --since</code> 实测核实: W1–W5 规则引擎重设计 <b>7 commits(11-01 03:04–07:46)</b> 全部落在 RM03 glob 内 —— ①判据变: <code>stop_following_rules_if</code>/<code>ignore_next_action_error</code> 两键退场(RM03-05 旧判据失效, 重写), <code>Rule.process</code> 返回值收口为 verdict; ②新面零用例: 条件组合树 all/any/not、<code>choose</code> 编排块、动作 <code>on_error</code> 三档(policy/retries/backoff)、per-run trace(state.json <code>rule_traces</code>)、单一 registry(PluginEntry)、webui 未启用徽标/组合树编辑器; ③另有 <code>fbaf0446</code>(10-31 20:24, qB 5.3.x 双版本 facade + 跳检重加回传)命中 glob —— 锚件 §08 已记账归 RM04 漂移面, 本轮不复测只留意行为差异。</div>
+<p><b>做到什么程度算成</b>: §04 四块兑现 —— 17 条用例(8 复测 + 1 重写 + 8 新增)出官方 suite 结果行, 新面与 checking 面逐条有着落, 基线重立, 锚件 §07/§08 同步, 收尾核净。</p>
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>零外连红线</b>: 全部用例 L1 假种子(死端口 <code>http://&lt;本机局域网IP&gt;:1/announce</code>), 零外网流量; 只碰白名单实例(环境2: 56589/56590, exe <code>C:\Programs\qBittorrent-testing*</code>), 产品进程只连副实例 56590(空库)。</li>
+  <li><b>token 不落盘</b>: 经环境变量 <code>QBT_REAL_ENV=2</code> + <code>QBT_TEST_&lt;端口&gt;</code> 运行时注入, 任何文件(含本计划)不得出现 token 字面值。</li>
+  <li><b>当轮不修</b>: FAIL 按 scope-guard 入池 bug issue(本计划段只登记预期, 不实际入池); 红线文件 <code>config.yml</code> / <code>auto-qb-data/</code> 零触碰, 配置一律 <code>tests-real/config/*.yml</code> 派生 + <code>schema_version: 5</code>。</li>
+  <li><b>幂等与回滚</b>: 假种子一律 <code>real-fake</code> 标签; 种子数据只落 <code>tests-real/.work/rm03/</code>(环境2 无 R: 盘); 收尾 real-fake/标签/分类/限速/跳检备份全清零。</li>
+</ul>
+
+<h2><span class="no">§02</span>开工自检(会话协议 · 漂移体检明细 · glob 自检 · 环境自检)</h2>
+<h3>会话协议(本分支无远端)</h3>
+<div class="callout">分支 <code>real/drift-261101</code>(基于 9b2d158d)<b>纯本地无远端</b> —— 按本轮任务协议<b>禁止跑 <code>my-commit-flow.sync</code> / <code>ship.commit</code> / 任何 push</b>, 开工无需同步; 收尾用普通 git 提交。树净, HEAD <code>9b2d158d</code>。</div>
+<h3>漂移体检明细(git log 实测, 2026-11-01)</h3>
+<p>命中 RM03 glob 的 11-01 前后提交(短哈希 · author date · 主题):</p>
+<table>
+  <tr><th>commit</th><th>时间</th><th>主题(Wave)</th><th>分类(规程 §07)</th></tr>
+  <tr><td><code>01826193</code></td><td>11-01 03:04</td><td>W1-A 两键退场引擎侧: 载入转未启用+warning, 删 stop 链路, process 返回 verdict</td><td>①判据变(RM03-05 旧判据失效)</td></tr>
+  <tr><td><code>b26dc537</code></td><td>11-01 03:53</td><td>W2-A 载入规范化单点 normalize_legacy_rule()</td><td>③重构复验(行为等价假设, 随复测带跑)</td></tr>
+  <tr><td><code>23949a33</code></td><td>11-01 04:59</td><td>W2-B 动作 on_error 三档(policy/retries/backoff) + retry 任务级 requeue</td><td>②新面零用例</td></tr>
+  <tr><td><code>0e617793</code></td><td>11-01 05:35</td><td>W3-A 条件组合树 all/any/not: normalize 建树 + 引擎递归求值</td><td>②新面零用例</td></tr>
+  <tr><td><code>477df090</code></td><td>11-01 06:33</td><td>W3-B choose 编排块 + webui 组合树/choose 编辑器</td><td>②新面零用例(编辑器归 RM09 面, 见 D2)</td></tr>
+  <tr><td><code>9a996ad2</code></td><td>11-01 07:21</td><td>W4 per-run trace + evaluation 枚举位(环形 5 条/2KiB 截断/prune)</td><td>②新面零用例</td></tr>
+  <tr><td><code>4a6d0c18</code></td><td>11-01 07:46</td><td>W5-A 单一 registry 收口: PluginEntry 三元组+延迟访问器</td><td>③重构复验(外部不可观测, 见 D3)</td></tr>
+  <tr><td><code>fbaf0446</code></td><td>10-31 20:24</td><td>qB 5.3.x 双版本支持: facade share_limits_mode + 跳检重加回传</td><td>已记账归 RM04 漂移面, 本轮不复测</td></tr>
+</table>
+<h3>glob 自检(规程 §05 规则 8, <code>git ls-files</code> 实测 2026-11-01)</h3>
+<div class="callout good"><b>3/3 条 glob 全命中, 共 20 个文件, 无混入大件, 片边界不糊, 不拆不并。</b>清单: <code>rules/**</code> 18 件 —— 根 4 件(base.py 742 行 / conditions.py 259 / registry.py 196 / checking_meta.py 120) · <code>actions/</code> 7 件(basic 183 / checking 207 / full_checking 153 / skip_checking 33 / transfer 113 等) · <code>expr/</code> 7 件(env 477 / parser 252 / eval 203 / lexer 170 / types 107 / errors 22 等) + <code>rules_mod.py</code> 556 行 + <code>ops_mod.py</code> 1270 行(11-01 拍板新入片的 checking 执行体, 本片最大件但属单一验证面, 不构成拆片信号)。上轮同款「漏 <code>src/auto_qb/</code> 前缀」缺陷本轮未复发(现值本就带前缀)。</div>
+<h3>环境自检(2026-11-01 实测, 环境2)</h3>
+<pre><code>[ok] real.env (0.5s)
+  当前环境: 环境2(C盘机)  [QBT_REAL_ENV=2]
+    主实例 PRIMARY   = 56589  exe: C:\Programs\qBittorrent-testing\qbittorrent.exe
+    副实例 SECONDARY = 56590  exe: C:\Programs\qBittorrent-testing2\qbittorrent.exe
+    BT 监听端口(实测): {56589: 27049, 56590: 32719}
+    token @56589: 环境变量 已设(QBT_TEST_56589) / local.json 无(口径: token 由用户每轮会话给, 不落盘)
+    token @56590: 环境变量 已设(QBT_TEST_56590) / local.json 无(口径: token 由用户每轮会话给, 不落盘)
+
+[ok] real.guard (1.6s)
+  [ok] 56589 pid=14820 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停
+  [ok] 56590 pid=3532 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+<p>两实例 <code>connection_status=firewalled</code>(§2.5 口径非 disconnected 即通过), 白名单端口与镜像路径核对通过; 主实例 0 枚真实种子(§2.5.2), 对本片无碍 —— 全部用例 L1 假种子承载。</p>
+
+<h2><span class="no">§03</span>方案总览(验证面 → 代码映射, 新面部分)</h2>
+<p>既有验证面(条件命中/动作真作用/变量替换/表达式/触发面/去重/dry-run)的映射沿用上轮计划 <code>26-10-31-1228</code> §02, 不复述; 以下只列 <b>W1–W5 新面 + checking 面</b>的锚点(grep 实测, 未整读):</p>
+<table>
+  <tr><th>验证面</th><th>实现锚点(文件:行号)</th><th>外部可观测口径</th></tr>
+  <tr><td>条件组合树 all/any/not</td><td>建树 <code>_build_condition_node</code>(rules/base.py:193, 内存形态 ("all"|"any",[子节点])/("not",子)/("leaf",实例)) · 递归求值 <code>_eval_condition_node</code>(:222) · 键面 <code>CONDITION_COMBO_KEYS</code>(config/compat.py:72) · 扁平列表隐式 <code>{"all": [...]}</code> 包裹(normalize_conditions:199)</td><td>命中与否经动作副作用回读 + per-run trace 的条件名; 建树超深/坏节点装载期 ConfigError(dry-run 起程即验)</td></tr>
+  <tr><td>choose 编排块</td><td><code>ChooseBranch</code>/<code>ChooseBlock</code>(base.py:265/276) · <code>_build_action_steps</code>(:301, allow_choose=False 拦嵌套) · <code>_build_choose_block</code>(:331) · 求值 <code>_pick_choose_branch</code>(:682, 按序首中短路, 无命中走 default, 否则 no_op) · 注册 <code>registry.register_block("choose", ...)</code>(:289, keys_ref=CHOOSE_KNOWN_KEYS)</td><td>首中分支的 then 动作真作用于 qB(打标分流); 装载期嵌套 choose ConfigError; 块内动作失败按自身 on_error 分派</td></tr>
+  <tr><td>on_error 三档</td><td>取值枚举 <code>ON_ERROR_POLICIES = ("stop","continue","retry")</code> + 缺省 <code>{"policy":"stop","retries":3,"backoff":60}</code>(config/schema/fields.py:187-191) · 解析 <code>Rule._resolve_on_error</code>(base.py:424) · 分派 <code>_dispatch_result</code>(:641); retry = 任务级 requeue(task.retry_delay=backoff, 无 run 内 sleep), 重试上限按 task.attempt, 耗尽按 stop 收场</td><td>stop: 失败动作后后续动作不执行; continue: 后续照跑; retry: 产品日志 requeue + 动作重试; 全部可由后续动作有没有发生回读</td></tr>
+  <tr><td>per-run trace</td><td><code>state.record_rule_trace</code>(core/state.py:313, 键 <code>rule_traces["{规则名}:{hash}"]</code>) · 环形 5 条/单条 2KiB 截断(_trace_clip base.py:35) · 保留期 prune 与逐出口径单点 <code>_evict_oldest</code>(state.py:54) · 产出点 <code>Rule._trace_record</code>(base.py:476)</td><td>state.json 落盘账(经 graceful_after 起停拿落盘, §2.10 exec_history 同款方法); webui 未暴露(本轮不咬)</td></tr>
+  <tr><td>退役键面(W1)</td><td><code>RETIRED_CONTROL_KEYS</code>(rules_mod.py:49) · 载入转未启用 <code>_retired_copy</code>(:72) + 每次载入 WARNING <code>_warn_retired_rule</code>(:87, 「含已退役控制键 … 转为未启用」) · 检测单点 <code>retired_control_keys_in</code>(:56, webui 徽标同源)</td><td>含键规则: WARNING 日志 + 全程零动作命中; 对照(去掉退役键的同配置规则)正常命中 —— 红验内建</td></tr>
+  <tr><td>evaluation 枚举位</td><td><code>Rule.evaluation</code>(base.py:370, 缺省 "all"; "first_match" 预留未实现, 配置后按 all 处理 + warning, schema/fields.py:52-55)</td><td>负向注记: 配 first_match 不报错但语义仍 all —— 本轮只记账不断言(单测面)</td></tr>
+  <tr><td>checking 决策链</td><td><code>CheckAction</code>(rules/actions/checking.py:20, name="checking") · 决策链 0-4(:77-136): 只校验「暂停中未完成」/ 组内活跃下载整组跳过 / 组内校验串行 / 失败推断 / basic_check 定参考(filelist|piecehashes|custom) / 有无参考分段</td><td>skip 文案逐链可观测(「种子非暂停中未完成状态」「组内有种子正在下载」等); 命中面经 qB 侧效果回读</td></tr>
+  <tr><td>checking 全量段</td><td><code>FullCheckingMixin._execute_full_checking</code>(full_checking.py:32) → <code>OpsModule.recheck</code>(ops_mod.py:180): R1 提交点检查(在途/快照 checking 拒绝) + 失败冷却(仅 rule 源) + 提交 recheck + 轮询(证据门控 checking_meta.poll_verdict)</td><td>qB API 回读 state 经 checking 族 → 完成; 产品日志 <code>ops[rule]</code> 行; skip/fail 分支各有文案</td></tr>
+  <tr><td>checking 跳检段</td><td><code>SkipCheckingMixin</code>(skip_checking.py:15, 一行委托) → <code>OpsModule.skip_submit</code>(ops_mod.py:445, 异步建 job) · 相位机 <code>SkipJob</code>(:111): prepare(导出/备份) → delete(keep_record) → gone → add(跳过校验) → finish; 闸门 <code>_skip_gates</code>(:574, 部分下载禁止/同日去重/G3-G8); 收尾打 <code>skip_checking_tag</code>(全局配置)</td><td>种子被删重加(同 hash, progress 恢复) + skip 标签 + 备份产物 + state skip_check_day 记账; 同日第二次 skip「今日已跳检过」</td></tr>
+  <tr><td>单一 registry(W5)</td><td><code>PluginEntry</code>/<code>CONDITION_ENTRIES</code>/<code>ACTION_ENTRIES</code>(rules/registry.py:37-45) · 深度校验分发/兼容表/watch_fields 派生(双跑 diff 清零)</td><td>纯内部结构, 外部不可观测 —— 见 D3(推荐不立真机用例)</td></tr>
+</table>
+<div class="aside">共享基座(沿用上轮配方): 测试配置 trackers ≥1 条目(domains=[本机局域网IP], <code>lib/net.py:local_host()</code>) 引用规则集 <code>@rm03</code>; 假种子死端口 announce; <b>规则绑定名 = <code>@规则集.规则名</code> 全名</b>(§2.10) —— 日志/trace 键/exec_history 断言全按全名写锚点; 规则 <code>interval</code> 键留空才是每轮语义; <code>execute_once</code> 合法枚举 = never/once/daily/hourly。</div>
+
+<h2><span class="no">§04</span>实施步骤(用例清单四块 + 环境2 注意 + 时长预估)</h2>
+<h3>① 本片用例清单(17 条, docstring 首行 <code>[RM03-nn] …</code>)</h3>
+<p>位置 <code>tests-real/rm03_rules/</code>(既有目录扩容), 跑法 <code>commands run real.suite -- --slice RM03 --yes</code>(<code>-n 0</code>)。全部 L1 假种子, 不需要 L2 互传、不需要活跃真实种子; <b>token 不出现在任何用例文件</b>(经环境变量注入)。每条四行(前置/副作用/回滚/失败判据)为<b>草案</b>, 执行代理按实况微调后落 docstring。</p>
+
+<h4>A. 复测组(8 条, 判据未变 → 原判据复测; 全部降「回归档」口径, 环境换环境2)</h4>
+
+<div class="case"><div class="hd"><span class="cid">RM03-01</span><span class="ttl">条件命中·interval 主链: size 分流 + 异尺寸对照(复测)</span><span class="tag">L3 保级</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: 同上轮(256K 命中打标 / 512K 对照不打标, 跨 ≥3 节拍)。</li>
+    <li><b>本轮口径</b>: 纯复测; W2-A 载入规范化(扁平列表隐式 all 包裹)不改变单键条件语义, 若分流失效即 W2-A 行为回归 → FAIL 入池。</li>
+    <li><b>失败判据</b>: 同上轮(A 不打标 / B 打标 / 日志「规则执行异常」)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-02</span><span class="ttl">on_torrent_added 即时分派 → add_category(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: 加种子即分派(不等节拍), qB categories 出现 rm03-added 且种子赋上; 重复 infohash 409 删旧重加不收养(§2.9)。</li>
+    <li><b>失败判据</b>: 同上轮。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-03</span><span class="ttl">限速下发 + 奇数 KiB 手动保护不覆盖(复测)</span><span class="tag">L3 保级</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: 甲(64/128 KiB 偶数)下发后 API 回读相等; 乙预置 2001 KiB(奇数)→ skip「用户已设置」且原值不动。</li>
+    <li><b>环境2 注记</b>: 手动保护谓词看<b>单种</b>限速奇偶(utils.py:793 项目约定), 与全局 transfer 限速原值(偶数, §2.5.2)无关 —— 对照预置照旧成立。</li>
+    <li><b>失败判据</b>: 同上轮(验证口径 = API 回读, 不咬日志)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-04</span><span class="ttl">变量替换 ${required_seeding_time} + 无 hr 留原文(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: 双 tracker 条目分流(本机IP 带 hr / localhost 无 hr), 甲 keep-3D、乙字面原文; hr 配置若牵动 HR 模块对假种子在线动作记 BLOCKED 归 RM06。</li>
+    <li><b>失败判据</b>: 同上轮。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-06</span><span class="ttl">on_torrent_deleted 删除前快照(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: 删自造种子触发, print_torrent_details 输出带删除前快照字段(hash/名/落点非空); 只删 real-fake。</li>
+    <li><b>失败判据</b>: 同上轮。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-07</span><span class="ttl">stop→start 状态往返 + remove_tags regex(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: add_tags → remove_tags <code>regex:rm03-t\d+</code> 收敛且 real-fake 幸存; stop 后 state stopped → start 恢复做种族。</li>
+    <li><b>失败判据</b>: 同上轮(regex 误删 real-fake 时收尾按 hash 兜底删, 26-10-31-1215 坑在池)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-08</span><span class="ttl">规则层去重 execute_once + cooldown(复测, 枚举修正)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>本轮口径修正</b>: 上轮计划文本写 <code>execute_once: always</code> —— 按 §2.10 实测事实「合法枚举 = never/once/daily/hourly」, 本轮落刀用 <code>once</code>(「窗口内只执行一次」); W2-A normalize_legacy_rule 对旧形态的兼容面顺带被本条覆盖。</li>
+    <li><b>前置/期望</b>: 跨 ≥3 节拍首轮执行后不再执行; 去重断言走规则层(exec_history/trace 形态), 不被动作级幂等骗绿。</li>
+    <li><b>失败判据</b>: 同上轮。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-09</span><span class="ttl">dry-run 管线照常分派但零 qB 写(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置/期望</b>: §2.10 已实测定案「dry-run 管线照常分派规则、动作经 ctx.dry_run 跳 qB 写」—— 上轮 BLOCKED 预登记不适用, 直接断言 ≥10 节拍零标签/分类/限速变化 + 规则命中日志在。</li>
+    <li><b>失败判据</b>: dry-run 下 qB 侧出现任何写(高优 FAIL); 全程零规则日志(管线不分派, FAIL —— 定案已排除 BLOCKED 形态)。</li>
+  </ul></div></div>
+
+<h4>B. 重写组(1 条, 判据变级 —— 旧判据随两键退役失效)</h4>
+
+<div class="case"><div class="hd"><span class="cid">RM03-05</span><span class="ttl">表达式条件 + verdict/trace 口径(重写: 旧 stop_following_rules_if 止损链判据退役)</span><span class="tag">L3 目标(降档重爬)</span></div>
+  <div class="bd"><p>旧面(RM03-05 上轮): stop_following_rules_if 止损语义 —— 已随 W1-A 两键退场退役(缺陷 26-10-31-1304 连同两键一并了断), 旧判据<b>失效作废</b>。新面三段:</p>
+  <ul class="four">
+    <li><b>① 正向(保留)</b>: expr 条件(如 <code>size &gt; 100000 &amp;&amp; state == "stalledUP"</code>)命中打标; 期望值按真机字段实况校一次(上轮风险点 8)。</li>
+    <li><b>② 装载期负向(保留)</b>: 坏语法表达式 ConfigError(dry-run 起程即验)。</li>
+    <li><b>③ 运行期口径(新)</b>: 求值异常的合法语法表达式 → 条件出错 ERROR 日志 + per-run trace 记 error 档 + <code>Rule.process</code> verdict 收口(trace 断言细则与 RM03-13 共用方法); <b>不再断言「停止后续规则」</b>—— 止损语义已退役, 后续规则是否继续按新引擎实况记账不断言。</li>
+    <li><b>前置</b>: 同基座, 1 枚 256K 假种子; <b>副作用</b>: 正向打标; <b>回滚</b>: real.seed.rm + 清标签 + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: 正向不命中(修期望重跑一次仍不中记 FAIL); 运行期异常静默通过(无 ERROR 无 trace error 档且动作照跑)。</li>
+  </ul></div></div>
+
+<h4>C. 新增组 · W1–W5 新面(5 条, 编号续 RM03-1x)</h4>
+
+<div class="case"><div class="hd"><span class="cid">RM03-10</span><span class="ttl">条件组合树 all/any/not: 组合命中 + 短路 + 取反对照</span><span class="tag">L3(对照内建)</span><span class="tag">L1 假种子 ×2</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 同基座; 规则 A conditions=<code>{all: [size 档, state 族]}</code>(多叶同真)命中; 规则 B conditions=<code>{any: [size 甲档, size 乙档]}</code> 两枚种子各自命中(首真即真); 规则 C conditions=<code>{not: {size 甲档}}</code> —— 甲不得命中、乙必须命中(取反对照, 红验内建: not 语义反了 C 全反)。</li>
+    <li><b>副作用</b>: 2 假种子, 3 组标签。</li>
+    <li><b>回滚</b>: real.seed.rm --all + 清 rm03-* 标签 + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: all 任一叶假仍命中(AND 失效); any 全假仍命中 / 全真不命中; not 方向反(对照必须能红 —— 红不了降 L2 记); 扁平列表(旧形态)与显式 all 树行为不一致(W2-A 兼容回归)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-11</span><span class="ttl">choose 编排块: 分支首中短路 + default 兜底 + 嵌套拒绝</span><span class="tag">L2(装载期红验内建)</span><span class="tag">L1 假种子 ×2</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 规则 actions=<code>choose: [{when: {size 甲档}, then: [add_tags rm03-cho-a]}, {when: {size 乙档}, then: [add_tags rm03-cho-b]}], default: [add_tags rm03-cho-d]</code>; 甲打 a 不打 b(首中短路, 乙同理); 造一枚两档皆不中的第三尺寸(或 size 叶恒假形态)验证 default(造不出则 default 腿降级记 BLOCKED 注造法)。</li>
+    <li><b>装载期红验</b>: choose 内嵌套 choose → ConfigError(dry-run 起程即验, 不进主断言)。</li>
+    <li><b>副作用</b>: 2-3 假种子 + 对应标签。</li>
+    <li><b>回滚</b>: real.seed.rm --all + 清标签 + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: 多分支同中(短路失效, 两标签并发); 无命中且无 default 时空操作语义被破坏(报错或误走 default); 嵌套 choose 静默通过。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-12</span><span class="ttl">动作 on_error 三档: stop / continue / retry(requeue)</span><span class="tag">L3(三档对照)</span><span class="tag">L1 假种子 ×3</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 必败动作选型由执行代理按实况挑(候选: <code>move_to</code> 指向非法/保留路径, 造不出必败动作则本条记 BLOCKED 注造法); 每档一条规则 = [必败动作, add_tags rm03-oe-&lt;档&gt;]。</li>
+    <li><b>期望</b>: <b>stop</b>(缺省)—— 必败后 rm03-oe-stop 不出现(后续动作不执行); <b>continue</b> —— 必败后 rm03-oe-continue 出现(后续照跑; 对照面, continue 坏了即红); <b>retry</b>(retries=1, backoff 短值)—— 日志见 requeue + 重试耗尽后按 stop 收场(rm03-oe-retry 不出现)。</li>
+    <li><b>副作用</b>: 3 假种子 + 标签; 产品日志 requeue 行。</li>
+    <li><b>回滚</b>: real.seed.rm --all + 清标签 + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: stop 下后续动作照跑(缺省止损失效); continue 下后续不跑; retry 无 requeue 痕迹或不耗尽收场(无限重试 = 高优 FAIL)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-13</span><span class="ttl">per-run trace: state.json rule_traces 键面(环形/截断/prune)</span><span class="tag">L2</span><span class="tag">L1 假种子 ×1</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 同基座 1 假种子 + 命中规则跨 ≥6 节拍; 产品经 <code>graceful_after</code> 起停拿落盘账(§2.10 exec_history 同款方法, state_save_interval 下限 30s 别硬等周期)。</li>
+    <li><b>期望(草案)</b>: <code>rule_traces["@rm03.规则名:hash"]</code> 存在且 ≤5 条(环形逐出最旧); 条目含条件名/动作结果/verdict; 注入超长字段(如超长种子名)验证单条 2KiB 截断; prune 保留期口径只记账(跨天造不出, 记「由单测覆盖」)。</li>
+    <li><b>副作用</b>: 产品 data_dir(用例临时目录)落 trace 账。</li>
+    <li><b>回滚</b>: 删临时 data_dir + real.seed.rm --all + 清标签。</li>
+    <li><b>失败判据(草案)</b>: 键名不含规则全名/ hash; 条目数无界(环形失效); 超长条目未截断。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-14</span><span class="ttl">退役键面: 含 stop_following_rules_if 规则载入转未启用 + 零执行</span><span class="tag">L3(对照内建)</span><span class="tag">L1 假种子 ×1</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 配置含两条规则: 甲带 <code>stop_following_rules_if</code>(条件/动作与丙全同), 丙不带(对照); 1 枚命中的假种子。</li>
+    <li><b>期望(草案)</b>: 甲载入即转 enabled=false —— WARNING「规则[名] 含已退役控制键 stop_following_rules_if … 转为未启用」+ 全程零动作命中; 丙正常命中打标(对照红验内建: 甲若也打标 = 退役面失效); actions 域伪动作 <code>ignore_next_action_error</code> 同款面顺带验(第二条甲')。</li>
+    <li><b>副作用</b>: 1 假种子 + 丙的标签。</li>
+    <li><b>回滚</b>: real.seed.rm --all + 清标签 + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: 甲照样执行(退役面失效, 高优); 无 WARNING(静默吞); 丙也不执行(载入层误伤合法规则)。</li>
+  </ul></div></div>
+
+<h4>D. 新增组 · checking 跳检/全量(3 条, 11-01 拍板归属收口; 编号续 RM03-1x)</h4>
+<div class="callout warn"><b>组构成前置(本组最大造法风险)</b>: 决策链依赖 <code>grouping._group_members</code>(RM04 面)—— 执行代理开工先只读核实「同组」的最小测试配置造法(tracker conf 归组口径), 造不出记 BLOCKED 并在切片注明造法结论交 RM04 协调, 不硬撑。种子造法候选: qB add 带 skip_checking 参数造「有文件未校验」态(执行时核 API 支持, 造不出记 BLOCKED)。</div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-15</span><span class="ttl">checking 全量段: recheck 提交 + 轮询 + 决策链闸门红验</span><span class="tag">L3(闸门红验内建)</span><span class="tag">L1 假种子 ×2</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 同组两枚假种子(带数据落 .work/rm03): 参考种子(已完成已校验) + 目标种子(「暂停中未完成」态, add skip_checking 造); 规则 actions=<code>checking</code> 且 with_reference 段 mode=full-checking、basic_check=filelist。</li>
+    <li><b>期望(草案)</b>: 目标种子被 ctx.ops.recheck 提交 —— qB API 回读 state 经 checking 族(queuedDL/checkingDL 等)最终完成; 产品日志 <code>ops[rule]</code> 提交与轮询行; on_success 晋升 verified_references 为内存面不直接断言(经后续行为记账)。</li>
+    <li><b>负向红验</b>: 对照种子用「已完成」态(同组第三枚 progress=1.0)走同一规则 → 必须 skip「种子非暂停中未完成状态, 无需校验」(决策链 0, 天然对照)。</li>
+    <li><b>副作用</b>: 目标种子被真 recheck(qB 校验读盘, KB 级种子秒完); .work 落种子数据。</li>
+    <li><b>回滚</b>: real.seed.rm --all + real.seed.clean + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: recheck 从未提交(无 ops[rule] 行且 state 不动); 已完成对照被真校验(决策链 0 失效); 校验结果无证据背书被误判成功(checking_meta 证据门控失效)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-16</span><span class="ttl">checking 分段选择: 有参考 → with_reference / 无参考 → without_reference</span><span class="tag">L2</span><span class="tag">L1 假种子 ×2</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 两轮场景共一条 checking 规则(两段都配置且 mode 可区分, 如 with_reference=full-checking / without_reference=skip-checking 或两段动作文案可区分): 轮1 同组含已完成参考 → 走 with_reference 段; 轮2 组内无参考(只有目标)→ 走 without_reference 段。</li>
+    <li><b>期望(草案)</b>: 两轮分段行为可区分(段 mode 的外部效果不同 / 日志段名可辨); 「无参考跳检(高风险)」告警仅在无参考轮出现(规则侧语义)。</li>
+    <li><b>副作用</b>: 同 RM03-15(全量或跳检各一次)。</li>
+    <li><b>回滚</b>: 同 RM03-15。</li>
+    <li><b>失败判据(草案)</b>: 有无参考两轮走同一段(参考判定失效); 无参考轮缺高风险告警。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM03-17</span><span class="ttl">checking 跳检段: 四阶段真删重加 + 同日去重红验</span><span class="tag">L3(去重红验内建)</span><span class="tag">L1 假种子 ×1</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>前置</b>: 同组目标种子(暂停中未完成 + 文件在, add skip_checking 造); with_reference 段 mode=skip-checking; <b>高风险动作面 —— 只对 real-fake 自造种子执行, 绝不碰真实种子(本机环境2 真实种子 0 枚, guard 快照计数为证)</b>。</li>
+    <li><b>期望(草案)</b>: 跳检四阶段(prepare 导出/备份 → delete(保留文件) → 重加(跳过校验) → finish 收尾): 终态种子仍在库且同 hash、progress 恢复、<code>skip_checking_tag</code>(全局配置)标签打上; 备份产物落 ops 数据目录(断言存在, 收尾清); state <code>skip_check_day</code> 当日记账。</li>
+    <li><b>负向红验</b>: 同日第二次触发(重走决策链)→ 必须 skip「今日已跳检过」(跨规则同日去重)。</li>
+    <li><b>副作用</b>: 种子真被删除重加(keep_record); 备份产物; 标签。</li>
+    <li><b>回滚</b>: real.seed.rm --all + 备份产物清理 + 清标签 + 删用例目录。</li>
+    <li><b>失败判据(草案)</b>: <span class="bad">灾难级: 数据文件被真删(重加后 progress 归 0 且文件不在)→ 立即停手, 本条 FAIL + 现场留档入池</span>; 种子重加后 hash 变了(非同种子重加); 去重失效(同日第二次又真跑四阶段); skip 标签未打。</li>
+  </ul></div></div>
+
+<h3>② 本轮升档计划(规程 §08 硬要求)</h3>
+<ul>
+  <li><b>升档兑现(4 条到 L3)</b>: RM03-05 重写后重新冲 L3(降档重爬, 红验 = 运行期异常静默通过必须红); 新增 RM03-10(not 取反对照)/ RM03-12(continue 对照 + stop 缺省对照)/ RM03-15(已完成对照 skip)/ RM03-17(同日去重)四条<b>新建即档 L3</b>, 红验真跑过才保档, 红不出来按计划内规则降 L2 写原因。</li>
+  <li>预计本轮档位分布 <b>L0/L1/L2/L3 = 0/0/10/7</b>(上轮 0/0/6/3 → 复测 8 条保级 + 重写 1 条 + 新增 8 条)。</li>
+  <li>RM03-09 上轮 BLOCKED 预登记已由 §2.10 定案排除, 本轮直接 L2 断言(升半档口径记切片)。</li>
+</ul>
+<h3>③ <code>[需活跃种子]</code> 跳过条目</h3>
+<p><b>无。</b>17 条全部 L1 假种子承载, 与约束 2(真实种子全程非活跃)零冲突; 环境2 主实例 0 枚真实种子(§2.5.2)对本片无影响。潜在降级腿预登记: RM03-11 default 腿(第三尺寸造不出)、RM03-12 必败动作(造法待实况)、RM03-15/16/17 组构成(grouping 造法待实况)、RM03-15 负向「组内有活跃下载」腿(若 stalledDL 假种子不构成「活跃下载族」, 该腿记 BLOCKED, <b>不为它开 L2 互传</b> —— 见 D5)。L0 人工目视项: 本片 0 条(webui 徽标目视面归 D2 拍板); 需人眼确认的断言一律记 BLOCKED 不得代签。</p>
+<h3>④ 验收判据(什么算这片做完)</h3>
+<ol>
+  <li><code>real.suite --slice RM03 --yes</code> 官方结果行: 17 条全部 PASS; FAIL ⇒ 按 scope-guard 入池 bug issue 当轮不修; BLOCKED ⇒ 写明解锁条件, 不计入「做完」; 复跑守「每条最多复跑 2 次」纪律。</li>
+  <li>验证面逐条有着落: 条件命中(01/10)· 组合树(10)· choose(11)· on_error(12)· trace(13)· 退役键(14)· checking 全量/分段/跳检(15/16/17)· 动作真作用于 qB(01/02/03/07)· 变量替换(04)· 表达式(05)· 触发面(02/06)· 去重(08)· dry-run(09)。</li>
+  <li>至少 4 条红验真跑过并看到红(01/03/05/10/12/14/15/17 中任取实测), 档位分布如实记进 <code>testing/real-baselines/&lt;stamp&gt;-real-RM03.md</code>。</li>
+  <li><b>基线重立</b>: 切片基线 commit = 本轮实测完成时 HEAD; 锚件 §07 RM03 行同步(上次实测日期/基线哈希/档位分布/结论), §08 记一行(漂移轮 RM03 完成 + 基线重立口径)。</li>
+  <li>新环境事实回写规程 §2.10(W1-W5 新面真机形态: 组合树/choose/on_error/trace/退役键/checking 组构成造法)。</li>
+  <li>收尾核净: 56590 无 real-fake 残留、无 rm03-* 与 skip_checking_tag 标签/分类残留、单种限速复位、跳检备份产物清零、<code>tests-real/.work/rm03/</code> 清空、guard 复跑绿、进程比对无新增/消失。</li>
+  <li>本轮踩到已记的坑 ⇒ 该条「复发」+1 并写一句为什么没命中。</li>
+</ol>
+<h3>环境2 特有注意(§2.5.2 全条过一遍)</h3>
+<table>
+  <tr><th>事实</th><th>对本片的影响与处置</th></tr>
+  <tr><td>主实例 0 枚真实种子</td><td>无碍 —— 全部用例 L1 假种子; 动作全落副实例 56590(空库), 产品进程只连 56590, 56589 仅 guard 出现</td></tr>
+  <tr><td>无 R: 盘</td><td>real.seed ≥32M 自动退回 .work 真写盘 —— 本片用例 256K-1M 级无碍; checking 组种子数据落 .work/rm03, 收尾 real.seed.clean</td></tr>
+  <tr><td>gtm 18788 不可达</td><td>本片无涉(限速工具面归 RM07)</td></tr>
+  <tr><td>transfer 限速原值 up=1 MiB / down=5 MiB(偶数, 两实例对称)</td><td>环境1 的 1 KiB 奇数全局坑不存在; RM03-03 的手动保护对照用<b>单种</b> 2001 KiB 预置(谓词看单种奇偶), 与全局原值无关; 本片不动全局限速</td></tr>
+  <tr><td>profile 网卡标识坑(已修, 双 firewalled)</td><td>guard 报 disconnected 时先查 §2.5.2 头号坑再往下测</td></tr>
+  <tr><td>token 不落盘</td><td>QBT_REAL_ENV=2 + QBT_TEST_&lt;端口&gt; 运行时注入; 用例/配置/计划文件零 token 字面值; local.json 无(口径如此)</td></tr>
+</table>
+<h3>执行段预估轮次时长</h3>
+<p>基座+造种 ~30min; 官方 suite 一轮 17 条估 <b>10-20min</b>(L1 假种子为主, checking 组的 recheck 轮询与跳检四阶段稍重, KB 级种子校验秒完); 排障复跑按每条 ≤2 次预留 2-3 轮; 新面 8 条为首跑无先例(配置写法/期望值按实况校准), 全轮在预算 1 次(半天)内可控 —— 超预算按规程 §05 规则 4 处置并记 §08, 不硬扛。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>决策点</th><th>推荐(默认)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>W1-W5 新面用例覆盖深度: §04 共 17 条(新增 8)是否一轮全收口</td><td><b>全收口</b> —— RM03 预算 1 次可撑(新增 8 &lt; 拆片阈值 12), 且判据变级面拖到下轮会二次漂移</td><td>砍 RM03-13(trace, 可并入 05/12 断言)与 RM03-11(default 腿)做 15 条精简轮</td></tr>
+  <tr><td>D2</td><td>webui 未启用徽标 + 组合树/choose 编辑器(config_rules.js)在 RM03 覆盖到什么深度</td><td><b>RM03 只做后端载入面(RM03-14)</b>; 徽标 L0 目视与 choose 编辑器(config 保存规范形)归 RM08/RM09 漂移轮 —— 静态 js 在它们 glob 内, 编辑器保存规范形属配置保存链(RM09)</td><td>RM03-14 附带 dev.webui L0 目视一枪(徽标出现/卡脚提示), 记 L0 不计档</td></tr>
+  <tr><td>D3</td><td>单一 registry(W5-A)是否立真机用例</td><td><b>不立</b> —— 纯内部结构外部不可观测, 规程 §00 准入判据「能用桩或单测验的不进真机轨」; W5-A 提交自带双跑 diff 清零单测面; 本轮记账「由单测覆盖」</td><td>并入 RM03-13 断言 watch_fields 派生效果(间接面, 证据弱)</td></tr>
+  <tr><td>D4</td><td>升档目标形态</td><td><b>4 条 L3</b>(RM03-05 重爬 + 10/15/17 新建即档, 12 视必败动作造法定档)—— §08 硬要求「每轮至少 1 条升一档」以新建即档 + 重爬双兑现</td><td>保守: 新面全部 L2 起步, 下轮升档( §08 要求以「本轮纯回归+原因」口径豁免 —— 但本轮非纯回归, 不建议)</td></tr>
+  <tr><td>D5</td><td>checking 负向对照「组内有活跃下载」的承载</td><td><b>先试 stalledDL 假种子</b>(活跃下载族状态, 零外连零真流量)承载决策链 1 红验; 判据只认真速率则该腿 BLOCKED, 不为它开 L2 互传</td><td>直接上 L2 互传(真 uploading)—— 引入双实例时序复杂度, RM03 预算内风险大</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="cm">(待拍板后回填: D 编号 · 结论 · 日期; 已拍板条目从 §05 迁入。)</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>新面配置写法首跑无实况锚(组合树/choose/on_error 的 YAML 形态)</td><td>装载期 ConfigError 或行为与期望分叉</td><td>dry-run 起程先验装载(便宜); 期望值按实况修一次重跑; 仍不中记 FAIL/入池</td></tr>
+  <tr><td>R2</td><td>checking 组构成最小造法未知(_group_members 依赖 grouping, RM04 面)</td><td>测试配置凑不出「同组」</td><td>开工只读核实组键口径; 造不出记 BLOCKED + 切片注明交 RM04 协调</td></tr>
+  <tr><td>R3</td><td>跳检四阶段真删种子(高风险不可逆步骤)</td><td>备份缺失/重加失败/数据文件被真删</td><td>只对 real-fake 种子; 前置确认备份产物落盘再进删除段(执行序: 拒绝闸门全在备份与删除之前); 灾难形态(RM03-17 失败判据首条)立即停手留档入池</td></tr>
+  <tr><td>R4</td><td>retry requeue 断言涉主循环节拍时机</td><td>backoff 内断言过早</td><td>backoff 短值 + <code>_wait</code> 轮询到终态, 不 sleep 死等; 日志「requeue/重试」行做辅助锚</td></tr>
+  <tr><td>R5</td><td>trace/exec_history 断言要落盘账</td><td>读内存态看不到</td><td>graceful_after 起停拿落盘(§2.10 方法); 不把 state_save_interval 钉到 30s 以下</td></tr>
+  <tr><td>R6</td><td>qB 5.3.x facade 变化(fbaf0446 跳检重加回传)与实例版本 5.2.3 的行为差异</td><td>checking 用例撞 5.2/5.3 行为分叉</td><td>按实况记账; facade 面归 RM04 漂移轮不复测</td></tr>
+  <tr><td>R7</td><td>假种子进管线死门(tracker 匹配)</td><td>种子不进规则面零命中</td><td>沿用 §2.9/上轮配方: 死端口 announce + domains 覆盖 hostname(不含端口) + rules 引用</td></tr>
+  <tr><td>R8</td><td>退役键「转未启用」误伤合法规则或 WARNING 措辞漂移</td><td>RM03-14 对照丙不执行</td><td>断言咬结构化锚点(「含已退役控制键」), 不咬整句; 误伤即高优 FAIL 入池</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-1031</span> 初版: RM03 漂移复测轮排期计划 —— 定片 RM03(锚件 §03/§08); 漂移体检 = 判据变级(W1-W5 7 commits, 基线 2f06ccfe 失效按「首轮重来」重立); glob 自检 20 件全命中无混入; 环境自检环境2 real.env/real.guard 全绿(0 真实种子); 用例 17 条(复测 8 + 重写 RM03-05 + 新增 8: 新面 5 条 RM03-10..14 + checking 3 条 RM03-15..17); 升档 4 条 L3; 待拍板 D1-D5; 分支 real/drift-261101 @ 9b2d158d。</li>
+</ul>
+
+</div>
+</body>
+</html>
