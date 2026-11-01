@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 13 |
+| bug | 12 |
 | perf | 5 |
 | docs | 2 |
 | test | 28 |
@@ -178,9 +178,8 @@
 - [refactor] [文件优先级文案表 5 份且 setFilePriority 那份孤立缺 4 档](26-10-29-1340-refactor-b-r21a06-file-prio-text-table.html) — 优先级码→中文同一张表…
 - [bug] [浮层可点击行的 a11y 契约三套：combobox 候选项无 role/aria-activedescendant，列选择器项缺 Space、UI 切换缺 aria-current](26-10-29-1335-bug-b-r23a09-pop-item-a11y-contract.html) — 同一 .pop-item…
 - [refactor] [config_rules.js spec 编辑八助手已无调用者，其中 ListItemRemove 空态写 [] 与全项目删键口径相反](26-10-29-1334-refactor-b-r20c07-spec-list-empty-write.html) — spec 列表增删删键口…
-- [bug] [目录季标记锚定过窄: 「Season 2 (1080p)」类目录漏识别, 兜底静默归第 1 季](26-10-29-1329-bug-b-r08e03-dir-season-anchor.html) — parse_files…
 
-> 更早的 **257** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **258** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

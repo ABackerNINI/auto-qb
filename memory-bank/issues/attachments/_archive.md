@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (81)
+## Open (80)
 
 - [bug] [my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效](../26-11-01-2140-bug-sync-generated-whitelist-drift.html) — 分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解
 - [test] [core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期](../26-11-01-2024-test-core-w9b-mutation-low-residue.html) — W9b(R34) S5a 守阵后余量: 全轮真洞 367(存活 351 + no tests 16) - 红验 280 = 87(rules 31 含 no-tests hr12 / maintenance 19 / speed_curve 30 / tracker 7, 中 4 + 低 83, 弃杀 4 在内); 主体为 INFO/WARNING/ERROR 审计文案丢真、webui reasons 展示键值、回执计数、窄触发面, 按簇判读留档不排期
@@ -92,7 +92,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (317)
+## Done (318)
 
 - [bug] [WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction](../26-11-01-2102-bug-webui-set-share-limits-missing-sharelimitaction.html) — QbApi.torrents_set_share_limits 不传 share_limit_action, 库对 None 值键不发 → qB 5.0+ 该端点必填 shareLimitAction → WebUI 分享限制命令恒回「qB 拒绝执行: 缺少必需参数：shareLimitAction」; RM04-09 真机首测暴露
 - [test] [test.pkg.scoped 闸门对无自测包无豁免: dev/doc/env/kb 改即挂](../26-11-01-0921-test-commit-gate-no-test-pkg.html) — test.pkg.scoped 对改动包跑 pytest <包>, 包内零 test_*.py 时收集为空 rc=5 闸门 FAIL; real 已补最小自测, dev/doc/env/kb 四包同款未解
