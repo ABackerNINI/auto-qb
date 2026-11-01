@@ -69,6 +69,11 @@
   面板 role=listbox + :id=inputId+'-pop'; 两处 v-for 变体候选行 role=option/:id/:aria-selected 各齐两份;
   候选 id 生成式单点 comboOptId(add_torrent.js 定义恰 1 次, 模板消费恰 3 次), 预置行 aria-hidden 不配 option;
   同族顶栏: 列选择器项 Enter/Space 双键逐字同款 handler(筛选器项为基准锚一并钉), UI 切换项 :aria-current=page
+
+## 皮肤档位口径
+- 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
+  fork 自 console, 按 _UI_ALL 枚举的接线守阵随常量自动收编; 单独点名的成对面(qb-tabs 生效面/
+  --qb-gap-hatch 令牌/纵轴控件版式/.opt-pill.is-gated/.meta-dialog/ctx-item hover)已显式加 flux 档。
 """
 import json
 import os
@@ -378,6 +383,7 @@ def test_frontend_qb_traffic_chart_wiring():
         (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
         (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
         (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("flux"), "flux 生效样式面(聚合 + shared)"),
     ):
         for rule, what in (
             (".qb-tabs button.active", "窗口切换激活态"),
@@ -1170,11 +1176,12 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     assert tkb, "缺 _qbChartTokens(建图令牌单点)"
     assert 'gap: pick("--qb-gap-hatch"' in tkb.group(1), \
         "建图令牌必须产出 gap = --qb-gap-hatch(缺口斜纹专用高对比令牌)"
-    # 令牌三皮肤 + prism 五主题必须各自定义(缺一个就是那套皮肤下斜纹不可见)
+    # 令牌各皮肤 + prism 五主题必须各自定义(缺一个就是那套皮肤下斜纹不可见; flux 收编 S5)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas"),
         (_ui_css_aggregate("console"), "console"),
         (_ui_css_aggregate("prism"), "prism"),
+        (_ui_css_aggregate("flux"), "flux"),
     ):
         assert "--qb-gap-hatch:" in css, f"{name} 皮肤缺 --qb-gap-hatch 令牌(缺口斜纹不可见)"
     for theme in ("ocean", "galaxy", "orbit", "frost", "golden"):
@@ -1291,11 +1298,12 @@ def test_frontend_qb_traffic_yaxis_and_annotation():
     assert 'class="qb-statctl"' in stat_hdr and '<aq-qb-ctl></aq-qb-ctl>' in stat_hdr, \
         "纵轴/档位控件组必须落在图下统计栏 .hist-summary 内(2026-10-09 第 2 轮; 2026-10-16 起为唯一挂点; W3 起经 <aq-qb-ctl>)"
 
-    # 10. CSS 三皮肤成对(纵轴控件 + 图下统计栏控件组版式)
+    # 10. CSS 各皮肤成对(纵轴控件 + 图下统计栏控件组版式; flux 收编 S5)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas css 聚合"),
         (_ui_css_aggregate("console"), "console css 聚合"),
         (_ui_css_aggregate("prism"), "prism css 聚合"),
+        (_ui_css_aggregate("flux"), "flux css 聚合"),
     ):
         for rule in (
             ".qb-tools {",
@@ -2706,11 +2714,12 @@ def test_frontend_reannounce_inactive_gate_wiring():
         "禁用原因未走 title 通道(空串 = 清除提示, 见 ctx-menus 同款口径)"
     assert '@click="c.disabled || (c.checked = !c.checked)"' in pops, \
         "禁用项未在模板层短路点击(只靠样式 = 键盘/辅助技术仍可触发切换)"
-    # CSS 成套(三套皮肤 + atlas dialogs.css 后加载同补): 置灰须压过 .opt-pill:hover(坑档特异性节)
+    # CSS 成套(各皮肤 + atlas dialogs.css 后加载同补): 置灰须压过 .opt-pill:hover(坑档特异性节; flux 收编 S5)
     for name, t in (
         ("atlas css 聚合(link 序)", _ui_css_aggregate("atlas")),
         ("console css 聚合(link 序)", _ui_css_aggregate("console")),
         ("prism css 聚合(link 序)", _ui_css_aggregate("prism")),
+        ("flux css 聚合(link 序)", _ui_css_aggregate("flux")),
     ):
         assert ".opt-pill.is-gated" in t, f"{name} 缺 .opt-pill.is-gated 置灰规则(禁用态挂件裸奔)"
     # 非活跃 warn 的文本判据: 后端常量必须含「非活跃」(前端 _reannounceWarnInactive 按它识别)
@@ -3535,7 +3544,7 @@ def test_frontend_meta_dialog_paired():
     assert m, "shared/commands.js 找不到 ctxMeta(改名或挪走了? 同步本守阵)"
     assert "this.menu.visible = false" in m.group(1), ("ctxMeta 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)")
     assert "openMetaDialog(null)" in m.group(1), ("ctxMeta 必须复用 openMetaDialog 打开对话框 —— 目标集合口径单点在它里面")
-    # 3. CSS 成对: .meta-dialog 与 .opt-pill 各套 UI 都要有定义
+    # 3. CSS 成对: .meta-dialog 与 .opt-pill 各套 UI 都要有定义(flux 收编 S5)
     for name, t in (
         ("atlas css 聚合(link 序)", _ui_css_aggregate("atlas")),
         (
@@ -3543,6 +3552,7 @@ def test_frontend_meta_dialog_paired():
                                           encoding="utf-8").read()
         ),
         ("console css 聚合(link 序)", _ui_css_aggregate("console")),
+        ("flux css 聚合(link 序)", _ui_css_aggregate("flux")),
     ):
         assert ".meta-dialog" in t, f"{name} 缺少 .meta-dialog 定义"
         assert ".opt-pill" in t, f"{name} 缺少 .opt-pill 定义(atlas 此前没有该组件, 易漏)"
@@ -4439,11 +4449,12 @@ def test_frontend_ctx_submenu_single_entry_and_hover_close():
       3. **复制族并成第二个子面板**: 一级出现两个"更多"入口, 用户得先选"该进哪个"。
          CTX-06 把 复制名称/哈希/magnet 并入「更多操作」末尾。
     """
-    # 1. CSS 的 hover 规则: 直接子级 + 特异性压制(改回后代选择器 = 整片子面板变灰)
+    # 1. CSS 的 hover 规则: 直接子级 + 特异性压制(改回后代选择器 = 整片子面板变灰; flux 收编 S5)
     css = {
         "atlas": _ui_css_aggregate("atlas"),
         "prism": open(os.path.join(STATIC_ROOT, "prism", "css", "components.css"), encoding="utf-8").read(),
         "console": _ui_css_aggregate("console"),
+        "flux": _ui_css_aggregate("flux"),
     }
     for ui, text in css.items():
         assert ".ctx-item:where(:hover) > .ico" in text, (

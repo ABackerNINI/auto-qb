@@ -3,18 +3,21 @@
  * 全局 mixin 会波及 hub-field 等组件实例(watch/mounted 双份执行), 根选项只命中根。
  * 成员逐行原样搬运, 语义与拆分前一致; 接线形态4.由 _scan_mixin_wiring 钉住。 */
 /* 皮肤判定单点: URL 首段路径 == 皮肤目录名(static/<名>/index.html, 目录即 UI, 后端零注册表)。
- * 未识别段回落 atlas(如直接以 / 访问时的边缘路径)。加第四套 UI 在这里扩一档。 */
+ * 未识别段回落 atlas(如直接以 / 访问时的边缘路径)。加新 UI 在这里扩一档。 */
 function _aqbDetectUi() {
   const seg = location.pathname.split("/")[1];
-  return seg === "prism" ? "prism" : seg === "console" ? "console" : "atlas";
+  return seg === "prism" ? "prism" : seg === "console" ? "console"
+    : seg === "flux" ? "flux" : "atlas";
 }
 
-/* 界面切换下拉的选项表(单一语义模板参数化差异的数据面): 三套 UI 全列, 键序即菜单序。
- * 加第四套 UI = 这里加一档 + _aqbDetectUi 加一档判定, 模板零改动(旧「环形互切」已废, 2026-09-27)。 */
+/* 界面切换下拉的选项表(单一语义模板参数化差异的数据面): 各套 UI 全列, 键序即菜单序。
+ * 加新 UI = 这里加一档 + _aqbDetectUi 加一档判定, 模板零改动(旧「环形互切」已废, 2026-09-27)。
+ * flux 图标复用 sprite 既有 i-spark(flux 不新增 symbol —— sprite 段四皮肤逐字相等, 守阵钉)。 */
 const UI_HOME = {
   atlas: { icon: "#i-orbit", label: "星图", desc: "经典深色仪表盘" },
   prism: { icon: "#i-prism", label: "棱镜", desc: "工程仪器 · 五主题" },
   console: { icon: "#i-gauge", label: "控制台", desc: "Console Hub 仪表台" },
+  flux: { icon: "#i-spark", label: "flux", desc: "glass 层叠 · 动效皮肤" },
 };
 
 window.AQB_STATE = {

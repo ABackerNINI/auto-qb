@@ -227,7 +227,9 @@ STATIC_ROOT = os.path.join(
 
 # 全部 UI(皮肤)清单: 目录即 UI(static/<名>/index.html, 后端零注册表)。
 # 新增皮肤 = 加一档, 全文件"成对改"守阵随本常量自动扩档; 单独点名的守阵(令牌对账/CSS 链接序)另行核对。
-_UI_ALL = ("atlas", "prism", "console")
+# flux(第四套, plan 26-10-31-2316 S5): fork 自 console, 令牌 parity / wiring / 按钮成对 / hscroll /
+# transition parity(首格过渡单点) 等守阵全部随本常量收编。
+_UI_ALL = ("atlas", "prism", "console", "flux")
 
 
 def _ui_manifest(ui):

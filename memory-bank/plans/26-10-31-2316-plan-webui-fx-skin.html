@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-0856">
+<meta name="doc-updated" content="26-11-01-0925">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-0856 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-0925 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -249,7 +249,7 @@
 <p class="cm">D11 为编号占位：第 1 轮提问 Q11 与 Q3 同议题，结论并入 D3；编号保留以免拍板号断档误读。</p>
 
 <h3>S4 人工挑选结论(26-11-01)</h3>
-<p>用户在 showcase 完成挑选并导出 JSON,原始数据以附件为准:<code>memory-bank/plans/attachments/26-11-01-webui-fx-skin-s4-picks.json</code>(导出自 <code>static/fx/showcase.html</code>,2026-11-01T00:49:48Z)。<b>主 preset = glass</b>;共选定 <b>24 项</b>,按组件分组如下(warn 标注原样保留,空 = 无警示):</p>
+<p>用户在 showcase 完成挑选并导出 JSON,原始数据以附件为准:<code>memory-bank/plans/attachments/26-11-01-webui-fx-skin-s4-picks.json</code>(导出自 <code>static/fx/showcase.html</code>,2026-11-01 00:49 UTC)。<b>主 preset = glass</b>;共选定 <b>24 项</b>,按组件分组如下(warn 标注原样保留,空 = 无警示):</p>
 <table>
   <tr><th>#</th><th>组件</th><th>选定变体</th><th>fx 供给</th><th>warn 标注</th></tr>
   <tr><td>D1-2</td><td rowspan="5">按钮 <code>.bt</code> 一族</td><td>glow 辉光</td><td><code>glow</code>(fx 库)</td><td class="wr">超 hover 100ms 软约束</td></tr>
@@ -286,6 +286,17 @@
   <li><b>落选对照卡的处理口径</b>:行插入/退场选了 max-height 版(D4-4L / D4-5L),弹窗未选 backdrop blur 与 VT 共享元素(D2-4 / D2-6 落选),页签未选 VT 全接管(D7-4 方向感知入选)——S6 按 selected 实装,未选候选留库不挂载。</li>
 </ol>
 
+<h3>S5 执行实录(26-11-01)</h3>
+<p>flux fork 落地,三旧皮肤零改动(git status 证实: 仅 <code>shared/state.js</code> + 三个测试文件修改、<code>static/flux/</code> 新增)。分项:</p>
+<ul>
+  <li><b>fork 与体量</b>: <code>static/flux/</code> 5 文件共 2095 行(console 2099; views.css 逐字 0 差异,差异全在取值/头部注释: index.html 20 行、style.css 90 行、components.css 28 行、dialogs.css 6 行),全部低于 700 行帽。</li>
+  <li><b>令牌取值(glass 基调, 名集一字未动)</b>: 背景层改半透明静态玻璃面(<code>--bg-card</code> rgba(24,35,52,.82) / <code>--bg-row</code> rgba(30,43,63,.62) / <code>--glass</code> rgba(12,20,33,.78) / <code>--statusbar-bg</code> rgba(15,25,41,.8), 页底 <code>--bg</code> #0b111b 不透明);圆角三档 16/10/6(console 方角语言退役),components/dialogs 里 5 处 <code>clip-path</code> 切角改圆角(login-card/modal/add-drop-box/speed-pop/site-chip/brand-mark);accent 转冷青 #45b3c9;状态语义色族沿用 console 取值。<b>flux 自有 CSS backdrop-filter 保持 0 处</b> —— PERF-01 禁遮罩/吸顶条毛玻璃,且守阵钉各皮肤声明数对齐,玻璃感全靠半透明静态面。</li>
+  <li><b>ui === 盘点(grep 全量清单)</b>: shared/tpl/*.html + shared/*.js 共 4 处有效 —— topbar.html <code>ui === 'prism'</code>(棱镜专属分支, flux 不需要)与 <code>ui !== 'prism'</code>(自动涵盖 flux)、state.js <code>seg === 'prism'</code>/'console' 链(精确匹配, <b>已补 flux 档</b>: _aqbDetectUi + UI_HOME, 图标复用 sprite 既有 #i-spark, sprite 段四皮肤逐字相等不新增 symbol)。tpl-manifest 与模板分片无皮肤名单枚举,零补支。</li>
+  <li><b>守阵收编</b>: <code>webui_helpers._UI_ALL</code> 加 flux(atlas/prism/console/flux, 全文件成对改守阵随常量自动扩档);test_webui_static_skins 显式加档 10 处(表头 a11y 落点 / drawer_tpl stub 装载 / dt_table 挂载 / wiring CSS 链接序归 console 组 / 令牌 parity / 按钮成对 / HR safety / HR detail 生效面+底形族 / HR sort 生效面 / 排序箭头几何);dom_page 3 处 + dom_panel 6 处三套成对面加 flux;三文件头部「测试计划」同步。</li>
+  <li><b>transition parity 收编结论(本步定案)</b>: <b>收编</b> —— 随 _UI_ALL 自动罩住 flux,fork 后行板/首格过渡规则逐字同 console 天然满足;S6 挂 fx 动效时若要动行板/首格过渡,必须仍守「views.css 单点声明 + var(--dur) 同源」前提,破前提先改守阵(结论已写进 test_frontend_pinned_first_cell_hover_transition_parity 的 docstring)。</li>
+  <li><b>浏览器实测</b>: 桩 API 静态服务 + Playwright 双开 /flux/ 与 /console/ —— HTTP 200、登录遮罩渲染、token 验证后主界面(topbar/statusbar/layout/主表/空态)全渲染,<b>console 报错 0 / pageerror 0</b>(双皮肤);flux 令牌生效实测(--bg #0b111b、--radius 10px vs console #0d1724、0px, 顶栏按钮圆角/冷青 accent 可见);UI 切换下拉四项齐全且 flux 标「当前」。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -302,6 +313,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-31-2316</span> 初版：会话 grilling 三轮 15 项决策拍板后成文。要点：零依赖 fx 库(shared/fx/ 单点、两层变体) + showcase 挑选流 + fork console 成 flux(只 dark)；S1-S8 八步，S4 人工挑选为里程碑；三皮肤存量隔离是第一不变量。</li>
   <li><span class="tag">R1 · 26-11-01-0856</span> S4 人工挑选结论回填: 主 preset glass + 24 项选定按组件分组落档(含 warn 原样), S6 待办影响三条(页内自实现提升/glass 开 glow 供给/落选留库不挂载); 原始导出 JSON 落 attachments/26-11-01-webui-fx-skin-s4-picks.json</li>
+  <li><span class="tag">R2 · 26-11-01-0925</span> S5 flux fork 执行实录落档(见 §06「S5 执行实录」): fork 落地+令牌取值 glass 化(backdrop-filter 保持 0 处)+ui=== 盘点(补 state.js 两处)+守阵收编(_UI_ALL 四档 + skins 10 处/dom 9 处显式加档)+transition parity 收编定案+Playwright 双皮肤实测零报错; 另修 S4 段一处 ISO-T 日期体例</li>
 </ul>
 
 </div>

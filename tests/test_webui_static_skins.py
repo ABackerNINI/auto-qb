@@ -2,10 +2,10 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态; 计划 26-10-31-2316 S2 起 @starting-style 计入容器型 at-rule、shared/fx/fx.js 以"待接线豁免"登记, S6 进 manifest 后删除)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤220 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 三皮肤 CSS 链接序(atlas/console: style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
-- test_frontend_skin_css_token_parity: 三皮肤令牌**名集**相等守阵(issue 26-10-20-2231) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
-- test_frontend_shell_sprite_login_parity: 三份 index.html shell 内联段守阵(issue 26-10-20-2231) —— sprite 段(80 行/67 symbol)三皮肤逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, console 合法多一行皮肤说明注释)相等; symbol 数下限防"sprite 整体外提成共享文件后三份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须三皮肤同步"
-- test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体两套 CSS 成对定义、两套模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤220 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 各皮肤 CSS 链接序(atlas/console/flux(fork 自 console, S5 收编): style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
+- test_frontend_skin_css_token_parity: 各皮肤令牌**名集**相等守阵(issue 26-10-20-2231; 26-11-01 S5 收编 flux) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
+- test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
+- test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
 - test_frontend_search_syntax_wiring: 搜索匹配**服务端单点**的前端接线守阵 —— 清除钮 @mousedown.prevent 成对(焦点态清除失灵回归)/前端不得复活任何文本匹配实现(filters.js _parseSearchQuery 等四函数、hr.js/shows.js 旧整句 includes、app.js searchHitsQ 均已删, 复活即红)/filteredTorrents 必须消费 searchHits
 - test_frontend_search_pending_no_collapse: 搜索待响应期空命中集不得接管列表(2026-10-07 修详情面板/流量图搜索跳动) —— view.js searchPending 生命周期(输入武装防抖即置位/doSearch 直达入口补武装/resetSearch 清除/落袋且过代际守卫后清除) + filters.js _searchGateActive 单点(待响应且命中集未落袋 = 门不生效, 两个派生 filteredTorrents/filteredGroups 都走它; 渐进输入命中集非空仍按旧集过滤) + 三皮肤 .layout min-height: calc(100vh - var(--head-h)) 撑满首屏(停靠面板 sticky 锚点与列表长短无关, 筛到短列表不再脱锚跳)
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列每套 UI 2 处换绑 hrDurClass/hrSrcClass(计划 26-10-11-1722 P2 起明细成员单元格收敛为单份 <aq-member-cells> 渲染器, 触发面 3→2, 该渲染器由辅种页/追剧页共用)+ 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
@@ -18,13 +18,18 @@
 - test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: ① 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); ② 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
-- test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 三皮肤 .h-cell.sortable:focus-visible(atlas 落 views.css —— components.css 顶 700 行 cap); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
-- test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 ①行板过渡仍以 `background var(--dur)` 声明(时长基准) ②三皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) ③首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) ④首格过渡**只在三皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
+- test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 各皮肤 .h-cell.sortable:focus-visible(atlas/prism 落 views.css; console/flux 落 components.css —— 后者曾顶 700 行 cap; flux S5 收编); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
+- test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 ①行板过渡仍以 `background var(--dur)` 声明(时长基准) ②各皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) ③首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) ④首格过渡**只在各皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。flux 收编定案(S5, plan 26-10-31-2316): 随 _UI_ALL 自动罩住 —— fork 后规则逐字同 console 天然满足; S6 挂 fx 动效时若要动行板/首格过渡, 必须仍守「views.css 单点 + var(--dur) 同源」前提, 破前提先改本守阵。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
 - test_frontend_pinned_first_cell_selected_row_keeps_base: 选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」) —— 旧规则 `.group-row.selected { background: var(--sel-bg) }` 用半透明 tint **替换**行底(而非叠在行底上), 行板露出页底 `--bg`, 而吸左首格按 `--bg-row` 合成 ⇒ 两侧承光底分家, 选中行名称列整列异色竖带(真浏览器逐像素: atlas Δ9/255、prism Δ5/255, 三主表×双皮肤全中, 未选中行 Δ0); 钉 ①`.group-row.selected`/`.group-row.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红) ②行板与首格镜像的 tint 同字面(`var(--sel-bg, var(--accent-soft))`) ③首格镜像合成基色与行板同令牌 ④拆分后 `.member-row.selected` 仍在(成员行无吸左首格, 保持裸柔底)。行为面(行板与首格计算背景逐字相等, 选中/悬停选中)由 e2e/main-table-pinned-selected.spec.mjs 采
 - test_frontend_pinned_first_cell_expanded_row_keeps_base: 展开行「保留行底」守阵(2026-10-20 与选中态同轮收, 用户「group 一同修」) —— `.group-row.expanded { background: var(--bg-sunken) }` 同样把行底**替换**成半透明下沉底, 行板承光层变页底 `--bg`, 而首格按 `--bg-row` 合成; 真浏览器逐像素: 展开行 atlas Δ5/255、prism Δ2/255(低于可辨阈, 上轮按范围守恒未动); 钉 ①三皮肤 `.group-row.expanded` 的 background 末层是 `var(--bg-row)`(prism 在 views.css, atlas/console 在 components.css, 按选择器找) ②首格镜像同基色 ③console 独享的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`(否则悬停那一下又分家)。行为面由 e2e/main-table-pinned-selected.spec.mjs 的展开行用例采
 - test_drawer_table_bridge_wiring
 - test_drawer_tpl_table_face_bg_single_point
 - test_frontend_tpl_ctl_bits_single_source
+
+## 皮肤档位口径
+- 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
+  fork 自 console、只换令牌取值与视觉规则(类名/DOM/令牌名不动), 上述按 _UI_ALL 枚举的守阵随常量自动收编;
+  单独点名的守阵(表头 a11y 落点/令牌 parity/按钮成对/HR 各族成对面)已显式加 flux 档。
 """
 import json
 import os
@@ -870,9 +875,10 @@ def test_frontend_table_head_a11y():
     assert ':aria-sort="headAriaSort(col)"' in thead_seg, "thead <th> 缺 :aria-sort(HR 详情表读屏不知排序态)"
     assert '@keydown.enter.prevent="headActivate(col)"' in thead_seg, "thead <th> 缺 keydown 转发(键盘不可达)"
     assert ":tabindex=" in thead_seg, "thead <th> 缺 tabindex(键盘不可聚焦)"
-    # atlas 落 views.css 而非 components.css: 后者顶 700 行 cap(views.css 首注有约定); console/prism
-    # 各按 .h-cell.sortable 现有落点。
-    for ui, rel in (("atlas", "views.css"), ("console", "components.css"), ("prism", "views.css")):
+    # atlas 落 views.css 而非 components.css: 后者顶 700 行 cap(views.css 首注有约定); console/flux
+    # (flux fork 自 console)与 prism 各按 .h-cell.sortable 现有落点。
+    for ui, rel in (("atlas", "views.css"), ("console", "components.css"), ("prism", "views.css"),
+                    ("flux", "components.css")):
         css = open(os.path.join(STATIC_ROOT, ui, "css", rel), encoding="utf-8").read()
         assert ".h-cell.sortable:focus-visible" in css, \
             f"{ui} 皮肤缺 .h-cell.sortable:focus-visible(键盘能聚焦但看不见焦点 = 等于没做)"
@@ -1313,8 +1319,8 @@ def test_drawer_table_bridge_wiring():
     assert "dtSortSet(TABLE_ID" in v04 and "dtSortCell(TABLE_ID)" in v04, \
         "04 分段钮排序未并引擎(须 dtSortSet 直设 + active 态读 dtSortCell, 手搓排序态退役)"
 
-    # ⑫ 三份 index.html: stub 装载行各 1 条
-    for skin in ("atlas", "console", "prism"):
+    # ⑫ 各皮肤 index.html: stub 装载行各 1 条
+    for skin in ("atlas", "console", "prism", "flux"):
         idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
         assert idx.count("drawer_tpl/90-peers-stub-bridge.js") == 1, f"{skin} index.html stub 装载行失守"
 
@@ -1377,7 +1383,7 @@ def test_drawer_tpl_table_face_bg_single_point():
     for token in ("--tbl-head-bg", "--tbl-face-bg", "--tbl-head-minh", "--tbl-row-minh"):
         assert token in css, f"dt_table.css 缺令牌 {token}"
 
-    for skin in ("atlas", "console", "prism"):
+    for skin in ("atlas", "console", "prism", "flux"):
         idx = open(os.path.join(os.path.dirname(shared), skin, "index.html"), encoding="utf-8").read()
         assert idx.count('/shared/dt_table.css') == 1, f"{skin} index.html dt_table.css 挂载失守(须恰一次)"
 
@@ -1829,7 +1835,7 @@ def test_frontend_template_split_wiring():
         assert mf["scripts"][-1].endswith("/app.js"), (f"{ui} 清单末个脚本必须是 app.js(它末尾才 createApp, 且启动时要读 window.AQB_*)")
         # CSS 分层: 链接顺序即级联序; 单文件 ≤700 行体量守阵
         css_files = _ui_css_files(ui)
-        if ui in ("atlas", "console"):
+        if ui in ("atlas", "console", "flux"):
             rels = [os.path.relpath(p, STATIC_ROOT).replace(os.sep, "/") for p in css_files]
             assert rels == [
                 f"{ui}/style.css", f"{ui}/css/components.css", f"{ui}/css/views.css", f"{ui}/css/dialogs.css"
@@ -2052,7 +2058,9 @@ def test_frontend_skin_css_token_parity():
         return names
 
     prism_css = os.path.join(STATIC_ROOT, "prism", "css")
-    sets = {ui: _tokens([os.path.join(STATIC_ROOT, ui, "style.css")]) for ui in ("atlas", "console")}
+    # flux 收编(plan 26-10-31-2316 S5/D14): fork 只许换取值, 令牌名一个都不能少 —— 少名 = 该皮肤下
+    # var(--x) 声明计算值阶段整条静默作废(风险表「flux 令牌静默失效」的守阵面)。
+    sets = {ui: _tokens([os.path.join(STATIC_ROOT, ui, "style.css")]) for ui in ("atlas", "console", "flux")}
     sets["prism"] = _tokens(
         [os.path.join(prism_css, "tokens.css"),
          os.path.join(prism_css, "base.css")] + sorted(
@@ -2105,12 +2113,13 @@ def test_frontend_button_system_paired():
                 leftovers.append(f"{os.path.relpath(f, STATIC_ROOT)}:{bad}")
     assert not leftovers, f"旧按钮类名必须零残留: {leftovers}"
 
-    # 2. .bt 体系块与变体在两套 CSS 成对定义
+    # 2. .bt 体系块与变体在各套 CSS 成对定义(flux 收编 plan 26-10-31-2316 S5)
     variants = ["primary", "ghost", "danger", "danger-solid", "icon", "sm"]
     for css, name in (
         (atl_css, "atlas css 聚合(link 序)"),
         (pri_css, "prism/css/components.css"),
         (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
+        (_ui_css_aggregate("flux"), "flux css 聚合(link 序)"),
     ):
         assert re.search(r"^\.bt \{", css, re.M), f"{name} 缺 .bt 体系块"
         for v in variants:
@@ -2337,13 +2346,14 @@ def test_frontend_hr_safety_wiring():
     assert "unverified" not in collapse.group(1), "未核实行不得收起为「无时长要求」(本地有要求, 收起即失真)"
     assert "site_released" in collapse.group(1) and "site_exempt" in collapse.group(1), "真放行/免罪仍应收起轨道"
 
-    # 3. 新样式两套 CSS 成对
+    # 3. 新样式各套 CSS 成对(flux 收编 plan 26-10-31-2316 S5)
     atlas_css = _ui_css_aggregate("atlas")
     prism_css = _ui_css_aggregate("prism")  # issue 26-10-20-2231: hr-pop 段已并入 prism/css/dialogs.css, 改读聚合
     console_css = _ui_css_aggregate("console")
+    flux_css = _ui_css_aggregate("flux")
     for css, name in (
         (atlas_css, "atlas css 聚合(link 序)"), (prism_css, "prism css 聚合(link 序)"),
-        (console_css, "console css 聚合(link 序)")
+        (console_css, "console css 聚合(link 序)"), (flux_css, "flux css 聚合(link 序)")
     ):
         for rule in (
             ".m-pair.hr-warn",
@@ -2469,13 +2479,14 @@ def test_frontend_hr_detail_table_wiring():
         (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
         (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
         (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("flux"), "flux 生效样式面(聚合 + shared)"),
     ):
-        assert ".hr-detail-table" in css, f"{name} 缺 .hr-detail-table 段 —— 三套 UI 必须成对改(计划 §5.6)"
+        assert ".hr-detail-table" in css, f"{name} 缺 .hr-detail-table 段 —— 各套 UI 必须成对改(计划 §5.6)"
         for lane in ("a", "b", "c", "d"):
             assert f".hr-detail-table .hr-lane-{lane}" in css, f"{name} 缺 .hr-lane-{lane} 档位色义(计划 §5.4)"
         assert ".hr-detail-table tr.missing .hr-lane" in css, f"{name} 缺失踪行 --paused 描边弱化规则"
         assert ".hr-vsrc" in css, f"{name} 缺来源小徽章(.hr-vsrc)样式"
-    for ui in ("atlas", "console", "prism"):
+    for ui in ("atlas", "console", "prism", "flux"):
         own = _ui_css_aggregate(ui)
         for rule, what in (
             # 带 `{` 边界: 不带的话 `.hr-detail-table .hr-pres` 会被 `.hr-pres.hr-pres-on`
@@ -2666,12 +2677,13 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         js_code = re.sub(r"//[^\n]*", "", js_code)
         tpl_code = re.sub(r"<!--.*?-->", "", tpl, flags=re.S)
         assert dead not in js_code and dead not in tpl_code, f"{dead} 随旧列退役, 不得残留(死代码)"
-    # 生效面(聚合 + shared): 排序头/箭头/限宽钩子已收敛进 shared/console_hub.css(三皮肤逐条同),
-    # 徽章底形族仍各皮肤自带 —— 两处都在这张面上, 判据不变(三皮肤都得吃到)。
+    # 生效面(聚合 + shared): 排序头/箭头/限宽钩子已收敛进 shared/console_hub.css(各皮肤逐条同),
+    # 徽章底形族仍各皮肤自带 —— 两处都在这张面上, 判据不变(各皮肤都得吃到; flux 收编 S5)。
     for css, name in (
         (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
         (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
         (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("flux"), "flux 生效样式面(聚合 + shared)"),
     ):
         for rule, what in (
             (".hr-detail-table th.sortable", "排序表头"),
@@ -2696,6 +2708,7 @@ def test_frontend_hr_table_sort_filter_reorg_wiring():
         (_ui_css_effective("atlas"), "atlas 生效样式面(聚合 + shared)"),
         (_ui_css_effective("console"), "console 生效样式面(聚合 + shared)"),
         (_ui_css_effective("prism"), "prism 生效样式面(聚合 + shared)"),
+        (_ui_css_effective("flux"), "flux 生效样式面(聚合 + shared)"),
     ):
         mo = re.search(r"\.hr-detail-table th \.arrow\s*\{([^}]*)\}", css)
         assert mo, f"{name} 缺 .hr-detail-table th .arrow 规则体(计划 26-10-06-1009 §7)"

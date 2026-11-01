@@ -47,6 +47,11 @@
   settings.html 挂 <aq-cond-node> 与 <aq-choose-block>(旧扁平条件写入路径 hubPickPlugin
   conditions 零残留), tpl/rule-tree.html 双模板 + 三清单接线 + app.js 注册 + 共用层 CSS 成对;
   有 node 时真跑语义电池(归一幂等/树形读侧/建树切换删除收敛/choose 分支增删与 on_error 路径版)
+
+## 皮肤档位口径
+- 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
+  fork 自 console, 按 _UI_ALL 枚举的接线守阵随常量自动收编; 单独点名的三套成对面(HR 表②/全屏弹窗/
+  表③)已显式加 flux 档。
 """
 import base64
 import json
@@ -122,11 +127,12 @@ def test_frontend_hr_diag_view_wiring():
     js_code = re.sub(r"//[^\n]*", "", js_code)
     assert "localStorage" not in js_code, "展开态不持久化(计划 §5.3: 排障是临时动作): hr_status.js 代码态不得出现 localStorage"
 
-    # 3. CSS 三处成对(表② 新类)
+    # 3. CSS 各套成对(表② 新类; flux 收编 plan 26-10-31-2316 S5)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
         (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
         (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_aggregate("flux"), "flux css 聚合(link 序)"),
     ):
         for cls in (".hrs-diag", ".hr-diag-kv", ".hr-wave-table"):
             assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5.6)"
@@ -222,11 +228,12 @@ def test_frontend_hr_full_modal_wiring():
     assert busy and "this.hrsOpen" in busy.group(1), \
         "escBusy 名单缺 hrsOpen —— 漏同步时设置页按 Esc 关弹窗会顺带退回设置首页(hubOnKey)"
 
-    # 5. CSS 三处成对: 遮罩 + 面板 + 上下边界让出声明
+    # 5. CSS 各套成对: 遮罩 + 面板 + 上下边界让出声明(flux 收编 plan 26-10-31-2316 S5)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
         (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
         (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_aggregate("flux"), "flux css 聚合(link 序)"),
     ):
         for cls in (".hr-full-mask", ".hr-full-modal"):
             assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5 阶段2)"
@@ -384,11 +391,12 @@ def test_frontend_hr_history_wiring():
     js_code = re.sub(r"//[^\n]*", "", js_code)
     assert "localStorage" not in js_code, "展开态不持久化: hr_status.js 代码态不得出现 localStorage"
 
-    # 4. CSS 三处成对: 表③ 新类 + result_tone 五档色义
+    # 4. CSS 各套成对: 表③ 新类 + result_tone 五档色义(flux 收编 plan 26-10-31-2316 S5)
     for css, name in (
         (_ui_css_aggregate("atlas"), "atlas css 聚合(link 序)"),
         (_ui_css_aggregate("console"), "console css 聚合(link 序)"),
         (_ui_css_aggregate("prism"), "prism css 聚合(link 序)"),
+        (_ui_css_aggregate("flux"), "flux css 聚合(link 序)"),
     ):
         for cls in (".hr-hist-table", ".hr-hist-row", ".hr-hist-sub", ".hr-hres"):
             assert cls in css, f"{name} 缺 {cls} 段 —— 三套 UI 必须成对改(计划 §5.6)"

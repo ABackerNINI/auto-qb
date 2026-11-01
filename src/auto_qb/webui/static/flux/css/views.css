@@ -1,0 +1,452 @@
+/* ============ 微交互(只做"手感"级动效; 不做行入场动画与数字滚动, 见 atlas/views.css 同款纪律) ============ */
+.tabs button:active, .table-tool:active, .dist-chip:active, .filter-btn:active,
+.ctx-item:active, .pop-item:active, .col-menu-item:active { transform: scale(.975); }
+.ctx-item:active { transform: scale(.96); }
+.badge, .tag-chip, .site-chip, .cat-chip, .pop-item {
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease),
+    border-color var(--dur) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.h-cell .arrow { display: inline-block; animation: arrow-in .14s var(--ease-out); }
+@keyframes arrow-in { from { opacity: 0; transform: translateY(-2px); } }
+/* 展开行悬停仍用下沉底(不得跌回裸 `--bg-sunken`): 与行板展开规则同一个合成表达式 */
+.group-row.expanded:hover { background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row); }
+.topbar { background: var(--glass); }
+
+/* 限速对照(命中/实际) */
+.pill-limit .ico { opacity: .9; }
+.pill-limit.mismatch .lbl, .pill-limit.mismatch .val { color: var(--warn); }
+.pill-limit.mismatch .val { font-weight: 700; }
+.pill-limit.mismatch .ico { color: var(--warn); }
+.pill-limit.manual .lbl, .pill-limit.manual .val { color: var(--accent-hi); }
+.pill-limit.manual .ico { color: var(--accent-hi); }
+
+/* HR 栏: 未达标暖色 / 已达标绿 check */
+.g-hr { display: flex; align-items: center; justify-content: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.g-hr .hr-num { font-weight: 600; }
+.g-hr.pending { color: var(--hr-pending); }
+.g-hr.done { color: var(--green); }
+.g-hr .ico { opacity: .85; }
+/* 做种时长 / 分享率: mono 读数 + 专属色系; 要求值统一中性灰 */
+.m-pair { display: inline-flex; align-items: baseline; gap: 3px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.m-pair .req { color: var(--fg-dim); font-size: 11.5px; }
+.m-pair.m-dur { color: var(--teal); }
+.m-pair.m-ratio { color: var(--violet); }
+.m-pair.pending { color: var(--hr-pending); }
+.m-pair.reached { color: var(--green); }
+/* 删除安全档位: hr-warn = 本地·未达标(疑似辅种)黄档(2026-09-30 计划 hr-trigger-semantics:
+ * 原 unknown 灰档退役); hr-fail = 未达标终态红档。与 atlas/prism 同口径成对定义 */
+.m-pair.hr-warn { color: var(--warn); }
+.m-pair.hr-fail { color: var(--error); }
+/* HR 来源标记(2026-09-29, 计划 webui-hr-src-underline): 「在线/本地」底线编码 ——
+ * 长度(在线整格 / 本地半格) + 明暗(本地 50% 兜底) 双重编码;
+ * 线色一律 currentColor 跟随上面的档位色, 不引入新令牌。已排除 / 无 HR 不产线(无线 = 没有来源结论),
+ * 文案进 title。三套 UI 同口径 —— 改这里时同步 atlas/css/views.css 与 prism/css/views.css。
+ * !线是空 <i>: 绝对定位只给 left:0 而 width:auto 会收缩成 0(整条不可见), 必须显式 width:100%。
+ * !整格线必须挂 .dur-body(**文字**包裹层)而不是 .m-dur —— 行是 grid, 单元格被拉满整列宽, 挂单元格
+ *   上 width:100% 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报); 包裹层是 flex item
+ *   (fit-content), 线自然只覆盖「数值 + 要求」这段文字; 挂它也保住了弹窗的整格触发面。 */
+.m-pair.m-dur { position: relative; --dur-pad: 6px; padding-bottom: var(--dur-pad); }
+.m-dur .dur-body { position: relative; display: inline-flex; align-items: baseline; gap: 3px; }
+.m-dur .dur-val { position: relative; display: inline-block; }
+.m-dur .hr-line { position: absolute; left: 0; height: 2px; background: currentColor; }
+.m-dur .dur-body > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }  /* 整格: 在线(随文字) */
+.m-dur .dur-val > .hr-line { bottom: calc(-1 * var(--dur-pad)); width: 100%; }   /* 半格: 本地 */
+.m-dur.src-local .hr-line { opacity: .5; }
+/* 弹层多选行: 整行可点、无勾选框、左色条 + 亮字; 焦点必须 :focus-visible */
+.pop-item { position: relative; padding-left: 12px; }
+.pop-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+.pop-item.on::before { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 3px;
+  background: var(--accent); }
+.pop-item.on .pop-count { color: var(--accent-hi); font-weight: 600; }
+.pop-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* 固定宽度筛选按钮 + 绝对定位计数徽标(方形) */
+.filter-btn { position: relative; min-width: 92px; justify-content: center; }
+.filter-btn .filter-count { position: absolute; top: -6px; right: -6px; min-width: 17px; height: 17px;
+  display: inline-grid; place-items: center; padding: 0 4px;
+  background: var(--accent); color: var(--on-accent, #0d1724);
+  font: 700 10.5px/1 var(--font-mono); box-shadow: 0 0 0 2px var(--bg-row); }
+.filter-caret { transition: transform var(--dur) var(--ease); }
+.filter-btn.active .filter-caret { transform: rotate(180deg); }
+
+/* ============ 响应式收敛 ============ */
+@media (max-width: 1320px) {
+  .top-search input { width: 168px; }
+  .top-search input:focus { width: 208px; }
+}
+@media (max-width: 900px) {
+  .layout { padding: 12px 12px calc(24px + var(--statusbar-h)); }
+}
+
+select option { background: var(--bg-elev); color: var(--fg); }
+.col-menu { max-height: 70vh; overflow-y: auto; }
+/* 搜索命中(计划 26-10-19-2206 D6): 底色让给站点问题 / 种子状态, 命中改用 accent 描边 ——
+ * 两个信号都不丢: 块 = 这行为什么在列表里(圈), 填充 = 站点坏了或种子状态。
+ * 源顺序: 本规则在 .site-chip.sa-* 之前 ⇒ 站点问题的底色与字色胜出。 */
+.site-chip.search-hit { background: transparent; color: var(--accent-hi); font-weight: 600;
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+
+/* ---------------- 站点 chip: 站点问题走颜色, 命令结果走图标(计划 26-10-19-2206 S2) ----------------
+ * 站点问题(后端 site_alert)不再有图标 —— 缺配置 = 橙底 + 虚线底边(非颜色通道, D4, 灰度/色盲
+ * 下与实底红可区分), tracker 报错 = 红底。图标通道只剩**命令结果**且固定放在站点名之后,
+ * 尺寸 11px 塞进既有 gap:4px, 不触发列宽重排。
+ * 底色优先级由源顺序决定: 站点问题(本节) > 搜索命中(上一条) > 种子状态(components.css)。
+ * 缺配置优先于报错 —— 与后端 _site_alert 判定顺序一致(配置缺失时报错文本不可信)。 */
+.site-chip.sa-no-conf { background: var(--warn-soft); color: var(--warn);
+  border-bottom: 1px dashed var(--warn); }
+.site-chip.sa-tracker { background: var(--error-soft); color: var(--error); }
+/* 明细行站点文本(D9): 没有 chip 底色可用, 只染文字色(不动行底色, 不与行状态色抢) */
+.m-site.sa-no-conf { color: var(--warn); }
+.m-site.sa-tracker { color: var(--error); }
+
+/* 命令结果图标: 动效只走 opacity(dot-pulse 节奏, 与 .badge.warn.pending .dot 同源), 不碰会重排的属性 */
+.site-chip .sx { width: 11px; height: 11px; stroke-width: 2.2; }
+.site-chip .sx-pending { color: var(--accent-hi); animation: dot-pulse 1.4s ease-in-out infinite; }
+.site-chip .sx-ok { color: var(--green); }
+.site-chip .sx-warn { color: var(--warn); }
+.site-chip .sx-error { color: var(--error); }
+/* 变色后图标与文字同源(D5/R1): 橙底/红底上写死的语义色会糊掉, currentColor 才是该底色上的
+ * 高对比前景。**只作用于变色 chip** —— 正常 chip 的绿勾/红叉语义色保持不变(否则失败红叉会
+ * 继承种子状态的绿字, 失败语义直接消失)。 */
+.site-chip.sa-no-conf .sx, .site-chip.sa-tracker .sx { color: currentColor; }
+/* 状态列错误图标强化(计划 26-10-19-2007 D9): 文案与列宽不动, 只给已有的 i-warn 加呼吸 —— 复用 dot-pulse 节奏 */
+.g-status.k-error .ico { animation: dot-pulse 1.4s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .site-chip .sx-pending, .g-status.k-error .ico { animation: none; }
+}
+
+/* 校验中: 柔和呼吸 */
+.g-status.k-checking .ico, .member-row.checking .m-state .dot { animation: pulse-soft 1.6s ease-in-out infinite; }
+@keyframes pulse-soft { 0%, 100% { opacity: 1; } 50% { opacity: .32; } }
+/* 进度条填充平滑过渡 */
+.m-progress .bar > i { transition: width var(--dur-slow) var(--ease-out); }
+.g-name .caret { transition: transform var(--dur) var(--ease-spring), color var(--dur) var(--ease); }
+.dist-chip, .tabs button {
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+    color var(--dur) var(--ease), filter var(--dur) var(--ease), transform var(--dur-fast) var(--ease-out); }
+.dist-chip:active, .tabs button:active { transform: scale(.97); }
+.detail, .ctx-menu, .toast, .modal { animation-timing-function: var(--ease-out); }
+
+/* ---------------- 响应式(窄屏) ---------------- */
+@media (max-width: 900px) {
+  .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
+  .topbar .spacer { display: none; }
+  .ce-page { padding: 12px 12px 24px; }
+  .status-strip { padding: 7px 12px; overflow-x: auto; }
+  .dist-bar { flex-basis: 120px; }
+  .group-head, .group-row { min-width: 1180px; }
+  .status-strip { align-items: flex-start; }
+}
+
+/* ============ 登录"验证中"加载态 / 图标语义色 ============ */
+.ico-history { color: var(--today-up); }
+.login-loading { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 34px 32px 28px; }
+.login-loading .ico { width: 26px; height: 26px; color: var(--accent); }
+.login-loading p { margin: 0; }
+
+/* 多选选中态: 专用令牌族(--sel-*), 左侧靛蓝色条 + 柔底 */
+/* 选中/半选行**保留行底**(2026-10-20 修「选中的行必显列背景与其它列不一致」): tint 叠在行自身
+ * 的不透明 --bg-row 上, 不替换行底 —— 旧写法 `background: var(--sel-bg)` 让半透明 tint 透到页底
+ * --bg, 而吸左首格按 --bg-row 合成(见下方 selected 首格规则) ⇒ 两边承光底分家, 选中行名称列整列
+ * 一条异色竖带(实测逐通道 9/255 atlas、5/255 prism)。
+ * .member-row 没有吸左首格、也不承 row 底色 ⇒ 保持原「柔底」写法。 */
+.group-row.selected { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row); border-color: var(--sel-line, var(--accent-line)); }
+.member-row.selected { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+/* 成员行(辅种/追剧页分组内的种子)选中态与种子页种子行**同视觉**(2026-10-09 用户要求: 柔底 + 左色条)。
+ * 此前 .member-row.selected 只有柔底、没有左色条 -> 与种子页选中种子长得不一样。 */
+.group-row.selected::before, .member-row.selected::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%;
+  width: 3px; background: var(--sel-bar, var(--accent)); }
+.group-row.partial { background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
+  border-color: var(--sel-line, var(--accent-line)); }
+.member-row.partial { background: var(--sel-bg, var(--accent-soft)); border-color: var(--sel-line, var(--accent-line)); }
+.member-row { position: relative; }
+.group-row.partial::before, .member-row.partial::before { content: ""; position: absolute; left: 0;
+  top: 14%; bottom: 14%; width: 3px; background: var(--sel-bar, var(--accent)); opacity: .42; }
+.member-row.partial::before { top: 18%; bottom: 18%; }
+.group-row, .member-row { cursor: pointer; }
+/* 首列吸左固定(issue 26-10-06-1717, 2026-10-06): 行宽 > 容器时横向滚动, 首列常驻滚动容器左缘 ——
+ * 行左缘既是点击/多选落点(冒烟落点纪律 {8,8}), 也是行的身份(名称列), 横滚后不该被推出视野。
+ * 单元格必须**不透明**才挡得住滚过来的兄弟列: 基础态直接取行底色; 半透明状态(下沉/选中)用
+ * "同色 linear-gradient 叠在不透明 --bg-row 上" 做合成 —— 与行自身(该色叠在页底上)逐通道差
+ * < 10(远低于可辨阈 20), 不会读成"两截色"。状态序与行一致(selected/partial 在 expanded 之后)。
+ * 落在 views.css: 三套 UI 同一落点(prism 亦在 views.css; atlas 侧 components.css 已顶 700 行上限)。
+ * ! 表头 .group-head 在滚动容器**之外**(纵向 sticky 的前提), 首格改用反向 translateX 抵消容器
+ *   位移: 位移量由 sync*HeadScroll 写进 --head-pin-x; 减 --tbl-pad-x = 表头 padding-left(见 .group-head),
+ *   与行内 sticky 的 max(0, 自然位 - scrollLeft) 同形(否则表头首格会比行首格多出那段内边距)。 */
+.group-row > :first-child {
+  position: sticky; left: 0; z-index: 2; background: var(--bg-row);
+  /* 悬停底色与行板**同帧**渐变(2026-10-20 用户报「必显列鼠标滑过时背景与其它列不一致, 短暂
+   * 时间后恢复一致」): 行板 .group-row 有 transition: background var(--dur), 吸左首格此前没有
+   * 过渡 ⇒ 滑入瞬间首格已 snap 到 --bg-hover, 其余列还在从 --bg-row 渐入, 160ms 内读作一条竖带
+   * (双皮肤实测悬停首帧差 14/18, 移出同理反号)。补同源时长/缓动即逐帧对齐。渐变状态
+   * (expanded/selected/search-hit)走 background-image, 浏览器不可插值, 仍为离散替换(已知残留)。 */
+  transition: background-color var(--dur) var(--ease);
+  /* 行是 align-items: center, 网格项默认不拉伸 —— 首格只有单行内容高; 站点/标签等多 chip 格
+   * 换行把行撑高时(小窗常态), 滑入首格下方的 chip 从首格上下两段露出来(2026-10-11 用户报
+   * 「小窗时站点的徽标不会被名称列挡住」)。stretch 撑满行内容高才盖得住; 行 padding 14px
+   * >= 圆角半径, 拉伸后的方角不会戳出行缘。 */
+  align-self: stretch;
+}
+.group-row:hover > :first-child { background: var(--bg-hover); }
+.group-row.expanded > :first-child {
+  background: linear-gradient(var(--bg-sunken), var(--bg-sunken)), var(--bg-row);
+}
+.group-row.selected > :first-child,
+.group-row.partial > :first-child {
+  background: linear-gradient(var(--sel-bg, var(--accent-soft)), var(--sel-bg, var(--accent-soft))), var(--bg-row);
+}
+/* 搜索命中(2026-10-14 修「必现列背景与其他列不一致」): 行自身是「accent 渐层 over
+ * --bg-row」(components.css .group-row.search-hit 同款), 首格只拿平铺 --bg-row 会
+ * **丢整条渐层** —— 追剧表搜索命中行实测首格 backgroundImage=none, 名称列读作一条异色
+ * 竖带(左缘渐层最强处 Δ≈18/14/9)。首格补同款合成; 渐层停靠点同行(46%), 首格宽 << 行宽
+ * ⇒ 格内衰减更快, 残余差只落在渐层尾部(左缘逐通道一致), 远小于异色竖带。 */
+.group-row.search-hit > :first-child {
+  background: linear-gradient(90deg, var(--accent-soft), transparent 46%), var(--bg-row);
+}
+.group-head > .h-cell:first-child {
+  z-index: 2; background: var(--bg);
+  transform: translateX(max(0px, calc(var(--head-pin-x, 0px) - var(--tbl-pad-x, 14px))));
+}
+/* 首列 hover 高亮(2026-10-16 用户报「部分列 hover 未高亮」): 上面 background:var(--bg) 为吸左
+ * 遮住滑入的相邻列而必须**不透明**, 其特异性 (0,3,0) 压过 .h-cell:hover 的 (0,2,1) ⇒ 首列永不亮。
+ * 补法: 不动 background-color(吸左遮罩能力不减), 用 background-image 叠一层半透明高亮上来 ——
+ * image 层天然叠在 color 层之上, 合法语法(prism 同口径)。 */
+.group-head > .h-cell:first-child:hover { background-image: linear-gradient(var(--surface-2), var(--surface-2)); }
+/* 首列吸左边界提示(2026-10-11, 用户报「向右滚动时状态列被名称列盖住」): 横滚时相邻列滑进吸左
+ * 首格下方, 未盖满的尾字("做种"的"种"等)会紧贴首格右缘露出 —— 无边界提示时残根读成与名称
+ * 省略号粘连的坏字, 被误读成渲染 bug。横滚非零时由 sync*HeadScroll 给 .group-table 与表头打
+ * .is-hscrolled(三处单点: menu/selection/shows.js), 据此给吸左首格画右缘发丝线:
+ * 尾字被一条列分隔线切开, "盖住"读成 pane 边界而非破版; 未滚动不画(无物可盖, 视觉保持安静)。
+ * !2026-10-12 用户报「名称列后随机出现阴影」⇒ 原规则里的右缘落影
+ *   (`16px 0 14px -10px rgba(0, 0, 0, .55)`)整条删除。根因: 落影可见度随**首格高度**变 ——
+ *   box-shadow 的 spread -10 先从首格四周内缩 10px 再模糊 14px, 常态行首格仅 22px 高 ⇒ 落影矩形
+ *   塌成 2px、只剩模糊尾巴(近不可见); 站点/标签多 chip 格换行把行撑高(首格 46px+)时才显形。
+ *   于是同一个"横滚"状态在逐行之间深浅差 7 倍(实测 Δ 2.0 vs 13.7), 读成"随机出现的黑块"。
+ *   发丝线无此问题(inset 阴影铺满首格, 与高度无关), 故只留发丝线。 */
+.group-table.is-hscrolled .group-row > :first-child,
+.group-head.is-hscrolled > .h-cell:first-child {
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+/* 删除类确认框加宽形态(920 宽档) */
+.modal.wide { width: var(--modal-wide-w); }
+/* 确认框目标信息区: 等宽读数块(mono 键值) */
+.modal-details { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 14px;
+  padding: 10px 12px; border: 1px solid var(--border-soft); background: var(--surface-1); user-select: text; }
+.modal-detail-row { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; min-width: 0; }
+.modal-detail-row .ico { color: var(--fg-dim); flex: 0 0 auto; align-self: center; }
+.modal-detail-row .d-label { flex: 0 0 62px; color: var(--fg-dim); font: 500 11px/1.6 var(--font-mono);
+  letter-spacing: .05em; text-transform: uppercase; }
+/* 弹窗语义配色分级(计划 26-10-19-2341)整组在 shared/console_hub.css —— 三皮肤逐条同,
+ * ①②③④ 四级层次连注释一起搬过去了(拆散后各自的特异性论证读不懂)。
+ * 基线规则组 .modal-title / .modal.danger .modal-title .ico 仍在本套 components.css。 */
+
+.modal-detail-row .d-value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; color: var(--fg-soft); font-weight: 500; font-family: var(--font-mono); font-size: 12px; }
+.modal-detail-row.wide { display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "ico label copy" "value value value"; align-items: center; row-gap: 3px;
+  margin-bottom: 2px; }
+.modal-detail-row.wide > .ico { grid-area: ico; }
+.modal-detail-row.wide > .d-label { grid-area: label; flex: none; }
+.modal-detail-row.wide > .d-value { grid-area: value; display: -webkit-box; -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3; overflow: hidden; white-space: normal; overflow-wrap: break-word; }
+.modal-detail-row.wide > .d-copy { grid-area: copy; align-self: center; }
+.modal-detail-row .d-copy { width: 22px; height: 22px; opacity: 0; transition: opacity var(--dur) var(--ease); }
+.modal-detail-row:hover .d-copy, .modal-detail-row .d-copy:focus-visible { opacity: .75; }
+.modal-detail-row .d-copy:hover { opacity: 1; }
+/* ================= 路径选择器(服务端目录浏览) ================= */
+.modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
+.db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+.db-bar > .bt { flex: 0 0 auto; white-space: nowrap; }
+.db-path { flex: 1; min-width: 0; padding: 5px 9px; background: var(--bg-sunken);
+  border: 1px solid var(--border-soft); color: var(--fg-soft);
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.55; word-break: break-all; }
+.db-list { max-height: 380px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px;
+  padding: 4px; background: var(--surface-1); border: 1px solid var(--border-soft);
+  overscroll-behavior: contain; }
+.db-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 9px; border: 0;
+  background: transparent; color: var(--fg-muted); font: inherit; font-size: 12.5px; text-align: left;
+  cursor: pointer; transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.db-row:hover { background: var(--surface-2); color: var(--fg); }
+.db-row .ico { color: var(--accent); flex: 0 0 auto; }
+.db-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.db-new { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+.db-new .add-dialog-input { flex: 1 1 auto; min-width: 0; }
+.db-new > .bt { flex: 0 0 auto; white-space: nowrap; }
+
+/* 历史流量弹层(860 宽档) */
+.hist-modal { width: var(--modal-w-add); max-width: 100%; }
+.hist-modal .modal-title { margin-bottom: 12px; }
+.hist-tabs { display: inline-flex; gap: 2px; padding: 2px;
+  background: var(--bg-sunken); border: 1px solid var(--border-soft); }
+.hist-tabs button { padding: 3px 12px; border: 0; background: transparent;
+  color: var(--fg-muted); font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.hist-tabs button:hover { color: var(--fg); }
+.hist-tabs button.active { background: var(--accent-soft); color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+.hist-loading, .hist-empty { padding: 44px 0; text-align: center; color: var(--fg-dim); font-size: 13px; }
+.hist-chart { position: relative; }
+.hist-svg { display: block; width: 100%; height: auto; aspect-ratio: 920 / 380; }
+.hist-grid line { stroke: var(--hairline); }
+.hist-axis text { fill: var(--fg-dim); font-size: 10px; font-family: var(--font-mono); }
+.hist-area.up { fill: var(--today-up); opacity: .08; }
+.hist-area.down { fill: var(--today-down); opacity: .08; }
+.hist-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke; stroke-dasharray: 1000; stroke-dashoffset: 1000;
+  animation: hist-draw .7s var(--ease-out) forwards; }
+.hist-line.up { stroke: var(--today-up); }
+.hist-line.down { stroke: var(--today-down); }
+@keyframes hist-draw { to { stroke-dashoffset: 0; } }
+.hist-cross line { stroke: var(--fg-dim); stroke-width: 1; stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke; opacity: .8; }
+.hist-dot { stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.hist-dot.up { fill: var(--today-up); }
+.hist-dot.down { fill: var(--today-down); }
+.hist-tip { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px;
+  padding: 7px 11px; border: 1px solid var(--border-strong);
+  background: var(--bg-elev); box-shadow: var(--shadow-2);
+  font: 500 11.5px/1.5 var(--font-mono); color: var(--fg-muted);
+  pointer-events: none; white-space: nowrap; z-index: 2; }
+.hist-tip.flip { transform: translateX(-100%); }
+.hist-tip b { color: var(--fg); font-size: 12px; }
+.hist-tip .h-up { color: var(--today-up); }
+.hist-tip .h-down { color: var(--today-down); }
+.hist-legend { display: flex; align-items: center; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--fg-muted); }
+.hist-legend .sw { display: inline-block; width: 9px; height: 9px; margin-right: 6px; }
+.hist-legend .sw.up { background: var(--today-up); }
+.hist-legend .sw.down { background: var(--today-down); }
+/* 图例并入统计栏(2026-10-08 版式改): .hs-leg 沿用 .hist-legend 的色块与间距, 只让色块
+ * 有右边距(原 .hist-legend .sw 的 margin-right 是给独立图例行用的) */
+.hs-leg { display: inline-flex; align-items: center; }
+.hs-leg .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+.hs-leg .sw.up { background: var(--today-up); }
+.hs-leg .sw.down { background: var(--today-down); }
+.hist-hint { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
+/* 2026-10-16 版式改(用户动议「统计栏未对齐」): 各子项**垂直居中**对齐 —— flex 默认
+ * align-items:stretch 把纯文本读数拉到与控件组同高、文字贴顶(实测文字比中线高 3.7px),
+ * 而图例(.hs-leg)与控件组(.qb-statctl)自带 align-items:center 使内容居中, 两族文字因此
+ * 错开成两条线; 统一 center 后文本项收缩为内容高, 与图例/档位/纵轴控件同中线。 */
+.hist-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; margin-top: 6px; padding-top: 6px;
+  border-top: 1px solid var(--border-soft); font: 500 12px/1.5 var(--font-mono); color: var(--fg-dim); }
+.hist-summary b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hist-summary .h-up { color: var(--today-up); }
+.hist-summary .h-down { color: var(--today-down); }
+
+/* qB 口径流量图(P5a, plan 26-10-03-0946 §07; 2026-10-04 三挂点并入底部详情抽屉):
+ * 图表容器/窗口切换/空态 —— tooltip(.hist-tip)与图例/摘要(.hist-legend/.hist-summary)复用既有类,
+ * 色义同源; 曲线本体色值由 qb_traffic_chart.js 读令牌注入, 这里只有结构性规则。
+ * 流量形态正文的 flex/撑满规则在 dialogs.css 的 .drawer-body.is-traffic 段(抽屉壳侧) */
+/* .qb-tabs 组件本体(容器 + 按钮 + 激活态)在 shared/console_hub.css —— 三皮肤逐条同,
+ * 单点维护; 这里只剩下面「挂点胶水」(统计栏内的不收缩与紧凑档) */
+
+.qb-note, .qb-stale { padding: 44px 0; text-align: center; color: var(--fg-dim); font-size: 13px; }
+.qb-stale { padding: 0 0 10px; font-size: 12px; }
+.qb-chart { position: relative; }
+.qb-chart-host { width: 100%; }
+
+/* 纵轴固定模式控件(2026-10-08; 2026-10-16 上限读数 .qb-tools-hint 随 UI 移除): 分段器 + 手动值
+ * 输入 —— 与 .qb-tabs 同令牌链, 纯结构性规则(色值走令牌), 三皮肤成对改 */
+.qb-tools { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 12px; }
+.qb-tools-label { color: var(--fg-dim); font-size: 11.5px; }
+.qb-seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--border); }
+.qb-seg button { padding: 2px 10px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--fg-muted); font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.qb-seg button:hover { color: var(--fg); }
+.qb-seg button.active { background: var(--accent-soft); color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+.qb-yaxis-input { width: 84px; padding: 2px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg-sunken); color: var(--fg); font: 500 12px var(--font-mono, ui-monospace, monospace); }
+.qb-yaxis-input:focus { outline: none; border-color: var(--accent-line); }
+/* 2026-10-16 版式改: 控件组唯一挂点 = 图下统计栏(.qb-statctl), 流量形态头部不再挂控件 ——
+ * 原「流量形态头部并入控件」四条(.drawer-head:has(> .qb-tabs) 族)随挂点退役删除。 */
+
+/* 详情抽屉 · 合并双列(计划 26-10-11-2106 W2/W4 规则; W6 自 drawer_templates.js 的 <style data-dt>
+ * 注入单点迁入三皮肤, 逐条未改; W7 起为本组规则的单一来源 —— 变体专属 .dt-tpl 限宽仍在核心注入):
+ * · .dt-host:empty —— W2 Vue 组件根也带 .dt-host 类; 内容门关时子树只剩注释锚, :empty 兜底藏根
+ *   (显隐主门仍是组件内 v-show 读 dtHostOn; 变体宿主被拆装时空宿主同款藏法)。
+ * · .drawer-split —— R2 S2 合并双列布局(W4 收口 drawer.js); 上限 2400 = 两列各约 1180 可读
+ *   上限 + gap(与单栏同封顶哲学); 门 1920 保证容器 >= ~1880, minmax 下限不会溢出。
+ * · .dt-traffic-main —— 流量块 template 转 div 的布局等价层(顶替原 fragment 直挂
+ *   .drawer-body.is-traffic flex 纵列的几何; FX-29 遮罩对 wrapper 生效, 故不用 display:contents)。
+ * (W5 发明的 .dd-compact 密度档随变体层恢复一并撤销 —— W7 裁定退役越权)。 */
+.drawer .dt-host:empty { display: none; }
+.drawer .drawer-split { display: grid; grid-template-columns: minmax(560px, 1fr) minmax(620px, 1.15fr);
+  gap: 24px; max-width: 2400px; margin-left:auto; margin-right:auto; align-items: start; }
+.drawer .dt-col { min-width: 0; }
+.drawer .dt-col-head { display:flex; align-items:center; height:26px; margin-bottom:8px;
+  font-size:12px; font-weight:600; color:var(--fg-muted, inherit); border-bottom:1px solid var(--border-soft, transparent); }
+.drawer .dt-traffic-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+
+/* 档位/纵轴控件组(2026-10-09 第 2 轮落图下统计栏; 2026-10-16 起三挂点统一, 流量形态头部挂点退役)
+ * 落在 .hist-summary 内、排在「下载累计」之后。内层 .qb-tabs/.qb-tools 经 <aq-qb-ctl> 单点实现,
+ * 故这里只给「成组 + 不收缩 + 紧凑档」三条。 */
+.hist-summary > .qb-statctl { display: flex; align-items: center; gap: 12px; }
+.qb-statctl > .qb-tabs { flex: 0 0 auto; align-self: center; }
+.qb-statctl > .qb-tools { flex: 0 0 auto; align-self: center; margin: 0; }
+.qb-statctl > .qb-tabs button { padding: 2px 8px; }
+
+
+/* ============ 单种子视图 / 状态文字 ============ */
+.state-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.torrent-row .state-text { font-size: 12px; color: var(--fg-muted); }
+.g-save-path { color: var(--fg-muted); font-size: 12px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+
+/* 路径筛选选中底线(f-on 的 ::after)必须落 .sp-body 文字包裹层 —— 落单元格 div 上
+ * 线随列宽(行是 grid, 单元格被拉满列宽; 2026-10-09 报障, 强调由"框"改"下划线"后同理),
+ * 与 .m-dur 的 .dur-body 同一教训。省略号职责随线走: 超长路径铺满整列并省略, 不破列;
+ * 短路径时线贴文字。 */
+.g-save-path .sp-body { display: inline-block; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
+/* 视图切换入场 + 弹层关闭淡出 */
+.group-head, .group-table { animation: page-in .22s var(--ease-out); }
+/* !抽屉内表格体不播(2026-10-14 四复查「点击跳动」根因, 与 atlas 同款): 抽屉表格体是长生命周期
+ * 元素(桥 Teleport + 锚保活), anchFill 每帧摘插锚 ⇒ CSS 动画重播 ⇒ 每次点击重渲整表
+ * translateY(4px) 跳动并淡入(~0.22s 回位)。主列表表格随视图真重建才播, 不受影响。 */
+.drawer .group-head, .drawer .group-table, .drawer .h-cell .arrow { animation: none; }
+.pop-leave-active { transition: opacity var(--dur-fast) var(--ease); }
+.pop-leave-to { opacity: 0; }
+
+/* ================= 追剧视图(R10): 剧→季→集 层级 ================= */
+.show-row .show-name-text { font-weight: 600; }
+.season-head { display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px 7px; margin-top: 2px;
+  border-bottom: 1px solid var(--border-soft);
+  font: 600 12px/1.5 var(--font-mono); letter-spacing: .06em;
+  color: var(--fg-muted); position: sticky; top: 0; background: var(--bg-sunken); }
+.season-name { font-family: var(--font-mono); }
+.gap-badge { display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 8px; background: var(--warn-soft); color: var(--warn);
+  font: 600 11.5px/1.5 var(--font-mono); cursor: help; }
+.ep-row .g-name .caret { opacity: .55; }
+.ep-row.expanded .caret { opacity: 1; }
+.ep-key { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600;
+  padding: 1px 7px; background: var(--surface-1); border: 1px solid var(--border-soft); }
+.ep-pack { font: 500 10.5px/1.6 var(--font-mono); padding: 0 5px;
+  background: var(--surface-1); color: var(--fg-muted); border: 1px solid var(--border-soft); }
+.ep-site-count { font-size: 11.5px; color: var(--fg-dim); }
+.ep-row .state-text { font-size: 12px; color: var(--fg-muted); }
+
+.unrecognized { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 8px; }
+.unrecognized-head { display: flex; align-items: center; gap: 7px; width: 100%;
+  padding: 6px 14px; border: 0; background: none; cursor: pointer;
+  color: var(--fg-muted); font-size: 12.5px; font-weight: 600;
+  font-family: inherit; text-align: left; }
+.unrecognized-head:hover { color: var(--accent); }
+.unrecognized-head .caret { transition: transform var(--dur) var(--ease); }
+.unrecognized-head .caret.open { transform: rotate(90deg); }
+.unrecognized-hint { font-weight: 400; font-size: 11.5px; color: var(--fg-dim); }
+.unrecognized-body { padding: 2px 0 6px; }
+.unrecognized-row { display: grid; grid-template-columns: 110px minmax(200px, 2.2fr) 76px 92px 92px;
+  gap: 10px; align-items: center; padding: 5px 14px; }
+.unrecognized-row .m-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg); font-size: 12.5px; }
+
+/* ---------------- 列头拖动虚影(FX-25) ---------------- */
+.col-ghost { position: fixed; z-index: 120; pointer-events: none; transform: translate(10px, 12px);
+  padding: 3px 10px; background: var(--bg-elev); border: 1px solid var(--accent-line);
+  box-shadow: var(--shadow-2); color: var(--fg);
+  font: 600 11.5px/1.5 var(--font-mono); white-space: nowrap; }
