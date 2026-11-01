@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-1138">
+<meta name="doc-updated" content="26-11-01-2111">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-1138 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-2111 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -442,6 +442,37 @@
   <li>Playwright 断言(桩 API 真服务 8137, 临时脚本不入库): <b>headless 31/31 + 有头 31/31</b> —— chip hover 辉光/press 过渡/active 规则、徽章 spring 规则、下载行条纹流动 fx-bar-flow+填充辉光、开关滑块 spring 曲线(bezier 头 1.12 + linear() 降级链)+hover 辉光规则、ctx-menu fx-menu-in(console 对照仍 drop-in)、sb-alt 辉光过渡与 on 态规则、数字滚动(缓存建立/补间中采样 5 个不同值/格式 N.NN unit 不变/单位保持)、busy/登录遮罩规则、audit ok(total=1 无 unknown)、console 隔离(AQB_FX/AQB_FX_MOUNT 不存在/[data-fx] 零命中)、RM(ctx-menu 落回 drop-in、numRoll 跳过且文本即时、chip 整组在 no-preference 媒体)、console/pageerror 全零(三 context)。</li>
 </ul>
 
+<h3>精修轮 R1(F7a, 26-11-01): 真机四回归修复</h3>
+<p>用户真机精修报 4 个回归/行为 bug, 本轮只修这 4 个。三旧皮肤 / console / shared 模板与共享 CSS / showcase / config.yml / auto-qb-data 零改动(git status 证实: 仅 <code>flux/css/fx-mount.css</code> + <code>flux/fx-mount.js</code> + <code>tests/test_webui_static_skins.py</code>; 共享面唯一的回归修复面在守阵测试内)。</p>
+<table>
+  <tr><th>Bug</th><th>根因(证据)</th><th>修法(修后数字)</th></tr>
+  <tr>
+    <td><b>B1</b> console 皮肤出现圆角(用户报: 详情模板/文字元素被改圆角, console 应方角)</td>
+    <td><b>当前树未复现</b>。三层排查: ①git 面 —— console/atlas/prism/shared(除 fx/) 自 S1 前基线零 diff, console --radius 三令牌恒 0px; ②运行面 —— Playwright 全状态扫描 /console/(groups/torrents+抽屉/右键菜单/shows/设置面)非零圆角仅存量 999px 胶囊(.sb-err-badge/.dt01-bar), 无 16/10/6 档; ③旁证 —— 本机另一份 serve.py 实例(8199)的 console 静态文件与本 clone 逐字节相同。flux 侧全部圆角选择器带 <code>html[data-fx-preset]</code> 作用域前缀且 flux CSS 只挂 flux 页, 无跨皮肤向量。定性: 报障时点疑似落后树/别实例, 以守阵防再犯。</td>
+    <td>新增守阵 <code>test_frontend_console_square_radius</code>: console/style.css 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(现存值盘点后冻结); flux 意图圆角写进共享面即红。红绿双验: 共享面注 16px / console 面注 10px 各红一次, 还原后绿。</td>
+  </tr>
+  <tr>
+    <td><b>B2</b> flux 名称列 hover 背景与其它列不一致</td>
+    <td>S6 的 D4-1 行板 hover 用「gradient 叠 --bg-row」合成, 特异性 (0,7,1) 压过 row_lang flat 行板 hover(color-mix 纯色单点, (0,6,1)); 而吸左首格 hover 底消费的是 flat 首格同一条 color-mix —— 两条管线合成值分家: 实测行板悬停稳态 rgb≈(39,56,79) vs 首格 rgb≈(40,46,54), 蓝通道差 25/255, 名称列悬停期持久竖带。违反本档案 S5 收编定案「行板/首格过渡必须守 views.css 单点同源」的底色半边。</td>
+    <td>D4-1 行板 hover 规则<b>让位退役</b>(fx-mount.css 换墓碑注释): 行板 hover 底单点归 shared/row_lang.css(flat: --rl-hover-solid 兜底 color-mix 白 12% 混 --bg, 与首格逐字同表达式, 过渡继承各皮肤 views.css 的 var(--dur) 单点)—— 渐亮语义 row_lang 已供给, fx 不再另挂。修后实测: 悬停稳态行板/首格 backgroundColor 逐字相等(color(srgb .158 .179 .213)), 选中行+悬停同判相等, 悬停首格 vs 悬停其它格的行区截图逐字节相同; 状态行(expanded/selected/search-hit)走 flat 状态配对规则不受影响。</td>
+  </tr>
+  <tr>
+    <td><b>B3</b> push-content 把聚焦种子推出视野</td>
+    <td>push 上推(378px)把选中/聚焦行推出可视区: 上缘越顶(scroll 已被 drawer 自身 reveal 拉到 0, 滚动不可达)或下缘没入面板。开发面板(dock/applyPush)与拖 grip(ResizeObserver)与关面板三条路径都无回拉。</td>
+    <td>fx-mount.js 新增 <code>ensureFocusedVisible</code>: <b>终态几何解算</b>(关键教训: push 走 top 过渡, 实时 rect 是动画中间帧, 拿它解算会被后续位移抵消 —— 换算文档坐标 rowDocTop = rect.top + scrollY + 当前 push 一次解, 对过渡幂等): 满推下滚动有可行域 → 滚到最近可行点; 滚动救不回(行贴文档顶/行在文档深处)→ 按可视区裁剪 push 量(上头减/下头加)。<code>scheduleReveal</code> 短窗 rAF 循环(420ms &gt; --fx-dur-panel 320ms)覆盖过渡全程, 拖 grip 时 RO 连触续窗。修后实测: 选中行滚出视野(-419)→ Enter 开面板 → 行顶 129(= sticky 头下缘 128 钉住, visible=true); grip 拖高 +150(drawerTop 488→336)行仍 129 可见; 关面板回落行 181 可见。无选中行时 push 恒满额 378px(行为不变)。</td>
+  </tr>
+  <tr>
+    <td><b>B4</b> 详情面板(或主表)右键菜单位置不正确</td>
+    <td>头号嫌疑坐实: fx.css push 原语是 transform 版, transform 使 main.content 成为 fixed 后代的包含块, 而共享模板注入的 .ctx-menu 族就渲染在 main.content 内 → 面板开着时全部菜单视口坐标整段偏移, 实测主表行右键 dy=-464px(= 面板高 378 + sticky 头高 86, 恰为包含块原点视口位置)。已记坑 clip-path-clips-fixed 的持久 transform 形态复发(前两节都是瞬时动画)。</td>
+    <td>push 载体改 <b>relative-top</b>(fx-mount.css 作用域覆盖, fx.css 原语与消费方写法不动): 静态几何(position:relative; top:0 常驻给基准 + [data-fx-pushed] transform:none; top:calc(-1*--fx-push-y))在 RM 媒体块外, top 过渡(原语令牌 --fx-dur-panel/--fx-ease-in-out)在块内 —— relative 位移不生成 containing block, fixed 后代恢复视口锚定。修后实测: 面板开着时主表行右键 dx=dy=0、抽屉内右键 dx=dy=0, 与 /console/ 基线(dx=dy=0)逐位一致; ctx-menu 入场仍 fx-menu-in(audit ok、pageerror 零)。</td>
+  </tr>
+</table>
+<h4>守阵与实测</h4>
+<ul>
+  <li><b>守阵</b>: 新增 <code>test_frontend_console_square_radius</code>(B1, 红绿双验); <code>test_frontend_fx_wiring</code> 扩判据 6a(fx-mount.css 不得复活行板 :hover gradient 叠底)/6b(push 载体 relative-top 三件在档)/6c(ensureFocusedVisible + scheduleReveal 两路径 + rowDocTop 终态解算口径在档); 头部测试计划同步。坑档 <code>pitfalls/web-ui/clip-path-clips-fixed.md</code> 追加复发节(持久 transform 载体形态 + 为什么没命中: fx 原语拍板只评了 layout 警示, 没对 fixed 后代跑祖先链判据)。</li>
+  <li><b>实测</b>: test.quick 4455 passed(29.07s) → test.full <b>4455 passed, 10 skipped, 110.62s, 覆盖率 99%</b>(比上基线 +1 = 新守阵; 数字见 kb.baseline 最新切片)。Playwright 四 bug 复现→修复→回归断言全过(数字见上表), /console/ 对照零回归(圆角扫描与修复前逐类一致, 仅存量 999px 胶囊), flux 其它动效不回归(audit ok / ctx-menu fx-menu-in / chip-glow 等 P0-P1 规则原样 / pageerror 全零)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -462,6 +493,7 @@
   <li><span class="tag">R3 · 26-11-01-0954</span> S6 前半执行实录落档(见 §06「S6 执行实录(前半)」): fx 三件挂 flux(shell 静态 script + head 尾 2 link + html preset=glass, 219-&gt;227 行) + S4 选定 24 项页内自实现提升入库(REGISTRY 9-&gt;27 名, ripple 走 fx.js 委托, focus 系拆 focus-ring/focus-float 两效果名, D2-5 拆 danger+headshake 组合, D8-4 走 pop --fx-base-tx 合成不造新原语, rows 系全 data-fx 委托不碰 .group-row) + glass 开 glow 供给(0-&gt;12px accent-ink 系, S4 拍板 flux 定制; sheen 维持) + 守阵三处(fx.js 待接线豁免删/ hscroll 判据 6 fx 豁免/ 新增 test_frontend_fx_wiring) + test.full 4454 全绿 + Playwright 双验(flux audit ok total=0, showcase audit total=21 ok)</li>
   <li><span class="tag">R4 · 26-11-01-1101</span> S6 后半执行实录落档(见 §06「S6 执行实录(后半)」): S4 选定 24 项逐项挂进 flux(flux 专属 fx-mount.css 作用域 CSS + fx-mount.js 状态驱动程序化属性 + 6 个共享 JS ui 门控消费点, 共享模板结构与类名零改动) + 降级/落空清单(D4-6 落空/D5-3 降级/@starting-style 对运行时补属性不触发 → toast rise 落确定性 keyframes) + 守阵三处(shell 帽 227→233/link 序加 fx-mount.css/fx_wiring 扩挂载面与隔离反向) + 实测(test.full 4454 全绿 + Playwright 40/40: flux 全组生效/console 零泄漏/RM 降级/audit ok)</li>
   <li><span class="tag">R5 · 26-11-01-1138</span> S7 执行实录落档(见 §06「S7 执行实录」): P1 组件挂载按 S4 glass 基调推导 9 落 1 落空(dock 纯布局容器), flux 作用域 CSS 8 项 + 数字滚动走 state.js 两新门控 watch + fx-mount.js numRoll(360ms 轻量补间, 格式沿用节点现文本不与 fmt 口径分裂); REGISTRY/fx 三件/守阵/shell 零改动, fx-mount.css 新 keyframes 仅 2 条(fx-menu-in/fx-bar-flow)余全复用, 体量 305/307 行距帽余量 395/393; 帧率 rAF 计帧(有头): 空闲/数字滚动/行插退 64, toast VT 队列 54, danger glow 51(仅故意连触突发窗口, 稳态 60+); Playwright headless+有头各 31/31(flux 全生效/console 零泄漏/RM 降级/audit ok/报错全零); test.full 4454 全绿 116.22s 覆盖率 99%</li>
+  <li><span class="tag">R6 · 26-11-01-2111</span> 精修轮 R1(F7a)执行实录落档(见 §06「精修轮 R1」): 真机四回归修复 —— B1 console 圆角(未复现, 三层排查, 新守阵 console_square_radius 白名单钉方角口径+红绿双验)/B2 D4-1 行板 hover gradient 让位 row_lang 单点(行板/首格悬停管线分家 25/255, 修后逐字相等)/B3 push 推出选中行(ensureFocusedVisible 终态几何解算: 滚动可行域优先+残余裁剪 push 量, 三路径实测钉住)/B4 push transform 载体劫持 fixed 菜单坐标系(dy=-464, 改 relative-top 覆盖, 修后 dx=dy=0); fx_wiring 扩 6a/6b/6c; 坑档 clip-path-clips-fixed 追加持久 transform 复发节; test.full 4455 全绿(新基线切片 26-11-01-2109)</li>
 </ul>
 
 </div>

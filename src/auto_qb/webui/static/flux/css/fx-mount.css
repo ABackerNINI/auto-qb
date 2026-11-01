@@ -29,6 +29,19 @@ html[data-fx-preset] .toast { position: relative; }
  * 留在 RM 媒体块外: RM 下非危险条 = 无动画 + [data-fx] 过渡归零(fx.css RM 块) = 即时终态 */
 html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
 
+/* ---- push 载体改相对位移(R1 精修 B4, 静态几何留媒体块外): fx.css push 原语是 transform
+ *      版 —— transform 使 main.content 成为 fixed 后代的包含块, 而共享模板注入的 .ctx-menu
+ *      族(右键/表头/文件优先级/抽屉菜单, ctx-menus.html 注入后渲染在 main.content 内)就在
+ *      其中 ⇒ 面板开着时全部菜单视口坐标整段偏移(实测主表行右键 dy=-464px = 面板高 + 头部
+ *      高, 用户报障)。position:relative + top 位移**不创建包含块**, fixed 后代恢复视口锚定;
+ *      上推视觉同幅(读同一份 --fx-push-y, 消费方 fx-mount.js 不改)。position/top 基准常驻
+ *      给到(不随 pushed 翻转): top:auto 参与不了过渡, 开面板会跳变。 ---- */
+html[data-fx-preset] [data-fx~="push"] { position: relative; top: 0; }
+html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
+  transform: none; /* 压 fx.css push 原语的 translateY(含块问题源头) */
+  top: calc(-1 * var(--fx-push-y, 0px));
+}
+
 @media (prefers-reduced-motion: no-preference) {
 
   /* ==================================================================
@@ -88,19 +101,32 @@ html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
   }
 
   /* ==================================================================
-   * torrent/成员行(D4-1 hover 渐亮 / D4-2 selected 边条生长 / D4-3 锚点脉冲)
+   * push(D3-4)位移过渡(R1 精修 B4): 载体换 relative top(见媒体块外 push 段注)后,
+   * 过渡属性跟着换 top —— 压 fx.css push 原语的 transform 过渡, 原语令牌
+   * (--fx-dur-panel / --fx-ease-in-out)沿用; RM 下本条不生效 = top 瞬时到位(fx.css
+   * RM 块把 [data-fx] 过渡归零 = 无动效终态)。
+   * ================================================================== */
+  html[data-fx-preset] [data-fx~="push"] {
+    transition: top var(--fx-dur-panel) var(--fx-ease-in-out);
+  }
+
+  /* ==================================================================
+   * torrent/成员行(D4-2 selected 边条生长 / D4-3 锚点脉冲; D4-1 hover 渐亮已让位
+   * row_lang 单点, 见媒体块外 D4-1 段注)
    * ------------------------------------------------------------------
    * 行级效果零 .group-row 选择器的库纪律是对 fx.css(库不分皮肤)说的; 本层是
    * flux 专属挂载面, 消费既有状态类(.selected/.partial/.ctx-src), 零模板改动。
    * 行板/首格过渡单点纪律(守阵 pinned_first_cell_hover_transition_parity)不动:
    * 本层不声明行板与首格的 background 过渡, 只加 ::before 边条与一次性 flash。
    * ================================================================== */
-  /* D4-1 hover 渐亮: 与既有状态底同款合成(gradient 叠 --bg-row); expanded/
-   * selected/partial/search-hit 各有既有底, :not 排除不抢 */
-  html[data-fx-preset] .group-row:hover:not(.expanded):not(.selected):not(.partial):not(.search-hit),
-  html[data-fx-preset] .member-row:hover:not(.selected):not(.partial):not(.search-hit) {
-    background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-row);
-  }
+  /* D4-1 hover 渐亮(R1 精修 B2 让位退役): 原版「gradient 叠 --bg-row 合成」特异性压过
+   * row_lang flat 行板 hover(color-mix 纯色单点), 而吸左首格 hover 底消费的是 flat 首格
+   * 同一条 color-mix —— 行板/首格两条管线合成值分家, 悬停期名称列呈持久竖带(用户报障;
+   * 实测行板 vs 首格稳态逐通道差最大 25/255)。行板 hover 底的单点在 shared/row_lang.css
+   * (flat: --rl-hover-solid 兜底 color-mix 白 12% 混 --bg, 与首格逐字同表达式, 过渡继承
+   * 各皮肤 views.css 的 var(--dur) 单点) —— 渐亮语义 row_lang 已供给, 本层不再另挂;
+   * wave 模式首格按设计不吃 hover 底(扫层是唯一高亮源), 也由 row_lang/皮肤配对规则承接。
+   * 状态行(:not 链排除 expanded/selected/partial/search-hit)各有既有底, 不在 hover 层管。 */
   /* D4-2 selected 边条生长: 既有选中/半选左条(::before, views.css 给形)加 scaleY
    * 生长 -- 本层把条铺到全部行(非选中 scaleY(0) + opacity 0 双保险不可见),
    * 选中/半选时生长入场; member partial 的 18% 几何差在此镜像(本层特异性更高) */

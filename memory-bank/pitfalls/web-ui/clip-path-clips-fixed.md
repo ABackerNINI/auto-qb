@@ -19,3 +19,10 @@
   ⚠ 排查易误判: 直觉会怀疑内层 `.hb-view.on { animation: hb-in }`(也带 transform), 但 `.hb-view` **不是**这三个 fixed 元素的祖先(hub 页里 `.hb-view` 包在 `.hb-wrap` 内, 动作条/浮窗是 `.hb-wrap` 的兄弟), 其 transform 无害 —— 必须看清 fixed 元素的**最近带 transform 的祖先**是谁。
 - **处置**: 在 `shared/console_hub.css` 给设置页关掉 `page-in`(`.hub-page { animation: none; }`; console_hub.css 三套皮肤都最后加载, 同特异性下覆盖 components.css 的本页规则), 入场交给内层 `.hb-view.on` 的 `hb-in`(只作用内容, 不动 fixed 元素)⇒ 观感不变、位移消失。**不动 `page-in` 全局定义** —— `.layout`(种子等视图)没有这类 fixed 子节点, 位移入场可保留。通用解仍是让 fixed 后代脱离会动画的祖先(或该动画一律只动 opacity, 不带 transform)。
 - **守阵**: `shared/console_hub.css` 的 `.hub-page` 段内已钉死原因注释(含本坑与 `.hb-view.on` 不背锅一句)。
+
+### 持久 transform 载体位移 fixed 后代: flux push 让右键菜单整段错位 (2026-11-01 实测, 复发)
+
+- **触发**: flux 皮肤 S6 的 push-content(fx.css push 原语, transform 版)开详情面板时给 `main.content` 挂**持久** `transform: translateY(-push)`(此前两节都是瞬时动画 transform), 面板开着期间右键菜单(`.ctx-menu` 族: 行右键/表头菜单/文件优先级/抽屉菜单 —— ctx-menus.html 注入后渲染在 `main.content` 内)全部 `position: fixed` 坐标系被劫持: 实测主表行右键 dy=-464px(= 面板高 378 + sticky 头高 86, 恰为「包含块原点视口位置」)。
+- **判别**: 菜单 rect 与光标差值稳定等于「被 transform 祖先的视口 top/left」; `getComputedStyle(祖先).transform != none` 且 fixed 元素是其后代。**为什么上两节的教训没拦住**: fx push 原语拍板时只评了 layout 警示(transform vs height), 没对「fixed 后代在 main.content 内」跑本坑判据; 且本坑前两节记录的都是设置页瞬时动画, 「持久 transform 载体」是新形态 —— 挂载器消费方(fx-mount.js dock)与原语(fx.css)两侧都没查祖先链。
+- **处置**: push 载体改 `position: relative + top` 位移(不生成 containing block, fixed 后代恢复视口锚定), 视觉同幅读同一份 `--fx-push-y`; 覆盖写在 flux 作用域层(fx-mount.css), fx.css 原语与其它皮肤不动。通用结论升级: **持久 transform 载体**(面板让位/吸附位移这类常驻态)比瞬时动画更凶 —— 动画结束自己好, 载体不好; 给任何元素挂常驻 transform 前先枚举其 fixed 后代。
+- **守阵**: `tests/test_webui_static_skins.py::test_frontend_fx_wiring` 判据 6b 钉 relative-top 覆盖三件在档(transform:none + top 位移 + top 过渡); e2e 探针断言面板开着时主表行/抽屉内右键菜单 rect 与光标差 dx=dy=0。
