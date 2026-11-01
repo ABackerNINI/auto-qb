@@ -2,7 +2,7 @@
 
 > 摘要: 第四条测试轨的**全部规程** —— 硬约束与环境守卫、种子层 L0/L1/L2、切片表与切片更新规则、一轮的标准动作、两次排期之间的漂移判定、用例成熟度 L0–L3 与用例写法。状态与进度**不在本文件**, 在常驻锚 issue。
 > 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests-real, real 包, 不走闸门
-**Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html
+**Refs:** memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/plans/26-11-01-2123-plan-real-rm08-drift.html
 
 ## 00 定位: 四条测试轨的分工
 

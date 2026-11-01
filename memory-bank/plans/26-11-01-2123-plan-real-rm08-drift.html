@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>RM08 WebUI 读侧 漂移复测轮排期计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-rm08-drift">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-2123">
+<meta name="doc-updated" content="26-11-01-2123">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/testing/real-machine.md, memory-bank/plans/26-10-31-1754-plan-real-rm08.html, memory-bank/testing/real-baselines/26-10-31-1914-real-RM08.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-rm08-drift</div>
+<h1>RM08 WebUI 读侧 漂移复测轮排期计划</h1>
+<p class="lede">RM08 漂移复测轮排期(漂移轮顺序 RM03 ✅ → RM02 ✅ → RM04 ✅ 8/9 → <b>RM08 本轮</b>, 随后 RM09 两个连续子轮)。核心两件事: ①<b>横滚指示条</b>(11-01 全新观感面, 5 commits 无真机用例)按实现代码实况核实可脚本断言面归属并结案记账; ②既有 8 条用例在<b>环境2(C盘机)</b>前提差异下回归复测 —— 主实例 0 枚真实种子(RM08-05 腿A 计数分支替身, D1)、L2 互传环境2 首跑(S1 探针先行, D4)。上轮遗留 RM08-07⑤ 坏票负向的解锁路径(skip_local_verify=false + Bearer token)本轮兑现为升档(RM08-07 L2→L3, D2)。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-2123 · <b>doc-updated</b> 26-11-01-2123 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 主会话排期指令(RM08 WebUI 读侧 漂移复测轮排期计划代理, 2026-11-01); 锚件 §08「遗漏面分析与下一轮排期」(用户拍板 D1–D4)与漂移轮顺序条; 上一轮计划 <code>plans/26-10-31-1754-plan-real-rm08.html</code>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>定片(规程 §06 步骤 1)</h3>
+<p>片号 <code>RM08</code> = WebUI 读侧(锚件 §03), glob 7 条(见 §02 glob 自检), 验证面: 轮询分档 / 增量 delta / 视图 payload 收敛 / 大库首帧与滚动 / 详情抽屉。上一轮: 2026-10-31 首轮 <b>7 通过 / 0 失败 / 1 阻塞</b>(计划 <code>plans/26-10-31-1754-plan-real-rm08.html</code>, 切片 <code>testing/real-baselines/26-10-31-1914-real-RM08.md</code>, 基线 <code>eb34dc3d</code>; 档位 0/0/7/1)。读侧驱动形态 = <b>dev.webui 安全模式</b>(规程 §2.4): 每条用例 Popen 一份 <code>python -m auto_qb &lt;最小配置&gt;</code>(任务线全关 + 1.5S 同步线; 不用 <code>scripts/dev_webui.py</code> 本体 —— 上轮切片 §02 已记其自动开浏览器/交互式 CLI/配置缺 schema_version: 5)。</p>
+
+<h3>本轮要做成三件事</h3>
+<ol>
+  <li><b>横滚指示条结案记账(本轮核心)</b>: 11-01 新面(5 commits, 06:01–07:20)。按实现代码实况核实的结论(§02 漂移体检): <b>可脚本断言面存在但载体是浏览器 DOM</b>(<code>.hscroll-pill</code> 挂载/类名/几何), 已被 e2e 行为守阵在真浏览器钉住五面 + 静态守阵钉住规则单点与接线; 服务端端点载荷零参与 ⇒ RM08 读侧(HTTP 驱动)<b>无可叠加的独立断言面</b>。按「同一件事不测三遍」引用结案, 纯观感(色系/hover 加粗/跟手/尺寸)维持用户目视 L0 挂账(锚件 §08 已列)。拍板点 D3。</li>
+  <li><b>8 条既有用例全量复测</b>: 基线 <code>eb34dc3d</code> 失效(clone5 lineage 解析不到)按「首轮重来」重立; 读侧端点契约面漂移实测<b>零命中</b>(§02), 复测动机 = 基线重立 + 环境2 前提差异 + 上轮遗留(RM08-07⑤ 坏票负向解锁、RM08-08 健康态半边维持)。</li>
+  <li><b>环境2 前提差异落成用例分支</b>: 主实例 56589 <b>0 枚真实种子</b> ⇒ RM08-05 腿A 原前提不成立, 预登记 <code>guard.snapshot</code> 计数分支(有真实种子走原腿 / 0 枚走私有假种子替身, D1); L2 互传(RM08-06)在环境2 首跑, S1 开工探针先行(D4)。</li>
+</ol>
+
+<h3>做到什么程度算成</h3>
+<p>官方 <code>real.suite --slice RM08</code> 一轮: 8 条全跑(用例级 FAIL 为 0; RM08-08 missingFiles 半边 BLOCKED 维持; RM08-06 视 S1 探针结果); 红验全数见红(含 RM08-07 新增坏票负向); 基线重立 commit 落切片; 横滚条结案记账落切片 §03; 锚件 §07 RM08 行同步更新; 收尾核净(§04 ④)。</p>
+
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li>产品 <code>src/</code> 零改动 —— 只动用例代码(<code>tests-real/rm08_webui_read/</code>)与用例侧基建; 缺陷当轮不修, 一律入池。</li>
+  <li><b>同一件事不测三遍</b>: 横滚条脚本面引用 e2e 五面 + 静态守阵(D3); 转移面改动(path_map/api_key/409 查重)引用 2026-11-01 转移真机再验收 R3; choose 编辑器/组合树编辑器归 RM09 下一子轮 —— 一律记账引用, 不复测。</li>
+  <li>零外连红线: 假种子默认无 announce 纯本地(RM08-05 替身腿的 announce 用死端口 URL 且只为 mask 断言, 零外连); L2 互传两端 announce 只打本机伪 tracker(lib/tracker.py, exclude_port 防自连); 真实种子(若有)全程 paused 零触碰。</li>
+  <li>token 不落盘: 经环境变量 <code>QBT_TEST_56589</code>/<code>QBT_TEST_56590</code> 注入, 任何文件不得出现 token。</li>
+  <li>允许开启/重启两个测试 qB(56589/56590), 绝不动其它 qB。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点(漂移体检 · glob 自检 · 环境自检)</h2>
+
+<h3>漂移体检(规程 §06 步骤 2; git 实测 2026-11-01, HEAD <code>03f6ca19</code>)</h3>
+<p><b>基线失效重立口径</b>: 旧基线 <code>eb34dc3d</code>(clone5 lineage)在本分支解析不到 —— 按锚件 §08 警示与「写不出 commit 从首轮重来」口径, <b>本轮基线重立 = 官方 suite 实跑时刻的 HEAD</b>(RM03 轮 <code>6aa4b4d7</code> / RM02 轮 <code>af0ef0d7</code> 同款先例; 非收尾提交 hash)。</p>
+<p>近似漂移窗口 = RM08 首轮实测完成(10-31 19:05)之后。<code>git log</code> 实测: RM08 glob 内命中 <b>11 commits</b>(全部落 11-01 00:30–06:33; <code>views.py</code> 与 4 条 routes/<code>*.py</code> 端点文件<b>零命中</b>):</p>
+<table>
+  <tr><th>commit(时间)</th><th>触及 RM08 glob 的文件</th><th>分类与处置</th></tr>
+  <tr>
+    <td><code>3e4dbc42</code> 06:01 / <code>046ead70</code> 06:04 / <code>b685b2fe</code> 06:07 / <code>92e56294</code> 07:05 / <code>40d52599</code> 07:20<br><b>横滚指示条 5 连</b>(隐藏原生横条 + 指示条/热区/拖动 + 挂载即绑 + 热区修正 + 换色系)</td>
+    <td><code>static/shared/hscroll.css</code>(新, 73 行)<br><code>static/shared/columns.js</code>(+约 220 行指示条逻辑)</td>
+    <td><span class="wr">新面</span>(前端 DOM 层, 端点契约零变化)。可脚本断言面已被 e2e 守阵钉住(§03), 本轮<b>引用结案不复测</b>(D3); 纯观感维持 L0 目视挂账</td>
+  </tr>
+  <tr>
+    <td><code>c32a0bdc</code> 00:30<br>强制汇报确认改消解等待模型</td>
+    <td><code>webui/runtime.py</code>(命令确认跟踪段)</td>
+    <td><span class="wr">判据变</span>, 但属<b>写侧命令确认逻辑</b>(缺陷 26-10-31-1740① 的修复, 规程 §2.14 已记)→ 归 RM09 子轮回归义务(RM09-04①/③ 转绿), 本轮记账不复测</td>
+  </tr>
+  <tr>
+    <td><code>36699dd5</code> 03:25 / <code>23949a33</code> 04:59 / <code>477df090</code> 06:33<br>W1-B/W2-B/W3-B(规则引擎重设计表面)</td>
+    <td><code>shared/config_hub.js</code> / <code>config_rules.js</code> / <code>config_editor.js</code> / <code>app.js</code> / <code>console_hub.css</code> / <code>tpl/settings.html</code> / <code>tpl/rule-tree.html</code></td>
+    <td>设置页/组合树/choose 编辑器表面。数据面与判定逻辑已随 RM03 漂移轮 17/17 真机复测; <b>choose 编辑器(含 config 保存规范形)归 RM09 下一子轮</b>(锚件 §08 拍板), 本轮记账不复测; 「webui 未启用徽标」面归属见 D5</td>
+  </tr>
+  <tr>
+    <td><code>07a90b1c</code> 04:13 / <code>59b3669a</code> 04:20<br>转移目标编辑器 API Key 输入框 / path_map 分隔符归一化</td>
+    <td><code>shared/transfer_targets.js</code> / <code>transfer_flow.js</code> / <code>tpl/transfer-targets.html</code></td>
+    <td>转移面 —— 已被 2026-11-01 转移真机再验收 R3 覆盖(锚件 §08 记账口径), <b>不复测</b></td>
+  </tr>
+</table>
+<p><b>体检结论</b>: 读侧<b>端点契约面(views.py + 5 条 routes)零漂移</b> —— delta/rid/视图/抽屉/SSE 的服务端判据无一被改写, 期望值不变; 命中全部在 <code>static/shared/**</code>(前端)与 <code>runtime.py</code>(写侧确认段)。全量复测的动机是基线重立 + 环境2 前提差异, 不是判据变化。</p>
+
+<h3>横滚指示条可脚本断言面核实(按实现代码实况, 2026-11-01)</h3>
+<table>
+  <tr><th>核实项</th><th>实况</th></tr>
+  <tr><td>DOM 形态与类名</td><td><code>&lt;div class="hscroll-pill"&gt;&lt;i&gt;&lt;/i&gt;&lt;/div&gt;</code> 挂 body 末尾三主表各一(<code>hscroll.css:29</code> 注释钉死契约); 状态类 <code>.on</code>=可见(该表有横向溢出)/<code>.drag</code>=拖拽中; 滑块几何由 JS 写内联 width/transform(<code>columns.js _hscrollSync</code>)</td></tr>
+  <tr><td>触发与消失</td><td>挂载即绑(<code>b685b2fe</code>: 不需先横滚一次); 热区 mousemove 召唤(排除状态栏带与全屏宽, <code>92e56294</code>); Shift+滚轮召唤 1.5s 自落; 淡出 200ms/淡入 150ms(<code>hscroll.css:47-51</code>)</td></tr>
+  <tr><td>已有守阵(脚本面已覆盖)</td><td>① e2e 行为守阵 <code>e2e/hscroll-indicator.spec.mjs</code>(339 行, <code>34782490</code>): <b>真浏览器 × 三皮肤 × 五面</b> —— 无条槽+可横滚+热区淡入 / 拖动胶囊真横滚且表头同步 / 宽窗无溢出热区内不出现 / 召唤范围三界(不含状态栏·不限全屏宽·Shift+滚轮); ② 静态守阵 <code>tests/test_webui_static_skins.py</code> hscroll 挂载/级联序 + <code>test_frontend_hscroll_indicator_wiring</code>(:2868, 规则单点/接线, <code>hscroll.css:58</code> 注释自证)</td></tr>
+  <tr><td>服务端参与</td><td><b>零</b> —— 指示条行为纯前端 DOM+CSS+scroll 事件, /api/state 等端点载荷不含任何 hscroll 键 ⇒ RM08 读侧套件(HTTP 驱动, 无浏览器)<b>无可叠加的独立断言面</b></td></tr>
+  <tr><td>纯观感残面</td><td>换色系观感(<code>40d52599</code>: 滑块走 --accent、hover 只加粗 5px→7px 不改轨道色)、跟手性、尺寸手感 —— 人眼判, 维持 L0 目视挂账(锚件 §08 已列「横滚条」)</td></tr>
+</table>
+
+<h3>glob 自检(规程 §05 规则 8; <code>git ls-files</code> 逐条实测 2026-11-01)</h3>
+<table>
+  <tr><th>§03 RM08 行 glob(按字面)</th><th>命中</th><th>备注</th></tr>
+  <tr><td><code>src/auto_qb/webui/views.py</code></td><td>1</td><td>1163 行</td></tr>
+  <tr><td><code>src/auto_qb/webui/runtime.py</code></td><td>1</td><td>1688 行</td></tr>
+  <tr><td><code>src/auto_qb/webui/server/routes/state.py</code></td><td>1</td><td>153 行</td></tr>
+  <tr><td><code>src/auto_qb/webui/server/routes/torrent_detail.py</code></td><td>1</td><td>233 行</td></tr>
+  <tr><td><code>src/auto_qb/webui/server/routes/sites.py</code></td><td>1</td><td>59 行</td></tr>
+  <tr><td><code>src/auto_qb/webui/server/routes/events.py</code></td><td>1</td><td>81 行</td></tr>
+  <tr><td><code>src/auto_qb/webui/static/shared/**</code></td><td>90</td><td>约 35,242 行; 含 vendor 两件(uPlot/Vue min.js, 非产品代码)与写侧 js(RM09 glob <code>static/**/*.js</code> 亦覆盖 —— 片间重叠是锚件 §03 两行并存的固有形态)</td></tr>
+</table>
+<p><span class="good">7/7 全命中</span>, 无裸名零命中异常(RM04 轮第 12 次同款缺陷本行无残留)。shared/** 的 90 文件里读侧共用层与写侧 js 重叠、vendor 大件在内 —— 按「读侧端点 6 文件 + shared 前端共用层」理解片界, RM08/RM09 靠「读=端点契约、写=命令与配置保存」切分, 边界不糊, <b>不拆不并</b>, 重叠形态记账即可。</p>
+
+<h3>环境自检(2026-11-01 实测, 环境2 = C盘机; 详见 §08 附录)</h3>
+<pre><code>commands run real.env   [ok] 当前环境: 环境2(C盘机)  主 56589(exe C:\Programs\qBittorrent-testing) 副 56590(exe C:\Programs\qBittorrent-testing2)
+                        BT 监听 27049/32719; token 两端口环境变量注入 ok, 零落盘
+commands run real.guard [ok] 56589 pid=14820 v5.2.3 firewalled 真实种子 0 个, 已全部暂停
+                        [ok] 56590 pid=11644 v5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+<p><span class="wr">token 注入注意</span>: 本排期会话 shell 未带 <code>QBT_TEST_56589</code> 时 <code>real.guard</code> 对主实例报 <code>403 Forbidden</code>(副实例 localhost 免鉴权不受影响)—— 按环境变量注入 token 后复跑即双绿。<b>执行轮开工第一步: 注入两个 token 环境变量再跑 real.env + real.guard</b>(token 值由用户每轮会话给出, 任何文件不得出现)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<table>
+  <tr><th>线</th><th>内容</th><th>落点</th></tr>
+  <tr><td><b>A 全量复测</b></td><td>8 条既有用例原样重跑(端点契约零漂移, 期望值不变); 环境2 落点/前提差异按 §04 ① 逐条标注; RM08-04 大库首帧实测数在环境2 重新记录(1200 枚零数据注入与盘无关)</td><td><code>tests-real/rm08_webui_read/test_rm08_webui_read.py</code> 现有 8 条</td></tr>
+  <tr><td><b>B RM08-07 升档</b></td><td>上轮遗留⑤解锁兑现: 该用例的产品实例改 <code>skip_local_verify=false</code> + 请求带 Bearer token(scoped, 仅此用例; 其余 7 条保持 loopback 免鉴权), 补<b>坏票/无票负向对照</b>(拒收, 连流不建立)→ L2→L3(D2)</td><td>RM08-07 用例改造 + <code>product_case</code> 加 auth 形参</td></tr>
+  <tr><td><b>C 横滚条结案</b></td><td>不新建用例(D3 推荐): 切片 §03 记账引用 e2e 五面 + 静态守阵 + 坑档; 纯观感维持用户目视 L0 挂账(不迁出); 锚件 §08 已挂账口径不变</td><td>切片记账 + §04 ③ 汇总</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤(用例清单四块 + 环境2 注意)</h2>
+
+<h3>① 本片用例清单(8 条: 既有 8 条复测, 无新增编号; RM08-07 改造升档)</h3>
+<table>
+  <tr><th>id</th><th>档位</th><th>期望(本轮口径; 与上轮差异加粗)</th></tr>
+  <tr><td><code>RM08-01</code> 合并端点契约与 rid 门控</td><td>L2</td><td>首拍 status+torrents+rid+updated:true → 同 rid 零回传拍形态 {status, rid, updated:false}(数组键缺席是门控本体)→ qB 直调暂停 1 枚 → 版本推进且恒回传段在。<b>无判据变化, 环境2 回归(基座连 56590)。</b></td></tr>
+  <tr><td><code>RM08-02</code> delta 协商五对照</td><td>L3</td><td>full/变更代归约(窗口全部行内容现取一致 R1 口径)/窗外回落/未协商兼容闸/show 归约形态五对照, 红验三路见红。<b>无变化。</b></td></tr>
+  <tr><td><code>RM08-03</code> VIEW_ARRAYS payload 收敛</td><td>L2</td><td>四视图分片 + 缺省/未知 view 回退; 字节比按<b>无归组库下限 70% 钉</b>(上轮实测 0.62–0.66 已承载化, 切片 §03-3)。<b>无变化。</b></td></tr>
+  <tr><td><code>RM08-04</code> 大库首帧</td><td>L2</td><td>1200 枚零数据注入 → 首帧耗时(上界 2s)与字节实测如实记录(环境1 实测 59ms/2.4MB, <b>环境2 数字重新记录</b>, 不硬抄); 零回传拍趋近零; 行数==注入数; qB 全程不 disconnected。<b>R: 缺席无影响</b>(零数据只占元数据)。</td></tr>
+  <tr><td><code>RM08-05</code> 详情抽屉四端点双腿</td><td>L2</td><td>腿B(副实例假种子)原样。腿A 按 <b>D1 计数分支</b>: <b>主实例真实种子 &gt;0 → 原腿</b>(api_key 直连只读, 真实 tracker 域名 mask); <b>==0 → 私有假种子替身</b>(主实例 1 枚带数据假种子, announce=死端口 URL 可带 passkey 形参 —— <code>lib/torrent.py:25</code> info 硬编码 private:1, 假种子天然私有): api_key 直连路径、mask 机制(url+凭据原文零外发)、虚拟条目、私有 msg「这是私有 torrent」、files/peers、未知 hash 404 全保留; <b>降级记账: 「真实 PT 域名」词面缺失(替身用假域名), 解锁 = 用户在主实例添加真实种子后按原腿复测</b>。两腿全只读。</td></tr>
+  <tr><td><code>RM08-06</code> 状态栏 totals == 行级求和</td><td>L2</td><td>L2 互传(伪 tracker 全本机, 限速 fixture 钉 256KiB/s 快照还原)进行中 → totals 恒在且 == 同载荷行级求和连续 3 拍(双向)非零; 传输完成回零速。<b>环境2 首跑: S1 互传探针先行(D4)</b>; 不成立则本条降 BLOCKED 记环境事实(§04 ③)。</td></tr>
+  <tr><td><code>RM08-07</code> SSE 通道与只读辅助端点</td><td>L2→<b>L3</b></td><td>既有: ticket 换票/hello/心跳 &lt;TTL/ver 推送/sites/missing 计数。<b>新增负向(升档兑现): 驱动改 skip_local_verify=false + Bearer token 后, 坏票/无票连流请求 → 拒收(401/403 族), 流不建立 —— 回 200 即红</b>(上轮切片 §03-4: 免鉴权配置下 loopback 免鉴权先于票据闸, 坏票恒 200, 属配置显式语义; 本轮正是改配置解锁)。</td></tr>
+  <tr><td><code>RM08-08</code> error_reason(missingFiles 分支)</td><td>L2(半边)</td><td>健康态行 error_reason==""(空串口径)随复测跑; <b>missingFiles 半边 BLOCKED 维持</b>(造法「删文件+recheck」在 qB 5.2.3 三条路径都不成立, 切片 §03-5 两轮复现; 与环境无关, 非 5.3 语义面), 解锁不变 = 造法定案(候选: L2 传输读失败 / 重启期 resume 核验)。</td></tr>
+</table>
+<p>档位预估: 上轮 0/0/7/1 → RM08-07 升 L3 ⇒ <b>0/0/6/2</b>。</p>
+
+<h3>② 本轮升档计划(规程 §08 硬要求)</h3>
+<ul>
+  <li><b>RM08-07: L2 → L3</b> —— 上轮记账的解锁路径(skip_local_verify=false + Bearer token)本轮兑现, 补坏票/无票负向对照; 红验 = 坏票/无票若回 200 或流建立即红。驱动改造 scoped 到该用例的产品实例(<code>product_case</code> 加 auth 形参), 其余 7 条零改动。</li>
+  <li>其余 7 条维持原档(端点契约零漂移, 纯回归)。</li>
+</ul>
+
+<h3>实施分期</h3>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收</th></tr>
+  <tr><td>S1 开工自检与探针</td><td>① 注入 <code>QBT_TEST_56589/56590</code> → <code>real.env</code> + <code>real.guard</code> 双绿; ② <code>guard.snapshot</code> 核主实例真实种子计数(D1 分支依据); ③ L2 互传最小探针: 56589↔56590 各 1 枚假种子经本地伪 tracker 互传(RM00 lib 口径), 核 progress 推进与双端 announce(D4 依据); ④ RM08-07 鉴权形态探针(坏票回执状态码, 定负向断言锚点)</td><td>guard 双绿; 两探针结论记切片 §03; 计数与分支选择留痕</td></tr>
+  <tr><td>S2 用例改造</td><td>RM08-07 升档改造(scoped skip_local_verify=false + Bearer + 坏票/无票负向腿); RM08-05 腿A 计数分支替身腿(若 0 真实种子); 四行头(前置/副作用/回滚/失败判据)同步改写; 文件头 docstring「测试计划」清单同步</td><td><code>commands run real.list</code> 8 条可见; 单跑改造条绿</td></tr>
+  <tr><td>S3 官方轮</td><td><code>commands run real.suite -- --slice RM08 --yes</code>(-n 0)</td><td>8 条三态: 预期 7 PASS + RM08-08 BLOCKED 维持; 用例级 FAIL 0; 基线重立 = 实跑时刻 HEAD</td></tr>
+  <tr><td>S4 记录与收尾</td><td>新建切片 <code>testing/real-baselines/&lt;stamp&gt;-real-RM08.md</code>; 锚件 §07 RM08 行同步; 横滚条结案记账落切片 §03; 收尾核净(④)</td><td>§07 行更新(「§07 不更新等于这轮没做」)</td></tr>
+</table>
+
+<h3>③ 跳过 / BLOCKED 预登记</h3>
+<table>
+  <tr><th>项</th><th>类型</th><th>原因</th><th>解锁条件</th></tr>
+  <tr>
+    <td>RM08-08 missingFiles 半边(行载荷「文件丢失」+ delta 即达)</td>
+    <td class="bad">BLOCKED(判据半边级)</td>
+    <td>造法「删文件+recheck」在 qB 5.2.3 三条路径实测不成立(recheck running→stalledDL / stopped→stoppedDL / 删后 start fast-resume 仍原态; 上轮切片 §03-5 两轮复现); 与环境1/2 无关</td>
+    <td>missingFiles 造法定案(候选: L2 传输读失败路径 / qB 重启期 resume 核验), 定后按用例同口径补断言</td>
+  </tr>
+  <tr>
+    <td>RM08-06(L2 互传环境2 不成立时)</td>
+    <td class="bad">BLOCKED(条件预登记)</td>
+    <td>L1/L2 解锁实证在环境1(RM00); 环境2 的 current_network_interface 已修(§2.5.2)但互传未实证 —— S1 探针不成立时该条不可跑</td>
+    <td>S1 探针成立即照跑(主路径); 不成立则记环境事实回写规程 §2.5.2, 互传面解锁 = 探明环境2 互传根因</td>
+  </tr>
+  <tr>
+    <td>横滚指示条脚本面</td>
+    <td>引用不复测(D3 推荐)</td>
+    <td>可脚本断言面 = 浏览器 DOM 行为, e2e 行为守阵(三皮肤×五面)+ 静态守阵已钉住; 端点载荷零参与, RM08 读侧无可叠加断言面 —— 「同一件事不测三遍」</td>
+    <td>—(e2e/静态守阵即回归载体; 前端改动时 e2e 是门禁)</td>
+  </tr>
+  <tr>
+    <td>横滚指示条纯观感(色系/hover 加粗/跟手/尺寸)</td>
+    <td class="bad">BLOCKED = L0 目视挂账</td>
+    <td>人眼判(锚件 §08 已把「横滚条」列入观感 L0 目视挂账); 本轮如实维持挂账口径, 不迁出</td>
+    <td>用户真机目视(与既有 14 条目视清单同批)</td>
+  </tr>
+  <tr>
+    <td>choose 编辑器 / 组合树编辑器 / config 保存规范形面</td>
+    <td>记账不复测</td>
+    <td>锚件 §08 拍板归 RM09 下一子轮; 数据面已随 RM03 轮复测</td>
+    <td>—(RM09 子轮)</td>
+  </tr>
+  <tr>
+    <td>转移面(transfer_targets/transfer_flow/path_map)</td>
+    <td>记账不复测</td>
+    <td>已被 2026-11-01 转移真机再验收 R3 覆盖(锚件 §08)</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td>强制汇报确认消解等待模型(c32a0bdc, runtime.py)</td>
+    <td>记账不复测</td>
+    <td>写侧命令确认逻辑(26-10-31-1740① 修复), 归 RM09 子轮回归义务(RM09-04①/③ 转绿)</td>
+    <td>—(RM09 子轮)</td>
+  </tr>
+  <tr>
+    <td>观感/L0 面 14 条(上轮计划 §05 目视清单)</td>
+    <td class="bad">BLOCKED = L0 目视挂账</td>
+    <td>用户已拍板「子代理不代替人眼」; 清单整体冻结</td>
+    <td>用户真机目视(逐条勾)</td>
+  </tr>
+  <tr>
+    <td><code>[需活跃种子]</code> 类跳过</td>
+    <td>无</td>
+    <td>RM08 全部用例的活跃面用假种子承载(假种子不受约束 2); 真实种子全程 paused 零触碰; 环境2 主实例 0 真实种子反而免去误触面</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<h3>④ 验收判据(什么算这片做完)</h3>
+<ol>
+  <li>官方 <code>real.suite --slice RM08</code> 一轮: <b>8 条全跑, 用例级 FAIL 为 0</b>; RM08-08 BLOCKED 维持且健康态半边 PASS; RM08-06 视 S1 探针(成立则 PASS, 不成立 BLOCKED 记环境事实); 排障复跑守「每条最多 2 次」纪律。</li>
+  <li>红验全数见红: RM08-02 三对照(窗外回落/未协商/show 归约)+ <b>RM08-07 坏票/无票负向(新)</b>; RM08-05 未知 hash 404 负向(用例内建)。</li>
+  <li>基线重立: 切片记官方实跑时刻 HEAD(非收尾提交 hash); 锚件 §07 RM08 行同步(数字/档位 0/0/6/2/基线/指针)。</li>
+  <li>横滚条结案记账闭环: 切片 §03 记「可脚本面 = e2e 五面 + 静态守阵已覆盖, 读侧无叠加面, 引用不复测(D3 结论)」+ 纯观感维持 L0 挂账; 既有 14 条目视清单不迁出不抄。</li>
+  <li>收尾核净: 两实例 real-fake 残留 0(含 1200 枚大库批量删, <code>/torrents/delete</code> 多 hash 分隔符 <code>|</code>)、标签定义零残留、<code>.work/rm08/</code> 清空、<code>real.guard</code> 复跑绿、56590 transfer 限速原值逐字一致(up=1 MiB / down=5 MiB)、两实例进程比对(重启须记账)、token 零落盘。</li>
+  <li>产品 <code>src/</code> 零改动; 测试侧假红当轮定位修复的记切片 §04; 产品缺陷入池当轮不修。</li>
+</ol>
+
+<h3>环境2 特有注意(§2.5.2 / §2.9 逐条过一遍)</h3>
+<table>
+  <tr><th>注意点</th><th>对本轮的落法</th></tr>
+  <tr><td>token 注入(本排期会话实测 403 教训)</td><td>开工第一步注入 <code>QBT_TEST_56589/56590</code> 再跑 <code>real.env</code>/<code>real.guard</code>; RM08-05 腿A 的 api_key 取 <code>instances.token_for(PRIMARY)</code>(环境变量)</td></tr>
+  <tr><td>主实例 0 枚真实种子(§2.5.2)</td><td>RM08-05 腿A 计数分支(D1); 真实种子由用户自行添加, 用例侧<b>不得代造「真实」种子</b></td></tr>
+  <tr><td>L2 互传环境2 首跑</td><td>S1 探针先行(D4); 两端 announce 只打本机伪 tracker, 排除请求者自己(lib/tracker.py exclude_port)</td></tr>
+  <tr><td>transfer 限速原值 up=1MiB/down=5MiB(偶数)</td><td>RM08-06 照旧 transfer_limits fixture 钉 256KiB/s + 快照还原; 不硬编码原值; 收尾核原值逐字一致</td></tr>
+  <tr><td>56590 localhost 免鉴权 = 环境2 标准配置</td><td>产品进程空凭据可直连副实例; RM08-07 升档实例 scoped 改 skip_local_verify=false 是<b>产品配置层</b>改动(仅该实例), 与 56590 实例的 bypass_local_auth 无关, 不回还原则撞 401 封禁教训见 §2.5.2</td></tr>
+  <tr><td>R: 盘缺席(§2.5.2)</td><td>RM08-04 的 1200 枚零数据不受影响(元数据级); RM08-05/08 假种子带数据 256K 落 <code>.work/rm08/</code> 真写盘, 收尾必清</td></tr>
+  <tr><td>409 重加收养禁令(§2.9)</td><td>加种子 409 → 删旧重加绝不收养(上轮用例 <code>_add_retry</code> 口径不变)</td></tr>
+  <tr><td>快照滞后 1-2 拍(§2.9)</td><td><code>wait_in_store_state</code> 口径不变(RM08-05/02 已内建)</td></tr>
+  <tr><td>多标签「, 」连接(§2.9)</td><td>real-fake 标签清理按 strip 集合口径(用例 <code>rm_all_fakes</code> 已内建; 大库按 200 枚/批, 分隔符 <code>|</code>)</td></tr>
+  <tr><td>gtm 18788 不可达(§2.5.2)</td><td>RM08 无涉, 不设用例</td></tr>
+  <tr><td>并行陷阱(§2.8)</td><td>官方跑法 <code>real.suite</code> 传 -n 0; 片内文件锁照抄不拆</td></tr>
+  <tr><td>收尾进程口径</td><td>每条用例收尾 <code>taskkill /F /T</code> 杀整棵产品进程树(§2.7)</td></tr>
+</table>
+
+<h3>预估轮次时长</h3>
+<p>上轮官方轮 131.0s(环境1); 本轮 +坏票负向腿 +替身腿, 预估官方轮 <b>2.5-4 分钟</b>; S1 探针与 S2 改造为人工主要耗时。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>问题</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr>
+    <td><b>D1</b></td>
+    <td>RM08-05 腿A 在环境2(主实例 0 真实种子)的处置</td>
+    <td><b>guard.snapshot 计数分支</b>: 真实种子 &gt;0 走原腿; ==0 走<b>私有假种子替身</b>(api_key 直连 + mask 机制 + 虚拟条目 + 私有 msg 全保留, 「真实 PT 域名」词面降级记账, 解锁 = 用户添加真实种子后按原腿复测)—— 实现依据: <code>lib/torrent.py:25</code> info 硬编码 private:1, 假种子天然私有, 私有 msg 与 mask 断言机制等价成立。零授权依赖, 本轮即可全绿</td>
+    <td>整腿 BLOCKED 等用户加种子(不推荐 —— api_key 直连与 mask 机制两个环境无关断言面被白白搁置, 且「等」没有时限)</td>
+  </tr>
+  <tr>
+    <td><b>D2</b></td>
+    <td>升档兑现条(§08 硬要求至少 1 条)</td>
+    <td><b>RM08-07 L2→L3</b>: 上轮记账的解锁路径(skip_local_verify=false + Bearer token)本轮兑现, 补坏票/无票负向对照; 驱动改造 scoped 到该用例实例, 其余 7 条零改动</td>
+    <td>声明「本轮纯回归, 不加强」(不推荐 —— 解锁面现成, 白送的升档机会); 备选 RM08-06 升档(L2 互传环境2 首跑数据面加严)—— 但其前提(D4)未探明, 不宜预承诺</td>
+  </tr>
+  <tr>
+    <td><b>D3</b></td>
+    <td>横滚指示条: 真机轨是否新建用例</td>
+    <td><b>不新建, 引用结案</b>: 可脚本断言面(DOM 挂载/.on 类/overflow 联动/拖动/召唤)已被 e2e 行为守阵(真浏览器×三皮肤×五面)+ 静态守阵(规则单点/接线)钉住, 端点载荷零参与 ⇒ 读侧 HTTP 驱动无可叠加断言面; 按「同一件事不测三遍」切片记账引用, 纯观感维持 L0 目视挂账</td>
+    <td>真机轨新开「产品真进程+真浏览器」横滚用例(不推荐 —— 断言面与 e2e 完全重叠, 构成三遍重复; 且 e2e 已是改前端时的门禁)</td>
+  </tr>
+  <tr>
+    <td><b>D4</b></td>
+    <td>RM08-06(L2 互传)环境2 首跑风险</td>
+    <td><b>S1 开工探针先行</b>(56589↔56590 最小互传): 成立照跑; 不成立该条降 BLOCKED 记环境事实 + 回写规程 §2.5.2(不判产品缺陷)—— 探针成本一条命令级</td>
+    <td>该条直接回环境1 跑(违背锚件 §08 D2「轮次跟着会话走」拍板); 或跳过不跑(不推荐 —— totals 一致性是修复回潮探针级断言, 平白丢一轮)</td>
+  </tr>
+  <tr>
+    <td><b>D5</b></td>
+    <td>W1-B「webui 未启用徽标」面归属(36699dd5 命中 shared/config_hub.js, 在 RM08 glob 内)</td>
+    <td><b>归 RM09 子轮</b>与 choose 编辑器同批(同为设置页表面, 渲染属写侧配置页; 规则引擎判定数据面 RM03 轮已复测), 本轮记账不复测</td>
+    <td>本轮补一条只读断言(不推荐 —— 徽标渲染在浏览器 DOM, HTTP 驱动够不到, 与 e2e/静态守阵重叠)</td>
+  </tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>(待拍板 —— 拍板后回填: D 编号 / 结论 / 日期)</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>L2 互传在环境2 不成立(仅环境1 实证过; 56590 默认 save_path 指幽灵 R: 盘)</td><td>S1 探针两端连不上/零字节</td><td>先核 listen_port 绑定与 current_network_interface(§2.5.2 已修键); 仍不成立则 RM08-06 降 BLOCKED 记环境事实回写规程, 不判产品缺陷(D4)</td></tr>
+  <tr><td>RM08-07 鉴权改造面波及其余用例</td><td>skip_local_verify=false 改到共享 CONFIG_TEMPLATE</td><td>改造 scoped: <code>product_case</code> 加 auth 形参只影响该用例实例; S2 改造后单跑其余条抽查一条免鉴权路径不回归</td></tr>
+  <tr><td>替身腿的 mask 断言弱化被误读为「mask 未验」</td><td>D1 走替身分支</td><td>切片 §03 明写: mask 机制断言(url+passkey 形参原文零外发)照常成立, 缺的只是「真实 PT 域名」词面; 解锁条件带原腿口径</td></tr>
+  <tr><td>大库 1200 枚注入的 409/分隔符坑(上轮实测教训)</td><td>复跑同 infohash / 批量删逗号连接</td><td><code>_add_retry</code> 409 删旧重加 + <code>|</code> 分隔符批量删, 口径已在用例内建, 不回潮</td></tr>
+  <tr><td>环境2 大库首帧数字与环境1 差异大(盘/CPU 不同)</td><td>首帧耗时显著偏离 59ms 量级</td><td>断言按上界 2s 宽松界 + 实测数如实记录(环境2 自成回归基线), 不硬抄环境1 数字</td></tr>
+  <tr><td>token 经手面多(legA api_key + RM08-07 Bearer)</td><td>token 落进配置/日志/metrics</td><td>token 只经环境变量 → 内存; 用例侧断言与 metric 打点不打印凭据; 收尾 grep .work 确认零落盘</td></tr>
+  <tr><td>56590 残留毒化(RM03 轮标签定义残留教训)</td><td>收尾漏清定义层</td><td>验收判据第 5 条含零 real-fake + 标签定义零残留 + guard 复跑绿硬核</td></tr>
+</table>
+
+<h2><span class="no">§08</span>附录: 环境自检与盘面探查(2026-11-01 实测)</h2>
+<pre><code>环境      环境2(C盘机)  [QBT_REAL_ENV 未设, 按 EXE 探测]
+主实例    56589  pid=14820  qBittorrent v5.2.3  firewalled  真实种子 0 个(已全部暂停)  exe: C:\Programs\qBittorrent-testing\qbittorrent.exe
+副实例    56590  pid=11644  qBittorrent v5.2.3  firewalled  真实种子 0 个  exe: C:\Programs\qBittorrent-testing2\qbittorrent.exe
+BT 监听   56589=27049 / 56590=32719(env_registry 已回填)
+token     环境变量注入方式(QBT_TEST_56589/56590); 本排期会话实测: 未注入时主实例 403 Forbidden, 注入后 real.guard 双绿 —— 执行轮开工第一步注入
+56590     bypass_local_auth=true(环境2 标准配置); transfer 限速原值 up=1048576B / down=5242880B
+gtm       18788 不可达(RM08 无涉)
+落点      用例落点 = tests-real/.work/rm08/(C:, 仓库所在卷); R: 缺席, 大种子一律 --no-data 或小尺寸真写盘后收尾清</code></pre>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-2123</span> 初版 —— RM08 WebUI 读侧 漂移复测轮排期(主会话指令)。要点: 漂移体检 11 commits 逐文件分类(基线 eb34dc3d 失效按首轮重来口径重立; 端点契约面零漂移, 命中全部在 shared/** 前端与 runtime.py 写侧确认段); 横滚指示条按实现实况定性「可脚本面已被 e2e+静态守阵钉住, 读侧无叠加面」报 D3; glob 自检 7/7 全命中(无裸名异常, shared 重叠与 vendor 记账); 环境自检双绿(token 未注入 403 教训记附录); 8 条复测 + RM08-07 升档 L2→L3(坏票负向), RM08-05 腿A 计数分支替身(D1), RM08-06 互传探针先行(D4); BLOCKED 预登记 missingFiles 半边维持; D1–D5 待拍板。</li>
+</ul>
+
+</div>
+</body>
+</html>
