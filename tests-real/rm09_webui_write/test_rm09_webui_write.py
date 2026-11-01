@@ -1,11 +1,13 @@
-"""RM09 WebUI 写侧 —— 十条真机用例(端点回执 → 命令线消费 → qB 真作用全链路)。
+"""RM09 WebUI 写侧 —— 十一条真机用例(端点回执 → 命令线消费 → qB 真作用全链路)。
 
-验证面对准冻结计划 plans/26-10-31-1710-plan-real-RM09.html §03 的十条 spec:
+验证面对准冻结计划 plans/26-10-31-1710-plan-real-RM09.html §03 的十条 spec +
+漂移复测轮 plans/26-11-01-2212-plan-real-rm09-drift.html 新增的 RM09-11:
 单发命令 pause/resume 全链路(RM09-01)· 删除双态 false 数据还在 / true 数据真删(RM09-02)·
 批量合单 hashes+组键混合 + 路由层 400 三连 + skip 计数(RM09-03)· 强制汇报回执三态(RM09-04)·
 移动真搬文件 + rename + rename-fs(RM09-05)· 组命令全员真停 + 未知 key 拒收(RM09-06)·
 配置保存 WebUI 落盘通道(RM09-07)· keys 写读回 + 非法载荷拒收(RM09-08)· fs mkdir 白名单内建 +
-越界拒收(RM09-09)· 种子转移端点未知 target 负向(RM09-10)。
+越界拒收(RM09-09)· 种子转移端点未知 target 负向(RM09-10)·
+choose 编辑器保存通道 PUT /api/config 服务端规范形语义(RM09-11, 新建即 L3 四腿)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 回执通道: POST 端点 200 只代表「入队」(runtime.post_command 返回 {queued, cmd_id});
@@ -26,6 +28,19 @@
 - 配置保存: GET /api/config 掩码树 → PUT {tree} → applied+changes(顶层段名)+restart_required;
   写盘单点 write_tree(非 R 级段立即生效)。热重载机制本身(RM02-04)不复测, 只测落盘通道。
 - 转移端点: run/test 都有路由层目标预检(transfer.py:24), 未知 target_id 400 拒收不入队。
+- choose 保存通道(RM09-11, 漂移轮新增): PUT /api/config(routes/config.py:134)树根 = 整份 YAML
+  文档(§2.14), 规则集 = config 段下所有 *_rules 键(loaders.py:634), 回执 changes 收 Config
+  顶层段名(规则集聚合段 = rules_config, impact.diff_config_impacts); 校验与启动同路径
+  (write_tree → 临时文件 load_config, ConfigError → 400 且磁盘零触碰), choose 感知校验单点
+  config/validation/rules.py(_validate_choose_block: 嵌套 choose 拒绝「编排块只允许一层」;
+  未知动作 400「未知动作 '<名>'」; 动作项经 normalize_action_entry 单点漏斗认规范形
+  {type, params, on_error}); 退役键 stop_following_rules_if / 伪动作 ignore_next_action_error
+  键面保留识别不拒收(rules.py:43/158/404)—— W1-B 徽标数据源 = GET /api/config 树, HTTP 侧
+  可断言腿 = 退役键经保存通道键面保留, 徽标 DOM 渲染引用 e2e/静态守阵(test_webui_static_dom_page.py
+  W1-B)不复测(D2); 保存成功投递 reload_config 热重载(机制本身归 RM02-04 引用)。
+  与 RM03-11 的「不测三遍」切分(D6): RM03-11 测规则层热重载语义(分支求值/首中短路/default
+  兜底/无 default 空操作/装载期嵌套拒绝), RM09-11 只测保存通道交付链(规范形 → 校验/400/落盘
+  → 热重载后「PUT 的树被引擎吃到」), ② 只证首中分支打标落 qB 的交付链证据, 求值对照零复测。
 
 跑法: `commands run real.suite -- --slice RM09 --yes`(不要裸 pytest)。真实种子全程非活跃;
 假种子一律 real-fake 标签(死端口 announce http://<本机IP>:1/announce, 零外连); 删除/移动/重命名
@@ -911,3 +926,161 @@ def test_rm09_10_transfer_unknown_target(clean_fakes):
         # 零状态变化: 种子原态未动(预检闸破则这里会看到转移痕迹)
         after = qb.torrent(h)
         assert after is not None and after.get("state") == before, f"种子状态被未知 target 请求改动: {before} -> {after}"
+
+
+def test_rm09_11_choose_save_channel(clean_fakes):
+    """[RM09-11] choose 编辑器保存通道: PUT /api/config 服务端规范形语义(四腿, 新建即 L3)
+
+    与 RM03-11 的「不测三遍」切分(D6): RM03-11 测规则层热重载语义 —— 分支求值/首中短路/
+    default 兜底/无 default 空操作/装载期嵌套拒绝; 本条只测 WebUI 保存通道交付链 ——
+    编辑器写全规范形({type, params, on_error} / choose 编排块)经 PUT /api/config 的服务端
+    语义(结构校验与启动同路径 / 400 逐字文案 / 落盘规范形 / 热重载投递后「PUT 的树被引擎
+    吃到」)。分支求值语义本条零断言: ② 只证首中分支打标落 qB 的交付链证据(种子先于 PUT
+    入列且彼时树里无规则, 打标只可能来自本次 PUT 交付), 对照集归 RM03-11 引用不复测。
+
+    前置: 基座 + 1 枚 256KiB 假种子(死端口 announce 归 rm09fake domains, 先于 ① 入列);
+          负向腿落盘前配置文件字节快照。
+    副作用: 用例内 PUT 临时配置树四次(两次 applied 两次 400 拒收); 热重载重建规则任务;
+            假种子被打 rm09-cho-small 标签(choose 首中分支)。
+    回滚: 产品随起停还原(临时 data_dir 删除即净); real-fake 种子收尾删净; 400 拒收腿磁盘
+          字节零触碰(用例内断言)。
+    失败判据: PUT applied 但磁盘无 choose 规范形/缺显式 on_error(保存通道断);
+              changes 不含规则段 rules_config; GET 回读与落盘不一致; 热重载后规则不打标
+              (交付链断, PUT 的树没被引擎吃到, 高优); 嵌套 choose/未知动作竟 200(校验器
+              fail-fast 破)或 400 却触碰磁盘; 退役键被拒收(键面保留识别破, 徽标数据源失效)。
+    """
+    with product_case("rm09_11") as (case, port, _proc):
+        qb = clean_fakes
+        cfg_path = case / "config.yml"
+
+        # 前置: 种子先入列(此时配置树里无任何 *_rules 段, ② 的打标只可能来自 ① 的 PUT 交付)
+        h = fake_one(qb, case, "rm09i.bin", sub="src")
+        settle(qb, h)
+        wait_state(qb, h, "stalledUP", desc="前置假种子应纯本地做种")
+        wait_in_store(port, h)
+
+        # ---- ① 正向: GET 树 → 注入全规范形 choose 规则树(tracker 引用一并)→ PUT applied
+        #      → 落盘 YAML 规范形 → GET 回读一致
+        tree = web_req(port, "GET", "/api/config")["tree"]
+        tree["config"]["trackers"]["rm09fake"]["rules"] = ["@rm09_rules"]
+        tree["config"]["rm09_rules"] = {
+            "c11choose": {
+                "trigger": "interval",
+                "actions": [
+                    {
+                        "choose": [
+                            {
+                                "when": {"size": "<=1MiB"},
+                                "then": [
+                                    {
+                                        "type": "add_tags",
+                                        "params": ["rm09-cho-small"],
+                                        "on_error": {"policy": "stop", "retries": "3", "backoff": "60"},
+                                    }
+                                ],
+                            }
+                        ],
+                        "default": [
+                            {
+                                "type": "add_tags",
+                                "params": ["rm09-cho-default"],
+                                "on_error": {"policy": "continue", "retries": "0", "backoff": "5"},
+                            }
+                        ],
+                    }
+                ],
+            }
+        }
+        resp = web_req(port, "PUT", "/api/config", {"tree": tree})
+        assert resp.get("applied") is True, f"PUT 回执 applied 非 true: {resp}"
+        assert "rules_config" in resp.get("changes", []), f"changes 未含规则段 rules_config: {resp}"
+        assert not resp.get("restart_required"), f"规则段竟报 restart_required: {resp}"
+
+        import yaml
+
+        parsed = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))["config"]
+        action = parsed["rm09_rules"]["c11choose"]["actions"][0]
+        assert "choose" in action, f"落盘 YAML 缺 choose 编排块: {action}"
+        branch = action["choose"][0]
+        assert branch["when"] == {"size": "<=1MiB"}, f"落盘 when 不对: {branch.get('when')}"
+        then0 = branch["then"][0]
+        assert then0["type"] == "add_tags", f"落盘 then 非规范形(缺 type): {then0}"
+        assert then0["params"] == ["rm09-cho-small"], f"落盘 params 不对: {then0}"
+        assert then0["on_error"]["policy"] == "stop", f"落盘缺显式 on_error: {then0}"
+        assert parsed["trackers"]["rm09fake"]["rules"] == ["@rm09_rules"], "落盘 tracker 引用丢失"
+
+        tree2 = web_req(port, "GET", "/api/config")["tree"]
+        back = tree2["config"]["rm09_rules"]["c11choose"]["actions"][0]
+        assert "choose" in back, f"GET 回读缺 choose 块: {back}"
+        assert back["choose"][0]["then"][0]["type"] == "add_tags", f"GET 回读与落盘不一致: {back}"
+        assert back["choose"][0]["then"][0]["on_error"]["policy"] == "stop", f"GET 回读缺 on_error: {back}"
+
+        # ---- ② 交付链: 热重载后 choose 规则真作用(首中分支打标落 qB)—— 只证「PUT 的树被
+        #      引擎吃到」; 分支求值/首中短路/default 兜底语义归 RM03-11 引用不复测(D6)
+        wait_until(lambda: "rm09-cho-small" in _tags_of(qb.torrent(h) or {}), 90, "PUT 热重载交付链断: 首中分支未打标")
+
+        # ---- ③ 红验: 负向 400 逐字文案 + 磁盘字节零触碰(嵌套 choose / 未知动作名)
+        snap = cfg_path.read_bytes()
+
+        tree3 = web_req(port, "GET", "/api/config")["tree"]
+        tree3["config"]["rm09_rules"] = {
+            "c11bad": {
+                "trigger": "interval",
+                "actions": [
+                    {
+                        "choose": [
+                            {
+                                "when": {"size": "<=1MiB"},
+                                "then": [
+                                    {
+                                        "choose": [
+                                            {
+                                                "when": {"size": "<=1MiB"},
+                                                "then": [{"type": "add_tags", "params": ["rm09-bad"]}],
+                                            }
+                                        ]
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ],
+            }
+        }
+        code1, p1 = web_err(port, "PUT", "/api/config", {"tree": tree3})
+        assert code1 == 400, f"嵌套 choose 应 400 拒收: {code1} {p1}"
+        assert "choose 内不允许嵌套 choose(编排块只允许一层)" in str(p1.get("detail", "")), f"400 逐字文案不对: {p1}"
+        assert cfg_path.read_bytes() == snap, "嵌套 choose 400 竟触碰了磁盘(高优)"
+
+        tree4 = web_req(port, "GET", "/api/config")["tree"]
+        tree4["config"]["rm09_rules"] = {
+            "c11bad2": {"trigger": "interval", "actions": [{"type": "no_such_action", "params": {}}]}
+        }
+        code2, p2 = web_err(port, "PUT", "/api/config", {"tree": tree4})
+        assert code2 == 400, f"未知动作名应 400 拒收: {code2} {p2}"
+        assert "未知动作 'no_such_action'" in str(p2.get("detail", "")), f"400 逐字文案不对: {p2}"
+        assert cfg_path.read_bytes() == snap, "未知动作 400 竟触碰了磁盘(高优)"
+
+        # ---- ④ 红验/徽标数据源(D2): 退役键经 PUT 保存通道键面保留不拒收(applied + 落盘保留
+        #      + GET 树保留)—— 徽标 DOM 渲染/卡脚提示交互引用 e2e/静态守阵(W1-B)不复测
+        tree5 = web_req(port, "GET", "/api/config")["tree"]
+        tree5["config"]["rm09_rules"] = {
+            "c11retired": {
+                "trigger": "interval",
+                "stop_following_rules_if": "always",
+                "actions": [{"type": "ignore_next_action_error", "params": "true"}],
+            }
+        }
+        resp4 = web_req(port, "PUT", "/api/config", {"tree": tree5})
+        assert resp4.get("applied") is True, f"退役键竟被保存通道拒收: {resp4}"
+
+        parsed4 = yaml.safe_load(cfg_path.read_text(encoding="utf-8"))["config"]
+        spec4 = parsed4["rm09_rules"]["c11retired"]
+        assert spec4.get("stop_following_rules_if") == "always", f"退役键 stop_following_rules_if 未落盘保留: {spec4}"
+        act4 = spec4["actions"][0]
+        assert act4.get("type") == "ignore_next_action_error", f"退役伪动作未落盘保留: {act4}"
+        assert str(act4.get("params", "")).strip().lower() == "true", f"伪动作 params 未落盘保留: {act4}"
+
+        back4 = web_req(port, "GET", "/api/config")["tree"]["config"]["rm09_rules"]["c11retired"]
+        assert back4.get("stop_following_rules_if") == "always", f"徽标数据源(GET 树)缺退役键: {back4}"
+        assert back4["actions"][0]["type"] == "ignore_next_action_error", f"GET 树缺退役伪动作: {back4}"
