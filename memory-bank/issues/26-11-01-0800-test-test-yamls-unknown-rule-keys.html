@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0800">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="test-yamls-unknown-rule-keys">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-01-1054-test-yamls-removal.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_yamls 存量样例含 RULE_KNOWN_KEYS 外键">
 <meta name="issue-summary" content="test_start.yml 等存量样例含 log_level 等 RULE_KNOWN_KEYS 外键(未被测试消费, 合法性未核)">
 <title>test_yamls 存量样例含 RULE_KNOWN_KEYS 外键 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0800-test-test-yamls-unknown-rule-keys</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 08:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,7 +97,12 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 08:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 10:42 — <strong>In Progress</strong>（用户指派认领；拍板 = 样例目录整体移除而非改样例 —— <code>test_yamls/</code> 是早期手写测试配置，未被任何测试消费，逐份修样例不如整目录退役）。复验：2026-11-01 10:42 @d1271363 仍复现（<code>test_start.yml:31</code> <code>log_level: info</code> 原样；rg 全仓核过 src/scripts/tests 零引用）</li>
+      <li>2026-11-01 10:54 — <strong>Done</strong>（样例目录整体移除；基线切片 <a href="../testing/baselines/26-11-01-1054-test-yamls-removal.md">26-11-01-1054-test-yamls-removal</a>）</li>
     </ul>
+    <h3>修复后补充</h3>
+    <p><b>实际修法</b>: 不改样例，<code>test_yamls/</code> 整目录退役（git rm 7 个 yml）—— 建议修法的第①分支（报未知键）已无对象：样例本就是早期手写测试配置，未随 schema 演进维护，且全仓核实未被任何测试/代码消费（示例配置守阵只扫 <code>docker/config.example.yml</code> 与 <code>tests/helpers._example_rules_config</code> 内置样例）。连带清理引用面：<code>.vscode/launch.json</code> 删指向该目录的调试配置（4→3）、<code>.dockerignore</code> 删行、<code>AGENTS.md</code> 示例指引收敛为 <code>minimal.yml</code>；文档回写 keys.md / prod-files.md / code-style.md / conditions-and-actions.md（choose 样例行改移除注记）。注：其中 <code>test_choose.yml</code> 是今晨 W3 波次新建的样例，随目录一并移除，choose 写法说明仍留在 <code>rule-system/conditions-and-actions.md</code>。</p>
+    <p><b>验证方式</b>: ① rg 全仓（src/scripts/tests/docs/.github 及隐藏文件）确认删除前后引用面收敛到零；② <code>commands run test.full</code> 稳定树全绿（4461 passed + 2 skipped，覆盖率闸门通过；首跑 98.87% FAIL 为一次性测量竞态，复跑未复现）；③ <code>doc.caps</code> 复查 AGENTS.md 7268/8000 PASS。测试数字见基线切片（不在此手抄）。</p>
   </section>
 
   <footer>

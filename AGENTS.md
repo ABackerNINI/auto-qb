@@ -46,7 +46,7 @@
 
 ## 红线(生产文件,禁止改动/提交)
 
-- **`config.yml`**:用户真实生产配置(真实PT域名/tracker规则/qB凭据引用),不是示例!示例用`minimal.yml`/`test_yamls/`。
+- **`config.yml`**:用户真实生产配置(真实PT域名/tracker规则/qB凭据引用),不是示例!示例用`minimal.yml`。
 - **`auto-qb-data/`**:运行时数据(state.json/锁/日志/跳检备份),已gitignore;不要"顺手"格式化或重排。
 - 明细见`memory-bank/pitfalls/ops/prod-files.md`。
 

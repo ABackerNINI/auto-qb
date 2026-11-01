@@ -188,4 +188,4 @@ traffic_source:
 
 ## 测试配置样例
 
-`test_yamls/` 下有运行用测试配置 (`test_up_dl_limit_tracker.yml`, `test_actions/` 目录等); `test.yml`/`minimal.yml` 是手工/最小样例。调试入口见 `.vscode/launch.json` (4 个配置: 正常运行/dry-run/导出/测试限速配置)。
+`test.yml`/`minimal.yml` 是手工/最小样例(`test_yamls/` 样例目录已于 2026-11-01 整体移除, 见 `memory-bank/issues/26-11-01-0800-test-test-yamls-unknown-rule-keys.html`)。调试入口见 `.vscode/launch.json` (3 个配置: 正常运行/dry-run/导出)。

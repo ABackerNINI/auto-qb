@@ -47,7 +47,7 @@ actions:
 - **fail-fast**: 块级键面 `choose`/`default`、分支键面 `when`/`then`(compat.CHOOSE_KNOWN_KEYS / CHOOSE_BRANCH_KEYS 单点); 缺 when / 缺 then / choose 非列表 / 空分支列表 / then·default 非 list / 嵌套 choose / when 内未知条件全部在载入校验期拒绝, 坐标按树形如实报(`choose[i].when` / `choose[i].then[j]`)。
 - **normalize 单点**: choose 结构识别/分支建树/块内动作缺省 on_error 注入全在 `config/compat.normalize_choose_block`(幂等); when 扁平列表同样包隐式 `all`。
 - **触发白名单**: `on_torrent_deleted` 的动作白名单同样约束 choose 块内 then/default 的动作(删除后种子无活现场, 块内动作同径拒绝)。
-- 样例: `test_yamls/test_actions/test_choose.yml`。
+- 样例: 无独立样例文件(原 `test_yamls/test_actions/test_choose.yml` 随 `test_yamls/` 样例目录于 2026-11-01 整体移除)。
 
 ## 13 种条件 (conditions.py, 全部 `match(ctx) -> bool`, 组内与组间逻辑见各条)
 

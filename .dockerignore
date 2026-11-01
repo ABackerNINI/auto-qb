@@ -31,7 +31,6 @@ htmlcov/
 cov-report.txt
 dist/
 tests/
-test_yamls/
 scripts/
 extensions/
 resources/
