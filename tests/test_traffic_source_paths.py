@@ -16,6 +16,12 @@
 - test_source_enabled_identity_judgment: 总开关恒等判据 is not False(桩属性不当成关闭; 计划 26-10-17-1737 S1)
 - test_dat_path_source_off_returns_empty: enabled=false -> ""(关源停取数, 优先于 provider 分支)
 - test_unavailable_reason_source_off: 关源文案含「已关闭」且优先于 provider 分支(verdict-scope-parity)
+
+W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01) ——
+- test_unavailable_reason_exact_wording_per_branch: 三支文案逐字钉死(ur_3/5/10/11/12/13: 文案漂移
+  = 排障误导, 变异审计判据; 子串断言杀不掉 XX 包裹型变异, 必须全等)
+- test_tool_dat_path_stub_endpoint_without_data_dir: 桩端点(缺 data_dir 字段)-> 空串(tdp_15:
+  getattr 缺省不得落占位路径)
 """
 import os
 from types import SimpleNamespace
@@ -138,3 +144,29 @@ def test_unavailable_reason_source_off(tmp_path, monkeypatch):
     assert "traffic_source.enabled=false" in reason
     # 不许出现 provider 分支的文案(关源时工具指针在不在都不是原因)
     assert "指针" not in reason
+
+
+# ---------- W7(R31) S5 补测(变异审计真洞守阵) ----------
+
+
+def test_unavailable_reason_exact_wording_per_branch():
+    """三支文案逐字钉死: 子串断言杀不掉 XX 包裹型漂移, 文案是用户排障的入口必须全等"""
+    off = _cfg(TrafficSourceConfig(enabled=False))
+    assert paths.unavailable_reason(off) == (
+        "流量来源已关闭: config.traffic_source.enabled=false —— 曲线/规则表达式/工具订阅"
+        "已停止取数; 到设置页「流量与限速」→「数据来源」重新启用总开关即可恢复"
+    )
+    tool = _cfg(TrafficSourceConfig(provider="global_traffic_monitor"))
+    assert paths.unavailable_reason(tool) == (
+        "数据源不可得: 全局流量监视器未在运行(发现指针 endpoint.json 缺失或未报出数据目录), "
+        "取不到 history_traffic.dat 路径 —— 到设置页「流量与限速」→「数据来源」看工具状态, 或点「立即拉起」"
+    )
+    tm = _cfg(TrafficSourceConfig(provider="traffic_monitor"))
+    assert paths.unavailable_reason(tm) == "数据源未配置: 需要 config.traffic_source.traffic_monitor.dat_path"
+
+
+def test_tool_dat_path_stub_endpoint_without_data_dir(tmp_path, monkeypatch):
+    """桩端点(缺 data_dir 字段) -> 空串(getattr 缺省 "" 不得变占位路径, tdp_15)"""
+    monkeypatch.setattr(agent, "discover", lambda: SimpleNamespace())
+    assert paths.tool_dat_path() == ""
+    assert paths.dat_path(_cfg(TrafficSourceConfig(provider="global_traffic_monitor"))) == ""

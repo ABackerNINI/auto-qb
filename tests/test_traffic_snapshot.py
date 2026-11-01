@@ -26,6 +26,20 @@
 - test_publish_event_ignores_non_today_and_source_off
 - test_publish_event_patches_day_row_without_reading
 
+W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-analysis/w7-r31/classify.md) ——
+- test_apply_reload_receipt_and_short_circuit: apply 回执契约(module/action 逐字)+ 段相等短路
+  (apply_1/6/7/9/14/15 短路失效族 + apply_16/28~33 回执字段族 + apply_27 INFO 审计, 一条守阵整族杀)
+- test_apply_tolerates_detached_ctx_without_queue: task_queue 缺席(防御默认面)apply 不炸(_registered_task_3)
+- test_interval_of_stub_config_defaults_600: 桩配置(无 traffic_source)回退 600s(_interval_of_18)
+- test_refresh_source_off_logs_and_reason_passthrough: 关源 INFO 审计 + off 原因逐字透传(refresh_3~8)
+- test_refresh_stale_reasons_contract_and_warnings: stale reasons 三键契约(dir/code/text)+ 两条
+  WARNING 不丢(refresh_15/24/25/26/31/32/36)
+- test_refresh_without_today_row_debug_suffix_safe: dat 无今日行 -> DEBUG 后缀优雅缺席(refresh_51
+  day=None TypeError 崩溃面向下钉, 中危)
+- test_publish_event_cold_start_row_shape_zero_payload: 冷启动零载荷 day 行形状逐键(period/label/
+  up/down; publish_event_12/13 高水位缺省 + 55/56/57 label 键值)
+- test_publish_off_reason_contract: off reasons 契约逐键逐字 + 默认回退文案(publish_off_1/14~16/21~24)
+
 ## 事件零读盘补丁(26-10-21, 用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」)
 - test_publish_event_patches_day_row_without_reading: 补丁只改 periods 的 day 行(month/history/limit 段不动),
   ts 推进, 且**一次读盘都没有**(read_source_rows 打桩成 raise)
@@ -33,11 +47,13 @@
   文件读盘路径的 day 行也不低于水位(崩溃恢复闪跳被抹掉)
 - test_publish_event_ignores_non_today_and_source_off: 非当日 / 关源 -> False 且快照一字未动
 - test_publish_event_creates_day_row_on_cold_start: 冷启动(种子 periods=[])首个事件先于任何读盘 -> 建 day 行
+
 """
 import copy
 import logging
 import time
-from datetime import date
+from datetime import date, timedelta
+from types import SimpleNamespace
 
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
 from auto_qb.core.modules.traffic_snapshot_mod import (
@@ -498,3 +514,132 @@ def test_poll_payload_drops_history(web_env):
     r = client.get("/api/traffic/history", headers=_auth(mgr))
     assert r.status_code == 200, r.text
     assert r.json()["history"] == [{"date": today, "up": 1, "down": 2}]
+
+
+# ---------- W7(R31) S5 补测(变异审计真洞守阵) ----------
+
+
+def test_apply_reload_receipt_and_short_circuit(tmp_path):
+    """apply 回执契约 + 段相等短路(变异审计 apply 回执族整族杀)
+
+    回执 module/action 逐字(host.apply_all 汇总进 reload 回执, 失真=审计/回执面);
+    段相等必须短路回 "none" 回执(getattr/键名漂移会让短路失效 -> 误报 reloaded);
+    热更新 INFO 审计不丢。
+    """
+    mgr = _mgr(tmp_path)
+    mod = _mod(mgr)
+    mod.start(mgr.ctx, dry_run=False)  # 注册任务(默认 600s)
+    old = mgr.config
+    new = copy.copy(old)
+    new.traffic_source = copy.deepcopy(old.traffic_source)
+    new.traffic_source.refresh_interval = 1800.0
+
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        r = mod.apply(old, new)
+    assert (r.module, r.action) == (MODULE_NAME, "reloaded")
+    assert mgr.task_queue.named(TASK_NAME).interval == 1800.0
+    assert any(
+        rec.levelno == logging.INFO and "刷新间隔热更新" in msg for rec, msg in zip(cap.records, cap.messages)
+    ), "热更新 INFO 审计丢失"
+
+    # 段相等 -> 短路: 回执 action 落默认 "none", interval 不动
+    r2 = mod.apply(new, new)
+    assert (r2.module, r2.action) == (MODULE_NAME, "none")
+    assert mgr.task_queue.named(TASK_NAME).interval == 1800.0
+
+
+def test_apply_tolerates_detached_ctx_without_queue(tmp_path):
+    """task_queue 缺席(防御默认面): apply 不炸, 照常回 reloaded 回执
+
+    _registered_task 的 queue 判空是防御分支 —— 剥掉判空(恒取 named)会在无队列环境
+    AttributeError(崩溃面)。
+    """
+    mod = _mod(_mgr(tmp_path))
+    old = mod._ctx.config
+    new = copy.copy(old)
+    new.traffic_source = copy.deepcopy(old.traffic_source)
+    new.traffic_source.refresh_interval = 60.0  # 段不同 -> 不短路 -> 会走 _registered_task
+    real_ctx = mod._ctx
+    mod._ctx = SimpleNamespace(task_queue=None, config=old)
+    try:
+        r = mod.apply(old, new)
+    finally:
+        mod._ctx = real_ctx
+    assert (r.module, r.action) == (MODULE_NAME, "reloaded")
+
+
+def test_interval_of_stub_config_defaults_600(tmp_path):
+    """桩配置(无 traffic_source 段)回退 600s —— 与 models 默认同值, 不得漂移"""
+    assert _mod(_mgr(tmp_path))._interval_of(SimpleNamespace()) == 600.0
+
+
+def test_refresh_source_off_logs_and_reason_passthrough(tmp_path):
+    """关源: INFO 审计不丢 + off 原因逐字透传(publish_off 不落 fallback 兜底)"""
+    mgr = _mgr(tmp_path)
+    mgr.config.traffic_source.enabled = False
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert _mod(mgr).refresh() is False
+    assert any(
+        rec.levelno == logging.INFO and msg == "流量快照 | 来源总开关关闭(traffic_source.enabled=false), 发布 off 快照"
+        for rec, msg in zip(cap.records, cap.messages)
+    ), "关源 INFO 审计丢失(逐字)"
+    tv = mgr.web.traffic_view
+    assert tv["source"]["reasons"] == [
+        {
+            "dir": "",
+            "code": "source_off",
+            "text": "流量来源已关闭(traffic_source.enabled=false): 已停止取数",
+        }
+    ]
+
+
+def test_refresh_stale_reasons_contract_and_warnings(tmp_path):
+    """stale: reasons 三键契约(dir/code/text, 前端按码分流)+ 两条 WARNING 不丢"""
+    mgr = _mgr(tmp_path, str(tmp_path / "absent.dat"))
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert _mod(mgr).refresh() is False
+    r0 = mgr.web.traffic_view["source"]["reasons"][0]
+    assert set(r0) == {"dir", "code", "text"}, "reasons 键契约损坏(前端按键取值)"
+    assert r0["dir"] == "" and r0["code"] == "dat_missing"
+    assert r0["text"].startswith("流量数据读取失败")
+    assert any(
+        rec.levelno == logging.WARNING and "读取流量数据失败" in msg for rec, msg in zip(cap.records, cap.messages)
+    ), "读盘失败 WARNING 丢失"
+
+    # 坏行跳过路径: 有有效行照常发布, 坏行 WARNING 不丢
+    bad = tmp_path / "bad.dat"
+    bad.write_text('lines: "2"\nnot-a-date\n2026/11/01 1/2\n', encoding="utf-8")
+    mgr.config.traffic_source.traffic_monitor.dat_path = str(bad)
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert _mod(mgr).refresh() is True
+    assert any(
+        rec.levelno == logging.WARNING and "行无法解析已跳过" in msg for rec, msg in zip(cap.records, cap.messages)
+    ), "坏行 WARNING 丢失"
+
+
+def test_refresh_without_today_row_debug_suffix_safe(tmp_path):
+    """dat 无今日行(常态) -> DEBUG 后缀优雅缺席, 不得 TypeError(refresh_51 崩溃面, 中危)"""
+    yesterday = date.today() - timedelta(days=1)
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(yesterday, 1, 2)]))
+    assert _mod(mgr).refresh() is True
+
+
+def test_publish_event_cold_start_row_shape_zero_payload(tmp_path):
+    """冷启动零载荷事件: day 行逐键形状(period/label/上下行) —— 高水位缺省 (0,0) 不得漂移"""
+    mgr = _mgr(tmp_path)
+    mod = _mod(mgr)
+    assert mod.publish_event(date.today().isoformat(), 0, 0) is True
+    row = mgr.web.traffic_view["periods"][0]
+    assert row == {"period": "day", "label": "今日", "up": 0, "down": 0}
+
+
+def test_publish_off_reason_contract(tmp_path):
+    """off reasons 契约逐键逐字 + 默认回退文案(reason 空 -> 「流量来源已关闭」)"""
+    mgr = _mgr(tmp_path)
+    mod = _mod(mgr)
+    mod.publish_off("总开关关闭")
+    tv = mgr.web.traffic_view
+    assert tv["source"]["reasons"] == [{"dir": "", "code": "source_off", "text": "总开关关闭"}]
+
+    mod.publish_off()  # 默认 reason: 落回退文案
+    assert mgr.web.traffic_view["source"]["reasons"][0]["text"] == "流量来源已关闭"

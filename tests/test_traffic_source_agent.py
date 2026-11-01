@@ -50,8 +50,38 @@ P1-T1.3 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_resolve_claim_target_tool_exe_dir_priority
 - test_run_claim_timeout_and_spawn_failure
 - test_run_foreground_real_execution_with_allowed_binary
+
+W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-analysis/w7-r31/classify.md) ——
+平台支一律**强制进支**钉面(is_windows 打桩)—— WSL 池里 is_windows() 恒 False, Windows 支
+变异靠强制进支让守阵在任何环境咬合(平台内断言), 不依赖 WSL 端到端:
+- test_platform_data_home_windows_branch_pinned: Windows 支逐段(LOCALAPPDATA 主路径 + fallback)
+- test_platform_data_home_posix_fallback_pinned: POSIX 生产面 fallback ~/.local/share 逐段
+- test_probe_and_status_pin_call_contract: 探活契约(base_url/GET /status/timeout 钉死, probe_8/status_2)
+- test_ensure_running_pins_probe_timeout: 订阅线程探活超时钉 PROBE_TIMEOUT_S(er_6)
+- test_ensure_running_success_then_failure_guards: 成功后等待窗归零(er_8/9 状态机崩溃/假失败)
+- test_ensure_running_not_installed_backoff: 未安装分支精确文案/退避窗/全新 agent error 空串
+  (er_22/23/24/25, init_7/8/9)
+- test_launch_window_exhaustion_state_and_logs: 窗口耗尽 INFO/WARNING 逐字 + 退避三态边界
+  (er_10/16/41, status_52/60/61)
+- test_fresh_agent_success_has_no_fake_recovery_log: 首次成功无假日志(init_13)
+- test_error_memory_recovery_semantics: 恢复恰一条 INFO 逐字 + 记忆清空(_clear_error_1/3)
+- test_ensure_running_launch_oserror_warning_exact: 拉起 OSError WARNING 逐字(er_33)
+- test_run_claim_platform_command_and_contract: claim 平台命令两支逐位 + 回执契约(run_claim_2/3/4/
+  6/8/9/29/35/36/46)
+- test_resolve_claim_target_empty_tool_dir_falls_back_to_default: tool_dir 留空兜底默认目录
+  (rct_33/36/39, claim 通道)
+- test_resolve_launch_target_labels_and_branch_pinned: 解析标签逐字 + Windows 支(rlt_20/25/26/47/52)
+- test_read_deferred_note_path_and_encoding_pinned: 注记路径单点 + open utf-8 契约(dnp_3/4, rdn_4/7)
+- test_read_deferred_note_warning_paths: 注记三条 WARNING 不丢(rdn_14/16/22)
+- test_pointer_warning_paths_and_version_default: 指针 WARNING/可选字段缺省/port 边界
+  (read_pointer_12, parse_pointer_7/8/36/38/73)
+- test_read_pointer_pins_utf8_encoding: 指针 open utf-8 契约(read_pointer_3/6)
+- test_stub_conf_without_tool_dir_attr_uses_default_dir: 桩配置缺 tool_dir 属性走默认目录
+  (rlt_39/rct_32)
+- test_status_ready_and_not_running_fields: 状态区字段读数(status_19/21/26/36)
 """
 import ast
+import builtins
 import json
 import logging
 import os
@@ -67,7 +97,7 @@ from auto_qb.core.traffic_source import agent
 from auto_qb.infra.utils import is_windows
 from auto_qb.webui import tool_client
 
-from helpers import write_credential_file, write_endpoint_pointer
+from helpers import capture_logs, write_credential_file, write_endpoint_pointer
 
 #: 本平台对应的 D19 启动器文件名(与工具目录里的文件同名同源)
 _LAUNCHER = agent._LAUNCHER_WINDOWS if is_windows() else agent._LAUNCHER_POSIX
@@ -767,3 +797,385 @@ def test_note_error_throttles_same_reason():
     finally:
         lg.removeHandler(handler)
         lg.setLevel(old_level)
+
+
+# ---------- W7(R31) S5 补测(变异审计真洞守阵): 平台支强制进支钉面 ----------
+
+
+def test_platform_data_home_windows_branch_pinned(monkeypatch):
+    """Windows 支强制走(平台内断言): LOCALAPPDATA 主路径 + 未置位 fallback 逐段钉死
+
+    WSL 池里 is_windows() 恒 False, Windows 支变异对套件不可见(平台盲区) —— 强制进支让
+    守阵在任何环境咬合: or→and / 键名漂移 / join 缺参与错词全部当场红。
+    """
+    monkeypatch.setattr(agent, "is_windows", lambda: True)
+    monkeypatch.setenv("LOCALAPPDATA", "C:/custom/appdata")
+    assert agent._platform_data_home() == "C:/custom/appdata"
+    assert agent.pointer_dir() == os.path.join("C:/custom/appdata", agent.POINTER_DIR_NAME)
+
+    # 未置位: fallback ~/AppData/Local(逐段: ~ 展开 / AppData / Local)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    assert agent._platform_data_home() == os.path.join(os.path.expanduser("~"), "AppData", "Local")
+
+
+def test_platform_data_home_posix_fallback_pinned(monkeypatch):
+    """POSIX 生产面强制走: XDG 未置位 -> ~/.local/share 逐段钉死(指针整链的目录根)"""
+    monkeypatch.setattr(agent, "is_windows", lambda: False)
+    monkeypatch.setattr(agent.sys, "platform", "linux")
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    expected = os.path.join(os.path.expanduser("~"), ".local", "share")
+    assert agent._platform_data_home() == expected
+    assert agent.pointer_dir() == os.path.join(expected, agent.POINTER_DIR_NAME)
+
+
+def test_probe_and_status_pin_call_contract(tmp_path, monkeypatch):
+    """探活契约单点: base_url 来自指针、GET /status、timeout 钉 PROBE_TIMEOUT_S
+
+    probe_8(中): base_url 丢失 = rstrip AttributeError 崩溃面; status_2(中): UI 线程
+    探活无超时 = 状态区可被吊死 —— 契约断言把两个调用参数钉死。
+    """
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
+    seen = []
+    monkeypatch.setattr(
+        tool_client,
+        "call_tool",
+        lambda base_url, path, method, credential, payload=None, timeout=None:
+        (seen.append((base_url, path, timeout)) or (200, {
+            "ok": True
+        })),
+    )
+    assert agent.probe() is not None
+    assert seen == [("http://127.0.0.1:8099", "/status", agent.PROBE_TIMEOUT_S)]
+
+    # 状态区同一契约(status_2)
+    seen.clear()
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: object())
+    st = agent.TrafficSourceAgent().status(_conf())
+    assert st["state"] == "ready"
+    assert seen == [("http://127.0.0.1:8099", "/status", agent.PROBE_TIMEOUT_S)]
+
+
+def test_ensure_running_pins_probe_timeout(monkeypatch):
+    """订阅线程探活超时钉 PROBE_TIMEOUT_S(er_6): 回环挂起时不得无超时吊住订阅线程"""
+    seen = []
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: seen.append(timeout) or None)
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: agent.LaunchTarget("/x/launch.sh", False, "t"))
+    monkeypatch.setattr(agent, "launch_tool", lambda t: None)
+    assert agent.TrafficSourceAgent().ensure_running(_conf()) is None
+    assert seen == [agent.PROBE_TIMEOUT_S]
+
+
+def test_ensure_running_success_then_failure_guards(monkeypatch):
+    """探活成功后等待窗必须归零(er_8/9): 成功再失败是正常缺席, 不得 TypeError/记假「窗口耗尽」"""
+    good = agent.ToolEndpoint(base_url="http://x", token_path="/t")
+    seq = [good]
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: seq.pop(0) if seq else None)
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: agent.LaunchTarget("/x/launch.sh", False, "t"))
+    monkeypatch.setattr(agent, "launch_tool", lambda t: None)
+    clock = [1000.0]
+    a = agent.TrafficSourceAgent(clock=lambda: clock[0])
+    conf = _conf()
+    assert a.ensure_running(conf) is not None
+    assert a._pending_until == 0.0, "成功后等待窗必须归零(残留值下轮崩溃或记假失败)"
+
+    clock[0] += 10.0
+    assert a.ensure_running(conf) is None
+    assert a._fail_reason == "" and a._retry_after == 0.0, "成功后缺席是正常重拉, 不得记假「窗口耗尽」"
+    st = a.status(conf)
+    assert st["state"] == "launching"
+    assert st["retry_s"] == pytest.approx(agent.FIRST_BOOT_WINDOW_S)  # 探活成功轮不算「已拉起过」
+    assert st["data_dir"] == "" and st["autostart_registered"] is False
+
+
+def test_ensure_running_not_installed_backoff(tmp_path, monkeypatch):
+    """未安装分支: 精确失败原因与 WARNING(er_22/25); 退避窗内不重试(er_24); 退避截止后可
+    再解析(er_23: retry_after 必须是数值, None 下轮 TypeError); 初值 0.0 不挡首轮解析
+    (init_7); 全新 agent 未安装态 error 为空串(init_8/9)。"""
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(tmp_path / "absent.json"))
+    resolve_calls = []
+
+    def fake_resolve(conf):
+        resolve_calls.append(1)
+        return None
+
+    monkeypatch.setattr(agent, "resolve_launch_target", fake_resolve)
+    clock = [0.0]
+    a = agent.TrafficSourceAgent(clock=lambda: clock[0])
+    conf = _conf(tool_dir=str(tmp_path / "empty"))
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert a.ensure_running(conf) is None
+    assert resolve_calls == [1]
+    assert a._fail_reason == "未安装: 工具目录与可执行文件都解析不到"
+    assert any(
+        rec.levelno == logging.WARNING and rec.getMessage() == "全局流量监视器联动: 未安装: 工具目录与可执行文件都解析不到(请在设置页指定 tool_exe)"
+        for rec in cap.records
+    ), "未安装 WARNING 逐字不匹配"
+
+    # 全新 agent: 未安装态 error 为空串(初值语义; status 自身也会调 resolve, 计数清零)
+    st = agent.TrafficSourceAgent(clock=lambda: clock[0]).status(conf)
+    assert st["state"] == "not_installed" and st["error"] == ""
+    resolve_calls.clear()
+
+    clock[0] += 1.0
+    assert a.ensure_running(conf) is None
+    assert resolve_calls == [], "退避窗内不得重试解析(er_24)"
+
+    clock[0] += agent.RELAUNCH_BACKOFF_S + 1.0
+    assert a.ensure_running(conf) is None
+    assert resolve_calls == [1], "退避耗尽后应再解析(er_23: retry_after 不得是 None)"
+
+
+def test_launch_window_exhaustion_state_and_logs(tmp_path, monkeypatch):
+    """窗口耗尽: INFO 拉起审计 + WARNING 逐字(er_16/41); 退避三态边界(er_10/status_52/61/
+    status_60): 截止一拍即判耗尽, 退避过期后不得恒 launch_failed。"""
+    clock = [1000.0]
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: agent.LaunchTarget("/x/launch.sh", False, "启动器"))
+    launches = []
+    monkeypatch.setattr(agent, "launch_tool", lambda t: launches.append(t))
+    a = agent.TrafficSourceAgent(clock=lambda: clock[0])
+    conf = _conf()
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert a.ensure_running(conf) is None
+    assert len(launches) == 1
+    assert any(
+        rec.levelno == logging.INFO and "已拉起全局流量监视器(启动器)" in rec.getMessage() for rec in cap.records
+    ), "拉起 INFO 审计丢失"
+    assert a.status(conf)["state"] == "launching"
+
+    # 恰在窗口截止时刻: 已算耗尽(er_10 边界一拍), 状态区也不再判 launching(status_52)
+    clock[0] = 1000.0 + agent.FIRST_BOOT_WINDOW_S
+    assert a.status(conf)["state"] != "launching", "窗口截止一拍不算 launching(status_52)"
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert a.ensure_running(conf) is None
+    assert a._fail_reason == f"拉起后 {agent.FIRST_BOOT_WINDOW_S:g}s 内未探活成功"
+    assert any(
+        rec.levelno == logging.WARNING and "拉起后 120s 内未探活成功(30s 后重试)" in rec.getMessage() for rec in cap.records
+    ), "窗口耗尽 WARNING 逐字不匹配"
+    assert a.status(conf)["state"] == "launch_failed"
+
+    # 恰在退避截止时刻: 状态区不再判 launch_failed(status_61 边界一拍)
+    clock[0] = 1000.0 + agent.FIRST_BOOT_WINDOW_S + agent.RELAUNCH_BACKOFF_S
+    assert a.status(conf)["state"] != "launch_failed"
+    # 退避彻底过期: fail_reason 仍在但退避已过 -> not_running(status_60: and 不得松动成 or)
+    clock[0] += 1.0
+    assert a.status(conf)["state"] == "not_running"
+
+
+def test_fresh_agent_success_has_no_fake_recovery_log(monkeypatch):
+    """全新 agent 首次成功不得有「已恢复」假 INFO(init_13: _last_error 初值必须是空串)"""
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: agent.ToolEndpoint(base_url="http://x", token_path="/t"))
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.TrafficSourceAgent().ensure_running(_conf()) is not None
+    assert cap.messages == [], "全新 agent 首次成功不得有日志(假恢复 INFO = 审计噪声)"
+
+
+def test_error_memory_recovery_semantics():
+    """失败记忆与恢复日志(_clear_error_1/3): 恢复恰一条 INFO 且逐字带旧因; 记忆必须清空
+    —— 连续成功不得重复「已恢复」假日志; 恢复后同因重新 WARNING(不是 DEBUG)。"""
+    a = agent.TrafficSourceAgent()
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        a._note_error("拉起失败: 拒绝访问")
+        a._clear_error()  # 恢复: 一条 INFO(先前: ...)
+        a._clear_error()  # 再次成功: 记忆已清, 无新日志
+        a._note_error("拉起失败: 拒绝访问")  # 恢复后同因: 重新 WARNING
+    levels = [rec.levelno for rec in cap.records]
+    assert levels == [logging.WARNING, logging.INFO, logging.WARNING]
+    assert cap.messages[1] == "全局流量监视器联动已恢复(先前: 拉起失败: 拒绝访问)"
+
+
+def test_ensure_running_launch_oserror_warning_exact(tmp_path, monkeypatch):
+    """拉起 OSError 分支: WARNING 逐字带原因与重试提示(er_33: 失败告警不得丢真)"""
+    monkeypatch.setattr(agent, "probe", lambda timeout=None: None)
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(tmp_path / "absent.json"))
+    monkeypatch.setattr(agent, "resolve_launch_target", lambda conf: agent.LaunchTarget("/x/launch.sh", False, "启动器"))
+
+    def _boom(target):
+        raise OSError("拒绝访问")
+
+    monkeypatch.setattr(agent, "launch_tool", _boom)
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.TrafficSourceAgent().ensure_running(_conf()) is None
+    assert any(
+        rec.levelno == logging.WARNING and "全局流量监视器联动: 拉起失败: 拒绝访问(启动器, 30s 后重试)" == rec.getMessage()
+        for rec in cap.records
+    ), "拉起失败 WARNING 逐字不匹配"
+
+
+def test_run_claim_platform_command_and_contract(monkeypatch):
+    """claim 执行契约: 平台命令两支强制进支逐位钉(Windows `cmd.exe /c` / POSIX `/bin/sh`);
+    空输出原样空串; OSError 分支 exit_code 恒 -1(本层失败语义, 不得落成工具退出码形态)。"""
+    seen = []
+
+    def fake_run(args, *, cwd, timeout):
+        seen.append(list(args))
+        return _proc(0, "")
+
+    monkeypatch.setattr(agent, "_run_foreground", fake_run)
+    target = agent.ClaimTarget(path="/inst/claim.cmd", label="x")
+    agent.run_claim(target)
+    assert seen[-1] == (["cmd.exe", "/c", "/inst/claim.cmd"] if is_windows() else ["/bin/sh", "/inst/claim.cmd"])
+
+    # 两支强制进支: 各自逐位(run_claim_2/3 分支选择子, 4/6 与 8/9 命令构造)
+    monkeypatch.setattr(agent, "is_windows", lambda: True)
+    agent.run_claim(target)
+    assert seen[-1] == ["cmd.exe", "/c", "/inst/claim.cmd"]
+    monkeypatch.setattr(agent, "is_windows", lambda: False)
+    agent.run_claim(target)
+    assert seen[-1] == ["/bin/sh", "/inst/claim.cmd"]
+
+    # 空输出: 原样空串(不落占位文案)
+    r = agent.run_claim(target)
+    assert r.ok is True and r.exit_code == 0 and r.output == ""
+
+    # OSError 分支: exit_code 恒 -1
+    def boom(args, *, cwd, timeout):
+        raise OSError("denied")
+
+    monkeypatch.setattr(agent, "_run_foreground", boom)
+    r2 = agent.run_claim(target)
+    assert r2.ok is False and r2.exit_code == -1 and "执行失败" in r2.output
+
+
+def test_resolve_claim_target_empty_tool_dir_falls_back_to_default(monkeypatch):
+    """tool_dir 留空(生产合法) -> 兜底仓库内默认目录里的 claim 启动器
+
+    rct_33/36(中): 兜底丢失 = 人工易主通道静默失效; rct_39(中): Windows 支强制进支钉 claim.cmd。
+    """
+    for forced_win, name in ((False, agent.CLAIM_LAUNCHER_POSIX), (True, agent.CLAIM_LAUNCHER_WINDOWS)):
+        monkeypatch.setattr(agent, "is_windows", lambda v=forced_win: v)
+        target = agent.resolve_claim_target(_conf())
+        assert target is not None, "tool_dir 留空必须兜底到仓库内默认目录"
+        assert os.path.basename(target.path) == name
+
+
+def test_resolve_launch_target_labels_and_branch_pinned(tmp_path, monkeypatch):
+    """解析标签逐字(rlt_20/25/26/52: label 进 f-string 审计日志, None 显 "None");
+    Windows 支强制进支钉 launch.cmd(rlt_47)。"""
+    exe = tmp_path / "gtm-exe"
+    exe.write_text("", encoding="utf-8")
+    t = agent.resolve_launch_target(_conf(tool_exe=str(exe)))
+    assert t is not None and t.label == "tool_exe 指定的可执行文件"
+
+    (tmp_path / "launch.cmd").write_text("", encoding="utf-8")
+    (tmp_path / "launch.sh").write_text("", encoding="utf-8")
+    conf = _conf(tool_dir=str(tmp_path))
+    monkeypatch.setattr(agent, "is_windows", lambda: True)
+    t1 = agent.resolve_launch_target(conf)
+    assert t1 is not None and os.path.basename(t1.path) == "launch.cmd"
+    assert t1.label == "工具侧启动器(launch.cmd)"
+    monkeypatch.setattr(agent, "is_windows", lambda: False)
+    t2 = agent.resolve_launch_target(conf)
+    assert t2 is not None and t2.label == "工具侧启动器(launch.sh)"
+
+
+def test_read_deferred_note_path_and_encoding_pinned(tmp_path, monkeypatch):
+    """注记路径 = pointer_dir/deferred.json(dnp_3/4: 丢目录/丢文件名都读不到, 可见性便利失效);
+    open 显式 encoding="utf-8"(rdn_4/7: GBK locale 下非 ASCII 注记不得读丢)。"""
+    pdir = tmp_path / "ptr"
+    pdir.mkdir()
+    monkeypatch.setattr(agent, "pointer_dir", lambda: str(pdir))
+    payload = {"schema": agent.DEFERRED_SCHEMA, "reason": "让位", "detail": "拷贝件在跑"}
+    (pdir / agent.DEFERRED_FILE_NAME).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    assert agent.read_deferred_note() == payload
+
+    real_open = builtins.open
+    captured = {}
+
+    def spy_open(file, mode="r", *args, **kwargs):
+        captured["mode"] = mode
+        captured["encoding"] = kwargs.get("encoding")
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+    agent.read_deferred_note()
+    assert captured == {"mode": "r", "encoding": "utf-8"}
+
+
+def test_read_deferred_note_warning_paths(tmp_path, monkeypatch):
+    """注记三条 WARNING 不丢(rdn_14/16/22): 读失败/格式非法/schema 非预期都留排障轨迹"""
+    pdir = tmp_path / "ptr"
+    pdir.mkdir()
+    (pdir / agent.DEFERRED_FILE_NAME).mkdir()  # 注记路径是目录 -> IsADirectoryError(OSError 非 FileNotFoundError)
+    monkeypatch.setattr(agent, "pointer_dir", lambda: str(pdir))
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.read_deferred_note() is None
+    assert any(rec.levelno == logging.WARNING and "让位注记失败" in rec.getMessage() for rec in cap.records)
+
+    (pdir / agent.DEFERRED_FILE_NAME).rmdir()  # 换回文件形态
+    note = pdir / agent.DEFERRED_FILE_NAME
+    note.write_text("[1]", encoding="utf-8")
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.read_deferred_note() is None
+    assert any(rec.levelno == logging.WARNING and "格式非法" in rec.getMessage() for rec in cap.records)
+
+    note.write_text(json.dumps({"schema": 999}), encoding="utf-8")
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.read_deferred_note() is None
+    assert any(rec.levelno == logging.WARNING and "schema 非预期" in rec.getMessage() for rec in cap.records)
+
+
+def test_pointer_warning_paths_and_version_default(tmp_path, monkeypatch):
+    """指针排障轨迹与可选字段缺省: 读失败/schema 非预期/缺关键字段三条 WARNING
+    (read_pointer_12, parse_pointer_7/8/38); 旧指针无 version -> 空串不显示占位
+    (parse_pointer_73); port=1 也在合法面(parse_pointer_36: 拒绝边界只在 <=0)。"""
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not-json", encoding="utf-8")
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(bad))
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.read_pointer() is None
+    assert any(rec.levelno == logging.WARNING and "读取全局流量监视器指针失败" in rec.getMessage() for rec in cap.records)
+
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.parse_pointer({"schema": 999}) is None
+    assert any(
+        rec.levelno == logging.WARNING and
+        rec.getMessage() == f"全局流量监视器指针 schema 非预期(读到 999, 期望 {agent.ENDPOINT_SCHEMA}): 不猜字段, 视为未就绪"
+        for rec in cap.records
+    ), "schema 告警逐字不匹配"
+
+    with capture_logs("auto_qb.core.traffic_source.agent") as cap:
+        assert agent.parse_pointer({"schema": agent.ENDPOINT_SCHEMA}) is None
+    assert any(rec.levelno == logging.WARNING and "缺关键字段" in rec.getMessage() for rec in cap.records)
+
+    ep = agent.parse_pointer({"schema": agent.ENDPOINT_SCHEMA, "host": "h", "port": 1, "token_path": "/t"})
+    assert ep is not None and ep.version == "" and ep.base_url == "http://h:1"
+
+
+def test_read_pointer_pins_utf8_encoding(tmp_path, monkeypatch):
+    """指针读取 open 显式 encoding="utf-8"(read_pointer_3/6: GBK locale 下非 ASCII 指针不得读丢)"""
+    p = tmp_path / "ptr" / agent.ENDPOINT_FILE_NAME
+    p.parent.mkdir()
+    p.write_text(json.dumps({"schema": agent.ENDPOINT_SCHEMA, "note": "非ASCII注记"}), encoding="utf-8")
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(p))
+    real_open = builtins.open
+    captured = {}
+
+    def spy_open(file, mode="r", *args, **kwargs):
+        captured["mode"] = mode
+        captured["encoding"] = kwargs.get("encoding")
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+    assert agent.read_pointer() == {"schema": agent.ENDPOINT_SCHEMA, "note": "非ASCII注记"}
+    assert captured == {"mode": "r", "encoding": "utf-8"}
+
+
+def test_stub_conf_without_tool_dir_attr_uses_default_dir():
+    """桩配置(无 tool_dir 属性) -> getattr 缺省空串走仓库内默认目录
+
+    rlt_39/rct_32: 缺省落占位串会跳过 default_tool_dir -> 误报「未安装」。
+    """
+    assert agent.resolve_launch_target(SimpleNamespace(tool_exe="")) is not None
+    assert agent.resolve_claim_target(SimpleNamespace(tool_exe="")) is not None
+
+
+def test_status_ready_and_not_running_fields(tmp_path, monkeypatch):
+    """ready 态端点字段读数(status_19: data_dir 不得恒空)与 retry_s 基线(status_36)"""
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
+    monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: (200, {"ok": True}))
+    st = agent.TrafficSourceAgent().status(_conf())
+    assert st["state"] == "ready"
+    assert st["data_dir"] == str(tmp_path / "gtm")
+    assert st["retry_s"] == 0.0

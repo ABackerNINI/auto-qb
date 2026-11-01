@@ -11,8 +11,17 @@
 - test_read_source_rows_missing_file_returns_dat_missing: 读不到文件(OSError) -> 空行 + dat_missing + 文案带路径
 - test_read_source_rows_empty_returns_dat_empty: 有文件无有效记录 -> dat_empty + 坏行数透传(不是 0)
 - test_read_source_rows_tolerates_non_utf8_bytes: errors="ignore" 容忍非 UTF-8 字节, 不抛异常
+
+W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01) ——
+- test_read_source_rows_pins_utf8_open_contract: open 契约逐参钉死(rsr_3/7: encoding 必须显式
+  utf-8, GBK locale 下非 ASCII 内容不得读丢; errors=ignore 同钉)
+- test_read_source_rows_empty_fail_shape_verbatim: dat_empty 失败形状逐字(rsr_30: 子串断言杀不掉
+  XX 包裹型漂移)
 """
+import builtins
 from pathlib import Path
+
+NL = chr(10)
 
 from auto_qb.core.traffic_source import reader
 
@@ -64,3 +73,32 @@ def test_read_source_rows_tolerates_non_utf8_bytes(tmp_path):
     rows, bad, fail = reader.read_source_rows(str(p))
     assert fail is None and bad == 0
     assert len(rows) == 1
+
+
+# ---------- W7(R31) S5 补测(变异审计真洞守阵) ----------
+
+
+def test_read_source_rows_pins_utf8_open_contract(tmp_path, monkeypatch):
+    """dat 读取 open 契约逐参钉死(rsr_3/7: encoding 显式 utf-8 + errors=ignore)"""
+    dat = _write(tmp_path, 'lines: "1"' + NL + '2026/11/01 3/4' + NL)
+    real_open = builtins.open
+    captured = {}
+
+    def spy_open(file, mode="r", *args, **kwargs):
+        captured["mode"] = mode
+        captured["encoding"] = kwargs.get("encoding")
+        captured["errors"] = kwargs.get("errors")
+        return real_open(file, mode, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", spy_open)
+    rows, bad, fail = reader.read_source_rows(dat)
+    assert fail is None and bad == 0
+    assert captured == {"mode": "r", "encoding": "utf-8", "errors": "ignore"}
+
+
+def test_read_source_rows_empty_fail_shape_verbatim(tmp_path):
+    """dat_empty 失败形状逐字(code/text/log 三键全等, rsr_30)"""
+    dat = _write(tmp_path, 'lines: "1"' + NL + 'not-a-date' + NL)
+    rows, bad, fail = reader.read_source_rows(dat)
+    assert rows == [] and bad == 1
+    assert fail == {"code": "dat_empty", "text": "流量数据无有效记录", "log": f"流量数据无有效记录({dat})"}
