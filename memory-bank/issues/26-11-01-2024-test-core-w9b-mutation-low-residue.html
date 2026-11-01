@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="core-w9b-mutation-low-residue">
+<meta name="issue-stamp" content="26-11-01-2024">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="core-w9b-mutation-low-residue">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期">
+<meta name="issue-summary" content="W9b(R34) S5a 守阵后余量: 全轮真洞 367(存活 351 + no tests 16) - 红验 280 = 87(rules 31 含 no-tests hr12 / maintenance 19 / speed_curve 30 / tracker 7, 中 4 + 低 83, 弃杀 4 在内); 主体为 INFO/WARNING/ERROR 审计文案丢真、webui reasons 展示键值、回执计数、窄触发面, 按簇判读留档不排期">
+<title>core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期 · test · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· test</div>
+    <h1>core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期</h1>
+    <p class="lede">W9b(R34) S5a 守阵后余量: 全轮真洞 367(存活 351 + no tests 16) − 红验覆盖 280 = <strong>87 条</strong>(rules_mod 30 + no-tests hr12 = 31 · maintenance_mod 19 · speed_curve_mod 30 · tracker_mod 7; 中 4 + 低 83, 含弃杀 4); 主体为 INFO/WARNING/ERROR 审计文案丢真、webui reasons 展示键值失真、回执/计数失真、窄触发与节拍面, 按簇判读留档不排期。高危 18/18 与 no tests 真洞 15/16 已由守阵覆盖, 不在本件。</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-01-2024-test-core-w9b-mutation-low-residue</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 20:24</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>W9b(R34) S5a 守阵后(44 条新守阵, 红验 285/285 全红, commit 986b9f2f)+ S6 同目标同池复跑(1,442 变异 / 杀死率 67.79% → 88.14%, 新增存活 0), modules 小件 6 文件真洞余量 <strong>87 条</strong>: rules_mod 30 + no-tests hr12(共 31)· maintenance_mod 19 · speed_curve_mod 30 · tracker_mod 7(= 全轮真洞 367 − 红验覆盖 280)。判读: 主体为<strong>审计日志/回执文案丢真(INFO/WARNING/ERROR 文案、计数、异常前缀、hash 前缀)、webui reasons 展示键/值失真(speed_curve)、单位换算展示(_fmt_bytes)、节拍提前与窄触发 continue→break、守卫误告警(ma8 族旁支)</strong>, 全部有兜底或展示面, 无删除/数据丢失路径; 另中危 4 条(rules mk3/mk14 ctx.config·task 缺省面 + he10 任务缺省 + maintenance sc17 分类创建步 None 顶替)为窄触发, 按簇留档。弃杀 4 条(rf9/rf11/he6/he10, 守阵不硬凑)含在余量内。按 W2-W9a 先例「低危不追只记录」, 本件把余量落成可检索留档, 非排期承诺。</p>
+    <p>账目单点: <code>tmp-analysis/w9b-r34/classify-rules.md</code> / <code>classify-small.md</code>「R34 收尾落账」节(逐 id 清单见两文件各函数表与落账节; 未盖全集 = classify 表行 − 红验名单 <code>tmp-analysis/w9b-r34/s5-redverify-units.py</code> ITEMS, 对账脚本 <code>s6-ledger.py</code>)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>src/auto_qb/core/modules/rules_mod.py</code>(取证 2026-11-01)· 余量 31(含 no-tests hr12): 低危计数/日志丢真(fr/ap/lr14/rr 族)、异常前缀与 hash 前缀(ae37/41、he13/17)、截断与去重面(rf9/rf11)、返回值谎报(ctt13/17/52)为主 + 中 3(mk3/mk14 ctx.config·task、he10); 逐 id 见 classify-rules.md「R34 收尾落账」节</li>
+      <li><code>src/auto_qb/core/modules/maintenance_mod.py</code>(取证 2026-11-01)· 余量 19: 低危标签动作/删除动作日志丢真(atc6/at9/rt12/rst13/pt4/pt14)、INFO 丢真(sc27/sc28/cc5)、覆盖语义丢(hr46/hr74)、边界(hr15/hr16)、日志前缀(hdt 族) + 中 1(sc17 分类创建步 None 顶替)</li>
+      <li><code>src/auto_qb/core/modules/speed_curve_mod.py</code>(取证 2026-11-01)· 余量 30: 低危 webui reasons 展示键值失真(hc 族 ≈22)、单位换算展示失真(fb13-18)、节流边界(ms11)</li>
+      <li><code>src/auto_qb/core/modules/tracker_mod.py</code>(取证 2026-11-01)· 余量 7: 低危回执计数失真(ap 族旁支 ma12/ma14)、方向文案(sl5/6/8/9)、INFO 丢真(sl21)</li>
+      <li>红验器: <code>tmp-analysis/w9b-r34/s5-redverify-units.py</code>(285 条)· 守阵: <code>tests/test_modules_w9b_s5.py</code>(44 用例, 其中 44 条为本轮 S5a 新增)· 复跑: <code>tmp-analysis/w9b-r34/26-11-01-2018-rerun-merged-dump.txt</code> + 对账产物 s6-reconcile-report.txt / s6-ledger.py / s6-survivor-diff.py</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>不排期。若后续轮复跑杀死率, 优先顺序: ①speed_curve reasons 展示键值簇(~22 条, 表驱动单守阵可成簇杀) ②中 4 条窄触发(mk3/mk14/he10/sc17, 单点定向) ③纯文案/日志/回执丢真(~60 条)性价比最低, 消费方出现(如审计告警面板)再按簇立守阵。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-01 20:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-11-01-2024-test-core-w9b-mutation-low-residue.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
