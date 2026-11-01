@@ -39,6 +39,21 @@
 - test_scope_hit_flat_does_not_cover_subdirs
 - test_stall_verdict_boundaries
 - test_within_empty_scope_never_matches
+
+W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
+- test_norm_backslash_bridge_and_within_guard: _norm 反斜杠归一桥(平台盲区)+ 空 scope 守卫
+- test_join_slash_normalization_faces: _join 拼接契约(反斜杠归一/尾斜杠剥离/相对段剥离)
+- test_plan_long_path_exact_boundaries: 长路径校正恰 260 边界(内容根/最长文件)+ link_path_limit 透传
+- test_same_volume_proof_tolerance_band: 同卷证明容差带(1GiB 绝对带不翻倍 + 恰等边界)
+- test_job_dict_full_roundtrip_values: 落账往返保值(非默认字段全量)+ 坏 plan 形状拒收
+- test_scope_hit_src_guard_and_resolve_order: src 守卫 + 解析序(终态跳过不中断)+ 收尾去重 + 历史账兜底链
+- test_reconcile_timeout_boundaries_and_tail_wait: 对账超时判据(未超时恒等/恰等不算超/心跳 60s 边界)
+- test_stall_verdict_grow_and_late_warn_branches: 停滞 WARN 侧支(增长/末支/moving 恰等边界)
+- test_plan_layout_filter_and_last_mile_contract: 空名过滤 + 末段 link_kind + 缺省实参契约
+- test_plan_dir_link_error_long_path_text: 目录错误前段拼进长路径拒绝文案(不炸/不丢/不伪空格)
+- test_evaluate_group_receipt_contract_keys: 回执契约键面(幂等/主回执/添加预检三张 dict)
+- test_evaluate_group_text_faces_representatives: 文案代表面(空间/未完成/硬上限)与恰等边界
+- test_evaluate_add_flow_faces: 添加预检流面(终态不中断/作用域外/rel 切片各形态)
 """
 import os
 
@@ -689,3 +704,337 @@ def test_job_from_dict_type_error_and_reconcile_fallthrough():
     assert ru.reconcile(job, link_present=False, qb_up=True) == ru.ACT_REBUILD
     assert ru.reconcile(job, link_present=False, qb_up=True, seed_state="missingFiles") == ru.ACT_FINALIZE
     assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=10, finalize_timeout=1) == ru.ACT_FAILED_TIMEOUT
+
+
+# ---------------------------------------------------------------- W8(R32) S5a 守阵追加
+
+
+def test_norm_backslash_bridge_and_within_guard():
+    """_norm 反斜杠归一桥: qB 回报反斜杠与正斜杠 scope 混合比较恒等(Windows 生产口径); 空 scope 恒不命中"""
+    assert ru._norm("R:\\Download\\Testing") == ru._norm("R:/Download/Testing")
+    dir_job = _job(alias_kind="dir", plan={"form": ru.FORM_DIR_ALIAS})
+    # 目录别名作用域含子路径: 归一桥断链(反斜杠形态漏折回)会让 _within 前缀比较恒 miss
+    assert dir_job.scope_hit(S, os.path.join(S, "Show", "sub", "deep")) is True
+    assert ru._within("", "R:/anywhere") is False
+
+
+def test_join_slash_normalization_faces():
+    """_join 拼接契约: 反斜杠归一/尾斜杠剥离/相对段首尾斜杠剥离(平台无关字符串契约)"""
+    assert ru._join("R:\\Download", "Show") == "R:/Download/Show"
+    assert ru._join("R:/Download/", "Show") == "R:/Download/Show"
+    assert ru._join("R:/BoX", "Show") == "R:/BoX/Show"  # 剥字符集只含 / 与大写 X, 尾 X 不得多剥
+    assert ru._join("R:/D", "XSub") == "R:/D/XSub"  # 名首 X 不得被剥
+    assert ru._join("R:/D", "/lead/") == "R:/D/lead"
+
+
+def test_plan_long_path_exact_boundaries():
+    """长路径校正恰 260 边界(实测 259 可建、260 起 WinError 1314): 恰达上限即校正, 不放过"""
+    save = "R:/D/" + "a" * 200  # len 205
+    # 内容根恰 260(=limit)且文件更长 -> 目录别名也建不出来 -> 拒绝
+    files = tuple(f"{'b' * 54}/e{i:02d}" for i in range(3))  # 文件路径 264
+    p = ru.plan(
+        save,
+        files,
+        8,
+        2000,
+        content_root_exclusive=True,
+        file_link_kind="symlink",
+        dir_link_kind="junction",
+        link_path_limit=260
+    )
+    assert p.form == ru.FORM_REJECT and "内容根路径过长" in p.reason, (p.form, p.reason)
+    # 最长文件路径恰 260、内容根 256 < 260 -> 能力校正提议目录别名(需确认)
+    files2 = tuple(f"{'b' * 50}/e{i:02d}" for i in range(3))  # 文件路径 205+1+54=260
+    p = ru.plan(
+        save,
+        files2,
+        8,
+        2000,
+        content_root_exclusive=True,
+        file_link_kind="symlink",
+        dir_link_kind="junction",
+        link_path_limit=260
+    )
+    assert p.form == ru.FORM_DIR_ALIAS and p.needs_confirm and "路径过长" in p.reason, (p.form, p.reason)
+    # 事实包 link_path_limit 必须透传进 plan(丢实参 -> 校正失效 -> 长路径逐文件链接误放行)
+    facts = _ok_facts(
+        save_path=save,
+        files=tuple((f, 100) for f in files2),
+        content_root_exclusive=True,
+        file_link_kind="symlink",
+        dir_link_kind="junction",
+        link_path_limit=260,
+    )
+    item = ru.evaluate_group(facts)
+    assert item["cls"] == ru.CLS_CONFIRM and item["form"] == ru.FORM_DIR_ALIAS, item
+
+
+def test_same_volume_proof_tolerance_band():
+    """同卷证明容差带: 差 1.5GiB(超出 1GiB 绝对带)不得证明同盘; 恰等容差边界仍同盘"""
+    gib = 1 << 30
+    local = 10 * gib  # 2% 相对容差(204MiB) < 1GiB -> 绝对带生效
+    assert ru.same_volume_proof(local + int(1.5 * gib), local) is False  # 容差不得翻倍
+    assert ru.same_volume_proof(local + gib, local) is True  # 恰等边界(<=)
+
+
+def test_job_dict_full_roundtrip_values():
+    """落账往返保值: 非默认字段全量往返(断键/丢实参=重启恢复丢字段, resume_hashes 断链=成员滞留); 坏 plan 形状拒收"""
+    job = _job(reason="测试原因", armed_at=1.5, updated_at=2.5, resume_hashes=("HA", "HB"), attempts=2, last_error="boom")
+    back = ru.job_from_dict(ru.job_to_dict(job))
+    assert back == job
+    assert back.resume_hashes == ("HA", "HB") and back.attempts == 2 and back.last_error == "boom"
+    assert ru.job_from_dict({"job_id": "x", "plan": "not-a-dict"}).plan is None  # 防御面: 非 dict plan 不透传
+
+
+def test_scope_hit_src_guard_and_resolve_order():
+    """src 不匹配恒不命中(嵌套 src 别组不得被误纳); 解析按登记序跳过终态不中断; 收尾去重; 历史账兜底链"""
+    job = _job(plan={"form": ru.FORM_DIR_ALIAS})
+    assert job.scope_hit("R:/elsewhere", "R:/elsewhere/Show") is False
+    # 解析序: 终态 job 在前只跳过不中断, 后面的活动 job 仍要查到
+    done = _job(job_id="d", phase=ru.PHASE_DONE, dst="T:/one")
+    active = _job(job_id="a", phase=ru.PHASE_ARMED, dst="T:/two")
+    root = os.path.join(S, "Show")
+    assert ru.resolve_physical(S, root, (done, active)) == "T:/two"
+    # 收尾集合去重: 重复成员只收一次
+    dir_active = _job(plan={"form": ru.FORM_DIR_ALIAS})
+    assert ru.finalize_members(dir_active, [("HB", S, root), ("HB", S, root)]) == ("HB", )
+    # 历史账(无 alias_kind)靠 plan.form 兜底链解析形态
+    legacy_dir = ru.RelocateJob(
+        job_id="lg",
+        hashes=("HA", ),
+        mover="HA",
+        src=S,
+        dst=T,
+        scope=root,
+        alias_kind="",
+        plan={"form": ru.FORM_DIR_ALIAS}
+    )
+    assert legacy_dir.scope_hit(S, root) is True
+    legacy_file = ru.RelocateJob(
+        job_id="lf",
+        hashes=("HA", ),
+        mover="HA",
+        src=S,
+        dst=T,
+        scope=root,
+        alias_kind="",
+        plan={"form": ru.FORM_FILE_LINKS}
+    )
+    assert legacy_file.scope_hit(S, root) is True  # 逐文件: landing 恰等于 scope
+
+
+def test_reconcile_timeout_boundaries_and_tail_wait():
+    """对账超时判据: 未超时恒等(qB 暂离不得判死), 恰等不算超(>), 心跳恰 60s 未过期"""
+    job = _job()
+    # removing/removed 支
+    assert ru.reconcile(
+        job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=False, elapsed=100, finalize_timeout=3600
+    ) == ru.ACT_WAIT
+    assert ru.reconcile(
+        job, journal_phase=ru.PHASE_REMOVED, link_present=False, qb_up=False, elapsed=3600, finalize_timeout=3600
+    ) == ru.ACT_WAIT
+    # 尾支(链接不在且无 journal 意图, qB down): 同判据
+    assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=100, finalize_timeout=3600) == ru.ACT_WAIT
+    assert ru.reconcile(job, link_present=False, qb_up=False, elapsed=3600, finalize_timeout=3600) == ru.ACT_WAIT
+    # 心跳恰 60s: 未过期(>)
+    assert ru.reconcile(job, journal_phase=ru.PHASE_ARMED, link_present=True, heartbeat_age=60.0) == ru.ACT_WAIT
+
+
+def test_stall_verdict_grow_and_late_warn_branches():
+    """停滞 WARN 侧支: 体积增长超时转 warn; 非 moving 非增长超时(未到 stall_timeout)也 warn; 恰等边界算超"""
+    assert ru.stall_verdict(True, False, 7200, 7200, 600, 0) == ru.STALL_WARN  # 增长恰等边界
+    assert ru.stall_verdict(True, False, 8000, 7200, 600, 0) == ru.STALL_WARN
+    assert ru.stall_verdict(False, False, 8000, 7200, 600, 100) == ru.STALL_WARN  # 末支 warn
+    assert ru.stall_verdict(False, False, 7200, 7200, 600, 100) == ru.STALL_WARN  # 末支恰等边界
+    assert ru.stall_verdict(False, True, 7200, 7200, 600, 0) == ru.STALL_WARN  # moving 恰等边界
+
+
+def test_plan_layout_filter_and_last_mile_contract():
+    """空名条目必须过滤(布局/计数不塌); 末段逐文件链接的 link_kind 契约; 缺省实参即契约"""
+    p = ru.plan(S, ("", "Show/e00.mkv", "Show/e01.mkv"), 8, 2000, file_link_kind="hardlink", dir_link_kind="junction")
+    assert p.flat is False and p.content_root == S + "/Show" and p.file_count == 2
+    assert ru.layout_of(S, ("", "Show/a.mkv")) == (False, "Show")
+    assert ru.layout_of(S, ("/a.mkv", )) == (True, "")
+    # 末段(平铺/不专属超阈值逐文件链接): link_kind 必须带上(执行期建链形态消费)
+    p = ru.plan(
+        S,
+        tuple(f"e{i:02d}.mkv" for i in range(9)),
+        8,
+        2000,
+        content_root_exclusive=False,
+        file_link_kind="hardlink",
+        dir_link_kind="junction"
+    )
+    assert p.form == ru.FORM_FILE_LINKS and p.link_kind == "hardlink" and p.link_count == 9
+    # 缺省 threshold=8 / hard_max=2000 / 兜底文案(不出现占位符)
+    p = ru.plan(
+        S,
+        _files(8),
+        multi_member=True,
+        content_root_exclusive=True,
+        file_link_kind="hardlink",
+        dir_link_kind="junction"
+    )
+    assert p.form == ru.FORM_DIR_ALIAS
+    p = ru.plan(S, _files(2001), 8, multi_member=True, content_root_exclusive=False, file_link_kind="hardlink")
+    assert p.form == ru.FORM_REJECT and "2000" in p.reason
+    # 兜底文案在「能力校正提议」分支: 文件级不可建但目录别名可行 -> 提议文案带兜底原因
+    p = ru.plan(S, _files(3), 8, 2000, content_root_exclusive=True, file_link_kind=None, dir_link_kind="junction")
+    assert p.form == ru.FORM_DIR_ALIAS and "文件级链接不可建 ——" in p.reason and "XXXX" not in p.reason
+    # 两个能力探测错误都缺省(拒绝分支): 不出现占位符
+    p = ru.plan(S, _files(3), 8, 2000, file_link_kind=None, dir_link_kind=None)
+    assert p.form == ru.FORM_REJECT and "XXXX" not in p.reason
+    # 空表 reject: link_count=0(回执契约)
+    assert ru.plan(S, (), 8, 2000).link_count == 0
+
+
+def test_plan_dir_link_error_long_path_text():
+    """目录别名过长且已有探测错误: 前段错误拼进拒绝文案(不炸/不丢/不伪空格/无占位符)"""
+    save = "R:/D/" + "a" * 200
+    files = tuple(f"{'b' * 54}/e{i:02d}" for i in range(3))  # 内容根恰 260
+    p = ru.plan(
+        save,
+        files,
+        8,
+        2000,
+        content_root_exclusive=True,
+        file_link_kind=None,
+        file_link_error="文件级不可建",
+        dir_link_kind="junction",
+        dir_link_error="未探测到可用形态",
+        link_path_limit=260
+    )
+    assert p.form == ru.FORM_REJECT
+    assert "未探测到可用形态 内容根路径过长" in p.reason, p.reason
+    p = ru.plan(
+        save,
+        files,
+        8,
+        2000,
+        content_root_exclusive=True,
+        file_link_kind=None,
+        file_link_error="文件级不可建",
+        dir_link_kind="junction",
+        dir_link_error="",
+        link_path_limit=260
+    )
+    assert p.form == ru.FORM_REJECT and "文件级不可建; 内容根路径过长" in p.reason and "XXXX" not in p.reason
+    # 目录不专属: why 列表不得混入伪条目
+    p = ru.plan(
+        save,
+        files,
+        8,
+        2000,
+        content_root_exclusive=False,
+        file_link_kind=None,
+        file_link_error="文件级不可建",
+        dir_link_kind="junction",
+        link_path_limit=260
+    )
+    assert p.form == ru.FORM_REJECT and "XXXX" not in p.reason
+
+
+def test_evaluate_group_receipt_contract_keys():
+    """回执契约键面: 幂等/主回执/添加预检三张 dict 的键名与取值即前端契约(改名/丢键/值翻转都算断)"""
+    keys = {
+        "hashes", "mover", "name", "save_path", "target", "file_count", "form", "alias_kind", "link_count",
+        "needs_confirm", "cls", "reasons", "notes", "target_free", "same_volume"
+    }
+    item = ru.evaluate_group(_ok_facts(target=S))  # 幂等分支
+    assert set(item) == keys, set(item) ^ keys
+    assert item["file_count"] == 2 and item["link_count"] == 0
+    assert item["needs_confirm"] is False and item["alias_kind"] is None and item["cls"] == ru.CLS_OK
+    item = ru.evaluate_group(_ok_facts(files=_files(9), same_volume=False, target_free=1234))
+    assert set(item) == keys, set(item) ^ keys
+    assert item["form"] == ru.FORM_DIR_ALIAS and item["needs_confirm"] is True
+    assert item["alias_kind"] == "junction" and item["link_count"] == 1
+    assert item["cls"] == ru.CLS_CONFIRM and item["reasons"][0]["gate"] == "form"
+    assert item["reasons"][0]["cls"] == ru.CLS_CONFIRM
+    assert "提议目录别名" in item["reasons"][0]["text"]  # confirm 文案不丢
+    assert item["target_free"] == 1234 and item["same_volume"] is False
+    assert item["hashes"] == ["HA", "HB"] and item["mover"] == "HA" and item["name"] == "Show"
+    assert item["save_path"] == S and item["target"] == T
+    assert any("目标卷剩余 1234 字节" in n for n in item["notes"])
+    # 添加预检: 基座键随分支透传
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(_dir_job(), ), target_free=5000))
+    assert r["save_path"] == S and r["name"] == "Show" and r["volume_free"] == 5000
+    assert r["notes"] == ["目标卷剩余 5000 字节"]
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Whatever", jobs=(_dir_job(phase=ru.PHASE_REMOVED), )))
+    assert r["actual_path"] is None and r["volume_free"] is None  # 收尾窗分支不伪造落点/卷剩余
+    r = ru.evaluate_add(
+        ru.AddFacts(
+            save_path=S,
+            name="Show",
+            landing_is_link=True,
+            landing_link_kind="symlink",
+            landing_link_target="D:/elsewhere",
+            target_free=777
+        )
+    )
+    assert r["actual_path"] == "D:/elsewhere" and r["volume_free"] == 777
+
+
+def test_evaluate_group_text_faces_representatives():
+    """文案代表面(全量文案留池): 空间/未完成/硬上限闸门的判定性片段 + 恰等边界不误拒"""
+    item = ru.evaluate_group(_ok_facts(target_free=50))
+    assert item["reasons"][0]["cls"] == ru.CLS_BLOCKED  # blocked 侧 cls 不得塌 None
+    text = " | ".join(r["text"] for r in item["reasons"] if r["gate"] == "space")
+    assert "空间不足" in text and "50" in text, text
+    item = ru.evaluate_group(_ok_facts(target_free=200))  # 剩余恰等所需(2x100) -> 不误拒
+    assert item["cls"] == ru.CLS_OK, item["reasons"]
+    item = ru.evaluate_group(_ok_facts(target_free=None, same_volume=None))
+    assert all("目标卷剩余" not in n for n in item["notes"])  # 不可判定时不伪字节文案
+    sp_text = " | ".join(r["text"] for r in item["reasons"] if r["gate"] == "space")
+    assert sp_text.startswith("目标卷剩余空间不可判定"), sp_text
+    item = ru.evaluate_group(_ok_facts(progresses=(1.0, 0.5)))
+    text = " | ".join(r["text"] for r in item["reasons"] if r["gate"] == "incomplete")
+    assert "尚未完成" in text and "辅种组 (未完成成员的进度" in text, text
+    # hard_max 拒绝: 配置上限与目录别名具体错误都进文案
+    item = ru.evaluate_group(
+        _ok_facts(files=_files(2001), hard_max=1500, content_root_exclusive=False, file_link_kind="hardlink")
+    )
+    text = " | ".join(r["text"] for r in item["reasons"] if r["gate"] == "form")
+    assert "1500" in text, text
+    item = ru.evaluate_group(
+        _ok_facts(
+            files=_files(2001),
+            content_root_exclusive=True,
+            file_link_kind="hardlink",
+            dir_link_kind=None,
+            dir_link_error="boom 提权失败"
+        )
+    )
+    text = " | ".join(r["text"] for r in item["reasons"] if r["gate"] == "form")
+    assert "boom 提权失败" in text, text
+
+
+def test_evaluate_add_flow_faces():
+    """添加预检流面: 终态在前不中断收尾窗检查; 作用域外落点不进分支; rel 切片各形态(尾斜杠/反斜杠/尾x/名首x/空名)"""
+    done = _dir_job(phase=ru.PHASE_DONE)
+    removing = _dir_job(phase=ru.PHASE_REMOVING)
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Show", jobs=(done, removing)))
+    assert r["reasons"][0]["gate"] == "finalize_window"
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="Other", jobs=(_dir_job(), )))
+    assert r["cls"] == ru.CLS_OK  # 同 src 但落点不在作用域内 -> 不进分支
+    for sp in (S + "/", "R:\\Download\\Testing"):
+        r = ru.evaluate_add(ru.AddFacts(save_path=sp, name="Show", jobs=(_dir_job(), ), target_free=5000))
+        assert r["cls"] == ru.CLS_CONFIRM and r["actual_path"] == T + "/Show", (sp, r["actual_path"])
+    root_job = ru.RelocateJob(
+        job_id="jx",
+        hashes=("HA", "HB"),
+        mover="HA",
+        src="R:/BoX",
+        dst=T,
+        scope="R:/BoX",
+        alias_kind="dir",
+        phase=ru.PHASE_ARMED
+    )
+    r = ru.evaluate_add(ru.AddFacts(save_path="R:/BoX", name="Show", jobs=(root_job, )))
+    assert r["actual_path"] == T + "/Show" and r["notes"] == ["目标卷剩余不可判定"]
+    r = ru.evaluate_add(ru.AddFacts(save_path="R:/BoX", name="XSub", jobs=(root_job, )))
+    assert r["actual_path"] == T + "/XSub"  # 名首 X 不得被剥(剥字符集只含大写 X 与 /)
+    scope_all = ru.RelocateJob(
+        job_id="ja", hashes=("HA", "HB"), mover="HA", src=S, dst=T, scope=S, alias_kind="dir", phase=ru.PHASE_ARMED
+    )
+    r = ru.evaluate_add(ru.AddFacts(save_path=S, name="", jobs=(scope_all, )))
+    assert r["actual_path"] == T  # 空名: rel 为空 -> actual = dst(不伪段)
