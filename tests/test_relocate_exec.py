@@ -71,10 +71,11 @@
 - test_rebuild_first_attempt_not_backoff_on_fresh_boot: 开机窗口 —— monotonic < REBUILD_BACKOFF 时首次重建不得被 0.0 哨兵退避吞掉(issue 26-10-31-0932)
 - test_respawn_first_spawn_not_backoff_on_fresh_boot: 开机窗口 —— monotonic < RESPAWN_BACKOFF 时 guardian 首拉不受退避(issue 26-10-31-0932)
 ### W8(R32) S5 补测(变异审计真洞守阵, 分类: tmp-analysis/w8-r32/classify-mod-{a,b}.md)
-- test_group_facts_gate_inputs_block_gates: 事实包字段丢失/损坏仍拦闸(incomplete/moving/third_party_link/hardlink 四闸)
+- test_group_facts_gate_inputs_block_gates: 事实包字段丢失/损坏仍拦闸(incomplete/moving/third_party_link/hardlink 四闸) + reparse 非零 tag/缺省 tag 判别
 - test_group_facts_same_volume_proof_both_sides: 同卷证明任一侧吻合即过(源侧/目标侧两场景)
 - test_group_facts_fact_sources_faces: 文件表/目标卷剩余/listing 失败三事实源的单点行为
 - test_group_facts_platform_and_unc_faces: remote 拦 platform 闸 / cap 崩溃面 / UNC dir 形态 / file_alias_kind 实参
+  + 同卷硬链接兜底(same_volume 实参丢失 ⇒ capability_ok 翻假)
 - test_group_facts_long_path_and_start_plan_faces: 长路径校正(260) + 执行入口 plan 同参 + file_link_error 文案 + hard_max 配置
 - test_group_facts_multi_root_and_hard_max_faces: 多首段内容根回落 + 硬上限拒绝
 - test_group_facts_dir_link_note_faces: 目录级链接 note(OSError 与 realpath 两段拼接)
@@ -88,6 +89,7 @@
 - test_start_job_ids_and_receipt_contract: job_id 三分量进键 + started 回执契约
 - test_start_job_inflight_guard: 在途拦截(非终态拦/终态放)与拦截回执契约
 - test_start_job_pause_issue_args_and_crash_window: 暂停/下发实参钉死 + 崩溃窗补发
+  + 补发 setLocation 入参(只发 mover) + 发起 rt 初值(stall_since/last_size/sample_ts)
 - test_start_job_plan_faces: plan 消费 file_link_error 与 hard_max 配置
 - test_apply_reconcile_rebuild_faces: 重建退避账/stage 值/journal 意图回滚/rebuild_exhausted 文案
 - test_apply_reconcile_finalize_and_done_faces: 收尾下发实参/rt 账/DONE journal 相位
@@ -1359,14 +1361,25 @@ def _stub_cap(
     dir_symlink_ok=False,
     dir_symlink_error="",
     file_symlink_error="",
+    hardlink_ok=False,
     hardlink_error=""
 ):
-    """替身能力包: 平台判定面不依赖真机探测(WSL/Windows 双侧确定性)"""
+    """替身能力包: 平台判定面不依赖真机探测(WSL/Windows 双侧确定性)
+
+    ``file_kind`` 显式给定 = 该形态可用(同时决定 file_symlink 探针 ok); 给 None 时按
+    ``hardlink_ok`` + 同卷实参走真实阶梯的硬链接兜底分支(Windows 同卷唯一可建组合)。
+    """
     seen = {}
 
     def _fak(same_volume):
         seen["arg"] = same_volume
-        return file_kind
+        if file_kind is not None:
+            return file_kind
+        if not link_visible:
+            return None
+        if same_volume and hardlink_ok:
+            return afs.KIND_HARDLINK
+        return None
 
     cap = types.SimpleNamespace(
         process_os="windows",
@@ -1379,7 +1392,7 @@ def _stub_cap(
         junction=afs.LinkProbe(False, error="junction 不可用"),
         dir_symlink=afs.LinkProbe(dir_symlink_ok, error=dir_symlink_error),
         file_symlink=afs.LinkProbe(file_kind is not None, error=file_symlink_error),
-        hardlink=afs.LinkProbe(False, error=hardlink_error),
+        hardlink=afs.LinkProbe(hardlink_ok, error=hardlink_error),
         dir_alias_kind=dir_kind,
         file_alias_kind=_fak,
     )
@@ -1387,18 +1400,23 @@ def _stub_cap(
     return cap, seen
 
 
-def _stub_lstat(monkeypatch, *, islnk=False, nlink=1, tag=0, boom=False):
-    """代表文件 lstat 替身(第三方链接/硬链接识别面的输入)"""
+def _stub_lstat(monkeypatch, *, islnk=False, nlink=1, tag=0, omit_tag=False, boom=False):
+    """代表文件 lstat 替身(第三方链接/硬链接识别面的输入)
+
+    ``omit_tag`` = 不提供 ``st_reparse_tag``(POSIX stat 形态): 判别默认值必须落在假值上。
+    """
     import stat as stat_mod
 
     def _lstat(path):
         if boom:
             raise OSError("不可读")
-        return types.SimpleNamespace(
-            st_mode=stat_mod.S_IFLNK if islnk else stat_mod.S_IFREG,
-            st_reparse_tag=tag,
-            st_nlink=nlink,
-        )
+        attrs = {
+            "st_mode": stat_mod.S_IFLNK if islnk else stat_mod.S_IFREG,
+            "st_nlink": nlink,
+        }
+        if not omit_tag:
+            attrs["st_reparse_tag"] = tag
+        return types.SimpleNamespace(**attrs)
 
     monkeypatch.setattr(os, "lstat", _lstat)
 
@@ -1459,6 +1477,22 @@ def test_group_facts_gate_inputs_block_gates(monkeypatch):
     v = ru.evaluate_group(facts)
     hl = next(r for r in v["reasons"] if r["gate"] == "hardlink")
     assert facts.files[0][0] in hl["text"], hl
+
+    # reparse 点非零 tag(Windows junction/目录链接, 非 S_ISLNK)也必须判第三方链接:
+    # `or tag` 被 and 化/反化会漏判(gf_220/221/227/228 簇)。
+    _stub_lstat(monkeypatch, islnk=False, tag=0xA0000003)  # IO_REPARSE_TAG_MOUNT_POINT
+    mod, facts = _facts()
+    assert facts.third_party_link_files == (facts.files[0][0], ), facts.third_party_link_files
+    v = ru.evaluate_group(facts)
+    assert any(r["gate"] == "third_party_link" for r in v["reasons"]), v
+
+    # tag 缺省(POSIX stat 形态): getattr 默认值必须为假值, 否则每个普通文件都会被误判链接。
+    _stub_lstat(monkeypatch, islnk=False, nlink=1, omit_tag=True)
+    mod, facts = _facts()
+    assert facts.third_party_link_files == () and facts.hardlink_files == (), (
+        facts.third_party_link_files,
+        facts.hardlink_files,
+    )
 
     assert facts.name == "Show" and facts.target == "R:/dst"  # 事实包身份面不得 None 化
 
@@ -1540,6 +1574,16 @@ def test_group_facts_platform_and_unc_faces(monkeypatch, tmp_path):
     facts5 = mgr.host.get("relocate")._group_facts([mgr.store.by_hash["HA"], mgr.store.by_hash["HB"]], dst, client2)
     assert seen["arg"] is True, seen
     assert facts5.file_link_kind == "hardlink", facts5.file_link_kind
+
+    # 同卷 + 文件符号链接不可用、硬链接可用(Windows 同卷唯一可建文件别名的组合):
+    # `same_volume=bool(same_vol)` 被 None 化 / 实参删除 / 内层 bool(None) 都会让
+    # platform_verdict 走不到硬链接兜底 => capability_ok 翻假(gf_140/144/147)。
+    mgr2, client3, src3, dst3, content3, files3 = relocate_env(tmp_path / "hl", state="pausedUP")
+    _stub_cap(monkeypatch, hardlink_ok=True)
+    facts6 = mgr2.host.get("relocate")._group_facts([mgr2.store.by_hash["HA"], mgr2.store.by_hash["HB"]], dst3, client3)
+    assert facts6.same_volume is True, facts6.same_volume
+    assert facts6.capability_ok is True, facts6.capability_reason
+    assert facts6.file_link_kind == afs.KIND_HARDLINK, facts6.file_link_kind
 
 
 def test_group_facts_long_path_and_start_plan_faces(tmp_path, monkeypatch):
@@ -1998,10 +2042,16 @@ def test_start_job_pause_issue_args_and_crash_window(tmp_path, monkeypatch):
         mod2.relocate_execute(["HA"], dst2)
     jid = next(iter(mod2._jobs))
     assert mod2._rt[jid]["issue"] is True, mod2._rt[jid]
+    # 发起时的 rt 初值必须干净: 键名大小写漂移 / stall_since 非零 = 停滞时钟先手开跑
+    # (sj_140/144/145; 先手开跑会让 `elif not rt.get("stall_since")` 分支永远轮不到)
+    assert mod2._rt[jid]["last_size"] == -1 and mod2._rt[jid]["sample_ts"] == 0.0, mod2._rt[jid]
+    assert mod2._rt[jid]["stall_since"] == 0.0, mod2._rt[jid]
     client2.torrents_set_location = real2
     mgr2.store.own_writes.clear()  # 暂停快照已回流(崩溃窗现场: 暂停早已生效)
     mod2.on_task_line()
     assert [c for c in client2.calls if c[0] == "set_location"] == [("set_location", dst2)], client2.calls
+    # 补发路径的入参同样必须是 mover(且实参键在场): 缺省 None = qB 全局改路径(sm_41/43)
+    assert client2.limit_location_hashes_calls == [("set_location", ["HA"])], client2.limit_location_hashes_calls
 
 
 def test_start_job_plan_faces(tmp_path, monkeypatch):

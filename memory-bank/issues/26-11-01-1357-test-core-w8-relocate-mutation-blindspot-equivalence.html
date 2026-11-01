@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="core-w8-relocate-mutation-blindspot-equivalence">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判">
 <meta name="issue-summary" content="units 平台盲区 9 条(n11/16/17 归一桥/j8/9 拼接/t3/p102/eg235/246 长路径)在 Windows 套件全构造钉杀; mod st_reparse_tag 4 条 WSL 不可构造留池; 等价翻案 j13/lo2 改真洞已杀、w5 死代码改等价">
 <title>core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-1357-test-core-w8-relocate-mutation-blindspot-equivalence</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 13:57</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -100,9 +100,38 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>结论: 根因 / 修法 / 验证 / 遗留</h2>
+
+    <p><strong>根因(仅 mod st_reparse_tag 簇 4 条有动作面)</strong>: <code>_group_facts</code> 的第三方链接判别是
+    <code>tag = getattr(st, "st_reparse_tag", 0)</code> 后 <code>if stat.S_ISLNK(st.st_mode) or tag:</code>。
+    S5 守阵只覆盖了 <code>S_ISLNK</code> / <code>st_nlink</code> / <code>OSError</code> 三态, 两条判别分支没有观测点:
+    ① reparse 点非零 tag(Windows junction / 目录链接, <code>S_ISLNK</code> 为假)必须也判第三方链接 —— <code>or tag</code> 被 and 化/反化/整段删除都会漏判;
+    ② <code>getattr</code> 缺省值必须是假值(POSIX stat 无该字段) —— 默认改非零会把每个普通文件误判成链接。
+    gf_220/221/227/228 因此长期存活。<code>units</code> 平台盲区 9 条与翻案条目是落账, 无未结动作面。</p>
+
+    <p><strong>修法(零 src 改动, 只补守阵)</strong>: 均在 <code>tests/test_relocate_exec.py</code>:</p>
+    <ul>
+      <li><code>_stub_lstat</code> 增加 <code>omit_tag</code>: 可构造「不带 <code>st_reparse_tag</code> 的 POSIX stat 形态」, 让缺省值分支成为可观测输入。</li>
+      <li><code>test_group_facts_gate_inputs_block_gates</code> 增两段: 非零 tag(<code>IO_REPARSE_TAG_MOUNT_POINT=0xA0000003</code>)必须进 <code>third_party_link_files</code> 且 <code>evaluate_group</code> 出 <code>third_party_link</code> 闸; 缺省 tag 时 <code>third_party_link_files</code> 与 <code>hardlink_files</code> 必须为空。</li>
+      <li>文件头「## 测试计划」同步补注 reparse 两分支。</li>
+    </ul>
+
+    <p><strong>验证(实测)</strong>:</p>
+    <ul>
+      <li>红验 <code>tmp-analysis/w8fix/redverify_tag.py</code>: <strong>4/4 RED</strong>(缺省 0→1 / <code>or</code>→<code>and</code> / <code>or</code>→<code>or not</code> / 删除 <code>or tag</code> 全部被定向守阵逮住), 还原后 <strong>GREEN</strong>。</li>
+      <li>镜像全池复跑(mutmut 3.8.1, <code>~/auto-qb-mut-w8fix</code>, <code>--no-refresh --no-sync</code>): relocate_mod.py 池 <strong>3006 变异 / 杀 2503 / 存活 503 / 超时 0 / no tests 0</strong>; gf_220/221/227/228 <strong>已不在存活清单</strong>(条目级核验: 两条 results 文件均无这 4 个 id)。</li>
+      <li>全量测试与覆盖率见 <code>commands run kb.baseline</code> 最新切片(见下方遗留说明)。</li>
+    </ul>
+
+    <p><strong>遗留</strong>: 本件无未结动作面。gf_220/221/227/228 已实杀, 不标「疑似等价」。同主题的 <code>spawn</code> 平台盲区与 461 条低/极低余量归 low-residue 件记账。</p>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 13:57 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 01:56 — 用户指派认领（与 low-residue 同主题合并处理），状态 <strong>In Progress</strong>；认领方 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code></li>
+      <li>2026-11-02 02:52 — mod st_reparse_tag 簇 4 条补两路守阵并红验 4/4 全红; 镜像复跑(0216/0228 两轮)存活清单均不含这 4 个 id, 确认已杀。本件动作面清零, 状态 <strong>Done</strong></li>
     </ul>
   </section>
 

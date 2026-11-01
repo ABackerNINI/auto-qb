@@ -53,7 +53,10 @@ import set_conf  # noqa: E402  (同目录渲染器: timeout_multiplier 的单点
 DEFAULT_DISTRO = "Ubuntu-26.04"
 DEFAULT_MIRROR = "~/auto-qb-mut"
 DEFAULT_BRANCH = "develop"
-MUTMUT_VERSION = "3.8.0"
+# 3.8.1 修了 stats 收集在 pytest 9.2 上崩的问题(9.2 删了私有属性 Function._nodeid,
+# 3.8.0 的 stats 插件还按 `item._nodeid` 取值 ⇒ 基线直接 `failed to collect stats`);
+# 本仓 pytest 已钉 9.2.0。
+MUTMUT_VERSION = "3.8.1"
 GREMLINS_VERSION = "1.11.2"
 DEFAULT_TIMEOUT_MULTIPLIER = set_conf.DEFAULT_TIMEOUT_MULTIPLIER  # 与 mutmut 自身默认一致
 DEFAULT_CHILDREN = 4  # WSL 只有 8 核(.wslconfig), 拉满会打挂
@@ -221,8 +224,12 @@ def _ensure_mirror(distro: str, mirror: str, branch: str, *, refresh: bool, no_s
 
 def _ensure_tool(distro: str, mirror: str) -> None:
     mq = _bq(mirror)
-    _say(f"[3/3] 确保 mutmut=={MUTMUT_VERSION} 在镜像 venv 里(缺了才装)")
-    _wsl(distro, f"cd {mq} && test -x .venv/bin/mutmut || uv pip install -q mutmut=={MUTMUT_VERSION}")
+    _say(f"[3/3] 确保 mutmut=={MUTMUT_VERSION} 在镜像 venv 里(版本不符才装)")
+    # **必须核版本, 不能只判文件在不在**: 镜像里躺着的旧版(mutmut 3.8.0 + pytest 9.2)会在
+    # stats 收集阶段崩(`failed to collect stats`), 而「文件存在」让这套检查完全看不出问题。
+    version = _wsl(distro, f"cd {mq} && .venv/bin/mutmut --version", check=False).stdout.strip()
+    if version != f"mutmut, version {MUTMUT_VERSION}":
+        _wsl(distro, f"cd {mq} && uv pip install -q mutmut=={MUTMUT_VERSION}")
     # WSL 里通常只有 python3; 包脚本的 wrapper 端到端用例要裸 `python`(报告 §10 #13)
     _wsl(
         distro, 'command -v python >/dev/null 2>&1 || { mkdir -p "$HOME/.local/bin" '

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="core-w8-relocate-mutation-low-residue">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ W8 relocate 两文件变异真洞余量 461 条批量判读留档(低 397/极低 46/中危 18=未逐验 10+注记 8), 不排期">
 <meta name="issue-summary" content="W8(R32) S5/S5a 守阵后余量: mod 314 + units 241, 中危 0 实余, 低/极低主体为文案/契约键/窄触发/未消费面, 按簇判读留档不排期">
 <title>core/ W8 relocate 两文件变异真洞余量 461 条批量判读留档(低 397/极低 46/中危 18=未逐验 10+注记 8), 不排期 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-1357-test-core-w8-relocate-mutation-low-residue</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 13:57</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,9 +96,65 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>结论: 根因 / 修法 / 验证 / 遗留</h2>
+
+    <p><strong>根因(中危 18 条按簇拆三处, 均为「守阵只断言浅层可观测、深层实参/初值不可见」)</strong>:</p>
+    <ul>
+      <li><strong>gf_140/144/147</strong>: <code>_group_facts</code> 把同卷判定 <code>same_volume=bool(same_vol)</code> 传给
+        <code>platform_verdict</code>, 后者再经 <code>cap.file_alias_kind(same_volume)</code> 走硬链接兜底。既有替身只回放
+        <code>file_kind</code>, 没有「同卷 + 符号链接不可用 + 硬链接可用」组合, 也不断言 <code>facts.same_volume</code>,
+        实参被 None 化/删除/内层 <code>bool(None)</code> 时 <code>capability_ok</code> 翻假却无人发现。</li>
+      <li><strong>sm_41/43</strong>: <code>_step_move</code> 崩溃窗补发 <code>torrents_set_location(torrent_hashes=[job.mover], location=job.dst)</code>。
+        既有断言只比对 <code>("set_location", dst)</code>, 不看 <code>torrent_hashes</code> —— kwarg 缺省成 None 或整段删除会让
+        qB 走全局改路径(影响面最大的一类), 属真洞。</li>
+      <li><strong>sj_145(连带 136–145 整簇)</strong>: <code>_start_job</code> 的 rt 初值 <code>{"last_size": -1, "sample_ts": 0.0, "stall_since": 0.0}</code>。
+        既有断言只看 <code>issue is True</code> —— 键名大小写漂移或 <code>stall_since</code> 非零时停滞时钟先手开跑,
+        <code>elif not rt.get("stall_since")</code> 分支永远轮不到。</li>
+    </ul>
+
+    <p><strong>修法(零 src 改动, 只补守阵, 共 3 处)</strong>: 均在 <code>tests/test_relocate_exec.py</code>:</p>
+    <ul>
+      <li><code>_stub_cap</code> 增加 <code>hardlink_ok</code>, 并让 <code>file_alias_kind</code> 替身按真实阶梯回放
+        「同卷 + <code>hardlink.ok</code> ⇒ <code>KIND_HARDLINK</code>; 否则 None」(原替身恒回 <code>file_kind</code>, 硬链接兜底不可达)。</li>
+      <li><code>test_group_facts_platform_and_unc_faces</code> 增一段: <code>hardlink_ok=True</code> 下断言
+        <code>facts6.same_volume is True</code> / <code>capability_ok is True</code> / <code>file_link_kind == "hardlink"</code>。</li>
+      <li><code>test_start_job_pause_issue_args_and_crash_window</code> 增两段: 发起后 rt 初值逐键断言
+        (<code>last_size == -1</code>, <code>sample_ts == 0.0</code>, <code>stall_since == 0.0</code>); 补发后断言
+        <code>limit_location_hashes_calls == [("set_location", ["HA"])]</code>(只发 mover)。</li>
+      <li>文件头「## 测试计划」两条同步补注。</li>
+    </ul>
+
+    <p><strong>验证(实测)</strong>:</p>
+    <ul>
+      <li>红验 <code>tmp-analysis/w8fix/redverify_issueb.py</code>: <strong>8/8 RED</strong>(gf140/144/147、sm41/43、sj140/144/145 全部被定向守阵逮住),
+        还原后 GF/SJ <strong>双 GREEN</strong>。</li>
+      <li>镜像全池复跑(mutmut 3.8.1, <code>~/auto-qb-mut-w8fix</code>, test/src md5 双侧一致, <code>--no-refresh --no-sync --children 4</code>):
+        <strong>3006 / 3006 · 杀 2503 · 存活 503 · 超时 0 · no tests 0</strong>, 21.32 mut/s, 172.7s。</li>
+      <li>存活集逐 id 对差(旧 <code>…26-11-02-0216-…results.txt</code> 518 → 新 <code>…26-11-02-0228-…results.txt</code> 503):
+        <strong>新杀 15 / 新增存活 0</strong> = gf_140/144/147 + sm_41/43 + <code>start_job__mutmut_136..145</code> 连续 10 条(rt 初值整簇连带)。</li>
+      <li>中危 18 条逐条现势: <strong>10 条已杀</strong>(gf_140/144/147、sm_41/43、sj_145 本轮 + gf_220/221/227/228 由 blindspot 件守阵);
+        gf_24/25、sm_72 <strong>复跑已不在存活清单</strong>(同函数既有守阵连带, 本轮未单独红验); <strong>sp_27 仍 survived</strong>(平台盲区, 见遗留);
+        sg_1/29(红线目录)与 gf_142/am_25(等价翻案)<strong>维持原判</strong>。</li>
+      <li>全量测试 / 覆盖率: 见 <code>commands run kb.baseline</code> 最新切片(两条红 gate 均既有、与本轮无关, 见遗留)。</li>
+    </ul>
+
+    <p><strong>遗留(如实标注, 不声称全部杀死)</strong>:</p>
+    <ul>
+      <li><strong>sp_27 平台盲区未杀</strong>: 其守阵 <code>tests/test_relocate_exec.py::test_spawn_args_pinned</code> 依赖
+        <code>subprocess.CREATE_NO_WINDOW</code>(WSL 无此常量, 恒红), 已由 <code>.commands/mutants/scripts/set_conf.py</code> 的
+        <code>DEFAULT_DESELECT</code> 排除出 WSL 池。Windows 侧守阵仍在且随全量套件跑绿; WSL 池杀不掉属工具平台边界, 非未覆盖。</li>
+      <li><strong>461 条低/极低余量按设计不排期</strong>: 低 397 + 极低 46 + 中危已结清, 主体为回执/日志文案与契约键、窄触发、未消费字段;
+        本件是留档单, 不视为本次欠账。若后续轮复跑, 按原「建议」节顺序推进。</li>
+      <li><strong>疑似等价不冒充已杀</strong>: gf_142/am_25 维持等价; <code>step_move</code>/<code>spawn</code> 池内剩余存活未在本轮逐条重判。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 13:57 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 01:56 — 用户指派认领（与 blindspot-equivalence 同主题合并处理），状态 <strong>In Progress</strong>；认领方 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code></li>
+      <li>2026-11-02 02:52 — 中危可动作面结清: 补 3 处守阵, 红验 8/8 全红, 镜像复跑新杀 15 / 新增存活 0; sp_27 平台盲区与 461 条低/极低余量按设计留账。状态 <strong>Done</strong></li>
     </ul>
   </section>
 

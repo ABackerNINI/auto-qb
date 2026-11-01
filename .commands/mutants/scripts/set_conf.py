@@ -44,6 +44,10 @@ DEFAULT_DESELECT = (
     "tests/test_core_modules.py::test_no_private_notify_access_from_outside",
     "tests/test_facade_modules.py::test_kernel_run_wiring_delegates_to_host",
     "tests/test_sync.py::test_no_synthetic_state_write_site",
+    # W8(R32) S5a 起: test_spawn_args_pinned 断言 Windows-only 的 subprocess.CREATE_NO_WINDOW
+    # (测试缺平台守卫, 同 issue 26-10-31-1539-deselect-guards 族), WSL 镜像里基线恒红 ——
+    # 不 deselect 会打断 stats 收集(首轮曾靠镜像内临时第 9 条绕过, 这里固化成默认)。
+    "tests/test_relocate_exec.py::test_spawn_args_pinned",
 )
 
 # also_copy 推导时的排除项: vcs / 依赖 / 生成物 / 本工具自身产物 —— 都不该进 mutants/ 副本。
