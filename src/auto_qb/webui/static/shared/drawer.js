@@ -765,7 +765,7 @@ window.AQB_DRAWER = {
       this.moveBusy = true;
       let ok = false;
       try {
-        if (this.moveSingleHash) ok = await this._editPost(this.moveSingleHash, "location", { location }, "已移动");
+        if (this.moveSingleHash) ok = await this._editPost(this.moveSingleHash, "location", { location }, "移动");
         else ok = await this._bulkEditPost(this.moveTargets, "location", { location }, "批量移动");
       } finally {
         this.moveBusy = false;

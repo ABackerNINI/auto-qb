@@ -27,6 +27,8 @@
 - test_relocate_module_precheck_classify_entries
 - test_relocate_module_precheck_defensive_paths
 - test_relocate_module_precheck_qb_temp_gate
+- test_relocate_module_precheck_qb_temp_foreign_demoted
+- test_relocate_module_precheck_qb_temp_unowned_demoted
 - test_relocate_module_precheck_scandir_and_lstat_degraded
 - test_relocate_module_precheck_scandir_missing_root
 - test_relocate_module_start_and_apply_probe_wiring
@@ -168,7 +170,11 @@ def _fwd(p):
 
 
 def test_relocate_module_precheck_qb_temp_gate(tmp_path, monkeypatch):
-    """内容根存在 qB 未完成孪生(原名 + .!qB 后缀) -> blocked(qb_temp): 数据尚未落定"""
+    """本组文件的 .!qB 孪生(剥后缀对回本组 own) -> blocked(qb_temp): 本组数据尚未落定
+
+    qb_temp 收窄(plan 26-11-02-0134)后硬拦面只剩本组; 外组/无主 .!qB 降 notes,
+    见 test_relocate_module_precheck_qb_temp_foreign_demoted / _unowned_demoted。
+    """
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
     with open(os.path.join(content, "e00.mkv.!qB"), "wb") as f:
@@ -176,6 +182,43 @@ def test_relocate_module_precheck_qb_temp_gate(tmp_path, monkeypatch):
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
     assert item["cls"] == "blocked" and "qb_temp" in [r["gate"] for r in item["reasons"]]
     assert any("e00.mkv.!qB" in r["text"] for r in item["reasons"])
+
+
+def test_relocate_module_precheck_qb_temp_foreign_demoted(tmp_path, monkeypatch):
+    """外组种子的 .!qB 未完成文件 -> 不硬拦(qb_temp 收窄): 降级为组外 note
+
+    qB 的搬运(libtorrent 1.2/2.0 aux::move_storage)只遍历种子自己的文件表逐文件搬,
+    外组 .!qB 与本次迁移无因果作用 —— 与外来普通文件同口径(plan 26-11-02-0134)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
+    # 组外种子 HC: 同 save_path, 单集下载中, 其 .!qB 孪生落在本组内容根(共享剧集目录场景)
+    hc = FakeTorrent(hash="HC", name="413INSTC-305", save_path=src, progress=0.5, state="downloading")
+    client.torrents["HC"] = hc
+    client.files_map["HC"] = [_fake_file("Show/413INSTC-305.mp4", 100)]
+    seed_store(mgr, [hc, client.torrents["HA"], client.torrents["HB"]])
+    mgr.host.get("grouping")._assign_new_torrent("HC")
+    with open(os.path.join(content, "413INSTC-305.mp4.!qB"), "wb") as f:
+        f.write(b"partial")
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
+    assert item["cls"] == "ok", (item["cls"], item["reasons"])
+    assert "qb_temp" not in [r["gate"] for r in item["reasons"]], item["reasons"]
+    assert any("413INSTC-305.mp4.!qB" in n for n in item.get("notes") or []), item.get("notes")
+
+
+def test_relocate_module_precheck_qb_temp_unowned_demoted(tmp_path, monkeypatch):
+    """无主 .!qB(剥后缀对不回任何种子) -> 不硬拦(D1): 降级为杂项 note
+
+    孤儿残留不被逐文件搬运触碰, 不该永久锁死该目录的迁移(plan 26-11-02-0134 D1)。
+    """
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
+    with open(os.path.join(content, "LEFTOVER-ORPHAN.mkv.!qB"), "wb") as f:
+        f.write(b"partial")
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
+    assert item["cls"] == "ok", (item["cls"], item["reasons"])
+    assert "qb_temp" not in [r["gate"] for r in item["reasons"]], item["reasons"]
+    assert any("LEFTOVER-ORPHAN.mkv.!qB" in n for n in item.get("notes") or []), item.get("notes")
 
 
 def test_relocate_module_precheck_defensive_paths(tmp_path):

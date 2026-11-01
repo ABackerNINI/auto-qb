@@ -333,7 +333,7 @@ def test_evaluate_group_gates_table():
         (_ok_facts(progresses=(1.0, 0.5)), "incomplete", "未完成成员"),
         (_ok_facts(states=("moving", "pausedUP")), "moving", "qB 搬迁态"),
         (_ok_facts(target_conflicts=("Show/e00.mkv", )), "target_conflict", "目标同名内容"),
-        (_ok_facts(qb_temp_entries=("e00.mkv.!qB", )), "qb_temp", ".!qB 临时文件"),
+        (_ok_facts(qb_temp_entries=("e00.mkv.!qB", )), "qb_temp", ".!qB 未落定文件"),
         (_ok_facts(target_free=None), "space", "空间不可判定"),
         (_ok_facts(target_free=50), "space", "空间不足"),
         (_ok_facts(target_unknown=True), "target_unknown", "目标存在性不可判定"),

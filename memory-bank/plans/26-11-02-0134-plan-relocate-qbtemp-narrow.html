@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组迁移 qb_temp 闸门按归属收窄</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-qbtemp-narrow">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-02-0134">
+<meta name="doc-updated" content="26-11-02-0134">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-02-backend-relocate-qbtemp-narrow.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-qbtemp-narrow</div>
+<h1>整组迁移 qb_temp 闸门按归属收窄</h1>
+<p class="lede">把整组迁移 <code>qb_temp</code> 闸门从「内容根里任何 <code>.!qB</code> 都硬拦」收窄为「只拦本组自己的 <code>.!qB</code>」——外组/无主条目按归属降级为告知性 notes；依据 libtorrent 1.2/2.0 源码核实的逐文件搬运语义，判定层零改动、收窄全部发生在事实收集层。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-02-0134 · <b>doc-updated</b> 26-11-02-0134 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户报障(WEBUI 单种子移动被无关 <code>.!qB</code> 误拦) + 同会话两轮取证与全面安全分析; 用户指令「写计划文档, 然后按建议实施」
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>：<code>relocate.enabled=true</code> 时 WEBUI 单种子移动走整组迁移闸门（计划 26-10-18-1604 P5 三入口接线，现行决策）。事实收集层把内容根目录里<strong>别的种子</strong>的 <code>.!qB</code> 文件也计入硬拦面——共享剧集目录里另一集正在下载（如 <code>413INSTC-305.mp4.!qB</code>）就会拦下本组迁移，属误报，且该场景（同目录多种子）是辅种库常态，几乎不可用。</p>
+<p><b>目标</b>：硬拦面收窄到「本组文件处于 <code>.!qB</code> 未落定态」；外组/无主 <code>.!qB</code> 降为告知性 notes。<b>完成判据</b>：内容根存在外组 <code>.!qB</code> 时单种子移动可正常发起（守阵三案绿 + test.full 全绿）；本组文件 <code>.!qB</code> 态仍被拦。</p>
+<p><b>设计底线/不变量</b>：① 闸门 id <code>qb_temp</code> 不改名（前端与测试按 id 断言）；② 「本组数据未落定必拦」的磁盘态竞态兜底不弱化（<code>GATE_INCOMPLETE</code> 之外的独立防线）；③ dir_alias 的内容根专属（exclusive）前提不动；④ 三入口（单个/批量/规则 move_to）共用同一判定，单点收口；⑤ 保守默认：归属判定的两个误判方向都必须偏保守（不得把该拦的放行）。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>现状链路</b>：<code>relocate_mod.py</code> 事实收集处 <code>qb_temp_entries = [ext 中以 .!qB 结尾] + [本组 names 中以 .!qB 结尾]</code>——ext（内容根里不属于本组的条目）在 <code>_classify_entries</code> <strong>之前</strong>就被整类抽走，没走归属判定；<code>relocate_units.evaluate_group</code> 见 <code>qb_temp_entries</code> 非空即 blocked（<code>GATE_QB_TEMP</code>）。</p>
+<p><b>痛点 1（误报，根因）</b>：libtorrent 1.2 与 2.0 的 <code>aux::move_storage()</code>（<code>src/aux_/storage_utils.cpp</code>，RC_1_2/RC_2_0 两分支源码均已核）只遍历 <code>f.file_range()</code>（种子自己的文件表）逐文件 <code>move_file</code>（rename 失败回退 copy），搬后只删「变空的」源子目录（<code>remove</code> 非空即停，且从不删 save_path 本身）——<strong>外来文件（无论 <code>.!qB</code> 还是已完成）既不会被搬走也不会被删</strong>。共享目录里任何一集在下载/暂停未完成，该目录所有单种子移动全被拦。</p>
+<p><b>痛点 2（自相矛盾）</b>：外来<strong>普通</strong>文件（external/misc）现状只 note 不拦（「只链路本组文件， 不动杂项」），外来 <code>.!qB</code> 却硬拦——同一归属两类处置。后者是 lt 1.1 时代「整目录连坐」行为的防御残留（<a href="https://github.com/arvidn/libtorrent/issues/435">libtorrent #435</a>，该行为在现行 1.2/2.0 已不存在；issue 2020 年 stale 关闭，算法已被逐文件实现取代）。</p>
+<p><b>旁证</b>：本项目真机报告 26-10-18-0826（qB 5.2.3 / lt 2.0.13 实测）「组内第一个种子真正搬文件并保留进度，其余成员撞目标同名 need_full_check」与逐文件语义一致。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线（收集层三分，判定层零改动）</b>：<code>relocate_mod._group_facts</code> 把 ext 的 <code>.!qB</code> 条目剥后缀后按归属三分——</p>
+<table>
+<tr><th>归属</th><th>判据</th><th>去向</th><th>效果</th></tr>
+<tr><td>own-matched</td><td>剥后缀 ∈ 本组 <code>_top_children</code>（或本组 names 本身带后缀）</td><td><code>qb_temp_entries</code></td><td>维持 <code>GATE_QB_TEMP</code> 硬拦（数据未落定）</td></tr>
+<tr><td>foreign-matched</td><td>剥后缀被同 save_path 其它种子文件表命中（复用 <code>_classify_entries</code> 的 belongs 机制，单次扫描）</td><td><code>external_entries</code></td><td>随现有组外 note，不拦</td></tr>
+<tr><td>unowned</td><td>两者都不中（孤儿残留/非种子写入者）</td><td><code>misc_entries</code></td><td>随现有杂项 note，不拦（D1）</td></tr>
+</table>
+<p><b>落点</b>：<code>src/auto_qb/core/modules/relocate_mod.py</code>（收集+分类）、<code>relocate_units.py</code>（仅 GroupFacts docstring 与闸门文案同步，gate id 不变）、<code>tests/test_web_relocate.py</code>、<code>tests/test_relocate_units.py</code>。三入口共用 <code>evaluate_group</code>，一处收窄全入口生效。</p>
+<p><b>决策表</b>：D1（unowned 处置）见 §06——采纳分析轮推荐 A（降 note）。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>步</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>S1</td><td><code>relocate_mod</code>：ext 的 <code>.!qB</code> 剥后缀归属三分；belongs 判定抽单点供 rest 与 <code>.!qB</code> 两路共用（一次 store 扫描，不翻倍 API 成本）；<code>exclusive = not ext</code> 保持不变（dir_alias 前提不动）</td><td>新守阵三案（foreign→note / unowned→note / own-matched→blocked）绿</td></tr>
+<tr><td>S2</td><td><code>relocate_units</code>：GroupFacts docstring 与 <code>GATE_QB_TEMP</code> 文案随新口径同步（「内容根存在…」→「本组存在…」，gate id 不变）</td><td>闸门表测试文案断言同步，绿</td></tr>
+<tr><td>S3</td><td>守阵：<code>test_web_relocate.py</code> 原「外组孪生→blocked」用例改写为「外组→note+可迁」+ 新增 own-matched/unowned 两案；<code>test_relocate_units.py</code> 闸门表语义不变（facts 非空即拦），仅文案同步；两文件头部「## 测试计划」清单同步</td><td>红绿核对后 test.full 全绿</td></tr>
+<tr><td>S4</td><td>收尾 DoD：test.full 全量 + 新基线切片；立档 <code>tasks/</code>（阈值 2：改动 ≥3 源文件）；Refs 双向；kb.index</td><td>数字只进 kb.baseline，档案/切片引用不抄</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——唯一决策点 D1 已在分析轮拍板（见 §06）。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>编号</th><th>决策点</th><th>结论</th><th>备选（被否）</th><th>日期/依据</th></tr>
+<tr><td>D1</td><td>unowned <code>.!qB</code>（孤儿残留）处置</td><td>降为 misc note</td><td>保留硬拦——逐文件搬运语义下无数据风险，孤儿文件不该永久锁死目录迁移</td><td>2026-11-02 用户「按建议实施」（采纳分析轮推荐 A）</td></tr>
+<tr><td>D2</td><td>是否收窄</td><td>收窄并实施</td><td>维持现状 / 仅入池——用户案例属高频误报，共享目录场景不可用</td><td>2026-11-02 用户「写计划文档， 然后按建议实施」</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>lt 版本差异（源码读的是分支头，非 2.0.13 原包）</td><td>实际运行环境的 lt 行为与分支头不一致（整目录连坐仅存在于 ≤lt 1.1 时代）</td><td>真机复验用例兜底：内容根放外组 <code>.!qB</code> 执行迁移，断言其原地不动；支持面钉 qB ≥4.3（lt 1.2+）</td></tr>
+<tr><td>归属误判（同目录同名不同内容）</td><td>外组文件名与本组文件名相同/互为剥后缀形态</td><td>两个误判方向均偏保守：误判外组→无主=继续拦；误判外组→本组=多拦一次。无放行风险</td></tr>
+<tr><td>TOCTOU 预检后状态漂移</td><td>预检通过到 qB 实际搬运之间外组开新下载</td><td>逐文件语义下无影响；本组成员已 pause + <code>GATE_MOVING</code>/<code>GATE_INCOMPLETE</code> 兜底</td></tr>
+<tr><td>守阵漏改导致收集层回归</td><td>未来重构 _group_facts 时恢复旧的整类抽取</td><td>三案守阵钉住收集层语义（foreign/unowned 不进 qb_temp、own-matched 必进），闸门表断言保留</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-02-0134</span> 初版：用户报障（WEBUI 移动种子被无关 <code>.!qB</code> 误拦）取证轮产出全面安全分析后，用户拍板「写计划文档， 然后按建议实施」。要点：libtorrent RC_1_2/RC_2_0 逐文件搬运语义源码核实 + qb_temp 按归属三分收窄（own 拦 / foreign note / unowned note=D1）。</li>
+</ul>
+
+</div>
+</body>
+</html>

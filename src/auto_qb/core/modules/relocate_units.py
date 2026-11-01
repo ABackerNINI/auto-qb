@@ -46,7 +46,7 @@ GATE_INCOMPLETE = "incomplete"  # 组内存在未完成成员(progress < 1)
 GATE_MOVING = "moving"  # 成员正处于 qB 搬迁态(state 含 moving)
 GATE_TARGET_CONFLICT = "target_conflict"  # 目标已存在同名内容(qB 会走全量校验)
 GATE_TARGET_UNKNOWN = "target_unknown"  # 目标路径存在性不可判定(容器映射 miss)
-GATE_QB_TEMP = "qb_temp"  # 内容根存在 .!qB 临时文件
+GATE_QB_TEMP = "qb_temp"  # 本组文件处于 .!qB 未落定态(外组/无主 .!qB 降 notes: qB 逐文件搬运碰不到, plan 26-11-02-0134)
 GATE_SPACE = "space"  # 目标卷剩余不足 / 不可判定
 GATE_SAME_FS = "same_fs"  # 无法证明 auto-qb 与 qB 看同一块盘(§2.4 同卷证明)
 GATE_PLATFORM = "platform"  # §3.3 能力矩阵不支持(跨 OS 容器 / 无链接能力)
@@ -355,8 +355,10 @@ class GroupFacts:
     - progresses/states: 与 hashes 同序的成员事实。
     - content_root_exclusive: 内容根恰好只含本组文件(目录别名的硬前提, §3.2); None =
       不可判定(目录不存在/读不了) —— 按不专属处理(保守)。
-    - misc_entries/external_entries/qb_temp_entries: 内容根 listing 的分类结果
-      (杂项 = 不属于任何种子; 组外 = 属于别的种子; .!qB = qB 临时文件)。
+    - misc_entries/external_entries/qb_temp_entries: 内容根 listing 的归属分类
+      (杂项 = 不属于任何种子, 含无主 .!qB 残留; 组外 = 属于别的种子, 含其未完成 .!qB
+      —— 两者只进 notes: qB 逐文件搬运碰不到它们; qb_temp = 本组文件处于 .!qB
+      未落定态, 唯一硬拦面, plan 26-11-02-0134)。
     - target_conflicts: 目标侧已存在的同名路径(任一命中 qB 就走 need_full_check)。
     - same_volume: 源/目标是否同卷(None = 不可判定, 按跨卷保守处理)。
     - target_free: 目标卷剩余字节(None = 不可判定 ⇒ space 闸门拒绝)。
@@ -478,7 +480,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
     if facts.target_unknown:
         _block(GATE_TARGET_UNKNOWN, "目标路径存在性不可判定(容器映射未覆盖): 不可判定一律拒绝 —— 请检查 fs.path_map 是否覆盖目标位置")
     if facts.qb_temp_entries:
-        _block(GATE_QB_TEMP, "内容根存在 .!qB 临时文件(" + ", ".join(facts.qb_temp_entries[:3]) + "): 数据尚未落定, 不能迁")
+        _block(GATE_QB_TEMP, "本组存在 .!qB 未落定文件(" + ", ".join(facts.qb_temp_entries[:3]) + "): 数据尚未落定, 不能迁")
     if facts.target_free is None:
         _block(GATE_SPACE, "目标卷剩余空间不可判定(路径不可读或容器映射未覆盖): 不可判定一律拒绝")
     elif facts.target_free < needed:

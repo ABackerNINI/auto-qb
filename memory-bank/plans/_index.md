@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-11-02-0134] [整组迁移 qb_temp 闸门按归属收窄](26-11-02-0134-plan-relocate-qbtemp-narrow.html) — `relocate-qbtemp-narrow`
 - [26-11-01-2212] [RM09 WebUI 写侧 漂移复测轮排期计划](26-11-01-2212-plan-real-rm09-drift.html) — `real-rm09-drift`
 - [26-11-01-2123] [RM08 WebUI 读侧 漂移复测轮排期计划](26-11-01-2123-plan-real-rm08-drift.html) — `real-rm08-drift`
 - [26-11-01-2033] [RM04 辅种与分组 漂移复测轮排期计划](26-11-01-2033-plan-real-machine-rm04-drift-plan.html) — `real-machine-rm04-drift-plan`

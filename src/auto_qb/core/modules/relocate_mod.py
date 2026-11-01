@@ -1281,10 +1281,21 @@ class RelocateModule(BaseModule):
         if entries is not None:
             own = _top_children(files)
             ext = [e.name for e in entries if e.name not in own]
-            qb_temp = [n for n in ext if n.endswith(_QB_TEMP_SUFFIX)]
-            qb_temp += [n for n in names if n.endswith(_QB_TEMP_SUFFIX)]
+            # .!qB 条目按归属三分(plan 26-11-02-0134): qB 的搬运(libtorrent 1.2/2.0
+            # aux::move_storage 只遍历种子自己的文件表逐文件搬)碰不到外组/无主的 .!qB,
+            # 它们与普通外来条目同走归属分类(外组 -> external note, 其余 -> misc note);
+            # 只有「本组文件处于 .!qB 未落定态」(剥后缀对回本组, 或本组 names 自带后缀)
+            # 才进 qb_temp 硬拦面 —— 这是 GATE_INCOMPLETE 之外的磁盘态竞态兜底。
+            qb_ext = [n for n in ext if n.endswith(_QB_TEMP_SUFFIX)]
             rest = [n for n in ext if not n.endswith(_QB_TEMP_SUFFIX)]
-            misc, external = self._classify_entries(rest, save_path, content_root, hashes, store, client)
+            qb_temp = [n for n in qb_ext if n[:-len(_QB_TEMP_SUFFIX)] in own]
+            qb_stripped = [n[:-len(_QB_TEMP_SUFFIX)] for n in qb_ext if n not in qb_temp]
+            # belongs 单次扫描: rest 与剥后缀名一并送分类, 结果按名回流到带后缀原名
+            misc, external = self._classify_entries(rest + qb_stripped, save_path, content_root, hashes, store, client)
+            ext_set, misc_set = set(external), set(misc)
+            external = [n for n in rest if n in ext_set] + [n for n in qb_ext if n[:-len(_QB_TEMP_SUFFIX)] in ext_set]
+            misc = [n for n in rest if n in misc_set] + [n for n in qb_ext if n[:-len(_QB_TEMP_SUFFIX)] in misc_set]
+            qb_temp += [n for n in names if n.endswith(_QB_TEMP_SUFFIX)]
             exclusive = not ext
 
         # ---- 目标同名冲突(逐文件判定: 同卷/跨卷都适用, 只查本组文件) ----
