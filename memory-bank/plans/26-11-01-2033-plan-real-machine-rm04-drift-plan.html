@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>RM04 辅种与分组 漂移复测轮排期计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-machine-rm04-drift-plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-2033">
+<meta name="doc-updated" content="26-11-01-2033">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/testing/real-machine.md, memory-bank/plans/26-10-31-1042-plan-real-rm04.html, memory-bank/testing/real-baselines/26-10-31-1219-real-RM04.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-machine-rm04-drift-plan</div>
+<h1>RM04 辅种与分组 漂移复测轮排期计划</h1>
+<p class="lede">RM04 漂移复测轮排期(漂移轮顺序 RM03 ✅ → RM02 ✅ → <b>RM04 本轮</b>): 核心是 <code>fbaf0446</code>(qB 5.3.x 双版本支持, facade share_limits_mode + 跳检重加回传)无真机复测, 外加上一轮 8 条用例在「qbittorrent-api 升版 2026.10.1 + 环境2 前提差异(R: 盘缺席)」下的回归复测; 本机两测试实例均 qB 5.2.3, 5.3 服务端语义按实况预登记 BLOCKED, 不硬造。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-2033 · <b>doc-updated</b> 26-11-01-2033 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 主会话排期指令(RM04 辅种与分组 漂移复测轮排期计划代理, 2026-11-01); 锚件 §08 漂移轮顺序拍板(D1–D4)与其「跳检/全量校验归属拍板」条
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>定片(规程 §06 步骤 1)</h3>
+<p>片号 <code>RM04</code> = 辅种与分组(锚件 §03), glob 6 条(见 §02 glob 自检), 验证面: 归组 key / 跨组文件冲突 / 缺失文件标记 / 跨盘移动 / journal 恢复。上一轮: 2026-10-31 首轮 8/8 全绿(计划 <code>plans/26-10-31-1042-plan-real-rm04.html</code>, 切片 <code>testing/real-baselines/26-10-31-1219-real-RM04.md</code>, 基线 <code>bb02248b</code>)。</p>
+
+<h3>本轮要做成三件事</h3>
+<ol>
+  <li><b>全量复测</b>: 8 条既有用例在 qbittorrent-api <code>2026.8.1 → 2026.10.1</code> 升版 + torrents 快照新字段(<code>share_limits_mode</code>)下回归(库变属基建变, 不是纯重构, 按漂移纪律一律重跑)。</li>
+  <li><b>fbaf0446 记入 RM04 漂移面的两个新真机面</b>: facade <code>share_limits_mode</code> 与跳检重加回传 —— 在 5.2.3 上把「可触发面」真机验掉(新增 RM04-09), 5.3 服务端语义预登记 BLOCKED + 解锁条件(§04 ③)。</li>
+  <li><b>环境2 前提差异落成用例改造点</b>: R: 盘缺席 ⇒ RM04-05/06/07 的 <code>RAM=R:/qbt-fake</code> 落点失效; D: 为空光驱 ⇒ 本机唯一可写卷 C: ⇒ RM04-05「真跨卷」判据不可达, 按同卷口径重写(§04 ①)。</li>
+</ol>
+
+<h3>做到什么程度算成</h3>
+<p>官方 <code>real.suite --slice RM04</code> 一轮: 复测 8 条 + 新增 1 条全 PASS(预登记 BLOCKED 之外零 FAIL); 红验全数见红; 基线重立 commit 落切片; 锚件 §07 RM04 行同步更新; 收尾核净(§04 ④)。</p>
+
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li>产品 <code>src/</code> 零改动 —— 只动用例代码(<code>tests-real/rm04_relocate/</code>)与必要的用例侧基建; 缺陷当轮不修, 一律入池。</li>
+  <li><b>同一件事不测三遍</b>(锚件 §08 拍板口径): checking 跳检/全量决策链与执行体引用 RM03-15..17; guardian「qB 退出删链接」路径引用 RM10-05/06/07; 转移面(path_map/api_key/409 查重)引用 2026-11-01 转移真机再验收 R3 —— 一律只记账引用, 不复测。</li>
+  <li>零外连红线: 假种子 announce 用本机死端口 <code>http://&lt;本机IP&gt;:1/announce</code>; 绝不碰主实例真实种子(环境2 主实例本就 0 枚)。</li>
+  <li>任何文件不得出现 token; 允许开启/重启两个测试 qB(56589/56590), 绝不动其它 qB。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点(漂移体检 · glob 自检 · 环境自检)</h2>
+
+<h3>漂移体检(规程 §06 步骤 2; git 实测 2026-11-01, HEAD <code>1a7611ea</code>)</h3>
+<p><b>基线失效重立口径</b>: 旧基线 <code>bb02248b</code>(clone5 lineage)在本分支解析不到 —— 按锚件 §08 警示与「写不出 commit 从首轮重来」口径, <b>本轮基线重立 = 官方 suite 实跑时刻的 HEAD</b>(RM02 轮 <code>af0ef0d7</code> / RM03 轮 <code>6aa4b4d7</code> 同款先例; 非收尾提交 hash)。</p>
+<p>近似漂移窗口 = RM04 首轮实测完成(10-31 12:23)之后。<code>git log</code> 实测: RM04 glob 内命中 <b>2 commits</b>:</p>
+<table>
+  <tr><th>commit</th><th>触及 RM04 glob 的文件</th><th>glob 外但相关</th></tr>
+  <tr>
+    <td><code>fbaf0446</code> 10-31 20:24<br>qB 5.3.x 双版本支持落地</td>
+    <td><code>torrents/compat.py</code>(+7)<br><code>torrents/record.py</code>(+3)</td>
+    <td><code>core/qbapi.py</code>(facade)、<code>core/modules/ops_mod.py</code>(跳检重加回传)、<code>webui/commands.py</code>(调用点) —— 锚件 §08 拍板「记 RM04 漂移面」; 另 <b>qbittorrent-api 2026.8.1 → 2026.10.1</b>(全局面基建变)</td>
+  </tr>
+  <tr>
+    <td><code>f2698064</code> 11-01 09:12<br>添加种子后补一次同步追平</td>
+    <td><code>torrents/store.py</code>(+106: expect 登记 + 同步线提前)</td>
+    <td><code>core/qbmanager.py</code> / <code>webui/commands.py</code>(RM02/RM09 面)</td>
+  </tr>
+</table>
+<p><b>逐文件分类</b>(规程 §07 三分类):</p>
+<table>
+  <tr><th>文件</th><th>分类</th><th>对 RM04 用例的处置</th></tr>
+  <tr><td><code>torrents/compat.py</code>: <code>share_limits_mode</code> 进 <code>_EXTENSION_FIELDS</code>, 快照全表计数 70→71</td><td><span class="wr">判据变</span>(加法式: 新增可选扩展字段)</td><td>5.2.3 实况恒 None, 行为等价; 涉快照/重加链的条目随全量复测覆盖</td></tr>
+  <tr><td><code>torrents/record.py</code>: 新 slot <code>share_limits_mode</code>(缺省 None)</td><td>纯重构级(行为等价)</td><td>仍跑, 结论标「重构后复验」</td></tr>
+  <tr><td><code>torrents/store.py</code>(f2698064): add 后 expect 追平新路径</td><td><span class="wr">路径变</span></td><td>add 后断言时序更稳(最多 +3 次追平同步 ~240ms); RM02 轮 D4 已记账不复测, RM04 复测顺带覆盖</td></tr>
+  <tr><td><code>qbapi.py</code> facade / <code>ops_mod.py</code> 跳检重加回传 / <code>commands.py</code> 调用点(fbaf0446)</td><td><span class="wr">判据变</span>(锚件拍板记 RM04 漂移面)</td><td>本轮核心新面: 5.2.3 可触发面真机验(RM04-09)+ 5.3 服务端语义 BLOCKED(§04 ③)</td></tr>
+  <tr><td>qbittorrent-api 2026.8.1 → 2026.10.1(fbaf0446)</td><td>基建变(非纯重构)</td><td>= 全量复测的动机之一, 8 条全跑</td></tr>
+</table>
+<p><b>环境前提变(非代码漂移)</b>: 环境2 无 R: 盘 ⇒ RM04-05/06/07 的 <code>RAM = Path("R:/qbt-fake/rm04")</code>(<code>tests-real/rm04_relocate/test_rm04_relocate.py:48</code>)落点失效; D: 为空光驱(DriveType 5)⇒ 本机唯一可写卷 C:, RM04-05「真跨卷」判据不可达(见 §04 ①)。</p>
+
+<h3>glob 自检(规程 §05 规则 8; <code>git ls-files</code> 逐条实测 2026-11-01)</h3>
+<table>
+  <tr><th>§03 RM04 行 glob(按字面)</th><th>命中</th><th>备注</th></tr>
+  <tr><td><code>src/auto_qb/core/modules/grouping_mod.py</code></td><td>1</td><td></td></tr>
+  <tr><td class="bad"><code>relocate_mod.py</code>(裸名)</td><td class="bad">0</td><td>补 <code>src/auto_qb/core/modules/</code> 前缀后命中 1(1517 行)</td></tr>
+  <tr><td class="bad"><code>relocate_units.py</code>(裸名)</td><td class="bad">0</td><td>补前缀后命中 1(932 行)</td></tr>
+  <tr><td><code>src/auto_qb/torrents/**</code></td><td>5</td><td>__init__/compat/record/store/view, 无混入大件</td></tr>
+  <tr><td><code>src/auto_qb/infra/relocate_journal.py</code></td><td>1</td><td></td></tr>
+  <tr><td><code>src/auto_qb/infra/alias_fs.py</code></td><td>1</td><td></td></tr>
+</table>
+<p><span class="bad">异常(记计划并报, 不擅自改锚件 §03)</span>: 第 2/3 条裸名零命中 —— 10-31 排期时的前缀修正只补了第 1/4/5/6 条, 第 2/3 条漏网(修正不彻底的残留, 非 11-01 之后回潮: <code>git log -S</code> 实证该行 10-31 修正时即为此形态)。补全前缀后 6/6 命中 = <b>8 文件 5871 行</b>, 全属归组/迁移/种子数据面, 片边界不糊, 不拆不并。处置交拍板(D4)。</p>
+
+<h3>环境自检(2026-11-01 实测, 环境2 = C盘机; 详见附录)</h3>
+<pre><code>commands run real.env   [ok] 当前环境: 环境2(C盘机)  主 56589(exe C:\Programs\qBittorrent-testing) 副 56590(exe C:\Programs\qBittorrent-testing2)
+                        BT 监听 27049/32719; token 两端口环境变量注入 ok, 零落盘
+commands run real.guard [ok] 56589 pid=14820 v5.2.3 firewalled 真实种子 0 个, 已全部暂停
+                        [ok] 56590 pid=11644 v5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+<p><b>盘面探查(跨盘候选落点)</b>: 全机逻辑盘实测仅 <b>C: 可写(剩 76.3 GB)</b>; D: 为空光驱(DriveType 5, 无介质); R: 缺席。<code>subst</code> 虚拟卷实测(挂 <code>X:</code> → C: 目录, 已拆除): <code>os.stat().st_dev</code> 与宿主卷<b>同值</b> ⇒ <code>alias_fs.same_volume()</code>(<code>alias_fs.py:366</code>, st_dev 相等判定)判<b>同卷</b> —— subst 伪造不了异卷, 跨卷腿无本机廉价造法。56590 prefs 默认 <code>save_path = R:\Download\PTing</code>(指向不存在盘, profile 抄自环境1 残留)⇒ 假种子一律显式落点。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<table>
+  <tr><th>线</th><th>内容</th><th>落点</th></tr>
+  <tr><td><b>A 全量复测</b></td><td>8 条既有用例原样重跑(库升版 + 快照新字段回归); 判据无一被 fbaf0446 改写(readd 字段表 <code>RE_ADD_FIELDS</code> 未动), 期望值不变</td><td><code>tests-real/rm04_relocate/test_rm04_relocate.py</code> 现有 8 条</td></tr>
+  <tr><td><b>B fbaf0446 可触发面</b></td><td>新增 RM04-09: facade <code>share_limits_mode</code> 在 5.2.3 的端到端真机语义(WebUI 分享限制命令 → facade 恒发 <code>shareLimitsMode="Default"</code> → 5.2 忽略未知参、limits 生效); 跳检重加回传的 5.2.3 wire = None 不发键(与升版前逐字节一致), 其主链回归由复测 + RM03-15..17 引用覆盖; 5.3 服务端语义 BLOCKED 预登记</td><td>新增用例 + §04 ③ BLOCKED 清单</td></tr>
+  <tr><td><b>C 环境2 适配</b></td><td>用例侧 <code>RAM</code> 落点加盘探测回退(R: 存在用 R:, 否则退 <code>.work/rm04/ram/</code> 真写盘); RM04-05 按「C:→C: 同卷」重写(dir_alias/junction/穿透/armed/done 主链全保, 真跨卷半边 BLOCKED); 与跨卷无关的 7 条零改动</td><td>用例改造点 3 处(05/06/07 共用的 <code>RAM</code> 常量 + RM04-05 判据)</td></tr>
+</table>
+<h4>5.3.x 面可触发范围结论(按代码实况核实, 2026-11-01)</h4>
+<p><code>fbaf0446</code> 的设计目标即「同一份代码双服 5.2.3/5.3.x, 不引入版本号分支」—— 产品代码里<b>没有任何版本分支</b>: facade(<code>qbapi.py:197</code>)恒发 <code>share_limits_mode="Default"</code>; 跳检重加(<code>ops_mod._skip_add_call</code>)恒透传快照值, 而 5.2.3 快照无该字段恒 None ⇒ 库对 None 值键不发, wire 与升版前完全一致。⇒ 在本机 5.2.3 上:</p>
+<ul>
+  <li><b>可真机触发</b>: ① facade 调用链端到端(<code>_cmd_set_share_limits</code> → facade → qB)带新参后 5.2.3 照常生效(= RM04-09); ② 跳检重加主链在新库(2026.10.1)上不回归(= 复测 + RM03-15..17 引用); ③ 快照层新字段采集不炸(compat 加法式字段, 随全量复测)。</li>
+  <li><b>不可真机触发(BLOCKED)</b>: 5.3 服务端语义 —— <code>torrents/setShareLimits</code> 缺 <code>shareLimitsMode</code> 回 400、重加后 <code>MatchAny/MatchAll</code> 保持不被重置为 Default、<code>share_limits_mode</code> 作为 torrent 字段出现在 5.3 快照里。解锁条件 = 任一环境部署 qB 5.3.x 测试实例(feat issue 26-10-31-0711 族 P4「真机确认」原口径就等 stable 发布, 与本轮一致, 不另立条件)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤(用例清单四块 + 环境2 注意)</h2>
+
+<h3>① 本片用例清单(9 条: 既有 8 条复测 + 新增 RM04-09)</h3>
+<table>
+  <tr><th>id</th><th>档位</th><th>期望(本轮口径; 与上轮差异加粗)</th></tr>
+  <tr><td><code>RM04-01</code> 归组 key</td><td>L3</td><td>同名同表归同组, 异表对照红验, 组键解码 = (规范化 save_path, 排序文件表), 零「大小不一致」误报。<b>无判据变化, 库升版回归。</b></td></tr>
+  <tr><td><code>RM04-02</code> 组内大小一致性</td><td>L2</td><td>同表异尺寸 → 警告 + 整组暂停; 单成员组对照不误停。<b>无变化。</b></td></tr>
+  <tr><td><code>RM04-03</code> 缺失文件标记</td><td>L3</td><td>真删数据 + 上传转暂停 → 整组 MISSING + 暂停; 未删对照不打标。<b>无变化。</b></td></tr>
+  <tr><td><code>RM04-04</code> 跨组文件冲突</td><td>L3</td><td>交叉 + stalledDL 下载方 → 警告 + 只停下载方; 复发红验; MISSING 豁免对照; 开关关零动作。<b>无变化。</b></td></tr>
+  <tr><td><code>RM04-05</code> 跨盘移动主链</td><td>L2→<b>L3 重爬</b></td><td><span class="wr">判据变重写</span>: <b>R:→D: 真跨卷 → C:→C: 同卷</b>(src 落点退 <code>.work/rm04/ram/</code>, dst 仍在 <code>.work</code>)。保留全部主链判据: 回执 started + 「迁移发起」、save_path 变 dst、dst size 对齐、src 内容根成 junction、穿透读同 size、「已武装收尾」、成员2 setLocation 跟进后 job phase=done(reason=external) + journal phase=done。<b>新增负向对照(L3 兑现): dst 不存在 → GATE_SPACE 不可判定拒绝</b>(§2.9 已有实测事实); <b>「真跨卷复制」半边 BLOCKED</b>(§04 ③)。注意: plan() 形态分流(<code>relocate_units.py:146</code>)不读卷关系, 同卷 dir_alias 预期成立 —— 若实况分流不同, 按实况定判据记切片 §03。</td></tr>
+  <tr><td><code>RM04-06</code> journal 恢复</td><td>L3</td><td>搬迁中强杀 → 恢复在途 job → 推进到 done; 30S 落盘窗口抓不住走注入退路(上轮已批准口径)。<b>变化仅落点: src 退 .work 真写盘; C: 同卷搬迁更快, 注入退路预期仍是主路径。</b></td></tr>
+  <tr><td><code>RM04-07</code> journal 异常形态</td><td>L2</td><td>坏 journal(非 JSON)+ 孤儿 pid 不崩, 对账收口 done, journal 现场定夺重写。<b>变化仅落点。</b></td></tr>
+  <tr><td><code>RM04-08</code> 保存路径变化重归组</td><td>L2</td><td>qB 直改位置(绕 relocate 闸门)→ 新键建立旧键解散; 缺文件扫描触发且文件齐全零动作。<b>无变化。</b></td></tr>
+  <tr><td><code>RM04-09</code> <b>新增</b>: facade share_limits_mode 5.2.3 语义</td><td>L2(可升 L3)</td><td>前置: 副实例 1 枚带数据假种子(显式落点)+ 产品进程连副实例。动作: WebUI 命令线 <code>set_share_limits</code>(ratio/seeding_time 具体值)。断言: 回执 ok + qB 侧 <code>ratio_limit/seeding_time_limit</code> 回读命中(facade 恒发 <code>shareLimitsMode="Default"</code>, 5.2 忽略未知参)。负向(L3 候选): 不存在 hash → <code>store.get</code> None 静默 return(<code>commands.py:923</code>), 断言零 qB 调用零副作用 —— 回执形态开工探针核实后定档。5.3 语义子项 BLOCKED(§04 ③)。</td></tr>
+</table>
+<p>档位预估: 复测 8 条(0/0/4/4)→ RM04-05 重写升 L3 + RM04-09 新建 L2 ⇒ <b>0/0/4/5</b>。</p>
+
+<h4>实施分期</h4>
+<table>
+  <tr><th>步</th><th>内容</th><th>验收</th></tr>
+  <tr><td>S1 开工探针</td><td>① 同卷 dir_alias 探针: 最小 2 成员组在 C: 同卷跑一次目录别名搬迁, 核实 plan() 分流与 junction 成立(给 RM04-05 重写定判据); ② RM04-09 回执形态探针(负向腿定档); ③ <code>real.guard</code> 复跑</td><td>两探针结论记切片 §03; guard 双 firewalled</td></tr>
+  <tr><td>S2 用例改造</td><td><code>RAM</code> 常量盘探测回退(R: → <code>.work/rm04/ram/</code>); RM04-05 判据重写(同卷口径 + GATE_SPACE 负向); 新增 RM04-09; 四行头(前置/副作用/回滚/失败判据)同步改写; 测试计划 docstring 清单同步</td><td><code>commands run real.list</code> 9 条可见; 单跑改造条绿</td></tr>
+  <tr><td>S3 官方轮</td><td><code>commands run real.suite -- --slice RM04 --yes</code>(-n 0)</td><td>9 条三态: 预期 9 PASS / 0 FAIL / 0 BLOCKED(用例级); 基线重立 = 实跑时刻 HEAD</td></tr>
+  <tr><td>S4 记录与收尾</td><td>新建切片 <code>testing/real-baselines/&lt;stamp&gt;-real-RM04.md</code>; 更新锚件 §07 RM04 行(含新基线 commit); 收尾核净(§04 ④)</td><td>§07 行更新(「§07 不更新等于这轮没做」)</td></tr>
+</table>
+
+<h3>② 本轮升档计划(规程 §08 硬要求)</h3>
+<ul>
+  <li><b>RM04-05: L2 → L3</b> —— 判据变重写时补「dst 不存在 → GATE_SPACE 拒绝」负向对照(§2.9 实测: disk_usage 打不存在路径 fail-closed), 红验 = 对照组给足 dst 即过、删 dst 即拒。</li>
+  <li><b>RM04-09: 新建即 L2</b>, 负向腿(不存在 hash 静默 return 零副作用)探针核实回执形态后可当场升 L3。</li>
+  <li>其余 7 条维持原档(判据零变化, 纯回归)。</li>
+</ul>
+
+<h3>③ 跳过 / BLOCKED 预登记</h3>
+<table>
+  <tr><th>项</th><th>类型</th><th>原因</th><th>解锁条件</th></tr>
+  <tr>
+    <td>5.3 服务端语义面: ① <code>setShareLimits</code> 缺 <code>shareLimitsMode</code> → 400; ② 跳检重加后 <code>MatchAny/MatchAll</code> 保持; ③ 5.3 快照含 <code>share_limits_mode</code> 字段</td>
+    <td class="bad">BLOCKED(用例子项级)</td>
+    <td>两测试实例均 qB 5.2.3; 产品代码无版本分支(§03 实况核实), 该语义是 5.3 服务端行为, 5.2.3 上结构性不可触发 —— 不硬造</td>
+    <td>任一环境部署 qB 5.3.x 测试实例(feat issue 26-10-31-0711 族 P4 原口径等 stable; 届时按本条直接开测)</td>
+  </tr>
+  <tr>
+    <td>RM04-05 真跨卷半边(R:→D: 式跨卷复制语义: qB 复制搬运、跨卷空间闸)</td>
+    <td class="bad">BLOCKED(判据半边级)</td>
+    <td>本机唯一可写卷 C:(D: 空光驱, R: 缺席); subst 实测 st_dev 同值伪不了异卷(§02); 同卷口径已覆盖 dir_alias/journal 主链</td>
+    <td>环境2 接入第二可写卷(外接盘/VHD, 需用户授权 —— 系统级改动), 或该半边回环境1 复测(D1)</td>
+  </tr>
+  <tr>
+    <td>checking 跳检/全量决策链与执行体</td>
+    <td>引用不复测</td>
+    <td>RM03 漂移轮已收口(RM03-15..17); 锚件 §08「同一件事不测三遍」拍板; 跳检重加回传的 5.2.3 wire = None 不发键, 无独立真机观测点</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td>guardian「qB 退出删链接」删链路径</td>
+    <td>引用不复测</td>
+    <td>RM10-05/06/07 三态已收口(RM04 遗留闭环记账在案)</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td>转移面(path_map 分隔符 / target api_key / 409 查重)</td>
+    <td>记账不复测</td>
+    <td>已被 2026-11-01 转移真机再验收 R3 覆盖(锚件 §08)</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td><code>[需活跃种子]</code> 类跳过</td>
+    <td>无</td>
+    <td>RM04 九条全 L1 假种子(零外连), 不依赖真实种子; 环境2 主实例 0 真实种子反而免去误触面(guard 只读核验)</td>
+    <td>—</td>
+  </tr>
+</table>
+
+<h3>④ 验收判据(什么算这片做完)</h3>
+<ol>
+  <li>官方 <code>real.suite --slice RM04</code> 一轮: <b>9 条全 PASS</b>(用例级 BLOCKED 为 0; 预登记的子项级 BLOCKED 不占 FAIL); 排障复跑守「每条最多 2 次」纪律。</li>
+  <li>红验全数见红: RM04-01 异表对照 / RM04-03 未删对照 / RM04-04 复发+豁免对照 / RM04-06 注入负向 / <b>RM04-05 GATE_SPACE 拒绝对照(新)</b> / RM04-09 负向腿(如定 L3)。</li>
+  <li>基线重立: 切片记官方实跑时刻 HEAD(非收尾提交 hash); 锚件 §07 RM04 行同步(数字/基线/指针)。</li>
+  <li>收尾核净: 56590 零 real-fake 种子零残留标签定义零分类; junction 零残留(lstat 全查, purge 只 os.rmdir 本体); <code>.work/rm04/</code>(含 ram 回退落点)清空; <code>real.guard</code> 复跑绿; 56590 transfer 限速原值逐字一致(up=1 MiB / down=5 MiB); 两实例进程比对(重启须记账); token 零落盘。</li>
+  <li>产品 <code>src/</code> 零改动; 测试侧假红当轮定位修复的记切片 §04; 产品缺陷入池当轮不修。</li>
+</ol>
+
+<h3>环境2 特有注意(§2.5.2 / §2.9 逐条过一遍)</h3>
+<table>
+  <tr><th>注意点</th><th>对本轮的落法</th></tr>
+  <tr><td>R: 盘缺席(§2.5.2)</td><td><code>real.seed</code> ≥32M 会退 <code>.work</code> 真写盘; 用例侧 <code>RAM</code> 常量自己加盘探测回退(S2); 大种子优先 <code>--no-data</code>, 本轮搬迁种子仍按 64M 量级(76.3 GB 足够), 收尾必清</td></tr>
+  <tr><td>56590 默认 <code>save_path=R:\Download\PTing</code> 指向不存在盘</td><td>全部假种子显式落点(现状已是), 不依赖默认路径; 不顺手改实例 prefs(RM04 无涉, 改了反而破坏 guard 快照口径)</td></tr>
+  <tr><td>假种子进管线前提(§2.9)</td><td>announce = 本机死端口 + 测试配置 trackers 段有对应 domains 条目, 否则整条管线不发生(上轮首轮 7 条假红的根因)</td></tr>
+  <tr><td>409 重加收养禁令(§2.9)</td><td><code>_add_retry</code> 对 409 删旧重加、绝不收养(收养带旧状态毒化两轮的教训)</td></tr>
+  <tr><td>快照滞后 1-2 拍(§2.9)</td><td>relocate 触发前等 groups 视图成员 progress==1.0(<code>wait_store_progress</code>); f2698064 追平只覆盖 add 后新行出现, 不覆盖进度追平</td></tr>
+  <tr><td>多标签「, 」连接(§2.9)</td><td>标签成员判断一律 strip 集合(<code>_tags_of</code>), MISSING 双标签种子对清场函数可见</td></tr>
+  <tr><td>删 junction 不递归(§2.9)</td><td><code>purge_tree</code> 形态照抄(os.walk 遇 reparse 点 os.rmdir 剪枝)</td></tr>
+  <tr><td>transfer 限速原值 up=1MiB/down=5MiB(§2.5.2)</td><td>RM04 不碰限速; 收尾照旧核原值逐字一致</td></tr>
+  <tr><td>56590 localhost 免鉴权 = 标准配置(§2.5.2)</td><td>产品空凭据可直连; 若撞 401 连环假红先核 <code>bypass_local_auth</code> 是否被还原</td></tr>
+  <tr><td>gtm 18788 不可达(§2.5.2)</td><td>RM04 无涉, 不设用例</td></tr>
+  <tr><td>单成员组恒 FORM_DIRECT(§2.9)</td><td>目录别名主链一律 2 成员组 + 子目录布局 + <code>alias_file_threshold: 1</code> + POST body <code>confirm: true</code></td></tr>
+  <tr><td>并行陷阱(§2.8)</td><td>官方跑法 <code>real.suite</code> 传 -n 0; 片内 <code>serial.lock</code> 文件锁照抄不拆</td></tr>
+</table>
+
+<h3>预估轮次时长</h3>
+<p>上轮官方轮 182.5s(环境1, R:→D: 跨卷复制)。本轮同卷搬迁更快、多 1 条用例, 预估官方轮 <b>3-5 分钟</b>; S1 探针 + S2 改造为人工主要耗时。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>问题</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr>
+    <td><b>D1</b></td>
+    <td>RM04-05 真跨卷半边在环境2 的处置</td>
+    <td><b>同卷口径重写 + 跨卷半边 BLOCKED</b>(主链面全保, 解锁条件写明: 第二可写卷或回环境1) —— 零系统级改动、零授权依赖, 本轮即可全绿</td>
+    <td>外接盘/VHD 造第二卷(需管理员 + 系统级改动 + 用户授权, 且引新环境变量进 env_registry); 本轮直接回环境1 复测该条(违背 D2「轮次跟着会话走」拍板)</td>
+  </tr>
+  <tr>
+    <td><b>D2</b></td>
+    <td>升档兑现条(§08 硬要求至少 1 条)</td>
+    <td><b>RM04-05 重写后 L2→L3</b>(判据变本来就要重写, 边际成本≈0, 补 GATE_SPACE 负向对照)</td>
+    <td>声明「本轮纯回归, 不加强」(不推荐 —— 判据变重写是既成事实, 放弃白送的升档机会)</td>
+  </tr>
+  <tr>
+    <td><b>D3</b></td>
+    <td>RM04-09(facade 真机面)定档</td>
+    <td><b>新建即 L2</b>; 负向腿(不存在 hash 静默 return 零副作用)经开工探针核实回执形态后当场定 L3/L2</td>
+    <td>只做 L1 采集人判(不推荐 —— 断言面清晰, qB 回读可直接机判)</td>
+  </tr>
+  <tr>
+    <td><b>D4</b></td>
+    <td>锚件 §03 RM04 行第 2/3 条裸名 glob(<code>relocate_mod.py</code>/<code>relocate_units.py</code> 零命中)的修正</td>
+    <td><b>执行轮开工时按 §05 规则 8 补 <code>src/auto_qb/core/modules/</code> 前缀 + 记锚件 §08</b>(第 12 次同款缺陷, 本次形态 = 10-31 修正不彻底); 本排期轮不擅自改锚件</td>
+    <td>立即修正(需用户对锚件改动的显式确认)</td>
+  </tr>
+  <tr>
+    <td><b>D5</b></td>
+    <td>5.3 服务端语义 BLOCKED 面是否另立 issue 追踪</td>
+    <td><b>不另立</b> —— 预登记在本计划 §04 ③ + 切片; feat issue 26-10-31-0711 族 P4「真机确认随 stable 发布」已是既有追踪点, 口径一致</td>
+    <td>另立 BLOCKED issue(状态重复记账, 两处要同步)</td>
+  </tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>(待拍板 —— 拍板后回填: D 编号 / 结论 / 日期)</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>同卷下 dir_alias 主链形态与跨卷不同(plan() 不读卷关系是代码阅读结论, 未真机证)</td><td>S1 同卷探针发现分流不同(如同卷改走逐文件硬链接)</td><td>判据以实况为准重定, 记切片 §03; 若 dir_alias 同卷不成立, RM04-05 改走 file_links(hardlink) 口径重写, dir_alias 主链半边 BLOCKED(解锁=第二卷)</td></tr>
+  <tr><td>库 2026.10.1 与 qB 5.2.3 的真机兼容(升版后首个真机片)</td><td>首条用例红且形态是库层异常(QbCompatError/请求体异常)</td><td>单测层已有 test_qbapi_wire.py(真库+真 requests 栈)守阵; 真机红则按缺陷入池, 升版回退交主会话(当轮不修)</td></tr>
+  <tr><td>C: 空间与真写盘残留(.work 回退落点不再「重启即清」)</td><td>64M 量级种子 + junction 残留</td><td>76.3 GB 充足; 收尾 <code>real.seed.clean</code> + <code>purge_tree</code>(junction 不递归)双保险, 验收判据第 4 条硬核</td></tr>
+  <tr><td>409 收养毒化(上轮实测教训)</td><td>同 infohash 复跑</td><td><code>_add_retry</code> 409 → 删旧重加口径不变; 开跑先清场断言(零 real-fake 残留)</td></tr>
+  <tr><td>state 30S 落盘窗口照旧抓不住(RM04-06)</td><td>同卷搬迁更快, 真杀窗口更抓不住</td><td>注入退路是上轮已批准的主路径, 真杀代码保留(赶上窗口即走)</td></tr>
+  <tr><td>56590 残留毒化(RM03 轮教训: 标签定义/分类残留)</td><td>收尾漏清定义层</td><td>验收判据第 4 条含零残留标签定义零分类(RM03 轮 23 个残留的教训)</td></tr>
+</table>
+
+<h2><span class="no">§08</span>附录: 环境自检与盘面探查(2026-11-01 实测)</h2>
+<pre><code>环境      环境2(C盘机)  [QBT_REAL_ENV 未设, 按 EXE 探测]
+主实例    56589  pid=14820  qBittorrent v5.2.3  firewalled  真实种子 0 个(已全部暂停)  exe: C:\Programs\qBittorrent-testing\qbittorrent.exe
+副实例    56590  pid=11644  qBittorrent v5.2.3  firewalled  真实种子 0 个  exe: C:\Programs\qBittorrent-testing2\qbittorrent.exe
+BT 监听   56589=27049 / 56590=32719(env_registry 已回填)
+token     两端口环境变量注入 ok(QBT_TEST_56589/56590), 零落盘
+56590     bypass_local_auth=true(环境2 标准配置); transfer 限速原值 up=1048576B / down=5242880B; 默认 save_path=R:\Download\PTing(指向不存在盘)
+盘面      全机逻辑盘: 仅 C: 可写(剩 76.3 GB / 总 126.9 GB); D: 为空光驱(DriveType 5); R: 缺席
+subst     实测 X:(→C: 目录)st_dev 与 C: 同值(7948910114532192327) ⇒ alias_fs.same_volume() 判同卷 —— 伪造不了异卷(探针已拆除)
+落点      用例落点 = tests-real/.work/rm04/(C:, 仓库所在卷); 跨盘候选 = 无第二可写卷(RM04-05 同卷口径, 见 D1)
+gtm       18788 不可达(RM04 无涉)</code></pre>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-2033</span> 初版 —— RM04 漂移复测轮排期(主会话指令)。要点: 漂移体检 fbaf0446+f2698064 逐文件分类(基线 bb02248b 失效按首轮重来口径重立); glob 自检 4/6 命中(第 2/3 条裸名残留, 报 D4); 环境自检双绿 + 盘面探查(仅 C: 可写, subst 伪不了异卷); 9 条用例(复测 8 + 新增 RM04-09), 升档 RM04-05 L2→L3, BLOCKED 预登记 5.3 服务端语义 + 真跨卷半边; D1–D5 待拍板。</li>
+</ul>
+
+</div>
+</body>
+</html>
