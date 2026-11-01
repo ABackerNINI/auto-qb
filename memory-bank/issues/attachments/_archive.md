@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (77)
+## Open (79)
 
+- [test] [core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判](../26-11-01-1357-test-core-w8-relocate-mutation-blindspot-equivalence.html) — units 平台盲区 9 条(n11/16/17 归一桥/j8/9 拼接/t3/p102/eg235/246 长路径)在 Windows 套件全构造钉杀; mod st_reparse_tag 4 条 WSL 不可构造留池; 等价翻案 j13/lo2 改真洞已杀、w5 死代码改等价
+- [test] [core/ W8 relocate 两文件变异真洞余量 461 条批量判读留档(低 397/极低 46/中危 18=未逐验 10+注记 8), 不排期](../26-11-01-1357-test-core-w8-relocate-mutation-low-residue.html) — W8(R32) S5/S5a 守阵后余量: mod 314 + units 241, 中危 0 实余, 低/极低主体为文案/契约键/窄触发/未消费面, 按簇判读留档不排期
 - [test] [core W7(R31) no-tests 面: agent._run_foreground 18 条变异池内无直接触达](../26-11-01-0953-test-core-w7-mutation-run-foreground-notests.html) — agent.py _run_foreground 18 条变异(参数逐位 None 化/丢失 16 + text=False + close_fds=False)mutmut 记 no tests, 池内无直接触达; 登记 no-tests 面 + 后续轮覆盖预期, 不扩池
 - [test] [core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数](../26-11-01-0614-test-core-w6-mutation-notests-offpool.html) — W6(R30) S2 实测 qbapi 147 + qbmanager 10 no-tests: S1 函数面核对定性为池外触达登记非缺口单, 零扩池(W8/W9 轮自然覆盖 qbapi 面, 后续轮仍不覆盖再议扩池)
 - [test] [core/ W6 终态残留记账: 超时盲区 16 条(qbmanager 15 + exporter 1, 含 4 条 TypeError 空转环复跑改判预期)+ 存疑 6 条 §H 清单](../26-11-01-0614-test-core-w6-mutation-timeout-doubt-ledger.html) — W6 守阵覆盖 329/332 后的残留留账: 超时盲区 16(并发面工具盲区, 复跑前不硬判)+ 存疑 6(§H 形态级手搓复验候选), 检索留档非排期承诺

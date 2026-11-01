@@ -22,7 +22,7 @@
 | bug | 12 |
 | perf | 6 |
 | docs | 2 |
-| test | 24 |
+| test | 26 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [test] [core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判](26-11-01-1357-test-core-w8-relocate-mutation-blindspot-equivalence.html) — units 平台盲区 9…
+- [test] [core/ W8 relocate 两文件变异真洞余量 461 条批量判读留档(低 397/极低 46/中危 18=未逐验 10+注记 8), 不排期](26-11-01-1357-test-core-w8-relocate-mutation-low-residue.html) — W8(R32) S5/S…
 - [test] [core W7(R31) no-tests 面: agent._run_foreground 18 条变异池内无直接触达](26-11-01-0953-test-core-w7-mutation-run-foreground-notests.html) — agent.py _ru…
 - [test] [core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数](26-11-01-0614-test-core-w6-mutation-notests-offpool.html) — W6(R30) S2 实…
 - [test] [core/ W6 终态残留记账: 超时盲区 16 条(qbmanager 15 + exporter 1, 含 4 条 TypeError 空转环复跑改判预期)+ 存疑 6 条 §H 清单](26-11-01-0614-test-core-w6-mutation-timeout-doubt-ledger.html) — W6 守阵覆盖 329/…

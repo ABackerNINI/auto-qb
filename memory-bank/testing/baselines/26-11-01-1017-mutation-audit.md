@@ -45,7 +45,7 @@
 - **no tests 18**(agent `_run_foreground`): 池内无直接触达——唯一直跑用例 `test_run_foreground_real_execution_with_allowed_binary` 依赖环境二进制 node, 无 node 静默 return, 函数体在覆盖映射期从未执行; 已入池 issue 登记, 不扩池
 - **S4 对账**: 候选 30 = SURVIVED 28 / KILLED 2(推翻假存活 2)/ TIMEOUT·FLAKY·APPLY_FAIL 终态 0; 9 条首轮新增失败全是 `test_hr_discovery` 端口绑定类既有 flaky(不判死), 幂等续跑 9/9 稳定 SURVIVED
 - **红验**: S5a **139/139 全红**(snapshot 43 + agent 86 + paths 7 + reader 3, 逐条 apply→跑守阵→还原, commit 4573f9d1); 复跑实测守阵真洞覆盖 **138/138**(er_39/40 经映射连带补上)
-- **1 件 issue**: [`26-11-01-0953-test-core-w7-mutation-run-foreground-notests`](../issues/26-11-01-0953-test-core-w7-mutation-run-foreground-notests.html)(no-tests 18 登记: 池内无直接触达定性 + 池调整建议; 档案 Refs 已双向补链)
+- **1 件 issue**: [`26-11-01-0953-test-core-w7-mutation-run-foreground-notests`](../../issues/26-11-01-0953-test-core-w7-mutation-run-foreground-notests.html)(no-tests 18 登记: 池内无直接触达定性 + 池调整建议; 档案 Refs 已双向补链)
 - **dump / results 指针**: 三分类输入 = 首轮 dump/results `tmp-analysis/w7-r31/26-11-01-07{49,52,53,54}-core-*`(snapshot 0753 · agent 0754 · paths 0754 · reader 0752/0749; 原始落盘 `R:\Temp\auto-qb\mutants\`); 复跑 results 4 件 = `R:\Temp\auto-qb\mutants\26-11-01-10{02,03,04,05}-core-*-results.txt`(snapshot 17 · agent 25+18 no tests · paths 6 · reader 1); S4 verify 产物 `R:/Temp/auto-qb/mutants/s4-verify-s4-ids.txt`(清单 `tmp-analysis/w7-r31/s4-ids.txt` 30 条); 红验 4 组日志 `tmp-analysis/w7-r31/s5-redverify-*.log`
 
 ## 本改动面
