@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-qbtemp-narrow">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-02-0134">
-<meta name="doc-updated" content="26-11-02-0220">
+<meta name="doc-updated" content="26-11-02-0316">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-02-backend-relocate-qbtemp-narrow.md">
 <style>
   :root {
@@ -103,6 +103,15 @@
 <h3>R1 增补（26-11-02-0220）：同族第二例 —— 空间/同卷闸门的「目标叶子未建」误报</h3>
 <p>用户复测报同类误拦：<code>GATE_SPACE</code>「目标卷剩余空间不可判定」。根因同族——收集层把「合法的暂不可见」交给硬拦：目标叶子目录尚未创建是迁移正常输入（libtorrent <code>move_storage</code> 落地即 <code>create_directories</code>，上轮源码已核），而 <code>shutil.disk_usage</code> 要求路径已存在（本机实证 missing → WinError 3）→ <code>target_free=None</code> → 硬拦；且同卷判定（<code>os.stat</code> 取 st_dev）在叶子未建时同样不可得 → 按跨卷保守处理让形态降级/拒绝（实施中发现，与空间同一机制一并收口）。用户配置无 <code>fs.path_map</code>（已核实），报错文案首位的「容器映射未覆盖」属容器实现语义，对 Local 场景误导。</p>
 <p><b>方案A（收集层祖先回退，两处同一机制）</b>：<code>_volume_free_resolved</code>（disk_usage 失败逐级上溯第一个可用层取卷剩余）与 <code>_same_volume_resolved</code>（same_volume None 逐级上溯第一个可读层比 st_dev）；上溯到根仍不可用/盘未就绪/UNC 不可达 → 维持 None → 硬拦照旧（保守默认不破）。junction/卷挂载点之下新建目录物理落在「最近存在祖先」所在卷，两处语义均正确。<b>方案B</b>：same_fs 单成员 note 文案对齐实现（原文「目标冲突/空间未预检」与实现不符，实为「其余闸门照跑」）。</p>
+<h3>R2 增补（26-11-02-0316）：全闸门同族扫描的三项处置</h3>
+<p>按用户指令对 <code>evaluate_group</code> 13 闸门 + 收集层失败形态 + <code>plan()</code> 分流 + 添加预检逐项扫描后，三项处置：</p>
+<table>
+<tr><th>#</th><th>定性</th><th>处置</th></tr>
+<tr><td>#1 同卷迁移被「空间不足」硬拦</td><td>正族误报：同卷 rename 不占额外空间（notes 自己写着「qB 走 rename」，但闸门无视）——库盘快满时同盘内挪目录被拒</td><td><code>same_volume is True</code> 时空间预检不适用（不足与不可判定都不拦，数值仅展示）；None/False 维持现行硬拦</td></tr>
+<tr><td>#2 目标冲突只查前 50 个文件</td><td>反向漏拦：<code>names[:50]</code> 静默截断无注释——&gt;50 文件组的冲突落在后面会让 mover 撞 <code>need_full_check</code> 进度清零（relocate 特性要根除的原始灾难）</td><td>去截断全量判定（上限受 hard_max 约束；规则重复发起已被 T3 幂等挡在闸门前，成本仅新目标首查）</td></tr>
+<tr><td>#3 目标已存在但是文件</td><td>反向轻微：预检全绿，执行期 create_directories 失败 → job failed（数据无损但体验差）</td><td>新闸门 <code>target_type</code>：<code>exists is True 且 isdir 非 True</code> → blocked；存在性抛错按不可判定由 target_unknown 兑底</td></tr>
+</table>
+<p>已核查干净：空文件表（plan 拒绝）/ scandir 失败（exclusive=None 保守）/ 添加预检（降级展示不拦）/ UNFINISHED 作用域（S14b 已收窄）/ UNDETERMINED（Local 恒可得）/ INCOMPLETE、MOVING、HARDLINK、THIRD_PARTY_LINK（只看本组事实）/ 规则表达式 disk 读取（走 on_error，契约不同）。</p>
 
 <h2><span class="no">§04</span>实施步骤</h2>
 <table>
@@ -113,6 +122,9 @@
 <tr><td>S4</td><td>收尾 DoD：test.full 全量 + 新基线切片；立档 <code>tasks/</code>（阈值 2：改动 ≥3 源文件）；Refs 双向；kb.index</td><td>数字只进 kb.baseline，档案/切片引用不抄</td></tr>
 <tr><td>S5</td><td>R1 方案A：<code>_volume_free_resolved</code> 空间祖先回退 + <code>_same_volume_resolved</code> 同卷上溯（同一机制，实施中发现一并收口）</td><td>守阵四案（祖先命中/整卷不可达仍拦/裸名/空串）+ 定向与全量绿</td></tr>
 <tr><td>S6</td><td>R1 方案B：same_fs 单成员 note 文案对齐实现</td><td>既有单成员 note 断言仍绿（关键词保留）</td></tr>
+<tr><td>S7</td><td>R2 #1：同卷空间豁免（same_volume=True 时 space 闸门不适用，数值仅展示）</td><td>同卷豁免四态守阵（同卷不足/不可读不拦，跨卷照拦）</td></tr>
+<tr><td>S8</td><td>R2 #2/#3：冲突检测去 [:50] 截断改全量 + 新闸门 target_type（目标存在但不是目录）</td><td>第 60 文件冲突守阵 + 目标为文件 blocked 守阵；闸门表扩充 target_type 行</td></tr>
+<tr><td>S9</td><td>R2 覆盖补齐：上溯退化面（层数走尽/空目标/卷根不动点/裸名）+ _classify_entries 单条抛错 continue + _within 空 scope</td><td>test.full 覆盖率闸回 99%（首跑 98.86% 红后补齐）</td></tr>
 </table>
 
 <h2><span class="no">§05</span>待拍板清单</h2>
@@ -125,6 +137,9 @@
 <tr><td>D2</td><td>是否收窄</td><td>收窄并实施</td><td>维持现状 / 仅入池——用户案例属高频误报，共享目录场景不可用</td><td>2026-11-02 用户「写计划文档， 然后按建议实施」</td></tr>
 <tr><td>D3</td><td>空间/同卷「叶子未建」误报处置</td><td>方案A：收集层祖先回退（空间 + 同卷两处同一机制）</td><td>单成员跳过 space 闸门（C，被否——放弃真实保护，跨卷 copy 中途失败有回滚窗口）</td><td>2026-11-02 用户「按方案A+B修复」</td></tr>
 <tr><td>D4</td><td>same_fs 单成员 note 文案与实现不符</td><td>方案B：文案对齐实现（其余闸门照跑）</td><td>放宽单成员预检（被否）</td><td>2026-11-02 用户「按方案A+B修复」</td></tr>
+<tr><td>D5</td><td>全闸门同族扫描处置范围</td><td>三项全修（#1 同卷空间豁免 / #2 冲突全量 / #3 target_type 闸门）</td><td>仅修正族不碰反向（被否——#2 是进度清零级风险）</td><td>2026-11-02 用户「按建议处置」</td></tr>
+<tr><td>D6</td><td>#2 截断取舍</td><td>去截断全量判定（成本有界：hard_max ≤2000 次 stat，仅新目标首查）</td><td>保留截断 + 显式声明（被否——声明掩盖不了漏拦）</td><td>2026-11-02 用户「按建议处置」（采纳分析轮推荐）</td></tr>
+<tr><td>D7</td><td>#3 闸门形态</td><td>新增稳定 gate id <code>target_type</code>（additive，前端通用渲染 reason.text）</td><td>并入 target_conflict 文案（被否——语义不同）</td><td>2026-11-02 用户「按建议处置」</td></tr>
 </table>
 
 <h2><span class="no">§07</span>风险与对策</h2>
@@ -141,6 +156,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-02-0134</span> 初版：用户报障（WEBUI 移动种子被无关 <code>.!qB</code> 误拦）取证轮产出全面安全分析后，用户拍板「写计划文档， 然后按建议实施」。要点：libtorrent RC_1_2/RC_2_0 逐文件搬运语义源码核实 + qb_temp 按归属三分收窄（own 拦 / foreign note / unowned note=D1）。</li>
   <li><span class="tag">R1 · 26-11-02-0220</span> 同族第二例收口（用户复测报 GATE_SPACE 误拦 + 拍板「并入之前的文档， 按方案A+B修复」）：方案A = 收集层祖先回退两处（<code>_volume_free_resolved</code> 空间 / <code>_same_volume_resolved</code> 同卷，实施中发现同卷同根因一并收口）；方案B = same_fs 单成员 note 文案对齐；守阵四案 + 全量绿（数字见 kb.baseline 最新切片）。</li>
+  <li><span class="tag">R2 · 26-11-02-0316</span> 全闸门同族扫描三项处置（用户拍板「按建议处置」）：#1 同卷空间豁免（same_volume=True 时空间预检不适用）；#2 目标冲突去 [:50] 截断改全量（漏拦致进度清零的反向风险）；#3 新增 <code>target_type</code> 闸门（目标存在但不是目录）；另补覆盖率退化面守阵四处（首跑 98.86% 红后补齐回 99%）。已核查干净面与反向观察记 §03。</li>
 </ul>
 
 </div>

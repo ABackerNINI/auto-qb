@@ -19,6 +19,9 @@
   space 不足/space 不可判定/target_unknown/same_fs 多成员/platform 多成员/第三方文件链接/硬链接)
 - test_evaluate_group_single_member_remote_allows: 单成员 + 证明不过/能力不支持 -> ok + note
   (独占情形由 qB 自搬)
+- test_evaluate_group_same_volume_space_exempt: 同卷 rename 不占额外空间 -> 空间预检不适用(R2 #1);
+  跨卷不足/不可读仍拦
+- test_within_empty_scope_false: _within 空 scope -> False(退化分支, 覆盖补齐)
 - test_evaluate_group_dir_alias_confirms: F>=thr + 专属 -> confirm(dir_alias, needs_confirm)
 - test_evaluate_group_external_files_force_file_links: 组外文件 -> exclusive=False ->
   file_links + note 列出组外条目(不动别人的文件)
@@ -333,15 +336,16 @@ def test_evaluate_group_gates_table():
         (_ok_facts(progresses=(1.0, 0.5)), "incomplete", "未完成成员"),
         (_ok_facts(states=("moving", "pausedUP")), "moving", "qB 搬迁态"),
         (_ok_facts(target_conflicts=("Show/e00.mkv", )), "target_conflict", "目标同名内容"),
+        (_ok_facts(target_not_dir=True), "target_type", "目标存在但不是目录"),
         (_ok_facts(qb_temp_entries=("e00.mkv.!qB", )), "qb_temp", ".!qB 未落定文件"),
-        (_ok_facts(target_free=None), "space", "空间不可判定"),
-        (_ok_facts(target_free=50), "space", "空间不足"),
+        (_ok_facts(target_free=None, same_volume=False), "space", "空间不可判定"),
+        (_ok_facts(target_free=50, same_volume=False), "space", "空间不足"),
         (_ok_facts(target_unknown=True), "target_unknown", "目标存在性不可判定"),
         (_ok_facts(same_fs_proved=False), "same_fs", "同卷证明不过(多成员)"),
         (_ok_facts(capability_ok=False, capability_reason="跨 OS 容器"), "platform", "能力矩阵不支持(多成员)"),
         (_ok_facts(third_party_link_files=("Show/e00.mkv", )), "third_party_link", "第三方文件级链接"),
         (_ok_facts(hardlink_files=("Show/e00.mkv", )), "hardlink", "第三方硬链接"),
-        (_ok_facts(target_free=50, same_fs_proved=False), "space", "多闸门并发: 首个 blocked 即定 cls"),
+        (_ok_facts(target_free=50, same_volume=False, same_fs_proved=False), "space", "多闸门并发: 首个 blocked 即定 cls"),
     ]
     for facts, gate, label in cases:
         item = ru.evaluate_group(facts)
@@ -367,6 +371,25 @@ def test_evaluate_group_single_member_remote_allows():
     joined = " ".join(item["notes"])
     assert "同一块盘" in joined and "独占" in joined
     assert any("不可判定" in n for n in item["notes"])  # same_volume=None -> 按跨卷保守处理
+
+
+def test_evaluate_group_same_volume_space_exempt():
+    """同卷 rename 不占额外空间: 空间预检不适用(R2 #1); 跨卷同数值仍拦"""
+    item = ru.evaluate_group(_ok_facts(same_volume=True, target_free=100))
+    assert "space" not in _gates(item), _gates(item)
+    item2 = ru.evaluate_group(_ok_facts(same_volume=False, target_free=100))
+    assert "space" in _gates(item2)
+    # 同卷 + 卷剩余不可读: rename 语义下同样不拦
+    item3 = ru.evaluate_group(_ok_facts(same_volume=True, target_free=None))
+    assert "space" not in _gates(item3)
+    # 跨卷 + 不可读: 照拦(不可判定一律拒绝)
+    item4 = ru.evaluate_group(_ok_facts(same_volume=False, target_free=None))
+    assert "space" in _gates(item4)
+
+
+def test_within_empty_scope_false():
+    """_within 空 scope -> False(退化分支, 覆盖补齐)"""
+    assert ru._within("", "R:/any/path") is False
 
 
 def test_evaluate_group_dir_alias_confirms():
@@ -976,7 +999,7 @@ def test_evaluate_group_receipt_contract_keys():
 
 def test_evaluate_group_text_faces_representatives():
     """文案代表面(全量文案留池): 空间/未完成/硬上限闸门的判定性片段 + 恰等边界不误拒"""
-    item = ru.evaluate_group(_ok_facts(target_free=50))
+    item = ru.evaluate_group(_ok_facts(target_free=50, same_volume=False))
     assert item["reasons"][0]["cls"] == ru.CLS_BLOCKED  # blocked 侧 cls 不得塌 None
     text = " | ".join(r["text"] for r in item["reasons"] if r["gate"] == "space")
     assert "空间不足" in text and "50" in text, text

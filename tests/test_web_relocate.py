@@ -31,6 +31,10 @@
 - test_relocate_module_precheck_qb_temp_unowned_demoted
 - test_relocate_volume_free_ancestor_fallback
 - test_relocate_module_space_gate_ancestor_and_missing
+- test_relocate_module_target_conflict_beyond_50
+- test_relocate_module_target_is_file_blocked
+- test_relocate_volume_free_resolved_degenerate
+- test_relocate_module_classify_entries_per_record_error
 - test_relocate_module_precheck_scandir_and_lstat_degraded
 - test_relocate_module_precheck_scandir_missing_root
 - test_relocate_module_start_and_apply_probe_wiring
@@ -276,6 +280,71 @@ def test_relocate_module_space_gate_ancestor_and_missing(tmp_path, monkeypatch):
     assert item2["cls"] == "blocked"
 
 
+def test_relocate_module_target_conflict_beyond_50(tmp_path, monkeypatch):
+    """R2 #2: 目标冲突检测覆盖全量文件(旧实现只查前 50, 第 51+ 的冲突会漏拦致进度清零)"""
+    pin_disk_usage(monkeypatch)
+    paths = tuple(f"Show/e{i:02d}.mkv" for i in range(60))
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=60, data_dir=False, paths=paths)
+    os.makedirs(os.path.join(dst, "Show"))
+    with open(os.path.join(dst, "Show", "e59.mkv"), "wb") as f:
+        f.write(b"conflict")
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
+    assert "target_conflict" in [r["gate"] for r in item["reasons"]], item["reasons"]
+    assert item["cls"] == "blocked"
+
+
+def test_relocate_module_target_is_file_blocked(tmp_path, monkeypatch):
+    """R2 #3: 目标已存在但是文件 -> blocked(target_type): qB 无法在其下创建内容"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
+    with open(os.path.join(dst, "occupied.txt"), "wb") as f:
+        f.write(b"x")
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], os.path.join(dst, "occupied.txt"))[0]
+    assert "target_type" in [r["gate"] for r in item["reasons"]], item["reasons"]
+    assert item["cls"] == "blocked"
+
+
+def test_relocate_volume_free_resolved_degenerate(tmp_path, monkeypatch):
+    """上溯退化面: 深层全缺失走尽层数上限 / 空目标 / 卷根不动点 => None(覆盖补齐)"""
+    import auto_qb.infra.alias_fs as alias_fs
+
+    from auto_qb.core.modules.relocate_mod import _same_volume_resolved, _volume_free_resolved
+    from auto_qb.infra.file_access import LocalFileAccess
+
+    fa = LocalFileAccess()
+    deep = os.path.join(str(tmp_path), *tuple(f"d{i}" for i in range(70)))
+    assert _volume_free_resolved(fa, deep) is None  # 64 层上溯走尽仍不存在
+    assert _volume_free_resolved(fa, "") is None
+    # 同卷: 桩 same_volume 恒 None -> 卷根不动点/走尽层数/空目标 都 None(纯词法, 不触盘)
+    monkeypatch.setattr(alias_fs, "same_volume", lambda a, b: None)
+    assert _same_volume_resolved(alias_fs, "D:/src", "D:/") is None  # 卷根不动点(Windows; POSIX 走空串分支)
+    assert _same_volume_resolved(alias_fs, "D:/src", deep) is None  # 走尽层数
+    assert _same_volume_resolved(alias_fs, "D:/src", "") is None
+
+
+def test_relocate_module_classify_entries_per_record_error(tmp_path, monkeypatch):
+    """_classify_entries: 单条记录归一化抛错 -> except-continue 跳过, 其余分类不炸(覆盖补齐)"""
+    from auto_qb.infra import utils as infra_utils
+
+    mgr, client, src, dst, content, _ = relocate_env(tmp_path, file_count=2, data_dir=False)
+    hc = FakeTorrent(hash="HC", name="HC", save_path=src, progress=1.0, state="pausedUP")
+    client.torrents["HC"] = hc
+    client.files_map["HC"] = [_fake_file("Show/HC.mkv", 100)]
+    seed_store(mgr, [hc, client.torrents["HA"], client.torrents["HB"]])
+    calls = {"n": 0}
+    orig = infra_utils.path_normalize
+
+    def flaky(p):
+        calls["n"] += 1
+        if calls["n"] == 3:  # 第 1/2 次是 src_norm/cr_norm, 第 3 次落在 HC 记录上(own 已提前跳过)
+            raise RuntimeError("boom")
+        return orig(p)
+
+    monkeypatch.setattr(infra_utils, "path_normalize", flaky)
+    misc, external = mgr.host.get("relocate")._classify_entries(["HC.mkv"], src, src, ("HA", "HB"), mgr.store, client)
+    assert external == [] and "HC.mkv" in misc
+
+
 def test_relocate_module_precheck_defensive_paths(tmp_path):
     """纵深防御与退化入参: 未启用 / 空 hashes / 上下文缺失 / qB 未连接 各自 blocked 自解释"""
     from types import SimpleNamespace
@@ -367,6 +436,7 @@ def test_relocate_module_fs_fact_branches(tmp_path, monkeypatch):
     monkeypatch.undo()
     pin_disk_usage(monkeypatch)  # 恢复 disk_usage 钉值后重挂「抛错」变体
     monkeypatch.setattr(fa_mod.LocalFileAccess, "disk_usage", lambda self, p: (_ for _ in ()).throw(OSError("no disk")))
+    monkeypatch.setattr(alias_fs, "same_volume", lambda a, b: False)  # R2 #1 后同卷豁免会让 space 不拦, 桩成跨卷才能测到空间闸门
     item3 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     gates3 = [r["gate"] for r in item3["reasons"]]
     assert "space" in gates3 and "same_fs" in gates3  # 空间不可判定 + 同卷证明读不到

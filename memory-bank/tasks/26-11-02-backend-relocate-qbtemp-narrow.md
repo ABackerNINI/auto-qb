@@ -3,7 +3,7 @@
 **Status:** In Progress
 **Added:** 2026-11-02
 **Updated:** 2026-11-02
-**Summary:** 认领用户报障: WEBUI 单种子移动被外组 .!qB 误拦 —— 归因 relocate P5 三入口接线(现行决策) + qb_temp 收集层未走归属分类; 源码核实 lt 1.2/2.0 逐文件搬运后按归属三分收窄(own 拦 / foreign / unowned 降 note, D1), 计划 26-11-02-0134; 守阵三案+定向与全量绿(数字见 kb.baseline 26-11-02-0144); 顺带 drawer.js 移动失败 toast 文案; R1 同族第二例(空间/同卷闸门「叶子未建」误拦)按方案A收集层祖先回退(空间+同卷两处同一机制)+方案B note 文案对齐收口(数字见 kb.baseline 最新切片); 真机复验留 Open
+**Summary:** 认领用户报障: WEBUI 单种子移动被外组 .!qB 误拦 —— 归因 relocate P5 三入口接线(现行决策) + qb_temp 收集层未走归属分类; 源码核实 lt 1.2/2.0 逐文件搬运后按归属三分收窄(own 拦 / foreign / unowned 降 note, D1), 计划 26-11-02-0134; 顺带 drawer.js 移动失败 toast 文案; R1 同族第二例(空间/同卷闸门「叶子未建」误拦)按方案A收集层祖先回退(空间+同卷两处同一机制)+方案B note 文案对齐收口; R2 全闸门扫描三项(同卷空间豁免/冲突全量去截断/target_type 闸门, D5-D7) + 覆盖补齐; 守阵累计十几案, 全量绿(数字见 kb.baseline 最新切片); 真机复验留 Open
 **Topics:** backend-relocate-qbtemp-narrow
 **Refs:** memory-bank/plans/26-11-02-0134-plan-relocate-qbtemp-narrow.html
 
@@ -16,6 +16,7 @@
 5. 「先本地提交不推送」（commit c21d4386 未推送， 补推走 ship.push）
 6. 「先分析」复测报错 GATE_SPACE「目标卷剩余空间不可判定」（同族，分析轮产出根因链与方案表）
 7. 「并入之前的文档，按方案A+B修复」（D3 方案A / D4 方案B， 计划 R1）
+8. 「扫描一下还有没有同族问题」→「按建议处置」（全闸门扫描三项：#1 同卷空间硬拦 / #2 冲突 [:50] 截断漏拦 / #3 目标非目录， D5-D7， 计划 R2）
 
 ## 思考过程与决策
 
@@ -41,6 +42,9 @@
 | S6 | R1 方案A：_volume_free_resolved 空间祖先回退 + _same_volume_resolved 同卷上溯 | Done(2026-11-02) |
 | S7 | R1 方案B：same_fs 单成员 note 文案对齐实现 | Done(2026-11-02) |
 | S8 | R1 守阵：祖先回退四案（含整卷不可达仍硬拦）+ 定向与全量绿 | Done(2026-11-02) |
+| S9 | R2 #1：同卷空间豁免（same_volume=True 时空间预检不适用，四态守阵） | Done(2026-11-02) |
+| S10 | R2 #2/#3：冲突检测全量去截断 + 新闸门 target_type | Done(2026-11-02) |
+| S11 | R2 覆盖补齐（退化面四案 + 清单同步），全量回 99% | Done(2026-11-02) |
 
 ## 进度日志
 
@@ -51,3 +55,5 @@
 - 2026-11-02 01:46 qb_temp 闸门按归属收窄落地(plan 26-11-02-0134): relocate_mod 收集层把 ext 的 .!qB 剥后缀归属三分(own 对回本组→硬拦面; foreign/unowned 与普通条目同走归属分类降 notes), relocate_units 文案与 docstring 同步(gate id 不变), 守阵三案(foreign/unowned/own-matched)+全量绿数字见 kb.baseline 切片 26-11-02-0144; 依据 = lt RC_1_2/RC_2_0 aux::move_storage 逐文件搬运源码核实; S5 真机复验留 Open(计划与档案)
 
 - 2026-11-02 02:22 R1 同族第二例收口(用户复测报 GATE_SPACE 误拦, 拍板按方案A+B修复): relocate_mod 新增 _volume_free_resolved(空间祖先回退)/_same_volume_resolved(同卷上溯, 实施中发现同根因一并收口), 全链不可达维持硬拦; relocate_units same_fs 单成员 note 文案对齐(方案B); 守阵四案+定向 69 passed+全量绿数字见 kb.baseline 切片 26-11-02-0222; 计划 R1(26-11-02-0220)/档案 S6-S8 已并入
+
+- 2026-11-02 03:18 R2 全闸门同族扫描三项处置落地(用户拍板按建议处置): #1 同卷空间豁免(same_volume=True 时空间预检不适用, rename 不占额外空间); #2 目标冲突去 names[:50] 截断改全量(漏拦致进度清零的反向风险); #3 新增 target_type 闸门(目标存在但不是目录); 另补覆盖率退化面守阵四处(首跑 98.86% 红后回 99%); 全量绿数字见 kb.baseline 切片 26-11-02-0317; 计划 R2(26-11-02-0316)/档案 S9-S11 已并入

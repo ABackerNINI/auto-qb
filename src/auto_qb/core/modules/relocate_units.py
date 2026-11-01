@@ -46,6 +46,7 @@ GATE_INCOMPLETE = "incomplete"  # 组内存在未完成成员(progress < 1)
 GATE_MOVING = "moving"  # 成员正处于 qB 搬迁态(state 含 moving)
 GATE_TARGET_CONFLICT = "target_conflict"  # 目标已存在同名内容(qB 会走全量校验)
 GATE_TARGET_UNKNOWN = "target_unknown"  # 目标路径存在性不可判定(容器映射 miss)
+GATE_TARGET_TYPE = "target_type"  # 目标路径已存在但不是目录(qB 无法在其下创建内容, R2 #3)
 GATE_QB_TEMP = "qb_temp"  # 本组文件处于 .!qB 未落定态(外组/无主 .!qB 降 notes: qB 逐文件搬运碰不到, plan 26-11-02-0134)
 GATE_SPACE = "space"  # 目标卷剩余不足 / 不可判定
 GATE_SAME_FS = "same_fs"  # 无法证明 auto-qb 与 qB 看同一块盘(§2.4 同卷证明)
@@ -382,6 +383,7 @@ class GroupFacts:
     qb_temp_entries: Tuple[str, ...] = ()
     target_conflicts: Tuple[str, ...] = ()
     target_unknown: bool = False
+    target_not_dir: bool = False
     same_volume: Optional[bool] = None
     target_free: Optional[int] = None
     same_fs_proved: bool = False
@@ -479,12 +481,15 @@ def evaluate_group(facts: GroupFacts) -> dict:
         )
     if facts.target_unknown:
         _block(GATE_TARGET_UNKNOWN, "目标路径存在性不可判定(容器映射未覆盖): 不可判定一律拒绝 —— 请检查 fs.path_map 是否覆盖目标位置")
+    if facts.target_not_dir:
+        _block(GATE_TARGET_TYPE, "目标路径已存在但不是目录: qB 无法在其下创建内容 —— 请改目标或先清理该路径(R2 #3)")
     if facts.qb_temp_entries:
         _block(GATE_QB_TEMP, "本组存在 .!qB 未落定文件(" + ", ".join(facts.qb_temp_entries[:3]) + "): 数据尚未落定, 不能迁")
-    if facts.target_free is None:
+    if facts.target_free is None and facts.same_volume is not True:
         _block(GATE_SPACE, "目标卷剩余空间不可判定(路径不可读或容器映射未覆盖): 不可判定一律拒绝")
-    elif facts.target_free < needed:
+    elif facts.target_free is not None and facts.target_free < needed and facts.same_volume is not True:
         _block(GATE_SPACE, f"目标卷剩余 {facts.target_free} 字节 < 本组数据 {needed} 字节: 空间不足, 拒绝迁移")
+    # 同卷(True): rename 不占额外空间, 空间预检不适用(R2 #1) —— 数值仅展示, 见 same_volume note
 
     # ---- 同卷证明 + 平台能力(多成员组需要 qB 能读到本机建的链接) ----
     if not facts.same_fs_proved:
@@ -541,7 +546,7 @@ def evaluate_group(facts: GroupFacts) -> dict:
     if facts.target_free is not None:
         notes.append(f"目标卷剩余 {facts.target_free} 字节; 本组数据 {needed} 字节")
     if facts.same_volume is True:
-        notes.append("源与目标同卷: qB 走 rename, 不实际占用额外空间(预检仍按目标卷剩余展示)")
+        notes.append("源与目标同卷: qB 走 rename 不占额外空间, 空间预检不适用(目标卷剩余仅展示, R2 #1)")
     elif facts.same_volume is False:
         notes.append("源与目标跨卷: qB 走复制; 逐文件别名将使用符号链接")
     elif facts.same_volume is None:

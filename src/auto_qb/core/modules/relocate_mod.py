@@ -1344,10 +1344,20 @@ class RelocateModule(BaseModule):
             qb_temp += [n for n in names if n.endswith(_QB_TEMP_SUFFIX)]
             exclusive = not ext
 
-        # ---- 目标同名冲突(逐文件判定: 同卷/跨卷都适用, 只查本组文件) ----
+        # ---- 目标同名冲突(逐文件全量判定: 同卷/跨卷都适用, 只查本组文件; R2 #2 去
+        # names[:50] 静默截断 —— 漏拦的冲突会让 mover 撞 need_full_check 进度清零;
+        # 上限受 plan hard_max 约束, 规则重复发起被 T3 幂等挡在闸门前, 成本仅新目标首查) ----
         conflicts = []
         target_unknown = False
-        for n in names[:50]:
+        target_not_dir = False
+        # R2 #3: 目标已存在但不是目录 => 迁移必然失败(qB create_directories 落不了), 预检直接拒;
+        # 存在性抛错按不可判定(冲突循环同款), 由 target_unknown 兜底
+        try:
+            if fa.exists(target) is True and fa.isdir(target) is not True:
+                target_not_dir = True
+        except Exception:  # noqa: BLE001
+            pass
+        for n in names:
             try:
                 hit = fa.exists(_native(target, n))
             except Exception:  # noqa: BLE001
@@ -1454,6 +1464,7 @@ class RelocateModule(BaseModule):
             qb_temp_entries=tuple(qb_temp),
             target_conflicts=tuple(conflicts),
             target_unknown=target_unknown,
+            target_not_dir=target_not_dir,
             same_volume=same_vol,
             target_free=target_free,
             same_fs_proved=proved,
