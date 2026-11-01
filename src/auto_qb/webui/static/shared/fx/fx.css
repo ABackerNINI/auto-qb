@@ -4,7 +4,9 @@
  * 计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S2 步)
  * 调研: memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html (S1, §06 五条硬结论)
  *
- * 范围(S2): 只交付令牌体系与通用基线, 暂无消费者、不挂任何皮肤。
+ * 范围(S2 + S6 前半): S2 交付令牌体系与通用基线; S6 把 showcase 选定候选
+ *   (计划 §06 S4 结论 24 项)提升为一等原语(见「S6 提升原语」段), 消费面 =
+ *   flux(D14 隔离拍板: 三旧皮肤不挂载)。
  *   三套风格配方在 fx-presets.css(风格层, <html data-fx-preset="..."> 切换);
  *   挂载器在 fx.js(单挂载器, 扫 data-fx / data-fx-variant 统一初始化)。
  *
@@ -20,8 +22,9 @@
  *   在前、linear() 覆盖在后的降级链; @starting-style 不支持 = 直接落在终态。
  *   不为旧浏览器保动效。
  *
- * 时序契约: 本文件不依赖任何 JS; fx.js 挂行未来进 tpl-manifest 由 boot.js
- *   保序注入。本文件与 boot.js 零耦合, 单独 <link> 亦可独立生效。
+ * 时序契约: 本文件不依赖任何 JS; fx.js 挂行进 flux shell 静态 <script>(S6:
+ *   不进 tpl-manifest —— 四套清单守阵钉逐项相等, fx 只服务 flux)。本文件与
+ *   boot.js 零耦合, 单独 <link> 亦可独立生效。
  *
  * 令牌命名: 一律 --fx-* 前缀, 与四皮肤既有令牌名集(atlas/prism/console/
  *   flux)零交集, 不参与皮肤令牌 parity 守阵的统计口径; 四皮肤共用 = 只引用
@@ -99,6 +102,11 @@
   --fx-pop-scale: 0.96;        /* pop 起始缩放(差 4%, 过大显廉价) */
   --fx-slip-x: 16px;           /* 横向滑入距离(方向由各变体规则取正负) */
 
+  /* ---- 结构性常量(S6 提升原语引入; preset 恒值重声明保持配方完整性,
+   *      分调是未来选项而非当下需要) ---- */
+  --fx-zoom-from: 1.08;        /* zoom 反差入场起始缩放(D2-3, >1 收缩落位) */
+  --fx-row-h: 44px;            /* 行插入/退场 max-height 版的行高单点(D4-4L/5L) */
+
   /* ---- 风格层供给面(preset 配方整体替换的槽位; 基线值 = 全关闭, 具体消费方:
    *      sheen 用 --fx-sheen-c, 发光/毛玻璃类组件配方用 --fx-glow* / --fx-blur,
    *      本文件基线规则不消费 glow/blur -- 供 S3+ 组件配方取用) ---- */
@@ -126,12 +134,16 @@
 }
 
 /* ---- 入场原语: @starting-style 扁平写法(Chrome 117+; 不支持 = 无动效终态,
- *      符合 D5)。元素首次渲染/从 display:none 出现时从起始态过渡到终态 ---- */
+ *      符合 D5)。元素首次渲染/从 display:none 出现时从起始态过渡到终态。
+ *      pop 支持 --fx-base-tx 基础位移槽(S6, D8-4 横滚胶囊变体: 生产胶囊以
+ *      translateX(-50%) 居中, transform 被居中占用时由消费方写 --fx-base-tx
+ *      合成, 缺省 0px = 既有语义不变) ---- */
 @starting-style {
   [data-fx~="fade"] { opacity: 0; }
   [data-fx~="rise"] { opacity: 0; transform: translateY(var(--fx-enter-shift)); }
-  [data-fx~="pop"] { opacity: 0; transform: scale(var(--fx-pop-scale)); }
+  [data-fx~="pop"] { opacity: 0; transform: translateX(var(--fx-base-tx, 0px)) scale(var(--fx-pop-scale)); }
   [data-fx~="slip"] { opacity: 0; transform: translateX(var(--fx-slip-x)); }
+  [data-fx~="zoom"] { opacity: 0; transform: scale(var(--fx-zoom-from)); }
 }
 
 /* ---- 退场态: 挂载器写 data-fx-exit 后生效; 退场骨对(短+accelerate)整体
@@ -241,6 +253,220 @@
 }
 
 /* ====================================================================
+ * S6 提升原语(S4 人工挑选结论 24 项中「页内自实现」候选入库, 计划 §06;
+ * 实现 = showcase 页内逐条提升为 data-fx 一等能力, showcase 卡面不动):
+ *   ripple(D1-4) / icon(D1-6) / focus-ring(D5-2) / focus-float(D5-3) /
+ *   shake(D5-5) / headshake(D2-5 接力半边) / dir(D7-4) / zoom(D2-3) /
+ *   push(D3-4) / row-hover(D4-1) / row-sel(D4-2) / row-flash(D4-3) /
+ *   row-in(D4-4L) / row-out(D4-5L) / check(D4-6) / countdown(D6-2) /
+ *   ico-spring(D6-4) / danger(D6-5, 兼 D2-5 glow 半边)
+ * 已在库不重复造: glow/sheen/press(D1-2/3/5) / toast rise+exit 骨对(D6-1) /
+ *   AQB_FX.viewTransition(D6-3) / pop + --fx-base-tx 合成(D8-4)。
+ * 提升原则: 复用既有令牌/骨对/供给面(--fx-slip-x/--fx-zoom-from/--fx-row-h/
+ *   --bg-hover/--sel-bar/--sel-bg + --accent 系带兜底引用, 不新增皮肤侧色值);
+ *   新 @keyframes 全配 RM 降级块(下方 RM 段逐条列出)。
+ * 边界(D14 隔离 + 行过渡守阵): 行级效果只服务 flux, 一律 data-fx 委托,
+ *   不写 .group-row 选择器, 不碰「views.css 单点 + var(--dur) 同源」前提。
+ * ==================================================================== */
+
+/* ---- ripple 波纹(D1-4): 宿主 = data-fx~="ripple"(相对定位 + 裁边); 波纹
+ *      节点 .fx-ripple 由 fx.js 的 document 级 pointerdown 委托注入
+ *      (AQB_FX.ripple 兜程序化触发), 色取 currentColor ---- */
+[data-fx~="ripple"] {
+  position: relative;
+  overflow: hidden;
+}
+.fx-ripple {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: color-mix(in srgb, currentColor 35%, transparent);
+  transform: scale(0);
+  animation: fx-ripple 380ms var(--fx-ease-out) forwards;
+}
+@keyframes fx-ripple { to { transform: scale(1); opacity: 0; } }
+
+/* ---- icon 附加(D1-6): hover 图标子元素轻擦(.fx-ico 子元素契约, 80-120ms
+ *      轻擦上限内取 --fx-dur-hover 档) ---- */
+[data-fx~="icon"] .fx-ico { transition: transform var(--fx-dur-hover) var(--fx-ease-standard); }
+[data-fx~="icon"]:hover .fx-ico { transform: rotate(8deg) scale(1.08); }
+[data-fx~="icon"]:active .fx-ico { transform: rotate(0deg) scale(0.96); }
+
+/* ---- focus 系(D5-2 ring / D5-3 floating label): 挂字段容器(相对定位由
+ *      focus-float 自带), 契约 = 容器内 input(ring)/ input+label 兄弟对
+ *      (float, input 须带 placeholder 以吃 :placeholder-shown); 颜色引
+ *      --accent 系(四皮肤既有令牌, 带兜底) ---- */
+[data-fx~="focus-ring"] input {
+  transition: box-shadow var(--fx-dur-hover) var(--fx-ease-standard),
+              border-color var(--fx-dur-hover) var(--fx-ease-standard);
+}
+[data-fx~="focus-ring"] input:focus {
+  outline: none;
+  border-color: var(--accent, currentColor);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent, currentColor) 30%, transparent);
+}
+[data-fx~="focus-float"] {
+  position: relative;
+}
+[data-fx~="focus-float"] label {
+  position: absolute; left: 11px; top: 8px;
+  pointer-events: none; transform-origin: left top;
+  transition: transform var(--fx-dur-fast) var(--fx-ease-standard),
+              color var(--fx-dur-fast) var(--fx-ease-standard);
+}
+[data-fx~="focus-float"] input:focus + label,
+[data-fx~="focus-float"] input:not(:placeholder-shown) + label {
+  transform: translateY(-15px) scale(0.75);
+  color: var(--accent-ink, currentColor);
+}
+
+/* ---- shake 校验失败微震(D5-5): 触发口两个 -- :user-invalid(原生校验) /
+ *      .is-invalid(JS 驱动, 与弹窗行级 .is-* 同风格); 边框转 danger 色归
+ *      消费方(语义色属皮肤层, 库只管动) ---- */
+[data-fx~="shake"]:user-invalid,
+[data-fx~="shake"].is-invalid {
+  animation: fx-shake 300ms var(--fx-ease-standard);
+}
+@keyframes fx-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* ---- headshake 强调微震(D2-5 接力半边): play() 触发, 幅度更大衰减式
+ *      (animate.css headShake 家族); 与 danger 组合 = 弹窗 danger tone 全款
+ *      (下方组合规则: glow 先行 400ms, headshake 430ms 接力) ---- */
+[data-fx~="headshake"][data-fx-play] { animation: fx-headshake 350ms var(--fx-ease-standard); }
+@keyframes fx-headshake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-4px); }
+  30% { transform: translateX(3px); }
+  45% { transform: translateX(-2px); }
+  60% { transform: translateX(1px); }
+}
+
+/* ---- dir 方向感知滑动(D7-4, 页签/列表通用): 消费方(通常经 AQB_FX::dir)
+ *      写 data-fx-dir="left|right"; 位移复用 --fx-slip-x 的 3/4 档(showcase
+ *      12px 对 16px), 时长走 --fx-dur-tab ---- */
+[data-fx~="dir"][data-fx-dir="right"] { animation: fx-dir-r var(--fx-dur-tab) var(--fx-ease-out); }
+[data-fx~="dir"][data-fx-dir="left"] { animation: fx-dir-l var(--fx-dur-tab) var(--fx-ease-out); }
+@keyframes fx-dir-r { from { opacity: 0; transform: translateX(calc(var(--fx-slip-x) * 0.75)); } to { opacity: 1; transform: none; } }
+@keyframes fx-dir-l { from { opacity: 0; transform: translateX(calc(var(--fx-slip-x) * -0.75)); } to { opacity: 1; transform: none; } }
+
+/* ---- push 内容上推(D3-4, transform 版; height 真让位 = layout 警示,
+ *      S4 只标注不落库): 消费方写 data-fx-pushed 并在本元素作用域给
+ *      --fx-push-y(让位量 = 布局值, 归消费方) ---- */
+[data-fx~="push"] {
+  transition: transform var(--fx-dur-panel) var(--fx-ease-in-out);
+}
+[data-fx~="push"][data-fx-pushed] {
+  transform: translateY(calc(-1 * var(--fx-push-y, 0px)));
+}
+
+/* ====================================================================
+ * rows 系(D4 torrent 表格行, 只服务 flux): 高密度行禁全行 stagger(硬口径),
+ * 全部单行独立; 触发态类 = .is-sel / .is-done(与弹窗行级 .is-* 同风格)。
+ * ==================================================================== */
+
+/* row-hover(D4-1): hover 底色渐亮(hover 档下限; 色取皮肤既有 --bg-hover) */
+[data-fx~="row-hover"] {
+  transition: background-color var(--fx-dur-hover) var(--fx-ease-standard);
+}
+[data-fx~="row-hover"]:hover {
+  background-color: var(--bg-hover, transparent);
+}
+
+/* row-sel(D4-2): 行首 3px 边条自上生长 + 选中底色(消费选中态族令牌) */
+[data-fx~="row-sel"] {
+  position: relative;
+}
+[data-fx~="row-sel"]::before {
+  content: "";
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  background: var(--sel-bar, var(--accent, currentColor));
+  transform: scaleY(0); transform-origin: top;
+  transition: transform var(--fx-dur-fast) var(--fx-ease-standard);
+}
+[data-fx~="row-sel"].is-sel {
+  background-color: var(--sel-bg, transparent);
+}
+[data-fx~="row-sel"].is-sel::before { transform: scaleY(1); }
+
+/* row-flash(D4-3): 锚点定位脉冲(一次性 flash; 平滑滚动由消费方
+ * scrollIntoView, RM 时 behavior:auto) */
+[data-fx~="row-flash"][data-fx-play] { animation: fx-row-flash 600ms var(--fx-ease-standard); }
+@keyframes fx-row-flash {
+  0% { background-color: color-mix(in srgb, var(--accent, currentColor) 30%, transparent); }
+  40% { background-color: color-mix(in srgb, var(--accent, currentColor) 8%, transparent); }
+  60% { background-color: color-mix(in srgb, var(--accent, currentColor) 22%, transparent); }
+  100% { background-color: transparent; }
+}
+
+/* row-in / row-out(D4-4L / D4-5L, max-height 版): S4 选定 layout 版(下方位移
+ * 平滑无瞬跳, 每帧 reflow 的代价已随选定拍板); 行高单点 --fx-row-h */
+[data-fx~="row-in"] { animation: fx-row-in 200ms var(--fx-ease-out) forwards; overflow: hidden; }
+@keyframes fx-row-in {
+  from { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
+  to { max-height: var(--fx-row-h); opacity: 1; }
+}
+[data-fx~="row-out"] { animation: fx-row-out 200ms var(--fx-ease-in) forwards; overflow: hidden; }
+@keyframes fx-row-out {
+  from { max-height: var(--fx-row-h); opacity: 1; }
+  to { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
+}
+
+/* check(D4-6): checkbox 快勾 -- 契约 = 元素内 svg path 划线(stroke 用
+ * currentColor); 勾选 = 格子过冲弹出 + 对勾划线 */
+[data-fx~="check"] { color: transparent; }
+[data-fx~="check"] svg path {
+  stroke-dasharray: 14; stroke-dashoffset: 14;
+  transition: stroke-dashoffset var(--fx-dur-fast) var(--fx-ease-standard) 40ms;
+}
+[data-fx~="check"].is-done {
+  border-color: var(--accent, currentColor);
+  color: var(--accent, currentColor);
+  animation: fx-check-pop var(--fx-dur-fast) var(--fx-ease-back);
+}
+[data-fx~="check"].is-done svg path { stroke-dashoffset: 0; }
+@keyframes fx-check-pop { from { transform: scale(0.6); } }
+
+/* ====================================================================
+ * spawn 系(D6 toast / 通知, rise 骨对与 exit 已在库不重复)
+ * ==================================================================== */
+
+/* countdown 倒计时条(D6-2): 挂条元素; 时长由消费方写 --fx-life(与自动关闭
+ * 同一状态源的毫秒数), 几何 = 宿主底缘 2px 满宽(showcase 契约同款) */
+[data-fx~="countdown"] {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+  background: var(--accent, currentColor);
+  transform-origin: left;
+  animation: fx-countdown var(--fx-life, 4s) var(--fx-ease-linear) forwards;
+}
+@keyframes fx-countdown { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ico-spring(D6-4): tone 图标 spring 弹入(play 触发; 单属性动画取降级链
+ * bezier 头, linear() 生效面 = 双属性过渡) */
+[data-fx~="ico-spring"][data-fx-play] { animation: fx-ico-spring 300ms var(--fx-spring-2); }
+@keyframes fx-ico-spring { from { transform: scale(0.5); } }
+
+/* danger 边缘 glow 脉冲(D6-5, 兼 D2-5 glow 半边): play 触发, 仅一次不循环
+ * (paint 小面积, 报告 §05 标注口径); 色取皮肤语义色 --error 带兜底 */
+[data-fx~="danger"][data-fx-play] { animation: fx-danger-glow 400ms var(--fx-ease-standard); }
+@keyframes fx-danger-glow {
+  0% { box-shadow: 0 0 0 0 transparent; }
+  35% { box-shadow: 0 0 18px 2px color-mix(in srgb, var(--error, #d98a8a) 50%, transparent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+/* D2-5 弹窗 danger tone 全款 = danger + headshake 组合(glow 先行, headshake
+ * 430ms 接力 -- 时序按 showcase armDanger 同排); 单 danger = toast 静音款 */
+[data-fx~="danger"][data-fx~="headshake"][data-fx-play] {
+  animation: fx-danger-glow 400ms var(--fx-ease-standard),
+             fx-headshake 350ms var(--fx-ease-standard) 430ms;
+}
+
+/* ====================================================================
  * prefers-reduced-motion: reduce 降级块(硬惯例: 每个动效配套, 集中在
  * 本块按动效逐条列出 -- 新增动效必须来这里补一行, 缺块即违规)
  * ==================================================================== */
@@ -269,4 +495,25 @@
   [data-fx~="lift"]:hover,
   [data-fx~="lift"]:active { transform: none; }
   [data-fx~="press"]:active { transform: none; }
+  /* ---- S6 提升原语(S4 选定 24 项入库): @keyframes 族逐条关(D5: 无动效终态
+   *      = 直接落在触发后的即时状态: ripple 不注入 / 静态红边 / 满条倒计时 /
+   *      row-in/out 直接成行) ---- */
+  .fx-ripple { animation: none; opacity: 0; }
+  [data-fx~="shake"]:user-invalid,
+  [data-fx~="shake"].is-invalid,
+  [data-fx~="headshake"][data-fx-play],
+  [data-fx~="dir"][data-fx-dir],
+  [data-fx~="row-flash"][data-fx-play],
+  [data-fx~="row-in"],
+  [data-fx~="row-out"],
+  [data-fx~="check"].is-done,
+  [data-fx~="countdown"],
+  [data-fx~="ico-spring"][data-fx-play],
+  [data-fx~="danger"][data-fx-play] { animation: none; }
+  /* 子元素/伪元素过渡(不携带 data-fx, 上面 [data-fx] 时长归零块罩不到)逐条补 */
+  [data-fx~="icon"] .fx-ico,
+  [data-fx~="focus-ring"] input,
+  [data-fx~="focus-float"] label,
+  [data-fx~="row-sel"]::before,
+  [data-fx~="check"] svg path { transition-duration: 0s; transition-delay: 0s; }
 }

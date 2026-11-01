@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-theme="ocean">
+<html lang="zh-CN" data-theme="ocean" data-fx-preset="glass">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -21,6 +21,11 @@
   <link rel="stylesheet" href="/shared/console_hub.css">
   <!-- W6 表格面背景/密度族单点: 变体只声明令牌值(说明见该文件头) -->
   <link rel="stylesheet" href="/shared/dt_table.css">
+  <!-- fx 动效库(计划 26-10-31-2316 S6): shared/fx 三件只挂 flux(S4 主 preset glass,
+       见 <html data-fx-preset>; 级联序照 shared 层惯例排本皮肤全部 CSS 之后, 守阵
+       test_frontend_fx_wiring 钉序; 三旧皮肤零引用 = D14 隔离拍板) -->
+  <link rel="stylesheet" href="/shared/fx/fx.css">
+  <link rel="stylesheet" href="/shared/fx/fx-presets.css">
 </head>
 <body>
   <!-- 图标 sprite: 与 atlas/prism/console 同一份清单(brand 仍用 i-orbit 轨道符号, 皮肤差异只在 CSS 层) -->
@@ -214,6 +219,9 @@
     ]
   }
   </script>
+  <!-- fx 挂载器(S6): shell 静态 script(不进 tpl-manifest -- 四套清单守阵钉逐项相等,
+       fx 只服务 flux); 初始 scan 早于模板异步注入属正常, 消费方挂载后重扫 -->
+  <script src="/shared/fx/fx.js"></script>
   <script src="/shared/boot.js"></script>
 </body>
 </html>

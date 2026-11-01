@@ -1,8 +1,8 @@
 """test_webui_static_skins 测试计划: webui 前端资产静态守阵: 皮肤清单 / CSS / 挂件类名
 
 ## 测试计划(每个测试函数一条)
-- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态; 计划 26-10-31-2316 S2 起 @starting-style 计入容器型 at-rule、shared/fx/fx.js 以"待接线豁免"登记, S6 进 manifest 后删除)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤220 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 各皮肤 CSS 链接序(atlas/console/flux(fork 自 console, S5 收编): style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
+- test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态; 计划 26-10-31-2316 S2 起 @starting-style 计入容器型 at-rule、shared/fx/fx.js 曾以"待接线豁免"登记(S6 挂 flux shell 静态 script 后豁免已删)
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤227 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220, 26-10-31-2316 S6 fx 三件挂 flux +7 → 227)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 各皮肤 CSS 链接序(atlas/console/flux(fork 自 console, S5 收编): style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
 - test_frontend_skin_css_token_parity: 各皮肤令牌**名集**相等守阵(issue 26-10-20-2231; 26-11-01 S5 收编 flux) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
@@ -15,7 +15,8 @@
 - test_frontend_table_shell_single_point: 表壳/行模型单元格渲染器单点守阵(计划 26-10-11-1722 P1/P2/P3/P5) —— 表头块 5 份内联副本收敛为 `<aq-table>`(shared/table.js + tpl/xtpl.html#tpl-aq-table); 127 条行模型单元格 v-if 分支收敛为五个单份渲染器 `<aq-member-cells>`(member, xtpl.html)/`<aq-group-cells>`/`<aq-torrent-cells>`/`<aq-show-cells>`/`<aq-ep-cells>`(tpl/xtpl-cells.html); 钉 ①六个组件都 app.component 注册 ②表壳模板恰一份且四件交互把手(.h-cell/.h-label/.arrow/.resizer/.col-drop-line)齐备 ③groups.html/shows.html 各 2 个、torrents.html 1 个 `<aq-table>` 调用点、三个页面模板 `.h-cell` 内联零残留、各页行模型渲染器调用点齐备 ④thead 模式(P5): 设置页 HR 详情表表头借壳, 占位须 `<tr is="vue:aq-table" mode="thead">` 且该段内联 `<th>` 零残留; thead 可排序性判据同源 col.sortable(sortable 类与箭头 v-if 由它驱动, issue 26-10-29-1348)
 - test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
-- test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
+- test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效; shared/fx/* 豁免 —— fx 只挂 flux, 计划 26-10-31-2316 D14 隔离拍板)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
+- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等)、三旧皮肤对 /shared/fx/ 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效)
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: ① 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); ② 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_table_head_a11y: 引擎表头可访问性守阵(issue 26-10-12-0800, 计划 26-10-12-2330 方案 C) —— 语义载体用 role="columnheader"(**不是** button: aria-sort 只对该 role 生效, 挂 button 上读屏忽略) + 件套单点(shared/table.js 的 headAriaSort/headActivate 两方法, grid/thead 共用) + grid .h-cell 的 :aria-sort/:tabindex(仅可排序列)/Enter·Space keydown 全走 headActivate + .group-head role=row / 指示线 role=presentation + thead <th> 同补件套 + 各皮肤 .h-cell.sortable:focus-visible(atlas/prism 落 views.css; console/flux 落 components.css —— 后者曾顶 700 行 cap; flux S5 收编); 键盘真按键行为在 e2e/table-head-a11y.spec.mjs
@@ -287,11 +288,6 @@ def _scan_mixin_wiring(problems):
             path = os.path.join(dirpath, name)
             rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
             if rel in refs:
-                continue
-            if rel == "shared/fx/fx.js":
-                # S2 fx 骨架(计划 26-10-31-2316): fx 挂载器交付时**暂无消费者**, 挂行要等
-                # S6 才进 tpl-manifest(由 boot.js 保序)。此处登记豁免 = "已登记的待接线件";
-                # S6 接线后清单引用自然命中 refs, 本豁免应随手删除。
                 continue
             problems.append(f"{rel} 未被 tpl-manifest 清单或 shell 静态 <script> 引用(拆分片段漏挂 -> 整块功能静默消失)")
 
@@ -1772,7 +1768,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤220 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤227 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; 计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -1782,15 +1778,16 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 220:
+        if n_shell > 227:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 220"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 227"
                 "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5/S6 各 +3; "
                 "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4; "
                 "W6 计划 26-10-13-0811 shared/dt_table.css 挂载(注释+link)+2; "
                 "issue 26-10-20-2231 prism/css/dialogs.css 挂载(注释+link)+2; "
                 "计划 26-10-30-0217 阶段2 shared/row_lang.css 挂载(注释+link)+2 → 218; "
-                "计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220)"
+                "计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; "
+                "计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []
@@ -2950,8 +2947,11 @@ def test_frontend_hscroll_indicator_wiring():
             f"{ui} 皮肤自有 CSS 里又给 .group-table 声明了 scrollbar-width({stray}) —— "
             "隐藏规则单点在 shared/hscroll.css, 第二份副本 = 日后各自漂移"
         )
-        # 判据 6: 共享层链接集逐字相同(有序)
-        shared_sets[ui] = re.findall(r'href="(/shared/[^"]+\.css)"', shell)
+        # 判据 6: 共享层链接集逐字相同(有序) —— shared/fx/* 豁免: fx 动效库只挂
+        # flux(计划 26-10-31-2316 S6, D14 存量隔离拍板), 不参与四皮肤一致口径;
+        # 其挂载与级联序由 test_frontend_fx_wiring 单独钉
+        shared_sets[ui] = [h for h in re.findall(r'href="(/shared/[^"]+\.css)"', shell)
+                           if not h.startswith("/shared/fx/")]
     base_shared = shared_sets[_UI_ALL[0]]
     assert "/shared/hscroll.css" in base_shared, ("共享层链接集里没有 /shared/hscroll.css(有序清单抽取口径坏了? 同步本守阵)")
     for ui in _UI_ALL[1:]:
@@ -3029,6 +3029,75 @@ def test_frontend_hscroll_indicator_wiring():
         "columns.js _hscrollPill() 体内又出现了 _hscrollBind() —— 这正是 ef734485 修掉的缺陷: "
         "监听与建 DOM 同生共死 = 不横滚就不建 DOM、不建 DOM 就不挂监听、不挂监听就永远不建"
     )
+
+
+def test_frontend_fx_wiring():
+    """fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半) —— shared/fx 三件只挂 flux
+
+    静默故障形态(fx 三件在盘上、pytest 却无从判红的挂载面问题):
+      1. flux 漏挂/挂两次: fx.css/fx-presets.css 漏 = 库令牌与规则整族不在, S6 后半的
+         data-fx 挂载全部静默不生效; 挂两次 = 配方重复进级联。
+      2. 级联序漂移: fx 链接被挪到本皮肤 CSS 之前(共库层惯例 = 排最后, link 序即级联序)。
+      3. 隔离反向破防: 三旧皮肤(atlas/prism/console)出现 /shared/fx/ 引用 —— D14 存量
+         隔离拍板被顺手破坏, 三旧皮肤视觉漂移。
+      4. 注册表与 CSS 脱钩: fx.js REGISTRY 里有效果名而 fx.css 没有对应 [data-fx~=] 规则
+         —— audit 放行但样式静默不生效(与「audit 报未知」相反方向的漏补)。
+    fx.js 走 shell 静态 <script> 而非 tpl-manifest: 四套清单守阵(split_wiring)钉逐项相等,
+    fx 只服务 flux, 进清单就得四套同挂 = 破隔离。
+    """
+    flux_shell = open(os.path.join(STATIC_ROOT, "flux", "index.html"), encoding="utf-8").read()
+    # 1. flux 恰挂一次
+    for needle, why in (
+        ('href="/shared/fx/fx.css"', "fx 库基线(fx.css)漏挂/重复挂"),
+        ('href="/shared/fx/fx-presets.css"', "fx 风格配方(fx-presets.css)漏挂/重复挂"),
+        ('src="/shared/fx/fx.js"', "fx 挂载器(fx.js)漏挂/重复挂"),
+    ):
+        assert flux_shell.count(needle) == 1, (
+            f"flux shell 的 {needle} 挂载失守(须恰一次, 实测 {flux_shell.count(needle)}) —— {why}"
+        )
+    # 2. 级联序: fx.css 在本皮肤 views.css 与 shared 收尾件(dt_table.css)之后;
+    #    fx-presets.css 在 fx.css 之后(showcase 同序: 基线在前, 配方覆盖在后)
+    pos_views = flux_shell.find('href="/flux/css/views.css"')
+    pos_dt = flux_shell.find('href="/shared/dt_table.css"')
+    pos_fx = flux_shell.find('href="/shared/fx/fx.css"')
+    pos_pre = flux_shell.find('href="/shared/fx/fx-presets.css"')
+    assert pos_views > 0 and pos_dt > 0, "flux shell 缺 views.css/dt_table.css link(fx 级联序判据失去锚点)"
+    assert pos_fx > pos_views and pos_fx > pos_dt, (
+        "flux shell 里 /shared/fx/fx.css 排在本皮肤 views.css / shared 收尾件之前 —— "
+        "link 序即级联序, 共库层惯例 = 排最后"
+    )
+    assert pos_pre > pos_fx, "fx-presets.css 须排在 fx.css 之后(基线在前, 配方覆盖在后)"
+    # 3. 隔离反向: 三旧皮肤对 /shared/fx/ 零引用(D14 拍板)
+    for ui in ("atlas", "prism", "console"):
+        shell = open(os.path.join(STATIC_ROOT, ui, "index.html"), encoding="utf-8").read()
+        assert "/shared/fx/" not in shell, (
+            f"{ui} shell 出现 /shared/fx/ 引用 —— fx 动效库只服务 flux(D14 存量隔离拍板), "
+            "三旧皮肤挂上即视觉漂移"
+        )
+    # 4. preset 落档: flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)
+    assert 'data-fx-preset="glass"' in flux_shell, (
+        'flux <html> 缺 data-fx-preset="glass" —— S4 人工挑选主 preset 为 glass, '
+        "缺档 = flux 落回 fx.css :root 基线值而非 glass 配方"
+    )
+    # 5. 注册表 <-> CSS 同步(fx.js 单点声明, 两侧同轮补)
+    fx_js = open(os.path.join(STATIC_ROOT, "shared", "fx", "fx.js"), encoding="utf-8").read()
+    fx_css = open(os.path.join(STATIC_ROOT, "shared", "fx", "fx.css"), encoding="utf-8").read()
+    fx_pre = open(os.path.join(STATIC_ROOT, "shared", "fx", "fx-presets.css"), encoding="utf-8").read()
+    m = re.search(r"effects:\s*\[(.*?)\]", fx_js, re.S)
+    assert m, "fx.js REGISTRY.effects 解析失败(守阵口径跟实现走, 同步本守阵)"
+    effects = re.findall(r'"([^"]+)"', m.group(1))
+    assert len(effects) >= 27, f"fx.js REGISTRY.effects 仅 {len(effects)} 名(基线 9 + S6 提升 18, 缩水即红)"
+    for name in effects:
+        assert f'[data-fx~="{name}"]' in fx_css, (
+            f'fx.js REGISTRY.effects 的 "{name}" 在 fx.css 无 [data-fx~="{name}"] 规则 —— '
+            "audit 会放行但样式静默不生效, CSS 与注册表必须同轮补"
+        )
+    mp = re.search(r"presets:\s*\[(.*?)\]", fx_js, re.S)
+    assert mp, "fx.js REGISTRY.presets 解析失败"
+    for name in re.findall(r'"([^"]+)"', mp.group(1)):
+        assert f'[data-fx-preset="{name}"]' in fx_pre, (
+            f'fx.js REGISTRY.presets 的 "{name}" 在 fx-presets.css 无配方块(缺档 = 切换落空)'
+        )
 
 
 def test_frontend_pinned_first_cell_hover_transition_parity():

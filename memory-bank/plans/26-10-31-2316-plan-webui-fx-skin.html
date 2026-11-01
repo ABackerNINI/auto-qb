@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-0925">
+<meta name="doc-updated" content="26-11-01-0954">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-0925 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-0954 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -297,6 +297,46 @@
   <li><b>浏览器实测</b>: 桩 API 静态服务 + Playwright 双开 /flux/ 与 /console/ —— HTTP 200、登录遮罩渲染、token 验证后主界面(topbar/statusbar/layout/主表/空态)全渲染,<b>console 报错 0 / pageerror 0</b>(双皮肤);flux 令牌生效实测(--bg #0b111b、--radius 10px vs console #0d1724、0px, 顶栏按钮圆角/冷青 accent 可见);UI 切换下拉四项齐全且 flux 标「当前」。</li>
 </ul>
 
+<h3>S6 执行实录(前半)(26-11-01)</h3>
+<p>fx 三件挂 flux + S4 选定 24 项的页内自实现提升入库 + glass 开 glow 供给。三旧皮肤 / showcase / config.yml / auto-qb-data 零改动(git status 证实: 仅 <code>shared/fx/</code> 三件 + <code>flux/index.html</code> + <code>tests/test_webui_static_skins.py</code> + 本档案)。</p>
+<h4>提升清单(S4 待办①, 24 项分组落点)</h4>
+<table>
+  <tr><th>候选</th><th>落点</th><th>实现口径</th></tr>
+  <tr><td>D1-2 glow / D1-3 sheen / D1-5 press</td><td>已在库(fx.css 基线)</td><td>语义逐条核对一致, 零改动。</td></tr>
+  <tr><td>D1-4 ripple</td><td>fx.css + <b>fx.js</b></td><td>data-fx="ripple" 宿主(相对定位+裁边); fx.js 新增 document 级 pointerdown <b>单委托</b>(动态宿主零接线自动覆盖)注入 .fx-ripple 节点(animationend+超时双通道自清, RM 不注入), 另露 <code>AQB_FX.ripple(host, ev)</code> 供程序化触发。</td></tr>
+  <tr><td>D1-6 hover-icon</td><td>fx.css</td><td>data-fx="icon" + <code>.fx-ico</code> 子元素契约(hover 轻擦 rotate(8deg) scale(1.08), 时长 --fx-dur-hover)。</td></tr>
+  <tr><td>D5-2 ring / D5-3 floating label</td><td>fx.css</td><td><b>评估结论: 不走 data-fx-variant</b>(那是强度维 subtle/bold/spring, 语义冲突)——落成两个效果名 data-fx="focus-ring" / "focus-float", 可多值组合; 挂字段容器, 契约 = 容器内 input(ring)/ input+label 兄弟对(float); 颜色引 --accent/--accent-ink 带兜底。</td></tr>
+  <tr><td>D5-5 shake-invalid</td><td>fx.css</td><td>data-fx="shake", 双触发口 <code>:user-invalid</code>(原生)/ <code>.is-invalid</code>(JS); 300ms 保留(S4 warn 原样), 边框转 danger 色归消费方(库只管动)。</td></tr>
+  <tr><td>D2-3 zoom-out</td><td>fx.css</td><td>data-fx="zoom" 入场原语(@starting-style 族第 5 员, scale --fx-zoom-from=1.08 收缩落位; 新结构性常量, 三 preset 恒值重声明)。</td></tr>
+  <tr><td>D2-5 danger tone(headShake+glow)</td><td>fx.css</td><td>拆两半合流: glow 半边归 <b>danger</b> 原语(play 触发, 色引 --error 带兜底), headShake 半边归新 <b>headshake</b> 原语(play 触发, 350ms 衰减式); 组合规则 <code>[data-fx~="danger"][data-fx~="headshake"][data-fx-play]</code> 一条 = 弹窗全款(glow 400ms 先行 + headshake 430ms 接力, armDanger 同排), 单 danger = toast 静音款(D6-5)。</td></tr>
+  <tr><td>D3-4 push-content</td><td>fx.css</td><td>data-fx="push"(transform 版; height 真让位 = layout 警示不落库): 消费方写 data-fx-pushed + 作用域 --fx-push-y(让位量归布局侧), 曲线 --fx-dur-panel + ease-in-out。</td></tr>
+  <tr><td>D4-1 hover 扫光 / D4-2 selected 边条 / D4-3 anchor 脉冲 / D4-4L row-insert / D4-5L row-remove / D4-6 checkbox 快勾</td><td>fx.css(rows 系)</td><td>全部 data-fx 委托(row-hover/row-sel/row-flash/row-in/row-out/check), <b>不写 .group-row 选择器</b>(守阵「views.css 单点 + var(--dur) 同源」前提不动, 效果只服务 flux); 颜色消费既有令牌(--bg-hover/--sel-bar/--sel-bg/--accent 系); 行插入/退场按 S4 拍板落 max-height 版(行高单点 --fx-row-h=44px, layout 警示随选定拍板入档); 触发态类 .is-sel/.is-done 与弹窗行级 .is-* 同风格。</td></tr>
+  <tr><td>D6-1 toast slide+fade</td><td>已在库</td><td>data-fx="rise" + AQB_FX.exit 骨对, 零改动。</td></tr>
+  <tr><td>D6-2 倒计时条</td><td>fx.css</td><td>data-fx="countdown"(挂条元素; 时长读消费方 --fx-life, 与自动关闭同源)。</td></tr>
+  <tr><td>D6-3 队列 FLIP(VT)</td><td>已在库(fx.js)</td><td>AQB_FX.viewTransition 语义一致, 零改动。</td></tr>
+  <tr><td>D6-4 icon spring</td><td>fx.css</td><td>data-fx="ico-spring"(play 触发, 300ms --fx-spring-2, 单属性动画取降级链 bezier 头)。</td></tr>
+  <tr><td>D8-4 hscroll 缩放+淡入变体</td><td>fx.css(既有原语扩展)</td><td>不造新原语: <b>pop 原语加 --fx-base-tx 基础位移槽</b>(缺省 0px 语义不变)——生产胶囊 translateX(-50%) 居中占用 transform, 消费方写 --fx-base-tx 即得「缩放+淡入不跳位」合成; S6 后半挂载时落。</td></tr>
+</table>
+<p class="cm">REGISTRY.effects 9 -> 27 名(fx.js 单点), 全部逐名在 fx.css 有对应规则(守阵对账); audit/幂等口径未动。</p>
+<h4>glass 供给改动(S4 待办②)</h4>
+<ul>
+  <li><b>glow 开</b>: glass 块 <code>--fx-glow: 0px -&gt; 12px</code>、<code>--fx-glow-c: transparent -&gt; color-mix(in srgb, var(--accent-ink, currentColor) 60%, transparent)</code> —— 取 showcase 强制补供口径(.fx-force-glow 同款: 12px 级 + accent-ink 系色)。注明这是 <b>S4 拍板的 flux 定制</b>: glass 原始配方语义在 showcase 对比区仍有未补供对照组。</li>
+  <li><b>sheen 维持</b>: glass 本就开(白 40%/0.12), D1-3 sheen 被选维持现值不另动(注记写进 glass 块)。</li>
+  <li>crisp/基线不动; neon 本就开。新令牌 --fx-zoom-from/--fx-row-h 三 preset 恒值重声明(presets「全部成员整体声明」纪律不破)。</li>
+</ul>
+<h4>fx 挂行落点(S6 挂载第一步)与守阵</h4>
+<ul>
+  <li><b>flux/index.html</b>(219 -&gt; 227 行): <code>&lt;html&gt;</code> 加 <code>data-fx-preset="glass"</code>(S4 主 preset 落档); head 尾(dt_table.css 后)挂 <code>/shared/fx/fx.css</code> + <code>fx-presets.css</code>(shared 层惯例 = 排本皮肤全部 CSS 之后, 基线在前配方在后); boot.js 前 <code>&lt;script src="/shared/fx/fx.js"&gt;</code>。</li>
+  <li><b>fx.js 走 shell 静态 script 而非 tpl-manifest</b>: 四套清单守阵钉逐项相等, fx 只服务 flux, 进清单就得四套同挂 = 破 D14 隔离。初始 scan 早于 boot.js 模板异步注入属正常(幂等, 消费方挂载后重扫)。</li>
+  <li><b>守阵三处</b>: ①<code>_scan_mixin_wiring</code> 的 fx.js「待接线豁免」<b>已删</b>(S2 登记的"已登记的待接线件"退役, flux shell 静态 script 引用自然命中 refs); ②hscroll 守阵判据 6(四皮肤 /shared/*.css 链接集逐字相同)加 <code>shared/fx/*</code> 豁免(挂载与序由新守阵单独钉); ③新增 <code>test_frontend_fx_wiring</code>: flux 恰挂三件各一次 + 级联序锚点(views.css/dt_table.css 之后, presets 在 fx.css 后) + 三旧皮肤 /shared/fx/ 零引用(隔离反向钉) + data-fx-preset="glass" 在档 + REGISTRY.effects/presets 逐名对 CSS 规则/配方块。shell 帽 220 -&gt; 227(守阵历史行同步)。</li>
+  <li><b>fx 三件体量</b>: fx.css 272 -&gt; 519 / fx.js 201 -&gt; 255 / fx-presets.css 225 -&gt; 240, 距 700 行帽余量分别 181/445/460 行, 无需按职责分新文件。</li>
+</ul>
+<h4>实测</h4>
+<ul>
+  <li>test.quick 迭代绿; test.full 全绿(数字见 kb.baseline 最新切片)。</li>
+  <li>Playwright 快验(纯静态服务, 无桩 API): /flux/ HTTP 200、AQB_FX 在、preset=glass、registry 27 名、audit ok(total=0, flux 尚无 data-fx 元素, 符合预期)、<b>fx 三件挂行齐备</b>(head 2 link + body 1 script)、ripple 委托真触发(注入宿主派 pointerdown 实测 .fx-ripple 节点入 DOM); 404 仅 /api/config/public(静态服务无后端, 预期)。/fx/showcase.html 回归: audit total=21 <b>ok=true</b>(挑选快照全功能, 卡面一字未动)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -314,6 +354,7 @@
   <li><span class="tag">R0 · 26-10-31-2316</span> 初版：会话 grilling 三轮 15 项决策拍板后成文。要点：零依赖 fx 库(shared/fx/ 单点、两层变体) + showcase 挑选流 + fork console 成 flux(只 dark)；S1-S8 八步，S4 人工挑选为里程碑；三皮肤存量隔离是第一不变量。</li>
   <li><span class="tag">R1 · 26-11-01-0856</span> S4 人工挑选结论回填: 主 preset glass + 24 项选定按组件分组落档(含 warn 原样), S6 待办影响三条(页内自实现提升/glass 开 glow 供给/落选留库不挂载); 原始导出 JSON 落 attachments/26-11-01-webui-fx-skin-s4-picks.json</li>
   <li><span class="tag">R2 · 26-11-01-0925</span> S5 flux fork 执行实录落档(见 §06「S5 执行实录」): fork 落地+令牌取值 glass 化(backdrop-filter 保持 0 处)+ui=== 盘点(补 state.js 两处)+守阵收编(_UI_ALL 四档 + skins 10 处/dom 9 处显式加档)+transition parity 收编定案+Playwright 双皮肤实测零报错; 另修 S4 段一处 ISO-T 日期体例</li>
+  <li><span class="tag">R3 · 26-11-01-0954</span> S6 前半执行实录落档(见 §06「S6 执行实录(前半)」): fx 三件挂 flux(shell 静态 script + head 尾 2 link + html preset=glass, 219-&gt;227 行) + S4 选定 24 项页内自实现提升入库(REGISTRY 9-&gt;27 名, ripple 走 fx.js 委托, focus 系拆 focus-ring/focus-float 两效果名, D2-5 拆 danger+headshake 组合, D8-4 走 pop --fx-base-tx 合成不造新原语, rows 系全 data-fx 委托不碰 .group-row) + glass 开 glow 供给(0-&gt;12px accent-ink 系, S4 拍板 flux 定制; sheen 维持) + 守阵三处(fx.js 待接线豁免删/ hscroll 判据 6 fx 豁免/ 新增 test_frontend_fx_wiring) + test.full 4454 全绿 + Playwright 双验(flux audit ok total=0, showcase audit total=21 ok)</li>
 </ul>
 
 </div>

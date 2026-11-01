@@ -11,7 +11,8 @@
  *
  * 配方口径(S1 §02 A4 OpenProps 启示: 家族 x 强度档位):
  *   neon  = 强档(弹簧 -3 / elastic / 时长靠上限) + 发光开(--fx-glow*)
- *   glass = 中档(弹簧 -2 / sine-quadratic 系柔曲线) + 毛玻璃开(--fx-blur)
+ *   glass = 中档(弹簧 -2 / sine-quadratic 系柔曲线) + 毛玻璃开(--fx-blur);
+ *           S4 拍板 flux 定制(26-11-01): glow/sheen 供给面同开(见 glass 块注记)
  *   crisp = 基线档(无过冲: 弹簧族落回 --fx-ease-out 系 / 时长取下限)
  *
  * 扩展接口(新增 preset 的固定步骤):
@@ -81,6 +82,9 @@
   --fx-enter-shift: 14px;
   --fx-pop-scale: 0.94;
   --fx-slip-x: 20px;
+  /* 结构性常量(S6 提升原语): preset 恒值重声明保持配方完整(分调是未来选项) */
+  --fx-zoom-from: 1.08;
+  --fx-row-h: 44px;
   /* 风格供给面: 发光开 */
   --fx-glow: 12px;
   --fx-glow-c: color-mix(in srgb, currentColor 45%, transparent);
@@ -150,9 +154,17 @@
   --fx-enter-shift: 10px;
   --fx-pop-scale: 0.97;
   --fx-slip-x: 14px;
-  /* 风格供给面: 毛玻璃开(组件配方消费; 禁用在全屏遮罩/吸顶层, PERF-01) */
-  --fx-glow: 0px;
-  --fx-glow-c: transparent;
+  /* 结构性常量(S6 提升原语): preset 恒值重声明保持配方完整(分调是未来选项) */
+  --fx-zoom-from: 1.08;
+  --fx-row-h: 44px;
+  /* 风格供给面: 毛玻璃开(组件配方消费; 禁用在全屏遮罩/吸顶层, PERF-01)。
+   * glow 开 = S4 拍板的 flux 定制(26-11-01, 计划 §06 待办②): 主 preset glass +
+   * D1-2 glow / D2-5 / D6-5 等 glow 系候选被选, 取 showcase 强制补供口径
+   * (.fx-force-glow): 12px 级、色取 accent-ink 系; glass 原始配方语义在
+   * showcase 对比区仍有未补供对照组。sheen 本就开(白 40%/0.12, D1-3 sheen
+   * 被选维持现值), 不另动。 */
+  --fx-glow: 12px;
+  --fx-glow-c: color-mix(in srgb, var(--accent-ink, currentColor) 60%, transparent);
   --fx-blur: 10px;
   --fx-sheen-c: color-mix(in srgb, #ffffff 40%, transparent);
   --fx-sheen-op: 0.12;
@@ -204,6 +216,9 @@
   --fx-enter-shift: 8px;
   --fx-pop-scale: 0.97;
   --fx-slip-x: 12px;
+  /* 结构性常量(S6 提升原语): preset 恒值重声明保持配方完整(分调是未来选项) */
+  --fx-zoom-from: 1.08;
+  --fx-row-h: 44px;
   /* 风格供给面: 全关(装饰归零, 只剩时序) */
   --fx-glow: 0px;
   --fx-glow-c: transparent;

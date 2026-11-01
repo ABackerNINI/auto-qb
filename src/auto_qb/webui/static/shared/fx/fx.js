@@ -9,30 +9,33 @@
  *   - 零依赖: 不引入任何库; classic script + IIFE, 只导出 window.AQB_FX 一域
  *     (顶层不落 let/const -- classic script 全局词法环境撞名会 SyntaxError 白屏,
  *     见 pitfalls/web-ui/classic-script-top-level-const-collision.md)。
- *   - 无消费者(S2): 本文件暂不挂任何皮肤; 挂行未来进 tpl-manifest 由 boot.js
- *     保序注入(风险表 §07「fx.js 与 boot.js 时序冲突」的既定对策), 本文件不读
- *     任何其它 AQB_* 域, 单独加载亦可独立工作。
+ *   - 挂载面(S6 前半): flux shell 静态 <script>(计划 26-10-31-2316; 不进
+ *     tpl-manifest -- 四套清单守阵钉逐项相等, fx 只服务 flux)。本文件不读
+ *     任何其它 AQB_* 域, 单独加载亦可独立工作; 初始 scan 早于 boot.js 的
+ *     模板异步注入属正常 -- 幂等重扫, 消费方挂载 data-fx 元素后再调 scan()。
  *   - 不装 MutationObserver: Vue 轮询把列表行整批换掉(每数秒一次), 观察器会
  *     跟着高频空转(perf-cadence 口径) -- 覆盖新增节点的机制是「幂等重扫」:
  *     任何时刻可再调 AQB_FX.scan(), 已初始化的元素按标记跳过。
  *
- * data-fx 属性约定(与 fx.css 基线规则一一对应):
- *   data-fx="fade|rise|pop|slip|sheen|pulse|lift|glow|press"
- *                                              动效名, 空格分隔可多值
- *                                              (lift/glow/press = hover/press
- *                                              反馈原语, S3 起入族)
+ * data-fx 属性约定(与 fx.css 基线规则一一对应; 名录单点 = REGISTRY.effects,
+ * 基线 9 个(S2) + S6 提升原语 18 个(showcase S4 选定入库), 空格分隔可多值):
+ *   data-fx="<效果名...>"                      见 REGISTRY.effects
  *   data-fx-variant="subtle|bold|spring"       强度变体, 可省
  *   <html data-fx-preset="neon|glass|crisp">   风格层整套配方(fx-presets.css)
  *   data-fx-exit                               退场态标记(挂载器写, 见 exit)
  *   data-fx-play                               一次性动画触发标记(挂载器写, 见 play)
+ *   data-fx-dir="left|right"                   dir 方向槽(S6, fx.js::dir 写)
+ *   data-fx-pushed                             push 让位态标记(S6, 消费方写)
  *   data-fx-on="1"                             已扫描标记(挂载器写, 幂等依据)
  *   --fx-i (style)                             stagger 序号槽(0..N, CSS 算延迟)
+ *   --fx-life (style)                          countdown 倒计时毫秒(S6, 消费方写)
+ *   --fx-base-tx / --fx-push-y (style)         pop 基础位移 / push 让位量(S6, 消费方写)
  *
  * 漏挂载检测口(S2 交付面之一):
  *   - 扫描时给元素写 data-fx-on 标记; audit() 汇报「有 data-fx 但没标记」的
  *     元素 = 挂载器没跑到它(fx.js 漏进 manifest / 新节点没重扫)。
  *   - fx.js 整个漏挂时 window.AQB_FX 为 undefined, 消费方/排障页可一行判:
- *     if (!window.AQB_FX) ... (fx 挂行没进 manifest 的静态信号)。
+ *     if (!window.AQB_FX) ... (fx 挂行没进页面的静态信号)。
  *   - audit() 同时按 REGISTRY 校验未知的动效名/变体名/预设名 -- 模板里写了
  *     data-fx 拼错值时 CSS 静默不生效, 这里是唯一的报错出口。
  */
@@ -41,10 +44,19 @@
 
   var MARK = "data-fx-on";
 
-  /* 动效名/变体名/预设名注册表: fx.css 基线原语 + fx-presets.css 配方名。
-   * 新增任一名 = CSS 与这里同轮补(漏补 = audit 恒报未知, 不会静默)。 */
+  /* 动效名/变体名/预设名注册表: fx.css 基线原语 + S6 提升原语 + fx-presets.css
+   * 配方名。新增任一名 = CSS 与这里同轮补(漏补 = audit 恒报未知, 不会静默;
+   * 反向漏补 CSS 只补注册表 = audit 放行但样式静默不生效, 守阵
+   * test_frontend_fx_wiring 逐名对账)。 */
   var REGISTRY = {
-    effects: ["fade", "rise", "pop", "slip", "sheen", "pulse", "lift", "glow", "press"],
+    effects: [
+      /* 基线(S2): 入场 fade/rise/pop/slip + 注意力 sheen/pulse + 反馈 lift/glow/press */
+      "fade", "rise", "pop", "slip", "sheen", "pulse", "lift", "glow", "press",
+      /* S6 提升(计划 §06 S4 结论; 与 fx.css「S6 提升原语」段一一对应) */
+      "ripple", "icon", "focus-ring", "focus-float", "shake", "headshake", "dir",
+      "zoom", "push", "row-hover", "row-sel", "row-flash", "row-in", "row-out",
+      "check", "countdown", "ico-spring", "danger",
+    ],
     variants: ["subtle", "bold", "spring"],
     presets: ["neon", "glass", "crisp"],
   };
@@ -179,6 +191,46 @@
     return document.documentElement.getAttribute("data-fx-preset") || "";
   }
 
+  /* ---- S6 提升(showcase 页内实现入库, 计划 §06 S4 结论) ---- */
+
+  /* ripple 波纹(D1-4): 向宿主 [data-fx~="ripple"] 注入一个 .fx-ripple 节点
+   * (几何: 直径 = 宿主较长边 x2, 圆心 = 指针落点, 缺省中心), animationend /
+   * 超时双通道自清。RM: 不注入(直接按压终态, showcase 同口径)。常规路径走
+   * 下方 document 级 pointerdown 单委托, 本函数供程序化触发复用。 */
+  function ripple(host, ev) {
+    if (reduced()) return;
+    var r = host.getBoundingClientRect();
+    if (!r.width && !r.height) return;
+    var d = Math.max(r.width, r.height) * 2;
+    var s = document.createElement("span");
+    s.className = "fx-ripple";
+    s.style.width = d + "px";
+    s.style.height = d + "px";
+    var cx = ev && typeof ev.clientX === "number" && (ev.clientX || ev.clientY) ? ev.clientX - r.left : r.width / 2;
+    var cy = ev && typeof ev.clientY === "number" && (ev.clientX || ev.clientY) ? ev.clientY - r.top : r.height / 2;
+    s.style.left = (cx - d / 2) + "px";
+    s.style.top = (cy - d / 2) + "px";
+    s.addEventListener("animationend", function () { s.remove(); }, { once: true });
+    host.appendChild(s);
+    setTimeout(function () { s.remove(); }, 450);
+  }
+
+  /* document 级 pointerdown 单委托: 命中 [data-fx~="ripple"] 即注入波纹。
+   * 捕获段挂 document 一次, 动态插入的宿主零接线自动覆盖(无 MutationObserver)。 */
+  document.addEventListener("pointerdown", function (ev) {
+    var t = ev.target && ev.target.closest ? ev.target.closest('[data-fx~="ripple"]') : null;
+    if (t) ripple(t, ev);
+  }, true);
+
+  /* dir 方向感知滑动重触发口(D7-4): 切页签/切列表方向时调 dir(el, "left"|"right")
+   * -- 摘属性 -> 强制 reflow -> 重写, 同方向的连续切换也能重新播放(fx.css 的
+   * fx-dir-* 动画吃 data-fx-dir 属性)。 */
+  function dir(el, direction) {
+    el.removeAttribute("data-fx-dir");
+    void el.offsetWidth;
+    el.setAttribute("data-fx-dir", direction === "left" ? "left" : "right");
+  }
+
   /* ---- 装载: 就绪即扫; boot.js 保序注入时模板已注入, 兜底 DOMContentLoaded ---- */
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () { scan(); });
@@ -195,6 +247,8 @@
     play: play,
     exit: exit,
     viewTransition: viewTransition,
+    ripple: ripple,
+    dir: dir,
     reduced: reduced,
     preset: preset,
   };
