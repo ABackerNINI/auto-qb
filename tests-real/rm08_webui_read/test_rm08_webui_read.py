@@ -8,13 +8,13 @@ error_reason 数据面 missingFiles 分支(RM08-08)。
 
 驱动形态(计划 §01/§03: dev.webui 安全模式): 每条用例经 Popen 起一份**最小配置**的产品进程
 (interval=86400S 任务线全关 · sync_interval=1.5S 同步线照常 · 规则集零段 · grouping 只读归组 ·
-web.enabled + skip_local_verify: true 回环免密钥), 连 36596(空库草稿本)直接 HTTP 拉读侧端点,
+web.enabled + skip_local_verify: true 回环免密钥), 连 副实例(空库草稿本)直接 HTTP 拉读侧端点,
 逐条「端点载荷 + qB API 对照」两级断言。为什么不 Popen scripts/dev_webui.py 本体: 它是给人用的
 一键脚本(自动开浏览器/交互式 CLI/生成的配置缺 schema_version: 5 会走迁移改写/日志路径与
 lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成同款最小配置(schema_version: 5)
 后用 `python -m auto_qb` 起 —— 与 dev_webui.py 内部 `cli_main()` 完全等价。收尾一律 taskkill
 /F /T 杀整棵进程树(§2.7: 不带 /T 只杀 uv 启动器, 孤儿继续持端口)。RM08-05 的真实种子腿
-(36595 侧)是本片唯一的 36595 面产品实例: 配置经 api_key 直连(qB 5.x WebUI API Key, 实测
+(主实例 侧)是本片唯一的 主实例 面产品实例: 配置经 api_key 直连(qB 5.x WebUI API Key, 实测
 本机可用), grouping 关死(零写路径), 同步线只读。
 
 与计划判据的实况修正(执行时以实况为准记录, 均非产品缺陷, 详见用例 docstring):
@@ -35,7 +35,7 @@ lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成�
   = L2 传输读失败路径或 qB 重启期 resume 核验造法定案。
 
 跑法: `commands run real.suite -- --slice RM08 --yes`(RM08-04 大库注入放最后)。真实种子全程
-非活跃(36595 的 8 枚严格只读, 仅 RM08-05 走只读 detail 面); 假种子一律 real-fake 标签, 本片
+非活跃(主实例 的 8 枚严格只读, 仅 RM08-05 走只读 detail 面); 假种子一律 real-fake 标签, 本片
 默认无 announce 纯本地做种(读侧不需要归组管线, 零外连); RM08-06 的 L2 互传走 RM00 口径
 (伪 tracker 回对端, 全本机零外网, 真实种子保持 paused); 删数据/recheck 只对自造种子。
 """
@@ -172,9 +172,9 @@ def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str) -> tupl
         encoding="utf-8",
     )
     text = cfg.read_text(encoding="utf-8")
-    if qb_port == 36596:
-        if "port: 36595" in text:
-            raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {cfg}")
+    if qb_port == instances.SECONDARY:
+        if f"port: {instances.PRIMARY}" in text:
+            raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
     else:
         if f"port: {qb_port}" not in text:
             raise AssertionError(f"配置未指向 {qb_port}, 拒跑: {cfg}")
@@ -184,7 +184,7 @@ def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str) -> tupl
 
 
 def _popen_auto_qb(cfg: Path):
-    """Popen 一份 `python -m auto_qb <config>`(lib/app.start 的同款命令线, 不带它的 36596 白名单闸)。"""
+    """Popen 一份 `python -m auto_qb <config>`(lib/app.start 的同款命令线, 不带它的 副实例 白名单闸)。"""
     return subprocess.Popen(
         [str(app.PY), "-m", "auto_qb", str(cfg)],
         cwd=str(app.ROOT),
@@ -217,7 +217,7 @@ def web_ready(port: int) -> dict:
 
 
 @contextlib.contextmanager
-def product_case(name: str, *, qb_port: int = 36596, grouping: bool = True, api_key: str = ""):
+def product_case(name: str, *, qb_port: int = instances.SECONDARY, grouping: bool = True, api_key: str = ""):
     """起一份 dev.webui 安全模式产品进程跑单条用例, 收尾必杀进程树。"""
     case = case_dir(name)
     cfg, port = write_cfg(case, qb_port=qb_port, grouping=grouping, api_key=api_key)
@@ -356,7 +356,7 @@ def fake_one(qb, case: Path, name: str, size: int = 256 * 1024, sub: str = "src"
 
 @pytest.fixture()
 def clean_fakes():
-    """幂等清场: 开跑先清 36596 自造种子, 收尾再清一轮并核净(§09 幂等纪律)。"""
+    """幂等清场: 开跑先清 副实例 自造种子, 收尾再清一轮并核净(§09 幂等纪律)。"""
     qb = qbfake()
     rm_all_fakes(qb)
     yield qb
@@ -423,7 +423,7 @@ def wait_quiesced_rid(port: int, cycles: int = 2, quiet_s: float = 2.5) -> int:
 def test_rm08_01_merge_endpoint_and_rid_gating(clean_fakes):
     """[RM08-01] 合并端点契约与 rid 门控: 单请求 status+视图 / 零回传拍 / 恒回传段
 
-    前置: dev.webui 基座连 36596 + 3 枚无 announce 假种子(stalledUP); 首拍字节快照。
+    前置: dev.webui 基座连 副实例 + 3 枚无 announce 假种子(stalledUP); 首拍字节快照。
     副作用: 1 假种子被 qB API 直调暂停一次(可恢复)。
     回滚: real-fake 种子收尾删净; 产品进程 taskkill /F /T; 临时目录随下轮 case_dir 清场。
     失败判据: rid 匹配仍回全量(门控破, 大库下白耗带宽, 高优); updated 拍缺 status 恒回传段
@@ -593,14 +593,14 @@ def test_rm08_03_view_arrays_payload(clean_fakes):
 def test_rm08_05_detail_drawer(clean_fakes):
     """[RM08-05] 详情抽屉四端点: detail 同源一致 + trackers mask + files/peers + 未知 hash 负向
 
-    前置: 36596 主基座 + 1 假种子(假种子腿); 36595 侧另起一份 api_key 直连产品实例
+    前置: 副实例 主基座 + 1 假种子(假种子腿); 主实例 侧另起一份 api_key 直连产品实例
           (grouping 关死零写路径), 真实种子 paused 只读走一遍(真实 tracker 域名最有说服力)。
-    副作用: 无(两腿全只读; 36595 真实种子零触碰)。
+    副作用: 无(两腿全只读; 主实例 真实种子零触碰)。
     回滚: 假种子删净; 两份产品进程 taskkill /F /T; 临时目录清场。
     失败判据: detail 字段与 qB 回读不一致(同源破, 抽屉显示错数, 高优); tracker 原文/凭据外发
               (mask 破, 域名泄漏面); 虚拟条目缺失; 未知 hash 500(错误处理面破)。
     """
-    # ---- 腿 B: 36596 假种子 ----
+    # ---- 腿 B: 副实例 假种子 ----
     with product_case("rm08_05") as (case, port, _proc):
         qb = clean_fakes
         h = fake_one(qb, case, "rm08e.bin", sub="src")
@@ -628,7 +628,7 @@ def test_rm08_05_detail_drawer(clean_fakes):
         code, p = web_err(port, "GET", f"/api/torrents/{'f' * 40}")
         assert code == 404, f"未知 hash 应 404(_require_torrent): {code} {p}"
 
-    # ---- 腿 A: 36595 真实种子(paused, 只读; 独立产品实例 api_key 直连, grouping 关死) ----
+    # ---- 腿 A: 主实例 真实种子(paused, 只读; 独立产品实例 api_key 直连, grouping 关死) ----
     api_key = instances.token_for(instances.PRIMARY) or ""
     with product_case("rm08_05_real", qb_port=instances.PRIMARY, grouping=False, api_key=api_key) as (
         case_real,
@@ -637,7 +637,7 @@ def test_rm08_05_detail_drawer(clean_fakes):
     ):
         qb95 = instances.make(instances.PRIMARY)
         ts = qb95.torrents()
-        assert ts, "36595 应有真实种子(guard 已 pause)"
+        assert ts, "主实例 应有真实种子(guard 已 pause)"
         h = ts[0]["hash"]
         wait_in_store_state(port_real, h, "stoppedUP", timeout=60)  # 同源对照前快照状态到位
         raw_urls = {t["url"] for t in qb95.trackers(h) if str(t["url"]).startswith("http")}
@@ -678,7 +678,7 @@ def test_rm08_06_status_totals_l2(clean_fakes, primary, secondary, tracker, tran
     """[RM08-06] 状态栏 totals 修后复验(走查迁出): status.totals 恒回传 == 同载荷行级求和(非零速)
 
     前置: 双实例 + RM00 L2 互传就位(伪 tracker 回对端, 全本机零外网; 限速钉 256KiB/s);
-          36596 侧 dev.webui 基座在跑; 36595 的 8 枚真实种子保持 paused(假种子活跃不受约束 2)。
+          副实例 侧 dev.webui 基座在跑; 主实例 的 8 枚真实种子保持 paused(假种子活跃不受约束 2)。
     副作用: 两实例各新增 1 枚互传假种子 + 数据文件(用例目录); 传输期间该种子两端活跃。
     回滚: 双侧删种子(连数据) + 限速由 transfer_limits fixture 按快照还原 + 停伪 tracker。
     失败判据: view=torrent 下 totals 键缺失(修复回潮, 状态栏恒 0 根因复发, 高优);
@@ -973,9 +973,9 @@ def test_rm08_08_error_reason_missing_files(clean_fakes):
 def test_rm08_04_large_library_first_frame(clean_fakes):
     """[RM08-04] 大库首帧与滚动数据面: 1200 枚零数据注入下的首拍耗时/字节 + 零回传拍(排期指令: 放最后跑)
 
-    前置: 基座连 36596(空库起步); 1200 枚零数据 .torrent 用例内 bencode 现造(唯一 infohash,
+    前置: 基座连 副实例(空库起步); 1200 枚零数据 .torrent 用例内 bencode 现造(唯一 infohash,
           KB 级元数据, 不落数据盘, 无 announce 零外连)。
-    副作用: 36596 新增 1200 枚种子条目(qB 侧, 无数据文件)。
+    副作用: 副实例 新增 1200 枚种子条目(qB 侧, 无数据文件)。
     回滚: 按 real-fake 标签批量 /torrents/delete(delete_files=false)分批删净 + 收尾核 0 残留;
           产品进程 taskkill /F /T; 临时目录清场; 全片收尾复跑 real.guard。
     失败判据: 首帧耗时超 2s 宽松上界(payload 收敛/JSONResponse 快路径回归); 零回传拍在大库下
@@ -985,7 +985,7 @@ def test_rm08_04_large_library_first_frame(clean_fakes):
     n = 1200
     with product_case("rm08_04") as (case, port, _proc):
         qb = clean_fakes
-        assert qb.connection_status() != "disconnected", "前置: 36596 连接态异常"
+        assert qb.connection_status() != "disconnected", "前置: 副实例 连接态异常"
         savepath = case / "bulk"
         savepath.mkdir(parents=True, exist_ok=True)
 

@@ -5,13 +5,13 @@
 需要 announce 的场景请在用例里用 `FakeTracker`, 或自己起一个常驻 tracker 再用 `--tracker` 指过去。
 
 安全边界(与用例同一套):
-  - 端口只认白名单 36595/36596, 且镜像路径必须在 `D:\\Programs\\qBittorrent-testing*` 下(guard 核);
+  - 端口只认白名单 主实例/副实例, 且镜像路径必须在 `D:\\Programs\\qBittorrent-testing*` 下(guard 核);
   - 加种子前先把**真实种子全部暂停**并核一遍;
   - 自造种子一律打 `real-fake` 标签 —— list / rm / clean 只认这个标签, 绝不碰真实种子;
   - 自造的数据与 .torrent 只能落在 `tests-real/.work/` 下(越界拒跑)。
 
 用法示例:
-  uv run python tests-real/seed.py add --yes                             # 默认 256K 伪随机, 加到 36596 并做种(零外连)
+  uv run python tests-real/seed.py add --yes                             # 默认 256K 伪随机, 加到 副实例 并做种(零外连)
   uv run python tests-real/seed.py add --size 512K --pattern text --yes   # 可读文本行, 便于人眼看/手改
   uv run python tests-real/seed.py add --size 2G --pattern zeros --yes    # 大种子自动落 R:(内存盘, 免写盘代价)
   uv run python tests-real/seed.py add --size 3G --no-data --yes          # >2G 只造元数据: 不落盘就不拦
@@ -47,7 +47,7 @@ HUGE_SIZE = 2 * 1024**3  # > 2G 原则上不许造: 要 --allow-huge + --reason 
 DEFAULT_SIZE = "256K"  # 默认 KB 级: 造种子是为了看状态, 不是为了塞满盘
 ALLOWED_ROOTS = (HERE / ".work", RAM_ROOT)
 TAG = "real-fake"
-DEFAULT_PORT = instances.SECONDARY  # 36596: 空库, 拿它当草稿本
+DEFAULT_PORT = instances.SECONDARY  # 副实例: 空库, 拿它当草稿本
 
 
 # ---------------------------------------------------------------- 小工具

@@ -135,7 +135,7 @@ config:
     schema_version: 5
     qbittorrent:
         host: 127.0.0.1
-        port: 36596
+        port: {qb_port}
         username: ""
         password: ""
     data_dir: "{data_dir}"
@@ -161,11 +161,12 @@ config:
 
 
 def write_cfg(case: Path, *, grouping: bool = True) -> tuple[Path, int]:
-    """生成临时配置(schema_version: 5, 直连 36596 空库, WEB 必开 —— 命令消费挂在完整主循环上)。"""
+    """生成临时配置(schema_version: 5, 直连 副实例 空库, WEB 必开 —— 命令消费挂在完整主循环上)。"""
     cfg = case / "config.yml"
     web_port = app.free_port()
     cfg.write_text(
         CONFIG_TEMPLATE.format(
+            qb_port=instances.SECONDARY,
             data_dir=(case / "data").as_posix(),
             grouping="true" if grouping else "false",
             web_port=web_port,
@@ -174,8 +175,8 @@ def write_cfg(case: Path, *, grouping: bool = True) -> tuple[Path, int]:
         encoding="utf-8",
     )
     text = cfg.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {cfg}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
     if "schema_version: 5" not in text:
         raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
     return cfg, web_port
@@ -280,7 +281,7 @@ def wait_group(port: int, h: str, members: set[str], timeout: float, desc: str) 
     return wait_until(probe, timeout, desc)
 
 
-# ---- qB 侧辅助(36596 副实例; 假种子 real-fake 标签, 幂等清场) ----
+# ---- qB 侧辅助(副实例 副实例; 假种子 real-fake 标签, 幂等清场) ----
 
 
 def qbfake() -> "object":
@@ -313,7 +314,7 @@ def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
 
 
 def rm_all_fakes(qb) -> list[str]:
-    """删光 36596 里本片自造的种子(连数据), 收尾轮询核净。"""
+    """删光 副实例 里本片自造的种子(连数据), 收尾轮询核净。"""
     gone = []
     for t in qb.torrents():
         if TAG in _tags_of(t):
@@ -416,7 +417,7 @@ def clean_fakes():
 def test_rm09_01_pause_resume_roundtrip(clean_fakes):
     """[RM09-01] 单发右键命令真作用: pause/resume 全链路(端点回执 → 命令线消费 → qB 状态真变)
 
-    前置: 基座(非 dry-run 完整主程序连 36596)+ 1 枚带数据假种子(stalledUP), 记录回读前原态。
+    前置: 基座(非 dry-run 完整主程序连 副实例)+ 1 枚带数据假种子(stalledUP), 记录回读前原态。
     副作用: 假种子状态切换两次(做种 → 暂停 → 做种)。
     回滚: real-fake 种子收尾删净(连数据), 产品进程停止, 临时目录随下轮清场。
     失败判据: 回执 ok 但 qB 状态不变(命令线断链/写错实例); 回执永不到达(轮询超时);

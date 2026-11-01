@@ -5,9 +5,9 @@ interval 真节拍(qbmanager.run 双时间线)· 优雅退出落盘 · 非优雅
 热重载 L0/R 闸(apply_new_config)· queue_rebuilt 相位(has_named 幂等)·
 连不上 qB 的节流与退避(RM01 拍板 D1 移交)· state 损坏恢复(store_recovery)。
 
-基建: 节拍观测与断连注入走 `lib/proxy.py`(产品 <-> 36596 之间的本机转发件);
+基建: 节拍观测与断连注入走 `lib/proxy.py`(产品 <-> 副实例 之间的本机转发件);
 进程起停复用 `lib/app.py` 的 AppProc/graceful 跑壳, 配置自带 main_tick/sync_interval/
-state_save_interval 形参(指向代理端口或空端口时不能走 app.start 的 36596 断言)。
+state_save_interval 形参(指向代理端口或空端口时不能走 app.start 的 副实例 断言)。
 
 跑法: `real.suite --slice RM02`(task id), 不要裸 pytest。真实种子全程非活跃(八条零种子)。
 """
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from lib import app
+from lib import app, instances
 from lib.proxy import TcpProxy
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -89,7 +89,7 @@ def write_cfg(
     interval: str = "60S",
 ) -> Path:
     """生成临时配置(schema_version: 5)。qb_port 可指向代理端口/空端口 —— 那两种形态
-    过不了 app.start 的 36596 断言, 所以本片用下面的 start() 代替, 安全面自己复核。"""
+    过不了 app.start 的 副实例 断言, 所以本片用下面的 start() 代替, 安全面自己复核。"""
     data_dir = (case / "data").as_posix()
     cfg = case / "config.yml"
     cfg.write_text(
@@ -106,8 +106,8 @@ def write_cfg(
         encoding="utf-8",
     )
     text = cfg.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {cfg}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
     if "schema_version: 5" not in text:
         raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
     return cfg
@@ -121,7 +121,7 @@ def start(
     graceful_after: float | None = None,
     extra_args: list[str] | None = None
 ) -> app.AppProc:
-    """起产品进程(复用 lib/app.py 的跑壳与 AppProc, 只绕过 36596 断言 —— 配置已自查)"""
+    """起产品进程(复用 lib/app.py 的跑壳与 AppProc, 只绕过 副实例 断言 —— 配置已自查)"""
     if graceful_after is not None:
         cmd = [str(app.PY), str(app._graceful_runner(case)), str(cfg), str(graceful_after)]
     else:
@@ -192,7 +192,7 @@ def sync_gaps(proxy: TcpProxy, window: float, skip: int = 1, since: float | None
 def test_rm02_01_interval_cadence():
     """[RM02-01] interval 真节拍: 同步线请求周期与 sync_interval 一致, 无死段无空转
 
-    前置: 36596 在线空库; 本地 TCP 代理(39000-39999 探空端口, 转发到 36596);
+    前置: 副实例(SECONDARY)在线空库; 本地 TCP 代理(39000-39999 探空端口, 转发到副实例);
           配置 schema_version: 5、qB 地址指代理、main_tick=2S/sync_interval=1.5S、非 dry-run。
     副作用: 无(对 qB 零写, 只读快照请求; 用例目录随收尾删除)。
     回滚: 停进程 + 关代理 + 删用例目录。
@@ -207,7 +207,7 @@ def test_rm02_01_interval_cadence():
         cfg = write_cfg(case, qb_port=px.port)
         p = start(cfg, case)
         assert p.wait_log("启动 qB 管理器", 40), f"进程没起来:\n{p.log()[-800:]}"
-        assert px.wait_requests(6, 30), f"30s 内没有请求经代理到达 36596:\n{p.log()[-600:]}"
+        assert px.wait_requests(6, 30), f"30s 内没有请求经代理到达副实例:\n{p.log()[-600:]}"
 
         gaps = sync_gaps(px, window=26.0)
         sync = px.sync_times()
@@ -230,9 +230,9 @@ def test_rm02_01_interval_cadence():
 def test_rm02_02_graceful_exit_saves_state():
     """[RM02-02] 优雅退出落盘: state.json 退出即写 + 锁 meta 清干净; 红验: dry-run 必须不写
 
-    前置: 直连 36596(不经代理); 非 dry-run; 进程内 8s 后自投 SIGTERM(graceful_after);
+    前置: 直连 副实例(不经代理); 非 dry-run; 进程内 8s 后自投 SIGTERM(graceful_after);
           启动前 state.json 不存在(fresh 目录)。
-    副作用: 用例目录写 state.json/.bak/state.lock(随目录清理); 36596 零写。
+    副作用: 用例目录写 state.json/.bak/state.lock(随目录清理); 副实例 零写。
     回滚: 进程已自行退出; 删用例目录。
     失败判据: 日志无优雅退出锚(非托管模式 SIGTERM 经 KeyboardInterrupt 走 run() 的
               except KeyboardInterrupt ->「停止」一行; 托管模式才是「收到停止信号, 退出主循环」)
@@ -241,7 +241,7 @@ def test_rm02_02_graceful_exit_saves_state():
     """
     case = case_dir("rm02_02")
     try:
-        cfg = write_cfg(case)  # 直连 36596, web 关
+        cfg = write_cfg(case)  # 直连 副实例, web 关
         state_json = case / "data" / "state.json"
         meta = case / "data" / "state.lock.meta.json"
         assert not state_json.exists(), "fresh 目录里不该有 state.json, 用例前提不成立"
@@ -280,7 +280,7 @@ def test_rm02_02_graceful_exit_saves_state():
 def test_rm02_03_flush_window():
     """[RM02-03] 非优雅终止丢失窗口 <= state_save_interval; 红验: interval=0 必须不中途写盘
 
-    前置: 配置 state_save_interval=30S(校验下限); 非 dry-run 运行 >=70s; 直连 36596。
+    前置: 配置 state_save_interval=30S(校验下限); 非 dry-run 运行 >=70s; 直连 副实例。
     副作用: 用例目录 state.json 多次改写; 进程被 taskkill /F /T 强杀。
     回滚: 删用例目录(强杀进程已死, 无需停)。
     失败判据: 运行期内 mtime 推进次数 <2(75s 应有 ~30s/60s 两次); taskkill 后最后写入
@@ -341,7 +341,7 @@ def test_rm02_03_flush_window():
 def test_rm02_04_hot_reload_l0_and_rgate():
     """[RM02-04] 热重载: L0 键(main_tick/sync_interval)即时生效 + R 闸(data_dir)拒绝
 
-    前置: 代理基座(产品 <-> 代理 <-> 36596) + WEB 启用(非 dry-run); 基线节拍 1.5s。
+    前置: 代理基座(产品 <-> 代理 <-> 副实例) + WEB 启用(非 dry-run); 基线节拍 1.5s。
     副作用: 运行期经 PUT /api/config 改写用例目录的临时配置文件。
     回滚: 停进程 + 关代理 + 删用例目录。
     失败判据: 提交 main_tick/sync_interval 变更后代理观测同步线节拍未变(2.5s 期望);
@@ -404,7 +404,7 @@ def test_rm02_04_hot_reload_l0_and_rgate():
 def test_rm02_05_queue_rebuilt_idempotent():
     """[RM02-05] queue_rebuilt 相位: 连续两次 L2 重建, 全局任务不重不丢
 
-    前置: 直连 36596 + WEB 启用; 经 PUT /api/config 改 interval(rules 模块认领段)触发
+    前置: 直连 副实例 + WEB 启用; 经 PUT /api/config 改 interval(rules 模块认领段)触发
           L2 重建, 连续两次。
     副作用: 运行期改写用例目录的临时配置文件(interval 60S->61S->62S)。
     回滚: 停进程 + 删用例目录。
@@ -580,7 +580,7 @@ def test_rm02_08_state_corruption_recovery():
     """
     case = case_dir("rm02_08")
     try:
-        cfg = write_cfg(case)  # 直连 36596
+        cfg = write_cfg(case)  # 直连 副实例
         state_json = case / "data" / "state.json"
         state_bak = case / "data" / "state.json.bak"
 

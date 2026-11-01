@@ -11,7 +11,7 @@
 - 正常发起的搬迁锚点是「迁移发起」;「已下发 qB 搬迁」只出现在重启补发路径(_step_move);
 - 同一物理文件挂两枚同组种子(辅种本质)时, 两枚的 info 必须不同 ⇒ 用**不同 piece_len** 造
   (同内容不同分块 → 不同 infohash, 双双校验通过); 盐不同会让先写的成员校验失败;
-- 同卷证明闸门: qB 36596 默认保存路径在 R: 盘(实测), 与 src 同卷 ⇒ 多成员跨卷可过 GATE_SAME_FS;
+- 同卷证明闸门: qB 副实例 默认保存路径在 R: 盘(实测), 与 src 同卷 ⇒ 多成员跨卷可过 GATE_SAME_FS;
 - journal 恢复的权威账在 state.json 的 relocate.jobs(job_to_dict 形), journal/spec/pid 是 guardian 侧账;
   相位落盘走 state_save_interval(30S)周期, 断言等待窗按 30s+ 裕量给。
 
@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pytest
 
-from lib import app, torrent
+from lib import app, instances, torrent
 from lib.bencode import encode
 from lib.net import local_host
 
@@ -66,8 +66,7 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 绕 HT
 
 
 def qbfake():
-    from lib import instances
-    return instances.make(36596)
+    return instances.make(instances.SECONDARY)
 
 
 def _tags_of(t) -> set[str]:
@@ -100,7 +99,7 @@ def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
 
 
 def rm_all_fakes(qb) -> list[str]:
-    """删光 36596 里本片自造的种子(连数据), 返回删掉的名字(证据用)。
+    """删光 副实例 里本片自造的种子(连数据), 返回删掉的名字(证据用)。
 
     顺序 = **先删后摘标签**(删失败时保留 real-fake 标记, 让下一次清场还能看见它;
     先摘后删会在删除漏网时把种子变成无主残留 —— 实测踩中)。收尾轮询核净, 不净即抛。"""
@@ -183,7 +182,7 @@ config:
     schema_version: 5
     qbittorrent:
         host: 127.0.0.1
-        port: 36596
+        port: {qb_port}
         username: ""
         password: ""
     data_dir: "{data_dir}"
@@ -217,7 +216,7 @@ def write_cfg(case: Path,
               cross_group: bool = False,
               relocate: bool = False,
               alias_threshold: int = 8) -> tuple[Path, int]:
-    """生成临时配置(schema_version: 5, 直连 36596, WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
+    """生成临时配置(schema_version: 5, 直连副实例(SECONDARY), WEB 必开 —— 本片断言全走产品 WEB 只读端点)。
 
     product data_dir 指用例临时目录: journal/spec/pid/state 随目录清理, 不碰仓库根 auto-qb-data/。
     返回 (配置路径, web端口)。"""
@@ -225,6 +224,7 @@ def write_cfg(case: Path,
     web_port = app.free_port()
     cfg.write_text(
         CONFIG_TEMPLATE.format(
+            qb_port=instances.SECONDARY,
             data_dir=(case / "data").as_posix(),
             cross_group="true" if cross_group else "false",
             relocate="true" if relocate else "false",
@@ -235,8 +235,8 @@ def write_cfg(case: Path,
         encoding="utf-8",
     )
     text = cfg.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {cfg}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
     if "schema_version: 5" not in text:
         raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
     return cfg, web_port
@@ -463,9 +463,9 @@ def wait_job_phase(case: Path, job_id: str, phases: set[str], timeout: float, de
 def test_rm04_01_group_key_same_and_contrast():
     """[RM04-01] 归组 key: 同 save_path 同文件列表归同组, 异文件列表不同组(对照红验内建)
 
-    前置: 产品非 dry-run 连 36596, grouping.enabled=true(默认); 3 枚 --no-data 假种子
+    前置: 产品非 dry-run 连 副实例, grouping.enabled=true(默认); 3 枚 --no-data 假种子
           (A/B 同名同 save_path 异 salt, C 异名同 save_path), 停在 stalledDL。
-    副作用: 36596 加 3 假种子(real-fake); 零文件系统写(仅 savepath 目录壳)。
+    副作用: 副实例 加 3 假种子(real-fake); 零文件系统写(仅 savepath 目录壳)。
     回滚: 删光 real-fake 种子 + 删用例目录。
     失败判据: A/B 未归同组; 或 C 与 A/B 归成一组(对照红验失效); 或出现
               「文件大小不一致」日志(3 枚同尺寸, 归组触发的一致性检查不得误报)。
@@ -474,7 +474,7 @@ def test_rm04_01_group_key_same_and_contrast():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cfg, web_port = write_cfg(case)
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
@@ -513,7 +513,7 @@ def test_rm04_02_size_consistency_pauses_group():
 
     前置: 同 RM04-01 基座; A/B --no-data 同名同 save_path、声明 256K/512K(相对路径同、
           大小不同); C --no-data 异名单成员组作对照。
-    副作用: 36596 加 3 假种子; A/B 整组被产品暂停(假种子, 允许)。
+    副作用: 副实例 加 3 假种子; A/B 整组被产品暂停(假种子, 允许)。
     回滚: 删光 real-fake 种子 + 删用例目录。
     失败判据: 日志无「文件大小不一致, 暂停整组」; 或 A/B 未变 stopped; 或单成员 C
               也被判不一致而暂停(误报)。
@@ -522,7 +522,7 @@ def test_rm04_02_size_consistency_pauses_group():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cfg, web_port = write_cfg(case)
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
@@ -569,7 +569,7 @@ def test_rm04_03_missing_files_tag_and_contrast():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cfg, web_port = write_cfg(case)
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
@@ -621,7 +621,7 @@ def test_rm04_04_cross_group_conflict_and_missing_exempt():
 
     前置: cross_group_conflict_check: true; 组 A 带数据完整(2 文件, stalledUP), 组 B
           --no-data(同内容根同名文件物理重叠, stalledDL 满足下载中谓词, 零外连)。
-    副作用: 36596 加 2 假种子; B(下载方)被暂停两次(初次 + 复发红验)。
+    副作用: 副实例 加 2 假种子; B(下载方)被暂停两次(初次 + 复发红验)。
     回滚: 删光 real-fake 种子(连数据)+ 摘标签 + 删两个用例目录。
     失败判据: 无「跨组文件交叉」警告; 或下载方未被暂停; 或完成侧被误暂停; 复发红验
               (resume 后再次警告+暂停)不成立; MISSING 豁免对照不豁免(resume 后仍被打断);
@@ -632,7 +632,7 @@ def test_rm04_04_cross_group_conflict_and_missing_exempt():
     p2 = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cfg, web_port = write_cfg(case, cross_group=True)
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
@@ -725,7 +725,7 @@ def test_rm04_05_cross_volume_relocate_dir_alias():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         src = RAM / "rm04_05" / "src"
         dst = case / "dst"
         purge_tree(src.parent)
@@ -807,7 +807,7 @@ def test_rm04_06_journal_recovery_after_crash():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         src = RAM / "rm04_06" / "src"
         dst = case / "dst"
         purge_tree(src.parent)
@@ -955,7 +955,7 @@ def test_rm04_07_corrupt_journal_and_orphan_pid():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         src = RAM / "rm04_07" / "src"
         dst = case / "dst"
         purge_tree(src.parent)
@@ -1058,7 +1058,7 @@ def test_rm04_08_save_path_change_regroup():
     p = None
     try:
         qb = qbfake()
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         src = WORK / "rm04_08" / "src"
         moved = WORK / "rm04_08" / "moved"
         cfg, web_port = write_cfg(case)

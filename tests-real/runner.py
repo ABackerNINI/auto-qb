@@ -18,7 +18,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from lib import guard, instances  # noqa: E402
+from lib import env_registry, guard, instances  # noqa: E402
 
 CASE_RE = re.compile(r"\[(RM\d{2}-\d{2})\]\s*(.+)")
 
@@ -78,6 +78,25 @@ def cmd_pause_all(args) -> int:
     return rc
 
 
+def cmd_env(args) -> int:
+    from lib import instances
+
+    env = guard._ENV
+    eid = next(k for k, v in env_registry.ENVIRONMENTS.items() if v is env)
+    print(f"当前环境: 环境{eid}({env['machine']})  [QBT_REAL_ENV={os.environ.get('QBT_REAL_ENV') or '(未设, 按 EXE 探测)'}]")
+    print(f"  主实例 PRIMARY   = {env['primary']}  exe: {env['exe'][env['primary']]}")
+    print(f"  副实例 SECONDARY = {env['secondary']}  exe: {env['exe'][env['secondary']]}")
+    if env["bt_listen"]:
+        print(f"  BT 监听端口(实测): {env['bt_listen']}")
+    else:
+        print("  BT 监听端口: 待本轮实测回填(规程 §2.5)")
+    for port in guard.WHITELIST_PORTS:
+        via_env = f"已设(QBT_TEST_{port})" if os.environ.get(instances.TOKEN_ENV[port]) else "未设"
+        via_file = "有(local.json)" if str(port) in instances._local_tokens() else "无"
+        print(f"  token @{port}: 环境变量 {via_env} / local.json {via_file}(口径: token 由用户每轮会话给, 不落盘)")
+    return 0
+
+
 def cmd_up(args) -> int:
     for port in _ports(args.port):
         if _wait_port(port, timeout=0.5):
@@ -106,8 +125,9 @@ def cmd_down(args) -> int:
             f"Where-Object {{ $_.Path -eq '{guard.EXE[port]}' }} | "
             "ForEach-Object { Stop-Process -Id $_.Id -Force; $_.Id }"
         )
-        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-                           capture_output=True, text=True, timeout=60)
+        r = subprocess.run(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps], capture_output=True, text=True, timeout=60
+        )
         killed = [x for x in (r.stdout or "").split() if x.strip().isdigit()]
         print(f"[{'ok' if killed else 'skip'}] {port} 关闭 pid={killed or '无(未在跑)'}")
     return 0
@@ -180,8 +200,10 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--port", default="all")
     p.set_defaults(fn=cmd_pause_all)
 
-    for name, fn, text in (("up", cmd_up, "启动白名单实例(经 explorer, 不会被工具 shell 连带杀掉)"),
-                           ("down", cmd_down, "关闭白名单实例")):
+    p = sub.add_parser("env", help="看当前测试环境(id/端口/EXE/token 配置方式)")
+    p.set_defaults(fn=cmd_env)
+
+    for name, fn, text in (("up", cmd_up, "启动白名单实例(经 explorer, 不会被工具 shell 连带杀掉)"), ("down", cmd_down, "关闭白名单实例")):
         p = sub.add_parser(name, help=text)
         p.add_argument("--port", default="all")
         p.add_argument("--dry-run", action="store_true")

@@ -1,9 +1,9 @@
 """RM07 片内基座: 只做「环境还活着 + 真实种子没被点着」的只读核验(与 RM01/RM06 同口径)。
 
 不挂 `tests-real/conftest.py` 的 `env` fixture: 那套会**暂停**两实例的全部种子并起看门狗 ——
-RM07 的十条全部只依赖「36596 在线且空库」(产品进程只连 36596; 限速/曲线/采样判据都是数据与
+RM07 的十条全部只依赖「副实例 在线且空库」(产品进程只连 副实例; 限速/曲线/采样判据都是数据与
 配置面; 唯一的 L2 互传 RM07-08 用假种子, 不受约束 2), 归零对它是多余的副作用。这里只读:
-端口白名单 + 实例在线 + 36595 的真实种子必须仍在非活跃态。
+端口白名单 + 实例在线 + 主实例 的真实种子必须仍在非活跃态。
 """
 from __future__ import annotations
 
@@ -53,4 +53,4 @@ def environment():
 
     primary = instances.make(instances.PRIMARY)
     active = [t["name"] for t in primary.torrents() if t["state"] in ACTIVE]
-    assert not active, f"36595 的真实种子有活跃的, 本片不该在此时跑: {active[:5]}"
+    assert not active, f"主实例({instances.PRIMARY})的真实种子有活跃的, 本片不该在此时跑: {active[:5]}"

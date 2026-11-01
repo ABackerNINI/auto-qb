@@ -9,9 +9,9 @@ import time
 
 import pytest
 
-from lib import guard, net, torrent
+from lib import env_registry, guard, instances, net, torrent
 
-PRIMARY, SECONDARY = 36595, 36596
+PRIMARY, SECONDARY = instances.PRIMARY, instances.SECONDARY
 
 
 def _purge(qb, infohash: str) -> None:
@@ -29,8 +29,7 @@ def _tracker_urls(qb, infohash: str) -> set:
     `/torrents/trackers` 会把 DHT / PeX / LSD 也当条目返回, url 形如 `** [DHT] **`,
     它们不是网络地址, 直接丢进 is_local_url 会误报, 所以先按 http 前缀滤掉。
     """
-    return {tr["url"] for tr in qb.trackers(infohash)
-            if str(tr.get("url") or "").startswith("http")}
+    return {tr["url"] for tr in qb.trackers(infohash) if str(tr.get("url") or "").startswith("http")}
 
 
 def _wait(fn, timeout: float, interval: float = 1.0, what: str = "条件"):
@@ -49,7 +48,7 @@ def _wait(fn, timeout: float, interval: float = 1.0, what: str = "条件"):
 def test_rm00_01_guard_whitelist():
     """[RM00-01] 守卫第一层: 非白名单端口一律拒跑, 白名单端口必须核出测试目录下的镜像路径。
 
-    前置: 36595 实例在跑(L0)。
+    前置: 主实例(PRIMARY)在跑(L0)。
     副作用: 无(只读端口与进程)。
     回滚: 无需。
     失败判据: 非白名单端口未抛 GuardError, 或白名单端口核不出镜像路径 / 镜像不在测试目录下。
@@ -65,7 +64,7 @@ def test_rm00_01_guard_whitelist():
 def test_rm00_02_guard_pauses_real_torrents(env):
     """[RM00-02] 守卫第二层: 真实种子全部非活跃(前置归零的结果, 也是看门狗的保护面)。
 
-    前置: 两实例在跑; 36595 有真实种子(L0)。
+    前置: 两实例在跑; 主实例(PRIMARY)有真实种子(L0)。
     副作用: 无(只读状态; 归零已在 fixture 里做过)。
     回滚: 无需。
     失败判据: 任一受保护种子处于活跃状态或速率非 0。
@@ -84,7 +83,7 @@ def test_rm00_03_instances_online(env):
     副作用: 无(只读 `/transfer/info`)。
     回滚: 无需。
     失败判据: 任一实例 `connection_status == disconnected` —— 此时它一个 announce 都不会发,
-              后面所有"零流量"结论都是假的(实测 36596 的 BT 端口撞上生产实例就是这样)。
+              后面所有"零流量"结论都是假的(实测: 副实例 BT 端口曾撞上生产实例)。
 
     注意 `firewalled` 是**通过**: 本地互传不需要端口映射, 只要有监听 socket 就行。
     """
@@ -98,8 +97,8 @@ def test_rm00_03_instances_online(env):
 def test_rm00_04_l1_fake_torrent_zero_traffic(primary, tracker, workdir):
     """[RM00-04] L1 正向: 构造种子 + 伪 tracker ⇒ 做种中但零流量, 且 qB 真的报到过。
 
-    前置: 36595 在跑 + 伪 tracker 在跑(L1)。
-    副作用: 往 36595 加一个自造种子(announce 只指本机, 见 lib/net.py 为何不用 127.0.0.1), 结束后连文件一起删。
+    前置: 主实例(PRIMARY)在跑 + 伪 tracker 在跑(L1)。
+    副作用: 往主实例(PRIMARY)加一个自造种子(announce 只指本机, 见 lib/net.py 为何不用 127.0.0.1), 结束后连文件一起删。
     回滚: finally 里 delete(delete_files=True) + 删临时目录。
     失败判据: 60s 内未进入稳定态 / 伪 tracker 零 announce / 60s 内出现非 0 速率 / tracker 里有非本地地址。
     """
@@ -110,8 +109,12 @@ def test_rm00_04_l1_fake_torrent_zero_traffic(primary, tracker, workdir):
     _purge(primary, ih)
     try:
         primary.add_torrent(raw, savepath=str(save), paused=False, infohash_hint=ih)
-        t = _wait(lambda: (primary.torrent(ih) or {}).get("state") in ("stalledUP", "uploading", "pausedUP")
-                  and tracker.count(ih) >= 1 and primary.torrent(ih), 60, what="稳定态+announce")
+        t = _wait(
+            lambda: (primary.torrent(ih) or {}).get("state") in
+            ("stalledUP", "uploading", "pausedUP") and tracker.count(ih) >= 1 and primary.torrent(ih),
+            60,
+            what="稳定态+announce"
+        )
         assert t, f"60s 内未稳定: {primary.torrent(ih)} / announce={tracker.count(ih)}"
         assert tracker.count(ih) >= 1, "伪 tracker 没收到 announce —— stalledUP 可能只是没报到"
 
@@ -160,7 +163,7 @@ def test_rm00_05_l1_no_external_contact(primary, tracker, workdir):
 
 # ---------------------------------------------------------------- RM00-06
 def test_rm00_06_l2_peer_transfer(primary, secondary, tracker, workdir, transfer_limits):
-    """[RM00-06] L2: 双实例互传 —— 36596 从 36595 拉完同一构造种子, 全程只打本地 tracker。
+    """[RM00-06] L2: 双实例互传 —— 副实例(SECONDARY)从主实例(PRIMARY)拉完同一构造种子, 全程只打本地 tracker。
 
     前置: 两实例在跑 + 伪 tracker 在跑; 两端 listen_port 不同且都绑在局域网 IP 上(实测 26803 / 60539)。
     副作用: 两端各加一个自造种子并互传 2MB; 限速临时钉成 256 KiB/s(见 transfer_limits), 结束后还原。
@@ -194,7 +197,8 @@ def test_rm00_06_l2_peer_transfer(primary, secondary, tracker, workdir, transfer
                 break
             time.sleep(1)
         assert done is not None, (
-            f"180s 未完成: leech={secondary.torrent(ih)} / seed={primary.torrent(ih)} / announce={tracker.count(ih)}")
+            f"180s 未完成: leech={secondary.torrent(ih)} / seed={primary.torrent(ih)} / announce={tracker.count(ih)}"
+        )
         assert up_seconds >= 5, f"做种端 upspeed>0 只观测到 {up_seconds}s(需 ≥5s)"
         assert done["downloaded"] >= payload, f"leech 实际下载量不足: {done['downloaded']} < {payload}"
         # qB 的 uploaded 计数比 progress 慢一拍(实测差 ~20KB), 给它 15s 追平, 不要卡死在临界值上

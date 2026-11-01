@@ -3,7 +3,7 @@
 设计约束(每条都有现场证据, 见 plan 26-10-31-0705 §02):
   - **绕代理**: 本机 HTTP_PROXY 会把 127.0.0.1 的请求转成 502, 一律用 ProxyHandler({}) 的 opener;
   - **字段名**: qB 5.2 返回 upspeed / dlspeed;
-  - **鉴权降级**: 带 token 收到 403 时重试一次不带 token(36596 是 LocalHostAuth=false), 成功则记住;
+  - **鉴权降级**: 带 token 收到 403 时重试一次不带 token(副实例 是 LocalHostAuth=false), 成功则记住;
   - **不吞异常**: HTTP 错误一律带状态码与 body 片段抛出, 让用例红在原因上而不是 None 上。
 """
 from __future__ import annotations
@@ -61,7 +61,7 @@ class Qb:
                 return r.read()
         except urllib.error.HTTPError as e:
             if e.code == 403 and self._auth_mode == "token":
-                # 该实例本机免鉴权: 带 token 反而被拒(36596 实测), 降级后重试一次
+                # 该实例本机免鉴权: 带 token 反而被拒(副实例 实测), 降级后重试一次
                 self._auth_mode = "none"
                 headers.pop("Authorization", None)
                 try:

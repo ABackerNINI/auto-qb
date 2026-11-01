@@ -53,7 +53,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
 
 import hr_helpers  # noqa: E402  (tests/hr_helpers.py: myhr_page/row/LOGIN_PAGE/torrent_blob)
-from lib import app, torrent  # noqa: E402
+from lib import app, instances, torrent  # noqa: E402
 from lib.net import local_host  # noqa: E402
 
 pytestmark = [
@@ -90,8 +90,7 @@ _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))  # 绕 HT
 
 
 def qbfake():
-    from lib import instances
-    return instances.make(36596)
+    return instances.make(instances.SECONDARY)
 
 
 def _tags_of(t) -> set[str]:
@@ -132,7 +131,7 @@ def rm_all_fakes_with_sweep(qb, name_prefix: str) -> list[str]:
             qb.delete(t["hash"], delete_files=True)
             gone.append(f"[sweep]{t['name']}")
     if gone:
-        wait_until(lambda: not qb.torrents(), 15, f"清场后 36596 仍有种子残留: {gone}")
+        wait_until(lambda: not qb.torrents(), 15, f"清场后副实例仍有种子残留: {gone}")
     return gone
 
 
@@ -222,7 +221,7 @@ def assert_zero_external(case: Path) -> None:
 
 
 def fake_seed(qb, name: str, salt: str, savepath) -> tuple[str, bytes]:
-    """造一枚 L1 假种子并加入 36596(带 real-fake 标签); 返回 (infohash, .torrent 原始字节)。
+    """造一枚 L1 假种子并加入 副实例(带 real-fake 标签); 返回 (infohash, .torrent 原始字节)。
 
     字节必须留着: 身份登记路径是「站点行下载 .torrent → compute_infohashes → 与本地 infohash
     对碰」(service._run_downloads), 桩回传的就是这份字节 ⇒ 条目绑定到本地种子(RM06-02 正向链)。"""
@@ -249,7 +248,7 @@ def write_cfg(
     request_timeout_s: int = 20,
     hr_check_enabled: bool = True
 ) -> Path:
-    """生成临时配置(schema_version: 5, 直连 36596 空库; 计划 §03 基座口径)。
+    """生成临时配置(schema_version: 5, 直连 副实例 空库; 计划 §03 基座口径)。
 
     - trackers 恰 1 条目: domains=[站点档案 tracker 域]+[本机 IP] —— 域名交集派生站点绑定
       (loaders._resolve_hr_site_bindings), 本机 IP 使假种子(announce=本机IP:1)进匹配管线;
@@ -272,7 +271,7 @@ def write_cfg(
         "schema_version": 5,
         "qbittorrent": {
             "host": "127.0.0.1",
-            "port": 36596,
+            "port": instances.SECONDARY,
             "username": "",
             "password": ""
         },
@@ -332,10 +331,10 @@ def write_cfg(
     path = case / "config.yml"
     path.write_text(yaml.safe_dump({"config": cfg}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     text = path.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {path}")
-    if "port: 36596" not in text:
-        raise AssertionError(f"配置没指向 36596(空库草稿本), 拒跑: {path}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
+    if f"port: {instances.SECONDARY}" not in text:
+        raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
     return path
 
 
@@ -587,7 +586,7 @@ def test_rm06_01_channel_auth_and_discovery():
     """[RM06-01] 通道鉴权与发现: 无/错 token 401 · 非扩展 origin 403 · 正确凭据 200 + 发现端点自动分发(负向内建)
 
     前置: 完整通道基座(§03); 1 枚假种子(保证任务队列非空); 数据端点 port=0 随机, 实绑端口取自产品日志。
-    副作用: 1 假种子; hr.token/站点文件落用例临时 data_dir; 36596 无写。
+    副作用: 1 假种子; hr.token/站点文件落用例临时 data_dir; 副实例 无写。
     回滚: real.seed.rm --all + 删用例临时目录; 实例无残留。
     失败判据: 错 token 拿到 200(鉴权失效, 高优 FAIL); 正确凭据被 401/403; 401 时通道接触状态仍被写;
               发现回执缺端口或 token; 任务 URL 域名不是站点档案域名(UrlPolicy 失守 = SSRF 红线);
@@ -597,7 +596,7 @@ def test_rm06_01_channel_auth_and_discovery():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         fake_seed(qb, "rm06c1.bin", "rm06c1", WORK / "rm06_01")
         cfg = write_cfg(case, web_port=app.free_port(), request_timeout_s=8)
@@ -686,7 +685,7 @@ def test_rm06_02_task_dispatch_and_result_roundtrip():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         name = "rm06c2beta marker show 2026"
         ih, raw = fake_seed(qb, name, "rm06c2-a", WORK / "rm06_02")
@@ -751,7 +750,7 @@ def test_rm06_03_hit_lane_a_tagging():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         name = "rm06c3beta marker show"
         ih, raw = fake_seed(qb, name, "rm06c3-a", WORK / "rm06_03")
@@ -806,7 +805,7 @@ def test_rm06_04_miss_lane_release_and_contrast():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         miss_name = "rm06c4 miss alpha one"  # 甲: 与两行名全不重合(K=12 无连续重合段)
         hit_name = "rm06c4beta marker show"  # 乙: 行 601 名命中
@@ -891,7 +890,7 @@ def test_rm06_05_error_paths_login_and_timeout():
     case1 = case_dir("rm06_05a")
     p1 = None
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c5"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c5"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         fake_seed(qb, "rm06c5a.bin", "rm06c5-a", WORK / "rm06_05a")
         cfg = write_cfg(case1, web_port=app.free_port())
@@ -987,7 +986,7 @@ def test_rm06_06_rate_limit_interval_and_daily_quota():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         name = "rm06c6beta marker show"
         ih, raw = fake_seed(qb, name, "rm06c6-a", WORK / "rm06_06")
@@ -1063,7 +1062,7 @@ def test_rm06_07_exclude_table_dynamic_switch():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         excl_name = "rm06c7 alpha excluded one"  # 甲: 预打 rm06-excl
         hit_name = "rm06c7beta marker show"  # 乙: 不带排除标签
@@ -1169,7 +1168,7 @@ def test_rm06_08_status_read_face_and_guard():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes_with_sweep(qb, "rm06c"), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm06_defs(qb)
         name = "rm06c8beta marker show"
         ih, raw = fake_seed(qb, name, "rm06c8-a", WORK / "rm06_08")

@@ -72,8 +72,8 @@ TODAY = date.today()
 
 LIMIT_PREF_KEYS = ("dl_limit", "up_limit", "alt_dl_limit", "alt_up_limit", "use_alt_speed_limits")
 
-
 # ---------------------------------------------------------------- 基座
+
 
 def case_dir(name: str) -> Path:
     d = WORK / name
@@ -111,7 +111,7 @@ config:
     schema_version: 5
     qbittorrent:
         host: 127.0.0.1
-        port: 36596
+        port: {qb_port}
         username: ""
         password: ""
     data_dir: "{data_dir}"
@@ -134,13 +134,14 @@ config:
 
 
 def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: str = "") -> Path:
-    """生成临时配置(schema_version: 5, 只指 36596 空库)。extra = 顶层段 YAML 文本(顶格书写,
+    """生成临时配置(schema_version: 5, 只指 副实例 空库)。extra = 顶层段 YAML 文本(顶格书写,
     这里统一缩进 4 格挂到 config: 之下 —— 段落必须嵌在 config 键组内, 根节点只认 config)。"""
     data_dir = (case / "data").as_posix()
     cfg = case / "config.yml"
     indented = "".join(("    " + line if line.strip() else line) + "\n" for line in extra.splitlines())
     cfg.write_text(
         CONFIG_TEMPLATE.format(
+            qb_port=instances.SECONDARY,
             data_dir=data_dir,
             main_tick=main_tick,
             web_enabled="true" if web else "false",
@@ -150,8 +151,8 @@ def write_cfg(case: Path, *, web: bool = False, main_tick: str = "2S", extra: st
         encoding="utf-8",
     )
     text = cfg.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {cfg}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {cfg}")
     if "schema_version: 5" not in text:
         raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {cfg}")
     return cfg
@@ -169,12 +170,10 @@ def traffic_source_section(enabled: bool = True, dat_path: str = "", refresh: st
 
 
 def qb_traffic_section(sample: str = "4S", flush: str = "60S") -> str:
-    return (
-        "qb_traffic:\n"
-        "    enabled: true\n"
-        f"    sample_interval: {sample}\n"
-        f"    flush_interval: {flush}\n"
-    )
+    return ("qb_traffic:\n"
+            "    enabled: true\n"
+            f"    sample_interval: {sample}\n"
+            f"    flush_interval: {flush}\n")
 
 
 def web_port_of(cfg: Path) -> int:
@@ -186,7 +185,6 @@ def web_port_of(cfg: Path) -> int:
 
 def web_client(port: int):
     """产品 Web API 客户端(GET 返回 dict; 非 2xx 抛 HTTPError, 断言 502 时显式接)。"""
-
     def req(method: str, path: str, body: dict | None = None) -> dict:
         r = urllib.request.Request(
             f"http://127.0.0.1:{port}{path}",
@@ -220,6 +218,7 @@ def put_config(port: int, mutate) -> dict:
 
 # ---------- dat 造数(parse_history_dat 口径: KB 单位, 首行 lines 声明) ----------
 
+
 def write_dat(path: Path, rows: list[tuple[date, int, int]], bad_lines: tuple[str, ...] = ()) -> Path:
     """rows: [(日期, 上传KB, 下载KB)]; bad_lines: 故意造的坏行(坏行路径是验证面)。"""
     lines = [f"lines: {len(rows) + len(bad_lines)}"]
@@ -231,6 +230,7 @@ def write_dat(path: Path, rows: list[tuple[date, int, int]], bad_lines: tuple[st
 
 
 # ---------- qB 全局限速(transfer 端点 = qB 5.2 权威面, 与产品 qbapi 同一路径) ----------
+
 
 def global_limit_bytes(qb, direction: str) -> int:
     path = "/transfer/uploadLimit" if direction == "up" else "/transfer/downloadLimit"
@@ -246,12 +246,12 @@ def set_global_limit_bytes(qb, direction: str, value_bytes: int) -> None:
 
 @pytest.fixture()
 def global_limits():
-    """实例级全局偏好快照/还原(头号红线): 36596 的 transfer 两方向 + prefs 五键, 结束逐字还原。
+    """实例级全局偏好快照/还原(头号红线): 副实例 的 transfer 两方向 + prefs 五键, 结束逐字还原。
 
-    RM07-04/05/06/08 会改写(或依赖)36596 的全局限速 —— 忘还原会毒化后续所有片的
+    RM07-04/05/06/08 会改写(或依赖)副实例的全局限速 —— 忘还原会毒化后续所有片的
     L2 互传与真实种子行为(§2.5: 默认 dl_limit=1024 既是坑也是原值)。还原值取快照, 不硬编码。
     """
-    qb = instances.make(36596)
+    qb = instances.make(instances.SECONDARY)
     saved_prefs = {k: qb.prefs().get(k) for k in LIMIT_PREF_KEYS}
     saved = {"up": global_limit_bytes(qb, "up"), "down": global_limit_bytes(qb, "down")}
     yield qb
@@ -271,8 +271,13 @@ def pin_limits():
     qbs = {port: instances.make(port) for port in (instances.PRIMARY, instances.SECONDARY)}
     saved = {port: {k: qb.prefs().get(k) for k in LIMIT_PREF_KEYS} for port, qb in qbs.items()}
     for qb in qbs.values():
-        qb.set_prefs(dl_limit=256 * 1024, up_limit=256 * 1024, alt_dl_limit=256 * 1024,
-                     alt_up_limit=256 * 1024, use_alt_speed_limits=False)
+        qb.set_prefs(
+            dl_limit=256 * 1024,
+            up_limit=256 * 1024,
+            alt_dl_limit=256 * 1024,
+            alt_up_limit=256 * 1024,
+            use_alt_speed_limits=False
+        )
     yield 256 * 1024
     for port, qb in qbs.items():
         qb.set_prefs(**saved[port])
@@ -280,8 +285,9 @@ def pin_limits():
 
 # ---------- 假种子(RM07-07/08 用; real-fake 标签, 幂等清场) ----------
 
+
 def rm_all_fakes(qb) -> list[str]:
-    """删 36596 上全部 real-fake 种子(幂等清场); 返回删掉的 hash。"""
+    """删 副实例 上全部 real-fake 种子(幂等清场); 返回删掉的 hash。"""
     removed = []
     for t in qb.torrents():
         tags = {x.strip() for x in (t.get("tags") or "").split(",")}
@@ -291,8 +297,9 @@ def rm_all_fakes(qb) -> list[str]:
     return removed
 
 
-def fake_seed(qb, name: str, size: int, savepath: Path, salt: str, announce: str = ANNOUNCE_IP,
-              paused: bool = True) -> str:
+def fake_seed(
+    qb, name: str, size: int, savepath: Path, salt: str, announce: str = ANNOUNCE_IP, paused: bool = True
+) -> str:
     """造一枚 L1 假种子并加入实例(带 real-fake 标签; announce 缺省指本机死端口)。"""
     os.makedirs(savepath, exist_ok=True)
     raw, ih = torrent.build_stream(name, size, "random", salt, announce)
@@ -306,6 +313,7 @@ def tracker_urls(qb, ih: str) -> list[str]:
 
 
 # ---------- v4 采样文件读回(store 口径) ----------
+
 
 def day_file(data_dir: Path, series: str, infohash: str | None = None) -> Path:
     d = data_dir / "qb-traffic-v4" / ("global" if series == "global" else f"torrents/{infohash}")
@@ -328,7 +336,7 @@ def test_rm07_01_unconfigured_source_startup_warning(global_limits):
     """[RM07-01] RM01 观察项收口: 未配流量源启动 → 「读取流量数据失败()」空路径 WARNING 仍复现且不崩
 
     前置: 缺省测试配置(不写 traffic_source 段 → enabled 缺省 True/dat_path 空); data_dir 独立
-          临时目录; 无需种子; 36596 在线。
+          临时目录; 无需种子; 副实例 在线。
     副作用: 产品起停两次; 临时目录。
     回滚: 删临时目录; 实例无写(global_limits fixture 进出零改动)。
     失败判据: 无该 WARNING(行为已变 —— 如实回写锚件 §08 收口, 按实况定档); 启动崩溃或主循环
@@ -343,13 +351,13 @@ def test_rm07_01_unconfigured_source_startup_warning(global_limits):
         try:
             assert p.wait_log("启动 qB 管理器", 40), f"第 {run} 次启动进程没起来:\n{p.log()[-800:]}"
             # 来源刷新任务 next_run=now, 首个任务线节拍即跑 → WARNING 应在启动后数秒内出现
-            wait_until(lambda: count_log(case, r"读取流量数据失败\(\)") > prev, 20,
-                       f"第 {run} 次启动未出现空路径 WARNING(计数 {prev} 未增长)")
+            wait_until(lambda: count_log(case, r"读取流量数据失败\(\)") > prev, 20, f"第 {run} 次启动未出现空路径 WARNING(计数 {prev} 未增长)")
             seen = count_log(case, r"读取流量数据失败\(\)")
             text = p.log()
             # 观察项原文(RM01 §04-6): 空路径形态 + 真实异常文本跟随其后(易带偏排查方向的形态)
             assert "流量快照 | 读取流量数据失败(): [Errno 2] No such file or directory: ''" in text, (
-                f"WARNING 文案与观察项原文不符:\n{[l for l in text.splitlines() if '读取流量数据失败' in l]}")
+                f"WARNING 文案与观察项原文不符:\n{[l for l in text.splitlines() if '读取流量数据失败' in l]}"
+            )
             assert p.alive(), f"打完 WARNING 后进程退出(崩溃): rc={p.returncode()}"
             # 主循环照常跑完节拍: 来源快照按 stale 发布(Web 面), 而不是进程死掉
             port = web_port_of(cfg)
@@ -383,7 +391,7 @@ def test_rm07_02_source_refresh_three_states():
     dat_a = write_dat(
         case / "datA.dat",
         [(date(TODAY.year, TODAY.month - 1 if TODAY.month > 1 else 12, 28), 100, 200), (TODAY, 5120, 5120)],
-        bad_lines=("这不是一行流量数据",),
+        bad_lines=("这不是一行流量数据", ),
     )
     p = None
     try:
@@ -394,8 +402,7 @@ def test_rm07_02_source_refresh_three_states():
         req = web_client(port)
 
         # ---- ① 总开关关: INFO off 文案 + 零 WARNING 零读盘 + periods/history 清空
-        wait_until(lambda: "来源总开关关闭(traffic_source.enabled=false), 发布 off 快照" in p.log(), 20,
-                   "off 态缺「来源总开关关闭」INFO")
+        wait_until(lambda: "来源总开关关闭(traffic_source.enabled=false), 发布 off 快照" in p.log(), 20, "off 态缺「来源总开关关闭」INFO")
         wait_until(lambda: traffic_view(port).get("state") == "off", 15, "顶层 state 未翻 off")
         view = traffic_view(port)
         assert view["source"]["state"] == "off", f"source 段不是 off: {view['source']}"
@@ -413,20 +420,30 @@ def test_rm07_02_source_refresh_three_states():
         wait_until(lambda: traffic_view(port).get("state") == "stale", 15, "顶层 state 未翻 stale")
         view = traffic_view(port)
         assert view["source"]["state"] == "stale" and view["source"]["reasons"][0]["code"] == "dat_missing", (
-            f"stale 段不符: {view['source']}")
+            f"stale 段不符: {view['source']}"
+        )
         # stale 语义: history 清空 + periods 归零行(_period_rows 对空行集产出 day/month 0/0, 非空列表)
         zeroed = {r["period"]: (r["up"], r["down"]) for r in view["periods"]}
         assert zeroed == {"day": (0, 0), "month": (0, 0)}, f"stale 态 periods 未归零: {view['periods']}"
         assert traffic_history(port)["history"] == [], "stale 态未清 history"
 
         # ---- ③ 指向本地 dat: ok + history/periods 与造行一致(KB×1024) + 坏行 WARNING
-        resp = put_config(port, lambda c: c["traffic_source"]["traffic_monitor"].__setitem__("dat_path",
-                                                                                              dat_a.as_posix()))
+        resp = put_config(
+            port, lambda c: c["traffic_source"]["traffic_monitor"].__setitem__("dat_path", dat_a.as_posix())
+        )
         assert resp.get("applied") is True, f"PUT 未应用: {resp}"
         prev_month = date(TODAY.year, TODAY.month - 1 if TODAY.month > 1 else 12, 28)
         expected = [
-            {"date": f"{prev_month:%Y-%m-%d}", "up": 100 * 1024, "down": 200 * 1024},
-            {"date": f"{TODAY:%Y-%m-%d}", "up": 5120 * 1024, "down": 5120 * 1024},
+            {
+                "date": f"{prev_month:%Y-%m-%d}",
+                "up": 100 * 1024,
+                "down": 200 * 1024
+            },
+            {
+                "date": f"{TODAY:%Y-%m-%d}",
+                "up": 5120 * 1024,
+                "down": 5120 * 1024
+            },
         ]
         wait_until(lambda: traffic_history(port)["history"] == expected, 20, "ok 态 history 行与造行不符")
         view = traffic_view(port)
@@ -438,8 +455,7 @@ def test_rm07_02_source_refresh_three_states():
         day_row = next(r for r in view["periods"] if r["period"] == "day")
         month_row = next(r for r in view["periods"] if r["period"] == "month")
         assert (day_row["up"], day_row["down"]) == (5120 * 1024, 5120 * 1024), f"今日聚合与造行不符: {day_row}"
-        assert (month_row["up"], month_row["down"]) == (5120 * 1024, 5120 * 1024), (
-            f"本月聚合未按自然月过滤(上月行混入?): {month_row}")
+        assert (month_row["up"], month_row["down"]) == (5120 * 1024, 5120 * 1024), (f"本月聚合未按自然月过滤(上月行混入?): {month_row}")
         wait_until(lambda: "流量数据 1 行无法解析已跳过" in p.log(), 10, "坏行未记 WARNING(坏行路径失守)")
         assert_no_crash(case)
     finally:
@@ -471,20 +487,28 @@ def test_rm07_03_source_switch_immediate_refresh():
         port = web_port_of(cfg)
         expect_a = [{"date": f"{TODAY:%Y-%m-%d}", "up": 1000 * 1024, "down": 2000 * 1024}]
         expect_b = [
-            {"date": f"{date(TODAY.year, TODAY.month, 1):%Y-%m-%d}", "up": 10 * 1024, "down": 20 * 1024},
-            {"date": f"{TODAY:%Y-%m-%d}", "up": 3000 * 1024, "down": 4000 * 1024},
+            {
+                "date": f"{date(TODAY.year, TODAY.month, 1):%Y-%m-%d}",
+                "up": 10 * 1024,
+                "down": 20 * 1024
+            },
+            {
+                "date": f"{TODAY:%Y-%m-%d}",
+                "up": 3000 * 1024,
+                "down": 4000 * 1024
+            },
         ]
         wait_until(lambda: traffic_history(port)["history"] == expect_a, 20, "datA 初次发布未到位")
         assert traffic_view(port)["source"]["state"] == "ok"
 
         # ---- 热改 dat_path → datB: 判据是 10s 内换血(refresh_interval=600S, 定时器不可能到期)
-        resp = put_config(port, lambda c: c["traffic_source"]["traffic_monitor"].__setitem__("dat_path",
-                                                                                              dat_b.as_posix()))
+        resp = put_config(
+            port, lambda c: c["traffic_source"]["traffic_monitor"].__setitem__("dat_path", dat_b.as_posix())
+        )
         assert resp.get("applied") is True, f"PUT 未应用: {resp}"
         assert not resp.get("restart_required"), f"traffic_source 段被划 R 级(新事实, 如实记): {resp}"
         assert "traffic_source" in (resp.get("changes") or {}), f"回执 changes 未含 traffic_source: {resp}"
-        wait_until(lambda: traffic_history(port)["history"] == expect_b, 10,
-                   "切源后 10s 内未换血(600S 定时器不可能到期 ⇒ 「切源即刷新」契约破)")
+        wait_until(lambda: traffic_history(port)["history"] == expect_b, 10, "切源后 10s 内未换血(600S 定时器不可能到期 ⇒ 「切源即刷新」契约破)")
         view = traffic_view(port)
         day_row = next(r for r in view["periods"] if r["period"] == "day")
         assert (day_row["up"], day_row["down"]) == (3000 * 1024, 4000 * 1024), f"periods 未换血为 datB: {day_row}"
@@ -525,15 +549,17 @@ def test_rm07_04_speed_curve_apply_and_retarget(global_limits):
 
     前置: 曲线配置(day 曲线 双方向 + month 曲线 下载, interval 3S)+ 本地 dat(今日 上5MiB/下5MiB);
           预置 qB 全局 下=1024KiB(偶)/上=0(不限), 原值已由 fixture 快照。
-    副作用: 改写实例全局偏好 upload/download_limit(实例级, 影响 36596 全部传输); 临时 dat。
+    副作用: 改写实例全局偏好 upload/download_limit(实例级, 影响 副实例 全部传输); 临时 dat。
     回滚: global_limits fixture 按预置前快照还原(非想当然的 1024); 删临时 dat。
     失败判据: 回读≠目标(下发链路断, 高优 FAIL); actual 与 target 不一致且无 read_failed 原因码;
               改档后限速不动(查档/基线推进分叉); 收尾忘还原全局限速(测试侧事故, 立即修)。
     """
     case = case_dir("rm07_04")
     qb = global_limits
-    dat = write_dat(case / "hist.dat",
-                    [(date(TODAY.year, TODAY.month - 1 if TODAY.month > 1 else 12, 20), 500, 500), (TODAY, 5120, 5120)])
+    dat = write_dat(
+        case / "hist.dat",
+        [(date(TODAY.year, TODAY.month - 1 if TODAY.month > 1 else 12, 20), 500, 500), (TODAY, 5120, 5120)]
+    )
     set_global_limit_bytes(qb, "down", 1024 * 1024)  # 偶数 KiB 现场(非手动), 与目标 640 不同 → 必真写
     set_global_limit_bytes(qb, "up", 0)
     p = None
@@ -556,14 +582,17 @@ def test_rm07_04_speed_curve_apply_and_retarget(global_limits):
         assert limit["reasons"] == [], f"正常轮不应有 reasons: {limit['reasons']}"
 
         # ---- 红验(改档对照): 今日下载跨档(20MiB, ≥10MiB 且 <50MiB) → day 512KiB, 最严合并仍 512
-        write_dat(dat, [(date(TODAY.year, TODAY.month - 1 if TODAY.month > 1 else 12, 20), 500, 500),
-                        (TODAY, 5120, 20480)])
+        write_dat(
+            dat, [(date(TODAY.year, TODAY.month - 1 if TODAY.month > 1 else 12, 20), 500, 500), (TODAY, 5120, 20480)]
+        )
         wait_until(lambda: global_limit_bytes(qb, "down") == 512 * 1024, 30, "改档后下载限速未跟到 512KiB(查档/基线推进分叉)")
         assert global_limit_bytes(qb, "up") == 2048 * 1024, "改档波及了上传方向(方向隔离破)"
         assert "512KiB/s" in p.log(), "改档后缺新档位日志"
         limit = traffic_view(port)["limit"]
-        assert limit["target"] == {"up": 2048, "down": 512} and limit["actual"] == limit["target"], (
-            f"改档后 limit 段不符: {limit}")
+        assert limit["target"] == {
+            "up": 2048,
+            "down": 512
+        } and limit["actual"] == limit["target"], (f"改档后 limit 段不符: {limit}")
         assert_no_crash(case)
     finally:
         if p is not None:
@@ -621,8 +650,8 @@ def test_rm07_05_speed_curve_manual_protection(global_limits):
         assert limit["state"] == "ok" and limit["target"]["down"] == 2048, f"命中手动时 limit 段不符: {limit}"
         # 日志节流: 同一状态每 1h 才提醒一次 —— 短窗内恰好 1 条 INFO, 不逐轮刷屏
         time.sleep(6)
-        assert count_log(case, r"下载限速当前 1025KiB/s 为奇数") == 1, (
-            f"手动保护 INFO 逐轮刷屏(节流失守): {count_log(case, r'下载限速当前 1025KiB/s 为奇数')} 条")
+        assert count_log(case, r"下载限速当前 1025KiB/s 为奇数"
+                        ) == 1, (f"手动保护 INFO 逐轮刷屏(节流失守): {count_log(case, r'下载限速当前 1025KiB/s 为奇数')} 条")
         # 同轮 upload 侧(偶数 0)照常下发 —— 逐方向独立
         wait_until(lambda: global_limit_bytes(qb, "up") == 1024 * 1024, 30, "upload 侧被连带跳过(逐方向独立破)")
         assert not [r for r in traffic_view(port)["limit"]["reasons"] if r.get("code") == "manual" and r["dir"] == "up"], \
@@ -631,8 +660,8 @@ def test_rm07_05_speed_curve_manual_protection(global_limits):
         # ---- 红验(退出恢复): 改回偶数 1024 → 下一轮覆盖恢复 + reasons 清 + 节流记忆清
         set_global_limit_bytes(qb, "down", 1024 * 1024)
         wait_until(lambda: global_limit_bytes(qb, "down") == 2048 * 1024, 30, "改偶数后仍未覆盖(退出路径断, 红验不红)")
-        assert not [r for r in traffic_view(port)["limit"]["reasons"] if r.get("code") == "manual"], (
-            "退出手动保护后 reasons 未清")
+        assert not [r for r in traffic_view(port)["limit"]["reasons"] if r.get("code") == "manual"
+                   ], ("退出手动保护后 reasons 未清")
         assert_no_crash(case)
     finally:
         if p is not None:
@@ -659,10 +688,14 @@ def test_rm07_06_curve_short_circuit_three_ways(global_limits):
     try:
         # ---- ① curve.enabled=false: publish disabled, 不读 dat 不写 qB(偏好原值)
         set_global_limit_bytes(qb, "down", 1024 * 1024)
-        cfg = write_cfg(case, web=True, extra=traffic_source_section(dat_path=dat.as_posix())
-                        + "global_speed_limit_curve:\n    enabled: false\n    interval: 3S\n    curves:\n"
-                          "        - curve:\n            period: day\n            download_curve:\n"
-                          '                - "1MiB":\n                    download_speed_limit: "640KiB/s"\n')
+        cfg = write_cfg(
+            case,
+            web=True,
+            extra=traffic_source_section(dat_path=dat.as_posix()) +
+            "global_speed_limit_curve:\n    enabled: false\n    interval: 3S\n    curves:\n"
+            "        - curve:\n            period: day\n            download_curve:\n"
+            '                - "1MiB":\n                    download_speed_limit: "640KiB/s"\n'
+        )
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-600:]}"
         port = web_port_of(cfg)
@@ -672,18 +705,20 @@ def test_rm07_06_curve_short_circuit_three_ways(global_limits):
         assert "设置全局限速" not in p.log(), "enabled=false 出现下发日志"
         assert count_log(case, r"读取流量数据失败") == 0, "enabled=false 仍读 dat 报错"
         view = traffic_view(port)
-        assert view["state"] == "disabled" and view["limit"]["target"] == {"up": None, "down": None}, (
-            f"disabled 语义不符: {view}")
+        assert view["state"] == "disabled" and view["limit"]["target"] == {
+            "up": None,
+            "down": None
+        }, (f"disabled 语义不符: {view}")
         p.stop()
         p = None
 
         # ---- ② traffic_source.enabled=false: 曲线任务 REQUEUE 零发布, 来源模块发 off
-        cfg = write_cfg(case, web=True, extra=traffic_source_section(enabled=False, dat_path=dat.as_posix())
-                        + CURVE_MANUAL)
+        cfg = write_cfg(
+            case, web=True, extra=traffic_source_section(enabled=False, dat_path=dat.as_posix()) + CURVE_MANUAL
+        )
         p = app.start(cfg, case)
         assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-600:]}"
-        wait_until(lambda: "来源总开关关闭(traffic_source.enabled=false), 发布 off 快照" in p.log(), 20,
-                   "关源后来源模块未发 off")
+        wait_until(lambda: "来源总开关关闭(traffic_source.enabled=false), 发布 off 快照" in p.log(), 20, "关源后来源模块未发 off")
         time.sleep(8)
         assert count_log(case, r"限速曲线 \|") == 0, "关源后曲线任务仍有日志/发布(A4「谁写 state」双作者破)"
         assert global_limit_bytes(qb, "down") == 1024 * 1024, "关源后曲线仍写了 qB 偏好(高优 FAIL)"
@@ -713,7 +748,7 @@ def test_rm07_06_curve_short_circuit_three_ways(global_limits):
 def test_rm07_07_qb_traffic_sample_restart_gap():
     """[RM07-07] qB 口径采样主链 + 重启缺口: 采样落 v4 store → 产品重启 → 恢复采样无假增量无重置审计
 
-    前置: qb_traffic 配置(sample 4S=main_tick 2S 整数倍, flush 60S)+ 1 枚假种子(零传输)在 36596。
+    前置: qb_traffic 配置(sample 4S=main_tick 2S 整数倍, flush 60S)+ 1 枚假种子(零传输)在 副实例。
     副作用: 1 假种子; v4 采样文件落临时 data_dir; 产品两轮起停(各 graceful)。
     回滚: 删自造种子 + 删临时目录。
     失败判据: 重启后采样文件出现非零增量块(假尖峰, 「重启尖峰缺口」验证面 FAIL); 产品重启后采样
@@ -722,8 +757,8 @@ def test_rm07_07_qb_traffic_sample_restart_gap():
     (spec 调整见模块 docstring: 单种系列/首窗 null 的可见面归 RM07-08 的 L2 真流量。)
     """
     case = case_dir("rm07_07")
-    qb = instances.make(36596)
-    assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+    qb = instances.make(instances.SECONDARY)
+    assert not rm_all_fakes(qb), "开跑前副实例有 real-fake 残留, 先清场"
     ih = None
     p = None
     try:
@@ -750,8 +785,8 @@ def test_rm07_07_qb_traffic_sample_restart_gap():
         assert p.wait(150) == 0, f"第二轮未优雅退出:\n{p.log()[-600:]}"
         log = p.log()
         assert "流量采样 | 启动恢复开始" in log, "重启后缺「启动恢复开始」(恢复链路未跑)"
-        assert re.search(r"流量采样 \| 启动恢复完成: 1 系列", log), (
-            f"重启后未恢复现存系列(catch-up 链路断):\n{[l for l in log.splitlines() if '启动恢复' in l]}")
+        assert re.search(r"流量采样 \| 启动恢复完成: 1 系列",
+                         log), (f"重启后未恢复现存系列(catch-up 链路断):\n{[l for l in log.splitlines() if '启动恢复' in l]}")
         assert "计数器重置" not in log, "无计数器重置却出现 reset_log 审计行"
         parsed2 = parse_day(gf)
         assert parsed2.bad_lines == 0, f"重启续写引入坏行: bad={parsed2.bad_lines}"
@@ -772,7 +807,7 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
     """[RM07-08] L2 互传真实速率聚合: 采样随互传增长 → 单种系列累计 ≥ payload → 全局系列出非零 r 行
 
     前置: 双实例 + 本地伪 tracker(回对端 peer)+ pin_limits 钉 256KiB/s + 产品 qb_traffic 采样
-          (sample 4S / flush 60S)连 36596; 假种子 announce 指本地伪 tracker。
+          (sample 4S / flush 60S)连 副实例; 假种子 announce 指本地伪 tracker。
     副作用: 两实例各 1 假种子(4MB 互传); 实例限速被 fixture 临时改写; v4 采样文件落临时 data_dir。
     回滚: finally 两端 delete(delete_files=True) + pin_limits/global_limits 还原 + 删临时目录。
     失败判据: 互传零字节(连不上自己 —— §2.5 伪 tracker 排除请求者/监听端口坑, 排不通记 BLOCKED);
@@ -821,10 +856,12 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
                 pass
             time.sleep(1)
         assert done is not None, (
-            f"180s 未完成: leech={secondary.torrent(ih)} / seed={primary.torrent(ih)} / announce={tracker.count(ih)}")
+            f"180s 未完成: leech={secondary.torrent(ih)} / seed={primary.torrent(ih)} / announce={tracker.count(ih)}"
+        )
         assert up_seconds >= 10, f"leech dlspeed>0 只观测到 {up_seconds}s(需 ≥10s)"
         assert len(growth) >= 3 and growth[-1][1] > growth[0][1], (
-            f"今日聚合字节未随互传增长(采样或聚合装配断): growth={growth[:5]}…共 {len(growth)} 步")
+            f"今日聚合字节未随互传增长(采样或聚合装配断): growth={growth[:5]}…共 {len(growth)} 步"
+        )
 
         # ---- flush(≤60s)后: 单种系列天文件落盘, dl_total 累计 ≥ payload; 全局系列出非零 r 行
         tf = day_file(case / "data", "torrent", ih)
@@ -833,8 +870,8 @@ def test_rm07_08_l2_transfer_sampling(primary, secondary, tracker, workdir, glob
         assert tparsed.bad_lines == 0, f"单种天文件坏行: {tparsed.bad_lines}"
         tsamples = samples_of(tparsed)
         assert tsamples, "单种系列无任何 r 行(互传了却没采样)"
-        assert max(r.dl_total for r in tsamples) >= payload, (
-            f"单种 dl_total 累计不足: {max(r.dl_total for r in tsamples)} < {payload}")
+        assert max(r.dl_total for r in tsamples
+                  ) >= payload, (f"单种 dl_total 累计不足: {max(r.dl_total for r in tsamples)} < {payload}")
         assert any(r.dl_rate > 0 for r in tsamples), "单种系列无非零速率行"
         gf = day_file(case / "data", "global")
         wait_until(lambda: gf.is_file(), 120, "全局系列天文件未落盘")
@@ -878,8 +915,8 @@ def test_rm07_09_sample_interval_ratio_and_reblock():
         gf = day_file(case / "data", "global")
         assert gf.is_file(), f"① 全局天文件未落盘: {sorted((case / 'data').rglob('*.dat'))}"
         parsed = parse_day(gf)
-        assert parsed.blocks and all(b.interval_s == 4.0 for b in parsed.blocks), (
-            f"块头 interval_s != 生效值 4s: {[b.interval_s for b in parsed.blocks]}")
+        assert parsed.blocks and all(b.interval_s == 4.0 for b in parsed.blocks
+                                    ), (f"块头 interval_s != 生效值 4s: {[b.interval_s for b in parsed.blocks]}")
         assert parsed.bad_lines == 0
 
         # ---- ② 运行期热改 sample_interval(4S→6S): 触发关块重开, 新数据分块带新 interval。
@@ -897,15 +934,15 @@ def test_rm07_09_sample_interval_ratio_and_reblock():
         resp = put_config(port, lambda c: c["qb_traffic"].__setitem__("sample_interval", "6S"))
         assert resp.get("applied") is True, f"PUT 未应用: {resp}"
         assert not resp.get("restart_required"), f"qb_traffic 段被划 R 级(新事实, 如实记): {resp}"
-        wait_until(lambda: "流量采样 | 采样率变化 -> 6s: 关闭全部现块, 新数据分块带新 interval" in p.log(), 20,
-                   "热改 interval 后缺关块重开日志")
+        wait_until(lambda: "流量采样 | 采样率变化 -> 6s: 关闭全部现块, 新数据分块带新 interval" in p.log(), 20, "热改 interval 后缺关块重开日志")
         assert p.wait(80) == 0, f"② 未优雅退出:\n{p.log()[-600:]}"
         gf = day_file(case / "data", "global")
         assert gf.is_file(), "② 全局天文件未落盘"
         parsed = parse_day(gf)
         assert parsed.bad_lines == 0, f"切 interval 后文件出现坏行: bad={parsed.bad_lines}"
-        assert [b.interval_s for b in parsed.blocks] == [6.0], (
-            f"变更后的数据分块未带新 interval(应恰一个 6s 块): {[b.interval_s for b in parsed.blocks]}")
+        assert [b.interval_s for b in parsed.blocks] == [
+            6.0
+        ], (f"变更后的数据分块未带新 interval(应恰一个 6s 块): {[b.interval_s for b in parsed.blocks]}")
         zruns = [r for b in parsed.blocks for r in b.records if not isinstance(r, V4Sample)]
         assert zruns and zruns[0].run_len >= 8, f"z 游程未无缝横跨全程(切源前后断链): {zruns[:2]}"
 
@@ -963,8 +1000,10 @@ def test_rm07_10_tool_status_endpoint_five_states():
         FIVE_STATES = {"not_installed", "launching", "launch_failed", "not_running", "ready"}
         for body in (body1, body2):
             assert body["state"] in FIVE_STATES, f"state 不在五态内: {body['state']}"
-        need = {"enabled", "state", "reachable", "tool_url", "token_path", "version", "pid", "data_dir",
-                "autostart_registered", "autostart_error", "error", "retry_s", "claim_note"}
+        need = {
+            "enabled", "state", "reachable", "tool_url", "token_path", "version", "pid", "data_dir",
+            "autostart_registered", "autostart_error", "error", "retry_s", "claim_note"
+        }
         missing = need - set(body1)
         assert not missing, f"状态载荷缺键: {missing}"
         assert body1["enabled"] is False, "provider=traffic_monitor 时 enabled 应为 false"

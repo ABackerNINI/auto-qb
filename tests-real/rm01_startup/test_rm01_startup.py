@@ -19,7 +19,7 @@ import pytest
 
 from lib import app
 
-# 本片所有用例都只碰 36596(空库) —— 见 lib/app.py 模块 docstring 的安全口径
+# 本片所有用例都只碰 副实例(空库) —— 见 lib/app.py 模块 docstring 的安全口径
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="本片断言含 Windows 特有语义(注册表/无控制台 SIGTERM)"),
     # 本片每条都要抢端口 + 起真实进程: 并行跑会互相抢 39000-39999 段(各自 free_port 可能撞同一个),
@@ -35,6 +35,7 @@ def _cfg(case: Path, **kw) -> Path:
 
 
 # ---------------------------------------------------------------- RM01-01
+
 
 def test_rm01_01_missing_config_fail_fast():
     """[RM01-01] 配置缺失时干净退出: 退出码 1 + stderr 一行「配置错误」+ 无堆栈
@@ -56,6 +57,7 @@ def test_rm01_01_missing_config_fail_fast():
 
 
 # ---------------------------------------------------------------- RM01-02
+
 
 def test_rm01_02_single_instance_lock_rejects_second():
     """[RM01-02] 单实例锁: 第二实例被拒且报出持有者, 且「被拒」不是因为别的原因(L3)
@@ -100,6 +102,7 @@ def test_rm01_02_single_instance_lock_rejects_second():
 
 # ---------------------------------------------------------------- RM01-03
 
+
 def test_rm01_03_readonly_mode_skips_lock():
     """[RM01-03] 只读出口(--export-yaml)不持锁: A 持锁时仍可并发跑
 
@@ -123,6 +126,7 @@ def test_rm01_03_readonly_mode_skips_lock():
 
 
 # ---------------------------------------------------------------- RM01-04
+
 
 def test_rm01_04_lock_released_after_hard_kill():
     """[RM01-04] 强杀(taskkill /F)后锁自动释放: 立刻能起新实例, 不做 PID 存活检测也不留死锁
@@ -150,6 +154,7 @@ def test_rm01_04_lock_released_after_hard_kill():
 
 
 # ---------------------------------------------------------------- RM01-05
+
 
 def test_rm01_05_web_start_log_and_token_no_leak():
     """[RM01-05] WEB 启动日志给到 localhost 地址, token 落盘且**不进日志**
@@ -182,6 +187,7 @@ def test_rm01_05_web_start_log_and_token_no_leak():
 
 # ---------------------------------------------------------------- RM01-06
 
+
 def test_rm01_06_port_taken_reports_failure_not_silent():
     """[RM01-06] 端口被占时显式报「WEB UI 启动失败」, 进程不装死也不崩
 
@@ -210,6 +216,7 @@ def test_rm01_06_port_taken_reports_failure_not_silent():
 
 
 # ---------------------------------------------------------------- RM01-07
+
 
 def test_rm01_07_graceful_exit_then_rebind_same_port():
     """[RM01-07] 优雅退出(SIGTERM handler)后锁与 meta 清干净、端口立刻可复用(L3)
@@ -259,6 +266,7 @@ def test_rm01_07_graceful_exit_then_rebind_same_port():
 
 # ---------------------------------------------------------------- RM01-08
 
+
 def test_rm01_08_autostart_registry_roundtrip():
     """[RM01-08] 开机自启注册表往返: enable 写出可执行的启动命令, disable 幂等清干净
 
@@ -293,6 +301,7 @@ def test_rm01_08_autostart_registry_roundtrip():
 
 
 # ---------------------------------------------------------------- RM01-09
+
 
 def test_rm01_09_tray_second_instance_raises_window():
     """[RM01-09] 托盘双开: 第二实例唤起已运行实例后静默退出(退出码 0), 不是报锁错

@@ -22,7 +22,7 @@
 | bug | 7 |
 | perf | 6 |
 | docs | 3 |
-| test | 3 |
+| test | 4 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [test.pkg.scoped 闸门对无自测包无豁免: dev/doc/env/kb 改即挂](26-11-01-0921-test-commit-gate-no-test-pkg.html) — test.pkg.sco…
 - [docs] [docs/configuration.md 动作结果态漏 pending](26-11-01-0800-docs-docs-action-result-pending-drift.html) — 动作结果段只列 3 态漏…
 - [test] [test_yamls 存量样例含 RULE_KNOWN_KEYS 外键](26-11-01-0800-test-test-yamls-unknown-rule-keys.html) — test_start.y…
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…

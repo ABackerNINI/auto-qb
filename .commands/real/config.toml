@@ -3,11 +3,17 @@ name      = "real"
 when      = "真机实测轨: 三层守卫 / 起停测试实例 / 跑 tests-real 用例(不挂提交闸门)"
 confirmed = true
 
+[tasks."real.env"]
+run     = ["uv run python tests-real/runner.py env"]
+timeout = 30
+when    = "看当前测试环境(环境 id / 主副端口 / EXE 路径 / token 配置方式; 换机器或端口对不上时先跑它)"
+note    = "双环境: 环境1 = D盘机 36595/36596, 环境2 = C盘机 56589/56590; QBT_REAL_ENV 显式指定, 缺省按 EXE 存在性探测; token 不落盘, 由用户每轮会话给(QBT_TEST_<端口>)"
+
 [tasks."real.guard"]
 run     = ["uv run python tests-real/runner.py guard"]
 timeout = 120
 when    = "真机实测开工第一步: 端口/镜像路径白名单 + 真实种子归零"
-note    = "不过即非 0 退出, 没有 --force 逃生门 —— 白名单只认 127.0.0.1:36595/36596 且镜像路径在 D:\\Programs\\qBittorrent-testing* 下"
+note    = "不过即非 0 退出, 没有 --force 逃生门 —— 白名单 = 当前环境(real.env 可查)的主/副端口, 且镜像路径在该环境 qBittorrent-testing* 前缀下; 本机多个平行 clone 共享同一套物理实例, 同一时刻只许一个 clone 跑 real.*"
 
 [tasks."real.list"]
 run     = ["uv run python tests-real/runner.py list"]
@@ -19,25 +25,25 @@ note    = "用例 id 写在 docstring 首行 [RMxx-nn], 从这里抽; 新增用�
 run     = ["uv run python tests-real/runner.py up <args>"]
 timeout = 120
 when    = "测试实例没起时拉起它(只认白名单端口)"
-note    = "经 explorer.exe 拉起: 工具 shell 里 Start-Process / cmd start 起的 GUI 进程会随命令结束被杀(实测); <args> 传 --port 36595|36596, 不加 --dry-run 就真起"
+note    = "经 explorer.exe 拉起: 工具 shell 里 Start-Process / cmd start 起的 GUI 进程会随命令结束被杀(实测); <args> 传 --port <当前环境白名单端口>(real.env 可查), 不加 --dry-run 就真起"
 
 [tasks."real.down"]
 run     = ["uv run python tests-real/runner.py down <args>"]
 timeout = 120
 when    = "关掉测试实例(按镜像路径精确匹配, 不碰生产 qB)"
-note    = "<args> 传 --port 36595|36596; 默认真关, 想先看传 --dry-run"
+note    = "<args> 传 --port <当前环境白名单端口>; 默认真关, 想先看传 --dry-run"
 
 [tasks."real.pause-all"]
 run     = ["uv run python tests-real/runner.py pause-all <args>"]
 timeout = 120
 when    = "把目标实例全部种子暂停(手工版守卫; real.guard 已含此步)"
-note    = "<args> 传 --port 36595|36596"
+note    = "<args> 传 --port <当前环境白名单端口>"
 
 [tasks."real.seed"]
 run     = ["uv run python tests-real/seed.py add <args>"]
 timeout = 600
 when    = "造一个假种子并加入测试实例(手工探索用: 指定大小/落点/生成方式/是否落数据)"
-note    = "默认 dry-run, 加 --yes 才真造真加; 默认 256K(KB 级就够看状态), 关键参数 --size 8M | --pattern random|zeros|text | --dir <落点> | --from <现成文件> | --no-data(不落数据) | --paused | --port 36596。落点只认 tests-real/.work/ 与 R:/qbt-fake/: ≥32M 自动落 R:(内存盘, 免写盘代价, 重启即清空)。> 2G 原则上不造, 命令会停下来等授权, 必须 --allow-huge --reason \"<原因>\" 双写才放行(只给 --allow-huge 会被拒), 只造元数据用 --no-data 不受限。默认不给 announce ⇒ 纯本地做种、零外连; 自造种子一律打 real-fake 标签, 与真实种子互不相干"
+note    = "默认 dry-run, 加 --yes 才真造真加; 默认 256K(KB 级就够看状态), 关键参数 --size 8M | --pattern random|zeros|text | --dir <落点> | --from <现成文件> | --no-data(不落数据) | --paused | --port <当前环境白名单端口>(缺省副实例)。落点只认 tests-real/.work/ 与 R:/qbt-fake/: ≥32M 自动落 R:(内存盘, 免写盘代价, 重启即清空; R: 是环境1机器的硬件事实, 环境2 无 R: 时自动退回 .work 真写盘, 大种子优先 --no-data)。> 2G 原则上不造, 命令会停下来等授权, 必须 --allow-huge --reason \"<原因>\" 双写才放行(只给 --allow-huge 会被拒), 只造元数据用 --no-data 不受限。默认不给 announce ⇒ 纯本地做种、零外连; 自造种子一律打 real-fake 标签, 与真实种子互不相干"
 
 [tasks."real.seed.list"]
 run     = ["uv run python tests-real/seed.py list <args>"]

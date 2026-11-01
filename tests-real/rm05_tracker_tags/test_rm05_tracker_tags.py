@@ -23,7 +23,7 @@ delete_tags_if_has_no_torrents 使用中对照(RM05-06)· 站点档案派生装�
   奇数 KiB(2001)= is_manual_speed_limit 项目约定, added 管线必须 skip 不覆盖;
 - tag 解析一律 strip(§2.9: qB 多标签以「, 」连接, 已入池 26-10-31-1215 的用例侧防御);
 - qB 全局标签定义独立于种子存活(种子删除不带走), GET /torrents/tags 列定义、
-  POST /torrents/createTags|deleteTags 造/删(逗号分隔多值, 36596 实测可用);
+  POST /torrents/createTags|deleteTags 造/删(逗号分隔多值, 副实例 实测可用);
 - RM05-07 是纯装载期面: 正向起产品进程等「启动 qB 管理器」; 负向走 run_cli --dry-run
   退出码 + 「配置错误」文案(RM03-05 同款观测法); hr_check.enabled 全程 false(HR 零外连红线),
   站点绑定要求条目带 hr 段(validation: 「已绑定站点…但该站点未配置 hr 段」)。
@@ -50,7 +50,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import app, torrent  # noqa: E402
+from lib import app, instances, torrent  # noqa: E402
 from lib.net import local_host  # noqa: E402
 
 pytestmark = [
@@ -73,8 +73,7 @@ ANNOUNCE_LH = "http://127.0.0.1:1/announce"
 
 
 def qbfake():
-    from lib import instances
-    return instances.make(36596)
+    return instances.make(instances.SECONDARY)
 
 
 def _tags_of(t) -> set[str]:
@@ -106,7 +105,7 @@ def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
 
 
 def rm_all_fakes(qb) -> list[str]:
-    """删光 36596 里本片自造的种子(连数据), 返回删掉的名字(证据用)。
+    """删光 副实例 里本片自造的种子(连数据), 返回删掉的名字(证据用)。
     顺序 = 先删后摘标签; 若 real-fake 被误删导致失明(26-10-31-1215 坑在池), 调用方按名字兜底。"""
     gone = []
     for t in qb.torrents():
@@ -131,7 +130,7 @@ def rm_all_fakes_with_sweep(qb, name_prefix: str) -> list[str]:
             qb.delete(t["hash"], delete_files=True)
             gone.append(f"[sweep]{t['name']}")
     if gone:
-        wait_until(lambda: not qb.torrents(), 15, f"清场后 36596 仍有种子残留: {gone}")
+        wait_until(lambda: not qb.torrents(), 15, f"清场后 副实例 仍有种子残留: {gone}")
     return gone
 
 
@@ -141,7 +140,7 @@ def global_tags(qb) -> list[str]:
 
 
 def delete_global_tags(qb, names: list[str]) -> None:
-    """删全局标签定义(POST /torrents/deleteTags, 逗号分隔多值, 36596 实测可用)。"""
+    """删全局标签定义(POST /torrents/deleteTags, 逗号分隔多值, 副实例 实测可用)。"""
     if not names:
         return
     body = urllib.parse.urlencode({"tags": ",".join(names)}).encode()
@@ -182,7 +181,7 @@ def write_cfg(case: Path,
               extra: dict | None = None,
               *,
               web: tuple[int, int] | None = None) -> tuple[Path, int | None]:
-    """生成临时配置(schema_version: 5, 直连 36596)。
+    """生成临时配置(schema_version: 5, 直连 副实例)。
 
     trackers = {条目名: spec}(dict 插入序 = YAML 书写序 = 匹配优先序, 键序敏感的 RM05-01 依赖此);
     extra = 顶层键合并(delete_tags / remove_similar_tags / hr_check / ruleset 等);
@@ -192,7 +191,7 @@ def write_cfg(case: Path,
         "schema_version": 5,
         "qbittorrent": {
             "host": "127.0.0.1",
-            "port": 36596,
+            "port": instances.SECONDARY,
             "username": "",
             "password": ""
         },
@@ -222,10 +221,10 @@ def write_cfg(case: Path,
     path = case / "config.yml"
     path.write_text(yaml.safe_dump({"config": cfg}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     text = path.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {path}")
-    if "port: 36596" not in text:
-        raise AssertionError(f"配置没指向 36596(空库草稿本), 拒跑: {path}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
+    if f"port: {instances.SECONDARY}" not in text:
+        raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
     if "schema_version: 5" not in text:
         raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {path}")
     return path, web_port
@@ -277,7 +276,7 @@ def fake_seed(
     announce: str = ANNOUNCE_IP,
     piece_len: int = torrent.PIECE_LEN,
 ) -> str:
-    """造一枚 L1 假种子并加入 36596(带 real-fake 标签)。announce 缺省指本机死端口。"""
+    """造一枚 L1 假种子并加入 副实例(带 real-fake 标签)。announce 缺省指本机死端口。"""
     savepath = Path(savepath)
     os.makedirs(savepath, exist_ok=True)  # savepath 得存在; 文件不写 ⇒ 永远 progress 0
     raw, ih = torrent.build_stream(name, size, "random", salt, announce, piece_len)
@@ -300,8 +299,8 @@ def test_rm05_01_match_three_way_split():
     前置: 测试配置 trackers 双条目同域(书写序 zz-hit 在前、aa-second 在后 —— 故意让字母序
           与书写序相反, 若实现按名字序取「第一个」会立刻红); 3 枚假种子在产品启动前入库:
           A/C announce=本机IP(双匹配), B announce=127.0.0.1(零匹配, §2.9 第①条预期负向)。
-    副作用: 36596 加 3 假种子; A/C 被打 rm05-hit。
-    回滚: real.seed.rm --all + 清 rm05-* 标签定义 + 删用例目录; 收尾核 36596 无残留。
+    副作用: 副实例 加 3 假种子; A/C 被打 rm05-hit。
+    回滚: real.seed.rm --all + 清 rm05-* 标签定义 + 删用例目录; 收尾核 副实例 无残留。
     失败判据: A 未被打标(匹配语义分叉); B 也被打 rm05-*(死门失效, 负向必须能红);
               C 同时有 rm05-second(多匹配降级失效); 日志无 WARNING(多匹配静默)。
     """
@@ -309,7 +308,7 @@ def test_rm05_01_match_three_way_split():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm05_defs(qb)
         # 条目书写序: zz-hit 在前(config dict 顺序 = 匹配优先序); aa-second 排后但字母序在前
         trackers = {
@@ -390,7 +389,7 @@ def test_rm05_02_hot_reload_rebind():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm05_defs(qb)
         trackers = {"rm05site": {"domains": [FAKE_HOST], "tags": ["rm05-v1"]}}
         savepath = WORK / "rm05_02"
@@ -465,7 +464,7 @@ def test_rm05_03_tracker_speed_limit_and_manual_skip():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm05_defs(qb)
         trackers = {
             "rm05site": {
@@ -533,7 +532,7 @@ def test_rm05_04_seed_tags_family():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm05_defs(qb)
         trackers = {
             "rm05site":
@@ -593,7 +592,7 @@ def test_rm05_05_delete_tags_global_and_tracker_tags_ref():
           add_tags 隐式重建定义), 与全局删除同节拍成对发生(先删后打)—— g1/g2 稳态振荡且
           干净窗亚秒级, 外部采样不可观测(schema delete_tags risk 文案明载的「互相打架」);
           断言走四件机械可观测事实: 命中集三元 / 孤儿标签永久消失 / 对照恒在 / 删除跨节拍重复。
-    副作用: 1 假种子; rm05-g1/g2/orphan-a 三个标签定义被反复删(都在 36596 空库, 波及面只含自造种子)。
+    副作用: 1 假种子; rm05-g1/g2/orphan-a 三个标签定义被反复删(都在 副实例 空库, 波及面只含自造种子)。
     回滚: real.seed.rm --all + 清残留 rm05-* 标签定义(模式仍限 rm05-)+ 删用例目录。
     失败判据: 删除日志的命中集 ≠ {rm05-g1, rm05-g2, rm05-orphan-a}(@tracker_tags 展开失控);
               rm05-orphan-a 定义或种子标签回潮(定义级删除未真发生);
@@ -604,7 +603,7 @@ def test_rm05_05_delete_tags_global_and_tracker_tags_ref():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm05_defs(qb)
         trackers = {"rm05site": {"domains": [FAKE_HOST], "tags": ["rm05-g1", "rm05-g2"]}}
         savepath = WORK / "rm05_05"
@@ -685,7 +684,7 @@ def test_rm05_06_delete_tags_if_has_no_torrents():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm05_defs(qb)
         trackers = {"rm05site": {"domains": [FAKE_HOST]}}
         savepath = WORK / "rm05_06"

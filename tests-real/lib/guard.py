@@ -4,7 +4,7 @@
 或让真实种子跑了一轮流量。所以这里全部 fail-closed: 核不出来就拒跑, 没有 --force 逃生门。
 
 三层:
-  1. 静态白名单 —— 端口 ∈ {36595, 36596}, 且占用该端口的进程镜像路径在测试目录下;
+  1. 静态白名单 —— 端口 ∈ 当前环境的 {主, 副}(env_registry 派生), 且占用该端口的进程镜像路径在测试目录下;
   2. 前置快照 + 归零 —— 记下当时所有真实种子, 全部暂停;
   3. 运行期看门狗 —— 每 2s 复核, 真实种子一旦有速率立刻暂停并记违规, 累计 3 次由调用方中止。
 """
@@ -14,13 +14,15 @@ import subprocess
 import threading
 import time
 
-WHITELIST_PORTS = (36595, 36596)
-# testing 与 testing2 都落在这一前缀下; 生产实例(D:\Programs\qBittorrent-2 / Program Files)不在其中
-IMAGE_PREFIXES = ("D:\\Programs\\qBittorrent-testing", )
-EXE = {
-    36595: "D:\\Programs\\qBittorrent-testing\\qbittorrent.exe",
-    36596: "D:\\Programs\\qBittorrent-testing2\\qbittorrent.exe",
-}
+from . import env_registry
+
+# 白名单从环境注册表派生(双环境: D盘机 36595/36596, C盘机 56589/56590, 见 env_registry);
+# testing 与 testing2 都落在该环境的 image_prefix 下, 生产实例(qBittorrent-2 / Program Files)不在其中
+_ENV = env_registry.active()
+WHITELIST_PORTS = (_ENV["primary"], _ENV["secondary"])
+IMAGE_PREFIXES = (_ENV["image_prefix"], )
+EXE = dict(_ENV["exe"])
+BT_LISTEN_PORTS = frozenset(_ENV["bt_listen"].values())
 ACTIVE_STATES = {"uploading", "downloading", "forcedUP", "forcedDL", "stalledDL", "metaDL", "checkingUP", "checkingDL"}
 
 

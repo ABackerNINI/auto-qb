@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (52)
+## Open (53)
 
+- [test] [test.pkg.scoped 闸门对无自测包无豁免: dev/doc/env/kb 改即挂](../26-11-01-0921-test-commit-gate-no-test-pkg.html) — test.pkg.scoped 对改动包跑 pytest <包>, 包内零 test_*.py 时收集为空 rc=5 闸门 FAIL; real 已补最小自测, dev/doc/env/kb 四包同款未解
 - [docs] [docs/configuration.md 动作结果态漏 pending](../26-11-01-0800-docs-docs-action-result-pending-drift.html) — 动作结果段只列 3 态漏 pending, 与引擎六档 verdict 漂移(存量, 早于规则引擎重设计)
 - [test] [test_yamls 存量样例含 RULE_KNOWN_KEYS 外键](../26-11-01-0800-test-test-yamls-unknown-rule-keys.html) — test_start.yml 等存量样例含 log_level 等 RULE_KNOWN_KEYS 外键(未被测试消费, 合法性未核)
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的

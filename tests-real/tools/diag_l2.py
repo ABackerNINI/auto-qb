@@ -28,18 +28,27 @@ def conns(port: int) -> str:
 
 
 def tracker_view(q, ih: str) -> list:
-    return [{"url": x.get("url"), "status": x.get("status"), "msg": x.get("msg"),
-             "peers": x.get("num_peers"), "seeds": x.get("num_seeds"),
-             "leeches": x.get("num_leeches"), "next": x.get("next_announce")}
-            for x in q.trackers(ih) if str(x.get("url")).startswith("http")]
+    return [
+        {
+            "url": x.get("url"),
+            "status": x.get("status"),
+            "msg": x.get("msg"),
+            "peers": x.get("num_peers"),
+            "seeds": x.get("num_seeds"),
+            "leeches": x.get("num_leeches"),
+            "next": x.get("next_announce")
+        } for x in q.trackers(ih) if str(x.get("url")).startswith("http")
+    ]
 
 
 def main() -> None:
     q1, q2 = instances.make(instances.PRIMARY), instances.make(instances.SECONDARY)
     seed_port = int(q1.prefs()["listen_port"])
     host = net.local_host()
-    print(f"[net] local_host={host} seed_port={seed_port} "
-          f"36595={q1.connection_status()} 36596={q2.connection_status()}")
+    print(
+        f"[net] local_host={host} seed_port={seed_port} "
+        f"PRIMARY={q1.connection_status()} SECONDARY={q2.connection_status()}"
+    )
 
     # 测试实例带 1 KiB/s 下载限速, 互传 512KB 会被限速卡住 —— 诊断期间临时解除
     saved = {q.port: {k: q.prefs()[k] for k in ("dl_limit", "up_limit")} for q in (q1, q2)}
@@ -73,10 +82,12 @@ def main() -> None:
             n = int(time.time() - t0)
             for label, q in (("seed", q1), ("leech", q2)):
                 t = q.torrent(ih) or {}
-                print(f"[{n:3d}s {label}] state={t.get('state')} prog={t.get('progress')} "
-                      f"conn={t.get('connections_count')} up={t.get('upspeed')} dl={t.get('dlspeed')} "
-                      f"avail={t.get('availability')} seeds={t.get('num_seeds')} "
-                      f"tr={json.dumps(tracker_view(q, ih), ensure_ascii=False)}")
+                print(
+                    f"[{n:3d}s {label}] state={t.get('state')} prog={t.get('progress')} "
+                    f"conn={t.get('connections_count')} up={t.get('upspeed')} dl={t.get('dlspeed')} "
+                    f"avail={t.get('availability')} seeds={t.get('num_seeds')} "
+                    f"tr={json.dumps(tracker_view(q, ih), ensure_ascii=False)}"
+                )
             print(f"[{n:3d}s tracker] count={tr.count(ih)} ports={[a.get('port') for a in tr.announces]}")
             print(f"[{n:3d}s tcp {seed_port}] {conns(seed_port)}")
             if (q2.torrent(ih) or {}).get("progress", 0) >= 1.0:

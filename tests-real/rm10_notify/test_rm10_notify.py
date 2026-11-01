@@ -42,10 +42,12 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import app, instances  # noqa: E402
+from lib import app, guard, instances  # noqa: E402
 
 pytestmark = [
-    pytest.mark.skipif(sys.platform != "win32", reason="本片断言含 Windows 特有语义(HKCU 注册表/junction/tasklist/PowerShell toast)"),
+    pytest.mark.skipif(
+        sys.platform != "win32", reason="本片断言含 Windows 特有语义(HKCU 注册表/junction/tasklist/PowerShell toast)"
+    ),
 ]
 
 WORK = Path(__file__).resolve().parents[1] / ".work" / "rm10"
@@ -122,7 +124,7 @@ def case_dir(name: str) -> Path:
 
 
 def dead_port() -> int:
-    """探空死端口: 本会话不复用(lib/app.free_port 记账), 与白名单 36595/36596 及 26803/60539 段零重叠。"""
+    """探空死端口: 本会话不复用(lib/app.free_port 记账), 与白名单端口及 BT 监听端口(guard.BT_LISTEN_PORTS)零重叠。"""
     return app.free_port()
 
 
@@ -186,13 +188,12 @@ def pkg_handlers() -> list:
 
 # ---------------------------------------------------------------- 导出面(CLI 派生配置)
 
-
 EXPORT_CONFIG_TEMPLATE = """\
 config:
     schema_version: 5
     qbittorrent:
         host: 127.0.0.1
-        port: 36595
+        port: {primary_port}
         username: ""
         password: ""
         api_key: "{api_key}"
@@ -246,12 +247,13 @@ CONFIGURED_DOMAINS = {"rm10probe.invalid"}
 
 
 def write_export_cfg(case: Path) -> Path:
-    """生成 tests-real 派生导出配置(指 36595 真实例, api_key 直连; 红线 config.yml 零触碰)。"""
+    """生成 tests-real 派生导出配置(指主实例(PRIMARY)真实例, api_key 直连; 红线 config.yml 零触碰)。"""
     api_key = instances.token_for(instances.PRIMARY) or ""
-    assert api_key, "36595 缺 token(tests-real/config/instances.local.json)—— 无法派生导出配置"
+    assert api_key, f"主实例 {instances.PRIMARY} 缺 token(环境变量 QBT_TEST_{instances.PRIMARY}, 用户每轮会话给)—— 无法派生导出配置"
     cfg = case / "config.yml"
     cfg.write_text(
         EXPORT_CONFIG_TEMPLATE.format(
+            primary_port=instances.PRIMARY,
             api_key=api_key,
             data_dir=(case / "data").as_posix(),
             web_port=app.free_port(),
@@ -259,12 +261,12 @@ def write_export_cfg(case: Path) -> Path:
         encoding="utf-8",
     )
     text = cfg.read_text(encoding="utf-8")
-    assert "port: 36595" in text and "rm10probe.invalid" in text
+    assert f"port: {instances.PRIMARY}" in text and "rm10probe.invalid" in text
     return cfg
 
 
 def qb_aggregated_domains() -> set:
-    """从 36595 真实例聚合全部 tracker 域名(与 exporter.collect_all_tracker_hostnames 同函数同口径:
+    """从 主实例 真实例聚合全部 tracker 域名(与 exporter.collect_all_tracker_hostnames 同函数同口径:
     伪条目 `** [DHT] **` 等 url 取不出 host 会被 _split_url 自然滤掉)。真实种子全程 paused, 只读。"""
     qb = instances.make(instances.PRIMARY)
     domains = set()
@@ -292,7 +294,6 @@ def assert_domain_sets_match(actual: set, expected: set) -> None:
 
 class _StepClock:
     """假时钟: 每次 +step(注入 finalize_watch.run 的 clock)。step=0.25 时, 第 4 轮 stable=0.5 凑齐。"""
-
     def __init__(self, step: float = 0.25):
         self.t = -step
         self.step = step
@@ -345,8 +346,15 @@ def _accept_loop(sock: socket.socket, stop: threading.Event) -> None:
             time.sleep(0.02)
 
 
-def build_guardian_scene(case: Path, job: str, *, n_alias: int = 3, files: list | None = None,
-                         spec_files: list | None = None, port: int | None = None) -> tuple[Path, Path, list]:
+def build_guardian_scene(
+    case: Path,
+    job: str,
+    *,
+    n_alias: int = 3,
+    files: list | None = None,
+    spec_files: list | None = None,
+    port: int | None = None
+) -> tuple[Path, Path, list]:
     """RM10-05/06/07 共享基座: dst 真文件 + alias_fs 产品同款通道建 junction + spec 落盘。
 
     files = 磁盘真文件 [(rel, size)]; spec_files = spec 里声明的清单(缺省与 files 一致;
@@ -385,7 +393,7 @@ def build_guardian_scene(case: Path, job: str, *, n_alias: int = 3, files: list 
 def test_rm10_01_export_positive():
     """[RM10-01] 导出正向: 真 CLI 全量导出, 域名集与真实 qB 对照
 
-    前置: 36595 connected(真实种子 8 枚全 paused, 只读扫描); tests-real 派生配置
+    前置: 主实例 connected(真实种子 8 枚全 paused, 只读扫描); tests-real 派生配置
       (tracker 段 rm10probe.invalid 与真实域零重叠); .work/rm10/ 已建。
     副作用: 只读 qB; 写 .work/rm10/rm10_01/export-full.yml 一个本地文件(含真实 tracker 域名,
       不外发, 收尾整目录删)。
@@ -423,7 +431,7 @@ def test_rm10_01_export_positive():
 def test_rm10_02_export_negative():
     """[RM10-02] 导出负向对照: dry-run 零写 / only-missing 骨架 / 双跑幂等
 
-    前置: 同 RM10-01(36595 connected 只读; tests-real 派生配置)。
+    前置: 同 RM10-01(主实例 connected 只读; tests-real 派生配置)。
     副作用: 写 .work/rm10/rm10_02/export-missing.yml; dry_run 轮零写; 红验用进程内直调
       exporter(dry_run 门双跑对照, 零 qB)。
     回滚: 删 .work/rm10/rm10_02/。
@@ -459,7 +467,9 @@ def test_rm10_02_export_negative():
     aggregated = qb_aggregated_domains()
     expected_missing = exporter.find_missing_domains(aggregated, CONFIGURED_DOMAINS)
     try:
-        assert_domain_sets_match(CONFIGURED_DOMAINS | expected_missing, CONFIGURED_DOMAINS | expected_missing | {"bogus.rm10.invalid"})
+        assert_domain_sets_match(
+            CONFIGURED_DOMAINS | expected_missing, CONFIGURED_DOMAINS | expected_missing | {"bogus.rm10.invalid"}
+        )
     except AssertionError:
         pass
     else:
@@ -484,7 +494,6 @@ def test_rm10_02_export_negative():
 
 
 # ================================================================ RM10-03
-
 
 AUMID_KEY = rf"Software\Classes\AppUserModelId\{notify.WINDOWS_TOAST_APPID}"
 
@@ -519,10 +528,13 @@ def _make_probe_lnk(path: str) -> None:
     """造真实探针 .lnk(WScript.Shell COM, TargetPath 指 notepad): 产品 legacy 清理只判 exists+remove,
     但用真 .lnk 更忠实 —— 造不出来就响亮失败, 不静默降级。"""
     r = subprocess.run(
-        ["powershell", "-NoProfile", "-NonInteractive", "-Command",
-         f"$ws = New-Object -ComObject WScript.Shell; "
-         f"$s = $ws.CreateShortcut('{path}'); $s.TargetPath = 'C:\\Windows\\System32\\notepad.exe'; $s.Save()"],
-        capture_output=True, text=True, timeout=30,
+        [
+            "powershell", "-NoProfile", "-NonInteractive", "-Command", f"$ws = New-Object -ComObject WScript.Shell; "
+            f"$s = $ws.CreateShortcut('{path}'); $s.TargetPath = 'C:\\Windows\\System32\\notepad.exe'; $s.Save()"
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
     )
     assert r.returncode == 0 and os.path.exists(path), f"探针 .lnk 造法失败: {r.stderr[-300:]}"
 
@@ -677,8 +689,15 @@ def test_rm10_05_guardian_removed():
     watcher.start()
     try:
         # 假时钟: 每轮 +0.25 ⇒ 第 4 轮 stable=0.5 凑齐动手; sleep 注入让出 GIL 给 watcher
-        result = finalize_watch.run(str(data_dir), job, heartbeat=0.2, stable=0.5, poll=0.1,
-                                    clock=_StepClock(0.25), sleep=lambda _s: time.sleep(0.01))
+        result = finalize_watch.run(
+            str(data_dir),
+            job,
+            heartbeat=0.2,
+            stable=0.5,
+            poll=0.1,
+            clock=_StepClock(0.25),
+            sleep=lambda _s: time.sleep(0.01)
+        )
     finally:
         stop.set()
         watcher.join(timeout=5)
@@ -718,11 +737,20 @@ def test_rm10_06_guardian_negative():
     # ① spec.files 故意错 size → verify_mismatch, 一个链接都不删(保守默认, 黄金法则 2 真机红验)
     job_a = GUARDIAN_JOB.format("06a")
     data_a, dst_a, aliases_a = build_guardian_scene(
-        case, job_a, n_alias=5,
+        case,
+        job_a,
+        n_alias=5,
         spec_files=[("f1.bin", 999), ("sub/f2.bin", 2048)],  # 磁盘 f1.bin 实际 1024, spec 故意错位
     )
-    r_a = finalize_watch.run(str(data_a), job_a, heartbeat=0.2, stable=0.5, poll=0.1,
-                             clock=_StepClock(0.3), sleep=lambda _s: time.sleep(0.01))
+    r_a = finalize_watch.run(
+        str(data_a),
+        job_a,
+        heartbeat=0.2,
+        stable=0.5,
+        poll=0.1,
+        clock=_StepClock(0.3),
+        sleep=lambda _s: time.sleep(0.01)
+    )
     assert r_a == "verify_mismatch", f"①路结论应 verify_mismatch, 实际 {r_a}"
     ja = read_journal(str(data_a), job_a) or {}
     assert str(ja.get("phase")) == "failed" and str(ja.get("reason")) == "verify_mismatch", f"①路 journal: {ja}"
@@ -734,8 +762,15 @@ def test_rm10_06_guardian_negative():
     job_b = GUARDIAN_JOB.format("06b")
     data_b, dst_b, aliases_b = build_guardian_scene(case, job_b, n_alias=3)
     assert write_journal(str(data_b), job_b, {"phase": "done", "reason": "external"}), "预写终态失败"
-    r_b = finalize_watch.run(str(data_b), job_b, heartbeat=0.2, stable=0.5, poll=0.1,
-                             clock=_StepClock(0.3), sleep=lambda _s: time.sleep(0.01))
+    r_b = finalize_watch.run(
+        str(data_b),
+        job_b,
+        heartbeat=0.2,
+        stable=0.5,
+        poll=0.1,
+        clock=_StepClock(0.3),
+        sleep=lambda _s: time.sleep(0.01)
+    )
     assert r_b == "stopped", f"②路结论应 stopped, 实际 {r_b}"
     jb = read_journal(str(data_b), job_b) or {}
     assert str(jb.get("phase")) == "done", f"终态被心跳覆盖: {jb.get('phase')!r}"
@@ -795,7 +830,7 @@ def test_rm10_07_guardian_params_mutex():
         dummy.settimeout(0.2)
         acceptor.start()
         live_port = dummy.getsockname()[1]
-        assert live_port not in (36595, 36596, 26803, 60539), f"哑 socket 端口撞禁用面: {live_port}"
+        assert live_port not in (*guard.WHITELIST_PORTS, *guard.BT_LISTEN_PORTS), f"哑 socket 端口撞禁用面: {live_port}"
         spec_path_c = data_c / "relocate" / f"{job_c}.spec.json"
         spec_c = json.loads(spec_path_c.read_text(encoding="utf-8"))
         spec_c["port"] = live_port
@@ -811,9 +846,16 @@ def test_rm10_07_guardian_params_mutex():
         dummy.close()
 
     # ④ CLI 形状: 缺 --data-dir/--job → argparse 非 0
-    r = subprocess.run([str(app.PY), "-m", "auto_qb.tools.finalize_watch"], capture_output=True,
-                       text=True, cwd=str(app.ROOT), timeout=60,
-                       env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    r = subprocess.run(
+        [str(app.PY), "-m", "auto_qb.tools.finalize_watch"],
+        capture_output=True,
+        text=True,
+        cwd=str(app.ROOT),
+        timeout=60,
+        env={
+            **os.environ, "PYTHONIOENCODING": "utf-8"
+        }
+    )
     assert r.returncode != 0, "缺参应 argparse 非 0"
     assert "--data-dir" in (r.stderr + r.stdout), "缺参报错未提示 --data-dir"
 
@@ -835,15 +877,15 @@ def test_rm10_08_notify_fatal(monkeypatch):
     """
     try:
         # ① 直发恰 1 次, 且不受 max_per_hour=0 影响(旁路语义: 不过 handler/节流)
-        n1 = send_attempts(lambda: notify.notify_fatal(
-            "rm10-08 fatal probe", NotifyConfig(enabled=True, max_per_hour=0)))
+        n1 = send_attempts(
+            lambda: notify.notify_fatal("rm10-08 fatal probe", NotifyConfig(enabled=True, max_per_hour=0))
+        )
         assert n1 == 1, f"notify_fatal 应恰 1 次发送尝试, 实际 {n1}"
 
         # ② 防自环: 挂真 handler 后经 auto_qb.notify 前缀 logger emit → 零尝试(NOTIFY_LOGGER_PREFIX 门)
         h = mount(NotifyConfig(enabled=True, min_level="ERROR", max_per_hour=20, dedup_window=60.0))
         assert h is not None
-        n2 = send_attempts(
-            lambda: logging.getLogger("auto_qb.notify.rm10probe").error("rm10-08 selfloop probe"))
+        n2 = send_attempts(lambda: logging.getLogger("auto_qb.notify.rm10probe").error("rm10-08 selfloop probe"))
         unmount(h)
         assert n2 == 0, f"自环 logger 触发了发送尝试({n2}) —— NOTIFY_LOGGER_PREFIX 门失守"
 

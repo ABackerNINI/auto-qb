@@ -47,7 +47,7 @@ import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import app, torrent  # noqa: E402
+from lib import app, instances, torrent  # noqa: E402
 from lib.net import local_host  # noqa: E402
 
 pytestmark = [
@@ -73,8 +73,7 @@ RULESET = "rm03_rules"  # 规则集键: loaders.py 只认以 _rules 结尾的 co
 
 
 def qbfake():
-    from lib import instances
-    return instances.make(36596)
+    return instances.make(instances.SECONDARY)
 
 
 def _tags_of(t) -> set[str]:
@@ -106,7 +105,7 @@ def _add_retry(qb, raw: bytes, savepath: str, ih: str) -> None:
 
 
 def rm_all_fakes(qb) -> list[str]:
-    """删光 36596 里本片自造的种子(连数据), 返回删掉的名字(证据用)。
+    """删光 副实例 里本片自造的种子(连数据), 返回删掉的名字(证据用)。
     顺序 = 先删后摘标签(删失败时保留 real-fake 标记让下次清场还能看见它, RM04 实测口径)。"""
     gone = []
     for t in qb.torrents():
@@ -172,7 +171,7 @@ def fake_seed(
     with_data: bool = False,
     piece_len: int = torrent.PIECE_LEN,
 ) -> str:
-    """造一枚 L1 假种子并加入 36596(带 real-fake 标签)。announce 缺省指本机死端口。"""
+    """造一枚 L1 假种子并加入 副实例(带 real-fake 标签)。announce 缺省指本机死端口。"""
     savepath = Path(savepath)
     if with_data:
         torrent.write_file(str(savepath / name), size, "random", salt)
@@ -185,13 +184,13 @@ def fake_seed(
 
 
 def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) -> Path:
-    """生成临时配置(schema_version: 5, 直连 36596)。rule_sets = {规则集名: {规则名: spec}},
+    """生成临时配置(schema_version: 5, 直连副实例)。rule_sets = {规则集名: {规则名: spec}},
     经 yaml.safe_dump 落盘(键序 = 插入序, 规则执行顺序随定义序)。"""
     cfg: dict = {
         "schema_version": 5,
         "qbittorrent": {
             "host": "127.0.0.1",
-            "port": 36596,
+            "port": instances.SECONDARY,
             "username": "",
             "password": ""
         },
@@ -219,10 +218,10 @@ def write_cfg(case: Path, trackers: dict, rule_sets: dict, *, web: bool = True) 
     path = case / "config.yml"
     path.write_text(yaml.safe_dump({"config": cfg}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     text = path.read_text(encoding="utf-8")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {path}")
-    if "port: 36596" not in text:
-        raise AssertionError(f"配置没指向 36596(空库草稿本), 拒跑: {path}")
+    if f"port: {instances.PRIMARY}" in text:
+        raise AssertionError(f"配置指向了 {instances.PRIMARY}(真实种子), 拒跑: {path}")
+    if f"port: {instances.SECONDARY}" not in text:
+        raise AssertionError(f"配置没指向副实例(空库草稿本), 拒跑: {path}")
     if "schema_version: 5" not in text:
         raise AssertionError(f"配置缺 schema_version: 5(会触发迁移改写), 拒跑: {path}")
     return path
@@ -292,9 +291,9 @@ def tracker_conf_entry(domains: list[str], rules: bool = True) -> dict:
 def test_rm03_01_interval_size_condition_contrast():
     """[RM03-01] 条件命中·interval 主链: size 条件分流 256K 命中 / 512K 对照不得命中(红验内建)
 
-    前置: 产品非 dry-run 连 36596; A(256K)/B(512K) 两枚假种子(死端口 announce 同一
+    前置: 产品非 dry-run 连 副实例; A(256K)/B(512K) 两枚假种子(死端口 announce 同一
           tracker 条目引 @rm03_rules)在产品启动前入库(interval 存量补建拾取, 免竞态)。
-    副作用: 36596 加 2 假种子; A 被打 rm03-hit 标签。
+    副作用: 副实例 加 2 假种子; A 被打 rm03-hit 标签。
     回滚: 删光 real-fake 种子 + 删用例目录。
     失败判据: ≥3 节拍后 A 仍无标签; B 也被打标(条件分流失效, 对照必须能红);
               日志出现「规则执行异常」/Traceback。
@@ -303,7 +302,7 @@ def test_rm03_01_interval_size_condition_contrast():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         rules = {
             RULESET:
                 {
@@ -362,7 +361,7 @@ def test_rm03_02_on_added_dispatch_category():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm03_categories(qb)
         rules = {
             RULESET:
@@ -426,7 +425,7 @@ def test_rm03_03_speed_limits_and_manual_odd_skip():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         rules = {
             RULESET:
                 {
@@ -500,7 +499,7 @@ def test_rm03_04_var_replacement_with_and_without_hr():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         rules = {
             RULESET:
                 {
@@ -569,7 +568,7 @@ def test_rm03_05_expr_condition_hit_and_negatives():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
 
         # ---- 装载期负向: 坏语法表达式在配置加载即被拒(独立起一次 CLI, dry-run 不进主循环)
         case_bad = case_dir("rm03_05_load")
@@ -675,7 +674,7 @@ def test_rm03_06_on_deleted_trigger_snapshot():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         rules = {
             RULESET:
                 {
@@ -745,7 +744,7 @@ def test_rm03_07_action_sequence_stop_start_and_remove_tags():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         rules = {
             RULESET:
                 {
@@ -837,7 +836,7 @@ def test_rm03_08_dedup_execute_once_and_cooldown():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         rules = {
             RULESET:
                 {
@@ -904,7 +903,7 @@ def test_rm03_09_dry_run_zero_qb_write():
     """[RM03-09] dry-run 面: 条件命中但零 qB 写(约束面负向)
 
     前置: 先直接经 qB API 加 1 枚假种子并留底快照(tags/categories/限速); 换 dry-run
-          配置(--dry-run, 不带 WEB)起产品连 36596。
+          配置(--dry-run, 不带 WEB)起产品连 副实例。
     副作用: qB 侧零写(这正是被验对象); 产品侧仅日志。
     回滚: 删光 real-fake 种子 + 停产品 + 删用例目录。
     失败判据: dry-run 下 qB 侧出现标签/分类/限速变化(高优 FAIL, 约束面被破坏);
@@ -914,7 +913,7 @@ def test_rm03_09_dry_run_zero_qb_write():
     p = None
     qb = qbfake()
     try:
-        assert not rm_all_fakes(qb), "开跑前 36596 有 real-fake 残留, 先清场"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
         cleanup_rm03_categories(qb)
         rules = {
             RULESET:

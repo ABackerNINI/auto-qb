@@ -1,6 +1,6 @@
 """产品进程起停 —— 真机片「进程边界」类用例的公共件(RM01 起, 后续片可复用)。
 
-为什么不复用 runner.py: 那个管的是 **qB 实例**(36595/36596 的进程), 这里管的是**产品自身**
+为什么不复用 runner.py: 那个管的是 **qB 实例**(当前环境主/副实例的进程, 见 env_registry), 这里管的是**产品自身**
 (`python -m auto_qb <config>`)。两者的生命周期、日志位置、退出语义完全不同, 混在一起会让
 "停的是谁"变成每次都要想一遍的问题。
 
@@ -16,8 +16,8 @@
 3. **配置必须写 `schema_version: 5`** —— 否则每次启动都走 v1→v5 迁移; 非 dry-run 时还会**改写**
    配置文件并留备份, 把临时目录搅浑。
 
-安全口径: 生成的配置**只指向 36596**(空库副实例), 端口写死不走参数; 用例开头可 `assert_cfg_target()`
-复核, 防止手滑把产品进程指到 36595 的真实种子上。
+安全口径: 生成的配置**只指向副实例**(空库, env_registry 当前环境的 SECONDARY), 端口不走参数;
+用例开头可 `assert_cfg_target()` 复核, 防止手滑把产品进程指到主实例(PRIMARY)的真实种子上。
 """
 from __future__ import annotations
 
@@ -28,13 +28,15 @@ import sys
 import time
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parents[1]                      # tests-real/lib -> 仓库根
-PY = ROOT / ".venv" / "Scripts" / "python.exe"
-WORK = HERE.parent / ".work" / "rm01"       # 与 seed.py 同族的 .work 落点
+from . import instances
 
-QB_PORT = 36596                             # 只碰空库副实例
-WEB_PORT_LO, WEB_PORT_HI = 39000, 39999     # 与 36595/36596/生产 WEB 端口互不重叠
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[1]  # tests-real/lib -> 仓库根
+PY = ROOT / ".venv" / "Scripts" / "python.exe"
+WORK = HERE.parent / ".work" / "rm01"  # 与 seed.py 同族的 .work 落点
+
+QB_PORT = instances.SECONDARY  # 只碰空库副实例(环境注册表派生)
+WEB_PORT_LO, WEB_PORT_HI = 39000, 39999  # 与主/副实例/生产 WEB 端口互不重叠
 WEB_START_TIMEOUT = 30.0
 
 CONFIG_TEMPLATE = """\
@@ -61,8 +63,8 @@ config:
         enabled: false
 """
 
-
 # ---------- 端口 ----------
+
 
 def port_free(port: int) -> bool:
     """能否 bind 到 127.0.0.1:port(探空口径, 不占端口)
@@ -103,6 +105,7 @@ def free_port(lo: int = WEB_PORT_LO, hi: int = WEB_PORT_HI) -> int:
 
 # ---------- 临时工作区 / 配置 ----------
 
+
 def case_dir(name: str, fresh: bool = True) -> Path:
     """用例专属目录 <tests-real>/.work/rm01/<name>; fresh=True 时先清空"""
     d = WORK / name
@@ -136,12 +139,13 @@ def write_config(
 
 
 def assert_cfg_target(cfg: Path, qb_port: int = QB_PORT) -> None:
-    """复核配置指向 36596 —— 防手滑把产品进程指到真实种子所在的 36595"""
+    """复核配置指向副实例(空库) —— 防手滑把产品进程指到主实例的真实种子上"""
     text = cfg.read_text(encoding="utf-8")
     if f"port: {qb_port}" not in text:
         raise AssertionError(f"配置未指向 {qb_port}, 拒跑: {cfg}")
-    if "port: 36595" in text:
-        raise AssertionError(f"配置指向了 36595(真实种子), 拒跑: {cfg}")
+    primary = instances.PRIMARY
+    if f"port: {primary}" in text:
+        raise AssertionError(f"配置指向了 {primary}(真实种子), 拒跑: {cfg}")
 
 
 def log_path(case: Path) -> Path:
@@ -156,9 +160,9 @@ def read_log(case: Path) -> str:
 
 # ---------- 进程 ----------
 
+
 class AppProc:
     """一个产品进程。所有起法都经 `start()`; 收尾必须 `stop()/kill()` 之一。"""
-
     def __init__(self, popen: subprocess.Popen, case: Path, cfg: Path):
         self.popen = popen
         self.case = case
@@ -292,7 +296,9 @@ def start(
         cwd=str(ROOT),
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        env={
+            **os.environ, "PYTHONIOENCODING": "utf-8"
+        },
     )
     return AppProc(popen, case, cfg)
 
@@ -307,7 +313,9 @@ def run_cli(args: list[str], timeout: float = 60.0) -> subprocess.CompletedProce
         encoding="utf-8",
         errors="replace",
         timeout=timeout,
-        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        env={
+            **os.environ, "PYTHONIOENCODING": "utf-8"
+        },
     )
 
 

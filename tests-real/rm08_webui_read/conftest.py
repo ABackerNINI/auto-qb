@@ -4,7 +4,7 @@
 RM08 的八条只依赖「两实例在线」(读侧判据全部落在只读端点 + real-fake 假种子 + RM08-06 的
 L2 互传假种子(假种子不受约束 2)上); 唯一需要归零面的是 RM08-06, 它直接请求全局
 `primary/secondary/tracker/transfer_limits` fixtures(内部走 `env`, 归零跳过 real-fake 标签)。
-这里只读: 端口白名单 + 实例在线 + 36595 的真实种子必须仍在非活跃态。
+这里只读: 端口白名单 + 实例在线 + 主实例 的真实种子必须仍在非活跃态。
 """
 from __future__ import annotations
 
@@ -54,4 +54,4 @@ def environment():
 
     primary = instances.make(instances.PRIMARY)
     active = [t["name"] for t in primary.torrents() if t["state"] in ACTIVE]
-    assert not active, f"36595 的真实种子有活跃的, 本片不该在此时跑: {active[:5]}"
+    assert not active, f"主实例({instances.PRIMARY})的真实种子有活跃的, 本片不该在此时跑: {active[:5]}"

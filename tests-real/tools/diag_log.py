@@ -1,4 +1,4 @@
-"""打印某个实例的 qB 日志尾部(定位 tracker/announce 问题用)。用法: uv run python tests-real/tools/diag_log.py 36596 [条数]"""
+"""打印某个实例的 qB 日志尾部(定位 tracker/announce 问题用)。用法: uv run python tests-real/tools/diag_log.py 副实例 [条数]"""
 from __future__ import annotations
 
 import json

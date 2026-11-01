@@ -1,7 +1,7 @@
 # 真机实测(连真实 qBittorrent 的实测轨)
 
 > 摘要: 第四条测试轨的**全部规程** —— 硬约束与环境守卫、种子层 L0/L1/L2、切片表与切片更新规则、一轮的标准动作、两次排期之间的漂移判定、用例成熟度 L0–L3 与用例写法。状态与进度**不在本文件**, 在常驻锚 issue。
-> 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests-real, real 包, 不走闸门
+> 触发: 真机实测, 真机测试, 连真机, 实测排期, 测试 qB, 36595, 36596, 56589, 56590, 测试环境, QBT_REAL_ENV, 双环境, 假种子, 伪 tracker, 切片, 用例成熟度, 漂移判定, tests-real, real 包, 不走闸门
 
 ## 00 定位: 四条测试轨的分工
 
@@ -23,7 +23,7 @@
 
 | # | 约束 | 谁执行 | 怎么机检 |
 |---|---|---|---|
-| 1 | **只碰白名单实例**: `127.0.0.1:36595` / `127.0.0.1:36596`, 且进程镜像路径前缀 `D:\Programs\qBittorrent-testing` | `real.guard` 静态核验 | 端口或镜像路径不在白名单 → **退出码非 0, 无 `--force`** |
+| 1 | **只碰白名单实例**: 当前环境的主/副端口(环境1 = `127.0.0.1:36595`/`36596` + `D:\Programs\qBittorrent-testing` 前缀; 环境2 = `127.0.0.1:56589`/`56590` + `C:\Programs\qBittorrent-testing` 前缀; 单点 = `tests-real/lib/env_registry.py`, `real.env` 可查) | `real.guard` 静态核验 | 端口或镜像路径不在白名单 → **退出码非 0, 无 `--force`** |
 | 2 | **真实种子全程非活跃** | guard 前置 `pause-all` + 运行期看门狗 | 每 2s 轮询目标 qB, 任一**真实**种子进入 `uploading`/`downloading` → 立即暂停并记违规; 违规 ≥3 次中止本轮 |
 | 3 | **生产配置零触碰**: 只用 `tests-real/config/*.yml` 派生配置 | guard 校验配置路径 | 配置路径 == 仓库根 `config.yml` → 拒跑(红线文件, 见 pitfalls/ops/prod-files) |
 | 4 | **不动其它 qB**: 杀进程/重启前先核镜像路径 | `real.up` / `real.down` | guard 记录运行前全部 qB 进程 (PID+镜像路径), 收尾比对; 出现新增/消失即报告 |
@@ -35,7 +35,7 @@
 
 ### 2.1 守卫(全在 `tests-real/guard.py`, 入口 `real.guard`; 任何用例先过它)
 
-1. **静态白名单** —— 端口 ∈ {36595, 36596}; 进程镜像路径前缀匹配; 配置路径不是 `config.yml`。
+1. **静态白名单** —— 端口 ∈ 当前环境的主/副端口(env_registry 派生); 进程镜像路径前缀匹配; 配置路径不是 `config.yml`。
 2. **在线核验** —— `connection_status` 必须不是 `disconnected`(`connected` / `firewalled` 都算通过)。
    见 §2.5: 掉线时 qB 一个 announce 都不发, 而种子状态看起来完全正常 —— 不拦在门口, 整片结论都是假的。
 3. **前置快照 + 归零** —— 记录当时所有 qB 进程与目标实例的种子清单; 对目标实例 `pause` 全部种子, 校验 `start_paused_enabled`。
@@ -46,14 +46,15 @@
 ### 2.2 启动 / 重启
 
 - 一律走 `real.up` / `real.down`(白名单内), **不要手工双击 exe** —— 手工启动的进程 guard 认不出归属。
-- 端口被残留占用 → `dev.port-kill`(**只传白名单端口**), 它按端口查真 PID, 不会误杀包装进程。
+- 端口被残留占用 → `dev.port-kill`(**只传当前环境白名单端口**, `real.env` 可查), 它按端口查真 PID, 不会误杀包装进程。
 - 两个实例都是 **portable 模式**(各自带 `profile/`), 配置与 `qBittorrent-data` 互不影响; 需要"干净环境"时换 `profile` 目录而不是删 `%APPDATA%`。
+- **多平行 clone 注意**: 本机常有多个平行 clone, 但物理测试实例(端口/进程)全机只有一套 —— 真机轨**同一时刻只允许一个 clone 在跑 `real.*`**; 开跑前若 `real.guard` 报端口被占/种子状态异常, 先确认是不是另一个 clone 正在测。
 
 ### 2.3 RM00 之前的手工版(三条, 缺一不开跑)
 
-`real` 包由 RM00 建立; 在那之前守卫是手工 checklist —— 跑 `dev.webui` / `dev.run` 前逐条核:
+`real` 包由 RM00 建立; 在那之前守卫是手工 checklist —— 跑 `dev.webui` / `dev.run` 前逐条核(先 `real.env` 确认当前环境):
 
-1. 目标端口是 `36595` / `36596`, 且该端口对应的进程镜像路径在 `D:\Programs\qBittorrent-testing*` 下(用端口反查 PID 再核路径, 别只看端口);
+1. 目标端口是当前环境的主/副端口(环境1 = `36595`/`36596` + `D:\Programs\qBittorrent-testing*`; 环境2 = `56589`/`56590` + `C:\Programs\qBittorrent-testing*`), 且该端口对应的进程镜像路径在对应前缀下(用端口反查 PID 再核路径, 别只看端口);
 2. 目标实例**全部种子处于 `paused`**(`GET /api/v2/torrents/info` 逐条看 `state`), 有活跃的先暂停;
 3. 要跑的配置是 `tests-real/config/*.yml` 派生的那份, **不是**仓库根 `config.yml`。
 
@@ -63,11 +64,15 @@
 
 `dev.webui` 起一份**关掉全部自动任务**的最小配置(只留同步快照 + WEB UI, 数据目录独立), 连真机 qB 看界面/试交互 —— 读侧切片(RM08)首选它, 不必跑完整主循环。注意它**仍会真写**: WebUI 上点"暂停"就是真暂停(这是测乐观 UI 的前提), 所以约束 1/2 一样适用。
 
-### 2.5 实例的硬事实(RM00 实测; 环境有变先改这里)
+### 2.5 实例的硬事实(实测得出; 环境有变先改这里。分环境记账, 单点 = `tests-real/lib/env_registry.py`)
+
+**环境怎么选**: 环境变量 `QBT_REAL_ENV=1|2` 显式指定(两套 exe 都在同一台机器上时必须用); 缺省按 EXE 存在性自动探测(1→2 序); `real.env` 打印当前环境与 token 配置方式。**token 不落盘**, 由用户每轮会话给出, 经环境变量 `QBT_TEST_<端口>` 注入(如 `QBT_TEST_36595` / `QBT_TEST_56589`)。
+
+#### 2.5.1 环境1(D盘机): WebUI 36595/36596
 
 **两个测试实例的 BT 监听端口**: 36595 = `26803`, 36596 = `60539`, 都绑在局域网 IP `192.168.1.122` 上。
 
-> 🔴 **36596 原本配的是 60537, 而生产实例 `D:\Programs\qBittorrent-2` 占着 60537**。撞车后果不是"慢", 是**该实例一个 announce 都不发**: 抢不到监听 socket ⇒ `/api/v2/transfer/info` 的 `connection_status` 变成 `disconnected` ⇒ libtorrent 认定自己离线, 连 tracker 都不联系, 所有种子永远停在 `stalledUP`/`stalledDL` 且 `status=1`(未联系)。
+> 🔴 **(环境1 实测)36596 原本配的是 60537, 而生产实例 `D:\Programs\qBittorrent-2` 占着 60537**。撞车后果不是"慢", 是**该实例一个 announce 都不发**: 抢不到监听 socket ⇒ `/api/v2/transfer/info` 的 `connection_status` 变成 `disconnected` ⇒ libtorrent 认定自己离线, 连 tracker 都不联系, 所有种子永远停在 `stalledUP`/`stalledDL` 且 `status=1`(未联系)。**这条教训全环境通用**。
 > **所以 `real.up` 之后必须核一句 `connection_status`**: 只接受 `connected` / `firewalled`; 见到 `disconnected` 立刻换端口(`set_prefs(listen_port=...)`, 用 `socket.bind` 先探空), 不要往下测 —— 否则整片结论全是假红。
 
 **其它会让人白跑半小时的实测事实**:
@@ -85,6 +90,20 @@
 
 **诊断入口(卡住时先跑它们, 别靠猜)**: `uv run python tests-real/tools/diag_l2.py [秒]`(双实例互传全过程: announce 计数 / tracker 视图 / TCP 连接表) 与 `tests-real/tools/diag_log.py <port> [行数]`(qB 日志尾部)。
 
+#### 2.5.2 环境2(C盘机): WebUI 56589/56590
+
+2026-11-01 新配置并完成首轮基建实测(guard 全绿), 硬事实如下(口径同 2.5.1; 单点代码侧 = `env_registry.py`):
+
+| 事实 | 影响 | 处置 |
+|---|---|---|
+| 🔴 **profile 抄自环境1 机器, 残留其网卡标识 `ethernet_32769`** | 本机网卡(Intel 82574L)对不上 ⇒ libtorrent 绑不出监听 socket ⇒ `connection_status=disconnected`, 与 §2.5.1 端口撞车同款假红 | 2026-11-01 已 `set_prefs(current_network_interface="")`(任意接口)修复, 双实例转 `firewalled`。**换机抄 profile 后必查这条** |
+| BT 监听端口: 56589 = `27049`, 56590 = `32719` | 用例的禁用端口黑名单 | 已回填 `env_registry.bt_listen` |
+| 局域网 IP = `192.168.110.130`(动态取) | announce 地址 | `lib/net.py: local_host()` 动态解析, 无需回填 |
+| transfer 限速原值: up = `1048576`B(1 MiB), down = `5242880`B(5 MiB)(两实例对称); prefs `dl_limit=11535360` / `up_limit=5243904` | 与环境1 的 1024B 奇数坑不同, 这里**全是偶数**, 曲线用例的手动保护误报风险低; 但 up 1 MiB 会压 L2 互传速率 | 曲线类用例照旧开工预置/收尾还原快照(§2.13 口径), 不硬编码原值 |
+| **主实例当前 0 枚真实种子**(2026-11-01 实测; 环境1 有 8 枚) | 依赖真实种子的用例(RM08-05 腿A / RM10-01/02 的真实例只读扫描)在环境2 前提不成立 | 跑这类用例前先核 `guard.snapshot` 计数; 真实种子由用户自行添加, 用例侧不得代造"真实"种子 |
+| R: 盘**不存在** | `real.seed` ≥32M 自动退回 `.work` **真写盘** | 大种子优先 `--no-data`; 收尾记得 `real.seed.clean` |
+| gtm 默认发现端口 18788 探测不可达 | 「未安装」前提大概率成立(与环境1 相反) | RM07 状态端点用例仍按实况双分支断言, 不提前固化 |
+
 ### 2.6 手工探索: 假种子命令(`real.seed*`)
 
 需要"随手造个种子看看界面 / 状态 / 标签 / 限速"时用它, 不必先写一条用例:
@@ -98,7 +117,7 @@
 
 参数: `--size 256K|8M|1.5G|512k`(**默认 256K**, KB 级就够看状态) · `--pattern random|zeros|text` ·
 `--dir <落点>`(只认 `tests-real/.work/` 与 `R:/qbt-fake/`) · `--from <现成文件>`(大小自动取文件, 不动原文件) ·
-`--no-data` · `--paused` · `--piece-len` · `--port 36595|36596`(默认 36596, 空库当草稿本) ·
+`--no-data` · `--paused` · `--piece-len` · `--port <当前环境白名单端口>`(缺省副实例, 空库当草稿本) ·
 `--allow-huge --reason "<原因>"`(> 2G 才用得上) · `--yes`(不加就只打印计划)。
 
 五条口径:
@@ -110,7 +129,7 @@
   占盘/占内存盘、qB 校验要**读满一遍**、清理最容易漏(尤其落到真磁盘的)。想清楚了再分两条路走:
   只要"大尺寸"这个属性看状态 ⇒ `--no-data`(不落盘, 零代价, 不受限); 要真数据 ⇒ 先问自己 1G 行不行。
   `--from <现成文件>` 不创建文件、只造种子, 源文件超 2G 只告警不拦。
-- **≥ 32M 自动落 `R:/qbt-fake/`**: R 盘是**内存盘**(约 52 GB 可用), 写多少都不心疼; 但**重启即清空**,
+- **≥ 32M 自动落 `R:/qbt-fake/`**(R 盘是**环境1 机器**的内存盘, 约 52 GB 可用; **环境2 无 R: 时自动退回 `.work` 真写盘** —— 大种子优先 `--no-data`), 写多少都不心疼; 但**重启即清空**,
   所以大种子只当次会话有效。要长期留着就显式 `--dir` 指到磁盘(仍在允许的落点内)。R: 不可用时自动退回 `.work` 并提示会真写盘。
 - **默认不带 announce** ⇒ 纯本地做种(`stalledUP`、progress 100%、零外连)。要 announce 请在用例里用
   `FakeTracker` —— CLI 是短命进程, 起不了活到你看完的 tracker。
@@ -212,7 +231,7 @@
 | **off 快照复位 limit 段, derive 优先级定顶层** | 来源 off → `publish_off` 把 limit 段复位 disabled; 曲线未配时无发布者再动它, 之后 ok 轮顶层 state 停在 `disabled` 而非 `ok` | 三态判据咬段级 `source.state`; 顶层 disabled 是 derive_state 设计语义非缺陷 |
 | **零传输种子不进采样集** | `_sample_torrents` 数据门 = 采样目录存在才采; 零传输假种子整体跳过不产目录; 「暂停态种子进 null run」(:831)是活跃但缺字段分支, 健康 qB 到不了 | 单种系列/重启首窗 null 的真数据面归 L2 互传; L1 只验全局系列 |
 | **纯空闲系列的开放 z 游程从不形成盘上旧块** | 记录只在封口时 append(`_append_record` 才开块)→ 切 interval 时「无开放块的开放游程不封」, 盘上恰一个新 interval 块、z 游程无缝横跨 | L1 断「新块带新 interval + 文件干净」; 「旧块封口」面需块内有 r 行(L2) |
-| **gtm 工具可能已在本机运行** | 发现指针指向机器级安装(RM07 实测: 指向另一 clone `D:\Projects\auto-qb`, state=ready, autostart 已注册)—— 「未安装 → not_installed」前提不一定成立 | 状态端点用例按实况双分支断言(ready 验就绪载荷 / 不可达验五态+error); **写端点(PUT /config 等)对就绪工具会真写用户安装, 跨 clone 红线, 一律不发**; provider=traffic_monitor 缺省下产品不订阅工具, 只读探测 |
+| **gtm 工具可能已在本机运行**(环境1 机器事实; 环境2 待核, 见 §2.5.2) | 发现指针指向机器级安装(RM07 实测: 指向另一 clone `D:\Projects\auto-qb`, state=ready, autostart 已注册)—— 「未安装 → not_installed」前提不一定成立 | 状态端点用例按实况双分支断言(ready 验就绪载荷 / 不可达验五态+error); **写端点(PUT /config 等)对就绪工具会真写用户安装, 跨 clone 红线, 一律不发**; provider=traffic_monitor 缺省下产品不订阅工具, 只读探测 |
 
 ### 2.14 WebUI 写侧面的事实(RM09 实测, 2026-10-31)
 
@@ -234,19 +253,19 @@
 |---|---|---|---|---|---|
 | **L0** | 用实例里现成的真实种子 | 全程 `paused` | 只读数据面、观感、配置读写 | 零(不动真实种子) | ✅ 现在可用 |
 | **L1** | 构造种子, announce 指向本地伪 tracker(bencode, **零 peer**) | `stalledUP` / `paused`, **零外网流量** | 标签/分类/状态/限速下发/规则命中/HR 判定数据面 | 零(流量不出本机) | ✅ RM00 已验证 |
-| **L2** | 36595 做种 + 36596 下载, 伪 tracker 回对端地址 | 真 `uploading`/`downloading` | 真实速率/进度/完成事件/做种时间/汇报 | 零(两端都打本地 tracker) | ✅ RM00 已验证 |
+| **L2** | 主实例做种 + 副实例下载, 伪 tracker 回对端地址 | 真 `uploading`/`downloading` | 真实速率/进度/完成事件/做种时间/汇报 | 零(两端都打本地 tracker) | ✅ RM00 已验证(环境1) |
 
 **L1 设计要点**: 伪 tracker 只需实现 `GET /announce` 返回 `d8:intervali1800e5:peers0:e`(零 peer)即够; 种子用 bencode 现造(`announce` = `http://<本机局域网IP>:<port>/announce`), 不要拿真实种子的 infohash 改 announce —— 那会让真实 tracker 仍被联系。
-**L2 设计要点**: 伪 tracker 对 36596 的 announce 返回 36595 的 peer(`ip` + `port` 取自 qB 的监听端口), 两端都在本机 ⇒ 流量不出网卡。
+**L2 设计要点**: 伪 tracker 对副实例的 announce 返回主实例的 peer(`ip` + `port` 取自 qB 的监听端口), 两端都在本机 ⇒ 流量不出网卡。
 
 > ⚠️ **announce 不能写 `127.0.0.1`**: qB 的出站 socket 绑在以太网接口上(`current_network_interface`), 打 127.0.0.1 会 `WSAEADDRNOTAVAIL`, tracker 状态 4「该请求的地址无效」。一律用 `lib/net.py: local_host()` 取的局域网 IP —— 仍是本机, 流量仍不出网卡。
 > ⚠️ **伪 tracker 回包必须排除请求者自己**: 两实例同 IP 只差端口, 若把"自己"也回给它, 种子会去连自己, 而 qB 默认 `enable_multi_connections_from_same_ip=false`(同一 IP 只允许一条连接), 真正的 leech 会被挤掉 —— 现场表现是 `connections_count` 1→0 且零字节, 极易误判成加密/防火墙问题。`lib/tracker.py` 已按 announce 里的 `port` 排除。
 
 **RM00 验收三条**(全绿才解锁 L1/L2, 之后各片才允许引用):
 
-1. **L1 正向** —— 构造种子加入 36595 后, `GET /api/v2/torrents/info` 里该种子 `upspeed == 0 && dlspeed == 0` 持续 ≥60s, 且伪 tracker 收到 ≥1 次 announce。
+1. **L1 正向** —— 构造种子加入主实例后, `GET /api/v2/torrents/info` 里该种子 `upspeed == 0 && dlspeed == 0` 持续 ≥60s, 且伪 tracker 收到 ≥1 次 announce。
 2. **L1 反向** —— 关掉伪 tracker 后种子进入 `error`/`stalledUP`, 且**无任何外网连接**(用连接表或域名黑名单断言), 证明流量物理上出不去。
-3. **L2** —— 36596 从 36595 拉取同一构造种子, `progress` 单调升至 1.0, 期间 `upspeed > 0` 持续 ≥10s, 完成后 36595 侧 `seeding_time` 增长; 全程两端 announce 只打本地伪 tracker。
+3. **L2** —— 副实例从主实例拉取同一构造种子, `progress` 单调升至 1.0, 期间 `upspeed > 0` 持续 ≥10s, 完成后主实例侧 `seeding_time` 增长; 全程两端 announce 只打本地伪 tracker。
 
 **退路(必须写进 RM00 计划)**: 若 qB 拒绝自定义 announce / 拒绝非标准端口 / 双实例拒绝互连 ⇒ L1 降级为"真实种子 + 全局暂停 + 只读断言", L2 直接置 `Dropped` 并写明原因 —— 不允许"再试试"把 RM00 撑成三次排期。
 
