@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0921">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="commit-gate-scope">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-01-test-commit-gate.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.pkg.scoped 闸门对无自测包无豁免: dev/doc/env/kb 改即挂">
 <meta name="issue-summary" content="test.pkg.scoped 对改动包跑 pytest &lt;包&gt;, 包内零 test_*.py 时收集为空 rc=5 闸门 FAIL; real 已补最小自测, dev/doc/env/kb 四包同款未解">
 <title>test.pkg.scoped 闸门对无自测包无豁免: dev/doc/env/kb 改即挂 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0921-test-commit-gate-no-test-pkg</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 09:21</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -77,6 +77,7 @@
   <section id="s1">
     <h2><span class="no">01</span>现象</h2>
     <p>提交闸门 <code>test.pkg.scoped</code>(计划 26-11-01-0434 方案 C, 2026-11-01 上线)对改动包跑 <code>pytest .commands/&lt;包&gt;</code>; 包内没有任何 <code>test_*.py</code> 时 pytest 收集为空 → 退出码 5 → 闸门 FAIL(fail-closed, 无豁免路径, <code>pkg_scoped.py</code> 只对「0 个改动包」兜底 rc 0)。现状: <code>dev</code> / <code>doc</code> / <code>env</code> / <code>kb</code> 四包零自测 —— 谁改这四个包谁挂闸门。同款问题在 <code>real</code> 包命中过一次(双环境化提交, 2026-11-01), 已按用户拍板补最小自测 <code>.commands/real/scripts/test_real_pkg.py</code>(5 条)解决。</p>
+    <p class="hint">复验 (2026-11-01 19:17, 认领时): 四包清单仍成立 —— <code>.commands/{dev,doc,env,kb}</code> 各仅 <code>config.toml</code>、零 <code>test_*.py</code>; 02 节「有自测包」清单亦一致。用户指派认领, 按建议①实施。</p>
   </section>
 
   <section id="s2">
@@ -90,12 +91,16 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>二选一: ① 按 real 包先例给四包各补最小自测(config.toml 可解析 + 任务必备键 + 引用脚本存在); ② <code>pkg_scoped.py</code> 对「pytest 收集为空且该包本就没有自测」判 rc 0(闸门语义变更, 属 0434 计划范围, 需拍板)。认领前先复验四包清单仍成立。</p>
+    <p><strong>实际修法 (2026-11-01, 按建议①)</strong>: 四包各落 <code>scripts/test_&lt;包&gt;_pkg.py</code> 最小守阵 —— config.toml 可解析 + <code>[pack].name</code> + 任务必备键(run/timeout/when) + run 命令 .py 引用存在 + 引用抽取非空(防空转假绿); doc/kb 的 <code>&lt;skill-dir:&gt;</code> 引用经引擎 <code>find_skill_dir</code> 单点展开(importlib 就地加载须先注册 <code>sys.modules</code>, 坑见 <code>pitfalls/testing/importlib-sys-modules-dataclass.md</code>); env 无 .py 引用, 第三例改守 env.version 的版本单源(<code>auto_qb.__version__</code> ∈ <code>src/auto_qb/__init__.py</code>)。守阵首跑逮到 <code>dev.port-kill</code> 缺 <code>timeout</code> —— 顺带补 <code>timeout = 60</code>(真缺口), 未放宽守阵。</p>
+    <p><strong>验证方式与数字 (2026-11-01)</strong>: ①合成坏引用红验 —— doc/kb/dev 抽取器全部抓到; ②四包 <code>commands run test.pkg.scoped</code> 各 3 例全绿 rc=0; ③整跑 <code>commands run test.pkg</code> 223 passed (52.0s); ④<code>commands run test.full</code> 4453 passed + 10 skipped、覆盖 99% —— 基线切片 <code>memory-bank/testing/baselines/26-11-01-1926-test-commit-gate.md</code>。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 09:21 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 19:17 — 用户指派认领，状态 <strong>Open → In Progress</strong>（先复验：四包清单仍成立，见 01 节复验行）</li>
+      <li>2026-11-01 19:28 — 修复完成，状态 <strong>In Progress → Done</strong>（按建议①四包补最小自测 + 顺带修 dev.port-kill 缺 timeout；实际修法与验证数字见 03 节）</li>
     </ul>
   </section>
 
