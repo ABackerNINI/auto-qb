@@ -20,7 +20,6 @@
 
 - [26-11-01-0106] [规则引擎重设计方案](26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
-- [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
@@ -43,6 +42,7 @@
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
 - [26-10-31-0306] [种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单](26-10-31-0306-plan-torrent-transfer.html) — `torrent-transfer`
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
+- [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`
 - [26-10-30-0221] [实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流](26-10-30-0221-plan-full-code-review-2.html) — `full-code-review-2`
@@ -84,9 +84,8 @@
 - [26-10-12-0527] [WEBUI 抽屉表格统一重写 — 修正计划（依据双计划联合审计）](26-10-12-0527-plan-webui-drawer-table-rework.html) — `webui-drawer-table-rework`
 - [26-10-11-2106] [种子详情面板重构 · 从字符串 DOM 变体到 Vue 面板 — 分步实施计划](26-10-11-2106-plan-webui-drawer-refactor.html) — `webui-drawer-refactor`
 - [26-10-11-2040] [批量跳检后「批量开始」状态脱节 · 修复方案](26-10-11-2040-plan-webui-bulk-skipcheck-start-desync.html) — `webui-optimistic-ui`
-- [26-10-11-1722] [WEBUI 表格公共组件 · 从辅种表/追剧表抽公共表壳 — 分步实施计划](26-10-11-1722-plan-webui-table-component.html) — `webui-table-component`
 
-> 更早的 **121** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **122** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

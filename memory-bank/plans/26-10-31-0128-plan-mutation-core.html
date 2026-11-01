@@ -7,9 +7,9 @@
 <title>core/ 包变异测试审计 · 分步执行计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="mutation-core">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-0128">
-<meta name="doc-updated" content="26-10-31-0128">
+<meta name="doc-updated" content="26-11-01-2038">
 <meta name="doc-refs" content="memory-bank/issues/26-10-08-0642-test-mutation-audit-standing.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>core/ 包变异测试审计 · 分步执行计划</h1>
 <p class="lede">对 <code>src/auto_qb/core/</code>(主循环 / 状态 / 限速, 32 文件 14,710 行)做变异测试定期审计: 不做整包首轮, 直接按模块拆 9 轮, 每轮走「跑 → 报告 → 三分类 → 手工确认 → 补测红验 → 同池复跑 → 切片 → 更锚」的完整协议。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-0128 · <b>doc-updated</b> 26-10-31-0128 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-0128 · <b>doc-updated</b> 26-11-01-2038 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「写一个 core/ 的变异测试计划」; 依据常驻锚 <code>26-10-08-0642-test-mutation-audit-standing</code> §03 优先级(core/ 为下一个待做大件)与 mutation-testing skill「派生计划」节
 </div>
 
@@ -221,6 +221,7 @@
 <ul>
   <li><span class="tag">R1 · 26-10-31-0228</span> 拍板回填: D1/D2/D3 按推荐结论定案(见 §06), 计划转入执行。</li>
 <li><span class="tag">R0 · 26-10-31-0128</span> 初版。来源: 用户指令「写一个 core/ 的变异测试计划」。要点: 按 mutation-testing skill「派生计划」节骨架成文; core/ 32 文件 14,710 行摸底实测(wc -l + tests/ 全量 grep 建模块→池映射); 定调不做整包首轮(hr 整包 96 min 实测反推 core ≥2.5h), 直接拆 W1–W9 九轮按出错代价排序; 三个池面缺口立牌(state.py 仅 2 文件 / qbapi.py 4 文件对 54 def / reader.py 零引用); 三批分期可中断。零 src/ / tests/ 改动; 未执行审计(计划边界: 不在计划里实施)。</li>
+  <li><span class="tag">R2 · 26-11-01-2038</span> 整包收口: W1–W9 九个工作包(R25–R34, W9 拆 9a/9b)全部完成, core/ 整包变异审计收官; 计划状态置 Done, 验收见 §04.3 五条自查结论; 数字一律引常驻锚 §07 与最新切片(commands run kb.baseline), 正文不手抄。</li>
 </ul>
 
 </div>

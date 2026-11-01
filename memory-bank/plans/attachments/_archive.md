@@ -10,14 +10,13 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (4)
+## Open (3)
 
 - [26-11-01-0106] [规则引擎重设计方案](../26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](../26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
-- [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](../26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (181)
+## Done (182)
 
 - [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](../26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0434] [提交闸门按改动收窄优化](../26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
@@ -37,6 +36,7 @@
 - [26-10-31-0446] [全局流量来源 S19 真机验收计划(桩测 · 仅 Windows 侧)](../26-10-31-0446-plan-global-traffic-source-acceptance.html) — `global-traffic-source-acceptance`
 - [26-10-31-0306] [种子转移到其它下载器: 后端移动管线 + per-target 配置 + 四支右键菜单](../26-10-31-0306-plan-torrent-transfer.html) — `torrent-transfer`
 - [26-10-31-0143] [kb.nav 多选与批量右键菜单](../26-10-31-0143-plan-kb-nav-multiselect.html) — `kb-nav-multiselect`
+- [26-10-31-0128] [core/ 包变异测试审计 · 分步执行计划](../26-10-31-0128-plan-mutation-core.html) — `mutation-core`
 - [26-10-30-2359] [WebUI 分组行左条区分全选与半选——三模板选型](../26-10-30-2359-plan-webui-sel-bar-partial-full.html) — `webui-sel-bar-partial-full`
 - [26-10-30-0610] [乐观UI扩面: 重命名乐观补丁+主备速度切预翻转](../26-10-30-0610-plan-webui-optimistic-ui.html) — `webui-optimistic-ui`
 - [26-10-30-0221] [实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流](../26-10-30-0221-plan-full-code-review-2.html) — `full-code-review-2`
