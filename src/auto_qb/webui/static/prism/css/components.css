@@ -165,11 +165,25 @@ html[data-theme="frost"] .rowlang-group, html[data-theme="golden"] .rowlang-grou
 
 /* 状态语义配色(分布条/chip/明细圆点共用, 与后端 kind 一一对应) */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
-.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch, .k-moving, .k-moving .swatch { color: var(--blue); }
+.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch, .k-moving, .k-moving .swatch { color: var(--st, var(--blue)); }
 /* FX-06(D8-B): 暂停/其它保持无色相, 但字色从 --fg-dim 抬到中性中间调(--paused) ——
  * 旧写法用 dim 灰, 叠加白色高光底就读作"白底看不到字"。 */
 .k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }
 .k-error, .k-error .swatch { color: var(--error); }
+
+/* 状态色令牌(2026-11-02): 一处声明, 图例(.k-*) / 站点芯片(.site-chip) / 行(.s-* 与裸 kind) 共用
+ * --st(前景) 与 --st-soft(柔和底)。声明在**行元素**上靠变量继承下发, 内层成员行自带 kind 类即覆盖
+ * —— 不用后代选择器把组行色连带给子行。
+ * checking 原先与 downloading 同 --blue、肉眼分不出: 改 --warn(琥珀, "在动磁盘但不传输");
+ * moving 改 --violet(紫), 与 views.py::state_kind docstring「移动中紫」的原口径对齐。
+ * 落 components.css 而非 views.css: 后者 818 行存量冻结(只许减不许增)。 */
+.k-seeding, .site-chip.seeding, .group-row.s-seeding, .member-row.seeding { --st: var(--green); --st-soft: var(--green-soft); }
+.k-downloading, .site-chip.downloading, .group-row.s-downloading, .member-row.downloading { --st: var(--blue); --st-soft: var(--blue-soft); }
+.k-checking, .site-chip.checking, .group-row.s-checking, .member-row.checking { --st: var(--warn); --st-soft: var(--warn-soft); }
+.k-moving, .site-chip.moving, .group-row.s-moving, .member-row.moving { --st: var(--violet); --st-soft: var(--violet-soft); }
+.k-paused, .site-chip.paused, .group-row.s-paused, .member-row.paused { --st: var(--paused); --st-soft: var(--paused-soft); }
+.k-other, .site-chip.other, .group-row.s-other, .member-row.other { --st: var(--paused); --st-soft: var(--paused-soft); }
+.k-error, .site-chip.error, .group-row.s-error, .member-row.error { --st: var(--error); --st-soft: var(--error-soft); }
 
 /* 表格工具按钮(列选择器入口) */
 .col-picker { position: relative; }

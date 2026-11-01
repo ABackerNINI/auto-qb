@@ -128,7 +128,7 @@
  * 暂停/其它用中性中间调 --paused(与棱镜同口径): 此前用更暗的 --fg-dim, 与"已暂停"状态文字
  * 不同族; 见下方令牌声明处的说明。 */
 .k-seeding, .k-seeding .swatch { color: var(--green); }
-.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch, .k-moving, .k-moving .swatch { color: var(--blue); }
+.k-downloading, .k-downloading .swatch, .k-checking, .k-checking .swatch, .k-moving, .k-moving .swatch { color: var(--st, var(--blue)); }
 .k-paused, .k-paused .swatch, .k-other, .k-other .swatch { color: var(--paused); }
 .k-error, .k-error .swatch { color: var(--error); }
 
@@ -288,7 +288,7 @@
 .g-status { display: inline-grid; place-items: center; width: 20px; height: 20px; flex: 0 0 auto;
   border-radius: 6px; background: var(--surface-2); }
 .g-status.k-seeding { background: var(--green-soft); }
-.g-status.k-downloading, .g-status.k-checking, .g-status.k-moving { background: var(--blue-soft); }
+.g-status.k-downloading, .g-status.k-checking, .g-status.k-moving { background: var(--st-soft, var(--blue-soft)); }
 .g-status.k-error { background: var(--error-soft); }
 /* FX-06 对齐: 暂停/其它不铺底(原先落回 --surface-2 的白 6% 底 -> 读作"太白"), 改中性描边 +
  * 中间调图标色 —— 与做种/下载/错误三个有色底并列时, "有色/无色"的层次反而更清楚。 */
@@ -318,7 +318,7 @@
 .group-row.s-downloading .g-save-path, .group-row.s-downloading .m-hash, .group-row.s-downloading .g-count,
 .group-row.s-checking .g-save-path, .group-row.s-checking .m-hash, .group-row.s-checking .g-count, .group-row.s-moving .g-save-path, .group-row.s-moving .m-hash, .group-row.s-moving .g-count,
 .group-row.s-downloading .m-progress .val, .group-row.s-checking .m-progress .val, .group-row.s-moving .m-progress .val,
-.group-row.s-downloading .state-text, .group-row.s-checking .state-text, .group-row.s-moving .state-text { color: var(--blue); }
+.group-row.s-downloading .state-text, .group-row.s-checking .state-text, .group-row.s-moving .state-text { color: var(--st, var(--blue)); }
 .group-row.s-error .g-name-text, .group-row.s-error .g-stat:not(.zero),
 .group-row.s-error .g-save-path, .group-row.s-error .m-hash, .group-row.s-error .g-count,
 .group-row.s-error .m-progress .val, .group-row.s-error .state-text { color: var(--error); }
@@ -337,7 +337,7 @@
 .member-row.downloading .m-hash, .member-row.checking .m-hash, .member-row.moving .m-hash,
 .member-row.downloading .g-save-path, .member-row.checking .g-save-path, .member-row.moving .g-save-path,
 .member-row.downloading .m-progress .val, .member-row.checking .m-progress .val, .member-row.moving .m-progress .val,
-.member-row.downloading .state-text, .member-row.checking .state-text, .member-row.moving .state-text { color: var(--blue); }
+.member-row.downloading .state-text, .member-row.checking .state-text, .member-row.moving .state-text { color: var(--st, var(--blue)); }
 .member-row.error .m-stat:not(.zero), .member-row.error .m-hash, .member-row.error .g-save-path,
 .member-row.error .m-progress .val, .member-row.error .state-text { color: var(--error); }
 .member-row.paused .m-stat:not(.zero), .member-row.paused .m-hash, .member-row.paused .g-save-path,
@@ -358,7 +358,7 @@
  * 原 .sc-0..7 站点专属文字色与 .stalled* 死规则已移除 —— m.kind 只有六种语义值,
  * stalled 系列从不出现在 chip 上; 见 memory-bank/pitfalls.md 回写条目) */
 .site-chip.seeding { background: var(--green-soft); color: var(--green); }
-.site-chip.downloading, .site-chip.checking { background: var(--blue-soft); color: var(--blue); }
+.site-chip.downloading, .site-chip.checking { background: var(--st-soft, var(--blue-soft)); color: var(--st, var(--blue)); }
 /* FX-06 对齐: 暂停/其它去掉白 6% 底, 改中性描边 + 中间调字色(与棱镜 .site-chip.paused 同口径) */
 .site-chip.paused, .site-chip.other { background: var(--paused-soft); color: var(--paused);
   box-shadow: inset 0 0 0 1px var(--paused-line); }
@@ -395,7 +395,7 @@
 .member-row.downloading .tag-chip:not(.hr-pending):not(.hr-done),
 .member-row.downloading .cat-chip,
 .member-row.checking .tag-chip:not(.hr-pending):not(.hr-done),
-.member-row.checking .cat-chip, .group-row.s-moving .tag-chip:not(.hr-pending):not(.hr-done), .group-row.s-moving .cat-chip, .member-row.moving .tag-chip:not(.hr-pending):not(.hr-done), .member-row.moving .cat-chip { background: var(--blue-soft); color: var(--blue); }
+.member-row.checking .cat-chip, .group-row.s-moving .tag-chip:not(.hr-pending):not(.hr-done), .group-row.s-moving .cat-chip, .member-row.moving .tag-chip:not(.hr-pending):not(.hr-done), .member-row.moving .cat-chip { background: var(--st-soft, var(--blue-soft)); color: var(--st, var(--blue)); }
 .group-row.s-error .tag-chip:not(.hr-pending):not(.hr-done),
 .group-row.s-error .cat-chip,
 .member-row.error .tag-chip:not(.hr-pending):not(.hr-done),
@@ -429,18 +429,18 @@
 .m-state { display: inline-flex; align-items: center; gap: 6px; color: var(--fg-muted); }
 .m-state .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
 .member-row.seeding .m-state { color: var(--green); }
-.member-row.downloading .m-state, .member-row.checking .m-state, .member-row.moving .m-state { color: var(--blue); }
+.member-row.downloading .m-state, .member-row.checking .m-state, .member-row.moving .m-state { color: var(--st, var(--blue)); }
 .member-row.error .m-state { color: var(--error); }
 /* FX-06 对齐: 暂停/其它与状态芯片同族(不再是更暗的 --fg-dim) */
 .member-row.paused .m-state, .member-row.other .m-state { color: var(--paused); }
 .m-hash { color: var(--fg-dim); font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
 
-/* 进度: 细条 + 数字(同一 grid 单元格内横排; 数值盒定宽右对齐, 条长不随百分比文本宽漂移) */
+/* 进度: 细条+数字(数值盒定宽右对齐, 条长不随文本宽漂移); 条色 = 行状态色 --st(2026-11-02 前恒为 accent) */
 .m-progress { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .m-progress .bar { flex: 1 1 auto; height: 4px; min-width: 22px; border-radius: 999px;
   background: var(--surface-2); overflow: hidden; }
 .m-progress .bar > i { display: block; height: 100%; border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), var(--accent-hi)); }
+  background: var(--st, var(--accent)); }
 .m-progress .val { flex: 0 0 auto; min-width: 4em; text-align: right; font-size: 12px; color: var(--fg-muted); }
 
 /* ---------------- 右键菜单(坐标由 JS 计算并做视口边界吸附) ---------------- */

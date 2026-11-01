@@ -40,8 +40,15 @@
 - **状态色族**(`--green/--blue/--error/--warn` + `--paused-*`): 表达**种子/行状态**。只染有语义的状态; 0 值/
   "—"占位不染; 芯片(站点/标签/分类)保持自身语义色不跟随行色(决策 D6-A —— 芯片表达**成员级**语义, 跟随行色会抹平这层信息)。
   `--paused` 是唯一"无色相"的成员, 取值 = `--fg-muted`(中性中间调), 配 `--paused-soft: transparent` + `--paused-line: var(--border-strong)`
-  —— **暂停/其它一律"不铺底 + 中性描边"**, 不许落回 `--surface-2`(暗底 = 白 6%, 读作"太白/没颜色")。该族**各套 UI 各声明一处**(atlas/prism/console)
-  (星图 `:root` / 棱镜 `themes/*.css` 五主题), 改值必须两处同改。
+  —— **暂停/其它一律"不铺底 + 中性描边"**, 不许落回 `--surface-2`(暗底 = 白 6%, 读作"太白/没颜色")。该族**各套 UI 各声明一处**(atlas/prism/console/flux)
+  (星图 `:root` / 棱镜 `themes/*.css` 五主题), 改值必须全处同改。
+- **状态色 → kind 映射与 `--st` 单点**(2026-11-02): 七个 kind 各绑一支令牌 —— 做种 `--green` / 下载 `--blue` /
+  **校验 `--warn`(琥珀)** / **移动中 `--violet`(紫, 与 `views.py::state_kind` docstring 的原口径对齐)** /
+  错误 `--error` / 暂停与其它 `--paused`。消费面不再各写令牌值: 行元素(`.k-*` 图例项 / `.site-chip.<kind>` /
+  `.group-row.s-<kind>` / `.member-row.<kind>`)声明 `--st`(前景) 与 `--st-soft`(柔和底) 一次, 图例色、芯片底、
+  行文字(名称/数值/state-text/.val)、**进度条填充**统一读变量。声明在**行元素**上靠继承下发 ——
+  内层成员行自带 kind 类即覆盖, 不用后代选择器给子行连带染组行色。校验与下载原先同 `--blue` 肉眼分不出
+  (用户报障原症状), 拆开后由 `test_frontend_static_bundle_health` 第 19 项钉死值。
 - **选中态族**(`--sel-bg/--sel-line/--sel-bar`, 五主题均取**非绿**的靖蓝族): 只用于"用户选中"语义; **不得**再引用
   `--accent`/`--accent-soft` —— 品牌主题(orbit)下 `--accent` 与做种 `--green` 同族且明度接近, 用户分不出"选中"与"做种"。
 - **流量方向色族**(`--today-up/--today-down`, 星图 `:root` 一处 + 棱镜五主题各一处, 改值必须全处同改):

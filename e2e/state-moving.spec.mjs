@@ -82,18 +82,36 @@ for (const skin of SKINS) {
       await expect(page.locator(`.torrent-row[data-hash="${hash}"]`)).toBeVisible();
       await chip.click();  // 复原取消筛选(后续门控与 companion 用例不受影响)
 
-      // ④ 配色: .k-moving 的计算色必须等于 --blue 令牌(不是落回默认前景色)
+      // ④ 配色: .k-moving 的计算色必须等于 --violet 令牌(不是落回默认前景色)
+      //    2026-11-02 起 moving 从 --blue 拆出为紫(与 checking 拆分同批, 见各皮肤「状态色令牌」段)
       const [ token, computed ] = await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
         const el = document.querySelector('.dist-bar span.k-moving');
-        return [root.getPropertyValue('--blue').trim(), el ? getComputedStyle(el).color : ''];
+        return [root.getPropertyValue('--violet').trim(), el ? getComputedStyle(el).color : ''];
       });
       expect(computed, '.k-moving 元素应已渲染').toBeTruthy();
       const a = parseRgb(token), b = parseRgb(computed);
       expect(b, `计算色无法解析: ${computed}`).not.toBeNull();
       if (a) {
-        expect(b.slice(0, 3), `.k-moving 应取 --blue(${token}), 实得 ${computed}`)
+        expect(b.slice(0, 3), `.k-moving 应取 --violet(${token}), 实得 ${computed}`)
           .toEqual(a.map((n) => Math.round(n)));
+      }
+
+      // ⑤ 进度条填充 = 行状态色(2026-11-02): --st 声明在行元素上靠继承下发,
+      //    静态守阵只能钉「规则里写了 var(--st)」, 继承是否真到位只有浏览器能证。
+      //    先钉条存在(列被隐藏就红, 不许静默跳过), 再比对计算背景色。
+      const fill = row.locator('.m-progress .bar > i');
+      await expect(fill, '进度列的填充条应存在(断言不得静默跳过)').toHaveCount(1, { timeout: 5_000 });
+      const [ vtok, vbg ] = await page.evaluate((h) => {
+        const root = getComputedStyle(document.documentElement);
+        const el = document.querySelector(`.torrent-row[data-hash="${h}"] .m-progress .bar > i`);
+        return [root.getPropertyValue('--violet').trim(), el ? getComputedStyle(el).backgroundColor : ''];
+      }, hash);
+      const c = parseRgb(vtok), d = parseRgb(vbg);
+      expect(d, `进度条填充色无法解析: ${vbg}`).not.toBeNull();
+      if (c) {
+        expect(d.slice(0, 3), `moving 行进度条应取 --violet(${vtok}), 实得 ${vbg}`)
+          .toEqual(c.map((n) => Math.round(n)));
       }
     });
   });

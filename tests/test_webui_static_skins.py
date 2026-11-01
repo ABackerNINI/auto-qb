@@ -1624,6 +1624,73 @@ def _scan_progress_val_parity(problems):
             problems.append(f"{ui} 皮肤的 `.m-progress .val` 基础规则数 = {n}(应恰 1 条且带 min-width 定宽)")
 
 
+_STATE_TOKEN_EXPECT = {
+    "seeding": "var(--green)",
+    "downloading": "var(--blue)",
+    "checking": "var(--warn)",
+    "moving": "var(--violet)",
+    "error": "var(--error)",
+    "paused": "var(--paused)",
+    "other": "var(--paused)",
+}
+
+
+def _scan_state_color_tokens(problems):
+    """状态色令牌守阵(2026-11-02): 每皮肤的 7 个 kind 都必须有 --st/--st-soft, 进度条必须读 --st
+
+    背景: 进度条填充原先各皮肤写死(atlas 蓝渐变 / console+flux 绿 LED / prism --accent), 与
+    种子状态无关 —— 星图/棱镜下"做种"的条是蓝的、控制台/流影下"下载"的条是绿的, 颜色把状态
+    读反; 且 downloading/checking/moving 三支同 --blue, 校验中与下载中肉眼分不出。
+    处置 = 行元素上声明 --st/--st-soft(7 kind), 图例/芯片/行文字/进度条统一消费变量。
+
+    钉四件事(缺一条都是静默故障):
+    ① 每个 kind 都要有 --st 声明, 且取值 = 期望表(防漏一个状态 → 回落写死色);
+    ② --st-soft 同条声明(芯片底用); ③进度条 `.bar > i` 每皮肤恰 1 条且体内含 var(--st;
+    ④ 值漂移即红(checking 被人改回 --blue → 校验中又和下载中同色, 用户报障原样复发)。
+    """
+    found = {ui: {} for ui in _UI_ALL}
+    bar = {ui: [] for ui in _UI_ALL}
+    for dirpath, _dirs, files in os.walk(STATIC_ROOT):
+        for name in sorted(files):
+            if not name.endswith(".css") or "/vendor/" in f"/{dirpath}/{name}":
+                continue
+            path = os.path.join(dirpath, name)
+            rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
+            ui = next((u for u in _UI_ALL if rel.startswith(u + "/")), None)
+            if ui is None:
+                continue
+            text = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
+            for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", text):
+                if "--st" in body:
+                    m = re.search(r"--st\s*:\s*([^;]+);", body)
+                    if m:
+                        val = m.group(1).strip()
+                        soft = "--st-soft" in body
+                        for kind in re.findall(r"\.k-([a-z]+)", sel):
+                            if kind in _STATE_TOKEN_EXPECT:
+                                found[ui].setdefault(kind, set()).add((val, soft))
+                if re.search(r"\.m-progress\s+\.bar\s*>\s*i", sel) and "background" in body:
+                    bar[ui].append((rel, body))
+    for ui in _UI_ALL:
+        for kind, want in _STATE_TOKEN_EXPECT.items():
+            vals = found[ui].get(kind)
+            if not vals:
+                problems.append(f"{ui} 皮肤缺状态色令牌 `.k-{kind}` 的 --st 声明"
+                                " —— 该状态的前景色与进度条会回落写死色")
+                continue
+            for val, soft in sorted(vals):
+                if val != want:
+                    problems.append(f"{ui} 皮肤 `.k-{kind}` 的 --st = {val}(应为 {want})"
+                                    " —— 校验中/下载中同色会复发")
+                if not soft:
+                    problems.append(f"{ui} 皮肤 `.k-{kind}` 缺 --st-soft 同条声明(芯片底会回落写死色)")
+        if len(bar[ui]) != 1:
+            problems.append(f"{ui} 皮肤的 `.m-progress .bar > i` 规则数 = {len(bar[ui])}(应恰 1 条)")
+        for rel, body in bar[ui]:
+            if "var(--st" not in body:
+                problems.append(f"{rel} 进度条填充未取状态色 var(--st) —— 各状态一条色, 读不出种子状态")
+
+
 def _scan_frontend_assets():
     """扫描 webui/static 返回问题清单(空 = 健康)
 
@@ -1683,6 +1750,11 @@ def _scan_frontend_assets():
        后端 `_KEYS_SERIAL_RE` ↔ 前端 `KB_DEF_RE` 逐字同源 —— 差一个字符就是单边静默
        (前端放的串后端 422 / 后端放的串前端录完即丢弃)。
 
+    19. 状态色令牌四处成对(见 _scan_state_color_tokens, 2026-11-02): 每个皮肤 7 个 kind 都要
+       声明 `--st`/`--st-soft`(值 = 期望表: checking→--warn, moving→--violet), 且进度条
+       `.bar > i` 恰 1 条且取 `var(--st` —— 漏一个状态/漏一套皮肤 = 该状态回落写死色,
+       校验中与下载中重新同蓝(本次修复前的原症状)。
+
 
     WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测);
@@ -1736,6 +1808,7 @@ def _scan_frontend_assets():
     _scan_backdrop_filter(problems)
     _scan_column_cells_paired(problems)
     _scan_progress_val_parity(problems)
+    _scan_state_color_tokens(problems)
     return problems
 
 
@@ -3198,23 +3271,19 @@ def test_frontend_fx_wiring():
     #     d) 上推过渡: fx-mount.css 面板开着时 window 滚动走平滑
     #        (scroll-behavior: smooth, :has 门作用域, RM 下不生效 = 原版瞬时)。
     dialogs_css = open(os.path.join(STATIC_ROOT, "flux", "css", "dialogs.css"), encoding="utf-8").read()
-    assert re.search(r"\.drawer-enter-from\s*\{[^}]*translateY\(100%\)", dialogs_css), (
-        "flux dialogs.css 面板入场不是底部上滑(translateY(100%)) -- F7e 动效①落点缺失, "
-        "回退到 translateY(-16px) 微移即用户口径不兑现"
-    )
-    assert re.search(r"\.drawer-enter-active\s*\{[^}]*var\(--fx-dur-panel\)[^}]*var\(--fx-ease-out\)",
-                     dialogs_css, re.S), (
-        "flux dialogs.css 面板入场时长/缓动未消费 fx 骨令牌(--fx-dur-panel/--fx-ease-out) -- "
-        "令牌化单点纪律(改时长只动 fx.css)"
-    )
-    assert re.search(r"html\.fx-glide\s*\{\s*scroll-behavior:\s*smooth", mount_css), (
-        "fx-mount.css 缺上推过渡(html.fx-glide 的 scroll-behavior: smooth) -- F7e 动效②落点缺失, "
-        "原版让位滚动回退成瞬时跳变"
-    )
-    assert "fx-glide" in mount_js, (
-        "fx-mount.js 缺 fx-glide 窗口挂/摘(动效②的作用域开关) -- 平滑滚动作用域失控(罩全程 = "
-        "键盘滚动手感漂移, 或恒不生效)"
-    )
+    assert re.search(
+        r"\.drawer-enter-from\s*\{[^}]*translateY\(100%\)", dialogs_css
+    ), ("flux dialogs.css 面板入场不是底部上滑(translateY(100%)) -- F7e 动效①落点缺失, "
+        "回退到 translateY(-16px) 微移即用户口径不兑现")
+    assert re.search(
+        r"\.drawer-enter-active\s*\{[^}]*var\(--fx-dur-panel\)[^}]*var\(--fx-ease-out\)", dialogs_css, re.S
+    ), ("flux dialogs.css 面板入场时长/缓动未消费 fx 骨令牌(--fx-dur-panel/--fx-ease-out) -- "
+        "令牌化单点纪律(改时长只动 fx.css)")
+    assert re.search(r"html\.fx-glide\s*\{\s*scroll-behavior:\s*smooth", mount_css
+                    ), ("fx-mount.css 缺上推过渡(html.fx-glide 的 scroll-behavior: smooth) -- F7e 动效②落点缺失, "
+                        "原版让位滚动回退成瞬时跳变")
+    assert "fx-glide" in mount_js, ("fx-mount.js 缺 fx-glide 窗口挂/摘(动效②的作用域开关) -- 平滑滚动作用域失控(罩全程 = "
+                                    "键盘滚动手感漂移, 或恒不生效)")
 
 
 def test_frontend_pinned_first_cell_hover_transition_parity():

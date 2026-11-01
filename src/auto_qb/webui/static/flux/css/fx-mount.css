@@ -285,7 +285,7 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
    *      行 = 活动信号不是装饰常驻)。行状态类与既有染色规则同源
    *      (components.css .group-row.s-* / .member-row.*)。 ---- */
   html[data-fx-preset] .m-progress .bar > i {
-    box-shadow: 0 0 6px -2px color-mix(in srgb, var(--green, currentColor) 50%, transparent);
+    box-shadow: 0 0 6px -2px color-mix(in srgb, var(--st, var(--green, currentColor)) 50%, transparent);
   }
   html[data-fx-preset] .group-row.s-downloading .m-progress .bar > i,
   html[data-fx-preset] .member-row.downloading .m-progress .bar > i {
