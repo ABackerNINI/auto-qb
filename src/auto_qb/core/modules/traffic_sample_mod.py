@@ -637,7 +637,7 @@ class TrafficSampleModule(BaseModule):
                 block_open=has_block,
                 head_pending=has_block and not buf.header_written,
                 start_epoch=buf.start_epoch if has_block else None,
-                interval_s=(buf.interval_s if buf is not None and buf.interval_s else (self._effective_interval or 1)),
+                interval_s=(buf.interval_s if has_block and buf.interval_s else (self._effective_interval or 1)),
                 projected_ts=buf.projected_ts if buf is not None else 0.0,
                 records=records,
                 open_run=(

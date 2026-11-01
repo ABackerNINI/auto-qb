@@ -222,6 +222,8 @@ tmp-analysis/mut-core-w5-classify.md, 中危真洞全盖 + 低危按簇代表, b
 - test_w5_live_tail_empty_shell_no_truncation: 活尾空信息键不截断其后系列(_publish_live_tail_37)
 - test_w5_live_tail_head_pending_false_chain: head_pending=False 活尾游标链倒推(_publish_live_tail_65)
 - test_w5_live_tail_no_buffer_interval_contract: 无块活尾 interval_s 契约(_publish_live_tail_63)
+- test_w5_live_tail_interval_change_reset_window_uses_effective: 改间隔复位窗口内无块活尾
+  interval_s 取当前生效间隔(非陈旧旧块值, 违约守护; 变异 _publish_live_tail_59 方向与此一致, 疑等价变异待复核)
 - test_w5_counter_reset_audit_logs: 重置审计 INFO 键/方向/关块留痕(sample_series_14/15/22/26/27/34 /
   _close_block_and_reopen_1 / _append_record_66/71)
 - test_w5_latest_mirror_fields_complete: latest 镜像字段契约含 null 点(sample_series_43/47/49 /
@@ -3877,6 +3879,29 @@ def test_w5_live_tail_no_buffer_interval_contract(tmp_path, monkeypatch):
     slots = v4_live_tail_slots(tail)
     assert slots[0].dt_s == 30.0  # 单槽 dt_s = interval(非 1)
     assert slots[0].ts == float(int(tail.open_run.start))
+
+
+def test_w5_live_tail_interval_change_reset_window_uses_effective(tmp_path, monkeypatch):
+    """改间隔复位窗口内无块活尾 interval_s 取当前生效间隔(非陈旧旧块值)——
+    LiveTail.interval_s 契约(traffic_store.py:511); 变异 _publish_live_tail__mutmut_59 方向与此一致(疑等价变异, 复核销账)"""
+    clock = _Clock()
+    mgr = _w5_mgr(tmp_path, monkeypatch, clock)
+    mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    mod = mgr.host.get("qb_traffic")
+    _run_sample(mgr)  # 首轮 r: 开块 interval=30
+    buf = mod._buffers[GLOBAL_SERIES_KEY]
+    assert buf.start_epoch is not None and buf.interval_s == 30.0
+    mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=45, flush_interval=10**9)
+    mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
+    clock.advance(30)
+    _run_sample(mgr)  # 改间隔: 关块复位 -> 本轮 z 游程无块
+    buf = mod._buffers[GLOBAL_SERIES_KEY]
+    assert buf.start_epoch is None  # 复位窗口: 无开放块
+    assert buf.interval_s == 30.0  # 残留旧块值(_reset_block 8 字段不含 interval_s)
+    tail = mod.live_tail[GLOBAL_SERIES_KEY]
+    assert not tail.block_open and tail.open_run is not None
+    assert tail.interval_s == 45.0  # 契约: 无块取当前生效间隔(非陈旧 30)
+    assert v4_live_tail_slots(tail)[0].dt_s == 45.0
 
 
 def test_w5_counter_reset_audit_logs(tmp_path, monkeypatch):
