@@ -1849,10 +1849,20 @@ def test_w6_flush_fallback_once_per_round():
 
 
 def test_w6_conn_recovery_flag_flip():
-    """守阵(W6, 低): 线跑通后连接状态必须翻回已连接(is False 门反转/改 True = UI 永显断开)"""
+    """守阵(W6, 低): 线跑通后连接状态必须翻回已连接(is False 门反转/改 True = UI 永显断开)
+
+    connect 替身与真实现同构(成功即落非 None client, 见 pitfalls/testing/manager-connect-stub.md):
+    否则断连稳态守卫(client is None + _last_conn_ok is False)命中, 请求线整段被跳过, 本用例
+    测的就不再是「线跑通后翻转」而是守卫轮。
+    """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
-        mgr.connect = mock.Mock(return_value=True)
+
+        def fake_connect():
+            mgr.client = mock.Mock()
+            return True
+
+        mgr.connect = fake_connect
         mgr._last_conn_ok = False  # 断开态进入主循环
         mgr.config.main_tick = 0.05
         mgr.config.sync_interval = 0.05

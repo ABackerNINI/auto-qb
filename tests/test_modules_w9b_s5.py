@@ -334,7 +334,8 @@ def test_s5_rule_task_pending_breakpoint_protocol():
         mgr.client = FakeClient()
         rules = mgr.host.get("rules")
         rule = _interval_rule(mgr, "t5.b4")
-        rule.actions = [_PendingAction()]
+        # W3-B 起执行单元是构造期派生的 rule.steps; rule.actions 只是兼容视图(改它不影响执行)
+        rule.steps = [("action", _PendingAction(), Rule._resolve_on_error(None))]
         seed_store(mgr, [FakeTorrent(hash="HB4", tags="")])
         task = rules._create_rule_task(rule, "HB4")
         rc = task.handler(task, False)
@@ -643,7 +644,8 @@ def test_s5_rule_event_pending_records_breakpoint():
         mgr.client = FakeClient()
         rules = mgr.host.get("rules")
         rule = _interval_rule(mgr, "t5.e2")
-        rule.actions = [_PendingAction(), _PendingAction()]
+        # 同上: 断点索引以 rule.steps 为单位(W3-B), 两个 pending 占两步
+        rule.steps = [("action", _PendingAction(), Rule._resolve_on_error(None)) for _ in range(2)]
         seed_store(mgr, [FakeTorrent(hash="HE2", tags="")])
         task = rules._apply_event_rule(rule, "HE2")
         assert task.resume_index == 1, "首跑 pending 应记断点(ctx.task=None 则断点不记)"

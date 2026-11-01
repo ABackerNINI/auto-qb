@@ -261,3 +261,11 @@
 - **合流**: 37 笔本地提交 rebase 到远端新基 `6a390e76`, `my-commit-flow.sync` 两次失败后由人工逐轮化解 8 次, 全部成功、零手写件冲突; 冲突面靠 `git merge-tree --write-tree --name-only` 非破坏性探测才看清(3 件全是生成物)。
 - **坑档复发**: [`pitfalls/git/rebase-continue-needs-clean-index.md`](../pitfalls/git/rebase-continue-needs-clean-index.md) 复发 +1 —— **为什么没命中**: 失败行未给冲突清单, sync 自动化解放弃后由人工 `merge-tree` 探测才识别为生成物冲突; 坑档本身内容正确且已照做, 命中延迟在「识别冲突面」这一步, 不在处置(每次重跑生成器都把其它干净自动合并的白名单件改成 MM, 须把全部改动路径一并 add)。
 - **入池**: 本轮另发现自动化解根因疑点, 已入池 [`26-11-01-2140-bug-sync-generated-whitelist-drift`](../issues/26-11-01-2140-bug-sync-generated-whitelist-drift.html)(白名单集合随树漂移的实测证据、已实证/待验证分层见该件 §02/§05)。
+
+### 2026-11-01 R36 — 合流后三条守阵确定性失败的判性质与修复
+
+- **成因(合流语义面)**: 三条守阵写于 rebase 前基 `0250e2f3`, 该基既无 `enumerate(self.steps)` 也无 `_ran_line`; 本次 rebase 把两笔远端并行提交一并带进新基 —— `477df090`(W3-B choose 编排块)把动作循环从 `self.actions` 改为构造期派生的 `self.steps`, `self.actions` 退为兼容视图; `e820d2bb`(issue 26-10-31-1029 断连自动重连)新增断连稳态守卫(`client is None and _last_conn_ok is False`)与恢复检测门 `_ran_line`。实测 `4a6d0c18`(W5-A) 对 `rules/base.py` 仅 +14 行 `register_block` 与装饰器 kwargs, 与三条无因果关系(原归因修正)。
+- **逐条判性质**: 三条全判**守阵过紧**, **零上游回退**。
+  - rules 两条(pending 断点协议 / rule-event 断点推进): 用例以 `rule.actions = [...]` 注入 pending 桩, 而 W3-B 起执行单元是 `rule.steps`, 注入不生效 → 桩动作从未执行, pending 路径根本没走到。新契约下该行为未变: `_process` 顶层 pending 分支写 `task.resume_index = si + 1` 并返 `VERDICT_PENDING`, `_handle_rule` 按 `has_breakpoint` 收 FINISHED —— 守阵意图原样保留, 只需挪注入点。
+  - qbmanager 一条(连接标志翻转): connect 替身只 `return True` 不落 `mgr.client`, 断连稳态守卫命中后请求线整段跳过, `_ran_line` 恒 False, 翻转门不开; 真实现 `connect()` 成功路径自身调 `_note_conn_ok()`(qbmanager.py:408)。上游已把该形态写成坑档 `pitfalls/testing/manager-connect-stub.md` 并给出处置(替身与真实现同构, 成功即落非 None client)。
+- **处置**: 改守阵 **3 条**(注入点 `rule.actions` → `rule.steps` 两条; connect 替身补落 client 一条), **保 bug 0 条**, 零 src 改动, 未入池 issue。红验: 三条同构变异(rules 顶层 pending 断点 `si + 1` → `si` 一处连带两条; qbmanager 翻转门 `is False` → `is True`)全部先红后还原, 收尾 `git diff --stat src/` 为空。全量与覆盖率见 `commands run kb.baseline`。
