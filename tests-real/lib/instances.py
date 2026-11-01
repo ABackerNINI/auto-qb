@@ -8,8 +8,10 @@ token **不保存不落盘**, 由用户每轮会话给出, 经环境变量 `QBT_
 (历史机制)本地文件 `tests-real/config/instances.local.json`(已 gitignore)仍被读取,
 形如 `{"36595": {"token": "qbt_..."}}` —— 但当前口径是**不创建它**, 别把 token 写进盘。
 
-副实例(testing2)在本机常为免鉴权(LocalHostAuth=false), 见 plan 26-10-31-0705 D2;
-`lib/qb.py` 的鉴权降级会自动处理两种情况。
+两环境副实例(testing2)均 localhost 免鉴权: 环境1 36596 出厂即 LocalHostAuth=false
+(plan 26-10-31-0705 D2); 环境2 56590 已由用户拍板 `bypass_local_auth=True` 永久落实例
+(2026-11-01 = 环境2 标准配置, 规程 §2.5.2 —— RM03 轮 401 封禁连环事故见切片
+26-11-01-1214 §04-1)。`lib/qb.py` 的鉴权降级仍自动处理两种情况(若该键被还原)。
 """
 from __future__ import annotations
 

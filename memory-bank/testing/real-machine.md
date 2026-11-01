@@ -103,7 +103,7 @@
 | **主实例当前 0 枚真实种子**(2026-11-01 实测; 环境1 有 8 枚) | 依赖真实种子的用例(RM08-05 腿A / RM10-01/02 的真实例只读扫描)在环境2 前提不成立 | 跑这类用例前先核 `guard.snapshot` 计数; 真实种子由用户自行添加, 用例侧不得代造"真实"种子 |
 | R: 盘**不存在** | `real.seed` ≥32M 自动退回 `.work` **真写盘** | 大种子优先 `--no-data`; 收尾记得 `real.seed.clean` |
 | gtm 默认发现端口 18788 探测不可达 | 「未安装」前提大概率成立(与环境1 相反) | RM07 状态端点用例仍按实况双分支断言, 不提前固化 |
-| 🔴 **56590 要求鉴权**(bypass_local_auth=False, 与环境1 的 36596 免鉴权相反; 2026-11-01 RM03 轮实测) | 产品进程空凭据(各片 CONFIG_TEMPLATE 口径)连 56590 必 401×5 → qB WebUI IP 封禁(3600s), 整片连环假红; Bearer/API-Key 通路不受封禁影响 | 处置配方与拍板项见 §2.10 末行 + 切片 26-11-01-1214 §04-1(临时 bypass+重启已验证, 用后还原) |
+| 56590 **localhost 免鉴权** = 环境2 标准配置(bypass_local_auth=True, 2026-11-01 用户拍板已永久落实例; 此前 False 时产品进程空凭据连 56590 必 401×5 → qB WebUI IP 封禁 3600s, 整片连环假红) | 产品进程空凭据(各片 CONFIG_TEMPLATE 口径)现在可直连副实例, 与环境1 的 36596 口径对齐 | RM03 轮 401 封禁连环事故与临时 bypass 配方见切片 26-11-01-1214 §04-1; 若再撞 401 连环假红, 先核该键是否被还原成 False |
 
 ### 2.6 手工探索: 假种子命令(`real.seed*`)
 
@@ -204,7 +204,7 @@
 | **skip_checking 加种实测语义(qB 5.2.3, RM03 漂移轮探针)** | `/torrents/add` 带 skip_checking: +有数据 → 视为已完成(stoppedUP progress=1, 不校验); +无数据 → missingFiles —— 两形态都造不出「暂停中未完成」 | 「暂停中未完成」造法 = **paused + 数据在场 + 不带 skip_checking** → stoppedDL progress=0(暂停加种只查 resume data 不做全量校验); stalledDL 活跃下载族 = 不暂停 + 无数据 + 不带 skip_checking |
 | **full-checking 证据窗有数据量下限(RM03-15 实测)** | 证据闩(store 快照 sync_interval 同步 + CHECK_RESULT_INTERVAL 2S 轮询)要求校验窗口 ≥3s: 512MB 毫秒级不可捕(连状态迁移都不出现), 2GB 实测 checkingDL ~3s(0.43s→3.46s) | checking 全量段用例的目标种子数据量按 ~2GB 造(.work 真写盘, 收尾 clean); KB 级种子只够跳检段(无证据窗); 窗口不足表现为 START_TIMEOUT/「校验成功」行缺失假红 |
 | **跳检重加后种子视为已完成(RM03-17 实测)** | SkipJob 重加(is_skip_checking+is_stopped)+数据在场 → progress=1 ⇒ 成功跳检后的种子被决策链 0 拦住, **同日去重闸不可达** | 去重红验前置 = 首跳完成后删掉重加回「暂停中未完成」态(同 hash, paused+数据在场), 二次触发才能穿透链 0 到闸门 |
-| **环境2 副实例要求鉴权(56590, 与环境1 相反)** | `bypass_local_auth=False` + username=abacker: 产品进程空凭据(全部片的 CONFIG_TEMPLATE 口径)连 56590 必 401×5 → qB WebUI IP 封禁(3600s)连环假红; Bearer/API-Key 通路不受封禁影响 | 待拍板(临时 bypass_local_auth=True + 重启清封禁已验证可解, 用后还原, 见切片 26-11-01-1214 §04-1); 环境1 的免鉴权副实例是 36596, 「副实例常为免鉴权」注释只对环境1 成立 |
+| **环境2 副实例 56590 已拍板免鉴权(2026-11-01 = 环境2 标准配置, 与环境1 对齐)** | ~~`bypass_local_auth=False` 时产品进程空凭据必 401×5 → WebUI IP 封禁(3600s)连环假红~~ 已永久落实例: `bypass_local_auth=True`, 空凭据直连可达(见 §2.5.2) | RM03 轮 401 封禁连环事故与临时 bypass 配方(历史)见切片 26-11-01-1214 §04-1; 若再撞 401 连环假红先核 §2.5.2 该键未被还原 |
 
 ### 2.11 tracker·标签面的事实(RM05 实测, 2026-10-31)
 
