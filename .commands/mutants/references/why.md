@@ -60,6 +60,17 @@ cd <mirror> && git checkout -- src/ && .venv/bin/mutmut apply <mutant_id> \
 CPython 复用上一条变异体的 `.pyc` ⇒ 假 SURVIVED, 见坑档 redverify-pycache-stale-verdict);
 单次套件 `timeout`(变异体死循环)超时记 TIMEOUT, 与 APPLY_FAIL / UNKNOWN 一起算**未判定**, 不并进 SURVIVED。
 
+### S4 手工通道: dump diff → 整文件 post-image(不要直接 `git apply`)
+
+mutmut 的 dump 里 `@@` 行号相对**变异后**源码会漂移, 拿整段 hunk 直接 `git apply` 会因大偏移搜索恒失败;
+WSL `/mnt/*` 上的文件偶发空读, GNU `patch` 可能读不到内容却返回 `rc=0` —— **假成功**。可靠做法只有一条:
+
+1. 按 dump diff 找到目标行;
+2. 在源码里确认该锚点**唯一匹配**(`count != 1` 就停手, 与
+   [redverify-anchor-lineendings](../../../memory-bank/pitfalls/testing/redverify-anchor-lineendings.md) 同一纪律);
+3. **整文件拷贝 post-image**(把 diff 的 `+` 侧写成完整文件后 `cp` 覆盖), 不拼 hunk;
+4. 以 **post-image 通道的复跑结果**为准 —— 两通道结论不一致时不采信 `patch` 的 rc。
+
 ```text
 # pytest-gremlins(Windows, 兜底) —— mutants.gremlins 展开成这一条
 TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
@@ -162,6 +173,8 @@ TMPDIR=R:/Temp/auto-qb/tests COVERAGE_FILE=R:/Temp/auto-qb/gremlins.cov \
 | 跑到一半崩在 `FileNotFoundError: mutants/.../<file>.meta` | **并行会话**共用同一镜像, 对方的 `mutants.run` 执行了 `rm -rf mutants`, 删掉你正在跑的 `.meta` | 每会话用**专用镜像** `--mirror '~/auto-qb-mut-<pkg>'`(`report` / `verify` 带同一个); 并存时降 `--children`(实测 4+4 会互相拖慢)。判别与处置见坑档 [mutants-shared-mirror](../../../memory-bank/pitfalls/testing/mutants-shared-mirror.md) |
 | 大包单轮被 3600s timeout 截断 | `mutants.run` 的 `timeout = 3600`; 大包实测会超(hr: 8,027 变异 ≈96 min) | **别从零重跑**: 在镜像里 `cd <mirror> && .venv/bin/mutmut run --max-children 4` **续跑**(mutmut 对未变函数保留既有 `exit_code`, 跳过已有结果, 与整跑等价); 更稳的是按模块切 |
 | `only_mutate` 不是你设的目标 / `mutants/` 下出现别的包 | 同一个镜像被**另一个会话**改过配置 | 同上: 用专用镜像; 排障时先 `grep -m1 only_mutate <mirror>/pyproject.toml` 核对 |
+| 换目标跑 verify 全是 `APPLY_FAIL` | 上一轮 `mutants.run` 的 `rm -rf mutants` 清掉了该目标的注册表 | 先对目标重跑 `mutants.run`; `cmd_verify` 现已开跑前预检注册表并直接失败提示 |
+| verify 结果里 `APPLY_FAIL` 一直不减少 | 旧逻辑把 APPLY_FAIL 当成「已验」跳过 | **已修**: `_done_ids` 把 APPLY_FAIL 与 TIMEOUT/FLAKY/UNKNOWN 一起视为未判定, 重跑自动重试 |
 
 ## 本会话验证到哪一步(诚实交代)
 

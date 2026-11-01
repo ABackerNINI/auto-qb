@@ -15,13 +15,19 @@
 - SuiteCmdTest         全套件命令不得带 `-x`(会停在既有失败上), 且必须带 `-B` + 禁写字节码
 - SetConfRenderTest    timeout_multiplier 显式写进 [tool.mutmut](默认=mutmut 默认); 覆盖式重写不残留旧值; 非正值拒绝
 - RunHeaderTest        结果文件账本头记录 target/池/并行度/timeout_multiplier/镜像HEAD/工具版本, 不与 @@@ 明细格式冲突
+- DeselectTableTest     DEFAULT_DESELECT / FLAKY_DESELECT 条目必须指向存在的测试文件与 def; 漂移即判红
+- DoneIdsTest           未判定(APPLY_FAIL/TIMEOUT/FLAKY/UNKNOWN)不进 done; KILLED/SURVIVED 进 done
+- SuiteCmdDeselectTest  全套件命令自动带 FLAKY_DESELECT 的 --deselect, 且保留既有并行度参数
+- EnsureMirrorTest      WSL 不可达 / .git 缺失 ⇒ Fail 且不 clone; 目录不存在才 clone; refresh 走 fetch
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -193,6 +199,123 @@ class RunHeaderTest(unittest.TestCase):
         for line in lines:
             self.assertTrue(line.startswith("# "))
             self.assertNotIn("@@@ ", line)
+
+
+class DeselectTableTest(unittest.TestCase):
+    """两张 deselect 表的漂移守阵: 测试文件拆分/改名后条目失效, 必须当场判红并提示改表。"""
+
+    ROOT = Path(__file__).resolve().parents[3]
+
+    def _assert_table(self, table: tuple[str, ...], table_name: str):
+        self.assertTrue(table, f"{table_name} 不能为空")
+        for node in table:
+            with self.subTest(table=table_name, node=node):
+                path_s, sep, name = node.partition("::")
+                self.assertTrue(sep, f"{node}: 缺 `::<test_name>` 形态")
+                self.assertNotIn("::", name, f"{node}: 只允许一层 `::`")
+                self.assertTrue(
+                    path_s.endswith(".py"),
+                    f"{node}: 测试文件后缀不是 .py —— 测试文件拆分后路径漂移, 改 {table_name}"
+                )
+                fp = self.ROOT / path_s
+                self.assertTrue(
+                    fp.is_file(), f"{node}: 测试文件不存在 —— 测试文件拆分后路径漂移, 改 {table_name}"
+                )
+                self.assertIn(
+                    f"def {name}",
+                    fp.read_text(encoding="utf-8"),
+                    f"{node}: 测试函数不存在(可能已改名) —— 测试文件拆分后路径漂移, 改 {table_name}"
+                )
+
+    def test_default_deselect_entries_exist(self):
+        self._assert_table(set_conf.DEFAULT_DESELECT, "DEFAULT_DESELECT")
+
+    def test_flaky_deselect_entries_exist(self):
+        self._assert_table(set_conf.FLAKY_DESELECT, "FLAKY_DESELECT")
+
+
+class DoneIdsTest(unittest.TestCase):
+    def test_undetermined_verdicts_are_retried(self):
+        text = "\n".join(
+            [
+                "# baseline 1 条既有失败 · tests/a.py::test_x",
+                "abc123 :: KILLED :: 1 failed, 4144 passed",
+                "abc124 :: SURVIVED :: 4144 passed",
+                "abc125 :: APPLY_FAIL :: APPLYFAIL 变异未落地",
+                "abc126 :: TIMEOUT :: 4144 passed",
+                "abc127 :: FLAKY :: 新增失败未复现",
+                "abc128 :: UNKNOWN :: ",
+                "abc129 :: SURVIVED :: 4144 passed",
+            ]
+        )
+        self.assertEqual(mutants._done_ids(text), {"abc123", "abc124", "abc129"})
+
+    def test_empty_file_has_no_done_ids(self):
+        self.assertEqual(mutants._done_ids(""), set())
+
+
+class SuiteCmdDeselectTest(unittest.TestCase):
+    def test_all_flaky_entries_are_deselected(self):
+        cmd = mutants._suite_cmd(8, 1200)
+        for node in set_conf.FLAKY_DESELECT:
+            self.assertIn(f"--deselect {node}", cmd)
+        self.assertIn("-n 8", cmd)
+        self.assertNotIn("-n 0", cmd)
+        self.assertIn("--no-cov", cmd)
+
+
+class EnsureMirrorTest(unittest.TestCase):
+    """探测三态: WSL 不可达 / 目录不存在 / 目录在但 .git 缺失 —— 后两者绝不 clone 覆盖。"""
+
+    def _run(self, *, probe_rc: int = 0, state: str = "MIRROR_HAVE_GIT", refresh: bool = False):
+        calls: list[str] = []
+
+        def fake_wsl(distro, script, *, check=True):
+            calls.append(script)
+            if "echo ok" in script:
+                return subprocess.CompletedProcess([], probe_rc, "", "")
+            if "MIRROR_" in script:
+                return subprocess.CompletedProcess([], 0, state + "\n", "")
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        with mock.patch.object(mutants, "_wsl", side_effect=fake_wsl), \
+                mock.patch.object(mutants, "_git_url", return_value="https://example.invalid/repo.git"), \
+                mock.patch.object(mutants, "_say"):
+            try:
+                mutants._ensure_mirror(
+                    "Ubuntu-26.04", "~/auto-qb-mut", "develop", refresh=refresh, no_sync=True
+                )
+            except mutants.Fail as exc:
+                return "FAIL", str(exc), calls
+        return "OK", "", calls
+
+    def test_wsl_unreachable_fails_without_clone(self):
+        status, msg, calls = self._run(probe_rc=1)
+        self.assertEqual(status, "FAIL")
+        self.assertIn("WSL 不可达", msg)
+        self.assertFalse(any("git clone" in c for c in calls))
+
+    def test_missing_dir_triggers_clone(self):
+        status, _, calls = self._run(state="MIRROR_NO_DIR")
+        self.assertEqual(status, "OK")
+        self.assertTrue(any("git clone" in c for c in calls))
+
+    def test_existing_dir_without_git_fails_without_clone(self):
+        status, msg, calls = self._run(state="MIRROR_NO_GIT")
+        self.assertEqual(status, "FAIL")
+        self.assertIn(".git 缺失", msg)
+        self.assertFalse(any("git clone" in c for c in calls))
+
+    def test_existing_git_with_refresh_runs_fetch(self):
+        status, _, calls = self._run(state="MIRROR_HAVE_GIT", refresh=True)
+        self.assertEqual(status, "OK")
+        self.assertTrue(any("fetch -q origin" in c for c in calls))
+        self.assertFalse(any("git clone" in c for c in calls))
+
+    def test_no_refresh_skips_fetch(self):
+        status, _, calls = self._run(state="MIRROR_HAVE_GIT", refresh=False)
+        self.assertEqual(status, "OK")
+        self.assertFalse(any("fetch -q origin" in c for c in calls))
 
 
 if __name__ == "__main__":

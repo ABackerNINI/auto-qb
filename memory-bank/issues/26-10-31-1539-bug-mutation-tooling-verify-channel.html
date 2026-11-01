@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-1539">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0209-mutation-tooling-issues.md, memory-bank/activeContext/26-11-02-0213-mutation-tooling-verify-channel.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)">
 <meta name="issue-summary" content="W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建">
 <title>mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)</h1>
     <p class="lede">W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1539-bug-mutation-tooling-verify-channel</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 15:39</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -152,7 +152,13 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：TODO）</div>
+    <div class="callout">四条形态都是「判定链缺前置校验/缺状态区分」，不是同一个根因，但共享同一处代码面：</div>
+    <ol>
+      <li><b>①注册表</b>：<code>mutmut</code> 的变异注册表就是镜像里的 <code>mutants/</code>（按 id 落 <code>*.meta</code>），而 <code>cmd_run</code> 每轮无条件 <code>rm -rf mutants mutmut-cache.db</code>（为避开「0 files mutated」提前收工），该清理对<b>所有目标</b>生效；<code>cmd_verify</code> 不核注册表存在性，且旧完成的 id 集合把 <code>APPLY_FAIL</code> 当成「已判定」跳过 ⇒ 未判定静默堆积。</li>
+      <li><b>②apply 通道</b>：把 <code>mutmut dump</code> 的 diff 当成可直接应用的补丁 —— 其 <code>@@</code> 行号相对源码漂移，<code>git apply</code> 大偏移搜索必失败；<code>/mnt/*</code> 偶发空读使 GNU patch <code>rc=0</code> 假成功。判据缺「以 post-image 复跑为准」的最后一环。</li>
+      <li><b>③flaky</b>：差集判据「本次失败 − 基线」本身正确，但池里含随机红用例时每条候选要多跑一轮复验才能落定 FLAKY；跑前未 deselect 只是开销与噪声，不是误判根因（复跑复现门槛已兜住假 KILLED）。</li>
+      <li><b>④镜像探测</b>：<code>_ensure_mirror</code> 用 <code>test -d {mirror}/.git</code> 一个布尔量同时表达「WSL 可达」与「镜像存在」—— WSL VM 死亡窗口里任何 <code>wsl.exe</code> 都非零，于是「WSL 不可达」被误读成「镜像缺失」并进入 <code>git clone</code> 重建分支。</li>
+    </ol>
   </section>
 
   <section id="s6">
@@ -169,11 +175,20 @@
     <ul>
       <li>2026-10-31 15:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-01 00:50 — 补充形态④（R29 S4 实证: WSL VM 死亡窗口 <code>_ensure_mirror</code> 把 <code>test -d .git</code> 失败误判为镜像缺失尝试 clone 重建, 克隆未遂镜像完好; 状态维持 <strong>Open</strong>）</li>
+      <li>2026-11-02 — 认领，状态 <strong>In Progress</strong>（修复中）；复验：四形态仍在（<code>cmd_run</code> 仍 <code>rm -rf mutants mutmut-cache.db</code>；<code>cmd_verify</code> 的 done 集未排除 APPLY_FAIL；flaky 集无 deselect 常量表；<code>_ensure_mirror</code> 仍把 WSL 不可达当镜像缺失）。</li>
+      <li>2026-11-02 — 修复并验证，状态 <strong>Done</strong>（已修）；四形态逐条落地, 验证见下方「复验 / 修复后补充」与本轮基线切片。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-02 复验（按锚点重读 <code>.commands/mutants/scripts/mutants.py</code> / <code>set_conf.py</code>）：<b>四形态全部仍复现</b> —— ① <code>cmd_run</code> 仍无条件 <code>rm -rf mutants mutmut-cache.db</code>，<code>cmd_verify</code> 无注册表预检、完成 id 集合含 APPLY_FAIL；② apply 通道仍以 <code>git apply</code> 为主、<code>references/why.md</code> 无 post-image 固化作法；③ <code>set_conf.py</code> 只有 <code>DEFAULT_DESELECT</code>，无 flaky 表，<code>_suite_cmd</code> 不自动 deselect；④ <code>_ensure_mirror</code> 仍以单条 <code>test -d {mirror}/.git</code> 的结果决定是否 clone。故本件按四条分别修，不因部分形态「已有复跑门槛兜底」而收窄。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（四形态一一对应，均在 <code>.commands/mutants/</code> + <code>mutation-testing</code> skill 内，零 <code>src/</code> 改动）：</p>
+    <ol>
+      <li><b>注册表预检 + APPLY_FAIL 归入未判定</b>：<code>cmd_verify</code> 开跑前查镜像 <code>mutants/**/*.meta</code>（grep 前提为 <code>find mutants -name '*.meta' -print -quit</code>），缺失即 <code>Fail</code> 并提示「先跑 <code>mutants.run</code> 该目标再 verify；单文件轮会清掉其它目标的注册表」；新增 <code>UNDETERMINED_VERDICTS=("APPLY_FAIL","TIMEOUT","FLAKY","UNKNOWN")</code> 与纯函数 <code>_done_ids</code>，未判定不进完成集（续跑自动重试），收尾提示补列 APPLY_FAIL；<code>cmd_run</code> 清理前打印「该清理会一并清掉其它目标注册表」的警告。</li>
+      <li><b>apply 通道固化为 post-image</b>：<code>references/why.md</code> 新增「S4 手工通道：dump diff → 整文件 post-image」小节（按 dump 定位唯一匹配行 → 取整文件 post-image <code>cp</code> → 以 post-image 复跑为准），并写明禁 <code>git apply</code> 直 apply 与 <code>/mnt/*</code> patch；排障表补「换目标 verify 全 APPLY_FAIL」「APPLY_FAIL 不再自动跳过」两行；skill 坑段加指针。</li>
+      <li><b>flaky 集落到共享表并自动 deselect</b>：<code>set_conf.py</code> 新增 <code>FLAKY_DESELECT</code>（6 条已实证 node id，与 <code>DEFAULT_DESELECT</code> 同表维护），<code>--deselect</code> 默认合并两类；<code>_suite_cmd</code> 自动从 <code>FLAKY_DESELECT</code> 派生 <code>--deselect</code>，verify 前无需手工带；<code>DeselectTableTest</code> 对两张表统一做条目对差守阵。</li>
+      <li><b>WSL 可达性与镜像存在性分离</b>：<code>_ensure_mirror</code> 先跑 <code>echo ok</code> 探 WSL 可达性，非零即 <code>Fail</code>（提示 VM 可能被杀/OOM，稍后重跑）且<b>不进入 clone 分支</b>；随后按三态处理——目录不存在才 clone、目录在但 <code>.git</code> 缺失则停手不覆盖、正常则按需 refresh；新增 <code>EnsureMirrorTest</code>（mock WSL）覆盖四路径。</li>
+    </ol>
+    <p><b>验证方式</b>：<code>commands run test.pkg</code> 全绿（含 <code>DoneIdsTest</code> / <code>SuiteCmdDeselectTest</code> / <code>EnsureMirrorTest</code> 三组新守阵）· <code>commands run test.full</code> 全绿（覆盖率闸 99 达标）· <code>set_conf.py --print</code> 自证输出 14 条 deselect。<b>未做真实 WSL mutmut 跑轮</b>：当轮 WSL VM 被 OOM 反复杀（正是形态④的现场），本轮以单测（mock <code>_wsl</code>）验证分支逻辑，真机回归留到下次审计轮。实测数字只记在本轮基线切片（<code>memory-bank/testing/baselines/26-11-02-0209-mutation-tooling-issues.md</code>），本文不手抄。</p>
   </section>
 
   <footer>

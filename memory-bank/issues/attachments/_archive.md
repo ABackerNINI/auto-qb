@@ -4,10 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (71)
+## Open (69)
 
-- [bug] [mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失](../26-10-31-1539-bug-mutation-tooling-deselect-guards.html) — W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律
-- [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
@@ -83,7 +81,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (327)
+## Done (329)
 
 - [bug] [my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效](../26-11-01-2140-bug-sync-generated-whitelist-drift.html) — 分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解
 - [bug] [WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction](../26-11-01-2102-bug-webui-set-share-limits-missing-sharelimitaction.html) — QbApi.torrents_set_share_limits 不传 share_limit_action, 库对 None 值键不发 → qB 5.0+ 该端点必填 shareLimitAction → WebUI 分享限制命令恒回「qB 拒绝执行: 缺少必需参数：shareLimitAction」; RM04-09 真机首测暴露
@@ -108,6 +106,8 @@
 - [feat] [聚合读法机械化: 模板/CSS/JS 内容定位走机器索引](../26-10-31-2226-feat-webui-agg-content-map.html) — 生成聚合映射命令, 输出内容片段在 shared/tpl+css+JS 域的单点定位, 判别法从人读 frontend-split.md 变成跑命令
 - [bug] [组命令对形状合法但不存在的组 key 静默 ok(无账无回执错误)](../26-10-31-1740-bug-webui-group-cmd-unknown-key-silent-ok.html) — RM09-06 实测: base64url 合法但不存在的组 key 走 /api/groups/{key}/pause 得 ok 回执且零效果零日志; 计划口径「只要不是静默成功」
 - [bug] [强制汇报确认跟踪对不可达 tracker 的首报过早落 confirmed(ok 回执)](../26-10-31-1740-bug-webui-reannounce-premature-confirm.html) — RM09-04 实测: 死端口 tracker 的 reannounce 在 updating 在途瞬间即写 ok(日志+1ms), 随后 tracker 拒绝不纠正回执 —— 计划期望 RC_FAIL
+- [bug] [mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失](../26-10-31-1539-bug-mutation-tooling-deselect-guards.html) — W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律
+- [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [bug] [托盘模式(--tray)进程内 SIGTERM 不生效: KeyboardInterrupt 被 Tk 回调层吞掉, 进程不退出](../26-10-31-1030-bug-tray-sigterm-ignored.html) — RM02 轮实测: graceful 跑壳 raise_signal(SIGTERM) 对 CLI 模式有效、对 --tray 模式 3/3 无效(45s+ 后进程仍存活), 与 cli.py「所有模式一致」注释相悖
 - [bug] [运行期断连后不自动重连, 且断开期间逐拍 ERROR 刷屏(client=None 误入兜底分支)](../26-10-31-1029-bug-qbmanager-disconnect-no-reconnect.html) — RM02-07 真机实测: qB 断开期间每 2s 一条「主循环异常」ERROR(45+ 条/75s), 且恢复后 60s 仍不自动回连 —— client=None 后 connect() 永远不再被调用

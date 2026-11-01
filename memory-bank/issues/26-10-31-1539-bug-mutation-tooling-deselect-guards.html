@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-1539">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0209-mutation-tooling-issues.md, memory-bank/activeContext/26-11-02-0212-mutation-tooling-deselect-guards.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失">
 <meta name="issue-summary" content="W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律">
 <title>mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失</h1>
     <p class="lede">W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1539-bug-mutation-tooling-deselect-guards</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 15:39</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -151,7 +151,7 @@
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：TODO）</div>
+    <div class="callout">不是表逻辑错误，是「表与测试面的同步」没有机械约束：<code>DEFAULT_DESELECT</code> 是纯手写常量表，新增/改名「读源码文本做断言」的测试时没有任何守卫会提醒补 node id；失败又发生在变异轮基线（离改动时刻很远），提示信息也不指向该表 ⇒ 缺口只能靠人事后排障才发现。</div>
   </section>
 
   <section id="s6">
@@ -166,11 +166,20 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 15:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 认领，状态 <strong>In Progress</strong>（修复中）；复验：<code>DEFAULT_DESELECT</code> 现为 8 条，目标条目 <code>test_v4_parse_skeleton_single_point</code> 已在表内（条目缺口已消失）；系统性提醒缺口仍在（表无机械漂移守阵、<code>mutants.run</code> 基线失败行未点名该表）。</li>
+      <li>2026-11-02 — 修复并验证，状态 <strong>Done</strong>（已修）；机械守阵、纪律与失败现场提示三路补齐, 验证见下方「复验 / 修复后补充」与本轮基线切片。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-02 复验：<b>条目缺口已消失</b> —— <code>DEFAULT_DESELECT</code> 现含 8 条，<code>tests/test_traffic_store.py::test_v4_parse_skeleton_single_point</code> 已由 commit <code>a9d08273</code> 补入；<b>系统性提醒缺口仍复现</b> —— 表无机械漂移守阵，<code>mutants.run</code> 基线失败行未点名该表，纪律只写在事后排障口径里。故本件不因「条目已补」而关闭，按系统性缺口继续修。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（三路，均在 <code>.commands/mutants/</code> 命令包内，零 <code>src/</code> 改动）：</p>
+    <ol>
+      <li><b>机械守阵</b>：<code>scripts/test_mutants.py</code> 新增 <code>DeselectTableTest</code> —— 逐条断言测试文件存在、node id 形如 <code>&lt;path.py&gt;::&lt;name&gt;</code>、文件内有 <code>def &lt;name&gt;</code>；测试文件拆分或函数改名即判红，失败信息点名「测试文件拆分后路径漂移，改 <code>DEFAULT_DESELECT</code>」。同一守阵覆盖新增的 <code>FLAKY_DESELECT</code>。</li>
+      <li><b>失败现场提示</b>：<code>scripts/mutants.py</code> 的 <code>cmd_run</code> 基线失败 <code>[FAIL]</code> 分支追加一行，点名 <code>set_conf.py</code> 的 <code>DEFAULT_DESELECT</code> 与处置（把 node id 加进表后重跑）。</li>
+      <li><b>前置纪律</b>：<code>scripts/set_conf.py</code> 表前写明「新增/改名任何读源码文本做断言的测试，必须同步把 node id 加进本表」；<code>mutation-testing</code> skill 硬约束 4 补同步核表与漂移兜底说明。</li>
+    </ol>
+    <p><b>改道说明</b>：建议修法里的「扫描 tests/ 自动检测所有读源码文本守阵」<b>未采用</b> —— 现有守阵标记不统一（docstring 自称、命名约定、间接 read_text 混用），粗扫会把读静态资产/临时文件的用例大量误报，维护成本高于收益；本件选择「机械对差守阵（管已入表条目的漂移）+ 失败现场点名（管漏入表）+ 前置纪律」三路，满足建议修法允许的「至少在 <code>mutants.run</code> 基线失败提示里点名」路径。</p>
+    <p><b>验证方式</b>：<code>commands run test.pkg</code> 全绿（含新增四组守阵）· <code>commands run test.full</code> 全绿（覆盖率闸 99 达标）· <code>set_conf.py --print</code> 自证输出同时含两类 deselect 的全部条目。实测数字只记在本轮基线切片（<code>memory-bank/testing/baselines/26-11-02-0209-mutation-tooling-issues.md</code>），本文不手抄。</p>
   </section>
 
   <footer>

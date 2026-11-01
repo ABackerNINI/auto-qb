@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import set_conf  # noqa: E402  (同目录渲染器: timeout_multiplier 的单点默认值)
+from set_conf import FLAKY_DESELECT  # noqa: E402
 
 DEFAULT_DISTRO = "Ubuntu-26.04"
 DEFAULT_MIRROR = "~/auto-qb-mut"
@@ -206,10 +207,34 @@ def _slug(text: str) -> str:
 
 def _ensure_mirror(distro: str, mirror: str, branch: str, *, refresh: bool, no_sync: bool) -> None:
     mq = _bq(mirror)
-    have = _wsl(distro, f"test -d {mq}/.git", check=False).returncode == 0
-    if not have:
+    # 先探 WSL 可达性: VM 被杀/OOM 时任何 wsl.exe 调用都返回非零, 此时「test -d 失败」≠「镜像缺失」。
+    # 不先探测就 clone, 一次成功就会毁掉专用镜像(注册表 + 本地 pyproject/venv 钉版)。
+    probe = _wsl(distro, "echo ok", check=False)
+    if probe.returncode != 0:
+        raise Fail(
+            f"WSL 不可达(distro={distro}, rc={probe.returncode}) —— VM 可能被杀/OOM, 稍后重跑; "
+            "本脚本不会重建镜像。\n"
+            f"{(probe.stdout + probe.stderr).strip()[-800:]}"
+        )
+    if _DRY:
+        state = "MIRROR_HAVE_GIT"
+    else:
+        state = _wsl(
+            distro,
+            f'if [ -d {mq} ]; then if [ -d {mq}/.git ]; then echo MIRROR_HAVE_GIT; '
+            f'else echo MIRROR_NO_GIT; fi; else echo MIRROR_NO_DIR; fi',
+            check=False
+        ).stdout.strip()
+    if "MIRROR_NO_DIR" in state:
         _say(f"[1/3] 建镜像仓 {mirror} (git clone)")
         _wsl(distro, f"git clone -q --branch {branch} {_git_url()} {mq}")
+    elif "MIRROR_NO_GIT" in state:
+        raise Fail(
+            f"镜像目录在但 .git 缺失: {mirror} —— 疑似损坏/误判; 先人工核验 head 与 mutants/ 注册表, "
+            "不自动 clone 覆盖"
+        )
+    elif "MIRROR_HAVE_GIT" not in state:
+        raise Fail(f"无法判定镜像状态(探测输出: {state!r}) —— 不自动 clone 覆盖")
     elif refresh:
         _say(f"[1/3] 刷新镜像仓 {mirror} (fetch + 硬切到 origin/{branch})")
         _wsl(distro, f"git -C {mq} fetch -q origin {branch} && git -C {mq} checkout -q -f -B {branch} FETCH_HEAD")
@@ -256,6 +281,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         _say("[WARN] 没给 --pool: 会用全 tests 当池 —— 实测会把 WSL 打挂(报告 §07 对照四), 强烈建议给定向池")
     # 清缓存: 目标/池一变, 旧 mutants/ 会让 mutmut 保留旧结果并「0 files mutated」提前收工(实测)
     _say("[4/6] 清 mutants/ 与 mutmut-cache.db")
+    _say("[WARN] 该清理会一并清掉其它目标的 mutmut 注册表 —— 换目标跑 verify 前必须对该目标重跑 mutants.run")
     _wsl(args.distro, f"cd {mq} && rm -rf mutants mutmut-cache.db")
     _say(f"[5/6] 写 [tool.mutmut] (目标 / 池 / forkserver / deselect / timeout_multiplier={args.timeout_multiplier:g})")
     pool = " ".join(_bq(p) for p in args.pool)
@@ -273,6 +299,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         _say(f"SUMMARY: {summary}")
     if proc.returncode != 0:
         _say(f"[FAIL] mutmut 退出码 {proc.returncode} —— 常见原因: 基线不绿(工具要求先全绿) / 池里没有测试 / 配置写错")
+        _say(
+            "       基线红且报错指向「读源码文本」的守阵时: 把该 node id 加进 "
+            ".commands/mutants/scripts/set_conf.py 的 DEFAULT_DESELECT 后重跑"
+        )
         return 1
 
     _write_results(args)
@@ -390,10 +420,14 @@ def _suite_cmd(workers: int, timeout_s: int, target: str = "tests/") -> str:
 
     参数口径: **不能有 `-x`**(基线本来就红时它会停在第一条既有失败上, 变异体根本没被执行);
     `-rfE` 出 short test summary(逐条 node id, 用来与基线做差集); `--tb=no` 压掉回溯。
+
+    flaky 用例从 FLAKY_DESELECT(set_conf.py)自动派生 --deselect, 不让人手拼。
     """
+    deselects = " ".join(f"--deselect {shlex.quote(d)}" for d in FLAKY_DESELECT)
     return (
         f"PYTHONDONTWRITEBYTECODE=1 timeout {timeout_s} "
         f".venv/bin/python -B -m pytest {target} -q --no-cov -p no:cacheprovider -rfE --tb=no -n {workers}"
+        + (f" {deselects}" if deselects else "")
     )
 
 
@@ -405,6 +439,29 @@ def _fail_ids(text: str) -> set[str]:
         if m:
             ids.add(m.group(1))
     return ids
+
+
+#: 未判定 ⇒ 不写进 done, 重跑自动重试(不能当成 KILLED/SURVIVED 跳过)
+UNDETERMINED_VERDICTS = ("APPLY_FAIL", "TIMEOUT", "FLAKY", "UNKNOWN")
+
+
+def _done_ids(text: str) -> set[str]:
+    """结果文件里「已判定、可跳过」的 id 集合。
+
+    APPLY_FAIL / TIMEOUT / FLAKY / UNKNOWN 都是未判定 —— 尤其 APPLY_FAIL(注册表被清/apply 没落地)
+    必须能重试, 否则未判定会静默堆积成「已验」。
+    """
+    done: set[str] = set()
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith("#") or " :: " not in s:
+            continue
+        mid, _, rest = s.partition(" :: ")
+        verdict = rest.split(" :: ", 1)[0].strip()
+        if any(v in verdict for v in UNDETERMINED_VERDICTS):
+            continue
+        done.add(mid.strip())
+    return done
 
 
 def _summary_of(text: str) -> str:
@@ -535,6 +592,14 @@ def cmd_verify(args: argparse.Namespace) -> int:
     _ensure_tool(args.distro, args.mirror)
     mq = _bq(args.mirror)
 
+    if not _DRY:
+        reg = _wsl(args.distro, f"cd {mq} && find mutants -name '*.meta' -print -quit 2>/dev/null", check=False)
+        if reg.returncode != 0 or not reg.stdout.strip():
+            raise Fail(
+                "镜像里没有 mutmut 注册表(mutants/**/*.meta) —— 先跑 mutants.run 该目标再 verify; "
+                "单文件轮会清掉其它目标的注册表"
+            )
+
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     # 结果文件按**输入清单**定名(不是时间戳): 否则跨分钟重跑就换了个文件, 「已验 id 跳过」形同虚设
@@ -544,11 +609,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
         path.unlink()
     done = set()
     if path.exists():
-        done = {
-            x.split(" :: ")[0]
-            for x in path.read_text(encoding="utf-8").splitlines()
-            if " :: " in x and not any(v in x for v in ("UNKNOWN", "TIMEOUT", "FLAKY"))
-        }
+        done = _done_ids(path.read_text(encoding="utf-8"))
     todo = [i for i in ids if i not in done]
 
     _purge_pycache(args.distro, args.mirror)
@@ -610,8 +671,11 @@ def cmd_verify(args: argparse.Namespace) -> int:
         f"[verify] KILLED(假存活) {killed} · SURVIVED(真洞候选) {survived} · "
         f"APPLY_FAIL {apply_failed} · TIMEOUT {timed_out} · FLAKY {flaky} · UNKNOWN {unknown} -> {path}"
     )
-    if timed_out or unknown or flaky:
-        _say("[verify] TIMEOUT/FLAKY/UNKNOWN 是**未判定**(不是 SURVIVED): 重跑同一命令会自动重试这几条")
+    if apply_failed or timed_out or unknown or flaky:
+        _say(
+            "[verify] APPLY_FAIL/TIMEOUT/FLAKY/UNKNOWN 是**未判定**(不是 SURVIVED): "
+            "重跑同一命令会自动重试这几条"
+        )
     return 0
 
 

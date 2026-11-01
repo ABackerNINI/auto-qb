@@ -15,7 +15,8 @@
 - ``pytest_add_cli_args`` 必带 ``-n 0 --no-cov``(抵消 pytest.ini addopts 里的 ``-n 8``, 以及
   tests/conftest.py 按平台设的覆盖率闸)
   以及**文本层守阵**的 ``--deselect``: mutmut 把变异体写进同一份文件, 凡「读源码文本做断言」的守阵
-  在基线就红, 整轮直接中断(实测两条, 见 ``DEFAULT_DESELECT``; 它们会随测试文件拆分漂移, 报错时先核这里)。
+  在基线就红, 整轮直接中断(见 ``DEFAULT_DESELECT``; 会随测试文件拆分漂移, 报错时先核这里); flaky 用例
+  (端口绑定/并发类)另表维护在 ``FLAKY_DESELECT``, run 与 verify 都自动 deselect。
 - ``process_isolation = "forkserver"`` —— 默认 ``fork`` 会让注册表类守阵假红。
 - ``timeout_multiplier`` **必须显式写**(默认值 = mutmut 自身默认 15.0): 此前只在镜像里手工改
   (W5/W6 的 ``= 2``), 每次本脚本覆盖式重写都会静默抹掉, 于是「这一轮的超时口径」不可复现、
@@ -32,7 +33,10 @@ import sys
 from pathlib import Path
 
 # 文本层守阵: 它们读源码文本做断言, 会被 mutmut 的变异体撑爆(实测报告 §10 #9)。
-# 该表**会随测试文件拆分漂移**(test_web.py 已拆成 tests/test_web_*.py), 跑红时先核这里。
+# **首要纪律**: 新增/改名任何「读源码文本做断言」的测试(含 docstring 自称静态守阵的), 必须同步把
+# node id 加进本表; 否则该守阵在变异基线就红, 整轮直接中断。
+# 该表**会随测试文件拆分漂移**(test_web.py 已拆成 tests/test_web_*.py); 漂移由包内
+# test_mutants.py 的 DeselectTableTest 对差守阵兜底(文件或函数改名即判红), 跑红时先核这里。
 DEFAULT_DESELECT = (
     "tests/test_sim_corpus.py::test_fs_mock_coverage_static_guard",
     "tests/test_web_seed_center.py::test_api_enqueue_wakes_main_loop",
@@ -48,6 +52,18 @@ DEFAULT_DESELECT = (
     # (测试缺平台守卫, 同 issue 26-10-31-1539-deselect-guards 族), WSL 镜像里基线恒红 ——
     # 不 deselect 会打断 stats 收集(首轮曾靠镜像内临时第 9 条绕过, 这里固化成默认)。
     "tests/test_relocate_exec.py::test_spawn_args_pinned",
+)
+
+# flaky 用例: 端口绑定 / 并发类, 全套件里会随机红, 会污染 verify 的「本次失败 - 基线」差集。
+# 只收**已实证**条目(W2-W4 轮真实撞到的); 未定位到具体 node id 的形态(如 W3 记的 relocate 类 1 条)
+# 不猜测, 实测到即补。
+FLAKY_DESELECT = (
+    "tests/test_hr_discovery.py::test_start_binds_first_free_candidate",
+    "tests/test_hr_discovery.py::test_runtime_discovery_bind_failure_keeps_data_endpoint",
+    "tests/test_hr_discovery.py::test_start_all_busy_returns_false_and_retries",
+    "tests/test_web_views_reload.py::test_stop_web_server_releases_port_for_restart",
+    "tests/test_web_views_reload.py::test_start_web_server_reports_failure_when_port_taken",
+    "tests/test_commands_engine.py::test_wrapper_end_to_end_passes_args",
 )
 
 # also_copy 推导时的排除项: vcs / 依赖 / 生成物 / 本工具自身产物 —— 都不该进 mutants/ 副本。
@@ -152,7 +168,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pool", nargs="*", default=[], help="测试选择池(相对仓库根); 留空=全 tests(不推荐, 会打挂 WSL)")
     p.add_argument("--pyproject", default="pyproject.toml", help="要改写的 pyproject.toml(默认当前目录)")
     p.add_argument("--also-copy", nargs="*", default=None, help="覆盖 also_copy(留空串=不写该键); 不传则按顶层目录推导")
-    p.add_argument("--deselect", nargs="*", default=list(DEFAULT_DESELECT), help="文本层守阵(留空串=不 deselect)")
+    p.add_argument(
+        "--deselect",
+        nargs="*",
+        default=None,
+        help="覆盖 deselect 表(留空串=不 deselect); 不传则 DEFAULT_DESELECT + FLAKY_DESELECT"
+    )
     p.add_argument(
         "--timeout-multiplier",
         type=float,
@@ -175,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
     path = Path(args.pyproject)
     root = path.resolve().parent
     also_copy = derive_also_copy(root) if args.also_copy is None else [x for x in args.also_copy if x]
-    deselect = [x for x in args.deselect if x]
+    deselect = [*DEFAULT_DESELECT, *FLAKY_DESELECT] if args.deselect is None else [x for x in args.deselect if x]
     section = render(args.target, args.pool, also_copy, deselect, args.timeout_multiplier)
 
     if args.to_stdout:

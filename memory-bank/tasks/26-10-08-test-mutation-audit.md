@@ -285,6 +285,9 @@
 - **验证**: 定向 `commands run test.one -- tests/test_speed_curve.py tests/test_ops.py tests/test_grouping.py` → **233 passed, 1 skipped**; 全量 `commands run test.full` → **4805 passed, 2 skipped**, TOTAL `22482 164 7708 134 99%`(覆盖率闸 Windows 99 达标); 形态级手搓红验 **26/26 全红**(`tmp-analysis/issue-w9ab-residue/redverify.py`, gitignored; 首轮暴露 W9b-13 越周期不敏感 + W9a-07 锚点重复两问题, 修正后复跑), 收尾 `git status --short src/` 为空。数字单点在 [26-11-02-0211](../testing/baselines/26-11-02-0211-issue-w9ab-low-residue-guards.md)。
 - **未做 / 遗留**: **未跑 mutmut/gremlins 全轮**(全轮 WSL 长跑超出本轮范围), 故不声称具体 id 被杀或存活数下降, 守阵强度以手搓形态级红验 + 定向池实测为证; W9b 中危 4(rules mk3/mk14 · he10 · maintenance sc17)与 W9a grouping 极低 4 未逐 id 定位/未加守阵, 疑窄触发或等价, 如实留档; 两件纯文案/日志余量按原判读不排期; `tmp-analysis/` 产物只在本 clone; 未 commit(用户安排)。
 
+- 2026-11-02 02:12 修复 issue 26-10-31-1539(deselect-guards): DEFAULT_DESELECT 表前补同步纪律 + cmd_run 基线失败行点名该表 + DeselectTableTest 机械对差守阵(覆盖新 FLAKY_DESELECT); issue 置 Done, 数字见基线切片 26-11-02-0209
+- 2026-11-02 02:13 修复 issue 26-10-31-1539(verify-channel)四形态: verify 前置注册表预检 + APPLY_FAIL 归未判定可重试; why.md 固化 dump->post-image 手工通道; FLAKY_DESELECT 自动 deselect; _ensure_mirror 先探 WSL 可达性再分三态(不对不可达 clone); issue 置 Done, 数字见基线切片 26-11-02-0209
+
 - 2026-11-02 02:56 W9a/W9b low-residue 余量 issue 成簇守阵收口: 两条分别置 Done; 定向 233 过 + 全量 4805 过(99%); 手搓红验 26/26; 零 src 改动; 未跑 mutmut 全轮
 
 ### 2026-11-02 R39 — W7 no-tests 与 W5 零块存疑两件计划外闭合(issue 26-11-01-0953 / 26-11-01-0050)
@@ -296,3 +299,4 @@
 - **遗留**: W7 同轮 25 条 survived 属既有三分类余量, 不在本件; W5 全量变异未重跑(等价判定基于现码静态不可达 + 定向实测); 两件均未扩池; 本轮随两件测试改动一并提交。
 
 - 2026-11-02 03:18 W8 遗留两件结清后提交闸门双红清零: 10 件 2026-09 旧档工作树行尾归一 LF(内容零改) + transfer/adapters/qb 的 find_torrent/pause_torrent 等扩展点补 11 条守阵(覆盖率 98.96% -> 99.08%); 全量 4820 过 2 跳; 本轮两笔提交推送
+
