@@ -23,6 +23,10 @@ v3「成功一行, 失败一行(原因 + 下一步)」保留, **结果行逐字�
   快照语义(2026-10-07): 白名单 / 重跑命令一律取自**本进程启动时那份配置**(`_snapshot` 副本里那份) ——
   中途 rebase 把上游新版 `.my-commit-flow.toml` 写进工作区也**不换**, 那正是"同一次调用混两个版本"的来源。
   判据(生成器是纯函数、重跑后自证通过 ⇒ 没丢手写内容)与配置来源无关, 不因不重取而失效。
+  暂存与观测(2026-11-01, issue 26-11-01-2140): rebase 化解循环里, 重跑后把「白名单 ∩ 全部改动路径
+  (含重跑新写出的未跟踪件)」与冲突集一并暂存 —— 只 add 冲突集时, 重跑会把其它干净自动合并的白名单件
+  改成 MM 态, `rebase --continue` 被 git 拒绝(索引不干净), 全生成物冲突也被判失败; 失败行自带失败分级
+  + 冲突清单(前 5 条 + 总数), 不再需要人工 merge-tree 探测冲突面。
 
 注: 树脏类失败行为什么必须自带出路(2026-10-03 定, 2026-10-04 更新): 只说「先提交或移出后重跑」会让执行者
   原地打转 —— 单独重跑 sync 树还是脏的, 必再撞同一处。出路两条: ① stash 移出 → 同步 → pop 弹回(两处改动
@@ -185,6 +189,44 @@ def _modified_paths() -> set[str]:
     return out
 
 
+def _changed_paths() -> set[str]:
+    """工作树相对 HEAD 的**全部**改动路径(含新增 / 删除 / 未跟踪; 改名取新侧)。
+
+    供生成物重跑后的暂存面用(2026-11-01, issue 26-11-01-2140): 只拿 M 会漏两类 ——
+    ①重跑把**干净自动合并**的白名单件改出的 MM 态之外, 新基引入的新生成物路径会被重跑写成
+    未跟踪新文件; ②重跑删掉的白名单件(D)。调用方一律与白名单求交后才使用, 手写件进不来。
+    """
+    out: set[str] = set()
+    for line in git("-c", "core.quotepath=off", "status", "--porcelain", "-uall", check=False).splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip() if len(line) > 3 else ""
+        if " -> " in path:
+            path = path.split(" -> ")[-1].strip()
+        if path:
+            out.add(path)
+    return out
+
+
+def _unmerged_paths() -> set[str]:
+    """当前未合并(冲突)路径 —— rebase 停下时的冲突面。"""
+    return {
+        line.strip()
+        for line in git("diff", "--name-only", "--diff-filter=U", check=False).splitlines() if line.strip()
+    }
+
+
+# 失败行里的路径清单上限(前 N 条 + 总数) —— 清单是给人判断「是不是全生成物」的, 不是全量转储。
+DETAIL_CAP = 5
+
+
+def _cap_paths(paths) -> str:
+    """路径清单的人话形态: 前 DETAIL_CAP 条, 超出则「等 N 处」。"""
+    ordered = sorted(paths)
+    shown = ", ".join(ordered[:DETAIL_CAP])
+    return f"{shown} 等 {len(ordered)} 处" if len(ordered) > DETAIL_CAP else shown
+
+
 def _remote_changed(rsha: str) -> set[str]:
     """远端 tip 相对本地 HEAD 改动过的路径。"""
     return {line.strip() for line in git("diff", "--name-only", "HEAD", rsha, check=False).splitlines() if line.strip()}
@@ -271,17 +313,23 @@ def _git_run_editor(*args: str) -> subprocess.CompletedProcess:
     return run_git(["git", *args], env={**os.environ, "GIT_EDITOR": "true"})
 
 
-def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, int, str, str]:
-    """分叉 rebase 的**有界冲突循环**。返回 (ok, 重跑处数, rebase 刚落地的 hash, amend 后的 hash);
-    末位空串 = 收尾没 amend; 失败时已 --abort / 回滚, 状态与跑之前一致。
+def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, int, str, str, str]:
+    """分叉 rebase 的**有界冲突循环**。返回 (ok, 重跑处数, rebase 刚落地的 hash, amend 后的 hash, 失败原因);
+    末位空串 = 收尾没 amend / 成功; ok=False 时末位是人话原因(失败分级 + 冲突清单), 供失败行携带 ——
+    旧失败行不带冲突清单(issue 26-11-01-2140): 全生成物冲突被误判成手写件冲突, 识别冲突面这一步卡住。
+    失败时已 --abort / 回滚, 状态与跑之前一致。
 
     后两个返回值是给调用方写步骤行用的 —— 本函数**不登记步骤**: 两行痕迹必须按发生顺序
     (先「rebase 重放」再「重跑后 amend」)排在结果行上面, 而 rebase 那一行只有拿到本函数的返回值
     才拼得出来。谁登记谁就会把顺序写反(amend 先于 rebase 记录 ⇒ 打印出的链子是倒的), 所以
     干脆把「怎么排」交给唯一知道全局顺序的调用方。
 
-    单次 rebase 一旦停下就取冲突集: 全在生成物白名单 → 取一侧 + 重跑 + 自证 + continue;
+    单次 rebase 一旦停下就取冲突集: 全在生成物白名单 → 取一侧 + 重跑 + 自证 + 暂存 + continue;
     出现任何手写冲突 / 白名单取不到 / 超限 → abort。循环上限 = 本地独有提交数 + 1(防死循环)。
+    **暂存面(2026-11-01, issue 26-11-01-2140)**: 重跑会把**其它干净自动合并**的白名单件改出未暂存
+    修改(MM 态), 新基引入新生成物路径时还会写出未跟踪新文件 —— 只 add 冲突集的话 `rebase --continue`
+    被 git 拒绝(索引不干净, 单点: memory-bank/pitfalls/git/rebase-continue-needs-clean-index.md)。
+    这里把「白名单 ∩ 全部改动路径」与冲突集一并暂存: add 面与改动面对齐; 交集已过滤, 手写件进不来。
 
     白名单 / 重跑命令取自**本进程启动时那份配置**(快照语义): 中途 rebase 换了上游配置也不换规则 ——
     那正是"同一次调用混两个版本"的来源; 判据(重跑后自证)与配置来源无关。
@@ -291,7 +339,7 @@ def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, 
     resolved = 0
     proc = git_run("rebase", rsha)
     if proc.returncode == 0:
-        return True, 0, git("rev-parse", "HEAD", check=False), ""  # 无冲突 —— 与现状逐字一致, 不做任何重跑
+        return True, 0, git("rev-parse", "HEAD", check=False), "", ""  # 无冲突 —— 与现状逐字一致, 不做任何重跑
     steps_done = 0
     while proc.returncode != 0 and steps_done < limit:
         steps_done += 1
@@ -299,47 +347,51 @@ def _resolve_rebase(rsha: str, cfg: dict, ahead: int, head: str) -> tuple[bool, 
         whitelist = _whitelist(cfg)
         if not whitelist:
             git("rebase", "--abort", check=False)
-            return False, 0, "", ""
-        conflicts = {
-            line.strip()
-            for line in git("diff", "--name-only", "--diff-filter=U", check=False).splitlines() if line.strip()
-        }
-        if not conflicts or not conflicts <= whitelist:
+            return False, 0, "", "", "生成物白名单取不到(generated_list_cmd --list 失败)"
+        conflicts = _unmerged_paths()
+        if not conflicts:
             git("rebase", "--abort", check=False)
-            return False, 0, "", ""
+            return False, 0, "", "", f"rebase 停下但没有未合并路径({_git_reason(proc)})"
+        if not conflicts <= whitelist:
+            git("rebase", "--abort", check=False)
+            return False, 0, "", "", f"冲突含非生成物: {_cap_paths(conflicts - whitelist)}"
         for path in sorted(conflicts):
             git_run("checkout", "--ours", "--", path)  # rebase 里 --ours = 上游侧; 取哪侧无所谓, 马上被重写
-        if not _regen(cfg, root) or not _self_check(cfg, root):
+        if not _regen(cfg, root):
             git("rebase", "--abort", check=False)
-            return False, 0, "", ""
+            return False, 0, "", "", f"生成器重跑失败(冲突 {len(conflicts)} 处全在生成物: {_cap_paths(conflicts)})"
+        if not _self_check(cfg, root):
+            git("rebase", "--abort", check=False)
+            return False, 0, "", "", f"自证未过(--check 非 0; 冲突 {len(conflicts)} 处: {_cap_paths(conflicts)})"
         resolved += len(conflicts)
-        git_run("add", "--", *sorted(conflicts))
+        to_stage = conflicts | (_changed_paths() & whitelist)  # add 面与改动面对齐(见上「暂存面」)
+        git_run("add", "--", *sorted(to_stage))
         proc = _git_run_editor("rebase", "--continue")
     if proc.returncode != 0:
         git("rebase", "--abort", check=False)
-        return False, 0, "", ""
+        return False, 0, "", "", f"rebase {limit} 轮未收敛, 最后一次: {_git_reason(proc)}"
     landed = git("rev-parse", "HEAD", check=False)  # rebase 刚落地的 tip; 之后还可能被 amend 挪走
     whitelist = _whitelist(cfg)
     if not whitelist:
         git("reset", "--hard", head, check=False)
-        return False, 0, "", ""
+        return False, 0, "", "", "收尾白名单取不到(generated_list_cmd --list 失败)"
     amended = ""
     # 收尾再自证: 多提交重放时, 中间那次重跑基于「部分重放」的树 → tip 上可能仍是中间态。
     if not _regen(cfg, root):
         git("reset", "--hard", head, check=False)
-        return False, 0, "", ""
-    dirty = _modified_paths() & whitelist
+        return False, 0, "", "", "收尾生成器重跑失败"
+    dirty = _changed_paths() & whitelist  # 含重跑新写出的未跟踪生成物(旧 _modified_paths 只看 M, 会漏)
     if dirty:
         git_run("add", "--", *sorted(dirty))
         if git_run("commit", "--amend", "--no-edit").returncode != 0:
             git("reset", "--hard", head, check=False)
-            return False, 0, "", ""
+            return False, 0, "", "", "生成物重跑结果 amend 失败"
         resolved += len(dirty)
         amended = git("rev-parse", "HEAD", check=False)
     if not _self_check(cfg, root):
         git("reset", "--hard", head, check=False)
-        return False, 0, "", ""
-    return True, resolved, landed, amended
+        return False, 0, "", "", "收尾自证未过(--check 非 0)"
+    return True, resolved, landed, amended, ""
 
 
 def _step_rebase(steps: list[str] | None, behind: int, ahead: int, head: str, new: str) -> None:
@@ -422,10 +474,16 @@ def run_sync(steps: list[str] | None = None) -> tuple[bool, str]:
             f"出路二选一: 不提交先同步 {UNLOCK_STEPS}; 或工作已完成待入库 → commands run ship.commit"
             f"(提交先行, 树净 rebase 恒可自动)"
         )
-    conflict_line = (f"需解决冲突 本地{head[:8]} 远端{rsha[:8]} —— rebase 已自动回滚, "
-                     "手动合流(解冲突)后重跑")
+
+    def conflict_line(why: str = "") -> str:
+        """冲突失败行(前缀为约定模板, 被 commit.py 透传与测试钉住); why 非空时补失败分级 + 冲突清单
+        (2026-11-01, issue 26-11-01-2140: 旧失败行不带路径, 全生成物冲突被误判成手写件冲突)。"""
+        detail = f"({why})" if why else ""
+        return (f"需解决冲突 本地{head[:8]} 远端{rsha[:8]} —— rebase 已自动回滚{detail}, "
+                "手动合流(解冲突)后重跑")
+
     if cfg.get("auto_resolve_generated", True):  # 冲突全在生成物上 → 有界循环自动化解
-        ok, count, landed, amended = _resolve_rebase(rsha, cfg, ahead, head)
+        ok, count, landed, amended, why = _resolve_rebase(rsha, cfg, ahead, head)
         if ok:
             tail = f" {GENERATED_MARK} {count} 处" if count else ""
             # 两行痕迹按发生顺序登记: 先 rebase 重放, 再收尾重跑导致的 amend —— 顺序反了链子就倒了
@@ -433,11 +491,13 @@ def run_sync(steps: list[str] | None = None) -> tuple[bool, str]:
             if amended:
                 step(steps, f"同步: 生成物自动重跑后 amend {landed[:8]}→{amended[:8]}")
             return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]}{tail}"
-        return False, conflict_line
+        return False, conflict_line(why)
     proc = git_run("rebase", rsha)
     if proc.returncode != 0:
+        conflicts = _unmerged_paths()
         git("rebase", "--abort", check=False)  # 全量自动回滚: 失败后仓库与跑之前一致
-        return False, conflict_line
+        why = f"冲突 {len(conflicts)} 处: {_cap_paths(conflicts)}" if conflicts else _git_reason(proc)
+        return False, conflict_line(why)
     _step_rebase(steps, behind, ahead, head, git("rev-parse", "HEAD"))
     return True, f"同步成功 {git('rev-parse', 'HEAD')[:8]}"
 

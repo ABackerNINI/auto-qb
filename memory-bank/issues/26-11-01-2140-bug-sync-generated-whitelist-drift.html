@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="kb-sync-generated-resolve">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效">
 <meta name="issue-summary" content="分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解">
 <title>my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-2140-bug-sync-generated-whitelist-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 21:40</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">my-commit-flow 同步脚本 / 生成物自动化解</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -184,6 +184,7 @@ memory-bank/plans/_index.md
       <li>白名单集合<strong>随树内容漂移</strong>：同一条 <code>--list</code> 命令在旧 tip 树给 21 行、在 rebase 中的树上给 23 行；差的 2 条（<code>plans/attachments/_archive.md</code>、<code>tasks/attachments/_archive.md</code>）确认为 rebase 前旧树里不存在的文件。</li>
       <li>失败行不含冲突清单：<code>conflict_line</code>（<code>sync.py:425</code>）构造的模板里本就没有路径位。</li>
     </ul>
+    <div class="callout"><strong>定案（2026-11-02 00:49 复验后）</strong>：主因 = 假设 B 实证 —— 每轮重跑后只 <code>git add</code> 冲突集，重跑把其它干净自动合并的白名单件改成 MM 态，<code>rebase --continue</code> 被 git 拒绝。假设 A <strong>排除</strong>：白名单本就是每轮循环重算（无「rebase 前旧快照」），但它影响的是 <strong>add 面 / 收尾 amend 面</strong>（新基引入的新生成物路径会被重跑写成未跟踪/MM 件，不在 add 范围）—— 与 B 同根，修法一并覆盖。红验：把修后代码的暂存面还原成「只 add 冲突集」，最小复现用例即红。</div>
     <h3>假设 A（次要候选）：白名单求值时机</h3>
     <p>重跑生成器时白名单是对<strong>半重放中的树</strong>求值的，因此集合与「rebase 前那次求值」不一致；重跑会写到旧快照以外的路径。<strong>待验证</strong>，因为按代码 <code>_whitelist</code> 是每轮循环重算（<code>sync.py:299</code>）而非 rebase 前求值一次 —— 它更可能以「重跑写出的路径不在 <code>git add</code> 覆盖范围 / 不在 <code>_modified_paths</code> 的 M 过滤里」的形态影响覆盖率，而不是直接触发拒绝。</p>
     <p><strong>验证方法</strong>：合成一个仓（远端新基新增一个生成物路径 + 本地有与生成物重叠的提交），在 <code>_whitelist</code> / <code>_regen</code> / <code>_self_check</code> 三处打点，记录每轮求值的行数与集合差，并采集 <code>git status --short</code>。最小复现步骤：①在镜像 clone 造一个分叉（远端新基多一个生成物路径，如新增一个带 <code>_archive.md</code> 的文档族）；②本地造 1 笔以上会与该生成物重叠的提交；③跑 <code>commands run my-commit-flow.sync</code>，记录失败行与 <code>git status --short</code>。</p>
@@ -207,11 +208,18 @@ memory-bank/plans/_index.md
     <ul>
       <li>2026-11-01 21:40 — 入池，状态 <strong>Open</strong>（计划外，未修；发现于 core/ W9b 收尾的远端合流）</li>
       <li>2026-11-01 21:45 — 补证据段：<code>--list</code> 21 / 23 行复核、<code>merge-tree</code> 冲突面、定位锚点（取证于 HEAD <code>bf0977db</code>）</li>
+      <li>2026-11-02 00:49 — 用户指派认领，复验<strong>仍复现</strong>（HEAD <code>10a32bfe</code>），状态 <strong>In Progress</strong>；同轮修完置 <strong>Done</strong>（见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-02 00:49 <strong>仍复现</strong>（HEAD <code>10a32bfe</code>）—— 入池锚点全部在场：<code>_resolve_rebase</code> 重跑后仍只 <code>git add</code> 冲突集、<code>conflict_line</code> 模板仍无路径位；当前树 <code>gen_all.py --list</code> 23 行（白名单随树漂移的形态仍在）。另以真实临时仓最小复现实证：远端新基引入新生成物路径 + 本地重叠提交 → 旧逻辑下 sync 失败（MM 态 continue 被拒），与入池现象同型。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（2026-11-02 落库，<code>.commands/my-commit-flow/scripts/sync.py</code>）</strong>：建议三条全部采纳，互不冲突——</p>
+    <ul>
+      <li><strong>暂存面（主因修复）</strong>：新增 <code>_changed_paths()</code>（status --porcelain -uall 全量改动路径，含新增/删除/未跟踪），化解循环里暂存 <code>冲突集 ∪ (白名单 ∩ 全部改动路径)</code>；收尾 amend 的 dirty 判定从 <code>_modified_paths()</code>（仅 M）换成同款全量交集 —— 新基引入的新生成物路径（未跟踪件）由此入库，不再卡 continue。</li>
+      <li><strong>观测面</strong>：<code>_resolve_rebase</code> 返回值扩到五元组（末位 = 失败原因人话分级），失败行在「已自动回滚」后带 <code>(原因; 冲突清单)</code> —— 分级覆盖白名单取不到 / 含非生成物 / 重跑失败 / 自证未过 / 超限；清单前 5 条 + 总数（<code>DETAIL_CAP=5</code>）。约定模板前缀「需解决冲突 本地x 远端y」逐字保留（commit.py 透传与守阵不变）。</li>
+      <li><strong>求值时机</strong>：无需单独改 —— 假设 A 排除后确认每轮重算本就正确，暂存面取「当时白名单 ∩ 当时改动路径」已把漂移覆盖。</li>
+    </ul>
+    <p><strong>验证方式</strong>：真实临时仓守阵两条新增 —— <code>test_sync.py::test_diverged_new_generated_path_autoresolves</code>（本 issue 最小复现：远端新基引入 <code>gen/b/arc.md</code> + 本地重叠提交 → 自动化解成功、新件重跑后入库、<code>status --porcelain</code> 零残留）与 <code>test_conflict_failure_line_lists_conflicts</code>（失败行带「冲突含非生成物: base.txt」）。红验通过：把暂存面还原成旧行为，新复现用例即红（FAILED），恢复修复后转绿。基线 151 → <strong>153 passed</strong>（<code>commands run test.pkg.scoped -- .commands/my-commit-flow</code>，36.6s；红验 1 failed / 恢复后 153 passed 40s）。</p>
   </section>
 
   <footer>

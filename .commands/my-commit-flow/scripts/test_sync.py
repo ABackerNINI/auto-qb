@@ -41,6 +41,11 @@ v3.1 步骤行(「改写留痕」; 纪律见 `_pipeline.py`「步骤登记」段
 - test_autoresolve_is_idempotent                    化解成功后重跑 sync → 已同步
 - test_autoresolve_step_says_discarded              自动化解 → 步骤行写明「重叠 N 处全在生成物 → 丢弃本地那份」
 
+暂存面与观测面(2026-11-01, issue 26-11-01-2140):
+- test_diverged_new_generated_path_autoresolves     远端新基引入新生成物路径 + 本地重叠提交 → 自动化解;
+                                                    新路径件被重跑后**入库**(不再因 MM 态 continue 被拒)
+- test_conflict_failure_line_lists_conflicts        失败行自带冲突清单: 非生成物冲突给出路径(不再裸「需解决冲突」)
+
 (注: 旧的「配置被自我改写后的重取」4 条守阵已随快照自举退役 —— 快照语义下自动化解一律用本进程
 启动时那份配置, 不重取; 机制守阵迁到 test_snapshot.py。)
 """
@@ -74,6 +79,7 @@ def _git(cwd: Path, *args: str) -> str:
 
 
 def _commit_file(repo: Path, name: str, content: str, msg: str) -> None:
+    (repo / name).parent.mkdir(parents=True, exist_ok=True)  # 新生成物路径可能带新目录(issue 26-11-01-2140 回归)
     (repo / name).write_text(content, encoding="utf-8")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", msg)
@@ -286,7 +292,7 @@ def test_rebase_then_amend_steps_are_in_order(env, monkeypatch):
     _commit_file(env.a, "a-only.txt", "a\n", "local work")
     _push_remote_commit(env, "b.txt", "b\n")
     old = _git(env.a, "rev-parse", "HEAD")
-    monkeypatch.setattr(sync_mod, "_resolve_rebase", lambda rsha, cfg, ahead, head: (True, 1, "a" * 40, "b" * 40))
+    monkeypatch.setattr(sync_mod, "_resolve_rebase", lambda rsha, cfg, ahead, head: (True, 1, "a" * 40, "b" * 40, ""))
     steps: list[str] = []
     ok, _line = sync_mod.run_sync(steps)
     assert ok and steps == [
@@ -570,6 +576,41 @@ def test_main_prints_steps_above_result(env, monkeypatch, capsys):
     assert sync_mod.main([]) == 0
     lines = capsys.readouterr().out.strip().splitlines()
     assert len(lines) == 2 and lines[0].startswith("同步: ") and lines[1].startswith("同步成功 ")
+
+
+def test_diverged_new_generated_path_autoresolves(env, monkeypatch):
+    """issue 26-11-01-2140 的最小复现: 远端新基引入**本地 tip 树里不存在**的新生成物路径, 本地又有
+    与生成物重叠的提交。旧代码重跑后只 add 冲突集: 新路径件被重跑改成未暂存修改(MM),
+    `rebase --continue` 被 git 拒绝 → 整体 abort → 失败行只有一句「需解决冲突」。
+    修后: add 面与改动面对齐, 自动化解成功且新路径件被重跑结果**入库**(不留在工作区脏着)。
+    """
+    monkeypatch.chdir(env.a)
+    # 本地 tip: 只有 gen/a.md; 远端新基额外引入 gen/b/arc.md(本地 tip 树里不存在的新生成物路径)
+    _seed_generated_conflict(env, monkeypatch, paths=("gen/a.md", "gen/b/arc.md"))
+    _push_remote_commit(env, "gen/b/arc.md", "remote" + NL)
+    _commit_file(env.a, "gen/a.md", _gen_content("gen/a.md"), "local regen")
+    ok, line = sync_mod.run_sync()
+    assert ok and "自动重跑生成物" in line, line
+    assert _git(env.a, "rev-list", "--merges", "--count", "HEAD") == "0"  # 线性
+    assert (env.a / "gen" / "a.md").read_text(encoding="utf-8") == _gen_content("gen/a.md")
+    # 关键回归: 新生成物路径的件被重跑并入库, 内容 == 生成结果, 工作区干净
+    assert (env.a / "gen" / "b" / "arc.md").read_text(encoding="utf-8") == _gen_content("gen/b/arc.md")
+    assert _git(env.a, "status", "--porcelain", "-uall") == ""  # 不留 MM / 未跟踪残留
+
+
+def test_conflict_failure_line_lists_conflicts(env, monkeypatch):
+    """失败行观测面(同 issue): 冲突清单直接进失败行 —— 旧行不带路径, 全生成物冲突被误判成
+    手写件冲突, 要人工 merge-tree 探测才能认出。这里钉非生成物冲突的形态: 给出路径。"""
+    monkeypatch.chdir(env.a)
+    _install_fake_generator(env, monkeypatch)
+    _commit_file(env.a, "base.txt", "my line" + NL, "local edit")
+    _push_remote_commit(env, "base.txt", "remote line" + NL)
+    ok, line = sync_mod.run_sync()
+    assert not ok
+    assert re.search(r"需解决冲突 本地[0-9a-f]{8} 远端[0-9a-f]{8}", line)  # 约定模板前缀不变
+    assert "已自动回滚" in line and "手动合流" in line
+    assert "冲突含非生成物" in line and "base.txt" in line  # 冲突清单进了失败行
+    assert NL not in line  # 仍是一行
 
 
 def test_autoresolve_is_idempotent(env, monkeypatch):
