@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (53)
 
+- [docs] [docs/configuration.md 动作结果态漏 pending](../26-11-01-0800-docs-docs-action-result-pending-drift.html) — 动作结果段只列 3 态漏 pending, 与引擎六档 verdict 漂移(存量, 早于规则引擎重设计)
+- [test] [test_yamls 存量样例含 RULE_KNOWN_KEYS 外键](../26-11-01-0800-test-test-yamls-unknown-rule-keys.html) — test_start.yml 等存量样例含 log_level 等 RULE_KNOWN_KEYS 外键(未被测试消费, 合法性未核)
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3

@@ -21,8 +21,8 @@
 |---|---|
 | bug | 7 |
 | perf | 7 |
-| docs | 2 |
-| test | 2 |
+| docs | 3 |
+| test | 3 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [docs] [docs/configuration.md 动作结果态漏 pending](26-11-01-0800-docs-docs-action-result-pending-drift.html) — 动作结果段只列 3 态漏…
+- [test] [test_yamls 存量样例含 RULE_KNOWN_KEYS 外键](26-11-01-0800-test-test-yamls-unknown-rule-keys.html) — test_start.y…
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/get…

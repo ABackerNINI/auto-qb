@@ -10,3 +10,4 @@
 - **判别**: 症状 = `node --check` 全绿 + pytest 静态守阵全绿, 但浏览器 `pageerror: <名字> is not defined` 且整站白屏(boot.js 按清单序加载, 首个炸点即停)。静态查不出是因为尾巴**恰好合法** —— 语法层无错误可报。
 - **处置**: 注释文字里避开 `*/` 序列(写成 `Key / Digit / Numpad 前缀` 加空格); 浏览器探针(ui_harness + pageerror 监听)是唯一可靠防线, 改完 JS 至少开一次页面。
 - **关联**: CSS 同族坑与守阵见 [css-comment-terminator.md](css-comment-terminator.md); 本条暂无静态守阵(可靠区分"注释文字里的 */"需完整 JS 词法分析, 收益不抵复杂度, 以探针兜底)。
+- **复发**: +1 (2026-11-01, 规则引擎重设计 W3-B): app.js 注释里写 `cfgCond*/cfgChoose*)` 的 `*/` 砍断注释致语法错 —— 没命中的原因: 实施前没先读本条目(按动作路由应读 pitfalls/web-ui 类索引); 守阵红当场修复。
