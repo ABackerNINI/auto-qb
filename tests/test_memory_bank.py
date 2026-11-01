@@ -58,6 +58,9 @@ memory-bank skill 的 `scripts/new_doc.py` / `wrap_session.py` / `check_doc_temp
   P2 补) —— 连字符领域 `memory-bank` 可建 / `memory-` 前缀撞名不误收 / 裸领域沿用 P1 行为
 - test_wrap_creates_zero_slot_slice_and_updates: 建切片零 SLOT 即合规 (判断剩余 0, 裁定 A6);
   二次调用抬最后活动 + 追加 R 行; 同专题档案抬 Updated + 进度日志日期行 (A5)
+- test_wrap_archive_flag_anchors_umbrella_archive: `--archive` 显式锚档案 —— 异键 (伞形档案
+  `test-umbrella-audit` vs 切片 `derived-slice`) 时命中并抬 Updated + 进度日志; 不传时
+  提示落空且档案零触碰 (默认行为不变); 坏 kebab 拒
 - test_checker_three_mutations_judged_red: 红绿双验 —— 填完 = 基准绿; 三类突变 (删状态行 /
   词表外值 / 留 SLOT) 逐类判红, 每类还原后复绿 (证明绿不是恒绿)
 - test_checker_freeze_line_exempts_stock: 冻结线之前 (档案日期 26-10-16 / plan·report 文件名
@@ -1540,6 +1543,74 @@ def test_wrap_creates_zero_slot_slice_and_updates(tmp_path: Path) -> None:
     today = timekit.now().strftime("%Y-%m-%d")
     assert f"**Updated:** {today}" in text, "同专题档案应抬 Updated 到今天"
     assert any(line.startswith(f"- {today} ") for line in text.split("\n")), ("档案进度日志应追加带日期的一行 (A5)")
+
+
+def test_wrap_archive_flag_anchors_umbrella_archive(tmp_path: Path) -> None:
+    """`--archive` 显式锚档案: 伞形档案与派生计划各持不同 key 时一次同时命中两侧。
+
+    不传 `--archive` 时行为不变 (用 `--topic` 匹配档案), 落空提示保留原文案且档案零触碰;
+    传了则档案按 `--archive` 的 `**Topics:**` 键精确匹配, 切片文件名仍由 `--topic` 决定。
+    """
+    import io
+    from contextlib import redirect_stderr, redirect_stdout
+
+    wrap = _wrap()
+    new_doc = _new_doc()
+    import timekit  # 必须在 helper 之后 —— helper 负责把 SKILL_SCRIPTS 插进 sys.path
+
+    mb = tmp_path / "memory-bank"
+    mb.mkdir()
+
+    def wrap_run(topic: str, did: str, archive: str | None = None) -> tuple[int, str]:
+        argv = ["--root", str(tmp_path), "--mb-dir", str(mb), "--topic", topic, "--did", did]
+        if archive is not None:
+            argv += ["--archive", archive]
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = wrap.main(argv)
+        return rc, out.getvalue()
+
+    with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+        assert (
+            new_doc.main(
+                [
+                    "--root",
+                    str(tmp_path),
+                    "--mb-dir",
+                    str(mb),
+                    "task",
+                    "--title",
+                    "伞形档案",
+                    "--topic",
+                    "test-umbrella-audit",
+                ]
+            )
+            == 0
+        )
+    archive = next((mb / "tasks").glob("*-test-umbrella-audit.md"))
+    before = archive.read_text(encoding="utf-8")
+
+    # 不传 --archive: 沿用 --topic 匹配 → 落空 (默认行为不变), 档案零触碰
+    rc, out = wrap_run("derived-slice", "不传锚点")
+    assert rc == 0
+    assert "未找到同专题档案" in out, f"未传 --archive 应保留原文案: {out}"
+    assert archive.read_text(encoding="utf-8") == before, "落空时档案不得被改"
+
+    # 传 --archive: 异键伞形档案被命中并更新
+    rc, out = wrap_run("derived-slice", "传锚点", archive="test-umbrella-audit")
+    assert rc == 0
+    assert "未找到" not in out, f"--archive 命中时不该有落空提示: {out}"
+    assert "已更新档案" in out, f"应按 --archive 键命中档案: {out}"
+    text = archive.read_text(encoding="utf-8")
+    today = timekit.now().strftime("%Y-%m-%d")
+    assert f"**Updated:** {today}" in text, "命中的档案应抬 Updated 到今天"
+    assert "传锚点" in text, "命中的档案进度日志应追加本轮 did"
+    slice_file = next((mb / "activeContext").glob("*-derived-slice.md"))
+    assert "**R1(" in slice_file.read_text(encoding="utf-8"), "切片仍按 --topic 抬活动 + 追加 R 行"
+
+    # 坏 kebab: 与 --topic 同一 SLUG_RE 校验
+    rc, out = wrap_run("derived-slice", "坏锚点", archive="Bad_Key")
+    assert rc == 1, f"非 kebab 的 --archive 必须拒: {out}"
 
 
 def test_checker_three_mutations_judged_red(tmp_path: Path) -> None:

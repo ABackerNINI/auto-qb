@@ -13,7 +13,9 @@
 
 用法 (从仓库根; `<skill-dir>` = 加载 memory-bank skill 时它实际所在的目录):
     python <skill-dir>/scripts/wrap_session.py --topic <slug> --did "一句话说清本轮做了什么"
+    python <skill-dir>/scripts/wrap_session.py --topic <切片 slug> --archive <档案 Topics 键> --did ..
     python <skill-dir>/scripts/wrap_session.py --root <dir> --mb-dir <dir> --topic .. --did ..
+`--archive` 只给伞形档案与派生计划各持不同 key 时用: 切片仍按 `--topic` 落, 档案按 `--archive` 匹配。
 退出码: 0 成功 / 1 参数或校验失败 (原因与下一步打在输出里)
 """
 
@@ -105,6 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--topic", required=True, help="专题 slug (切片文件名后缀 / 档案 **Topics:** 主键)")
+    parser.add_argument(
+        "--archive",
+        help="档案 **Topics:** 键 (默认取 --topic 的值): 伞形档案与派生计划各持不同 key 时用它单独锚定档案")
     parser.add_argument("--did", required=True, help="一句话: 本轮做了什么 (切片摘要预填 + R 行, 裁定 A5/A6)")
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
@@ -112,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if not SLUG_RE.match(args.topic):
         return _fail(f"--topic 必须是 kebab (小写英文数字 + 短横线): {args.topic!r}")
+    if args.archive is not None and not SLUG_RE.match(args.archive):
+        return _fail(f"--archive 必须是 kebab (小写英文数字 + 短横线): {args.archive!r}")
 
     root = Path(args.root).resolve() if args.root else find_root()
     mb = resolve_mb_dir(root, args.mb_dir)
@@ -129,7 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         created = _create_slice(args.topic, args.did, moment, slice_dir)
         print(f"已建切片 {rel_posix(created, root)} (三行头 + R0, 零 SLOT; 可选骨架段需要时再补)")
 
-    # --- 同专题档案 (**Topics:** 匹配)
+    # --- 同专题档案 (**Topics:** 匹配; --archive 显式锚点时用它的键, 否则沿用 --topic)
+    archive_key = args.archive if args.archive is not None else args.topic
     touched: list[Path] = []
     tasks_dir = mb / "tasks"
     if tasks_dir.is_dir():
@@ -138,16 +146,23 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             text = path.read_text(encoding="utf-8")
             m = TOPICS_LINE_RE.search(text)
-            if m and m.group(1).strip() == args.topic:
+            if m and m.group(1).strip() == archive_key:
                 changed = _touch_archive(path, args.did, moment)
                 note = "Updated + 进度日志" if changed else "进度日志 (无 Updated 行, 未抬)"
                 print(f"已更新档案 {rel_posix(path, root)} ({note})")
                 touched.append(path)
     if not touched:
-        print(
-            f"[提示] 未找到同专题档案 (**Topics:** == {args.topic}) —— 跳过; "
-            f"如需立档: commands run kb.new task --title \"..\" --topic <领域>-{args.topic}"
-        )
+        if args.archive is None:
+            print(
+                f"[提示] 未找到同专题档案 (**Topics:** == {args.topic}) —— 跳过; "
+                f"如需立档: commands run kb.new task --title \"..\" --topic <领域>-{args.topic}"
+            )
+        else:
+            print(
+                f"[提示] 未找到 Topics == {archive_key} 的档案 (由 --archive 指定) —— 跳过; "
+                f"请从 `grep -h '^\\*\\*Topics:\\*\\*' memory-bank/tasks/*.md | sort -u` 取可用键, "
+                f"切片仍按 --topic {args.topic} 落在 activeContext/"
+            )
 
     # --- 索引 (动了档案才需要重建; 切片无索引)
     if touched:
