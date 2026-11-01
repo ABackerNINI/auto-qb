@@ -801,10 +801,19 @@ config:
 
 ### 动作结果与错误处理
 
-- 每个动作返回统一结果：`success` / `failed` / `skipped`
-- `failed`：qB 返回失败或出错；`skipped`：条件不满足（如标签已存在、分类已设置），**不算失败**
-- 动作 `failed` 会**中断本条动作链**（后续动作不再执行）；错误策略（失败继续 / 重试）随 per-step
-  `on_error` 配置落地（W2）。条件求值出错时本条规则本轮跳过，不影响其它规则
+- 每个动作返回统一结果（`ActionResult` 四态，引擎侧口径以 `memory-bank/rule-system/rules-and-triggers.md`
+  「Rule.process() 执行语义」为单一事实源）：
+  - `success`：动作执行成功（dry-run 同样返回 `success`），继续后续动作
+  - `failed`：API 非 200 / 抛异常 / 前置检查未通过，按动作 `on_error` 三档分派（见下）
+  - `skipped`：条件不满足未执行（如标签已存在、分类已设置、段未启用），**不算失败**，继续
+  - `pending`：动作已提交等待异步完成（目前仅 `full-checking` 校验），本轮规则执行在此中断、
+    记断点待恢复；续跑从断点动作继续，并跳过条件评估与去重
+- 动作 `failed` 按 per-step `on_error` 三档分派（W2 已落地）：`stop`（缺省）= **中断本条动作链**
+  （后续动作不再执行）；`continue` = 记 WARNING 后继续后续动作；`retry` = 任务级 requeue
+  （按 `backoff` 推迟重试，上限 `retries`，耗尽按 `stop` 收场）
+- 规则级每轮执行结论为单值 verdict：`no_match` / `error` / `deduped` / `no_op` / `pending` /
+  `executed` 六档 + `retry`（动作失败且该动作 `on_error.policy: retry` 时）——条件求值出错时本条
+  规则本轮跳过（`error`），不影响其它规则；完整 verdict 表见上引主题文档
 - 旧的 `stop_following_rules_if` / `ignore_next_action_error` 已退役（见上节「已退役键」），
   不再有任何停止 / 忽略语义
 

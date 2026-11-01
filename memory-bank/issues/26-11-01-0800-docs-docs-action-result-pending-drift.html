@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0800">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="docs-action-result-pending-drift">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-01-0935-docs-action-result-pending-drift.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="docs/configuration.md 动作结果态漏 pending">
 <meta name="issue-summary" content="动作结果段只列 3 态漏 pending, 与引擎六档 verdict 漂移(存量, 早于规则引擎重设计)">
 <title>docs/configuration.md 动作结果态漏 pending · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0800-docs-docs-action-result-pending-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 08:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 08:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-01 09:25 — 用户指派认领，状态 <strong>Open → In Progress</strong>；复验（09:25）：「动作结果」段仍 3 态、全文件 grep <code>pending</code> 零命中，代码侧 <code>VERDICT_*</code> 六档 + <code>RETRY</code> 在 <code>src/auto_qb/rules/base.py:51-60</code> 确认在位</li>
+      <li>2026-11-01 09:26 — 状态 <strong>In Progress → Done</strong>。实际修法：按 issue 建议以 <code>memory-bank/rule-system/rules-and-triggers.md</code> 为单一事实源补齐该段 —— <code>ActionResult</code> 四态逐条列出（含 <code>pending</code> 及触发条件：目前仅 <code>full-checking</code>，本轮中断记断点待恢复，续跑跳过条件评估与去重）+ <code>on_error</code> 三档分派（W2 已落地）+ 规则级 verdict 六档 + <code>retry</code> 一句带过并回指主题文档；未改代码。验证：纯 docs 单文件改动（无代码 / 测试变更）；全量 <code>test.full</code> 实测 4461 passed + 2 skipped / 155.90s（覆盖率 99%），数字只写基线切片 26-11-01-0935（见 <code>commands run kb.baseline</code>）；<code>kb.check</code> 跑绿</li>
     </ul>
   </section>
 
