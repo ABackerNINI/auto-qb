@@ -7,9 +7,9 @@
 <title>规则引擎重设计方案</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="rule-engine-redesign">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-01-0106">
-<meta name="doc-updated" content="26-11-01-0216">
+<meta name="doc-updated" content="26-11-01-2352">
 <meta name="doc-refs" content="memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html, memory-bank/tasks/26-11-01-rule-engine-redesign.md, memory-bank/testing/baselines/26-11-01-0323-rule-engine-w1-two-key-retire.md, memory-bank/testing/baselines/26-11-01-0457-rule-engine-w2-on-error.md, memory-bank/testing/baselines/26-11-01-0630-rule-engine-w3-combo-choose.md, memory-bank/testing/baselines/26-11-01-0719-rule-engine-redesign.md, memory-bank/testing/baselines/26-11-01-0752-rule-engine-w5-registry.md">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>规则引擎重设计方案</h1>
 <p class="lede">以调研报告 <a href="../reports/26-11-01-0057-report-rule-engine-redesign.html">26-11-01-0057</a>(唯一事实源)为底,承认「无链」的任务/事件执行模型:两键退场走<b>配置升级路线</b>(D1)——载入检测到 <code>stop_following_rules_if</code>/<code>ignore_next_action_error</code> 即把该规则转为<b>未启用</b>并出 warning(webui 可见),原内容保留供改写,不做运行时兼容;分期引入新原语:per-step <code>on_error</code>(W2)、条件组合树 + <code>choose</code> 块(D3 转正,W3)、per-run trace 与 <code>evaluation</code> 枚举位(W4)、单一 registry(W5);<code>mode</code> 与具名状态按 D6 <b>移出本期</b>(设计说明保留,见 §03.4)。<code>config.yml</code> 零改加载与 <code>exec_history</code> 兼容是全程硬约束,实施范围 W1–W5 全序列(D7),每期独立可交付可回退;webui 是主配置面,编辑控件随期同步(D8)。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-01-0106 · <b>doc-updated</b> 26-11-01-0216 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-01-0106 · <b>doc-updated</b> 26-11-01-2352 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 调研报告 26-11-01-0057 定稿后的方案轮(现状 G1–G13 与成熟系统调研均以报告为唯一事实源,本方案不重新调研);动机源头 issue 26-10-31-1304 <code>rules-stop-following-dead</code> + issue 26-10-01-2211(两键语义重梳);现状基线 <code>c32a0bdc</code>,compat 面另对工作区 config.yml 做了只读键名核对
 </div>
 
@@ -315,6 +315,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-01-0106</span> 初版:基于调研报告 26-11-01-0057(G1–G13 + 8 原语候选)产出重设计方案;设计主轴「承认无链」;compat 硬约束落为载入规范化单点;分期 W1–W5(死语义→错误策略→组合树/choose→引擎参数/状态/trace→registry);待拍板 D1–D6。生产 config.yml 只读键名核对补记:<b>5 条规则</b>(报告记 4,<code>r_rule</code> 现场在列),两死键生产未使用。</li>
   <li><span class="tag">R1 · 26-11-01-0216</span> 拍板定稿为 R1 改版:grilling 轮 D1-D8 + 红队 R1-R8 全部落稿——两键退场改配置升级路线(载入转未启用+warning,webui 提示面,不做运行时兼容)、choose 转正 W3、evaluation 只留枚举位、trace 按(规则×种子)维度环形 3-5 条+1MiB 体积红线、mode/具名状态移出本期(设计说明存 §03.4)、W5 补导入方向二选一与 G9 表述修正、兼容表 4 处修订(_strip_none 注记/逐条件映射表/校验前定位回映射/命名复合形透传)、W2 retry 改任务级 requeue、normalize 钉 W2、§05 清空迁 §06</li>
+  <li><span class="tag">R2 · 26-11-01-2358</span> <b>实施完成,计划翻 Done</b>:W1-W5 全序列落地(9 笔提交 eac5cdf6..c6f57c5c,拆小任务派子智能体分阶段实施,每期独立 commit+基线切片),W5 导入方向拍板 (a)(schema 留 config.schema + 延迟访问器);test.full 4346→4420 passed 全程绿,期基线切片 5 份(最新 26-11-01-0752-rule-engine-w5-registry,见 kb.baseline);兼容硬约束全程成立(生产 5 条规则 normalize 快照零差异 / config.yml 零改 / exec_history 去重键口径不动);真机收口:RM03 漂移复测轮 17/17 全绿(W1-W5 新面 5 条 + checking 收口,基线 6aa4b4d7)+ RM09-11 choose 保存通道四腿 + W1-B 徽标 L0 目视补测兑现(锚件 26-10-31-0641 记账);计划外入池 2 件(26-11-01-0800 docs pending 态漂移已由 c2ccdbe0 修复 / test_yamls 外键——目录已随 91a6c66d 整体退役自然了结);W1 验收② dry-run 当时因本机 qB 未运行环境受限,载入层路径已由 RM03-09/14 真机覆盖</li>
 </ul>
 
 </div>

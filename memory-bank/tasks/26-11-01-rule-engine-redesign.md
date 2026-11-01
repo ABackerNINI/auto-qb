@@ -1,9 +1,9 @@
 # 26-11-01-rule-engine-redesign — 规则引擎重设计与重设计方案
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-01
 **Updated:** 2026-11-01
-**Summary:** 规则引擎重设计:现状取证(G1-G13 缺口,stop 六档死配置/伪动作异味)→ 成熟方案调研(Drools/OPA/CEL/json-rules-engine/easy-rules/Zapier/ECA/HA,8 原语)→ 调研报告 26-11-01-0057 → 方案 26-11-01-0106(R0→grilling 拍板 D1-D8 + 红队 R1-R8 修订 → R1 定稿);实施 W1-W5 待开工
+**Summary:** 规则引擎重设计:现状取证(G1-G13)→ 调研报告 26-11-01-0057 → 方案 26-11-01-0106(R1 定稿,D1-D8 拍板)→ W1-W5 全序列实施完成(9 笔提交,test.full 4420 passed,5 份期基线切片)→ 真机收口(RM03 漂移轮 17/17 全绿 + RM09-11 choose 保存通道 + W1-B 徽标 L0 目视兑现);计划与档案均 Done
 **Topics:** rule-engine-redesign
 **Refs:** memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html, memory-bank/plans/26-11-01-0106-plan-rule-engine-redesign.html
 
@@ -36,11 +36,11 @@
 | S5 | 红队 grilling 拷打(R1-R8 修订清单) | Done(2026-11-01) |
 | S6 | 用户 grilling 拍板(D1-D8 共识) | Done(2026-11-01) |
 | S7 | 方案 R1 定稿(kb.bump,守卫全绿) | Done(2026-11-01) |
-| S8 | W1 两键退场(升级路线) | Open |
-| S9 | W2 on_error 错误策略+normalize 落地 | Open |
-| S10 | W3 组合树+choose+webui 编辑器 | Open |
-| S11 | W4 per-run trace+evaluation 枚举位 | Open |
-| S12 | W5 单一 registry 收口 | Open |
+| S8 | W1 两键退场(升级路线:载入转未启用+verdict 收口+webui 徽标) | Done(2026-11-01,eac5cdf6+740ecf74) |
+| S9 | W2 on_error 三档+retry requeue+normalize_legacy_rule 单点 | Done(2026-11-01,b98005cd+5e4c5e30) |
+| S10 | W3 组合树 all/any/not+choose+webui 编辑器(保存写规范形) | Done(2026-11-01,f0fc2040+10c71ea8) |
+| S11 | W4 trace(规则×种子环形)+evaluation 枚举占坑 | Done(2026-11-01,2f5b66ca) |
+| S12 | W5 单一 registry 收口(方向 a,双跑 diff 清零) | Done(2026-11-01,779ec8fc+c6f57c5c) |
 
 ## 进度日志
 
@@ -49,3 +49,10 @@
 调研与方案轮完成:报告 26-11-01-0057(出厂即 Done)+ 方案 26-11-01-0106(R0→R1 定稿,doc-status Open 待实施);D1-D8 全部拍板;实施 S8-S12 待开工。本轮未动代码,未跑 test.full(无基线切片)。cap 债务 8 项存量已转告(doc.caps 现算为准)。
 
 - 2026-11-01 02:19 调研与方案轮完成: 报告 26-11-01-0057 定稿 + 方案 26-11-01-0106 R1 定稿(D1-D8 拍板), 实施 W1-W5 待开工
+
+### R1 · 实施完成 (2026-11-01)
+
+W1-W5 全序列实施完成并真机收口,档案翻 Done。
+
+- 2026-11-01 06:33 W1-W5 实施落地:9 笔提交(eac5cdf6→c6f57c5c,拆 9 个小任务派子智能体依次实施,每期独立 commit+test.full 全绿+期基线切片共 5 份,最新 26-11-01-0752-rule-engine-w5-registry);test.full 4346→4420 passed;W5 导入方向拍板 (a);兼容硬约束全程成立(生产 5 条规则快照零差异/config.yml 零改/exec_history 键口径不动);计划外入池 2 件(26-11-01-0800×2)
+- 2026-11-01 23:55 真机收口:RM03 漂移复测轮 17/17 全绿(W1-W5 新面 5 条+checking 收口,基线 6aa4b4d7)+ RM09-11 choose 保存通道四腿 11/11;W1-B「webui 未启用徽标」L0 目视挂账由本会话补测兑现(锚件 26-10-31-0641 记账:徽标/伪动作标记/卡脚等价写法/对照卡四面目视全过);计划 26-11-01-0106 翻 Done(R2),activeContext 过期切片迁出

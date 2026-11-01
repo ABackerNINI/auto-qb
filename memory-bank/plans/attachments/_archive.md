@@ -10,21 +10,21 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (8)
+## Open (7)
 
 - [26-11-01-2212] [RM09 WebUI 写侧 漂移复测轮排期计划](../26-11-01-2212-plan-real-rm09-drift.html) — `real-rm09-drift`
 - [26-11-01-2123] [RM08 WebUI 读侧 漂移复测轮排期计划](../26-11-01-2123-plan-real-rm08-drift.html) — `real-rm08-drift`
 - [26-11-01-2033] [RM04 辅种与分组 漂移复测轮排期计划](../26-11-01-2033-plan-real-machine-rm04-drift-plan.html) — `real-machine-rm04-drift-plan`
 - [26-11-01-1921] [RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)](../26-11-01-1921-plan-real-machine-rm02-drift-plan.html) — `real-machine-rm02-drift-plan`
 - [26-11-01-1031] [RM03 规则引擎 · 真机实测分步计划(漂移复测轮)](../26-11-01-1031-plan-real-machine-rm03-drift-plan.html) — `real-machine-rm03-drift-plan`
-- [26-11-01-0106] [规则引擎重设计方案](../26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2316] [WEBUI 动效皮肤 flux 分步实施计划](../26-10-31-2316-plan-webui-fx-skin.html) — `webui-fx-skin`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (182)
+## Done (183)
 
 - [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](../26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0434] [提交闸门按改动收窄优化](../26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
+- [26-11-01-0106] [规则引擎重设计方案](../26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
 - [26-10-31-2354] [reannounce 确认跟踪改消解等待模型:废除在途直证,成功凭 working/前跳正证据](../26-10-31-2354-plan-webui-write-side.html) — `webui-write-side`
 - [26-10-31-1922] [RM10 通知·外部集成 · 真机实测分步计划](../26-10-31-1922-plan-real-rm10.html) — `real-machine-rm10-plan`
 - [26-10-31-1754] [RM08 WebUI 读侧 · 真机实测分步计划](../26-10-31-1754-plan-real-rm08.html) — `real-machine-rm08-plan`
