@@ -19,10 +19,17 @@ git -C <mirror> fetch -q origin develop && git -C <mirror> checkout -q -f -B dev
 cd <mirror> && uv sync -q
 cd <mirror> && test -x .venv/bin/mutmut || uv pip install -q mutmut==3.8.0
 cd <mirror> && rm -rf mutants mutmut-cache.db
-cd <mirror> && .venv/bin/python .commands/mutants/scripts/set_conf.py --target '<glob>' --pool <files...>
+cd <mirror> && .venv/bin/python .commands/mutants/scripts/set_conf.py --target '<glob>' --timeout-multiplier 15 --pool <files...>
 cd <mirror> && .venv/bin/mutmut run --max-children 4
 cd <mirror> && .venv/bin/mutmut results
 ```
+
+**轮次参数与账本**(2026-11-02, issue `26-11-01-0614` 两件): `set_conf.py` 是**覆盖式重写** `[tool.mutmut]`,
+所以 `timeout_multiplier` 必须由它显式写(默认 15.0 = mutmut 自身默认; W5/W6 只在镜像里手工加 `= 2`,
+下一次 `run` 就被静默抹掉 ⇒ 超时口径不可复现、TIMEOUT 数无法归因)。`mutants.run --timeout-multiplier X`
+可按轮次覆盖; 结果文件头部同时记 `# run <时间> target=... children=... timeout_multiplier=...`,
+`# pool <n>: <文件...>`, `# mirror head=... mutmut=<版本>` —— no-tests 是**池的函数**、TIMEOUT 是
+**超时倍数的函数**, 账本缺这两项就无法把残留条数归因到「哪一轮的哪套口径」。
 
 ```text
 # 主线后半段 —— mutants.report / mutants.verify 展开成这几步

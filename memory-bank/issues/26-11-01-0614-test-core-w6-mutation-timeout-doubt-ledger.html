@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0614">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0233-mutation-audit-w6-residue.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ W6 终态残留记账: 超时盲区 16 条(qbmanager 15 + exporter 1, 含 4 条 TypeError 空转环复跑改判预期)+ 存疑 6 条 §H 清单">
 <meta name="issue-summary" content="W6 守阵覆盖 329/332 后的残留留账: 超时盲区 16(并发面工具盲区, 复跑前不硬判)+ 存疑 6(§H 形态级手搓复验候选), 检索留档非排期承诺">
 <title>core/ W6 终态残留记账: 超时盲区 16 条(qbmanager 15 + exporter 1, 含 4 条 TypeError 空转环复跑改判预期)+ 存疑 6 条 §H 清单 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0614-test-core-w6-mutation-timeout-doubt-ledger</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 06:14</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -112,7 +112,33 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 06:14 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 02:17 — 用户指派认领（与 <code>26-11-01-0614-test-core-w6-mutation-notests-offpool</code> 合并处理），状态 <strong>In Progress</strong>；认领方任务档案 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code>（R37）</li>
+      <li>2026-11-02 02:28 — 复验完成、修法落地并置 <strong>Done</strong>（4 条 TypeError 变异双池复现真死循环；补齐「轮次参数账本」使 TIMEOUT 的超时口径可复现，不改 <code>src/</code>、不改池，详见 §05/§06）</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>复验结论<span class="opt">（2026-11-02）</span></h2>
+    <p><strong>4 条 TypeError 空转环：双池复现，确认为真死循环（工具未判定，不声称杀死）。</strong>形态级探针逐条注入、硬超时 120s、<code>finally</code> 还原原字节，W6 池（10 文件）与 WIDE 池（W6 + test_hr_status / test_hr_server / test_hr_runtime / test_tray / test_ui）各跑一遍：</p>
+    <ul>
+      <li>基线：W6 池 <code>rc=0, 25.13s, 257 passed</code>；WIDE 池 <code>rc=0, 52.47s, 506 passed, 1 skipped</code>（两池基线均绿）。</li>
+      <li>run_91（<code>getattr(self.web, None, None)</code>）/ run_92（<code>getattr("truth_pending", None)</code>）/ run_93（<code>getattr(self.web, None)</code>）/ run_111（<code>self._tick(force=cmd_forced)</code> 缺位置参）：<strong>8/8 测量均 <code>rc=124 @120.0s</code></strong>，W6 与 WIDE 池结果完全同形。</li>
+      <li>机制：4 条变异都让 run 主循环抛 <code>TypeError</code>，被 <code>except Exception</code> 吞掉并把节拍推到未来 → 用例等待条件永不满足 → 工具只能等到超时。<strong>与池口径无关（两池同超时）</strong>，属「异常吞没型空转环」而非并发面盲区。</li>
+    </ul>
+    <p><strong>其余 12+1 条</strong>（run_16 / run_22 / run_197 / _wait_next_2 / _wait_next_12 无限阻塞；_wait_next_8 / run_78 / run_80 / run_81 / run_84 忙转；run_20 or→and 重试环；exporter <code>gen_tracker_name_15</code> 唯一名 while 环）<strong>维持未判定</strong>——本轮未逐条重跑，不作为「已确认死循环」或「已杀」写账。</p>
+    <p><strong>§H 存疑 6 条维持原判</strong>：均为<strong>疑似等价 / 现网零观测</strong>（身份判据 falsy 同形、需构造 MappedFileAccess、console-only 配置、web 侧兜底、handler 尚未读 payload、浮点恰等边界）。<strong>不声称等价已被证明</strong>，仅保留「未来形态变化可证伪」的触发条件。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>修复后补充<span class="opt">（修法 / 验证 / 遗留）</span></h2>
+    <p><strong>实际修法（与 issue 1 共用一件，不改 <code>src/</code>、不改池）</strong>：问题不是「16 条该不该杀」，而是 <strong>TIMEOUT 数是超时倍数的函数，而本轮的超时倍数没有随结果留痕</strong>——W5/W6 镜像里手工加的 <code>timeout_multiplier = 2</code> 会在每次覆盖式重写 <code>[tool.mutmut]</code> 时被静默抹掉，下一轮既无法判断 120s 是 mutmut 默认 15× 还是 2×，也无法与 W6 的 TIMEOUT 计数比对。故：</p>
+    <ul>
+      <li><code>.commands/mutants/scripts/set_conf.py</code>：<code>timeout_multiplier</code> 显式写入 <code>[tool.mutmut]</code>（默认 <code>15.0</code>），新增 <code>--timeout-multiplier</code> 按轮次覆盖；</li>
+      <li><code>.commands/mutants/scripts/mutants.py</code>：<code>run</code> 校验并透传 <code>--timeout-multiplier</code>，结果文件头记录 <code>target / children / timeout_multiplier / pool / 镜像 HEAD / mutmut 版本</code>；</li>
+      <li><strong>不改主循环异常吞没</strong>：<code>qbmanager.run</code> 的 <code>except Exception</code> 是产品容错行为，改成「不吞」属产品变更，超出本 issue 范围；变异测试只记录不判定。</li>
+    </ul>
+    <p><strong>验证（实测）</strong>：<code>commands run test.pkg.scoped</code> → <code>[ok] test.pkg.scoped (4.9s)</code>，包内 <code>24 passed in 3.77s</code>（含 4 条 <code>set_conf</code> 渲染 + 2 条账本头断言）；<code>mutants.py run --dry-run --timeout-multiplier 2</code> 确认透传与 <code>[5/6]</code> 行含 <code>timeout_multiplier=2</code>；<code>commands run kb.index</code> → <code>[ok] kb.index (0.6s)</code>；形态级探针 8/8 <code>rc=124 @120s</code>（见 §05）。未重跑 W6 整轮。</p>
+    <p><strong>遗留</strong>：① 16 条 TIMEOUT 本体维持「未判定」，本轮<strong>不声称杀死任何一条</strong>；② 4 条 TypeError 只有在主循环容错策略被改（或后续轮采用更短超时倍数）时才可能改判；③ §H 6 条存疑维持疑似等价，待形态变化证伪（如 rules handler 开始读 payload）再回改真洞；④ 下一轮同池复跑时按账本头的 <code>timeout_multiplier</code> 能否对齐，本身即是本修法的验收点。</p>
   </section>
 
   <footer>

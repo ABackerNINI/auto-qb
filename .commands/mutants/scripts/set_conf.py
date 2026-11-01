@@ -6,7 +6,8 @@
 用法::
 
     python set_conf.py --target '**/config/*.py' --pool tests/test_config.py [tests/...] \
-        [--pyproject pyproject.toml] [--also-copy a b c] [--deselect x y] [--print]
+        [--pyproject pyproject.toml] [--also-copy a b c] [--deselect x y] \
+        [--timeout-multiplier 15.0] [--print]
 
 设计要点(逐条对应可行性报告 26-10-08-0231 §10 的坑; 改这里之前先读那份):
 
@@ -16,6 +17,9 @@
   以及**文本层守阵**的 ``--deselect``: mutmut 把变异体写进同一份文件, 凡「读源码文本做断言」的守阵
   在基线就红, 整轮直接中断(实测两条, 见 ``DEFAULT_DESELECT``; 它们会随测试文件拆分漂移, 报错时先核这里)。
 - ``process_isolation = "forkserver"`` —— 默认 ``fork`` 会让注册表类守阵假红。
+- ``timeout_multiplier`` **必须显式写**(默认值 = mutmut 自身默认 15.0): 此前只在镜像里手工改
+  (W5/W6 的 ``= 2``), 每次本脚本覆盖式重写都会静默抹掉, 于是「这一轮的超时口径」不可复现、
+  TIMEOUT 数无法归因。``--timeout-multiplier`` 可覆盖(轮次宽/紧各档都要留痕)。
 - ``also_copy`` 默认按镜像仓**顶层目录推导**(排除 vcs / 依赖 / 生成物), 漏一个基线就红;
   要精确控制用 ``--also-copy`` 覆盖(空串表示不写该键)。
 """
@@ -71,6 +75,11 @@ DENY = {
 
 HEADER = "[tool.mutmut]"
 
+#: 变异体超时倍数(mutmut: 相对「基线单测墙时」的倍数, 工具自身默认 15.0)。**显式写进 [tool.mutmut]**:
+#  只在镜像里手工加的值会在下一次覆盖式重写时被静默抹掉(W5/W6 的 `timeout_multiplier = 2` 实证),
+#  于是轮次参数不可复现、TIMEOUT 数无法归因。--timeout-multiplier 可按轮次覆盖, 但每次都会留痕。
+DEFAULT_TIMEOUT_MULTIPLIER = 15.0
+
 
 def strip_section(text: str, header: str = HEADER) -> str:
     """删掉 ``[tool.mutmut]`` 整段(含其下所有键), 保留其余内容与空行结构。"""
@@ -104,7 +113,13 @@ def derive_also_copy(root: Path) -> list[str]:
     return names
 
 
-def render(target: str, pool: list[str], also_copy: list[str], deselect: list[str]) -> str:
+def render(
+    target: str,
+    pool: list[str],
+    also_copy: list[str],
+    deselect: list[str],
+    timeout_multiplier: float = DEFAULT_TIMEOUT_MULTIPLIER
+) -> str:
     def arr(items: list[str]) -> str:
         return "[" + ", ".join('"' + i + '"' for i in items) + "]"
 
@@ -115,6 +130,7 @@ def render(target: str, pool: list[str], also_copy: list[str], deselect: list[st
         HEADER,
         'source_paths = ["src"]',
         f"only_mutate = {arr([target])}",
+        f"timeout_multiplier = {timeout_multiplier:g}",
         f"pytest_add_cli_args = {arr(cli)}",
         'process_isolation = "forkserver"',
         "use_git_change_detection = false",
@@ -133,11 +149,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pyproject", default="pyproject.toml", help="要改写的 pyproject.toml(默认当前目录)")
     p.add_argument("--also-copy", nargs="*", default=None, help="覆盖 also_copy(留空串=不写该键); 不传则按顶层目录推导")
     p.add_argument("--deselect", nargs="*", default=list(DEFAULT_DESELECT), help="文本层守阵(留空串=不 deselect)")
+    p.add_argument(
+        "--timeout-multiplier",
+        type=float,
+        default=DEFAULT_TIMEOUT_MULTIPLIER,
+        help=f"变异体超时倍数(默认 {DEFAULT_TIMEOUT_MULTIPLIER:g}, 与 mutmut 默认一致; 显式写入才算轮次参数可复现)"
+    )
     p.add_argument("--print", dest="to_stdout", action="store_true", help="只打印新段, 不落盘(自证用)")
     args = p.parse_args(argv)
 
     if not args.target.strip():
         sys.stderr.write("[FAIL] --target 不能为空\n")
+        return 2
+    if args.timeout_multiplier <= 0:
+        sys.stderr.write(f"[FAIL] --timeout-multiplier 必须 > 0(收到 {args.timeout_multiplier:g})\n")
         return 2
     for f in args.pool:
         if not (Path(f).suffix == ".py" or "::" in f or Path(f).is_dir()):
@@ -147,7 +172,7 @@ def main(argv: list[str] | None = None) -> int:
     root = path.resolve().parent
     also_copy = derive_also_copy(root) if args.also_copy is None else [x for x in args.also_copy if x]
     deselect = [x for x in args.deselect if x]
-    section = render(args.target, args.pool, also_copy, deselect)
+    section = render(args.target, args.pool, also_copy, deselect, args.timeout_multiplier)
 
     if args.to_stdout:
         sys.stdout.write(section)

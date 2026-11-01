@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0614">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0233-mutation-audit-w6-residue.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数">
 <meta name="issue-summary" content="W6(R30) S2 实测 qbapi 147 + qbmanager 10 no-tests: S1 函数面核对定性为池外触达登记非缺口单, 零扩池(W8/W9 轮自然覆盖 qbapi 面, 后续轮仍不覆盖再议扩池)">
 <title>core/ W6 no-tests 面 157 条登记: 全部为池外触达(webui commands getattr 动态派发/routes/transfer adapters/W8-W9 模块池), 零真正零触达函数 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0614-test-core-w6-mutation-notests-offpool</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 06:14</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -163,11 +163,32 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 06:14 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 02:17 — 用户指派认领（与 <code>26-11-01-0614-test-core-w6-mutation-timeout-doubt-ledger</code> 合并处理），状态 <strong>In Progress</strong>；认领方任务档案 <code>memory-bank/tasks/26-10-08-test-mutation-audit.md</code>（R37）</li>
+      <li>2026-11-02 02:26 — 复验完成、修法落地并置 <strong>Done</strong>（不扩池、不改 <code>src/</code>；补齐「轮次参数账本」，使 no-tests 的池口径与 timeout 的超时口径可复现可归因，详见下两节）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-02 02:20 — <strong>结论仍成立</strong>：157 条 no-tests 全部为池外触达，真正零触达函数为 0。按现行代码逐面核对，修正三处归因（原件归因过粗 / 行号已漂移）：</p>
+    <table>
+      <tr><th>面</th><th>原记触达</th><th>复验后触达（现行代码）</th></tr>
+      <tr><td><code>qbmanager.status_snapshot</code> ×8</td><td>test_hr_status / test_hr_server / test_hr_runtime / test_tray / test_ui</td><td>精确到 <code>tests/test_ui.py:155,162</code> 的 <code>mgr.status_snapshot()</code>；同目录 hr 三文件的 <code>status_snapshot</code> 是 hr 自身快照，不触达本方法</td></tr>
+      <tr><td><code>qbmanager.reconnect</code> ×2</td><td>同上一组</td><td><code>tests/test_modules_p5.py:483,484</code> 的 <code>rules.rebuild_runtime()</code> 尾段 <code>self._manager.reconnect()</code>（<code>src/auto_qb/core/modules/rules_mod.py:233</code>，测试把 <code>mgr.connect</code> mock 掉）</td></tr>
+      <tr><td><code>qbapi._invalidate_torrent_trackers</code> ×5</td><td>webui commands getattr 动态派发</td><td><code>tests/test_web_commands.py:1139-1141</code> 的 <code>add_trackers</code> 命令 → 断言 <code>rec._trackers_info is None</code>（「add_trackers 应失效惰性缓存」）；确属池外非零触达</td></tr>
+    </table>
+    <ul>
+      <li>getattr 动态派发区已漂移：现址 <code>src/auto_qb/webui/commands.py:525 / 534 / 539 / 544 / 549 / 1015</code>（原记 <code>522-546</code>）；用符号 + grep 重新定位，行号只作加速项。</li>
+      <li><code>qbapi.torrents_set_share_limits</code> 的 no-tests 面已被 <strong>2026-11-02 新增</strong>的 <code>tests/test_qbapi_wire.py:79-85</code>（<code>test_facade_set_share_limits_wire_carries_share_limit_action</code>，经 <code>QbApi(client, None)</code> facade 出口）覆盖 → 该面已进池，下一轮同池复跑应转 killed。<strong>本轮不重跑整轮，故不声称已杀。</strong>同文件 44/62 两条（2026-10-31 已在池）只直调 raw client，不触达 facade 方法，不能算作该面的覆盖。</li>
+      <li>其余面（webui routes 3 / transfer adapters 1 / relocate_mod 2 / speed_curve_mod 2 / qbapi 写操作 19）维持池外触达定性，未逐条重跑。</li>
+    </ul>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（与建议修法一致：不扩池、不改码）</strong>——问题不在池本身，而在「轮次参数没有随结果留痕」，导致 no-tests（池的函数）与 TIMEOUT（超时倍数的函数）两轮都不可归因。因此只在命令包补齐记账，不改 <code>src/</code>、不改池：</p>
+    <ul>
+      <li><code>.commands/mutants/scripts/set_conf.py</code>：把 <code>timeout_multiplier</code> <strong>显式写进 <code>[tool.mutmut]</code></strong>（默认 <code>15.0</code>，与 mutmut 自身默认一致），并新增 <code>--timeout-multiplier</code> 可按键覆盖；理由：W5/W6 镜像里手工加的 <code>timeout_multiplier = 2</code> 会在每次覆盖式重写 <code>[tool.mutmut]</code> 时被<strong>静默抹掉</strong>，轮次超时口径不可复现。</li>
+      <li><code>.commands/mutants/scripts/mutants.py</code>：<code>run</code> 新增 <code>--timeout-multiplier</code> 校验并透传；结果文件头部写入账本行 <code>target / children / timeout_multiplier / pool 文件清单 / 镜像 HEAD / mutmut 版本</code>，开跑与回看都能确认本轮「可比参数」。</li>
+      <li>池口径维持 W6 原样（不把 webui / transfer / W8-W9 / hr-tray-ui 池并进来）：并池会改掉本轮的可比性，且这些面本来就按轮次自然覆盖。</li>
+      <li>配套：<code>.commands/mutants/config.toml</code> 命令说明与 <code>references/why.md</code> 补「轮次参数与账本」段；<code>scripts/test_mutants.py</code> 补 4 条 <code>set_conf</code> 渲染断言 + 2 条账本头断言。</li>
+    </ul>
+    <p><strong>验证（实测）</strong>：<code>commands run test.pkg.scoped</code> 跑 <code>.commands/mutants</code> 包测试 → <code>[ok] test.pkg.scoped (4.9s)</code>，包内 <code>24 passed in 3.77s</code>；<code>mutants.py run --dry-run --timeout-multiplier 2</code> 输出确认 <code>--timeout-multiplier 2</code> 已透传且 <code>[5/6]</code> 行含 <code>timeout_multiplier=2</code>；<code>commands run kb.index</code> → <code>[ok] kb.index (0.6s)</code>。本轮未重跑 W6 整轮（避免与「不做整轮回归」的收口口径冲突）。</p>
+    <p><strong>遗留</strong>：① 157 条池外触达面按轮次自然覆盖，本件不承诺扩池；② <code>torrents_set_share_limits</code> 待下一轮 W6 同池复跑确认转 killed（现仅确认 <code>test_qbapi_wire.py:79-85</code> 的 facade 用例已进池，不声称已杀）；③ 其余池外触达面（webui routes / transfer adapters / relocate / speed_curve）未逐条重跑，归因沿用原件。</p>
   </section>
 
   <footer>

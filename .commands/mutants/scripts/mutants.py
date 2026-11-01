@@ -3,7 +3,8 @@
 用法::
 
     python mutants.py setup     [--distro D] [--mirror P] [--branch B] [--no-sync] [--dry-run]
-    python mutants.py run       --target G [--pool F ...] [--children N] [--no-refresh] [--dry-run]
+    python mutants.py run       --target G [--pool F ...] [--children N] [--timeout-multiplier X]
+                                [--no-refresh] [--dry-run]
     python mutants.py report    [--target G] [--status S,S] [--limit N] [--out DIR] [--dry-run]
     python mutants.py verify    (--from-report F | --ids-file F) [--workers N] [--no-refresh]
                                 [--suite-timeout S] [--recompute-baseline] [--fresh] [--dry-run]
@@ -45,11 +46,16 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import set_conf  # noqa: E402  (同目录渲染器: timeout_multiplier 的单点默认值)
+
 DEFAULT_DISTRO = "Ubuntu-26.04"
 DEFAULT_MIRROR = "~/auto-qb-mut"
 DEFAULT_BRANCH = "develop"
 MUTMUT_VERSION = "3.8.0"
 GREMLINS_VERSION = "1.11.2"
+DEFAULT_TIMEOUT_MULTIPLIER = set_conf.DEFAULT_TIMEOUT_MULTIPLIER  # 与 mutmut 自身默认一致
 DEFAULT_CHILDREN = 4  # WSL 只有 8 核(.wslconfig), 拉满会打挂
 DEFAULT_WORKERS = 8
 DEFAULT_SUITE_TIMEOUT = 1200  # 单次全套件硬截止; 变异体可能死循环, 没有它会把整条 verify 挂死
@@ -233,6 +239,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
+    if args.timeout_multiplier <= 0:
+        raise Fail(f"--timeout-multiplier 必须 > 0(收到 {args.timeout_multiplier:g})")
     _ensure_mirror(args.distro, args.mirror, args.branch, refresh=not args.no_refresh, no_sync=args.no_sync)
     _ensure_tool(args.distro, args.mirror)
     mq = _bq(args.mirror)
@@ -242,11 +250,12 @@ def cmd_run(args: argparse.Namespace) -> int:
     # 清缓存: 目标/池一变, 旧 mutants/ 会让 mutmut 保留旧结果并「0 files mutated」提前收工(实测)
     _say("[4/6] 清 mutants/ 与 mutmut-cache.db")
     _wsl(args.distro, f"cd {mq} && rm -rf mutants mutmut-cache.db")
-    _say("[5/6] 写 [tool.mutmut] (目标 / 池 / forkserver / deselect)")
+    _say(f"[5/6] 写 [tool.mutmut] (目标 / 池 / forkserver / deselect / timeout_multiplier={args.timeout_multiplier:g})")
     pool = " ".join(_bq(p) for p in args.pool)
     _wsl(
         args.distro, f"cd {mq} && .venv/bin/python .commands/mutants/scripts/set_conf.py "
-        f"--target {_bq(args.target)}" + (f" --pool {pool}" if args.pool else "")
+        f"--target {_bq(args.target)} --timeout-multiplier {args.timeout_multiplier:g}" +
+        (f" --pool {pool}" if args.pool else "")
     )
     _say(f"[6/6] mutmut run --max-children {args.children}")
     proc = _wsl(args.distro, f"cd {mq} && .venv/bin/mutmut run --max-children {args.children}", check=False)
@@ -263,6 +272,31 @@ def cmd_run(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_header(
+    target: str,
+    pool: list[str],
+    children: int,
+    timeout_multiplier: float,
+    head: str,
+    version: str,
+    *,
+    when: str | None = None
+) -> str:
+    """结果文件的账本头 —— 本轮「可比参数」缺一项, 下一轮的数字就不可比。
+
+    no-tests 是**池的函数**、TIMEOUT 是**超时倍数的函数**(W6 两件 issue 的共性): 不把 target / 池 /
+    并行度 / timeout_multiplier / 镜像 HEAD / 工具版本 记下来, 残留条数就无法归因到「哪一轮的哪套口径」。
+    头部行以 `#` 开头, 与 `@@@ id :: status` 的明细格式互不干扰。
+    """
+    stamp = when or datetime.now().strftime("%Y-%m-%d %H:%M")
+    pool_line = " ".join(pool) if pool else "(全 tests - 不推荐)"
+    return (
+        f"# run {stamp} target={target} children={children} timeout_multiplier={timeout_multiplier:g}\n"
+        f"# pool {len(pool)}: {pool_line}\n"
+        f"# mirror head={head} mutmut={version}\n"
+    )
+
+
 def _write_results(args: argparse.Namespace) -> None:
     proc = _wsl(args.distro, f"cd {_bq(args.mirror)} && .venv/bin/mutmut results", check=False)
     text = proc.stdout.strip()
@@ -270,12 +304,18 @@ def _write_results(args: argparse.Namespace) -> None:
     if _DRY:
         _say(f"[结果] (dry-run 未取) 预计未杀死 {n} 条")
         return
+    head = _wsl(args.distro, f"cd {_bq(args.mirror)} && git rev-parse --short HEAD", check=False).stdout.strip()
+    version = _wsl(args.distro, f"cd {_bq(args.mirror)} && .venv/bin/mutmut --version", check=False).stdout.strip()
+    header = _run_header(
+        args.target, args.pool, args.children, args.timeout_multiplier, head or "unknown", version or "unknown"
+    )
     stamp = datetime.now().strftime("%y-%m-%d-%H%M")
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     path = out / f"{stamp}-{_slug(args.target)}-results.txt"
-    path.write_text(text + "\n", encoding="utf-8")
+    path.write_text(header + text + "\n", encoding="utf-8")
     _say(f"[结果] 未杀死(存活+超时) {n} 条 -> {path}")
+    _say(f"[账本] {header.splitlines()[0]}")
     for line in text.splitlines()[:HEAD_LINES]:
         _say(line)
     if n > HEAD_LINES:
@@ -627,6 +667,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pool", nargs="*", default=[], help="测试选择池(定向的几个文件; 别用全 tests)")
     p.add_argument(
         "--children", type=int, default=DEFAULT_CHILDREN, help=f"mutmut --max-children(默认 {DEFAULT_CHILDREN})"
+    )
+    p.add_argument(
+        "--timeout-multiplier",
+        type=float,
+        default=DEFAULT_TIMEOUT_MULTIPLIER,
+        help=f"run: 变异体超时倍数(默认 {DEFAULT_TIMEOUT_MULTIPLIER:g}, 与 mutmut 默认一致); 写进 [tool.mutmut] 并记进结果文件头"
     )
     p.add_argument(
         "--workers",

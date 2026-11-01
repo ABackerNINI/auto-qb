@@ -13,6 +13,8 @@
 - VerdictTest          基线常红 + 无新增失败 ⇒ SURVIVED(本条就是原 bug); 有新增失败 ⇒ KILLED;
                        APPLYFAIL / rc=124 / 无汇总 三种「未判定」不得落进 SURVIVED
 - SuiteCmdTest         全套件命令不得带 `-x`(会停在既有失败上), 且必须带 `-B` + 禁写字节码
+- SetConfRenderTest    timeout_multiplier 显式写进 [tool.mutmut](默认=mutmut 默认); 覆盖式重写不残留旧值; 非正值拒绝
+- RunHeaderTest        结果文件账本头记录 target/池/并行度/timeout_multiplier/镜像HEAD/工具版本, 不与 @@@ 明细格式冲突
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import mutants  # noqa: E402
+import set_conf  # noqa: E402
 
 #: 历史上本机 Linux 侧的真实基线(3 条平台失败, 现已修绿) —— 保留当夹具, 代表任意「红基线」
 LINUX_BASELINE = {
@@ -145,6 +148,51 @@ class SuiteCmdTest(unittest.TestCase):
         cmd = mutants._suite_cmd(0, 60, "tests/a.py::test_x")
         self.assertIn("pytest tests/a.py::test_x ", cmd)
         self.assertIn("-n 0", cmd)
+
+
+class SetConfRenderTest(unittest.TestCase):
+    def test_timeout_multiplier_is_written_explicitly(self):
+        """只在镜像里手工加过的值会被覆盖式重写抹掉(W5/W6 实证) ⇒ 必须由渲染器显式产出。"""
+        text = set_conf.render("**/core/*.py", ["tests/test_a.py"], ["data"], ["tests/b.py::test_x"], 2)
+        self.assertIn("timeout_multiplier = 2\n", text)
+        self.assertIn('process_isolation = "forkserver"', text)
+        self.assertIn("pytest_add_cli_args_test_selection = [\"tests/test_a.py\"]", text)
+        self.assertIn("--deselect\", \"tests/b.py::test_x\"", text)
+
+    def test_default_matches_mutmut_default(self):
+        self.assertEqual(set_conf.DEFAULT_TIMEOUT_MULTIPLIER, 15.0)
+        self.assertIn("timeout_multiplier = 15\n", set_conf.render("x", [], [], []))
+
+    def test_rewrite_leaves_no_stale_multiplier(self):
+        old = '[tool.mutmut]\ntimeout_multiplier = 2\nonly_mutate = ["x"]\n'
+        new = set_conf.strip_section(old) + "\n" + set_conf.render("y", [], [], [], 7.5)
+        self.assertEqual(new.count("timeout_multiplier"), 1)
+        self.assertIn("timeout_multiplier = 7.5\n", new)
+
+    def test_non_positive_multiplier_is_rejected(self):
+        self.assertEqual(set_conf.main(["--target", "x", "--timeout-multiplier", "0", "--print"]), 2)
+
+
+class RunHeaderTest(unittest.TestCase):
+    def test_header_records_comparable_parameters(self):
+        header = mutants._run_header(
+            "**/core/qbapi.py", ["tests/a.py", "tests/b.py"], 4, 2.0, "3275c1d4", "3.8.0", when="2026-11-02 02:30"
+        )
+        self.assertTrue(header.startswith("# run 2026-11-02 02:30 "))
+        self.assertIn("target=**/core/qbapi.py", header)
+        self.assertIn("timeout_multiplier=2", header)
+        self.assertIn("# pool 2: tests/a.py tests/b.py", header)
+        self.assertIn("head=3275c1d4", header)
+        self.assertIn("mutmut=3.8.0", header)
+
+    def test_header_lines_do_not_collide_with_detail_format(self):
+        """账本头以 `#` 开头; 明细是 `@@@ id :: status` —— 否则下游会把它当候选 id。"""
+        header = mutants._run_header("x", [], 4, 15.0, "h", "v", when="2026-11-02 02:30")
+        lines = header.splitlines()
+        self.assertEqual(len(lines), 3)
+        for line in lines:
+            self.assertTrue(line.startswith("# "))
+            self.assertNotIn("@@@ ", line)
 
 
 if __name__ == "__main__":
