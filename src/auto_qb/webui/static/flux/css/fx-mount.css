@@ -29,18 +29,9 @@ html[data-fx-preset] .toast { position: relative; }
  * 留在 RM 媒体块外: RM 下非危险条 = 无动画 + [data-fx] 过渡归零(fx.css RM 块) = 即时终态 */
 html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
 
-/* ---- push 载体改相对位移(R1 精修 B4, 静态几何留媒体块外): fx.css push 原语是 transform
- *      版 —— transform 使 main.content 成为 fixed 后代的包含块, 而共享模板注入的 .ctx-menu
- *      族(右键/表头/文件优先级/抽屉菜单, ctx-menus.html 注入后渲染在 main.content 内)就在
- *      其中 ⇒ 面板开着时全部菜单视口坐标整段偏移(实测主表行右键 dy=-464px = 面板高 + 头部
- *      高, 用户报障)。position:relative + top 位移**不创建包含块**, fixed 后代恢复视口锚定;
- *      上推视觉同幅(读同一份 --fx-push-y, 消费方 fx-mount.js 不改)。position/top 基准常驻
- *      给到(不随 pushed 翻转): top:auto 参与不了过渡, 开面板会跳变。 ---- */
-html[data-fx-preset] [data-fx~="push"] { position: relative; top: 0; }
-html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
-  transform: none; /* 压 fx.css push 原语的 translateY(含块问题源头) */
-  top: calc(-1 * var(--fx-push-y, 0px));
-}
+/* ---- push 载体(R1 精修 B4 引入)已随 F7e 弃用删除: push 位移本体退役, main.content
+ *      不再被 stamp data-fx~="push"(消费点 fx-mount.js::dock 段注), 本文件不再持有
+ *      任何 push 规则; shared/fx/fx.css 的 push 原语是通用库面, 保留不消费。 ---- */
 
 /* ---- D4-6 checkbox 快勾(R2 精修 V3, 静态几何留媒体块外; S4 选定、S6b 因行内无
  *      checkbox 元素落空, 此处转落地): 复用 .selected 状态类做快勾视觉 -- 行首格
@@ -123,14 +114,14 @@ html[data-fx-preset] .member-row.selected > :first-child::after {
   }
 
   /* ==================================================================
-   * push(D3-4)位移过渡(R1 精修 B4): 载体换 relative top(见媒体块外 push 段注)后,
-   * 过渡属性跟着换 top —— 压 fx.css push 原语的 transform 过渡, 原语令牌
-   * (--fx-dur-panel / --fx-ease-in-out)沿用; RM 下本条不生效 = top 瞬时到位(fx.css
-   * RM 块把 [data-fx] 过渡归零 = 无动效终态)。
+   * 上推过渡动效(R5 精修 F7e): 开门让位窗口内, 原版让位/重入的 window 滚动
+   * (_kbRevealRow / _kbScrollRowIntoView 的 scrollBy/scrollTo)走平滑过渡 --
+   * 零 JS 几何, 终态与 console 逐位一致, 只把瞬时跳变变过渡(用户口径「上推
+   * 过渡动效」)。fx-glide 类由 fx-mount.js::dock 挂/摘(开面板挂, 落定回执的
+   * 重入滚动落走后摘), 作用域只罩开门窗口 -- 面板开着期间的键盘滚动保持原版
+   * 瞬时。RM 下本条不生效 = 原版瞬时滚动(D5 无动效终态)。
    * ================================================================== */
-  html[data-fx-preset] [data-fx~="push"] {
-    transition: top var(--fx-dur-panel) var(--fx-ease-in-out);
-  }
+  html.fx-glide { scroll-behavior: smooth; }
 
   /* ==================================================================
    * torrent/成员行(D4-2 selected 边条生长 / D4-3 锚点脉冲; D4-1 hover 渐亮已让位

@@ -4,7 +4,7 @@
  *
  * 分工: fx.js(AQB_FX)是零依赖单挂载器, 只认 data-fx 属性; 本文件是 flux 专属
  *   消费层 -- 模板分片是四皮肤共享的, 不能给共享模板加属性, 故**状态驱动**的
- *   效果(行插入/退场、页签方向、toast spawn/退场、dock 让位、登录微震、数字
+ *   效果(行插入/退场、页签方向、toast spawn/退场、面板出入落定回执、登录微震、数字
  *   滚动)由本文件
  *   在运行时程序化补属性; 共享 JS 消费点按 this.ui === "flux" 门控调用本域。
  *   纯 CSS 态效果(hover/active/focus/类触发)在 flux/css/fx-mount.css, 不过这里。
@@ -53,87 +53,71 @@
     });
   }
 
-  /* ---- 底部详情面板 push-content(D3-4, transform 版; R3 精修 F7c 改纯过渡) ----
+  /* ---- 底部详情面板出入(D3-4; R5 精修 F7e: push 位移本体弃用) ----
    * 消费点 = state.js watch.drawerVisible(开/合与切页回来的唯一出入门口)。
-   * fx push 原语契约: 消费方写 data-fx-pushed + 作用域 --fx-push-y(让位量)。
-   * push 载体 = main.content(主表内容区, 面板吸底遮住的就是它); 让位量 =
-   * .drawer-dock 实时高 -- 面板入场由 drawer.js 的 rAF 追高逐帧变化, 用
-   * ResizeObserver 跟写 --fx-push-y 保持同幅。RM: fx.css 降级块把过渡归零 =
-   * 让位瞬时到位(状态本身保留, 不是装饰动画)。
-   * R1 精修(B4): 载体位移由 transform 改 relative top(fx-mount.css push 段) --
-   * transform 会把 main.content 变成 fixed 后代(.ctx-menu 族)的包含块, 面板开着时
-   * 右键菜单坐标整段偏移; relative top 不创建包含块, 消费方写法不变。
-   * R3 精修(F7c): push 只保留为**纯过渡动效**(top 位移的平滑), 滚动结果完全交还
-   * 原版逻辑 -- 聚焦/选中行的可视区让位由 shared/shortcuts.js::_kbRevealRow 单点
-   * 承担(console 原版开面板路径同款: 行底推至面板顶缘上方, 不被窗口遮挡的最低
-   * 位置), flux 不再做自己的滚动干预/(push 量裁剪)(R1 B3 的可视区回拉/短窗循环
-   * 两机构整体退役, 用户拍板否掉自定义方案; 守阵 6c 反向钉三符号不在档)。
-   * R3 精修(F7d, F7c 裁决项 b 落地): 原版让位的触发三点(drawer.js open $nextTick /
-   * afterEnter 钩子 / drawer_store._drawerDone)都在 push 过渡**结束前**跑, 按推前
-   * 几何算出的让位量被随后的 push 位移整体上移抵消 -- 聚焦行终位落到吸顶头之后
-   * (实测 21.9 < 头区 98)。本文件在 push 过渡**落定后**发一次回执(dock 第二参),
-   * 共享侧消费点(state.js drawerVisible watch 注册的回调)据此重入原版可视区单点
-   * 把聚焦行算回可见带 -- 本文件只发信号, 不做任何几何解算/滚动(6c 单点纪律)。
-   * 落定信号双路: top 过渡的 transitionend 为主; 兜底定时器 = 计算样式的过渡时长
-   * +100ms(RM 过渡归零不派 transitionend / 后台标签页丢事件)。回执只在
-   * data-fx-pushed 在场时发 -- 关面板 push 回 0 的过渡结束不发(关闭不需要让位)。
-   * 连续 applyPush(入场追高 RO 连触 / 拖 grip)会重写 --fx-push-y 重启过渡, 兜底
-   * 定时器随每次写入重臂 = 恒以"最后一次位移 + 过渡时长"为落定点, 幂等无害。 */
-  var ro = null;
-  var pushedEl = null;
+   * 历史口径: S6 起 D3-4 = 开门时 main.content 整体上移(dock 实时高全幅 --fx-push-y,
+   * relative-top 载体 = R1 B4); R3(F7c) 改纯过渡 + 滚动结果交还原版三点
+   * (drawer.js open $nextTick / afterEnter 钩子 / drawer_store._drawerDone ->
+   * _kbRevealRow); R4(F7d) 加 push 落定回执 + 共享侧重入原版可视区单点。
+   * F7e 弃用缘由(打点实测, 桩 8137 1440x900): push 位移是布局级搬移, 而原版让位/
+   * 重入只有 window 滚动一个工具 -- 文档顶(scrollY=0)没有上滚余量, 点击**上半部分**
+   * 行开门时行被位移推出视野(222.2 -> -155.8), 落定回执如期发出、行目标正确
+   * (drawer.hash)、原版 _kbScrollRowIntoView 也如期执行, 但负向 scrollBy 被钳制成
+   * 无操作 -- 下半部分行(scrollY>0 有余量)则一切正常。用户拍板「全面弃用新逻辑,
+   * 只加面板上滑出现以及上推过渡动效」:
+   *   - push 位移本体退役: 本文件不再 stamp data-fx="push"/data-fx-pushed/--fx-push-y,
+   *     fx-mount.css 的 push 载体段一并删除; shared/fx/fx.css 的 push 原语是通用库面
+   *     (REGISTRY 在档), 保留不消费。内容零位移后, 原版三点让位与 console 同构,
+   *     任意滚动位置都能兑现「聚焦行上推至不被窗口遮挡的最低位置」。
+   *   - dock 只保留动效职责: ①面板入场动效本体在 flux/css/dialogs.css
+   *     (translateY(100%) 底部上滑, 令牌 --fx-dur-panel); ②入场**落定后**发一次回执
+   *     (dock 第二参, F7d 机制保留、换锚), 共享侧消费点(state.js)据此对打开面板的
+   *     那一行(drawer.hash, 与输入模态无关)重入原版可视区单点 _kbScrollRowIntoView
+   *     -- 本文件只发信号, 不做任何几何解算/滚动(6c 单点纪律)。 */
   var settleCb = null;
+  var settleArmed = false;
   var settleTimer = 0;
+  /* 面板入场时长: 与 dialogs.css .drawer-enter-active 消费的 --fx-dur-panel 同源。
+   * dock(true) 在 watch pre-flush 跑、面板还没挂载, 读不到计算样式, 故取常量;
+   * 主路 transitionend 不依赖本值, 只有兜底定时器用它。 */
+  var PANEL_ENTER_MS = 300;
   function dock(open, onSettled) {
     if (onSettled) settleCb = onSettled;
-    var el = document.querySelector("main.content");
-    if (!el) return;
-    if (el !== pushedEl) {
-      pushedEl = el; /* 切页后 main.content 是新节点: 重 stamp */
-      el.setAttribute("data-fx", "push");
-    }
-    if (open) applyPush();
-    else {
-      pushedEl.removeAttribute("data-fx-pushed");
+    if (open) {
+      settleArmed = true;
+      /* 上推过渡动效窗口(F7e 动效②): 开门到落定回执之间, 原版让位/重入的滚动走
+       * 平滑(fx-mount.css html.fx-glide 段)。作用域只罩这段窗口 —— 面板开着期间的
+       * 键盘滚动(End/Home/翻页)保持原版瞬时, 与 console 手感逐位一致。 */
+      document.documentElement.classList.add("fx-glide");
+    } else {
+      settleArmed = false;
+      document.documentElement.classList.remove("fx-glide");
       if (settleTimer) { clearTimeout(settleTimer); settleTimer = 0; } /* 关面板不再发落定回执 */
     }
-    if (!ro && window.ResizeObserver) {
-      ro = new ResizeObserver(applyPush);
-      var dk = document.querySelector(".drawer-dock");
-      if (dk) ro.observe(dk);
-    }
-    FX.scan();
   }
-  function applyPush() {
-    if (!pushedEl) return;
-    var dk = document.querySelector(".drawer-dock");
-    var h = dk ? dk.offsetHeight : 0;
-    if (h > 0) {
-      /* 让位量恒 = 面板全高(不裁剪): 开面板/拖 grip(RO 连触)只更新过渡的位移量,
-       * 行的可视区让位不在这里做 -- 单点在 _kbRevealRow(原版滚动逻辑)。 */
-      pushedEl.style.setProperty("--fx-push-y", h + "px");
-      pushedEl.setAttribute("data-fx-pushed", "");
-      armSettle();
-    } else {
-      pushedEl.removeAttribute("data-fx-pushed");
-    }
-  }
-  /* push 落定回执(F7d): 重臂式兜底定时器 + transitionend 单发, 双路都过
-   * data-fx-pushed 在场守卫(关闭路径的过渡结束不发)。 */
+  /* 面板入场落定回执(F7d 机制保留, F7e 换锚): ①面板本体 transform 过渡的
+   * transitionend 为主路; ②兜底定时器 = 入场时长 + 100ms(RM 过渡归零不派
+   * transitionend / 过渡被打断 / 后台标签页丢事件)。双路都过 settleArmed 单发
+   * 守卫 -- 关面板路径的过渡结束不发(关闭不需要重入)。 */
   function armSettle() {
     if (!settleCb) return;
-    var d = parseFloat(getComputedStyle(pushedEl).transitionDuration);
-    var ms = isFinite(d) && d >= 0 ? d * 1000 : 400;
     if (settleTimer) clearTimeout(settleTimer);
-    settleTimer = setTimeout(fireSettle, ms + 100);
+    settleTimer = setTimeout(fireSettle, PANEL_ENTER_MS + 100);
   }
   function fireSettle() {
     if (settleTimer) { clearTimeout(settleTimer); settleTimer = 0; }
-    if (!settleCb || !pushedEl || !pushedEl.hasAttribute("data-fx-pushed")) return;
+    if (!settleArmed || !settleCb) return;
+    settleArmed = false;
     settleCb();
+    /* 回执消费点(state.js)在 $nextTick 里对目标行重入原版单点, 平滑滚动本身还要
+     * 走几百毫秒 -- fx-glide 留到重入滚动落走后再摘(经验余量 800ms), 摘早了那一次
+     * 校正滚动会退化成瞬时(终态不变, 只损失动效)。 */
+    setTimeout(function () { document.documentElement.classList.remove("fx-glide"); }, 800);
   }
   document.addEventListener("transitionend", function (ev) {
-    if (!settleCb || !pushedEl) return;
-    if (ev.target !== pushedEl || ev.propertyName !== "top") return;
+    if (!settleArmed || !settleCb) return;
+    var t = ev.target;
+    if (!t || !t.matches || !t.matches(".drawer-dock > .drawer") || ev.propertyName !== "transform") return;
     fireSettle();
   }, true);
 

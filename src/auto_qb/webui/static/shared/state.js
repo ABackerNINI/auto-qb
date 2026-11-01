@@ -602,14 +602,15 @@ window.AQB_STATE = {
       // 早退分支(本钩子对每次可见性翻转都要跑到)
       if (this.ui === "flux" && window.AQB_FX_MOUNT) {
         window.AQB_FX_MOUNT.dock(v, () => {
-          // fx 落定回执(R3 精修 F7d, F7c 裁决项 b): push 过渡落定后几何已是推后,
-          // 原版让位三点(open/afterEnter/_drawerDone)都在推前跑、按推前几何算出的
-          // 让位量被 push 位移抵消, 聚焦行终位会落到吸顶头之后 —— 此刻重入原版
-          // 可视区单点把行算回可见带(顶: 吸顶列头下 8px / 底: 面板顶缘上 8px, 两界
-          // 公式与键盘跟随同源)。几何与滚动全在原版单点, 这里只做重入 + 触发形态
-          // 守卫(照 drawer_store.js:398 双守卫 + drawer.js:1277 种子形态门): 面板
-          // 已关/流量形态/行不在链上都不滚。flux 门控 = 外层 ui 判断(dock 只在
-          // flux 消费), 其它皮肤零重入。
+          // fx 面板入场落定回执(R5 精修 F7e; F7d 机制保留、语义换锚): push 位移本体
+          // 已弃用(F7e, fx-mount.js dock 段注), 回执锚点从 push 过渡落定换到面板入场
+          // 过渡落定。此刻重入**原版**可视区单点把「打开面板的那一行」算回可见带
+          // (顶: 吸顶列头下 8px / 底: 面板顶缘上 8px, 两界公式与键盘跟随同源) ——
+          // 行目标取 drawer.hash(显式打开的入参, 双击/右键/Enter/Alt+数字共用),
+          // 与输入模态无关。几何与滚动全在原版单点, 这里只做重入 + 触发形态守卫
+          // (照 drawer_store.js:398 双守卫 + drawer.js:1277 种子形态门): 面板已关/
+          // 流量形态/行不在链上都不滚。flux 门控 = 外层 ui 判断(dock 只在 flux
+          // 消费), 其它皮肤零重入。
           if (!this.drawer.open || !this.drawerIsSeed) return;
           const h = this.drawer.hash;
           const rows = this._kbRows();

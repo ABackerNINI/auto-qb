@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-02-0056">
+<meta name="doc-updated" content="26-11-02-0203">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-02-0056 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-02-0203 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -568,6 +568,46 @@
   <li><b>实测</b>: test.quick 4797 passed, 10 skipped(38.77s) → test.full 4797 passed, 10 skipped, 覆盖率 99%(119.91s, 数字事实源 = kb.baseline 最新切片)。</li>
 </ul>
 
+<h3>精修轮 R5(F7e, 26-11-02): push 位移本体弃用 —— 面板底部上滑 + 上推过渡两段动效</h3>
+<p>用户第三次报障(措辞原样): 「D3-4 push-content 内容上推会将聚焦的种子往上推出视野的问题仍未修复, 即<b>点击页面上半部分的种子, 打开详情面板, 点击的种子被上推出视野</b>。需要保留原本的逻辑(会将聚焦行上推至不被窗口遮挡的最低位置), <b>全面弃用新逻辑, 只加面板上滑出现以及上推过渡动效</b>」。前两轮工作假设(重入行目标为空 / 门控不成立)被本轮打点否定。</p>
+<h4>时间线打点(修前, 桩 8137/flux, 1440x900, Playwright 真实手势 + 四路埋点: open/reveal 调用、main.content style MutationObserver、settle 回执包装、行终位)</h4>
+<table>
+  <tr><th>路径</th><th>事件序列(修前)</th><th>行终位 top</th></tr>
+  <tr><td>单击上半行(第 2 行, top 222.2)</td><td>click 只落光标, <b>面板不开</b>(onTorrentClick: 面板关着不打开, 开面板归双击/Enter/右键) —— 零滚动零位移</td><td>222.2(不动)</td></tr>
+  <tr><td>dblclick 上半行(scrollY=0)</td><td>t59 open+reveal(行可见不滚) → t85-330 RO 连触 push 位移 170→378px(行随位移上移) → t314 afterEnter reveal(只下界, 行已在视口上方 = 无操作) → t660 回执如期发, 行目标正确(drawer.hash, idx=1), _kbScrollRowIntoView 如期执行: rect.top=-42 &lt; vTop → scrollBy 负量被 <b>scrollY=0 钳制成无操作</b></td><td><b>-155.8(滚出视野上缘)</b></td></tr>
+  <tr><td>Enter 上半行(先单击落光标)</td><td>同 dblclick 链路(t939 回执 + 重入), 同样钳制</td><td><b>-155.8(出视野)</b></td></tr>
+  <tr><td>dblclick 下半行(第 9 行, top 702.3)</td><td>reveal 滚 302px(有下滚余量) → 回执重入校正 → 终位可看见板顶上方</td><td>136.3(可见, 本来就好)</td></tr>
+</table>
+<p><b>根因结论</b>: push 位移是布局级搬移(main.content top:-dock 高), 而原版让位/重入只有 window 滚动一个工具 —— 文档顶 scrollY=0 没有上滚余量, 点击上半部分行时位移不可恢复; 重入链路(F7d)本身完全正常(回执发了、行目标对、原版单点跑了)。任务书三个假设(聚焦行空/门控不成立/时序反转)全部不成立。</p>
+<h4>修法(按用户口径: 弃用新逻辑, 保留原版滚动, 只加两段动效)</h4>
+<ul>
+  <li><b>push 位移本体退役</b>(fx-mount.js::dock/applyPush 重写): 不再 stamp data-fx="push"/data-fx-pushed/--fx-push-y, RO 跟幅与 top 过渡 transitionend 拆除; fx-mount.css 删 push 载体两段(relative-top 覆盖 + top 过渡, B4 随之失效)。内容零位移后, 原版三点让位(open $nextTick / _drawerDone / afterEnter → _kbRevealRow, 零触碰)与 console 同构, 任意滚动位置都兑现「聚焦行上推至不被窗口遮挡的最低位置」。shared/fx/fx.css 的 push 原语是通用库面(REGISTRY 在档), 保留不消费。</li>
+  <li><b>落定回执换锚保留</b>(F7d 机制): 信号从 push top 过渡换成面板入场 transform 过渡的 transitionend(主路)+ 入场时长+100ms 兜底定时器(RM/打断/后台丢事件), settleArmed 单发守卫(关面板不发)。共享侧消费点(state.js)不变: 对「打开面板的那一行」(drawer.hash = 显式打开入参, 双击/右键/Enter/Alt+数字共用, 与输入模态无关)重入原版 _kbScrollRowIntoView —— 推后重入为无害幂等(行可见即不滚)。</li>
+  <li><b>动效① 面板底部上滑出现</b>(flux/css/dialogs.css): 入场 translateY(-16px) 微移 → translateY(100%)→0 整幅上滑, 时长/缓动消费 fx 骨令牌 var(--fx-dur-panel)(glass 320ms)/var(--fx-ease-out); 新增 prefers-reduced-motion 降级块(过渡归零 = 无动效终态)。</li>
+  <li><b>动效② 上推过渡</b>(fx-mount.css + fx-mount.js): 开门让位窗口内 html.fx-glide { scroll-behavior: smooth } —— 原版让位/重入的 scrollBy/scrollTo 走平滑, 零 JS 几何、终态与 console 逐位一致, 只把瞬时跳变变过渡。作用域窗口 = dock(true) 挂、落定回执后 800ms 摘(罩住回执消费点 $nextTick 重入的平滑滚动), 面板开着期间的键盘滚动保持原版瞬时(no-preference 媒体块内, RM 不生效)。</li>
+  <li>除上述外零滚动/几何干预: 不重引 B3 裁剪/回拉(守阵反向钉继续在档), 共享 JS 除 state.js 注释改写外零改动, shortcuts.js/drawer.js/drawer_store.js 零触碰。</li>
+</ul>
+<h4>验证矩阵(修后, 桩 8137, 1440x900, 真实手势)</h4>
+<table>
+  <tr><th>路径</th><th>flux 终位</th><th>console 对照</th><th>判据</th></tr>
+  <tr><td>dblclick 上半行(scrollY=0)</td><td>222.2 / scrollY 0 / 面板顶 488</td><td>222.2 / 0 / 488(逐位一致)</td><td>行 bottom 294 &lt; 488, 全可见</td></tr>
+  <tr><td>Enter 上半行</td><td>222.2 / 0</td><td>—(同链路)</td><td>同上</td></tr>
+  <tr><td>dblclick 下半行(top 702.3)</td><td>400.3 / scrollY 302</td><td>400.3 / 302(逐位一致)</td><td>行底 472 = 面板顶 488 上 16px(原版公式落点)</td></tr>
+  <tr><td>End 末行(面板开着)</td><td>top 430.6 / bottom 474 / scrollY 21160</td><td>430.6 / 474 / 21160(逐位一致)</td><td>行底 474 &lt; 面板顶 488</td></tr>
+  <tr><td>开着切目标(单击跟随)</td><td>143.5 / 21160</td><td>143.5 / 21160(逐位一致)</td><td>行不动, hash 换目标</td></tr>
+  <tr><td>grip 拖高 +150</td><td>面板顶 338 / 行 143.5</td><td>338 / 143.5(逐位一致)</td><td>行仍可见(无校正 = console 同款)</td></tr>
+  <tr><td>Esc 关面板</td><td>closed, scrollY 0 不动</td><td>一致</td><td>关闭路径零滚动</td></tr>
+  <tr><td>flux-RM</td><td>222.2 / 400.3 / 434.6 三路径终态与 flux 逐位一致(末行 21156 差 4px 为平滑/瞬时收敛差, 可见性同判据)</td><td>—</td><td>RM = 无动效终态</td></tr>
+  <tr><td>上滑动效中间帧</td><td>translateY 378→315→201→105→34.5→1.2 单调收敛(320ms, fx 令牌)</td><td>—</td><td>整幅底部上滑成立</td></tr>
+  <tr><td>audit / 报错</td><td colspan="2">flux audit ok(total=0, push stamp 退役后归零)/ 三 session console+pageerror 全零</td><td>—</td></tr>
+</table>
+<h4>守阵与实测</h4>
+<ul>
+  <li><b>守阵</b>: fx_wiring 6b 改 F7e 反向钉(mount_css 零 push 载体规则 / mount_js 零 stamp 代码形态 setProperty("--fx-push-y") / setAttribute("data-fx-pushed") / setAttribute("data-fx","push")); 6c 保留三符号反向钉 + 落定回执四件(transitionend/armSettle/fireSettle/<b>settleArmed</b> 替换 data-fx-pushed 守卫钉)+ state.js 两钉保留 + 新增两段动效落点钉(dialogs.css translateY(100%) + var(--fx-dur-panel)/var(--fx-ease-out), fx-mount.css html.fx-glide 消费 + mount_js 挂摘); 文件头测试计划同步。</li>
+  <li><b>红绿双验</b>: 绿(fx_wiring passed)→红(临时改 fx-mount.css fx-glide 选择器名, AssertionError 落点正确)→复绿。</li>
+  <li><b>实测</b>: test.quick 4798 passed, 10 skipped(33.67s) → test.full 4798 passed, 10 skipped, 覆盖率 99%(151.11s, 数字事实源 = kb.baseline 最新切片 26-11-02-0200)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -593,6 +633,7 @@
   <li><span class="tag">R8 · 26-11-01-2301</span> 接手复测修正(前代理 R2 失联收尾): 帧率实录改为复测归因口径(空闲 60-64/滚动 60 无衰减; 弹窗开启 32/详情面板开启 39 = SwiftShader 软渲染结构性开销, blur(0px) 仍 41.5 vs none 63, 降半径无效, 真机硬件 GPU 待用户复验); Playwright 补接手复验 34/34; 存量失败 3 例已随 sync 远端守阵重钉修复, test.full 4797 全绿; backdrop 守阵红绿双验独立复跑(flux 5 处红/modal-mask 红/atlas parity 红/还原绿)</li>
   <li><span class="tag">R9 · 26-11-02-0005</span> 精修轮 R3(F7c)执行实录落档(见 §06「精修轮 R3」): T1 残余圆角回退(令牌三档归零+四处 clip-path 恢复)+T2 F7a 退役(push 纯过渡, 滚动交还 _kbRevealRow); fx_wiring 6c 反向钉; 聚焦行落吸顶头后果列待裁决</li>
   <li><span class="tag">R10 · 26-11-02-0056</span> 精修轮 R4(F7d)落档(见 §06「精修轮 R4」): F7c 裁决项 b 落地 —— push 落定回执(fx-mount.js transitionend+兜底定时器, data-fx-pushed 守卫)+ state.js 消费点重入原版 _kbScrollRowIntoView, 聚焦行终位 21.9→108.9/136.0(吸顶列头下 8px 整); 实证 A/B 定案重入单点选择; fx_wiring 6c 追加落定回执链路六针并红绿双验</li>
+  <li><span class="tag">R11 · 26-11-02-0203</span> 精修轮 R5(F7e)落档(见 §06「精修轮 R5」): D3-4 第三轮修复 —— 打点四路径实证根因(push 位移在 scrollY=0 不可恢复, F7d 重入链路本身正常), 按用户口径弃用 push 位移本体, 落定回执换锚面板入场过渡, 加面板底部上滑(fx 令牌)+fx-glide 上推过渡两段动效; 守阵 6b/6c 重写红绿双验; test.full 4798 全绿(切片 26-11-02-0200)</li>
 </ul>
 
 </div>

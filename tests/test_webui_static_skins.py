@@ -16,7 +16,7 @@
 - test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
 - test_frontend_frozen_column_boundary_wiring: 首列吸左边界提示守阵(2026-10-11 修「向右滚动时状态列被名称列盖住」) —— 横滚时相邻列滑进吸左首格(26-10-06-1717)下方, 未盖满的尾字("做种"的"种"等)紧贴首格右缘露出, 无边界提示时残根读成与名称省略号粘连的坏字(误读成渲染 bug); 钉两层接线: 横滚同步单点 columns.js::syncHeadScroll(ev, page)(P4 把 menu/selection/shows 三份收敛为一份)必须给滚动容器与吸顶表头打 .is-hscrolled(scrollLeft>0 打 / 回 0 摘, CSS 无法感知 scrollLeft, 丢标 = 落影永不出现)且三个滚动容器各带表 id 调用它, 三皮肤 views.css 的 .is-hscrolled 规则必须行吸左首格与表头吸左首格成对(漏表头 = 列名残根仍裸露)且含发丝线(inset -1px)成分、且**不得**再带右缘落影(2026-10-12 用户报「名称列后随机出现阴影」: 落影可见度随首格高度变, 常态行首格 22px 时塌成 2px 近不可见、高行才显形, 逐行深浅差 7 倍读成随机黑块)
 - test_frontend_hscroll_indicator_wiring: 主表横滚指示条守阵(计划 26-11-01-0553 S4) —— 原生横条隐藏 + 底部胶囊单点 shared/hscroll.css: 两条隐藏声明缺一即红(只写 ::-webkit-scrollbar 时 Firefox 仍画条槽 / 只写 scrollbar-width 时 Chromium 系仍画, 全局 `*{scrollbar-width:thin}` 挡不住)、三皮肤各恰挂一次且排在本皮肤 views.css 之后(link 序即级联序, 排前面被页面级规则反压)、三皮肤 /shared/*.css 链接集逐字相同(挂载漂移 = 某皮肤缺规则而规则只有一份, 整条静默失效; shared/fx/* 豁免 —— fx 只挂 flux, 计划 26-10-31-2316 D14 隔离拍板)、皮肤自有 CSS 零第二份隐藏声明(副本 = 日后各自漂移)、CSS 四类名与 columns.js 建 DOM/classList 同侧(改名只改一侧 = 胶囊恒不可见且零报错)、syncHeadScroll 尾部仍调 _hscrollSync 且主表白名单 group/torrent/show 齐全(删接线 = 胶囊永不出现 / 删白名单 = 抽屉面 xtpl.html:360 每次横滚在 body 留一个永不用的胶囊)、_hscrollBind() 调用点在 _ensureHeadObserver 体内(退回挂在 _hscrollPill() 里 = 从没横滚过的纯鼠标用户永远见不到胶囊, 而「纯鼠标没有拖拽入口」正是本方案要补的洞)
-- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/push 载体 relative-top 覆盖三件在档(B4 transform 含块劫持 fixed 菜单坐标系)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑, push 只留纯过渡; F7d: 追加落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/data-fx-pushed 守卫三件 + state.js dock 第二参重入原版 _kbScrollRowIntoView, 缺一即回退到「聚焦行终位被吸顶头遮住」的时序缺陷)
+- test_frontend_fx_wiring: fx 动效库挂行守阵(计划 26-10-31-2316 S6 前半 + 后半) —— shared/fx 三件只挂 flux: flux shell 恰挂 fx.css/fx-presets.css 各一次(head link, 级联序排本皮肤全部 CSS 之后)与 fx.js 一次(shell 静态 script, 不进 tpl-manifest —— 四套清单守阵钉逐项相等), S6 后半追加 flux 专属挂载面 fx-mount.css(link, 排 fx 三件之后)与 fx-mount.js(script)恰一次、三旧皮肤对 /shared/fx/ 与 fx-mount 零引用(D14 隔离反向钉)、flux <html> 带 data-fx-preset="glass"(S4 主 preset 拍板)、fx.js REGISTRY.effects 逐名能在 fx.css 找到 [data-fx~="名"] 规则且 presets 逐名能在 fx-presets.css 找到配方块(漏 CSS = audit 放行但样式静默不生效); R1 精修(26-10-31-2316 §06)追加回归钉: fx-mount.css 不得复活行板 :hover gradient 叠底(B2 行板/首格悬停管线分家)/fx-mount.js 滚动干预三符号(ensureFocusedVisible/scheduleReveal/revealFocusedRow)反向钉不在档(F7c: R3 精修退役 R1 B3 自定义回拉, 滚动单点交还 shortcuts.js 原版逻辑; F7d: 落定回执链路钉 —— fx-mount.js transitionend/兜底定时器/单发守卫 + state.js dock 第二参重入原版 _kbScrollRowIntoView; F7e(R5 精修): push 位移本体弃用反向钉(fx-mount.css/js 零 push 载体/--fx-push-y 规则, 打点实证 scrollY=0 时位移把聚焦行推出视野且滚动不可恢复) + 两段动效落点钉(dialogs.css 面板底部上滑 translateY(100%) 消费 --fx-dur-panel/--fx-ease-out, fx-mount.css 面板开着 scroll-behavior:smooth 的 :has 作用域), 缺一即回退到「聚焦行终位被推出视野」的 D3-4 三轮报障缺陷)
 - test_frontend_console_square_radius: console 方角口径守阵(R1 精修 B1, 用户报「console 详情模板/文字元素出现圆角」) —— console/style.css 的 --radius-lg/--radius/--radius-sm 三令牌全 0px + console 自有 CSS 与 console 实际加载的四件共享面(row_lang/dt_table/hscroll/console_hub)的 border-radius 声明值全量白名单(0/999px 胶囊/小值/50%/var(--radius*)/inherit, 现存值盘点后冻结): flux 意图的圆角 16/10/6 写进共享面 = 三皮肤同时回归, 新值入列必须显式改白名单(有意识决策)
 - test_frontend_pinned_first_cell_bg_per_face: 必现列(吸左首格)底色按面重锚守阵(2026-10-14 修「必现列背景与其他列不一致」, 报障面 = 主表三页 + 抽屉全部变体表格) —— 两层根因: ① 皮肤 `.group-row > :first-child{background:var(--bg-row)}` 是主列表行语言, 抽屉各引擎面复用 .group-row(零特判)致首格与行板三样各算(族面 --tbl-face-bg→--bg / 04 卡 / 05·10 透明 / 08 --bg-row), 行内一条异色竖带(ocean Δ 16/255); ② 追剧表 search-hit 行底是「accent 渐层 over --bg-row」而首格只平铺 --bg-row, 整条渐层丢失(实测 backgroundImage=none)。修复单点 shared/dt_table.css 按面重锚: 族面 06/07/09/11 行板/表头首格同 Token(--tbl-face-bg/--tbl-head-bg) + 悬停 --bg-hover, err(06)/bad(07/09)/is-chk(11)/sel(10) 半透明 tint 一律 `linear-gradient(tint,tint), var(--bg-card)` 合成(**禁** --bg-row 基色/裸半透明令牌), empty-row 随行透明; 04·05 首格是内容根 ⇒ 摘底摘 position:static(05 failrow 保 error-soft); 10 保留吸左取 --bg-card; 08 bad 补合成; 三皮肤 views.css 补 search-hit 首格镜像(90deg 渐层 46% + --bg-row); 05 变体补内层行容器 dt05-list(家族两层 dtNN-wrap+dtNN-list, 修前单层 dt05-wrap 与 CSS 前缀不匹配致六条 .group-row 规则空转、行带主表卡底)。真浏览器量具 e2e/dt-table-face-bg.spec.mjs(首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行)
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
@@ -3147,57 +3147,73 @@ def test_frontend_fx_wiring():
         "fx-mount.css 复活了行板 :hover 的 gradient 叠底 —— 行板/首格悬停管线分家回归"
         "(B2, 用户报「名称列 hover 背景与其它列不一致」); hover 底单点在 shared/row_lang.css"
     )
-    # 6b. B4(push 载体): relative-top 覆盖必须在档 —— fx.css push 原语是 transform 版,
-    #     transform 使 main.content 成为 .ctx-menu 族(fixed)的包含块, 面板开着时右键菜单
-    #     坐标整段偏移。钉 transform:none + top 位移与 top 过渡三件都在。
-    assert re.search(
-        r'html\[data-fx-preset\] \[data-fx~="push"\]\[data-fx-pushed\]\s*\{[^}]*transform:\s*none[^}]*\}', mount_css,
-        re.S
-    ), (
-        "fx-mount.css 缺 push 载体 relative-top 覆盖(transform:none + top 位移) —— 面板开着时"
-        ".ctx-menu 族(fixed)坐标系被 transform 劫持, 右键菜单位置回归错位(B4)"
+    # 6b. F7e(R5 精修, 用户拍板「全面弃用新逻辑」): push 位移本体退役 —— 打点实证
+    #     scrollY=0 时点击上半部分行开门, 行被全幅位移推出视野且滚动不可恢复(负向
+    #     scrollBy 在文档顶被钳制)。反向钉: fx-mount.css/js 不得再持有任何 push
+    #     载体/让位量规则或 stamp(B4 relative-top 载体随之退役; 复活即回归)。
+    assert "data-fx-pushed" not in mount_css and "--fx-push-y" not in mount_css, (
+        "fx-mount.css 复活 push 载体规则(F7e 已弃用) -- 内容位移在 scrollY=0 时把聚焦行"
+        "推出视野且原版滚动无法恢复, 回归即重蹈 D3-4 三轮报障"
     )
-    assert re.search(r"\[data-fx~=\"push\"\]\s*\{[^}]*transition:\s*top\s", mount_css,
-                     re.S), ("fx-mount.css 缺 push 的 top 过渡声明(RM 媒体块内) —— 开/关面板位移会跳变")
-    # 6c. F7c(R3 精修, 用户否掉 F7a 自定义方案): push 只留纯过渡动效, 滚动行为完全交还
-    #     原版单点 shared/shortcuts.js(console 原版开面板路径同款让位) -- fx-mount.js
+    # 6c. F7c(R3 精修, 用户否掉 F7a 自定义方案): 滚动行为完全交还原版单点
+    #     shared/shortcuts.js(console 原版开面板路径同款让位) -- fx-mount.js
     #     不得再挂自己的滚动干预/可视区回拉/push 量裁剪(R1 B3 的
     #     ensureFocusedVisible/scheduleReveal/revealFocusedRow 整体退役, 复活即回归:
     #     与原版单点双写滚动打架)。反向钉: 三个符号在 fx-mount.js 出现即红。
     for gone in ("ensureFocusedVisible", "scheduleReveal", "revealFocusedRow"):
         assert gone not in mount_js, (
             f"fx-mount.js 残留 {gone}(F7c 已退役: 滚动行为单点交还 shortcuts.js 原版逻辑, "
-            "flux 不再做自己的滚动干预/push 量裁剪) —— push 只保留纯过渡动效"
+            "flux 不再做自己的滚动干预/push 量裁剪)"
         )
-    assert "--fx-push-y" in mount_js, (
-        "fx-mount.js 丢了 push 让位量写入(--fx-push-y) —— 纯过渡动效本体(全幅让位 + "
-        "top 过渡)必须保留, 只退役滚动干预"
-    )
-    #     F7d(F7c 裁决项 b 落地): 原版让位触发三点都在 push 过渡结束前跑, 按推前几何
-    #     算出的让位量被 push 位移抵消, 聚焦行终位落吸顶头后(实测 21.9 < 头区 98)。
-    #     钉落定回执链路三件(缺一 = 回退到 F7c 的时序缺陷):
-    #     a) fx-mount.js 发信号: top 过渡 transitionend + 兜底定时器(armSettle/fireSettle),
-    #        且发前过 data-fx-pushed 在场守卫(关面板 push 回 0 的过渡结束不发);
+    for gone_code in ('setProperty("--fx-push-y"', 'setAttribute("data-fx-pushed"', 'setAttribute("data-fx", "push")'):
+        assert gone_code not in mount_js, (
+            f"fx-mount.js 复活 push 位移 stamp({gone_code}, F7e 已弃用) -- 内容位移在 scrollY=0 时把聚焦行"
+            "推出视野且原版滚动无法恢复, 回归即重蹈 D3-4 三轮报障"
+        )
+    #     F7d(F7c 裁决项 b 落地) + F7e 换锚: 落定回执机制保留, 锚点从 push 过渡落定
+    #     换到面板入场过渡落定。钉链路四件(缺一 = 回退到时序缺陷):
+    #     a) fx-mount.js 发信号: 面板 transform 过渡 transitionend + 兜底定时器
+    #        (armSettle/fireSettle), 且发前过 settleArmed 单发守卫(关面板不发);
     #     b) state.js 消费点登记重入回调(dock 第二参)且重入调**原版**可视区单点
     #        _kbScrollRowIntoView -- 几何/滚动全在 shortcuts.js 单点, 共享侧只做
-    #        数据 plumbing; 钉它而不是 _kbRevealRow: 落定时行既可能推过头(吸顶头后,
-    #        需上界分支)也可能不足(文档底钳制, 需下界分支), _kbRevealRow 只有下界
-    #        (实测落定重入它 = 无操作, 行停 21.9), _kbScrollRowIntoView 两界公式与
-    #        键盘跟随同源(上界落点 = 吸顶列头下 8px, 实测 136.0)。
+    #        数据 plumbing; 行目标 = drawer.hash(显式打开的入参, 与输入模态无关)。
     for needle, why in (
-        ("transitionend", "fx-mount.js 缺 push 落定信号(transitionend) -- F7d 落定回执链路断, 聚焦行回退到被吸顶头遮住的 F7c 缺陷"),
+        ("transitionend", "fx-mount.js 缺面板入场落定信号(transitionend) -- F7d/F7e 落定回执链路断"),
         ("function armSettle", "fx-mount.js 缺落定兜底定时器重臂(armSettle) -- RM/后台标签页/过渡被打断时回执不发"),
         ("function fireSettle", "fx-mount.js 缺落定回执单发(fireSettle)"),
-        ('hasAttribute("data-fx-pushed")', "fx-mount.js 落定回执缺 data-fx-pushed 在场守卫 -- 关面板 push 回 0 会误发让位"),
+        ("settleArmed", "fx-mount.js 落定回执缺 settleArmed 单发守卫 -- 关面板路径会误发重入"),
     ):
         assert needle in mount_js, f"fx-mount.js 缺 {needle} —— {why}"
     state_js = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
     assert re.search(r"AQB_FX_MOUNT\.dock\(v,\s*\(\)",
                      state_js), ("state.js 的 dock 消费点缺落定回执回调(第二参) -- F7d 重入链路断, "
-                                 "push 落定后无人把聚焦行算回可见带")
+                                 "面板落定后无人把聚焦行算回可见带")
     assert "this._kbScrollRowIntoView(rows, idx)" in state_js, (
         "state.js 落定回执未重入原版可视区单点 _kbScrollRowIntoView -- 几何/滚动必须"
         "全在 shortcuts.js 单点(上界吸顶列头下 8px / 下界面板顶缘上 8px), 共享侧只做 plumbing"
+    )
+    #     F7e 两段动效落点(用户口径「只加面板上滑出现以及上推过渡动效」):
+    #     c) 面板底部上滑出现: flux/css/dialogs.css 入场 translateY(100%)->0,
+    #        时长/缓动消费 fx 骨令牌(--fx-dur-panel/--fx-ease-out);
+    #     d) 上推过渡: fx-mount.css 面板开着时 window 滚动走平滑
+    #        (scroll-behavior: smooth, :has 门作用域, RM 下不生效 = 原版瞬时)。
+    dialogs_css = open(os.path.join(STATIC_ROOT, "flux", "css", "dialogs.css"), encoding="utf-8").read()
+    assert re.search(r"\.drawer-enter-from\s*\{[^}]*translateY\(100%\)", dialogs_css), (
+        "flux dialogs.css 面板入场不是底部上滑(translateY(100%)) -- F7e 动效①落点缺失, "
+        "回退到 translateY(-16px) 微移即用户口径不兑现"
+    )
+    assert re.search(r"\.drawer-enter-active\s*\{[^}]*var\(--fx-dur-panel\)[^}]*var\(--fx-ease-out\)",
+                     dialogs_css, re.S), (
+        "flux dialogs.css 面板入场时长/缓动未消费 fx 骨令牌(--fx-dur-panel/--fx-ease-out) -- "
+        "令牌化单点纪律(改时长只动 fx.css)"
+    )
+    assert re.search(r"html\.fx-glide\s*\{\s*scroll-behavior:\s*smooth", mount_css), (
+        "fx-mount.css 缺上推过渡(html.fx-glide 的 scroll-behavior: smooth) -- F7e 动效②落点缺失, "
+        "原版让位滚动回退成瞬时跳变"
+    )
+    assert "fx-glide" in mount_js, (
+        "fx-mount.js 缺 fx-glide 窗口挂/摘(动效②的作用域开关) -- 平滑滚动作用域失控(罩全程 = "
+        "键盘滚动手感漂移, 或恒不生效)"
     )
 
 
