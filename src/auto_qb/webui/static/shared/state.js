@@ -558,11 +558,20 @@ window.AQB_STATE = {
     // 切回辅种页时表格 DOM 是新建的, 需要重新实体化列宽(设置页期间表格不存在)
     page() {
       this.persistUiPage();  // 位置即用户意图: 落盘后才经得起 F5(见 initialPage)
+      // fx(S6 后半, plan 26-10-31-2316): 页签方向感知滑动的消费点(主内容页 <-> 设置页),
+      // flux 专属(flux/fx-mount.js::tabDir), 其它皮肤零调用; 无参 watcher 现读 this.page
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.tabDir(this.page);
       this.$nextTick(() => {
         this._syncHeadHeight();
         this.recomputeEffective();
       });
     },
+    /* fx(S6 后半, plan 26-10-31-2316): 行插入/退场动效的数据差分消费点(flux 专属,
+     * flux/fx-mount.js::rows) —— watch 默认 flush pre: 赋值后、Vue 重渲前, 旧行仍在
+     * DOM, 退场幽灵此刻抓取; 行窗口化(滚动虚拟化)不动数据数组, 天然不误触发。
+     * 其它皮肤零调用(window.AQB_FX_MOUNT 只在 flux shell 挂)。 */
+    "torrents"(v) { if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.rows(v, "hash"); },
+    "groups"(v) { if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.rows(v, "key"); },
     /* 未保存改动防护(U1-b, 报告 26-10-02-0508): 原生 beforeunload 兜底**随脏态**挂载 / 摘除 ——
      * 常驻挂载会让 Firefox 放弃 bfcache, 且没改动也弹框 = 弹框疲劳(报告 §6)。判据与挂载点
      * 都在 config_editor.js(cfgGuardSync), 这里只负责把脏态变化喂过去。 */
@@ -582,6 +591,10 @@ window.AQB_STATE = {
      * W7(计划 26-10-11-2106 恢复注): W5 曾随变体退役删掉本补挂(Vue 组件随 aside 重建自渲染,
      * 无此缺口) —— 变体层原样恢复, 补挂同批恢复(选「经典」时 _dtSync 无宿主可挂 = 空转, 无害)。 */
     drawerVisible(v) {
+      // fx(S6 后半, plan 26-10-31-2316): 面板 push-content 的消费点(flux 专属,
+      // flux/fx-mount.js::dock) —— 开/合与切页回来的唯一出入门口, 早于下方既有
+      // 早退分支(本钩子对每次可见性翻转都要跑到)
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.dock(v);
       const s = this.qbCurScope;
       if (!s) {
         if (v) this.$nextTick(() => this._dtSync());  // 进场补挂: 等 aside 补进 DOM 再定位宿主(经典档空转)

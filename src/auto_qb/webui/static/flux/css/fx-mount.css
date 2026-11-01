@@ -1,0 +1,197 @@
+/* ====================================================================
+ * fx-mount.css -- flux 皮肤 fx 动效挂载面(S6 后半)
+ * ====================================================================
+ * 计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S6, S4 选定 24 项)
+ *
+ * 定位: 模板分片是四皮肤共享的 -- 给共享模板元素加 data-fx 属性会同时命中其它
+ *   皮肤, 故「效果只能挂在共享模板公共类上」的部分一律以 html[data-fx-preset]
+ *   作用域前缀在本层挂载(fx 三件与该属性只存在于 flux, D14 隔离拍板: 三旧皮肤
+ *   既不挂 fx.css 也没有 data-fx-preset, 本层选择器在其它皮肤恒不命中)。
+ *   状态驱动的效果(行插入/退场、页签方向、toast spawn、dock 让位、登录微震)由
+ *   flux/fx-mount.js(AQB_FX_MOUNT)程序化补属性, 共享 JS 消费点按
+ *   this.ui === "flux" 门控调用 -- 两个落点都不碰共享模板的结构与类名。
+ *
+ * RM: fx.css 的 prefers-reduced-motion 降级块只罩 [data-fx] 元素; 本层选择器
+ *   大多不带 data-fx, 故一切动画/过渡声明收进 @media (prefers-reduced-motion:
+ *   no-preference) -- 降级目标 = 无动效终态(D5), 静态几何(position/裁边等)
+ *   留在媒体块外。
+ *
+ * 级联序: 本文件排在 /shared/fx/fx.css 与 fx-presets.css 之后(flux shell 链尾),
+ *   对 flux 既有同选择器规则(如 .bt/.modal/.toast 的入场动画)以后到覆盖。
+ * ==================================================================== */
+
+/* ---- 载体(静态几何, 无动效语义): 按钮 ripple/sheen 的裁边容器、行插入退场
+ *      幽灵的定位容器、toast 倒计时条的定位宿主 ---- */
+html[data-fx-preset] .bt { position: relative; overflow: hidden; }
+html[data-fx-preset] .group-table { position: relative; }
+html[data-fx-preset] .toast { position: relative; }
+/* 皮肤既有 toast-in 入场让位 fx(S6 接管, 见下方 toast 段注) -- 静态抑制无动效语义,
+ * 留在 RM 媒体块外: RM 下非危险条 = 无动画 + [data-fx] 过渡归零(fx.css RM 块) = 即时终态 */
+html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
+
+@media (prefers-reduced-motion: no-preference) {
+
+  /* ==================================================================
+   * 按钮 .bt 六变体(D1-2 glow / D1-3 sheen / D1-5 press / D1-6 icon)
+   * ------------------------------------------------------------------
+   * D1-4 ripple 走 flux/fx-mount.js 的 document 级 pointerdown 委托(.bt 命中
+   * 即 FX.ripple), 波纹节点样式在 fx.css -- CSS 侧只需上面的裁边载体。
+   * glow 与各变体既有 hover 落影**合成**(保留原第一段阴影, 追加 fx 辉光段):
+   * glass 供给面已开 --fx-glow 12px accent-ink 系(S4 拍板 flux 定制), 基线
+   * .bt:hover 的 --glow-soft 在 ghost/icon 的 transparent --tone 下不可见,
+   * 故该两变体 hover 只剩 fx 辉光 -- 六变体全覆盖(D1-2 选中口径)。
+   * ================================================================== */
+  html[data-fx-preset] .bt {
+    /* press(D1-5)回弹段: 整条 transition 重声明, 仅 transform 段换 fx 骨对
+     * (fast + back-out, fx.css press 原语同款); 其余属性保持 skin 原配方 */
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+      color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), filter var(--dur) var(--ease),
+      transform 120ms var(--fx-ease-back);
+  }
+  html[data-fx-preset] .bt:active:not(:disabled) {
+    transform: scale(var(--fx-pop-scale));
+    transition-duration: var(--fx-dur-press);
+    transition-timing-function: var(--fx-ease-standard);
+  }
+  html[data-fx-preset] .bt:hover:not(:disabled) { box-shadow: var(--glow-soft), 0 0 var(--fx-glow) var(--fx-glow-c); }
+  html[data-fx-preset] .bt.primary:hover:not(:disabled) { box-shadow: var(--glow), 0 0 var(--fx-glow) var(--fx-glow-c); }
+  /* sheen(D1-3): hover 触发一次扫光, 复用 fx.css 的 fx-sheen keyframes 与
+   * --fx-sheen-* 供给面(glass 维持白 40%/0.12); ::after 载体同 fx.css sheen 契约 */
+  html[data-fx-preset] .bt::after {
+    content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 36%;
+    background: linear-gradient(105deg, transparent, var(--fx-sheen-c), transparent);
+    opacity: 0; transform: translateX(-140%); pointer-events: none;
+  }
+  html[data-fx-preset] .bt:hover:not(:disabled)::after { animation: fx-sheen var(--fx-dur-emphasis) var(--fx-ease-standard); }
+  /* icon(D1-6): 图标钮 hover 轻擦 -- fx.css icon 原语的 .fx-ico 契约元素在 flux
+   * 零存在(按钮图标子元素是既有 .ico), 等价落点换 .ico、曲线/幅度同款 */
+  html[data-fx-preset] .bt.icon .ico { transition: transform var(--fx-dur-hover) var(--fx-ease-standard); }
+  html[data-fx-preset] .bt.icon:hover:not(:disabled) .ico { transform: rotate(8deg) scale(1.08); }
+  html[data-fx-preset] .bt.icon:active:not(:disabled) .ico { transform: rotate(0deg) scale(0.96); }
+
+  /* ==================================================================
+   * 弹窗(D2-3 zoom 反差入场 / D2-5 danger tone glow->headshake 接力)
+   * ------------------------------------------------------------------
+   * flux 既有 modal-in 弹簧入场退役(animation-name: none), 换 fx zoom 原语的
+   * 供方令牌 --fx-zoom-from(@starting-style 块在媒体块外: RM 下无过渡声明,
+   * 起始式惰性无效, 直落终态)。danger tone 类 .modal.tone-error 由 _openModal
+   * 单点派生(计划 26-10-19-2341), 节点插入即播; 时序同 fx.css 的组合规则:
+   * glow 400ms 先行 + headshake 430ms 接力(S4 warn「强调档偏长」原样保留)。
+   * ================================================================== */
+  html[data-fx-preset] .modal {
+    animation-name: none;
+    transition: opacity var(--fx-pair-modal-in), transform var(--fx-pair-modal-in);
+  }
+  html[data-fx-preset] .modal.tone-error {
+    animation: fx-danger-glow 400ms var(--fx-ease-standard),
+               fx-headshake 350ms var(--fx-ease-standard) 430ms;
+  }
+
+  /* ==================================================================
+   * torrent/成员行(D4-1 hover 渐亮 / D4-2 selected 边条生长 / D4-3 锚点脉冲)
+   * ------------------------------------------------------------------
+   * 行级效果零 .group-row 选择器的库纪律是对 fx.css(库不分皮肤)说的; 本层是
+   * flux 专属挂载面, 消费既有状态类(.selected/.partial/.ctx-src), 零模板改动。
+   * 行板/首格过渡单点纪律(守阵 pinned_first_cell_hover_transition_parity)不动:
+   * 本层不声明行板与首格的 background 过渡, 只加 ::before 边条与一次性 flash。
+   * ================================================================== */
+  /* D4-1 hover 渐亮: 与既有状态底同款合成(gradient 叠 --bg-row); expanded/
+   * selected/partial/search-hit 各有既有底, :not 排除不抢 */
+  html[data-fx-preset] .group-row:hover:not(.expanded):not(.selected):not(.partial):not(.search-hit),
+  html[data-fx-preset] .member-row:hover:not(.selected):not(.partial):not(.search-hit) {
+    background: linear-gradient(var(--bg-hover), var(--bg-hover)), var(--bg-row);
+  }
+  /* D4-2 selected 边条生长: 既有选中/半选左条(::before, views.css 给形)加 scaleY
+   * 生长 -- 本层把条铺到全部行(非选中 scaleY(0) + opacity 0 双保险不可见),
+   * 选中/半选时生长入场; member partial 的 18% 几何差在此镜像(本层特异性更高) */
+  html[data-fx-preset] .group-row::before,
+  html[data-fx-preset] .member-row::before {
+    content: ""; position: absolute; left: 0; top: 14%; bottom: 14%; width: 3px;
+    border-radius: 2px; background: var(--sel-bar, var(--accent)); pointer-events: none;
+    transform: scaleY(0); transform-origin: 50% 0%; opacity: 0;
+    transition: transform var(--fx-dur-fast) var(--fx-ease-standard),
+                opacity var(--fx-dur-fast) var(--fx-ease-standard);
+  }
+  html[data-fx-preset] .group-row.selected::before,
+  html[data-fx-preset] .member-row.selected::before { transform: scaleY(1); opacity: 1; }
+  html[data-fx-preset] .group-row.partial::before,
+  html[data-fx-preset] .member-row.partial::before { transform: scaleY(1); opacity: 0.42; }
+  html[data-fx-preset] .member-row.partial::before { top: 18%; bottom: 18%; }
+  /* D4-3 锚点脉冲: 右键锚点行(menu.js::_markCtxSource 挂 .ctx-src)一次性 flash --
+   * 类挂上即播、菜单关闭摘类、下次右键重挂重播, 零 JS(状态类由既有机制给);
+   * keyframes 复用 fx.css fx-row-flash。只落行类, .ctx-src 命中的按钮不播。 */
+  html[data-fx-preset] .ctx-src.group-row, html[data-fx-preset] .ctx-src.member-row,
+  html[data-fx-preset] .ctx-src.ep-row, html[data-fx-preset] .ctx-src.show-row {
+    animation: fx-row-flash 600ms var(--fx-ease-standard);
+  }
+
+  /* ==================================================================
+   * toast(D6-1~5 配合面): spawn 属性 stamp 在 flux/fx-mount.js(data-fx="rise"
+   * [+ danger]、.ico 子元素 ico-spring、--fx-life 倒计时), 本层做三件配合:
+   * 1) 入场: 皮肤 toast-in 已在媒体块外被抑制, fx rise 落成**确定性入场动画** --
+   *    @starting-style 过渡对「插入后才补属性」的节点不触发(Chromium 的起始式窗口
+   *    在首次样式计算即关闭, 程序化 stamp 晚于该时刻; 实测 2026-11-01), 动画则在
+   *    选择器开始匹配时即播, stamp 同帧生效; 危险条 = rise + fx-danger-glow 双动画
+   *    合并(fx.css 的 danger 单动画规则被本条覆盖, glow 语义不变);
+   * 2) 倒计时条(D6-2): .toast 无条形子元素(共享模板不可改), 以 ::after 合成 --
+   *    几何同 fx countdown 契约(底缘 2px 满宽), 时长读消费方写的 --fx-life,
+   *    只挂 [data-fx-cd] 标记的条(stamp 时已知 ttl, sticky 条不给)。
+   * ================================================================== */
+  html[data-fx-preset] .toast[data-fx~="rise"]:not([data-fx-exit]) {
+    animation: fx-toast-rise var(--fx-dur-toast) var(--fx-ease-out);
+  }
+  html[data-fx-preset] .toast[data-fx~="rise"][data-fx~="danger"][data-fx-play] {
+    animation: fx-toast-rise var(--fx-dur-toast) var(--fx-ease-out),
+               fx-danger-glow 400ms var(--fx-ease-standard);
+  }
+  html[data-fx-preset] .toast[data-fx-cd]::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
+    background: var(--accent, currentColor); transform-origin: left;
+    animation: fx-countdown var(--fx-life, 4s) var(--fx-ease-linear) forwards;
+  }
+
+  /* ==================================================================
+   * 输入框 focus ring(D5-2): flux 各输入面既有 focus 描边/辉光**保留**, 在
+   * box-shadow 链尾追加 fx 3px 柔环(fx focus-ring 原语同款色: --accent 30%)。
+   * 登录卡输入不走本效果: 其 warn 凭据语义档 focus 辉光是 flux 既有设计, 不混
+   * accent。D5-3 floating label 降级: flux 输入框无 input+label 兄弟对结构
+   * (标签都在字段容器上方), 结构改造被共享模板红线禁止 -- 见计划档案降级注明。
+   * ================================================================== */
+  html[data-fx-preset] .top-search input:focus {
+    box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
+      0 0 22px -6px color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+  html[data-fx-preset] .modal-field input:focus {
+    box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
+      0 0 22px -6px color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+  html[data-fx-preset] .hb-input:focus, html[data-fx-preset] .hb-select:focus {
+    box-shadow: var(--glow), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  /* ==================================================================
+   * 主表横滚指示条(D8-4 变体 C: 缩放+淡入): 生产胶囊 translateX(-50%) 居中
+   * 占用 transform(单点 shared/hscroll.css, 红线不改), fx pop 原语是
+   * @starting-style 插入语义而胶囊是常驻节点靠 .on 类现身 -- 故等价落成
+   * keyframes 入场: 幅度取 --fx-pop-scale、曲线 --fx-ease-out, 位移 -50% 烘进
+   * keyframe(与静息态同值, 动画结束无缝回位); .on 重挂即重播。
+   * ================================================================== */
+  html[data-fx-preset] .hscroll-pill.on { animation: fx-pill-in 200ms var(--fx-ease-out); }
+}
+
+/* zoom 反差入场的起始式(见上方弹窗段注): RM 下无过渡声明, 本块惰性无效 */
+@starting-style {
+  html[data-fx-preset] .modal { opacity: 0; transform: scale(var(--fx-zoom-from)); }
+}
+
+/* D8-4 胶囊入场 keyframes(-50% 位移烘进帧, 静息态同值) */
+@keyframes fx-pill-in {
+  from { opacity: 0; transform: translateX(-50%) scale(var(--fx-pop-scale)); }
+  to { opacity: 1; transform: translateX(-50%) scale(1); }
+}
+
+/* D6-1 toast 入场 keyframes(等价 fx rise 原语: 位移读 --fx-enter-shift 供给面) */
+@keyframes fx-toast-rise {
+  from { opacity: 0; transform: translateY(var(--fx-enter-shift)); }
+  to { opacity: 1; transform: none; }
+}

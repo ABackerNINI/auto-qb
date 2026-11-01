@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-0954">
+<meta name="doc-updated" content="26-11-01-1101">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-0954 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-1101 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -337,6 +337,66 @@
   <li>Playwright 快验(纯静态服务, 无桩 API): /flux/ HTTP 200、AQB_FX 在、preset=glass、registry 27 名、audit ok(total=0, flux 尚无 data-fx 元素, 符合预期)、<b>fx 三件挂行齐备</b>(head 2 link + body 1 script)、ripple 委托真触发(注入宿主派 pointerdown 实测 .fx-ripple 节点入 DOM); 404 仅 /api/config/public(静态服务无后端, 预期)。/fx/showcase.html 回归: audit total=21 <b>ok=true</b>(挑选快照全功能, 卡面一字未动)。</li>
 </ul>
 
+<h3>S6 执行实录(后半)(26-11-01)</h3>
+<p>S4 选定 24 项逐项挂进 flux 可达面。三旧皮肤 / showcase / config.yml / auto-qb-data 零改动(git status 证实: 仅 <code>flux/index.html</code>(+6 行) + <code>flux/css/fx-mount.css</code> / <code>flux/fx-mount.js</code>(新增, flux 专属) + 4 个共享 JS 的 ui 门控钩子 + <code>tests/test_webui_static_skins.py</code> + 本档案)。</p>
+<h4>挂载架构(三型落点, 全部不碰共享模板的结构与类名)</h4>
+<ul>
+  <li><b>flux 专属文件(主力)</b>: <code>flux/css/fx-mount.css</code>(197 行, 每条规则 <code>html[data-fx-preset]</code> 作用域前缀 —— 其它皮肤既不挂 fx.css 也没有该属性, 选择器恒不命中) + <code>flux/fx-mount.js</code>(<code>window.AQB_FX_MOUNT</code>, 状态驱动程序化补属性; shell 静态 script 只挂 flux)。共享模板公共类上的纯 CSS 态效果一律前者, 不给共享模板加属性。</li>
+  <li><b>共享 JS ui 门控钩子(6 个消费点)</b>: <code>ui_feedback.js</code> toast()/_finishToast()/_dropToast()、<code>state.js</code> watch torrents/groups/drawerVisible/page、<code>view.js</code> setViewMode、<code>auth.js</code> 两处鉴权失败口 —— 全部 <code>this.ui === "flux" && window.AQB_FX_MOUNT</code> 双保险(其它皮肤两条件恒假)。</li>
+  <li><b>程序化属性兜底</b>: 登录段受四皮肤 shell parity 守阵(逐字相等)约束不给加属性, data-fx 由 fx-mount.js 在运行时补。</li>
+</ul>
+<h4>逐组挂载落点表(S4 24 项)</h4>
+<table>
+  <tr><th>效果</th><th>落点</th><th>落点类型</th></tr>
+  <tr><td>D1-2 glow</td><td>fx-mount.css <code>.bt:hover</code> 与各变体既有 hover 落影<b>合成</b>(保留原第一段阴影 + 追加 fx 辉光段; ghost/icon 既有 none = 只剩 fx 辉光, 六变体全覆盖)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D1-3 sheen</td><td>fx-mount.css <code>.bt::after</code> 载体 + <code>:hover::after</code> 触发(复用 fx-sheen keyframes 与 glass 供给面)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D1-4 ripple</td><td>fx-mount.js document 级 pointerdown 委托命中 <code>.bt</code> → <code>AQB_FX.ripple</code>(RM 内部把关); 载体(裁边)在 fx-mount.css</td><td>flux 专属 JS + 作用域 CSS</td></tr>
+  <tr><td>D1-5 press</td><td>fx-mount.css <code>.bt:active</code> scale(--fx-pop-scale) + 回弹段(fast+back-out, fx press 原语同款; 替换既有 translateY(1px))</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D1-6 icon</td><td>fx-mount.css <code>.bt.icon .ico</code> hover 轻擦(rotate 8deg + 1.08) —— <b>偏差注明</b>: fx.css icon 原语的 <code>.fx-ico</code> 契约元素在 flux 零存在(按钮图标子元素是既有 <code>.ico</code>), 等价落点换 .ico, 曲线/幅度同款, 效果不落空</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D2-3 zoom 入场</td><td>fx-mount.css <code>.modal</code>: 皮肤 modal-in 弹簧入场退役(animation-name:none) + opacity/transform 过渡(--fx-pair-modal-in, glass 320ms) + <code>@starting-style</code> scale(--fx-zoom-from)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D2-5 danger tone</td><td>fx-mount.css <code>.modal.tone-error</code>(_openModal 单点派生类)插入即播: fx-danger-glow 400ms 先行 + fx-headshake 430ms 接力(时序同 fx.css 组合规则)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D3-4 push-content</td><td>state.js watch drawerVisible(门控) → fx-mount.js <code>dock()</code>: main.content stamp data-fx="push" + data-fx-pushed + <code>--fx-push-y</code>(= .drawer-dock 实时高, ResizeObserver 跟 drawer.js 的 rAF 追高逐帧同幅); 关面板/切页回落摘标记</td><td>ui 门控 JS + fx.css push 原语</td></tr>
+  <tr><td>D4-1 row-hover</td><td>fx-mount.css <code>.group-row/.member-row:hover</code>(:not 排除 expanded/selected/partial/search-hit 既有底)gradient 叠 --bg-hover 合成(与既有状态底同款写法)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D4-2 row-sel</td><td>fx-mount.css 行 ::before 铺到全部行(scaleY(0)+opacity 0 双保险不可见), 既有 .selected/.partial 类驱动 scaleY(0→1) 生长; member partial 18% 几何差镜像</td><td>flux 作用域 CSS(消费既有状态类, 零模板改动)</td></tr>
+  <tr><td>D4-3 row-flash</td><td>fx-mount.css <code>.ctx-src.group-row</code> 等四行类 fx-row-flash —— 右键锚点行由 menu.js::_markCtxSource 既有机制挂 .ctx-src, <b>类挂即播零 JS</b>(菜单关闭摘类, 重挂重播)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D4-4L row-in</td><td>state.js watch torrents/groups(门控, watch flush pre) → fx-mount.js <code>rows()</code>: 数据差分 → rAF 内对渲染行 stamp data-fx="row-in"(fx-row-in 动画随属性生效)。行窗口化只动可见窗口不动数据数组, 滚动重渲天然不误触发</td><td>ui 门控 JS + fx.css 原语</td></tr>
+  <tr><td>D4-5L row-out</td><td>同上: 差分移除侧在重渲前抓行克隆为<b>退场幽灵</b>(容器内绝对定位定格原位 + 实际行高覆写 --fx-row-h), stamp row-out 播完自清(280ms 超时兜底)</td><td>ui 门控 JS + fx.css 原语</td></tr>
+  <tr><td>D4-6 check</td><td class="bad">落空: torrent 表格行无 checkbox 元素(选择走 单击/键盘/右键, 勾选格子只存在于抽屉 dt11 变体面) —— S4 候选留库, 见降级清单</td><td>落空注明</td></tr>
+  <tr><td>D5-2 focus-ring</td><td>fx-mount.css <code>.top-search input:focus</code> / <code>.modal-field input:focus</code> / <code>.hb-input:focus</code> 三输入面既有 focus 描边/辉光保留、box-shadow 链尾追加 fx 3px 柔环; 登录卡输入<b>不挂</b>(warn 凭据语义辉光是 flux 既有设计, 不混 accent)</td><td>flux 作用域 CSS</td></tr>
+  <tr><td>D5-3 focus-float</td><td class="bad">降级: flux 输入面无 input+label 兄弟对结构(标签都在字段容器上方), 结构改造被共享模板红线禁止 —— 见降级清单</td><td>降级注明</td></tr>
+  <tr><td>D5-5 shake</td><td>auth.js 两处失败口(401 与服务不可达, 门控) → fx-mount.js <code>loginShake()</code>: 程序化 stamp data-fx="shake" + .is-invalid 挂/摘(400ms, 连续失败可重播) —— 登录段 shell parity 不给加属性故走程序化</td><td>ui 门控 JS + fx.css 原语</td></tr>
+  <tr><td>D6-1 rise+exit 骨对</td><td>ui_feedback.js toast()/_finishToast()(门控 nextTick) → fx-mount.js <code>toastSync()</code>: 差分扫描 .toast-wrap 新条 stamp data-fx="rise"; 退场 = _dropToast(门控) → <code>toastDrop()</code> 包 View Transitions</td><td>ui 门控 JS + fx.css 原语 + fx-mount.css 确定性入场动画</td></tr>
+  <tr><td>D6-2 countdown</td><td>toastSync 写 <code>--fx-life</code>(与自动关闭同一来源 toastMs 单点解析, sticky 条不给)+ data-fx-cd 标记; fx-mount.css <code>.toast[data-fx-cd]::after</code> 合成条(fx-countdown keyframes, 底缘 2px 满宽)</td><td>ui 门控 JS + 作用域 CSS</td></tr>
+  <tr><td>D6-3 队列 FLIP</td><td>_dropToast 门控 → fx-mount.js <code>toastDrop()</code>: spawn 时逐条写唯一 view-transition-name, 移除包 <code>AQB_FX.viewTransition</code>(被移除条快照退场 + 存活条同名配对 FLIP); RM/不支持 VT = 直接提交</td><td>ui 门控 JS</td></tr>
+  <tr><td>D6-4 ico-spring</td><td>toastSync 对新条 .ico 子元素 stamp data-fx="ico-spring" + data-fx-play(节点新插, 属性到位即播)</td><td>ui 门控 JS + fx.css 原语</td></tr>
+  <tr><td>D6-5 danger glow</td><td>toastSync 按 .error/.timeout 类补 danger+play(busy 等待条结算成终态的原位升级也覆盖); fx-mount.css 危险条 rise+glow 双动画合并(覆盖 fx.css 单动画规则, glow 语义不变)</td><td>ui 门控 JS + 作用域 CSS</td></tr>
+  <tr><td>D7-4 dir</td><td>view.js setViewMode + state.js watch page(门控) → fx-mount.js <code>tabDir()</code>: 位置槽位序(组/种/剧/设置)比方向, rAF 后对 main.content(三视图共壳, 跨切换持久)/main.ce-page stamp data-fx="dir" + <code>AQB_FX.dir</code> 重触发; 设置页内部 hub.view 二级导航不算页签切换</td><td>ui 门控 JS + fx.css 原语</td></tr>
+  <tr><td>D8-4 hscroll 胶囊</td><td>fx-mount.css <code>.hscroll-pill.on</code> fx-pill-in(缩放+淡入; 生产胶囊 translateX(-50%) 居中占用 transform, 位移烘进 keyframe 与静息同值无缝回位; .on 重挂即重播) —— <b>shared/hscroll.css 零改动</b>(红线)</td><td>flux 作用域 CSS</td></tr>
+</table>
+<h4>降级 / 落空清单</h4>
+<ul>
+  <li><b>D4-6 check 落空</b>: torrent 行无 checkbox 元素(见落点表), S4 候选留库不挂载。</li>
+  <li><b>D5-3 focus-float 降级</b>: flux 输入面无 input+label 兄弟对结构, 结构改造被共享模板红线禁止。</li>
+  <li><b>D5-2 收窄</b>: 登录卡输入不挂 accent ring(保留 warn 语义辉光); 实活验证面 = 顶栏搜索(设置页 .hb-input 规则在档, 桩服务不供 config schema 无法实活)。</li>
+  <li><b>row-in/out 覆盖面</b>: 只服务数据差分驱动的增删(种子页平铺行 + 辅种组行); 行窗口化滚动重渲按口径不触发; 成员行(groups/shows 展开成员)不在差分源里, 不覆盖。</li>
+  <li><b>实测发现并处置</b>: @starting-style 过渡对「插入后才程序化补属性」的节点<b>不触发</b>(Chromium 起始式窗口在首次样式计算即关闭, stamp 晚于该时刻) —— toast rise(fx.css rise 原语是 starting-style 族)落成 fx-mount.css 的<b>确定性入场动画</b> fx-toast-rise(位移读 --fx-enter-shift, RM 收进 no-preference 媒体), data-fx="rise" stamp 保留(audit 口径不变); 其余动画类原语(ico-spring/row-in/row-out/countdown)本就随属性生效不受影响。</li>
+  <li><b>RM 边界</b>: flux 皮肤存量 modal-in 动画在 RM 下仍播(存量行为与 console 一致, 不属 fx 降级面); fx 侧全部降级 = ripple 不注入 / 弹窗 danger 动画不播 / toast 即时终态 / 行直接成行。</li>
+</ul>
+<h4>守阵与体量</h4>
+<ul>
+  <li><b>shell 帽</b>: flux/index.html 227 → 233(fx-mount.css 注释+link + fx-mount.js 注释+script), 守阵历史行同步。</li>
+  <li><b>link 序</b>: flux 本皮肤 CSS 断言加 <code>flux/css/fx-mount.css</code> 链尾档(排 fx 三件之后 = 最后一级联)。</li>
+  <li><b>test_frontend_fx_wiring 扩</b>: fx-mount.css/fx-mount.js 恰挂一次 + fx-mount.css 排 fx-presets.css 之后 + 三旧皮肤对 fx-mount 零引用(隔离反向钉)。</li>
+  <li>fx 三件体量不动(fx.css 519 / fx.js 255 / fx-presets 240); fx-mount.css 197 行、fx-mount.js 249 行, 远离 700 行帽。</li>
+</ul>
+<h4>实测</h4>
+<ul>
+  <li>test.quick 迭代绿(4454 passed); <b>test.full 全绿: 4454 passed, 10 skipped, 110.88s, 覆盖率 99%</b>(数字见 kb.baseline 最新切片)。</li>
+  <li>Playwright 实测(桩 API 真服务 8137 + headless Chromium, 40/40 断言通过): <b>按钮</b> hover 辉光追加段/sheen(::after fx-sheen)/press 缩放/ripple 节点注入; <b>弹窗</b> modal-in 退役 + zoom 过渡在档、danger 框 glow+headshake 双动画; <b>行</b> hover 渐亮/选中边条 scaleY 生长/插入 stamp+fx-row-in/退场幽灵 fx-row-out 播完自清/右键锚点 fx-row-flash; <b>输入</b> 顶栏搜索 focus 3px 柔环; <b>面板</b> data-fx-pushed + --fx-push-y=378px 与 dock 实高一致、关面板回落; <b>toast</b> rise stamp+倒计时条(--fx-life=4000ms)+ico-spring+error 条 danger glow、退场走 View Transitions 且队列 FLIP、皮肤 toast-in 让位; <b>页签</b> 前进 right/后退 left/进设置页 main.ce-page 方向滑动; <b>hscroll 胶囊</b> .on fx-pill-in 缩放+淡入; <b>登录微震</b> shake stamp+.is-invalid 触发 fx-shake 后自清; <b>audit</b> 终态 ok(total&gt;0, 无 unknown/unmounted); console/pageerror 全零。</li>
+  <li><b>console 对照零泄漏</b>: window.AQB_FX/AQB_FX_MOUNT 均不存在、全文档 [data-fx] 与 .fx-ripple 零命中、按钮 hover 无 fx 辉光段、弹窗仍走皮肤 modal-in、toast 无 data-fx 仍走皮肤 toast-in; console/pageerror 全零。</li>
+  <li><b>RM 降级(reducedMotion: reduce)</b>: ripple 不注入、弹窗 fx danger 动画不播、toast 全零动画(过渡 0s/无倒计时条)、行插入无 stamp 无动画直接成行、audit ok、pageerror 全零。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -355,6 +415,7 @@
   <li><span class="tag">R1 · 26-11-01-0856</span> S4 人工挑选结论回填: 主 preset glass + 24 项选定按组件分组落档(含 warn 原样), S6 待办影响三条(页内自实现提升/glass 开 glow 供给/落选留库不挂载); 原始导出 JSON 落 attachments/26-11-01-webui-fx-skin-s4-picks.json</li>
   <li><span class="tag">R2 · 26-11-01-0925</span> S5 flux fork 执行实录落档(见 §06「S5 执行实录」): fork 落地+令牌取值 glass 化(backdrop-filter 保持 0 处)+ui=== 盘点(补 state.js 两处)+守阵收编(_UI_ALL 四档 + skins 10 处/dom 9 处显式加档)+transition parity 收编定案+Playwright 双皮肤实测零报错; 另修 S4 段一处 ISO-T 日期体例</li>
   <li><span class="tag">R3 · 26-11-01-0954</span> S6 前半执行实录落档(见 §06「S6 执行实录(前半)」): fx 三件挂 flux(shell 静态 script + head 尾 2 link + html preset=glass, 219-&gt;227 行) + S4 选定 24 项页内自实现提升入库(REGISTRY 9-&gt;27 名, ripple 走 fx.js 委托, focus 系拆 focus-ring/focus-float 两效果名, D2-5 拆 danger+headshake 组合, D8-4 走 pop --fx-base-tx 合成不造新原语, rows 系全 data-fx 委托不碰 .group-row) + glass 开 glow 供给(0-&gt;12px accent-ink 系, S4 拍板 flux 定制; sheen 维持) + 守阵三处(fx.js 待接线豁免删/ hscroll 判据 6 fx 豁免/ 新增 test_frontend_fx_wiring) + test.full 4454 全绿 + Playwright 双验(flux audit ok total=0, showcase audit total=21 ok)</li>
+  <li><span class="tag">R4 · 26-11-01-1101</span> S6 后半执行实录落档(见 §06「S6 执行实录(后半)」): S4 选定 24 项逐项挂进 flux(flux 专属 fx-mount.css 作用域 CSS + fx-mount.js 状态驱动程序化属性 + 6 个共享 JS ui 门控消费点, 共享模板结构与类名零改动) + 降级/落空清单(D4-6 落空/D5-3 降级/@starting-style 对运行时补属性不触发 → toast rise 落确定性 keyframes) + 守阵三处(shell 帽 227→233/link 序加 fx-mount.css/fx_wiring 扩挂载面与隔离反向) + 实测(test.full 4454 全绿 + Playwright 40/40: flux 全组生效/console 零泄漏/RM 降级/audit ok)</li>
 </ul>
 
 </div>

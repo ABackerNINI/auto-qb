@@ -26,6 +26,9 @@
        test_frontend_fx_wiring 钉序; 三旧皮肤零引用 = D14 隔离拍板) -->
   <link rel="stylesheet" href="/shared/fx/fx.css">
   <link rel="stylesheet" href="/shared/fx/fx-presets.css">
+  <!-- fx 挂载面(S6 后半): flux 专属作用域 CSS 挂载层(共享模板公共类上的效果一律
+       html[data-fx-preset] 前缀挂载, 级联序排 fx 三件之后, 守阵 test_frontend_fx_wiring 钉) -->
+  <link rel="stylesheet" href="/flux/css/fx-mount.css">
 </head>
 <body>
   <!-- 图标 sprite: 与 atlas/prism/console 同一份清单(brand 仍用 i-orbit 轨道符号, 皮肤差异只在 CSS 层) -->
@@ -222,6 +225,9 @@
   <!-- fx 挂载器(S6): shell 静态 script(不进 tpl-manifest -- 四套清单守阵钉逐项相等,
        fx 只服务 flux); 初始 scan 早于模板异步注入属正常, 消费方挂载后重扫 -->
   <script src="/shared/fx/fx.js"></script>
+  <!-- fx 状态驱动挂载器(S6 后半): flux 专属消费层, 共享 JS 消费点按 ui === "flux" 门控
+       调 AQB_FX_MOUNT(行插入退场/页签方向/toast/dock 让位/登录微震), 其它皮肤无此域 -->
+  <script src="/flux/fx-mount.js"></script>
   <script src="/shared/boot.js"></script>
 </body>
 </html>

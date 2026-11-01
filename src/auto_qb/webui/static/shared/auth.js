@@ -148,6 +148,9 @@ window.AQB_AUTH = {
       if (message) {
         this.authError = message;
         this.authErrorKind = "auth";
+        // fx(S6 后半, plan 26-10-31-2316): D5-5 校验失败微震的消费点(flux 专属,
+        // flux/fx-mount.js::loginShake), 其它皮肤零调用
+        if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.loginShake();
       }
     },
     async bootstrap(candidate) {
@@ -182,6 +185,8 @@ window.AQB_AUTH = {
           // 服务不可达 ≠ 密钥错误: 不否定候选密钥(本地存储亦保留), 给出重试入口, 防误清凭证
           this.authError = "服务不可用, 请确认 auto-qb 程序正在运行";
           this.authErrorKind = "unavailable";
+          // fx(S6 后半): 同上 —— 服务不可达也是一次校验失败, 输入框同款微震(flux 专属)
+          if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.loginShake();
         }
         // e.auth(401/无凭证): _request 已走 _logout() 完成遮罩/数据/文案收口
       } finally {

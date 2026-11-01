@@ -147,6 +147,9 @@ window.AQB_VIEW = {
       // P1-1: 服务端只回当前视图的数组, 切视图后本地持有的 rid 与新视图的数据不再对应
       // ⇒ 置空强制下一轮取全量(切页首帧多一次全量, 换来的是之后每轮只传 1/4)
       this.lastRid = null;
+      // fx(S6 后半, plan 26-10-31-2316): 主表三页签方向感知滑动的消费点(flux 专属,
+      // flux/fx-mount.js::tabDir), 其它皮肤零调用
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.tabDir(mode);
       this.$nextTick(() => {
         this._syncHeadHeight();
         this.recomputeEffective();

@@ -44,9 +44,17 @@ window.AQB_FEEDBACK = {
       this.toasts.push({ id, text, kind });
       // 通知: emit 即收(上方注释; auth 整表清空绕过退场钩子, 所以不能等退场)
       if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
+      // fx(S6 后半, plan 26-10-31-2316): flux 皮肤的 toast 动效挂载点 —— 渲染落定后由
+      // flux/fx-mount.js 差分扫描程序化补 data-fx(rise/ico-spring/countdown/danger);
+      // ttl 与自动关闭同一来源(toastMs 单点解析), sticky 条传 0 = 不挂倒计时。其它皮肤零调用。
+      const wait = toastMs(kind, ms);
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) {
+        const ttl = opts.sticky ? 0 : wait;
+        this.$nextTick(() => window.AQB_FX_MOUNT.toastSync(ttl));
+      }
       // sticky = 常驻不自动消失(强制重新汇报"等待中"): 由 _finishToast 更新终态后退场
       if (opts.sticky) return id;
-      setTimeout(() => this._dropToast(id), toastMs(kind, ms));
+      setTimeout(() => this._dropToast(id), wait);
       return id;
     },
     /* 常驻提示条结算: 原位更新文案与样式(kind)后停留 ms 再退场 —— "等待中"->"成功/超时"的强反馈 */
@@ -54,13 +62,24 @@ window.AQB_FEEDBACK = {
       this._updateToast(id, { kind, text });
       // 通知: 终态 upsert —— busy 链在此首次入历史, emit 即收过的条目在此覆盖(kind/text 以终态为准)
       if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
-      setTimeout(() => this._dropToast(id), toastMs(kind, ms));
+      // fx(S6 后半): 同 toast() —— busy 条原位升级成终态时, danger/倒计时按新 kind/ttl 补挂
+      const wait = toastMs(kind, ms);
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) {
+        this.$nextTick(() => window.AQB_FX_MOUNT.toastSync(wait));
+      }
+      setTimeout(() => this._dropToast(id), wait);
     },
     _updateToast(id, patch) {
       const t = this.toasts.find((x) => x.id === id);
       if (t) Object.assign(t, patch);
     },
     _dropToast(id) {
+      // fx(S6 后半): flux 退场走骨对 -- 被移除条 View Transitions 快照退场 + 存活条
+      // FLIP 重排(fx-mount.js::toastDrop; RM/不支持 = 直接提交, 无动效终态)
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) {
+        window.AQB_FX_MOUNT.toastDrop(() => { this.toasts = this.toasts.filter((t) => t.id !== id); });
+        return;
+      }
       this.toasts = this.toasts.filter((t) => t.id !== id);
     },
     /* --------------------------------------------- 通知(WEBUI 通知 S1 数据层) */
