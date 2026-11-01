@@ -7,10 +7,10 @@
 <title>WEBUI 动效皮肤 flux 分步实施计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-fx-skin">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-02-0203">
-<meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
+<meta name="doc-updated" content="26-11-02-0237">
+<meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html, memory-bank/testing/baselines/26-11-02-0237-webui-fx-skin.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-02-0203 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-02-0237 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -608,6 +608,16 @@
   <li><b>实测</b>: test.quick 4798 passed, 10 skipped(33.67s) → test.full 4798 passed, 10 skipped, 覆盖率 99%(151.11s, 数字事实源 = kb.baseline 最新切片 26-11-02-0200)。</li>
 </ul>
 
+<h3>S8 执行实录(26-11-02): 收尾</h3>
+<p>纯文档/档案轮, 代码与测试零改动(atlas/prism/console/showcase/config.yml/auto-qb-data 零改动)。§04 S8 行 DoD 逐项落点如下, §05 后续任务三条(更多 preset / 存量收编 / 指南硬化)保持登记、不排期。</p>
+<ul>
+  <li><b>文档回写</b>: <code>conventions/webui.md</code> 新增「WEB UI fx 动效库与 flux 皮肤」章节(fx 相关问题的路由单点), 小节: 挂载口(data-fx/data-fx-variant 属性驱动 + AQB_FX 单挂载器 scan/audit/幂等; 两层变体 = 组件层 variant × 风格层 data-fx-preset)/库落点与三档消费落点(flux 专属 fx-mount.css/js + 共享 JS ui 门控 + 程序化 stamp)/四皮肤隔离(三旧皮肤零 fx 引用, fx_wiring 反向钉)/降级哲学 D5 单点/已知硬约束坑路由(transform 祖先 → 坑档 clip-path-clips-fixed、@starting-style 对程序化补属性不触发、blur 面积与 SwiftShader 软渲染、_FLUX_BACKDROP_BUDGET 毛玻璃预算、高密度行禁 stagger)/后续扩展接口指向 §05。</li>
+  <li><b>双向补链</b>: webui.md 头部 <code>**Refs:**</code> ↔ 本档案 <code>doc-refs</code> 互指(S4 前已在档), fx 章节内另链坑档; <code>kb.docmap --check</code> 绿。</li>
+  <li><b>基线</b>: test.full 实测 4799 passed, 10 skipped, 覆盖率 99% —— 与上切片 26-11-02-0200(4798)同树(HEAD 529863f1)差 +1、本轮零代码变更, test.quick 交叉一致(4799), 按口径新建切片定格(见 kb.baseline 最新切片); 数字事实源 = kb.baseline, 本节不另抄明细。</li>
+  <li><b>progress 沉淀</b>: <code>progress/implemented-webui.md</code> 增 flux/fx 落地条目; activeContext 两切片(webui-flux-skin-r3-shape-scroll / f7e-push-retire)内容已尽在 §06 R9-R11, 蒸馏后删除。</li>
+  <li><b>状态翻转</b>: doc-status Open → Done(<code>commands run kb.status</code>); 变更记录收尾条 R12(kb.bump)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -634,6 +644,7 @@
   <li><span class="tag">R9 · 26-11-02-0005</span> 精修轮 R3(F7c)执行实录落档(见 §06「精修轮 R3」): T1 残余圆角回退(令牌三档归零+四处 clip-path 恢复)+T2 F7a 退役(push 纯过渡, 滚动交还 _kbRevealRow); fx_wiring 6c 反向钉; 聚焦行落吸顶头后果列待裁决</li>
   <li><span class="tag">R10 · 26-11-02-0056</span> 精修轮 R4(F7d)落档(见 §06「精修轮 R4」): F7c 裁决项 b 落地 —— push 落定回执(fx-mount.js transitionend+兜底定时器, data-fx-pushed 守卫)+ state.js 消费点重入原版 _kbScrollRowIntoView, 聚焦行终位 21.9→108.9/136.0(吸顶列头下 8px 整); 实证 A/B 定案重入单点选择; fx_wiring 6c 追加落定回执链路六针并红绿双验</li>
   <li><span class="tag">R11 · 26-11-02-0203</span> 精修轮 R5(F7e)落档(见 §06「精修轮 R5」): D3-4 第三轮修复 —— 打点四路径实证根因(push 位移在 scrollY=0 不可恢复, F7d 重入链路本身正常), 按用户口径弃用 push 位移本体, 落定回执换锚面板入场过渡, 加面板底部上滑(fx 令牌)+fx-glide 上推过渡两段动效; 守阵 6b/6c 重写红绿双验; test.full 4798 全绿(切片 26-11-02-0200)</li>
+  <li><span class="tag">R12 · 26-11-02-0237</span> S8 收尾落档(见 §06「S8 执行实录」): conventions/webui.md 增 fx 动效库与 flux 皮肤章节(路由单点: 挂载口/三档消费落点/四皮肤隔离/降级哲学 D5/坑路由/扩展接口) + 双向补链核对 + test.full 4799 全绿新建基线切片(同树计数波动) + progress 沉淀与 activeContext 两切片删除 + doc-status 翻 Done</li>
 </ul>
 
 </div>

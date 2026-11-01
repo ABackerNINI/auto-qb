@@ -1,7 +1,7 @@
 # WEB UI 产出口径与令牌
 
-> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、HTML dark 主题 —— 前端产出口径的唯一出处。
-> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用
+> 摘要: 菜单/入口分层、令牌分工、按钮体系、悬浮提示、选中摘要口径、fx 动效库与 flux 皮肤、HTML dark 主题 —— 前端产出口径的唯一出处。
+> 触发: WEB UI 约定, 菜单分层, 令牌, 主题, dark, HTML 产出, tooltip, 悬浮提示, 选中摘要, occ_key, 实际占用, fx, 动效, data-fx, flux, 皮肤, preset, reduced-motion
 **Refs:** memory-bank/issues/26-10-20-2231-refactor-fe-css-rule-family-dup.html, memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html
 
 ## WEB UI 菜单/入口分层原则 (2026-09-17 用户明确要求记入)
@@ -138,6 +138,21 @@
 - **不去重的两层**: 跨组文件交叉(`cross_group_conflict`)不再去重(后端另有风险标记); 追剧页同集多版本不额外去重(「同一份文件」判据是 save_path = 组, 不是集; 不同版本是不同字节)。
 - **算法单点**: `selection.js::selSizeSummaryOf(members)` —— 筛选行(`selectedSize` computed, 无选中早退)与删除确认框(`delete_flow.js::_deleteDetails` 的条件行)共用, 不另写求和。删除框那行仅 `Y < X` 时追加, 口径说明走 `d.hint`(popovers 详情行 `:title` 吃 `d.hint || String(d.value)`; 原生 title 由 .aq-tip 层迁移成 `data-aq-tip`)。
 - **守阵**: `tests/test_web_backend_misc.py::test_member_view_occ_key`(契约三条) · `tests/test_webui_static_dom_page.py::test_frontend_selection_size_summary_wiring`(模板/JS/删除行三层接线) · `e2e/multiselect-shows.spec.mjs`「选中摘要」两条(双皮肤)。
+
+## WEB UI fx 动效库与 flux 皮肤 (2026-11-01, 计划 26-10-31-2316)
+
+第四套皮肤 flux(fork console、只 dark、主 preset glass)+ 零依赖动效库。本节是 fx 相关问题的路由单点; 15 项拍板与逐轮实录见计划档案 §06, 本节不复述。
+
+- **挂载口(不写第二套)**: 属性驱动 —— 组件层 `data-fx="<效果名...>"`(多值空格组合) + `data-fx-variant="subtle|bold|spring"`(强度维); 风格层 `<html data-fx-preset="glass">`(整套令牌配方一键切换, neon/crisp 留库可切回)。单挂载器 = `window.AQB_FX`(fx.js): `scan()` 幂等(boot.js 模板异步注入后消费方再调即可), `audit()` 对账(unknown/unmounted 即问题), 效果名录单点 `REGISTRY.effects`(逐名对 fx.css 规则, 守阵钉); 程序化触发走 `AQB_FX.ripple/dir/viewTransition` 等导出。
+- **库落点与消费纪律**: `static/shared/fx/` 三件单点(fx.css 基线规则+降级块 / fx-presets.css preset 配方 / fx.js 挂载器)。皮肤消费只走三档落点: ① flux 专属 `flux/css/fx-mount.css`(每条规则带 `html[data-fx-preset]` 作用域前缀, 其它皮肤无该属性恒不命中)+ `flux/fx-mount.js`(`window.AQB_FX_MOUNT`, 状态驱动程序化 stamp 属性); ② 共享 JS 的 ui 门控钩子(`this.ui === "flux" && window.AQB_FX_MOUNT` 双保险, 其它皮肤两条件恒假); ③ 登录段等 shell parity 面(HTML 逐字相等守阵)不给加属性, 全靠运行时程序化 stamp。共享模板不加属性、不改类名、不写第二份效果规则。
+- **四皮肤隔离**: atlas/prism/console 对 shared/fx/ 与 fx-mount 零引用(不挂库也无 data-fx-preset), 守阵 `test_frontend_fx_wiring` 反向钉(三旧皮肤零引用 + flux 挂行恰三件 + 级联序); fx.js 走 flux shell 静态 script 而非 tpl-manifest(四套清单守阵钉逐项相等, 进清单 = 四皮肤同挂破隔离)。flux 与 console 后续演进互不带动, 同步需求走 issue/另立计划。
+- **降级哲学(D5 单点)**: Chrome/Edge 全特性; Firefox/Safari/旧内核 = 降到**无动效终态**, 不为旧浏览器保动效 —— 「动效没生效」先查浏览器再查代码。硬惯例: 每个 @keyframes 配 `prefers-reduced-motion` 降级块, 动画类原语收进 no-preference 媒体; flux 皮肤存量动效(如 modal-in)的 RM 行为不属 fx 降级面。
+- **已知硬约束/坑路由**:
+  - transform 祖先改 fixed 包含块 → [pitfalls/web-ui/clip-path-clips-fixed.md](../pitfalls/web-ui/clip-path-clips-fixed.md)(R1 实复发: push 载体改 relative-top; 新动效载体选型先对 fixed 后代跑祖先链判据);
+  - `@starting-style` 对「插入后才程序化补属性」的节点不触发(起始式窗口在首次样式计算即关闭) —— 程序化 stamp 的入场用确定性 @keyframes, 不用 starting-style 族;
+  - blur 面积成本: 常驻小面 blur 空闲/滚动无衰减, 大面板(盖住视口大半)开启期掉帧; 本机 Playwright Chromium 是 SwiftShader 软渲染, 帧率数字不可当真机预期。flux 毛玻璃走显式预算守阵 `_FLUX_BACKDROP_BUDGET = 4`(test_webui_static_skins::`_scan_backdrop_filter`, 加/摘 = 显式改预算 + 红绿双验; modal-mask 恒禁);
+  - 高密度行(torrent 表)禁全行 stagger(设计指南硬条); 行内实时数据(速度列)不挂数字补间(高频补间 = 高负载, 只挂状态栏级低频面)。
+- **后续扩展接口**: 新 preset(retro 等)/存量动效收编/动效指南硬化 → 计划档案 §05 后续任务(配方接口已在两层变体模型预留); 单组件换装 = 从 showcase 落选候选按卡面标注启用, 不新造第二实现。
 
 ## HTML 文档一律 dark 主题 (2026-09-20 用户指定)
 
