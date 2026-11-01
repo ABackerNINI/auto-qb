@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-machine-rm02-drift-plan">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-01-1921">
+<meta name="doc-updated" content="26-11-01-1921">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); background: var(--code-bg); padding: 12px 16px; border-radius: 4px; margin: 14px 0; }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout.good { border-left-color: var(--ok); }
+  .case { border: 1px solid var(--hair); border-radius: 4px; margin-bottom: 16px; overflow: hidden; }
+  .case > .hd { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; padding: 10px 14px; background: var(--code-bg); border-bottom: 1px solid var(--hair-soft); }
+  .case > .hd .cid { font-family: var(--mono); font-weight: 700; color: var(--accent-ink); }
+  .case > .hd .ttl { font-weight: 600; }
+  .case > .bd { padding: 10px 14px 12px; }
+  .four { margin: 8px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--dim); }
+  .four li { margin-bottom: 3px; }
+  .four b { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-machine-rm02-drift-plan</div>
+<h1>RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)</h1>
+<p class="lede">对「主循环·调度·持久化」片(RM02)做<b>漂移复测轮</b>真机实测的分步计划: 核心 = <b>RM02-07 断连自动重连真机回归</b>(issue 26-10-31-1029 已修 <code>e820d2bb</code>, 修复轮只有单测, 规程 §2.8 明载「修复后须真机回归」); 其余 7 条既有用例原判据复测(环境1 → 环境2 首跑), W2-B/W4 波及 <code>core/taskqueue.py</code>/<code>core/state.py</code> 的重构面随复测带跑, <code>f2698064</code> 已真机验过记账不复测。设计主轴: 既有 8 条用例零重写直接复用, 基线按「写不出 commit 从首轮重来」口径在本轮实测完成时重立。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-01-1921 · <b>doc-updated</b> 26-11-01-1921 · <b>doc-status</b> Open(待拍板 §05, 拍板即冻结) · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> RM02 漂移复测轮排期代理 · 常驻锚 issue 26-10-31-0641 §08(2026-11-01 漂移轮顺序 RM03→<b>RM02</b>→RM04→RM08/09 已拍板; RM03 轮已完成 17/17) · 分支 real/drift-261101(纯本地, 无远端)<br>
+  <b>前置已办</b> 56590 副实例 <code>bypass_local_auth=True</code> 已按用户拍板(2026-11-01)永久落实例 = 环境2 标准配置(锚件 §08 已记; 规程 §2.5.2/§2.10 已回写, commit 670a6194)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>定片(规程 §06 步骤 1)</h3>
+<p>「主循环·调度·持久化」→ <b>RM02</b>。依据: 锚件 §03 片表 RM02 行(名称「主循环·调度·持久化」, glob = <code>src/auto_qb/core/qbmanager.py</code> · <code>src/auto_qb/core/taskqueue.py</code> · <code>src/auto_qb/core/state.py</code> · <code>src/auto_qb/core/module.py</code> · <code>src/auto_qb/infra/store_recovery.py</code>, 验证面 = interval 真节拍 / 优雅退出落盘 / 非优雅终止丢失窗口 / 热重载 / <code>queue_rebuilt</code> 相位 / 连不上 qB 的失败节流与重连退避(RM01 D1 移交)); 排期依据 = 锚件 §08 2026-11-01 漂移轮顺序拍板(RM03 已完成, 本轮 RM02)。</p>
+<div class="callout"><b>锚件 §08 已拍板口径(本轮输入, 写在开头)</b>:
+<ul style="margin:6px 0">
+  <li>漂移轮顺序 <b>RM03(已完成 17/17)→ RM02 → RM04 → RM08/09</b>; 轮次跟着会话走(§08 D2 拍板), 本轮固定<b>环境2(C盘机)</b>, 顺带兑现 RM02 在环境2 的首跑覆盖。</li>
+  <li>本轮核心: <b>RM02-07 断连自动重连真机回归</b> —— issue 26-10-31-1029(qB 断连后不自动重连 + ERROR 刷屏)已修(<code>e820d2bb</code>, 单测 5 断言全绿), 修复轮只有单测, 规程 §2.8 明载「修复后须真机回归」; 断连注入基建 <code>tests-real/lib/proxy.py</code> 已有。</li>
+  <li>次要: W2-B/W4 波及 <code>core/taskqueue.py</code>/<code>core/state.py</code>(RM02 glob)的重构复验; <code>f2698064</code>(添加种子后补一次同步追平)已真机验过(26-11-01-0244/0516 transfer 轮), <b>记账即可不复测</b>。</li>
+  <li>旧基线 <code>eba6ee47</code>(clone5 lineage)本分支解析不到(bad revision, 本机 <code>git log eba6ee47..HEAD</code> 实测 fatal)→ 按 §07「写不出 commit 从首轮重来」口径<b>重立基线 = 本轮实测完成时 HEAD</b>。</li>
+  <li>记账项: 缺陷 26-10-31-1030(托盘 SIGTERM)已修且 11-01 托盘复验 3/3, 切片记账即可; RM02 上一轮 8 条 7 绿 1 红(RM02-07), 切片 <code>26-10-31-1041-real-RM02.md</code>, 计划 <code>26-10-31-0927</code>。</li>
+</ul></div>
+<h3>做到什么程度算成</h3>
+<p>§04 四块兑现 —— 8 条用例出官方 suite 结果行, <b>RM02-07 从 FAIL 转 PASS</b>(真机回归闭环, 锚件 §07 RM02 行「有缺陷在池」徽标可摘), 升档 1 条兑现(D2 拍板), 基线重立, 锚件 §07/§08 同步, 收尾核净。</p>
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>只碰白名单实例</b>: 环境2 56589/56590(exe <code>C:\Programs\qBittorrent-testing*</code>), 允许 real.up/real.down 重启这两个; <b>绝不动其它 qB</b>。产品进程只连副实例 56590(空库), 主实例 56589 仅 guard 出现。</li>
+  <li><b>token 不落盘</b>: 经环境变量 <code>QBT_REAL_ENV=2</code> + <code>QBT_TEST_&lt;端口&gt;</code> 运行时注入, 任何文件(含本计划)不得出现 token 字面值。56590 免鉴权后产品进程空凭据(CONFIG_TEMPLATE 口径 <code>username:""/password:""</code>)直连可达。</li>
+  <li><b>当轮不修</b>: FAIL 按 scope-guard 入池 bug issue; 红线文件 <code>config.yml</code> / <code>auto-qb-data/</code> 零触碰, 配置一律用例目录临时派生 + <code>schema_version: 5</code>。</li>
+  <li><b>幂等与回滚</b>: 产品 data_dir/配置全落 <code>tests-real/.work/rm02/</code> 用例目录, 收尾删除; 对 qB 侧零写(全部用例只读快照/或经代理观测), 真实种子(0 枚)零触碰。</li>
+  <li><b>跑法</b>: 官方入口 <code>commands run real.suite -- --slice RM02 --yes</code>(<code>-n 0</code> 串行) —— 直跑 pytest 会撞 xdist 并行抢端口陷阱(§2.8 末注)。</li>
+</ul>
+
+<h2><span class="no">§02</span>开工自检(会话协议 · 漂移体检明细 · glob 自检 · 环境自检)</h2>
+<h3>会话协议(本分支无远端)</h3>
+<div class="callout">分支 <code>real/drift-261101</code>(纯本地无远端)—— 按本轮任务协议<b>禁止跑 <code>my-commit-flow.sync</code> / <code>ship.commit</code> / 任何 push</b>; 收尾普通 git 提交(gitmoji + 中文), commit 前核 <code>git status</code> 只含本轮产物。前置配置回写已单独提交 <code>670a6194</code>。</div>
+<h3>漂移体检明细(规程 §06 步骤 2, git log 实测 2026-11-01)</h3>
+<p>旧基线 <code>eba6ee47</code> 失效(clone5 lineage, bad revision), 漂移面按「RM02 首轮实测时刻(2026-10-31 10:41)之后」<code>git log --since</code> 对 5 条 glob 实测, 命中 <b>4 commits</b>:</p>
+<table>
+  <tr><th>commit</th><th>时间</th><th>主题</th><th>命中文件(RM02 glob)</th><th>分类(规程 §07)</th></tr>
+  <tr><td><code>e820d2bb</code></td><td>11-01 03:38</td><td>qB 运行期断连后自动重连, 消除断开期间逐拍「主循环异常」刷屏(issue 26-10-31-1029)</td><td><code>core/qbmanager.py</code></td><td><b>修复真机回归(必测)</b> —— RM02-07 修复轮只有单测, §2.8 明载须真机回归; 用例判据本就按修复后行为写(节流 ≤3 / 退避 ≤8 次 / 恢复 60s 自动回连), 无需改判据</td></tr>
+  <tr><td><code>23949a33</code></td><td>11-01 04:59</td><td>W2-B 动作 on_error 三档 + retry 任务级 requeue</td><td><code>core/taskqueue.py</code></td><td>③重构复验(对 RM02 面) —— 队列结构动过, RM02-03(落盘)/RM02-05(queue_rebuilt)是最敏感探针, 随复测带跑; on_error 新面已归 RM03 且 RM03-12 真机测过, 不在 RM02 重复立用例(见 D3)</td></tr>
+  <tr><td><code>9a996ad2</code></td><td>11-01 07:21</td><td>W4 per-run trace + evaluation 枚举位</td><td><code>core/state.py</code></td><td>③重构复验(对 RM02 面) —— state 键面动过, RM02-02/03/08(持久化三件套)随复测带跑; trace 新面已归 RM03 且 RM03-13 真机测过</td></tr>
+  <tr><td><code>f2698064</code></td><td>11-01 09:12</td><td>添加种子后补一次同步追平</td><td><code>core/qbmanager.py</code></td><td><b>记账不复测</b> —— 已真机验过(26-11-01-0244/0516 transfer 轮, 锚件 §08 记账), 本轮切片只记一行</td></tr>
+</table>
+<div class="callout warn"><b>结论一行: 判据变 0 条, 修复回归 1 条(RM02-07 必测), 重构复验 2 commit(随 8 条复测带跑), 记账 1 条 —— 轮形态 = 「修复回归 + 换环境复测」轮, 非纯回归, 不适用 §08「纯回归豁免」。</b>另注: 任务简报所引「W2-B/W4 波及 core/module.py」与实测不符 —— 两 commit 实际命中 <code>taskqueue.py</code>/<code>state.py</code>(均在 RM02 glob 内, 结论不变); <code>core/module.py</code> 上一次变更是 <code>f2698064</code> 之前的既验面, 零额外命中。</div>
+<h3>glob 自检(规程 §05 规则 8, <code>git ls-files</code> 实测 2026-11-01)</h3>
+<div class="callout good"><b>5/5 条 glob 全命中, 共 5 个文件 2219 行, 无混入大件, 片边界不糊, 不拆不并。</b>清单: <code>qbmanager.py</code> 1008 行 · <code>module.py</code> 439 行 · <code>state.py</code> 374 行 · <code>taskqueue.py</code> 313 行 · <code>store_recovery.py</code> 85 行。历史「漏 <code>src/auto_qb/</code> 前缀」缺陷(锚件 §08 记 RM02 亦中过招、已按规则 8 修正)本轮未复发 —— 现值本就带前缀, 5/5 直接命中。</div>
+<h3>环境自检(2026-11-01 实测, 环境2; 附录)</h3>
+<pre><code>[ok] real.env (0.4s)
+  当前环境: 环境2(C盘机)  [QBT_REAL_ENV=2]
+    主实例 PRIMARY   = 56589  exe: C:\Programs\qBittorrent-testing\qbittorrent.exe
+    副实例 SECONDARY = 56590  exe: C:\Programs\qBittorrent-testing2\qbittorrent.exe
+    BT 监听端口(实测): {56589: 27049, 56590: 32719}
+    token @56589: 环境变量 已设(QBT_TEST_56589) / local.json 无(口径: token 由用户每轮会话给, 不落盘)
+    token @56590: 环境变量 已设(QBT_TEST_56590) / local.json 无(口径: token 由用户每轮会话给, 不落盘)
+
+[ok] real.guard (1.2s)
+  [ok] 56589 pid=14820 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停
+  [ok] 56590 pid=11644 vv5.2.3 firewalled 真实种子 0 个, 已全部暂停</code></pre>
+<p>两实例 <code>firewalled</code>(§2.5 口径非 disconnected 即通过)。另有<b>开工加验一步(本轮特有)</b>: 核 56590 <code>bypass_local_auth</code> 回读 = <code>True</code>(前置任务已设并回读核实 + WebUI 免凭据 version/prefs/torrents/root 全 200; profile 持久化跨重启, 但若某轮收尾误还原会复发 401 封禁连环假红, 回读一行便宜保命)。主实例 0 枚真实种子(§2.5.2)对本片无碍 —— 全部用例只连副实例空库。</p>
+
+<h2><span class="no">§03</span>方案总览(修复回归面的代码映射)</h2>
+<p>既有 7 条验证面(节拍/落盘/丢失窗/热重载/queue_rebuilt/首连失败/损坏恢复)的映射沿用上轮计划 <code>26-10-31-0927</code>, 用例本体零改动; 以下只列 <b>RM02-07 断连重连面</b>(e820d2bb 修复)的锚点(grep 实测):</p>
+<table>
+  <tr><th>验证面</th><th>实现锚点(qbmanager.py, e820d2bb 后)</th><th>外部可观测口径(用例已按此写)</th></tr>
+  <tr><td>断连稳态守卫</td><td>主循环二元组判据 <code>client is None and _last_conn_ok is False</code>(后者只由断连转换单点 <code>_note_conn_failed</code> 置位): 命中跳过请求线直接走 <code>_reconnect_due</code> 重连, 成功即补同步; 两条时间线照常推进防空转</td><td>断开窗口无「主循环异常」逐拍 ERROR(节流 ≤3); 经代理 probe 计数 ≤8(退避 2→4→8→16→30s 上限); 间隔 ≤32s</td></tr>
+  <tr><td>恢复检测门</td><td><code>_ran_line</code> 旗标(本轮真有线跑成功才翻转 <code>_last_conn_ok</code>) —— 守卫轮 sync/tick due 恒真但不能翻转, 否则断连态重新失去出口(实现首版踩坑, 单测当场抓出)</td><td>恢复代理后 60s 内「已重新连接 qBittorrent」INFO 出现, 同步线请求恢复(wait_requests +2)</td></tr>
+  <tr><td>注入基建</td><td><code>tests-real/lib/proxy.py</code>(上轮新增): 转发 + 请求时间戳 + <code>cut()</code>/<code>restore()</code> 断连注入(新连接 accept 即关记 probe); qB 校验 Host 头已统一改写</td><td>红验内建: 断开窗口必须看到连接失败 ERROR(注入生效), 否则记 BLOCKED 不硬撑</td></tr>
+</table>
+<div class="aside">环境2 首跑差量: 上轮代理指向 36596(出厂免鉴权), 本轮指向 56590 —— 免鉴权已由前置任务拍板落实(bypass_local_auth=True), 产品空凭据直连/经代理均可达, 401 封禁连环假红的土壤已铲除; 代理基建代码零改动(端口派生自 env_registry)。</div>
+
+<h2><span class="no">§04</span>实施步骤(用例清单四块 + 环境2 注意 + 时长预估)</h2>
+<h3>① 本片用例清单(8 条, 全部既有用例 <code>tests-real/rm02_loop/test_rm02_loop.py</code>, 零重写)</h3>
+<p>跑法 <code>commands run real.suite -- --slice RM02 --yes</code>(<code>-n 0</code>)。全部用例零真实种子依赖、对 qB 零写; <b>token 不出现在任何用例文件</b>。期望值以下为「上轮实测判据」复述, 执行代理落刀前先读 docstring 四行原文。</p>
+
+<div class="case"><div class="hd"><span class="cid">RM02-01</span><span class="ttl">interval 真节拍: 同步线周期 = sync_interval, 无死段无空转(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: 代理观测同步线间隔中位数 1.5s ±20%, 无 &gt;4.5s 死段, 总请求数 &lt;300(非 _throttle 空转)。</li>
+    <li><b>本轮口径</b>: e820d2bb 重排了主循环线结构(守卫分支 + _ran_line), 本条是「行为等价」最直接的探针 —— 若节拍漂移即修复回归, FAIL 入池。</li>
+    <li><b>失败判据</b>: 同 docstring(中位数偏离/死段/空转特征)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-02</span><span class="ttl">优雅退出落盘: state.json 退出即写 + meta 清干净(复测)</span><span class="tag">L3 保级</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: graceful_after 优雅退出 rc=0, state.json 在、锁 meta 清干净; <b>红验</b>: dry-run 对照轮必须真不写(对照不红则本条作废)。</li>
+    <li><b>本轮口径</b>: W4 动过 state.py(加 rule_traces 键面), 本条 + RM02-03/08 是它的持久化回归探针; W4 新键面不在本片断言(归 RM03-13 已测)。</li>
+    <li><b>失败判据</b>: 同 docstring; .bak 断言不在本条(fresh 目录无旧文件, 归 RM02-08)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-03</span><span class="ttl">非优雅终止丢失窗口 ≤ state_save_interval(复测)</span><span class="tag">L3 保级</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: state_save_interval=30S 下 75s 内 mtime 推进 ≥2 次; taskkill /F /T 后最后写入距 kill ≤40s; <b>红验</b>: interval=0S 对照轮运行期 state.json 不出现。</li>
+    <li><b>本轮口径</b>: 强杀语义(Windows TerminateProcess)与环境1 无差; 等待窗沿用, 环境2 若慢按实况校一次期望再定 FAIL。</li>
+    <li><b>失败判据</b>: 同 docstring。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-04</span><span class="ttl">热重载: L0 键即时生效 + R 闸拒绝(复测, 升档候选见 D2)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: PUT main_tick/sync_interval 后代理观测节拍 1.5s→2.5s 即时生效; R 级段(data_dir)提交报 restart_required 且磁盘不写穿。</li>
+    <li><b>本轮口径</b>: 纯复测; R 闸「故意造错被拒 + 不写穿」形态上已具负向对照要素, 若 D2 拍板本条升 L3 需补独立红验腿(对照闸门失效形态, 造法见 D2 备注)。</li>
+    <li><b>失败判据</b>: 同 docstring。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-05</span><span class="ttl">queue_rebuilt 相位: 连续两次 L2 重建全局任务不重不丢(复测 + 升档候选)</span><span class="tag">L2 → L3 候选(D2)</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: interval 60→61→62S 触发两次 L2 重建, 「创建全局任务 N 个」恒 3 行且 N 三行相等(has_named 幂等), 「应用结构级配置变更」恰 2 行, 进程存活。</li>
+    <li><b>升档腿(若 D2 拍板)</b>: 补负向对照轮 —— 同配置摘掉全局任务(或以无可认领段的最小配置起), 断言「创建全局任务」0 行: 重建逻辑打穿(无中生有)时对照必须红; 红验真跑过才保 L3。</li>
+    <li><b>本轮口径</b>: W2-B 动过 taskqueue.py(requeue 字段), 本条是队列结构回归探针。</li>
+    <li><b>失败判据</b>: 同 docstring(N 翻倍/任务消失/重建路径没走)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-06</span><span class="ttl">首连失败双模式: 非托管 fail-fast / 托管常驻重试节流(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: 非托管 rc=1 + stderr「无法连接 qBittorrent」无堆栈; 托管(--tray)10s 内不死, 连接失败 WARNING/ERROR 各恰 1 行(转换节流)。</li>
+    <li><b>本轮口径</b>: e820d2bb 动了 connect/恢复检测路径, 首连面敏感(守卫判据单看 client is None 会误伤启动窗口 —— 修复已处理, 本条正是回归探针)。托管小节只验节流不验优雅退出(1030 已修+托盘复验 3/3 记账, 是否补断言见 D4); 托管进程收尾 taskkill /F /T。</li>
+    <li><b>失败判据</b>: 同 docstring; 等待窗按 §2.8 loopback ~2s/首连周期 20-40s 放宽。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-07</span><span class="ttl">运行期断连: 节流 + 重连退避 + 恢复自动接上(★本轮核心: 修复真机回归, 上轮 FAIL 转 PASS)</span><span class="tag">L3 保级</span><span class="tag">核心</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望(= 上轮 FAIL 判据的镜像, 修复后应全绿)</b>: 掐代理 75s —— ①断开窗口有连接失败 ERROR(注入生效, 红验内建)且 ERROR/WARNING ≤3(无逐拍刷屏); ②重连 probe ≤8 次、间隔 ≤32s(指数退避 2→30s 上限); ③恢复代理后 60s 内「已重新连接 qBittorrent」INFO 出现且同步线请求恢复(wait_requests +2)。</li>
+    <li><b>本轮口径</b>: issue 26-10-31-1029 修复 <code>e820d2bb</code>(断连稳态守卫 + _ran_line 恢复门)修复轮只有单测(test_run_client_none_reconnects_without_error_spam 五断言), 本条是其<b>真机回归唯一载体</b>; 用例判据零改动直接复测。</li>
+    <li><b>若仍 FAIL</b>: 按 scope-guard 入池(修复回归失败属高优), 现场留代理 probe/日志证据, 当轮不修。</li>
+    <li><b>失败判据</b>: 同 docstring(任一断言)。</li>
+  </ul></div></div>
+
+<div class="case"><div class="hd"><span class="cid">RM02-08</span><span class="ttl">state 损坏恢复: .bak 回退 + 自愈写回 + 孤儿 tmp 清理(复测)</span><span class="tag">L2 复测</span></div>
+  <div class="bd"><ul class="four">
+    <li><b>期望</b>: 两次起停造出 .bak(.bak 只在写盘前已有旧文件时生成, §2.8); 停机写坏主文件 + 留孤儿 tmp → 启动从 .bak 恢复、写回主文件、tmp 被清; 日志锚点「状态文件损坏」「已用备份恢复状态」全中。</li>
+    <li><b>本轮口径</b>: W4 动过 state.py, 本条兜底其键面变更不伤恢复链。</li>
+    <li><b>失败判据</b>: 同 docstring。</li>
+  </ul></div></div>
+
+<h3>② 本轮升档计划(规程 §08 硬要求)</h3>
+<ul>
+  <li><b>推荐(D2): RM02-05 L2→L3</b> —— 补负向对照轮(无可认领全局任务的最小配置 → 「创建全局任务」必须 0 行, 重建打穿即红); 红验真跑过才保档, 红不出来降回 L2 写原因。</li>
+  <li>备选: RM02-04 L2→L3(R 闸造错腿独立成红验)或申报「本轮纯回归不加强」—— <b>后者不成立</b>: 本轮含修复回归与换环境首跑, 非纯回归, §08 豁免条款不适用。</li>
+  <li>RM02-07 已是 L3 且红验(注入生效断言)内建, 保级不需升; 预计本轮档位分布 <b>L0/L1/L2/L3 = 0/0/6/2</b>(RM02-05 升档后 = 0/0/5/3, 与上轮持平)。</li>
+</ul>
+<h3>③ <code>[需活跃种子]</code> 跳过条目</h3>
+<p><b>无。</b>8 条全部不依赖真实种子(副实例空库 + 代理观测/临时目录承载), 与约束 2(真实种子全程非活跃)零冲突; 环境2 主实例 0 枚真实种子(§2.5.2)对本片无影响。无 L0 人工目视项。</p>
+<h3>④ 验收判据(什么算这片做完)</h3>
+<ol>
+  <li><code>real.suite --slice RM02 --yes</code> 官方结果行: <b>8 条全 PASS, 其中 RM02-07 必须绿</b>(本轮核心验收); FAIL ⇒ scope-guard 入池当轮不修; BLOCKED ⇒ 写明解锁条件不计入「做完」; 复跑守「每条最多 2 次」纪律。</li>
+  <li>升档兑现 1 条(D2 拍板目标), 红验真跑过并看到红(或按计划内规则降档写原因)。</li>
+  <li><b>基线重立</b>: 切片 <code>testing/real-baselines/&lt;stamp&gt;-real-RM02.md</code> 基线 commit = 本轮官方 suite 实跑时刻 HEAD; 锚件 §07 RM02 行回填(日期/基线哈希/档位分布/结论 —— 「有缺陷在池」徽标随 1029 回归绿摘除), §08 记一行(漂移轮 RM02 完成 + 基线重立口径)。</li>
+  <li>记账项写进切片: <code>f2698064</code> 已验不复测 · 26-10-31-1030 已修+托盘复验 3/3 · W2-B/W4 重构复验结论 · 环境换环境2 的差量(bypass 拍板落实)。</li>
+  <li>新环境事实(如有)回写规程 §2.8; 收尾核净: <code>tests-real/.work/rm02/</code> 清空、代理端口释放、guard 复跑绿、两实例进程比对无新增/消失(允许记账内重启)、真实种子计数与开工一致(0)、任何文件零 token 字面值。</li>
+  <li>本轮踩到已记的坑 ⇒ 该条「复发」+1 并写一句为什么没命中。</li>
+</ol>
+<h3>环境2 特有注意(§2.5.2 全条过一遍)</h3>
+<table>
+  <tr><th>事实</th><th>对本片的影响与处置</th></tr>
+  <tr><td>56590 localhost 免鉴权 = 环境2 标准配置(本轮前置已落实, 拍板 2026-11-01)</td><td>产品空凭据直连/经代理可达; 开工加验回读 bypass_local_auth=True(§02); 若见 401 连环假红先核该键被还原</td></tr>
+  <tr><td>主实例 0 枚真实种子</td><td>无碍 —— 全部用例只连副实例空库; 56589 仅 guard 出现</td></tr>
+  <tr><td>无 R: 盘</td><td>本片用例不造种子, 产品 data_dir/配置全落 <code>.work/rm02/</code> 用例目录, 收尾删除</td></tr>
+  <tr><td>gtm 18788 不可达</td><td>本片无涉(工具面归 RM07)</td></tr>
+  <tr><td>transfer 限速原值 up=1MiB/down=5MiB(偶数)</td><td>本片不下发限速、不动全局限速, 无涉</td></tr>
+  <tr><td>profile 网卡标识坑(已修, 双 firewalled)</td><td>guard 报 disconnected 时先查 §2.5.2 头号坑再往下测(勿与断连注入的 cut 窗混淆 —— 后者只在代理层)</td></tr>
+  <tr><td>loopback 拒连 ~2s / 首连周期 20-40s(§2.8)</td><td>RM02-06/07 等待窗按此放宽, 慢不是挂死</td></tr>
+  <tr><td>venv Tk 解释器坑(§2.7, 上轮复发过 2 次)</td><td>RM02-06 托管小节起 --tray 需要 GUI 栈 —— 开工核 <code>python -c "import customtkinter"</code> 过不过; 不过先按 §2.7 重建再跑</td></tr>
+  <tr><td>token 不落盘</td><td>QBT_REAL_ENV=2 + QBT_TEST_&lt;端口&gt; 运行时注入; 用例/配置/切片零 token 字面值</td></tr>
+</table>
+<h3>执行段预估轮次时长</h3>
+<p>上轮官方轮 8 条 425.4s ≈ 7min(环境1), 本轮同构成估 <b>7-10min/轮</b>(RM02-07 断连窗 75s+恢复 60s 占大头); 排障复跑按每条 ≤2 次预留 2-3 轮; 全轮在预算 0.5 次(半天)内可控 —— 超预算按规程 §05 规则 4 处置并记 §08, 不硬扛。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>决策点</th><th>推荐(默认)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>RM02-07 回归形态</td><td><b>原用例原判据直接复测冲绿</b> —— 判据本就按修复后行为写(节流/退避/自动回连三段), 重写零增益</td><td>重写扩展(补断连期间 web 真值弧/UI 断开态断言)—— 增量证据弱、改判据违「拍板后冻结」惯例</td></tr>
+  <tr><td>D2</td><td>升档目标(§08 硬要求)</td><td><b>RM02-05 升 L3</b> —— 补「无全局任务对照轮 0 创建行」负向对照, 造法便宜(配置删全局任务段), 红验真</td><td>RM02-04 升 L3(R 闸造错腿独立红验, 造法需绕过产品校验直接改文件, 较绕); 或申报纯回归豁免(不成立, 本轮非纯回归)</td></tr>
+  <tr><td>D3</td><td>W2-B/W4 波及面复验深度</td><td><b>随 8 条复测带跑 + 切片记账</b> —— 两 commit 的新面(on_error/trace)已归 RM03 且真机测过(RM03-12/13), RM02 面只欠「重构不伤既有行为」的证据, 复测即得</td><td>为 requeue/trace 在 RM02 补专门真机用例 —— 与 RM03-12/13 重复立证, 不符合「一片一亩地」</td></tr>
+  <tr><td>D4</td><td>RM02-06 托管小节是否补优雅退出断言</td><td><b>不补, 记账</b> —— 1030 已修且 11-01 托盘复验 3/3(rc=0), 单独验证过; RM02-06 改判据会扩大本轮 diff, 违「零重写」主轴</td><td>补一条 rc=0 断言(成本低但涉 --tray 起停时长与 SIGTERM 投递方式, 引入新假红面)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="cm">(待拍板后回填: D 编号 · 结论 · 日期; 已拍板条目从 §05 迁入。前置拍板不占 D 编号: 56590 免鉴权 = 环境2 标准配置, 用户 2026-11-01 拍板, 已落实例并回写规程/锚件, commit 670a6194。)</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>bypass_local_auth 被还原 → 401×5 → WebUI IP 封禁(3600s)连环假红</td><td>某轮收尾误还原 / 实例被手工改动</td><td>开工加验回读(§02); 已封禁时按切片 26-11-01-1214 §04-1 配方(重设 + 重启清封禁)处置并记账</td></tr>
+  <tr><td>R2</td><td>RM02-07 修复回归仍红(环境2 行为差 / 修复不完备)</td><td>恢复后不回连或节流超标</td><td>留代理 probe 序列与日志证据入池高优 bug, 当轮不修; 与环境1 上轮现场(39-45 条/75s)对比定性</td></tr>
+  <tr><td>R3</td><td>e820d2bb 守卫与既有节拍/热重载用例互相干扰(主循环结构重排)</td><td>RM02-01/04 节拍断言漂移</td><td>先跑 01/04 定位是否修复回归; 是则入池, 不是则查环境差量(慢盘/杀软)按实况校期望一次再定</td></tr>
+  <tr><td>R4</td><td>xdist 并行抢端口(§2.8 末注)</td><td>绕开 real.suite 直跑 pytest</td><td>一律官方入口 <code>real.suite --slice RM02</code>(-n 0); conftest 文件锁兜底已在</td></tr>
+  <tr><td>R5</td><td>venv 解释器漂回无 Tk 裁剪版(上轮复发坑)</td><td>RM02-06 托管小节 No module named tkinter</td><td>开工核 import 探针(§2.7); 命中先重建 venv + env.sync, 该条「复发」+1 记切片</td></tr>
+  <tr><td>R6</td><td>断连窗与退避断言的时机竞争(环境2 慢机)</td><td>probe 间隔 >32s 误红</td><td>期望值按实况校一次重跑; 仍红才 FAIL —— 环境差量与行为回归分开定性</td></tr>
+  <tr><td>R7</td><td>代理基建环境2 首用的未知差量(Host 头改写已验于环境1)</td><td>RM02-01 基座连不上</td><td>proxy 派生端口来自 env_registry, 开工先用 RM02-01 单跑探路再进官方轮</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-01-1921</span> 初版: RM02 漂移复测轮排期计划 —— 定片 RM02(锚件 §03/§08); 漂移体检 = 基线 eba6ee47 失效按「首轮重来」重立 + 4 commits 命中(e820d2bb 修复回归必测 / W2-B·W4 重构复验 / f2698064 记账); glob 自检 5/5 命中 2219 行无混入; 环境自检环境2 real.env/real.guard 全绿(0 真实种子, 双 firewalled); 前置拍板已落实(56590 bypass_local_auth=True = 环境2 标准配置, commit 670a6194); 用例 8 条零重写复测(RM02-07 修复真机回归为核心, 上轮 FAIL 转绿为验收); 升档推荐 RM02-05→L3; 待拍板 D1-D4; 分支 real/drift-261101。</li>
+</ul>
+
+</div>
+</body>
+</html>
