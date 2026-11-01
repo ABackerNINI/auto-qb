@@ -1539,6 +1539,11 @@ class WebCommandsMixin:
         outcomes = [_add_outcome(r) for r in results]
         states = [s for s, _d in outcomes]
         detail = "; ".join(d for _s, d in outcomes)
+        # 期望落地登记(issue 26-10-30-0626 候选 A): 回执里的 added_torrent_ids 是**期望新增
+        # 集合**, 而 qB 的 200 只代表受理 —— torrent 还要过 6~40ms 的异步管线才进 session,
+        # 命令后那次补刷新距此仅 0.5~0.8ms, 必然只拿到一部分。登记后主循环有界追平
+        # (80ms × ≤3 次), 让这一批在 ~100ms 内全部可见, 而不是等下一个 1.5s 节拍。
+        self._expect_landing(results)
         # 聚合判据(受理态三值, 见 _add_outcome): "加进去了没有"与"有被拒的没有"是两个
         # 独立问题 —— 旧布尔把 partial 与 fail 压成同一值, 于是部分成功只能报 error。
         #   added ∧ ¬rejected -> ok(全部受理);
@@ -1564,3 +1569,19 @@ class WebCommandsMixin:
             logger.warning(line + "(部分受理)")
         else:
             logger.warning(line + "(qB 未接受)")
+
+    def _expect_landing(self, results) -> None:
+        """把 add 回执里的 added_torrent_ids 登记为「待落地」(issue 26-10-30-0626 候选 A)
+
+        只有 Web API >= 2.14.0 的 JSON 回执带这个字段(见 `_add_outcome`); 老版 qB 是纯文本
+        `Ok.`/`Fails.`, 拿不到 id —— 那种版本上静默跳过, 现象退回"等常规节拍", 不因此报错
+        (老版 qB 连 `success_count` 都没有, 编不出集合, 硬猜只会引入误登记)。
+
+        登记是**幂等合并**语义: 同一批文件+链接两次调用各自登记, 与并发添加互不覆盖。
+        """
+        ids = []
+        for r in results:
+            if isinstance(r, Mapping):
+                ids.extend(str(x) for x in (r.get("added_torrent_ids") or []) if x)
+        if ids:
+            self.store.expect_hashes(ids)

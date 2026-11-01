@@ -38,6 +38,22 @@ _RATE_FRESH_WARN_ROUNDS = 3
 # 上述判据服务的两个速率键(per-key 判据的枚举单点)
 _RATE_KEYS = ("dl_info_speed", "up_info_speed")
 
+# 「期望落地」有界追平(issue 26-10-30-0626 候选 A) —— 三个参数的取值依据:
+#   · 间隔 80ms: qB 的 add 是四跳异步管线(ioThread 文件搜索 -> 主线程续体 -> libtorrent
+#     网络线程 -> 排队告警, src/base/bittorrent/sessionimpl.cpp:3113-3171), 实测 6~40ms
+#     才进 session; 80ms 已越过尾部, 再密只是白问 qB。
+#   · 3 次: 首次补刷新 + 3 次追平 = 一条 add 命令最多多 3 次 sync/maindata, 总时长
+#     ~240ms, 远小于常规节拍 1.5s。
+#   · TTL 3s: 兜底。追平只在同步线可达时才有意义 —— 断连/暂停期间不得让主循环的
+#     next_sync_at 停在过去时刻(那会退化成无 sleep 空转, 判据见 qbmanager 主循环
+#     26-10-02-0728/0442 两处注释)。
+_EXPECT_RETRY_INTERVAL = 0.08
+_EXPECT_MAX_RETRIES = 3
+_EXPECT_TTL = 3.0
+# 追平到期时刻被问到时的最小回值(秒): 保证调用方拿到的永远是**未来**时刻,
+# 即便本轮同步没跑成(断连), 也只按这个粒度空转, 不会算出 0 超时。
+_EXPECT_MIN_ASK = 0.01
+
 
 class TorrentStore:
     """种子信息数据层: 主索引 + 增量同步 + 惰性缓存 + 分组索引 + 全局标签/分类缓存
@@ -47,6 +63,8 @@ class TorrentStore:
       - using_fallback: 已降级全量(旧版 qB, 告警去重); validate_sample: 全量轮校验样本;
       - 速率键新鲜度(P3): _rate_absent_streak/_rate_stale_warned —— 速率键连续无读数轮数
         与节流告警记忆(纯内存, per-key 语义, 见 _track_rate_key_freshness)。
+    期望落地(issue 26-10-30-0626, 纯内存): _expect_pending/_expect_due_at/_expect_retries ——
+      命令线 add 受理后登记的回执 hash, 主循环据此把同步节拍提前做有界追平(见 expect_hashes)。
     分组相关结构(供 GroupingModule 直接读写, 保持增量语义):
       - groups:        key=(save_path, 排序文件路径元组) -> [hash...]
       - group_sizes:   key -> {hash: {规范化相对路径: 大小}}
@@ -78,6 +96,13 @@ class TorrentStore:
         # torrents_removed 不算删除 —— 记录不摘、不进 last_removed、不触发分组删除链路
         # (计划 26-10-21-1857 §6; 跳检随后会以 skip_checking 重加同一 hash)
         self.skipping_hashes: Set[str] = set()
+        # 期望落地登记(issue 26-10-30-0626 候选 A, 纯内存): 命令线 add 受理后把回执里的
+        # added_torrent_ids 登记进来, 主循环按 expect_due_at() 提前一次同步, 直到全部进
+        # 快照或用尽次数。语义 = 「这批 hash 应该很快就出现在快照里, 但现在还没有」。
+        self._expect_pending: Set[str] = set()
+        self._expect_due_at: float = 0.0
+        self._expect_deadline: float = 0.0
+        self._expect_retries: int = 0
         # 增量同步态
         self.rid: int = 0
         self.need_validate: bool = True
@@ -168,6 +193,83 @@ class TorrentStore:
         # Web 分组视图需重建标记: 视图相关字段(_VIEW_FIELDS)或组成员变化时置真,
         # 主循环每 tick 消费(consume_view_changed), 无变化则不重建(惰性真正生效)
         self.view_changed: bool = True
+
+    # ---------- 期望落地(命令写入 -> 快照可见 之间的有界追平) ----------
+
+    def expect_hashes(self, hashes) -> None:
+        """登记「这批 hash 应该很快出现在快照里, 但现在还没有」(issue 26-10-30-0626 候选 A)
+
+        为什么需要: qB 的 `POST /torrents/add` 返回 200 只代表**受理**, torrent 还要过四跳
+        异步管线才进 session(src/base/bittorrent/sessionimpl.cpp:3113-3171: ioThread 文件
+        搜索 -> 主线程续体 -> libtorrent 网络线程 -> 排队告警), 实测 6~40ms。而命令后那次
+        补刷新距 add 返回只有 0.5~0.8ms, 必然落在管线中间 —— 一次同步只能拿到这一批里
+        已经建好的那几个, 剩下的要等下一个同步节拍(1.5s)。登记后主循环按
+        `expect_due_at()` 提前再问一次, 直到全部进快照或用尽次数。
+
+        只登记**当前快照里还没有**的 hash(已存在的不必追); 空集合直接返回, 常态零开销。
+        由命令线在 add 回执处调用(主循环线程), 因此不需要锁 —— 与 `skipping_hashes`
+        等纯内存登记同线程口径。
+        """
+        want = {str(h) for h in hashes if h}
+        want = {h for h in want if h not in self.by_hash}  # 已在快照里的不必追
+        if not want:
+            return
+        now = time.time()
+        self._expect_pending |= want
+        self._expect_retries = 0
+        self._expect_deadline = now + _EXPECT_TTL
+        self._expect_due_at = now + _EXPECT_RETRY_INTERVAL
+
+    def expect_due_at(self) -> float:
+        """下一次追平同步的建议时刻(0.0 = 无待办); 主循环据此把同步节拍提前
+
+        返回值恒为**未来**时刻(`_EXPECT_MIN_ASK` 兜底): 即便本轮同步没跑成(断连), 调用方
+        也不会算出 0 超时而空转。TTL 到期即作废 —— 追平是锦上添花, 绝不能拖住主循环。
+        """
+        if not self._expect_pending:
+            return 0.0
+        now = time.time()
+        if now >= self._expect_deadline:
+            self._clear_expect()
+            return 0.0
+        return max(self._expect_due_at, now + _EXPECT_MIN_ASK)
+
+    def clear_expect(self) -> None:
+        """放弃追平(同步线不可达时由主循环调用; 也用于热重载重置)
+
+        断连/暂停期间不跑同步, 追平无从兑现 —— 留着只会让下一次恢复后的第一拍多问一次,
+        收益为零而语义含糊(那批 hash 早该由全量轮覆盖)。"""
+        self._clear_expect()
+
+    def _clear_expect(self) -> None:
+        self._expect_pending.clear()
+        self._expect_retries = 0
+        self._expect_due_at = 0.0
+        self._expect_deadline = 0.0
+
+    def _settle_expect(self) -> None:
+        """同步应用后结算(每轮 `_apply` 末尾调用): 已进快照的出局, 仍有缺则排下一次追平
+
+        次数用尽或超过 TTL 即放弃 —— 剩下的交给常规同步节拍, 不无限重试(与「补刷新整批
+        只补一次」的既有 P0-5 口径一致: 追平是**有界**补问, 不是轮询)。
+        """
+        if not self._expect_pending:
+            return
+        # 只遍历待办集合(≤ 一批的种子数), 不复制 by_hash —— 大库上这条路径要跑 4 次
+        self._expect_pending = {h for h in self._expect_pending if h not in self.by_hash}
+        if not self._expect_pending:
+            self._clear_expect()
+            return
+        if self._expect_retries >= _EXPECT_MAX_RETRIES or time.time() >= self._expect_deadline:
+            logger.debug(
+                "期望落地追平放弃: 仍缺 %d 个(%s), 交给常规同步节拍",
+                len(self._expect_pending),
+                ",".join(sorted(self._expect_pending))[:64],
+            )
+            self._clear_expect()
+            return
+        self._expect_retries += 1
+        self._expect_due_at = time.time() + _EXPECT_RETRY_INTERVAL
 
     # ---------- 快照(增量同步) ----------
 
@@ -316,6 +418,8 @@ class TorrentStore:
             self.delta_fields = {}
             self.state_changed = []
             self.field_changed = []
+            # 零变化轮也要结算: 期望集合可能已被更早的轮次满足, 不结算就会多追一次
+            self._settle_expect()
             return [], []
         prev = self.by_hash
         by_hash = {} if full else dict(prev)  # 全量重建 / 增量: C 级浅拷贝, 未变化记录原样保留
@@ -395,6 +499,7 @@ class TorrentStore:
         self.last_removed = changes
         if view_changed or added or changes:
             self.view_changed = True
+        self._settle_expect()
         return added, changes
 
     def consume_view_changed(self) -> bool:
@@ -649,6 +754,7 @@ class TorrentStore:
         self.state_snapshot.clear()
         self.verified_references.clear()
         self.own_writes.clear()  # 自有写登记不跨热重载残留(S2; 纯内存态, 与 state_snapshot 同级)
+        self.clear_expect()  # 追平待办不跨热重载: 下一轮是全量, 该出现的自然会出现
         self.state_since.clear()  # 状态时长随状态快照一并重置(下一轮全量 refresh 重新起算)
         self.transitional_missing_skips.clear()  # 组 key 随分组索引重建, 过渡态计数一并清零
         # download_conflict_warned / cross_group_conflict_warned 有意不清(决策钉死, 防"顺手补 clear"):

@@ -15,6 +15,12 @@
   ⇒ `SELF_POSTED_COMMANDS` 白名单里的命令不唤醒。
 - **命令后补刷新走完整 `_refresh_torrents()`**: 绝不单独调 `store.apply_sync()`(只更 `by_hash`
   与 `server_state`, 分组/任务/事件/索引全不管 ⇒ 留下半刷新态); 整批命令 drain 完**只补一次**。
+  - ❗**"只补一次"不等于"一次就够"**: qB 的 add 是四跳异步管线(ioThread 文件搜索 → 主线程续体 →
+    libtorrent → 排队告警), HTTP 200 只代表受理, torrent 进 session 要 6~40ms; 而补刷新距 add
+    返回仅 0.5~0.8ms, 必然只拿到这一批里已经建好的那几个。故 2026-11-01 起另加**有界追平**:
+    `store.expect_hashes()` 登记回执里的 `added_torrent_ids`, 主循环按 `expect_due_at()` 把同步线
+    提前到 +80ms 再问一次(≤3 次 / TTL 3s)。**补刷新仍是一次**, 追平是同步线自己的事
+    ([issue 26-10-30-0626](../issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html))。
 - **乐观 UI 只做白名单(pause/resume)**: `pendingOps[hash] = {patch, prev, ts}`, 真值匹配即清,
   3s 兜底回落, **失败立即回滚**。
   - ✅ **3s 兜底会显式回滚到 `op.prev`**(2026-09-19,

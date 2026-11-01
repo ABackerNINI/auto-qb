@@ -14,6 +14,7 @@
 - test_run_loop_managed_never_sleeps: 传 stop_event 时不 sleep(托盘模式停止信号即时响应)
 - test_run_loop_layered_cadence: 分层节拍——同步线按 sync_interval、任务线按 main_tick, 两线次数不等
 - test_wake_drains_commands_without_extra_ticks: 命令唤醒只走命令线, 命令风暴下 tick 次数不增加
+- test_run_loop_expect_landing_pulls_sync_forward: 添加种子后的有界追平(issue 26-10-30-0626) —— store 有待落地 hash 时同步线被提前到 ~80ms(不等 sync_interval), 追平轮带 force, 次数用尽后自动放弃
 - test_drain_web_commands_reports_resync_needed: P0-5 门控——只有改种子状态的命令置 changed
 - test_command_batch_triggers_single_resync: P0-5 一批命令后补**一次**完整刷新(整批合单)
 - test_sync_moved_proxy: S4(26-10-21-2323) —— 「本轮是否有变化」代理判据: delta/新增/删除任一非空即为真
@@ -296,6 +297,42 @@ def test_wake_drains_commands_without_extra_ticks():
         # 任务线/同步线: 只有首轮, 不因唤醒而增加
         assert calls["task"] == 1, f"唤醒不应触发任务线, 实际 {calls['task']}"
         assert calls["sync"] == 1, f"唤醒不应触发同步线, 实际 {calls['sync']}"
+
+
+def test_run_loop_expect_landing_pulls_sync_forward():
+    """添加种子后的有界追平: store 有待落地 hash 时, 同步线被提前到 ~80ms 而不是等节拍
+
+    issue 26-10-30-0626 候选 A: qB 的 add 是四跳异步管线, 命令后那次补刷新必然只拿到一部分,
+    剩下的原本要等 sync_interval(1.5s)。登记待落地后主循环应按 store 给的到期时刻再问一次;
+    本用例把 sync_interval 设成 5s —— 没有追平, 观测窗口内根本不会有第二次同步。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.connect = mock.Mock(return_value=True)
+        mgr.config.sync_interval = 5.0
+        mgr.config.main_tick = 5.0
+        stamps, forces = [], []
+
+        def sync_line(dry_run, flush=True, force=False):
+            stamps.append(time.time())
+            forces.append(force)
+            if len(stamps) == 1:
+                mgr.store.expect_hashes(["H1"])  # 模拟 add 命令受理后登记
+                return
+            # 同步跑了但这一批还没进 session: 零变化轮(走 _apply 早退分支, 结算同样生效)
+            mgr.store._apply({}, [], full=False)
+            if len(stamps) >= 4:
+                raise KeyboardInterrupt
+
+        mgr._sync_line = sync_line
+        mgr._task_line = mock.Mock()
+        mgr.run(dry_run=False)
+
+        assert len(stamps) == 4, f"应有首次补刷新 + 3 次追平, 实际 {len(stamps)} 次"
+        gaps = [b - a for a, b in zip(stamps, stamps[1:])]
+        assert all(g < 1.0 for g in gaps), f"追平间隔应 ~80ms 而非 5s 节拍, 实际 {gaps}"
+        assert forces[1:] == [True] * 3, "追平轮必须 force(否则被「上一版已取走」门控挡掉)"
+        assert mgr.store._expect_pending == {"H1"}, "次数未用尽前应保留待办"
 
 
 def test_drain_web_commands_reports_resync_needed():

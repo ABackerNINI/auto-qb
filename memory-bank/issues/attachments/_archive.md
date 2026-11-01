@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (53)
+## Open (52)
 
 - [docs] [docs/configuration.md 动作结果态漏 pending](../26-11-01-0800-docs-docs-action-result-pending-drift.html) — 动作结果段只列 3 态漏 pending, 与引擎六档 verdict 漂移(存量, 早于规则引擎重设计)
 - [test] [test_yamls 存量样例含 RULE_KNOWN_KEYS 外键](../26-11-01-0800-test-test-yamls-unknown-rule-keys.html) — test_start.yml 等存量样例含 log_level 等 RULE_KNOWN_KEYS 外键(未被测试消费, 合法性未核)
@@ -12,7 +12,6 @@
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
-- [perf] [SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
@@ -65,7 +64,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (311)
+## Done (312)
 
 - [feat] [转移目标不支持 api_key 鉴权: 纯 token qB 5.x 实例无法作为目标](../26-11-01-0335-feat-torrent-transfer-target-apikey.html) — 主 qB 有 api_key(Bearer)通道, TransferTargetConfig/_build_client 只有 username/password
 - [bug] [转移已存在种子被误判「失败」: qB 5.2 对重复 infohash 回无文案 409, adapter 异常分支缺探针查重兜底](../26-11-01-0334-bug-torrent-transfer-duplicate-409.html) — 已存在→期望「跳过」, 实测「失败」; 源保留不变量未破, 用户反馈误导
@@ -90,6 +89,7 @@
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](../26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在
+- [perf] [批量添加种子时部分新行要等下一轮同步(1.5s): 补刷新赶在 qB 把种子建进 session 之前, 与 SSE 无关](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — 一次添加 N 个种子时, 主循环命令后只补刷新一次(距 add 返回 0.5~0.8ms), 而 qB 的 add 是四跳异步管线(ioThread 文件搜索 → 主线程续体 → libtorrent → 排队告警), 从 HTTP 200 到 torrent 进 session 要 6~40ms ⇒ 补刷新只拿到此刻已建好的那部分, 其余等下一个同步节拍(1.5s); 真机实测 N=6 有 22% 的种子、N=12 有 44% 落在 ~1.53s, 其余 ~25ms; N=1 从不复现
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](../26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program Files/Git/autostart 基于旧快照整份回写, 与并发 PUT /config 交叠即把刚改的参数静默还原(state.json 同款双线程写已有 _state_lock, config 路径无对等防护)
 - [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](../26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day != self._day 同样命中即清零, dat 今日行被低值覆盖且当日不可自愈; restore 防了日期超前、运行路径没防倒退
 - [bug] [gtm http_host 无回环约束, 与「控制面强制绑定 127.0.0.1」docstring 契约漂移](../26-10-30-0624-bug-gtm-http-host-loopback-contract.html) — http_host 可配置且校验只查非空, PUT 0.0.0.0 重启后控制面对局域网暴露(token 明文落盘), 安全声明与实现未取齐一头

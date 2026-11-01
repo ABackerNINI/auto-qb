@@ -6,13 +6,13 @@
 <meta name="issue-slug" content="webui-sse-down-poll-latency">
 <meta name="issue-stamp" content="26-10-30-0626">
 <meta name="issue-type" content="perf">
-<meta name="doc-topic" content="webui-sse-resilience">
+<meta name="doc-topic" content="webui-add-torrents-sync-lag">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见">
-<meta name="issue-summary" content="SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)">
-<title>SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见 · perf · 计划外问题</title>
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="批量添加种子时部分新行要等下一轮同步(1.5s): 补刷新赶在 qB 把种子建进 session 之前, 与 SSE 无关">
+<meta name="issue-summary" content="一次添加 N 个种子时, 主循环命令后只补刷新一次(距 add 返回 0.5~0.8ms), 而 qB 的 add 是四跳异步管线(ioThread 文件搜索 → 主线程续体 → libtorrent → 排队告警), 从 HTTP 200 到 torrent 进 session 要 6~40ms ⇒ 补刷新只拿到此刻已建好的那部分, 其余等下一个同步节拍(1.5s); 真机实测 N=6 有 22% 的种子、N=12 有 44% 落在 ~1.53s, 其余 ~25ms; N=1 从不复现">
+<title>批量添加种子时部分新行要等下一轮同步(1.5s) · perf · 计划外问题</title>
 <style>
   :root {
     --bg: #10151a;
@@ -48,7 +48,7 @@
   nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
   header.cover { grid-column: 2; margin-bottom: 8px; }
   .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
-  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  h1 { font-family: var(--display); font-size: 36px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
   .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
   .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
   .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
@@ -70,8 +70,10 @@
   th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
   th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
   .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .callout.warn { border-left-color: var(--warn); }
   .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
   .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  .strike { color: var(--faint); text-decoration: line-through; }
   footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
   a { color: var(--accent-ink); }
 </style>
@@ -95,80 +97,214 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· perf</div>
-    <h1>SSE 掉线时命令反馈退化为 1.5s 轮询: 服务端 ~20ms 就绪但前端 ~1.2s 才可见</h1>
-    <p class="lede">SSE 断开时 ver 推送失效, 命令后前端等下一轮 1.5s 定档轮询才刷新, 实测可见延迟 ~1.19s(服务端 ~20ms 已就绪, 98% 是干等)</p>
+    <div class="kicker">计划外问题（已修）· perf · 已认领</div>
+    <h1>批量添加种子时部分新行要等下一轮同步(1.5s): 补刷新赶在 qB 把种子建进 session 之前, 与 SSE 无关</h1>
+    <p class="lede">一次添加 N 个种子时, 主循环在命令后只补刷新一次(距 add 返回 0.5~0.8ms), 而 qB 的 <code>add</code> 是四跳异步管线: HTTP 200 只代表「已受理」, torrent 真正进 session 还要 6~40ms ⇒ 补刷新只拿到此刻已建好的那部分, 其余等下一个同步节拍(1.5s)。真机实测: N=6 有 22%、N=12 有 44% 的种子落在 ~1.53s, 其余 ~25ms; N=1 五轮全 ≤23ms 从不复现。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-10-30-0626-perf-webui-sse-down-poll-latency</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-30 06:26</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
-      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
-      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui · core</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">用户报障 · 2026-11-01 复验并重写归因</div></div>
     </div>
   </header>
 
   <section id="s1">
     <h2><span class="no">01</span>现象与发现场景</h2>
-    <p>乐观 UI 扩面分析（计划 26-10-30-0610）期间用户反馈：生产 WebUI（种子库 &lt;100）添加种子后新种子出现「肯定长于 1 秒」。同日真机复测（qBittorrent-testing 5.2.3 @127.0.0.1:36595，auto-qb 独立配置 8 种子库）证明服务端 ~20ms 就已发布新数据；把前端 SSE 摘掉、只按 1.5s 定档轮询模拟，可见延迟立即抬到 ~1.19s，与用户观察吻合 —— <b>SSE 失效时所有命令的反馈都退化为「等下一轮轮询」</b>。用户拍板：暂不修，先入池。</p>
+    <p>用户在真实 WebUI 上<b>一次添加多个种子</b>时观察到: 列表里「一部分种子立刻就出来了(毫秒级), 另一部分明显要等一秒以上」, 当时的描述是「肯定长于 1 秒」。原报告(2026-10-30)把它归因为「SSE 掉线时 ver 推送失效, 前端退化为 1.5s 定档轮询」, 并用「摘掉 SSE、只按 1.5s 轮询」的对照复现出 ~1.19s。</p>
+    <p><b>2026-11-01 认领复验后, 原归因被推翻</b>——三条都站不住:</p>
+    <ul>
+      <li><b>不是「SSE 掉线时」才发生</b>: 下面 §02 的全部实测里 SSE 通道全程健康(ver 事件正常到达), 现象照旧复现。</li>
+      <li><b>不是「全部种子都长于 1 秒」</b>: 同一批里一部分 ~25ms、一部分 ~1.53s, 与用户观察一致, 原报告的「~1.19s 均值」掩盖了这个双峰。</li>
+      <li><b>原对照测的是「单种子添加」</b>: 单种子 5/5 轮全部 ≤23ms, 从来不输这场竞态 —— 于是「摘掉 SSE 就变 1.2s」被误读成「SSE 是原因」, 实际它只是把一个本来就不稳定的过程放大了。</li>
+    </ul>
+    <div class="callout">真机环境(§02 全部数据): qBittorrent 5.2.3 @ <code>127.0.0.1:36596</code>(空库副实例, <code>real.guard</code> 通过: 真实种子 0 个/全暂停), 产品用 <code>tests-real/lib/app.py</code> 起独立临时配置(数据目录隔离, 非仓库根 <code>config.yml</code>), WEB 端口 39000 段, 种子为内存现造的 L1 假种子(<code>real-fake</code> 标签, 无 announce, paused 添加, 全程非活跃), 每轮跑完按 hash 删除。跑完两个实例种子数均回到 0。</div>
   </section>
 
   <section id="s2">
     <h2><span class="no">02</span>证据</h2>
-    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
-<pre><code># 同环境两列对照（2026-10-30 真机, n=5, t0=POST 发出, 单位 ms; 原始数据 H:/Temp/opt-webui-test/bench3b_results.json）
-# 列1 = SSE 通(被动监听 ver 后 60ms 去抖等价刷新); 列2 = 模拟前端 1.5s 链式轮询(不消费任何事件)
-SSE 通:  可见 33.5 / 23.4 / 23.6 / 25.6 / 21.9   (均值 25.6; ver 事件 19.2~30.2 到达)
-轮询-only: 可见 1231.6 / 1131.8 / 1178.1 / 1103.6 / 1302.8 (均值 1189.6)
-「服务端已就绪、前端未被叫醒」窗口 = 1080.0~1283.4 (均值 1167.2, 占整条延迟 ~98%)
-# 轮询-only 下服务端发布照常: 被动 SSE 测得 ver 事件仍 ~19-28ms 到达 => 服务端无压制成分</code></pre>
+    <p class="hint">贴原文, 不转述。取证时间 2026-11-01 08:00~08:30, 原始数据在 <code>tests-real/.work/rm01/add*/result.json</code>(gitignored)。</p>
+
+    <h3>A. 主证据: 同一批里双峰分布(SSE 全程健康)</h3>
+    <p>「可见」= 前端等价路径(收到 <code>ver</code> 事件 → 拉 <code>/api/state?delta=1</code>)首次看到该行的时刻, 以 POST 发出为 t0。</p>
+<pre><code># N=6, 5 组共 17 轮(102 个种子) —— 其中 22 个(22%)落在 ~1.53s; 下列为抽样(跨组, 非同一轮序)
+r0  3 个 @ 28.3ms  |  3 个 @ 1551.5ms
+r1  1 个 @ 25.8ms  |  5 个 @ 1529.8ms
+r2  6 个 @ 26.2ms  |  —
+r3  3 个 @ 24.8ms  |  3 个 @ 1538.7ms
+r4  5 个 @ 25.6ms  |  1 个 @ 1532.4ms
+r5  2 个 @ 31.3ms  |  4 个 @ 1545.5ms
+r6  3 个 @ 12.7ms  |  3 个 @ 1534.8ms
+r7  3 个 @ 13.2ms  |  3 个 @ 1533.1ms
+(其余 10 轮 6 个全在 15~43ms)
+
+# N=12, 3 轮(36 个种子) —— 16 个(44%)落在 ~1.54s
+3 个 @ 32.9ms | 9 个 @ 1544.1ms
+8 个 @ 23.2ms | 4 个 @ 1544.6ms
+9 个 @ 34.2ms | 3 个 @ 1542.3ms
+
+# N=1, 5 轮(对照组) —— 0 个延迟, 13.0 / 13.0 / 14.4 / 15.0 / 23.4ms</code></pre>
+    <p>延迟的那一簇<b>不是「1.5s 左右」, 而是精确等于下一个同步节拍</b>: 全部落在 1529.8~1551.5ms, 即 <code>sync_interval</code>(1.5s)+ 首次发布耗时。</p>
+
+    <h3>B. SSE 事件流原文(说明推送通道是好的)</h3>
+<pre><code># 同一轮里 ver 事件三次到达, 前两次都只有 3 行 —— 服务端不是"没推", 是"没有东西可推"
+ver @ 10.6ms  full=true  hit=3  miss=3
+ver @ 1115.6ms full=true hit=3  miss=3     ← 别的脏源触发的版本, 仍缺这 3 行
+ver @ 1525.0ms full=true hit=6  miss=0     ← 下一个同步节拍补齐</code></pre>
+
+    <h3>C. 服务端 store 侧就是 1.5s(与前端无关)</h3>
+    <p>不经 SSE、直接 25ms 一次拉 <code>/api/state</code> 读服务端快照, 得到的时刻与 A 完全一致(如 31.3ms / 1545.5ms)。⇒ 慢的不是「前端不知道」, 是「服务端快照里还没有」。</p>
+
+    <h3>D. 产品调用链 trace(诊断壳包了一层 QbApi, 不改产品代码)</h3>
+<pre><code>qb_add   dur 3.5ms   receipt: success_count=6        ← qB 说 6 个都收下了
+qb_sync  rid 3→4     n=5      (t+4ms)                ← 紧跟的补刷新只拿到 5 个
+qb_sync  rid 4→5     n=6      (t+1516ms)             ← 下一个同步节拍才补上第 6 个
+
+# 另两轮: rid 5→6 n=3 然后 +1.512s n=6;  rid 6→7 n=6(一次到位)
+
+# 「补刷新」到底多快 —— 同一份 trace, 4 轮 add 的返回时刻到下一次 qb_sync 发出:
+#   add_dur 3.4 / 3.5 / 2.9 / 3.0 ms  ⇒  补刷新距 add 返回 0.60 / 0.50 / 0.50 / 0.80 ms
+# 即: 命令消费完的那一瞬间就发出去了, 中间没有任何等待。</code></pre>
+
+    <h3>E. 缺的不是「sync 视图」, 是 session 里还没建好</h3>
+    <p>初版把 §02-D 的 <code>n=5</code> 读成「qB 的 sync 视图滞后于 <code>/torrents/info</code>」—— <b>源码分析后否掉</b>: 两个端点读的是同一份数据(<code>session->torrents()</code>, 见 §02-F), 同一时刻不可能一多一少。真正在变的是「这一批 torrent 有没有被建进 session」。</p>
+<pre><code># 产品 add 之后从外部连打两个端点(每对间隔 5ms), 只列「两数不等」的采样点
+round2:  t+5.8ms   /sync/maindata?rid=0  命中 0/6  |  t+29.2ms /torrents/info 命中 6/6
+round3:  t+6.6ms   /sync/maindata?rid=0  命中 0/6  |  t+9.5ms  /torrents/info 命中 6/6
+         t+17.7ms  /sync/maindata?rid=0  命中 6/6  |  t+32.9ms /torrents/info 命中 6/6  ← 下一对已追平
+# 其余 34 个采样点(同一对里)两数完全一致 —— 差别全在这 5~25ms 的采样间隔里
+# 全量快照(rid=0)同样会是 0/6: 因为 session 里确实还没有, 不是"增量视图漏了"</code></pre>
+    <p class="hint">所以「改用全量快照」绕不过去(它读的还是 session); 能绕过去的只有「晚一点再问」。</p>
+
+    <h3>F. 源码级坐实: qB 的 add 是四跳异步管线</h3>
+    <p>源码 <code>D:\Projects\Else\qBittorrent</code>(本地树 <code>v5.3.0-dev</code>, HEAD 2026-10-07; 实测实例是 5.2.3, add 路径两者同构)。<code>/api/v2/torrents/add</code> 的 200 只代表「已受理」, 到 torrent 真正进 session 要过四道异步:</p>
+<pre><code>① torrentscontroller.cpp:1342-1345  回执 success_count = addedTorrentIDs.size()
+                                    ← 只是 addTorrent() 返回 true 的个数, 与 session 无关
+② sessionimpl.cpp:3176  addTorrent_impl 末尾 return true —— 此刻 async_add_torrent 还没调
+③ :3113-3121 resolveFileNames(): needFindIncompleteFiles(:3014: 有元数据且非"已完成"就是 true)
+   → findIncompleteFiles(:3179) 用 QMetaObject::invokeMethod 投给 m_fileSearcher
+   → :724-725 m_fileSearcher->moveToThread(m_ioThread)      【跳 1: 主线程 → ioThread, 排队】
+   → 搜索在 ioThread 上跑完 promise.finish(); then(this, …) 的上下文是 SessionImpl(主线程)
+                                                            【跳 2: ioThread → 主线程, 排队】
+④ :3137 m_nativeSession->async_add_torrent(p) 只在续体里才调 【跳 3: 主线程 → libtorrent 网络线程】
+   :1868-1871 set_alert_notify → QMetaObject::invokeMethod(readAlerts, Qt::QueuedConnection)
+                                                            【跳 4: 网络线程 → 主线程, 排队】
+   :3162 createTorrent() → :6258-6261 m_torrents.insert(…)
+   :3168 emit torrentAdded → synccontroller.cpp:947-952 m_updatedTorrents.insert(…)
+                                                            ← 同一趟 readAlerts 里, 无中间窗口</code></pre>
+    <p>三点结论:</p>
+    <ul>
+      <li><b>回执是乐观的</b>: <code>success_count=N</code> 在一个 torrent 都还没建的时候就已经写好了(§02-D: <code>qb_add 3.5ms → success_count=6</code>)。</li>
+      <li><b>同一批的 N 个 add 串行</b>: 每个都要过一次 ioThread 的文件搜索(单线程, <code>:724-725</code>), 第 N 个进 session 的时刻随 N 往后推 —— 这就是「批量才有、单个几乎没有」的来源。</li>
+      <li><b>两个端点不会打架</b>: <code>makeMaindataSnapshot</code>(synccontroller.cpp:552)与 <code>infoAction</code>(torrentscontroller.cpp:689)都遍历 <code>session->torrents()</code>; 而 <code>m_torrents.insert</code> 与 <code>emit torrentAdded</code> 在同一趟 <code>readAlerts</code> 里同步完成(WebUI 组件未 <code>moveToThread</code>, 与 session 同在应用主线程, 信号直连) ⇒ 任何时刻两者要么都有、要么都没有, 与 §02-E 的 34 个采样点一致。</li>
+    </ul>
+    <p class="hint">由此也能解释 §02-A 的形态: 补刷新<b>发出</b>在 add 返回后 0.5~0.8ms, 但 qB <b>处理</b>它要到 ~4~7ms(事件循环里排在告警批处理后面); 那几毫秒里管线只走完一部分, 于是拿到的既不是 0 也不是 N, 而是「已经建好的那几个」。N=1 时管线只有一次搜索、不与别人排队, 补刷新那一问通常赶得上(5/5 轮实测都在 13~23ms 内落地), 所以从不复现。</p>
+
+    <h3>G. 原证据(保留原文, 归因已改)</h3>
+<pre><code># 2026-10-30 真机, n=5, t0=POST 发出, 单位 ms(每次只加 1 个种子)
+SSE 通:    可见 33.5 / 23.4 / 23.6 / 25.6 / 21.9   (均值 25.6; ver 事件 19.2~30.2 到达)
+轮询-only: 可见 1231.6 / 1131.8 / 1178.1 / 1103.6 / 1302.8 (均值 1189.6)</code></pre>
+    <p>这组数字本身没问题, 结论也没问题(<b>单种子</b>时 SSE 掉线确实退化到「等下一轮轮询」)。问题是它被外推成了「批量添加也长于 1 秒的原因」—— 批量场景下 1.5s 花在服务端快照上, 前端那时刷新也是扑空。</p>
   </section>
 
   <section id="s3">
     <h2><span class="no">03</span>影响面</h2>
     <table>
       <tr><th>维度</th><th>结论</th></tr>
-      <tr><td>触发条件</td><td>SSE 通道失效（反代/远程访问缓冲、换票失败重连窗、后端重启），或页面跑旧 bundle（无 ver 处理）——SSE 断本身有断线 toast 提示，但用户未必留意</td></tr>
-      <tr><td>影响范围</td><td>全部命令反馈与状态变化的新鲜度（不只添加种子）——ver 驱动的刷新全部退化为 basePollMs 节拍；种子库 ≤1000 时该节拍恒 1500ms</td></tr>
-      <tr><td>严重度</td><td>低~中（可用性劣化非功能损坏；SSE 正常时无感）</td></tr>
+      <tr><td>触发条件</td><td>一次命令里添加多个种子(<code>files_b64</code> 多条 / 多条链接)。SSE 状态无关; 库大小无关(测试库 0~12 个种子); 视图无关(group/torrent 两种视图都复现)。单种子添加基本不触发(5/5 轮未复现)。</td></tr>
+      <tr><td>影响范围</td><td>只影响「新行出现」这一类反馈 —— 添加种子是<b>唯一没有乐观补丁也没有真值事件</b>的命令(暂停/开始有补丁+truth, 重命名有补丁), 它的行只能从 store 同步里来。其它命令的反馈不受此影响。</td></tr>
+      <tr><td>严重度</td><td>低~中: 可用性劣化(不是功能损坏), 但「批量加完只出来一半」会让人以为丢种子/加失败。批次越大越容易命中(N=6 → 22% 的种子, N=12 → 44%)。</td></tr>
+      <tr><td>SSE 掉线的叠加</td><td>SSE 健康时延迟 = 1.5s + ~60ms(ver 去抖); SSE 掉线时 = 1.5s + 0~1.5s(轮询相位), 最坏 ~3s。原报告的 1.19s 就是「快照已就绪后纯等轮询」的那一段, 仍然成立, 但它只是二阶项。</td></tr>
     </table>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">行号为 2026-11-01 复验时; 代码漂移后靠符号与 grep 词重新定位。</p>
     <ul>
-      <li><code>polling.js:264-270 basePollMs</code>（取证 2026-10-30）· ≤1000 种子恒 1500ms · grep <code>basePollMs</code> / <code>1500</code></li>
-      <li><code>polling.js:271-279 currentPollMs</code> · 无「无变化退避」（曾有，因状态栏与行数据新鲜度解耦被废），只剩失败退避 <code>min(15000, base×2^pollFails)</code></li>
-      <li><code>polling.js:245-254 scheduleNext</code> · 链式 setTimeout：上一拍 refresh 落定后 +1500ms，实际周期 ≈1500ms+RTT</li>
-      <li><code>polling.js:62-67</code> ver 事件 → 60ms 去抖 → refresh（SSE 通时唯一加速通道）；<code>_esConnected</code> 为断线态判据</li>
-      <li><code>runtime.py:499 consume_commands</code> / <code>qbmanager.py:554</code> · 服务端侧：RESYNC 命令后同拍补刷新+发布，与前端是否在线无关（实测证实）</li>
+      <li><code>qbmanager.py:538</code> <code>cmd_changed_state = self.host.run_command_line()</code> / <code>:555</code> <code>sync_due = sync_due_by_time or (cmd_changed_state and not dry_run)</code> —— 命令改状态后**只补刷新一次**(P0-5)。</li>
+      <li><code>qbmanager.py:772 _sync_line</code> → <code>:869 _refresh_torrents</code> → <code>store.apply_sync(api)</code> —— 补刷新就是这里, 一次 <code>/sync/maindata</code>。</li>
+      <li><code>store.py apply_sync</code>(<code>src/auto_qb/torrents/store.py</code>) · <code>api.sync_maindata(rid=self.rid)</code> —— 唯一取数通道; 这一轮没收录的种子, 要等下一次调用。</li>
+      <li><code>qbapi.py:315 sync_maindata</code> —— 透传 qbittorrent-api。</li>
+      <li><code>commands.py:1475 _cmd_add_torrents</code> —— 回执在这里就写(<code>_set_web_result</code>), 所以前端 toast ~5ms 就亮, 而快照还没补; 回执里的 <code>added_torrent_ids</code> 是本次的**期望新增集合**(修法抓手, 见 §06)。</li>
+      <li><code>commands.py:123 RESYNC_COMMANDS</code> 含 <code>add_torrents</code> —— 决定"命令后要不要补刷新"的白名单。</li>
+      <li><code>polling.js:62-67</code> ver 事件 → 60ms 去抖 → refresh; <code>:245 scheduleNext</code> / <code>:264 basePollMs</code>(≤1000 种子恒 1500ms)/ <code>:271 currentPollMs</code> —— 前端侧只贡献这 60ms 与"掉线时的一整拍"。</li>
+      <li><code>add_torrent.js:665 submitAddTorrent</code> —— 添加路径**不打乐观补丁**(只有 toast), 行出现完全依赖 store。</li>
+    </ul>
+    <p class="hint">qB 侧(源码 <code>D:\Projects\Else\qBittorrent</code>, 详见 §02-F):</p>
+    <ul>
+      <li><code>src/webui/api/torrentscontroller.cpp:1342-1345</code> —— 回执 <code>success_count</code> 统计的是「已受理」个数。</li>
+      <li><code>src/base/bittorrent/sessionimpl.cpp:3176</code> <code>addTorrent_impl</code> 直接 <code>return true</code>; <code>:3113-3121</code> 文件搜索 → <code>:3179 findIncompleteFiles</code> → <code>:724-725</code> FileSearcher 在 <code>m_ioThread</code>; <code>:3137 async_add_torrent</code>; <code>:1868-1871</code> 告警排队投递; <code>:3162/:3168</code> <code>createTorrent</code> + <code>emit torrentAdded</code>。</li>
+      <li><code>src/webui/api/synccontroller.cpp:552 / :947-952 / :591-712</code> —— 全量快照与增量都只认 <code>session->torrents()</code> 与 <code>m_updatedTorrents</code>, 两者同一趟更新。</li>
+      <li><code>src/webui/api/torrentscontroller.cpp:689</code> —— <code>infoAction</code> 遍历 <code>session->torrents()</code>, 与 sync 同源。</li>
     </ul>
   </section>
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">已定位（2026-10-30 实测）：不是服务端慢、不是大库（已排除：用户库 &lt;100 且 8 种子复测同样 ~1.2s）——是「ver 推送失效后，回执到达不触发任何刷新」的结构性缺口：回执（cmd 事件或轮询 /api/cmd）兑现 waitCmd 后，前端只等被动通道（ver 或 1.5s 节拍），断线态下没有主动补刷。补刷新+发布在回执后 ~10-20ms 完成，与服务端就绪之间只差一次主动拉取。</div>
+    <div class="callout">已定位(2026-11-01 真机实测 + 源码坐实): <b>命令后的那次补刷新发得太早</b>。它在 add 返回后 <b>0.5~0.8ms</b> 就发出(§02-D), 而 qB 的 add 要过四跳异步管线(§02-F): ioThread 文件搜索 → 主线程续体 → libtorrent 网络线程 → 排队告警。从 HTTP 200 到 torrent 进 session 需要 <b>6~40ms</b> ⇒ 补刷新只拿到「那一刻已经建好的那几个」, 剩下的不在本轮载荷里, 下一次同步要等 <code>sync_interval</code>(1.5s) ⇒ 这些行整体后移 1.5s。回执里的 <code>success_count=N</code> 是「已受理」而不是「已建好」, 所以 toast 立刻亮、列表只出一半。</div>
+    <p>链路逐段(每段都有 §02 的实测支撑):</p>
+    <ol>
+      <li>前端 POST 一条 add(含 N 个文件) → 主循环下一拍消费; handler 调 qB 加种子, qB 立刻回执 <code>success_count=N</code>(耗时 3~4ms), <b>回执在这一步就写给前端了</b>(toast 亮, 但列表还没变)。此刻 session 里新种子 0 个。</li>
+      <li>qB 侧同时开始建: ioThread 逐个搜索未完成文件(单线程, N 个串行) → 回主线程 → <code>async_add_torrent</code> → 告警排队 → <code>createTorrent</code> 进 <code>m_torrents</code> 并 <code>emit torrentAdded</code>。整段实测 6~40ms, 尾部随 N 变长。</li>
+      <li>主循环看到「本批命令改了 qB 状态」⇒ 立刻补刷新一次(§04 第一条锚点), 距 add 返回仅 0.5~0.8ms —— 稳定落在管线中间。</li>
+      <li>这一轮 <code>/sync/maindata</code> 只返回此刻已建好的行(实测 0/6、3/6、5/6 都出现过), 没建好的不在 store 里 ⇒ 任何 ver 推送、任何前端刷新都拿不到(§02 B: 中间那版 ver 也是 hit=3)。</li>
+      <li>下一个同步节拍(1.5s)才补齐, 随后 ver 推送 + 60ms 去抖 ⇒ 用户看到的是 ~1.53s。</li>
+    </ol>
+    <p><b>已排除的假设</b>: 服务端算力(补刷新 3ms 内完成)、大库(测试库 0~12 个种子)、前端轮询节拍(SSE 健康时同样复现; 直接读 store 也是 1.5s)、网络(全部本机 loopback)、qB 的 sync 增量视图(§02-E/F: 两个端点同源, 同一时刻不会一多一少)。</p>
+    <p class="hint">为什么单种子几乎不触发: 单个 add 也走同一条管线, 但只占 ioThread 一次、不排队, 补刷新那一问通常赶得上(5/5 轮实测 13~23ms 落地); 批量时 N 个搜索在同一个 ioThread 上排队, 尾部被推到补刷新之后, 输的概率随 N 上升(N=6 → 22%, N=12 → 44% 的种子)。</p>
   </section>
 
   <section id="s6">
-    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
-    <p><b>候选 A（推荐，零后端）</b>：SSE 掉线态（<code>_esConnected !== true</code>）下，waitCmd 回执兑现后 ~100ms 武装一次定向 <code>refresh()</code>（补刷新+视图发布已完成，避开 runtime.py:539 记载的扑空窗口——实测该窗口 &lt;10ms），把断线态反馈从 ~1.2s 压回 ~150ms。代价小、不碰乐观 UI 与服务端；注意与 26-10-21-2323「减少直查」方向一致（只是拉既有 /api/state，不新增端点）。<b>候选 B</b>：回执携带「补刷新已完成」标记，前端据此立即刷新——需要后端改回执，收益同 A，代价高，不推荐。<b>候选 C</b>：断线态把 basePollMs 降到 500ms 兜底——请求数 ×3，治标，仅作 A 的补充。</p>
+    <h2><span class="no">06</span>修法<span class="opt">（已实施: 候选 A）</span></h2>
+    <p class="hint">2026-11-01 09:4x 按候选 A 实施。原报告的候选 A(SSE 掉线时前端在回执后补一次 refresh)对本文现象<b>无效</b> —— 那时 store 里还没有这几行, 前端刷也是扑空, 已弃用。</p>
+    <p><b>候选 A(推荐, 后端, 有界补同步)</b>: <code>_cmd_add_torrents</code> 已经拿到 qB 回执的 <code>added_torrent_ids</code> —— 把它交给主循环, 补刷新后核对 <code>set(added_ids) - store.by_hash</code>; 非空则以 ~80ms 间隔再同步, 上限 3 次 / ~500ms 即收工(仍缺就等常规节拍, 不无限重试)。实测管线时延 6~40ms; 已验过这个前提: add 返回后 <b>sleep 80ms 再 sync, N=12 连跑 8 轮全部 12/12 命中</b>(响应返回时刻 t+83~112ms), 预期把 1.5s 压到 ~100ms。代价: 每条 add 命令最多多 1~2 次 <code>sync/maindata</code>。</p>
+    <div class="callout"><b>落地形态</b>(与建议的差异: 追平逻辑放在 store 而不是命令 handler —— 内核不该知道 add 语义, 只认「有一批 hash 还没落地」这一个通用信号):
+      <ul>
+        <li><code>store.py expect_hashes()</code> —— 登记期望集合(过滤已在快照里的), 置 80ms 后的到期时刻; <code>expect_due_at()</code> 给出下一次追平时刻(恒为未来值 + TTL 3s 兜底); <code>_settle_expect()</code> 在每轮 <code>_apply</code> 末尾结算(落地出局 / 仍有缺则排下一次 / 3 次用尽即放弃)。</li>
+        <li><code>commands.py _expect_landing()</code> —— 把回执里的 <code>added_torrent_ids</code> 交给 store; 老版 qB 的纯文本回执拿不到 id, 静默跳过。</li>
+        <li><code>qbmanager.py</code> 主循环 —— 同步后 <code>next_sync_at = min(next_sync_at, expect_due_at())</code> 把同步线提前到追平时刻; 追平轮带 <code>force=True</code>(否则被「上一版已取走」门控挡掉); 断连分支先 <code>clear_expect()</code>, 免得到期时刻把 <code>next_sync_at</code> 钉在过去造成空转。</li>
+      </ul>
+    </div>
+    <p><b>候选 B(后端, 定向灌入)</b>: 添加命令后用 <code>/torrents/info?hashes=&lt;added_ids&gt;</code> 把这几个 hash 直接灌进 store(<code>store.refresh</code> 的子集形态)。<b>注意: 它不是"一步到位"</b> —— §02-F 证明该端点与 sync 同源, 同样要等管线走完(实测 t+9.5ms 已完整, 但 t+6.6ms 仍是 0/6), 所以照样要配"缺就重试"的循环, 与 A 的差别只是"补齐时读哪个端点"。代价: 多一条 qB 调用 + 一条"命令注入快照"的旁路, 与"快照只由同步线写"的单一写入口径有摩擦。</p>
+    <p><b>候选 C(治标)</b>: 断线态或添加后临时把 <code>sync_interval</code> 降到 500ms —— 请求数 ×3, 只把 1.5s 变 0.5s, 且和"下界 1.5s = 服务端 sync 粒度"的既有设计相悖。不推荐。</p>
+    <p><b>候选 D(前端, 不推荐)</b>: 添加回执后前端本地补拉几次 <code>/api/state</code> —— 服务端没有的东西拉多少次都没有, 只会把"扑空"变成"多次扑空"。</p>
+    <p class="hint">另注: 若后续把添加也做成"乐观行"(先插一行 pending 新种子), 体验上能立刻消掉空窗, 但那是另一条更大的设计线(要处理 hash 未知/去重/失败回滚), 不在本条范围内。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
-      <li>2026-10-30 06:26 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-10-30 06:26 — 入池, 状态 <strong>Open</strong>(计划外, 未修)。原归因: SSE 掉线 → 前端退化为 1.5s 轮询。</li>
+      <li>2026-11-01 08:0x — 用户认领(指出描述有误: 不一定是 SSE 掉线时; 「肯定长于 1 秒」不准确, 多种子添加是毫秒级与 &gt;1s 并存)。状态 <strong>Open → In Progress</strong>。</li>
+      <li>2026-11-01 08:3x — 复验 + 重新取证完成, 正文重写: 标题/摘要/§01/§02/§03/§04/§05/§06 全部按新证据改写, 原证据与结论保留在 §02-G 并标注改道原因。</li>
+      <li>2026-11-01 09:0x — 补一次源码分析(<code>D:\Projects\Else\qBittorrent</code>): 新增 §02-F「add 是四跳异步管线」+ §04 的 qB 侧锚点。<b>并修正两处早前的过度归因</b>: ① 原 §02-E「滞后在 qB 的 sync 视图, 不在 session」<b>不成立</b> —— 两个端点同源(<code>session->torrents()</code>), 同一时刻不会一多一少, 早前看到的差只是两次采样相隔 5~25ms; ② §05 的「10~60ms 滞后窗」改为「6~40ms 异步管线时延」, 且「补刷新距 add 返回 3~5ms」按 trace 更正为 0.5~0.8ms。§06 候选 B 的「一步到位」也随之降级(该端点同样要等管线)。</li>
+      <li>2026-11-01 09:4x — 按用户指示「按推荐修」实施候选 A(store 有界追平 + 命令线登记 + 主循环提前同步线), 新增 <code>tests/test_store_expect.py</code> 与两条用例; 真机复测零 1.5s 簇。状态 <strong>In Progress → Done</strong>。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验: <b>2026-11-01 08:00~08:30 仍复现</b>, 且原描述需修正 —— 见 §01 与 §02-A(SSE 全程健康下仍出现 22%/44% 的种子落在 ~1.53s)。真机口径: <code>real.guard</code> 通过(36596, 真实种子 0 个全暂停), 全程未触碰其它 qB 实例, 假种子每轮按 hash 删净。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>: 与候选 A 一致, 但把追平逻辑放在数据层(<code>store.expect_hashes/expect_due_at/_settle_expect</code>)而不是命令 handler —— 内核只认「有一批 hash 还没落地」, 不认 add 语义。命令线只负责把回执里的 <code>added_torrent_ids</code> 交进去, 主循环把同步线提前到 store 给的到期时刻。三个参数: 间隔 80ms、最多 3 次、TTL 3s(断连/暂停时作废, 不让到期时刻把 <code>next_sync_at</code> 钉在过去空转)。</p>
+    <p><b>验证方式</b>: 真机 36596(空库, 假种子 paused 添加, 每轮按 hash 删净) + <code>tests-real/lib/app.py</code> 起独立临时配置, 用 <code>tmp-analysis/probe_add_timeline.py</code> 读服务端 <code>/api/state</code> 首次可见时刻。</p>
+<pre><code># 修复后(N=6 × 6 轮 = 36 个种子): 全部 24.6~128.5ms, 零个 &gt;1s
+r0  3 个 @ 38.4ms | 3 个 @ 128.5ms        r3  5 个 @ 24.6ms | 1 个 @ 115.2ms
+r1  2 个 @ 25.3ms | 4 个 @ 115.8ms        r4  2 个 @ 25.9ms | 4 个 @ 117.3ms
+r2  2 个 @ 25.3ms | 4 个 @ 116.7ms        r5  1 个 @ 26.6ms | 5 个 @ 116.6ms
+
+# 修复后(N=12 × 3 轮 = 36 个种子): 全部 24.3~114.6ms(修复前 44% 落在 ~1.54s)
+r0  12 个 @ 61.6ms(一次到位)   r1  3 个 @ 25.0ms | 9 个 @ 114.6ms   r2  1 个 @ 24.3ms | 11 个 @ 113.2ms
+
+# 对照组 N=1 × 5 轮: 25.9~27.8ms, 只问一次(未退化)
+# 前端等价路径(SSE ver -> /api/state, N=6 × 4 轮): 最晚 119.0ms
+#   ver@27.4 hit=3 -> ver@114.3 hit=6 / ver@16.3 hit=2 -> ver@106.6 hit=6
+
+# 单测: 4385 passed / 2 skipped, 覆盖率 99.06%(新增 test_store_expect.py 7 条 + 命令线/主循环各 1 条)</code></pre>
+    <p><b>遗留</b>: ① 老版 qB(Web API &lt; 2.14)回执没有 <code>added_torrent_ids</code>, 该版本上退回"等常规节拍", 未做额外兜底; ② SSE 掉线时前端仍要等下一次轮询(store 侧 100ms 有数据, 但前端不知道), 那是原报告的另一半问题(单种子 1.19s), 本次未动。</p>
   </section>
 
   <footer>
-    26-10-30-0626-perf-webui-sse-down-poll-latency.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+    26-10-30-0626-perf-webui-sse-down-poll-latency.html · 由 create-issue skill 入池; 2026-11-01 认领后重写归因; 2026-11-01 按候选 A 修复并真机验证; 状态随推进在上面「状态变更日志」里留痕
   </footer>
 
 </div>

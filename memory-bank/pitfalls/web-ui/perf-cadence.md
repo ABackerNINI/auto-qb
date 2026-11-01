@@ -30,6 +30,11 @@
   新种子不归组、`on_torrent_deleted` 不触发、删除不处理、`store.groups` 残留幽灵、状态快照不推进。
 - **处置**: 调 `_refresh_torrents()`; 且补刷新放在 `_drain_web_commands()` **整批结束后一次**
   (不是每条命令后各一次)。
+- **边界**: "只补一次"约束的是**命令线**; qB 的 add 要过 6~40ms 异步管线才进 session, 补刷新
+  (距 add 返回 0.5~0.8ms)必然只拿到一部分 ⇒ 另有**同步线的有界追平**
+  (`store.expect_hashes` / `expect_due_at`, 80ms × ≤3 次), 见
+  [issue 26-10-30-0626](../../issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html)。
+  两条不能混: 追平走的是 `_sync_line()`, 不是再调一次补刷新。
 
 ### 命令线与 tick 线必须解耦
 

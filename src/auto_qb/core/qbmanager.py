@@ -564,13 +564,21 @@ class QbManager(
                         # 要过一会儿才翻状态, 紧跟着的那次补刷新读到的还是命令前的值。此时不能干等
                         # 下一个同步周期(真机大库 2s) —— 那正是用户看到的"点了要 2 秒才恢复正常"。
                         _wait_truth = bool(getattr(self.web, "truth_pending", None))
-                        cmd_forced = (bool(cmd_changed_state) or _wait_truth) and not dry_run
+                        # 追平轮(issue 26-10-30-0626)同样要 force: 要补的是**新行**, 若上一版
+                        # 视图还没被前端取走, 非 force 会被"已取走"门控挡掉 -> 快照有了但界面
+                        # 看不到, 等于白追。
+                        _exp_due = self.store.expect_due_at()
+                        cmd_forced = (bool(cmd_changed_state) or _wait_truth or bool(_exp_due)) and not dry_run
                         # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
                         # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
                         # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
                         _t_line = time.time() if (cmd_changed_state and not dry_run) else 0.0
                         _ran_line = False  # 本轮是否真有线跑成功(连接恢复检测的门, 26-10-31-1029)
                         if self.client is None and self._last_conn_ok is False:
+                            # 断连稳态: 追平无从兑现(本分支不跑同步线), 先作废待办 ——
+                            # 否则它的到期时刻会被下面的 min() 拉进 next_sync_at, 让主循环
+                            # 按 10ms 粒度空转到 TTL 才放手。
+                            self.store.clear_expect()
                             # 断连稳态(issue 26-10-31-1029): 不执行任何请求线, 直接走重连判定。
                             # 判据是二元组: _last_conn_ok=False 只由断连转换单点 _note_conn_failed
                             # 置位, 它与 client=None 同现即「已记录断连且客户端已置空」的稳态;
@@ -623,6 +631,14 @@ class QbManager(
                         # web 真值弧单测不可达(truth_pending 仅 web 启用时非空; 26-10-02-0441)
                         if _wait_truth and getattr(self.web, "truth_pending", None):  # pragma: no cover
                             next_sync_at = time.time() + TRUTH_RETRY_S
+                        # 添加种子后的有界追平(issue 26-10-30-0626 候选 A): qB 的 add 是四跳
+                        # 异步管线(sessionimpl.cpp:3113-3171), 命令后那次补刷新距 add 返回仅
+                        # 0.5~0.8ms, 必然落在管线中间 -> 这一批只进来一部分。store 登记了还没
+                        # 落地的 hash 时, 把同步节拍提前到它给的时刻(默认 +80ms), 直到全部落地
+                        # 或次数用尽 —— 有界由 store 侧计数 + TTL 双保, 不改变常规节拍语义。
+                        _exp_next = self.store.expect_due_at()
+                        if _exp_next:
+                            next_sync_at = min(next_sync_at, _exp_next)
                         # 连接恢复检测: 上面任一条线**真跑成功**(_ran_line)即 API 可达(connect() 仅
                         # 启动时调用一次, 断开后恢复只能在此翻转, 否则 UI 永远显示"qB 断开")。
                         # !门必须是 _ran_line 而非 sync_due/tick_due(26-10-31-1029): 断连稳态守卫轮

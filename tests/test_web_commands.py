@@ -51,6 +51,7 @@
 - test_bulk_missing_group_receipt: bulk 组键缺失计组数 -> error 回执点名
 - test_bulk_recheck_via_ops_aggregates_skip_and_fail: 批量 recheck 经 ops 逐个提交, 跳过/失败计数进聚合文案
 - test_add_torrents_files_only_and_urls_only: _cmd_add_torrents files/urls 两分支各自一次调用
+- test_add_torrents_registers_expect_landing: add 回执的 added_torrent_ids 登记为「待落地」(issue 26-10-30-0626 追平); 老版 qB 纯文本回执拿不到 id -> 静默跳过不报错
 - test_cmd_handlers_without_cmd_id_stay_silent: 无 cmd_id 一侧全覆盖(CLI/内部触发旁路) —— 14 处 `if cmd_id:` 假弧 + _bulk_receipt 两档 + _bulk_missing_msgs 缺失组文案 + skip_check 菜单关早退 + add_torrents 无回执: 不写回执(空键不出现)、不炸、日志照记
 - test_drain_web_commands_bulk_torrents_group_keys_mixed_and_missing
 """
@@ -2013,6 +2014,41 @@ def test_add_torrents_files_only_and_urls_only(monkeypatch):
         mgr.web.consume_commands()
         assert mgr.web.results["c-u"]["status"] == "ok"
         assert seen and seen[0].get("urls") == ["magnet:?xt=urn:btih:abc"], seen
+
+
+def test_add_torrents_registers_expect_landing(monkeypatch):
+    """add 回执的 added_torrent_ids 登记为「待落地」; 老版 qB 纯文本回执静默跳过
+
+    issue 26-10-30-0626: qB 的 200 只代表受理, torrent 还要过 6~40ms 异步管线才进 session;
+    命令后那次补刷新距 add 返回仅 0.5~0.8ms, 只拿到一部分 -> 主循环按 store 的到期时刻
+    有界追平。这里钉住「登记」这一步: 回执里的 id 必须进 store, 且老版回执不得炸。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr, client, _key = _make_grouped_manager(td)
+        f = td + "/x.torrent"
+        with open(f, "wb") as fh:
+            fh.write(b"d8:announce3:fooe")
+
+        hashes = ["A" * 40, "B" * 40]
+        client.torrents_add = lambda **kw: {
+            "success_count": 2,
+            "failure_count": 0,
+            "pending_count": 0,
+            "added_torrent_ids": hashes,
+        }
+        mgr.web.commands.put(("add_torrents", {"files": [f], "cmd_id": "c-x"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["c-x"]["status"] == "ok"
+        assert mgr.store._expect_pending == set(hashes), "回执里的 added_torrent_ids 必须登记"
+        assert mgr.store.expect_due_at() > 0, "登记后主循环应能提前同步"
+
+        # 老版 qB(Web API < 2.14): 纯文本回执拿不到 id -> 不登记、不报错
+        mgr.store.clear_expect()
+        client.torrents_add = lambda **kw: "Ok."
+        mgr.web.commands.put(("add_torrents", {"files": [f], "cmd_id": "c-y"}))
+        mgr.web.consume_commands()
+        assert mgr.web.results["c-y"]["status"] == "ok"
+        assert mgr.store._expect_pending == set(), "拿不到 id 时不得凭空登记"
 
 
 def test_cmd_handlers_without_cmd_id_stay_silent(monkeypatch):
