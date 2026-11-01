@@ -2243,6 +2243,7 @@ def test_guard_content_root_flat():
     from auto_qb.core.modules.grouping_mod import _content_root_of
 
     assert _content_root_of("R:/D", ["movie.mkv"]) == "R:/D", "平铺单文件必须早退返回 save_path"
+    assert _content_root_of("R:/D", ["/movie.mkv"]) == "R:/D", "首斜杠包裹的平铺文件名归一后仍须早退"
     assert _content_root_of("R:/D", []) == "R:/D", "空文件表同样早退"
     assert _content_root_of("", ["a.mkv"]) == "", "空 save_path 同样早退"
 
@@ -2254,6 +2255,12 @@ def test_guard_content_root_nested_first_segment():
 
     assert _content_root_of("R:/D", ["sub/deep/a.mkv", "sub/deep/b.mkv"]) == os.path.join("R:/D", "sub"), \
         "唯一顶层段必须是首段(不是末段, 二层嵌套区分 split/rsplit)"
+    assert _content_root_of("R:/D", ["sub\\deep\\a.mkv", "sub\\deep\\b.mkv"]) == os.path.join("R:/D", "sub"), \
+        "反斜杠文件名必须归一为正斜杠后再判顶层段"
+    assert _content_root_of("R:/D", ["/sub/deep/a.mkv", "sub/deep/b.mkv"]) == os.path.join("R:/D", "sub"), \
+        "首尾斜杠剥离后同顶层段必须合并(不剥离会裂成空首段)"
+    assert _content_root_of("R:/D", ["/sub/a.mkv", ""]) == os.path.join("R:/D", "sub"), \
+        "空文件名段必须在归一阶段被过滤(否则顶层段集合被空串污染而回退)"
     assert _content_root_of("R:/D", ["a/x.mkv", "b/y.mkv"]) == "R:/D", "多顶层段必须回退 save_path"
 
 
@@ -2268,6 +2275,8 @@ def test_guard_within_scope_contract():
     assert _within_scope("R:/D/", "R:/D/x") is True, "尾斜杠 scope 归一后必须在域内"
     assert _within_scope("/data", "/data/sub") is True, "POSIX 绝对路径 scope 必须真"
     assert _within_scope("/data", "/database") is False, "前缀串撞车不得误判在域内"
+    assert _within_scope("", "/data") is False, "空 scope 不得因空判据而误判在域内"
+    assert _within_scope("", "") is False, "空 scope 与空路径同样不得判在域内"
 
 
 def test_guard_physical_dir_layer2_alias_resolved(monkeypatch):

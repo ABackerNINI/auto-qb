@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-1711">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="core-w9a-mutation-low-residue">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0211-issue-w9ab-low-residue-guards.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ W9a grouping+ops 变异真洞余量 260 条批量判读留档(grouping 68 + ops 192, 低危文案/日志/窄触发面为主 + 极低 4), 不排期">
 <meta name="issue-summary" content="W9a(R33) S5a 守阵后余量: 真洞 449 - 红验 189 = 260(grouping 68 / ops 192); 主体为 WARNING/INFO 审计文案、settle payload、窄触发 continue-&gt;break、strip(XX/XX) 面与极低 4, 按簇判读留档不排期">
 <title>core/ W9a grouping+ops 变异真洞余量 260 条批量判读留档(grouping 68 + ops 192, 低危文案/日志/窄触发面为主 + 极低 4), 不排期 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-1711-test-core-w9a-mutation-low-residue</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 17:11</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,9 +96,42 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>根因与修法</h2>
+    <p><strong>根因</strong>: 非代码缺陷, 而是守阵覆盖缺口。S5a/S6 后仍可存活的形态集中在两簇: ①<strong>重加属性直传键面未被断言</strong> —— <code>_skip_add_call</code> 的 <code>upload_limit</code>/<code>download_limit</code>/<code>ratio_limit</code>/<code>seeding_time_limit</code> 在既有守阵里没有显式非默认值, 变异成 <code>None</code> 不会红; ②<strong>内容根/作用域的归一面缺窄触发断言</strong> —— <code>_content_root_of</code> 的反斜杠归一、首尾斜杠剥离、空文件名段过滤、唯一顶层段 <code>== 1</code> 边界, 以及 <code>_within_scope</code> 的空 scope 守卫, 既有用例均未覆盖。</p>
+    <p><strong>修法</strong>(零 <code>src/</code> 改动, 只加强守阵):</p>
+    <ul>
+      <li><code>tests/test_ops.py::test_guard_skip_readd_args_pin</code>: FakeTorrent 显式设 <code>up_limit=1234</code> / <code>dl_limit=5678</code> / <code>ratio_limit=2.5</code> / <code>seeding_time_limit=3600</code>, 断言四个属性原样直传(任一被置 None 必红)。</li>
+      <li><code>tests/test_grouping.py::test_guard_content_root_flat/nested_first_segment</code>: 补首斜杠包裹平铺名、反斜杠路径、首尾斜杠混合、空文件名段、<code>len(firsts)==1</code> 边界, 以及取首段 vs 取末段的区分。</li>
+      <li><code>tests/test_grouping.py::test_guard_within_scope_contract</code>: 补空 scope(<code>""</code>)两个断言, 钉住 <code>bool(s)</code> 守卫。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>验证</h2>
+    <ul>
+      <li>定向: <code>commands run test.one -- tests/test_speed_curve.py tests/test_ops.py tests/test_grouping.py</code> → <strong>233 passed, 1 skipped</strong>。</li>
+      <li>全量: <code>commands run test.full</code> → <strong>4805 passed, 2 skipped</strong>, TOTAL <code>22482 164 7708 134 99%</code>, 覆盖率闸(Windows 99)达标。数字单点在 <code>memory-bank/testing/baselines/26-11-02-0211-issue-w9ab-low-residue-guards.md</code>。</li>
+      <li>形态级手搓红验(gitignored <code>tmp-analysis/issue-w9ab-residue/redverify.py</code>): 本件对应的 <strong>W9a-01..13 共 13/13</strong> 条同构变异态均使守阵变红(逐条锚点唯一校验、原字节还原; <code>git status</code> 确认 <code>src/</code> 零改动)。</li>
+      <li><strong>口径</strong>: 未跑 mutmut/gremlins 全轮复跑 —— 本 clone 无 W9a 逐 id 产物且全轮成本超出本 issue 范围; 故<strong>不声称任何具体变异 id 被杀死</strong>, 手搓红验只证明"这些形态若出现守阵会红"。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>遗留与边界</h2>
+    <ul>
+      <li>③纯文案/日志丢真(~200 条): 按原判读「低危不追只记录」<strong>不排期</strong>, 继续留档; 消费方(如审计告警面板)出现时再按簇立守阵。</li>
+      <li>grouping 极低 4 条: 缺逐 id diff 产物, <strong>未逐 id 定位/未逐验</strong>; 本轮仅按同形态窄触发面补守阵, <strong>不声称这 4 条具体 id 已杀</strong>, 其中部分可能为等价变异。</li>
+      <li>ops 的 S6 首轮假杀纠正 5 条(检查证据/闸文案/广播日志/备份文案)未在本轮逐条复验, 维持原判读。</li>
+      <li>未执行 git commit(按用户安排另行提交)。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 17:11 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 01:54 — 认领，状态 <strong>In Progress</strong>（用户指派；与 26-11-01-2024 同主题合并处理）</li>
+      <li>2026-11-02 02:13 — 修复完成，状态 <strong>Done</strong>（建议优先级 ①② 的可成簇面已加守阵并验证；③按原判读不排期，遗留见 06）</li>
     </ul>
   </section>
 

@@ -1675,7 +1675,8 @@ def test_guard_skip_finish_start_scope():
 
 def test_guard_skip_readd_args_pin():
     """守阵(W9a ac 簇 + pr14/pr16): 重加参数直传 pin —— torrent_files/保存路径/分类/标签/
-    内容布局/停种/顺序下载/首末块/分享限制全部原样回传, 布局丢失=重加即 missingFiles"""
+    内容布局/停种/顺序下载/首末块/上下列限速/比率与做种时限/分享限制全部原样回传,
+    布局丢失=重加即 missingFiles"""
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
@@ -1689,6 +1690,10 @@ def test_guard_skip_readd_args_pin():
         tags="tag1,tag2",
         seq_dl=True,
         f_l_piece_prio=True,
+        up_limit=1234,
+        dl_limit=5678,
+        ratio_limit=2.5,
+        seeding_time_limit=3600,
         inactive_seeding_time_limit=42,
         share_limit_action="ModeX",
     )
@@ -1706,6 +1711,8 @@ def test_guard_skip_readd_args_pin():
     assert a["is_stopped"] is True, "重加必须显式停种"
     assert a["is_skip_checking"] is True
     assert a["is_sequential_download"] is True and a["is_first_last_piece_priority"] is True, "顺序下载偏好不得重置"
+    assert a["upload_limit"] == 1234 and a["download_limit"] == 5678, "上传/下载限速属性不得丢失"
+    assert a["ratio_limit"] == 2.5 and a["seeding_time_limit"] == 3600, "做种比率/做种时间限制不得重置"
     assert a["share_limit_action"] == "ModeX" and a["inactive_seeding_time_limit"] == 42, "分享限制属性不得重置"
 
 

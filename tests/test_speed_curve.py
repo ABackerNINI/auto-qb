@@ -1014,8 +1014,10 @@ def test_speed_curve_success_logs_period_stats(tmp_path):
 def test_speed_curve_format_helpers():
     """日志格式化辅助: 字节可读串 / 中文数字(含两位数) / period 中文标签 / 限速显示"""
     assert _fmt_bytes(0) == "0B"
+    assert _fmt_bytes(1023) == "1023B"
     assert _fmt_bytes(1024) == "1KiB"
     assert _fmt_bytes(int(1.5 * GIB)) == "1.5GiB"
+    assert _fmt_bytes(int(1.25 * GIB)) == "1.25GiB"  # 两位小数必须保留(非整值不是 .1f)
     assert _fmt_bytes(60 * GIB) == "60GiB"
     assert _fmt_bytes(3 * 1024**4) == "3TiB"
     assert _cn_number(0) == "零"
@@ -1029,9 +1031,12 @@ def test_speed_curve_format_helpers():
     assert _period_label("month") == "本月"
     assert _period_label("7D") == "七日"
     assert _period_label("30D") == "三十日"
+    assert _period_label("99D") == "九十九日"
+    assert _period_label("100D") == "100日"  # >=100 直接落数字(与 99D 卡边界)
     assert _period_label("120D") == "120日"
     assert _fmt_global_limit(None) == "不限速"
     assert _fmt_global_limit(0) == "不限速"
+    assert _fmt_global_limit(1) == "1KiB/s"
     assert _fmt_global_limit(5120) == "5120KiB/s"
 
 
@@ -1101,13 +1106,26 @@ def test_traffic_view_manual_reason_on_odd_kib(tmp_path):
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD), down=_points(FULL_DOWNLOAD)))
     mgr, client = _make_mgr(tmp_path, gslc)
     client.transfer.limits["upload_limit"] = 2001 * 1024  # 用户手动 2001KiB/s(奇数)
+    client.transfer.limits["download_limit"] = 10265 * 1024  # 用户手动 10265KiB/s(奇数, 用户实报值)
 
     assert _run_curve(mgr)
     tv = mgr.web.traffic_view
-    assert tv["limit"]["target"]["up"] == 6144  # 5GiB -> 首档 6MiB/s
-    assert tv["limit"]["actual"]["up"] == 2001  # 未被覆盖, 仍是手动值 -> 前端显示两者不一致
-    assert [r["code"] for r in tv["limit"]["reasons"]] == ["manual"]
-    assert tv["limit"]["reasons"][0]["dir"] == "up"
+    assert tv["limit"]["target"] == {"up": 6144, "down": 11264}  # 5GiB -> 首档 6MiB/s / 11MiB/s
+    # 未被覆盖, 仍是手动值 -> 前端显示"命中/实际"两者不一致
+    assert tv["limit"]["actual"] == {"up": 2001, "down": 10265}
+    # 完整键面 pin: 前端锁图标与文案直接消费 dir/code/text 三键, 丢键、错方向、改文案都让 UI 静默失真
+    assert tv["limit"]["reasons"] == [
+        {
+            "dir": "up",
+            "code": "manual",
+            "text": "上传限速 2001KiB/s 为奇数(疑似手动设置), 本轮不覆盖"
+        },
+        {
+            "dir": "down",
+            "code": "manual",
+            "text": "下载限速 10265KiB/s 为奇数(疑似手动设置), 本轮不覆盖"
+        },
+    ]
 
 
 def test_traffic_view_dry_run_has_target_without_actual(tmp_path):
@@ -1135,9 +1153,12 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     assert tv["state"] == "stale"  # 曲线侧先判定也可派生 stale(与今日同格)
     assert tv["limit"]["state"] == "stale"
     assert tv["limit"]["target"] == {"up": None, "down": None}
-    assert tv["limit"]["reasons"][0]["code"] == "dat_missing"
+    r0 = tv["limit"]["reasons"][0]
+    assert set(r0) == {"dir", "code", "text"}, f"reasons 键面必须是 dir/code/text 三键: {r0}"
+    assert r0["dir"] == "" and r0["code"] == "dat_missing"
+    assert r0["text"].startswith("流量数据读取失败: "), f"前端文案前缀必须点明读取失败: {r0['text']}"
 
-    # 文件存在但无有效记录: 同样 stale, 原因码不同
+    # 文件存在但无有效记录: 同样 stale, 原因码与文案均确定
     bad = tmp_path / "bad.dat"
     bad.write_text('lines: "2"\nnot-a-date\n', encoding="utf-8")
     _b = _gslc(str(bad), _pc("day", up=_points(FULL_UPLOAD)))
@@ -1145,7 +1166,7 @@ def test_traffic_view_stale_when_dat_missing_or_empty(tmp_path):
     mgr.config.traffic_source.traffic_monitor.dat_path = _b.dat_path
     assert _run_curve(mgr) is True
     assert mgr.web.traffic_view["state"] == "stale"
-    assert mgr.web.traffic_view["limit"]["reasons"][0]["code"] == "dat_empty"
+    assert mgr.web.traffic_view["limit"]["reasons"] == [{"dir": "", "code": "dat_empty", "text": "流量数据无有效记录"}]
 
 
 # ---------- 手动保护的日志节流(持续状态不逐轮刷屏) ----------
@@ -1187,7 +1208,8 @@ def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, mon
         clock["now"] += 61.0  # 远小于提醒周期
         assert _run_curve(mgr)
         assert cap.text.count("本轮不覆盖") == 1  # 同状态不重复
-        clock["now"] += _MANUAL_REMIND_GAP  # 越过一个提醒周期 -> 再说明白一次
+        # 恰好整周期(不是"越过"): >= 边界必须再提醒一次(改成 > 就会吞掉这一轮)
+        clock["now"] = 1_000_000.0 + _MANUAL_REMIND_GAP
         assert _run_curve(mgr)
         assert cap.text.count("本轮不覆盖") == 2
         # 手动值变化(2001 -> 2003, 仍是奇数): 状态指纹变了 -> 立即重报
@@ -1271,5 +1293,12 @@ def test_speed_curve_readback_failure_degrades_actual(tmp_path, monkeypatch):
     assert _run_curve(mgr)
     assert client.transfer.calls == [("set_upload_limit", 6 * 1024 * 1024)], "回读失败不影响已写入的限速"
     tv = mgr.web.traffic_view
-    assert [r["code"] for r in tv["limit"]["reasons"]] == ["read_failed"]
+    # 完整键面 + 文案 pin: 前端靠 reasons 说明"实际值未知", dir 为空表示非单一方向
+    assert tv["limit"]["reasons"] == [
+        {
+            "dir": "",
+            "code": "read_failed",
+            "text": "回读实际限速失败: qB 回读失败"
+        },
+    ]
     assert tv["limit"]["actual"]["up"] == 0, "actual 退化为写前读数"

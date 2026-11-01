@@ -59,7 +59,7 @@
 | S3 实测 | Done | 见下「进度日志」R0; `set_conf` 覆盖式重写与幂等本地实测通过 |
 | S4 issue + 坑档 | Done | issue `26-10-08-0642-test-mutation-audit-standing`(常驻) + `pitfalls/testing/mutation-pool-artifact.md` |
 | S5 收尾 | Done | 索引 / 基线 / 软链 |
-| S6+ 逐包轮次 | In Progress | config **七轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface)、R10(loop-guards)、R11(loader-defaults)、R13(boundary-guards); 池内 6 条 `test` issue **已全部实施**; **hr 已执行**(计划 `26-10-09-1459`): 首轮 R14 + 模块轮 R16–R22(service.py 全覆盖收口); **rules 已执行**(R23, 计划 `26-10-30-0049`, 60 守阵复验全清); **core 计划已派生并执行完毕 W1–W9b**(计划 `26-10-31-0128`, R25–R34): state+taskqueue / traffic_limits+grid / tvshows+episodes+curves / traffic_store / traffic_sample_mod / 编排客户端五文件 / 快照与来源四文件 / relocate 搬移面两文件 / grouping+ops 两文件 / rules+modules 小件六文件, 九个工作包全部收口(逐轮数字见各基线切片; core/ 整包审计收官, 余量在池) |
+| S6+ 逐包轮次 | In Progress | config **七轮已执行**(计划 `26-10-08-0720`): 首轮见 R2、R6(validator-strings)、R7(writer-tail)、R8(schema-surface)、R10(loop-guards)、R11(loader-defaults)、R13(boundary-guards); 池内 6 条 `test` issue **已全部实施**; **hr 已执行**(计划 `26-10-09-1459`): 首轮 R14 + 模块轮 R16–R22(service.py 全覆盖收口); **rules 已执行**(R23, 计划 `26-10-30-0049`, 60 守阵复验全清); **core 计划已派生并执行完毕 W1–W9b**(计划 `26-10-31-0128`, R25–R34): state+taskqueue / traffic_limits+grid / tvshows+episodes+curves / traffic_store / traffic_sample_mod / 编排客户端五文件 / 快照与来源四文件 / relocate 搬移面两文件 / grouping+ops 两文件 / rules+modules 小件六文件, 九个工作包全部收口(逐轮数字见各基线切片; core/ 整包审计收官, 余量在池); **R37 余量 issue 收口**: 26-11-01-1711(W9a) + 26-11-01-2024(W9b) 的高价值簇已加强守阵并置 Done, 未逐验的中危/极低与纯文案余量按原判读留档 |
 
 ## 进度日志
 
@@ -277,3 +277,12 @@
 - **修法(理由)**: 不改 `src/`(异常吞没是产品容错行为, 改成不吞属产品变更、超范围)、不改池(两池同超时已证与池无关)。真正缺口是「轮次参数不随结果留痕」——W5/W6 镜像手工加的 `timeout_multiplier = 2` 会被 `set_conf.py` 覆盖式重写 `[tool.mutmut]` 时静默抹掉, 于是 no-tests(池的函数)与 TIMEOUT(超时倍数的函数)都不可归因、不可复现。落点: `set_conf.py` 显式写 `timeout_multiplier`(默认 15.0)+ 新增 `--timeout-multiplier`; `mutants.py run` 校验透传并把 `target / children / timeout_multiplier / pool / 镜像 HEAD / mutmut 版本` 写进结果文件头; `config.toml` 命令说明与 `references/why.md` 补「轮次参数与账本」; `scripts/test_mutants.py` 补 4 条渲染断言 + 2 条账本头断言。
 - **验证**: `commands run test.pkg.scoped` 跑包测试通过(4.9s, 包内 24 项全绿 in 3.77s); `mutants.py run --dry-run --timeout-multiplier 2` 确认透传与 `[5/6]` 行; `commands run kb.index` 通过(0.6s)。全量与覆盖率见切片(`commands run kb.baseline`)。
 - **遗留**: 16 条 TIMEOUT 本体维持未判定; §H 6 条疑似等价待形态变化证伪; 其余池外触达面按轮次自然覆盖, 本件不承诺扩池; 未执行 commit(按用户要求)。
+### 2026-11-02 R38 — W9a/W9b low-residue 余量 issue 成簇守阵收口(26-11-01-1711 + 26-11-01-2024)
+
+- **认领**: 两条余量留档 issue 逐件读后判「同主题(变异守阵余量)但非同函数根因」, 按建议优先级挑可成簇面合并一轮处理; 两件 `doc-status` 置 In Progress→Done, 双向链 `doc-refs` 指任务档案与本轮切片, 结论分别回写各件 §04–§06(不合并成一条)。
+- **W9a(26-11-01-1711)**: 根因 = 既有守阵未钉 `_skip_add_call` 四个直传属性(上限/比率/做种时间), 及 `_content_root_of`/`_within_scope` 归一与空值边界。修法(测试 only, 零 src): `test_ops.py::test_guard_skip_readd_args_pin` 给 FakeTorrent 显式非默认 `up_limit/dl_limit/ratio_limit/seeding_time_limit` 并断言透传; `test_grouping.py` 的三条内容根/作用域用例补反斜杠归一、首尾斜杠剥离、空段过滤、唯一顶层段合并、空 scope 判否。**未逐验**: grouping 极低 4 与 ops S6 假杀纠正 5 条无本 clone 逐 id 产物, 如实标注不声称杀死。
+- **W9b(26-11-01-2024)**: 根因 = `limit.reasons` 只断言 code、缺 dir/text/完整键面与下载方向; 格式化 helper 缺精度与非整值/百刻度边界; manual 提醒用例用 3661s「越过」周期, 对 `>=`→`>` 不敏感。修法(测试 only, 零 src): 四条 `tests/test_speed_curve.py` 用例补完整 reasons 字典(manual 双方向 / dat_missing+dat_empty / read_failed)与 `1023B`、`1.25GiB`、`99D/100D`、`1KiB/s` 断言; 周期提醒第三轮改为恰好 `_MANUAL_REMIND_GAP`。
+- **验证**: 定向 `commands run test.one -- tests/test_speed_curve.py tests/test_ops.py tests/test_grouping.py` → **233 passed, 1 skipped**; 全量 `commands run test.full` → **4805 passed, 2 skipped**, TOTAL `22482 164 7708 134 99%`(覆盖率闸 Windows 99 达标); 形态级手搓红验 **26/26 全红**(`tmp-analysis/issue-w9ab-residue/redverify.py`, gitignored; 首轮暴露 W9b-13 越周期不敏感 + W9a-07 锚点重复两问题, 修正后复跑), 收尾 `git status --short src/` 为空。数字单点在 [26-11-02-0211](../testing/baselines/26-11-02-0211-issue-w9ab-low-residue-guards.md)。
+- **未做 / 遗留**: **未跑 mutmut/gremlins 全轮**(全轮 WSL 长跑超出本轮范围), 故不声称具体 id 被杀或存活数下降, 守阵强度以手搓形态级红验 + 定向池实测为证; W9b 中危 4(rules mk3/mk14 · he10 · maintenance sc17)与 W9a grouping 极低 4 未逐 id 定位/未加守阵, 疑窄触发或等价, 如实留档; 两件纯文案/日志余量按原判读不排期; `tmp-analysis/` 产物只在本 clone; 未 commit(用户安排)。
+
+- 2026-11-02 02:56 W9a/W9b low-residue 余量 issue 成簇守阵收口: 两条分别置 Done; 定向 233 过 + 全量 4805 过(99%); 手搓红验 26/26; 零 src 改动; 未跑 mutmut 全轮
