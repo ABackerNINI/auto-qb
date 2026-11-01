@@ -13,9 +13,13 @@ web.enabled + skip_local_verify: true 回环免密钥), 连 副实例(空库草�
 一键脚本(自动开浏览器/交互式 CLI/生成的配置缺 schema_version: 5 会走迁移改写/日志路径与
 lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成同款最小配置(schema_version: 5)
 后用 `python -m auto_qb` 起 —— 与 dev_webui.py 内部 `cli_main()` 完全等价。收尾一律 taskkill
-/F /T 杀整棵进程树(§2.7: 不带 /T 只杀 uv 启动器, 孤儿继续持端口)。RM08-05 的真实种子腿
-(主实例 侧)是本片唯一的 主实例 面产品实例: 配置经 api_key 直连(qB 5.x WebUI API Key, 实测
-本机可用), grouping 关死(零写路径), 同步线只读。
+/F /T 杀整棵进程树(§2.7: 不带 /T 只杀 uv 启动器, 孤儿继续持端口)。RM08-05 的腿A(主实例 侧)
+是本片唯一的 主实例 面产品实例: 配置经 api_key 直连(qB 5.x WebUI API Key, 实测本机可用),
+grouping 关死(零写路径), 同步线只读; 腿A 按 D1 计数分支: 主实例真实种子 >0 走原腿(真实
+tracker 域名 mask), ==0(环境2 实况)走私有假种子替身(假种子 info 硬编码 private:1, 私有
+msg 与 mask 断言机制等价成立; 「真实 PT 域名」词面缺失降级记账)。RM08-07 的产品实例经
+auth 形参 scoped 切到 skip_local_verify=false + 显式 web.token(Bearer 鉴权, D2 升档负向),
+其余用例实例维持 loopback 免鉴权零改动。
 
 与计划判据的实况修正(执行时以实况为准记录, 均非产品缺陷, 详见用例 docstring):
 - RM08-01②/④ 零回传拍: status(traffic/server/totals 恒回传段)由 /api/state 路由层包在
@@ -24,9 +28,10 @@ lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成�
 - RM08-02⑤ show 视图: 计划 spec 写「show ∉ _DELTA_VIEWS 恒全量」, 但实码 S9b 已把 show
   纳入增量矩阵(runtime.py `_DELTA_VIEWS = {group, torrent, show}`, 计划 §02 锚点表自身
   也这么记)—— 计划内部矛盾, ⑤按实码契约断言并在基线切片记账, 不入池缺陷。
-- RM08-07⑤ 坏票负向: skip_local_verify=true 下 auth.py 的 loopback 免鉴权先于票据闸返回
-  —— 冻结驱动形态下该负向不可达, 记 BLOCKED 子项(解锁: 驱动改 skip_local_verify=false
-  + Bearer token), 其余子项照常断言。
+- RM08-07⑤ 坏票负向: 上轮 skip_local_verify=true 下 auth.py 的 loopback 免鉴权先于票据闸
+  返回, 记 BLOCKED 子项; 本轮(2026-11-01 漂移复测轮 D2)已按解锁路径兑现 —— 该用例的产品
+  实例 scoped 改 skip_local_verify=false + web.token 显式配置, 请求带 Bearer, 坏票/无票/
+  错票负向补齐(升 L3), 其余 7 条实例维持 loopback 免鉴权零改动。
 - RM08-02② 窗口洁净: 计划「delta.upsert 恰含变更行」的新鲜入库场景下, 错峰 check 完成的
   派生变更会落在基线邻代(upsert 混入内容与当前视图一致的邻代行, 复现两轮)—— 判据放宽为
   「变更行在 + 窗口全部行内容现取一致 + removed 空」, 恰单行形态在基线切片记账。
@@ -35,9 +40,11 @@ lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成�
   = L2 传输读失败路径或 qB 重启期 resume 核验造法定案。
 
 跑法: `commands run real.suite -- --slice RM08 --yes`(RM08-04 大库注入放最后)。真实种子全程
-非活跃(主实例 的 8 枚严格只读, 仅 RM08-05 走只读 detail 面); 假种子一律 real-fake 标签, 本片
-默认无 announce 纯本地做种(读侧不需要归组管线, 零外连); RM08-06 的 L2 互传走 RM00 口径
-(伪 tracker 回对端, 全本机零外网, 真实种子保持 paused); 删数据/recheck 只对自造种子。
+非活跃(主实例若有真实种子则严格只读, 仅 RM08-05 走只读 detail 面; 环境2 主实例 0 枚, 腿A
+按 D1 走替身分支); 假种子一律 real-fake 标签, 本片默认无 announce 纯本地做种(读侧不需要
+归组管线, 零外连); RM08-05 替身腿的 announce 用死端口 URL 且只为 mask 断言(连接即被拒,
+零外连); RM08-06 的 L2 互传走 RM00 口径(伪 tracker 回对端, 全本机零外网, 真实种子保持
+paused); 删数据/recheck 只对自造种子。
 """
 from __future__ import annotations
 
@@ -57,7 +64,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib import app, instances, torrent  # noqa: E402
+from lib import app, guard, instances, torrent  # noqa: E402
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="本片断言含 Windows 特有语义(taskkill 进程树/盘符路径)"),
@@ -150,15 +157,19 @@ config:
         enabled: true
         host: 127.0.0.1
         port: {web_port}
-        skip_local_verify: true
+        skip_local_verify: {skip_local}{token_line}
     trackers: {{}}
     notify:
         enabled: false
 """
 
 
-def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str) -> tuple[Path, int]:
-    """生成 dev.webui 同款最小配置(schema_version: 5; 任务线全关, 同步线 1.5S, 回环免密钥)。"""
+def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str, auth: str = "") -> tuple[Path, int]:
+    """生成 dev.webui 同款最小配置(schema_version: 5; 任务线全关, 同步线 1.5S, 回环免密钥)。
+
+    auth 非空(RM08-07 升档, scoped 只影响该用例实例): skip_local_verify=false + 显式
+    web.token —— 请求必须带 Bearer, 环票闸可达, 坏票/无票负向可断言(D2)。
+    """
     cfg = case / "config.yml"
     web_port = app.free_port()
     cfg.write_text(
@@ -168,6 +179,8 @@ def write_cfg(case: Path, *, qb_port: int, grouping: bool, api_key: str) -> tupl
             data_dir=(case / "data").as_posix(),
             grouping="true" if grouping else "false",
             web_port=web_port,
+            skip_local="false" if auth else "true",
+            token_line=f'\n        token: "{auth}"' if auth else "",
         ),
         encoding="utf-8",
     )
@@ -217,36 +230,53 @@ def web_ready(port: int) -> dict:
 
 
 @contextlib.contextmanager
-def product_case(name: str, *, qb_port: int = instances.SECONDARY, grouping: bool = True, api_key: str = ""):
-    """起一份 dev.webui 安全模式产品进程跑单条用例, 收尾必杀进程树。"""
+def product_case(
+    name: str, *, qb_port: int = instances.SECONDARY, grouping: bool = True, api_key: str = "", auth: str = ""
+):
+    """起一份 dev.webui 安全模式产品进程跑单条用例, 收尾必杀进程树。
+
+    auth 非空 ⇒ 该实例 skip_local_verify=false + Bearer 鉴权(scoped, RM08-07 升档用);
+    Bearer 值经 _AUTH_TOKENS 按 web 端口派发, web_req/web_err 自动携带, 收尾即撤。
+    """
     case = case_dir(name)
-    cfg, port = write_cfg(case, qb_port=qb_port, grouping=grouping, api_key=api_key)
+    cfg, port = write_cfg(case, qb_port=qb_port, grouping=grouping, api_key=api_key, auth=auth)
+    if auth:
+        _AUTH_TOKENS[port] = auth
     proc = app.AppProc(_popen_auto_qb(cfg), case, cfg)
     try:
         assert proc.wait_web(), f"产品 WEB 未启动: 日志尾部 {proc.log()[-400:]!r}"
         web_ready(port)
         yield case, port, proc
     finally:
+        _AUTH_TOKENS.pop(port, None)
         kill_tree(proc)
 
 
-def web_req(port: int, method: str, path: str, body: dict | None = None) -> dict | list:
-    """产品 Web API 客户端(GET/POST/PUT; 本机免鉴权 skip_local_verify=true)。"""
+# web 端口 -> Bearer 值(auth 实例派发表; 值是用例侧自造的测试令牌, 非真实凭据)
+_AUTH_TOKENS: dict[int, str] = {}
+
+
+def web_req(port: int, method: str, path: str, body: dict | None = None, token: str | None = None) -> dict | list:
+    """产品 Web API 客户端(GET/POST/PUT; 本机免鉴权 skip_local_verify=true; auth 实例自动带 Bearer)。"""
+    if token is None:
+        token = _AUTH_TOKENS.get(port, "")
     r = urllib.request.Request(
         f"http://127.0.0.1:{port}{path}",
         method=method,
         data=json.dumps(body).encode("utf-8") if body is not None else None,
     )
+    if token:
+        r.add_header("Authorization", f"Bearer {token}")
     if body is not None:
         r.add_header("Content-Type", "application/json")
     with _OPENER.open(r, timeout=60) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def web_err(port: int, method: str, path: str, body: dict | None = None) -> tuple[int, dict]:
+def web_err(port: int, method: str, path: str, body: dict | None = None, token: str | None = None) -> tuple[int, dict]:
     """非 2xx 探针: 返回 (状态码, 解析后的错误载荷); 拿到 2xx 反而是用例 bug, 直接抛。"""
     try:
-        web_req(port, method, path, body)
+        web_req(port, method, path, body, token=token)
     except urllib.error.HTTPError as e:
         raw = e.read().decode("utf-8", errors="replace")
         try:
@@ -594,9 +624,14 @@ def test_rm08_05_detail_drawer(clean_fakes):
     """[RM08-05] 详情抽屉四端点: detail 同源一致 + trackers mask + files/peers + 未知 hash 负向
 
     前置: 副实例 主基座 + 1 假种子(假种子腿); 主实例 侧另起一份 api_key 直连产品实例
-          (grouping 关死零写路径), 真实种子 paused 只读走一遍(真实 tracker 域名最有说服力)。
-    副作用: 无(两腿全只读; 主实例 真实种子零触碰)。
-    回滚: 假种子删净; 两份产品进程 taskkill /F /T; 临时目录清场。
+          (grouping 关死零写路径)。腿A 按 D1 计数分支: 主实例真实种子 >0 → 原腿(paused 只读
+          走一遍, 真实 tracker 域名最有说服力); ==0(环境2 实况)→ 私有假种子替身(主实例 1 枚
+          带数据假种子, announce=死端口 URL 带 passkey 形参 —— lib/torrent.py info 硬编码
+          private:1, 假种子天然私有, 私有 msg 与 mask 断言机制等价成立; 零外连: 死端口连接
+          即被拒)。「真实 PT 域名」词面在替身分支缺失, 降级记账(切片 §03), 解锁 = 用户在
+          主实例添加真实种子后按原腿复测。
+    副作用: 替身分支往主实例加 1 枚 real-fake 假种子(收尾删净); 原腿只读(真实种子零触碰)。
+    回滚: 两实例 real-fake 删净; 两份产品进程 taskkill /F /T; 临时目录清场。
     失败判据: detail 字段与 qB 回读不一致(同源破, 抽屉显示错数, 高优); tracker 原文/凭据外发
               (mask 破, 域名泄漏面); 虚拟条目缺失; 未知 hash 500(错误处理面破)。
     """
@@ -628,7 +663,7 @@ def test_rm08_05_detail_drawer(clean_fakes):
         code, p = web_err(port, "GET", f"/api/torrents/{'f' * 40}")
         assert code == 404, f"未知 hash 应 404(_require_torrent): {code} {p}"
 
-    # ---- 腿 A: 主实例 真实种子(paused, 只读; 独立产品实例 api_key 直连, grouping 关死) ----
+    # ---- 腿 A: 主实例 侧(独立产品实例 api_key 直连, grouping 关死; D1 计数分支) ----
     api_key = instances.token_for(instances.PRIMARY) or ""
     with product_case("rm08_05_real", qb_port=instances.PRIMARY, grouping=False, api_key=api_key) as (
         case_real,
@@ -636,42 +671,71 @@ def test_rm08_05_detail_drawer(clean_fakes):
         _proc_real,
     ):
         qb95 = instances.make(instances.PRIMARY)
-        ts = qb95.torrents()
-        assert ts, "主实例 应有真实种子(guard 已 pause)"
-        h = ts[0]["hash"]
-        wait_in_store_state(port_real, h, "stoppedUP", timeout=60)  # 同源对照前快照状态到位
-        raw_urls = {t["url"] for t in qb95.trackers(h) if str(t["url"]).startswith("http")}
-        assert raw_urls, "真实种子应有真实 tracker 条目"
+        # D1 计数分支(guard.snapshot 口径, skip_tags 排除自造种子): >0 原腿 / ==0 私有假种子替身
+        real_map = guard.snapshot(qb95, skip_tags=(TAG, ))
+        metric(
+            f"[rm08-05] 腿A 计数分支: 主实例真实种子 {len(real_map)} 枚 -> "
+            f"{'原腿(真实种子只读)' if real_map else 'D1 私有假种子替身(真实 PT 域名词面降级记账)'}"
+        )
+        if real_map:
+            h = next(iter(real_map))
+            wait_in_store_state(port_real, h, "stoppedUP", timeout=60)  # 同源对照前快照状态到位
+        else:
+            # 替身腿: 主实例 1 枚带数据私有假种子, announce=死端口 URL 带 passkey 形参(零外连)
+            rm_all_fakes(qb95)
+            case_a = case_dir("rm08_05_legA_seed")
+            savepath = case_a / "src"
+            os.makedirs(savepath, exist_ok=True)
+            torrent.write_file(str(savepath / "rm08a_legA.bin"), 256 * 1024, "random", "rm08a_legA.bin")
+            dead = next(p for p in range(2, 200) if app.port_free(p))
+            announce = f"http://127.0.0.1:{dead}/announce?passkey=RM08DRIFTDEADPORT261101"
+            raw, h = torrent.build_from_path(str(savepath / "rm08a_legA.bin"), "rm08a_legA.bin", announce)
+            _add_retry(qb95, raw, str(savepath), h, paused=False)
+            try:
+                settle(qb95, h)
+                wait_state(qb95, h, "stalledUP", desc="替身腿假种子纯本地做种")
+                wait_in_store_state(port_real, h, "stalledUP", timeout=60)
+                _leg_a_assertions(port_real, qb95, h, leg="替身腿")
+            finally:
+                rm_all_fakes(qb95)
+            return
 
-        # detail 同源一致(抽屉 General tab 数据源)
-        d = web_req(port_real, "GET", f"/api/torrents/{h}")["torrent"]
-        qrow = qb95.torrent(h)
-        assert d["name"] == qrow["name"] and d["state"] == qrow["state"], "真实种子 detail name/state 与 qB 不同源"
-        assert norm(d["save_path"]) == norm(qrow["save_path"]), "真实种子 save_path 与 qB 不同源"
-        assert abs(d["progress"] - qrow["progress"]) <= 1e-4, "真实种子 progress 与 qB 不同源"
-        assert d.get("size") == qrow["size"], "真实种子 size 与 qB 不同源"
-        assert "site" in d and {"hr_state", "hr_safety", "hr_excluded"} <= set(d), "真实种子 detail 缺 site/HR 键"
+        _leg_a_assertions(port_real, qb95, h, leg="真实种子腿")
 
-        # trackers: 虚拟条目原样 + 真实条目已 mask(原文/凭据不外发, 高优)
-        trs = web_req(port_real, "GET", f"/api/torrents/{h}/trackers")
-        urls = [str(t["url"]) for t in trs]
-        assert any(u.startswith(("**", "[DHT]", "[PeX]", "[LSD]")) for u in urls), f"真实种子腿缺虚拟条目: {urls}"
-        http_urls = [u for u in urls if u.startswith("http")]
-        assert http_urls, "真实条目缺失"
-        body_text = json.dumps(trs, ensure_ascii=False)
-        for u in raw_urls:
-            assert u not in http_urls, f"tracker url 未 mask(mask 破): {u}"
-            assert u not in body_text, f"tracker 原文/凭据外发(mask 破, 高优): {u}"
-        assert any(t.get("msg") == "这是私有 torrent"
-                   for t in trs), (f"私有种子 tracker msg 口径不对: {[t.get('msg') for t in trs]}")
 
-        # files/peers 回读 200 且结构合法
-        files = web_req(port_real, "GET", f"/api/torrents/{h}/files")
-        assert isinstance(files, list) and files, f"真实种子 files 应非空: {files}"
-        peers = web_req(port_real, "GET", f"/api/torrents/{h}/peers")
-        assert "peers" in peers, "真实种子 peers 缺透传结构"
-        code, _p = web_err(port_real, "GET", f"/api/torrents/{'0' * 40}")
-        assert code == 404, f"未知 hash 应 404: {code}"
+def _leg_a_assertions(port_real: int, qb95, h: str, *, leg: str) -> None:
+    """腿A 共用断言块(原腿/替身腿同口径): detail 同源 + mask/虚拟条目/私有 msg + files/peers + 404。"""
+    raw_urls = {t["url"] for t in qb95.trackers(h) if str(t["url"]).startswith("http")}
+    assert raw_urls, f"{leg}应有 http tracker 条目"
+
+    # detail 同源一致(抽屉 General tab 数据源)
+    d = web_req(port_real, "GET", f"/api/torrents/{h}")["torrent"]
+    qrow = qb95.torrent(h)
+    assert d["name"] == qrow["name"] and d["state"] == qrow["state"], f"{leg} detail name/state 与 qB 不同源"
+    assert norm(d["save_path"]) == norm(qrow["save_path"]), f"{leg} save_path 与 qB 不同源"
+    assert abs(d["progress"] - qrow["progress"]) <= 1e-4, f"{leg} progress 与 qB 不同源"
+    assert d.get("size") == qrow["size"], f"{leg} size 与 qB 不同源"
+    assert "site" in d and {"hr_state", "hr_safety", "hr_excluded"} <= set(d), f"{leg} detail 缺 site/HR 键"
+
+    # trackers: 虚拟条目原样 + http 条目已 mask(原文/凭据不外发, 高优)
+    trs = web_req(port_real, "GET", f"/api/torrents/{h}/trackers")
+    urls = [str(t["url"]) for t in trs]
+    assert any(u.startswith(("**", "[DHT]", "[PeX]", "[LSD]")) for u in urls), f"{leg}缺虚拟条目: {urls}"
+    http_urls = [u for u in urls if u.startswith("http")]
+    assert http_urls, f"{leg} http 条目缺失"
+    body_text = json.dumps(trs, ensure_ascii=False)
+    for u in raw_urls:
+        assert u not in http_urls, f"tracker url 未 mask(mask 破): {u}"
+        assert u not in body_text, f"tracker 原文/凭据外发(mask 破, 高优): {u}"
+    assert any(t.get("msg") == "这是私有 torrent" for t in trs), (f"私有种子 tracker msg 口径不对: {[t.get('msg') for t in trs]}")
+
+    # files/peers 回读 200 且结构合法
+    files = web_req(port_real, "GET", f"/api/torrents/{h}/files")
+    assert isinstance(files, list) and files, f"{leg} files 应非空: {files}"
+    peers = web_req(port_real, "GET", f"/api/torrents/{h}/peers")
+    assert "peers" in peers, f"{leg} peers 缺透传结构"
+    code, _p = web_err(port_real, "GET", f"/api/torrents/{'0' * 40}")
+    assert code == 404, f"未知 hash 应 404: {code}"
 
 
 def test_rm08_06_status_totals_l2(clean_fakes, primary, secondary, tracker, transfer_limits):
@@ -763,29 +827,30 @@ def _local_host() -> str:
 
 
 def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
-    """[RM08-07] SSE 推送通道与只读辅助端点: ticket 换票 / hello / 心跳 <TTL + sites/missing 扫描
+    """[RM08-07] SSE 推送通道与只读辅助端点: ticket 换票 / hello / 心跳 <TTL + ver 推送 + 坏票/无票负向 + sites/missing
 
-    前置: 基座 + 1 枚假种子; 流式客户端读超时 > 12s(WEB_VIEW_TTL=10s, SSE_KEEPALIVE_S=5s)。
+    前置: 基座(auth 形参: skip_local_verify=false + 显式 web.token, D2 升档 scoped 只影响本用例
+          实例; S1 探针已证坏票/无票/错票/无凭证全 401、好票连流 200)+ 1 枚假种子; 流式客户端
+          读超时 > 12s(WEB_VIEW_TTL=10s, SSE_KEEPALIVE_S=5s)。
     副作用: 1 假种子状态切换一次; 1 条 SSE 连接(收尾关)。
     回滚: real-fake 种子收尾删净; 停基座; 流式连接随进程树终止关闭。
     失败判据: 12s 内零心跳帧(keepalive 破, 连着的客户端被判不活跃 → 主循环停组装视图 → 自锁,
               高优); hello 前泄漏载荷; 连流期间变更后既无推送帧也无版本推进(连接饿死);
               sites/missing 计数与实例种子数不符。
-    BLOCKED 子项(计划 spec ⑤ 坏票负向): skip_local_verify=true 下 auth.py 的 loopback 免鉴权
-    先于票据闸返回(实码事实, 冻结驱动形态不可达)—— 本轮不断言, 解锁=驱动改 skip_local_verify=
-    false + Bearer token 重跑; 已在基线切片与锚件记账, 非产品缺陷。
+    升档兑现(2026-11-01 漂移轮 D2, 上轮 BLOCKED 子项⑤解锁): skip_local_verify=false 后票据闸
+    可达 —— 坏票/无票连流请求必须拒收(401 族)且流不建立, 回 200 即红; 错 Bearer 对照同口径。
     """
-    with product_case("rm08_07") as (case, port, _proc):
+    with product_case("rm08_07", auth="rm08-07-bearer-drift-token") as (case, port, _proc):
         qb = clean_fakes
         h = fake_one(qb, case, "rm08g.bin", sub="src")
         settle(qb, h)
         wait_in_store(port, h)
 
-        # ① 换票: {ticket, ttl}(30s)
+        # ① 换票: {ticket, ttl}(30s; auth 实例下 POST 需 Bearer, web_req 自动携带)
         tk = web_req(port, "POST", "/api/events/ticket")
         assert tk.get("ticket") and tk.get("ttl") == 30, f"ticket 回执形状不对: {tk}"
 
-        # ② 连流收 hello(首帧即 hello, 不得先泄漏载荷)
+        # ② 连流收 hello(首帧即 hello, 不得先泄漏载荷; 好票 ?ticket= 连流免 Bearer)
         conn, sresp = _sse_connect(port, tk["ticket"])
         try:
             assert sresp.getheader(
@@ -810,7 +875,17 @@ def test_rm08_07_sse_and_aux_endpoints(clean_fakes):
         finally:
             conn.close()
 
-        # ⑤ 坏票负向: 冻结驱动形态下不可达(见 docstring BLOCKED 子项), 本轮不断言。
+        # ⑤ 坏票/无票负向(升档兑现, 红验): 票据闸必须拒收且流不建立 —— 回 200 即红。
+        #    注意显式 token="" 压掉 auth 实例的自动 Bearer: 带**正确** Bearer 时票据闸本就
+        #    不拦(auth.py: 票据消费失败落回 Bearer 校验, 有效密钥放行)—— 负向测的是
+        #    「无有效凭证」路径, 与探针②口径一致。
+        code, p = web_err(port, "GET", "/api/events?ticket=forged-ticket-rm08-drift", token="")
+        assert code in (401, 403), f"坏票应拒收(401/403 族), 实际 {code}: {p}"
+        code, p = web_err(port, "GET", "/api/events", token="")
+        assert code in (401, 403), f"无票应拒收(401/403 族), 实际 {code}: {p}"
+        # 错 Bearer 对照(鉴权面本体): 错 token 连读侧端点也拒收
+        code, p = web_err(port, "GET", "/api/state?view=torrent", token="rm08-07-wrong-bearer")
+        assert code in (401, 403), f"错 Bearer 应拒收, 实际 {code}: {p}"
 
         # ⑥ sites/missing(只读扫描): 计数与实例种子数一致; trackers 空 + 假种子无 announce
         #    ⇒ domains=0, sites=[](无缺失域可报, 结构与计数口径断言)
