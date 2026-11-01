@@ -33,14 +33,21 @@ per-run trace(RM03-13)· 退役键面(RM03-14)· checking 全量段(RM03-15)· �
   共享同一物理文件且都能通过真校验;
 - stalledDL 假种子(qbittorrentapi TorrentState 实测): is_downloading=True 且非 stopped ——
   构成决策链 1 的「活跃下载族」(D5 拍板: 判据是状态族谓词不认真速率, 零外连零真流量);
-  造法 = skip_checking + 不暂停 + 无数据(死端口无 peer), 落不了下载族该腿记 BLOCKED 不硬造。
+  落不了下载族该腿记 BLOCKED 不硬造。
 
-执行段注意(qB 5.2.3 侧两个未核事实, 首跑先小窗核实):
-- /torrents/add 的 skip_checking 参数与「加后 progress=0 不自动校验」未在本机核过(token 由执行段
-  注入, 本文件零 token 字面值); 造不出「暂停中未完成」态时按计划记 BLOCKED, 不硬造;
-- full-checking 的成功证据闩要求 store 快照观测到 checkingDL/checkingUP —— 小种子校验窗口可能
-  短于 sync_interval(计划 26-10-04-1824 D1 已接受该残余风险, 表现为 START_TIMEOUT 假红);
-  撞上时按实况校准一次(拉大种子数据量或调小 sync_interval)重跑。
+造法校准(2026-11-01 执行段开工探针实测, qB 5.2.3; 计划预登记的两个未核事实按实况落定):
+- /torrents/add 的 skip_checking 实测语义: +有数据 → 视为已完成(stoppedUP progress=1, 不校验);
+  +无数据 → missingFiles —— 两形态都造不出「暂停中未完成」, 计划草案的 skip_checking 造法不成立;
+- 「暂停中未完成」正确造法 = paused 加种 + 数据在场 + **不带** skip_checking → stoppedDL
+  progress=0(qB 5.2.3 暂停加种只查 resume data 不做全量校验, 探针实测);
+- stalledDL 活跃下载族造法 = 不暂停 + 无数据 + 不带 skip_checking(is_downloading=True 且
+  amount_left>0, 谓词 _is_active_download 命中; skip_checking+无数据落 missingFiles 不算下载族);
+- full-checking 证据闩(store 快照 1S 同步 + 2S 轮询)要求校验窗口 ≥3s: 实测 2GB 数据 recheck 的
+  checkingDL 窗口 ~3s(0.43s→3.46s), 512MB 窗口毫秒级不可捕 —— RM03-15/16 的目标种子数据量取
+  2GB(写盘 ~5s, 收尾 real.seed.clean 清), RM03-17 走跳检无证据窗维持 KB 级;
+- 跳检重加(is_skip_checking+is_stopped)+数据在场 → progress=1(视为已完成): 成功跳检后的种子
+  会被决策链 0 拦住, 同日去重闸永远走不到 —— RM03-17 的去重红验须先把目标种子删掉重加回
+  「暂停中未完成」态(同 hash, paused+数据在场), 第二次触发才能穿透链 0 到闸门。
 
 跑法: `commands run real.suite -- --slice RM03 --yes`(不要裸 pytest)。真实种子全程非活跃;
 全部 L1 假种子(死端口 announce, 零外连); 假种子一律 real-fake 标签; 产品 data_dir 指用例临时
@@ -74,6 +81,8 @@ pytestmark = [
 WORK = Path(__file__).resolve().parents[1] / ".work" / "rm03"
 TAG = "real-fake"
 SKIP_TAG = "zSkipChecked"  # config.skip_checking_tag 缺省值(models.py:570, 本轮不覆盖)
+# full-checking 证据窗校准(探针实测, 见模块头注): 2GB → checkingDL ~3s, 能被 1S 快照+2S 轮询捕获
+CHECK_DATA_SIZE = 2 * 1024 * 1024 * 1024
 SETTLED = {
     "stalledUP", "stalledDL", "pausedUP", "pausedDL", "stoppedUP", "stoppedDL", "missingFiles", "error", "moving"
 }
@@ -314,13 +323,16 @@ def test_rm03_10_condition_combo_tree():
     前置: 3 枚假种子(256K/512K/2MiB, 产品启动前入库); 四条规则 ——
           c10all={all:[size>=200KiB, size<=384KiB]} 只中 256K;
           c10any={any:[size<=384KiB, expr 除零]} 256K 首叶短路(不触 expr 错), 512K/2MiB 走到 expr 报错;
-          c10not={not:{size<=384KiB}} 只中 2MiB(取反对照, 方向反了全反 —— 红验内建);
+          c10not={not:{size<=384KiB}} 命中一切 >384KiB(B 与 C; 取反对照 = 256K 必须不得中,
+          方向反了(退化为 size<=384KiB)则 A 中而 B/C 不中 —— 红验内建);
           c10flat=同 c10all 的扁平列表旧形态(W2-A 隐式 all 包裹, 行为必须与显式 all 一致)。
     副作用: 加 3 假种子; 打 rm03-all/rm03-any/rm03-not/rm03-flat 标签。
     回滚: 删光 real-fake 种子 + 删用例目录。
     失败判据: all 任一叶假仍命中(AND 失效); not 方向反; 扁平与显式 all 行为不一致;
               any 短路失效(256K 的 trace 里出现 expr 叶/报错明细);
               执行段警告: D5 无关, 本条无外连面。
+    注: 首跑假红复盘(官方第二轮): 原断言「rm03-not 只中 2MiB」数学上就错 —— not(size<=384KiB)
+        对 512K 亦为真, 512K 本该被 not 命中(产品行为正确); 已按取反语义修正期望。
     """
     case = case_dir("rm03_10")
     p = None
@@ -402,7 +414,11 @@ def test_rm03_10_condition_combo_tree():
             25,
             f"A(256K)未按 all/any/flat 命中: {sorted(_tags_of(qb.torrent(ha) or {}))}",
         )
-        wait_until(lambda: "rm03-not" in _tags_of(qb.torrent(hc) or {}), 20, "C(2MiB)未被 not 规则命中(取反失效)")
+        wait_until(
+            lambda: "rm03-not" in _tags_of(qb.torrent(hb) or {}) and "rm03-not" in _tags_of(qb.torrent(hc) or {}),
+            20,
+            "B(512K)/C(2MiB)未被 not 规则命中(取反失效; not(size<=384KiB) 对一切 >384KiB 为真)",
+        )
         time.sleep(8)  # ≥4 节拍: 负向窗口
         ta, tb, tc = (_tags_of(qb.torrent(h) or {}) for h in (ha, hb, hc))
         assert "rm03-not" not in ta, f"对照红验失效: A(256K)被 not 规则命中(取反方向反了): {sorted(ta)}"
@@ -410,7 +426,10 @@ def test_rm03_10_condition_combo_tree():
         assert "rm03-any" not in tb, f"B(512K)被 any 命中(首叶假第二叶除零报错不该有动作): {sorted(tb)}"
         assert "rm03-all" not in tc and "rm03-flat" not in tc, f"C(2MiB)被 all/flat 命中(上界叶失效): {sorted(tc)}"
         assert "rm03-any" not in tc, f"C(2MiB)被 any 命中(expr 报错不该有动作): {sorted(tc)}"
-        assert not [t for t in tb if t.startswith("rm03-")], f"B(512K)被打标(四规则均不该中): {sorted(tb)}"
+        assert not [t for t in tb if t.startswith("rm03-") and t != "rm03-not"], \
+            f"B(512K)被 not 以外的规则打标: {sorted(tb)}"
+        assert not [t for t in tc if t.startswith("rm03-") and t != "rm03-not"], \
+            f"C(2MiB)被 not 以外的规则打标: {sorted(tc)}"
 
         rc = p.wait(90)
         p = None
@@ -856,18 +875,18 @@ def test_rm03_14_retired_control_keys():
 def test_rm03_15_full_checking_submit_and_gates():
     """[RM03-15] checking 全量段: recheck 提交+轮询+成功; 决策链 0/1 闸门红验(已完成对照 / 组内活跃下载)
 
-    前置: grouping 开; 同组两枚假种子(A=参考: 带数据完成; B=目标: skip_checking 暂停未完成,
-          与 A 同文件同大小故同组且能真校验通过) + 独立第二组(D=skip_checking 不暂停无数据
-          → 预期落活跃下载族 stalledDL; Bz=同组暂停目标); 规则 checking basic_check=filelist,
-          with_reference 段 mode=full-checking。
-    副作用: B 被真 recheck(qB 校验读盘, KB 级秒完)并完成; .work 落种子数据。
+    前置: grouping 开; 同组两枚假种子(A=参考: 带数据非暂停加种即校验完成; B=目标: paused+数据
+          在场加种 → stoppedDL progress=0 未校验, 与 A 同文件同大小故同组且能真校验通过, 数据 2GB
+          保证据窗) + 独立第二组(D=不暂停无数据 → 预期落活跃下载族 stalledDL; Bz=同组 paused
+          无数据目标); 规则 checking basic_check=filelist, with_reference 段 mode=full-checking。
+    副作用: B 被真 recheck(qB 校验读盘, 2GB 级数秒)并完成; .work 落种子数据。
     回滚: 删光 real-fake 种子(连数据)+ 删用例目录。
     失败判据: recheck 从未提交(无 ops[rule] 提交/成功行且 B progress 不动); 已完成对照 A 被真校验
               (决策链 0 失效 —— A 的 trace 动作不是 skip「种子非暂停中未完成状态」); 校验结果无证据
               背书被误判成功(证据门控失效); Bz 未被「组内有种子正在下载」拦下(决策链 1 失效)。
-    执行段注意: D 腿(D5)是状态族谓词, stalledDL 假种子落不了下载族时该腿记 BLOCKED(warn)不硬造;
-              小种子校验窗口可能短于 sync_interval(证据闩挂不上 → START_TIMEOUT 假红),
-              撞上按实况校准一次(拉大数据量/再压 sync_interval)重跑。
+    造法注记: skip_checking 加种实测造不出「暂停中未完成」(+数据=视为已完成, 无数据=missingFiles,
+              见模块头注探针校准) —— 目标态一律 paused+数据在场; D 腿(D5)是状态族谓词, stalledDL
+              假种子落不了下载族时该腿记 BLOCKED(warn)不硬造。
     """
     case = case_dir("rm03_15")
     p = None
@@ -898,22 +917,24 @@ def test_rm03_15_full_checking_submit_and_gates():
                 }
         }
         trackers = {"rm03fake": tracker_conf_entry([FAKE_HOST])}
-        # ---- 组1: 参考 A(带数据完成) + 目标 B(skip_checking 暂停未完成), 同文件 ⇒ 同组
+        # ---- 组1: 参考 A(带数据非暂停, 加种即校验完成) + 目标 B(paused+数据在场 → stoppedDL
+        #      progress=0), 同文件 ⇒ 同组。造法校准: paused 加种不自动校验, 数据量 2GB 保证证据窗
         savepath = WORK / "rm03_15"
-        f1 = torrent.write_file(str(savepath / "rm03c15.bin"), 256 * 1024, "random", "rm03c15")
+        f1 = torrent.write_file(str(savepath / "rm03c15.bin"), CHECK_DATA_SIZE, "random", "rm03c15")
         ih_a, ih_b, raw_a, raw_b = group_pair_from_file(f1, "rm03c15.bin")
-        _add_retry(qb, raw_a, str(savepath), ih_a)  # 带数据: qB 加种即校验 → 完成(参考种子)
+        _add_retry(qb, raw_a, str(savepath), ih_a)  # 非暂停+数据: qB 加种即校验 → 完成(参考种子)
         settle(qb, ih_a)
         assert (qb.torrent(ih_a) or {}).get("progress") == 1.0, "参考种子 A 未完成(带数据假种子校验失效)"
-        _add_retry(qb, raw_b, str(savepath), ih_b, skip_checking=True, paused=True)
+        _add_retry(qb, raw_b, str(savepath), ih_b, paused=True)
         time.sleep(2)
         tb = qb.torrent(ih_b) or {}
-        assert tb.get("progress", 1.0) < 1.0, f"目标 B 加种即完成(skip_checking 造法失效): state={tb.get('state')}"
-        # ---- 组2: 下载者 D(skip_checking 不暂停, 预期 stalledDL 活跃下载族) + 目标 Bz(暂停)
+        assert tb.get("progress", 1.0) < 1.0, f"目标 B 加种即完成(暂停加种造法失效): state={tb.get('state')}"
+        # ---- 组2: 下载者 D(不暂停+无数据, 预期 stalledDL 活跃下载族) + 目标 Bz(paused+无数据)
         f2 = torrent.write_file(str(savepath / "rm03c15d.bin"), 128 * 1024, "random", "rm03c15d")
         ih_d, ih_bz, raw_d, raw_bz = group_pair_from_file(f2, "rm03c15d.bin")
-        _add_retry(qb, raw_d, str(savepath), ih_d, skip_checking=True, paused=False)
-        _add_retry(qb, raw_bz, str(savepath), ih_bz, skip_checking=True, paused=True)
+        os.remove(f2)  # 组2 不落数据: D 不暂停无数据 → stalledDL(下载族); skip_checking+无数据=missingFiles 反而不算
+        _add_retry(qb, raw_d, str(savepath), ih_d, paused=False)
+        _add_retry(qb, raw_bz, str(savepath), ih_bz, paused=True)
         dl_state = None
         deadline = time.time() + 25.0
         while time.time() < deadline:  # 落不了下载族该腿降级 BLOCKED(warn), 不让它炸整条用例(D5)
@@ -931,8 +952,13 @@ def test_rm03_15_full_checking_submit_and_gates():
         wait_until(lambda: (qb.torrent(ih_b) or {}).get("progress", 0) >= 1.0, 60, "B 未被真校验完成(recheck 未提交或未生效)")
         assert count_anchor(case, rf"ops\[rule\].*\({ih_b[:8]}\).*full-checking 校验已提交") >= 1, \
             "B 缺「full-checking 校验已提交」提交行"
-        assert count_anchor(case, rf"ops\[rule\].*\({ih_b[:8]}\).*校验成功") >= 1, \
-            "B 缺「校验成功」行(轮询未按证据门控收口)"
+        # 成功行要等产品的证据轮询落账(2S 一跳, 见 seen_checking 才下 SUCCESS): progress=1.0 的
+        # qB 直读会跑赢它 1-3s, 这里必须 wait_until 不能 assert(官方第二轮假红复盘)
+        wait_until(
+            lambda: count_anchor(case, rf"ops\[rule\].*\({ih_b[:8]}\).*校验成功") >= 1,
+            30,
+            "B 缺「校验成功」行(轮询未按证据门控收口)",
+        )
         assert SKIP_TAG not in _tags_of(qb.torrent(ih_b) or {}), "B 被打跳检标签(走错分段: 该走 full-checking)"
 
         rc = p.wait(120)
@@ -970,14 +996,17 @@ def test_rm03_15_full_checking_submit_and_gates():
 def test_rm03_16_reference_segment_selection():
     """[RM03-16] checking 分段选择: 有参考 → with_reference(full-checking) / 无参考 → without_reference(skip-checking)
 
-    前置: grouping 开; 一条 checking 规则两段都配且 mode 可区分 —— 组1: A1(带数据完成, 参考)+
-          B1(skip_checking 暂停目标)同组 → B1 应走 with_reference(full-checking, 校验完成);
-          组2: C1 单独成组(同大小文件在盘, 无其它成员)→ C1 走 without_reference(skip-checking,
+    前置: grouping 开; 一条 checking 规则两段都配且 mode 可区分 —— 组1: A1(带数据非暂停加种
+          即校验完成, 参考)+ B1(paused+数据在场加种 → stoppedDL progress=0, 数据 2GB 保证证据窗)
+          同组 → B1 应走 with_reference(full-checking, 校验完成); 组2: C1 单独成组(同大小文件在盘,
+          paused 加种 → stoppedDL progress=0, 无其它成员)→ C1 走 without_reference(skip-checking,
           真删重加 + zSkipChecked 标签 + 仅规则源的「无参考跳检(高风险)」告警)。
     副作用: B1 被真 recheck; C1 被真删除重加(keep 文件); .work 落种子数据。
     回滚: 删光 real-fake 种子(连数据)+ 删用例目录。
     失败判据: 有无参考两轮走同一段(参考判定失效 —— B1 拿到 zSkipChecked 或 C1 被真校验完成);
               无参考轮缺「无参考跳检(高风险)」告警; C1 重加后种子丢失或文件被真删。
+    造法注记: skip_checking 加种实测造不出「暂停中未完成」(见模块头注探针校准) —— 目标态一律
+              paused+数据在场。
     """
     case = case_dir("rm03_16")
     p = None
@@ -1013,17 +1042,17 @@ def test_rm03_16_reference_segment_selection():
         }
         trackers = {"rm03fake": tracker_conf_entry([FAKE_HOST])}
         savepath = WORK / "rm03_16"
-        # ---- 组1(有参考): A1 完成 + B1 暂停未完成
-        f1 = torrent.write_file(str(savepath / "rm03c16a.bin"), 256 * 1024, "random", "rm03c16a")
+        # ---- 组1(有参考): A1 完成(非暂停加种即校验) + B1 暂停未完成(paused+数据在场, 2GB 保证证据窗)
+        f1 = torrent.write_file(str(savepath / "rm03c16a.bin"), CHECK_DATA_SIZE, "random", "rm03c16a")
         ih_a1, ih_b1, raw_a1, raw_b1 = group_pair_from_file(f1, "rm03c16a.bin")
         _add_retry(qb, raw_a1, str(savepath), ih_a1)
         settle(qb, ih_a1)
         assert (qb.torrent(ih_a1) or {}).get("progress") == 1.0, "参考 A1 未完成"
-        _add_retry(qb, raw_b1, str(savepath), ih_b1, skip_checking=True, paused=True)
-        # ---- 组2(无参考): C1 单枚, 文件在盘(跳检 filelist 前置检查过得去), 组内无其它成员
+        _add_retry(qb, raw_b1, str(savepath), ih_b1, paused=True)
+        # ---- 组2(无参考): C1 单枚, 文件在盘(paused+数据 → stoppedDL progress=0), 组内无其它成员
         f2 = torrent.write_file(str(savepath / "rm03c16b.bin"), 128 * 1024, "random", "rm03c16b")
         raw_c1, ih_c1 = torrent.build_from_path(f2, "rm03c16b.bin", ANNOUNCE_IP, torrent.PIECE_LEN)
-        _add_retry(qb, raw_c1, str(savepath), ih_c1, skip_checking=True, paused=True)
+        _add_retry(qb, raw_c1, str(savepath), ih_c1, paused=True)
         time.sleep(2)
         assert (qb.torrent(ih_c1) or {}).get("progress", 1.0) < 1.0, "C1 加种即完成(skip_checking 造法失效)"
 
@@ -1057,14 +1086,19 @@ def test_rm03_16_reference_segment_selection():
 def test_rm03_17_skip_checking_phases_and_dedup():
     """[RM03-17] checking 跳检段: 四阶段真删重加(同 hash/文件保留/打标/当日记账)+ 同日去重红验
 
-    前置: grouping 开; 同组 A(带数据完成, 参考)+ B(skip_checking 暂停未完成目标, 文件在盘);
-          with_reference 段 mode=skip-checking。高风险动作面 —— 只对 real-fake 自造种子执行,
-          绝不碰真实种子(环境2 主实例真实种子 0 枚, guard 快照计数为证)。
-    副作用: B 被真删除重加(keep 文件); 备份产物(成功即清); zSkipChecked 标签; state skip_check_day 记账。
+    前置: grouping 开; 同组 A(带数据非暂停加种即校验完成, 参考)+ B(paused+数据在场加种 →
+          stoppedDL progress=0 暂停未完成目标, 文件在盘); with_reference 段 mode=skip-checking。
+          高风险动作面 —— 只对 real-fake 自造种子执行, 绝不碰真实种子(环境2 主实例真实种子 0 枚,
+          guard 快照计数为证)。
+    副作用: B 被真删除重加(keep 文件); 备份产物(成功即清); zSkipChecked 标签; state skip_check_day
+          记账; 去重红验段 B 被测试侧删掉重加一次(keep 文件, 造回目标态)。
     回滚: 删光 real-fake 种子(连数据)+ 清 skip_checking_tag 标签残留 + 删用例目录。
     失败判据: 灾难级: 数据文件被真删(文件不在)→ 本条 FAIL 现场留档入池; 种子重加后不在库;
               去重失效(同日第二次又真跑四阶段 —— 「跳检删除种子」行 >1); skip 标签未打;
               state 无 skip_check_day 当日记账。
+    造法注记: 跳检重加(is_skip_checking+is_stopped)+数据在场 → progress=1(视为已完成), 成功跳检
+          后的种子被决策链 0 拦住, 去重闸走不到 —— 去重红验前置: 首跳完成后把 B 删掉重加回
+          「暂停中未完成」态(同 hash, paused+数据在场), 第二次触发才能穿透链 0 到闸门(模块头注)。
     """
 
     case = case_dir("rm03_17")
@@ -1103,9 +1137,9 @@ def test_rm03_17_skip_checking_phases_and_dedup():
         _add_retry(qb, raw_a, str(savepath), ih_a)
         settle(qb, ih_a)
         assert (qb.torrent(ih_a) or {}).get("progress") == 1.0, "参考 A 未完成"
-        _add_retry(qb, raw_b, str(savepath), ih_b, skip_checking=True, paused=True)
+        _add_retry(qb, raw_b, str(savepath), ih_b, paused=True)  # paused+数据在场 → stoppedDL progress=0
         time.sleep(2)
-        assert (qb.torrent(ih_b) or {}).get("progress", 1.0) < 1.0, "B 加种即完成(skip_checking 造法失效)"
+        assert (qb.torrent(ih_b) or {}).get("progress", 1.0) < 1.0, "B 加种即完成(暂停加种造法失效)"
 
         cfg = write_cfg(case, trackers, rules, grouping_enabled=True)
         p = app.start(cfg, case, graceful_after=35.0)  # 窗口覆盖首跳四阶段 + 第二次触发撞去重
@@ -1127,7 +1161,13 @@ def test_rm03_17_skip_checking_phases_and_dedup():
             15,
             "state.json 无 skip_check_day 当日记账",
         )
-        time.sleep(10)  # 第二次触发窗口: 撞同日去重
+        # ---- 去重红验前置: 首跳重加(skip_checking)后 B progress=1, 决策链 0 会先拦, 去重闸走不到
+        #      (造法校准, 见模块头注) —— 删掉重加回「暂停中未完成」态(同 hash, paused+数据在场)
+        qb.delete(ih_b, delete_files=False)  # 保留数据文件
+        wait_until(lambda: qb.torrent(ih_b) is None, 15, "去重前置: B 删除未生效")
+        _add_retry(qb, raw_b, str(savepath), ih_b, paused=True)
+        assert (qb.torrent(ih_b) or {}).get("progress", 1.0) < 1.0, "去重前置: B 重加回未完成态失败"
+        time.sleep(10)  # 第二次触发窗口: 穿透链 0 → 闸门撞同日去重
 
         rc = p.wait(90)
         p = None
