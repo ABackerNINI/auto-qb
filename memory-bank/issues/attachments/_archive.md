@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (83)
+## Open (82)
 
 - [bug] [my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效](../26-11-01-2140-bug-sync-generated-whitelist-drift.html) — 分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解
 - [bug] [WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction](../26-11-01-2102-bug-webui-set-share-limits-missing-sharelimitaction.html) — QbApi.torrents_set_share_limits 不传 share_limit_action, 库对 None 值键不发 → qB 5.0+ 该端点必填 shareLimitAction → WebUI 分享限制命令恒回「qB 拒绝执行: 缺少必需参数：shareLimitAction」; RM04-09 真机首测暴露
@@ -44,7 +44,6 @@
 - [bug] [state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达)](../26-10-31-0458-bug-state-read-encoding-guard.html) — core/state.py _read_state_file 的 encoding="utf-8" 零守阵: 变异测试坐实删掉它全套件照绿(UTF-8 宿主分不出), locale 打桩在 CPython 3.13 不可达; 回归后果 = Windows GBK 生产机读 UTF-8 state 误入损坏链/静默清空
 - [bug] [TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行](../26-10-31-0449-bug-taskqueue-dry-run-chain.html) — core/taskqueue.py 的 dry_run 传递链断裂(变异测试坐实): _run_one 收到 None, dry_run=True 时 handler 仍真执行, --dry-run 模式对任务路径产生真实写副作用
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
-- [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -95,7 +94,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (315)
+## Done (316)
 
 - [test] [test.pkg.scoped 闸门对无自测包无豁免: dev/doc/env/kb 改即挂](../26-11-01-0921-test-commit-gate-no-test-pkg.html) — test.pkg.scoped 对改动包跑 pytest <包>, 包内零 test_*.py 时收集为空 rc=5 闸门 FAIL; real 已补最小自测, dev/doc/env/kb 四包同款未解
 - [docs] [docs/configuration.md 动作结果态漏 pending](../26-11-01-0800-docs-docs-action-result-pending-drift.html) — 动作结果段只列 3 态漏 pending, 与引擎六档 verdict 漂移(存量, 早于规则引擎重设计)
@@ -175,6 +174,7 @@
 - [refactor] [tests 同名小助手多份拷贝 9 族(_fake_file/_pin_disk_usage/_write_dat/_ss/_write_token/_make_store/atomic 注入/legacy v1 样本等)](../26-10-21-0502-refactor-test-shared-micro-helper-dup.html) — 逐字级拷贝散在 2-5 个文件各一份; 收进 tests 共享层(helpers/webui_helpers)单点
 - [refactor] [web 测试环境装配三形态: conftest.web_env 不可参数化导致 15+ 处内联旁路](../26-10-21-0502-refactor-test-web-env-param-dup.html) — web_env 硬编码 config_text/client; test_web_auth ×10 与 test_web_admin ×5 每用例内联 TestClient(create_app(mgr)); web_env 参数化后回收
 - [test] [「## 测试计划」docstring 与实际用例清单漂移 56 文件且无机械守阵](../26-10-21-0502-test-test-plan-docstring-guard.html) — 121 测试文件中 56 文件清单漂移(约 290 条用例未列), 4 文件无清单, 幽灵条目 7 处实证; 守阵化+存量回填
+- [perf] [gtm 每轮采样两次 psutil 网卡枚举发出约 180-360 次控制操作, 累计「I/O 其它」达 780 万次](../26-10-20-2345-perf-gtm-sampler-other-io.html) — psutil.net_io_counters + net_if_stats 每 5 秒一轮共约 177 次控制操作(实测进程 72 次/秒), 运行 35 小时累计 780 万次; 网卡状态可缓存或合并为一次枚举
 - [refactor] [前端 schema→默认值梯三处同构(字段 / 插件 spec / 插件 section)](../26-10-20-2231-refactor-fe-config-default-ladder-dup.html) — cfgDefaultForField 与 cfgPluginDefaultSpec/DefaultSection 三处互嵌套同构, 是 Phase 2 最缠绕的一处
 - [refactor] [前端配置实体增/改/删骨架 9 处(站点与规则集/规则)](../26-10-20-2231-refactor-fe-config-entity-crud-dup.html) — 增命名实体 3 处 + hub 侧 promptDialog 包装 3 处 + 重命名 2 处 + 删实体 4 处, 同一语义骨架按实体抄多遍
 - [refactor] [三皮肤 CSS 规则族互克隆(74 克隆 / 18.55% 为全前端最高重复面)](../26-10-20-2231-refactor-fe-css-rule-family-dup.html) — views 272/260、dialogs 236/195/121、components 81/70; 四规则族跨皮肤逐条同(hr-detail-table / modal.strip / qb-tabs / drawer-tabs)

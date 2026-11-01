@@ -1,7 +1,9 @@
 """采样器: psutil 全适配器采样 + 当日累计 + 计数器重置/崩溃恢复 (S1 实现).
 
 每次采样 (sample_once; 休眠循环随 S2 run 命令落地, 节奏取 sample_interval
-默认 5s) 读 psutil.net_io_counters(pernic=True), 按 AdapterFilter 过滤后
+默认 5s) 读全适配器计数器 (默认注入点经 nic.default_providers 平台决议: Windows 原生
+GetIfTable2 整表单读, 非 Windows/回退为 psutil 两次调用, 见 issue 26-10-20-2345),
+按 AdapterFilter 过滤后
 全适配器合计 up/down, 维护两条状态:
 
 - 上次读数快照: 本次 < 上次 -> 判定计数器重置 (网卡重连/驱动重启), delta 记 0
@@ -38,6 +40,8 @@ from datetime import date, datetime
 from typing import Callable, Mapping, Optional, Protocol, Union
 
 import psutil
+
+from .nic import default_providers
 
 logger = logging.getLogger("gtm.sampler")
 
@@ -152,19 +156,20 @@ class SampleResult:
 
 
 def read_counters() -> dict[str, NicIo]:
-    """生产读数: psutil 全适配器 net_io_counters (注入点, 单测替身)."""
+    """psutil 回退读数: 全适配器 net_io_counters (注入点, 单测替身; 生产默认经 nic 平台决议)."""
     return psutil.net_io_counters(pernic=True)  # type: ignore[no-any-return]
 
 
 def read_stats() -> dict[str, NicStats]:
-    """生产读数: psutil 网卡状态 (isup; 注入点, 单测替身)."""
+    """psutil 回退读数: 网卡状态 isup (注入点, 单测替身; 生产默认经 nic 平台决议)."""
     return psutil.net_if_stats()  # type: ignore[no-any-return]
 
 
 class Sampler:
     """采样单元: 读 -> 过滤 -> 合计 -> delta (重置归零) -> 当日累计 (跨天硬切).
 
-    依赖注入 (clock/counters_provider/stats_provider) 的默认路径即生产路径;
+    依赖注入 (clock/counters_provider/stats_provider) 的默认路径即生产路径 (默认对经
+    nic.default_providers 平台决议, 懒解析 —— 构造不触碰真实系统 API);
     休眠节拍不在本模块 (S2 run), sample_once 是单步计算, 可反复驱动.
     """
     def __init__(
@@ -176,7 +181,12 @@ class Sampler:
     ) -> None:
         self.filter = adapter_filter or AdapterFilter()
         self._clock = clock or datetime.now
-        self._counters_provider = counters_provider or read_counters
+        if counters_provider is None and stats_provider is None:
+            # 生产默认: nic 平台决议 (Windows 原生 GetIfTable2 整表 / 回退 psutil), 懒解析
+            counters_provider, stats_provider = default_providers(
+                (read_counters, read_stats)
+            )  # type: ignore[assignment]
+        self._counters_provider = counters_provider or read_counters  # 单侧注入缺侧直接落 psutil 回退对
         self._stats_provider = stats_provider or read_stats
         self._day: Optional[date] = None
         self._day_up = 0

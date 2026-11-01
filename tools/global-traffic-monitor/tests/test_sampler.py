@@ -533,7 +533,8 @@ def test_select_without_stats_mapping():
 
 
 def test_production_readers_delegate_to_psutil(monkeypatch):
-    """生产读数单点 (默认注入点): read_counters/read_stats 直接转发 psutil 的同名调用."""
+    """psutil 回退读数单点: read_counters/read_stats 直接转发 psutil 的同名调用
+    (生产默认经 nic.default_providers 平台决议, 本对是回退与非 Windows 路径)."""
     import gtm.sampler as sampler_mod
 
     seen: list[str] = []
