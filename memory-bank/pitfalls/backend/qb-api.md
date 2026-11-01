@@ -176,6 +176,11 @@
 - **处置**: 透传新参数一律 camelCase 直发 kwarg(两版库同 wire, 见 ops_mod `_skip_add_call` 的
   `shareLimitsMode=` 用法)并配请求体级守阵; 版本可选的 qB 新字段进 `_EXTENSION_FIELDS`
   (+ record slot, 缺省 None = 不发), 不动 `RE_ADD_FIELDS`。
-- **守阵**: `tests/test_qbapi_wire.py`(真库 + 真 requests 栈经 FakeQbServer 按线上原文断言三件事);
-  `tests/test_torrents.py` 的 _SNAPSHOT_FIELDS↔record slots 同步守卫。
+- **setShareLimits 双必填参**(issue 26-11-01-2102, 2026-11-02 修): qB 5.0/Web API 2.10.4 起
+  该端点还必填 `shareLimitAction`(库具名参缺省 None 被丢弃 → 请求体缺参恒 400), facade 与
+  `shareLimitsMode` 同一手法缺省显式 `"Default"`(到限执行 qB 全局默认动作; 5.2 无该参数,
+  忽略未知参无副作用); 守阵含 **facade 出口** wire 用例 —— 直调裸库传显式参的用例钉不住
+  facade 漏参形态。
+- **守阵**: `tests/test_qbapi_wire.py`(真库 + 真 requests 栈经 FakeQbServer 按线上原文断言三件事;
+  含 facade(QbApi)出口双必填参守阵); `tests/test_torrents.py` 的 _SNAPSHOT_FIELDS↔record slots 同步守卫。
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

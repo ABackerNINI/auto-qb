@@ -33,8 +33,9 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (261)
+## Done (262)
 
+- [26-11-02-backend-webui-seed-cmds](../26-11-02-backend-webui-seed-cmds.md) WebUI set_share_limits 补必填参 shareLimitAction (issue 26-11-01-2102)
 - [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
 - [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
 - [26-11-01-backend-gtm-sampler](../26-11-01-backend-gtm-sampler.md) gtm 网卡采样改原生 GetIfTable2 整表读取 (issue 26-10-20-2345)

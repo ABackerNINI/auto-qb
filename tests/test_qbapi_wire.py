@@ -12,6 +12,10 @@ qB 5.3 把 torrents/setShareLimits 的 shareLimitsMode 列为必填(缺失 400),
   shareLimitsMode=Default(facade 恒传, 5.3 必填参守阵)
 - test_set_share_limits_none_mode_not_sent: share_limits_mode=None 时请求体无 shareLimitsMode 键
   (requests 对 None 值键一律丢弃 —— facade docstring 修正后的真实语义; 也是 5.2 重加 wire 不变的依据)
+- test_facade_set_share_limits_wire_carries_share_limit_action: 经 QbApi facade 出口的 setShareLimits
+  请求体同时含 shareLimitAction=Default 与 shareLimitsMode=Default(qB 5.0/Web API 2.10.4 起两者
+  必填, 缺失 400; 库缺省 None 被丢弃, 必须 facade 显式补参 —— 直调裸库的用例钉不住 facade 漏参,
+  issue 26-11-01-2102)
 - test_torrents_add_wire_body_dual_send_and_camel_case_kwarg: torrents/add 请求体同时含
   skip_checking 与 seedMode(双发守阵, 库降版先红)且 camelCase kwarg shareLimitsMode 透传
   (2026.8.1 无具名参, 经 _format_payload kwargs 并入 POST data; snake_case 会发错键名被 5.3 静默忽略)
@@ -23,6 +27,8 @@ from urllib.parse import parse_qs
 from qbittorrentapi import Client
 
 from helpers import FakeQbServer
+
+from auto_qb.core.qbapi import QbApi
 
 
 def _client(srv) -> Client:
@@ -68,6 +74,25 @@ def test_set_share_limits_none_mode_not_sent():
         assert bodies, "应命中 setShareLimits 端点"
         qs = parse_qs(bodies[-1])
         assert "shareLimitsMode" not in qs, f"None 值键应被 requests 丢弃而不是发出: {qs}"
+
+
+def test_facade_set_share_limits_wire_carries_share_limit_action():
+    """经 QbApi facade 出口的 setShareLimits 请求体含 shareLimitAction=Default + shareLimitsMode=Default
+    (两个必填参: qB 5.0/WebAPI 2.10.4 起 shareLimitAction、5.3 起 shareLimitsMode, 缺失 400; issue 26-11-01-2102)"""
+    with FakeQbServer() as srv:
+        client = _client(srv)
+        api = QbApi(client, None)
+        api.torrents_set_share_limits(
+            ratio_limit="1.0",
+            seeding_time_limit=-1,
+            inactive_seeding_time_limit=-2,
+            torrent_hashes="a" * 40,
+        )
+        bodies = _bodies(srv, "torrents/setShareLimits")
+        assert bodies, "应命中 setShareLimits 端点"
+        qs = parse_qs(bodies[-1])
+        assert qs.get("shareLimitAction") == ["Default"], f"请求体须含 shareLimitAction=Default: {qs}"
+        assert qs.get("shareLimitsMode") == ["Default"], f"facade 恒发两必填参: {qs}"
 
 
 def test_torrents_add_wire_body_dual_send_and_camel_case_kwarg():

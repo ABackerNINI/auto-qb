@@ -426,10 +426,14 @@ class FakeClient:
         seeding_time_limit=None,
         inactive_seeding_time_limit=None,
         share_limits_mode=None,
+        share_limit_action=None,
         torrent_hashes=None,
     ):
         self.calls.append(
-            ("set_share_limits", (ratio_limit, seeding_time_limit, inactive_seeding_time_limit, share_limits_mode))
+            (
+                "set_share_limits",
+                (ratio_limit, seeding_time_limit, inactive_seeding_time_limit, share_limits_mode, share_limit_action),
+            )
         )
 
     def torrents_rename(self, torrent_hash=None, new_torrent_name=None):

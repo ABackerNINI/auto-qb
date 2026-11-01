@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-2102">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-seed-cmds">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-02-backend-webui-seed-cmds.md, memory-bank/testing/baselines/26-11-02-0044-sharelimit-action-fix.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction">
 <meta name="issue-summary" content="QbApi.torrents_set_share_limits 不传 share_limit_action, 库对 None 值键不发 → qB 5.0+ 该端点必填 shareLimitAction → WebUI 分享限制命令恒回「qB 拒绝执行: 缺少必需参数：shareLimitAction」; RM04-09 真机首测暴露">
 <title>WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-2102-bug-webui-set-share-limits-missing-sharelimitaction</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 21:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -164,11 +164,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 21:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 用户指派认领（认领档案 <code>memory-bank/tasks/26-11-02-backend-webui-seed-cmds.md</code>，doc-refs 已双向登记），状态 <strong>Open → In Progress</strong>。</li>
+      <li>2026-11-02 — 修复并验证完毕，状态 <strong>In Progress → Done</strong>（实际修法 / 验证方式 / 测试数字见「修复后补充」）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-11-02（clone4, 10a32bfe）：三锚点仍成立 —— facade <code>torrents_set_share_limits</code> 与 <code>_cmd_set_share_limits</code> 均不传 <code>share_limit_action</code>；库 2026.10.1 <code>torrents.py:1585</code> wire 字典 <code>"shareLimitAction": share_limit_action</code> 且具名参缺省 None → requests 丢弃。现象在代码层复现；真机 RM04-09 验收留真机轨。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与建议修法一致）：① facade <code>qbapi.py::torrents_set_share_limits</code> 补具名参 <code>share_limit_action: str = "Default"</code> 显式发参（与 share_limits_mode 同一手法）；② <code>commands.py::_cmd_set_share_limits</code> 透传 <code>"Default"</code>；③ 守阵三层：既有 FakeClient 断言扩 5 元组（test_web_commands ×2 / test_web_longtail ×1）+ <code>test_qbapi_wire.py</code> 新增 <strong>facade 出口</strong> wire 守阵（经 QbApi 断言请求体含 <code>shareLimitAction=Default</code> + <code>shareLimitsMode=Default</code> —— 直调裸库传显式参的用例钉不住 facade 漏参形态）。</p>
+    <p><strong>验证方式</strong>：dev.fmt + test.quick（4804 passed / 2 skipped）+ test.full 同数全绿；真机 RM04-09 验收留真机轨（本轮无 QBT_TEST_* 凭据）。</p>
+    <p><strong>测试数字</strong>：见基线切片 <a href="../testing/baselines/26-11-02-0044-sharelimit-action-fix.md">testing/baselines/26-11-02-0044-sharelimit-action-fix.md</a>（<code>commands run kb.baseline</code>）。</p>
   </section>
 
   <footer>

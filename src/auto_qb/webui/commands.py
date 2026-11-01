@@ -917,7 +917,9 @@ class WebCommandsMixin:
         inactive_seeding_time_limit: Optional[int] = None,
     ):
         """种子分享限制; 缺失维度按 -2(使用全局默认)补齐; share_limits_mode 恒传 "Default"
-        (= qB 全局分享限制模式, 即 5.2 旧行为; 5.3 起该端点必填此参, 缺失 400)
+        (= qB 全局分享限制模式, 即 5.2 旧行为; 5.3 起该端点必填此参, 缺失 400); share_limit_action
+        恒传 "Default"(= 到限执行 qB 全局默认动作; qB 5.0/Web API 2.10.4 起必填, 缺失 400,
+        issue 26-11-01-2102)
 
         哨兵语义(与 qbittorrent-api torrents_set_share_limits 文档一致):
         -2 = 使用全局分享限制默认值; -1 = 不限制; 正数 = 限制值(比例/分钟)。
@@ -929,6 +931,7 @@ class WebCommandsMixin:
             seeding_time_limit=-2 if seeding_time_limit is None else int(seeding_time_limit),
             inactive_seeding_time_limit=-2 if inactive_seeding_time_limit is None else int(inactive_seeding_time_limit),
             share_limits_mode="Default",
+            share_limit_action="Default",
             torrent_hashes=[hash],
         )
         logger.info(
