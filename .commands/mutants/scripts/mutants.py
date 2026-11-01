@@ -568,6 +568,32 @@ def _reproduces(distro: str, mirror: str, ids: set[str], timeout_s: int) -> bool
     return bool(_fail_ids(proc.stdout + "\n" + proc.stderr) & ids)
 
 
+def _check_registry(distro: str, mirror: str) -> None:
+    """verify 前确认镜像里有**非空**的 mutmut 注册表。
+
+    只看存在性不够: OOM/中断的一轮会留下 0 字节 `.meta`, 它能通过「文件在不在」的预检,
+    随后逐条 `mutmut apply` 全报 APPLYFAIL —— 排障时还会误判成 apply 通道坏了(实测 2026-11-02
+    中池 3 路 OOM 打断, 注册表被写成 0 字节)。空注册表没有可验证的变异, 语义等同缺失。
+    """
+    reg = _wsl(
+        distro,
+        f"cd {_bq(mirror)} && find mutants -name '*.meta' -printf '%s %p\\n' 2>/dev/null",
+        check=False
+    )
+    entries = [ln.strip() for ln in reg.stdout.splitlines() if ln.strip()]
+    if reg.returncode != 0 or not entries:
+        raise Fail(
+            "镜像里没有 mutmut 注册表(mutants/**/*.meta) —— 先跑 mutants.run 该目标再 verify; "
+            "单文件轮会清掉其它目标的注册表"
+        )
+    empty = [ln.split(None, 1)[-1] for ln in entries if ln.split(None, 1)[0] == "0"]
+    if empty:
+        raise Fail(
+            f"镜像里的 mutmut 注册表为空(0 字节): {', '.join(empty)} —— "
+            "空注册表没有可验证的变异(等同缺失), 先跑 mutants.run 该目标再 verify"
+        )
+
+
 def cmd_verify(args: argparse.Namespace) -> int:
     """S4 的机械化: 对候选逐条 `mutmut apply` → 跑**全套件** → 还原, 记 KILLED / SURVIVED。
 
@@ -593,12 +619,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     mq = _bq(args.mirror)
 
     if not _DRY:
-        reg = _wsl(args.distro, f"cd {mq} && find mutants -name '*.meta' -print -quit 2>/dev/null", check=False)
-        if reg.returncode != 0 or not reg.stdout.strip():
-            raise Fail(
-                "镜像里没有 mutmut 注册表(mutants/**/*.meta) —— 先跑 mutants.run 该目标再 verify; "
-                "单文件轮会清掉其它目标的注册表"
-            )
+        _check_registry(args.distro, args.mirror)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)

@@ -19,6 +19,7 @@
 - DoneIdsTest           未判定(APPLY_FAIL/TIMEOUT/FLAKY/UNKNOWN)不进 done; KILLED/SURVIVED 进 done
 - SuiteCmdDeselectTest  全套件命令自动带 FLAKY_DESELECT 的 --deselect, 且保留既有并行度参数
 - EnsureMirrorTest      WSL 不可达 / .git 缺失 ⇒ Fail 且不 clone; 目录不存在才 clone; refresh 走 fetch
+- RegistryPrecheckTest  注册表缺失 ⇒ 拦; 0 字节 ⇒ 按「注册表为空」拦(给同一句 run 提示); 非空不误伤
 """
 
 from __future__ import annotations
@@ -316,6 +317,47 @@ class EnsureMirrorTest(unittest.TestCase):
         status, _, calls = self._run(state="MIRROR_HAVE_GIT", refresh=False)
         self.assertEqual(status, "OK")
         self.assertFalse(any("fetch -q origin" in c for c in calls))
+
+
+class RegistryPrecheckTest(unittest.TestCase):
+    """空注册表必须与缺失同档拦下: 0 字节 `.meta` 若通过预检, verify 会逐条 APPLYFAIL。"""
+
+    def _run(self, *, rc: int = 0, stdout: str = ""):
+        with mock.patch.object(mutants, "_wsl", return_value=subprocess.CompletedProcess([], rc, stdout, "")):
+            try:
+                mutants._check_registry("Ubuntu-26.04", "~/auto-qb-mut")
+            except mutants.Fail as exc:
+                return "FAIL", str(exc)
+        return "OK", ""
+
+    def test_missing_registry_fails_with_run_hint(self):
+        status, msg = self._run(stdout="")
+        self.assertEqual(status, "FAIL")
+        self.assertIn("没有 mutmut 注册表", msg)
+        self.assertIn("先跑 mutants.run", msg)
+
+    def test_find_error_is_treated_as_missing(self):
+        status, msg = self._run(rc=2, stdout="")
+        self.assertEqual(status, "FAIL")
+        self.assertIn("没有 mutmut 注册表", msg)
+
+    def test_empty_registry_fails_as_empty_not_missing(self):
+        status, msg = self._run(stdout="0 mutants/src/x.py.meta\n")
+        self.assertEqual(status, "FAIL")
+        self.assertIn("注册表为空(0 字节)", msg)
+        self.assertIn("mutants/src/x.py.meta", msg)
+        self.assertIn("先跑 mutants.run", msg)
+        self.assertNotIn("没有 mutmut 注册表", msg)
+
+    def test_one_empty_meta_among_others_still_fails(self):
+        status, msg = self._run(stdout="10 mutants/a.meta\n0 mutants/b.meta\n")
+        self.assertEqual(status, "FAIL")
+        self.assertIn("mutants/b.meta", msg)
+        self.assertNotIn("mutants/a.meta", msg)
+
+    def test_non_empty_registry_passes(self):
+        status, _ = self._run(stdout="12345 mutants/src/x.py.meta\n")
+        self.assertEqual(status, "OK")
 
 
 if __name__ == "__main__":
