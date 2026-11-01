@@ -50,6 +50,9 @@ P1-T1.3 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
 - test_resolve_claim_target_tool_exe_dir_priority
 - test_run_claim_timeout_and_spawn_failure
 - test_run_foreground_real_execution_with_allowed_binary
+- test_run_foreground_subprocess_contract_with_probe (issue 26-11-01-0953): 注入
+  subprocess.run 探针钉逐位实参(args/cwd/stdin/stdout/stderr/text/timeout/close_fds),
+  不依赖环境二进制(node), 让函数体在任意环境可执行(mutmut no-tests 面闭合)
 
 W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-analysis/w7-r31/classify.md) ——
 平台支一律**强制进支**钉面(is_windows 打桩)—— WSL 池里 is_windows() 恒 False, Windows 支
@@ -697,6 +700,33 @@ def test_run_foreground_real_execution_with_allowed_binary():
         return
     proc = agent._run_foreground([node, "--version"], cwd=None, timeout=30)
     assert proc.returncode == 0 and proc.stdout.strip()
+
+
+def test_run_foreground_subprocess_contract_with_probe(monkeypatch):
+    """_run_foreground 的 subprocess.run 拼装契约: 注入探针逐位钉实参, 不依赖环境二进制
+
+    issue 26-11-01-0953: 既有直跑用例依赖 node, 无 node 环境静默 return, 函数体在
+    mutmut 的 stats/覆盖映射阶段从未执行 -> 18 条参数变异记 no tests。本用例把
+    subprocess.run 换成记录器, 函数体必执行, 且对 args 透传 / cwd / DEVNULL / PIPE 合并
+    / text / timeout / close_fds 逐位断言(任一被 None 化或丢失即红)。
+    """
+    seen = {}
+
+    def probe(args, **kwargs):
+        seen.update(args=args, **kwargs)
+        return SimpleNamespace(returncode=7, stdout="probe-out", stderr="probe-err")
+
+    monkeypatch.setattr(agent.subprocess, "run", probe)
+    proc = agent._run_foreground(["probe-bin", "--flag"], cwd="probe-cwd", timeout=3.5)
+    assert proc.returncode == 7 and proc.stdout == "probe-out"
+    assert seen["args"] == ["probe-bin", "--flag"]
+    assert seen["cwd"] == "probe-cwd"
+    assert seen["stdin"] is subprocess.DEVNULL
+    assert seen["stdout"] is subprocess.PIPE
+    assert seen["stderr"] is subprocess.STDOUT
+    assert seen["text"] is True
+    assert seen["timeout"] == 3.5
+    assert seen["close_fds"] is True
 
 
 # ---------- P1-T1.3 守卫与容错簇(计划 26-10-20-2101) ----------

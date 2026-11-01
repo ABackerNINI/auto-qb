@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0050">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0217-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ traffic_sample_mod W5 终态存疑注记: _agg_credit_day_file_9 零槽块可达性未闭合">
 <meta name="issue-summary" content="W5 守阵覆盖后唯一余量: _agg_credit_day_file_9(空块支 break, 零槽块 parser 可达性存疑)+ 同主题 _agg_flush_series_13(空桶防御支)判等价前提未实测">
 <title>core/ traffic_sample_mod W5 终态存疑注记: _agg_credit_day_file_9 零槽块可达性未闭合 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0050-test-core-w5-mutation-dayfile-zeroblock-doubt</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 00:50</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -102,7 +102,29 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 00:50 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 01:53 — 用户指派认领（与 W7 no-tests 件一并处理），状态 <strong>In Progress</strong></li>
+      <li>2026-11-02 02:09 — 存疑判定闭合（两条均判等价变异，定向用例钉住不可达性），状态 <strong>Done</strong></li>
     </ul>
+    <h3>复验（2026-11-02 01:53）</h3>
+    <p>WSL 镜像 HEAD <code>bd6c8a32</code> 下现码未变：<code>_agg_credit_day_file</code> 空块支与 <code>_agg_flush_series</code> 空桶支仍在；两条变异仍是「待定真洞 / 待定等价」的存疑项，不是已消失件。复验锚点：<code>grep "if not slots:"</code> / <code>grep "空桶不留"</code>。</p>
+    <h3>根因定案</h3>
+    <ul>
+      <li><strong><code>_agg_credit_day_file__mutmut_9</code>（<code>if not slots: continue</code> → <code>break</code>）</strong>：零槽块生产不可达。解析器 <code>src/auto_qb/core/traffic_store.py</code> 的 <code>parse_v4_day_text._close()</code> 仅在 <code>cur_start is not None and cur_records</code> 时 append <code>V4Block</code>（<code>V4ParsedDay</code> docstring 明写「空块不保留」）；<code>v4_block_slots</code> 亦从 <code>block.records</code> 展开。故「B 行后无任何记录」的零记录块永不进入 <code>parsed_day.blocks</code> —— 该空块支是防御死码，变异在真实解析产物上<strong>等价</strong>。</li>
+      <li><strong><code>_agg_flush_series__mutmut_13</code>（空桶 <code>continue</code> → <code>break</code>）</strong>：空桶生产点不存在。<code>_agg_credit_hours</code> 恒 <code>pending.setdefault(h, []).append(...)</code>，且 <code>end &lt;= start</code> 直接 return 不建桶；恢复路径同样过滤空桶（<code>if not samples: continue</code>）。该空桶支同为防御死码，变异<strong>等价</strong>。</li>
+    </ul>
+    <h3>实际修法</h3>
+    <p>生产代码不改（现码语义正确）；在 <code>tests/test_traffic_sample.py</code> 新增两条定向用例钉住不可达性，并同步该文件头部「测试计划」：</p>
+    <ul>
+      <li><code>test_parser_never_emits_zero_slot_block</code>：构造「零记录 B 块 + 有记录 B 块 + r 行」与「文件尾孤立 B 行」，断言 <code>bad_lines == 0</code>、blocks 仅剩有记录块、<code>all(block.records)</code>；证实解析器不产零槽块。</li>
+      <li><code>test_agg_credit_hours_never_creates_empty_bucket</code>：退化区间（<code>end &lt;= start</code>）不建桶、有效区间每桶至少一条样本；证实 pending 空桶生产点不存在。</li>
+    </ul>
+    <h3>等价判定（如实标注）</h3>
+    <p><code>_agg_credit_day_file__mutmut_9</code> 与 <code>_agg_flush_series__mutmut_13</code> 均判定为<strong>等价变异（防御死码）</strong>，本轮<strong>未杀死</strong>，也不声称杀死 —— 未为不可达分支构造伪输入（那只会产生假守阵）。若未来解析器或入账路径出现零槽块 / 空桶的真实生产点，本判据失效，需回看并升档开件。</p>
+    <h3>验证</h3>
+    <p><code>commands run test.one -- tests/test_traffic_source_agent.py tests/test_traffic_sample.py</code> 全绿（首跑曾因测试构造「3 列无基线 B 块后接 r 行」被判坏，改 5 列基线块后通过）；<code>commands run test.full</code> 全绿且覆盖率闸达标，精确数字与覆盖率报表见 <code>commands run kb.baseline</code> 最新切片，本件不手抄。</p>
+    <p><strong>变异侧说明</strong>：本轮<strong>未重跑 W5 全量变异</strong>（成本高且本件结论不依赖新结果）；等价判定依据是「现码静态不可达性 + 上述定向解析/入账实测」。若后续 W5 复跑结果与判据冲突，以复跑为准重判。</p>
+    <h3>遗留</h3>
+    <p>①两条均记等价、不记缺口；②W5 全量变异未重跑，结论基于现码与定向实测；③本轮不执行 git commit，由用户确认后另行安排。</p>
   </section>
 
   <footer>

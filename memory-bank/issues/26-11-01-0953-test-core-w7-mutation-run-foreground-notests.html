@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-01-0953">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="mutation-audit">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-02-0217-mutation-audit.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core W7(R31) no-tests 面: agent._run_foreground 18 条变异池内无直接触达">
 <meta name="issue-summary" content="agent.py _run_foreground 18 条变异(参数逐位 None 化/丢失 16 + text=False + close_fds=False)mutmut 记 no tests, 池内无直接触达; 登记 no-tests 面 + 后续轮覆盖预期, 不扩池">
 <title>core W7(R31) no-tests 面: agent._run_foreground 18 条变异池内无直接触达 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-01-0953-test-core-w7-mutation-run-foreground-notests</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-01 09:53</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -162,11 +162,16 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-01 09:53 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 01:53 — 用户指派认领（与 W5 零块存疑件一并处理），状态 <strong>In Progress</strong></li>
+      <li>2026-11-02 02:09 — 修复完成（注入式直测落地 + 同池同目标变异复跑 18 条全 killed），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验（2026-11-02 01:53–02:05，WSL 镜像 HEAD <code>bd6c8a32</code>，同池同目标）</strong>：认领后先重跑锚点 —— 修前仍复现：<code>agent.py</code> 566 变异中 18 条记 no tests，且 <code>_run_foreground</code> 唯一真执行用例仍因 <code>shutil.which("node")</code> 为空而静默 return。现象仍在，不是过期件。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与「建议修法」同向，未改道）：<code>tests/test_traffic_source_agent.py</code> 新增 <code>test_run_foreground_subprocess_contract_with_probe</code> —— 把 <code>agent.subprocess.run</code> 换成记录器探针后调用 <code>agent._run_foreground</code>，函数体必执行（不依赖 PATH / node），并对 <code>args / cwd / stdin / stdout / stderr / text / timeout / close_fds</code> 逐位断言；任一被 None 化或丢失即红。同步更新该文件头部 docstring 的「测试计划」清单。</p>
+    <p><strong>变异验证</strong>（2026-11-02，WSL mutmut 3.8.0，目标 <code>**/core/traffic_source/agent.py</code>，池 = W7 的 7 文件，<code>--no-refresh --no-sync --children 4</code>）：修后 566/566 全部有判定 —— 杀 <strong>541</strong> / 存活 <strong>25</strong> / <strong>no tests 0</strong> / 超时 0（10.28 mutations/second，墙时 69.8s）；<code>mutmut results --all true</code> 过滤 <code>_run_foreground</code> 得 <strong>18/18 killed</strong>（<code>x__run_foreground__mutmut_1..18</code>）。</p>
+    <p><strong>套件验证</strong>：目标两文件 <code>commands run test.one</code> 全绿；<code>commands run test.full</code> 全绿且覆盖率闸达标 —— 精确数与覆盖率报表见 <code>commands run kb.baseline</code> 最新切片（<code>memory-bank/testing/baselines/</code>），本件不手抄。</p>
+    <p><strong>遗留</strong>：①同轮 25 条 survived 属 W7 三分类的既有余量，不在本件范围；②仍未扩池（与 W6/R30 口径一致），本轮只补池内用例形态；③本轮不执行 git commit，由用户确认后另行安排。</p>
   </section>
 
   <footer>

@@ -184,6 +184,10 @@ P1-T1.2 守卫与容错簇(计划 26-10-20-2101, 覆盖率缺口清偿):
   (不产 hour 行), 空桶跳过
 - test_agg_credit_day_file_empty_block_and_null_slots: 空块零槽跳过 / n 槽 null 期不贡献
   (_slot_agg_obs 返回 None 的两条同源出口)
+- test_parser_never_emits_zero_slot_block (issue 26-11-01-0050): 解析器 `_close` 仅在
+  有记录时产块 —— 零记录 B 块(空块)投产后不可达, 空块支改判防御死码
+- test_agg_credit_hours_never_creates_empty_bucket (issue 26-11-01-0050): 入账恒
+  setdefault+append 且 end<=start 直接返回 —— pending 空桶生产点不存在
 - test_stop_early_return_when_disabled_or_no_data_dir: stop() 在 qb_traffic 段缺失/未启用/
 - test_live_tail_pending_agg_published_and_cleared_by_seal
 - test_v4_write_io_full_day_2s_interval
@@ -3257,6 +3261,36 @@ def test_agg_credit_day_file_empty_block_and_null_slots():
     tail = TrafficSampleModule._agg_credit_day_file(hour_samples, null_day)
     assert hour_samples == {}  # n 槽 null 期零入账
     assert tail is not None and tail[1] is None and tail[0] == pytest.approx(1060.0)
+
+
+def test_parser_never_emits_zero_slot_block():
+    """零槽块生产可达性实测(issue 26-11-01-0050): 解析器只在块内有记录时产块
+
+    _close() 的 `cur_start is not None and cur_records` 双闸让「B 行后无任何记录」
+    的零记录块不进入 V4ParsedDay.blocks —— 空块支 `if not slots: continue` 是防御
+    死码(continue->break 在解析产物上恒等价), 不是可补守阵的真洞。
+    """
+    text = "\n".join([HEADER_LINE_V4, "key,global", "B,1000,30", "B,2000,30,100,200", "r,10,20,0,0"]) + "\n"
+    parsed = parse_v4_day_text(text)
+    assert parsed.bad_lines == 0
+    assert len(parsed.blocks) == 1  # 首个零记录 B 块被丢弃, 只余有记录块
+    assert parsed.blocks[0].start_epoch == 2000
+    assert all(block.records for block in parsed.blocks)
+    # 文件尾的 B 行(无记录)同样不产块
+    assert parse_v4_day_text(f"{HEADER_LINE_V4}\nB,3000,30\n").blocks == ()
+
+
+def test_agg_credit_hours_never_creates_empty_bucket():
+    """pending 空桶生产点不存在(issue 26-11-01-0050): 入账恒 setdefault+append
+
+    end <= start 直接返回(不建桶), 有效区间每桶至少 append 一条 ——
+    「空桶留空」在 _agg_flush_series 是防御支(空桶支 continue->break 判等价)。
+    """
+    pending: dict = {}
+    TrafficSampleModule._agg_credit_hours(pending, 100.0, 100.0, 1, 2, 3, 4)
+    assert pending == {}  # 退化区间不建桶
+    TrafficSampleModule._agg_credit_hours(pending, 100.0, 101.0, 1, 2, 3, 4)
+    assert all(samples for samples in pending.values())  # 生产的桶恒非空
 
 
 def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
