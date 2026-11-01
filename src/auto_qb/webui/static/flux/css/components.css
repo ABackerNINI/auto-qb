@@ -41,8 +41,12 @@
   color: #fecaca; background: #6b1f22; border-bottom: 1px solid #a33a3f; }
 .service-banner .ico { color: #fecaca; flex: 0 0 auto; }
 /* z-index 说明: 顶栏内的列选择器弹层必须能盖住下方的同级吸顶条 —— 顶栏与状态条都须 position+z-index */
+/* V2 精修(计划 26-10-31-2316 R2): 常驻浮层面挂静态 backdrop-filter(真毛玻璃) --
+ * 无过渡、静态磨砂一次算(帧率实测见计划档案 R2 实录); 弹窗遮罩/列表行仍禁
+ * (PERF-01 嵌套模糊教训: 全屏遮罩 blur 不回来), 数量由守阵 _scan_backdrop_filter
+ * 的 flux 显式档(恰 4 处)钉住。Safari 降级 = 无模糊纯半透明面(D5)。 */
 .topbar { position: relative; z-index: 31; display: flex; align-items: center; gap: 16px; padding: 10px 18px;
-  background: var(--glass); border-bottom: 1px solid var(--border-soft); }
+  background: var(--glass); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border-soft); }
 .topbar .brand { display: flex; align-items: center; gap: 9px;
   font: 600 17px/1 var(--font-display); letter-spacing: .02em; }
 .topbar .ver { padding: 1px 7px; background: var(--surface-1); border: 1px solid var(--border-soft);
@@ -146,7 +150,8 @@
 /* ---------------- 底部状态栏(TBL-08): 仪表台读数条, 数值一律 mono ---------------- */
 .statusbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: flex; align-items: center;
   gap: 16px; height: var(--statusbar-h); padding: 0 18px; overflow: hidden; white-space: nowrap;
-  background: var(--statusbar-bg, var(--bg-card)); border-top: 1px solid var(--border-soft);
+  background: var(--statusbar-bg, var(--bg-card)); backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border-soft);
   font: 500 12px/1 var(--font-mono); color: var(--fg-dim);
   box-shadow: inset 0 1px 0 var(--hairline); }
 .sb-speed { display: flex; align-items: center; gap: 16px; min-width: 0; overflow: hidden; }
@@ -492,6 +497,7 @@
 .modal-mask .modal { border-radius: var(--radius-lg); }
 .modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px;
   background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-card);
+  backdrop-filter: blur(14px); /* V2 精修: 弹窗面板(非遮罩)静态毛玻璃 -- 遮罩仍不带(见上注) */
   border: 1px solid var(--border-strong); box-shadow: var(--shadow-3); animation: modal-in .16s var(--ease);
   max-height: calc(100vh - 120px); overflow-y: auto; overscroll-behavior: contain; } /* 矮视口兜底: 壳内滚, 按钮可达 */
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
@@ -617,7 +623,7 @@
 .top-search { display: flex; align-items: center; gap: 8px; }
 .search-box { position: relative; display: flex; align-items: center; }
 .search-box > .ico { position: absolute; left: 11px; color: var(--cyan); pointer-events: none; opacity: .85; }
-.top-search input { width: 240px; padding: 7px 52px 7px 33px; border-radius: var(--radius-sm);
+.top-search input { width: 240px; padding: 7px 52px 7px 33px; border-radius: 0; /* R2 精修(V1): 搜索框回退原版方角 —— 多轮精修的原版形态, 辉光作全站参考基准 */
   border: 1px solid var(--border); background: var(--bg-sunken); color: var(--fg); font-size: 13px;
   transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), width var(--dur) var(--ease); }
 .top-search input::placeholder { color: var(--fg-dim); }

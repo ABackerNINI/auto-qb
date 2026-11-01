@@ -42,6 +42,28 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
   top: calc(-1 * var(--fx-push-y, 0px));
 }
 
+/* ---- D4-6 checkbox 快勾(R2 精修 V3, 静态几何留媒体块外; S4 选定、S6b 因行内无
+ *      checkbox 元素落空, 此处转落地): 复用 .selected 状态类做快勾视觉 -- 行首格
+ *      ::after 画勾形, 落行 padding 沟槽(D4-2 边条右邻, 同 --sel-bar 色)。零 JS
+ *      零模板改动: flux 行选择的真实交互 = Ctrl/Cmd+点击 toggle / Shift 区间 / 键盘
+ *      选择(普通点击只落光标不选中, selection.js 口径), 全部路径最终都落在
+ *      .selected 类上, CSS 消费即全路径覆盖 -- 比 fx-mount.js 差分注入少两条
+ *      state.js watch 与节点生命周期管理(S4 口径 B 案, 见计划档案 R2 实录)。
+ *      载体选择: 行本体 ::after 被 row_lang wave 扫层占用、::before 被 flat 左条与
+ *      D4-2 边条占用, 首格 ::after 全站空闲(grep 证); 勾形绝对定位的包含块是行
+ *      (position:relative 皮肤自带), top:50% 按行高居中; 首格 .g-name 的
+ *      overflow:hidden 裁不到它(包含块在裁剪者之外)。partial(半选)不给勾:
+ *      半选语义由 42% 边条表达, 勾形只表全选。RM: 勾标静态可见(状态语义非装饰),
+ *      pop 动画不播(下方媒体块)。 ---- */
+html[data-fx-preset] .group-row.selected > :first-child::after,
+html[data-fx-preset] .member-row.selected > :first-child::after {
+  content: ""; position: absolute; left: 4px; top: calc(50% - 3px);
+  width: 9px; height: 5px; pointer-events: none;
+  border-left: 2px solid var(--sel-bar, var(--accent));
+  border-bottom: 2px solid var(--sel-bar, var(--accent));
+  transform: rotate(-45deg);
+}
+
 @media (prefers-reduced-motion: no-preference) {
 
   /* ==================================================================
@@ -143,6 +165,12 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
   html[data-fx-preset] .group-row.partial::before,
   html[data-fx-preset] .member-row.partial::before { transform: scaleY(1); opacity: 0.42; }
   html[data-fx-preset] .member-row.partial::before { top: 18%; bottom: 18%; }
+  /* D4-6 勾形 pop(静态几何在媒体块外, 见那里段注): back-out 弹入 180ms(<=200ms
+   * 约束), 0->1 过冲; rotate(-45deg) 烘进帧与静息态同值, 动画结束无缝回位 */
+  html[data-fx-preset] .group-row.selected > :first-child::after,
+  html[data-fx-preset] .member-row.selected > :first-child::after {
+    animation: fx-check-pop 180ms var(--fx-ease-back);
+  }
   /* D4-3 锚点脉冲: 右键锚点行(menu.js::_markCtxSource 挂 .ctx-src)一次性 flash --
    * 类挂上即播、菜单关闭摘类、下次右键重挂重播, 零 JS(状态类由既有机制给);
    * keyframes 复用 fx.css fx-row-flash。只落行类, .ctx-src 命中的按钮不播。 */
@@ -177,23 +205,15 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
   }
 
   /* ==================================================================
-   * 输入框 focus ring(D5-2): flux 各输入面既有 focus 描边/辉光**保留**, 在
-   * box-shadow 链尾追加 fx 3px 柔环(fx focus-ring 原语同款色: --accent 30%)。
-   * 登录卡输入不走本效果: 其 warn 凭据语义档 focus 辉光是 flux 既有设计, 不混
-   * accent。D5-3 floating label 降级: flux 输入框无 input+label 兄弟对结构
+   * 输入框 focus ring(D5-2)已退役(R2 精修 V1, 用户明确): S6b 给
+   * .top-search/.modal-field/.hb-input 等 focus 追加的 3px 柔环整块撤除 --
+   * 各输入面原本就有自己的 focus 描边/辉光(components.css/dialogs.css/
+   * console_hub.css), fx 环属叠加过量; 顶栏搜索框更是「多轮精修的原版」,
+   * 其方角 + 原辉光作全站参考基准(R2 辉光盘点锚点), 不作任何 fx 改写。
+   * fx.css 库内 focus-ring/focus-float 效果名留库不挂载(与 D5-3 同口径)。
+   * D5-3 floating label 降级(原文保留): flux 输入框无 input+label 兄弟对结构
    * (标签都在字段容器上方), 结构改造被共享模板红线禁止 -- 见计划档案降级注明。
    * ================================================================== */
-  html[data-fx-preset] .top-search input:focus {
-    box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
-      0 0 22px -6px color-mix(in srgb, var(--accent) 80%, transparent);
-  }
-  html[data-fx-preset] .modal-field input:focus {
-    box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent),
-      0 0 22px -6px color-mix(in srgb, var(--accent) 80%, transparent);
-  }
-  html[data-fx-preset] .hb-input:focus, html[data-fx-preset] .hb-select:focus {
-    box-shadow: var(--glow), 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent);
-  }
 
   /* ==================================================================
    * P1 组件挂载(S7, 计划 §03 P1 清单; S4 定调 glass + 克制复用既有帧与
@@ -205,7 +225,9 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
    * ================================================================== */
 
   /* ---- 标签 chip(.site-chip/.tag-chip/.cat-chip, 筛选交互件): hover 辉光
-   *      (glass 供给面 --fx-glow*, 与 .bt 同 tokens; 对小面积 chip 取半量)
+   *      (glass 供给面 --fx-glow*, 与 .bt 同 tokens; 对小面积 chip 取半量,
+   *      R2 精修 V1 再降一档: 加 -2px 负 spread -- 半量全 spread 在小面积上
+   *      偏糊, 收敛成搜索框原版同族「负 spread 柔光」配方)
    *      + active 按压缩放(press 原语同款)。base transition 已含 box-shadow
    *      var(--dur-fast)(120ms, 超 hover 100ms 软约束 -- S6 按钮 glow 同口径
    *      只标注), transform 段在此并入(时长同 fast 档)。 ---- */
@@ -218,7 +240,7 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
   html[data-fx-preset] .site-chip:hover:not(.f-on),
   html[data-fx-preset] .tag-chip:hover:not(.f-on),
   html[data-fx-preset] .cat-chip:hover:not(.f-on) {
-    box-shadow: 0 0 calc(var(--fx-glow) / 2) var(--fx-glow-c);
+    box-shadow: 0 0 calc(var(--fx-glow) / 2) -2px var(--fx-glow-c);
   }
   html[data-fx-preset] .site-chip:active,
   html[data-fx-preset] .tag-chip:active,
@@ -245,18 +267,12 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
     animation: fx-bar-flow 900ms linear infinite;
   }
 
-  /* ---- 开关 .hb-switch: 滑块弹簧曲线(spring-1 软过冲, 时长沿用基线 .2s 不动)
-   *      + track hover 微辉光(checked 态既有辉光 10px 的 hover 加深档; 未选中
-   *      hover 给 55% 半量)。RM: 本组整体在媒体块内, 落回皮肤基线 .2s var(--ease)
-   *      (flux 存量行为, 同 S6 RM 边界口径)。 ---- */
-  html[data-fx-preset] .hb-switch .hb-sw-track {
-    transition: background .2s var(--ease), box-shadow var(--fx-dur-hover) var(--fx-ease-standard);
-  }
+  /* ---- 开关 .hb-switch: 滑块弹簧曲线(spring-1 软过冲, 时长沿用基线 .2s 不动)。
+   *      R2 精修 V1: S7 自加的 track hover 微辉光整组撤除(未选中 hover 55% 半量
+   *      + checked hover 加深档) -- checked 态的静息辉光是皮肤既有设计(S7 之前就
+   *      在), hover 再叠辉光与全站 hover 克制口径(搜索框 hover 仅描边加深)不协调;
+   *      track 的 box-shadow 过渡段随之回退皮肤基线(.2s var(--ease) 由皮肤自供)。 ---- */
   html[data-fx-preset] .hb-switch .hb-sw-track::after { transition-timing-function: var(--fx-spring-1); }
-  html[data-fx-preset] .hb-switch:hover .hb-sw-track {
-    box-shadow: 0 0 8px -3px color-mix(in srgb, var(--accent) 55%, transparent);
-  }
-  html[data-fx-preset] .hb-switch:hover input:checked + .hb-sw-track { box-shadow: 0 0 12px -3px var(--accent); }
 
   /* ---- 右键菜单(.ctx-menu 一级 / .ctx-sub 次级 flyout): drop-in 换 pop 入场
    *      (缩放+淡入, 幅度 = --fx-pop-scale; 一级 160ms / 次级 120ms 对齐基线档;
@@ -324,3 +340,9 @@ html[data-fx-preset] [data-fx~="push"][data-fx-pushed] {
 /* P1(S7) 下载中进度条条纹流动 keyframes(8px = 条纹周期, 一周期回绕无缝;
  * paint-only 小面积, 仅下载态行常驻 -- 帧率实测见计划档案 S7 实录) */
 @keyframes fx-bar-flow { to { background-position: 8px 0; } }
+
+/* D4-6 勾形 pop keyframes(行首格快勾, R2 精修 V3) */
+@keyframes fx-check-pop {
+  from { opacity: 0; transform: rotate(-45deg) scale(0); }
+  to { opacity: 1; transform: rotate(-45deg) scale(1); }
+}

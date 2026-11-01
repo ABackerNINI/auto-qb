@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-2111">
+<meta name="doc-updated" content="26-11-01-2301">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-2111 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-2301 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -473,6 +473,47 @@
   <li><b>实测</b>: test.quick 4455 passed(29.07s) → test.full <b>4455 passed, 10 skipped, 110.62s, 覆盖率 99%</b>(比上基线 +1 = 新守阵; 数字见 kb.baseline 最新切片)。Playwright 四 bug 复现→修复→回归断言全过(数字见上表), /console/ 对照零回归(圆角扫描与修复前逐类一致, 仅存量 999px 胶囊), flux 其它动效不回归(audit ok / ctx-menu fx-menu-in / chip-glow 等 P0-P1 规则原样 / pageerror 全零)。</li>
 </ul>
 
+<h3>精修轮 R2(F7b, 26-11-01): 用户四项视觉/功能调整</h3>
+<p>用户真机精修第二轮 4 项(V1 辉光收敛 / V2 真毛玻璃 / V3 checkbox 快勾 / V4 收尾核对)。三旧皮肤 / console / showcase / 共享模板与共享 CSS / config.yml / auto-qb-data 零改动(git status 证实: 仅 <code>flux/</code> 四件 + <code>tests/test_webui_static_skins.py</code> + 本档案)。fx 三件零改动(新动效零 REGISTRY 增量, 全走既有令牌)。</p>
+<h4>V1 搜索框回退 + 辉光全面盘点</h4>
+<ul>
+  <li><b>顶栏搜索框回退原版</b>: components.css <code>.top-search input</code> 圆角 <code>var(--radius-sm) -&gt; 0</code>(S5 圆角三档改写波及点, 搜索框是「多轮精修的原版」); fx-mount.css 里对它的唯一改动(D5-2 focus 3px 柔环)整块撤除 —— 原版方角 + 原版辉光(<code>inset 1px + 22px -6px</code>)逐字保留, 作全站辉光参考基准。flux/style.css 对搜索框零改动(核实)。</li>
+  <li><b>D5-2 focus-ring 退役</b>: S6b 给 .modal-field/.hb-input/.top-search 追加的 3px 柔环整块撤除(各输入面原本就有自己的 focus 描边/辉光: dialogs.css/console_hub.css); fx.css 库内 focus-ring/focus-float 效果名留库不挂载(与 D5-3 同口径)。</li>
+</ul>
+<table>
+  <tr><th>辉光面</th><th>来源</th><th>处置</th><th>理由</th></tr>
+  <tr><td>搜索框 focus 辉光</td><td>皮肤原版</td><td><b>保留原档</b>(参考基准)</td><td>用户点名「多轮精修的原版」, 圆角/辉光逐字回退</td></tr>
+  <tr><td>按钮 .bt hover 辉光(12px 全 spread)</td><td>S4 选定(D1-2)</td><td><b>保留原档</b></td><td>S4 拍板点名保留</td></tr>
+  <tr><td>toast danger glow</td><td>S4 选定(D6-5)</td><td><b>保留原档</b></td><td>S4 拍板点名保留</td></tr>
+  <tr><td>弹窗 danger tone glow</td><td>S4 选定(D2-5)</td><td><b>保留原档</b></td><td>S4 拍板点名保留</td></tr>
+  <tr><td>chip hover 辉光(半量 6px 全 spread)</td><td>S7 推导</td><td><b>降档</b>(+ -2px 负 spread)</td><td>小面积上全 spread 偏糊; 收敛成搜索框同族「负 spread 柔光」配方</td></tr>
+  <tr><td>进度条填充微辉光(6px -2px 绿 50%)</td><td>S7 推导</td><td><b>保留原档</b></td><td>已是最低档负 spread + 小面积活动信号 + S7 帧率实测无衰减, 不明显过量</td></tr>
+  <tr><td>sb-alt 绿辉光(10px -3px 绿 70%)</td><td>S7 推导</td><td><b>保留原档</b></td><td>备用限速点亮态语义灯, 点亮时刻唯一 + 负 spread 已收敛</td></tr>
+  <tr><td>开关 track hover 微辉光(未选中 55% 半量 + checked 加深档)</td><td>S7 推导</td><td><b>撤除</b>(整组)</td><td>checked 静息辉光是皮肤既有设计(S7 之前就在), hover 再叠辉光与全站 hover 克制口径(搜索框 hover 仅描边加深)不协调; track box-shadow 过渡段随之回退皮肤基线</td></tr>
+  <tr><td>hscroll 胶囊</td><td>S6(D8-4)</td><td>—(本就无辉光)</td><td>缩放+淡入, 无需处置</td></tr>
+</table>
+<h4>V2 常驻浮层面真毛玻璃(flux 显式档)</h4>
+<ul>
+  <li><b>落点四件</b>(静态 backdrop-filter, 无过渡; Safari/降级 = 纯半透明面 D5): <code>.topbar</code> blur(12px) / <code>.statusbar</code> blur(12px)(components.css) / <code>.drawer</code> blur(14px)(dialogs.css) / <code>.modal</code> blur(14px)(components.css, 弹窗<b>面板</b>非遮罩)。<b>弹窗遮罩 .modal-mask 不加 blur</b>(D2-4 落选 + PERF-01 根因本体), 列表行不加; 透明度未动(blur 后下层文字已成模糊色斑, 「不可辨」达标, 玻璃质感保留)。</li>
+  <li><b>守阵改 flux 显式档</b>(test_webui_static_skins::_scan_backdrop_filter): ①位置禁令对 flux 放开四类(topbar/status-strip/statusbar/ce-actions —— 静态 blur 非动效、遮罩级全屏 blur 不回来), <b>modal-mask 对 flux 也仍禁</b>; ②数量断言拆两半: 三旧皮肤(atlas/prism/console)恒 0 且相等, flux 恰 <code>_FLUX_BACKDROP_BUDGET = 4</code>(加/摘毛玻璃 = 显式改预算 + 红绿双验)。红绿双验: flux 多注 1 处(5 处)红/三旧皮肤加 1 处红/还原绿。</li>
+  <li><b>嵌套 blur 口径</b>: 弹窗面板开着时面板 blur 叠在顶栏/状态栏 blur 之上 = 有意接受的小面积嵌套(遮罩级全屏 blur 才是 PERF-01 根因)。<b>帧率实测(2026-11-01 接手复测修正)</b>: rAF 计帧有头 Chromium 1440x900 —— 空闲 60-64 / 滚动期 60 / <b>弹窗开启期(嵌套 blur 三面同挂)32 / 详情面板开启期 39 fps</b>: 常驻顶栏/状态栏 blur 在空闲与滚动下均无衰减; 衰减只出现在大面板(blur 面盖住视口大半)开启期。归因: 本机 Playwright Chromium = <b>ANGLE SwiftShader 纯软渲染</b>(CDP SystemInfo: displayType ANGLE_SWIFTSHADER / VMware SVGA 3D, 无硬件 GPU), 且代价是结构性的 —— 面板 blur 降到 8/6px 仍 ~30fps、blur(0px) 仍 41.5(对照 backdrop-filter:none 63), 降半径无救, 是 backdrop-filter 每帧背景合成开销。真机硬件 GPU 下此开销通常由 GPU 合成消化, <b>弹窗/详情开启期帧率待用户真机浏览器复验</b>(若不可接受: 摘面板 blur 或同用户重议落点, 不在本轮自作主张)。</li>
+  <li>style.css 三处「backdrop-filter 0 处」旧注与 dialogs.css 头注同步作废改写。</li>
+</ul>
+<h4>V3 D4-6 checkbox 快勾落地(S4 选定、S6b 落空转落地)</h4>
+<ul>
+  <li><b>行选择真实交互(摸底结论)</b>: 普通点击只落光标/展开不选中(2026-09-17 口径), 选择 = Ctrl/Cmd+点击 toggle、Shift+点击区间、键盘路径; 全部路径最终落在 <code>.selected</code>(/.partial)状态类上。</li>
+  <li><b>实现口径 = S4 口径 B 案</b>(复用 .selected 状态做快勾视觉, 纯 CSS): 行首格 <code>::after</code> 画勾形(9x5 边框勾, rotate -45deg), 落行 padding 沟槽(D4-2 边条右邻, 同 --sel-bar 色); 类挂即播 <code>fx-check-pop</code> 180ms back-out 弹入(&lt;=200ms 约束), 取消选中即消失。RM: 勾标静态可见(状态语义非装饰), 动画不播。</li>
+  <li><b>载体选择</b>: 行本体 ::after 被 row_lang wave 扫层占用、::before 被 flat 左条与 D4-2 边条占用 —— 首格 ::after 全站空闲(grep 证); 勾形包含块是行(position:relative 皮肤自带), top:50% 按行高居中; .g-name 的 overflow:hidden 裁不到它(包含块在裁剪者之外)。fx-mount.js 程序化注入(S4 口径 A 案)评估后不取: 要么加 2 条 state.js watch + 节点生命周期管理, 要么碰 MutationObserver 禁令, 且键盘路径覆盖不全; B 案零 JS 零共享改动全路径覆盖。</li>
+  <li><b>partial(半选)不给勾</b>: 半选语义由 42% 边条表达, 勾形只表全选。已知边界: 行窗口化滚动重渲会重建节点, 选中行滚出再滚回勾形重播一次 pop(观感无害)。</li>
+</ul>
+<h4>V4 守阵与实测</h4>
+<ul>
+  <li><b>守阵</b>: 仅 <code>_scan_backdrop_filter</code> 改造(V2, 红绿双验); fx_wiring/split_wiring/token parity 等其余守阵零改动全绿; 文件帽: fx-mount.css 348 / components.css 673 / dialogs.css 562 / style.css 198, 距 700 行帽余量充分; flux shell(233 行)未动(零新挂行)。</li>
+  <li><b>Playwright 实测(桩 API 真服务 8137, 临时脚本不入库, 33/33 断言通过)</b>: V1 搜索框 computed radius=0px + focus 辉光 22px -6px 段在且无 3px 环; D5-2 三输入面 CSSOM 无 fx 柔环、hb-input 原版 var(--glow) 在档; 辉光盘点五项规则面断言(chip -2px/track 0 规则/进度条/sb-alt/按钮)。V2 四面 computed blur(12/12/14/14) + 遮罩 none。V3 Ctrl 单选出勾+动画名在播、取消消失、Shift 区间 3 行全勾、Esc 全消。RM: 勾标静态在、动画 none、blur 保留。console 对照: fx/mount/preset 全无、顶栏/状态栏无 blur、搜索框方角、选中行无快勾。三 context console/pageerror 全零; audit ok(total=0)。<b>接手复验(2026-11-01): 34/34 全过</b> —— 上列断言逐项重跑(新增: console CSSOM 无快勾规则), 结论一致; 前代理失联后半成品与实录数字经本轮独立复测背书。</li>
+  <li><b>帧率(有头, rAF 计帧 2s 采样; 接手复测修正, 详见上「嵌套 blur 口径」)</b>: 空闲 60-64 / 滚动期 60 / 弹窗开启期(嵌套 blur)32 / 详情面板开启期 39 fps —— 常驻顶栏/状态栏 blur 空闲/滚动无衰减; 大面板开启期衰减为本机 Playwright Chromium SwiftShader 软渲染结构性开销(blur(0px) 仍 41.5 vs none 63, 降半径无效), 真机硬件 GPU 待用户复验。</li>
+  <li><b>存量失败(前代理实录)已被远端修复</b>: 前代理净树复现同红 3 例(tests/test_modules_w9b_s5.py 两例规则任务断点协议 + test_qbmanager.py 一例连接恢复旗标, 随其 sync 的远端提交带入, 按范围守恒未入本轮修)<b>—— 接手复测时已不存在</b>: 本轮 sync 再带入的远端合流轮把这三条守阵重钉(守阵过紧判零上游回退, 见基线切片 26-11-01-2211), 收尾 <code>test.full 4797 passed, 10 skipped in 126.93s</code> 覆盖率 99% <b>全绿</b>(全量数字事实源=kb.baseline 最新切片, 此处为成文快照)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -494,6 +535,8 @@
   <li><span class="tag">R4 · 26-11-01-1101</span> S6 后半执行实录落档(见 §06「S6 执行实录(后半)」): S4 选定 24 项逐项挂进 flux(flux 专属 fx-mount.css 作用域 CSS + fx-mount.js 状态驱动程序化属性 + 6 个共享 JS ui 门控消费点, 共享模板结构与类名零改动) + 降级/落空清单(D4-6 落空/D5-3 降级/@starting-style 对运行时补属性不触发 → toast rise 落确定性 keyframes) + 守阵三处(shell 帽 227→233/link 序加 fx-mount.css/fx_wiring 扩挂载面与隔离反向) + 实测(test.full 4454 全绿 + Playwright 40/40: flux 全组生效/console 零泄漏/RM 降级/audit ok)</li>
   <li><span class="tag">R5 · 26-11-01-1138</span> S7 执行实录落档(见 §06「S7 执行实录」): P1 组件挂载按 S4 glass 基调推导 9 落 1 落空(dock 纯布局容器), flux 作用域 CSS 8 项 + 数字滚动走 state.js 两新门控 watch + fx-mount.js numRoll(360ms 轻量补间, 格式沿用节点现文本不与 fmt 口径分裂); REGISTRY/fx 三件/守阵/shell 零改动, fx-mount.css 新 keyframes 仅 2 条(fx-menu-in/fx-bar-flow)余全复用, 体量 305/307 行距帽余量 395/393; 帧率 rAF 计帧(有头): 空闲/数字滚动/行插退 64, toast VT 队列 54, danger glow 51(仅故意连触突发窗口, 稳态 60+); Playwright headless+有头各 31/31(flux 全生效/console 零泄漏/RM 降级/audit ok/报错全零); test.full 4454 全绿 116.22s 覆盖率 99%</li>
   <li><span class="tag">R6 · 26-11-01-2111</span> 精修轮 R1(F7a)执行实录落档(见 §06「精修轮 R1」): 真机四回归修复 —— B1 console 圆角(未复现, 三层排查, 新守阵 console_square_radius 白名单钉方角口径+红绿双验)/B2 D4-1 行板 hover gradient 让位 row_lang 单点(行板/首格悬停管线分家 25/255, 修后逐字相等)/B3 push 推出选中行(ensureFocusedVisible 终态几何解算: 滚动可行域优先+残余裁剪 push 量, 三路径实测钉住)/B4 push transform 载体劫持 fixed 菜单坐标系(dy=-464, 改 relative-top 覆盖, 修后 dx=dy=0); fx_wiring 扩 6a/6b/6c; 坑档 clip-path-clips-fixed 追加持久 transform 复发节; test.full 4455 全绿(新基线切片 26-11-01-2109)</li>
+  <li><span class="tag">R7 · 26-11-01-2225</span> 精修轮 R2(F7b)执行实录落档(见 §06「精修轮 R2」): 用户四项调整 —— V1 搜索框回退原版方角+原辉光(全站参考基准)/D5-2 focus-ring 退役/辉光盘点 9 面逐项处置(保留 6/降档 1: chip 负 spread 化/撤除 1: 开关 track hover 辉光/无辉光 1); V2 常驻浮层面真毛玻璃四处(顶栏/状态栏 blur(12px)+详情面板/弹窗面板 blur(14px), 遮罩仍禁)+守阵改 flux 显式档(_FLUX_BACKDROP_BUDGET=4, 三旧皮肤恒 0, 红绿双验)+帧率实测(空闲 60-64/滚动 60 无衰减; 弹窗开启 32/详情面板开启 39 —— 本机 SwiftShader 软渲染结构性开销, 真机硬件 GPU 待复验); V3 D4-6 checkbox 快勾落地(S4 口径 B 案: 复用 .selected 类做首格 ::after 勾形+fx-check-pop 180ms, 零 JS 全路径覆盖, RM 勾标静态在); fx 三件/共享模板/shell 零改动, 仅 flux 四件+毛玻璃守阵; Playwright 33/33 + 接手复验 34/34; test.full 4797 全绿(前代理实录的存量失败 3 例已随本轮 sync 远端提交的守阵重钉修复, 见切片 26-11-01-2211)</li>
+  <li><span class="tag">R8 · 26-11-01-2301</span> 接手复测修正(前代理 R2 失联收尾): 帧率实录改为复测归因口径(空闲 60-64/滚动 60 无衰减; 弹窗开启 32/详情面板开启 39 = SwiftShader 软渲染结构性开销, blur(0px) 仍 41.5 vs none 63, 降半径无效, 真机硬件 GPU 待用户复验); Playwright 补接手复验 34/34; 存量失败 3 例已随 sync 远端守阵重钉修复, test.full 4797 全绿; backdrop 守阵红绿双验独立复跑(flux 5 处红/modal-mask 红/atlas parity 红/还原绿)</li>
 </ul>
 
 </div>

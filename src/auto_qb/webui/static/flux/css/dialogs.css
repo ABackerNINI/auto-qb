@@ -1,6 +1,7 @@
 /* ==================== 种子详情面板(方案A 底部停靠, 计划 26-10-03-0917 W1) ====================
- * R1B 右缘抽屉重设计为停靠面板: 全宽贴列表容器、无遮罩、无 backdrop-filter —— 本皮肤唯一一处
- * 毛玻璃在此摘除, PERF-01 全站归零收尾(与 atlas/prism 成对改)。布局/落点/层级口径见
+ * R1B 右缘抽屉重设计为停靠面板: 全宽贴列表容器、无遮罩 —— 2026-10-03 曾在此摘除本皮肤唯一
+ * 一处毛玻璃(PERF-01 全站归零收尾); R2 精修(计划 26-10-31-2316 V2)改回: flux 常驻大型浮层
+ * 面挂静态 backdrop-filter(守阵 flux 显式档钉数), 遮罩/列表行仍禁。布局/落点/层级口径见
  * atlas/css/dialogs.css 头段注释, 三皮肤同构。 */
 /* 落点 2026-10-04 自种子视图上提为 app 级(shared/tpl/dock.html): qB 口径流量图(全局/分组)并入
  * 抽屉后需任意页可开; 左右内边距复刻原落点所在的 .layout/.ce-page 内边距(12px), 宽度不变 */
@@ -10,7 +11,8 @@
 .torrents-dock { display: flex; flex-direction: column; }
 .torrents-dock > .group-table { flex: 1 1 auto; min-height: 0; }
 .drawer { position: relative; display: flex; flex-direction: column; max-height: 42vh; overflow: hidden;
-  background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  background: var(--bg-card); backdrop-filter: blur(14px);
+  border: 1px solid var(--border-strong); border-radius: var(--radius);
   box-shadow: var(--shadow-3); }
 /* W3 高度治理: 内联 height/max-height(drawer.js drawerPanelStyle, 展开恒锁 —— 2026-10-18
  * 用户硬约束「高度绝不随内容自行调整」)覆盖这里的默认上限; 42vh 只作 JS 失效时的兜底 */

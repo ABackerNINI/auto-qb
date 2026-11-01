@@ -2,8 +2,9 @@
  *
  * 设计语言单点(plan 26-10-31-2316 S4 拍板: 主 preset = glass):
  *   柔和曲线(radius 三档 16/10/6, 大面切角 clip-path 退役改圆角) / 半透明层叠静态面(卡/行/浮层带 alpha,
- *   页底透出成"玻璃层"观感 —— 不用 backdrop-filter: PERF-01 禁遮罩/吸顶条毛玻璃, 且守阵钉各皮肤
- *   声明数对齐, flux 自有 CSS 保持 0 处) / 负 spread 发光配方沿用(--glow·--glow-soft) /
+ *   页底透出成"玻璃层"观感; R2 精修 V2 起常驻大型浮层面挂静态 backdrop-filter 真毛玻璃 ——
+ *   顶栏/状态栏/详情面板/弹窗面板恰 4 处, 遮罩与列表行仍禁, 守阵 flux 显式档钉数) /
+ *   负 spread 发光配方沿用(--glow·--glow-soft) /
  *   语义三档静息描边即语义色 / 数值·路径·列头一律 --font-mono / 状态指示统一分段 LED。
  * 令牌名集与三皮肤相等(守阵 test_frontend_skin_css_token_parity 收编 flux), 取值各写各的;
  * 类名与 DOM 结构受 JS 耦合(.group-head/.detail-head 供列宽拖拽、gridStyle 生成列数须与 rows 一致、
@@ -16,7 +17,7 @@
   --font-mono: "Cascadia Code", "Consolas", ui-monospace, monospace;
 
   /* 背景分层(glass): 页底不透明, 卡/行/悬浮走半透明层叠 —— 页底透出成"玻璃层"静态观感
-   * (不用 backdrop-filter: PERF-01 禁遮罩/吸顶条毛玻璃, 且守阵钉各皮肤声明数对齐, flux 保持 0 处) */
+   * (R2 精修 V2: 常驻大型浮层面另挂静态 backdrop-filter, 见头部注; 遮罩/行仍纯半透明) */
   --bg: #0b111b;
   --bg-card: rgba(24, 35, 52, .82);
   --bg-row: rgba(30, 43, 63, .62);
@@ -101,7 +102,7 @@
   --today-down: var(--teal);
   --today-ico: var(--lime);
 
-  /* 表面工程: 玻璃底色(顶栏, 半透明静态面 —— 不挂 backdrop-filter, PERF-01 吸顶条禁毛玻璃) / 极淡分隔线 */
+  /* 表面工程: 玻璃底色(顶栏, 半透明静态面; R2 精修 V2 起顶栏挂静态 blur, 见 components.css) / 极淡分隔线 */
   --glass: rgba(12, 20, 33, .78);
   --hairline: rgba(255, 255, 255, .06);
   /* 缺口斜纹底纹(2026-10-08): --hairline 仅用于 1px 发丝线, 当面积底纹用几乎不可见 ——

@@ -614,10 +614,16 @@ def _scan_page_class_wiring(problems):
 # 注: 抽屉遮罩 `.drawer-mask` 不在此列 —— 它是**当时唯一在用的**遮罩, 底下已无第二块毛玻璃,
 # 两套 UI 同款且棱镜侧实测无卡顿; 一并摘掉会单边改动棱镜外观, 超出本次范围(见 scope-guard)。
 _PERF_BACKDROP_BANNED = ("modal-mask", "topbar", "status-strip", "statusbar", "ce-actions")
+# R2 精修(计划 26-10-31-2316 §06, 2026-11-01): flux 显式档 —— 用户报"浮层半透明, 下层文字透出
+# 影响阅读", flux 的常驻大型浮层面(顶栏/状态栏/详情面板/弹窗面板)挂**静态** backdrop-filter
+# 真毛玻璃(无过渡; 弹窗遮罩与列表行仍不带)。四类旧禁类对 flux 放开, 但声明数钉死显式预算:
+# 多一处少一处都红, 防"顺手再挂一块"重演嵌套模糊(弹窗面板 blur 会叠在顶栏/状态栏 blur 之上,
+# 这是**有意接受的小面积嵌套** —— 遮罩级全屏 blur 不回来, 帧率实测背书, 见计划档案 R2 实录)。
+_FLUX_BACKDROP_BUDGET = 4
 
 
 def _scan_backdrop_filter(problems):
-    """毛玻璃守阵: 全屏遮罩 / 吸顶吸底条不得带 backdrop-filter, 且星图与棱镜的数量必须对齐
+    """毛玻璃守阵: 全屏遮罩 / 吸顶吸底条不得带 backdrop-filter, 三旧皮肤声明数对齐, flux 显式档
 
     现象(2026-09-24, 用户报"星图卡顿, 点状态栏历史流量尤其明显; 棱镜无此问题"):
     星图 atlas/style.css 一度挂了 5 处 backdrop-filter —— 顶栏 blur(12px) / 状态分布条 blur(10px) /
@@ -628,9 +634,12 @@ def _scan_backdrop_filter(problems):
     所以无此症状。
 
     两层断言(缺一不可):
-    1.**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS);
-    2.**数量**: 各套 UI 自己的声明数必须相等 —— 防"只在某一侧加回来"这类单边改动
-      (shared/console_hub.css 是共用层, 各边同担, 不计入各自计数)。
+    1.**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS) --
+      flux 例外四类(topbar/status-strip/statusbar/ce-actions)按 R2 显式档放开, modal-mask 对
+      flux 也仍禁(遮罩级全屏 blur 是 PERF-01 根因本体, 任何皮肤不回来);
+    2.**数量**: 三旧皮肤(atlas/prism/console)声明数必须相等且为 0 —— 防"只在某一侧加回来"
+      这类单边改动(shared/console_hub.css 是共用层, 各边同担, 不计入各自计数); flux 走显式档,
+      声明数必须恰等于 _FLUX_BACKDROP_BUDGET(加/摘毛玻璃 = 显式改预算 + 红绿双验)。
     扫描前先剥 `/* ... */`, 否则本文件里解释这段历史的注释会被当成真实声明(实测会误报)。
     """
     counts = {ui: 0 for ui in _UI_ALL}
@@ -651,6 +660,8 @@ def _scan_backdrop_filter(problems):
                             counts[ui] += 1
                     for bad in _PERF_BACKDROP_BANNED:
                         if re.search(r"\.%s\b" % re.escape(bad), sel):
+                            if rel.startswith("flux/") and bad != "modal-mask":
+                                continue  # R2 显式档: flux 四类常驻浮层面明示放开(静态 blur), 遮罩仍禁
                             problems.append(
                                 f"{rel} `{sel or '(未识别选择器)'}` 上出现 backdrop-filter —— "
                                 f"{bad} 是全屏遮罩或常驻吸顶/吸底条, 加毛玻璃会与弹层遮罩叠成嵌套模糊"
@@ -658,11 +669,18 @@ def _scan_backdrop_filter(problems):
                             )
                 if "}" in line:
                     sel = ""
-    if len(set(counts.values())) != 1:
+    non_flux = {ui: n for ui, n in counts.items() if ui != "flux"}
+    if len(set(non_flux.values())) != 1:
         problems.append(
-            f"各套 UI 的 backdrop-filter 声明数不对齐: "
-            f"{' / '.join(f'{ui} {n} 处' for ui, n in counts.items())} —— "
+            f"三旧皮肤的 backdrop-filter 声明数不对齐: "
+            f"{' / '.join(f'{ui} {n} 处' for ui, n in non_flux.items())} —— "
             f"单边加毛玻璃会重新引入嵌套模糊卡顿(遮罩类从不带 backdrop-filter, 见 PERF-01)"
+        )
+    if counts["flux"] != _FLUX_BACKDROP_BUDGET:
+        problems.append(
+            f"flux 的 backdrop-filter 声明数 = {counts['flux']}(显式档恰 {_FLUX_BACKDROP_BUDGET} 处: "
+            f"顶栏/状态栏/详情面板/弹窗面板各一) —— R2 精修 V2 口径: flux 加/摘毛玻璃必须显式改本预算"
+            f"并红绿双验, 防『顺手再挂一块』重演嵌套模糊(遮罩级全屏 blur 任何皮肤不回来, 见 PERF-01)"
         )
 
 
@@ -1636,7 +1654,8 @@ def _scan_frontend_assets():
        只是"缺发光"; 真浏览器量 computedStyle 才看得出来)。
        (见 _scan_page_class_wiring)
 
-    13. 毛玻璃(backdrop-filter)不得挂在全屏遮罩 / 吸顶吸底条上, 且星图与棱镜的声明数必须相等
+    13. 毛玻璃(backdrop-filter)不得挂在全屏遮罩 / 吸顶吸底条上, 三旧皮肤声明数相等(恒 0),
+       flux 走显式档恰 4 处(顶栏/状态栏/详情面板/弹窗面板, R2 精修 V2; 遮罩对 flux 也禁)
        (见 _scan_backdrop_filter) —— 嵌套毛玻璃会让"点状态栏历史流量"这类开弹层的动作明显卡顿,
        且**只在星图侧复现**(棱镜 .modal-mask 从不带 backdrop-filter), 属于"两边都能跑、一边更卡"
        的差异, 肉眼走查看不出来, 只能靠计数兜底。
