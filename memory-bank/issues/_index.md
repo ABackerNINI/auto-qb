@@ -22,7 +22,7 @@
 | bug | 12 |
 | perf | 6 |
 | docs | 2 |
-| test | 26 |
+| test | 27 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [core/ W9a grouping+ops 变异真洞余量 260 条批量判读留档(grouping 68 + ops 192, 低危文案/日志/窄触发面为主 + 极低 4), 不排期](26-11-01-1711-test-core-w9a-mutation-low-residue.html) — W9a(R33) S5a…
 - [test] [core/ W8 relocate 平台盲区与等价翻案落账: mod st_reparse_tag 簇 4 条留池, units 平台盲区 9 条 Windows 守阵已钉, 翻案 6 条+w5 死代码改判](26-11-01-1357-test-core-w8-relocate-mutation-blindspot-equivalence.html) — units 平台盲区 9…
 - [test] [core/ W8 relocate 两文件变异真洞余量 461 条批量判读留档(低 397/极低 46/中危 18=未逐验 10+注记 8), 不排期](26-11-01-1357-test-core-w8-relocate-mutation-low-residue.html) — W8(R32) S5/S…
 - [test] [core W7(R31) no-tests 面: agent._run_foreground 18 条变异池内无直接触达](26-11-01-0953-test-core-w7-mutation-run-foreground-notests.html) — agent.py _ru…
