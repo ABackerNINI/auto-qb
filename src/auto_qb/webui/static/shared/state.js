@@ -600,7 +600,23 @@ window.AQB_STATE = {
       // fx(S6 后半, plan 26-10-31-2316): 面板 push-content 的消费点(flux 专属,
       // flux/fx-mount.js::dock) —— 开/合与切页回来的唯一出入门口, 早于下方既有
       // 早退分支(本钩子对每次可见性翻转都要跑到)
-      if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.dock(v);
+      if (this.ui === "flux" && window.AQB_FX_MOUNT) {
+        window.AQB_FX_MOUNT.dock(v, () => {
+          // fx 落定回执(R3 精修 F7d, F7c 裁决项 b): push 过渡落定后几何已是推后,
+          // 原版让位三点(open/afterEnter/_drawerDone)都在推前跑、按推前几何算出的
+          // 让位量被 push 位移抵消, 聚焦行终位会落到吸顶头之后 —— 此刻重入原版
+          // 可视区单点把行算回可见带(顶: 吸顶列头下 8px / 底: 面板顶缘上 8px, 两界
+          // 公式与键盘跟随同源)。几何与滚动全在原版单点, 这里只做重入 + 触发形态
+          // 守卫(照 drawer_store.js:398 双守卫 + drawer.js:1277 种子形态门): 面板
+          // 已关/流量形态/行不在链上都不滚。flux 门控 = 外层 ui 判断(dock 只在
+          // flux 消费), 其它皮肤零重入。
+          if (!this.drawer.open || !this.drawerIsSeed) return;
+          const h = this.drawer.hash;
+          const rows = this._kbRows();
+          const idx = rows.findIndex((r) => r.kind === "torrent" && r.id === h);
+          if (idx >= 0) this._kbScrollRowIntoView(rows, idx);
+        });
+      }
       const s = this.qbCurScope;
       if (!s) {
         if (v) this.$nextTick(() => this._dtSync());  // 进场补挂: 等 aside 补进 DOM 再定位宿主(经典档空转)

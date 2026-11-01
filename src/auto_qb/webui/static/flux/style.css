@@ -1,7 +1,7 @@
 /* auto-qb WEB UI · flux 皮肤(glass 层叠玻璃语言; 第四套皮肤, fork 自 console, 与 atlas/prism/console 并列)
  *
  * 设计语言单点(plan 26-10-31-2316 S4 拍板: 主 preset = glass):
- *   柔和曲线(radius 三档 16/10/6, 大面切角 clip-path 退役改圆角) / 半透明层叠静态面(卡/行/浮层带 alpha,
+ *   方角形状(R3 精修 T1: radius 三档回退 console 原版 0px, 大面切角按类恢复) + 半透明层叠静态面(卡/行/浮层带 alpha,
  *   页底透出成"玻璃层"观感; R2 精修 V2 起常驻大型浮层面挂静态 backdrop-filter 真毛玻璃 ——
  *   顶栏/状态栏/详情面板/弹窗面板恰 4 处, 遮罩与列表行仍禁, 守阵 flux 显式档钉数) /
  *   负 spread 发光配方沿用(--glow·--glow-soft) /
@@ -117,10 +117,12 @@
   --sel-line: rgba(139, 147, 248, .45);
   --sel-bar: #8b93f8;
 
-  /* 几何/阴影/动效: 柔和曲线 = 三档圆角令牌走玻璃圆角(大面 16 / 控件 10 / 小件 6) */
-  --radius-lg: 16px;
-  --radius: 10px;
-  --radius-sm: 6px;
+  /* 几何/阴影/动效: 三档圆角令牌回退 console 原版方角(R3 精修 T1: S5「柔和曲线 16/10/6」改写
+   * 退役 —— 令牌取值是共享 CSS(row_lang/console_hub 等)形状消费的单点, 归零 = 详情模板/弹窗/
+   * 浮层/徽章全族与 console computed 形状逐位一致; 玻璃半透明/blur 等取值改动不受影响) */
+  --radius-lg: 0px;
+  --radius: 0px;
+  --radius-sm: 0px;
   /* ---- 弹窗尺寸族: 与 atlas/prism 同族同值(03=860 宽档 / 04=920 宽档) ---- */
   --modal-w-narrow: 460px;
   --modal-w-base: 520px;

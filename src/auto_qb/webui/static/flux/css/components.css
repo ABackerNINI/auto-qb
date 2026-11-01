@@ -315,10 +315,10 @@
 .group-row .g-stat.tone-high { color: var(--accent-hi); }
 .risk-mark { color: var(--warn); cursor: help; }
 .g-sites { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-/* 站点 chip: 4px 圆角小签(glass 柔和曲线下放一级), 柔底 + 同族字色 */
+/* 站点 chip: 3px 微切角小签(R3 精修 T1: 形状回退 console 原版 clip-path 切角; 柔底等取值保留), 柔底 + 同族字色 */
 .site-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
   background: var(--surface-2); color: var(--fg-muted); font: 500 11px/1.6 var(--font-mono); white-space: nowrap;
-  border-radius: 4px;
+  clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px);
   transition: background var(--dur) var(--ease); }
 .site-chip.seeding { background: var(--green-soft); color: var(--green); }
 .site-chip.downloading, .site-chip.checking { background: var(--blue-soft); color: var(--blue); }
@@ -360,7 +360,7 @@
 /* 挂件点击即筛选(2026-09-29): 与 atlas/views.css 同口径 —— 站点/标签/分类胶囊与路径、
  * 明细站点单元格可点, 点击 = 切换顶栏筛选弹层里的对应值; f-on = 该值已在筛选中,
  * 强调一律用**笔直横线**(currentColor 底线; 绝对定位 ::after 画直线而非 inset box-shadow ——
- * box-shadow 会沿 border-radius 画成弧; flux 的 chip 底线沿用 ::after 直线方案, 圆角只轻裁线端)。
+ * box-shadow 会沿 border-radius 画成弧; 本皮肤 site-chip 有 clip-path 切角, ::after 一并被它裁)。
  * 胶囊与文本格已统一为同一条 2px 底线)。 */
 .site-chip, .tag-chip, .cat-chip { cursor: pointer;
   transition: background var(--dur) var(--ease), filter var(--dur-fast) var(--ease),
@@ -494,7 +494,9 @@
   padding: 20px; background: rgba(4, 10, 22, .72); animation: fade-in .14s var(--ease);
   overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防弹窗滚轮穿透背景 */
 @keyframes fade-in { from { opacity: 0; } }
-.modal-mask .modal { border-radius: var(--radius-lg); }
+/* R3 精修 T1: 弹窗形状回退 console 原版切角 14px(毛玻璃 blur 等取值保留) */
+.modal-mask .modal { --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0,
+  100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut)); }
 .modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px;
   background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-card);
   backdrop-filter: blur(14px); /* V2 精修: 弹窗面板(非遮罩)静态毛玻璃 -- 遮罩仍不带(见上注) */

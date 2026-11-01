@@ -53,7 +53,7 @@
     });
   }
 
-  /* ---- 底部详情面板 push-content(D3-4, transform 版) ----
+  /* ---- 底部详情面板 push-content(D3-4, transform 版; R3 精修 F7c 改纯过渡) ----
    * 消费点 = state.js watch.drawerVisible(开/合与切页回来的唯一出入门口)。
    * fx push 原语契约: 消费方写 data-fx-pushed + 作用域 --fx-push-y(让位量)。
    * push 载体 = main.content(主表内容区, 面板吸底遮住的就是它); 让位量 =
@@ -62,10 +62,29 @@
    * 让位瞬时到位(状态本身保留, 不是装饰动画)。
    * R1 精修(B4): 载体位移由 transform 改 relative top(fx-mount.css push 段) --
    * transform 会把 main.content 变成 fixed 后代(.ctx-menu 族)的包含块, 面板开着时
-   * 右键菜单坐标整段偏移; relative top 不创建包含块, 消费方写法不变。 */
+   * 右键菜单坐标整段偏移; relative top 不创建包含块, 消费方写法不变。
+   * R3 精修(F7c): push 只保留为**纯过渡动效**(top 位移的平滑), 滚动结果完全交还
+   * 原版逻辑 -- 聚焦/选中行的可视区让位由 shared/shortcuts.js::_kbRevealRow 单点
+   * 承担(console 原版开面板路径同款: 行底推至面板顶缘上方, 不被窗口遮挡的最低
+   * 位置), flux 不再做自己的滚动干预/(push 量裁剪)(R1 B3 的可视区回拉/短窗循环
+   * 两机构整体退役, 用户拍板否掉自定义方案; 守阵 6c 反向钉三符号不在档)。
+   * R3 精修(F7d, F7c 裁决项 b 落地): 原版让位的触发三点(drawer.js open $nextTick /
+   * afterEnter 钩子 / drawer_store._drawerDone)都在 push 过渡**结束前**跑, 按推前
+   * 几何算出的让位量被随后的 push 位移整体上移抵消 -- 聚焦行终位落到吸顶头之后
+   * (实测 21.9 < 头区 98)。本文件在 push 过渡**落定后**发一次回执(dock 第二参),
+   * 共享侧消费点(state.js drawerVisible watch 注册的回调)据此重入原版可视区单点
+   * 把聚焦行算回可见带 -- 本文件只发信号, 不做任何几何解算/滚动(6c 单点纪律)。
+   * 落定信号双路: top 过渡的 transitionend 为主; 兜底定时器 = 计算样式的过渡时长
+   * +100ms(RM 过渡归零不派 transitionend / 后台标签页丢事件)。回执只在
+   * data-fx-pushed 在场时发 -- 关面板 push 回 0 的过渡结束不发(关闭不需要让位)。
+   * 连续 applyPush(入场追高 RO 连触 / 拖 grip)会重写 --fx-push-y 重启过渡, 兜底
+   * 定时器随每次写入重臂 = 恒以"最后一次位移 + 过渡时长"为落定点, 幂等无害。 */
   var ro = null;
   var pushedEl = null;
-  function dock(open) {
+  var settleCb = null;
+  var settleTimer = 0;
+  function dock(open, onSettled) {
+    if (onSettled) settleCb = onSettled;
     var el = document.querySelector("main.content");
     if (!el) return;
     if (el !== pushedEl) {
@@ -75,9 +94,7 @@
     if (open) applyPush();
     else {
       pushedEl.removeAttribute("data-fx-pushed");
-      /* 关面板回落(R1 精修 B3): 内容滑回后选中/聚焦行同样回拉 -- 回落也是过渡位移
-       * (top 过渡), 量终态几何要走短窗循环(见 scheduleReveal), 单帧量到的是旧几何。 */
-      scheduleReveal();
+      if (settleTimer) { clearTimeout(settleTimer); settleTimer = 0; } /* 关面板不再发落定回执 */
     }
     if (!ro && window.ResizeObserver) {
       ro = new ResizeObserver(applyPush);
@@ -91,111 +108,34 @@
     var dk = document.querySelector(".drawer-dock");
     var h = dk ? dk.offsetHeight : 0;
     if (h > 0) {
+      /* 让位量恒 = 面板全高(不裁剪): 开面板/拖 grip(RO 连触)只更新过渡的位移量,
+       * 行的可视区让位不在这里做 -- 单点在 _kbRevealRow(原版滚动逻辑)。 */
       pushedEl.style.setProperty("--fx-push-y", h + "px");
       pushedEl.setAttribute("data-fx-pushed", "");
-      /* 开面板/拖 grip(R1 精修 B3): 上推把先前可见的选中/聚焦行推出视野(上缘越顶
-       * 或下缘没入面板)。回拉 = 滚动补差(有余量时)+ 滚动不可达的残余按可视区**裁剪
-       * push 量**(上缘越顶减 push / 下缘没入面板加 push, 见 ensureFocusedVisible)。
-       * 上推走 top 过渡(--fx-dur-panel), 逐帧位移会抵消单次回拉 -- 走短窗 rAF 循环
-       * 量到几何落定为止; 拖 grip 时 RO 连续触发持续续窗, 全程钉在可视区; 行可见时
-       * 回拉是 no-op。 */
-      ensureFocusedVisible(h);
-      scheduleReveal();
+      armSettle();
     } else {
       pushedEl.removeAttribute("data-fx-pushed");
     }
   }
-  /* 回拉短窗: 每帧量一次可视区, 窗口覆盖 push top 过渡全程(--fx-dur-panel 320ms 档,
-   * 取 420ms 余量); 窗内新触发(拖 grip/再开合)即续窗, 收敛即停, 不留常驻循环。 */
-  var REVEAL_WINDOW_MS = 420;
-  var revealRaf = 0;
-  var revealUntil = 0;
-  function scheduleReveal() {
-    revealUntil = performance.now() + REVEAL_WINDOW_MS;
-    if (revealRaf) return;
-    revealRaf = requestAnimationFrame(function loop() {
-      var dk = document.querySelector(".drawer-dock");
-      ensureFocusedVisible(dk ? dk.offsetHeight : 0);
-      if (performance.now() < revealUntil) {
-        revealRaf = requestAnimationFrame(loop);
-      } else {
-        revealRaf = 0;
-      }
-    });
+  /* push 落定回执(F7d): 重臂式兜底定时器 + transitionend 单发, 双路都过
+   * data-fx-pushed 在场守卫(关闭路径的过渡结束不发)。 */
+  function armSettle() {
+    if (!settleCb) return;
+    var d = parseFloat(getComputedStyle(pushedEl).transitionDuration);
+    var ms = isFinite(d) && d >= 0 ? d * 1000 : 400;
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = setTimeout(fireSettle, ms + 100);
   }
-  /* ---- 选中/聚焦行可视区回拉(B3) ----
-   * 目标行 = 选中行(三视图行类通吃)优先, 无选中回落 document.activeElement 所在行
-   * (键盘聚焦也是「聚焦」语义)。可视区下缘 = 面板开着时取面板顶(行没入面板同样算
-   * 不可见), 上缘 = sticky 头下缘(行滑到吸顶头下面同样被盖住)。解算在终态几何下
-   * 一次完成(ensureFocusedVisible): 满推时滚动有可行域就滚到最近可行点, 滚动救不
-   * 回(行贴文档顶 / 行在文档深处)的残余改 push 量 —— 上头减 push(内容落回来)、
-   * 下头加 push(把行从面板后面提上来)。滚动容器 = window(页面唯一纵向滚动容器);
-   * RO 观察的是 dock 高, 改 --fx-push-y 不回环。 */
-  function focusedRow() {
-    var el = document.querySelector(
-      ".torrent-row.selected, .group-row.selected, .member-row.selected, .show-row.selected, .ep-row.selected");
-    if (!el) {
-      var ae = document.activeElement;
-      el = ae && ae.closest
-        ? ae.closest(".torrent-row, .group-row, .member-row, .show-row, .ep-row")
-        : null;
-    }
-    return el;
+  function fireSettle() {
+    if (settleTimer) { clearTimeout(settleTimer); settleTimer = 0; }
+    if (!settleCb || !pushedEl || !pushedEl.hasAttribute("data-fx-pushed")) return;
+    settleCb();
   }
-  function ensureFocusedVisible(h) {
-    if (!pushedEl) return;
-    var el = focusedRow();
-    if (!el || !el.getBoundingClientRect) return;
-    var r = el.getBoundingClientRect();
-    if (!r.height) return;
-    /* 可视区上缘 = sticky 头下缘(行滑到吸顶头下面同样被盖住); 下缘 = 面板开着时取
-     * 面板顶(行没入面板同样算不可见)。 */
-    var headB = 0;
-    var head = document.querySelector(".sticky-head");
-    if (head) {
-      var hb = head.getBoundingClientRect();
-      if (hb.bottom > 0) headB = hb.bottom;
-    }
-    var drawerTop = window.innerHeight;
-    var dockH = h || 0;
-    var dk = document.querySelector(".drawer-dock");
-    if (dk) {
-      var db = dk.getBoundingClientRect();
-      if (db.height > 0 && db.top > 0) {
-        drawerTop = db.top;
-        if (!dockH) dockH = db.height;
-      }
-    }
-    if (!dockH) return; /* 面板没开: 无 push 语境, 不动作 */
-    /* 终态几何解算(关键: push 走 top 过渡, 实时 rect 是动画中间帧, 拿它解算会被
-     * 后续位移抵消 —— 换算到**文档坐标 + 目标 push**一次性解, 对过渡幂等):
-     * 行文档顶 rowDocTop = rect.top + scrollY + 当前 push(当前 animated top = -push);
-     * 满 push(dockH)下行落在 [headB, drawerTop - rowH] 需要 scrollY ∈
-     * [rowDocTop - dockH - drawerTop + rowH, rowDocTop - dockH - headB]。
-     * 区间可行 -> 滚到最近可行点, push 保持满额; 不可行只有两头 --
-     * 上头(S 上界 < 0, 行贴文档顶, 满推也越顶)-> 减 push(P* = rowDocTop - headB);
-     * 下头(S 下界 > maxScroll, 行在文档深处, 满推 + 滚到底仍没入面板)-> 加 push。 */
-    var curPush = -(parseFloat(getComputedStyle(pushedEl).top) || 0);
-    var rowDocTop = r.top + window.scrollY + curPush;
-    var rowH = r.height;
-    var maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-    var sLo = rowDocTop - dockH - drawerTop + rowH;
-    var sHi = rowDocTop - dockH - headB;
-    if (sHi < 0) {
-      /* 行贴文档顶: 满推 + scroll=0 也越顶 —— 先把 scroll 归零(该行唯一能拉下来的
-       * 自由度, P* 按 S=0 解), 再减 push 让行上缘正好回到头下缘。 */
-      if (window.scrollY > 0) window.scrollTo(0, 0);
-      pushedEl.style.setProperty("--fx-push-y", Math.max(0, Math.round(rowDocTop - headB)) + "px");
-    } else if (sLo > maxScroll) {
-      /* 行在文档深处: 满推 + 滚到底仍没入面板 —— 滚到底后加 push 把行提上来。 */
-      if (window.scrollY < maxScroll) window.scrollTo(0, maxScroll);
-      pushedEl.style.setProperty("--fx-push-y", Math.round(rowDocTop - maxScroll - drawerTop + rowH) + "px");
-    } else {
-      pushedEl.style.setProperty("--fx-push-y", Math.round(dockH) + "px");
-      var sTarget = Math.min(Math.max(window.scrollY, Math.max(0, sLo)), Math.min(maxScroll, sHi));
-      if (Math.abs(sTarget - window.scrollY) >= 1) window.scrollTo(0, Math.round(sTarget));
-    }
-  }
+  document.addEventListener("transitionend", function (ev) {
+    if (!settleCb || !pushedEl) return;
+    if (ev.target !== pushedEl || ev.propertyName !== "top") return;
+    fireSettle();
+  }, true);
 
   /* ---- 行插入/退场(D4-4L / D4-5L, max-height 版) ----
    * 数据差分驱动: 消费点 = state.js watch.torrents / watch.groups(watch 默认 flush
@@ -410,6 +350,5 @@
     toastDrop: toastDrop,
     loginShake: loginShake,
     numRoll: numRoll,
-    revealFocusedRow: ensureFocusedVisible, /* B3 回拉单点(滚动补差 + push 裁剪), 供验证/排障直调 */
   };
 })();

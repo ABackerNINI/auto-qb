@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-2301">
+<meta name="doc-updated" content="26-11-02-0056">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-2301 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-02-0056 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -514,6 +514,60 @@
   <li><b>存量失败(前代理实录)已被远端修复</b>: 前代理净树复现同红 3 例(tests/test_modules_w9b_s5.py 两例规则任务断点协议 + test_qbmanager.py 一例连接恢复旗标, 随其 sync 的远端提交带入, 按范围守恒未入本轮修)<b>—— 接手复测时已不存在</b>: 本轮 sync 再带入的远端合流轮把这三条守阵重钉(守阵过紧判零上游回退, 见基线切片 26-11-01-2211), 收尾 <code>test.full 4797 passed, 10 skipped in 126.93s</code> 覆盖率 99% <b>全绿</b>(全量数字事实源=kb.baseline 最新切片, 此处为成文快照)。</li>
 </ul>
 
+<h3>精修轮 R3(F7c, 26-11-01/02): 用户复验后两项指令 —— 残余圆角回退 + push 回原版滚动逻辑</h3>
+<p>用户复验 R1/R2 后两项新指令: T1 按六类清单把 S5 形状改写回退成 console 原版形状(颜色/玻璃半透明等取值保留); T2 否掉 F7a 自定义方案, push 改回「原版滚动逻辑 + 纯过渡动效」。三旧皮肤 / console / showcase / 共享模板 / config.yml / auto-qb-data 零改动(git status 证实: 仅 <code>flux/style.css</code> + <code>flux/css/components.css</code> + <code>flux/css/dialogs.css</code> + <code>flux/fx-mount.js</code> + <code>tests/test_webui_static_skins.py</code> + 本档案)。</p>
+<h4>T1 残余圆角回退(diff flux vs console 三件 + 令牌消费面盘点)</h4>
+<p>形状差异有两个来源: ①皮肤 CSS 逐条 diff(S5 把 console 的 clip-path 切角换成圆角); ②<b>令牌取值改写(--radius 三档 0 → 16/10/6)</b> —— 共享 CSS(console_hub.css 21 处 / row_lang.css 2 处消费 var(--radius*))在 flux 下被隐性改圆, 而共享文件不可动, 令牌取值是唯一 flux 侧杠杆。故回退分两层: <b>令牌归零</b>(style.css 三档回 0px, 覆盖全部共享 CSS 消费面) + <b>四处 clip-path 逐字恢复</b>(皮肤 CSS 内 S5 换写的切角件)。</p>
+<table>
+  <tr><th>元素(用户清单六类)</th><th>S5 改动</th><th>回退后形状</th><th>处置</th></tr>
+  <tr><td>1. 站点徽章 .site-chip</td><td>clip-path 3px 切角 → border-radius 4px</td><td>clip-path 3px 切角(逐字恢复)</td><td><b>回退</b></td></tr>
+  <tr><td>2. 种子详情面板 .drawer</td><td>表达式未动, 令牌 0→10px 计算值变圆</td><td>0px 方角(令牌归零; blur 保留)</td><td><b>回退</b>(令牌层)</td></tr>
+  <tr><td>3a. 详情模板皮肤面: .f-cell(明细站点格)/.drawer-body .group-head/.speed-pop .pop-grp/.grp-live/.sb-alt</td><td>同上, var(--radius*) 令牌计算值 0→6/10px</td><td>0px 方角(令牌归零; 表达式与 console 逐字相同)</td><td><b>回退</b>(令牌层)</td></tr>
+  <tr><td>3b. 详情模板共享面: console_hub.css 21 处 + row_lang.css 2 处(hb-cond-k/hb-branch/err-panel/ctx-custom-*/rowlang-menu 等)</td><td>共享 CSS 消费 var(--radius*), 令牌改写波及</td><td>0px 方角(令牌归零)</td><td><b>回退</b>(令牌层)</td></tr>
+  <tr><td>3c. 详情模板 999px 胶囊(.hr-pres/.hr-hres/.sb-err-badge/.dt01-bar 等)</td><td>S5 未动(console 原生胶囊)</td><td>999px 逐位不变</td><td><b>保留</b>(用户点名保留)</td></tr>
+  <tr><td>4a. 弹窗 .modal(添加/删除等全部弹窗面板)</td><td>clip-path 14px 切角 → radius-lg</td><td>clip-path 14px 切角(逐字恢复; blur(14px) 保留)</td><td><b>回退</b></td></tr>
+  <tr><td>4b. 拖放落点 .add-drop-box(删除种子窗族)</td><td>同上</td><td>clip-path 14px 切角(逐字恢复)</td><td><b>回退</b></td></tr>
+  <tr><td>5. 任务栏通知徽章 .sb-err-badge</td><td>S5 未动形状(console 原生 999px 胶囊, flux 侧 fx-mount.css 只挂 spring 动画)</td><td>999px 逐位不变</td><td><b>保留</b>(console 原生胶囊)</td></tr>
+  <tr><td>6. 主备速度切换 .speed-pop 面板 + .sb-alt 图标</td><td>speed-pop: clip 14px → radius 10px; sb-alt: 令牌波及</td><td>speed-pop clip 14px 逐字恢复; sb-alt 0px(令牌层)</td><td><b>回退</b></td></tr>
+  <tr><td>清单外·主结构面(按钮/.topbar .ver/输入容器等令牌消费者)</td><td>令牌波及(计算值 16/10/6)</td><td>0px(随令牌归零一并变方)</td><td><b>随令牌归零, 列待裁决</b>(用户未点名; 令牌是共享面单点, 无法只回点名子集)</td></tr>
+  <tr><td>清单外·登录面 .login-card/.brand-mark</td><td>clip 14/8px 切角 → radius-lg/8px</td><td>0px 方角(令牌归零) —— 与 console 的切角形状仍有别</td><td><b>待裁决</b>(用户未点名; 是否也逐字恢复切角待拍板)</td></tr>
+</table>
+<h4>T2 push 回原版滚动逻辑(F7a 退役)</h4>
+<ul>
+  <li><b>原版逻辑落点(Playwright + 源码双证)</b>: shared/shortcuts.js::_kbRevealRow(743 行)单点 —— 行底 <code>scrollBy</code> 至面板顶缘上方 8px(console 原版开面板已有: 「被点行要露出来」2026-10-03 报障修); 触发三点 = drawer.js:1046(openTorrentDrawer 显式开, $nextTick)/drawer.js:1277(afterEnterHook 槽位落定补发)/drawer_store.js:398(_drawerDone 落定补让位); 让位下界 = _kbViewBottom 消费 _drawerAnimTop(enter 插值期登记的<b>落定</b>顶缘)。实测 console: 行 486.9 → scroll 87px → 399.9(= 面板顶 488 上方, 不被遮挡的最低位置)。</li>
+  <li><b>回退面</b>: fx-mount.js 删 <code>ensureFocusedVisible</code>(终态几何解算+滚动补差+push 量裁剪)/<code>focusedRow</code>/<code>scheduleReveal</code>(420ms 短窗 rAF 循环)/REVEAL 窗口三量/<code>revealFocusedRow</code> 导出, dock()/applyPush() 回 S6b 原形(与 ad58472d 版逐字一致, 仅注释差) —— push 本体 = 全幅让位 stamp(--fx-push-y = dock 实时高, RO 跟幅)+ relative-top 载体(B4 修保留)+ top 过渡, <b>纯过渡动效, 滚动结果完全交还 _kbRevealRow</b>。state.js 六个 ui 门控 watch 盘点: 仅 dock 涉 push(保留), 其余(tabDir/rows/numRoll)不涉滚动, 零回退面。</li>
+  <li><b>实测数字(桩 8137, 双皮肤同数据同操作: 进种子页 dblclick 第 6 行开面板, 1440x900)</b>: 让位滚动 flux 87px == console 87px(原版逻辑行为逐位一致); 行终位 flux 21.9 = console 399.9 − push 378(恒定偏移); push 过渡 6 中间帧单调推进(-2→-13→-43→-83→-180→-305→-378)平滑非跳变; RM 降级: 让位瞬时到位(top=-378=dockH)且让位滚动与 console-RM 一致(103px/103px); 面板几何两皮肤同(dockH 378); audit ok(total=1 = main.content data-fx="push" 已扫挂)/pageerror 全零。<b>已知既定后果(待用户裁决)</b>: flux 下 push(-378) 与原版让位滚动(+87, 按推前面板坐标解算)叠加, 聚焦行终位落在吸顶头后(21.9 &lt; headB 98) —— 即 R1 B3 曾报的「push 推走选中行」在字面回退下复现(截图证实); 三条候选出路(重跑一次原版 reveal 于落定后 / flux 下抑制 reveal 初发 / 接受现状)均触用户约束, 未擅动, 见汇报。</li>
+</ul>
+<h4>守阵与实测</h4>
+<ul>
+  <li><b>守阵</b>: fx_wiring 6c 改<b>反向钉</b>(ensureFocusedVisible/scheduleReveal/revealFocusedRow 三符号在 fx-mount.js 出现即红 + --fx-push-y 在档钉纯过渡本体); 文件头测试计划同步。红绿双验: 绿(当前树 3 passed)+红(临时注回符号 1 failed)+复绿。console 方角守阵 test_frontend_console_square_radius 不辖 flux(白名单只钉 console+四共享面), docstring 过时表述(flux 圆角三档)同步改写。</li>
+  <li><b>实测</b>: test.quick 4797 passed, 10 skipped(31.54s) → test.full 见 kb.baseline 最新切片; 文件行数: fx-mount.js 415→317 / components.css 673→675 / dialogs.css 562→565(帽 700 内); Playwright T1 形状 19 选择器 computed 对照逐位一致(除两项有意 HOLD, 见上表), T2 行为断言 8/8。</li>
+</ul>
+
+<h3>精修轮 R4(F7d, 26-11-02): push 落定后重入原版让位 —— F7c 裁决项 b 落地</h3>
+<p>R3 存档的「已知既定后果」用户拍板走候选一(重跑一次原版 reveal 于落定后)。修法与验证数字:</p>
+<h4>修法(落定回执链路, 两处落点)</h4>
+<ul>
+  <li><b>信号侧(flux/fx-mount.js, +37 行)</b>: dock 增第二参 <code>onSettled</code>(共享侧消费点登记的重入回调); push 过渡<b>落定</b>后发一次回执。信号双路: ①<code>top</code> 过渡的 <code>transitionend</code>(主路, ev.target === main.content 且 propertyName === "top"); ②兜底定时器 = 计算样式 transitionDuration + 100ms(RM 过渡归零不派 transitionend / 后台标签页丢事件 / 过渡被打断)。双路都过 <code>data-fx-pushed</code> 在场守卫 —— 关面板 push 回 0 的过渡结束<b>不发</b>回执(关闭不需要让位)。入场追高 RO 连触/拖 grip 会重写 --fx-push-y 重启过渡, 兜底定时器随每次 applyPush 重臂 = 恒以「最后一次位移 + 过渡时长」为落定点, 幂等。本文件只发信号, 零几何解算/零滚动(6c 单点纪律不破)。</li>
+  <li><b>重入侧(shared/state.js drawerVisible watch, +17/-1 行)</b>: dock 消费点登记回调(dock 第二参, flux ui 门控内); 回调体照 drawer_store.js:398 双守卫形态 + drawer.js:1277 种子形态门(<code>drawer.open &amp;&amp; drawerIsSeed</code>), 行不在 <code>_kbRows()</code> 链上不滚; 命中即重入**原版**可视区单点 <code>_kbScrollRowIntoView(rows, idx)</code>(shortcuts.js, 与键盘跟随同源) —— 几何与滚动全在原版单点, 共享侧只做数据 plumbing。</li>
+  <li><b>与裁决项 b 字面口径的偏差(实证 A/B 后定案)</b>: 裁决项 b 写「重跑原版 _kbRevealRow」; 实测落定后聚焦行是<b>推过头</b>(行在吸顶头之后, <code>rect.bottom &lt; vBot</code>), 而 _kbRevealRow 只有下界分支(rect.bottom &gt; vBot - 4 才 scrollBy) —— 落定重入它 = <b>无操作</b>(A/B 实测: 行停 21.9 不动, 缺陷原样)。裁决描述的落点「吸顶头下方 8px」恰是同族单点 _kbScrollRowIntoView 的<b>上界落点公式</b>(vTop + 8); 且落定后行也可能<b>不足</b>(文档底 scrollBy 钳制, 需下界分支), 它两界同源一并覆盖。故重入 _kbScrollRowIntoView, _kbRevealRow 本体与其触发三点(drawer.js:1046/1277、drawer_store.js:398)零触碰。</li>
+</ul>
+<h4>验证数字(桩 8137, 1440x900, Playwright)</h4>
+<ul>
+  <li><b>修复对照</b>: dblclick 第 6 行开面板, 行终位 21.9(吸顶头后, scrollY 87) → <b>108.9</b>(scrollY 0, ≥ 头区 98 + 8 = 106 达标); Enter 路径行终位 <b>136.0</b> = 吸顶列头下 8px 整(vTop 128.4 + 8, 滚动余量足时的公式落点)。</li>
+  <li><b>grip 拖高 +150</b>: dockH 378→528, 落定回执随 --fx-push-y 重臂后重入, 行终位 136 仍可见(面板顶 338 上方)。</li>
+  <li><b>Esc 关面板</b>: data-fx-pushed 摘除、scrollY 关闭前后不动(关闭路径零滚动, 与 console 一致), 无误发 reveal/console 行为零漂移(console 终位 399.9/400 与 R3 存档逐位一致)。</li>
+  <li><b>连续开面板(开着双击切换目标)</b>: 行终位 flux 413.6 == console 413.6(逐位一致 —— drawerVisible 不翻转则无新回执, 原版切换路径让位不受影响); scrollY 差恒等于 push 量(772 = 1150 − 378)。</li>
+  <li><b>RM</b>: flux 终态 108.9/136 与非 RM <b>逐位一致</b>(重入确定性, 不依赖 transitionend, 兜底定时器 0s+100ms 兜住); console-RM 383.9/384(原版行为)。</li>
+  <li><b>过渡与卫生</b>: push 过渡中间帧单调(逐帧采样 nonMonotonic 判 -1); 落定回执后有一次<b>瞬时</b>校正滚动(原版 scrollBy 本就瞬时, 过渡只属 push 本体 —— 用户口径「只加过渡动效」); audit ok(total=1)/console+pageerror 全零; fx-mount.js 317→354(帽 700 内)。</li>
+</ul>
+<h4>守阵与实测</h4>
+<ul>
+  <li><b>守阵</b>: fx_wiring 6c 改写 —— 三旧符号反向钉保留, 追加落定回执链路六针(fx-mount.js: transitionend / armSettle / fireSettle / data-fx-pushed 在场守卫; state.js: dock(v, 回调) 第二参在档 + _kbScrollRowIntoView 重入在档), 缺一即红; 文件头测试计划同步。</li>
+  <li><b>红绿双验</b>: 绿(test.one fx_wiring 1 passed)→红(临时摘 data-fx-pushed 守卫, AssertionError 落点正确)→复绿。</li>
+  <li><b>实测</b>: test.quick 4797 passed, 10 skipped(38.77s) → test.full 4797 passed, 10 skipped, 覆盖率 99%(119.91s, 数字事实源 = kb.baseline 最新切片)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -537,6 +591,8 @@
   <li><span class="tag">R6 · 26-11-01-2111</span> 精修轮 R1(F7a)执行实录落档(见 §06「精修轮 R1」): 真机四回归修复 —— B1 console 圆角(未复现, 三层排查, 新守阵 console_square_radius 白名单钉方角口径+红绿双验)/B2 D4-1 行板 hover gradient 让位 row_lang 单点(行板/首格悬停管线分家 25/255, 修后逐字相等)/B3 push 推出选中行(ensureFocusedVisible 终态几何解算: 滚动可行域优先+残余裁剪 push 量, 三路径实测钉住)/B4 push transform 载体劫持 fixed 菜单坐标系(dy=-464, 改 relative-top 覆盖, 修后 dx=dy=0); fx_wiring 扩 6a/6b/6c; 坑档 clip-path-clips-fixed 追加持久 transform 复发节; test.full 4455 全绿(新基线切片 26-11-01-2109)</li>
   <li><span class="tag">R7 · 26-11-01-2225</span> 精修轮 R2(F7b)执行实录落档(见 §06「精修轮 R2」): 用户四项调整 —— V1 搜索框回退原版方角+原辉光(全站参考基准)/D5-2 focus-ring 退役/辉光盘点 9 面逐项处置(保留 6/降档 1: chip 负 spread 化/撤除 1: 开关 track hover 辉光/无辉光 1); V2 常驻浮层面真毛玻璃四处(顶栏/状态栏 blur(12px)+详情面板/弹窗面板 blur(14px), 遮罩仍禁)+守阵改 flux 显式档(_FLUX_BACKDROP_BUDGET=4, 三旧皮肤恒 0, 红绿双验)+帧率实测(空闲 60-64/滚动 60 无衰减; 弹窗开启 32/详情面板开启 39 —— 本机 SwiftShader 软渲染结构性开销, 真机硬件 GPU 待复验); V3 D4-6 checkbox 快勾落地(S4 口径 B 案: 复用 .selected 类做首格 ::after 勾形+fx-check-pop 180ms, 零 JS 全路径覆盖, RM 勾标静态在); fx 三件/共享模板/shell 零改动, 仅 flux 四件+毛玻璃守阵; Playwright 33/33 + 接手复验 34/34; test.full 4797 全绿(前代理实录的存量失败 3 例已随本轮 sync 远端提交的守阵重钉修复, 见切片 26-11-01-2211)</li>
   <li><span class="tag">R8 · 26-11-01-2301</span> 接手复测修正(前代理 R2 失联收尾): 帧率实录改为复测归因口径(空闲 60-64/滚动 60 无衰减; 弹窗开启 32/详情面板开启 39 = SwiftShader 软渲染结构性开销, blur(0px) 仍 41.5 vs none 63, 降半径无效, 真机硬件 GPU 待用户复验); Playwright 补接手复验 34/34; 存量失败 3 例已随 sync 远端守阵重钉修复, test.full 4797 全绿; backdrop 守阵红绿双验独立复跑(flux 5 处红/modal-mask 红/atlas parity 红/还原绿)</li>
+  <li><span class="tag">R9 · 26-11-02-0005</span> 精修轮 R3(F7c)执行实录落档(见 §06「精修轮 R3」): T1 残余圆角回退(令牌三档归零+四处 clip-path 恢复)+T2 F7a 退役(push 纯过渡, 滚动交还 _kbRevealRow); fx_wiring 6c 反向钉; 聚焦行落吸顶头后果列待裁决</li>
+  <li><span class="tag">R10 · 26-11-02-0056</span> 精修轮 R4(F7d)落档(见 §06「精修轮 R4」): F7c 裁决项 b 落地 —— push 落定回执(fx-mount.js transitionend+兜底定时器, data-fx-pushed 守卫)+ state.js 消费点重入原版 _kbScrollRowIntoView, 聚焦行终位 21.9→108.9/136.0(吸顶列头下 8px 整); 实证 A/B 定案重入单点选择; fx_wiring 6c 追加落定回执链路六针并红绿双验</li>
 </ul>
 
 </div>
