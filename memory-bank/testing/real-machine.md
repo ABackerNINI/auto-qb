@@ -171,7 +171,8 @@
 | 本机 loopback 连接失败单次 ~2s | 连无监听端口的 connect 不是瞬时 RST; 托管模式首个 connect() 周期(detect_scheme http/https + login 三连)约 20-40s 才落第一条 ERROR | 断连类用例的等待窗按此放宽; 慢不是挂死 |
 | 热重载命令线 = `PUT /api/config` | 回执带 `changes`(顶层段名)与 `restart_required`; R 级段(data_dir/state_file/fs)提交即被回退旧值并报 restart_required | 触发 L2 重建的最小改动 = 改 `interval`(rules 模块认领段) |
 | 托盘模式 SIGTERM 无效(已修) | ~~graceful 跑壳对 `--tray` 3/3 不退出~~ 根因修正: 非「Tk 吞 KeyboardInterrupt」—— 异常跳出 mainloop 后 TrayUi.run 收尾被整段跳过, 进程退出挂在 pystray 非 daemon 线程的 threading._shutdown(见坑档 backend/tray-sigterm-teardown) | 已修(2026-11-01, issue 26-10-31-1030 置 Done): SIGTERM 换装投递 quit 事件与菜单「退出」合流 + run() 收尾挂 finally; 真机复验 3/3 优雅退出 rc=0(数字见 kb.baseline); 托盘用例现在可验优雅退出 |
-| 断连后不自动重连(缺陷在池) | 运行期 qB 断开一次后, 每 main_tick 一条「主循环异常」ERROR(75s 内 39-45 条)且恢复后不回连 —— issue 26-10-31-1029 | RM02-07 记 FAIL; 修复后须真机回归 |
+| 断连后不自动重连(缺陷在池) | 运行期 qB 断开一次后, 每 main_tick 一条「主循环异常」ERROR(75s 内 39-45 条)且恢复后不回连 —— issue 26-10-31-1029 | ~~RM02-07 记 FAIL; 修复后须真机回归~~ 已修(e820d2bb)且 2026-11-01 环境2 真机回归绿(RM02-07): 断开窗转换 ERROR 恰 1 条 + 退避 2/4/8/16/30 踩点 + 恢复自动回连 |
+| 一次 connect() 周期在「accept 即关」代理下开 ~10-22 条 TCP 连接(RM02 复测实测, 2026-11-01) | qbittorrent-api `_request_manager` 每请求**至少重试 1 次**(HTTP→HTTPS 切换兜底, 轮间 session 重建+0.6s sleep, 实测隔 ~1.7s)+ session 级 urllib3 Retry —— proxy probe 计的是连接 accept 数, **probe 数 ≠ 重连尝试数**(实际尝试数 = probe 按 >2.5s 间隙聚簇) | 断连退避断言(如 RM02-07)按簇计数: 尝试数/簇跨度/簇间距, 不许直接断言 probe 总数(首轮按总数 ≤8 断过假红) |
 | `.bak` 只在写盘前已有旧文件时生成 | fresh 目录首次优雅退出只有 state.json, 没有 `.bak`(atomic_write keep_backup 语义) | 要造 `.bak` 需先正常起停**两次** |
 
 > 并行陷阱: `pytest.ini` 的 addopts 是 `-n 8`, 默认 `--dist load` 下 `xdist_group` **不生效**。官方入口 `real.suite` 传 `-n 0` 没问题, 直跑 `pytest tests-real/...` 会互相抢端口 —— `rm01_startup/conftest.py` 用一把文件锁兜住, 后续片照抄。

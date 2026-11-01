@@ -402,7 +402,7 @@ def test_rm02_04_hot_reload_l0_and_rgate():
 
 
 def test_rm02_05_queue_rebuilt_idempotent():
-    """[RM02-05] queue_rebuilt 相位: 连续两次 L2 重建, 全局任务不重不丢
+    """[RM02-05] queue_rebuilt 相位: 连续两次 L2 重建, 全局任务不重不丢; 负向对照: 无认领段不无中生有
 
     前置: 直连 副实例 + WEB 启用; 经 PUT /api/config 改 interval(rules 模块认领段)触发
           L2 重建, 连续两次。
@@ -411,6 +411,14 @@ def test_rm02_05_queue_rebuilt_idempotent():
     失败判据: 第二次重建后「创建全局任务 N 个」的 N 翻倍(has_named 幂等被打穿); 或
               重建后全局任务消失(该日志不再出现); 或 L2 重建路径根本没走
               (「应用结构级配置变更」缺行, 测试空转)。
+              对照腿(无认领段最小配置): 除 traffic_snapshot_refresh 外出现任何其它全局任务
+              / 单行 N>1 —— 重建逻辑无中生有。
+    注(档位 L3, 26-11-01 漂移轮 D2): 计划原拟对照 = 「创建全局任务 0 行」; 实测最小配置下
+    启动期恒有 1 行「创建全局任务 1 个: ['internal:traffic_snapshot_refresh']」—— 流量快照
+    任务注册**无配置门槛**(模块注释明示"没配曲线也能看历史图", 结构性设计), 字面 0 行造法
+    不成立(必然假红)。对照腿按等价口径落地: 无认领段(delete_tags/global_speed_limit_curve
+    均缺省)的最小配置下, 重建路径除该无门槛快照任务外必须 0 行 0 异种任务; 重建凭空造出
+    维护/曲线任务(无中生有)或过滤打穿(N>1)时对照红。
     """
     case = case_dir("rm02_05")
     p = None
@@ -448,6 +456,44 @@ def test_rm02_05_queue_rebuilt_idempotent():
         if p is not None:
             p.stop()
         cleanup(case)
+
+    # ---- 负向对照(L3 红验): 无认领段的最小配置, 重建路径不得无中生有
+    # 模板本就无 delete_tags/global_speed_limit_curve 段 —— 对照与主腿同构, 差异在断言对象:
+    # 主腿验「该建的不重不丢」, 对照验「不该建的绝不出现」。traffic_snapshot_refresh 是唯一
+    # 无配置门槛的全局任务(代码事实, 见 docstring 注), 出现任何其它任务名或 N>1 即红。
+    case2 = case_dir("rm02_05_ctrl")
+    p2 = None
+    try:
+        cfg2 = write_cfg(case2, web_enabled=True)
+        web_port2 = int(re.search(r"port: (\d+)", cfg2.read_text(encoding="utf-8").split("web:")[1]).group(1))
+        p2 = start(cfg2, case2)
+        assert p2.wait_web(40), f"对照进程没起来:\n{p2.log()[-800:]}"
+
+        for new_interval in ("61S", "62S"):
+            tree = web_req(web_port2, "GET", "/api/config")["tree"]
+            tree["config"]["interval"] = new_interval
+            resp = web_req(web_port2, "PUT", "/api/config", {"tree": tree})
+            assert resp.get("applied") is True, f"对照 PUT 未应用: {resp}"
+        deadline = time.time() + 30
+        while time.time() < deadline and \
+                len([ln for _t, _lv, ln in log_records(case2) if "应用结构级配置变更" in ln]) < 2:
+            time.sleep(0.3)
+        rebuilds2 = [ln for _t, _lv, ln in log_records(case2) if "应用结构级配置变更" in ln]
+        assert len(rebuilds2) == 2, f"对照腿 L2 重建路径没走全(对照空转, 断言不成立): {rebuilds2}"
+
+        lines2 = [ln for _t, _lv, ln in log_records(case2) if "创建全局任务" in ln]
+        assert lines2, "对照连无门槛快照任务都没注册(重建把任务丢了?)"
+        foreign = [ln for ln in lines2 if "traffic_snapshot_refresh" not in ln]
+        assert not foreign, \
+            f"对照红: 无认领段配置下凭空造出非快照全局任务(无中生有): {[ln[:140] for ln in foreign]}"
+        ns2 = [int(m.group(1)) for ln in lines2 for m in [re.search(r"创建全局任务 (\d+) ", ln)] if m]
+        assert ns2 == [1] * len(lines2), \
+            f"对照红: 无认领段配置下单行任务数 >1(过滤/has_named 被打穿): {ns2} / {[ln[:120] for ln in lines2]}"
+        assert p2.alive(), "对照腿连续重建把进程打挂了"
+    finally:
+        if p2 is not None:
+            p2.stop()
+        cleanup(case2)
 
 
 # ---------------------------------------------------------------- RM02-06
@@ -513,8 +559,16 @@ def test_rm02_07_disconnect_throttle_and_backoff():
     副作用: 无(对 qB 零写; 掐断的是本机代理)。
     回滚: 恢复代理 + 停进程 + 删用例目录。
     失败判据: 断开期间 ERROR/WARNING 记录数 > 转换次数(逐拍刷屏 = A-07 回归); 重连尝试
-              逐拍打满(探测数 > 8); 恢复代理后 60s 内未自动回连(无「已重新连接」INFO 收尾,
-              同步线不恢复)。红验即注入本身: 断开后必须看到连接失败 ERROR(注入生效)。
+              逐拍打满(尝试簇 > 8 或簇横跨 >3s = 连续流式重连); 恢复代理后 60s 内未自动回连
+              (无「已重新连接」INFO 收尾, 同步线不恢复)。红验即注入本身: 断开后必须看到
+              连接失败 ERROR(注入生效)。
+    注(计量口径, 26-11-01 环境2 首跑校准): proxy probe 计的是 **TCP 连接 accept 数**, 一次
+    connect() 周期在 cut 代理下实测开 ~10-22 条连接(qbittorrent-api _request_manager 至少
+    重试 1 次 + session 级 urllib3 Retry, 库内行为), 且周期 = 两轮迭代(轮间 ~1.7s)—— probe
+    数 != 重连尝试数。按 >2.5s 间隙把 probe 聚成「尝试」(迭代对内 ~1.7s 合并; 尝试间隙 =
+    退避节拍 + 周期耗时, 实测 >=3.2s), 对尝试数/簇跨度/簇间距断言。首跑曾按 probe 总数 <=8
+    断言, 被库内重试放大(~16 条/次)打出假红, 产品退避节奏实测正确(尝试起点
+    0.7/4.2/9.1/18.5/35.4/65.9s = 2/4/8/16/30 + 周期耗时)。
     """
     case = case_dir("rm02_07")
     px = TcpProxy(app.QB_PORT, port=app.free_port())
@@ -543,9 +597,25 @@ def test_rm02_07_disconnect_throttle_and_backoff():
         assert len(bad_lv) <= 3, \
             f"断开期间 ERROR/WARNING 记录 {len(bad_lv)} 条(应 <= 转换次数)—— 逐拍刷屏(A-07 回归): {[r[2][:110] for r in bad_lv[:8]]}"
         probes = [t for t in px.probes() if cut_ts <= t <= restore_ts]
-        assert len(probes) <= 8, \
-            f"断开 {restore_ts-cut_ts:.0f}s 内重连尝试 {len(probes)} 次 —— 逐拍重连(退避失守): {[f'{t-cut_ts:.1f}' for t in probes[:12]]}"
-        gaps = [b - a for a, b in zip(probes, probes[1:])]
+        # probe = TCP 连接 accept 数, 一次 connect() 周期开 ~10-22 条(库内重试, 见 docstring 注):
+        # 周期结构 = qbittorrent-api _request_manager 的 2 轮迭代(max_retries=1, 轮间 session
+        # 重建 + 0.6s sleep, 实测隔 ~1.7s) —— 按 >2.5s 间隙聚成「尝试」: 迭代对内间隙 ~1.7s 被合并,
+        # 尝试间隙 = 退避节拍(>= 2s)+ 周期耗时, 实测 >=3.2s, 阈值取中。
+        attempts: list[list[float]] = []
+        for ts in probes:
+            if not attempts or ts - attempts[-1][-1] > 2.5:
+                attempts.append([ts])
+            else:
+                attempts[-1].append(ts)
+        starts = [c[0] for c in attempts]
+        assert starts, f"断开 {restore_ts-cut_ts:.0f}s 内没有任何重连尝试(probe 0 条): {px.events()[:8]}"
+        assert len(starts) <= 8, \
+            (f"断开 {restore_ts-cut_ts:.0f}s 内重连尝试 {len(starts)} 次(期望 <=8, 退避 2+4+8+16+30 约 6 次) "
+             f"—— 逐拍重连(退避失守): {[f'{x-cut_ts:.1f}' for x in starts]}")
+        assert all(c[-1] - c[0] <= 5.0 for c in attempts), \
+            (f"有尝试簇横跨 >5s —— 库内两轮迭代不该拖这么长(连续流式重连形态?): "
+             f"{[f'{c[-1]-c[0]:.1f}' for c in attempts if c[-1] - c[0] > 5.0]}")
+        gaps = [b - a for a, b in zip(starts, starts[1:])]
         assert all(g <= 32.0 for g in gaps), f"重试间隔超过 30s 上限(+裕量): {gaps}"
 
         # ---- 恢复: 60s 内应自动回连(INFO 收尾), 同步线恢复
