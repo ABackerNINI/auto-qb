@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-01-1101">
+<meta name="doc-updated" content="26-11-01-1138">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>WEBUI 动效皮肤 flux 分步实施计划</h1>
 <p class="lede">给 WEBUI 做一个零依赖的动效组件库（<code>shared/fx/</code> 单点）+ 一套多风格候选的动效皮肤 <code>flux</code>（fork 自 console、只做 dark）：先桌面调研提炼动效模式，再用 showcase 页让用户逐组件挑选动效变体，最后挂进 flux 皮肤——现有 atlas/prism/console 三皮肤一行不碰。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-1101 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-31-2316 · <b>doc-updated</b> 26-11-01-1138 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling(2026-10-31)：15 项决策(D1–D15)逐项拍板，见 §06 拍板记录
 </div>
 
@@ -397,6 +397,51 @@
   <li><b>RM 降级(reducedMotion: reduce)</b>: ripple 不注入、弹窗 fx danger 动画不播、toast 全零动画(过渡 0s/无倒计时条)、行插入无 stamp 无动画直接成行、audit ok、pageerror 全零。</li>
 </ul>
 
+<h3>S7 执行实录(26-11-01)</h3>
+<p>P1 组件挂载 + 帧率实测。P1 未经 showcase 挑选, 按 S4 已定基调(glass + 选定候选气质)推导: 克制、复用既有原语与令牌(fade/slide/pulse/glow 系), hover ≤120ms / 入场 ≤400ms 软约束, 每组件 1-2 效果不强堆。三旧皮肤 / showcase / 共享模板结构与类名 / hscroll.css / config.yml / auto-qb-data 零改动(git status 证实: 仅 <code>flux/css/fx-mount.css</code> + <code>flux/fx-mount.js</code> + <code>shared/state.js</code>(2 个新 ui 门控消费点) + 本档案)。</p>
+<h4>P1 设计表(组件 → 效果 → 落点类型 → 时长/RM)</h4>
+<table>
+  <tr><th>#</th><th>组件</th><th>效果</th><th>落点类型</th><th>时长/RM</th></tr>
+  <tr><td>1</td><td>标签 chip(<code>.site-chip/.tag-chip/.cat-chip</code>, 筛选交互件)</td><td>hover 辉光(glass 供给面 --fx-glow* 小面积取半量 calc(/2), <code>:not(.f-on)</code> 不抢选中态) + active 按压缩放(press 同款 --fx-pop-scale)</td><td>flux 作用域 CSS(fx-mount.css, 下同)</td><td>120/60ms 档; RM 整组在 no-preference 媒体内 = 落回既有 filter hover</td></tr>
+  <tr><td>2</td><td>未读徽章 <code>.sb-err-badge</code></td><td>v-if 出场 spring 弹入(复用 fx-ico-spring 帧); 退场无动画(卸载即消失, toast 的 VT 口径对徽章过重)</td><td>flux 作用域 CSS</td><td>300ms spring-2; RM 关</td></tr>
+  <tr><td>3</td><td>进度条 <code>.m-progress</code></td><td>填充微辉光(静态, --green 50% / 6px -2px) + 下载行条纹流动(fx-bar-flow <b>新帧</b>, 8px=条纹周期无缝循环, 仅 s-downloading/.downloading 行 = 活动信号非常驻装饰)</td><td>flux 作用域 CSS</td><td>流动 900ms linear infinite(paint-only 小面积); RM 全关</td></tr>
+  <tr><td>4</td><td>开关 <code>.hb-switch</code></td><td>滑块弹簧曲线(spring-1 软过冲, 时长沿用基线 .2s) + track hover 微辉光(checked 既有 10px 辉光的 hover 加深 / 未选中 55% 半量)</td><td>flux 作用域 CSS</td><td>hover 80ms(--fx-dur-hover); RM 落回皮肤基线曲线(flux 存量行为, 同 S6 RM 边界口径)</td></tr>
+  <tr><td>5</td><td>右键菜单 <code>.ctx-menu/.ctx-sub</code></td><td>drop-in 换 pop 入场(fx-menu-in <b>新帧</b>, 缩放 --fx-pop-scale + 淡入; 一级 160ms/次级 120ms 对齐基线档); 关闭无退场(v-if 卸载, 加退场需动 menu.js 接线 = 破 ctx-menu 挂钩耦合纪律)</td><td>flux 作用域 CSS(v-if 插入即播零 JS)</td><td>≤160ms; RM 落回皮肤 drop-in(存量)</td></tr>
+  <tr><td>6</td><td>状态栏速度区 <code>.sb-alt.on</code></td><td>备用限速"乌龟"亮绿态语义绿辉光点亮(transition 并入 box-shadow 段)</td><td>flux 作用域 CSS</td><td>120ms; RM 关</td></tr>
+  <tr><td class="bad">7</td><td>dock(<code>torrents-dock</code>)</td><td class="bad">落空注明: 纯布局常驻容器无状态时刻; 其视觉时刻(行增删/hscroll 胶囊/页签方向/push 让位)已由 P0 效果覆盖, 不再造空入场</td><td>落空注明</td><td>—</td></tr>
+  <tr><td>8</td><td>登录遮罩 <code>.login-mask/.login-card</code></td><td>遮罩淡入(复用皮肤 fade-in 帧) + 卡片 rise(复用 fx-toast-rise 帧); v-if 插入即播零 JS —— flux 专属 CSS 面与 shell parity 无关(parity 只钉 HTML)</td><td>flux 作用域 CSS</td><td>200/250ms; RM 全关</td></tr>
+  <tr><td>9</td><td>busy 骨架 <code>.drawer-busy</code></td><td>呼吸脉动(复用皮肤 pulse-soft 帧 opacity-only; 与 drawer.switching 的兄弟置灰机制零冲突 —— 那套动 siblings 本条动 busy 标签自身); <code>.ce-placeholder.loading</code> 已有皮肤 loading-glow 不叠加(克制)</td><td>flux 作用域 CSS</td><td>1.6s infinite; RM 关</td></tr>
+  <tr><td>10</td><td>数字滚动(<code>.sb-spd .val</code> 速度双值 + 今日体积 <code>.v-down/.v-up</code> 双值)</td><td>JS 数值补间: 逐元素缓存 <code>el._fxRoll</code>, rAF 360ms ease-out; 格式沿用节点现文本(小数位/单位取自新文本, 不自拼 = 不与 fmtSpeed/fmtSize 口径分裂); 单位跨界/非数值直接落值; 写尾部文本节点(兼容含 svg 的今日流量值); 补间中再触发 = 重定向目标; 补间窗口(360ms)短于轮询间隔, Vue 下一帧覆写竞态无害</td><td>ui 门控 JS(state.js watch totalDl/totalUl 两新消费点, $nextTick 后调) + fx-mount.js <code>numRoll()</code></td><td>360ms; RM 跳过(Vue 文本即时到位 = 无动效终态)</td></tr>
+</table>
+<p class="cm">新增库效果 = 零: REGISTRY/fx 三件一字未动(wiring 守阵对账面不动); fx-mount.css 新 @keyframes 仅 2 条(fx-menu-in/fx-bar-flow), 其余全复用(fx.css 的 fx-ico-spring/fx-toast-rise 既有帧 + flux 皮肤全局帧 fade-in/pulse-soft —— @keyframes 全文档共享)。状态栏口径注: 任务清单「状态栏(status-strip:速度/限速区)」跨 .status-strip(筛选条, chip/badge 已由 #1/#2 覆盖)与底部 .statusbar 速度区(#6/#10), 两面都已落。</p>
+<h4>降级 / 落空清单</h4>
+<ul>
+  <li><b>#7 dock 落空</b>(见设计表); 其余 9 项全落。</li>
+  <li><b>三件走规则级验证</b>: 徽章出场(桩无未读态)、busy 呼吸(抽屉切换窗口过短未捕获 live)、登录遮罩(桩本机免鉴权无登录面)—— live 断言缺口由 CSSOM 规则断言补位(守阵面与 e2e 面各按可达性取齐)。</li>
+  <li><b>数字滚动覆盖面</b>: 只挂状态栏速度双值 + 今日体积双值(每轮询 tick 的最高频实时面); 行内实时数据(速度列等)不挂 —— 高密度行频繁补间 = 高负载, 克制不堆。</li>
+  <li><b>RM 边界</b>: 开关滑块曲线/ctx-menu 入场在 RM 下落回 flux 皮肤基线(存量行为不属 fx 降级面, 与 S6 口径一致); 其余 P1 动画/过渡全部收进 no-preference 媒体 = RM 直接终态。</li>
+</ul>
+<h4>体量与守阵</h4>
+<ul>
+  <li>fx-mount.css 197 → 305 行 / fx-mount.js 249 → 307 行, 距 700 行帽余量 395/393; fx 三件与 flux shell(233 行)不动, 守阵零改动(S7 纯 fx-mount 内容扩展, 挂行与 REGISTRY 对账面均不变)。</li>
+  <li>state.js 新增 2 个 watch(totalDl/totalUl), 与 S6 消费点同款 <code>this.ui === "flux" && window.AQB_FX_MOUNT</code> 双保险门控; computed 值不变不触发(轮询同值在 watch 层天然短路)。</li>
+</ul>
+<h4>帧率实测(S7 DoD; rAF 计帧法, 有头 Chromium 优先, 1440x900 DPR 1, 桩 API 真服务 8137 + 300 合成种子, 下载行 75 条可见; headless 对照轮括注)</h4>
+<table>
+  <tr><th>场景</th><th>载荷</th><th>fps 有头</th><th>fps headless</th></tr>
+  <tr><td>空闲基线</td><td>含 75 行条纹流动常驻 + 页面稳态</td><td>64</td><td>61</td></tr>
+  <tr><td>数字滚动刷新连触</td><td>5 次/100ms 连续驱动 totalDl 补间</td><td>64</td><td>60</td></tr>
+  <tr><td>行插入退场连触</td><td>15 条退场幽灵 + 15 行回插(row-out/row-in 连触)</td><td>64</td><td>60</td></tr>
+  <tr><td>toast VT 队列</td><td>6 条 spawn → 批量退场(View Transitions FLIP)</td><td>54</td><td>54</td></tr>
+  <tr><td>danger glow</td><td>error 条 spawn(rise+glow 双动画)</td><td>51</td><td>51</td></tr>
+</table>
+<p class="cm">掉帧处置: 51-54 仅出现在<b>故意连触的突发窗口</b>(VT 快照/双动画叠加载荷, 窗口 &lt;1s, 非稳态), 稳态全部回 60+; 75 行条纹流动常驻下空闲基线与纯净基线同值 = paint-only 假设成立, 不处置不标注。</p>
+<h4>实测</h4>
+<ul>
+  <li>test.quick 迭代绿(4454 passed); test.full 全绿(数字见 kb.baseline 最新切片)。</li>
+  <li>Playwright 断言(桩 API 真服务 8137, 临时脚本不入库): <b>headless 31/31 + 有头 31/31</b> —— chip hover 辉光/press 过渡/active 规则、徽章 spring 规则、下载行条纹流动 fx-bar-flow+填充辉光、开关滑块 spring 曲线(bezier 头 1.12 + linear() 降级链)+hover 辉光规则、ctx-menu fx-menu-in(console 对照仍 drop-in)、sb-alt 辉光过渡与 on 态规则、数字滚动(缓存建立/补间中采样 5 个不同值/格式 N.NN unit 不变/单位保持)、busy/登录遮罩规则、audit ok(total=1 无 unknown)、console 隔离(AQB_FX/AQB_FX_MOUNT 不存在/[data-fx] 零命中)、RM(ctx-menu 落回 drop-in、numRoll 跳过且文本即时、chip 整组在 no-preference 媒体)、console/pageerror 全零(三 context)。</li>
+</ul>
+
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
@@ -416,6 +461,7 @@
   <li><span class="tag">R2 · 26-11-01-0925</span> S5 flux fork 执行实录落档(见 §06「S5 执行实录」): fork 落地+令牌取值 glass 化(backdrop-filter 保持 0 处)+ui=== 盘点(补 state.js 两处)+守阵收编(_UI_ALL 四档 + skins 10 处/dom 9 处显式加档)+transition parity 收编定案+Playwright 双皮肤实测零报错; 另修 S4 段一处 ISO-T 日期体例</li>
   <li><span class="tag">R3 · 26-11-01-0954</span> S6 前半执行实录落档(见 §06「S6 执行实录(前半)」): fx 三件挂 flux(shell 静态 script + head 尾 2 link + html preset=glass, 219-&gt;227 行) + S4 选定 24 项页内自实现提升入库(REGISTRY 9-&gt;27 名, ripple 走 fx.js 委托, focus 系拆 focus-ring/focus-float 两效果名, D2-5 拆 danger+headshake 组合, D8-4 走 pop --fx-base-tx 合成不造新原语, rows 系全 data-fx 委托不碰 .group-row) + glass 开 glow 供给(0-&gt;12px accent-ink 系, S4 拍板 flux 定制; sheen 维持) + 守阵三处(fx.js 待接线豁免删/ hscroll 判据 6 fx 豁免/ 新增 test_frontend_fx_wiring) + test.full 4454 全绿 + Playwright 双验(flux audit ok total=0, showcase audit total=21 ok)</li>
   <li><span class="tag">R4 · 26-11-01-1101</span> S6 后半执行实录落档(见 §06「S6 执行实录(后半)」): S4 选定 24 项逐项挂进 flux(flux 专属 fx-mount.css 作用域 CSS + fx-mount.js 状态驱动程序化属性 + 6 个共享 JS ui 门控消费点, 共享模板结构与类名零改动) + 降级/落空清单(D4-6 落空/D5-3 降级/@starting-style 对运行时补属性不触发 → toast rise 落确定性 keyframes) + 守阵三处(shell 帽 227→233/link 序加 fx-mount.css/fx_wiring 扩挂载面与隔离反向) + 实测(test.full 4454 全绿 + Playwright 40/40: flux 全组生效/console 零泄漏/RM 降级/audit ok)</li>
+  <li><span class="tag">R5 · 26-11-01-1138</span> S7 执行实录落档(见 §06「S7 执行实录」): P1 组件挂载按 S4 glass 基调推导 9 落 1 落空(dock 纯布局容器), flux 作用域 CSS 8 项 + 数字滚动走 state.js 两新门控 watch + fx-mount.js numRoll(360ms 轻量补间, 格式沿用节点现文本不与 fmt 口径分裂); REGISTRY/fx 三件/守阵/shell 零改动, fx-mount.css 新 keyframes 仅 2 条(fx-menu-in/fx-bar-flow)余全复用, 体量 305/307 行距帽余量 395/393; 帧率 rAF 计帧(有头): 空闲/数字滚动/行插退 64, toast VT 队列 54, danger glow 51(仅故意连触突发窗口, 稳态 60+); Playwright headless+有头各 31/31(flux 全生效/console 零泄漏/RM 降级/audit ok/报错全零); test.full 4454 全绿 116.22s 覆盖率 99%</li>
 </ul>
 
 </div>

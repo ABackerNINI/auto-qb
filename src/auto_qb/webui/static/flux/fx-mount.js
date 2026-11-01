@@ -4,7 +4,8 @@
  *
  * 分工: fx.js(AQB_FX)是零依赖单挂载器, 只认 data-fx 属性; 本文件是 flux 专属
  *   消费层 -- 模板分片是四皮肤共享的, 不能给共享模板加属性, 故**状态驱动**的
- *   效果(行插入/退场、页签方向、toast spawn/退场、dock 让位、登录微震)由本文件
+ *   效果(行插入/退场、页签方向、toast spawn/退场、dock 让位、登录微震、数字
+ *   滚动)由本文件
  *   在运行时程序化补属性; 共享 JS 消费点按 this.ui === "flux" 门控调用本域。
  *   纯 CSS 态效果(hover/active/focus/类触发)在 flux/css/fx-mount.css, 不过这里。
  *
@@ -238,6 +239,62 @@
     });
   }
 
+  /* ---- 数字滚动(P1: 速度/体积实时数据, S7) ----
+   * 消费点 = state.js watch totalDl/totalUl(computed 每轮询 tick 变化即触发, ui 门控,
+   * 调用方 $nextTick 后进 -- 等 Vue 文本渲染落地再读新值)。轻量数值补间: 逐元素
+   * 缓存上次数值(el._fxRoll), rAF 360ms ease-out; 格式沿用节点现文本(小数位与
+   * 单位取自新文本, 不自拼 = 不与 fmtSpeed/fmtSize 口径分裂), 单位跨界(KiB/s ->
+   * MiB/s)或非数值文本(空/"--")直接跳过落值。写回: .sb-spd .val 是纯文本插值;
+   * 今日流量 .val 内含 svg, 写尾部文本节点。Vue 下一轮渲染会整体覆写文本 --
+   * 补间窗口(360ms)短于轮询间隔, 终帧写的就是 Vue 的目标文本, 竞态无害; 补间中
+   * 再触发 = 重定向目标(取消旧 rAF 从当前值续走)。RM: 直接跳过(Vue 文本即时
+   * 到位 = 无动效终态)。首轮只建缓存不播(避免首屏整片滚动)。 */
+  var ROLL_MS = 360;
+  var ROLL_SEL = ".sb-spd .val, .sb-item.sb-today .v-down, .sb-item.sb-today .v-up";
+  function rollTarget(el) {
+    var node = el.lastChild;
+    while (node && node.nodeType !== 3) node = node.previousSibling; /* 尾部文本节点(纯文本插值即元素自身) */
+    if (!node) return null;
+    var m = (node.nodeValue || "").match(/^([\d.]+)(.*)$/);
+    if (!m || m[1].indexOf(".") === 0) return null;
+    var num = parseFloat(m[1]);
+    if (!isFinite(num)) return null;
+    return { node: node, num: num, dec: (m[1].split(".")[1] || "").length, unit: m[2] };
+  }
+  function rollOne(el, t) {
+    var st = el._fxRoll;
+    if (st.unit !== undefined && st.unit !== t.unit) { /* 单位跨界: 补间无意义, 直接落值 */
+      st.num = t.num;
+      st.unit = t.unit;
+      return;
+    }
+    var from = st.num;
+    st.num = t.num;
+    st.unit = t.unit;
+    var t0 = performance.now();
+    if (st.raf) cancelAnimationFrame(st.raf);
+    var step = function (now) {
+      var p = now - t0 >= ROLL_MS ? 1 : (now - t0) / ROLL_MS;
+      var e = 1 - Math.pow(1 - p, 3); /* ease-out cubic */
+      t.node.nodeValue = (from + (t.num - from) * e).toFixed(t.dec) + t.unit;
+      if (p < 1) st.raf = requestAnimationFrame(step);
+      else st.raf = 0;
+    };
+    st.raf = requestAnimationFrame(step);
+  }
+  function numRoll() {
+    if (FX.reduced()) return;
+    var nodes = document.querySelectorAll(ROLL_SEL);
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var t = rollTarget(el);
+      if (!t) continue;
+      if (!el._fxRoll) { el._fxRoll = { num: t.num, unit: t.unit, raf: 0 }; continue; }
+      if (el._fxRoll.num === t.num && el._fxRoll.unit === t.unit) continue;
+      rollOne(el, t);
+    }
+  }
+
   window.AQB_FX_MOUNT = {
     rows: rows,
     tabDir: tabDir,
@@ -245,5 +302,6 @@
     toastSync: toastSync,
     toastDrop: toastDrop,
     loginShake: loginShake,
+    numRoll: numRoll,
   };
 })();

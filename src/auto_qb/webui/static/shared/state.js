@@ -572,6 +572,12 @@ window.AQB_STATE = {
      * 其它皮肤零调用(window.AQB_FX_MOUNT 只在 flux shell 挂)。 */
     "torrents"(v) { if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.rows(v, "hash"); },
     "groups"(v) { if (this.ui === "flux" && window.AQB_FX_MOUNT) window.AQB_FX_MOUNT.rows(v, "key"); },
+    /* fx(S7, plan 26-10-31-2316): 数字滚动(状态栏速度/今日体积实时数据)的消费点
+     * (flux 专属, flux/fx-mount.js::numRoll) —— computed 值变化才触发(轮询同值
+     * 在 watch 层天然短路), $nextTick 等 Vue 文本落地后再读新值补间。其它皮肤
+     * 零调用(window.AQB_FX_MOUNT 只在 flux shell 挂)。 */
+    totalDl() { if (this.ui === "flux" && window.AQB_FX_MOUNT) this.$nextTick(() => window.AQB_FX_MOUNT.numRoll()); },
+    totalUl() { if (this.ui === "flux" && window.AQB_FX_MOUNT) this.$nextTick(() => window.AQB_FX_MOUNT.numRoll()); },
     /* 未保存改动防护(U1-b, 报告 26-10-02-0508): 原生 beforeunload 兜底**随脏态**挂载 / 摘除 ——
      * 常驻挂载会让 Firefox 放弃 bfcache, 且没改动也弹框 = 弹框疲劳(报告 §6)。判据与挂载点
      * 都在 config_editor.js(cfgGuardSync), 这里只负责把脏态变化喂过去。 */

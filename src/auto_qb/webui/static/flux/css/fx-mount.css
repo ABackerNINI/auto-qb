@@ -1,7 +1,7 @@
 /* ====================================================================
  * fx-mount.css -- flux 皮肤 fx 动效挂载面(S6 后半)
  * ====================================================================
- * 计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S6, S4 选定 24 项)
+ * 计划: memory-bank/plans/26-10-31-2316-plan-webui-fx-skin.html (S6 后半 P0 + S7 P1)
  *
  * 定位: 模板分片是四皮肤共享的 -- 给共享模板元素加 data-fx 属性会同时命中其它
  *   皮肤, 故「效果只能挂在共享模板公共类上」的部分一律以 html[data-fx-preset]
@@ -170,6 +170,99 @@ html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
   }
 
   /* ==================================================================
+   * P1 组件挂载(S7, 计划 §03 P1 清单; S4 定调 glass + 克制复用既有帧与
+   * 供给面, hover <=120ms / 入场 <=400ms 软约束, 每组件 1-2 效果不强堆):
+   * 新 @keyframes 仅 2 条(fx-menu-in / fx-bar-flow, 文件尾), 其余复用
+   * fx.css / 本文件既有帧与 flux 皮肤全局帧(pulse-soft/fade-in, @keyframes
+   * 全文档共享); 不新增 data-fx 效果名(REGISTRY 零改动, wiring 守阵对账面
+   * 不动)。
+   * ================================================================== */
+
+  /* ---- 标签 chip(.site-chip/.tag-chip/.cat-chip, 筛选交互件): hover 辉光
+   *      (glass 供给面 --fx-glow*, 与 .bt 同 tokens; 对小面积 chip 取半量)
+   *      + active 按压缩放(press 原语同款)。base transition 已含 box-shadow
+   *      var(--dur-fast)(120ms, 超 hover 100ms 软约束 -- S6 按钮 glow 同口径
+   *      只标注), transform 段在此并入(时长同 fast 档)。 ---- */
+  html[data-fx-preset] .site-chip,
+  html[data-fx-preset] .tag-chip,
+  html[data-fx-preset] .cat-chip {
+    transition: background var(--dur) var(--ease), filter var(--dur-fast) var(--ease),
+      box-shadow var(--dur-fast) var(--ease), transform var(--fx-dur-fast) var(--fx-ease-back);
+  }
+  html[data-fx-preset] .site-chip:hover:not(.f-on),
+  html[data-fx-preset] .tag-chip:hover:not(.f-on),
+  html[data-fx-preset] .cat-chip:hover:not(.f-on) {
+    box-shadow: 0 0 calc(var(--fx-glow) / 2) var(--fx-glow-c);
+  }
+  html[data-fx-preset] .site-chip:active,
+  html[data-fx-preset] .tag-chip:active,
+  html[data-fx-preset] .cat-chip:active {
+    transform: scale(var(--fx-pop-scale));
+    transition-duration: var(--fx-dur-press), var(--fx-dur-press), var(--fx-dur-press), var(--fx-dur-press);
+    transition-timing-function: var(--fx-ease-standard);
+  }
+
+  /* ---- 未读徽章 .sb-err-badge: v-if 出场 spring 弹入(复用 fx-ico-spring 帧,
+   *      300ms spring-2, 入场软约束内); 退场无动画(Vue 卸载即消失, toast 的
+   *      VT 退场口径对徽章过重)。 ---- */
+  html[data-fx-preset] .sb-err-badge { animation: fx-ico-spring 300ms var(--fx-spring-2); }
+
+  /* ---- 进度条 .m-progress: 填充微辉光(静态玻璃供给, 小面积 paint) + 下载中
+   *      条纹流动(fx-bar-flow, 8px = 条纹周期无缝循环, paint-only; 只落下载态
+   *      行 = 活动信号不是装饰常驻)。行状态类与既有染色规则同源
+   *      (components.css .group-row.s-* / .member-row.*)。 ---- */
+  html[data-fx-preset] .m-progress .bar > i {
+    box-shadow: 0 0 6px -2px color-mix(in srgb, var(--green, currentColor) 50%, transparent);
+  }
+  html[data-fx-preset] .group-row.s-downloading .m-progress .bar > i,
+  html[data-fx-preset] .member-row.downloading .m-progress .bar > i {
+    animation: fx-bar-flow 900ms linear infinite;
+  }
+
+  /* ---- 开关 .hb-switch: 滑块弹簧曲线(spring-1 软过冲, 时长沿用基线 .2s 不动)
+   *      + track hover 微辉光(checked 态既有辉光 10px 的 hover 加深档; 未选中
+   *      hover 给 55% 半量)。RM: 本组整体在媒体块内, 落回皮肤基线 .2s var(--ease)
+   *      (flux 存量行为, 同 S6 RM 边界口径)。 ---- */
+  html[data-fx-preset] .hb-switch .hb-sw-track {
+    transition: background .2s var(--ease), box-shadow var(--fx-dur-hover) var(--fx-ease-standard);
+  }
+  html[data-fx-preset] .hb-switch .hb-sw-track::after { transition-timing-function: var(--fx-spring-1); }
+  html[data-fx-preset] .hb-switch:hover .hb-sw-track {
+    box-shadow: 0 0 8px -3px color-mix(in srgb, var(--accent) 55%, transparent);
+  }
+  html[data-fx-preset] .hb-switch:hover input:checked + .hb-sw-track { box-shadow: 0 0 12px -3px var(--accent); }
+
+  /* ---- 右键菜单(.ctx-menu 一级 / .ctx-sub 次级 flyout): drop-in 换 pop 入场
+   *      (缩放+淡入, 幅度 = --fx-pop-scale; 一级 160ms / 次级 120ms 对齐基线档;
+   *      v-if 插入即播, 零 JS 与 ctx-menu 挂钩零耦合 -- 只换动画不改结构)。
+   *      菜单关闭无退场(v-if 卸载, 加退场需动 menu.js 接线 = 破耦合纪律)。 ---- */
+  html[data-fx-preset] .ctx-menu { animation: fx-menu-in 160ms var(--fx-ease-out); }
+  html[data-fx-preset] .ctx-sub { animation: fx-menu-in 120ms var(--fx-ease-out); }
+
+  /* ---- 状态栏速度区 .sb-alt.on(备用限速"乌龟"亮绿态): 语义绿辉光点亮
+   *      (transition 并入 box-shadow 120ms 档; 熄灭态无辉光 = 状态信号)。 ---- */
+  html[data-fx-preset] .sb-alt {
+    transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease),
+      color var(--dur) var(--ease), box-shadow var(--fx-dur-fast) var(--fx-ease-standard);
+  }
+  html[data-fx-preset] .sb-alt.on {
+    box-shadow: 0 0 10px -3px color-mix(in srgb, var(--green) 70%, transparent);
+  }
+
+  /* ---- 登录遮罩(v-if 插入即播, 零 JS -- flux 自有 CSS 面与共享模板红线无关,
+   *      shell parity 只钉 HTML 不钉 flux 专属 CSS): 遮罩淡入(复用皮肤 fade-in
+   *      帧, 200ms) + 卡片 rise(复用本文件 fx-toast-rise 帧, --fx-dur-enter
+   *      250ms; 登录卡是遮罩内唯一大面, 卡片动/遮罩静更有层次)。 ---- */
+  html[data-fx-preset] .login-mask { animation: fade-in 200ms var(--fx-ease-out); }
+  html[data-fx-preset] .login-card { animation: fx-toast-rise var(--fx-dur-enter) var(--fx-ease-out); }
+
+  /* ---- busy 加载态 .drawer-busy(抽屉切换"正在加载…"): 呼吸脉动(复用皮肤
+   *      pulse-soft 帧 opacity-only, 与 drawer.switching 的兄弟置灰机制零冲突
+   *      -- 那套动的是 siblings, 本条动的是 busy 标签自身)。ce-placeholder.loading
+   *      已有皮肤既有 loading-glow, 不叠加(克制)。 ---- */
+  html[data-fx-preset] .drawer-busy { animation: pulse-soft 1.6s ease-in-out infinite; }
+
+  /* ==================================================================
    * 主表横滚指示条(D8-4 变体 C: 缩放+淡入): 生产胶囊 translateX(-50%) 居中
    * 占用 transform(单点 shared/hscroll.css, 红线不改), fx pop 原语是
    * @starting-style 插入语义而胶囊是常驻节点靠 .on 类现身 -- 故等价落成
@@ -195,3 +288,13 @@ html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
   from { opacity: 0; transform: translateY(var(--fx-enter-shift)); }
   to { opacity: 1; transform: none; }
 }
+
+/* P1(S7) 右键菜单入场 keyframes(缩放+淡入, 幅度读 --fx-pop-scale 供给面) */
+@keyframes fx-menu-in {
+  from { opacity: 0; transform: scale(var(--fx-pop-scale)); }
+  to { opacity: 1; transform: none; }
+}
+
+/* P1(S7) 下载中进度条条纹流动 keyframes(8px = 条纹周期, 一周期回绕无缝;
+ * paint-only 小面积, 仅下载态行常驻 -- 帧率实测见计划档案 S7 实录) */
+@keyframes fx-bar-flow { to { background-position: 8px 0; } }
