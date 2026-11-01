@@ -33,29 +33,63 @@ html[data-fx-preset] .toast:not([data-fx~="danger"]) { animation-name: none; }
  *      不再被 stamp data-fx~="push"(消费点 fx-mount.js::dock 段注), 本文件不再持有
  *      任何 push 规则; shared/fx/fx.css 的 push 原语是通用库面, 保留不消费。 ---- */
 
-/* ---- D4-6 checkbox 快勾(R2 精修 V3, 静态几何留媒体块外; S4 选定、S6b 因行内无
- *      checkbox 元素落空, 此处转落地): 复用 .selected 状态类做快勾视觉 -- 行首格
- *      ::after 画勾形, 落行 padding 沟槽(D4-2 边条右邻, 同 --sel-bar 色)。零 JS
- *      零模板改动: flux 行选择的真实交互 = Ctrl/Cmd+点击 toggle / Shift 区间 / 键盘
- *      选择(普通点击只落光标不选中, selection.js 口径), 全部路径最终都落在
- *      .selected 类上, CSS 消费即全路径覆盖 -- 比 fx-mount.js 差分注入少两条
- *      state.js watch 与节点生命周期管理(S4 口径 B 案, 见计划档案 R2 实录)。
- *      载体选择: 行本体 ::after 被 row_lang wave 扫层占用、::before 被 flat 左条与
- *      D4-2 边条占用, 首格 ::after 全站空闲(grep 证); 勾形绝对定位的包含块是行
- *      (position:relative 皮肤自带), top:50% 按行高居中; 首格 .g-name 的
- *      overflow:hidden 裁不到它(包含块在裁剪者之外)。partial(半选)不给勾:
- *      半选语义由 42% 边条表达, 勾形只表全选。RM: 勾标静态可见(状态语义非装饰),
- *      pop 动画不播(下方媒体块)。 ---- */
-html[data-fx-preset] .group-row.selected > :first-child::after,
-html[data-fx-preset] .member-row.selected > :first-child::after {
-  content: ""; position: absolute; left: 4px; top: calc(50% - 3px);
-  width: 9px; height: 5px; pointer-events: none;
-  border-left: 2px solid var(--sel-bar, var(--accent));
-  border-bottom: 2px solid var(--sel-bar, var(--accent));
-  transform: rotate(-45deg);
+/* ---- D4-6 checkbox 快勾(R6 精修: R2 精修 V3 的行首格勾标退役, 转落真实
+ *      checkbox 元素本体; 静态几何留媒体块外)。
+ *      误归类复盘: showcase 的 D4-6 demo 卡挂在 torrent rows 组下(R2 精修 V3
+ *      照该落点把快勾做成了 .selected 行首格 ::after 勾形) -- 用户指认错落:
+ *      本意是 checkbox 元素本体改快勾形式; 行选择指示已有 D4-2 边条 + --sel-bg,
+ *      不缺勾。R6 复原计划原判「行级落空、候选留库」, 快勾真落地到 flux 内全部
+ *      可见 checkbox: 抽屉 dt11 勾选格(.dt11-ck, 三态含目录格 indeterminate)/
+ *      settings 明细两处 / 筛选器 hb-check / 转移目标 tr-tgt-chk / 流量卡自启。
+ *      排除面: .hb-switch input 是开关滑轨的隐藏载体(opacity:0 width:0,
+ *      console_hub.css), 视觉不是 checkbox, :not() 显式排除。
+ *      契约偏差注: fx.css 的 check 原语 = 「元素内 svg path 划线」, 原生 input
+ *      无 svg 子元素, 划线半边落不了(R6 拍板 CSS-only, 共享模板零改动): 勾形/
+ *      短横走内联 SVG 贴图(data URI, 描边取 --on-accent 同值深底反白口径),
+ *      弹入复用 fx.css 的 fx-check-pop keyframes(下方媒体块, 本文件不再私有
+ *      重写)。零 JS 零模板改动, 作用域前缀 html[data-fx-preset] 保证三旧皮肤
+ *      恒不命中。RM: 勾选态静态可见(状态语义非装饰), pop 动画不播(下方媒体块)。
+ *      ---- */
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input) {
+  appearance: none; box-sizing: border-box;
+  width: 14px; height: 14px; flex: none; margin: 0;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-sunken) center no-repeat;
+  vertical-align: -2px; cursor: pointer;
 }
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):hover:not(:disabled) { border-color: var(--fg-dim); }
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):checked,
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):indeterminate {
+  border-color: var(--accent);
+  background-color: var(--accent);
+}
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):checked {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.5l2.5 2.5 4.5-5' fill='none' stroke='%230b111b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-size: 10px 10px;
+}
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):indeterminate {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' fill='none' stroke='%230b111b' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: 8px 8px;
+}
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):disabled { opacity: .45; cursor: not-allowed; }
+html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible { outline: 1px solid var(--ring); outline-offset: 1px; }
 
 @media (prefers-reduced-motion: no-preference) {
+
+  /* ==================================================================
+   * D4-6 checkbox 快勾(R6 精修): 勾选/半选即播 fx-check-pop 过冲弹入 --
+   * keyframes 复用 fx.css 原语同名定义(本文件私有重写已随 R6 退役); 勾形/
+   * 短横贴图随 background-size 0→满放大近似划线感(原生 input 无 svg 子元素,
+   * 划线半边的契约偏差见上方段注), 边/底色 --dur 同源过渡。
+   * ================================================================== */
+  html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input) {
+    transition: border-color var(--dur) var(--ease), background-color var(--dur) var(--ease),
+      background-size 120ms var(--fx-ease-standard);
+  }
+  html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):checked,
+  html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):indeterminate {
+    animation: fx-check-pop var(--fx-dur-fast) var(--fx-ease-back);
+  }
 
   /* ==================================================================
    * 按钮 .bt 六变体(D1-2 glow / D1-3 sheen / D1-5 press / D1-6 icon)
@@ -331,9 +365,3 @@ html[data-fx-preset] .member-row.selected > :first-child::after {
 /* P1(S7) 下载中进度条条纹流动 keyframes(8px = 条纹周期, 一周期回绕无缝;
  * paint-only 小面积, 仅下载态行常驻 -- 帧率实测见计划档案 S7 实录) */
 @keyframes fx-bar-flow { to { background-position: 8px 0; } }
-
-/* D4-6 勾形 pop keyframes(行首格快勾, R2 精修 V3) */
-@keyframes fx-check-pop {
-  from { opacity: 0; transform: rotate(-45deg) scale(0); }
-  to { opacity: 1; transform: rotate(-45deg) scale(1); }
-}

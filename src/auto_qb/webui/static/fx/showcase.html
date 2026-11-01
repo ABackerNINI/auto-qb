@@ -42,6 +42,7 @@
 -->
 <link rel="stylesheet" href="../shared/fx/fx.css">
 <link rel="stylesheet" href="../shared/fx/fx-presets.css">
+<link rel="stylesheet" href="showcase-modern.css">
 <style>
 /* ====================================================================
  * showcase 页内样式 -- 只放本页排版与样例组件的专属样式;
@@ -216,16 +217,8 @@ html[data-fx-preset="glass"] .stage::before {
 }
 html[data-fx-preset="crisp"] .stage::before { height: 1px; background: var(--faint); border-radius: 0; }
 
-/* ---- View Transitions 范围收敛(S4 复验二修) ----
- * 默认 VT 对整页 root 做快照替换: 过渡的约 250ms 里整页被旧快照盖住, 循环
- * 演示等持续动画全部冻结 -- 感知为「点页签全页闪一下」。root 关掉默认参与
- * (html 不进快照), 快照只覆盖显式打了 view-transition-name 的演示区(D7-3
- * 页签容器 / D2-6 触发钮+面板 / D6-3 队列 toast 逐条), 页面其余区域保持实时
- * 渲染; 时长显式钉 250ms(<=400ms 口径硬化: UA 默认虽也是约 250ms, 但慢机
- * 上实测会漂到 320-340ms, 钉住防漂移), ::view-transition 覆盖层随过渡结束
- * 自动拆除, 无伪元素残留。 */
-:root { view-transition-name: none; }
-::view-transition-group(*) { animation-duration: 250ms; }
+/* ---- View Transitions 范围收敛: 规则外置 showcase-modern.css(v.Nu 不识
+ * VT API, 内联过不了 check_html --vnu 闸门; 行为零变化) ---- */
 
 /* ---- 分区与卡片 ---- */
 section { margin: 0 0 54px; }
@@ -528,12 +521,7 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   position: absolute; inset: 0; background: rgba(5, 8, 11, 0.6);
   transition: opacity var(--fx-dur-modal-exit) var(--fx-ease-out);
 }
-@starting-style {
-  .fmd-backdrop { opacity: 0; }
-  /* 只有反例对照(半径直动)需要把 blur 起点 claim 到 0px; 治本版 blur 恒定,
-   * 起点 opacity: 0 由上面基础规则覆盖 */
-  .fmd-blur.fmd-blur-legacy .fmd-backdrop { opacity: 0; backdrop-filter: blur(0px) brightness(1); }
-}
+/* backdrop 入场起始式外置 showcase-modern.css(v.Nu 不识 @starting-style) */
 .fmd.closing .fmd-backdrop {
   opacity: 0;
   transition: opacity var(--fx-pair-modal-out);
@@ -678,9 +666,15 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   display: inline-flex; align-items: center; justify-content: center; color: transparent; cursor: pointer;
 }
 .frt-chk svg path { stroke-dasharray: 14; stroke-dashoffset: 14; transition: stroke-dashoffset 120ms var(--fx-ease-standard) 40ms; }
-.frt-row.done .frt-chk { border-color: var(--accent); color: var(--accent); animation: frtChkPop 120ms var(--fx-ease-back); }
-.frt-row.done .frt-chk svg path { stroke-dashoffset: 0; }
-@keyframes frtChkPop { from { transform: scale(0.6); } }
+/* D4-6 checkbox 快勾(R6 归位自 D4 行组): 勾选态视觉全走 fx.css 的
+ * [data-fx~="check"] 原语契约(.is-done = accent 描边 + pop + svg 划线),
+ * 这里只供格子几何与底描边(行组 .frt-row.done 旧样式随归位退役) */
+.fctl { display: flex; gap: 18px; align-items: center; padding: 6px 2px; }
+.fctl-item { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; color: var(--dim); font-size: 12.5px; }
+.fctl-chk {
+  flex: none; width: 16px; height: 16px; border: 1px solid var(--faint); border-radius: 3px;
+  display: inline-flex; align-items: center; justify-content: center; color: transparent; cursor: pointer;
+}
 .frt-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .frt-size, .frt-st { color: var(--dim); font-family: var(--mono); font-size: 11.5px; white-space: nowrap; }
 .frt-row.frt-flash { animation: frtFlash 600ms var(--fx-ease-standard); }
@@ -811,8 +805,7 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   .fdr-parallax .fdr-grip { transition-duration: 0s; transition-delay: 0s; transform: none; }
   /* D4 行: 过渡/一次性动画全关, 静态终态保留 */
   .frt-row { transition-duration: 0s; transition-delay: 0s; }
-  .frt-row.frt-flash, .frt-row.frt-in, .frt-row.frt-inl, .frt-row.frt-out, .frt-row.frt-outl,
-  .frt-row.done .frt-chk { animation: none; }
+  .frt-row.frt-flash, .frt-row.frt-in, .frt-row.frt-inl, .frt-row.frt-out, .frt-row.frt-outl { animation: none; }
   /* D6 toast: 进度条留静态满条(信息冗余: 文本仍在), 其余动画关 */
   .tst-bar, .tst-ico.spring, .tst.tst-danger.tst-glow { animation: none; }
   /* D8 横滚指示条: 过渡归零直接显隐(位移/缩放压平) */
@@ -1041,8 +1034,8 @@ footer .foot-nav a:hover { color: var(--accent-ink); }
   </section>
 
   <section id="d5">
-    <h2><span class="no">D5 · 组件分区</span>输入框 focus 态</h2>
-    <p class="sec-note">焦点可见性是可访问性必需 -- 所有 focus 候选的 RM 降级都「保留状态、只去动效」。点样例输入框或卡片「演示」钮触发 focus。</p>
+    <h2><span class="no">D5 · 组件分区</span>输入框 focus 态 / checkbox 快勾</h2>
+    <p class="sec-note">焦点可见性是可访问性必需 -- 所有 focus 候选的 RM 降级都「保留状态、只去动效」。点样例输入框或卡片「演示」钮触发 focus。D4-6 checkbox 快勾自 R6 起归位本区(载体是 checkbox 元素本体, 原挂 D4 torrent rows 组是误归类; flux 生产落点 = 抽屉 dt11 勾选格 / settings 明细 / 筛选器)。</p>
     <div class="cards"></div>
   </section>
 
@@ -1066,7 +1059,7 @@ footer .foot-nav a:hover { color: var(--accent-ink); }
 
   <section id="d4">
     <h2><span class="no">D4 · 组件分区</span>torrent 表格行(选中/锚点/光标三态)</h2>
-    <p class="sec-note">高密度行<b>禁全行 stagger</b>(硬口径): 刷新类候选只做单行独立浮现/退场, 整表刷新走 cross-fade 或 View Transitions 思路(见 D7-3, 不在此重复落卡)。行可交互: selected 卡点行切选中, checkbox 卡点格子勾选。row-insert 与 row-remove 各落<b>对照双卡</b>(纯 transform 版 vs max-height 版), 组成「插入/退场 x transform/max-height」2x2 对照(D4-4 / D4-4L / D4-5 / D4-5L), 破例点在各自 meta 标注。</p>
+    <p class="sec-note">高密度行<b>禁全行 stagger</b>(硬口径): 刷新类候选只做单行独立浮现/退场, 整表刷新走 cross-fade 或 View Transitions 思路(见 D7-3, 不在此重复落卡)。行可交互: selected 卡点行切选中。row-insert 与 row-remove 各落<b>对照双卡</b>(纯 transform 版 vs max-height 版), 组成「插入/退场 x transform/max-height」2x2 对照(D4-4 / D4-4L / D4-5 / D4-5L), 破例点在各自 meta 标注。D4-6 checkbox 快勾已归位 D5(R6: 载体是 checkbox 元素本体, 挂行组是误归类)。</p>
     <div class="cards"></div>
   </section>
 
@@ -1108,7 +1101,7 @@ footer .foot-nav a:hover { color: var(--accent-ink); }
       <tr><td>D2-3 zoom-out 反差</td><td><span class="good">transform/opacity</span></td><td>250ms -- 入场档内</td><td>终态</td><td class="good">符合</td></tr>
       <tr><td>D2-4 backdrop blur 渐入</td><td><span class="wr">filter(大面积, 合成器)</span></td><td>200ms -- 符合; S4 页内基准(预磨砂版): 过渡 23 fps / 静置维持 56 fps(有头 chromium 156, longtask 0)</td><td>直接终态模糊</td><td class="wr">剩余点击停顿 = 每次打开 3 帧约 50ms 的全屏磨砂重算, 成本随磨砂面积放大(40% 面积磨砂实测零停顿) -- 预磨砂已把重算次数压到下限, 详见 MECH 帧率抽查</td></tr>
       <tr><td>D2-5 danger tone</td><td><span class="good">transform</span> + <span class="wr">box-shadow</span></td><td>glow 400ms + headShake 350ms -- 强调档(300-500ms)内</td><td>去动效留静态红边</td><td class="good">符合(强调档)</td></tr>
-      <tr><td>D2-6 VT 共享元素</td><td><span class="good">浏览器合成</span></td><td>钉 250ms; S4 实测: 点击->回调 ~4ms / 过渡起 18-57ms(旧快照捕获+新态渲染, 约 2-3 帧平台下限) / 总时长 298-327ms -- 符合(<=400ms)</td><td>不支持/RM: 普通打开</td><td class="good">符合</td></tr>
+      <tr><td>D2-6 VT 共享元素</td><td><span class="good">浏览器合成</span></td><td>钉 250ms; S4 实测: 点击->回调 ~4ms / 过渡起 18-57ms(旧快照捕获+新态渲染, 约 2-3 帧平台下限) / 总时长 298-327ms -- 符合(&lt;=400ms)</td><td>不支持/RM: 普通打开</td><td class="good">符合</td></tr>
       <tr><td>D3-1 上滑+fade(底部面板)</td><td><span class="good">transform/opacity</span></td><td>入 300ms / 出 200ms 骨对 -- 符合</td><td>无动效直接开合</td><td class="good">符合</td></tr>
       <tr><td>D3-2 shadow-ahead(上缘落影)</td><td><span class="wr">box-shadow(paint, 面板级中等面积)</span></td><td>与上滑同步 300ms 渐强, 落位后 180ms 收缩为常规阴影 -- 入场档内</td><td>常规静态阴影</td><td class="wr">paint 标注, 保留</td></tr>
       <tr><td>D3-3 backdrop 渐暗+blur</td><td><span class="good">opacity/filter</span>(遮罩, blur 4px 小半径)</td><td>250ms 与面板同步 -- 符合</td><td>静态半透明遮罩</td><td class="wr">filter 小半径, 标注</td></tr>
@@ -1135,12 +1128,12 @@ footer .foot-nav a:hover { color: var(--accent-ink); }
 
   <section id="mech">
     <h2><span class="no">MECH</span>机制自检 + 交接说明(T5)</h2>
-    <p class="sec-note">入场原语(fade / rise / pop / slip)的样例演示机制 = <code>display:none</code> 一帧后恢复, <code>@starting-style</code> 会重新播放入场; <code>--fx-i</code>(stagger 序号槽)只允许设在 ≤8 个表面级联的入场样例上(<b>hover/press 反馈样例绝不设 -- 否则交互被 delay 拖慢</b>; torrent 行禁全行 stagger)。S3a 后补的 4 组组件走「构造器卡」: CARDS 条目带 <code>ctor</code> 字段(modal/drawer/rows/toast/hscroll), buildSample 分发到对应 make* 构造器, comp.demo() 承接演示钮与循环档 -- 弹窗/抽屉/toast 均为真触发。ripple / 图标附加 / zoom-out 这几个「样例页内实现」的候选若被选定, 是否把实现提升进 fx 库(fx.js 加 ripple 助手 / fx.css 加图标子元素契约与反差缩放原语)是 S4/S6 的决策点。</p>
+    <p class="sec-note">入场原语(fade / rise / pop / slip)的样例演示机制 = <code>display:none</code> 一帧后恢复, <code>@starting-style</code> 会重新播放入场; <code>--fx-i</code>(stagger 序号槽)只允许设在 ≤8 个表面级联的入场样例上(<b>hover/press 反馈样例绝不设 -- 否则交互被 delay 拖慢</b>; torrent 行禁全行 stagger)。S3a 后补的 4 组组件走「构造器卡」: CARDS 条目带 <code>ctor</code> 字段(modal/drawer/rows/ctl/toast/hscroll), buildSample 分发到对应 make* 构造器, comp.demo() 承接演示钮与循环档 -- 弹窗/抽屉/toast 均为真触发。ripple / 图标附加 / zoom-out 这几个「样例页内实现」的候选若被选定, 是否把实现提升进 fx 库(fx.js 加 ripple 助手 / fx.css 加图标子元素契约与反差缩放原语)是 S4/S6 的决策点。</p>
     <div class="mech" id="mech-row"></div>
     <div class="perf">
       <button class="ctl" type="button" id="btn-perf">帧率抽查(约 16s)</button>
       <div class="perf-out" id="perf-out">对最重的 4 个样例做页内基准: 350ms 节奏连触发 4s, rAF 计帧 + longtask 统计 -- backdrop blur(D2-4) / sheen(D1-3) / 弹窗入退场(D2-1) / 行插入(D4-4)。数值以跑基准当时的环境为准, S4 裁决请用有头浏览器复测。
-S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D2-4 预磨砂版连触发 23 fps / 静置维持 56 fps / 卡内反例(blur 半径直动) 25 fps / D1-3 sheen 62 / D2-1 弹窗 62 / D4-4 行插入 58-64; headless -- blur 35 / sheen 59 / 弹窗 60 / 行插入 60。分段打点: 单次打开的点击停顿 = 3 帧各约 50ms 的全屏磨砂重算(反例直动为 4-5 帧 -- chromium 156 已对半径动画做重算合并, 故连触发基准两者同量级; 预磨砂仍是生产口径: 重算次数下限, 不依赖引擎合并行为)。重算成本随磨砂面积放大: 40% 面积磨砂实测零停顿 -- 大面积毛玻璃的点击期停顿是面积单点, CSS 侧(预磨砂 / opacity 交叉 / 常驻层)均无法消除, 生产按此口径评估面积与半径。D2-6 VT(钉 250ms 后): 点击->回调 ~4ms / 过渡起 18-57ms(旧快照捕获+新态渲染, 约 2-3 帧平台下限) / 总时长 298-327ms, <=400ms 达标。</div>
+S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D2-4 预磨砂版连触发 23 fps / 静置维持 56 fps / 卡内反例(blur 半径直动) 25 fps / D1-3 sheen 62 / D2-1 弹窗 62 / D4-4 行插入 58-64; headless -- blur 35 / sheen 59 / 弹窗 60 / 行插入 60。分段打点: 单次打开的点击停顿 = 3 帧各约 50ms 的全屏磨砂重算(反例直动为 4-5 帧 -- chromium 156 已对半径动画做重算合并, 故连触发基准两者同量级; 预磨砂仍是生产口径: 重算次数下限, 不依赖引擎合并行为)。重算成本随磨砂面积放大: 40% 面积磨砂实测零停顿 -- 大面积毛玻璃的点击期停顿是面积单点, CSS 侧(预磨砂 / opacity 交叉 / 常驻层)均无法消除, 生产按此口径评估面积与半径。D2-6 VT(钉 250ms 后): 点击->回调 ~4ms / 过渡起 18-57ms(旧快照捕获+新态渲染, 约 2-3 帧平台下限) / 总时长 298-327ms, &lt;=400ms 达标。</div>
     </div>
   </section>
 
@@ -1335,6 +1328,21 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
         states: "校验失败 = 微震 3 次 + 边框转 danger; 复演示自动摘 class"
       },
       sample: '<span class="fx-field f-shake"><input type="text" value="not-a-valid-path" aria-label="演示输入框"></span>'
+    },
+    /* ---- D4-6 checkbox 快勾(R6 归位: 原 D4 torrent rows 组, 载体记错成表格行 --
+     *      快勾的载体是 checkbox 元素本体, 与行三态无关; flux 生产落点 =
+     *      fx-mount.css R6 段: 抽屉 dt11 勾选格(三态)/ settings 明细 / 筛选器) ---- */
+    {
+      id: "D4-6", sec: "d5", ctor: "ctl", kind: "check", name: "checkbox 快勾", fx: null, demo: "ctl", warn: "",
+      meta: {
+        attr: "transform(scale 0.6->1 过冲) + stroke-dashoffset(SVG 划线)",
+        dur: "pop 120ms back-out; 划线 120ms(延迟 40ms)",
+        js: "纯 CSS; 点格子勾选(真实交互)",
+        rm: "直切",
+        src: "animate.css bounceIn 微缩版(uiverse checkbox 常见)",
+        states: "勾选 = 格子过冲弹出 + 对勾划线; 取消反向。R6 归位注: 原挂在 D4 torrent rows 组下(行内构 checkbox 格)是误归类 -- flux 真实落点为 checkbox 元素本体(dt11/settings/筛选器, CSS-only 近似: 原生 input 无 svg 子元素, 原语留库不消费)"
+      },
+      sample: ""
     },
     /* ---- D7 页签切换 ---- */
     {
@@ -1628,18 +1636,6 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
         rm: "立即删除",
         src: "报告 D4-5 要求的对照实现(行高恒定时常用)",
         states: "删除 = 行收拢推下方行, 无瞬跳但代价是每帧 layout"
-      },
-      sample: ""
-    },
-    {
-      id: "D4-6", sec: "d4", ctor: "rows", kind: "check", name: "checkbox 快勾", fx: null, demo: "rows", warn: "",
-      meta: {
-        attr: "transform(scale 0.6->1 过冲) + stroke-dashoffset(SVG 划线)",
-        dur: "pop 120ms back-out; 划线 120ms(延迟 40ms)",
-        js: "纯 CSS; 点格子勾选(真实交互)",
-        rm: "直切",
-        src: "animate.css bounceIn 微缩版(uiverse checkbox 常见)",
-        states: "勾选 = 格子过冲弹出 + 对勾划线; 取消反向"
       },
       sample: ""
     },
@@ -2137,7 +2133,7 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
     };
   }
 
-  /* ---- D4 torrent 表格行样例构造器(kind: hover|selected|anchor|insert|remove|removel|check) ----
+  /* ---- D4 torrent 表格行样例构造器(kind: hover|selected|anchor|insert|remove|removel) ----
    * 高密度行样例: 禁全行 stagger(硬口径), 所有动效单行独立。 */
   var FRT_DATA = [
     ["ubuntu-24.04.1-desktop-amd64.iso", "5.8 GiB", "做种"],
@@ -2224,18 +2220,47 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
         };
         first.addEventListener("animationend", fin, { once: true });
         setTimeout(fin, 320);
-      } else if (kind === "check") {
-        r.classList.toggle("done");
       }
     }
 
-    /* 真实交互: selected 卡点行切选中, check 卡点格子勾选 */
+    /* 真实交互: selected 卡点行切选中(check 卡已归位 D5, 见 makeCtl) */
     wrap.addEventListener("click", function (ev) {
       var row = ev.target.closest ? ev.target.closest(".frt-row") : null;
       if (!row) return;
       if (kind === "selected") row.classList.toggle("sel");
-      if (kind === "check") row.classList.toggle("done");
     });
+    return { el: wrap, demo: demo };
+  }
+
+  /* ---- D4-6 checkbox 快勾样例构造器(R6 归位自 torrent rows 组): 载体 =
+   *      checkbox 格子本体(走 fx.css 的 [data-fx~="check"] 原语契约:
+   *      .is-done = 格子过冲弹出 + svg path 划线), 不再是表格行 ---- */
+  function makeCtl(c) {
+    var wrap = document.createElement("div");
+    wrap.className = "fctl";
+    var boxes = [];
+    ["未选", "已选"].forEach(function (t, i) {
+      var lab = document.createElement("label");
+      lab.className = "fctl-item";
+      var box = document.createElement("span");
+      box.className = "fctl-chk";
+      box.setAttribute("data-fx", "check");
+      box.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+      if (i === 1) box.classList.add("is-done");
+      var txt = document.createElement("span");
+      txt.textContent = t;
+      lab.appendChild(box);
+      lab.appendChild(txt);
+      wrap.appendChild(lab);
+      boxes.push(box);
+    });
+    /* 真实交互: 点格子勾选/取消(语义同原生 checkbox 点选) */
+    wrap.addEventListener("click", function (ev) {
+      var lab = ev.target.closest ? ev.target.closest(".fctl-item") : null;
+      if (!lab) return;
+      lab.querySelector(".fctl-chk").classList.toggle("is-done");
+    });
+    function demo() { boxes[1].classList.toggle("is-done"); }
     return { el: wrap, demo: demo };
   }
 
@@ -2476,6 +2501,7 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
     if (c.ctor === "modal") { c.comp = makeModal(c); el = c.comp.el; }
     else if (c.ctor === "drawer") { c.comp = makeDrawer(c); el = c.comp.el; }
     else if (c.ctor === "rows") { c.comp = makeRows(c); el = c.comp.el; }
+    else if (c.ctor === "ctl") { c.comp = makeCtl(c); el = c.comp.el; }
     else if (c.ctor === "toast") { c.comp = makeToast(c); el = c.comp.el; }
     else if (c.ctor === "hscroll") { c.comp = makeHscroll(c); el = c.comp.el; }
     else if (c.demo === "slide" || c.demo === "fade" || c.demo === "vt" || c.demo === "dir" || c.demo === "choir") {

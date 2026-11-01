@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-fx-skin">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-31-2316">
-<meta name="doc-updated" content="26-11-02-0237">
+<meta name="doc-updated" content="26-11-02-0345">
 <meta name="doc-refs" content="memory-bank/conventions/webui.md, memory-bank/conventions/webui-scope.md, memory-bank/pitfalls/web-ui/css-file-line-cap.md, memory-bank/reports/26-10-31-2340-report-webui-fx-skin.html, memory-bank/testing/baselines/26-11-02-0237-webui-fx-skin.md">
 <style>
   :root {
@@ -608,6 +608,16 @@
   <li><b>实测</b>: test.quick 4798 passed, 10 skipped(33.67s) → test.full 4798 passed, 10 skipped, 覆盖率 99%(151.11s, 数字事实源 = kb.baseline 最新切片 26-11-02-0200)。</li>
 </ul>
 
+<h3>精修轮 R6(F7f, 26-11-02): D4-6 快勾误归类纠正 —— 行首勾标退役, 转落真实 checkbox</h3>
+<p>用户报障: 主表选中行名称列多了一个勾。根因 = R2 精修 V3 的落点误判: showcase 的 D4-6 demo 卡挂在 torrent rows 组下(行内构 checkbox 格), V3 照该落点把快勾转成了 <code>.selected</code> 行首格 <code>::after</code> 勾形 —— 用户本意是 <b>checkbox 元素本体</b>改快勾形式(本档案 S6 后半的原判「D4-6 行级落空、候选留库」本就正确)。grilling 四项拍板: 勾标删/落地面=全部可见 checkbox/CSS-only/showcase 归位。</p>
+<ul>
+  <li><b>行首勾标退役</b>: fx-mount.css 的 .group-row/.member-row.selected > :first-child::after 勾形与私有 fx-check-pop keyframes 删除, 行选择指示回归 D4-2 边条 + --sel-bg 双重态(不缺勾)。</li>
+  <li><b>快勾真落地(CSS-only)</b>: <code>html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input)</code> 全量自绘 -- appearance:none 14px 方格 + checked/indeterminate accent 底 + 内联 SVG 贴图勾形/短横(--on-accent 同值描边) + disabled/focus-visible 态。落地面 = flux 内全部可见 checkbox(抽屉 dt11 勾选格三态 / settings 明细两处 / 筛选器 hb-check / 转移目标 tr-tgt-chk / 流量卡自启); <code>.hb-switch input</code> 是开关滑轨的隐藏载体(opacity:0), :not() 显式排除。动效收 RM no-preference 媒体块: 勾选即播 fx.css 的 fx-check-pop(keyframes 复用不再私有重写) + background-size 0→满放大近似划线感 -- 契约偏差注: 原生 input 无 svg 子元素, fx.css check 原语「svg path 划线」半边落不了(R6 拍板 CSS-only, 共享模板零改动, 原语留库不消费)。</li>
+  <li><b>showcase 归位</b>: D4-6 注册项自 d4 挪入 d5(sec/ctor 改 ctl), 新增 makeCtl 构造器(未选/已选两格, 走 [data-fx~="check"] 原语契约), makeRows 摘除 check 分支与 .done 死样式(frtChkPop keyframes + RM 块引用), d4/d5 sec-note、mech 构造器清单、meta.states 归位注同步。</li>
+  <li><b>vnu 闸门顺带达标(提交时发现, 存量非本轮引入)</b>: showcase.html 首次过 check_html --vnu --strict, 5 条 error 与 HEAD 基线逐条相同 —— 2 条真伤(正文 <code>&lt;=400ms</code> 未转义, 转 <code>&amp;lt;=</code>) + 3 条 v.Nu CSS profile 滞后假阳性(view-transition-name / ::view-transition-group(*) / @starting-style, fx 库有意用的现代特性); 按「改谁谁达标」口径处置: 三段规则原文外置新件 <code>fx/showcase-modern.css</code>(vnu 只查 HTML 内联, 与 fx 库同款规则外置先例一致, 行为零变化, CSSOM 冒烟: 外置件挂载 + root view-transition-name=none + starting-style 2 子规则生效)。</li>
+  <li><b>实测</b>: 桩服务 8137 临时 Playwright 18/18(flux 选中行无勾标 + CSSOM 零勾标规则 / hb-check·dt11-ck·裸 input 三面 computed appearance+accent 底+勾形贴图 / hb-switch 零波及 / indeterminate 短横 / RM 动画不播静态在 / showcase D4-6 卡在 D5 + 原语契约 pop+划线); 截图两幅目检(选中行只剩边条+底色; showcase D5 区新卡+归位注)。test.full 4806 全绿(129.26s 与闸门修复后复跑 110.94s 各一次, 中间一次 relocate 偶发单红复跑即绿, 覆盖率 99%, 切片 26-11-02-0340); check_html --vnu --strict 改动双 HTML 零 error。守阵零改动(勾标无既有断言; 新增 CSS 不触 fx_wiring 反向钉面)。</li>
+</ul>
+
 <h3>S8 执行实录(26-11-02): 收尾</h3>
 <p>纯文档/档案轮, 代码与测试零改动(atlas/prism/console/showcase/config.yml/auto-qb-data 零改动)。§04 S8 行 DoD 逐项落点如下, §05 后续任务三条(更多 preset / 存量收编 / 指南硬化)保持登记、不排期。</p>
 <ul>
@@ -645,6 +655,7 @@
   <li><span class="tag">R10 · 26-11-02-0056</span> 精修轮 R4(F7d)落档(见 §06「精修轮 R4」): F7c 裁决项 b 落地 —— push 落定回执(fx-mount.js transitionend+兜底定时器, data-fx-pushed 守卫)+ state.js 消费点重入原版 _kbScrollRowIntoView, 聚焦行终位 21.9→108.9/136.0(吸顶列头下 8px 整); 实证 A/B 定案重入单点选择; fx_wiring 6c 追加落定回执链路六针并红绿双验</li>
   <li><span class="tag">R11 · 26-11-02-0203</span> 精修轮 R5(F7e)落档(见 §06「精修轮 R5」): D3-4 第三轮修复 —— 打点四路径实证根因(push 位移在 scrollY=0 不可恢复, F7d 重入链路本身正常), 按用户口径弃用 push 位移本体, 落定回执换锚面板入场过渡, 加面板底部上滑(fx 令牌)+fx-glide 上推过渡两段动效; 守阵 6b/6c 重写红绿双验; test.full 4798 全绿(切片 26-11-02-0200)</li>
   <li><span class="tag">R12 · 26-11-02-0237</span> S8 收尾落档(见 §06「S8 执行实录」): conventions/webui.md 增 fx 动效库与 flux 皮肤章节(路由单点: 挂载口/三档消费落点/四皮肤隔离/降级哲学 D5/坑路由/扩展接口) + 双向补链核对 + test.full 4799 全绿新建基线切片(同树计数波动) + progress 沉淀与 activeContext 两切片删除 + doc-status 翻 Done</li>
+  <li><span class="tag">R13 · 26-11-02-0345</span> 精修轮 R6(F7f)落档(见 §06「精修轮 R6」): 用户报障选中行名称列多勾 —— R2 V3 落点误判纠正, 行首勾标退役, D4-6 快勾转落真实 checkbox(flux 全部可见面, CSS-only, .hb-switch 隐藏载体排除) + showcase D4-6 卡归位 D5(makeCtl 新构造器, makeRows 摘 check); 临时 Playwright 18/18; showcase 首过 vnu 闸门顺带达标(2 真伤转义 + 3 假阳性外置 showcase-modern.css); test.full 4806 全绿(切片 26-11-02-0340)</li>
 </ul>
 
 </div>

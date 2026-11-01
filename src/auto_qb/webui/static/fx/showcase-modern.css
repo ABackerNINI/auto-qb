@@ -1,0 +1,27 @@
+/* ====================================================================
+ * showcase-modern.css -- showcase 页的现代 CSS 特性外置面
+ * ====================================================================
+ * 定位: 这几段规则写在 showcase.html 内联 <style> 里会被 check_html --vnu
+ *   闸门红(2026-11-01 起「改谁谁达标」口径) -- v.Nu 的 CSS profile 滞后于
+ *   平台, 不认识 View Transitions API 与 @starting-style(与 fx 库同款规则
+ *   放外部 .css 的既有先例一致, vnu 只查 HTML 内联)。行为零变化, 原文迁出。
+ * ==================================================================== */
+
+/* ---- View Transitions 范围收敛(S4 复验二修) ----
+ * 默认 VT 对整页 root 做快照替换: 过渡的约 250ms 里整页被旧快照盖住, 循环
+ * 演示等持续动画全部冻结 -- 感知为「点页签全页闪一下」。root 关掉默认参与
+ * (html 不进快照), 快照只覆盖显式打了 view-transition-name 的演示区(D7-3
+ * 页签容器 / D2-6 触发钮+面板 / D6-3 队列 toast 逐条), 页面其余区域保持实时
+ * 渲染; 时长显式钉 250ms(<=400ms 口径硬化: UA 默认虽也是约 250ms, 但慢机
+ * 上实测会漂到 320-340ms, 钉住防漂移), ::view-transition 覆盖层随过渡结束
+ * 自动拆除, 无伪元素残留。 */
+:root { view-transition-name: none; }
+::view-transition-group(*) { animation-duration: 250ms; }
+
+/* ---- D2 弹窗 backdrop 入场起始式(原文自 showcase.html 迁出) ----
+ * 只有反例对照(半径直动)需要把 blur 起点 claim 到 0px; 治本版 blur 恒定,
+ * 起点 opacity: 0 由基础规则覆盖 */
+@starting-style {
+  .fmd-backdrop { opacity: 0; }
+  .fmd-blur.fmd-blur-legacy .fmd-backdrop { opacity: 0; backdrop-filter: blur(0px) brightness(1); }
+}
