@@ -9,6 +9,7 @@
 - test_qb_test_connection_login_failed: LoginFailed -> 抛 TransferAdapterError(文案含"登录失败")
 - test_qb_test_connection_unreachable: APIConnectionError -> 抛 TransferAdapterError(文案含"无法连接")
 - test_qb_test_connection_reuses_client: 同一 adapter 多次探测复用同一 client(单批一个连接)
+- test_qb_test_connection_unexpected_error: 非连接/登录类异常 -> TransferAdapterError(文案含"探测失败")
 - test_qb_build_client_passes_api_key: 带 api_key 的目标 -> Client 收到 api_key 原值(Bearer 直连, issue 26-11-01-0335)
 - test_qb_build_client_empty_api_key_maps_to_none: api_key 空串(缺省)-> Client 收到 None(密码登录路径, 行为零变化)
 - test_qb_add_field_mapping: 字段键 -> torrents/add 参数映射(category/tags/ratio_limit/seeding_time_limit/upload_limit/download_limit)
@@ -16,6 +17,8 @@
 - test_qb_add_text_ok_result: 旧形态纯文本 "Ok." -> ADDED
 - test_qb_add_metadata_result: 新形态元数据(success_count/added_torrent_ids) -> ADDED 且 infohash 取自回执
 - test_qb_add_duplicate_text_result: 响应文本含已存在文案 -> SKIPPED(不是失败)
+- test_qb_add_text_rejected_result: 响应文本既非 Ok 也非已存在 -> FAILED(带响应原文)
+- test_qb_add_metadata_zero_counts_failed: 元数据三项计数全 0 -> FAILED(不涉及探针)
 - test_qb_add_rejected_with_probe_hash_exists: 全部被拒 + 探针 hash 在目标查得 -> SKIPPED
 - test_qb_add_rejected_probe_hash_absent: 全部被拒 + 探针 hash 目标查无 -> FAILED
 - test_qb_add_rejected_without_probe: 全部被拒且无探针 hash -> FAILED(不查重)
@@ -23,12 +26,20 @@
 - test_qb_add_conflict409_plain_probe_hash_exists: 抛无文案 409(qB 5.2 形态) + 探针 hash 目标查得 -> SKIPPED(异常分支探针兜底)
 - test_qb_add_conflict409_plain_probe_hash_absent: 无文案 409 + 探针 hash 目标查无 -> FAILED
 - test_qb_add_connection_error_failed: 调用异常(网络) -> FAILED 态返回, 不上抛
+- test_qb_add_login_failed_result: 添加时抛 LoginFailed -> FAILED(文案含"登录失败")
+- test_qb_hash_exists_query_failure: 探针查重查询故障 -> 按查不到处理(FAILED, 不误判已存在)
 - test_qb_add_missing_save_path_fails: save_path 缺失 -> FAILED 且未发起 torrents_add
 - test_qb_add_empty_data_raises: data 空字节 -> TypeError(编程错误)
 - test_qb_add_unknown_field_downgraded: capabilities 外的字段键被忽略并写进 ignored_fields(降级注明)
 - test_qb_add_empty_tags_not_sent: tags 空串/逗号空项 -> 不下发 tags 参数
 - test_qb_add_super_seeding_applied: 添加成功且 hash 可得 -> setSuperSeeding 一发 + reason 注明
 - test_qb_add_super_seeding_without_hash: 添加成功但无回执 hash -> 不调 setSuperSeeding, reason 注明未应用
+- test_qb_add_super_seeding_apply_failure: 添加成功但 setSuperSeeding 抛错 -> 状态保 ADDED, reason 注明失败
+- test_qb_find_torrent_mapping_record: 验证轮询查得 Mapping 记录 -> 原样转 dict
+- test_qb_find_torrent_absent: 验证轮询查无 -> None
+- test_qb_find_torrent_query_failure_returns_none: 查询故障 -> None(下一轮再试, 不升级为"目标没收到")
+- test_qb_find_torrent_non_mapping_record: 非 Mapping 记录 -> 只取验证关心的五个键
+- test_qb_pause_torrent_success_and_failure: pause_torrent True/False 两向(失败只告警不上抛)
 - test_tr_stub_capabilities_and_test: tr stub capabilities 空集 + test_connection 返回"暂未实现"前缀
 - test_tr_stub_add_torrent_raises: tr stub add_torrent 抛 NotImplementedError
 - test_add_result_ok_property: AddResult.ok 三态语义(failed=False, added/skipped=True)
@@ -143,6 +154,17 @@ def test_qb_test_connection_unreachable(monkeypatch):
     assert "无法连接" in str(excinfo.value)
 
 
+def test_qb_test_connection_unexpected_error(monkeypatch):
+    """非连接/登录类异常(如库内部错误) -> TransferAdapterError, 文案含"探测失败"与原文"""
+    client = MagicMock()
+    client.app_version.side_effect = ValueError("bad response")
+    adapter = _qb_adapter(monkeypatch, client)
+    with pytest.raises(Exception) as excinfo:  # noqa: B017
+        adapter.test_connection()
+    assert "探测失败" in str(excinfo.value)
+    assert "bad response" in str(excinfo.value)
+
+
 def test_qb_test_connection_reuses_client(monkeypatch):
     client = MagicMock()
     client.app_version.return_value = "v5.2.3"
@@ -251,6 +273,26 @@ def test_qb_add_duplicate_text_result(monkeypatch):
     assert result.ok is True
 
 
+def test_qb_add_text_rejected_result(monkeypatch):
+    """文本响应既非 Ok. 也非已存在文案 -> FAILED, 原因带响应原文"""
+    client = MagicMock()
+    client.torrents_add.return_value = "Fails."
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d"}, skip_check=False)
+    assert result.status is AddStatus.FAILED
+    assert "Fails." in result.reason
+
+
+def test_qb_add_metadata_zero_counts_failed(monkeypatch):
+    """元数据三项计数全 0(既非受理也非全部被拒的边界) -> FAILED, 不发起探针"""
+    client = MagicMock()
+    client.torrents_add.return_value = _metadata_result(success=0, failure=0, pending=0)
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d", "infohash": "ABC123"}, skip_check=False)
+    assert result.status is AddStatus.FAILED
+    client.torrents_info.assert_not_called()
+
+
 def test_qb_add_rejected_with_probe_hash_exists(monkeypatch):
     client = MagicMock()
     client.torrents_add.return_value = _metadata_result(success=0, failure=1)
@@ -322,6 +364,27 @@ def test_qb_add_connection_error_failed(monkeypatch):
     assert "refused" in result.reason
 
 
+def test_qb_add_login_failed_result(monkeypatch):
+    """添加时抛 LoginFailed -> FAILED(文案含"登录失败"), 不上抛"""
+    client = MagicMock()
+    client.torrents_add.side_effect = LoginFailed()
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d", "infohash": "ABC123"}, skip_check=False)
+    assert result.status is AddStatus.FAILED
+    assert "登录失败" in result.reason
+
+
+def test_qb_hash_exists_query_failure(monkeypatch):
+    """探针查重查询故障(网络噪声)-> 按查不到处理, 落 FAILED 而不是误判已存在"""
+    client = MagicMock()
+    client.torrents_add.return_value = _metadata_result(success=0, failure=1)
+    client.torrents_info.side_effect = RuntimeError("probe timeout")
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d", "infohash": "ABC123"}, skip_check=False)
+    assert result.status is AddStatus.FAILED
+    assert result.ok is False
+
+
 def test_qb_add_missing_save_path_fails(monkeypatch):
     client = MagicMock()
     adapter = _qb_adapter(monkeypatch, client)
@@ -386,6 +449,72 @@ def test_qb_add_super_seeding_without_hash(monkeypatch):
     assert "超级做种未应用" in result.reason
 
 
+def test_qb_add_super_seeding_apply_failure(monkeypatch):
+    """添加成功但 setSuperSeeding 抛错 -> 状态保 ADDED, reason 注明失败(不翻状态)"""
+    client = MagicMock()
+    client.torrents_add.return_value = _metadata_result(success=1, ids=["ABC123"])
+    client.torrents_set_super_seeding.side_effect = RuntimeError("boom")
+    adapter = _qb_adapter(monkeypatch, client)
+    result = adapter.add_torrent(b"d4:infod4:name3:abce", {"save_path": "/d", "super_seeding": True}, skip_check=False)
+    assert result.status is AddStatus.ADDED
+    assert "超级做种应用失败" in result.reason
+
+
+# ---------- qb: orchestrator 扩展点(find_torrent / pause_torrent) ----------
+
+
+def test_qb_find_torrent_mapping_record(monkeypatch):
+    """验证轮询: 目标返回 Mapping 记录 -> 原样转 dict, 查询按 hash 单条"""
+    client = MagicMock()
+    record = {"hash": "ABC123", "state": "pausedUP", "progress": 1.0}
+    client.torrents_info.return_value = [record]
+    adapter = _qb_adapter(monkeypatch, client)
+    assert adapter.find_torrent("ABC123") == record
+    client.torrents_info.assert_called_once_with(torrent_hashes="ABC123")
+
+
+def test_qb_find_torrent_absent(monkeypatch):
+    """验证轮询: 目标查无 -> None"""
+    client = MagicMock()
+    client.torrents_info.return_value = []
+    adapter = _qb_adapter(monkeypatch, client)
+    assert adapter.find_torrent("ABC123") is None
+
+
+def test_qb_find_torrent_query_failure_returns_none(monkeypatch):
+    """验证轮询: 查询故障 -> None(下一轮再试, 不把噪声升级成"目标没收到")"""
+    client = MagicMock()
+    client.torrents_info.side_effect = RuntimeError("network noise")
+    adapter = _qb_adapter(monkeypatch, client)
+    assert adapter.find_torrent("ABC123") is None
+
+
+def test_qb_find_torrent_non_mapping_record(monkeypatch):
+    """验证轮询: 非 Mapping 记录 -> 只取 hash/state/progress/name/save_path 五键"""
+    class _Record:
+        hash = "ABC123"
+        state = "pausedUP"
+        progress = 1.0
+        name = "demo"
+        save_path = "/data"
+
+    client = MagicMock()
+    client.torrents_info.return_value = [_Record()]
+    adapter = _qb_adapter(monkeypatch, client)
+    got = adapter.find_torrent("ABC123")
+    assert got == {"hash": "ABC123", "state": "pausedUP", "progress": 1.0, "name": "demo", "save_path": "/data"}
+
+
+def test_qb_pause_torrent_success_and_failure(monkeypatch):
+    """pause_torrent: 成功 True; 调用失败只告警返回 False, 不上抛"""
+    client = MagicMock()
+    adapter = _qb_adapter(monkeypatch, client)
+    assert adapter.pause_torrent("ABC123") is True
+    client.torrents_pause.assert_called_once_with(torrent_hashes="ABC123")
+    client.torrents_pause.side_effect = RuntimeError("pause failed")
+    assert adapter.pause_torrent("ABC123") is False
+
+
 # ---------- tr stub ----------
 
 
@@ -415,3 +544,4 @@ def test_normalize_tags():
     assert _normalize_tags("a, b,,c") == ["a", "b", "c"]
     assert _normalize_tags(["x", "", "y"]) == ["x", "y"]
     assert _normalize_tags("") == []
+    assert _normalize_tags(123) == ["123"]  # 标量兜底: 单值包成一项(非 str/可迭代)
