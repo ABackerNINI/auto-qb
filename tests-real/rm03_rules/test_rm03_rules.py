@@ -1,19 +1,18 @@
 """RM03 规则引擎 —— 九条真机用例(条件命中 / 动作真作用于 qB / 变量替换 / 表达式)。
 
-验证面对准冻结计划 plans/26-10-31-1228-plan-real-RM03.html §02 的六行代码映射:
-条件命中·interval 主链(RM03-01)· on_torrent_added 事件分派→add_category(RM03-02)·
-限速下发+API 回读+奇数 KiB 手动限速不覆盖(RM03-03)· 变量替换 ${required_seeding_time}
-(RM03-04)· 表达式条件命中+装载期/运行期负向(RM03-05)· on_torrent_deleted 删除触发面
-快照留档(RM03-06)· 动作序列 stop→start+remove_tags regex(RM03-07)·
-execute_once/cooldown 规则层去重(RM03-08)· dry-run 零 qB 写(RM03-09)。
+漂移复测轮(计划 plans/26-11-01-1031-plan-real-machine-rm03-drift-plan.html §04 A/B 组):
+RM03-01..04/06..09 八条判据未变纯复测(环境换环境2), RM03-05 判据变级重写 ——
+W1-A 两键退场(stop_following_rules_if / ignore_next_action_error 载入转未启用)后,
+旧「止损链」判据失效作废。W1-W5 新面与 checking 面的 8 条新增用例在 test_rm03_drift.py。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 规则集 = config 段下**以 `_rules` 结尾的顶层键**(loaders.py:629), tracker 条目
   `rules: ["@rm03_rules"]` 引用; tracker 绑定是规则面的前置死门 —— 假种子必须带本机死端口
   announce(http://<本机IP>:1/announce, §2.9 第①条), 匹配按 hostname 不含端口(utils.match_tracker_confs);
-- 规则动作日志锚点: 「规则[名] <log_repr> | 动作[名] 成功/失败」(base.py:247/256);
-  条件求值出错 = ERROR「条件求值出错, 停止后续规则」(base.py:280, 优先于 stop_following_rules_if);
-  skip 级是 DEBUG(INFO 日志不可见), 断言不咬 skip 文案;
+- 规则动作日志锚点: 「规则[名] <log_repr> | 动作[名] 成功/失败」(base.py:654/676);
+  条件求值出错 = ERROR「本条规则本轮跳过(条件求值出错)」(base.py:718, 同因 300s 节流;
+  旧话术「停止后续规则」已随 W1 退役 —— per-rule 任务模型里不存在「后续规则」链);
+  skip 级是 DEBUG(INFO 日志不可见), 日志断言不咬 skip 文案(文案断言走 per-run trace, 见 drift 文件);
 - 限速断言只认 qB API 回读(torrents/info 的 dl_limit/up_limit); 奇数 KiB = 手动限速
   (utils.is_manual_speed_limit), 动作必须 skip 不覆盖;
 - execute_once 合法枚举实况 = never/once/daily/hourly(fields.py:181) —— 计划写的
@@ -276,6 +275,19 @@ def exec_history(case: Path) -> dict:
     except (json.JSONDecodeError, OSError):
         return {}
     return data.get("exec_history") or {}
+
+
+def rule_traces(case: Path) -> dict:
+    """state.json 里的 rule_traces(per-run trace, W4; 键 = {规则全名}:{hash},
+    每维环形 5 条; 优雅退出/周期落盘时刷盘 —— 涉 trace 的用例一律 graceful_after 起停)。"""
+    p = case / "data" / "state.json"
+    if not p.is_file():
+        return {}
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data.get("rule_traces") or {}
 
 
 def tracker_conf_entry(domains: list[str], rules: bool = True) -> dict:
@@ -552,17 +564,17 @@ def test_rm03_04_var_replacement_with_and_without_hr():
 # ================================================================ RM03-05
 
 
-def test_rm03_05_expr_condition_hit_and_negatives():
-    """[RM03-05] 表达式条件: 正向求值命中打标; 坏语法装载期被拒(ConfigError);
-    运行期除零 → 条件出错停规则 ERROR 且动作不执行、后续规则被停
+def test_rm03_05_expr_condition_verdict_trace():
+    """[RM03-05] 表达式条件(重写): 正向命中打标; 坏语法装载期 ConfigError;
+    运行期除零 → ERROR「本条规则本轮跳过(条件求值出错)」+ trace error 档 + verdict 收口
 
     前置: 1 枚 256K 假种子; 正向规则 expr=(tor.size >= 200KiB) and (len(tor.name) > 0);
-          运行期负向规则 expr=(1 / 0) > 0(装载期合法, 求值抛 ExprError);
-          其后再挂一条无条件规则(必须被停, 验证 stop 语义)。
+          运行期负向规则 expr=(1 / 0) > 0(装载期合法, 求值抛 ExprError); 另挂一条
+          无条件打标规则按新引擎实况记账(止损语义已随 W1 退役, 「后续规则是否被停」不再断言)。
     副作用: 加 1 假种子; 正向打标 rm03-expr-hit。
-    回滚: 删光 real-fake 种子 + 删用例目录。
-    失败判据: 正向不命中(按实况修期望值重跑一次, 仍不中记 FAIL); 装载期坏语法静默通过;
-              运行期负向无 ERROR 且动作照跑(停规则语义失效); 被停的后续规则打了标。
+    回滚: 删光 real-fake 种子 + 删用例目录(含装载期负向的临时 case 目录)。
+    失败判据: 正向不命中(按实况修期望值重跑一次, 仍不中记 FAIL); 坏语法装载期静默通过(rc=0);
+              运行期异常静默通过(无 ERROR 日志且 trace 无 error 档且动作照跑)。
     """
     case = case_dir("rm03_05")
     p = None
@@ -594,14 +606,13 @@ def test_rm03_05_expr_condition_hit_and_negatives():
         assert "rm03c5bad" in sinks, f"装载期拒绝但日志/输出不含规则名(证据不足):\n{sinks[-600:]}"
         purge_tree(case_bad)
 
-        # ---- 主现场: 正向命中 + 运行期负向停规则
+        # ---- 主现场: 正向命中 + 运行期异常口径(W1 后: 本条本轮跳过, 不再断言「停止后续规则」)
         rules = {
             RULESET:
                 {
                     "rm03c5expr":
                         {
                             "trigger": "interval",
-                            "stop_following_rules_if": "never",
                             "conditions": [{
                                 "expr": "(tor.size >= 200KiB) and (len(tor.name) > 0)"
                             }],
@@ -612,7 +623,6 @@ def test_rm03_05_expr_condition_hit_and_negatives():
                     "rm03c5err":
                         {
                             "trigger": "interval",
-                            "stop_following_rules_if": "never",
                             "conditions": [{
                                 "expr": "(1 / 0) > 0"
                             }],
@@ -634,19 +644,30 @@ def test_rm03_05_expr_condition_hit_and_negatives():
         settle(qb, h)
 
         cfg = write_cfg(case, trackers, rules)
-        p = app.start(cfg, case)
+        p = app.start(cfg, case, graceful_after=25.0)  # trace 落盘走优雅退出(§2.10 exec_history 同款)
         assert p.wait_log("加载规则 3 条(启用 3 条)", 40), f"规则没加载上:\n{p.log()[-800:]}"
 
         wait_until(lambda: "rm03-expr-hit" in _tags_of(qb.torrent(h) or {}), 25, "正向表达式不命中(求值结果与真机字段实况分叉)")
         wait_until(
-            lambda: count_anchor(case, r"规则\[rm03_rules.rm03c5err\].*条件求值出错, 停止后续规则") >= 1,
+            lambda: count_anchor(case, r"规则\[rm03_rules.rm03c5err\].*本条规则本轮跳过\(条件求值出错\)") >= 1,
             20,
-            "运行期负向表达式未产生「条件求值出错, 停止后续规则」ERROR(静默通过, 停规则语义失效)",
+            "运行期负向表达式未产生「本条规则本轮跳过(条件求值出错)」ERROR(静默通过)",
         )
-        time.sleep(6)  # ≥3 节拍: 若停规则失效, rm03-never / rm03-after 必然出现
-        tags = _tags_of(qb.torrent(h) or {})
-        assert "rm03-never" not in tags, f"运行期负向规则的动作照跑了(出错后未停): {sorted(tags)}"
-        assert "rm03-after" not in tags, f"排在出错规则后的规则未被停(停止后续规则失效): {sorted(tags)}"
+        rc = p.wait(90)
+        p = None
+        assert rc == 0, f"优雅退出非 0(观察窗没走完): {rc}\n{log_text(case)[-600:]}"
+
+        # ---- per-run trace 口径(W4 新面): 出错规则的 trace 记 error 档, 正向规则 verdict 收口
+        traces = rule_traces(case)
+        err_dim = traces.get(f"{RULESET}.rm03c5err:{h}") or []
+        assert err_dim, "rm03c5err 无 per-run trace(trace 键面/全名前缀失效)"
+        err_entry = err_dim[-1]
+        assert err_entry.get("verdict") == "error", f"出错规则 trace verdict 非 error: {err_entry.get('verdict')!r}"
+        assert err_entry.get("error"), f"出错规则 trace 无 error 明细: {sorted(err_entry)}"
+        assert not err_entry.get("actions"), f"出错规则 trace 记了动作执行(异常后动作照跑): {err_entry.get('actions')}"
+        ok_dim = traces.get(f"{RULESET}.rm03c5expr:{h}") or []
+        assert ok_dim and ok_dim[-1].get("verdict") in ("executed", "no_op"), \
+            f"正向规则 trace verdict 异常: {ok_dim[-1] if ok_dim else '无'}"
         assert_no_crash(case)
     finally:
         if p is not None:
@@ -844,20 +865,17 @@ def test_rm03_08_dedup_execute_once_and_cooldown():
                         {
                             "trigger": "interval",
                             "execute_once": "once",
-                            "stop_following_rules_if": "never",
                             "actions": [{
                                 "add_tags": ["rm03-once"]
                             }],
                         },
-                    "rm03c8cool":
-                        {
-                            "trigger": "interval",
-                            "cooldown": "60S",
-                            "stop_following_rules_if": "never",
-                            "actions": [{
-                                "add_tags": ["rm03-cool"]
-                            }],
-                        },
+                    "rm03c8cool": {
+                        "trigger": "interval",
+                        "cooldown": "60S",
+                        "actions": [{
+                            "add_tags": ["rm03-cool"]
+                        }],
+                    },
                 }
         }
         trackers = {"rm03fake": tracker_conf_entry([FAKE_HOST])}
