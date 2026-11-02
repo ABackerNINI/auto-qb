@@ -1,11 +1,11 @@
-# 26-11-02-webui-large-filelist-perf — WEBUI 单种子千级文件列表性能统一优化 (W1-W5 落地, W6 待拍板)
+# 26-11-02-webui-large-filelist-perf — WEBUI 单种子千级文件列表性能统一优化 (W1-W5 + W6a 落地, W6b Dropped, 真机轨完成)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-02
-**Updated:** 2026-11-02
-**Summary:** WEBUI 千级文件列表卡顿统一优化: 调研报告取证根因 R1-R6 → 计划 26-11-02-0351 拆 W1-W6 → 串行子智能体实施 W1(记忆化/廉价sig/content-visibility)+W2(kind 描述符参数化)+W3(抽屉挂窗)+W4(千级验收矩阵 8/8)+W5(主表 3000 种子复测全绿), 千级常驻 DOM 1001→45-48 行、交互 longtask 归零; 全量 4824 过/覆盖率 99.00% (基线 26-11-02-0707); 首访量齐 issue 26-11-02-0902 已修(Done, 千级估算开窗+渐进量齐)并二轮调优(阈值 200 与 ROW_WIN_MIN 合并、精确冷启动档消失, 空档1 首访路径指纹/空档2 单测边界判据补齐并负向验证, 数字见 kb.baseline 最新切片); W6(P3 可选)与真机轨待用户拍板/token
+**Updated:** 2026-11-03
+**Summary:** WEBUI 千级文件列表卡顿统一优化: 调研报告取证根因 R1-R6 → 计划 26-11-02-0351 拆 W1-W6 → 串行实施 W1(记忆化/廉价sig/content-visibility)+W2(kind 描述符参数化)+W3(抽屉挂窗)+W4(千级验收矩阵 8/8)+W5(主表 3000 种子复测全绿), 千级常驻 DOM 1001→45-48 行、交互 longtask 归零; 首访量齐 issue 26-11-02-0902 已修并二轮调优。用户拍板后 W6 落地: W6a 抽屉专用乐观优先级补丁(失败/超时双出口回滚 + 重叠点击按 hash 序号收口, 最终态与整表重拉一致)已实施并由新单测 2 条 + 新 e2e 3 条 × 双皮肤验收, 千文件桩可见延迟 15-17ms vs 旧路径 171-174ms; W6b payload 裁剪按实测(127911B/可裁≈27%仅省≈1.3ms)拍板 Dropped(不等于已完成, 无代码/测试产出)。真机轨环境1(D盘 36595/36596)完成 RM08-09: 真 qB 1000 文件, 首帧 436-486ms / 常驻 DOM 47 行 / rowsFn 1002 行 max 7.6ms mean 5.28ms / longtask 0 / 乐观 9-14ms vs 旧路径 64-80ms / payload 156478B / 冷 30-44ms 热 16-18ms; 真实种子 8 枚全程非活跃。全量与基线数字见 kb.baseline。
 **Topics:** webui-large-filelist-perf
-**Refs:** memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/testing/baselines/26-11-02-0707-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-first-visit-rowh-measure.html, memory-bank/pitfalls/web-ui/est-cold-start-vs-absolute-threshold.md, memory-bank/testing/baselines/26-11-02-1129-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-1248-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-drawer-tab-switch-lag.html
+**Refs:** memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/testing/baselines/26-11-02-0707-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-first-visit-rowh-measure.html, memory-bank/pitfalls/web-ui/est-cold-start-vs-absolute-threshold.md, memory-bank/testing/baselines/26-11-02-1129-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-1248-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-drawer-tab-switch-lag.html, memory-bank/testing/baselines/26-11-02-2246-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-2353-webui-large-filelist-perf.md
 
 ## 原始请求
 
@@ -39,9 +39,9 @@
 | S6 | W4 千级验收: drawer-content-perf spec 8/8 全矩阵+A/B 口径收紧 | Done(2026-11-02) |
 | S7 | W5 主表千级复测: 五 spec 44/44+同屏交叉 2 条, 主表零回归 | Done(2026-11-02) |
 | S8 | 终态 test.full+基线切片 26-11-02-0707(4824 过/99.00%) | Done(2026-11-02) |
-| S9 | W6a 乐观优先级对称补丁(依赖 D3 拍板+R5 占比实测) | Open |
-| S10 | W6b payload 四步量法实测后裁剪(依赖 D1 拍板) | Open |
-| S11 | 真机轨 rm08 千文件/千级种子条目(依赖用户注入 QBT_TEST_ token) | Open |
+| S9 | W6a 乐观优先级补丁(用户拍板实施) | Done(2026-11-02) — `drawer.js` 新增 `_drawerFilePriority`/`_drawerFileRollback`: prev 快照→当帧写 priority→POST→waitCmd(10s); 失败/超时回 prev 后静默重拉 files(最终态==整表重拉), 重叠点击按 hash 序号只让最新一次收口; 单测 2 条(静态顺序/双出口 + node 五态) + e2e 3 条×双皮肤; 桩可见延迟 15-17ms vs 旧 171-174ms, 失败回滚 350-352ms, 超时回滚 10027-10036ms |
+| S10 | W6b payload 四步量法实测后裁剪(依赖 D1 拍板) | Dropped(2026-11-02, 用户拍板) — 实测 127911B/可裁≈27%仅省≈1.3ms; **Dropped 不等于已完成**: 未产出代码/测试, 不得记 Done |
+| S11 | 真机轨 rm08 千文件 content 条目(用户提供测试环境) | Done(2026-11-02) — 环境1(D盘 36595/36596; C盘不存在), 三方核对通过; 新增 RM08-09(真 qB 1000 文件假种子): 首帧 436-486ms/常驻 DOM 47 行(折叠1/展开47)/rowsFn 1002 行 max 7.6ms mean 5.28ms/longtask 0/乐观 9-14ms vs 旧 64-80ms/payload 156478B/冷 30-44ms 热 16-18ms/detail 12-28ms/命令回执 423-440ms; 真实种子全程非活跃 |
 
 ## 进度日志
 
@@ -63,3 +63,11 @@
 - 2026-11-02 21:0x 复测 issue 26-11-02-0902(抽屉页签切换卡 1-2s, 等 5e351c4b 合入后按用户要求重测): 同步到 e8d6279c; 干净端口 8157 新起 3000 种子桩(不复用 8155); 真实鼠标开抽屉+12 次切页签, atlas/prism 双皮肤、headless/headed/CPU4x 五轮 —— 切页签首帧 31-77ms、Layout 1.1-18.2ms、Style 3.7-9.1ms、Script 2.6-5.8ms、切换期 0 longtask(4x 下 70-389ms 仍无 1-2s)。同桩 A/B(页内强制"量齐前全量渲染"): 3000 行单发 _measureRowH 2086.9ms / longtask [4639ms, 2028ms], 修复后首访 30 行/20.4ms/0 longtask —— 结论: 随 5e351c4b 解决, issue 置 Done(关联对方提交, 非本条独立修复); 证据边界=报告者 session 未逐次录样, 属关联证据
 
 - 2026-11-02 21:28 复测 drawer-tab-switch-lag: 同步 e8d6279c, 对照对方 5e351c4b 首访估算开窗, 同桩同路径不复现(31-77ms/0 longtask), issue 置 Done
+
+- 2026-11-02 22:45 W6 测量先行 + 残留清理: 删除 `tmp-analysis/s6_test_discovery.py`(gitignored 一次性生成器, 内嵌模板含 `def _free_port`, 是 `test_free_port_single_source` 唯一误报源; `tmp-analysis/` 其余 100+ 旧草稿非同源, 未动), `test.free_port` 复验通过, `test.full` 恢复全绿 4888 passed/2 skipped(覆盖率 99%, 22523 stmts/134 miss, 分支 7728/128 miss), 基线 26-11-02-2246。W6 千文件桩 3 轮(prism dt11/1000 files): W6a 现状 POST 43-56ms/GET 83-94ms/徽章可见 142-153ms/0 longtask/13 次 DOM 变更, 乐观写候选 16.5-19.6ms/5 次; W6b payload 127911B(name 20k/piece_range 8k/size 7k/availability 4110/is_seed 4k/progress 3k/priority 1k, 键名开销 85600B), 取数 4.3-4.8ms/parse 0.15-0.18ms/assign 0-0.1ms/rowsFn 6.0-6.3ms/到两帧 40.3-63.7ms, 同尺寸静态对照 drawer.js 98215B/5-6ms。建议 W6b Dropped、W6a 做, 均待用户拍板; 代码实况: `_forEachRow` 不覆盖 `drawer.files`, W6a 需抽屉专用乐观写+双出口回滚。真机轨仍待 QBT_TEST_* token, 清单已入计划 §06.1。计划/档案保持 In Progress, 未 commit/push。
+
+- 2026-11-02 22:47 W6 测量先行: W6a 现状 142-153ms→乐观写 16.5-19.6ms(建议做), W6b payload 127911B/裁剪省≈1.3ms(建议 Dropped), D1/D2/D3 已回填计划 §06, 真机轨待 QBT_TEST_* token; 服务端/前端代码零改动, 计划与档案保持 In Progress
+
+- 2026-11-02 23:59 用户拍板后落地: W6a 实施(`drawer.js` 抽屉专用乐观写: 先采 prev→当帧写 priority→POST→waitCmd(10s), 失败/超时回 prev + 静默重拉 files 与整表重拉对齐; 重叠点击按 hash 序号只让最新一次收口), 新单测 2 条(静态顺序/双出口 + node 五态: 成功/失败/超时/重叠/幂等)+新 e2e 3 条×双皮肤(千文件桩: 可见延迟乐观 15-17ms vs 旧 171-174ms, 失败回滚 350-352ms, 超时回滚 10027-10036ms); W6b 按拍板 Dropped(不等于已完成)。真机轨选环境1(D盘 36595/36596, C盘目录不存在), 端口+路径+进程三方核对+real.guard 通过, 主实例 8 枚真实种子全程非活跃; 新增 RM08-09 千文件假种子用例并实测: files 1000 行/payload 156478B/冷 30-44ms 热 16-18ms/detail 12-28ms/命令回执 423-440ms, 真产品首帧 436-486ms/常驻 DOM 47 行(折叠1/展开47)/rowsFn 1002 行 max 7.6ms mean 5.28ms/longtask 0/乐观 9-14ms vs 旧 64-80ms; 中途主实例被外部停掉, 按授权 real.up 只拉起环境1后复跑。计划与档案在实现、验收、真机数字齐备后翻 Done; 未 commit/push(用户未授权)
+
+- 2026-11-02 23:54 W6a 实施+验收(单测2+e2e6); W6b 拍板 Dropped; 真机环境1 RM08-09 千文件; 全量 4896 passed

@@ -5,6 +5,8 @@
 收敛(RM08-03)· 大库首帧与零回传(RM08-04, 按排期指令放最后跑)· 详情抽屉四端点(RM08-05)·
 状态栏 totals 修后复验走查迁出(RM08-06)· SSE 推送通道与只读辅助端点(RM08-07)·
 error_reason 数据面 missingFiles 分支(RM08-08)。
+另按计划 26-11-02-0351 §06.1 待跑清单增 RM08-09: 真 qB 单种子 1000 文件的内容页签数据面
+(files payload/端点耗时/真实命令回执)+ 真产品前端首帧/窗口化/乐观优先级可见延迟实测。
 
 驱动形态(计划 §01/§03: dev.webui 安全模式): 每条用例经 Popen 起一份**最小配置**的产品进程
 (interval=86400S 任务线全关 · sync_interval=1.5S 同步线照常 · 规则集零段 · grouping 只读归组 ·
@@ -49,9 +51,11 @@ paused); 删数据/recheck 只对自造种子。
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import http.client
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -65,6 +69,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import app, guard, instances, torrent  # noqa: E402
+from lib.bencode import encode  # noqa: E402
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="本片断言含 Windows 特有语义(taskkill 进程树/盘符路径)"),
@@ -1099,4 +1104,287 @@ def test_rm08_04_large_library_first_frame(clean_fakes):
         # 实测数直接断言进输出(runner 逐条记录 stdout), 供基线切片誊写
         metric(
             f"[rm08-04] 注入 {n} 枚耗时 {inject_s:.1f}s | 首帧 {dt1 * 1000:.0f}ms / {b1}B | 零回传拍 {dt2 * 1000:.0f}ms / {jlen(r2)}B"
+        )
+
+
+def _build_multifile(root: str, count: int, per_size: int, piece_len: int = 16384) -> tuple[bytes, str]:
+    """现造单种子 count 文件的 .torrent(全零内容, 不落数据; 只用于 files 数据面与 UI 千行场景)。
+
+    内容 = count*per_size 字节全零, 按 piece_len 连续切块算 sha1(BEP3 多文件 pieces 口径)。
+    info.files 的 path 形如 ["D", "f0000 - file.bin"] ⇒ qB 文件列表显示 D/f0000 - file.bin,
+    与 e2e 千文件桩同形状(便于两边数字对照)。private:1 + 无 announce ⇒ 零外连。
+    """
+    total = count * per_size
+    pieces = bytearray()
+    left = total
+    while left > 0:
+        n = min(piece_len, left)
+        pieces += hashlib.sha1(b"\0" * n).digest()
+        left -= n
+    info = {
+        "name": root,
+        "piece length": piece_len,
+        "pieces": bytes(pieces),
+        "private": 1,
+        "files": [{
+            "length": per_size,
+            "path": ["D", f"f{i:04d} - file.bin"]
+        } for i in range(count)],
+    }
+    ih = hashlib.sha1(encode(info)).hexdigest()
+    return encode({"info": info, "comment": RM08_COMMENT}), ih
+
+
+# 真产品前端量具(Playwright 由本仓库 node_modules 提供; 只读 DOM + 调既有方法, 不注入桩数据)。
+# 与 e2e 千文件桩同口径: dt11 + 2560x1200 + 同一 rAF 采样; 数字直接回传 JSON, 不做估算。
+_UI_PROBE_JS = r"""
+const { chromium } = require("@playwright/test");
+const [url, name] = process.argv.slice(2);
+const ANCHOR = '[data-dt-table-anchor="drawerContentV11"]';
+const TABLE = "drawerContentV11";
+const BADGE = ".dt11-pbadge";
+(async () => {
+  const out = { url, name, errors: [] };
+  const browser = await chromium.launch();
+  let page;
+  try {
+    page = await browser.newPage({ viewport: { width: 2560, height: 1200 } });
+    page.on("pageerror", (e) => out.errors.push(String(e)));
+    await page.addInitScript(() =>
+      localStorage.setItem("autoqb.ui.drawerTpl", JSON.stringify({ content: "11" })));
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+    await page.waitForFunction(() => {
+      const a = document.querySelector("#app");
+      return a && !a.hasAttribute("v-cloak");
+    }, null, { timeout: 30000 });
+    // 真产品默认视图可能是星图; 先切到种子列表再等行(与 e2e 桩环境默认视图不同)
+    await page.click('nav.tabs [data-view="torrents"]', { timeout: 15000 });
+    await page.waitForSelector(".torrent-row", { timeout: 20000 });
+    const row = page.locator(".torrent-row").filter({ hasText: name }).first();
+    await row.dblclick({ force: true });
+    await page.waitForSelector(".drawer-dock > .drawer", { timeout: 10000 });
+    await page.locator(".drawer-dock > .drawer .drawer-tabs button").filter({ hasText: "内容" }).click();
+    // 首帧: 点内容页签 -> dt11 锚内首行真正可查(不是外壳可查)
+    const t0 = Date.now();
+    await page.waitForSelector(`${ANCHOR} .group-row[data-table="${TABLE}"]`, { timeout: 20000 });
+    out.firstFrameMs = Date.now() - t0;
+    await page.waitForSelector(`${ANCHOR} .row-pad`, { timeout: 10000 });
+    out.domRows = await page.locator(`${ANCHOR} .group-row[data-table="${TABLE}"]`).count();
+
+    // longtask: 内容页签打开前埋, 收尾取
+    await page.evaluate(() => {
+      window.__lt = [];
+      try {
+        new PerformanceObserver((l) => {
+          for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration));
+        }).observe({ type: "longtask", buffered: false });
+      } catch (e) { /* 浏览器不支持 longtask 时留空 */ }
+    });
+
+    // 折叠/展开: 目录折叠后常驻行数塌缩, 展开还原(窗口化下仍 < 300)
+    const foldBtn = page.locator(`${ANCHOR} .group-row.dir [data-act="fold"]`).first();
+    await foldBtn.click();
+    await page.waitForTimeout(250);
+    out.foldedRows = await page.locator(`${ANCHOR} .group-row[data-table="${TABLE}"]`).count();
+    await foldBtn.click();
+    await page.waitForTimeout(250);
+    out.unfoldedRows = await page.locator(`${ANCHOR} .group-row[data-table="${TABLE}"]`).count();
+
+    // rowsFn 热态直测(dtTplRows -> 变体 rowsFn, 20 次采样取 max/mean; 与 e2e K1 同口径)
+    out.rowsFn = await page.evaluate(() => {
+      const vm = document.querySelector("#app")._vnode.component.proxy;
+      const s = [];
+      let n = 0;
+      for (let i = 0; i < 20; i++) {
+        const t = performance.now();
+        const rows = vm.dtTplRows("content");
+        s.push(performance.now() - t);
+        n = rows.length;
+      }
+      return {
+        n,
+        max: Math.round(Math.max(...s) * 100) / 100,
+        mean: Math.round((s.reduce((a, b) => a + b, 0) / s.length) * 100) / 100,
+      };
+    });
+
+    const measure = async (mode, idx) => page.evaluate(async ({ mode, idx, table, badge }) => {
+      const vm = document.querySelector("#app")._vnode.component.proxy;
+      const read = () => {
+        const tag = `f${String(idx).padStart(4, "0")}`;
+        for (const r of document.querySelectorAll(`.group-row[data-table="${table}"]`)) {
+          if ((r.textContent || "").includes(tag)) {
+            const b = r.querySelector(badge);
+            return b ? (b.textContent || "").trim() : "";
+          }
+        }
+        return "";
+      };
+      const t = performance.now();
+      if (mode === "optimistic") vm.setFilePriority(7, [idx]);
+      else vm._editPost(vm.drawer.hash, "files/priority", { indices: [idx], priority: 7 }, "x");
+      return await new Promise((ok) => {
+        const check = () => {
+          const now = performance.now() - t;
+          if (read() === "最高") ok(Math.round(now));
+          else if (now > 10000) ok(-1);
+          else requestAnimationFrame(check);
+        };
+        requestAnimationFrame(check);
+      });
+    }, { mode, idx, table: TABLE, badge: BADGE });
+
+    // 候选(乐观写 idx0) -> 等重拉落定 -> 对照(_editPost idx1)
+    out.optimisticMs = await measure("optimistic", 0);
+    await page.waitForTimeout(800);
+    out.controlMs = await measure("control", 1);
+    out.longtasks = await page.evaluate(() => window.__lt || []);
+    out.badge0 = await page.evaluate(({ table, badge }) => {
+      for (const r of document.querySelectorAll(`.group-row[data-table="${table}"]`)) {
+        if ((r.textContent || "").includes("f0000")) {
+          const b = r.querySelector(badge);
+          return b ? (b.textContent || "").trim() : "";
+        }
+      }
+      return "";
+    }, { table: TABLE, badge: BADGE });
+  } catch (e) {
+    out.error = String(e && e.message || e);
+    try {
+      out.diag = {
+        url: page.url(), title: await page.title(),
+        groupRows: await page.locator(".group-row").count(),
+        torrentRows: await page.locator(".torrent-row").count(),
+        navTorrents: await page.locator('nav.tabs [data-view="torrents"]').count(),
+        text: (await page.locator("body").innerText()).slice(0, 300),
+      };
+    } catch (_) { out.diag = String(_); }
+  } finally {
+    await browser.close();
+  }
+  process.stdout.write(JSON.stringify(out) + "\n");
+  if (out.error) process.exitCode = 2;
+})().catch((e) => { console.error(e && e.stack || e); process.exit(2); });
+"""
+
+
+def _ui_probe(case: Path, port: int, name: str) -> dict:
+    """跑真产品前端量具; 环境缺 node/Playwright 或超时 ⇒ 返回 {blocked}, 不编数字。"""
+    node = shutil.which("node")
+    if not node:
+        return {"blocked": "node 不在 PATH"}
+    script = case / "ui_probe.cjs"
+    script.write_text(_UI_PROBE_JS, encoding="utf-8")
+    try:
+        p = subprocess.run(
+            [node, str(script), f"http://127.0.0.1:{port}/", name],
+            cwd=str(app.ROOT),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=180,
+        )
+    except subprocess.TimeoutExpired:
+        return {"blocked": "前端量具 180s 超时"}
+    lines = [x for x in (p.stdout or "").strip().splitlines() if x.strip()]
+    try:
+        payload = json.loads(lines[-1])
+    except Exception:
+        payload = None
+    if p.returncode != 0:
+        detail = json.dumps(payload, ensure_ascii=False)[:500] if payload else (p.stderr or "").strip()[:500]
+        return {"blocked": f"node rc={p.returncode}: {detail}"}
+    if payload is None:
+        return {"blocked": f"量具输出不可解析: {(p.stdout or '').strip()[:300]}"}
+    return payload
+
+
+def test_rm08_09_content_thousand_files(clean_fakes):
+    """[RM08-09] 千文件内容页签: 真 qB 单种子 1000 文件的 files 数据面 + 真产品前端首帧/窗口化/乐观优先级
+
+    前置: 副实例(空库) + 现造 1 枚 real-fake 多文件种子(1000 文件 × 1KB, 全零元数据, 无数据落盘,
+          无 announce 零外连, paused 入列; 真实种子不受影响)。产品进程经 product_case 起。
+    副作用: 副实例新增 1 枚 real-fake 种子(收尾 clean_fakes 删净); 产品进程 taskkill /F /T;
+          前端量具把该假种子 idx0/idx1 优先级改为 7(仅假种子, 随后随种子删除)。
+    回滚: clean_fakes 收尾 rm_all_fakes; 临时目录清场; 量具生成的 ui_probe.cjs 随 case 目录清场。
+    失败判据: files 行数 != 1000(detail 数据面破) / 真实 files/priority 命令回执非 ok(写链路破) /
+              常驻 DOM 行数 >= 300(窗口化退化) / 乐观可见延迟未短于旧路径(W6a 收益回退)。
+    口径: 数据面数字全部实测; 前端量具若缺 node/Playwright 或超时 ⇒ 记 BLOCKED(数据面数字照常采纳),
+          零估算。JS 量具只读 DOM + 调既有方法, 不改产品态(除假种子优先级, 见副作用)。
+    """
+    n = 1000
+    per = 1024
+    with product_case("rm08_09") as (case, port, _proc):
+        qb = clean_fakes
+        savepath = case / "bulk"
+        savepath.mkdir(parents=True, exist_ok=True)
+        raw, ih = _build_multifile("rm08k_1000f", n, per)
+        _add_retry(qb, raw, str(savepath), ih, paused=True)
+        settle(qb, ih)
+        wait_in_store(port, ih, timeout=60)
+
+        # ① files 数据面: 行数 + payload 字节 + 冷/热两次端点耗时(qB -> 产品 -> JSON 序列化)
+        t0 = time.perf_counter()
+        files1 = web_req(port, "GET", f"/api/torrents/{ih}/files")
+        dt1 = time.perf_counter() - t0
+        assert isinstance(
+            files1, list
+        ) and len(files1) == n, f"files 行数 != {n}: {len(files1) if isinstance(files1, list) else files1}"
+        assert files1[0]["name"].endswith("f0000 - file.bin"), f"首行文件名不符: {files1[0].get('name')!r}"
+        b1 = jlen(files1)
+        t1 = time.perf_counter()
+        files2 = web_req(port, "GET", f"/api/torrents/{ih}/files")
+        dt2 = time.perf_counter() - t1
+        assert len(files2) == n, f"热态 files 行数 != {n}: {len(files2)}"
+        # detail(内容页签同源数据源之一): 耗时记实测
+        t2 = time.perf_counter()
+        web_req(port, "GET", f"/api/torrents/{ih}")
+        dt3 = time.perf_counter() - t2
+
+        # ② 真实写链路: POST files/priority -> /api/cmd 回执 ok -> files 回读 priority 生效
+        t3 = time.perf_counter()
+        queued = web_req(port, "POST", f"/api/torrents/{ih}/files/priority", {"indices": [0], "priority": 7})
+        cmd_id = queued.get("cmd_id")
+        assert cmd_id, f"files/priority 未回 cmd_id: {queued}"
+        rec = wait_until(
+            lambda: next(
+                (x for x in [web_req(port, "GET", f"/api/cmd/{cmd_id}")] if x.get("status") in ("ok", "error")), None
+            ),
+            20,
+            "真实 files/priority 回执未完成",
+        )
+        dt_cmd = time.perf_counter() - t3
+        assert rec["status"] == "ok", f"真实 files/priority 回执非 ok: {rec}"
+        after = web_req(port, "GET", f"/api/torrents/{ih}/files")
+        assert after[0]["priority"] == 7, f"priority 未生效: {after[0].get('priority')}"
+
+        # ③ 真产品前端量具: 首帧 / 常驻 DOM / 折叠展开 / 乐观 vs 旧路径可见延迟 / longtask
+        ui = _ui_probe(case, port, "rm08k_1000f")
+        if "blocked" in ui:
+            metric(f"[rm08-09] 前端量具 BLOCKED: {ui['blocked']} | 数据面已采, DOM/可见延迟待补")
+        else:
+            assert ui["firstFrameMs"] > 0, f"首帧不可测: {ui}"
+            assert ui["domRows"] < 300, f"常驻 DOM 行数 >= 300(窗口化退化): {ui['domRows']}"
+            assert ui["unfoldedRows"] < 300, f"展开后常驻 DOM 行数 >= 300: {ui['unfoldedRows']}"
+            assert ui["foldedRows"] < ui["unfoldedRows"], f"折叠未塌缩: {ui['foldedRows']} vs {ui['unfoldedRows']}"
+            assert 1001 <= ui["rowsFn"]["n"] <= 1003, f"rowsFn 装配的不是全量虚表: {ui['rowsFn']}"
+            assert ui["rowsFn"]["max"] < 25, f"rowsFn 千级热态单次耗时 >= 25ms: {ui['rowsFn']}"
+            assert ui["optimisticMs"] >= 0, f"乐观可见延迟不可测: {ui}"
+            assert ui["controlMs"] > 0, f"旧路径可见延迟不可测: {ui}"
+            assert ui["optimisticMs"] < ui["controlMs"], (
+                f"乐观可见延迟未短于旧路径: {ui['optimisticMs']}ms vs {ui['controlMs']}ms"
+            )
+            assert not ui["errors"], f"前端页面错误: {ui['errors']}"
+            metric(
+                f"[rm08-09] 前端: 首帧 {ui['firstFrameMs']}ms | 常驻 DOM {ui['domRows']} 行 "
+                f"(折叠后 {ui['foldedRows']} / 展开后 {ui['unfoldedRows']}) | "
+                f"rowsFn {ui['rowsFn']['n']} 行 max {ui['rowsFn']['max']}ms / mean {ui['rowsFn']['mean']}ms (n=20) | "
+                f"可见延迟 乐观 {ui['optimisticMs']}ms vs 旧路径 {ui['controlMs']}ms | "
+                f"longtask {len(ui['longtasks'])} 条 {ui['longtasks'][:5]}"
+            )
+
+        metric(
+            f"[rm08-09] 数据面: files {n} 行 payload {b1}B | 冷 {dt1 * 1000:.0f}ms / 热 {dt2 * 1000:.0f}ms | "
+            f"detail {dt3 * 1000:.0f}ms | files/priority 真实回执 {dt_cmd * 1000:.0f}ms"
         )

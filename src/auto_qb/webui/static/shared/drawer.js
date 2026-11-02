@@ -956,7 +956,70 @@ window.AQB_DRAWER = {
       const label = prioText(p, String(p));
       const okText = Array.isArray(indices)
         ? `已将 ${idx.length} 个文件设为「${label}」` : `优先级已设为「${label}」`;
-      await this._editPost(hash, "files/priority", { indices: idx, priority: p }, okText);
+      await this._drawerFilePriority(hash, idx, p, okText);
+    },
+    /* W6a(计划 26-11-02-0351 §06 拍板 = 实施): 抽屉文件优先级乐观写补丁。
+     * drawer.files 是内容页签的独立响应式数组, 不在 commands.js::_forEachRow 覆盖的
+     * torrents/singles/groups 三数组内 —— 既有 applyOptimisticPatch/pendingOps 管不到它,
+     * 所以在这里单点补一条只写 priority 的通道。
+     * 写入纪律: 先逐 index 采当前 priority 作 prev, 当帧写新值(徽章立变), 再发 POST;
+     * 只写 priority 一个字段(值来自我们), 不碰其它行数据。
+     * 回滚出口两条(回执失败 / 等待超时)都回 prev, 随后静默重拉 files —— 命令若其实已
+     * 生效, 重拉带回服务端真值, 最终态与整表重拉一致, 不留假状态; 成功路径同样重拉收口。
+     * 重叠点击: 每次点击递增该 hash 的序号; 只有最新一次的操作做重拉(旧操作不回滚已被
+     * 覆盖的 index), 后一次操作自己收口 —— 不引入绕过单写线程的并发通道。
+     * 幂等: 重复点同一优先级只重复同值 POST, 可见态无变化; 不加任何定时器。 */
+    async _drawerFilePriority(hash, indices, priority, okText) {
+      const files = (this.drawer.open && this.drawer.hash === hash) ? this.drawer.files : null;
+      const snap = [];
+      if (Array.isArray(files)) {
+        for (const i of indices) {
+          const row = files[i];
+          if (!row) continue;
+          snap.push({ i, prev: row.priority, next: priority });
+          row.priority = priority;  /* 乐观写入: 徽章当帧可见, 不等回执 */
+        }
+      }
+      if (!this._filePrioSeq) this._filePrioSeq = new Map();
+      const seq = (this._filePrioSeq.get(hash) || 0) + 1;
+      this._filePrioSeq.set(hash, seq);
+      const latest = () => this._filePrioSeq.get(hash) === seq;
+      const refresh = () => {
+        if (!latest()) return;
+        if (this.drawer.open && this.drawer.hash === hash) this._fetchDrawerFiles(true);
+      };
+      try {
+        const resp = await this.api(`/api/torrents/${hash}/files/priority`, {
+          method: "POST",
+          body: JSON.stringify({ indices: indices.slice(), priority }),
+        });
+        /* 优先级是快命令, 10s 足够; 超时后走回滚出口, 不让徽章停在假值上 */
+        const r = await this.waitCmd(resp.cmd_id, 10000);
+        if (r.ok) {
+          this.toast(`已执行: ${okText}`, "ok", 2500);
+          if (this.drawer.open && this.drawer.hash === hash) this._fetchDrawerDetail();
+          refresh();
+          return true;
+        }
+        const timeout = /执行等待超时/.test(String(r.error || ""));
+        this._drawerFileRollback(hash, snap);
+        this.toast(`${okText}${timeout ? "超时, 已回滚: " : "失败: "}${r.error}`, "error", 8000);
+      } catch (e) {
+        this._drawerFileRollback(hash, snap);
+        if (!e.auth) this.toast(`${okText}命令发送失败, 已回滚: ` + e.message, "error");
+        if (!e.auth) refresh();
+        return false;
+      }
+      refresh();
+      return false;
+    },
+    /* 失败/超时回滚: 只回仍是我们写下的值(后一次点击已覆盖的 index 不回滚, 由那次操作负责)。 */
+    _drawerFileRollback(hash, snap) {
+      if (!this.drawer.open || this.drawer.hash !== hash || !Array.isArray(this.drawer.files)) return;
+      for (const { i, prev, next } of snap) {
+        const row = this.drawer.files[i];
+        if (row && row.priority === next) row.priority = prev;
+      }
     },
     /* 复制种子信息: 目标 hash 显式传入, 缺省回落 menu.hash(S3/M3: 键盘路径 _kbEditAct 传 (field, h),
      * 不再借道菜单状态) */

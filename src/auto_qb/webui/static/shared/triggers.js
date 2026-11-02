@@ -213,6 +213,10 @@ const TRIGGER_DEFS = {
       "scope": "panel", "why": ""
     },
     {
+      "file": "drawer.js", "fn": "_drawerFilePriority", "ep": "/api/torrents/{hash}/files/priority",
+      "scope": "panel", "why": ""
+    },
+    {
       "file": "drawer.js", "fn": "_bulkEditPost", "ep": "/api/torrents/bulk",
       "scope": "sel|anchor", "why": ""
     },

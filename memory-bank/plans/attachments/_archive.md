@@ -4,9 +4,8 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**。
 > 每条链接指回 `plans/` 下的制品原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (4)
+## In Progress (3)
 
-- [26-11-02-0351] [WEBUI 大文件列表性能统一优化(抽屉千级文件 + 主表千级复测)](../26-11-02-0351-plan-webui-large-filelist-perf.html) — `webui-large-filelist-perf`
 - [26-10-31-1119] [qBittorrent 5.3.x 双版本支持落地计划(facade 修复→升库→升 qB→走查→回写)](../26-10-31-1119-plan-qb-5-3-support.html) — `qb-5-3-support`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
@@ -17,9 +16,10 @@
 - [26-11-02-0134] [整组迁移 qb_temp 闸门按归属收窄](../26-11-02-0134-plan-relocate-qbtemp-narrow.html) — `relocate-qbtemp-narrow`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (190)
+## Done (191)
 
 - [26-11-02-0657] [测试临时目录自举与互斥锁方案 — R→H→%TEMP% 固定探测 · 禁静默降级 · 禁外部 TMPDIR · 锁自举 · 评审稿](../26-11-02-0657-plan-testing-tmpdir-bootstrap.html) — `testing-tmpdir-bootstrap`
+- [26-11-02-0351] [WEBUI 大文件列表性能统一优化(抽屉千级文件 + 主表千级复测)](../26-11-02-0351-plan-webui-large-filelist-perf.html) — `webui-large-filelist-perf`
 - [26-11-01-2212] [RM09 WebUI 写侧 漂移复测轮排期计划](../26-11-01-2212-plan-real-rm09-drift.html) — `real-rm09-drift`
 - [26-11-01-2123] [RM08 WebUI 读侧 漂移复测轮排期计划](../26-11-01-2123-plan-real-rm08-drift.html) — `real-rm08-drift`
 - [26-11-01-2033] [RM04 辅种与分组 漂移复测轮排期计划](../26-11-01-2033-plan-real-machine-rm04-drift-plan.html) — `real-machine-rm04-drift-plan`
