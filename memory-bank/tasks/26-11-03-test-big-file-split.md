@@ -1,0 +1,59 @@
+# 26-11-03-test-big-file-split — 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
+
+**Status:** In Progress
+**Added:** 2026-11-03
+**Updated:** 2026-11-03
+**Summary:** 按计划完成 R1 —— 10 个大型测试文件 move-only 拆为 36 个测试文件 + 12 个支撑/扫描模块; 测试函数名与模块级界定逐字不变; 全量见 kb.baseline; 12 个仍超千行的桶留 R2。
+**Topics:** test-big-file-split
+**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md
+
+## 原始请求
+
+1. 先按计划把「>1000 行大文件」扫描结果产出多轮拆分实施计划(已完成, 落盘 `memory-bank/plans/26-11-02-2342-plan-big-file-split.html`)。
+2. 按计划实施第一轮(R1): 10 个测试文件, **严格 move-only** —— 只搬测试代码/用例, 不改断言、不改行为、不顺手重构; 无法 move-only 安全拆分的文件停手报告。
+3. 保持测试可发现性与既有导入关系; 共享 fixture/辅助按计划指定归属; 核对 `tests/_tmp_bootstrap.py` 头部「## 测试计划」同步要求(无新增用例则不改)。
+4. 每个文件拆完跑该文件定向测试(走包内 task id), 最后跑一次全量, 与最新基线对比; 本轮实现不 commit / 不 push, 改动留给用户审阅。
+5. (本轮) 用户说「提交」—— 授权把 R1 改动 commit + push; 要求先同步、复核工作区只有 R1 的 `tests/` 改动(58 项)、`tests/helpers.py` / `tests/_tmp_bootstrap.py` / `src/` 零改动; 按收尾 DoD 回写文档 + 新建基线切片; 不动计划里暂缓/不拆的文件, 不新增子桶拆分。
+
+## 思考过程与决策
+
+- **move-only 的判据取「AST 层逐字比对」而非人工目测**: 以 HEAD 中 10 个原文件为基准, 抽出全部模块级 `FunctionDef`/`AsyncFunctionDef`/`ClassDef`/`Assign`/`AnnAssign` 源码片段逐字节比对; 测试函数名集合双向一致 —— 这两项是「搬」与「改」的分界。
+- **分桶由依赖闭包决定**: 用 `ast.Name`(Load) 求每个测试函数的依赖闭包; 被恰好一个桶使用的辅助归入该桶内联, 多桶共用的提升为支撑模块(`*_support.py` / `webui_static_scan_{common,css,js}.py`)。支撑模块**不以 `test_` 开头**(pytest 只收 `test_*.py`), 避免被当成用例文件收集。
+- **导入语义靠「全量复制 + 显式补 import」**: 每个生成文件都复制原文件的全部 import 语句, 再补 `from <support> import ...`; 支撑模块之间按无环分层(css → common; js → common + css; 常量集中在 common)。
+- **文件头「## 测试计划」清单按桶切分, 不重写文案**: 按原顺序保留非条目行; 条目仅当归档的测试名属于当前桶时保留; 跨桶共用条目在其余桶写派生行 `原条目见 <归属文件>(跨分文件共用同一用例条目, 文案未改)`, 保留锚点原文 —— 守阵 `test_test_plan_docstring_guard.py` 绿。
+- **不新增子桶**: R1 只管「把大文件拆到能拆的粒度」; 仍超千行的 12 个桶**不在本轮继续下拆**, 留给 R2 在计划里补分桶修订(保持轮次边界清晰、改动可审)。
+- **文件仍留在 `tests/` 下**: 基于 `__file__` 推导仓库根/`ROOT` 常量的用例不因目录深度变化而失效, 也不需要改任何路径。
+
+## 实现计划
+
+1. 取 HEAD 中的 10 个原测试文件作为基准, 跑 AST 分桶分析并产出 SPECS(目标文件名 + 桶归属 + 支撑模块归属)。
+2. 生成 36 个测试文件 + 12 个支撑/扫描模块, 逐文件校验: 模块级界定逐字不变、测试函数名集合一致、无跨文件残留引用。
+3. 修正「## 测试计划」清单切分逻辑, 使 `test_test_plan_docstring_guard.py` 全绿。
+4. 每个新文件跑定向测试; 再跑 `commands run test.quick` 与 `commands run test.full`。
+5. 收尾: 立档、`kb.wrap`、回写 `memory-bank/testing/file-conventions.md`、新建基线切片、提交推送。
+
+## 子任务状态表
+
+| 步 | 内容 | 状态 |
+|---|---|---|
+| S1 | `test_webui_static_dom_panel.py` → drawer / dialogs / traffic / misc + support | Done (2026-11-03) |
+| S2 | `test_hr_service.py` → wave / misc / rows / store + support | Done (2026-11-03) |
+| S3 | `test_traffic_sample.py` → store / core / config / misc + support | Done (2026-11-03) |
+| S4 | `test_webui_static_skins.py` → table / skin / widget + scan_{common,css,js} | Done (2026-11-03) |
+| S5 | `test_memory_bank.py` → cli / docs / structure / naming + support | Done (2026-11-03) |
+| S6 | `test_relocate_exec.py` → run / reconcile / jobs / misc + support | Done (2026-11-03) |
+| S7 | `test_config.py` → misc / load / rules + write support | Done (2026-11-03) |
+| S8 | `test_grouping.py` → state / misc / scan / conflict + support | Done (2026-11-03) |
+| S9 | `test_webui_static_dom_page.py` → layout / hr / store + support | Done (2026-11-03) |
+| S10 | `test_extension_proxy.py` → page_fetch / options / manifest + support | Done (2026-11-03) |
+| S11 | 定向测试 + 全量闸门 + 基线切片 | Done (2026-11-03) |
+| S12 | 收尾回写 + 提交推送 | Done (2026-11-03) |
+
+## 进度日志
+
+### R0 · 立档 (2026-11-03)
+
+- 本轮选择 AST 层「模块级界定逐字比对 + 测试函数名双向一致」作为 move-only 证据: 搬而不改有机器判据, 不靠人工目测。
+- 12 个仍超千行的桶(dom_panel_drawer / traffic_store / dom_panel_dialogs / traffic_core / config_misc / memory_cli / hr_misc / skins_table / dom_panel_traffic / hr_wave / dom_page_layout / memory_docs)留 R2 补分桶修订, 本轮不下拆。
+
+- 2026-11-03 00:42 按计划完成 R1: 10 个大型测试文件 move-only 拆为 36 个测试文件 + 12 个支撑/扫描模块; 906 个测试函数名与 1170 个模块级界定逐字不变; 全量见 kb.baseline; 12 个仍超千行的桶留 R2

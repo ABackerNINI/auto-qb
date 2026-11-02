@@ -4,8 +4,9 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (22)
+## In Progress (23)
 
+- [26-11-03-test-big-file-split](../26-11-03-test-big-file-split.md) 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-11-02-backend-relocate-qbtemp-narrow](../26-11-02-backend-relocate-qbtemp-narrow.md) 整组迁移 qb_temp 闸门按归属收窄
 - [26-10-31-memory-bank-recurrence-tooling](../26-10-31-memory-bank-recurrence-tooling.md) 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
