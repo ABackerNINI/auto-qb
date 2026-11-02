@@ -2,7 +2,30 @@
 
 > 摘要: 临时目录必须在 `tempfile.gettempdir()` 之下、覆盖率文件不能留仓库根、`TMPDIR` 不设收尾会崩, 别手工加前缀。
 > 等级: L1
-> 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集, R 盘缺席, 回落 TEMP, 快照守阵
+> 触发: 跑全量, basetemp, TMPDIR, 临时目录, 覆盖率文件, pytest-current, 耗时, 手工跑子集, R 盘缺席, 回落 TEMP, 快照守阵, 自举, auto-qb-tests, 外部 TMPDIR 拒收, rc=4, rc=3, 测试互斥锁, coverage 落点
+
+**Refs:** memory-bank/plans/26-11-02-0657-plan-testing-tmpdir-bootstrap.html
+
+### 测试 TMPDIR 已由 `tests/_tmp_bootstrap.py` 自举接管(2026-11-02); 外部 TMPDIR 一律拒收 rc=4
+
+- **触发**: 跑 tests/ 树的任何 pytest; 或想在 shell / run config / config.toml 里手工设 `TMPDIR`。
+- **判别**:
+  · 探测 R: → H: → 系统 `%TEMP%`(单一配置点 `TMP_ROOT_CANDIDATES`; 本机无 R/H ⇒ 常态走 `%TEMP%`);
+    实例根 `<根>/auto-qb-tests/<repo hash8>-<pid>-<rand6>` —— 连跑两次根互异, xdist worker 同根;
+    各 clone 按 repo 路径 hash 分根, 互不共享。
+  · 外部 `TMPDIR`(值不含 `auto-qb-tests` 标记)→ 进程响亮退出 **rc=4** 并给清理指引;
+    旧 `set "TMPDIR=R:/Temp/auto-qb/tests"` 前缀**已废止**(R: 在本机不存在, 该写法自 2026-09-23 引入起
+    从未生效, 全靠 gettempdir 静默回落掩盖 —— git 考证见计划 `plans/26-11-02-0657`)。
+  · 本文件 2026-09 诸条目里「手工把 TMPDIR 指到某盘」的处置均为**前自举时代**写法;
+    症状机制(basetemp 须在 `gettempdir()` 之下 / 收尾 `pytest-current` 崩溃)仍有效, 处置以本条为准。
+  · coverage 落点: pytest-cov 在 `pytest_load_initial_conftests`(tryfirst) 就把 data_file 绑成
+    CWD 的 `.coverage`(早于一切 conftest), env `COVERAGE_FILE` 对主进程**无效**;
+    conftest `pytest_configure` 调 `_tmp_bootstrap.retarget_cov_data_file()` 改写 `_data._filename`
+    重定向(xdist worker 启动晚, env 天然有效)。**若升级 pytest-cov/coverage 后仓库根又见 `.coverage.*`,
+    先查这个私有面**(钉版于 uv.lock, 回归阵 `tests/test_tmp_bootstrap.py`)。
+  · 同 clone 写重型全量互斥锁 `<系统temp>/auto-qb-locks/<repo hash8>`: 撞锁 **rc=3** + 打印持锁者,
+    强杀后下一位自愈; 残留实例根按「mtime 超 12h 且内嵌 pid 已死」双条件清扫(阈值暂定可调)。
+- **处置**: 一律 `commands run test.*` 或裸 `uv run pytest tests ...`, **任何层都别预设 TMPDIR**。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 
@@ -68,8 +91,10 @@
   用户自己终端(`TMPDIR` 在 C 盘)无此问题。
   ⇒ 工具 shell 跑全量前**先设 `TMPDIR`**; 见到这个 `PermissionError` **先怀疑临时目录, 别当代码回归**。
   📌 **2026-09-22 已固定为 `TMPDIR="R:/Temp/auto-qb/tests"`**(R 盘不支持符号链接, 反而绕开了这个崩溃),
+  ⚠ **2026-11-02 起废止**: 改由 `tests/_tmp_bootstrap.py` 自举(见首条), 手工固定写法全部拆除;
   完整约定见 [../../techContext.md](../../techContext.md)「临时目录 / 备份盘约定」。
-  📌 **2026-09-23 已写进闸门命令(真正的收口)**: `.commands/my-commit-flow/.my-commit-flow.toml` 里那条 pytest 闸门改成
+  📌 **2026-09-23 已写进闸门命令(真正的收口)**: ⚠ **2026-11-02 起废止**(自举接管, 见首条)。原记录:
+  `.commands/my-commit-flow/.my-commit-flow.toml` 里那条 pytest 闸门改成
   `set "TMPDIR=R:/Temp/auto-qb/tests" && uv run pytest tests -q --no-cov` —— 以前**靠调用者记得导出**,
   从工具 shell 跑 `preflight.py` / `commit.py` 忘导出就假红。
   ⚠ 该写法是 **cmd.exe** 的: 预检用 `subprocess.run(shell=True)`, Windows 上解析到 COMSPEC → cmd.exe,

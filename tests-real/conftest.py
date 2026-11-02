@@ -56,8 +56,10 @@ def secondary(env):
 
 @pytest.fixture()
 def workdir(request):
-    """本地工作目录 —— 不用 pytest 的 tmp_path: 本机 TMPDIR 指向 H:, 而 qB 要真读这些文件,
-    网络盘/慢盘会让用例假红(同 pitfalls/testing/tmpdir.md 的教训, 但这里不能靠 TMPDIR 前缀)。"""
+    """本地工作目录 —— 不用 pytest 的 tmp_path: qB 要真读这些文件, 慢盘/沙箱重定向会让
+    用例假红(同 pitfalls/testing/tmpdir.md 的教训)。TMPDIR 自 2026-11-02 起由
+    tests/_tmp_bootstrap.py 探测(R→H→系统temp, 计划 26-11-02-0657), 但 tests-real 需要
+    的是仓库本地确定性目录, 与探测无关, 故仍用 .work/。"""
     d = Path(__file__).resolve().parent / ".work" / re.sub(r"\W+", "_", request.node.name)
     shutil.rmtree(d, ignore_errors=True)
     d.mkdir(parents=True, exist_ok=True)
@@ -86,8 +88,9 @@ def transfer_limits(env):
     """
     saved = {port: {k: qb.prefs().get(k) for k in LIMIT_KEYS} for port, qb in env["qbs"].items()}
     for qb in env["qbs"].values():
-        qb.set_prefs(dl_limit=L2_RATE, up_limit=L2_RATE, alt_dl_limit=L2_RATE,
-                     alt_up_limit=L2_RATE, use_alt_speed_limits=False)
+        qb.set_prefs(
+            dl_limit=L2_RATE, up_limit=L2_RATE, alt_dl_limit=L2_RATE, alt_up_limit=L2_RATE, use_alt_speed_limits=False
+        )
     yield L2_RATE
     for port, qb in env["qbs"].items():
         qb.set_prefs(**saved[port])

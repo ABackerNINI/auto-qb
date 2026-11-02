@@ -20,8 +20,9 @@
 - [26-11-01-1031] [RM03 规则引擎 · 真机实测分步计划(漂移复测轮)](../26-11-01-1031-plan-real-machine-rm03-drift-plan.html) — `real-machine-rm03-drift-plan`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (184)
+## Done (185)
 
+- [26-11-02-0657] [测试临时目录自举与互斥锁方案 — R→H→%TEMP% 固定探测 · 禁静默降级 · 禁外部 TMPDIR · 锁自举 · 评审稿](../26-11-02-0657-plan-testing-tmpdir-bootstrap.html) — `testing-tmpdir-bootstrap`
 - [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](../26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0434] [提交闸门按改动收窄优化](../26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
 - [26-11-01-0106] [规则引擎重设计方案](../26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`

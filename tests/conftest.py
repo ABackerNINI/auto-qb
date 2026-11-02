@@ -75,6 +75,12 @@ import pytest
 
 import sidefx
 
+# 临时目录自举 + 写重型互斥锁(计划 26-11-02-0657): 必须在任何插件固化 tempfile 缓存前跑,
+# 模块级调用一次; 外部 TMPDIR 不含自举标记 → rc=4 拒收; 写重型锁被占 → rc=3。
+import _tmp_bootstrap
+
+_tmp_bootstrap.bootstrap()
+
 # 覆盖率闸: 平台定档(为什么不是一个数, 见 pytest_configure 的 docstring)
 COVERAGE_FLOOR_WIN = 99.0
 COVERAGE_FLOOR_OTHER = 98.5
@@ -108,6 +114,7 @@ def pytest_configure(config):
     只读自己那份 —— 实测改 `config.option` 或 `session.config.option` 都**不生效**(报告期仍视为
     「未设阈值」, 闸门静默失效)。所以这里取插件对象改它的 `options`。
     """
+    _tmp_bootstrap.retarget_cov_data_file(config)  # coverage 数据文件重定向到实例根(机制见该函数 docstring)
     plugin = config.pluginmanager.getplugin("_cov")
     if plugin is None:
         return  # 没开覆盖率(--no-cov / 无 --cov): 无闸可设
@@ -300,3 +307,8 @@ def web_env(tmp_path, request):
     client_addr = params.get("client_addr")
     client = TestClient(app) if client_addr is None else TestClient(app, client=client_addr)
     return mgr, client
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """写重型锁双释放之一(另一是 _tmp_bootstrap 内 atexit; 被强杀时靠下一位僵尸自愈)。"""
+    _tmp_bootstrap.pytest_session_finish_hook()

@@ -42,6 +42,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -63,7 +64,9 @@ DEFAULT_TIMEOUT_MULTIPLIER = set_conf.DEFAULT_TIMEOUT_MULTIPLIER  # 与 mutmut �
 DEFAULT_CHILDREN = 3  # WSL 只有 8 核(.wslconfig); 4 路并发峰值曾顶到 VM 内存上限 OOM
 DEFAULT_WORKERS = 8
 DEFAULT_SUITE_TIMEOUT = 1200  # 单次全套件硬截止; 变异体可能死循环, 没有它会把整条 verify 挂死
-DEFAULT_OUT = "R:/Temp/auto-qb/mutants"  # 别落仓内(报告 §10 #7)
+DEFAULT_OUT = os.path.join(
+    tempfile.gettempdir(), "auto-qb-mutants"
+)  # 别落仓内(报告 §10 #7); R:/ 写死自 2026-10-08 起在无 R 盘机器从未生效, 2026-11-02 改随系统 temp(计划 26-11-02-0657)
 HEAD_LINES = 30
 #: 结果导出脚本(仓库内, 由本脚本推进镜像 /tmp 后执行) —— 它 import mutmut 内部 API, 只能在镜像里跑
 DUMP_SCRIPT_REL = ".commands/mutants/scripts/mutants_dump.py"
@@ -220,8 +223,7 @@ def _ensure_mirror(distro: str, mirror: str, branch: str, *, refresh: bool, no_s
         state = "MIRROR_HAVE_GIT"
     else:
         state = _wsl(
-            distro,
-            f'if [ -d {mq} ]; then if [ -d {mq}/.git ]; then echo MIRROR_HAVE_GIT; '
+            distro, f'if [ -d {mq} ]; then if [ -d {mq}/.git ]; then echo MIRROR_HAVE_GIT; '
             f'else echo MIRROR_NO_GIT; fi; else echo MIRROR_NO_DIR; fi',
             check=False
         ).stdout.strip()
@@ -229,10 +231,8 @@ def _ensure_mirror(distro: str, mirror: str, branch: str, *, refresh: bool, no_s
         _say(f"[1/3] 建镜像仓 {mirror} (git clone)")
         _wsl(distro, f"git clone -q --branch {branch} {_git_url()} {mq}")
     elif "MIRROR_NO_GIT" in state:
-        raise Fail(
-            f"镜像目录在但 .git 缺失: {mirror} —— 疑似损坏/误判; 先人工核验 head 与 mutants/ 注册表, "
-            "不自动 clone 覆盖"
-        )
+        raise Fail(f"镜像目录在但 .git 缺失: {mirror} —— 疑似损坏/误判; 先人工核验 head 与 mutants/ 注册表, "
+                   "不自动 clone 覆盖")
     elif "MIRROR_HAVE_GIT" not in state:
         raise Fail(f"无法判定镜像状态(探测输出: {state!r}) —— 不自动 clone 覆盖")
     elif refresh:
@@ -426,8 +426,8 @@ def _suite_cmd(workers: int, timeout_s: int, target: str = "tests/") -> str:
     deselects = " ".join(f"--deselect {shlex.quote(d)}" for d in FLAKY_DESELECT)
     return (
         f"PYTHONDONTWRITEBYTECODE=1 timeout {timeout_s} "
-        f".venv/bin/python -B -m pytest {target} -q --no-cov -p no:cacheprovider -rfE --tb=no -n {workers}"
-        + (f" {deselects}" if deselects else "")
+        f".venv/bin/python -B -m pytest {target} -q --no-cov -p no:cacheprovider -rfE --tb=no -n {workers}" +
+        (f" {deselects}" if deselects else "")
     )
 
 
@@ -575,23 +575,15 @@ def _check_registry(distro: str, mirror: str) -> None:
     随后逐条 `mutmut apply` 全报 APPLYFAIL —— 排障时还会误判成 apply 通道坏了(实测 2026-11-02
     中池 3 路 OOM 打断, 注册表被写成 0 字节)。空注册表没有可验证的变异, 语义等同缺失。
     """
-    reg = _wsl(
-        distro,
-        f"cd {_bq(mirror)} && find mutants -name '*.meta' -printf '%s %p\\n' 2>/dev/null",
-        check=False
-    )
+    reg = _wsl(distro, f"cd {_bq(mirror)} && find mutants -name '*.meta' -printf '%s %p\\n' 2>/dev/null", check=False)
     entries = [ln.strip() for ln in reg.stdout.splitlines() if ln.strip()]
     if reg.returncode != 0 or not entries:
-        raise Fail(
-            "镜像里没有 mutmut 注册表(mutants/**/*.meta) —— 先跑 mutants.run 该目标再 verify; "
-            "单文件轮会清掉其它目标的注册表"
-        )
+        raise Fail("镜像里没有 mutmut 注册表(mutants/**/*.meta) —— 先跑 mutants.run 该目标再 verify; "
+                   "单文件轮会清掉其它目标的注册表")
     empty = [ln.split(None, 1)[-1] for ln in entries if ln.split(None, 1)[0] == "0"]
     if empty:
-        raise Fail(
-            f"镜像里的 mutmut 注册表为空(0 字节): {', '.join(empty)} —— "
-            "空注册表没有可验证的变异(等同缺失), 先跑 mutants.run 该目标再 verify"
-        )
+        raise Fail(f"镜像里的 mutmut 注册表为空(0 字节): {', '.join(empty)} —— "
+                   "空注册表没有可验证的变异(等同缺失), 先跑 mutants.run 该目标再 verify")
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
@@ -693,18 +685,18 @@ def cmd_verify(args: argparse.Namespace) -> int:
         f"APPLY_FAIL {apply_failed} · TIMEOUT {timed_out} · FLAKY {flaky} · UNKNOWN {unknown} -> {path}"
     )
     if apply_failed or timed_out or unknown or flaky:
-        _say(
-            "[verify] APPLY_FAIL/TIMEOUT/FLAKY/UNKNOWN 是**未判定**(不是 SURVIVED): "
-            "重跑同一命令会自动重试这几条"
-        )
+        _say("[verify] APPLY_FAIL/TIMEOUT/FLAKY/UNKNOWN 是**未判定**(不是 SURVIVED): "
+             "重跑同一命令会自动重试这几条")
     return 0
 
 
 def cmd_gremlins(args: argparse.Namespace) -> int:
     root = repo_root()
     env = dict(os.environ)
-    env["TMPDIR"] = "R:/Temp/auto-qb/tests"  # 不设会在收尾崩(假红, 报告 §10 #6)
-    env["COVERAGE_FILE"] = "R:/Temp/auto-qb/gremlins.cov"
+    # TMPDIR(2026-11-02, 计划 26-11-02-0657): 不再写死 R:/(无 R 盘机器从未生效);
+    # 子进程 pytest 由 tests/_tmp_bootstrap.py 自举探测, 这里原样透传。
+    # COVERAGE_FILE 同理不再写死 —— gremlins 走 --no-cov, 覆盖率文件本就不产。
+    env.pop("COVERAGE_FILE", None)
     if not args.pool:
         _say("[WARN] 没给 --pool: 会扫全 tests 收集覆盖 —— 慢且可能撞 WinError 206(报告 §10 #2)")
     cmd = [

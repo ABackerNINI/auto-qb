@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (70)
+## Open (69)
 
-- [test] [test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红](../26-11-02-0413-test-webui-relocate-free-space-race.html) — 断言比较两次独立 disk_usage 调用的自由字节数, 间隔内任何磁盘活动(实测 4096B)即偶发红; 单跑恒绿, 全量/闸门跑两次中招
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
@@ -82,8 +81,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (329)
+## Done (330)
 
+- [test] [test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红](../26-11-02-0413-test-webui-relocate-free-space-race.html) — 断言比较两次独立 disk_usage 调用的自由字节数, 间隔内任何磁盘活动(实测 4096B)即偶发红; 单跑恒绿, 全量/闸门跑两次中招
 - [bug] [my-commit-flow.sync 生成物自动化解在 rebase 新基引入新生成物路径时失效](../26-11-01-2140-bug-sync-generated-whitelist-drift.html) — 分叉 rebase 冲突面全在生成物白名单内仍被判失败并回滚, 且失败行不给冲突清单 —— 需人工 merge-tree 探测 + 逐轮手解
 - [bug] [WebUI set_share_limits 在 qB 5.2.3 恒 400: facade 漏发必填参 shareLimitAction](../26-11-01-2102-bug-webui-set-share-limits-missing-sharelimitaction.html) — QbApi.torrents_set_share_limits 不传 share_limit_action, 库对 None 值键不发 → qB 5.0+ 该端点必填 shareLimitAction → WebUI 分享限制命令恒回「qB 拒绝执行: 缺少必需参数：shareLimitAction」; RM04-09 真机首测暴露
 - [test] [core/ W9b rules+modules 小件 变异真洞余量 87 条批量判读留档(rules 31 + maintenance 19 + speed_curve 30 + tracker 7, 低危文案/日志/回执/展示面为主 + 中 4), 不排期](../26-11-01-2024-test-core-w9b-mutation-low-residue.html) — W9b(R34) S5a 守阵后余量: 全轮真洞 367(存活 351 + no tests 16) - 红验 280 = 87(rules 31 含 no-tests hr12 / maintenance 19 / speed_curve 30 / tracker 7, 中 4 + 低 83, 弃杀 4 在内); 主体为 INFO/WARNING/ERROR 审计文案丢真、webui reasons 展示键值、回执计数、窄触发面, 按簇判读留档不排期

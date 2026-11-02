@@ -5,25 +5,23 @@
     run.py run test.pkg.scoped --full -- <changed:.agents/skills/commands/**> → 引擎改动, 整跑
 
 归并规则(D4, 2026-11-01 拍板): 改动文件按 `.commands/<包>/` 前缀归并出受影响包集合 ——
-单包 → 只跑该包(`uv run pytest .commands/<包> -q --no-cov -n 8`, TMPDIR 在此内置, 不走
-cmd.exe 引号配方); ≥2 包或 --full → 转调 `run.py run test.pkg`(TMPDIR/写法配方单点在
-test 包, 这里不抄第二份; 引擎测试贴着引擎放, 改引擎永远全跑); 0 包 → 静默 rc 0
+单包 → 只跑该包(`uv run pytest .commands/<包> -q --no-cov -n 8`); ≥2 包或 --full → 转调
+`run.py run test.pkg`(引擎测试贴着引擎放, 改引擎永远全跑); 0 包 → 静默 rc 0
 (闸门 `<changed:>` 无匹配本应整条跳过, 这里只兜底)。
+
+TMPDIR(2026-11-02, 计划 26-11-02-0657): 不再内置 R:/ 前缀(自 2026-11-01 引入起在本机从未生效,
+必走 WARN 分支); 由子进程 pytest 的 tests/_tmp_bootstrap.py 自举探测(R→H→系统temp)——
+本 wrapper **原样透传环境**, 不设 TMPDIR; 若环境里有外部 TMPDIR, 子进程会 rc=4 拒收(刻意堵死)。
 """
 
 from __future__ import annotations
 
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]  # .commands/test/scripts/ → 仓库根
 RUN_PY = REPO_ROOT / ".agents" / "skills" / "commands" / "scripts" / "run.py"
-# 与 test 包 config.toml 同源的本机约定(H:\Temp 是坏默认, symlink 陷阱见
-# memory-bank/pitfalls/testing/tmpdir.md); scoped 的 pytest 子进程用, 转调 test.pkg 时不碰
-# (配方在 task 定义里)。
-TMPDIR = r"R:\Temp\auto-qb\tests"
 
 
 def plan(argv: list[str]) -> tuple[bool, list[str]]:
@@ -50,17 +48,10 @@ def main(argv: list[str] | None = None) -> int:
     if not pkgs:
         return 0
     target = f".commands/{pkgs[0]}"
-    env = dict(os.environ)
-    try:
-        Path(TMPDIR).mkdir(parents=True, exist_ok=True)
-        env["TMPDIR"] = TMPDIR
-    except OSError:
-        print(f"[WARN] TMPDIR {TMPDIR} 建不了, 沿用环境默认(symlink 陷阱见 memory-bank/pitfalls/testing/tmpdir.md)")
     print(f"[pkg.scoped] 受影响包: {pkgs[0]} → 只跑 {target}")
     proc = subprocess.run(
         ["uv", "run", "pytest", target, "-q", "--no-cov", "-n", "8"],
         cwd=str(REPO_ROOT),
-        env=env,
     )
     return proc.returncode
 

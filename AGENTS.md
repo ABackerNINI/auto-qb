@@ -63,7 +63,7 @@ commands run env.sync # 首次/依赖变更后同步依赖
 ```
 
 - 依赖统一走`uv`(`pyproject.toml`+`uv.lock`)。
-- ⚠`TMPDIR`已内置在`test.*`里,**别再手工加前缀**(会盖掉包里正确的值);判据见`memory-bank/pitfalls/testing/tmpdir.md`。
+- ⚠测试TMPDIR由`tests/_tmp_bootstrap.py`自举探测(R→H→%TEMP%),**外部TMPDIR一律拒收(rc=4)**,别手工加前缀;要换根改`TMP_ROOT_CANDIDATES`单点;判据见`memory-bank/pitfalls/testing/tmpdir.md`。
 - 新增测试必须同步该文件头部docstring的"## 测试计划"清单。
 
 ## ⚠环境硬约束:Git操作(AI工具shell特有)

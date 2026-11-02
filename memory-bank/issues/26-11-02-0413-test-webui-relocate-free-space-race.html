@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-relocate-free-space-race">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红">
 <meta name="issue-summary" content="断言比较两次独立 disk_usage 调用的自由字节数, 间隔内任何磁盘活动(实测 4096B)即偶发红; 单跑恒绿, 全量/闸门跑两次中招">
 <title>test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红</h1>
     <p class="lede">断言比较两次独立 disk_usage 调用的自由字节数, 间隔内任何磁盘活动(实测 4096B)即偶发红; 单跑恒绿, 全量/闸门跑两次中招</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-02-0413-test-webui-relocate-free-space-race</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 04:13</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui / relocate</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">agent(R6 精修轮提交闸门)</div></div>
     </div>
@@ -161,11 +161,12 @@ E        +  where 76690481152 = (前一次 disk_usage 的 .free, 即 free_base)
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-02 04:13 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 04:50 — 认领并修复，状态 <strong>Done</strong>（实际修法见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
     <p>入池前已复验三连(见 01): 单跑绿 → 全量红 → 全量绿, 竞态判据成立; 认领后按当时环境重跑确认。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法 = 建议案 (b): <code>test_relocate_volume_free_ancestor_fallback</code> 桩 <code>disk_usage</code> —— 存在的路径回固定 free(500_000_000), 不存在抛 <code>FileNotFoundError</code>(复刻真实失败形态, 同文件 <code>test_relocate_module_space_gate_ancestor_and_missing</code> 已有同款桩); 两次采样同源同值, 断言不再依赖真实盘抖动, 祖先上溯/裸名/空串各分支语义不变(零 src 改动)。验证: <code>test.one -k volume_free</code> 2 passed; <code>test.one tests/test_web_relocate.py</code> 31 passed; 全量直跑 4812 passed / 11 failed(1519s) —— 11 红全部与本改动无关且可证环境性: 8 条 junction 族(本 shell 创建 junction 后 Target 被改写落沙箱、穿透读取失败, 直接探针实证, 与改动零因果: 零 src 改动、未触 alias_fs/grouping 链路), 2 条端口监听(他 agent 的 harness 占口), 1 条耗时预算(19.37s/5s, 四 clone 并发机载下超时); 因全量未绿不产新基线切片。</p>
   </section>
 
   <footer>

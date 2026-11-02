@@ -227,15 +227,25 @@ def test_relocate_module_precheck_qb_temp_unowned_demoted(tmp_path, monkeypatch)
     assert any("LEFTOVER-ORPHAN.mkv.!qB" in n for n in item.get("notes") or []), item.get("notes")
 
 
-def test_relocate_volume_free_ancestor_fallback(tmp_path):
+def test_relocate_volume_free_ancestor_fallback(tmp_path, monkeypatch):
     """_volume_free_resolved: 叶子未建 -> 上溯最近存在祖先(plan R1 方案A); 裸名无分隔符 -> None
 
     真盘实证: shutil.disk_usage 对不存在的目录抛 FileNotFoundError(WinError 3),
     而目标目录尚未创建是迁移的正常输入(qB 落地时 libtorrent create_directories)。
+    桩 disk_usage(存在回固定 free / 不存在抛错): 两次独立采样间任何后台写盘都会让
+    全等断言偶发红(issue 26-11-02-0413), 钉死后语义不变、采样确定。
     """
     from auto_qb.core.modules.relocate_mod import _volume_free_resolved
+    from auto_qb.infra import file_access as fa_mod
     from auto_qb.infra.file_access import LocalFileAccess
 
+    def pinned(self, p):
+        clean = str(p).replace("\\\\?\\", "")
+        if not os.path.exists(clean):
+            raise FileNotFoundError(2, "系统找不到指定的路径", clean)
+        return fa_mod.DiskUsage(total=10**12, used=0, free=500_000_000)
+
+    monkeypatch.setattr(fa_mod.LocalFileAccess, "disk_usage", pinned)
     fa = LocalFileAccess()
     base = os.path.join(str(tmp_path), "existing-lib")
     os.makedirs(base)
