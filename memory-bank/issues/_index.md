@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 8 |
+| bug | 9 |
 | perf | 5 |
 | docs | 2 |
 | test | 3 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留](26-11-03-0254-bug-search-uncovered-stale-virtual-row.html) — 未归组命中转归组后同屏出…
 - [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery…
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/get…
