@@ -71,3 +71,5 @@
 **R6(2026-11-02 03:18):** W8 遗留两件结清后提交闸门双红清零: 10 件 2026-09 旧档工作树行尾归一 LF(内容零改) + transfer/adapters/qb 的 find_torrent/pause_torrent 等扩展点补 11 条守阵(覆盖率 98.96% -> 99.08%); 全量 4820 过 2 跳; 本轮两笔提交推送
 
 **R7(2026-11-02 20:46):** core W5 traffic_sample_mod 中池单轮复跑收尾: children=1 + 1.5 GiB ulimit, 97 survived 逐 id 对差 W5 终态真新增 0(2 条为 59e814fd 修复后重编号), 4 条 timeout 单列; 2 条表面新增红验 SURVIVED 不声称杀; 结果文件已备份仓库外, 数字见基线切片 26-11-02-2044
+
+**R8(2026-11-02 20:46):** W2 变异 4 件(parse-edges/badbytes-read/boundary-grid/broke-contract)收尾补全: 核对 Done 回写与双向认领链, 全量测试全绿并新建基线切片 26-11-02-2045, 零 src 改动
