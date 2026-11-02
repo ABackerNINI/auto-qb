@@ -34,13 +34,14 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (270)
+## Done (271)
 
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
 - [26-11-02-backend-relocate-qbtemp-narrow](../26-11-02-backend-relocate-qbtemp-narrow.md) 整组迁移 qb_temp 闸门按归属收窄
 - [26-11-02-webui-flux-overlay-opacity](../26-11-02-webui-flux-overlay-opacity.md) 修复 flux 皮肤浮层透出正文
 - [26-11-02-webui-large-filelist-perf](../26-11-02-webui-large-filelist-perf.md) WEBUI 单种子千级文件列表性能统一优化 (W1-W5 + W6a 落地, W6b Dropped, 真机轨完成)
+- [26-11-03-memory-bank-code-review-3-s0](../26-11-03-memory-bank-code-review-3-s0.md) 第三次全量代码评审 S0:准备与底册
 - [26-11-03-memory-bank-kb-nav-searchbox](../26-11-03-memory-bank-kb-nav-searchbox.md) kb.nav 搜索支持文件名与相对路径
 - [26-11-03-test-big-file-split](../26-11-03-test-big-file-split.md) 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
 - [26-11-03-test-port-zero](../26-11-03-test-port-zero.md) 测试/开发侧端口改 0(webServer.wait 捕获)实施

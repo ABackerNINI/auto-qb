@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>第三次全量代码评审报告(骨架)</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="memory-bank-full-code-review-3">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-03-0636">
+<meta name="doc-updated" content="26-11-03-0636">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: memory-bank-full-code-review-3 · 骨架(Open)</div>
+<h1>第三次全量代码评审报告</h1>
+<p class="lede">本件为第三次全量代码评审的报告骨架：只保留章节结构与封面事实，S0 底册与过程记录见 task 文档，正文待 S1–S6 完成后填充。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-0636 · <b>doc-updated</b> 26-11-03-0636 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>计划</b> memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html<br>
+  <b>S0 底册</b> memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md<br>
+  <b>起点 HEAD</b> 47a61c7c（计划记载 812ad785，S0 开工快进 1 笔）· <b>基线</b> 4933 passed + 2 skipped / 99%（切片 26-11-03-0534）<br>
+  <b>来源</b> 用户指派执行第三次全量代码评审，S0 只做准备与底册。
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p class="aside">待 S6 终验后填写：分批结论、全局判断、与二次评审的差异。</p>
+
+<h2><span class="no">§02</span>证据快照</h2>
+<p class="aside">待各批完成后填写：关键实测数字、CDP/测试输出、行号与取证时间。快照按当时现场固定，不回改历史值。</p>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+<p class="aside">待填写：取证工具、复现条件、未覆盖模块与已知边界。</p>
+
+<h2><span class="no">§04</span>分批发现汇总</h2>
+<table>
+  <tr><th>批</th><th>范围</th><th>发现数</th><th>P0/P1</th><th>结论</th></tr>
+  <tr><td>B1–B10</td><td>按计划 §05 分批表</td><td>待填</td><td>待填</td><td>待填</td></tr>
+</table>
+
+<h2><span class="no">§05</span>终验</h2>
+<p class="aside">待填写：test.full 实测数字（对照 4933+2 / 99%）、diff 核对、与 Open issue 去重结果（基数为 S0 57 条）。</p>
+
+<h2><span class="no">§06</span>拍板与后续</h2>
+<p class="aside">待 S6 填写：与计划 §06 的 D1–D9 拍板记录对齐；入池/不修/后续计划的分流。</p>
+
+<h2><span class="no">附录</span>底册四表</h2>
+<p class="aside">S0 底册（Open issue 54/57、坑档 7 类、在途计划 5 件、二次 26 条去向）不在本报告复述，单点在 <code>memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md</code>。</p>
+
+</div>
+</body>
+</html>

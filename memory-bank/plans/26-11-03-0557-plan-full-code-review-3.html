@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="full-code-review-3">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-11-03-0557">
+<meta name="doc-updated" content="26-11-03-0636">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: full-code-review-3</div>
+<h1>实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审</h1>
+<p class="lede">对第二次全面评审终点 <code>bf9920d3</code> 到当前 HEAD <code>812ad785</code> 的 <b>358 笔提交</b>做第三次只读评审, 并补审前两次始终未独立覆盖的 <code>tests/</code> 测试质量面与文档漂移面。设计主轴: <b>实质增量全量读码、move-only 拆分做等价核验、未变旧面轻量抽验; 本轮零改动, 只产出发现、分级与处置建议</b>。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-0636 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户 26-11-03 指令「参照仓库前两次 code review 制定第三次分步实施计划; 本轮只写计划, 不执行评审、不改代码、不 commit」; 骨架继承首次 <a href="26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> 与第二次 <a href="26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a>, 底数实测自 HEAD <code>812ad785</code> 与基线切片 <a href="../testing/baselines/26-11-03-0459-test-big-file-split.md">26-11-03-0459</a>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>为什么现在做第三次</h3>
+<p>第二次全面评审在 <code>bf9920d3</code>(26-10-30 06:00, 报告原记 <code>3d957597</code> —— 该哈希因后续 rebase 已不可解析, 以现行等价定稿提交 <code>bf9920d3</code> 为准)定稿: 十批 27/27 勾选, 26 条发现(P0×0 / P1×1 / P2×6 / P3×19), 其中 17 条新入池, 其余合并处置, 关联 issue 除既有类型注解债(26-09-21-1408, Open)外全部 Done。此后到 HEAD <code>812ad785</code>, <code>develop</code> 前进 <b>358 笔提交</b>, 代码面 <b>479 个文件</b>变更(<b>+122,931 / −62,415</b> 行, 含 move-only 拆分的删移计数), 且出现五个第二次评审未见过的大面:</p>
+<ul>
+  <li><b>种子转移新域</b>: <code>src/auto_qb/transfer/</code> 6 件 928 行 + <code>web.transfer</code> 配置 12 件 1,030 行 + WebUI 路由/编辑器/确认弹窗。</li>
+  <li><b>动效皮肤与 fx 库</b>: <code>flux/</code> 7 件 3,071 行 + <code>shared/fx/</code> 2 件 3,072 行 + <code>fx/showcase.html</code>, 四皮肤守阵同步扩面。</li>
+  <li><b>规则引擎重设计 W1–W5</b>: <code>rules/</code> 7 件 725 行, 含 transfer action 与规则树编辑器。</li>
+  <li><b>qB 5.3 双版本支持</b>: <code>config/compat.py</code>、<code>qbapi</code>/<code>qbmanager</code>、share limits 口径。</li>
+  <li><b>真机实测框架 tests-real/</b>: 40 件全新(框架 + RM00–RM10 用例), 从未经评审。</li>
+  <li><b>大文件多轮拆分 R1–R4</b>: <code>tests/</code> 251 件、WebUI shared 72 件、scripts 13 件的 move-only 改造 —— 行为应零变, 但加载序/挂载面/守阵定位是新的风险面。</li>
+</ul>
+<h3>目标与完成判据</h3>
+<ul>
+  <li><b>只读取证</b>: 评审轮内不改一行 <code>src/</code> 代码、不改一份文档、不 commit、不 push; 全部产出 = 发现清单 + 分级 + 处置建议 + 待用户拍板项。</li>
+  <li><b>算成</b>: 实质增量文件 100% 过目(R1–R13 勾选); move-only 拆分文件 100% 等价核验; 遗留测试面给出覆盖缺口清单; 每条 P0/P1 有三锚 + 可达性复验; 报告/计划终态 Done; 索引与文档机检全绿。</li>
+</ul>
+<h3>设计原则(继承前两次 + 本轮两条)</h3>
+<ul>
+  <li><b>先底册后读码</b>: 开工把 issues 池 Open 条目、坑档 7 类、在途计划/报告、第二次评审 26 条发现蒸馏为「已知问题底册」; 每条新发现先去重, 不重复报告已知问题。</li>
+  <li><b>分批 + 统一五步</b>: 每批「读档 → 坑档对照 → 逐文件读码 → 工具提示源 → 登记去重」, 每批一轮会话。</li>
+  <li><b>证据纪律</b>: 每条发现必须带 文件:行 + 函数名 + 行号三锚 + 可达性论证; 论证不出可达不登记为 bug。</li>
+  <li><b>基线不变式</b>: 起点基线 <b>4924 passed + 2 skipped / 覆盖率 99%</b>(切片 26-11-03-0459); 每批收尾 <code>test.full</code> 数字持平, 漂移先查明再继续。</li>
+  <li><b>增量分层(继承二次 D1)</b>: 新增/实质变更文件全量读码; 未变旧面逐文件过目但只做维度抽验 + 上次同域发现回归核对。</li>
+  <li><b>拆分等价(本轮新增)</b>: move-only 文件不做逻辑重审, 只核「内容搬移零丢失 / 加载序 / 挂载名 / CSS 层叠序 / 测试辅助读法」五项, 用 diff 配对与 grep 清单证明。</li>
+  <li><b>单 clone</b>: 只在 <code>auto-qb-clone1</code> 操作; 评审只读, 天然无跨 clone 写风险。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>前两次评审考古结论</h3>
+<table>
+  <tr><th>轮次</th><th>材料</th><th>范围与终点</th><th>方法</th><th>发现与去向</th><th>明确未覆盖</th></tr>
+  <tr>
+    <td><b>第一次</b></td>
+    <td><a href="26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> 计划<br><a href="../reports/26-10-05-1036-report-full-code-review.html">26-10-05-1036</a> 报告</td>
+    <td>全仓 <code>src/</code> + <code>static/</code> + <code>extensions/</code> + <code>scripts/</code>; 终点 <code>a4d14a8d</code></td>
+    <td>十批(A/B1/B2/C/D/E/F1/F2/G/H), 每批统一五步, R1–R10 维度, 逐文件过目</td>
+    <td><b>57 条</b>发现, 经修复计划 <a href="26-10-06-0103-plan-full-code-review-remediation.html">26-10-06-0103</a> 六批 <b>28 issue</b> 全部 Done</td>
+    <td>① <code>memory-bank/</code> / <code>.commands/</code> / <code>.agents/</code> 元层不评审; ② <code>tests/</code> 测试质量只作 R10 视角, 无独立批次; ③ 文档漂移仅点状登记, 无系统审计</td>
+  </tr>
+  <tr>
+    <td><b>第二次</b></td>
+    <td><a href="26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> 计划<br><a href="../reports/26-10-30-0237-report-full-code-review-2.html">26-10-30-0237</a> 报告</td>
+    <td>起点 <code>6441a707</code> → 终点 <code>bf9920d3</code>(报告原记 <code>3d957597</code>); 九批 + T 批, 27/27 勾选</td>
+    <td>增量优先分层(D1), R1–R11, 每批读档/坑档/读码/工具/去重五步</td>
+    <td><b>26 条</b>(P0×0 / P1×1 / P2×6 / P3×19); 17 条新入池 + 合并条; 关联 issue 除 26-09-21-1408 类型注解债外全部 Done</td>
+    <td>① 重复代码审查 Phase 3/4(轮 24–26 的 <code>tests/</code> 与横切)仍未并入(D3 拍板不并); ② <code>tests/</code> 仍无独立批次(仅新增/变更文件轻量过目); ③ 文档漂移仍只 R10 点状; ④ 元层仍不评审</td>
+  </tr>
+</table>
+<h3>当前区间规模(实测 <code>bf9920d3..812ad785</code>)</h3>
+<table>
+  <tr><th>域</th><th>变更文件</th><th>增/删行</th><th>要点</th></tr>
+  <tr><td><code>src/auto_qb/webui/</code></td><td>105 件</td><td>+17,302 / −6,497</td><td>static/shared 72 件 +10.6k、flux 7 件 3.1k、fx 2 件 3.1k、四皮肤 CSS/HTML; py 12 件 +363; R4 八拆 move-only 与搜索/乐观写/抽屉窗口化/转移 UI 实质变更混在同一域</td></tr>
+  <tr><td><code>src/auto_qb/config/</code></td><td>12 件</td><td>+1,030 / −69</td><td><code>web.transfer</code> 目标列表与校验、qB 5.3 compat、schema/validation 同步</td></tr>
+  <tr><td><code>src/auto_qb/transfer/</code></td><td>6 件(全新)</td><td>+928 / −0</td><td>编排器、adapter 协议/qb/tr stub、状态门/导出/映射/跳检降级/验证轮询/删源</td></tr>
+  <tr><td><code>src/auto_qb/rules/</code></td><td>7 件</td><td>+725 / −127</td><td>W1–W5 重设计: base/conditions/registry + transfer/checking/full_checking actions</td></tr>
+  <tr><td><code>src/auto_qb/core/</code> + <code>torrents/</code></td><td>15 件</td><td>+780 / −129</td><td>taskqueue 护栏、qbapi/qbmanager 5.3、state、traffic_sample/store/source、relocate、tvshows、torrents compat/store</td></tr>
+  <tr><td><code>src/auto_qb/hr/</code> + <code>infra/</code> + <code>tray/</code> + <code>cli.py</code></td><td>9 件</td><td>+123 / −44</td><td>HR discovery 多 clone 隔离相关、journal、tray 信号</td></tr>
+  <tr><td><code>tests/</code></td><td>251 件</td><td>move-only 为主, 新增 transfer/kb_nav/webui 守阵</td><td>R1/R2 25 个测试大文件拆 90 桶 + 20 support; 286 件现行</td></tr>
+  <tr><td><code>tests-real/</code></td><td>40 件(全新)</td><td>—</td><td>真机框架 lib/runner/seed + RM00–RM10 十一组用例; 从未评审</td></tr>
+  <tr><td><code>tools/global-traffic-monitor/</code></td><td>17 件</td><td>—</td><td>nic.py 新增 GetIfTable2 整表单读; config/server/sampler/storage 与测试同步</td></tr>
+  <tr><td><code>extensions/</code> + <code>scripts/</code></td><td>16 件</td><td>—</td><td>HR proxy background 拆 2 件; R3 move-only 拆 sim/capture/ui map/e2e 自检</td></tr>
+  <tr><td><b>合计</b></td><td><b>479 件</b>(代码面)</td><td><b>+122,931 / −62,415</b></td><td>358 笔提交; 含新增功能、实修与 move-only 拆分三类混合</td></tr>
+</table>
+<h3>底数</h3>
+<ul>
+  <li><b>起点 HEAD</b>: <code>812ad785</code>(26-11-03 <code>my-commit-flow.sync</code> 后; 快进 <code>5e7d4a9f→812ad785</code>)。</li>
+  <li><b>起点基线</b>: <code>test.full</code> <b>4924 passed + 2 skipped / 覆盖率 99%</b>(切片 26-11-03-0459, 全量 194.03s)。</li>
+  <li><b>issues 池</b>: <b>52 Open / 2 In Progress / 359 Done / 3 Superseded / 6 Dropped</b>; Open 按类型 feat 21 / bug 8 / question 6 / perf 5 / refactor 4 / test 3 / docs 3 / chore 2 —— 底册只取 bug/perf/refactor/test/docs/chore 做撞车比对。</li>
+  <li><b>在途件</b>: 大文件拆分计划 26-11-02-2342(R4 已收口, 2 暂缓/2 不拆)、种子转移计划、规则引擎重设计、真机实测常驻排期(26-10-31-0641)、变异测试审计(26-10-08-0642)、qB 5.3 影响分析(26-10-31-0711) —— 相关文件只登记「计划未覆盖增量」。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>范围结论</h3>
+<p>主线范围 = <b>上次覆盖终点到当前 HEAD</b>: <code>bf9920d3..812ad785</code>(358 笔提交)。理由: ① 第二次评审在此定稿, 之后无任何评审记录; ② 区间内新增五个大面(transfer / flux+fx / W1–W5 / qB 5.3 / tests-real); ③ R1–R4 拆分改变了文件边界, 旧评审的行号锚已大量失效。 N 同时把前两次<b>明确未独立覆盖</b>的两块遗留纳入: <code>tests/</code> 测试质量面(只做覆盖缺口 + 拆分等价, 不逐文件深读)与文档漂移系统审计(只读)。</p>
+<table>
+  <tr><th>类别</th><th>范围</th><th>处理口径</th><th>理由</th></tr>
+  <tr><td>实质增量</td><td>transfer 全量; rules W1–W5; core/torrents/hr/infra/tray 变更函数; config 12 件; webui py 12 件; static 非拆分提交面(fx/flux/search/optimistic/windowing/transfer UI); gtm + extensions + scripts 实质改动; tests-real 全量</td><td>全量读码, R1–R13</td><td>新代码/新行为, 无历史评审可继承</td></tr>
+  <tr><td>move-only 拆分</td><td>R4 八拆(drawer/config_hub/config_editor/shortcuts/columns/commands/dialogs/console_hub.css 四拆) + R1/R2 测试拆分 + R3 scripts 拆分 + HR proxy 拆 2 件</td><td>只做 R12 等价核验: 搬移零丢失/加载序/挂载名/CSS 层叠序/守阵读法</td><td>行为应零变; 深审会重付读码成本且偏离风险点</td></tr>
+  <tr><td>未变旧面</td><td>上述批次中未在区间内变更、但被新调用方使用或与新面强耦合的文件</td><td>逐文件过目 + 维度抽验 + 上次同域发现回归核对</td><td>保持「全面」覆盖, 控制单文件工时</td></tr>
+  <tr><td>遗留测试面</td><td><code>tests/</code> 286 件(拆分后); 覆盖缺口与回归风险</td><td>test-gap-audit + 拆分等价抽查, 不做逐文件深读</td><td>前两次只作 R10 视角, 从未独立批次</td></tr>
+  <tr><td>文档漂移</td><td><code>docs/</code> + README + <code>memory-bank/</code> 口径段(不含历史报告正文)</td><td>docs-sync-audit + <code>doc.drift</code>/<code>doc.links</code>; 只登记不修</td><td>前两次仅点状; 本区间有 qB 5.3/端口口径/拆分文件边界三类漂移面</td></tr>
+  <tr><td>排除</td><td><code>memory-bank/</code> / <code>.commands/</code> / <code>.agents/</code> 元层; 重复代码审查 Phase 3/4; 生产 <code>config.yml</code> / <code>auto-qb-data/</code></td><td>不纳入(待 D3/D4 确认)</td><td>前两次明确排除 / 方法论不同 / 生产红线</td></tr>
+</table>
+<h3>批次地图(待 S1 重盘回填实测)</h3>
+<table>
+  <tr><th>批</th><th>范围</th><th>规模(实测)</th><th>重点维度</th><th>增量要点</th></tr>
+  <tr><td>B1</td><td><code>transfer/</code> 全量 + <code>config/</code> web.transfer + <code>webui/server/routes/transfer.py</code> + 转移 UI</td><td>≈1.9k 行 + 6 测试文件</td><td>R1 R2 R4 R6 R8 R9 R11</td><td>新域全量: 状态门/导出/映射/跳检降级/验证轮询/删源; api_key 凭据与目标 URL 校验</td></tr>
+  <tr><td>B2</td><td><code>core/</code> 12 件 + <code>torrents/</code> 3 件 + <code>cli.py</code></td><td>≈900 行变更</td><td>R1 R3 R5 R6 R9 R11</td><td>taskqueue 护栏、qB 5.3 facade、traffic sample/store/source、relocate、torrents compat</td></tr>
+  <tr><td>B3</td><td><code>rules/</code> 7 件 + 规则树编辑器后端面</td><td>≈850 行</td><td>R1 R5 R6</td><td>W1–W5 重设计: base/conditions/registry + transfer/checking/full_checking actions; 与 config 规则段两侧口径</td></tr>
+  <tr><td>B4</td><td><code>webui/</code> py 12 件(server/routes/commands/runtime/views/tool_client)</td><td>≈440 行</td><td>R2 R4 R8 R9 R11</td><td>state/torrent_cmds/torrent_detail/traffic_monitor/transfer 路由; 认证与输入校验面</td></tr>
+  <tr><td>B5</td><td>static 实质变更面: shared 非拆分文件 + fx 2 件 + flux 7 件 + 四皮肤 CSS/HTML 非拆分段 + tpl</td><td>≈9k 行</td><td>R8 R9 R13</td><td>搜索自动更新/未归组重复行修复、抽屉窗口化+行记忆化、乐观写、kb.nav 折叠、fx/flux 动效与浮层</td></tr>
+  <tr><td>B6</td><td>static move-only 拆分面: R4 八拆 + console_hub.css 四拆</td><td>≈30 件</td><td>R12</td><td>加载序、<code>Object.assign(window.AQB_*.methods)</code> 挂载、四皮肤 link 顺序、守阵聚合读法</td></tr>
+  <tr><td>B7</td><td><code>tools/global-traffic-monitor/</code> 17 件 + <code>extensions/</code> 3 件 + <code>scripts/</code> 13 件</td><td>≈2k 行</td><td>R1 R3 R6 R7 R8 R11 R12</td><td>GetIfTable2 整表单读、config 写锁/端口契约回归、proxy 拆分、sim/capture/ui-map 拆分等价</td></tr>
+  <tr><td>B8</td><td><code>hr/</code> 6 件 + <code>infra/</code> 1 件 + <code>tray/</code> 1 件</td><td>≈120 行</td><td>R6 R7 R8 R9</td><td>HR discovery 多 clone 混串相关、journal 心跳、tray Ctrl+C/信号</td></tr>
+  <tr><td>B9</td><td><code>tests/</code> 286 件(遗留测试质量面) + <code>tests-real/</code> 40 件(新框架)</td><td>tests 251 件变更 / tests-real 40 件</td><td>R10 R12 R13</td><td>覆盖缺口、拆分等价、真机守卫三层与用例边界(不跑真机)</td></tr>
+  <tr><td>B10</td><td>文档漂移系统审计</td><td><code>docs/</code> + README + memory-bank 口径段</td><td>R10</td><td>qB 5.3 双版本口径、端口文档、拆分文件边界、命令漂移</td></tr>
+</table>
+<h3>分期</h3>
+<p><b>S0</b> 准备+底册 → <b>S1</b> 范围重盘与批次定稿 → <b>S2</b> [B1][B2][B3][B4] → <b>S3</b> [B5][B6] → <b>S4</b> [B7][B8] → <b>S5</b> [B9][B10] → <b>S6</b> 交叉验证+汇总分级 → <b>S7</b> 处置建议+回写与测试确认。合计约 <b>14–16 轮会话</b>(深度优先于速度; 只读批次可并行, 回填串行)。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步</th><th>输入</th><th>动作</th><th>产出</th><th>验收判据</th><th>工作量/并行</th></tr>
+  <tr>
+    <td><b>S0</b><br>准备与范围锁定</td>
+    <td>用户拍板 D1–D8; HEAD <code>812ad785</code>; 基线 4924+2 / 99%</td>
+    <td>sync 记起点 → 建报告草稿(<code>kb.new report</code>, 专题 full-code-review-3) → 底册四表蒸馏(52 Open issue「包×一句话」/ 坑档 7 类 / 在途计划报告 / 二次 26 条发现与去向) → 拍板回写 §06</td>
+    <td>报告草稿(Open, 附录=底册四表)</td>
+    <td>底册四表齐全; 每个 D 点有结论; 草稿封面记 HEAD 与基线; 不打开任何目录整读</td>
+    <td>1 轮 · 串行</td>
+  </tr>
+  <tr>
+    <td><b>S1</b><br>范围重盘</td>
+    <td>底册; <code>git diff --name-status bf9920d3..HEAD</code></td>
+    <td>给 479 个代码文件打「新增/实质变更/move-only 拆分/未变」标; 按提交信息与 diff 形状拆出 R1–R4 拆分清单; 生成批次矩阵(文件 × LOC × 变更态 × 关联测试 × 维度); 回填 §03</td>
+    <td>批次矩阵定稿 + 实质/move-only 两套文件全集</td>
+    <td>脚本核对: 各批文件并集 == 区间代码文件全集(479), 0 漏 0 重; move-only 每对「源→目标」可复核; 无归属文件为空</td>
+    <td>1–2 轮 · 串行</td>
+  </tr>
+  <tr>
+    <td><b>S2</b><br>后端分批评审</td>
+    <td>B1–B4 文件清单 + 该域文档/坑档索引</td>
+    <td>每批五步: 读档 → 坑档对照 → 逐文件读码(R1–R13 勾选) → 工具提示源(TRAE-code-review / TRAE-security-review 限该批 diff; 人工复核) → 登记去重(报告草稿)</td>
+    <td>B1–B4 发现表(ID 批字母-序号)</td>
+    <td>每批: 全文件过目勾选;「无发现」也是结论; 每条七字段齐全; 撞车字段非空; 收尾 <code>test.quick</code> 绿; 每轮会话 DoD</td>
+    <td>4 轮 · 批间可并行(只读), 回填串行</td>
+  </tr>
+  <tr>
+    <td><b>S3</b><br>前端分批评审</td>
+    <td>B5 实质清单 + B6 move-only 配对清单</td>
+    <td>B5 全量读码(R8/R9/R13); B6 只做等价核验五件套(搬移零丢失/加载序/挂载名/CSS 层叠序/守阵读法); 用 <code>dev.ui-map</code> 与 node 探针定位</td>
+    <td>B5/B6 发现表 + 等价核验记录</td>
+    <td>每对拆分有 diff 配对证据; 四皮肤 link 顺序与断言语义不变; 前端冒烟 <code>dev.e2e</code> 绿</td>
+    <td>3 轮 · B5/B6 可并行, 回填串行</td>
+  </tr>
+  <tr>
+    <td><b>S4</b><br>工具链与真机分批评审</td>
+    <td>B7/B8 清单 + tests-real 环境说明</td>
+    <td>B7 全量读码 + R12 拆分等价; B8 变更函数读码; <code>test.gtm</code> 回归; <code>real.env</code>/<code>real.list</code> 只读核对用例清单(不跑真机)</td>
+    <td>B7/B8 发现表 + gtm 回归数字</td>
+    <td><code>test.gtm</code> 达门槛; tests-real 用例 id 清单与文件一致; 不触碰真实 qB/生产配置</td>
+    <td>2 轮 · 可并行(只读), 回填串行</td>
+  </tr>
+  <tr>
+    <td><b>S5</b><br>遗留测试面与文档漂移</td>
+    <td>B9/B10 清单 + 基线切片 + docs-sync-audit</td>
+    <td>B9: test-gap-audit 出覆盖缺口, 抽查拆分桶读法/夹具隔离/端口自举; tests-real 框架守卫静态审; B10: docs-sync-audit + <code>doc.drift</code>/<code>doc.links</code>, 只登记不修</td>
+    <td>测试缺口清单 + 文档漂移清单</td>
+    <td>缺口条目带「模块/行为/现守阵/风险」四字段; 文档漂移每条带代码侧真值锚; 不重复变异审计已入池条目</td>
+    <td>3 轮 · B9/B10 可并行, 回填串行</td>
+  </tr>
+  <tr>
+    <td><b>S6</b><br>交叉验证 + 汇总分级</td>
+    <td>全部发现表 + 底册</td>
+    <td>跨批契约核对(transfer↔rules↔webui; gtm↔主程序 dat; extension↔backend; 拆分↔守阵); 每条 P 级二次论证(P0 数据破坏/安全 · P1 功能错误 · P2 健壮性 · P3 可维护性); 与 52 Open issue 终验去重</td>
+    <td>分级终表 + 去重报告</td>
+    <td>每条 P0/P1 在当期 HEAD 复验可达; 无 ID 断号; 降级/升级均写理由; 撞车数与底册逐条对得上</td>
+    <td>1–2 轮 · 串行</td>
+  </tr>
+  <tr>
+    <td><b>S7</b><br>处置建议 + 回写与测试确认</td>
+    <td>分级终表; 用户对处置清单的批准</td>
+    <td>给每条发现定去向(新 issue/并入既有/已知接受/不修); P0/P1 清单请用户确认后 <code>create-issue</code> 入池并互链; 报告 doc-status → Done; 计划 → Done; <code>kb.index</code>; 基线切片(无代码改动则引用 26-11-03-0459); 跑 <code>test.full</code>/<code>doc.*</code>/<code>kb.check</code></td>
+    <td>终版报告 + 新 issue(经批准) + 计划 Done</td>
+    <td><code>test.full</code> 持平 4924+2 / 99%; <code>doc.caps</code>/<code>doc.drift</code>/<code>doc.links</code>/<code>kb.check</code> 全绿; 入池数与报告清单一致; 无源码改动</td>
+    <td>1 轮 · 串行</td>
+  </tr>
+</table>
+<aside>发现条目格式沿用前两次: ID / 维度(R1–R13 或 general) / 级 P0–P3 / 三锚(文件:行 + 函数名 + 行号) / 症状 / 可达性证据 / 撞车 / 处置建议, 七字段缺一不登记。中间发现滚动回填报告草稿, 草稿期只增不改旧条目。</aside>
+
+<h3>评审维度</h3>
+<table>
+  <tr><th>#</th><th>维度</th><th>核对判据</th><th>本轮为何重要</th></tr>
+  <tr><td>R1</td><td>幂等窗口</td><td>重复执行/每日一次窗口/state_file 去重</td><td>transfer 确认、删源、跳检降级均新增窗口语义</td></tr>
+  <tr><td>R2</td><td>危险闸门</td><td>删源/覆盖/强制/跳检是否有显式配置与保守默认</td><td>transfer 可删源; 大库列表操作新增批量入口</td></tr>
+  <tr><td>R3</td><td>单一写线程</td><td>只有主循环线程改队列与 state_file</td><td>transfer 编排器跨线程、gtm 双写者历史事故</td></tr>
+  <tr><td>R4</td><td>fail-fast 边界</td><td>新配置键进 <code>validate_config</code> + schema; 校验后不散落防御</td><td>web.transfer 12 件 config 变更; api_key/URL 校验</td></tr>
+  <tr><td>R5</td><td>时间/数值语义</td><td>时区/挂钟回跳/单位/上下限</td><td>gtm day_rolled、traffic 采样、transfer 验证轮询</td></tr>
+  <tr><td>R6</td><td>错误处理与退避</td><td>静默吞并/退避/失败可观测</td><td>transfer adapter 失败、relocate 恢复、HR discovery</td></tr>
+  <tr><td>R7</td><td>IO 资源</td><td>句柄/临时文件/大文件读/进程句柄</td><td>gtm nic 原生调用、tests-real 框架、导出落盘</td></tr>
+  <tr><td>R8</td><td>安全面</td><td>凭据遮显/Token/路径穿越/SSRF/XSS/扩展中转</td><td>transfer api_key、目标 URL、扩展 proxy、四皮肤渲染</td></tr>
+  <tr><td>R9</td><td>并发竞态</td><td>共享状态/双写/请求路径与主循环</td><td>transfer 编排、traffic store、抽屉乐观写</td></tr>
+  <tr><td>R10</td><td>测试缺口与文档漂移</td><td>行为变更处守阵是否存在; 文档与代码真值</td><td>本轮 B9/B10 专属; 区间内大量行为变更</td></tr>
+  <tr><td>R11</td><td>跨进程/跨侧契约</td><td>gtm↔主程序 dat; extension↔backend; 前端↔路由字段</td><td>gtm nic/config 改动、transfer routes、四皮肤共享</td></tr>
+  <tr><td>R12</td><td>拆分等价(新增)</td><td>搬移零丢失/加载序/挂载名/CSS 层叠序/守阵聚合读法</td><td>R1–R4 共数百文件 move-only, 行号锚全失效</td></tr>
+  <tr><td>R13</td><td>前端性能与渲染证据(新增)</td><td>长列表窗口化/记忆化/动效不阻塞主线程/浮层合成</td><td>千级卡顿、flux 毛玻璃、fx 动效与面板上滑</td></tr>
+</table>
+
+<h3>工具与分工</h3>
+<table>
+  <tr><th>维度</th><th>Skill</th><th>人工判读</th><th>验证命令(task id)</th></tr>
+  <tr><td>通用代码审查</td><td><code>TRAE-code-review</code>(按批对提交区间/diff 执行)</td><td>可达性、契约、架构与业务语义</td><td><code>commands run test.quick</code></td></tr>
+  <tr><td>安全审查</td><td><code>TRAE-security-review</code>(仅用于 transfer 凭据/路由/扩展中转/认证面)</td><td>R8 全量人工: 权限边界与数据流向</td><td><code>commands run test.one -- &lt;安全相关测试&gt;</code></td></tr>
+  <tr><td>测试覆盖/回归</td><td><code>test-gap-audit</code>(只读缺口审计)</td><td>缺口是否真风险; 与变异审计底册去重</td><td><code>commands run test.full</code> / <code>commands run test.gtm</code> / <code>commands run test.one -- &lt;file&gt;</code></td></tr>
+  <tr><td>文档漂移</td><td><code>docs-sync-audit</code>(只读)</td><td>口径取舍与红线判定</td><td><code>commands run doc.drift</code> / <code>doc.links</code> / <code>doc.caps</code> / <code>kb.check</code></td></tr>
+  <tr><td>前端行为</td><td>—</td><td>四皮肤与两档 CPU 场景人工/浏览器复验</td><td><code>commands run dev.e2e-check</code> / <code>commands run dev.e2e</code> / <code>commands run dev.ui-map</code></td></tr>
+  <tr><td>真机框架</td><td>—</td><td>tests-real 只静态审 + 清单核对, 不跑真机(除非用户显式授权)</td><td><code>commands run real.env</code> / <code>commands run real.list</code></td></tr>
+  <tr><td>纪律</td><td><code>scope-guard</code> / <code>create-issue</code> / <code>memory-bank</code> / <code>commands</code></td><td>不修、不入池(未经批准)、不跨 clone</td><td><code>commands run kb.index</code> / <code>commands run kb.baseline</code></td></tr>
+</table>
+<p class="aside">静态工具提示源: 现行 <code>pyproject.toml</code> 只配置 <code>pytest-cov</code>, 无 ruff/bandit 依赖, 不存在对应 task id —— 本轮默认以 <code>TRAE-code-review</code>/<code>TRAE-security-review</code> + 人工判读为准; 如需临时静态工具, 用 <code>uvx</code> 一次性运行, 不写入仓库依赖。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>推荐(默认)</th><th>备选</th></tr>
+  <tr><td>D1</td><td><code>tests/</code> 测试质量遗留面是否纳入</td><td><b>纳入, 轻量口径</b>: test-gap-audit 出覆盖缺口 + 拆分等价抽查, 不逐文件深读(与二次 D3「不并入重复代码审查」不冲突)</td><td>不纳入(维持前两次仅 R10 视角, 测试质量继续无独立结论)</td></tr>
+  <tr><td>D2</td><td>文档漂移是否做系统审计</td><td><b>纳入, 只读</b>: docs-sync-audit + <code>doc.*</code>, 只登记不修</td><td>只查与本次区间直接相关的三处(qB 5.3/端口/拆分边界)</td></tr>
+  <tr><td>D3</td><td><code>memory-bank/</code> / <code>.commands/</code> / <code>.agents/</code> 元层是否评审</td><td><b>不纳入</b>(维持前两次排除; 本轮聚焦产品代码与测试)</td><td>纳入(会引入知识库/命令包第二套评审标准, 范围显著扩大)</td></tr>
+  <tr><td>D4</td><td>重复代码审查 Phase 3/4(轮 24–26)是否并跑</td><td><b>不并入</b>(方法论不同; 只把 322 条发现与 17 条入池 issue 收进底册做撞车比对)</td><td>并跑(评审窗口拉长, 且 tests 拆分后旧轮次结论需重盘)</td></tr>
+  <tr><td>D5</td><td>评审深度分层口径</td><td><b>三层</b>: 实质增量全量读码 R1–R13; move-only 只做 R12 等价核验; 未变旧面逐文件过目 + 维度抽验 + 上次同域回归</td><td>全量等深重审(约多 8 轮); 只审增量(放弃全面)</td></tr>
+  <tr><td>D6</td><td><code>tests-real/</code> 是否全量评审并跑真机</td><td><b>静态全量评审</b>(框架/守卫/用例边界), <b>不跑真机</b>(只核对 <code>real.list</code> 清单)</td><td>跑真机(需用户显式授权与测试实例, 超出只读边界)</td></tr>
+  <tr><td>D7</td><td>P0/P1 是否评审当轮入池</td><td><b>不入池</b>: S7 汇总清单后请用户逐项确认, 再走 <code>create-issue</code>(仓库请求边界要求显式授权)</td><td>当轮直接入池(P0 立即, P1 批量; 会绕过用户确认)</td></tr>
+  <tr><td>D8</td><td>批次是否并行</td><td><b>批间只读并行、回填串行</b>(单 clone 内只读安全; 报告草稿单写者)</td><td>全串行(总轮次不变但日历跨度更长)</td></tr>
+  <tr><td>D9</td><td>区间内已入池的 26-11-03 新 issue(HR discovery 多 clone 混串 / WebUI 端口占用静默 / 端口文档漂移 / e2e 8236 遗留)如何处理</td><td><b>视为底册已知</b>, 评审只登记其未覆盖增量, 不重复报告</td><td>重新复核并可能重开(会与既有处置冲突)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>本轮只写计划, 尚未执行评审; D1–D9 待用户拍板后回填本表。未拍板前不进入 S0 之后的任何步骤。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>历史 rebase 导致旧哈希不可解析(二次终点 <code>3d957597</code> 已失效)</td><td>会话间继续 rebase/合流</td><td>范围一律以<b>现行等价提交</b> + 日期/提交信息双锚定位; 报告中同时记文档原哈希与现行等价哈希</td></tr>
+  <tr><td>评审窗口内 develop 继续演进, 行号漂移</td><td>358 笔/4 天的速率延续</td><td>每批开工 sync 记本批 HEAD; 三锚登记; S6 在当期 HEAD 复验 P0/P1; 不改基准分支</td></tr>
+  <tr><td>move-only 拆分误判为实质变更, 或实质变更混入拆分</td><td>提交信息不完整 / 同一提交混合搬移与改写</td><td>S1 用 diff 形状 + 提交信息双判; 疑似混合提交按实质全量审; B6 每对拆分给配对证据</td></tr>
+  <tr><td>tests/ 286 件体量吞噬评审预算</td><td>逐文件深读</td><td>D1 轻量口径: 只做缺口审计 + 拆分桶抽查 + 夹具隔离/端口自举核对, 不逐行读</td></tr>
+  <tr><td>误报: 理论缺陷不可达</td><td>并发/时序/恢复路径</td><td>可达性证据强制字段; 不可达降 P3 备查或不记; S6 二次论证</td></tr>
+  <tr><td>与在途计划/既有 52 条 Open issue 双重报告</td><td>transfer/拆分/变异/真机/5.3 计划覆盖同文件</td><td>底册列全; 每条发现强制填撞车字段; 相关批只登记「计划未覆盖增量」</td></tr>
+  <tr><td>评审中发现顺手想修</td><td>高优先级缺陷触发修复冲动</td><td>黄金法则 7 + scope-guard: 计划外缺陷一行不改; D7 兜底(P0 也不当场修)</td></tr>
+  <tr><td>安全审查噪音/误报</td><td>凭据与路由面被全量扫描</td><td>安全审查只针对 transfer/认证/扩展中转的变更 diff, 逐条人工复核后才登记</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-0557</span> 初版: 用户指令发起「参照前两次 code review 制定第三次分步实施计划, 本轮只写计划」; 考古确认首次 57 条/28 issue 全部 Done、二次 26 条(P0×0/P1×1/P2×6/P3×19)/17 条入池且除类型注解债外全部 Done; 范围定为 <code>bf9920d3..812ad785</code>(358 笔提交, 479 件代码变更 +122,931/−62,415), 并入 tests 遗留面与文档漂移; 十批 B1–B10 + S0–S7 + R12/R13 + 拍板点 D1–D9, 待拍板。底数: HEAD 812ad785 / 基线 4924 passed + 2 skipped / 99%(切片 26-11-03-0459)/ issues Open 52。</li>
+</ul>
+
+</div>
+</body>
+</html>

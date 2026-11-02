@@ -4,8 +4,11 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (54)
+## Open (57)
 
+- [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](../26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 4933+2(切片 0534, +9 为端口改 0 守阵); 计划仍引 0459 的 4924+2 作为终验持平基准
+- [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](../26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实测仅大文件拆分与 qB 5.3 在途, 另有 version-management 等 3 件未列, 2 件已 Done, 2 件实为 issue 锚
+- [docs] [第三次评审计划 §02 底册数字三处与事实不符(Open 52/54、新入池 17/18、总数自相矛盾)](../26-11-03-0630-docs-plan-review3-ledger-counts-drift.html) — 计划 0557 §02 记 52 Open/17 条新入池/共 424 条; 实测 54 Open、18 个入池 issue、分项和为 422
 - [test] [e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-big-table-existing-red.html) — dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突

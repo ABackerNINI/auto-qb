@@ -2,7 +2,7 @@
 
 > 摘要: R4 前端域拆分后全量基线
 > 基线时间: 2026-11-03 04:59
-**Refs:** memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/plans/26-11-02-2342-plan-big-file-split.html
+**Refs:** memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html
 
 ## 验收数字
 
