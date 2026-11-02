@@ -66,7 +66,9 @@
   `renderChannels` / 卡片墙 `cVisibleItems` 三处统一消费, 正文不入索引 (体积口径), 大小写与反斜杠归一;
   排序/展示与原有标题·专题·摘要匹配行为不变, 数据层/服务层零改动。守阵 `tests/test_kb_nav.py` 新增一条
   (node 回放页内真实 JS 单点: basename / mb 内相对路径 / 仓库根相对路径 / 大小写 / 反斜杠 / 原字段 / 无关词),
-  数字见 kb.baseline。
+  数字见 kb.baseline。合流后顺带修远端新守阵的环境依赖 (`tests/test_real_machine_safety.py` 受控桩分支
+  原先默认 `tmp_path` 在非系统卷且祖先目录不带 hidden 属性, 本机 TMP=C:/AppData 下必然误红; 桩化
+  `SystemDrive` 与非 `hid` 路径属性后与运行环境解耦), 详情见对应基线切片的「首跑红及处置」。
 
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,

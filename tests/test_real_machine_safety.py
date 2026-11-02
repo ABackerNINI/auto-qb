@@ -6,7 +6,8 @@
   FindFirstVolumeW/FindNextVolumeW/卷 GUID 字面量/隐藏卷 junction 构造函数名;
   一旦有人再引入隐藏卷路径即红。
 - test_small_target_guard_rejects_unsafe_paths: 入口守卫拒绝 UNC/无盘符/系统盘/
-  reparse point/hidden 属性; 普通临时目录放行。
+  reparse point/hidden 属性; 普通临时目录放行 (受控桩分支把 SystemDrive 指向非系统
+  盘符且桩掉祖先属性, 不依赖 tmp_path 所在卷/目录属性)。
 - test_small_target_missing_env_fails_with_instructions: 未设入口环境变量时显式失败,
   提示里含准备指引(不是 skip)。
 - test_label_forbidden_keywords: Recovery/System/EFI 类卷标关键词判定。
@@ -66,20 +67,24 @@ def test_small_target_guard_rejects_unsafe_paths(tmp_path, monkeypatch):
 
     # reparse point / hidden 用受控桩验证判定分支, 不在真实盘上建 junction/改属性
     # (真机轨里的显式入口守卫本身会读真实属性; 这里只守控制流, 避免测试自己造副作用)
+    # 本机临时目录可能落在系统卷 (TMP=C:), 守卫会在系统卷检查处提前拒绝; 受控桩分支
+    # 先把 SystemDrive 指向不存在的盘符, 使控制流测试不依赖 tmp_path 所在卷。
+    monkeypatch.setenv("SystemDrive", "Z:")
     real_dir = tmp_path / "real"
     real_dir.mkdir()
     (real_dir / "link").mkdir()
     monkeypatch.setattr(mod, "_is_link", lambda p: Path(p).name == "link")
+    # 祖先目录在真实盘上可能带 hidden/system 属性 (本机 tmp 落在 AppData 下), 受控桩一律返回 0,
+    # 只让 "hid" 命中 hidden 分支 —— 否则会先撞祖先属性检查, 测不到目标分支。
+    monkeypatch.setattr(mod, "_get_attrs", lambda p: 0)
     with pytest.raises(AssertionError, match="reparse"):
         mod.assert_safe_target(str(real_dir / "link"))
 
     (real_dir / "hid").mkdir()
-    orig_attrs = mod._get_attrs
     monkeypatch.setattr(
         mod,
         "_get_attrs",
-        lambda p:
-        (stat.FILE_ATTRIBUTE_HIDDEN | stat.FILE_ATTRIBUTE_DIRECTORY if Path(p).name == "hid" else orig_attrs(p)),
+        lambda p: (stat.FILE_ATTRIBUTE_HIDDEN | stat.FILE_ATTRIBUTE_DIRECTORY if Path(p).name == "hid" else 0),
     )
     with pytest.raises(AssertionError, match="hidden"):
         mod.assert_safe_target(str(real_dir / "hid"))
