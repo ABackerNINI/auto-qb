@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ grid ±1s 边界与窗端点几何变异存活 10 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)">
 <title>core/ grid ±1s 边界与窗端点几何变异存活 10 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-boundary-grid</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -109,7 +109,23 @@
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：<code>null_lo &lt;= t</code>/<code>t &lt; t1</code>/<code>s.ts &gt;= t1</code>/<code>interval - 1</code>/<code>t1 - 1</code>/<code>span &gt;</code> 锚点仍在</li>
+      <li>2026-11-02 — 状态 <strong>Done</strong>：9 条红验 KILLED；vsp_44 判等价（被最终过滤压制，见下）；vsp_158 由既有同刻排序守阵覆盖；定向测试全绿</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法与验证</h2>
+    <p><b>零 src 改动, 只补守阵</b>(<code>tests/test_traffic_grid.py</code>):</p>
+    <ul>
+      <li><code>vsp_43</code>/<code>vsp_155</code> → <code>test_v4_series_points_null_mark_at_lookback_boundary_kept</code>: n 槽首槽恰在回看下界 <code>t0 - _V4_SEAM_LOOKBACK_S</code>, 断连标记必须发出(附加条件与最终过滤两处下界判据)。红验 2 条 <b>KILLED</b>。</li>
+      <li><code>vsp_44</code>/<code>vsp_156</code> → <code>test_v4_series_points_marks_at_window_end_not_emitted</code>: 块间真空标记恰为 t1 时由最终过滤挡下(变异成 <code>&lt;=</code> 会多出窗外 null 点)。<code>vsp_156</code> 红验 <b>KILLED</b>; <code>vsp_44</code>(附加条件 <code>&lt;</code>→<code>&lt;=</code>)判<b>等价</b> —— 该处只决定是否入 marks, 最终过滤 <code>t &lt; t1</code> 仍会丢弃 t==t1, 不进输出, 单独变异零可观测差异。</li>
+      <li><code>vsp_52</code> → <code>test_v4_series_points_observed_slot_at_window_end_not_consumed</code>: 恰在 t1 的观测槽不消费。红验 <b>KILLED</b>。</li>
+      <li><code>vsp_158</code> → 既有 <code>test_v4_series_points_same_t_marks_and_obs_sort_stable</code> 已覆盖: null rank 0→1 后同刻稳定排序会把观测点排到 null 之前, 断言失败。红验 <b>KILLED</b>, 未新增重复测试。</li>
+      <li><code>fb_9</code> → <code>test_floor_buckets_remainder_one_keeps_tail_bucket</code>: t1-first ≡ 1 (mod interval) 时尾桶保留。红验 <b>KILLED</b>。</li>
+      <li><code>bg_52</code>/<code>bg_53</code> → <code>test_build_grid_day_window_midnight_anchors</code>: 23:59:59 不多铺次日桶、00:00:01 不丢当日桶。红验 2 条 <b>KILLED</b>。</li>
+      <li><code>vtp_62</code> → <code>test_v4_totals_points_spread_threshold_exact_boundary</code>: span 恰等 max(2w,60) 不摊配。红验 <b>KILLED</b>。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_traffic_grid.py</code> 全绿; 测试数字见 <code>kb.baseline</code>。</p>
   </section>
 
   <footer>

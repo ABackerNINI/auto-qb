@@ -75,9 +75,8 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (4)
+## In Progress (3)
 
-- [test] [core/ grid ±1s 边界与窗端点几何变异存活 10 条低危](../26-10-31-0823-test-core-w2-mutation-boundary-grid.html) — W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)
 - [test] [core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危](../26-10-31-0823-test-core-w2-mutation-broke-contract.html) — W2 未逐条 verify 低危簇 I: vgo_80/83/105/117 + vrft_15/25 + vtp_101(断链桶冒充 0 线/w=0 除零/单侧游程摊配)
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
@@ -120,6 +119,7 @@
 - [chore] [pillow 12.3.0 -> 13.0.0 升级(major, 含约 40 个 CVE 修复)](../26-10-31-0830-chore-tray-pillow-13-upgrade.html) — Pillow 13.0 移除既定弃用项并修复约 40 个 CVE(3 critical/12 high), 安全激励强; 本项目仅 tray/app.py 一处懒导入 Image, 风险很低
 - [chore] [fastapi 0.141.1 -> 0.162.0 与 uvicorn 0.53.0 -> 0.54.0 升级(0.x 降档入池)](../26-10-31-0830-chore-webui-fastapi-uvicorn-upgrade.html) — fastapi/uvicorn 有 minor 更新; 0.x minor 按 deps-upgrade 规则当 major 降档, 调用面为整个 webui/server, 需人工评估后 bump
 - [test] [core/ limits 坏字节读侧容错变异存活 6 条低危](../26-10-31-0823-test-core-w2-mutation-badbytes-read.html) — W2 未逐条 verify 低危簇 B: rdl_8/18 + rday_25/29/34/35(坏字节文件 UnicodeDecodeError/LookupError 未捕获, 读侧降级契约破坏)
+- [test] [core/ grid ±1s 边界与窗端点几何变异存活 10 条低危](../26-10-31-0823-test-core-w2-mutation-boundary-grid.html) — W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)
 - [test] [core/ limits 解析边角变异存活: 坏行/撕裂/负值 4 条低危](../26-10-31-0823-test-core-w2-mutation-parse-edges.html) — W2 未逐条 verify 低危簇 A: parse_4/9/37/38(行内空白/撕裂尾/负值边角), W2 池无守阵
 - [chore] [升库 qbittorrent-api==2026.8.1 -> ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)](../26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html) — pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -> 升库 -> 升 qB 5.3
 - [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入

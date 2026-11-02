@@ -72,6 +72,12 @@
 - test_build_month_grid_empty_meta_complete: (bmg_3, 顺手 bmg_6/_7/_8/_10/_18..)空月集兜底栅格 meta 仍齐全(name/segment/t0/t1/interval/buckets)
 - test_group_totals_up_sums_across_members: (gtp_28)组累计上行 = 逐成员差分再求和(多成员非零 up 增量, 此前池内 up 恒 0 撞不出)
 - test_group_totals_member_gap_does_not_truncate: (gtp_17)前位成员缺行是 continue 不是截断 —— 后位成员贡献照常计入
+- test_v4_series_points_null_mark_at_lookback_boundary_kept: (vsp_43/vsp_155)null 标记恰在回看下界 —— 下界含等号, 变异成 `<` 会丢掉该断连标记
+- test_v4_series_points_marks_at_window_end_not_emitted: (vsp_44/vsp_156)窗尾整秒标记不发出 —— null 槽末槽恰为 t1 时不追加; 块间真空标记恰为 t1 时由最终过滤挡下
+- test_v4_series_points_observed_slot_at_window_end_not_consumed: (vsp_52)恰在 t1 的观测槽不消费(v2 口径 ts >= t1), 变异成 `>` 会多出窗外桶
+- test_floor_buckets_remainder_one_keeps_tail_bucket: (fb_9)t1-first ≡ 1 (mod interval) 时 ceil 尾桶保留, interval-1 变异成 -2 会少一个尾桶
+- test_build_grid_day_window_midnight_anchors: (bg_52/bg_53)day 窗日期集 t1-1 口径 —— 23:59:59 不多铺次日桶, 00:00:01 不丢当日桶
+- test_v4_totals_points_spread_threshold_exact_boundary: (vtp_62)摊配门槛 span 恰等 max(2w,60) 不摊配, 变异成 >= 会多摊一批
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -110,6 +116,7 @@ from auto_qb.core.traffic_grid import (
     _V4_SEAM_NULL_S,
     _V4_SEAM_SPREAD_MIN_S,
     _bucket_delta,
+    _floor_buckets,
 )
 from auto_qb.core.traffic_store import (
     AggRow,
@@ -125,6 +132,7 @@ from auto_qb.core.traffic_store import (
     v4_block_slots,
     v4_live_tail_slots,
     v4_date_str_epoch,
+    v4_day_epoch,
     v4_month_epoch,
     v4_next_month_epoch,
     v4_window_dates,
@@ -1542,3 +1550,71 @@ def test_group_totals_member_gap_does_not_truncate():
     assert mask[11] is False  # m2 在 b1 有观测
     totals = group_totals_points([m1, m2], g, mask)
     assert totals[11] == {"t": b1, "dl": 100, "up": 400}
+
+
+def test_v4_series_points_null_mark_at_lookback_boundary_kept():
+    """(vsp_43/vsp_155)null 标记恰在回看下界(_V4_SEAM_LOOKBACK_S)必须发出 —— 下界判据
+    含等号(`null_lo <= t`, 附加条件与最终过滤两处); 变异成 `<` 会吞掉窗首断连标记"""
+    t0 = NOW
+    lo = t0 - _V4_SEAM_LOOKBACK_S
+    b = V4Block(lo, 30, None, None, (V4NullRun(3), V4Sample(1, 1, 100, 50, dt_ms=30000)))
+    points = v4_series_points((b, ), t0, t0 + 3600)
+    assert [(p.t, p.dl_rate) for p in points] == [
+        (lo, None),  # n 游程首槽恰在回看下界 -> 断连标记保留
+        (lo + 60, 1),  # n 终点 + 30s: 桶 [lo+60, lo+90)
+    ]
+
+
+def test_v4_series_points_marks_at_window_end_not_emitted():
+    """(vsp_44/vsp_156)窗尾整秒标记不发出 —— null 槽末槽恰为 t1 时追加条件挡下; 块间真空
+    标记恰为 t1 时由最终过滤挡下(变异成 `<=` 会多出窗外 null 点)"""
+    t1 = NOW + 3600
+    # 前块末槽 @t1: t1-60 首个 n 槽在窗内出标记; 块间真空标记 = prev_chain_end = t1;
+    # 后块起点在窗外(只为制造真空标记, 自身观测槽不消费)
+    b1 = V4Block(t1 - 60, 30, None, None, (V4NullRun(2, dt_ms=60000), ))
+    b2 = V4Block(t1 + 3600, 30, 10, 20, (V4Sample(6, 6, 200, 60), ))
+    points = v4_series_points((b1, b2), NOW, t1)
+    assert [(p.t, p.dl_rate) for p in points] == [
+        (t1 - 60, None),  # 窗内 n 标记; 末槽 t1 与真空标记 t1 均在窗外不发出
+    ]
+
+
+def test_v4_series_points_observed_slot_at_window_end_not_consumed():
+    """(vsp_52)恰在 t1 的观测槽不消费(v2 口径 ts >= t1) —— 变异成 `ts > t1` 会把窗外
+    记录铺成窗尾桶"""
+    t1 = NOW + 3600
+    b = V4Block(t1, 30, 10, 20, (V4Sample(5, 5, 100, 50), ))
+    assert v4_series_points((b, ), NOW, t1) == ()
+
+
+def test_floor_buckets_remainder_one_keeps_tail_bucket():
+    """(fb_9)ceil 公式 —— t1-first ≡ 1 (mod interval) 时尾桶必须保留; `interval-1` 变异成
+    `interval-2` 会少一个尾桶, 窗尾留 1 秒缺口"""
+    assert _floor_buckets(100, 111, 10) == (100, 110)
+
+
+def test_build_grid_day_window_midnight_anchors():
+    """(bg_52/bg_53)day 窗日期集 t1-1 口径 —— now 恰为 23:59:59 不多铺次日桶, 恰为
+    00:00:01 不丢当日桶(变异成 t1+1/t1-2 会各错一天)"""
+    midnight = v4_day_epoch(NOW)
+    span = WINDOW_SPECS["6mo"][0]
+    for now in (midnight + 86399, midnight + 1):
+        g = build_grid("6mo", now)
+        assert g.segment == "day" and g.t1 == now and g.t0 == now - span
+        assert g.last == midnight  # 末桶恒为 now 所在本地日界
+
+
+def test_v4_totals_points_spread_threshold_exact_boundary():
+    """(vtp_62)接缝摊配门槛 span > max(2w, 60) —— span 恰等门槛时不摊配, 恢复桶整段取
+    delta; 变异成 `>=` 会把该 delta 摊回前位等值游程桶"""
+    pts = (
+        V4PointEntry(1000, 0, 0, 1000, 500, w=30),  # 锚点: 游程值建立
+        V4PointEntry(1030, 0, 0, 1000, 500, w=30),  # 等值 z 形游程, span 60 == max(60, 60)
+        V4PointEntry(1060, 1, 1, 1100, 500, w=30),  # 恢复桶: step 100 落本桶
+    )
+    out = v4_totals_points(pts)
+    assert [(p.t, p.dl, p.up) for p in out] == [
+        (1000, None, None),  # 窗首基线缺失
+        (1030, 0, 0),  # 等值游程 delta=0
+        (1060, 100, 0),  # 未触发摊配 -> 整段 delta 归恢复桶
+    ]
