@@ -73,8 +73,14 @@ export function assertModesValid() {
 
 assertModesValid();
 
-/** 参与冒烟的皮肤(双皮肤都跑是旧冒烟轨以来的既定口径), `console` 不在其中, 只认 prism|atlas。 */
+/** 参与冒烟的皮肤(双皮肤都跑是旧冒烟轨以来的既定口径), `console` 不在其中, 只认 prism|atlas。
+ *  这是**运行时预算**的选择而非能力限制: 桩服务的静态挂载是通用的(static/<名>/ 全量可服务),
+ *  需要"四皮肤同口径"的只读测量(样式/几何一致性)用下面的 SKINS_ALL。 */
 export const SKINS = ['prism', 'atlas'];
+
+/** 全皮肤(四套): 只给跨皮肤**只读测量**类断言用(如做种时间格行高), 不参与冒烟口径 ——
+ *  全量 e2e 若整体翻到四皮肤, 运行时长会翻倍, 且多数断言与皮肤无关。 */
+export const SKINS_ALL = ['prism', 'atlas', 'console', 'flux'];
 
 /**
  * 起桩服务的命令。用 `uv run` —— 与 .commands/dev/config.toml 的 dev.harness 保持**同一条口径**

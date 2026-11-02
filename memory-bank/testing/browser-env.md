@@ -49,7 +49,7 @@
 - **命令**: 桩服务(`scripts/ui_harness.py`)由 `playwright.config.mjs` 的 `webServer` **自动起停**
   (端口 8137, `reuseExistingServer: false`), 不需要人工先起、也不需要人工关:
   ```bash
-  commands run dev.e2e      # 全量集(八个 spec × prism/atlas 双皮肤)
+  commands run dev.e2e      # 全量集(八个 spec × prism/atlas 双皮肤; 只读测量类用 SKINS_ALL 四皮肤)
   npm run test:e2e:fast     # @fast 门禁子集(分钟级) —— 「每次改前端」的日常口径
   npm run test:e2e:headed   # 有头模式(人工看动作)
   ```

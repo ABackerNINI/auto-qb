@@ -24,6 +24,8 @@
   --hr-scene on|empty|off`)。e2e 轨道下由 `playwright.config.mjs` 的 `webServer` **自动起停**
   (端口 8137, `reuseExistingServer: false`), 不需要人工先起。
 - `commands run dev.e2e` —— 跑 `e2e/` **全量集**(@playwright/test, chromium, prism/atlas 双皮肤循环)。
+  双皮肤是**冒烟运行时预算**口径(`harness.mjs` 的 `SKINS`), 不是能力限制(桩服务静态挂载通用, 四皮肤都能访问);
+  跨皮肤**只读测量**类断言(如 `views.spec` 的做种时间格行高守阵)走 `SKINS_ALL`(四皮肤, 数据驱动同一份断言体)。
   spec 按旧断言块拆分: `views.spec`(渲染健康/视图/筛选器/轮询分档) ·
   `multiselect-shows.spec`(追剧 + 多选右键, 存量 flaky 所在块) · `optimistic.spec`(乐观 UI 全家) ·
   `menus.spec`(菜单族 + W5-off fail-closed) · `perf.spec`(性能埋点, 阈值逐字保留) ·

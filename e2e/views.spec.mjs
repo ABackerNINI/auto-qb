@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS, TORRENTS } from './harness.mjs';
+import { BASE_URL, SKINS, SKINS_ALL, TORRENTS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
 
@@ -419,7 +419,9 @@ test.describe('几何守卫(右对齐列表头)', () => {
  * 口径: 同一行先补文案(模拟完成后稳态)量一次、再清空量一次, 两次行高必须相等; 并顺带钉住
  * .m-pair.m-dur 的 padding 必须为 0(它就是行高差的来源), --dur-pad 只做线的下移偏移。 */
 test.describe('几何守卫(做种时长单元格行高恒定)', () => {
-  for (const skin of SKINS) {
+  // 四皮肤同口径(CSS 规则四份逐条同源, 只测两套会漏掉 console/flux 的漂移): 走 SKINS_ALL,
+  // 四条用例由同一份断言体数据驱动, 不复制用例体; 其余 spec 仍吃双皮肤 SKINS 口径。
+  for (const skin of SKINS_ALL) {
     test(`[${skin}] 几何: 做种时间有文案/无文案行高相等, 且单元格无 padding`, async ({ page }) => {
       await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.group-row', { timeout: 30_000 });
