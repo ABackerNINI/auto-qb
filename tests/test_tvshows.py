@@ -33,6 +33,10 @@
 - [x] parse_files 首文件无季继续扫后续文件 (parse_files_20); 标点剥除进聚合键 (normalize_key_15/16) (W3-S5)
 - [x] 两轮扫描: 零位 bare 不劫持「季在中间、集在季后」的切分 (find_episode_2/11); 区间终点 999 合法 (find_episode_31) (W3-S5)
 - [x] 名称标记优先: 带集数/日期且带 key 的结果不被文件集数改写 (refine_1) (W3-S5)
+- [x] 年份窗口 1900-2099 两端闭区间 + 2100 反向对照 (bare_ok_9/10/11/12) (W3 余量)
+- [x] 集数上下界: E9999 起点合法 / 区间终点 1000 超限 (find_episode_24/32) (W3 余量)
+- [x] 目录季 1..99 闭区间: S99 收 / 第百季 拒 (dir_season_13/14) (W3 余量)
+- [x] 非法日期跳过继续找后续合法日期 (find_date_18) (W3 余量)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
 - test_bare_trailing_without_context_not_matched
@@ -47,6 +51,7 @@
 - test_date_basic
 - test_date_invalid_not_date
 - test_default_unknown_shared
+- test_dir_season_99_boundary
 - test_e05_glued_title_side_unknown
 - test_e_lookalike_not_matched
 - test_empty_name_defaults
@@ -55,6 +60,7 @@
 - test_episode_patterns
 - test_episode_range_end_999_kept
 - test_episode_scan_after_season_beats_zero_position_bare
+- test_episode_upper_bounds
 - test_episode_wins_over_date
 - test_find_episode_non_bare_zero_skipped
 - test_find_season_out_of_range_and_earliest_kept
@@ -62,6 +68,7 @@
 - test_fullwidth_brackets_kept_as_title
 - test_group_prefix_stripped
 - test_identity_diff_preserved
+- test_invalid_date_continues_to_later_valid
 - test_key_forms
 - test_marker_cut_takes_first_position
 - test_multi_season_unknown
@@ -90,6 +97,7 @@
 - test_season_pack
 - test_sxe_season_not_double_counted
 - test_unknown
+- test_year_window_bare_edges
 - test_zero_position_marker_name_keyless
 """
 import pytest
@@ -565,3 +573,50 @@ def test_refine_name_episode_and_date_untouched():
     assert refine_with_files(parsed, ["Season 1/Show.S01E01.mkv"]) == parsed
     dated = p("Show.Name.2026.09.15.1080p")
     assert refine_with_files(dated, ["Season 1/Show.S01E01.mkv"]) == dated
+
+
+# ---------------- W3 余量定向补测 (2026-11-02) ----------------
+# 覆盖 W3 池遗留: 年份/bare 边界、CJK「百」、键归一、标题尾 trim
+# (issue 26-10-31-1211 / 26-10-31-1212 四件, 同属标题/年月/键名归一化方向)
+
+
+def test_year_window_bare_edges():
+    """bare 年份窗口 1900-2099 是闭区间: 两端点都不当集数, 2100 是合法大编号
+
+    bare_ok_9/10(1900<=n -> 1901<=n / 1900<n): 1900 漏排解成 ep 1900;
+    bare_ok_11/12(n<=2099 -> n<2099 / n<=2100): 2099 漏排、2100 被误当年份。
+    """
+    assert p("[Group] Show - 1900 [1080p]").kind == KIND_UNKNOWN
+    assert p("[Group] Show - 2099 [1080p]").kind == KIND_UNKNOWN
+    assert p("Show - 2100 [1080p]").ep_start == 2100  # 反向对照: 窗口外仍认
+
+
+def test_episode_upper_bounds():
+    """集数上界: E9999 起点合法(<=9999); 区间终点 1000 超限应丢弃
+
+    find_episode_24(start<=9999 -> <9999): E9999 起点被丢;
+    find_episode_32(end>999 -> >1000): end==1000 应判异常终点却保留。
+    """
+    assert p("Show.Name.E9999").ep_start == 9999
+    assert p("Show.Name.S01E05-1000").ep_end is None
+
+
+def test_dir_season_99_boundary():
+    """目录季 1..99 闭区间: S99 收进季号, 第百季(100)拒绝
+
+    dir_season_13(s<=99 -> s<99): S99 目录被丢;
+    dir_season_14(s<=99 -> s<=100): 「第百季」被收为季 100。
+    """
+    assert parse_files(["S99/E05.mkv"])[0] == 99
+    assert parse_files(["第百季/E05.mkv"])[0] is None
+
+
+def test_invalid_date_continues_to_later_valid():
+    """非法日期跳过继续找: 同一名字里后面还有合法日期时仍判 DATE
+
+    find_date_18(continue -> break): 首个坏日期(2023.13.99)即放弃 ->
+    "Show.2023.13.99.2026.09.15" 原判 DATE 变 unknown。
+    """
+    r = p("Show.2023.13.99.2026.09.15")
+    assert r.kind == KIND_DATE
+    assert r.date == "2026-09-15"
