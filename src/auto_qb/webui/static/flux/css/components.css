@@ -115,7 +115,7 @@
 .filter-btn.active .filter-caret { opacity: 1; }
 /* 浮层弹层(列选择器/筛选器共用): 方角 + 顶亮渐变 + 大阴影 */
 .col-menu, .pop-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; padding: 8px;
-  background: var(--bg-elev); border: 1px solid var(--border-strong);
+  background: var(--bg-pop); border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-3); animation: drop-in .12s var(--ease-out); }
 .col-menu { width: 300px; }
 .pop-menu { width: 260px; max-height: 330px; overflow-y: auto; }
@@ -427,7 +427,7 @@
 
 /* ---------------- 右键菜单 ---------------- */
 .ctx-menu { position: fixed; z-index: 100; min-width: 196px; padding: 6px;
-  background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  background: var(--bg-pop); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drop-in .12s var(--ease); }
 .ctx-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px;
   font-size: 13px; cursor: pointer; transition: background var(--dur) var(--ease); }
@@ -465,7 +465,7 @@
  * 不裁剪时 Vue 绑定的内联 top 恒为 -6px —— 与本条默认值一致, 改默认值两处要同步 */
 .ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
   min-width: 190px; padding: 6px;
-  background: var(--bg-card); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  background: var(--bg-pop); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drop-in .12s var(--ease); }
 .ctx-sub.flip-x { left: auto; right: calc(100% + 4px); }
 .ctx-item.danger { color: var(--error); }
@@ -618,7 +618,7 @@
 .ce-chart-dot { fill: var(--fg); stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .ce-chart-svg .ce-axis-labels text { fill: var(--fg-dim); font-size: 10px; }
 .ce-chart-tip { position: absolute; transform: translate(10px, -50%); display: flex; flex-direction: column;
-  gap: 1px; padding: 6px 9px; background: var(--bg-elev);
+  gap: 1px; padding: 6px 9px; background: var(--bg-pop);
   border: 1px solid var(--border-strong); box-shadow: var(--shadow-2); pointer-events: none;
   font: 500 11.5px/1.5 var(--font-mono); color: var(--fg-soft); white-space: nowrap; z-index: 2; }
 .ce-chart-tip.flip { transform: translate(calc(-100% - 10px), -50%); }

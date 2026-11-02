@@ -32,6 +32,14 @@
   (如 `--font-display` 星图 = 单一无衬线族、控制台/棱镜 = Bahnschrift), 但**名字一个都不能少** —— 少声明一个,
   该皮肤下 `var(--x)` 的那条声明会在计算值阶段**整条作废且无任何报错**(星图此前少 3 个字体令牌, 自己 4 处
   `var(--font-mono)` 裸引用全程失效、共用层只能按"该皮肤没有令牌"各写兜底链)。新增令牌 = 三皮肤同轮补名。
+- **浮层不透明兜底 `--bg-pop`**(2026-11-02, 用户报「flux 下弹窗/下拉/悬停卡透出正文」): flux 是唯一把
+  `--bg-card: rgba(...,.82)` / `--bg-elev: rgba(...,.92)` 写成半透明的皮肤(另三皮肤两 token 均为不透明 hex);
+  而 flux 毛玻璃预算恰 4 处(见本文件 flux 段), **没有 backdrop-filter 的浮层半透明底会直接把下方正文透出来**。
+  `--bg-pop` = `--bg-elev(.92)` 覆在页底 `--bg` 上的**不透明等效色**(flux `#1c2a3f`), **只给无毛玻璃的浮层**
+  (下拉/右键菜单/悬停卡/设置页浮窗/提示面板), 卡片/行/大面浮层仍走 `--bg-card/--bg-elev` 保层叠语言。
+  **不得**用加 `backdrop-filter` 的方式解决(预算钉死)。另三皮肤 `--bg-pop: var(--bg-elev)` 惰性别名(名集守阵要求)。
+  shared 层浮层(`console_hub.css` 的 `.hb-pop`/`.hb-tr-drop`/`.search-help-pop`/`.aq-tip`/`.err-panel`、
+  `row_lang.css` 的 `.rowlang-menu`)本体**不动**, 只在 flux 侧用 `html[data-fx-preset]` 前缀覆盖底色(见 flux 段)。
 - **CSS 分层三皮肤同构**(2026-10-21): 星图/控制台 = `style.css → css/components → css/views → css/dialogs`;
   棱镜 = `css/tokens → css/themes/*(五主题) → css/base → css/components → css/views → css/dialogs`;
   三皮肤最后都接共用层 `shared/console_hub.css` + `shared/dt_table.css`。**弹窗层恒排最后**(抽屉/确认框/对话框/
@@ -158,6 +166,7 @@
   - transform 祖先改 fixed 包含块 → [pitfalls/web-ui/clip-path-clips-fixed.md](../pitfalls/web-ui/clip-path-clips-fixed.md)(R1 实复发: push 载体改 relative-top; 新动效载体选型先对 fixed 后代跑祖先链判据);
   - `@starting-style` 对「插入后才程序化补属性」的节点不触发(起始式窗口在首次样式计算即关闭) —— 程序化 stamp 的入场用确定性 @keyframes, 不用 starting-style 族;
   - blur 面积成本: 常驻小面 blur 空闲/滚动无衰减, 大面板(盖住视口大半)开启期掉帧; 本机 Playwright Chromium 是 SwiftShader 软渲染, 帧率数字不可当真机预期。flux 毛玻璃走显式预算守阵 `_FLUX_BACKDROP_BUDGET = 4`(test_webui_static_skins::`_scan_backdrop_filter`, 加/摘 = 显式改预算 + 红绿双验; modal-mask 恒禁);
+    **未挂 blur 的浮层一律 `--bg-pop`**(下拉/右键菜单/悬停卡/设置页浮窗/提示面板, 见令牌分工段) —— 本皮肤两个表面令牌带 alpha, 借它们当浮层底就是透正文; 不许为此新增 backdrop-filter;
   - 高密度行(torrent 表)禁全行 stagger(设计指南硬条); 行内实时数据(速度列)不挂数字补间(高频补间 = 高负载, 只挂状态栏级低频面)。
 - **消息面(message surface)统一(2026-11-02, 用户报「强制汇报投递与确认框样式不一致」)**: 用户操作引起的消息浮层(右下角提示条 / 站内确认框)**材质同源、形态各守其位** —— 位置与交互语义不变(提示条非阻塞、确认框居中阻断), 只把材质与语义档语法收成一份。三件: ① 表面读同一 `--msg-surface`(高光渐变 + `--bg-elev` 近不透明底, 单点声明在 `flux/css/components.css` 的 `.toast-wrap, .modal-mask` 一条规则, **提示条不挂 blur** —— R2 精修只给常驻大面开毛玻璃且预算钉死); ② 语义档 `--msg-tone`(图标)/`--msg-line`(描边)由 kind/tone 一档一声明: ok→green / warn·timeout→warn / error→error / busy→accent / **info = 中性基线**(不单列规则); ③ 弹窗侧 `.modal.tone-warn|error` 同读 `--msg-line` —— 两处都靠「描边 + 图标」表达等级, 不再一边染边框一边中性。**形状不统一(用户二轮口径「消息通知不要切角」)**: 切角(`--hb-cut`, 弹窗 14px / 限速浮层)只属**弹窗级大面浮层**; 提示条是过路小条, 方角(radius 令牌本就 0), 切角在小面积上读作装饰缺口且会啃掉底部倒计时条右端 —— 初版曾把它也统一成切角, 被用户退回, 现由守阵**反向钉**死在 `.toast` 上(`clip-path` 出现即红)。**新增 toast kind 必须登记语义档**(未登记 = 静默落成与 info 同貌; warn 档 21 处调用点就这么整档丢了样式), 守阵 `tests/test_webui_static_skins.py::test_frontend_static_bundle_health` 的第 20 项 `_scan_message_surface_parity` 扫「模板图标映射 + JS 调用点」两侧求 kind 全集。范围: 只统一 flux, atlas/prism/console 仍是 fork 前的平面方角配方(范围守恒, 未动)。**形状最终档待用户从挑选台选定**: `/fx/showcase.html` D9 区(方角纯描边 = 现生产基线 / 左侧 3px 色条 / 顶部 2px 通栏 / 色条+淡底 / 微圆角 2px / 切角对照), 选定后落 `.toast` 一条规则并同步本条。
 - **消息面图标: 圈内字形族(2026-11-02 三轮, 用户「图标需要统一一下, showcase 中 toast/通知 的例子不错, 直接复用」)**: 参考物 = `fx/showcase.html` D6 的 `.tst-ico` —— **18px、圆环 + 圈内单一字形、stroke 2、round cap**, 一档一形(对勾 ok / 感叹 warn / 叉 error / 旋转箭头 busy / 时针 timeout / i info)。此前生产是裸 13px sprite 字形(stroke 1.7), 六档字形粗细与含圈与否各不相同。**实现落点 = 渲染层换漆, 不动图标源**: toast 模板(`tpl/overlays.html` 的 kind→`<use href>` 映射)与各皮肤 sprite 段是**四皮肤共享且逐字相等**的守阵面, 换 glyph 会连带改三套旧皮肤且旧皮肤没有 18px 档 —— 故 flux 用 `mask` 把「圆环 + 圈内字形」当形状、`background-color: var(--msg-tone)` 上色(语义档单点复用, 不另开配色表), `color: transparent` 让旧 sprite 字形失效; 全部收在 `flux/css/views.css` 的 `@supports (mask-image)` 块内。**降级 = 能力降级不是信息丢失**: 不支持 mask 的浏览器不进该块, 保留 sprite 字形(放大到 18px / stroke 2), 只是不画圆环。⚠ mask 缺失(某档漏写 `--msg-ico`)的后果比"没图标"更糟 —— background-color 会把 18px 方框铺成实心色块, 故守阵对**每档**都钉 `--msg-ico`(与 `--msg-tone` 同一张 kind 表)。**新增 kind = 三张表都要登记**(语义色 `--msg-tone` / 描边 `--msg-line` / 图标 `--msg-ico`)。形状定档: **暂定 D9-1(方角 · 纯描边)** = 现生产形态, 其余五个候选留在挑选台待随时改判。

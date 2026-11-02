@@ -350,7 +350,7 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .hist-dot.down { fill: var(--today-down); }
 .hist-tip { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; gap: 1px;
   padding: 7px 11px; border: 1px solid var(--border-strong);
-  background: var(--bg-elev); box-shadow: var(--shadow-2);
+  background: var(--bg-pop); box-shadow: var(--shadow-2);
   font: 500 11.5px/1.5 var(--font-mono); color: var(--fg-muted);
   pointer-events: none; white-space: nowrap; z-index: 2; }
 .hist-tip.flip { transform: translateX(-100%); }
@@ -493,6 +493,6 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* ---------------- 列头拖动虚影(FX-25) ---------------- */
 .col-ghost { position: fixed; z-index: 120; pointer-events: none; transform: translate(10px, 12px);
-  padding: 3px 10px; background: var(--bg-elev); border: 1px solid var(--accent-line);
+  padding: 3px 10px; background: var(--bg-pop); border: 1px solid var(--accent-line);
   box-shadow: var(--shadow-2); color: var(--fg);
   font: 600 11.5px/1.5 var(--font-mono); white-space: nowrap; }

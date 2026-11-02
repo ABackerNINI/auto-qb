@@ -2,9 +2,19 @@
 
 > 摘要: 弹层 / 浮层 / 遮罩 / 多选与命令回执 —— "点了没反应"这类症状的固定排查顺序; 含浮层几何(视口钳位 / 尺寸估算)与 Esc 退栈顺序。
 > 等级: L0
-> 触发: 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor, 视口钳位, 菜单高度, 溢出视口, 菜单项点不到, outside of the viewport, ESC 退栈, 退栈顺序, Esc 关错层, 两图同开, 层叠顺序
+> 触发: 浮层, 弹层, 右键菜单, 遮罩, 点了没反应, 多选, 命令回执, 强制汇报, 起点, anchor, Shift 连选, 落起点, selAnchor, 视口钳位, 菜单高度, 溢出视口, 菜单项点不到, outside of the viewport, ESC 退栈, 退栈顺序, Esc 关错层, 两图同开, 层叠顺序, 透出正文, 背景透明, 毛玻璃, 半透明底, 浮层底, --bg-pop
 
 **Refs:** memory-bank/tasks/26-10-13-memory-bank-kb-nav-esc.md, memory-bank/plans/26-10-02-1955-plan-webui-multi-ctx-actions.html, memory-bank/tasks/26-10-06-webui-ctx-menu-viewport.md, memory-bank/reports/26-10-31-0104-report-webui-speed-esc-vimium.html
+
+### 浮层能透出下方正文: 先查「该皮肤的表面令牌带不带 alpha」, 不是 blur 没写好
+
+- **触发**: 用户报「弹窗/下拉/右键菜单/悬停卡背景透明, 能看见下面正文」; 给浮层排查毛玻璃失效。
+- **判别**: 逐项核对 `backdrop-filter` 是错方向 —— 先看该皮肤 `--bg-card/--bg-elev` 的取值。四皮肤里只有 flux 把这两个
+  写成 `rgba(...,.82)` / `rgba(...,.92)`(另三套是不透明 hex), 而 flux 的毛玻璃预算钉死 4 处(顶栏/状态栏/抽屉/弹窗),
+  **没挂 blur 的浮层读这两个令牌 = 半透明底直接透正文**。判据: 该浮层规则里是否有 `backdrop-filter`; 没有就不该读带 alpha 的表面令牌。
+- **处置**: 浮层底一律改用不透明兜底令牌 `--bg-pop`(flux `#1c2a3f` = `--bg-elev` 覆在页底 `--bg` 的等效色), **不要加 blur**
+  (预算守阵 `_FLUX_BACKDROP_BUDGET` 会红)。shared 层浮层(console_hub/row_lang)在 flux 侧用 `html[data-fx-preset]` 前缀覆盖,
+  不动 shared 本体(否则波及 atlas/prism/console)。口径见 conventions/webui.md「浮层不透明兜底」段。
 
 ### 全屏遮罩错误浮层无 dismiss 路径 = 整页操作锁 ≤ 轮周期
 
