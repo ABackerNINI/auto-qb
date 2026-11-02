@@ -19,17 +19,21 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 11 |
 | perf | 5 |
-| docs | 2 |
+| docs | 3 |
 | test | 3 |
-| refactor | 3 |
+| refactor | 4 |
 | feat | 21 |
 | chore | 2 |
 | question | 6 |
 
 ## Open
 
+- [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败…
+- [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](26-11-03-0316-docs-port-doc-drift.html) — loading-and-…
+- [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs…
+- [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中…
 - [bug] [搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留](26-11-03-0254-bug-search-uncovered-stale-virtual-row.html) — 未归组命中转归组后同屏出…
 - [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery…
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…

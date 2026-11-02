@@ -4,8 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (55)
 
+- [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
+- [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
+- [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口
+- [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例
 - [bug] [搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留](../26-11-03-0254-bug-search-uncovered-stale-virtual-row.html) — 未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索
 - [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](../26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery 并行用例端口抢占偶发红，单跑均绿；与本轮 CSS 改动无关
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测

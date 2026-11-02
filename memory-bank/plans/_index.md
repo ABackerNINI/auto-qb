@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-11-03-0316] [测试侧端口改 0 自动分配](26-11-03-0316-plan-test-port-zero.html) — `test-port-zero`
 - [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](26-11-02-2342-plan-big-file-split.html) — `big-file-split`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 

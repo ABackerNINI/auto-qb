@@ -10,8 +10,9 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (2)
+## Open (3)
 
+- [26-11-03-0316] [测试侧端口改 0 自动分配](../26-11-03-0316-plan-test-port-zero.html) — `test-port-zero`
 - [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](../26-11-02-2342-plan-big-file-split.html) — `big-file-split`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
