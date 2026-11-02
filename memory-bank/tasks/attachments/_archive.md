@@ -35,7 +35,7 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (266)
+## Done (267)
 
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
 - [26-11-02-webui-large-filelist-perf](../26-11-02-webui-large-filelist-perf.md) WEBUI 单种子千级文件列表性能统一优化 (W1-W5 + W6a 落地, W6b Dropped, 真机轨完成)
