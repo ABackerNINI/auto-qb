@@ -211,6 +211,12 @@
             <template v-if="hrSrcFilter.length">HR 来源“{{ hrSrcFilter.join('/') }}” </template>
             <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
             → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ` 个${l10nGroup}` }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
+            <!-- 搜索自动更新提示(plan 26-11-03-0120 F4): 紧接结果计数, 3s 后自收(窗口内累计计数);
+                 视觉完全继承父级 .strip-note, 三套皮肤零复制; .search-refresh-note 仅作 e2e 选择器钩子(无 CSS)。
+                 查询变更/清空/切视图/手动搜索会立即收窗口(见 view.js _clearSearchRefreshHint) -->
+            <span v-if="searchRefreshNotice && searchRefreshDelta > 0" class="search-refresh-note"
+                  role="status" aria-live="polite"
+                  :title="'本次自动刷新相对提示窗口起点新增的命中种子数(按 hash 去重, 窗口内累计)'"> · 结果已更新（+{{ searchRefreshDelta }} 个种子）</span>
             <template v-if="searchBuilding"> · 索引构建中…</template>
           </span>
           <div class="strip-tools">

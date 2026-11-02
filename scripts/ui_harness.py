@@ -50,6 +50,7 @@
   等于把一个免鉴权的 WEB UI 交给整个局域网(合成数据也含配置结构), 直接拒绝启动。
 """
 import argparse
+import hashlib
 import ipaddress
 import os
 import queue
@@ -100,6 +101,73 @@ def _inject_add_options(mgr, torrents) -> None:
     mgr.client.categories = cats
     mgr.client.tags = tags
     print(f"[harness] 添加种子候选已注入: 分类={len(cats)} 标签={len(tags)}", flush=True)
+
+
+def _install_search_refresh_probe(app, mgr, site_conf) -> None:
+    """仅测试用控制端点(plan 26-11-03-0120 P3): 新增/删除一个合成种子
+
+    动机: e2e 要验"搜索进行中新增命中种子 -> 一个轮询周期内自动出现在结果里"。真机由 qB
+    侧新增, 浏览器没有添加接口; 桩若只能在启动时灌数据, "时间维度的新增"永远测不到。
+
+    实现走**生产同款**路径: 先放进 FakeClient, 再调 QbManager._refresh_torrents —— 由 store
+    apply_sync 推出 added/removed, S2 触发面自然给 search_rev +1。**不手写版本号**, 否则 e2e
+    测的是一条假通路。删种子端点供用例收尾(长驻桩共享实例, 不清理会让视图/计数用例互相污染)。
+
+    仅回环可访问(harness 已拒绝非回环监听), 不参与打包、不进生产代码。
+    """
+    # !create_app 末尾把 StaticFiles 挂在 "/" 上, 它也是 POST 的兜底匹配(回 405) —— 后追加的
+    #   路由永远轮不到。故先登记、再整体挪到路由表最前(仅测试桩内做, 生产工厂不动)。
+    first_probe = len(app.router.routes)
+
+    @app.post("/__harness__/add_torrent")
+    def _add_torrent(name: str, category: str = "", save_path: str = r"R:\Downloads\Harness"):
+        h = hashlib.sha1(name.encode("utf-8")).hexdigest()
+        if h in mgr.client.torrents:
+            return {"hash": h, "added": False, "search_rev": mgr.web.search_rev}
+        size = 8 * 1024**3
+        tor = FakeTorrent(
+            hash=h,
+            name=name,
+            size=size,
+            total_size=size,
+            save_path=save_path,
+            # 测试期合成种子保持非活跃(与真机硬约束同口径; 合成种子本可活跃, 但 paused 更稳)
+            state="pausedUP",
+            progress=1.0,
+            downloaded=size,
+            added_on=int(time.time()),
+            category=category,
+            tracker=f"https://tracker.hhanclub.net/announce/{h[:8]}",
+            tracker_conf=site_conf,
+        )
+        mgr.client.torrents[h] = tor
+        mgr.client.files_map[h] = [
+            {
+                "name": f"{name}/{name}.mkv",
+                "size": size,
+                "progress": 1.0,
+                "priority": 1
+            },
+        ]
+        mgr._refresh_torrents(False)
+        # !生产里视图发布由主循环每拍 flush_views; 桩没有主循环 —— 不补这一次, store 有了新种子、
+        #   /api/search 也能查到, 但 /api/state 的 torrents 仍是旧快照(新行永远进不了列表)
+        mgr.web.flush_views(force=True)
+        return {"hash": h, "added": True, "search_rev": mgr.web.search_rev}
+
+    @app.post("/__harness__/remove_torrent")
+    def _remove_torrent(hash: str):
+        if hash not in mgr.client.torrents:
+            return {"hash": hash, "removed": False, "search_rev": mgr.web.search_rev}
+        del mgr.client.torrents[hash]
+        mgr.client.files_map.pop(hash, None)
+        mgr._refresh_torrents(False)
+        mgr.web.flush_views(force=True)  # 同 add: 桩无主循环, 发布视图须手动补一拍
+        return {"hash": hash, "removed": True, "search_rev": mgr.web.search_rev}
+
+    probes = app.router.routes[first_probe:]
+    del app.router.routes[first_probe:]
+    app.router.routes[0:0] = probes
 
 
 def _inject_site_alerts(torrents) -> None:
@@ -994,6 +1062,8 @@ def main() -> int:
     _start_command_pump(mgr, args.cmd_result, args.state_revert_ms, args.cmd_wait_ms)
 
     app = create_app(mgr)
+    # 搜索自动更新 e2e 的控制面(plan 26-11-03-0120 P3; 仅回环测试桩, 不进生产)
+    _install_search_refresh_probe(app, mgr, site_conf)
     print(
         f"[harness] http://{args.host}:{args.port}/atlas/  /prism/  种子={args.torrents} 组={len(mgr.store.groups)} "
         f"命令回执={args.cmd_result} 跳检菜单={args.skip_check_menu} HR场景={args.hr_scene}",

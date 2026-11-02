@@ -6,6 +6,7 @@
 - test_frontend_hr_safety_wiring: 删除安全档位前端接线守阵 —— hr.js 的 token 映射表与后端 resolve.py 的 SRC_* 常量逐字一致、做种时长列每套 UI 2 处换绑 hrDurClass/hrSrcClass(计划 26-10-11-1722 P2 起明细成员单元格收敛为单份 <aq-member-cells> 渲染器, 触发面 3→2, 该渲染器由辅种页/追剧页共用)+ 挂 hrSrcFull/hrSrcHalf 底线与 hrPopEnter 触发 + 来源与已排除文案都走 hrDurHint 进 title(行内不留 chip) + 弹窗单例 DOM 每套 UI 恰一份、三套 CSS 的 hr-warn/hr-line/hr-pop 成对定义、js 引用的 m.hr_* 字段都在后端 hr_view_fields 键集里(字段打错 = 页面静默空白)
 - test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
+- test_frontend_search_auto_refresh_wiring: 搜索自动更新接线守阵(plan 26-11-03-0120) —— 服务端 search_rev 单点/触发面(增删+全量轮+name/category/save_path/tags)/state 恒回传/search 响应先在快照前取 rev + 前端常量定值(2000ms/3000ms)/doSearch(quiet) 不武装 pending/落袋版本对齐/轮询触发点与冷却/续查用独立定时器 + 共享 topbar 提示每套皮肤恰好一份(零复制)
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -400,6 +401,7 @@ def test_frontend_site_alert_icon_wiring():
         body = re.search(r"\.site-chip\.sa-no-conf\s*\{([^}]*)\}", css)
         assert body, f"{ui} 缺 .site-chip.sa-no-conf 规则体"
         assert "dashed" in body.group(1), f"{ui} 缺配置 chip 缺虚线底边(D4 非颜色通道)"
+
         # D6: 搜索命中让出底色 —— 不得再用 accent 柔底占住 chip 填充
         hit = re.search(r"\.site-chip\.search-hit\s*\{([^}]*)\}", css)
         assert hit, f"{ui} 缺 .site-chip.search-hit 规则体"
@@ -438,3 +440,79 @@ def test_frontend_site_alert_icon_wiring():
     assert m, "commands.js 必须有 ALERT_ICON 单点"
     assert set(re.findall(r"(\w+):\s*\"#i-",
                           m.group(1))) == set(CMD_TOKENS), ("ALERT_ICON 键集必须只含命令结果四种 token(站点问题已改走颜色, 不得留图标映射)")
+
+
+def test_frontend_search_auto_refresh_wiring():
+    """搜索自动更新接线守阵(plan 26-11-03-0120)
+
+    症状: 搜索期间新增命中种子的种子不会自动出现在结果里, 必须重搜(前端只在发起搜索时取一次
+    快照, 轮询不重跑搜索)。本守阵钉住修复的四层接线, 任一处被改回/漏改都会让"自动更新"静默失效:
+      S1/S2 服务端版本号单点 + 触发面(增删 / name/category/save_path/tags / full_round 一次);
+      S3 /api/state 恒回传 search_rev(不受 rid 门控吞掉);
+      S4 /api/search 响应带 rev, 且**在读 store 快照之前**取(否则"旧结果配新版本" = 漏更新);
+      F1-F4 前端常量定值(2000ms 冷却 = P0 窄 p95 39.7ms / 宽 p95 150.1ms+3.48MB 超闸门后的判据值)、
+        doSearch(quiet) 不武装 pending、落袋版本对齐、轮询触发点、续查独立定时器、共享模板提示零复制。
+    """
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    shared = os.path.join(STATIC_ROOT, "shared")
+
+    def _read(*parts):
+        return open(os.path.join(repo, *parts), encoding="utf-8").read()
+
+    runtime_py = _read("src", "auto_qb", "webui", "runtime.py")
+    state_py = _read("src", "auto_qb", "webui", "server", "routes", "state.py")
+    views_py = _read("src", "auto_qb", "webui", "views.py")
+    manager_py = _read("src", "auto_qb", "core", "qbmanager.py")
+    view_js = open(os.path.join(shared, "view.js"), encoding="utf-8").read()
+    polling_js = open(os.path.join(shared, "polling.js"), encoding="utf-8").read()
+    state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
+
+    # S1: 版本号单点(只在 runtime, 主循环自增; Web 线程只读)
+    assert "self.search_rev: int = " in runtime_py, "runtime 缺 search_rev 字段(启动毫秒播种)"
+    assert "self.search_rev += 1" in runtime_py, "note_search_data_changed 未自增版本号"
+    # S2: 触发面 —— 增删/全量轮/搜索相关字段; tracker 不在快照字段表, 由 full_round 覆盖
+    assert 'frozenset(("name", "category", "save_path", "tags"))' in manager_py, \
+        "触发字段集被改 —— 名称/分类/路径/标签变化会改变命中集, 漏一个就不刷新"
+    assert "search_data_changed = bool(added or removed)" in manager_py, "增删未计入搜索版本触发"
+    assert manager_py.index('self.events.emit("full_round")') < manager_py.index("search_data_changed = True"), \
+        "full_round 必须计入搜索版本(tracker 重匹配后站点行命中要刷新)"
+    assert "self.web.note_search_data_changed()" in manager_py, "主循环未把搜索版本变化通知 Web 层"
+    # S3: 恒回传(共享 status 段, /api/status 同源; 不得塞进 rid 门控分支)
+    assert '"search_rev": manager.web.search_rev' in state_py, "state 载荷缺 search_rev(前端无从判断过期)"
+    # S4: 响应带 rev 且先取值后读快照
+    assert views_py.count('"rev": rev') == 2, "search_torrents 的两条返回路径都要带 rev"
+    search_fn = views_py[views_py.index("def search_torrents"):]
+    assert search_fn.index("rev = self.web.search_rev") < search_fn.index("pos, neg = _parse_query"), \
+        "rev 必须在读取任何快照前取值(否则搜索途中变化会被本响应据为己有 -> 漏更新)"
+
+    # F1: 常量定值单点(三皮肤共用 view.js, 改值先回看计划 P0 闸门)
+    assert "const SEARCH_REFRESH_MIN_MS = 2000;" in view_js, \
+        "冷却常量应按 P0 判据取 2000ms(宽查询 p95 150.1ms/3.48MB 超闸门)"
+    assert "const SEARCH_REFRESH_HINT_MS = 3000;" in view_js, "提示停留时长应为 3s"
+    assert "searchRevApplied: -1" in state_js, "state 缺已落袋版本字段(无从比对 rev)"
+    assert "searchRefreshNotice: false" in state_js and "searchRefreshDelta: 0" in state_js, \
+        "state 缺提示开关/累计计数(模板取不到值 = 提示永不出现)"
+    # F2: quiet 入口不武装 pending; 落袋整集替换 + 版本对齐; 续查不得复用输入防抖定时器
+    assert "async doSearch(quiet = false)" in view_js, "doSearch 缺 quiet 参数(无法静默刷新)"
+    assert view_js.count("this.searchPending = true") == 2, \
+        "武装点应仍恰两处(onSearchInput 防抖 + doSearch 手动入口; quiet 不得武装)"
+    assert "if (!useQuiet) this.searchPending = false;" in view_js, \
+        "落袋清 pending 只应发生在手动搜索(静默刷新从未武装, 不得干扰手动在途态)"
+    assert "this.searchRevApplied = typeof data.rev === \"number\"" in view_js, "落袋未对齐服务端版本"
+    assert "if (useQuiet) this._noteSearchRefresh(prevHits);" in view_js, "静默刷新未驱动提示计数"
+    assert "this._searchRefreshTimer = setTimeout(() => this.doSearch(true), 1000)" in view_js, \
+        "索引续查必须用独立定时器(复用 searchTimer 会取消用户刚输入的防抖, 改词被吞)"
+    assert "this.searchTimer = setTimeout(() => this.doSearch(), 1000)" not in view_js, \
+        "view.js 仍有旧续查复用 searchTimer 的写法(会吞输入防抖)"
+    # F3: 轮询触发点 + 冷却 + 静默请求
+    assert "this._maybeSearchRefresh();" in polling_js, "refresh 成功后未裁决搜索刷新"
+    assert "rev === this.searchRevApplied" in polling_js, "触发条件缺版本比对(无变化会空转重查)"
+    assert "now - this._searchRefreshAt < SEARCH_REFRESH_MIN_MS" in polling_js, "缺冷却门"
+    assert "this.doSearch(true);" in polling_js, "触发点未走静默入口(会闪全列表)"
+    # F4: 提示在共享模板, 每套皮肤聚合恰好一份(零复制); 计数口径与自收时长可核
+    for ui in _UI_ALL:
+        agg = _ui_aggregate(ui)
+        assert agg.count('class="search-refresh-note"') == 1, f"{ui} 自动刷新提示应恰一处(共享 topbar 零复制)"
+        assert "· 结果已更新（+{{ searchRefreshDelta }} 个种子）" in agg, f"{ui} 缺「结果已更新(+N)」文案"
+        assert 'role="status"' in agg and 'aria-live="polite"' in agg, f"{ui} 提示缺无障碍播报属性"
+    assert "SEARCH_REFRESH_HINT_MS" in view_js, "提示 3s 自收未接到常量"

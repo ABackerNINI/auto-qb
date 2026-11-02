@@ -203,6 +203,11 @@ class WebUIRuntime:
         # 视图版本号(等价 qB 的 rid): 每次发布自增, Web 端按版本跳过整表替换。
         # 以进程启动时间播种 —— 进程重启后版本号不会回落到旧客户端已持有的值
         self.group_view_ver: int = int(time.time())
+        # 搜索数据版本号(plan 26-11-03-0120 S1): 搜索相关数据(增删 / name/category/
+        # save_path/tags 变化 / full_round)一变化就在主循环自增一次; 随 /api/state 恒回传,
+        # 前端发现手上的结果版本落后就静默重查。以启动毫秒播种 —— 服务重启后旧页面版本
+        # 几乎必然不等, 天然触发一次自愈刷新; 只自增, 不清理、不落盘(搜索词本就不持久化)。
+        self.search_rev: int = int(time.time() * 1000)
         # 快照是否过期(全部 Web 视图共享: 主循环据此惰性重建)
         self.group_view_dirty: bool = True
         # HR 判定新鲜度基线: 最近一次视图重建完成时的 hr.revision。HR 判定结果不是 store
@@ -464,6 +469,14 @@ class WebUIRuntime:
     def mark_search_index_dirty(self) -> None:
         """核心域 → 表现层: 种子集变化, 搜索索引需重建"""
         self.search_index_dirty = True
+
+    def note_search_data_changed(self) -> None:
+        """核心域 → 搜索: 搜索相关数据已变(plan 26-11-03-0120 S1)
+
+        只自增版本号, 供前端在下一轮 /api/state 发现结果过期后静默重查; 幂等语义由
+        前端整集替换保证(重复自增最多多一次无变化的刷新)。只由主循环线程调用。
+        """
+        self.search_rev += 1
 
     def note_cross_keys(self, keys) -> None:
         """视图构建期回传跨组交叉键集(plan S2; _build_group_view 在 view_lock 临界区内调用)

@@ -31,6 +31,10 @@ def _status_payload(manager, snap: dict) -> dict:
         "groups": len(manager.web.group_view),
         "version": _app_version(),
         "traffic": public_traffic_view(manager.web.traffic_view),
+        # 搜索数据版本(plan 26-11-03-0120 S3): 恒回传的标量, 前端每轮比对"手上结果"的
+        # 版本, 落后则静默重查。放在共享段 —— /api/status 也回传(同源, 两端点不漂移);
+        # 与 traffic/server/totals 同为"数据源不是分组视图"的恒回传口径, 不参与 rid 门控。
+        "search_rev": manager.web.search_rev,
     }
 
 

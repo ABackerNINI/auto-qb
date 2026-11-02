@@ -1112,9 +1112,14 @@ class WebviewMixin:
             # test_search_row_view_converged_on_member_view 钉两边同名字段等值 + 键集关系)。
             return {**self._member_view(rec), "by": by}
 
+        # 搜索数据版本(plan 26-11-03-0120 S4): 在读取任何快照**之前**取值 —— 之后若主循环
+        # 再自增, 本次响应返回的仍是旧版本, 前端下一轮 /api/state 会再触发一次静默重查,
+        # 不会把"旧结果 + 新版本号"配对(避免漏更新)。快照读取本身不加锁, 该顺序给出
+        # 单调保证: rev 落后 ⇒ 结果不新, rev 相等 ⇒ 结果至少覆盖到该版本。
+        rev = self.web.search_rev
         pos, neg = _parse_query(q or "")
         if not pos:
-            return {"results": [], "building": False, "negative_only": bool(neg)}
+            return {"results": [], "building": False, "negative_only": bool(neg), "rev": rev}
 
         def _instant_rows(rec: TorrentRecord) -> List[Tuple[str, str]]:
             """即时候选行(只读 store, 不依赖文件索引): 名字/站点/分类/保存路径/每个标签各归一为一行;
@@ -1157,7 +1162,7 @@ class WebviewMixin:
         building = self.web.search_index_dirty
         if building:
             self.web.post_command("build_search_index")
-        return {"results": results, "building": building, "negative_only": False}
+        return {"results": results, "building": building, "negative_only": False, "rev": rev}
 
     def _group_hashes(self, key: tuple) -> List[str]:
         return [h for h in self.store.groups.get(key, []) if h in self.store.by_hash]

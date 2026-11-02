@@ -154,7 +154,8 @@ def test_frontend_dir_browse_and_search_stale_guard():
         "loadDir finally 未按戳守卫 —— 过期请求会闪一帧\"加载完\"假象(新在途请求持有 loading)"
 
     # ② doSearch: 落袋前比对当前搜索词
-    m = re.search(r"async doSearch\(\)\s*\{(.*?)\n    \},", vw, re.S)
+    # quiet 参数(plan 26-11-03-0120 F2): 静默刷新复用同一落袋路径, 签名容忍可选参
+    m = re.search(r"async doSearch\([^)]*\)\s*\{(.*?)\n    \},", vw, re.S)
     assert m, "view.js 找不到 doSearch(改名或挪走了? 同步本守阵)"
     body = re.sub(r"//[^\n]*", "", m.group(1))
     assert body.count('if ((this.searchQuery || "").trim() !== q) return;') == 2, \

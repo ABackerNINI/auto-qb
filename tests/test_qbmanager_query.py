@@ -24,6 +24,8 @@
 - test_w6_refresh_matching_loop_continues_past_skips: 守阵(W6)——匹配循环跳过(幽灵/未匹配)不截断后续种子
 - test_w6_refresh_fs_selfcheck_once: 守阵(W6)——映射自检一次性闸门: 恰好首轮全量跑一次且实参为 save_path 清单
 - test_w6_refresh_search_index_dirty_on_add_only: 守阵(W6)——单边新增/删除都必须标搜索索引脏
+- test_search_rev_bumps_once_per_changed_tick: 守阵(plan 26-11-03-0120 S2)——增删/全量轮各只 +1(按 tick 合并, 不按种子数)
+- test_search_rev_ignores_non_search_fields: 守阵(plan 26-11-03-0120 S2)——仅搜索相关字段(name/category/save_path/tags)变化才 +1
 - test_w6_refresh_added_logging_domains: 守阵(W6)——新增 INFO/未匹配 WARNING 审计面 + 诊断域名来自真实拉取
 - test_w6_export_torrents_info_pins_utf8_encoding: 守阵(W6, 平台相关)——导出 open 探针钉 encoding="utf-8"
 """
@@ -608,6 +610,53 @@ def test_w6_refresh_search_index_dirty_on_add_only():
         del client.torrents["H1"]
         mgr._refresh_torrents(False)  # 仅删除
         assert mgr.web.mark_search_index_dirty.call_count == 1, "单边删除必须标索引脏"
+
+
+def test_search_rev_bumps_once_per_changed_tick():
+    """守阵(plan 26-11-03-0120 S2): 增删/全量轮各只 +1(按 tick 合并, 不按种子数)
+
+    前端按版本号变化触发静默重查; 若按种子数自增, 一批新增 500 个会让版本号跳 500 ——
+    语义无害但让人误以为要刷 500 次; 若全量轮不自增, tracker 重匹配后站点行命中不刷新。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        for i in range(3):
+            client.torrents[f"H{i}"] = FakeTorrent(hash=f"H{i}", name=f"T{i}")
+        mgr._refresh_torrents(False)  # 首轮全量 + 3 个新增 => 只 +1
+        base = mgr.web.search_rev
+        mgr.store.rid = 0  # 强制下一轮全量(存量记录无增删, 仅 full_round)
+        mgr._refresh_torrents(False)
+        assert mgr.web.search_rev == base + 1, "全量轮每 tick 只 +1, 不按种子数自增"
+        del client.torrents["H2"]
+        mgr._refresh_torrents(False)  # 仅删除
+        assert mgr.web.search_rev == base + 2, "删除同样 +1"
+
+
+def test_search_rev_ignores_non_search_fields():
+    """守阵(plan 26-11-03-0120 S2): 只有搜索相关字段变化才 +1
+
+    速度/进度等高频字段每 tick 都可能变 —— 若也自增, 前端会持续触发静默重查(白白重算);
+    名称/标签/分类/保存路径会改变命中集, 必须 +1。tracker 不在快照字段表, 由 full_round 覆盖。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        mgr.client = client
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="Alpha", tags="")
+        mgr._refresh_torrents(False)  # 首轮全量
+        base = mgr.web.search_rev
+        client.torrents["H1"].upspeed = 12345  # 非搜索字段(视图字段)
+        client.torrents["H1"].progress = 0.5
+        mgr._refresh_torrents(False)
+        assert mgr.web.search_rev == base, "速度/进度变化不得触发搜索版本自增"
+        client.torrents["H1"].tags = "国配"
+        mgr._refresh_torrents(False)
+        assert mgr.web.search_rev == base + 1, "标签变化改变命中集, 必须 +1"
+        client.torrents["H1"].name = "Beta"
+        mgr._refresh_torrents(False)
+        assert mgr.web.search_rev == base + 2, "名称变化改变命中集, 必须 +1"
 
 
 def test_w6_refresh_added_logging_domains():

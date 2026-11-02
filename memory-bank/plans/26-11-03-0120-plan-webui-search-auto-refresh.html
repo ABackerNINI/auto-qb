@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 搜索结果随新增种子自动更新</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-search-auto-refresh">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-03-0120">
+<meta name="doc-updated" content="26-11-03-0224">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-0223-webui-search-auto-refresh.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+
+  /* 计划文档内的 UI 提示示意(纯展示, 不参与实现) */
+  .mock-strip { border: 1px solid var(--hair); background: var(--code-bg); padding: 10px 14px; margin: 14px 0; font-family: var(--mono); font-size: 12px; color: var(--dim); }
+  .mock-new { color: var(--accent-ink); border-left: 1px solid var(--hair); margin-left: 12px; padding-left: 12px; }
+  .mock-caption { font-family: var(--mono); font-size: 11px; color: var(--faint); margin-top: -6px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-search-auto-refresh</div>
+<h1>WEBUI 搜索结果随新增种子自动更新</h1>
+<p class="lede">给搜索结果加一个“数据版本号”，让前端在下一次 <code>/api/state</code> 轮询内静默重算当前查询，并用一条 3 秒的“结果已更新（+N 个种子）”短提示告诉用户结果在增长 —— 搜索语义仍由服务端单点裁决，前端不新增任何文本匹配。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-0120 · <b>doc-updated</b> 26-11-03-0224 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话中的只读根因分析 + 两轮 grilling；用户于 2026-11-03 拍板 U1–U5（见 <b>§06</b>）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>要解决的问题</h3>
+<p>搜索进行中或搜索完成后，如果有新种子进入且其名称/文件命中当前搜索词，结果列表不会自动变化，必须重新敲一次搜索才能看到。用户视其为缺陷，而不是“已知取舍”。</p>
+
+<h3>设计主轴</h3>
+<p><strong>“版本号驱动的一次性快照刷新”</strong>：后端只在搜索相关数据变化时自增一个轻量标量，前端发现自己的结果版本落后，就重新调用同一个 <code>/api/search</code>。不做增量补入、不做服务端活跃查询、不加 SSE 新事件。</p>
+
+<h3>不变量（违反即方案作废）</h3>
+<ul>
+  <li><strong>搜索语义单点</strong>：所有文本匹配、负词、文件行语义仍只在服务端 <code>views.py::search_torrents</code>；前端不得新增任何匹配函数（现有守阵继续生效）。</li>
+  <li><strong>单一写线程</strong>：<code>search_rev</code> 只由主循环写，Web 线程只读；不引入绕开主循环的并发写。整数自增在 GIL 下原子，跨线程读取安全。</li>
+  <li><strong>状态不落盘</strong>：搜索词本来就不持久化（<code>state.js:229</code>），本方案不新增 <code>state_file</code> 字段、不新增配置键。</li>
+  <li><strong>幂等</strong>：每次刷新整集替换 <code>searchHits</code> 与 <code>searchUncovered</code>，重复触发不产生重复行。</li>
+  <li><strong>保守默认</strong>：只在前台、搜索态、版本变化、冷却窗口之外触发；后台标签不拉数。</li>
+  <li><strong>三皮肤一致</strong>：UI 提示落在共享模板 <code>shared/tpl/topbar.html</code>，复用既有 <code>.strip-note</code> 视觉，不做三套皮肤各自的复制件。</li>
+</ul>
+
+<h3>算成什么样</h3>
+<ul>
+  <li>搜索“尼古”得到 5 个结果；新增一颗名称含“尼古”的种子后，<strong>不碰搜索框</strong>，在 1 次轮询 + 1s 冷却内变为 6 个结果。</li>
+  <li>结果增长时，顶部筛选说明条出现 <code>结果已更新（+1 个种子）</code>，3 秒后消失；连续新增合并计数，不闪烁。</li>
+  <li>0 命中 → 有命中的场景同样可见：空态消失、行出现、顶部提示出现。</li>
+  <li>删除/改名/标签变化不会把列表打回全量，也不会让 <code>searchPending</code> 语义塌陷。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>症状与复现步骤</h3>
+<ol>
+  <li>打开任意一套皮肤（<code>/atlas/</code>、<code>/prism/</code>、<code>/flux/</code>），在右上角搜索框输入“尼古”，等待结果稳定（例如 5 个）。</li>
+  <li>通过 qB API 或测试桩新增一颗名称含“尼古”的种子；保持当前页面与搜索框不动。</li>
+  <li>等待至少两个 <code>/api/state</code> 轮询周期（1.5–3s/次）。结果仍是 5 个。</li>
+  <li>重新敲一次回车或改一个字再改回来 —— 结果立刻变 6 个。说明后端能查到，前端没有再次取。</li>
+</ol>
+<p>“搜索进行中”变体：若新增发生在文件索引构建期间，已有的 1s <code>building</code> 轮询可能碰巧带入新种子；一旦 <code>building=false</code>，同样的新增就不会再被看到。</p>
+
+<h3>根因链路（带证据）</h3>
+<ol>
+  <li><strong>后端没有结果缓存</strong>：<code>/api/search</code> 每请求重算，候选行即时从 <code>store.by_hash</code> 取，文件行才取自缓存索引 <code>search_index</code>（<code>src/auto_qb/webui/views.py:1119-1160</code>）。因此“重新搜索就能看到”排除了后端固化结果。</li>
+  <li><strong>前端是一次性快照</strong>：<code>searchHits = new Set(results.map(...))</code>、<code>searchUncovered = results.filter(...)</code> 只在 <code>doSearch()</code> 落袋时写入（<code>src/auto_qb/webui/static/shared/view.js:41-48</code>）。</li>
+  <li><strong>唯一自动重查条件过窄</strong>：只有响应里 <code>building=true</code> 时才有 1s 重查（<code>view.js:51-55</code>）。索引完成后新增的种子没有第二次查询。</li>
+  <li><strong>轮询链路不重跑搜索</strong>：SSE <code>ver</code> 只触发 <code>refresh()</code>（<code>polling.js:62-67</code>）；<code>refresh()</code> 更新 groups/torrents 与 status，但从不调用 <code>doSearch</code>（<code>polling.js:345-380</code>）。新种子进了组列表，却不在 <code>searchHits</code> 里，被命中门挡掉（<code>filters.js:213-224</code>、<code>filters.js:260-268</code>）。</li>
+  <li><strong>主循环没有“结果需刷新”的信号</strong>：新增/删除时只做 <code>self.web.mark_search_index_dirty()</code>（<code>src/auto_qb/core/qbmanager.py:914-917</code>；<code>runtime.py:464-466</code>），该信号只影响文件索引，不影响前端结果版本。</li>
+  <li><strong>增量同步本身不是瓶颈</strong>：新种子会在下一个同步轮进入 store，名字行无需索引即可命中（<code>views.py:1119-1130</code>）。缺的是“前端知道该重查”的触发。</li>
+</ol>
+
+<p class="aside">相邻缺陷（不在本计划范围）：<code>searchUncovered</code> 是搜索时刻快照，未归组命中之后被归组时会出现“真实行 + 陈旧虚拟行”的重复；删除后虚拟行也会滞留到下轮搜索（<code>filters.js:225-249</code>）。本方案的静默重查会缩短其暴露窗口，但不作为本次修复目标。</p>
+
+<h3>方案候选与被否理由</h3>
+<table>
+  <tr><th>方案</th><th>做法</th><th>结论</th></tr>
+  <tr>
+    <td><strong>A · 版本号 + 静默重查</strong>（采纳）</td>
+    <td>主循环在搜索相关数据变化时自增 <code>search_rev</code>；随 <code>/api/state</code> 恒回传；<code>/api/search</code> 响应带回结果对应版本；前端发现落后就重调。</td>
+    <td class="good">复杂度可控；结果与“此刻重新搜索”严格一致；无长驻状态；服务端字段是加法，可独立回滚。</td>
+  </tr>
+  <tr>
+    <td>B · 仅前端固定轮询</td>
+    <td>搜索态下每 1–3s 盲调 <code>/api/search</code>，后端零改动。</td>
+    <td class="bad">O(N) 全扫与全量响应持续发生；3000+ 库、宽查询时 CPU/带宽不可接受；与 <code>building</code> 轮询叠加更容易互相踩。</td>
+  </tr>
+  <tr>
+    <td>C · 服务端活跃查询 + 增量推送</td>
+    <td>客户端注册查询，主循环只对新增种子做匹配并推送 hash 增量。</td>
+    <td class="bad">引入跨请求生命周期/多标签/清理/TTL/并发；文件行语义与负词仍要回退全量；增量与全量易漂移，测试成本高。</td>
+  </tr>
+  <tr>
+    <td>D · 只提示、不自动刷新</td>
+    <td>显示“结果有更新，点击刷新”。</td>
+    <td class="bad">不满足用户“自动更新”的核心诉求，只能作为性能兜底。</td>
+  </tr>
+  <tr>
+    <td>E · 前端本地重算命中</td>
+    <td>新种子到达后前端自行匹配。</td>
+    <td class="bad">直接违反“唯一文本匹配点”不变量；三页/负词/文件行语义会分叉；现有静态守阵会拦。</td>
+  </tr>
+  </table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>主线</h3>
+<p>服务端只增加两个标量：<code>search_rev</code>（当前数据版本）与响应里的 <code>rev</code>（该次结果对应的版本）。前端只增加一个判断：<code>status.search_rev !== searchRevApplied</code> 时静默重查。UI 提示由共享 topbar 模板承接。</p>
+
+<pre><code><span class="cm"># 服务端语义</span>
+added/removed ────────────────┐
+name/category/save_path/tags 变化 ─┼─→ search_rev += 1
+full_round(重连/tracker 重匹配) ────────────┘
+
+GET /api/state  → status.search_rev（恒回传标量）
+GET /api/search → { results, uncovered, building, negative_only, rev }
+
+<span class="cm"># 前端语义</span>
+refresh() 落 groups/status
+  └─ status.search_rev !== searchRevApplied && 搜索态 && 前台 && 冷却已过
+       └─ doSearch(quiet=true)  <span class="cm">// 不置 searchPending，不触发 pending 塌列表</span>
+            ├─ 成功: 整集替换 hits/uncovered，写回 rev；新增命中 &gt; 0 时亮提示 3s
+            └─ 失败: 保留旧结果，等下一次轮询重试</code></pre>
+
+<h3>触发面与定值</h3>
+<table>
+  <tr><th>项</th><th>定值</th><th>说明</th></tr>
+  <tr><td>服务端触发字段</td><td><code>{"name","category","save_path","tags"}</code></td><td>与 <code>_instant_rows</code> 的候选来源对齐；速度/进度/大小等变化不触发。<code>tracker</code> 不列入：快照字段表 <code>compat._SNAPSHOT_FIELD_SET</code> 无此字段，<code>tracker_name</code> 由 <code>tracker_conf</code> 派生、只在全量轮重匹配时变化 —— 已由 <code>full_round</code> 触发覆盖（R1 修正）。</td></tr>
+  <tr><td>增删触发</td><td><code>added or removed</code></td><td>每 tick 最多自增 1 次（按批合并，不按种子数）。</td></tr>
+  <tr><td>全量轮触发</td><td><code>full_round</code> 一次</td><td>覆盖 tracker 配置重匹配导致的 <code>tracker_name</code> 变化；重连时多一次刷新可接受。</td></tr>
+  <tr><td>索引构建</td><td>不额外触发</td><td>静默重查若见 <code>building=true</code>，由前端独立定时器续查；无需服务端再发信号。</td></tr>
+  <tr><td>前端冷却</td><td><code>SEARCH_REFRESH_MIN_MS = 2000</code></td><td>P0 实测 3000 库宽查询 p95 150.1ms、响应 3.48MB，超闸门（p95&gt;50ms 且响应&gt;500KB）⇒ 按判据取 2000ms（见 §08）。</td></tr>
+  <tr><td>提示时长</td><td><code>SEARCH_REFRESH_HINT_MS = 3000</code></td><td>每次更新重置计时；查询变更/清空/切页立即清掉。</td></tr>
+  <tr><td>版本初值</td><td><code>int(time.time()*1000)</code></td><td>服务重启后旧页面版本几乎必然不等，触发一次自愈刷新。</td></tr>
+</table>
+
+<h3>UI 提示：让用户知道结果在增长</h3>
+<p><strong>位置</strong>：共享模板 <code>shared/tpl/topbar.html</code> 的筛选说明条内，紧跟结果计数之后、<code>· 索引构建中…</code> 之前（<code>topbar.html:203-215</code>）。该条只在 <code>filtersActive</code> 时出现，搜索态必然满足。</p>
+<p><strong>实现</strong>：新增一个无 CSS 的钩子类 <code>search-refresh-note</code>（沿用 <code>.sel-summary</code> 的“仅作 e2e 选择器、无样式”先例，<code>topbar.html:199-200</code>），视觉完全继承父级 <code>.strip-note</code>，因此三套皮肤零复制、零新增配色。</p>
+<p><strong>文案</strong>：<code>结果已更新（+N 个种子）</code>。全角括号；<code>title</code> 写“本次自动刷新新增 N 个命中种子（按 hash 去重）”；<code>role="status"</code> + <code>aria-live="polite"</code> 让读屏可用。</p>
+<div class="mock-strip">搜索“尼古” → <b>6</b> 个种子(仅命中成员高亮) <span class="mock-new">结果已更新（+1 个种子）</span></div>
+<p class="mock-caption">示意：提示不新增图标、不使用 toast，不占独立行。</p>
+
+<p><strong>计数口径</strong>：<code>N = |newHits \ hintBaseHits|</code>，按 hash 去重，统计“种子数”而非组数/集数，避免组视图与种子视图口径漂移。提示窗口内连续刷新以窗口起点的 hits 为基线累加；窗口结束（3s 无新更新）清空基线。仅 <code>N &gt; 0</code> 时显示；删除、改名、仅内容变化不显示 <code>(+N)</code>，避免噪声。</p>
+<p><strong>出现/消失</strong>：静默重查落袋且 <code>N &gt; 0</code> 时立即出现；<code>SEARCH_REFRESH_HINT_MS=3000</code> 后消失；期间再有新增则更新数字并重置计时。查询变更/清空/切换视图/手动搜索立即清掉。</p>
+<p><strong>0 命中 → 有命中</strong>：不额外做居中横幅。空态 <code>aq-empty</code> 消失的同时，顶部提示照常出现；因为搜索态下说明条始终可见，用户能从“空态消失 + 顶部 +N”同时看到变化。</p>
+
+<h3>服务端 4 处改动</h3>
+<table>
+  <tr><th>#</th><th>文件</th><th>改什么</th><th>验收</th></tr>
+  <tr><td>S1</td><td><code>src/auto_qb/webui/runtime.py</code></td><td>新增 <code>search_rev</code>（启动时刻为初值）与 <code>note_search_data_changed()</code>；只自增，不清理、不落盘。</td><td>重复调用只涨不回退；无 state_file 写入。</td></tr>
+  <tr><td>S2</td><td><code>src/auto_qb/core/qbmanager.py</code></td><td><code>apply_sync</code> 之后：<code>added or removed</code> 时置脏 + 自增；<code>delta_fields</code> 命中触发字段时自增；<code>full_round</code> 时自增一次。速度等字段不触发。</td><td>新增/删除/改名/打标各恰好 +1；仅 upspeed 变化 +0。</td></tr>
+  <tr><td>S3</td><td><code>src/auto_qb/webui/server/routes/state.py</code></td><td><code>_status_payload</code> 增加 <code>"search_rev": manager.web.search_rev</code>，<code>/api/status</code> 与 <code>/api/state</code> 同源恒回传。</td><td>两接口值一致；state 只多 server/totals 的守阵仍绿（<code>tests/test_web_seed_center.py:213-228</code>）。</td></tr>
+  <tr><td>S4</td><td><code>src/auto_qb/webui/views.py</code></td><td><code>search_torrents</code> 在取 <code>by_hash</code> 快照<strong>之前</strong>记录 <code>rev = self.web.search_rev</code>，响应增加 <code>"rev": rev</code>。</td><td>并发变更最多导致一次冗余刷新，不会把旧结果标成新版本。</td></tr>
+</table>
+
+<h3>前端 3 处逻辑改动 + 1 个共享模板</h3>
+<table>
+  <tr><th>#</th><th>文件</th><th>改什么</th><th>约束</th></tr>
+  <tr><td>F1</td><td><code>static/shared/state.js</code></td><td>新增 <code>searchRevApplied=-1</code>、<code>searchRefreshNotice=false</code>、<code>searchRefreshDelta=0</code>、<code>_searchRefreshTimer/_searchHintTimer/_searchRefreshAt</code>。</td><td>不改搜索词持久化；初值不与服务端版本碰撞。</td></tr>
+  <tr><td>F2</td><td><code>static/shared/view.js</code></td><td><code>doSearch(quiet=false)</code>：quiet 不置 pending；记录序号/在途；落袋写 <code>searchRevApplied=data.rev</code>；计算新增命中并维护提示；quiet 失败不 <code>resetSearch</code>；响应 <code>building</code> 时用独立定时器续查。</td><td><code>this.searchPending = true</code> 仍恰两处；落袋顺序保持 <code>searchHits → pending=false → searchUncovered</code>（<code>tests/test_webui_static_skins.py:2801-2836</code>）。</td></tr>
+  <tr><td>F3</td><td><code>static/shared/polling.js</code></td><td><code>refresh()</code> 在 <code>applyStateRows</code> 后：搜索词非空、前台、非负词-only、冷却已过且 <code>status.search_rev !== searchRevApplied</code> 时安排 <code>doSearch(true)</code>。</td><td>不新建全局轮询；只在现有轮询/SSE 触发点后判断；后台标签跳过。</td></tr>
+  <tr><td>F4（呈现）</td><td><code>static/shared/tpl/topbar.html</code></td><td>在结果计数后插入提示 span（钩子类 + <code>role=status</code>），文案和计数来自 F1/F2。</td><td>共享模板，三皮肤同源；不新增 CSS、不改皮肤文件。</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>阶段</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>P0 · 实测与定值</td>
+    <td>用 <code>scripts/ui_harness.py --torrents 3000</code> 起桩，对当前版本测量 <code>/api/search</code>：窄词与宽词各 20 次，记录 p50/p95 与响应字节数。按 §08 闸门确认 <code>SEARCH_REFRESH_MIN_MS</code> 取 1000 还是上调。</td>
+    <td>测量脚本输出可复现；本计划 §08 回填实测数字后，冷却常量才冻结。</td>
+  </tr>
+  <tr>
+    <td>P1 · 服务端信号</td>
+    <td>S1–S4；补后端单测（触发面、状态回传、响应版本、结果增长）。</td>
+    <td><code>commands run test.quick</code> 绿；新增用例覆盖“仅速度变化不触发”。</td>
+    </tr>
+  <tr>
+    <td>P2 · 前端刷新与提示</td>
+    <td>F1–F4；补静态守阵；手工三皮肤走查。</td>
+    <td>“恰两处 pending”守阵仍绿；0 命中→有命中不闪全量；提示 3s 消失、连续更新合并计数。</td>
+    </tr>
+  <tr>
+    <td>P3 · e2e 与真机</td>
+    <td>在 <code>scripts/ui_harness.py</code> 增加仅测试用的“新增种子”命令；新增 <code>e2e/search-auto-refresh.spec.mjs</code>；三皮肤跑通；真机 qB 加种验证。</td>
+    <td>不碰搜索框 5s 内结果增长；提示出现并消失；控制台无错误；主循环日志无命令积压。</td>
+    </tr>
+  <tr>
+    <td>P4 · 收尾</td>
+    <td>回写 <code>memory-bank/</code> 与基线（若跑了 <code>test.full</code>）；用户另行授权后提交。</td>
+    <td>DoD 完成；本文件 §08 数字与代码一致。</td>
+    </tr>
+</table>
+
+<h3>实施注意</h3>
+<ul>
+  <li>P0 未完成前，1000ms 是<strong>暂定值</strong>，不得把它写成“性能已验证”的结论。</li>
+  <li>F2 的 quiet 路径必须复用同一落袋逻辑；不要复制第三份 hits/uncovered 赋值，避免三处漂移。</li>
+  <li><code>full_round</code> 触发若发现配置热重载重匹配 tracker 但不走 full round，需在配置应用处补一次 <code>note_search_data_changed()</code>；实施时按实际调用链确认。</li>
+  <li>索引构建续查使用<strong>独立定时器</strong>，不要复用输入防抖的 <code>searchTimer</code>，避免取消用户正在输入的去抖。</li>
+  <li>提示文案只出现在共享 topbar；禁止在 <code>atlas/</code>、<code>prism/</code>、<code>flux/</code> 各自复制一份。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无。U1–U5 已于 2026-11-03 全部拍板并迁入 §06；本轮只剩实施前实测（P0），不是需要用户再选的设计决策。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1（U1）</td><td>新鲜度采用“下一次 <code>/api/state</code> 轮询内 + ≥1s 冷却”，不新增 SSE 事件。</td><td>2026-11-03</td></tr>
+  <tr><td>D2（U2）</td><td>触发面为 <code>added/removed</code> + <code>name/category/save_path/tags/tracker</code> 变化 + <code>full_round</code> 一次。</td><td>2026-11-03</td></tr>
+  <tr><td>D3（U3）</td><td>UI 提示选 B：加“结果已更新（+N 个种子）”短提示，不做完全静默；位置/时长/计数口径见 §03。</td><td>2026-11-03</td></tr>
+  <tr><td>D4（U4）</td><td>先实测 3000 种子库当前版本 <code>/api/search</code> 耗时，再冻结冷却常量；不做预先性能优化。</td><td>2026-11-03</td></tr>
+  <tr><td>D5（U5）</td><td>允许在 <code>scripts/ui_harness.py</code> 增加仅测试用的“新增种子”命令。</td><td>2026-11-03</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>宽查询重算成本高</td><td>查询命中数千、<code>/api/search</code> p95 超闸门</td><td>上调冷却到 2000ms，或追加轻量/hash-only 刷新模式；实测前不宣称达标。</td></tr>
+  <tr><td>规则引擎高频改标签</td><td>每 tick 都有 tags 变化，rev 持续增长</td><td>冷却兜底；若仍抖动，缩短触发面为增删即时 + 字段变化更长冷却（常量单点）。</td></tr>
+  <tr><td>滚动位置被插入行推动</td><td>新命中按 <code>added_on</code> 降序插在顶部</td><td>quiet 不置 pending、不重建列表；实测有跳动再保存/恢复 <code>scrollTop</code>，不在首版预防性加代码。</td></tr>
+  <tr><td>陈旧虚拟行重复</td><td>命中之后才被归组（不伴随 rev 变化）</td><td>本方案不修；静默重查缩短窗口。若仍高频，另立 issue 跟踪 <code>searchUncovered</code> 一致性。</td></tr>
+  <tr><td>服务重启版本重置</td><td>Web 服务重启但页面未关</td><td><code>search_rev</code> 初值取启动时刻，旧页面版本几乎必然不等，触发一次自愈刷新。</td></tr>
+  <tr><td>多标签放大请求</td><td>同一浏览器开多个主视图标签</td><td>后台标签跳过；前台每标签每 rev 变化最多一次，可接受。后续再考虑共享 Worker。</td></tr>
+  <tr><td>e2e 桩与生产漂移</td><td>测试桩自己复刻置脏/自增副作用</td><td>优先改 FakeClient 快照后调用与主循环同一同步入口；若只能显式三连调用，注释标明仅测试并加断言防漂移。</td></tr>
+  <tr><td>守阵误伤</td><td>新增 quiet 分支改变 pending 次数或落袋顺序</td><td>保持 <code>searchPending = true</code> 恰两处；新增断言只钉 rev/提示/模板钩子，不改既有语义断言。</td></tr>
+  <tr><td>配置热重载 tracker 不触发</td><td>重匹配 <code>tracker_name</code> 但不走 full round</td><td>实施时核调用链；缺则补一次自增，属于 S2 验收项。</td></tr>
+</table>
+
+<h3>回滚</h3>
+<ul>
+  <li><strong>前端回滚</strong>：删除 F3 的 rev 判断块，即回到“一次性快照”行为；F4 模板提示不再亮。</li>
+  <li><strong>服务端回滚</strong>：S1–S4 都是加法字段/只读标量，无迁移、无配置；旧客户端会忽略新字段，可独立发版。</li>
+  <li><strong>顺序</strong>：先发服务端（无行为变化），再发前端；不需要 feature flag。</li>
+</ul>
+
+<h2><span class="no">§08</span>测试与验收</h2>
+
+<h3>后端单测</h3>
+<ul>
+  <li><code>tests/test_qbmanager.py</code>：新增/删除 → <code>search_rev</code> 恰 +1；仅 <code>upspeed</code> 变化 → +0；<code>name/tags/category/save_path/tracker</code> 变化 → +1；<code>full_round</code> → +1；批量 10 颗新增合并为 +1。</li>
+  <li><code>tests/test_web_hr.py</code>：<code>/api/search</code> 响应含 <code>rev</code>；新增种子后同查询结果 5→6；<code>rev</code> 在快照前取值（可用注入/monkeypatch 验证保守性）。</li>
+  <li><code>tests/test_web_hr.py</code>（R1 归位：原计划写 <code>test_web_seed_center.py</code>）：<code>/api/search</code> 响应含 <code>rev</code>；<code>rev</code> 在读取快照前取值（在 <code>_member_view</code> 中自增 rev，断言响应仍是旧值）；<code>/api/status</code> 与 <code>/api/state</code> 的 <code>status.search_rev</code> 同源。</li>
+</ul>
+
+<h3>前端静态守阵</h3>
+<ul>
+  <li>既有：<code>this.searchPending = true</code> 恰两处；落袋顺序不变（<code>tests/test_webui_static_skins.py:2801-2836</code>）。</li>
+  <li>新增：<code>view.js</code> 含 <code>searchRevApplied</code>、quiet 分支与提示状态；quiet 分支不得新增第三处 pending 赋值。</li>
+  <li>新增：<code>polling.js</code> 的 <code>refresh()</code> 含 <code>status.search_rev</code> 比较与 <code>doSearch(true)</code> 调度；后台/负词-only/冷却守卫存在。</li>
+  <li>新增：<code>topbar.html</code> 含 <code>search-refresh-note</code> 钩子、<code>结果已更新（+{{ searchRefreshDelta }} 个种子）</code>、<code>role="status"</code> 与 <code>aria-live="polite"</code>。</li>
+  <li>新增：三皮肤（<code>atlas/prism/flux</code>）的 topbar 均来自共享模板；禁止出现皮肤私有提示实现/CSS。</li>
+  <li>既有“唯一文本匹配点”守阵保持：新增代码不得出现前端文本匹配函数。</li>
+</ul>
+
+<h3>三皮肤 e2e</h3>
+<ol>
+  <li>测试桩预置 5 颗名称含“尼古”的种子；启动三皮肤。</li>
+  <li>搜索“尼古”，断言结果 5。</li>
+  <li>通过桩的“新增种子”命令加入第 6 颗；不碰搜索框。</li>
+  <li>断言 ≤5s 内结果 6、顶部出现 <code>结果已更新（+1 个种子）</code>、3s 后消失；控制台无报错。</li>
+  <li>0 命中变体：搜索不存在的词 → 加匹配种子 → 断言不闪全量列表、随后出现 1 行并提示 <code>+1</code>。</li>
+  <li>删除/改名变体：静默更新，不亮 <code>(+N)</code>，不把列表打回全量。</li>
+</ol>
+
+<h3>3000 库性能实测（P0 闸门）</h3>
+<ul>
+  <li>桩：<code>scripts/ui_harness.py --torrents 3000</code>；查询取窄词（命中少）与宽词（命中多）各 20 次。</li>
+  <li>记录：<code>/api/search</code> p50/p95、响应字节数、浏览器侧两帧间隔；同时观察主循环 tick 是否被拖慢。</li>
+  <li>闸门：p95 ≤ 50ms 且响应 ≤ 500KB → 冷却取 1000ms；超任一 → 冷却上调至 2000ms；若仍超 → 先做轻量刷新（hashes/精简行），不强行上线高频重查。</li>
+  <li>本节数字在 P0 后回填；未回填前 1000ms 标记为暂定。</li>
+</ul>
+
+<h3>实测结果（R1 回填，2026-11-03）</h3>
+<table>
+  <tr><th>项</th><th>实测</th><th>结论</th></tr>
+  <tr><td>P0 · 3000 桩窄查询 <code>GROUP1234</code></td><td>1 命中 · p50 <b>31.6ms</b> / p95 <b>39.7ms</b> · 响应 <b>1.2KB</b></td><td>闸门内（≤50ms / ≤500KB）</td></tr>
+  <tr><td>P0 · 3000 桩宽查询 <code>1080p</code></td><td>3000 命中 · p50 <b>109.9ms</b> / p95 <b>150.1ms</b> · 响应 <b>3.48MB</b></td><td>超闸门（p95&gt;50ms 且响应&gt;500KB）⇒ <code>SEARCH_REFRESH_MIN_MS = 2000</code></td></tr>
+  <tr><td>后端单测 + 前端静态守阵</td><td>四个改动测试文件 <b>173 passed / 1 skipped</b></td><td>全绿；<code>this.searchPending = true</code> 恰两处守阵保持</td></tr>
+  <tr><td>三皮肤 e2e（<code>e2e/search-auto-refresh.spec.mjs</code>）</td><td>atlas / prism / flux 各 2 条，<b>6 passed (15.2s)</b></td><td>含 0 命中变体与叠加筛选；结果 0→1、<code>+1</code> 提示、不闪全列表</td></tr>
+  <tr><td>真机（环境1 主实例 36595）</td><td><code>real.guard</code> 双实例全绿（真实种子 8 + 0，全程 paused）；新增 <code>real-fake</code> 种子 <code>SEARCHPROBE-real.bin</code> 后 <code>search_rev</code> 恰 +1（1793643345289→1793643345290），<code>/api/search</code> 0→1；浏览器内搜索不刷新页面、<b>约 3s</b> 自动出现 1 行，期间未闪现 9 行全量</td><td>PASS；提示为 3s 自收，视觉抓拍未单独留证（逻辑由 e2e 覆盖）；自造种子已删、<code>real.seed.clean</code> 已清、双实例已 <code>real.down</code></td></tr>
+  <tr><td>全量测试</td><td>见 <code>kb.baseline</code> 最新切片</td><td>不在此处手抄数字</td></tr>
+</table>
+
+<h3>真机验收</h3>
+<ul>
+  <li>真实 qB 环境搜索一个稳定词，用 qB 添加命名含该词的种子；一个轮询周期内结果增长，提示出现后消失。</li>
+  <li>搜索期间删除/改名命中种子：行消失/更新，无 pending 塌列表，无重复行（除已知相邻缺陷）。</li>
+  <li>断网重连触发 full round：只多一次刷新，不进入持续重查循环。</li>
+</ul>
+
+<h2><span class="no">§09</span>未决与依赖</h2>
+<table>
+  <tr><th>项</th><th>状态</th><th>处理</th></tr>
+  <tr><td>3000 库 <code>/api/search</code> 真实耗时</td><td class="good">已实测（P0）</td><td>窄/宽两档数字见 §08；冷却常量已冻结为 2000ms。</td></tr>
+  <tr><td>桩“新增种子”命令入口</td><td class="good">已实现（P3）</td><td><code>scripts/ui_harness.py</code> 的 <code>/__harness__/add_torrent</code> / <code>remove_torrent</code>：走生产同款 <code>_refresh_torrents</code>，再由 <code>store.apply_sync</code> 推出 added/removed；仅测试、仅回环。</td></tr>
+  <tr><td>配置热重载 tracker 重匹配路径</td><td class="good">已核（R1）</td><td><code>tracker</code> 不在 <code>_SNAPSHOT_FIELD_SET</code>，<code>tracker_name</code> 由 <code>tracker_conf</code> 派生且只在 <code>full_round</code> 重匹配时变化 ⇒ 由 <code>full_round</code> 触发覆盖，无需在配置应用处补自增。</td></tr>
+  <tr><td><code>searchUncovered</code> 陈旧重复</td><td>已知相邻缺陷</td><td>不在本计划修；必要时另立 issue，避免范围蔓延。</td></tr>
+  <tr><td>滚动锚点保护</td><td>观察项</td><td>实测有跳动再做；首版不加预防性代码。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-0120</span> 初版：依据会话只读根因分析、两轮 grilling 与用户 2026-11-03 的 U1–U5 拍板；主线定为“版本号 + 静默重查”，UI 提示定为共享 topbar 的“结果已更新（+N 个种子）”。</li>
+  <li><span class="tag">R1 · 26-11-03</span> 实施收口：P0 实测回填（宽查询超闸门 ⇒ 冷却定 2000ms）；触发字段去掉 <code>tracker</code>（由 <code>full_round</code> 覆盖）；<code>doSearch</code> 静态守阵正则放宽以容纳 <code>quiet</code> 形参；桩控制端点在 <code>_refresh_torrents</code> 后补 <code>web.flush_views(force=True)</code>（桩无主循环，否则 <code>/api/state</code> 仍是旧快照）；<code>status.search_rev</code> 守阵归位 <code>tests/test_web_hr.py</code>；真机一次 PASS（环境1，真实种子全程 paused）。</li>
+</ul>
+
+</div>
+</body>
+</html>

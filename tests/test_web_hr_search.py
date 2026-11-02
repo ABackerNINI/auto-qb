@@ -17,7 +17,9 @@
 - test_search_torrents_facet_rows: 候选行覆盖全部文本面(站点/分类/路径/标签行即时匹配, by 定位行类别) + facet 行负词整种子排除 —— 三页同源(26-09-26 单点化; 负词种子级 26-09-27 定案)
 - test_search_torrents_phrase: 短语 "…" 整段归一为连续子串, 词序敏感(terms-AND 命中而短语不命中的区分用例)
 - test_search_torrents_regression_envnv10: 回归(26-09-26 报障)——「恶女 10」命中单文件发布物, -ubweb 可排除
-- test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记, 不投递索引构建
+- test_search_torrents_negative_only_empty: 仅负词/空查询返回空 + negative_only 标记 + 当前 rev, 不投递索引构建
+- test_search_torrents_rev_snapshot_before_read: 守阵(plan 26-11-03-0120 S4)——rev 在读取 store 快照前取值(构行时自增仍回旧值)
+- test_api_state_reports_search_rev: 守阵(plan 26-11-03-0120 S3)——/api/status 与 /api/state 的 search_rev 同源且变化可见
 - test_search_torrents_file_match: 文件列表匹配(依赖已建索引)
 - test_search_torrents_building_triggers: 索引脏时 building=True 并投递构建命令
 - test_api_search_endpoint: GET /api/search 转发与鉴权(含空查询)
@@ -517,11 +519,55 @@ def test_search_torrents_negative_only_empty():
         seed_store(mgr, [t1])
 
         r = mgr.search_torrents("-dv")
-        assert r == {"results": [], "building": False, "negative_only": True}
+        assert r == {
+            "results": [],
+            "building": False,
+            "negative_only": True,
+            "rev": mgr.web.search_rev
+        }, "仅负词: 空结果 + negative_only + 当前搜索版本号"
         assert mgr.web.commands.empty(), "仅负词无从起搜, 不应投递构建命令"
         # 空查询: 同样空结果, 但 negative_only=False(前端按普通空态处理)
         r2 = mgr.search_torrents("")
-        assert r2 == {"results": [], "building": False, "negative_only": False}
+        assert r2 == {"results": [], "building": False, "negative_only": False, "rev": mgr.web.search_rev}
+
+
+def test_search_torrents_rev_snapshot_before_read():
+    """守阵(plan 26-11-03-0120 S4): search_rev 在读取 store 快照**之前**取值
+
+    若把取值写在迭代/构行之后, 搜索期间新增的种子可能已读到、却没带进新版本号 ⇒ 该响应
+    自报"最新", 前端不再补刷 ⇒ 漏更新。本用例在构行时自增版本号, 钉住响应仍带回旧 rev。
+    """
+    from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        seed_store(mgr, [FakeTorrent(hash="HA", name="Alpha")])
+        base = mgr.web.search_rev
+        orig = mgr._member_view
+
+        def bump(rec):
+            mgr.web.note_search_data_changed()
+            return orig(rec)
+
+        with mock.patch.object(mgr, "_member_view", side_effect=bump):
+            r = mgr.search_torrents("alpha")
+        assert r["rev"] == base, f"版本号必须在读快照前取值: {r['rev']} != {base}"
+        assert mgr.web.search_rev > base, "自增必须生效(供下一轮轮询发现落后)"
+        assert [x["hash"] for x in r["results"]] == ["HA"]
+
+
+def test_api_state_reports_search_rev(web_env):
+    """(plan 26-11-03-0120 S3) search_rev 恒回传且 /api/state 与 /api/status 同源"""
+    mgr, client = web_env
+    auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
+    status = client.get("/api/status", headers=auth).json()
+    state = client.get("/api/state", headers=auth).json()["status"]
+    assert status["search_rev"] == state["search_rev"] == mgr.web.search_rev
+    mgr.web.note_search_data_changed()
+    state2 = client.get("/api/state", headers=auth).json()["status"]
+    assert state2["search_rev"] == mgr.web.search_rev > status["search_rev"], \
+        "数据变化后 /api/state 必须回传新版本(rid 门控不得吞掉它)"
 
 
 def test_search_torrents_file_match():

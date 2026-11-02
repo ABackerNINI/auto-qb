@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="search-uncovered-stale-virtual-row">
+<meta name="issue-stamp" content="26-11-03-0254">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-search-auto-refresh">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留">
+<meta name="issue-summary" content="未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索">
+<title>搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留</h1>
+    <p class="lede">未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-03-0254-bug-search-uncovered-stale-virtual-row</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 02:54</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在 plan <code>26-11-03-0120</code>（WEBUI 搜索自动更新）落地后的回归中记录（2026-11-03）。与配置无关，与「搜索结果里的种子是否已归组」相关。两个现象：</p>
+    <ul>
+      <li><strong>A 重复展示</strong>：搜索命中一个<strong>未归组</strong>种子（分组关闭 / 同 <code>save_path</code> 暂无第二个种子 / 文件列表不可读）→ 结果用 <code>searchUncovered</code> 的虚拟行兜底。随后该种子<strong>变成已归组</strong>（同 <code>save_path</code> 出现第二个种子），列表同屏出现<strong>真实组行 + 陈旧虚拟行</strong>，同一个种子展示两次。</li>
+      <li><strong>B 删除后滞留</strong>：搜索命中后该种子被删除 / 移出命中集，虚拟行仍留在结果里，直到用户重新输入搜索词（或下一次 <code>search_rev</code> 变化触发静默重查）。</li>
+    </ul>
+    <p class="hint">本报告只记录，不修；现象由用户报告 + 静态代码可证，尚未补 e2e 复现用例。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">静态代码证据（取证 2026-11-03 02:54，行号为当时值）：</p>
+<pre><code># src/auto_qb/webui/static/shared/view.js:71  (doSearch 内, 只在搜索时算一次)
+this.searchUncovered = results.filter((r) => !grouped.has(r.hash));
+
+# src/auto_qb/webui/static/shared/filters.js:225-249  (filteredTorrents, 渲染时无条件追加)
+for (const r of this.searchUncovered) {
+  ...
+  kept.push({
+    key: "u-" + r.hash, name: r.name, count: 1, virtual: true,
+    ...
+    members: [{ ...r, hit: true }],
+  });
+}
+
+# src/auto_qb/webui/static/shared/state.js:231  (字段声明)
+searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表不可读), 以虚拟行兜底展示</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>搜索激活（非空查询 + 非 <code>negative_only</code>）且命中集里有未归组种子；随后该种子<strong>被归组</strong>（同 <code>save_path</code> 出现第二个种子）或<strong>被删除</strong>。分组启用时更常见；与站点/皮肤无关。</td></tr>
+      <tr><td>影响范围</td><td>三类皮肤（atlas / prism / flux）的搜索结果列表（<code>filteredTorrents</code>），可与分类/标签/路径/站点/HR 筛选叠加；只影响前端展示与行计数，不影响 <code>/api/search</code> 返回与后端数据。</td></tr>
+      <tr><td>严重度</td><td>中：重复行会让计数与「选中/操作目标」失真；滞留行会让人对已删除种子继续操作（点下去 404/回执失败），但不崩溃、不丢数据。0 命中变体不触发。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/webui/static/shared/view.js:71</code>（取证 2026-11-03 02:54）· 符号 <code>doSearch</code> · grep 关键词 <code>searchUncovered</code> · 虚拟行集合只在搜索时按当时 <code>grouped</code> 计算一次。</li>
+      <li><code>src/auto_qb/webui/static/shared/filters.js:225-249</code>（取证同上）· 符号 <code>filteredTorrents</code> · grep 关键词 <code>"u-" + r.hash</code> / <code>virtual: true</code> · 渲染时对 <code>searchUncovered</code> 无条件追加，不校验该 hash 是否已进入当前组视图。</li>
+      <li><code>src/auto_qb/webui/static/shared/state.js:231</code>（取证同上）· 字段 <code>searchUncovered</code>。</li>
+      <li>缓解链路：<code>src/auto_qb/webui/static/shared/polling.js</code> 的 <code>_maybeSearchRefresh</code> → <code>view.js</code> 的 <code>doSearch(true)</code> · grep 关键词 <code>_maybeSearchRefresh</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">初步结论（静态可证，未做动态复现）：<code>searchUncovered</code> 是 <code>doSearch</code> 时刻的<strong>快照</strong>，渲染层把「真实组」与「该快照」两路<strong>无条件合并</strong>，合流时既不校验 hash 是否已在当前组视图里，也不校验 hash 是否仍在 <code>searchHits</code> 内 ⇒ 转归组后重复、删除后滞留。已排除：<code>/api/search</code> 返回重复项（后端只回种子列表，重复来自前端两路合并）。</div>
+    <p><strong>静默重查为何只是缓解而非治本</strong>：<code>_maybeSearchRefresh</code> 只在 <code>status.search_rev !== searchRevApplied</code> 时才重跑 <code>doSearch(true)</code>，而 <code>search_rev</code> 只在 added/removed、<code>name/category/save_path/tags</code> 变化与 <code>full_round</code> 时 +1；分组归属变化不保证伴随一次 rev 变化（且 <code>searchPending</code> / <code>_searchRefreshBusy</code> / 冷却窗口会跳过本轮）。即便 rev 变化，从「组行已出现」到「下一次静默重查落袋」之间仍有一帧重复可见。真正的边界应在渲染/状态层：合并前按当前组哈希集去重，并剔除已不在 <code>searchHits</code> 的虚拟行。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向（只写方案，不在本报告实施）：</p>
+    <ul>
+      <li><strong>A 渲染层去重（推荐，改动最小）</strong>：<code>filteredTorrents</code> 注入虚拟行前，先用当前组视图的成员哈希建一个 Set（可复用已有分组索引），跳过已在组内的 <code>r.hash</code>；同时跳过不在 <code>this.searchHits</code> 内的 <code>r</code>（删除后残留）。代价：每次过滤多一次 O(n) 集合构建（可缓存到 <code>group_view_ver</code> 变化时）。</li>
+      <li><strong>B 状态层重算</strong>：在轮询成功且 <code>group_view_ver</code> / 组索引变化时重算 <code>searchUncovered</code>（按当前 <code>grouped</code> 与最新命中集）。代价：多一次全量 <code>filter</code>；需与 <code>doSearch</code> 的 grouped 口径保持单点，避免两份计算漂移。</li>
+    </ul>
+    <p><strong>验收判据</strong>（认领后按此补测试）：① 未归组命中转归组后结果只有 1 行，不出现 <code>key: "u-&lt;hash&gt;"</code> 虚拟行；② 删除命中后虚拟行在一个轮询周期内消失，无需重新输入搜索词；③ 静态守阵钉住「注入虚拟行前跳过已在组 hash / 已不在命中集 hash」；④ e2e 覆盖 A/B 两场景（三皮肤至少各 1 条）；⑤ 不新增第三处 <code>this.searchPending = true</code>，自动更新过程不闪全列表。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-03 02:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-03-0254-bug-search-uncovered-stale-virtual-row.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

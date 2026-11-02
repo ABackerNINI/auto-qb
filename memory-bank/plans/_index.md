@@ -24,6 +24,7 @@
 
 ## Done
 
+- [26-11-03-0120] [WEBUI 搜索结果随新增种子自动更新](26-11-03-0120-plan-webui-search-auto-refresh.html) — `webui-search-auto-refresh`
 - [26-11-02-0657] [测试临时目录自举与互斥锁方案 — R→H→%TEMP% 固定探测 · 禁静默降级 · 禁外部 TMPDIR · 锁自举 · 评审稿](26-11-02-0657-plan-testing-tmpdir-bootstrap.html) — `testing-tmpdir-bootstrap`
 - [26-11-02-0351] [WEBUI 大文件列表性能统一优化(抽屉千级文件 + 主表千级复测)](26-11-02-0351-plan-webui-large-filelist-perf.html) — `webui-large-filelist-perf`
 - [26-11-01-2212] [RM09 WebUI 写侧 漂移复测轮排期计划](26-11-01-2212-plan-real-rm09-drift.html) — `real-rm09-drift`
@@ -83,9 +84,8 @@
 - [26-10-16-0214] [HR 扩展「连接后端」区重排 + 实例状态入表 修改计划 · auto-qb](26-10-16-0214-plan-hr-ext-connect-ui.html) — `hr-ext-connect-ui`
 - [26-10-15-2357] [HR 扩展「连接自愈 + 手动优先 + 不静默」修改计划 · auto-qb](26-10-15-2357-plan-hr-ext-connect-selfheal.html) — `hr-ext-connect-selfheal`
 - [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
-- [26-10-14-1241] [HR 取数通道「去端口 + 跨机」联合实施计划 · auto-qb](26-10-14-1241-plan-hr-channel-portless-remote.html) — `hr-channel-portless-remote`
 
-> 更早的 **131** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **132** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

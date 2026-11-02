@@ -233,7 +233,17 @@ window.AQB_STATE = {
       searchNegativeOnly: false,  // 查询只含排除词(无正判据, 服务端返回空, 前端据此提示)
       searchError: "",        // 搜索请求失败提示(不再静默)
       searchPending: false,   // 搜索待响应(防抖武装起/请求在途, 落袋或复位即翻回): 待响应期空命中集不得接管列表
-      searchTimer: null,      // 防抖 + 索引构建自动重查定时器
+      searchTimer: null,      // 输入防抖定时器(只负责「停手 400ms 后再发一次搜索」)
+      // 搜索自动刷新(plan 26-11-03-0120): 服务端 search_rev 一变(增删/名称/分类/路径/标签),
+      // 前端在下一轮 /api/state 发现落后就静默重查一次, 整集替换命中集, 不塌列表、不闪全列表。
+      searchRevApplied: -1,   // 已落袋结果对应的服务端 search_rev(-1 = 尚无结果)
+      searchRefreshNotice: false,  // 「结果已更新(+N)」提示可见(3s 窗口, 查询变更/清空/切视图/手动搜索即收)
+      searchRefreshDelta: 0,       // 窗口内累计新增命中数(按 hash 去重, 以窗口起点命中集为基准)
+      _searchRefreshAt: 0,         // 最近一次静默重查时刻(冷却锚点; 下划线字段不进模板代理)
+      _searchRefreshBusy: false,   // 静默重查在途(防重入; 与 searchPending 分开, 后者只代表手动搜索)
+      _searchRefreshTimer: null,   // 索引构建续查定时器(与输入防抖 searchTimer 分开, 互不取消)
+      _searchHintTimer: null,      // 提示消失定时器(每轮刷新重新计时)
+      _searchHintBase: null,       // 提示窗口起点的命中 hash 集(窗口内累计计数不重复)
       searchHelpOpen: false,  // 搜索语法浮卡开合(计划 26-09-28-0201 方案A; 临时浮层, 点空白/Esc/导航收起)
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
       // 多选筛选(组内任一成员命中任一选中值即保留该组; 同一筛选器内多选为"或")

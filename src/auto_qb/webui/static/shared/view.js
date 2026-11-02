@@ -1,10 +1,19 @@
 /* view.js — 视图切换与搜索域(onSearchInput/resetSearch/doSearch/persistUiPage/goView/
  * stashExpandState/restoreExpandState/setViewMode): W2b 自 app.js 拆出, 全局 mixin 方法域。 */
+/* 搜索自动刷新参数(plan 26-11-03-0120 F1, 三皮肤共用单点):
+ * SEARCH_REFRESH_MIN_MS —— 静默重查最小间隔(P0 实测 3000 种子库: 窄查询 p95 39.7ms/1.2KB,
+ *   宽查询(全库命中) p95 150.1ms/3.48MB, 超闸门"p95<=50ms 且响应<=500KB" -> 按判据取 2000ms);
+ *   只在 search_rev 变化时才请求, 无数据变化不空转, 冷却仅防高频变更风暴。
+ * SEARCH_REFRESH_HINT_MS —— 「结果已更新(+N 个种子)」提示停留时长。 */
+const SEARCH_REFRESH_MIN_MS = 2000;
+const SEARCH_REFRESH_HINT_MS = 3000;
 window.AQB_VIEW = {
   methods: {
     onSearchInput(event) {
       // 输入防抖: 停止输入 400ms 后触发搜索; 清空则立即恢复辅种管理视图(不等防抖)
       if (this.searchTimer) clearTimeout(this.searchTimer);
+      // 查询一变, 上一轮「结果已更新(+N)」的窗口立即作废(计数基准也随之失效)
+      this._clearSearchRefreshHint();
       if (!(event.target.value || "").trim()) {
         this.resetSearch();
         return;
@@ -22,15 +31,29 @@ window.AQB_VIEW = {
       this.searchNegativeOnly = false;
       this.searchError = "";
       this.searchPending = false;
+      // 自动刷新域一并复位: 结果已不存在, 版本号/提示窗口/索引续查都没有载体了
+      this.searchRevApplied = -1;
+      this._clearSearchRefreshHint();
+      if (this._searchRefreshTimer) clearTimeout(this._searchRefreshTimer);
+      this._searchRefreshTimer = null;
       this.expandedKey = null;
     },
-    async doSearch() {
+    async doSearch(quiet = false) {
       const q = (this.searchQuery || "").trim();
       if (!q) {
         this.resetSearch();
         return;
       }
-      this.searchPending = true;  // 直达入口(searchHelpFill)不经 onSearchInput, 在此补武装
+      const useQuiet = !!quiet;
+      if (useQuiet) {
+        // 静默刷新(plan 26-11-03-0120 F2): 不武装 searchPending(列表保持现状, 落袋整集替换),
+        // 不打断提示窗口; 防重入用独立标志(与手动搜索的在途态分开)
+        if (this._searchRefreshBusy) return;
+        this._searchRefreshBusy = true;
+      } else {
+        this.searchPending = true;  // 直达入口(searchHelpFill)不经 onSearchInput, 在此补武装
+        this._clearSearchRefreshHint();  // 手动搜索: 上一轮自动刷新提示作废
+      }
       try {
         const data = await this.api(`/api/search?q=${encodeURIComponent(q)}`);
         // 请求代际守卫(query 戳, 同 drawer.js _drawerStale 收口式): 落袋前比对当前搜索框
@@ -39,29 +62,67 @@ window.AQB_VIEW = {
         // 复位自动失配, 在途旧响应同样丢弃
         if ((this.searchQuery || "").trim() !== q) return;  // 失配弃单不动 pending(新词的 doSearch 已接管)
         const results = data.results || [];
+        const prevHits = this.searchHits;  // 整集替换前的命中集(自动刷新提示的计数基准)
         this.searchHits = new Set(results.map((r) => r.hash));
         // 实际归组的种子由分组筛选展示; 未归组的命中(分组未启用/文件列表不可读)单独兜底
         const grouped = new Set();
         for (const g of this.groups) for (const m of g.members) grouped.add(m.hash);
-        this.searchPending = false;  // 本词落袋: 待响应期结束(之后空命中集 = 服务端真判 0 命中)
+        if (!useQuiet) this.searchPending = false;  // 本词落袋: 待响应期结束(静默刷新从未武装)
         this.searchUncovered = results.filter((r) => !grouped.has(r.hash));
         this.searchBuilding = !!data.building;
         this.searchNegativeOnly = !!data.negative_only;
         this.searchError = "";
+        // 版本对齐(plan 26-11-03-0120 S4/F2): 服务端在取快照前记 rev, 故落袋即"至少覆盖到
+        // 该版本"; 响应缺 rev(旧服务端)时保持旧值, 下次轮询自然再试
+        this.searchRevApplied = typeof data.rev === "number" ? data.rev : this.searchRevApplied;
+        if (useQuiet) this._noteSearchRefresh(prevHits);
         if (this.searchBuilding) {
-          // 文件索引构建中(增量限流可能需多轮): 1s 后自动重查, 直至 building 消除
-          if (this.searchTimer) clearTimeout(this.searchTimer);
-          this.searchTimer = setTimeout(() => this.doSearch(), 1000);
+          // 文件索引构建中(增量限流可能需多轮): 用**独立**定时器续查, 绝不复用输入防抖的
+          // searchTimer —— 复用会让续查取消用户刚输入的防抖, 首词/改词被吞
+          if (this._searchRefreshTimer) clearTimeout(this._searchRefreshTimer);
+          this._searchRefreshTimer = setTimeout(() => this.doSearch(true), 1000);
         }
       } catch (e) {
         if ((this.searchQuery || "").trim() !== q) return;  // 旧请求的错误不得写进新词的状态
-        // 不再静默(否则与"无匹配结果"无法区分): 401 由 api() 回登录框, 其余在搜索框旁提示
         if (!e.auth) {
-          const msg = e.message || "搜索失败";
-          this.resetSearch();
-          this.searchError = msg;
+          if (useQuiet) {
+            // 静默刷新失败: 保留旧结果(不塌列表), 不弹错误; 若索引仍在构建则维持续查,
+            // 否则等到下一轮 search_rev 变化再试(错误风暴由轮询退避吸收)
+            if (this.searchBuilding) {
+              if (this._searchRefreshTimer) clearTimeout(this._searchRefreshTimer);
+              this._searchRefreshTimer = setTimeout(() => this.doSearch(true), 1000);
+            }
+          } else {
+            // 不再静默(否则与"无匹配结果"无法区分): 401 由 api() 回登录框, 其余在搜索框旁提示
+            const msg = e.message || "搜索失败";
+            this.resetSearch();
+            this.searchError = msg;
+          }
         }
+      } finally {
+        if (useQuiet) this._searchRefreshBusy = false;
       }
+    },
+    /* 自动刷新提示(plan 26-11-03-0120 F4): 计数口径 = 本次命中集相对**提示窗口起点**新增的
+     * hash 数(窗口内累计, 多轮刷新不重复计数); "0 命中 -> 有命中"同样按此口径显示(+N)。
+     * 只增不减: 纯删除/改名不提示(不打扰); 查询变更/清空/切视图/手动搜索立即收窗口。 */
+    _noteSearchRefresh(prevHits) {
+      const base = this._searchHintBase || prevHits;
+      let added = 0;
+      for (const h of this.searchHits) if (!base.has(h)) added += 1;
+      if (!added) return;
+      this._searchHintBase = base;  // 窗口内沿用起点基准, 累计计数不因多轮刷新重复
+      this.searchRefreshDelta = added;
+      this.searchRefreshNotice = true;
+      if (this._searchHintTimer) clearTimeout(this._searchHintTimer);
+      this._searchHintTimer = setTimeout(() => this._clearSearchRefreshHint(), SEARCH_REFRESH_HINT_MS);
+    },
+    _clearSearchRefreshHint() {
+      if (this._searchHintTimer) clearTimeout(this._searchHintTimer);
+      this._searchHintTimer = null;
+      this.searchRefreshNotice = false;
+      this.searchRefreshDelta = 0;
+      this._searchHintBase = null;
     },
     /* 搜索语法浮卡(计划 26-09-28-0201 方案A): 开合 + 示例回填。
      * 语法语义单点在服务端 views.py::_parse_query —— 本卡只做入口, 不做任何匹配实现。 */
@@ -142,6 +203,7 @@ window.AQB_VIEW = {
       if (this.viewMode === mode) return;
       this.stashExpandState();
       this.viewMode = mode;
+      this._clearSearchRefreshHint();  // 提示属于"当前视图的结果变化", 切视图即收(计划 26-11-03-0120 F4)
       try { localStorage.setItem("autoqb.ui.view", mode); } catch { /* 持久化失败不影响功能 */ }
       this.restoreExpandState(mode);  // 切回原视图时把展开态还回去(在 lastRid 置空取全量之前, 用旧行验存活性)
       // P1-1: 服务端只回当前视图的数组, 切视图后本地持有的 rid 与新视图的数据不再对应

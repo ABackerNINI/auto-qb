@@ -80,6 +80,11 @@ from ..infra import utils
 
 logger = logging.getLogger(__name__)
 
+# 搜索相关字段(plan 26-11-03-0120 S2): 这些字段变化会改变 /api/search 的命中集。
+# !不写 "tracker": 快照字段表(compat._SNAPSHOT_FIELD_SET)无此字段, tracker_name 由
+# tracker_conf 派生, 其变化只发生在全量轮重匹配时 —— 已由 full_round 触发覆盖。
+_SEARCH_TRIGGER_FIELDS = frozenset(("name", "category", "save_path", "tags"))
+
 
 class QbConnectError(AutoQbError):
     """无法连接 qBittorrent(非托管模式首连失败)
@@ -900,6 +905,9 @@ class QbManager(
         """
         prev_records = dict(self.store.by_hash)  # 删除前快照副本(供 on_torrent_deleted 只读动作)
         added, removed = self.store.apply_sync(self.api)
+        # 搜索数据版本(plan 26-11-03-0120 S2): 增删种子或全量轮(tracker 重匹配)都算变化;
+        # 每 tick 最多自增一次(按批合并, 不按种子数), 由下方统一裁决后自增。
+        search_data_changed = bool(added or removed)
         if self.store.need_validate:
             self._validate_torrent_schema(self.store.validate_sample)
             # fs.path_map 映射自检(非 fail-fast, 只记日志): 首轮全量同步后跑一次 ——
@@ -911,10 +919,19 @@ class QbManager(
             # (存量记录不走 added 分支, 事件分派/维护任务都依赖 conf 已就位) —— 相位广播
             # (plan §4.2): 重匹配知识在 tracker 模块(ctx.trackers), 内核只报「全量轮」时机
             self.events.emit("full_round")
+            search_data_changed = True
         # 分组视图过期由 store.view_changed 精确驱动(仅视图字段/成员变化时置脏), 不再每轮无条件置脏
         # 种子集变化(新增/删除) -> 搜索索引需反映新/删种子, 标记脏(Web 搜索时重建)
         if added or removed:
             self.web.mark_search_index_dirty()
+        # 搜索数据版本(plan 26-11-03-0120 S2): 增删/全量轮之外, 名称/分类/保存路径/标签
+        # 变化也会改变命中集(名称命中、分类/路径/标签过滤); 速度/进度/大小等高频字段不触发。
+        if not search_data_changed and self.store.delta_fields:
+            search_data_changed = any(
+                not _SEARCH_TRIGGER_FIELDS.isdisjoint(fields) for fields in self.store.delta_fields.values()
+            )
+        if search_data_changed:
+            self.web.note_search_data_changed()
         # 删除种子的删除前快照: 种子已从 store 移除后, ctx.torrent 回退此副本供只读动作留档
         removed_snapshots = {h: prev_records[h] for h in removed if h in prev_records}
 

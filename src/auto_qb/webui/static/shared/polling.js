@@ -342,6 +342,23 @@ window.AQB_POLL = {
       if (payload.shows !== undefined) this.shows = payload.shows;  // 追剧视图(R10)
       return payload;
     },
+    /* 搜索自动刷新触发点(plan 26-11-03-0120 F3): 每轮 /api/state 成功后比对服务端
+     * search_rev 与"手上结果的版本"。落后 => 冷却允许就静默重查一次(整集替换, 不闪全列表);
+     * 无数据变化时版本相等, 零额外请求。跳过条件: 手动搜索在途(pending)/静默重查在途/
+     * 仅负词(结果恒空)/无搜索词(非搜索态)/版本缺失(旧服务端)。
+     * 冷却 SEARCH_REFRESH_MIN_MS 按 P0 闸门取 2000ms —— 轮询本身 >=1.5s, 二者叠加后
+     * 实际最小刷新间隔约 2s, 高频变更风暴也不会把 Web 线程打满。 */
+    _maybeSearchRefresh() {
+      if (this.searchPending || this._searchRefreshBusy) return;
+      if (this.searchNegativeOnly) return;
+      if (!(this.searchQuery || "").trim()) return;
+      const rev = this.status && this.status.search_rev;
+      if (typeof rev !== "number" || rev === this.searchRevApplied) return;
+      const now = Date.now();
+      if (this._searchRefreshAt && now - this._searchRefreshAt < SEARCH_REFRESH_MIN_MS) return;
+      this._searchRefreshAt = now;
+      this.doSearch(true);
+    },
     async refresh() {
       try {
         // rid 增量: 带上已持有的视图版本, 服务端版本未变时不回传数组(响应体趋近于零)。
@@ -404,6 +421,7 @@ window.AQB_POLL = {
         this.reapplyPending();    // P0-3: 整表替换后把仍 pending 的乐观值重新贴上
         this.serviceDown = false;
         this.pollFails = 0;
+        this._maybeSearchRefresh();  // 本轮 state 已落, 顺带裁决搜索是否需要静默重查(plan 26-11-03-0120)
       } catch (e) {
         // 服务不可达(程序退出/网络失败): 置 serviceDown 显示横幅; 轮询继续, 服务恢复后自动消失。
         // 401(密钥无效): 停止轮询并回到密钥输入界面(防无谓空转)。
