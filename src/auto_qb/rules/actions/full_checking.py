@@ -144,6 +144,10 @@ class FullCheckingMixin:
             rec = manager.store.get(h)
             if rec is None or rec.progress >= 1.0:
                 manager.state.get("recheck_fails", {}).pop(h, None)
+                # 自愈清除即时落盘(与 bump_recheck_fail 同写点纪律): 否则只剩周期落盘兜底,
+                # state_save_interval 窗口内崩溃/断电会丢本次自愈; 残留记录下次 1.6 会再自愈
+                # (代价=一次多余 recheck), 且频率受当日失败上限约束, 不怕写放大
+                manager.ctx.state.save()
                 continue
             if sizes.get(h) == mine:
                 # INFO 提级: 生产 INFO 日志下必须能看到「谁因推断被拒检」(2026-09-25 排障盲区)

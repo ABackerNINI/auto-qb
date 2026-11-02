@@ -20,6 +20,8 @@
   自己, count==0 的兄弟不推断
 - test_group_fail_inference_scans_past_self_and_stale_records: C26 守阵 —— 1.6 遍历遇自身/陈旧
   记录只跳过当前项(continue→break 会截断后续真失败成员)
+- test_group_fail_selfheal_flushes_state: 1.6 假失败自愈 pop 后即时落盘(pop 后盘上已无记录)
+- test_group_fail_no_selfheal_skips_save: 1.6 未发生自愈 -> 不 pop 不落盘(两路径对照)
 """
 
 import json
@@ -467,3 +469,58 @@ def test_group_fail_inference_scans_past_self_and_stale_records():
     assert out is not None and out.is_skipped, "末位的真失败成员仍应被判定并推断跳过"
     assert "HC" in out.message
     assert "HB" not in mgr.state.get("recheck_fails", {}), "陈旧记录应被自愈清除"
+
+
+def test_group_fail_selfheal_flushes_state():
+    """1.6 假失败自愈清除即时落盘: pop 后状态已在盘上, 不依赖周期落盘窗口
+
+    回归 issue 26-11-03-0104: 自愈只改内存时, 崩溃/断电会丢失本次自愈(残留记录下次 1.6
+    再自愈, 代价是一次多余 recheck)。本用例直接驱动生产写点、不经跳检路径 —— 跳检完成
+    自身也会 save_state, 走整条规则链会把两种写点混在一起, 掩盖本处漏落盘。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    me = make_target(hash="HA")
+    done = make_target(hash="HB", state="pausedUP", progress=1.0)  # 已完成: 记录必为假失败
+    seed_store(mgr, [me, done])
+    inject_group(mgr, "HA", "HB")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {}).update({"HA": {"movie.mkv": 100}, "HB": {"movie.mkv": 100}})
+    mgr.state.setdefault("recheck_fails", {})["HB"] = {"date": date.today().isoformat(), "count": 2}
+    ctx = make_ctx(mgr, me, client)
+    action = CheckAction({"basic_check": "filelist"})
+    with patch.object(mgr.ctx.state, "save", wraps=mgr.ctx.state.save) as m_save:
+        assert action._skip_on_group_check_failed(ctx, ["HA", "HB"]) is None, "自愈不参与推断"
+    assert m_save.call_count == 1, "自愈清除必须即时落盘一次"
+    assert os.path.exists(mgr.state_file), "自愈后状态文件必须已写出"
+    with open(mgr.state_file, "r", encoding="utf-8") as f:
+        on_disk = json.load(f)
+    assert "HB" not in on_disk.get("recheck_fails", {}), "盘上不得残留已自愈的失败记录"
+
+
+def test_group_fail_no_selfheal_skips_save():
+    """1.6 未发生自愈 -> 不 pop 不落盘(落盘只在自愈写点发生, 不等于每次 1.6 都写盘)
+
+    与 test_group_fail_selfheal_flushes_state 配成两路径: 记录仍指向未完成成员时是有效
+    失败证据, 映射不一致也不推断 —— 内存记录原样保留, 且不得产生额外磁盘写入。
+    """
+    cfg = make_check_cfg(without_mode="full-checking", without_start=True)
+    mgr = make_mgr(cfg, with_tq=True)
+    client = CheckingFakeClient()
+    mgr.client = client
+    me = make_target(hash="HA")
+    sib = make_target(hash="HB")  # 未完成: 失败记录有效
+    seed_store(mgr, [me, sib])
+    inject_group(mgr, "HA", "HB")
+    key = mgr.store.member_to_key["HA"]
+    mgr.store.group_sizes.setdefault(key, {}).update({"HA": {"movie.mkv": 100}, "HB": {"movie.mkv": 200}})
+    mgr.state.setdefault("recheck_fails", {})["HB"] = {"date": date.today().isoformat(), "count": 1}
+    ctx = make_ctx(mgr, me, client)
+    action = CheckAction({"basic_check": "filelist"})
+    with patch.object(mgr.ctx.state, "save", wraps=mgr.ctx.state.save) as m_save:
+        assert action._skip_on_group_check_failed(ctx, ["HA", "HB"]) is None, "映射不一致不推断"
+        assert m_save.call_count == 0, "未发生自愈不得落盘"
+    assert "HB" in mgr.state.get("recheck_fails", {}), "有效失败记录不得被清除"
+    assert not os.path.exists(mgr.state_file), "未发生自愈时不应凭空写出状态文件"
