@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-02-0902">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-large-filelist-perf">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-02-webui-large-filelist-perf.md, memory-bank/pitfalls/web-ui/est-cold-start-vs-absolute-threshold.md, memory-bank/testing/baselines/26-11-02-1129-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-1248-webui-large-filelist-perf.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="各视图首次访问全量量齐行高(3000 行单发长任务)">
 <meta name="issue-summary" content="各视图首访时窗口化引擎走全量渲染量齐行高, 3000 行下单发约 5.4s 长任务; 可考虑首访用估算行高渐进量齐压平">
 <title>各视图首次访问全量量齐行高(3000 行单发长任务) · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-02-0902-perf-webui-first-visit-rowh-measure</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 09:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,17 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-02 09:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 10:59 — 认领（用户指派本会话「认领并修复」）: 复验仍复现，根因确认 = 首访「全量渲染 → 逐行量齐」冷启动；状态 <strong>In Progress</strong></li>
+      <li>2026-11-02 11:18 — 修复完成并验证: 千级首访改估算开窗 + 渐进量齐(<code>ROW_WIN_EST_MIN</code> / <code>_rowHAvgOf</code>), 3000 行首访 longtask 8432ms → 97ms; 状态 <strong>Done</strong></li>
+      <li>2026-11-02 12:48 — 二轮调优(用户指令「边界调小+补两处空档」): <code>ROW_WIN_EST_MIN</code> 1000→200(拐点实测定值, 见修复后补充二段); 空档1/空档2 判据补齐并负向验证; 状态维持 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-02（认领前复测）<strong>仍复现</strong> —— 桩 <code>scripts/ui_harness.py --torrents 3000</code>（端口 8337），首访点击种子视图, Playwright + CDP CPU Profile 实测<strong>单发 longtask 8432ms</strong>（起点约 2141ms, 持续到约 10573ms）；CPU 自耗 Top: <code>getBoundingClientRect</code> 2731.8ms（3310 次）、<code>addEventListener</code> 1245.4ms、<code>removeEventListener</code> 1190.6ms，<code>_measureRowH</code> 自身仅 24.5ms。量齐后 <code>_winMeasured.torrent=true</code>、常驻 DOM 20 行、<code>scrollHeight=191009</code>，窗口化稳态正常。结论: 长任务由「全量渲染 3000 行 + 逐行 gBR 量齐 + 每行监听增删」构成，与建议修法①「估算行高 + 渐进量齐」的判断一致。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：按建议修法①落地，不新增机制 —— ①<code>app.js</code> 增 <code>ROW_WIN_EST_MIN=1000</code>：千级以下仍走「全量渲染 → 量齐」的精确冷启动（保住百行级严格判据），达到千级首帧直接用 <code>_rowH[kind] || ROW_WIN_EST_H[kind]</code> 估算开窗、gap 缺失取 <code>ROW_WIN_GAP_FALLBACK</code>；②<code>columns.js</code> 的 <code>_rowWindow</code> 冷启动门控按上条分档，<code>_winMeasured</code> 语义改为「首访窗口行已实测」，缺的行随滚动/轮询渐进补齐；③未量过的行占位改取<strong>已实测行的全局均值</strong>（新增 <code>_rowHAvgOf(kind)</code>），替代原先的「当前窗口均值」—— 后者会让占位总高随窗口移动每帧抖动；④<code>_measureRowH</code> 去掉一次性 sum 累计，只逐行写 <code>_rowHs</code>。抽屉 content 同走该路径，千级以下行为零变化。</p>
+    <p><strong>验证方式</strong>：①桩 <code>scripts/ui_harness.py --torrents 3000</code>（端口 8437）+ Playwright 首访探针（Playwright + longtask/gBR 计数）：修复前首访单发 longtask <strong>8432ms</strong>、gBR 3310 次；修复后首访首行可见 <strong>263ms</strong>、longtask 最大 <strong>97ms</strong>、gBR <strong>55 次</strong>。②<code>commands run test.quick</code>：<strong>4837 passed / 10 skipped / 0 failed</strong>（124.10s）。③e2e 默认 300 档 <code>perf.spec.mjs</code>：<strong>6 passed / 4 skipped / 0 failed</strong>（19.4s）；3000 档 <code>perf.spec.mjs</code>：<strong>10 passed / 0 failed</strong>（1.2m，含 A/B / 行窗口化 / 占位粗界 / 滚到底不塌陷 / W5 同屏交叉）；3000 档 <code>window-invalidation.spec.mjs</code>：<strong>6 passed</strong>（53.6s）。</p>
+    <p><strong>与建议修法的差异</strong>：无改道。补充：千级首访的占位总高不再与全量渲染逐像素相等（估算值随滚动实测收敛；3000 行实测偏差约 13%~14%，方向取决于首屏采样到哪一档行高，如 216538 vs 190979 或 164278 vs 190979），故 <code>e2e/perf.spec.mjs</code> 两条绝对阈值按行数分档：千级以下保持原值（|Δ|&lt;50px / 滚动 |Δ|&lt;200px），千级及以上「占位总高」退为粗界守阵（0.5~1.5 倍全量，防估算 ×2 / 接近 0 的失真）、「滚到底」改为只禁塌陷（允许总高随补量增长）—— 判据语义不变（禁的是塌陷与失真），精确判据留在默认档。真正收敛到逐像素相等需把全表滚一遍（约 125 步），代价不划算，故不做。</p>
+    <p><strong>二轮调优（2026-11-02 12:48, 用户指令）</strong>：①<strong>阈值实测定值 1000→200</strong> —— 同一探针在 100/150/200/250/300/400/500/600/700/800 档各跑一次首访(全部 gBR≈行数确认走精确路径), longtask 随行数近线性涨: 100 行 146ms / 150 行 215ms / 200 行 334ms / 250 行 377ms / 300 行 455ms / 400 行 627ms / 500 行 733ms / 600 行 947ms / 700 行 1113ms / 800 行 1253ms, 250ms 拐点落在 150~200 之间 —— 故取 <code>ROW_WIN_EST_MIN=200</code> 与 <code>ROW_WIN_MIN</code> 合并, 「全量渲染」与「精确冷启动」两档合一; 用户举例的 400/500/512 均不满足 250ms 线(400 档 627ms 为其 2.5 倍)。副作用 = 200~999 原精确冷启动档消失(334~1521ms 降至 ~60ms), 默认 300 档 e2e 从严格口径转粗界档(设计变化的必然结果)。②<strong>空档1(反向判别力)</strong>: perf.spec 新增「首访路径指纹」用例 —— addInitScript 注入 gBR 计数、点种子页签前清零, 断言首访 gBR&lt;150(估算实测 ~55 与行数无关; 误切精确时 ≈行数: 200 档 228 / 300 档 325 / 999 档 1051; 150 居中各留 2.7×/1.5× 余量); 负向验证 = 门控临时恒 off 强制精确路径, 双皮肤指纹用例红(gbr=325/行数300), 还原回绿。③<strong>空档2(单测边界)</strong>: node 探针电池加边界两断言 n=199 走 off(全量) / n=200 走估算开窗(active); 负向验证 = 门控恒 off, 恰红预期两条, 还原回绿(1 passed)。④<strong>顺带修正</strong>: 「滚到底」估算档判据原按「总高只会增长」写单向判据, 300 档首次踩进即红(22887→21591px, Δ-1296 —— 收敛方向不定), 改按比例禁塌陷(|Δ|&lt;before×25%)。⑤验证轮: e2e 199 档 6 passed / 200 档 8 passed / 默认 300 档 8 passed(均双皮肤零 failed), test.full 4837 passed / 10 skipped / 99%(基线切片 26-11-02-1248)。</p>
   </section>
 
   <footer>

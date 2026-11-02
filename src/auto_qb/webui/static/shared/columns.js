@@ -719,7 +719,9 @@ window.AQB_COLUMNS = {
     },
     /* 行高: **逐行实测**(不是采样几行取均值)。行高本就不齐(带 H&R 要求的行多一行),
      * 用"等高"近似会在几千行上累积成上百像素漂移 —— 表现为滚到底够不着、滚动条长度不对。
-     * 首次(或列集合变化后)由一轮**全量渲染**量齐所有行, 之后每轮只更新当前窗口里的行。 */
+     * 首访策略按规模二分(issue 26-11-02-0902): 千级以下仍由一轮**全量渲染**一次量齐(百毫秒级);
+     * 千级及以上首帧就用 ROW_WIN_EST_H 开窗, 只量视口行, 未量行沿用全局均值兜底、随滚动逐步实测
+     * 替换 —— 否则 3000 行首访要付「全量 patch + 逐行 gBR + 每行监听增删」一发 8.4s 长任务。 */
     _measureRowH() {
       if (!this.rowWin) return;
       // 签名取三个有窗口的层(与 _rowWindow 的 kind 对齐; 顺序 group/torrent/detail 与旧字面量一致)
@@ -745,7 +747,7 @@ window.AQB_COLUMNS = {
         }
         const rows = document.querySelectorAll(sel);
         if (!rows.length) continue;
-        let sum = 0, changed = false;
+        let changed = false;
         for (const r of rows) {
           const h = r.getBoundingClientRect().height;
           const key = kind + ":" + (r.getAttribute("data-hash") || r.getAttribute("data-key") || "");
@@ -753,15 +755,16 @@ window.AQB_COLUMNS = {
             this._rowHs[key] = h;
             changed = true;
           }
-          sum += h;
         }
-        const avg = sum / rows.length;  // 未量过的行(新种子)用它兜底
+        // 未量过的行(新种子 / 千级首访尚未滚到的行)用它兜底。取**已实测行的全局均值**而非
+        // 当前窗口均值: 后者随窗口切换每帧跳变, 会让占位总高与滚动条长度跟着抖(issue 26-11-02-0902)。
+        const avg = this._rowHAvgOf(kind);
         if (this._rowH[kind] === undefined || Math.abs(this._rowH[kind] - avg) > 0.01) {
           this._rowH = { ...this._rowH, [kind]: avg };
           changed = true;
         }
         if (!this._winMeasured[kind]) {
-          this._winMeasured[kind] = true;  // 这一轮是全量渲染, 高度已量齐
+          this._winMeasured[kind] = true;  // 首访窗口行已实测(千级以下即全表, 千级以上随滚动补齐)
           changed = true;
         }
         if (changed) this._rowHVer++;  // 响应式: 让窗口按新高度重算
@@ -791,7 +794,7 @@ window.AQB_COLUMNS = {
           : document.querySelector(`[data-dt-table-anchor="${tid}"] .group-table`);
         const drows = block ? block.querySelectorAll(".group-row[data-dt-key]") : [];
         if (!drows.length) continue;
-        let dsum = 0, dChanged = false;
+        let dChanged = false;
         for (const r of drows) {
           const h = r.getBoundingClientRect().height;
           const key = "drawerContent:" + (r.getAttribute("data-dt-key") || "");
@@ -799,19 +802,33 @@ window.AQB_COLUMNS = {
             this._rowHs[key] = h;
             dChanged = true;
           }
-          dsum += h;
         }
-        const davg = dsum / drows.length;  // 未量过的行(新种子)用它兜底
+        // 未量过的行(新文件)用它兜底; 口径同主表 = 已实测行的全局均值而非当前窗口均值
+        const davg = this._rowHAvgOf("drawerContent");
         if (this._rowH["drawerContent"] === undefined || Math.abs(this._rowH["drawerContent"] - davg) > 0.01) {
           this._rowH = { ...this._rowH, drawerContent: davg };
           dChanged = true;
         }
         if (!this._winMeasured["drawerContent"]) {
-          this._winMeasured["drawerContent"] = true;  // 这一轮是全量渲染, 高度已量齐
+          this._winMeasured["drawerContent"] = true;  // 首访窗口行已实测(小列表即全表, 大列表随滚动补齐)
           dChanged = true;
         }
         if (dChanged) this._rowHVer++;
       }
+    },
+    /* 该 kind 已实测行的**全局均值**(遍历 _rowHs 的 kind: 前缀)。
+     * 为什么不用「当前窗口均值」: 窗口随滚动换一批行, 窗口均值会跟着跳变(如 49.7 ↔ 71.4),
+     * 占位总高与滚动条长度每帧抖一下; 全局均值只随新实测行缓慢收敛, 滚到哪里都稳定。
+     * 首访千级列表此时只有视口那几十行, 之后每滚一屏补一批, 估算偏差单调收敛。 */
+    _rowHAvgOf(kind) {
+      const prefix = kind + ":";
+      let sum = 0, n = 0;
+      for (const k in this._rowHs) {
+        if (!k.startsWith(prefix)) continue;
+        sum += this._rowHs[k];
+        n++;
+      }
+      return n ? sum / n : 0;
     },
     /* 行键提取按 kind 走描述符(计划 26-11-02-0351 W2): 主表 = item.hash / group = item.key
      * (WIN_SRC_DOC.keyOf 与 group 覆盖); 抽屉行(W3 接线)两者皆无, 键字段名由该 kind 的
@@ -833,12 +850,19 @@ window.AQB_COLUMNS = {
       const sy = doc ? this._winScrollY : st.y;
       const vh = doc ? this._winViewH : st.h;
       if (!this.rowWin || n < ROW_WIN_MIN || vh <= 0) return off;
-      // 行高还没量齐 -> 这一轮先全量渲染(首轮/改列之后各一次), 下次就走窗口了
-      if (!this._winMeasured[kind]) return off;
+      // 行高还没量齐(首访/改列之后): 直接估算开窗(issue 26-11-02-0902; 阈值 ROW_WIN_EST_MIN
+      // 与 ROW_WIN_MIN 合并取 200 —— 精确冷启动在 200 行即单发 334ms longtask, 不可接受),
+      // 只渲染视口行, 未量行按 _rowH 全局均值/EST_H 兜底, 事后随滚动收敛。
+      if (!this._winMeasured[kind] && n < ROW_WIN_EST_MIN) return off;
       const est = this._rowH[kind] || ROW_WIN_EST_H[kind];
-      // 行间距实测(见 _winGapFor); 容器还没渲染时本轮先全量, 免得按错的间距撑占位
-      const gap = this._winGapFor(kind);
-      if (gap === null) return off;
+      // 行间距实测(见 _winGapFor); 容器还没渲染时本轮先全量, 免得按错的间距撑占位。
+      // 首访冷启动例外: 首帧容器通常还没挂(挂载后才量得到), 先按兜底间距开窗,
+      // 下一拍容器一挂上就实测真值并重算 —— 否则又退回一次全量渲染, 等于白改。
+      let gap = this._winGapFor(kind);
+      if (gap === null) {
+        if (!this._winMeasured[kind] && n >= ROW_WIN_EST_MIN) gap = ROW_WIN_GAP_FALLBACK;
+        else return off;
+      }
       const hs = this._rowHs;
       const pre = new Array(n + 1);
       pre[0] = 0;

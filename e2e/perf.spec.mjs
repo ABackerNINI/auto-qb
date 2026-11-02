@@ -76,6 +76,15 @@ import { INST, readInst } from './lib/vm.mjs';
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
 const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`);
 
+/**
+ * 首访估算开窗阈值(镜像 `src/auto_qb/webui/static/shared/app.js` 的 ROW_WIN_EST_MIN;
+ * 真值单点仍在 app.js, 这里只给本 spec 的断言分档用): n >= 此值的首访用估算行高开窗、
+ * 随滚动渐进实测收敛(issue 26-11-02-0902) —— 占位总高只做粗界守阵, 滚到底按"不塌陷"判。
+ * 2026-11-02 二轮按拐点实测(150 行 215ms / 200 行 334ms, 250ms 线)从 1000 下移到 200,
+ * 与 ROW_WIN_MIN 合并; 低于此值窗口化本身关闭(off 全量渲染), win==full 恒等平凡成立。
+ */
+const ROW_WIN_EST_MIN = 200;
+
 /** 进种子视图并等行渲染(块B 所有用例的共同 arrange, 旧脚本 nav[1] 点击同口径)。 */
 async function gotoTorrents(page, skin) {
   collectRuntimeErrors(page);
@@ -183,6 +192,33 @@ for (const skin of SKINS) {
       expect(tRows < tTotal * 0.5, `P1-2 行窗口化生效: DOM ${tRows} 行 << 数据 ${tTotal} 条`).toBe(true);
     });
 
+    test('P1-2 首访路径指纹: 估算开窗档 gBR 远小于行数(防误退回精确冷启动)', async ({ page }) => {
+      /* 只在估算开窗档跑: 低于阈值时窗口化本身关闭, 无"路径"可判(issue 26-11-02-0902 空档1)。 */
+      test.skip(TORRENTS < ROW_WIN_EST_MIN, `路径指纹断言仅估算开窗档(>= ${ROW_WIN_EST_MIN})有判别力; 当前 E2E_TORRENTS=${TORRENTS}`);
+      collectRuntimeErrors(page);
+      /* gBR 计数必须先于 goto 注入, 且在**点击种子页签前**清零 —— 只量"种子视图首访"段,
+       * 不把分组页首访的量齐计进来(A/B 用例的注入在 goto 之后, 量的是 refresh 轮次, 抓不到首访)。 */
+      await page.addInitScript(() => {
+        window.__gbr0 = 0;
+        const orig = Element.prototype.getBoundingClientRect;
+        Element.prototype.getBoundingClientRect = function () { window.__gbr0++; return orig.apply(this, arguments); };
+      });
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      await page.evaluate(() => { window.__gbr0 = 0; });
+      await tab(page, 'torrents').click();
+      await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
+      await page.waitForTimeout(600);  // 等 updated 量齐拍结束, 计数稳定
+      const gbr = await page.evaluate(() => window.__gbr0);
+      const tTotal = await readInst(page, 'vm.filteredTorrents.length');
+      /* 判别依据(2026-11-02 实测): 估算开窗首访只对窗口内 ~24 行量高, gbr≈55 且**与行数无关**
+       * (1000/3000 档均 55); 误退回精确冷启动则对全表逐行量齐, gbr≈行数(200 档 228 / 300 档 325 /
+       * 999 档 1051)。上界 150 居中 —— 对估算路径余量 2.7x, 对误切精确的最小档(200 行)余量 1.5x,
+       * 两条路径都留判别余量; 占位总高粗界对"误切精确"(比值 1.0)无判别力, 全靠本条兜住。 */
+      expect(gbr, `首访路径指纹(估算开窗): gBR ${gbr} 次 / 行数 ${tTotal} —— ` +
+        '接近行数说明误退回精确冷启动(全量渲染+逐行量齐, 200 行即 334ms longtask)').toBeLessThan(150);
+    });
+
     test('P1-2 占位总高 == 全量渲染(窗口化只少渲染 DOM, 不改布局高度)', async ({ page }) => {
       await gotoTorrents(page, skin);
 
@@ -204,9 +240,20 @@ for (const skin of SKINS) {
         const el = document.querySelector(".group-table");
         return { win, full, gap: el ? parseFloat(getComputedStyle(el).rowGap) : null };
       })()`);
-      /* 阈值逐字保留: |win - full| < 50。 */
-      expect(Math.abs(hCmp.win - hCmp.full), `窗口化 ${hCmp.win} vs 全量 ${hCmp.full}px ` +
-        `(Δ ${hCmp.win - hCmp.full}, 实测行间距 ${hCmp.gap}px)`).toBeLessThan(50);
+      /* 阈值: 估算开窗档(>= ROW_WIN_EST_MIN)首访按**已实测行全局均值**估算未量行, 占位总高
+       * 随滚动单调收敛但与全量不是逐像素相等(3000 行实测偏差约 13%~14%, 方向取决于首屏采样
+       * 到哪一档行高; issue 26-11-02-0902) —— 该档只做粗界守阵(防 ×2 / 接近 0 这类估算失真)。
+       * else 分支(严格口径 |win-full|<50)只对 <200 的 off 档可达: 窗口化关闭, win==full 恒等
+       * 平凡成立 —— 2026-11-02 二轮阈值 1000→200 后, 原精确冷启动档(200~999)已并入估算档。 */
+      if (TORRENTS >= ROW_WIN_EST_MIN) {
+        const ratio = hCmp.win / hCmp.full;
+        expect(ratio, `占位总高粗界(估算开窗): 窗口化 ${hCmp.win} vs 全量 ${hCmp.full}px ` +
+          `(比值 ${ratio.toFixed(3)}, 实测行间距 ${hCmp.gap}px)`).toBeGreaterThan(0.5);
+        expect(ratio, '占位总高粗界(估算开窗): 不超过全量 1.5 倍').toBeLessThan(1.5);
+      } else {
+        expect(Math.abs(hCmp.win - hCmp.full), `窗口化 ${hCmp.win} vs 全量 ${hCmp.full}px ` +
+          `(Δ ${hCmp.win - hCmp.full}, 实测行间距 ${hCmp.gap}px)`).toBeLessThan(50);
+      }
     });
 
     test('滚动到底: 总高不塌陷(占位撑住) + 最后一屏有行且可见', async ({ page }) => {
@@ -229,8 +276,18 @@ for (const skin of SKINS) {
         const r = ns[ns.length - 1].getBoundingClientRect();
         return r.top < window.innerHeight && r.bottom > 0;
       });
-      /* 阈值逐字保留: |after - before| < 200。 */
-      expect(Math.abs(after - before), `滚动到底不塌陷(占位撑住总高): ${before} -> ${after}px`).toBeLessThan(200);
+      /* 阈值: 估算开窗档滚到底继续实测收敛, 方向**不定** —— 占位总高随滚动收敛, 但方向取决于
+       * 首屏采样行高与全局均值的相对高低(3000 档实测 +13~14%, 300 档实测 -5.7% = -1296px;
+       * 上轮"只会增长"的假设在 2026-11-02 阈值 200 后默认 300 档首次踩进本分支即证伪) ——
+       * 故按**比例**禁塌陷: |Δ| < before×25%(对实测峰值 ~2x 余量; 窗口引擎塌陷/占位翻倍会是
+       * 接近 ±100% 远超此线, 判别力保留)。issue 26-11-02-0902。
+       * else 严格口径(|after-before|<200)只对 <200 的 off 档可达(win==full 平凡恒等, 同占位总高分档)。 */
+      if (TORRENTS >= ROW_WIN_EST_MIN) {
+        expect(Math.abs(after - before), `滚动到底不塌陷(占位撑住总高; 估算收敛按比例禁塌陷): ${before} -> ${after}px ` +
+          `(|Δ| ${Math.abs(after - before)}, 上界 ${Math.round(before * 0.25)})`).toBeLessThan(before * 0.25);
+      } else {
+        expect(Math.abs(after - before), `滚动到底不塌陷(占位撑住总高): ${before} -> ${after}px`).toBeLessThan(200);
+      }
       expect(lastVisible, `最后一屏有行且可见(末行 ${lastHash || '-'})`).toBe(true);
     });
   });

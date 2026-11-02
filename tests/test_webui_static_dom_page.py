@@ -60,7 +60,8 @@
   的切片起点/终点/上下占位与文档型同输入同输出(三滚动位), 源族分流(容器族只读 _winCtn /
   文档族只读 _winScrollY 对, 未注册 kind 回落文档型), 描述符几何(scrollY/viewH/topOffset)
   与绑定契约(bindScroll passive/unbind)逐项钉值, 零差异回退(低于 ROW_WIN_MIN/未量齐/rowWin 关)
-  不回潮
+  不回潮; 首访路径边界二条(issue 26-11-02-0902 二轮空档2): _winMeasured=false 时 n=199 走
+  off(全量渲染) / n=200 走估算开窗(active) —— 门控被误改成恒窗口/恒 off 时必有一条红
 - test_frontend_row_window_sig_and_ctn_sync_guard: 行窗失效签名守阵(2026-11-02 关抽屉/切页卡死
   取证) —— ① _measureRowH 行高签名不含 viewMode(含则每次切页作废三 kind 行高 + 翻 _winMeasured,
   返回该视图全量渲染量齐, 3000 行实测 5.8~8.4s 长任务 = 「切标签页卡死几秒」; _winResize/列集合
@@ -2166,7 +2167,7 @@ def test_frontend_window_source_kind_descriptor_parameterized():
         )
         assert proc.returncode == 0, f"窗口源描述符 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
-        assert res["total"] >= 16, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert res["total"] >= 18, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
         assert not res["failed"], ("窗口源描述符行为漂移: " + "、".join(res["failed"]) + " —— 主表等价/容器型几何被改掉")
 
 
@@ -2182,6 +2183,9 @@ global.window = {
 global.requestAnimationFrame = (fn) => { fn(); return 1; };
 global.ROW_WIN_MIN = 200;
 global.ROW_WIN_OVERSCAN = 10;
+// 首访估算开窗阈值(2026-11-02 二轮按拐点实测从 1000 下移到 200, 与 ROW_WIN_MIN 合并;
+// 单点仍在 app.js, 电池自给)
+global.ROW_WIN_EST_MIN = 200;
 global.ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
 const src = fs.readFileSync(process.argv[1], "utf8");
 eval(src + "\n;globalThis.__W2__ = { M: window.AQB_COLUMNS.methods, DOC: WIN_SRC_DOC, SRC: WIN_SOURCES, ctr: winSrcContainer };");
@@ -2224,6 +2228,21 @@ const mkCtx = () => Object.assign({}, M, {
 });
 
 const checks = [
+  // --- 首访路径边界(空档2, issue 26-11-02-0902 二轮): EST_MIN 两侧必须真的分路径 ---
+  // _winMeasured=false 模拟首访 + _rowHs 空(未量行走 EST/均值兜底); gap 由 mkCtx 给 6(非
+  // null, 跳过 fallback 分支)。门控被误改成"恒窗口"或"恒 off"时, 下面两条必有一条红。
+  ["边界 EST_MIN-1: n=199 首访走 off(全量渲染, 无窗口)", (() => {
+      const c = mkCtx(); c._winMeasured.torrent = false; c._rowHs = {};
+      const rows = Array.from({ length: 199 }, (_, i) => ({ hash: "b" + i }));
+      const w = M._rowWindow.call(c, "torrent", rows, null);
+      return w.active === false && w.end === 199;
+  })()],
+  ["边界 EST_MIN: n=200 首访走估算开窗(active 窗口)", (() => {
+      const c = mkCtx(); c._winMeasured.torrent = false; c._rowHs = {};
+      const rows = Array.from({ length: 200 }, (_, i) => ({ hash: "b" + i }));
+      const w = M._rowWindow.call(c, "torrent", rows, null);
+      return w.active === true;
+  })()],
   // --- 文档型描述符几何(主表现行为原样) ---
   ["DOC.scrollY 直读 window.scrollY", DOC.scrollY() === 1000],
   ["DOC.viewH 直读 window.innerHeight", DOC.viewH() === 800],
@@ -2322,10 +2341,13 @@ const fallback = () => {
   const rows = mkRows("hash");
   const base = () => Object.assign({}, M, {
     rowWin: true, _winMeasured: { torrent: true }, _rowH: { torrent: 50 }, _rowHVer: 1,
-    _winViewH: 800, _winScrollY: 1300, _winTop: { torrent: 1200 }, _rowHs: {}, _winGapFor: () => GAP,
+    _winViewH: 800, _winScrollY: 1300, _winTop: { torrent: 1200 }, _rowHs: {}, _rowPre: {},
+    _winGapFor: () => GAP,
   });
   const small = base(); small._rowHs = {}; fillHs("torrent", rows, small._rowHs);
   const off = base(); off.rowWin = false; fillHs("torrent", rows, off._rowHs);
+  // 未量齐(issue 26-11-02-0902 二轮): 阈值 1000→200 后 n>=EST_MIN 的首访改走**估算开窗**
+  // (EST/全局均值兜底, active 窗口), 不再退全量渲染 —— off 只剩 n<MIN / rowWin 关 / 视口 0。
   const unmeasured = base(); unmeasured._winMeasured = { torrent: false }; fillHs("torrent", rows, unmeasured._rowHs);
   const noVh = base(); noVh._winViewH = 0; fillHs("torrent", rows, noVh._rowHs);
   const rowsSmall = rows.slice(0, 199);
@@ -2334,9 +2356,10 @@ const fallback = () => {
   const w3 = unmeasured._rowWindow("torrent", rows, "torrentTable");
   const w4 = noVh._rowWindow("torrent", rows, "torrentTable");
   const inert = (w, n) => !w.active && w.start === 0 && w.end === n && w.padTop === 0 && w.padBottom === 0;
-  return inert(w1, rowsSmall.length) && inert(w2, rows.length) && inert(w3, rows.length) && inert(w4, rows.length);
+  return inert(w1, rowsSmall.length) && inert(w2, rows.length) && w3.active
+    && inert(w4, rows.length);
 };
-checks.push(["零差异回退: 行数<MIN / rowWin 关 / 未量齐 / 视口 0 一律全量渲染", fallback()]);
+checks.push(["零差异回退: 行数<MIN / rowWin 关 / 视口 0 一律全量渲染; 未量齐+n>=EST_MIN 改估算开窗(active)", fallback()]);
 
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));

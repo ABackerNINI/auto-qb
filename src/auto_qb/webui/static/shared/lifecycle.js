@@ -51,7 +51,8 @@ window.AQB_LIFECYCLE = {
      * ("22时00分 / 3天12时"), 实测 3000 种子里 27% 是 65.4px、其余 43.7px。按"等高"算占位
      * 会在几千行上累积成**上百像素**的漂移(滚到底够不着 / 滚动条长度不对), 必须逐行记。 */
     this._rowHs = {};
-    this._winMeasured = { torrent: false, group: false, member: false };  // 该 kind 是否量齐
+    // 该 kind 的首访窗口行是否已实测(千级以下 = 全表量齐; 千级以上只会量到视口内那批, 随滚动补齐)
+    this._winMeasured = { torrent: false, group: false, member: false };
     /* 行间距(px)**实测**缓存: 三个容器的真实 gap 不同(atlas .group-table 6px / prism 5px /
      * 成员容器 .detail 是块级容器 = 0), 硬编码会让占位总高失真(见文件头 BUG-1 注释)。 */
     this._winGap = {};

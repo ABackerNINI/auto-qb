@@ -3,9 +3,9 @@
 **Status:** In Progress
 **Added:** 2026-11-02
 **Updated:** 2026-11-02
-**Summary:** WEBUI 千级文件列表卡顿统一优化: 调研报告取证根因 R1-R6 → 计划 26-11-02-0351 拆 W1-W6 → 串行子智能体实施 W1(记忆化/廉价sig/content-visibility)+W2(kind 描述符参数化)+W3(抽屉挂窗)+W4(千级验收矩阵 8/8)+W5(主表 3000 种子复测全绿), 千级常驻 DOM 1001→45-48 行、交互 longtask 归零; 全量 4824 过/覆盖率 99.00% (基线 26-11-02-0707); W6(P3 可选)与真机轨待用户拍板/token
+**Summary:** WEBUI 千级文件列表卡顿统一优化: 调研报告取证根因 R1-R6 → 计划 26-11-02-0351 拆 W1-W6 → 串行子智能体实施 W1(记忆化/廉价sig/content-visibility)+W2(kind 描述符参数化)+W3(抽屉挂窗)+W4(千级验收矩阵 8/8)+W5(主表 3000 种子复测全绿), 千级常驻 DOM 1001→45-48 行、交互 longtask 归零; 全量 4824 过/覆盖率 99.00% (基线 26-11-02-0707); 首访量齐 issue 26-11-02-0902 已修(Done, 千级估算开窗+渐进量齐)并二轮调优(阈值 200 与 ROW_WIN_MIN 合并、精确冷启动档消失, 空档1 首访路径指纹/空档2 单测边界判据补齐并负向验证, 数字见 kb.baseline 最新切片); W6(P3 可选)与真机轨待用户拍板/token
 **Topics:** webui-large-filelist-perf
-**Refs:** memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/testing/baselines/26-11-02-0707-webui-large-filelist-perf.md
+**Refs:** memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/testing/baselines/26-11-02-0707-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-first-visit-rowh-measure.html, memory-bank/pitfalls/web-ui/est-cold-start-vs-absolute-threshold.md, memory-bank/testing/baselines/26-11-02-1129-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-1248-webui-large-filelist-perf.md
 
 ## 原始请求
 
@@ -55,3 +55,7 @@
 - 2026-11-02 07:08 报告 26-11-02-0339 + 计划 26-11-02-0351 + W1-W5 串行实施(千级 DOM 1001→45-48, longtask 归零, 主表 3000 种子复测全绿) + 基线 26-11-02-0707(4824 过/99.00%); 遗留: W6/D1/D3 待拍板、真机轨待 token; 工作区未提交(用户未授权)
 
 - 2026-11-02 08:29 用户验收轮(3000 种子桩): 切标签页/关抽屉后卡死数秒且能滚不能点 —— 根因=columns.js _measureRowH 行高签名混入 viewMode(切页全表作废退全量量齐)+_winCtnSync 抽屉离场过渡期宽度假 bump(作废主表行高); 两守卫修复后 8.4s/5.6s longtask→0(主线程饿死假象, 非遮罩); 新守阵 e2e/window-invalidation 6 条+静态 1 条, 三皮肤千级 e2e 28/28
+
+- 2026-11-02 11:25 认领并修复 issue 26-11-02-0902: 千级首访估算开窗+渐进量齐(ROW_WIN_EST_MIN 1000 / _rowHAvgOf 全局均值), 3000 行首访 longtask 8432ms→97ms、gBR 3310→55 次; perf.spec 千级档判据分档(粗界/不塌陷), 3000 档 10 passed; 新增坑档 est-cold-start-vs-absolute-threshold; 工作区未入库(用户未授权)
+
+- 2026-11-02 12:51 阈值二轮调优 1000→200(拐点实测 250ms 线落 150~200 之间, 与 ROW_WIN_MIN 合并); 空档1 首访路径指纹用例+空档2 单测边界断言补齐并双负向验证; 滚到底估算档改按比例禁塌陷; e2e 199/200/300 三档+test.full 全绿, 基线 26-11-02-1248
