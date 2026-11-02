@@ -35,6 +35,7 @@
 
 ## Done (269)
 
+- [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
 - [26-11-02-backend-relocate-qbtemp-narrow](../26-11-02-backend-relocate-qbtemp-narrow.md) 整组迁移 qb_temp 闸门按归属收窄
 - [26-11-02-webui-flux-overlay-opacity](../26-11-02-webui-flux-overlay-opacity.md) 修复 flux 皮肤浮层透出正文
@@ -43,7 +44,6 @@
 - [26-11-03-test-big-file-split](../26-11-03-test-big-file-split.md) 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
 - [26-11-03-webui-ctx-src-target-marker](../26-11-03-webui-ctx-src-target-marker.md) 右键目标行持续可见标识：四皮肤 .ctx-src 改静态实心 outline 框
 - [26-11-03-webui-remove-row-hover-bar-and-fx-flash](../26-11-03-webui-remove-row-hover-bar-and-fx-flash.md) 四皮肤移除鼠标 hover 行左条 + flux 右键强调动效退役
-- [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
 - [26-11-02-backend-webui-seed-cmds](../26-11-02-backend-webui-seed-cmds.md) WebUI set_share_limits 补必填参 shareLimitAction (issue 26-11-01-2102)
 - [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
