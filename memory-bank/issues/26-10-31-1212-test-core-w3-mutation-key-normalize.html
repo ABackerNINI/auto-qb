@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ tvshows 键归一变异存活: 尾 bigram/空格折叠 2 条低危 + 归一循环死循环 2 条">
 <meta name="issue-summary" content="W3 低危簇4: normalize_key_25+title_and_key_37 低危补测; normalize_key_34/38 timeout 死循环(DoS 形态)随簇记 bug 备注处置=代码侧">
 <title>core/ tvshows 键归一变异存活: 尾 bigram/空格折叠 2 条低危 + 归一循环死循环 2 条 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1212-test-core-w3-mutation-key-normalize</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 12:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -105,6 +105,8 @@
     <ul>
       <li>2026-10-31 12:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 21:46 — 认领，状态 <strong>In Progress</strong>（用户指派，本轮修复）</li>
+      <li>2026-11-02 22:35 — 修复完成，状态 <strong>Done</strong>。两条真洞补守阵（红验 2/2 KILLED）：<code>test_normalize_key_tail_bigram_noise</code>（normalize_key_25）与 <code>test_noise_gap_whitespace_collapsed_in_title</code>（title_and_key_37）；timeout 2 条按 C1 裁定走<b>代码侧步长防御</b>：<code>_normalize_key</code> 的 <code>while</code>+手工 <code>i +=</code> 改为 <code>for</code> + <code>skip_next</code> 标志，行为等价而变异点（倒退/不前进步长）从结构上消失，配回归断言 <code>test_normalize_key_multi_bigram_terminates</code>。测试计划清单与 <code>tests/test_tvshows.py</code> 全文件 94 passed；红验整套 14/14 KILLED（含本件 2 条与后续件 1 条）。<br>
+      <b>实测与建议不符留档</b>：①normalize_key_25 建议的 "Show Web Dl" 不可达（"dl" 已被 <code>_EXTRA_NOISE_TOKENS</code> 单 token 剔除），改用可达的 Dual Audio / DD Plus / HDR10 Plus；②title_and_key_37 建议断言两形态 key 相等实测杀不动（<code>_normalize_key</code> 的 <code>split()</code> 自带折叠），改断言 title。全量数字见 kb.baseline。</li>
     </ul>
   </section>
 

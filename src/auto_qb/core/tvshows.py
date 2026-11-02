@@ -373,13 +373,15 @@ def _normalize_key(title: str) -> str:
     s = unicodedata.normalize("NFKC", title)
     s = re.sub(r"[^\w\s]+", " ", s)
     tokens = [t for t in s.lower().split() if t not in _EXTRA_NOISE_TOKENS]
-    out, i = [], 0
-    while i < len(tokens):
-        if i + 1 < len(tokens) and tokens[i] + " " + tokens[i + 1] in _EXTRA_NOISE_BIGRAMS:
-            i += 2
+    out, skip_next = [], False
+    for i, tok in enumerate(tokens):
+        if skip_next:
+            skip_next = False
             continue
-        out.append(tokens[i])
-        i += 1
+        if i + 1 < len(tokens) and tok + " " + tokens[i + 1] in _EXTRA_NOISE_BIGRAMS:
+            skip_next = True
+            continue
+        out.append(tok)
     return " ".join(out)
 
 

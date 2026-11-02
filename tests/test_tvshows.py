@@ -38,6 +38,9 @@
 - [x] 目录季 1..99 闭区间: S99 收 / 第百季 拒 (dir_season_13/14) (W3 余量)
 - [x] 非法日期跳过继续找后续合法日期 (find_date_18) (W3 余量)
 - [x] CJK「百」裸写=100 且「第百季」不进季号 (cjk_int_27 / find_season_14) (W3 余量)
+- [x] 归一化尾位 bigram(dual audio/dd plus/hdr10 plus) 成对剔除 (normalize_key_25) (W3 余量)
+- [x] 噪音词挖空后连续空格在展示名中折叠 (title_and_key_37) (W3 余量)
+- [x] 归一化循环不依赖手工步长递增, 多 bigram 标题正常返回 (timeout 34/38 代码侧防御) (W3 余量)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
 - test_bare_trailing_without_context_not_matched
@@ -75,10 +78,13 @@
 - test_key_forms
 - test_marker_cut_takes_first_position
 - test_multi_season_unknown
+- test_noise_gap_whitespace_collapsed_in_title
 - test_noise_tokens_stripped
 - test_normalization_equivalence
 - test_normalize_key_bigram_noise
+- test_normalize_key_multi_bigram_terminates
 - test_normalize_key_strips_punctuation
+- test_normalize_key_tail_bigram_noise
 - test_parse_files_multi_season_dir_unknown
 - test_parse_files_no_season
 - test_parse_files_s01_dir_and_zh_marker
@@ -639,3 +645,35 @@ def test_find_season_rejects_hundred_plus():
     find_season_14(s<=99 -> s<=100): 「第百季」被收为季 100, 违反 1..99 口径。
     """
     assert tvshows._find_season("第百季") is None
+
+
+def test_normalize_key_tail_bigram_noise():
+    """归一化: 位于 tokens 末尾的相邻噪音 bigram 也要成对剔除
+
+    normalize_key_25(i+1<len -> i+2<len): 尾位 bigram 边界失效,
+    "Show Dual Audio" / "Show DD Plus" / "Show HDR10 Plus" 的噪音词残留进聚合键。
+    注: issue 原建议的 "Show Web Dl" 不可达 —— "dl" 已在 _EXTRA_NOISE_TOKENS
+    单 token 剔除, bigram 分支看不到它; 换用可达的三种 bigram。
+    """
+    assert tvshows._normalize_key("Show Dual Audio") == "show"
+    assert tvshows._normalize_key("Show DD Plus") == "show"
+    assert tvshows._normalize_key("Show HDR10 Plus") == "show"
+
+
+def test_noise_gap_whitespace_collapsed_in_title():
+    """噪音词被挖空留下的连续空格必须折叠, 否则展示名残留多空格
+
+    title_and_key_37(\\s+ 折叠失效): "Show 1080p Name" 的 title 变 "Show   Name"。
+    注: issue 原建议断言两形态 key 相等 —— 实测杀不动: _normalize_key 的
+    str.split() 本身会折叠空白, key 恒为 "show name"; 真正可观测面是 title。
+    """
+    assert p("Show 1080p Name S01E05").title == p("Show Name S01E05").title == "Show Name"
+
+
+def test_normalize_key_multi_bigram_terminates():
+    """多 token / 多 bigram 标题正常返回(归一化循环不依赖手工步长递增)
+
+    normalize_key_34(i+=2 -> i-=2) / normalize_key_38(i+=1 -> i=1) 是死循环形态,
+    补测只能断言输入形态正常返回; 步长防御在 _normalize_key 的 for 循环侧。
+    """
+    assert tvshows._normalize_key("Show Dual Audio HDR10 Plus 1080p") == "show 1080p"
