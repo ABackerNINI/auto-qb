@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)">
 <meta name="issue-summary" content="W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED">
 <title>core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1539-test-core-w4-mutation-extreme-low-residue</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 15:39</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -103,6 +103,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 15:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 22:58 — 认领，状态 <strong>In Progress</strong>（用户指派，本轮修复；doc-refs 入池时已反向声明 tasks/26-10-08-test-mutation-audit.md）</li>
+      <li>2026-11-02 23:29 — 修复完成，状态 <strong>Done</strong>。守阵落在 <code>tests/test_traffic_store.py</code> S6 簇 6 用例：<code>test_v4_one_byte_read_and_append_semantics</code>（_read_parse_6/_ensure_6）、<code>test_v4_live_tail_slots_zero_and_negative_span_forms</code>（live_101/103/128）、<code>test_v4_read_agg_empty_default_exact_fields</code>（sra_14/15/23 + cache_agg_29/36/37）、<code>test_v4_store_series_keys_skips_hash_named_plain_file</code>（skeys_24）、<code>test_v4_day_cache_budget_exact_fit_and_evict_to_one</code>（cache_day_36/33）、<code>test_v4_store_evict_rmtree_failure_continues_remaining</code>（evict_37），红验 17/17 KILLED（tmp-analysis/redverify-s6-w4.py）。其中 <code>width_7</code> 与 <code>cache_agg_28</code> 经 pre 复核<b>已被既有守阵覆盖</b>（<code>test_v4_merge_agg_day_cov_capped_at_86400</code> / <code>test_v4_agg_cache_hit_and_invalidate</code>），不另补测；R28「cache_agg_36/37 疑似连带杀」对账结果为本轮 pre 仍 SURVIVED，已由新守阵击杀。零 src 改动。W4 dump 已不在本机，变异形态按 issue 本体描述 + mutmut 常规算子重建（等价形态类）。全量数字见 kb.baseline。</li>
     </ul>
   </section>
 

@@ -147,6 +147,22 @@ mut-core W4 S5 定向补测(变异审计确认真洞守阵, 2026-10-31; 红验 t
 - test_v4_live_tail_slots_open_run_edge_spans: live_tail_104/136/137/150 —— 开放游程封口边缘
   跨度(span=1 非块首形均摊 / 块首形 n=2 端点含 / n=1 单槽 dt_s = 标称 interval)
 
+mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验 tmp-analysis/redverify-s6-w4.py):
+- test_v4_one_byte_read_and_append_semantics: _read_parse_6/_ensure_6 —— 1 字节文件(仅外部损坏
+  可造)读侧照常解析记坏(不冒充空文件 None), 写侧只补换行不重出头行/key 行
+- test_v4_live_tail_slots_zero_and_negative_span_forms: live_101/103/128 —— 开放游程封口同秒
+  病态(span==0)与时钟回拨(last_seen < 链锚点): 非块首落标称 interval 均摊, 块首收拢
+  int(start) 且 dt_s 落标称 interval
+- test_v4_read_agg_empty_default_exact_fields: sra_14/15/23 + cache_agg_29/36/37 —— 缺失
+  agg.dat 空哨兵全字段精确(key=None/空元组/bad_lines/data_lines=0), store 与缓存两层同钉
+- test_v4_store_series_keys_skips_hash_named_plain_file: skeys_24 —— torrents/ 下 hash 名普通
+  文件不得当系列目录列出
+- test_v4_day_cache_budget_exact_fit_and_evict_to_one: cache_day_36/33 —— 驻留总量恰等 budget
+  不逐出(严格大于才逐), 超预算逐到只剩最新一条
+- test_v4_store_evict_rmtree_failure_continues_remaining: evict_37 —— 淘汰删除失败 continue
+  不 break, 排序在后的到龄系列照常淘汰
+(width_7/cache_agg_28 经红验已被既有守阵覆盖, 不另补测 —— 见 issue 26-10-31-1539 状态日志)
+
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
@@ -2280,3 +2296,132 @@ def test_v4_live_tail_slots_open_run_edge_spans():
     run_n1 = LiveTailRun(kind="z", start=100.4, last_seen=100.4, dl_total=dlt, up_total=upt, samples=1)
     slots1 = v4_live_tail_slots(LiveTail(False, False, None, 2, 0.0, (), run_n1))
     assert len(slots1) == 1 and slots1[0].ts == 100.0 and slots1[0].dt_s == 2
+
+
+# ---------- mut-core W4 S6 定向补测(issue 26-10-31-1539 extreme-low-residue 簇) ----------
+
+
+def test_v4_one_byte_read_and_append_semantics(tmp_path):
+    """1 字节文件(仅外部损坏可造, W4 _read_parse_6/_ensure_6): 读侧不得当空文件 ——
+    read_day/read_agg 照常解析(头行门闩整文件记坏, 不返 None/空哨兵); 写侧
+    _ensure_file_prefix 不得当新文件 —— 撕裂尾只补一个换行, 不重出头行/key 行"""
+    st = TrafficV4Store(str(tmp_path))
+    day_path = st.series_day_path("global", "2026-10-31")
+    os.makedirs(os.path.dirname(day_path), exist_ok=True)
+    for p in (day_path, v4_agg_file_path(str(tmp_path), "global")):
+        with open(p, "wb") as f:
+            f.write(b"x")
+    parsed_day = st.read_day("global", "2026-10-31")
+    assert parsed_day is not None and parsed_day.bad_lines == 1 and parsed_day.data_lines == 1
+    parsed_agg = st.read_agg("global")
+    assert parsed_agg.bad_lines == 1 and parsed_agg.data_lines == 1
+    # 写侧: 1 字节天文件上追加 -> 只补换行(头行/key 行不得重出)
+    st.append_records("global", "2026-10-31", (1000, 30), (V4Sample(1, 1, 6, 9), ), block_base=(5, 8))
+    raw = _read_text(day_path)
+    assert raw.startswith("x\nB,1000,30,5,8\n") and HEADER_LINE_V4 not in raw
+
+
+def test_v4_live_tail_slots_zero_and_negative_span_forms():
+    """开放游程封口的病态跨度(W4 live_101/103/128): 同秒病态(span == 0)与时钟回拨
+    (last_seen < 链锚点)—— 非块首封口回落标称 interval 均摊(dt_s = interval, 槽位按
+    interval 展开); 块首封口槽位收拢 int(start), dt_s 仍落标称 interval(max 钳到 0)"""
+    dlt, upt = 3000, 1300
+    # 非块首形 span == 0(last_seen == 写侧游标): spacing 落标称 interval(不落 0)
+    run0 = LiveTailRun(kind="z", start=900.0, last_seen=1000.0, dl_total=dlt, up_total=upt, samples=2)
+    slots = v4_live_tail_slots(LiveTail(True, False, 900, 30, 1000.0, (), run0))
+    assert [s.ts for s in slots] == [1030.0, 1060.0]
+    assert all(s.dt_s == 30 and s.is_zero for s in slots)
+    # 非块首形时钟回拨(last_seen < 写侧游标): 同回落标称 interval
+    run_back = LiveTailRun(kind="z", start=900.0, last_seen=970.0, dl_total=dlt, up_total=upt, samples=2)
+    slots_b = v4_live_tail_slots(LiveTail(True, False, 900, 30, 1000.0, (), run_back))
+    assert [s.ts for s in slots_b] == [1030.0, 1060.0]
+    assert all(s.dt_s == 30 for s in slots_b)
+    # 块首形 span == 0(start == last_seen)且 n = 2: 槽位收拢 int(start), dt_s 落标称 interval
+    run_flat = LiveTailRun(kind="z", start=100.0, last_seen=100.0, dl_total=dlt, up_total=upt, samples=2)
+    slots_f = v4_live_tail_slots(LiveTail(False, False, None, 30, 0.0, (), run_flat))
+    assert [s.ts for s in slots_f] == [100.0, 100.0]
+    assert all(s.dt_s == 30 for s in slots_f)
+    # 块首形时钟回拨(last_seen < start): max 钳到 0 -> 同 span == 0 形态
+    run_flat_b = LiveTailRun(kind="z", start=100.0, last_seen=70.0, dl_total=dlt, up_total=upt, samples=2)
+    slots_fb = v4_live_tail_slots(LiveTail(False, False, None, 30, 0.0, (), run_flat_b))
+    assert [s.ts for s in slots_fb] == [100.0, 100.0]
+    assert all(s.dt_s == 30 for s in slots_fb)
+
+
+def test_v4_read_agg_empty_default_exact_fields(tmp_path):
+    """read_agg 空哨兵全字段钉住(W4 sra_14/15/23 + cache_agg_29/36/37): 缺失 agg.dat 时
+    store 层与缓存层空解析结果全字段精确 —— key=None, hours/days/months 空元组,
+    bad_lines/data_lines = 0(坏行计数空默认不漂)"""
+    st = TrafficV4Store(str(tmp_path))
+    for empty in (st.read_agg("global"), V4DayCache(str(tmp_path)).read_agg("global")):
+        assert empty.key is None
+        assert empty.hours == () and empty.days == () and empty.months == ()
+        assert empty.bad_lines == 0 and empty.data_lines == 0
+        assert empty.torn_tail is False
+
+
+def test_v4_store_series_keys_skips_hash_named_plain_file(tmp_path):
+    """series_keys(W4 skeys_24): torrents/ 下 hash 名的普通文件(非目录)不得被当系列目录
+    列出; hash 名目录照常列出"""
+    st = TrafficV4Store(str(tmp_path))
+    tdir = os.path.join(v4_root_dir(str(tmp_path)), TORRENTS_DIR_NAME)
+    os.makedirs(tdir)
+    with open(os.path.join(tdir, "HASHFILE1"), "w", encoding="utf-8") as f:
+        f.write("junk")
+    os.makedirs(os.path.join(tdir, "HASHDIR1"))
+    assert st.series_keys() == ["torrent:HASHDIR1"]
+
+
+def test_v4_day_cache_budget_exact_fit_and_evict_to_one(tmp_path, monkeypatch):
+    """天文件字节预算两向边界(W4 cache_day_36/cache_day_33): 驻留总量恰等 budget 不逐出
+    (严格大于才逐); 超预算逐出到只剩最新一条(len > 1 才逐, 最新读入者恒保留)"""
+    data_dir = str(tmp_path)
+    block = V4Block(1000, 30, 10, 20, (V4Sample(1, 1, 10, 20), ))
+    paths = {}
+    for date in ("2026-10-01", "2026-10-02"):
+        paths[date] = _write_v4_day(data_dir, "global", date, format_v4_day_text("global", (block, )))
+    size1 = os.path.getsize(paths["2026-10-01"])
+    size2 = os.path.getsize(paths["2026-10-02"])
+    calls = []
+    real_parse = traffic_store_module.parse_v4_day_text
+
+    def counting_parse(t):
+        calls.append(1)
+        return real_parse(t)
+
+    monkeypatch.setattr(traffic_store_module, "parse_v4_day_text", counting_parse)
+    # 恰等 budget: 两条都驻留, 重读命中不重解析
+    cache = V4DayCache(data_dir, budget=size1 + size2)
+    cache.read_day("global", "2026-10-01")
+    cache.read_day("global", "2026-10-02")
+    cache.read_day("global", "2026-10-01")
+    assert calls == [1, 1], "驻留总量恰等 budget 不逐出(严格大于才逐)"
+    # 差 1B 超预算: 逐出最久未用到只剩最新一条, 重读 10-01 重解析
+    calls.clear()
+    cache2 = V4DayCache(data_dir, budget=size1 + size2 - 1)
+    cache2.read_day("global", "2026-10-01")
+    cache2.read_day("global", "2026-10-02")  # 超预算: 10-01 被逐出
+    cache2.read_day("global", "2026-10-01")  # 已被逐出: 重解析(10-02 被逐出)
+    assert calls == [1, 1, 1], "超预算逐到只剩最新一条"
+
+
+def test_v4_store_evict_rmtree_failure_continues_remaining(tmp_path, monkeypatch):
+    """淘汰删除失败不阻断当轮后续(W4 evict_37): rmtree 抛 OSError 的系列保留下轮重试
+    (不进返回表), 排序在后的到龄系列照常淘汰(continue 非 break)"""
+    st = TrafficV4Store(str(tmp_path))
+    window = 30 * 86400.0
+    now = v4_date_str_epoch("2026-03-15") + window
+    old_d = v4_epoch_date_str(now - 40 * 86400)
+    for h in ("AAA", "BBB"):
+        write_dat_lines(st.series_day_path(f"torrent:{h}", old_d), [HEADER_LINE_V4, f"key,torrent:{h}"])
+    real_rmtree = traffic_store_module.shutil.rmtree
+
+    def _flaky(path):
+        if os.path.basename(path) == "AAA":
+            raise OSError(16, "locked")
+        return real_rmtree(path)
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.shutil.rmtree", _flaky)
+    assert st.evict_expired_series(now, window) == ["torrent:BBB"]
+    assert os.path.exists(v4_series_dir(str(tmp_path), "torrent:AAA"))  # 失败保留下轮重试
+    assert not os.path.exists(v4_series_dir(str(tmp_path), "torrent:BBB"))  # 不阻断后续淘汰
