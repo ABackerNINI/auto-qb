@@ -141,5 +141,10 @@
   autostart 的 HKCU Run 键及其 `auto-qb` 值(用例在 `finally` 自清理) / 临时目录内的删除与建链 / 回环地址监听。
 - **处置**: 判定策略本身有单测 `tests/test_sidefx.py`(含"临时目录判定必须剥掉 `\\?\` 前缀"这一回归点 ——
   普查时 157 条假阳性就栽在这)⇒ **改清单时同步**。
+  临时根集合**按调用时**取 `gettempdir()`/`TMPDIR`/`TEMP`/`TMP` 并带环境签名缓存失效, **不在模块导入时固化**
+  —— `tests/conftest.py` 先 `import sidefx`、后 `_tmp_bootstrap.bootstrap()` 切 `TMPDIR` 的顺序下, 导入时快照
+  会让串行 `-n 0` 的实例根内删除/建链全被判越界(并行 xdist 因 worker 导入时 TMPDIR 已就位而不暴露)。回归点:
+  `test_sidefx_temp_roots_follow_tmpdir_switch`; 判据与复现手法见
+  [../pitfalls/testing/sidefx-import-time-temp-roots.md](../pitfalls/testing/sidefx-import-time-temp-roots.md)。
   ❌ **不要**为了让测试变绿而随意放宽清单: 先确认该副作用是测试必需的。
   要临时诊断可取用 `sidefx_recorder` 夹具(如断言某操作未产生副作用)。

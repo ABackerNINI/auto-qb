@@ -130,8 +130,27 @@ def _with_dir_fd(path: Any, kw: dict) -> Any:
         return path
 
 
+def _roots_signature() -> Tuple[str, ...]:
+    """临时根来源的**当前**快照: 任一项变化即重算根集合(见 `_temp_roots` 的导入顺序坑)"""
+    return (tempfile.gettempdir(), ) + tuple(os.environ.get(name, "") for name in ("TMPDIR", "TEMP", "TMP"))
+
+
+_ROOTS_CACHE: Optional[Tuple[Tuple[str, ...], List[str]]] = None
+
+
 def _temp_roots() -> List[str]:
-    """临时目录根集合(取所有可能的来源, 避免不同机器上 gettempdir 不一致)"""
+    """临时目录根集合(取所有可能的来源, 避免不同机器上 gettempdir 不一致)
+
+    !不能固化成模块级常量(2026-11-02 串行 `-n 0` 的 12 条假阳性): `tests/conftest.py` 先
+    `import sidefx`、后跑 `_tmp_bootstrap.bootstrap()` 把 `TMPDIR` 切到实例根
+    (`R:\\Temp\\auto-qb-tests\\<实例>`)。导入时求值只拿到切换前的系统 temp ⇒ 实例根内的
+    删除/建链全被判"临时目录外"(xdist worker 导入时 TMPDIR 已就位, 所以只有串行暴露)。
+    改为首次判定时求值 + 按 `_roots_signature()` 失效: 每条路径多几次 env 读取, 不重复 realpath。
+    """
+    global _ROOTS_CACHE
+    signature = _roots_signature()
+    if _ROOTS_CACHE is not None and _ROOTS_CACHE[0] == signature:
+        return _ROOTS_CACHE[1]
     candidates = [tempfile.gettempdir(), "/tmp", "/var/tmp"]
     for name in ("TMPDIR", "TEMP", "TMP"):
         value = os.environ.get(name)
@@ -144,10 +163,8 @@ def _temp_roots() -> List[str]:
         except (OSError, ValueError):
             # 环境变量里的临时目录取值可能是畸形串(含空字节/超长等); 记账器绝不能因此拖垮整个测试会话
             continue
+    _ROOTS_CACHE = (signature, roots)
     return roots
-
-
-TEMP_ROOTS = _temp_roots()
 
 
 def is_temp_path(path: Any) -> bool:
@@ -159,7 +176,7 @@ def is_temp_path(path: Any) -> bool:
         target = _norm_path(path)
     except (OSError, ValueError):  # 畸形路径(空字节/超长等): 记账器不得因此拖垮被记的那个调用
         return False
-    for root in TEMP_ROOTS:
+    for root in _temp_roots():
         if target == root or target.startswith(root.rstrip("\\/") + os.sep):
             return True
     return False

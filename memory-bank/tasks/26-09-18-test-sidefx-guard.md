@@ -7,6 +7,7 @@
 **Legacy-ID:** TASK016
 **Summary:** 真凶 `test_cli.py::test_main_qb_compat_error_clean_exit` 用 MagicMock 当配置 ⇒ 绕过 `notify_fatal` 守卫真发 Windows toast; 修 mock + 新增 `tests/conftest.py` 会话级通知器命令拦截; 另修 2 个环境依赖假失败(`APPDATA` 未设 / 沙箱把 `os.symlink` 落成真实目录) + `.gitignore` 补 `.coverage.*`; **1007 passed / 0 failed**; **已入库 `7ae21a1`** (剩用户再跑一次测试确认不再弹框)
 **Topics:** test-sidefx-guard
+**Refs:** memory-bank/issues/26-11-02-2142-test-sidefx-serial-false-positive.html, memory-bank/pitfalls/testing/sidefx-import-time-temp-roots.md, memory-bank/testing/baselines/26-11-02-2223-sidefx-serial-false-positive.md
 
 ## 原始请求
 
@@ -242,3 +243,5 @@
     ③TASK016 自己日志里描述"原畸形引用"时又写了那个字面量, 会让扫描器永久误报 ⇒ 去掉 `docs/` 前缀。
   复扫(排除 vendor): **77 个 md / 170 条链接 / 107 条纯文本, 失效 0、缺失 0**。
 - 2026-09-18: 全量 **1018 passed / 0 failed** —— 本次随文档漂移清理一并入库。
+
+- 2026-11-02 22:19 修复 sidefx 串行假阳性: 临时根按当前 TMPDIR 按需重算(延迟求值+签名缓存) + 回归测试 test_sidefx_temp_roots_follow_tmpdir_switch

@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (57)
 
-- [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
 - [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — relocate_units.py:490 GATE_SPACE elif 分支(target_free < needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
@@ -70,8 +69,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (346)
+## Done (347)
 
+- [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](../26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)
 - [perf] [种子详情面板页签切换卡 1-2 秒](../26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(general/content 等)切换在 3000 种子规模下卡 1-2 秒; 疑与切页触发窗口/行高作废或内容变体全量装配相关, 待查
 - [perf] [各视图首次访问全量量齐行高(3000 行单发长任务)](../26-11-02-0902-perf-webui-first-visit-rowh-measure.html) — 各视图首访时窗口化引擎走全量渲染量齐行高, 3000 行下单发约 5.4s 长任务; 可考虑首访用估算行高渐进量齐压平

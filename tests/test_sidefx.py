@@ -6,6 +6,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_sidefx_is_temp_path: 临时目录判定, 含 Windows `\\\\?\\` 长路径前缀(普查时 157 条假阳性的根因)
+- test_sidefx_temp_roots_follow_tmpdir_switch: 导入后切 TMPDIR(串行 bootstrap 晚于 import sidefx)按当前根重算, 不沿用导入时快照
 - test_sidefx_is_loopback: 回环地址判定(放行 127.* / ::1 / localhost, 拒绝 0.0.0.0 与局域网)
 - test_sidefx_policy_allows_known_effects: 放行清单逐条 —— node 子进程 / autostart Run 键 / 临时目录删除与建链 / 回环监听
 - test_sidefx_policy_flags_unknown_effects: 越界判定逐条 —— 通知器进程 / AUMID 键 / 其它值名 / 非临时目录删除与建链 / 非回环监听
@@ -34,6 +35,22 @@ def test_sidefx_is_temp_path(tmp_path):
     assert sidefx.is_temp_path("\\\\?\\" + tempfile.gettempdir())
     assert not sidefx.is_temp_path("C:/Windows/System32")
     assert not sidefx.is_temp_path("/etc/passwd")
+
+
+def test_sidefx_temp_roots_follow_tmpdir_switch(tmp_path, monkeypatch):
+    """临时根按当前 TMPDIR 重算, 不能固化为导入时快照(2026-11-02 串行 12 条假阳性的回归点)
+
+    复现条件: `tests/conftest.py` 先 `import sidefx`(此刻 `tempfile.gettempdir()` 仍是系统 temp),
+    紧接着 `_tmp_bootstrap.bootstrap()` 才把 `TMPDIR` 切到实例根。旧实现把根集合固化在导入时
+    ⇒ 串行 `-n 0` 下实例根内的删除/建链全被判"临时目录外"; 并行 xdist worker 导入时 TMPDIR
+    已就位, 所以只有串行暴露。
+    """
+    stale = [sidefx._norm_path("C:/Windows/definitely-not-a-temp-root")]
+    monkeypatch.setattr(sidefx, "_ROOTS_CACHE", (sidefx._roots_signature(), stale))
+    assert not sidefx.is_temp_path(tmp_path), "构造的陈旧快照不应含 tmp_path"
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    monkeypatch.setattr(tempfile, "tempdir", None)
+    assert sidefx.is_temp_path(tmp_path), "TMPDIR 切换后必须按当前根重算, 不得沿用导入时快照"
 
 
 def test_sidefx_is_loopback():

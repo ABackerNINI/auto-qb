@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-02-2142">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="sidefx-temp-roots-order">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-09-18-test-sidefx-guard.md, memory-bank/pitfalls/testing/sidefx-import-time-temp-roots.md, memory-bank/testing/baselines/26-11-02-2223-sidefx-serial-false-positive.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)">
 <meta name="issue-summary" content="串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR">
 <title>sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化) · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-02-2142-test-sidefx-serial-false-positive</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 21:42</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tests（守卫 / 临时目录自举）</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">AI 会话（日志 URL 粘连修复轮）</div></div>
     </div>
@@ -206,11 +206,36 @@ FAILED tests/test_sidefx.py::test_sidefx_report_shape                     (越�
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-02 21:42 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 22:09 — 用户指派认领，状态 <strong>In Progress</strong>；认领方任务档案 <code>memory-bank/tasks/26-09-18-test-sidefx-guard.md</code></li>
+      <li>2026-11-02 22:23 — 修复并验证完成，状态 <strong>Done</strong>；实际修法 = 建议方案 B（延迟求值 + 环境签名缓存），未采用 A（无需改 conftest 导入顺序）；回归测试与全量实测见下</li>
     </ul>
     <h3>复验</h3>
-    <p class="hint">认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-02 22:10 — <strong>仍复现</strong>（<code>commands run test.one -- tests/test_sidefx.py</code>，串行 <code>-n 0</code>）：
+      <code>5 failed, 6 passed, 1 error in 0.50s</code>；越界 <strong>12 条</strong>（FSDEL 8 / SYMLINK 4），
+      首条 <code>R:\Temp\auto-qb-tests\e49d30ad-29636-0jir03\pytest-of-11059\pytest-0\test_sidefx_is_temp_pathcurrent</code>
+      与原件同形；<code>sidefx.is_temp_path(tempfile.gettempdir()) == False</code> 断言直接复现。
+      本轮为该文件在串行下的全部 12 条假阳性（原件 575 条是 6 文件定向跑的会话级合计）。</p>
     <h3>修复后补充</h3>
-    <p class="hint">修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（采用建议 B「延迟求值」，未采用 A「改导入顺序」）</strong>——A 需把
+      <code>conftest</code> 里 <code>_StubRegKey = sidefx.StubRegKey</code> 等模块级引用整体后移，churn 更大；
+      B 对导入顺序免疫，改动集中在 <code>tests/sidefx.py</code>。具体:</p>
+    <ul>
+      <li><code>tests/sidefx.py</code>: 删除模块顶层的 <code>TEMP_ROOTS = _temp_roots()</code>（导入时快照）；
+        新增 <code>_roots_signature()</code>（取 <code>tempfile.gettempdir()</code> + <code>TMPDIR/TEMP/TMP</code> 三项）
+        与 <code>_ROOTS_CACHE</code>（签名不符即重算）；<code>is_temp_path</code> 改为每次判定时取<b>当前</b>根集合</li>
+      <li><code>tests/test_sidefx.py</code>: 新增回归测试 <code>test_sidefx_temp_roots_follow_tmpdir_switch</code>
+        （先构造与当前签名一致的陈旧快照，断言不含 <code>tmp_path</code>；再切 <code>TMPDIR</code> 并清
+        <code>tempfile.tempdir</code>，断言必须按当前根重算为真）；头部「## 测试计划」同步追加条目</li>
+      <li>知识库回写: 新坑 <code>pitfalls/testing/sidefx-import-time-temp-roots.md</code>；
+        <code>testing/file-conventions.md</code> sidefx 段补「临时根按调用时重算」事实；基线切片见 <code>commands run kb.baseline</code></li>
+    </ul>
+    <p><strong>验证</strong>: 修复前 <code>commands run test.one -- tests/test_sidefx.py</code>（串行 <code>-n 0</code>）
+      为 <code>5 failed, 6 passed, 1 error</code> / 越界 12 条（FSDEL 8 · SYMLINK 4）；修复后同命令
+      <code>12 passed</code> / 会话台账「越界 0」。全量 <code>commands run test.full</code> 全绿，覆盖率达标；
+      实测数字只记在基线切片（<code>memory-bank/testing/baselines/26-11-02-2223-sidefx-serial-false-positive.md</code>），
+      本报告不手抄。</p>
+    <p><strong>遗留</strong>: 无。建议方案 A（顺序守卫）未做 —— B 已让实现对导入顺序免疫，再加顺序守卫属冗余；
+      若日后有人把 <code>TEMP_ROOTS</code> 重新固化成常量，回归测试会直接红。</p>
   </section>
 
   <footer>
