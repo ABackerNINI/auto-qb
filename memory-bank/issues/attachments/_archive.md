@@ -4,9 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (50)
 
-- [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
+- [bug] [full_checking 自愈 pop 后缺 state.save 落盘](../26-11-03-0104-bug-full-checking-selfheal-state-save.html) — recheck_fails 自愈清除写点不落盘，崩溃/断电窗口可能丢失自愈结果
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
@@ -30,7 +30,6 @@
 - [perf] [渐进灌入期主循环掉拍: 每拍新增种子管线请求预算(复测漂移 1.22→0.801s; 原「max_tasks_per_tick 自适应」经查非有效旋钮)](../26-10-01-2218-perf-mainloop-max-tasks-adaptive.html) — 2026-10-08 复测 P2: 稳态 2.139s / 漂移 0.801s(原 2.87 / 1.22), 已进 1.0s 稳态门限内; 成本在 _refresh_torrents 逐种子内联请求而非任务队列 ⇒ 原方案无效, 待拍板是否 Dropped
 - [question] [配置切分(每站点一份)是否做(存疑)](../26-10-01-2212-question-config-split-per-site.html) — (存疑)把站点配置拆为每站点一份文件, 涉及加载/热重载/校验面, 待拍板
 - [question] [基于搜索的辅种方式可行性(存疑)](../26-10-01-2212-question-search-based-recheck-feasibility.html) — (可行性存疑)用站点搜索发现可辅种资源的思路, 待可行性结论
-- [refactor] [重新梳理 ignore_next_action_error / stop_following_rules_if 语义](../26-10-01-2211-refactor-rules-keys-semantics-review.html) — 两个规则容错键的语义/交互需要重新梳理(命名、默认值、组合行为)
 - [bug] [--tray 模式下 Ctrl+C 无法关闭程序](../26-10-01-2203-bug-tray-ctrl-c-not-exit.html) — (未计划)托盘模式下 Ctrl+C 信号不退出进程, Windows 控制台信号处理与托盘生命周期冲突
 - [feat] [现场重建: 硬盘/qB 损坏后重建辅种现场](../26-10-01-2203-feat-disaster-site-rebuild.html) — 防灾难(硬盘损坏/qB 损坏)后难以重建辅种现场, 需要重建能力(备份/导出/重放方向待设计)
 - [feat] [浏览器扩展优化信息展示](../26-10-01-2203-feat-ext-info-display.html) — EXT 域一句话 TODO: 扩展侧信息展示优化(无细节, 开工先复验现状与诉求)
@@ -63,7 +62,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (353)
+## Done (355)
 
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
 - [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(跨卷小容量卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — 纯函数层四条判别红验已通过全量测试; 真机 L490 前置最终定为手动挂载 ImDisk 96M 内存盘 + 显式入口 QBT_REAL_SMALL_TARGET(隐藏 Recovery 卷 + mklink /J 做法已废弃并彻底移除); 2026-11-03 真机跑通: status=error + gate=space + 文案「空间不足」+ 零 started + 零迁移发起 + 目标叶子未建, RM04-05 单跑 1 passed 32.90s, RM04 套件 9 passed 199.57s; issue Done; 产品代码零改动
@@ -98,6 +97,7 @@
 - [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
+- [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [test] [core/ tvshows CJK 中文数字变异存活: 「百」语义 2 条低危](../26-10-31-1212-test-core-w3-mutation-cjk-numerals.html) — W3 低危簇2: cjk_int_27(百=100变200)+find_season_14(第百季收进季号), cjk_int_23 待定随簇备注, W3 池无守阵
 - [test] [core/ curves 别名/坏行变异存活: normalize_period「D」+ parse_dat 坏行计数 3 条低危](../26-10-31-1212-test-core-w3-mutation-curves-alias-badlines.html) — W3 低危簇7: normalize_7/8(别名 D 被拒)+parse_dat_19(坏行计数 2→1), W3 池无守阵
@@ -356,6 +356,7 @@
 - [bug] [HrEntry.last_seen 全库无写入点, INDEX_RETENTION 过期清理分支永不触发](../26-10-01-2335-bug-hr-entry-last-seen-dead-prune.html) — HrEntry.last_seen 无任何写入点恒 0.0, service 两处 INDEX_RETENTION 过期清理分支成死代码
 - [perf] [/api/state 全量构建拖垮主循环: 增量 rid 用满 + 分页/按需字段(5000 种子实测)](../26-10-01-2218-perf-webui-api-state-full-scan.html) — 5000 种子下 /api/state 全量单次约 0.6s 抢占同进程主循环; 方向①(rid 增量用满)与③(分页/按需字段)未被现有 issue 覆盖, 方向②已由 shows-view issue 跟踪
 - [docs] [config/schema/__init__.py docstring 仍提及已退役的 TRACKER_FIELD_LEVELS](../26-10-01-2212-docs-schema-docstring-tracker-field-levels.html) — TRACKER_FIELD_LEVELS 级别表随内核化重构整体退役后, config/schema/__init__.py 的 docstring 仍提及它, 与代码相反的文档漂移; 不在 issue 26-10-01-1738-docs-code-comment-drift 的 6 处清单内
+- [refactor] [重新梳理 ignore_next_action_error / stop_following_rules_if 语义](../26-10-01-2211-refactor-rules-keys-semantics-review.html) — 两个规则容错键的语义/交互需要重新梳理(命名、默认值、组合行为)
 - [bug] [hr.token 生成是非原子写, 半截文件导致通道密钥静默漂移 (与 web.token 同族)](../26-10-01-2151-bug-hr-channel-credential-atomic-write.html) — hr.channel resolve_token 用 O_TRUNC 直写 hr.token, 非空半截密钥被持久化, 扩展侧鉴权 401
 - [bug] [添加新站点热重载后不触发种子的内置维护任务](../26-10-01-2147-bug-webui-hotreload-newsite-maintenance.html) — WEBUI 添加新站点并热重载后, 受影响种子的内置维护任务没有被触发
 - [feat] [WEBUI HR 在线核实详情表(移植 --hr-status 与插件表格)](../26-10-01-2137-feat-webui-hr-detail-table.html) — HR 在线核实信息现为文字挤在一起, 需全量详情表: 哪些种子已核实/未核实、上次核实时间等; 扩展侧已完成, 仅剩 webui

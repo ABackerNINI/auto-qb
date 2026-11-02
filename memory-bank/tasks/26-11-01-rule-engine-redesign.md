@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-11-01
-**Updated:** 2026-11-01
+**Updated:** 2026-11-03
 **Summary:** 规则引擎重设计:现状取证(G1-G13)→ 调研报告 26-11-01-0057 → 方案 26-11-01-0106(R1 定稿,D1-D8 拍板)→ W1-W5 全序列实施完成(9 笔提交,test.full 4420 passed,5 份期基线切片)→ 真机收口(RM03 漂移轮 17/17 全绿 + RM09-11 choose 保存通道 + W1-B 徽标 L0 目视兑现);计划与档案均 Done
 **Topics:** rule-engine-redesign
-**Refs:** memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html, memory-bank/plans/26-11-01-0106-plan-rule-engine-redesign.html
+**Refs:** memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html, memory-bank/plans/26-11-01-0106-plan-rule-engine-redesign.html, memory-bank/issues/26-10-31-1304-bug-rules-stop-following-dead.html, memory-bank/issues/26-10-01-2211-refactor-rules-keys-semantics-review.html
 
 ## 原始请求
 
@@ -56,3 +56,7 @@ W1-W5 全序列实施完成并真机收口,档案翻 Done。
 
 - 2026-11-01 06:33 W1-W5 实施落地:9 笔提交(eac5cdf6→c6f57c5c,拆 9 个小任务派子智能体依次实施,每期独立 commit+test.full 全绿+期基线切片共 5 份,最新 26-11-01-0752-rule-engine-w5-registry);test.full 4346→4420 passed;W5 导入方向拍板 (a);兼容硬约束全程成立(生产 5 条规则快照零差异/config.yml 零改/exec_history 键口径不动);计划外入池 2 件(26-11-01-0800×2)
 - 2026-11-01 23:55 真机收口:RM03 漂移复测轮 17/17 全绿(W1-W5 新面 5 条+checking 收口,基线 6aa4b4d7)+ RM09-11 choose 保存通道四腿 11/11;W1-B「webui 未启用徽标」L0 目视挂账由本会话补测兑现(锚件 26-10-31-0641 记账:徽标/伪动作标记/卡脚等价写法/对照卡四面目视全过);计划 26-11-01-0106 翻 Done(R2),activeContext 过期切片迁出
+
+- 2026-11-03 00:32 核实 issue 1304 与 2211 对 rule-engine-redesign 的落地情况: 1304 完全解决翻 Done, 2211 部分解决置 In Progress(G-05 未落); 双向补链与索引重建
+
+- 2026-11-03 01:06 纠正 2211 错误归类: 两键语义梳理完全解决翻 Done; G-05 自愈 pop 缺 state.save 按原归类另入池 26-11-03-0104 bug 便签
