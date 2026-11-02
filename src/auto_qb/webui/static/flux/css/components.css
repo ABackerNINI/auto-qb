@@ -472,9 +472,9 @@
 .ctx-item.danger .ico { color: currentColor; }
 .ctx-item.danger:hover { background: var(--error-soft); }
 .ctx-sep { height: 1px; background: var(--border-soft); margin: 5px 8px; }
-/* CTX-02 触发源强调: 只用内描边, 不叠底色(TBL-03 的底色是状态语义) */
+/* CTX-02 触发源强调: fx-row-flash 只是入场, 之后用静态实心 2px accent outline 常驻框住目标行(不铺底色/不用左条; 与 .kb-cursor 虚线 1px 可分)。 */
 .group-row.ctx-src, .member-row.ctx-src, .show-row.ctx-src, .ep-row.ctx-src {
-  box-shadow: inset 2px 0 0 var(--accent), inset 0 0 0 1px var(--accent-line); }
+  outline: 2px solid var(--accent); outline-offset: -2px; }
 .ctx-anchor.ctx-src { box-shadow: 0 0 0 2px var(--ring); border-radius: 0; }
 
 /* ---------------- 空态 ---------------- */

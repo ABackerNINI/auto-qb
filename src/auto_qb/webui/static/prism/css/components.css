@@ -380,10 +380,17 @@ select option { background: var(--bg-elev); color: var(--fg); }
 
 /* ================= CTX-02 触发源强调 =================
  * 右键菜单弹出期间把被作用的那一行框出来, 让"这次操作针对谁"一眼可见。
- * 刻意**不改背景**: 行底色已承担状态语义, 再叠一层会互相打架 —— 只用内描边强调。
- * 标记与清理都在共享层(app.js _markCtxSource/_clearCtxSource), 双 UI 同源。 */
+ * 刻意**不改背景**: 行底色已承担状态语义, 再叠一层会互相打架。
+ * 2026-11-02(用户报「强调动效结束后看不出右键目标行」): 标记是静态形态, 不依赖一次性动效。
+ * **用 outline 而不是 box-shadow/左条**, 两条都是实测踩出来的:
+ *   · box-shadow: shared/row_lang.css 的 flat 行语言以 `html[data-rowlang]... .rl-scope .group-row
+ *     { box-shadow: none }`(特异性远高)把它归零 —— atlas 实测计算值恒为 none, 皮肤里怎么写都不生效;
+ *   · 左条: flat 行语言的**选中条就是** `--accent` 3px 左条(.group-row.selected::before), 同几何同色
+ *     ⇒ 右键目标会被读成"已选中"(正是要避免的混淆)。
+ * outline 独立于这两者: 实心 2px accent 闭合框, 不铺底色, 也不碰选中条; 与键盘光标(.kb-cursor
+ * 1px **虚线** outline)以线宽/线型区分。标记与清理在共享层(menu.js _markCtxSource/_clearCtxSource)。 */
 .group-row.ctx-src, .member-row.ctx-src, .show-row.ctx-src, .ep-row.ctx-src {
-  box-shadow: inset 2px 0 0 var(--accent), inset 0 0 0 1px var(--accent-line); }
+  outline: 2px solid var(--accent); outline-offset: -2px; }
 .ctx-anchor.ctx-src { box-shadow: 0 0 0 2px var(--ring); border-radius: var(--radius-sm); }
 
 /* ================= W4 顶栏: 一级导航三态 + 设置右置 + 品牌动态化 ================= */

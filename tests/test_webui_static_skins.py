@@ -30,6 +30,7 @@
   $root.dtBridgeLines(tab, seg) 在位 + sortedDrawer 调用点 ≥2(回落支 + 窗支)
 - test_drawer_tpl_table_face_bg_single_point
 - test_frontend_tpl_ctl_bits_single_source
+- test_frontend_ctx_src_target_marker_parity: 右键目标行「持续可见标识」守阵(2026-11-02 用户报「强调动效结束后看不出右键目标行」) —— 四皮肤四行类 .ctx-src 全覆盖 + 静态实心 2px accent outline 框(outline-offset:-2px) + 禁用 box-shadow(row_lang flat 会归零, atlas 实测恒 none)与左条(与选中条同几何同色) + 规则体零 background/零 --sel-* 令牌(不被读成选中) + 零 animation(标识常驻菜单打开期而非闪一下) + 四皮肤逐字同值
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -4068,3 +4069,46 @@ def test_frontend_console_square_radius():
                 "皮肤面(B1 回归向量: flux 意图的圆角 16/10/6 漏进 console 加载面); "
                 "若确属 console 设计变更, 显式更新本守阵白名单"
             )
+
+
+def test_frontend_ctx_src_target_marker_parity():
+    """右键目标行「持续可见标识」守阵(2026-11-02 用户报「强调动效结束后看不出右键目标行」)
+
+    现象: 右键种子行时只有一次性强调, 动效结束后行上没有任何持久标记 —— 用户无法确认
+    "这次菜单操作针对哪一行"。
+
+    口径(三态不可混): 选中 = `--sel-bar` 左条 + `--sel-bg` 底色; 键盘光标 = `.kb-cursor`
+    1px 虚线; 右键目标 = `.ctx-src` **实心 2px accent 闭合框(outline, offset -2px), 不铺底色,
+    不用左条**。
+    故本守阵钉四件事(四皮肤逐条同值):
+    1. 四个行类(group/member/show/ep)都被 `.ctx-src` 规则覆盖 —— 漏一支 = 该视图右键无标识;
+    2. 标记是静态声明(实心 2px accent outline, offset -2px), 不依赖一次性动效; 禁用 box-shadow
+       (row_lang flat 行语言会归零)与左条(与选中条同几何同色);
+    3. 规则体内**零 background**、零 `--sel-*` 令牌 —— 否则会被读成"已选中";
+    4. 不挂 animation —— 标识必须常驻菜单打开期间, 而不是闪一下。
+    """
+    bodies = {}
+    want_outline = "outline: 2px solid var(--accent); outline-offset: -2px"
+    for ui in _UI_ALL:
+        rel = f"{ui}/css/components.css"
+        path = os.path.join(STATIC_ROOT, ui, "css", "components.css")
+        rules = _css_rules(open(path, encoding="utf-8").read())
+        for sel in (".group-row.ctx-src", ".member-row.ctx-src", ".show-row.ctx-src", ".ep-row.ctx-src"):
+            assert any(sel in sels for sels, _ in rules), f"{rel} 缺 `{sel}` 规则 —— 该行类右键时无目标标识"
+        body = " ".join(_css_body(rules, ".group-row.ctx-src", rel).split())
+        assert want_outline in body, (
+            f"{rel} 的 .ctx-src 标识退化了(期望 `{want_outline}`) —— "
+            "box-shadow 会被 row_lang.css 的 flat 行语言归零(atlas 实测恒 none), 左条又与选中条同几何同色"
+        )
+        assert "box-shadow" not in body, (
+            f"{rel} 的 .ctx-src 用 box-shadow 画框 —— row_lang.css 的 flat 行语言(特异性更高)会把它归零, "
+            "皮肤里怎么写都不生效"
+        )
+        assert "background" not in body, f"{rel} 的 .ctx-src 铺了底色 —— 会被误读成「已选中」"
+        assert "--sel-bar" not in body and "--sel-bg" not in body, (f"{rel} 的 .ctx-src 引用了选中态令牌族 —— 右键目标与选中必须两套视觉")
+        assert "animation" not in body, (f"{rel} 的 .ctx-src 挂了 animation —— 标识会在动效结束后消失, 正是本单要修的形态")
+        bodies[ui] = body
+    assert len(set(bodies.values())) == 1, (
+        "各皮肤的 .ctx-src 标识不一致 —— 全皮肤必须逐条同值(用户口径: prism/atlas 一致, 另两皮肤不漂移):\n" +
+        "\n".join(f"  {k}: {v}" for k, v in bodies.items())
+    )
