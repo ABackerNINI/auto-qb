@@ -81,7 +81,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (333)
+## Done (334)
 
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](../26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)
 - [test] [test_relocate_volume_free_ancestor_fallback 断言竞态: 两次独立 disk_usage 之间自由空间被写即偶发红](../26-11-02-0413-test-webui-relocate-free-space-race.html) — 断言比较两次独立 disk_usage 调用的自由字节数, 间隔内任何磁盘活动(实测 4096B)即偶发红; 单跑恒绿, 全量/闸门跑两次中招
