@@ -223,6 +223,20 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
     animation: fx-toast-rise var(--fx-dur-toast) var(--fx-ease-out),
                fx-danger-glow 400ms var(--fx-ease-standard);
   }
+  /* 队列推入(九轮, 2026-11-02): 栈里已有条时, 新条**从下方一整格推入**并延迟 90ms ——
+   * 旧条此刻正被 flipStack 上移让位(200ms), 若新条在原地淡入/只下移 10px, 就必然与还没让开
+   * 的旧条叠画(实测 t=1825ms 起 5 帧重叠, 最大 49px = 旧条整个高度 —— 用户报的「互相重叠」)。
+   * 改从 translateY(100% + 栈间距) 起步后, 两条同速上移、间距恒为 8:
+   * 旧条底边 904→837, 新条顶边 912→845, 全程不交叉。
+   * backwards: 延迟期保持首帧(完全透明 + 屏外), 不闪出实体。
+   * 首条(栈里只有它)不加 [data-fx-queue], 仍走原地 rise —— 单条没有让位需求, 不必延迟。 */
+  html[data-fx-preset] .toast[data-fx~="rise"][data-fx-queue]:not([data-fx-exit]) {
+    animation: fx-toast-queue-in var(--fx-dur-toast) var(--fx-ease-out) 90ms backwards;
+  }
+  html[data-fx-preset] .toast[data-fx~="rise"][data-fx-queue][data-fx~="danger"][data-fx-play] {
+    animation: fx-toast-queue-in var(--fx-dur-toast) var(--fx-ease-out) 90ms backwards,
+               fx-danger-glow 400ms var(--fx-ease-standard);
+  }
   html[data-fx-preset] .toast[data-fx-cd]::after {
     content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px;
     background: var(--accent, currentColor); transform-origin: left;
@@ -353,6 +367,13 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
 /* D6-1 toast 入场 keyframes(等价 fx rise 原语: 位移读 --fx-enter-shift 供给面) */
 @keyframes fx-toast-rise {
   from { opacity: 0; transform: translateY(var(--fx-enter-shift)); }
+  to { opacity: 1; transform: none; }
+}
+
+/* D6-3 队列推入 keyframes(九轮, 2026-11-02): 从**下方一整格**(自身高度 + 栈间距 8px)起步 ——
+ * 与旧条让位上移同速, 两条互不侵入; 原地小位移淡入做不到这点(见上面 [data-fx-queue] 规则注解)。 */
+@keyframes fx-toast-queue-in {
+  from { opacity: 0; transform: translateY(calc(100% + 8px)); }
   to { opacity: 1; transform: none; }
 }
 

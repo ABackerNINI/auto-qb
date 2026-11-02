@@ -197,7 +197,7 @@ window.AQB_DIALOGS = {
     async submitMgrCategory() {
       if (this.mgrBusy) return;  // 回车提交与按钮同源: 防回执等待期重复投递
       const name = this.mgrNew.catName.trim();
-      if (!name) { this.toast("分类名称不能为空", "warn"); return; }
+      if (!name) { this.toast("分类名称不能为空: 请输入名称后重试", "warn"); return; }
       await this._mgrRun(async () => {
         const payload = { name };
         const savePath = this.mgrNew.catPath.trim();
@@ -211,7 +211,7 @@ window.AQB_DIALOGS = {
       if (this.mgrBusy) return;  // 回执等待期防重复投递
       // 支持中英文逗号分隔批量创建(空段剔除; 与添加种子对话框的标签口径一致)
       const tags = this.mgrNew.tags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
-      if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
+      if (!tags.length) { this.toast("标签不能为空: 请至少输入一个标签", "warn"); return; }
       await this._mgrRun(async () => {
         await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags }) });
         this.mgrNew.tags = "";
@@ -224,8 +224,8 @@ window.AQB_DIALOGS = {
       });
       if (p === null) return;  // 取消/遮罩/Esc 均不写
       const savePath = p.trim();
-      if (!savePath) { this.toast("保存路径不能为空", "warn"); return; }
-      if (savePath === cur) { this.toast("未作修改", "ok", 2000); return; }
+      if (!savePath) { this.toast("保存路径不能为空: 请输入或选择一个目录", "warn"); return; }
+      if (savePath === cur) { this.toast("未作修改: 输入与当前值一致", "ok", 2000); return; }
       await this._mgrRun(
         () => this.api("/api/categories/edit", { method: "POST", body: JSON.stringify({ name, save_path: savePath }) }),
         `已更新分类路径: ${name}`, "修改分类路径失败",
@@ -362,14 +362,14 @@ window.AQB_DIALOGS = {
     async metaAddNewTags() {
       if (this.metaBusy) return;
       const tags = this.metaNewTags.split(/[,,]/).map((t) => t.trim()).filter(Boolean);
-      if (!tags.length) { this.toast("请输入至少一个标签", "warn"); return; }
+      if (!tags.length) { this.toast("标签不能为空: 请至少输入一个标签", "warn"); return; }
       const fresh = tags.filter((t) => !this.metaTags.includes(t));
       if (fresh.length) {
         // 新标签定义先入队创建(定义列表/管理对话框可见); 已存在时创建失败不影响后续打标
         try {
           await this.api("/api/tags", { method: "POST", body: JSON.stringify({ tags: fresh }) });
         } catch (e) {
-          if (!e.auth) this.toast("创建标签失败(可能已存在), 继续尝试打标", "warn", 4000);
+          if (!e.auth) this.toast("标签创建失败: 可能已存在, 继续尝试打标", "warn", 4000);
         }
         this.metaTags = [...new Set([...this.metaTags, ...fresh])].sort((a, b) => a.localeCompare(b));
       }
@@ -388,7 +388,7 @@ window.AQB_DIALOGS = {
         try {
           await this.api("/api/categories", { method: "POST", body: JSON.stringify({ name }) });
         } catch (e) {
-          if (!e.auth) this.toast(`创建分类「${name}」失败(可能已存在), 继续尝试设置`, "warn", 4000);
+          if (!e.auth) this.toast(`分类创建失败: 「${name}」可能已存在, 继续尝试设置`, "warn", 4000);
         }
         this.metaCategories = [...this.metaCategories, name].sort((a, b) => a.localeCompare(b));
       }

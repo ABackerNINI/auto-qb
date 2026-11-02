@@ -482,21 +482,32 @@
   text-align: center; color: var(--fg-dim); font-size: 13px; }
 .empty .ico { width: 28px; height: 28px; opacity: .6; color: var(--accent); }
 
-/* ---------------- 提示条(toast): 方角 + 语义描边 ---------------- */
-.toast-wrap { position: fixed; right: 20px; bottom: 20px; z-index: 120; display: flex; flex-direction: column;
-  gap: 8px; align-items: flex-end; pointer-events: none; }
-.toast { display: flex; align-items: center; gap: 9px; max-width: 380px; padding: 10px 14px;
-  background: var(--bg-card); border: 1px solid var(--border-strong);
-  box-shadow: var(--shadow-2); font-size: 13px; pointer-events: auto; animation: toast-in .18s var(--ease); }
-.toast .ico { color: var(--accent); }
-.toast.ok { border-color: var(--green-line); }
-.toast.ok .ico { color: var(--green); }
-.toast.error { border-color: var(--error-line); }
-.toast.error .ico { color: var(--error); }
-.toast.busy { border-color: var(--accent-line); }
-.toast.busy .ico { color: var(--accent); }
-.toast.timeout { border-color: var(--warn-line); }
-.toast.timeout .ico { color: var(--warn); }
+/* ============ 消息面(message surface): 提示条与站内确认框同一套材质 ============
+ * 用户报障(2026-11-02): 「强制汇报投递」的提示条与刚点过的确认框像两个产品的控件 —— 提示条停在
+ * console fork 时的平面方角老配方(方角 + --bg-card + --shadow-2), 弹窗是 flux 的 glass 语言。
+ * 统一口径 = **材质同源, 形态各守其位**: ① 表面 同一 `--msg-surface`(高光渐变 + --bg-elev 近不透明底;
+ * 提示条面积小故不挂 blur —— R2 精修只给常驻大型浮层面开毛玻璃, backdrop 预算钉死 4 处);
+ * ② 语义 `--msg-tone`(图标) / `--msg-line`(描边) 由 kind 一档一声明, 两处都靠「描边 + 图标」表达等级;
+ * ③ 形状**不跟弹窗** —— 用户口径(2026-11-02 二轮): 「消息通知不要切角」。切角是 flux 大面浮层
+ * (弹窗/限速浮层)的语言, 通知是**过路小条**, 切角在小面积上读作装饰缺口且会啃掉底部倒计时条
+ * 右端; 故 `.toast` 保持方角(radius 令牌本就为 0), 只有材质与语义档同源。**别再"顺手统一"切角** ——
+ * 守阵 `_scan_message_surface_parity` 反向钉本条(clip-path 出现在 `.toast` 上即红)。
+ * 新增 kind 必须先在本表登记, 否则静默退回中性档(历史缺口: warn 21 处调用点整档没样式 = 与 info 同貌)。
+ * ------------------------------------------------------------------------ */
+/* 消息面供给面单点(提示条/确认框两处消费; 改取值只动这一行) */
+.toast-wrap, .modal-mask { --msg-surface: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-elev); }
+.toast-wrap { position: fixed; right: 20px; bottom: calc(var(--statusbar-h, 34px) + 12px); z-index: 120; /* 坐在状态栏之上(用户八轮「通知挡住状态栏」), 与 .err-panel 同族 */
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.toast { --msg-tone: var(--accent); --msg-line: var(--border-strong); position: relative;
+  display: flex; align-items: flex-start; gap: 9px; width: 340px; max-width: calc(100vw - 40px);
+  padding: 10px 12px; background: var(--msg-surface, var(--bg-elev)); border: 1px solid var(--msg-line);
+  box-shadow: var(--shadow-3); font-size: 13px; font-weight: 600; line-height: 1.4; overflow: hidden;
+  pointer-events: auto; animation: toast-in .18s var(--ease); }
+.toast .ico { color: var(--msg-tone); margin-top: 1px; }
+.toast.ok { --msg-tone: var(--green); --msg-line: var(--green-line); }
+.toast.warn, .toast.timeout { --msg-tone: var(--warn); --msg-line: var(--warn-line); }
+.toast.error { --msg-tone: var(--error); --msg-line: var(--error-line); }
+.toast.busy { --msg-tone: var(--accent); --msg-line: var(--accent-line); }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px) scale(.98); } }
 
 /* ---------------- 站内确认框: 弹窗大面 → 切角 14px + 顶亮渐变(hb-modal 语言) ----------------
@@ -508,11 +519,14 @@
 /* R3 精修 T1: 弹窗形状回退 console 原版切角 14px(毛玻璃 blur 等取值保留) */
 .modal-mask .modal { --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0,
   100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut)); }
-.modal { width: var(--modal-w-base); max-width: 100%; padding: 20px 22px;
-  background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-card);
+.modal { --msg-line: var(--border-strong); width: var(--modal-w-base); max-width: 100%; padding: 20px 22px;
+  background: var(--msg-surface, var(--bg-elev));
   backdrop-filter: blur(14px); /* V2 精修: 弹窗面板(非遮罩)静态毛玻璃 -- 遮罩仍不带(见上注) */
-  border: 1px solid var(--border-strong); box-shadow: var(--shadow-3); animation: modal-in .16s var(--ease);
+  border: 1px solid var(--msg-line); box-shadow: var(--shadow-3); animation: modal-in .16s var(--ease);
   max-height: calc(100vh - 120px); overflow-y: auto; overscroll-behavior: contain; } /* 矮视口兜底: 壳内滚, 按钮可达 */
+/* 语义档描边: 提示条按 kind / 弹窗按 tone(_openModal 单点派生 warn 缺省·error 危险), 同一套 --msg-line */
+.modal.tone-warn { --msg-line: var(--warn-line); }
+.modal.tone-error { --msg-line: var(--error-line); }
 @keyframes modal-in { from { opacity: 0; transform: translateY(8px) scale(.985); } }
 .modal { animation: modal-in .2s var(--ease-spring); }
 .modal-title { display: flex; align-items: center; gap: 9px;

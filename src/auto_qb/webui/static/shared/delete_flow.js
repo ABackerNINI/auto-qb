@@ -222,8 +222,10 @@ window.AQB_DELETE = {
      * 文案诚实区分「失败/未确认/跳过」; skipped = 投递前收敛掉的非活跃数(等待态就报, D5)。 */
     async _reannounceAll(jobs, label, skipped = 0) {
       if (!jobs.length) return true;
-      const skipTxt = skipped ? `(跳过 ${skipped} 个非活跃)` : "";
-      const tid = this.toast(`正在向 tracker 汇报 ${jobs.length} 个目标${skipTxt}, 等待确认…`, "busy", 0, { sticky: true });
+      /* 归档条文案(九轮统一收): 必须**归档后仍成立** —— 不写「进行中 / 等待 tracker 确认」,
+       * 那是它结算前的状态; 结算后它要在队列里留 4s 与结果条并存(见 commands.js::_runningToast)。 */
+      const run = this._runningToast(`强制重新汇报已投递: ${jobs.length} 个目标`
+        + (skipped ? `, 跳过 ${skipped} 个非活跃` : ""));
       const results = await Promise.allSettled(
         jobs.map((p) => this.api(p, { method: "POST" }).then((r) => this.waitCmd(r.cmd_id)))
       );
@@ -240,13 +242,13 @@ window.AQB_DELETE = {
           ? `${errs.length}/${jobs.length} 个目标汇报失败`
           : `${warns.length}/${jobs.length} 个目标汇报未确认`;
         const first = errs[0] || warns[0];
-        this._finishToast(tid, errs.length ? "error" : "timeout",
-          `${head}${label ? `(${label})` : ""}: ${first}, 已保留未删除`, 8000);
+        await this._settleRunningToast(run, errs.length ? "error" : "timeout",
+          `${head}: ${label ? `「${label}」` : ""}${first}, 已保留未删除`, 8000);
         return false;
       }
       const skipN = skipped + inactive;
-      this._finishToast(tid, "ok",
-        `汇报确认成功${skipN ? `(跳过 ${skipN} 个非活跃)` : ""}, 开始删除…`, 2000);
+      await this._settleRunningToast(run, "ok",
+        `强制重新汇报完成: ${skipN ? `跳过 ${skipN} 个非活跃, ` : ""}开始删除…`, 2000);
       return true;
     },
     /* 删除确认框「删除前强制重新汇报」的可用性(闸门层, issue 26-10-17-1703; 判据与右链

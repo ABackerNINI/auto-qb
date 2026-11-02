@@ -870,7 +870,7 @@ def test_qb_traffic_shortcuts() -> None:
     assert it["group"] == "视图与导航" and it["scope"] == "global", "open-qb-traffic 应 视图与导航 / global"
     assert it["def"] == "Ctrl+Backslash", "open-qb-traffic 默认键必须是 Ctrl+Backslash"
     assert it["runs"] == ["_kbToggleQbTraffic"], "open-qb-traffic 必须走 _kbToggleQbTraffic(切换语义)"
-    assert "if (!this.qbTrafficOn) {" in chart and "qB 口径流量图未启用" in chart, \
+    assert "if (!this.qbTrafficOn) {" in chart and "功能未启用: qB 口径流量图" in chart, \
         "openQbHistory 必须补未启用提示(键盘入口不能静默无反应)"
 
     # ② 详情面板流量页签(Alt+1-4 的第五档)
@@ -884,7 +884,7 @@ def test_qb_traffic_shortcuts() -> None:
     gate = tb.index('tab === "traffic" && !this.qbTrafficOn')
     assert gate > tb.index('this.page !== "groups"'), "流量门控必须在页面守卫之后(守卫序: 页面 -> 功能门 -> 双态)"
     assert gate < tb.index('if (this.drawer.open && this.drawerIsSeed)'), "流量门控必须先于开态切页(未启用不得切到隐形页签)"
-    assert "qB 口径流量图未启用" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
+    assert "功能未启用: qB 口径流量图" in tb, "流量页签未启用必须 toast 提示后忽略, 不许静默"
 
     # ③ 窗口前后切换(when 条件绑定 + 端点夹取, 见 test_webui_static_dom_page.py 的持久化守阵)
     for tid, key, delta in (("traffic-win-prev", "BracketLeft", "-1"), ("traffic-win-next", "BracketRight", "1")):

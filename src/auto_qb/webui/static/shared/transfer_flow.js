@@ -331,8 +331,8 @@ window.AQB_TRANSFER_FLOW = {
       if (this._transferRunning) return;
       this._transferRunning = true;
       const timeoutMs = Math.max(40000, send.length * 20000 + 20000);
-      const tid = this.toast(
-        `正在转移 ${send.length} 个种子到「${name}」…(串行执行, 数据文件不动)`, "busy", 0, { sticky: true }
+      const run = this._runningToast(
+        `转移已开始: ${send.length} 个种子到「${name}」, 串行执行, 数据文件不动`
       );
       for (const h of send) this.setRowIcon(h, "pending", "转移中…", timeoutMs + 5000);
       let r = null;
@@ -345,7 +345,7 @@ window.AQB_TRANSFER_FLOW = {
         /* 投递失败(网络/400): 一批全未执行 —— 撤 pending 图标(不落 error: 种子没被碰过,
          * 落红图标反而谎报), 只 toast。 */
         for (const h of send) this.setRowIcon(h, "", "");
-        this._finishToast(tid, "error", "转移命令发送失败: " + ((e && e.message) || e), 8000);
+        this._finishToast(run.tid, "error", "转移命令发送失败: " + ((e && e.message) || e), 8000);
         this._transferRunning = false;
         return;
       }
@@ -382,13 +382,13 @@ window.AQB_TRANSFER_FLOW = {
         for (const h of send) this.setRowIcon(h, "warn", firstSkip);
       }
       const allSkip = skipN + skips.length;
-      const head = `转移结算(目标 ${name}): 成功 ${okN}, 跳过 ${allSkip}, 失败 ${failN}`;
+      const head = `转移结算: 目标「${name}」, 成功 ${okN}, 跳过 ${allSkip}, 失败 ${failN}`;
       if (failN) {
-        this._finishToast(tid, "error", `${head}; ${firstFail || "部分种子失败, 源已保留"}`, 8000);
+        await this._settleRunningToast(run, "error", `${head}; ${firstFail || "部分种子失败, 源已保留"}`, 8000);
       } else if (allSkip) {
-        this._finishToast(tid, "timeout", `${head}; ${firstSkip || "部分种子被跳过, 源保留"}`, 6000);
+        await this._settleRunningToast(run, "timeout", `${head}; ${firstSkip || "部分种子被跳过, 源保留"}`, 6000);
       } else {
-        this._finishToast(tid, "ok",
+        await this._settleRunningToast(run, "ok",
           `${head}${keepSource ? "(按勾选保留源任务)" : "(源任务已删除, 数据文件未动)"}`, 3000);
       }
       this.transferTargetsReload();  // 目标缓存对齐热重载后的配置; 列表态交 rid 轮询自然刷新

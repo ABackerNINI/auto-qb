@@ -253,6 +253,52 @@ select option { background: var(--bg-elev); color: var(--fg); }
 .modal-detail-row .d-copy { width: 22px; height: 22px; opacity: 0; transition: opacity var(--dur) var(--ease); }
 .modal-detail-row:hover .d-copy, .modal-detail-row .d-copy:focus-visible { opacity: .75; }
 .modal-detail-row .d-copy:hover { opacity: 1; }
+
+/* ============ 消息面图标: 圈内字形族(用户口径 2026-11-02 三轮) ============
+ * 原话: 「图标需要统一一下, showcase 中『toast / 通知』的例子中的图标样式不错, 直接复用」——
+ * 参考物 = `fx/showcase.html` D6 的 `.tst-ico`: **18px、圆环 + 圈内单一字形、stroke 2、round cap**,
+ * 一档一形(对勾 / 感叹 / 叉 / 旋转箭头 / 时针 / i)。此前生产是裸 13px sprite 字形(stroke 1.7),
+ * 六档字形粗细与含圈与否各不相同, 并排看像临时拼的。
+ *
+ * 为什么不换图标源: toast 模板(`tpl/overlays.html` 的 kind→`<use href>` 映射)与各皮肤 sprite 段
+ * 都是**四皮肤共享且逐字相等**的守阵面 —— 换 glyph 会连带改三套旧皮肤(范围守恒禁, 且旧皮肤没有
+ * 18px 档, 换过去只会变小脏)。故 flux 只在**渲染层**换漆:
+ *   ① `color: transparent` 让 sprite 字形(currentColor 描边)失效 = 藏掉旧字形;
+ *   ② `mask` 把「圆环 + 圈内字形」当形状, `background-color: var(--msg-tone)` 上色 —— 语义档
+ *      单点复用(与 components.css 的 --msg-tone 表同源, 一处着色两处通用, 不另开配色表);
+ *   ③ 每档一张 mask(数据 URI 直写, 单点在本块), `.toast.busy` 的 `.spin` 照旧转 = 圈内箭头自转。
+ * 降级: 不支持 mask 的浏览器**不进本块** → 保留 sprite 字形(仅放大到 18px / stroke 2), 图标仍在,
+ * 只是不画圈(能力降级而非信息丢失)。新增 kind 必须在此补一张 mask(守阵同 kind 表一起扫)。 */
+/* 兜底尺寸(同一档视觉重量, 只是不画圆环): 写在 @supports 之前, 支持 mask 时由下面的规则覆盖 */
+.toast .ico { width: 18px; height: 18px; stroke-width: 2; }
+@supports (mask-image: url("#x")) {
+  .toast .ico {
+    width: 18px; height: 18px; color: transparent;
+    background-color: var(--msg-tone);
+    -webkit-mask: var(--msg-ico) center / 18px 18px no-repeat;
+    mask: var(--msg-ico) center / 18px 18px no-repeat;
+  }
+  .toast, .toast.info { --msg-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 8h.01M12 11v5'/%3E%3C/svg%3E"); }
+  .toast.ok { --msg-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8 12.5 11 15.5 16 9.5'/%3E%3C/svg%3E"); }
+  .toast.warn { --msg-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5v5.5M12 16.5h.01'/%3E%3C/svg%3E"); }
+  .toast.error { --msg-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M9 9l6 6M15 9l-6 6'/%3E%3C/svg%3E"); }
+  .toast.busy { --msg-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 6.5a5.5 5.5 0 0 1 5.5 5.5'/%3E%3C/svg%3E"); }
+  .toast.timeout { --msg-ico: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.5V12l3.2 1.9'/%3E%3C/svg%3E"); }
+}
+/* ============ 消息面文字区: 标题行 + 明细行(D6-2「倒计时进度条」骨架, 2026-11-02 四轮) ============
+ * 用户口径: 「文字内容排版样式也使用 showcase 中『toast / 通知』的 D6-2 倒计时进度条例子中的样式」——
+ * 参考物 = `fx/showcase.html` D6 的 `.tst-title`(13px/600) + `.tst-sub`(12px/dim) 两行块级堆叠,
+ * 配 `.tst` 的 `align-items: flex-start`(图标顶对齐)。旧生产是单行 400 字重、图标垂直居中,
+ * 长 err.message 折行时图标被压在垂直中线, 与行块不齐。
+ * 分段落点: 共享模板只有一条 `<span>{{ t.text }}</span>`(四皮肤共用, 不动模板), 拆两段由
+ * flux/fx-mount.js::shapeToastText 在挂载层完成 —— 纯结构规则(动作短语 : 明细), 不猜语义。
+ * 单行条由 components.css 的 .toast 基座 600 字重读作标题行, 与拆开条同貌: 「拆不开」是
+ * 短回执的正常形态, 不是缺样式。落 views.css 而非 components.css: 后者卡 700 行体量上限
+ * (pitfalls/web-ui/css-file-line-cap)。 */
+.toast-txt { flex: 1; min-width: 0; display: block; overflow-wrap: anywhere; }
+.toast-t { display: block; }
+.toast-s { display: block; margin-top: 1px; color: var(--fg-muted); font-size: 12px;
+  font-weight: 400; line-height: 1.45; }
 /* ================= 路径选择器(服务端目录浏览) ================= */
 .modal.dir-browse { width: var(--modal-w-add); max-width: 100%; display: flex; flex-direction: column; }
 .db-bar { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 10px; }

@@ -1475,7 +1475,11 @@ ok("删除闸门: 混选 -> 不禁用 + pill 报跳过数", (() => { const g = G
 ok("删除闸门: 全活跃 -> 不禁用无说明", (() => { const g = G([{ state: "uploading" }, { state: "stalledUP" }]); return g.disabled === false && g.note === ""; })());
 ok("删除闸门: 解析不出(空成员) -> 不误拦", G([]).disabled === false && G(null).note === "");
 ok("删除闸门: 缺 state 回落 kind 兜底(paused 同族)", G([{ kind: "paused" }]).disabled === true);
-const RA_BASE = { toast: () => 1, _finishToast: () => {}, api: async (p) => ({ cmd_id: p }) };
+/* 统一收(2026-11-02 十轮): _reannounceAll 改走进行中条工厂 + 两段式结算(真实现见
+ * commands.js), 这份电池只测 skip 桶分型, 两个原语给空桩即可。 */
+const RA_BASE = { toast: () => 1, _finishToast: () => {},
+  _runningToast: () => ({ tid: 1, text: "", at: 0 }), _settleRunningToast: async () => {},
+  api: async (p) => ({ cmd_id: p }) };
 const INACTIVE_WARN = { ok: false, status: "warn", error: "未确认: 种子非活跃(暂停/停止/排队/校验中/错误), qB 静默忽略强制汇报" };
 const DEFER_WARN = { ok: false, status: "warn", error: "未确认: 已受理, 推迟中" };
 const ra = (waitImpl, jobs, skipped) => DF._reannounceAll.call({ ...RA_BASE, waitCmd: waitImpl }, jobs, "标签", skipped);
@@ -2663,7 +2667,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
         "_actCore 未按 reannouncePlan 收敛投递集合 —— 混选会对非活跃目标发指令, 确认层随后白等窗口报「未确认」"
     assert "跳过 ${plan.skipped} 个非活跃" in cmds, \
         "回执未体现被跳过的非活跃目标数(用户看不懂「选了 4 个怎么只汇报了 1 个」)"
-    assert "没有可强制重新汇报的目标" in cmds, \
+    assert "无可汇报目标: 没有可强制重新汇报的种子" in cmds, \
         "缺空投递收口 —— 会落进成功分支报「成功 0 个目标」(把没做事说成做成了)"
     # 前后端判据表逐项同表(各写一份是刻意的: 前端要能在无往返时判置灰; 漂移必须立刻报红)
     assert _PY_BLOCKED_STATES == {

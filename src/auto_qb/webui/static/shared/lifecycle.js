@@ -160,7 +160,7 @@ window.AQB_LIFECYCLE = {
       // page 挡设置页(escBusy 无需同步), inInput 挡搜索框, hrPop 让"收卡"独占该次按键
       else if (this.authOk && this.page === "groups" && !this.hrPop.open && !inInput && this.facetsActive) {
         this.clearFilters();
-        this.toast("已清除全部筛选(搜索词保留)", "ok", 2500);
+        this.toast("已清除全部筛选: 搜索词保留", "ok", 2500);
       }
     });
     // 键盘快捷键引擎(计划 26-09-28-0354 W1): 必须注册在 Esc 退栈链**之后**(注册序 = 触发序);

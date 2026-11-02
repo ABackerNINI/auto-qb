@@ -665,6 +665,9 @@ window.AQB_COMMANDS = {
         }
       }
       const t0 = isRe ? 0 : this._newCmdStats(action);
+      /* 强制汇报投递条的句柄(九轮: 投递与回执是**两条**消息, 见 reannounce 分支注解)。
+       * 提到 try 外是为了 catch 里也能把它收掉 —— sticky 条不结账会永远挂在屏上。 */
+      let reToast = null;
       if (!isRe) {
         this.applyOptimistic(optHashes, action);  // P0-3: 补丁先于 POST(失败会回滚), 见 26-09-19-1939
         this._markCmdPatch(t0);
@@ -686,21 +689,23 @@ window.AQB_COMMANDS = {
           if (!jobs.length) {
             /* 闸门放行(目标解析不出时不误拦)但计划为空(组行成员被清空的罕见态): 必须显式
              * 收口 —— 落进下面的成功分支会报「成功 0 个目标」, 那是把没做事说成做成了。 */
-            this.toast(plan.skipped ? `全部 ${plan.skipped} 个目标均非活跃，已跳过` : "没有可强制重新汇报的目标", "error", 6000);
+            this.toast(plan.skipped ? `汇报已跳过: 全部 ${plan.skipped} 个目标均非活跃` : "无可汇报目标: 没有可强制重新汇报的种子", "error", 6000);
             return;
           }
           const cnt = jobs.length;
-          const skipTxt = plan.skipped ? `, 跳过 ${plan.skipped} 个非活跃` : "";  // 零跳过时文案与本特性上线前逐字一致
-          /* 跳过数在投递前就已知, 故等待态就报出来 —— 否则用户要盯到 tracker 确认落定(最长 40s)
-           * 才知道"我选了 2 个为什么只汇报了 1 个"。 */
-          const tid = this.toast(
-            plan.skipped
-              ? `强制重新汇报已投递 ${cnt} 个活跃目标, 跳过 ${plan.skipped} 个非活跃(tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
-              : (cnt > 1
-                ? `强制重新汇报等待中…(${cnt} 个目标, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)`
-                : "强制重新汇报等待中…(已投递, tracker 确认最长 30s; 受最小间隔推迟的目标会先行回执)"),
-            "busy", 0, { sticky: true }
-          );
+          /* 跳过数在投递前就已知, 故投递条就报出来 —— 否则用户要盯到 tracker 确认落定(最长 40s)
+           * 才知道"我选了 2 个为什么只汇报了 1 个"。
+           * !2026-11-02 九轮(用户实测「第一个消息窗口会被第二个顶掉, 仅显示不到 1 秒, 没有做到
+           *   队列重排」): 八轮把回执做成**同一条**原位换字(emit 一条 sticky, 回执 _finishToast
+           *   改 kind/text) —— 桩服务回执 ~500ms 就回, 投递条只活半秒就被改了内容, 看着就是
+           *   "两个窗口互相顶掉"; 队列里从头到尾只有一条, 自然也没有重排可言。
+           *   今按 D6-3 队列语义拆成**两条事件消息**: 投递条归档成中性「已投递」并留在队列里
+           *   (带 TTL), 回执**另起一条** —— 新条推入时投递条被 flipStack 顶上一格, 两条并存。
+           *   因此投递条文案必须**归档后仍成立**: 不写「等待中」(它结算后就不再是"等待"了),
+           *   统一写「已投递」; "tracker 确认中" 也只作投递瞬间的状态词。 */
+          const deliveredText = `强制重新汇报已投递: ${cnt} 个目标`
+            + (plan.skipped ? `, 跳过 ${plan.skipped} 个非活跃` : "");
+          reToast = this._runningToast(deliveredText);
           /* 投递即给目标落"进行中"(右槽蓝呼吸, 兜底 45s): 多目标时用户能在**行上**看到
            * 哪几个在飞, 而不是只有一条聚合 toast。 */
           for (const j of jobs) for (const h of j.hashes) this.setRowIcon(h, "pending", "强制重新汇报中…");
@@ -741,19 +746,19 @@ window.AQB_COMMANDS = {
             }
           });
           if (!errN && !warnN) {
-            this._finishToast(tid, "ok",
-              cnt > 1
-                ? `强制重新汇报成功(tracker 已确认, ${cnt} 个目标${skipTxt})`
-                : `强制重新汇报成功(tracker 已确认${skipTxt})`, 3000);
+            /* 回执条只报"结果": 目标数/跳过数投递条已经报过, 这里再报会把说明挤成两行,
+             * 也与投递条不同高(八轮报障的成因之一)。 */
+            await this._settleRunningToast(reToast, "ok", `强制重新汇报成功: tracker 已确认 ${cnt} 个目标`, 3000);
             return;
           }
           /* toast 类型映射(计划 §3.4): 含 error -> error / 仅 warn -> timeout(复用现有类型, 不新增)。 */
           const kind = errN ? "error" : "timeout";
-          const head = `强制重新汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}${skipTxt}`;
+          /* head 不带跳过数: 投递条已报过, 重复会把说明挤成两行(与投递条不同高) */
+          const head = `强制重新汇报: 成功 ${okN}, 失败 ${errN}, 未确认 ${warnN}`;
           /* 后端聚合 msg 头部「成功 X, 失败 Y, 未确认 Z: 」与前端三桶计数重复(格式被契约测试
            * 钉住), 剥头只留原因段; 投递失败/等待超时无头部, 原样保留。 */
           const detail = firstMsg.replace(/^成功 [0-9]+, 失败 [0-9]+, 未确认 [0-9]+: /, "");
-          this._finishToast(tid, kind, detail ? `${head} (${detail})` : head, 6000);
+          await this._settleRunningToast(reToast, kind, detail ? `${head} (${detail})` : head, 6000);
           return;
         }
         let resp;
@@ -775,8 +780,34 @@ window.AQB_COMMANDS = {
         else this.toast(`${label}失败: ${r.error}`, "error", 8000);
       } catch (e) {
         if (!isRe) this.resolveOptimistic(optHashes, false);  // 发送失败: 回滚, 不留假状态
+        /* 投递条必须收口: sticky 条不结账会永远挂在屏上(发送抛错时尤其明显)。
+         * auth 失效不弹 —— 会话断了, 屏幕上留条"命令未能送达"毫无用处。 */
+        if (reToast && !e.auth) this._finishToast(reToast.tid, "error", "强制重新汇报失败: 命令未能送达", 6000);
         if (!e.auth) this.toast("命令发送失败: " + e.message, "error");
       }
+    },
+    /* ---- 进行中 → 结果: 统一两段式("统一收", 2026-11-02 九轮) ----
+     * 口径: 「进行中 / 已投递」与「结果」是**两个事件**, 队列里必须是两条 —— 进行中条归档成
+     * 中性(info)留在队列, 结果**另起一条**推入; 新条推入时归档条被 flipStack 顶上一格,
+     * 两条并存可见(D6-3 队列重排的可见前提)。
+     * !此前各链路都是同一条 `_finishToast` 原位改字: 本地/桩服务回执快, 进行中条只活几百毫秒
+     *   就被换了内容, 用户读作「第一个窗口被第二个顶掉, 仅显示不到 1 秒」。强制汇报先改(九轮),
+     *   导出 / 批量跳检 / 转移 / 删除前置汇报本轮统一收进本原语。
+     * 用法: const run = this._runningToast(`导出已开始: N 个 .torrent 文件`);
+     *       await this._settleRunningToast(run, "ok", `已导出: N 个 .torrent 文件`, 3000);
+     * minShow = 进行中条的最短可读时长(兜住本地 ~500ms 的回执; 慢回执完全不受影响)。
+     * text 传空 = 只归档不出结果条(调用方自己接着发, 例如删除流后面还有「已删除」)。
+     * 例外: 投递本身抛错(网络/400)时**不拆** —— 没有"已投递"这回事, 进行中条自身就是终态,
+     *   直接 `_finishToast(id, "error", …)` 原位落失败, 免得屏幕上留一条假的「已投递」。 */
+    _runningToast(text) {
+      return { tid: this.toast(text, "busy", 0, { sticky: true }), text, at: Date.now() };
+    },
+    async _settleRunningToast(ref, kind, text, ms = null, minShow = 900) {
+      if (!ref) return;
+      const hold = Math.max(0, minShow - (Date.now() - ref.at));
+      if (hold) await new Promise((r) => setTimeout(r, hold));
+      this._finishToast(ref.tid, "info", ref.text, 4000);
+      if (text) this.toast(text, kind, ms);
     },
     async act(action) {
       this.menu.visible = false;
@@ -947,7 +978,7 @@ window.AQB_COMMANDS = {
         try { ok = document.execCommand("copy"); } catch { ok = false; }
         document.body.removeChild(ta);
       }
-      if (ok) this.toast(`已复制${label}`, "ok", 2000);
+      if (ok) this.toast(`已复制: ${label}已写入剪贴板`, "ok", 2000);
       else this.toast("复制失败: 浏览器未授权剪贴板访问", "error");
     },
     /* 模板入口别名(issue 26-10-03-1412): Vue 模板解析不到 `_` 前缀成员(保留内部域, 点复制钮
@@ -966,7 +997,7 @@ window.AQB_COMMANDS = {
       if (!target) return;
       try {
         await this._exportDownload(target);
-        this.toast("已导出 .torrent", "ok", 2500);
+        this.toast("已导出: .torrent 文件已保存", "ok", 2500);
       } catch (e) {
         if (!e.auth) this.toast("导出失败: " + e.message, "error", 8000);
       }
@@ -1015,7 +1046,7 @@ window.AQB_COMMANDS = {
      * 单个失败不中断整体, 结束 toast 汇总 成功 N / 失败 K。401 中途整段终止: _logout 已清会话与
      * toast, 继续循环只会再发空头。 */
     async _exportHashes(hashes) {
-      const tid = this.toast(`开始导出 ${hashes.length} 个 .torrent…`, "busy", 0, { sticky: true });
+      const run = this._runningToast(`导出已开始: ${hashes.length} 个 .torrent 文件`);
       const failed = [];
       let ok = 0;
       for (const h of hashes) {
@@ -1028,11 +1059,11 @@ window.AQB_COMMANDS = {
         }
       }
       if (!failed.length) {
-        this._finishToast(tid, "ok", `已导出 ${ok} 个 .torrent`, 3000);
+        await this._settleRunningToast(run, "ok", `已导出: ${ok} 个 .torrent 文件`, 3000);
         return;
       }
       const heads = failed.slice(0, 3).map((h) => h.slice(0, 8)).join(", ") + (failed.length > 3 ? " …" : "");
-      this._finishToast(tid, "timeout", `导出: 成功 ${ok} / 失败 ${failed.length} (${heads})`, 6000);
+      await this._settleRunningToast(run, "timeout", `导出: 成功 ${ok} / 失败 ${failed.length} (${heads})`, 6000);
     },
   },
   computed: {

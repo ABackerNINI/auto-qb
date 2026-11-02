@@ -47,10 +47,12 @@ window.AQB_FEEDBACK = {
       // fx(S6 后半, plan 26-10-31-2316): flux 皮肤的 toast 动效挂载点 —— 渲染落定后由
       // flux/fx-mount.js 差分扫描程序化补 data-fx(rise/ico-spring/countdown/danger);
       // ttl 与自动关闭同一来源(toastMs 单点解析), sticky 条传 0 = 不挂倒计时。其它皮肤零调用。
+      // !第二参必须传本条 id: 同一 tick 里可能既有归档条(4000)又有新推入的结果条(12000),
+      //   不按 id 命中的话先执行的那份 ttl 会落到后一条上(进度条与退场错位, 见 fx-mount.js 注释)。
       const wait = toastMs(kind, ms);
       if (this.ui === "flux" && window.AQB_FX_MOUNT) {
         const ttl = opts.sticky ? 0 : wait;
-        this.$nextTick(() => window.AQB_FX_MOUNT.toastSync(ttl));
+        this.$nextTick(() => window.AQB_FX_MOUNT.toastSync(ttl, id));
       }
       // sticky = 常驻不自动消失(强制重新汇报"等待中"): 由 _finishToast 更新终态后退场
       if (opts.sticky) return id;
@@ -62,10 +64,12 @@ window.AQB_FEEDBACK = {
       this._updateToast(id, { kind, text });
       // 通知: 终态 upsert —— busy 链在此首次入历史, emit 即收过的条目在此覆盖(kind/text 以终态为准)
       if (ERR_HISTORY_KINDS[kind]) this._recordErrorToast(id, kind, text);
-      // fx(S6 后半): 同 toast() —— busy 条原位升级成终态时, danger/倒计时按新 kind/ttl 补挂
+      // fx(S6 后半): 同 toast() —— busy 条原位升级成终态时, danger/倒计时按新 kind/ttl 补挂。
+      // 两参都是"本条": 倒计时精确挂到这一条上(栈里可能还有别的 sticky / 归档条),
+      // 见 flux/fx-mount.js::toastSync 的 id 命中说明
       const wait = toastMs(kind, ms);
       if (this.ui === "flux" && window.AQB_FX_MOUNT) {
-        this.$nextTick(() => window.AQB_FX_MOUNT.toastSync(wait));
+        this.$nextTick(() => window.AQB_FX_MOUNT.toastSync(wait, id));
       }
       setTimeout(() => this._dropToast(id), wait);
     },

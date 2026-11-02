@@ -240,7 +240,7 @@
           hidden: new Set(),
           sub: { order: def.sub.order.slice(), hidden: new Set() },
         });
-        this.toast(`「${CTX_BRANCH_LABEL[branch] || branch}」已恢复默认布局`, "ok", 3000);
+        this.toast(`布局已重置: 「${CTX_BRANCH_LABEL[branch] || branch}」恢复默认`, "ok", 3000);
       },
 
       /* ---------------------------------------------------------- 拖拽(D14: 鼠标直觉的那一半) */

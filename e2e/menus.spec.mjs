@@ -297,8 +297,8 @@ for (const skin of SKINS) {
         // exportMulti 走裸 fetch 不经命令泵, ok/error 两模式都出成功 toast(旧 error 轮本来就绿)
         await expect.poll(async () => {
           const ts = await readInst(page, "(vm.toasts || []).map((t) => t.kind + '|' + t.text)");
-          return (ts || []).includes(`ok|已导出 ${N} 个 .torrent`);
-        }, { message: `W5 导出成功回执 toast「已导出 ${N} 个 .torrent」`, timeout: 5_000 }).toBe(true);
+          return (ts || []).includes(`ok|已导出: ${N} 个 .torrent 文件`);
+        }, { message: `W5 导出成功回执 toast「已导出: ${N} 个 .torrent 文件」`, timeout: 5_000 }).toBe(true);
       });
 
       test('W4 组选中导出: 展开为整组成员(selHashSet 全量, 请求数 == 成员数)', async ({ page }) => {

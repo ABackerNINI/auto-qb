@@ -192,7 +192,7 @@ window.CONFIG_RULES = {
         return;
       }
       if (data.value === null || data.value === undefined) {
-        this.toast("校验通过(用到取值: " + used + ")", "ok");
+        this.toast("校验通过: 用到取值 " + used, "ok");
         return;
       }
       const detail = (data.trace || []).map((t) => t.name + "=" + JSON.stringify(t.value)).join("; ");

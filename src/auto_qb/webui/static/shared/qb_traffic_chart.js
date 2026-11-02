@@ -571,7 +571,7 @@ window.AQB_QB_TRAFFIC = {
       // 状态栏入口本身 v-if 在 qbHistEntryOn 上(关闭时无按钮), 这里补的是**键盘入口**
       // (shortcuts.js open-qb-traffic): 功能关闭时按了键要给出反馈, 不静默
       if (!this.qbTrafficOn) {
-        this.toast("qB 口径流量图未启用", "info", 2500);
+        this.toast("功能未启用: qB 口径流量图, 请先在设置里打开", "info", 2500);
         return;
       }
       return this.openDrawerTraffic("global", "");

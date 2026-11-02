@@ -1,6 +1,9 @@
     <!-- 提示条与站内确认框: 全局单例(替代 alert/confirm/prompt, 视觉与主题一致) -->
     <div class="toast-wrap">
-      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.kind">
+      <!-- data-id: 提示条的稳定身份(Vue key 的同一来源) —— flux 挂载层靠它把"结算后的 TTL"
+           精确补到**被结算的那一条**上(--fx-life/倒计时条), 而不是凭"谁还没有进度条"去猜:
+           栈里同时躺着 sticky 常驻条时, 猜法会给常驻条挂上假的倒计时。纯属性, 四皮肤同一模板, 无视觉影响。 -->
+      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.kind" :data-id="t.id">
         <svg class="ico ico-sm" :class="{ spin: t.kind === 'busy' }" viewBox="0 0 16 16">
           <use :href="{ ok: '#i-check', error: '#i-warn', busy: '#i-refresh', timeout: '#i-clock' }[t.kind] || '#i-info'"></use>
         </svg>

@@ -738,6 +738,59 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 /* 退场: 库 data-fx-exit 骨对, 页内只把时长覆盖为 toast 档 */
 .tst[data-fx-exit] { transition-duration: var(--fx-dur-toast-exit); }
 
+/* ---- 样例组件: 消息通知形态候选(D9, 2026-11-02 二轮) ----
+ * 背景: 上一轮把提示条与确认框"统一"成同一套切角 glass, 用户否决「消息通知不要切角」——
+ * 切角是弹窗级大面浮层的语言, 通知是过路小条, 切角在小面积上读作装饰缺口, 还会啃掉底部
+ * 倒计时条右端。故本区只挑**形状/边标**, 材质(高光渐变 + 近不透明底 + 语义描边 + 语义图标)
+ * 一行不动 —— 六个候选共用同一 .mst 基座, 变量集与生产逐字同源:
+ *   flux style.css  --accent #45b3c9 / --green #3fd699 / --warn #f5bb42 / --error #f3766f
+ *                    --*-line 为同色 42~45% alpha / --border-strong rgba(168,196,232,.3)
+ *                    --bg-elev rgba(30,44,66,.92) / --surface-1 白 4.5% / --shadow-3
+ * 选定后的落点 = flux/css/components.css 的 .toast 一条规则(替换/追加对应变体行)。 */
+.mst-stack { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.mst {
+  --mst-tone: #45b3c9; --mst-line: rgba(168, 196, 232, .3);
+  position: relative; display: flex; align-items: flex-start; gap: 9px;
+  width: 340px; max-width: 100%; padding: 10px 12px; border-radius: 0;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .045), transparent 46%), rgba(30, 44, 66, .92);
+  border: 1px solid var(--mst-line);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, .3);
+  font: 600 13px/1.4 var(--sans); color: var(--ink);
+  animation: mstIn 180ms cubic-bezier(.2, .8, .3, 1);
+}
+@keyframes mstIn { from { opacity: 0; transform: translateY(10px) scale(.98); } }
+.mst svg {
+  width: 18px; height: 18px; flex: none; margin-top: 1px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; color: var(--mst-tone);
+}
+/* 文字区: 与生产同一排版(D6-2 骨架) -- 标题行 13/600 + 明细行 12/dim */
+.mst-txt { flex: 1; min-width: 0; display: block; overflow-wrap: anywhere; }
+.mst-t { display: block; }
+.mst-s { display: block; margin-top: 1px; color: var(--dim); font-size: 12px; font-weight: 400; line-height: 1.45; }
+.mst.t-ok   { --mst-tone: #3fd699; --mst-line: rgba(63, 214, 153, .42); }
+.mst.t-warn { --mst-tone: #f5bb42; --mst-line: rgba(245, 187, 66, .45); }
+.mst.t-err  { --mst-tone: #f3766f; --mst-line: rgba(243, 118, 111, .45); }
+/* N0 切角 10px(上一轮实现, 已否决 —— 留作对照, 别再把这条捡回去) */
+.mst.v-cut { clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px),
+  calc(100% - 10px) 100%, 0 100%, 0 10px); }
+/* N2 左侧 3px 语义色条(inset 落影, 不占布局宽度) */
+.mst.v-rail { box-shadow: inset 3px 0 0 var(--mst-tone), 0 14px 40px rgba(0, 0, 0, .3); }
+/* N3 顶部 2px 通栏语义条(与底部倒计时条上下呼应) */
+.mst.v-top::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--mst-tone);
+}
+/* N4 左侧色条 + 语义淡底(信号最强; 底色合成保住近不透明底, 不与下方表格行抢对比) */
+.mst.v-tint {
+  box-shadow: inset 3px 0 0 var(--mst-tone), 0 14px 40px rgba(0, 0, 0, .3);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--mst-tone) 14%, transparent), transparent 58%),
+    linear-gradient(135deg, rgba(255, 255, 255, .045), transparent 46%),
+    rgba(30, 44, 66, .92);
+}
+/* N5 微圆角 2px(方角族里最软的一档; 只软化, 不切角) */
+.mst.v-r2 { border-radius: 2px; }
+@media (prefers-reduced-motion: reduce) { .mst { animation: none; } }
+
 /* ---- 样例组件: 主表横滚指示条(D8) -- 生产真值演示复刻, 不回写生产 ----
  * 生产单点: shared/hscroll.css(胶囊外观) + shared/columns.js(_hscroll* 接线),
  * 全参数已定稿于计划 26-11-01-0553 §03 B 表。几何/配色照抄生产口径:
@@ -1066,6 +1119,12 @@ footer .foot-nav a:hover { color: var(--accent-ink); }
   <section id="d6">
     <h2><span class="no">D6 · 组件分区</span>toast / 通知</h2>
     <p class="sec-note">真触发样例: 点按钮吐<b>真 toast</b>(共用右下角 toast 宿主, <code>aria-live="polite"</code>; 循环档自动限流防堆积)。展示时长与动画时长解耦 -- 自动关闭归 JS 状态源, 动画时长走 fx 库 toast 骨对令牌。</p>
+    <div class="cards"></div>
+  </section>
+
+  <section id="d9">
+    <h2><span class="no">D9 · 形态挑选区(追加)</span>消息通知形状 / 边标(材质不动, 只挑形状)</h2>
+    <p class="sec-note"><b>为什么单开一区</b>: 上一轮把提示条与确认框「统一」成同一套切角 glass, 用户否决 —— <b>「消息通知不要切角」</b>。切角是弹窗级<b>大面浮层</b>的语言(弹窗 / 限速浮层), 通知是<b>过路小条</b>: 切角在小面积上读作装饰缺口, 还会啃掉底部倒计时条右端。故本区<b>材质一行不动</b>(高光渐变 + 近不透明底 + 语义描边 + 语义图标, 与确认框同源), 只挑<b>形状与边标</b>; 六个候选共用同一基座, 配色/几何与生产逐字同源(fx 皮肤令牌)。每张卡摆 ok / warn / error 三档, 方便看全严重度; 点「演示」重放入场, 勾「选定」后页尾可导出 JSON 清单。<br><b>现状(2026-11-02 四轮)</b>: 形状<b>暂定 D9-1</b>(方角 · 纯描边 = 生产现状); 图标族<b>已定</b> —— 复用 D6「toast / 通知」的<b>圈内字形</b>(18px 圆环 + 圈内单一字形, stroke 2 / round cap, 一档一形), 生产落 <code>flux/css/views.css</code> 的 mask 段; <b>文字排版也已定</b> —— 照 D6-2「倒计时进度条」的<b>标题行 + 明细行</b>(13/600 + 12/dim, 图标顶对齐), 生产落 <code>components.css</code> 的 <code>.toast</code> 基座 + <code>views.css</code> 的 <code>.toast-t/.toast-s</code>, 两段由 <code>flux/fx-mount.js</code> 在挂载层拆(共享模板只有一条 span)。六张卡样例均按此排版。</p>
     <div class="cards"></div>
   </section>
 
@@ -1672,7 +1731,8 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
         js: "AQB_FX.viewTransition 包插入/移除; 不支持 = 瞬时重排(零分支)",
         rm: "瞬时重排(Chrome 对 RM 自动跳过 VT 动画)",
         src: "chrome.dev view-transitions + FLIP 惯例(aerotwist)",
-        states: "新条推入 = 旧条平滑上移; 每次演示推一条。快照范围收敛: 每条 toast 打独立 view-transition-name(root 关默认参与, 页面其余区域不进快照)"
+        states: "新条推入 = 旧条平滑上移; 每次演示推一条。快照范围收敛: 每条 toast 打独立 view-transition-name(root 关默认参与, 页面其余区域不进快照)",
+        adopted: "生产已采用(2026-11-02 八/九轮): flux/fx-mount.js::flipStack 在 toastSync/toastDrop 双钩做视口坐标 FLIP; 与样例的差别 = 不走 VT 快照(插入发生在共享层, flux 挂载层拿不到包裹点), 改为对现存条补 transform / 对自身高度变化补 height 关键帧。九轮补两处: ① 推入侧 —— 栈内新条走 fx-toast-queue-in(从下方一整格起步 + 90ms 延迟), 否则旧条还没让开就同帧叠画(实测 49px / 5 帧); ② 消息侧 —— 「强制重新汇报」的已投递与回执是**两条**独立消息(投递条归档留队列, 回执另起一条), 这样队列里才有东西可重排。RM 下自动降级为无动效"
       },
       sample: ""
     },
@@ -1700,6 +1760,84 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
       },
       sample: ""
     },
+    /* ---- D9 消息通知形状候选(2026-11-02 二轮: 用户否决「消息通知切角」后单开的形态挑选区) ----
+     * 材质一律不动(高光渐变 + 近不透明底 + 语义描边 + 语义图标, 与确认框同源), 只挑形状/边标:
+     * D9-0 = 上一轮实现(切角, 已否决, 留作对照) / D9-1 = 推荐基线(方角纯描边) / D9-2~D9-5 = 边标变体。
+     * 选定后的落点 = flux/css/components.css 的 .toast 一条规则(见该处「消息面」段注)。 */
+    {
+      id: "D9-0", sec: "d9", name: "切角 10px(上一轮, 已否决)", fx: null, demo: "enter",
+      warn: "已否决: 通知不切角",
+      meta: {
+        attr: "clip-path(切角, 同时裁掉底部倒计时条右端)",
+        dur: "静态几何, 无时长",
+        js: "纯 CSS",
+        rm: "不适用(静态形状)",
+        src: "本轮初版实现(把提示条与弹窗统一成同一套切角)",
+        states: "小面积上切角读作装饰缺口; 条右端被斜切, 倒计时走完时显示不完整 → 用户退回"
+      },
+      sample: ""
+    },
+    {
+      id: "D9-1", sec: "d9", name: "方角 · 纯描边(<b>暂定选定</b> = 生产现状)", fx: null, demo: "enter", warn: "",
+      meta: {
+        attr: "无额外形状属性(只留 1px 语义描边 + 落影)",
+        dur: "入场 180ms(与生产 toast-in 同源)",
+        js: "纯 CSS",
+        rm: "无动效, 静态同框",
+        src: "生产现状 flux/css/components.css .toast(本轮统一后去掉切角)",
+        states: "五档语义靠描边 + 图标表达; 方角与表头/行板/按钮同族(flux radius 令牌本为 0)"
+      },
+      sample: ""
+    },
+    {
+      id: "D9-2", sec: "d9", name: "方角 · 左侧 3px 语义色条", fx: null, demo: "enter", warn: "",
+      meta: {
+        attr: "box-shadow inset 3px(不占布局宽度, 同 .ctx-src 行内边条手法)",
+        dur: "入场 180ms",
+        js: "纯 CSS",
+        rm: "无动效; 边条是静态形状, 不降级",
+        src: "M3 snackbar 边标惯例 + 本仓 .ctx-src / 选中行左条同族语汇",
+        states: "严重度落在扫视路径左缘(与行首列同位); 描边仍保留, 两处同色不叠加第二含义"
+      },
+      sample: ""
+    },
+    {
+      id: "D9-3", sec: "d9", name: "方角 · 顶部 2px 通栏语义条", fx: null, demo: "enter", warn: "",
+      meta: {
+        attr: "::before 背景(paint, 小面积)",
+        dur: "入场 180ms",
+        js: "纯 CSS",
+        rm: "无动效, 静态同框",
+        src: "浏览器通知条 / 系统横幅的顶栏惯例",
+        states: "与底部倒计时条上下夹成一对; ⚠ 非 sticky 条同时存在上下两条色带, 需现场确认不吵"
+      },
+      sample: ""
+    },
+    {
+      id: "D9-4", sec: "d9", name: "方角 · 左侧色条 + 语义淡底", fx: null, demo: "enter", warn: "paint(渐变合成)",
+      meta: {
+        attr: "box-shadow inset + background 双层渐变合成(paint)",
+        dur: "入场 180ms",
+        js: "纯 CSS(color-mix 合成, 底色仍取近不透明底, 不透背) ",
+        rm: "无动效, 静态同框",
+        src: "M2 error surface 的 tint 手法(本仓删除确认框 is-error 行同源)",
+        states: "信号最强档; 淡底压在表格行上会与行状态色抢注意力 —— 只在 error 档开也说得通(变体可收窄)"
+      },
+      sample: ""
+    },
+    {
+      id: "D9-5", sec: "d9", name: "微圆角 2px · 纯描边", fx: null, demo: "enter", warn: "破 flux 方角纪律",
+      meta: {
+        attr: "border-radius: 2px",
+        dur: "入场 180ms",
+        js: "纯 CSS",
+        rm: "不适用(静态形状)",
+        src: "macOS 通知中心的弱圆角档(2~4px)",
+        states: "只软化不切角; flux 的 --radius 三令牌是 0(R3 精修拍板), 选定需同步令牌口径而非单点写死"
+      },
+      sample: ""
+    },
+
     /* ---- D8 主表横滚指示条(构造器卡, S4 追加) ----
      * 生产口径已定稿(26-11-01-0553): 几何/配色/触发全参数单点 = shared/hscroll.css +
      * columns.js。D8-1 为生产基线(样例=真功能); D8-2~D8-5 为动效风格变体(只换出场
@@ -1767,6 +1905,34 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
       sample: ""
     }
   ];
+
+  /* ---- D9 消息通知形状候选的样例装配 ----
+   * 三档并排(ok / warn / error)看全严重度; 同一 .mst 基座, 只换形状/边标类(v-*)。
+   * 图标直接内联(展示页无 sprite), 路径与生产 #i-check / #i-warn / #i-info 同形。 */
+  /* 图标族 = D6 参考样式的圈内字形(用户 2026-11-02 三轮拍板「直接复用」): 24 viewBox / 圆环 r9 /
+   * stroke 2 / round cap, 圈内一档一形。生产侧落 flux/css/views.css 的 mask 段(同一套 path 数据)。 */
+  var MST_IRO = "<circle cx='12' cy='12' r='9'/>";
+  var MST_ICO = {
+    ok: MST_IRO + "<path d='M8 12.5 11 15.5 16 9.5'/>",
+    warn: MST_IRO + "<path d='M12 7.5v5.5M12 16.5h.01'/>",
+    err: MST_IRO + "<path d='M9 9l6 6M15 9l-6 6'/>"
+  };
+  var MST_SHAPE = { "D9-0": "v-cut", "D9-1": "", "D9-2": "v-rail", "D9-3": "v-top", "D9-4": "v-tint", "D9-5": "v-r2" };
+  CARDS.forEach(function (c) {
+    if (c.sec !== "d9") return;
+    var shape = MST_SHAPE[c.id] || "";
+    function row(tone, icon, head, sub) {
+      return '<div class="mst t-' + tone + (shape ? " " + shape : "") + '">' +
+        '<svg viewBox="0 0 24 24" aria-hidden="true">' + icon + "</svg>" +
+        '<span class="mst-txt"><span class="mst-t">' + head + "</span>" +
+        (sub ? '<span class="mst-s">' + sub + "</span>" : "") + "</span></div>";
+    }
+    c.sample = '<div class="mst-stack">' +
+      row("ok", MST_ICO.ok, "已强制汇报", "3 个种子 · tracker 已受理") +
+      row("warn", MST_ICO.warn, "部分目标已受理", "2 个推迟到最小间隔后重报") +
+      row("err", MST_ICO.err, "添加种子失败", "该种子已在列表中") +
+      "</div>";
+  });
 
   /* 机制自检条: 四个入场原语(T5 的 enter 演示样例) */
   var MECH_CARDS = [
@@ -2550,6 +2716,8 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
       '<dt>RM 降级</dt><dd>' + m.rm + "</dd>" +
       '<dt>来源</dt><dd>' + m.src + "</dd>" +
       '<dt>交互态</dt><dd>' + m.states + "</dd>" +
+      /* 生产采用情况(可选): 定了生产落点的卡才写, 免得"样例好看但没人用"看不出来 */
+      (m.adopted ? '<dt>生产</dt><dd class="good">' + m.adopted + "</dd>" : "") +
       "</dl>";
 
     var ops = document.createElement("div");

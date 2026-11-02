@@ -994,7 +994,7 @@ window.CONFIG_HUB = {
         const res = await this.api("/api/sites/missing");
         const sites = res.sites || [];
         if (!sites.length) {
-          this.toast("没有发现未配置的站点", "ok");
+          this.toast("无需导入: 没有发现未配置的站点", "ok");
           return;
         }
         const list = sites.map((s) => `${s.name}(${s.domain})`).join("、");

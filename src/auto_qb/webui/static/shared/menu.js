@@ -37,11 +37,11 @@ window.AQB_MENU = {
       this.headMenu.visible = false;
       if (!m.page || !m.key) return;
       if (m.locked) {
-        this.toast(`「${m.label}」是必显列(承载展开/标识), 不可隐藏`, "info");
+        this.toast(`该列必显: 「${m.label}」承载展开/标识, 不可隐藏`, "info");
         return;
       }
       this.toggleColumn(m.page, m.key);
-      this.toast(`已隐藏「${m.label}」列(右键表头或"列"按钮可恢复)`);
+      this.toast(`已隐藏「${m.label}」列: 右键表头或"列"按钮可恢复`);
     },
     headMenuSort(dir) {
       const m = this.headMenu;
@@ -73,8 +73,8 @@ window.AQB_MENU = {
         /* 隐私模式/配额满: 本轮仍生效, 只是刷新后回落默认 —— 偏好类写入失败不该打断操作 */
       }
       this.toast(mode === "rel"
-        ? `「${m.label}」改按相对时间显示(3天前)`
-        : `「${m.label}」改按绝对时间显示(09-20 21:25)`);
+        ? `时间口径已切换: 「${m.label}」改按相对时间显示(3天前)`
+        : `时间口径已切换: 「${m.label}」改按绝对时间显示(09-20 21:25)`);
     },
     /* 该列是否支持口径切换(模板 v-if 用; 常量在 app.js, 模板读不到顶层 const) */
     headTimeFmtAble() {

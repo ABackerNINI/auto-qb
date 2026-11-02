@@ -195,7 +195,13 @@ for (const skin of SKINS) {
       }
 
       // 聚合 toast 文案与改动前逐字一致(成功/失败/未确认三桶 + 首条原因)
-      const toasts = await readInst(page, 'vm.toasts.map((t) => t.text).join("\\n")');
+      // ⚠ 时序(2026-11-02 九轮): 回执条是**另起的一条**(投递条归档成「已投递」留在队列里),
+      //   且投递条有 900ms 最短展示保护 —— 行图标在回执处理的中途就落了, 所以读 vm.toasts 之前
+      //   必须等"回执条落定", 不能假定行图标就位时它已经在数组里。
+      const toastText = () => readInst(page, 'vm.toasts.map((t) => t.text).join("\\n")');
+      await expect.poll(toastText, { timeout: 10_000, message: '等聚合回执条落定' })
+        .toContain('强制重新汇报: 成功 2, 失败 1, 未确认 0');
+      const toasts = await toastText();
       expect(toasts).toContain('强制重新汇报: 成功 2, 失败 1, 未确认 0');
       expect(toasts).toContain('失败: tracker 未接受汇报(not working)');
     });

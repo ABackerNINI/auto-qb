@@ -179,6 +179,15 @@ function makeVm() {
       const t = vm.toasts.find((x) => x.id === id);
       if (t) { t.kind = kind; t.text = text; t.finished = true; }
     },
+    /* 统一收(2026-11-02 十轮): 真实实现在 commands.js, 这里按同一语义补桩 ——
+     * 进行中条归档成 info 留在数组里, 结果**另起一条**。故断言取"最后一条"= 结果条
+     * (下面 lastToast), 不是 toasts[0](那是归档条)。minShow 等待不模拟: 单测不等真时钟。 */
+    _runningToast(text) { return { tid: vm.toast(text, "busy"), text, at: Date.now() }; },
+    _settleRunningToast(ref, kind, text) {
+      vm._finishToast(ref.tid, "info", ref.text);
+      if (text) vm.toast(text, kind);
+      return Promise.resolve();
+    },
     setRowIcon(hash, kind, msg) { vm.icons[hash] = { kind, msg }; },
     api(path, options) {
       if (vm.apiShouldThrow) return Promise.reject(new Error("boom"));
@@ -200,6 +209,9 @@ const out = {};
 
 /* 全链异步走 async IIFE(顶层 await 会被 Node 22 模块探测重试成 ESM, require 失效) */
 (async () => {
+
+/* 结果条 = 最近推入的一条(统一收后: 进行中条先归档留在数组里, 结果另起一条) */
+const lastToast = () => vm.toasts[vm.toasts.length - 1] || null;
 
 // ---- ① 目标侧拦下: 不存在 / 未启用 -> toast error, 不开弹窗不投递
 let vm = makeVm();
@@ -233,7 +245,7 @@ out.precheck = {
 };
 out.settleOk = {
   icons: vm.icons,
-  toast: vm.toasts[0],
+  toast: lastToast(),
   cleared: vm.cleared,
 };
 
@@ -244,7 +256,7 @@ vm.cmdResult = { ok: true, truth: { results: [
   { hash: "h-ok", "状态": "成功", "原因": "" },
 ], summary: { success: 1, skipped: 0, failed: 0 }, target: "副种机" } };
 await vm.transferOpen("副种机", ["h-ok"]);
-out.settlePure = { toast: vm.toasts[0] };
+out.settlePure = { toast: lastToast() };
 
 // ---- ③ 全被排除: toast 收口, 不开弹窗不投递
 vm = makeVm();
@@ -268,7 +280,7 @@ await vm.transferOpen("副种机", ["h-ok", "h-up", "h-dl"]);
 out.keepSource = {
   body: JSON.parse(vm.apiCalls[0][1].body),
   icons: vm.icons,
-  toast: vm.toasts[0],
+  toast: lastToast(),
   cleared: vm.cleared,
 };
 
@@ -280,26 +292,26 @@ vm.cmdResult = { ok: true, truth: { results: [
   { hash: "h-up", "状态": "跳过", "原因": "目标已存在" },
 ], summary: { success: 1, skipped: 1, failed: 0 }, target: "副种机" } };
 await vm.transferOpen("副种机", ["h-ok", "h-up"]);
-out.partialSkip = { toast: vm.toasts[0], iconUp: vm.icons["h-up"] };
+out.partialSkip = { toast: lastToast(), iconUp: vm.icons["h-up"] };
 
 // ---- ⑦ truth 缺失: ok 回执无 results -> 全批 warn(不谎称成功); 命令失败 -> 全批 error
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.cmdResult = { ok: true, truth: {} };
 await vm.transferOpen("副种机", ["h-ok"]);
-out.noTruth = { icons: vm.icons, toast: vm.toasts[0] };
+out.noTruth = { icons: vm.icons, toast: lastToast() };
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.cmdResult = { ok: false, error: "转移目标未启用: 副种机" };
 await vm.transferOpen("副种机", ["h-ok"]);
-out.cmdFail = { icons: vm.icons, toast: vm.toasts[0] };
+out.cmdFail = { icons: vm.icons, toast: lastToast() };
 
 // ---- ⑧ 发送失败: 撤 pending 图标 + toast error
 vm = makeVm();
 vm.confirmRes = { checks: { keep_source: false } };
 vm.apiShouldThrow = true;
 await vm.transferOpen("副种机", ["h-ok"]);
-out.sendFail = { icons: vm.icons, toast: vm.toasts[0], running: vm._transferRunning };
+out.sendFail = { icons: vm.icons, toast: lastToast(), running: vm._transferRunning };
 
 // ---- ⑨ 单飞闸: 执行中重复 transferOpen 直接返回(不开弹窗不投递)
 vm = makeVm();

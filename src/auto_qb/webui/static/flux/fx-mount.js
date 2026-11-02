@@ -210,26 +210,82 @@
    * rise 入场 + ico-spring 图标 + 非 sticky 条的 --fx-life 倒计时标记; 已在场条
    * 按kind 类补 danger(busy 等待条结算成 error/timeout 的原位升级)。 */
   var toastSeq = 0;
-  function toastSync(ttl) {
+  /* ---- toast 文字排版(D6-2 骨架, 用户口径 2026-11-02 四轮 / 五轮扩分隔符 + 六轮文案统一) ----
+   * 共享模板只渲染一条 `<span>{{ t.text }}</span>`(四皮肤共用, 不动模板), flux 在挂载层
+   * 把它读作「主标题 + 说明」两段, 与 showcase D6-2「倒计时进度条」样例同一排版语法
+   * (13px/600 标题行 + 12px/--fg-muted 明细行, 图标顶对齐)。拆段规则纯结构、不猜语义:
+   * 首个 `:` / `：` / `,` / `，` 之前的**动作短语**(≤14 字、不含括号)当主标题, 其后的剩余当说明。
+   * 说明门槛只留 2 字 —— 六轮把生产文案统一成「主标题: 说明」(无分隔符的回执都补了说明句),
+   * 说明常常就是一个名字/计数(「已执行: 重命名」「已复制: 名称已写入剪贴板」), 门槛再高会让
+   * 这批条退回去单行, 与「都改成主标题+说明」的口径打架。残留单行 = 说明侧是运行时错误串且
+   * 过短(<2 字), 那是数据现实, 不是样式缺口; 单行条字重由 CSS 基座统一 600, 与标题行同貌。
+   * 每次 sync 都跑并按 `.toast-t` 是否存在判重: Vue 在 .text 变更时会覆写 span 子节点
+   * (hostSetElementText), 标记位会骗人, 按 DOM 现状判才可靠。文本一律 textContent,
+   * 不拼 innerHTML —— err.message 里可以是任意字符。 */
+  var TOAST_SPLIT = /^([^:：,，()（）\n]{1,14})[:：,，]\s*([\s\S]{2,})$/;
+  function shapeToastText(n) {
+    var span = null;
+    for (var i = 0; i < n.children.length; i++) {
+      if (n.children[i].tagName === "SPAN") { span = n.children[i]; break; }
+    }
+    if (!span || span.querySelector(".toast-t")) return; /* 已塑形 */
+    span.classList.add("toast-txt");                     /* 单行也挂: 让 flex:1 / min-width:0 生效 */
+    var text = span.textContent || "";
+    var m = TOAST_SPLIT.exec(text);
+    if (!m) return;
+    span.textContent = "";
+    var head = document.createElement("span");
+    head.className = "toast-t";
+    head.textContent = m[1].trim();
+    var tail = document.createElement("span");
+    tail.className = "toast-s";
+    tail.textContent = m[2].trim();
+    span.appendChild(head);
+    span.appendChild(tail);
+  }
+  function toastSync(ttl, id) {
     var wrap = document.querySelector(".toast-wrap");
     if (!wrap) return;
     var nodes = wrap.querySelectorAll(".toast");
     for (var i = 0; i < nodes.length; i++) {
       var n = nodes[i];
+      shapeToastText(n);
+      /* 本次 ttl 只属于**这一条**(data-id 精确命中); 没传 id 时退化为最新一条(栈尾) ——
+       * 消费点永远传自己的 id(见下方倒计时段), 这条只是漏传时的合理兜底。 */
+      var own = id != null
+        ? n.getAttribute("data-id") === String(id)
+        : i === nodes.length - 1;
       if (!n._fxToast) {
         n._fxToast = 1;
         n.setAttribute("data-fx", "rise");
+        /* 栈里已有别的条 => 这次是「队列推入」: 新条从下方一整格进场, 与旧条上移让位同速,
+         * 两条不叠画(见 fx-mount.css 的 [data-fx-queue] 规则)。首条不加 —— 单条没有让位需求。 */
+        if (nodes.length > 1) n.setAttribute("data-fx-queue", "");
         /* D6-3 队列 FLIP 的身份牌: 退场包进 View Transitions 时按名配对 */
         n.style.viewTransitionName = "fx-toast-" + (++toastSeq);
-        if (ttl > 0) {
-          n.style.setProperty("--fx-life", ttl + "ms");
-          n.setAttribute("data-fx-cd", "");
-        }
         var ico = n.querySelector(".ico");
         if (ico) {
           ico.setAttribute("data-fx", "ico-spring");
           ico.setAttribute("data-fx-play", "");
         }
+      }
+      /* 倒计时条(D6-2)挂载/刷新 —— 只给本条, 且 ttl 与这条自己的退场定时器同源。
+       * !2026-11-02 十一轮(用户报「强制重新汇报失败的窗口时间指示条到了但没消失」): 此前 stamp
+       *   分支用**整栈共用**的 ttl 给所有新条挂条 —— 而 `_settleRunningToast` 在同一个 tick 里
+       *   先给归档条发 4000(settle), 再推结果条(12000), 两份 $nextTick 按注册序执行, 于是
+       *   4000 先落到刚渲染的结果条上: 进度条 4s 走完, 条却按 12000ms 才移除, 中间 8s 干挂。
+       *   实测 t=5106ms 动画 finished、t=13013ms 节点才消失。现在 stamp 时也按 id 命中, 归档条
+       *   拿 4000、结果条拿 12000, 进度条终点 = 退场时刻。
+       * sticky 条建时 ttl=0(按设计不给进度条), 归档成终态/「已投递」时才拿到 TTL —— 只在挂载
+       * 那一刻挂条的话, 这条会"无进度条突然消失", 与同屏新条两套观感, 故两处共用本段。
+       * --fx-life 变了要摘掉标记 + 强制回流重播(改 animation-duration 不会重启已在跑的动画)。 */
+      if (own && ttl > 0) {
+        n.style.setProperty("--fx-life", ttl + "ms");
+        if (n.hasAttribute("data-fx-cd")) {
+          n.removeAttribute("data-fx-cd");
+          void n.offsetWidth;
+        }
+        n.setAttribute("data-fx-cd", "");
       }
       if (!n._fxDanger && /\b(error|timeout)\b/.test(n.getAttribute("class") || "")) {
         n._fxDanger = 1;
@@ -237,16 +293,70 @@
         n.setAttribute("data-fx-play", "");
       }
     }
+    flipStack();
     FX.scan();
+  }
+
+  /* ---- toast 队列重排 FLIP(D6-3, 用户八轮口径 2026-11-02) ----
+   * 报障: 「强制汇报的两个窗口(已投递/回执)没有统一, 且会互相重叠」——
+   *   ① 两态(等待中 / 已确认)高度不同(等待态说明折两行 76px, 回执 59px), 结算时盒子瞬间抽高,
+   *      看起来像两个窗口叠了一下 —— 文案侧已压成同高一行说明(commands.js 2026-11-02 注解);
+   *   ② 队列本身没有重排动效: 新条插入/旧条退场时, 现存条**瞬移**到新位置, 与正在入场的条
+   *      同帧叠着画 —— 这就是「互相重叠」的另一半。
+   * 本函数按 D6-3「队列重排 FLIP」补上后半: 每次栈几何变化时, 用上一轮的布局位置给现存条
+   * 反向位移(translateY)后归零, 让"让位"是滑出去的而不是跳过去的; 自身高度变化(等待态结算
+   * 成终态)同理 —— 高度从旧值动到新值, 底锚定, 上沿自然跟着走, 不再两个盒子叠一下。
+   * 读布局用 offsetTop/offsetHeight(相对 .toast-wrap 的布局盒), **不用** getBoundingClientRect:
+   * 后者会被正在跑的 transform 污染, 连续 sync 会把位移读成 0(FLIP 失效)。
+   * RM / 无 WAAPI: 只记位不动画(降级 = 无动效终态, 与 fx 库其他原语同口径)。 */
+  var toastGeo = typeof WeakMap === "function" ? new WeakMap() : null;
+  var toastAnim = typeof WeakMap === "function" ? new WeakMap() : null;
+  function flipStack() {
+    var wrap = document.querySelector(".toast-wrap");
+    if (!wrap) return;
+    var nodes = wrap.querySelectorAll(".toast");
+    if (!nodes.length) return;
+    var reduced = FX.reduced() || !nodes[0].animate;
+    /* 量之前先把自己上一轮的位移动画摘掉: 读的是"纯布局位置", 否则 transform 会把
+     * getBoundingClientRect 带偏, 连续 sync 时位移会被读成 0(FLIP 静默失效)。
+     * 位置用**视口坐标**: 栈是底部锚定的, 新条插入时容器整体上移, 而各条在容器内的
+     * offsetTop 不变(实测恒为 0) —— 只有视口坐标能看出"用户看到的位置变了"。 */
+    var list = [];
+    var i, n;
+    for (i = 0; i < nodes.length; i++) {
+      n = nodes[i];
+      var running = toastAnim && toastAnim.get(n);
+      if (running && running.playState !== "finished") running.cancel();
+      var r = n.getBoundingClientRect();
+      list.push({ n: n, top: r.top, h: r.height });
+    }
+    for (i = 0; i < list.length; i++) {
+      var it = list[i];
+      var prev = toastGeo && toastGeo.get(it.n);
+      if (toastGeo) toastGeo.set(it.n, { top: it.top, h: it.h });
+      if (!prev || reduced || it.n.hasAttribute("data-fx-exit")) continue;
+      var dh = it.h - prev.h;
+      var dy = prev.top - it.top;      /* >0 = 这一轮它上移了 */
+      if (Math.abs(dh) < 1 && Math.abs(dy) < 1) continue;
+      /* 高度变了 = 这条自己换内容(等待态结算成终态): 只补高度, 位置由底锚定自然带出来;
+       * 否则是邻居进出: 补位移。两者都从"上一轮的样子"过渡到"现在的样子"。 */
+      var frames = Math.abs(dh) >= 1
+        ? [{ height: prev.h + "px" }, { height: it.h + "px" }]
+        : [{ transform: "translateY(" + dy + "px)" }, { transform: "translateY(0)" }];
+      var anim = it.n.animate(frames, { duration: 200, easing: "cubic-bezier(.2,.8,.3,1)" });
+      if (toastAnim) toastAnim.set(it.n, anim);
+    }
   }
 
   /* ---- toast 退场(D6-1 退场半 + D6-3 队列重排 FLIP) ----
    * 消费点 = ui_feedback.js::_dropToast。View Transitions 可用且非 RM: 数组更新包进
    * startViewTransition -- 被移除条按 view-transition-name 快照走默认退场(fade),
-   * 存活条同名新旧配对 = FLIP 重排; 不支持/RM: 直接提交(D5: 无动效终态)。 */
+   * 存活条同名新旧配对 = FLIP 重排; 不支持/RM: 提交后由 flipStack 补位移动画。 */
   function toastDrop(commit) {
     if (FX.reduced() || !document.startViewTransition) {
       commit();
+      /* commit 只改数组, DOM 要等 Vue nextTick 才落地 —— 本帧 rAF 里量才是"删掉之后"的布局 */
+      requestAnimationFrame(function () { flipStack(); });
       return;
     }
     FX.viewTransition(commit);

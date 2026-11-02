@@ -1701,6 +1701,483 @@ def _scan_state_color_tokens(problems):
                 problems.append(f"{rel} 进度条填充未取状态色 var(--st) —— 各状态一条色, 读不出种子状态")
 
 
+def _scan_message_surface_parity(problems):
+    """消息面材质守阵(2026-11-02, flux): 提示条与站内确认框共用表面与语义档, 但**通知不切角**
+
+    背景(用户报障): 「强制汇报投递」的提示条与刚点过的确认框看起来像两个产品的控件 ——
+    提示条是 fork 时带过来的平面方角老配方(方角 + --bg-card + --shadow-2), 弹窗是 flux 的
+    glass 语言(对角切角 + 高光渐变面 + 毛玻璃)。统一口径 = **材质同源, 形态各守其位**:
+    位置/交互语义不变, 材质与语义档语法收成一份; 形状**不统一** —— 用户二轮口径
+    「消息通知不要切角」: 切角只属弹窗级大面浮层, 通知是过路小条。
+
+    钉五件事(每条都是"看着还能跑、观感却分家"或"新增 kind 静默变中性"的静默故障):
+    ① `--msg-surface` 在 flux 内**恰一处**声明(提示条/确认框共用的供给面单点) —— 两处各写一份
+      渐变表达式就是本次要消灭的漂移;
+    ② `.toast` 基线消费 `background: var(--msg-surface` + `border: ... var(--msg-line)`,
+      且**不得**带 clip-path(切角只属弹窗; 本轮先统一成切角, 被用户退回并反向钉);
+    ③ `.modal` 基线同样消费 `--msg-surface` 与 `--msg-line`(只换其中一边 = 材质又分家);
+    ④ 语义档值 = 期望表(ok→green / warn→warn / error→error / busy→accent / timeout→warn):
+      值漂移(如 warn 改回 border-strong)会让 warn 档重新与 info 同貌;
+    ⑤ **模板与 JS 里出现的每个 toast kind 都必须有对应 `.toast.<kind>` 规则**(info 除外 ——
+      中性档就是基线, 不单列)。warn 档此前正是整档缺失: 21 处调用点在四套皮肤下与 info
+      完全同貌(既无琥珀描边也无琥珀图标), 肉眼读成"普通提示";
+    ⑥ **文字排版 = D6-2「倒计时进度条」骨架**(用户四轮口径): `.toast` 基座顶对齐 + 600 字重,
+      `.toast-txt/.toast-s` 两行块级(13/600 + 12/--fg-muted/400), 且 flux/fx-mount.js 的
+      toastSync 必须调 `shapeToastText(n)` —— 共享模板只有一条 span, 两段由挂载层拆; JS 缺席
+      时全部退回单行而 CSS 守阵看不出来, 故这条要连 JS 一起钉。
+
+    WARN: 只钉 flux —— 另三套皮肤仍是 fork 前的平面方角配方(本轮范围守恒, 未统一它们);
+      本条与该范围一并对齐, 将来三皮肤也统一时把 _UI_ALL 换上来即可。
+    """
+    flux_dir = os.path.join(STATIC_ROOT, "flux")
+    surface_rules = []  # 声明(:) --msg-surface 的规则(选择器)
+    bodies = {"toast": [], "modal": []}  # 同名基类可能有多条规则(如 .modal 另有动画覆盖), 合并判
+    tone = {}  # kind -> --msg-tone 取的令牌名
+    modal_tone = {}  # tone 档 -> --msg-line 取的令牌名
+    ico = set()  # 声明 --msg-ico(mask 圈内字形)的选择器集合; "*" = 基线档(.toast)
+    typo = {}  # 文字区选择器 -> 规则体(.toast-txt / .toast-t / .toast-s)
+    for dirpath, _dirs, files in os.walk(flux_dir):
+        for name in sorted(files):
+            if not name.endswith(".css"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), STATIC_ROOT).replace(os.sep, "/")
+            text = re.sub(r"/\*.*?\*/", "", open(os.path.join(dirpath, name), encoding="utf-8").read(), flags=re.S)
+            for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", text):
+                sel = " ".join(sel.split())
+                if re.search(r"--msg-surface\s*:", body):
+                    surface_rules.append(sel)
+                if sel == ".toast":
+                    bodies["toast"].append((rel, body))
+                elif sel == ".modal":
+                    bodies["modal"].append((rel, body))
+                if re.search(r"--msg-ico\s*:", body):
+                    for one in [s.strip() for s in sel.split(",")]:
+                        if one == ".toast":
+                            ico.add("*")
+                        elif one.startswith(".toast."):
+                            ico.add(one[len(".toast."):])
+                for one in [s.strip() for s in sel.split(",")]:
+                    if one in (".toast-txt", ".toast-t", ".toast-s", ".toast-wrap"):
+                        typo[one] = typo.get(one, "") + body
+                    m = re.fullmatch(r"\.toast\.([a-z]+)", one)
+                    if m:
+                        mt = re.search(r"--msg-tone\s*:\s*var\((--[\w-]+)", body)
+                        if mt:
+                            tone[m.group(1)] = mt.group(1)
+                    m = re.fullmatch(r"\.modal\.tone-([a-z]+)", one)
+                    if m:
+                        ml = re.search(r"--msg-line\s*:\s*var\((--[\w-]+)", body)
+                        if ml:
+                            modal_tone[m.group(1)] = ml.group(1)
+
+    if len(surface_rules) != 1:
+        problems.append(
+            f"flux 的 --msg-surface 声明数 = {len(surface_rules)}({surface_rules})"
+            " —— 消息面供给面必须恰一处单点: 提示条/确认框各写一份渐变表达式就会漂移"
+            "(用户报障原症状: 两种消息浮层像两个产品的控件)"
+        )
+    for key, must in (
+        ("toast", ("var(--msg-surface", "var(--msg-line)")), ("modal", ("var(--msg-surface", "var(--msg-line)"))
+    ):
+        if not bodies[key]:
+            problems.append(f"flux 缺 `.{key}` 基线规则 —— 消息面统一的前提(表面/语义档)无处落")
+            continue
+        rel = bodies[key][0][0]
+        body = "\n".join(b for _r, b in bodies[key])
+        for token in must:
+            if token not in body:
+                problems.append(f"{rel} `.{key}` 基线缺 {token} —— 提示条与确认框会退回两套材质"
+                                "(本次统一前: 平面卡 vs 玻璃面)")
+    # 形状反向钉(用户二轮口径 2026-11-02: 「消息通知不要切角」): 切角是 flux 大面浮层(弹窗/限速浮层)
+    # 的语言, 通知是过路小条 —— 切角在小面积上读作装饰缺口, 还会啃掉底部倒计时条右端。故提示条
+    # **不得**出现 clip-path: 被"顺手统一"回来即红(本轮就先统一成切角、被用户退回)。
+    if bodies["toast"]:
+        rel = bodies["toast"][0][0]
+        for _r, body in bodies["toast"]:
+            if "clip-path" in body:
+                problems.append(
+                    f"{rel} `.toast` 出现 clip-path —— 消息通知不切角(用户口径 2026-11-02):"
+                    "切角只属弹窗级大面浮层; 通知是过路小条, 切角会啃掉倒计时条右端"
+                )
+
+    for kind, want in _MSG_TONE_EXPECT.items():
+        got = tone.get(kind)
+        if got is None:
+            problems.append(
+                f"flux 缺 `.toast.{kind}` 的 --msg-tone 声明 —— 该档会落回中性基线,"
+                "与 info 同貌(warn 档 21 处调用点就是这么静默丢档的)"
+            )
+        elif got != want:
+            problems.append(f"flux `.toast.{kind}` 的 --msg-tone = {got}(应为 {want}) —— 语义档漂移")
+    for level, want in (("warn", "--warn-line"), ("error", "--error-line")):
+        got = modal_tone.get(level)
+        if got != want:
+            problems.append(
+                f"flux 缺 `.modal.tone-{level}` 的 --msg-line = {want}(实际 {got})"
+                " —— 弹窗语义档不染描边, 就只有提示条一侧染色, 两处语义语法又分家"
+            )
+
+    # 图标族(用户三轮口径 2026-11-02: 「复用 showcase toast 例子的图标样式」= 圈内字形): 基线一张
+    # mask + 每档一张。漏一张的后果比"没图标"更糟 —— mask 无效时 background-color 会把 18px 方框
+    # 铺成实心色块(旧 sprite 字形又被 color: transparent 藏掉了), 屏幕上就是一块彩色方块。
+    if "*" not in ico:
+        problems.append(
+            "flux 缺提示条图标的基线 --msg-ico(声明在 `.toast` 或 `.toast.info` 上)"
+            " —— 圈内字形族无处落; mask 缺失时 background-color 会把图标位铺成实心色块"
+        )
+    for kind in _MSG_TONE_EXPECT:
+        if kind not in ico:
+            problems.append(
+                f"flux 缺 `.toast.{kind}` 的 --msg-ico —— 该档图标退成实心色块/无字形"
+                "(mask 表在 views.css 的 @supports 块内, 新增 kind 要一并补一张)"
+            )
+
+    # 文字排版(用户四轮口径 2026-11-02: 「文字内容排版样式也使用 showcase 中 D6-2 倒计时进度条的样式」):
+    # 标题行 + 明细行两段块级堆叠、图标顶对齐。回退成单行居中 = 用户选定前的老观感。
+    toast_body = "\n".join(b for _r, b in bodies["toast"])
+    for token, why in (
+        ("align-items: flex-start", "图标顶对齐(同 D6-2 .tst): 回退 center 时多行文本把图标压到垂直中线"),
+        ("font-weight: 600", "标题行字重(同 D6-2 .tst-title): 拆不开的单行条也要读作标题行"),
+    ):
+        if token not in toast_body:
+            problems.append(f"flux `.toast` 基线缺 {token} —— {why}")
+    for sel, must, why in (
+        (".toast-txt", ("min-width: 0", ), "长 err.message 折不了行(会把条撑破/溢出)"),
+        (".toast-s", ("font-size: 12px", "var(--fg-muted)", "font-weight: 400"), "明细行字级/色/字重"),
+    ):
+        body = typo.get(sel)
+        if body is None:
+            problems.append(f"flux 缺 `{sel}` 规则 —— {why} 无处落(D6-2 的两行排版不成立)")
+            continue
+        for token in must:
+            if token not in body:
+                problems.append(f"flux `{sel}` 缺 {token} —— {why} 漂移")
+    # 拆段器: 共享模板只有一条 `<span>{{ t.text }}</span>`(四皮肤共用, 不动模板), 两段由
+    # flux/fx-mount.js::shapeToastText 在挂载层拆。JS 缺席 = 全部退回单行, CSS 守阵看不出这事。
+    mount_js = os.path.join(STATIC_ROOT, "flux", "fx-mount.js")
+    js = open(mount_js, encoding="utf-8").read() if os.path.isfile(mount_js) else ""
+    if "shapeToastText(n);" not in js:
+        problems.append(
+            "flux/fx-mount.js 的 toastSync 未调 shapeToastText(n) —— 提示条退回单行,"
+            "D6-2 的标题/明细两行排版落不了地(CSS 侧看不出来)"
+        )
+    elif '"toast-t"' not in js or '"toast-s"' not in js:
+        problems.append("shapeToastText 拆出的段名不是 toast-t / toast-s —— 与 views.css 文字区选择器对不上")
+
+    # 位置与队列(用户八轮, 2026-11-02): ① 提示条必须坐在状态栏**之上** —— 状态栏是常驻仪表盘,
+    # 压上去等于盖住速率(报障原话「通知挡住了状态栏」); ② 队列重排要真做: toastSync/toastDrop
+    # 都得调 flipStack, 缺一处就回到"新条插入/旧条退场时邻居瞬移"(报障的「互相重叠」另一半)。
+    wrap_body = typo.get(".toast-wrap")
+    if wrap_body is None:
+        problems.append("flux 缺 `.toast-wrap` 基线规则 —— 提示条栈的定位无处落")
+    elif "var(--statusbar-h" not in wrap_body:
+        problems.append("flux `.toast-wrap` 未按状态栏高度抬升(bottom 缺 var(--statusbar-h))"
+                        " —— 提示条会压住底部状态栏的速率/连接数(用户八轮报障)")
+    if js.count("flipStack();") < 2:
+        problems.append(
+            "flux/fx-mount.js 的队列重排不完整 —— toastSync(插入/结算)与 toastDrop(退场)"
+            " 都要调 flipStack(); 少一处, 邻居条就会瞬移并与入场条同帧叠画"
+        )
+
+    # 队列推入不叠画(九轮, 2026-11-02): 光有 FLIP 还不够 —— 新条若沿用原地 rise(只下移 10px),
+    # 它会在旧条还没让开时就落在同一块地方(实测 5 帧重叠、最大 49px = 旧条整个高度, 用户报的
+    # 「互相重叠」)。新条必须**从下方一整格**起步(自身高度 + 栈间距), 与旧条上移同速。
+    css_path = os.path.join(STATIC_ROOT, "flux", "css", "fx-mount.css")
+    fxcss = ""
+    if os.path.isfile(css_path):
+        fxcss = re.sub(r"/\*.*?\*/", "", open(css_path, encoding="utf-8").read(), flags=re.S)
+    if "@keyframes fx-toast-queue-in" not in fxcss:
+        problems.append("flux/css/fx-mount.css 缺 fx-toast-queue-in 关键帧 —— 队列推入没有"
+                        "\"从下方一整格起步\"的形态, 新条会与正在让位的旧条叠画")
+    elif "[data-fx-queue]" not in fxcss:
+        problems.append("flux/css/fx-mount.css 没有 [data-fx-queue] 规则 —— 队列推入形态无处挂")
+    if 'setAttribute("data-fx-queue"' not in js:
+        problems.append("flux/fx-mount.js 不给栈内新条打 data-fx-queue —— 首条之外的推入仍走"
+                        "原地 rise, 新条与让位中的旧条重叠")
+
+    # 进行中 → 结果 统一两段式(九~十轮, 2026-11-02 "统一收"): 所有 sticky 进行中条必须经
+    # `_runningToast` 建(唯一工厂), 结果必须经 `_settleRunningToast` 另起一条 —— 退回"同一条
+    # 原位改字"时, 本地回执快得只剩几百毫秒, 用户读作「第一个窗口被第二个顶掉」。
+    # 三条判据, 都是"看着还能跑、但用户看到的是另一回事"的静默故障:
+    shared_dir = os.path.join(STATIC_ROOT, "shared")
+    cmds_path = os.path.join(shared_dir, "commands.js")
+    cmds = open(cmds_path, encoding="utf-8").read() if os.path.isfile(cmds_path) else ""
+    offenders, banned_hits = [], []
+    for name in sorted(os.listdir(shared_dir)) if os.path.isdir(shared_dir) else []:
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(shared_dir, name), encoding="utf-8").read()
+        for lineno, line in enumerate(text.splitlines(), 1):
+            # ① sticky 条只能由 _runningToast 建(手搓 { sticky: true } = 绕开最短展示与归档口径)
+            if "{ sticky: true }" in line and "_runningToast" not in line:
+                offenders.append(f"shared/{name}:{lineno}")
+        # ② 归档条文案必须**归档后仍成立**: 它会留在队列里与结果条并存, 不能自称"进行中/等待"。
+        # 先剥注释再扫: 注释里既有用法示例(_runningToast(`…`)), 也有带引号的解释词("进行中"),
+        # 都会被字面量正则误抓 —— 只留真代码里的模板/字符串。
+        stripped = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        stripped = re.sub(r"(?m)//[^\n]*", "", stripped)
+        for m in re.finditer(r"_runningToast\(", stripped):
+            window = stripped[m.end():m.end() + 240]
+            lits = [a or b for a, b in re.findall(r"`([^`]*)`|\"([^\"]*)\"", window)]
+            joined = " ".join(lits)
+            for banned in ("进行中", "正在", "等待 tracker", "确认中"):
+                if banned in joined:
+                    banned_hits.append(f"shared/{name}: `_runningToast` 文案含「{banned}」")
+                    break
+    # 工厂自身那行 `{ sticky: true }` 是合法供给面(唯一一处), 其余任何手搓都算绕开
+    if len(offenders) > 1 or (offenders and not offenders[0].startswith("shared/commands.js")):
+        problems.append(
+            f"有 sticky 提示条绕开了统一工厂 _runningToast({', '.join(offenders[:3])})"
+            " —— 手搓 sticky 条没有最短展示保护, 回执快时会一闪而过被结果条顶掉"
+        )
+    if banned_hits:
+        problems.append(f"归档条文案写成了进行时态({banned_hits[0]}) —— 它结算后要留在队列里"
+                        "继续被读到, 文案必须归档后仍成立(用「已投递/已开始/已提交」)")
+    # ③ 结算点下限护栏(全 shared 汇总, 不单看 commands.js —— 单文件计数会被 docstring 里的
+    # 用法示例撑起来, 虚绿)。目前 5 条链路(强制汇报/导出/删除前置/跳检/转移)共 12 处(含定义);
+    # 阈值取 10 = 允许删掉一两条分支, 但整条链路退回"原位改字"时必红。
+    settle_total = 0
+    for name in sorted(os.listdir(shared_dir)) if os.path.isdir(shared_dir) else []:
+        if name.endswith(".js"):
+            body = open(os.path.join(shared_dir, name), encoding="utf-8").read()
+            body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
+            body = re.sub(r"(?m)//[^\n]*", "", body)
+            settle_total += len(re.findall(r"_settleRunningToast\(", body))
+    if "async _settleRunningToast(" not in cmds or settle_total < 10:
+        problems.append(
+            f"进行中条的结算没有走 _settleRunningToast(定义缺失或全量调用点仅 {settle_total}"
+            " 处, 下限 10) —— 退回同一条 _finishToast 原位改字, 进行中条会被结果瞬间顶掉"
+        )
+
+    # 倒计时归属(十一轮, 2026-11-02 · 用户报「强制重新汇报失败的窗口时间指示条到了但没消失」):
+    # --fx-life(进度条时长)必须与**这一条**的退场定时器同源。此前 toastSync 的 stamp 分支用
+    # "整栈共用"的 ttl 给所有未挂载的新条挂条 —— 而 _settleRunningToast 在同一个 tick 里先给
+    # 归档条发 4000(settle)、再推结果条(12000), 两份 $nextTick 按注册序执行, 4000 先落到刚渲染的
+    # 结果条上: 进度条 4s 走完, 条按 12s 才移除, 中间 8s 干挂(实测 anim finished t=5106ms /
+    # 节点消失 t=13013ms)。修法 = 挂条处按 data-id 命中本条。三条判据缺一条就回到错位:
+    if "var own = id != null" not in js or "own && ttl > 0" not in js:
+        problems.append(
+            "flux/fx-mount.js::toastSync 的倒计时没按 data-id 命中本条(缺 own 判定)"
+            " —— 同一 tick 里归档条(4000)的 ttl 会贴到新推入的回执条(12000)上,"
+            " 用户看到「时间指示条到了但窗口不消失」"
+        )
+    elif js.count('setAttribute("data-fx-cd"') != 1:
+        problems.append("flux/fx-mount.js 挂 data-fx-cd 的不止一处 —— 唯一一处必须在 own 守卫内,"
+                        " 旁路会绕过归属判定, 把别人的 ttl 挂到本条上")
+    ui_fb_path = os.path.join(shared_dir, "ui_feedback.js")
+    ui_fb = open(ui_fb_path, encoding="utf-8").read() if os.path.isfile(ui_fb_path) else ""
+    for m in re.finditer(r"toastSync\(\s*([^)]*)\)", ui_fb):
+        args = [a.strip() for a in m.group(1).split(",")]
+        if len(args) != 2 or args[1] != "id":
+            problems.append(
+                f"shared/ui_feedback.js 的 {m.group(0).strip()} 没传本条 id —— 倒计时会"
+                "按「整栈 ttl 先到先得」落到别的条上(进度条与退场错位)"
+            )
+
+    used = _toast_kinds_in_use()
+    for kind in sorted(used - set(_MSG_NEUTRAL_KINDS) - set(tone)):
+        problems.append(
+            f"toast kind `{kind}` 在模板/JS 里有调用, 但 flux 没有 `.toast.{kind}` 规则"
+            " —— 新 kind 必须登记语义档, 否则静默落成中性提示(与 info 同貌)"
+        )
+
+
+def _scan_toast_copy_two_part(problems):
+    """toast 文案守阵(2026-11-02 六轮): 每条提示条文案都要是「主标题: 说明」
+
+    背景: 提示条排版改成标题行 + 说明行(见 _scan_message_surface_parity), 但两行的前提是
+    **文案本身带分隔符**。用户口径「都改成主标题+说明」= 生产文案也统一 —— 本轮把 58 处没有
+    分隔符的回执补上了说明句(「已导出 .torrent」→「已导出: .torrent 文件已保存」之类),
+    否则同一屏里永远混着"只有标题"的条, 与选定形态不一致。
+
+    判据(与 `flux/fx-mount.js` 的 `TOAST_SPLIT` 同一条规则, 改一处要同步另一处):
+      `主标题` = 首个 `:` / `：` / `,` / `，` 之前, ≤14 字且不含括号;
+      `说明` = 其后 ≥2 字。说明门槛低到 2 字是刻意的 —— 「已执行: 重命名」这种短回执的说明
+      就是一个名字, 门槛再高它们又会退回单行。
+
+    只判**首参是字面量/模板**的调用: `this.toast(g.title)` / `toast(text, ...)` 这类文案由
+    调用方运行时决定, 静态无从判定(它们的实参往往来自后端或常量表), 跳过而不是误报。
+    注释与字符串里的 `toast(` 不算调用(注释里讨论 toast 的地方很多)。
+    """
+    pattern = re.compile(r"^([^:：,，()（）\n]{1,14})[:：,，]\s*([\s\S]{2,})$")
+    for name in sorted(os.listdir(os.path.join(STATIC_ROOT, "shared"))):
+        if not name.endswith(".js"):
+            continue
+        path = os.path.join(STATIC_ROOT, "shared", name)
+        src = open(path, encoding="utf-8").read()
+        for line_no, text in _toast_literal_texts(src):
+            if not pattern.match(text):
+                problems.append(
+                    f"shared/{name}:{line_no} toast 文案不是「主标题: 说明」形态: {text[:40]!r}"
+                    " —— 主标题 ≤14 字且不含括号, 其后用 `: ` 或 `, ` 接说明(≥2 字); "
+                    "文案决定提示条能不能排成两行, 单行条会与选定形态分家"
+                )
+
+
+def _toast_literal_texts(src):
+    """产出 (行号, 典型渲染文本): 提示条文案的两个入口都扫。
+
+    - `toast(text, kind, ms, opts)` → 第 1 个实参;
+    - `_finishToast(id, kind, text, ms)`(常驻条原位结算成终态, 如「等待中…」→「成功/超时」)
+      → 第 3 个实参。只扫 toast 会漏掉一批终态文案(「已导出 N 个 .torrent」「强制汇报成功…」
+      都在这里)。
+
+    实现口径: 先用正则定位调用点, 再用 `_args_texts` 按顶层逗号切实参(字符串/模板/嵌套括号
+    都在切分里处理)。注释行(以 `//` 或 `*` 开头)里的提及不算调用。
+    典型文本 = 字面量原样 + `${...}`/裸表达式折成占位(模拟 err.message / 名称 / 计数);
+    首段就是表达式的调用跳过(主标题由运行时拼接, 静态判不了)。
+    """
+    for m in re.finditer(r"(?<![\w$])(_finishToast|toast)\s*\(", src):
+        name = m.group(1)
+        line_start = src.rfind("\n", 0, m.start()) + 1
+        prefix = src[line_start:m.start()].lstrip()
+        if prefix.startswith("//") or prefix.startswith("*"):
+            continue  # 注释里的提及, 不是调用
+        arg_idx = 2 if name == "_finishToast" else 0
+        texts, _end = _args_texts(src, m.end())
+        if len(texts) <= arg_idx or texts[arg_idx] is None:
+            continue
+        yield src[:m.start()].count("\n") + 1, texts[arg_idx]
+
+
+def _args_texts(src, start):
+    """按顶层逗号切开实参, 逐个折成典型文本(非字面量实参 = None); 返回 (列表, 收尾下标)。"""
+    texts, i = [], start
+    while True:
+        text, i = _first_arg_text(src, i)
+        texts.append(text)
+        if i >= len(src) or src[i] != ",":
+            return texts, i
+        i += 1
+
+
+def _skip_string(src, start):
+    """跳过一段字符串/模板字面量, 返回闭合引号之后的下标。"""
+    quote = src[start]
+    i = start + 1
+    while i < len(src):
+        if src[i] == "\\":
+            i += 2
+            continue
+        if src[i] == quote:
+            return i + 1
+        if quote == "`" and src.startswith("${", i):
+            i = _skip_braces(src, i + 2)
+            continue
+        i += 1
+    return len(src)
+
+
+def _skip_braces(src, start):
+    """从 `${` 的内容起点跳到配对的 `}` 之后(模板里嵌表达式的花括号计数)。"""
+    depth, i = 1, start
+    while i < len(src):
+        if src[i] in "\"'`":
+            i = _skip_string(src, i)
+            continue
+        if src[i] == "{":
+            depth += 1
+        elif src[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i + 1
+        i += 1
+    return len(src)
+
+
+def _first_arg_text(src, start):
+    """取 toast( 的第一个实参: 是字面量/字面量拼接则返回典型文本, 否则返回 (None, 收尾下标)。"""
+    parts = []
+    literal_seen = False
+    head_from_expr = False  # 首段来自 `${head}...` / 三元 / 变量 = 标题由运行时决定, 静态判不了
+    i = start
+    depth = 0
+    while i < len(src):
+        ch = src[i]
+        if ch in "\"'`":
+            end = _skip_string(src, i)
+            raw = src[i + 1:end - 1]
+            if not parts and raw.startswith("${"):
+                head_from_expr = True
+            lit = re.sub(r"\$\{[^}]*\}", "示例值x", raw)
+            parts.append(lit)
+            literal_seen = True
+            i = end
+            continue
+        if ch in "([{":
+            depth += 1
+            i += 1
+            continue
+        if ch in ")]}":
+            if depth == 0:
+                break
+            depth -= 1
+            i += 1
+            continue
+        if ch == "," and depth == 0:
+            break
+        if ch in "+" or ch.isspace():
+            i += 1
+            continue
+        # 裸表达式(三元/变量/调用): 表达式本身折成一个占位; 同层后面的字面量照常拼回去
+        if not parts:
+            head_from_expr = True
+        parts.append("示例值x")
+        j, d = i, 0
+        while j < len(src):
+            c = src[j]
+            if c in "\"'`":
+                end = _skip_string(src, j)
+                lit = re.sub(r"\$\{[^}]*\}", "示例值x", src[j + 1:end - 1])
+                parts.append(lit)
+                j = end
+                continue
+            if c in "([{":
+                d += 1
+            elif c in ")]}":
+                if d == 0:
+                    break
+                d -= 1
+            elif c == "," and d == 0:
+                break
+            j += 1
+        i = j if j > i else i + 1  # 保证前进(否则 "-" 之类的单字符会死循环)
+    # 首段是表达式(如 `${head}...` / `cond ? ... : ...`)时跳过: 主标题由运行时拼接,
+    # 静态无从判定(拿占位当标题会误报)。首段是字面量的才判 —— 这类占绝大多数。
+    if not literal_seen or head_from_expr:
+        return None, i
+    return "".join(parts).strip(), i
+
+
+def _toast_kinds_in_use():
+    """模板图标映射 + JS 调用点里出现的 toast kind 全集(守阵判据, 不含中性 info 的取舍在调用方)
+
+    两个来源缺一不可: 模板图标映射(`{ ok: '#i-check', error: '#i-warn', … }`)决定**渲染**分支,
+    JS 调用点决定**谁在用**。只看模板会漏"新加 kind 但模板没给图标"(照样渲染, 只是图标走 info);
+    只看 JS 会漏"模板里有却暂时没人用的档"(留着也别删)。
+    """
+    kinds = set()
+    tpl = os.path.join(STATIC_ROOT, "shared", "tpl", "overlays.html")
+    if os.path.isfile(tpl):
+        text = open(tpl, encoding="utf-8").read()
+        m = re.search(r"\{([^}]*)\}\[t\.kind\]", text)
+        if m:
+            kinds |= set(re.findall(r"(\w+)\s*:", m.group(1)))
+    for name in sorted(os.listdir(os.path.join(STATIC_ROOT, "shared"))):
+        if not name.endswith(".js"):
+            continue
+        text = open(os.path.join(STATIC_ROOT, "shared", name), encoding="utf-8").read()
+        kinds |= set(re.findall(r"toast\([^;]{0,80}?\"(ok|warn|error|info|busy|timeout)\"", text))
+    return kinds
+
+
+# message surface 语义档期望表(值 = 消费的色令牌名): timeout 与 warn 同取琥珀 ——
+# 两者都是「已受理但未落定」, 靠图标区分(clock vs info), 与 TOAST_MS_FLOOR 的停留下限同族。
+_MSG_TONE_EXPECT = {"ok": "--green", "warn": "--warn", "error": "--error", "busy": "--accent", "timeout": "--warn"}
+# 中性档: info 就是基线本身(中性描边 + accent 图标), 不单列规则 —— 列了反而与"无等级"的语义自相矛盾
+_MSG_NEUTRAL_KINDS = ("info", )
+
+
 def _scan_frontend_assets():
     """扫描 webui/static 返回问题清单(空 = 健康)
 
@@ -1765,6 +2242,23 @@ def _scan_frontend_assets():
        `.bar > i` 恰 1 条且取 `var(--st` —— 漏一个状态/漏一套皮肤 = 该状态回落写死色,
        校验中与下载中重新同蓝(本次修复前的原症状)。
 
+    20. 消息面材质同源(见 _scan_message_surface_parity, 2026-11-02, 只钉 flux): 提示条与站内
+       确认框共用 `--msg-surface` 单点 + 语义档描边(--msg-line)/图标(--msg-tone), 但提示条
+       **不得切角**(用户二轮口径「消息通知不要切角」, 反向钉 clip-path); 模板与 JS 里出现的
+       每个 toast kind 都必须登记语义档 —— 缺档的 kind 与 info 同貌(warn 档 21 处调用点此前
+       整档没样式, 用户报障的"消息弹窗样式没统一"一半来自这里)。
+       八~十轮追加队列口径: `.toast-wrap` 必须按 `--statusbar-h` 抬升(不许压住状态栏);
+       FLIP 要 `flipStack();` 至少两处(toastSync 插入/结算 + toastDrop 退场); 队列推入要有
+       `fx-toast-queue-in` 关键帧 + `[data-fx-queue]` 规则 + JS 盖章(否则新条与让位中的旧条叠画);
+       **进行中 → 结果统一两段式**: 所有 `{ sticky: true }` 只能出现在统一工厂 `_runningToast` 体内
+       (手搓 = 绕开最短展示与归档口径), 结算一律走 `_settleRunningToast`(全 shared 汇总调用点下限 10,
+       防整条链路退回原位改字), 归档条文案不许写进行时态(它结算后要留在队列里与结果条并存)。
+    21. toast 文案 = 「主标题: 说明」(见 _scan_toast_copy_two_part, 2026-11-02 六轮): 每条提示条
+       文案都要能被 fx-mount.js 的 `TOAST_SPLIT` 拆成两行 —— 主标题 ≤14 字(不含括号) + `: ` / `, `
+       后接说明(≥2 字)。提示条排版改成标题行 + 说明行之后, "文案本身没有说明"就是新的分家来源
+       (用户六轮口径「都改成主标题+说明」, 本轮把 58 处没有分隔符的回执补上了说明句)。
+       只判首参是字面量/模板的调用; `toast(g.title)` 这类运行时决定的文案跳过(静态无从判定)。
+
 
     WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测);
@@ -1819,6 +2313,8 @@ def _scan_frontend_assets():
     _scan_column_cells_paired(problems)
     _scan_progress_val_parity(problems)
     _scan_state_color_tokens(problems)
+    _scan_message_surface_parity(problems)
+    _scan_toast_copy_two_part(problems)
     return problems
 
 

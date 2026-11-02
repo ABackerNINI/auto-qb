@@ -518,10 +518,10 @@ window.AQB_DRAWER = {
             ...(force ? { force: true } : {}),
           }),
         });
-        const tid = this.toast(`批量跳检进行中…(${n} 个目标, 每个约需数秒)`, "busy", 0, { sticky: true });
+        const run = this._runningToast(`批量跳检已提交: ${n} 个目标, 每个约需数秒`);
         const r = await this.waitCmd(resp.cmd_id, 60000);
-        if (r.ok) this._finishToast(tid, "ok", `已执行: 批量跳检(${n} 个目标)`, 3000);
-        else this._finishToast(tid, "error", `批量跳检未完成: ${r.error}`, 8000);
+        if (r.ok) await this._settleRunningToast(run, "ok", `已执行: 批量跳检(${n} 个目标)`, 3000);
+        else await this._settleRunningToast(run, "error", `批量跳检未完成: ${r.error}`, 8000);
       } catch (e) {
         if (!e.auth) {
           this.toast((exec.mode === "single" ? "命令发送失败: " : "批量跳检命令发送失败: ") + e.message, "error");
@@ -593,13 +593,13 @@ window.AQB_DRAWER = {
         if (res[k] === "") continue;  // 空 = 不修改
         const n = Number(res[k]);
         if (!Number.isFinite(n) || n < 0) {
-          this.toast("限速需为非负数字(KiB/s)", "warn");
+          this.toast("限速值无效: 需为非负数字(KiB/s)", "warn");
           return;
         }
         body[key] = Math.round(this.kibToBytes(n));  // KiB/s → bytes/s; 0 原样传(后端语义 = 不限)
       }
       if (!Object.keys(body).length) {
-        this.toast("未作修改", "ok", 2000);
+        this.toast("未作修改: 输入与当前值一致", "ok", 2000);
         return;
       }
       await this._editPost(hash, "limits", body, "限速已更新");
@@ -625,7 +625,7 @@ window.AQB_DRAWER = {
       if (res.ratio !== "") {
         const n = Number(res.ratio);
         if (!Number.isFinite(n) || (n < 0 && n !== -1)) {
-          this.toast("分享率需为非负数字(或 -1)", "warn");
+          this.toast("分享率无效: 需为非负数字或 -1", "warn");
           return;
         }
         body.ratio_limit = n;
@@ -634,13 +634,13 @@ window.AQB_DRAWER = {
         if (res[k] === "") continue;  // 空 = 不修改
         const n = Number(res[k]);
         if (!Number.isFinite(n) || (n < 0 && n !== -1)) {
-          this.toast("时长需为非负小时数(或 -1)", "warn");
+          this.toast("时长无效: 需为非负小时数或 -1", "warn");
           return;
         }
         body[key] = n === -1 ? -1 : Math.round(n * 3600);  // 小时 → 秒; -1 原样(未设/全局)
       }
       if (!Object.keys(body).length) {
-        this.toast("未作修改", "ok", 2000);
+        this.toast("未作修改: 输入与当前值一致", "ok", 2000);
         return;
       }
       await this._editPost(hash, "share-limits", body, "分享率限制已更新");
@@ -759,7 +759,7 @@ window.AQB_DRAWER = {
       if (this.moveBusy) return;
       const location = String(this.movePathInput || "").trim();
       if (!location) {
-        this.toast("路径不能为空", "warn");
+        this.toast("路径不能为空: 请填写新的保存位置", "warn");
         return;
       }
       this.moveBusy = true;
@@ -800,13 +800,13 @@ window.AQB_DRAWER = {
         if (res[k] === "") continue;  // 空 = 不修改该项(只提交有值方向)
         const n = Number(res[k]);
         if (!Number.isFinite(n) || n < 0) {
-          this.toast("限速需为非负数字(KiB/s)", "warn");
+          this.toast("限速值无效: 需为非负数字(KiB/s)", "warn");
           return;
         }
         body[key] = Math.round(this.kibToBytes(n));  // KiB/s 转 bytes/s; 0 原样传(qB 语义 = 不限)
       }
       if (!Object.keys(body).length) {
-        this.toast("未作修改", "ok", 2000);
+        this.toast("未作修改: 输入与当前值一致", "ok", 2000);
         return;
       }
       await this._bulkEditPost(targets, "limits", body, "批量速度限制");
@@ -876,7 +876,7 @@ window.AQB_DRAWER = {
       });
       if (!res) return;
       if (!res.name) {
-        this.toast("名称不能为空", "warn");
+        this.toast("名称不能为空: 请输入新的显示名", "warn");
         return;
       }
       /* S1 重命名乐观补丁(计划 26-10-30-0610): 对话框确认后、POST 之前把新名贴上行与抽屉。
@@ -912,7 +912,7 @@ window.AQB_DRAWER = {
       if (raw === null) return;
       const urls = raw.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
       if (!urls.length) {
-        this.toast("请输入至少一条 tracker URL", "warn");
+        this.toast("tracker 为空: 请至少输入一条 announce URL", "warn");
         return;
       }
       await this._editPost(hash, "trackers/add", { urls }, urls.length > 1 ? `已添加 ${urls.length} 条 tracker` : "tracker 已添加");
@@ -978,7 +978,7 @@ window.AQB_DRAWER = {
         value = (d && d.magnet_uri) || "";
       }
       if (!value) {
-        this.toast("该种子没有 magnet 链接", "warn");
+        this.toast("无法复制: 该种子没有 magnet 链接", "warn");
         return;
       }
       const label = field === "name" ? "种子名" : field === "hash" ? "信息哈希" : "magnet 链接";

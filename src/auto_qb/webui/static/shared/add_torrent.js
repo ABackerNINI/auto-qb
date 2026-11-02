@@ -396,7 +396,7 @@ window.AQB_ADD = {
         });
         this.dirBrowse.newName = "";
         await this.loadDir(r.path || this.dirBrowse.path);
-        this.toast(`已新建文件夹: ${r.created}`, "ok", 3000);
+        this.toast(`已新建文件夹: 「${r.created}」已创建`, "ok", 3000);
       } catch (e) {
         if (!e.auth) this.toast("新建文件夹失败: " + e.message, "error", 8000);
       } finally {
@@ -407,7 +407,7 @@ window.AQB_ADD = {
     dirPick() {
       const p = this.dirBrowse.path || (this.dirBrowse.dirs[0] && this.dirBrowse.dirs[0].path) || "";
       if (!p) {
-        this.toast("请先选择一个目录", "warn");
+        this.toast("未选择目录: 请先在目录树中点选一个位置", "warn");
         return;
       }
       this.addSavePath = p;
@@ -587,7 +587,7 @@ window.AQB_ADD = {
         else ignored.push(f);  // 含拖入的文件夹(目录条目 size=0 无扩展名), 不做递归遍历
       }
       if (!picks.length) {
-        if (ignored.length) this.toast("拖入的不是 .torrent 文件, 已忽略", "warn");
+        if (ignored.length) this.toast("拖入文件无效: 不是 .torrent 文件, 已忽略", "warn");
         return;
       }
       if (!this.addOpen) this.openAddTorrent();  // 必须先开窗再填(openAddTorrent 会清空 addFiles)
@@ -599,8 +599,8 @@ window.AQB_ADD = {
           added += 1;
         }
       }
-      if (ignored.length) this.toast(`已忽略 ${ignored.length} 个非 .torrent 项`, "warn", 4000);
-      else if (!added) this.toast("文件已在列表中", "warn", 3000);
+      if (ignored.length) this.toast(`已忽略非种子文件: ${ignored.length} 个未添加`, "warn", 4000);
+      else if (!added) this.toast("文件已在列表中: 未重复添加该种子", "warn", 3000);
     },
     _addIngestLinks(dt) {
       if (!dt) return;
@@ -706,7 +706,7 @@ window.AQB_ADD = {
            * 窗口按已受理收口(关闭), 明细进 warn toast(后端文案已带"成功 N / 失败 M"计数,
            * 见 commands.py::_cmd_add_torrents 三态回执); 想补提剩下的再开窗即可。
            * 只有全拒(error)才保留窗口: 那一份文件/链接原样没进 qB, 留着改完能直接重提。 */
-          this.toast(`${r.error}, 列表稍后自动刷新`, "warn", 8000);
+          this.toast(`部分种子未添加: ${r.error}, 列表稍后自动刷新`, "warn", 8000);
           this.addOpen = false;
         } else {
           this.toast(`添加种子失败: ${r.error}`, "error", 8000);

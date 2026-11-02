@@ -210,9 +210,9 @@ window.CONFIG_EDITOR = {
         // 口径(issue 26-09-28-2135): R 级/readonly 字段在写盘前已回退为磁盘旧值 —— 值**没写进去**,
         // 重启也不会生效, 不能再说「需重启进程才生效」; 如实说「仅能在配置文件中修改, 本次未写入」
         if (result.restart_required && result.restart_required.length) {
-          this.toast(`已保存并热重载(变更 ${n} 项); ${result.restart_required.join(", ")} 为程序托管字段, 仅能在配置文件中修改, 本次未写入`, "timeout", 9000);
+          this.toast(`已保存: 已热重载, 变更 ${n} 项; ${result.restart_required.join(", ")} 为程序托管字段, 仅能在配置文件中修改, 本次未写入`, "timeout", 9000);
         } else {
-          this.toast(`已保存并热重载(变更 ${n} 项)`, "ok", 3500);
+          this.toast(`已保存: 已热重载, 变更 ${n} 项`, "ok", 3500);
         }
         // R2(计划 26-10-02-1955 W1): 保存成功后刷新功能旗标(免重登)。reload_config 是入队等
         // 主循环应用, PUT 回执先于应用落地 —— 立即拉一次之外再短延时补拉一次收窄竞态窗口
@@ -724,7 +724,7 @@ window.CONFIG_EDITOR = {
       if (!name) return false;
       const path = [...def.path, name];
       if (this.cfgExists(path)) {
-        this.toast(`${def.label} ${name} 已存在`, "error");
+        this.toast(`名称冲突: ${def.label}「${name}」已存在`, "error");
         return false;
       }
       this.cfgSetPath(path, def.initial);
@@ -739,7 +739,7 @@ window.CONFIG_EDITOR = {
       const container = this.cfgRaw(def.path);
       if (!container || typeof container !== "object") return false;
       if (container[name]) {
-        this.toast(`${def.label} ${name} 已存在`, "error");
+        this.toast(`名称冲突: ${def.label}「${name}」已存在`, "error");
         return false;
       }
       // 换键靠重建对象: 直接把值搬到新键会挪到末尾, 而列表顺序就是用户看到的实体顺序

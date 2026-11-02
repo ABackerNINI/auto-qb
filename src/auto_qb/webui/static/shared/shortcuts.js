@@ -844,7 +844,7 @@ window.AQB_SHORTCUTS = {
      * drawer 作用域条目已清空(§3.2), 四条改 list 作用域由此单点分流双态。 */
     _kbDrawerTab(tab) {
       if (this.page !== "groups") {
-        this.toast("详情面板只在种子/辅种/追剧页可用", "info", 2500);
+        this.toast("页签不可用: 详情面板只在种子/辅种/追剧页可用", "info", 2500);
         return;
       }
       /* 合并页签态位次重排(2026-10-10 用户报「标签合并后没有同步修改快捷键」): 合并成功
@@ -859,7 +859,7 @@ window.AQB_SHORTCUTS = {
       // 流量页签受功能门控: 页签按钮 v-if=qbTrafficOn 不渲染, 切到隐形页签 = 卡在一个没有
       // 按钮可切回的页(与 openTorrentDrawer 的 initialTab 归一同一口径), 未启用时提示后忽略
       if (tab === "traffic" && !this.qbTrafficOn) {
-        this.toast("qB 口径流量图未启用", "info", 2500);
+        this.toast("功能未启用: qB 口径流量图, 请先在设置里打开", "info", 2500);
         return;
       }
       if (this.drawer.open && this.drawerIsSeed) {
@@ -1330,7 +1330,7 @@ window.AQB_SHORTCUTS = {
       else ov[item.id] = serial;
       this._kbApplyOverrides(ov);
       if (item.danger && serial && !serial.includes("+")) {
-        this.toast(`「${item.label}」已绑定为裸键 —— 该动作是危险操作, 触发时有确认框兜底`, "warn", 5000);
+        this.toast(`裸键绑定: 「${item.label}」是危险操作, 触发时有确认框兜底`, "warn", 5000);
       }
     },
     /* ---------------- W6: 录制器(VS Code 按下即录模式, §3.3/§5.2) ----------------
@@ -1370,7 +1370,7 @@ window.AQB_SHORTCUTS = {
       this.kbRecordCancel();
       if (!item) return;
       if (kbInBlacklist(serial)) {
-        this.toast(`浏览器保留该组合键(Ctrl+W/T/N/Q 等), 无法绑定: ${kbDisplayName(serial)}`, "error", 6000);
+        this.toast(`无法绑定: 浏览器保留该组合键(Ctrl+W/T/N/Q 等), ${kbDisplayName(serial)}`, "error", 6000);
         return;
       }
       const other = AQB_SHORTCUT_DEFS.find((it) => it.id !== item.id && !it.fixed && kbSerialWithDraft(it, this.kbDraft) === serial);
@@ -1424,7 +1424,7 @@ window.AQB_SHORTCUTS = {
       this.kbSaved = JSON.parse(JSON.stringify(doc));
       window.AQB_KEYS.apply(JSON.parse(JSON.stringify(doc)));
       this._kbTableCache = null;
-      this.toast("快捷键已保存(其它浏览器/标签刷新后生效)", "ok", 3500);
+      this.toast("快捷键已保存: 其它浏览器/标签刷新后生效", "ok", 3500);
     },
     kbDraftRevert() {
       this.kbRecordCancel();

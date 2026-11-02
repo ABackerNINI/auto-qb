@@ -28,6 +28,13 @@ W3C 官方校验器 v.Nu (vnu.jar, ~32MB, 不进仓库): 落点 `<root>/.tools/v
     --vnu --all        全库巡检 (实测 645 件 ~9s) —— 默认**只报告不拦** (存量 320 条 error
                        属债务, 清理走专门会话), `--strict` 才 rc=1。
 
+⚠ Vue 模板分片不送 v.Nu (2026-11-02): `src/auto_qb/webui/static/shared/tpl/*.html` 是 Vue
+模板片段 (由 boot.js 按 tpl-manifest 聚合成页面), 里面的 `v-if` / `@click` / `:class` 是指令
+不是 HTML 属性 —— v.Nu 按 HTML 文档语义校验, 必然逐条报 `Attribute "…" not allowed`。
+实测首次提交改分片时 22 条 error 全属此类 (同批 showcase.html 零 error)。故 run_vnu 先按
+路径判据摘掉这些分片并在输出里写明 (摘掉要可见, 不静默), 全被摘掉时不下载 jar、不依赖 JDK。
+L1+L2 对分片照常跑 —— 结构判据 (闭合标签/标签名) 对模板片段同样成立。
+
 用法 (从仓库根; `<skill-dir>` = memory-bank skill 实际所在目录):
     python <skill-dir>/scripts/check_html.py --check          全库 L1+L2 守卫, 有命中 rc=1
     python <skill-dir>/scripts/check_html.py <files...>       只查给定文件 (闸门 <changed:> 用)
@@ -173,6 +180,24 @@ def ensure_vnu_jar(root: Path) -> Path:
     return jar
 
 
+# Vue 模板分片的家 (单点 = tpl-manifest 的目录约定): 这些 .html 是模板**片段**, 由 boot.js
+# 按清单聚合成页面再注入。v-if / @click / :prop 是 Vue 指令而非 HTML 属性, v.Nu 必报
+# `Attribute "…" not allowed` —— 那是范畴错误, 不是缺陷 (2026-11-02 首次提交改分片实测
+# 22 条, 同批 showcase.html 零 error)。判据只认路径: 兜底成"内容含 v- 就跳过"会把真正
+# 写坏属性名的页面一起放过, 得不偿失。
+VUE_TPL_SEGMENTS = ("shared", "tpl")
+
+
+def is_vue_template_fragment(path: Path, root: Path) -> bool:
+    """该文件是否为 `shared/tpl/` 下的 Vue 模板分片 (v.Nu 不适用)。"""
+    try:
+        parts = path.resolve().relative_to(root.resolve()).parts
+    except (ValueError, OSError):
+        return False
+    n = len(VUE_TPL_SEGMENTS)
+    return any(tuple(parts[i:i + n]) == VUE_TPL_SEGMENTS for i in range(len(parts) - n + 1))
+
+
 def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
     """跑 v.Nu; 输出归一为 `仓库相对路径:行: error: 文案`; --strict 有 error 即 rc=1。"""
     if not files:
@@ -186,6 +211,16 @@ def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
             ", ".join(rel_posix(p, root) for p in fragments)
         )
         if not files:
+            return 0
+    skipped = [p for p in files if is_vue_template_fragment(p, root)]
+    if skipped:
+        files = [p for p in files if p not in skipped]
+        print(
+            "[--] check_html --vnu: 跳过 Vue 模板分片 (v-if/@click/:prop 属模板语法, v.Nu 不适用): " +
+            ", ".join(rel_posix(p, root) for p in skipped)
+        )
+        if not files:
+            print("[ok] check_html --vnu: 本次改动全是 Vue 模板分片, 无需 v.Nu")
             return 0
     jar = ensure_vnu_jar(root)
     cmd = [java, "-jar", str(jar), "--asciiquotes", "--errors-only", "--exit-zero-always", *[str(p) for p in files]]
