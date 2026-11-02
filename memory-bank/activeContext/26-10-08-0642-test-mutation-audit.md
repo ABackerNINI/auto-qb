@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
 > 摘要: 把可行性报告 `26-10-08-0231` 落成可复用流程 —— 指导 skill + 命令包 + 常驻排期锚 + 方法论坑档。**config / hr / rules / core 四包审计均已收官**(config 与 hr 的真洞 issue 全清, core 计划 W1–W9b 九个工作包全完成), 余量按 issue 口径在池; 逐轮细节在任务档案, 覆盖刻度见常驻锚 §07。
-> 最后活动: 2026-11-02 21:36
+> 最后活动: 2026-11-02 22:18
 
 ## 包状态与刻度
 
@@ -54,3 +54,5 @@
 **R8(2026-11-02 20:46):** W2 变异 4 件(parse-edges/badbytes-read/boundary-grid/broke-contract)收尾补全: 核对 Done 回写与双向认领链, 全量测试全绿并新建基线切片 26-11-02-2045, 零 src 改动
 
 **R9(2026-11-02 21:36):** 结清 W2 元数据/状态方向 4 件 issue(empty-meta-grid / guard-counter / recorder-defense / snapshot-mixbucket): 零 src 改动, 10 个新守阵用例, 红验 14 KILLED + 2 判等价; 全量测试数字见基线切片 26-11-02-2135
+
+**R10(2026-11-02 22:18):** 结清 W3 标题/年月/键名归一化 4 件 issue，补守阵并消除归一化循环死循环变异面；全量数字见 kb.baseline
