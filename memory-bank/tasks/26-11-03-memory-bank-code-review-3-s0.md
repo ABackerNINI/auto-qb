@@ -5,7 +5,7 @@
 **Updated:** 2026-11-03
 **Summary:** 第三次全量代码评审 S0:底册四表(Open issue / 坑档 / 在途件 / 二次 26 条去向), 入池 3 条计划底数漂移
 **Topics:** memory-bank-code-review-3-s0
-**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/issues/26-11-03-0630-docs-plan-review3-ledger-counts-drift.html, memory-bank/issues/26-11-03-0630-docs-plan-review3-inflight-list-stale.html, memory-bank/issues/26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/issues/26-11-03-0630-docs-plan-review3-ledger-counts-drift.html, memory-bank/issues/26-11-03-0630-docs-plan-review3-inflight-list-stale.html, memory-bank/issues/26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md
 
 ## 原始请求
 

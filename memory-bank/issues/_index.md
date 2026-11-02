@@ -21,8 +21,8 @@
 |---|---|
 | bug | 8 |
 | perf | 5 |
-| docs | 7 |
-| test | 5 |
+| docs | 9 |
+| test | 6 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,9 @@
 
 ## Open
 
+- [docs] [第三次评审计划 域表分项合计 478 与总数 479 不符(漏记 finalize_watch.py)](26-11-03-0704-docs-plan-domain-table-count.html) — 计划 02 节 10 行…
+- [docs] [12 个拆分残片被 git 判为 rename(R051-R072), 配对表不能按 1:1 改名解读](26-11-03-0704-docs-split-residue-rename.html) — 拆分提交中仅一个目标桶被…
+- [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件…
 - [docs] [计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)](26-11-03-0647-docs-plan-review3-legacy-html-refchain.html) — 旧件 0221 计划/1…
 - [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 49…
 - [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实…

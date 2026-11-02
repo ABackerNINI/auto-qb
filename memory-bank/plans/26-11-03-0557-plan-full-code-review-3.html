@@ -10,7 +10,7 @@
 <meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-11-03-0557">
 <meta name="doc-updated" content="26-11-03-0636">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md">
 <style>
   :root {
     --bg: #10151a;
@@ -72,7 +72,7 @@
 <h1>实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审</h1>
 <p class="lede">对第二次全面评审终点 <code>bf9920d3</code> 到当前 HEAD <code>812ad785</code> 的 <b>358 笔提交</b>做第三次只读评审, 并补审前两次始终未独立覆盖的 <code>tests/</code> 测试质量面与文档漂移面。设计主轴: <b>实质增量全量读码、move-only 拆分做等价核验、未变旧面轻量抽验; 本轮零改动, 只产出发现、分级与处置建议</b>。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-0636 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-0704 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 26-11-03 指令「参照仓库前两次 code review 制定第三次分步实施计划; 本轮只写计划, 不执行评审、不改代码、不 commit」; 骨架继承首次 <a href="26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> 与第二次 <a href="26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a>, 底数实测自 HEAD <code>812ad785</code> 与基线切片 <a href="../testing/baselines/26-11-03-0459-test-big-file-split.md">26-11-03-0459</a>
 </div>
 
@@ -159,7 +159,7 @@
   <tr><td>文档漂移</td><td><code>docs/</code> + README + <code>memory-bank/</code> 口径段(不含历史报告正文)</td><td>docs-sync-audit + <code>doc.drift</code>/<code>doc.links</code>; 只登记不修</td><td>前两次仅点状; 本区间有 qB 5.3/端口口径/拆分文件边界三类漂移面</td></tr>
   <tr><td>排除</td><td><code>memory-bank/</code> / <code>.commands/</code> / <code>.agents/</code> 元层; 重复代码审查 Phase 3/4; 生产 <code>config.yml</code> / <code>auto-qb-data/</code></td><td>不纳入(待 D3/D4 确认)</td><td>前两次明确排除 / 方法论不同 / 生产红线</td></tr>
 </table>
-<h3>批次地图(待 S1 重盘回填实测)</h3>
+<h3>批次地图(实测与配对见 S1 档案, 此处不重复流水)</h3>
 <table>
   <tr><th>批</th><th>范围</th><th>规模(实测)</th><th>重点维度</th><th>增量要点</th></tr>
   <tr><td>B1</td><td><code>transfer/</code> 全量 + <code>config/</code> web.transfer + <code>webui/server/routes/transfer.py</code> + 转移 UI</td><td>≈1.9k 行 + 6 测试文件</td><td>R1 R2 R4 R6 R8 R9 R11</td><td>新域全量: 状态门/导出/映射/跳检降级/验证轮询/删源; api_key 凭据与目标 URL 校验</td></tr>
@@ -191,7 +191,7 @@
     <td><b>S1</b><br>范围重盘</td>
     <td>底册; <code>git diff --name-status bf9920d3..HEAD</code></td>
     <td>给 479 个代码文件打「新增/实质变更/move-only 拆分/未变」标; 按提交信息与 diff 形状拆出 R1–R4 拆分清单; 生成批次矩阵(文件 × LOC × 变更态 × 关联测试 × 维度); 回填 §03</td>
-    <td>批次矩阵定稿 + 实质/move-only 两套文件全集</td>
+    <td>批次矩阵定稿 + 实质/move-only 两套文件全集(<b>Done 26-11-03</b>, 实测与配对见 <code>tasks/26-11-03-memory-bank-code-review-3-s1.md</code>)</td>
     <td>脚本核对: 各批文件并集 == 区间代码文件全集(479), 0 漏 0 重; move-only 每对「源→目标」可复核; 无归属文件为空</td>
     <td>1–2 轮 · 串行</td>
   </tr>
