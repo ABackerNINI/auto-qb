@@ -340,3 +340,5 @@
 - 2026-11-02 22:45 curves W3 簇7/簇8 结清: normalize D 别名 / 坏行同分支累加 / merge_direction 1B/s 非零断言, 红验 4/4 KILLED, 零 src 改动
 
 - 2026-11-02 22:51 W3 四件 test issue 收尾: 全量 test.full 后新建基线切片 26-11-02-2250 并回补四件 doc-refs
+
+- 2026-11-02 23:48 W4 批次 2 issue 结清: extreme-low-residue(6 用例, 红验 17/17 KILLED) + observability-logs(4 用例, 红验 18/19 KILLED, _wblp_20 判等价), 各随件提交 5f63962e/da5f498a; 全量 4896 passed + 10 skipped, 基线切片 26-11-02-2348
