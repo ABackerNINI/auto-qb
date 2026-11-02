@@ -22,7 +22,7 @@
 | bug | 8 |
 | perf | 5 |
 | docs | 3 |
-| test | 3 |
+| test | 5 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [test] [e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)](26-11-03-0559-test-e2e-big-table-existing-red.html) — dt-live-upda…
+- [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定…
 - [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败…
 - [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](26-11-03-0316-docs-port-doc-drift.html) — loading-and-…
 - [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs…

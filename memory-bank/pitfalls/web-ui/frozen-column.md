@@ -193,3 +193,5 @@
   (首格可见底 == 行板可见底, 含悬停与 err/bad/is-chk/sel 状态行; 主表 search-hit 首格渐层镜像)。
   ⚠ 多 clone  workspace 下先确认 8137 没有**别 clone 的残留桩**(本例撞上 auto-qb-clone5 的),
   撞上宁可失败也不要静默验错对象 —— 换干净端口 `E2E_PORT=<n>` 复跑(见 pitfalls/testing/smoke.md)。
+  现状(2026-11-03, 计划 26-11-03-0316): e2e 端口由脚本取号(`ui_harness --port 0` + `webServer.wait`
+  捕获回传), `E2E_PORT` 已取消(设置即报错); 复跑直接起新桩即可。

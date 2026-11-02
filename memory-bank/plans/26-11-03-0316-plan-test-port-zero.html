@@ -7,10 +7,10 @@
 <title>测试侧端口改 0 自动分配</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="test-port-zero">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0316">
-<meta name="doc-updated" content="26-11-03-0403">
-<meta name="doc-refs" content="memory-bank/issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html">
+<meta name="doc-updated" content="26-11-03-0448">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html, memory-bank/testing/baselines/26-11-03-0430-test-port-zero.md, memory-bank/tasks/26-11-03-test-port-zero.md">
 <style>
   :root {
     --bg: #10151a;
@@ -74,7 +74,7 @@
 <h1>测试侧端口改 0 自动分配</h1>
 <p class="lede">把 e2e / 开发桩的固定监听口（8137、8099、8177 顺延链）统一改为 <code>0</code>（OS 分配），由 Playwright <code>webServer.wait</code> 命名捕获实绑端口并在进程内传递/回收；<code>web.port</code> 与 HR 发现口 18788 不在本计划内。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0316 · <b>doc-updated</b> 26-11-03-0403 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-0316 · <b>doc-updated</b> 26-11-03-0448 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户第三轮执行指令（2026-11-03）+ 前两轮只读摸排结论；发现口另案见 <a href="../issues/26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html">26-11-03-0315-bug-hr-discovery-multi-clone-isolation</a>
 </div>
 
@@ -342,6 +342,8 @@ export const HARNESS_CMD = `uv run python scripts/ui_harness.py --torrents ${TOR
   <li><span class="tag">R2 · 26-11-03-0347</span> 拍板回填：D1 不保留 <code>E2E_PORT</code>（设置即报错，不提供覆盖）、D2 <code>dev_webui</code> 一律 0（删 8177 默认与 <code>+1…+20</code> 顺延）；同步删除「覆盖口 / 排障逃生口」表述、selfcheck 的 E2E_PORT 分支、回退路径与守阵测试项；D3 仍待定。</li>
   <li><span class="tag">R3 · 26-11-03-0356</span> D3 取证：实测 47 处仍需取具体号的调用点（tests-real 28 / tests 18 / dev_webui 1），远超内联条件；按「不擅自建模块」口径不新增共享核心、不逐点内联，两套本地 helper 保持现状，D3 仍待用户确认；S4 的 dev_webui 改为就地 <code>bind(0)</code>+close 取号，S5/§03/§05/§06/§07/§09 同步为「保持现状」口径，补 TOCTOU 风险。</li>
   <li><span class="tag">R4 · 26-11-03-0403</span> D3 定案：保持两套本地 helper、不新建共享模块、不内联 47 处；唯一 helper 改动为 tests-real/lib/app.py 取号后立即回绑自验（与 RETRIES=3 对齐，失败换候选、耗尽响亮报错）；S5 验收/风险、§05/§06 定案、§09 守阵同步，计划进入待开工</li>
+  <li><span class="tag">R5 · 26-11-03-0431</span> S1-S5 实施完成(ui_harness 预绑 socket / webServer.wait 捕获 / spec codemod / selfcheck / dev_webui 0 / tests-real 回绑自验 / 守阵); 验收: 单跑与并发双 e2e 均绿且端口独立、teardown 无孤儿; S6 命令入口与行为文档未做, 待用户另行授权</li>
+  <li><span class="tag">R6 · 26-11-03-0448</span> S6 文档同步完成: dev 包 3 条命令说明改新语义、smoke/browser-env 改脚本取号口径、4 处坑档补现状注记; doc.caps/drift/links 与 memory-bank 守阵全绿; 计划转 Done</li>
 </ul>
 
 </div>

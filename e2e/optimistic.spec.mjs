@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { CMD_RESULT, requireMode } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { INST, readInst, withVm } from './lib/vm.mjs';
@@ -176,7 +176,7 @@ async function clickRow(page, row, opts = {}) {
  */
 async function openApp(page, skin) {
   collectRuntimeErrors(page);
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 }
 

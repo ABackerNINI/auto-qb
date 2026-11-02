@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, TORRENTS } from './harness.mjs';
+import { baseUrl, TORRENTS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { INST } from './lib/vm.mjs';
 
@@ -40,7 +40,7 @@ for (const skin of SKINS3) {
       test.skip(TORRENTS <= 500, `切页行窗断言仅种子数 >500 有判别力; 当前 E2E_TORRENTS=${TORRENTS}(默认档 300)`);
       test.setTimeout(120_000);
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 20_000 });
       await page.click('nav.tabs [data-view="torrents"]');
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 30_000 });
@@ -75,7 +75,7 @@ for (const skin of SKINS3) {
         body: JSON.stringify([{ name: 'D/a.mkv', size: 1, progress: 1, priority: 1 },
           { name: 'D/b.mkv', size: 1, progress: 1, priority: 0 }]),
       }));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 20_000 });
       await page.click('nav.tabs [data-view="torrents"]');
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 30_000 });

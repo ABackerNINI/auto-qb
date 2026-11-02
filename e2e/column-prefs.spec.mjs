@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
 
@@ -143,7 +143,7 @@ for (const skin of SKINS) {
     test('列设置多标签页互不覆盖: 双标签各改一列, storage 事件合流谁也不吞谁', async ({ page }) => {
       test.setTimeout(90_000);   // 两次整页加载 + 跨页传播等待, 放宽默认 30s
       const errors = collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(page);
 
       /* 标签 2 = 同 context 的第二页(共享 localStorage, storage 事件照常跨页)。
@@ -151,7 +151,7 @@ for (const skin of SKINS) {
        * 最新存储, 验不出"旧快照整份写回吞掉别人改动"。这里先等标签 2 行渲染完再动标签 1。 */
       const tab2 = await page.context().newPage();
       const errors2 = collectRuntimeErrors(tab2);
-      await tab2.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await tab2.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(tab2);
 
       await colToggle(page, '辅种表', '总上传', true);   // 标签 1 先改(旧 items[3] = uploaded)
@@ -178,13 +178,13 @@ for (const skin of SKINS) {
       const errors = collectRuntimeErrors(page);
       // 窗 A 1600×900(fixture 页摆视口; 旧脚本 pa 同值)
       await page.setViewportSize({ width: 1600, height: 900 });
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(page);
       // 窗 B 1000×700(旧脚本 pb 同值; 旧模型此处 B 算出的 px 会写进存储, A 刷新即被改写)
       const pb = await page.context().newPage();
       const errors2 = collectRuntimeErrors(pb);
       await pb.setViewportSize({ width: 1000, height: 700 });
-      await pb.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await pb.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(pb);
 
       await dragCol(page);   // A 拖宽 -> group 固化(colW 非空)
@@ -229,7 +229,7 @@ for (const skin of SKINS) {
 
     test('列设置·全自动页不落px(种子页意图动作后 pages.torrent.w 必须是 null)', async ({ page }) => {
       const errors = collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(page);
 
       /* 旧脚本 vm.toggleColumn("torrent","size") 直调 —— 有真实 UI 路径(col-menu「种子页」分区),
@@ -248,7 +248,7 @@ for (const skin of SKINS) {
 
     test('列设置·隐藏列宽度保留(隐藏→再拖宽→重新显示, 该列 px 原样回来)', async ({ page }) => {
       const errors = collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(page);
       await dragCol(page);   // 固化 group(全可见列拿到意图宽度)
       const s1 = await colState(page);
@@ -281,7 +281,7 @@ for (const skin of SKINS) {
 
     test('列设置·v4→v5迁移(固化页宽度保留 / 非固化页污染 px 清零 / 隐序保留 / 首次意图落 v5)', async ({ page }) => {
       const errors = collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await rowsReady(page);
       /* 注入 v4 旧载荷(桩态注入, D4 第①类 evaluate; 旧脚本同款逐字)。新 context 无 v5 残留,
        * removeItem 保留只为与旧脚本逐字同款(幂等)。 */

@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (52)
+## Open (54)
 
+- [test] [e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-big-table-existing-red.html) — dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
+- [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
 - [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
 - [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口

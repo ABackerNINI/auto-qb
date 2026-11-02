@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
 import { tab, ctxItem, clickRow, openApp } from './lib/gestures.mjs';

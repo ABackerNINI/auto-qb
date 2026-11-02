@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { CMD_RESULT } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
@@ -201,7 +201,7 @@ async function clickRow(page, row, opts = {}) {
  */
 async function openApp(page, skin) {
   collectRuntimeErrors(page);
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
   // 首屏数据经 /api/state 回来后才有行 —— 与 views.spec 渲染健康同口径的 boot 判据
   await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 }
@@ -525,7 +525,7 @@ for (const skin of SKINS) {
       // addInitScript 在 app.js 读 localStorage 之前写入(smoke.md: 注入脚本必须赶在读之前)。
       collectRuntimeErrors(page);
       await page.addInitScript(() => localStorage.setItem('autoqb.ui.view', 'shows'));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       // 等挂载再读 vm: readInst 在 Vue mount 前会抛(_vnode 未定义), 轮询必须从挂载后起跑
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
 

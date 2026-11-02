@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { withVm } from './lib/vm.mjs';
 
@@ -99,7 +99,7 @@ for (const skin of SKINS) {
     test(`Home / End 到首末行都不被吸顶列头 / 状态栏遮住 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       // 种子页平铺列表(用户报障所在视图; 也是行窗口化生效的视图 = 前缀和落点那条路)
@@ -193,7 +193,7 @@ for (const skin of SKINS) {
     test(`PageUp / PageDown 一屏不超过屏内可见行数(不跳行; 面板开着同样) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.click('nav.tabs [data-view="torrents"]');
@@ -240,7 +240,7 @@ for (const skin of SKINS) {
     test(`无光标回落落屏内就近行, 不跳极值行(追剧页非窗口化视图, 滚动后) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 

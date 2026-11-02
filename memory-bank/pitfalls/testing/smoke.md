@@ -54,7 +54,7 @@
   下一轮冒烟 `ERR_CONNECTION_REFUSED`(而 `curl` 在**同一次调用内**是通的, 误以为服务活着)。
 - **处置**: ①起桩服务用**常驻后台任务**(`run_in_background`)—— `ui_harness.py` **长驻**(uvicorn.run 阻塞),
   别指望 `dev.harness` 会返回; 不要 `(cmd &)`;
-  ②起完**立刻看 harness 日志首行**(打印监听地址与种子/组数), 端口被占就换端口;
+  ②起完**立刻看 harness 日志首行**(打印实绑地址与种子/组数), 显式指定口时若被占就换端口;
   ③怀疑服务不对先 `curl <base>/prism/` 必须 200(只 `curl /api/...` 会被旧进程蒙过去)。
   复发: 4 —— 多 clone 下 8099/8137 反复被**别会话 / 别 clone 的残留 harness** 占用(uvicorn 起不来只打
   `[Errno 10048]` 一行, 后台起桩任务全 failed 但无一行有效日志), 换 `E2E_PORT` 复跑即过, 勿杀占用进程;
@@ -65,6 +65,9 @@
   代理变体: 本环境有 HTTP_PROXY 透明代理, `curl` 直连被占端口拿到的是代理的 502「upstream connect failed」,
   而 node/Playwright 直连却 200 —— **curl 通不通不能当判据**, 以
   `Get-NetTCPConnection -LocalPort N -State Listen` 现查归属为准。
+  *现状(2026-11-03, 计划 26-11-03-0316): e2e 端口已改为由脚本取号(`ui_harness --port 0` +
+  Playwright `webServer.wait` 捕获回传), `E2E_PORT` 已取消(设置即报错); 残留桩归属按实绑端口 +
+  命令行里的 clone 路径判。以上复发记录保留为当时的现场。*
 
 ### 「冒烟整体执行 — elementHandle.click: Timeout」≠ 桩没起来 —— 归因先做 HEAD stash 对照
 
@@ -253,7 +256,7 @@
 - **触发**: 报「某个已修缺陷回归了」, 且带皮肤/页面差异(如「prism 正常, atlas 异常」)。2026-10-29 七修
   排查现场就是这一形态: 六修已全绿, 用户侧却稳定复现「无焦点点下拉即弹回」。
 - **判别**: 先核对**服务端现在发的是什么字节**与**进程是否还活着**, 再谈代码 ——
-  ① `curl -s --noproxy '*' -o /dev/null -w "%{http_code}" http://127.0.0.1:8099/atlas/` 返回 `000`
+  ① `curl -s --noproxy '*' -o /dev/null -w "%{http_code}" http://127.0.0.1:<启动行实端口>/atlas/` 返回 `000`
      (连接被拒)⇒ 那份桩早就死了, 用户测的不是它(旧进程 / 别的 clone / 旧页签);
   ② `curl -s .../shared/tpl/combo-input.html | grep -c "@mousedown.prevent"`、`.../atlas/css/dialogs.css |
      grep -c ":has(.add-pop)"` ⇒ 直接证明"服务端发的是不是当前代码", 比问「你刷新了吗」有效得多;

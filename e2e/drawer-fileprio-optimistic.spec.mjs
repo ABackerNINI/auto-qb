@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors } from './lib/errors.mjs';
 
 /**
@@ -126,7 +126,7 @@ async function openK(page, skin, filesState) {
   await page.setViewportSize(WIDE);
   await page.addInitScript(() =>
     localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ content: '11' })));
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
   await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
   await page.click('nav.tabs [data-view="torrents"]');

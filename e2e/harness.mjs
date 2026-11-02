@@ -17,18 +17,41 @@
  */
 
 /**
- * 端口**刻意避开 8099**: 那是人工冒烟的惯用值, 多 clone 工作区下极易被别的会话残留 harness 占用
- * —— memory-bank/pitfalls/testing/smoke.md 已记 3 次复发, 其中一次是"复用了别 clone 的服务,
- * 12 项探针在旧代码上照样通过"的假信心。撞上端口时宁可失败, 也不要静默验错对象。
- * 模式轮也**不改端口**: 串行人跑, 换端口反而破坏「撞残留服务宁可失败」的既有纪律。
+ * 端口由 OS 分配(计划 26-11-03-0316): 桩命令恒传 `--port 0`, 实绑端口由 `ui_harness.py`
+ * 启动行打印, 再由 `playwright.config.mjs` 的 `webServer.wait` 命名捕获组写入
+ * `process.env.UI_HARNESS_PORT`。spec 侧一律 `baseUrl()` **懒取值** —— 模块加载发生在
+ * webServer setup 之前, 任何模块级常量都会拿到 undefined。
  *
- * 默认恒为 **8137**(上述纪律不变)。仅**排障**时可用 `E2E_PORT=<n>` 临时换一个干净端口:
- * 场景 = 8137 被别的 clone 残留桩占用、或残留桩把连通搞脏(ERR_CONNECTION_REFUSED 飘忽)时,
- * 用 `E2E_PORT=8337 commands run dev.e2e` 在一片干净端口上复跑, 判定"是本轮代码还是环境"。
- * 这不是常规路径 —— 常规一律 8137; global-teardown 读同一个 PORT, 换端口后收尾兜底自动跟随。
+ * 不复用外部服务 / 不提供固定口覆盖: `reuseExistingServer=false` 保留作纵深防御;
+ * 旧 `E2E_PORT` 覆盖已取消, 环境中若残留该变量直接报错(多 clone 下固定口必然互相抢,
+ * 撞上残留桩还会验错对象 —— 见 memory-bank/pitfalls/testing/smoke.md 的假信心事故)。
  */
-export const PORT = Number(process.env.E2E_PORT || 8137);
-export const BASE_URL = `http://127.0.0.1:${PORT}`;
+const LEGACY_PORT_ENV = 'E2E_PORT' in process.env;
+if (LEGACY_PORT_ENV) {
+  throw new Error(
+    `[e2e] E2E_PORT=${process.env['E2E_PORT']} 已取消: 测试端口一律由 OS 分配(webServer.wait 捕获), ` +
+    '请从环境变量中移除 E2E_PORT 再跑; 排障场景请先确认没有残留桩, 不要改回固定口'
+  );
+}
+
+/** 捕获契约: 与 scripts/ui_harness.py 的启动行逐字对应(实绑端口 → UI_HARNESS_PORT)。 */
+export const WAIT_STDOUT = /\[harness\] http:\/\/127\.0\.0\.1:(?<ui_harness_port>\d+)\//;
+
+/**
+ * 桩服务基址 —— **必须在使用时调用**: webServer setup 在 spec 加载之后才注入 env, 模块级
+ * 求值会早于注入。缺 env 直接抛(不回退任何固定口), 消息写明期望值与排障入口。
+ */
+export function baseUrl() {
+  const port = process.env.UI_HARNESS_PORT;
+  if (!port) {
+    throw new Error(
+      '[e2e] UI_HARNESS_PORT 未注入: Playwright webServer.wait 没捕获到桩端口\n' +
+      '  NEXT: 确认 playwright.config.mjs 的 webServer 有 wait.stdout=WAIT_STDOUT, ' +
+      '且 scripts/ui_harness.py 启动行含 "[harness] http://127.0.0.1:<端口>/"'
+    );
+  }
+  return `http://127.0.0.1:${port}`;
+}
 
 /* ------------------------------------------------------------------ *
  * 模式矩阵: 默认值 + env 覆盖(计划 26-10-06-0708 §3.2 示意, 逐字落地) *
@@ -90,21 +113,15 @@ export const SKINS_ALL = ['prism', 'atlas', 'console', 'flux'];
  * WARN 收尾依赖(踩过, 见 memory-bank/pitfalls/testing/playwright-teardown.md):
  * Playwright 停 webServer 时等的是子进程的 `'close'` 事件, 而 Node 的 `'close'` 要求**所有
  * stdio 管道都关闭**。Windows 上它用 `spawnSync('taskkill ...')`(带管道 stdio) —— 本机 node 的
- * `spawnSync` 遇管道 stdio 必 EBUSY, 失败被静默吞掉 => 桩服务没死 => 命令永不退出、8137 残留。
+ * `spawnSync` 遇管道 stdio 必 EBUSY, 失败被静默吞掉 => 桩服务没死 => 命令永不退出、桩端口残留。
  * 现由 `e2e/global-teardown.mjs`(配置里的 `globalTeardown`)在 Playwright 动手之前用**异步**
  * taskkill 先杀掉进程树兜底; 非 Windows 走 `process.kill(-pid, SIGKILL)` 本来就没问题。
  */
 export const HARNESS_CMD = [
   'uv run python scripts/ui_harness.py',
   `--torrents ${TORRENTS}`,
-  `--port ${PORT}`,
+  '--port 0',
   CMD_RESULT !== 'ok' ? `--cmd-result ${CMD_RESULT}` : '',
   SKIP_CHECK !== 'on' ? '--skip-check-menu off' : '',
   HR_SCENE !== 'on' ? `--hr-scene ${HR_SCENE}` : '',
 ].filter(Boolean).join(' ');
-
-/**
- * 就绪探测 URL —— 用**页面**而不是 `/api/` 下的接口: 只探接口会被"旧进程仍在服务旧代码"蒙过去
- * (旧进程可能页面 404 但 /api 仍 200), 这是 smoke.md 里记的判据。
- */
-export const READY_URL = `${BASE_URL}/${SKINS[0]}/`;

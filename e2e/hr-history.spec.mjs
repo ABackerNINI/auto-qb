@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { requireMode } from './lib/mode.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
@@ -72,7 +72,7 @@ import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs
  *  块G 所有用例的共同 arrange(旧脚本真实手势链, vm 直调已全部换成 locator 手势)。 */
 async function openHrHistoryTable(page, skin) {
   collectRuntimeErrors(page);
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
   await page.locator('nav.tabs-right button').click(); // 顶栏右侧「设置」(旧同款真实手势)

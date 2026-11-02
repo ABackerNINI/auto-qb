@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
@@ -28,7 +28,7 @@ for (const skin of SKINS) {
     test(`辅种页成员行双击打开详情面板 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -57,7 +57,7 @@ for (const skin of SKINS) {
     test(`追剧页集明细成员行双击打开详情面板 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await page.click('nav.tabs [data-view="shows"]');
       await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 30_000 });
@@ -79,7 +79,7 @@ for (const skin of SKINS) {
     test(`面板跨视图保持 / 切设置页退场 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 

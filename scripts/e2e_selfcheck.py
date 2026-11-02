@@ -8,17 +8,18 @@
 1. node_modules/@playwright/test 在位 —— 多 clone 工作区 node_modules/ 不跟 git 走,
    新 clone 从未 npm i 时 npx 会自作主张装错包(playwright 而非 @playwright/test),
    报错对象与真实病因差一层。
-2. e2e 端口(默认 8137, 随 E2E_PORT)监听占用 —— playwright.config reuseExistingServer=false,
-   占用即起不来; 且 uvicorn 端口被占只打一行 [Errno 10048] 就退出, 报错面极差。
+2. **固定口覆盖已取消**(计划 26-11-03-0316): 环境中若仍设 `E2E_PORT`, 直接报错退出 ——
+   测试端口一律由 OS 分配(Playwright webServer.wait 从桩启动行捕获), 固定口在多 clone 下
+   必然互相抢, 撞上残留桩还会验错对象。`--blocking <端口>` 仅作人工排查占用, 不进入自动流程。
 3. 8099(人工桩惯用值)残留监听告警 —— 多 clone 下反复被别会话/别 clone 的残留 harness 占用。
-   默认仅告警不拦(e2e 轨不用 8099); `--blocking 8099` 可给 dev.harness 做同款前置。
+   默认仅告警不拦(e2e 轨不用固定口); `--blocking 8099` 可给 dev.harness 做同款前置。
 
 占用归属判定**不走 curl**: 本环境有透明代理, curl 直连被占端口拿到代理 502, 判据不可靠
 (smoke.md 已记); 一律 Get-NetTCPConnection 现查 PID + Win32_Process.CommandLine ——
 命令行里带 clone 路径, "旧桩是哪个 clone 的"一眼可判, 不猜。
 
 用法:
-    commands run dev.e2e-check                  # 单跑(默认: blocking=E2E_PORT||8137, warn=8099)
+    commands run dev.e2e-check                  # 单跑(默认: 无拦断面, warn=8099)
     python scripts/e2e_selfcheck.py --blocking 8099 --warn ""   # dev.harness 口径
 退出码: 0 全过 / 1 有拦断面不过(修复动作在 NEXT: 行)
 """
@@ -35,7 +36,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from port_kill import listening_pids  # noqa: E402  (端口探测单点, dev.port-kill 同源)
 
-DEFAULT_E2E_PORT = "8137"
 DEFAULT_WARN_PORTS = "8099"
 # 命令行里抓 clone 路径段(多 clone 工作区 ../auto-qb-* 平级, 残留桩归属一眼可判)
 CLONE_HINT_RE = re.compile(r"[A-Za-z]:\\[^\"']*auto-qb[^\"']*")
@@ -94,8 +94,7 @@ def _check_port(port: int, blocking: bool, problems: list[str], notes: list[str]
         lines.append(f"  pid {pid} {name}: {summary}")
     if blocking:
         lines.append(
-            "  NEXT: commands run dev.port-kill -- " + str(port) +
-            " (确认别 clone 的桩已无用再杀; 不确定就用 E2E_PORT=<空闲端口> commands run dev.e2e 排障复跑)"
+            "  NEXT: commands run dev.port-kill -- " + str(port) + " (确认别 clone 的桩已无用再杀; e2e 轨端口由 OS 分配, 不再用固定口)"
         )
     else:
         lines.append(
@@ -107,8 +106,17 @@ def _check_port(port: int, blocking: bool, problems: list[str], notes: list[str]
 
 def main(argv: list[str] | None = None) -> int:
     _utf8_stdout()
+    if "E2E_PORT" in os.environ:
+        print(
+            "WHY: E2E_PORT 已取消 —— 测试端口一律由 OS 分配(Playwright webServer.wait 捕获), "
+            "固定口在多 clone 下必然互相抢, 撞上残留桩还会验错对象\n"
+            "  NEXT: 从环境变量中移除 E2E_PORT 后重跑 (排障占用用 --blocking <端口>, "
+            "判据: memory-bank/pitfalls/testing/smoke.md)"
+        )
+        print("RESULT: 环境自检未过 —— 不进 spec, 按 NEXT: 修复后重跑")
+        return 1
     args = [a for a in (argv if argv is not None else sys.argv[1:])]
-    blocking_raw = DEFAULT_E2E_PORT
+    blocking_raw = ""
     warn_raw = DEFAULT_WARN_PORTS
     i = 0
     while i < len(args):
@@ -122,12 +130,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"未知参数: {args[i]} (支持 --blocking <ports> / --warn <ports>, 逗号分隔, 空串关闭)")
             return 2
     root = Path(__file__).resolve().parents[1]
-    e2e_port = int(os.environ.get("E2E_PORT") or blocking_raw)
-    blocking_ports = [p for p in (e2e_port, ) if p]
+    blocking_ports = [int(p) for p in blocking_raw.split(",") if p.strip().isdigit()]
     warn_ports = [int(p) for p in warn_raw.split(",") if p.strip().isdigit()]
-    # blocking 显式传参时以传参为准(E2E_PORT 只在未传参时作默认)
-    if "--blocking" in args:
-        blocking_ports = [int(p) for p in blocking_raw.split(",") if p.strip().isdigit()]
 
     problems: list[str] = []
     notes: list[str] = []
@@ -146,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"WHY: {p}")
         print("RESULT: 环境自检未过 —— 不进 spec, 按 NEXT: 修复后重跑 (判据: memory-bank/pitfalls/testing/smoke.md)")
         return 1
-    print("RESULT: 环境自检通过 (node_modules 在位; 拦断端口无占用; 8099 无残留)")
+    print("RESULT: 环境自检通过 (node_modules 在位; 无拦断面占用; 8099 无残留)")
     return 0
 
 

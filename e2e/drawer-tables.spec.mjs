@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
 import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
@@ -63,7 +63,7 @@ for (const skin of SKINS) {
         (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
         TPL06,
       );
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -144,7 +144,7 @@ for (const skin of SKINS) {
     test(`面板开着行键盘仍可用并驱动面板跟随(W2 第四件: 键位不被面板夺走) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -188,7 +188,7 @@ for (const skin of SKINS) {
        * 能抓到。菜单不再有「经典」项(2026-10-14): 四内容页签只有三个变体候选。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 

@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS, TORRENTS } from './harness.mjs';
+import { baseUrl, SKINS, TORRENTS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { INST, readInst } from './lib/vm.mjs';
 
@@ -88,7 +88,7 @@ const ROW_WIN_EST_MIN = 200;
 /** 进种子视图并等行渲染(块B 所有用例的共同 arrange, 旧脚本 nav[1] 点击同口径)。 */
 async function gotoTorrents(page, skin) {
   collectRuntimeErrors(page);
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
   await tab(page, 'torrents').click();
   await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
@@ -203,7 +203,7 @@ for (const skin of SKINS) {
         const orig = Element.prototype.getBoundingClientRect;
         Element.prototype.getBoundingClientRect = function () { window.__gbr0++; return orig.apply(this, arguments); };
       });
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.evaluate(() => { window.__gbr0 = 0; });
       await tab(page, 'torrents').click();

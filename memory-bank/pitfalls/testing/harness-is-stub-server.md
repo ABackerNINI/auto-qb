@@ -9,6 +9,6 @@
 - **触发**: 改完前端要"跑真浏览器冒烟", 顺手选了 `dev.harness`。
 - **判别**: 命令长时间无输出且不退出; 或 `commands show dev.harness` 的展开里**没有 test runner**(只有起桩脚本, 末尾是 `uvicorn.run(app, ...)` —— 设计上就不返回)。
 - **处置**: 断言一律走 `commands run dev.e2e`(全量集; 分钟级的 fast 子集见 `dev.e2e` 的包内说明); `dev.harness` 只在需要**手动**开浏览器或给别的工具连桩时用, 用完按端口清(`commands run dev.port-kill -- <port>`)。
-- **要活过验收期就别走包装器**: `dev.harness` 包内 `timeout = 900` 是**写死的**, 而 `run` 子命令**没有** `--timeout` 覆盖入口(`--timeout` 只在 `add` 上), 所以 `commands run dev.harness` 起出来的桩**准点 15 分钟自尽**——日志尾巴是 `[FAIL] dev.harness 超时(900s) —— 卡住的命令: uv run python scripts/ui_harness.py ...`, 症状是浏览器**突然打不开**, 容易被误判成端口冲突/服务崩了。验收/演示这类要挂几十分钟的场景, 直接跑 `commands show dev.harness` 展开里的那条真命令(必须是 `uv run`, 裸 python 缺 qbittorrent-api), 参数 `--torrents N --port P` 加在其后(默认 8099, 1500 种子)。
+- **要活过验收期就别走包装器**: `dev.harness` 包内 `timeout = 900` 是**写死的**, 而 `run` 子命令**没有** `--timeout` 覆盖入口(`--timeout` 只在 `add` 上), 所以 `commands run dev.harness` 起出来的桩**准点 15 分钟自尽**——日志尾巴是 `[FAIL] dev.harness 超时(900s) —— 卡住的命令: uv run python scripts/ui_harness.py ...`, 症状是浏览器**突然打不开**, 容易被误判成端口冲突/服务崩了。验收/演示这类要挂几十分钟的场景, 直接跑 `commands show dev.harness` 展开里的那条真命令(必须是 `uv run`, 裸 python 缺 qbittorrent-api), 参数 `--torrents N --port P` 加在其后(不传 `--port` 默认 0 = 由脚本取号, 启动行回显实端口; 要固定口再显式 `--port P`; 1500 种子)。
   起没起来的判据看日志末行 `[harness] http://127.0.0.1:<port>/atlas/ ... 种子=N`。
 - **同族(症状同是"挂住", 成因不同)**: 本机 node 的 `spawnSync` 管道 stdio EBUSY 会让 e2e 用例**全 PASS 但命令不退出**(见 [playwright-teardown](playwright-teardown.md))—— 那条是**收尾失败**, 本档是**设计如此**, 别混。

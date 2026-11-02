@@ -8,7 +8,10 @@
 
 用法:
     uv run python scripts/dev_webui.py --qb-port 8080 --qb-user admin --qb-password x
-    uv run python scripts/dev_webui.py --qb-host 192.168.1.10 --qb-port 8080 --web-port 8177
+    uv run python scripts/dev_webui.py --qb-host 192.168.1.10 --qb-port 8080
+
+    # 指定 WEB 端口(默认 0 = OS 分配, 启动行打印实绑地址; 显式具体口用于固定 origin 场景)
+    uv run python scripts/dev_webui.py --qb-port 8080 --web-port 8099
 
     # 不自动开浏览器(比如已经开着 / 在远程桌面里)
     uv run python scripts/dev_webui.py --qb-port 8080 --no-open
@@ -84,7 +87,7 @@ config:
 
 
 def _port_listening(host: str, port: int, timeout: float = 0.6) -> bool:
-    """该端口上是否已有服务在听(用于: qB 连不上要早失败 / WEB 端口被占要换一个)"""
+    """该端口上是否已有服务在听(用于: qB 连不上要早失败)"""
     import socket
 
     try:
@@ -94,19 +97,6 @@ def _port_listening(host: str, port: int, timeout: float = 0.6) -> bool:
         return False
 
 
-def _pick_web_port(host: str, want: int, tries: int = 20) -> int:
-    """端口被占就往上找一个空的 —— 一键脚本不该让用户自己去查是谁占了
-
-    常见成因: 上一次 dev_webui 没退干净(进程还在), 或这个端口本来就有别的服务。
-    """
-    if not _port_listening(host, want):
-        return want
-    for p in range(want + 1, want + 1 + tries):
-        if not _port_listening(host, p):
-            return p
-    return want  # 都不行就交回原值, 让后端报它自己的错(语义不变)
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description="连真机 qBittorrent, 关掉所有自动任务, 只开 WEB UI")
     ap.add_argument("--qb-host", default="127.0.0.1", help="qBittorrent WebUI 地址(默认 127.0.0.1)")
@@ -114,7 +104,7 @@ def main() -> int:
     ap.add_argument("--qb-user", default="", help="qB 用户名(默认空)")
     ap.add_argument("--qb-password", default="", help="qB 密码(默认空)")
     ap.add_argument("--web-host", default="127.0.0.1", help="WEB UI 监听地址(默认 127.0.0.1; 打印/打开的仍是 localhost)")
-    ap.add_argument("--web-port", type=int, default=8177, help="WEB UI 端口(默认 8177, 避开常用端口)")
+    ap.add_argument("--web-port", type=int, default=0, help="WEB UI 端口(默认 0 = OS 分配; 可指定具体口)")
     ap.add_argument("--main-tick", type=float, default=2.0, help="主循环间隔(秒, 默认 2)")
     ap.add_argument("--data-dir", default="", help="运行时数据目录(默认系统临时目录下的一个子目录)")
     ap.add_argument("--no-open", action="store_true", help="不自动打开浏览器")
@@ -131,17 +121,16 @@ def main() -> int:
         print(f"       改端口: --qb-port <qB 里那个端口>")
         print("    4. 若 qB 只监听了具体网卡, 用 --qb-host 指定那个地址")
         return 2
-    # 2. WEB 端口被占 => 自动换一个(实测: 上一次进程没退干净最常见)
+    # 2. WEB 端口: 默认 0 = OS 分配(测试/开发轨不让多 clone 抢固定口, 计划 26-11-03-0316)。
+    #    产品 validate_config 只接受 1–65535, 故必须先 bind(0) 取一个具体口再落盘;
+    #    显式传具体口则原样保留 —— 被占时由后端响亮报错, 不再顺延(顺延会改浏览器 origin)。
     web_port = args.web_port
-    if _port_listening(args.web_host, web_port):
-        alt = _pick_web_port(args.web_host, web_port)
-        print(f"[提示] WEB 端口 {args.web_host}:{web_port} 已被占用(多为上一次没退干净的进程)")
-        if alt != web_port:
-            print(f"       自动改用 {alt}\n")
-            web_port = alt
-        else:
-            print("       附近也没找到空端口, 仍按原端口启动(失败信息以后端为准)\n")
+    if web_port == 0:
+        import socket
 
+        with socket.socket() as s:
+            s.bind((args.web_host, 0))
+            web_port = s.getsockname()[1]
     if args.data_dir:
         data_dir = os.path.abspath(args.data_dir)
     else:

@@ -21,8 +21,10 @@
 
 - `scripts/ui_harness.py` —— 起一个**真 `create_app` + 真 `QbManager` + `FakeClient` + 合成种子**的桩服务
   (`--torrents N --groups N --port P --cmd-result ok|error|hang --state-revert-ms N --skip-check-menu on|off
-  --hr-scene on|empty|off`)。e2e 轨道下由 `playwright.config.mjs` 的 `webServer` **自动起停**
-  (端口 8137, `reuseExistingServer: false`), 不需要人工先起。
+  --hr-scene on|empty|off`; `--port` 默认 0 = 由脚本取号, 排障时才显式传具体口)。e2e 轨道下由
+  `playwright.config.mjs` 的 `webServer` **自动起停**(桩 `--port 0` 由 OS 分配, `webServer.wait`
+  从启动行捕获实绑端口并经 `UI_HARNESS_PORT` 回传给 spec; `reuseExistingServer: false`),
+  不需要人工先起, 也无需预知或指定端口。
 - `commands run dev.e2e` —— 跑 `e2e/` **全量集**(@playwright/test, chromium, prism/atlas 双皮肤循环)。
   双皮肤是**冒烟运行时预算**口径(`harness.mjs` 的 `SKINS`), 不是能力限制(桩服务静态挂载通用, 四皮肤都能访问);
   跨皮肤**只读测量**类断言(如 `views.spec` 的做种时间格行高守阵)走 `SKINS_ALL`(四皮肤, 数据驱动同一份断言体)。

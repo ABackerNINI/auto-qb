@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
@@ -86,7 +86,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeTrackers()) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ trackers: '04' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTrackersVariant(page, '04');
@@ -153,7 +153,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeTrackers()) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ trackers: '05' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTrackersVariant(page, '05');
@@ -201,7 +201,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeTrackers()) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ trackers: '06' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTrackersVariant(page, '06');

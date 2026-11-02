@@ -85,6 +85,8 @@ def port_free(port: int) -> bool:
 
 _USED_PORTS: set[int] = set()
 
+RETRIES = 3  # 回绑自验被抢的上限(与 tests/_test_ports.py 的 RETRIES=3 同口径)
+
 
 def free_port(lo: int = WEB_PORT_LO, hi: int = WEB_PORT_HI) -> int:
     """取一个当前空闲、且**本会话没用过**的端口; 段内全被占则抛(不静默退到别的段)
@@ -93,13 +95,26 @@ def free_port(lo: int = WEB_PORT_LO, hi: int = WEB_PORT_HI) -> int:
     才真正消失(实测 2026-10-31: 整片连跑时 RM01-07 抢到 RM01-05 刚释放的 39000, 立刻
     10048; 单跑则不复现)。端口段够大, 直接不复用比 sleep 等它更可靠 —— 也避免"多睡一会儿
     就好了"这种靠时间的假稳。
+
+    探空之后**立即回绑自验**(计划 26-11-03-0316 S5): `port_free` 的 bind+close 与产品进程真正
+    监听之间有 TOCTOU 窗口, 回绑把窗口压到最小; 连抢 RETRIES 次即抛, 不静默换段/降级。
     """
+    misses = 0
     for port in range(lo, hi + 1):
         if port in _USED_PORTS:
             continue
-        if port_free(port):
-            _USED_PORTS.add(port)
-            return port
+        if not port_free(port):
+            continue
+        try:
+            with socket.socket() as probe:
+                probe.bind(("127.0.0.1", port))  # 回绑自验: 窗口内被抢则 OSError(10048)
+        except OSError:
+            misses += 1
+            if misses >= RETRIES:
+                raise RuntimeError(f"{lo}-{hi} 段连续 {RETRIES} 次取号后回绑均被抢 —— 先查残留进程")
+            continue
+        _USED_PORTS.add(port)
+        return port
     raise RuntimeError(f"{lo}-{hi} 段没有可用端口 —— 先查残留进程")
 
 

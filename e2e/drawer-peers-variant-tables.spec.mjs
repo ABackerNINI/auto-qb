@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
@@ -82,7 +82,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify({ peers: makePeers() }) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ peers: '07' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openPeersVariant(page, '07');
@@ -141,7 +141,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify({ peers: makePeers() }) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ peers: '07' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openPeersVariant(page, '07');
@@ -169,7 +169,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify({ peers: makePeers() }) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ peers: '09' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openPeersVariant(page, '09');
@@ -191,7 +191,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify({ peers: makePeers() }) }));
       await page.addInitScript(() =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ peers: '08' })));
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openPeersVariant(page, '08');

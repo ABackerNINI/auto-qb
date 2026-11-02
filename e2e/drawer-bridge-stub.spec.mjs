@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
@@ -61,7 +61,7 @@ for (const skin of SKINS) {
     test(`生产不可见: 无 ?dtstub 时菜单无 stub 项、锚零个 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -77,7 +77,7 @@ for (const skin of SKINS) {
     test(`路径A 初开 + 手势三件套: 排序/拖宽/右键隐藏(偏好按 table-id 落盘) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -123,7 +123,7 @@ for (const skin of SKINS) {
     test(`路径B 页签切换: peers→trackers→peers 桥重挂进当前锚 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -146,7 +146,7 @@ for (const skin of SKINS) {
     test(`路径C 软切换换目标: 换种子数据重拉, 桥稳定存活 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -168,7 +168,7 @@ for (const skin of SKINS) {
     test(`路径D 合并双列: tp 对开启, peers 列选 stub → 桥在合并列锚内点亮 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/?dtstub=1`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);

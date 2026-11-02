@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
@@ -24,7 +24,7 @@ for (const skin of SKINS) {
 
     test(`主视图表头: columnheader + 可排序列进 Tab 序 + Enter/Space 触发排序与 aria-sort @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -59,7 +59,7 @@ for (const skin of SKINS) {
         (o) => localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(o)),
         { trackers: '06' },
       );
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 

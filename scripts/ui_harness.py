@@ -18,15 +18,16 @@
 
 用法
 ----
-    uv run python scripts/ui_harness.py --torrents 3000 --port 8099
-    # 浏览器侧断言已迁 e2e 轨: 桩服务由它自动起(8137), 模式走 E2E_* env(见 e2e/harness.mjs),
-    # 命令 `commands run dev.e2e`; 手看页面直接开 http://127.0.0.1:8099/prism/
+    uv run python scripts/ui_harness.py --torrents 3000
+    # 浏览器侧断言已迁 e2e 轨: 桩服务由它自动起(端口由 OS 分配, Playwright webServer.wait 从
+    # 启动行捕获实绑地址), 模式走 E2E_* env(见 e2e/harness.mjs), 命令 `commands run dev.e2e`;
+    # 手看页面时直接打开启动行打印的 http://127.0.0.1:<实端口>/prism/
 
 参数
 ----
     --torrents N   合成种子总数(默认 1500; 用 3000 复现大库)
     --groups G     前 G×2 个种子两两归组(默认 200 组), 其余为未归组单种子
-    --port P       监听端口(默认 8099)
+    --port P       监听端口(默认 0 = 由 OS 分配; 显式指定具体口仍可用)
     --no-groups    不建分组(纯平铺, 测种子页窗口化最快)
     --cmd-result   ok|error|hang(默认 ok): 兜底命令泵给每条命令的回执 ——
                    error 用于验证 P0-3 乐观 UI 的**失败回滚**, hang 用于验证 3s 回落真值
@@ -54,6 +55,7 @@ import hashlib
 import ipaddress
 import os
 import queue
+import socket
 import sys
 import tempfile
 import threading
@@ -961,7 +963,7 @@ def main() -> int:
         "而真机上它往往是最长的那一段。0 = 瞬时(默认)",
     )
     ap.add_argument("--host", default="127.0.0.1", help="监听地址(**只接受回环**)")
-    ap.add_argument("--port", type=int, default=8099)
+    ap.add_argument("--port", type=int, default=0, help="监听端口(默认 0 = OS 分配; 排障时才显式指定具体口, 多 clone 下固定口会互相抢)")
     args = ap.parse_args()
 
     # !本服务故意免鉴权(skip_local_verify), 绑到非回环等于把 WEB UI 交给整个局域网。
@@ -973,6 +975,24 @@ def main() -> int:
         )
         return 2
 
+    # 端口与监听共用**同一个 socket**(计划 26-11-03-0316 S1): 先 bind 拿到实端口, 再交给
+    # uvicorn `run(sockets=[sock])`, 取号与监听之间没有 TOCTOU 窗口。--port 0 = OS 分配;
+    # 绑定失败在这里就响亮报错(打印地址/原因/下一步), 不等到 uvicorn 内部才炸。
+    # 监听族按 --host 选(::1 走 IPv6; 其余回环走 IPv4), 避免预绑 socket 反而废掉原 --host 支持。
+    family = socket.AF_INET6 if ":" in args.host else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        sock.bind((args.host, args.port))
+    except OSError as exc:
+        print(
+            f"[harness] 绑定失败: {args.host}:{args.port} ({exc})\n"
+            "          NEXT: 换 --port 0 交由 OS 分配, 或确认该端口未被占用后重试",
+            file=sys.stderr
+        )
+        sock.close()
+        return 2
+    actual = sock.getsockname()[1]
+
     tmp = tempfile.mkdtemp(prefix="aqb-harness-")
     state_file = os.path.join(tmp, "state.json")
     mgr = make_manager(state_file)
@@ -983,7 +1003,7 @@ def main() -> int:
     mgr.config.web = WebConfig(
         enabled=True,
         host=args.host,
-        port=args.port,
+        port=actual,
         token="",
         skip_local_verify=True,
         skip_check_menu=(args.skip_check_menu == "on"),
@@ -995,7 +1015,7 @@ def main() -> int:
     # data_dir 同步钉到临时目录, 保存备份(.bak)不落仓库根
     mgr.config_path = os.path.join(tmp, "config.yml")
     mgr.config.data_dir = tmp
-    _materialize_config(mgr.config_path, args.port, args.skip_check_menu == "on")
+    _materialize_config(mgr.config_path, actual, args.skip_check_menu == "on")
 
     site_conf = mgr.config.trackers["HHan"]
     torrents = _make_torrents(args.torrents, site_conf)
@@ -1064,15 +1084,21 @@ def main() -> int:
     app = create_app(mgr)
     # 搜索自动更新 e2e 的控制面(plan 26-11-03-0120 P3; 仅回环测试桩, 不进生产)
     _install_search_refresh_probe(app, mgr, site_conf)
+    # 捕获契约(计划 26-11-03-0316 §03): Playwright `webServer.wait` 的正则从这里取实绑定口,
+    # 必须形如 `[harness] http://127.0.0.1:<实端口>/...` 且 flush=True。
     print(
-        f"[harness] http://{args.host}:{args.port}/atlas/  /prism/  种子={args.torrents} 组={len(mgr.store.groups)} "
+        f"[harness] http://127.0.0.1:{actual}/atlas/  /prism/  种子={args.torrents} 组={len(mgr.store.groups)} "
         f"命令回执={args.cmd_result} 跳检菜单={args.skip_check_menu} HR场景={args.hr_scene}",
         flush=True
     )
 
     import uvicorn
 
-    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    uv_config = uvicorn.Config(app, host=args.host, port=actual, log_level="warning")
+    try:
+        uvicorn.Server(uv_config).run(sockets=[sock])
+    finally:
+        sock.close()
     return 0
 
 

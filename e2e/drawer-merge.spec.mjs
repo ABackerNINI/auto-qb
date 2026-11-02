@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { expectNoDeadClass } from './lib/dt-dead-class.mjs';
 
@@ -46,7 +46,7 @@ for (const skin of SKINS) {
     test(`宽视口: 合并页签开关 + 双列 + 切对不受污染 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -109,7 +109,7 @@ for (const skin of SKINS) {
     test(`窄视口: 门内置灰可见, 点击零状态变化 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(NARROW);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -139,7 +139,7 @@ for (const skin of SKINS) {
       collectRuntimeErrors(page);
       await page.addInitScript(() => localStorage.setItem("autoqb.ui.drawerMerge", JSON.stringify("on")));
       await page.setViewportSize(NARROW);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -173,7 +173,7 @@ for (const skin of SKINS) {
        * Alt+4 零变化(不借道 vm; 判据读双列 data-merge, 与用户所见一致)。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -208,7 +208,7 @@ for (const skin of SKINS) {
        *   ②内容不丢 —— 关合并后单栏当前页签的桥变体表格行仍在; 再开合并时双列与右列桥表行都回来。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);
@@ -307,7 +307,7 @@ for (const skin of SKINS) {
        * 不借道 vm; 变体挂载态经宿主 .dt-tpl 类(DOM 可见事实)。 */
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       const drawer = await openTorrentDrawer(page);

@@ -18,7 +18,7 @@
  * 桩是长驻共享实例, 每条用例 afterEach 必须删除自己加的种子, 否则污染种子总数/视图用例。
  */
 import { expect, test } from '@playwright/test';
-import { BASE_URL } from './harness.mjs';
+import { baseUrl } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { tab } from './lib/gestures.mjs';
 import { readInst } from './lib/vm.mjs';
@@ -31,7 +31,7 @@ const SEARCH_INPUT = 'input[placeholder="搜索种子或文件名..."]';
 /** 桩控制面: 运行期新增一个合成种子(名称含 token), 返回 hash 供收尾删除。 */
 async function addSeed(request, name, category = '') {
     const res = await request.post(
-        `${BASE_URL}/__harness__/add_torrent?name=${encodeURIComponent(name)}` +
+        `${baseUrl()}/__harness__/add_torrent?name=${encodeURIComponent(name)}` +
         `&category=${encodeURIComponent(category)}`,
     );
     expect(res.ok(), '桩控制面 add_torrent 必须 200').toBeTruthy();
@@ -47,13 +47,13 @@ for (const skin of SEARCH_SKINS) {
 
         test.afterEach(async ({ request }) => {
             if (!addedHash) return;
-            await request.post(`${BASE_URL}/__harness__/remove_torrent?hash=${addedHash}`);
+            await request.post(`${baseUrl()}/__harness__/remove_torrent?hash=${addedHash}`);
             addedHash = null;
         });
 
         /** 进皮肤页并切到种子视图(搜索态的行数可直接观察)。 */
         async function gotoTorrents(page) {
-            await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+            await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
             await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
             await tab(page, 'torrents').click();
             await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });

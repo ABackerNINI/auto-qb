@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS, SKINS_ALL, TORRENTS } from './harness.mjs';
+import { baseUrl, SKINS, SKINS_ALL, TORRENTS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { readInst } from './lib/vm.mjs';
 
@@ -67,7 +67,7 @@ for (const skin of SKINS) {
     test('渲染健康: Vue 挂载成功、分组行渲染、无运行时错误 @fast', async ({ page }) => {
       const errors = collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
 
       /* #app 带 v-cloak + `[v-cloak] { display: none }` ⇒ Vue 不 mount 就整页隐藏, 只剩背景。
        * 断言该属性已被摘掉 = 挂载成功 —— 这是"白屏"与"数据没回来"的分界线。 */
@@ -87,7 +87,7 @@ for (const skin of SKINS) {
 
     test('展开态跨视图记忆: 展开分组后切种子页再切回, 展开的组还在', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
 
       /* 展开 = "我正盯着这一组"这种临时意图, 切走再切回必须还是那一组。三层缺一不可:
        * 1.切走后实时字段清空(展开态不串台); 2.切回后 expandedKey 还原成同一个组 key;
@@ -116,7 +116,7 @@ for (const skin of SKINS) {
 
     test('导航焦点: 键盘切页后旧页签不残留焦点框', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(tab(page, 'shows')).toBeVisible({ timeout: 15_000 });
 
       /* 鼠标点「追剧」—— 页签持焦但鼠标模态不画 :focus-visible。
@@ -141,7 +141,7 @@ for (const skin of SKINS) {
 
     test('种子视图: 切换有数据、总数与桩一致、renderMs 埋点可读', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
       /* P1-1: 只回传当前视图数组 ⇒ 切过去必须仍有数据, 不能被上一轮抹空。 */
@@ -161,7 +161,7 @@ for (const skin of SKINS) {
 
     test('状态栏速度 = 服务端 totals(种子页不回 groups 也要对)', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await tab(page, 'torrents').click();
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
@@ -181,7 +181,7 @@ for (const skin of SKINS) {
 
     test('种子页筛选器有数据(计数=种子数)', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await tab(page, 'torrents').click();
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
@@ -217,7 +217,7 @@ for (const skin of SKINS) {
 
     test('设置页刷新保持位置(顶层页 + 分区 + 配置已加载)', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
       /* 2026-09-25 用户报「设置页刷新会回到种子页」: 顶层 page 与设置分区(hub.view)原本都是
@@ -262,7 +262,7 @@ for (const skin of SKINS) {
      * 显示回填」, 并对照「聚焦后键入照旧写树」防止守卫把正常编辑一起挡掉。 */
     test('设置-常规: 密码框被自动填充不得造脏(未聚焦 input 不写树)', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
       await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
@@ -299,7 +299,7 @@ for (const skin of SKINS) {
      * 控件/专用写回, 这条会直接红。 */
     test('设置-HR 在线核实: 端点密钥同样不被自动填充写脏', async ({ page, request }) => {
       collectRuntimeErrors(page);
-      const conf = await (await request.get(`${BASE_URL}/api/config`)).json();
+      const conf = await (await request.get(`${baseUrl()}/api/config`)).json();
       const tree = conf.tree;
       tree.config.hr_check = {
         enabled: 'true',
@@ -308,7 +308,7 @@ for (const skin of SKINS) {
       await page.route('**/api/config', (route) =>
         route.fulfill({ json: { tree, path: '(e2e)', masked: true, mask_sentinel: '***' } }));
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
@@ -332,7 +332,7 @@ for (const skin of SKINS) {
 
     test('轮询间隔按种子量分档(≤1000→1500 / 1000~3000→2000 / >3000→3000)', async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       /* 等首屏数据到位再断言: basePollMs 在 status.torrents 未知时取中间档 2000,
        * 不等数据落地的话 3000 种子轮(期望也是 2000)会被"未知档"蒙过去。 */
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
@@ -352,7 +352,7 @@ for (const skin of SKINS) {
 test.describe('数据契约(桩供数 @fast)', () => {
   for (const skin of SKINS) {
     test(`[${skin}] 数据契约: status.torrents 与桩服务种子数一致 @fast`, async ({ request }) => {
-      const res = await request.get(`${BASE_URL}/api/state`);
+      const res = await request.get(`${baseUrl()}/api/state`);
       expect(res.ok(), `GET /api/state -> ${res.status()}`).toBeTruthy();
 
       const body = await res.json();
@@ -376,7 +376,7 @@ test.describe('数据契约(桩供数 @fast)', () => {
 test.describe('几何守卫(右对齐列表头)', () => {
   for (const skin of SKINS) {
     test(`[${skin}] 几何: 右对齐列表头与值右缘对齐(±1px), 且值格不居中`, async ({ page }) => {
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.group-row', { timeout: 30_000 });
       await page.waitForTimeout(300); /* 等列对齐规则注入 + 首帧布局稳定 */
 
@@ -423,7 +423,7 @@ test.describe('几何守卫(做种时长单元格行高恒定)', () => {
   // 四条用例由同一份断言体数据驱动, 不复制用例体; 其余 spec 仍吃双皮肤 SKINS 口径。
   for (const skin of SKINS_ALL) {
     test(`[${skin}] 几何: 做种时间有文案/无文案行高相等, 且单元格无 padding`, async ({ page }) => {
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.group-row', { timeout: 30_000 });
       await page.locator('nav.tabs [data-view="torrents"]').click();
       await page.waitForSelector('.group-row.torrent-row', { timeout: 30_000 });
@@ -476,7 +476,7 @@ test.describe('几何守卫(做种时长单元格行高恒定)', () => {
 test.describe('几何守卫(只读状态行同缘)', () => {
   for (const skin of SKINS) {
     test(`[${skin}] 几何: 只读状态行标签与值同缘(±2px), 且标签不吃上边距`, async ({ page }) => {
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await page.waitForSelector('.group-row', { timeout: 30_000 });
 
       const result = await page.evaluate(() => {
@@ -526,7 +526,7 @@ test.describe('设置页 · 流量与限速 → 数据来源(S6)', () => {
   for (const skin of SKINS) {
     test(`[${skin}] 来源=文件时工具块不出现, 切到工具后出现`, async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
@@ -603,7 +603,7 @@ test.describe('设置页 · 工具参数的单位控件(S7)', () => {
         return route.fulfill({ json: { ok: true, config: toolConfig } });
       });
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.locator('nav.tabs-right button').first().click();
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });
@@ -669,7 +669,7 @@ test.describe('设置页 · 流量与限速合并卡(B4)', () => {
   for (const skin of SKINS) {
     test(`[${skin}] 三区同屏 + 区可折叠 + 历史图入口可用`, async ({ page }) => {
       collectRuntimeErrors(page);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.locator('nav.tabs-right button').first().click(); // 顶栏右侧「设置」
       await expect(page.locator('.hb-grid .hb-card').first()).toBeVisible({ timeout: 20_000 });

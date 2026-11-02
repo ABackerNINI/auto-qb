@@ -6,7 +6,7 @@
  * 断言口径与 D4 守则不变 —— 见 vm.mjs / probes.mjs 头注。
  */
 import { expect } from '@playwright/test';
-import { BASE_URL } from '../harness.mjs';
+import { baseUrl } from '../harness.mjs';
 import { collectRuntimeErrors } from './errors.mjs';
 import { readInst } from './vm.mjs';
 
@@ -113,7 +113,7 @@ export async function clickRow(page, row, opts = {}) {
  */
 export async function openApp(page, skin) {
   collectRuntimeErrors(page);
-  await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
   await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 }
 

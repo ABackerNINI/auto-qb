@@ -23,7 +23,8 @@
   浏览器 Chrome **153.0.8010.52** 在 `~/.agent-browser/browsers/`。
 - **最小可用序列**(实测: 打开本项目桩服务的 Vue 页面):
   ```powershell
-  agent-browser open "http://127.0.0.1:8099/atlas/"   # 7s 返回, 标题「auto-qb · 辅种管理 · 星图」
+  commands run dev.harness -- --port 8099   # 人工排查显式指定; 不传参数则默认 0 = 脚本取号(从启动行取实绑 URL)
+  agent-browser open "http://127.0.0.1:8099/atlas/"  # 7s 返回, 标题「auto-qb · 辅种管理 · 星图」
   agent-browser snapshot                              # 完整无障碍树(导航/搜索框/添加种子/设置)
   agent-browser screenshot <path>                     # 出图 96 KB
   agent-browser close                                 # exit 0, 无残留进程
@@ -47,7 +48,8 @@
 - **何时用**: 一切 WEB UI 浏览器断言 —— 旧单页冒烟脚本已于 2026-10-06 随迁移计划
   26-10-06-0708 退役, `e2e/` 是唯一轨道(八个 spec 按断言块拆分, 双皮肤, 模式矩阵 env 参数化)。
 - **命令**: 桩服务(`scripts/ui_harness.py`)由 `playwright.config.mjs` 的 `webServer` **自动起停**
-  (端口 8137, `reuseExistingServer: false`), 不需要人工先起、也不需要人工关:
+  (桩 `--port 0` 由 OS 分配, `webServer.wait` 从启动行捕获实绑端口并经 `UI_HARNESS_PORT` 回传;
+  `reuseExistingServer: false`), 不需要人工先起、也不需要人工关, 无需预知或指定端口:
   ```bash
   commands run dev.e2e      # 全量集(八个 spec × prism/atlas 双皮肤; 只读测量类用 SKINS_ALL 四皮肤)
   npm run test:e2e:fast     # @fast 门禁子集(分钟级) —— 「每次改前端」的日常口径

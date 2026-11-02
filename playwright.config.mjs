@@ -1,6 +1,6 @@
 // @ts-check
 import { defineConfig, devices } from '@playwright/test';
-import { BASE_URL, HARNESS_CMD, READY_URL } from './e2e/harness.mjs';
+import { HARNESS_CMD, WAIT_STDOUT } from './e2e/harness.mjs';
 
 /**
  * WEB UI 真浏览器冒烟 —— 本仓库"静态守阵之外"的那一层门禁。
@@ -35,7 +35,8 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never' }]],
 
   use: {
-    baseURL: BASE_URL,
+    /* 不设 use 里的 baseURL 属性 —— 端口要到 webServer setup 才由 wait 捕获注入, 而配置对象在
+     * setup 之前就已求值, 这里只能拿到 undefined; spec 一律用 harness.mjs 的 baseUrl() 懒取值。 */
     /* 失败重跑时留 trace —— 时序类故障(乐观 UI 回滚 / 合帧竞态)光看断言消息看不出时序 */
     trace: 'on-first-retry',
   },
@@ -51,7 +52,9 @@ export default defineConfig({
 
   webServer: {
     command: HARNESS_CMD,
-    url: READY_URL,
+    /* 端口不再写死: 桩传 --port 0, `wait.stdout` 的正则从启动行捕获实绑端口并注入
+     * `process.env.UI_HARNESS_PORT`。url/port 与 wait 互斥 —— 只给 wait。 */
+    wait: { stdout: WAIT_STDOUT },
     /* ❗**不复用**已存在的服务: 多 clone 工作区下复用会连上别的 clone 的残留 harness,
      * 于是"全 PASS"验的是旧代码(smoke.md 记的假信心事故)。端口被占时宁可直接失败。 */
     reuseExistingServer: false,

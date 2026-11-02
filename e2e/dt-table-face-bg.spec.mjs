@@ -22,7 +22,7 @@
  * 数据口径沿用 dt-live-update / variant-tables 家族桩(bad 行由 client 名含 XL 合成)。 */
 import { expect, test } from '@playwright/test';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 
 const WIDE = { width: 2560, height: 1200 };
 
@@ -189,7 +189,7 @@ for (const skin of SKINS) {
           route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeTrackers()) }));
         await page.addInitScript((tpl) =>
           localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(tpl)), FACES[faceId].tpl);
-        await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+        await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
         await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
         await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -243,7 +243,7 @@ for (const skin of SKINS) {
         route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeTrackers()) }));
       await page.addInitScript((tpl) =>
         localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify(tpl)), FACES[faceId].tpl);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
       await page.click('nav.tabs [data-view="torrents"]');
@@ -357,7 +357,7 @@ for (const skin of SKINS) {
     test(`追剧表搜索命中行: 首格带同款 accent 渐层(修前 backgroundImage=none 丢整条渐层) @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
       await page.setViewportSize(WIDE);
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await page.click('nav.tabs [data-view="shows"]');
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 15_000 });

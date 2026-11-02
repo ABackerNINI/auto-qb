@@ -1,6 +1,6 @@
 // @ts-check
 import { expect, test } from '@playwright/test';
-import { BASE_URL, SKINS } from './harness.mjs';
+import { baseUrl, SKINS } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 
 /**
@@ -34,7 +34,7 @@ for (const skin of SKINS) {
     test(`辅种页: 展开组后 ↓ 进入成员行 + Shift+↓ 范围选中 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -63,7 +63,7 @@ for (const skin of SKINS) {
     test(`追剧页: 展开剧/集后 ↓ 进入集行与成员行 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await page.click('nav.tabs [data-view="shows"]');
       await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 30_000 });
@@ -88,7 +88,7 @@ for (const skin of SKINS) {
     test(`辅种页: 光标进成员行后 ← 收起所属分组并回组行 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -111,7 +111,7 @@ for (const skin of SKINS) {
     test(`追剧页: 光标进集成员行后 ← 收起所属集并回集行 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await page.click('nav.tabs [data-view="shows"]');
       await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 30_000 });
@@ -139,7 +139,7 @@ for (const skin of SKINS) {
     test(`辅种页: 光标进成员行后 Esc 收起明细表并把光标退回组行 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
 
@@ -166,7 +166,7 @@ for (const skin of SKINS) {
     test(`追剧页: 光标进集成员行后 Esc 逐层收起, 光标退回集行 / 剧行 @fast (${skin})`, async ({ page }) => {
       collectRuntimeErrors(page);
 
-      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
       await page.click('nav.tabs [data-view="shows"]');
       await expect(page.locator('.show-row').first()).toBeVisible({ timeout: 30_000 });
