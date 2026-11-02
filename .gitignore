@@ -39,6 +39,8 @@ logs/
 # Trae相关文件
 .trae/
 .trae-html-share-packages/
+# 规格模式(spec)产物: 本地规格草稿, 不入库
+.spec/
 
 # Awesome-Copilot 列表文件
 awesome-copilot-llms.txt
