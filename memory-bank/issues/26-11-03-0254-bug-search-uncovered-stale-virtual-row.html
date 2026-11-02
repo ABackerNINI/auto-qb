@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-0254">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-search-auto-refresh">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-0120-plan-webui-search-auto-refresh.html, memory-bank/tasks/26-11-03-webui-search-uncovered-dedup.md, memory-bank/testing/baselines/26-11-03-0452-webui-search-uncovered-dedup.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留">
 <meta name="issue-summary" content="未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索">
 <title>搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · bug</div>
     <h1>搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留</h1>
     <p class="lede">未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0254-bug-search-uncovered-stale-virtual-row</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 02:54</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -181,11 +181,37 @@ searchUncovered: [],    // 未归组的命中种子(分组未启用/文件列表
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 02:54 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 04:16 — 用户指派认领，状态 <strong>In Progress</strong>；认领方 = 计划 <code>26-11-03-0120</code>（本件即该计划「相邻缺陷」的落地跟踪），本轮只做修复计划与 grilling，未改代码、未新建文件</li>
+      <li>2026-11-03 04:52 — 修复完成，状态 <strong>Done</strong>；任务档案 <code>tasks/26-11-03-webui-search-uncovered-dedup.md</code>，基线切片 <code>testing/baselines/26-11-03-0452-webui-search-uncovered-dedup.md</code>，坑档 <code>pitfalls/web-ui/derived-snapshot-render.md</code>（本轮未 commit）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验（2026-11-03 04:16，静态锚点复核，未跑动态 e2e）：<code>view.js::doSearch</code> 仍只在落袋时
+      赋 <code>this.searchUncovered = results.filter(...)</code>，渲染期无重算；<code>filters.js</code> 中
+      <code>searchUncovered</code> 的虚拟行追加块现位于 <strong><code>filteredGroups</code></strong>（约 213-250 行），
+      <strong>报告原文把该块标成 <code>filteredTorrents</code> 有误</strong> —— <code>filteredTorrents</code>（约 260 行起）
+      只走 <code>searchHits</code> 门，不消费 <code>searchUncovered</code>，故种子页不出现虚拟行重复；<code>/api/search</code>
+      仍按 <code>store.by_hash</code> 逐条产出（每 hash 至多一条，<code>results</code> 与 <code>file_hits</code> 互斥），
+      无重复 hash。动态 A/B 复现（辅种页转归组 / 删除后滞留）待修复轮用浏览器补证。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（方案 A，落点按复验纠正为 <code>filteredGroups</code>）</strong>：
+      <code>filteredGroups</code> 在 <code>const hits = this.searchHits</code> 之后，仅当
+      <code>this.searchUncovered.length</code> 非空时惰性构建 <code>groupedNow</code>（遍历<strong>渲染时未过滤的
+      <code>this.groups</code></strong> 全部成员 hash，与 <code>doSearch</code> 的 <code>grouped</code> 同口径）；
+      虚拟行循环最前加两道闸 —— <code>if (!hits.has(r.hash)) continue;</code>（已不在命中集）与
+      <code>if (groupedNow.has(r.hash)) continue;</code>（已在当前真实组内），两道闸均排在所有 facet 过滤与
+      <code>kept.push</code> <strong>之前</strong>。三皮肤共享，未改后端 / <code>/api/search</code> 契约 /
+      <code>search_rev</code>，未加缓存（用户拍板）。</p>
+    <p><strong>验证方式与证据</strong>：静态守阵
+      <code>test_webui_static_skins_widget.py::test_frontend_search_uncovered_deduped</code>（按语义<strong>位置</strong>
+      断言：判据源 = 未过滤 <code>this.groups</code> / 惰性构建 / 两道闸 &lt; facet &lt; push / 消费点恰一处 /
+      <code>filteredTorrents</code> 不得引入）；新增 <code>e2e/search-uncovered-no-duplicate.spec.mjs</code>
+      （三皮肤 × 4 场景：跨视图 stale groups 首搜 / 叠加分类筛选 / 命中删除后 ≤1 个搜索刷新周期内行消失 /
+      视图往返幂等）。桩无法直接造「后归组」与「热改分组配置」（合成种子全部已归组、运行期新增种子恒落未归组、
+      <code>reload_config</code> 只回执不应用），故 e2e 用「首屏落种子页时 <code>this.groups=[]</code> ⇒
+      命中全判未归组、切辅种页后旧快照重画」复现同一根因（<code>search_rev</code> 全程不变）。
+      实测数字见 <code>memory-bank/testing/baselines/26-11-03-0452-webui-search-uncovered-dedup.md</code>（含全量汇总与
+      定向/e2e 口径）；复跑 <code>dev.e2e</code> 时删除用例曾因断言「等待成组」超时（桩增量归组相位不跑）而修正为
+      「合法兜底行 → 删除后消失」。</p>
   </section>
 
   <footer>

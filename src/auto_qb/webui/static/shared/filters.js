@@ -212,6 +212,17 @@ window.AQB_FILTERS = {
       }
       if (!this._searchGateActive(q)) return base;
       const hits = this.searchHits;
+      /* 归组判据按**渲染时**的未过滤 groups 现算(与 doSearch 的 grouped 口径一致): searchUncovered
+       * 只是搜索落袋时的快照 —— 归组关系(配置开关 / 跨视图 / 新成员并入)或命中集变化后它不会自动
+       * 重算, 直接追加会把同一 hash 画成"真实组行 + 虚拟行"两遍(2026-11-03 issue 26-11-03-0254)。
+       * 两道闸: 已不在命中集(删除/字段不再命中) / 已在当前真实组内(组行已展示) 都跳过。 */
+      let groupedNow = null;
+      if (this.searchUncovered.length) {
+        groupedNow = new Set();
+        for (const g of this.groups) {
+          for (const m of g.members) groupedNow.add(m.hash);
+        }
+      }
       const kept = [];
       for (const g of base) {
         let hit = false;
@@ -223,6 +234,8 @@ window.AQB_FILTERS = {
         if (hit) kept.push({ ...g, members: members, virtual: false });
       }
       for (const r of this.searchUncovered) {
+        if (!hits.has(r.hash)) continue;
+        if (groupedNow.has(r.hash)) continue;
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
         if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(r))) continue;
         if (this.hrSrcFilter.length && !this.hrSrcFilter.includes(this._hrSrcBucketMember(r))) continue;

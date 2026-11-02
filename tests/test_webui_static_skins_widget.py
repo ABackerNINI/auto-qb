@@ -7,6 +7,7 @@
 - test_frontend_site_alert_icon_wiring: 站点 chip 改色表达守阵(计划 26-10-19-2206 S4, 取代 26-10-19-2007 的两槽口径) —— 站点问题走**颜色**(缺配置橙底+虚线下边 / tracker 报错红底)、命令结果走**图标**且固定放站点名之后: 三皮肤样式键集相等(含 reduced-motion 降级/搜索命中让出底色/明细行染色)/模板三处 cell 只剩一个图标槽且 tooltip 挂整块 chip/旧图标类 `.sa` 零残留/token->符号单点只含命令结果四种
 - test_drawer_tpl_variant_interaction_single_point: 变体交互单点定型守阵(计划 26-10-12-0527 U5①) —— drawer_tpl/*.js 全目录扫 ui.sort(手搓排序状态机不允许在任何变体复活); 凡声明 tableId+rowsFn(桥表格变体)的文件**声明即受检**, 另强制零表格容器列宽 grid(列宽唯一来源 = 引擎列集 computed; 版式 grid 卡片/双栏/图例是 D5 保留面) —— 未来新变体接引擎即自动落入本守阵, 无需改守阵, 即「定型」之义
 - test_frontend_search_auto_refresh_wiring: 搜索自动更新接线守阵(plan 26-11-03-0120) —— 服务端 search_rev 单点/触发面(增删+全量轮+name/category/save_path/tags)/state 恒回传/search 响应先在快照前取 rev + 前端常量定值(2000ms/3000ms)/doSearch(quiet) 不武装 pending/落袋版本对齐/轮询触发点与冷却/续查用独立定时器 + 共享 topbar 提示每套皮肤恰好一份(零复制)
+- test_frontend_search_uncovered_deduped: 虚拟行只兜底"真正未归组且仍在命中集"的种子(2026-11-03 issue 26-11-03-0254) —— filteredGroups 追加 searchUncovered 前必须用渲染时未过滤的 this.groups 现算 groupedNow, 且「已不在命中集」「已归组」两道闸排在 facet 过滤与 kept.push 之前; 虚拟行只允许 filteredGroups 消费一处, filteredTorrents 不得引入
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -184,6 +185,54 @@ def test_frontend_search_pending_no_collapse():
         assert m, f"{theme} 找不到 .layout 规则"
         assert "min-height: calc(100vh - var(--head-h" in m.group(0), \
             f"{theme} .layout 缺 min-height 撑满首屏(列表筛短后停靠面板脱锚跳)"
+
+
+def test_frontend_search_uncovered_deduped():
+    """虚拟行只兜底"真正未归组且仍在命中集"的种子守阵(2026-11-03 issue 26-11-03-0254)
+
+    searchUncovered 是搜索落袋时的快照; 归组关系(配置开关归组 / 跨视图 stale groups / 新成员并入)
+    或命中集(删除 / 字段不再命中)变化后它不会自动重算 => 渲染期直接追加会把同一 hash 画成
+    "真实组行 + u-<hash> 虚拟行"两遍, 且 search_rev 不变时永不自动消失。
+    守阵按**语义顺序**钉(不只看变量名): 判据必须在渲染时从**未过滤的 this.groups** 现算
+    (与 doSearch 的 grouped 口径一致), 两道闸必须排在 facet 过滤与 kept.push 之前;
+    且虚拟行只允许 filteredGroups 消费一处。
+    """
+    filters_js = open(os.path.join(STATIC_ROOT, "shared", "filters.js"), encoding="utf-8").read()
+    body = filters_js[filters_js.index("filteredGroups() {"):filters_js.index("filteredTorrents() {")]
+
+    # 1. 判据源 = 渲染时的未过滤 groups(不得退化成 base/sortedGroups, 否则 facet 过滤会改变归组判定)
+    assert "let groupedNow = null;" in body, "filteredGroups 缺 groupedNow 声明"
+    assert "if (this.searchUncovered.length) {" in body, \
+        "groupedNow 只在有待兜底虚拟行时才构建(无搜索态不得增加每次渲染的 O(n) 成本)"
+    assert re.search(r"for \(const g of this\.groups\)", body), \
+        "归组判据必须取未过滤的 this.groups(与 doSearch 的 grouped 口径一致, 不得用 sortedGroups/base)"
+    assert re.search(r"for \(const m of g\.members\) groupedNow\.add\(m\.hash\)", body), \
+        "groupedNow 必须收全部成员 hash"
+
+    # 2. 两道闸必须排在 facet 过滤与 push 之前(先过滤再判归组 = 语义顺序反了)
+    loop = body[body.index("for (const r of this.searchUncovered) {"):]
+    facet_positions = [
+        loop.index(k) for k in (
+            "if (this.kindFilter",
+            "if (this.hrFilter.length",
+            "if (this.hrSrcFilter.length",
+            "if (this.pathFilter.length",
+            "if (this.tagFilter.length",
+            "if (this.categoryFilter.length",
+            "if (this.siteFilter.length",
+        )
+    ]
+    hits_gate = loop.index("if (!hits.has(r.hash)) continue;")
+    grouped_gate = loop.index("if (groupedNow.has(r.hash)) continue;")
+    assert hits_gate < min(facet_positions), "「已不在命中集」闸必须排在 facet 过滤之前"
+    assert grouped_gate < min(facet_positions), "「已归组」闸必须排在 facet 过滤之前"
+    assert loop.index("kept.push({") > grouped_gate, "虚拟行 push 必须在「已归组」闸之后"
+
+    # 3. 虚拟行只在 filteredGroups 消费一处; 种子页不得引入(issue 原文把消费点标成 filteredTorrents 有误)
+    assert filters_js.count("for (const r of this.searchUncovered)") == 1, \
+        "searchUncovered 消费点应恰一处(filteredGroups); 种子页/追剧页不得引入虚拟行"
+    assert "searchUncovered" not in filters_js[filters_js.index("filteredTorrents() {"):], \
+        "filteredTorrents 不得消费 searchUncovered(种子页无虚拟行, 每种子单行不重复)"
 
 
 def test_frontend_hr_safety_wiring():
