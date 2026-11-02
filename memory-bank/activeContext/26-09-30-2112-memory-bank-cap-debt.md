@@ -1,7 +1,7 @@
 # 26-09-30-2112-memory-bank-cap-debt — cap 守卫改债务制 (WARN 不拦提交 + 独立清理会话)
 
 > 摘要: cap 治理专题。守卫改造 2026-09-30 实施完成(除 AGENTS.md 外尺寸全降级为债务: 提交不拦、派生输出转告用户、清理另开会话; AGENTS.md 硬规定照拦), AGENTS.md 削薄已由 10-06 清理轮落地(6,853/8,000)。**2026-10-10 清理会话: 条数债务 125 > 70 清偿 —— 删 79 片留 46 片**(判据与覆盖去向见下), `SLICE_COUNT_LIMIT` 未抬、活跃片零删除。**2026-10-11 清理会话(用户令「清理 cap 债务」): 字符 cap 债务 5 项 → 0** —— 索引三件(issues 走**视图归档** `CLOSED_KEEP=60` + 全量归档索引落 `attachments/`; tasks / web-ui 类索引压渲染口径) + 手写两件按「切最老一半」外迁到 `attachments/`; 条数债务本就不超(64 ≤ 70)。判据与副产物见 [26-10-11-1745 切片](../testing/baselines/attachments/26-10-11-1745-memory-bank-cap-cleanup.md) 与坑档 [index-archive-view(索引条目数撑爆 → 视图归档)](../pitfalls/kb/index-archive-view.md)。**2026-10-19 清理会话: 条数债务 150 > 70 清偿 —— 删 90 片留 60 片**(冻结钉住/活跃档案/温片全保留; 49 片蒸馏复核全免蒸馏 —— 坑档纪律成熟后修复类切片全有归宿), 判据细化见下「债务判据速记」。
-> 最后活动: 2026-10-19 23:00
+> 最后活动: 2026-11-02 22:22
 
 ## 状态
 
@@ -39,6 +39,12 @@
   ②**保留 60**: 冻结面钉住 16(基线 .md 真实 `](` 链接 ×2 / append-only 流水链接 ×4 / plans·reports·issues `doc-refs` ×10 —— 声明方冻结不可改, 切片必须留) + 活跃档案(In Progress/Open)22 + 近 5 天无档案温片 21 + 本专题片 1。
   ③收口 `kb.check`(主键 733 / 认领链双向闭环) / `doc.links` / `doc.caps` / `kb.active`(页脚 60 ≤ 70, 条数债务行消失) 全绿; test.full 数字见新基线切片。`SLICE_COUNT_LIMIT` 未动。两处超长切片(15-0728 19,375 / 16-0541 14,305)属字符债务, 随既有 4 项(doc.caps)另行清理。
 
+- **2026-11-02 清理轮(用户令「只清偿一条 kb.check 债务: 切片总数 162 > 70」; 条数债务 92 片清偿, 162 → 70)**: 判据沿用 10-19 成例三查 + 声明方二分(冻结件指向谁谁留 / 可编辑 Refs 摘 token 后可删 / 纯文本提及容忍):
+  ①**删除集 = 92**: 档案 Done/Dropped 且 ≥12h 的 47 片 + 无档案且 ≥5 天的 12 片 + 已完结且有落点的温片按「最老优先」补退 33 片(开放决策片不参与 —— 正文引用 Open/In Progress 件或所属档案未收口的一律留)。
+  ②**保留 70**: 冻结声明方/链接钉住 26(plans·reports·issues `doc-refs` + 基线 `.md` 真实 `](` 链接 + append-only 流水链接, 含本专题片 1) + 活跃档案(In Progress/Open) 13 + 开放决策片(正文引用 Open/In Progress 件) 15 + 其余最新温片 24(三类重叠, 唯一保留 70)。
+  ③**落点逐片核对, 本轮零 progress 新增**: 有档案 → 任务档案; 无档案 → Done issue/plan/report/baseline attachments/pitfall/skill(`testing/real-machine.md`、`deps-upgrade` skill 等); 纯代码修复 → 代码与守阵 + 对应坑档/基线切片。无「落点空白」片, 故不向已超 cap 的 `progress/` 追加。
+  ④收口 `kb.check`(切片数 70 ≤ 70, 条数债务行消失) / 认领链 / docmap / 守卫测试见提交说明与基线切片。基线字符债务 `26-11-01-0722`(8,057 > 8,000)按用户边界**未动**。
+
 ## 债务判据速记(后续清理会话直接复用)
 
 - 条数债务由 `commands run kb.active` 页脚现算(`SLICE_COUNT_LIMIT = 70`, `_common.py` 单点), 不拦提交; `doc.caps` 的债务组不含条数(它只管字符 cap), 所以会出现「doc.caps 报 0 债务而 kb.active 报条数超」的口径差。
@@ -51,3 +57,5 @@
   逐片蒸馏复核用**语义关键词** grep progress/pitfalls/tasks/conventions —— slug 字面搜不准(用词不同漏报率极高, 本轮 49/49 免蒸馏全靠语义命中)。
 
 **R1(2026-10-19 23:00):** 条数债务清偿 150>70: 删 90 片留 60(16 冻结声明方/链接钉住 + 22 活跃档案 + 21 近5天温片 + 1 专题片), 49 片蒸馏复核全免蒸馏(坑档/同专题档案/报告/计划已覆盖), 29 档案 Refs 摘除死 token; 收口 kb.check/doc.links/kb.active 全绿, test.full 数字见新基线切片
+
+**R2(2026-11-02 22:22):** 切片债务清偿 162->70: 退役 92 片(档案 Done/Dropped >=12h + 无档案 >=5d 按 2026-10-19 成例三查, 再按已完成/有落点/最老优先补退温片), 保留冻结链 26 + 活跃/开放决策片 + 最新温片 19; 落点为 Done 档案/issue/report/baseline/pitfall/skill; kb.check 切片数回落到 70

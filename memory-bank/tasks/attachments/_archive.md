@@ -37,6 +37,7 @@
 
 ## Done (263)
 
+- [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
 - [26-11-02-backend-webui-seed-cmds](../26-11-02-backend-webui-seed-cmds.md) WebUI set_share_limits 补必填参 shareLimitAction (issue 26-11-01-2102)
 - [26-11-02-webui-flux-overlay-opacity](../26-11-02-webui-flux-overlay-opacity.md) 修复 flux 皮肤浮层透出正文
@@ -80,7 +81,6 @@
 - [26-10-20-webui-kbd-cursor-first-row](../26-10-20-webui-kbd-cursor-first-row.md) WEBUI 三主表首行键盘光标虚线贴住吸顶列头
 - [26-10-20-webui-menu-label-unify](../26-10-20-webui-menu-label-unify.md) WEBUI右键菜单文案统一:动词+灰色种子计数
 - [26-10-20-webui-pinned-first-cell-hover](../26-10-20-webui-pinned-first-cell-hover.md) WEBUI 必显列悬停闪竖带（首格过渡与行板不同源）
-- [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-10-19-webui-modal-width-tier](../26-10-19-webui-modal-width-tier.md) 重命名弹窗加宽 860: modal 宽度档位修(cls 选项 + 三皮肤), 长种子名零裁剪
 - [26-10-19-webui-move-dialog-geometry](../26-10-19-webui-move-dialog-geometry.md) 设定位置弹窗几何修: 加宽 860 + 开层预留, 保存路径下拉完整落在对话框内
 - [26-10-19-webui-site-alerts](../26-10-19-webui-site-alerts.md) WEBUI 站点列状态提醒与逐目标汇报回执
