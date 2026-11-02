@@ -37,13 +37,13 @@
 
 ## Done (263)
 
+- [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
 - [26-11-02-backend-webui-seed-cmds](../26-11-02-backend-webui-seed-cmds.md) WebUI set_share_limits 补必填参 shareLimitAction (issue 26-11-01-2102)
 - [26-11-02-webui-flux-overlay-opacity](../26-11-02-webui-flux-overlay-opacity.md) 修复 flux 皮肤浮层透出正文
 - [26-10-13-backend-seed-state-writeback](../26-10-13-backend-seed-state-writeback.md) 种子状态双写通道：B 系立件与证否，方向回 A 系
 - [26-10-31-backend-global-traffic-source-acceptance](../26-10-31-backend-global-traffic-source-acceptance.md) 全局流量来源 S19 真机验收(桩测 · Windows 侧)实施记录
 - [26-11-01-backend-gtm-sampler](../26-11-01-backend-gtm-sampler.md) gtm 网卡采样改原生 GetIfTable2 整表读取 (issue 26-10-20-2345)
 - [26-11-01-backend-tray-sigterm-quit](../26-11-01-backend-tray-sigterm-quit.md) 托盘模式 SIGTERM 优雅退出: handler 换装 quit 事件合流 + run() 收尾挂 finally 兜底(issue 26-10-31-1030)
-- [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
 - [26-11-01-test-commit-gate-scope](../26-11-01-test-commit-gate-scope.md) 提交闸门按改动收窄优化实施
 - [26-11-01-test-commit-gate](../26-11-01-test-commit-gate.md) 提交闸门无自测包豁免修复: dev/doc/env/kb 补最小自测

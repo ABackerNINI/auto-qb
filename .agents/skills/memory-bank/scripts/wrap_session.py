@@ -107,9 +107,7 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_stdout()
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--topic", required=True, help="专题 slug (切片文件名后缀 / 档案 **Topics:** 主键)")
-    parser.add_argument(
-        "--archive",
-        help="档案 **Topics:** 键 (默认取 --topic 的值): 伞形档案与派生计划各持不同 key 时用它单独锚定档案")
+    parser.add_argument("--archive", help="档案 **Topics:** 键 (默认取 --topic 的值): 伞形档案与派生计划各持不同 key 时用它单独锚定档案")
     parser.add_argument("--did", required=True, help="一句话: 本轮做了什么 (切片摘要预填 + R 行, 裁定 A5/A6)")
     parser.add_argument("--root", help="仓库根 (默认向上找 .git)")
     parser.add_argument("--mb-dir", help="memory-bank 目录 (默认 <root>/memory-bank)")
@@ -189,9 +187,7 @@ def main(argv: list[str] | None = None) -> int:
         if not rows:
             print(f"  [{label}] 无")
             continue
-        print(f"  [{label}]")
-        for row in rows:
-            print(f"  {row}")
+        print(f"  [{label}] {len(rows)} 条 (--verbose 展开详情)")
     if gate_a or gate_b or anomalies:
         print("状态漂移硬拦非空, 先 commands run kb.status 处理(部分完成翻 In Progress)再收尾")
     return 0

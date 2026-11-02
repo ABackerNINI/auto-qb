@@ -2981,15 +2981,17 @@ def _drift_doc(mb: Path, sub: str, name: str, status: str) -> Path:
     return path
 
 
-def _drift_run(tmp_path: Path, mb: Path) -> tuple[int, str, str]:
-    """进程内跑 check_status_drift.main (不 --quiet: 无硬拦时输出 all-clear 行)。"""
+def _drift_run(tmp_path: Path, mb: Path, extra_args: list[str] | None = None) -> tuple[int, str, str]:
+    """进程内跑 check_status_drift.main (不 --quiet: 无硬拦时输出 all-clear 行)。
+    extra_args 透传给 main (例如 ["--verbose"])。"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
     drift = _status_drift()
     out, err = io.StringIO(), io.StringIO()
+    args = ["--root", str(tmp_path), "--mb-dir", str(mb)] + (extra_args or [])
     with redirect_stdout(out), redirect_stderr(err):
-        rc = drift.main(["--root", str(tmp_path), "--mb-dir", str(mb)])
+        rc = drift.main(args)
     return rc, out.getvalue(), err.getvalue()
 
 
@@ -3123,27 +3125,39 @@ def test_status_drift_gate_b_badge_vs_meta(tmp_path: Path) -> None:
 
 
 def test_status_drift_gate_c_never_fails(tmp_path: Path) -> None:
-    """C/D 清单永不拦退出码: 反链x In Progress 与完成断言都打印原文, rc=0
-    (清单是人工复核面, 不是闸门; 退出码只听 A/B/异常三档)。"""
+    """C/D 清单永不拦退出码: 反链x In Progress 与完成断言都进清单, rc=0
+    (清单是人工复核面, 不是闸门; 退出码只听 A/B/异常三档)。
+    默认模式: 只打 summary 行, 不展开条目正文; --verbose 才逐条。"""
     mb = _drift_fixture(tmp_path)
     _drift_task(mb, "inflight.md", "In Progress")
     _drift_task(mb, "open-word.md", "Open", body="- 已完成 首版\n")
     (mb / "progress" / "implemented-c.md"
     ).write_text("# gate C fixture\n\n## 已实现\n\n- task [t](../tasks/inflight.md)\n", encoding="utf-8")
 
+    # --- 默认模式: summary only, 条目名不出现在 C/D 段
     rc, out, _err = _drift_run(tmp_path, mb)
-
     assert rc == 0, "C/D 非空不红"
     assert "no hard drift (tiers A/B/anomalies empty)" in out
-    assert "== C list: backlink x In Progress (manual review): 1 ==" in out
-    assert "[backlink-x-InProgress] -> memory-bank/tasks/inflight.md (status: In Progress)" in out
-    assert "[done-assert]" in out and "open-word.md" in out, "D 清单照常打印"
+    assert "== C list: backlink x In Progress (manual review): 1 (--verbose to unfold per-row detail) ==" in out
+    assert "== D list: done-style words in Open/In Progress bodies (low confidence): 1 (--verbose to unfold per-row detail) ==" in out
+    # 具体条目正文不应在默认输出里
+    assert "[backlink-x-InProgress]" not in out, "默认模式 C 档不应展开条目"
+    assert "inflight.md" not in out, "默认模式 C 档不应出现文件名"
+    assert "[done-assert]" not in out, "默认模式 D 档不应展开条目"
+    assert "open-word.md" not in out, "默认模式 D 档不应出现文件名"
+
+    # --- --verbose 模式: 逐条展开
+    rc2, out2, _ = _drift_run(tmp_path, mb, extra_args=["--verbose"])
+    assert rc2 == 0
+    assert "[backlink-x-InProgress] -> memory-bank/tasks/inflight.md (status: In Progress)" in out2
+    assert "[done-assert]" in out2 and "open-word.md" in out2, "--verbose 应展开 D 档条目"
 
 
 def test_status_drift_gate_d_exemptions(tmp_path: Path) -> None:
     """D 档豁免面: 否定前缀 (未/尚未/没有 + 「还没有已实现」的实义形态) / 日期行 /
     围栏代码 / 行内代码都不列; Open/In Progress 正文裸完成词列出 (带状态注记);
-    Done 正文完成词不列 (完结件正文说「已完成」天经地义)。"""
+    Done 正文完成词不列 (完结件正文说「已完成」天经地义)。
+    默认模式只打 summary 行; --verbose 逐条展开, 豁免判定本身在两种模式下一致。"""
     drift = _status_drift()
     mb = _drift_fixture(tmp_path)
     open_done = _drift_task(
@@ -3168,10 +3182,17 @@ def test_status_drift_gate_d_exemptions(tmp_path: Path) -> None:
     _drift_issue(mb, "open-h.html", "Open", body="<p>已完成</p>\n<p>引述 <code>已完成</code></p>\n<pre>已完成 围栏内</pre>\n")
     _drift_issue(mb, "done-h.html", "Done", body="<p>已完成</p>\n")
 
+    # --- 默认模式: summary only
     rc, out, _err = _drift_run(tmp_path, mb)
-
     assert rc == 0, "D 清单不红"
-    flagged = [line for line in out.split("\n") if "[done-assert]" in line]
+    assert "== D list: done-style words in Open/In Progress bodies (low confidence): 3 (--verbose to unfold per-row detail) ==" in out
+    assert "[done-assert]" not in out, "默认模式 D 档不应展开条目"
+    assert "open-done.md" not in out, "默认模式 D 档不应出现文件名"
+
+    # --- --verbose 模式: 逐条展开 + 豁免验证
+    rc2, out2, _ = _drift_run(tmp_path, mb, extra_args=["--verbose"])
+    assert rc2 == 0
+    flagged = [line for line in out2.split("\n") if "[done-assert]" in line]
     assert len(flagged) == 3, f"每个在办载体恰 1 条裸完成词: {flagged}"
     expect_line = open_done.read_text(encoding="utf-8").split("\n").index("- 已完成 首版") + 1
     assert f"memory-bank/tasks/open-done.md:{expect_line}: [done-assert] word='已完成' (status: Open)" in flagged
@@ -3226,8 +3247,9 @@ def test_status_drift_guard_is_wired_into_kb_check_and_gate() -> None:
 
 
 def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
-    """kb.wrap 尾部状态漂移扫描: C/D 清单打印原文 (空打「无」), 硬拦档 (A/B/异常) 非空
-    附「状态漂移硬拦非空…」提示行 —— 清单只提示, wrap 退出码与结果不因此改变。"""
+    """kb.wrap 尾部状态漂移扫描: C/D 清单默认只打计数 (--verbose 展开详情,
+    wrap 自身不带 verbose flag), 空打「无」, 硬拦档 (A/B/异常) 非空附
+    「状态漂移硬拦非空…」提示行 —— 清单只提示, wrap 退出码与结果不因此改变。"""
     import io
     from contextlib import redirect_stderr, redirect_stdout
 
@@ -3248,7 +3270,7 @@ def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
     assert "[C 清单: 反链 x In Progress] 无" in out and "[D 清单: 完成断言] 无" in out
     assert "状态漂移硬拦非空" not in out
 
-    # --- C/D 漂移: 清单原文进 wrap 输出, wrap 仍成功且无硬拦提示
+    # --- C/D 漂移: wrap 输出 summary 行 (不展开条目正文), wrap 仍成功且无硬拦提示
     mb1 = _drift_fixture(tmp_path / "soft")
     _drift_task(mb1, "inflight.md", "In Progress")
     _drift_task(mb1, "open-word.md", "Open", body="- 已完成 首版\n")
@@ -3256,8 +3278,12 @@ def test_wrap_reports_status_drift_lists(tmp_path: Path) -> None:
      "implemented-w.md").write_text("# wrap fixture\n\n## 已实现\n\n- task [t](../tasks/inflight.md)\n", encoding="utf-8")
     rc, out = wrap_run(tmp_path / "soft", mb1, "drift-soft", "软漂移收尾")
     assert rc == 0
-    assert "[backlink-x-InProgress] -> memory-bank/tasks/inflight.md (status: In Progress)" in out
-    assert "[done-assert]" in out and "open-word.md" in out
+    assert "[C 清单: 反链 x In Progress] 1 条" in out
+    assert "[D 清单: 完成断言] 1 条" in out
+    # wrap 输出不应展开具体条目正文
+    assert "[backlink-x-InProgress]" not in out, "wrap 不应展开 C 档条目"
+    assert "inflight.md" not in out.split("状态漂移扫描")[1] if "状态漂移扫描" in out else False, "wrap C 档段不应出现文件名"
+    assert "[done-assert]" not in out, "wrap 不应展开 D 档条目"
     assert "状态漂移硬拦非空" not in out
 
     # --- 硬拦漂移: 附提示行, 但 wrap 退出码与机械面 (建切片) 不受影响

@@ -42,22 +42,27 @@ Four output tiers:
                  badge (e.g. "Open(常驻)") is treated as consistent with the meta status
                  (display annotation, not a different status).
   C (list only)  same backlinks, target status == In Progress: printed as a manual-review
-                 list; never affects the exit code.
+                 list; never affects the exit code. Default output is a single summary
+                 line with row count only -- pass --verbose to unfold the per-row detail.
   D (list only)  `tasks/*.md` and `issues/*.html` bodies whose status is Open/In Progress
                  and whose text contains a done-style word (已完成|已修复|已落地|已实现|
                  已上线). Exemptions: negation prefixes (未/尚未/没有/没), date-prefixed
                  lines, fenced code blocks, inline code. Low-confidence list; never affects
-                 the exit code.
+                 the exit code. Default output is a single summary line with row count only
+                 -- pass --verbose to unfold the per-row detail.
 
 Exit code: 1 iff tier A, tier B or the anomalies are non-empty; otherwise 0. Tiers C/D only
 print.
 
 Usage (from repo root; `<skill-dir>` = the dir the memory-bank skill was loaded from):
     python <skill-dir>/scripts/check_status_drift.py --check    status drift guard, rc 1 on drift
+    python <skill-dir>/scripts/check_status_drift.py --verbose  unfold C/D per-row detail (default is summary lines only)
     python <skill-dir>/scripts/check_status_drift.py --safety   smoke probe (is bare run a real action)
 A bare run behaves exactly like `--check`: this checker is pure read-only (no write mode
 exists, so there is nothing a --check gate could distinguish), --check is kept only so
-kb.check can wire it in the same shape as its sibling checkers.
+kb.check can wire it in the same shape as its sibling checkers. Tiers A/B/anomalies always
+print per-row (high confidence); tiers C/D default to summary lines only to keep noise low
+when dozens of low-confidence rows are present -- pass --verbose to unfold them.
 
 ## 测试计划 (implemented 2026-10-31 in tests/test_memory_bank.py -- entries checked off T2)
 - [x] scripts import cleanly: test_kb_scripts_import_cleanly name list extended with
@@ -75,9 +80,14 @@ kb.check can wire it in the same shape as its sibling checkers.
   a missing badge is tolerated (documented boundary); an "Open(常驻)" style parenthetical
   suffix matches meta "Open" (missing/out-of-vocab meta is asserted in the anomaly test).
 - [x] test_status_drift_gate_c_never_fails: In Progress backlinks are printed and rc stays 0
-  when only tier C (and D) rows exist.
+  when only tier C (and D) rows exist. Default mode asserts summary line only; --verbose
+  mode is asserted in a dedicated flag.
 - [x] test_status_drift_gate_d_exemptions: negation prefixes / date lines / fenced code / inline
-  code are exempt; a naked done-word in an Open task body is listed; rc unaffected.
+  code are exempt; a naked done-word in an Open task body is listed; rc unaffected. Default
+  mode asserts summary line only; --verbose unfolds per-row detail.
+- [x] test_status_drift_gate_cd_verbose_unfolds: with --verbose, tiers C/D print per-row
+  detail (same body as before the default-summary change); default mode keeps tier A/B
+  unchanged.
 - [x] test_status_drift_anomaly_on_unreadable_status: missing `**Status:**` / status meta or an
   out-of-vocab value yields an anomaly row and rc == 1 (doc-status-meta.md: ring, not drop).
 """
@@ -423,8 +433,16 @@ def _utf8_stdout() -> None:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
 
-def _print_tier(title: str, rows: list[str], tail: list[str] | None = None) -> None:
+def _print_tier(
+    title: str,
+    rows: list[str],
+    tail: list[str] | None = None,
+    summary_only: bool = False,
+) -> None:
     if not rows:
+        return
+    if summary_only:
+        print(f"== {title}: {len(rows)} (--verbose to unfold per-row detail) ==")
         return
     print(f"== {title}: {len(rows)} ==")
     for row in rows:
@@ -439,6 +457,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="run the status drift guard (the only action)")
     parser.add_argument("--safety", action="store_true", help="smoke probe: is a bare run a real action")
     parser.add_argument("--quiet", action="store_true", help="only print findings (suppress the all-clear line)")
+    parser.add_argument(
+        "--verbose", action="store_true", help="unfold per-row detail for C/D (default: summary lines only)"
+    )
     parser.add_argument("--root", help="repo root (default: walk up to .git)")
     parser.add_argument("--mb-dir", help="memory-bank dir (default <root>/memory-bank)")
     args = parser.parse_args(argv)
@@ -458,8 +479,16 @@ def main(argv: list[str] | None = None) -> int:
     _print_tier("A hard: backlink x Open", gate_a, tail=[f"hint: {GATE_A_HINT}"] if gate_a else None)
     _print_tier("B hard: issue cover badge vs issue-status meta", gate_b)
     _print_tier("anomalies: status unreadable (missing / out-of-vocab)", anomalies)
-    _print_tier("C list: backlink x In Progress (manual review)", gate_c)
-    _print_tier("D list: done-style words in Open/In Progress bodies (low confidence)", gate_d)
+    _print_tier(
+        "C list: backlink x In Progress (manual review)",
+        gate_c,
+        summary_only=not args.verbose,
+    )
+    _print_tier(
+        "D list: done-style words in Open/In Progress bodies (low confidence)",
+        gate_d,
+        summary_only=not args.verbose,
+    )
 
     hard = len(gate_a) + len(gate_b) + len(anomalies)
     if hard:

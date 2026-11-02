@@ -2,9 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-11-01
-**Updated:** 2026-11-01
+**Updated:** 2026-11-02
 **Summary:** 状态漂移机检四档判据落地并联入提交闸门与 kb.wrap; 存量 B/C/D 清零(硬拦归零, 合法滞留+误报留档理由齐档)
 **Topics:** memory-bank-status-drift-guard
+**Refs:** memory-bank/testing/baselines/26-11-02-2039-memory-bank-status-drift-guard.md
 
 ## 原始请求
 
@@ -31,6 +32,7 @@ grilling 逐轮拍板:判据分层(progress 反链=高置信、正文完成断�
 | T4 | 存量实测出清单 | Done(2026-10-31) |
 | T5a | B 档清零+C 档裁决(badge 对齐 Done;drawer 翻 Done;config-eol 合法滞留) | Done(2026-11-01) |
 | T5b | D 档 62 条裁决(seed-state 翻 Done,余 46 条确证误报留档) | Done(2026-11-01) |
+| T6 | 低置信输出收敛(C/D 默认仅一行计数, --verbose 展开; 守卫与 wrap 同步) | Done(2026-11-02) |
 
 ## 进度日志
 
@@ -39,3 +41,9 @@ grilling 逐轮拍板:判据分层(progress 反链=高置信、正文完成断�
 机检四档判据落地并联入守卫体系;存量 B/C/D 全部处置完毕(硬拦归零,合法滞留与误报均已记录理由),checker 与 kb.check 全绿;测试基线见 kb.baseline 最新切片。
 
 - 2026-11-01 00:16 状态漂移机检四档判据落地联入守卫体系, 存量 B/C/D 清零(硬拦归零, 合法滞留+误报留档)
+
+### R1 · 低置信输出收敛 (2026-11-02)
+
+T5b 结论(余 46 条 D 档确证误报)已足够证明低置信面的信噪比问题: 每轮裸跑都要展开 47 行, 而无一需要翻状态。本轮把 C/D 默认输出收敛为一行计数(`== <tier>: N (--verbose to unfold per-row detail) ==`), 详情挂 `--verbose` 显式开关; Tier A/B/anomalies 高置信仍逐条 (硬拦语义与退出码零改动)。kb.wrap 尾部同步收敛(`[C 清单] N 条 (--verbose 展开详情)`), 并改守卫三条(两条 C/D 闸门测试 + wrap 集成测试): 默认模式断言不出条目正文, --verbose 断言逐条仍可展开。
+
+- 2026-11-02 20:30 低置信 C/D 清单默认收敛为一行计数并新增 --verbose 展开详情, A/B/anomalies 高置信逐条不变
