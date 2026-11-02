@@ -36,11 +36,7 @@
 - **deselect 口径**: `set_conf.py` DEFAULT_DESELECT 维持 **8 条**(R30 S5 新增 5 条已入库, 首轮即用 8 条口径, 复跑一致), 本轮零新增
 - **新增存活 0**(逐 id 对差做实): 复跑存活 101 全部 ⊆ 首轮 444 存活, 只有移出无移入
 - **复跑存活构成闭合(修正口径 101)**: 等价 **95**(112 − 连带杀 17)+ 真洞 **6**(3 注记 export_44/46+`__init___43` + 3 签名默认极低 `__init___1`/`run_1`/`_refresh_torrents_1`)= **101** ✓
-- **连带杀 17 条判读等价, 全链条目级复验稳定复现(0 条环境噪声)**, 机理=新守阵精确断言把「真值/文案/拼写等价」转可观测(同 W4 z_row_39 / W3 kib_1 形态):
-  - module 3: EventBusǁ__init___2/4(fresh-bus `is False` 身份断言, test_module_host:680-681)+ register_7(**「尾逗号」实为丢 getattr 默认参**→nameless 对象 AttributeError, 首判等价系误读 dump 形态; nameless fail-fast 守阵直杀)
-  - qbmanager 9: apply_new_config_24/26/29/30 + _tick_3 + run_66/128/148 + export_torrents_info_11(其中 run_128/run_148 系 S5b 手搓红验未复现实际变异形态的判读修正, 非翻案)
-  - qbapi 1: delete_4(delete_files=None 被 wire 参数断言杀, 按形态应记真洞)
-  - exporter 4: export_yaml_template_25/78(丢 encoding)+ _29/82("UTF-8" 拼写)被 `test_export_yaml_template_pins_utf8_encoding` 的 open 探针钉死
+- **连带杀 17 条判读等价, 全链条目级复验稳定复现(0 条环境噪声)**: 逐 id 与机理见任务档案 R30(同 W4 z_row_39 / W3 kib_1 形态)。
 - **超时 16→16 构成变化(修正口径)**: 首轮盲区 16(qbmanager 15 + exporter gtn_15)→ **run_20 复跑被杀(盲区回收, §G 销 1)** + **gtn_17 稳定超时(真洞中「双重冲突死循环」被新守阵场景触发, survived→盲区新入)** + TypeError 空转环 run_91/92/93/111 **复跑仍超时(改判预期未兑现, 维持盲区)** → 终态 qbmanager 14 + exporter 2(gtn_15/17)= 16
 - **全轮 5 条 killed→timeout 翻转, 条目级复验**(全限定名单跑): run_task_line_1 / _task_line_5 / run_191 / run_200 **恢复被杀**(受扰环境时序假象, 同 R29 `__init___7` 形态, 与首轮判定一致)+ gtn_17 稳定超时(见上)
 - **守阵覆盖口径(S5 声明 vs 复跑实测)**: S5b 红验 128/128 + 201/201 全红 → 声明盖 329/332; **复跑实测 = 325 杀 + gtn_17 盲区 1, 真洞残存活 6** —— 3 条签名默认极低(`__init___1`/`run_1`/`_refresh_torrents_1`)红验声明覆盖但复跑稳定存活(红验同构构造与 mutmut 实际变异形态不符, 同 R29「红验纠偏均为脚本映射错误」族); 3 条注记留账(export_44/46 + `__init___43`)口径不变
@@ -48,7 +44,7 @@
 ### 三分类终态(W6 池口径, 详见任务档案 R30 与 tmp-analysis/w6-r30/classify-a/b.md)
 
 - **真洞 332**(高 1 / 中 135 / 低 168 / 极低 28): 复跑实测守阵覆盖 325 杀 + gtn_17 死循环盲区 1; **残存活 6 条留账**(3 注记: export_44/46 默认分支不可达 + `__init___43` 显式配裸文件名 state_file 才可达; 3 签名默认极低: `__init___1` no_lock / `run_1` dry_run / `_refresh_torrents_1` dry_run——生产构造点全显式传参, 补测需构造「不传显式参」的构造点用例, 留后续轮)。
-- **等价 112**: 复跑实测存活面 95(连带杀 17, 逐条机理见上); 其余 95 条逐条理由见 classify。
+- **等价 112**: 复跑实测存活面 95(连带杀 17, 逐条机理见任务档案 R30); 其余 95 条逐条理由见 classify。
 - **假存活 0**(宽池轮预期兑现)。
 - **超时盲区 16**(qbmanager 14 + exporter 2): 并发面阻塞/忙转/死循环形态 + TypeError 空转环 4 条(改判预期未兑现), 维持 bug 备注口径不硬判(入池 issue 记账)。
 - **no tests 157**(qbapi 147 + qbmanager 10): **池外触达口径**(S1 §1/§2: qbapi 53 def 中 webui commands getattr 动态派发 19 方法 + routes 3 + transfer adapters 1 + W8/W9 模块池 4 + hr/tray/ui 池 10 触达 qbmanager reconnect/status_snapshot, 零「真正零触达」函数)——按 issue 口径不扩池, W8/W9 轮自然覆盖后再核。
