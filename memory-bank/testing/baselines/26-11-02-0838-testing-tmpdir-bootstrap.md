@@ -6,9 +6,9 @@
 
 ## 验收数字
 
-- **目标**: 全量 pytest(`tests/` 全量 + `src/` 覆盖率报表), 测于 TMPDIR 自举/互斥锁/coverage 落实例根五步全部落盘后的工作树(HEAD `9b77ad98` + 本轮未提交改动)
-- `commands run test.full` 实测(wrapper 墙 225.2s, 2026-11-02 08:38, Windows 本机):
-  - 汇总行: `4830 passed, 10 skipped, 4 warnings in 222.31s (0:03:42)`
+- **目标**: 全量 pytest(`tests/` 全量 + `src/` 覆盖率报表), 测于 TMPDIR 自举/互斥锁/coverage 落实例根五步全部落盘后的工作树(已 rebase 到远端 `develop` 最新 `c32e8e03`, 含本轮改动)
+- `commands run test.full` 实测(wrapper 墙 335.1s, 2026-11-02 08:58, Windows 本机):
+  - 汇总行: `4830 passed, 10 skipped, 3 warnings in 329.41s (0:05:29)`
   - TOTAL 表: `TOTAL  22521  152  7726  135  99.00%`(stmts / miss / branch / partial / 覆盖率)
   - 覆盖率闸: 通过(要求 99.0%, 实测 99.00%)
 - **首跑一红及处置**: 全量首跑 `1 failed, 4829 passed, 10 skipped in 216.15s`, 红在
