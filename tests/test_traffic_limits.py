@@ -30,6 +30,9 @@
 - test_recorder_guard_count_exact_threshold: (guard_7)护栏计数精确性 —— 恰 2000 条(阈值)静默, 第 2001 条才告警
 - test_events_for_window_boundary_events_at_t0_and_t1: (win_16/win_20)窗口端点 —— 恰在 t0 的事件只参与合成首事件不重复出段, 恰在 t1 的事件不进装配
 - test_events_for_window_adjacent_same_value_dedup_chain: (win_26, 防御面)同值去重游标推进 —— 窗内相邻同值事件(>=3 事件几何)只出一段
+- test_parse_inline_whitespace_valid_line: (parse_4)行内含空白(空格/制表)的合法手编行 —— int 容忍前导空白, split(None) 会把整行拆散丢弃
+- test_parse_zero_epoch_and_zero_limits_valid: (parse_37/parse_38)非负契约下界 —— ts=0 合法(仅负数豁免), 0,0,0 整行复原; `ts <= 0`/`ts < 1` 会误丢 epoch 0 行
+- test_limits_cache_bad_byte_day_file_tolerated: (rdl_8/rdl_18 + rday_25/29/34/35)读侧两处 open 的坏字节降级 —— 含坏字节天文件走 LimitsCache.read_day(Web 端点路径)不得抛 UnicodeDecodeError/LookupError, 坏行豁免后有效事件照常读回
 """
 import logging
 import os
@@ -545,6 +548,35 @@ def test_parse_torn_tail_complete_line_dropped_and_valid_kept():
     assert parse_limits_day_text("100,1,2") == ()  # 无换行完整行: 撕裂尾丢弃
     text = "100,1,2\n200,3,4\n500,42"  # 有效行 x2 + 撕裂尾
     assert parse_limits_day_text(text) == ((100, 1, 2), (200, 3, 4))
+
+
+def test_parse_inline_whitespace_valid_line():
+    """(parse_4)行内含空白的手编合法行: 三列数字带前导空白仍须复原(int 容忍空白),
+    `split("\\n")` 换成 `split(None)` 会把该行按空白拆散成两段坏行而整行丢弃"""
+    text = "100, 1, 2\n200,\t3,\t4\n"
+    assert parse_limits_day_text(text) == ((100, 1, 2), (200, 3, 4))
+
+
+def test_parse_zero_epoch_and_zero_limits_valid():
+    """(parse_37/parse_38)非负契约下界: ts=0 是合法值(仅负数豁免), 0,0,0(ts/up/down 全 0)
+    整行复原 —— `ts <= 0` 或 `ts < 1` 会把 epoch 0 行误当损坏丢弃"""
+    assert parse_limits_day_text("0,1,2\n") == ((0, 1, 2), )
+    assert parse_limits_day_text("0,0,0\n") == ((0, 0, 0), )
+
+
+def test_limits_cache_bad_byte_day_file_tolerated(tmp_path):
+    """(rdl_8/rdl_18 + rday_25/rday_29/rday_34/rday_35)读侧两处 open 的坏字节降级契约:
+    含坏字节的天文件走 LimitsCache.read_day(Web 端点路径)不得抛 UnicodeDecodeError/
+    LookupError —— errors="replace" 降级解码 + 坏行豁免, 坏字节行跳过、有效事件照常读回"""
+    data_dir = str(tmp_path)
+    cache = LimitsCache(data_dir)
+    ts = _anchored_ts()
+    date = v4_epoch_date_str(ts)
+    p = limits_day_path(data_dir, date)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "wb") as f:
+        f.write(f"{ts},1024,2048\n".encode() + b"\xff\xfe garbage\n" + f"{ts + 30},0,4096\n".encode())
+    assert cache.read_day(date) == ((ts, 1024, 2048), (ts + 30, 0, 4096))
 
 
 def test_recorder_single_event_and_empty_day_file_restart(tmp_path):

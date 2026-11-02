@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 I: vgo_80/83/105/117 + vrft_15/25 + vtp_101(断链桶冒充 0 线/w=0 除零/单侧游程摊配)">
 <title>core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-broke-contract</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -105,6 +105,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：<code>cov_end &gt;= a[4]</code>/<code>a[4] = cov_end</code>/<code>if a[0]</code>/<code>if a[2]</code>/<code>p.w &lt;= 0</code> 锚点仍在</li>
     </ul>
   </section>
 
