@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from lib import app, instances, torrent
+from lib import app, instances, small_target, torrent
 from lib.bencode import encode
 from lib.net import local_host
 
@@ -169,6 +169,43 @@ def make_junction(link: Path, target: Path) -> None:
     """建一条目录 junction(mklink /J, 与产品 create_dir_alias 同产物)。"""
     r = subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], capture_output=True, text=True)
     assert r.returncode == 0, f"mklink /J 失败({link} -> {target}): {r.stdout} {r.stderr}"
+
+
+def _space_negative_control(web_port: int, ih: str, files: list[tuple[str, int]], case: Path) -> None:
+    """L490 负向对照: 跨卷 + 目标剩余严格小于 needed, 断言拒绝且零副作用。
+
+    前置**只认显式入口** `QBT_REAL_SMALL_TARGET`(见 lib/small_target.py): 用户手动挂载
+    ImDisk 内存盘(96M)并在其下建空目录; 守卫硬拒无盘符/系统卷/Recovery-System-EFI 卷标/
+    hidden-system 属性/junction 跨卷路径。前置缺失或剩余不小于 needed 时**显式断言失败并
+    给出挂载命令**, 不 skip。
+    目标叶子故意不存在, 产品上溯到用户目录读卷剩余; L490 在一切搬运之前拒绝, 目标卷零写入。"""
+    needed = sum(s for _n, s in files)
+    target, free = small_target.require_small_target(needed)
+    dst_neg = target / f"rm04_05_space_dst_{os.getpid()}"
+    try:
+        assert not dst_neg.exists(), f"目标叶子必须不存在(产品会上溯到 {target}): {dst_neg}"
+        before = log_text(case).count("迁移发起")
+        result = cmd_post_and_wait(
+            web_port, f"/api/torrents/{ih}/location", {
+                "location": str(dst_neg),
+                "confirm": True
+            }
+        )
+        assert result.get("status") == "error", \
+            f"空间不足应被闸门 error 拒绝, 实际: {json.dumps(result, ensure_ascii=False)[:500]}"
+        items = ((result or {}).get("truth") or {}).get("results") or []
+        gates = [r for it in items for r in (it.get("reasons") or []) if r.get("gate") == "space"]
+        assert gates, f"拒绝原因缺 gate=space: {json.dumps(items, ensure_ascii=False)[:400]}"
+        assert any("空间不足" in str(r.get("text")) for r in gates), \
+            f"L490 分支未命中(文案应为「空间不足」, 实际: {gates})"
+        assert not [it for it in items if it.get("cls") == "started"], "空间不足却有 started 项(闸门失守)"
+        assert log_text(case).count("迁移发起") == before, "空间不足却新增「迁移发起」(负向对照零副作用失守)"
+        assert not dst_neg.exists(), f"空间不足却创建了目标叶子(目标卷被写入): {dst_neg}"
+        assert free < needed, f"前置自证失败: free={free} needed={needed}"
+    finally:
+        # 只在闸门失守意外建了唯一 pid 叶子时清掉它; 不触碰用户目录内既有数据
+        if dst_neg.exists():
+            purge_tree(dst_neg)
 
 
 def purge_tree(root) -> None:
@@ -743,13 +780,23 @@ def test_rm04_05_same_volume_relocate_dir_alias():
     负向对照(先于主链, 红验 = 给足 dst 即过): dst_neg = Z:/rm04_05_neg_ctl/dst(Z: 不存在盘,
           上溯整链不可判定) → GATE_SPACE「剩余空间不可判定」拒绝 —— 回执 error + reasons 含
           gate=space + 零 started 零「迁移发起」(零副作用)。
-    副作用: qB 真搬数据(C: 内); src 内容根变 junction 指向 dst; <data_dir>/relocate/ 落账;
-          副实例 save_path 临时改写(finally 还原并核验)。
+    L490 空间不足负向对照(2026-11-02 issue 26-11-02-1208, 复验改为显式入口): 组数据
+          2×64MiB=128MiB; 前置只认 QBT_REAL_SMALL_TARGET 指向的小容量卷空目录(lib/small_target.py
+          硬守卫: 带盘符/非系统卷/非 Recovery-System-EFI 卷标/无 hidden-system/reparse point/
+          st_dev 与盘符根一致), 前置缺失或剩余不小于 needed 时显式失败并给准备指引, 不 skip。
+          **已废弃并移除**: 上一轮曾用无盘符隐藏 Recovery 卷经 junction 造前置(见同函数 docstring
+          与 issue 更正记录), 该做法不许可再引入; tests/test_real_machine_safety.py 源码扫描守卫
+          保证一旦复发即红。
+          本段置于主链之后: 主链仍全跑; 前置缺失时只本段显式失败, 不掩盖主链结果。
+    副作用: qB 真搬数据(R:/qbt-fake/rm04 → D: case/dst); src 内容根变 junction 指向 dst;
+          <data_dir>/relocate/ 落账; 副实例 save_path 临时改写(finally 还原并核验)。
     回滚: 副实例 save_path 还原; 删 junction 只 os.rmdir 本体(禁递归删穿); 删光 real-fake 种子;
-          删用例目录 + RAM 树。
-    失败判据: dst 缺席却 started/「迁移发起」(闸门失守); 主链回执无 started; save_path 未变 dst
-              (归一后比); dst 侧 size 不齐; src 内容根未成 junction; 经原路径穿透读不到同 size;
-              journal 未落 phase=done; 日志缺「迁移发起」/「已武装收尾」; save_path 未还原。
+          删用例目录 + RAM 树。用户小容量目录只读剩余/不建叶子, 无需清理; 若闸门失守意外建了
+          叶子, finally 只删该唯一 pid 叶子(不触碰目录内既有数据)。
+    失败判据: dst 缺席却 started/「迁移发起」(闸门失守); L490 对照未以「空间不足」拒绝或出现
+              started/「迁移发起」/目标叶子被创建; 主链回执无 started; save_path 未变 dst(归一后比);
+              dst 侧 size 不齐; src 内容根未成 junction; 经原路径穿透读不到同 size; journal 未落
+              phase=done; 日志缺「迁移发起」/「已武装收尾」; save_path 未还原。
     """
     case = case_dir("rm04_05")
     p = None
@@ -779,7 +826,8 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         assert p.wait_log("整组迁移已启用", 20), \
             f"relocate 启动日志缺失(开关没生效?):\n{p.log()[-600:]}"
 
-        files = [("rm04c5/sub/a.bin", 128 * 1024), ("rm04c5/sub/b.bin", 128 * 1024)]
+        # 组数据 128MiB: 超过 ImDisk 96M 盘格式化后的剩余(~80MiB), 让 L490「空间不足」前置成立
+        files = [("rm04c5/sub/a.bin", 64 * 1024 * 1024), ("rm04c5/sub/b.bin", 64 * 1024 * 1024)]
         h1 = fake_multi(qb, "rm04c5", files, src, "rm04c5", write=True)  # 数据只写这一份
         h2 = fake_multi(qb, "rm04c5", files, src, "rm04c5", piece_len=32768, write=False)
         wait_complete(qb, [h1, h2])
@@ -790,7 +838,12 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         #      原 dst=case/"dst" 在 C盘充足时上溯父目录即命中 free_space + same_volume → 闸门放行,
         #      红灯失守(issue 26-11-02-1144)。改用 Z:/... 让 _volume_free_resolved 上溯整链失败 → None
         #      + _same_volume_resolved 上溯整链失败 → None → GATE_SPACE 条件真实命中。
-        result = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(dst_neg), "confirm": True})
+        result = cmd_post_and_wait(
+            web_port, f"/api/torrents/{h1}/location", {
+                "location": str(dst_neg),
+                "confirm": True
+            }
+        )
         assert result.get("status") == "error", \
             f"dst 缺席应被闸门 error 拒绝, 实际: {json.dumps(result, ensure_ascii=False)[:500]}"
         neg_items = ((result or {}).get("truth") or {}).get("results") or []
@@ -837,6 +890,10 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         assert job.get("reason") == "external", f"job done 但 reason={job.get('reason')}: {job}"
         jr = journal_of(case, job_id)
         assert jr and jr.get("phase") == "done", f"journal 未落 phase=done: {jr}"
+
+        # ---- 负向对照2(L490 空间不足分支): 放在主链之后, 前置缺失只红本段, 不掩盖主链结果
+        #      显式入口 QBT_REAL_SMALL_TARGET; 守卫见 lib/small_target.py; 不再自动枚举/挂接隐藏卷
+        _space_negative_control(web_port, h1, files, case)
     finally:
         if p is not None:
             p.stop()

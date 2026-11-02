@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (52)
+## Open (51)
 
-- [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — relocate_units.py:490 GATE_SPACE elif 分支(target_free < needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
@@ -64,9 +63,10 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (352)
+## Done (353)
 
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
+- [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(跨卷小容量卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — 纯函数层四条判别红验已通过全量测试; 真机 L490 前置最终定为手动挂载 ImDisk 96M 内存盘 + 显式入口 QBT_REAL_SMALL_TARGET(隐藏 Recovery 卷 + mklink /J 做法已废弃并彻底移除); 2026-11-03 真机跑通: status=error + gate=space + 文案「空间不足」+ 零 started + 零迁移发起 + 目标叶子未建, RM04-05 单跑 1 passed 32.90s, RM04 套件 9 passed 199.57s; issue Done; 产品代码零改动
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](../26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)
 - [perf] [种子详情面板页签切换卡 1-2 秒](../26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(general/content 等)切换在 3000 种子规模下卡 1-2 秒; 疑与切页触发窗口/行高作废或内容变体全量装配相关, 待查
 - [perf] [各视图首次访问全量量齐行高(3000 行单发长任务)](../26-11-02-0902-perf-webui-first-visit-rowh-measure.html) — 各视图首访时窗口化引擎走全量渲染量齐行高, 3000 行下单发约 5.4s 长任务; 可考虑首访用估算行高渐进量齐压平

@@ -193,6 +193,16 @@
 | **搬迁窗口基本抓不住 state 30S 落盘周期** | 64M 跨卷搬迁数秒, 强杀后 state.json 常无在途 job(「恢复在途 job 0 条」≠ 恢复面失效) | journal 注入退路(RM04 计划 §03 批准): 停机态按 job_to_dict 形造 phase=moving/move_issued=true 账 + journal/spec, 重启走 `_recover` RESUME 分支; 另注意产品日志是**追加式**, 断言「最后一次启动」的日志行要等新行出现再取 |
 | **删 junction 绝不递归(重申 §08)** | `rm -r`/`shutil.rmtree` 对 junction 的行为按平台而异, 穿透即删真实数据 | 用 `os.walk(topdown)` 遇 reparse 点 `os.rmdir` 剪枝的 purge 形态(RM04 用例 `purge_tree` 可照抄) |
 | **qB `free_space_on_disk` 报的是它默认 save_path 那块卷(relocate 同卷证明的隐藏前提, RM04 漂移轮实测)** | 默认路径所在盘缺席时(环境2 的 56590 指幽灵 R: 盘)恒 **-1** ⇒ `same_volume_proof` 必败 ⇒ 多成员组 relocate 被 GATE_SAME_FS 拒 —— 目录别名主链在环境2 直接不可达 | 用例临时把副实例 `save_path` 改指实存盘现存目录(qB 立即报出真值, 与本地 `disk_usage` 零漂移), 测毕逐字还原并断言(RM04-05 造法); 环境1 默认路径实存, 天然免疫 |
+| **「跨卷 + target_free < needed」前置只认显式入口(issue 26-11-02-1208 复验)** | 测试**不自动枚举、不自动挂接**任何卷; 必须由用户准备小容量目标并经环境变量 `QBT_REAL_SMALL_TARGET` 指定绝对路径(带盘符、已存在、非系统卷、卷标不得为 Recovery/System/EFI、路径无 hidden/system/reparse point)。**唯一指定方式 = 手动挂载 ImDisk 内存盘(需管理员, 配方见下)**; 不设其它备选 | 前置缺失或剩余不小于 `needed` 时 `require_small_target` **显式断言失败并给准备指引**(不静默 skip); 守卫见 `tests-real/lib/small_target.py`, 复发守卫见 `tests/test_real_machine_safety.py`(扫源码禁 `FindFirstVolumeW/FindNextVolumeW`/卷 GUID/旧构造函数)。**曾用「隐藏 Recovery 卷 + `mklink /J`」, 已废弃并彻底移除** |
+
+**安全构造配方(L490 跨卷空间不足前置, 2026-11-02 复验口径)**:
+
+- **绝不使用 Recovery/System/EFI 卷**: 这些是系统恢复/引导分区, 除读空闲外任何操作都不许可; 用 junction 指向它们同样不许可。旧做法(隐藏卷 + `mklink /J`)已废弃并移除, 仅在 issue 26-11-02-1208 与真机基线留历史证据链。
+- **唯一指定方式 = 手动挂载 ImDisk 内存盘(需管理员, 非破坏性, 重启即清空)**: 以管理员身份运行 `imdisk -a -s 96M -t vm -o fix -m Y: -p "/fs:ntfs /q /y"` —— `96M` = 96×1,048,576 = 100,663,296 字节(格式化后实测 Size 100,659,200), 严格小于 `needed` 134,217,728; `-t vm` = 系统虚拟内存承载, `-o fix` = 固定介质(默认, 与 `-o rem` 相反); **不要加 `-P`**(会把虚拟盘写进注册表并尝试开机自建)。随后 `New-Item -ItemType Directory Y:\small_target`, 设 `QBT_REAL_SMALL_TARGET=Y:\small_target`。**缺少前置时代码显式断言失败并给准备指引, 不静默 skip**; 不提供小 VHD/小 U 盘/小分区等替代路径。卸载由用户主导: `imdisk -d -m Y:`(失败再 `-D` 强制), 复核 `imdisk -l` 输出 `No virtual disks.` 且 `Test-Path Y:\` 为 `False`。**容量按需最小化(≤128MiB), 用完必须卸载**。`-t vm` 可能被页面文件换出; `-o awe` 才保证常驻物理内存, 但需要 AWEAlloc 驱动(本机 `sc query AWEAlloc` 为 STOPPED), 因此不选。官方依据: ImDisk CLI 2.1.1 内置帮助、GitHub 官方 FAQ(示例 `imdisk -a -s 400M -m R: -p "/fs:ntfs /q /y"`)与 AWE 常驻说明。
+- **2026-11-03 实跑实测(96M 盘)**: `imdisk -l` → `\Device\ImDisk0`; `Win32_LogicalDisk`: `Y:` Size 100,659,200 / FreeSpace 84,054,016(80.16MiB, < needed 134,217,728, 差 50,163,712 字节); 卷标为空; `st_dev` Y=2787372261218981617 / D=3628948922281332713 / R=5401726539199518481(三者互异 ⇒ 真跨卷); `assert_safe_target` 与 `require_small_target` 均放行。内存占用 ≈96MiB 系统虚拟内存(`-t vm`)。
+- **预计占用上限**: RAM 落点 128MiB(2×64MiB 只写一份, 缺 R: 时退回 `.work` 真写盘) + D: dst 搬迁 128MiB + 日志/元数据约 4KB; **目标小卷 0 写入**; 峰值 ≤ 约 270MiB。
+- **清理**: 用例 `finally` 清 `.work/rm04` 与 `R:/qbt-fake/rm04`; 闸门失守意外建叶子时只删唯一 pid 叶子; **内存盘由用户主导卸载**(`imdisk -d -m Y:`, 失败再 `-D`)。
+- **守卫**: `assert_safe_target` 硬拒 UNC/卷 GUID、无盘符、非绝对、非已存在目录、系统卷、Recovery/System/EFI 类卷标、路径各级 hidden/system 或 reparse point、`st_dev` 与盘符根不一致; 前置缺失/剩余 ≥ needed 时断言失败并给准备指引, 不跳过。
 
 ### 2.10 规则引擎面的事实(RM03 实测, 2026-10-31)
 

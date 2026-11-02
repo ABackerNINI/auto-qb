@@ -57,6 +57,9 @@ W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 - test_evaluate_group_receipt_contract_keys: 回执契约键面(幂等/主回执/添加预检三张 dict)
 - test_evaluate_group_text_faces_representatives: 文案代表面(空间/未完成/硬上限)与恰等边界
 - test_evaluate_add_flow_faces: 添加预检流面(终态不中断/作用域外/rel 切片各形态)
+
+2026-11-02 issue 26-11-02-1208 追加(L490 跨卷空间不足分支红验):
+- test_evaluate_group_space_cross_volume_branch: 严格小于才拒 / 恰等放行 / same_volume=None 按跨卷保守拒 / 同卷豁免
 """
 import os
 
@@ -385,6 +388,26 @@ def test_evaluate_group_same_volume_space_exempt():
     # 跨卷 + 不可读: 照拦(不可判定一律拒绝)
     item4 = ru.evaluate_group(_ok_facts(same_volume=False, target_free=None))
     assert "space" in _gates(item4)
+
+
+def test_evaluate_group_space_cross_volume_branch():
+    """GATE_SPACE 跨卷空间不足分支(relocate_units.py:490): 严格小于才拒; 恰等放行;
+    same_volume=None 按跨卷保守拒; 同卷 rename 豁免(R2 #1)"""
+    # needed = 2 x 100 = 200; 跨卷 + 剩余 199 < 200 -> 第二条拒绝分支命中(隔离: 无其他闸门)
+    item = ru.evaluate_group(_ok_facts(target_free=199, same_volume=False))
+    assert item["cls"] == ru.CLS_BLOCKED
+    assert _gates(item) == ["space"], _gates(item)
+    text = item["reasons"][0]["text"]
+    assert "目标卷剩余 199 字节" in text and "本组数据 200 字节" in text and "空间不足" in text
+    # 恰等所需 -> 不拒(判据是严格小于, 不是 <=)
+    item = ru.evaluate_group(_ok_facts(target_free=200, same_volume=False))
+    assert item["cls"] == ru.CLS_OK and "space" not in _gates(item)
+    # 卷关系不可判定(None)按跨卷保守处理 -> 照拦(不得因 None 放行)
+    item = ru.evaluate_group(_ok_facts(target_free=199, same_volume=None))
+    assert item["cls"] == ru.CLS_BLOCKED and "space" in _gates(item)
+    # 同卷 rename 不占额外空间 -> 空间预检不适用
+    item = ru.evaluate_group(_ok_facts(target_free=199, same_volume=True))
+    assert item["cls"] == ru.CLS_OK and "space" not in _gates(item)
 
 
 def test_within_empty_scope_false():

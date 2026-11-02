@@ -7,12 +7,12 @@
 <meta name="issue-stamp" content="26-11-02-1208">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="real-machine-rm04-drift-plan">
-<meta name="doc-refs" content="memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/issues/26-11-02-1144-bug-rm04-gate-space-envdrift.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/issues/26-11-02-1144-bug-rm04-gate-space-envdrift.html, memory-bank/testing/baselines/26-11-02-2206-rm04-gate-space-crossvol-branch.md, memory-bank/testing/real-baselines/26-11-02-2243-real-RM04-05.md, memory-bank/testing/baselines/26-11-02-2301-rm04-l490-real-branch.md, memory-bank/testing/baselines/26-11-02-2345-real-machine-safety-guard-l490.md, memory-bank/testing/baselines/26-11-03-0038-rm04-l490-imdisk-real.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
-<meta name="issue-title" content="RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)">
-<meta name="issue-summary" content="relocate_units.py:490 GATE_SPACE elif 分支(target_free &lt; needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码">
-<title>RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境) · bug · 计划外问题</title>
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(跨卷小容量卷环境)">
+<meta name="issue-summary" content="纯函数层四条判别红验已通过全量测试; 真机 L490 前置最终定为手动挂载 ImDisk 96M 内存盘 + 显式入口 QBT_REAL_SMALL_TARGET(隐藏 Recovery 卷 + mklink /J 做法已废弃并彻底移除); 2026-11-03 真机跑通: status=error + gate=space + 文案「空间不足」+ 零 started + 零迁移发起 + 目标叶子未建, RM04-05 单跑 1 passed 32.90s, RM04 套件 9 passed 199.57s; issue Done; 产品代码零改动">
+<title>RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(跨卷小容量卷环境) · bug · 计划外问题</title>
 <style>
   :root {
     --bg: #10151a;
@@ -85,8 +85,8 @@
     <a href="#s2"><span class="no">02</span>证据</a>
     <a href="#s3"><span class="no">03</span>影响面</a>
     <a href="#s4"><span class="no">04</span>定位锚点</a>
-    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
-    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s5"><span class="no">05</span>安全构造配方</a>
+    <a href="#s6"><span class="no">06</span>复验结果与判据</a>
     <a href="#s7"><span class="no">07</span>状态变更日志</a>
     <div class="toc-foot">
       类型 bug · 档位 standard<br>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
-    <h1>RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)</h1>
-    <p class="lede">relocate_units.py:490 GATE_SPACE elif 分支(target_free &lt; needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码</p>
+    <div class="kicker">计划外问题 · bug</div>
+    <h1>RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(跨卷小容量卷环境)</h1>
+    <p class="lede">relocate_units.py:490 GATE_SPACE elif 分支(target_free &lt; needed AND same_volume=False) 缺用例级红验; 纯函数层四条判别红验已通过全量测试; 真机前置定为<strong>手动挂载 ImDisk 96M 内存盘</strong> + 显式入口 <code>QBT_REAL_SMALL_TARGET</code>（隐藏 Recovery 卷 + junction 做法<strong>已废弃并彻底移除</strong>）; 2026-11-03 真机跑通: <code>status=error</code> + <code>gate=space</code> + 文案「空间不足」+ 零 started + 零「迁移发起」+ 目标叶子未建, 主链全过</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 12:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -115,7 +115,9 @@
       <li><strong>L488</strong>：<code>target_free is None AND same_volume is not True</code>（空间不可判定 + 跨卷）→ 在 Z:/ 不存在盘上真实命中 → 已用方案 A 补进 RM04-05 负向对照</li>
       <li><strong>L490</strong>：<code>target_free is not None AND target_free &lt; needed AND same_volume is not True</code>（空间可判定且不足 + 跨卷）→ <strong>目前 RM04-05 无覆盖此分支的红验</strong></li>
     </ul>
-    <p><strong>为什么本机做不了</strong>（取证 2026-11-02 12:05，环境2 C盘机）：<code>disk_usage</code> 实测仅 C:/ 存在（68.3 GB free），D:/E:/F:/G:/H:/ 全 missing。跨卷前置 <code>same_volume=False</code> 在 <code>_same_volume_resolved</code> 里要求 src 与 dst 分属不同卷；只有 C: 盘时上溯到根也在 C: 上 → <code>same_volume=True</code>。且闸门自身 L492 有注释"同卷 rename 不占额外空间，空间预检不适用"——同卷即跳过 L490 分支。本机根本进不了这个分支，硬做只能伪造跨卷条件（造虚拟盘/容器），与"改测试前提"不同等，应改有第二可写卷的机器执行。</p>
+    <p><strong>为什么环境2 做不了</strong>（取证 2026-11-02 12:05，入池时所在机器为环境2 C盘机）：<code>disk_usage</code> 实测仅 C:/ 存在（68.3 GB free），D:/E:/F:/G:/H:/ 全 missing。跨卷前置 <code>same_volume=False</code> 在 <code>_same_volume_resolved</code> 里要求 src 与 dst 分属不同卷；只有 C: 盘时上溯到根也在 C: 上 → <code>same_volume=True</code>。且闸门自身 L492 有注释"同卷 rename 不占额外空间，空间预检不适用"——同卷即跳过 L490 分支。</p>
+    <p><strong>前提更正（2026-11-02 22:43）</strong>：上一轮接手时把「本机各卷剩余 ≥ 30GB ⇒ 造不出 <code>target_free &lt; needed</code>」当作不可造结论，这是<strong>错的</strong>。接手机是环境1(D盘机)，与撰写本 issue 的环境2 不是同一套；环境1 有多个可写卷、可连真实 qB 的写侧，并且存在无盘符的隐藏 Recovery 卷（0.55GB，free 86,564,864 字节 ≈ 82.5MiB）。该卷经 junction 暴露为普通路径后，「跨卷 + 目标剩余严格小于 needed」两个前置同时成立；L490 在一切搬运之前拒绝，不需要向该卷写入。</p>
+    <p><strong>安全边界复验更正（2026-11-02 23:3x，最终口径）</strong>：隐藏 Recovery 卷是 Windows 系统恢复分区，<strong>除读空闲外的任何操作都不许可</strong>，用 junction 指向它同样不许可。上一轮「隐藏卷 + <code>mklink /J</code>」的构造<strong>已废弃并彻底移除</strong>（源码、文档、用例推荐做法中均已删除，仅在本 issue 与真机基线留历史证据链）。当前真机前置只认用户显式准备的普通小容量卷路径（环境变量 <code>QBT_REAL_SMALL_TARGET</code>），并有硬守卫拒绝无盘符/系统卷/Recovery-System-EFI 卷标/reparse point/hidden-system/st_dev 跨卷路径；前置缺失时显式断言失败并给准备指引，不静默 skip。</p>
     <p><strong>为什么不移除这个分支红验</strong>：L490 是 <code>GATE_SPACE</code> 两条拒绝分支之一（不是冗余），且"目标卷空间不足"在跨卷迁移动作中是真实风险场景——目标盘比源盘小、用户预算错误、qB 临时落盘吃满等。缺少覆盖不等于分支没用，应在有条件的机器上补。</p>
   </section>
 
@@ -129,10 +131,29 @@ elif facts.target_free is not None and facts.target_free &lt; needed and facts.s
     _block(GATE_SPACE, f"目标卷剩余 {facts.target_free} 字节 &lt; 本组数据 {needed} 字节: 空间不足, 拒绝迁移")
 # 同卷(True): rename 不占额外空间, 空间预检不适用(R2 #1) —— 数值仅展示, 见 same_volume note
 </code></pre>
-    <p>本机仅有 C: 盘可写（取证 2026-11-02 12:05）：</p>
+    <p>环境2 仅有 C: 盘可写（取证 2026-11-02 12:05，入池时所在机器）：</p>
 <pre><code>C:/: exists, free=68.3GB, total=126.9GB
 D:/: missing   E:/: missing   F:/: missing   G:/: missing   H:/: missing</code></pre>
-    <p>RM04-05 用例覆盖的分支：<strong>L488（Z:/ 不存在盘 = 上溯整链不可判定）</strong> 已补；<strong>L490</strong>（跨卷空间不足）缺失。</p>
+    <p><strong>RM04-05 用例覆盖的分支</strong>：<strong>L488（Z:/ 不存在盘 = 上溯整链不可判定）</strong> 已真机覆盖；<strong>L490</strong>（跨卷空间不足）在纯函数闸门层已有四条判别红验（见 <a href="../testing/baselines/26-11-02-2206-rm04-gate-space-crossvol-branch.md">基线 26-11-02-2206</a>）。真机端到端段改为<strong>显式小容量入口</strong>，前置须用户自备；本机 2026-11-02 23:3x 重跑时该段以明确断言失败（非静默 skip），主链全部通过。</p>
+    <h3>历史证据（2026-11-02 22:2x-22:43，已废弃）</h3>
+    <p>下列数字来自上一轮的隐藏 Recovery 卷构造。<strong>该做法已废弃并彻底移除</strong>，仅保留证据链，<strong>不构成当前推荐或验收依据</strong>。</p>
+<pre><code>real.guard: 36595 pid=24004 qB v5.2.3 firewalled 真实种子 8 个, 已全部暂停
+           36596 pid=35180 qB v5.2.3 firewalled 真实种子 0 个, 已全部暂停
+
+Recovery 卷 \\?\Volume{3047a86e-fab4-4bd4-a4d6-8824b76ce3d6}\:
+  total=587,198,464  free=86,564,864(82.5MiB)
+R:/ free=43,130,843,136   D:/ free=121,583,759,360
+
+junction 暴露后(目标叶子未建):
+  _volume_free_resolved(fa, &lt;leaf&gt;)            = 86,564,864
+  _same_volume_resolved(alias_fs, "R:/", &lt;leaf&gt;) = False
+  evaluate_group(needed=134,217,728) → blocked
+    reason = "目标卷剩余 86564864 字节 &lt; 本组数据 134217728 字节: 空间不足, 拒绝迁移"</code></pre>
+    <p>历史端到端观察：<code>POST /api/torrents/{hash}/location</code> 指向 <code>&lt;case&gt;/smallvol/rm04_05_space_dst</code> → 回执 <code>status=error</code>、<code>reasons[].gate="space"</code> 且文案含「空间不足」、零 <code>cls="started"</code>、产品日志零「迁移发起」；同轮 <code>real.suite --slice RM04</code> 为 <code>9 passed in 186.99s</code>。<strong>该结论因安全边界失效已退回</strong>，见下。</p>
+    <h3>当前证据（2026-11-02 23:3x，显式入口）</h3>
+    <p><strong>正向对照（普通盘受限目录）</strong>：目标 <code>D:\Projects\auto-qb-clone3\tests-real\.work\rm04_probe_target</code>。<code>assert_safe_target</code> 放行（卷标 <code>Data</code>，free 121,580,154,880，<code>st_dev</code> 与 <code>D:\</code> 根一致 362,894,892,228,133,2713）；<code>require_small_target(134,217,728)</code> 明确拒绝并给准备指引。结论：<strong>普通大容量目录不等价于真跨卷空间不足</strong>，只验证入口与守卫，L490 不可达。</p>
+    <p><strong>真机重跑（RM04-05，入口指向普通目录）</strong>：<code>commands run real.run --case RM04-05 --yes</code> → <code>1 failed, 8 deselected in 33.09s</code>。失败点仅在末尾 <code>_space_negative_control</code> 的 <code>require_small_target</code> 断言（free 121,445,658,624 ≥ needed），非静默 skip；失败前主链断言（Z: L488 负向、搬迁 started、save_path、dst size、junction、穿透、「已武装收尾」、成员2 setLocation、job done(reason=external)、journal done）全部通过。</p>
+    <p><strong>写入账目（本轮实测，1s 采样）</strong>：RAM 落点 <code>R:\qbt-fake\rm04\rm04_05\src\rm04c5\sub\a.bin</code>/<code>b.bin</code> 峰值 <strong>134,217,728</strong> 字节（2×64MiB 只写一份）；D: dst 峰值 <strong>134,217,728</strong> 字节；D: 工作目录峰值 <strong>134,221,927</strong> 字节（日志/元数据 <strong>4,199</strong> 字节）；D: free 前后差 <strong>134,496,256</strong> 字节；合计约 <strong>268,439,655</strong> 字节 ≈ 256.05MiB（不含 qB 自身 profile 写入）。清理后 <code>tests-real\.work</code> 回到 <strong>515,662</strong> 字节（与运行前相同）、<code>.work\rm04</code> 残留 66 字节、<code>R:\qbt-fake\rm04</code> 为 0、目标目录子项 0。<strong>Recovery 卷写入字节数：上一轮未采集前后 free，无法证实「零写入」</strong>；本轮已彻底移除该卷依赖，未来不再触碰。</p>
   </section>
 
   <section id="s3">
@@ -150,43 +171,79 @@ D:/: missing   E:/: missing   F:/: missing   G:/: missing   H:/: missing</code><
     <ul>
       <li><code>src/auto_qb/core/modules/relocate_units.py:488</code>（取证 2026-11-02 12:05）· L488 不可判定分支 · grep <code>GATE_SPACE</code></li>
       <li><code>src/auto_qb/core/modules/relocate_units.py:490</code>（取证 2026-11-02 12:05）· L490 空间不足分支（<strong>缺覆盖</strong>）· grep <code>target_free.*needed</code></li>
-      <li><code>tests-real/rm04_relocate/test_rm04_relocate.py:788</code>（取证 2026-11-02 12:05）· RM04-05 负向对照入口 · grep <code>负向对照</code></li>
+      <li><code>tests-real/rm04_relocate/test_rm04_relocate.py:174</code>（2026-11-02 23:3x）· L490 负向对照 <code>_space_negative_control</code>；调用点 <code>:885</code> · grep <code>_space_negative_control</code></li>
+      <li><code>tests-real/lib/small_target.py</code>（2026-11-02 23:3x）· 显式入口 <code>QBT_REAL_SMALL_TARGET</code> + 硬守卫 · grep <code>assert_safe_target</code></li>
+      <li><code>tests/test_real_machine_safety.py</code>（2026-11-02 23:3x）· 隐藏卷路径复发守卫（源码扫描禁 token）</li>
     </ul>
   </section>
 
   <section id="s5">
-    <h2><span class="no">05</span>交接前置（接手机器需要满足）</h2>
+    <h2><span class="no">05</span>安全构造配方（当前口径：显式入口 + 硬守卫）</h2>
     <div class="callout">
-      <strong>需要第二可写卷</strong>（Windows 上除 C: 外至少还有 D:/E:/… 任一存在且可写），让 <code>_same_volume_resolved</code> 能判定跨卷；同时目标卷剩余空间 <strong>小于</strong>（或可控地调到小于）RM04-05 两枚种子数据总和（约 256 KB × 2 = 512 KB，或按用例 <code>needed</code> 实测值）。<br><br>
-      第二可写卷可选来源：另一块实体盘、外置 SSD、挂载虚拟盘（DiskPart vdisk attach / DISM / 亚视虚拟盘）—— 只要 <code>os.stat(dst).st_dev != os.stat(src).st_dev</code> 即满足跨卷条件。<br><br>
-      环境2（C盘机）不可用：probe 实测 D:/ 不存在。
+      <strong>只认显式入口</strong>：环境变量 <code>QBT_REAL_SMALL_TARGET</code> 指向<strong>用户自己准备</strong>的小容量目录（绝对路径、带盘符、已存在、非系统卷）。测试<strong>绝不枚举、绝不挂接</strong>任何无盘符/隐藏/Recovery/System/EFI 卷，也不创建 junction 指向它们。前置缺失或剩余不小于 <code>needed</code> 时<strong>显式断言失败并给准备指引</strong>，不静默 skip。
     </div>
+    <p><strong>硬守卫（<code>tests-real/lib/small_target.py:assert_safe_target</code>，任一不满足即 <code>AssertionError</code>）</strong>：</p>
+    <ul>
+      <li>拒绝 UNC / 卷 GUID 路径（<code>\\?\Volume{...}</code>）；</li>
+      <li>必须是绝对路径且带盘符（<code>[A-Za-z]:</code>）；</li>
+      <li>必须是<strong>已存在</strong>的目录（测试不替用户创建目录）；</li>
+      <li>拒绝系统卷（盘符 == <code>%SystemDrive%</code>）；</li>
+      <li>拒绝卷标含 <code>Recovery</code> / <code>System</code> / <code>EFI</code> / <code>恢复</code> / <code>系统</code>；</li>
+      <li>目标路径各级不得含 hidden/system 属性、不得是 reparse point（junction/symlink/mount point）；</li>
+      <li>目标 <code>st_dev</code> 必须与盘符根一致（拒绝经挂载点跨卷）。</li>
+    </ul>
+    <p><strong>用户准备（唯一指定方式：手动挂载 ImDisk 内存盘，需管理员）</strong>：</p>
+    <ol>
+      <li><code>imdisk -a -s 96M -t vm -o fix -m Y: -p "/fs:ntfs /q /y"</code>（<code>96M</code>=100,663,296 字节，严格小于 needed 134,217,728；<code>-t vm</code>=系统虚拟内存承载，<code>-o fix</code>=固定介质；<strong>不要加 <code>-P</code></strong>）。</li>
+      <li><code>New-Item -ItemType Directory Y:\small_target</code>，设 <code>QBT_REAL_SMALL_TARGET=Y:\small_target</code>。</li>
+      <li>测毕由用户卸载：<code>imdisk -d -m Y:</code>（失败再 <code>-D</code> 强制），复核 <code>imdisk -l</code> 为 <code>No virtual disks.</code> 且 <code>Test-Path Y:\</code> 为 <code>False</code>。容量按需最小化（≤128MiB），用完必须卸载。</li>
+    </ol>
+    <p><strong>不提供备选</strong>：不写小 VHD / 小 U 盘 / 小分区等替代路径；测试不自动枚举、不自动挂载任何卷。</p>
+    <p><strong>ImDisk 官方依据（2026-11-03 调研）</strong>：CLI 内置帮助（本机 v2.1.1）确认 <code>-a</code> 附加、<code>-t vm</code> 系统虚拟内存、<code>-s</code> 单位与后缀（<code>M</code>=MiB）、<code>-o fix/rem</code> 固定/可移动介质、<code>-d</code> 卸载、<code>-D</code> 强制卸载；官方 FAQ 给出 <code>imdisk -a -s 400M -m R: -p "/fs:ntfs /q /y"</code> 与 <code>-o awe</code> 常驻物理内存说明（<code>-t vm</code> 可能被页面文件换出）。2026-11-03 已由用户以管理员挂载 96M 盘并真机跑通，实测数值见 <a href="#s6">§06</a>。</p>
+    <p><strong>预计磁盘占用上限</strong>：RAM 落点 128MiB（2×64MiB 只写一份，<code>R:</code> 内存盘；缺 R: 时退回 <code>tests-real/.work</code> 真写盘）+ D: dst 搬迁 128MiB + 日志/元数据约 4KB；<strong>小容量目标卷 0 写入</strong>（用例只读卷剩余与 <code>st_dev</code>，不建叶子）。峰值 ≤ 约 270MiB。</p>
+    <p><strong>清理</strong>：用例 <code>finally</code> 删除 <code>tests-real/.work/rm04</code> 与 <code>R:/qbt-fake/rm04</code>；若闸门失守意外建了唯一 pid 叶子，只删该叶子、不触碰用户目录既有数据；<strong>ImDisk 内存盘由用户主导卸载</strong>（<code>imdisk -d -m Y:</code>，失败再 <code>-D</code>）。</p>
+    <p><strong>为什么绝不使用 Recovery 卷</strong>：隐藏 Recovery 卷是 Windows 系统恢复分区，写入或挂接可能破坏系统恢复能力；除读空闲外的任何操作都不许可。上一轮曾用它造前置，<strong>已废弃并彻底移除</strong>（源码、文档、用例推荐做法均已删除，仅 issue 与真机基线留历史证据链）。<code>tests/test_real_machine_safety.py</code> 扫描 <code>tests-real/</code> 源码，禁止 <code>FindFirstVolumeW/FindNextVolumeW</code>、卷 GUID 字面量、旧构造函数名；再引入隐藏卷路径即红。</p>
   </section>
 
   <section id="s6">
-    <h2><span class="no">06</span>接手判据</h2>
-    <p><strong>不改产品代码，只改 RM04-05 负向对照段（在已补的 Z:/ 不可判定红验之后新增 L490 分支红验）</strong>：</p>
+    <h2><span class="no">06</span>复验结果与判据（2026-11-03 真机复验终态）</h2>
     <ol>
-      <li>探针：<code>os.stat(src).st_dev != os.stat(dst).st_dev</code>（跨卷）+ <code>shutil.disk_usage(dst_parent).free &lt; 用例 needed 实测值</code>（空间不足），两个前置同时成立；</li>
-      <li>真机 POST /api/torrents/{hash}/location（跨卷 + 空间不足 dst）→ 期望 <code>status=error</code> + <code>reasons[].gate == "space"</code> + 零 started 零 "迁移发起"；</li>
-      <li>主链不受影响（<code>dst.mkdir(parents=True, exist_ok=True)</code> 预建后空间充足 → PASS）；</li>
-      <li>同轮 RM04 套件 <strong>9 条全 PASS</strong>（原有 8 条 + 方案 A 补的 L488 红验 + 本次补的 L490 红验 → 全绿）；</li>
-      <li>不改产品代码、不改计划正文（RM04 计划已 Done，不需要翻回）。</li>
+      <li><strong>正向对照</strong>：<code>assert_safe_target</code> 对普通盘目录放行；<code>require_small_target</code> 因 free ≥ needed 明确拒绝并给准备指引 —— 证明入口/守卫生效，普通大容量目录不等价于真跨卷空间不足。</li>
+      <li><strong>前置实测（2026-11-03，ImDisk 96M）</strong>：<code>imdisk -l</code> → <code>\Device\ImDisk0</code>；<code>Test-Path Y:\small_target</code>=True；<code>Win32_LogicalDisk</code>：Size 100,659,200 / FreeSpace 84,054,016（80.16MiB，&lt; needed 134,217,728，差 50,163,712 字节）；卷标为空；<code>st_dev</code> Y=2787372261218981617 / D=3628948922281332713 / R=5401726539199518481（三者互异 ⇒ 真跨卷）；<code>assert_safe_target</code> 与 <code>require_small_target</code> 均放行。</li>
+      <li><strong>L490 真机端到端（本次跑通）</strong>：<code>QBT_REAL_SMALL_TARGET=Y:\small_target</code> → <code>commands run real.run -- --case RM04-05 --yes</code> → <code>1 passed, 8 deselected in 32.90s</code>。用例内六条断言全部成立：① <code>status=error</code>；② 拒绝原因含 <code>gate=space</code>；③ 该 gate 文案含「空间不足」；④ 回执零 <code>cls=started</code>；⑤ 日志「迁移发起」计数不增；⑥ 目标叶子 <code>Y:\small_target\rm04_05_space_dst_&lt;pid&gt;</code> 未建（目标卷零写入）。</li>
+      <li><strong>套件与全量</strong>：<code>commands run real.suite -- --slice RM04 --yes</code> → <code>9 passed in 199.57s</code>（主链未受影响）；<code>commands run test.full</code> → <code>4909 passed, 2 skipped, 3 warnings in 235.11s</code>。</li>
+      <li><strong>主链全过</strong>：Z: L488 负向、搬迁 started、save_path 变 dst、dst size 对齐、src 内容根 junction、穿透同 size、「已武装收尾」、成员2 setLocation、job done(reason=external)、journal phase=done。</li>
+      <li><strong>守卫测试</strong>：<code>uv run pytest tests/test_real_machine_safety.py -n 8</code> → <code>4 passed</code>，sidefx 越界 0。</li>
+      <li><strong>产品代码零改动</strong>：<code>src/</code> 零 diff；不改计划正文（RM04 计划已 Done，不需要翻回）。</li>
     </ol>
+    <p><strong>落地改动</strong>：新增 <code>tests-real/lib/small_target.py</code>（显式入口 + 硬守卫）、<code>tests/test_real_machine_safety.py</code>（隐藏卷路径复发守卫）；<code>tests-real/rm04_relocate/test_rm04_relocate.py</code> 删除 <code>_volume_roots()</code>/<code>small_volume_junction()</code>，L490 段改走 <code>small_target.require_small_target()</code> 并移到主链之后（前置缺失只红该段，不掩盖主链结果）。真机历史数字见 <a href="../testing/real-baselines/26-11-02-2243-real-RM04-05.md">真机基线 26-11-02-2243</a>（已标废弃做法）。</p>
+    <p><strong>结论</strong>：纯函数层红验 + 真机 L490 端到端均已闭环（前置 = 手动挂载 ImDisk 96M 内存盘 + <code>QBT_REAL_SMALL_TARGET</code>），issue 状态 <strong>Done</strong>。产品代码零改动；<code>src/</code> 零 diff。真机数字按口径落在基线切片（见 <code>commands run kb.baseline</code>）。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-02 12:08 — 入池，状态 <strong>Open</strong>。交接中：环境2 C盘机仅有 C: 可写卷，无法进 L490 分支；需第二可写卷 + 空间可判定的环境接手。</li>
+      <li>2026-11-02 21:54 — 用户指派认领，状态 <strong>In Progress</strong>。复验：<code>relocate_units.py:490</code> 分支原文仍在；本机（环境1）第二可写卷前置成立（D:/E:/F:/G:/H:/R: 均有可写空间），但各卷剩余均 ≥ 30GB，无法在不破坏磁盘的前提下造出「target_free &lt; needed」的真机前置。<span class="todo">（该结论已被 22:43 更正：遗漏无盘符 Recovery 小容量卷，前置实际可造）</span></li>
+      <li>2026-11-02 22:06 — 修复完成，状态 <strong>Done</strong>。改道说明：真机 L490 需「第二可写卷 + 目标剩余 &lt; needed」，本机各卷剩余均 ≥ 30GB 且非管理员，无法在不破坏磁盘的前提下造出该前置；改在纯函数闸门层 <code>evaluate_group</code> 补红验（该函数是 L490 分支判定的单一事实源）。新增 <code>test_evaluate_group_space_cross_volume_branch</code> 覆盖严格小于拒 / 恰等放行 / <code>same_volume=None</code> 保守拒 / 同卷豁免；红验（临时把 L490 的 <code>is not True</code> 改成 <code>is False</code>）令 None 分支断言转红，精确还原后产品源码 <code>git diff</code> 为空。单文件与 <code>test.full</code> 均全绿，数字见基线切片 <a href="../testing/baselines/26-11-02-2206-rm04-gate-space-crossvol-branch.md">26-11-02-2206</a>。</li>
+      <li>2026-11-02 22:43 — <strong>前提更正 + 真机验证重做</strong>，状态维持 <strong>Done</strong>。上一轮「各卷 ≥30GB ⇒ 无法造出 target_free &lt; needed」的改道理由<strong>错误</strong>（接手机是环境1，与撰写本 issue 的环境2 不是同一套；且遗漏了无盘符小容量卷）。真机构造：隐藏 Recovery 卷（free 86,564,864 字节）经 <code>mklink /J</code> 暴露为 <code>case/smallvol</code>，RM04-05 组数据抬到 2×64MiB（needed 134,217,728）→ 跨卷 + 空间不足前置成立。真机回执：<code>status=error</code> + <code>gate=space</code> + 文案「空间不足」+ 零 started + 零「迁移发起」，目标卷零写入。RM04 套件 <code>9 passed in 186.99s</code>(单跑 RM04-05 <code>1 passed in 94.55s</code>)。改动仅 tests-real RM04-05 与 issue/文档，<code>src/</code> 零 diff；数字见 <a href="../testing/real-baselines/26-11-02-2243-real-RM04-05.md">真机基线 26-11-02-2243</a>。<span class="todo">（该做法已废弃并移除；结论退回，见 23:3x 条目）</span></li>
+      <li>2026-11-02 23:3x — <strong>安全边界更正 + 显式入口落地</strong>，状态退回 <strong>In Progress</strong>。隐藏 Recovery 卷（系统恢复分区）除读空闲外任何操作均不许可，junction 指向同样不许可 —— 上一轮做法<strong>已废弃并彻底移除</strong>（<code>_volume_roots</code>/<code>small_volume_junction</code> 删除）。新增 <code>tests-real/lib/small_target.py</code>（<code>QBT_REAL_SMALL_TARGET</code> + 硬守卫）与 <code>tests/test_real_machine_safety.py</code>（源码扫描禁隐藏卷 token，4 passed）。正向对照：普通 D: 目录守卫生效但 <code>require_small_target</code> 明确拒绝（free ≥ needed），证明其不等价于真跨卷；真机重跑 RM04-05 <code>1 failed, 8 deselected in 33.09s</code>，唯一失败为 L490 段前置缺失的显式断言，主链全过。L490 真机端到端待用户准备小容量目标后复验。产品代码零改动。</li>
+      <li>2026-11-03 00:04 — <strong>ImDisk 前置调研（未完成实跑）</strong>：官方 CLI 语法/语义确认；本机 <code>imdisk</code> 2.1.1、驱动 RUNNING、AWEAlloc STOPPED。当前进程 Medium 完整性（<code>whoami /groups</code> 显示 Administrators 「Group used for deny only」，<code>IsInRole(Administrator)=False</code>）。非提权执行 <code>imdisk -a -s 96M -t vm -o fix -m Y: -p "/fs:ntfs /q /y"</code> 返回「Access Denied... You have to invoke this utility running in elevated mode」+「Created device 0: Y: -> Image in memory」+ 格式化失败，退出码仍为 0 但 <code>Test-Path Y:\</code>=False（半挂载陷阱）；已 <code>imdisk -D -m Y:</code> 清理，<code>imdisk -l</code> 回到 <code>No virtual disks.</code>。状态维持 <strong>In Progress</strong>，待用户以管理员执行挂载后继续 RM04-05 实跑。</li>
+      <li>2026-11-03 00:4x — <strong>真机复验跑通，状态 Done</strong>。用户以管理员手动挂载 ImDisk 96M 内存盘（<code>imdisk -l</code> → <code>\Device\ImDisk0</code>；Size 100,659,200 / FreeSpace 84,054,016 字节 &lt; needed 134,217,728；卷标空；<code>st_dev</code> 与 D:/R: 三者互异），<code>QBT_REAL_SMALL_TARGET=Y:\small_target</code> 下跑 RM04-05：六条断言全部成立（<code>status=error</code> / <code>gate=space</code> / 文案「空间不足」/ 零 started / 零「迁移发起」/ 目标叶子未建），<code>1 passed, 8 deselected in 32.90s</code>；RM04 套件 <code>9 passed in 199.57s</code>，主链未受影响。全量 <code>4909 passed, 2 skipped in 235.11s</code>。清洁：测试实例 36595/36596 已 <code>real.down</code> 关停，<code>Y:\small_target</code> 残留 0 项，内存盘<strong>保留挂载待用户卸载</strong>（<code>imdisk -d -m Y:</code>，失败再 <code>-D</code>）。配方改为唯一指定方式写入 <code>memory-bank/testing/real-machine.md</code> §2.9（删除小 VHD/小 U 盘备选）。产品代码零改动。</li>
     </ul>
     <h3>交叉引用</h3>
     <ul>
       <li><strong>本 issue →</strong> 根因 issue 已解决（方案 A）但留下分支覆盖缺口：<a href="26-11-02-1144-bug-rm04-gate-space-envdrift.html">26-11-02-1144</a></li>
-      <li><strong>本 issue 所属专题</strong>：<a href="..">26-11-01-2033-plan-real-machine-rm04-drift-plan.html</a>（已 Done，不再翻回）</li>
+      <li><strong>本 issue 所属专题</strong>：<a href="../plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html">26-11-01-2033-plan-real-machine-rm04-drift-plan.html</a>（已 Done，不再翻回）</li>
     </ul>
     <h3>复验 / 修复后补充</h3>
-    <p class="hint">待接手机器完成后补：接手时间 / 环境前置是否满足 / 探针实测值 / 真机套件数字 / 与建议修法不同则说明改道原因。</p>
+    <p><strong>安全边界更正（2026-11-02 23:3x，最终口径）</strong>：<strong>「隐藏 Recovery 卷 + <code>mklink /J</code>」做法已废弃并彻底移除</strong>，仅在下方「历史证据」保留证据链，不再作为推荐做法。当前只认显式入口 <code>QBT_REAL_SMALL_TARGET</code> + 硬守卫；前置缺失时断言失败并给准备指引，不静默 skip。安全构造配方见 §05。</p>
+    <p><strong>本轮重跑（显式入口，2026-11-02 23:3x）</strong>：正向对照目标 <code>D:\Projects\auto-qb-clone3\tests-real\.work\rm04_probe_target</code> —— <code>assert_safe_target</code> 放行（卷标 <code>Data</code>、free 121,580,154,880、<code>st_dev</code> 与盘符根一致），<code>require_small_target(134,217,728)</code> 明确拒绝并给准备指引。结论：<strong>普通大容量目录不等价于真跨卷空间不足</strong>，只验证入口/守卫。<code>commands run real.run --case RM04-05 --yes</code> → <code>1 failed, 8 deselected in 33.09s</code>，失败点仅 L490 段前置断言；失败前主链（Z: L488 负向、搬迁、save_path、dst size、junction、穿透、已武装收尾、成员2 setLocation、job done(external)、journal done）全部通过。</p>
+    <p><strong>写入账目（本轮实测）</strong>：RAM <code>R:\qbt-fake\rm04\rm04_05\src\rm04c5\sub\a.bin</code>/<code>b.bin</code> 峰值 134,217,728 字节；D: dst 峰值 134,217,728；D: 工作目录峰值 134,221,927（日志/元数据 4,199）；D: free 前后差 134,496,256；合计约 268,439,655 字节 ≈ 256.05MiB。清理后 <code>tests-real\.work</code> 515,662（= 运行前）、<code>.work\rm04</code> 66、<code>R:\qbt-fake\rm04</code> 0、目标目录子项 0。</p>
+    <p><strong>历史证据（2026-11-02 22:2x-22:43，已废弃）</strong>：当时用隐藏 Recovery 卷（total 587,198,464 / free 86,564,864 ≈ 82.5MiB）经 junction 造前置，探针 <code>_volume_free_resolved = 86,564,864</code>、<code>_same_volume_resolved = False</code>、<code>evaluate_group</code> 返回 <code>blocked</code>（文案「空间不足」），RM04 套件曾报 <code>9 passed in 186.99s</code>。该构造<strong>不许可再使用</strong>；且上一轮<strong>未采集该卷前后 free，无法证实「零写入」</strong>——只有「L490 在搬运前拒绝」的代码路径间接证据，不足以宣称已证实。</p>
+    <p><strong>补充覆盖（纯函数层，保留）</strong>：<code>tests/test_relocate_units.py</code> 的 <code>test_evaluate_group_space_cross_volume_branch</code> 覆盖四个判别点 —— 严格小于才拒、恰等放行、<code>same_volume=None</code> 按跨卷保守拒、同卷 rename 豁免；红验为临时把 L490 的 <code>is not True</code> 改 <code>is False</code> 令 None 分支断言转红，还原后 <code>src/</code> 零 diff。数字见 <a href="../testing/baselines/26-11-02-2206-rm04-gate-space-crossvol-branch.md">基线切片 26-11-02-2206</a>。</p>
+    <p><strong>产品代码</strong>：零改动（<code>relocate_units.py:488-492</code> 保持原文）；本轮改动面为 <code>tests-real/rm04_relocate/test_rm04_relocate.py</code>（删除隐藏卷构造函数、L490 段改显式入口并后移）、<code>tests-real/lib/small_target.py</code>（新增）、<code>tests/test_real_machine_safety.py</code>（新增）与 <code>tests/test_relocate_units.py</code>（纯函数红验）。</p>
+    <p class="hint">遗留：①L490 真机端到端仍待用户准备 <code>QBT_REAL_SMALL_TARGET</code> 后复验 —— 未准备时用例会明确红并给准备指引，不静默跳过；②本轮未做真机突变红验（改动只加断言不改产品），分支退化由纯函数层四条判别点兜住；③优先使用非破坏性小卷（小 VHD / 小 U 盘）；绝不使用 Recovery/System/EFI 卷，守卫测试已钉死。</p>
   </section>
 
   <footer>
