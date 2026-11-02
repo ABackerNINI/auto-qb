@@ -70,6 +70,20 @@
   原先默认 `tmp_path` 在非系统卷且祖先目录不带 hidden 属性, 本机 TMP=C:/AppData 下必然误红; 桩化
   `SystemDrive` 与非 `hid` 路径属性后与运行环境解耦), 详情见对应基线切片的「首跑红及处置」。
 
+- **kb.nav 置顶区折叠 + 置顶条目单击对齐主区 (2026-11-03, 专题 kb-nav-pin-zone)**: 两处交互改动都在壳
+  `nav_page.html`(数据层/服务层零改动)。①置顶专区标题行加**折叠按钮** `#pzToggle`: 原生 `button`
+  (回车/空格即触发, 不另写键位), `aria-expanded` + `aria-controls="pzBody"` + `aria-label`, 折叠箭头
+  靠 `.pinzone.collapsed` 旋转 -90° 反映状态; 收起只藏表格主体 `pzBody`, **标题行与展开入口始终可见**;
+  折叠态落 `mb-nav-pin-collapsed`(与 PINS_KEY 同款 try/catch 降级, boot 唯一装载、derive 不碰, 同 pin 坑型)。
+  应用单点 `applyPinCollapse()` 只动类 / aria / `[hidden]`, 不重建 innerHTML —— 重建会把焦点从按钮丢回 body。
+  ②置顶条目单击原先 `window.open` 原文, 与主区(打开右侧抽屉)不一致; 收成共用单点 `openRowDetail(link)`
+  (主表与置顶区的 click 委托都调它, 同一 `renderDrawer` / 同一 `sel` 高亮), 置顶件双向显示时两区同 link
+  同亮; Esc 行选择退档改扫 `#v-ledger` 下全部 `tr.sel` 覆盖双区。图钉 / 多选 / 折叠早退分支仍留在各自
+  click 委托里(不进单点)。守阵 `tests/test_kb_nav_interaction.py` +2(node 回放页内真实 JS: 折叠切换 +
+  aria 状态 + localStorage, 以及置顶行单击走 `openRowDetail` 而非 `window.open`; 合流时随 R2 测试拆分
+  从原 `tests/test_kb_nav.py` 迁入本桶), 数字见 kb.baseline;
+  `kb.nav --gen-static` 生成静态页真机验证 5 项 PASS(折叠/展开/抽屉/选中态)。
+
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,
   `kb.active` 现算); 归档阈值 14 天默认落地(`--stale-days` 可调)。W4(merge-tree 预检 + rerere)可选未做;

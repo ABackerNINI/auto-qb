@@ -13,6 +13,9 @@
   搜索索引 (2026-11-03): navSearchText() 单点 = 标题 / 专题 / issue 摘要 + 文件路径两种形态
   (link 本身含 basename, 另加 memory-bank/<link>); 台账 / 控制台频道 / 卡片墙共用, 正文不入索引
   (体积口径), 匹配统一小写并把反斜杠归一成 "/"。
+  置顶区交互 (2026-11-03): 标题行内置折叠按钮 #pzToggle (原生 button, aria-expanded / aria-controls,
+  箭头方向反映状态), 折叠态落 mb-nav-pin-collapsed 且只藏表格主体 pzBody —— 标题行与展开入口始终可见;
+  置顶条目单击与主表**共用** openRowDetail() 单点 (同一 renderDrawer, 双区同 link 同亮), 不再单开原文。
 -->
 <style>
   :root {
@@ -275,6 +278,21 @@
     margin-left: auto; font-family: var(--sans); font-size: 11px;
     letter-spacing: 0; text-transform: none; color: var(--faint);
   }
+  /* 置顶区折叠按钮: 标题行内置, 箭头朝下 = 展开 / 朝右 = 收起 (类 collapsed 驱动旋转);
+     原生 button, 回车 / 空格触发 (不另写键位处理)。只用类 + aria + [hidden], 见 applyPinCollapse */
+  .pztoggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px; padding: 0; flex: none;
+    border: none; background: none; cursor: pointer; color: var(--cyan); border-radius: 3px;
+  }
+  .pztoggle:hover { background: var(--cyan-soft); }
+  .pztoggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 1px; }
+  .pztoggle svg {
+    width: 13px; height: 13px; display: block; fill: none; stroke: currentColor;
+    stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+    transition: transform .15s ease;
+  }
+  .pinzone.collapsed .pztoggle svg { transform: rotate(-90deg); }
   /* 专区表头: 跟着 .pzhead (高 28px) 之下粘住。底色跟主表表头同一枚 --chrome (2026-10-05 对齐) ——
      原先用 --paper-3 是想"与主表表头的 bg 区分", 但那让两个**同款表头**长得不一样; 现在两处一致,
      纵向由 .pinzone 的 border-bottom 分隔。顺带把专区表头从 --paper-2 的专区底上抬起来
@@ -744,6 +762,7 @@ const TYPES = ["bug", "perf", "docs", "test", "refactor", "feat", "chore", "ques
 const ACTIVE_ST = new Set(["Open", "In Progress"]);
 const VIEW_KEY = "mb-nav-view";
 const PINS_KEY = "mb-nav-pins";
+const PIN_COLLAPSE_KEY = "mb-nav-pin-collapsed";   // 置顶区折叠态 (纯前端偏好, 同 PINS_KEY): "1" = 收起
 const HIDDEN_KEY = "mb-nav-hidden";   // 隐藏条目 (纯前端偏好, 同 pin): 隐藏区数据落点
 const FILTERS_KEY = "mb-nav-filters";   // 筛选器 / 选择类状态 (纯前端偏好, 刷新后不丢)
 const SORT_KEYS = ["stamp", "form", "status", "topic"];
@@ -752,6 +771,8 @@ const PULL_HEADER = "X-Nav-Action";   // 拉取的 CSRF 自定义头: 跨站 fet
 const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17v5M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></svg>';
 /* 恢复 (unhide) 图标 = 逆时针回转, 内联 SVG 同图钉口径 */
 const UNHIDE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>';
+/* 折叠箭头 (置顶区标题行): 朝下 = 展开; 收起态靠 CSS 旋转 -90 度朝右 (状态可见) */
+const CHEV_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
 
 let DATA = null;
 let byLink = new Map();      // link -> item
@@ -775,6 +796,9 @@ const S = {
   /* 置顶 (pin): 纯前端偏好, 数组顺序即置顶序 (最近 pin 的在前)。只在 boot() 装载一次,
      derive() 永不触碰 —— 否则 30s 轮询会把 pin 洗掉 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。 */
   pins: [],
+  /* 置顶区折叠态: 纯前端偏好, 落 PIN_COLLAPSE_KEY (同 PINS_KEY 口径) —— 只在 boot() 装载一次,
+     derive() 不碰; 收起时只藏表格主体, 标题行与展开入口始终可见 (2026-11-03 用户要求)。 */
+  pinCollapsed: false,
   /* 隐藏 (hide): 纯前端偏好, 同 pin —— 只在 boot() 装载一次, derive() 只读 (把隐藏条目挡在
      各视图之外) 绝不写, 否则 30s 轮询会洗掉用户的隐藏 (坑见 pitfalls/web-ui/poll-reseed-filter.md)。
      showHidden = 隐藏区展开开关, 会话态不落盘 (需求口径: 点按钮才能查看)。 */
@@ -805,6 +829,26 @@ function loadPins() {
   } catch (e) { return []; }
 }
 function savePins() { try { localStorage.setItem(PINS_KEY, JSON.stringify(S.pins)); } catch (e) { /* file:// 下静默降级为会话内存态 */ } }
+/* 置顶区折叠态: 与 PINS_KEY 同款纯前端偏好, 读写一律 try/catch 兜底 (file:// 下降级为会话内存态);
+   装载点全壳唯一 (boot), derive 不碰 —— 否则 30s 轮询会把用户收起的置顶区又展开 */
+function loadPinCollapsed() {
+  try { return localStorage.getItem(PIN_COLLAPSE_KEY) === "1"; } catch (e) { return false; }
+}
+function savePinCollapsed() { try { localStorage.setItem(PIN_COLLAPSE_KEY, S.pinCollapsed ? "1" : "0"); } catch (e) { /* 静默降级 */ } }
+/* 折叠应用单点: 渲染末尾与按钮点击共用; 只动类 / aria-expanded / [hidden], **不整表重渲染**
+   —— 重建 innerHTML 会把焦点从按钮丢回 body, 键盘用户点完就掉了焦点; 箭头方向由 .collapsed 类驱动 */
+function applyPinCollapse() {
+  const zone = $("pinZone"), btn = $("pzToggle"), body = $("pzBody");
+  if (!zone) return;
+  zone.classList.toggle("collapsed", !!S.pinCollapsed);
+  if (btn) btn.setAttribute("aria-expanded", S.pinCollapsed ? "false" : "true");
+  if (body) body.hidden = !!S.pinCollapsed;
+}
+function togglePinCollapsed() {
+  S.pinCollapsed = !S.pinCollapsed;
+  savePinCollapsed();
+  applyPinCollapse();
+}
 const isPinned = link => S.pins.includes(link);
 function togglePin(link) {
   const at = S.pins.indexOf(link);
@@ -1169,11 +1213,15 @@ function renderPinZone() {
   const head = thead ? thead.outerHTML : "";
   const ms = multiSet();
   zone.innerHTML =
-    '<div class="pzhead">置顶 · PINNED <b>(' + items.length + ")</b>" +
-    '<span class="pzhint">点图钉取消 · 点行打开原文</span></div>' +
-    '<table class="pztable">' + head + "<tbody>" +
+    '<div class="pzhead">' +
+    '<button class="pztoggle" id="pzToggle" type="button" aria-expanded="' + (S.pinCollapsed ? "false" : "true") +
+    '" aria-controls="pzBody" aria-label="展开 / 收起置顶区" title="展开 / 收起置顶区">' + CHEV_SVG + "</button>" +
+    "置顶 · PINNED <b>(" + items.length + ")</b>" +
+    '<span class="pzhint">点图钉取消 · 点行看详情</span></div>' +
+    '<div class="pzbody" id="pzBody"><table class="pztable">' + head + "<tbody>" +
     items.map(i => `<tr class="pin-row${ms.has(i.link) ? " msel" : ""}" data-link="${esc(i.link)}">${ledgerCells(i, 0, true)}</tr>`).join("") +
-    "</tbody></table>";
+    "</tbody></table></div>";
+  applyPinCollapse();
 }
 
 /* 隐藏区: 与置顶专区同构 (克隆主表 thead + 行复用 ledgerCells hidMark 路径), 但默认折叠 ——
@@ -1198,6 +1246,16 @@ function renderHiddenZone() {
     "</tbody></table>";
 }
 
+/* 明细打开单点 (主表与置顶专区共用): 普通单击 = 单选高亮 + 右侧抽屉, 同一套 renderDrawer;
+   置顶件双向显示, 两区同 link 的行都挂 sel。图钉 / 多选早退分支留在各自 click 委托里 (不在这里) */
+function openRowDetail(link) {
+  S.sel = link;
+  document.querySelectorAll("#aRows tr.sel, #pinZone tr.sel").forEach(r => r.classList.remove("sel"));
+  document.querySelectorAll("#aRows tr[data-link], #pinZone tbody tr[data-link]").forEach(r => {
+    if (r.dataset.link === link) r.classList.add("sel");
+  });
+  renderDrawer(link);
+}
 function renderDrawer(link) {
   const i = byLink.get(link);
   if (!i) return;
@@ -1522,10 +1580,7 @@ function wire() {
     if (e.ctrlKey || e.metaKey) { toggleMulti(tr.dataset.link); return; }
     if (e.shiftKey) { e.preventDefault(); shiftMulti(tr.dataset.link); return; }
     S.multiAnchor = tr.dataset.link;   /* 普通点击落锚点 (auto-qb 键鼠衔接口径), 不动 S.multi */
-    S.sel = tr.dataset.link;
-    $("aRows").querySelectorAll("tr.sel").forEach(r => r.classList.remove("sel"));
-    tr.classList.add("sel");
-    renderDrawer(S.sel);
+    openRowDetail(tr.dataset.link);    /* 单选高亮 + 抽屉: 与置顶区共用同一单点 */
   });
   $("aRows").addEventListener("contextmenu", e => {
     const tr = e.target.closest("tr");
@@ -1535,15 +1590,18 @@ function wire() {
   });
   /* 置顶专区: 委托点击 (图钉取消 / 条目打开) 与右键 —— 与主表行同款交互 */
   $("pinZone").addEventListener("click", e => {
+    const tb = e.target.closest(".pztoggle");
+    if (tb) { togglePinCollapsed(); return; }   /* 折叠 = 只切置顶区可见性, 不动选区 / 抽屉 */
     const pb = e.target.closest(".pinbtn");
-    if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 图钉 = 取消置顶, 免得冒泡又开原文 */
+    if (pb) { togglePin(pb.dataset.pin); return; }   /* 早退: 图钉 = 取消置顶, 免得冒泡又开抽屉 */
     const row = e.target.closest("tr.pin-row");
     if (!row) return;
     /* 多选手势 (拍板 D2: 置顶区纳入) 与主表同款; Shift 区间按主表可见序解析 (置顶件双向显示) */
     if (e.ctrlKey || e.metaKey) { toggleMulti(row.dataset.link); return; }
     if (e.shiftKey) { e.preventDefault(); shiftMulti(row.dataset.link); return; }
     S.multiAnchor = row.dataset.link;
-    window.open(MB + row.dataset.link, "_blank");
+    /* 普通单击与主表一致: 走同一个 openRowDetail (同 renderDrawer / 同选中高亮), 不再单开原文 */
+    openRowDetail(row.dataset.link);
   });
   $("pinZone").addEventListener("contextmenu", e => {
     const row = e.target.closest("tr.pin-row");
@@ -1602,7 +1660,7 @@ function wire() {
     const drawer = $("drawer");
     if (drawer.classList.contains("open")) { S.sel = null; closeDrawer(); return; }  // z-30 详情抽屉: 清选择 + 收
     if (S.multi.length) { clearMulti(); return; }   // 多选档 (计划 26-10-31-0143, 拍板 D9): 收完浮层再退选区
-    const selRows = $("aRows").querySelectorAll("tr.sel");
+    const selRows = $("v-ledger").querySelectorAll("tr.sel");   /* 主表 + 置顶专区两处行选择 (同 link 双区同亮) */
     if (selRows.length) { selRows.forEach(r => r.classList.remove("sel")); return; }  // 行选择退档
     const inInput = !!e.target.closest("input, textarea, select");
     if (S.view === "console" && !inInput && (S.openRows.size || S.selTopic)) {
@@ -1764,6 +1822,7 @@ function boot() {
   wire();
   if (STATIC_MODE || location.protocol === "file:") $("pullBtn").hidden = true;   /* 静态 / file 模式无服务端可拉 */
   S.pins = loadPins();   /* 全壳唯一装载点 (derive 绝不触碰): 守阵 test_pin_state_not_reseeded_by_derive */
+  S.pinCollapsed = loadPinCollapsed();   /* 折叠态同款: 全壳唯一装载点 (derive 不碰) */
   S.hidden = loadHidden();   /* 隐藏同款: 全壳唯一装载点 (derive 只读不写), 守阵 test_hidden_state_not_reseeded_by_derive */
   S.view = loadView();
   restoreFilters();      /* 全壳唯一装载点 (derive 绝不触碰): 刷新后筛选器不丢 */

@@ -49,6 +49,8 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_batch_actions_idempotent: 批量 pin/hide 幂等 (every 动态方向 / 过滤已达态 / 落盘链不绕开) + 批量隐藏剪出选区
 - test_multiselect_chrome_and_escapes: 顶栏已选N chip ([hidden] 兜底/点击清空) + Esc 退栈末档清多选 (序在 drawer 后 sel 前) + setView 清空 + Ctrl+A 台账非输入态全选
 - test_batch_copy_paths_and_open_links: copyText 双链路降级 + 批量复制每行一个按可见序 + 打开 >5 confirm 走 MB 路由
+- test_pin_zone_collapse_toggle: 置顶区标题行的折叠按钮 (原生 button / aria-expanded + aria-controls / 折叠箭头方向) 切换置顶区主体可见性并持久化 (node 回放真实 JS)
+- test_pin_row_click_opens_drawer_via_shared_path: 置顶区条目单击与主表共用同一 openRowDetail 单点 (同 renderDrawer / 同 sel 高亮), 不再单开原文
 """
 
 from __future__ import annotations
@@ -368,3 +370,130 @@ def test_batch_copy_paths_and_open_links() -> None:
     assert "window.open(MB + l" in o, "打开须走 MB 前缀路由 (file:// 与 http 双模式)"
     assert "if (!window.open(" in o and "blocked" in o, "缺弹窗拦截检测 (open 返回 null 须记账)"
     assert "showError(" in o and "Esc" in o, "拦截须走 showError 提醒引导允许弹窗 (静默失效 = 2026-10-31 验收反馈)"
+
+
+# --------------------------------------------------------------------------- 置顶区交互 (折叠 / 单击)
+
+
+def test_pin_zone_collapse_toggle(tmp_path) -> None:
+    """2026-11-03 用户要求: 置顶区标题旁加折叠 / 展开控件 —— 收起后标题行与展开入口仍可见
+    (箭头方向随 .collapsed 旋转), 且折叠只动置顶区**主体**, 不重渲染整表 (重建 innerHTML 会把
+    键盘焦点从按钮丢回 body)。状态按仓库既有做法落 localStorage (同 PINS_KEY 口径, try/catch
+    兜底; boot 唯一装载点, derive 不碰 —— 否则 30s 轮询会把用户收起的区又展开)。
+    按钮为原生 <button>: 可聚焦, 回车 / 空格原生触发 click, 无障碍态走 aria-expanded + aria-controls。
+    JS 用 node 回放真实函数体 (applyPinCollapse / togglePinCollapsed / savePinCollapsed)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    assert 'const PIN_COLLAPSE_KEY = "mb-nav-pin-collapsed"' in text, "缺折叠态存储键常量"
+    assert "pinCollapsed: false" in text, "S 缺 pinCollapsed 会话 / 持久状态字段"
+    assert "function loadPinCollapsed" in text and "function savePinCollapsed" in text, "缺折叠态存 / 读函数"
+    assert "function applyPinCollapse" in text and "function togglePinCollapsed" in text, "缺折叠应用 / 切换单点"
+
+    btn = re.search(r'<button class="pztoggle" id="pzToggle".*?>', text, re.S)
+    assert btn, "置顶区标题行缺折叠按钮 #pzToggle"
+    markup = btn.group(0)
+    assert 'type="button"' in markup, "折叠控件必须是原生 button (可聚焦, 回车 / 空格可触发)"
+    assert 'aria-expanded="' in markup and 'aria-controls="pzBody"' in markup, "缺无障碍展开态 / 受控区属性"
+    assert "aria-label=" in markup, "图标按钮缺无障碍名称"
+    css = _shell_css()
+    assert ".pinzone.collapsed .pztoggle svg" in css, "收起态缺箭头方向变化 (状态须可见)"
+    assert ".pztoggle:focus-visible" in css, "折叠按钮缺键盘焦点可见样式"
+
+    zone = re.search(r"function renderPinZone\(\) \{(.*?)\n\}", text, re.S)
+    assert zone and "applyPinCollapse()" in zone.group(1), "渲染末尾必须应用折叠态 (轮询重画后仍收起)"
+    assert 'id="pzBody"' in zone.group(1), "置顶区主体缺受控容器 #pzBody (aria-controls 目标)"
+    click = re.search(r'\$\("pinZone"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert click and "togglePinCollapsed()" in click.group(1), "折叠按钮点击未接切换单点 (委托里缺早退分支)"
+
+    boot = re.search(r"function boot\(\) \{(.*?)\n\}", text, re.S)
+    assert boot and boot.group(1).count("S.pinCollapsed = loadPinCollapsed()") == 1, (
+        "折叠态装载点必须全壳唯一 (只在 boot 装载一次, 否则刷新即丢)"
+    )
+    derive = re.search(r"function derive\(\) \{(.*?)\n\}", text, re.S)
+    assert derive and "pinCollapsed" not in derive.group(1), "derive() 碰折叠态 = 30s 轮询把收起洗掉"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    apply_body = re.search(r"function applyPinCollapse\(\) \{(.*?)\n\}", text, re.S)
+    toggle_body = re.search(r"function togglePinCollapsed\(\) \{(.*?)\n\}", text, re.S)
+    save_src = next((ln for ln in text.splitlines() if ln.startswith("function savePinCollapsed()")), None)
+    assert apply_body and toggle_body and save_src, "折叠函数结构搬家要同步本守阵"
+    key = re.search(r'const PIN_COLLAPSE_KEY = "(.*?)";', text).group(1)
+    probe = tmp_path / "pin_collapse_probe.js"
+    probe.write_text(
+        "const PIN_COLLAPSE_KEY = " + json.dumps(key) + ";\n"
+        "const store = {};\n"
+        "const localStorage = { getItem: k => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };\n"
+        "const S = { pinCollapsed: false };\n"
+        "const cls = new Set();\n"
+        "const zone = { hidden: false, classList: { toggle: (n, on) => { if (on) cls.add(n); else cls.delete(n); }, "
+        "contains: n => cls.has(n) } };\n"
+        "const btn = { attrs: {}, setAttribute(k, v) { this.attrs[k] = String(v); } };\n"
+        "const bodyEl = { hidden: false };\n"
+        "const els = { pinZone: zone, pzToggle: btn, pzBody: bodyEl };\n"
+        "function $(id) { return els[id]; }\n"
+        "function applyPinCollapse() {" + apply_body.group(1) + "\n}\n" + save_src + "\n"
+        "function togglePinCollapsed() {" + toggle_body.group(1) + "\n}\n"
+        "const snap = () => [zone.classList.contains('collapsed'), btn.attrs['aria-expanded'], bodyEl.hidden, "
+        "String(store[PIN_COLLAPSE_KEY])].join(',');\n"
+        "applyPinCollapse();\n"
+        "console.log('init=' + snap());\n"
+        "togglePinCollapsed();\n"
+        "console.log('after1=' + snap());\n"
+        "togglePinCollapsed();\n"
+        "console.log('after2=' + snap());\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    assert got.get("init") == "false,true,false,undefined", f"初始应为展开态: {got}"
+    assert got.get("after1") == "true,false,true,1", f"首次点击应收起且落盘: {got}"
+    assert got.get("after2") == "false,true,false,0", f"再次点击应展开且落盘: {got}"
+
+
+def test_pin_row_click_opens_drawer_via_shared_path(tmp_path) -> None:
+    """2026-11-03 用户要求: 置顶区条目单击与主区对齐 —— 打开右侧抽屉, 且**复用**同一套详情渲染 /
+    打开逻辑 (openRowDetail -> renderDrawer), 不再各写一份。node 回放真实 openRowDetail 函数体,
+    断言同一 link 在双区都挂 sel, 且抽屉渲染函数被同一个入参调用。"""
+    text = SHELL.read_text(encoding="utf-8")
+    shared = re.search(r"function openRowDetail\(link\) \{(.*?)\n\}", text, re.S)
+    assert shared, "缺明细打开单点 openRowDetail (主表与置顶区必须共用)"
+    body = shared.group(1)
+    assert "S.sel = link" in body and "renderDrawer(link)" in body, "单点必须改 S.sel 并调 renderDrawer"
+    assert body.count("renderDrawer(") == 1, "抽屉渲染只许调用一次 (不另写第二套打开逻辑)"
+
+    main = re.search(r'\$\("aRows"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    zone = re.search(r'\$\("pinZone"\)\.addEventListener\("click", e => \{(.*?)\n  \}\);', text, re.S)
+    assert main and "openRowDetail(tr.dataset.link)" in main.group(1), "主表单击未走共用单点"
+    assert zone and "openRowDetail(row.dataset.link)" in zone.group(1), "置顶区单击未走共用单点"
+    assert "window.open(MB + row.dataset.link" not in zone.group(1), "置顶区仍残留旧的「单击直开原文」路径"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    probe = tmp_path / "pin_row_probe.js"
+    probe.write_text(
+        "const mkRow = link => { const s = new Set(); return { dataset: { link }, classList: { "
+        "add: n => s.add(n), remove: n => s.delete(n), contains: n => s.has(n) } }; };\n"
+        "const rows = ['a.md', 'b.md'].map(mkRow);\n"
+        "rows[0].classList.add('sel');\n"
+        "const document = { querySelectorAll: sel => sel.includes('tr.sel') "
+        "? rows.filter(r => r.classList.contains('sel')) : rows.slice() };\n"
+        "const drawer = [];\n"
+        "function renderDrawer(link) { drawer.push(link); }\n"
+        "const S = { sel: null };\n"
+        "function openRowDetail(link) {" + body + "\n}\n"
+        "openRowDetail('b.md');\n"
+        "console.log('sel=' + S.sel);\n"
+        "console.log('drawer=' + drawer.join(','));\n"
+        "console.log('a=' + rows[0].classList.contains('sel'));\n"
+        "console.log('b=' + rows[1].classList.contains('sel'));\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    assert got.get("sel") == "b.md", f"S.sel 未指向被点条目: {got}"
+    assert got.get("drawer") == "b.md", f"抽屉未走 renderDrawer 同一条路径: {got}"
+    assert got.get("a") == "false" and got.get("b") == "true", f"双区 sel 高亮未同步: {got}"
