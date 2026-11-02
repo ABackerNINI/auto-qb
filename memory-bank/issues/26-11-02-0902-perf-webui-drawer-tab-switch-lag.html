@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-02-0902">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-large-filelist-perf">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/issues/26-11-02-0902-perf-webui-first-visit-rowh-measure.html, memory-bank/tasks/26-11-02-webui-large-filelist-perf.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="种子详情面板页签切换卡 1-2 秒">
 <meta name="issue-summary" content="抽屉内页签(general/content 等)切换在 3000 种子规模下卡 1-2 秒; 疑与切页触发窗口/行高作废或内容变体全量装配相关, 待查">
 <title>种子详情面板页签切换卡 1-2 秒 · perf · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-02-0902-perf-webui-drawer-tab-switch-lag</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 09:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -151,7 +151,7 @@ content 页签首开: 5809ms → 修复后 374ms(设计内: 千文件量齐轮)
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查。已排除: ①残留遮罩/指针拦截(同轮 elementFromPoint 前後对照干净, 且"能滚不能点"已证为主线程饥饿); ②关抽屉假 bump 路径(已在同轮修复, 本条在抽屉已打开状态下切换页签)。</div>
+    <div class="callout">结论（2026-11-02 21:0x）：与 <a href="26-11-02-0902-perf-webui-first-visit-rowh-measure.html">首访行高测量 issue</a> 同源 —— 报告时「行高未量齐前必须先全量渲染再逐行 gBR 量齐」的冷启动路径在 3000 行档单发 2s 量级（同桩 A/B 实测 <code>_measureRowH</code> 2086.9ms / longtask [4639ms, 2028ms]）；<code>5e351c4b</code> 改为直接估算开窗后该路径消失（首访 30 行 / 20.4ms / 0 longtask），页签切换回到 31-77ms 首帧。<br>已排除（原轮）：①残留遮罩/指针拦截(同轮 elementFromPoint 前后对照干净, 且"能滚不能点"已证为主线程饥饿); ②关抽屉假 bump 路径(已在同轮修复, 本条在抽屉已打开状态下切换页签)。</div>
   </section>
 
   <section id="s6">
@@ -164,11 +164,25 @@ content 页签首开: 5809ms → 修复后 374ms(设计内: 千文件量齐轮)
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-02 09:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 12:0x — 认领复验（HEAD b357948e，同轮七组配置面取证 42+ 次切换）：本机 Playwright 复现不出 1-2s，状态 <strong>In Progress</strong>；按防过期原则挂起，等另一条 issue（首访行高测量）落地后同桩复测</li>
+      <li>2026-11-02 20:3x — 对方 <code>5e351c4b</code>（首访估算开窗阈值 1000→200）合入；<strong>状态绘制被此前一轮误置 Done 的结论已作废</strong>，本行以本文件当前内容为准</li>
+      <li>2026-11-02 21:0x — 同步到 e8d6279c 后同桩复测（干净端口 8157）：页签切换回落到 31-77ms 首帧、0 longtask，状态 <strong>Done</strong>（随 <code>5e351c4b</code> 解决，非本 issue 独立修复）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>复验：2026-11-02 20:5x-21:0x 已消失</b>（HEAD <code>e8d6279c</code>，含 <code>5e351c4b</code>）。环境：新起桩 <code>uv run python scripts/ui_harness.py --torrents 3000 --port 8157</code>（3000 种子 / 200 组 / 每种子 2 文件），<strong>不复用 8155</strong>（旧进程，不能作复测依据）；Playwright 真实鼠标双击种子行开抽屉，再按 内容→用户→Tracker→常规 连续 12 次切页签，每轮 3 遍、双皮肤各一轮。</p>
+    <table>
+      <tr><th>轮次</th><th>皮肤/模式</th><th>切页签首帧(raf2)</th><th>Layout / Style / Script</th><th>切换期 longtask</th></tr>
+      <tr><td>R-a</td><td>atlas · headless · 不节流</td><td>31.4-52.0ms</td><td>1.1-18.2 / 3.7-9.1 / 2.6-5.8ms</td><td>0</td></tr>
+      <tr><td>R-b</td><td>prism · headless · 不节流</td><td>36.2-47.7ms</td><td>1.4-10.0 / 3.9-7.0 / 2.9-3.9ms</td><td>0</td></tr>
+      <tr><td>R-c</td><td>atlas · groups 视图(展开组→双击成员行)</td><td>32.3-77.0ms</td><td>—</td><td>0</td></tr>
+      <tr><td>R-d</td><td>atlas · headed(1920x1080)</td><td>31.3-56.2ms</td><td>—</td><td>0</td></tr>
+      <tr><td>R-e</td><td>atlas · CPU 4x 节流</td><td>70.2-389ms</td><td>13.9-149 / 45.9-67.8 / 37.7-60.9ms</td><td>窗内 50-237ms 多次（含后台轮询），单次切换无 1-2s</td></tr>
+    </table>
+    <p>同步 JS（<code>drawerTab</code> 入口）1.1-5.1ms；首帧可见（raf2）31-77ms，与主表切页 61-96ms 同量级，满足 §06 判据。页面加载期唯一的 longtask 为 89-98ms（首访开窗，非切换路径）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（非本 issue 独立修复）</b>：由 <code>5e351c4b</code>「WEBUI 首访估算开窗阈值下调至 200」解决 —— 该提交把「量齐前行高前必须全量渲染」的冷启动分支改为<strong>直接估算开窗</strong>（<code>ROW_WIN_EST_MIN=200</code>，与 <code>ROW_WIN_MIN</code> 合并），并把未量行兜底从「当前窗口均值」改为<code>_rowHAvgOf</code>全局均值。改动文件：<code>shared/app.js</code>（阈值 + 注释）、<code>shared/columns.js</code>（<code>_measureRowH</code> / <code>_rowWindow</code> / 新增 <code>_rowHAvgOf</code>）、<code>shared/lifecycle.js</code>（<code>_winMeasured</code> 注释口径）。</p>
+    <p><b>A/B 量化证据（同桩 8157，atlas，headless）</b>：修复前路径（页内 monkey-patch 强制「量齐前全量渲染」，不改仓库代码）一次 3000 行：渲染 3000 行 + <code>_measureRowH</code> 单发 <strong>2086.9ms</strong>，longtask <strong>[4639ms, 2028ms]</strong>；当前 HEAD 首访只渲染 30 行，<code>_measureRowH</code> <strong>20.4ms</strong>、0 longtask。1-2s 量级的唯一路径就是这条，与报告现象一致。</p>
+    <p><b>证据边界</b>：报告者当时会话（08:5x）跑在修复前代码上，session 里的「每次切页签都卡」未被逐次录样；本轮只证明「当前 HEAD 同桩同路径不再复现」+「被移除的冷启动路径确为 1-2s 量级」。二者是关联证据，不是同一 session 的因果直证。</p>
   </section>
 
   <footer>

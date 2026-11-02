@@ -5,7 +5,7 @@
 **Updated:** 2026-11-02
 **Summary:** WEBUI 千级文件列表卡顿统一优化: 调研报告取证根因 R1-R6 → 计划 26-11-02-0351 拆 W1-W6 → 串行子智能体实施 W1(记忆化/廉价sig/content-visibility)+W2(kind 描述符参数化)+W3(抽屉挂窗)+W4(千级验收矩阵 8/8)+W5(主表 3000 种子复测全绿), 千级常驻 DOM 1001→45-48 行、交互 longtask 归零; 全量 4824 过/覆盖率 99.00% (基线 26-11-02-0707); 首访量齐 issue 26-11-02-0902 已修(Done, 千级估算开窗+渐进量齐)并二轮调优(阈值 200 与 ROW_WIN_MIN 合并、精确冷启动档消失, 空档1 首访路径指纹/空档2 单测边界判据补齐并负向验证, 数字见 kb.baseline 最新切片); W6(P3 可选)与真机轨待用户拍板/token
 **Topics:** webui-large-filelist-perf
-**Refs:** memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/testing/baselines/26-11-02-0707-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-first-visit-rowh-measure.html, memory-bank/pitfalls/web-ui/est-cold-start-vs-absolute-threshold.md, memory-bank/testing/baselines/26-11-02-1129-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-1248-webui-large-filelist-perf.md
+**Refs:** memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/testing/baselines/26-11-02-0707-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-first-visit-rowh-measure.html, memory-bank/pitfalls/web-ui/est-cold-start-vs-absolute-threshold.md, memory-bank/testing/baselines/26-11-02-1129-webui-large-filelist-perf.md, memory-bank/testing/baselines/26-11-02-1248-webui-large-filelist-perf.md, memory-bank/issues/26-11-02-0902-perf-webui-drawer-tab-switch-lag.html
 
 ## 原始请求
 
@@ -59,3 +59,7 @@
 - 2026-11-02 11:25 认领并修复 issue 26-11-02-0902: 千级首访估算开窗+渐进量齐(ROW_WIN_EST_MIN 1000 / _rowHAvgOf 全局均值), 3000 行首访 longtask 8432ms→97ms、gBR 3310→55 次; perf.spec 千级档判据分档(粗界/不塌陷), 3000 档 10 passed; 新增坑档 est-cold-start-vs-absolute-threshold; 工作区未入库(用户未授权)
 
 - 2026-11-02 12:51 阈值二轮调优 1000→200(拐点实测 250ms 线落 150~200 之间, 与 ROW_WIN_MIN 合并); 空档1 首访路径指纹用例+空档2 单测边界断言补齐并双负向验证; 滚到底估算档改按比例禁塌陷; e2e 199/200/300 三档+test.full 全绿, 基线 26-11-02-1248
+
+- 2026-11-02 21:0x 复测 issue 26-11-02-0902(抽屉页签切换卡 1-2s, 等 5e351c4b 合入后按用户要求重测): 同步到 e8d6279c; 干净端口 8157 新起 3000 种子桩(不复用 8155); 真实鼠标开抽屉+12 次切页签, atlas/prism 双皮肤、headless/headed/CPU4x 五轮 —— 切页签首帧 31-77ms、Layout 1.1-18.2ms、Style 3.7-9.1ms、Script 2.6-5.8ms、切换期 0 longtask(4x 下 70-389ms 仍无 1-2s)。同桩 A/B(页内强制"量齐前全量渲染"): 3000 行单发 _measureRowH 2086.9ms / longtask [4639ms, 2028ms], 修复后首访 30 行/20.4ms/0 longtask —— 结论: 随 5e351c4b 解决, issue 置 Done(关联对方提交, 非本条独立修复); 证据边界=报告者 session 未逐次录样, 属关联证据
+
+- 2026-11-02 21:28 复测 drawer-tab-switch-lag: 同步 e8d6279c, 对照对方 5e351c4b 首访估算开窗, 同桩同路径不复现(31-77ms/0 longtask), issue 置 Done
