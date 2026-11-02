@@ -51,6 +51,7 @@ worker 的同族用例占住, 候选轮换是特性而非碰撞。
 - test_runtime_non_loopback_pairing_full_flow
 - test_start_all_busy_returns_false_and_retries
 - test_start_binds_first_free_candidate
+- test_startup_log_separates_endpoint_url: 发现端点启动日志的 URL 后必须有空白(编辑器点击不吞括号)
 - test_stop_is_idempotent_and_releases
 - test_wildcard_host_uses_request_host
 """
@@ -389,6 +390,19 @@ def test_start_binds_first_free_candidate():
         srv.stop()
         for s in holds:
             s.close()
+
+
+def test_startup_log_separates_endpoint_url(caplog):
+    """启动日志: 发现端点 URL 后必须有空格, 否则 `(候选 ..., 实绑 ...)` 会被吞进 URL"""
+    base = _free_port()
+    srv = make_discovery(port=base)
+    caplog.set_level(logging.INFO, logger="auto_qb.hr.discovery")
+    assert srv.start() is True
+    try:
+        line = next(r.getMessage() for r in caplog.records if "发现端点已启动" in r.getMessage())
+        assert f"http://{srv.host}:{srv.bound_port} (候选" in line, line
+    finally:
+        srv.stop()
 
 
 def test_start_all_busy_returns_false_and_retries():

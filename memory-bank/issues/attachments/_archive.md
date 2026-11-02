@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (62)
+## Open (63)
 
+- [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
 - [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — relocate_units.py:490 GATE_SPACE elif 分支(target_free < needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED

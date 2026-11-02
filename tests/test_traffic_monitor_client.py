@@ -7,6 +7,8 @@
   -> 不订阅(首行闸), _pass 不发任何控制面请求; 开回来自动恢复
 - test_endpoint_is_loopback_notify_path: 登记给工具的回调 endpoint = 本机回环 + 本实例端口 + 通知路径
 - test_register_stores_id_and_heartbeat_interval: 探活通过 -> 注册成功, 记住工具给的订阅 id 与心跳周期, 载荷带回调 endpoint 与回调凭证
+- test_register_log_separates_urls_from_text: 订阅注册日志的两个 URL 后必须有空白/行尾(样例那条, 防编辑器点击吞后文)
+- test_unreachable_message_separates_url: 工具不可达文案中 URL 后必须有空白(不把尾部括号吞进 URL)
 - test_registered_pass_only_heartbeats: 已注册且注册键未变 -> 只心跳, 不重复注册
 - test_reg_key_change_reregisters: 端口变化(注册键之一) -> 先注销旧 id 再按新键注册
 - test_heartbeat_unknown_id_reregisters: 工具回 404(注册表丢了 / 租约过期) -> 本轮立刻重新注册
@@ -48,6 +50,7 @@
 import io
 import json
 import logging
+import re
 import threading
 import time
 from datetime import date
@@ -90,6 +93,18 @@ def _pc(period: str, up=None, down=None) -> PeriodCurve:
 def _sub_threads():
     """存活的订阅线程; stop / 自行收线之后应为空"""
     return [t for t in threading.enumerate() if t.name == "auto-qb-gtm-sub"]
+
+
+#: URL 字符集(不含 `)` `(` 等粘连字符; 末尾标点由 _url_tails 剥掉)
+_URL_RE = re.compile(r"https?://[A-Za-z0-9\-._~:/?#\[\]@!$&'*+,;=%]+")
+
+
+def _url_tails(text):
+    """(url, 后随字符) 对: 剥掉 URL 末尾标点, 让 `;` / `)` 这类粘连字符显形"""
+    for m in _URL_RE.finditer(text):
+        url = m.group(0).rstrip(".,;:)]}'\"")
+        pos = m.start() + len(url)
+        yield url, (text[pos] if pos < len(text) else "")
 
 
 class _LogCapture:
@@ -237,6 +252,31 @@ def test_register_stores_id_and_heartbeat_interval(sub_env):
     assert payload[_CALLBACK_KEY] == getattr(mgr.web, _CRED_FIELD)
     assert sub._sub_id == "sub-1"
     assert sub._heartbeat_s == 60.0
+
+
+def test_register_log_separates_urls_from_text(sub_env):
+    """样例那条: 两个 URL 后都必须有空白/行尾, 否则 VS Code 点击会吞掉「(心跳」"""
+    _mgr, sub, _tool = sub_env
+    with _LogCapture("auto_qb.webui.tool_client") as buf:
+        sub._pass()
+    line = next(l for l in buf.getvalue().splitlines() if "订阅已注册" in l)
+    assert "-> http://127.0.0.1:8080" in line and "工具 http://127.0.0.1:8099" in line, line
+    for url, tail in _url_tails(line):
+        assert tail == "" or tail.isspace(), f"URL 后粘连了 {tail!r}: {line}"
+
+
+def test_unreachable_message_separates_url(monkeypatch):
+    """工具不可达文案: URL 后必须是空白, 不把尾部 `)` 吞进 URL"""
+    def _refuse(*_args, **_kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(tool_client.urllib.request, "urlopen", _refuse)
+    with pytest.raises(tool_client.ToolUnreachable) as err:
+        tool_client.call_tool("http://127.0.0.1:8099", "/status", "GET", "")
+    msg = str(err.value)
+    assert "工具控制面不可达: http://127.0.0.1:8099/status (" in msg, msg
+    for url, tail in _url_tails(msg):
+        assert tail == "" or tail.isspace(), f"URL 后粘连了 {tail!r}: {msg}"
 
 
 def test_registered_pass_only_heartbeats(sub_env):

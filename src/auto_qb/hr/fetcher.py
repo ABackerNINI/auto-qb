@@ -185,8 +185,10 @@ class ChannelFetcher:
             # 区分「被叫停」与「等超时」: 前者是关停路径(不该算一次失败), 后者才计入退避熔断
             if self.queue.cancel_reason:
                 raise HrChannelStopped(f"取数通道已停止({self.queue.cancel_reason}), 本轮放弃: {url}")
-            raise HrChannelTimeout(f"等待浏览器扩展取数超时({self.request_timeout:.0f}s): {url}"
-                                   "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)")
+            raise HrChannelTimeout(
+                f"等待浏览器扩展取数超时({self.request_timeout:.0f}s): {url} "
+                "(浏览器是否在运行 / 扩展是否启用 / 是否已登录站点?)"
+            )
         if not result.ok:
             detail = result.error or f"HTTP {result.status}"
             if result.kind == KIND_LOGIN_PAGE:

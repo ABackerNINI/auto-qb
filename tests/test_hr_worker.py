@@ -46,6 +46,8 @@
 - test_build_views_prefers_memory_snapshot: 本轮结果的内存快照覆盖已落盘视图; generated_at 取现读时钟
 - test_note_logs_normal_action_only_on_change: 正常动作只在变化时记一条, 缺省文案「正常」
 - test_note_pacing_key_and_message: 节流键取自原因; 缺省文案「正常」; 精确文案
+- test_note_pacing_separates_reason_url: 节流 INFO 中原因以 URL 结尾时, 后文括号前必须有空格
+- test_note_alerted_separates_reason_url: 已告警 INFO 中原因以 URL 结尾时, 后文括号前必须有空格
 - test_note_warn_gap_floor_and_exact_boundary: 非节流告警的 warn_gap 下界 60s 且「恰好到点」即再报
 - test_note_pacing_reminder_fires_at_exact_gap: 节流态持续时恰好满一个 warn_gap 即再说明一次
 - test_note_info_branch_message: 非告警动作走 INFO 分支并带站点与动作
@@ -942,8 +944,36 @@ def test_note_pacing_key_and_message(tmp_path):
             "pt.example.com",
             HrRefreshResult(site="pt.example.com", action=ACTION_WAITING, reason="", reason_kind=REASON_BUDGET)
         )
-    assert "HR 站点 pt.example.com | waiting: 未到可取时刻(间隔, 还差 5s)(节流中, 非故障)" in cap.messages, cap.messages
-    assert "HR 站点 pt.example.com | waiting: 正常(节流中, 非故障)" in cap.messages, cap.messages
+    assert "HR 站点 pt.example.com | waiting: 未到可取时刻(间隔, 还差 5s) (节流中, 非故障)" in cap.messages, cap.messages
+    assert "HR 站点 pt.example.com | waiting: 正常 (节流中, 非故障)" in cap.messages, cap.messages
+
+
+def test_note_pacing_separates_reason_url(tmp_path):
+    """原因以 URL 结尾时, `(节流中, 非故障)` 前必须有空格(编辑器点击不吞括号)"""
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={})), publisher=HrViewPublisher(), poll_interval=60.0
+    )
+    url = "https://pt.example.com/myhr.php?hrtype=A"
+    waiting = HrRefreshResult(
+        site="pt.example.com", action=ACTION_WAITING, reason=f"本波取数被叫停: {url}", reason_kind=REASON_BUDGET
+    )
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._note("pt.example.com", waiting)
+    assert any(f"{url} (节流中, 非故障)" in m for m in cap.messages), cap.messages
+
+
+def test_note_alerted_separates_reason_url(tmp_path):
+    """已由产生处告警的原因以 URL 结尾时, `(已在取数处告警)` 前必须有空格"""
+    worker = HrWorker(
+        service=_service(tmp_path, FakeFetcher(pages={})), publisher=HrViewPublisher(), poll_interval=60.0
+    )
+    url = "https://pt.example.com/myhr.php?hrtype=A"
+    result = HrRefreshResult(
+        site="pt.example.com", action=ACTION_ERROR, reason=f"等待浏览器扩展取数超时(180s): {url}", alerted=True
+    )
+    with capture_logs("auto_qb.hr.worker", logging.INFO) as cap:
+        worker._note("pt.example.com", result)
+    assert any(f"{url} (已在取数处告警)" in m for m in cap.messages), cap.messages
 
 
 def test_note_warn_gap_floor_and_exact_boundary(tmp_path, monkeypatch):

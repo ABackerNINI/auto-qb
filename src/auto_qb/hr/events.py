@@ -74,12 +74,12 @@ def login_expired_note(site: str, detail: str) -> str:
 
 def fetch_failed(site: str, failures: int, threshold: int, detail: str) -> str:
     """页面取数失败: 该档证据在此截断, 下周期自然重试(§5.2)"""
-    return f"{prefix(EVENT_PARSE)} 站点 {site} | 页面取数失败(本波第 {failures} 次): {detail}(该档截断, 下周期自然重试)"
+    return f"{prefix(EVENT_PARSE)} 站点 {site} | 页面取数失败(本波第 {failures} 次): {detail} (该档截断, 下周期自然重试)"
 
 
 def page_changed(site: str, action: str, detail: str) -> str:
     """页面改版疑似: 表头缺失/字段缺失等结构性失效 ⇒ 需人工核对 HR 页结构"""
-    return f"{prefix(EVENT_PARSE)} 站点 {site} | {action}: {detail}(请核对站点 HR 页是否改版)"
+    return f"{prefix(EVENT_PARSE)} 站点 {site} | {action}: {detail} (请核对站点 HR 页是否改版)"
 
 
 def order_broken(site: str, detail: str) -> str:

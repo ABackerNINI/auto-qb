@@ -487,7 +487,7 @@ class HrDiscoveryServer:
     def _after_bind(self) -> None:
         """绑定成功后的公共收尾: 日志 + 心跳线程 + 立即登记一次(扩展不必等满一个心跳周期)"""
         logger.info(
-            f"HR 发现端点已启动: {API_DISCOVER} @ http://{self.host}:{self._bound_port}"
+            f"HR 发现端点已启动: {API_DISCOVER} @ http://{self.host}:{self._bound_port} "
             f"(候选 {self._candidates_text()}, 实绑 {self._bound_port})"
         )
         self._heartbeat_stop.clear()

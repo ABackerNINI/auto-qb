@@ -11,6 +11,8 @@
 - test_login_expired_message_action_and_site: 登录失效告警带标签前缀 + 站点名 + 「去浏览器登录」动作
 - test_login_expired_note_short_sentence: 写进 wave.notes 的短句带同一标签前缀与站点名
 - test_page_changed_message_prefix_and_action: 页面改版文案带 `[HR 页面改版]` 前缀
+- test_fetch_failed_url_separated_from_tail: 取数失败详情以 URL 结尾时, 后接括号说明前必须有空格
+- test_page_changed_url_separated_from_tail: 页面改版详情以 URL 结尾时, 后接括号说明前必须有空格
 - test_order_broken_message_text: 排序失效文案 = 标签 + 详情 + 强制早停 + 改版核对引导
 - test_counter_mismatch_streak_tail_only_when_over_one: `(已连续 N 波)` 只在 streak>1 时出现(0/1 都不出现)
 - test_counter_mismatch_message_anchors: 计数对不平文案 = 标签 + 实抓/声明行数 + `--hr-once` 走查引导
@@ -70,6 +72,19 @@ def test_page_changed_message_prefix_and_action():
     assert msg.startswith("[HR 页面改版]")
     assert "表头缺失" in msg and "无 HR 编号列" in msg
     assert "请核对站点 HR 页是否改版" in msg
+
+
+def test_fetch_failed_url_separated_from_tail():
+    """详情以 URL 结尾时, `(该档截断...)` 前必须有空格(否则编辑器点击会把括号吞进 URL)"""
+    url = "https://pt.example.com/myhr.php?hrtype=A"
+    msg = events.fetch_failed("pt.example.com", 1, 1, f"等待浏览器扩展取数超时(180s): {url}")
+    assert f"{url} (该档截断, 下周期自然重试)" in msg, msg
+
+
+def test_page_changed_url_separated_from_tail():
+    url = "https://pt.example.com/myhr.php?hrtype=A"
+    msg = events.page_changed("pt.example.com", "error", f"扩展取数失败: {url}")
+    assert f"{url} (请核对站点 HR 页是否改版)" in msg, msg
 
 
 def test_order_broken_message_text():

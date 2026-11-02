@@ -105,7 +105,7 @@ def call_tool(base_url: str, path: str, method: str, credential: str, payload=No
         raw = e.read()
         code = e.code
     except (urllib.error.URLError, OSError) as e:
-        raise ToolUnreachable(f"工具控制面不可达({url}): {e}") from e
+        raise ToolUnreachable(f"工具控制面不可达: {url} ({e})") from e
     try:
         return code, (json.loads(raw.decode("utf-8")) if raw else {})
     except (UnicodeDecodeError, json.JSONDecodeError) as e:
@@ -349,8 +349,8 @@ class TrafficMonitorSubscriber:
         self._heartbeat_s = _heartbeat_interval(resp)
         self._clear_error()
         logger.info(
-            f"全局流量监视器订阅已注册: id={sub_id} -> {payload['endpoint']}"
-            f"(心跳 {self._heartbeat_s:g}s, 工具 {endpoint.base_url})"
+            f"全局流量监视器订阅已注册: id={sub_id} -> {payload['endpoint']} "
+            f"(心跳 {self._heartbeat_s:g}s), 工具 {endpoint.base_url}"
         )
 
     def _heartbeat(self, endpoint) -> bool:

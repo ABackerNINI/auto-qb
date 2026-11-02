@@ -1252,7 +1252,7 @@ class HrRefreshService:
                 tid: data.infohash_of(tid)
                 for tid, row in wave.seen.items() if row.lane == LANE_SCOPE
             },
-            notes="; ".join(wave.notes),
+            notes=" ; ".join(wave.notes),
         )
         data.fetched_at = now
         any_ok = any(st.ok for st in lane_states.values())
@@ -1288,7 +1288,7 @@ class HrRefreshService:
             wave.had_error or wave.parse_problem or not retention_ok or depth_broken or wave.alerted or
             (zero_rows and not confirmed_empty)
         )
-        result.reason = "; ".join(notes)
+        result.reason = " ; ".join(notes)
         result.snapshot = data
         # 拉取历史(计划 26-10-04-0312 §3.3): 波终态事件, 随下方既有 commit 落盘
         self._append_history(
@@ -1298,9 +1298,9 @@ class HrRefreshService:
             status = session.commit(now)
             result.persisted = status == "written"
             if status == "readonly":
-                result.reason = (result.reason + "; " if result.reason else "") + "锁自检失败, 未写盘(只读退化)"
+                result.reason = (result.reason + " ; " if result.reason else "") + "锁自检失败, 未写盘(只读退化)"
         else:
-            result.reason = (result.reason + "; " if result.reason else "") + "只读模式, 未写盘"
+            result.reason = (result.reason + " ; " if result.reason else "") + "只读模式, 未写盘"
 
     @staticmethod
     def _merge_seen(data: HrSiteData, wave: _WaveContext, now: float) -> None:

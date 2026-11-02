@@ -364,7 +364,7 @@ class HrWorker:
             if self._pacing_key.get(site) != key or now - self._pacing_at.get(site, 0.0) >= warn_gap:
                 self._pacing_key[site] = key
                 self._pacing_at[site] = now
-                logger.info(f"HR 站点 {site} | {result.action}: {result.reason or '正常'}(节流中, 非故障)")
+                logger.info(f"HR 站点 {site} | {result.action}: {result.reason or '正常'} (节流中, 非故障)")
             else:
                 logger.debug(f"HR 站点 {site} | {result.action}(节流中, 同状态不重复记): {result.reason}")
             return
@@ -379,7 +379,7 @@ class HrWorker:
             # `alerted` 则相反: 产生处(取数失败 / 存储层读坏)已经打过 WARNING 了 —— 同一次事件
             # 再打一遍就是两条系统通知(2026-09-24 用户实报: 一次超时拿到两条), 这里只记状态。
             if result.alerted:
-                logger.info(f"HR 站点 {site} | {result.action}: {detail}(已在取数处告警)")
+                logger.info(f"HR 站点 {site} | {result.action}: {detail} (已在取数处告警)")
             elif result.action in (ACTION_PARTIAL, ACTION_ERROR):
                 logger.warning(events.page_changed(site, result.action, detail))
             else:

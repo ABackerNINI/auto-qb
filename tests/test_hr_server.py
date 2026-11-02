@@ -47,6 +47,7 @@
 
 ### R20 变异审计轮: 端点契约与适配层守阵
 - test_started_endpoint_identity_and_thread_name: 启动期身份钉(server_bind 现填 name/port, 线程现名且真起)
+- test_startup_log_separates_endpoint_url: 端点启动日志的 URL 后必须有空白(编辑器点击不吞括号)
 - test_default_port_and_extension_id_defaults: 默认端口 0(交 OS 随机, 计划 26-10-14-1241)+ 默认 host 回环 + 默认 extension_id 空(任意扩展 origin 放行)
 - test_never_started_stop_returns_true: 未启动的 stop 幂真(未启动把「已停止」是事实)
 - test_fresh_reject_counters_are_zero: 新端点被拒接触现 0 计数/0.0 时刻
@@ -341,6 +342,18 @@ def _http(method: str, port: int, path: str, *, token=None, body=None, origin=No
         req.add_header("Content-Type", "application/json")
     with urllib.request.urlopen(req, timeout=5) as resp:
         return resp.status, resp.read()
+
+
+def test_startup_log_separates_endpoint_url(caplog):
+    """启动日志: 端点 URL 后必须有空格, 否则 `(仅监听本机回环...)` 会被吞进 URL"""
+    server = make_server()
+    caplog.set_level(logging.INFO, logger="auto_qb.hr.server")
+    handle = server.start()
+    try:
+        line = next(r.getMessage() for r in caplog.records if "端点已启动" in r.getMessage())
+    finally:
+        server.stop()
+    assert f"http://127.0.0.1:{handle.port} (仅监听本机回环" in line, line
 
 
 def test_http_roundtrip_over_loopback():

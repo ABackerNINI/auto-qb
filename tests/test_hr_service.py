@@ -175,7 +175,8 @@
 - test_refresh_locked_min_interval_force_defers_with_exact_seconds: force 撞账号安全线(min_interval): 让位 + defer 历史, 还差秒数如实
 - test_finish_wave_ok_lanes_clear_fail_and_mismatch_streaks: 干净波清零: fail_streak / count_mismatch_streak 归 0
 - test_finish_wave_empty_confirmed_at_reset_to_zero: 清单再现非零行: 人工对账戳清 0(不是 None)
-- test_finish_wave_notes_joined_with_semicolon: 多条 note 以「; 」连接(持久化 notes 字段)
+- test_finish_wave_notes_joined_with_semicolon: 多条 note 以「 ; 」连接(持久化 notes 字段)
+- test_finish_wave_notes_keep_url_separated_from_semicolon: URL 结尾的 note 与分隔分号之间必须有空格
 - test_finish_wave_zero_rows_note_exact_text: 零行不签发的持久化文案单点(带人工对账命令)
 - test_finish_wave_healthy_wave_has_no_retention_note: 留存达标(空基线)的波不得记「流转守恒不达标」note
 - test_finish_wave_persist_false_reason_appends_after_existing_reason: 只读走查的未写盘说明追加在原有原因之后
@@ -3765,8 +3766,25 @@ def test_finish_wave_notes_joined_with_semicolon(tmp_path):
     data, _ = service.store(SITE).read_unlocked()
     notes = data.wave.notes
     assert "表" in notes and "页面取数失败" in notes, f"两条痕迹都应持久化: {notes!r}"
-    assert notes.count("; ") == 1, f"分隔符是「; 」: {notes!r}"
+    assert notes.count(" ; ") == 1, f"分隔符是「 ; 」(URL 结尾的 note 不会与分号粘连): {notes!r}"
     assert "; " in data.history[-1].notes[0] or len(data.history[-1].notes) >= 1
+
+
+def test_finish_wave_notes_keep_url_separated_from_semicolon(tmp_path):
+    """note 以 URL 结尾时, 与后一条之间的分隔符必须是「 ; 」, URL 后不能直接贴分号"""
+    clock = Clock()
+    url_b, url_c = url_of("B"), url_of("C")
+    fetcher = FakeFetcher(
+        pages={url_of("A"): myhr_page([])},
+        fail_text_at={
+            "B": f"扩展取数失败: {url_b}",
+            "C": f"扩展取数失败: {url_c}"
+        },
+    )
+    service = make_service(tmp_path, fetcher, clock=clock)
+    result = run_wave(service, {})
+    assert f"{url_b} ; " in result.reason, result.reason
+    assert f"{url_c}" in result.reason, result.reason
 
 
 def test_finish_wave_zero_rows_note_exact_text(tmp_path):
@@ -3803,7 +3821,7 @@ def test_finish_wave_persist_false_reason_appends_after_existing_reason(tmp_path
     fetcher = FakeFetcher(pages=pages, fail_text_at={"B": "连接超时"})
     service = make_service(tmp_path, fetcher, clock=clock, persist=False)
     result = run_wave(service, {})
-    assert result.reason.startswith("档位 B 页面取数失败: 连接超时; "), f"原有 reason 不被吞: {result.reason!r}"
+    assert result.reason.startswith("档位 B 页面取数失败: 连接超时 ; "), f"原有 reason 不被吞: {result.reason!r}"
     assert result.reason.endswith("只读模式, 未写盘")
 
 
@@ -3818,7 +3836,7 @@ def test_finish_wave_readonly_degradation_reason_appends_after_existing_reason(t
     clock.advance(13 * 3600)
     result = run_wave(service)
     assert result.persisted is False
-    assert result.reason.startswith("档位 B 页面取数失败: 连接超时; 锁自检失败"), f"reason 拼接口径: {result.reason!r}"
+    assert result.reason.startswith("档位 B 页面取数失败: 连接超时 ; 锁自检失败"), f"reason 拼接口径: {result.reason!r}"
 
 
 # ---- 纯展示/记录助手(_lanes_summary_from / _append_history) ----

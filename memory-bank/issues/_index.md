@@ -22,7 +22,7 @@
 | bug | 10 |
 | perf | 5 |
 | docs | 2 |
-| test | 12 |
+| test | 13 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时…
 - [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)](26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — relocate_uni…
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低…
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl…

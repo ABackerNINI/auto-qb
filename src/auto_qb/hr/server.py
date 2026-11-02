@@ -278,11 +278,11 @@ class HrChannelServer:
         self._handle = HrEndpointHandle(server, thread, server.server_address[1])
         # INFO 而非 WARNING: 本仓 WARNING 以上会被推成系统通知, 而「端点起来了」是预期内的事
         if is_loopback_host(self.host):
-            logger.info(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}(仅监听本机回环, 需 token 鉴权)")
+            logger.info(f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port} (仅监听本机回环, 需 token 鉴权)")
         else:
             disc = f"; 发现端口 {self.discovery_port}" if self.discovery_port else ""
             logger.info(
-                f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port}"
+                f"HR 取数通道端点已启动: http://{self.host}:{self._handle.port} "
                 f"(监听 {self.host}, 已暴露到内网, 需 token 鉴权{disc})"
             )
         return self._handle
