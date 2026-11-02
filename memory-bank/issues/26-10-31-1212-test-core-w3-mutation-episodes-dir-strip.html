@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ episodes 目录未剥离变异存活: names 4 条低危合 1 参数化">
 <meta name="issue-summary" content="W3 低危簇6: names_5/9/14/16 目录段未剥离(空格切/左切/反斜杠/分隔串失效)同族, 一个参数化用例全杀">
 <title>core/ episodes 目录未剥离变异存活: names 4 条低危合 1 参数化 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1212-test-core-w3-mutation-episodes-dir-strip</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 12:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -103,6 +103,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 12:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 认领，状态 <strong>In Progress</strong>（用户指派，W3 批次合并处理）</li>
+      <li>2026-11-02 22:37 — 完成，状态 <strong>Done</strong>：<code>tests/test_episodes.py</code> 新增参数化守阵 <code>test_episode_path_directory_stripped</code>（四条路径形态断言只取文件名段集数），内存加载变异红验 <code>names_5/9/14/16</code> <strong>4/4 KILLED</strong>（附 <code>names_9_left</code> 左切变体同杀，共 5/5），<strong>零 src 改动</strong>。偏离：issue 建议的 <code>"Season 1/01.mkv"→[1]</code> 不可达（bare number 分支已禁用，现状与变异体均返回 <code>[]</code>），改用三条可达样例 + 多级目录 <code>"Show.S01E05/EP05/EP01.mkv"</code> 补面（<code>names_9</code> 的 <code>split("/",1)</code> 形态正由该条命中）。全量数字见 kb.baseline</li>
     </ul>
   </section>
 

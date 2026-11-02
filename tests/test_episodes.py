@@ -8,6 +8,7 @@
 - test_episode_tags_ignore_date_screenshot: 日期型截图干扰忽略
 - test_episode_tags_disabled: 配置关闭时不加标签
 - test_tvshows_side_forms_not_matched: 负测守阵(与 tvshows 族双向非对称, issue 26-10-29-1328)
+- test_episode_path_directory_stripped: 目录段不参与集数解析(空格/左切/反斜杠/多级目录; 变异 names_5/9/14/16)
 """
 import os
 import tempfile
@@ -118,6 +119,29 @@ def test_tvshows_side_forms_not_matched(name, expected):
     test_showe05_glued_title_side_unknown。
     """
     assert extract_episodes_from_names([name]) == expected, f"{name!r} 解析结果不符现状"
+
+
+@pytest.mark.parametrize(
+    "name, expected",
+    [
+        ("Show EP05/EP01.mkv", [1]),  # 目录含空格 + 集标记
+        ("Show.S01E05/EP01.mkv", [1]),  # 目录含 S01E05
+        ("Show.S01E05\\E01.mkv", [1]),  # 反斜杠分隔的目录段
+        ("Show.S01E05/EP05/EP01.mkv", [1]),  # 多级目录: 中段目录也带集标记
+    ],
+)
+def test_episode_path_directory_stripped(name, expected):
+    """目录段不参与集数解析: 只取文件名段的明确集标记
+
+    names_5(rsplit("/",1) -> rsplit(None,1)): 目录含空格时按空白右切, "Show EP05/EP01.mkv"
+    取到目录里的 EP05; names_9(右切退化为左切/保留中段): "Show.S01E05/EP01.mkv" 取到 5,
+    多级目录中段的 "EP05" 同样可能被取到;
+    names_14(反斜杠替换串失效): "Show.S01E05\\E01.mkv" 不归一, 取到 S01E05 的 5;
+    names_16(分隔串 "/" 加料): 正常 "/" 路径不再切分, 目录标记同样被计入。
+    注: issue 建议的 "Season 1/01.mkv"→[1] 不可达 —— bare number 分支已禁用, 现状与
+    变异体都返回 []; 用上表四个可达形态替代(前三条对应 issue 原文, 第四条补多级目录面)。
+    """
+    assert extract_episodes_from_names([name]) == expected, f"{name!r} 应只取文件名段集数"
 
 
 def test_episode_tags_added_on_new_torrent():

@@ -333,3 +333,5 @@
 - 2026-11-02 22:18 结清 W3 标题/年月/键名归一化 4 件 issue，补守阵并消除归一化循环死循环变异面；全量数字见 kb.baseline
 
 - 2026-11-02 22:26 W3 簇3 tvshows 组名括号: 补 test_bracket_group_hint_case_and_negation 守阵, 红验 is_groupish_2/4 + strip_group_19 3/3 KILLED, 零 src 改动
+
+- 2026-11-02 22:38 issue 26-10-31-1212-w3-episodes-dir-strip 结清: 补 test_episode_path_directory_stripped 参数化守阵, names_5/9/14/16 红验 4/4 KILLED, 零 src 改动
