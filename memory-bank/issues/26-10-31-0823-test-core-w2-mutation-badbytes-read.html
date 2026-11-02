@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ limits 坏字节读侧容错变异存活 6 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 B: rdl_8/18 + rday_25/29/34/35(坏字节文件 UnicodeDecodeError/LookupError 未捕获, 读侧降级契约破坏)">
 <title>core/ limits 坏字节读侧容错变异存活 6 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-badbytes-read</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -105,7 +105,18 @@
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：两处 <code>open(..., errors="replace")</code> 仍在，<code>codecs.lookup_error("REPLACE")</code> 实测抛 LookupError（变异危害成立）</li>
+      <li>2026-11-02 — 状态 <strong>Done</strong>：6 条红验全部 KILLED（rdl_8/18 由既有 recorder 守阵杀、rday_25/29/34/35 由新增 cache 守阵杀），定向测试全绿</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法与验证</h2>
+    <p><b>零 src 改动, 只补守阵</b>(<code>tests/test_traffic_limits.py</code>):</p>
+    <ul>
+      <li><code>rday_25</code>/<code>rday_29</code>/<code>rday_34</code>/<code>rday_35</code> → 新增 <code>test_limits_cache_bad_byte_day_file_tolerated</code>: 含坏字节的天文件走 <code>LimitsCache.read_day</code>(Web 端点路径) —— <code>errors</code> 删成 strict / 换成 <code>None</code> / 大小写或无效处理器名都会抛 UnicodeDecodeError/LookupError; 原实现降级后坏行豁免、有效事件照常读回。红验 4 条 <b>KILLED</b>。</li>
+      <li><code>rdl_8</code>/<code>rdl_18</code> → 既有 <code>test_recorder_bad_byte_day_file_tolerated</code> 已覆盖 <code>_read_day_last_event</code> 同一降级契约(重启去重读路径)。红验 2 条 <b>KILLED</b>, 未新增重复测试。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_traffic_limits.py</code> 全绿; 测试数字见 <code>kb.baseline</code>。</p>
   </section>
 
   <footer>
