@@ -1955,7 +1955,8 @@ def test_w5_recover_single_month_row_no_reappend(tmp_path, monkeypatch):
 def test_w5_ingest_acc_same_day_multi_hour(tmp_path, monkeypatch):
     """day 累计器同日多 hour 追加(常态每日): 两个完结小时逐级并入, 日行 cov 全量
     —— _ingest_acc_10"""
-    clock = _Clock()
+    # 时钟钉在本地正午: 默认 epoch 在 UTC 下是 22:13, h2+3610 会跨午夜触发日封口, 与本用例前提相悖
+    clock = _Clock(now=_w5_ts(2026, 6, 15, 12, 0, 0))
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY

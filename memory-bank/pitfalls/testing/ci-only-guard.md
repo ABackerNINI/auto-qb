@@ -2,7 +2,7 @@
 
 > 摘要: 两类守阵**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 300 次期间读者必读 >50 次"), 写耗时跨平台差一个量级 ⇒ 快机器上读者根本没读几轮就撞活性断言。两条都不是被测行为破了, 是**守阵自身的平台/速度依赖**。2026-10-22 gtm 子项目 (`tools/global-traffic-monitor`) 双平台 job 实证。
 > 等级: L0
-> 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job
+> 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job
 
 ### 跨平台断言写死切片长度: nt 侧凑巧成立, POSIX 侧恒红
 
@@ -17,4 +17,17 @@
 - **判别**: 红的**不是**被守行为 (`violations == []` / `bad == 0` 恒绿), 而是活性计数 (实测 29 / 41, 阈值 50 / 100); 本机恒绿 ⇒ 单机 fsync 比 CI 慢一个量级, 写者收工时读者还没读几轮。**别**把阈值一路往下调 —— 那只是把守阵校准到本机速度, 换台机器照样红, 且判别力随阈值一起被稀释。
 - **处置**: 把"期望读够"换成"**确保读够**" —— 写者循环条件改成「读者计数 < 门槛 且 写次数 < 上限(20000) 且 未过 deadline(15s)」: 线程版读内存计数器, 进程版让读者每轮把读次数写进**心跳文件**供父进程读 (读到写半途的空串按 0 处理, 不误判达标), 写完再置 done。活性语义保留且更强: 读者不干活时循环撞 deadline, 断言照红。实测注入"读者比写者慢 20 倍"仍达标 (约 7s), 正常路径 0.x 秒。
 - **守阵**: 被守断言 (无半行/截断/空文件) 一字不改; 红验动作 = 把 `atomic_write_text` 改成 truncate 后分片直写 (非原子) → 两条守阵都红在 `bad` / `violations` 上 (2026-10-22 实证 `bad=90`), 改完用 `sha256sum -c` 复核实现已还原。
-- **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」)
+
+### 2026-11-03 三次实证: 跨平台断言引用一侧才有的模块常量(`CREATE_NO_WINDOW`)
+
+- **触发**: 用例 `monkeypatch.setattr(infra_utils, "is_windows", lambda: True)` 强制走 Windows 分支后, 断言
+  `kwargs["creationflags"] == subprocess.CREATE_NO_WINDOW`; POSIX 的 `subprocess` 模块**不定义**该常量
+  ⇒ CI ubuntu 恒红, 本机 Windows 绿。
+- **判别**: 失败是 `AttributeError: module 'subprocess' has no attribute 'CREATE_NO_WINDOW'`, 不是断言值不等;
+  强制分支只换了**实现判定**, 常量仍由当前平台的模块提供 —— Windows 专属常量不能照名直接取。
+- **处置**: 与被测实现同口径兜底取常量 —— `getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)`
+  (`relocate_mod._spawn` 本就是这款写法); **别**整体 skip 掉用例, 否则 Windows 正分支在 Linux 上失去守阵。
+- **守阵**: `tests/test_relocate_exec_misc.py::test_spawn_args_pinned`; 无 WSL/容器时复现 Linux 语义:
+  先 `del subprocess.CREATE_NO_WINDOW` 再同进程 `pytest.main(...)`(实测改前 AttributeError、改后绿)。
+- **复发**: +1 (2026-11-03): 为什么没命中 —— 见到用例已用 monkeypatch 造平台差异, 就默认"两侧都覆盖了",
+  没检查断言里引用的**模块常量**是否也随平台存在; 判别法当时只写了"切片长度/阈值", 没泛化到"仅一侧存在的符号"。

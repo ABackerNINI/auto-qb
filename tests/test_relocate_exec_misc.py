@@ -290,7 +290,8 @@ def test_spawn_args_pinned(monkeypatch):
     mod._spawn("D:/dd", "jr-x")
     argv, kwargs = seen[-1][0][0], seen[-1][1]
     assert "--job" in argv and argv[-1] == "jr-x", argv
-    assert kwargs["creationflags"] == subprocess.CREATE_NO_WINDOW, kwargs
+    # CREATE_NO_WINDOW 只在 Windows 侧存在; 用例强制走 Windows 分支时按实现同款兜底取常量
+    assert kwargs["creationflags"] == getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000), kwargs
     assert kwargs["stdout"] == subprocess.DEVNULL and kwargs["stderr"] == subprocess.DEVNULL, kwargs
     assert kwargs["close_fds"] is True, kwargs
 
