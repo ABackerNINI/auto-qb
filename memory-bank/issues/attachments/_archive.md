@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (55)
+## Open (54)
 
 - [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
 - [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
@@ -16,7 +16,6 @@
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
 - [bug] [state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达)](../26-10-31-0458-bug-state-read-encoding-guard.html) — core/state.py _read_state_file 的 encoding="utf-8" 零守阵: 变异测试坐实删掉它全套件照绿(UTF-8 宿主分不出), locale 打桩在 CPython 3.13 不可达; 回归后果 = Windows GBK 生产机读 UTF-8 state 误入损坏链/静默清空
-- [bug] [TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行](../26-10-31-0449-bug-taskqueue-dry-run-chain.html) — core/taskqueue.py 的 dry_run 传递链断裂(变异测试坐实): _run_one 收到 None, dry_run=True 时 handler 仍真执行, --dry-run 模式对任务路径产生真实写副作用
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -67,7 +66,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (356)
+## Done (357)
 
 - [bug] [full_checking 自愈 pop 后缺 state.save 落盘](../26-11-03-0104-bug-full-checking-selfheal-state-save.html) — recheck_fails 自愈清除写点不落盘，崩溃/断电窗口可能丢失自愈结果
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
@@ -132,6 +131,7 @@
 - [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入
 - [bug] [qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)](../26-10-31-0711-bug-skip-readd-share-limits-mode.html) — compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -> 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](../26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈
+- [bug] [TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行](../26-10-31-0449-bug-taskqueue-dry-run-chain.html) — core/taskqueue.py 的 dry_run 传递链断裂(变异测试坐实): _run_one 收到 None, dry_run=True 时 handler 仍真执行, --dry-run 模式对任务路径产生真实写副作用
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在
 - [perf] [批量添加种子时部分新行要等下一轮同步(1.5s): 补刷新赶在 qB 把种子建进 session 之前, 与 SSE 无关](../26-10-30-0626-perf-webui-sse-down-poll-latency.html) — 一次添加 N 个种子时, 主循环命令后只补刷新一次(距 add 返回 0.5~0.8ms), 而 qB 的 add 是四跳异步管线(ioThread 文件搜索 → 主线程续体 → libtorrent → 排队告警), 从 HTTP 200 到 torrent 进 session 要 6~40ms ⇒ 补刷新只拿到此刻已建好的那部分, 其余等下一个同步节拍(1.5s); 真机实测 N=6 有 22% 的种子、N=12 有 44% 落在 ~1.53s, 其余 ~25ms; N=1 从不复现

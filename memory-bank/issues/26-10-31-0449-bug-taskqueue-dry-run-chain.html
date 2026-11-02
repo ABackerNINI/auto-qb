@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="taskqueue-dry-run-chain">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行">
 <meta name="issue-summary" content="core/taskqueue.py 的 dry_run 传递链断裂(变异测试坐实): _run_one 收到 None, dry_run=True 时 handler 仍真执行, --dry-run 模式对任务路径产生真实写副作用">
 <title>TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0449-bug-taskqueue-dry-run-chain</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 04:49</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -154,23 +154,29 @@ taskqueue  _run_one__mutmut_3   SURVIVED
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
     <div class="callout">全套件无 <code>run_due(dry_run=True)</code> 用例（池内 handler 均忽略第二实参），dry_run 传递契约零守阵——已排除「工具误报」（S4 verify 实测 SURVIVED）。</div>
+    <p><strong>认领复验（2026-11-03 04:21）</strong>：缺陷面是<strong>回归守阵缺口</strong>，不是现行 src 行为错误——<code>run_due</code> / <code>_run_one</code> 三环实参正确，<code>qbmanager._task_line</code> 也显式下传 dry_run。守阵已在 <code>tests/test_taskqueue.py::test_run_due_passes_dry_run_to_handler</code>（R25 S5 补入）；同池 mutmut 复跑（S6，2026-10-31 05:14）已将 <code>run_due__mutmut_15</code> / <code>_run_one__mutmut_3</code> 判 KILLED（taskqueue 174 变异 / 杀 156 / 存活 18 / 杀死率 89.66%，见基线切片 26-10-31-0518）。</p>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p>契约钉死：handler 第二实参必须收到 dry_run 标志。守阵一条杀两条（<code>run_due__mutmut_15</code> + <code>_run_one__mutmut_3</code>）：<code>run_due(dry_run=True)</code> + handler 断言收到的第二实参 <code>is True</code>；反向对照 <code>run_due()</code> 缺省（dry_run=False）断言 <code>is False</code>。</p><p><strong>守阵已当场补入</strong> <code>tests/test_taskqueue.py::test_run_due_passes_dry_run_to_handler</code>（2026-10-31 W1 S5）；量化销账（变异转 KILLED）待 S6 同目标同池复跑（mutants.run，本单届时凭复跑数字置 Done）。</p>
+    <p><strong>落地结果（2026-11-03）</strong>：建议修法已按期落入，本轮只做复验与收口——守阵存在且有效，红验用运行时替换还原两种变异形态（<code>run_due</code> 传 None / <code>_run_one</code> 传 None）均转红，还原后绿；守阵登记进 <code>memory-bank/testing/guards.md</code>；<code>src/</code> 零改动。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 04:49 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 04:21 — 认领，状态 <strong>In Progress</strong>（用户指派修复；认领锚 = 任务档案 <code>26-10-08-test-mutation-audit</code>，双向链已存在）</li>
+      <li>2026-11-03 04:24 — 复验 + 红验完成，状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-03 04:21 <strong>缺陷已消失</strong>——守阵 <code>test_run_due_passes_dry_run_to_handler</code> 已在树内并实测通过（1 passed）；<code>run_due → _run_one → handler</code> 三环实参正确，<code>qbmanager._task_line</code> 显式下传 dry_run。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：零 <code>src/</code> 改动——本单是回归守阵缺口，守阵已随 R25 S5 补入；本轮补齐红验与守阵登记（<code>memory-bank/testing/guards.md</code>）。<br>
+    <strong>验证方式</strong>：运行时替换还原两种变异形态（<code>run_due</code> 传 None / <code>_run_one</code> 传 None），守阵两条均转红、还原后绿（RED OK ×2 / GREEN OK ×1）；同池 mutmut 复跑（2026-10-31 05:14）两条已转 KILLED。<br>
+    <strong>测试数字</strong>：见 <code>commands run kb.baseline</code> 最新切片。</p>
   </section>
 
   <footer>

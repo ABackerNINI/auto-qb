@@ -92,6 +92,14 @@
 > 口径漂移(「qB 自带 WebUI 1500ms」→ 服务端 `RefreshInterval` 节流)见 [../systemPatterns/main-loop.md](../systemPatterns/main-loop.md)。
 > deferral 纪律(校验类不得对自写 hash 出决策 + 有界性双依据)见 [../pitfalls/backend/concurrency.md](../pitfalls/backend/concurrency.md)。
 
+## 任务队列 dry_run 契约 (26-11-03, 红验 26-11-03 @工作区)
+
+| 守阵 | 钉住的结论 | 红验 |
+|---|---|---|
+| `test_taskqueue.py::test_run_due_passes_dry_run_to_handler` | `--dry-run` 的任务路径安全承诺压在三环实参链上: `run_due(dry_run=True)` → `_run_one(task, dry_run)` → `handler(task, dry_run)`; handler 第二实参必须是 dry_run 原值, 缺省 `False` 反向对照 | 运行时替换还原两种变异形态(`run_due` 传 None / `_run_one` 传 None)⇒ 两条实测全红(真值断言失败), 还原后绿; 同池 mutmut 复跑已转 KILLED(见切片 26-10-31-0518) |
+
+> 本守阵由变异审计 core/ W1(R25 S5)补入, 对应 issue `26-10-31-0449-bug-taskqueue-dry-run-chain`。
+
 ## 通用纪律
 
 - **红验优先用运行时 monkeypatch 还原旧实现**(不碰工作区), `lru_cache` 记得先 `cache_clear()`。
