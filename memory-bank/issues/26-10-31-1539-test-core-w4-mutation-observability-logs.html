@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)">
 <meta name="issue-summary" content="W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED">
 <title>core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1539-test-core-w4-mutation-observability-logs</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 15:39</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,6 +104,7 @@
     <ul>
       <li>2026-10-31 15:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 22:58 — 认领，状态 <strong>In Progress</strong>（用户指派，本轮修复；doc-refs 入池时已反向声明 tasks/26-10-08-test-mutation-audit.md）</li>
+      <li>2026-11-02 23:55 — 修复完成，状态 <strong>Done</strong>。19 条存活变异守阵落在 <code>tests/test_traffic_store.py</code>：<code>test_v4_bad_line_warn_torn_exemption_and_gate_boundaries</code>（_wbl_4/6/9/13/14 + _wblp_4/8/12/18/19，撕裂尾恰豁免 1 行 / 行数闸 / 占比闸含恰等 5% 不告）、<code>test_v4_bad_line_warn_throttle_table_clear_boundary</code>（_wbl_21/23/24，节流表 256 清空边界）、<code>test_v4_bad_line_warn_message_fields_and_source_identity</code>（_wbl_26/27 + _wblp_1，告警消息字段与来源标识按文件独立）、<code>test_v4_evict_and_rewrite_failure_warning_message_content</code>（evict_36 + wtp_46，淘汰失败与重写占用告警消息内容）。红验 18/19 KILLED；<code>_wblp_20</code>（<code>getattr(parsed, "torn_tail", False)</code> 默认值 False→True）判<b>等价变异</b>：<code>V4ParsedDay</code>/<code>V4ParsedAgg</code> 均定义 <code>torn_tail: bool = False</code> 字段恒存在，getattr 默认值不可达。零 src 改动。W4 dump 已不在本机，变异形态按 issue 本体描述 + mutmut 常规算子重建（等价形态类），红验 harness 锚点逐一核对源码。全量数字见 kb.baseline。</li>
     </ul>
   </section>
 

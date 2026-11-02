@@ -162,6 +162,15 @@ mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验
 - test_v4_store_evict_rmtree_failure_continues_remaining: evict_37 —— 淘汰删除失败 continue
   不 break, 排序在后的到龄系列照常淘汰
 (width_7/cache_agg_28 经红验已被既有守阵覆盖, 不另补测 —— 见 issue 26-10-31-1539 状态日志)
+- test_v4_bad_line_warn_torn_exemption_and_gate_boundaries: _wbl_4/6/9/13/14 + _wblp_4/8/12/18/19
+  —— 撕裂尾恰豁免 1 行(不多不少)/单行坏行不告(行数闸)/占比 <=5%(含恰等)不告
+- test_v4_bad_line_warn_throttle_table_clear_boundary: _wbl_21/23/24 —— 节流表含本条恰 256 条
+  不清空, 第 257 条触发整体清空(两向边界)
+- test_v4_bad_line_warn_message_fields_and_source_identity: _wbl_26/27 + _wblp_1 —— 告警消息
+  字段(文件标识/有效坏行数/占比)与按来源分槽各自告警不互吞
+- test_v4_evict_and_rewrite_failure_warning_message_content: evict_36 + wtp_46 —— 淘汰删除失败
+  与裁剪重写放弃的 WARNING 带语义文案与对象标识
+(_wblp_20 判等价变异: 两解析结果型恒带 torn_tail 字段, getattr 默认值不可达 —— 见 issue 状态日志)
 
 线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
 monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
@@ -2425,3 +2434,145 @@ def test_v4_store_evict_rmtree_failure_continues_remaining(tmp_path, monkeypatch
     assert st.evict_expired_series(now, window) == ["torrent:BBB"]
     assert os.path.exists(v4_series_dir(str(tmp_path), "torrent:AAA"))  # 失败保留下轮重试
     assert not os.path.exists(v4_series_dir(str(tmp_path), "torrent:BBB"))  # 不阻断后续淘汰
+
+
+# ---------- mut-core W4 S6 定向补测(issue 26-10-31-1539 observability-logs 簇) ----------
+
+
+def test_v4_bad_line_warn_torn_exemption_and_gate_boundaries(tmp_path, caplog, monkeypatch):
+    """坏行告警豁免与闸门(W4 _wbl_4/6/9/13/14 + _wblp_4/8/12/18/19): 撕裂尾恰豁免 1 行
+    (失效则临界误告, 加倍则临界被吞); 单行坏行(占比再高)不告; 占比 <= 5%(含恰等)不告"""
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", {})
+    store = TrafficV4Store(str(tmp_path))
+    head = [HEADER_LINE_V4, "key,global", "B,1000,30,5,8"]
+
+    def _write(date_str: str, lines, trailing_newline: bool = True) -> None:
+        path = v4_day_file_path(str(tmp_path), "global", date_str)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        text = _v4_day_text(lines)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text if trailing_newline else text[:-1])
+
+    def _warns() -> list:
+        return [r for r in caplog.records if "坏行" in r.getMessage()]
+
+    # ① 撕裂尾恰豁免 1 行: 中段 1 坏行 + 尾部半行(豁免) -> 有效坏行 1 < 2, 不告
+    _write("2026-10-01", head + ["r,1,1,1,1"] * 34 + ["garbage", "torn_half"], trailing_newline=False)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        parsed = store.read_day("global", "2026-10-01")
+    assert parsed.bad_lines == 2 and parsed.torn_tail is True
+    assert not _warns(), "撕裂尾豁免后有效坏行 1 < 2(豁免不得失效)"
+    # ② 豁免不加倍: 中段 2 坏行 + 尾部半行 -> 有效坏行 2 且 2/39 > 5% -> 告警恰一次
+    caplog.clear()
+    _write("2026-10-02", head + ["r,1,1,1,1"] * 34 + ["garbage1", "garbage2", "torn_half"], trailing_newline=False)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        parsed2 = store.read_day("global", "2026-10-02")
+    assert parsed2.bad_lines == 3 and parsed2.torn_tail is True
+    assert len(_warns()) == 1, "豁免后有效坏行 2 超阈告警(豁免不得加倍)"
+    # ③ 单行坏行(1/10 = 10% > 5%): 行数闸拦下不告
+    caplog.clear()
+    _write("2026-10-03", head + ["r,1,1,1,1"] * 7 + ["garbage"])
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        parsed3 = store.read_day("global", "2026-10-03")
+    assert parsed3.bad_lines == 1 and parsed3.data_lines == 10
+    assert not _warns(), "单行坏行不告(行数闸)"
+    # ④ 占比闸: 2/100 = 2% <= 5% 不告
+    caplog.clear()
+    _write("2026-10-04", head + ["r,1,1,1,1"] * 96 + ["garbage1", "garbage2"])
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-04")
+    assert not _warns(), "占比 2% <= 5% 不告"
+    # ⑤ 占比恰等边界: 2/40 = 5.0% 恰压线不告(超阈为严格大于)
+    caplog.clear()
+    _write("2026-10-05", head + ["r,1,1,1,1"] * 36 + ["garbage1", "garbage2"])
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-05")
+    assert not _warns(), "占比恰等 5% 不告(严格大于才告)"
+
+
+def test_v4_bad_line_warn_throttle_table_clear_boundary(tmp_path, caplog, monkeypatch):
+    """节流表清空边界(W4 _wbl_21/23/24): 含本条恰 256 条不清空; 第 257 条触发整体清空"""
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", {})
+    store = TrafficV4Store(str(tmp_path))
+    good = [HEADER_LINE_V4, "key,global", "B,1000,30,5,8"] + ["r,1,1,1,1"] * 34
+    path = v4_day_file_path(str(tmp_path), "global", "2026-10-06")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_v4_day_text(good + ["garbage1", "garbage2"]))
+    # 预填 255 条 + 本次告警 = 256: 未越上界不清空
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", {f"f{i}": 0.0 for i in range(255)})
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-06")
+    assert len([r for r in caplog.records if "坏行" in r.getMessage()]) == 1
+    assert len(traffic_store_module._bad_line_warn_ts) == 256, "含本条恰 256 条不清空"
+    # 预填 256 条 + 本次告警 = 257: 越上界整体清空
+    caplog.clear()
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", {f"f{i}": 0.0 for i in range(256)})
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-06")
+    assert len([r for r in caplog.records if "坏行" in r.getMessage()]) == 1
+    assert len(traffic_store_module._bad_line_warn_ts) == 0, "第 257 条触发整体清空"
+
+
+def test_v4_bad_line_warn_message_fields_and_source_identity(tmp_path, caplog, monkeypatch):
+    """告警消息字段与来源标识(W4 _wbl_26/27 + _wblp_1): 消息含文件标识(系列目录名/文件名)、
+    有效坏行数/受检行数与占比字段; 不同文件按来源分槽各自告警不互吞"""
+    monkeypatch.setattr(traffic_store_module, "_bad_line_warn_ts", {})
+    store = TrafficV4Store(str(tmp_path))
+    good = [HEADER_LINE_V4, "key,global", "B,1000,30,5,8"] + ["r,1,1,1,1"] * 34
+    for date in ("2026-10-06", "2026-10-05"):
+        path = v4_day_file_path(str(tmp_path), "global", date)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(_v4_day_text(good + ["garbage1", "garbage2"]))
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-06")
+        store.read_day("global", "2026-10-05")
+    warns = [r.getMessage() for r in caplog.records if "坏行" in r.getMessage()]
+    assert len(warns) == 2, "不同文件按来源分槽各自告警(不互吞)"
+    assert any("global/2026-10-06.dat" in m and "坏行 2/38 行" in m and "占比 5.3%" in m for m in warns)
+    assert any("global/2026-10-05.dat" in m for m in warns)
+    # 撕裂尾场景消息中的有效坏行数 = 豁免后计数(3 非 4)
+    caplog.clear()
+    torn = good + ["garbage1", "garbage2", "garbage3", "torn_half"]
+    path = v4_day_file_path(str(tmp_path), "global", "2026-10-04")
+    with open(path, "w", encoding="utf-8", newline="\n") as f:
+        f.write(_v4_day_text(torn)[:-1])
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        store.read_day("global", "2026-10-04")
+    warns2 = [r.getMessage() for r in caplog.records if "坏行" in r.getMessage()]
+    assert len(warns2) == 1 and "坏行 3/40 行" in warns2[0]
+
+
+def test_v4_evict_and_rewrite_failure_warning_message_content(tmp_path, caplog, monkeypatch):
+    """失败告警消息内容(W4 evict_36 + wtp_46): 淘汰删除失败与裁剪重写放弃的 WARNING 须带
+    语义文案与对象标识(非 None/空消息)"""
+    st = TrafficV4Store(str(tmp_path))
+    window = 30 * 86400.0
+    now = v4_date_str_epoch("2026-03-15") + window
+    old_d = v4_epoch_date_str(now - 40 * 86400)
+    write_dat_lines(st.series_day_path("torrent:AAA", old_d), [HEADER_LINE_V4, "key,torrent:AAA"])
+
+    def _boom_rmtree(path):
+        raise OSError(16, "locked")
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.shutil.rmtree", _boom_rmtree)
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        assert st.evict_expired_series(now, window) == []
+    evict_warns = [r.getMessage() for r in caplog.records if "淘汰删除失败" in r.getMessage()]
+    assert len(evict_warns) == 1 and "AAA" in evict_warns[0]
+    # 裁剪重写被占用退避耗尽: 放弃本轮告警含文案与文件名, 原文件完好
+    caplog.clear()
+    monkeypatch.setattr("auto_qb.core.traffic_store.time.sleep", lambda s: None)
+
+    def _boom_replace(src, dst):
+        raise PermissionError(13, "locked")
+
+    monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _boom_replace)
+    target = tmp_path / "agg.dat"
+    target.write_text("old\n", encoding="utf-8")
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_store"):
+        assert traffic_store_module._write_text_payload(str(target), "new\n") is False
+    wtp_warns = [r.getMessage() for r in caplog.records if "放弃本轮" in r.getMessage()]
+    assert len(wtp_warns) == 1 and "agg.dat" in wtp_warns[0]
+    assert target.read_text(encoding="utf-8") == "old\n"

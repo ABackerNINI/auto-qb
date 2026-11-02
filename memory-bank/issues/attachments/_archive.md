@@ -59,13 +59,12 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (3)
+## In Progress (2)
 
-- [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (351)
+## Done (352)
 
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](../26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)
@@ -98,6 +97,7 @@
 - [bug] [mutants deselect 缺口: DEFAULT_DESELECT 缺新文本层守阵 + 守阵提醒机制缺失](../26-10-31-1539-bug-mutation-tooling-deselect-guards.html) — W4-A 实证: test_v4_parse_skeleton_single_point 击穿基线不在 DEFAULT_DESELECT; 新文本层守阵晚于表即击穿, 需提醒机制或更新纪律
 - [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
+- [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [test] [core/ tvshows CJK 中文数字变异存活: 「百」语义 2 条低危](../26-10-31-1212-test-core-w3-mutation-cjk-numerals.html) — W3 低危簇2: cjk_int_27(百=100变200)+find_season_14(第百季收进季号), cjk_int_23 待定随簇备注, W3 池无守阵
 - [test] [core/ curves 别名/坏行变异存活: normalize_period「D」+ parse_dat 坏行计数 3 条低危](../26-10-31-1212-test-core-w3-mutation-curves-alias-badlines.html) — W3 低危簇7: normalize_7/8(别名 D 被拒)+parse_dat_19(坏行计数 2→1), W3 池无守阵
