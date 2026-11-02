@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>大文件多轮拆分实施计划（&gt;1000 行候选 80 个）</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="big-file-split">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-02-2342">
+<meta name="doc-updated" content="26-11-02-2342">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: big-file-split</div>
+<h1>大文件多轮拆分实施计划（&gt;1000 行候选 80 个）</h1>
+<p class="lede">以 26-11-02 只读扫描为基线，把 606 个纳入源文件中 80 个 &gt;1000 行候选分 5 轮处置：先用纯搬迁拆测试静态守阵，再逐轮上移到工具/扩展、前端域片段、后端单类与大型 Mixin；每轮独立验证、独立回滚。本轮只立计划，不动源码。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-02-2342 · <b>doc-updated</b> 26-11-02-2342 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令（2026-11-02：基于同会话只读扫描写多轮拆分计划，本轮只写计划）+ 扫描事实（606 纳入 / 80 命中 / py66·js12·html1·css1）
+</div>
+
+<h2><span class="no">§01</span>目标与非目标</h2>
+<p><b>目标</b>：在不改变任何运行时行为、接口、文案与视觉的前提下，把仓库中体量最大的源文件降下来，并按风险从低到高形成可独立验收的轮次。</p>
+<ul>
+  <li><b>G1 体量目标</b>：对判定为「拆」的 56 个候选执行拆分，拆分后每个新文件 ≤1000 行；原文件要么消失，要么只保留入口/门面。</li>
+  <li><b>G2 零行为目标</b>：第一轮只搬测试代码，生产代码（<code>src/</code>）零改动；后续轮次只做「等价搬迁 + 重导出」，不改逻辑、不改公开符号、不改默认值。</li>
+  <li><b>G3 可回滚目标</b>：每个文件一条可独立回退的步骤，落一份「函数 → 目标文件」清单；失败只回退该文件/该批次，不回退整轮。</li>
+  <li><b>G4 可追溯目标</b>：全部数字来自 26-11-02 扫描与本次 AST 结构统计，不在计划里新造数字；执行时新增数字必须来自实测输出。</li>
+</ul>
+<p><b>非目标</b>：</p>
+<ul>
+  <li>N1 不拆「没必要拆」的 2 个（演示样张、常量/接线内核）；22 个暂缓文件本轮不动，只在附录记录触发条件。</li>
+  <li>N2 不做架构重设计、不合并模块、不改配置键、不改测试断言语义、不做「顺手重构」；计划外的缺陷按范围守恒入池，不在拆分动作里修。</li>
+  <li>N3 不处理被排除的 51 个大文件（技能资产/旧快照/设计样张），也不处理 ≤1000 行文件。</li>
+  <li>N4 本轮不改源码、不拆文件、不 commit、不 push；只新增本计划文档并重建知识库索引。</li>
+</ul>
+
+<h2><span class="no">§02</span>扫描事实与现状</h2>
+<p>扫描口径：统计全部源文件类型，行数用脚本逐文件读取后按 <code>splitlines()</code> 计数，空行、注释、docstring 全部计入；阈值严格为 &gt;1000（等于 1000 不算）。</p>
+<table>
+  <thead><tr><th>维度</th><th>事实</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td>扫描总量</td><td>1132 个源文件</td><td>扣除依赖/缓存/运行时数据/报告生成物后遍历所得</td></tr>
+    <tr><td>纳入候选口径</td><td><b>606 个</b></td><td><code>src</code> 277 · <code>tests</code> 157 · <code>tests-real</code> 38 · <code>e2e</code> 54 · <code>scripts</code> 19 · <code>tools</code> 28 · <code>extensions</code> 6 · <code>.commands</code> 24 · 根目录 3</td></tr>
+    <tr><td>命中 &gt;1000 行</td><td><b>80 个</b></td><td>等于 1000 不算；最大 7022 行，最小 1004 行</td></tr>
+    <tr><td>类型分布</td><td>py 66 · js 12 · html 1 · css 1</td><td>合计 80</td></tr>
+    <tr><td>区域分布</td><td><code>tests</code> 43 · <code>src</code> 23（后端 11 + 前端 static 12）· <code>tests-real</code> 7 · <code>scripts</code> 3 · <code>tools</code> 2 · <code>extensions</code> 2</td><td>合计 80</td></tr>
+    <tr><td>测试集中度</td><td>50 / 80 是测试</td><td><code>tests/</code> 43 + <code>tests-real/</code> 7；前 6 大文件全部在测试/静态守阵</td></tr>
+  </tbody>
+</table>
+<p><b>第一轮 10 个文件的结构事实</b>（AST 提取，测试函数 / 模块级辅助函数 / 模块级类）：</p>
+<table>
+  <thead><tr><th>文件</th><th>行数</th><th>tests</th><th>helpers</th><th>classes</th></tr></thead>
+  <tbody>
+    <tr><td><code>test_webui_static_dom_panel.py</code></td><td>7022</td><td>62</td><td>4</td><td>0</td></tr>
+    <tr><td><code>test_hr_service.py</code></td><td>4517</td><td>193</td><td>19</td><td>5（假取数器/桩适配器）</td></tr>
+    <tr><td><code>test_traffic_sample.py</code></td><td>4281</td><td>142</td><td>21</td><td>2（时钟/翻转速度种子）</td></tr>
+    <tr><td><code>test_webui_static_skins.py</code></td><td>4070</td><td>26</td><td>34</td><td>0</td></tr>
+    <tr><td><code>test_memory_bank.py</code></td><td>3384</td><td>96</td><td>37</td><td>0</td></tr>
+    <tr><td><code>test_relocate_exec.py</code></td><td>2773</td><td>93</td><td>13</td><td>0</td></tr>
+    <tr><td><code>test_config.py</code></td><td>2525</td><td>97</td><td>4</td><td>0</td></tr>
+    <tr><td><code>test_grouping.py</code></td><td>2471</td><td>113</td><td>7</td><td>1（跨组告警捕获）</td></tr>
+    <tr><td><code>test_webui_static_dom_page.py</code></td><td>2411</td><td>39</td><td>3</td><td>0</td></tr>
+    <tr><td><code>test_extension_proxy.py</code></td><td>2300</td><td>45</td><td>15</td><td>0</td></tr>
+  </tbody>
+</table>
+<p><b>共享依赖盘点（第一轮前置结论）</b>：<code>tests/helpers.py</code> 被 <code>tests/</code> 下 60+ 个文件以 <code>from helpers import ...</code> 引用（另有 <code>webui_helpers.py</code>、<code>hr_helpers.py</code> 等域内辅助）。因此 <code>tests/helpers.py</code> 本身<strong>不进入第一轮</strong>，且任何新拆出的测试文件必须继续使用其现有 API，不改函数签名、不改导入路径。</p>
+<div class="aside">被排除的 51 个大文件只作一句口径说明：<code>.agents/skills/</code> 37 个（技能示例/模板/资产）、<code>.codebuddy/skills/</code> 6 个（同内容镜像）、<code>.workbuddy-ai/tmp/aqb_old/</code> 7 个（旧版源码临时快照）、<code>resources/settings-page-templates/05-console-hub.html</code> 1 个（设计样张）；均不属本项目运行代码，不进入候选表。</div>
+
+<h2><span class="no">§03</span>处置原则与轮次划分</h2>
+<p>处置三类，判定顺序固定：</p>
+<ul>
+  <li><b>拆</b>：存在两个以上可命名、可独立验证的职责面，且拆分后能保持接口/测试语义不变。</li>
+  <li><b>暂缓</b>：职责可切但当前收益低于回归成本（共享依赖广、真机环境、临界 1000 行、单组件），记录触发条件后再动。</li>
+  <li><b>没必要拆</b>：行数增长来自演示数据、模板字符串或常量单点，拆分只会把单一事实源打散，收益为负。</li>
+</ul>
+<table>
+  <thead><tr><th>轮次</th><th>范围</th><th>文件数</th><th>拆 / 暂缓 / 不拆</th><th>风险</th><th>进入条件</th><th>轮末闸门</th></tr></thead>
+  <tbody>
+    <tr><td><b>R1</b></td><td>测试与静态守阵第一批（最大 10 个）</td><td>10</td><td>10 / 0 / 0</td><td>低（纯搬迁）</td><td>计划批准；<code>test.full</code> 基线可查</td><td>单文件全绿 + 收集数不变 + 全量绿 + 基线切片</td></tr>
+    <tr><td><b>R2</b></td><td>其余 <code>tests/</code> 与 <code>tests-real/</code></td><td>40</td><td>25 / 15 / 0</td><td>低（同一搬迁机制）</td><td>R1 完成且机制稳定</td><td>同 R1；真机类不进入本轮拆分</td></tr>
+    <tr><td><b>R3</b></td><td>工具脚本与扩展</td><td>7</td><td>4 / 3 / 0</td><td>中低（独立进程/入口）</td><td>R1 完成（测试网稳定）</td><td>脚本可启动 + <code>test.gtm</code> / 扩展守阵绿</td></tr>
+    <tr><td><b>R4</b></td><td>前端 <code>webui/static</code> 域片段</td><td>12</td><td>8 / 2 / 2</td><td>中（全局命名空间/加载顺序/模板）</td><td>R1、R2 完成（静态守阵已拆分且绿）</td><td>静态守阵 + 浏览器冒烟 + 全量绿</td></tr>
+    <tr><td><b>R5</b></td><td>后端单类 / 大 Mixin</td><td>11</td><td>9 / 2 / 0</td><td>高（调用面广/状态机）</td><td>R4 完成（前后端契约守阵稳定）</td><td>全量绿 + 覆盖率门槛不变 + 契约守阵绿</td></tr>
+    <tr><td><b>合计</b></td><td>80</td><td>80</td><td><b>56 / 22 / 2</b></td><td>—</td><td>—</td><td>—</td></tr>
+  </tbody>
+</table>
+<p><b>顺序理由</b>：R1/R2 是同一套「move-only」机制的两次规模应用，失败成本最低，先把「函数→文件清单、收集数守恒、回滚脚本」这套流程跑顺；R3 独立于前后端，插在中间消化非 Web 入口；R4 必须在 R1/R2 之后，因为前端改动的验收网就是那批静态 DOM/皮肤/页面守阵；R5 最后，因为后端门面与 Mixin 的调用面最广，需要前端契约守阵已稳定。</p>
+
+<h2><span class="no">§04</span>第一轮任务清单（10 个文件，全部 move-only）</h2>
+<p>统一搬迁方式：<b>move-only</b>。函数/类逐字剪切，函数体、断言、常量文本不重排、不格式化、不改名；只重算最小 import、补模块 docstring、把原文件头部的「## 测试计划」条目按归属分配到新文件。禁止顺带重构、禁止改 fixture scope、禁止改测试语义。</p>
+<table>
+  <thead><tr><th>原文件</th><th>行数</th><th>目标文件与模块边界</th><th>共享辅助归属</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><a href="../../tests/test_webui_static_dom_panel.py">test_webui_static_dom_panel.py</a></td><td>7022</td>
+      <td><code>test_webui_static_dom_panel_drawer.py</code>：抽屉/模板/变体（<code>test_drawer_*</code>、<code>test_drawer_tpl_*</code>）<br>
+          <code>test_webui_static_dom_panel_dialogs.py</code>：右键菜单/添加/弹窗/改名/元信息/忙碌态（<code>test_frontend_ctx_menu_*</code>、<code>test_frontend_add_*</code>、<code>test_frontend_dialog_*</code> 等）<br>
+          <code>test_webui_static_dom_panel_traffic.py</code>：流量图接线/窗口持久/轴与注释（<code>test_frontend_qb_traffic_*</code>）<br>
+          <code>test_webui_static_dom_panel_misc.py</code>：其余静态守阵</td>
+      <td>4 个模块级辅助（<code>_tpl_body</code>、<code>_tpl_top_level_tags</code>、<code>_drawer_fetch_parts</code>、<code>_js_fetch_call_lines</code>）→ 建 <code>tests/webui_dom_panel_support.py</code>；若某辅助只被一个目标文件使用，则内联，不建 support</td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_hr_service.py">test_hr_service.py</a></td><td>4517</td>
+      <td><code>test_hr_service_wave.py</code>：波次调度/预算/停表/页覆盖/顺序约束（wave、budget、stop、coverage、order、header、lane、release、freshness）<br>
+          <code>test_hr_service_rows.py</code>：行级下载/本地命中/终态/未可信/模糊匹配（rows、terminal、local、exempt、verified、untrusted、fuzzy）<br>
+          <code>test_hr_service_store.py</code>：站点文件/状态/报告/重载/计数（store、status、report、reload、counter、history、prebuilt、marks）<br>
+          <code>test_hr_service_misc.py</code>：按上表未命中者归入，逐条登记不猜语义</td>
+      <td>19 个辅助 + 5 个假适配器/假取数器类 → <code>tests/hr_service_support.py</code>，测试文件只 import；不改类名与构造签名</td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_traffic_sample.py">test_traffic_sample.py</a></td><td>4281</td>
+      <td><code>test_traffic_sample_config.py</code>：配置段解析/边界矩阵/采样间隔与 flush 间隔校验<br>
+          <code>test_traffic_sample_core.py</code>：任务注册/线程/基线/回卷/断连/缺字段/空闲过滤<br>
+          <code>test_traffic_sample_store.py</code>：v4 路径/行/聚合/flush/跨天/tail/重载<br>
+          <code>test_traffic_sample_misc.py</code>：未命中者归入</td>
+      <td>21 个辅助 + <code>_Clock</code>/<code>_FlipSpeedTorrent</code> → <code>tests/traffic_sample_support.py</code></td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_webui_static_skins.py">test_webui_static_skins.py</a></td><td>4070</td>
+      <td>本文件主体是 34 个扫描器而非测试：<br>
+          <code>tests/webui_static_scan_css.py</code>：<code>_scan_css_*</code>、<code>_css_*</code>、<code>_extract_column_keys</code>、token/背景/规则扫描<br>
+          <code>tests/webui_static_scan_js.py</code>：<code>_scan_js_*</code>、<code>_scan_template_*</code>、<code>_scan_mixin_*</code>、toast/状态/rank/ETA 扫描<br>
+          测试保留在 <code>test_webui_static_skins.py</code>；若搬迁后仍 &gt;1000，再按 <code>_table.py</code> / <code>_skin.py</code> / <code>_widget.py</code> 拆测试</td>
+      <td>34 个扫描器按「CSS 面 / JS-模板面」二分；被两侧共用的解析原语留在 <code>webui_static_scan_common.py</code></td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_memory_bank.py">test_memory_bank.py</a></td><td>3384</td>
+      <td><code>test_memory_bank_structure.py</code>：目录/文件/索引/归档/activeContext<br>
+          <code>test_memory_bank_naming.py</code>：slug/命名/类名/topic/头部 meta<br>
+          <code>test_memory_bank_docs.py</code>：doc-map/模板/链接/状态/caps/pitfall 字段<br>
+          <code>test_memory_bank_cli.py</code>：<code>kb.new</code>/<code>kb.status</code>/<code>kb.bump</code>/<code>kb.wrap</code> 行为与夹具</td>
+      <td>37 个辅助/夹具 → <code>tests/kb_test_support.py</code>；<code>_kb_checker</code>、<code>_gen_all</code> 等生成器调用保持单点</td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_relocate_exec.py">test_relocate_exec.py</a></td><td>2773</td>
+      <td><code>test_relocate_exec_run.py</code>：执行/停表/回滚/断开/dry-run/步预算<br>
+          <code>test_relocate_exec_reconcile.py</code>：对账/guardian/respawn/心跳/backoff<br>
+          <code>test_relocate_exec_jobs.py</code>：取消/持久化/重载/facts/stub<br>
+          <code>test_relocate_exec_misc.py</code>：未命中者归入</td>
+      <td>13 个辅助 → <code>tests/relocate_exec_support.py</code></td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_config.py">test_config.py</a></td><td>2525</td>
+      <td><code>test_config_load.py</code>：加载/路径派生/未知键/默认段<br>
+          <code>test_config_rules.py</code>：tracker tags/HR spec/exclude/skip_checking/tri-state<br>
+          <code>test_config_misc.py</code>：其余校验与边界</td>
+      <td>4 个写文件辅助 → <code>tests/config_write_support.py</code>（被多组共用）</td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_grouping.py">test_grouping.py</a></td><td>2471</td>
+      <td><code>test_grouping_scan.py</code>：扫描/增量/触发检查/删除/保存路径变更<br>
+          <code>test_grouping_conflict.py</code>：下载冲突/检查冲突/暂停/active 过滤<br>
+          <code>test_grouping_state.py</code>：组状态/无全局任务/记录停止范围/替换缺失文件<br>
+          <code>test_grouping_misc.py</code>：未命中者归入</td>
+      <td>7 个辅助 + <code>_CrossWarnCapture</code> → <code>tests/grouping_support.py</code></td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_webui_static_dom_page.py">test_webui_static_dom_page.py</a></td><td>2411</td>
+      <td><code>test_webui_static_dom_page_hr.py</code>：HR 详情/全屏/契约键/历史<br>
+          <code>test_webui_static_dom_page_layout.py</code>：成员窗口/computed/模板前缀/dist 段/列与持久化/未保存守卫<br>
+          <code>test_webui_static_dom_page_store.py</code>：列存储/迁移/空提示/目录浏览/store 竞态</td>
+      <td>3 个辅助（<code>_bundle_iter</code>、<code>_computed_member_names</code>、<code>_reserved_prefix_problems</code>）→ <code>tests/webui_dom_page_support.py</code></td>
+    </tr>
+    <tr>
+      <td><a href="../../tests/test_extension_proxy.py">test_extension_proxy.py</a></td><td>2300</td>
+      <td><code>test_extension_proxy_manifest.py</code>：manifest/MV3/语法/协议/共享常量<br>
+          <code>test_extension_proxy_options.py</code>：options 归一化/拒绝路径/站点取数/权限/实例变更<br>
+          <code>test_extension_proxy_page_fetch.py</code>：直取/离屏渲染/登录页/焦点归还/配额/自愈</td>
+      <td>15 个 node 运行与 JS 解析辅助，以及 <code>page_fetch_trace</code>/<code>quota_trace</code>/<code>discovery_helpers_trace</code>/<code>selfheal_trace</code>/<code>site_perm_trace</code> → <code>tests/extension_proxy_support.py</code></td>
+    </tr>
+  </tbody>
+</table>
+<div class="aside">分桶规则是「按测试函数名前缀/所属被测对象」，不是按行数均分。执行前必须先产出一张「测试函数 → 目标文件」映射表（AST 生成，落到执行时的任务档案），并逐条核对未命中项；禁止用「前 N 行 / 后 M 行」硬切。</div>
+
+<h2><span class="no">§05</span>第一轮执行步骤、验证闸门与回滚</h2>
+<h3>执行步骤（每个文件一遍）</h3>
+<ol>
+  <li><b>S0 前置</b>：确认工作树只含本计划文档；<code>commands run kb.baseline</code> 看最新基线；<code>commands run test.full</code> 留一份拆分前实测输出。</li>
+  <li><b>S1 依赖盘点</b>：AST 列出模块级函数/类与其调用点；<code>grep</code> 该模块被其它测试/守阵引用的位置；产出「函数 → 目标文件 + 共享辅助归属」映射，登记到任务档案。</li>
+  <li><b>S2 文档面切分</b>：把原文件头部「## 测试计划」清单按函数归属分配；新文件各写自己的清单，条目文案不改；并确认不触发 <code>tests/test_memory_bank.py</code> 的结构守卫。</li>
+  <li><b>S3 搬迁</b>：逐段剪切到目标文件；只补最小 import；共享辅助先落到 support 模块，再让各文件 import；不重排、不格式化、不改名。</li>
+  <li><b>S4 单文件验证</b>：<code>commands run test.one -- tests/&lt;新文件1&gt; tests/&lt;新文件2&gt; ...</code> 全绿；失败即回滚该文件。</li>
+  <li><b>S5 收集面守恒</b>：<code>commands run test.one -- tests --collect-only -q</code>，拆分前后收集用例总数必须相等；函数名集合做差必须为空（仅允许路径前缀变化）。</li>
+  <li><b>S6 批次全量</b>：每完成 2–3 个文件跑一次 <code>commands run test.quick</code>；每完成 5 个跑一次 <code>commands run test.full</code>（含覆盖率门槛），与 S0 基线对比 passed/skipped 数量。</li>
+  <li><b>S7 轮末收口</b>：<code>commands run test.full</code> 全绿 → <code>commands run kb.index</code> / <code>commands run kb.check</code> → 按实测输出新建基线切片（<code>commands run kb.new baseline --total "&lt;实测&gt;"</code>，数字只誊写不编造）。</li>
+</ol>
+<h3>验证闸门</h3>
+<table>
+  <thead><tr><th>闸门</th><th>命令 / 判据</th><th>通过标准</th></tr></thead>
+  <tbody>
+    <tr><td>G1 单文件</td><td><code>commands run test.one -- &lt;新文件...&gt;</code></td><td>0 failed / 0 error</td></tr>
+    <tr><td>G2 收集守恒</td><td><code>commands run test.one -- tests --collect-only -q</code></td><td>用例总数与拆分前一致；测试函数名集合无增删（路径变化允许）</td></tr>
+    <tr><td>G3 快速全量</td><td><code>commands run test.quick</code></td><td>全绿，无新增 skip/xfail</td></tr>
+    <tr><td>G4 全量 + 覆盖率</td><td><code>commands run test.full</code></td><td>全绿；覆盖率门槛（Windows 99.0 / 其它 98.5）不降</td></tr>
+    <tr><td>G5 静态守阵</td><td>被拆的守阵文件自身（dom_panel / skins / dom_page / extension_proxy / memory_bank）</td><td>全部通过；若守阵枚举文件路径，同步更新枚举而不是放宽断言</td></tr>
+    <tr><td>G6 知识库一致</td><td><code>commands run kb.index</code>、<code>commands run kb.check</code></td><td>生成物与索引一致，无 SLOT 残留</td></tr>
+    <tr><td>G7 范围守恒</td><td><code>git status --short</code> / <code>git diff --stat</code></td><td>本文件改动只落在 <code>tests/</code>；<code>src/</code> 零改动；无计划外文件</td></tr>
+  </tbody>
+</table>
+<h3>回滚方式</h3>
+<ul>
+  <li>回滚粒度 = 单个原文件（含其新文件与 support 模块），不是整轮。</li>
+  <li>按映射清单逐个删除新文件（用显式文件列表，<b>禁止 <code>git clean</code></b>），再 <code>git restore -- &lt;原文件&gt;</code>；support 模块若被其它已完成文件引用，先回退引用方再删。</li>
+  <li>回滚后重跑 G1/G2；若已跑到批次全量，再补一次 <code>test.quick</code>。</li>
+  <li>若失败根因是共享辅助归属判断错误，先调整归属再重搬，不在失败状态上叠改。</li>
+</ul>
+
+<h2><span class="no">§06</span>暂缓与不建议拆清单</h2>
+<h3>没必要拆（2 个）</h3>
+<table>
+  <thead><tr><th>文件</th><th>行数</th><th>为什么没必要拆</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/auto_qb/webui/static/fx/showcase.html</code></td><td>3045</td><td>它是 fx 动效候选挑选台（演示/对比页），不在生产运行路径；行数主要来自页面尾部的 <code>CARDS</code> 数据数组与内联演示样式，拆分只会把「一页可整体打开」的演示形态打散。若未来卡量继续增长，优先把数据外置为 JS/JSON，而不是拆 HTML。</td></tr>
+    <tr><td><code>src/auto_qb/webui/static/shared/app.js</code></td><td>1008</td><td>已经是一轮续拆后的内核文件，剩余主体是列模型/排序/时间口径等常量单点 + <code>createApp</code> 接线；仅超阈值 8 行。拆常量会让「单一事实源」分散到多个文件，前端守阵与加载顺序成本上升，收益为负。</td></tr>
+  </tbody>
+</table>
+<h3>暂缓（22 个）</h3>
+<table>
+  <thead><tr><th>组</th><th>文件</th><th>暂缓理由</th><th>再启动触发条件</th></tr></thead>
+  <tbody>
+    <tr><td>共享测试辅助（1）</td><td><code>tests/helpers.py</code> 1541</td><td>被 60+ 个测试文件 <code>from helpers import ...</code> 引用；拆它会同时改大量导入点，回归面远大于文件本身收益</td><td>先做完整调用聚类；出现明确的三簇以上职责且新辅助持续增长时再拆</td></tr>
+    <tr><td>真机用例（7）</td><td><code>tests-real/</code> rm04 1256 · rm06 1253 · rm03_drift 1209 · rm08 1102 · rm09 1086 · rm07 1025 · rm03_rules 1008</td><td>每个文件对应一个真机场景（辅种/HR/规则/WebUI 读写/流量），依赖真实 qB 与跨进程状态；文件只略超阈值，拆分的验证成本高、收益低</td><td>该场景新增用例使文件 &gt;1500，或真机环境稳定进入日常 CI 时按场景再拆</td></tr>
+    <tr><td>临界测试（7）</td><td><code>test_modules_w9b_s5.py</code> 1054 · <code>test_expr_eval.py</code> 1055 · <code>test_relocate_units.py</code> 1063 · <code>test_sync.py</code> 1074 · <code>test_hr_store.py</code> 1014 · <code>test_tray.py</code> 1036 · <code>test_modules_p5.py</code> 1004</td><td>只超阈值 4–74 行，且都围绕单一被测对象；拆分产生的新文件数与 import 成本高于收益</td><td>再次触碰该模块并新增用例，使文件 &gt;1300 时顺手拆</td></tr>
+    <tr><td>工具与扩展（3）</td><td><code>scripts/ui_harness.py</code> 1010 · <code>tools/.../test_storage.py</code> 1034 · <code>extensions/hr-fetch-proxy/options.js</code> 1085</td><td>均为单一入口/单一话题：冒烟桩、存储落盘、单页接线；临界超阈值</td><td>对应入口新增第二类职责，或文件 &gt;1300</td></tr>
+    <tr><td>前端模板/单组件（2）</td><td><code>drawer_templates.js</code> 1184 · <code>qb_traffic_chart.js</code> 1157</td><td>前者以模板字符串为主体，后者是单一 uPlot 组件；拆分只碎片化，不降低理解成本</td><td>模板新增族或图表新增交互/图型，使文件 &gt;1500</td></tr>
+    <tr><td>同构校验器（1）</td><td><code>config/validation/sections.py</code> 1044</td><td>26 个 <code>_validate_*</code> 高度同构、按段注册；拆开会让校验注册表跨文件追踪</td><td>新增配置段使单文件 &gt;1300，或需要按段独立复用</td></tr>
+    <tr><td>单类临界（1）</td><td><code>core/qbmanager.py</code> 1008</td><td>单类 36 方法，仅超阈值 8 行；拆分主要是搬方法，收益低于调用面回归成本</td><td>新增第二类职责（如任务编排/事件流）再拆</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>后续轮次要点与依赖顺序</h2>
+<p>后续轮次沿用 R1 的「映射表 + 单文件验证 + 收集/全量守恒 + 显式回滚」机制，只增加各轮特有的入口约束。</p>
+<table>
+  <thead><tr><th>轮次</th><th>执行要点</th><th>依赖</th></tr></thead>
+  <tbody>
+    <tr><td><b>R2</b> 其余测试（40）</td><td>25 个按被测对象分桶搬迁；<code>test_*.py</code> 才能被收集，support 文件不得以 <code>test_</code> 开头；共享辅助优先抽到 <code>*_support.py</code>，不复制。真机 7 个与临界 7 个保持暂缓。<code>tests/helpers.py</code> 只 import 不修改。</td><td>依赖 R1 的映射表与回滚清单模板</td></tr>
+    <tr><td><b>R3</b> 工具/扩展（7）</td><td><code>sim_qb.py</code> 保留入口、按 HTTP/状态/处理器拆；<code>qb_capture.py</code> 按抓取/脱敏/回放拆；扩展只拆 <code>background.js</code>，保留 MV3 唯一 worker 入口，用 <code>importScripts</code> 组合，manifest 不改。验证：<code>test.gtm</code> + <code>test.one</code> 工具用例 + 扩展守阵。</td><td>只依赖 R1 机制，可与 R2 并行，但需独立分支/独立提交</td></tr>
+    <tr><td><b>R4</b> 前端（12）</td><td>沿现有 <code>window.AQB_*</code> 域边界拆；<code>drawer.js</code>/<code>commands.js</code>/<code>shortcuts.js</code> 保留根入口；<code>console_hub.css</code> 按现有 <code>&lt;link&gt;</code> 顺序拆并保持级联；<code>dialogs.js</code> 按弹窗族拆。模板字符串为主的 2 个暂缓；演示页与内核 2 个不拆。</td><td>依赖 R1/R2：静态 DOM/皮肤/页面守阵必须先稳定</td></tr>
+    <tr><td><b>R5</b> 后端（11）</td><td>内部顺序：<code>utils</code> → <code>views</code> → <code>traffic_store</code>/<code>traffic_sample_mod</code> → <code>relocate_mod</code>/<code>ops_mod</code> → <code>hr/service</code> → <code>webui/runtime</code>/<code>webui/commands</code>。门面/大 Mixin 只做「拆实现 + 原文件重导出」，保持既有 import 路径与符号名。</td><td>依赖 R4：前端契约守阵稳定后再动后端门面</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§08</span>完成判据、风险与未知项</h2>
+<h3>完成判据</h3>
+<ul>
+  <li><b>每轮</b>：本轮「拆」清单全部完成后，新文件均 ≤1000；<code>test.full</code> 全绿；覆盖率门槛不降；用例收集数守恒；<code>kb.check</code> 通过；<code>git diff --stat</code> 只含本轮允许的目录。</li>
+  <li><b>R1</b>：<code>tests/</code> 内 10 个原文件全部退出 &gt;1000 清单；新增文件不含 <code>src/</code> 改动；基线切片已按实测数字更新。</li>
+  <li><b>总计划</b>：80 个候选全部有处置记录（56 拆 / 22 暂缓 / 2 不拆）；范围内 &gt;1000 行文件从 80 降到 24（22 暂缓 + 2 不拆），且该 24 个均有「再启动触发条件」；没有生产行为/接口/文案/视觉变化。</li>
+</ul>
+<h3>风险与对策</h3>
+<table>
+  <thead><tr><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td>共享辅助漂移</td><td>同一辅助被两个目标文件引用，且复制了一份</td><td>抽到 support 模块单点；G2 检查函数名集合，发现重复命名即停</td></tr>
+    <tr><td>收集面丢失</td><td>新文件命名不符合 <code>test_*.py</code>，或模块 import 失败</td><td>G2 收集总数必须相等；缺一即回滚该文件</td></tr>
+    <tr><td>头部「测试计划」清单失真</td><td>新文件 docstring 未同步或漏条目</td><td>S2 先分配清单；<code>test_memory_bank</code> 与静态守阵作为闸门</td></tr>
+    <tr><td>守阵枚举文件路径</td><td>静态守阵断言写死了旧文件名</td><td>G5 优先同步枚举；禁止放宽断言；必要时只改路径常量</td></tr>
+    <tr><td>覆盖率假红</td><td>单文件跑 <code>test.full</code> 或收集面变小</td><td>单文件只用 <code>test.one</code>（内置 <code>--no-cov</code>）；覆盖率闸只认 <code>test.full</code></td></tr>
+    <tr><td>前端加载顺序</td><td>拆分后脚本/CSS 顺序变化导致未定义或样式覆盖</td><td>R4 保留根入口与既有 <code>&lt;link&gt;/&lt;script&gt;</code> 顺序；静态守阵 + 浏览器冒烟</td></tr>
+    <tr><td>后端门面调用面广</td><td>拆分改变 import 路径或符号可见性</td><td>原文件保留重导出；R5 按「叶→门面」顺序；全量 + 契约守阵</td></tr>
+    <tr><td>回滚误伤</td><td>用 <code>git clean</code> 或整目录回退</td><td>只按映射清单显式删除新文件 + <code>git restore</code> 原文件；禁止破坏性命令</td></tr>
+  </tbody>
+</table>
+<h3>未知项</h3>
+<ul>
+  <li><code>test_hr_service.py</code> 的 193 个测试与 19 个辅助中，存在跨组共享的假适配器；实际归属需执行时按调用点确认，计划只给边界规则。</li>
+  <li><code>test_webui_static_skins.py</code> 搬迁后测试区可能仍 &gt;1000，需二次拆分；是否发生取决于扫描器与测试的实际行占比，执行时用实测决定，不预估。</li>
+  <li>静态守阵是否枚举测试文件名尚未逐一确认；R1 第一个文件执行时先跑 <code>test_memory_bank</code> 与相关守阵探明。</li>
+</ul>
+
+<h2><span class="no">§09</span>附录 A：80 个候选处置总表</h2>
+<p>按轮次归组，轮内按行数降序。处置：<b>拆</b> = 本轮执行；<b>暂缓</b> = 记录触发条件后再动；<b>不拆</b> = 没必要拆。目标文件名为建议边界，最终以执行时的映射表为准。</p>
+<table>
+  <thead><tr><th>轮</th><th>文件（相对仓库根）</th><th>行数</th><th>处置</th><th>目标边界 / 理由</th></tr></thead>
+  <tbody>
+    <tr><td>R1</td><td><code>tests/test_webui_static_dom_panel.py</code></td><td>7022</td><td>拆</td><td>drawer / dialogs / traffic / misc + <code>webui_dom_panel_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_hr_service.py</code></td><td>4517</td><td>拆</td><td>wave / rows / store / misc + <code>hr_service_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_traffic_sample.py</code></td><td>4281</td><td>拆</td><td>config / core / store / misc + <code>traffic_sample_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_webui_static_skins.py</code></td><td>4070</td><td>拆</td><td>扫描器抽到 css/js/common 三模块；测试留原文件，必要时二次拆</td></tr>
+    <tr><td>R1</td><td><code>tests/test_memory_bank.py</code></td><td>3384</td><td>拆</td><td>structure / naming / docs / cli + <code>kb_test_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_relocate_exec.py</code></td><td>2773</td><td>拆</td><td>run / reconcile / jobs / misc + <code>relocate_exec_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_config.py</code></td><td>2525</td><td>拆</td><td>load / rules / misc + <code>config_write_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_grouping.py</code></td><td>2471</td><td>拆</td><td>scan / conflict / state / misc + <code>grouping_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_webui_static_dom_page.py</code></td><td>2411</td><td>拆</td><td>hr / layout / store + <code>webui_dom_page_support.py</code></td></tr>
+    <tr><td>R1</td><td><code>tests/test_extension_proxy.py</code></td><td>2300</td><td>拆</td><td>manifest / options / page_fetch + <code>extension_proxy_support.py</code></td></tr>
+
+    <tr><td>R2</td><td><code>tests/test_qbmanager.py</code></td><td>2283</td><td>拆</td><td>connect / query / tasks / loop + support</td></tr>
+    <tr><td>R2</td><td><code>tests/test_traffic_store.py</code></td><td>2282</td><td>拆</td><td>codec / paths / agg / store + support</td></tr>
+    <tr><td>R2</td><td><code>tests/test_utils.py</code></td><td>2133</td><td>拆</td><td>parse / path_tracker / windows</td></tr>
+    <tr><td>R2</td><td><code>tests/test_web_commands.py</code></td><td>2127</td><td>拆</td><td>dispatch / commands / confirm</td></tr>
+    <tr><td>R2</td><td><code>tests/test_ops.py</code></td><td>2106</td><td>拆</td><td>delete / limit / tags / report</td></tr>
+    <tr><td>R2</td><td><code>tests/test_web_hr.py</code></td><td>2005</td><td>拆</td><td>endpoints / search / fs</td></tr>
+    <tr><td>R2</td><td><code>tests/test_checking.py</code></td><td>1959</td><td>拆</td><td>single / batch / skip</td></tr>
+    <tr><td>R2</td><td><code>tests/test_config_writer.py</code></td><td>1959</td><td>拆</td><td>edit / validate / roundtrip</td></tr>
+    <tr><td>R2</td><td><code>tests/test_traffic_grid.py</code></td><td>1750</td><td>拆</td><td>grid / agg / group</td></tr>
+    <tr><td>R2</td><td><code>tests/test_hr_config.py</code></td><td>1562</td><td>拆</td><td>keys / defaults / migrate</td></tr>
+    <tr><td>R2</td><td><code>tests/test_rule_compat.py</code></td><td>1555</td><td>拆</td><td>mapping / defaults / warn</td></tr>
+    <tr><td>R2</td><td><code>tests/test_web_shortcuts.py</code></td><td>1550</td><td>拆</td><td>registry / conflict / panel</td></tr>
+    <tr><td>R2</td><td><code>tests/helpers.py</code></td><td>1541</td><td>暂缓</td><td>60+ 文件 import；先盘点聚类，触发见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_web_backend_misc.py</code></td><td>1337</td><td>拆</td><td>config / token / sites / views</td></tr>
+    <tr><td>R2</td><td><code>tests/test_speed_curve.py</code></td><td>1312</td><td>拆</td><td>curve / dispatch / bounds</td></tr>
+    <tr><td>R2</td><td><code>tests/test_actions.py</code></td><td>1301</td><td>拆</td><td>按动作类型族分文件</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm04_relocate/test_rm04_relocate.py</code></td><td>1256</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm06_hr/test_rm06_hr.py</code></td><td>1253</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_hr_report.py</code></td><td>1246</td><td>拆</td><td>once / status</td></tr>
+    <tr><td>R2</td><td><code>tests/test_hr_status.py</code></td><td>1237</td><td>拆</td><td>summary / detail</td></tr>
+    <tr><td>R2</td><td><code>tests/test_hr_worker.py</code></td><td>1228</td><td>拆</td><td>lifecycle / publish</td></tr>
+    <tr><td>R2</td><td><code>tests/test_kb_nav.py</code></td><td>1222</td><td>拆</td><td>page / links</td></tr>
+    <tr><td>R2</td><td><code>tests/test_webui_delta.py</code></td><td>1212</td><td>拆</td><td>delta / merge</td></tr>
+    <tr><td>R2</td><td><code>tests/test_traffic_source_agent.py</code></td><td>1211</td><td>拆</td><td>probe / spawn / state</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm03_rules/test_rm03_drift.py</code></td><td>1209</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_torrents.py</code></td><td>1191</td><td>拆</td><td>model / store</td></tr>
+    <tr><td>R2</td><td><code>tests/test_rule_base.py</code></td><td>1172</td><td>拆</td><td>action_result / context / rule</td></tr>
+    <tr><td>R2</td><td><code>tests/test_hr_runtime.py</code></td><td>1156</td><td>拆</td><td>endpoints / thread / reload</td></tr>
+    <tr><td>R2</td><td><code>tests/test_web_longtail.py</code></td><td>1126</td><td>拆</td><td>runtime / commands / routes</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm08_webui_read/test_rm08_webui_read.py</code></td><td>1102</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm09_webui_write/test_rm09_webui_write.py</code></td><td>1086</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_sync.py</code></td><td>1074</td><td>暂缓</td><td>临界且单一增量同步话题；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_relocate_units.py</code></td><td>1063</td><td>暂缓</td><td>临界；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_expr_eval.py</code></td><td>1055</td><td>暂缓</td><td>临界；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_modules_w9b_s5.py</code></td><td>1054</td><td>暂缓</td><td>临界；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_tray.py</code></td><td>1036</td><td>暂缓</td><td>临界；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm07_traffic/test_rm07_traffic.py</code></td><td>1025</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_hr_store.py</code></td><td>1014</td><td>暂缓</td><td>临界；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests-real/rm03_rules/test_rm03_rules.py</code></td><td>1008</td><td>暂缓</td><td>单个真机场景；见 §06</td></tr>
+    <tr><td>R2</td><td><code>tests/test_modules_p5.py</code></td><td>1004</td><td>暂缓</td><td>临界；见 §06</td></tr>
+
+    <tr><td>R3</td><td><code>scripts/sim_qb.py</code></td><td>2077</td><td>拆</td><td>保留入口；http / state / handlers</td></tr>
+    <tr><td>R3</td><td><code>scripts/qb_capture.py</code></td><td>1559</td><td>拆</td><td>capture / sanitize / replay</td></tr>
+    <tr><td>R3</td><td><code>extensions/hr-fetch-proxy/background.js</code></td><td>1427</td><td>拆</td><td>保留唯一 worker 入口；fetch / storage / messaging</td></tr>
+    <tr><td>R3</td><td><code>tools/global-traffic-monitor/tests/test_server.py</code></td><td>1274</td><td>拆</td><td>auth / endpoints / lease / reload</td></tr>
+    <tr><td>R3</td><td><code>extensions/hr-fetch-proxy/options.js</code></td><td>1085</td><td>暂缓</td><td>单页接线，临界；见 §06</td></tr>
+    <tr><td>R3</td><td><code>tools/global-traffic-monitor/tests/test_storage.py</code></td><td>1034</td><td>暂缓</td><td>单一存储话题，临界；见 §06</td></tr>
+    <tr><td>R3</td><td><code>scripts/ui_harness.py</code></td><td>1010</td><td>暂缓</td><td>单一冒烟桩，临界；见 §06</td></tr>
+
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/fx/showcase.html</code></td><td>3045</td><td>不拆</td><td>演示挑选台 + CARDS 数据驱动；见 §06</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/console_hub.css</code></td><td>1589</td><td>拆</td><td>tokens / layout / controls / panels，保持 link 顺序</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/drawer.js</code></td><td>1543</td><td>拆</td><td>general / trackers / files / peers / edit，保留根入口</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/config_hub.js</code></td><td>1484</td><td>拆</td><td>page / tree / presets / validation</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/config_editor.js</code></td><td>1475</td><td>拆</td><td>tree / types / form</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/shortcuts.js</code></td><td>1442</td><td>拆</td><td>registry / engine / panel</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/columns.js</code></td><td>1429</td><td>拆</td><td>width / menu / persist / window</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/drawer_templates.js</code></td><td>1184</td><td>暂缓</td><td>模板字符串为主体；见 §06</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/qb_traffic_chart.js</code></td><td>1157</td><td>暂缓</td><td>单一组件；见 §06</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/commands.js</code></td><td>1076</td><td>拆</td><td>send / receipt / optimistic</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/dialogs.js</code></td><td>1022</td><td>拆</td><td>stats / tags / logs / limit / traffic</td></tr>
+    <tr><td>R4</td><td><code>src/auto_qb/webui/static/shared/app.js</code></td><td>1008</td><td>不拆</td><td>常量单点 + createApp 接线；见 §06</td></tr>
+
+    <tr><td>R5</td><td><code>src/auto_qb/hr/service.py</code></td><td>1829</td><td>拆</td><td>budget / wave / verdict / persist，service 保留入口</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/webui/runtime.py</code></td><td>1688</td><td>拆</td><td>views / commands / traffic / hr / stream 子门面</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/core/modules/traffic_sample_mod.py</code></td><td>1622</td><td>拆</td><td>先抽 agg 纯函数，再 sampler / blocks</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/core/traffic_store.py</code></td><td>1616</td><td>拆</td><td>row_codec / day_paths / agg / store</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/webui/commands.py</code></td><td>1590</td><td>拆</td><td>torrents / config / logs / limit / traffic 子 Mixin</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/core/modules/relocate_mod.py</code></td><td>1586</td><td>拆</td><td>plan / gate / exec / journal</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/infra/utils.py</code></td><td>1435</td><td>拆</td><td>parse / paths / windows；utils 保留重导出</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/core/modules/ops_mod.py</code></td><td>1270</td><td>拆</td><td>delete / limit / tags / report</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/webui/views.py</code></td><td>1163</td><td>拆</td><td>group / single / episodes / flat / search</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/config/validation/sections.py</code></td><td>1044</td><td>暂缓</td><td>同构校验器集合；见 §06</td></tr>
+    <tr><td>R5</td><td><code>src/auto_qb/core/qbmanager.py</code></td><td>1008</td><td>暂缓</td><td>单类临界；见 §06</td></tr>
+  </tbody>
+</table>
+<div class="aside">附录 B（排除口径）：扫描同时排除了 51 个非项目运行代码的大文件——技能资产 37、技能镜像 6、旧版临时快照 7、设计样张 1；它们不进入本计划任何轮次。</div>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-02-2342</span> 初版：基于 26-11-02 只读扫描（606 纳入 / 80 命中 / py66·js12·html1·css1）制定 5 轮处置；56 拆、22 暂缓、2 不拆。</li>
+</ul>
+
+</div>
+</body>
+</html>
