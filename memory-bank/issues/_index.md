@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 9 |
+| bug | 8 |
 | perf | 5 |
 | docs | 3 |
 | test | 3 |
@@ -151,7 +151,7 @@
 - [test] [core/ limits 记录器/缓存防御面变异存活 3 条低危](26-10-31-0823-test-core-w2-mutation-recorder-defense.html) — W2 未逐条 verif…
 - [test] [core/ grid 同桶快照/混桶家族变异存活 8 条低危](26-10-31-0823-test-core-w2-mutation-snapshot-mixbucket.html) — W2 未逐条 verif…
 
-> 更早的 **298** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **299** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
