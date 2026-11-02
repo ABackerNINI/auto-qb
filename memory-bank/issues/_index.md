@@ -22,7 +22,7 @@
 | bug | 10 |
 | perf | 5 |
 | docs | 2 |
-| test | 7 |
+| test | 6 |
 | refactor | 4 |
 | feat | 21 |
 | chore | 2 |
@@ -154,9 +154,8 @@
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-p…
 - [perf] [批量添加种子时部分新行要等下一轮同步(1.5s): 补刷新赶在 qB 把种子建进 session 之前, 与 SSE 无关](26-10-30-0626-perf-webui-sse-down-poll-latency.html) — 一次添加 N 个种子时,…
 - [bug] [gtm config.yml 双 HTTP 线程写点无锁, /autostart 读-改-写可丢更新](26-10-30-0624-bug-gtm-config-write-lock.html) — D:/Program F…
-- [bug] [gtm day_rolled 无方向检查, 挂钟回跳跨日界当日累计二次清零](26-10-30-0624-bug-gtm-day-rolled-direction-check.html) — 挂钟回跳跨日界时 day…
 
-> 更早的 **287** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **288** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
