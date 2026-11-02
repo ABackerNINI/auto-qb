@@ -15,6 +15,12 @@
 - **处置**: 浮层底一律改用不透明兜底令牌 `--bg-pop`(flux `#1c2a3f` = `--bg-elev` 覆在页底 `--bg` 的等效色), **不要加 blur**
   (预算守阵 `_FLUX_BACKDROP_BUDGET` 会红)。shared 层浮层(console_hub/row_lang)在 flux 侧用 `html[data-fx-preset]` 前缀覆盖,
   不动 shared 本体(否则波及 atlas/prism/console)。口径见 conventions/webui.md「浮层不透明兜底」段。
+- **反向坑(2026-11-03 复发形态): 「找回毛玻璃」别做成删/加 blur 或把弹窗底统一成近不透明** ——
+  `.modal` 的 `backdrop-filter` 一直都在, 丢的是**透视度**: 底从 `--bg-card`(.82)换成 `--bg-elev`(.92)后
+  blur 只剩 8% 透视, 肉眼读作毛玻璃消失。判别 = 计算样式 `background-color` alpha 是否 ≥ .9; 处置 = 让
+  挂 blur 的表面用半透明角色底(`--msg-base: var(--bg-card)` 只挂 `.modal-mask`), 无 blur 浮层继续 `--bg-pop`,
+  **不要**为了找效果去新增 backdrop-filter(预算钉死)。守阵 `_scan_flux_modal_frost`(双向钉弹窗 blur+半透明底
+  与 `--bg-pop` 不透明底)。
 
 ### 全屏遮罩错误浮层无 dismiss 路径 = 整页操作锁 ≤ 轮周期
 

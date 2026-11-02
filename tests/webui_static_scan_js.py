@@ -40,6 +40,7 @@ from webui_static_scan_css import (
     _scan_column_cells_paired,
     _scan_css_blocks,
     _scan_css_comments,
+    _scan_flux_modal_frost,
     _scan_progress_val_parity,
     _scan_state_color_tokens,
 )
@@ -794,6 +795,12 @@ def _scan_frontend_assets():
        (用户六轮口径「都改成主标题+说明」, 本轮把 58 处没有分隔符的回执补上了说明句)。
        只判首参是字面量/模板的调用; `toast(g.title)` 这类运行时决定的文案跳过(静态无从判定)。
 
+    22. flux 弹窗毛玻璃与浮层不透明底对照(见 _scan_flux_modal_frost, 2026-11-03): `.modal` 必须
+       同时保留无前缀与 `-webkit-` blur, 且底走 `--msg-base: var(--bg-card)` 半透明角色面 ——
+       26-11-02 消息面统一把弹窗底换成 `--bg-elev`(92%)后 blur 仅剩 8% 透视, 肉眼读成"毛玻璃被
+       上一次透明修复弄丢"; 反向同时钉透明修复侧(`--bg-pop` 不透明 + 八类无 blur 浮层仍消费它),
+       防只修一边又翻烧饼。
+
 
     WARN: 7/8/9/11/18 五项按 **app.js 整包**(HTML 加载顺序拼接 app.js + 各片段)扫描, 不按单文件 ——
       拆分后同一条不变量的代码可能分处两个文件, 只看一个文件必然漏(2026-09-20 实测);
@@ -849,6 +856,7 @@ def _scan_frontend_assets():
     _scan_progress_val_parity(problems)
     _scan_state_color_tokens(problems)
     _scan_message_surface_parity(problems)
+    _scan_flux_modal_frost(problems)
     _scan_toast_copy_two_part(problems)
     return problems
 

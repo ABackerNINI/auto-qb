@@ -162,6 +162,8 @@ _PERF_BACKDROP_BANNED = ("modal-mask", "topbar", "status-strip", "statusbar", "c
 # 真毛玻璃(无过渡; 弹窗遮罩与列表行仍不带)。四类旧禁类对 flux 放开, 但声明数钉死显式预算:
 # 多一处少一处都红, 防"顺手再挂一块"重演嵌套模糊(弹窗面板 blur 会叠在顶栏/状态栏 blur 之上,
 # 这是**有意接受的小面积嵌套** —— 遮罩级全屏 blur 不回来, 帧率实测背书, 见计划档案 R2 实录)。
+# 计数口径 = **逻辑处**(按规则体): `-webkit-backdrop-filter` 是 Safari 前缀别名, 与同体的无前缀
+# 声明只计一处 —— 否则加一条兼容声明就把预算顶红, 迫使 agent 去改预算而不是改样式。
 _FLUX_BACKDROP_BUDGET = 4
 
 

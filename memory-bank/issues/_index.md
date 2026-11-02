@@ -22,7 +22,7 @@
 | bug | 9 |
 | perf | 5 |
 | docs | 2 |
-| test | 2 |
+| test | 3 |
 | refactor | 3 |
 | feat | 21 |
 | chore | 2 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery…
 - [bug] [full_checking 自愈 pop 后缺 state.save 落盘](26-11-03-0104-bug-full-checking-selfheal-state-save.html) — recheck_fail…
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank…
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/get…

@@ -120,9 +120,10 @@ def _scan_backdrop_filter(problems):
     1.**位置**: 上述六类元素一律不许出现 backdrop-filter(不论哪套 UI、哪份 CSS) --
       flux 例外四类(topbar/status-strip/statusbar/ce-actions)按 R2 显式档放开, modal-mask 对
       flux 也仍禁(遮罩级全屏 blur 是 PERF-01 根因本体, 任何皮肤不回来);
-    2.**数量**: 三旧皮肤(atlas/prism/console)声明数必须相等且为 0 —— 防"只在某一侧加回来"
+    2.**数量**: 三旧皮肤(atlas/prism/console)逻辑处数必须相等且为 0 —— 防"只在某一侧加回来"
       这类单边改动(shared/console_hub.css 是共用层, 各边同担, 不计入各自计数); flux 走显式档,
-      声明数必须恰等于 _FLUX_BACKDROP_BUDGET(加/摘毛玻璃 = 显式改预算 + 红绿双验)。
+      逻辑处数必须恰等于 _FLUX_BACKDROP_BUDGET(加/摘毛玻璃 = 显式改预算 + 红绿双验)。
+      计数按规则体归并: `-webkit-backdrop-filter` 前缀别名与同一体的无前缀声明只算一处。
     扫描前先剥 `/* ... */`, 否则本文件里解释这段历史的注释会被当成真实声明(实测会误报)。
     """
     counts = {ui: 0 for ui in _UI_ALL}
@@ -134,13 +135,17 @@ def _scan_backdrop_filter(problems):
             rel = os.path.relpath(path, STATIC_ROOT).replace(os.sep, "/")
             text = re.sub(r"/\*.*?\*/", "", open(path, encoding="utf-8").read(), flags=re.S)
             sel = ""
+            counted = False  # 当前规则体已计过一条逻辑毛玻璃声明(前缀别名不重复计数)
             for line in text.splitlines():
                 if "{" in line:
                     sel = (sel + " " + line.split("{", 1)[0]).strip()
-                if re.search(r"backdrop-filter\s*:", line):
-                    for ui in _UI_ALL:
-                        if rel.startswith(ui + "/"):
-                            counts[ui] += 1
+                    counted = False
+                if re.search(r"(?:-webkit-)?backdrop-filter\s*:", line):
+                    if not counted:
+                        for ui in _UI_ALL:
+                            if rel.startswith(ui + "/"):
+                                counts[ui] += 1
+                        counted = True
                     for bad in _PERF_BACKDROP_BANNED:
                         if re.search(r"\.%s\b" % re.escape(bad), sel):
                             if rel.startswith("flux/") and bad != "modal-mask":
@@ -161,7 +166,7 @@ def _scan_backdrop_filter(problems):
         )
     if counts["flux"] != _FLUX_BACKDROP_BUDGET:
         problems.append(
-            f"flux 的 backdrop-filter 声明数 = {counts['flux']}(显式档恰 {_FLUX_BACKDROP_BUDGET} 处: "
+            f"flux 的 backdrop-filter 逻辑处数 = {counts['flux']}(显式档恰 {_FLUX_BACKDROP_BUDGET} 处: "
             f"顶栏/状态栏/详情面板/弹窗面板各一) —— R2 精修 V2 口径: flux 加/摘毛玻璃必须显式改本预算"
             f"并红绿双验, 防『顺手再挂一块』重演嵌套模糊(遮罩级全屏 blur 任何皮肤不回来, 见 PERF-01)"
         )
@@ -315,3 +320,118 @@ def _scan_state_color_tokens(problems):
         for rel, body in bar[ui]:
             if "var(--st" not in body:
                 problems.append(f"{rel} 进度条填充未取状态色 var(--st) —— 各状态一条色, 读不出种子状态")
+
+
+def _scan_flux_modal_frost(problems):
+    """flux 弹窗毛玻璃与浮层不透明底对照守阵(2026-11-03 回归, 用户报「flux 弹窗毛玻璃弄丢了」)
+
+    现象与根因: `backdrop-filter` 声明从未被删(仍在 `.modal` 上), 但 26-11-02 的消息面统一把
+    弹窗底从 `--bg-card`(82%) 换成 `--bg-elev`(92%) —— 只剩 8% 透视, blur 形同不存在, 肉眼
+    读成"毛玻璃被上一次透明修复弄丢了"。故本守阵**同时钉两侧**, 只钉其一都会让修复来回翻烧饼:
+    ① 弹窗侧: `.modal` 必须保留无前缀 + `-webkit-`(Safari < 18)两份 blur 声明, 且底必须是
+       半透明角色面(`--msg-base`), 不允许再回到 `--bg-elev` 近不透明底;
+    ② 透明修复侧(26-11-02 R7): flux `--bg-pop` 必须仍是不透明色, 且八类**不挂 blur** 的浮层
+       (列选择器/筛选器/右键菜单/次级菜单/限速浮层/HR 悬停卡/拖放落点/HR 全屏面板)仍消费它 ——
+       把毛玻璃找回来只许动弹窗底, 不许把这批浮层重新调透明(用户报障原症状: 下层正文透出);
+    ③ 提示条不得被 `--msg-base` 波及: `--msg-base` 只许在 `.modal-mask` 作用域声明(挂 :root
+       会让无 blur 的 `.toast` 一起变透明, 即透明修复倒退), 且 --bg-card 的 alpha 必须低于
+       --bg-elev, 保证 blur 有可见透视。
+    WARN: 只钉 flux —— 三旧皮肤没有毛玻璃(见 _scan_backdrop_filter 恒 0), 不随本守阵放开。
+    """
+    flux_dir = os.path.join(STATIC_ROOT, "flux")
+    rules = {}  # 选择器 -> [(rel, body)]; 逗号分组已拆成单个选择器
+    rule_bodies = []  # (rel, body) 每条规则一份(未拆逗号) —— 声明单点计数必须按规则, 否则共享规则会被计两次
+    style_path = os.path.join(flux_dir, "style.css")
+    for dirpath, _dirs, files in os.walk(flux_dir):
+        for name in sorted(files):
+            if not name.endswith(".css"):
+                continue
+            rel = os.path.relpath(os.path.join(dirpath, name), STATIC_ROOT).replace(os.sep, "/")
+            text = re.sub(r"/\*.*?\*/", "", open(os.path.join(dirpath, name), encoding="utf-8").read(), flags=re.S)
+            for sel_block, body in re.findall(r"([^{}]+)\{([^{}]*)\}", text):
+                rule_bodies.append((rel, body))
+                for sel in (s.strip() for s in sel_block.split(",")):
+                    if sel:
+                        rules.setdefault(sel, []).append((rel, body))
+
+    # ① 弹窗本体: 两份 blur + 半透明角色底
+    modal = rules.get(".modal", [])
+    if not modal:
+        problems.append("flux 缺 `.modal` 规则 —— 弹窗基线无处落(毛玻璃/描边/材质全失效)")
+    else:
+        rel, body = modal[0][0], "\n".join(b for _r, b in modal)
+        for token, why in (
+            ("backdrop-filter: blur(", "无前缀毛玻璃(Chrome/Edge/Firefox 主链路)"),
+            ("-webkit-backdrop-filter: blur(", "Safari < 18 的前缀别名"),
+        ):
+            if token not in body:
+                problems.append(f"{rel} `.modal` 缺 {token} —— {why}丢失; 弹窗是 R2 显式档最后一处毛玻璃,"
+                                "删掉等于用户报的「弹窗毛玻璃弄丢了」原症状")
+        if "var(--msg-surface" not in body:
+            problems.append(f"{rel} `.modal` 底未消费 --msg-surface —— 消息面材质与提示条分家")
+
+    # ② 角色底单点: --msg-surface 恰一处, 且用 --msg-base 分流(提示条近不透明 / 弹窗半透明)
+    surface_decls = [(rel, body) for rel, body in rule_bodies if re.search(r"--msg-surface\s*:", body)]
+    if len(surface_decls) != 1:
+        problems.append(f"flux 的 --msg-surface 声明数 = {len(surface_decls)} —— 消息面供给面必须恰一处单点"
+                        "(提示条/弹窗各写一份渐变表达式就会漂移)")
+    elif "var(--msg-base" not in surface_decls[0][1]:
+        problems.append(
+            f"{surface_decls[0][0]} 的 --msg-surface 未走 --msg-base 角色底 —— 弹窗与无 blur 的"
+            "提示条被迫共用一个 alpha: 要么弹窗 blur 被不透明底压成不可见, 要么提示条重新透出正文"
+        )
+    base_decls = [
+        (rel, sel, body) for sel, bodies in rules.items() for rel, body in bodies if re.search(r"--msg-base\s*:", body)
+    ]
+    mask_ok = any(
+        sel == ".modal-mask" and re.search(r"--msg-base\s*:\s*var\(--bg-card\)", body) for _r, sel, body in base_decls
+    )
+    if not mask_ok:
+        problems.append(
+            "flux 的 `.modal-mask` 未声明 `--msg-base: var(--bg-card)` —— 弹窗底退回 92% 不透明,"
+            "blur 只剩 8% 透视, 毛玻璃名存实亡(2026-11-03 回归根因)"
+        )
+
+    # ③ 提示条不得被半透明角色底波及(无 blur 的小条透出正文 = 透明修复倒退)
+    for rel, sel, _body in base_decls:
+        if sel != ".modal-mask":
+            problems.append(
+                f"{rel} `{sel}` 声明了 --msg-base —— 只许在 `.modal-mask` 作用域分流; 挂 :root/.toast"
+                "会让无 blur 的提示条一起变透明(下层正文透出, 用户报障原症状)"
+            )
+
+    # ④ 透明修复侧: --bg-pop 不透明 + 八类无 blur 浮层仍消费它
+    style = open(style_path, encoding="utf-8").read() if os.path.isfile(style_path) else ""
+    m = re.search(r"--bg-pop\s*:\s*([^;]+);", style)
+    if not m:
+        problems.append("flux/style.css 缺 --bg-pop —— 无 blur 浮层的不透明底单点被删")
+    else:
+        val = m.group(1).strip()
+        if any(t in val for t in ("rgba(", "rgb(", "hsla(", "transparent")):
+            problems.append(f"flux `--bg-pop` = {val} —— 必须是不透明色; 无 blur 浮层用半透明底会把下层正文"
+                            "透出来(26-11-02 透明修复倒退)")
+    for sel in (
+        ".col-menu", ".pop-menu", ".ctx-menu", ".ctx-sub", ".speed-pop", ".hr-pop", ".add-drop-box", ".hr-full-modal"
+    ):
+        bodies = rules.get(sel)
+        if not bodies:
+            problems.append(f"flux 缺 `{sel}` 规则 —— 无 blur 浮层的不透明底无处落")
+        elif not any("var(--bg-pop" in body for _r, body in bodies):
+            problems.append(f"flux `{sel}` 未消费 var(--bg-pop) —— 无 blur 浮层重新变半透明会把下层正文透出"
+                            "(26-11-02 透明修复倒退)")
+
+    # ⑤ blur 要有可见透视: --bg-card alpha 必须低于 --bg-elev 且明显低于 1
+    def _alpha(name):
+        mm = re.search(rf"{re.escape(name)}\s*:\s*rgba\([^)]*,\s*([0-9.]+)\s*\)", style)
+        return float(mm.group(1)) if mm else None
+
+    a_card, a_elev = _alpha("--bg-card"), _alpha("--bg-elev")
+    if a_card is None or a_elev is None:
+        problems.append("flux/style.css 的 --bg-card/--bg-elev 不是 rgba 令牌 —— 弹窗底的透视度无从判定")
+    elif a_card >= a_elev or a_card >= .95:
+        problems.append(
+            f"flux --bg-card alpha = {a_card}(--bg-elev = {a_elev}) —— 弹窗底的透视度不足,"
+            "backdrop blur 会被不透明底压成不可见(毛玻璃形同虚设)"
+        )
+
+
