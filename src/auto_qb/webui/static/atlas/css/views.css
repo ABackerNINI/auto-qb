@@ -69,7 +69,7 @@
  * !整格线必须挂 .dur-body(**文字**包裹层)而不是 .m-dur —— 行是 grid, 单元格被拉满整列宽, 挂单元格
  *   上 width:100% 就画成整列一条(线随列宽不随文字, 2026-09-29 真机实报); 包裹层是 flex item
  *   (fit-content), 线自然只覆盖「数值 + 要求」这段文字; 挂它也保住了弹窗的整格触发面。 */
-.m-pair.m-dur { position: relative; --dur-pad: 6px; padding-bottom: var(--dur-pad); }
+.m-pair.m-dur { position: relative; --dur-pad: 6px; }  /* 不得加 padding-bottom: 会把有文案的格撑高 6px(整行 43.05→48.69) */
 .m-dur .dur-body { position: relative; display: inline-flex; align-items: baseline; gap: 3px; }
 .m-dur .dur-val { position: relative; display: inline-block; }
 .m-dur .hr-line { position: absolute; left: 0; height: 2px; background: currentColor; }

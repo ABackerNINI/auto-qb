@@ -320,6 +320,16 @@ def test_frontend_hr_safety_wiring():
             f"{name} 整格线没写显式 width:100% —— 空 <i> 的 width:auto 会收缩成 0(线整条不可见)"
         assert ".m-dur > .hr-line" not in css, \
             f"{name} 整格线仍挂在单元格 .m-dur 上 —— 单元格是 grid item 会被拉满列宽, 线随列宽不随文字"
+        # 做种时长单元格不得用 padding 给底线留位(2026-11-03 真机实报): padding-bottom 会把**有文案**
+        # 的单元格撑高 6px(整行 43.05→48.69), 种子完成后一刷新就多出一片"变高"的行; --dur-pad 只做
+        # 线的下移偏移, 行底 10px 内边距足够容纳线身 —— 一旦写回 padding, 有/无文案行高不再相等。
+        dur_rule = re.search(r"\.m-pair\.m-dur \{[^}]*\}", css)
+        assert dur_rule, f"{name} 缺 .m-pair.m-dur 规则 —— 做种时长单元格的 --dur-pad 偏移找不到"
+        assert "padding" not in dur_rule.group(0), \
+            f"{name} 的 .m-pair.m-dur 又加了 padding —— 有文案/无文案行高将不再相等(43.05 vs 48.69)"
+        for line_rule in (".m-dur .dur-body > .hr-line", ".m-dur .dur-val > .hr-line"):
+            assert re.search(rf"{re.escape(line_rule)} \{{[^}}]*bottom: calc\(-1 \* var\(--dur-pad\)\)", css), \
+                f"{name} 的 {line_rule} 没按 var(--dur-pad) 下移 —— 去掉单元格 padding 后线会压住文字"
 
     # 4. 前端引用的 m.hr_* 字段 ⊆ 后端 hr_view_fields 键集(字段一致性)
     from auto_qb.core.qbmanager import QbManager

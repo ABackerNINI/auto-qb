@@ -411,6 +411,55 @@ test.describe('几何守卫(右对齐列表头)', () => {
   }
 });
 
+/* 几何守卫(做种时长单元格行高恒定, 2026-11-03 真机实报):
+ * 现象 = 种子完成后「下载中」列表里该行变高(43.05→48.69px)。根因是 .m-pair.m-dur 用
+ * padding-bottom: 6px 给 HR 底线留位 —— 单元格空时只有 6px 高(不撑行), 一旦有做种时间文案
+ * (完成瞬间就会出现"0分钟")总高 27.69px 超过其它文字格 22.05px, 把整行抬高 5.64px。
+ * 为什么必须在真浏览器里量: 静态守阵只读文件文本, 看不见盒子模型(grid 行高由最高格决定)。
+ * 口径: 同一行先补文案(模拟完成后稳态)量一次、再清空量一次, 两次行高必须相等; 并顺带钉住
+ * .m-pair.m-dur 的 padding 必须为 0(它就是行高差的来源), --dur-pad 只做线的下移偏移。 */
+test.describe('几何守卫(做种时长单元格行高恒定)', () => {
+  for (const skin of SKINS) {
+    test(`[${skin}] 几何: 做种时间有文案/无文案行高相等, 且单元格无 padding`, async ({ page }) => {
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.group-row', { timeout: 30_000 });
+      await page.locator('nav.tabs [data-view="torrents"]').click();
+      await page.waitForSelector('.group-row.torrent-row', { timeout: 30_000 });
+
+      const geo = await page.evaluate(() => {
+        const row = document.querySelector('.group-row.torrent-row');
+        const dur = row.querySelector('.m-pair.m-dur');
+        if (!dur) return null;
+        const h = () => row.getBoundingClientRect().height;
+        const inner = dur.firstElementChild;
+        /* 稳态文案 = 完成后一定出现的"0分钟"量级; 只动文字节点, 盒子结构与样式仍是页面真货 */
+        const withH = (() => {
+          if (inner) inner.textContent = '1分钟';
+          else dur.textContent = '1分钟';
+          return h();
+        })();
+        const withoutH = (() => {
+          if (inner) inner.textContent = '';
+          else dur.textContent = '';
+          return h();
+        })();
+        return {
+          withH: Math.round(withH * 100) / 100,
+          withoutH: Math.round(withoutH * 100) / 100,
+          padBottom: getComputedStyle(dur).paddingBottom,
+        };
+      });
+
+      expect(geo, '种子页没有做种时间单元格(.m-pair.m-dur) —— 列结构变了?').not.toBeNull();
+      expect(geo.padBottom, '做种时间单元格又用 padding 给底线留位, 行高会被文案撑高').toBe('0px');
+      expect(
+        Math.abs(geo.withH - geo.withoutH),
+        `做种时间有文案/无文案行高不等: ${geo.withH} vs ${geo.withoutH}`,
+      ).toBeLessThanOrEqual(0.5);
+    });
+  }
+});
+
 /* 几何守卫(只读状态行同缘, 2026-10-18, 计划 26-10-17-1737 S6/#5):
  * 「工具状态」区的只读行曾出现「标签 | 值」前后不齐 —— 根因是 .hb-lb 的 7px 上边距
  * (为对齐输入框而设)落进没有控件盒的纯文本行, 标签整体比数值低一截。修法 = .hb-row.hb-ro
