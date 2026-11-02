@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ limits 记录器/缓存防御面变异存活 3 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 C: obs_7/8(非 Mapping 状态防御) + rday_10(缺失哨兵空串化)">
 <title>core/ limits 记录器/缓存防御面变异存活 3 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-recorder-defense</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -101,7 +101,19 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：<code>isinstance(server_state, Mapping)</code> 防御支、<code>lambda name: None</code> 与 <code>stat_key = None</code> 缺失哨兵三处与 issue 描述一致</li>
+      <li>2026-11-02 — 状态 <strong>Done</strong>：3 条红验全部 KILLED，定向测试全绿</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法与验证</h2>
+    <p><b>零 src 改动, 只补守阵</b>(<code>tests/test_traffic_limits.py</code>):</p>
+    <ul>
+      <li><code>obs_7</code>/<code>obs_8</code> → 新增 <code>test_recorder_observe_non_mapping_state_no_phantom_event</code>: <code>observe(object(), ts)</code> 不抛且不建当日天文件 —— 恒 Mapping 支实测 AttributeError(<code>'object' object has no attribute 'get'</code>), lambda 返回 0 实测写出 (0,0) 假事件。红验两条 <b>KILLED</b>。</li>
+      <li><code>rday_10</code> → 新增 <code>test_limits_cache_missing_day_zero_open</code>: spy <code>builtins.open</code> 断言缺失天文件调用计数 0 —— 哨兵 <code>None</code> 写成 <code>""</code> 后实测白开 1 次(异常被 OSError 吞, 结果面仍 ())。红验 <b>KILLED</b>(1 != 0)。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_traffic_grid.py tests/test_traffic_limits.py</code> 全绿; 测试数字见 <code>kb.baseline</code>。</p>
   </section>
 
   <footer>
