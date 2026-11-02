@@ -33,6 +33,10 @@
 - test_parse_inline_whitespace_valid_line: (parse_4)行内含空白(空格/制表)的合法手编行 —— int 容忍前导空白, split(None) 会把整行拆散丢弃
 - test_parse_zero_epoch_and_zero_limits_valid: (parse_37/parse_38)非负契约下界 —— ts=0 合法(仅负数豁免), 0,0,0 整行复原; `ts <= 0`/`ts < 1` 会误丢 epoch 0 行
 - test_limits_cache_bad_byte_day_file_tolerated: (rdl_8/rdl_18 + rday_25/29/34/35)读侧两处 open 的坏字节降级 —— 含坏字节天文件走 LimitsCache.read_day(Web 端点路径)不得抛 UnicodeDecodeError/LookupError, 坏行豁免后有效事件照常读回
+- test_recorder_guard_day_reset_after_warn: (mut-core W2 guard_1)按天重置 —— 首日超阈告警后次日首条必须静默(重置判定反写会让计数变生命周期累计, 次日旧计数+跨过节流窗即误报)
+- test_recorder_guard_throttled_single_warning: (mut-core W2 guard_9/guard_14)节流条数 —— 同天超阈后的 WARNING 恰 1 条(时间戳取不到/存不进会让每轮都刷)
+- test_recorder_observe_non_mapping_state_no_phantom_event: (mut-core W2 obs_7/obs_8)非 Mapping 状态防御 —— 不抛 AttributeError 且不把未知字段当 0 记假事件
+- test_limits_cache_missing_day_zero_open: (mut-core W2 rday_10)缺失天文件零 open —— 缺失哨兵判据失守会白开一次(异常被 OSError 吞, 契约无声破坏)
 """
 import logging
 import os
@@ -404,6 +408,32 @@ def test_limits_cache_no_data_dir_and_open_oserror(tmp_path, monkeypatch):
     assert cache.read_day(date) == ()
 
 
+def test_limits_cache_missing_day_zero_open(tmp_path, monkeypatch):
+    """(mut-core W2 rday_10)缺失天文件零 open: 缺失哨兵(stat_key=None)判据失守会白开一次
+    (FileNotFoundError 被 OSError 吞), 「缺失恒 () 零 open」性能契约无声破坏"""
+    cache = LimitsCache(str(tmp_path))
+    calls = {"n": 0}
+    real_open = open
+
+    def spy(*a, **k):
+        calls["n"] += 1
+        return real_open(*a, **k)
+
+    monkeypatch.setattr("builtins.open", spy)
+    assert cache.read_day("2026-10-20") == ()
+    assert calls["n"] == 0
+
+
+def test_recorder_observe_non_mapping_state_no_phantom_event(tmp_path):
+    """(mut-core W2 obs_7/obs_8)非 Mapping 状态防御: 无 .get 的替身不得 AttributeError 上抛,
+    也不得把未知字段当 0 记成假事件(up/down 缺失即不猜不记)"""
+    data_dir = str(tmp_path)
+    rec = SpeedLimitRecorder(data_dir)
+    ts = _anchored_ts()
+    rec.observe(object(), ts)
+    assert not os.path.exists(limits_day_path(data_dir, v4_epoch_date_str(ts)))
+
+
 def test_limits_cache_evicts_oldest(tmp_path, monkeypatch):
     """缓存上限治理: 条目超上限丢最旧(LRU), 被丢的天重读触发重解析(不常驻)"""
     monkeypatch.setattr("auto_qb.core.traffic_limits._LIMITS_CACHE_MAX_ENTRIES", 2)
@@ -679,6 +709,37 @@ def test_recorder_guard_count_exact_threshold(tmp_path, caplog):
         assert not any("超常" in r.message for r in caplog.records)  # 恰达阈值: 静默
         rec.observe(_state(1024, 2048), ts + tl._LIMITS_DAILY_EVENT_WARN)
         assert any("超常" in r.message for r in caplog.records)  # 超过阈值: 告警
+
+
+def test_recorder_guard_day_reset_after_warn(tmp_path, caplog, monkeypatch):
+    """(mut-core W2 guard_1)按天重置: 首日超阈告警后, 次日首条必须重新静默 —— 重置判定
+    反写(!= -> ==)会让计数变生命周期累计, 次日旧计数再跨过节流窗即误报"""
+    from auto_qb.core import traffic_limits as tl
+
+    clock = {"t": 1000.0}
+    monkeypatch.setattr(tl.time, "monotonic", lambda: clock["t"])
+    rec = SpeedLimitRecorder(str(tmp_path))
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
+        for _ in range(tl._LIMITS_DAILY_EVENT_WARN + 1):
+            rec._guard_count("2026-10-20")
+        assert sum("超常" in r.message for r in caplog.records) == 1
+        clock["t"] += tl._LIMITS_GUARD_WARN_GAP_S + 60  # 越过节流窗: 旧计数若未清零必刷
+        caplog.clear()
+        rec._guard_count("2026-10-21")
+        assert not any("超常" in r.message for r in caplog.records)
+
+
+def test_recorder_guard_throttled_single_warning(tmp_path, caplog, monkeypatch):
+    """(mut-core W2 guard_9/guard_14)同天超阈后的告警节流: monotonic 钉常量时恰 1 条 ——
+    时间戳取不到(now=None)或存不进(_guard_ts=None)都会让每轮都刷 WARNING"""
+    from auto_qb.core import traffic_limits as tl
+
+    monkeypatch.setattr(tl.time, "monotonic", lambda: 5000.0)
+    rec = SpeedLimitRecorder(str(tmp_path))
+    with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
+        for _ in range(tl._LIMITS_DAILY_EVENT_WARN + 5):
+            rec._guard_count("2026-10-20")
+    assert sum("超常" in r.message for r in caplog.records) == 1
 
 
 def test_events_for_window_boundary_events_at_t0_and_t1(tmp_path):
