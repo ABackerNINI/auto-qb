@@ -13,7 +13,7 @@
  * 渐进字段: 每文件 availability 有则整列渲染, 无则整列省略不占位(U4: 引擎 omitEmpty
  * 通用机制接管, 原 hasav/noav 双 grid 手搓退役)。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
+ * 原子换帧, 数据未变(廉价指纹比对, W1)跳过重建, 折叠/筛选/勾选集自保(按 path 记账;
  * 换种子只重置勾选集与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542; 勾选集必须重置:
  * 上一种子的勾选落到新种子文件上是真实的优先级误操作面); 批量条/汇总条 sticky 吸底不随行滚动。
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 勾选(issue 26-10-07-0846;
@@ -47,6 +47,35 @@
    * 数据**(Vue.reactive)—— 点选后桥 keyed 写补丁原行更新, 不再 anchTouch 强制换代整表重挂
    * (旧结构 = 每次点选行 DOM 全换 → 勾选跳动 + 大树点选卡死, 用户 2026-10-13 症状 7/8)。 */
   const ui = Vue.reactive({ filter: "all", folded: new Set(), checked: new Set(), lastSig: "", lastHash: "", focusKey: "" });
+
+  /* W1(计划 26-11-02-0351)止血: 行对象按 path 记忆化 —— 输入未变的行复用上一轮对象,
+   * 桥 keyed diff(v-for :key=path + 行对象作 prop)对引用相等的行跳渲。命中判据 = 该行
+   * 参与渲染的输入逐项相等: 文件行 = derive 数值字段(size/prog/prio/av)+ 勾选态; 目录行 =
+   * 自身行态(folded)+ 子树聚合输入(files/size/done/ck/minAv/hasAv)—— 聚合是子树文件字段
+   * 的确定函数, 聚合全等即显示值全等, 改/勾一个文件自然只翻该行与祖先链。缓存是模块级
+   * 瞬态, 换种子/换 ctx 清空; 命名避开变体单点 T/R/H(pitfalls/web-ui/variant-singleton-shadow)。 */
+  const rowMem = new Map(); /* path -> 输入快照 + 上一轮行对象 */
+  let rowMemHash = "";
+  let rowMemCtx = null;
+  /* W1: sig 廉价指纹 —— 数组引用相等直接复用上轮指纹(O(1) 快路); 引用变了比 O(F) 数值
+   * 滚动指纹(size/progress/priority/availability 全部数据输入都进指纹, 任一变化必翻 sig),
+   * 不再 JSON.stringify 全量序列化(千级文件每拍白付)。 */
+  let sigFiles = null;
+  let sigFilesVal = "";
+  function filesSig(files) {
+    if (files === sigFiles) return sigFilesVal;
+    let h = files.length;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i] || {};
+      h = (h * 31 + (f.size || 0)) | 0;
+      h = (h * 31 + (f.progress || 0)) | 0;
+      h = (h * 31 + (f.priority || 0)) | 0;
+      h = (h * 31 + (f.availability || 0)) | 0;
+    }
+    sigFiles = files;
+    sigFilesVal = String(h);
+    return sigFilesVal;
+  }
 
   const CSS = [
     /* 骨架: 工具条 / 行区(引擎行容器, .drawer-body 本体滚动)/ 吸底条 */
@@ -158,7 +187,8 @@
     const statOf = (dp) => {
       let s = stats.get(dp);
       if (!s) {
-        s = { size: 0, done: 0, files: 0, missCnt: 0, miss: 0, skipCnt: 0, minAv: Infinity, hasAv: false };
+        /* ck = 子树内勾选文件数(W1: 随本单遍累计, dirRowOf 的三态框不再 subtreeFiles 全表 filter) */
+        s = { size: 0, done: 0, files: 0, missCnt: 0, miss: 0, skipCnt: 0, minAv: Infinity, hasAv: false, ck: 0 };
         stats.set(dp, s);
       }
       return s;
@@ -180,12 +210,14 @@
       total.done += size * prog;
       if (prog < 1) total.missCnt++;
       if (prio === 0) { total.skipCnt++; total.skipSize += size; }
+      const isCk = ui.checked.has(r.path); /* W1: 勾选计数一次读账, 随前缀归并落到各祖先目录 */
       const segs = r.path.split("/");
       for (let i = 1; i < segs.length; i++) {
         const s = statOf(segs.slice(0, i).join("/"));
         s.size += size; s.done += size * prog; s.files++;
         if (prog < 1) { s.missCnt++; s.miss += size * (1 - prog); }
         if (prio === 0) s.skipCnt++;
+        if (isCk) s.ck++;
         if (av !== undefined && av !== null) {
           s.hasAv = true;
           if (num(av) < s.minAv) s.minAv = num(av);
@@ -223,16 +255,28 @@
    * 整列判据, avTxt 供显示(目录 "—"/文件真值或 "—")。 */
   function dirRowOf(ctx, r, d) {
     const s = d.stats.get(r.path);
+    const folded = ui.folded.has(r.path);
     const prog = statProg(s || { size: 0, done: 0 });
-    const paths = subtreeFiles(r.path, d.fileRows).map((it) => it.row.path);
-    return {
+    /* W1: ckState 一次算存局部(旧码双算) —— 勾选计数已随 derive 单遍落到 stats.ck,
+     * subtreeFiles 每目录全表 filter 的 O(D×F) 装配冗余消除 */
+    const ckState = s ? (s.ck === 0 ? 0 : s.ck === s.files ? 2 : 1) : 0;
+    /* W1 记忆化: 行输入(子树聚合 + 行态)逐项全等 → 返回上一轮行对象(该行跳渲) */
+    const prev = rowMem.get(r.path);
+    if (prev && prev.dir && prev.folded === folded && prev.ckState === ckState &&
+      (s
+        ? (prev.hasS && prev.files === s.files && prev.size === s.size && prev.done === s.done &&
+          prev.hasAv === s.hasAv && prev.minAv === s.minAv)
+        : !prev.hasS)) {
+      return prev.row;
+    }
+    const row = {
       k: r.path,
       kind: "row",
       path: r.path,
       dir: true,
       name: r.name,
       indent: Math.max(0, r.depth) * 14,
-      folded: ui.folded.has(r.path),
+      folded,
       meta: (s ? s.files : 0) + " 文件",
       metaTitle: "",
       missTxt: "",
@@ -241,7 +285,7 @@
       progW: Math.min(100, Math.max(0, prog)).toFixed(1),
       part: prog < 100,
       progTitle: "子树加权平均进度 " + prog.toFixed(1) + "%",
-      ckState: chkStateOf(paths),
+      ckState,
       subFiles: s ? s.files : 0,
       av: undefined,
       avTxt: s && s.hasAv ? s.minAv.toFixed(2) : "—",
@@ -250,15 +294,24 @@
       badge: "",
       badgeCls: "",
       badgeTitle: "",
-      _cls: "dir" + (chkStateOf(paths) === 2 ? " is-chk" : ""),
+      _cls: "dir" + (ckState === 2 ? " is-chk" : ""),
     };
+    rowMem.set(r.path, { dir: true, folded, ckState, hasS: !!s, files: s ? s.files : 0, size: s ? s.size : 0, done: s ? s.done : 0, hasAv: !!(s && s.hasAv), minAv: s ? s.minAv : Infinity, row });
+    return row;
   }
   function fileRowOf(ctx, item, d) {
     const r = item.row;
     const checked = ui.checked.has(r.path);
     const avNum = item.av !== undefined && item.av !== null;
+    const avN = avNum ? num(item.av) : undefined;
+    /* W1 记忆化: 文件行输入(size/prog/prio/av + 勾选态)逐项全等 → 返回上一轮行对象 */
+    const prev = rowMem.get(r.path);
+    if (prev && !prev.dir && prev.ck === checked && prev.size === item.size &&
+      prev.prog === item.prog && prev.prio === item.prio && prev.avN === avN) {
+      return prev.row;
+    }
     const missTxt = item.prog < 1 ? ctx.fmtSize(item.size * (1 - item.prog)) : "";
-    return {
+    const row = {
       k: r.path,
       kind: "row",
       path: r.path,
@@ -277,22 +330,34 @@
       progTitle: "文件进度 " + (item.prog * 100).toFixed(1) + "%",
       ckState: checked ? 2 : 0,
       subFiles: 0,
-      av: avNum ? num(item.av).toFixed(2) : undefined,
-      avTxt: avNum ? num(item.av).toFixed(2) : "—",
-      avLow: avNum && num(item.av) < 1,
+      av: avNum ? avN.toFixed(2) : undefined,
+      avTxt: avNum ? avN.toFixed(2) : "—",
+      avLow: avNum && avN < 1,
       avTitle: avNum ? "qB availability: 全 swarm 中该文件数据的份数" : "qB 未返回该文件可用性",
       badge: H.prioText(item.prio, "正常"),
       badgeCls: prioBadgeClass(item.prio).trim(),
       badgeTitle: "优先级: " + H.prioText(item.prio, "正常") + " — 点击循环 不下载→正常→高→最高",
       _cls: "file" + (checked ? " is-chk" : ""),
     };
+    rowMem.set(r.path, { dir: false, ck: checked, size: item.size, prog: item.prog, prio: item.prio, avN, row });
+    return row;
   }
 
   /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 树扁平遍历(筛选 + 折叠判据)。
    * 排序不适用(树序 = 树语义, dyn 空键 = 原序); 筛选空合成空态行(原文案口径)。 */
   function rowsFn(ctx) {
     const files = fileList(ctx);
-    if (!files.length) return [];
+    if (!files.length) {
+      if (rowMem.size) rowMem.clear();
+      return [];
+    }
+    /* 记忆化缓存生命周期: 换种子(hash 记账)/换 ctx 清空 —— path 空间与格式化口径都换了 */
+    const hash = (ctx.drawer && ctx.drawer.hash) || "";
+    if (hash !== rowMemHash || ctx !== rowMemCtx) {
+      rowMemHash = hash;
+      rowMemCtx = ctx;
+      rowMem.clear();
+    }
     const d = derive(ctx);
     const rows = [];
     function isFolded(path) {
@@ -355,9 +420,10 @@
       ui.checked = new Set();
       ui.filter = "all";
     }
-    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); 锚元素由 anchFill 跨帧
-     * 保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
-    const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
+    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); sig 走廉价指纹(W1,
+     * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化);
+     * 锚元素由 anchFill 跨帧保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
+    const sig = filesSig(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
@@ -553,6 +619,7 @@
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
+    rowMem.clear(); /* W1: 记忆化缓存是模块级瞬态, 卸载即弃(下次挂载全量重建) */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听,
      * 否则新旧变体监听叠加、同一次点击被多个 handler 重复处理 */
     H.unwireEvents(host);

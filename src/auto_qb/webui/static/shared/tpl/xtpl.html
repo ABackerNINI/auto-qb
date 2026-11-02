@@ -358,8 +358,17 @@
            桥模板每拍对每段排序两次(v-if + v-for), 80 行量级下白排一遍约几 ms, 砍掉 -->
       <div v-if="seg.rows.length" class="group-table"
            @scroll="$root.syncHeadScroll($event, $root.dtBridgeTbl(tab))"
+           @keydown="$root.dtWinKbd($event, tab)"
            @vue:mounted="$root.dtRowAfter($root.dtBridgeTbl(tab), $event)">
-        <div v-for="r in $root.sortedDrawer($root.dtBridgeTbl(tab), seg.rows)"
+        <!-- W3 行窗口化(计划 26-11-02-0351): 窗表(drawerContent 两变体)上下各一个
+             <aq-row-pad> 撑住被折叠行的合计高(与主表三列表同一份占位件, table.js 收敛单点);
+             非窗表 dtWinPad 恒 0(v-if 挡住不渲染)= 不开窗逐字节等价。占位是 .group-table 的
+             直接子元素, 与行同吃容器 row-gap —— 与 _rowWindow 前缀和的间距口径一致。 -->
+        <aq-row-pad v-if="$root.dtWinPad(tab, 'top')" :height="$root.dtWinPad(tab, 'top')"></aq-row-pad>
+        <!-- 行源单点 dtBridgeLines: 窗表 = 窗口切片(drawerWinView computed 缓存), 其余 =
+             既有全量排序(表达式形状不变, 非窗表零差异)。@keydown = W3 键盘跨窗回焦
+             (冒泡序在变体宿主委托之前, 窗内移动零干预 —— 守卫与退避见 dtWinKbd)。 -->
+        <div v-for="r in $root.dtBridgeLines(tab, seg)"
              :key="r[$root.dtBridgeRowKey(tab)]" class="group-row"
              :class="$root.dtBridgeRowCls(tab) ? r[$root.dtBridgeRowCls(tab)] : null"
              :data-table="$root.dtBridgeTbl(tab)" :data-dt-key="r[$root.dtBridgeRowKey(tab)]"
@@ -369,6 +378,7 @@
                      :cols="$root.visibleColsOf($root.dtBridgeTbl(tab))"
                      v-bind="{ [$root.dtBridgeRowProp(tab)]: r }"></component>
         </div>
+        <aq-row-pad v-if="$root.dtWinPad(tab, 'bottom')" :height="$root.dtWinPad(tab, 'bottom')"></aq-row-pad>
       </div>
       <aq-empty v-else text="暂无数据"></aq-empty>
     </teleport>

@@ -121,6 +121,24 @@ def collect_files(mb: Path, paths: list[Path] | None) -> list[Path]:
     return sorted(mb.rglob("*.html"))
 
 
+# x-template 碎片: 全文件只由 <script type="text/x-template"> 块(夹注释/空白)组成,
+# 被前端 fetch 后内联进宿主文档, 自己不是独立 HTML 文档 —— v.Nu 的 document 级规则
+# (doctype / title)对它无意义 (2026-11-02 ship.commit 实测: xtpl.html 被误报 2 条)。
+# 这类文件仍过 L1+L2 常驻判据 (标签配平面), 此处只豁免 --vnu 的文档级检查。
+_XTPL_FRAG_RE = re.compile(
+    r"^(?:\s|<!--.*?-->|<script\b[^>]*\btype=[\"']text/x-template[\"'][^>]*>.*?</script>)+$",
+    re.S,
+)
+
+
+def is_xtemplate_fragment(path: Path) -> bool:
+    try:
+        text = path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return bool(_XTPL_FRAG_RE.fullmatch(text.strip()))
+
+
 def run_l1l2(files: list[Path], root: Path) -> int:
     """L1+L2 逐文件检查; 命中打印 file:问题 并 rc=1。"""
     bad_total = 0
@@ -160,6 +178,15 @@ def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
     if not files:
         print("[ok] check_html --vnu: 本次无 HTML 改动, 跳过")
         return 0
+    fragments = [p for p in files if is_xtemplate_fragment(p)]
+    if fragments:
+        files = [p for p in files if p not in fragments]
+        print(
+            f"[ok] check_html --vnu: 跳过 {len(fragments)} 个 x-template 碎片 (非独立文档, 仍过 L1+L2): " +
+            ", ".join(rel_posix(p, root) for p in fragments)
+        )
+        if not files:
+            return 0
     jar = ensure_vnu_jar(root)
     cmd = [java, "-jar", str(jar), "--asciiquotes", "--errors-only", "--exit-zero-always", *[str(p) for p in files]]
     try:

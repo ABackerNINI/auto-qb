@@ -11,7 +11,7 @@
  * 单文件 = [index], 目录 = 整棵子树收集)。重命名不在本变体设计内 → 回 classic 用(试用期对照)。
  * 渐进字段: 每文件 availability(qB 版本浮动)有则渲染可用性格与详情格, 无则整格省略不占位。
  * 渲染纪律: dtHtml 全量转义(dtRaw 只用于拼接本变体 dtHtml 产出的预转义片段), replaceChildren
- * 原子换帧, 数据未变(整份 files 序列化比对)跳过重建, 滚动/折叠/筛选/选中态自保(换种子只重置
+ * 原子换帧, 数据未变(廉价指纹比对, W1)跳过重建, 滚动/折叠/筛选/选中态自保(换种子只重置
  * 选中与筛选, 折叠记账跨种子保持 —— P3-6, 报告 26-10-07-0542)。
  * 行级键盘: 树行 roving tabindex + 方向键移焦 + Enter/Space 激活(issue 26-10-07-0846;
  * 锚点/记账/回焦/移焦走核心 helpers 单点, 整行不加 role=button —— 行内已含原生控件)。
@@ -45,6 +45,35 @@
   /* W5(计划 26-10-13-0811 L5): 选中/折叠/筛选进反应式驱动数据 —— 桥 keyed 写补丁原行更新,
    * 不再 anchTouch 强制换代整表重挂(行抖动/焦点丢的旧结构)。 */
   const ui = Vue.reactive({ filter: "all", folded: new Set(), selPath: "", lastSig: "", lastHash: "", focusKey: "" });
+
+  /* W1(计划 26-11-02-0351)止血: 行对象按 path 记忆化 —— 输入未变的行复用上一轮对象,
+   * 桥 keyed diff(v-for :key=path + 行对象作 prop)对引用相等的行跳渲。命中判据 = 该行
+   * 参与渲染的输入逐项相等: 文件行 = 树节点数值字段(size/prog/prio/index)+ 行态(sel/folded);
+   * 目录行 = 自身行态 + 子树聚合输入(files/dirs/size/prog)—— 聚合是子树文件字段的确定函数,
+   * 聚合全等即显示值全等, 改一个文件自然只翻该行与祖先链。缓存是模块级瞬态, 换种子/换 ctx
+   * 清空; 命名避开变体单点 T/R/H(pitfalls/web-ui/variant-singleton-shadow)。 */
+  const rowMem = new Map(); /* path -> 输入快照 + 上一轮行对象 */
+  let rowMemHash = "";
+  let rowMemCtx = null;
+  /* W1: sig 廉价指纹 —— 数组引用相等直接复用上轮指纹(O(1) 快路); 引用变了比 O(F) 数值
+   * 滚动指纹(size/progress/priority/availability 全部数据输入都进指纹, 任一变化必翻 sig),
+   * 不再 JSON.stringify 全量序列化(千级文件每拍白付)。 */
+  let sigFiles = null;
+  let sigFilesVal = "";
+  function filesSig(files) {
+    if (files === sigFiles) return sigFilesVal;
+    let h = files.length;
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i] || {};
+      h = (h * 31 + (f.size || 0)) | 0;
+      h = (h * 31 + (f.progress || 0)) | 0;
+      h = (h * 31 + (f.priority || 0)) | 0;
+      h = (h * 31 + (f.availability || 0)) | 0;
+    }
+    sigFiles = files;
+    sigFilesVal = String(h);
+    return sigFilesVal;
+  }
 
   const CSS = [
     /* 主从双栏骨架(右栏 324px = 设计稿口径)。滚动容器是 .drawer-body 本身(overflow:auto),
@@ -202,14 +231,24 @@
   function rowOf(ctx, n) {
     const dir = n.dir;
     const sel = ui.selPath === n.path;
-    return {
+    const folded = ui.folded.has(n.path);
+    /* W1 记忆化: 输入快照逐项全等 → 返回上一轮行对象(新装配零分配, 该行跳渲) */
+    const prev = rowMem.get(n.path);
+    if (prev && prev.dir === dir && prev.sel === sel && prev.folded === folded) {
+      if (dir
+        ? (prev.files === n.files && prev.dirs === n.dirs && prev.size === n.size && prev.prog === n.prog)
+        : (prev.size === n.size && prev.prog === n.prog && prev.prio === n.prio && prev.index === n.index)) {
+        return prev.row;
+      }
+    }
+    const row = {
       k: n.path,
       kind: "row",
       path: n.path,
       dir,
       name: n.name,
       indent: Math.max(0, n.depth) * 14,
-      folded: ui.folded.has(n.path),
+      folded,
       meta: dir ? n.files + " 文件" : "",
       metaTitle: dir ? "目录内共 " + n.files + " 个文件" + (n.dirs ? " · " + n.dirs + " 个子目录" : "") : "",
       missTxt: (!dir && n.prog < 100) ? ctx.fmtSize(n.miss) : "",
@@ -225,13 +264,25 @@
       index: dir ? -1 : n.index,
       _cls: (dir ? "dir" : "file") + (sel ? " sel" : ""),
     };
+    rowMem.set(n.path, { dir, sel, folded, files: n.files, dirs: n.dirs, size: n.size, prog: n.prog, prio: n.prio, index: n.index, row });
+    return row;
   }
 
   /* 桥行来源(注册条目 rowsFn ← 根方法 dtTplRows): 树扁平 emit(筛选 + 折叠判据)。
    * 排序不适用(树序 = 树语义, dyn 空键 = 原序)。 */
   function rowsFn(ctx) {
     const files = fileList(ctx);
-    if (!files.length) return [];
+    if (!files.length) {
+      if (rowMem.size) rowMem.clear();
+      return [];
+    }
+    /* 记忆化缓存生命周期: 换种子(hash 记账)/换 ctx 清空 —— path 空间与格式化口径都换了 */
+    const hash = (ctx.drawer && ctx.drawer.hash) || "";
+    if (hash !== rowMemHash || ctx !== rowMemCtx) {
+      rowMemHash = hash;
+      rowMemCtx = ctx;
+      rowMem.clear();
+    }
     const tree = FT.buildFileTree(files);
     const rows = [];
     (function emit(n) {
@@ -311,9 +362,10 @@
       ui.selPath = "";
       ui.filter = "all";
     }
-    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); 锚元素由 anchFill 跨帧
-     * 保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
-    const sig = JSON.stringify(files) + "|" + String(!!loading) + "|" + err;
+    /* 数据未变跳过重建(优先级改动补拉 / 换页签回来都会触发通知); sig 走廉价指纹(W1,
+     * 引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, 不再 JSON.stringify 全量序列化);
+     * 锚元素由 anchFill 跨帧保活(锚被重建 = Teleport 重挂 = 行抖动, 桥变体稳定 HTML 不变量) */
+    const sig = filesSig(files) + "|" + String(!!loading) + "|" + err;
     if (H.skipUnchanged(host, ui, sig)) return;
     _ctx = ctx;
     /* 三态空帧(加载/错态/空态)走 reg.helpers::emptyFrame 单点(issue 26-10-20-2231);
@@ -467,6 +519,7 @@
 
   function destroy(host) {
     ui.lastSig = ""; /* 下次挂载强制整帧重建 */
+    rowMem.clear(); /* W1: 记忆化缓存是模块级瞬态, 卸载即弃(下次挂载全量重建) */
     /* 宿主元素跨变体复用(同页签只有一个 data-dt-host), 换变体必须摘掉本变体的委托监听 */
     H.unwireEvents(host);
   }

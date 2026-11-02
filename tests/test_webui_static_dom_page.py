@@ -47,6 +47,26 @@
   settings.html 挂 <aq-cond-node> 与 <aq-choose-block>(旧扁平条件写入路径 hubPickPlugin
   conditions 零残留), tpl/rule-tree.html 双模板 + 三清单接线 + app.js 注册 + 共用层 CSS 成对;
   有 node 时真跑语义电池(归一幂等/树形读侧/建树切换删除收敛/choose 分支增删与 on_error 路径版)
+- test_frontend_window_source_kind_descriptor_parameterized: 行窗口化窗口源按 kind 参数化守阵
+  (计划 26-11-02-0351 W2 参数化 + W3 抽屉接线) —— columns.js 的 WIN-SOURCES 哨兵段是窗口化几何对
+  window.scrollY/innerHeight 的唯一直读点(主表三 kind = 文档型 WIN_SRC_DOC 原行为搬入, 行键
+  group=item.key / 其余=item.hash), 窗口化方法节(_winContainer.._onWinResize)零直读;
+  _winSrc(kind) 未注册回落文档型(保守默认), _rowKeyOf/_ensureWinTop/_onWinScroll/_onWinResize
+  全走描述符; W3: WIN_SOURCES 注册 drawerContent(容器型 winSrcContainer + 行键 item.k),
+  抽屉两表(V10/V11)挂 window:"drawerContent" 而 segs 分段桥(08/05)显式不接窗(恒 null),
+  桥消费面(drawer_templates.js drawerWinView/dtWinRows/dtWinPad/dtBridgeLines/dtWinKbd)与
+  xtpl.html 桥模板接线(aq-row-pad 占位 ×2 / dtBridgeLines 行源 / @keydown 跨窗回焦)在位;
+  有 node 时真跑语义电池: 容器型 winSrcContainer 下桩 scrollTop/clientHeight
+  的切片起点/终点/上下占位与文档型同输入同输出(三滚动位), 源族分流(容器族只读 _winCtn /
+  文档族只读 _winScrollY 对, 未注册 kind 回落文档型), 描述符几何(scrollY/viewH/topOffset)
+  与绑定契约(bindScroll passive/unbind)逐项钉值, 零差异回退(低于 ROW_WIN_MIN/未量齐/rowWin 关)
+  不回潮
+- test_frontend_row_window_sig_and_ctn_sync_guard: 行窗失效签名守阵(2026-11-02 关抽屉/切页卡死
+  取证) —— ① _measureRowH 行高签名不含 viewMode(含则每次切页作废三 kind 行高 + 翻 _winMeasured,
+  返回该视图全量渲染量齐, 3000 行实测 5.8~8.4s 长任务 = 「切标签页卡死几秒」; _winResize/列集合
+  两真变化因子必须在); ② _winCtnSync 的 drawer.open 守卫先于 clientWidth 读取(收场动画 .drawer
+  转 absolute, .drawer-body clientWidth 1894->1918 是过渡假象, 采信即假 bump 共享 _winResize →
+  下一拍全量重渲 5.6s 长任务 = 「关抽屉后卡死; 能滚不能点」)
 
 ## 皮肤档位口径
 - 皮肤清单单点在 webui_helpers._UI_ALL(atlas/prism/console/flux); flux(第四套, plan 26-10-31-2316 S5)
@@ -2042,3 +2062,327 @@ def test_api_traffic_history_endpoint(web_env):
     }
     data = client.get("/api/traffic/history", headers=auth).json()
     assert data["state"] == "ok" and data["history"][0]["date"] == "2026-09-14"
+
+
+def test_frontend_window_source_kind_descriptor_parameterized():
+    """行窗口化窗口源按 kind 参数化守阵(计划 26-11-02-0351 W2, 主表零变化纯重构)
+
+    W2 把 columns.js 窗口化一节对 window.scrollY / window.innerHeight 的硬编码(全页滚动)抽成
+    按 kind 的「窗口源描述符」: 滚动源 / 视口 / 容器顶偏移 / 滚动绑定 / 行键, 每 kind 一份 ——
+    为 W3 给抽屉表挂容器 kind(滚动源 = .drawer-body 的 scrollTop)铺路。主表三 kind 必须逐行等价。
+
+    钉四件事:
+    1. **唯一直读点**(机检): columns.js 的 WIN-SOURCES 哨兵段是窗口化几何对 window.scrollY /
+       window.innerHeight 的唯一直读区; 窗口化方法节零直读 —— 参数化回潮(方法里又摸 window)即红。
+    2. **主表路径等价**: _rowKeyOf / _ensureWinTop / _onWinScroll / _onWinResize 全走描述符且
+       _winSrc 未注册回落文档型(保守默认 = 现行为); _rowWindow 三个调用点仍在。
+    3. **W3 接线(计划 26-11-02-0351)**: columns.js WIN_SOURCES 注册 drawerContent(容器型
+       winSrcContainer + 行键 item.k); app.js 抽屉两表(drawerContentV10/V11)挂
+       window:"drawerContent" 且 segs 分段桥(08/05)显式不接窗; drawer_templates.js 桥消费面
+       (drawerWinView/dtWinRows/dtWinPad/dtBridgeLines/dtWinKbd)与 xtpl.html 桥模板接线
+       (aq-row-pad 占位 ×2 / dtBridgeLines 行源 / @keydown 跨窗回焦)在位。
+    4. **行为**(有 node 时真跑): 容器型 winSrcContainer 下桩 scrollTop/clientHeight 后,
+       窗口切片起点/终点/上下占位与文档型同输入同输出(三个滚动位); 源族分流(容器族只读
+       _winCtn / 文档族只读 _winScrollY 对, 未注册 kind 回落文档型); 描述符几何与绑定契约
+       逐项钉值; 零差异回退(行数 < ROW_WIN_MIN / 未量齐 / rowWin 关)不回潮。
+
+    无 node 的机器只跑静态那一半(静默跳过电池, 不引入 pytest skip, 基线 0 skipped)。
+    """
+    cols = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
+
+    # 1. WIN-SOURCES 哨兵段成对且唯一; window.scrollY 全文件只出现在段内(列菜单/横滚条摸的是
+    #    innerWidth/innerHeight, 属各自特性, 不在本断言面)
+    m_begin = re.search(r"/\* WIN-SOURCES-BEGIN", cols)
+    m_end = re.search(r"WIN-SOURCES-END \*/", cols)
+    assert m_begin and m_end and m_begin.start() < m_end.start(), (
+        "columns.js WIN-SOURCES 哨兵段缺失/不成对 —— 窗口源描述符的单点区段被拆散? 同步本守阵"
+    )
+    for m in re.finditer(r"window\.scrollY", cols):
+        assert m_begin.start() < m.start() < m_end.start(), (
+            f"columns.js 偏移 {m.start()} 处直读 window.scrollY —— 窗口化几何必须经窗口源描述符"
+            "(计划 26-11-02-0351 W2: WIN-SOURCES 段是唯一直读点)"
+        )
+    # 1b. 窗口化方法节(方法区 P1-2 标记 -> winMembers)零 window.scrollY / innerHeight 直读
+    m_sec = re.search(r"/\* -+ P1-2 行窗口化 -+\s*\n", cols)
+    m_member = re.search(r"^\s{4}winMembers\(", cols, re.M)
+    assert m_sec and m_member, "columns.js 窗口化方法节标记漂移(P1-2 行窗口化 / winMembers) —— 同步本守阵"
+    sec = cols[m_sec.start():m_member.start()]
+    for pat in ("window.scrollY", "window.innerHeight"):
+        assert pat not in sec, (f"窗口化方法节又出现了 {pat} 直读 —— 滚动几何必须经窗口源描述符(W2 参数化回潮)")
+
+    # 2. 主表路径等价: 四个消费方法各走描述符; _winSrc 未注册回落文档型
+    def _body(text, fn):
+        m = re.search(rf"\n    {fn}\([^)]*\) " + r"\{\n(.*?)\n    \},", text, re.S)
+        assert m, f"columns.js 找不到 {fn}( 改名或挪走了? 同步本守阵"
+        return m.group(1)
+
+    assert "WIN_SOURCES[kind] || WIN_SRC_DOC" in _body(cols, "_winSrc"
+                                                      ), ("_winSrc 缺保守回落 —— 描述符缺失必须回落文档型(现行为), 否则未知 kind 直接炸")
+    assert "this._winSrc(kind).keyOf(item)" in _body(cols, "_rowKeyOf"), "_rowKeyOf 未走描述符"
+    assert "this._winSrc(kind).topOffset(el)" in _body(cols, "_ensureWinTop"), "_ensureWinTop 未走描述符"
+    assert "WIN_SRC_DOC.scrollY()" in _body(cols, "_onWinScroll"), "_onWinScroll 未走描述符"
+    assert "WIN_SRC_DOC.viewH()" in _body(cols, "_onWinResize"), "_onWinResize 未走描述符"
+    for call in ('_rowWindow("member"', '_rowWindow("torrent"', '_rowWindow("group"'):
+        assert call in cols, f"{call} 调用点消失 —— 主表三窗口断了(恒久活性探针)"
+
+    # 3. W3 接线(计划 26-11-02-0351): 抽屉两表挂 window:"drawerContent"(必须为注册过的 kind 名);
+    #    segs 分段桥描述符(08/05)显式不接窗(恒 null); 桥模板消费面三件就位(切片/占位/跨窗键盘)
+    assert "drawerContent: 27" in app, ("app.js ROW_WIN_EST_H 缺 drawerContent 档(27 = --tbl-row-minh 校准值)")
+    m_src = re.search(r"drawerContent: Object\.assign\(winSrcContainer\(", cols)
+    assert m_src, ("columns.js WIN_SOURCES 缺 drawerContent 注册(容器型 winSrcContainer)—— W3 滚动源未接")
+    assert 'keyOf: (item) => item.k' in cols, "columns.js drawerContent 描述符缺行键 keyOf(item.k)"
+    for tid in ("drawerContentV10", "drawerContentV11"):
+        m = re.search(rf"{tid}: " + r"\{(.*?)\n  \},", app, re.S)
+        assert m, f"app.js 找不到 {tid} 注册条目(改名了? 同步本守阵)"
+        assert 'window: "drawerContent"' in m.group(1), (
+            f"{tid} 未挂 window:\"drawerContent\" —— 千文件窗口化接线断了(打回 null 即回退全量渲染)"
+        )
+    for seg_tid in ("drawerPeerV08", "drawerTrackerV05"):
+        m = re.search(rf"{seg_tid}: " + r"\{(.*?)\n  \},", app, re.S)
+        assert m, f"app.js 找不到 {seg_tid}(segs 分段桥, 改名了? 同步本守阵)"
+        assert "window: null" in m.group(1), (f"{seg_tid} 的 window 被动了 —— segs:true 分段桥显式不接窗(一段一锚, 占位件无位可插)")
+    dtpl = open(os.path.join(STATIC_ROOT, "shared", "drawer_templates.js"), encoding="utf-8").read()
+    for fn in ("drawerWinView", "dtWinRows", "dtWinPad", "dtBridgeLines", "dtWinKbd"):
+        assert fn in dtpl, f"drawer_templates.js 缺 W3 桥窗口化消费面 {fn}(切片/占位/跨窗回焦三件)"
+    xtpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "xtpl.html"), encoding="utf-8").read()
+    m_bridge = re.search(r'id="tpl-aq-dt-bridge">(.*?)</script>', xtpl, re.S)
+    assert m_bridge, "xtpl.html 桥模板 tpl-aq-dt-bridge 找不到(改名了? 同步本守阵)"
+    bridge = m_bridge.group(1)
+    assert "aq-row-pad" in bridge and "dtWinPad(tab, 'top')" in bridge and "dtWinPad(tab, 'bottom')" in bridge, (
+        "桥模板缺上下占位件(aq-row-pad × dtWinPad)—— 窗口化折叠段的撑高契约断了"
+    )
+    assert "dtBridgeLines(tab, seg)" in bridge, "桥模板 v-for 未走 dtBridgeLines 行源单点(窗切片/全量回落)"
+    assert "dtWinKbd($event, tab)" in bridge, "桥模板 .group-table 缺 @keydown 跨窗回焦接线"
+
+    # 4. 有 node 时真跑语义电池(行为面)
+    node = shutil.which("node")
+    if node:
+        proc = subprocess.run(
+            [node, "-e", _NODE_WIN_SRC_PROBE,
+             os.path.join(STATIC_ROOT, "shared", "columns.js")],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode == 0, f"窗口源描述符 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
+        res = json.loads(proc.stdout.strip())
+        assert res["total"] >= 16, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert not res["failed"], ("窗口源描述符行为漂移: " + "、".join(res["failed"]) + " —— 主表等价/容器型几何被改掉")
+
+
+_NODE_WIN_SRC_PROBE = r"""
+const fs = require("fs");
+// 桩浏览器全局: window(文档滚动几何 + 绑定录制) / rAF(同步执行) / 行窗口化常量(单点在 app.js, 电池自给)
+global.__winBind = [];
+global.window = {
+  scrollY: 1000, innerHeight: 800,
+  addEventListener: (t, h, o) => global.__winBind.push(["on", t, h, o]),
+  removeEventListener: (t, h) => global.__winBind.push(["off", t, h]),
+};
+global.requestAnimationFrame = (fn) => { fn(); return 1; };
+global.ROW_WIN_MIN = 200;
+global.ROW_WIN_OVERSCAN = 10;
+global.ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
+const src = fs.readFileSync(process.argv[1], "utf8");
+eval(src + "\n;globalThis.__W2__ = { M: window.AQB_COLUMNS.methods, DOC: WIN_SRC_DOC, SRC: WIN_SOURCES, ctr: winSrcContainer };");
+const { M, DOC, SRC, ctr } = globalThis.__W2__;
+
+// 行集: 300 行, 两种行高混排(43.7 / 65.4, 同主表实测口径); 键字段按 kind 分流(hash / k)
+const N = 300;
+const mkRows = (fld) => Array.from({ length: N }, (_, i) => ({ [fld]: fld + i }));
+const hOf = (i) => (i % 2 ? 65.4 : 43.7);
+const fillHs = (kind, rows, hs) => rows.forEach((r, i) => { hs[kind + ":" + r[kind === "ctr" ? "k" : "hash"]] = hOf(i); });
+const GAP = 6;
+
+// 滚动容器桩: scrollTop/clientHeight/rect 全可控; 监听录制
+const mkSc = () => {
+  const rec = [];
+  const sc = {
+    scrollTop: 1200, clientHeight: 800,
+    getBoundingClientRect: () => ({ top: 0 }),
+    addEventListener: (t, h, o) => rec.push(["on", t, h, o]),
+    removeEventListener: (t, h) => rec.push(["off", t, h]),
+  };
+  return { sc, rec };
+};
+
+// 窗口化引擎态: 表顶在内容偏移 1200 / 视口 800; rel 与 _rowHs 逐场景覆写
+// W3: 滚动几何按源族分流 —— 文档型读 _winScrollY/_winViewH, 容器型读 _winCtnState()
+// (抽屉 .drawer-body 一对, 与文档对分家: 主表与抽屉同屏, 两套坐标系混用会互相漂移)。
+const mkCtx = () => Object.assign({}, M, {
+  rowWin: true,
+  _winMeasured: { torrent: true, group: true, member: true, ctr: true, drawerContent: true },
+  _rowH: { torrent: 50, group: 50, member: 50, ctr: 50, drawerContent: 50 },
+  _rowHVer: 7,
+  _winViewH: 800,
+  _winScrollY: 0,
+  _winCtn: { y: 0, h: 800 },  // 容器族引擎态(真机由 _winCtnState 惰性建 Vue.reactive 版)
+  _winTop: { torrent: 0, group: 0, member: 0, ctr: 0, drawerContent: 0 },
+  _rowHs: {},
+  _rowPre: {},  // 前缀和留存(created 初始化, 电池自给)
+  _winGapFor: () => GAP,
+});
+
+const checks = [
+  // --- 文档型描述符几何(主表现行为原样) ---
+  ["DOC.scrollY 直读 window.scrollY", DOC.scrollY() === 1000],
+  ["DOC.viewH 直读 window.innerHeight", DOC.viewH() === 800],
+  ["DOC.topOffset = rect.top + scrollY", DOC.topOffset({ getBoundingClientRect: () => ({ top: 200 }) }) === 1200],
+  ["DOC.bindScroll 挂 window passive", (() => { const h = () => {}; DOC.bindScroll(h); DOC.unbindScroll(h);
+      return JSON.stringify(global.__winBind) === JSON.stringify([["on", "scroll", h, { passive: true }], ["off", "scroll", h]]); })()],
+  // --- 容器型描述符几何(下桩 scrollTop/clientHeight) ---
+  ["CTR.scrollY = scrollTop", (() => { const { sc } = mkSc(); const d = ctr(() => sc); return d.scrollY() === 1200 && (sc.scrollTop = 1600) && d.scrollY() === 1600; })()],
+  ["CTR.viewH = clientHeight", ctr(() => mkSc().sc).viewH() === 800],
+  ["CTR.topOffset = 相对容器内容顶", (() => { const { sc } = mkSc(); const d = ctr(() => sc);
+      const el = { getBoundingClientRect: () => ({ top: 90 }) };
+      return d.topOffset(el) === 90 - 0 + 1200 && d.topOffset(null) === 0; })()],
+  ["CTR.topOffset 容器未渲染回落 0(零差异回退)", ctr(() => null).topOffset({ getBoundingClientRect: () => ({ top: 1 }) }) === 0
+      && ctr(() => null).scrollY() === 0 && ctr(() => null).viewH() === 0],
+  ["CTR.bindScroll 挂元素 passive + unbind 摘除(无 RO 环境不挂)", (() => { const { sc, rec } = mkSc(); const d = ctr(() => sc);
+      const h = () => {}; d.bindScroll(h); d.unbindScroll(h);
+      return JSON.stringify(rec) === JSON.stringify([["on", "scroll", h, { passive: true }], ["off", "scroll", h]]); })()],
+  // --- kind 解析与行键 ---
+  ["主表三 kind 注册齐全: torrent/member 共用文档型, group 覆盖行键", SRC.torrent === DOC && SRC.member === DOC
+      && SRC.group !== DOC && SRC.group.keyOf({ key: "a" }) === "a" && SRC.group.scrollY() === 1000],
+  ["未注册 kind 回落文档型", M._winSrc("nope") === DOC && M._winSrc("torrent") === DOC && M._winSrc("member") === DOC],
+  ["主表行键: group=item.key 其余=item.hash", M._rowKeyOf("group", { key: "g1" }) === "group:g1"
+      && M._rowKeyOf("torrent", { hash: "t1" }) === "torrent:t1" && M._rowKeyOf("member", { hash: "m1" }) === "member:m1"],
+  ["容器 kind 注册后行键从描述符给(W3 接线路径)", (() => {
+      const { sc } = mkSc();
+      SRC.ctr = Object.assign({}, ctr(() => sc), { keyOf: (it) => it.k });
+      const ok = M._rowKeyOf("ctr", { k: "x" }) === "ctr:x";
+      delete SRC.ctr;  // 注册动作本身也是 W3 的活, 电池不留痕
+      return ok; })()],
+  // --- 合帧写回走描述符 ---
+  ["_onWinResize/_onWinScroll 经描述符写回引擎态", (() => {
+      const c = Object.assign({}, M, { _winResize: 0, _winViewH: 0, _winScrollY: 0, _winRaf: 0 });
+      window.scrollY = 1555; window.innerHeight = 900;
+      c._onWinResize(); const a = c._winViewH === 900 && c._winScrollY === 1555 && c._winResize === 1;
+      c._winScrollY = 0; c._onWinScroll(); const b = c._winScrollY === 1555;
+      window.scrollY = 1000; window.innerHeight = 800;  // 还原桩
+      return a && b; })()],
+];
+
+// --- 切片等价电池: 同输入(行高/间距/rel/视口)下文档型与容器型起点/终点/占位逐位相同, 三个滚动位 ---
+const sliceEq = () => {
+  const sc = mkSc();
+  const d = ctr(() => sc.sc);
+  SRC.ctr = Object.assign({}, d, { keyOf: (it) => it.k });
+  const rowsT = mkRows("hash"), rowsC = mkRows("k");
+  const ctxT = mkCtx(), ctxC = mkCtx();
+  fillHs("torrent", rowsT, ctxT._rowHs);
+  fillHs("ctr", rowsC, ctxC._rowHs);
+  const out = [];
+  for (const into of [1000, 3000, 8000]) {  // 滚进表块 1000 / 3000 / 8000(全部窗内, 避开端点钳位)
+    // 文档型: 表顶文档偏移 1200(= 200 rect.top + 1000 scrollY), 滚到 1200+into
+    ctxT._winTop.torrent = 1200; ctxT._winScrollY = 1200 + into;
+    // 容器型: 表顶内容偏移 1200; el 的 rect.top 按物理随滚动走(content 偏移 - scrollTop),
+    // 故无论何时量 topOffset 恒得 1200 —— 与引擎「签名变化时量一次、滚动只动 scrollTop」同构
+    sc.sc.scrollTop = 1200 + into;
+    ctxC._winTop.ctr = d.topOffset({ getBoundingClientRect: () => ({ top: 1200 - sc.sc.scrollTop }) });
+    ctxC._winCtn = { y: d.scrollY(), h: sc.sc.clientHeight };
+    const a = ctxT._rowWindow("torrent", rowsT, "torrentTable");
+    const b = ctxC._rowWindow("ctr", rowsC, null);
+    out.push(JSON.stringify(a) === JSON.stringify(b)
+      && a.active && a.start > 0 && a.end < N && a.padTop > 0 && a.padBottom > 0);
+  }
+  delete SRC.ctr;
+  return out.every(Boolean);
+};
+checks.push(["容器型切片与文档型同输入同输出(三滚动位, 活窗+占位齐)", sliceEq()]);
+
+// --- W3 源族分流: 容器族滚动不写文档对, 文档族滚动不写容器对(主表与抽屉同屏不互相漂移) ---
+const familySplit = () => {
+  const rows = mkRows("hash");
+  const c = mkCtx();
+  fillHs("torrent", rows, c._rowHs);
+  c._winTop.torrent = 1200; c._winScrollY = 2200;   // 文档族滚动位
+  const wDoc = c._rowWindow("torrent", rows, "torrentTable");
+  const docY1 = c._winScrollY;
+  c._winCtn = { y: 9999, h: 800 };                  // 容器族滚动位(抽屉滚到别处)
+  c._winMeasured.ctr2 = true;                       // 未注册 kind 的量齐位(回落文档族路径)
+  const wCtn = c._rowWindow("ctr2", mkRows("k"), null);  // 未注册 kind 回落文档族(现行为)
+  // 未注册 kind 仍走文档对(不受容器态影响); 容器族 kind 只读 _winCtn
+  SRC.dctr = Object.assign({}, ctr(() => mkSc().sc), { keyOf: (it) => it.k });
+  const rowsD = mkRows("k");
+  const c2 = mkCtx();
+  fillHs("dctr", rowsD, c2._rowHs);
+  c2._winMeasured.dctr = true; c2._rowH.dctr = 50;  // dctr 的量齐位(电池自给, mkCtx 未含)
+  c2._winScrollY = 2200; c2._winCtn = { y: 9999, h: 800 }; c2._winTop.dctr = 0;
+  const wD = c2._rowWindow("dctr", rowsD, null);
+  const okCtn = wD.active && wD.start > 0 && wD.padTop > 0;  // 按容器 y=9999 切片(与文档 y 无关)
+  const docStill = c._winScrollY === docY1 && wDoc.active;   // 文档族态未被容器读路径动过
+  delete SRC.dctr;
+  return okCtn && docStill && wCtn.active;
+};
+checks.push(["源族分流: 容器族只读 _winCtn / 文档族只读 _winScrollY 对, 未注册 kind 回落文档族", familySplit()]);
+
+// --- 零差异回退不回潮 ---
+const fallback = () => {
+  const rows = mkRows("hash");
+  const base = () => Object.assign({}, M, {
+    rowWin: true, _winMeasured: { torrent: true }, _rowH: { torrent: 50 }, _rowHVer: 1,
+    _winViewH: 800, _winScrollY: 1300, _winTop: { torrent: 1200 }, _rowHs: {}, _winGapFor: () => GAP,
+  });
+  const small = base(); small._rowHs = {}; fillHs("torrent", rows, small._rowHs);
+  const off = base(); off.rowWin = false; fillHs("torrent", rows, off._rowHs);
+  const unmeasured = base(); unmeasured._winMeasured = { torrent: false }; fillHs("torrent", rows, unmeasured._rowHs);
+  const noVh = base(); noVh._winViewH = 0; fillHs("torrent", rows, noVh._rowHs);
+  const rowsSmall = rows.slice(0, 199);
+  const w1 = small._rowWindow("torrent", rowsSmall, "torrentTable");
+  const w2 = off._rowWindow("torrent", rows, "torrentTable");
+  const w3 = unmeasured._rowWindow("torrent", rows, "torrentTable");
+  const w4 = noVh._rowWindow("torrent", rows, "torrentTable");
+  const inert = (w, n) => !w.active && w.start === 0 && w.end === n && w.padTop === 0 && w.padBottom === 0;
+  return inert(w1, rowsSmall.length) && inert(w2, rows.length) && inert(w3, rows.length) && inert(w4, rows.length);
+};
+checks.push(["零差异回退: 行数<MIN / rowWin 关 / 未量齐 / 视口 0 一律全量渲染", fallback()]);
+
+console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_frontend_row_window_sig_and_ctn_sync_guard():
+    """行窗失效签名守阵(2026-11-02 关抽屉/切页卡死取证, 报告 26-11-02-0339 后续)——两根因防回潮
+
+    1. _measureRowH 的行高签名**不含 viewMode**: 签名含 viewMode 时每次切页把三 kind 行高全表
+       作废并翻 _winMeasured=false, 返回该视图即走一轮全量渲染量齐(3000 种子实测 5.8~8.4s 长任务,
+       用户所见「切标签页卡死几秒」)。行宽几何不随 viewMode 变 —— 列集合(colcounts)与视口宽
+       (_winResize)两因子独立在签名里, 真变化仍能作废。e2e 对面: window-invalidation.spec.mjs。
+    2. _winCtnSync 必须先过 drawer.open 守卫再读 .drawer-body 几何: 收场动画 .drawer 转 absolute
+       出流(三皮肤 dialogs.css .drawer-leave-active), clientWidth 实测跳 1894->1918 是过渡假象;
+       采信就假 bump 与主表**共用**的 _winResize, 下一拍 updated 钩子按签名失配全量重渲主表
+       (3000 行实测 5.6s 长任务, 用户所见「关抽屉后卡死; 能滚不能点」—— 滚轮走合成器不进主线程)。
+    """
+    rel = "shared/columns.js"
+    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+
+    # 1) 行高签名: 无 viewMode, 有 _winResize 与列集合因子
+    m = re.search(r"_measureRowH\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert m, f"{rel} 找不到 _measureRowH()(改名或挪走了? 同步本守阵)"
+    sm = re.search(r"const sig = `([^`]*)`", m.group(1))
+    assert sm, "_measureRowH 缺行高签名模板(结构变了? 同步本守阵)"
+    sig = sm.group(1)
+    assert "viewMode" not in sig, (
+        "_measureRowH 行高签名重新出现 viewMode —— 每次切页把三 kind 行高"
+        "全表作废并翻 _winMeasured, 返回该视图即全量渲染量齐(3000 行实测 5.8~8.4s 长任务, "
+        "2026-11-02 切页卡死根因); 行宽几何不随 viewMode 变, 列集合/视口宽两因子已独立在签名里"
+    )
+    assert "${this._winResize}" in sig and ".cols].length" in sig, ("行高签名缺 _winResize/列集合因子 —— 真宽度/列变化必须仍能作废行高")
+
+    # 2) _winCtnSync: drawer.open 守卫先于 clientWidth 读取(判定只认代码态, 注释里提到不算)
+    m2 = re.search(r"_winCtnSync\(\)\s*\{(.*?\n    \},)", text, re.S)
+    assert m2, f"{rel} 找不到 _winCtnSync()(改名或挪走了? 同步本守阵)"
+    code_lines = [ln.strip() for ln in m2.group(1).splitlines() if not ln.strip().startswith(("*", "//"))]
+    code = "\n".join(code_lines)
+    guard_idx = code.find("!this.drawer || !this.drawer.open")
+    assert guard_idx != -1, (
+        "_winCtnSync 代码里缺 drawer.open 守卫 —— 收场动画期 .drawer 转 absolute, "
+        ".drawer-body clientWidth 是过渡假象(1894->1918), 采信即假 bump 共享 _winResize"
+    )
+    cw_idx = code.find("clientWidth")
+    assert cw_idx != -1 and cw_idx > guard_idx, (
+        "_winCtnSync 的 drawer.open 守卫必须先于 clientWidth 读取 —— 守卫被挪到读取之后 = "
+        "关抽屉假 bump 回潮(2026-11-02 关抽屉卡死根因)"
+    )

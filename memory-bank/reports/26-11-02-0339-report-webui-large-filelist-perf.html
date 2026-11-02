@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI 单种子千级文件列表性能调研</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="webui-large-filelist-perf">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-02-0339">
+<meta name="doc-updated" content="26-11-02-0339">
+<meta name="doc-refs" content="memory-bank/plans/26-11-02-0351-plan-webui-large-filelist-perf.html, memory-bank/tasks/26-11-02-webui-large-filelist-perf.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: webui-large-filelist-perf</div>
+<h1>WebUI 单种子千级文件列表性能调研</h1>
+<p class="lede">结论先行: 千级文件列表卡顿的根因不在数据线(后端已短缓存 + JSONResponse 短路), 而在前端抽屉 content 页签<b>全量渲染 + 全量重算</b> —— 主表早有 P1-2 行窗口化, 抽屉三表全部 <code>window: null</code>; 且每次点选/重拉都整棵树重派生、千行行对象全新、千个行组件全量 re-render。推荐路线 = 记忆化止血 + 把主表窗口化机制推广进抽屉引擎。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-02-0339 · <b>doc-updated</b> 26-11-02-0339 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户报障: 单种子约 1000+ 文件的详情文件列表操作卡顿, 需要性能优化; 主表性能问题一并取证。本轮为纯调研(只取证不改码), 证据为 2026-11-02 本地 clone 代码走读(HEAD fe211faf)。
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+<p><b>前端技术栈事实</b>: Vue 3 全局构建(<code>shared/vendor/vue.global.prod.js</code>, Options API + x-template 字符串模板), 无构建步骤、无打包器, 三皮肤(prism/atlas/console/flux)共享同一套 <code>shared/</code> 模块; 表格行由自研「引擎行容器」(<code>group-table</code> + <code>.group-row</code> grid)渲染。这个事实直接决定方案取舍: <b>任何需要打包器/JSX 的方案都不适配; 凡能与「引擎行容器 + Teleport 桥 + 列偏好双轨」共存的方案才是候选</b>。</p>
+<p><b>卡顿根因(按影响排序, 详见 §03)</b>: ① 抽屉 content 行全量渲染无窗口化(主表已有); ② 每次 reactive tick 全量重派生(O(F·D) 建树/聚合)并产出<b>全新</b>行对象 → 千个行组件全量 re-render; ③ 交互粒度 = 整列表(点一次勾选 = 全表重算重渲); ④ <code>JSON.stringify(files)</code> 全量序列化做变更比对; ⑤ 优先级提交后整列表(千文件 payload)静默重拉再全渲一遍。</p>
+<p><b>推荐路线(详见 §05)</b>: 分三阶段 —— P1 低风险止血(行对象记忆化 + <code>content-visibility</code>); P2 主修(把主表 <code>_rowWindow</code> 窗口化参数化推广到抽屉引擎表); P3 数据与交互面(乐观优先级 + payload 裁剪, 按 perf-cadence 四步量法先测后裁)。不建议引入 AG Grid/整套第三方表格或上构建步骤。</p>
+
+<h2><span class="no">§02</span>证据快照 · 现状取证(代码事实)</h2>
+
+<h3>2.1 前端架构与两条渲染线</h3>
+<ul>
+  <li><b>主表线</b>(种子/分组/追剧): 数据走 <code>/api/state</code> 单请求轮询, rid 门控 + view 裁剪 + delta 增量协商(<code>server/routes/state.py:47-60</code> 端点注; <code>shared/polling.js:347-354</code> 前端带 <code>rid=</code> 与 delta=1)——版本未变时响应体趋近于零, 数组不回传、不触发整表替换。渲染层有 <b>P1-2 行窗口化</b>(<code>shared/columns.js:515</code> 起一整节; 常量 <code>ROW_WIN_MIN=200</code> / <code>ROW_WIN_OVERSCAN=10</code> 在 <code>shared/app.js:648-652</code>), 模板经 <code>&lt;aq-row-pad&gt;</code> 上下占位消费切片(<code>shared/tpl/torrents.html:7,19</code>、<code>groups.html:22,48</code>)。逐行实测行高(<code>columns.js:567-612 _measureRowH</code>), 前缀和 + 二分求可见窗(<code>columns.js:620-660 _rowWindow</code>)。主表的数据与渲染两条线<b>均已优化到位</b>。</li>
+  <li><b>抽屉详情线</b>(本次病灶): 详情面板四页签(general/content/trackers/peers)各有变体注册表; content 页签无 classic 档、缺省落首个注册变体 10「树 + 详情」(<code>shared/drawer_templates.js</code> TPL_REG.defaultSel; manifest 装载序 10&lt;11&lt;12)。content 页签<b>无轮询</b>(变体 11 头注自述, <code>drawer_tpl/11-content-treegrid-batch-low.js:364</code>), 文件列表按需拉取。</li>
+</ul>
+
+<h3>2.2 数据线: 文件列表端点(健康, 但全量)</h3>
+<ul>
+  <li>端点 <code>GET /api/torrents/{hash}/files</code>(<code>src/auto_qb/webui/server/routes/torrent_detail.py:58-64</code>): 一次返回 <code>client.torrents_files(hash)</code> 全量数组, 无分页、无字段裁剪; <code>JSONResponse</code> 包裹(跳过 <code>jsonable_encoder</code> 收税, 与 pitfalls/web-ui/perf-cadence 判据一致) + <code>_cached_read("files:{hash}")</code> 只读短缓存。qB WebAPI 的 files 元素本就只有约 7 字段(name/size/progress/priority/is_seed/piece_range/availability), 裁剪空间有限。</li>
+  <li>前端取数: <code>shared/drawer_store.js:95-104</code>(files 源配置) — 拉全量、整数组替换 <code>drawer.files</code>(引用换新)。拉取时机 = 打开 content 页签 / 换种子 / 合并双列补给(<code>drawer_store.js:141,296,312,328</code>) / 优先级提交后 silent 重拉(<code>shared/drawer.js:565</code>)。无 SSE、无轮询, 数据线本身不是卡顿首恶。</li>
+</ul>
+
+<h3>2.3 渲染线: content 文件列表(全量 + 全量重算)</h3>
+<ul>
+  <li><b>窗口化缺席</b>: 抽屉全部表注册条目 <code>window: null</code> —— <code>drawerContentV10/V11</code> 在 <code>shared/app.js:602-615</code>, peers/tracker 五条同; 而主表三条是 <code>window: "torrent"/"group"/"member"</code>(<code>app.js:445</code> 注)。即 <b>P1-2 行窗口化只覆盖主视图, 千级文件行在抽屉里全量进 DOM</b>。</li>
+  <li><b>桥渲染链全量</b>: 变体外壳只画锚(<code>data-dt-anchor-slot</code>), 行经 <code>&lt;aq-dt-bridge&gt;</code> 组件 Teleport 进锚(<code>shared/tpl/drawer.html:208,221</code>), 桥模板对 <code>$root.dtBridgeSegs(tab)</code> 的全部行做 <code>v-for</code>, 每行一个行渲染器组件(<code>shared/tpl/xtpl.html:333-366</code>, <code>&lt;component :is="'aq-'+model+'-cells'" :p="r"&gt;</code>)。1000 文件 + 目录行 ≈ 千级行 × 每行 8~11 个元素(勾选框/折叠钮/名/徽章/大小/进度条/可用性)≈ <b>万级常驻 DOM 节点 + 千级行组件实例</b>(规模为按分片模板的估算)。</li>
+  <li><b>每次求值全量重建派生</b>: 变体 10 的 <code>rowsFn</code> 每次求值都调核心 <code>buildFileTree</code> 重建整棵树(<code>drawer_tpl/10-content-tree-detail-tall.js:232-247</code> → <code>shared/drawer_templates.js:469-496</code>, 无缓存); 变体 11 的 <code>rowsFn → derive</code> 每次做 O(文件数×目录深度) 的路径前缀归并聚合(<code>drawer_tpl/11-content-treegrid-batch-low.js:153-196</code>, 逐祖先 <code>segs.slice(0,i).join("/")</code> 拼串)。树扁平化单点 <code>drawerFileRows()</code> 是 <b>method 不是 computed</b>(<code>shared/drawer.js:1451</code>), 无 Vue 缓存, 每次调用重走。</li>
+  <li><b>行对象全新 → 千组件全量 re-render</b>: rowsFn 每次产出全新行对象数组(<code>rowOf</code>/<code>dirRowOf</code>/<code>fileRowOf</code> 均新建字面量, dt10:198-227、dt11:224-289), 桥 v-for 按 key diff 时<b>每一行的 prop 对象引用都变了</b> → 1000 个 <code>aq-dt11-cells</code> 全部重渲。变体 11 的目录行装配还是 O(目录数×文件数): 每目录行 <code>subtreeFiles</code> 全表 <code>filter(startsWith)</code>, 且 <code>chkStateOf(paths)</code> 在同一行对象里算两遍(dt11:244 ckState 与 :253 _cls)。</li>
+  <li><b>变更比对用全量序列化</b>: 变体 render 通知(换页签回来/数据落袋/补拉)每次先 <code>JSON.stringify(files)</code> 拼签名比对跳过重建(<code>dt11:360</code>、<code>dt10:316</code>) —— 千文件时每拍白付一次 ~10<sup>5</sup> 字节级的字符串化。</li>
+  <li><b>交互粒度 = 整列表</b>: 勾选/折叠/筛选/徽章点击都改 reactive <code>ui</code> 态(dt11:49, Vue.reactive, W5 改造)→ <code>dtTplRows</code> 重求 → derive + 全行重装配 + 全表 keyed patch。W5(计划 26-10-13-0811 L5)已把「整表 DOM 全换」降为 keyed 写补丁(dt11 头注 44-48 行自述: 旧结构「每次点选行 DOM 全换 → 勾选跳动 + <b>大树点选卡死</b>, 用户 2026-10-13 症状 7/8」), 但复杂度仍是 O(文件数)/交互 —— 本次报障是同一症状在更大文件数下的延续。</li>
+  <li><b>优先级提交链放大</b>: 点一次徽章 = <code>setFilePriority</code> POST(<code>drawer.js:950-959</code>)→ 成功回执后 silent 全量重拉 files(<code>drawer.js:565</code>)→ 整数组替换 → 派生重建 + 千行全渲, 一轮全价。</li>
+</ul>
+
+<h3>2.4 主表现状(顺带取证)</h3>
+<ul>
+  <li>主表数据/渲染两线已优化: rid+delta 增量轮询、view 裁剪、行窗口化、<code>JSONResponse</code> 短路(见 §2.1-2.2 与 pitfalls/web-ui/perf-cadence)。</li>
+  <li>残留已知面全部<b>已入池</b>且有结论, 不在本轮展开: 5000 种子冷启动/降级轮仍回整表全量(<code>issues/26-10-08-0411-perf-webui-api-state-pagination.html</code>)、组视图增量粒度可降到成员级(26-10-07-1420)、SSE/补刷新延迟(26-10-30-0626)。前端残余开销为 <code>_measureRowH</code> 全量轮的逐行 <code>getBoundingClientRect</code> 与每帧 O(n) 前缀和, 量级小(代码自注 ≈0.03ms)。</li>
+  <li>判断: 用户感知的「主表卡」若发生在几千种子库, 属上述已入池议题的延伸; 若与本次同场景(打开千文件种子详情时主表连带卡), 则更可能是抽屉全量渲染拖累同一页面主线程 —— 与 §03 R1/R2 同源。</li>
+</ul>
+
+<h2><span class="no">§03</span>根因分析(按影响排序)</h2>
+<table>
+  <tr><th>#</th><th>根因</th><th>机制与证据</th><th>影响面</th></tr>
+  <tr><td>R1</td><td><b>抽屉行全量渲染, 无窗口化</b></td><td><code>DRAWER_TABLE_DEFS</code> 全部 <code>window: null</code>(<code>app.js:602-615</code>); 桥 v-for 全量(<code>xtpl.html:353-365</code>)。主表 <code>_rowWindow</code> 机制现成(<code>columns.js:620-660</code>)但只接主视图。</td><td>万级常驻 DOM + 千组件实例 → 首渲/滚动/任何 patch 的基数都被放大; 是「千级文件」场景的第一要素。</td></tr>
+  <tr><td>R2</td><td><b>每次 reactive tick 全量重派生 + 全新行对象</b></td><td>rowsFn 每次重建树/聚合(dt10:232-247; dt11:153-196; 树单点 <code>drawer_templates.js:469</code> 无缓存); 行对象全新 → 千行组件全量 re-render; <code>drawerFileRows</code> 是 method(<code>drawer.js:1451</code>)。</td><td>把「数据没变」也变成全价; 任何一处 reactive 依赖翻动(文件数组引用/勾选/折叠)都付千行 patch。</td></tr>
+  <tr><td>R3</td><td><b>交互粒度 = 整列表</b></td><td>点选/折叠/徽章 → reactive ui → dtTplRows 重求 + 全表 patch(dt11:44-48 头注自认「大树点选卡死」前史); 目录行装配 O(D×F)(dt11:224-255 subtreeFiles + chkStateOf 双算)。</td><td>单次点击的卡顿感直接来源; W5 已降一档(换代→keyed patch), 千级规模下仍不够。</td></tr>
+  <tr><td>R4</td><td><b>sig 比对 = 全量 JSON.stringify</b></td><td><code>dt11:360</code> / <code>dt10:316</code>, 每次变体 render 通知序列化整份 files。</td><td>每拍 O(payload) 字符串化; 不是首恶但在千文件下白付, 且随文件数线性恶化。</td></tr>
+  <tr><td>R5</td><td><b>优先级提交后整列表重拉重渲</b></td><td>POST 成功 → <code>_fetchDrawerFiles(true)</code>(<code>drawer.js:565</code>)→ 整数组替换 → 全价一轮。乐观补丁机制(<code>applyOptimistic</code> 族)未覆盖 files 列表(对齐 pitfalls/web-ui/webui-optimistic-rollback-symmetry 的「覆盖面」概念)。</td><td>把一次小交互(改一个文件的优先级)放大成网络往返 + 千行重渲。</td></tr>
+  <tr><td>R6</td><td><b>数据线全量无裁剪(次要)</b></td><td><code>torrent_detail.py:58-64</code> 全量返回, 无分页; qB files 字段本就 ~7 个, 裁剪空间有限。</td><td>payload 一次性传输(非轮询), 网络占比待测 —— 按 perf-cadence「载荷大不等于要裁字段」四步量法先量再动。</td></tr>
+</table>
+<div class="aside">与 pitfalls 判据对齐说明: ① 本报告的「前后端契约」结论与 pitfalls/web-ui/contract-api.md 一致 —— content 文件列表是按需拉取、无 rid 门控, 不存在「轮询全量 payload」问题; ② R2/R3 与 pitfalls/web-ui/frame-swap-scroll-reset.md 的「整帧换/replaceChildren」史一脉相承, 现行 withScroll/anchFill 保锚机制在窗口化改造时必须继续保活; ③ 主表窗口化已踩平的坑(逐行实测行高、gap 实测、sticky 内缩补偿 pitfalls/web-ui/sticky-scrollpad-inset.md)在抽屉推广时全部适用。</div>
+
+<h2><span class="no">§04</span>成熟方案对比矩阵</h2>
+<table>
+  <tr><th>方案</th><th>原理</th><th>优点</th><th>代价</th><th>适配度</th></tr>
+  <tr><td><b>自研窗口化推广到抽屉</b>(主表 <code>_rowWindow</code> 参数化)</td><td>只渲染视口 ± overscan 的行, 上下用占位件撑高; 前缀和 + 二分定位窗口(<code>columns.js:620-660</code> 现成实现)</td><td>与主表同一机制同一单点, 树折叠/筛选天然兼容(窗口吃 rowsFn 已扁平化的可见行); dt10/11 行高近定值(<code>--tbl-row-minh:27px</code> 等), 逐行实测逻辑可直接复用; qBittorrent 官方 WebUI 同路线(§附录, 5.2 引入 5.3 默认开启)</td><td>现实现硬编码 <code>window.scrollY/innerHeight</code>(<code>columns.js:631-655</code>), 抽屉滚动容器是 <code>.drawer-body</code> 面板内滚动 —— 需把滚动源/视口矩形参数化; sticky 表头(-14px)/吸底条(-20px)补偿与键盘跨窗回焦(主表 W2 前缀和先例)要成对处理</td><td><span class="good">A</span>(主修)</td></tr>
+  <tr><td><b>行对象记忆化 + 组件跳渲</b>(键控复用下一档)</td><td>derive/rowOf 按 path 记忆化: 未变的行复用旧对象 → Vue prop 引用不变 → 子组件跳过 re-render; 千行 diff 仍在但组件重渲降到只有脏行</td><td>改动集中在变体文件内, 不动引擎/桥; 与窗口化正交可叠加; 直击 R2/R3</td><td>记忆化键与失效面要想清(优先级/进度/勾选/折叠都进键); 行对象含派生字段(目录聚合), 目录行失效会连带子树判断</td><td><span class="good">A-</span>(止血首选)</td></tr>
+  <tr><td><b>CSS <code>content-visibility: auto</code> + <code>contain-intrinsic-size</code></b></td><td>浏览器跳过屏外子树的 layout/paint(web.dev 实测大列表渲染 ~232ms→~30ms 量级)</td><td>零 JS 改动, 给 <code>.group-row</code> 加一条规则; 首渲与滚动收益立竿见影</td><td>不省 Vue patch(vnode diff 与组件 re-render 照付) —— 只治 R1 的渲染税, 不治 R2/R3; 与 sticky 表头/锚保活/键盘 scrollIntoView 的交互需实测; 仅 Chromium 系完整生效(本项目自用 WebUI, 可接受)</td><td><span class="good">A-</span>(与上两项正交叠加)</td></tr>
+  <tr><td><b>vue-virtual-scroller(DynamicScroller/RecycleScroller)</b></td><td>Vue 3 组件级虚拟滚动, 支持动态行高</td><td>开箱即用、UMD 可免构建加载; 动态高度免自研</td><td>第三方组件替换引擎行容器, 与三皮肤 <code>dt_table.css</code>/列偏好双轨/右键隐藏/拖宽体系冲突; 引入第 4 套表格实现, 违背「单一语义模板」收敛方向(frontend-split 坑)</td><td><span class="wr">B-</span></td></tr>
+  <tr><td><b>TanStack Virtual(+ TanStack Table)</b></td><td>headless 虚拟化/表格逻辑库, 自带 Vue 适配</td><td>动态测量成熟, 无 UI 强加; 逻辑层可与现有 DOM 共存</td><td>Table 部分无官方 vanilla 渲染层, 引入等于重写渲染层; 与自研引擎重复建设; 虚拟化部分与自研 <code>_rowWindow</code> 收益相同</td><td><span class="wr">B</span>(仅作动态测量思路参考)</td></tr>
+  <tr><td><b>AG Grid / 整套第三方虚拟化表格</b></td><td>自带虚拟化的成品 grid, vanilla/CDN 可用</td><td>虚拟化/列交互/大数据集均开箱即得, 久经考验</td><td>整套样式/皮肤/列偏好/键盘/右键体系全部推翻重做; 与无构建原则勉强共存但体量大; Community(MIT)够用但 Enterprise 特性收费</td><td><span class="bad">C</span>(不建议)</td></tr>
+  <tr><td><b>数据层: 乐观优先级 + payload 裁剪/分页</b></td><td>优先级提交先贴本地补丁(只改受影响行)失败对称回滚; files 响应按渲染需要裁字段或按可见窗口懒取</td><td>直击 R5/R6; 乐观单点与回滚对称判据已有成文坑档(webui-optimistic-rollback-symmetry)可循</td><td>files 字段本就少, 裁剪收益需按 perf-cadence 四步量法先测; 懒取/分页与「树聚合按全量派生」耦合 —— 目录聚合(size/进度/最低可用性)需要全量数据, 分页会破坏聚合口径</td><td><span class="wr">B+</span>(乐观优先级值得做, 裁剪先测后动)</td></tr>
+  <tr><td><b>增量推送(SSE)</b></td><td>服务端变更主动推, 替代轮询</td><td>—</td><td>content 文件列表无轮询(按需拉取), SSE 对本场景无收益; 相关议题在 issues/26-10-30-0626 走主表线</td><td><span class="bad">C</span>(不对症)</td></tr>
+</table>
+
+<h2><span class="no">§05</span>推荐路线(给计划阶段的输入)</h2>
+<p><b>总路线</b>: 记忆化止血 → 窗口化主修 → 数据面收尾, 三阶段相互独立、可分批交付; 全程不引入构建步骤、不换框架、不动引擎对外契约。</p>
+<h3>P1 · 低风险止血(建议先做, 收益/风险比最高)</h3>
+<ul>
+  <li><b>行对象记忆化</b>(R2/R3): 变体 10/11 的 derive/rowsFn 按 path 记忆化行对象 —— 未变文件(引用/字段哈希相等)复用旧对象, 让桥 v-for 里 999/1000 行组件因 prop 引用相等而跳渲; 目录行聚合失效按子树脏标记传播。顺手消掉 dt11:244/:253 的 <code>chkStateOf</code> 双算与 <code>subtreeFiles</code> 每目录全表 filter(改前缀计数)。</li>
+  <li><b>sig 廉价化</b>(R4): 全量 <code>JSON.stringify(files)</code> 换「长度 + 抽样字段 + 版本号」指纹(数据落袋时后端/取数层本可带单调版本), 或只在 files 引用未变时直接跳过。</li>
+  <li><b>content-visibility</b>(R1 渲染税): dt10/11 行容器加 <code>content-visibility:auto; contain-intrinsic-size: auto 27px;</code>(按各自 min-height 定值), 与 P2 不冲突; 需实测 sticky 表头/键盘回焦/锚保活(H.anchFill/withScroll)不受影响。</li>
+</ul>
+<h3>P2 · 主修: 窗口化推广进抽屉引擎</h3>
+<ul>
+  <li>把 <code>columns.js</code> 的 <code>_rowWindow/_measureRowH/_winGapFor</code> 参数化: 滚动源(<code>window.scrollY</code> → 容器 <code>scrollTop</code>)与视口矩形(面板内滚动)抽成 kind 配置; <code>DRAWER_TABLE_DEFS.drawerContentV10/V11</code> 的 <code>window: null</code> 改挂新 kind。</li>
+  <li>树语义天然兼容: 窗口化的输入就是 rowsFn 输出的<b>已扁平化可见行</b>(折叠/筛选已在 rowsFn 完成), 窗口化不碰树; 折叠/展开引起行数突变时走既有的「全量重测一轮」路径(<code>_winMeasured</code> 失效机制现成)。</li>
+  <li>成对处理(坑档已踩平): 行高逐行实测 + gap 实测(<code>_winGapOf</code> 已实测不硬编码); sticky 表头/吸底条的 padding 内缩补偿(dt11 现有 -14px/-20px 注释口径); 键盘跨窗移动焦点走主表 W2 前缀和先例(<code>shortcuts.js _kbScrollRowIntoView</code> 同法); 滚动位自保 withScroll 继续生效。</li>
+</ul>
+<h3>P3 · 数据与交互面(可选, 按实测决定)</h3>
+<ul>
+  <li><b>乐观优先级</b>(R5): 提交后不整表重拉, 直接按 indices 写 <code>drawer.files[i].priority</code> 并复用行级补丁; 失败/超时回滚必须与贴补丁走同一单点且覆盖面对称(对齐 webui-optimistic-rollback-symmetry; 现有 <code>applyOptimistic</code> 族可扩 files 覆盖面)。</li>
+  <li><b>payload 实测后再裁</b>(R6): 按 perf-cadence「载荷大不等于要裁字段」四步量法(字节构成/客户端拆分/网络对照/端点内耗时)实测千文件 payload 各环占比, 有数据再决定裁 <code>is_seed/piece_range</code> 等非渲染字段或做 range 懒取; 无实测数字不动端点。</li>
+</ul>
+<h3>明确不做</h3>
+<ul>
+  <li>不引入 AG Grid/整套第三方表格(推翻三皮肤与列偏好双轨, 违和成本远超收益); 不上构建步骤/不换框架; 不给 content 列表上 SSE(无轮询可替)。</li>
+</ul>
+
+<h2><span class="no">§06</span>方法与局限</h2>
+<ul>
+  <li><b>方法</b>: 纯静态走读(HEAD fe211faf, 2026-11-02) —— 先 pitfalls/web-ui/_index.md 路由, 再 grep 定位渲染路径, 精读 content 两变体、引擎桥、drawer_store/drawer.js 取数链、后端 files/state 端点; 外部方案经 WebSearch 调研(参考链接见 §07)。</li>
+  <li><b>局限</b>: ① 本轮无浏览器实测 —— 各根因的耗时占比(重算 vs patch vs 渲染 vs 网络)未量化, 计划阶段动手前建议先按 perf-cadence 四步量法 + DevTools Performance 一轮实测校准优先级; ② DOM 节点数/组件实例数为按分片模板结构的估算, 非运行时计数; ③ 变体 12(content 空间树图)未逐行走读, 推断与 10/11 同构(其体量相近), 纳入改造时需单独核; ④ 主表取证基于代码与既有 issue 池结论, 未复跑压测; 测试基线数字一律引用「见 kb.baseline」口径, 本报告不手抄。</li>
+</ul>
+
+<h2><span class="no">§07</span>附录 · 参考链接</h2>
+<ul>
+  <li>qBittorrent Changelog(WEBUI: Optimize table performance with virtual list — 5.2.0; Enable virtual list by default #23887 — 5.3.0): <code>https://github.com/qbittorrent/qBittorrent/blob/master/Changelog</code>; 实现单点 <code>src/webui/www/private/scripts/dynamicTable.js</code>(setVirtualList, 固定行高)。</li>
+  <li>qBittorrent GUI/WebUI 大库性能问题实证: issue <code>https://github.com/qbittorrent/qBittorrent/issues/13304</code>(数千种子 100% CPU)。</li>
+  <li>TanStack Virtual(headless 虚拟化): <code>https://tanstack.com/virtual/latest</code> / <code>https://github.com/tanstack/virtual</code>; TanStack Table Vue 虚拟化指南: <code>https://tanstack.com/table/latest/docs/framework/vue/guide/virtualization</code>。</li>
+  <li>vue-virtual-scroller(Vue 组件级虚拟滚动, RecycleScroller/DynamicScroller): <code>https://github.com/Akryum/vue-virtual-scroller</code>; Vue 3 虚拟滚动方案横向对比: <code>https://pdanpdan.github.io/virtual-scroll/compare</code>; VueUse useVirtualList: <code>https://vueuse.org/core/usevirtuallist</code>。</li>
+  <li>AG Grid vs TanStack Table 对比(含 50k 行基准): <code>https://www.pkgpulse.com/guides/tanstack-table-vs-ag-grid-vs-react-data-grid-2026</code> / <code>https://www.simple-table.com/blog/tanstack-table-vs-ag-grid-comparison</code> / <code>https://itnext.io/i-benchmarked-6-react-data-grids-on-50-000-rows-the-real-winner-was-the-tradeoff-d447fbf5ecde</code>。</li>
+  <li>CSS content-visibility: web.dev(含 ~232ms→~30ms 实测案例) <code>https://web.dev/articles/content-visibility</code>; MDN <code>https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/content-visibility</code>。</li>
+  <li>库内先例(本文引用的行号均相对本 clone): <code>issues/26-10-08-0411-perf-webui-api-state-pagination.html</code>、<code>issues/26-10-30-0626-perf-webui-sse-down-poll-latency.html</code>、<code>issues/26-10-07-1420-perf-webui-group-row-hash-ref.html</code>; 判据文件 <code>pitfalls/web-ui/perf-cadence.md</code>、<code>pitfalls/web-ui/contract-api.md</code>、<code>pitfalls/web-ui/frame-swap-scroll-reset.md</code>、<code>pitfalls/web-ui/sticky-scrollpad-inset.md</code>、<code>pitfalls/web-ui/webui-optimistic-rollback-symmetry.md</code>。</li>
+</ul>
+
+</div>
+</body>
+</html>

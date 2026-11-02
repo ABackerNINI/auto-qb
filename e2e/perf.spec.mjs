@@ -67,6 +67,10 @@ import { INST, readInst } from './lib/vm.mjs';
  *  · 保留的 sleep 均有注释: 滚动后 400ms×2 —— 行窗口化按滚动位置异步补行, 读总高/末行前要让
  *    补行 settle, 旧块同值同节奏(量的是 settle 后的布局不变量, 等待即测量程序的一部分)。
  *  · 旧脚本单页流水里的跨块收尾(scrollTo(0,0) 等)不再需要 —— 每 test 独立 context。
+ *
+ * ── W5 增补(计划 26-11-02-0351 §W5, 2026-11-02): 尾部「主表×抽屉同屏交叉」describe ——
+ * 千级种子(E2E_TORRENTS>500)下抽屉滚动/折叠不扰动主表文档型窗口 + 不放大主表轮询节拍,
+ * W3 窗口状态分家的端到端零回归确认; 抽屉侧判据在 drawer-content-perf / dt-live-update, 不在此重复。
  */
 
 /** 导航页签定位器(tpl/topbar.html `nav.tabs [data-view]`)。 */
@@ -228,6 +232,119 @@ for (const skin of SKINS) {
       /* 阈值逐字保留: |after - before| < 200。 */
       expect(Math.abs(after - before), `滚动到底不塌陷(占位撑住总高): ${before} -> ${after}px`).toBeLessThan(200);
       expect(lastVisible, `最后一屏有行且可见(末行 ${lastHash || '-'})`).toBe(true);
+    });
+  });
+
+  /* ── W5 同屏交叉(计划 26-11-02-0351 §W5 改法要点 2): 千级种子主表 × 千文件抽屉同屏 ——
+   * W3 引擎改动(窗口状态按源族分家: 主表=文档型 _winScrollY/_winViewH, 抽屉=容器型
+   * _winCtnState)对主表的零回归端到端确认。量具分工: 抽屉侧窗口化/折叠/丢帧由
+   * drawer-content-perf.spec.mjs(W4)与 dt-live-update #12(W3)把守; 本条只守「抽屉交互
+   * 不扰动主表窗口」与「抽屉交互不放大主表轮询节拍」两个同屏面 —— 抽屉 content 无轮询,
+   * 理论无耦合, 用数字确认(计划口径)。
+   * 桩口径: page.route 拦 torrents files 端点(同 drawer-content-perf), 千文件树 =
+   * 单层目录 D 下 1000 文件; E2E_TORRENTS>500 才有判别力(同上行窗口化门控)。 */
+  function makeFilesK(n = 1000) {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push({
+        name: `D/f${String(i).padStart(4, '0')} - file.mkv`,
+        size: 1_000_000 + i * 999,
+        progress: (i % 4) / 4,
+        priority: 1,
+        availability: 0.5,
+      });
+    }
+    return out;
+  }
+
+  test.describe(`皮肤 ${skin}(W5: 主表×抽屉同屏交叉)`, () => {
+    installRuntimeErrorGuard(test);
+
+    test('W5 同屏交叉: 抽屉滚动/折叠不扰动主表窗口 + 不放大主表轮询节拍', async ({ page }) => {
+      test.skip(TORRENTS <= 500, `同屏交叉断言仅种子数 >500 有判别力; 当前 E2E_TORRENTS=${TORRENTS}(默认档 300)`);
+      test.setTimeout(90_000);
+      collectRuntimeErrors(page);
+      await page.route('**/api/torrents/*/files', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeFilesK()) }));
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ content: '11' })));
+      await gotoTorrents(page, skin);
+
+      /* 开抽屉(首行; 滚到中段后补行窗口与 2s 轮询重渲会抢点击 —— 先开再滚, 同屏交叉量的是
+       * 交互前后稳定态, 不量开合瞬间) → 内容页签(dt11 引擎桥) → 窗口化占位件点亮。 */
+      await page.dblclick('.torrent-row >> nth=0', { force: true }); // force: 整表重渲染抢点击(smoke.md)
+      const drawer = page.locator('.drawer-dock > .drawer');
+      await expect(drawer).toBeVisible({ timeout: 5_000 });
+      await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
+      const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
+      await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
+      await expect(anchor.locator('.row-pad').first(), '抽屉窗口化占位件在场').toBeAttached({ timeout: 10_000 });
+      await page.waitForTimeout(600); // 抽屉 dock 挤压视口后主表窗口重测 settle
+
+      /* 主表滚到中段(千级窗口居中态, 抽屉同屏在场), 等窗口化补行 settle(同上 400ms 口径)。 */
+      await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight * 0.5)');
+      await page.waitForTimeout(600);
+
+      /* 快照①: 主表窗口(滚动位 + 渲染窗首末行 + 常驻行数); 挂轮询 tick 与 longtask 探针。
+       * vm.refresh 实例属性影子化计数(第①类注入; 节拍链 fn 走 this.refresh 命中影子)。 */
+      await page.evaluate(`(() => {
+        const vm = ${INST};
+        if (!window.__refreshPatched) {
+          window.__refreshPatched = true;
+          const orig = vm.refresh;
+          vm.refresh = function (...a) { window.__ticks.push(performance.now()); return orig.apply(this, a); };
+        }
+        window.__ticks = [];
+        window.__lt = [];
+        if (window.__po) window.__po.disconnect();
+        window.__po = new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration)); });
+        window.__po.observe({ entryTypes: ['longtask'] });
+      })()`);
+      const snap = () => page.evaluate(() => {
+        const rows = document.querySelectorAll('.torrent-row');
+        return {
+          sy: Math.round(window.scrollY),
+          n: rows.length,
+          first: rows.length ? rows[0].getAttribute('data-hash') : null,
+          last: rows.length ? rows[rows.length - 1].getAttribute('data-hash') : null,
+        };
+      });
+      const before = await snap();
+      expect(before.n, '主表窗口常驻行数 >0(中段滚动态)').toBeGreaterThan(0);
+
+      /* 抽屉交互: 40 步匀速滚到底(~3.2s, 窗口随滚动连续重算) + 回顶 + 折叠/展开一次(窗口重算最重路径;
+       * 折叠目标 .dir 行在树顶 —— 滚到底后它已出窗卸载, 必须回顶再点)。 */
+      const body = drawer.locator('.drawer-body');
+      for (let step = 1; step <= 40; step++) {
+        await body.evaluate((el, s) => { el.scrollTop = (el.scrollHeight * s) / 40; }, step);
+        await page.waitForTimeout(80);
+      }
+      await body.evaluate((el) => { el.scrollTop = 0; });
+      await page.waitForTimeout(400);
+      const tgl = anchor.locator('.group-row.dir [data-act="fold"]').first();
+      await tgl.click();
+      await page.waitForTimeout(400);
+      await tgl.click();
+      await page.waitForTimeout(400);
+
+      /* 快照②: 主表窗口必须逐字段不变(抽屉滚动/折叠不漂移主表文档型窗口)。 */
+      const after = await snap();
+      expect(after.sy, `主表滚动位不漂移: ${before.sy} -> ${after.sy}`).toBe(before.sy);
+      expect(after.n, `主表常驻行数不变: ${before.n} -> ${after.n}`).toBe(before.n);
+      expect(after.first, `主表渲染窗首行不变: ${before.first} -> ${after.first}`).toBe(before.first);
+      expect(after.last, `主表渲染窗末行不变: ${before.last} -> ${after.last}`).toBe(before.last);
+
+      /* 轮询节拍: 交互窗(~4.4s)内主表 refresh 恰为节拍数(3000 种子档 2000ms → 2 拍, 余量 ±1) ——
+       * >=1 证节拍不被抽屉交互拖累, <=3 证抽屉交互不放大轮询(计划: 「互不放大, 用数字确认」)。 */
+      const ticks = await page.evaluate('window.__ticks');
+      expect(ticks.length, `主表轮询节拍不被放大/拖累(交互窗实测 ${ticks.length} 拍; 2000ms 档期望 2±1)`).toBeLessThanOrEqual(3);
+      expect(ticks.length, '主表轮询节拍在抽屉交互期间续跑(至少 1 拍)').toBeGreaterThanOrEqual(1);
+
+      /* 主线程灾难冻结粗界(同 W4 K2 口径 500ms; 精细分布进档案不钉数)。 */
+      const lt = await page.evaluate('window.__lt || []');
+      expect(Math.max(0, ...lt), `同屏交互无灾难冻结帧(实测 longtask ${lt.join('/') || '无'})`).toBeLessThan(500);
+      console.log(`      [W5 同屏 ${skin}] 主表窗口 ${before.n} 行(${(before.first || '').slice(0, 8)}…${(before.last || '').slice(0, 8)}…) 交互前后逐字段恒等 | ` +
+        `轮询 ${ticks.length} 拍/4.4s | longtask ${lt.join('/') || '无'}`);
     });
   });
 }

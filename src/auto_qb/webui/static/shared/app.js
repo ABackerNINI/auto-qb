@@ -442,7 +442,8 @@ const DEFAULT_SORT = { key: "added_on", dir: -1 };
  *   tableRef 行容器 ref(行窗口化测量消费; null = 明细成员容器 .detail, 无独立滚动容器)
  *   grid     表头/行 grid 模板 computed 名(模板 gridStyle 消费)
  *   cols     可见列 computed 名(模板 visible*Cols 消费)
- *   window   行窗口化 kind(与 _rowWindow 的 kind 对齐; 明细 = member)
+ *   window   行窗口化 kind(与 _rowWindow 的 kind 对齐; 明细 = member; 滚动几何按 kind 解析
+ *            窗口源描述符 —— 单点在 columns.js 顶部 WIN_SOURCES, 未注册 kind 回落文档型)
  *   sort     排序键/方向 data 字段名 + 恢复默认序的目标值(三态排序第三击落点)
  */
 const TABLE_DEFS = {
@@ -486,7 +487,9 @@ const VIEW_TABLE = { groups: "group", torrents: "torrent", shows: "show" };
  *   headRef  恒为 null —— 抽屉表头渲染在变体外壳/桥模板内部, 子组件模板里的 ref 只登记在子
  *            组件上, 根实例的 $refs 取不到; 故走 columns.js `_headEl` 的 **DOM 兜底**
  *            (按 `.group-head[data-table="<id>"]` 查, 表头根自带 data-table)。
- *   window   恒为 null —— 抽屉列表最多百级行, 远低于 ROW_WIN_MIN, 不开窗口化。
+ *   window   窗口化 kind 名 —— 除两个 content 变体挂 "drawerContent"(千文件报障场景,
+ *            计划 26-11-02-0351 W3: 滚动源 = .drawer-body 容器型描述符, 桥切片消费)外,
+ *            其余抽屉表恒为 null(行数远低于 ROW_WIN_MIN; 08/05 的 segs 分段桥显式不接窗)。
  *   grid/cols 走各自 computed(columns.js 里每表一对) —— 与主视图同一条 `_gridTemplate` 生成路径。
  *
  * sort 描述符: 变体表恒走 dyn(排序状态进根 data 的 dtSortState 映射, 按 table-id 通用存取)。
@@ -594,7 +597,7 @@ const DRAWER_TABLE_DEFS = {
   drawerContentV10: {
     columns: DRAWER_CONTENT_V10_COLUMNS, label: "内容表·树 + 详情",
     headRef: null, tableRef: null,
-    grid: "drawerContentV10Grid", cols: "visibleDrawerContentV10Cols", window: null,
+    grid: "drawerContentV10Grid", cols: "visibleDrawerContentV10Cols", window: "drawerContent",
     sort: { dyn: true, defKey: "", defDir: 1 },
     variantTab: "content", variantId: "10", rowTab: true, rowAfter: true,
     rows: "dtTplRows", rowKey: "k", rowModel: "dt10", rowProp: "p", rowCls: "_cls",
@@ -602,7 +605,7 @@ const DRAWER_TABLE_DEFS = {
   drawerContentV11: {
     columns: DRAWER_CONTENT_V11_COLUMNS, label: "内容表·树表批量",
     headRef: null, tableRef: null,
-    grid: "drawerContentV11Grid", cols: "visibleDrawerContentV11Cols", window: null,
+    grid: "drawerContentV11Grid", cols: "visibleDrawerContentV11Cols", window: "drawerContent",
     sort: { dyn: true, defKey: "", defDir: 1 },
     variantTab: "content", variantId: "11", rowTab: true, rowAfter: true,
     rows: "dtTplRows", rowKey: "k", rowModel: "dt11", rowProp: "p", rowCls: "_cls",
@@ -649,7 +652,9 @@ const ROW_WIN_MIN = 200;        // 行数低于此值不开窗口
 const ROW_WIN_OVERSCAN = 10;    // 视口上下各多渲染的行数(快速滚动时不露白)
 // 首帧还没量到行高时的估算值(px)。估错只会让第一帧窗口略偏, 测到真值后同一帧即纠正;
 // 若没有它, 首轮就得先全量渲染 3000 行才能量到行高 —— 白付一次 300ms。
-const ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34 };
+// drawerContent = 抽屉内容树两变体(W3 已接线)的兜底档: 27 = dt11 的 --tbl-row-minh
+// 校准值(dt10 定高 29px), 实测逐行真值进 _rowHs 后此值只兜未量过的新行。
+const ROW_WIN_EST_H = { torrent: 42, group: 44, member: 34, drawerContent: 27 };
 // 行间距兜底值: 仅在容器还没量到(或 rowGap 解析不出, 如块级容器的 "normal")时使用。
 const ROW_WIN_GAP_FALLBACK = 0;
 

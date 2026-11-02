@@ -741,6 +741,32 @@
       dtMenuMergeOn() {
         return this.drawerIsSeed;
       },
+      /* ---------------- W3 行窗口化(计划 26-11-02-0351): content 两变体的窗口视图 ----------------
+       * 千文件场景行渲染基数从全量降到视口窗(引擎 _rowWindow 消费, kind = "drawerContent",
+       * 滚动源 = .drawer-body 容器型描述符, 列状态双轨/树折叠语义零触碰 —— 窗口只吃 rowsFn
+       * 已扁平化的可见行)。**computed 缓存**: 桥模板一处 v-for + 上下两处占位共三次触达,
+       * rowsFn 装配千行 6-8ms(W1 实测), 不能每触达重付一次; 带参 computed 禁用
+       * (pitfalls/web-ui/vue-reactivity), 故按「当前在场窗表唯一」反查 tab 而不收参。
+       * segs:true 描述符(05/08 分组桥)**显式不接窗**并在此钉死防误推广: 一段一锚, 占位件
+       * 无位可插, 千级文件只有单锚 V10/V11。抽屉没开 / 桥未点亮(锚未挂)返回 null ——
+       * 消费方原样回落全量渲染(零差异回退语义与主表 off 结构一致)。 */
+      drawerWinView() {
+        if (!this.drawer || !this.drawer.open) return null;
+        var defs = window.AQB_DRAWER_TPL_DEFS || {};
+        for (var tid in defs) {
+          var def = defs[tid];
+          if (!def || !def.window || def.segs) continue;  // 未接窗 / 分段桥(显式不接窗)
+          var tab = def.variantTab;
+          if (this.dtBridgeTbl(tab) !== tid || !this.dtBridgeOn(tab)) continue;
+          var rows = this.sortedDrawer(tid, this.dtBridgeRows(tab));
+          var win = this._rowWindow(def.window, rows, null);
+          return {
+            tab: tab, tid: tid, win: win, rows: rows,
+            lines: win.active ? rows.slice(win.start, win.end) : rows,
+          };
+        }
+        return null;
+      },
     },
     /* traffic 数据落袋通知(S6, 见文件头「S6 接入说明」)不写成 watch 选项: 本 mixin 走
      * app.mixin 全局注入, Vue 的 <transition> 内置假实例(BaseTransition)也会吃进全局 mixin
@@ -859,6 +885,82 @@
         var rs = this.dtBridgeRows(tab);
         if (def.segs) return Array.isArray(rs) ? rs : [];
         return [{ key: "", rows: rs || [] }];
+      },
+      /* ---------------- W3 窗口切片/占位/跨窗键盘(计划 26-11-02-0351) ----------------
+       * 三件都是桥模板消费面; 非窗表(或窗口视图不在场)原样回落 —— 行 = 全量排序, 占位 = 0,
+       * 与不开窗逐字节等价(零差异回退语义同主表 off 结构)。视图本体在 computed
+       * drawerWinView(缓存 rowsFn 装配), 这里只做按 tab 的守卫分发。 */
+      dtWinRows(tab) {
+        var v = this.drawerWinView;
+        return v && v.tab === tab ? v.lines : [];
+      },
+      dtWinPad(tab, edge) {
+        var v = this.drawerWinView;
+        if (!v || v.tab !== tab || !v.win.active) return 0;
+        return edge === "top" ? v.win.padTop : v.win.padBottom;
+      },
+      /* 桥 v-for 行源单点: 窗表走切片, 其余(含 segs 分段桥)走既有全量排序 —— 表达式形状
+       * 不变, 非窗表语义零差异。 */
+      dtBridgeLines(tab, seg) {
+        var def = this.dtBridgeDef(tab);
+        var v = this.drawerWinView;
+        if (def && def.window && !def.segs && v && v.tab === tab) return v.lines;
+        return this.sortedDrawer(this.dtBridgeTbl(tab), seg.rows);
+      },
+      /* W3 键盘跨窗回焦: 行 roving(变体 keydown 委托 → H.rowMove)只在已渲染行内移焦,
+       * 窗口化后焦点落在已渲染块端沿再按方向键/Home/End 时, 数据序的下一行不在 DOM ——
+       * 这里补跨窗段: 按前缀和(_rowPre[kind], _rowWindow 留存)换算目标行的容器 y,
+       * **先滚动后回焦**(pitfalls/web-ui/kbd-cursor-collapse-dangling 家族: 回焦目标必须
+       * 在重渲后的窗内, 防焦点悬空指未渲染行)。主表先例 = shortcuts.js
+       * _kbScrollRowIntoView(禁 scrollIntoView 同理由: 逐层滚动会连带滚祖先)。
+       * 窗内移动不在本方法管(直接返回, 变体 rowMove 原语义); 前缀和与数据行数不符
+       * (锚换代竞态)退避不猜(P1-2 退避口径)。绑定在桥模板 .group-table @keydown ——
+       * 冒泡序在变体宿主委托之前, 窗内分支零干预(不 preventDefault 不停传播)。 */
+      dtWinKbd(ev, tab) {
+        var def = this.dtBridgeDef(tab);
+        if (!def || !def.window || def.segs) return;
+        var v = this.drawerWinView;
+        if (!v || v.tab !== tab || !v.win.active) return;
+        var rowEl = ev.target && ev.target.closest ? ev.target.closest("[data-dt-key]") : null;
+        if (!rowEl) return;
+        var rows = v.rows;
+        var key = rowEl.getAttribute("data-dt-key") || "";
+        var rk = def.rowKey || "k";
+        var i = -1;
+        for (var j = 0; j < rows.length; j++) {
+          if (String(rows[j][rk]) === key) { i = j; break; }
+        }
+        if (i < 0) return;
+        var target = -1;
+        if (ev.key === "ArrowDown") target = i + 1;
+        else if (ev.key === "ArrowUp") target = i - 1;
+        else if (ev.key === "Home") target = 0;
+        else if (ev.key === "End") target = rows.length - 1;
+        if (target < 0 || target >= rows.length) return;
+        if (target >= v.win.start && target < v.win.end) return;  // 窗内: 变体 rowMove 正常处理
+        var kind = def.window;
+        var pre = this._rowPre && this._rowPre[kind];
+        if (!pre || pre.length !== rows.length + 1) return;       // 前缀和失效: 退避不猜
+        ev.preventDefault();
+        var sc = document.querySelector(".drawer-body");
+        if (!sc) return;
+        var top = (this._winTop && this._winTop[kind]) || 0;
+        if (ev.key === "ArrowUp" || ev.key === "Home") {
+          sc.scrollTop = pre[target] + top - 8;                   // 目标行顶缘留 8px 呼吸
+        } else {
+          sc.scrollTop = pre[target + 1] + top - sc.clientHeight + 8;  // 底缘贴视口下沿
+        }
+        this._winCtnSync();  // 立即写回容器态(不等 scroll 事件 rAF, nextTick 即重渲出目标行)
+        var tkey = String(rows[target][rk]);
+        var tid = v.tid;
+        this.$nextTick(function () {
+          var host = document.querySelector('[data-dt-table-anchor="' + tid + '"] .group-table');
+          if (!host) return;
+          var list = host.querySelectorAll("[data-dt-key]");
+          for (var m = 0; m < list.length; m++) {
+            if (list[m].getAttribute("data-dt-key") === tkey) { list[m].focus(); break; }
+          }
+        });
       },
       /* 变体行装配单点(U2): 描述符 rows: "dtTplRows" → 按当前选中变体的注册条目回调
        * rowsFn(ctx)。行来源与筛选是版式语义(变体文件自管), 排序/列交互归引擎 —— 两层

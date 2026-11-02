@@ -24,7 +24,10 @@
 - test_frontend_pinned_first_cell_hover_transition_parity: 必显列(吸左首格)悬停过渡与行板同源守阵(2026-10-20 修「必显列鼠标滑过时背景与其它列不一致, 短暂后恢复一致」) —— 行板 `.group-row` 有 transition: background var(--dur)(160ms) 而吸左首格无过渡 ⇒ 滑入瞬间首格 snap 到 --bg-hover、其余列还在从 --bg-row 渐入, 160ms 内行内一条竖带, 过渡完才"恢复一致"(真浏览器逐帧: prism/frost Δ14、atlas/ocean Δ18, 三主表 × 双皮肤全中; 移出同理反号); 钉 ①行板过渡仍以 `background var(--dur)` 声明(时长基准) ②各皮肤 `.group-row > :first-child` 体内 `transition: background-color var(--dur)`(禁字面毫秒, 否则行板调时长又漂) ③首格悬停镜像 `:hover > :first-child` → `--bg-hover` 不得丢(丢了是整段悬停期的持久竖带) ④首格过渡**只在各皮肤 views.css 单点**, 抽屉按面重锚(dt_table.css)与变体注入 CSS 不得自带 `transition`(带即脱离 --dur 与行板错拍; 2026-10-20 审计: 主表三页 + 经典抽屉表 + 06/07/09/10/11 六面逐帧差全 0; 26-10-30-0217 阶段2 起豁免 shared/row_lang.css —— 其 :first-child 上的 transition 只有行语言名称列左条 ::before 的 .12s 本体动效(D4 拍板 M2); 首格 hover/选中底为 color-mix 纯色换 background-color(26-10-30 复验二修, ::after 已撤销), 过渡继承 views.css 单点)。flux 收编定案(S5, plan 26-10-31-2316): 随 _UI_ALL 自动罩住 —— fork 后规则逐字同 console 天然满足; S6 挂 fx 动效时若要动行板/首格过渡, 必须仍守「views.css 单点 + var(--dur) 同源」前提, 破前提先改本守阵。行为面(逐帧差 ≤ 2、稳态同色)由 e2e/main-table-pinned-hover.spec.mjs 真浏览器采
 - test_frontend_pinned_first_cell_selected_row_keeps_base: 选中/半选行「保留行底」守阵(2026-10-20 修「选中的行必显列背景与其它列不一致」) —— 旧规则 `.group-row.selected { background: var(--sel-bg) }` 用半透明 tint **替换**行底(而非叠在行底上), 行板露出页底 `--bg`, 而吸左首格按 `--bg-row` 合成 ⇒ 两侧承光底分家, 选中行名称列整列异色竖带(真浏览器逐像素: atlas Δ9/255、prism Δ5/255, 三主表×双皮肤全中, 未选中行 Δ0); 钉 ①`.group-row.selected`/`.group-row.partial` 的 background 末层是 `var(--bg-row)`(裸半透明令牌即红) ②行板与首格镜像的 tint 同字面(`var(--sel-bg, var(--accent-soft))`) ③首格镜像合成基色与行板同令牌 ④拆分后 `.member-row.selected` 仍在(成员行无吸左首格, 保持裸柔底)。行为面(行板与首格计算背景逐字相等, 选中/悬停选中)由 e2e/main-table-pinned-selected.spec.mjs 采
 - test_frontend_pinned_first_cell_expanded_row_keeps_base: 展开行「保留行底」守阵(2026-10-20 与选中态同轮收, 用户「group 一同修」) —— `.group-row.expanded { background: var(--bg-sunken) }` 同样把行底**替换**成半透明下沉底, 行板承光层变页底 `--bg`, 而首格按 `--bg-row` 合成; 真浏览器逐像素: 展开行 atlas Δ5/255、prism Δ2/255(低于可辨阈, 上轮按范围守恒未动); 钉 ①三皮肤 `.group-row.expanded` 的 background 末层是 `var(--bg-row)`(prism 在 views.css, atlas/console 在 components.css, 按选择器找) ②首格镜像同基色 ③console 独享的 `.group-row.expanded:hover` 不得跌回裸 `--bg-sunken`(否则悬停那一下又分家)。行为面由 e2e/main-table-pinned-selected.spec.mjs 的展开行用例采
-- test_drawer_table_bridge_wiring
+- test_drawer_table_bridge_wiring: 桥接线守阵(计划 26-10-12-0527; W3 增补) —— 桥模板行源单点
+  已从直调 sortedDrawer 收进 dtBridgeLines(窗表 = drawerWinView 窗口切片, 其余回落 sortedDrawer
+  全量; 排序机仍只有 sortedDrawer 一份, drawer_templates.js 两支调用点任缺即红), 本守阵同步钉
+  $root.dtBridgeLines(tab, seg) 在位 + sortedDrawer 调用点 ≥2(回落支 + 窗支)
 - test_drawer_tpl_table_face_bg_single_point
 - test_frontend_tpl_ctl_bits_single_source
 
@@ -1106,7 +1109,14 @@ def test_drawer_table_bridge_wiring():
         "桥模板 teleport 缺目标存在性 v-if(dtBridgeTargetOn) —— 锚离场那一窗挂 teleport = patch 中断 + 内容消失"
     assert "$root.dtBridgeSegs(tab)" in btpl, "桥模板未走分段取数 dtBridgeSegs(U2: 分组变体逐段 teleport)"
     assert "<aq-table" in btpl and "-cells" in btpl, "桥模板必须复用表壳 + 行渲染器(不许自拼表格)"
-    assert "$root.sortedDrawer(" in btpl, "桥行序必须走 sortedDrawer 单点(dyn 分支) —— 手拼即第二份排序机"
+    # W3(计划 26-11-02-0351)起桥行序走 dtBridgeLines 行源单点(窗表 = 窗口切片, 其余 =
+    # sortedDrawer 全量) —— 模板不再直调 sortedDrawer; 排序机仍必须只有 sortedDrawer 一份
+    # (dtBridgeLines 回落支与 drawerWinView 窗支都调它, 不得手拼比较器)。
+    assert "$root.dtBridgeLines(tab, seg)" in btpl, "桥模板 v-for 未走 dtBridgeLines 行源单点(W3 窗切片/全量回落)"
+    dtpl = read("drawer_templates.js")
+    assert dtpl.count("this.sortedDrawer(") >= 2, (
+        "drawer_templates.js 的 dtBridgeLines 回落支与 drawerWinView 窗支必须都走 sortedDrawer 单点 —— 手拼即第二份排序机"
+    )
     assert "$root.syncHeadScroll(" in btpl, "桥缺表头横滚同步(横滚时表头不动 = 静默坏)"
     assert "$root.dtBridgeRowCls(tab)" in btpl, "桥行缺 rowCls 修饰类绑定(变体行级个性失守, D5)"
 

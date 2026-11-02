@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WEBUI 大文件列表性能统一优化(抽屉千级文件 + 主表千级复测)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-large-filelist-perf">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-11-02-0351">
+<meta name="doc-updated" content="26-11-02-0359">
+<meta name="doc-refs" content="memory-bank/reports/26-11-02-0339-report-webui-large-filelist-perf.html, memory-bank/tasks/26-11-02-webui-large-filelist-perf.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-large-filelist-perf</div>
+<h1>WEBUI 大文件列表性能统一优化(抽屉千级文件 + 主表千级复测)</h1>
+<p class="lede">依据调研报告 <a href="../reports/26-11-02-0339-report-webui-large-filelist-perf.html">26-11-02-0339</a> 把「单种子千级文件列表卡顿」的六条根因(R1-R6)拆成六个串行工作包: P1 止血(变体 10/11 行对象按 path 记忆化 + sig 廉价指纹 + content-visibility) → P2 主修(把主表 <code>_rowWindow</code> 窗口化参数化推广进抽屉引擎表) → 千级验收(抽屉 + <b>主表千级复测一并覆盖</b>) → P3 可选(乐观优先级 + payload 实测后裁剪)。设计主轴: <b>不换框架、不上构建步骤、不引第三方 grid、不动引擎对外契约</b>; 主表已被判优化到位, 只做零回归复测。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-02-0351 · <b>doc-updated</b> 26-11-02-0359 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户报障「单种子约 1000+ 文件的详情文件列表操作卡顿」+ 用户指令「列表性能问题统一解决, 也包括主表」 · 依据调研报告 reports/26-11-02-0339(HEAD fe211faf 取证, 本计划行号已在 146d3b0a 复核, 见 §02)<br>
+  <b>实施方式</b> 串行子智能体逐包推进(一包 = 一个子智能体一轮); 每包完成跑 <code>commands run test.quick</code>, 全部完成后统一 <code>commands run test.full</code> + <code>commands run kb.new baseline</code> 记基线(数字一律「见 kb.baseline」口径, 不手抄)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>1.1 做到什么程度算成</h3>
+<ul>
+  <li><b>S1 抽屉千级可交互</b>: 千级文件种子的 content 页签, 勾选 / 折叠 / 滚动 / 改优先级不再可感知卡顿; 常驻 DOM 行数从「全量(千级)」降到「视口 + overscan」(可机检: 实际 <code>.group-row</code> 数 &lt;&lt; 数据行数, 沿用 e2e/perf.spec.mjs P1-2 既有口径)。</li>
+  <li><b>S2 数据没变不付全价</b>: 同一份 files 引用未变时, 变体 render 通知零重建零重渲(记忆化 + 廉价 sig); 勾选等局部交互只重装配受影响子树, 不再整表派生。</li>
+  <li><b>S3 主表零回归(用户要求)</b>: 全部改动落地后, 主表在千级种子 / 千级文件场景下 rid+delta 增量轮询、view 裁剪、行窗口化、<code>JSONResponse</code> 短路四件既有优化全部无回归(W5 复测包, e2e/perf.spec.mjs 三条 + tests-real 真机轨)。</li>
+  <li><b>S4 明确不做</b>: 不引入 AG Grid / vue-virtual-scroller / TanStack(报告 §04 判 C/B-, 违和成本远超收益); 不上构建步骤; 不给 content 列表上 SSE(按需拉取无轮询可替)。</li>
+</ul>
+<div class="aside"><b>设计底线 / 不变量</b>: ① 窗口化必须<b>零差异回退</b>——行数低于 <code>ROW_WIN_MIN</code>(200) / 容器未渲染 / 行高未量齐时一律全量渲染, 占位件不渲染(现 <code>_rowWindow</code> off 结构即此语义, W2/W3 不得破坏); ② 折叠 / 筛选 / 树语义<b>只在 rowsFn 层</b>, 窗口化只吃已扁平化的可见行, 窗口层不碰树; ③ 整帧换链路的 <code>H.withScroll</code> 保活与 anchFill 锚保活必须继续生效(pitfalls/web-ui/frame-swap-scroll-reset); ④ 任何乐观补丁贴与回滚必须同一单点对称(pitfalls/web-ui/webui-optimistic-rollback-symmetry); ⑤ <b>零新增配置键</b>——rowWin 等开关是前端 data 态不是配置, 本计划不碰 <code>config.validate_config</code> / <code>config/schema.py</code>; 实施中若真要加配置键, 必须同步 validate_config + schema.py(守卫测试会查)并先停下来说明; ⑥ 红线不碰: <code>config.yml</code> / <code>auto-qb-data/</code>。</div>
+
+<h2><span class="no">§02</span>现状与痛点(引报告结论, 锚点已复核)</h2>
+<p>六条根因与证据行号见报告 §03, 此处只留计划要用的锚点快照(全部为 <code>src/auto_qb/webui/static/</code> 相对路径, 行号 2026-11-02 于 HEAD 146d3b0a 逐条复核):</p>
+<table>
+  <tr><th>#</th><th>根因</th><th>锚点</th></tr>
+  <tr><td>R1</td><td>抽屉行全量渲染无窗口化</td><td><code>app.js:594-609</code> drawerContentV10/V11 <code>window: null</code>; 桥 v-for 全量 <code>tpl/xtpl.html:333-366</code>; 主表机制现成 <code>columns.js:616-660 _rowWindow</code> / <code>app.js:648-652</code> 常量</td></tr>
+  <tr><td>R2</td><td>每次 reactive tick 全量重派生 + 全新行对象</td><td>dt10 <code>drawer_tpl/10-content-tree-detail-tall.js:232-247</code>(rowsFn 重建树, sig 在 :316); dt11 <code>drawer_tpl/11-content-treegrid-batch-low.js:153-196</code>(derive O(F·D)); 树单点 <code>drawer_templates.js:469-496 buildFileTree</code> 无缓存; <code>drawer.js:1451 drawerFileRows</code> 是 method 非 computed</td></tr>
+  <tr><td>R3</td><td>交互粒度 = 整列表</td><td>dt11:224-289 行装配(目录行 <code>subtreeFiles</code> 全表 filter + <code>chkStateOf</code> 在 :244/:253 双算); 点选 → reactive ui → dtTplRows 重求 + 全表 keyed patch</td></tr>
+  <tr><td>R4</td><td>sig 比对 = 全量 JSON.stringify</td><td><code>dt11:360</code> / <code>dt10:316</code>(两处同形: <code>JSON.stringify(files) + "|" + loading + err</code>)</td></tr>
+  <tr><td>R5</td><td>优先级提交后整列表重拉重渲</td><td><code>drawer.js:565</code>(files/priority → <code>_fetchDrawerFiles(true)</code> silent 重拉)→ 整数组替换 → 全价一轮</td></tr>
+  <tr><td>R6</td><td>数据线全量无裁剪(次要, 先测后动)</td><td><code>server/routes/torrent_detail.py:58-64</code> 全量返回 + <code>_cached_read</code> 短缓存; qB files 字段本就约 7 个</td></tr>
+</table>
+<h3>2.1 报告与代码事实不一致处(本轮复核记录, 只记录不改报告)</h3>
+<ul>
+  <li>报告写 drawerContentV10/V11 在 <code>app.js:602-615</code> —— 实际 V10 块起于 594 行(两处 <code>window: null</code> 在 597/605), 属 ±10 行级微漂, 本计划锚点以 §02 表为准。</li>
+  <li><code>columns.js:489</code> 注释仍写「window 恒为 null —— 抽屉列表最多百级行, 远低于 ROW_WIN_MIN, 不开窗口化」—— 与千文件报障场景矛盾, 属注释漂移(该注释写于变体表行数尚小的时期), W3 随行修正。</li>
+  <li>其余关键锚点(columns.js 530-546 / 568-612 / 616-660, drawer.js 565 / 1451, dt10 235/316/325/396/410, dt11 360, drawer_templates.js 469/856-870, torrent_detail.py 58-64)复核一致。</li>
+</ul>
+<h3>2.2 主表现状(顺带取证, 结论 = 只复测不重修)</h3>
+<p>主表数据 / 渲染两线均已优化到位(rid+delta 增量、view 裁剪、P1-2 窗口化、JSONResponse 短路); 残留已知面全部已入池且与本轮渲染线不同源: <code>issues/26-10-08-0411</code>(5000 种子冷启动 / 降级轮整表全量)、<code>issues/26-10-07-1420</code>(组视图增量粒度)、<code>issues/26-10-30-0626</code>(SSE 失效退轮询延迟)。取舍见 D2: <b>留池不顺带修</b>, W5 只做千级无回归复测。</p>
+
+<h2><span class="no">§03</span>方案总览与工作包依赖</h2>
+<p>六个工作包<b>严格串行</b>推进(一包 = 一个子智能体一轮), 依赖与改动面如下; 预计改动文件清单供逐包委派直接引用:</p>
+<table>
+  <tr><th>包</th><th>一句话目标</th><th>预计改动文件</th><th>依赖</th><th>性质</th></tr>
+  <tr><td>W1</td><td>P1 止血: 变体 10/11 行对象按 path 记忆化 + sig 廉价指纹 + content-visibility + O(D×F) 装配优化</td><td><code>drawer_tpl/10-content-tree-detail-tall.js</code>、<code>drawer_tpl/11-content-treegrid-batch-low.js</code>、<code>shared/dt_table.css</code>、配套守阵</td><td>无(先行)</td><td>必做</td></tr>
+  <tr><td>W2</td><td>P2 前置: 引擎窗口化参数化(滚动源 / 视口 / 行键抽 kind 配置), 主表行为零变化</td><td><code>shared/columns.js</code>、<code>shared/app.js</code>、配套守阵</td><td>W1(串行排序, 无代码耦合)</td><td>必做</td></tr>
+  <tr><td>W3</td><td>P2 抽屉接线: drawerContentV10/V11 挂 window kind + 桥切片消费 + sticky 补偿核对 + 行高实测 + 键盘跨窗回焦</td><td><code>shared/app.js</code>、<code>shared/columns.js</code>、<code>shared/drawer_templates.js</code>、<code>shared/tpl/xtpl.html</code>、<code>shared/shortcuts.js</code>、<code>shared/dt_table.css</code>(注释随行)</td><td>W2</td><td>必做</td></tr>
+  <tr><td>W4</td><td>千级验收(抽屉): Playwright 千文件桩 + tests-real 真机轨, A/B 对照取数</td><td><code>e2e/perf.spec.mjs</code>(扩)或新 e2e spec、<code>tests-real/rm08_webui_read/</code>(扩)</td><td>W1+W3</td><td>必做</td></tr>
+  <tr><td>W5</td><td>主表千级复测(用户要求): 主表千级场景无回归确认 + 残留池 issue 取舍(D2)</td><td>复用 <code>e2e/perf.spec.mjs</code> / <code>column-prefs.spec.mjs</code> / <code>kbd-scroll-band.spec.mjs</code> / tests-real; 原则上零代码改动</td><td>W2(且排在 W4 后做终态复测)</td><td>必做</td></tr>
+  <tr><td>W6</td><td>P3 可选: 乐观优先级对称补丁(W6a, 推荐做) + payload 四步量法实测后裁剪(W6b, D1 决策点)</td><td>W6a: <code>shared/drawer.js</code>、<code>shared/commands.js</code>、<code>tests/test_webui_optimistic_rename_alt.py</code>(扩电池); W6b(仅 D1 拍板后): <code>server/routes/torrent_detail.py</code></td><td>W1(记忆化) + W4(实测占比); W6b 另需 D1 拍板</td><td>可选</td></tr>
+</table>
+<div class="aside"><b>报告路线对齐说明</b>: 报告 §05 的 P1 = W1, P2 = W2+W3(拆两包是为一包只动一侧——W2 只动引擎不接线, W3 只接线不改引擎算法), P3 = W6; W4/W5 是本计划新增的验收层(用户要求主表一并统一复测)。W6b 在 W4 实测出 payload 各环占比数字前<b>只量不做</b>(perf-cadence 判据「载荷大不等于要裁字段」四步量法)。</div>
+
+<h2><span class="no">§04</span>实施步骤(逐工作包)</h2>
+
+<h3>W1 · P1 止血: 记忆化 + 廉价指纹 + content-visibility(改 3 文件)</h3>
+<h4>目标</h4>
+<p>直击 R2/R3/R4: 数据没变时变体 10/11 的 render 通知零重建零重渲; 勾选 / 折叠只重装配受影响子树; render 拍不再全量序列化; 屏外行渲染税(content-visibility)立收。</p>
+<h4>涉及文件(行号级定位)</h4>
+<ul>
+  <li><code>src/auto_qb/webui/static/shared/drawer_tpl/10-content-tree-detail-tall.js</code>: rowsFn <b>:232-247</b>(调 <code>FT.buildFileTree</code> 重建树)、行装配 <b>:198-227</b>(rowOf/dirRowOf 新建字面量)、sig <b>:316</b>。</li>
+  <li><code>src/auto_qb/webui/static/shared/drawer_tpl/11-content-treegrid-batch-low.js</code>: derive <b>:153-196</b>(O(F·D) 路径前缀归并)、行装配 <b>:224-289</b>(<code>subtreeFiles</code> 每目录全表 filter + <code>chkStateOf</code> :244/:253 双算)、sig <b>:360</b>。</li>
+  <li><code>src/auto_qb/webui/static/shared/dt_table.css</code>(现 162 行, 距 700 行 cap 余量足): 加 content-visibility 规则一条。</li>
+  <li>配套守阵: <code>tests/test_webui_static_dom_panel.py</code>(扩 node 电池 + 静态断言)、<code>e2e/dt-live-update.spec.mjs</code>(扩条目)。</li>
+</ul>
+<h4>改法要点</h4>
+<ol>
+  <li><b>行对象按 path 记忆化</b>(两变体各自内聚, 不动引擎 / 桥 / 核心层): 模块级 <code>Map&lt;path, row&gt;</code> 缓存上一轮行对象; 派生时文件行 = 「文件对象引用相等 且 参与渲染的字段集(size/progress/priority/is_seed/piece_range/availability)浅比对相等」→ 复用旧对象(prop 引用不变 → 桥 v-for keyed diff 时该行组件跳渲); 目录行 = 「子树内无任何失效行 且 自身折叠态与聚合输入未变」→ 复用, 失效沿祖先链传播 O(depth)。⚠ 键集必须覆盖该行<b>参与渲染的全部输入</b>: dt11 的 <code>_cls</code>(rowCls, 勾选三态染色)挂在行对象上, 勾选 / 折叠态变化必须使该行及其祖先链失效重装配, 否则染色停旧值。新增模块级缓存命名避开变体单点 <code>T/R/H</code> 三件套(pitfalls/web-ui/variant-singleton-shadow)。</li>
+  <li><b>O(D×F) 装配优化</b>: <code>subtreeFiles</code> 每目录全表 filter 改为派生期一次 O(F) 给每目录累计 subtree size / 进度加权 / 最低可用性; <code>chkStateOf</code> 双算(dt11:244/:253)一次算存行内局部复用。⚠ 聚合口径两处对齐: dt11 头注 <b>:8-9</b> 明示聚合口径以核心 <code>buildFileTree</code>(<code>drawer_templates.js:469</code>)为准 —— node 电池逐项对表。</li>
+  <li><b>sig 廉价化</b>(dt10:316 / dt11:360 同形两处): <code>files</code> 数组引用相等 → 直接跳过重建; 引用变了再比「长度 + 首 / 中 / 尾抽样元素关键字段」指纹, 不再 <code>JSON.stringify(files)</code>。loading / err 分量保留。</li>
+  <li><b>content-visibility</b>: dt_table.css 加 <code>.drawer-body .dt10-list .group-row, .drawer-body .dt11-list .group-row { content-visibility: auto; contain-intrinsic-size: auto 27px; }</code>(按各自 <code>--tbl-row-minh</code> 定值, 实施时实测校准)。⚠ 与锚保活的家族耦合(frame-swap-scroll-reset「摘下再插回会重启什么」): 真浏览器逐帧采样确认无 4px 跳动 / 动画重播复发; sticky 表头 / 键盘 scrollIntoView / H.anchFill 行为实测不受影响。仅 Chromium 系完整生效(本项目自用 WebUI, 报告已判可接受)。</li>
+</ol>
+<h4>验收判据(可机检优先)</h4>
+<ul>
+  <li>node 电池(真跑纯函数, 非 mock): 同一份 files 二次派生, 全部行对象引用相等; 改一个文件的 progress → 仅该文件行 + 祖先目录链为新对象, 其余引用相等; 勾选翻一个文件 → 该行 + 祖先链重装配且 <code>_cls</code> 正确翻转; derive 聚合值(大小 / 进度 / 缺口 / 最低可用性)与 <code>FT.buildFileTree</code> 口径逐项相等。</li>
+  <li>静态守阵: grep 断言两变体内不再出现 <code>JSON.stringify(files)</code>。</li>
+  <li>e2e(dt-live-update 扩): 千文件桩下勾选单行, 主线程长任务不出现(Performance API measure, 口径同 perf.spec.mjs 既有埋点); dt-live-update #8/#9 点击不跳动仍绿。</li>
+</ul>
+<h4>测试计划</h4>
+<ul>
+  <li><code>tests/test_webui_static_dom_panel.py</code> 扩 node 电池条目 + 静态断言(仿 <code>test_frontend_add_options_recent_order</code> 先例); 同步该文件头部 docstring「## 测试计划」清单。</li>
+  <li><code>e2e/dt-live-update.spec.mjs</code> 扩 1-2 条; 守阵红验(还原 sig 为 stringify / 记忆化键漏勾选态各应翻红)。</li>
+</ul>
+<h4>回滚面</h4>
+<p>两变体文件 + dt_table.css 一条规则, 引擎 / 桥 / 核心层零改动; 单提交 revert 即回退; 记忆化缓存是模块级瞬态, 回滚无状态残留。</p>
+
+<h3>W2 · P2 前置: 引擎窗口化参数化, 主表零变化(改 2 文件)</h3>
+<h4>目标</h4>
+<p>把 <code>columns.js</code> 窗口化一节对 <code>window.scrollY / innerHeight</code> 的硬编码抽成按 kind 的「滚动源配置」; 主表三 kind(torrent/group/member)行为<b>逐字节不变</b>, 为 W3 接线抽屉容器滚动源铺路。<b>本包不接线任何抽屉表</b>(全部 <code>window: null</code> 原样)。</p>
+<h4>涉及文件</h4>
+<ul>
+  <li><code>src/auto_qb/webui/static/shared/columns.js</code>: <code>_winContainer</code> <b>:519-527</b>、<code>_winGapOf/_winGapFor</code> <b>:530-546</b>、<code>_winSigExtra/_ensureWinTop</code> <b>:548-565</b>(<code>:561</code> 读 <code>window.scrollY</code>)、<code>_measureRowH</code> <b>:568-612</b>、<code>_rowKeyOf</code> <b>:611</b>(现按 item.hash/item.key 取键, 抽屉行两者皆无)、<code>_rowWindow</code> <b>:616-660</b>、<code>_onWinScroll/_onWinResize</code> <b>:662-672</b>(<code>:666/:671/:672</code> 读 scrollY/innerHeight)。</li>
+  <li><code>src/auto_qb/webui/static/shared/app.js</code>: 常量 <code>ROW_WIN_MIN/ROW_WIN_OVERSCAN/ROW_WIN_EST_H</code> <b>:648-652</b>(EST_H 需预留 drawer 档, 先按 <code>--tbl-row-minh</code> 填 27 校准)、<code>DRAWER_TABLE_DEFS</code> <b>:594-609</b>(本包只动注释口径, <code>window: null</code> 不动)、注册表注释 <b>:445</b>。</li>
+</ul>
+<h4>改法要点</h4>
+<ol>
+  <li>抽「窗口源描述符」: 每 kind 一份 <code>{ scrollY(), viewH(), topOffset(el), bindScroll(handler), unbindScroll(handler) }</code> —— 主表三 kind = window 文档滚动(现行为原样搬进描述符); 容器型 kind(预留) = 滚动元素 <code>scrollTop / clientHeight / getBoundingClientRect().top</code> + 元素 scroll 监听 + ResizeObserver 视口高。主表 kind 的五个函数与现有实现逐行等价, 只是落位。</li>
+  <li><code>_rowKeyOf</code> 参数化: 抽屉行键从描述符给(后来 = rowKey 字段名 <code>"k"</code> 的值), 主表路径不变。</li>
+  <li><code>_rowPre[kind]</code> 前缀和(键盘跨窗回焦用, <code>:637</code> 附近)按 kind 自然扩展, 主表消费方 <code>shortcuts.js _kbScrollRowIntoView</code> 不动。</li>
+  <li>保守默认: 描述符缺失 / 容器型 kind 未注册时回落现行为; <code>ROW_WIN_MIN=200</code> 阈值语义不变(小列表零差异回退)。</li>
+</ol>
+<h4>验收判据</h4>
+<ul>
+  <li>主表既有守阵全绿即本包主验收: <code>e2e/perf.spec.mjs</code> P1-2 三条(DOM 行数远小于数据条数 / 占位总高 == 全量 / 滚动到底不塌陷)、<code>e2e/kbd-scroll-band.spec.mjs</code>、<code>e2e/hscroll-indicator.spec.mjs</code>、<code>e2e/column-prefs.spec.mjs</code>(列偏好双轨不受影响, pitfalls/web-ui/columns-persist)。</li>
+  <li>可机检: 静态断言 <code>window.scrollY/innerHeight</code> 在 columns.js 只出现在主表 kind 描述符内, 不再散落。</li>
+  <li>node 电池(扩 test_webui_static_dom_page.py): 容器型描述符下桩 scrollTop/clientHeight, 窗口切片起点 / 终点 / 占位高与文档型同输入同输出。</li>
+</ul>
+<h4>测试计划</h4>
+<p><code>tests/test_webui_static_dom_page.py</code> 扩 node 电池 + 静态断言; 同步文件头「## 测试计划」清单。e2e 全靠既有守阵, 无新增 spec。</p>
+<h4>回滚面</h4>
+<p>columns.js + app.js 两文件; 描述符缺省回落现行为, revert 即回; 若主表守阵翻红, 首查描述符搬迁是否漏了 <code>_winSigExtra</code> / <code>_ensureWinTop</code> 签名因子。</p>
+
+<h3>W3 · P2 抽屉接线: content 两变体挂窗口(改 5-6 文件)</h3>
+<h4>目标</h4>
+<p>R1 主修: drawerContentV10/V11 的 <code>window: null</code> 改挂新容器 kind, 桥模板消费切片 + 上下占位; 千级文件行从全量进 DOM 降到视口窗口; 树语义(折叠 / 筛选)不受影响(窗口吃 rowsFn 已扁平化的可见行)。</p>
+<h4>涉及文件</h4>
+<ul>
+  <li><code>src/auto_qb/webui/static/shared/app.js</code>: <code>DRAWER_TABLE_DEFS.drawerContentV10/V11</code> <b>:594-609</b> — <code>window: null</code> → <code>window: "drawerContent"</code>(含 tableRef 语义: 抽屉表无独立 tableRef, 容器解析走变体锚所在 <code>.group-table</code>)。</li>
+  <li><code>src/auto_qb/webui/static/shared/columns.js</code>: 注册 <code>drawerContent</code> kind 的窗口源描述符(滚动源 = <code>.drawer-body</code>, sticky-scrollpad-inset 坑档确认其为抽屉滚动容器, padding 14/18-20px)。</li>
+  <li><code>src/auto_qb/webui/static/shared/drawer_templates.js</code>: 桥描述符消费面 <code>dtBridgeRows/dtBridgeSegs</code> <b>:856-870</b> — 扩 <code>dtWinRows(tab)/dtWinPad(tab,'top'|'bottom')</code>(内部调 <code>_rowWindow("drawerContent", rows, ...)</code>), 单段才接窗; <code>segs: true</code> 描述符(08 五分组)<b>显式不接</b>并注释钉死, 防误推广。</li>
+  <li><code>src/auto_qb/webui/static/shared/tpl/xtpl.html</code>: 桥 v-for <b>:333-366</b> — 行 v-for 切换为 <code>dtWinRows(tab)</code>, 外侧加 <code>&lt;aq-row-pad&gt;</code> 上下占位(组件现成 <code>table.js:295-317</code>, win.active=false 时不渲染)。</li>
+  <li><code>src/auto_qb/webui/static/shared/shortcuts.js</code>: 抽屉行级键盘(U4 rowTab 已有)跨窗回焦 — 行 roving 焦点移出已渲染窗口前, 按 <code>_rowPre["drawerContent"]</code> 前缀和换算 scrollIntoView(主表 W2 前缀和先例同法), 回焦目标行必须在窗内(pitfalls/web-ui/kbd-cursor-collapse-dangling 家族: 先滚动后回焦, 防光标悬空指未渲染行)。</li>
+  <li><code>src/auto_qb/webui/static/shared/dt_table.css</code> 或 <code>columns.js:489</code> 注释: 「抽屉列表最多百级行不开窗」的过时注释随行修正(§2.1 ②)。</li>
+</ul>
+<h4>改法要点</h4>
+<ol>
+  <li>窗口化输入 = rowsFn 输出的已扁平化可见行; 折叠 / 展开引起行数突变走既有「全量重测一轮」路径(<code>_winMeasured[kind]</code> 失效机制现成), 不新写失效逻辑。</li>
+  <li>行高逐行实测复用 <code>_measureRowH</code>(抽屉行近定值 27px, 首轮实测后 EST 兜底); 行间距走 <code>_winGapFor</code> 实测不硬编码(主表已踩平的坑)。</li>
+  <li>sticky 补偿核对(不新写, 只核): dt11 既有吸顶 <code>top:-14px</code> / 吸底 <code>bottom:-20px</code> 负 inset 与 <code>margin:8px -16px -20px</code> 盖缝设计在占位件引入后仍成立 —— 占位件在滚动容器内容流内, 不改 sticky 几何; 复跑 <code>e2e/drawer-content-dt11-sticky.spec.mjs</code>(expect.poll 口径, 防入场动画窗口假红, pitfalls/web-ui/sticky-scrollpad-inset 守阵测量窗口教训)。</li>
+  <li>锚换代容忍: teleport 锚换代窗口期切片变化要容忍锚缺失(生产版静默跳过, 现状行为不变; pitfalls/web-ui/teleport-target-missing-patch-abort 不新增风险面即可, 换代后 <code>rowAfterFn</code> 回焦照旧)。</li>
+  <li>与 W1 叠加: W1 记忆化管「重渲降级」, W3 管「渲染基数」, 正交; rowsFn 派生仍全量(树聚合需要全量数据, 不做派生层分页)。</li>
+</ol>
+<h4>验收判据</h4>
+<ul>
+  <li>e2e(扩 <code>drawer-content-variant-tables.spec.mjs</code> 或新 spec): 千行桩(约 1000 文件 + 目录)双变体 × 至少 prism + 一个带入场动画的皮肤(atlas)下, <code>.group-row</code> 实际 DOM 行数 &lt;&lt; 数据行数; 占位总高 == 全量渲染高度; 折叠 / 展开后窗口重测行数正确; 滚动到底最后一屏有行且可见; 键盘 ↓ 移出窗边界时先滚动后回焦, 焦点行可见。</li>
+  <li>既有守阵全绿: dt-live-update #8/#9(点击不跳动, withScroll 保活)、drawer-content-dt11-sticky、drawer-bridge-stub、drawer-switch-no-flash。</li>
+  <li>静态守阵: 断言 DRAWER_TABLE_DEFS 两个 content 变体 <code>window</code> 非 null 且为注册过的 kind 名; 断言 <code>segs:true</code> 描述符无窗口化接线。</li>
+  <li>列状态双轨: 抽屉列偏好(colHidden/colWidths/colOrder 双轨模型)读写路径不碰, <code>column-prefs.spec.mjs</code> 全绿。</li>
+</ul>
+<h4>测试计划</h4>
+<ul>
+  <li>e2e 新条目进 <code>drawer-content-variant-tables.spec.mjs</code>(或独立 spec, 实施者按体量定); 静态 / node 电池进 <code>tests/test_webui_static_dom_panel.py</code>; 两处都同步文件头「## 测试计划」清单。</li>
+  <li>守阵红验: 把 <code>window</code> 打回 null 应使「DOM 行数 &lt;&lt; 数据行数」翻红。</li>
+</ul>
+<h4>回滚面</h4>
+<p><code>window</code> 描述符两行打回 null 即零差异回退到全量渲染(off 结构语义); 桥模板占位件随 win.active 关闭不渲染; 单提交 revert。若接线后发现树折叠态与窗口重测竞态, 优先在 rowsFn 侧失效 <code>_winMeasured</code>, 不在窗口层做树逻辑。</p>
+
+<h3>W4 · 千级验收(抽屉): Playwright 桩 + 真机轨(改测试, 不改产品码)</h3>
+<h4>目标</h4>
+<p>把「千级文件可交互」变成可复现的守阵与实测数字; 补上报告局限①(无浏览器实测)的基线。产出数字一律进基线切片(<code>kb.new baseline</code>), 文档只写「见 kb.baseline」。</p>
+<h4>涉及文件</h4>
+<ul>
+  <li><code>e2e/perf.spec.mjs</code>(扩: 千文件桩下抽屉场景)或新 <code>e2e/drawer-content-perf.spec.mjs</code>。</li>
+  <li><code>tests-real/rm08_webui_read/</code>(扩真机条目: 真实 qB 构造千文件种子 → 打开 content 页签 → 交互耗时采集)。</li>
+</ul>
+<h4>改法要点</h4>
+<ol>
+  <li>Playwright 桩: <code>page.route</code> 拦 <code>/api/torrents/*/files</code> 回约 1000 文件 + 目录的合成数组(口径参考 drawer-content-dt11-sticky 的既有桩法); 变体 10/11 × prism/atlas 双皮跑矩阵。</li>
+  <li>量四样(每样都指派交付物, perf-cadence「埋点写完必须有人消费」): ①首渲 DOM 行数 / 节点数(断言窗口化生效); ②勾选单行 / 折叠单目录的长任务耗时(Performance API, A/B = W3 落地前后同场景); ③滚动 rAF 采样丢帧; ④render 拍 sig 开销(确认不再全量 stringify)。</li>
+  <li>真机轨: tests-real rm08 新条目, 真 qB 下打开千文件种子 content 页签到可交互的耗时; 数字誊进基线切片。</li>
+</ol>
+<h4>验收判据</h4>
+<ul>
+  <li>守阵: 首渲 DOM 行数断言(窗口化)、勾选长任务不超 W3 前基线的对照断言(A/B 口径, 不拍绝对 ms 数——CI 不可靠, perf-cadence 教训)、滚动到底不塌陷。</li>
+  <li>档案: W4 轮次把四样实测数字写进任务档案与基线切片; 若②的 A/B 改善不达预期(勾选仍整表级), 回头查 W1 记忆化失效面是否漏键。</li>
+</ul>
+<h4>测试计划</h4>
+<p>本包即测试; e2e 条目同步所在 spec 文件头注释口径; 真机条目进 rm08 轨道清单。</p>
+<h4>回滚面</h4>
+<p>纯测试文件, 无产品码回滚面。</p>
+
+<h3>W5 · 主表千级复测(用户要求): 无回归确认 + 残留池取舍(原则上零代码改动)</h3>
+<h4>目标</h4>
+<p>用户明确要求「列表性能统一解决, 也包括主表」—— 主表四件既有优化(rid+delta 增量轮询 / view 裁剪 / 行窗口化 / JSONResponse 短路)在 W2 参数化重构后于千级场景<b>无回归</b>的正式确认; 并对主表侧残留池 issue 给出取舍结论(D2)。</p>
+<h4>涉及文件</h4>
+<p>复用既有基建, 原则上零改动: <code>e2e/perf.spec.mjs</code>(主表 P1-2 三条 + P1-3 埋点 A/B, 千级场景桩已具备)、<code>e2e/column-prefs.spec.mjs</code>、<code>e2e/kbd-scroll-band.spec.mjs</code>、<code>e2e/delta-sync.spec.mjs</code>、<code>tests-real/rm08_webui_read/</code>(主表真机场景); 必要时仅扩 e2e 条目(若需补「千级种子 + 打开千文件抽屉同屏」的连带场景)。</p>
+<h4>改法要点</h4>
+<ol>
+  <li>W2 合入后必跑一轮上述守阵(参数化重构的主表零回归门); W3/W4 落地后再跑终态一轮(抽屉与主表同页, 抽屉重渲不得拖累主表轮询节拍)。</li>
+  <li>「千级种子 + 千级文件同屏」连带场景: 大库(千级种子)下打开千文件种子详情, 量主表轮询 tick 与抽屉交互互不放大(抽屉 content 无轮询, 理论无耦合, 用数字确认)。</li>
+  <li>残留池 issue 取舍(推荐方案 → D2): <code>26-10-08-0411</code>(5000 种子冷启动 / 降级轮整表全量)与 <code>26-10-30-0626</code>(SSE 失效退轮询延迟)<b>留池不顺带修</b> —— 二者是数据线议题(分页门控 / 推送通道), 与本轮渲染线(W1-W3)不同源无耦合; W5 只确认渲染线无回归。若复测暴露其在千级下显著恶化, 按 create-issue 认领单独立项, 不混入本计划。</li>
+</ol>
+<h4>验收判据</h4>
+<ul>
+  <li>perf.spec.mjs 全部条目 + column-prefs + kbd-scroll-band + delta-sync 全绿(W2 后一轮、终态一轮)。</li>
+  <li>真机轨主表场景实测数字进基线切片; 与 W4 同轮归档。</li>
+  <li>结论回写: D2 的取舍结论连同复测数字写进任务档案 §拍板记录。</li>
+</ul>
+<h4>测试计划</h4>
+<p>复用为主; 若扩 e2e 条目, 同步 spec 文件头注释。新增 Python 守阵则同步该文件头部 docstring「## 测试计划」清单。</p>
+<h4>回滚面</h4>
+<p>无产品码改动; 若扩的 e2e 条目暴露真回归, 回滚对象是 W2/W3 对应提交(本包自身无回滚面)。</p>
+
+<h3>W6 · P3 可选: 乐观优先级(W6a) + payload 实测后裁剪(W6b, 决策点 D1)</h3>
+<h4>目标</h4>
+<p>R5/R6 收尾。W6a 直击「改一个文件的优先级 = 网络往返 + 千行重渲」; W6b 按 perf-cadence 四步量法实测后决定裁不裁, <b>无实测数字不动端点</b>。</p>
+<h4>涉及文件</h4>
+<ul>
+  <li>W6a: <code>src/auto_qb/webui/static/shared/drawer.js</code>(<code>:565</code> files/priority silent 重拉链、<code>:950-959 setFilePriority</code>)、<code>src/auto_qb/webui/static/shared/commands.js</code>(<code>applyOptimisticPatch</code> 族扩 files 覆盖面)、<code>tests/test_webui_optimistic_rename_alt.py</code>(扩四态电池)、<code>e2e/dt-live-update.spec.mjs</code>。</li>
+  <li>W6b(仅 D1 拍板裁剪后): <code>src/auto_qb/webui/server/routes/torrent_detail.py:58-64</code>。</li>
+</ul>
+<h4>改法要点</h4>
+<ol>
+  <li><b>W6a 乐观补丁</b>: 提交前按 indices 原地写 <code>drawer.files[i].priority</code>(W1 记忆化保证只有脏行 + 祖先链重渲); <b>不</b>整表替换数组引用(引用替换会丢 prev, 且触发 rowsFn 全量重派生); 成功回执后不做 silent 全量重拉, 改低频对账(下一次打开 / 换种子自然重拉即可, 或 8s 兜底拉一次真值)。<b>失败 / 3s 无回执 / 8s 未确认回滚必须与贴补丁走同一单点</b>, prev 在贴补丁时逐 index 采集(对齐 webui-optimistic-rollback-symmetry: 两条回滚出口都要覆盖, 「采不到 prev」不得出现 —— 原地写前采, 不在替换后找); 真值对账判据用重拉数据与补丁值比对(qB files 的 priority 语义以重拉为准, 「真值到达」≠「值覆盖结束」, pitfalls/web-ui/contract-api)。</li>
+  <li><b>W6b 四步量法</b>(先量后裁): ①payload 字节构成(最大字段占几成) ②客户端 parse / 赋值 / patch 耗时拆分 ③同尺寸静态文件网络对照 ④端点内 5 行计时中间件。有数字再决定: 裁 <code>is_seed/piece_range/availability</code> 等非渲染字段, 或 range 懒取。<b>裁字段不裁行</b> —— 目录聚合(大小 / 进度 / 最低可用性)需要全量数据, 分页 / 行懒取会破坏聚合口径(报告 §04 判); 后端裁剪时前端记忆化字段集(W1)同步收窄。</li>
+</ol>
+<h4>验收判据</h4>
+<ul>
+  <li>W6a: 点击优先级徽章行上当帧变色(回执级); 四态单测(贴上 / 回执 hold / 失败回滚 / 兜底回滚最后已知真值)扩进 <code>test_webui_optimistic_rename_alt.py</code> 电池 —— <b>坑档明示「新消费者加第二个覆盖面时应扩本电池, 静态守阵看不出来」</b>; e2e: 断网 / 桩 500 时回滚对称, 无行停留假状态。</li>
+  <li>W6b: 实测数字(四步)进任务档案; 裁与不裁都给结论; 若裁, 契约守阵(前端消费键 ⊆ 后端返回键集, 仿 <code>test_frontend_hr_contract_keys_match_backend</code> 双向提取口径)钉住裁剪后字段集。</li>
+</ul>
+<h4>测试计划</h4>
+<p><code>tests/test_webui_optimistic_rename_alt.py</code> 扩电池条目(同步文件头「## 测试计划」清单); e2e 扩 dt-live-update; W6b 若动后端, 同步 test_web* 契约守阵。</p>
+<h4>回滚面</h4>
+<p>W6a: drawer.js setFilePriority 链回退到 silent 重拉(现状行为)即回滚; 乐观补丁是纯前端显示层, 不碰写后同步字段边界(26-10-21-2323 §4.3), 后端零改动。W6b: 端点字段集回退 = revert 单提交, 前端记忆化字段集随行回退。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>决策点</th><th>推荐(默认)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>W6b payload 裁剪做不做</td><td>按 perf-cadence 四步量法先实测(W4/W5 同轮采集), <b>有数字再定</b>; 无数字不动 <code>torrent_detail.py</code>。预判: files 字段本就约 7 个, 裁剪收益可能不抵契约面 —— 实测后大概率「不裁」</td><td>直接不做(接受一次性传输全量)</td></tr>
+  <tr><td>D2</td><td>主表残留池 issue(26-10-08-0411 / 26-10-30-0626)取舍</td><td><b>留池不顺带修</b>: 数据线议题与本轮渲染线不同源; W5 只做千级无回归复测, 复测若暴露恶化再认领单独立项</td><td>顺带小修 26-10-08-0411 的降级轮门控(会拉大本计划改动面, 不推荐)</td></tr>
+  <tr><td>D3</td><td>W6a 乐观优先级实施时机</td><td>W1-W4 落地且 W4 实测确认 R5(重拉重渲)在千级下占比显著后实施; 记忆化(W1)是其收益前置</td><td>本轮不做, 留待下轮</td></tr>
+</table>
+<p class="cm">用户指令「列表性能统一解决, 也包括主表」已落为 W5 必做包与 D2 推荐项; W1-W5 为必做主线路线(即报告推荐路线), W6 为可选层按 D1/D3 拍板。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>时间 / 依据</th></tr>
+  <tr><td>—</td><td>(拍板后回填: D1/D2/D3 结论 + 日期)</td><td>—</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>W1 记忆化失效面想漏(勾选 / 折叠 / 进度轮进未进键)</td><td>键集漏「参与渲染的输入」→ 染色 / 聚合停旧值</td><td>键集设计清单化(逐字段问「它变了我该不该重渲」); node 电池逐字段对照旧实现 + 勾选翻转子树链断言; e2e dt-live-update 扩; 守阵红验</td></tr>
+  <tr><td>content-visibility 与锚保活 / 入场动画家族耦合</td><td>跳渲元素被摘插时动画重播 / 4px 跳动复发(frame-swap-scroll-reset 家族教训)</td><td>真浏览器逐帧采样(4ms 双路, dt-live-update #9 口径)双皮肤验证; 复发则作用域禁用动画而非撤 content-visibility</td></tr>
+  <tr><td>W2 参数化破坏主表窗口化</td><td>描述符搬迁漏签名因子(_winSigExtra/_ensureWinTop/_winResize)</td><td>主表零回归守阵先行(perf.spec.mjs 三条 + kbd-scroll-band + column-prefs); 描述符缺省回落现行为; 「window.scrollY 只在主表描述符内」静态断言</td></tr>
+  <tr><td>抽屉 sticky 缝在占位件引入后复发</td><td>占位件改变内容流几何(sticky-scrollpad-inset)</td><td>复跑 drawer-content-dt11-sticky(expect.poll 口径防入场动画假红); 占位件不触碰负 inset 设计</td></tr>
+  <tr><td>键盘跨窗回焦悬空 / 滚错位</td><td>焦点行随窗口化卸载(kbd-cursor-collapse-dangling 家族)</td><td>回焦前按 _rowPre 前缀和先 scrollIntoView 再回焦; e2e 钉「移出窗边界 → 焦点行可见」</td></tr>
+  <tr><td>变体局部变量遮蔽三件套</td><td>W1 新增模块级缓存撞 T/R/H 名(variant-singleton-shadow)</td><td>命名避开 + 走查; 既有静态守阵(H.rowFocusKey 断言)兜底</td></tr>
+  <tr><td>dt11 聚合口径与核心层漂移</td><td>O(D×F) 改前缀计数时聚合口径手滑(dt11:8-9 两处对齐警告)</td><td>node 电池把 derive 聚合值与 FT.buildFileTree 逐项对表(size/进度/缺口/最低可用性)</td></tr>
+  <tr><td>窗口化误推广到分段桥</td><td>segs:true 描述符(08 五分组)被顺手接线</td><td>本计划只接 dt10/11 单段; 静态守阵 + 注释钉死「segs:true 不接窗」</td></tr>
+  <tr><td>W6a 乐观补丁留假状态</td><td>回滚出口漏一条 / prev 采集晚于写入</td><td>贴与回滚同一单点 + 双出口全覆盖; prev 原地写前逐 index 采; 扩四态电池(坑档明示静态守阵看不出来)</td></tr>
+  <tr><td>抽屉小列表(行数 &lt; 200)被误开窗</td><td>ROW_WIN_MIN 阈值语义被改</td><td>阈值语义不动; 零差异回退(off = 全量)是不变量, e2e 小列表用例钉「无占位件」</td></tr>
+</table>
+<div class="aside"><b>验收判据与坑档对齐清单</b>(硬约束 3): 列状态双轨 → column-prefs 守阵(W2/W3 必跑, columns-persist); 前后端契约 → content files 按需拉取契约不变、不引入轮询; W6b 契约守阵双向键集(contract-api); 视图裁剪 → 主表 VIEW_ARRAYS / rid 门控零触碰, delta-sync 守阵(contract-api); 乐观回滚对称 → W6a 四态电池 + 同一单点(webui-optimistic-rollback-symmetry); 整帧换滚动位 → withScroll/anchFill 保活, dt-live-update #8/#9(frame-swap-scroll-reset); sticky 内缩 → 负 inset 复跑 + expect.poll 测量窗口(sticky-scrollpad-inset); teleport 锚换代 → 容忍窗口期缺失(teleport-target-missing-patch-abort); 键盘跨窗 → 前缀和 scrollIntoView(kbd 系); 埋点消费 → W4 四样各指派交付物(perf-cadence); CSS 行数 cap → dt_table.css 现 162 行余量足, 追加后自查(css-file-line-cap)。</div>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-02-0351</span> 初版。来源: 调研报告 reports/26-11-02-0339(HEAD fe211faf 取证)+ 用户指令「列表性能问题统一解决, 也包括主表」。要点: 报告推荐路线落为 W1-W6 串行工作包(P1=W1, P2=W2+W3, 验收=W4/W5, P3=W6 可选); 用户「包括主表」要求落为 W5 主表千级复测必做包; 主表残留池 issue 取舍留 D2(推荐留池); payload 裁剪留 D1(先量后做); 关键代码锚点已在 HEAD 146d3b0a 复核, 发现报告两处微漂(§2.1)与一条过时注释(columns.js:489, W3 随行修); 零新增配置键; 不碰 config.yml / auto-qb-data/。</li>
+</ul>
+
+</div>
+</body>
+</html>

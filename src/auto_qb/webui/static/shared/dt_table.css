@@ -160,3 +160,16 @@
 .drawer-body .dt10-list .group-row.sel > :first-child {
   background: linear-gradient(var(--sel-bg), var(--sel-bg)), var(--bg-card);
 }
+
+/* ---- W1(计划 26-11-02-0351): 千级文件列表屏外行渲染税(content-visibility:auto) ----
+ * 视口外行跳过布局与绘制; contain-intrinsic-size 的 auto 记上次实测尺寸、定值兜底首渲,
+ * 滚动条总高稳定。定值 = 各自行高: 10 是 height:29px 定高行, 11 是 --tbl-row-minh:27px
+ * 近定值行。仅 Chromium 系完整生效(自用 WebUI, 计划已判可接受); 与锚保活(frame-swap-
+ * scroll-reset 家族)的耦合面 —— sticky 表头/键盘 scrollIntoView 回焦按保留尺寸定位,
+ * e2e dt-live-update #8/#9(点击不跳动)实测盯住。 */
+.drawer-body .dt10-list .group-row,
+.drawer-body .dt11-list .group-row {
+  content-visibility: auto;
+}
+.drawer-body .dt10-list .group-row { contain-intrinsic-size: auto 29px; }
+.drawer-body .dt11-list .group-row { contain-intrinsic-size: auto 27px; }

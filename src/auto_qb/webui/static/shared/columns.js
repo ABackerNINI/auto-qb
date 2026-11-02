@@ -38,6 +38,88 @@ const HSCROLL_IND = {
   sbH: -1,         // 状态栏实测高缓存; -1 = 未量(window resize 时清)
 };
 
+/* ---------------- P1-2 行窗口化 · 窗口源描述符(计划 26-11-02-0351 W2 参数化) ----------------
+ * 窗口化的滚动几何原先散在方法里直读 window 全局(scrollY / innerHeight, 全页滚动硬编码);
+ * 现抽成**按 kind 的窗口源描述符**: 滚动源 / 视口 / 容器顶偏移 / 滚动绑定 / 行键, 每 kind 一份。
+ * - 主表三 kind(torrent/group/member)= 文档滚动型 WIN_SRC_DOC(原实现逐行搬入, 行为零变化);
+ * - 容器型 winSrcContainer(预留, W3 接线 drawerContent): 滚动源 = 指定容器的 scrollTop,
+ *   视口 = 容器 clientHeight, 绑定 = 元素 scroll 监听 + ResizeObserver(容器高变化不触发 window resize)。
+ * 保守默认: kind 未在 WIN_SOURCES 注册时 _winSrc 回落 WIN_SRC_DOC —— 描述符缺失 = 现行为。
+ * _winTop 的几何口径两型对称: 文档型 = rect.top + scrollY(相对文档内容顶), 容器型 =
+ * rect.top - 滚动容器rect.top + scrollTop(相对容器内容顶) —— rel = scrollY - top 都是
+ * 「已滚进行块的距离」, _rowWindow 的前缀和算式两型共用。
+ * bindScroll/unbindScroll 是绑定契约: 文档型的实际挂载仍单点在 lifecycle.js(P1-2 原样, 描述符
+ * 与其逐字同款); 容器型由接线方消费 —— handler 约定 = 事件到达后按描述符重读 scrollY/viewH
+ * 写回引擎态(this._winScrollY / this._winViewH), 即 _onWinScroll/_onWinResize 的合帧写法。
+ */
+/* WIN-SOURCES-BEGIN: 窗口化几何对 window.scrollY / window.innerHeight 的直读只允许出现在这一段 */
+const WIN_SRC_DOC = {
+  scrollY: () => window.scrollY,
+  viewH: () => window.innerHeight,
+  topOffset(el) {
+    return el.getBoundingClientRect().top + window.scrollY;
+  },
+  bindScroll(handler) {
+    window.addEventListener("scroll", handler, { passive: true });
+  },
+  unbindScroll(handler) {
+    window.removeEventListener("scroll", handler);
+  },
+  keyOf(item) {
+    return item.hash;  // torrent/member 的行键; group 覆盖为 item.key(见 WIN_SOURCES)
+  },
+};
+const WIN_SOURCES = {
+  torrent: WIN_SRC_DOC,
+  member: WIN_SRC_DOC,
+  group: Object.assign({}, WIN_SRC_DOC, { keyOf: (item) => item.key }),
+  /* 抽屉内容树两变体(W3 接线, 计划 26-11-02-0351): 滚动源 = .drawer-body(抽屉滚动容器,
+   * sticky-scrollpad-inset 坑档确认), 行键 = 行对象 k(文件路径, 描述符 rowKey 字段)。
+   * getEl 惰性求值 —— 抽屉 v-if 未渲染时各函数逐次判空(scrollY/viewH 0 = 零差异回退)。 */
+  drawerContent: Object.assign(winSrcContainer(() => document.querySelector(".drawer-body")), {
+    keyOf: (item) => item.k,
+  }),
+};
+/* 容器滚动型描述符工厂(W2 只交付形态, 不接线任何 kind): getEl 返回滚动容器元素
+ * (惰性求值 —— 容器可能 v-if 未渲染, 各函数逐次判空: 未渲染 = scrollY 0 / viewH 0, 走零差异回退)。 */
+function winSrcContainer(getEl) {
+  return {
+    scrollY() {
+      const el = getEl();
+      return el ? el.scrollTop : 0;
+    },
+    viewH() {
+      const el = getEl();
+      return el ? el.clientHeight : 0;
+    },
+    topOffset(el) {
+      const sc = getEl();
+      if (!sc || !el) return 0;
+      return el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop;
+    },
+    bindScroll(handler) {
+      const el = getEl();
+      if (!el) return;
+      el.addEventListener("scroll", handler, { passive: true });
+      // 容器视口高不随 window resize 变(抽屉抽成一条再撑回), 用 ResizeObserver 盯住:
+      // 尺寸变化同 handler 一并通知(接线方合帧后重读 scrollY/viewH)。
+      if (typeof ResizeObserver === "function") {
+        this._ro = new ResizeObserver(() => handler());
+        this._ro.observe(el);
+      }
+    },
+    unbindScroll(handler) {
+      const el = getEl();
+      if (el) el.removeEventListener("scroll", handler);
+      if (this._ro) {
+        this._ro.disconnect();
+        this._ro = null;
+      }
+    },
+  };
+}
+/* WIN-SOURCES-END */
+
 window.AQB_COLUMNS = {
   methods: {
     toggleColMenu(ev) {
@@ -513,9 +595,20 @@ window.AQB_COLUMNS = {
       });
     },
     /* ---------------- P1-2 行窗口化 ----------------
-     * 模板只消费三个产物: 可见切片、上占位高、下占位高。窗口关闭时 == 全量渲染(零差异回退)。 */
+     * 模板只消费三个产物: 可见切片、上占位高、下占位高。窗口关闭时 == 全量渲染(零差异回退)。
+     * 滚动几何按 kind 走窗口源描述符(模块顶 WIN_SOURCES, 计划 26-11-02-0351 W2 参数化):
+     * 本节方法体零 window 全局直读(scrollY / innerHeight 都经描述符)。 */
     _winContainer(kind, refName) {
       if (refName) return this.$refs[refName] || null;
+      if (kind === "drawerContent") {
+        // 抽屉内容桥(W3)的行容器 = 变体锚里的 .group-table(桥模板单点输出; content 页签
+        // 同一时刻只有一座桥表在场, 经 dtBridgeTbl 反查当前选中变体的表 id)。锚未挂
+        // (抽屉没开 / 非 content 页签)返回 null —— 调用方按「容器未渲染」零差异回退。
+        const tid = this.dtBridgeTbl("content");
+        return (tid && typeof document !== "undefined")
+          ? document.querySelector(`[data-dt-table-anchor="${tid}"] .group-table`)
+          : null;
+      }
       // 成员行: 容器 = .detail —— 明细表头(注册表 detail.headRef)的父元素。表头组件化后
       // 走 _headEl 取根元素(计划 26-10-11-1722 P1), 不能再直接读 $refs(那是组件实例)。
       const head = this._headEl("detail");
@@ -549,16 +642,78 @@ window.AQB_COLUMNS = {
       // 会改变"容器上方内容高度"的因子: 状态分布条是否渲染 / 搜索态 / 筛选态
       return `${this.distTotal ? 1 : 0}${this.searchQuery && this.searchQuery.trim() ? 1 : 0}${this.filtersActive ? 1 : 0}`;
     },
-    /* 容器顶边相对文档的偏移: 只在签名变化时读一次(getBoundingClientRect = 强制同步布局,
-     * 每帧读会把 P1-3 的收益又吐回去)。签名含 lastRid ⇒ 每轮数据最多读一次。 */
+    /* 窗口源描述符解析(计划 26-11-02-0351 W2): kind 未注册回落文档型 —— 描述符缺失 = 现行为。 */
+    _winSrc(kind) {
+      return WIN_SOURCES[kind] || WIN_SRC_DOC;
+    },
+    /* ---------------- 容器型滚动源的引擎态(W3 接线, 计划 26-11-02-0351) ----------------
+     * 与文档型 _winScrollY/_winViewH **分家**, 不共用一对: 主表与抽屉同屏可见(停靠面板),
+     * 两个滚动源是两套坐标系 —— 抽屉滚一把就把文档对写掉, 主表窗口(轮询每拍按 _winScrollY
+     * 重算)跟着漂移。容器态惰性建一次; Vue.reactive 让滚动写回能触发桥模板重渲(node 探针
+     * 无 Vue 时退化普通对象 —— 电池只验证几何, 不验证响应式)。 */
+    _winCtnState() {
+      if (!this._winCtn) {
+        const V = typeof window !== "undefined" ? window.Vue : null;
+        this._winCtn = (V && typeof V.reactive === "function") ? V.reactive({ y: 0, h: 0 }) : { y: 0, h: 0 };
+      }
+      return this._winCtn;
+    },
+    /* 容器几何写回单点: scroll 事件(rAF 合帧后)与键盘跨窗滚动(W3 dtWinKbd)都走这里。
+     * 几何读取 = 强制同步布局, 故只挂两处低频口(事件拍/按键), 不进渲染路径。宽度变化另
+     * bump _winResize(行高随列宽变, 需一轮全量重量) —— 高度动画(抽屉抽成一条再撑回)不 bump,
+     * 否则开抽屉动画每帧都付一次千行全量渲染。 */
+    _winCtnSync() {
+      if (typeof document === "undefined") return;
+      // 收场期(drawer.open 已翻 false, 面板还在 leave 动画)的 .drawer-body 宽度**不可采信**:
+      // .drawer-leave-active 转 absolute 出流(三皮肤 dialogs.css), clientWidth 实测跳 1894->1918
+      // —— 采信就假 bump _winResize, 而那是与主表**共用**的宽度代, 下一拍 updated 钩子的
+      // _measureRowH 按签名失配把主表行高全表作废, 3000 行下走一轮全量重渲(实测 5.5s 长任务,
+      // 用户所见「关抽屉后卡死几秒; 能滚不能点」—— 滚轮走合成器不进主线程, 鼠标事件被长任务饿死)。
+      // 真重开会经 _ensureWinCtnBind 重新绑定并 sync, 此处短路不丢状态。
+      if (!this.drawer || !this.drawer.open) return;
+      const el = document.querySelector(".drawer-body");
+      if (!el) return;
+      const st = this._winCtnState();
+      st.y = el.scrollTop;
+      st.h = el.clientHeight;
+      if (this._winCtnW !== undefined && Math.abs(el.clientWidth - this._winCtnW) > 0.5) this._winResize++;
+      this._winCtnW = el.clientWidth;
+    },
+    _onWinCtnScroll() {
+      if (this._winRafC) return;
+      this._winRafC = requestAnimationFrame(() => {
+        this._winRafC = 0;
+        this._winCtnSync();
+      });
+    },
+    /* 容器滚动监听惰性绑定: 文档型的挂载单点在 lifecycle.js mounted(window 监听, 常驻),
+     * 容器型的滚动源 .drawer-body 是动态元素 —— 每轮签名检查时按元素引用比对, 换了就摘旧
+     * 挂新(ResizeObserver 随 bindScroll/unbindScroll 成对重挂); 抽屉从未打开就永不绑定。
+     * 绑定后立即 _winCtnSync 写回初值 —— 不等第一次滚动/尺寸事件, 否则开抽屉后窗口在用户
+     * 滚动前不激活。 */
+    _ensureWinCtnBind() {
+      if (typeof document === "undefined") return;
+      const el = document.querySelector(".drawer-body");
+      if (this._winCtnBoundEl === el) return;
+      const src = this._winSrc("drawerContent");
+      if (this._winCtnBoundEl) src.unbindScroll(this._onWinCtnScroll);
+      this._winCtnBoundEl = el || null;
+      if (!el) return;
+      src.bindScroll(this._onWinCtnScroll);
+      this._winCtnW = undefined;  // 新容器: 宽度基线重建(绑定拍不 bump)
+      this._winCtnSync();
+    },
+    /* 容器顶边相对滚动内容顶的偏移(按 kind 走描述符): 只在签名变化时读一次(getBoundingClientRect
+     * = 强制同步布局, 每帧读会把 P1-3 的收益又吐回去)。签名含 lastRid ⇒ 每轮数据最多读一次。 */
     _ensureWinTop() {
+      this._ensureWinCtnBind();  // 容器型滚动源惰性绑定(元素引用比对, 常态零开销)
       const base = `${this.viewMode}|${this.page}|${this._winResize}|${this._winSigExtra()}|${this.lastRid}`;
-      for (const kind of ["torrent", "group", "member"]) {
+      for (const kind of ["torrent", "group", "member", "drawerContent"]) {
         const sig = `${base}|${kind}`;
         if (this._winTopSig[kind] === sig) continue;
         const def = TABLE_DEFS[kind];
         const el = this._winContainer(kind, def ? def.tableRef : null);
-        this._winTop[kind] = el ? el.getBoundingClientRect().top + window.scrollY : 0;
+        this._winTop[kind] = el ? this._winSrc(kind).topOffset(el) : 0;
         this._winTopSig[kind] = sig;
       }
     },
@@ -569,7 +724,11 @@ window.AQB_COLUMNS = {
       if (!this.rowWin) return;
       // 签名取三个有窗口的层(与 _rowWindow 的 kind 对齐; 顺序 group/torrent/detail 与旧字面量一致)
       const winDefs = [TABLE_DEFS.group, TABLE_DEFS.torrent, TABLE_DEFS.detail];
-      const sig = `${this.viewMode}|${this._winResize}|${winDefs.map((d) => this[d.cols].length).join("|")}`;
+      // !签名不含 viewMode(2026-11-02 关抽屉/切页卡死取证): 三 kind 行宽几何都不随 viewMode 变
+      // —— 列集合由 colcounts 因子独立盯住、视口宽由 _winResize 盯住, 行本身只在固定列集的
+      // 同宽表区渲染。旧签名含 viewMode = 每次切页把三 kind 行高全表作废 + _winMeasured 翻 false
+      // ⇒ 下一轮 _rowWindow 走全量渲染量齐, 3000 行实测 5.9~8.4s 长任务(切页卡死的根因)。
+      const sig = `${this._winResize}|${winDefs.map((d) => this[d.cols].length).join("|")}`;
       // !用 getBoundingClientRect().height 而不是 offsetHeight: 后者取整, 0.4px 的误差 ×
       // 3000 行就是 1200px 的漂移。
       const probes = [["torrent", ".torrent-row[data-hash]"], ["group", ".group-row:not(.torrent-row)[data-key]"], ["member", ".member-row[data-hash]"]];
@@ -607,9 +766,58 @@ window.AQB_COLUMNS = {
         }
         if (changed) this._rowHVer++;  // 响应式: 让窗口按新高度重算
       }
+      // 抽屉内容桥(第四探测位, 计划 26-11-02-0351 W3): 行高逐行实测同法。选择器不能裸扫
+      // .group-row[data-dt-key] —— 桥行都带该属性, 合并态同屏还有 peers/trackers 的桥行;
+      // 按当前在场变体锚现拼(同 kind 两变体 V10/V11 同时只有一座在场), 行键 = data-dt-key
+      // (rowKey "k" 的值, 与 _rowKeyOf 的描述符 keyOf 同源)。签名 = 窗宽代 + 可见列数。
+      const dtDefs = (typeof window !== "undefined" && window.AQB_DRAWER_TPL_DEFS) || {};
+      for (const tid of Object.keys(dtDefs)) {
+        const ddef = dtDefs[tid];
+        if (ddef.window !== "drawerContent" || ddef.segs) continue;  // segs 描述符显式不接窗
+        if (this.dtBridgeTbl(ddef.variantTab) !== tid) continue;     // 未选中/未在场: 不量
+        const dcols = (this[ddef.cols] || []).length;
+        const sigD = `${this._winResize}|${dcols}`;
+        if (this._rowHSig["drawerContent"] !== sigD) {
+          // 列集合/窗口宽变了: 旧高度作废, 下一轮走全量重新量齐(只多付一次全量渲染)
+          for (const k of Object.keys(this._rowHs)) {
+            if (k.startsWith("drawerContent:")) delete this._rowHs[k];
+          }
+          this._rowHSig["drawerContent"] = sigD;
+          this._winMeasured["drawerContent"] = false;
+          this._rowHVer++;
+          continue;
+        }
+        const block = typeof document === "undefined" ? null
+          : document.querySelector(`[data-dt-table-anchor="${tid}"] .group-table`);
+        const drows = block ? block.querySelectorAll(".group-row[data-dt-key]") : [];
+        if (!drows.length) continue;
+        let dsum = 0, dChanged = false;
+        for (const r of drows) {
+          const h = r.getBoundingClientRect().height;
+          const key = "drawerContent:" + (r.getAttribute("data-dt-key") || "");
+          if (this._rowHs[key] === undefined || Math.abs(this._rowHs[key] - h) > 0.5) {
+            this._rowHs[key] = h;
+            dChanged = true;
+          }
+          dsum += h;
+        }
+        const davg = dsum / drows.length;  // 未量过的行(新种子)用它兜底
+        if (this._rowH["drawerContent"] === undefined || Math.abs(this._rowH["drawerContent"] - davg) > 0.01) {
+          this._rowH = { ...this._rowH, drawerContent: davg };
+          dChanged = true;
+        }
+        if (!this._winMeasured["drawerContent"]) {
+          this._winMeasured["drawerContent"] = true;  // 这一轮是全量渲染, 高度已量齐
+          dChanged = true;
+        }
+        if (dChanged) this._rowHVer++;
+      }
     },
+    /* 行键提取按 kind 走描述符(计划 26-11-02-0351 W2): 主表 = item.hash / group = item.key
+     * (WIN_SRC_DOC.keyOf 与 group 覆盖); 抽屉行(W3 接线)两者皆无, 键字段名由该 kind 的
+     * 描述符给(如 rowKey 字段 "k" 的值)。未注册 kind 回落文档型 = 现行为。 */
     _rowKeyOf(kind, item) {
-      return kind + ":" + (kind === "group" ? item.key : item.hash);
+      return kind + ":" + this._winSrc(kind).keyOf(item);
     },
     /* 前缀和 y(i) = 第 i 行的顶边偏移(含行间距)。每帧重算: 3000 次加法 ≈ 0.03ms,
      * 比维护"失效缓存 + 增量更新"简单得多, 也不会因为漏失效而算错。 */
@@ -617,7 +825,14 @@ window.AQB_COLUMNS = {
       const n = list.length;
       const off = { active: false, start: 0, end: n, padTop: 0, padBottom: 0 };
       void this._rowHVer;  // 依赖: 行高表更新后重算
-      if (!this.rowWin || n < ROW_WIN_MIN || this._winViewH <= 0) return off;
+      // 滚动几何按**源族**分流(计划 26-11-02-0351 W3): 文档型 = 主表三 kind 共用一对
+      // _winScrollY/_winViewH; 容器型 = 抽屉 .drawer-body 自己一对(_winCtnState)。
+      // 两套坐标系混用会让主表窗口跟着抽屉滚动漂移(主表与抽屉同屏可见)。
+      const doc = this._winSrc(kind) === WIN_SRC_DOC;
+      const st = doc ? null : this._winCtnState();
+      const sy = doc ? this._winScrollY : st.y;
+      const vh = doc ? this._winViewH : st.h;
+      if (!this.rowWin || n < ROW_WIN_MIN || vh <= 0) return off;
       // 行高还没量齐 -> 这一轮先全量渲染(首轮/改列之后各一次), 下次就走窗口了
       if (!this._winMeasured[kind]) return off;
       const est = this._rowH[kind] || ROW_WIN_EST_H[kind];
@@ -636,7 +851,7 @@ window.AQB_COLUMNS = {
       // 前缀和留存(计划 26-09-28-0354 W2): 键盘光标滚到窗口化未渲染行时按它换算文档 y
       // (shortcuts.js _kbScrollRowIntoView)。纯缓存, created 里初始化, 不进 data。
       this._rowPre[kind] = pre;
-      const rel = this._winScrollY - (this._winTop[kind] || 0);
+      const rel = sy - (this._winTop[kind] || 0);
       let start = this._prefixFloor(pre, rel) - ROW_WIN_OVERSCAN;
       let end = this._prefixFloor(pre, rel + this._winViewH) + 1 + ROW_WIN_OVERSCAN;
       if (!(start >= 0) || start > n) start = 0;
@@ -659,17 +874,19 @@ window.AQB_COLUMNS = {
       }
       return lo;
     },
+    /* 滚动/resize 的合帧写回: 几何一律经文档型描述符读(WIN-SOURCES 段是唯一直读点)。
+     * 容器型 kind(W3 接线)的事件路径由其描述符 bindScroll 挂到容器元素上, 写回同一对引擎态。 */
     _onWinScroll() {
       if (this._winRaf) return;
       this._winRaf = requestAnimationFrame(() => {
         this._winRaf = 0;
-        this._winScrollY = window.scrollY;
+        this._winScrollY = WIN_SRC_DOC.scrollY();
       });
     },
     _onWinResize() {
       this._winResize++;
-      this._winViewH = window.innerHeight;
-      this._winScrollY = window.scrollY;
+      this._winViewH = WIN_SRC_DOC.viewH();
+      this._winScrollY = WIN_SRC_DOC.scrollY();
     },
     /* 模板用: 成员行切片(展开明细)。窗口未启用时原样返回, 与改动前完全等价 */
     winMembers(list) {

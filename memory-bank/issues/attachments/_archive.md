@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (69)
+## Open (71)
 
+- [perf] [种子详情面板页签切换卡 1-2 秒](../26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(general/content 等)切换在 3000 种子规模下卡 1-2 秒; 疑与切页触发窗口/行高作废或内容变体全量装配相关, 待查
+- [perf] [各视图首次访问全量量齐行高(3000 行单发长任务)](../26-11-02-0902-perf-webui-first-visit-rowh-measure.html) — 各视图首访时窗口化引擎走全量渲染量齐行高, 3000 行下单发约 5.4s 长任务; 可考虑首访用估算行高渐进量齐压平
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的

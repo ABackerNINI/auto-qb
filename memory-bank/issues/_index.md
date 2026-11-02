@@ -20,7 +20,7 @@
 | 类型 | 条数 |
 |---|---|
 | bug | 9 |
-| perf | 5 |
+| perf | 7 |
 | docs | 2 |
 | test | 20 |
 | refactor | 4 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [perf] [种子详情面板页签切换卡 1-2 秒](26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(genera…
+- [perf] [各视图首次访问全量量齐行高(3000 行单发长任务)](26-11-02-0902-perf-webui-first-visit-rowh-measure.html) — 各视图首访时窗口化引擎走…
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低…
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl…
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process…

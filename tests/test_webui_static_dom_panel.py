@@ -53,6 +53,7 @@
 - test_drawer_prio_text_single_point: 文件优先级码 -> 中文文案表单点守阵(issue 26-10-29-1340) —— 五份内联表(4 份含 legacy 4 档 + setFilePriority 那份缺 4 回退 String(p))收口成核心层 HELPERS.PRIO_TEXT 全键表 + 带回退取文 prioText(p, dash) 挂 reg.helpers; 守阵 = shared/ 递归扫五键表字面仅 1 处(全仓唯一硬约束) + drawer.js 两处(setFilePriority 回执 String(p) 兜底 / drawerFileRows 显示「正常」兜底, 方法内经 window.AQB_DRAWER_TPL_REG 取别名)与 10/11/12(H.prioText 消费)接线 + PRIO_LABEL/本地字面零残留 + node 真跑可达域 p∈{0,1,6,7} 新旧逐字同与 4 档补测 prioText(4, "4")==="高"(ctx-menus.html 静态菜单项文案属自身呈现不在表内, issue 范围外不改; 行为等价 e2e 盯 drawer-content-variant-tables)
 - test_drawer_tracker_bucket_text_single_point: tracker 五桶文案表单点守阵(issue 26-10-29-1343) —— 04/05/06 三变体各持一份的桶文案(04/06 BUCKET{text,sev} 两份 + 05 GROUPS{text,cnt} 一份 + 04 PILLS 与 05 计数条内联字面, 共 5 处两形状)收口成核心层 TRACKERS(TRACKER_BUCKETS 全列 text/sev/order/cnt + TRACKER_BUCKET_ORDER 处理序数组, 05 分区顺序与 04/06 sev 升序同源写一次)挂 reg.trackers(reg.peers 同类判据命名空间); 守阵 = 核心表全列逐字钉住 + 桶文案词「未联系」drawer_tpl/ 零命中且核心层恰 1 处 + 三变体 TK 接线与本地 BUCKET/GROUPS/胶囊 text/tip 桶名字面零残留(cls/tip/色族/各版式桶序是呈现语义留各自文件) + node 真跑 text/sev/cnt 与旧表逐字对账(sev 0/1/2/3/9 不动 = 排序权值等价; 变体私有 bucketOf 三份属 R21-B-05/C-05 不在本项; 行为等价 e2e 盯 drawer-trackers-variant-tables / drawer-trackers-reannounce)
 - test_drawer_content_file_tree_single_point: content 目录树构建/聚合单点守阵(issue 26-10-29-1343) —— 10/12 各持一份的 newDir/buildTree/aggregate/findNode 四件收口成核心 CONTENT(buildFileTree/findNode)挂 reg.content(reg.peers/reg.trackers 同类「按页签判据命名空间」, 不落 helpers —— 那里只住跨页签骨架机制); 统一节点模型「dirs + 标量 av」(目录 = 子树最低可用性, undefined/null 同为无值 —— 旧 12 把 null 当值聚合、旧 10 的 Infinity 哨兵会渲染出 "Infinity", 均属无判据漂移, 以单点为准); 守阵 = drawer_tpl/ 四函数定义零命中 + 10/12 FT 接线数逐件对账(10: buildFileTree 4 处/findNode 2 处; 12: 各 1 处) + 旧模型字面零残留(minAv/布尔对/裸 availability 叶子字段; 11 的 derive 扁平表第三算法不在本项, 自有模型不查) + 11 头注声明口径以 buildFileTree 为准 + node 真跑语义电池: 新旧三实现(新单点/旧 10/旧 12)对 fixture 组(嵌套两层/根单文件/size 缺失/availability null·负数·小数·零/空目录段/空名回退)逐节点归一化 JSON 全等(旧 10 布尔对 -> av、旧 12 null -> 无值、dirs 统一现算), 另钉 findNode 四态与新节点键集纯净; 行为等价 e2e 盯 drawer-content-variant-tables / drawer-content-dt11-sticky
+- test_drawer_tpl_row_memoization_and_cheap_sig: 千级文件列表止血守阵(计划 26-11-02-0351 W1) —— 变体 10/11 行对象按 path 记忆化(输入未变的行复用上一轮对象, 桥 keyed diff 对引用相等行跳渲; _cls 挂行对象, 勾选/折叠/选中态进快照失效面)+ sig 廉价指纹(引用相等 O(1) 快路 / 引用变 O(F) 数值滚动指纹, JSON.stringify(files) 零回潮)+ dt11 O(D×F) 装配冗余消除(stats.ck 随 derive 单遍落账, dirRowOf 的 subtreeFiles 全表 filter 与 chkStateOf 双算退役)+ dt_table.css content-visibility:auto 屏外行渲染税; node 电池真跑两变体 rowsFn: 同一份数据二次派生全行引用相等 / 改一文件 progress 仅该行+祖先链新对象 / 选中与勾选翻转只重装配该行+祖先链且 _cls 正确翻转 / 折叠目录行重装配且子树不再 emit / dt11 目录聚合(大小/进度/文件数/最低可用性)与核心 buildFileTree 口径逐项相等; 静态断言钉 content-visibility/contain-intrinsic-size 规则在 dt_table.css; 行为等价 e2e 盯 dt-live-update(勾选单行长任务 + #8/#9 不跳动)
 - test_drawer_general_hr_state_line_parity: 抽屉 general 三变体 HR 结论行对齐守阵(issue 26-10-29-1341) —— 同一颗 hr_triggered 种子的「删除安全档位结论 · 依据」行(hr_safety_text/hr_state_text + hr_reason)三变体都必须消费 hr_state: 01/02 从旧版就有, 03 手抄时字段集停在旧版整段漏掉, 后端 views.py 详情载荷字段齐全、hr.js::hrStateLine 注释成文「详情抽屉要显示这行」, 选 03 就看不到「能否删」是用户可见缺失; 守阵 = 三件源码各含 if (d.hr_state) 闸(空值路径被闸拦住, hr_state 为空不多出空行), 缺件即红
 - test_overlay_fit_single_point: 浮层「贴边留白 + 视口夹取」几何单点守阵(issue 26-10-20-2231) —— ①单点模块 shared/overlay_fit.js 四入口(EDGE=8 / clampAxis / probeRight / probeLeft / fitInViewport)在三份 tpl-manifest 同点登记且装载序在首个消费方 config_hub.js 之前(漏登记/序错 = 运行时取别名 undefined); ②七消费文件接线数逐文件对账(ui_feedback 7 / menu 5 / config_hub 4 / hr 3 / drawer 2 / columns 3 / dialogs 1, 全部经 FIT 别名); ③手写夹取式零残留(8/12 字面量夹取 / PAD / margin=8 / EDGE=8 回潮即红); ④12px 两处(hubAsk / speed-pop)显式命名传参 + 注释在位; ⑤顶层 const/let 跨文件撞名零容忍(实测事故: 经典脚本顶层 let/const 是全局词法环境, 七文件同写顶层 const FIT 致后六文件 SyntaxError、mixin 静默不注册、整页崩而静态守阵全绿; 跨文件别名只许方法内取或包 IIFE); 行为面 node 电池(四入口七型 + 与旧手写式四种书写网格代数等价), 真实浏览器几何由 e2e/menus.spec.mjs CTX-fit 左右缘盯
 - test_frontend_poll_skeleton_single_point: 长驻/有界轮询骨架单点守阵(issue 26-10-20-2231, 2026-10-22) —— 同一份「启停 + 守卫 + 在途悬挂兜底 + 代际守卫」此前写了三份(主轮 setTimeout 链 / 抽屉 setInterval / 流量图 setInterval), 停止条件五处手写, 且**抽屉侧漏了悬挂兜底**(同一类「loading 卡死⇒面板永久冻结」缺陷只修了流量图一边, 本件的实质缺陷面)。收敛后: ①骨架三口子 startPoll/stopPoll/awaitPoll 在 polling.js + 阈值常量 AQB_POLL_STALL_MS(30s = 请求级超时 15s 的两倍余量); ②抽屉/流量两侧只声明差异(ms/guard/stall/mutex/onStall), 裸 setInterval 零残留; ③document.hidden 守卫单点在骨架里, shared/ 内除骨架与 lifecycle 的 visibilitychange 事件响应外不得再有散点; ④三条有界等待(_pollCmd / tmPollSettle / tmPollShutdown)一律经 awaitPoll, 手写 ++pollGen 代际守卫与 setTimeout 递归不得回潮。行为面 node 电池真跑(无 node 静默跳过): chain 在途不排下一拍(不堆叠请求) / 悬挂超阈值补偿一次且重新计时 / 退避曲线与旧 _pollCmd 逐项等价(0,150,300,500,500 与 500,1000,1000) / 拍数上限与截止时间收摊兑现 null / 同名先停后起(旧链兑现 null) / 外部叫停 / fn 抛出即 reject / 页面隐藏恒等守卫
@@ -6433,6 +6434,254 @@ ok("旧 10 Infinity 哨兵不再进统一模型(无可用性目录 av=undefined)
 
 console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]).length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
+"""
+
+
+def test_drawer_tpl_row_memoization_and_cheap_sig():
+    """千级文件列表止血守阵(计划 26-11-02-0351 W1) ——
+    ① sig 廉价指纹: 10/11 两变体 JSON.stringify(files) 零回潮(引用相等 O(1) 快路 + 引用变
+       O(F) 数值滚动指纹, filesSig 单点各一份);
+    ② 行对象按 path 记忆化: 两变体各持模块级 rowMem(path -> 输入快照 + 上轮行对象), 行装配
+       (rowOf/dirRowOf/fileRowOf)命中即复用 —— 桥 keyed diff 对引用相等行跳渲; _cls 挂行
+       对象, 勾选/折叠/选中态必须进快照失效面(漏键 = 染色停旧值);
+    ③ dt11 O(D×F) 装配冗余消除: stats.ck 随 derive 单遍前缀归并落账, dirRowOf 不再
+       subtreeFiles 每目录全表 filter、chkStateOf 不再双算(全文件只剩定义 + toggleSet +
+       master 三处);
+    ④ CSS: dt_table.css content-visibility:auto + contain-intrinsic-size 覆盖 dt10/dt11
+       行容器(定值 = 各自行高 29px/27px, 屏外行渲染税立收);
+    ⑤ node 电池(无 node 静默跳过): 同一份数据二次派生全行引用相等 / 改一文件 progress 仅
+       该行+祖先目录链为新对象 / 选中与勾选翻转只重装配该行+祖先链且 _cls 正确翻转 / 折叠
+       目录行重装配且子树不再 emit / dt11 目录聚合(大小/进度/文件数/最低可用性)与核心
+       buildFileTree 口径逐项相等。行为等价 e2e 盯 dt-live-update。"""
+    shared = os.path.join(STATIC_ROOT, "shared")
+    tpl_dir = os.path.join(shared, "drawer_tpl")
+    v10 = open(os.path.join(tpl_dir, "10-content-tree-detail-tall.js"), encoding="utf-8").read()
+    v11 = open(os.path.join(tpl_dir, "11-content-treegrid-batch-low.js"), encoding="utf-8").read()
+
+    # ---- ① sig 廉价指纹(计划验收机检点: JSON.stringify(files) 零回潮) ----
+    for name, v in (("10-content-tree-detail-tall", v10), ("11-content-treegrid-batch-low", v11)):
+        assert "JSON.stringify(files)" not in v, f"{name}: sig 仍全量序列化 files(W1 廉价指纹回潮)"
+        assert "function filesSig(files)" in v and "filesSig(files)" in v, \
+            f"{name}: sig 未走 filesSig 廉价指纹单点"
+        # ---- ② 记忆化: 模块级缓存 + 命中快照(命名避开 T/R/H 单点) ----
+        assert "const rowMem = new Map()" in v, f"{name}: 缺模块级行记忆化缓存 rowMem"
+        assert "rowMem.clear()" in v, f"{name}: 记忆化缓存无清空路径(换种子/卸载)"
+
+    # ---- ③ dt11 O(D×F) 消除: subtreeFiles 只剩定义 + toggleRow/onChange 两交互点;
+    #      chkStateOf 只剩定义 + toggleSet + master 三处; 勾选计数随 derive 落 stats.ck ----
+    assert v11.count("subtreeFiles(") == 3, \
+        f"11: subtreeFiles 调用面漂了(应 3 处 = 定义 + toggleRow + onChange; dirRowOf 全表 filter 应已退役, 实测 {v11.count('subtreeFiles(')})"
+    assert v11.count("chkStateOf(") == 3, \
+        f"11: chkStateOf 调用面漂了(应 3 处 = 定义 + toggleSet + master; dirRowOf 双算应已退役, 实测 {v11.count('chkStateOf(')})"
+    assert "ck: 0" in v11 and "if (isCk) s.ck++;" in v11, "11: 勾选计数未随 derive 单遍落 stats.ck"
+
+    # ---- ④ CSS: content-visibility 规则在位(行高定值与各面行高对齐) ----
+    css = open(os.path.join(shared, "dt_table.css"), encoding="utf-8").read()
+    assert "content-visibility: auto" in css, "dt_table.css 缺 content-visibility:auto(W1 屏外行渲染税)"
+    for lst, h in ((".dt10-list .group-row", "29px"), (".dt11-list .group-row", "27px")):
+        assert f".drawer-body {lst}" in css, f"dt_table.css 缺 {lst} 选择器"
+        assert f"contain-intrinsic-size: auto {h}" in css, f"dt_table.css 缺 {lst} 的 contain-intrinsic-size 定值 {h}"
+
+    # ---- ⑤ node 电池: 两变体 rowsFn 真跑(记忆化引用相等 / 失效面 / 聚合口径) ----
+    node = shutil.which("node")
+    if not node:
+        return
+    proc = subprocess.run(
+        [
+            node, "-e", _NODE_ROW_MEMO_PROBE,
+            os.path.join(shared, "drawer_templates.js"),
+            os.path.join(tpl_dir, "10-content-tree-detail-tall.js"),
+            os.path.join(tpl_dir, "11-content-treegrid-batch-low.js")
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert proc.returncode == 0, f"行记忆化 node 电池跑挂: {proc.stderr.strip()}"
+    report = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert report["failed"] == [], f"行记忆化电池 {report['ok']}/{report['total']} 过, 失败: {report['failed']}"
+
+
+_NODE_ROW_MEMO_PROBE = r"""
+const fs = require("fs");
+global.window = {};
+const store = {};
+global.localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+};
+global.Vue = { reactive: (o) => o };
+eval(fs.readFileSync(process.argv[1], "utf8")); /* 核心层 */
+/* 变体是 IIFE, ui(Vue.reactive 视图态)是模块私有 —— 探针在 "use strict"; 后插一行把 ui
+ * 递出来(只活在测试里, 产品代码零改动)。 */
+function loadVariant(p) {
+  const src = fs.readFileSync(p, "utf8");
+  eval(src.replace('"use strict";', '"use strict"; window.__PROBE_UI = function () { return ui; };'));
+  const ui = window.__PROBE_UI();
+  window.__PROBE_UI = null;
+  return ui;
+}
+const ui10 = loadVariant(process.argv[2]); /* 10 树+详情 */
+const ui11 = loadVariant(process.argv[3]); /* 11 树表批量 */
+const reg = window.AQB_DRAWER_TPL_REG;
+const e10 = reg.get("content", "10");
+const e11 = reg.get("content", "11");
+
+const checks = [];
+const ok = (name, cond) => checks.push([name, !!cond]);
+const fmtSize = (v) => "SZ" + (Number(v) || 0);
+/* dt11 的 derive 吃 ctx.drawerFileRows()(drawer.js 树扁平化: 目录行 + 文件行带 index/progress%)
+ * —— 探针按其消费字段复刻同构桩(dir/name/path/depth/index/progress) */
+const drawerFileRows = (files) => {
+  const root = { dirs: new Map(), files: [], size: 0, path: "" };
+  for (let fi = 0; fi < files.length; fi++) {
+    const f = files[fi];
+    const parts = String(f.name || "").split("/").filter(Boolean);
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node.dirs.has(parts[i])) {
+        node.dirs.set(parts[i], { dirs: new Map(), files: [], size: 0, path: node.path ? node.path + "/" + parts[i] : parts[i] });
+      }
+      node = node.dirs.get(parts[i]);
+      node.size += f.size || 0;
+    }
+    node.files.push(Object.assign({}, f, { index: fi }));
+  }
+  const rows = [];
+  const walk = (node, name, depth) => {
+    if (name !== null) rows.push({ depth, dir: true, name, path: node.path });
+    for (const [dn, d] of node.dirs) walk(d, dn, name === null ? 0 : depth + 1);
+    for (const f of node.files) {
+      const last = String(f.name || "").split("/").pop();
+      rows.push({
+        depth: name === null ? 0 : depth + 1, dir: false,
+        name: last,
+        path: node.path ? node.path + "/" + last : last,
+        index: f.index,
+        progress: Math.round((f.progress || 0) * 100),
+      });
+    }
+  };
+  walk(root, null, -1);
+  return rows;
+};
+/* ctx 模拟生产形态: ctx 恒定(根 vm), 静默补拉 = ctx.drawer.files 引用换新 */
+const mkCtx = (files) => ({ drawer: { files, hash: "h1" }, fmtSize, drawerFileRows() { return drawerFileRows(this.drawer.files); } });
+const byKey = (rows) => new Map(rows.map((r) => [r.k, r]));
+/* 失效面: 按 k 对齐比引用(行序可能因折叠变化, 不能按下标) */
+const changedKeys = (before, after) => {
+  const mb = byKey(before);
+  return after.filter((x) => mb.get(x.k) !== x).map((x) => x.k).sort();
+};
+const reuseCount = (before, after) => {
+  const mb = byKey(before);
+  return after.filter((x) => mb.get(x.k) === x).length;
+};
+
+const F1 = [
+  { name: "a/one.bin", size: 100, progress: 1, priority: 1, availability: 1 },
+  { name: "a/two.bin", size: 200, progress: 0.5, priority: 6, availability: 0.5 },
+  { name: "b/c/three.bin", size: 300, progress: 0, priority: 0, availability: 0 },
+  { name: "b/c/four.bin", size: 400, progress: 1, priority: 1 },
+  { name: "b/five.bin", size: 500, progress: 1, priority: 1, availability: 2 },
+  { name: "top.bin", size: 50, progress: 1, priority: 7, availability: 1 },
+];
+const reuse = {};
+
+/* ================= dt10: 树 + 详情 ================= */
+{
+  const ctx = mkCtx(F1);
+  const r1 = e10.rowsFn(ctx);
+  const r2 = e10.rowsFn(ctx);
+  ok("dt10 二次派生全行引用相等(" + r1.length + " 行)",
+    r1.length === r2.length && r1.every((x, i) => x === r2[i]));
+  reuse.dt10_same = reuseCount(r1, r2) + "/" + r1.length;
+
+  /* 改一个文件进度: 仅该文件行 + 祖先目录链新对象, 其余引用相等 */
+  const F2 = F1.map((f, i) => (i === 1 ? Object.assign({}, f, { progress: 0.9 }) : f));
+  ctx.drawer.files = F2; /* 模拟静默补拉(引用换新) */
+  const r3 = e10.rowsFn(ctx);
+  ok("dt10 改 a/two.bin 进度: 行数不变", r3.length === r1.length);
+  ok("dt10 改 a/two.bin 进度: 仅该行+祖先链 a 新对象, 实测翻 " + JSON.stringify(changedKeys(r1, r3)),
+    JSON.stringify(changedKeys(r1, r3)) === JSON.stringify(["a", "a/two.bin"]));
+  reuse.dt10_1file = reuseCount(r1, r3) + "/" + r3.length;
+  ok("dt10 改进度后 a/two 进度随新值", byKey(r3).get("a/two.bin").progTxt === "90.0");
+
+  /* 选中翻转: 该行重装配且 _cls 正确翻转(sel 挂 _cls, 行对象必须换新) */
+  ui10.selPath = "top.bin";
+  const r4 = e10.rowsFn(ctx);
+  ok("dt10 选中 top.bin: 仅该行重装配", JSON.stringify(changedKeys(r3, r4)) === JSON.stringify(["top.bin"]));
+  ok("dt10 选中行 _cls 翻转", byKey(r4).get("top.bin")._cls === "file sel");
+  ui10.selPath = "";
+  const r5 = e10.rowsFn(ctx);
+  ok("dt10 取消选中: _cls 复位", byKey(r5).get("top.bin")._cls === "file");
+
+  /* 折叠目录: 目录行重装配(folded 翻转)且子树不再 emit */
+  ui10.folded.add("b");
+  const r6 = e10.rowsFn(ctx);
+  ok("dt10 折叠 b: 目录行重装配", JSON.stringify(changedKeys(r5, r6)) === JSON.stringify(["b"]));
+  ok("dt10 折叠 b: 行对象 folded=true 且子树不 emit",
+    byKey(r6).get("b").folded === true && !byKey(r6).has("b/c") && r6.length === 5);
+  ui10.folded.delete("b");
+}
+
+/* ================= dt11: 树表批量 ================= */
+{
+  const ctx = mkCtx(F1);
+  const q1 = e11.rowsFn(ctx);
+  const q2 = e11.rowsFn(ctx);
+  ok("dt11 二次派生全行引用相等(" + q1.length + " 行)",
+    q1.length === q2.length && q1.every((x, i) => x === q2[i]));
+  reuse.dt11_same = reuseCount(q1, q2) + "/" + q1.length;
+
+  /* 改一个文件进度: 该文件行 + 祖先目录链(b 与 b/c)新对象 */
+  const G2 = F1.map((f, i) => (i === 2 ? Object.assign({}, f, { progress: 0.25 }) : f));
+  ctx.drawer.files = G2;
+  const q3 = e11.rowsFn(ctx);
+  ok("dt11 改 b/c/three.bin 进度: 仅该行+祖先链 b/b/c 新对象, 实测翻 " + JSON.stringify(changedKeys(q1, q3)),
+    JSON.stringify(changedKeys(q1, q3)) === JSON.stringify(["b", "b/c", "b/c/three.bin"]));
+  reuse.dt11_1file = reuseCount(q1, q3) + "/" + q3.length;
+
+  /* 勾选翻转: 该文件行 + 祖先链重装配, ckState/_cls 正确(三态框染色挂 _cls) */
+  ui11.checked.add("a/one.bin");
+  const q4 = e11.rowsFn(ctx);
+  ok("dt11 勾选 a/one.bin: 仅该行+祖先 a 重装配, 实测翻 " + JSON.stringify(changedKeys(q3, q4)),
+    JSON.stringify(changedKeys(q3, q4)) === JSON.stringify(["a", "a/one.bin"]));
+  ok("dt11 文件行 ckState=2 且 _cls 翻转 is-chk",
+    byKey(q4).get("a/one.bin").ckState === 2 && byKey(q4).get("a/one.bin")._cls === "file is-chk");
+  ok("dt11 目录行部分勾选 ckState=1 且 _cls 无 is-chk",
+    byKey(q4).get("a").ckState === 1 && byKey(q4).get("a")._cls === "dir");
+  ui11.checked.add("a/two.bin");
+  const q5 = e11.rowsFn(ctx);
+  ok("dt11 全勾目录 ckState=2 且 _cls 翻转",
+    byKey(q5).get("a").ckState === 2 && byKey(q5).get("a")._cls === "dir is-chk");
+  ui11.checked.delete("a/one.bin");
+  ui11.checked.delete("a/two.bin");
+
+  /* 聚合口径对表: dt11 目录行显示值与核心 buildFileTree 逐项相等(大小/进度/文件数/最低可用性) */
+  const tree = reg.content.buildFileTree(G2);
+  const nodeBy = new Map();
+  (function scan(n) { nodeBy.set(n.path, n); for (const c of (n.children || [])) scan(c); })(tree);
+  const q6 = e11.rowsFn(ctx);
+  let why = "";
+  for (const r of q6) {
+    if (!r.dir) continue;
+    const n = nodeBy.get(r.path);
+    if (!n) { why = r.path + " 树中无此目录"; break; }
+    const avTxt = n.av !== undefined ? n.av.toFixed(2) : "—";
+    if (r.sizeTxt !== "SZ" + n.size) { why = r.path + " 大小不等(" + r.sizeTxt + " vs SZ" + n.size + ")"; break; }
+    if (r.progTxt !== n.prog.toFixed(1)) { why = r.path + " 进度不等(" + r.progTxt + " vs " + n.prog.toFixed(1) + ")"; break; }
+    if (r.meta !== n.files + " 文件") { why = r.path + " 文件数不等(" + r.meta + ")"; break; }
+    if (r.avTxt !== avTxt) { why = r.path + " 最低可用性不等(" + r.avTxt + " vs " + avTxt + ")"; break; }
+  }
+  ok("dt11 目录聚合与核心 buildFileTree 口径逐项相等(大小/进度/文件数/最低可用性)" + (why ? " — " + why : ""),
+    why === "");
+}
+
+console.log(JSON.stringify({ total: checks.length, ok: checks.filter((c) => c[1]).length,
+  failed: checks.filter((c) => !c[1]).map((c) => c[0]), reuse }));
+if (checks.some((c) => !c[1])) process.exit(1);
 """
 # node 电池(issue 26-10-20-2231): 加载真实 polling.js, 真跑骨架三口子 —— ①chain 在途不排下一拍
 # (不堆叠请求) ②卡死判据持续为真 -> 超阈值补偿一次并重新计时 ③有界等待: 退避曲线与旧 _pollCmd 逐项

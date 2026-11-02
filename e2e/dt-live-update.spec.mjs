@@ -12,8 +12,14 @@
  *      优先级徽章点击走 POST→补拉→整帧换帧; 行选中点击走 rerender 整帧换帧。**跳动是瞬态**
  *      (root cause: 抽屉表格体是长生命周期元素, anchFill 每帧摘插锚 = CSS 入场动画重播,
  *      整表 translateY(4px) 后 ~0.22s 缓回) —— 点前/点后各拍一张的比对式量具(如 #8 的
- *      before/after offsetTop)必然错过, 必须**逐帧采样**(rAF + 4ms 定时双路)覆盖整个
+ *      before/after offsetTop)必然错过, 必须**逐帧采样**(rAF + 4ms 双路)覆盖整个
  *      数据回路窗口, 取全程最大偏移。atlas/console 双皮肤都中过招(prism 无该动画规则)。
+ *   #10/#11 千级止血量具(计划 26-11-02-0351 W1): 千文件桩下勾选单行/数据回路补拉,
+ *      longtask PerformanceObserver 钉主线程零长任务(记忆化跳渲 + 廉价 sig + O(D×F) 消除),
+ *      失效面(_cls 染色/三态框)与未变行身份同步盯住。
+ *   #12 千级窗口化量具(计划 26-11-02-0351 W3): 千文件桩下 content 变体挂 window:"drawerContent"
+ *      —— 常驻 DOM 行数 << 数据行数(渲染基数收口)/ 滚到底末行可见(占位撑总高)/ 键盘 ↓ 跨窗
+ *      先滚动后回焦(dtWinKbd 前缀和换算)。
  * 数据口径沿用 drawer-peers-variant-tables / drawer-content-variant-tables 的桩. */
 import { test, expect } from '@playwright/test';
 import { installRuntimeErrorGuard, collectRuntimeErrors } from './lib/errors.mjs';
@@ -65,6 +71,22 @@ function makeFilesTall(n = 40) {
       progress: (i % 5) / 5,
       priority: [1, 6, 0, 1, 7][i % 5],
       availability: i % 4 === 0 ? undefined : 0.3 + (i % 7) / 10,
+    });
+  }
+  return out;
+}
+
+/* W1(#10/#11)专用: 千文件桩 —— 单层目录 D 下 1000 个文件(1 目录行 + 1000 文件行)。
+ * file0 priority 固定 6(徽章「高」): #11 点徽章走 PRIO_CYCLE 6→7, 补拉后断言「最高」。 */
+function makeFilesK(n = 1000) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push({
+      name: `D/f${String(i).padStart(4, '0')} - file.mkv`,
+      size: 1_000_000 + i * 999,
+      progress: (i % 4) / 4,
+      priority: i === 0 ? 6 : 1,
+      availability: i % 5 === 0 ? undefined : 0.3 + (i % 7) / 10,
     });
   }
   return out;
@@ -300,6 +322,197 @@ for (const skin of SKINS) {
       expect(dev.rt, `数据回路+选中点击: 靠顶行全程零偏移(实测 ${dev.rt}px)`).toBeLessThanOrEqual(0.5);
       expect(dev.rm, `数据回路+选中点击: 中部行全程零偏移(实测 ${dev.rm}px)`).toBeLessThanOrEqual(0.5);
       expect(dev.st, `数据回路+选中点击: scrollTop 全程零偏移(实测 ${dev.st}px)`).toBeLessThanOrEqual(0.5);
+    });
+
+    /* W1(计划 26-11-02-0351)止血量具: 千级文件列表两态 ——
+     *   #10 勾选单行: 记忆化 + O(D×F) 消除后行侧零重建(锚内 MutationObserver 记录数钉住
+     *       —— 旧实现 = 1000+ 行全量重写), 长任务(PerformanceObserver longtask, 口径同
+     *       perf.spec.mjs 既有埋点)钉回归下界。W1 时预算 ≤1/<150ms(残留 = 桥 v-for 千行
+     *       keyed diff); W4 A/B 收紧为 0(W3 收窗后基数 ~47 行, 2026-11-02 实测双皮 0)。
+     *       失效面同钉: 勾选行 _cls 翻 is-chk、目录行三态框 indeterminate 跟进(漏键 =
+     *       染色停旧值, node 电池同判据)。
+     *   #11 数据回路: 徽章点击 → POST → 静默补拉(仅一个文件 priority 变), 廉价 sig 不再
+     *       全量 JSON.stringify、记忆化只重装配脏行 —— 长任务下界同 #10 收紧为 0 + 未变行
+     *       DOM 身份与徽章值不抖(首行身份戳沿用 #8 口径)。
+     *   探针 settle 判据(W4 修): 收窗(占位件在场)完成后才装探针, 否则量进收窗本身。 */
+    test(`#10 千文件勾选单行: 行侧零重建 + 长任务预算内 + 勾选链染色即时翻转 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(60_000); // 千行桩首渲 + 皮肤循环, 30s 默认太紧
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.route('**/api/torrents/*/files', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeFilesK()) }));
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ content: '11' })));
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
+      const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
+      await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
+      await page.waitForTimeout(400); // 首渲 settle(千行挂载自身的成本不计入判据窗口)
+      // W4(计划 26-11-02-0351)修测量口径: W3 窗口化后首渲是「全量量高 → 收窗」两拍, 固定
+      // 400ms 等不到收窗完成 —— 探针把收窗(摘 ~950 行, mut 实测 957/961)算进交互窗, 预算
+      // 断言量错对象恒红(2026-11-02 实测取证)。对齐 #12 的 settle 判据: 占位件在场 = 收窗完成,
+      // 之后的交互量测才是「勾选单行」本身。
+      await expect(anchor.locator('.row-pad').first(), '窗口化收窗完成(占位件在场 = 量齐后已收窗)').toBeAttached({ timeout: 10_000 });
+
+      // 探针在 settle 后安装 —— 只量「勾选单行」这一次交互: longtask + 锚内 DOM 变更
+      await page.evaluate(() => {
+        window.__lt = [];
+        window.__mut = 0;
+        if (window.__po) window.__po.disconnect();
+        window.__po = new PerformanceObserver((l) => {
+          for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration));
+        });
+        window.__po.observe({ entryTypes: ['longtask'] });
+        new MutationObserver((ms) => { window.__mut += ms.length; })
+          .observe(document.querySelector('[data-dt-table-anchor="drawerContentV11"]'),
+            { attributes: true, childList: true, subtree: true });
+      });
+
+      const firstCk = anchor.locator('.dt11-ck[data-act="ck"]').first();
+      await firstCk.click();
+      await page.waitForTimeout(500); // 交互 + patch 全部余波落进观察窗
+
+      const lt = await page.evaluate(() => window.__lt || []);
+      const mut = await page.evaluate(() => window.__mut || 0);
+      const ltSum = lt.reduce((a, b) => a + b, 0);
+      // W4 A/B 收紧(计划 26-11-02-0351 §W4): W1 时预算 ≤1/<150ms, 钉的残留面是「桥 v-for
+      // 千行 keyed diff」; W3 收窗后渲染基数 ~47 行, 该面随基数消失。2026-11-02 实测(收窗
+      // settle 判据对齐 #12 后)双皮 0 longtask / 0ms —— 回归下界收紧为 0, 勾选单行再出现任何
+      // longtask 即红(length==0 时总时长恒 0, 不再留冗余的绝对 ms 断言, perf-cadence 口径)。
+      expect(lt.length, `勾选单行零长任务(实测 ${lt.join('/') || '无'}; W4 A/B 收紧: W1 预算 ≤1, ` +
+        `W3 收窗 + 双皮实测 0/0ms → 下界 0)`).toBe(0);
+      expect(mut, `锚内 DOM 变更记录 ≤8(实测 ${mut}; 行侧零重建 —— 旧实现 = 1000+ 行全量重写)`).toBeLessThanOrEqual(8);
+      console.log(`      [#10 ${skin}] 勾选单行: longtask ${lt.join('/') || '无'}(合 ${ltSum}ms), 锚内 mut ${mut}`);
+      // 失效面在真浏览器成立: 勾选行 _cls 翻 is-chk(rowCls="_cls" 绑行容器), 目录行三态跟进
+      const chkRow = anchor.locator('.group-row.is-chk[data-table="drawerContentV11"]');
+      await expect(chkRow, '勾选行容器拿到 is-chk 染色').toHaveCount(1);
+      await expect(chkRow.locator('.dt11-ck[data-act="ck"]')).toBeChecked();
+      const dirCk = anchor.locator('.group-row.dir .dt11-ck[data-act="dirck"]');
+      await expect(dirCk, '目录行三态框进入 indeterminate(部分勾选)').toHaveJSProperty('indeterminate', true);
+      await expect(dirCk).not.toBeChecked();
+    });
+
+    test(`#11 千文件数据回路: 补拉一文件变值预算内 + 未变行身份/徽章不抖 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(60_000);
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      let posted = false;
+      const base = makeFilesK();
+      page.on('request', (r) => { if (r.url().includes('/files/priority')) posted = true; });
+      await page.route('**/api/torrents/*/files', (route) => {
+        // POST 后静默补拉: 只有 file0 priority 变(6→7, 徽章循环一档) —— 脏行 = file0, 目录聚合不变
+        const files = posted ? base.map((f, i) => (i === 0 ? { ...f, priority: 7 } : f)) : base;
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(files) });
+      });
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ content: '11' })));
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
+      const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
+      await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
+      await page.waitForTimeout(400);
+      // W4 settle 判据同 #10(占位件在场 = 收窗完成), 探针别量进收窗本身(取证见 #10 注)
+      await expect(anchor.locator('.row-pad').first(), '窗口化收窗完成(占位件在场)').toBeAttached({ timeout: 10_000 });
+
+      // 脏行(file0)与未变参照行(file5)打身份戳; longtask + 锚内变更探针同 #10 口径
+      await page.evaluate(() => {
+        const a = document.querySelector('[data-dt-table-anchor="drawerContentV11"]');
+        a.querySelector('.group-row[data-dt-key="D/f0000 - file.mkv"]').setAttribute('data-row-probe', 'f0');
+        a.querySelector('.group-row[data-dt-key="D/f0005 - file.mkv"]').setAttribute('data-row-probe', 'f5');
+        window.__lt = [];
+        window.__mut = 0;
+        if (window.__po) window.__po.disconnect();
+        window.__po = new PerformanceObserver((l) => {
+          for (const e of l.getEntries()) window.__lt.push(Math.round(e.duration));
+        });
+        window.__po.observe({ entryTypes: ['longtask'] });
+        new MutationObserver((ms) => { window.__mut += ms.length; })
+          .observe(a, { attributes: true, childList: true, subtree: true });
+      });
+
+      // 点击 file0 优先级徽章(循环 6→7 一次真实提交) → waitCmd 回执 → 静默补拉 → 换帧
+      const badge0 = anchor.locator('.group-row[data-dt-key="D/f0000 - file.mkv"] .dt11-pbadge');
+      await badge0.click();
+      await page.waitForTimeout(800); // 覆盖 POST→回执→补拉→换帧全程
+
+      const lt = await page.evaluate(() => window.__lt || []);
+      const mut = await page.evaluate(() => window.__mut || 0);
+      const ltSum = lt.reduce((a, b) => a + b, 0);
+      // W4 A/B 收紧(口径同 #10): W1 预算 ≤2/<200ms 钉的是「整包 JSON.stringify + 千行全量
+      // 重装配」残留面; W3 收窗 + 廉价 sig 后该面消失, 2026-11-02 实测双皮 0 longtask / 0ms
+      // (POST→补拉→换帧全程, settle 判据对齐 #12)→ 回归下界 0。
+      expect(lt.length, `数据回路零长任务(实测 ${lt.join('/') || '无'}; W4 A/B 收紧: W1 预算 ≤2, ` +
+        `W3 收窗 + 廉价 sig + 双皮实测 0/0ms → 下界 0)`).toBe(0);
+      expect(mut, `锚内 DOM 变更记录 ≤16(实测 ${mut}; 记忆化只重装配脏行)`).toBeLessThanOrEqual(16);
+      console.log(`      [#11 ${skin}] 数据回路: longtask ${lt.join('/') || '无'}(合 ${ltSum}ms), 锚内 mut ${mut}`);
+      await expect(anchor.locator('[data-row-probe="f0"]'), '脏行 file0 DOM 身份保持(keyed 补丁)').toBeAttached();
+      await expect(anchor.locator('[data-row-probe="f5"]'), '未变行 DOM 身份保持').toBeAttached();
+      const f0Badge = await anchor.locator('[data-row-probe="f0"] .dt11-pbadge').textContent();
+      expect(f0Badge.trim(), '脏行徽章随补拉新值翻转(最高)').toBe('最高');
+      const f5Badge = await anchor.locator('[data-row-probe="f5"] .dt11-pbadge').textContent();
+      expect(f5Badge.trim(), '未变行徽章值不抖(记忆化命中)').toBe('正常');
+    });
+
+    /* W3(计划 26-11-02-0351)窗口化量具: 千文件桩下 content 变体 11 挂 window:"drawerContent"
+     * (滚动源 = .drawer-body 容器型描述符, 桥切片消费)。三判据:
+     *   ① 常驻 DOM 行数 << 数据行数(1000 文件 + 目录行) —— 渲染基数收口(千行 keyed diff 的
+     *      残留 longtask 面随基数消失, #10/#11 的预算断言为伴证);
+     *   ② 占位撑住总高: 滚到底末行进窗且可见(滚动条长度与「滚到底」契约, BUG-1 家族);
+     *   ③ 键盘 ↓ 跨窗: 焦点移出已渲染块端沿时先滚动后回焦(dtWinKbd 前缀和换算), 焦点行在
+     *      DOM 且可见 —— 回焦目标必须在重渲后的窗内(kbd-cursor-collapse-dangling 家族)。 */
+    test(`#12 千文件窗口化: 常驻 DOM 行数 << 数据行数 + 滚到底不塌陷 + 键盘跨窗回焦 @fast (${skin})`, async ({ page }) => {
+      test.setTimeout(60_000);
+      collectRuntimeErrors(page);
+      await page.setViewportSize(WIDE);
+      await page.route('**/api/torrents/*/files', (route) =>
+        route.fulfill({ contentType: 'application/json', body: JSON.stringify(makeFilesK()) }));
+      await page.addInitScript(() =>
+        localStorage.setItem('autoqb.ui.drawerTpl', JSON.stringify({ content: '11' })));
+      await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+      await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
+      await expect(page.locator('.group-row').first()).toBeVisible({ timeout: 30_000 });
+      const drawer = await openTorrentDrawer(page);
+      await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
+      const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
+      await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
+      // 占位件在场 = 窗口化已激活(全量首轮量行高 → 收窗, 量齐前不给占位)
+      await expect(anchor.locator('.row-pad').first(), '窗口化占位件在场(量齐后收窗)').toBeAttached({ timeout: 10_000 });
+
+      // ① 常驻 DOM 行数 << 数据行数(视口窗 + OVERSCAN 10×2, 300 是回归上界不是刻度)
+      const domRows = await anchor.locator('.group-row[data-table="drawerContentV11"]').count();
+      expect(domRows, `常驻 DOM 行数远小于数据行数(实测 ${domRows}, 数据 1001)`).toBeLessThan(300);
+
+      // ② 滚到底: 末行进窗且可见(占位撑总高, 滚到底够得着)
+      const body = drawer.locator('.drawer-body');
+      await body.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+      await expect(anchor.locator('.group-row[data-dt-key="D/f0999 - file.mkv"]'),
+        '滚到底末行进窗且可见(占位总高 == 全量渲染高度)').toBeVisible({ timeout: 10_000 });
+
+      // ③ 键盘跨窗: 回顶, 焦点落首行, 连按 ↓ 越过窗底沿 —— 目标行先被滚进窗再回焦
+      await body.evaluate((el) => { el.scrollTop = 0; });
+      await page.waitForTimeout(400);  // 窗口重算(合帧 rAF + 重渲)落定
+      await anchor.locator('.group-row[data-dt-key="D/f0000 - file.mkv"]').focus();
+      for (let i = 0; i < 80; i++) {
+        await page.keyboard.press('ArrowDown');
+        await page.waitForTimeout(30);
+      }
+      const fk = await page.evaluate(() => {
+        const el = document.activeElement;
+        const row = el && el.closest ? el.closest('[data-dt-key]') : null;
+        return row ? row.getAttribute('data-dt-key') : '';
+      });
+      const m = /f(\d{4})/.exec(fk || '');
+      const idx = m ? Number(m[1]) : -1;
+      expect(idx, `连按 80 次 ↓ 后焦点行已越过初始窗底沿(实测 ${fk})`).toBeGreaterThanOrEqual(60);
+      expect(idx, `焦点行仍在数据范围内且未丢焦(实测 ${fk})`).toBeLessThanOrEqual(80);
+      await expect(anchor.locator(`.group-row[data-dt-key="${fk}"]`),
+        '跨窗回焦的焦点行就在已渲染窗内且可见').toBeVisible();
     });
   });
 }
