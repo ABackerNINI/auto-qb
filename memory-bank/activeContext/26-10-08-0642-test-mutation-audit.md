@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
 > 摘要: 把报告 `26-10-08-0231`(变异测试可行性)落成可复用流程: 指导 skill `mutation-testing`(四段流程 / 硬约束 / 标准步骤 / 三分类 / 派生计划模板) + 命令包 `.commands/mutants`(setup/run/report/verify/gremlins/status) + 常驻排期锚 issue `26-10-08-0642-test-mutation-audit-standing` + 方法论坑档。**config 包已全清**(首轮 + 六实施轮, 杀死率 80.25% → **90.02%**); **hr 包已全清**(首轮 R14 + 七个模块轮 R16–R22, 真洞入池 6 条 `test` issue 全部实施); **rules 包已清**(R23 首轮, 名义 59.9% → 实测 71.8%, 60 簇守阵全过); **core 包已收官**(计划 `plans/26-10-31-0128`, W1–W9b 九个工作包全部完成, 计划置 Done, 余量在池; 刻度见锚 §07)。2026-10-31 常驻锚蒸馏改版: 只留 §07 覆盖进度总表一张记录表, 守阵 `check_mutation_anchor.py` 防流水回归。档案 `tasks/26-10-08-test-mutation-audit.md`。
-> 最后活动: 2026-11-02 03:18
+> 最后活动: 2026-11-02 20:46
 
 ## 已完成(详情见档案, 不在此复述)
 
@@ -69,3 +69,5 @@
 **R5(2026-11-02 03:05):** W7 no-tests 与 W5 零块存疑两件计划外闭合: 注入式直测钉 _run_foreground 18/18 killed(W7 池 566 变异 no tests 归零); W5 两条空块/空桶变异定等价并补解析/入账定向用例; 两件均设置 Done、零 src 改动、未扩池
 
 **R6(2026-11-02 03:18):** W8 遗留两件结清后提交闸门双红清零: 10 件 2026-09 旧档工作树行尾归一 LF(内容零改) + transfer/adapters/qb 的 find_torrent/pause_torrent 等扩展点补 11 条守阵(覆盖率 98.96% -> 99.08%); 全量 4820 过 2 跳; 本轮两笔提交推送
+
+**R7(2026-11-02 20:46):** core W5 traffic_sample_mod 中池单轮复跑收尾: children=1 + 1.5 GiB ulimit, 97 survived 逐 id 对差 W5 终态真新增 0(2 条为 59e814fd 修复后重编号), 4 条 timeout 单列; 2 条表面新增红验 SURVIVED 不声称杀; 结果文件已备份仓库外, 数字见基线切片 26-11-02-2044
