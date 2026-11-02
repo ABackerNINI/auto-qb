@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="plan-review3-legacy-html-refchain">
+<meta name="issue-stamp" content="26-11-03-0647">
+<meta name="issue-type" content="docs">
+<meta name="doc-topic" content="code-review-3-s0">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="light">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)">
+<meta name="issue-summary" content="旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用">
+<title>计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失) · docs · 计划外问题（便签）</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 860px; margin: 0 auto; padding: 48px 40px 72px; }
+  header.cover { margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 16px; }
+  h1 { font-family: var(--display); font-size: 27px; font-weight: 600; letter-spacing: -0.015em; line-height: 1.22; margin-bottom: 12px; }
+  .lede { font-size: 15px; color: var(--dim); max-width: 62ch; margin-bottom: 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 26px; padding: 14px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 13.5px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { margin-top: 30px; }
+  h2 { font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.005em; margin-bottom: 10px; padding-bottom: 7px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 11.5px; color: var(--faint); margin-right: 9px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  p { margin-bottom: 11px; max-width: 74ch; }
+  ul, ol { margin: 0 0 11px 22px; max-width: 74ch; }
+  li { margin-bottom: 5px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 74ch; }
+  footer { margin-top: 44px; padding-top: 14px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="cover">
+    <div class="kicker">计划外问题（便签）· docs</div>
+    <h1>计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)</h1>
+    <p class="lede">旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-03-0647-docs-plan-review3-legacy-html-refchain</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 06:47</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象</h2>
+    <p>计划 0557 原把 <code>26-10-30-0221</code> 计划与 <code>26-10-05-1036</code> 报告列入 <code>doc-refs</code>, 并为满足双向链在这两件加了指向计划 0557 的反向引用。但 <code>ship.commit</code> 的增量 HTML 检查(全仓改动 HTML 一律过 v.Nu)判定这两件各有存量 error(<b>0221 共 2 条</b>: 正文未转义 <code>&lt;</code>; <b>1036 共 7 条</b>: <code>span</code> 未闭合、多余 <code>&lt;/p&gt;</code>、<code>&lt;code&gt;</code> 内出现未知 <code>dummy</code> 元素、未转义 <code>&lt;=</code>、<code>h1</code> 后直接 <code>h3</code> 跳级), 闸门判红。为遵守"不修计划外文档", 已回退这两件的反向引用, 并从计划 0557 的 <code>doc-refs</code> 移除这两条; 正文中的普通链接仍保留。<b>影响</b>: 计划 0557 → 0221/1036 的机器引用链不可见(正文可见), <code>docmap</code> 反向闭环缺这 2 条; 后续清理旧 HTML 前, 任何 ref-only 编辑都会被同一闸门拦下。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>位置</h2>
+    <p class="hint">文件 + grep 关键词（比行号稳）；行号要标取证时间。</p>
+    <ul>
+      <li><code>memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html:13</code>(取证 2026-11-03 06:47)· grep <code>doc-refs</code>(已不含 0221/1036)</li>
+      <li><code>memory-bank/plans/26-10-30-0221-plan-full-code-review-2.html:154</code> · 2 条 error: <code>Bad character " " after "&lt;"</code></li>
+      <li><code>memory-bank/reports/26-10-05-1036-report-full-code-review.html:62,307,309,446,686</code> · 7 条 error: 标题跳级 / <code>span</code> 未闭合 / 多余 <code>&lt;/p&gt;</code> / <code>dummy</code> 元素 / 未转义 <code>&lt;=</code></li>
+      <li>触发: <code>commands run ship.commit</code> 闸门 <code>check_html.py --vnu --strict &lt;changed **/*.html&gt;</code>(取证 2026-11-03 06:38, 9 条 error / 11 文件)</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
+    <p>另开清理会话修这两件旧 HTML 的 9 条 error(转义 <code>&lt;</code> / <code>&lt;=</code>、补齐 <code>span</code>、去掉未知 <code>dummy</code>、修正标题层级), 再恢复计划 0557 的 2 条 <code>doc-refs</code> 与两件的反向引用, 跑 <code>commands run kb.check</code> 确认 1005 份文档的引用链双向闭环。</p>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-03 06:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+  </section>
+
+  <footer>
+    26-11-03-0647-docs-plan-review3-legacy-html-refchain.html · 便签档（light）· 由 create-issue skill 入池；入池不等于已修，改动状态在上面的「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

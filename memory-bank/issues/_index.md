@@ -21,7 +21,7 @@
 |---|---|
 | bug | 8 |
 | perf | 5 |
-| docs | 6 |
+| docs | 7 |
 | test | 5 |
 | refactor | 4 |
 | feat | 21 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [docs] [计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)](26-11-03-0647-docs-plan-review3-legacy-html-refchain.html) — 旧件 0221 计划/1…
 - [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 49…
 - [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实…
 - [docs] [第三次评审计划 §02 底册数字三处与事实不符(Open 52/54、新入池 17/18、总数自相矛盾)](26-11-03-0630-docs-plan-review3-ledger-counts-drift.html) — 计划 0557 §02…

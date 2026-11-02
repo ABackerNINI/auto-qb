@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (57)
+## Open (58)
 
+- [docs] [计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)](../26-11-03-0647-docs-plan-review3-legacy-html-refchain.html) — 旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用
 - [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](../26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 4933+2(切片 0534, +9 为端口改 0 守阵); 计划仍引 0459 的 4924+2 作为终验持平基准
 - [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](../26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实测仅大文件拆分与 qB 5.3 在途, 另有 version-management 等 3 件未列, 2 件已 Done, 2 件实为 issue 锚
 - [docs] [第三次评审计划 §02 底册数字三处与事实不符(Open 52/54、新入池 17/18、总数自相矛盾)](../26-11-03-0630-docs-plan-review3-ledger-counts-drift.html) — 计划 0557 §02 记 52 Open/17 条新入池/共 424 条; 实测 54 Open、18 个入池 issue、分项和为 422
