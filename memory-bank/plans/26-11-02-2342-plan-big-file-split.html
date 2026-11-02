@@ -10,7 +10,7 @@
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-02-2342">
 <meta name="doc-updated" content="26-11-03-0327">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md">
 <style>
   :root {
     --bg: #10151a;
@@ -310,7 +310,8 @@
     <tr><td><code>tests/test_web_commands_dispatch.py</code></td><td>1058</td><td><code>tests/test_web_commands.py</code></td><td>drain 核心与 <code>api_t</code> 路由接线分离</td><td>待排期</td></tr>
   </tbody>
 </table>
-<div class="aside">R2 25 个原文件拆分后实测：仅以上两个新桶超阈值，其余新桶均 ≤1000 行（最大 987 行）。</div>
+<div class="aside">R2 25 个原文件拆分后实测：仅以上两个新桶超阈值，其余新桶均 ≤1000 行（最大 987 行）。<br>
+R4 8 个前端文件拆分后实测：新桶全部 ≤1000 行（最大 <code>shortcuts_engine.js</code> 804 行），排期清单无新增；暂缓 2 个（<code>drawer_templates.js</code> 1170 / <code>qb_traffic_chart.js</code> 1142）与不拆 2 个（<code>fx/showcase.html</code> 2926 / <code>shared/app.js</code> 981）按 §06 保持零改动。</div>
 
 <h2><span class="no">§08</span>完成判据、风险与未知项</h2>
 <h3>完成判据</h3>
@@ -438,6 +439,7 @@
   <li><span class="tag">R0 · 26-11-02-2342</span> 初版：基于 26-11-02 只读扫描（606 纳入 / 80 命中 / py66·js12·html1·css1）制定 5 轮处置；56 拆、22 暂缓、2 不拆。</li>
   <li><span class="tag">R1 · 26-11-03-0144</span> 补 R2 新口径: 新桶超 1000 行不再就地二次切分, 登记 新桶超阈值·后续排期 清单(2 个)</li>
   <li><span class="tag">R2 · 26-11-03-0327</span> R3 完成: 4 拆(sim_qb/qb_capture/background.js/test_server.py) 3 暂缓零改动; 新桶均 &lt;=1000(最大 897), 排期清单无新增; 全量见 kb.baseline</li>
+  <li><span class="tag">R4 · 26-11-03</span> R4 完成: 8 拆(console_hub.css 4 段 + drawer/config_hub/config_editor/shortcuts/columns/commands/dialogs 共 20 片段)、2 暂缓与 2 不拆零改动; 全部 move-only(根入口保留 + 片段尾接加载); 新桶均 &lt;=1000(最大 804), 排期清单无新增; 静态守阵按「域聚合读」同步引用, 断言语义未改; 全量见回复实测</li>
 </ul>
 
 </div>

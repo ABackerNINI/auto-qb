@@ -198,6 +198,25 @@ def is_vue_template_fragment(path: Path, root: Path) -> bool:
     return any(tuple(parts[i:i + n]) == VUE_TPL_SEGMENTS for i in range(len(parts) - n + 1))
 
 
+# WebUI 皮肤壳: `static/<皮肤>/index.html` 里的 `<div id="app">` 是 Vue 根模板(内联),
+# `v-if` / `v-else` / `@click` / `:prop` / `v-cloak` 同样是模板语法而非 HTML 属性 ——
+# 与 tpl 分片同属范畴错误 (R4 拆分 shared 静态件时首次改到壳文件, v.Nu 报 44 条全为此类,
+# 同批 fx/showcase.html 零 error)。判据只认路径, 不放行"内容含 v- 就跳过"。
+WEBUI_SKIN_SHELLS = ("atlas", "console", "flux", "prism")
+
+
+def is_webui_skin_shell(path: Path, root: Path) -> bool:
+    """该文件是否为 WebUI 皮肤壳 `webui/static/<皮肤>/index.html`。"""
+    try:
+        parts = path.resolve().relative_to(root.resolve()).parts
+    except (ValueError, OSError):
+        return False
+    return (
+        len(parts) >= 4 and parts[-1] == "index.html" and parts[-3] == "static" and parts[-4] == "webui" and
+        parts[-2] in WEBUI_SKIN_SHELLS
+    )
+
+
 def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
     """跑 v.Nu; 输出归一为 `仓库相对路径:行: error: 文案`; --strict 有 error 即 rc=1。"""
     if not files:
@@ -212,15 +231,15 @@ def run_vnu(files: list[Path], root: Path, strict: bool, java: str) -> int:
         )
         if not files:
             return 0
-    skipped = [p for p in files if is_vue_template_fragment(p, root)]
+    skipped = [p for p in files if is_vue_template_fragment(p, root) or is_webui_skin_shell(p, root)]
     if skipped:
         files = [p for p in files if p not in skipped]
         print(
-            "[--] check_html --vnu: 跳过 Vue 模板分片 (v-if/@click/:prop 属模板语法, v.Nu 不适用): " +
-            ", ".join(rel_posix(p, root) for p in skipped)
+            "[--] check_html --vnu: 跳过 Vue 承载面 (tpl 分片 / 皮肤壳内联根模板; "
+            "v-if/@click/:prop 属模板语法, v.Nu 不适用): " + ", ".join(rel_posix(p, root) for p in skipped)
         )
         if not files:
-            print("[ok] check_html --vnu: 本次改动全是 Vue 模板分片, 无需 v.Nu")
+            print("[ok] check_html --vnu: 本次改动全是 Vue 承载面, 无需 v.Nu")
             return 0
     jar = ensure_vnu_jar(root)
     cmd = [java, "-jar", str(jar), "--asciiquotes", "--errors-only", "--exit-zero-always", *[str(p) for p in files]]

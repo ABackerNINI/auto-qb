@@ -1,7 +1,7 @@
 # v.Nu 把 Vue 模板分片整批判红: 那是范畴错误, 不是缺陷
 
 > 摘要: `shared/tpl/*.html` 是 Vue 模板**片段**, `v-if` / `@click` / `:class` 是指令不是 HTML 属性 —— 送 W3C v.Nu 校验必然逐条报 `Attribute "…" not allowed`, 提交闸门因此整批红
-> 触发: v.Nu 报 Attribute not allowed, check_html --vnu 红, 提交闸门 HTML 规范级, Vue 指令校验, tpl 分片, overlays.html, 模板片段不是文档
+> 触发: v.Nu 报 Attribute not allowed, check_html --vnu 红, 提交闸门 HTML 规范级, Vue 指令校验, tpl 分片, overlays.html, 皮肤壳 index.html, 模板片段不是文档
 **Refs:** memory-bank/conventions/webui.md(模板分片) · memory-bank/pitfalls/web-ui/tpl-comment-split-orphan.md
 
 ### 改一行模板属性, 提交闸门被 22 条 "Attribute not allowed" 挡住
@@ -28,5 +28,14 @@
   ① 分片认得出; ② 普通页面不被误判; ③ 全是分片时 `run_vnu(..., "java-does-not-exist") == 0`
   (用不存在的可执行名证明没走到子进程, 也就不会下载 jar)。红验: 判据改 `return False` →
   「tpl 分片未被认出 —— v.Nu 会整批误报」, 还原后绿。
+
+- **同族变体 (R4 · 2026-11-03)**: 首次改到皮肤壳 `src/auto_qb/webui/static/<atlas|console|flux|prism>/index.html`
+  (挂 R4 片段与 CSS link) —— 壳里内联的 `<div id="app">` 是 Vue 根模板, v.Nu 一次报 44 条
+  全是 `Attribute "v-else/@click/:disabled" not allowed`, 同批 `fx/showcase.html` 零 error。
+  处置: 同族路径判据 `is_webui_skin_shell()`(`WEBUI_SKIN_SHELLS` 四皮肤 + 只认
+  `webui/static/<皮肤>/index.html`), 与 tpl 分片一起在 `run_vnu` 里摘除并打印摘掉了谁;
+  L1+L2 照常跑。守阵: `tests/test_memory_bank_docs.py::test_html_vnu_skips_vue_template_fragments`
+  追加 ① 壳认得出 ② 普通页面/`fx/showcase.html` 不误判 ③ tpl 分片不被误判成壳 ④ 全是
+  Vue 承载面时 `run_vnu(..., "java-does-not-exist") == 0`。
 
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

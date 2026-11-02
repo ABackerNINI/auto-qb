@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from webui_helpers import read_shared
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "auto_qb" / "webui" / "static"
 SHARED = STATIC / "shared"
@@ -19,7 +21,7 @@ KB_SCOPES = {"global", "list", "drawer", "settings", "modal"}
 
 
 def _read(rel: str) -> str:
-    return (SHARED / rel).read_text(encoding="utf-8")
+    return read_shared(rel)
 
 
 def _registry() -> list[dict]:

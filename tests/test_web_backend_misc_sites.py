@@ -26,6 +26,7 @@ import pytest
 
 from auto_qb.infra.utils import decode_group_key, encode_group_key
 
+from webui_helpers import read_shared
 from webui_helpers import WEB_ENV_CONFIG_TEXT, _make_web_manager, STATIC_ROOT, _UI_ALL, _ui_aggregate
 
 
@@ -124,7 +125,7 @@ def test_frontend_sites_import_wiring():
     两套 UI 的站点 pill 行都必须挂「⤓ 导入缺失站点」按钮并调用 config_hub.js 的
     hubImportSites —— 漏一套那套 UI 就没有入口; 防重入标志 hub.importing 必须存在。
     """
-    hub_js = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    hub_js = read_shared("config_hub.js")
     assert "async hubImportSites()" in hub_js, "config_hub.js 缺 hubImportSites 方法"
     assert "this.hub.importing" in hub_js, "缺防重入标志 hub.importing"
     for ui in _UI_ALL:
@@ -179,7 +180,7 @@ def test_frontend_tracker_search_wiring():
     assert "hb-pill-tail" in pills.group(1) and "hubImportSites()" in pills.group(1), \
         "行尾动作区(新增/导入)必须留在 pill 行内(P4: 与站点 pill 分形分位)"
     # 2. 逻辑层单点: CJK 安全归一化 + 解析 / 行索引 / 命中 / 清空 / 收层 / 键盘
-    hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    hub = read_shared("config_hub.js")
     assert re.search(r"replace\(/\[\^\\p\{L\}\\p\{N\}\]\+/gu",
                      hub), ("站点归一化必须用 [^\\p{L}\\p{N}](u 标志): ASCII \\W 会把整个中文词折成空格")
     for token in (
@@ -233,10 +234,10 @@ def test_frontend_tracker_search_wiring():
         and "trackerSearchFocus = false" in closefn.group(1) \
         and "trackerMouseAt = null" in closefn.group(1), \
         "收层单点必须清词 + 复位聚焦态 + 复位悬停门限坐标(跳转器拍板: 收层一律清词)"
-    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    ed = read_shared("config_editor.js")
     assert 'trackerQuery: ""' in ed, "cfg.trackerQuery 必须在 config_editor.js state 声明(漏声明 = 响应性缺失)"
     # 6. CSS 成对: 模板用到的 hb-tr-* 类都要有规则
-    css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
+    css = read_shared("console_hub.css")
     for cls in (
         "hb-tr-stage",
         "hb-tr-veil",
@@ -309,7 +310,7 @@ def test_frontend_dialog_combo_hover_takeover():
         body = re.search(rf"{fnname}\(\) \{{(.*?)\n    \}},", at, re.S)
         assert body and f"{field} = null" in body.group(1), \
             f"{fnname} 必须复位 {field}(开层复位门限坐标)"
-    dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
+    dlg = read_shared("dialogs.js")
     body = re.search(r"openMetaCatMenu\(\) \{(.*?)\n    \},", dlg, re.S)
     assert body and "metaCatMouseAt = null" in body.group(1), \
         "openMetaCatMenu 必须复位 metaCatMouseAt(开层复位门限坐标)"
@@ -356,11 +357,11 @@ def test_frontend_search_help_wiring():
     assert "searchHelpOpen) this.searchHelpOpen = false" in lc, "Esc 退栈必须含浮卡(pop 层)"
     goview = re.search(r"goView\(mode\) \{(.*?)\n    \},", view, re.S)
     assert goview and "this.searchHelpOpen = false" in goview.group(1), "goView 导航必须收起浮卡"
-    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    ed = read_shared("config_editor.js")
     openst = re.search(r"async openSettings\(\) \{(.*?)\n    \},", ed, re.S)
     assert openst and "this.searchHelpOpen = false" in openst.group(1), "openSettings 导航必须收起浮卡"
     # 4. CSS 成对: 挂件类在共用层(console_hub.css, 三套 UI 同载), input 右内边距 52px 三皮肤各自留位
-    shared_css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
+    shared_css = read_shared("console_hub.css")
     for cls in (".search-help", ".search-help.no-clear", ".search-help-pop", ".shp-row", ".shp-tip"):
         assert cls in shared_css, f"shared/console_hub.css 缺少 {cls} 定义(挂件类名错配 = 静默裸样式)"
     atlas_css = open(os.path.join(STATIC_ROOT, "atlas", "css", "components.css"), encoding="utf-8").read()

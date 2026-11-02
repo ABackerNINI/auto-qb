@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 
+from webui_helpers import bundle_file, read_shared
 from webui_helpers import STATIC_ROOT
 
 
@@ -54,7 +55,7 @@ def test_w6a_static_optimistic_write_precedes_post():
     徽章停在假值(与整表重拉不一致)。另钉 rename 既有 applyOptimisticPatch 消费点不被本补丁
     扩成第二处(drawer.files 不属于它的覆盖面, 走独立通道是本计划的明确取舍)。
     """
-    js = open(_shared_path("drawer.js"), encoding="utf-8").read()
+    js = read_shared("drawer.js")
 
     m = re.search(r"async _drawerFilePriority\(hash, indices, priority, okText\)\s*\{(.*?)\n    \},", js, re.S)
     assert m, "drawer.js 找不到 _drawerFilePriority(改名或挪走了? 同步本守阵)"
@@ -208,4 +209,4 @@ def test_w6a_drawer_fileprio_states_node():
     不回滚新值 / 同值重复点击失败仍回最后真值。api/waitCmd/toast 与两个取数原语走最小桩,
     其余真方法。无 node 静默跳过(与本仓库既有 node 电池同口径)。
     """
-    _run_node_probe(_W6A_NODE_PROBE, _shared_path("drawer.js"))
+    _run_node_probe(_W6A_NODE_PROBE, bundle_file("drawer.js"))

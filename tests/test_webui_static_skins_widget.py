@@ -25,6 +25,7 @@ import shutil
 
 import subprocess
 
+from webui_helpers import read_shared
 from webui_helpers import (
     STATIC_ROOT,
     _UI_ALL,
@@ -484,7 +485,7 @@ def test_frontend_site_alert_icon_wiring():
     # ③ token -> 符号单点: 命令结果符号一律经 alertIconHref 取, 不得内联第二份映射
     # (单点模板 × 1 槽 = 1 次; 模板里既有的 #i-warn/#i-caret 属于别的语义, 不在此列)
     assert tpl.count("$root.alertIconHref(") == 1, "命令结果图标必须经 alertIconHref 单点取符号"
-    cmds = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    cmds = read_shared("commands.js")
     m = re.search(r"const ALERT_ICON = \{([\s\S]*?)\};", cmds)
     assert m, "commands.js 必须有 ALERT_ICON 单点"
     assert set(re.findall(r"(\w+):\s*\"#i-",

@@ -28,6 +28,7 @@ import time
 
 from auto_qb.infra.utils import encode_group_key
 
+from webui_helpers import read_shared
 from webui_helpers import (
     KEY,
     STATIC_ROOT,
@@ -145,7 +146,7 @@ def test_frontend_hr_full_modal_wiring():
     # 这里钉的是「展开态不许新增存储通道」—— 任何含 localStorage 的行不得提及 hrsOpen/hrs.open,
     # 且三个承载文件代码态不得出现新的 hrs 存储键字面量。
     for name in ("hr_status.js", "config_hub.js", "state.js"):
-        code = open(os.path.join(shared, name), encoding="utf-8").read()
+        code = read_shared(name)
         code = re.sub(r"/\*.*?\*/", "", code, flags=re.S)
         code = re.sub(r"//[^\n]*", "", code)
         for ln in code.splitlines():
@@ -167,7 +168,7 @@ def test_frontend_hr_full_modal_wiring():
     ):
         assert needle in js_flat, f"hr_status.js 缺 {what}(应有 `{needle}`)"
     assert "setInterval" not in js, "hr_status.js 不得有轮询定时器(计划 §5.5 刷新纪律)"
-    hub_js = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    hub_js = read_shared("config_hub.js")
     assert 'if (key === "hr_check") this.hrsOpen = false;' in hub_js, \
         "hubGo 打开 HR 分区必须复位 hrsOpen(每次进分区回折叠), 且不得再自动 loadHrStatus"
     assert 'key === "hr_check" && !this.hrs.loaded' not in hub_js, \
@@ -175,7 +176,7 @@ def test_frontend_hr_full_modal_wiring():
 
     # 4. ESC 关闭: 退栈链分支 + escBusy 名单两处同步(不抢不漏)
     lc = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
-    dl = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    dl = read_shared("dialogs.js")
     chain = re.search(r"if \(e\.key !== \"Escape\"\) return;.*?\}\);", lc, re.S)
     assert chain, "lifecycle.js 找不到 Esc 退栈链 —— 结构变了? 同步本守阵"
     assert "this.hrsOpen) this.hrsCollapse()" in chain.group(0), \

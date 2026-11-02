@@ -1,0 +1,315 @@
+/* ==========================================================================
+   首页(Hub): 抬头 + 警示条 + 卡片网格
+   ========================================================================== */
+/* WARN: `width: 100%` 必须写: 本页挂在 `.ce-page`(flex column)下, flex item 用了
+ *   `margin: 0 auto` 之后 `align-self: stretch` 就不再拉伸(规范: auto 外边距优先),
+ *   宽度会退化成 fit-content ⇒ 实测只 484px ⇒ 卡片网格 `auto-fill minmax(272px)` 只排得下
+ *   **1 列**(表现为"竖着排")。样张里 .wrap 是 block 子元素所以没这个问题。
+ *   底部还要让两层: 固定动作条 + 状态栏(否则最后一块被压在动作条下)。 */
+.hb-wrap {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 24px clamp(16px, 3vw, 32px) calc(40px + var(--statusbar-h, 34px) + 62px);
+}
+.hb-view { display: none; }
+.hb-view.on { display: block; animation: hb-in .18s var(--ease-out); }
+@keyframes hb-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+
+.hb-hd { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; }
+.hb-hd h1 { margin: 0; font: 600 26px/1.2 var(--hb-font-display); letter-spacing: -.01em; }
+.hb-hd .hd-sub {
+  margin: 6px 0 0;
+  font: 500 12px/1.5 var(--hb-font-mono);
+  color: var(--fg-dim);
+  letter-spacing: .02em;
+}
+.hb-hd .hd-search { margin-left: auto; position: relative; }
+.hb-hd .hd-search .hb-input { width: 250px; padding-left: 32px; }
+.hb-hd .hd-search .hb-ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--fg-dim); }
+.hb-hd .hd-sub .on { color: var(--warn); }
+
+.hb-attn {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 18px;
+  padding: 12px 15px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-line, color-mix(in srgb, var(--warn) 45%, transparent));
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+.hb-attn .at-ico { color: var(--warn); flex: none; margin-top: 1px; }
+.hb-attn .at-body { min-width: 0; }
+.hb-attn b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.hb-attn p { margin: 0; font-size: 13px; line-height: 1.6; color: var(--fg-muted); }
+.hb-attn .at-go { margin-left: auto; white-space: nowrap; flex: none; font-size: 13px; }
+
+.hb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(272px, 1fr)); gap: 12px; }
+.hb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  text-align: left;
+  padding: 15px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  background-image: linear-gradient(135deg, var(--surface-1), transparent 46%);
+  cursor: pointer;
+  /* 静息即微光(2026-09-22 用户要求: 外层选项常亮): 样张原版只在 hover 发光,
+   * 这里把配方里的 --glow-soft 提到静息态, hover / 聚焦升到 --glow; 数值一律沿用配方, 不自造 */
+  box-shadow: var(--glow-soft);
+  transition: border-color var(--dur) var(--ease), transform var(--dur) var(--ease),
+      box-shadow var(--dur) var(--ease);
+}
+.hb-card:hover { border-color: var(--tone); transform: translateY(-2px); box-shadow: var(--glow); }
+.hb-card:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; box-shadow: var(--glow); }
+.hb-card-top { display: flex; align-items: flex-start; gap: 11px; }
+.hb-card-ico {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-hi);
+  border: 1px solid var(--accent-line);
+}
+.hb-card-ico.off { background: var(--surface-2); color: var(--fg-dim); border-color: var(--border); }
+.hb-card-t { font: 600 14.5px/1.3 var(--hb-font-display); }
+.hb-card-d { font-size: 12.8px; line-height: 1.6; color: var(--fg-muted); min-height: 2.6em; }
+.hb-card-f { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 1px; }
+.hb-card-f .cf-v { font: 500 11.5px/1 var(--hb-font-mono); color: var(--fg-dim); }
+
+/* 分段 LED: 绿=正常 / 橙=需要注意 / 灰=未启用 */
+.hb-led {
+  display: inline-block;
+  width: 34px;
+  height: 7px;
+  flex: none;
+  background: repeating-linear-gradient(90deg, var(--fg-dim) 0 5px, transparent 5px 8px);
+  opacity: .55;
+}
+.hb-led.ok { background: repeating-linear-gradient(90deg, var(--green) 0 5px, transparent 5px 8px); opacity: 1; }
+.hb-led.warn { background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 8px); opacity: 1; }
+
+/* ==========================================================================
+   二级页(Spoke): 面包屑 / 分区头 / 块 / 行
+   ========================================================================== */
+/* 返回条(方案一 2026-09-28): 原面包屑随页滚走, 二级页深处回不了首页 —— sticky 钉在顶栏之下。
+ * top 用 --head-h(columns.js 实测写入 :root; 设置页无状态分布条 = 纯顶栏高), -1px 防透缝,
+ * 与 .group-head 同口径。玻璃底配方同 .hb-actbar; z-index 只需盖过普通内容 ——
+ * 说明浮窗(60)/保存条(40)/抽屉一族(80)都在其上, 不受影响 */
+.hb-crumb {
+  position: sticky;
+  top: calc(var(--head-h, 100px) - 1px);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+  margin-bottom: 13px;
+  padding: 8px 2px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+}
+.hb-crumb button {
+  background: transparent;
+  border: 0;
+  color: var(--accent-hi);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.hb-crumb button:hover { text-decoration: underline; }
+.hb-crumb .cb-now { color: var(--fg-muted); }
+/* Esc 键帽(方案三): 快捷键的可见提示, 真实处理在 config_hub.js::hubOnKey */
+.hb-crumb .cb-kbd { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; }
+.hb-crumb .cb-kbd kbd {
+  font: 500 10.5px/1 var(--hb-font-mono);
+  color: var(--fg-muted);
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.hb-sec { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 18px; padding-bottom: 15px; border-bottom: 1px solid var(--border); }
+.hb-sec-mark {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-hi);
+  border: 1px solid var(--accent-line);
+}
+.hb-sec h1 { margin: 0; font: 600 21px/1.25 var(--hb-font-display); letter-spacing: .005em; }
+.hb-sec .sh-lede { margin: 5px 0 0; font-size: 13.5px; color: var(--fg-muted); max-width: 72ch; }
+
+/* 块: WARN: 不设 overflow: hidden(块自身的 clip-path 已经够了, 再加会把靠近块边缘那几个
+   字段的聚焦发光多裁一条边) */
+.hb-blk { margin-bottom: 14px; background: var(--bg-card); border: 1px solid var(--border); }
+.hb-blk-hd {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 14px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.hb-blk-hd .bh-t { font: 600 13px/1.35 var(--hb-font-display); letter-spacing: .01em; }
+.hb-blk-hd .bh-n { font-size: 11.5px; color: var(--fg-dim); }
+.hb-blk-hd .bh-r { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+
+/* 段内嵌套块(section 可选段 / group object 段 / subcard 相关设置子卡): 由 hub-field 递归渲染,
+   比外层块缩进一级以表达从属关系。
+   WARN: 2026-09-25: 这三个分支曾随经典设置页模板一起被删, 段项于是落进叶子字段的 <input v-else>,
+   值被 String(对象) 成 "[object Object]" —— 嵌套块要靠这条 margin 才看得出是外层块的下级。 */
+.hb-blk.hb-sub { margin: 10px 14px 12px; }
+.hb-blk.hb-sub.hb-inactive { opacity: .55; }
+.hb-blk-hd.hb-sub-toggle { cursor: pointer; user-select: none; }
+
+/* 「流量与限速」分区(2026-10-19 去嵌套): 三区已提升为页面级 .hb-blk, 页头下方只剩一条
+   现状摘要 + 历史图入口的窄条。不套卡片外壳 —— 它讲的是整页现状, 不属于某一个区。 */
+.hb-tl-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--fg-dim);
+}
+.hb-tl-bar .hb-tl-sum { color: var(--fg-muted); }
+.hb-tl-bar .hb-btn { margin-left: auto; }
+
+/* 「流量与限速」三区的依赖提示条(计划 26-10-18-0813 B4/D6): 来源关闭时三区都会空转, 常驻一条。
+   用 warn 语义色而非 error —— 关源是合法状态(用户主动关的), 提示的是"后果", 不是"出错";
+   左侧 3px 实心条与 .hb-row.risk 同一配方(inset 阴影不用 border, 免得撑开行高)。
+   2026-10-19: 外壳卡去掉后它不再是卡内一条通栏, 自带边框与下边距(否则贴在页头文字上)。 */
+.hb-tl-dep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  background: var(--warn-soft);
+  box-shadow: inset 3px 0 0 var(--warn);
+  border: 1px solid var(--border);
+}
+.hb-tl-dep b { color: var(--warn); font-weight: 600; }
+
+/* 行: 标签 | 控件 | ?(说明浮窗触发点) */
+.hb-row {
+  display: grid;
+  grid-template-columns: 178px minmax(0, 1fr) 24px;
+  gap: 12px;
+  padding: 10px 14px;
+  align-items: start;
+  border-top: 1px solid var(--hairline);
+}
+.hb-blk > .hb-row:first-of-type { border-top: 0; }
+.hb-row:hover { background: var(--surface-1); }
+.hb-row.risk { box-shadow: inset 3px 0 0 var(--warn); }
+.hb-row.danger { box-shadow: inset 3px 0 0 var(--error); }
+.hb-lb { font-size: 13px; padding-top: 7px; display: flex; gap: 5px; align-items: baseline; flex-wrap: wrap; }
+.hb-lb .lb-req { color: var(--error); }
+.hb-ct { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.hb-ct .hb-input, .hb-ct .hb-select { flex: 0 1 250px; }
+/* 只读状态行(计划 26-10-17-1737 S6/#5): 行内只有纯文本、没有控件盒, 标签不再为对齐输入框留
+ * 7px 上边距 —— 标签与值按首行基线对齐(「标签 | 值」前后不齐的根因就是那 7px 与
+ * .hb-ct 的居中/顶端对齐各说各话)。**只挂 .hb-ro**, 全局 .hb-row 的控件行不变。 */
+.hb-row.hb-ro { align-items: baseline; }
+.hb-row.hb-ro .hb-lb { padding-top: 0; }
+.hb-hp { flex: 1 0 100%; font-size: 12.2px; line-height: 1.6; color: var(--fg-dim); max-width: 70ch; }
+.hb-hp.risk { color: var(--warn); }
+
+/* 说明浮窗触发点: 一小块方角按钮, 平时很淡, hover / 打开时点亮 */
+.hb-ask {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  font: 500 11px/1 var(--hb-font-mono);
+  cursor: pointer;
+  transition: color var(--dur) var(--ease), border-color var(--dur) var(--ease),
+      background var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+}
+.hb-ask:hover { color: var(--accent-hi); border-color: var(--tone); background: var(--accent-soft); box-shadow: var(--glow-soft); }
+.hb-ask.on { color: var(--accent-hi); border-color: var(--tone); background: var(--accent-soft); box-shadow: var(--glow-soft); }
+/* 语调变体(2026-09-28 用户报「?」配色与选项不一致): 危险/重要选项的行内「?」沿用选项的语义色
+   —— 静息描边走 tone-line(与 .hb-input.danger 同一配方), hover / 打开时描边 + 发光整组转语义色。
+   语调类由模板经 ce.hubToneOf(item) 挂到按钮上(与控件同一来源), 非语义行不加类保持中性灰 */
+.hb-ask.important { --tone: var(--warn); border-color: var(--tone-line); }
+.hb-ask.danger { --tone: var(--error); border-color: var(--tone-line); }
+.hb-ask.important:hover, .hb-ask.important.on { color: var(--warn); background: var(--warn-soft); }
+.hb-ask.danger:hover, .hb-ask.danger.on { color: var(--error); background: var(--error-soft); }
+
+/* 搜索命中行(整行可点, 跳到该配置项所在的分区) */
+.hb-row-hit {
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+  cursor: pointer;
+  /* <button> 的文字色不继承 body(UA 默认 buttontext, 系统浅色 = 纯黑), 不显式声明则暗色主题下整行黑字 */
+  color: var(--fg);
+}
+.hb-blk > .hb-row-hit:first-of-type { border-top: 0; }
+.hb-row-hit:hover { background: var(--surface-1); }
+
+/* 行内复合控件: 列表 / 数值+单位 / 多选 */
+.hb-ct .hb-list { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
+.hb-list-row { display: flex; gap: 6px; align-items: center; }
+.hb-list-row .hb-input, .hb-list-row .hb-select { flex: 1 1 auto; }
+/* WARN: 独立下拉(rules_ref 的「从已有规则集/规则中选择…」)是 .hb-list 的**直接子项**, 两代坑都在这里:
+ *   1. 2026-09-25: .hb-list 是 column 方向 —— 上面 `.hb-ct .hb-input, .hb-ct .hb-select{flex:0 1 250px}`
+ *      那条的 flex-basis 会落到**主轴 = 高度**上, 把它撑成 250px 高的竖条(用户报"按钮变形过高";
+ *      真浏览器实测 460×250, 同一条选择器在 row 方向的 enum 上是正常的 250×37)。`flex: none` 复位的是这一条。
+ *   2. 2026-10-02: 用户报"太长, 与上方的框不对齐" —— 直接子项被 stretch 拉满 460px, 而上方
+ *      .hb-list-row 里的输入框还要让出「删除按钮 + gap」一截, 两框右缘差一个按钮宽。
+ *      改成 rules_ref 专用 2 列 grid + 行 `display: contents`: 输入框与下拉落进**同一列**,
+ *      宽度由列宽决定 —— 不必复制按钮的 padding / 字号去凑 calc(), 按钮以后改形制也不会再错位。
+ *      只挂 rules_ref(.hb-list-ref), 不动通用列表的 flex 布局(它的「＋ 添加」靠 align-self 收缩)。 */
+.hb-list.hb-list-ref {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+/* 行本身不生成盒子: 输入框与删除按钮按文档顺序成为 grid 的 col1 / col2 项, 与下拉共用 col1 列宽 */
+.hb-list.hb-list-ref > .hb-list-row { display: contents; }
+/* 非 grid 回退(皮肤 / 其它分支): 保留 09-25 的复位语义 */
+.hb-list > .hb-select { flex: none; }
+.hb-unit { display: flex; gap: 6px; align-items: center; }
+.hb-unit .hb-input { flex: 0 0 104px; }
+.hb-checks { display: flex; gap: 12px; flex-wrap: wrap; }
+.hb-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg-muted); }
+/* 插件 spec(无标签整行): 两列布局(控件 | ?) */
+.hb-row.bare { grid-template-columns: minmax(0, 1fr) 24px; }
+/* 所属功能未启用(grey_if 不满足): 灰显但仍可编辑 */
+.hb-row.hb-inactive { opacity: .55; }
+/* 自定义行/区块的整体灰显(D14, 26-10-17-1737 S1: traffic_source.enabled=false 时来源单选与
+   子参数区灰显不隐藏 —— 后端允许关源后仍改配置; 与 .hb-inactive 同一透明度口径) */
+.hb-grey { opacity: .55; }
+/* 搜索跳转后的落点提示 */
+.hb-row.flash { animation: hb-flash 1.4s var(--ease); }
+@keyframes hb-flash { 0%, 100% { background: transparent; } 18% { background: var(--accent-soft); } }
+/* 卡片是 <button>: 复位浏览器默认字体与文字色, 否则字号/字体会跟页面不一致,
+ * 文字色回退成 UA 的 buttontext(系统浅色 = 纯黑) —— 暗色主题下卡片标题黑到看不清 */
+.hb-card { font: inherit; color: var(--fg); }
+

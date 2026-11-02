@@ -29,6 +29,7 @@ from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES as _PY_BLOCKED_STAT
 
 from auto_qb.webui.commands import REANNOUNCE_INACTIVE_SKIP as _PY_INACTIVE_SKIP
 
+from webui_helpers import read_shared
 from webui_helpers import (
     STATIC_ROOT,
     _UI_ALL,
@@ -167,9 +168,9 @@ def test_frontend_reannounce_inactive_gate_wiring():
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     deco = open(os.path.join(shared, "decorate.js"), encoding="utf-8").read()
-    cmds = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
-    kb = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    cmds = read_shared("commands.js")
+    kb = read_shared("shortcuts.js")
+    drawer_js = read_shared("drawer.js")
     menus = open(os.path.join(shared, "tpl", "ctx-menus.html"), encoding="utf-8").read()
 
     # ① 判定单点: qB 原始 state 串全覆盖 + 读 state(不是 kind)+ 多目标"任一活跃即可用"
@@ -220,7 +221,7 @@ def test_frontend_reannounce_inactive_gate_wiring():
     assert cmds.index("_guardReannounce({ keys, hashes })", core_at) < \
         cmds.index("this.applyOptimistic(optHashes, action)", core_at), \
         "_actCore 的强制汇报闸门落在乐观补丁之后(会先贴补丁再拒绝)"
-    kb_body = re.search(r"async _kbAct\(action\) \{(.*?)\n  \},", kb, re.S)
+    kb_body = re.search(r"async _kbAct\(action\) \{(.*?)\n    \},", kb, re.S)
     assert kb_body, "shortcuts.js 找不到 _kbAct"
     kb_txt = kb_body.group(1)
     assert "_guardReannounce(" in kb_txt, "键盘路径未接强制汇报闸门(非活跃目标仍能 Shift+A 绕过)"
@@ -760,8 +761,8 @@ def test_frontend_raw_fetch_timeout_single_point():
 
     # ④ 四个旁路调用点全部改调单点
     life = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
-    cmds = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
-    keys = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
+    cmds = read_shared("commands.js")
+    keys = read_shared("shortcuts.js")
     assert 'aqbFetch("/api/config/public")' in life, "lifecycle.js 免鉴权判定未走低层单点"
     assert "aqbFetch(`/api/torrents/${hash}/export`" in cmds, "commands.js 导出下载未走低层单点"
     assert keys.count('aqbFetch("/api/keys"') == 2, "shortcuts.js 密钥读写两处都必须走低层单点"
@@ -945,8 +946,8 @@ def test_frontend_poll_skeleton_single_point():
     poll_js = open(os.path.join(shared, "polling.js"), encoding="utf-8").read()
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()
     chart_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
-    hub_js = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
-    cmd_js = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
+    hub_js = read_shared("config_hub.js")
+    cmd_js = read_shared("commands.js")
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
 
     # ① 骨架三口子 + 阈值常量

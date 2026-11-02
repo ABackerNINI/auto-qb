@@ -31,6 +31,7 @@ from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES as _PY_BLOCKED_STAT
 
 from auto_qb.webui.commands import REANNOUNCE_INACTIVE_SKIP as _PY_INACTIVE_SKIP
 
+from webui_helpers import read_shared
 from webui_helpers import (
     STATIC_ROOT,
     _UI_ALL,
@@ -196,9 +197,9 @@ def test_frontend_qb_traffic_chart_wiring():
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
     lifecycle_js = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
     auth_js = open(os.path.join(shared, "auth.js"), encoding="utf-8").read()
-    dialogs_js = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    dialogs_js = read_shared("dialogs.js")
     app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()  # W1: 数据/行为层
     statusbar = open(os.path.join(shared, "tpl", "statusbar.html"), encoding="utf-8").read()
     drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
@@ -1260,7 +1261,7 @@ def test_frontend_qb_traffic_drawer_page_guard():
     shared = os.path.join(STATIC_ROOT, "shared")
     js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
 
     # 1. 可见性单点: 守卫在形态分支之前, 状态位不被改写
     vis = re.search(r"drawerVisible\(\) \{\n(.*?)\n    \},", drawer_js, re.S)

@@ -25,12 +25,14 @@
 import os
 import re
 
-from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest
+from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest, read_shared, SHARED_SPLIT_PARTS
 
 SHARED = os.path.join(STATIC_ROOT, "shared")
 
 
 def _shared(*parts) -> str:
+    if len(parts) == 1 and parts[0] in SHARED_SPLIT_PARTS:
+        return read_shared(parts[0])
     return open(os.path.join(SHARED, *parts), encoding="utf-8").read()
 
 

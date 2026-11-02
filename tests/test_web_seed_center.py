@@ -39,7 +39,7 @@ import pytest
 from auto_qb.infra.utils import mask_tracker_url
 from auto_qb.webui.runtime import CMD_SLOW_MS, WebUIRuntime
 
-from webui_helpers import STATIC_ROOT, _iter_api_routes
+from webui_helpers import read_shared, STATIC_ROOT, _iter_api_routes
 
 # ---------- 种子中心视图(WEB UI 替代 qB 界面: 种子页/详情抽屉/全局统计) ----------
 
@@ -729,10 +729,7 @@ def test_truth_hold_matches_truth_push_cap():
 
     from auto_qb.webui.commands import TRUTH_PUSH_CAP_MS
 
-    js = open(
-        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "static", "shared", "commands.js"),
-        encoding="utf-8",
-    ).read()
+    js = read_shared("commands.js")
     m = re.search(r"TRUTH_HOLD_MS\s*=\s*([\d.]+)", js)
     assert m, "commands.js 里找不到 TRUTH_HOLD_MS —— 守阵失效(常数被改名?)"
     assert float(
@@ -754,10 +751,7 @@ def test_optimistic_rollback_and_settle_use_truth_not_stale_prev():
     """
     import re
 
-    js = open(
-        os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "static", "shared", "commands.js"),
-        encoding="utf-8",
-    ).read()
+    js = read_shared("commands.js")
     m = re.search(r"_expirePending\(\)\s*\{(.*?)\n    \},", js, re.S)
     assert m, "commands.js 找不到 _expirePending(改名或挪走了? 同步本守阵)"
     body = m.group(1)

@@ -30,6 +30,7 @@ import time
 
 from auto_qb.infra.utils import encode_group_key
 
+from webui_helpers import read_shared
 from webui_helpers import (
     KEY,
     STATIC_ROOT,
@@ -58,10 +59,10 @@ def test_frontend_cols_store_single_setitem_site():
             code = ln.split("//")[0]
             if "localStorage.setItem(COLS_STORE_KEY" in code:
                 hits.append(f"{name}:{i}")
-    assert len(hits) == 1 and hits[0].startswith("shared/columns.js"), (
+    assert len(hits) == 1 and hits[0].startswith("shared/columns"), (
         f"COLS_STORE_KEY 的 setItem 必须只存在于 columns.js 的 persistPage 内, 实测: {hits}"
     )
-    cols = open(os.path.join(STATIC_ROOT, "shared/columns.js"), encoding="utf-8").read()
+    cols = read_shared("columns.js")
     m = re.search(r"persistPage\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", cols, re.S)
     assert m, "columns.js 找不到 persistPage(page)(改名或挪走了? 同步本守阵)"
     assert "localStorage.setItem(COLS_STORE_KEY" in m.group(1), "setItem 不在 persistPage 内? 同步本守阵"
@@ -96,7 +97,7 @@ def test_frontend_cols_empty_hint_names_browser_clear_cause():
     另一层: 清站点数据的环境下 localStorage 里的"已提示"标记也一起没了 ⇒ 没有 sessionStorage
     兜底就会每次关浏览器重开都弹。
     """
-    text = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    text = read_shared("columns.js")
     m = re.search(r"_showColsOriginHint\(\)\s*\{(.*?)\n    \},", text, re.S)
     assert m, "columns.js 找不到 _showColsOriginHint(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -117,7 +118,7 @@ def test_frontend_cols_empty_hint_is_not_a_floating_banner():
     改道后只进通知面板(ui_feedback.js::_recordNotice): 面板默认收起、不占版面、不进截图, 入口留
     一个未读徽标。本守阵钉死"不再建浮层"这个不变量(文案 / 去重标记的守阵在上一条)。
     """
-    text = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    text = read_shared("columns.js")
     m = re.search(r"_showColsOriginHint\(\)\s*\{(.*?)\n    \},", text, re.S)
     assert m, "columns.js 找不到 _showColsOriginHint(改名或挪走了? 同步本守阵)"
     body = m.group(1)

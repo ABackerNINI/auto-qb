@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** 按计划完成 R1(10 个测试文件 → 36 个测试文件 + 12 个支撑/扫描模块)、R2(25 个测试文件 → 90 个分桶 + 20 个 support)与 R3(4 个工具/脚本/扩展文件 → 9 个分片, 3 个暂缓零改动); 测试函数名与模块级界定逐字不变, 收集数守恒; 全量见 kb.baseline; 2 个超千行新桶按新口径登记计划后续排期, R3 无新增超阈值桶。
+**Summary:** 按计划完成 R1(10 个测试文件 → 36 个测试文件 + 12 个支撑/扫描模块)、R2(25 个测试文件 → 90 个分桶 + 20 个 support)、R3(4 个工具/脚本/扩展文件 → 9 个分片, 3 个暂缓零改动)与 R4(8 个前端文件 → 20 个域名片段 + 4 段 CSS, 2 暂缓/2 不拆零改动); 测试函数名与模块级界定逐字不变; 全量见 kb.baseline; 2 个超千行新桶按新口径登记计划后续排期, R3/R4 均无新增超阈值桶; R4 改动未提交, 留用户审阅。
 **Topics:** test-big-file-split
-**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md
+**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md
 
 ## 原始请求
 
@@ -55,6 +55,9 @@
 | R3-1 | `sim_qb.py` / `qb_capture.py` / `background.js` / `test_server.py` move-only 拆分(4 拆 3 暂缓) | Done (2026-11-03) |
 | R3-2 | 扩展守阵加载顺序适配 + 定向闸门 + 全量闸门 + 基线切片 | Done (2026-11-03) |
 | R3-3 | 收尾回写 + 提交推送 | Done (2026-11-03) |
+| R4-1 | 8 个前端文件 move-only 拆分(`console_hub.css` 4 段 + `drawer`/`config_hub`/`config_editor`/`shortcuts`/`columns`/`commands`/`dialogs` 共 20 片段; 2 暂缓/2 不拆零改动) | Done (2026-11-03) |
+| R4-2 | 四套皮肤清单加载序同步 + 守阵「域聚合读」引用适配 + 定向/全量闸门 | Done (2026-11-03) |
+| R4-3 | 收尾回写(计划 §07/§10、本档案、基线切片) + 提交推送 | Done (2026-11-03) |
 
 ## 进度日志
 
@@ -68,3 +71,7 @@
 - 2026-11-03 01:58 R2 完成: 25 个测试文件 move-only 拆为 90 桶 + 20 support(用例数守恒), 同步并入远端 test_kb_nav 新用例, 新口径与排期清单入计划, 全量见 kb.baseline
 
 - 2026-11-03 03:27 R3 完成: 4 个工具/脚本/扩展文件 move-only 拆分(sim_qb 2077->166 入口+4 模块; qb_capture 1559->959+2 模块; background.js 1427->642+2 分片; test_server.py 1274->552+1 support+2 分文件), 3 个暂缓零改动; 扩展守阵按 importScripts 顺序拼接 bundle; 全量见 kb.baseline
+
+- 2026-11-03 R4 完成(未提交): 8 个前端文件 move-only 拆分 —— console_hub.css 1589->291 根+3 连续段(前 3 段沿用层叠序); drawer.js 1543->916+3 片段, config_hub.js 1484->617+3, config_editor.js 1475->736+3, shortcuts.js 1442->428+2, columns.js 1429->124+5(computed 片段最后加载), commands.js 1076->431+2(_runningToast 工厂留根), dialogs.js 1022->720+2; 片段一律 `Object.assign(window.AQB_*.methods, ...)` 原地扩充、加载序紧跟根文件; 四套皮肤 index.html 清单与 CSS link 同步; 守阵改「域聚合读」(tests/webui_helpers.py SHARED_SPLIT_PARTS/read_shared/bundle_file), 断言语义未改; 暂缓 drawer_templates/qb_traffic_chart 与不拆 fx/showcase.html/app.js 零改动; 新桶最大 804 行, 排期清单无新增
+
+- 2026-11-03 04:59 R4 完成: 8 个前端文件 move-only 拆为 20 个域名片段 + 4 段连续 CSS(2 暂缓/2 不拆零改动), 四皮肤清单与守阵域聚合读同步; 新桶均 <=1000(最大 804), 排期无新增

@@ -1032,7 +1032,9 @@ def test_html_vnu_skips_vue_template_fragments(tmp_path) -> None:
     2026-11-02 首次提交改分片实测: `static/shared/tpl/overlays.html` 的 `v-if` / `@click` /
     `:class` 被 v.Nu 逐条判 `Attribute "…" not allowed` (22 条), 全批只有这一类 —— 范畴错误,
     不是缺陷; 同批 `fx/showcase.html` 零 error, 说明网本身是好的。判据只认路径 (tpl-manifest
-    的家), 不用"内容含 v- 就跳过" —— 那会把真正写坏属性名的页面一起放过。
+    的家), 不用"内容含 v- 就跳过" —— 那会把真正写坏属性名的页面一起放过。皮肤壳
+    `static/<皮肤>/index.html` 的内联 `<div id="app">` 是 Vue 根模板, 同一类范畴错误由
+    `is_webui_skin_shell` 按路径摘除。
     全被摘掉时不得触碰 java / vnu.jar (不下载、不装 JDK 也能提交纯模板改动) —— 用不存在的
     可执行名证明根本没走到子进程。
     """
@@ -1045,6 +1047,14 @@ def test_html_vnu_skips_vue_template_fragments(tmp_path) -> None:
     page.parent.mkdir(parents=True)
     page.write_text("<html><body><p>ok</p></body></html>", encoding="utf-8")
 
+    shell = root / "src" / "auto_qb" / "webui" / "static" / "prism" / "index.html"
+    shell.parent.mkdir(parents=True)
+    shell.write_text('<div id="app"><form v-else>a</form></div>', encoding="utf-8")
+
     assert m.is_vue_template_fragment(tpl, root), "tpl 分片未被认出 —— v.Nu 会整批误报"
     assert not m.is_vue_template_fragment(page, root), "普通页面被误判成分片 —— 真错误会被放行"
-    assert m.run_vnu([tpl], root, True, "java-does-not-exist") == 0, ("全是模板分片时仍应 rc=0, 且不得调用 java (调用即抛/下载 jar)")
+    assert m.is_webui_skin_shell(shell, root), "皮肤壳内联根模板未被认出 —— v.Nu 会整批误报"
+    assert not m.is_webui_skin_shell(page, root), "普通页面被误判成皮肤壳 —— 真错误会被放行"
+    assert not m.is_webui_skin_shell(tpl, root), "tpl 分片被误判成皮肤壳 —— 该走 tpl 判据"
+    assert m.run_vnu([tpl, shell], root, True,
+                     "java-does-not-exist") == 0, ("全是 Vue 承载面时仍应 rc=0, 且不得调用 java (调用即抛/下载 jar)")

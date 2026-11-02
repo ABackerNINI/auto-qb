@@ -60,7 +60,7 @@ from auto_qb.config.schema import SIZE_UNITS as AQB_SIZE_UNITS
 from auto_qb.config.schema import TIME_UNITS as AQB_TIME_UNITS
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
-from webui_helpers import STATIC_ROOT
+from webui_helpers import STATIC_ROOT, read_shared
 from auto_qb.webui.server.routes import traffic_monitor as tm_routes
 
 # 工具侧源码根(跨包契约: 单位文法 / 复合串契约 的权威在工具那一侧)
@@ -452,6 +452,8 @@ def test_notify_rejects_non_dict_body(tm_env):
 
 
 def _static(*parts) -> str:
+    if len(parts) == 2 and parts[0] == "shared":
+        return read_shared(parts[1])
     return open(os.path.join(STATIC_ROOT, *parts), encoding="utf-8").read()
 
 

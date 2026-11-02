@@ -35,6 +35,7 @@ import shutil
 
 import subprocess
 
+from webui_helpers import read_shared
 from webui_helpers import (
     STATIC_ROOT,
     _UI_ALL,
@@ -247,7 +248,7 @@ def test_frontend_table_registry_single_point():
             assert "tableRef: null" in s, f"TABLE_DEFS.{tid}.tableRef 应为 null(成员行容器 = .detail 父元素)"
     order = [app.index(f'headRef: "{h}"') for _tid, _c, h, _t in want]
     assert order == sorted(order), "TABLE_DEFS 的表顺序与定义序不符(TABLE_PAGES 顺序漂移 = 列偏好按错表读)"
-    cols = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    cols = read_shared("columns.js")
     assert '["group", "detail", "torrent", "show"]' not in cols, ("columns.js 又出现四页字面量 —— 应走 TABLE_PAGES(注册表派生)")
     sort_js = open(os.path.join(STATIC_ROOT, "shared", "sort.js"), encoding="utf-8").read()
     for probe in ('viewMode === "torrents"', 'viewMode === "shows"'):
@@ -434,7 +435,7 @@ def test_drawer_table_bridge_wiring():
         "sortedDrawer 缺 dyn 分支(变体表行序回退恒原序, 排序静默无效)"
 
     # ⑦ columns.js: 渐进列 omitEmpty 单点(07/08 的 qB files 字段整列省略)
-    col = read("columns.js")
+    col = read_shared("columns.js")
     assert "_colsOmitEmpty(page, out)" in col and "c.omitEmpty" in col, \
         "_visibleCols 尾部缺 omitEmpty 单点(渐进列省略必须表头/行/grid/对齐同走一条路, 否则 nofiles 错位 bug 类回潮)"
 
@@ -920,7 +921,7 @@ def test_frontend_hr_detail_table_wiring():
     # 故这里同时钉两件事: ①收敛族在共用层有且生效; ②底形族在每套皮肤自己的文件里(真差异不许
     # 被共用层顺手抹平)。原先「prism 拆 components.css + views.css 两件」的钉法随收敛失效 ——
     # 那两段已不在 prism 文件里, 改成钉共用层持有它们。
-    shared_css = open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8").read()
+    shared_css = read_shared("console_hub.css")
     assert ".hr-detail-table-bar" in shared_css, "shared/console_hub.css 缺表头过滤栏段(chips + 数据截至)"
     assert ".hr-detail-table .hr-lane-a" in shared_css, "shared/console_hub.css 缺表格徽章色义段"
     for css, name in (
@@ -1157,7 +1158,7 @@ def test_frontend_frozen_column_boundary_wiring():
     shared = os.path.join(STATIC_ROOT, "shared")
     # 1. JS: 横滚同步单点 —— 计划 26-10-11-1722 P4 起 menu/selection/shows 三份收敛为
     #    columns.js 的 syncHeadScroll(ev, page) 一份; 三个滚动容器各带自己的表 id 调它。
-    cols_js = open(os.path.join(shared, "columns.js"), encoding="utf-8").read()
+    cols_js = read_shared("columns.js")
     anchor = "syncHeadScroll(ev, page) {"
     assert anchor in cols_js, ("columns.js 缺横滚同步单点 syncHeadScroll(ev, page)(P4 收敛后被删/改名? 同步本守阵)")
     seg = cols_js[cols_js.index(anchor):]
@@ -1283,7 +1284,7 @@ def test_frontend_hscroll_indicator_wiring():
     for sel in (".hscroll-pill", ".hscroll-pill.on", ".hscroll-pill.drag", ".hscroll-pill > i"):
         assert sel in hcss, (f"shared/hscroll.css 缺选择器 `{sel}` —— CSS 与 columns.js 的 DOM 契约只剩一侧, "
                              "类名不同名时胶囊恒不可见且零报错")
-    cols_js = open(os.path.join(shared, "columns.js"), encoding="utf-8").read()
+    cols_js = read_shared("columns.js")
     assert '"hscroll-pill"' in cols_js, ("columns.js 里没有 \"hscroll-pill\" —— 建 DOM 用的类名被改/被删, CSS 那四条规则整族空转")
     for cls in ("on", "drag"):
         assert re.search(r'classList\.(?:toggle|add|remove)\("%s"' % cls, cols_js), (

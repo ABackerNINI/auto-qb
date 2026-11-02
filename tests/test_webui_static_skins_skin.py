@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_frontend_static_bundle_health: 前端静态资源静态守阵(冲突标记/注释孤儿续行/node --check 语法校验/CSS 规则漏闭合/CSS 注释提前终止/<transition> 吞弹窗/静态引用缺失/追剧视图集成员取 hash 未走 memberHashesOf/STATE_RANK 与后端 _SHOW_STATE_RANK 漂移 + STATE_RANK_LAST 兜底秩与 _SHOW_STATE_RANK_LAST 一致 / 键位归一化正则 KB_DEF_RE 与后端 _KEYS_SERIAL_RE 逐字一致 / ETA 哨兵与后端 _ETA_SENTINEL 跨层一致(全树零命中即红) / 页面挂件类名必须有对应 CSS 规则 / 列模型每列必须有值单元格分支+默认隐藏单点接线 —— 均为"pytest 全绿但界面废掉"的故障形态; 计划 26-10-31-2316 S2 起 @starting-style 计入容器型 at-rule、shared/fx/fx.js 曾以"待接线豁免"登记(S6 挂 flux shell 静态 script 后豁免已删) / flux 弹窗毛玻璃 vs 浮层不透明底对照(2026-11-03, _scan_flux_modal_frost)
-- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤233 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220, 26-10-31-2316 S6 fx 三件挂 flux +7 → 227, S6 后半 fx 挂载面(fx-mount.css+fx-mount.js, flux 专属) +6 → 233)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 各皮肤 CSS 链接序(atlas/console/flux(fork 自 console, S5 收编): style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
+- test_frontend_template_split_wiring: 模板分片接线守阵(26-09-26 拆分 plans/26-09-26-2233 W1) —— 清单完整性(漏挂=整块消失 / 404=整页占位 / into 非法)+ 双 UI 分片名单同名同序 + 聚合标签配平 + shell≤256 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 +2, 26-10-30-0217 阶段2 row_lang.css 挂载 +2 → 218, 26-11-01-0553 hscroll.css 挂载 +2 → 220, 26-10-31-2316 S6 fx 三件挂 flux +7 → 227, S6 后半 fx 挂载面(fx-mount.css+fx-mount.js, flux 专属) +6 → 233, R4 域片段挂载(console_hub.css 拆 4 link 净 +3 + 7 域 20 片段 script)+23 → 256)/单分片≤400 行 + 清单脚本序(vendor 首 app.js 尾) + 各皮肤 CSS 链接序(atlas/console/flux(fork 自 console, S5 收编): style→components→views→dialogs; prism: tokens→五主题→base→components→views→dialogs, 弹窗层必须最后; shared 层 row_lang.css 在各皮肤 views.css 之后, 计划 26-10-30-0217 阶段2)与单文件 700 行体量口径(prism/css/views.css 818 行存量冻结, 只许减不许增)
 - test_frontend_skin_css_token_parity: 各皮肤令牌**名集**相等守阵(issue 26-10-20-2231; 26-11-01 S5 收编 flux) —— 皮肤少声明令牌 = 该皮肤下 `var(--x)` 整条声明在计算值阶段作废且无报错(星图此前少 3 个字体令牌 86 vs 89, 自己 4 处 `var(--font-mono)` 裸引用全程失效、共用层只能各写兜底链); 钉名集相等(取值自由), 差异按缺/多两侧成对报出
 - test_frontend_shell_sprite_login_parity: 各皮肤 index.html shell 内联段守阵(issue 26-10-20-2231; S5 收编 flux) —— sprite 段(80 行/67 symbol)逐字相等(manifest 已被 split_wiring 钉死, 本守阵补上 sprite 与 login)+ #app+login 段(注释/空行归一后, 皮肤说明注释为合法差异不参与比对)相等; symbol 数下限防"sprite 整体外提成共享文件后各份同时消失、相等断言恒真"; 失败信息提示"改图标/改登录遮罩须各皮肤同步"
 - test_frontend_button_system_paired: 按钮体系(.bt)迁移守阵 —— ce-btn/ce-icon 全语料零残留、.bt 六变体各套 CSS 成对定义(atlas/prism/console/flux, S5 收编 flux)、atlas/prism 模板 bt 用量逐类相等、双色令牌(on-accent/on-accent-ink/on-error)星图 :root + 棱镜五主题成对声明
@@ -110,7 +110,7 @@ def test_frontend_template_split_wiring():
       2. 清单挂了不存在的分片 / into 非法 —— boot fetch 404, 整页停在错误占位;
       3. 两套 shell 清单漂移(各自演化 parts/scripts)—— 单一语义模板下等于偷偷分裂出第二份模板;
       4. 绕开 UI 差异口私拷模板块(双模板副本的复发形态)—— 由 _scan_ui_diff_registry 钉住。
-    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤227 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; 计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227; S6 后半 fx 挂载面(fx-mount.css 注释+link + fx-mount.js 注释+script, flux 专属)+6 → 233)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
+    另钉: 聚合标签配平(切割边界错位的兜底)、shell ≤256 行(S1 定 200, 26-10-06-0838 S5/S6 各 +3, R2 26-10-09-2219 S1 +4, W6 26-10-13-0811 dt_table.css 挂载 +2, issue 26-10-20-2231 prism dialogs.css 挂载 +2, 计划 26-10-30-0217 阶段2 row_lang.css 挂载(注释+link)+2 → 218; 计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; 计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227; S6 后半 fx 挂载面(fx-mount.css 注释+link + fx-mount.js 注释+script, flux 专属)+6 → 233; R4 计划 26-11-02-2342 §07 域片段挂载(console_hub.css 拆 4 link 净 +3 + 7 域 20 片段 script)+23 → 256)/ 单分片 ≤400 行、清单脚本序(vendor 首 / app.js 尾)。
     """
     problems = []
     manifests = {}
@@ -120,9 +120,9 @@ def test_frontend_template_split_wiring():
         mf = _ui_manifest(ui)
         manifests[ui] = mf
         n_shell = shell.count("\n") + (0 if shell.endswith("\n") else 1)
-        if n_shell > 233:
+        if n_shell > 256:
             problems.append(
-                f"{ui}/index.html {n_shell} 行, shell 体量上限 233"
+                f"{ui}/index.html {n_shell} 行, shell 体量上限 256"
                 "(S1 定 200 = 核心层 1 行 + 首批 9 变体; 计划 26-10-06-0838 S5/S6 各 +3; "
                 "R2 计划 26-10-09-2219 S1 起 drawer_pages classic 插件 +4; "
                 "W6 计划 26-10-13-0811 shared/dt_table.css 挂载(注释+link)+2; "
@@ -130,7 +130,8 @@ def test_frontend_template_split_wiring():
                 "计划 26-10-30-0217 阶段2 shared/row_lang.css 挂载(注释+link)+2 → 218; "
                 "计划 26-11-01-0553 shared/hscroll.css 挂载(注释+link)+2 → 220; "
                 "计划 26-10-31-2316 S6 fx 三件挂 flux(注释+2link+注释+script)+7 → 227; "
-                "计划 26-10-31-2316 S6 后半 fx 挂载面(flux 专属: fx-mount.css 注释+link + fx-mount.js 注释+script)+6 → 233)"
+                "计划 26-10-31-2316 S6 后半 fx 挂载面(flux 专属: fx-mount.css 注释+link + fx-mount.js 注释+script)+6 → 233; "
+                "R4 计划 26-11-02-2342 §07 域片段挂载(console_hub.css 拆 4 link 净 +3 + 7 域 20 个片段 script)+23 → 256)"
             )
         assert '<script src="/shared/boot.js"></script>' in shell, f"{ui} shell 缺 boot.js 引用(分片无人注入)"
         names = []

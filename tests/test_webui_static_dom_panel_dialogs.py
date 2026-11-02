@@ -51,6 +51,7 @@ from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES as _PY_BLOCKED_STAT
 
 from auto_qb.webui.commands import REANNOUNCE_INACTIVE_SKIP as _PY_INACTIVE_SKIP
 
+from webui_helpers import read_shared
 from webui_helpers import (
     STATIC_ROOT,
     _UI_ALL,
@@ -176,9 +177,9 @@ def test_recheck_confirm_wired_all_mouse_entries():
     4. shortcuts.js _kbAct 改调共用 helper, 不再内联 confirmDialog 文案;
     5. 共用文案字符串全仓只在 commands.js 出现一次(防三处各抄一份漂移)。
     """
-    cmds = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
-    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
-    shortcuts = open(os.path.join(STATIC_ROOT, "shared", "shortcuts.js"), encoding="utf-8").read()
+    cmds = read_shared("commands.js")
+    drawer = read_shared("drawer.js")
+    shortcuts = read_shared("shortcuts.js")
     text = "全量重读磁盘并校验完整性, 大库上耗时长且不可中断。"
 
     # ① 共用 helper 单点: 调用形态(标题/okText)与文案逐字沿键盘路径原样
@@ -253,7 +254,7 @@ def test_skip_check_dialog_precheck_wired():
     """
     ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
     tpl = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
-    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    drawer = read_shared("drawer.js")
 
     # ① _modalInit 三字段(缺省值即零变化契约: 改默认/删字段/改名都红)
     m = re.search(r"_modalInit\(\)\s*\{\s*return\s*\{(.*?)\n      \};", ui, re.S)
@@ -318,7 +319,7 @@ def test_skip_check_dialog_verdict_render():
     3. 降级文案明示「后端闸门仍会在执行时拦截」(D10);
     4. 分组展示: 计数行(可跳检/需强制/禁止)+ 组内名称上限截断(slice(0,5)+等 X 个)。
     """
-    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    drawer = read_shared("drawer.js")
 
     # ① 状态机六态分支: 逐分支提取语句清单(剥注释滤空行后)与期望逐一比对 ——
     #    摘除/新增/改写任一语句(如降级分支删掉解锁行、blocked 分支漏收强制钮)即红
@@ -404,7 +405,7 @@ def test_modal_identity_stamp_landing_guard():
     3. drawer.js _skipCheckDialog 把 this.modal.mid 交棒 _skipPrecheck;
     4. drawer.js _skipPrecheck 落袋守卫 = seq 代际 + 身份戳, 且位于任何 this.modal 写之前。
     """
-    drawer = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    drawer = read_shared("drawer.js")
     ui = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
 
     # ① _openModal 发戳: mid 自增必须随 modal 字面量一同创建(后补属性不进 Vue 响应的旧坑)
@@ -501,7 +502,7 @@ def test_frontend_ctx_menu_multi_select_targets_selection():
         assert bad not in multi_defs, (f"注册表 multi 支出现单目标分派 {bad} —— 批量菜单必须整份走 ctxAct/ctxDelete")
 
     # 3. ctxAct/ctxDelete 复用批量浮条链路, 且先收起菜单(菜单根节点 @click.stop, 全局点空白关不掉)
-    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    cmd = read_shared("commands.js")
     for name, delegate in (("ctxAct(action)", "bulkAct(action)"), ("ctxDelete()", "bulkDelete()")):
         m = re.search(rf"\n    {re.escape(name)} \{{(.*?)\n    \}},", cmd, re.S)
         assert m, f"shared/commands.js 找不到 {name}(改名或挪走了? 同步本守阵)"
@@ -556,8 +557,8 @@ def test_frontend_ctx_menu_group_actions_parity():
     )
 
     # 3. 六个入口方法落地 + 复用多选同一套下游链路
-    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
-    drw = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    cmd = read_shared("commands.js")
+    drw = read_shared("drawer.js")
     assert "_groupTargets()" in cmd, "commands.js 缺 _groupTargets(组级目标集合单点)"
     # 2026-10-10(S3): _groupTargets 退化为 _scopeResolve("anchor") 的投影, 成员展开单点
     # (memberHashesOf)随之收进 selection.js::_selExpandGroups —— 守阵跟着搬家, 语义不变
@@ -606,7 +607,7 @@ def test_frontend_meta_dialog_paired():
     assert "vm.openMetaDialog(vm.menu.hash)" in reg, ("注册表 member 支缺单种子右键菜单的标签/分类入口(openMetaDialog(vm.menu.hash))")
     assert "vm.ctxMeta()" in reg, "注册表 multi 支缺批量右键菜单的 ctxMeta 入口"
     # 2. shared 逻辑接线(逻辑层两套共用, 只在 shared 出现)
-    dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
+    dlg = read_shared("dialogs.js")
     for token in (
         "openMetaDialog(singleHash)",
         "closeMeta()",
@@ -618,7 +619,7 @@ def test_frontend_meta_dialog_paired():
         "/api/torrents/bulk",
     ):
         assert token in dlg, f"shared/dialogs.js 缺少 {token}(改名或挪走了? 同步本守阵)"
-    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    cmd = read_shared("commands.js")
     m = re.search(r"\n    ctxMeta\(\) \{(.*?)\n    \},", cmd, re.S)
     assert m, "shared/commands.js 找不到 ctxMeta(改名或挪走了? 同步本守阵)"
     assert "this.menu.visible = false" in m.group(1), ("ctxMeta 必须先收起右键菜单(菜单是 @click.stop, 全局点空白关不掉)")
@@ -1021,7 +1022,7 @@ def test_frontend_add_combo_label_clear_mask_and_refit():
 
     shared = os.path.join(STATIC_ROOT, "shared")
     at = open(os.path.join(shared, "add_torrent.js"), encoding="utf-8").read()
-    dg = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    dg = read_shared("dialogs.js")
     lf = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
     mgr = open(os.path.join(shared, "tpl", "dialogs-mgr.html"), encoding="utf-8").read()
     pv = open(os.path.join(shared, "tpl", "popovers.html"), encoding="utf-8").read()
@@ -1247,8 +1248,8 @@ def test_frontend_move_dialog_combobox_wiring():
     import re
 
     shared = os.path.join(STATIC_ROOT, "shared")
-    dr = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
-    cmd = open(os.path.join(shared, "commands.js"), encoding="utf-8").read()
+    dr = read_shared("drawer.js")
+    cmd = read_shared("commands.js")
     at = open(os.path.join(shared, "add_torrent.js"), encoding="utf-8").read()
     lf = open(os.path.join(shared, "lifecycle.js"), encoding="utf-8").read()
     st = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
@@ -1381,7 +1382,7 @@ def test_frontend_rename_dialog_width_wiring():
     shared = os.path.join(STATIC_ROOT, "shared")
     uif = open(os.path.join(shared, "ui_feedback.js"), encoding="utf-8").read()
     pv = open(os.path.join(shared, "tpl", "popovers.html"), encoding="utf-8").read()
-    dr = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    dr = read_shared("drawer.js")
 
     # 1. cls 字段在 _modalInit 单点声明(每框初值; 缺了 = 后补属性不进 Vue 响应, 挂类不生效)
     init = re.search(r"_modalInit\(\) \{\s*return \{(.*?)\n      \};", uif, re.S)
@@ -1492,7 +1493,7 @@ def test_frontend_dialog_shell_single_point():
 
     # 3. 数据表与明细并一的单点
     st = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
-    dg = open(os.path.join(shared, "dialogs.js"), encoding="utf-8").read()
+    dg = read_shared("dialogs.js")
     m = re.search(r"mgrDef\(\) \{(.*?)\n    \},", st, re.S)
     assert m, "state.js 找不到 mgrDef(管理对话框数据表被改名/挪走? 同步本守阵)"
     for needle in (
@@ -1637,8 +1638,8 @@ def test_frontend_busy_skeleton_single_point():
     toast) + 19 处调用点接线数对账(dialogs 14: mgr 5 + 面板加载 5 + POST 4; config_hub 5: tm 族
     4 槽 + 一键导入) + finally 复位保底必须住在单点内(漏 finally = 面板永久转圈) + 裸 busy 置位
     反向断言(再手抄 = 破单点, 回潮即红)。"""
-    dlg = open(os.path.join(STATIC_ROOT, "shared", "dialogs.js"), encoding="utf-8").read()
-    hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    dlg = read_shared("dialogs.js")
+    hub = read_shared("config_hub.js")
     # 1. 三单点在册(dialogs.js 是骨架单点文件, config_hub.js 经同一根实例混入调用)
     for token in (
         "async _mgrRun(fn, okMsg, errMsg)",
@@ -1747,7 +1748,11 @@ def test_overlay_fit_single_point():
     shared = os.path.join(STATIC_ROOT, "shared")
     fit_js = open(os.path.join(shared, "overlay_fit.js"), encoding="utf-8").read()
     files = {
-        name: open(os.path.join(shared, name), encoding="utf-8").read()
+        name:
+            (
+                read_shared(name) if name in ("config_hub.js", "drawer.js", "columns.js", "dialogs.js") else
+                open(os.path.join(shared, name), encoding="utf-8").read()
+            )
         for name in ("ui_feedback.js", "menu.js", "config_hub.js", "hr.js", "drawer.js", "columns.js", "dialogs.js")
     }
     # 1. 单点在册(四入口 + EDGE 缺省 8)

@@ -81,6 +81,7 @@ import time
 
 from auto_qb.infra.utils import encode_group_key
 
+from webui_helpers import bundle_file, read_shared
 from webui_helpers import (
     KEY,
     STATIC_ROOT,
@@ -120,7 +121,7 @@ def test_frontend_member_window_functions_live_in_methods():
     断言: 这三个名字的定义行必须在 `methods: {` 之后、`computed: {` 之前。
     """
     rel = "shared/columns.js"
-    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    text = read_shared("columns.js")
     m_methods = re.search(r"^\s*methods:\s*\{", text, re.M)
     m_computed = re.search(r"^\s*computed:\s*\{", text, re.M)
     assert m_methods, f"{rel} 找不到 methods 块(文件结构改了? 同步本守阵)"
@@ -237,7 +238,7 @@ def test_frontend_dist_segments_aggregates_per_view():
     断言: distSegments 实现里必须包含三个 viewMode 分支(torrents / shows / 其余即 groups)。
     """
     rel = "shared/dialogs.js"
-    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    text = read_shared("dialogs.js")
     m = re.search(r"distSegments\s*\(\)\s*\{(.*?)\n    \},", text, re.S)
     assert m, f"{rel} 找不到 distSegments computed(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -257,7 +258,7 @@ def test_frontend_persist_page_takes_intent_only():
     (issue 26-09-20-1800, 四轮修复未绝根)。取代旧守阵 test_frontend_save_col_state_skips_widths_for_auto_pages。
     """
     rel = "shared/columns.js"
-    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    text = read_shared("columns.js")
     m = re.search(r"persistPage\s*\(\s*page\s*\)\s*\{(.*?)\n    \},", text, re.S)
     assert m, f"{rel} 找不到 persistPage(page)(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -318,7 +319,7 @@ def test_frontend_page_location_persisted():
         "(设置页的配置树是按需加载的)"
     )
 
-    hub = open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8").read()
+    hub = read_shared("config_hub.js")
     m = re.search(r"function initialHubView\(\)\s*\{(.*?)\n\}", hub, re.S)
     assert m and "autoqb.ui.hub" in m.group(1), "config_hub.js 的 initialHubView 未读 autoqb.ui.hub"
     assert re.search(r"^\s*view:\s*initialHubView\(\),", hub, re.M), "hub.view 初值未走 initialHubView()"
@@ -329,7 +330,7 @@ def test_frontend_page_location_persisted():
     body = m.group(1)
     assert "this.cfg.schema" in body and "groups.some" in body, ("hubRestore 未对 schema 校验分区 key —— 分区改名/删除后刷新会停在空白分区")
     assert "this.hubGo(" in body, "hubRestore 应复用 hubGo(否则漏掉 trackers/rules 选中项与日志/HR 懒加载)"
-    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    ed = read_shared("config_editor.js")
     assert "this.hubRestore()" in ed, "cfgLoad 成功后未调 hubRestore(schema 到手那一刻才校验得了分区 key)"
 
 
@@ -353,7 +354,7 @@ def test_frontend_unsaved_changes_guard_wiring():
     5. 主动刷新前摘兜底;
     6. 键盘监听在 lifecycle 注册、unmounted 撤除, 脏态 watcher 在 state.js 接线(漏接 = 整块静默消失)。
     """
-    ed = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    ed = read_shared("config_editor.js")
     fb = open(os.path.join(STATIC_ROOT, "shared", "ui_feedback.js"), encoding="utf-8").read()
     pop = open(os.path.join(STATIC_ROOT, "shared", "tpl", "popovers.html"), encoding="utf-8").read()
     st = open(os.path.join(STATIC_ROOT, "shared", "state.js"), encoding="utf-8").read()
@@ -459,7 +460,7 @@ def test_frontend_expand_state_survives_view_switch():
     assert "this.groups.some(" in restore, ("restoreExpandState 未验展开的组是否还在 —— 组已被删/被筛掉时留下悬空 expandedKey")
     assert "this.expandedKey = key" in restore, "restoreExpandState 未把分组展开键还回 expandedKey"
 
-    cols = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    cols = read_shared("columns.js")
     m = re.search(r"groupWin\(\)\s*\{(.*?)\n    \},", cols, re.S)
     assert m, "columns.js 找不到 groupWin()(改名或挪走了? 同步本守阵)"
     win = m.group(1)
@@ -489,7 +490,7 @@ def test_frontend_hub_field_covers_non_leaf_items():
        的 cfgFlatten 实读(将来新增类型忘了加分支 → 立刻红, 不靠人记);
     2. 叶子分支必须是链尾的 `v-else` —— 否则非叶子项会有绕回兜底 input 的路径。
     """
-    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    editor = read_shared("config_editor.js")
     kinds = set(re.findall(r'type:\s*"(field|section|group|subcard)"', editor))
     assert "field" in kinds, "config_editor.js 里找不到 cfgFlatten 的 type: \"field\"(改名/挪走了? 同步本守阵)"
     non_leaf = sorted(k for k in kinds if k != "field")
@@ -532,7 +533,7 @@ def test_frontend_hub_field_renders_readonly_fields():
     4. 叶子行带「程序维护」徽标; settings-detail 的块级 section 开关对 readonly 段换徽标
        (fs 段的启用/关闭开关在那里, 不禁用就能把整段从 UI 删掉)。
     """
-    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    editor = read_shared("config_editor.js")
     for member in ("readonly()", "readonlyComplex()", "readonlySummary()"):
         assert member in editor, f"config_editor.js 的 CE_FIELD_BASE 缺 computed {member} (模板引用会 undefined 静默失效)"
 
@@ -570,7 +571,7 @@ def test_frontend_keyed_list_toggle_deletes_key_when_emptied():
     定稿口径 = 与同文件 cfgItemRemove 一致: 清空即 cfgDelPath(删键 = 回到"未配置"), 勾选再
     取消因此是零副作用的可逆操作。本守阵钉住: 写回必须挂在长度守卫里, 空则走删键。
     """
-    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    editor = read_shared("config_editor.js")
     m = re.search(r"toggleKey\(name\)\s*\{(.*?)\n    \},", editor, re.S)
     assert m, "config_editor.js 里找不到 toggleKey(name)(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -606,7 +607,7 @@ def test_frontend_password_field_ignores_autofill():
         assert 'setSecret($event)' in branch, (f"{skin} 的密码框写回未走 setSecret —— 自动填充会被当成用户编辑写进配置树")
         assert "set($event.target.value)" not in branch, (f"{skin} 的密码框直连 set() —— 自动填充造脏的根因(2026-10-20 报障)原样复发")
 
-    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    editor = read_shared("config_editor.js")
     m2 = re.search(r"\n    setSecret\(ev\) \{(.*?)\n    \},", editor, re.S)
     assert m2, "config_editor.js 的 CE_FIELD_BASE 找不到 setSecret(ev)(改名或挪走了? 同步本守阵)"
     body = m2.group(1)
@@ -624,7 +625,7 @@ def test_frontend_flatten_skips_hidden_fields():
     cfgFlatten 里跳过才真的生效: 两套 UI 的 hub 页与经典设置页都由它供给渲染项, 漏了这条
     skip = 字段照样出现在界面上, 报障原样复发。
     """
-    editor = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    editor = read_shared("config_editor.js")
     m = re.search(r"cfgFlatten\(fields, basePath, depth, ownerPath[^\n]*\n(.*?)\n      const byKey", editor, re.S)
     assert m, "config_editor.js 里找不到 cfgFlatten 的分组循环(改名或挪走了? 同步本守阵)"
     assert "f.hidden" in m.group(1), ("cfgFlatten 未跳过 f.hidden —— 打了 hidden 的字段仍会渲染进设置页(两套 UI 同源于此函数)")
@@ -677,7 +678,7 @@ def test_frontend_bulk_bar_retired():
         ):
             assert token not in css, f"{ui} CSS 仍残留死样式 {token!r} —— 批量控制条已退役, 应删除"
     # 批量链路仍在: 右键批量菜单要用(定义在 shared/commands.js / delete_flow.js)
-    cmd = open(os.path.join(STATIC_ROOT, "shared", "commands.js"), encoding="utf-8").read()
+    cmd = read_shared("commands.js")
     assert "async bulkAct(action) {" in cmd, "bulkAct 定义消失 —— 右键批量菜单的动作链断了"
     assert "return this.bulkAct(action);" in cmd, "ctxAct 必须继续复用 bulkAct"
     dfl = open(os.path.join(STATIC_ROOT, "shared", "delete_flow.js"), encoding="utf-8").read()
@@ -754,7 +755,7 @@ def test_frontend_config_default_ladder_single_point():
     无 node 的机器只跑静态那一半(静默跳过电池, 不引入 pytest skip, 基线 0 skipped)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
-    ed = open(os.path.join(shared, "config_editor.js"), encoding="utf-8").read()
+    ed = read_shared("config_editor.js")
     ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
 
     # 1. 三个单点各定义一处(两文件合计): 拆回多份 = 加 kind 又要多处同改
@@ -792,7 +793,7 @@ def test_frontend_config_default_ladder_single_point():
         proc = subprocess.run(
             [
                 node, "-e", _NODE_CFG_DEFAULT_PROBE,
-                os.path.join(shared, "config_editor.js"),
+                bundle_file("config_editor.js"),
                 os.path.join(shared, "config_rules.js")
             ],
             capture_output=True,
@@ -825,12 +826,12 @@ def test_frontend_rule_tree_and_choose_editor():
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
-    ce = open(os.path.join(shared, "config_editor.js"), encoding="utf-8").read()
-    hub = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    ce = read_shared("config_editor.js")
+    hub = read_shared("config_hub.js")
     tpl = open(os.path.join(shared, "tpl", "settings.html"), encoding="utf-8").read()
     tree_tpl = open(os.path.join(shared, "tpl", "rule-tree.html"), encoding="utf-8").read()
     app = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
-    css = open(os.path.join(shared, "console_hub.css"), encoding="utf-8").read()
+    css = read_shared("console_hub.css")
 
     # 1. 草稿规范化单点: cfgSetTree 恰挂一次; 旧扁平条件写入路径零残留
     assert ce.count("cfgNormalizeRulesDraft()") == 1, "cfgSetTree 必须恰挂一次草稿规范化(D2 单点)"
@@ -889,7 +890,7 @@ def test_frontend_rule_tree_and_choose_editor():
         proc = subprocess.run(
             [
                 node, "-e", _NODE_RULE_TREE_PROBE,
-                os.path.join(shared, "config_editor.js"),
+                bundle_file("config_editor.js"),
                 os.path.join(shared, "config_rules.js")
             ],
             capture_output=True,
@@ -941,7 +942,7 @@ def test_frontend_action_on_error_control():
                 node,
                 "-e",
                 _NODE_ON_ERROR_PROBE,
-                os.path.join(shared, "config_editor.js"),
+                bundle_file("config_editor.js"),
                 os.path.join(shared, "config_rules.js"),
             ],
             capture_output=True,
@@ -975,7 +976,7 @@ def test_frontend_retired_rule_keys_upgrade_surface():
     """
     shared = os.path.join(STATIC_ROOT, "shared")
     ru = open(os.path.join(shared, "config_rules.js"), encoding="utf-8").read()
-    hub = open(os.path.join(shared, "config_hub.js"), encoding="utf-8").read()
+    hub = read_shared("config_hub.js")
     tpl = open(os.path.join(shared, "tpl", "settings.html"), encoding="utf-8").read()
 
     # 1. 旧伪动作判断零残留(连友好话术一起)
@@ -1009,9 +1010,9 @@ def test_frontend_retired_rule_keys_upgrade_surface():
                 node,
                 "-e",
                 _NODE_RETIRED_KEYS_PROBE,
-                os.path.join(shared, "config_editor.js"),
+                bundle_file("config_editor.js"),
                 os.path.join(shared, "config_rules.js"),
-                os.path.join(shared, "config_hub.js"),
+                bundle_file("config_hub.js"),
             ],
             capture_output=True,
             text=True,
@@ -1234,7 +1235,7 @@ def test_frontend_window_source_kind_descriptor_parameterized():
 
     无 node 的机器只跑静态那一半(静默跳过电池, 不引入 pytest skip, 基线 0 skipped)。
     """
-    cols = open(os.path.join(STATIC_ROOT, "shared", "columns.js"), encoding="utf-8").read()
+    cols = read_shared("columns.js")
     app = open(os.path.join(STATIC_ROOT, "shared", "app.js"), encoding="utf-8").read()
 
     # 1. WIN-SOURCES 哨兵段成对且唯一; window.scrollY 全文件只出现在段内(列菜单/横滚条摸的是
@@ -1305,8 +1306,7 @@ def test_frontend_window_source_kind_descriptor_parameterized():
     node = shutil.which("node")
     if node:
         proc = subprocess.run(
-            [node, "-e", _NODE_WIN_SRC_PROBE,
-             os.path.join(STATIC_ROOT, "shared", "columns.js")],
+            [node, "-e", _NODE_WIN_SRC_PROBE, bundle_file("columns.js")],
             capture_output=True,
             text=True,
         )
@@ -1329,7 +1329,7 @@ def test_frontend_row_window_sig_and_ctn_sync_guard():
        (3000 行实测 5.6s 长任务, 用户所见「关抽屉后卡死; 能滚不能点」—— 滚轮走合成器不进主线程)。
     """
     rel = "shared/columns.js"
-    text = open(os.path.join(STATIC_ROOT, rel), encoding="utf-8").read()
+    text = read_shared("columns.js")
 
     # 1) 行高签名: 无 viewMode, 有 _winResize 与列集合因子
     m = re.search(r"_measureRowH\(\)\s*\{(.*?\n    \},)", text, re.S)

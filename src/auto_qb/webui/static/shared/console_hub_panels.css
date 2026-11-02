@@ -1,0 +1,459 @@
+/* ==========================================================================
+   底部动作条: 让位给底部状态栏(--statusbar-h)
+   ========================================================================== */
+.hb-actbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--statusbar-h, 34px);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px clamp(16px, 3vw, 32px);
+  background: var(--glass);
+  border-top: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+}
+.hb-actbar .ab-st { display: flex; align-items: center; gap: 9px; font-size: 12.8px; color: var(--fg-muted); }
+.hb-actbar .ab-r { margin-left: auto; display: flex; gap: 9px; }
+
+/* 日志章节 */
+.hb-logs-pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  font-family: var(--hb-font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg-muted);
+  max-height: calc(100vh - 320px);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+/* 日志"筛不了"的说明: 经典设置页与新版章节共用(两处 UI 都引本文件), 见 routes/system.py 的 note */
+.logs-note {
+  margin: 0 0 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 12.2px;
+  line-height: 1.6;
+  color: var(--warn);
+}
+
+@media (max-width: 760px) {
+  .hb-row { grid-template-columns: 1fr; gap: 6px; }
+  .hb-row .hb-ask { justify-self: end; margin-top: -26px; }
+  .hb-hd .hd-search { margin-left: 0; width: 100%; }
+  .hb-hd .hd-search .hb-input { width: 100%; }
+  .hb-tr-drop-list { max-height: 55vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hb-view.on, .hb-pop.on, .aq-tip.on, .err-panel { animation: none; }
+}
+
+/* ---------------- 键盘快捷键: 光标行(计划 26-09-28-0354 W2) ----------------
+ * 与选中态是两套语义两套视觉(0822 §04): 光标 = 虚线描边不铺底, 选中 = 既有底色 + 左侧条。
+ * 三套 UI 共用(shared 层), 颜色走皮肤令牌 --accent(atlas/prism/console 各自定义)。 */
+.kb-cursor {
+  outline: 1px dashed var(--accent, #5cc0cf);
+  outline-offset: -1px;
+}
+
+/* ---------------- 键盘快捷键: 自定义面板(W6)与帮助浮层(计划 26-09-28-0354 §5.2) ----------------
+ * 面板在设置页「快捷键」分区(共用 .hb-blk 外壳), 行内三段: 动作名 / 当前键帽 / 录制-禁用-重置;
+ * 帮助浮层是只读速查(分组 + 键帽), 与面板共用键帽(kbd)与危险标注样式。颜色全走主题令牌。 */
+.kb-note { color: var(--fg-muted); font-size: 12px; margin: 0 0 10px; }
+.kb-grp { margin-bottom: 14px; }
+.kb-grp-t {
+  font: 600 11px/1 var(--hb-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hi, var(--accent));
+  padding: 6px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+.kb-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 2px;
+  border-bottom: 1px dashed var(--border);
+  flex-wrap: wrap;
+}
+.kb-row.rec { background: var(--accent-soft); }
+.kb-row-label { flex: 1 1 200px; min-width: 160px; }
+.kb-danger { color: var(--warn); font-size: 12px; }
+.kb-row-keys kbd, .kb-help-row kbd {
+  font: 500 11px/1 var(--hb-font-mono);
+  color: var(--fg);
+  padding: 3px 7px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+}
+.kb-none { color: var(--fg-muted); font-size: 12px; }
+.kb-row-acts { display: inline-flex; gap: 6px; }
+.kb-rec-tip { color: var(--accent-hi, var(--accent)); font-size: 12px; }
+.kb-conflict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 8px;
+  border: 1px solid var(--warn-soft, var(--border));
+  background: var(--warn-soft);
+  font-size: 12px;
+}
+.kb-help { width: min(560px, 92vw); }
+.kb-help-body { max-height: 60vh; overflow-y: auto; padding: 4px 18px 10px; overscroll-behavior: contain; }
+.kb-help-grp-t {
+  font: 600 11px/1 var(--hb-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hi, var(--accent));
+  padding: 10px 0 4px;
+  border-bottom: 1px solid var(--border);
+}
+.kb-help-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--border);
+}
+.kb-help-label { flex: 1; }
+.modal-actions .kb-note { margin: 0; }
+
+/* ============================================================
+   「WebUI」卡 · 右键菜单布局定制块(计划 26-10-20-0024 W4)
+   kb-* 同款共享落点(三皮肤同吃), 只动本块的排布; 菜单自身的
+   样式(.ctx-item/.ctx-sep/.ctx-sub)一个字没改 —— §01 不变量。
+   ============================================================ */
+.ctx-custom-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 10px 14px 0;
+}
+.ctx-custom-tab {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 7px 14px 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1.25;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+.ctx-custom-tab:hover { background: var(--bg-hover); color: var(--fg); }
+.ctx-custom-tab.on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--fg);
+}
+.ctx-custom-tab-t { font-weight: 600; }
+.ctx-custom-tab-n {
+  font: 11px/1.2 var(--hb-font-mono);
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
+}
+/* 已定制小点: tab 右上角, 一眼看出"这支动过" */
+.ctx-custom-dot {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent-hi);
+}
+.ctx-custom-hint {
+  margin: 8px 14px 0;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.ctx-custom-sec { padding: 12px 14px 0; }
+.ctx-custom-sec:last-of-type { padding-bottom: 4px; }
+.ctx-custom-sec-hd {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0 5px;
+  border-bottom: 1px solid var(--border);
+}
+.ctx-custom-sec-t {
+  font: 600 11px/1 var(--hb-font-display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-hi, var(--accent));
+}
+.ctx-custom-sec-n {
+  flex: 1;
+  font-size: 12px;
+  color: var(--fg-muted);
+}
+
+.ctx-custom-list { display: flex; flex-direction: column; }
+.ctx-custom-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 4px 2px;
+  border-bottom: 1px dashed var(--border);
+  min-height: 30px;
+}
+.ctx-custom-row.off .ctx-custom-name { opacity: .42; text-decoration: line-through; }
+.ctx-custom-row.off .ctx-custom-ico { opacity: .35; }
+.ctx-custom-row.dragging { opacity: .45; }
+/* 拖拽落点: 上边一条强调线 = "插到这里"(不整行高亮, 免得看不出是插在上还是下) */
+.ctx-custom-row.over { box-shadow: inset 0 2px 0 var(--accent-hi); }
+.ctx-custom-row.sep { min-height: 24px; }
+
+.ctx-custom-grip {
+  width: 14px;
+  color: var(--fg-muted);
+  cursor: grab;
+  font-size: 11px;
+  letter-spacing: -1px;
+  user-select: none;
+}
+.ctx-custom-row.dragging .ctx-custom-grip { cursor: grabbing; }
+.ctx-custom-chk { display: inline-flex; align-items: center; cursor: pointer; }
+.ctx-custom-chk input { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+.ctx-custom-ico { width: 14px; height: 14px; flex: none; }
+.ctx-custom-name { flex: 1; font-size: 13px; }
+.ctx-custom-row.danger .ctx-custom-name { color: var(--error); }
+
+.ctx-custom-sep-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-strong);
+  opacity: .7;
+}
+.ctx-custom-sep-t {
+  font: 11px/1 var(--hb-font-mono);
+  color: var(--fg-muted);
+  letter-spacing: .02em;
+}
+
+/* 徽标: 次级入口 / 开关控制 / 危险 —— 与 .hb-badge 同尺寸, 但语义色不同 */
+.ctx-custom-tag {
+  font: 11px/1 var(--hb-font-mono);
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.ctx-custom-tag.gate { border-color: var(--accent); color: var(--accent-hi, var(--accent)); }
+.ctx-custom-tag.danger { border-color: var(--error); color: var(--error); }
+
+.ctx-custom-acts { display: inline-flex; align-items: center; gap: 4px; flex: none; }
+.ctx-custom-arrow {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-dim);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+.ctx-custom-arrow:hover:not([disabled]) { background: var(--bg-hover); color: var(--accent-hi); }
+.ctx-custom-arrow[disabled] { opacity: .3; cursor: not-allowed; }
+.ctx-custom-x {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0;
+}
+.ctx-custom-x:hover { border-color: var(--error); color: var(--error); }
+
+.ctx-custom-empty {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.55;
+}
+.ctx-custom-note {
+  margin: 12px 14px 14px;
+  font-size: 12.5px;
+  color: var(--fg-muted);
+  line-height: 1.6;
+}
+
+/* ============================================================
+   三皮肤共用规则族单点(issue 26-10-20-2231 · fe-css-rule-family-dup)
+   ------------------------------------------------------------
+   下面四族规则在 prism / atlas / console 三份皮肤 CSS 里曾逐字节相同(每族 2~3 份副本),
+   收敛到本文件只此一份。三皮肤 index.html 都挂本文件且排在各皮肤 CSS **之后** ⇒
+   同族规则以这里为准(级联序就是收敛点, 不需要 !important)。
+   留在皮肤内的例外: 三皮肤确有视觉差异的规则(同一属性取不同令牌)不在这里抹平 ——
+   它们留在各自文件里, 并在原地注明差异事实。改这里 = 三皮肤同改。
+   ============================================================ */
+
+/* ---- A · qB 流量图 · 窗口档位(.qb-tabs; 三皮肤同款胶囊分段器) ----
+ * 挂点胶水(.qb-statctl > .qb-tabs 的不收缩 + 紧凑档)是布局上下文, 仍留各皮肤 views.css。 */
+.qb-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px;
+  background: var(--bg-sunken); border: 1px solid var(--border); }
+.qb-tabs button { padding: 3px 12px; border: 0; border-radius: 999px; background: transparent;
+  color: var(--fg-muted); font-size: 12px; cursor: pointer;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.qb-tabs button:hover { color: var(--fg); }
+.qb-tabs button.active { background: var(--accent-soft); color: var(--accent-hi);
+  box-shadow: inset 0 0 0 1px var(--accent-line); }
+
+/* ---- B · 详情抽屉 · 页签(.drawer-tabs) ----
+ * 激活态(.drawer-tabs button.active)**不在本文件**: atlas/console 取 --accent / --accent,
+ * prism 取 --accent-hi / --accent-line(棱镜激活页签文字更亮) —— 视觉差异是事实, 留皮肤内。 */
+.drawer-tabs { display: flex; gap: 2px; }
+.drawer-tabs button { padding: 0 12px; border: 0; background: transparent; color: var(--fg-muted);
+  cursor: pointer; font-size: 13px; border-bottom: 2px solid transparent; }
+
+/* ---- C · 弹窗语义配色分级(计划 26-10-19-2341) ----
+ * 四级层次整组搬来而不逐条搬: ①②③④ 是同一套设计决定的层次, 拆散后各自的特异性论证
+ * (:where() 压到 0-2-0 靠源序胜出 / .is-* 0-3-0 压过兜底)就读不懂了。
+ * 基线规则组(.modal-title / .modal.danger .modal-title .ico)仍留各皮肤 components.css ——
+ * 那是弹窗基础语言, 三皮肤本就不同。颜色一律引状态色令牌, 不复制色值。 */
+/* ① 框级 tone: 由 _openModal 单点派生(error/warn), 只染标题图标与标题文字 —— 派生值与既有着色
+   一致 ⇒ 既有对话框零变化。按钮(.bt.danger-solid)不在本组规则内: 按钮表达「这个动作有后果」,
+   标题 tone 表达「整框语境等级」, 两层语义不合并 */
+.modal.tone-error .modal-title > .ico, .modal.tone-error .modal-title > span { color: var(--error); }
+.modal.tone-warn  .modal-title > .ico, .modal.tone-warn  .modal-title > span { color: var(--warn); }
+/* ② 标题区警示条(仅 strip:true 的框 —— 本轮只有删除确认框与跳检预检框): -soft 底 + 左侧 3px 色条。
+   色条走 inset shadow 而非 border-left —— 不占布局宽度, 避开 .modal-title 的 flex 排列与弹窗
+   overflow-y:auto 下的负边距溢出 */
+.modal.strip .modal-title { padding: 7px 11px; border-radius: var(--radius-sm); }
+.modal.strip.tone-error .modal-title { background: var(--error-soft); box-shadow: inset 3px 0 0 var(--error-line); }
+.modal.strip.tone-warn  .modal-title { background: var(--warn-soft); box-shadow: inset 3px 0 0 var(--warn-line); }
+/* ③ 行级语义: 只染 ico + label, value 保持 --fg-soft 中性以保长句可读性。作用域收在 .is-* 子类里,
+   不动全局 .modal-detail-row .ico —— 未标 tone 的行与共用同一行式范式的其它弹窗
+   (限速/移动/重命名/分享率)零变化 */
+.modal-detail-row.is-warn  > .ico, .modal-detail-row.is-warn  > .d-label { color: var(--warn); }
+.modal-detail-row.is-error > .ico, .modal-detail-row.is-error > .d-label { color: var(--error); }
+.modal-detail-row.is-ok    > .ico, .modal-detail-row.is-ok    > .d-label { color: var(--green); }
+/* ③ 框级兜底(仅 strip 框 —— 本轮只有删除确认框与跳检预检框): 未自标 tone 的行(删除框的
+   目标/成员/站点/保存路径/总大小, 跳检框的 busy 行)继承整框 tone —— 「整框已是危险语境、
+   下面一整片明细行列图标全灰」正是本轮要修的割裂。注意 value(长文本)不继承, 保持中性可读性。
+   :where() 把选择器特异性压到 0-2-0 与基础置灰规则同级 ⇒ 靠源序胜出; 而上面 ③ 的行级 .is-*
+   例外值特异性更高(0-3-0), 不被兜底覆盖 —— 「默认继承 / 行自报 / 强调加底」三级层次由此成立 */
+:where(.modal.strip.tone-error) .modal-detail-row > .ico,
+:where(.modal.strip.tone-error) .modal-detail-row > .d-label { color: var(--error); }
+:where(.modal.strip.tone-warn) .modal-detail-row > .ico,
+:where(.modal.strip.tone-warn) .modal-detail-row > .d-label { color: var(--warn); }
+/* ④ 强调行: error 行(删除框的 HR 风险点名 / 跳检框的「禁止」行)现在身处一整片继承同色的行里,
+   光靠颜色已经拉不开层级 —— 追加淡底 + 左侧色条。左右负 margin 抵消 .modal-details 的内边距,
+   背景铺到详情框边而不溢出(该容器固有 10px 12px padding, -6px 在内边距内) */
+.modal-detail-row.is-error { background: var(--error-soft); border-radius: 4px;
+  box-shadow: inset 2px 0 0 var(--error-line); padding: 2px 6px; margin: 0 -6px; }
+
+/* ---- D · HR 表① 件(.hr-detail-table: 表头过滤栏 / 档位徽章 / 排序头 / 名称列限宽) ----
+ * 骨架 .drawer-table 与徽章**底形族**(.hr-vsrc / .hr-pres / .hr-sub)不在这里: prism 描边取
+ * --border-soft、另两皮肤取 --border, 副行字体 prism 走 --font-mono 而另两皮肤写字面栈 ——
+ * 差异是事实, 按 issue「三皮肤确实有视觉差异的规则留在皮肤内」处置。 */
+.hr-detail-table-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0 2px; }
+.hr-chip { cursor: pointer; user-select: none; }
+.hr-chip.on { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+.hr-detail-table-fresh { margin-left: auto; color: var(--fg-dim); font-size: 11.5px; }
+.hr-detail-table .hr-lane { display: inline-block; padding: 0 7px; border-radius: 3px; border: 1px solid var(--fg-dim);
+  color: var(--fg-dim); font-size: 11px; white-space: nowrap; }
+.hr-detail-table .hr-lane-a { border-color: var(--warn-line); color: var(--warn); background: var(--warn-soft); }
+.hr-detail-table .hr-lane-b { border-color: var(--green-line); color: var(--green); background: var(--green-soft); }
+.hr-detail-table .hr-lane-c { border-color: var(--error-line); color: var(--error); background: var(--error-soft); }
+.hr-detail-table .hr-lane-d { border-color: var(--blue-line); color: var(--blue); background: var(--blue-soft); }
+.hr-detail-table tr.missing .hr-lane { border-color: var(--paused); color: var(--paused); background: transparent; }
+.hr-detail-table th.sortable { position: relative; cursor: pointer; user-select: none; }
+.hr-detail-table th.sortable:hover { color: var(--fg); }
+/* 排序箭头绝对定位不占流(2026-10-06, 计划 26-10-06-1009 §7 · 报告 26-10-06-0945 B1):
+ * 原 display:inline-block 恒占 11px + margin-left 3px = 14px, 把右对齐(num)列的表头文字整体
+ * 左顶(实测 14px, 三主题一致)。改绝对定位后无偏移 = 取静态位置(仍紧贴标签右缘, opacity 揭示
+ * 与 hover 语义不变), 但不再参与行内布局 => 标签回到列右缘, 与值文字同缘。
+ * 别改回 inline-block, 也别补内层 v-if(切换排序列时标题会左右跳, 与主表 P3 同形)。 */
+.hr-detail-table th .arrow { position: absolute; margin-left: 3px; color: var(--accent); opacity: 0; }
+.hr-detail-table th .arrow .ico { width: 11px; height: 11px; stroke-width: 2; }
+.hr-detail-table th.sortable:hover .arrow { opacity: .45; }
+.hr-detail-table th.sortable .arrow.on { opacity: 1; }
+/* 名称列限宽钩子(计划 §3.6 mockup 同款): 卡片上下文收窄换行、全屏覆盖层放开 —— 表① 自
+ * 阶段2 拍板(展开即全屏)后只存在于 .hr-full-modal 内, 限宽自然被放开规则盖住, 成对保留作双态钩子 */
+.hr-detail-table td.wrap { max-width: 150px; }
+.hr-full-modal .hr-detail-table td.wrap { max-width: none; }
+
+/* ---- E · 种子转移目标编辑器(.tr-tgt-*: 「WebUI」卡二级页, 计划 26-10-31-0306 W1/T5) ----
+ * 三皮肤共用层(与 .ctx-custom-* 同层); 本段只摆列表/编辑器/映射表的版式,
+ * 控件外观全复用 hb-* 件套(.hb-btn/.hb-input/.hb-select/.hb-badge/aq-switch)。 */
+.tr-tgt-empty { padding: 10px 14px 14px; }
+.tr-tgt-item { border-top: 1px solid var(--hairline); padding: 10px 14px; }
+.tr-tgt-item:first-of-type { border-top: 0; }
+.tr-tgt-item.open { background: var(--surface-1); }
+.tr-tgt-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tr-tgt-name { font-weight: 600; font-size: 13px; }
+.tr-tgt-url { flex: 1 1 auto; min-width: 120px; color: var(--fg-dim); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-tgt-acts { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.tr-tgt-test { margin: 6px 0 0; font-size: 12.5px; }
+.tr-tgt-test.ok { color: var(--green); }
+.tr-tgt-test.err { color: var(--error); }
+.tr-tgt-editor { margin-top: 10px; display: flex; flex-direction: column; gap: 12px; }
+.tr-tgt-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.tr-tgt-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tr-tgt-f.tr-tgt-wide { grid-column: 1 / -1; }
+.tr-tgt-fl { font-size: 12px; color: var(--fg-dim); }
+.tr-tgt-sec { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.tr-tgt-sec-t { flex-basis: 100%; font-size: 12.5px; color: var(--fg-dim); }
+.tr-tgt-chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+.tr-tgt-chk input { width: 13px; height: 13px; accent-color: var(--accent); cursor: pointer; }
+.tr-tgt-chk input:disabled { cursor: not-allowed; }
+.tr-tgt-map { display: flex; align-items: center; gap: 8px; flex-basis: 100%; }
+.tr-tgt-map .hb-input { flex: 1 1 200px; }
+.tr-tgt-arrow { color: var(--fg-dim); flex: none; }
+.tr-tgt-saveerr { margin: 0 14px 12px; padding: 8px 10px; white-space: pre-wrap; font-size: 12.5px;
+  color: var(--error); border: 1px solid var(--error-line); border-radius: var(--radius-sm); }
+
+/* ---- 规则结构树编辑器(W3-A/W3-B, plan 26-11-01-0106 D2/D8) ----
+ * 条件组合树节点(.hb-cond-*)与 choose 编排块(.hb-branch-*)的版式; 三皮肤共用层单点
+ * (组件 aq-cond-node / aq-choose-block, 模板 tpl/rule-tree.html)。 */
+.hb-cond-node { min-width: 0; }
+.hb-cond-node + .hb-cond-node { margin-top: 6px; }
+.hb-cond-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.hb-cond-hd .hb-select { width: auto; }
+.hb-cond-k { font: 600 12px/1 var(--hb-font-display); padding: 4px 8px; border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent, var(--fg-muted)) 14%, transparent); }
+.hb-cond-k.k-not { color: var(--warn, var(--fg)); }
+.hb-cond-ops { margin-left: auto; display: flex; gap: 6px; align-items: center; flex: none; }
+.hb-cond-kids { padding-left: 14px; border-left: 2px solid color-mix(in srgb, var(--fg-muted) 22%, transparent); }
+.hb-add-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.hb-choose { display: flex; flex-direction: column; gap: 8px; }
+.hb-branch { border: 1px solid color-mix(in srgb, var(--fg-muted) 22%, transparent);
+  border-radius: var(--radius-sm); padding: 8px 10px; }
+.hb-branch-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hb-branch-tag { font: 600 12px/1 var(--hb-font-display); color: var(--fg-muted); }
+.hb-branch-when { margin-bottom: 6px; }
+.hb-branch-when > .hb-lb, .hb-branch-then > .hb-lb { display: inline-block; margin-bottom: 4px;
+  font-size: 12px; color: var(--fg-dim); }
+.hb-branch-then .hb-step { margin-bottom: 6px; }
+.hb-choose-foot { display: flex; gap: 8px; }

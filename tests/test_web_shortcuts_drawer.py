@@ -92,6 +92,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 
 from __future__ import annotations
 
+from webui_helpers import read_shared
+
 import re
 
 from pathlib import Path
@@ -555,7 +557,7 @@ def test_recorder_and_panel_wiring() -> None:
     ]:
         assert needle in eng, f"录制器缺实现: {why}"
     # 冲突三选一: 交换 / 覆盖(对方置空) / 取消
-    body = re.search(r"kbConflictResolve\(mode\) \{(.*?)\n  \},", eng, re.S)
+    body = re.search(r"kbConflictResolve\(mode\) \{(.*?)\n    \},", eng, re.S)
     assert body, "缺 kbConflictResolve(冲突三选一落点)"
     text = body.group(1)
     assert 'mode === "swap"' in text and 'mode === "steal"' in text, "冲突必须含交换/覆盖两支"
@@ -563,7 +565,7 @@ def test_recorder_and_panel_wiring() -> None:
     # 重置单条/全部 + 空串禁用
     assert "kbResetAll" in eng and "kbResetRow" in eng and "kbDisableRow" in eng, "缺重置/禁用入口"
     # 保存语义: PUT 失败本地回滚; 成功提示跨浏览器刷新生效
-    save = re.search(r"async kbSaveKeys\(\) \{(.*?)\n  \},", eng, re.S)
+    save = re.search(r"async kbSaveKeys\(\) \{(.*?)\n    \},", eng, re.S)
     assert save and "kbDraftRevert()" in save.group(1), "保存失败必须本地回滚(§4.4)"
     # 危险档: danger 裸键提示但允许(§08 v4)
     assert 'item.danger && serial && !serial.includes("+"' in eng, "danger 绑裸键必须提示(允许)"
@@ -632,7 +634,7 @@ def test_settings_panel_section() -> None:
     hub = _read("config_hub.js")
     for needle in ('key: "keys"', 'hub.view === "keys"', 'v === "keys"'):
         assert needle in hub, f"config_hub 缺 keys 分区接线: {needle}"
-    css = (SHARED / "console_hub.css").read_text(encoding="utf-8")
+    css = read_shared("console_hub.css")
     for cls in (".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger"):
         assert cls in css, f"console_hub.css 缺 {cls}(挂件类名必须有对应规则)"
 

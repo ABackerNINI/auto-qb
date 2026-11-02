@@ -58,6 +58,7 @@ from auto_qb.webui.commands import REANNOUNCE_BLOCKED_STATES as _PY_BLOCKED_STAT
 
 from auto_qb.webui.commands import REANNOUNCE_INACTIVE_SKIP as _PY_INACTIVE_SKIP
 
+from webui_helpers import read_shared
 from webui_helpers import (
     STATIC_ROOT,
     _UI_ALL,
@@ -107,9 +108,9 @@ def test_frontend_drawer_form_judge_single_point():
        openDrawerTraffic 短路原写 `drawer.kind === "traffic"/"seed"` 字面量(W3 停手点「uPlot 与
        图表模块零改动」), W6 起改吃单点 —— 散点不得回潮。"""
     shared = os.path.join(STATIC_ROOT, "shared")
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
     menu_js = open(os.path.join(shared, "menu.js"), encoding="utf-8").read()
-    shortcuts_js = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
+    shortcuts_js = read_shared("shortcuts.js")
     drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
     traffic_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
 
@@ -222,7 +223,7 @@ def test_drawer_tpl_registry_wiring():
     _scan_mixin_wiring 的扫描面内, 此处补钉)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
     state_js = open(os.path.join(shared, "state.js"), encoding="utf-8").read()
     app_js = open(os.path.join(shared, "app.js"), encoding="utf-8").read()
     drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
@@ -727,7 +728,7 @@ def test_drawer_tpl_a11y_and_fetch_error_states():
     文案带自动刷新重试口径(5s 轮询真实存在)、content 文案不承诺自动重试(content 页签无轮询)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     drawer_tpl = open(os.path.join(shared, "tpl", "drawer.html"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
     vdir = os.path.join(shared, "drawer_tpl")
 
     # 1. 核心层关闭钮 aria-label(种子/流量两头部成对各一处; 原生 button 键盘本可达, 缺的只是可访问名)
@@ -1275,11 +1276,11 @@ def test_frontend_drawer_groups_shows_views():
 
     任一守卫被改回按视图分叉即红(按视图各写一遍 = 又一处会漏的分叉)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()  # W1: 5s 轮询收口在数据层
     groups_tpl = open(os.path.join(shared, "tpl", "groups.html"), encoding="utf-8").read()
     shows_tpl = open(os.path.join(shared, "tpl", "shows.html"), encoding="utf-8").read()
-    eng = open(os.path.join(shared, "shortcuts.js"), encoding="utf-8").read()
+    eng = read_shared("shortcuts.js")
     chart_js = open(os.path.join(shared, "qb_traffic_chart.js"), encoding="utf-8").read()
 
     # 1/2. 两个打开/可见单点都只挡主内容页
@@ -1342,7 +1343,7 @@ def test_frontend_drawer_open_switch_no_empty_flash():
     2. 冷启动重建(面板关着/流量形态换形, 无旧数据可保留): 初值页签的 loading 必须与空列表
        同帧置位, 详情在途窗口渲染加载态而非空态; 翻转仍归 fetcher 落袋单点(loading 清掉后才
        _dtNotify), 这里只保证等待期不落空态。"""
-    drawer_js = open(os.path.join(STATIC_ROOT, "shared", "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
 
     m = re.search(r"async openTorrentDrawer\(hash\) \{\n(.*?)\n    \},", drawer_js, re.S)
     assert m, "drawer.js 缺 openTorrentDrawer(守阵正则失配, 同步本守阵)"
@@ -1389,7 +1390,7 @@ def test_drawer_peers_speed_keys_normalized():
        —— 曾按 dlspeed / upspeed 造假数据, 冒烟「看得见速度」而真机恒 0(测假逃逸本 bug)。
     """
     shared = os.path.join(STATIC_ROOT, "shared")
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
     store_js = open(os.path.join(shared, "drawer_store.js"), encoding="utf-8").read()  # W1: 数据/行为层
 
     # ① 键名适配单点
@@ -1967,7 +1968,7 @@ def test_drawer_prio_text_single_point():
     行为等价由 e2e 盯(drawer-content-variant-tables)。"""
     shared = os.path.join(STATIC_ROOT, "shared")
     core = open(os.path.join(shared, "drawer_templates.js"), encoding="utf-8").read()
-    drawer_js = open(os.path.join(shared, "drawer.js"), encoding="utf-8").read()
+    drawer_js = read_shared("drawer.js")
 
     # ---- ① 字面表全仓唯一 ----
     LITERAL = '{ 0: "不下载", 1: "正常", 4: "高", 6: "高", 7: "最高" }'

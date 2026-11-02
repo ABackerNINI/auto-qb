@@ -33,6 +33,8 @@ import re
 from collections import Counter
 from pathlib import Path
 
+from webui_helpers import read_shared, SHARED_SPLIT_PARTS
+
 STATIC = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "static"
 SHARED = STATIC / "shared"
 
@@ -57,11 +59,18 @@ FAMILY_EXT_BRANCHES = {"multi", "member", "group"}
 
 
 def _read(name: str) -> str:
-    return (SHARED / name).read_text(encoding="utf-8")
+    return read_shared(name)
 
 
 def _shared_js() -> dict:
-    return {p.name: p.read_text(encoding="utf-8") for p in sorted(SHARED.glob("*.js"))}
+    """shared/*.js 逐域文本 —— 拆分域读根+片段聚合(同一逻辑模块, 调用点仍归属根文件名)"""
+    fragments = {f for parts in SHARED_SPLIT_PARTS.values() for f in parts[1:]}
+    out = {}
+    for p in sorted(SHARED.glob("*.js")):
+        if p.name in fragments:
+            continue
+        out[p.name] = read_shared(p.name) if p.name in SHARED_SPLIT_PARTS else p.read_text(encoding="utf-8")
+    return out
 
 
 def _defs() -> dict:

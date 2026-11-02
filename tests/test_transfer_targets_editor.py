@@ -40,13 +40,14 @@ import re
 import shutil
 import subprocess
 
+from webui_helpers import read_shared
 from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest
 
 _TT_JS = os.path.join(STATIC_ROOT, "shared", "transfer_targets.js")
 _TT_TPL = os.path.join(STATIC_ROOT, "shared", "tpl", "transfer-targets.html")
 _DETAIL_TPL = os.path.join(STATIC_ROOT, "shared", "tpl", "settings-detail.html")
 _STATE_JS = os.path.join(STATIC_ROOT, "shared", "state.js")
-_SHARED_CSS = os.path.join(STATIC_ROOT, "shared", "console_hub.css")
+_SHARED_CSS = read_shared("console_hub.css")
 
 # node 探针: 在真 vm 桩上跑目标编辑器的**写路径**(transfer_targets.js 的 methods), 输出
 # 实际写回的 config.web.transfer 形状与视图态 —— 交 python 侧过 validate_config(两端对
@@ -314,7 +315,7 @@ def test_tt_editor_wiring():
     assert "$root.ttMapMove" in tpl and "$root.ttMapAdd" in tpl and "$root.ttMapDel" in tpl, "路径映射增删排序缺失"
     assert "$root.ttTest" in tpl and "/api/transfer/test" in open(_TT_JS, encoding="utf-8").read(), ("测试连接按钮与端点调用不成对")
     # 聚合报错展示: cfg.saveError 由 cfgSave 写入(config_editor.js 单点), 编辑器块内 pre-wrap 展开
-    ce = open(os.path.join(STATIC_ROOT, "shared", "config_editor.js"), encoding="utf-8").read()
+    ce = read_shared("config_editor.js")
     assert "this.cfg.saveError = e.message" in ce, "cfgSave 失败未写 saveError(消费方拿不到聚合报错)"
     assert "$root.cfg.saveError" in tpl and "tr-tgt-saveerr" in tpl, "编辑器缺聚合报错展示位"
 
@@ -325,7 +326,7 @@ def test_tt_editor_wiring():
         assert "localStorage" not in open(p, encoding="utf-8").read(), f"{os.path.basename(p)} 不得持久化视图态"
 
     # CSS 成对: 模板用到的 .tr-tgt-* 类必须在共享层有规则(三皮肤共担, 无单皮肤遗漏面)
-    css = open(_SHARED_CSS, encoding="utf-8").read()
+    css = _SHARED_CSS
     used = set(re.findall(r'class="([^"]*)"', tpl))
     need = set()
     for c in used:

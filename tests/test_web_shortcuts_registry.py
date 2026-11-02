@@ -63,10 +63,14 @@ def _bundle_method_names() -> set[str]:
         in_block = False
         for line in text.splitlines():
             if not in_block:
-                if line.strip() in ("methods: {", "computed: {"):
+                if line.strip() in ("methods: {", "computed: {") or re.match(
+                    r"Object\.assign\(window\.AQB_[\w$]+(?:\.methods)?, \{", line.strip()
+                ):
                     in_block = True
                 continue
-            if line in ("  },", "  }"):  # 与 test_webui_static_skins.py::_section_members 同口径: 只认块级收口, 不被嵌套函数骗
+            if line in (
+                "  },", "  }"
+            ) or line == "});":  # 与 test_webui_static_skins.py::_section_members 同口径: 只认块级收口, 不被嵌套函数骗
                 in_block = False
                 continue
             m = re.match(r"^    (?:async )?([A-Za-z_$][\w$]*)\s*[(:]", line)
@@ -158,13 +162,13 @@ def test_delete_direct_outside_registry() -> None:
     m = re.search(r'if \(!inInput && e\.code === "Delete"(.*?)\n        \}', eng, re.S)
     assert m and "_kbDelete()" in m.group(1), "引擎未直连 Delete -> _kbDelete(§08 决策 v4)"
     assert "_kbOverlayBusy()" in m.group(1) and '"list"' in m.group(1), ("Delete 直连必须带浮层屏蔽与 list 作用域守卫(输入态/浮层下不得误删)")
-    body = re.search(r"async _kbDelete\(\) \{(.*?)\n  \},", eng, re.S)
+    body = re.search(r"async _kbDelete\(\) \{(.*?)\n    \},", eng, re.S)
     assert body and "_deleteFlow(" in body.group(1), ("_kbDelete 必须走 _deleteFlow(与批量浮条同链: 确认框 + HR 风险点名不可绕过)")
 
 
 def test_danger_kbact_has_confirm() -> None:
     eng = _read("shortcuts.js")
-    body = re.search(r"async _kbAct\(action\) \{(.*?)\n  \},", eng, re.S)
+    body = re.search(r"async _kbAct\(action\) \{(.*?)\n    \},", eng, re.S)
     assert body, "shortcuts.js 找不到 _kbAct(危险档键盘路径确认框的落点)"
     text = body.group(1)
     # §08: 重新校验/强制汇报键盘路径新增确认框(默认确定/Enter 确认); 鼠标路径不变

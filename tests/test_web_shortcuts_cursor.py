@@ -51,6 +51,8 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 
 from __future__ import annotations
 
+from webui_helpers import read_shared
+
 import re
 
 from pathlib import Path
@@ -75,8 +77,7 @@ def test_cursor_scroll_follow_without_scrollintoview() -> None:
     cols = _read("columns.js")
     assert re.search(r"this\._rowPre\[kind\] = pre;",
                      cols), ("columns.js._rowWindow 必须把前缀和留存进 this._rowPre[kind](键盘光标滚动进视口依赖)")
-    assert ".kb-cursor" in (SHARED / "console_hub.css").read_text(encoding="utf-8"
-                                                                 ), ("光标行视觉 .kb-cursor 必须在共用层 CSS(三套 UI 同载)")
+    assert ".kb-cursor" in read_shared("console_hub.css"), ("光标行视觉 .kb-cursor 必须在共用层 CSS(三套 UI 同载)")
     for tpl, kind, idexpr in [
         ("groups.html", "group", "g.key"),
         ("torrents.html", "torrent", "m.hash"),

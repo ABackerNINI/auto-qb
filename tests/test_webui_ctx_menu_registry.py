@@ -37,6 +37,7 @@ import re
 import shutil
 import subprocess
 
+from webui_helpers import read_shared
 from webui_helpers import STATIC_ROOT, _UI_ALL, _ui_manifest
 
 _CTX_MENU_JS = os.path.join(STATIC_ROOT, "shared", "ctx_menu.js")
@@ -440,8 +441,7 @@ def test_ctx_custom_panel_wiring():
       4. 三份 manifest: ctx_menu_custom.js 在 ctx_menu.js 之后、app.js 之前(合并语义复用);
       5. console_hub.css: .ctx-custom-* 样式段在(三皮肤同吃, 漏了面板裸奔)。
     """
-    with open(os.path.join(STATIC_ROOT, "shared", "config_hub.js"), encoding="utf-8") as f:
-        hub = f.read()
+    hub = read_shared("config_hub.js")
     assert re.search(r'key: "webui"', hub), "config_hub.js 未注册「WebUI」卡(首页看不到入口)"
     assert 'this.hub.view === "webui"' in hub, "hubNow 缺 webui 分支(页头/面包屑拿不到标题)"
     assert 'if (key === "webui") this.cmPanelEnter()' in hub, "hubGo 未在进入时复位定制面板(tab 残留)"
@@ -486,8 +486,7 @@ def test_ctx_custom_panel_wiring():
             "定制块要用 REG 的合并语义, 排在它前面 = 运行期 undefined"
         )
 
-    with open(os.path.join(STATIC_ROOT, "shared", "console_hub.css"), encoding="utf-8") as f:
-        css = f.read()
+    css = read_shared("console_hub.css")
     for cls in (".ctx-custom-tab", ".ctx-custom-row", ".ctx-custom-sec", ".ctx-custom-empty", ".ctx-custom-tag"):
         assert cls in css, f"console_hub.css 缺 {cls}(面板裸奔/不可读)"
 

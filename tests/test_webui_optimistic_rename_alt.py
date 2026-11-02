@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 
+from webui_helpers import bundle_file, read_shared
 from webui_helpers import STATIC_ROOT
 
 # node 电池报告失败行的前缀(与 test_webui_static_dom_panel 同口径: failed 数组逐条列名)
@@ -57,7 +58,7 @@ def test_rename_optimistic_patch_precedes_post():
     同时钉 patch 形状 = {name} 单键(§01 不变量「值覆盖只盖值来自我们的字段」)与
     drawer.js 全文件调用点唯一(第二处消费者出现时应显式扩本守阵, 不许静默长出来)。
     """
-    js = open(_shared_path("drawer.js"), encoding="utf-8").read()
+    js = read_shared("drawer.js")
     m = re.search(r"async editRename\(h = \"\"\)\s*\{(.*?)\n    \},", js, re.S)
     assert m, "drawer.js 找不到 editRename(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -91,7 +92,7 @@ def test_on_truth_event_kind_injection_action_guard():
     本守阵钉: 守卫字面量在、注入四写(patch/prev/hold/ts)全在守卫块内、注入语句全文件仅此一处。
     行为面回归在 test_rename_optimistic_four_states_node 的「守卫」段。
     """
-    js = open(_shared_path("commands.js"), encoding="utf-8").read()
+    js = read_shared("commands.js")
     m = re.search(r"onTruthEvent\(rec\)\s*\{(.*?)\n    \},", js, re.S)
     assert m, "commands.js 找不到 onTruthEvent(改名或挪走了? 同步本守阵)"
     body = m.group(1)
@@ -411,7 +412,7 @@ def test_rename_optimistic_four_states_node():
     _expirePending/onTruthEvent/_forEachRow 与 drawer.js 的 editRename/_editPost 原体)。
     无 node 静默跳过(与 test_webui_static_dom_panel 同口径)。
     """
-    _run_node_probe(_RENAME_NODE_PROBE, _shared_path("commands.js"), _shared_path("drawer.js"))
+    _run_node_probe(_RENAME_NODE_PROBE, bundle_file("commands.js"), bundle_file("drawer.js"))
 
 
 def test_alt_override_four_states_node():
@@ -423,7 +424,7 @@ def test_alt_override_four_states_node():
     _altOverrideReconcile(对账点单点)、state.js data 声明 altOverride。无 node 静默跳过。
     """
     # 静态锚: 显示单点 override 优先(摘覆盖后自动回落 server 值, 两态间零观感跳变的前提)
-    dialogs = open(_shared_path("dialogs.js"), encoding="utf-8").read()
+    dialogs = read_shared("dialogs.js")
     m = re.search(r"sbAltOn\(\)\s*\{\n(.*?)\n    \},", dialogs, re.S)
     assert m, "dialogs.js 找不到 sbAltOn(显示单点, 移动了就同步本守阵)"
     assert "if (this.altOverride) return !!this.altOverride.value;" in m.group(1), (
@@ -443,7 +444,7 @@ def test_alt_override_four_states_node():
     state = open(_shared_path("state.js"), encoding="utf-8").read()
     assert re.search(r"altOverride:\s*null,", state), "state.js data 缺 altOverride 声明(覆盖态没有落点)"
 
-    _run_node_probe(_ALT_NODE_PROBE, _shared_path("dialogs.js"))
+    _run_node_probe(_ALT_NODE_PROBE, bundle_file("dialogs.js"))
 
 
 _ALT_LIMITS_PROBE = r"""
@@ -513,4 +514,4 @@ def test_alt_limits_empty_gate_node():
     同形); C 未改动不下发(既有承诺不破); D 改动照常 POST 载荷正确; E 显式 0=不限速不拦。
     api/waitCmd/toast 走最小桩, 其余真方法。无 node 静默跳过(与本文件既有电池同口径)。
     """
-    _run_node_probe(_ALT_LIMITS_PROBE, _shared_path("dialogs.js"))
+    _run_node_probe(_ALT_LIMITS_PROBE, bundle_file("dialogs.js"))

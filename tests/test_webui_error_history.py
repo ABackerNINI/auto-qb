@@ -37,6 +37,8 @@ tests/test_webui_backend_errlog.py (S2), 本文件只管前端。
 import re
 from pathlib import Path
 
+from webui_helpers import read_shared
+
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "auto_qb" / "webui" / "static"
 SHARED = STATIC / "shared"
@@ -44,7 +46,7 @@ TPL = SHARED / "tpl"
 
 
 def _read(rel: str) -> str:
-    return (SHARED / rel).read_text(encoding="utf-8")
+    return read_shared(rel)
 
 
 def _fn_body(text: str, signature: str, indent: int = 4) -> str:
@@ -111,9 +113,13 @@ STORAGE_WRITE_BASELINE = {
 
 def test_frontend_error_history_no_persistence() -> None:
     """历史不出会话: shared/ 层 setItem 逐文件计数 == 基线(不增)"""
+    from webui_helpers import SHARED_SPLIT_PARTS
+    fragments = {f for parts in SHARED_SPLIT_PARTS.values() for f in parts if f != parts[0]}
     counts: dict[str, int] = {}
     for p in sorted(SHARED.glob("*.js")):
-        n = len(re.findall(r"(?:localStorage|sessionStorage)\.setItem\(", p.read_text(encoding="utf-8")))
+        if p.name in fragments:
+            continue
+        n = len(re.findall(r"(?:localStorage|sessionStorage)\.setItem\(", read_shared(p.name)))
         if n:
             counts[p.name] = n
     assert counts == STORAGE_WRITE_BASELINE, (

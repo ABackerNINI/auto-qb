@@ -334,6 +334,51 @@ def _app_bundle_text():
     return "\n".join(open(p, encoding="utf-8").read() for p, _rel in _app_bundle_files())
 
 
+# ---- R4 前端域拆分(计划 26-11-02-2342 §07): 根 + 片段按清单加载序聚合成一份 ----
+# 拆分只搬方法/规则段, 语义仍是同一个 window.AQB_* 域; 守阵一律读聚合面, 不读单个片段。
+SHARED_SPLIT_PARTS = {
+    "console_hub.css":
+        ("console_hub.css", "console_hub_layout.css", "console_hub_controls.css", "console_hub_panels.css"),
+    "drawer.js": ("drawer.js", "drawer_files.js", "drawer_general.js", "drawer_rows.js"),
+    "config_hub.js": ("config_hub.js", "config_hub_hr.js", "config_hub_tracker.js", "config_hub_tm.js"),
+    "config_editor.js": (
+        "config_editor.js", "config_editor_tree.js", "config_editor_form.js", "config_editor_curve.js"
+    ),
+    "shortcuts.js": ("shortcuts.js", "shortcuts_engine.js", "shortcuts_panel.js"),
+    "columns.js":
+        (
+            "columns.js", "columns_menu.js", "columns_grid.js", "columns_persist.js", "columns_drag.js",
+            "columns_computed.js"
+        ),
+    "commands.js": ("commands.js", "commands_optimistic.js", "commands_send.js"),
+    "dialogs.js": ("dialogs.js", "dialogs_meta.js", "dialogs_history.js"),
+}
+
+
+def shared_parts(name):
+    """shared/<name> 域名实际文件(根 + 片段, 清单加载序)的盘上路径列表"""
+    return [os.path.join(STATIC_ROOT, "shared", p) for p in SHARED_SPLIT_PARTS.get(name, (name, ))]
+
+
+def read_shared(name):
+    """shared/<name> 域聚合文本(根 + 片段; 与拆分前同一份代码, 只是换了载体文件)"""
+    return "\n".join(open(p, encoding="utf-8").read() for p in shared_parts(name))
+
+
+_BUNDLE_FILES: dict = {}
+
+
+def bundle_file(name):
+    """node 探针用: 把域聚合文本落一个临时脚本文件, 探针仍按「单文件」加载(与拆分前 argv 语义一致)"""
+    if name not in _BUNDLE_FILES:
+        import tempfile
+        path = os.path.join(tempfile.gettempdir(), "aqb_js_bundle_" + name.replace(".", "_"))
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(read_shared(name))
+        _BUNDLE_FILES[name] = path
+    return _BUNDLE_FILES[name]
+
+
 def _tpl_path(src, ui):
     """清单分片 src -> 盘上路径: /shared/... = 单一语义源(收敛后唯一形态); 相对路径按 <ui>/ 解析(兼容)"""
     if src.startswith("/"):
