@@ -41,6 +41,7 @@
 - [x] 归一化尾位 bigram(dual audio/dd plus/hdr10 plus) 成对剔除 (normalize_key_25) (W3 余量)
 - [x] 噪音词挖空后连续空格在展示名中折叠 (title_and_key_37) (W3 余量)
 - [x] 归一化循环不依赖手工步长递增, 多 bigram 标题正常返回 (timeout 34/38 代码侧防御) (W3 余量)
+- [x] 标题尾 trim 字符集: 全角【】收尾剥除 (title_and_key_30) (W3 余量)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
 - test_bare_trailing_without_context_not_matched
@@ -105,6 +106,7 @@
 - test_season
 - test_season_pack
 - test_sxe_season_not_double_counted
+- test_title_tail_trim_charset
 - test_unknown
 - test_year_window_bare_edges
 - test_zero_position_marker_name_keyless
@@ -677,3 +679,15 @@ def test_normalize_key_multi_bigram_terminates():
     补测只能断言输入形态正常返回; 步长防御在 _normalize_key 的 for 循环侧。
     """
     assert tvshows._normalize_key("Show Dual Audio HDR10 Plus 1080p") == "show 1080p"
+
+
+def test_title_tail_trim_charset():
+    """标题尾 trim 字符集生效: 全角【】收尾必须剥除(展示面不残留)
+
+    title_and_key_30(尾 strip 字符集 -> strip(None)): 末行只剥空白,
+    "【剧名】第1集" 的 title 残留 "【剧名】"。
+    注: issue 建议的 "Show - S01E05" 不可达 —— 切段后 " - " 已被
+    首行 _TRIM_CHARS strip 提前剥净, 打不到末行 strip; 换用实测可达的【】形态。
+    ("Show.Name.(US)" 的右括号同属该字符集, 当前展示名会剥成 "Show Name (US")
+    """
+    assert p("【剧名】第1集").title == "剧名"

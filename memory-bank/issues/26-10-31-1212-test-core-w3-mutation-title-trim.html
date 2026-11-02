@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ tvshows 标题尾 trim 变异存活: title_and_key_30 1 条低危">
 <meta name="issue-summary" content="W3 低危簇5: title_and_key_30 尾 strip 字符集失效, 标题残留「 -」/右括号, 展示面污染, W3 池无守阵">
 <title>core/ tvshows 标题尾 trim 变异存活: title_and_key_30 1 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-1212-test-core-w3-mutation-title-trim</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 12:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -101,6 +101,8 @@
     <ul>
       <li>2026-10-31 12:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 21:46 — 认领，状态 <strong>In Progress</strong>（用户指派，本轮修复）</li>
+      <li>2026-11-02 22:50 — 修复完成，状态 <strong>Done</strong>。守阵 <code>test_title_tail_trim_charset</code> 落在 <code>tests/test_tvshows.py</code>，断言 <code>p("【剧名】第1集").title == "剧名"</code>，红验 1/1 KILLED；零 src 改动。<br>
+      <b>实测与建议不符留档</b>：建议的 <code>"Show - S01E05"</code> 不可达 —— 切段后 <code>" - "</code> 已被首行的 <code>_TRIM_CHARS</code> strip 提前剥净，打不到末行 strip；改用实测可达的全角【】形态。<code>"Show.Name.(US)"</code> 的右括号虽同属字符集，但当前展示名为 <code>"Show Name (US"</code>（左括号在 <code>_strip_group_prefixes</code> 前保留、右括号被末行剥除），属既有展示面瑕疵，非本件变异体形态，未在本轮扩范围处理。极低危 <code>title_and_key_40</code> 按原裁定不补。全量数字见 kb.baseline。</li>
     </ul>
   </section>
 
