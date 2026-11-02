@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ grid 同桶快照/混桶家族变异存活 8 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 G: vsp_95/96/97/98/105/107/112/115(同刻快照最新性/混桶 is_raw/覆盖值取错通道)">
 <title>core/ grid 同桶快照/混桶家族变异存活 8 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-snapshot-mixbucket</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -106,7 +106,22 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：同桶合并段 <code>e[4]</code>/<code>is_raw</code>/覆盖赋值三处与 issue 描述一致</li>
+      <li>2026-11-02 — 状态 <strong>Done</strong>：8 条中 6 条红验 KILLED；<code>vsp_98</code>/<code>vsp_112</code> 实测定性为等价变异（不可观测），依据见 §05</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法与验证</h2>
+    <p><b>零 src 改动, 只补守阵</b>(<code>tests/test_traffic_grid.py</code>), 直构 <code>V4Slot</code> 活尾槽序钉住同桶合并契约:</p>
+    <ul>
+      <li><code>vsp_95</code> → 新增 <code>test_v4_series_points_same_timestamp_later_snapshot_wins</code>: 同刻双 raw 记录快照取后到者(<code>&gt;=</code> 变异成 <code>&gt;</code> 保留先到快照)。红验 <b>KILLED</b>。</li>
+      <li><code>vsp_96</code> → 新增 <code>test_v4_series_points_same_bucket_later_snapshot_wins</code>: totals(3000/4000) 大于 ts(≈998), 比较对象错成 <code>e[5]</code> 时恒假 → 快照永不更新。红验 <b>KILLED</b>。</li>
+      <li><code>vsp_97</code> → 新增 <code>test_v4_series_points_three_raw_same_bucket_no_typeerror</code>: 同桶三条 raw 照常均值; <code>e[4]=None</code> 时第三条实测 TypeError。红验 <b>KILLED</b>。</li>
+      <li><code>vsp_105</code>/<code>vsp_107</code>/<code>vsp_115</code> → 新增 <code>test_v4_series_points_mixed_bucket_raw_priority_keeps_mean</code>: z+raw+raw 混桶且 raw 的 dl≠up —— is_raw 旗写成 None/False 退化到末条单值(dl 15 而非均值 10), 覆盖值 <code>o[0]→o[1]</code> 则 dl 均值失真(12)。三条红验均 <b>KILLED</b>。</li>
+      <li><code>vsp_98</code>/<code>vsp_112</code> → 判 <b>等价变异</b>(红验实测 GREEN/EQ-CONF): 两者净效果都只是 <code>e[4]</code>(last_ts)不更新, 而 <code>e[4]</code> 只作同桶「更新快照」的比较基线、不参与输出; 生产槽序(<code>v4_block_slots</code> dt_ms≥1ms、<code>v4_live_tail_slots</code> ts 升序)非降, 陈旧的 <code>e[4]</code> 仍恒 ≤ 新槽 ts, 比较结果与快照/均值输出不变 —— 无可观测行为差异, 不构造不可达输入硬杀。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_traffic_grid.py tests/test_traffic_limits.py</code> 全绿; 测试数字见 <code>kb.baseline</code>。</p>
   </section>
 
   <footer>
