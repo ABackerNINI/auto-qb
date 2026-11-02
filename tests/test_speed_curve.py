@@ -10,16 +10,16 @@
 - test_speed_curve_config_rejects_bad_curves: curves 缺失/空/非单项映射/键名非 curve/curve 非 dict/未知键/缺 period/非法或重复 period/双向全缺
 - test_speed_curve_config_rejects_bad_points: 档位表空/阈值<=0或非递增/缺方向键/未知键/速度非法/多阈值键
 - test_speed_unit_prefixless_ib_aggregates_config_error: 守阵(issue 26-10-29-1252)——速度键写无前缀 iB/s 时 load_config 聚合成 ConfigError(消息含键名), 不许 KeyError 裸穿「统一 ConfigError」契约
-- test_normalize_period_aliases: period 别名归一化(day/1D/month/ND) / 非法值 ValueError
+- test_normalize_period_aliases: period 别名归一化(day/1D/D/month/ND) / 非法值 ValueError
 - test_parse_history_dat_rows: 头行忽略 / KB×1024 / 乱序按日期升序返回
-- test_parse_history_dat_bad_lines: 脏行计数 / 非法日期 / 重复日期取最后
+- test_parse_history_dat_bad_lines: 脏行计数(同分支多条累加) / 非法日期 / 重复日期取最后
 - test_aggregate_periods: day 当天行(缺失=0) / month 当月求和 / ND 自然日窗口求和(窗口外排除)
 - test_aggregate_nd_window_multi_digit: ND 窗口两位数 N(30D)精确求和 —— 前导数字截断(30D->3D)不得缩水 (W3-S5)
 - test_curve_speed_plan_b: 全程分档覆盖(首档覆盖低端, 边界, 末档延续)
 - test_curve_speed_last_tier_clamp_matrix: 末档 clamp 边界矩阵(各档内部不变/恰好压线/超末档取末档速度/末档 0 显式放开)
 - test_speed_curve_beyond_last_tier_clamps_both_directions: 双向累计超末档 -> 写末档速度值而非解除限速(任务集成)
 - test_merge_direction_after_clamp_takes_strictest: 多曲线各自超末档 -> clamp 到末档速度后合并, 取最严仍正确(SPD-01/D5)
-- test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None) / KiB 半值进位
+- test_merge_direction_and_bytes_to_kib: 取最小非零(全0=0/空=None/1B/s 仍算非零) / KiB 半值进位
 - test_speed_unit_conversion_boundaries: kib_to_bytes / bytes_to_kib_floor 边界(0/1/负/半值; kib_1 负值契约锁, 上游不可达的防御分支) (W3-S5)
 - test_speed_curve_global_task_registered: 配置存在 -> 创建 speed_limit_curve 全局任务
 - test_speed_curve_global_task_uses_own_interval: 曲线配置专属 interval
@@ -523,6 +523,7 @@ def test_normalize_period_aliases():
     """period 别名归一化: day/1D/D -> day; month -> month; ND -> ND; 非法 -> ValueError"""
     assert curves.normalize_period("day") == "day"
     assert curves.normalize_period("1D") == "day"
+    assert curves.normalize_period("D") == "day"  # 文档别名 "D"(loaders 配置期直达)
     assert curves.normalize_period("DAY") == "day"
     assert curves.normalize_period("month") == "month"
     assert curves.normalize_period("7D") == "7D"
@@ -550,17 +551,23 @@ def test_parse_history_dat_rows():
 
 
 def test_parse_history_dat_bad_lines():
-    """脏行计数 / 非法日期跳过 / 重复日期取最后 / 空行忽略"""
+    """脏行计数 / 非法日期跳过 / 重复日期取最后 / 空行忽略
+
+    两条格式坏行 + 两条非法日期行: 每个分支都出现两次, 计数必须是累加而非覆盖
+    (parse_dat_19: 格式坏行分支 `bad += 1` -> `bad = 1` 会漏计)。
+    """
     text = (
         'lines: "30"\n'
         "2026/09/04 100/200\n"
         "garbage line\n"
+        "another garbage line\n"  # 同分支第二条格式坏行
         "2026/13/40 1/2\n"  # 非法日期
+        "2026/02/30 1/2\n"  # 非法日期(2 月无 30 日), 同分支第二条
         "2026/09/04 300/400\n"  # 重复日期 -> 取最后
         "   \n"
     )
     rows, bad = curves.parse_history_dat(text)
-    assert bad == 2
+    assert bad == 4
     assert len(rows) == 1
     assert rows[0] == (date(2026, 9, 4), 300 * 1024, 400 * 1024)
 
@@ -696,6 +703,7 @@ def test_merge_direction_and_bytes_to_kib():
     """合并: 取最小非零(最严); 全 0 -> 0; 空 -> None; KiB 半值进位"""
     assert curves.merge_direction([6 * MIB, 2 * MIB, 4 * MIB]) == 2 * MIB
     assert curves.merge_direction([0, 0]) == 0
+    assert curves.merge_direction([0, 1]) == 1  # 1 B/s 是合法非零最严, 不得被当 0(merge_4)
     assert curves.merge_direction([]) is None
     assert curves.merge_direction([0, 5 * MIB]) == 5 * MIB  # 0(不限速档)不拉低最严
     assert curves.bytes_to_kib(0) == 0

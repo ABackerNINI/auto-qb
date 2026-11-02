@@ -4,14 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (56)
+## Open (54)
 
 - [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — relocate_units.py:490 GATE_SPACE elif 分支(target_free < needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
 - [test] [core/ traffic_store 观测面日志变异存活: 坏行告警族 19 条低·极低(记录不补)](../26-10-31-1539-test-core-w4-mutation-observability-logs.html) — W4 H 簇: _wbl 族 10 + _wblp 族 7 + evict_36 + wtp_46, 仅日志零行为, S4 verify 26 条抽验全 SURVIVED
 - [bug] [规则引擎 stop_following_rules_if 与「条件求值出错停止后续规则」在真实执行路径不生效](../26-10-31-1304-bug-rules-stop-following-dead.html) — Rule.process 的 (handled, stop) 返回值在唯一调用点被丢弃, interval/事件两路都不消费 stop —— 停止后续规则的配置语义是死的
-- [test] [core/ curves 别名/坏行变异存活: normalize_period「D」+ parse_dat 坏行计数 3 条低危](../26-10-31-1212-test-core-w3-mutation-curves-alias-badlines.html) — W3 低危簇7: normalize_7/8(别名 D 被拒)+parse_dat_19(坏行计数 2→1), W3 池无守阵
-- [test] [core/ curves 单位换算边界变异存活: merge_direction 1 条低危(簇余 3 条已销账)](../26-10-31-1212-test-core-w3-mutation-curves-unit-edges.html) — W3 低危簇8 缩簇: 原簇 kib_5/floor_6/kib_1 已 C2a 销账, 仅余 merge_4(1 B/s 档速被当 0 不限速)
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
@@ -68,7 +66,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (348)
+## Done (350)
 
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](../26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)
@@ -102,6 +100,8 @@
 - [bug] [mutants 工具坑: 注册表清理/dump 伪 hunk+/mnt 假成功/flaky 污染差集/WSL 死亡窗口误判镜像缺失(附实证轮次)](../26-10-31-1539-bug-mutation-tooling-verify-channel.html) — W2-W4 累积工具债 3 条 + R29 补充 1 条: rm -rf 清注册表致 APPLY_FAIL、dump 伪 hunk 致 git apply 失败、flaky 污染差集、WSL VM 死亡窗口 _ensure_mirror 误判镜像缺失尝试重建
 - [bug] [真机轨基建: 多标签种子的 tag 解析丢空白, real-fake 双标签种子对 list/rm/guard 全部失明](../26-10-31-1215-bug-real-tag-parse-multi-tag.html) — tests-real 的标签成员判断用裸 split(",")不 strip, qB 多标签是「, 」连接 → 带 MISSING+real-fake 双标签的假种子对 real.seed.list/rm --all 与 guard.snapshot 全部不可见, 清理漏网且残留会被同 infohash 复跑收养成假 FAIL
 - [test] [core/ tvshows CJK 中文数字变异存活: 「百」语义 2 条低危](../26-10-31-1212-test-core-w3-mutation-cjk-numerals.html) — W3 低危簇2: cjk_int_27(百=100变200)+find_season_14(第百季收进季号), cjk_int_23 待定随簇备注, W3 池无守阵
+- [test] [core/ curves 别名/坏行变异存活: normalize_period「D」+ parse_dat 坏行计数 3 条低危](../26-10-31-1212-test-core-w3-mutation-curves-alias-badlines.html) — W3 低危簇7: normalize_7/8(别名 D 被拒)+parse_dat_19(坏行计数 2→1), W3 池无守阵
+- [test] [core/ curves 单位换算边界变异存活: merge_direction 1 条低危(簇余 3 条已销账)](../26-10-31-1212-test-core-w3-mutation-curves-unit-edges.html) — W3 低危簇8 缩簇: 原簇 kib_5/floor_6/kib_1 已 C2a 销账, 仅余 merge_4(1 B/s 档速被当 0 不限速)
 - [test] [core/ episodes 目录未剥离变异存活: names 4 条低危合 1 参数化](../26-10-31-1212-test-core-w3-mutation-episodes-dir-strip.html) — W3 低危簇6: names_5/9/14/16 目录段未剥离(空格切/左切/反斜杠/分隔串失效)同族, 一个参数化用例全杀
 - [test] [core/ tvshows 组名括号变异存活: is_groupish/strip_group 3 条低危](../26-10-31-1212-test-core-w3-mutation-group-brackets.html) — W3 低危簇3: is_groupish_2/4(lower 反转)+strip_group_19(恒取尾候选), [Show][Subs][05] 标题取错, W3 池无守阵
 - [test] [core/ tvshows 键归一变异存活: 尾 bigram/空格折叠 2 条低危 + 归一循环死循环 2 条](../26-10-31-1212-test-core-w3-mutation-key-normalize.html) — W3 低危簇4: normalize_key_25+title_and_key_37 低危补测; normalize_key_34/38 timeout 死循环(DoS 形态)随簇记 bug 备注处置=代码侧
