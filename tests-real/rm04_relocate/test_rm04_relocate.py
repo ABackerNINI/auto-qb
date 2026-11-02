@@ -1,11 +1,13 @@
-"""RM04 辅种与分组 —— 九条真机用例(归组 key / 组内一致性 / 跨组冲突 / 缺失文件 / 跨盘移动 / journal / facade share_limits)。
+"""RM04 辅种与分组 —— 十条真机用例(归组 key / 组内一致性 / 跨组冲突 / 缺失文件 / 跨盘移动 / journal / facade share_limits / .!qB 窄域)。
 
 验证面对准冻结计划 plans/26-10-31-1042-plan-real-RM04.html §02 的六行代码映射(漂移复测轮
 plans/26-11-01-2033 追加 RM04-09: qbapi facade share_limits_mode):
 归组 key(group_key_of, 断言走产品 WEB 只读端点 GET /api/groups)· 组内大小一致性(警告+整组暂停)·
 跨组文件冲突(暂停下载方 + MISSING 豁免对照)· 缺失文件标记(带数据真删; --no-data 不是缺文件态)·
 跨盘移动主链(同卷口径 C:→C:, 目录别名 + 穿透 + journal phase=done; 真跨卷半边 BLOCKED)·
-journal 恢复与坏账兜底 · facade share_limits_mode 5.2.3 端到端(RM04-09)。
+journal 恢复与坏账兜底 · facade share_limits_mode 5.2.3 端到端(RM04-09)·
+.!qB 窄域(S1/S2/R1/R2)真机复验(RM04-10: 组外 .!qB 不拦且原地不动 / 组内 .!qB 硬拦 /
+目标叶子未建可上溯 + 同卷 note / 目标为文件 target_type)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 单成员组恒走 FORM_DIRECT(qB 自搬, 无别名无 journal)—— 目录别名链必须多成员组 + 子目录布局
@@ -1311,3 +1313,222 @@ def test_rm04_09_facade_share_limits_end_to_end():
             p.stop()
         rm_all_fakes(qbfake())
         purge_tree(case)
+
+
+# ================================================================ RM04-10
+
+
+def _file_state(p: Path) -> dict:
+    return {"size": p.stat().st_size, "sha1": hashlib.sha1(p.read_bytes()).hexdigest()}
+
+
+def _assert_unchanged(p: Path, before: dict, what: str) -> None:
+    """断言磁盘条目仍在原路径且内容逐字节未变(被迁移/删除/顺手改写都会红)。"""
+    assert p.is_file(), f"{what} 不在了(被迁移/删除): {p}"
+    now = _file_state(p)
+    assert now["size"] == before["size"], f"{what} 大小被改: {before['size']} -> {now['size']}: {p}"
+    assert now["sha1"] == before["sha1"], f"{what} 内容被改(sha1 不符): {p}"
+
+
+def _gates_of(result: dict) -> list[str]:
+    items = ((result or {}).get("truth") or {}).get("results") or []
+    return [r.get("gate") for it in items for r in (it.get("reasons") or [])]
+
+
+def _has_started(result: dict) -> bool:
+    items = ((result or {}).get("truth") or {}).get("results") or []
+    return bool([it for it in items if it.get("cls") == "started"])
+
+
+def test_rm04_10_qbtemp_narrow_foreign_allowed_own_blocked():
+    """[RM04-10] .!qB 窄域(S1/S2/R1/R2)真机复验: 组外 .!qB 不拦迁移且原地不动; 组内 .!qB 仍硬拦;
+    目标叶子未建(上溯) + 同卷 note; 目标为文件 target_type; 普通条目不受影响。
+
+    对应: plans/26-11-02-0134-plan-relocate-qbtemp-narrow.html §07 风险对策 +
+          tasks/26-11-02-backend-relocate-qbtemp-narrow.md S5 真机复验。
+    前置: 副实例; grouping+relocate 开; G1 单成员已完成(迁移主体); G2 --no-data 未完成(外部组,
+          手造 g2.!qB); G3 单成员已完成(手造 g3.!qB 作本组未落定对照); keep.txt 无主杂项;
+          目标 dst 叶子不存在、与 src 同卷、父目录存在(命中 R1 上溯 + R2 #1 同卷)。
+    副作用: 副实例加 3 枚 real-fake; 1 次真迁移(G1 单成员 direct) + 3 次闸门拒绝; 用例目录清理。
+    回滚: 删光 real-fake(连数据) + purge case/RAM 树。
+    失败判据: 组外 .!qB 被拦/被搬/被删; 组内 .!qB 未拦; G2 未同时命中 incomplete+qb_temp;
+              目标叶子未建却 GATE_SPACE; 目标为文件未 target_type; 迁移后源/目标结构不符;
+              普通条目被改动。
+    """
+    case = case_dir("rm04_10")
+    p = None
+    ev: dict = {"case": "RM04-10", "env": "环境1(D盘机)"}
+    try:
+        qb = qbfake()
+        ev["qb_version"] = qb.version()
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
+        src = RAM / "rm04_10" / "src"
+        dst = RAM / "rm04_10" / "dst"
+        purge_tree(src.parent)
+        src.mkdir(parents=True, exist_ok=True)
+        assert not dst.exists(), f"目标叶子必须不存在(测 R1 上溯): {dst}"
+        cfg, web_port = write_cfg(case, relocate=True)
+        p = app.start(cfg, case)
+        assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
+        assert p.wait_log("整组迁移已启用", 20), f"relocate 启动日志缺失:\n{p.log()[-600:]}"
+
+        size = 256 * 1024
+        h1 = fake_with_data(qb, "rm04c10_g1.bin", size, src, "rm04c10-g1")
+        h2 = fake_no_data(qb, "rm04c10_g2.bin", size, src, "rm04c10-g2")
+        h3 = fake_with_data(qb, "rm04c10_g3.bin", size, src, "rm04c10-g3")
+        for h in (h1, h2, h3):
+            settle(qb, h)
+        wait_complete(qb, [h1, h3])
+        for h in (h1, h2, h3):
+            qb.pause(h)
+            settle(qb, h)
+
+        g2_temp = src / "rm04c10_g2.bin.!qB"
+        g2_temp.write_bytes(bytes(range(256)) * 4)
+        g3_temp = src / "rm04c10_g3.bin.!qB"
+        g3_temp.write_bytes(b"g3-temp" * 128)
+        keep = src / "keep_rm04c10.txt"
+        keep.write_bytes(b"ordinary unowned entry" * 16)
+        g1_src = src / "rm04c10_g1.bin"
+        g3_file = src / "rm04c10_g3.bin"
+        ev.update(
+            {
+                "src": norm(src),
+                "dst": norm(dst) + "(leaf absent)",
+                "hashes": {
+                    "g1": h1,
+                    "g2": h2,
+                    "g3": h3
+                },
+                "foreign_qbtemp": _file_state(g2_temp),
+                "own_qbtemp": _file_state(g3_temp),
+                "keep": _file_state(keep),
+                "g3_file": _file_state(g3_file)
+            }
+        )
+
+        assert wait_group(web_port, h1, {h1}, 25, "G1 未独立成组")
+        assert wait_group(web_port, h2, {h2}, 25, "G2 未独立成组")
+        assert wait_group(web_port, h3, {h3}, 25, "G3 未独立成组")
+        wait_store_progress(web_port, [h1, h3])
+        wait_until(
+            lambda: next(
+                (
+                    m.get("progress") for m in (group_row(groups_view(web_port), h2) or {}).get("members", [])
+                    if m.get("hash") == h2
+                ), None
+            ) == 0, 20, "G2 未以 progress=0 进入产品快照"
+        )
+
+        # ---- 负向1: 组内 .!qB(已完成 G3) → qb_temp 硬拦, 零副作用
+        before = count_anchor(case, "迁移发起")
+        dst3 = RAM / "rm04_10" / "dst3"
+        r3 = cmd_post_and_wait(web_port, f"/api/torrents/{h3}/location", {"location": str(dst3), "confirm": True})
+        assert r3.get("status") == "error", f"组内 .!qB 应被拒, 实际: {json.dumps(r3, ensure_ascii=False)[:500]}"
+        gates3 = _gates_of(r3)
+        assert "qb_temp" in gates3, f"组内 .!qB 拒绝原因缺 qb_temp: {gates3}"
+        assert "incomplete" not in gates3, f"G3 已完成却命中 incomplete(对照失效): {gates3}"
+        assert not _has_started(r3), "组内 .!qB 被拦却出现 started 项"
+        assert count_anchor(case, "迁移发起") == before, "组内 .!qB 拒绝却新增「迁移发起」(零副作用失守)"
+        _assert_unchanged(g3_temp, ev["own_qbtemp"], "组内 .!qB")
+        assert norm((qb.torrent(h3) or {}).get("save_path")) == norm(src), "组内 .!qB 拒绝却改了 G3 save_path"
+        ev["g3_blocked_gates"] = gates3
+
+        # ---- 负向2: 外部组 G2(未完成)自身 .!qB → incomplete + qb_temp 双拦, 外组 .!qB 原地不动
+        before = count_anchor(case, "迁移发起")
+        dst2 = RAM / "rm04_10" / "dst2"
+        r2 = cmd_post_and_wait(web_port, f"/api/torrents/{h2}/location", {"location": str(dst2), "confirm": True})
+        assert r2.get("status") == "error", f"外部组未完成应被拒, 实际: {json.dumps(r2, ensure_ascii=False)[:500]}"
+        gates2 = _gates_of(r2)
+        assert "incomplete" in gates2 and "qb_temp" in gates2, f"G2 拒绝原因缺 incomplete/qb_temp: {gates2}"
+        assert not _has_started(r2), "G2 被拦却出现 started 项"
+        assert count_anchor(case, "迁移发起") == before, "G2 拒绝却新增「迁移发起」(零副作用失守)"
+        _assert_unchanged(g2_temp, ev["foreign_qbtemp"], "外组 .!qB")
+        ev["g2_blocked_gates"] = gates2
+
+        # ---- 负向3: 目标路径为文件 → target_type 硬拦(R2 #3), 零副作用
+        not_a_dir = case / "target_is_file"
+        not_a_dir.write_bytes(b"not-a-dir")
+        before = count_anchor(case, "迁移发起")
+        rf = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(not_a_dir), "confirm": True})
+        assert rf.get("status") == "error", f"目标为文件应被拒, 实际: {json.dumps(rf, ensure_ascii=False)[:500]}"
+        gates_f = _gates_of(rf)
+        assert "target_type" in gates_f, f"目标为文件拒绝原因缺 target_type: {gates_f}"
+        assert not _has_started(rf), "目标为文件却出现 started 项"
+        assert count_anchor(case, "迁移发起") == before, "目标为文件拒绝却新增「迁移发起」(零副作用失守)"
+        assert norm((qb.torrent(h1) or {}).get("save_path")) == norm(src), "目标为文件拒绝却改了 G1 save_path"
+        ev["target_type_gates"] = gates_f
+
+        # ---- 主链: 外组 .!qB 在内容根 → G1 单成员迁移放行(目标叶子未建, 同卷上溯)
+        before = count_anchor(case, "迁移发起")
+        result = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(dst), "confirm": True})
+        item = one_started_item(result)
+        job_id = item.get("job_id")
+        assert job_id, f"回执 started 项缺 job_id: {json.dumps(item, ensure_ascii=False)[:400]}"
+        assert item.get("form") == "direct", f"单成员组形态应为 direct, 实际: {item.get('form')}"
+        assert item.get("target_free") is not None and item["target_free"] > 0, \
+            f"目标叶子未建时未上溯到有效剩余: target_free={item.get('target_free')}"
+        assert item.get("same_volume") is True, f"src/dst 应同卷, 实际: {item.get('same_volume')}"
+        notes = " | ".join(item.get("notes") or [])
+        assert "源与目标同卷" in notes, f"同卷 note 缺失: {notes}"
+        assert "内容根含组外种子的文件" in notes and "rm04c10_g2.bin.!qB" in notes, \
+            f"组外 .!qB 未进入外组条目 note: {notes}"
+        assert "内容根含非种子杂项" in notes and "keep_rm04c10.txt" in notes, f"杂项 note 缺失: {notes}"
+        assert not [g for g in (r.get("gate") for r in (item.get("reasons") or []))
+                    if g in {"qb_temp", "space", "target_type", "incomplete"}], \
+            f"放行项仍带硬闸门: {item.get('reasons')}"
+        ev.update(
+            {
+                "started": True,
+                "job_id": job_id,
+                "form": item.get("form"),
+                "target_free": item.get("target_free"),
+                "same_volume": item.get("same_volume"),
+                "notes": item.get("notes")
+            }
+        )
+
+        wait_until(
+            lambda: norm((qb.torrent(h1) or {}).get("save_path")) == norm(dst), 90,
+            f"qB 侧 G1 save_path 未变 dst: {(qb.torrent(h1) or {}).get('save_path')}"
+        )
+        dst_g1 = dst / "rm04c10_g1.bin"
+        wait_until(lambda: dst_g1.is_file() and dst_g1.stat().st_size == size, 30, f"dst 侧 G1 数据未对齐: {dst_g1}")
+        assert sorted(x.name for x in dst.iterdir()) == ["rm04c10_g1.bin"], \
+            f"dst 目录结构不符(只应有 G1 文件): {sorted(x.name for x in dst.iterdir())}"
+        assert not (dst / "rm04c10_g2.bin.!qB").exists(), "外组 .!qB 被顺手带到 dst"
+        assert not (dst / "keep_rm04c10.txt").exists(), "无主杂项被带到 dst"
+        assert not (dst / "rm04c10_g3.bin").exists(), "外部组普通条目被带到 dst"
+        wait_until(lambda: not g1_src.exists(), 30, f"源侧 G1 文件未消失(direct 应搬走): {g1_src}")
+        assert src.is_dir(), "源内容根被整体删除(应保留其余条目)"
+        _assert_unchanged(g2_temp, ev["foreign_qbtemp"], "外组 .!qB")
+        _assert_unchanged(g3_temp, ev["own_qbtemp"], "组内 .!qB")
+        _assert_unchanged(keep, ev["keep"], "无主杂项")
+        _assert_unchanged(g3_file, ev["g3_file"], "外部组普通条目")
+        wait_until(lambda: count_anchor(case, "迁移发起") > before, 30, "日志缺「迁移发起」(搬迁没有真正下发)")
+        job = wait_job_phase(case, job_id, {"done"}, 90, "job 未推进到 done")
+        assert job.get("phase") == "done", f"job 未 done: {job}"
+        wait_until(
+            lambda: norm((lambda g: decode_key(g["key"])[0] if g else "")
+                         (group_row(groups_view(web_port), h1)) or "") == norm(dst), 30, "G1 迁移后未在 dst 重归组"
+        )
+        ev.update(
+            {
+                "job_phase": job.get("phase"),
+                "dst_entries": sorted(x.name for x in dst.iterdir()),
+                "src_g1_gone": not g1_src.exists(),
+                "result": "PASS"
+            }
+        )
+    finally:
+        if p is not None:
+            p.stop()
+        try:
+            WORK.mkdir(parents=True, exist_ok=True)
+            (WORK / "rm04_10_evidence.json").write_text(json.dumps(ev, ensure_ascii=False, indent=2), encoding="utf-8")
+            (WORK / "rm04_10_auto-qb.log").write_text(app.read_log(case), encoding="utf-8")
+        except Exception:  # noqa: BLE001 - 取证失败不得掩盖主断言结果
+            pass
+        rm_all_fakes(qbfake())
+        purge_tree(case)
+        purge_tree(RAM / "rm04_10")

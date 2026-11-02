@@ -15,7 +15,7 @@
 - test_evaluate_group_idempotent_skip: 全组已在目标位置 -> ok + 幂等 note(不再跑目标冲突闸门)
 - test_evaluate_group_unfinished_job_blocks: 非终态 job 碰本组 -> blocked(unfinished);
   终态 job 不拦(§3.6 第 14 行 / S10)
-- test_evaluate_group_gates_table: 闸门表驱动(incomplete/moving/target_conflict/qb_temp/
+- test_evaluate_group_gates_table: 闸门表驱动(incomplete/moving/target_conflict/target_type/qb_temp/
   space 不足/space 不可判定/target_unknown/same_fs 多成员/platform 多成员/第三方文件链接/硬链接)
 - test_evaluate_group_single_member_remote_allows: 单成员 + 证明不过/能力不支持 -> ok + note
   (独占情形由 qB 自搬)
