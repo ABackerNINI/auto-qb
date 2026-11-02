@@ -37,6 +37,7 @@
 - [x] 集数上下界: E9999 起点合法 / 区间终点 1000 超限 (find_episode_24/32) (W3 余量)
 - [x] 目录季 1..99 闭区间: S99 收 / 第百季 拒 (dir_season_13/14) (W3 余量)
 - [x] 非法日期跳过继续找后续合法日期 (find_date_18) (W3 余量)
+- [x] CJK「百」裸写=100 且「第百季」不进季号 (cjk_int_27 / find_season_14) (W3 余量)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
 - test_bare_trailing_without_context_not_matched
@@ -46,6 +47,7 @@
 - test_bracket_only_title_picks_last_candidate
 - test_bracket_paren_form
 - test_cjk_equivalence
+- test_cjk_int_bare_hundred
 - test_cjk_int_hundred_and_invalid_char
 - test_dash_form
 - test_date_basic
@@ -64,6 +66,7 @@
 - test_episode_wins_over_date
 - test_find_episode_non_bare_zero_skipped
 - test_find_season_out_of_range_and_earliest_kept
+- test_find_season_rejects_hundred_plus
 - test_frozen
 - test_fullwidth_brackets_kept_as_title
 - test_group_prefix_stripped
@@ -620,3 +623,19 @@ def test_invalid_date_continues_to_later_valid():
     r = p("Show.2023.13.99.2026.09.15")
     assert r.kind == KIND_DATE
     assert r.date == "2026-09-15"
+
+
+def test_cjk_int_bare_hundred():
+    """中文数字「百」裸写 = 100(缺省数字按 1 计, 不带进位语义)
+
+    cjk_int_27((num or 1) -> (num or 2)): 「百」解成 200。
+    """
+    assert tvshows._cjk_int("百") == 100
+
+
+def test_find_season_rejects_hundred_plus():
+    """标题季标记 1..99: 「第百季」(100) 不进季号
+
+    find_season_14(s<=99 -> s<=100): 「第百季」被收为季 100, 违反 1..99 口径。
+    """
+    assert tvshows._find_season("第百季") is None
