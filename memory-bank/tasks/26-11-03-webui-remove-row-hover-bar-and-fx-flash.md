@@ -53,8 +53,6 @@
 - 现状: 皮肤自有 CSS 零 hover 左条；`shared/row_lang.css` flat/wave 各 2 条 `:hover::before` 是唯一来源，四皮肤共用。
 - 改动: row_lang.css 删 4 条 hover 规则与 `--rl-bar` 消费；flux 删 fx-mount.css D4-3 规则、fx.css `fx-row-flash` 原语/keyframes/RM、fx.js 注册项；`.ctx-src` 静态 outline 规则保持不变。
 - 实测(8160/8162 桩，3000 种子/30 组；暗色 `colorScheme=dark` 复验 prism ocean/flat — 其默认浅色 frost 主题本就被 `:not([data-theme="frost"])` 排除): 四皮肤 hover 时行 `::before` opacity=0、行底色仍发生 hover 变化；右键 `.ctx-src` 计算值四皮肤均 `outline: 2px solid …; outline-offset: -2px; animationName: none`；菜单关闭后 `.ctx-src` 计数归零。
-- 测试: `tests/test_webui_static_skins.py` 27 passed；`test_webui_static_dom_page.py` + `test_webui_static_dom_panel.py` 101 passed；`test.full` 4900 passed / 10 skipped / 99%（详见最新基线切片）。
+- 测试: rebase 前 `tests/test_webui_static_skins.py` 27 passed + 两份 dom 守阵 101 passed; 合流后迁移到 `tests/test_webui_static_skins_{skin,table,widget}.py` 复跑 27 passed; 最终 `test.full` 4906 passed / 10 skipped / 99%(详见最新基线切片)。
 - 截图: `%TEMP%\aqb-ui-verify\{prism,atlas,console,flux}-{hover,ctx}.png`（临时验证产物，未入库）。
-- 入库: 用户 2026-11-03 明确要求提交(commit+push Gitee develop); 远端 `a48ead5c`(大文件拆分)已把 `tests/test_webui_static_skins.py` 拆成 `_skin/_table/_widget` 三份, rebase 时把 27→26 计数与「## 测试计划」清单迁移到 `tests/test_webui_static_skins_skin.py`(实测 fx_wiring 在该文件 L500/L566), 并在拆分后文件上复跑守阵。
-
-- 2026-11-03 01:02 移除四皮肤 hover 行左条与 flux fx-row-flash; test.full 4900 passed/10 skipped/99%
+- 入库: 用户 2026-11-03 明确要求提交(commit+push Gitee develop); 本地提交 `99ad1d92` → rebase 后 `c87ef855`(远端 `a48ead5c`/`b6c01640` 已把 `tests/test_webui_static_skins.py` 拆成 `_skin/_table/_widget`), 27→26 计数与「## 测试计划」清单已迁移到 `tests/test_webui_static_skins_skin.py`(fx_wiring L500/L566)并复跑通过; 索引重建提交 `cd8ba4eb` 已推 Gitee develop, 最终 test.full 4906 passed / 10 skipped / 99%。
