@@ -51,13 +51,14 @@ from webui_helpers import (
     KEY,
     STATIC_ROOT,
     _enable_qb_traffic,
+    _freeze_traffic_endpoint_clock,
     _qb_v4,
     _make_grouped_manager,
     _attach_live_tail_host,
 )
 
 
-def test_api_traffic_qb_global_live_tail_realtime(web_env):
+def test_api_traffic_qb_global_live_tail_realtime(web_env, monkeypatch):
     """(S6)raw 段窗活尾合流: 纯活尾(零盘)出实时桶点(不等 flush_interval 落盘);
     磁盘落盘后滞后快照重列已落盘记录被按 ts 精确去重(快照与 flush 竞态不重不漏),
     快照清空后磁盘响应与合流响应逐点一致 —— 图面全程无跳变"""
@@ -68,6 +69,12 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env):
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
+    # 钉住入口时刻(服务端 _grid 与用例同读 time.time, 钉一次双边生效): 5m 栅格是
+    # [now-300, now) 滚动窗, 桶数 = ceil((now - floor(now-300))/30) —— now 恰在 30s
+    # 边界(r=0)时开放桶 [now, now+30) 覆盖为 0 被省略, 其后一秒(r>0)又补回, 响应
+    # 因此多/少一个空桶。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI 慢一点就红
+    # (生产滚动窗语义正确, 不是产品缺陷; 同坑档 testing/flaky-midnight-daycount.md)。
+    monkeypatch.setattr(time, "time", lambda: float(now))
     base = ((now - 240) // 30) * 30  # 5m 窗内
     b0, b1, b2 = (base + i * 30 for i in range(3))
     recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800))
@@ -137,7 +144,7 @@ def test_api_traffic_qb_group_live_tail_member_only(web_env):
     assert next((p for p in body["points"] if p and p["t"] == b0), None) == {"t": b0, "dl": 0, "up": 0}
 
 
-def test_api_traffic_qb_global_3d_live_open_hour_fills_tail_vacuum(web_env):
+def test_api_traffic_qb_global_3d_live_open_hour_fills_tail_vacuum(web_env, monkeypatch):
     """(S7, 2026-10-14 用户报「3 天及以上的流量图视图有真空: 目前仅显示到 14 日 0 点,
     实际上现在已经 14 日 1 点了」)3d 窗(hour 段)活尾合流: agg.dat 只有封口行, 当前
     开放小时只活在采样模块累计器 —— 活尾 pending_agg 把它发布出来, 读侧按 epoch 与
@@ -152,6 +159,9 @@ def test_api_traffic_qb_global_3d_live_open_hour_fills_tail_vacuum(web_env):
     store = _qb_v4(mgr)
     now = int(time.time())
     h_open = tg.build_grid("3d", now).last  # 图尾桶(开放小时; now 恰整点时 = 刚完结小时, 断言不变式)
+    # 端点 _grid 请求时现读 time.time: 与用例的 now 钉成同一时刻, 防止算完 now 到请求之间
+    # 跨整点导致尾桶前移一格(尾桶是边界派生量, 见 pitfalls/testing/flaky-midnight-daycount.md)
+    _freeze_traffic_endpoint_clock(monkeypatch, now)
     rows = []
     t_dl, t_up = 1000, 400
     for i in range(5, 0, -1):  # 尾桶前 5 小时的封口行(totals 单调递增, 差分链不断)
@@ -181,7 +191,7 @@ def test_api_traffic_qb_global_3d_live_open_hour_fills_tail_vacuum(web_env):
     assert body["totals"][-1] == {"t": h_open, "dl": 1500, "up": 600}  # 5000-3500 / 2500-1900
 
 
-def test_api_traffic_qb_global_6mo_live_open_day_fills_tail(web_env):
+def test_api_traffic_qb_global_6mo_live_open_day_fills_tail(web_env, monkeypatch):
     """(S7)6mo 窗(day 段)活尾合流: 当日(本地日界桶)只活在写侧累计器 —— 活尾日部分行
     按 epoch 合流后, 图尾桶从 null 真空变为实时值; totals 跨封口/活尾接缝差分"""
     from auto_qb.core import traffic_grid as tg
@@ -193,6 +203,9 @@ def test_api_traffic_qb_global_6mo_live_open_day_fills_tail(web_env):
     store = _qb_v4(mgr)
     now = int(time.time())
     d_open = tg.build_grid("6mo", now).last  # 当日日界桶(now 恰零点时 = 前一日, 断言不变式)
+    # 端点 _grid 请求时现读 time.time: 与用例的 now 钉成同一时刻, 防止算完 now 到请求之间
+    # 跨本地零点导致日界尾桶前移一天(尾桶是边界派生量)
+    _freeze_traffic_endpoint_clock(monkeypatch, now)
     store.append_agg_rows(
         "global", (
             AggRow("day", d_open - 2 * 86400, 60, 90, 40, 50, 1000, 500, 86400),
@@ -252,7 +265,7 @@ def test_api_traffic_qb_global_all_live_current_month_in_grid(web_env):
     assert body["totals"][-1] == {"t": m_cur, "dl": 4000, "up": 2000}  # 5000-1000 / 2500-500
 
 
-def test_api_traffic_qb_group_30d_live_member_partial_and_empty_state(web_env):
+def test_api_traffic_qb_group_30d_live_member_partial_and_empty_state(web_env, monkeypatch):
     """(S7)组端点 agg 段活尾合流: 成员仅活尾(零盘)组图非空 —— 空态判据「组从未产过流量」
     计入活尾部分行(修复前误判空态); 组尾桶 = Σ 成员观测(无行成员按 0 计); 磁盘封口行与
     活尾部分行按成员各自合流, 组口径不变; all 窗(month 段)活尾当月行并入组月行铺格面"""
@@ -264,6 +277,8 @@ def test_api_traffic_qb_group_30d_live_member_partial_and_empty_state(web_env):
     _enable_qb_traffic(mgr)
     now = int(time.time())
     h_open = tg.build_grid("30d", now).last  # 组图尾桶
+    # 端点 _grid 请求时现读 time.time: 与用例的 now 钉成同一时刻, 防止跨整点导致组尾桶错位
+    _freeze_traffic_endpoint_clock(monkeypatch, now)
     live = LiveTail(
         block_open=False,
         head_pending=False,
