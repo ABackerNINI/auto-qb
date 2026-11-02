@@ -81,13 +81,7 @@ ORIGIN = "chrome-extension://" + "a" * 32
 TK = "t" * 48  # 测试用数据端点密钥(字面量本身无意义, 只验聚合透传)
 SC = "s" * 48  # 测试用配对密钥(同上; 真生成路径由 runtime 用例走 resolve_pairing_secret)
 
-
-def _free_port() -> int:
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
+from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py)
 
 
 def _simulate_read_denial(monkeypatch, path, *, times=None):

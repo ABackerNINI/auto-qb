@@ -105,13 +105,7 @@ def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time, s
     )
 
 
-def _free_port() -> int:
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
-
+from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py)
 
 # ---------- 1. 纯逻辑路由 ----------
 

@@ -161,13 +161,7 @@ def make_runtime(tmp_path, **kwargs):
     return HrRuntime(_FakeManager(make_config(tmp_path, **kwargs)))
 
 
-def _free_port() -> int:
-    """取一个当前空闲的端口(用于测「改端口要重挂」这类需要确定端口号的用例)"""
-    sock = socket.socket()
-    sock.bind(("127.0.0.1", 0))
-    port = sock.getsockname()[1]
-    sock.close()
-    return port
+from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py); 取当前空闲端口
 
 
 def test_disabled_builds_nothing(tmp_path):

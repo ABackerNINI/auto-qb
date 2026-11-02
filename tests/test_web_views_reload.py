@@ -43,15 +43,7 @@ from auto_qb.webui import create_app
 
 from webui_helpers import WEB_ENV_CONFIG_TEXT, _web_stub, _make_web_manager, _make_grouped_manager
 
-
-def _free_port() -> int:
-    """取一个本机空闲端口(先绑 0 再释放; 用于真实起停 WEB 服务器的测试)"""
-    import socket
-
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
+from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py); 取本机空闲端口
 
 # ---------- Web 视图与配置热重载 ----------
 

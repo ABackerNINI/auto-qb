@@ -450,12 +450,7 @@ def test_oversized_request_line_reaches_app_not_transport_400(web_env):
 
     from auto_qb.webui import start_web_server, stop_web_server
 
-    def _free_port() -> int:
-        import socket as _s
-
-        with _s.socket() as sock:
-            sock.bind(("127.0.0.1", 0))
-            return sock.getsockname()[1]
+    from _test_ports import free_port as _free_port  # 端口单点(防散落守卫: tests/test_free_port.py)
 
     mgr, _client = web_env
     mgr.config.web.port = _free_port()
