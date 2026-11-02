@@ -42,12 +42,14 @@
 - [x] 噪音词挖空后连续空格在展示名中折叠 (title_and_key_37) (W3 余量)
 - [x] 归一化循环不依赖手工步长递增, 多 bigram 标题正常返回 (timeout 34/38 代码侧防御) (W3 余量)
 - [x] 标题尾 trim 字符集: 全角【】收尾剥除 (title_and_key_30) (W3 余量)
+- [x] 括号段组名特征: ASCII 提示大小写归一 + 组名段不参与标题候选 (is_groupish_2/4, strip_group_19) (W3 余量)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
 - test_bare_trailing_without_context_not_matched
 - test_bracket_only_all_groupish_candidates
 - test_bare_zero_not_episode
 - test_bracket_form
+- test_bracket_group_hint_case_and_negation
 - test_bracket_only_title_picks_last_candidate
 - test_bracket_paren_form
 - test_cjk_equivalence
@@ -691,3 +693,18 @@ def test_title_tail_trim_charset():
     ("Show.Name.(US)" 的右括号同属该字符集, 当前展示名会剥成 "Show Name (US")
     """
     assert p("【剧名】第1集").title == "剧名"
+
+
+def test_bracket_group_hint_case_and_negation():
+    """括号段组名特征: ASCII 提示词大小写归一 + 组名段不参与标题候选
+
+    is_groupish_2(lower->upper): ASCII 提示词常量是小写, 归一方向反转后全部失效 ->
+    "[Show][Subs][05]" 的标题取到组名 "Subs"; is_groupish_4(h in low -> h not in low):
+    any 反转, 几乎全判组名 -> 同样退化到候选尾; strip_group_19(非组名候选列表换成 None):
+    恒取候选尾。三种形态同一守阵同杀, 展示名与聚合键两面都锁。
+    """
+    r = p("[Show][Subs][05]")
+    assert r.title == "Show"
+    assert r.key == "show"
+    assert r.kind == KIND_EPISODE
+    assert (r.season, r.ep_start) == (1, 5)
