@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 I: vgo_80/83/105/117 + vrft_15/25 + vtp_101(断链桶冒充 0 线/w=0 除零/单侧游程摊配)">
 <title>core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-broke-contract</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -106,7 +106,21 @@
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：<code>cov_end &gt;= a[4]</code>/<code>a[4] = cov_end</code>/<code>if a[0]</code>/<code>if a[2]</code>/<code>p.w &lt;= 0</code> 锚点仍在</li>
+      <li>2026-11-02 — 状态 <strong>Done</strong>：6 条红验 KILLED；vtp_101 判等价（现实域，全文件其余用例零差异，见下）；定向测试全绿</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法与验证</h2>
+    <p><b>零 src 改动, 只补守阵</b>(<code>tests/test_traffic_grid.py</code>):</p>
+    <ul>
+      <li><code>vgo_80</code> → <code>test_v4_grid_obs_same_end_later_point_wins_snapshot</code>: 同覆盖末端双点快照取后到者。红验 <b>KILLED</b>。</li>
+      <li><code>vgo_83</code> → <code>test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot</code>: <code>a[4] = cov_end</code> 必须推进覆盖末端, 短覆盖后继点不得抢快照。红验 <b>KILLED</b>。</li>
+      <li><code>vgo_105</code>/<code>vgo_117</code> → <code>test_v4_grid_obs_broken_bucket_zero_rate_kept_zero</code>: 断链桶有速率覆盖且值为 0 时仍是 0 线(均值判据看覆盖秒 <code>a[0]</code>/<code>a[2]</code>, 不看加权和)。红验 2 条 <b>KILLED</b>。</li>
+      <li><code>vrft_15</code>/<code>vrft_25</code> → <code>test_v4_rate_from_totals_zero_width_point_defensive</code>: w=0 直构点速率派不出(None)而非除零。红验 2 条 <b>KILLED</b>(变异形态直接 ZeroDivisionError)。</li>
+      <li><code>vtp_101</code> → <b>判等价(现实域), 跳过</b>: 变异把 dl 摊配回写支的 <code>up=e.up</code> 改成 <code>None</code>, 但紧接的 up 支(d=1)会以 <code>dl=e.dl / up=share</code> 整体重建同一条目, 覆盖该写回 —— 只有「单侧游程长度不同」几何才可见, 而这要求速率双零但单向 totals 变化, 违反写侧不变量「速率双零 ⟺ z 槽 ⟺ totals 冻结」, 现实数据不可达。实测: 该变异下 <code>tests/test_traffic_grid.py</code> 全文件用例零差异(SURVIVED), 不为凑改动新增构造。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_traffic_grid.py</code> 全绿; 测试数字见 <code>kb.baseline</code>。</p>
   </section>
 
   <footer>

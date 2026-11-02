@@ -78,6 +78,10 @@
 - test_floor_buckets_remainder_one_keeps_tail_bucket: (fb_9)t1-first ≡ 1 (mod interval) 时 ceil 尾桶保留, interval-1 变异成 -2 会少一个尾桶
 - test_build_grid_day_window_midnight_anchors: (bg_52/bg_53)day 窗日期集 t1-1 口径 —— 23:59:59 不多铺次日桶, 00:00:01 不丢当日桶
 - test_v4_totals_points_spread_threshold_exact_boundary: (vtp_62)摊配门槛 span 恰等 max(2w,60) 不摊配, 变异成 >= 会多摊一批
+- test_v4_grid_obs_same_end_later_point_wins_snapshot: (vgo_80)同覆盖末端双点快照取后到者, 变异成 `>` 会保留先到快照
+- test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot: (vgo_83)覆盖末端必须推进(`a[4] = cov_end`), 变异成写 a[5] 会让短覆盖点抢走快照
+- test_v4_grid_obs_broken_bucket_zero_rate_kept_zero: (vgo_105/vgo_117)断链桶有覆盖且速率为 0 时仍是 0 线, 均值判据错看加权和会把 0 误判成无覆盖出 None
+- test_v4_rate_from_totals_zero_width_point_defensive: (vrft_15/vrft_25)w=0 直构点防御契约 —— 速率派不出(None)而非除零, 变异成 `w < 0` 会 ZeroDivisionError
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -1618,3 +1622,60 @@ def test_v4_totals_points_spread_threshold_exact_boundary():
         (1030, 0, 0),  # 等值游程 delta=0
         (1060, 100, 0),  # 未触发摊配 -> 整段 delta 归恢复桶
     ]
+
+
+def test_v4_grid_obs_same_end_later_point_wins_snapshot():
+    """(vgo_80)同覆盖末端双点快照取后到者 —— 判据含等号(`cov_end >= a[4]`); 变异成 `>`
+    会保留先到快照(dl/up totals 停在 1000/500)"""
+    g = build_grid("24h", NOW, 30.0)
+    b0 = g.buckets[100]
+    pts = (
+        V4PointEntry(b0, 10, 10, 1000, 500, w=30),  # 覆盖 [b0, b0+30)
+        V4PointEntry(b0 + 10, 20, 20, 2000, 900, w=20),  # 同末端 [b0+10, b0+30): 后到
+    )
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(14, 14, 2000, 900)  # (10x30+20x20)/50=14; 后到快照胜
+
+
+def test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot():
+    """(vgo_83)覆盖末端必须推进(`a[4] = cov_end`) —— 变异成写 a[5] 时 a[4] 停滞, 更短的
+    后续覆盖点会把快照抢为己有"""
+    g = build_grid("24h", NOW, 30.0)
+    b0 = g.buckets[100]
+    pts = (
+        V4PointEntry(b0, 1, 1, 100, 50, w=10),  # 覆盖末端 b0+10
+        V4PointEntry(b0 + 10, 2, 2, 200, 90, w=20),  # 推进到 b0+30: 快照 200/90
+        V4PointEntry(b0 + 20, 3, 3, 300, 120, w=5),  # 末端 b0+25 < b0+30: 不抢快照
+    )
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(2, 2, 200, 90)  # (10+40+15)/35=1.857 -> 2; 快照仍是 200/90
+
+
+def test_v4_grid_obs_broken_bucket_zero_rate_kept_zero():
+    """(vgo_105/vgo_117)断链桶有覆盖且速率为 0 仍是 0 线, 不是 None —— 均值判据看覆盖秒
+    (`a[0]`/`a[2]`), 变异成看加权和(`a[1]`/`a[3]`)会把 0 误判成无覆盖, 断链桶冒充缺口"""
+    g = build_grid("24h", NOW, 30.0)
+    b0 = g.buckets[100]
+    pts = (
+        V4PointEntry(b0 - 60, 9, 9, 1000, 500, w=30),  # 覆盖 [b0-60, b0-30)
+        V4PointEntry(b0, 0, 0, 2000, 900, w=30),  # 有观测缝(断链), 但本桶速率覆盖 30s 且为 0
+    )
+    obs = v4_grid_obs(pts, g)
+    assert obs[b0] == BucketObs(0, 0, 2000, 900)  # 有覆盖 -> 0 线; 快照照记
+
+
+def test_v4_rate_from_totals_zero_width_point_defensive():
+    """(vrft_15/vrft_25)w=0 直构点的防御契约 —— `w <= 0` 速率派不出(None)而非除零;
+    变异成 `w < 0` 会在 delta/w 处 ZeroDivisionError"""
+    pts = (
+        V4PointEntry(1000, 0, 0, 1000, 500, w=30),
+        V4PointEntry(1030, 0, 0, 1050, 550, w=0),  # 零宽防御点
+        V4PointEntry(1060, 1, 1, 1150, 650, w=30),
+    )
+    out = v4_rate_from_totals(pts)
+    assert [(p.t, p.dl_rate, p.up_rate) for p in out] == [
+        (1000, None, None),  # 窗首基线缺失
+        (1030, None, None),  # w=0 -> 派不出(不除零)
+        (1060, 2, 2),  # 摊配后 delta 50 / w 30 -> 2
+    ]
+    assert [(p.dl_total, p.up_total, p.w) for p in out] == [(1000, 500, 30), (1050, 550, 0), (1150, 650, 30)]
