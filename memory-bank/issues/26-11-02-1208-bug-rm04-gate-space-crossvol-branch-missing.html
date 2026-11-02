@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="rm04-gate-space-crossvol-branch-missing">
+<meta name="issue-stamp" content="26-11-02-1208">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="real-machine-rm04-drift-plan">
+<meta name="doc-refs" content="memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/issues/26-11-02-1144-bug-rm04-gate-space-envdrift.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)">
+<meta name="issue-summary" content="relocate_units.py:490 GATE_SPACE elif 分支(target_free &lt; needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码">
+<title>RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)</h1>
+    <p class="lede">relocate_units.py:490 GATE_SPACE elif 分支(target_free &lt; needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 12:08</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在 issue <a href="26-11-02-1144-bug-rm04-gate-space-envdrift.html">26-11-02-1144</a>（RM04-05 负向对照红灯失守）定位到闸门 <code>GATE_SPACE</code> 有两条拒绝分支，分别对应 relocate_units.py:488 与 L490：</p>
+    <ul>
+      <li><strong>L488</strong>：<code>target_free is None AND same_volume is not True</code>（空间不可判定 + 跨卷）→ 在 Z:/ 不存在盘上真实命中 → 已用方案 A 补进 RM04-05 负向对照</li>
+      <li><strong>L490</strong>：<code>target_free is not None AND target_free &lt; needed AND same_volume is not True</code>（空间可判定且不足 + 跨卷）→ <strong>目前 RM04-05 无覆盖此分支的红验</strong></li>
+    </ul>
+    <p><strong>为什么本机做不了</strong>（取证 2026-11-02 12:05，环境2 C盘机）：<code>disk_usage</code> 实测仅 C:/ 存在（68.3 GB free），D:/E:/F:/G:/H:/ 全 missing。跨卷前置 <code>same_volume=False</code> 在 <code>_same_volume_resolved</code> 里要求 src 与 dst 分属不同卷；只有 C: 盘时上溯到根也在 C: 上 → <code>same_volume=True</code>。且闸门自身 L492 有注释"同卷 rename 不占额外空间，空间预检不适用"——同卷即跳过 L490 分支。本机根本进不了这个分支，硬做只能伪造跨卷条件（造虚拟盘/容器），与"改测试前提"不同等，应改有第二可写卷的机器执行。</p>
+    <p><strong>为什么不移除这个分支红验</strong>：L490 是 <code>GATE_SPACE</code> 两条拒绝分支之一（不是冗余），且"目标卷空间不足"在跨卷迁移动作中是真实风险场景——目标盘比源盘小、用户预算错误、qB 临时落盘吃满等。缺少覆盖不等于分支没用，应在有条件的机器上补。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>闸门分支原文（取证 2026-11-02 12:05）：</p>
+<pre><code># src/auto_qb/core/modules/relocate_units.py:488-492
+if facts.target_free is None and facts.same_volume is not True:
+    _block(GATE_SPACE, "目标卷剩余空间不可判定(路径不可读或容器映射未覆盖): 不可判定一律拒绝")
+elif facts.target_free is not None and facts.target_free &lt; needed and facts.same_volume is not True:
+    _block(GATE_SPACE, f"目标卷剩余 {facts.target_free} 字节 &lt; 本组数据 {needed} 字节: 空间不足, 拒绝迁移")
+# 同卷(True): rename 不占额外空间, 空间预检不适用(R2 #1) —— 数值仅展示, 见 same_volume note
+</code></pre>
+    <p>本机仅有 C: 盘可写（取证 2026-11-02 12:05）：</p>
+<pre><code>C:/: exists, free=68.3GB, total=126.9GB
+D:/: missing   E:/: missing   F:/: missing   G:/: missing   H:/: missing</code></pre>
+    <p>RM04-05 用例覆盖的分支：<strong>L488（Z:/ 不存在盘 = 上溯整链不可判定）</strong> 已补；<strong>L490</strong>（跨卷空间不足）缺失。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>目标卷剩余空间可判定但小于本组数据 + 源/目标跨卷</td></tr>
+      <tr><td>影响范围</td><td><code>GATE_SPACE</code> 第二条拒绝分支（L490）；分支本身逻辑正确，缺测试覆盖</td></tr>
+      <tr><td>严重度</td><td><strong>低</strong>：分支逻辑静态可审（源码已读、条件无漏洞），风险主要是未来改动时回归此分支无人知晓</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:488</code>（取证 2026-11-02 12:05）· L488 不可判定分支 · grep <code>GATE_SPACE</code></li>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:490</code>（取证 2026-11-02 12:05）· L490 空间不足分支（<strong>缺覆盖</strong>）· grep <code>target_free.*needed</code></li>
+      <li><code>tests-real/rm04_relocate/test_rm04_relocate.py:788</code>（取证 2026-11-02 12:05）· RM04-05 负向对照入口 · grep <code>负向对照</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>交接前置（接手机器需要满足）</h2>
+    <div class="callout">
+      <strong>需要第二可写卷</strong>（Windows 上除 C: 外至少还有 D:/E:/… 任一存在且可写），让 <code>_same_volume_resolved</code> 能判定跨卷；同时目标卷剩余空间 <strong>小于</strong>（或可控地调到小于）RM04-05 两枚种子数据总和（约 256 KB × 2 = 512 KB，或按用例 <code>needed</code> 实测值）。<br><br>
+      第二可写卷可选来源：另一块实体盘、外置 SSD、挂载虚拟盘（DiskPart vdisk attach / DISM / 亚视虚拟盘）—— 只要 <code>os.stat(dst).st_dev != os.stat(src).st_dev</code> 即满足跨卷条件。<br><br>
+      环境2（C盘机）不可用：probe 实测 D:/ 不存在。
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>接手判据</h2>
+    <p><strong>不改产品代码，只改 RM04-05 负向对照段（在已补的 Z:/ 不可判定红验之后新增 L490 分支红验）</strong>：</p>
+    <ol>
+      <li>探针：<code>os.stat(src).st_dev != os.stat(dst).st_dev</code>（跨卷）+ <code>shutil.disk_usage(dst_parent).free &lt; 用例 needed 实测值</code>（空间不足），两个前置同时成立；</li>
+      <li>真机 POST /api/torrents/{hash}/location（跨卷 + 空间不足 dst）→ 期望 <code>status=error</code> + <code>reasons[].gate == "space"</code> + 零 started 零 "迁移发起"；</li>
+      <li>主链不受影响（<code>dst.mkdir(parents=True, exist_ok=True)</code> 预建后空间充足 → PASS）；</li>
+      <li>同轮 RM04 套件 <strong>9 条全 PASS</strong>（原有 8 条 + 方案 A 补的 L488 红验 + 本次补的 L490 红验 → 全绿）；</li>
+      <li>不改产品代码、不改计划正文（RM04 计划已 Done，不需要翻回）。</li>
+    </ol>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-02 12:08 — 入池，状态 <strong>Open</strong>。交接中：环境2 C盘机仅有 C: 可写卷，无法进 L490 分支；需第二可写卷 + 空间可判定的环境接手。</li>
+    </ul>
+    <h3>交叉引用</h3>
+    <ul>
+      <li><strong>本 issue →</strong> 根因 issue 已解决（方案 A）但留下分支覆盖缺口：<a href="26-11-02-1144-bug-rm04-gate-space-envdrift.html">26-11-02-1144</a></li>
+      <li><strong>本 issue 所属专题</strong>：<a href="..">26-11-01-2033-plan-real-machine-rm04-drift-plan.html</a>（已 Done，不再翻回）</li>
+    </ul>
+    <h3>复验 / 修复后补充</h3>
+    <p class="hint">待接手机器完成后补：接手时间 / 环境前置是否满足 / 探针实测值 / 真机套件数字 / 与建议修法不同则说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

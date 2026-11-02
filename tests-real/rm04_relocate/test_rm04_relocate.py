@@ -740,8 +740,9 @@ def test_rm04_05_same_volume_relocate_dir_alias():
           free_space_on_disk 恒 -1 ⇒ same_volume_proof 必败 ⇒ 多成员组被 GATE_SAME_FS 拒;
           用例临时把 56590 的 save_path 改指 C: 现存目录(qB 立即报出 C: 真值), 测毕逐字还原。
     触发 = 产品 WEB POST /api/torrents/{hash}/location (confirm=true, 目录别名提议需二次确认)。
-    负向对照(先于主链, 红验 = 给足 dst 即过): dst 不预建 → GATE_SPACE「剩余空间不可判定」
-          拒绝 —— 回执 error + reasons 含 gate=space + 零 started 零「迁移发起」(零副作用)。
+    负向对照(先于主链, 红验 = 给足 dst 即过): dst_neg = Z:/rm04_05_neg_ctl/dst(Z: 不存在盘,
+          上溯整链不可判定) → GATE_SPACE「剩余空间不可判定」拒绝 —— 回执 error + reasons 含
+          gate=space + 零 started 零「迁移发起」(零副作用)。
     副作用: qB 真搬数据(C: 内); src 内容根变 junction 指向 dst; <data_dir>/relocate/ 落账;
           副实例 save_path 临时改写(finally 还原并核验)。
     回滚: 副实例 save_path 还原; 删 junction 只 os.rmdir 本体(禁递归删穿); 删光 real-fake 种子;
@@ -767,6 +768,10 @@ def test_rm04_05_same_volume_relocate_dir_alias():
 
         src = RAM / "rm04_05" / "src"
         dst = case / "dst"
+        # 负向对照专用路径: Z: 不存在盘, 上溯整链不可判定 → GATE_SPACE target_free=None + same_volume=None
+        # 真实命中(方案A, 2026-11-02 issue 26-11-02-1144): 原 dst=case/"dst" 在环境2 C盘充足时
+        # 上溯父目录即命中 73GB free + same_volume=True → 闸门放行(设计正确, 红验前提写窄)
+        dst_neg = Path("Z:/rm04_05_neg_ctl/dst")
         purge_tree(src.parent)
         cfg, web_port = write_cfg(case, relocate=True, alias_threshold=1)
         p = app.start(cfg, case)
@@ -781,8 +786,11 @@ def test_rm04_05_same_volume_relocate_dir_alias():
         assert wait_group(web_port, h1, {h1, h2}, 20, "两成员未成组(前提不成立)")
         wait_store_progress(web_port, [h1, h2])  # 闸门读产品快照, 等 1-2 个同步拍追平
 
-        # ---- 负向对照(L3 兑现): dst 不存在 → GATE_SPACE 不可判定拒绝(零副作用)
-        result = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(dst), "confirm": True})
+        # ---- 负向对照(L3 兑现): 不存在盘 Z: dst_neg → GATE_SPACE 上溯整链不可判定拒绝(零副作用)
+        #      原 dst=case/"dst" 在 C盘充足时上溯父目录即命中 free_space + same_volume → 闸门放行,
+        #      红灯失守(issue 26-11-02-1144)。改用 Z:/... 让 _volume_free_resolved 上溯整链失败 → None
+        #      + _same_volume_resolved 上溯整链失败 → None → GATE_SPACE 条件真实命中。
+        result = cmd_post_and_wait(web_port, f"/api/torrents/{h1}/location", {"location": str(dst_neg), "confirm": True})
         assert result.get("status") == "error", \
             f"dst 缺席应被闸门 error 拒绝, 实际: {json.dumps(result, ensure_ascii=False)[:500]}"
         neg_items = ((result or {}).get("truth") or {}).get("results") or []

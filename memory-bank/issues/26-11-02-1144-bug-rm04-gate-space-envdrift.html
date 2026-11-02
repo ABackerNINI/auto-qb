@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="rm04-gate-space-envdrift">
+<meta name="issue-stamp" content="26-11-02-1144">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="real-machine-rm04-drift-plan">
+<meta name="doc-refs" content="memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html, memory-bank/issues/26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)">
+<meta name="issue-summary" content="RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)">
+<title>RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)</h1>
+    <p class="lede">RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-02-1144-bug-rm04-gate-space-envdrift</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-02 11:44</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>漂移复测轮 RM04（辅种与分组）2026-11-02 在环境2（C盘机）重跑时，用例 RM04-05「同卷跨盘移动主链」的<strong>负向对照红灯失守</strong>。</p>
+    <p>用例意图：dst 目录故意不预建，期望闸门 <code>GATE_SPACE</code> 以「剩余空间不可判定」拒绝（<code>status=error</code> + <code>reasons.gate=space</code>），实现零副作用负向验证。</p>
+    <p>实测：闸门直接放行，<code>status=ok</code>，与预期相反。</p>
+    <p><strong>触发条件</strong>：目标叶子目录不存在但上溯一层即命中可读父目录（C: 盘充足、父目录存在）。<strong>不触发</strong>：上轮环境1（2026-11-01）R: 盘缺席时，上溯整链不可用 → 闸门命中。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>用例失败原文（取证 2026-11-02 11:44）：</p>
+<pre><code>[RM04 套件] 1 failed, 8 passed in 164.91s
+FAILED tests-real/rm04_relocate/test_rm04_relocate.py::test_rm04_05_same_volume_relocate_dir_alias
+AssertionError: dst 缺席应被闸门 error 拒绝, 实际: {"status": "ok", "error": "", ...}
+</code></pre>
+    <p>最小探针结果（取证 2026-11-02 11:44，<strong>环境2 C盘 + dst 叶子不存在但父目录在 C:</strong>）：</p>
+<pre><code>dst exists? False
+dst parent exists? True
+target_free (上溯到 C:/.../tests-real/.work/rm04/rm04_05): 73359466496 bytes (68.3 GB)
+same_volume (src vs dst 上溯到 C:/.../rm04_05): True
+GATE_SPACE (target_free is None and same_volume is not True): False  ← 放行！
+GATE_SAME_FS (same_volume is not True): False
+</code></pre>
+    <p>对照探针（<strong>环境1 R: 盘缺席</strong>，上轮 2026-11-01 条件）：</p>
+<pre><code>[R:缺席] target_free (上溯到 R:/): None
+[R:缺席] same_volume (上溯到 R:/): None
+GATE_SPACE: True  ← 上轮命中！
+</code></pre>
+    <p>闸门源码条件（取证 2026-11-02 11:44）：</p>
+<pre><code># src/auto_qb/core/modules/relocate_units.py:488
+if facts.target_free is None and facts.same_volume is not True:
+    _block(GATE_SPACE, "目标卷剩余空间不可判定(路径不可读或容器映射未覆盖): 不可判定一律拒绝")
+</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>目标叶子目录不存在 + 父目录可读 + 同卷（same_volume=True）+ 空间充足 → <strong>闸门按设计放行</strong>；仅当「路径上溯整链不可判定 + 跨卷」才命中 GATE_SPACE 拒绝</td></tr>
+      <tr><td>影响范围</td><td>仅 RM04-05 用例 L3 红验前提写窄；闸门逻辑本身在生产路径上行为正确（设计如此）</td></tr>
+      <tr><td>严重度</td><td><strong>低</strong>：代码零回归、闸门零失效；测试红验前提需按"上溯整链不可判定"条件收紧（或换另一条真正不可判定的路径）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:488</code>（取证 2026-11-02 11:44）· 闸门评估 · grep <code>GATE_SPACE</code></li>
+      <li><code>src/auto_qb/core/modules/relocate_mod.py:80</code>（取证 2026-11-02 11:44）· <code>_volume_free_resolved</code> 目标卷剩余（上溯最近存在祖先）· grep <code>def _volume_free_resolved</code></li>
+      <li><code>src/auto_qb/core/modules/relocate_mod.py:104</code>（取证 2026-11-02 11:44）· <code>_same_volume_resolved</code> 同卷判定（上溯最近存在祖先）· grep <code>def _same_volume_resolved</code></li>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:51</code>（取证 2026-11-02 11:44）· <code>GATE_SPACE = "space"</code> 常量定义 · grep <code>GATE_SPACE = "space"</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因</h2>
+    <div class="callout">
+      <strong>定性：环境差量（用例红验前提写窄）</strong>。闸门逻辑按设计工作——<code>GATE_SPACE</code> 拒绝条件是 <code>target_free is None AND same_volume is not True</code>。环境2 C盘充足 + dst 叶子不存在但父目录可读 → 上溯一层即命中 <code>target_free=73GB</code> + <code>same_volume=True</code>，闸门放行合理。<br><br>
+      上轮环境1（2026-11-01）R: 盘缺席 → 上溯整链到 R:/ 仍不可判定 → <code>target_free=None + same_volume=None</code> → GATE_SPACE 命中。<br><br>
+      <strong>已排除：产品回归</strong>（闸门条件 relocate_units.py:488 自 2026-11-02-0134 方案A 起稳定，本轮探针与上轮探针对照完全吻合设计分支）。
+    </div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法</h2>
+    <p><strong>不改代码，改测试红验前提</strong>。候选方案：</p>
+    <ul>
+      <li><strong>方案 A（窄化）</strong>：把 dst 改成"上溯整链不可判定"的路径（如 UNC 缺席、容器映射 miss），而不是"叶子不存在但父目录可读"——这正是计划 R1 方案A 的适用条件</li>
+      <li><strong>方案 B（增补对照）</strong>：在现有"空间充足应放行"路径再加一条红验：当 <code>target_free &lt; needed</code> 且 same_volume=False 时 GATE_SPACE 应拒绝（relocate_units.py:490 的 elif 分支），覆盖第二种闸门拒绝形态</li>
+      <li><strong>方案 C（改写）</strong>：把用例 docstring 里的"dst 缺席应被 GATE_SPACE 拒绝"改成"当 dst 上溯整链不可判定时应被 GATE_SPACE 拒绝"，明确前提</li>
+    </ul>
+    <p>未认领、未实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-02 11:44 — 入池，状态 <strong>Open</strong>（漂移复测 RM04-05 负向对照红灯失守，根因定性=环境差量，闸门逻辑按设计工作）</li>
+      <li>2026-11-02 11:50 — 被 <code>memory-bank/plans/26-11-01-2033-plan-real-machine-rm04-drift-plan.html</code> 认领，状态 <strong>In Progress</strong>。授权方案 A（dst 改上溯整链不可判定）+ B（增补 target_free &lt; needed AND same_volume=False 红验），不改产品代码。</li>
+    </ul>
+    <h3>复验</h3>
+    <p>2026-11-02 11:44 — 在环境2（C盘机）重跑 RM04 套件：1 failed, 8 passed。用例 <code>test_rm04_05_same_volume_relocate_dir_alias</code> FAIL。用最小探针直接调用 <code>_volume_free_resolved</code>/<code>_same_volume_resolved</code> 等价 Python 代码，证实闸门条件未命中（target_free=73GB, same_volume=True, GATE_SPACE=False）。在上轮 R: 缺席条件下跑同一探针，证实 GATE_SPACE=True 命中。两轮互证完毕。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法（方案 A）</strong>：RM04-05 负向对照 dst 从 <code>case/"dst"</code>（C: 现存父目录下）改成 <code>Z:/rm04_05_neg_ctl/dst</code>（不存在盘，上溯整链不可判定），主链 dst=case/"dst" 保持原路径不改。闸门 <code>GATE_SPACE</code> 条件（<code>target_free is None AND same_volume is not True</code>）在 Z:/ 路径下两边同时命中 → 真实拦截。不改产品代码，只改测试红验前提。</p>
+    <p><strong>探针前置</strong>：UNC 路径 <code>\\\\localhost999\\nonexistent_share\\foo</code> 在 Windows 上被 <code>os.path.dirname</code> 退化到 <code>///</code> 根 → <code>shutil.disk_usage("///")</code> 反读本地 C: free_space（73GB），反而放行；Z:/ 不存在盘上溯整链失败 → <code>target_free=None</code>。UNC 方案排除。</p>
+    <p><strong>方案 B（target_free &lt; needed AND same_volume=False）</strong>：在仅 C: 盘可写的环境2 上无法真跑——跨卷前置（same_volume=False）不成立，且闸门 <code>relocate_units.py:492</code> 同卷跳过空间预检。如实报告环境限制，不造虚拟盘伪造跨卷条件。</p>
+    <p><strong>验证方式</strong>：真机套件 <code>commands run real.suite -- --slice RM04 --yes</code>（环境2 C盘机 56589/56590）</p>
+    <p><strong>测试数字</strong>：<code>9 passed in 189.80s</code>（2026-11-02 12:05）。RM04-05 负向对照红灯真实命中 <code>GATE_SPACE</code> → error + gate=space；RM04-09（issue 26-11-01-2102 facade 修复）维持 PASS；其余 7 条全绿。</p>
+    <p>与建议修法不同：建议方案 B（增补第二红验）未实施——环境限制，如实报告。建议方案 A（窄化 dst 前提）实施，效果等同。</p>
+    <p><strong>交叉引用</strong>：方案 B（<code>target_free &lt; needed AND same_volume=False</code> 跨卷空间不足分支红验）已另立 issue <a href="26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html">26-11-02-1208</a>（Open），交给有第二可写卷的机器执行；本 issue 方案 A（Z:/ 不可判定分支）独立闭环，状态 Done 不变。</p>
+  </section>
+
+  <footer>
+    26-11-02-1144-bug-rm04-gate-space-envdrift.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

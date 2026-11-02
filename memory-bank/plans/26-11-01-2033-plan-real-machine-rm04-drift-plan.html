@@ -7,10 +7,10 @@
 <title>RM04 辅种与分组 漂移复测轮排期计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="real-machine-rm04-drift-plan">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-01-2033">
-<meta name="doc-updated" content="26-11-01-2033">
-<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/testing/real-machine.md, memory-bank/plans/26-10-31-1042-plan-real-rm04.html, memory-bank/testing/real-baselines/26-10-31-1219-real-RM04.md">
+<meta name="doc-updated" content="26-11-02-1157">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/testing/real-machine.md, memory-bank/plans/26-10-31-1042-plan-real-rm04.html, memory-bank/testing/real-baselines/26-10-31-1219-real-RM04.md, memory-bank/issues/26-11-02-1144-bug-rm04-gate-space-envdrift.html, memory-bank/issues/26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html">
 <style>
   :root {
     --bg: #10151a;
@@ -72,7 +72,7 @@
 <h1>RM04 辅种与分组 漂移复测轮排期计划</h1>
 <p class="lede">RM04 漂移复测轮排期(漂移轮顺序 RM03 ✅ → RM02 ✅ → <b>RM04 本轮</b>): 核心是 <code>fbaf0446</code>(qB 5.3.x 双版本支持, facade share_limits_mode + 跳检重加回传)无真机复测, 外加上一轮 8 条用例在「qbittorrent-api 升版 2026.10.1 + 环境2 前提差异(R: 盘缺席)」下的回归复测; 本机两测试实例均 qB 5.2.3, 5.3 服务端语义按实况预登记 BLOCKED, 不硬造。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-01-2033 · <b>doc-updated</b> 26-11-01-2033 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-01-2033 · <b>doc-updated</b> 26-11-02-1157 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 主会话排期指令(RM04 辅种与分组 漂移复测轮排期计划代理, 2026-11-01); 锚件 §08 漂移轮顺序拍板(D1–D4)与其「跳检/全量校验归属拍板」条
 </div>
 
@@ -154,7 +154,7 @@ commands run real.guard [ok] 56589 pid=14820 v5.2.3 firewalled 真实种子 0 �
   <tr><td><b>B fbaf0446 可触发面</b></td><td>新增 RM04-09: facade <code>share_limits_mode</code> 在 5.2.3 的端到端真机语义(WebUI 分享限制命令 → facade 恒发 <code>shareLimitsMode="Default"</code> → 5.2 忽略未知参、limits 生效); 跳检重加回传的 5.2.3 wire = None 不发键(与升版前逐字节一致), 其主链回归由复测 + RM03-15..17 引用覆盖; 5.3 服务端语义 BLOCKED 预登记</td><td>新增用例 + §04 ③ BLOCKED 清单</td></tr>
   <tr><td><b>C 环境2 适配</b></td><td>用例侧 <code>RAM</code> 落点加盘探测回退(R: 存在用 R:, 否则退 <code>.work/rm04/ram/</code> 真写盘); RM04-05 按「C:→C: 同卷」重写(dir_alias/junction/穿透/armed/done 主链全保, 真跨卷半边 BLOCKED); 与跨卷无关的 7 条零改动</td><td>用例改造点 3 处(05/06/07 共用的 <code>RAM</code> 常量 + RM04-05 判据)</td></tr>
 </table>
-<h4>5.3.x 面可触发范围结论(按代码实况核实, 2026-11-01)</h4>
+<h3>5.3.x 面可触发范围结论(按代码实况核实, 2026-11-01)</h3>
 <p><code>fbaf0446</code> 的设计目标即「同一份代码双服 5.2.3/5.3.x, 不引入版本号分支」—— 产品代码里<b>没有任何版本分支</b>: facade(<code>qbapi.py:197</code>)恒发 <code>share_limits_mode="Default"</code>; 跳检重加(<code>ops_mod._skip_add_call</code>)恒透传快照值, 而 5.2.3 快照无该字段恒 None ⇒ 库对 None 值键不发, wire 与升版前完全一致。⇒ 在本机 5.2.3 上:</p>
 <ul>
   <li><b>可真机触发</b>: ① facade 调用链端到端(<code>_cmd_set_share_limits</code> → facade → qB)带新参后 5.2.3 照常生效(= RM04-09); ② 跳检重加主链在新库(2026.10.1)上不回归(= 复测 + RM03-15..17 引用); ③ 快照层新字段采集不炸(compat 加法式字段, 随全量复测)。</li>

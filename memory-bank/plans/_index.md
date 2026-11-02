@@ -20,16 +20,16 @@
 ## Open
 
 - [26-11-02-0134] [整组迁移 qb_temp 闸门按归属收窄](26-11-02-0134-plan-relocate-qbtemp-narrow.html) — `relocate-qbtemp-narrow`
-- [26-11-01-2212] [RM09 WebUI 写侧 漂移复测轮排期计划](26-11-01-2212-plan-real-rm09-drift.html) — `real-rm09-drift`
-- [26-11-01-2123] [RM08 WebUI 读侧 漂移复测轮排期计划](26-11-01-2123-plan-real-rm08-drift.html) — `real-rm08-drift`
-- [26-11-01-2033] [RM04 辅种与分组 漂移复测轮排期计划](26-11-01-2033-plan-real-machine-rm04-drift-plan.html) — `real-machine-rm04-drift-plan`
-- [26-11-01-1921] [RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)](26-11-01-1921-plan-real-machine-rm02-drift-plan.html) — `real-machine-rm02-drift-plan`
-- [26-11-01-1031] [RM03 规则引擎 · 真机实测分步计划(漂移复测轮)](26-11-01-1031-plan-real-machine-rm03-drift-plan.html) — `real-machine-rm03-drift-plan`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
 
 - [26-11-02-0657] [测试临时目录自举与互斥锁方案 — R→H→%TEMP% 固定探测 · 禁静默降级 · 禁外部 TMPDIR · 锁自举 · 评审稿](26-11-02-0657-plan-testing-tmpdir-bootstrap.html) — `testing-tmpdir-bootstrap`
+- [26-11-01-2212] [RM09 WebUI 写侧 漂移复测轮排期计划](26-11-01-2212-plan-real-rm09-drift.html) — `real-rm09-drift`
+- [26-11-01-2123] [RM08 WebUI 读侧 漂移复测轮排期计划](26-11-01-2123-plan-real-rm08-drift.html) — `real-rm08-drift`
+- [26-11-01-2033] [RM04 辅种与分组 漂移复测轮排期计划](26-11-01-2033-plan-real-machine-rm04-drift-plan.html) — `real-machine-rm04-drift-plan`
+- [26-11-01-1921] [RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)](26-11-01-1921-plan-real-machine-rm02-drift-plan.html) — `real-machine-rm02-drift-plan`
+- [26-11-01-1031] [RM03 规则引擎 · 真机实测分步计划(漂移复测轮)](26-11-01-1031-plan-real-machine-rm03-drift-plan.html) — `real-machine-rm03-drift-plan`
 - [26-11-01-0553] [WEBUI 主表横向滚动条隐藏与底部紧凑指示条](26-11-01-0553-plan-webui-hscroll-indicator.html) — `webui-hscroll-indicator`
 - [26-11-01-0434] [提交闸门按改动收窄优化](26-11-01-0434-plan-commit-gate-scope.html) — `commit-gate-scope`
 - [26-11-01-0106] [规则引擎重设计方案](26-11-01-0106-plan-rule-engine-redesign.html) — `rule-engine-redesign`
@@ -84,13 +84,8 @@
 - [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 - [26-10-14-1241] [HR 取数通道「去端口 + 跨机」联合实施计划 · auto-qb](26-10-14-1241-plan-hr-channel-portless-remote.html) — `hr-channel-portless-remote`
 - [26-10-13-0811] [种子详情表格 · 只重写表格（模板变体全部保留）— 分步实施计划](26-10-13-0811-plan-webui-detail-table-rebuild.html) — `webui-detail-table-rebuild`
-- [26-10-13-0540] [种子状态双写通道重构 · A 系实施计划 — 删合成回写 + 局部 deferral](26-10-13-0540-plan-seed-state-writeback-removal-local-deferral.html) — `seed-state-writeback`
-- [26-10-13-0324] [方案 · kb.nav Esc 功能 · 借鉴 auto-qb Esc 退栈设计 · auto-qb](26-10-13-0324-plan-kb-nav-esc.html) — `kb-nav-esc`
-- [26-10-12-2330] [引擎表头 a11y 补课 — 可排序表头语义与键盘可达（方案 C）](26-10-12-2330-plan-webui-table-head-a11y.html) — `webui-drawer-table-rework`
-- [26-10-12-2010] [计划 · 流量启动恢复改为按需读取口径](26-10-12-2010-plan-webui-traffic-startup-recovery-on-demand.html) — `webui-traffic-startup-recovery-on-demand`
-- [26-10-12-0535] [计划 · qB 流量图限速线按当时值分段](26-10-12-0535-plan-webui-traffic-limit-history.html) — `webui-traffic-limit-history`
 
-> 更早的 **125** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **130** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

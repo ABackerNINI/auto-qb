@@ -7,9 +7,9 @@
 <title>RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="real-machine-rm02-drift-plan">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-01-1921">
-<meta name="doc-updated" content="26-11-01-1921">
+<meta name="doc-updated" content="26-11-02-1117">
 <meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html">
 <style>
   :root {
@@ -83,7 +83,7 @@
 <h1>RM02 主循环·调度·持久化 · 真机实测分步计划(漂移复测轮)</h1>
 <p class="lede">对「主循环·调度·持久化」片(RM02)做<b>漂移复测轮</b>真机实测的分步计划: 核心 = <b>RM02-07 断连自动重连真机回归</b>(issue 26-10-31-1029 已修 <code>e820d2bb</code>, 修复轮只有单测, 规程 §2.8 明载「修复后须真机回归」); 其余 7 条既有用例原判据复测(环境1 → 环境2 首跑), W2-B/W4 波及 <code>core/taskqueue.py</code>/<code>core/state.py</code> 的重构面随复测带跑, <code>f2698064</code> 已真机验过记账不复测。设计主轴: 既有 8 条用例零重写直接复用, 基线按「写不出 commit 从首轮重来」口径在本轮实测完成时重立。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-01-1921 · <b>doc-updated</b> 26-11-01-1921 · <b>doc-status</b> Open(待拍板 §05, 拍板即冻结) · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-01-1921 · <b>doc-updated</b> 26-11-02-1117 · <b>doc-status</b> Done(待拍板 §05, 拍板即冻结) · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> RM02 漂移复测轮排期代理 · 常驻锚 issue 26-10-31-0641 §08(2026-11-01 漂移轮顺序 RM03→<b>RM02</b>→RM04→RM08/09 已拍板; RM03 轮已完成 17/17) · 分支 real/drift-261101(纯本地, 无远端)<br>
   <b>前置已办</b> 56590 副实例 <code>bypass_local_auth=True</code> 已按用户拍板(2026-11-01)永久落实例 = 环境2 标准配置(锚件 §08 已记; 规程 §2.5.2/§2.10 已回写, commit 670a6194)
 </div>
