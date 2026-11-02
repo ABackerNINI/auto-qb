@@ -50,6 +50,7 @@ from auto_qb.hr.discovery import API_DISCOVER, DISCOVERY_DEFAULT_PORT
 
 from extension_proxy_support import (
     BACKGROUND_JS,
+    background_text,
     DISCOVERY_JS,
     EXT_DIR,
     JS_FILES,
@@ -146,15 +147,15 @@ def test_site_caps_are_shared_single_source():
     assert "importScripts('site-caps.js')" in _read(BACKGROUND_JS)
     html = _read(OPTIONS_HTML)
     assert "site-caps.js" in html and html.index("site-caps.js") < html.index("options.js"), "载入顺序: 常量在前"
-    for path in (BACKGROUND_JS, OPTIONS_JS):
-        assert not re.search(r"(?m)^const SITE_CAPS", _read(path)), f"{path.name} 又定义了一份阈值"
-        assert "SITE_CAPS[" in _read(path) or "Object.entries(SITE_CAPS)" in _read(path), \
-            f"{path.name} 应当消耗共享阈值而不是写死数字"
+    for name, text in ((BACKGROUND_JS.name, background_text()), (OPTIONS_JS.name, _read(OPTIONS_JS))):
+        assert not re.search(r"(?m)^const SITE_CAPS", text), f"{name} 又定义了一份阈值"
+        assert "SITE_CAPS[" in text or "Object.entries(SITE_CAPS)" in text, \
+            f"{name} 应当消耗共享阈值而不是写死数字"
 
 
 def test_protocol_matches_backend():
     """扩展与后端的线上格式钉在一处: 常量取 `hr.channel`/`hr.discovery`, 字段名取实测行为(双向守阵)"""
-    background = _read(BACKGROUND_JS)
+    background = background_text()
     assert API_TASKS in background and API_RESULT in background, "端点路径必须与 hr.channel 一致"
     assert "buildDiscoveryUrl(" in background and "runDiscovery(" in background, \
         "发现流程必须经 discovery.js 的单点拼 URL(路径常量只在 discovery.js 一处)"

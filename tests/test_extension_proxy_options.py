@@ -49,6 +49,7 @@ from auto_qb.hr.discovery import API_DISCOVER, DISCOVERY_DEFAULT_PORT
 
 from extension_proxy_support import (
     BACKGROUND_JS,
+    background_text,
     EXT_DIR,
     OPTIONS_HTML,
     OPTIONS_JS,
@@ -202,7 +203,7 @@ def test_options_listens_instances_changes():
 def test_options_poll_label_matches_background():
     """选项页的轮询周期文案必须与 background.js 的 POLL_MINUTES 同步(漂移史: 文案停在 5 分钟,
     实际 v2.6 起已改 1 分钟 —— 用户按选项页显示的数字理解行为, 对不上就把排查引向歧途)"""
-    bg = _read(BACKGROUND_JS)
+    bg = background_text()
     html = _read(OPTIONS_HTML)
     m = re.search(r"const POLL_MINUTES = (\d+);", bg)
     assert m, "POLL_MINUTES 常量要存在(改用别的名字时这条断言一起改)"

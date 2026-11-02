@@ -34,6 +34,33 @@ OPTIONS_HTML = EXT_DIR / "options.html"
 
 JS_FILES = (NORMALIZE_JS, DISCOVERY_JS, SITE_CAPS_JS, BACKGROUND_JS, OPTIONS_JS)
 
+#: R3 拆分后 service worker 的真实 importScripts 顺序(log -> support -> 主体)。
+BACKGROUND_LOG_JS = EXT_DIR / "background-log.js"
+
+BACKGROUND_SUPPORT_JS = EXT_DIR / "background-support.js"
+
+BACKGROUND_PARTS = (BACKGROUND_LOG_JS, BACKGROUND_SUPPORT_JS, BACKGROUND_JS)
+
+
+def background_text() -> str:
+    """按 service worker 加载顺序拼接全部分片(静态断言用, 与运行时同源)。"""
+    return "\n".join(p.read_text(encoding="utf-8") for p in BACKGROUND_PARTS)
+
+
+_BG_BUNDLE: str | None = None
+
+
+def background_bundle() -> str:
+    """vm 沙箱里 importScripts 是 no-op, 故用拼接文件模拟同一全局作用域。"""
+    global _BG_BUNDLE
+    if _BG_BUNDLE is None:
+        import tempfile
+        bundle = pathlib.Path(tempfile.gettempdir()) / "aqb_background_bundle.js"
+        bundle.write_text(background_text(), encoding="utf-8")
+        _BG_BUNDLE = str(bundle)
+    return _BG_BUNDLE
+
+
 #: 归一化的行为钉死表 —— **含用户 2026-09-24 实际踩到的两种写法**。
 #: (kind, 输入, 期望输出或 None=应当报错)
 #: 去端口+跨机(计划 26-10-14-1241 S4/V5)翻转的两条旧语义: 私网放行(原「非回环即抛」)、
@@ -223,7 +250,7 @@ def page_fetch_trace() -> dict:
             _NODE_RUN_PAGE_FETCH.replace("__PAGE_WITH_TABLE__", json.dumps(PAGE_WITH_TABLE)).replace(
                 "__CHALLENGE_LIKE__", json.dumps(CHALLENGE_LIKE)
             ).replace("__LOGIN_LIKE__", json.dumps(LOGIN_LIKE)),
-            str(BACKGROUND_JS),
+            background_bundle(),
             str(DISCOVERY_JS),
             str(SITE_CAPS_JS),
         ]
@@ -341,7 +368,7 @@ def quota_trace() -> dict:
         [
             node, "-e",
             _NODE_RUN_QUOTA.replace("__PAGE_WITH_TABLE__", json.dumps(PAGE_WITH_TABLE)),
-            str(BACKGROUND_JS),
+            background_bundle(),
             str(DISCOVERY_JS),
             str(SITE_CAPS_JS)
         ]
@@ -848,7 +875,7 @@ def selfheal_trace() -> dict:
         return {}
     proc = _run_node(
         [node, "-e", _NODE_RUN_SELFHEAL,
-         str(BACKGROUND_JS),
+         background_bundle(),
          str(NORMALIZE_JS),
          str(DISCOVERY_JS),
          str(SITE_CAPS_JS)]
@@ -1200,7 +1227,7 @@ def site_perm_trace() -> dict:
         return {}
     proc = _run_node(
         [node, "-e", _NODE_RUN_SITE_PERM,
-         str(BACKGROUND_JS),
+         background_bundle(),
          str(OPTIONS_JS),
          str(DISCOVERY_JS),
          str(SITE_CAPS_JS)]

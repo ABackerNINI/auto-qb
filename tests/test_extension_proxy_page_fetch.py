@@ -105,6 +105,8 @@ from auto_qb.hr.discovery import API_DISCOVER, DISCOVERY_DEFAULT_PORT
 
 from extension_proxy_support import (
     BACKGROUND_JS,
+    background_bundle,
+    background_text,
     CHALLENGE_LIKE,
     DISCOVERY_JS,
     EXT_DIR,
@@ -161,7 +163,7 @@ def test_no_opaque_reason_leaks():
     block = _js_object_block(js, "const DISCOVERY_REASON_TEXT = {")
     mapped = _js_object_keys(block)
     assert mapped, "选项页要有 DISCOVERY_REASON_TEXT(失败码 -> 中文结论)映射表"
-    reasons = sorted(set(re.findall(r"reason: '([^']+)'", _read(BACKGROUND_JS))))
+    reasons = sorted(set(re.findall(r"reason: '([^']+)'", background_text())))
     assert reasons, "后台应能给出失败码(改用别的键名时这条一起改)"
     for reason in reasons:
         assert reason in mapped, f"后台会报 reason={reason}, 选项页却没有中文映射(会原样外泄给用户)"
@@ -273,7 +275,7 @@ def test_extension_torrent_login_page_detected():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_LOGIN_PAGE, str(BACKGROUND_JS), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_LOGIN_PAGE, background_bundle(), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的登录页场景失败: {proc.stderr.strip()}"
     payload = json.loads(proc.stdout)["payload"]
     assert payload.get("ok") is False
@@ -289,7 +291,7 @@ def test_background_events_ring_dual_write():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_EVENTS, str(BACKGROUND_JS), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_EVENTS, background_bundle(), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的事件环场景失败: {proc.stderr.strip()}"
     out = json.loads(proc.stdout)
     assert out["quotaPayload"].get("kind") == "ext-quota", "页面访问超限那次要被扩展侧硬上限挡下(场景前提)"
@@ -311,7 +313,7 @@ def test_logger_levels_ring_truncation_and_clear():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_LOGGER, str(BACKGROUND_JS), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_LOGGER, background_bundle(), str(DISCOVERY_JS), str(SITE_CAPS_JS)])
     assert proc.returncode == 0, f"node 跑 background.js 的日志场景失败: {proc.stderr.strip()}"
     got = json.loads(proc.stdout)
     assert got["byLevel"] == ["info", "warn", "error"], f"低于记录级别(debug)要直接丢弃: {got['byLevel']}"
@@ -334,7 +336,7 @@ def test_connection_failure_logs_head_tail_only():
         return  # 没装 node: 与其它前端守阵同口径静默跳过
     proc = _run_node(
         [node, "-e", _NODE_RUN_NOISE,
-         str(BACKGROUND_JS),
+         background_bundle(),
          str(NORMALIZE_JS),
          str(DISCOVERY_JS),
          str(SITE_CAPS_JS)]
@@ -471,7 +473,7 @@ def test_background_discovery_flow():
     proc = _run_node(
         [
             node, "-e", _NODE_RUN_DISCOVERY_FLOW,
-            str(BACKGROUND_JS),
+            background_bundle(),
             str(NORMALIZE_JS),
             str(DISCOVERY_JS),
             str(SITE_CAPS_JS)
@@ -594,7 +596,7 @@ def test_badge_text_is_ascii_only():
 
     徽标字号极小, 对勾/省略号这类图形符在部分平台渲染成方框; 语义交给颜色 + 悬停标题表达。
     """
-    bg = _read(BACKGROUND_JS)
+    bg = background_text()
     block = bg[bg.index("const BADGE = {"):bg.index("function badgeStateOf")]
     texts = re.findall(r"text: '([^']*)'", block)
     # 26-10-29-0147 D5 起五态(新增 noSitePermission): 改结构时这条一起改
@@ -634,7 +636,7 @@ def test_probe_all_message_writes_ledger():
         return
     proc = _run_node(
         [node, "-e", _NODE_RUN_PROBE_ALL,
-         str(BACKGROUND_JS),
+         background_bundle(),
          str(NORMALIZE_JS),
          str(DISCOVERY_JS),
          str(SITE_CAPS_JS)]
@@ -649,7 +651,7 @@ def test_probe_all_message_writes_ledger():
     assert len(health) == 3, f"台账要按端点落三条: {health}"
     vals = sorted((h["ok"], h["state"]) for h in health.values())
     assert vals == [(False, "down"), (True, "401"), (True, "ok")], f"台账(ok, state): {health}"
-    bg = _read(BACKGROUND_JS)
+    bg = background_text()
     js = _read(OPTIONS_JS)
     # 回潮形态必是带引号的消息字面量(注释里提它不算)
     assert "'probe-one'" not in bg and "'probe-one'" not in js, "probe-one 已随 R3 取消, 不得回潮"
@@ -717,7 +719,7 @@ def test_badge_icon_frame_mapping():
     }
     node = _node()
     if node:
-        proc = _run_node([node, "-e", _NODE_RUN_BADGE_ICON, str(BACKGROUND_JS)])
+        proc = _run_node([node, "-e", _NODE_RUN_BADGE_ICON, background_bundle()])
         assert proc.returncode == 0, f"node 跑 badgeIconOf 失败: {proc.stderr.strip()}"
         got = dict(json.loads(proc.stdout))
         assert got == expected, f"四态图标路径映射: {got}"
@@ -736,7 +738,7 @@ def test_badge_icon_frame_mapping():
     manifest = json.loads(_read(MANIFEST))
     assert manifest["action"]["default_icon"] == {"16": "icons/icon16.png", "32": "icons/icon32.png"}, \
         "manifest default_icon 指向基础无框图(未配置态与安装初始态共用)"
-    bg = _read(BACKGROUND_JS)
+    bg = background_text()
     assert "text: 'OK'" not in bg and "text: '..'" not in bg, "旧 OK/.. 徽标文案随 R4 废止, 不得回潮"
 
 
@@ -751,7 +753,7 @@ def test_conn_state_judgement_matches_badge():
     node = _node()
     if not node:
         return  # 没装 node: 与其它前端守阵同口径静默跳过
-    proc = _run_node([node, "-e", _NODE_RUN_CROSS_LAYER_STATE, str(BACKGROUND_JS), str(OPTIONS_JS)])
+    proc = _run_node([node, "-e", _NODE_RUN_CROSS_LAYER_STATE, background_bundle(), str(OPTIONS_JS)])
     assert proc.returncode == 0, f"node 跨层比对失败: {proc.stderr.strip()}"
     got = json.loads(proc.stdout)
     assert got["badgeOut"] == got["connOut"], \
@@ -824,7 +826,7 @@ def test_run_task_marks_network_failure_when_granted():
 def test_log_ui_wiring_and_escape():
     """选项页日志面: 清空走后台协议(直接改 storage 会被后台内存缓冲盖回)、渲染必须转义、限渲染条数"""
     js = _read(OPTIONS_JS)
-    bg = _read(BACKGROUND_JS)
+    bg = background_text()
     html = _read(OPTIONS_HTML)
     assert "'clear-logs'" in js and "'clear-logs'" in bg, "清空要经后台清(内存缓冲是唯一写入口)"
     assert "logMax" in js and "logLevel" in js, "条数上限与记录级别要能落盘"

@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** 按计划完成 R1(10 个测试文件 → 36 个测试文件 + 12 个支撑/扫描模块)与 R2(25 个测试文件 → 90 个分桶 + 20 个 support); 测试函数名与模块级界定逐字不变, 收集数守恒; 全量见 kb.baseline; 2 个超千行新桶按新口径登记计划后续排期。
+**Summary:** 按计划完成 R1(10 个测试文件 → 36 个测试文件 + 12 个支撑/扫描模块)、R2(25 个测试文件 → 90 个分桶 + 20 个 support)与 R3(4 个工具/脚本/扩展文件 → 9 个分片, 3 个暂缓零改动); 测试函数名与模块级界定逐字不变, 收集数守恒; 全量见 kb.baseline; 2 个超千行新桶按新口径登记计划后续排期, R3 无新增超阈值桶。
 **Topics:** test-big-file-split
-**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md
+**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md
 
 ## 原始请求
 
@@ -52,6 +52,9 @@
 | R2-2 | 新桶超阈值口径落计划 + 排期清单(test_utils_windows 1075 / test_web_commands_dispatch 1058) | Done (2026-11-03) |
 | R2-3 | 同步并入远端 `test_kb_nav.py` 新用例(search 缝归 `_interaction`) + 全量闸门 + 基线切片 | Done (2026-11-03) |
 | R2-4 | 收尾回写 + 提交推送 | Done (2026-11-03) |
+| R3-1 | `sim_qb.py` / `qb_capture.py` / `background.js` / `test_server.py` move-only 拆分(4 拆 3 暂缓) | Done (2026-11-03) |
+| R3-2 | 扩展守阵加载顺序适配 + 定向闸门 + 全量闸门 + 基线切片 | Done (2026-11-03) |
+| R3-3 | 收尾回写 + 提交推送 | Done (2026-11-03) |
 
 ## 进度日志
 
@@ -63,3 +66,5 @@
 - 2026-11-03 00:42 按计划完成 R1: 10 个大型测试文件 move-only 拆为 36 个测试文件 + 12 个支撑/扫描模块; 906 个测试函数名与 1170 个模块级界定逐字不变; 全量见 kb.baseline; 12 个仍超千行的桶留 R2
 
 - 2026-11-03 01:58 R2 完成: 25 个测试文件 move-only 拆为 90 桶 + 20 support(用例数守恒), 同步并入远端 test_kb_nav 新用例, 新口径与排期清单入计划, 全量见 kb.baseline
+
+- 2026-11-03 03:27 R3 完成: 4 个工具/脚本/扩展文件 move-only 拆分(sim_qb 2077->166 入口+4 模块; qb_capture 1559->959+2 模块; background.js 1427->642+2 分片; test_server.py 1274->552+1 support+2 分文件), 3 个暂缓零改动; 扩展守阵按 importScripts 顺序拼接 bundle; 全量见 kb.baseline

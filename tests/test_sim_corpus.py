@@ -58,6 +58,8 @@ _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO / "src"))
 sys.path.insert(0, str(_REPO / "scripts"))
 
+import sim_qb_core  # noqa: E402  (R3: 边界判定实现所在模块, monkeypatch 目标随拆分同步)
+
 
 def _load(name: str):
     spec = importlib.util.spec_from_file_location(name, _REPO / "scripts" / f"{name}.py")
@@ -152,7 +154,7 @@ def test_sim_is_within_linux_equivalent(monkeypatch):
 
     与 test_fsmock_case_folding_does_not_follow_platform 同款手法: 不必等推上去才知道 Linux 红不红。
     """
-    monkeypatch.setattr(simqb, "os", types.SimpleNamespace(path=posixpath, sep="/"))
+    monkeypatch.setattr(sim_qb_core, "os", types.SimpleNamespace(path=posixpath, sep="/"))
     assert simqb.is_within("/run/fs/d0/x.mkv", "/run/fs") is True
     assert simqb.is_within("/run/other/x.mkv", "/run/fs") is False
 
@@ -164,14 +166,14 @@ def test_sim_is_within_red_on_fold_without_sep(monkeypatch):
     (`r="\\run\\fs"` 再拼 `"/"`) ⇒ B2 把**所有**路径判成逃逸 ⇒ sim 每个写入撞 BoundaryViolation。
     本条证明上一条守阵**能区分两态**, 不是恒绿。
     """
-    monkeypatch.setattr(simqb, "os", types.SimpleNamespace(path=posixpath, sep="/"))
+    monkeypatch.setattr(sim_qb_core, "os", types.SimpleNamespace(path=posixpath, sep="/"))
 
     def _norm_ntpath_only(p):
         if p.startswith("\\\\?\\"):
             p = p[4:]
         return ntpath.normcase(posixpath.realpath(posixpath.abspath(p)))
 
-    monkeypatch.setattr(simqb, "_norm", _norm_ntpath_only)
+    monkeypatch.setattr(sim_qb_core, "_norm", _norm_ntpath_only)
     assert simqb.is_within("/run/fs/d0/x.mkv", "/run/fs") is False, ("只换 normcase 会把真子路径判成逃逸 ⇒ 折叠与分隔符必须同源(改一个就必红)")
 
 
