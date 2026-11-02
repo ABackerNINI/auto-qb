@@ -22,9 +22,11 @@
     指向归属文件 —— 直接复制或整体重写会让 `test_test_plan_docstring_guard.py::test_repo_plan_matches_defs`
     同时报「未登记」与「ghost 条目」。
   - **文件仍留在 `tests/` 下**: 基于 `__file__` 推导仓库根 / `ROOT` 常量的用例不受目录深度变化影响。
-  - 拆分后仍超千行的桶**不在同一轮继续下拆**, 下拆走计划修订。
-- **实证**: 2026-11-03 R1 按此口径拆了 10 个大型测试文件(档案 `memory-bank/tasks/26-11-03-test-big-file-split.md`,
-  计划 `memory-bank/plans/26-11-02-2342-plan-big-file-split.html`)。
+  - 拆分后仍超千行的桶**不在同一轮继续下拆**, 登记到计划「新桶超阈值 · 后续排期」留待后续排期
+    (R2 起口径; 下拆仍按同一 move-only 机制, 只搬不改)。
+- **实证**: 2026-11-03 R1 拆了 10 个大型测试文件, R2 拆了其余 25 个(90 个分桶 + 20 个 support);
+  2 个超千行新桶按上条口径排期。档案 `memory-bank/tasks/26-11-03-test-big-file-split.md`,
+  计划 `memory-bank/plans/26-11-02-2342-plan-big-file-split.html`。
 
 ### 文件名与被测模块对应
 

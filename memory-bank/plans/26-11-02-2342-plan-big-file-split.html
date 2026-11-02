@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="big-file-split">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-02-2342">
-<meta name="doc-updated" content="26-11-02-2342">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-03-test-big-file-split.md">
+<meta name="doc-updated" content="26-11-03-0144">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,14 +75,14 @@
 <h1>大文件多轮拆分实施计划（&gt;1000 行候选 80 个）</h1>
 <p class="lede">以 26-11-02 只读扫描为基线，把 606 个纳入源文件中 80 个 &gt;1000 行候选分 5 轮处置：先用纯搬迁拆测试静态守阵，再逐轮上移到工具/扩展、前端域片段、后端单类与大型 Mixin；每轮独立验证、独立回滚。本轮只立计划，不动源码。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-02-2342 · <b>doc-updated</b> 26-11-02-2342 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-02-2342 · <b>doc-updated</b> 26-11-03-0144 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令（2026-11-02：基于同会话只读扫描写多轮拆分计划，本轮只写计划）+ 扫描事实（606 纳入 / 80 命中 / py66·js12·html1·css1）
 </div>
 
 <h2><span class="no">§01</span>目标与非目标</h2>
 <p><b>目标</b>：在不改变任何运行时行为、接口、文案与视觉的前提下，把仓库中体量最大的源文件降下来，并按风险从低到高形成可独立验收的轮次。</p>
 <ul>
-  <li><b>G1 体量目标</b>：对判定为「拆」的 56 个候选执行拆分，拆分后每个新文件 ≤1000 行；原文件要么消失，要么只保留入口/门面。</li>
+  <li><b>G1 体量目标</b>：对判定为「拆」的 56 个候选执行拆分，拆分后每个新文件 ≤1000 行；原文件要么消失，要么只保留入口/门面。<b>例外（R2 起生效）</b>：拆分产生的单个新桶若仍 &gt;1000 行，<b>不再就地二次切分</b>，只登记到 §07「新桶超阈值 · 后续排期」留待后续排期。</li>
   <li><b>G2 零行为目标</b>：第一轮只搬测试代码，生产代码（<code>src/</code>）零改动；后续轮次只做「等价搬迁 + 重导出」，不改逻辑、不改公开符号、不改默认值。</li>
   <li><b>G3 可回滚目标</b>：每个文件一条可独立回退的步骤，落一份「函数 → 目标文件」清单；失败只回退该文件/该批次，不回退整轮。</li>
   <li><b>G4 可追溯目标</b>：全部数字来自 26-11-02 扫描与本次 AST 结构统计，不在计划里新造数字；执行时新增数字必须来自实测输出。</li>
@@ -294,17 +294,28 @@
 <table>
   <thead><tr><th>轮次</th><th>执行要点</th><th>依赖</th></tr></thead>
   <tbody>
-    <tr><td><b>R2</b> 其余测试（40）</td><td>25 个按被测对象分桶搬迁；<code>test_*.py</code> 才能被收集，support 文件不得以 <code>test_</code> 开头；共享辅助优先抽到 <code>*_support.py</code>，不复制。真机 7 个与临界 7 个保持暂缓。<code>tests/helpers.py</code> 只 import 不修改。</td><td>依赖 R1 的映射表与回滚清单模板</td></tr>
+    <tr><td><b>R2</b> 其余测试（40）</td><td>25 个按被测对象分桶搬迁；<code>test_*.py</code> 才能被收集，support 文件不得以 <code>test_</code> 开头；共享辅助优先抽到 <code>*_support.py</code>，不复制。真机 7 个与临界 7 个保持暂缓。<code>tests/helpers.py</code> 只 import 不修改。<b>新口径</b>：拆分后产生的单个新桶（拆分后产生的单个文件）超过 1000 行的，<b>不再就地二次切分</b>，登记到本节「新桶超阈值 · 后续排期」留待后续排期。</td><td>依赖 R1 的映射表与回滚清单模板</td></tr>
     <tr><td><b>R3</b> 工具/扩展（7）</td><td><code>sim_qb.py</code> 保留入口、按 HTTP/状态/处理器拆；<code>qb_capture.py</code> 按抓取/脱敏/回放拆；扩展只拆 <code>background.js</code>，保留 MV3 唯一 worker 入口，用 <code>importScripts</code> 组合，manifest 不改。验证：<code>test.gtm</code> + <code>test.one</code> 工具用例 + 扩展守阵。</td><td>只依赖 R1 机制，可与 R2 并行，但需独立分支/独立提交</td></tr>
     <tr><td><b>R4</b> 前端（12）</td><td>沿现有 <code>window.AQB_*</code> 域边界拆；<code>drawer.js</code>/<code>commands.js</code>/<code>shortcuts.js</code> 保留根入口；<code>console_hub.css</code> 按现有 <code>&lt;link&gt;</code> 顺序拆并保持级联；<code>dialogs.js</code> 按弹窗族拆。模板字符串为主的 2 个暂缓；演示页与内核 2 个不拆。</td><td>依赖 R1/R2：静态 DOM/皮肤/页面守阵必须先稳定</td></tr>
     <tr><td><b>R5</b> 后端（11）</td><td>内部顺序：<code>utils</code> → <code>views</code> → <code>traffic_store</code>/<code>traffic_sample_mod</code> → <code>relocate_mod</code>/<code>ops_mod</code> → <code>hr/service</code> → <code>webui/runtime</code>/<code>webui/commands</code>。门面/大 Mixin 只做「拆实现 + 原文件重导出」，保持既有 import 路径与符号名。</td><td>依赖 R4：前端契约守阵稳定后再动后端门面</td></tr>
   </tbody>
 </table>
 
+<h3>新桶超阈值 · 后续排期（R2 起）</h3>
+<p>口径：拆分产生的单个新桶（含测试文件与 support 模块）若仍 &gt;1000 行，本次<b>不再就地二次切分</b>，只登记来源、行数与建议天然缝，留待后续轮次按同一 move-only 机制处理。行数为 R2 实测 <code>splitlines()</code> 计数。</p>
+<table>
+  <thead><tr><th>新桶文件</th><th>行数</th><th>来自原文件</th><th>建议天然缝</th><th>状态</th></tr></thead>
+  <tbody>
+    <tr><td><code>tests/test_utils_windows.py</code></td><td>1075</td><td><code>tests/test_utils.py</code></td><td>按 <code>win_</code> 控件族与 <code>open_path</code> 平台分支再切两桶</td><td>待排期</td></tr>
+    <tr><td><code>tests/test_web_commands_dispatch.py</code></td><td>1058</td><td><code>tests/test_web_commands.py</code></td><td>drain 核心与 <code>api_t</code> 路由接线分离</td><td>待排期</td></tr>
+  </tbody>
+</table>
+<div class="aside">R2 25 个原文件拆分后实测：仅以上两个新桶超阈值，其余新桶均 ≤1000 行（最大 987 行）。</div>
+
 <h2><span class="no">§08</span>完成判据、风险与未知项</h2>
 <h3>完成判据</h3>
 <ul>
-  <li><b>每轮</b>：本轮「拆」清单全部完成后，新文件均 ≤1000；<code>test.full</code> 全绿；覆盖率门槛不降；用例收集数守恒；<code>kb.check</code> 通过；<code>git diff --stat</code> 只含本轮允许的目录。</li>
+  <li><b>每轮</b>：本轮「拆」清单全部完成后，新文件均 ≤1000（<b>例外</b>：仍 &gt;1000 的新桶按 §07「新桶超阈值 · 后续排期」登记，不在本轮二次切分）；<code>test.full</code> 全绿；覆盖率门槛不降；用例收集数守恒；<code>kb.check</code> 通过；<code>git diff --stat</code> 只含本轮允许的目录。</li>
   <li><b>R1</b>：<code>tests/</code> 内 10 个原文件全部退出 &gt;1000 清单；新增文件不含 <code>src/</code> 改动；基线切片已按实测数字更新。</li>
   <li><b>总计划</b>：80 个候选全部有处置记录（56 拆 / 22 暂缓 / 2 不拆）；范围内 &gt;1000 行文件从 80 降到 24（22 暂缓 + 2 不拆），且该 24 个均有「再启动触发条件」；没有生产行为/接口/文案/视觉变化。</li>
 </ul>
@@ -425,6 +436,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-02-2342</span> 初版：基于 26-11-02 只读扫描（606 纳入 / 80 命中 / py66·js12·html1·css1）制定 5 轮处置；56 拆、22 暂缓、2 不拆。</li>
+  <li><span class="tag">R1 · 26-11-03-0144</span> 补 R2 新口径: 新桶超 1000 行不再就地二次切分, 登记 新桶超阈值·后续排期 清单(2 个)</li>
 </ul>
 
 </div>
