@@ -499,7 +499,7 @@ def test_hidden_zone_reuses_ledger_columns_and_inline_svg() -> None:
 def test_shell_has_multiselect_state_and_gestures() -> None:
     """多选状态与手势 (计划 26-10-31-0143): S.multi/multiAnchor 纯会话态 (不进筛选器持久化,
     derive() 不碰 —— 同 pin 坑型, 30s 轮询不得洗掉选区); 主表与置顶专区两处 click 委托都要有
-    Ctrl/Shift 分支, 且排在普通单击改 S.sel **之前**; 普通单击只落锚点不动 S.multi (拍板 D3)。
+    Ctrl/Shift 分支, 且排在普通单击打开抽屉 **之前**; 普通单击只落锚点不动 S.multi (拍板 D3)。
     Shift 手势须挡原生文字选中 (2026-10-31 验收反馈): mousedown 期挡默认行为 (click 挡已晚)
     + click 分支内 preventDefault 双保险, 普通点击不挡 (标题照常可选中复制)。"""
     text = SHELL.read_text(encoding="utf-8")
@@ -516,8 +516,8 @@ def test_shell_has_multiselect_state_and_gestures() -> None:
     assert main, "主表 click 委托不见了? 结构搬家要同步本守阵"
     m = main.group(1)
     assert "toggleMulti(tr.dataset.link)" in m and "shiftMulti(tr.dataset.link)" in m, "主表缺 Ctrl/Shift 多选手势"
-    assert "toggleMulti(" in m and m.index("toggleMulti(") < m.index("S.sel = "), (
-        "多选手势必须排在普通单击改 S.sel 之前 (Ctrl/Shift 早退, 不开抽屉)"
+    assert "toggleMulti(" in m and m.index("toggleMulti(") < m.index("openRowDetail("), (
+        "多选手势必须排在普通单击打开抽屉之前 (Ctrl/Shift 早退, 不开抽屉; 普通单击走共用 openRowDetail)"
     )
     assert "S.multiAnchor = tr.dataset.link;" in m, "普通单击须落锚点 (auto-qb 键鼠衔接口径)"
     assert "S.multi = " not in m and "clearMulti" not in m, "普通单击不得清多选 (拍板 D3: 容易误触)"
