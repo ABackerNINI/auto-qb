@@ -3,7 +3,7 @@ summary: 全局流量监视小工具(TM 替代)实施 — 计划 26-10-16-0541(O
 ---
 
 > 摘要: grilling 三轮 16 问收敛(两次纠正: TM 替代、多实例共享), 计划 26-10-16-0541(Open); S0–S9 已落地(骨架/采样/落盘/控制面/通知/自启/配置面/接收面/过渡文档/守阵); S10 待授权
-> 最后活动: 2026-11-02 21:46
+> 最后活动: 2026-11-03 06:32
 
 # activeContext · global-traffic-monitor(26-10-16-0541)
 
@@ -40,3 +40,7 @@ summary: 全局流量监视小工具(TM 替代)实施 — 计划 26-10-16-0541(O
 **R12(2026-10-20 23:49)**: 只读排查 gtm 常驻进程「I/O 其它」偏高: 实测 72.42 次/秒(累计 782 万)= psutil 网卡枚举控制操作(每轮 177 次), 读 0 次/秒、写 0.42 次/秒=设计值; 入池 perf issue 26-10-20-2345(Open), 未改码。
 
 **引用**(`mb/` = `memory-bank/`): `mb/reports/26-10-13-1034-report-global-traffic-source-lag.html`; `mb/plans/26-10-17-0339-plan-global-traffic-source-integration.html`; 基线 `mb/testing/baselines/attachments/`: s0–s9 = `26-10-16-{0601|0815|0855|0946|1016|1109|1145|1404|1737|1824}-global-traffic-monitor-s{0..9}.md` + `26-10-18-1947-notify-log-debug.md`; 坑档 `mb/pitfalls/`: `testing/{nested-pytest-config,redverify-anchor-lineendings,red-verify-must-hit-behavior,single-file-coverage-gate,mutation-pool-artifact}.md`、`backend/platform-fs.md`、`ops/session-program-blacklist.md`、`web-ui/frontend-split.md`; issue `mb/issues/26-10-20-2345-perf-gtm-sampler-other-io.html`; 文档 `docs/configuration.md`、`mb/config-reference/keys.md`、根 `README.md`。
+
+**R13(2026-11-03 06:16):** 修复 gtm 跨进程单实例锁用例在英文 Windows runner(cp1252)下 print 中文 UnicodeEncodeError 失败: 子进程注入 PYTHONIOENCODING=utf-8 + 捕获端 encoding=utf-8, 同文件另一子进程用例与 manual_e2e_relay 同因加固; 被拒信号(BUSY+PID)断言提到退出码之前; cp1252 复现改前红改后绿, test.gtm 全绿; 坑档并入 testing/ci-only-guard.md
+
+**R14(2026-11-03 06:32):** 生产侧 stdio 编码兜底: gtm __main__ 入口新增 _utf8_stdio() 把非 UTF-8 的 stdout/stderr reconfigure 成 UTF-8(errors=replace, 中文不丢, 退出码语义不变), 覆盖 print/argparse/logging 出口; 新增 3 条守阵(cp1252 TextIOWrapper 整行中文 / python -m gtm 帮助 exit 0 / endpoint stderr 中文 exit 1); 修复 test_module_main_guard_runs_cli 的 RuntimeWarning(runpy 前临时摘除 gtm.__main__ 再还原, 不压制警告); test.gtm 全绿且 0 warning; 同因并入 pitfalls/ops/console-encoding.md

@@ -388,7 +388,13 @@ def test_concurrent_reader_process_never_sees_partial(tmp_path):
          str(counts)],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        text=True,
+        # 子进程 stdio 显式 UTF-8: Windows runner 默认码页 (cp1252) 下脚本里的中文
+        # 异常文案会让 print 抛 UnicodeEncodeError 而以非 0 退出 (锁行为本身没问题)。
+        # PYTHONIOENCODING 只影响 stdio, 不会像 PYTHONUTF8 那样改子进程 open() 默认编码。
+        encoding="utf-8",
+        env={
+            **os.environ, "PYTHONIOENCODING": "utf-8"
+        },
     )
     try:
         deadline = time.monotonic() + 10
@@ -678,10 +684,23 @@ def test_single_instance_lock_blocks_second_process(tmp_path):
         "else:\n"
         "    print('ACQUIRED')\n"
     )
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=30)
+    # 同 _READER_PROC_SCRIPT 侧: 子进程 stdio 与捕获端都显式 UTF-8 —— 失败原文即
+    # Windows runner 的 cp1252 码页把 print 中文的 UnicodeEncodeError 变成子进程退出码 1。
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        encoding="utf-8",
+        timeout=30,
+        env={
+            **os.environ, "PYTHONIOENCODING": "utf-8"
+        },
+    )
+    # 先钉「第二进程被拒」的可见信号 (BUSY + 持有者 PID), 再看退出码 —— 只断言
+    # returncode 会把「子进程因编码/导入崩溃」与「锁正常拒绝」混为一谈。
+    assert "BUSY" in proc.stdout, (proc.stdout, proc.stderr)
+    assert "另一 global-traffic-monitor 实例已持有锁" in proc.stdout, (proc.stdout, proc.stderr)
+    assert f"PID {os.getpid()}" in proc.stdout, (proc.stdout, proc.stderr)
     assert proc.returncode == 0, proc.stderr
-    assert "BUSY" in proc.stdout
-    assert "另一 global-traffic-monitor 实例已持有锁" in proc.stdout and str(os.getpid()) in proc.stdout
 
 
 def test_lock_release_idempotent_and_meta_removed(tmp_path):

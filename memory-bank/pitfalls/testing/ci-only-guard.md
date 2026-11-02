@@ -1,8 +1,8 @@
 # CI 另一侧才现形的守阵: 写死平台前缀长度 / 活性阈值绑机器速度
 
-> 摘要: 两类守阵**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 300 次期间读者必读 >50 次"), 写耗时跨平台差一个量级 ⇒ 快机器上读者根本没读几轮就撞活性断言。两条都不是被测行为破了, 是**守阵自身的平台/速度依赖**。2026-10-22 gtm 子项目 (`tools/global-traffic-monitor`) 双平台 job 实证。
+> 摘要: 多类守阵/用例**只在与开发机不同的那一侧 CI job 上现形**, 本机单平台绿不构成"守阵成立"的证据 —— ①跨平台断言把**前缀切片长度写死**(`args[:2]`), nt 侧凑巧成立而 POSIX 侧恒红; ②并发守阵的**活性阈值绑机器速度**("写者写满 300 次…读者必读 >50 次"), 写耗时跨平台差一个量级 ⇒ 快机器上读者根本没读几轮就撞活性断言; ③断言引用**仅一侧存在的模块常量**(POSIX 无 `subprocess.CREATE_NO_WINDOW`); ④测试自起子进程 `print` 中文, **中文 Windows 本机 cp936 绿 / 英文 runner cp1252 红**(`UnicodeEncodeError` 把子进程退出码变成 1)。四条都不是被测行为破了, 是**守阵/用例自身的平台/速度/码页依赖**。2026-10-22 gtm 子项目 (`tools/global-traffic-monitor`) 双平台 job 实证。
 > 等级: L0
-> 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job
+> 触发: CI 红本机绿, 跨平台断言, os.name, sys.platform, 写死切片长度, 前缀长度, 仅一侧存在的模块常量, CREATE_NO_WINDOW, 活性阈值, 并发守阵, 读次数, flaky, gtm, atomic_write, 双平台 job, cp1252, cp936, 码页, PYTHONIOENCODING, 子进程 print 中文, UnicodeEncodeError, charmap, 英文 Windows runner
 
 ### 跨平台断言写死切片长度: nt 侧凑巧成立, POSIX 侧恒红
 
@@ -31,3 +31,21 @@
   先 `del subprocess.CREATE_NO_WINDOW` 再同进程 `pytest.main(...)`(实测改前 AttributeError、改后绿)。
 - **复发**: +1 (2026-11-03): 为什么没命中 —— 见到用例已用 monkeypatch 造平台差异, 就默认"两侧都覆盖了",
   没检查断言里引用的**模块常量**是否也随平台存在; 判别法当时只写了"切片长度/阈值", 没泛化到"仅一侧存在的符号"。
+
+### 2026-11-03 实证: 测试自起子进程 print 中文 —— 本机 cp936 绿, 英文 runner cp1252 红
+
+- **触发**: 用例用 `subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)` 起子进程,
+  子进程脚本里 `print('BUSY', e)` 打印含中文的异常消息; 开发机 (中文 Windows, cp936) 绿, GitHub
+  `windows-latest` (英文 Windows, cp1252) 红, 失败行是 `assert proc.returncode == 0`。
+- **判别**: 失败 stderr 里被测行为**已经正确发生** (单实例锁抛出 `SingleInstanceLockError`), 挂在
+  `print` 的编码上 —— 子进程 stdout 是管道时 Python 按 locale 码页编码, 本机 cp936 能编码中文所以绿,
+  cp1252 编不了 ⇒ `UnicodeEncodeError: 'charmap' codec can't encode characters` ⇒ 子进程退出码 1。
+  红的是**宿主码页依赖**, 不是被测语义; **别**把 `returncode == 0` 放宽成 `!= 0` 或吞掉错误来"修"。
+- **处置**: 子进程显式 UTF-8 stdio —— `env={**os.environ, "PYTHONIOENCODING": "utf-8"}`; 捕获端同编码
+  `encoding="utf-8"` 替代 `text=True`(让 locale 猜)。`PYTHONIOENCODING` 只影响 stdio, 不会像
+  `PYTHONUTF8=1` 那样改子进程 `open()` 的默认编码; 与 [../ops/console-encoding.md] 的"子进程收输出
+  显式编码"同口径, 方向是**测试自产输出**。断言顺序把「被拒信号」(BUSY + 持有者 PID) 放到退出码之前:
+  只看退出码分不清「编码/导入崩溃」与「锁正常拒绝」。
+- **守阵**: `tools/global-traffic-monitor/tests/test_storage.py::test_single_instance_lock_blocks_second_process`
+  及同文件另一条子进程用例 (子脚本异常文案也含中文); 本机复现 = 父进程注入 `PYTHONIOENCODING=cp1252`
+  再跑用例 —— 实测改前红 (退出码 1 + `charmap` 报错), 改后绿。

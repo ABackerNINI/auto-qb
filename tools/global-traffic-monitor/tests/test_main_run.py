@@ -32,12 +32,18 @@ Sampler -> stop_event -> ControlServer -> 绑端口 -> 清注记 -> Notifier -> 
 - 其余出口: `_resolve_data_dir` 搬迁提示 / `_load_config_or_fail` 聚合报错与
   legacy 迁移提示 / `main()` 的 run 与 claim 分发 / `python -m gtm` 守卫 /
   `cmd_endpoint` 读失败与顶层非对象 / `cmd_claim` 身份失败与记录写入失败
+- stdio 编码兜底: `_utf8_stdio` 把 cp1252 管道流重配成 UTF-8 (中文原样、不丢行、不碰
+  非文本流); `python -m gtm` 子进程在 `PYTHONIOENCODING=cp1252` 下 stdout 帮助与
+  stderr 错误文案仍可见, 退出码语义不变 (0 / 1)
 """
 
 from __future__ import annotations
 
 import argparse
+import io
+import os
 import runpy
+import subprocess
 import sys
 import threading
 
@@ -737,10 +743,81 @@ def test_main_dispatches_run_and_claim(monkeypatch) -> None:
 def test_module_main_guard_runs_cli(monkeypatch, capsys) -> None:
     """`python -m gtm` 守卫: 以 __main__ 跑模块 -> 无子命令打印帮助并 exit 0."""
     monkeypatch.setattr(sys, "argv", ["global-traffic-monitor"])
-    with pytest.raises(SystemExit) as excinfo:
-        runpy.run_module("gtm.__main__", run_name="__main__")
+    # 本文件顶部 `from gtm import __main__ as cli` 已让模块进了 sys.modules; runpy 再按
+    # __main__ 执行同一模块会发 RuntimeWarning ("found in sys.modules ... prior to
+    # execution")。临时摘除 (测完放回) 让 runpy 走"未导入"路径 —— 不压制警告, 也不影响
+    # 其余用例持有的 cli 引用。
+    saved = sys.modules.pop("gtm.__main__", None)
+    try:
+        with pytest.raises(SystemExit) as excinfo:
+            runpy.run_module("gtm.__main__", run_name="__main__")
+    finally:
+        if saved is not None:
+            sys.modules["gtm.__main__"] = saved
     assert excinfo.value.code == 0
     assert "usage: global-traffic-monitor" in capsys.readouterr().out
+
+
+# ---- stdio 编码兜底 ----
+
+
+def _cp1252_env(**extra: str) -> dict[str, str]:
+    """子进程环境: 强制 stdio 用 cp1252 (模拟英文 Windows runner 的管道码页)."""
+    env = {**os.environ, "PYTHONIOENCODING": "cp1252", "PYTHONUTF8": "0"}
+    env.update(extra)
+    return env
+
+
+def test_utf8_stdio_reconfigures_cp1252_and_keeps_chinese(monkeypatch) -> None:
+    """cp1252 文本流经兜底后按 UTF-8 出中文: 字符与整行都保留 (重配而非丢弃)."""
+    raw = io.BytesIO()
+    stdout = io.TextIOWrapper(raw, encoding="cp1252", errors="strict", newline="")
+    monkeypatch.setattr(sys, "stdout", stdout)
+    monkeypatch.setattr(sys, "stderr", io.TextIOWrapper(io.BytesIO(), encoding="cp1252"))
+
+    cli._utf8_stdio()
+
+    assert stdout.encoding.lower() == "utf-8"
+    stdout.write("第二进程被拒: 另一 global-traffic-monitor 实例已持有锁\n")
+    stdout.flush()
+    assert raw.getvalue().decode("utf-8") == "第二进程被拒: 另一 global-traffic-monitor 实例已持有锁\n"
+
+
+def test_utf8_stdio_ignores_non_text_streams(monkeypatch) -> None:
+    """pythonw 的 None / pytest 替身流 (非 TextIOWrapper): 跳过, 不抛错."""
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+    cli._utf8_stdio()  # 不应抛 AttributeError
+
+
+def test_module_help_survives_cp1252_pipe() -> None:
+    """管道 + cp1252: `python -m gtm` 的帮助中文照常可见, 退出码仍为 0 (入口兜底).
+
+    修复前该子进程在 argparse print_help 的 file.write 上抛 UnicodeEncodeError, 退出码
+    变 1 且 stdout 为空; 断言同时钉住「退出码语义」与「中文不丢」。
+    """
+    proc = subprocess.run([sys.executable, "-m", "gtm"], capture_output=True, timeout=30, env=_cp1252_env())
+    assert proc.returncode == 0, proc.stderr.decode("utf-8", "replace")
+    stdout = proc.stdout.decode("utf-8")  # 严格 UTF-8: 管道字节必须真是 UTF-8
+    assert "usage: global-traffic-monitor" in stdout
+    assert "全局流量监视小工具" in stdout
+
+
+def test_cli_error_line_survives_cp1252_pipe(tmp_path) -> None:
+    """管道 + cp1252: stderr 中文错误行可见且前缀契约不变, 退出码语义不变 (1)."""
+    env = _cp1252_env()
+    # 隔离指针目录 (storage.pointer_dir 走平台用户级根), 不读真实安装的 endpoint.json
+    if os.name == "nt":
+        env["LOCALAPPDATA"] = str(tmp_path)
+    elif sys.platform == "darwin":
+        env["HOME"] = str(tmp_path)
+    else:
+        env["XDG_DATA_HOME"] = str(tmp_path)
+    proc = subprocess.run([sys.executable, "-m", "gtm", "endpoint"], capture_output=True, timeout=30, env=env)
+    assert proc.returncode == 1
+    stderr = proc.stderr.decode("utf-8")
+    assert "global-traffic-monitor: " in stderr  # 日志前缀契约不变
+    assert "未找到发现指针" in stderr  # 告警原文不丢
 
 
 def test_endpoint_read_oserror_exits_1(tmp_path, monkeypatch, capsys) -> None:

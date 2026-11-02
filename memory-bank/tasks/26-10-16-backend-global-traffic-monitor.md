@@ -2,7 +2,7 @@
 
 **Status:** Done
 **Added:** 2026-10-16
-**Updated:** 2026-10-30
+**Updated:** 2026-11-03
 **Summary:** 自写独立整机流量历史记录小工具(TM 替代): 独立进程+开机自启+TM 兼容 dat 原子落盘+阈值变化主动通知多 auto-qb 实例刷新 WebUI 历史图。计划 26-10-16-0541(S0–S10 逐步显式授权); S0 包骨架 + S1 采样器 + S2 落盘 + S3 控制面 + S4 通知 + S5 自启 + S6 auto-qb 配置面 + S7 auto-qb 接收面 + S8 集成与过渡 + S9 守阵测试已落地(含用户拍板改版: 工具控制面加 POST /autostart); S6–S8/S10 已由计划 26-10-17-0339 S15–S19 承接(集成层另档 In Progress), 本计划口径已收口。
 **Refs:** memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html, memory-bank/pitfalls/testing/nested-pytest-config.md, memory-bank/pitfalls/backend/platform-fs.md, memory-bank/pitfalls/testing/redverify-anchor-lineendings.md, memory-bank/pitfalls/testing/red-verify-must-hit-behavior.md, memory-bank/pitfalls/ops/session-program-blacklist.md, memory-bank/pitfalls/testing/single-file-coverage-gate.md, memory-bank/pitfalls/web-ui/frontend-split.md, memory-bank/testing/baselines/26-10-16-0601-global-traffic-monitor-s0.md, memory-bank/testing/baselines/26-10-16-0815-global-traffic-monitor-s1.md, memory-bank/testing/baselines/26-10-16-0855-global-traffic-monitor-s2.md, memory-bank/testing/baselines/26-10-16-0946-global-traffic-monitor-s3.md, memory-bank/testing/baselines/26-10-16-1016-global-traffic-monitor-s4.md, memory-bank/testing/baselines/26-10-16-1109-global-traffic-monitor-s5.md, memory-bank/testing/baselines/26-10-16-1145-global-traffic-monitor-s6.md, memory-bank/testing/baselines/26-10-16-1404-global-traffic-monitor-s7.md, memory-bank/testing/baselines/26-10-16-1737-global-traffic-monitor-s8.md, memory-bank/testing/baselines/26-10-16-1824-global-traffic-monitor-s9.md, memory-bank/pitfalls/testing/no-uv-fallback.md, memory-bank/pitfalls/testing/mutation-pool-artifact.md, memory-bank/plans/26-10-21-0120-plan-gtm-coverage-gate.html
 **Topics:** global-traffic-monitor
@@ -205,3 +205,7 @@
 - 2026-10-18 19:48 通知链路三级日志(接收面放行/主循环 WEB UI/快照发布)INFO -> DEBUG: 用户报大流量日(事件 #1200)日志刷屏, 拍板「改为DEBUG级」; 消息文本不变, config 触发与两条 WARNING 路径不降; 新增 2 条日志级守阵; test.full 全量绿(数字见基线切片 26-10-18-1947-notify-log-debug, 口径 kb.baseline)
 
 - 2026-10-20 23:49 只读排查 gtm 常驻进程任务管理器「I/O 其它」偏高: 实测 72.42 次/秒(累计 782 万)确认为 psutil 网卡枚举控制操作(每轮 177 次), 读 0 次/秒、写 0.42 次/秒=设计值; 入池 perf issue 26-10-20-2345(Open), 未改码
+
+- 2026-11-03 06:16 修复 gtm 跨进程单实例锁用例在英文 Windows runner(cp1252)下 print 中文 UnicodeEncodeError 失败: 子进程注入 PYTHONIOENCODING=utf-8 + 捕获端 encoding=utf-8, 同文件另一子进程用例与 manual_e2e_relay 同因加固; 被拒信号(BUSY+PID)断言提到退出码之前; cp1252 复现改前红改后绿, test.gtm 全绿; 坑档并入 testing/ci-only-guard.md
+
+- 2026-11-03 06:32 生产侧 stdio 编码兜底: gtm __main__ 入口新增 _utf8_stdio() 把非 UTF-8 的 stdout/stderr reconfigure 成 UTF-8(errors=replace, 中文不丢, 退出码语义不变), 覆盖 print/argparse/logging 出口; 新增 3 条守阵(cp1252 TextIOWrapper 整行中文 / python -m gtm 帮助 exit 0 / endpoint stderr 中文 exit 1); 修复 test_module_main_guard_runs_cli 的 RuntimeWarning(runpy 前临时摘除 gtm.__main__ 再还原, 不压制警告); test.gtm 全绿且 0 warning; 同因并入 pitfalls/ops/console-encoding.md

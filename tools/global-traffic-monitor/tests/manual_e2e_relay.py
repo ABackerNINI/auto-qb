@@ -56,8 +56,9 @@ def child_env(install_src: Path, ptr_root: Path) -> dict:
     """子进程环境: 安装身份走 PYTHONPATH, 指针目录走平台数据根 env, 其余继承."""
     env = os.environ.copy()
     env["PYTHONPATH"] = os.pathsep.join([str(install_src), _venv_site_packages()])
-    env["LOCALAPPDATA"] = str(ptr_root)      # Windows 指针根
-    env["XDG_DATA_HOME"] = str(ptr_root)     # POSIX 指针根
+    env["LOCALAPPDATA"] = str(ptr_root)  # Windows 指针根
+    env["XDG_DATA_HOME"] = str(ptr_root)  # POSIX 指针根
+    env["PYTHONIOENCODING"] = "utf-8"  # 子进程 stdio 显式 UTF-8 (非 UTF-8 码页下中文不炸)
     return env
 
 
@@ -107,8 +108,15 @@ def probe_endpoint(ptr_root: Path, timeout: float = 20.0):
 
 def tool_call(base: str, token_path: str, path: str) -> tuple:
     token = Path(token_path).read_text(encoding="utf-8").strip()
-    req = urllib.request.Request(f"{base}{path}", data=b"{}", method="POST",
-                                 headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+    req = urllib.request.Request(
+        f"{base}{path}",
+        data=b"{}",
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+    )
     try:
         with urllib.request.urlopen(req, timeout=5) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8"))
@@ -123,7 +131,7 @@ def spawn_tool(inst: Path, ptr_root: Path):
         cwd=str(inst),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        encoding="utf-8",
     )
 
 
@@ -134,7 +142,7 @@ def run_claim(inst: Path, ptr_root: Path) -> subprocess.CompletedProcess:
         cwd=str(inst),
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        text=True,
+        encoding="utf-8",
         timeout=60,
     )
 

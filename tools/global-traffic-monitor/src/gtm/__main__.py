@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import logging
 import sys
@@ -57,6 +58,24 @@ from gtm.storage import (
 )
 
 logger = logging.getLogger("gtm")
+
+
+def _utf8_stdio() -> None:
+    """CLI 入口的 stdio 编码兜底: 非控制台的 stdout/stderr 一律按 UTF-8 输出.
+
+    为什么: Windows 上 stdio 被管道 / 服务日志捕获时, Python 按本地码页 (英文机器
+    cp1252) 编码 —— 任何中文告警 (print / argparse / logging StreamHandler) 都会抛
+    UnicodeEncodeError, 把「清晰地报错」变成「进程崩在报错上」。真控制台本来就按
+    Unicode 渲染 (WriteConsoleW, 编码已是 utf-8), 这里不动它; 只改编码, 不动缓冲与
+    `-u` / 重定向语义。errors="replace" 只兜孤立代理项 (UTF-8 能编码全部常规 Unicode),
+    中文原文不丢。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        if not isinstance(stream, io.TextIOWrapper):
+            continue  # pythonw 下可能为 None; pytest/capsys 的替身流不动
+        encoding = (stream.encoding or "").lower().replace("-", "")
+        if encoding != "utf8":
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -487,6 +506,7 @@ def cmd_claim(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    _utf8_stdio()  # 先于任何 print / argparse 输出 (非控制台中文告警不炸)
     args = build_parser().parse_args(argv)
     if args.command == "run":
         return cmd_run(args)

@@ -37,6 +37,7 @@
 ## Done (271)
 
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
+- [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案
 - [26-11-02-backend-relocate-qbtemp-narrow](../26-11-02-backend-relocate-qbtemp-narrow.md) 整组迁移 qb_temp 闸门按归属收窄
 - [26-11-02-webui-flux-overlay-opacity](../26-11-02-webui-flux-overlay-opacity.md) 修复 flux 皮肤浮层透出正文
@@ -59,7 +60,6 @@
 - [26-10-31-memory-bank-doc-guard-filename-scope-fix](../26-10-31-memory-bank-doc-guard-filename-scope-fix.md) 新增面守卫圈面改文件名 stamp 前缀: 堵缺 doc-added 手写新件逃逸洞 (RM02-RM10 事故)
 - [26-10-31-test-snapshot-git-marker-validity](../26-10-31-test-snapshot-git-marker-validity.md) 快照 _find_repo_root 判据加 .git/HEAD 有效性校验: 空壳标记不算仓库根
 - [26-10-11-webui-optimistic-bulk-desync](../26-10-11-webui-optimistic-bulk-desync.md) WEBUI 批量跳检后「批量开始」状态脱节修复(真值出口 + 前端回滚 + 快照回写)
-- [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-10-30-backend-deadcode-contract-hygiene](../26-10-30-backend-deadcode-contract-hygiene.md) 第二次全项目评审 P3 合并池位收口: 死码批量清理与契约卫生
 - [26-10-30-test-mutants-verify-baseline-fix](../26-10-30-test-mutants-verify-baseline-fix.md) mutants.verify 判据修复: 基线常红致恒判 KILLED

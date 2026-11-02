@@ -128,3 +128,23 @@
   见 nav_server.py `_utf8_stdout`); 或者关键行改 `print(..., flush=True)`。守阵:
   `tests/test_kb_nav.py::test_log_filters_polling` 旁的冒烟路径 + 引擎 stream 通道
   (commands run.py, 2026-10-04) —— stream 模式 stdio 直连不落管道, 是另一条独立防线。
+
+## CLI 入口的同一兜底: gtm 非控制台 print 中文会崩(2026-11-03 补, 同因不另立坑档)
+
+- **触发**: 工具的 `python -m gtm` (或 console script) 被管道 / 服务日志捕获时, 帮助与告警里的中文
+  经 `print` / `argparse.print_help` / `logging StreamHandler` 写 stdout/stderr; 英文 Windows
+  把 stdio 码页定成 cp1252 ⇒ `UnicodeEncodeError: 'charmap' codec can't encode characters`,
+  **本该展示的告警变成进程崩溃** (实测 `python -m gtm` 帮助退出码 1、stdout 为空)。
+- **判别**: 与「引擎自身的 stdout」同指纹 —— 真控制台正常, 被管道接住就崩; 本机一行复现:
+  `PYTHONIOENCODING=cp1252 PYTHONUTF8=0 python -m gtm`。注意方向: 这**不是**子进程收输出
+  (上面两条), 是本进程往外写。
+- **处置**: CLI 入口第一行 `_utf8_stdio()`(gtm `src/gtm/__main__.py`): 对 `io.TextIOWrapper`
+  且 `encoding` 非 utf-8 的 stdout/stderr 做 `reconfigure(encoding="utf-8", errors="replace")`。
+  只换编码, 不动缓冲 / `-u` / 重定向语义; 中文都在 UTF-8 码表内, `replace` 只兜孤立代理项
+  ⇒ 原文不丢; 退出码仍由业务 `return` 决定, 不因编码改变。真控制台本来就是 utf-8
+  (WriteConsoleW), 天然跳过。**不要**用全局 `PYTHONUTF8` 假设, 也不要用 `try/except: pass`
+  吞编码异常。
+- **守阵**: `test_main_run.py` +3 —— ①cp1252 `TextIOWrapper` 重配后按 UTF-8 出整行中文;
+  ②`PYTHONIOENCODING=cp1252` 子进程 `python -m gtm` 的 stdout 帮助可见且 exit 0;
+  ③同环境 `endpoint` 的 stderr 中文错误行可见且 exit 1(日志前缀契约不变)。前两档修复前必红
+  (实测崩在 `argparse.print_help` 的 `file.write`)。
