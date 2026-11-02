@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (66)
+## Open (65)
 
 - [bug] [RM04-05 GATE_SPACE 跨卷空间不足分支红验缺失(需第二可写卷环境)](../26-11-02-1208-bug-rm04-gate-space-crossvol-branch-missing.html) — relocate_units.py:490 GATE_SPACE elif 分支(target_free < needed AND same_volume=False) 缺用例级红验; 本机仅 C: 一个可写卷 same_volume=False 前置不成立, 闸门同卷跳过空间预检; 需第二可写卷 + 空间可判定的环境执行, 不改产品代码
 - [test] [core/ traffic_store 极低危真洞余量 17 条汇总(判读留档不排期)](../26-10-31-1539-test-core-w4-mutation-extreme-low-residue.html) — W4 真洞余量: 极低 15(病态输入/不可达分支/无消费方) + 低 2(evict_37/cache_day_33 延迟非丢失), 全套件 SURVIVED
@@ -18,7 +18,6 @@
 - [test] [core/ tvshows 键归一变异存活: 尾 bigram/空格折叠 2 条低危 + 归一循环死循环 2 条](../26-10-31-1212-test-core-w3-mutation-key-normalize.html) — W3 低危簇4: normalize_key_25+title_and_key_37 低危补测; normalize_key_34/38 timeout 死循环(DoS 形态)随簇记 bug 备注处置=代码侧
 - [test] [core/ tvshows 标题尾 trim 变异存活: title_and_key_30 1 条低危](../26-10-31-1212-test-core-w3-mutation-title-trim.html) — W3 低危簇5: title_and_key_30 尾 strip 字符集失效, 标题残留「 -」/右括号, 展示面污染, W3 池无守阵
 - [test] [core/ tvshows 年份/bare 边界变异存活: bare_ok/区间终点/目录季/日期 9 条低危](../26-10-31-1211-test-core-w3-mutation-year-bare-edges.html) — W3 低危簇1: bare_ok_9/10/11/12+find_episode_24/32+dir_season_13/14+find_date_18, 年份窗口/集数上下界/目录季/非法日期, W3 池无守阵
-- [test] [core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危](../26-10-31-0823-test-core-w2-mutation-empty-meta-grid.html) — W2 未逐条 verify 低危簇 H(缩并): bg_21(桶宽下限 1→2 伤亚 2s 采样) + gfn_6(sample_interval 实参静默丢弃)
 - [test] [core/ limits 护栏计数/节流变异存活 3 条低危](../26-10-31-0823-test-core-w2-mutation-guard-counter.html) — W2 未逐条 verify 低危簇 D: guard_1/9/14(按天重置失效/节流失效刷 WARNING)
 - [test] [core/ limits 记录器/缓存防御面变异存活 3 条低危](../26-10-31-0823-test-core-w2-mutation-recorder-defense.html) — W2 未逐条 verify 低危簇 C: obs_7/8(非 Mapping 状态防御) + rday_10(缺失哨兵空串化)
 - [test] [core/ grid 同桶快照/混桶家族变异存活 8 条低危](../26-10-31-0823-test-core-w2-mutation-snapshot-mixbucket.html) — W2 未逐条 verify 低危簇 G: vsp_95/96/97/98/105/107/112/115(同刻快照最新性/混桶 is_raw/覆盖值取错通道)
@@ -78,7 +77,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (337)
+## Done (338)
 
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](../26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2026-11-02 环境2 C盘充足) RM04-05 负向对照 dst 缺席应被 GATE_SPACE error 拒绝 → 实测 status=ok 放行; 闸门逻辑 relocate_units.py:488 按设计放行(上溯父目录取到 C: 73GB free + same_volume=True), 根因=环境差量(红验前提写窄)
 - [perf] [种子详情面板页签切换卡 1-2 秒](../26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(general/content 等)切换在 3000 种子规模下卡 1-2 秒; 疑与切页触发窗口/行高作废或内容变体全量装配相关, 待查
@@ -120,6 +119,7 @@
 - [test] [core/ limits 坏字节读侧容错变异存活 6 条低危](../26-10-31-0823-test-core-w2-mutation-badbytes-read.html) — W2 未逐条 verify 低危簇 B: rdl_8/18 + rday_25/29/34/35(坏字节文件 UnicodeDecodeError/LookupError 未捕获, 读侧降级契约破坏)
 - [test] [core/ grid ±1s 边界与窗端点几何变异存活 10 条低危](../26-10-31-0823-test-core-w2-mutation-boundary-grid.html) — W2 未逐条 verify 低危簇 F: vsp_43/44/52/155/156/158 + fb_9 + bg_52/53 + vtp_62(边界/窗端点/尾桶缺一口)
 - [test] [core/ grid 断链标记/快照最晚者胜/防御契约变异存活 7 条低危](../26-10-31-0823-test-core-w2-mutation-broke-contract.html) — W2 未逐条 verify 低危簇 I: vgo_80/83/105/117 + vrft_15/25 + vtp_101(断链桶冒充 0 线/w=0 除零/单侧游程摊配)
+- [test] [core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危](../26-10-31-0823-test-core-w2-mutation-empty-meta-grid.html) — W2 未逐条 verify 低危簇 H(缩并): bg_21(桶宽下限 1→2 伤亚 2s 采样) + gfn_6(sample_interval 实参静默丢弃)
 - [test] [core/ limits 解析边角变异存活: 坏行/撕裂/负值 4 条低危](../26-10-31-0823-test-core-w2-mutation-parse-edges.html) — W2 未逐条 verify 低危簇 A: parse_4/9/37/38(行内空白/撕裂尾/负值边角), W2 池无守阵
 - [chore] [升库 qbittorrent-api==2026.8.1 -> ==2026.10.1 支持双版本 qB(5.2.3/5.3.x)](../26-10-31-0716-chore-qbittorrentapi-bump-dual-version.html) — pyproject.toml 钉版升级到 2026.10.1(官方支持 qB 5.3.0/WebAPI 2.16.2); 下限 2026.8.1 不许降(跳检 skip_checking/seedMode 双发依赖); 禁开 RAISE_ERROR_FOR_UNSUPPORTED_QBITTORRENT_VERSIONS; 时序: 先合 facade 修复 -> 升库 -> 升 qB 5.3
 - [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入

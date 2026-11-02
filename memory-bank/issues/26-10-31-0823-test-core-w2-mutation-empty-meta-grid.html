@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="mutation-audit">
 <meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危">
 <meta name="issue-summary" content="W2 未逐条 verify 低危簇 H(缩并): bg_21(桶宽下限 1→2 伤亚 2s 采样) + gfn_6(sample_interval 实参静默丢弃)">
 <title>core/ grid 空态 meta/宽桶/实参丢弃变异存活 2 条低危 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0823-test-core-w2-mutation-empty-meta-grid</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 08:23</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -100,7 +100,19 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 08:23 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-02 — 认领（用户指派），状态 <strong>In Progress</strong>；复验：<code>max(1, ...)</code> 桶宽下限与 <code>build_grid(window, time.time(), sample_interval)</code> 实参与 issue 描述一致</li>
+      <li>2026-11-02 — 状态 <strong>Done</strong>：2 条红验全部 KILLED，定向测试全绿</li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>实际修法与验证</h2>
+    <p><b>零 src 改动, 只补守阵</b>(<code>tests/test_traffic_grid.py</code>):</p>
+    <ul>
+      <li><code>bg_21</code> → 新增 <code>test_build_grid_integral_interval_floor_not_raised</code>: 采样间隔 1.0 下 1m/5m/30m 桶宽恰 1、桶数 60/300/1800 —— 下限被抬到 2s 时 1m 立刻出 <code>interval=2</code>。红验 <b>KILLED</b>(1m: 2 != 1)。</li>
+      <li><code>gfn_6</code> → 新增 <code>test_grid_for_now_forwards_sample_interval</code>: <code>grid_for_now("1m", 1.0)</code> 断言 <code>interval=1</code> —— 删实参后落默认 30, 实测 <code>interval=30</code>。红验 <b>KILLED</b>。</li>
+    </ul>
+    <p class="hint">验证: <code>commands run test.one -- tests/test_traffic_grid.py tests/test_traffic_limits.py</code> 全绿; 测试数字见 <code>kb.baseline</code>。</p>
   </section>
 
   <footer>

@@ -82,6 +82,12 @@
 - test_v4_grid_obs_coverage_end_advance_keeps_latest_snapshot: (vgo_83)覆盖末端必须推进(`a[4] = cov_end`), 变异成写 a[5] 会让短覆盖点抢走快照
 - test_v4_grid_obs_broken_bucket_zero_rate_kept_zero: (vgo_105/vgo_117)断链桶有覆盖且速率为 0 时仍是 0 线, 均值判据错看加权和会把 0 误判成无覆盖出 None
 - test_v4_rate_from_totals_zero_width_point_defensive: (vrft_15/vrft_25)w=0 直构点防御契约 —— 速率派不出(None)而非除零, 变异成 `w < 0` 会 ZeroDivisionError
+- test_build_grid_integral_interval_floor_not_raised: (mut-core W2 bg_21)桶宽下限恒 1s —— 1.0 采样间隔下小窗桶宽恰 1(下限被抬到 2 让 si∈(0,2) 高频采样桶数腰斩)
+- test_grid_for_now_forwards_sample_interval: (mut-core W2 gfn_6)grid_for_now 转发 sample_interval —— 传 1.0 小窗桶宽 1(删实参落默认 30 时桶宽退化 30)
+- test_v4_series_points_same_bucket_later_snapshot_wins: (mut-core W2 vsp_96)同桶 raw+raw 快照取后到者 —— totals 大于 ts 时比较对象错成 totals 会永不更新
+- test_v4_series_points_three_raw_same_bucket_no_typeerror: (mut-core W2 vsp_97)同桶三条 raw 照常均值/末条快照 —— e[4] 被写坏时第三条比较 TypeError
+- test_v4_series_points_same_timestamp_later_snapshot_wins: (mut-core W2 vsp_95)同刻双 raw 记录快照取后到者 —— >= 变异成 > 保留先到者(vsp_98/vsp_112 判等价: e[4] 只作单调比较基线, 不参与输出)
+- test_v4_series_points_mixed_bucket_raw_priority_keeps_mean: (mut-core W2 vsp_105/vsp_107/vsp_115)z+raw+raw 混桶 raw 优先后两条 raw 仍取均值 —— is_raw 旗写坏退化末条单值, dl 覆盖取错向则均值失真
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -130,6 +136,7 @@ from auto_qb.core.traffic_store import (
     V4NullRun,
     V4ParsedAgg,
     V4Sample,
+    V4Slot,
     V4ZeroRun,
     format_v4_day_text,
     parse_v4_day_text,
@@ -192,6 +199,14 @@ def test_build_grid_fractional_interval_ceils_bucket_width():
     assert g.interval == 2
     assert len(g.buckets) == 30  # NOW 与 t0 均为偶数, 恰好对齐
     assert g.last < NOW <= g.last + 2  # 覆盖 [t0, t1) 不变
+
+
+def test_build_grid_integral_interval_floor_not_raised():
+    """(mut-core W2 bg_21)桶宽下限恒 1s: 采样间隔 1.0 时小窗桶宽恰 1 —— 下限被抬到 2s
+    会让 si∈(0,2) 的高频采样在 1m/5m/30m 上凭空把桶数/分辨率腰斩(伪聚合)"""
+    for name, n in (("1m", 60), ("5m", 300), ("30m", 1800)):
+        g = build_grid(name, NOW, 1.0)
+        assert g.interval == 1 and len(g.buckets) == n, name
 
 
 def test_build_grid_raw_bucket_cap_high_frequency_sampling():
@@ -617,6 +632,53 @@ def test_v4_same_second_merge_and_mixed_key_raw_priority():
         (1000, 2, 2, 30, 40),  # 混桶: 取 raw, z 让位
         (1001, 40, 50, 400, 500),  # 均值 (30+50)/2, (40+60)/2; 快照取最新行(@1001.6)
     ]
+
+
+def test_v4_series_points_same_bucket_later_snapshot_wins():
+    """(mut-core W2 vsp_96)同桶 raw+raw: 速率取均值、快照取后到者。totals 数值大于 ts 时,
+    比较对象错成 totals(e[5])恒假 -> 快照永不更新"""
+    slots = (
+        V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
+        V4Slot(998.9, 1.0, (15, 21, 4000, 5000), False),
+    )
+    points = v4_series_points((), 900, 2000, tail_slots=slots)
+    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total, p.w) for p in points] == [(998, 10, 15, 4000, 5000, 1)]
+
+
+def test_v4_series_points_three_raw_same_bucket_no_typeerror():
+    """(mut-core W2 vsp_97)同桶三条 raw: 均值三条、快照取末条 —— e[4] 被写成 None 时
+    第三条的 `ts >= e[4]` 会 TypeError"""
+    slots = (
+        V4Slot(998.2, 1.0, (4, 8, 2000, 3000), False),
+        V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
+        V4Slot(998.9, 1.0, (6, 10, 4000, 5000), False),
+    )
+    points = v4_series_points((), 900, 2000, tail_slots=slots)
+    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(998, 5, 9, 4000, 5000)]
+
+
+def test_v4_series_points_same_timestamp_later_snapshot_wins():
+    """(mut-core W2 vsp_95)同刻双 raw 记录: 快照取后到者(>= 变异成 > 会保留先到者)。
+    vsp_98/vsp_112 判等价 —— e[4] 只作单调比较基线、不参与输出, 生产槽序 ts 非降下陈旧
+    e[4] 仍恒 <= 新 ts, 比较结果不变"""
+    slots = (
+        V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
+        V4Slot(998.5, 1.0, (15, 21, 4000, 5000), False),
+    )
+    points = v4_series_points((), 900, 2000, tail_slots=slots)
+    assert [(p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(10, 15, 4000, 5000)]
+
+
+def test_v4_series_points_mixed_bucket_raw_priority_keeps_mean():
+    """(mut-core W2 vsp_105/vsp_107/vsp_115)z+raw+raw 三连混桶: raw 优先后两条 raw 照常取
+    均值 —— is_raw 旗写成假值会退化到「末条 raw 单值」; 覆盖速率取错通道(up 当 dl)均值失真"""
+    slots = (
+        V4Slot(998.2, 1.0, (0, 0, 1000, 2000), True),
+        V4Slot(998.5, 1.0, (5, 9, 3000, 4000), False),
+        V4Slot(998.9, 1.0, (15, 21, 4000, 5000), False),
+    )
+    points = v4_series_points((), 900, 2000, tail_slots=slots)
+    assert [(p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(10, 15, 4000, 5000)]
 
 
 def test_v4_vacuum_and_disconnect_distinct():
@@ -1342,6 +1404,13 @@ def test_grid_for_now_wraps_build_grid():
     ref = build_grid("24h", time.time(), 30)
     assert g.name == ref.name == "24h" and g.interval == ref.interval == 30 and g.segment == ref.segment
     assert abs(g.t1 - ref.t1) <= 2
+
+
+def test_grid_for_now_forwards_sample_interval():
+    """(mut-core W2 gfn_6)grid_for_now 必须把 sample_interval 转发给 build_grid:
+    传 1.0 时 1m 桶宽 1(删实参落默认 30 会退化成 30s 桶)"""
+    g = grid_for_now("1m", 1.0)
+    assert g.interval == 1 and g.segment == "raw"
 
 
 def test_bucket_delta_null_and_reset():
