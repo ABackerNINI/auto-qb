@@ -82,6 +82,7 @@ gen_doc_map.collect() 本体的键集合 —— 它是闸门/守阵消费单点 
 - test_esc_closes_drawer: drawer 档判据 open 类 (可见性) 且清 S.sel + closeDrawer 同步, 后于 ctxMenu 档
 - test_gsearch_clear_button: 全局搜索清词按钮在位 (内联 SVG / [hidden] 兜底 / syncGclear 单点同步 / 清词还焦点), placeholder 无 (Esc 清空)
 - test_slash_focuses_search: "/" 快捷键聚焦搜索框 (slashFocus 命名函数 / 输入态与 IME 不劫 / 挡默认行为), 注册点不混 Esc 关键词
+- test_search_matches_file_name_and_relative_path: 全局搜索按 basename / mb 内相对路径 / memory-bank/ 仓库根相对路径都能命中 (2026-11-03 用户复现); 原 title/topic/issue-summary 行为不变 + 大小写/反斜杠归一 + 三处过滤共用 navSearchText 单点 (正文不入索引)
 - test_shell_has_multiselect_state_and_gestures: 多选会话态 (S.multi/multiAnchor 不进持久化 / derive 不碰) + 主表与置顶区 Ctrl/Shift 手势排在改 S.sel 之前 + 普通单击不清多选
 - test_multiselect_renders_in_both_zones: 主表与置顶专区渲染都挂 msel (双区同亮) + CSS tr.msel 与 sel.msel 组合样式在位
 - test_ctx_menu_batch_upgrade: 右键批量升级单点 ctxTargets (集合>1 且行∈选区) + openCtx 冻结 links 快照 + 批量文案带 N + 分发走批量链
@@ -96,6 +97,7 @@ from __future__ import annotations
 import http.client
 import json
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -799,6 +801,65 @@ def test_slash_focuses_search() -> None:
     assert "Escape" not in listener.group(0) or "escRetreat" in listener.group(0), (
         "document 级 keydown 首个注册点混入 Esc 关键词 —— Esc 单点守阵 (test_esc_retreat_chain_single_point) 数的就是它"
     )
+
+
+def test_search_matches_file_name_and_relative_path(tmp_path) -> None:
+    """2026-11-03 用户复现: 在 #gq 输入 memory-bank/reports/<file> 无匹配 —— 原匹配串只拼
+    title/topic/issue-summary, link 未入索引, 故 basename 与路径都不可搜。本守阵钉三件事:
+    ①basename / mb 内相对路径 / 仓库根相对路径 (memory-bank/<link>) 三种形态命中该文件;
+    ②原有 title / topic / issue-summary 命中行为不变 (加路径只是加法); ③大小写与反斜杠归一;
+    ④台账 / 卡片墙 / 控制台频道三处过滤共用 navSearchText 单点, 不得各拼一份 haystack。
+    索引只含上述四类字段, 正文不入 (体积口径)。JS 单点用 node 回放 (与仓库其余 JS 守阵同口径)。"""
+    text = SHELL.read_text(encoding="utf-8")
+    idx_body = re.search(r"function navSearchText\(i\) \{([^}]*)\n\}", text, re.S)
+    qry_body = re.search(r"function navSearchQuery\(q\) \{([^}]*)\n\}", text, re.S)
+    assert idx_body and qry_body, "搜索索引单点 navSearchText / navSearchQuery 不见了? 改版要同步本守阵"
+    assert "i.link" in idx_body.group(1) and 'memory-bank/" + link' in idx_body.group(1), (
+        "索引必须含 link (basename 随之可搜) 与 memory-bank/<link> 仓库根相对形态"
+    )
+    assert text.count('i.title + " " + (i.topic') == 1, ("haystack 拼接必须只存在于 navSearchText 单点 (计数应=1), 否则过滤点各自漂移")
+
+    af = re.search(r"function aFiltered\(\) \{(.*?)\n\}", text, re.S)
+    cv = re.search(r"function cVisibleItems\(key\) \{(.*?)\n\}", text, re.S)
+    ch = re.search(r"function renderChannels\(\) \{(.*?)\n\}", text, re.S)
+    assert af and "navSearchText(i)" in af.group(1) and "navSearchQuery(S.q)" in af.group(1), "台账过滤未走搜索单点"
+    assert cv and "navSearchText(i)" in cv.group(1) and "navSearchQuery(S.q)" in cv.group(1), "卡片墙过滤未走搜索单点"
+    assert ch and "navSearchText(i)" in ch.group(1), "控制台频道过滤未消费同一索引 (路径搜索在该视图仍空白)"
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 不在 PATH (与仓库其余 JS 守阵同口径)")
+    item = {
+        "title": "规则引擎重设计报告",
+        "topic": "rule-engine-redesign",
+        "issue-summary": "关键词 alpha-beta",
+        "link": "reports/26-11-01-0057-report-rule-engine-redesign.html",
+    }
+    queries = {
+        "basename": "26-11-01-0057-report-rule-engine-redesign.html",
+        "mb_rel": "reports/26-11-01-0057-report-rule-engine-redesign.html",
+        "repo_rel": "memory-bank/reports/26-11-01-0057-report-rule-engine-redesign.html",
+        "upper": "MEMORY-BANK/REPORTS/26-11-01-0057-REPORT-RULE-ENGINE-REDESIGN.HTML",
+        "backslash": "memory-bank\\reports\\26-11-01-0057-report-rule-engine-redesign.html",
+        "title": "规则引擎重设计",
+        "topic": "rule-engine-redesign",
+        "summary": "alpha-beta",
+        "miss": "zzz-no-such-file",
+    }
+    probe = tmp_path / "search_probe.js"
+    probe.write_text(
+        "function navSearchText(i) {" + idx_body.group(1) + "\n}\n" + "function navSearchQuery(q) {" +
+        qry_body.group(1) + "\n}\n" + "const item = " + json.dumps(item, ensure_ascii=False) + ";\n" + "const qs = " +
+        json.dumps(queries, ensure_ascii=False) + ";\n" + "for (const [k, q] of Object.entries(qs)) "
+        "console.log(k + '=' + (navSearchText(item).includes(navSearchQuery(q)) ? '1' : '0'));\n",
+        encoding="utf-8",
+    )
+    out = subprocess.run([node, str(probe)], capture_output=True, text=True, encoding="utf-8", timeout=30)
+    assert out.returncode == 0, out.stderr
+    got = dict(line.split("=", 1) for line in out.stdout.strip().splitlines())
+    for key in ("basename", "mb_rel", "repo_rel", "upper", "backslash", "title", "topic", "summary"):
+        assert got.get(key) == "1", f"{key} 未命中 ({queries[key]}): {got}"
+    assert got.get("miss") == "0", "无关词不应命中"
 
 
 def test_shell_has_multiselect_state_and_gestures() -> None:

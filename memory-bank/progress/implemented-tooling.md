@@ -59,6 +59,15 @@
 - **kb.nav 多选与批量右键菜单 (2026-10-31, 专题 kb-nav-multiselect, 计划 26-10-31-0143 全段落地)**: 台账加文件管理器式多选 —— Ctrl+click 切换 / Shift+click 锚点区间**并入** (auto-qb selection.js 口径: 锚点不动, 可从同一起点多次扩段), 主表 + 置顶专区双区同亮 (置顶件双向显示, link 为键), 普通单击 = 现行为且**不清多选** (拍板 D3, 用户明确拒绝「单击清多选」—— 容易误触); 右键批量升级照 auto-qb menu.js CTX-03 —— `ctxTargets` 单点解析 (集合>1 且行∈选区 → 整集合快照, openCtx 冻结 `dataset.links`, 右键不改选区), 批量文案带灰色 N (拍板 D12), 四项动作走批量链: pin/hide 幂等批量 (`every` 动态反向文案, 批量隐藏把隐藏件剪出选区), 复制每行一个 `memory-bank/<link>` 按主表可见序 (被筛掉的选中行按全量序追加), 打开 >5 先 `window.confirm`; 辅助件: 顶栏「已选 N」chip 点击清空, Esc 退栈链末档清多选 (drawer 档后、遗留 tr.sel 前), Ctrl+A 台账非输入态全选可见行, 切视图即清空。选区 `S.multi`/`S.multiAnchor` 纯会话态 (derive()/saveFilters() 均不碰, 同 pin 坑型)。守阵 `tests/test_kb_nav.py` +6 (会话态与手势 / 双区渲染 / 批量升级 / 幂等 / 辅助件 / 复制与打开); Playwright 无头真机冒烟全过 (脚本 tmp-analysis/nav/, gitignored)。
   计划 [26-10-31-0143](../plans/26-10-31-0143-plan-kb-nav-multiselect.html)。
 
+- **kb.nav 搜索支持文件名/相对路径 (2026-11-03, 专题 kb-nav-searchbox)**: 用户复现「#gq 输入
+  `memory-bank/reports/<文件>` 无匹配」—— 根因: 搜索 haystack 只拼 title/topic/issue-summary, `link` 未入索引,
+  且匹配是对整串做 `includes`。修法: 壳内新增 `navSearchText()` / `navSearchQuery()` 单点, 索引加法式补
+  `link` (basename 随之可搜) 与 `memory-bank/<link>` 仓库根相对形态; 台账 `aFiltered` / 控制台
+  `renderChannels` / 卡片墙 `cVisibleItems` 三处统一消费, 正文不入索引 (体积口径), 大小写与反斜杠归一;
+  排序/展示与原有标题·专题·摘要匹配行为不变, 数据层/服务层零改动。守阵 `tests/test_kb_nav.py` 新增一条
+  (node 回放页内真实 JS 单点: basename / mb 内相对路径 / 仓库根相对路径 / 大小写 / 反斜杠 / 原字段 / 无关词),
+  数字见 kb.baseline。
+
 - **activeContext 多 clone 冲突治理 = 时间戳切片方案 (2026-09-23, W1–W3)**: 「重写头部滚动栈」改成
   「新增/更新自己的时间戳切片」; 取消 global.md/_index.md/_recent.md 缓存(文件名自带时间与主题,
   `kb.active` 现算); 归档阈值 14 天默认落地(`--stale-days` 可调)。W4(merge-tree 预检 + rerere)可选未做;

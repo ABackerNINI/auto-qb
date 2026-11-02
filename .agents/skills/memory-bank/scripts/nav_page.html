@@ -10,6 +10,9 @@
   移植自 tmp-analysis/nav-design/ 三套已验证原型, 交互设计未改。
   数据接入: http 模式 fetch /api/data (30s 轮询); 静态模式由 nav_server.py --gen-static 把
   下方唯一的数据注入位替换为 JSON (检测注入完成即不走 fetch)。链接前缀按协议自适应。
+  搜索索引 (2026-11-03): navSearchText() 单点 = 标题 / 专题 / issue 摘要 + 文件路径两种形态
+  (link 本身含 basename, 另加 memory-bank/<link>); 台账 / 控制台频道 / 卡片墙共用, 正文不入索引
+  (体积口径), 匹配统一小写并把反斜杠归一成 "/"。
 -->
 <style>
   :root {
@@ -611,7 +614,7 @@
 <div class="views">
 
   <!-- 视图 A: 台账 (过滤轨 + 排序表格 + 详情抽屉) -->
-  <section class="view on" id="v-ledger">
+  <div class="view on" id="v-ledger">
     <aside>
       <div class="fgroup" id="fgForm"><div class="fl">形态</div></div>
       <div class="fgroup" id="fgStatus"><div class="fl">状态</div></div>
@@ -656,7 +659,7 @@
       <!-- 隐藏区: 默认折叠, 点 #hidBtn 展开; 列定义克隆主表 thead + 行复用 ledgerCells (同 pin 专区口径) -->
       <div class="hidzone" id="hidZone" hidden></div>
     </main>
-  </section>
+  </div>
 
   <!-- 视图 B: 控制台 (四工位统计带 + 专题频道 + readout 行内展开) -->
   <section class="view" id="v-console">
@@ -1063,6 +1066,17 @@ function buildFilterRows(groupId, entries, sw, isActive, onToggle) {
 const FORM_ORD_N = { issue: 0, plan: 1, report: 2, task: 3 };
 const ST_ORD_N = { "In Progress": 0, "Open": 1, "Done": 2, "Dropped": 3, "Superseded": 4 };
 
+/* 搜索索引单点 (2026-11-03): 标题 / 专题 / issue 摘要 + 文件路径两种形态 —— link 本身就是 mb 内
+   相对路径 (已含 basename), 再补 "memory-bank/<link>" 这一仓库根相对形态; 正文不入索引 (体积口径)。
+   匹配统一小写并归一反斜杠, Windows 粘来的路径也能命中。台账 / 卡片墙 / 控制台频道的过滤共用本函数。 */
+function navSearchText(i) {
+  const link = (i.link || "").replace(/\\/g, "/");
+  return (i.title + " " + (i.topic || "") + " " + (i["issue-summary"] || "") + " " + link + " memory-bank/" + link).toLowerCase();
+}
+function navSearchQuery(q) {
+  return q.toLowerCase().replace(/\\/g, "/");
+}
+
 function aFiltered() {
   let list = DATA.items.filter(i =>
     !isHidden(i.link) &&
@@ -1072,8 +1086,8 @@ function aFiltered() {
     (!S.aChain || (i.refs && i.refs.length > 0))
   );
   if (S.q) {
-    const q = S.q.toLowerCase();
-    list = list.filter(i => (i.title + " " + (i.topic || "") + " " + (i["issue-summary"] || "")).toLowerCase().includes(q));
+    const q = navSearchQuery(S.q);
+    list = list.filter(i => navSearchText(i).includes(q));
   }
   const cmp = {
     stamp: (a, b) => b.stamp.localeCompare(a.stamp) || FORM_ORD_N[a.form] - FORM_ORD_N[b.form],
@@ -1335,9 +1349,10 @@ function renderConsole() {
 
 function renderChannels() {
   const qLocal = S.cq.trim().toLowerCase();
-  const qGlobal = S.q.toLowerCase();
+  const qGlobal = navSearchQuery(S.q);
   const keys = [...groups.keys()]
-    .filter(k => (!qLocal || k.toLowerCase().includes(qLocal)) && (!qGlobal || k.toLowerCase().includes(qGlobal)))
+    .filter(k => (!qLocal || k.toLowerCase().includes(qLocal)) &&
+      (!qGlobal || k.toLowerCase().includes(qGlobal) || groups.get(k).some(i => navSearchText(i).includes(qGlobal))))
     .sort((a, b) => {
       const la = liveOf(a), lb = liveOf(b);
       const na = groups.get(a).length, nb = groups.get(b).length;
@@ -1410,8 +1425,8 @@ function renderScope() {
 function cVisibleItems(key) {
   let list = groups.get(key).filter(i => S.cForms.has(i.form) && S.cStatuses.has(stOf(i)));
   if (S.q) {
-    const q = S.q.toLowerCase();
-    list = list.filter(i => (i.title + " " + (i.topic || "") + " " + (i["issue-summary"] || "")).toLowerCase().includes(q));
+    const q = navSearchQuery(S.q);
+    list = list.filter(i => navSearchText(i).includes(q));
   }
   return list.slice().sort((a, b) => {
     const aa = ACTIVE_ST.has(stOf(a)) ? 0 : 1, bb = ACTIVE_ST.has(stOf(b)) ? 0 : 1;
@@ -1431,7 +1446,7 @@ function renderCards() {
     if (S.cLive && !liveOf(k)) return false;
     const allOn = S.cForms.size === FORM_ORD.length && S.cStatuses.size === statusList.length;
     if (!S.q && allOn) return true;
-    return cVisibleItems(k).length > 0 || (S.q && k.toLowerCase().includes(S.q.toLowerCase()));
+    return cVisibleItems(k).length > 0 || (S.q && k.toLowerCase().includes(navSearchQuery(S.q)));
   }).sort((a, b) => {
     const la = liveOf(a) ? 0 : 1, lb = liveOf(b) ? 0 : 1;
     return la - lb || groups.get(b).length - groups.get(a).length || a.localeCompare(b);
