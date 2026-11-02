@@ -41,6 +41,7 @@
 - [26-11-02-webui-large-filelist-perf](../26-11-02-webui-large-filelist-perf.md) WEBUI 单种子千级文件列表性能统一优化 (W1-W5 + W6a 落地, W6b Dropped, 真机轨完成)
 - [26-11-03-memory-bank-kb-nav-searchbox](../26-11-03-memory-bank-kb-nav-searchbox.md) kb.nav 搜索支持文件名与相对路径
 - [26-11-03-webui-ctx-src-target-marker](../26-11-03-webui-ctx-src-target-marker.md) 右键目标行持续可见标识：四皮肤 .ctx-src 改静态实心 outline 框
+- [26-11-03-webui-remove-row-hover-bar-and-fx-flash](../26-11-03-webui-remove-row-hover-bar-and-fx-flash.md) 四皮肤移除鼠标 hover 行左条 + flux 右键强调动效退役
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-11-01-memory-bank-status-drift-guard](../26-11-01-memory-bank-status-drift-guard.md) 状态漂移机检落地与存量清零
 - [26-11-02-backend-webui-seed-cmds](../26-11-02-backend-webui-seed-cmds.md) WebUI set_share_limits 补必填参 shareLimitAction (issue 26-11-01-2102)

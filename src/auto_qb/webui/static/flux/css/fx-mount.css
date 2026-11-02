@@ -158,13 +158,14 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
   html.fx-glide { scroll-behavior: smooth; }
 
   /* ==================================================================
-   * torrent/成员行(D4-2 selected 边条生长 / D4-3 锚点脉冲; D4-1 hover 渐亮已让位
-   * row_lang 单点, 见媒体块外 D4-1 段注)
+   * torrent/成员行(D4-2 selected 边条生长; D4-1 hover 渐亮已让位 row_lang 单点,
+   * 见媒体块外 D4-1 段注; D4-3 锚点脉冲已退役, 右键目标标识改为 .ctx-src 静态描边,
+   * 见 flux/css/components.css 的 CTX-02 段)
    * ------------------------------------------------------------------
    * 行级效果零 .group-row 选择器的库纪律是对 fx.css(库不分皮肤)说的; 本层是
-   * flux 专属挂载面, 消费既有状态类(.selected/.partial/.ctx-src), 零模板改动。
+   * flux 专属挂载面, 消费既有状态类(.selected/.partial), 零模板改动。
    * 行板/首格过渡单点纪律(守阵 pinned_first_cell_hover_transition_parity)不动:
-   * 本层不声明行板与首格的 background 过渡, 只加 ::before 边条与一次性 flash。
+   * 本层不声明行板与首格的 background 过渡, 只加 ::before 边条。
    * ================================================================== */
   /* D4-1 hover 渐亮(R1 精修 B2 让位退役): 原版「gradient 叠 --bg-row 合成」特异性压过
    * row_lang flat 行板 hover(color-mix 纯色单点), 而吸左首格 hover 底消费的是 flat 首格
@@ -195,13 +196,6 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
   html[data-fx-preset] .group-row.selected > :first-child::after,
   html[data-fx-preset] .member-row.selected > :first-child::after {
     animation: fx-check-pop 180ms var(--fx-ease-back);
-  }
-  /* D4-3 锚点脉冲: 右键锚点行(menu.js::_markCtxSource 挂 .ctx-src)一次性 flash --
-   * 类挂上即播、菜单关闭摘类、下次右键重挂重播, 零 JS(状态类由既有机制给);
-   * keyframes 复用 fx.css fx-row-flash。只落行类, .ctx-src 命中的按钮不播。 */
-  html[data-fx-preset] .ctx-src.group-row, html[data-fx-preset] .ctx-src.member-row,
-  html[data-fx-preset] .ctx-src.ep-row, html[data-fx-preset] .ctx-src.show-row {
-    animation: fx-row-flash 600ms var(--fx-ease-standard);
   }
 
   /* ==================================================================

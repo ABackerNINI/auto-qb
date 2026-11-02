@@ -25,7 +25,6 @@
  *                    与行板过渡同一属性 background-color、同一份 views.css transition ⇒ 逐帧
  *                    相等; 行板与首格消费同一条(issue 26-10-30-0818 前仅首格, 行板原为 tint 形态)
  * - --rl-hairline    行间 1px 发丝线(回退 rgba(255,255,255,.06)); 仅 flat 消费
- * - --rl-bar         名称列左条 hover 中性白条(回退 rgba(255,255,255,.5))
  * - --rl-bar-on      名称列左条选中 accent 实色(回退链 var(--accent, #3aa6a6), 运行时取皮肤 --accent)
  * - --rl-sel-tint    选中/半选行 accent tint(回退 rgba(58,166,166,.10)); 仅 wave 行板/首格消费
  * - --rl-sel-solid   flat 行板+吸左名称列选中/半选纯色底(回退 color-mix: 不透明 accent 按 10% 权重
@@ -206,7 +205,8 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * (var(--tbl-pad-x, 14px), 三皮肤 .group-row 同一表达式: prism views.css:276 / atlas
  * components.css:272 / console components.css:253)——文本零位移、列头对齐, 且不被任何
  * overflow 裁剪。规格 = 旧选中左条同款: top/bottom 14% 不满高 / 3px 宽 / 右侧圆角;
- * hover = 中性白条 120ms 渐入; 选中 = accent 实色满高条, 半选 = accent 下锚比例短条
+ * hover 不出条(2026-11-03 用户要求移除鼠标 hover 左边条; 底色/描边等其余 hover 反馈保留);
+ * 选中 = accent 实色满高条, 半选 = accent 下锚比例短条
  * (26-10-30-2359 模板C, 高度 ∝ --sel-ratio; 取代旧「选中/半选同色同高」定案)。
  *
  * 左条两态几何(flat/wave 两组逐字一致):
@@ -227,19 +227,17 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   bottom: 14%;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--rl-bar, rgba(255,255,255,.5));
   opacity: 0;
   transition: opacity .12s ease, background-color .12s ease;
   pointer-events: none;
 }
-html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::before { opacity: .6; }
 /* 半选左条分家(计划 26-10-30-2359, 拍板 D1 = 模板C 比例高度): selected 保持实色满高条,
  * partial = 同色**下锚短条**, 高度 ∝ 选中比例(--sel-ratio 由 selection.js groupSelStyle 写入,
  * 0~1)。几何不变量不破: left:1px / 3px 宽 / bottom:14% 下缘与满高条对齐; 满高条区域 =
  * 100% - 28%(top/bottom 各 14%), height = 区域 × ratio; max(8px,..) 保底可辨。
  * fallback = 1(满高): 行未写变量(理论上不会, groupSelStyle 半选必写)时退化为旧行为 ——
- * 保守默认, 不出现"错比例"。height 过渡 150ms 跟手勾选节奏。hover 中性条不受影响
- * (partial opacity:1 压过 hover 的 .6, 组合态无歧义)。 */
+ * 保守默认, 不出现"错比例"。height 过渡 150ms 跟手勾选节奏。hover 已不出条(见上),
+ * 选中/半选条只在状态态出现。 */
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
@@ -263,12 +261,10 @@ html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   bottom: 14%;
   width: 2px;
   border-radius: 0 2px 2px 0;
-  background: var(--rl-bar, rgba(255,255,255,.5));
   opacity: 0;
   transition: opacity .12s ease, background-color .12s ease;
   pointer-events: none;
 }
-html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row:hover > :first-child::before { opacity: .6; }
 html[data-rowlang="flat"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
@@ -401,7 +397,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
  * - 未横滚: 行 ::before, left:1px = 行 padding 沟槽左缘右让 1px(键盘锚点让位, 见 flat 左条
  *   规则注释「2026-10-30 键盘锚点让位修」; 几何推导两边逐字同构);
  * - 横滚(.group-table.is-hscrolled): 沟槽条摘除, 吸左首格 ::before left:1px 出 2px 窄条。
- * hover = 中性白条 120ms 渐入; 选中/半选 = accent 实色条。wave 叠层序: 行 ::before(无
+ * hover 不出条(2026-11-03 用户要求移除鼠标 hover 左边条); 选中/半选 = accent 实色条。wave 叠层序: 行 ::before(无
  * z-index)在行内常规层, 扫层 ::after(z-index:3)半透明覆盖其上 —— 与行板/首格同步承光。 */
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row::before {
   content: "";
@@ -411,12 +407,10 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   bottom: 14%;
   width: 3px;
   border-radius: 0 3px 3px 0;
-  background: var(--rl-bar, rgba(255,255,255,.5));
   opacity: 0;
   transition: opacity .12s ease, background-color .12s ease;
   pointer-events: none;
 }
-html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row:hover::before { opacity: .6; }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-row.selected::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;
@@ -441,12 +435,10 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
   bottom: 14%;
   width: 2px;
   border-radius: 0 2px 2px 0;
-  background: var(--rl-bar, rgba(255,255,255,.5));
   opacity: 0;
   transition: opacity .12s ease, background-color .12s ease;
   pointer-events: none;
 }
-html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row:hover > :first-child::before { opacity: .6; }
 html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .rl-scope .group-table.is-hscrolled .group-row.selected > :first-child::before {
   background: var(--rl-bar-on, var(--accent, #3aa6a6));
   opacity: 1;

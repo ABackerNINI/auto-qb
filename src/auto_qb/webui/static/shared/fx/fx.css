@@ -257,8 +257,8 @@
  * 实现 = showcase 页内逐条提升为 data-fx 一等能力, showcase 卡面不动):
  *   ripple(D1-4) / icon(D1-6) / focus-ring(D5-2) / focus-float(D5-3) /
  *   shake(D5-5) / headshake(D2-5 接力半边) / dir(D7-4) / zoom(D2-3) /
- *   push(D3-4) / row-hover(D4-1) / row-sel(D4-2) / row-flash(D4-3) /
- *   row-in(D4-4L) / row-out(D4-5L) / check(D4-6) / countdown(D6-2) /
+ *   push(D3-4) / row-hover(D4-1) / row-sel(D4-2) / row-in(D4-4L) /
+ *   row-out(D4-5L) / check(D4-6) / countdown(D6-2) /
  *   ico-spring(D6-4) / danger(D6-5, 兼 D2-5 glow 半边)
  * 已在库不重复造: glow/sheen/press(D1-2/3/5) / toast rise+exit 骨对(D6-1) /
  *   AQB_FX.viewTransition(D6-3) / pop + --fx-base-tx 合成(D8-4)。
@@ -394,16 +394,6 @@
 }
 [data-fx~="row-sel"].is-sel::before { transform: scaleY(1); }
 
-/* row-flash(D4-3): 锚点定位脉冲(一次性 flash; 平滑滚动由消费方
- * scrollIntoView, RM 时 behavior:auto) */
-[data-fx~="row-flash"][data-fx-play] { animation: fx-row-flash 600ms var(--fx-ease-standard); }
-@keyframes fx-row-flash {
-  0% { background-color: color-mix(in srgb, var(--accent, currentColor) 30%, transparent); }
-  40% { background-color: color-mix(in srgb, var(--accent, currentColor) 8%, transparent); }
-  60% { background-color: color-mix(in srgb, var(--accent, currentColor) 22%, transparent); }
-  100% { background-color: transparent; }
-}
-
 /* row-in / row-out(D4-4L / D4-5L, max-height 版): S4 选定 layout 版(下方位移
  * 平滑无瞬跳, 每帧 reflow 的代价已随选定拍板); 行高单点 --fx-row-h */
 [data-fx~="row-in"] { animation: fx-row-in 200ms var(--fx-ease-out) forwards; overflow: hidden; }
@@ -503,7 +493,6 @@
   [data-fx~="shake"].is-invalid,
   [data-fx~="headshake"][data-fx-play],
   [data-fx~="dir"][data-fx-dir],
-  [data-fx~="row-flash"][data-fx-play],
   [data-fx~="row-in"],
   [data-fx~="row-out"],
   [data-fx~="check"].is-done,

@@ -54,7 +54,7 @@
       "fade", "rise", "pop", "slip", "sheen", "pulse", "lift", "glow", "press",
       /* S6 提升(计划 §06 S4 结论; 与 fx.css「S6 提升原语」段一一对应) */
       "ripple", "icon", "focus-ring", "focus-float", "shake", "headshake", "dir",
-      "zoom", "push", "row-hover", "row-sel", "row-flash", "row-in", "row-out",
+      "zoom", "push", "row-hover", "row-sel", "row-in", "row-out",
       "check", "countdown", "ico-spring", "danger",
     ],
     variants: ["subtle", "bold", "spring"],
