@@ -1,7 +1,7 @@
 # test-mutation-audit — 变异测试定期审计(指导 / 命令 / 排期锚)
 
 > 摘要: 把可行性报告 `26-10-08-0231` 落成可复用流程 —— 指导 skill + 命令包 + 常驻排期锚 + 方法论坑档。**config / hr / rules / core 四包审计均已收官**(config 与 hr 的真洞 issue 全清, core 计划 W1–W9b 九个工作包全完成), 余量按 issue 口径在池; 逐轮细节在任务档案, 覆盖刻度见常驻锚 §07。
-> 最后活动: 2026-11-02 23:48
+> 最后活动: 2026-11-03 00:26
 
 ## 包状态与刻度
 
@@ -66,3 +66,5 @@
 **R14(2026-11-02 22:51):** W3 四件 test issue 收尾: 全量 test.full 后新建基线切片 26-11-02-2250 并回补四件 doc-refs
 
 **R15(2026-11-02 23:48):** W4 批次 2 issue 结清: extreme-low-residue(6 用例, 红验 17/17 KILLED) + observability-logs(4 用例, 红验 18/19 KILLED, _wblp_20 判等价), 各随件提交 5f63962e/da5f498a; 全量 4896 passed + 10 skipped, 基线切片 26-11-02-2348
+
+**R16(2026-11-03 00:26):** 修复 tvshows 展示名尾 trim 拆散成对括号缺陷(Show.Name.(US) -> Show Name (US)); 新增守阵 test_title_paired_bracket_tail_preserved; 全量 4897 passed + 10 skipped; 基线切片 26-11-03-0025; 更新 issue 26-10-31-1212 状态日志

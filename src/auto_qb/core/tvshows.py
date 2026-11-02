@@ -336,6 +336,8 @@ _GROUP_HINTS = (
 )
 
 _TRIM_CHARS = " \t-–—_.·"
+_TITLE_TRIM_CHARS = _TRIM_CHARS + "[]()【】"
+_CLOSER_TO_OPENER = {")": "(", "]": "[", "】": "【"}
 
 
 def _is_groupish(s: str) -> bool:
@@ -395,7 +397,14 @@ def _title_and_key(seg: str) -> Tuple[str, str]:
     seg = _CJK_NOISE_RE.sub(" ", seg)
     # 展示名同步点/下划线 → 空格(scene 命名的 "Show.Name" 展示为 "Show Name"), 保留原大小写
     title = re.sub(r"[._]+", " ", seg)
-    title = re.sub(r"\s+", " ", title).strip(_TRIM_CHARS + "[]()【】")
+    title = re.sub(r"\s+", " ", title).lstrip(_TITLE_TRIM_CHARS)
+    # 尾端 trim: 有配对开括号的闭合符(如 "(US)"/"[Group]"/"【剧名】")保留, 其余尾标点照旧剥除
+    while title and title[-1] in _TITLE_TRIM_CHARS:
+        ch = title[-1]
+        if ch in _CLOSER_TO_OPENER and title.rfind(_CLOSER_TO_OPENER[ch]) > title.rfind(ch, 0, len(title) - 1):
+            break
+        title = title[:-1]
+    title = title.rstrip(_TRIM_CHARS)
     return title, _normalize_key(title)
 
 

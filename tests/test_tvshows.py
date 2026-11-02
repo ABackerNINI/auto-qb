@@ -42,6 +42,7 @@
 - [x] 噪音词挖空后连续空格在展示名中折叠 (title_and_key_37) (W3 余量)
 - [x] 归一化循环不依赖手工步长递增, 多 bigram 标题正常返回 (timeout 34/38 代码侧防御) (W3 余量)
 - [x] 标题尾 trim 字符集: 全角【】收尾剥除 (title_and_key_30) (W3 余量)
+- [x] 标题尾 trim 不拆散成对括号: (US)/(UK)/[Group] 保留闭合符; 无配对闭合符与尾标点照旧剥除 (W3 余量)
 - [x] 括号段组名特征: ASCII 提示大小写归一 + 组名段不参与标题候选 (is_groupish_2/4, strip_group_19) (W3 余量)
 - test_anime_season_with_bare_episode
 - test_bare_excludes_resolution_and_year
@@ -108,6 +109,7 @@
 - test_season
 - test_season_pack
 - test_sxe_season_not_double_counted
+- test_title_paired_bracket_tail_preserved
 - test_title_tail_trim_charset
 - test_unknown
 - test_year_window_bare_edges
@@ -693,6 +695,21 @@ def test_title_tail_trim_charset():
     ("Show.Name.(US)" 的右括号同属该字符集, 当前展示名会剥成 "Show Name (US")
     """
     assert p("【剧名】第1集").title == "剧名"
+
+
+def test_title_paired_bracket_tail_preserved():
+    """标题尾 trim 只剥无配对的标点, 不拆散成对括号(展示名括号必须闭合)
+
+    根因: 末行 strip 字符集不分对错, "Show.Name.(US)" 归一成 "Show Name (US)"
+    后右括号被一并剥掉 -> "Show Name (US"(括号不闭合)。
+    对照: 无配对闭合符与尾标点仍须照旧剥除, 防把尾 trim 整体关掉。
+    """
+    assert p("Show.Name.(US).S01E05").title == "Show Name (US)"
+    assert p("Show.Name.(UK).S01E05").title == "Show Name (UK)"
+    assert p("Show.Name.[Group].S01E05").title == "Show Name [Group]"
+    # 反向对照: 无配对开括号的闭合符 / 尾标点仍被剥除
+    assert p("Show.Name.US).S01E05").title == "Show Name US"
+    assert p("Show.Name. - S01E05").title == "Show Name"
 
 
 def test_bracket_group_hint_case_and_negation():

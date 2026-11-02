@@ -103,6 +103,7 @@
       <li>2026-11-02 21:46 — 认领，状态 <strong>In Progress</strong>（用户指派，本轮修复）</li>
       <li>2026-11-02 22:50 — 修复完成，状态 <strong>Done</strong>。守阵 <code>test_title_tail_trim_charset</code> 落在 <code>tests/test_tvshows.py</code>，断言 <code>p("【剧名】第1集").title == "剧名"</code>，红验 1/1 KILLED；零 src 改动。<br>
       <b>实测与建议不符留档</b>：建议的 <code>"Show - S01E05"</code> 不可达 —— 切段后 <code>" - "</code> 已被首行的 <code>_TRIM_CHARS</code> strip 提前剥净，打不到末行 strip；改用实测可达的全角【】形态。<code>"Show.Name.(US)"</code> 的右括号虽同属字符集，但当前展示名为 <code>"Show Name (US"</code>（左括号在 <code>_strip_group_prefixes</code> 前保留、右括号被末行剥除），属既有展示面瑕疵，非本件变异体形态，未在本轮扩范围处理。极低危 <code>title_and_key_40</code> 按原裁定不补。全量数字见 kb.baseline。</li>
+      <li>2026-11-03 00:25 — 上述展示面瑕疵单独修复（用户授权直修，未新开 issue，状态维持 <strong>Done</strong>）：<code>_title_and_key</code> 尾 trim 改为「有配对开括号的闭合符保留、其余尾标点照旧剥除」，<code>Show.Name.(US).S01E05</code> 展示名恢复为 <code>Show Name (US)</code>；守阵 <code>test_title_paired_bracket_tail_preserved</code> 落在 <code>tests/test_tvshows.py</code>，全量数字见 kb.baseline。</li>
     </ul>
   </section>
 
