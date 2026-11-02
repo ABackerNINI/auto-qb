@@ -14,6 +14,7 @@
 - test_load_state_recovered_writeback_failure_is_nonfatal: 自愈写回失败(磁盘满)仍返回备份恢复出的状态, 只告警不抛
 - test_load_state_backup_unusable_falls_to_empty: 主文件损坏且备份**存在但也不可用** -> 空状态 + ERROR 留痕(正向对照: 备份可用先恢复)
 - test_load_state_invalid_encoding_treated_as_corrupt: 位翻转坏编码(UnicodeDecodeError)同算损坏走告警链; 正向对照: 合法内容同一路径原样返回
+- test_read_state_file_pins_utf8_encoding: 守阵(issue 26-10-31-0458)——读侧 open 显式 encoding="utf-8"(builtins.open 探针); 主文件与 .bak 两条读取都钉住
 - test_load_state_nondict_json_treated_as_corrupt: 守阵(变异审计 W1)——合法 JSON 但顶层非 dict([]) 同算损坏: WARNING + 备份链兜底, 不静默清空
 - test_load_state_migration_desc_recorded_and_materializable: 守阵(变异审计 W1)——真迁移发生时 migration_desc 非空且可物化落盘; 反向对照: 无迁移 desc 为空不落盘
 - test_cleanup_orphan_tmp_removes_only_state_leftovers: 启动清理只删 `<state_file>.<随机>.tmp`; .bak / 中段非 .tmp / 别人的 .tmp / 空随机段不碰
@@ -229,6 +230,48 @@ def test_load_state_invalid_encoding_treated_as_corrupt():
         with open(state_file, "w", encoding="utf-8") as f:
             json.dump({"exec_history": {"k": 1}, "schema_version": STATE_V}, f)
         assert mgr.ctx.state.load() == {"exec_history": {"k": 1}, "schema_version": STATE_V}, "对照: 合法内容原样返回"
+
+
+def test_read_state_file_pins_utf8_encoding(monkeypatch):
+    """守阵(issue 26-10-31-0458, 变异审计 W1): 读侧 open 必须显式 encoding="utf-8"
+
+    背景: 变异 `_read_state_file__mutmut_3`(encoding="utf-8" -> None)与 `__mutmut_6`(丢掉
+    encoding 形参)在 origin/develop 全套件 SURVIVED —— 测试宿主是 UTF-8 locale, 缺省编码
+    落到 locale 仍是 utf-8, 内容面分不出差异; 而 CPython 3.13 的 open() 缺省编码走 C 层
+    locale 查询, monkeypatch locale.getencoding/getpreferredencoding 实证不可达(2026-10-31)。
+    回归后果: Windows GBK/cp936 生产机读 UTF-8 state(含中文规则名) -> UnicodeDecodeError
+    -> 误入损坏链(.bak 回退/静默清空)或 mojibake 入库; 而 save 侧显式 utf-8 => 读写不对称。
+
+    守阵方式与 test_exporter 的 encoding 守阵同法: builtins.open 探针把 encoding 实参本身
+    钉成全平台可观测断言(不读源码文本, 故无需 mutants deselect); 中文内容往返作加强。
+    红验: 读侧 encoding 改为 None 或整体删除 -> 本用例红。
+    """
+    import builtins
+
+    real_open = builtins.open
+    seen = {}
+
+    def spy(file, mode="r", *args, **kwargs):
+        seen[os.fspath(file)] = (mode, kwargs.get("encoding"))
+        return real_open(file, mode, *args, **kwargs)
+
+    payload = {"备注": "中文规则名", "schema_version": STATE_V}
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        with real_open(state_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        monkeypatch.setattr(builtins, "open", spy)
+
+        svc = qb_state.StateService(state_file)
+        assert svc.load() == payload, "对照: 合法 UTF-8 中文内容原样返回"
+        assert seen.get(state_file) == ("r", "utf-8"), f"主文件读侧必须显式 utf-8: {seen}"
+
+        # 损坏链的 .bak 读取同走 _read_state_file —— 同一守阵覆盖(备份也必须按 utf-8 读)
+        bak_file = state_file + utils.BACKUP_SUFFIX
+        with real_open(bak_file, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        assert svc._read_backup_dict() == (payload, None), "对照: 备份可用"
+        assert seen.get(bak_file) == ("r", "utf-8"), f"备份读侧必须显式 utf-8: {seen}"
 
 
 def test_load_state_nondict_json_treated_as_corrupt():

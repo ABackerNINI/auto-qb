@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-31-0458">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="state-read-encoding-guard">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-test-mutation-audit.md, memory-bank/testing/baselines/26-11-03-0427-mutation-audit.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达)">
 <meta name="issue-summary" content="core/state.py _read_state_file 的 encoding=&quot;utf-8&quot; 零守阵: 变异测试坐实删掉它全套件照绿(UTF-8 宿主分不出), locale 打桩在 CPython 3.13 不可达; 回归后果 = Windows GBK 生产机读 UTF-8 state 误入损坏链/静默清空">
 <title>state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-31-0458-bug-state-read-encoding-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-31 04:58</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">core</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -164,11 +164,13 @@ state  _read_state_file__mutmut_6   SURVIVED   # encoding 形参整体删除
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-31 04:58 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 04:27 — 认领（用户指派「认领并修复」）: 复验缺口成立（现状读侧仍显式 utf-8，但全套件对该实参零守阵）；状态 <strong>In Progress</strong></li>
+      <li>2026-11-03 04:27 — 修复完成并验证: 补 <code>test_read_state_file_pins_utf8_encoding</code>（open 探针钉读侧 encoding 实参，主文件 + .bak 双覆盖），红验两回归形态均红；全量套件通过；状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验（2026-11-03 04:27）：现状读侧 <code>open(path, "r", encoding="utf-8")</code> 正确、写侧同；缺口确认 = 既有套件对它零守阵。区分力实证：把该实参改成 <code>None</code>、以及整体删掉该形参，新增守阵两种形态均红（复原后 <code>src/</code> 零改动）。locale 打桩不可达结论沿用 §01，未再尝试假绿方案。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法：不改生产代码（读侧本就显式 utf-8），只把守阵立起来。新增用例用 <code>builtins.open</code> 探针把读侧 <code>encoding</code> 实参本身钉成 <code>"utf-8"</code>，并覆盖 <code>load</code> 主文件读取与 <code>_read_backup_dict</code> 的 <code>.bak</code> 读取两条路径；中文内容往返与原样返回作正向对照。<strong>与建议修法不同处</strong>：未采用「源码文本守阵 + <code>--deselect</code>」，改走探针式行为守阵 —— 全平台可观测、不读源码文本，因而无需在 mutants 侧 deselect（同 <code>tests/test_exporter.py</code> 既有 encoding 守阵先例）。验证：定向单文件 + 全量套件通过，数字见基线切片 <code>26-11-03-0427</code>（<code>commands run kb.baseline</code> 最新一条）。</p>
   </section>
 
   <footer>

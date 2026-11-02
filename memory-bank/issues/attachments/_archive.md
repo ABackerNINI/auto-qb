@@ -14,7 +14,6 @@
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
-- [bug] [state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达)](../26-10-31-0458-bug-state-read-encoding-guard.html) — core/state.py _read_state_file 的 encoding="utf-8" 零守阵: 变异测试坐实删掉它全套件照绿(UTF-8 宿主分不出), locale 打桩在 CPython 3.13 不可达; 回归后果 = Windows GBK 生产机读 UTF-8 state 误入损坏链/静默清空
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
@@ -131,6 +130,7 @@
 - [bug] [qB 5.3 兼容: setShareLimits 必带 shareLimitsMode, facade 缺参导致 400](../26-10-31-0711-bug-qbapi-share-limits-mode.html) — qB 5.3 将 torrents/setShareLimits 的 shareLimitsMode 列为必填, core/qbapi.py torrents_set_share_limits 不透传该参 -> WebUI 分享限制命令在 5.3 下整体 400; 修复与库版本解耦, 2026.8.1 上即可合入
 - [bug] [qB 5.3 行为回归: 跳检重加不回传 share_limits_mode, MatchAny/MatchAll 被重置为 Default(条件触发)](../26-10-31-0711-bug-skip-readd-share-limits-mode.html) — compat.py RE_ADD_FIELDS 与 ops_mod.py _skip_add_call 缺 share_limits_mode 字段 -> 5.3 下跳检重加会把新分享限制模式重置为 Default; 仅用户启用 MatchAny/MatchAll 时可见; 动作: 两处补字段透传
 - [bug] [卸载自启后发现指针 autostart_registered 不即时回写真值](../26-10-31-0537-bug-gtm-autostart-pointer-stale.html) — POST /autostart uninstall 成功后指针 autostart_registered 仍 True, UI 自启开关态漂移至工具下次重启自愈
+- [bug] [state.json 读取侧 encoding 无守阵: 回归丢显式 utf-8 时 GBK 生产机读坏状态(打桩不可达)](../26-10-31-0458-bug-state-read-encoding-guard.html) — core/state.py _read_state_file 的 encoding="utf-8" 零守阵: 变异测试坐实删掉它全套件照绿(UTF-8 宿主分不出), locale 打桩在 CPython 3.13 不可达; 回归后果 = Windows GBK 生产机读 UTF-8 state 误入损坏链/静默清空
 - [bug] [TaskQueue.run_due/_run_one 丢 dry_run 实参: --dry-run 下任务 handler 被真执行](../26-10-31-0449-bug-taskqueue-dry-run-chain.html) — core/taskqueue.py 的 dry_run 传递链断裂(变异测试坐实): _run_one 收到 None, dry_run=True 时 handler 仍真执行, --dry-run 模式对任务路径产生真实写副作用
 - [bug] [rename 乐观失败回滚不还原抽屉 detail.name](../26-10-30-0818-bug-webui-rename-rollback-drawer-detail.html) — 抽屉开着时重命名命令失败, 行上名字回滚但 drawer.detail.name 停留新名直到重开抽屉/下次拉取
 - [test] [存量 e2e 红 6 条: atlas 皮肤 pinned-hover/selected 行板 tint](../26-10-30-0818-test-e2e-atlas-pinned-row-tint.html) — main-table-pinned-hover/selected 两 spec 在 atlas 皮肤 6 例失败, stash 对照确认先于乐观UI批次存在
