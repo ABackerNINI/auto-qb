@@ -15,7 +15,7 @@
 - [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](../26-11-02-2342-plan-big-file-split.html) — `big-file-split`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (192)
+## Done (193)
 
 - [26-11-03-0120] [WEBUI 搜索结果随新增种子自动更新](../26-11-03-0120-plan-webui-search-auto-refresh.html) — `webui-search-auto-refresh`
 - [26-11-02-0657] [测试临时目录自举与互斥锁方案 — R→H→%TEMP% 固定探测 · 禁静默降级 · 禁外部 TMPDIR · 锁自举 · 评审稿](../26-11-02-0657-plan-testing-tmpdir-bootstrap.html) — `testing-tmpdir-bootstrap`

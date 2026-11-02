@@ -83,9 +83,8 @@
 - [26-10-16-0453] [HR 取数代理 · 工具栏图标候选 · 2026-10-16](26-10-16-0453-plan-hr-ext-icons.html) — `hr-ext-icons`
 - [26-10-16-0214] [HR 扩展「连接后端」区重排 + 实例状态入表 修改计划 · auto-qb](26-10-16-0214-plan-hr-ext-connect-ui.html) — `hr-ext-connect-ui`
 - [26-10-15-2357] [HR 扩展「连接自愈 + 手动优先 + 不静默」修改计划 · auto-qb](26-10-15-2357-plan-hr-ext-connect-selfheal.html) — `hr-ext-connect-selfheal`
-- [26-10-15-0829] [qB 流量图重启缝幻影尖峰与无采样区 · 分步实施计划 · auto-qb](26-10-15-0829-plan-qb-traffic-restart-spike-gap.html) — `qb-traffic-restart-spike-gap`
 
-> 更早的 **132** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **133** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
