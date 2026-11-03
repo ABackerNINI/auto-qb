@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (63)
+## Open (64)
 
 - [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
 - [test] [HR feeder wake 转发测试未断言转发目标](../26-11-03-1209-test-test-hr-runtime-feeder-wake-forward-unasserted.html) — 用例名声称转发 worker.wake()，实际只调用不加断言
@@ -15,6 +15,7 @@
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](../26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败
 - [bug] [flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖](../26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html) — views.css @media(max-width:900px) 的 .ce-page padding 12px 12px 24px 恒被 dialogs.css 的 .ce-page padding 16px 12px calc(...) 覆盖, 移动端紧凑内边距从未生效
 - [test] [前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫](../26-11-03-1120-test-webui-config-normalize-parity-gap.html) — config_rules.js 手抄 compat.py 的动作/条件/choose 归一语义, 两套期望分散在 Python 与 DOM 电池, 无同输入同输出的跨语言对拍用例
+- [bug] [断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)](../26-11-03-1039-bug-gtm-day-total-inflation.html) — 断网恢复后今日流量暴涨: 过滤后合计基线被降到子集(0), 网卡恢复时把其整个生命周期累计当成一次 delta 入账; 实测 state.json 佐证跳变量 = 273GiB/528GiB
 - [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](../26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。

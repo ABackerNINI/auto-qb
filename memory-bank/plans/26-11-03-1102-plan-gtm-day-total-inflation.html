@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="gtm-day-total-inflation">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-03-1102">
+<meta name="doc-updated" content="26-11-03-1211">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .callout { border: 1px solid var(--hair); border-left: 3px solid var(--accent); padding: 10px 14px; margin: 16px 0; color: var(--dim); }
+  .callout b { color: var(--ink); }
+  details { border: 1px solid var(--hair); padding: 10px 14px; margin: 14px 0; color: var(--dim); }
+  summary { cursor: pointer; color: var(--accent-ink); font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em; }
+  details blockquote { border-left: 2px solid var(--hair); margin: 12px 0; padding: 2px 0 2px 14px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN v3 · memory-bank · doc-topic: gtm-day-total-inflation</div>
+<h1>GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）</h1>
+<p class="lede">主修法不变：把「过滤后合计差分」拆成「逐网卡差分再求和」。v2 的三项修订（速率口径、可见告警、overlay 配置迁移）继续保留；v3 只改告警的<b>主告知面</b>：从「设置页一行」移到 auto-qb 主界面底部状态栏的常驻横幅/徽标，数据经流量快照追加的可选字段 <code>gtm_anomaly</code> 传递；设置页行与 GTM <code>/status</code> 降为次级详情，日志仍只作取证。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-1102 · <b>doc-updated</b> 26-11-03-1211 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令（2026-11-03）：v1 三点被否后出 v2；v3 再否「告警只落在设置页」，要求常驻可见通道；其余三项默认（1 GiB/s、24h 展示窗口、3× 钳制）保持不变<br>
+  <b>关联</b> memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html（症状/证据/根因取证在 issue，本文不复述全部证据）<br>
+  <b>拍板</b> D1=A（逐网卡基线） · D2=C-prime（速率口径、只告警） · D3=<b>顶栏常驻横幅</b>（快照 <code>gtm_anomaly</code>） · D4=overlay 配置迁移
+</div>
+
+<h2><span class="no">§01</span>目标与不变量</h2>
+<h3>1.1 目标</h3>
+<ul>
+  <li><b>主目标</b>：断网/网卡被过滤再恢复时，当日累计只增加「该卡恢复窗口的真实增量」，不再把整份生命周期累计入账。</li>
+  <li><b>次目标</b>：单轮单卡单方向速率超过阈值时留下<b>常驻可见</b>告警——auto-qb 主界面底部状态栏恒显横幅/徽标（不依赖打开设置页），点击可看完整文案并可「已知晓」；GTM <code>/status</code> 与设置页「工具状态」行提供详情，日志只作取证；<b>只告警，不改记账结果</b>。</li>
+  <li><b>第三目标</b>：新增配置键由程序迁移落盘，用户不需要手工加键/删键；迁移不写主 <code>config.yml</code>，退回旧版本不会因未知键 fail-fast。</li>
+  <li><b>非目标</b>：不改 dat 契约、不改 auto-qb 读取/聚合/限速、不引入第三方依赖、不修正已落盘的历史虚高行（见 §12 不做清单）。</li>
+</ul>
+<h3>1.2 不变量（违反即视为方案失败）</h3>
+<table>
+  <tr><th>编号</th><th>不变量</th><th>落地检查点</th></tr>
+  <tr><td>I1</td><td><code>history_traffic.dat</code> 行格式不变：<code>YYYY/M/D up_kb/down_kb</code>，<code>day_up_bytes/day_down_bytes</code> 语义不变</td><td>§10 契约核对；<code>tests/test_dat.py</code> 不动</td></tr>
+  <tr><td>I2</td><td>单写线程 + 单实例：采样/累计仍只在主循环线程发生</td><td>不新增线程/锁；<code>SingleInstanceLock</code> 仍在 <code>storage.acquire_lock</code></td></tr>
+  <tr><td>I3</td><td>幂等：同一组读数重放，delta 必须为 0；重复启动不重复迁移配置</td><td>§09 T7、T23</td></tr>
+  <tr><td>I4</td><td>状态持久化：崩溃丢失窗口 ≤ 采样间隔，且恢复后不得放大</td><td>state v2 每轮落盘；§05「进程重启」</td></tr>
+  <tr><td>I5</td><td>fail-fast：新增速率键必须进 <code>Config</code> + <code>_RATE_FIELDS</code> + <code>validate_payload</code> + WebUI 表单；overlay 中的未知键同样报错</td><td>§06.4、§07</td></tr>
+  <tr><td>I6</td><td>宁可少报不虚高：无法判定增量的窗口一律记 0</td><td>§05「从未观测的卡出现」「v1 升级」</td></tr>
+  <tr><td>I7</td><td>无新增第三方依赖（日志/原子写均用 stdlib）</td><td>§08、§07.4</td></tr>
+  <tr><td>I8</td><td>新配置键不写入主 <code>config.yml</code>（只进 overlay），旧版本读不到未知键</td><td>§07.5、T24/T25</td></tr>
+  <tr><td>I9</td><td>C-prime 的告警路径不得改动 <code>delta</code> / <code>day</code> / dat 行；告警与记账严格分离</td><td>§06.1、T11</td></tr>
+  <tr><td>I10</td><td>流量快照只<b>追加</b> <code>gtm_anomaly</code> 可选键：<code>ts</code>/<code>date</code>/<code>source</code>/<code>periods</code>/<code>history</code>/<code>limit</code> 与顶层 <code>state</code> 的语义、派生规则零改动</td><td>§06.6.3、T28</td></tr>
+  <tr><td>I11</td><td>GTM 不可达/字段缺失时，主界面不报错、不空白、不阻断流量刷新；告警段失败必须被隔离</td><td>§06.6.5、T29/T33</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与根因（摘要）</h2>
+<p>完整取证在 issue。这里是修法直接依赖的三条事实：</p>
+<ol>
+  <li><b>基线是「合计」而不是「逐卡」</b>：<code>sampler.py:339-340</code> 把过滤后所有卡的计数求和，<code>:369-381</code> 用这个合计与上轮合计做差，并在任何「合计变小」时把合计基线<b>无条件覆盖为收缩后的值</b>。</li>
+  <li><b>网卡 down 会被过滤</b>：<code>AdapterFilter</code> 默认 <code>exclude_down=True</code>（<code>sampler.py:109</code>，无配置开关）。链路断开期间合计基线被降到子集（常见为 0）。</li>
+  <li><b>媒体断链不清零网卡计数</b>：恢复后合计读数 = 该卡整个生命周期累计，于是 <code>delta = 整份累计</code>。现网实测：注入 ≈273.4 GiB 上传 / ≈528.5 GiB 下载；当日累计 336.41/538.52 GiB；与用户断网前读数（62.96/9.997 GiB）的恒定偏移完全吻合。</li>
+</ol>
+<div class="callout"><b>为什么必须拆成逐卡：</b>「合计变小」这一个信号同时覆盖三种完全不同的事件——真·计数器回绕、网卡被过滤、过滤集配置变化。只看合计永远无法区分；只有把基线落到每张卡上，才能在事件发生的<b>那一边</b>分类。</div>
+
+<h2><span class="no">§03</span>方案总览与关键决策</h2>
+<table>
+  <tr><th>编号</th><th>决策</th><th>结论</th></tr>
+  <tr><td>D1</td><td>主修法</td><td><b>A：逐网卡基线</b>。内存与 state 都保存每卡 <code>(last_up, last_down)</code>；delta 按交集逐卡计算后求和。</td></tr>
+  <tr><td>D2</td><td>旧载荷降级</td><td>state <code>version:1</code> 不丢弃：保留 day/当日累计，<b>逐卡记忆置空</b> → 首轮每卡只立基线、delta=0（不虚高，代价 ≤1 个采样间隔少报）。</td></tr>
+  <tr><td>D3</td><td>消失卡记忆</td><td>筛选集中消失的卡<b>保留记忆</b>，不做「消失即删」。仅按 7 天未见 TTL 清理，避免 state 无界增长；8 天后回来的卡按新卡处理（delta 0）。</td></tr>
+  <tr><td>D4</td><td>观测阈值（C-prime）</td><td>速率口径：<code>rate = delta / eff_dt</code>，<b>单卡、单方向</b>判定；配置键 <code>sample_rate_warn_bps</code>（内存 B/s，盘上复合串如 <code>"1GiB/s"</code>），默认 <b>1 GiB/s</b>。超阈值只 WARNING，<b>不记 0、不丢弃、不改 day 累计</b>。</td></tr>
+  <tr><td>D5</td><td>告警可见面（<b>v3 重定</b>）</td><td><b>主告知 = auto-qb 顶栏常驻横幅/徽标</b>：流量快照追加可选字段 <code>gtm_anomaly</code>（数据来自 GTM <code>/status.last_spike</code>，只增不改），<code>statusbar.html</code> 在每次打开 WebUI 时恒显；点击看完整文案，<code>×</code> 可本机消警。<b>次级</b>：设置页「最近异常」行、GTM <code>/status</code>。日志只作取证。</td></tr>
+  <tr><td>D6</td><td>配置升级</td><td>新键写入 <code>&lt;data_dir&gt;/config.v2.yml</code> overlay；启动时程序检测缺失键并原子写入；主 <code>config.yml</code> 零改写；旧版本只读主配置，因此可安全回滚。禁止人工加键/删键。</td></tr>
+  <tr><td>D7</td><td>契约冻结（<b>v3 扩一处</b>）</td><td><code>history_traffic.dat</code>、auto-qb 读取/聚合/限速零改动；GTM <code>/status</code> 与 auto-qb 流量快照均<b>只追加可选字段</b>（<code>last_spike</code> / <code>gtm_anomaly</code>），旧消费方/旧前端忽略即兼容；新增顶栏 1 组模板 + 1 段 CSS + 2 个前端 helper。</td></tr>
+</table>
+
+<h2><span class="no">§04</span>数据模型与 state v2</h2>
+<h3>4.1 内存结构</h3>
+<pre><code># sampler.Sampler 实例字段变化
+- self._last_up: int | None          # 旧: 合计基线
+- self._last_down: int | None        # 旧: 合计基线
++ self._nic_base: dict[str, tuple[int, int]]   # 新: {网卡名: (last_up, last_down)}，字节，int
++ self._nic_seen: dict[str, datetime]          # 新: {网卡名: 最近一次被选中的日期}，仅用于 7 天 TTL
++ self._state_restored: bool                   # 新: restore() 是否接受了合法载荷(含 v1)
++ self._last_sample_mono: float | None         # 新: 上一轮 time.monotonic()，不落盘
++ self._last_sample_wall: float | None         # 新: 上一轮 time.time()，落盘，供重启后 dt 兜底
++ self._last_spike: dict | None                # 新: 最近一轮越界快照，落盘，供 /status 与设置页展示</code></pre>
+<p>网卡名 = <code>AdapterFilter.select()</code> 返回的映射键（与 <code>psutil.net_io_counters(pernic=True)</code> / 原生 <code>Alias</code> 一致）。<b>用名字不用 LUID</b>：改名会被当作新卡（只立基线，安全）；沿用旧名但计数变小的卡会命中回绕分支（同样安全）。</p>
+<h3>4.2 state.json v2 载荷</h3>
+<pre><code>{
+  "version": 2,
+  "day": "2026-11-03",
+  "day_up_bytes": 361214484252,
+  "day_down_bytes": 578225157679,
+  "last_up_bytes": 293613556677,      <span class="cm">// 兼容/观测: sum(nic_baseline[*].up)</span>
+  "last_down_bytes": 567490630570,    <span class="cm">// 兼容/观测: sum(nic_baseline[*].down)</span>
+  "nic_baseline": {
+    "以太网": {"up": 293613556677, "down": 567490630570},
+    "vEthernet (WSL)": {"up": 12, "down": 44}
+  },
+  "last_sample_wall": 1793750832.4,   <span class="cm">// epoch 秒; 仅重启后首轮 dt 兜底</span>
+  "last_spike": {                     <span class="cm">// null 或最近一轮越界记录，见 §06.5</span>
+    "ts": "2026-11-03T10:47:12+08:00",
+    "dt_s": 5.0,
+    "eff_dt_s": 5.0,
+    "threshold_bps": 1073741824,
+    "items": [
+      {"nic": "以太网", "dir": "up", "cur": 293613556677, "last": 0, "delta": 293613556677,
+       "rate_bps": 58722711335}
+    ]
+  }
+}</code></pre>
+<p><code>subscribers</code> / <code>last_event_id</code> 仍由 <code>Storage._persist_state_locked</code> 在写盘时合并（<code>storage.py:668-670</code>），本次不改合并逻辑；v2 只是给 <code>sampler.snapshot()</code> 增加 <code>nic_baseline</code> / <code>last_sample_wall</code> / <code>last_spike</code> 三个键并把 <code>SNAPSHOT_VERSION</code> 改为 2（<code>sampler.py:52</code>）。</p>
+<h3>4.3 载入判定（逐分支，含代码落点）</h3>
+<table>
+  <tr><th>载荷</th><th>restore 行为</th><th><code>_state_restored</code></th><th><code>has_baseline</code>（逐卡）</th><th>当日累计</th></tr>
+  <tr><td><code>None</code> / 非映射</td><td>现有降级告警路径不变（<code>sampler.py:247-252</code>）</td><td>False</td><td>False</td><td>由 <code>restore_from_dat</code> 兜底</td></tr>
+  <tr><td><code>version:1</code>（现网）</td><td>按 v1 解析 day/day_up/day_down；<b>忽略</b> last_up/last_down；置 <code>_nic_base={}</code>、<code>_last_sample_wall=None</code>；追加告警「state v1 升级: 逐卡基线重建, 本轮 delta 记 0」</td><td>True</td><td>False（空）</td><td><b>保留 v1 的 day 累计</b>（不走 dat 兜底）</td></tr>
+  <tr><td><code>version:2</code></td><td>解析 day 三件 + <code>nic_baseline</code> + <code>last_sample_wall</code> + <code>last_spike</code>；条目非法（非 int / 负数 / 非映射）丢弃并告警，其余保留；wall/spike 非法则置 None</td><td>True</td><td>非空即 True</td><td>保留</td></tr>
+  <tr><td>其它 version</td><td>现有「版本不受支持 → 降级」路径不变（<code>:254-257</code>）</td><td>False</td><td>False</td><td>dat 兜底</td></tr>
+</table>
+<p><b>必须同步修改的兜底条件</b>（<code>storage.py:536</code>）：现在写的是 <code>if state is None or not sampler.has_baseline:</code>。v1 升级后逐卡记忆为空但 day 有效，若沿用原条件会对今天调用 <code>restore_from_dat</code>，把当日累计回退到 dat 的滞后值（最多丢一个 flush 间隔，且会抹掉 state 里更精确的累计）。改为：</p>
+<pre><code>- if state is None or not sampler.has_baseline:
++ if state is None or not sampler.state_restored or sampler.day is None:
+      sampler.restore_from_dat(self._dat.render())</code></pre>
+<p>这样保留了今天所有降级语义（缺失/损坏/版本不认识 → dat），并让 v1 升级不再误触发。<code>has_baseline</code> 从此只表示「逐卡记忆非空」，服务 <code>sample_once</code> 的 baseline 分支。</p>
+<h3>4.4 采样算法（伪代码，可直接照写）</h3>
+<pre><code>selected = self.filter.select(counters, stats)
+if not selected:
+    warnings.append("无适配器通过过滤: 合计按 0 计 (...)")   <span class="cm"># 文案不变</span>
+
+now_mono = time.monotonic(); now_wall = time.time()
+dt = self._dt_since_last(now_mono, now_wall, interval_hint)   <span class="cm"># 见 §06.3</span>
+
+delta_up = delta_down = 0
+next_base: dict[str, tuple[int,int]] = {}
+per_nic_delta: list[tuple[str, int, int, tuple[int,int], tuple[int,int]]] = []
+any_reset = False
+baseline = not self._nic_base            <span class="cm"># 逐卡记忆为空 => 本轮全为新卡</span>
+
+for name, io in selected.items():
+    cur = (io.bytes_sent, io.bytes_recv)
+    prev = self._nic_base.get(name)
+    if prev is None:                     <span class="cm"># 新卡(或 v1 升级后的首轮): 只立基线</span>
+        next_base[name] = cur
+        continue
+    du = cur[0] - prev[0]; dd = cur[1] - prev[1]
+    if du &lt; 0:                           <span class="cm"># 该卡真回绕: 只清零这一张卡</span>
+        any_reset = True
+        warnings.append(f"上行计数器重置 | nic={name} cur={cur[0]} last={prev[0]} delta 记 0")
+        du = 0
+    if dd &lt; 0:
+        any_reset = True
+        warnings.append(f"下行计数器重置 | nic={name} cur={cur[1]} last={prev[1]} delta 记 0")
+        dd = 0
+    delta_up += du; delta_down += dd
+    per_nic_delta.append((name, du, dd, cur, prev))
+    next_base[name] = cur
+
+<span class="cm"># 关键: 合并而不是替换 —— 消失卡的记忆保留(等它回来按真实增量算)</span>
+self._nic_base.update(next_base)
+self._nic_seen = {**self._nic_seen, **{n: now for n in next_base}}
+self._prune_nic_base(now)                <span class="cm"># 仅清 7 天未见的条目</span>
+self._last_up  = sum(v[0] for v in self._nic_base.values())
+self._last_down = sum(v[1] for v in self._nic_base.values())
+self._last_sample_mono = now_mono
+self._last_sample_wall = now_wall
+
+<span class="cm"># C-prime: 只算速率/只告警, 不修改 delta/day (见 §06)</span>
+self._evaluate_rate(per_nic_delta, dt, interval_hint)
+self._day_up += delta_up; self._day_down += delta_down</code></pre>
+<p><code>SampleResult</code> 字段不变：<code>baseline</code> 语义改为「本轮没有任何逐卡记忆」；<code>counter_reset</code> 语义改为「本轮存在任一网卡回绕」。两者当前无外部消费方，保留是为日志可读与未来兼容。</p>
+<h3>4.5 现网 state.json 兼容性推演</h3>
+<table>
+  <tr><th>项</th><th>现网真实值（只读取证）</th><th>升级到 v2 后</th></tr>
+  <tr><td><code>version</code></td><td>1</td><td>被接受；首轮后重写为 2</td></tr>
+  <tr><td><code>day</code> / <code>day_up_bytes</code> / <code>day_down_bytes</code></td><td>2026-11-03 / 361,214,484,252 / 578,225,157,679</td><td>原样保留（<b>已虚高的值不会被本方案回滚</b>，见 §12）</td></tr>
+  <tr><td><code>last_up_bytes</code> / <code>last_down_bytes</code></td><td>293,613,556,677 / 567,490,630,570</td><td>被忽略，不再作为差分基线；首轮各卡按当前读数立基线</td></tr>
+  <tr><td><code>subscribers</code> / <code>last_event_id</code></td><td>1 个订阅者 / 12235</td><td>合并逻辑不变，原样保留</td></tr>
+  <tr><td>首轮观测</td><td>—</td><td><code>delta=(0,0)</code>，WARNING「state v1 升级: 逐卡基线重建」；之后写出的 <code>nic_baseline</code> 即每卡真实读数</td></tr>
+</table>
+<div class="aside">注：现网 last_up/last_down 的数值已含冲高注入，<b>绝对不能</b>用它去凑逐卡基线（无法拆分到每张卡）；这就是 D2 选择「置空重立」而不是「把合计塞给某张卡」的原因。</div>
+<h3>4.6 回滚兼容（旧版本读 v2 载荷）</h3>
+<p>v1 解析器对 <code>version != 1</code> 走降级：当日累计从 dat 恢复、基线取当前值 → 首轮 delta 0，<b>不会重新引入冲高</b>。代价是丢失 v2 里的逐卡细节与 state 内更精确的日累计（最多一个 flush 间隔）。因此 state 升级可回滚，无需数据迁移。配置侧的回滚见 §07.6。</p>
+
+<h2><span class="no">§05</span>处理矩阵（逐情形给期望值）</h2>
+<table>
+  <tr><th>#</th><th>情形</th><th>逐卡记忆动作</th><th>本轮入账（期望）</th><th>说明 / 断言要点</th></tr>
+  <tr><td>1</td><td>首次运行 / state 缺失</td><td>空表 → 本轮为每张在选卡写入当前读数</td><td><code>(0, 0)</code></td><td>day 由 dat 兜底（今天有行则接续）</td></tr>
+  <tr><td>2</td><td>v1 载荷升级</td><td>忽略 v1 合计基线，置空；本轮重立</td><td><code>(0, 0)</code></td><td>保留 day 累计；WARNING 一次</td></tr>
+  <tr><td>3</td><td>进程重启（v2 载荷）</td><td>完整恢复每卡记忆</td><td>每卡 <code>cur - last</code>（含停机窗口真实增长）</td><td>I4：停机窗口不放大、不少报（真实流量仍计入）；速率判定用 wall 兜底 dt，见 §06.3</td></tr>
+  <tr><td>4</td><td>新网卡插入（有历史累计）</td><td>无记忆 → 只立基线</td><td><code>(0, 0)</code></td><td>典型场景：VPN/虚拟网卡/新 USB 网卡；不把它的历史累计计入</td></tr>
+  <tr><td>5</td><td>网卡消失（down/拔出/被排除/快照漏项）</td><td><b>保留旧记忆</b>；本轮不参与求和</td><td>仅其他卡的真实增量</td><td>本情形的关键：绝不因缺失把某张卡的记忆删掉或归零</td></tr>
+  <tr><td>6</td><td>断连后恢复（同一张卡，有记忆）</td><td>沿用恢复前记忆，差分后更新</td><td><code>cur - last</code>（断链期无流量 → 通常 <code>(0,0)</code>）</td><td><b>主修复点</b>：恢复瞬间不再整份累计入账；若断链期计数确有增长，只计真实增长</td></tr>
+  <tr><td>7</td><td>从未被观测的卡出现（如断网期间被过滤且此前已 down）</td><td>无记忆 → 只立基线</td><td><code>(0, 0)</code></td><td>无法区分「它的历史累计」与「缺口流量」→ 按 I6 少报</td></tr>
+  <tr><td>8</td><td>全部被过滤（<code>selected == {}</code>）</td><td>记忆<b>完全不动</b></td><td><code>(0, 0)</code></td><td>旧代码在此时把合计基线改成 0，是本 bug 的触发点；新代码不得清空/改写任何卡记忆</td></tr>
+  <tr><td>9</td><td><code>include</code>/<code>exclude</code> 正则变更</td><td>被移出的卡保留记忆；新纳入的卡按 #4</td><td>交集的卡真实增量 + 0</td><td>热生效：<code>ConfigHolder.current</code> 每轮读取，无需重启</td></tr>
+  <tr><td>10</td><td>计数器真回绕（驱动重载/接口重建/网卡禁用-启用）</td><td>该卡 <code>cur &lt; last</code> → delta 0，基线改写为 <code>cur</code>；其他卡正常</td><td>仅有其他卡增量</td><td>旧代码会因合计变小把全部卡的 delta 都记 0；新代码只影响回绕的那张卡</td></tr>
+  <tr><td>11</td><td>同名卡但计数更大（如硬件替换后同名）</td><td>无法识别 → 按正常差分</td><td>可能偏大一次</td><td>已知不可判定的边角；速率告警会在顶栏横幅/设置页/日志留下记录</td></tr>
+  <tr><td>12</td><td>跨天（00:00 硬切）</td><td>day 累计清零；<b>逐卡记忆保留</b></td><td>照常差分</td><td>不得因跨天重建基线（否则每天首轮少报）</td></tr>
+  <tr><td>13</td><td>挂钟回跳（日界不前进）</td><td>不动基线</td><td>照常差分</td><td>现逻辑（<code>sampler.py:352-356</code>）保留；速率判定另按 §06.3 跳过</td></tr>
+</table>
+<div class="aside"><b>速率判定不在这张表里改写任何期望值</b>：每一行的入账结果只由逐卡差分决定；速率检查是旁路，只在越界时追加告警记录，T11 专门断言「有告警时 delta 与 day 仍等于真实差值」。</div>
+
+<h2><span class="no">§06</span>C-prime：速率阈值、dt 处理与告警</h2>
+<h3>6.1 口径（按用户否决点改版）</h3>
+<ul>
+  <li><b>定义</b>：<code>rate = delta / eff_dt</code>，单位 B/s。判定对象是<b>单张网卡、单个方向</b>（上行与下行各算各的），不是合计。</li>
+  <li><b>触发</b>：某卡某方向 <code>rate &gt; threshold</code> 时 <code>logger.warning</code>，并在 state 写入 <code>last_spike</code>。严格大于才告警；等于阈值不告警。</li>
+  <li><b>动作边界（C-prime 核心）</b>：<b>不记 0、不丢弃、不白名单、不改 day 累计、不改 dat 行</b>。同一轮该卡该方向的 <code>delta</code> 照常入账；回绕是唯一的记 0 分支，且在专属告警里说明。</li>
+  <li><b>阈值语义不随采样间隔漂移</b>：速率 = 字节/时间，间隔调大时 dt 同比变大，正常流量速率不变；这正是本次改口径的目的。</li>
+</ul>
+<h3>6.2 单位、键名与默认值推导</h3>
+<p><b>盘上单位</b>：复合串 <code>"1GiB/s"</code>（与 auto-qb 既有 <code>speed</code> 文法一致）；<b>内存单位</b>：<code>int</code> B/s，字段名 <code>sample_rate_warn_bps</code>。不存绝对字节值。</p>
+<table>
+  <tr><th>参照量</th><th>速率（按 5s 采样）</th><th>与默认 1 GiB/s 的比值</th></tr>
+  <tr><td>正常 1GbE 峰值（125 MB/s）</td><td>≈0.116 GiB/s</td><td><span class="good">≈1/8.6</span></td></tr>
+  <tr><td>正常 2.5GbE 峰值（312.5 MB/s）</td><td>≈0.291 GiB/s</td><td><span class="good">≈1/3.4</span></td></tr>
+  <tr><td>正常 10GbE 峰值（1.25 GB/s）</td><td>≈1.164 GiB/s</td><td><span class="wr">≈1.16（可能触碰阈值）</span></td></tr>
+  <tr><td><b>本次上传注入</b> 273.45 GiB / 5s</td><td>≈54.69 GiB/s</td><td><span class="bad">≈54.7×</span></td></tr>
+  <tr><td><b>本次下载注入</b> 528.51 GiB / 5s</td><td>≈105.70 GiB/s</td><td><span class="bad">≈105.7×</span></td></tr>
+  <tr><td>同一注入，长 gap 按 3×间隔钳制（15s）</td><td>≈18.23 / 35.23 GiB/s</td><td><span class="bad">≈18.2× / 35.2×</span></td></tr>
+</table>
+<div class="aside"><b>默认值取 1 GiB/s（1,073,741,824 B/s）的推导</b>：本次上传注入在 5s 间隔下约合 <b>54.7 GiB/s</b>（≈58.7 GB/s）；取 1 GiB/s 后，信号仍有约 <b>55×</b> 余量。正常千兆峰值约 0.12 GiB/s（阈值的 1/8.6），2.5G 约 0.29 GiB/s（1/3.4），都留出余量；10GbE 峰值 1.16 GiB/s 可能触碰，但<b>只告警不拦截</b>，属可接受的噪声。若把 dt 上限钳到 3×间隔（15s），注入速率仍为 18.2 GiB/s，约为阈值的 18 倍，不会漏报。</div>
+<h3>6.3 dt 从哪来、怎么钳制（逐场景给期望值）</h3>
+<p><b>来源</b>：<code>time.monotonic()</code> 优先（单调、不受系统对时影响）；`now_mono` 与 `now_wall` 在读取计数器同一时刻采样。`dt = now_mono - last_mono`。进程重启后单调钟断代，改用 state 里持久化的 <code>last_sample_wall</code> 做兜底：`dt = now_wall - last_sample_wall`。</p>
+<p><b>钳制</b>：<code>eff_dt = min(dt, WARN_DT_CLAMP_FACTOR * interval_hint)</code>，常量 <code>WARN_DT_CLAMP_FACTOR = 3</code>；<code>interval_hint</code> 由主循环每轮传入当前 <code>config.sample_interval</code>（默认 5s），不在 sampler 内部缓存。这样长 gap 不会把注入量摊薄到阈值以下。</p>
+<table>
+  <tr><th>场景</th><th>dt 来源</th><th>eff_dt（期望）</th><th>判定期望</th><th>说明</th></tr>
+  <tr><td>正常轮（间隔 5s）</td><td>mono 差值 ≈5s</td><td>≈5s</td><td>按真实速率判定</td><td>无特殊处理</td></tr>
+  <tr><td>采样间隔热改 5s → 60s</td><td>mono 差值：切换轮仍≈5s，下一轮≈60s</td><td>切换轮 5s；下一轮 60s</td><td>速率不变，不漂移</td><td>钳制上限随当前间隔变为 180s；无需重启</td></tr>
+  <tr><td>断连/休眠造成进程内长 gap（如 600s）</td><td>mono 差值 600s</td><td><b>15s</b>（3×5s）</td><td>273 GiB 注入 → 18.2 GiB/s，<b>仍告警</b></td><td>若钳到 600s 会摊成 0.45 GiB/s 而漏报，这是必须钳制的理由</td></tr>
+  <tr><td>长 gap 内的合法积压（如 10 分钟 1 GiB）</td><td>mono 差值 600s</td><td>15s</td><td>≈68 MiB/s，<b>不告警</b></td><td>钳制只放大短时等价速率，不制造大额误报</td></tr>
+  <tr><td>进程重启（v2 载荷，有 wall 基线）</td><td>wall 差值（mono 断代）</td><td>按 3×间隔钳制</td><td>停机真实增长按钳制后速率判定</td><td>wall 差值须满足 <code>0 &lt; dt ≤ 7 天</code>；否则按下一行处理</td></tr>
+  <tr><td>进程重启（v1 升级 / 无 wall 基线）</td><td>无</td><td>—</td><td><b>跳过速率判定</b>（delta 仍照常入账）</td><td>首轮每卡只立基线，delta=0，本来也无越界</td></tr>
+  <tr><td>首轮 / state 缺失</td><td>无</td><td>—</td><td>跳过</td><td>没有上一轮读数，速率无定义</td></tr>
+  <tr><td>时钟回拨 / wall 差值异常</td><td>mono 可用则用 mono；否则 wall</td><td>—</td><td>若 <code>dt ≤ 0</code> 或非有限 → <b>跳过</b> + DEBUG 一行</td><td>不制造「负速率」或「无限速率」告警；记账不受影响</td></tr>
+  <tr><td>同一轮被重复调用（测试/异常重入）</td><td>mono 差值接近 0</td><td>仍用真实 dt</td><td>若 delta 也≈0 则不告警</td><td>幂等由逐卡差分保证；速率检查不额外引入状态</td></tr>
+  <tr><td>计数器回绕（某方向 cur &lt; last）</td><td>正常 dt</td><td>正常</td><td>该方向 delta=0 → 该方向不判定；另一方向独立判定</td><td>回绕告警与速率告警是两条独立日志</td></tr>
+</table>
+<div class="callout"><b>为什么不用 wall 钟做主来源：</b>系统对时/手动改时间会让 dt 变成负数或跳变；单调钟在 Windows 上始终可用，只在进程重启后断代，所以 wall 只做「重启首轮」的兜底，并且加 7 天上限与有限性检查。<b>跳过判定不会改变入账</b>，只是少一条告警。</div>
+<h3>6.4 配置落点（缺一即 I5 失败）</h3>
+<table>
+  <tr><th>#</th><th>文件 / 符号</th><th>改动</th></tr>
+  <tr><td>1</td><td><code>tools/global-traffic-monitor/src/gtm/config.py</code> 默认值区</td><td>新增 <code>DEFAULT_SAMPLE_RATE_WARN_BPS = 1024 ** 3</code>（1 GiB/s）</td></tr>
+  <tr><td>2</td><td><code>config.py</code> 的 <code>Config</code> 字段区</td><td>新增 <code>sample_rate_warn_bps: int = DEFAULT_SAMPLE_RATE_WARN_BPS</code></td></tr>
+  <tr><td>3</td><td><code>config.py</code> 字段分组与校验</td><td>新增 <code>_RATE_FIELDS = ("sample_rate_warn_bps",)</code>；<code>_KNOWN_FIELDS</code> 自动纳入；新增 <code>_check_rate</code>（必须为 <code>&gt; 0</code> 的复合速率串；裸数值报错）；<code>config_to_payload</code> 用 <code>format_speed</code> 输出</td></tr>
+  <tr><td>4</td><td><code>tools/global-traffic-monitor/src/gtm/units.py</code></td><td>新增 <code>parse_speed</code> / <code>format_speed</code>，文法镜像 auto-qb：<code>数字 + [KMGTP]iB/s</code>；格式化按 B/s → KiB/s → MiB/s → GiB/s → TiB/s</td></tr>
+  <tr><td>5</td><td><code>src/auto_qb/webui/static/shared/config_hub_tm.js</code></td><td>在「通知阈值」后新增表单项：<code>key: "sample_rate_warn_bps"</code>、<code>label: "单轮速率告警阈值"</code>、<code>kind: "speed"</code>、<code>unitDefault: "GiB/s"</code>、<code>def: "1GiB/s"</code>；<code>tmBuildPayload</code> 增加 <code>p.kind === "speed"</code> 分支（原只处理 time/size）</td></tr>
+  <tr><td>6</td><td><code>src/auto_qb/webui/static/shared/tpl/traffic-card.html</code></td><td>配置表单的单位渲染增加 <code>kind === "speed"</code> 分支（与 <code>config_editor.js</code> 的 <code>UNIT_OPTIONS</code> 已支持的 speed 文法一致）</td></tr>
+  <tr><td>7</td><td>文档回写</td><td>§11-S9：<code>memory-bank/</code> 与工具配置说明补一条键说明；主 <code>config.yml</code> 是生产文件不动（<b>红线</b>）</td></tr>
+</table>
+<div class="callout"><b>关于「必须同步进 <code>validate_config</code> 与 <code>config/schema.py</code>」：</b>本仓不存在覆盖 GTM 配置的 <code>config/schema.py</code>——那是 <code>src/auto_qb</code> 自身配置的单点；GTM 是独立包，其 fail-fast 单点就是 <code>Config</code> + <code>_RATE_FIELDS</code> + <code>_KNOWN_FIELDS</code> + <code>validate_payload</code>。auto-qb 侧唯一承载 GTM 键的界面单点是 <code>config_hub_tm.js</code>。本方案把「等价校验」落在 GTM 自己的校验器，并让 overlay 的未知键同样 fail-fast；不改 auto-qb 的 <code>config/schema.py</code>。</div>
+<h3>6.5 告警记录与日志字段</h3>
+<pre><code>logger.warning(
+    "单轮速率超阈值 | nic=%s dir=%s cur=%d last=%d delta=%d dt=%.3fs eff_dt=%.3fs rate=%.1fB/s threshold=%dB/s (仅告警, 照常入账)",
+    name, direction, cur, last, delta, dt, eff_dt, rate, threshold,
+)</code></pre>
+<ul>
+  <li><b>字段齐全</b>：网卡、方向、cur、last、delta、dt、eff_dt、rate、阈值，一个不少。</li>
+  <li><b>每张越界卡每个方向一行</b>；同一轮多卡/双方向越界则多行。</li>
+  <li><b>state 侧</b>：同一轮聚合为一条 <code>last_spike</code>（见 §04.2），<code>items</code> 保留本轮全部越界项；只保留最近一轮，避免无界增长。</li>
+  <li>阈值从 <code>ConfigHolder.current.sample_rate_warn_bps</code> 每轮读取，热改立即生效。</li>
+</ul>
+<h3>6.6 用户可见通道（v3：主告知必须是常驻面）</h3>
+<p>v2 把主告知放在设置页「工具状态」行 + 打开设置页时 toast。用户否决：<b>设置页不常访问，24h 展示窗口等于没有</b>。v3 把主告知移到 auto-qb 主界面的底部状态栏——只要打开 WebUI 就看到，不需要进设置页；设置页行与 GTM <code>/status</code> 降为次级详情，日志仍只作取证。其余三项默认（1 GiB/s、24h、3× 钳制）保持不变。</p>
+<h4>6.6.1 候选对比（成本 / 爆炸半径 / 失败降级）</h4>
+<table>
+  <tr><th>#</th><th>候选</th><th>数据来源与传递路径</th><th>成本</th><th>爆炸半径</th><th>失败降级</th><th>结论</th></tr>
+  <tr><td>A</td><td><b>auto-qb 顶栏常驻横幅</b><br>（快照追加 <code>gtm_anomaly</code>）</td><td>GTM <code>state.last_spike</code> → <code>GET /status</code> → <code>agent.fetch_last_spike()</code> → 快照 <code>refresh()</code>（默认 600s，启动首轮立即）→ <code>traffic_view.gtm_anomaly</code> → <code>/api/status</code>·<code>/api/state</code>（<code>public_traffic_view</code> 只摘 history，其余透传）→ <code>statusbar.html</code></td><td>GTM +1 字段 +1 property；auto-qb 快照 +1 可选段、agent +1 只读函数、状态栏 +1 组模板/CSS、2 个前端 helper；每 refresh 一次本机 HTTP</td><td><span class="good">小</span>：快照只增键，<code>periods/day</code>、<code>state</code> 派生、<code>limit/source/history</code> 零改动；旧前端忽略未知键</td><td>取不到 → 不覆盖旧段/不渲染；不抛异常、不阻断流量刷新（I11）</td><td><span class="good">推荐</span></td></tr>
+  <tr><td>B</td><td>前端已有的轮询顺手直读 GTM <code>/status</code></td><td>浏览器 → GTM 控制面（需先拿到 <code>endpoint.json</code> 的 host/port 与 <code>token_path</code> 内容）</td><td>必须新增代理路由 + 鉴权透传（前端拿不到密钥文件），成本≈A + 新路由；还要处理跨源/CORS</td><td><span class="bad">大</span>：新增一条把工具密钥带到浏览器的通道，攻击面扩大</td><td>前端轮询新增失败分支；GTM 不可达时可能污染主轮询</td><td>淘汰：成本与风险都高于 A</td></tr>
+  <tr><td>C</td><td>复用现有 notifier 推送（GTM 阈值通知 / auto-qb 通知链路）</td><td>GTM 事件 → 订阅者 → auto-qb <code>/notify</code> → 通知面板（<code>.sb-err</code> 未读徽标）</td><td>需新增事件类型 + 订阅载荷键 + 服务端去重；spike 每采样轮可重复，通知链路按「当日累计跨阈值」去重，语义不匹配</td><td><span class="bad">中</span>：改动固定的事件契约与通知面板，超出「只增快照字段」</td><td>通知面板需点开才见；不能保证常驻</td><td>淘汰为主通道（未来可作为可选加强，本次不做）</td></tr>
+  <tr><td>D</td><td>GTM 自身界面里更显眼的位置</td><td>GTM 控制面是纯 JSON（<code>/status</code> 等），没有 HTML 配置页</td><td>为告警新建一个 HTML 页/窗口，属新产物</td><td><span class="bad">大</span>：新增前端工程与托管方式</td><td>—</td><td>淘汰：没有比 <code>/status</code> 更显眼的既有位置</td></tr>
+  <tr><td>E</td><td>桌面通知 / 系统弹窗</td><td>平台通知 API</td><td>引入平台相关依赖与权限</td><td><span class="bad">大</span>：违反「无新增第三方依赖」</td><td>平台差异、易被系统静音</td><td>淘汰（§12 不做清单）</td></tr>
+</table>
+<h4>6.6.2 最终选择：快照 <code>gtm_anomaly</code> + 状态栏常驻横幅</h4>
+<p>理由：A 是唯一同时满足「<b>不用打开设置页就能看见</b>」「数据链路已在主轮询里」「失败可完全隔离」的候选；它把改动限制在一条<b>可选字段</b>与一个<b>纯增量模板</b>，不新增路由、不把工具密钥带进浏览器、不动事件契约。</p>
+<ol>
+  <li><b>GTM 侧</b>：采样器已把最近一轮越界快照存进 <code>_last_spike</code> 并随 state v2 落盘（§04）；<code>ControlServer._status</code>（<code>server.py:308-336</code>）追加 <code>"last_spike": self.sampler.last_spike</code>，无越界时为 <code>null</code>。旧 auto-qb 不读该键，无影响。</li>
+  <li><b>auto-qb 读取</b>：<code>traffic_source/agent.py</code> 新增模块级只读函数，复用既有发现/鉴权/HTTP 单点（<code>discover</code>/<code>read_token</code>/<code>call_tool</code>）；<b>不拉起、不订阅、不写任何状态</b>：
+<pre><code>def fetch_last_spike(timeout: float = PROBE_TIMEOUT_S) -> tuple[bool, Optional[dict]]:
+    """(工具可达, last_spike)；指针/密钥/HTTP/解析任一失败 -> (False, None)，绝不抛异常"""
+    ep = discover()
+    if ep is None:
+        return False, None
+    from ...webui.tool_client import ToolUnreachable, call_tool, read_token
+    token = read_token(ep.token_path)
+    if not token:
+        return False, None
+    try:
+        code, resp = call_tool(ep.base_url, "/status", "GET", token, None, timeout)
+    except ToolUnreachable:
+        return False, None
+    if code != 200 or not isinstance(resp, dict):
+        return False, None
+    spike = resp.get("last_spike")
+    return True, (spike if isinstance(spike, dict) else None)</code></pre></li>
+  <li><b>快照发布</b>：<code>TrafficSnapshotModule</code> 新增 <code>ANOMALY_KEY = "gtm_anomaly"</code> 与 <code>publish_anomaly()</code>，走现有 <code>_publish(**segments)</code> 段级合并（只改这一段，不重写 <code>periods</code>，不改 <code>derive_state</code>）；<code>refresh()</code> 在<b>来源开关打开时</b>调用一次 <code>_refresh_anomaly()</code>——可达则发布（<code>None</code> 表示无异常/旧工具无字段），不可达则<b>不发布、保留上次值</b>；来源关闭时一并清空该段。事件路径 <code>publish_event</code> 维持<b>零读盘、零额外网络</b>。
+<pre><code>def _refresh_anomaly(self) -> None:
+    try:
+        reachable, spike = agent.fetch_last_spike()
+    except Exception as e:                 <span class="cm"># 边界隔离: 告警取数失败不得中断流量刷新</span>
+        logger.debug(f"流量快照 | 读取 GTM 异常失败: {e}")
+        return
+    if not reachable:
+        logger.debug("流量快照 | 全局流量监视器不可达, 保留上次异常段")
+        return
+    self.publish_anomaly(spike)            <span class="cm"># spike=None 也发布(清空); 只有不可达才保留</span></code></pre></li>
+  <li><b>接口</b>：无需改路由。<code>/api/status</code> 与 <code>/api/state</code> 共用 <code>_status_payload</code>（<code>state.py:17-38</code>），<code>gtm_anomaly</code> 随 <code>public_traffic_view</code> 原样透传（该函数只摘 <code>history</code>）。</li>
+  <li><b>前端落点</b>：<code>shared/tpl/statusbar.html</code> 在 <code>.sb-stats</code> 之前新增一组<b>常驻</b>元素（不依赖 <code>todayTraffic</code>，与 <code>.sb-err</code> 同范式）；<code>dialogs.js</code> 新增 computed <code>gtmAnomaly()</code>/<code>gtmAlert()</code> 与 method <code>ackGtmAlert()</code>/<code>showGtmAlert()</code>；样式单点放 <code>shared/console_hub_controls.css</code> 的状态栏段：
+<pre><code>&lt;span v-if="gtmAlert" class="sb-item sb-gtm-alert"&gt;
+  &lt;button class="sb-gtm-main" :title="gtmAlert.full" @click.stop="showGtmAlert()"&gt;
+    &lt;svg class="ico ico-sm" viewBox="0 0 16 16"&gt;&lt;use href="#i-bell"&gt;&lt;/use&gt;&lt;/svg&gt;
+    &lt;span class="lbl"&gt;流量异常&lt;/span&gt;&lt;span class="val"&gt;{{ gtmAlert.short }}&lt;/span&gt;
+  &lt;/button&gt;
+  &lt;button class="sb-gtm-ack" title="已知晓(仅本机隐藏)" @click.stop="ackGtmAlert()"&gt;&amp;times;&lt;/button&gt;
+&lt;/span&gt;</code></pre>
+  <ul>
+    <li>点击横幅 → <code>this.toast(gtmAlert.full, "warn", 8000)</code> 展示完整文案；<code>&times;</code> → 写本机 ack（见 6.6.4）。</li>
+    <li>文案：短版 <code>流量异常 · 以太网 上行 54.7GiB/s</code>；完整版 <code>最近异常：2026-11-03 10:47 以太网 上行 273.4GiB/5s ≈54.7GiB/s（阈值 1GiB/s），已照常入账</code>；多方向时短版追加 <code>+N</code>，完整版逐条并列。</li>
+    <li>窄屏：<code>.sb-gtm-alert</code> 允许收缩 + 文本 ellipsis，<b>不得挤压</b>速度/限速组；无异常时整组不渲染，状态栏不留空位。</li>
+  </ul></li>
+  <li><b>次级面</b>（保留 v2 成果）：设置页「工具状态」区仍加「最近异常」一行（<code>traffic-card.html</code> + <code>config_hub_tm.js</code>），作为详情与排障入口；GTM <code>/status.last_spike</code> 供脚本读取；<code>gtm.log</code> 只作取证。设置页打开时的 toast 可保留，但<b>不再是主告知</b>。</li>
+</ol>
+<h4>6.6.3 契约扩大判定与「只增不改」兼容</h4>
+<table>
+  <tr><th>契约</th><th>变化</th><th>旧消费方/旧版本表现</th><th>结论</th></tr>
+  <tr><td>GTM <code>GET /status</code></td><td>+<code>last_spike</code>（对象或 <code>null</code>）</td><td>旧 auto-qb 只取 <code>day_*</code>/<code>ok</code> 等既有键，忽略新键；外部脚本同理</td><td><span class="good">纯追加，兼容</span></td></tr>
+  <tr><td>auto-qb <code>traffic_view</code>（快照）</td><td>+<code>gtm_anomaly</code>（对象或 <code>None</code>；<b>非</b>恒存在——只有发布过才在）</td><td>旧前端模板不引用该键 → 不渲染横幅；旧 auto-qb 后端没有该键 + 新前端 → <code>undefined</code> → 按无异常处理</td><td><span class="good">纯追加，兼容</span></td></tr>
+  <tr><td><code>derive_state</code> / 顶层 <code>state</code></td><td>零改动：告警段<b>不参与</b>状态派生</td><td>今日流量 pill、限速浮层、历史弹层看到的状态与 v2 完全一致</td><td><span class="good">语义冻结</span></td></tr>
+  <tr><td><code>periods</code>/<code>history</code>/<code>limit</code>/<code>source</code>/<code>ts</code>/<code>date</code></td><td>零改动</td><td>—</td><td><span class="good">冻结</span></td></tr>
+  <tr><td>快照版本号</td><td><b>不新增</b>：键缺失即「无异常」（保守默认），不把缺失当错误</td><td>旧快照继续可用；无需迁移</td><td><span class="good">不扩大版本面</span></td></tr>
+  <tr><td>auto-qb 消费点</td><td>仅 <code>statusbar.html</code> + <code>dialogs.js</code> + 次级设置页</td><td>其他消费方（曲线模块、历史端点、 Torrent 详情）不读该键</td><td><span class="good">爆炸半径小</span></td></tr>
+</table>
+<div class="callout"><b>结论：需要扩大契约，但只扩「可选字段」这一个面。</b>GTM <code>/status</code> 与 auto-qb 快照各追加一个可为 <code>null</code> 的键；两边的旧版本都能继续运行，新版本对旧数据按「无异常」降级。不引入版本号、不改既有键的语义。</div>
+<h4>6.6.4 持久性、刷新与手动消警</h4>
+<table>
+  <tr><th>场景</th><th>横幅是否还在</th><th>依据</th></tr>
+  <tr><td>同一页面内的下几轮轮询</td><td><b>在</b></td><td>快照段级合并；下一轮 refresh 用同一 <code>last_spike</code> 覆盖该段</td></tr>
+  <tr><td>刷新页面 / 重开 WebUI</td><td><b>在</b>（未 ack 时）</td><td>服务端快照仍是同一 <code>ts</code>；前端只按 24h 与 ack 过滤</td></tr>
+  <tr><td>auto-qb 重启</td><td><b>很快回来</b></td><td>快照内存重建，但任务入队即到期（<code>TaskQueue.add_task</code> 的 <code>next_run=now</code>），首轮 refresh 立即回读 GTM；最迟一个 <code>refresh_interval</code>（默认 600s）</td></tr>
+  <tr><td>GTM 重启</td><td><b>在</b></td><td><code>last_spike</code> 随 state v2 落盘，重启恢复；auto-qb 下一轮再读到</td></tr>
+  <tr><td>超过 24h</td><td><b>隐藏</b></td><td>前端 <code>gtmAlert()</code> 按 <code>ts</code> 过滤；服务端只保留最近一轮，日志保留历史</td></tr>
+  <tr><td>用户点 <code>&times;</code> 消警</td><td><b>隐藏</b>（仅本机、仅该 ts）</td><td>写 <code>localStorage["gtm.spike.ack"] = last_spike.ts</code>；同一 ts 不再显示；新异常 <code>ts</code> 不同 → 自动重新显示；清缓存/换浏览器会重新显示（不写服务端状态，避免新增写路径）</td></tr>
+</table>
+<h4>6.6.5 失败降级（GTM 不可达不得影响主界面）</h4>
+<ul>
+  <li><b>指针缺失 / 密钥缺失 / 连接失败 / 非 200 / JSON 非法</b>：<code>fetch_last_spike</code> 返回 <code>(False, None)</code>；快照<b>不发布该段</b>（有旧值保留旧值，无旧值就不渲染），只记一条 DEBUG（同因节流），<b>不抛异常</b>。</li>
+  <li><b>旧 GTM 无 <code>last_spike</code></b>：返回 <code>(True, None)</code> → 发布 <code>gtm_anomaly=None</code> → 横幅不渲染，其余照常。</li>
+  <li><b>快照告警段异常</b>：<code>_refresh_anomaly</code> 的边界 <code>try/except</code> 隔离；流量 <code>periods</code>/<code>history</code> 的发布顺序不受影响（先取告警、失败即返回，随后照常读 dat）。</li>
+  <li><b>前端字段异常</b>：<code>gtmAlert()</code> 对非对象/缺 <code>ts</code>/<code>ts</code> 不可解析一律返回 <code>null</code>，模板 <code>v-if</code> 不渲染；不抛 JS 错误、不影响速度/通知/流量 pill。</li>
+  <li><b>不可达期间的用户观感</b>：主界面保持原样（有旧告警显示旧告警，无则不显示），不会出现空白、报错或加载态卡死。</li>
+</ul>
+<div class="callout"><b>为什么这条通道可依赖：</b>①它挂在主界面底部状态栏，用户每次打开 WebUI 都看见，不依赖设置页访问频率；②数据来自 GTM 的持久 <code>last_spike</code>，不依赖被 pythonw 丢弃的 stderr；③传递复用既有快照轮询与接口，不新增路由、不把密钥交给浏览器；④GTM 不可达时整段静默降级，主界面不受牵连；⑤有 24h 窗口与本机 ack，不会长期占位。局限：它不是系统级弹窗，用户完全不开 WebUI 时仍只能事后查日志——这符合「不引入平台依赖」的范围约束。</div>
+
+<h2><span class="no">§07</span>配置升级与回滚（overlay）</h2>
+<h3>7.1 为什么不能直接写进 config.yml</h3>
+<p>GTM 的 <code>validate_payload</code> 对未知键是 <b>fail-fast</b>（<code>config.py:233-235</code>）。若迁移把 <code>sample_rate_warn_bps</code> 写进主 <code>config.yml</code>，用户退回旧版本时旧代码会因「未知配置键」直接拒绝启动。删除键又必须人工操作，违反本轮第 3 条否决。因此 v2 采用 <b>主配置零改写 + 新键独立 overlay</b>：旧版本只读 <code>config.yml</code>，天然看不到新键。</p>
+<h3>7.2 文件与载荷</h3>
+<pre><code># &lt;data_dir&gt;/config.v2.yml
+# 由 gtm v2 自动创建/维护；旧版本不会读取本文件
+sample_rate_warn_bps: "1GiB/s"</code></pre>
+<p>只允许出现 <code>_V2_FIELDS</code>（当前仅 <code>sample_rate_warn_bps</code>）。overlay 里出现未知键 → 与主配置同等级的 fail-fast，报「config.v2.yml 未知键: &lt;key&gt;」。</p>
+<h3>7.3 迁移触发与流程</h3>
+<table>
+  <tr><th>步骤</th><th>落点 / 动作</th><th>幂等性</th></tr>
+  <tr><td>1</td><td><code>_load_config_or_fail</code> 内，在 <code>data_dir</code> 与 <code>ensure_data_ownership</code> 之后、真正 <code>load_config</code> 之前：先跑既有 <code>migrate_legacy_config(config_path)</code>（处理旧版裸数值），再跑 <code>ensure_v2_overlay(config_path, overlay_path)</code></td><td>两步都以「是否已有合法键」为前提</td></tr>
+  <tr><td>2</td><td>overlay 不存在：用默认值生成内容并原子写入；写 INFO 一行「已创建 config.v2.yml（速率告警默认 1GiB/s）」</td><td>存在即跳过；不会每次启动重写</td></tr>
+  <tr><td>3</td><td>overlay 存在但缺 <code>sample_rate_warn_bps</code>：补默认值并原子改写（保留其他合法 v2 键）</td><td>补完后再启动即跳过</td></tr>
+  <tr><td>4</td><td>overlay 存在且键齐全：解析后与内存值比较；相等则<b>不写盘</b>（mtime 不变）</td><td>重复启动零副作用（I3）</td></tr>
+  <tr><td>5</td><td><code>load_config(path, overlay_path)</code>：读主配置 + overlay，overlay 覆盖同名字段，再交给 <code>validate_payload</code> 全量校验</td><td>主配置缺失时只走默认 + overlay</td></tr>
+</table>
+<h3>7.4 备份与写回原子性</h3>
+<ul>
+  <li><b>主配置</b>：v2 功能<b>从不写入</b> <code>config.yml</code>，因此不需要为它做备份。既有 <code>migrate_legacy_config</code> 若因旧版裸数值改写主文件，改写前复制一份 <code>config.yml.bak</code>（单世代，覆盖式）。</li>
+  <li><b>overlay</b>：每次改写前，若旧文件存在，复制一份 <code>config.v2.yml.bak</code>（单世代，覆盖式）；解析失败时提示用户可从该备份恢复。</li>
+  <li><b>原子写</b>：写同目录临时文件 <code>&lt;name&gt;.tmp.&lt;pid&gt;</code> → <code>flush</code> + <code>os.fsync</code> → <code>os.replace</code>（Windows 上同卷替换原子）。不做跨目录写，避免跨卷替换不原子。</li>
+  <li><b>写序</b>：保存设置时<b>先写 overlay、后写主配置</b>。若主配置写失败，overlay 已经包含新键，加载时仍以 overlay 为准；若 overlay 写失败，主配置保持旧值，不产生半套配置。</li>
+  <li><b>失败降级</b>：overlay 创建失败（目录只读/磁盘满）→ <code>logger.warning</code> 后用内存默认值继续启动，不阻断采样；状态写入本来也会暴露同一目录问题。</li>
+</ul>
+<h3>7.5 保存路径拆分</h3>
+<pre><code>save_config(path, cfg, overlay_path=None):
+    main_payload    = {k: v for k in payload if k not in _V2_FIELDS}
+    overlay_payload = {k: v for k in payload if k in _V2_FIELDS}
+    if overlay_path is None:            <span class="cm"># 既有测试/旧 API: 保持单文件行为</span>
+        atomic_write(path, payload); return
+    atomic_write(overlay_path, overlay_payload)   <span class="cm"># 先 overlay</span>
+    atomic_write(path, main_payload)              <span class="cm"># 主文件永不含新键</span></code></pre>
+<p><code>PUT /config</code> 走拆分版；<code>GET /status</code> 的回显走合并后的 <code>Config</code>，所以用户在设置页看到的是 1GiB/s，文件里主配置仍没有这个键。</p>
+<h3>7.6 回滚兼容（用户退回旧版本）</h3>
+<table>
+  <tr><th>对象</th><th>旧版本行为</th><th>结论</th></tr>
+  <tr><td>主 <code>config.yml</code></td><td>不含 <code>sample_rate_warn_bps</code>，旧版未知键校验通过</td><td><span class="good">正常启动</span></td></tr>
+  <tr><td><code>config.v2.yml</code></td><td>旧版不读该文件，也不会枚举 data_dir 下的配置</td><td><span class="good">无影响</span></td></tr>
+  <tr><td>state.json v2</td><td><code>version != 1</code> → 走 dat 兜底，首轮 delta 0</td><td><span class="good">不重新引入冲高</span></td></tr>
+  <tr><td>用户手工把新键加进主配置</td><td>旧版会 fail-fast</td><td><span class="bad">不在本方案路径</span>：界面/迁移都不会这么做；若发生，用 <code>config.yml.bak</code> 恢复</td></tr>
+</table>
+<div class="callout"><b>为什么选 overlay 而不是「迁移后保留备份」：</b>备份只是「出事后可恢复」，旧版本仍会先 fail-fast；overlay 是<b>事前避免</b>——旧代码读不到新键，回滚零操作。本仓 <code>PUT /config</code> 是全量覆写且主配置严格拒未知键，overlay 是成本最低的隔离面。</div>
+
+<h2><span class="no">§08</span>日志落地（取证面，不是主告知面）</h2>
+<h3>8.1 现状</h3>
+<p><code>logging.basicConfig(stream=sys.stderr, level=INFO, ...)</code>（<code>__main__.py:211-215</code>）；<code>launch.cmd:10-13</code> 用 <code>pythonw.exe</code> 拉起并自述「pythonw 没有 stderr, 输出全部丢弃」。</p>
+<h3>8.2 方案（stdlib，无新依赖，不新增配置键）</h3>
+<table>
+  <tr><th>项</th><th>决定</th></tr>
+  <tr><td>文件</td><td><code>os.path.join(data_dir, "gtm.log")</code>；轮转文件 <code>gtm.log.1</code> … <code>gtm.log.3</code></td></tr>
+  <tr><td>滚动</td><td><code>logging.handlers.RotatingFileHandler(maxBytes=4 * 1024 * 1024, backupCount=3, encoding="utf-8")</code>；总占用 ≤16 MiB</td></tr>
+  <tr><td>编码</td><td><b>显式 <code>encoding="utf-8"</code></b>。理由：<code>_utf8_stdio()</code>（<code>__main__.py:63-78</code>）只修 stdio，不覆盖文件流；日志含中文，默认码页会炸 encode</td></tr>
+  <tr><td>级别/格式</td><td>INFO；format 复用 <code>basicConfig</code> 的同一常量，避免两份格式漂移</td></tr>
+  <tr><td>挂载点</td><td><code>cmd_run</code> 内、<code>data_dir = _resolve_data_dir(...)</code>（<code>:253</code>）与 <code>ensure_data_ownership</code>（<code>:257</code>）之后、<code>_load_config_or_fail</code>（<code>:263</code>）之前 → 配置错误也能落盘</td></tr>
+  <tr><td>幂等</td><td>挂载前检查 root logger 是否已有指向同一 <code>baseFilename</code> 的 handler；有则跳过（防测试/重复调用叠加）</td></tr>
+  <tr><td>失败降级</td><td>创建 handler 抛 <code>OSError</code>（目录只读/磁盘满）→ 只 <code>logger.warning</code> 继续启动，<b>不阻断采样</b>；告警主告知由顶栏横幅承担（它读 state/<code>/status</code>，不依赖日志文件）</td></tr>
+  <tr><td>体量估算</td><td>INFO 每轮 1 行，5s 间隔 ≈17k 行/日 ≈2 MB/日 → 4 MiB×3 约覆盖 6 天；异常多时略快</td></tr>
+</table>
+<h3>8.3 验证</h3>
+<pre><code># 1) 单测: 用 tmp_path 断言 handler 存在、baseFilename 正确、重复调用不叠加
+uv run --directory tools/global-traffic-monitor pytest tests/test_main_run.py --no-cov -q
+
+# 2) 真机: 拉起后确认文件生成 + WARNING 可读
+Get-Content &lt;data_dir&gt;\gtm.log -Tail 20
+# 3) 断连复验后: 应出现「采样告警 | ...」与/或「单轮速率超阈值 | ...」</code></pre>
+
+<h2><span class="no">§09</span>测试：改写与新增</h2>
+<h3>9.1 既有用例逐条改写（旧断言 → 新断言）</h3>
+<table>
+  <tr><th>用例</th><th>旧断言</th><th>新断言</th><th>原因</th></tr>
+  <tr><td><code>test_sampler.py:146-155</code><br><code>test_all_adapters_filtered_warns_and_counts_zero</code></td><td><code>(r2.delta_up, r2.delta_down) == (100, 100)</code>；注释「缺失窗流量打进恢复后首包」</td><td><b><code>(0, 0)</code></b>；保留 <code>r1.baseline is True</code> 与「无适配器通过过滤」告警；<b>改名</b> <code>test_all_adapters_filtered_keeps_baselines_and_new_adapter_only_establishes</code></td><td>eth0 从未被观测过（只在全空后出现），按 #4/#8：只立基线，不入账</td></tr>
+  <tr><td><code>test_sampler.py:244-254</code><br><code>test_down_adapter_recovering_counts_from_zero</code></td><td><code>(1999, 1999)</code>；注释「缺失窗流量全额打进首包」</td><td><b><code>(0, 0)</code></b>；<b>改名</b> <code>test_down_adapter_recovering_does_not_backfill_lifetime_counter</code></td><td>wlan0 在 down 前从未被选中（无记忆）→ 恢复首轮只立基线；1999 里含 999 历史累计，不能入账</td></tr>
+  <tr><td><code>test_sampler.py:234-241</code><br><code>test_exclude_down_adapter</code></td><td><code>(10, 10)</code></td><td><b>不变</b>（保留为防线）</td><td>eth0 有记忆 0→10，wlan0 两轮都不可见 → 结果不变</td></tr>
+  <tr><td><code>test_sampler.py:308-410</code> 各 <code>restore({...})</code> 用例</td><td>直接构造 <code>version:1</code> 载荷并断言日期/损坏分支</td><td>拆两类：①保留为 <b>v1 兼容</b>用例，断言多出一条「state v1 升级」告警且 <code>delta=(0,0)</code>；②新增 v2 载荷用例（<code>nic_baseline</code> 合法/单条非法/全非法，<code>last_sample_wall</code>/<code>last_spike</code> 非法降级）</td><td>版本判定与降级路径被扩展，不能只测 v1</td></tr>
+  <tr><td><code>test_sampler.py:484-507</code> 快照往返</td><td><code>restore(snapshot()) == ()</code>，断言基线字段</td><td>断言 <code>()</code> 不变，并断言载荷 <code>version == 2</code>、<code>nic_baseline</code> 与内存一致、<code>last_*</code> == 各卡求和、<code>last_sample_wall</code>/<code>last_spike</code> 往返</td><td>新增载荷键</td></tr>
+  <tr><td><code>test_storage.py:429-435</code> state 落盘断言</td><td><code>state["day_up_bytes"] == 5MiB</code> 等</td><td>追加 <code>state["version"] == 2</code>、<code>"nic_baseline" in state</code>、<code>state["last_up_bytes"] == 5MiB</code>（单卡时求和相等）</td><td>载荷升级</td></tr>
+  <tr><td><code>tests/test_config.py</code> 既有 size 用例</td><td>只覆盖 <code>flush_delta_bytes</code>/<code>notify_threshold_bytes</code></td><td>追加 <code>sample_rate_warn_bps</code> 的合法/非法用例：<code>"1GiB/s"</code> 合法；<code>"0MiB/s"</code>、<code>"-1MiB/s"</code>、裸 <code>1073741824</code>、<code>"1GiB"</code>（缺 /s）进聚合错误</td><td>新速率类型不能复用 size 校验</td></tr>
+</table>
+<h3>9.2 新增用例清单（每条给输入与期望）</h3>
+<table>
+  <tr><th>#</th><th>用例</th><th>输入</th><th>期望</th></tr>
+  <tr><td>T1</td><td>断连-恢复且计数不涨（<b>主回归</b>）</td><td>eth0 选中 999 → down（被过滤）→ up，仍 999</td><td><code>delta=(0,0)</code>；<code>day</code> 不增</td></tr>
+  <tr><td>T2</td><td>断连-恢复且计数有真实增长</td><td>eth0 999 → down → up 1099</td><td><code>delta=(100,100)</code>（不是 1099）</td></tr>
+  <tr><td>T3</td><td>多卡：一张 down，另一张继续跑</td><td>eth0 0→100；wlan0 999→down→999</td><td><code>delta=(100,100)</code>，无重置告警</td></tr>
+  <tr><td>T4</td><td>全部被过滤后恢复</td><td>eth0 100 → selected 全空 → eth0 100</td><td><code>delta=(0,0)</code>；记忆保留（再涨到 150 → delta 50）</td></tr>
+  <tr><td>T5</td><td>单卡真回绕，其他卡正常</td><td>eth0 1000→20（回绕）；wlan0 0→30</td><td>eth0 delta 0 + 专属告警；wlan0 delta 30；合计 <code>(30, …)</code></td></tr>
+  <tr><td>T6</td><td>新卡插入（带大历史累计）</td><td>eth0 有记忆 100；新 vet 700 出现</td><td><code>delta=(0,0)</code>；vet 基线写 700</td></tr>
+  <tr><td>T7</td><td>重放同一读数（幂等 I3）</td><td>同一 <code>counters.page</code> 连续采样 3 次</td><td>第 2/3 轮 <code>delta=(0,0)</code></td></tr>
+  <tr><td>T8</td><td>v1 载荷升级</td><td>现网样例（<code>version:1</code>，day 今天）</td><td>day 累计保留；首轮 <code>(0,0)</code>；有升级告警；<code>state_restored is True</code></td></tr>
+  <tr><td>T9</td><td>v2 单条非法</td><td><code>nic_baseline</code> 中一条 <code>{"up": "x"}</code></td><td>该条丢弃 + 告警；其他条生效；day 保留</td></tr>
+  <tr><td>T10</td><td>跨天</td><td>23:59 采样后 00:00 采样</td><td>day 累计清零；<code>nic_baseline</code> 保留；该轮 delta 正常</td></tr>
+  <tr><td>T11</td><td><b>速率告警不改入账</b></td><td>单卡单轮 6 GiB/5s（1.2 GiB/s &gt; 1 GiB/s）</td><td>有 WARNING 且含 nic/dir/cur/last/delta/dt/eff_dt/rate/threshold；<code>delta</code> 与 <code>day</code> 仍是 6 GiB；<code>last_spike</code> 已写入 state</td></tr>
+  <tr><td>T12</td><td>速率边界</td><td>恰好 5 GiB/5s（=1 GiB/s）</td><td><b>不告警</b>，入账不变</td></tr>
+  <tr><td>T13</td><td>TTL 清理</td><td>某卡 7 天未见（用注入时钟）</td><td>条目被清；再次出现按新卡 <code>(0,0)</code></td></tr>
+  <tr><td>T14</td><td>日志文件挂载</td><td><code>tmp_path</code> 作为 data_dir</td><td><code>gtm.log</code> 存在；重复挂载不重复 handler；无异常</td></tr>
+  <tr><td>T15</td><td>速率配置键校验</td><td><code>"0MiB/s"</code> / <code>"-1MiB/s"</code> / 裸 <code>1073741824</code> / <code>"1GiB"</code></td><td>全部进聚合错误；<code>"1GiB/s"</code> 与 <code>"500MiB/s"</code> 合法</td></tr>
+  <tr><td>T16</td><td>正常速率不告警</td><td>250 MB/5s（≈50 MB/s）</td><td>无 <code>last_spike</code>；入账 250 MB</td></tr>
+  <tr><td>T17</td><td><b>长 gap 钳制防漏报</b></td><td>单卡 delta 273.45 GiB，dt 600s，间隔 5s</td><td>eff_dt=15s → 18.23 GiB/s &gt; 1 GiB/s，<b>必须告警</b>；若实现漏了钳制则为 0.45 GiB/s，测试应红</td></tr>
+  <tr><td>T18</td><td>长 gap 合法积压不误报</td><td>单卡 delta 1 GiB，dt 600s，间隔 5s</td><td>eff_dt=15s → 68 MiB/s，不告警；入账 1 GiB</td></tr>
+  <tr><td>T19</td><td>采样间隔热改</td><td>第 1 轮间隔 5s（delta 1 GiB）→ 间隔改 60s，第 2 轮 delta 6 GiB/60s</td><td>第 1 轮 0.2 GiB/s 不告警；第 2 轮 0.1 GiB/s 不告警；钳制上限随 60s 变 180s</td></tr>
+  <tr><td>T20</td><td>首轮 / 无 dt 降级</td><td>无 state、首轮采样；或 restore 后 mono 与 wall 都缺失</td><td>跳过速率判定、无 <code>last_spike</code>、delta 照常入账（首轮为 0）</td></tr>
+  <tr><td>T21</td><td>时钟异常降级</td><td>注入 dt ≤ 0 / NaN / inf；或 wall 差值 &gt; 7 天</td><td>跳过判定 + DEBUG 一行；无告警、无负数、入账不变</td></tr>
+  <tr><td>T22</td><td>重启后 wall 兜底</td><td>v2 state 的 <code>last_sample_wall</code> 在 600s 前；本轮 delta 273 GiB</td><td>mono 断代 → wall dt 600s 钳到 15s → 18.23 GiB/s 告警</td></tr>
+  <tr><td>T23</td><td><b>overlay 首次创建 + 重复启动幂等</b></td><td>空 data_dir 连续启动两次</td><td>第 1 次生成 <code>config.v2.yml</code>（含 <code>"1GiB/s"</code>）；第 2 次不写盘（内容/mtime 不变）；主 <code>config.yml</code> 不存在或零改写</td></tr>
+  <tr><td>T24</td><td>保存拆分</td><td>用 <code>save_config(path, cfg, overlay_path)</code> 保存全量 payload</td><td>主文件<b>不含</b> <code>sample_rate_warn_bps</code>；overlay 含 <code>"1GiB/s"</code>；重新 load 后合并值正确</td></tr>
+  <tr><td>T25</td><td><b>旧版本读取模拟</b></td><td>用 v1 的 <code>_KNOWN_FIELDS</code> 校验主文件 payload</td><td>通过（无未知键）；证明退回旧二进制可启动</td></tr>
+  <tr><td>T26</td><td>overlay 未知键 / 损坏</td><td><code>config.v2.yml</code> 写入 <code>foo: 1</code> 或非法 YAML</td><td>fail-fast，错误信息含文件与键名；不静默忽略</td></tr>
+  <tr><td>T27</td><td>GTM <code>/status</code> 透出</td><td>构造一次越界后 <code>GET /status</code></td><td>返回 <code>last_spike</code> 与 state 一致；无越界时为 <code>null</code>；既有 <code>day_*</code>/<code>ok</code> 等字段不变</td></tr>
+  <tr><td>T28</td><td><b>快照只增字段</b></td><td>agent 返回固定 spike；跑一次 <code>refresh()</code></td><td><code>traffic_view["gtm_anomaly"] == spike</code>；<code>periods</code>/<code>state</code>/<code>limit</code>/<code>source</code> 与「该段不存在」时逐键一致（<code>ts</code>/<code>date</code> 除外）；<code>derive_state</code> 的输入输出不受影响</td></tr>
+  <tr><td>T29</td><td><b>GTM 不可达降级</b></td><td>指针缺失 / 无 token / <code>call_tool</code> 抛 <code>ToolUnreachable</code>；快照已有旧 <code>gtm_anomaly</code></td><td><code>refresh()</code> 正常返回；旧 <code>gtm_anomaly</code> <b>保持</b>；<code>periods</code>/<code>history</code> 照常发布；无异常冒泡；只记 DEBUG</td></tr>
+  <tr><td>T30</td><td><b>旧字段缺失时正常</b></td><td><code>/status</code> 无 <code>last_spike</code>（旧 GTM）；或快照里根本没有 <code>gtm_anomaly</code> 键（旧 auto-qb 后端）</td><td>可取到时发布 <code>None</code>、横幅不渲染；<code>/api/status</code> 200 且其余 traffic 键完整；前端 <code>gtmAlert()</code> 返回 <code>null</code>、不抛错</td></tr>
+  <tr><td>T31</td><td><b>跨刷新持久</b></td><td>同一 spike 连续两次 <code>refresh()</code>；再新建模块实例（模拟 auto-qb 重启）跑首轮</td><td>两次都存在且值相同；新实例首轮从 agent 重新取到同一值（不依赖内存遗留）</td></tr>
+  <tr><td>T32</td><td><b>手动消警与新异常</b></td><td>e2e：注入 <code>gtm_anomaly.ts=T1</code> → 点 <code>&times;</code> → 刷新页面 → 注入 <code>ts=T2</code></td><td>T1：横幅可见 → ack 后隐藏 → 刷新后仍隐藏；T2：横幅重新出现；<code>localStorage["gtm.spike.ack"]</code> 记录为 T1</td></tr>
+  <tr><td>T33</td><td><b>告警段失败隔离</b></td><td>让 <code>fetch_last_spike</code> 抛任意异常（注入替身）</td><td><code>refresh()</code> 不抛；<code>periods</code>/<code>history</code> 按 dat 正常发布；<code>gtm_anomaly</code> 保持旧值/缺失</td></tr>
+  <tr><td>T34</td><td>来源关闭时清空告警</td><td><code>traffic_source.enabled=false</code></td><td>发布 off 段并清空 <code>gtm_anomaly</code>；不发起 GTM 请求</td></tr>
+</table>
+<h3>9.3 命令与判定</h3>
+<ul>
+  <li>工具全量：<code>commands run test.gtm</code>（门槛 88 写在工具 <code>pyproject.toml</code> 的 addopts）→ 只认 TOTAL 与门槛判定行。</li>
+  <li>单文件：<code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py --no-cov -q</code> → 全绿。</li>
+  <li>主仓回归（因改了 <code>config_hub_tm.js</code> / <code>traffic-card.html</code> / <code>statusbar.html</code> / <code>dialogs.js</code> / CSS）：<code>commands run test.quick</code> → 全绿；其中新增一条静态 DOM 守卫（<code>tests/test_webui_static_dom_panel_traffic.py</code> 同族）断言：<code>.sb-gtm-alert</code> 常驻组存在、<code>v-if="gtmAlert"</code> 不依赖 <code>todayTraffic</code>、ack 按钮与 <code>localStorage</code> 键存在。</li>
+  <li>前端行为（24h/ack/跨刷新）：新增 <code>e2e/gtm-alert.spec.mjs</code>，用 <code>page.route("**/api/state*")</code> 注入带 <code>gtm_anomaly</code> 的 status 载荷，覆盖 T32 三条判据；门禁命令 <code>npm run test:e2e:fast</code>（或按 <code>dev.e2e</code> note 的单条命令）。</li>
+  <li>真机复验见 §11-S4，判据：断连 ≥1 个采样周期再恢复后，<code>state.json</code> 的 <code>day_up_bytes - last_up_bytes</code> 不再出现「+几十 GiB 恒定偏移」，且日志/顶栏不出现大额速率告警。</li>
+</ul>
+
+<h2><span class="no">§10</span>受影响面与契约核对</h2>
+<table>
+  <tr><th>消费面</th><th>是否改动</th><th>依据</th></tr>
+  <tr><td><code>history_traffic.dat</code> 行格式与 upsert 语义</td><td><span class="good">零改动</span></td><td>只改 delta 的来源，<code>SampleResult.day_up_bytes/day_down_bytes</code> 与 <code>dat.upsert</code> 契约不变</td></tr>
+  <tr><td>auto-qb <code>traffic_source/reader</code> + <code>curves.aggregate</code> + 顶栏 pill 数据</td><td><span class="good">零改动</span></td><td>读的是 dat 文本；告警横幅是状态栏里与 pill <b>并列</b>的独立元素，不往 pill 里塞标记</td></tr>
+  <tr><td><code>speed_curve_mod</code>（限速档位）</td><td><span class="good">零改动</span></td><td>聚合 day/month/Nd，输入数据源不变；虚高不再产生，属预期收益</td></tr>
+  <tr><td><b>auto-qb 流量快照 <code>traffic_view</code></b></td><td>+<code>gtm_anomaly</code> 可选键</td><td><code>TrafficSnapshotModule</code> 段级发布；<code>periods/state/limit/source/history</code> 与 <code>derive_state</code> 零改动（只增不改）</td></tr>
+  <tr><td><b>auto-qb <code>traffic_source/agent.py</code></b></td><td>+<code>fetch_last_spike()</code></td><td>只读 <code>GET /status</code>；复用 <code>discover</code>/<code>read_token</code>/<code>call_tool</code>；不拉起、不订阅、不写状态</td></tr>
+  <tr><td><b>auto-qb WebUI 状态栏</b></td><td>+1 组常驻横幅/徽标 + 1 段 CSS + 2 个 helper</td><td><code>statusbar.html</code> + <code>dialogs.js</code> + <code>console_hub_controls.css</code>；无新路由，<code>/api/status</code>·<code>/api/state</code> 原样透传</td></tr>
+  <tr><td><code>notifier</code> 阈值通知 / 订阅者载荷</td><td><span class="good">零改动</span></td><td><code>subscribers</code>/<code>last_event_id</code> 合并逻辑与 <code>SampleResult</code> 均不动；不复用事件通道发告警</td></tr>
+  <tr><td>GTM <code>GET /status</code></td><td>+<code>last_spike</code> 字段</td><td>追加字段；旧消费方按需取键，忽略新键即兼容</td></tr>
+  <tr><td>GTM state.json 读取方</td><td>仅 <code>gtm/storage.py</code></td><td>唯一读写方；v1/v2 双读，旧版本降级</td></tr>
+  <tr><td>GTM 配置加载 / 保存</td><td>overlay 迁移 + 拆分写</td><td>主 <code>config.yml</code> 不含新键；旧版本可读</td></tr>
+  <tr><td>auto-qb WebUI 配置页</td><td>+1 表单项 + speed 单位分支</td><td><code>config_hub_tm.js</code> / <code>traffic-card.html</code>；<code>config_editor.js</code> 已支持 <code>speed</code> 文法</td></tr>
+  <tr><td>auto-qb WebUI 工具状态区</td><td>+1 行「最近异常」+ 2 个 helper</td><td><code>traffic-card.html</code> + <code>config_hub_tm.js</code>；无新路由、无后端改动</td></tr>
+  <tr><td>auto-qb <code>config/schema.py</code></td><td><span class="good">零改动</span></td><td>不覆盖 GTM 配置；GTM 校验单点在 <code>Config/_KNOWN_FIELDS/validate_payload</code></td></tr>
+</table>
+
+<h2><span class="no">§11</span>分阶段实施步骤</h2>
+<table>
+  <tr><th>步</th><th>内容</th><th>验证命令</th><th>判定</th><th>回滚点</th></tr>
+  <tr><td>S0</td><td>先落测试：按 §09 改写 2 条主用例 + 新增 T1/T2/T4/T8，跑红</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py --no-cov -q</code></td><td>失败点正是旧语义（1999/100/恢复首包）</td><td>丢弃测试改动</td></tr>
+  <tr><td>S1</td><td>sampler：<code>_nic_base</code>/<code>_nic_seen</code>/<code>_state_restored</code>，重写 <code>sample_once</code> 差分；<code>SNAPSHOT_VERSION=2</code>；<code>snapshot()</code>/<code>restore()</code> 双版本</td><td>同上 + <code>tests/test_sampler.py</code> 全量</td><td>T1/T2/T4/T7/T8/T10 绿；旧日志文案不变</td><td>revert S1</td></tr>
+  <tr><td>S2</td><td>storage：<code>recover</code> 兜底条件改 <code>state_restored/day</code>（§04.3）；确保 v1 升级不走 dat 回退</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_storage.py --no-cov -q</code></td><td>v1 升级用例 day 保留；缺失/损坏仍 dat 兜底</td><td>revert S2</td></tr>
+  <tr><td>S3</td><td>补完 T3/T5/T6/T9/T13 与快照往返断言；工具全量</td><td><code>commands run test.gtm</code></td><td>TOTAL 绿且覆盖率 ≥88</td><td>revert 测试</td></tr>
+  <tr><td>S4</td><td><b>真机断连复验</b>（不改生产配置）：拔网线/禁用网卡 ≥1 个采样周期再恢复，观察 state/dat</td><td>只读 <code>state.json</code>、<code>history_traffic.dat</code>；见 §9.3 判据</td><td><code>day - last</code> 不再出现恒定正偏移；当日增量≈真实增量</td><td>无（只观测）</td></tr>
+  <tr><td>S5</td><td>速率阈值：<code>units.py</code> parse/format speed + <code>config.py</code> 字段/<code>_RATE_FIELDS</code>/<code>_check_rate</code> + sampler <code>_dt_since_last</code>/<code>_evaluate_rate</code>；T11/T12/T15-T21</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py tests/test_config.py --no-cov -q</code></td><td>速率告警出现且入账不变；dt 场景逐条符合 §06.3</td><td>revert S5</td></tr>
+  <tr><td>S6</td><td>配置升级：<code>ensure_v2_overlay</code> + <code>load_config(overlay)</code> + <code>save_config</code> 拆分；T23-T26</td><td>工具测试；手工查看 <code>config.yml</code> 与 <code>config.v2.yml</code></td><td>overlay 首次创建、二次幂等；主文件无新键；旧版校验模拟通过</td><td>revert S6（删除 overlay 即回到单文件）</td></tr>
+  <tr><td>S7</td><td><b>次级可见面</b>：state <code>last_spike</code> + GTM <code>/status</code> 透传 + <code>traffic-card.html</code> 一行 + <code>config_hub_tm.js</code> helper/表单 kind speed；T27</td><td><code>commands run test.gtm</code> + <code>commands run test.quick</code> + 打开设置页目视</td><td>设置页能看到「最近异常」；24h 外隐藏；无告警时不渲染该行</td><td>revert S7（模板/JS 纯增量）</td></tr>
+  <tr><td>S7b</td><td><b>主告知数据链路</b>：<code>agent.fetch_last_spike()</code> + 快照 <code>gtm_anomaly</code> 段 + <code>refresh()</code> 钩子；T28-T31/T33/T34</td><td>主仓测试（快照模块单测 + 静态守卫）</td><td>只增字段；不可达保留旧值；旧字段缺失为 <code>None</code>；流量刷新不中断</td><td>revert S7b（快照/agent 纯增量）</td></tr>
+  <tr><td>S7c</td><td><b>主告知渲染</b>：<code>statusbar.html</code> 常驻横幅 + <code>dialogs.js</code> helper/ack + CSS；T32 e2e</td><td><code>commands run test.quick</code> + <code>npm run test:e2e:fast</code> + 双皮肤目视</td><td>无异常不渲染；有异常常驻；<code>&times;</code> 后本机隐藏且跨刷新保持；新 <code>ts</code> 再显示；窄屏不挤压速度组</td><td>revert S7c（模板/JS/CSS 纯增量）</td></tr>
+  <tr><td>S8</td><td>日志文件 handler（§08）+ T14</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_main_run.py --no-cov -q</code>；真机 <code>Get-Content gtm.log -Tail 20</code></td><td>重启后文件存在、含启动行；WARNING 可见</td><td>revert S8（纯增量）</td></tr>
+  <tr><td>S9</td><td>文档回写：<code>sampler.py:29-31</code> 抖动说明改写；<code>memory-bank/</code> 口径；issue 状态日志补「已修复 + 实测数字」；新基线切片</td><td><code>commands run kb.index</code> / <code>commands run test.full</code>（若触发收尾）</td><td>文档与代码一致；基线切片记实测</td><td>revert 文档</td></tr>
+</table>
+<p><b>建议顺序理由</b>：S0-S4 是主修复且相互耦合，先做完并真机复验，保证「先有正确的 delta」；S5 叠加速率观测，S6 叠加配置升级；S7 先把告警接到 GTM 与次级设置页（可独立验收），S7b/S7c 再把主告知接到状态栏并做前端行为验收，S8 最后补日志。任何一步失败都能单独 revert，且 S5/S6/S7/S7b/S7c 都不改变 dat 契约。</p>
+
+<h2><span class="no">§12</span>风险、回滚与不做清单</h2>
+<h3>12.1 风险与对策</h3>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>v1→v2 升级首轮少报（≤1 个采样间隔的真实增量）</td><td>升级当轮</td><td>接受（I6 少报优于虚高）；日志写明；可在升级说明里告知</td></tr>
+  <tr><td>R2</td><td>网卡改名 / 新虚拟网卡 → 首轮不报历史累计</td><td>插入 USB 网卡、装 VPN</td><td>按新卡处理（0）；属保守默认</td></tr>
+  <tr><td>R3</td><td>同名卡被替换后计数更大 → 可能多报一次</td><td>硬件替换但保留系统内同名</td><td>无法从绝对值区分；速率告警会在顶栏横幅/设置页/日志留下记录供现场判断</td></tr>
+  <tr><td>R4</td><td><b>降级回滚</b>：旧版本读主配置</td><td>回滚到旧二进制</td><td><b>已避免</b>：新键只在 <code>config.v2.yml</code>，主配置零改写；旧版本启动读不到未知键。仅当用户手工往主配置加键才会 fail-fast（非本方案路径）</td></tr>
+  <tr><td>R5</td><td>日志文件创建失败（目录只读/磁盘满）</td><td>权限/空间异常</td><td>WARNING 降级到 stderr（pythonw 下丢失），服务不中断；主告知面是顶栏横幅（读 state/<code>/status</code>，与日志文件无关）</td></tr>
+  <tr><td>R6</td><td>速率默认阈值误报（10GbE 峰值接近 1GiB/s）</td><td>10GbE 满速或更高</td><td>只告警不拦截；用户可在设置页调高；默认值取法见 §6.2</td></tr>
+  <tr><td>R7</td><td>TTL 7 天导致久未上网卡再出现时首轮 0</td><td>网卡 7 天未见过</td><td>接受；常量单点 <code>_NIC_BASE_TTL_DAYS = 7</code>，需要时改常量</td></tr>
+  <tr><td>R8</td><td>重启后 wall 兜底受系统对时影响</td><td>重启恰逢大幅校时</td><td>wall dt 仅作兜底，且要求 <code>0 &lt; dt ≤ 7 天</code>、有限；不满足则跳过判定，不产生负/无限速率告警</td></tr>
+  <tr><td>R9</td><td>overlay 文件对用户陌生或目录只读</td><td>手工排查/权限异常</td><td>文件头注释说明用途；创建失败降级为内存默认；文档写明「不读/不改主配置」</td></tr>
+  <tr><td>R10</td><td><code>/status</code> 追加字段影响旧消费方</td><td>旧版 auto-qb / 外部脚本</td><td>纯追加键，JSON 消费方按需取键；旧前端不渲染新行</td></tr>
+  <tr><td>R11</td><td>快照刷新多一次本机 HTTP（<code>/status</code>）</td><td>每 <code>refresh_interval</code>（默认 600s）一次，超时 10s；不可达立即返回；事件路径零额外网络</td><td>本机回环、低频，开销可忽略；失败只 DEBUG，不阻断刷新（T29/T33）</td></tr>
+  <tr><td>R12</td><td>告警只在打开 WebUI 时可见</td><td>用户完全不开 WebUI</td><td>按要求把主告知放到主界面常驻状态栏，不引入系统弹窗；不开 WebUI 时仍可从 <code>gtm.log</code>/<code>/status</code> 取证（§12.2 不做清单）</td></tr>
+  <tr><td>R13</td><td>旧前端 / 旧后端忽略 <code>gtm_anomaly</code></td><td>旧模板不引用该键；新前端读到 <code>undefined</code></td><td>只增不改：旧前端不显示横幅；新前端对缺失键按「无异常」处理（T30），不抛错</td></tr>
+</table>
+<h3>12.2 明确不做（范围守恒）</h3>
+<ul>
+  <li><b>不修历史虚高行</b>：今天 336.41/538.52 GiB 与 2026-11-02 行的可疑值不在本计划内；如需回写 dat 另立 issue。</li>
+  <li><b>不新增撤回/告警降级机制</b>：C-prime 严格按拍板只告警、照常入账。</li>
+  <li><b>不改 dat 契约</b>、不改 auto-qb 读取/聚合/限速；快照模块只<b>追加</b> <code>gtm_anomaly</code> 可选键。</li>
+  <li><b>不只写日志当告知</b>：主告知是状态栏常驻横幅；设置页 <code>last_spike</code> 行与 GTM <code>/status</code> 仅次级详情，日志只作取证。</li>
+  <li><b>不给顶栏「今日流量」pill 内侧塞标记</b>：横幅是状态栏里与 pill 并列的独立元素，不改 <code>periods/day</code> 语义。</li>
+  <li><b>不做前端直读 GTM <code>/status</code></b>：不新增代理路由、不把工具密钥带进浏览器；数据统一经 auto-qb 快照。</li>
+  <li><b>不扩展 notifier 事件载荷</b>：订阅契约为固定 6 键，异常事件不复用。</li>
+  <li><b>不新增桌面通知/系统弹窗</b>：不引入平台相关依赖。</li>
+  <li><b>不人工改 <code>config.yml</code></b>：新键只由程序写入 <code>config.v2.yml</code>。</li>
+  <li><b>不新增第三方依赖</b>（原子写/日志均用 stdlib）。</li>
+  <li><b>不碰</b> <code>config.yml</code>（生产红线）与 <code>auto-qb-data/</code>；不跨 clone 操作。</li>
+</ul>
+
+<h2><span class="no">§13</span>用户否决点与改法（v1 → v3）</h2>
+<table>
+  <tr><th>#</th><th>用户否决点</th><th>被淘汰做法</th><th>淘汰原因</th><th>v3 当前决策</th></tr>
+  <tr><td>V1</td><td><b>绝对字节阈值不妥</b>：用户可能调大采样间隔，语义漂移</td><td>v1：<code>sample_delta_warn_bytes</code>，默认 1 GiB；判定 <code>delta &gt; threshold</code></td><td>绝对量随 <code>sample_interval</code> 变化而改变含义；间隔调大后同一真实速率更容易或更不容易触发</td><td><code>sample_rate_warn_bps</code>（盘上 <code>"1GiB/s"</code>）；判定 <code>delta / eff_dt &gt; threshold</code>；dt 来源、钳制、降级逐场景写入 §6.3（<b>v2 起沿用</b>）</td></tr>
+  <tr><td>V2</td><td><b>告警必须用户可见</b>：pythonw 下 stderr 全丢，只写日志等于没人看见</td><td>v1：只 <code>logger.warning</code> + <code>gtm.log</code>；未设计界面承载</td><td>日志是取证面，不是告知面；用户不主动翻日志就永远看不到</td><td>v2 起：GTM <code>/status</code> 加 <code>last_spike</code>（state 持久）+ 设置页行；v3 再升级主告知到顶栏横幅（见 V4）</td></tr>
+  <tr><td>V3</td><td><b>配置走升级流程，禁止用户手工改</b>：不能靠人工删键/加键</td><td>v1：新键随 <code>save_config</code> 写入主 <code>config.yml</code>；回滚要求用户删除该键（v1 R4）</td><td>人工删键违反要求；不删则旧版本未知键 fail-fast</td><td>启动时程序迁移到 <code>config.v2.yml</code> overlay；主配置零改写；原子写/单世代备份/键存在即跳过；旧版本不读 overlay，回滚零操作（<b>v2 起沿用</b>）</td></tr>
+  <tr><td>V4</td><td><b>告警不能只落在设置页</b>：设置页不常访问，24h toast 等于没有</td><td>v2：主告知 = 设置页「工具状态」一行 + 打开设置页时 toast</td><td>可见性依赖用户主动进入设置页；不打开就等于没有</td><td><b>主告知 = auto-qb 顶栏常驻横幅</b>：快照追加 <code>gtm_anomaly</code>（只增不改），数据来自 <code>/status.last_spike</code>；设置页行与 GTM <code>/status</code> 降为次级；本机 ack 可消警；GTM 不可达静默降级（§6.6）</td></tr>
+</table>
+<details>
+  <summary>被否决做法原文摘录（v1 三段 + v2 可见面，保留可查）</summary>
+  <blockquote><b>v1 §6.2 单位与默认值推导</b>：单位选绝对字节量（配置复合串 <code>"1024MiB"</code>），不用「字节/秒」速率。理由：①采样器当前不记录 dt，引入速率需要新增时间基线并处理挂钟回跳；②速率的合法性依赖采样间隔，间隔热改后旧阈值语义漂移；③绝对量对「一次性整份累计」这类异常最直观、最容易解释。默认 <b>1 GiB</b>（<code>DEFAULT_SAMPLE_DELTA_WARN_MIB = 1024</code>）。</blockquote>
+  <blockquote><b>v1 §7 日志落地</b>：<code>logging.basicConfig(stream=sys.stderr)</code> 而 <code>launch.cmd</code> 用 pythonw 拉起，stderr 全丢；因此 C-prime 的 WARNING 若只走 stderr 等于不存在，方案写 <code>&lt;data_dir&gt;/gtm.log</code>，轮转 4 MiB × 3。v1 只把日志当作唯一落地，没有设计用户界面承载。</blockquote>
+  <blockquote><b>v1 R4 风险与对策</b>：新配置键 <code>sample_delta_warn_bytes</code> 写进 <code>config.yml</code> 后，旧版本启动会 fail-fast「未知配置键」；回滚前由用户删除该键（<code>config.yml</code> 是生产红线，agent 不代改），或接受 fail-fast 并恢复新版本。</blockquote>
+  <blockquote><b>v2 §6.6 可见面（被否决）</b>：主告知 = auto-qb 设置页「工具状态」一行「最近异常」+ 打开设置页时的 toast；GTM <code>/status.last_spike</code> 为数据源；日志只作取证。v2 自己写明「它不是主动弹窗，用户不打开设置页就只会在日志里看到」——这正是本次被否的原因。</blockquote>
+</details>
+<div class="callout"><b>保留原版的方式：</b>本节逐条保留 v1 被否决的三段原文、v2 可见面原文与淘汰理由；v1/v2 全文未单独存档（同轮未提交），未被否决的 A（逐网卡基线）、D2/D3（v1 降级/消失卡记忆）、I1-I9、速率口径与 overlay 迁移等在本版原样继承；v3 只替换主告知面。</div>
+
+<h2><span class="no">§14</span>待确认（v3 已清零）</h2>
+<div class="callout"><b>本轮无需再拍板：</b>用户第四条明确「其余三条默认（1 GiB/s、24h 展示窗口、3× 钳制）按推荐保留」，三项直接锁定；告警通道按 §6.6 选定 A（顶栏常驻横幅）。下列仅为后续可调项的记录。</div>
+<table>
+  <tr><th>项</th><th>锁定值</th><th>说明 / 可调位置</th></tr>
+  <tr><td>Q1 速率阈值</td><td><b>1 GiB/s</b></td><td>默认 <code>DEFAULT_SAMPLE_RATE_WARN_BPS = 1024 ** 3</code>；10GbE 满速可能触碰，只告警不拦截；用户可在设置页调整</td></tr>
+  <tr><td>Q2 展示窗口</td><td><b>24h</b></td><td>state 保留最近一条；前端按 <code>ts</code> 过滤；日志保留历史</td></tr>
+  <tr><td>Q3 dt 钳制</td><td><b>3× 当前采样间隔</b></td><td>常量 <code>WARN_DT_CLAMP_FACTOR</code>；长 gap 摊薄不漏报的推导见 §6.3</td></tr>
+  <tr><td>Q4（不阻塞）</td><td>短版文案 + 点击 toast 完整版</td><td>如希望横幅更短/更显眼，可在 S7c 目视阶段微调；属展示偏好，不影响数据链路</td></tr>
+</table>
+
+<h2><span class="no">§15</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-1102</span> 初版：依据 issue <code>26-11-03-1039</code> 的取证结论与用户拍板（A + C-prime）编写；范围只到方案，未实施代码、未改测试、未提交。</li>
+  <li><span class="tag">R1 · 26-11-03-1147</span> v2 按用户否决点修订：阈值由绝对字节改为速率口径(1GiB/s, delta/eff_dt, 长gap 3倍间隔钳制)、告警落到设置页 /status.last_spike 可见面、新键改走 config.v2.yml overlay 程序化迁移且主 config.yml 零改写；新增 §13 否决点与改法并保留 v1 原文摘录。</li>
+  <li><span class="tag">R2 · 26-11-03-1211</span> v3 按「告警不得只在设置页」修订：主告知改为 auto-qb 顶栏常驻横幅（快照追加 gtm_anomaly，只增不改），设置页行与 GTM /status 降为次级；新增候选对比、契约兼容与 T28-T34 测试。</li>
+</ul>
+
+</div>
+</body>
+</html>

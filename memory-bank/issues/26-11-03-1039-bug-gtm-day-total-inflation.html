@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="gtm-day-total-inflation">
+<meta name="issue-stamp" content="26-11-03-1039">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="gtm-traffic-day-total">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)">
+<meta name="issue-summary" content="断网恢复后今日流量暴涨: 过滤后合计基线被降到子集(0), 网卡恢复时把其整个生命周期累计当成一次 delta 入账; 实测 state.json 佐证跳变量 = 273GiB/528GiB">
+<title>断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)</h1>
+    <p class="lede">断网恢复后今日流量暴涨: 过滤后合计基线被降到子集(0), 网卡恢复时把其整个生命周期累计当成一次 delta 入账; 实测 state.json 佐证跳变量 = 273GiB/528GiB</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-03-1039-bug-gtm-day-total-inflation</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 10:39</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">gtm</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">agent/会话(用户报告)</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p><b>用户报告（2026-11-03）</b>：网络断开后自动恢复，WebUI 顶栏「今日流量」pill 的当日累计出现量级跳变——断网前 <b>上传 60 多 G / 下载不到 10 G</b>，恢复后涨到 <b>上传 300G 量级 / 下载 500G 量级</b>。用户判定这不是真实流量（成倍到几十倍），要求只做分析与入池。</p>
+    <p><b>数据链路（唯一来源）</b>：pill 只读 GTM（global-traffic-monitor）产出的 <code>history_traffic.dat</code>——前端 <code>period === "day"</code>（<code>static/shared/dialogs.js:460</code>、<code>static/shared/tpl/statusbar.html:6</code> 的 D2 注释即此约定）；auto-qb 侧 <code>traffic_snapshot.refresh()</code> 调 <code>read_source_rows()</code> → <code>curves.aggregate(rows,"day")</code> 发布 periods 的 day 行。GTM 的日累计由 <code>Sampler.sample_once()</code> 维护、<code>Storage.record()</code> upsert 进 dat。整条链<b>不经过 qBittorrent 计数器</b>。</p>
+    <p><b>现场与配置</b>：Windows；GTM 数据目录由发现指针指向 <code>D:\Projects\auto-qb\tools\global-traffic-monitor\data</code>（另一 clone，<b>只读取证，未改动</b>）。该目录无 <code>config.yml</code>，即全走默认值：<code>sample_interval=5s</code>；配置层只承载 <code>adapter_include/adapter_exclude</code> 两个正则列表（<code>config.py:77-78</code>），<code>exclude_loopback=True</code> / <code>exclude_down=True</code> 是 <code>AdapterFilter</code> 内部默认（<code>sampler.py:109</code>，<b>down 过滤无配置开关</b>）。</p>
+    <p><b>可观测性缺口</b>：GTM 只 <code>logging.basicConfig(stream=sys.stderr)</code>（<code>__main__.py:211-215</code>），而 <code>launch.cmd:12-13</code> 用 <code>pythonw.exe</code> 拉起（该文件第 10 行注释自述「pythonw 没有 stderr, 输出全部丢弃」）→ <b>没有落盘日志</b>。本轮只能靠 dat 与 state.json 取证。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">原文取证（2026-11-03 10:35 与 10:47 两次，只读取；未改动该目录）。单位：GiB = 1024³。</p>
+<h3>2.1 state.json（采样器当前快照，原文；subscribers 段已隐去）</h3>
+<pre><code>{
+  "day": "2026-11-03",
+  "day_down_bytes": 578225157679,
+  "day_up_bytes": 361214484252,
+  "last_down_bytes": 567490630570,
+  "last_event_id": 12235,
+  "last_up_bytes": 293613556677,
+  "subscribers": { "420cdac4d0eb4190": { ... } },
+  "version": 1
+}</code></pre>
+<h3>2.2 history_traffic.dat 今日行</h3>
+<pre><code>lines: "18"
+2026/11/03 352748235/564672295   &lt;-- 352,748,235 KiB / 564,672,295 KiB
+2026/11/02 65313232/314068936
+2026/11/01 76636404/78952131
+2026/10/31 31621539/37667297</code></pre>
+<p>今日行 = 361,214,192,640 B / 578,224,430,080 B，与 state.json 的 day 两值只差亚 MB 级（dat 写入刻意节流），<b>说明 dat 已把冲高值落盘，当日不会自愈</b>。</p>
+<h3>2.3 算术对齐（关键：差值恰好等于用户断网前读数，且两次采样差值恒定）</h3>
+<table>
+  <tr><th>量</th><th>state.json 值（字节，10:47）</th><th>折 GiB</th><th>与 day 累计的差</th></tr>
+  <tr><td>day_up（当日累计）</td><td>361,214,484,252</td><td>336.41</td><td rowspan="2">+62.96 GiB ≈ 用户「上传 60 多 G」</td></tr>
+  <tr><td>last_up（最近一次合计读数）</td><td>293,613,556,677</td><td>273.45</td></tr>
+  <tr><td>day_down（当日累计）</td><td>578,225,157,679</td><td>538.52</td><td rowspan="2">+9.997 GiB ≈ 用户「下载不到 10 G」</td></tr>
+  <tr><td>last_down（最近一次合计读数）</td><td>567,490,630,570</td><td>528.51</td></tr>
+</table>
+<p>正常单调计数器若全日在同一基线上累计，应满足 <code>day = last - base(当日首样)</code>（day &lt; last）。这里 <b>day 反而比 last 大</b>，且差额精确落在用户报告的断网前读数上 → 当日累计里混进了一笔「不属于当前基线区间」的字节，其大小恰等于恢复瞬间的合计读数（≈273.4 GiB 上传 / ≈528.5 GiB 下载）。</p>
+<p><b>二次取证对照（相隔约 10 分钟）</b>：<code>day_up</code> 与 <code>last_up</code> <b>同增 69,166,852 B</b>；<code>day_down</code> 与 <code>last_down</code> <b>同增 37,398,242 B</b>——差值不变。这正是「一次性错位注入 + 之后正常同步累计」的签名，排除「持续重复累加」（H4）。<b>2026/11/02 行 62 GiB/299 GiB 也提示历史上可能已发生过同类冲高，待认领时核对。</b></p>
+<h3>2.4 代码证据（取证 2026-11-03，行号仅加速项）</h3>
+<pre><code># tools/global-traffic-monitor/src/gtm/sampler.py
+338  selected = self.filter.select(counters, stats)
+339  total_up = sum(io.bytes_sent for io in selected.values())     # 合计口径随过滤集变化
+340  total_down = sum(io.bytes_recv for io in selected.values())
+359  if not selected: warnings.append("无适配器通过过滤: 合计按 0 计 ...")
+369  if total_up < self._last_up:        # 集合缩小 与 计数器归零 走同一分支
+370      counter_reset = True; warnings.append("上行计数器重置 ... delta 记 0")
+380  self._last_up = total_up            # 无条件覆盖：基线被降为子集(常见=0)
+381  self._last_down = total_down
+382  self._day_up += delta_up            # 下一次恢复时把整卡生命周期一次性入账
+
+# 该行为被文档与测试"钉成预期"（这正是它长期未被发现的原因）
+sampler.py:29-31  "过滤条件恢复后, 缺失窗口的流量会被打进恢复后首个 delta —— 与计数器重置同理, 无法从绝对值区分"
+tests/test_sampler.py:146-155  test_all_adapters_filtered_warns_and_counts_zero：基线0 → 恢复后 delta=(100,100)
+tests/test_sampler.py:244-254  test_down_adapter_recovering_counts_from_zero：期望 delta=1999（整份计数）</code></pre>
+<h3>2.5 现场确认缺什么</h3>
+<p>GTM 无落盘日志，故拿不到那几条 <code>"采样告警 | 上行/下行计数器重置"</code> 与 <code>"无适配器通过过滤"</code> 原文。要现场直证需补：①每轮 WARNING/DEBUG 落文件；②日志带 selected 网卡名单与每卡 cur/isup；③state.json 存每卡基线（见 §06）。目前只能靠 §2.3 的算术签名定位。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>默认配置下任意一次「选中网卡集合缩小后又恢复」即必现：拔网线 / 路由器断电 / 网卡禁用再启用 / Wi-Fi 掉线重连 / 睡眠唤醒。媒体级断链（拔线/链路丢失）期间网卡对象与累计计数通常保留（仅 OperStatus 变 down）；本次实测的 273 GiB 级跳变正是「计数未清零」的直接证明——若计数被清零，只会走 reset 分支、delta=0，不会虚高。冲高幅度 = 该卡生命周期累计 ÷ 当日真实流量（本例上传 ≈4.3×、下载 ≈53×，正好是用户说的「成倍到几十倍」）。每发生一次断连-恢复，当日累计再加一份同量级累计值。</td></tr>
+      <tr><td>影响范围</td><td>
+        ① WebUI 顶栏「今日流量」pill（day 行）当日整体虚高，且 pill 走 <code>traffic_snapshot.publish_source</code> 的每日高水位钳制（<code>traffic_snapshot_mod.py:285-290</code>）——<b>即便源端后来纠正，Auto-QB 侧当天也不会回退</b>；<br>
+        ② GTM dat 的今日行被 upsert 成虚高值（<code>storage.record</code>），当日无法自愈，历史图（<code>_history_rows</code>）与本月/Nd 聚合（<code>curves.aggregate</code>，<code>curves.py:76</code>）长期偏大；<br>
+        ③ 限速曲线 <code>speed_curve_mod.py:186</code> 用 day/month/Nd 聚合判档 → <b>误触发更严格档位，直接改 qB 限速</b>；<br>
+        ④ GTM 阈值通知 <code>notifier.py:107</code> 以 <code>day_total_bytes</code> 跨阈值为准 → 推送假「今日流量超阈值」事件；<br>
+        ⑤ 用户据此判断流量、分享率、超量/限速策略（本报告原始诉求）。</td></tr>
+      <tr><td>严重度</td><td><b>高</b>：数据正确性缺陷；默认配置必现；无可见告警（WARNING 只进 stderr，pythonw 下丢失）；当日不可自愈；会反向驱动限速与通知等自动化动作。</td></tr>
+    </table>
+    <div class="callout">与「qB 重启后计数器归零」类问题（报告 <code>26-10-15-0728</code>）不是同一条链：那条链有一批「回落判重置 → 关块重开」的防线；本条链的防线只覆盖「合计值变小」，没覆盖「合计值变小是因为网卡被过滤掉」。</div>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">符号 + grep 关键词为主，行号为 2026-11-03 取证时的加速项。</p>
+    <ul>
+      <li><code>tools/global-traffic-monitor/src/gtm/sampler.py:332-390</code> · <code>Sampler.sample_once</code> · grep <code>total_up = sum(io.bytes_sent</code>、<code>total_up &lt; self._last_up</code>、<code>self._last_up = total_up</code></li>
+      <li><code>sampler.py:29-31</code> · 模块 docstring 的「适配器过滤抖动说明」——把本缺陷声明成了「无法区分」的已知语义</li>
+      <li><code>sampler.py:98-140</code> · <code>AdapterFilter</code> / <code>selects</code> / <code>select</code> · grep <code>exclude_down</code>（默认 True，且无配置开关）</li>
+      <li><code>tools/global-traffic-monitor/src/gtm/storage.py:653</code> <code>record</code> / <code>:522</code> <code>recover</code> / <code>:303</code> <code>DatStore.upsert</code> · grep <code>last_up_bytes</code>、<code>day_up_bytes</code></li>
+      <li><code>tools/global-traffic-monitor/src/gtm/notifier.py:107</code> · 阈值判定用 <code>result.day_total_bytes</code></li>
+      <li><code>src/auto_qb/core/modules/traffic_snapshot_mod.py:198</code> <code>refresh</code> / <code>:229</code> <code>publish_event</code> / <code>:270-291</code> <code>publish_source</code>（高水位钳制在 285-290）</li>
+      <li><code>src/auto_qb/core/curves.py:76</code> <code>aggregate</code>；<code>src/auto_qb/core/modules/speed_curve_mod.py:186</code> 聚合调用</li>
+      <li><code>src/auto_qb/webui/static/shared/tpl/statusbar.html:6</code>（D2 口径注释）、<code>src/auto_qb/webui/static/shared/dialogs.js:460</code>（pill 取 day 行）</li>
+      <li><code>tools/global-traffic-monitor/tests/test_sampler.py:146-155</code> 与 <code>:244-254</code> · 把「恢复后首包吞下整份计数」写成了断言——修法落地时这两条必须同步改</li>
+      <li>现场数据（只读）：<code>D:\Projects\auto-qb\tools\global-traffic-monitor\data\state.json</code> 与同目录 <code>history_traffic.dat</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout"><b>结论：命中 H2 的机制面（恢复后首包吞下缺口期的「绝对值」），但真正致命的是「合计口径的基线被过滤集收缩污染」——不是 qB 计数器、不是 state 时序、不是并发重复累加。</b></div>
+    <h3>5.1 精确失效链（5 步，均可在 sampler.py 定位）</h3>
+    <ol>
+      <li>断网 → 该网卡 <code>OperStatus != up</code> → <code>AdapterFilter</code> 以默认 <code>exclude_down=True</code> 剔除它（<code>sampler.py:338</code>），<code>selected</code> 从「主卡(+虚拟卡)」缩成子集，常见情况直接变空。</li>
+      <li><code>total_up/total_down</code> 是<b>过滤后多卡的合计</b>（<code>:339-340</code>），因此合计值骤降；<code>:359-360</code> 只在「全空」时记一条 stderr WARNING。</li>
+      <li><code>:369-378</code> 把「合计变小」一律判成 <code>counter_reset</code>：delta 记 0（看起来安全）。</li>
+      <li><code>:380-381</code> <b>无条件</b>把 <code>_last_up/_last_down</code> 覆盖成收缩后的子集合计（通常是 0）。代码没有区分「计数器真归零」与「这张卡只是暂时看不见」。</li>
+      <li>网卡恢复 up：Windows 在媒体断链期间<b>保留</b>该卡 <code>InOctets/OutOctets</code>；于是 <code>total = 生命周期累计 ≫ 基线 0</code> → <code>delta = 整份累计</code>（<code>:373</code>）→ <code>:382-383</code> 一次性加进当日累计。</li>
+    </ol>
+    <h3>5.2 逐条假设裁决</h3>
+    <table>
+      <tr><th>假设</th><th>裁决</th><th>依据</th></tr>
+      <tr>
+        <td>H1 重连后用累计值减失效/归零的基线，把历史累计计成当日增量（qB session 归零、本地基线未同步）</td>
+        <td><b>证伪（结论对、主体错）</b></td>
+        <td>「今日流量」pill 的唯一来源是 GTM 的 dat（<code>statusbar.html:6</code> 的 D2 约定 + <code>dialogs.js:460</code> + <code>traffic_snapshot_mod.refresh</code>），GTM 全程不读 qB。qB 的 alltime/session 计数器只喂 <code>traffic_sample_mod</code> 的图表链路，那条链对 <code>cur &lt; last</code> 有「增量记 null + 关块重开」防线（<code>traffic_sample_mod.py:24-28、489-498、646-647</code>），不会产生一次性冲高。断网也不会让 qB 重启。真正基线失效的是 GTM 的<b>过滤后合计基线</b>。</td>
+      </tr>
+      <tr>
+        <td>H2 断连期数据缺失，恢复后把缺口整体补算到恢复那一轮</td>
+        <td><b>部分命中（机制命中、数值口径需修正）</b></td>
+        <td>代码里没有任何「补算缺口」分支，缺口期的该卡计数其实<b>不增长</b>（链路断了没流量）；被记入的不是缺口流量，而是<b>整卡生命周期累计（含断网之前的历史）</b>。<code>sampler.py:29-31</code> 与测试 <code>test_sampler.py:244-254</code> 正是把这个错误口径写成了「缺失窗流量打进首包」的预期。</td>
+      </tr>
+      <tr>
+        <td>H3 state 落盘/加载时序，重连时基线被重置或读回旧值</td>
+        <td><b>证伪</b></td>
+        <td><code>state.json</code> 每轮由 <code>storage.record</code> 落盘，<code>last_*</code> 是采样后值；重启走 <code>Sampler.restore</code>/<code>storage.recover</code>（缺失时首样只立基线、delta 0）。数字上也自洽：<code>last_up=273.4GiB</code> 正是冲高后的新基线，而不是旧值或随机值。问题是<b>写入的新基线本身是错误口径（0）</b>，不是持久化链路错。</td>
+      </tr>
+      <tr>
+        <td>H4 多次轮询并发/幂等失效导致重复累加</td>
+        <td><b>证伪</b></td>
+        <td>采样在单线程主循环内（<code>__main__.py:181</code>），进程有 <code>SingleInstanceLock</code>（<code>storage.py:393-413</code>）防双实例；HTTP 线程只读快照。<code>day_up += delta</code> 每轮只加一次，且 delta 语义就是「本轮增量」，不存在重复累加；本次只跳了一次（若重复会成倍叠加，见 §5.3）。</td>
+      </tr>
+    </table>
+    <h3>5.3 数值推演（与 §2.3 完全吻合）</h3>
+<pre><code>设 B = 当日基线, C(t) = 网卡生命周期计数器, R(t) = 当日真实流量
+正常:  day = C - B           且 day &lt; C   (day - last = -B &lt; 0)
+本例:  day_up   - last_up   = +67,600,927,575 B  = +62.96 GiB
+       day_down - last_down = +10,734,527,109 B  = + 9.997 GiB
+若冲高只发生一次且把基线置 0 (B'=0):
+       day = R_断网前 + C_恢复瞬间 ;  last = C_当前 = C_恢复瞬间 + R_恢复后
+       day - last = R_断网前 (恒定偏移, 不随继续采样变化)
+用户读数: 断网前 上传 60 多 GiB / 下载不到 10 GiB  → 与 62.96 / 9.997 GiB 吻合
+冲高注入量: day - (last - R_今日) ≈ 273.4 GiB(上传) / 528.5 GiB(下载) = 恢复瞬间合计读数
+放大倍数:   336.3/63 ≈ 5.3x(上传) ,  538.5/10 ≈ 54x(下载) → 用户所述「成倍到几十倍」
+若发生 k 次断连-恢复: day ≈ R_今日 + k·C  （本例 k=1）</code></pre>
+    <p class="hint">注：<code>C</code> 是「过滤后所有在选网卡的合计」，不等于单卡；但冲高量与它在恢复瞬间的读数同量级，故用同一符号表述。</p>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">只给方案，不在本报告实施。三条候选按推荐度排序。</p>
+    <h3>A（推荐）逐网卡基线：把差分下沉到每一张卡，再求和</h3>
+    <p>Sampler 内部改为保存 <code>{nic_name: (last_up, last_down)}</code>；每轮 <code>delta = Σ max(0, cur_i - last_i)</code>（仅对「本轮可见且上轮有记忆」的卡），随后用本轮可见卡刷新记忆。卡新出现（无记忆）只立基线、delta 0；卡消失则<b>保留其记忆</b>（可加 TTL），下次回来继续按真实增量算（媒体断链期间该卡计数不涨，回来时增量≈0，<b>天然正确</b>）。state.json 载荷升 version（存每卡基线），旧载荷降级为首样基线（delta 0，宁可少报不虚高）。</p>
+    <p><b>对黄金法则</b>：幂等性——同一读数重放只产生 0 增量；状态持久化——每卡基线进 state，跨重启/跨断连连续；单一写线程——采样路径不变。<b>爆炸半径</b>：<code>gtm/sampler.py</code> + <code>gtm/storage.py</code>（载荷兼容）+ 测试；dat 契约与 auto-qb 侧<b>零改动</b>。<b>风险</b>：网卡被系统改名/Alias 变化时按「新卡」处理（可接受，最多少报一窗）。</p>
+    <h3>B（轻量）识别「过滤集变化」，而不是只看合计涨落</h3>
+    <p>记住上轮 <code>selected</code> 名字集合；对本轮∩上轮的卡按合计做差，对<b>新增</b>卡只立基线，对消失卡的合计贡献直接丢弃（不产生 delta）。本质是 A 的简化版（基线仍可只存合计 + 上轮名单），但不解决「改名/重启后每卡基线丢失」，跨重启仍退化为「首样只立基线」（安全但不精确）。<b>爆炸半径</b>更小：只改 sampler，state 载荷可不升版；<b>代价</b>：断连窗口内若有其它卡承接了真实流量，会漏计。</p>
+    <h3>C（兜底保险，不单独用）单轮 delta 合理性上限</h3>
+    <p>当单轮 delta 超过阈值（如 <code>max(1 GiB, 5×近 N 轮 p95 增量)</code>）判为异常，本轮 delta 记 0 + WARNING。缺点：魔数、会误伤真实突发（大文件/高速下载）；且<b>已经入账的虚高不会自动回退</b>，需要额外「当日行修正」能力（按 day - 注入量回写 dat），而 dat 是 upsert 单调累计、没有撤回语义 → 工程代价高。建议只作为 A 之上的告警保险，不作为主修法。</p>
+    <h3>测试策略要点</h3>
+    <ul>
+      <li>单测（新增）：单卡 down→up 且计数不涨 → delta 0（<b>改写现有</b> <code>test_down_adapter_recovering_counts_from_zero</code> 的 1999 期望）；单卡 down→up 且计数涨 X → delta X；新卡插入/旧卡消失；全部过滤；真·计数器归零（芯片重置）；多卡混合；跨天；state 旧版载荷降级。</li>
+      <li>改写：<code>test_all_adapters_filtered_warns_and_counts_zero</code> 的 <code>(100,100)</code> 期望按新口径调整。</li>
+      <li>真机验证：在默认配置下禁用/拔掉主网卡 ≥1 个采样周期再恢复，断言当日增量≈恢复窗口真实增量（≈0），并核对 state 每卡基线；再跑一次真·网卡禁用-启用（计数器会清零）确认走「重置→delta 0」分支而不重复计。</li>
+      <li>文档：同步改 <code>sampler.py:29-31</code> 的抖动说明（从「无法区分」改为「按卡差分可区分」），并把口径写回 <code>memory-bank/</code>。</li>
+      <li>存量数据：今日与历史的虚高 dat 行需要一次性修正（可选，按 <code>day - 注入量</code> 人工/脚本回写；本次不实施）。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-03 10:39 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 10:52 — 根因分析回填（用户委托的取证轮，<b>只读</b>：未改代码、未提交、未改动 GTM 数据目录）。结论：命中「过滤集收缩污染合计基线」；H1/H3/H4 证伪，H2 仅机制面命中。证据为 state.json/dat 的算术签名（+62.96 GiB / +9.997 GiB 恒定偏移）与 sampler.py 五步失效链。现场 WARNING 原文缺失（GTM 无落盘日志），需认领后按 §2.5 补可观测性再复验。</li>
+      <li>2026-11-03 11:02 — <b>已出实施方案</b>：用户拍板 <b>A（逐网卡基线）+ C-prime（单轮增量超阈值只 WARNING、不记 0）</b>，方案见 <code>memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html</code>（已双向挂 doc-refs）。本轮仍未改代码/未改测试/未提交；§06 的 C 方案（超限记 0）<b>已被 C-prime 取代</b>，实施以 plan 为准。</li>
+      <li>2026-11-03 11:46 — <b>方案 v2 按用户口径修订</b>：①阈值由绝对字节改为<b>速率口径</b>（<code>sample_rate_warn_bps</code>，默认 1GiB/s，判定 <code>delta/eff_dt</code>，长 gap 按 3×采样间隔钳制，无 dt 时跳过判定）；②告警落到<b>用户可见面</b>（<code>/status.last_spike</code> + 设置页「工具状态」一行 + 打开设置页 toast，日志仅取证）；③新键走<b>程序化 overlay 迁移</b>（<code>config.v2.yml</code>，主 <code>config.yml</code> 零改写，旧版本可回滚），禁止人工加/删键。C-prime 核心不变：只告警、不记 0、不丢账。本轮仍未改代码/未改测试/未提交。</li>
+      <li>2026-11-03 12:11 — <b>方案 v3 按「告警不得只在设置页」修订</b>：主告知改为 auto-qb 顶栏常驻横幅（快照追加可选字段 <code>gtm_anomaly</code>，数据来自 <code>/status.last_spike</code>，只增不改），设置页行与 GTM <code>/status</code> 降为次级；支持本机 ack 消警，GTM 不可达时静默降级不影响主界面。方案见 plan 的 §6.6 / §13-V4 / R2。本轮仍未改代码/未跑全量/未提交。</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」；建议先做真机断连-恢复（拔网线 ≥1 个采样周期）核对当日增量。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-03-1039-bug-gtm-day-total-inflation.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

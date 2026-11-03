@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-11-03-1102] [GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）](26-11-03-1102-plan-gtm-day-total-inflation.html) — `gtm-day-total-inflation`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
