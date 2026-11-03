@@ -71,7 +71,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         # groups: 与 CLI 合并导出同一套分组构件; 代表名沿用同一 taken 查重序列
         # (sites 先逐域名取名, 组名在同一序列上顺延, 两边永不撞名), 组内/组间均 sorted;
         # entry 一并带上(build_merged_entry 单点产出, 前端合并模式直接用, 不在 JS 复刻代表规则);
-        # 无缺失域名时 groups 为空数组, 全单元素组时与 sites 一一对应
+        # 无缺失域名时 groups 为空数组; 全单元素组时 domains/entry 与 sites 一一对应,
+        # 组名在 sites 取名之后的同一 taken 序列上顺延(_N 后缀), 两边不按名字互查
         groups = []
         for group in group_missing_domains(torrent_sets, missing):
             name, entry = build_merged_entry(group, taken)

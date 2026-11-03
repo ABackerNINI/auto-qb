@@ -231,7 +231,8 @@ Object.assign(window.CONFIG_HUB.methods, {
        * busy 骨架走 dialogs.js::_panelLoad(toast 通道 errToast: 恒提示不看 auth)。
        *
        * 三分支自适应引导(计划 26-11-03-2337 M4, 后端契约: sites 逐域名原形 + groups
-       * 共现合并组, 组数可为 0; 全单元素组时 groups 与 sites 一一对应):
+       * 共现合并组, 组数可为 0; 全单元素组时 groups 的 domains/entry 与 sites 一一对应,
+       * 组名在 sites 取名之后顺延(不按名字互查)):
        *   1. sites 空 -> 现状「无需导入」toast(不变);
        *   2. 不存在 >=2 域名的组(groups 缺省/为空/全单元素) -> 现状 confirmDialog
        *      逐域名导入(_hubImportPerDomain, 路径零变化);

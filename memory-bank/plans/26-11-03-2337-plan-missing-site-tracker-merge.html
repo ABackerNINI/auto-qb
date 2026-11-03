@@ -118,7 +118,7 @@
 </ul>
 <h3>3.3 WEBUI:响应加 <code>groups</code> + 三钮自适应引导</h3>
 <ul>
-<li><code>/api/sites/missing</code> 响应<b>追加</b> <code>groups: [{name, domains: [...]}]</code>(name=代表站点名,与 CLI 同规则);<code>sites</code> 字段保持逐域名条目<b>原形</b>——现有断言与逻辑零破坏,加字段向后兼容。</li>
+<li><code>/api/sites/missing</code> 响应<b>追加</b> <code>groups: [{name, domains: [...], entry: {...}}]</code>(name=代表站点名,与 CLI 同规则;entry=合并默认条目,由后端 <code>build_merged_entry</code> 单点产出,前端合并模式直接用,不在 JS 复刻代表规则);<code>sites</code> 字段保持逐域名条目<b>原形</b>——现有断言与逻辑零破坏,加字段向后兼容。</li>
 <li>前端 <code>hubImportSites</code> 三分支:
   <ol>
   <li>无缺失 → 现状 toast(不变);</li>

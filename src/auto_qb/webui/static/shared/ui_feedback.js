@@ -250,6 +250,10 @@ window.AQB_FEEDBACK = {
      * 「带 danger-solid 且文案 === extraText」双条件锁定第三钮 —— ok 钮在 danger 框里也带
      * danger-solid, 但文案是 okText, 不会误中。静态类不进 Vue 动态 props, 后续补丁(文案
      * 原位更新等)不回收换上的类; 每次开框重跑一次(v-if 重建后类还原成静态值, 恰好兜底)。
+     * !前提: 本还原只适用「关→开」重建路径 —— _openModal 支持框可见时原地替换(单例先
+     * resolve 旧框再开新框, 同一 tick 内 v-if 不重建), 若 ghost 框可见时被非 ghost 框原地
+     * 替换, 换上的 ghost 类会残留 —— 该形态现网不存在(ghost 唯一调用点后续只会开无
+     * extraText 的框, v-if 卸载即销毁突变), 若引入此形态需改 Vue 状态驱动类(:class)。
      * 只在 extraStyle === "ghost" 时被调 —— 缺省路径零 DOM 改动, 既有调用点渲染逐字节不变。 */
     _applyExtraBtnGhost() {
       const ok = this.$refs.modalOk;
