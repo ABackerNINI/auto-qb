@@ -55,6 +55,7 @@
 - [26-11-03-memory-bank-code-review-3-s7](../26-11-03-memory-bank-code-review-3-s7.md) 全量代码评审 3 · S7（处置建议 + 终版报告 + 收尾）
 - [26-11-03-memory-bank-kb-nav-searchbox](../26-11-03-memory-bank-kb-nav-searchbox.md) kb.nav 搜索支持文件名与相对路径
 - [26-11-03-test-big-file-split](../26-11-03-test-big-file-split.md) 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
+- [26-11-03-test-hot-reload-group-index-step-c](../26-11-03-test-hot-reload-group-index-step-c.md) 热重载分组索引修复 Step C 真机验证
 - [26-11-03-test-port-zero](../26-11-03-test-port-zero.md) 测试/开发侧端口改 0(webServer.wait 捕获)实施
 - [26-11-03-webui-bind-fail-fast](../26-11-03-webui-bind-fail-fast.md) WebUI 启动期 bind 失败 fail-fast + 诊断
 - [26-11-03-webui-ctx-menu-e2e-existing-red](../26-11-03-webui-ctx-menu-e2e-existing-red.md) 修复 e2e 右键菜单既有红: 定制块行数漂移与 CTX 选择器/子面板 fit
