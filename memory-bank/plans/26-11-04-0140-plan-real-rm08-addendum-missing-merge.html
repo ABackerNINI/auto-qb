@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-rm08-addendum-missing-merge">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-04-0140">
+<meta name="doc-updated" content="26-11-04-0140">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html, memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/testing/real-machine.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-rm08-addendum-missing-merge</div>
+<h1>真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)</h1>
+<p class="lede">对「缺失站点导出/导入 tracker 合并」功能做真机实测 RM08 附加轮: 只测 WebUI 读侧 <code>GET /api/sites/missing</code> 新增的 <code>groups</code> 分组字段 —— 复用 RM10 附加轮的造场配方(共现两组 + 单元素组 + 互异 127.x IP 死端口 announce), dev.webui 安全模式驱动产品进程, 三条用例把「sites 原形 / groups 分组契约 / 负向空场与不粘合 / 前端三分支引导数据前提」一次钉住。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-0140 · <b>doc-updated</b> 26-11-04-0140 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 排期指令(RM10 附加轮收束后的 RM08 附加轮); 规程权威 = <code>memory-bank/testing/real-machine.md</code>; 排期锚 = issue 26-10-31-0641 §03 RM08 行 / §07 表 / §08
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>功能背景(<code>memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html</code>, 已入库 develop, 功能面基线 commit <code>b01609ca</code>): <code>GET /api/sites/missing</code>(<code>src/auto_qb/webui/server/routes/sites.py</code>)在逐域名 <code>sites</code> 之外追加 <code>groups: [{name, domains, entry}]</code> —— 同一颗种子共现的缺失域名 union-find 分组(跨种子传递闭包), name=代表站点名(组内最短域名派生, 与 sites 同一 taken 序列顺延), domains=组内全域名 sorted, entry=合并默认条目; groups 可为空数组; 全单元素组时 domains/entry 与 sites 一一对应、组名顺延。</p>
+<p><b>本轮目标</b>: RM10 附加轮已把 CLI 导出面(M1/M2)真机钉住(tests-real/rm10_notify/test_rm10_export_merge.py 4 条全绿); 本轮补齐 WebUI 读侧(M3/M4)的真机面 —— <b>只读</b>: 全部断言落在 GET 端点载荷上, 产品进程经 dev.webui 安全模式(规程 §2.4)起停, 零写侧操作(不 POST /api/config、不动种子状态)。</p>
+<p><b>设计底线/不变量</b>: ① 真实种子全程非活跃(环境2 两实例当前 0 枚); ② 零 DNS 零外连 —— announce 全部互异 127.x IP 字面量 + 死端口 <code>:1</code>(RM10 实测事实: <code>extract_tracker_hostnames</code> 取 urlparse().hostname 不含端口, 同 IP 异端口塌缩成一域, 故用互异 IP); ③ 种子全程 paused 不 announce; ④ token 只经环境变量, 产品配置指副实例(56590 bypass_local_auth 空凭据直连), 配置文件零 api_key 落盘; ⑤ 只碰白名单 56589/56590。</p>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 定片与 glob 自检(§05 规则 8)</h3>
+<p>并入 <b>RM08(WebUI 读侧)</b>, 不开新片(归属优先: sites.py 本就是 RM08 行 7 条 glob 之一)。glob 自检(2026-11-04 实测 <code>git ls-files</code>): RM08 行 glob 对本功能两个落点的命中<b>均已覆盖</b> —— <code>src/auto_qb/webui/server/routes/sites.py</code> 为行内显式条目; <code>src/auto_qb/webui/static/shared/config_hub_tracker.js</code> 落在 <code>src/auto_qb/webui/static/shared/**</code> 通配内。两文件均命中, 片未失效, 无需改片表。</p>
+<h3>2.2 漂移体检(§07)</h3>
+<p><b>基线 commit 失效</b>: RM08 基线 <code>b65520ad</code>(2026-11-01 重立)在本 clone <code>git rev-parse</code> 解析不到(bad revision —— 合流 rebase 改写 lineage, 与锚 §08 2026-11-01 遗漏面分析条警示的同款现象)。按「写不出 commit」既有处置口径做<b>近似漂移判定</b>(按 author date + 文件历史), 结论如下:</p>
+<ul>
+  <li><b>本功能对 RM08 glob 的命中</b>(判据变/纯新增, 是本轮的被测面): <code>dc98fb44</code>(M3, sites.py 追加 groups 字段 —— 纯新增字段, sites 原形保留)、<code>0fae1a66</code>(M4, config_hub_tracker.js + ui_feedback.js 三钮自适应引导 —— 纯新增前端面)、<code>b01609ca</code>(注释/档案口径修正 —— 纯注释)。功能构件本体 <code>4130f060</code>(M1 exporter 分组构件)与 CLI 接入 <code>16d0a96a</code>(M2)不在 RM08 glob 内(已由 RM10 附加轮真机覆盖)。</li>
+  <li><b>RM08 glob 其余命中</b>(11-02 以来, 非本功能): GTM 状态栏横幅两笔(d3a0cf98/26cc51fb)、flux 皮肤系列(S5–S7)、大文件列表窗口化(e6b02991)、搜索修复两笔、move-only 拆分(20a74274/deb1168d)等 —— 各归其主, 已由各自轮次/守阵覆盖, <b>不在本附加轮整片回归</b>(附加轮 scope=新功能面)。记账建议: 下次 RM08 正式排期轮按 §07 对这些命中补一轮整片回归(现有 RM08-01..09 复跑即可)。</li>
+</ul>
+<h3>2.3 环境自检(2026-11-04 实测)</h3>
+<p><code>real.env</code>: 环境2(C盘机), 主 56589(exe C:\Programs\qBittorrent-testing)/副 56590(C:\Programs\qBittorrent-testing2), token 经 QBT_TEST_56589/56590 注入。<code>real.guard</code> 全绿: 56589 pid=8228 firewalled 真实种子 0 个; 56590 pid=7596 firewalled 真实种子 0 个。<b>guard 手工: 端口 ok(56589→pid 8228→C:\Programs\qBittorrent-testing\qbittorrent.exe; 56590→pid 7596→C:\Programs\qBittorrent-testing2\qbittorrent.exe, 镜像路径均在环境2 白名单前缀下) / 种子 paused ok(两实例 torrents 均为 0, 无活跃可言) / 配置 ok(全部走 tests-real/.work/rm08/ 派生配置, schema_version: 5, 不碰仓库根 config.yml)</b>。进程快照: 全机 qB 进程恰 2 枚(8228/7596), 收尾比对基准。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 用例清单(四块之一)</h3>
+<p>落点 <code>tests-real/rm08_webui_read/test_rm08_missing_groups.py</code>(归属既有 RM08 目录, 同片 conftest 的串行锁与环境 fixture 自动生效)。辅助函数复用同目录 <code>test_rm08_webui_read.py</code> 的基座(product_case/web_req/清场/造种), 造场配方抄 RM10 的 build_scene(3 枚 paused 假种子 + addTrackers 追加设计 announce)。</p>
+<table>
+  <tr><th>id</th><th>档位</th><th>验证面与期望值</th></tr>
+  <tr>
+    <td><code>RM08-10</code></td>
+    <td>L2</td>
+    <td><b>groups 分组契约</b>: 造场 A=[127.0.0.7,127.0.0.12] B=[127.0.0.12,127.0.0.13] C=[127.0.0.14], 配置 trackers 配一个不命中域(rm08grp.invalid)保缺失面。断言: <code>torrents==3, domains==4</code>; sites 原形(逐域名 name/domain/entry, 名单恰 127_0_0_12/13/14/7); groups 恰 2 组 —— 合并组 <code>["127.0.0.12","127.0.0.13","127.0.0.7"]</code>(传递闭包) name=<code>127_0_0_7_1</code>(代表=组内最短, 与 sites 同 taken 序列顺延撞名加后缀) + 单元素组 <code>["127.0.0.14"]</code> name=<code>127_0_0_14_1</code>; 每组 entry.domains==组内全域名 sorted、hr/限速示例段与 sites 条目同源; sites 与 groups 的名字集零交集。</td>
+  </tr>
+  <tr>
+    <td><code>RM08-11</code></td>
+    <td>L3</td>
+    <td><b>负向对照(红验内建)</b>: 腿① 配置 domains 配 <code>["127.0.0"]</code>(双向包含匹配覆盖全部 127.0.0.x announce 域)→ 同场景断言 <code>sites==[] 且 groups==[](空场是空数组, 不是 null/缺键, isinstance 校验)</code> + torrents/domains 计数照常; 红验: 「设计域应在 sites 里」的故意错位断言必须红。腿② 不粘合语义(D1 拍板的真机验证): 配置域 X=127.0.1.5, 种A=[X,P] 种B=[X,Q](P=127.0.0.21, Q=127.0.0.22 缺失, P/Q 从不同现)→ 断言 groups 恰两组各自成组、<b>不存在同时含 P 与 Q 的组</b>(X 已配置不参与粘合); 红验: 「存在 P+Q 同组」的故意错位断言必须红。</td>
+  </tr>
+  <tr>
+    <td><code>RM08-12</code></td>
+    <td>L2</td>
+    <td><b>三分支自适应引导的数据面前提</b>: 同一造场(种S1=[127.0.0.31] 种S2=[127.0.0.32])先后两个形态 —— 全单组: 断言每组 len(domains)==1、groups 数==sites 数、逐组与逐 site 一一对应(domains==[site.domain], entry 与 site entry 逐键相等, name==site 名 + <code>_1</code> 顺延)、载荷上「存在 ≥2 域名组」闸门判定为假; 经 /torrents/addTrackers 给 S1 追加 127.0.0.32 变成共现场后<b>新起一份产品进程</b>复扫: 断言出现 ≥2 域名组(闸门判定为真) —— 同一载荷自带 groups, 前端免第二次请求即可判定(数据前提本体)。执行期实测修正: 两形态必须各起一份产品进程 —— 产品 store 对种子 tracker 列表惰性缓存且只在产品自身 tracker 写操作时失效(<code>record.py:269-276</code> / <code>qbapi.py:261-268</code>), 绕产品直改 qB 对在跑进程不可见(首跑单进程版假红, 记切片 §03)。</td>
+  </tr>
+</table>
+<p class="aside">id 说明: 排期指令建议从 RM08-09 起顺延, 但 <code>RM08-09</code> 已被计划 26-11-02-0351 的千文件用例占用(test_rm08_webui_read.py:1303), 按规程「编号不复用」顺延为本轮的 RM08-10/11/12。</p>
+<h3>3.2 升档(四块之二)</h3>
+<p>本轮纯新增面, 无既有用例可升 —— 升档兑现为 <b>RM08-11 新建即 L3</b>(两条红验真跑: 空场错位断言必须红 + 不粘合错位断言必须红, RM04-09/RM09-11「新建即档」同款口径)。RM08-10/12 新建即 L2。</p>
+<h3>3.3 [需活跃种子] 跳过项(四块之三)</h3>
+<p>无。groups 端点是只读扫描, 全部种子 paused 即可断言; 本轮零 [需活跃种子] 条目, 零跳过。</p>
+<h3>3.4 验收判据(四块之四)</h3>
+<ul>
+  <li>三条用例三态记账齐(PASS/FAIL/BLOCKED 逐条), FAIL 只入池不当轮修;</li>
+  <li>RM08-11 两条红验真红(故意错位断言不红 = 红验失败, 用例自身记 FAIL);</li>
+  <li>收尾核净: 两实例 real-fake 残留 0、.work/rm08 清场、guard 复跑绿、进程比对恰开工两枚(8228/7596)、token 零落盘 grep 核对;</li>
+  <li>基线切片落 <code>memory-bank/testing/real-baselines/&lt;stamp&gt;-real-RM08-addendum-missing-merge.md</code>。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>步骤</th><th>验收判据</th></tr>
+  <tr><td>1</td><td>写用例文件 tests-real/rm08_webui_read/test_rm08_missing_groups.py(三条, docstring 首行 [RM08-1x] + 前置/副作用/回滚/失败判据四行)</td><td>单跑可执行; 不动 pytest.ini; 配置断言自带(指向副实例 / schema_version: 5 / 零 api_key)</td></tr>
+  <tr><td>2</td><td>逐条单跑(uv run pytest tests-real/rm08_webui_read/test_rm08_missing_groups.py -q --no-cov), 三态记账</td><td>非正常失败不重试超 3 次; 假红先复核造法再记账</td></tr>
+  <tr><td>3</td><td>清场: real.seed.rm --all + real.seed.clean; guard 复跑; 进程比对; token 落盘 grep</td><td>残留 0 / guard 绿 / 进程恰 2 枚 / grep 零命中</td></tr>
+  <tr><td>4</td><td>基线切片 kb.new 记录 + 锚 §07/§08 回写素材交主会话(本轮禁止 git 写操作, 全部改动留工作树)</td><td>切片含实测数字与环境指纹</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无待拍板项 —— 用例设计、造场配方、id 顺延均按排期指令与既有拍板(D1 不粘合语义 / RM10 造场配方)直接执行。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th></tr>
+  <tr><td>D1(前序)</td><td>已配置域名不参与粘合: 两个缺失域名不因都碰过某已配置域名而合并(exporter.group_missing_domains docstring 明载; 本轮 RM08-11 腿②真机验证)。</td></tr>
+  <tr><td>D2(前序)</td><td>产品配置 token 零落盘: 配置指向主实例必须写 api_key, 故一律指副实例空凭据(bypass_local_auth)。</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>副实例残留他方种子污染设计域断言</td><td>前一 clone/轮次残链</td><td>断言按设计域定界(scoped, RM10 同款): 只断设计域, 实测开工先核实例 0 种子</td></tr>
+  <tr><td>409 Conflict(同 infohash 残留)</td><td>复跑同场</td><td>_add_retry 删旧重加, 绝不收养(§2.9)</td></tr>
+  <tr><td>qB 多标签连接符</td><td>strip 防御</td><td>_tags_of 按「, 」split 后 strip(§2.9 / 26-10-31-1215)</td></tr>
+  <tr><td>产品 WEB 端口段争用</td><td>xdist 并发</td><td>同目录 conftest 串行锁自动生效; 单文件直跑</td></tr>
+  <tr><td>double-submit 漂移/产品快照滞后</td><td>读侧无写, 风险低</td><td>sites/missing 直连 qB facade 不经快照, 无滞后面; 仅等 tracker 视图可见(RM10 同款 wait)</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-0140</span> 初版: 排期指令(RM08 附加轮)直接开工 —— 定片并入 RM08 / glob 自检两落点均命中 / 漂移体检按「基线 b65520ad 不解析」口径近似判定 / 环境自检全绿(8228/7596, 双实例 0 种子) / 三条用例 RM08-10(L2)/RM08-11(L3 红验)/RM08-12(L2), 造场复用 RM10 配方。</li>
+</ul>
+
+</div>
+</body>
+</html>

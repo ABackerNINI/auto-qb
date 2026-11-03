@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>RM10 附加轮: 缺失站点导出合并真机实测(导出面)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="real-rm10-addendum-missing-merge">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-04-0115">
+<meta name="doc-updated" content="26-11-04-0115">
+<meta name="doc-refs" content="memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html, memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: real-rm10-addendum-missing-merge</div>
+<h1>RM10 附加轮: 缺失站点导出合并真机实测(导出面)</h1>
+<p class="lede">RM10 附加轮(导出面): 对「缺失站点导出/导入 tracker 合并」(CLI <code>--export-yaml</code> 默认按种子共现合并 + <code>--split-trackers</code> 拆回逐域名)做真机实测。全程只读扫描面(自造 real-fake 假种子除外), 零外连, 归 RM10 片。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-0115 · <b>doc-updated</b> 26-11-04-0115 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 排期指令(RM10 附加轮·导出面), 规程 <code>memory-bank/testing/real-machine.md</code>, 排期锚 <code>issues/26-10-31-0641-test-real-machine-test-standing.html</code>, 功能计划 <code>plans/26-11-03-2337-plan-missing-site-tracker-merge.html</code>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>: 缺失站点导出/导入 tracker 合并功能(M1~M5, 计划 26-11-03-2337 R1)已全量入库 develop(7 提交, rebase 后即 <code>b01609ca</code> 之前 7 笔), 但只有单测覆盖 —— 真机面(CLI 连真 qB 扫描 tracker 再落盘 YAML)未验。本轮补 CLI 导出面 4 条真机用例。</p>
+<p><b>做到什么程度算成</b>: RM10-11~14 全 PASS(或如实记 FAIL/BLOCKED), 基线切片落档, 官方实跑时刻 HEAD 记为新基线 commit(旧 <code>5b795217</code> clone5 lineage 解析不到, 按「写不出 commit 从首轮重来」口径重立)。</p>
+<p><b>设计底线 / 不变量</b>:</p>
+<ul>
+<li>只读面: 产品侧只调 qB 查询接口; 实例里只动<b>本轮自造</b>的 real-fake 假种子(全程 paused), 真实种子零触碰(环境2 主实例实测 0 枚)。</li>
+<li>零外连: announce 全部用 <code>http://127.0.0.x:1/announce</code> IP 字面量 + 死端口 —— hostname 提取(<code>urlparse().hostname</code>)不含端口, 故用<b>互异 IP 字面量</b>造互异域名, 天然零 DNS、零外连; 种子全程 paused 不 announce。</li>
+<li>token 零落盘: 导出配置指向<b>副实例 56590</b>(bypass_local_auth=True, 空凭据直连, 规程 §2.5.2), 不写任何 token 进配置文件; 两 token 只经环境变量注入。</li>
+<li>产物一律落 <code>tests-real/.work/rm10/</code>, 收尾删净; <code>pytest.ini</code> testpaths 不动。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+<li>功能面: <code>exporter.py</code> 新增 <code>collect_torrent_tracker_hostnames</code>(逐种集合)/<code>group_missing_domains</code>(共现 union-find)/<code>build_merged_entry</code>(代表=组内最短 tie 字典序); <code>cli.py</code> 加 <code>--split-trackers</code>(配合校验: 缺 <code>--export-yaml</code> 即 <code>parser.error</code>); 单测 <code>tests/test_exporter.py</code> +243 行全绿(基线切片 26-11-04-0035: 4944 passed / 10 skipped / 覆盖率 99%)。</li>
+<li>真机缺口: RM10 既有 8 条(26-10-31 轮)只覆盖逐域名旧行为(RM10-01/02), 无合并面、无 <code>--split-trackers</code>、无追加模式合并。</li>
+<li>环境前提: 环境2 主实例 56589 真实种子 0 枚(2026-11-01 实测, 本轮开工复核仍 0), 副实例 56590 空库草稿本且 localhost 免鉴权 —— 造法比照 RM05 用副实例, 规避「token 写进导出配置落盘文件」。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 定片与 glob 自检(§05 规则 8)</h3>
+<p>本轮并入 RM10(通知·外部集成, 导出面)。RM10 行 5 条 glob <code>git ls-files</code> 实测命中:</p>
+<table>
+<tr><th>glob</th><th>命中</th></tr>
+<tr><td><code>src/auto_qb/core/modules/notify_mod.py</code></td><td>1(命中)</td></tr>
+<tr><td><code>src/auto_qb/infra/notify.py</code></td><td>1(命中)</td></tr>
+<tr><td><code>src/auto_qb/core/exporter.py</code></td><td>1(命中, 本轮主面)</td></tr>
+<tr><td><code>src/auto_qb/tools/**</code></td><td>2(__init__ / finalize_watch)</td></tr>
+<tr><td><code>extensions/**</code>(除 hr-fetch-proxy)</td><td>0(仅 hr-fetch-proxy 在库, 维持 26-10-31 记账: 新扩展落位后按规则 1 并入)</td></tr>
+</table>
+<p><code>src/auto_qb/cli.py</code> 覆盖核查: <b>已被 RM01 行 glob 覆盖</b>(<code>src/auto_qb/cli.py</code> 是 RM01 第 1 条 glob), 按 §05 规则 1「归属优先」<b>无需提名并入 RM10</b> —— cli.py 的 9 行改动(加 flag + 配合校验)随 RM01 glob 走, 本轮不重复记账。片边界不糊(5 命中全属通知/导出/guardian 面), 不拆不并。</p>
+<h3>3.2 漂移体检(§07, 重立基线轮)</h3>
+<p>RM10 旧基线 <code>5b795217</code> 为 clone5 lineage, 现分支解析不到(bad revision)→ 按「写不出 commit 从首轮重来」口径<b>本轮重立基线</b>。漂移面 = 本功能 7 提交(<code>948e11a1..086044b9</code>)对 RM10 glob 的命中 diff:</p>
+<table>
+<tr><th>文件</th><th>diff</th><th>分类</th></tr>
+<tr><td><code>src/auto_qb/core/exporter.py</code></td><td>+79/-10</td><td><b>判据变</b>: 导出默认行为从逐域名改为共现合并(+新构件 3 个) —— 即本轮被测面本身, 4 条新用例按新判据建, 不存在旧期望值要降档的问题</td></tr>
+<tr><td>notify_mod.py / notify.py / tools/** / extensions(非 proxy)</td><td>0 命中</td><td>纯新增面之外零漂移</td></tr>
+</table>
+<p>7 提交全量 diff 里的其余文件(<code>cli.py</code> +9/-1 → RM01 glob; <code>webui/server/routes/sites.py</code> → RM08 glob; <code>webui/static/shared/*.js</code> → RM09 glob; README/docs/memory-bank)均不在 RM10 glob 内, 各归其片记账。WEBUI 导入三钮引导(M3/M4)端到端观感归 L0 目视挂账(与 RM08 D3 横滚条同款), 本轮不建真机用例(既有单测/e2e 已钉)。</p>
+<h3>3.3 用例造法主线</h3>
+<ul>
+<li><b>种子面</b>: 副实例 56590(空库草稿本)造 3 枚 L1 假种子(<code>lib/torrent.build_stream</code> + <code>qb.add_torrent(paused=True, tags="real-fake")</code>, RM05 同款 409 删旧重加), 逐枚 <code>POST /torrents/addTrackers</code> 追加设计好的多 announce。共现设计: A=[127.0.0.7, 127.0.0.12]、B=[127.0.0.12, 127.0.0.13]、C=[127.0.0.14] ⇒ 期望合并组 {127.0.0.7, 127.0.0.12, 127.0.0.13}(跨种子传递闭包, 代表=最短 127.0.0.7)+ 单元素组 {127.0.0.14}。</li>
+<li><b>配置面</b>: tests-real 派生配置(schema_version: 5, 指副实例空凭据, trackers 段配 <code>rm10em.invalid</code> —— 与全部 announce 域零命中, 保证缺失面成立)。</li>
+<li><b>驱动面</b>: <code>lib/app.run_cli</code>(RM10-01/02 同款 CLI 驱动), <code>--export-yaml &lt;.work 落点&gt;</code> × {--only-missing, 追加, --split-trackers, --dry-run} 组合。</li>
+<li><b>断言面</b>: 只咬外部可观测(YAML 落盘内容 + 退出码 + stderr 文案); 断言按设计域<b>定界</b>(scoped) —— 实例里若有他方种子残链不进断言集, 设计域每个域名恰出现在一个条目。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤(用例清单 / 升档 / 约束影响 / 验收)</h2>
+<h3>4.1 用例清单(用例文件: <code>tests-real/rm10_notify/test_rm10_export_merge.py</code>, 归属既有 RM10 目录, 共享片内 conftest 串行锁+环境核验)</h3>
+<table>
+<tr><th>id</th><th>档位</th><th>面</th><th>期望值(核心断言)</th></tr>
+<tr><td>RM10-11</td><td>L2</td><td>only_missing 合并正向 + dry-run 零写</td><td>合并条目 domains==[127.0.0.12, 127.0.0.13, 127.0.0.7](3 元素)、键=<code>127_0_0_7</code>(最短代表派生); 单元素条目 domains==[127.0.0.14]、键=<code>127_0_0_14</code>; 设计域各恰一条目; 骨架只含 trackers+schema_version、无已配域; 条目 tags==[""](IP 形态 gen_default_tag 空标签, 已知正确行为)+ hr 示例段同 build_tracker_entry; dry-run 轮 rc=0 + 日志「已导出」+ 输出文件<b>不存在</b></td></tr>
+<tr><td>RM10-12</td><td>L2</td><td>追加模式合并</td><td>既有配置条目 rm10em_invalid 原样保留(domains/tags 逐字); 合并+单元素缺失条目追加; 导出含原始配置段(data_dir 等)</td></tr>
+<tr><td>RM10-13</td><td><b>L3(新建即档)</b></td><td>--split-trackers 配合校验红验 + split/合并键面对照</td><td>①缺 --export-yaml: rc!=0 + stderr 含「--split-trackers 需配合 --export-yaml 使用」; ②同批种子 split 产物: 4 条逐域名条目(每条 domains 长度恰 1)且不存在 ≥2 元素条目 —— 若产品回归成合并, 此断言必红; ③对照: 合并产物含 3 元素条目、split 产物 127.0.0.12 有专属条目</td></tr>
+<tr><td>RM10-14</td><td>L2</td><td>双跑幂等</td><td>同参数连跑两次(only_missing 与追加两模式各验)输出逐字节一致</td></tr>
+</table>
+<h3>4.2 本轮升档安排(§08 硬要求)</h3>
+<p>本轮 4 条全部<b>纯新增</b>(功能新面, 无既有用例可升档), 其中 RM10-13 <b>新建即 L3</b>(负向对照: 配合校验缺席即报错真跑 + split/合并双产物对照 —— 产品若退化回逐域名或恒合并, 断言必红)。满足「至少 1 条升一档或明写纯新增」。</p>
+<h3>4.3 受约束影响项(§01 硬约束 2: 真实种子全程非活跃)</h3>
+<p><b>预期无跳过条目</b>: 本轮只读扫描面, 假种子全程 paused(stopped*), 零 <code>[需活跃种子]</code> 标记。真实种子(若 guard.snapshot 报有)不进断言集 —— 设计域断言天然定界。</p>
+<h3>4.4 验收判据(什么算这片做完)</h3>
+<ol>
+<li>RM10-11~14 官方实跑三态齐(预期 4 PASS), 结果落 <code>testing/real-baselines/&lt;stamp&gt;-real-RM10-addendum-missing-merge.md</code>;</li>
+<li>基线 commit = 官方实跑时刻 HEAD(重立);</li>
+<li>收尾核净: 自造种子/数据/配置残留清零、guard 复跑绿、进程比对恰开工两枚、token 零落盘核对;</li>
+<li>零产品缺陷在池(有则如实入池并记 FAIL, 当轮不修)。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p class="aside">无 —— 环境与排期已由用户拍板(见 §06)。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>日期</th><th>决策</th><th>结论</th></tr>
+<tr><td>D1</td><td>26-11-04</td><td>环境与实例</td><td>本机 = 环境2(C盘机), 主 56589 / 副 56590, <code>QBT_REAL_ENV=2</code> 显式指定; token 每轮会话给出经环境变量注入, 不落盘</td></tr>
+<tr><td>D2</td><td>26-11-04</td><td>导出配置指向</td><td>指<b>副实例 56590</b> 空凭据(bypass_local_auth=True): 造法上根除「token 写进导出配置落盘文件」的违规面(主实例路径必须写 api_key); 假种子同落副实例</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>实例内他方种子残链污染缺失面</td><td>跑前有未清种子</td><td>开工 <code>real.seed.list</code> 清点(本轮实测两实例 0 残留); 断言按设计域定界(scoped), 不做全条目集硬断言</td></tr>
+<tr><td>announce 域名塌缩</td><td>同 IP 不同端口被当成同域</td><td>已核 <code>_hosts_of</code> 取 <code>urlparse().hostname</code> 不含端口 —— 改用互异 IP 字面量(127.0.0.7/12/13/14)而非同 IP 异端口</td></tr>
+<tr><td>127.x 触发 qB 连接</td><td>种子被启动</td><td>全程 <code>--paused</code>(stopped* 不 announce); 死端口 :1; real-fake 标签令守卫看门狗跳过</td></tr>
+<tr><td>409 同 infohash 复跑污染</td><td>重跑同参数用例</td><td><code>_add_retry</code> 删旧重加(RM05 同款), 绝不收养</td></tr>
+<tr><td>残留清理漏</td><td>用例中途炸</td><td>每条 try/finally: 删自造种子(delete_files)+ purge case 目录; 收尾 <code>real.seed.rm --all</code> + <code>real.seed.clean</code> 兜底</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-0115</span> 初版: 排期指令发起(RM10 附加轮·导出面, 环境2)。漂移体检=重立基线轮(旧 5b795217 解析不到), 7 提交对 RM10 glob 唯一命中 exporter.py(+79/-10, 判据变=本轮被测面); glob 自检 5 条全核, cli.py 已被 RM01 glob 覆盖无需提名; 用例 4 条(RM10-11~14, 新建即含 1 条 L3), 无约束跳过项。</li>
+</ul>
+
+</div>
+</body>
+</html>
