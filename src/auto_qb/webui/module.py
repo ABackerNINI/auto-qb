@@ -21,10 +21,82 @@ S7 追加: 全局流量监视器的**订阅生命周期**也内聚在本模块 �
 import logging
 
 from ..core.module import AppContext, ApplyResult, BaseModule
+from ..infra.port_owner import STATE_ABSENT, STATE_FOUND, describe_port_owner
+from .server import lifecycle
 from .server.lifecycle import WebUIBindError, _bind_message
 from .tool_client import TrafficMonitorSubscriber
 
 logger = logging.getLogger(__name__)
+
+#: 诊断块前缀: 沿用既有「WEB UI 启动失败」检索习惯, 紧跟 lifecycle 那条 ERROR 之后
+_DIAGNOSIS_PREFIX = "WEB UI 启动失败诊断"
+#: 探针不可用/未识别时的固定文案(显式降级, 不静默省略占用者行)
+_OWNER_UNKNOWN = "占用者: 未识别(本机无 ss/lsof 或查询超时)"
+#: 处置三选一(改键 / 改地址 / 关闭), 与 stderr 单行文案同口径
+_DIAGNOSIS_ACTIONS = ("处置: 改 web.port(同机多实例各配一个); "
+                      "监听地址写错则改 web.host; 不需要 WebUI 则 web.enabled: false")
+
+
+class _BindFailureCapture(logging.Handler):
+    """收集启动失败的**既有**错误文本(诊断块的「原因」行)
+
+    挂在 lifecycle 的 logger 上(它不受 uvicorn 的 dictConfig 重建影响), 从 `_run_server`
+    记录的异常链最深层取原始 bind 错误文案(OSError); 无异常链时退回记录文本。
+    """
+    def __init__(self) -> None:
+        super().__init__(level=logging.ERROR)
+        self.reason = ""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            exc = record.exc_info[1] if record.exc_info else None
+            if exc is None:
+                # 无异常链的记录(如 start_web_server 的总结 ERROR)不得覆盖异常给出的原因
+                self.reason = self.reason or record.getMessage()
+                return
+            while exc.__context__ is not None:
+                exc = exc.__context__
+            self.reason = str(exc) or exc.__class__.__name__
+        except Exception:  # 采集失败不得干扰启动期 fail-fast
+            pass
+
+
+def _start_server_capture_reason(web) -> str:
+    """拉起服务并返回启动失败的既有错误文本(成功/无错误时为空串)"""
+    capture = _BindFailureCapture()
+    lifecycle.logger.addHandler(capture)
+    try:
+        web.start_server()
+    finally:
+        lifecycle.logger.removeHandler(capture)
+    return capture.reason
+
+
+def _port_owner_line(host: str, port: int) -> str:
+    """探针(旁路): 查询占用者并整形为一行; 任何失败只写 debug, 固定降级为「未识别」"""
+    try:
+        probe = describe_port_owner(host, port)
+    except Exception as exc:  # 探针绝不影响退出码/异常类型/stderr 主行
+        logger.debug("端口占用者探针异常, 诊断降级为未识别: %s", exc)
+        return _OWNER_UNKNOWN
+    if probe.state == STATE_FOUND and probe.owner is not None:
+        owner = probe.owner
+        return f"占用者: pid={owner.pid}, 进程={owner.name}, 命令行={owner.cmdline}"
+    if probe.state == STATE_ABSENT:
+        return "占用者: 未找到(端口可能刚被释放)"
+    return _OWNER_UNKNOWN
+
+
+def _bind_diagnosis(web, owner_line: str, reason: str) -> str:
+    """启动期监听失败的多行诊断块(INFO: 同一故障的附加诊断, 不是新的失败事件)"""
+    return (
+        f"{_DIAGNOSIS_PREFIX} "
+        f"(web.enabled={str(bool(web.enabled)).lower()}, web.host={web.host}, web.port={web.port})\n"
+        f"  - 原因: 端口无法监听 ({reason or '详见上方 uvicorn 错误'})\n"
+        f"  - {owner_line}\n"
+        f"  - {_DIAGNOSIS_ACTIONS}\n"
+        f"  - 退出: 启动期 fail-fast, 退出码 1, 采集不会启动"
+    )
 
 
 class WebUIModule(BaseModule):
@@ -70,10 +142,14 @@ class WebUIModule(BaseModule):
         if web.handle is not None:
             # start 幂等(黄金法则 1): 已在跑不重复拉起(与 LoggingModule 的 _configured 闸同款)
             return None
-        web.start_server()
+        reason = _start_server_capture_reason(web)
         # R1 抛点: 启动期监听失败 -> fail-fast(低层 start_web_server 保持返回 handle 的原契约,
         # 热重载 apply 的同一函数不在此抛, 运行期语义不变)。AutoQbError => CLI 退出码 1 + 单行 stderr
         if web.handle is not None and not web.handle.started:
+            # 诊断面(plan 26-11-03-0930 §4.3/§4.5): INFO 不新增 ERROR 事件、不推第二条 toast;
+            # 探针是旁路 —— 结果只进日志, 绝不进异常消息(stderr/notify_fatal 单行不变)
+            owner_line = _port_owner_line(ctx.config.web.host, ctx.config.web.port)
+            logger.info(_bind_diagnosis(ctx.config.web, owner_line, reason))
             raise WebUIBindError(_bind_message(ctx.config.web))
         # 监视器订阅按期望态收敛(S7): 未启用/关订阅 -> 无操作, 零线程零请求(黄金法则 2)
         # 放在 start_server 之后: 回调端点要监听身份, 凭证也要 ensure_token 先落到位

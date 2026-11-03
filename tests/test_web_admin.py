@@ -19,6 +19,9 @@
 - test_api_log_note_when_level_unfilterable: 筛不了(格式无等级字段 / 已存行与格式不符)回全部行 + note, 不静默给空
 - test_webui_module_apply_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄; 经 WebUIModule.apply 驱动, P2)
 - test_webui_module_start_raises_bind_error_when_port_taken: 端口被占 -> WebUIModule.start 抛 WebUIBindError(启动期 fail-fast); 消息单行且含 host/port/配置键/常见原因/处置; 低层仍返回未就绪句柄(R1)
+- test_webui_module_bind_diagnosis_block_when_port_taken: 端口被占 -> start 落多行 INFO 诊断块(host/port/配置键/原因/占用者/处置三选一/退出后果), 异常消息不含探针内容
+- test_webui_module_bind_diagnosis_probe_unrecognized: 探针不可用或抛异常 -> 诊断块固定写「未识别」且异常类型/消息不变; 探针失败只写 DEBUG
+- test_webui_module_bind_diagnosis_adds_no_error_events: 探针 found / 抛异常两轮对比, auto_qb 树下 ERROR 条数不变(既有 lifecycle 两条保持原样)
 """
 import base64
 import logging
@@ -673,3 +676,118 @@ def test_webui_module_start_raises_bind_error_when_port_taken(tmp_path):
         assert f"web.port={port}" in message and "web.enabled=true" in message, "文案必须含配置键路径"
         assert "同机多实例默认同端口" in message, "常见原因要点明多实例同端口"
         assert "web.enabled: false" in message and "采集不会启动" in message, "处置与退出后果必须可照做"
+
+
+def _start_webui_on_taken_port(tmp_path, monkeypatch, probe, logger_name="auto_qb.webui.module"):
+    """真占端口后驱动 WebUIModule.start(S2b): 探针替身经 monkeypatch 注入, 返回 (mgr, port, 异常, 捕获日志)
+
+    !日志捕获走 helpers.capture_logs 直挂 logger, 不用 caplog —— make_manager 的
+      setup_logging 会清空 root handlers, pytest 挂在 root 上的采集 handler 一并被清。
+    """
+    import socket
+
+    from auto_qb.webui import stop_web_server
+    from auto_qb.webui.server.lifecycle import WebUIBindError
+
+    from helpers import capture_logs, make_manager
+
+    monkeypatch.setattr("auto_qb.webui.module.describe_port_owner", probe)
+    with socket.socket() as holder:  # 占住端口(bind + listen 后不可再绑)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        port = holder.getsockname()[1]
+        mgr = make_manager(str(tmp_path / "state.json"))
+        mgr.config.web.enabled = True
+        mgr.config.web.port = port
+        with capture_logs(logger_name) as cap:
+            try:
+                with pytest.raises(WebUIBindError) as excinfo:
+                    mgr.host.get("webui").start(mgr.ctx, dry_run=False)
+            finally:
+                if mgr.web.handle is not None:
+                    stop_web_server(mgr.web.handle)
+    return mgr, port, excinfo.value, cap
+
+
+def test_webui_module_bind_diagnosis_block_when_port_taken(tmp_path, monkeypatch):
+    """端口被占 -> 多行 INFO 诊断块: 无法监听的配置原值 + 原因 + 占用者 + 处置三选一 + 退出后果
+
+    S2b: 诊断是同一故障的附加信息(INFO), 不是新的失败事件; 探针内容只进日志,
+    不进 WebUIBindError 消息(stderr 单行与 notify_fatal 内容与 S2a 完全一致)。
+    """
+    from auto_qb.infra.port_owner import PortOwner, PortProbe
+    from auto_qb.webui.server.lifecycle import _bind_message
+
+    def probe(host, _port):
+        return PortProbe.found(PortOwner(pid=4321, name="python.exe", cmdline="python -m http.server 40000"))
+
+    mgr, port, exc, cap = _start_webui_on_taken_port(tmp_path, monkeypatch, probe)
+    diag = cap.text
+    assert "WEB UI 启动失败诊断" in diag, "沿用既有检索字样"
+    assert f"web.enabled=true, web.host=127.0.0.1, web.port={port}" in diag, "诊断块必须给出配置原值"
+    assert "原因: 端口无法监听" in diag
+    assert "占用者: pid=4321, 进程=python.exe, 命令行=python -m http.server 40000" in diag
+    assert "改 web.port" in diag and "改 web.host" in diag and "web.enabled: false" in diag, "处置三选一必须可照做"
+    assert "退出码 1" in diag and "采集不会启动" in diag, "退出后果必须写明"
+    # 诊断块恰一条, 且必须是 INFO(不得新增 ERROR 事件)
+    diag_records = [r for r in cap.records if "WEB UI 启动失败诊断" in r.getMessage()]
+    assert len(diag_records) == 1 and diag_records[0].levelno == logging.INFO
+    # 异常消息不含探针内容: 与 S2a 的单行消息逐字相同
+    message = str(exc)
+    assert message == _bind_message(mgr.config.web)
+    assert "4321" not in message and "占用者" not in message and "命令行" not in message
+
+
+@pytest.mark.parametrize("probe_kind", ["unavailable", "raises"])
+def test_webui_module_bind_diagnosis_probe_unrecognized(tmp_path, monkeypatch, probe_kind):
+    """探针不可用/抛异常 -> 占用者行固定写「未识别」, 异常类型与消息不变, 失败只写 DEBUG"""
+    from auto_qb.infra.port_owner import PortProbe
+    from auto_qb.webui.server import lifecycle
+
+    if probe_kind == "unavailable":
+
+        def probe(host, _port):
+            return PortProbe.unavailable("ss 不可用")
+    else:
+
+        def probe(host, _port):
+            raise RuntimeError("probe boom")
+
+    mgr, port, exc, cap = _start_webui_on_taken_port(tmp_path, monkeypatch, probe)
+    diag = cap.text
+    assert "WEB UI 启动失败诊断" in diag
+    assert "占用者: 未识别(本机无 ss/lsof 或查询超时)" in diag, "不可用时不得静默省略占用者行"
+    assert "pid=" not in diag, "未识别分支不得伪造占用者"
+    assert f"web.host=127.0.0.1, web.port={port}" in diag
+    # 异常类型/消息与探针结果无关
+    assert isinstance(exc, lifecycle.WebUIBindError)
+    message = str(exc)
+    assert message == lifecycle._bind_message(mgr.config.web)
+    assert "未识别" not in message and "probe boom" not in message and "占用者" not in message
+    if probe_kind == "raises":
+        assert any(r.levelno == logging.DEBUG and "探针异常" in r.getMessage() for r in cap.records), \
+            "探针失败只允许写 debug 级"
+
+
+def test_webui_module_bind_diagnosis_adds_no_error_events(tmp_path, monkeypatch):
+    """探针 found / 抛异常两轮对比: auto_qb 树下 ERROR 条数不变 —— 既有 lifecycle 两条保持原样"""
+    from auto_qb.infra.port_owner import PortOwner, PortProbe
+
+    def found(host, _port):
+        return PortProbe.found(PortOwner(pid=7, name="n", cmdline="c"))
+
+    def raises(host, _port):
+        raise RuntimeError("probe boom")
+
+    runs = []
+    for probe in (found, raises):
+        _mgr, _port, _exc, cap = _start_webui_on_taken_port(tmp_path, monkeypatch, probe, logger_name="auto_qb")
+        errors = [r for r in cap.records if r.levelno >= logging.ERROR]
+        runs.append(errors)
+
+    # 两轮 ERROR 事件面同形(探针失败不新增 ERROR); 每轮恰是既有两条, 都来自 lifecycle
+    assert [len(errs) for errs in runs] == [2, 2]
+    assert [{r.name for r in errs} for errs in runs] == [{"auto_qb.web"}, {"auto_qb.web"}]
+    messages = [r.getMessage() for r in runs[1]]
+    assert any("WEB UI 服务异常退出" in m for m in messages), "既有 _run_server 的 ERROR 必须原样保留"
+    assert any("WEB UI 启动失败" in m for m in messages), "既有 start_web_server 的 ERROR 必须原样保留"
