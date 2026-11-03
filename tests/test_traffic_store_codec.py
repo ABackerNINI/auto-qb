@@ -194,11 +194,22 @@ def test_all_persist_writes_on_caller_thread(tmp_path, monkeypatch):
         return real(self, key, date_str, header, records, block_base)
 
     monkeypatch.setattr(TrafficV4Store, "append_records", spy)
-    threads_before = threading.active_count()
+    # 不量全局 active_count 快照: 同 xdist worker 上无关用例的线程启停会污染计数
+    # (issue 26-11-04-0600: 全量并行 3==4 偶红, 方向是无关线程退出)。改 spy
+    # Thread.start, 只看本同步窗口内是否真的启动了线程 —— 对无关线程启停免疫,
+    # 且比快照强: 窗口内建线程又 join 掉的形态也逃不掉。
+    started = []
+    real_start = threading.Thread.start
+
+    def spy_start(self, *args, **kwargs):
+        started.append(self.name)
+        return real_start(self, *args, **kwargs)
+
+    monkeypatch.setattr(threading.Thread, "start", spy_start)
     mod.on_task_line(force=False)  # 宿主经任务线钩子调采样(首拍即采)
     assert {k for k, _ in seen} == {"global", "torrent:HASH123"}
     assert all(ident == threading.get_ident() for _, ident in seen)
-    assert threading.active_count() == threads_before
+    assert started == [], f"模块新建了线程: {started}"
 
 
 def test_v4_amortized_run_chain_self_consistent():

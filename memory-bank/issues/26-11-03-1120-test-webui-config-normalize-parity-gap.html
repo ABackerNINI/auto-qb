@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1120">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-config-contract">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-04-test-webui-config-normalize-parity.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫">
 <meta name="issue-summary" content="config_rules.js 手抄 compat.py 的动作/条件/choose 归一语义, 两套期望分散在 Python 与 DOM 电池, 无同输入同输出的跨语言对拍用例">
 <title>前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1120-test-webui-config-normalize-parity-gap</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,7 +97,8 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
-      <li>2026-11-03 11:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+        <li>2026-11-03 11:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+        <li>2026-11-04 04:46 — 认领并修复，状态 <strong>Done</strong>：加跨语言对拍守卫 —— <code>tests/config_normalize_parity_support.py</code>（<code>PARITY_CASES</code> 24 例输入 + <code>python_normalize</code> 金标准 + <code>_NODE_PARITY_PROBE</code>）与 <code>tests/test_webui_config_normalize_parity.py</code>（3 用例：Python 幂等/不改输入、金标准有判别力、跨语言逐例比对）。期望只写一份 = 后端 <code>normalize_legacy_rule</code> 真身输出，前端走 <code>cfgNormalizeRulesDraft</code> 同输入追平；覆盖扁平/混合/规范动作、退役伪动作、choose（扁平与树形 when、未知键、非法分支）、非法形状透传、命名透传。双向红验通过（JS 缺省 <code>backoff</code> 60→99 红；PY <code>ON_ERROR_DEFAULTS</code> 60→45 红，均已还原）；<code>test.full</code> 全绿，数字见 <code>commands run kb.baseline</code>。采纳「加对拍」方案，未退役前端镜像（镜像是 D2 打开即归一形的实现，退役需重做载入链与 DOM 电池）。</li>
     </ul>
   </section>
 

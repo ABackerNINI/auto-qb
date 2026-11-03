@@ -7,11 +7,11 @@
 <meta name="issue-stamp" content="26-11-04-0600">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="test-full-red">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-04-0634-test-full-red.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）">
-<meta name="issue-summary" content="全量并行跑时 active_count 3==4 判红, 单跑通过; 疑似并行执行抖动, 根因待查">
+<meta name="issue-summary" content="全局 active_count 快照断言受同 xdist worker 无关线程启停污染, 已改 spy Thread.start 只量本窗口, 红验+全量验证通过">
 <title>test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过） · test · 计划外问题</title>
 <style>
   :root {
@@ -95,15 +95,15 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）</h1>
-    <p class="lede">全量并行跑时 active_count 3==4 判红, 单跑通过; 疑似并行执行抖动, 根因待查</p>
+    <p class="lede">全局 active_count 快照断言受同 xdist worker 无关线程启停污染, 已改 spy Thread.start 只量本窗口, 红验+全量验证通过</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-0600-test-testing-persist-thread-active-count</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 06:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
-      <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -149,7 +149,7 @@ $ commands run test.one -- tests/test_traffic_store_codec.py::test_all_persist_w
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <div class="callout">待查（已排除：本轮 <code>relocate_proof.py</code> 改动 —— 不涉及线程/持久化，且单跑通过；现象方向是采样窗口内线程数减少，而非产品新增线程）</div>
+    <div class="callout"><strong>机制确定（2026-11-04 06:32 修复时归因）</strong>：<code>assert threading.active_count() == threads_before</code> 量的是<strong>进程级全局快照相等</strong>，而 pytest-xdist 的每个 worker 是一个常驻进程 —— 同 worker 上<strong>其它用例</strong>（或其拆卸路径）启停的无关线程只要落在采样窗口内退出，计数就 4→3 判红。方向（减少而非新增）与「产品建线程」相反，产品侧经查只用 <code>threading.Lock</code> 不建线程，不变式本身成立；红的是<strong>量法</strong>：把「本模块不建线程」错量成了「全进程线程数不变」。至于具体是哪个无关线程退出，与修复无关，未追。</div>
   </section>
 
   <section id="s6">
@@ -166,11 +166,19 @@ $ commands run test.one -- tests/test_traffic_store_codec.py::test_all_persist_w
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 06:00 — 入池，状态 <strong>Open</strong>（计划外，未修；用户授权新建）</li>
+      <li>2026-11-04 06:05 — 用户显式指派「认领并修复」，开工；复验全量未复现（偶发），按存在继续修复</li>
+      <li>2026-11-04 06:32 — 状态 <strong>Done</strong>：改 spy <code>Thread.start</code> 量法，红验+单文件+全量三层验证通过（详见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>复验：2026-11-04 06:05 认领后重跑 <code>commands run test.full</code> —— <strong>未复现</strong>（5134 passed, 10 skipped in 271.74s，全绿），与偶发抖动判断一致（入池时同 HEAD 两次同值复现；偶发问题复验跑绿不能当「已消失」，仍按存在处理）。单跑锚点亦绿。</p>
+    <h3>修复后补充（2026-11-04 06:32）</h3>
+    <p><strong>实际修法</strong>：走了建议修法之外的第三条路 —— 不再量任何全局快照/差集，改在 <code>on_task_line</code> 的同步窗口内 spy <code>threading.Thread.start</code>（monkeypatch 包装记录线程名），断言窗口内没有启动任何线程。三个候选的取舍：</p>
+    <ul>
+      <li>候选 1（线程集合差集）未采用：差集里出现「新线程」仍可能是同 worker 无关用例恰好在窗口内启动线程，污染面只是从「退出方向」换成「启动方向」，没根除。</li>
+      <li>候选 2（xdist 独占/串行标记）未采用：治标且拖慢全量。</li>
+      <li>实际采用 spy 量法：窗口是同步调用，只有被测模块自己的代码会经过 spy，对无关线程启停<strong>天然免疫</strong>；且比快照更强 —— 「窗口内建线程又 join 掉」的形态快照抓不到、spy 抓得到。</li>
+    </ul>
+    <p><strong>验证方式与测试数字</strong>（均为 2026-11-04 实测）：①红验 —— 向 <code>on_task_line</code> 临时注入 <code>Thread(target=lambda: None).start()</code> 突变，单跑判红且报错直指 <code>模块新建了线程: ['mutation-probe']</code>，还原后转绿（红绿双验齐）；②单文件 <code>commands run test.one -- tests/test_traffic_store_codec.py</code> 27 passed；③修复后全量 <code>commands run test.full</code>：<strong>5134 passed, 10 skipped in 195.00s，覆盖率 99%</strong>，门禁绿。改动仅 <code>tests/test_traffic_store_codec.py</code> 一处（原 197-201 行快照断言段），产品代码零改动。</p>
   </section>
 
   <footer>
