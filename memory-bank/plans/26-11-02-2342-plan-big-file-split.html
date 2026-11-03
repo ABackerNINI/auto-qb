@@ -7,10 +7,10 @@
 <title>大文件多轮拆分实施计划（&gt;1000 行候选 80 个）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="big-file-split">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-02-2342">
-<meta name="doc-updated" content="26-11-03-0327">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html">
+<meta name="doc-updated" content="26-11-03-0815">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/testing/baselines/26-11-03-0819-test-big-file-split.md">
 <style>
   :root {
     --bg: #10151a;
@@ -311,7 +311,8 @@
   </tbody>
 </table>
 <div class="aside">R2 25 个原文件拆分后实测：仅以上两个新桶超阈值，其余新桶均 ≤1000 行（最大 987 行）。<br>
-R4 8 个前端文件拆分后实测：新桶全部 ≤1000 行（最大 <code>shortcuts_engine.js</code> 804 行），排期清单无新增；暂缓 2 个（<code>drawer_templates.js</code> 1170 / <code>qb_traffic_chart.js</code> 1142）与不拆 2 个（<code>fx/showcase.html</code> 2926 / <code>shared/app.js</code> 981）按 §06 保持零改动。</div>
+R4 8 个前端文件拆分后实测：新桶全部 ≤1000 行（最大 <code>shortcuts_engine.js</code> 804 行），排期清单无新增；暂缓 2 个（<code>drawer_templates.js</code> 1170 / <code>qb_traffic_chart.js</code> 1142）与不拆 2 个（<code>fx/showcase.html</code> 2926 / <code>shared/app.js</code> 981）按 §06 保持零改动。<br>
+R5 9 个后端文件拆分后实测：新桶全部 ≤1000 行（最大 <code>hr/service_wave.py</code> 945 行），排期清单无新增；暂缓 2 个（<code>config/validation/sections.py</code> 1044 / <code>core/qbmanager.py</code> 1008）按 §06 保持零改动。<code>utils</code> 的 Windows 域与 tracker 脱敏域因测试按 <code>utils.*</code> 打补丁（<code>_bound_user32</code> / <code>urlparse</code>）必须与 patch 名同模块，保留在根；<code>resolve_or_create_token</code> 同理留根（<code>atomic_write</code> 打桩点）。</div>
 
 <h2><span class="no">§08</span>完成判据、风险与未知项</h2>
 <h3>完成判据</h3>
@@ -440,6 +441,8 @@ R4 8 个前端文件拆分后实测：新桶全部 ≤1000 行（最大 <code>sh
   <li><span class="tag">R1 · 26-11-03-0144</span> 补 R2 新口径: 新桶超 1000 行不再就地二次切分, 登记 新桶超阈值·后续排期 清单(2 个)</li>
   <li><span class="tag">R2 · 26-11-03-0327</span> R3 完成: 4 拆(sim_qb/qb_capture/background.js/test_server.py) 3 暂缓零改动; 新桶均 &lt;=1000(最大 897), 排期清单无新增; 全量见 kb.baseline</li>
   <li><span class="tag">R4 · 26-11-03</span> R4 完成: 8 拆(console_hub.css 4 段 + drawer/config_hub/config_editor/shortcuts/columns/commands/dialogs 共 20 片段)、2 暂缓与 2 不拆零改动; 全部 move-only(根入口保留 + 片段尾接加载); 新桶均 &lt;=1000(最大 804), 排期清单无新增; 静态守阵按「域聚合读」同步引用, 断言语义未改; 全量见回复实测</li>
+  <li><span class="tag">R5 · 26-11-03</span> R5 完成: 9 拆(utils→parse/paths + windows 留根; views→group/row/episodes/search; traffic_store→common/paths/codec/agg + store 留根; traffic_sample_mod→common/agg/blocks; relocate_mod→common/lifecycle/plan/exec; ops_mod→common/verdict/skip/jobs; hr/service→common/wave/status; webui/runtime→common/views/commands/stream; webui/commands→common/torrents/config/limit/logs)、2 暂缓零改动; 全部 move-only(根保留组合类/门面并全量重导出, patch 敏感名留根); 新桶均 &lt;=1000(最大 945), 排期清单无新增; 全量见回复实测</li>
+  <li><span class="tag">收束 · 26-11-03-0815</span> 计划全部五轮(R1-R5)执行完毕, 状态置 Done: 56 个「拆」候选均已拆分(新桶均 &lt;=1000 或按新口径登记), 22 暂缓 / 2 不拆保持零改动; 剩余待办为两个已登记新桶(<code>tests/test_utils_windows.py</code> 1080 / <code>tests/test_web_commands_dispatch.py</code> 1058)、<code>73&gt;70</code> 容量债务, 以及 22 暂缓 / 2 不拆文件的再启动触发条件, 均不在本计划范围; 基线见 kb.baseline</li>
 </ul>
 
 </div>

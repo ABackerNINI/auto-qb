@@ -577,13 +577,15 @@ def test_fmt_speed_size_ladder_equivalence():
 
 
 def test_fmt_ladder_single_point():
-    """守阵(issue infra-fmt-ladder-dup): 阶梯循环单点 _fmt_ladder —— utils.py 里 `if value >= div:` 只出现一次
+    """守阵(issue infra-fmt-ladder-dup): 阶梯循环单点 _fmt_ladder —— utils_paths.py 里 `if value >= div:` 只出现一次
 
+    (R5 拆分: 该函数随格式化域迁至 utils_paths.py, 仍由 utils 重导出; 判据语义不变。)
     fmt_speed / fmt_size 降为委托; 红验: 任一函数改回自抄阶梯即计数 >1 红。
     """
     from pathlib import Path
 
-    src = (Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "infra" / "utils.py").read_text(encoding="utf-8")
+    src = (Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "infra" /
+           "utils_paths.py").read_text(encoding="utf-8")
     assert src.count("if value >= div:") == 1, "阶梯判单点(出现 >1 次 = 又有人自抄)"
 
 

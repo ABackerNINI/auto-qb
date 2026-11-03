@@ -201,7 +201,7 @@ def test_search_row_view_converged_on_member_view():
 
     from auto_qb.torrents.view import view_field_value
 
-    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "views.py"
+    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "views_search.py"
     tree = ast.parse(src.read_text(encoding="utf-8"))
     view_fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_view")
     ret = next(n for n in ast.walk(view_fn) if isinstance(n, ast.Return))

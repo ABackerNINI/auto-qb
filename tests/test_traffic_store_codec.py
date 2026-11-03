@@ -19,7 +19,7 @@ v4 纯函数区(B1 立并于批 2 接线, plan 26-10-05-2200 §01):
 - test_v4_parse_discipline_dual_parser_same_verdict: 同纪律夹具双 parser 同判(issue 26-10-29-1304 R07-T06
   解析纪律收敛 _parse_v4_text 单点的行为守阵)—— 空文本/头行缺失与旧头行(整文件坏含头行本身)/
   坏行族+空行注释跳/撕裂尾(末行坏才豁免)/完整末行无换行 五组夹具, day 与 agg 纪律面逐项同判
-- test_v4_parse_skeleton_single_point: 静态守阵 —— 骨架行/行循环/驱动器接线在 traffic_store.py
+- test_v4_parse_skeleton_single_point: 静态守阵 —— 骨架行/行循环/驱动器接线在 traffic_store_codec.py
   各恰一处(_parse_v4_text 单点, 两解析器无行循环副本)
 
 v4 写侧存储(S2a/S2b, TrafficV4Store):
@@ -101,6 +101,8 @@ from datetime import datetime
 import pytest
 
 import auto_qb.core.traffic_store as traffic_store_module
+
+import auto_qb.core.traffic_store_codec as traffic_store_codec_module
 
 from auto_qb.config import QbTraffic
 
@@ -449,10 +451,10 @@ def test_v4_parse_discipline_dual_parser_same_verdict():
 
 def test_v4_parse_skeleton_single_point():
     """静态守阵: 解析纪律骨架单点(issue 26-10-29-1304 R07-T06) —— 骨架行 / 行循环 /
-    驱动器接线在 traffic_store.py 各恰一处(两解析器都走 _parse_v4_text, 无行循环副本)。
+    驱动器接线在 traffic_store_codec.py 各恰一处(两解析器都走 _parse_v4_text, 无行循环副本)。
     口径说明: 同形的空行注释跳行在 traffic_limits.parse_limits_day_text 还有一处, 但那是
     另一族解析器(无头行门闩 / 撕裂尾直接丢弃), 不在本 issue 收敛范围 —— 守阵只扫本文件"""
-    src = inspect.getsource(traffic_store_module)
+    src = inspect.getsource(traffic_store_codec_module)  # R5 拆分: 编解码骨架迁至 traffic_store_codec.py
     assert src.count('if not s or s.startswith("#")') == 1, "空行注释跳骨架行应只在公共驱动器"
     assert src.count("for i, line in enumerate(lines[1:]):") == 1, "行循环应只在公共驱动器"
     assert src.count("def _parse_v4_text(") == 1

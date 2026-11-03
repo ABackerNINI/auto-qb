@@ -11,15 +11,15 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (2)
+## Open (1)
 
-- [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](../26-11-02-2342-plan-big-file-split.html) — `big-file-split`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (194)
+## Done (195)
 
 - [26-11-03-0316] [测试侧端口改 0 自动分配](../26-11-03-0316-plan-test-port-zero.html) — `test-port-zero`
 - [26-11-03-0120] [WEBUI 搜索结果随新增种子自动更新](../26-11-03-0120-plan-webui-search-auto-refresh.html) — `webui-search-auto-refresh`
+- [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](../26-11-02-2342-plan-big-file-split.html) — `big-file-split`
 - [26-11-02-0657] [测试临时目录自举与互斥锁方案 — R→H→%TEMP% 固定探测 · 禁静默降级 · 禁外部 TMPDIR · 锁自举 · 评审稿](../26-11-02-0657-plan-testing-tmpdir-bootstrap.html) — `testing-tmpdir-bootstrap`
 - [26-11-02-0351] [WEBUI 大文件列表性能统一优化(抽屉千级文件 + 主表千级复测)](../26-11-02-0351-plan-webui-large-filelist-perf.html) — `webui-large-filelist-perf`
 - [26-11-02-0134] [整组迁移 qb_temp 闸门按归属收窄](../26-11-02-0134-plan-relocate-qbtemp-narrow.html) — `relocate-qbtemp-narrow`

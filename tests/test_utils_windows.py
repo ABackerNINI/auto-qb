@@ -128,14 +128,18 @@ def test_platform_detect_single_point_static_guard():
     `utils.is_windows/is_linux/is_mac/is_posix` 是「当前平台」事实的唯一口径 —— src/ 下
     任何模块不得再裸写 `sys.platform.startswith(...)` 另立判据: autostart.py 曾 6 处 +
     tray/app.py 1 处绕过单点, 且与单点的 "win" 前缀口径不一致(旁路写 "win32"), 新增平台
-    分支时各处判断不一致。本守阵扫 src/ 全部 .py, 仅豁免单点自身(infra/utils.py);
+    分支时各处判断不一致。本守阵扫 src/ 全部 .py, 仅豁免单点自身(infra/utils.py 与
+    R5 拆分后的 infra/utils_parse.py —— 平台判定定义的现居所);
     新旁路直接判红。notify.py 取 `sys.platform` 字符串值作平台标识(非 startswith 判据)不拦。
     """
     src_root = Path(__file__).resolve().parents[1] / "src"
-    single_point = src_root / "auto_qb" / "infra" / "utils.py"
+    single_points = {
+        src_root / "auto_qb" / "infra" / "utils.py",
+        src_root / "auto_qb" / "infra" / "utils_parse.py",
+    }
     offenders = []
     for path in sorted(src_root.rglob("*.py")):
-        if path == single_point:
+        if path in single_points:
             continue
         for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             if "sys.platform.startswith" in line:

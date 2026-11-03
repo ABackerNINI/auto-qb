@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** 按计划完成 R1(10 个测试文件 → 36 个测试文件 + 12 个支撑/扫描模块)、R2(25 个测试文件 → 90 个分桶 + 20 个 support)、R3(4 个工具/脚本/扩展文件 → 9 个分片, 3 个暂缓零改动)与 R4(8 个前端文件 → 20 个域名片段 + 4 段 CSS, 2 暂缓/2 不拆零改动); 测试函数名与模块级界定逐字不变; 全量见 kb.baseline; 2 个超千行新桶按新口径登记计划后续排期, R3/R4 均无新增超阈值桶; R4 改动未提交, 留用户审阅。
+**Summary:** 按计划完成 R1(10 个测试文件 → 36 个测试文件 + 12 个支撑/扫描模块)、R2(25 个测试文件 → 90 个分桶 + 20 个 support)、R3(4 个工具/脚本/扩展文件 → 9 个分片, 3 个暂缓零改动)、R4(8 个前端文件 → 20 个域名片段 + 4 段 CSS, 2 暂缓/2 不拆零改动)与 R5(9 个后端大文件 → 34 个新子模块, 2 暂缓零改动, patch 敏感名留根/MRO 与公开面不变); 测试函数名与模块级界定逐字不变; 全量见 kb.baseline; 计划 R1-R5 已全部收束(计划状态 Done), 2 个超千行新桶按口径登记后续排期, 剩余待办: 新桶 `tests/test_utils_windows.py` 1080 / `tests/test_web_commands_dispatch.py` 1058、`73>70` 容量债务、22 暂缓与 2 不拆文件的再启动触发条件。
 **Topics:** test-big-file-split
-**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md
+**Refs:** memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0048-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0157-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0326-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/testing/baselines/26-11-03-0819-test-big-file-split.md
 
 ## 原始请求
 
@@ -58,6 +58,9 @@
 | R4-1 | 8 个前端文件 move-only 拆分(`console_hub.css` 4 段 + `drawer`/`config_hub`/`config_editor`/`shortcuts`/`columns`/`commands`/`dialogs` 共 20 片段; 2 暂缓/2 不拆零改动) | Done (2026-11-03) |
 | R4-2 | 四套皮肤清单加载序同步 + 守阵「域聚合读」引用适配 + 定向/全量闸门 | Done (2026-11-03) |
 | R4-3 | 收尾回写(计划 §07/§10、本档案、基线切片) + 提交推送 | Done (2026-11-03) |
+| R5-1 | 9 个后端单类/大 Mixin move-only 拆分(`utils`/`traffic_store`/`traffic_sample_mod`/`relocate_mod`/`ops_mod`/`hr.service`/`views`/`runtime`/`commands`; 2 暂缓零改动) | Done (2026-11-03) |
+| R5-2 | patch 敏感 globals 留根 + 组合类 MRO 保持 + 公开面 re-export + 6 个守阵测试引用最小同步 | Done (2026-11-03) |
+| R5-3 | 计划 §07/§10 回写 + 定向/全量闸门(未提交, 按本轮要求留审阅) | Done (2026-11-03) |
 
 ## 进度日志
 
@@ -75,3 +78,7 @@
 - 2026-11-03 R4 完成(未提交): 8 个前端文件 move-only 拆分 —— console_hub.css 1589->291 根+3 连续段(前 3 段沿用层叠序); drawer.js 1543->916+3 片段, config_hub.js 1484->617+3, config_editor.js 1475->736+3, shortcuts.js 1442->428+2, columns.js 1429->124+5(computed 片段最后加载), commands.js 1076->431+2(_runningToast 工厂留根), dialogs.js 1022->720+2; 片段一律 `Object.assign(window.AQB_*.methods, ...)` 原地扩充、加载序紧跟根文件; 四套皮肤 index.html 清单与 CSS link 同步; 守阵改「域聚合读」(tests/webui_helpers.py SHARED_SPLIT_PARTS/read_shared/bundle_file), 断言语义未改; 暂缓 drawer_templates/qb_traffic_chart 与不拆 fx/showcase.html/app.js 零改动; 新桶最大 804 行, 排期清单无新增
 
 - 2026-11-03 04:59 R4 完成: 8 个前端文件 move-only 拆为 20 个域名片段 + 4 段连续 CSS(2 暂缓/2 不拆零改动), 四皮肤清单与守阵域聚合读同步; 新桶均 <=1000(最大 804), 排期无新增
+
+- 2026-11-03 R5 完成(未提交): 9 个后端单类/大 Mixin move-only 拆分 —— utils 1435->879 根+2(utils_parse/utils_paths), traffic_store 1616->615 根+4, traffic_sample_mod 1622->650 根+3, relocate_mod 1586->131 根+4, ops_mod 1270->374 根+3, hr/service 1829->411 根+2(service_wave 945 最大桶), views 1163->432 根+4, runtime 1701->247 根+3, commands 1590->240 根+4; 拆分后类改为 Mixin 组合且 MRO 顺序与原方法解析一致, 根全量 re-export 公开面; patch 敏感 globals(`_bound_user32`/`_bound_kernel32`/`urlparse`/`atomic_write`+`resolve_or_create_token`/`parse_v4_*`/`TrafficSampleModule.*`/`OpsModule._backup_torrent`/`runtime.time`/`commands.TransferOrchestrator`/`build_adapter`/`build_site_view`/三个 budget 常量)全部留根; 6 个静态守阵测试只改引用指向(断言语义未变); 新桶均 <=1000, 排期无新增; 2 个暂缓(`config/validation/sections.py` 1044 / `core/qbmanager.py` 1008)零改动; test.full 全绿, 数字见 kb.baseline; 收集数增量来源为开工同步并入的上游提交新增用例, R5 本身未增删测试
+
+- 2026-11-03 08:20 R5 完成并收束计划: 9 个后端大文件 move-only 拆分(34 个新模块, 2 暂缓零改动), patch 敏感名留根/MRO 与公开面不变, 新桶最大 945; 全量见 kb.baseline; 计划 R1-R5 全部完成, 状态 Done

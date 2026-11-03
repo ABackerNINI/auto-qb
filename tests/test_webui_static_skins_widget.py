@@ -509,9 +509,11 @@ def test_frontend_search_auto_refresh_wiring():
     def _read(*parts):
         return open(os.path.join(repo, *parts), encoding="utf-8").read()
 
-    runtime_py = _read("src", "auto_qb", "webui", "runtime.py")
+    # R5 拆分: __init__ 仍在 runtime.py, note_search_data_changed 迁至 runtime_stream.py
+    runtime_py = _read("src", "auto_qb", "webui", "runtime.py") + \
+        _read("src", "auto_qb", "webui", "runtime_stream.py")
     state_py = _read("src", "auto_qb", "webui", "server", "routes", "state.py")
-    views_py = _read("src", "auto_qb", "webui", "views.py")
+    views_py = _read("src", "auto_qb", "webui", "views_search.py")
     manager_py = _read("src", "auto_qb", "core", "qbmanager.py")
     view_js = open(os.path.join(shared, "view.js"), encoding="utf-8").read()
     polling_js = open(os.path.join(shared, "polling.js"), encoding="utf-8").read()

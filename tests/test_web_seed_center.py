@@ -170,7 +170,7 @@ def test_seed_view_no_member_view_restatement():
     """
     import ast
 
-    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "views.py"
+    src = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "views_row.py"
 
     def _declared_keys(fn_name: str) -> set:
         tree = ast.parse(src.read_text(encoding="utf-8"))
@@ -543,8 +543,11 @@ def test_api_enqueue_wakes_main_loop(web_env):
     assert len(mgr._wake_calls) == 1, f"用户命令投递后应唤醒主循环, 实际 {len(mgr._wake_calls)} 次"
 
     # 静态反向守卫: Web 侧所有 self-posted 的 cmd 名都必须登记, 否则下次新增就会自激
-    src = open(os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui", "views.py"),
-               encoding="utf-8").read()
+    views_dir = os.path.join(os.path.dirname(__file__), "..", "src", "auto_qb", "webui")
+    src = "".join(
+        open(os.path.join(views_dir, fn), encoding="utf-8").read()
+        for fn in ("views.py", "views_episodes.py", "views_search.py")
+    )
     # 两种投递写法都要认(2026-09-20 起统一走门面的 post_command; 旧写法保留匹配以防回退)
     posted = set(re.findall(r'web_commands\.put\(\(\s*"([^"]+)"', src)
                 ) | set(re.findall(r'web\.post_command\(\s*"([^"]+)"', src))
