@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1035">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-harness-port">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-1053-ci-e2e-base-url-fix.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()">
 <meta name="issue-summary" content="search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败">
 <title>HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl() · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()</h1>
     <p class="lede">search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1035-test-e2e-harness-baseurl-import</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 10:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">e2e</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,18 +158,34 @@ Command failed with exit code 1
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
     <p>推荐：spec 内改用 <code>baseUrl()</code>（在 <code>test()</code> 体或 <code>beforeEach</code> 里调用，不要在模块顶层求值，端口由 webServer 启动后才确定）。次选：<code>harness.mjs</code> 补一个兼容导出，但会保留两套端口 API。</p>
-    <p>防复发：加一条 import-smoke 守卫（如 <code>npx playwright test --list</code> 或 node 静态导入全部 spec），在提交闸门里跑，避免「spec 新增 + harness 改名」再次断链。</p>
+    <p>防复发：加一条 import-smoke 守卫（如 <code>commands run dev.e2e -- --list</code> 或 node 静态导入全部 spec），在提交闸门里跑，避免「spec 新增 + harness 改名」再次断链。</p>
+    <p><b>实际修法（提交 <code>88c1d3f5</code>，完全覆盖本缺陷）</b>：按推荐方案改调用方、不动 harness：
+    <a href="../../e2e/search-uncovered-no-duplicate.spec.mjs">search-uncovered-no-duplicate.spec.mjs</a> 改为
+    <code>import { baseUrl }</code>，5 处 <code>${BASE_URL}/...</code> 改为 <code>${baseUrl()}/...</code>；
+    新增守阵 <a href="../../tests/test_port_zero_guards.py">test_e2e_modules_use_lazy_base_url</a>
+    （扫 <code>e2e/</code> 全部 <code>.mjs</code> 断言 <code>BASE_URL</code> 零命中，补住原守阵只查定义侧的缺口）；
+    坑档见 <a href="../pitfalls/testing/smoke.md">smoke.md「新增 spec 从 harness import BASE_URL」条</a>。
+    未采用次选（harness 保留兼容导出），避免长期保留两套端口 API。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 10:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 13:20 — 确认缺陷已由提交 <code>88c1d3f5</code> 完全覆盖（改调用方 + 守阵 + 坑档），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-03 10:05 仍复现（<code>commands run dev.e2e</code> 4.9s 失败）；同一 HEAD 定向 spec 148 passed / 16 skipped / 0 failed。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：见上「实际修法」段 —— <code>88c1d3f5</code> 只改调用方 spec、补调用侧守阵与坑档，
+    harness 与产品代码零改动。</p>
+    <p><b>验证方式与数字</b>（提交同一轮实测）：
+    ① <code>commands run dev.e2e -- --list</code> 通过 —— 48 个 spec / <strong>440 用例</strong>（原报错发生在收集阶段，现已越过）；
+    ② 定向 <code>search-uncovered-no-duplicate</code> + <code>search-auto-refresh</code> = <strong>18 passed</strong>；
+    ③ 全量 <code>commands run dev.e2e</code> 正常启动并跑完 —— 当时 416 passed / 6 failed
+    （6 条全为另件 <a href="26-11-03-1135-test-e2e-site-alerts-order-pollution.html">26-11-03-1135</a> 的
+    site-alerts 顺序污染，与本缺陷无关；该污染随后已单独修桩，全量复跑 <strong>422 passed / 18 skipped / 0 failed</strong>）；
+    ④ Python 侧 <code>commands run test.full</code> = <strong>5002 passed / 2 skipped / 99%</strong>。</p>
   </section>
 
   <footer>

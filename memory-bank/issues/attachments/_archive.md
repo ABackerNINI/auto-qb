@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (76)
+## Open (74)
 
 - [docs] [tests-real env_registry 环境2 注释与配置不一致](../26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html) — 注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01
 - [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
@@ -16,12 +16,10 @@
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）](../26-11-03-1144-bug-gtm-auth-body-drain.html) — 鉴权失败分支不读请求体即回 401 并关连接，Win 上客户端偶发 WinError 10053，test_auth_required_on_all_write_endpoints 间歇失败
 - [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](../26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量
-- [test] [site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿](../26-11-03-1135-test-e2e-site-alerts-order-pollution.html) — 全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](../26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败
 - [bug] [flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖](../26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html) — views.css @media(max-width:900px) 的 .ce-page padding 12px 12px 24px 恒被 dialogs.css 的 .ce-page padding 16px 12px calc(...) 覆盖, 移动端紧凑内边距从未生效
 - [test] [前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫](../26-11-03-1120-test-webui-config-normalize-parity-gap.html) — config_rules.js 手抄 compat.py 的动作/条件/choose 归一语义, 两套期望分散在 Python 与 DOM 电池, 无同输入同输出的跨语言对拍用例
 - [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](../26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型
-- [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](../26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](../26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。
@@ -89,8 +87,10 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (363)
+## Done (365)
 
+- [test] [site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿](../26-11-03-1135-test-e2e-site-alerts-order-pollution.html) — 全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关
+- [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](../26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败
 - [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行
 - [test] [e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-big-table-existing-red.html) — dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)

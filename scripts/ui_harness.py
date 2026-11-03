@@ -1019,8 +1019,6 @@ def main() -> int:
 
     site_conf = mgr.config.trackers["HHan"]
     torrents = _make_torrents(args.torrents, site_conf)
-    if args.site_alert == "on":
-        _inject_site_alerts(torrents)
     if args.hr_site:
         _inject_hr_site(torrents)
         print(f"[harness] HR 站点判定已注入: {args.torrents} 个种子轮转全分支")
@@ -1030,6 +1028,15 @@ def main() -> int:
     seed_store(mgr, torrents)
     for tor in torrents:  # 抽屉/详情端点按 hash 取, 与 store 保持一致
         mgr.client.torrents[tor.hash] = tor
+    # 对齐增量同步游标(issue 26-11-03-1135): seed_store 直写 by_hash 绕过了首轮同步, store.rid
+    # 仍为 0 —— 首个 /__harness__/add_torrent|remove_torrent 探针拿 rid=0 会得到 full_update,
+    # _refresh_torrents 随即 emit full_round, TrackerModule 按 client.torrents_trackers 重匹配所有
+    # tracker_conf=None 的记录, 把 _inject_site_alerts 注入的 no_site_conf 行改回 HHan(站点告警
+    # 用例便随“哪个 spec 先用了探针”而红)。生产首轮本就是全量轮, 这里补跑一次真实全量同步, 让
+    # 后续探针都走增量路径。注入必须在这之后: 否则全量 delta 会覆盖注入的 tracker 字段。
+    mgr.store.apply_sync(mgr.api)
+    if args.site_alert == "on":
+        _inject_site_alerts(torrents)
     # 抽屉 peers 页签的数据面(issue 26-10-07-2309): FakeClient.peers_map 默认恒空 ⇒ peers 页签
     # 在桩服务下永远渲染空态, e2e 与截图目检从未覆盖「有数据」渲染路径。按种子序号灌合成对端
     # (含 flags/速度/进度/客户端多样性, 见 _make_peers_response), 端点 /api/torrents/{h}/peers

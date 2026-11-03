@@ -2,7 +2,7 @@
 
 > 摘要: CI Playwright 收集期 `BASE_URL` 导出缺失修复(改调用方用 `baseUrl()`) + e2e 回潮守阵收尾基线
 > 基线时间: 2026-11-03 10:53
-**Refs:** memory-bank/pitfalls/testing/smoke.md, memory-bank/tasks/26-11-03-webui-search-uncovered-dedup.md
+**Refs:** memory-bank/pitfalls/testing/smoke.md, memory-bank/tasks/26-11-03-webui-search-uncovered-dedup.md, memory-bank/issues/26-11-03-1035-test-e2e-harness-baseurl-import.html
 
 ## 验收数字
 

@@ -2,8 +2,8 @@
 
 > 摘要: 桩直改字段/手写派生产物(绕过生产单点函数)当时能过, 生产侧后来加了**以生产函数副作用为判据**的新判定后, 桩链路静默退化成另一条路径 —— 表现是「生产对、桩错」且无报错。本仓实例: ui_harness 直写 delta_fields 绕过 store._apply, S5b 给 flush_views 加 keyed 判定(rounds_applied 前进才算键级源)后, 桩真值轮恒 unkeyed → **恒 full**(S4→S5b 间事故, 2ca5491f 修复)。
 > 等级: L0
-> 触发: ui_harness, 冒烟桩, delta_fields, rounds_applied, keyed, unkeyed_command_source, 恒 full, store._apply, 桩失真, 手写派生字段, view_changed, 增量降级
-**Refs:** memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/pitfalls/testing/stubs-sim.md
+> 触发: ui_harness, 冒烟桩, delta_fields, rounds_applied, keyed, unkeyed_command_source, 恒 full, store._apply, 桩失真, 手写派生字段, view_changed, 增量降级, seed_store, rid, full_update, full_round, tracker_conf, site_alert, no_site_conf, add_torrent, 控制端点
+**Refs:** memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/pitfalls/testing/stubs-sim.md, memory-bank/issues/26-11-03-1135-test-e2e-site-alerts-order-pollution.html
 
 ### 桩改状态必须走生产同一条推导(`store._apply`), 不得手写派生字段
 
@@ -33,6 +33,24 @@
   seeding_time / tags / category 等); 或把替身字段集与真 `compat._SNAPSHOT_FIELDS` 对齐
   (那是另一个独立改动, 需评估波及面)。给真记录加快照字段时, 记得检查替身元组是否同步
   (同「替身漂移」家族, 见 stubs-sim.md)。
+
+### 桩直写 store.by_hash 不推进同步游标 → 首个探针触发 full_round, 静默重写注入的配置派生态
+
+- **触发**: 桩为了保留对象身份用 `seed_store()` 直写 `store.by_hash`(未经 `apply_sync`), 之后又提供
+  `/__harness__/add_torrent|remove_torrent` 这类「走生产路径」的控制端点。
+- **判别**: `store.rid` 仍为 0 ⇒ 首个探针触发 `_refresh_torrents` → `apply_sync(rid=0)` ⇒ FakeClient
+  回 `full_update=true` ⇒ `need_validate` 真 ⇒ 内核 `emit("full_round")` ⇒
+  `TrackerModule._on_full_round` 把所有 `tracker_conf is None` 的记录按 `client.torrents_trackers`
+  重匹配。桩此前注入的 `tracker_conf=None`(no_site_conf)因此在**第一次 add/remove 后静默变成
+  真实站点配置**, 依赖它的断言全红; `tracker_health_msg` 类注入不经 full_round 而幸存 —— 症状是
+  「只有一半注入态消失」, 且隔离跑绿、全量跑红(取决于哪个 spec 先用了探针)。
+- **实证**(2026-11-03, issue 26-11-03-1135): 未修桩时 `/api/state` 注入后 2 条 site_alert,
+  `POST /__harness__/add_torrent` 后只剩 tracker_error(1 条), remove 后也不恢复; 修桩后
+  add/remove 前后恒为 2 条。
+- **处置**: 启动时在 `seed_store` + client 数据灌入之后、注入派生状态之前补一次真实全量同步
+  (`mgr.store.apply_sync(mgr.api)`) 对齐 `rid`(生产首轮本就是全量轮); 注入必须放在其后, 否则
+  全量 delta 会覆盖注入的 `tracker` 字段。守阵: 用控制端点的 spec 与依赖注入态的 spec 同轮全量
+  跑必须全绿。
 
 ### 替身 to_dict 用 vars() 全导出、非快照对象字段漏出 → 详情端点恒 500(实爆实例)
 

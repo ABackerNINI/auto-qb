@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1135">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-full-run-pollution">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-1318-e2e-order-pollution.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿">
 <meta name="issue-summary" content="全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关">
 <title>site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1135-test-e2e-site-alerts-order-pollution</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -179,8 +179,27 @@ $ commands run dev.e2e -- e2e/search-auto-refresh.spec.mjs e2e/search-uncovered-
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查。已排除：① BASE_URL 收集崩溃（已另修，收集 440/48 通过）；② 端口/URL 写死；③ site-alerts 自身逻辑（隔离 8/8 绿）。<br>
-    已确认：污染由「排在 site-alerts 之前执行的 spec」引入 —— 用 <code>search-auto-refresh</code> + <code>search-uncovered-no-duplicate</code> + <code>shift-select-anchor</code> 三个前置 spec 与 site-alerts 组合跑即可复现同类红，说明桩内共享状态或浏览器存储被前置用例改写。</div>
+    <div class="callout"><b>已证实</b>（2026-11-03 12:35，真桩实验 + 代码链路）：根因是<strong>桩侧共享状态泄漏</strong>，
+    不是浏览器存储、跨 context 复用或时序抖动。
+    <ul>
+      <li>桩启动用 <code>seed_store()</code> 直写 <code>store.by_hash</code>（保留对象身份），绕过了 <code>apply_sync</code>，
+      故 <code>store.rid</code> 仍为 <code>0</code>。</li>
+      <li>第一个 <code>/__harness__/add_torrent|remove_torrent</code> 探针调用 <code>mgr._refresh_torrents(False)</code>
+      ⇒ <code>apply_sync(rid=0)</code> 拿到 FakeClient 的 <code>full_update=true</code>
+      （<code>tests/helpers.py</code> 的 <code>sync_maindata</code>：<code>rid==0</code> 必回全量）。</li>
+      <li><code>need_validate</code> 为真 ⇒ 内核 <code>emit("full_round")</code>（<code>core/qbmanager.py</code> 同步段）
+      ⇒ <code>TrackerModule._on_full_round</code>（<code>core/modules/tracker_mod.py</code>）把全部
+      <code>tracker_conf is None</code> 的记录按 <code>client.torrents_trackers()</code> 重匹配。</li>
+      <li>桩的 <code>torrents_trackers()</code> 默认对任意 hash 都回 HHan URL，于是 <code>_inject_site_alerts</code>
+      注入的 no_site_conf 行被改回 HHan 配置，<code>_site_alert</code> 回落为空串；tracker_error 行的
+      <code>tracker_health_msg</code> 不经 full_round，故幸存 —— 这正是「每皮肤 3 条红、第 2 条用例仍绿」的分型。</li>
+    </ul>
+    <p><b>实测证据</b>（真桩 <code>--torrents 300 --port 8088</code>）：注入后 <code>/api/state</code> 有 2 条
+    <code>site_alert</code>（no_site_conf + tracker_error）；<code>POST add_torrent</code> 后只剩 1 条
+    （tracker_error），再 <code>remove_torrent</code> 也不回弹；同一请求序列在修桩后恒为 2 条。</p>
+    <p><b>已排除</b>：① BASE_URL 收集崩溃（已另修，收集 440/48 通过）；② 端口/URL 写死；③ site-alerts 自身逻辑
+    （隔离 8/8 绿）；④ 浏览器 localStorage / page-context 跨 spec 复用（红/绿只随「此前是否跑过含探针的 spec」
+    变化，与页面存储无关）；⑤ 产品搜索逻辑（探针走生产 <code>_refresh_torrents</code>，被改写的只是桩注入的配置派生态）。</p></div>
   </section>
 
   <section id="s6">
@@ -193,18 +212,38 @@ $ commands run dev.e2e -- e2e/search-auto-refresh.spec.mjs e2e/search-uncovered-
       <li><b>C. 分轮执行</b>：把 <code>site-alerts</code> 划进独立 worker/批次（CI 与 <code>dev.e2e</code> 双份配置），代价是总时长上升、且掩盖真污染。</li>
     </ul>
     <p>倾向 A + B 组合：先用二分定位源，A 兜底判据，不选 C。</p>
-    <p><b>验收判据</b>：① 全量 <code>npx playwright test</code>（或 <code>commands run dev.e2e</code>）440 例跑完且 site-alerts 6 条转绿、其余用例无新增红；② 隔离 <code>commands run dev.e2e -- e2e/site-alerts.spec.mjs</code> 仍 8 passed；③ 用上面的「三件套 + site-alerts」组合复现命令跑出 32 passed。</p>
+    <p><b>实际修法（2026-11-03 12:36，改走「修桩」）</b>：根因在桩自身（直写 store 未对齐同步游标），注入态被探针路径
+    触发的生产 <code>full_round</code> 改写，故不在 spec 侧兜底、也不改产品代码。改 <code>scripts/ui_harness.py</code>：
+    在 <code>seed_store()</code> + <code>client.torrents</code> 灌入之后补一次真实全量同步
+    <code>mgr.store.apply_sync(mgr.api)</code> 对齐 <code>rid</code>（生产首轮本就是全量轮），再把
+    <code>_inject_site_alerts()</code> 移到其后（防止全量 delta 覆盖注入的 <code>tracker</code> 字段）。
+    效果：所有后续 add/remove 探针都走增量路径，不再触发 full_round 重匹配。spec/产品代码零改动。</p>
+    <p><b>验收判据</b>：① 全量 <code>commands run dev.e2e</code> 440 例跑完且 site-alerts 6 条转绿、其余用例无新增红；
+    ② 隔离 <code>commands run dev.e2e -- e2e/site-alerts.spec.mjs</code> 仍 8 passed；③ 三件套组合
+    （<code>search-auto-refresh</code> + <code>search-uncovered-no-duplicate</code> + <code>site-alerts</code>）全绿。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 11:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 12:29 — 用户指派本轮修复，状态 <strong>In Progress</strong>（先复验再定位）</li>
+      <li>2026-11-03 13:12 — 根因证实为桩侧同步游标未对齐（首个探针触发 full_round 重匹配），修桩后状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-03 12:35 仍复现 —— 真桩 <code>--torrents 300 --port 8088</code> 注入后 2 条
+    <code>site_alert</code>，<code>POST /__harness__/add_torrent</code> 后只剩 <code>tracker_error</code> 1 条、
+    <code>remove_torrent</code> 后不回弹；同时确认单文件隔离 8/8 绿（全量红/隔离绿的分型仍在）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>：见上「实际修法」段 —— 只改 <code>scripts/ui_harness.py</code>（启动补一次
+    <code>apply_sync</code> 对齐 <code>rid</code>，注入后移），产品代码与 spec 零改动。</p>
+    <p><b>验证方式与数字</b>（2026-11-03 13:12 实测）：① 隔离
+    <code>commands run dev.e2e -- e2e/site-alerts.spec.mjs</code> → <strong>8 passed</strong>；
+    ② 三件套组合（<code>search-auto-refresh</code> + <code>search-uncovered-no-duplicate</code> +
+    <code>site-alerts</code>）→ <strong>26 passed</strong>（0 红）；
+    ③ 全量 <code>commands run dev.e2e</code> → 440 例 <strong>422 passed / 18 skipped / 0 failed</strong>，
+    总时长 <strong>18.4m</strong>（<code>dev.e2e</code> 引擎预算 2700s 未触发掐断；site-alerts 8 条全绿）；
+    ④ Python 侧 <code>commands run test.full</code> → <strong>5002 passed / 2 skipped</strong>（99%），与修前一致。</p>
   </section>
 
   <footer>
