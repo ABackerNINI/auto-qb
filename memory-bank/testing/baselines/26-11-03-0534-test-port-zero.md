@@ -2,7 +2,7 @@
 
 > 摘要: 端口改 0 实施轮全量测试基线
 > 基线时间: 2026-11-03 05:34
-**Refs:**
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html
 
 ## 验收数字
 

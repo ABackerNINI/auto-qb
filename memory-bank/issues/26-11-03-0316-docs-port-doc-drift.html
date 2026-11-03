@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-0316">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="port-doc-drift">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-docs-doc-drift-sweep.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口">
 <meta name="issue-summary" content="loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585">
 <title>端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0316-docs-port-doc-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 03:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -100,6 +100,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 03:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 — 已修复：代码 <code>_try_port</code>（qb/web 1-65535）与 <code>_try_port_or_zero</code>（hr.channel 0-65535）分述；minimal.yml 16585→8080；sim 文档同步去掉 16585。</li>
     </ul>
   </section>
 

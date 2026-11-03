@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="full-code-review-3">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0557">
-<meta name="doc-updated" content="26-11-03-1249">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s6.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s7.md">
+<meta name="doc-updated" content="26-11-03-2146">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0534-test-port-zero.md, memory-bank/testing/baselines/26-11-03-1245-code-review-3-s7.md, memory-bank/plans/26-10-30-0221-plan-full-code-review-2.html, memory-bank/reports/26-10-05-1036-report-full-code-review.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s6.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s7.md">
 <style>
   :root {
     --bg: #10151a;
@@ -72,13 +72,13 @@
 <h1>实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审</h1>
 <p class="lede">对第二次全面评审终点 <code>bf9920d3</code> 到当前 HEAD <code>812ad785</code> 的 <b>358 笔提交</b>做第三次只读评审, 并补审前两次始终未独立覆盖的 <code>tests/</code> 测试质量面与文档漂移面。设计主轴: <b>实质增量全量读码、move-only 拆分做等价核验、未变旧面轻量抽验; 本轮零改动, 只产出发现、分级与处置建议</b>。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-1249 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-2146 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 26-11-03 指令「参照仓库前两次 code review 制定第三次分步实施计划; 本轮只写计划, 不执行评审、不改代码、不 commit」; 骨架继承首次 <a href="26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> 与第二次 <a href="26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a>, 底数实测自 HEAD <code>812ad785</code> 与基线切片 <a href="../testing/baselines/26-11-03-0459-test-big-file-split.md">26-11-03-0459</a>
 </div>
 
 <h2><span class="no">§01</span>目标与设计原则</h2>
 <h3>为什么现在做第三次</h3>
-<p>第二次全面评审在 <code>bf9920d3</code>(26-10-30 06:00, 报告原记 <code>3d957597</code> —— 该哈希因后续 rebase 已不可解析, 以现行等价定稿提交 <code>bf9920d3</code> 为准)定稿: 十批 27/27 勾选, 26 条发现(P0×0 / P1×1 / P2×6 / P3×19), 其中 17 条新入池, 其余合并处置, 关联 issue 除既有类型注解债(26-09-21-1408, Open)外全部 Done。此后到 HEAD <code>812ad785</code>, <code>develop</code> 前进 <b>358 笔提交</b>, 代码面 <b>479 个文件</b>变更(<b>+122,931 / −62,415</b> 行, 含 move-only 拆分的删移计数), 且出现五个第二次评审未见过的大面:</p>
+<p>第二次全面评审在 <code>bf9920d3</code>(26-10-30 06:00, 报告原记 <code>3d957597</code> —— 该哈希因后续 rebase 已不可解析, 以现行等价定稿提交 <code>bf9920d3</code> 为准)定稿: 十批 27/27 勾选, 26 条发现(P0×0 / P1×1 / P2×6 / P3×19), 其中 18 条新入池, 其余合并处置, 关联 issue 除既有类型注解债(26-09-21-1408, Open)外全部 Done。此后到 HEAD <code>812ad785</code>, <code>develop</code> 前进 <b>358 笔提交</b>, 代码面 <b>479 个文件</b>变更(<b>+122,931 / −62,415</b> 行, 含 move-only 拆分的删移计数), 且出现五个第二次评审未见过的大面:</p>
 <ul>
   <li><b>种子转移新域</b>: <code>src/auto_qb/transfer/</code> 6 件 928 行 + <code>web.transfer</code> 配置 12 件 1,030 行 + WebUI 路由/编辑器/确认弹窗。</li>
   <li><b>动效皮肤与 fx 库</b>: <code>flux/</code> 7 件 3,071 行 + <code>shared/fx/</code> 2 件 3,072 行 + <code>fx/showcase.html</code>, 四皮肤守阵同步扩面。</li>
@@ -97,7 +97,7 @@
   <li><b>先底册后读码</b>: 开工把 issues 池 Open 条目、坑档 7 类、在途计划/报告、第二次评审 26 条发现蒸馏为「已知问题底册」; 每条新发现先去重, 不重复报告已知问题。</li>
   <li><b>分批 + 统一五步</b>: 每批「读档 → 坑档对照 → 逐文件读码 → 工具提示源 → 登记去重」, 每批一轮会话。</li>
   <li><b>证据纪律</b>: 每条发现必须带 文件:行 + 函数名 + 行号三锚 + 可达性论证; 论证不出可达不登记为 bug。</li>
-  <li><b>基线不变式</b>: 起点基线 <b>4924 passed + 2 skipped / 覆盖率 99%</b>(切片 26-11-03-0459); 每批收尾 <code>test.full</code> 数字持平, 漂移先查明再继续。</li>
+  <li><b>基线不变式</b>: 起点基线见切片 <a href="../testing/baselines/26-11-03-0534-test-port-zero.md">26-11-03-0534</a>(端口改 0 实施轮; 数字以切片为准, 本文不手抄); 每批收尾 <code>test.full</code> 持平, 漂移先查明再继续。</li>
   <li><b>增量分层(继承二次 D1)</b>: 新增/实质变更文件全量读码; 未变旧面逐文件过目但只做维度抽验 + 上次同域发现回归核对。</li>
   <li><b>拆分等价(本轮新增)</b>: move-only 文件不做逻辑重审, 只核「内容搬移零丢失 / 加载序 / 挂载名 / CSS 层叠序 / 测试辅助读法」五项, 用 diff 配对与 grep 清单证明。</li>
   <li><b>单 clone</b>: 只在 <code>auto-qb-clone1</code> 操作; 评审只读, 天然无跨 clone 写风险。</li>
@@ -120,7 +120,7 @@
     <td><a href="26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a> 计划<br><a href="../reports/26-10-30-0237-report-full-code-review-2.html">26-10-30-0237</a> 报告</td>
     <td>起点 <code>6441a707</code> → 终点 <code>bf9920d3</code>(报告原记 <code>3d957597</code>); 九批 + T 批, 27/27 勾选</td>
     <td>增量优先分层(D1), R1–R11, 每批读档/坑档/读码/工具/去重五步</td>
-    <td><b>26 条</b>(P0×0 / P1×1 / P2×6 / P3×19); 17 条新入池 + 合并条; 关联 issue 除 26-09-21-1408 类型注解债外全部 Done</td>
+    <td><b>26 条</b>(P0×0 / P1×1 / P2×6 / P3×19); 18 条新入池 + 合并条; 关联 issue 除 26-09-21-1408 类型注解债外全部 Done</td>
     <td>① 重复代码审查 Phase 3/4(轮 24–26 的 <code>tests/</code> 与横切)仍未并入(D3 拍板不并); ② <code>tests/</code> 仍无独立批次(仅新增/变更文件轻量过目); ③ 文档漂移仍只 R10 点状; ④ 元层仍不评审</td>
   </tr>
 </table>
@@ -133,6 +133,7 @@
   <tr><td><code>src/auto_qb/rules/</code></td><td>7 件</td><td>+725 / −127</td><td>W1–W5 重设计: base/conditions/registry + transfer/checking/full_checking actions</td></tr>
   <tr><td><code>src/auto_qb/core/</code> + <code>torrents/</code></td><td>15 件</td><td>+780 / −129</td><td>taskqueue 护栏、qbapi/qbmanager 5.3、state、traffic_sample/store/source、relocate、tvshows、torrents compat/store</td></tr>
   <tr><td><code>src/auto_qb/hr/</code> + <code>infra/</code> + <code>tray/</code> + <code>cli.py</code></td><td>9 件</td><td>+123 / −44</td><td>HR discovery 多 clone 隔离相关、journal、tray 信号</td></tr>
+  <tr><td><code>src/auto_qb/tools/</code></td><td>1 件</td><td>+22 / −9</td><td>finalize_watch 整组迁移收尾 guardian(独立进程; 心跳 journal/三证判 qB 退出/删链)</td></tr>
   <tr><td><code>tests/</code></td><td>251 件</td><td>move-only 为主, 新增 transfer/kb_nav/webui 守阵</td><td>R1/R2 25 个测试大文件拆 90 桶 + 20 support; 286 件现行</td></tr>
   <tr><td><code>tests-real/</code></td><td>40 件(全新)</td><td>—</td><td>真机框架 lib/runner/seed + RM00–RM10 十一组用例; 从未评审</td></tr>
   <tr><td><code>tools/global-traffic-monitor/</code></td><td>17 件</td><td>—</td><td>nic.py 新增 GetIfTable2 整表单读; config/server/sampler/storage 与测试同步</td></tr>
@@ -142,9 +143,9 @@
 <h3>底数</h3>
 <ul>
   <li><b>起点 HEAD</b>: <code>812ad785</code>(26-11-03 <code>my-commit-flow.sync</code> 后; 快进 <code>5e7d4a9f→812ad785</code>)。</li>
-  <li><b>起点基线</b>: <code>test.full</code> <b>4924 passed + 2 skipped / 覆盖率 99%</b>(切片 26-11-03-0459, 全量 194.03s)。</li>
-  <li><b>issues 池</b>: <b>52 Open / 2 In Progress / 359 Done / 3 Superseded / 6 Dropped</b>; Open 按类型 feat 21 / bug 8 / question 6 / perf 5 / refactor 4 / test 3 / docs 3 / chore 2 —— 底册只取 bug/perf/refactor/test/docs/chore 做撞车比对。</li>
-  <li><b>在途件</b>: 大文件拆分计划 26-11-02-2342(R4 已收口, 2 暂缓/2 不拆)、种子转移计划、规则引擎重设计、真机实测常驻排期(26-10-31-0641)、变异测试审计(26-10-08-0642)、qB 5.3 影响分析(26-10-31-0711) —— 相关文件只登记「计划未覆盖增量」。</li>
+  <li><b>起点基线</b>: 见切片 <a href="../testing/baselines/26-11-03-0534-test-port-zero.md">26-11-03-0534</a>(端口改 0 实施轮; 原记 0459 系早一版切片, 差额由 0534「本改动面」解释; 数字以切片为准, 本文不手抄)。</li>
+  <li><b>issues 池</b>: <b>54 Open / 2 In Progress / 359 Done / 3 Superseded / 6 Dropped</b>(合计 424, S0 起点实测); Open 按类型 feat 21 / bug 8 / question 6 / perf 5 / test 5 / refactor 4 / docs 3 / chore 2 —— 底册只取 bug/perf/refactor/test/docs/chore 做撞车比对。计划定稿时点为 52 Open(0559 两条 e2e 既有红于定稿后入池, 类型 test 3→5); S0 本步入池 3 条后底册基数为 57。</li>
+  <li><b>在途件</b>(2026-11-03 终验复验): <code>plans/</code> 非 Done 仅 3 件 In Progress —— 版本管理 26-09-22-2318、选择触发一致性 26-10-10-2001、qB 5.3 支持 26-10-31-1119, 另有 issue 清池路线图 26-10-01-1758(Open); 大文件拆分 26-11-02-2342、种子转移 26-10-31-0306、规则引擎 26-11-01-0106 均已 Done。真机实测 26-10-31-0641 / 变异审计 26-10-08-0642 / qB 5.3 影响分析 26-10-31-0711 是 <code>issues/</code> 常驻锚, 不属 <code>plans/</code>。相关文件只登记「计划未覆盖增量」。</li>
 </ul>
 
 <h2><span class="no">§03</span>方案总览</h2>
@@ -181,8 +182,8 @@
   <tr><th>步</th><th>输入</th><th>动作</th><th>产出</th><th>验收判据</th><th>工作量/并行</th></tr>
   <tr>
     <td><b>S0</b><br>准备与范围锁定</td>
-    <td>用户拍板 D1–D8; HEAD <code>812ad785</code>; 基线 4924+2 / 99%</td>
-    <td>sync 记起点 → 建报告草稿(<code>kb.new report</code>, 专题 full-code-review-3) → 底册四表蒸馏(52 Open issue「包×一句话」/ 坑档 7 类 / 在途计划报告 / 二次 26 条发现与去向) → 拍板回写 §06</td>
+    <td>用户拍板 D1–D8; HEAD <code>812ad785</code>; 起点基线见切片 26-11-03-0534</td>
+    <td>sync 记起点 → 建报告草稿(<code>kb.new report</code>, 专题 full-code-review-3) → 底册四表蒸馏(54 Open issue(S0 起点; 定稿时 52)「包×一句话」/ 坑档 7 类 / 在途计划报告 / 二次 26 条发现与去向) → 拍板回写 §06</td>
     <td>报告草稿(Open, 附录=底册四表)</td>
     <td>底册四表齐全; 每个 D 点有结论; 草稿封面记 HEAD 与基线; 不打开任何目录整读</td>
     <td>1 轮 · 串行</td>
@@ -238,9 +239,9 @@
   <tr>
     <td><b>S7</b><br>处置建议 + 回写与测试确认</td>
     <td>分级终表; 用户对处置清单的批准（<b>Done 26-11-03</b>；终版报告 <a href="../reports/26-11-03-0636-report-memory-bank-full-code-review-3.html">26-11-03-0636</a>，18 条去向与优先级见报告 §02–§03）</td>
-    <td>给每条发现定去向(新 issue/并入既有/已知接受/不修); P0/P1 清单请用户确认后 <code>create-issue</code> 入池并互链; 报告 doc-status → Done; 计划 → Done; <code>kb.index</code>; 基线切片(无代码改动则引用 26-11-03-0459); 跑 <code>test.full</code>/<code>doc.*</code>/<code>kb.check</code></td>
+    <td>给每条发现定去向(新 issue/并入既有/已知接受/不修); P0/P1 清单请用户确认后 <code>create-issue</code> 入池并互链; 报告 doc-status → Done; 计划 → Done; <code>kb.index</code>; 基线切片(无代码改动则引用 S7 切片 26-11-03-1245); 跑 <code>test.full</code>/<code>doc.*</code>/<code>kb.check</code></td>
     <td>终版报告 + 新 issue(经批准) + 计划 Done</td>
-    <td><code>test.full</code> 持平 4924+2 / 99%; <code>doc.caps</code>/<code>doc.drift</code>/<code>doc.links</code>/<code>kb.check</code> 全绿; 入池数与报告清单一致; 无源码改动</td>
+    <td><code>test.full</code> 持平(S7 收尾切片 26-11-03-1245; 现行见 <code>commands run kb.baseline</code>); <code>doc.caps</code>/<code>doc.drift</code>/<code>doc.links</code>/<code>kb.check</code> 全绿; 入池数与报告清单一致; 无源码改动</td>
     <td>1 轮 · 串行</td>
   </tr>
 </table>
@@ -302,7 +303,7 @@
   <tr><td>move-only 拆分误判为实质变更, 或实质变更混入拆分</td><td>提交信息不完整 / 同一提交混合搬移与改写</td><td>S1 用 diff 形状 + 提交信息双判; 疑似混合提交按实质全量审; B6 每对拆分给配对证据</td></tr>
   <tr><td>tests/ 286 件体量吞噬评审预算</td><td>逐文件深读</td><td>D1 轻量口径: 只做缺口审计 + 拆分桶抽查 + 夹具隔离/端口自举核对, 不逐行读</td></tr>
   <tr><td>误报: 理论缺陷不可达</td><td>并发/时序/恢复路径</td><td>可达性证据强制字段; 不可达降 P3 备查或不记; S6 二次论证</td></tr>
-  <tr><td>与在途计划/既有 52 条 Open issue 双重报告</td><td>transfer/拆分/变异/真机/5.3 计划覆盖同文件</td><td>底册列全; 每条发现强制填撞车字段; 相关批只登记「计划未覆盖增量」</td></tr>
+  <tr><td>与在途计划/既有 54 条 Open issue 双重报告</td><td>transfer/拆分/变异/真机/5.3 计划覆盖同文件</td><td>底册列全; 每条发现强制填撞车字段; 相关批只登记「计划未覆盖增量」</td></tr>
   <tr><td>评审中发现顺手想修</td><td>高优先级缺陷触发修复冲动</td><td>黄金法则 7 + scope-guard: 计划外缺陷一行不改; D7 兜底(P0 也不当场修)</td></tr>
   <tr><td>安全审查噪音/误报</td><td>凭据与路由面被全量扫描</td><td>安全审查只针对 transfer/认证/扩展中转的变更 diff, 逐条人工复核后才登记</td></tr>
 </table>
@@ -311,6 +312,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-03-0557</span> 初版: 用户指令发起「参照前两次 code review 制定第三次分步实施计划, 本轮只写计划」; 考古确认首次 57 条/28 issue 全部 Done、二次 26 条(P0×0/P1×1/P2×6/P3×19)/17 条入池且除类型注解债外全部 Done; 范围定为 <code>bf9920d3..812ad785</code>(358 笔提交, 479 件代码变更 +122,931/−62,415), 并入 tests 遗留面与文档漂移; 十批 B1–B10 + S0–S7 + R12/R13 + 拍板点 D1–D9, 待拍板。底数: HEAD 812ad785 / 基线 4924 passed + 2 skipped / 99%(切片 26-11-03-0459)/ issues Open 52。</li>
   <li><span class="tag">R1 · 26-11-03-1249</span> S7 收尾：18 条处置去向与优先级定稿、终版报告落盘、计划完成；零源码改动</li>
+  <li><span class="tag">R2 · 26-11-03-2146</span> R2: 文档漂移复验回写(issue 0704/0647/0630 六条) —— 域表补 src/auto_qb/tools 行(合计 479); 起点基线改引切片 0534, S7 验收改引 1245(S7 收尾); 在途清单按终验复验(2318/2001/1119 In Progress + 1758 Open); 底册改 S0 实测 54/2/359/3/6(合计 424, test 5), 17→18 池位。</li>
 </ul>
 
 </div>

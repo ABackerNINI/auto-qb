@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="full-code-review-2">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-30-0221">
-<meta name="doc-updated" content="26-10-30-0554">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/reports/26-10-05-1036-report-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-11-0033-report-dup-code-audit.html, memory-bank/issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html, memory-bank/testing/baselines/26-10-30-0753-moving-phase-restore-fix.md, memory-bank/issues/26-10-30-0616-bug-moving-phase-issue-restore.html">
+<meta name="doc-updated" content="26-11-03-2146">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/reports/26-10-05-1036-report-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-11-0033-report-dup-code-audit.html, memory-bank/issues/26-10-30-0550-bug-hr-cutoff-zero-position-proof.html, memory-bank/testing/baselines/26-10-30-0753-moving-phase-restore-fix.md, memory-bank/issues/26-10-30-0616-bug-moving-phase-issue-restore.html, memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>实施计划: 全项目第二次全面 Code Review — 增量优先分批评审与发现分流</h1>
 <p class="lede">对全仓源码(后端 46.3k 行 Python + 前端 39.3k 行 static + gtm 子项目 10.4k 行 + extensions)做第二次只读全面评审: 沿用首次全面 review(26-10-05-0951)的分批评审骨架与 R1–R10 维度, 主轴改「增量优先」—— 首次基线 <code>a4d14a8d</code> 以来的新增/变更文件全量读码, 未变更文件轻量复核, 末轮汇总分级、撞车去重、P0/P1 入池。</p>
 <div class="meta">
-  <b>doc-added</b> 26-10-30-0221 · <b>doc-updated</b> 26-10-30-0554 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-10-30-0221 · <b>doc-updated</b> 26-11-03-2146 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「再做一次全面 code review, 先写一个分步实施计划」(26-10-30 会话); 方案骨架继承首次全面 review 计划 26-10-05-0951(状态 Done)与其后续修复计划 26-10-06-0103(状态 Done)、重复代码审查 26-10-10-2333(Phase 1–2 Done)
 </div>
 
@@ -151,7 +151,7 @@
   <tr><th>步</th><th>内容</th><th>产出</th><th>完成判据(证据门控)</th></tr>
   <tr><td>S0</td><td>准备: sync 记起点 HEAD(<code>6441a707</code>) → test.full 记起点基线(4073+2 / 99%, 已有切片 26-10-30-0139 直接引用) → 建报告草稿骨架(<code>kb.new report</code>, 专题 full-code-review-2) → 底册四表蒸馏(issues 19 条 Open「包×一句话」/ 坑档 7 类索引 / 在途计划报告清单 / dup-audit 322 条发现与 17 条入池 issue 清单) → D1–D6 拍板回写</td><td>报告草稿(状态 Open, 附录即底册四表)</td><td>底册四表齐全; 每个拍板点有结论; 草稿封面记起点 HEAD 与基线数字</td></tr>
   <tr><td>S1</td><td>批次地图重盘: <code>git diff --name-only a4d14a8d..HEAD</code> 给每文件打「新增/变更/未变」标 → 生成九批文件全集清单(文件 × LOC × 变更态 × 关联测试 × 关联文档 × 重点维度) → 回填 §03 批次地图</td><td>批次矩阵定稿</td><td>脚本核对: 九批文件并集 == 源码全集, 0 漏 0 重; 每文件变更态可复核</td></tr>
-  <tr><td>S2–S5</td><td>九批评审(每批一轮, 每轮统一五步): ①读档(该包 docstring + systemPatterns 主题) ②坑档对照 ③逐文件读码(变更/新增文件对照 R1–R11 全维度勾选; 未变文件按 D1 轻量口径) ④工具提示源(ruff + bandit 限该包, 逐条人工复核) ⑤登记去重(发现表回填报告草稿, 底册撞车标注)</td><td>九批发现表(ID < 批字母 >-<序号>)</td><td>每批: 全文件过目勾选 + 「无发现」也是结论 + 撞车字段非空 + 每轮会话 DoD + test.full 持平哨兵</td></tr>
+  <tr><td>S2–S5</td><td>九批评审(每批一轮, 每轮统一五步): ①读档(该包 docstring + systemPatterns 主题) ②坑档对照 ③逐文件读码(变更/新增文件对照 R1–R11 全维度勾选; 未变文件按 D1 轻量口径) ④工具提示源(ruff + bandit 限该包, 逐条人工复核) ⑤登记去重(发现表回填报告草稿, 底册撞车标注)</td><td>九批发现表(ID &lt;批字母&gt;-&lt;序号&gt;)</td><td>每批: 全文件过目勾选 + 「无发现」也是结论 + 撞车字段非空 + 每轮会话 DoD + test.full 持平哨兵</td></tr>
   <tr><td>S6</td><td>汇总分级: 全部发现合并 → 底册撞车终验 → 每条 P 级二次论证(P0 数据破坏/安全 · P1 功能错误 · P2 健壮性 · P3 可维护性; 降级/升级都要写理由) → 处置分流(入池清单定稿)</td><td>分级终表 + 入池清单</td><td>P0/P1 逐条在当期 HEAD 复验可达性; 无 ID 断号; 撞车标注与底册逐条对得上</td></tr>
   <tr><td>S7</td><td>报告与收尾: 报告定稿(doc-status → Done, 记各批 HEAD) → P0/P1 全部 create-issue 入池并互链 → 计划状态 → Done → <code>kb.index</code> 重建 → activeContext 迁出 → 向用户汇报分级统计与拍板执行情况</td><td>终版报告 + 新 issue 若干 + 计划 Done</td><td>kb.docmap --check 无断链; 入池数与报告清单一致; 索引重建绿</td></tr>
 </table>
@@ -196,6 +196,7 @@
 <ul>
   <li><span class="tag">R0 · 26-10-30-0221</span> 初版: 用户指令发起; 继承首次全面 review(26-10-05-0951, Done)骨架, 改增量优先主轴; 九批(A–H+T)+ R11 新维度 + S0–S7 门控 + 拍板点 D1–D6, 待拍板。底数实测: HEAD 6441a707 / 基线 4073+2 / 99%(切片 26-10-30-0139)/ issues Open 19 / 距首次基线 620 commits / 214 文件变更。</li>
   <li><span class="tag">R1 · 26-10-30-0554</span> 定稿收尾: S0–S7 全部走完 —— 十批评审 27/27 勾选, S6 终验 26 条(P0×0/P1×1/P2×6/P3×19), B-01 已入池(26-10-30-0550), 报告 26-10-30-0237 定稿 Done; doc-status 翻 Done</li>
+  <li><span class="tag">R2 · 26-11-03-2146</span> R2(2026-11-03): 修复 v.Nu error 之未转义尖括号: S2-S5 行的 ID 占位符改用 HTML 实体, 供引用链复验时增量闸门放行。</li>
 </ul>
 
 </div>

@@ -32,7 +32,7 @@ config:
 
     qbittorrent:
         host: 127.0.0.1
-        port: 16585
+        port: 8080          # qBittorrent WebUI 端口(示例值; 按实际修改, 与下方 web.port 区分)
         username: abacker
         password: "132435."
 

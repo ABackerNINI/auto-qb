@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-0647">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="code-review-3-s0">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-docs-doc-drift-sweep.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)">
 <meta name="issue-summary" content="旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用">
 <title>计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失) · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0647-docs-plan-review3-legacy-html-refchain</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 06:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -99,6 +99,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 06:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 — 已修复：恢复计划 0557 ↔ 0221 计划 / 1036 报告的双向 <code>doc-refs</code>（人工补元数据行）；0221/1036 的 9 条 v.Nu error 清零（<code>check_html --vnu --strict</code> 0 error），<code>kb.check</code> 认领链双向闭环。</li>
     </ul>
   </section>
 

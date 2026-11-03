@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="full-code-review">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-05-1036">
-<meta name="doc-updated" content="26-10-06-0103">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/plans/26-10-30-0221-plan-full-code-review-2.html">
+<meta name="doc-updated" content="26-11-03-2146">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/plans/26-10-30-0221-plan-full-code-review-2.html, memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html">
 <style>
   :root { color-scheme: dark; }
   * { box-sizing: border-box; }
@@ -59,7 +59,7 @@
     计划原载 2581+4 / 98%(HEAD ef93db56)已漂移: +29 passed / +1pp, 成因 = ef93db56 → a4d14a8d 之间他人提交
     (流量存储 v3 S6 活尾合流、HR 稳态降频、test.one 覆盖率闸、危险动作防护等)带测试落地, 与评审无关; 后续各批以新数字为基线不变式对照点。</p>
   <p class="kv"><b>各批评审时 HEAD:</b> 十批判审均为 <code>a4d14a8d</code>(每批开工 my-commit-flow.sync 均无新提交, 见 §2 各批章节表头); S5 汇总分级与 S6 报告定稿在 <code>145eedea</code>(a4d14a8d..145eedea 共 17 提交, 双基线口径与复验记录见 §3.0)。</p>
-  <h3>拍板 D1–D5 结论(2026-10-05, 用户逐项「按推荐」)</h3>
+  <h2>拍板 D1–D5 结论(2026-10-05, 用户逐项「按推荐」)</h2>
   <table>
     <tr><th>#</th><th>拍板</th><th>结论</th></tr>
     <tr><td>D1</td><td>前端评审深度</td><td>JS 逻辑全量逐文件, 拆 F1/F2 两轮; CSS/HTML 只查 XSS 汇入点与机制回归面(aq-tip / 皮肤 / 轮询边界), 不做样式审美评审</td></tr>
@@ -306,7 +306,7 @@ adapters/btschool 39 — 无发现(计数口径校准记录留档完整, B 档�
 <p class="kv"><b>逐文件勾选结论(3/3):</b><br>
 <span class="mono">traffic_store 1263 — C-02 C-04; R3✓(写路径全在主循环线程 handler 调用链内, 本层无锁成立; V3DayCache 读侧锁保护 + 解析锁外进行系明文契约, 并发重复解析无害; OSError 上抛口径统一) R5✓(epoch 秒/毫秒全整数口径; 时钟回拨钳制 dt_ms &gt;= 1 已落地(v3 §8.1 实施项核验); 除零全守卫 —— v3_hour_agg/v3_rollup_agg cov&lt;=0 fail-fast, 槽均摊 spacing 分母全带 run_len&gt;1/n&gt;1 守卫; end&lt;start 窗口倒置 fail-fast) R7✓(常规写全追加 open("a")+flush+fsync, 尾字节查补每 flush 一次; 唯一原子重写点 trim = tmp+fsync+os.replace + PermissionError 退避重试; utf-8 显式; 无 O_TRUNC 直写无句柄泄漏)<br>
 traffic_sample_mod 1096 — C-01 C-05; R3✓(handler 主循环线程独占, buffers/baselines/游程/累计器无锁成立; live_tail 不可变快照整体替换引用发布, Web 线程只读单引用 —— 黄金法则 5 单写线程不变式成立; 优雅退出 stop() 封游程+全量 flush+聚合封口, 幂等, OSError 不上抛) R1✓(catch-up 水位幂等(append 即水位, 崩溃后从文件尾恢复不重 append); trim same_content 零写; 数据门缓存与淘汰清理闭环) R5✓(累积漂移判据正确实现 —— 判 |actual-(游标+标称)| 而非本行偏差, 稳态小漂移自动退化周期写, 坑档 task-interval-tick-quantization 同族风险已被 v3 dt 链吸收; C1 失配取整+告警一次+采样率变化关块联动)<br>
-traffic_grid 530 — C-03; 纯函数层全过目 ✓(R5✓ 真空(块间 gap)与断连(n 槽)两语义分离; D1 覆盖桶模型自洽; 活尾合流按 ts 精确去重镜像口径成立; 归桶除零守卫齐(e[3]/a[0] 恒 &gt;=1); build_month_grid 空集兜底/v3_next_month_epoch 严格递增必终止)</p>
+traffic_grid 530 — C-03; 纯函数层全过目 ✓(R5✓ 真空(块间 gap)与断连(n 槽)两语义分离; D1 覆盖桶模型自洽; 活尾合流按 ts 精确去重镜像口径成立; 归桶除零守卫齐(e[3]/a[0] 恒 &gt;=1); build_month_grid 空集兜底/v3_next_month_epoch 严格递增必终止)</span></p>
 <p class="kv"><b>R4 顺带核验:</b> v3 新键 flush_interval 已进 validate_config(validation/sections.py:650-658, 60-3600s)与 schema 键面(schema/groups.py:442)—— 黄金法则 4 守卫面完整, 无发现。</p>
 <h4>批 C 发现表</h4>
 <table>
@@ -443,7 +443,7 @@ errors.py 11 — 无发现</span></p>
     <td>d 仅作其余字段默认源, name/domains 两实参从未被消费 —— 迷惑性冗余(看似参与构造, 实为纯噪音)</td>
     <td>静态即证(返回另行完整构造); 行为无影响</td>
     <td>无</td>
-    <td>仅记录(改 <code>d = TrackerConfig(name="<dummy>", domains=[])</code> 或直接以类属性取默认, 顺手修候选)</td>
+    <td>仅记录(改 <code>d = TrackerConfig(name="&lt;dummy&gt;", domains=[])</code> 或直接以类属性取默认, 顺手修候选)</td>
   </tr>
 </table>
 <h4>批 D 复验不登记项(可达性/影响面论证纪律)</h4>
@@ -683,7 +683,7 @@ rules/expr/env 463 — G-01(容器类型边界, 实证) G-02 G-06; R5✓(server_
 torrents/record 457 — 无发现; R5✓(_local_hr_triggered total_size==0 除零守卫; apply_delta None 视为未提供) R7✓(惰性缓存随记录回收); hr_managed/check_hr_* 直读 tracker_conf.hr 的 None 面复核为不可达: HrCondition(conditions.py:155)与 expr _hr getter(env.py:103)均先判 conf is None, maintenance_mod/views 调用点同样先守卫, views docstring 明文「不做 None 防御(早暴露配置匹配错误)」系有意设计<br>
 rules/base 314 — 无发现; R1✓(去重键 state.exec_history 单点 record_execution; cooldown/daily/hourly 全走挂钟自然窗口系文档化语义) R6✓(条件异常 → ERROR 节流 + stop=True 优先于 stop_following_rules_if; 动作异常 → fail 可观测); spec 单键性由 config 校验强制(validation/rules.py:297「多键/空值会被静默丢弃, 必须报错」), next(iter(items)) 无静默丢动作面<br>
 rules/conditions 261 — G-03; HrCondition 对 conf=None/conf.hr=None 显式双分支(防 AttributeError 被吞的注释在); ExprCondition 运行期非布尔兜底 ExprError<br>
-rules/expr/parser 256 — 无发现; 一层一运算符判定完备(含右操作数带一元即拒); 负号字面量只能写比较左侧(`tor.max_ratio >= -1` 报错、`-1 <= tor.max_ratio` 放行)系「含一元负号算运算符」的文档化语法约束, 有左侧改写出路, 不登记<br>
+rules/expr/parser 256 — 无发现; 一层一运算符判定完备(含右操作数带一元即拒); 负号字面量只能写比较左侧(`tor.max_ratio >= -1` 报错、`-1 &lt;= tor.max_ratio` 放行)系「含一元负号算运算符」的文档化语法约束, 有左侧改写出路, 不登记<br>
 rules/actions/checking 198 — G-07; R2 复核✓: 决策链 0/1/1.5/1.6/4 全部闸门先于委托, 执行体一行委托 ctx.ops.skip_check / ctx.ops.recheck(source="rule") — 与 WEB 同一 ops 层闸门(R2 实时复核/同日去重/七防护), 规则侧无绕闸旁路; group_has_downloading 经 grouping_mod:606 逐成员委托 store 单点(plan 0314 S1a 委托链成立)<br>
 rules/expr/eval 196 — G-01 求值侧; R5✓(and/or 短路; 除零/取模零显式 ExprError; _ORDER/_EQ 类型运行期兜底)<br>
 rules/expr/lexer 170 — 无发现; 单位解析复用 utils 同口径; 数字后边界检查(24Hours/1.5.2 即报错); eof 恒收尾(_peek 不越界)<br>

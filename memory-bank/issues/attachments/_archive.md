@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (74)
+## Open (67)
 
 - [docs] [tests-real env_registry 环境2 注释与配置不一致](../26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html) — 注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01
 - [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
@@ -23,14 +23,7 @@
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](../26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。
-- [docs] [第三次评审计划 域表分项合计 478 与总数 479 不符(漏记 finalize_watch.py)](../26-11-03-0704-docs-plan-domain-table-count.html) — 计划 02 节 10 行分项相加 478, git 实测代码面 479; 差额为 src/auto_qb/tools/finalize_watch.py 未列行
-- [docs] [12 个拆分残片被 git 判为 rename(R051-R072), 配对表不能按 1:1 改名解读](../26-11-03-0704-docs-split-residue-rename.html) — 拆分提交中仅一个目标桶被 -M50% 判为 rename, 其余为 A/D; 相似度 51-72%, 非等价移动
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
-- [docs] [计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)](../26-11-03-0647-docs-plan-review3-legacy-html-refchain.html) — 旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用
-- [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](../26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 4933+2(切片 0534, +9 为端口改 0 守阵); 计划仍引 0459 的 4924+2 作为终验持平基准
-- [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](../26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实测仅大文件拆分与 qB 5.3 在途, 另有 version-management 等 3 件未列, 2 件已 Done, 2 件实为 issue 锚
-- [docs] [第三次评审计划 §02 底册数字三处与事实不符(Open 52/54、新入池 17/18、总数自相矛盾)](../26-11-03-0630-docs-plan-review3-ledger-counts-drift.html) — 计划 0557 §02 记 52 Open/17 条新入池/共 424 条; 实测 54 Open、18 个入池 issue、分项和为 422
-- [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
 - [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例
 - [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](../26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery 并行用例端口抢占偶发红，单跑均绿；与本轮 CSS 改动无关
@@ -87,14 +80,21 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (365)
+## Done (372)
 
 - [test] [site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿](../26-11-03-1135-test-e2e-site-alerts-order-pollution.html) — 全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关
 - [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](../26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败
 - [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行
+- [docs] [第三次评审计划 域表分项合计 478 与总数 479 不符(漏记 finalize_watch.py)](../26-11-03-0704-docs-plan-domain-table-count.html) — 计划 02 节 10 行分项相加 478, git 实测代码面 479; 差额为 src/auto_qb/tools/finalize_watch.py 未列行
+- [docs] [12 个拆分残片被 git 判为 rename(R051-R072), 配对表不能按 1:1 改名解读](../26-11-03-0704-docs-split-residue-rename.html) — 拆分提交中仅一个目标桶被 -M50% 判为 rename, 其余为 A/D; 相似度 51-72%, 非等价移动
+- [docs] [计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)](../26-11-03-0647-docs-plan-review3-legacy-html-refchain.html) — 旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用
+- [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](../26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 4933+2(切片 0534, +9 为端口改 0 守阵); 计划仍引 0459 的 4924+2 作为终验持平基准
+- [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](../26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实测仅大文件拆分与 qB 5.3 在途, 另有 version-management 等 3 件未列, 2 件已 Done, 2 件实为 issue 锚
+- [docs] [第三次评审计划 §02 底册数字三处与事实不符(Open 52/54、新入池 17/18、总数自相矛盾)](../26-11-03-0630-docs-plan-review3-ledger-counts-drift.html) — 计划 0557 §02 记 52 Open/17 条新入池/共 424 条; 实测 54 Open、18 个入池 issue、分项和为 422
 - [test] [e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-big-table-existing-red.html) — dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
+- [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
 - [bug] [搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留](../26-11-03-0254-bug-search-uncovered-stale-virtual-row.html) — 未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索
 - [bug] [full_checking 自愈 pop 后缺 state.save 落盘](../26-11-03-0104-bug-full-checking-selfheal-state-save.html) — recheck_fails 自愈清除写点不落盘，崩溃/断电窗口可能丢失自愈结果
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR
