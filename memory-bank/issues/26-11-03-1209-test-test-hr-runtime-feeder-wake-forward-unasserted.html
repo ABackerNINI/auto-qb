@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1209">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="code-review-3">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-04-0148-hr-wake-forward-assert.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="HR feeder wake 转发测试未断言转发目标">
 <meta name="issue-summary" content="用例名声称转发 worker.wake()，实际只调用不加断言">
 <title>HR feeder wake 转发测试未断言转发目标 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1209-test-test-hr-runtime-feeder-wake-forward-unasserted</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 12:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 12:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 01:45 — 用户指派认领，状态 <strong>In Progress</strong>。复验：现象仍在（用例只调用不断言），两条 wake 用例当时全绿</li>
+      <li>2026-11-04 01:45 — 修完，状态 <strong>Done</strong>。实际修法：按建议注入替身（<code>monkeypatch.setattr(runtime.worker, "wake", …)</code>）并断言 <code>forwarded == [True]</code>；红验通过（临时掐掉 <code>runtime.wake</code> 的转发 → 新断言在 <code>tests/test_hr_runtime_feeder.py:286</code> 必红，还原实现后复绿）。验证：<code>test.one</code> 全文件 26 passed；<code>test.quick</code> 全量 5038 passed / 2 skipped</li>
     </ul>
   </section>
 

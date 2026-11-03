@@ -16,7 +16,7 @@
 
 ### P1 覆盖率提升轮: 运行时门面长尾
 - test_sleeper_raises_immediately_when_stop_already_set: 关停标记已置 -> 进等待前即抛 HrChannelStopped
-- test_wake_is_safe_and_forwards_to_worker: wake 转发线程(未启动空转)
+- test_wake_is_safe_and_forwards_to_worker: wake 转发线程(未启动空转; 已启动断言真转发到 worker.wake)
 - test_events_summaries_direct: events 连续失效文案与站点稳定排序直调
 
 ### hr 首轮变异审计轮: 运行时门面长尾(issue 26-10-10-1108-runtime-worker)
@@ -274,13 +274,16 @@ def test_sleeper_raises_immediately_when_stop_already_set(tmp_path):
         runtime.sleeper(30.0)
 
 
-def test_wake_is_safe_and_forwards_to_worker(tmp_path):
-    """wake 转发给取数线程(未启动时也安全不抛)"""
+def test_wake_is_safe_and_forwards_to_worker(tmp_path, monkeypatch):
+    """wake 转发给取数线程(未启动时也安全不抛; 已启动必须真转发到 worker.wake())"""
     runtime = make_runtime(tmp_path, enabled=True, channel=False)
     runtime.wake()  # 未启动: worker 为 None, 空转
     runtime.start()
     try:
-        runtime.wake()  # 已启动: 转发 worker.wake()
+        forwarded = []
+        monkeypatch.setattr(runtime.worker, "wake", lambda: forwarded.append(True))
+        runtime.wake()  # 已启动: 必须转发 worker.wake()
+        assert forwarded == [True]  # 弱断言修复(issue 26-11-03-1209): 只验证不抛 = 转发丢了也绿
     finally:
         runtime.stop()
 
