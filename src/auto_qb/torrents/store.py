@@ -168,7 +168,7 @@ class TorrentStore:
         # 缺文件扫描的过渡态容忍计数(仅内存, 重启归零): 组key -> 连续「原名缺失但 .!qB 孪生
         # 存在」命中次数(issue 26-09-21-0219 / plan 26-09-22-2038)。软信号不落盘 —— 丢失方向
         # 是"更早恢复判定"(保守, 沿用 verified_references 仅内存先例); 跨轮存活, 不随每轮
-        # 变化集清空(与 _missing_scanned_keys 的轮清不同); 热重载 reset_runtime 随分组索引清空。
+        # 变化集清空(与 _missing_scanned_keys 的轮清不同); 热重载 reset_runtime 仍归零(软信号与重启口径一致)。
         self.transitional_missing_skips: Dict[Any, int] = {}
         # 内存参考种子集合(仅内存, 重启后重新积累): full-checking 校验通过的种子, 可作为同组参考
         self.verified_references: Set[str] = set()
@@ -745,24 +745,29 @@ class TorrentStore:
     # ---------- 写操作同步(供 QbApi Facade调用) ----------
 
     def reset_runtime(self) -> None:
-        """热重载配置后的运行态重置: 清分组索引/缓存/状态快照/校验记录;
-        种子记录保留(tracker_conf 置空, 由下一轮全量 refresh 重匹配)"""
-        self.groups.clear()
-        self.group_sizes.clear()
-        self.member_to_key.clear()
-        self.group_key_migrations.clear()  # 组键迁移待办随分组索引重建清零(P7)
+        """热重载配置后的运行态重置: 清缓存/状态快照/校验记录;
+        种子记录保留(tracker_conf 置空, 由下一轮全量 refresh 重匹配)
+
+        分组索引(groups / group_sizes / member_to_key)**有意保留**(决策钉死, 计划 26-11-03-2223
+        D1=B): 分组键的三个输入 —— save_path、种子文件表、物理解析结果 —— 都不在 L2 重建判据
+        的变更面(_rebuild_needed 只看 rules / interval / delete_tags / 全局限速曲线 / tracker
+        绑定), 重建后记录与文件表缓存也都还在, 重算只能得到同一批键: 属纯浪费, 还会把全部组
+        标脏、触发跨组全量展开。未来若 L2 判据触及 save_path / 文件表 / 物理解析, 必须改走上游
+        的重建路径(本计划 §03 的 C/A 方案), 不能只放开本方法的 clear。
+        """
+        self.group_key_migrations.clear()  # 组键迁移待办是增量排空的一次性登记, 热重载后由全量重建覆盖(P7)
         self.state_snapshot.clear()
         self.verified_references.clear()
         self.own_writes.clear()  # 自有写登记不跨热重载残留(S2; 纯内存态, 与 state_snapshot 同级)
         self.clear_expect()  # 追平待办不跨热重载: 下一轮是全量, 该出现的自然会出现
         self.state_since.clear()  # 状态时长随状态快照一并重置(下一轮全量 refresh 重新起算)
-        self.transitional_missing_skips.clear()  # 组 key 随分组索引重建, 过渡态计数一并清零
+        self.transitional_missing_skips.clear()  # 过渡态容忍计数仍归零: 软信号与重启口径一致, 不随索引保留续用
         # download_conflict_warned / cross_group_conflict_warned 有意不清(决策钉死, 防"顺手补 clear"):
-        # 两个去重集合的组 key 均为纯函数派生(grouping_mod.group_key_of 单一事实源), 热重载重建
+        # 两个去重集合的组 key 均为纯函数派生(grouping_mod.group_key_of 单一事实源), 热重载保留
         # 分组索引后同数据派生同 key, 旧条目语义仍成立; 过期条目由每轮扫描的消除循环兜底丢弃。
         self.invalidate_tags()
         self.invalidate_categories()
-        self.view_changed = True  # 分组索引已清空, 视图必须重建
+        self.view_changed = True  # 热重载后 tracker_conf 置空/外部变更登记, 全量重匹配可能改组级展示字段
         # 热重载全量重建: tracker 配置可能已变 -> 全部种子登记 tags 待重检
         # (maintenance on_change 模式据此实现"首轮全量收敛", 两个模式行为一致 —— 计划 §07)
         self.external_tag_changes |= set(self.by_hash)
