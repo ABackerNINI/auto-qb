@@ -16,17 +16,23 @@
   exclude 黑名单 / stats 缺失不收编 / 顺序优先级 (include 不翻案 loopback 开关)
 - 断连-恢复: 无真实增长记 (0,0) (T1); 有真实增长只记增量 (T2); 全过滤后恢复仍记 (0,0) 且
   记忆保留 (T4); 首次出现的网卡只立基线不入账
+- 多卡断连 (T3): 一张 down 期间另一张正常增长只记该卡增量, 无重置告警; down 卡回来后仍 (0,0)
+- 单卡真回绕 (T5): 该卡该方向 delta 归零 + 只点名该卡的告警, 其他卡正常入账
+- 新卡插入 (T6): 带大历史累计的新卡只立基线 (delta 0), 基线记为该卡当前读数
 - state 恢复 (v2 载荷): 今天累计 + 逐卡基线接续; 昨天累计清零、逐卡记忆接续;
   未来/损坏/非映射/版本不符 -> 降级 (告警 + 无基线); 降级后首样本 baseline=True
+- state 恢复 (v2 局部损坏, T9): 单条非法条目丢弃 + 告警, 其他条生效, day 保留;
+  nic_baseline 缺失/非映射/条目非映射/缺字段同样是局部降级而非整体降级
 - state 恢复 (v1 兼容): 保留 day 累计、忽略合计基线 (逐卡记忆置空), 首轮 (0,0) +
   一条「state v1 升级」告警, state_restored=True (T8)
+- 逐卡记忆 TTL (T13): 超过 7 天未见的卡被清理, 再出现按新卡只立基线 (0,0)
 - dat 兜底: 今天行恢复 (KB->字节, TM 倒序与正序两态); 无今天行返回 False; 基线仍取当前值
 - snapshot/restore round-trip: v2 载荷 (version=2 + nic_baseline, last_* 为各卡求和) 恢复后与原状态一致
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Mapping, Optional
 
@@ -149,6 +155,28 @@ def test_counter_reset_both_zeroes_both():
     assert (r.delta_up_bytes, r.delta_down_bytes) == (0, 0)
     assert (r.day_up_bytes, r.day_down_bytes) == (0, 0)
     assert len(r.warnings) == 2
+
+
+def test_genuine_wrap_on_one_nic_keeps_other_nic_counting():
+    """T5: 单卡真回绕 (1000 -> 20) 只影响该卡: delta 归零 + 只点名该卡的告警;
+    其他卡 (wlan0 0 -> 30) 照常入账, 合计不含回绕前的历史值."""
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(1000, 1000), "wlan0": nic(0, 0)}
+    r1 = sampler.sample_once()
+    assert r1.baseline is True
+
+    counters.page = {"eth0": nic(20, 20), "wlan0": nic(30, 30)}  # eth0 双侧回绕; wlan0 正常
+    r2 = sampler.sample_once()
+    assert r2.counter_reset is True
+    assert (r2.delta_up_bytes, r2.delta_down_bytes) == (30, 30)
+    assert (r2.day_up_bytes, r2.day_down_bytes) == (30, 30)
+    assert len(r2.warnings) == 2
+    assert all("eth0" in w and "wlan0" not in w for w in r2.warnings), r2.warnings
+    # 回绕后的新读数成为下轮基线, 下一轮只记真实增量
+    counters.page = {"eth0": nic(40, 40), "wlan0": nic(30, 30)}
+    r3 = sampler.sample_once()
+    assert (r3.delta_up_bytes, r3.delta_down_bytes) == (20, 20)
+    assert (r3.day_up_bytes, r3.day_down_bytes) == (50, 50)
 
 
 def test_counter_reset_never_negative_across_many_samples():
@@ -374,6 +402,73 @@ def test_disconnect_recover_with_real_growth_counts_only_increment():
     assert (r_up.day_up_bytes, r_up.day_down_bytes) == (100, 100)
 
 
+def test_multi_nic_one_down_other_counts_normally():
+    """T3: 多卡中一张 down (被过滤) 期间另一张正常增长 -> 只记正常卡的增量, 无重置告警;
+    down 卡恢复后读数未涨, 仍记 (0,0) (记忆未被 down 轮改写)."""
+    stats = stats_page()
+    sampler, _, counters = make_sampler(stats=stats)
+    counters.page = {"eth0": nic(0, 0), "wlan0": nic(999, 999)}
+    r1 = sampler.sample_once()
+    assert r1.baseline is True
+
+    stats["wlan0"] = SimpleNamespace(isup=False)  # wlan0 down -> 被默认 exclude_down 过滤
+    counters.page = {"eth0": nic(100, 100), "wlan0": nic(999, 999)}
+    r_down = sampler.sample_once()
+    assert (r_down.delta_up_bytes, r_down.delta_down_bytes) == (100, 100)
+    assert r_down.counter_reset is False and r_down.warnings == ()
+
+    stats["wlan0"] = SimpleNamespace(isup=True)  # 恢复, 读数未涨
+    counters.page = {"eth0": nic(100, 100), "wlan0": nic(999, 999)}
+    r_up = sampler.sample_once()
+    assert (r_up.delta_up_bytes, r_up.delta_down_bytes) == (0, 0)
+    assert r_up.counter_reset is False and r_up.warnings == ()
+    assert (r_up.day_up_bytes, r_up.day_down_bytes) == (100, 100)  # 只含 eth0 的真实增量
+
+
+def test_new_nic_with_large_lifetime_counters_only_establishes_baseline():
+    """T6: 已有 eth0 记忆时新插入 vet (带 700 历史累计) -> 本轮 (0,0), vet 基线写 700."""
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(100, 100)}
+    sampler.sample_once()
+    counters.page = {"eth0": nic(100, 100), "vet": nic(700, 700)}  # vet 首次出现
+    r = sampler.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (0, 0)
+    assert (r.day_up_bytes, r.day_down_bytes) == (0, 0)
+    assert sampler.snapshot()["nic_baseline"] == {
+        "eth0": {
+            "up": 100,
+            "down": 100
+        },
+        "vet": {
+            "up": 700,
+            "down": 700
+        },
+    }
+    # 基线已写入: 之后再涨只记增量
+    counters.page = {"eth0": nic(100, 100), "vet": nic(750, 760)}
+    r2 = sampler.sample_once()
+    assert (r2.delta_up_bytes, r2.delta_down_bytes) == (50, 60)
+
+
+def test_nic_memory_expires_after_seven_days_and_reappears_as_new():
+    """T13: 某卡超过 7 天未被选中 -> 条目被清理; 再出现按新卡只立基线 (0,0)."""
+    sampler, clock, counters = make_sampler()
+    counters.page = {"eth0": nic(100, 200)}
+    sampler.sample_once()
+    assert sampler.snapshot()["nic_baseline"] == {"eth0": {"up": 100, "down": 200}}
+
+    clock.now = T0 + timedelta(days=8)  # eth0 已 8 天未被选中
+    counters.page = {"wlan0": nic(500, 600)}  # 只有 wlan0 -> eth0 不进 next_base
+    r = sampler.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (0, 0)
+    assert sampler.snapshot()["nic_baseline"] == {"wlan0": {"up": 500, "down": 600}}  # eth0 已清
+
+    counters.page = {"eth0": nic(9000, 9000), "wlan0": nic(500, 600)}  # eth0 回来 (带大累计)
+    r2 = sampler.sample_once()
+    assert (r2.delta_up_bytes, r2.delta_down_bytes) == (0, 0)  # 按新卡只立基线
+    assert sampler.snapshot()["nic_baseline"]["eth0"] == {"up": 9000, "down": 9000}
+
+
 def test_all_filtered_preserves_nic_memory_and_counts_later_growth():
     """T4: 全部被过滤时记忆完全不动; 恢复后仍 (0,0), 再涨 50 才记 50."""
     sampler, _, counters = make_sampler()
@@ -461,6 +556,68 @@ def test_restore_yesterday_clears_accumulation_keeps_baseline():
     r = sampler.sample_once()
     assert (r.delta_up_bytes, r.delta_down_bytes) == (100, 100)
     assert (r.day_up_bytes, r.day_down_bytes) == (100, 100)  # 跨天停机窗流量归今天
+
+
+def test_restore_v2_single_illegal_nic_entry_is_dropped():
+    """T9: v2 单条非法 ({"up": "x"}) -> 该条丢弃 + 告警, 其他条生效, day 保留."""
+    sampler, _, counters = make_sampler()
+    snap = {
+        "version": 2,
+        "day": "2026-10-16",
+        "day_up_bytes": 100,
+        "day_down_bytes": 200,
+        "last_up_bytes": 10,
+        "last_down_bytes": 20,
+        "nic_baseline": {
+            "eth0": {
+                "up": "x",
+                "down": 0
+            },
+            "wlan0": {
+                "up": 10,
+                "down": 20
+            }
+        },
+    }
+    warns = sampler.restore(snap)
+    assert len(warns) == 1 and "nic_baseline 条目非法" in warns[0] and "'eth0'" in warns[0]
+    assert sampler.state_restored is True
+    assert sampler.has_baseline
+    assert sampler.snapshot()["nic_baseline"] == {"wlan0": {"up": 10, "down": 20}}  # 只有 wlan0 生效
+    assert (sampler.day_up_bytes, sampler.day_down_bytes) == (100, 200)  # day 保留
+
+    counters.page = {"eth0": nic(500, 500), "wlan0": nic(110, 120)}
+    r = sampler.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (100, 100)  # 仅 wlan0 的增量
+    assert (r.day_up_bytes, r.day_down_bytes) == (200, 300)
+
+
+def test_restore_v2_nic_baseline_local_corruption_variants():
+    """nic_baseline 局部损坏逐形态: 缺失/非映射/键非字符串/条目非映射/缺字段 ->
+    丢弃并告警, 但 day 与恢复本身仍生效 (局部损坏不拖垮整体恢复)."""
+    base = {
+        "version": 2,
+        "day": "2026-10-16",
+        "day_up_bytes": 10,
+        "day_down_bytes": 20,
+    }
+    cases = [
+        (None, "缺失", "无告警"),
+        ([], "非映射", "nic_baseline 不是映射"),
+        ({5: {"up": 1, "down": 2}}, "键非字符串", "网卡名非字符串"),
+        ({"eth0": 7}, "条目非映射", "不是映射"),
+        ({"eth0": {"up": 1}}, "缺字段", "up/down 缺失"),
+    ]
+    for raw, label, expect in cases:
+        sampler, _, _ = make_sampler()
+        warns = sampler.restore(dict(base, nic_baseline=raw))
+        if expect == "无告警":
+            assert warns == (), label
+        else:
+            assert any(expect in w for w in warns), f"{label}: {warns!r}"
+            assert not sampler.has_baseline, label
+        assert sampler.state_restored is True, label
+        assert (sampler.day_up_bytes, sampler.day_down_bytes) == (10, 20), label
 
 
 def test_restore_future_day_is_degraded():
