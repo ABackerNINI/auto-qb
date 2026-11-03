@@ -27,7 +27,9 @@
 - test_store_update_fields_idempotent_writes_not_registered: 幂等写(已有标签再加/删不存在标签/同值分类)不登记自写
 - test_store_apply_tag_removal: torrents_delete_tags 全库移除(空表直返 / 命中移除并置脏视图与所在组)
 - test_store_remove_torrent_pending_semantics: remove_torrent 已知 hash 登记 removed / 未知 hash 无操作
-- test_store_reset_runtime_marks_view_changed
+- test_store_reset_runtime_marks_view_changed: reset 仍置 view_changed(索引保留不改变重建判定)
+- test_store_reset_runtime_keeps_group_index: reset_runtime 不清 groups/group_sizes/member_to_key(D1=B)
+- test_store_reset_runtime_no_regroup_cost: reset 不触发 O(N) 重归组(不拉文件表/不标脏组)
 - test_store_view_changed_on_membership
 """
 
@@ -344,12 +346,68 @@ def test_store_update_fields_marks_view_changed():
 
 
 def test_store_reset_runtime_marks_view_changed():
-    """热重载 L2 reset_runtime: 分组索引清空 -> 视图必须重建"""
+    """热重载 L2 reset_runtime: 清缓存/tracker_conf 置空 -> 视图必须重建(分组索引按 D1=B 保留)"""
     store = TorrentStore()
     store.refresh([FakeTorrent(hash="H1")])
     store.consume_view_changed()
     store.reset_runtime()
     assert store.consume_view_changed() is True
+
+
+def test_store_reset_runtime_keeps_group_index():
+    """reset_runtime **不清**分组索引(计划 26-11-03-2223 D1=B, issue 26-11-03-2206)
+
+    分组键的三个输入(save_path/种子文件表/物理解析)不在 L2 重建判据的变更面, 重建后记录
+    与文件表缓存仍在, 重算只能得到同一批键 —— 保留索引免 O(N) 重算。快照/缓存仍按原口径清。
+    """
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1", save_path=r"R:\D"), FakeTorrent(hash="H2", save_path=r"R:\D")])
+    key = (r"R:\D", )
+    groups_ref, member_ref, sizes_ref = store.groups, store.member_to_key, store.group_sizes
+    store.groups[key] = ["H1", "H2"]
+    store.member_to_key["H1"] = key
+    store.member_to_key["H2"] = key
+    store.group_sizes[key] = {"H1": {"movie.mkv": 100}, "H2": {"movie.mkv": 100}}
+    store.group_key_migrations.add(key)
+    store.transitional_missing_skips[key] = 1
+    store.state_snapshot["H1"] = "stalledUP"
+    for rec in store.by_hash.values():
+        rec.tracker_conf = object()
+    store.consume_view_changed()
+    store.reset_runtime()
+    assert store.groups is groups_ref and store.member_to_key is member_ref and store.group_sizes is sizes_ref, (
+        "分组索引对象不得被替换/清空"
+    )
+    assert store.groups[key] == ["H1", "H2"] and store.member_to_key == {"H1": key, "H2": key}
+    assert store.group_sizes[key] == {"H1": {"movie.mkv": 100}, "H2": {"movie.mkv": 100}}
+    assert store.transitional_missing_skips == {} and store.state_snapshot == {}, "软信号/状态快照仍归零(重启口径)"
+    assert all(rec.tracker_conf is None for rec in store.by_hash.values()), "conf 置空待全量轮重匹配"
+    assert store.consume_view_changed() is True
+
+
+def test_store_reset_runtime_no_regroup_cost():
+    """reset_runtime 本身不触发 O(N) 重归组: 不增文件取证、不标脏组、索引原引用保留
+
+    重算分组键需要逐种子拉文件表(grouping_mod._assign_new_torrent); reset 是纯运行态重置
+    (黄金法则 1 幂等), 重归组只能在 refresh 管线发生。计数以 FakeClient.torrents_files 为准。
+    """
+    client = FakeClient()
+    store = TorrentStore(client)
+    store.refresh([FakeTorrent(hash="H1", save_path=r"R:\D"), FakeTorrent(hash="H2", save_path=r"R:\D")])
+    for h in ("H1", "H2"):
+        store.get(h).files(client)  # 灌满记录级文件表缓存(重建后仍可用)
+    key = (r"R:\D", )
+    store.groups[key] = ["H1", "H2"]
+    store.member_to_key["H1"] = key
+    store.member_to_key["H2"] = key
+    store.group_sizes[key] = {"H1": {"movie.mkv": 100}, "H2": {"movie.mkv": 100}}
+    files_calls = client.files_calls
+    dirty_groups = set(store.dirty_groups)
+    store.reset_runtime()
+    assert client.files_calls == files_calls, "reset 不得为分组键重新拉文件表(O(N) 取证)"
+    assert store.dirty_groups == dirty_groups, "reset 不得把全部组标脏(否则下游全量展开)"
+    assert store.groups[key] == ["H1", "H2"], "索引内容原样"
+    assert store.group_sizes[key]["H1"] == {"movie.mkv": 100} and store.group_sizes[key]["H2"] == {"movie.mkv": 100}
 
 
 def test_store_seeding_time_quantized_no_repaint():

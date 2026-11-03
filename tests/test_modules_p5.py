@@ -19,6 +19,7 @@ test_rule_engine / test_trigger_events / test_rules_core(经同一刷新路径�
 - test_rebuild_within_window_still_delivers_queue_rebuilt: 抑制窗内二次重建 queue_rebuilt 不被吞(issue 26-10-01-0750)
 - test_full_round_restores_torrent_tasks_after_rebuild: full_round 重匹配兑现后补建存量种子的种子级任务(issue 26-10-01-2147)
 - test_startup_round_tasks_not_duplicated: 首轮全量轮 full_round 补建与 added 管线幂等互斥, 任务面恰一份(issue 26-10-01-2147)
+- test_l2_rebuild_group_view_not_empty: L2 重建保留分组索引, 全量轮后组视图不得为空且不重拉文件表(issue 26-11-03-2206)
 - test_rebuild_preserves_runtime_memory_state: 重建不重读磁盘, exec_history 原对象保留
 - test_rebuild_benchmark_5000_seeds: 5000 种子下短路/重建耗时回归阈值(基线化, 审计 L9)
 - test_p2a_dispatch_event_guards_skip_without_side_effects: 事件分派四守卫(快照/配置/首轮/同值)静默跳过 (P2-a)
@@ -48,7 +49,7 @@ import pytest
 
 from auto_qb.core.modules import maintenance_mod, rules_mod, tracker_mod
 from auto_qb.core.taskqueue import TaskQueue
-from helpers import FakeClient, FakeTracker, FakeTorrent, make_manager, seed_store
+from helpers import FakeClient, FakeTracker, FakeTorrent, _fake_file, grouping_cfg, make_manager, seed_store
 
 
 def _mgr(td):
@@ -588,6 +589,37 @@ def test_startup_round_tasks_not_duplicated():
             for t in q._fast if t.kind == "rule" and t.name == "example_rules.add_site_tag" and t.hash in ("H1", "H2")
         )
         assert (n_m, n_r) == (2, 2), f"任务面必须恰一份(不随入口数翻倍): maintenance={n_m}, rule={n_r}"
+
+
+def test_l2_rebuild_group_view_not_empty():
+    """L2 重建后组视图不得变空(issue 26-11-03-2206 / 计划 26-11-03-2223 守阵)
+
+    复现场景: interval 判据触发 rules.rebuild_runtime() -> store.reset_runtime(); 修复前
+    reset 清空 groups/group_sizes/member_to_key, 重建后全量 refresh 对存量记录不重跑归组,
+    _build_group_view() 恒空(热重载后 WebUI 分组页整体消失)。
+    新语义: 索引跨 L2 保留 -> 组行原样, 且全量轮不重新拉文件表(files_calls 不增)。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        client = FakeClient()
+        mgr = make_manager(os.path.join(td, "state.json"), bare=True, grouping=grouping_cfg(), client=client)
+        for h, name in (("H1", "T1"), ("H2", "T2")):
+            client.torrents[h] = FakeTorrent(hash=h, name=name, state="stalledUP", save_path=r"R:\Downloads")
+            client.files_map[h] = [_fake_file("movie.mkv", 100)]
+        mgr._refresh_torrents()  # 首轮全量: 同一 save_path + 同一文件表 -> 归为一组
+        assert len(mgr.store.groups) == 1, "首轮归组应得 1 组"
+        files_before = client.files_calls
+        groups_ref = mgr.store.groups
+
+        mgr.connect = mock.MagicMock(return_value=True)  # rebuild_runtime 尾段重连, 不真连
+        mgr.host.get("rules").rebuild_runtime()
+        assert mgr.store.groups is groups_ref, "reset_runtime 不得清空分组索引(D1=B)"
+        mgr.client = client  # 模拟 reconnect 完成(rid 失效 -> 下一次 refresh 为全量轮)
+        mgr._refresh_torrents()  # 全量轮: tracker 重匹配(full_round), 不得重跑文件取证
+        assert client.files_calls == files_before, "全量轮不得重新拉文件表(记录级缓存跨重建保留)"
+        assert len(mgr.store.groups) == 1
+        assert all(mgr.store.get(h).tracker_conf is not None for h in ("H1", "H2")), "full_round 应重匹配 conf"
+        view = mgr._build_group_view()
+        assert len(view) == 1 and view[0]["count"] == 2, "L2 重建后组视图不得为空(修复前此处为空列表)"
 
 
 def test_rebuild_preserves_runtime_memory_state():

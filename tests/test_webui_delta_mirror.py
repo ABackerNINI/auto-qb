@@ -22,8 +22,10 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
 - test_m5_hr_revision_wave_yields_full: M5(02 笔记 2.5.3) —— HR revision 波次 -> 本代 full,
   响应不含 delta/removed 键(R10); 下一拍 revision 未再变 -> 恢复行级增量
 - test_unkeyed_command_source_yields_full: 无键 dirty 源(R11 缺口, S3 观察) —— 命令自写字段
-  (update_torrent_fields)/reset_runtime 只置 view_changed 无行键, 落代必须 full(修复前为
-  「空键集且 full=False」, delta 客户端漏变更); 对照: store 驱动常规轮不受影响照常行级增量
+  (update_torrent_fields)/reset_runtime(索引保留, 计划 26-11-03-2223 D1=B) 只置 view_changed
+  无行键, 落代必须 full(修复前为「空键集且 full=False」, delta 客户端漏变更); 另以真实
+  _leave_group 解散组覆盖 row_key_unresolvable(不靠清空索引伪造); 对照: store 驱动常规轮
+  不受影响照常行级增量
 - test_m6_restart_ver_seeding_old_rid_full: M6 —— 进程重启 ver 时间播种(runtime.py:137-138,
   不回落): 时间线/累积器归零, 旧客户端 rid 窗外 -> 全量(R10); 对照: 重启后新一轮增量照常
 - test_m7_window_slide_out_and_rid_ahead_full: M7 —— 窗口滑出(41 代未消费, maxlen=40 把客户端
@@ -403,11 +405,14 @@ def test_unkeyed_command_source_yields_full():
     assert rt._delta_timeline[-1]["full"] is False
     assert [r["hash"] for r in out["resps"][0]["delta"]["torrents"]] == ["H2"]
 
-    # b) reset_runtime: 清分组索引 + 置 view_changed, 同样无键 —— 组行消失/成员回 singles,
-    #    行键不可推导 -> 必须 full, 否则 B 组行残留 + H1 单行缺失(镜子必红)
+    # b) reset_runtime: 分组索引**保留**(决策钉死, 计划 26-11-03-2223 D1=B) + 置 view_changed,
+    #    同样无键 —— 纯命令源仍必须 full(索引保留不改变该判定); 索引未清 => 组行原样,
+    #    full 重放后 B ≡ A。旧用例「reset 清索引 -> 组行消失 + 成员回 singles」随 D1 退役。
     store2 = make_store("H1", "H2")
     store2.member_to_key["H1"] = ("R:\\D", )
     store2.groups[("R:\\D", )] = ["H1"]
+    store2.group_sizes[("R:\\D", )] = {"H1": {"movie.mkv": 100}}
+    groups_ref, member_ref, sizes_ref = store2.groups, store2.member_to_key, store2.group_sizes
     rt2 = _delta_runtime(store2)
     m2 = Mirror(store2, rt2)
     ct2, cg2 = DeltaClient("torrent"), DeltaClient("group")
@@ -415,10 +420,39 @@ def test_unkeyed_command_source_yields_full():
     m2.publish()
     m2.sync(ct2, cg2)  # 基线含组行
     store2.reset_runtime()
-    assert not store2.groups and not store2.member_to_key  # 前置: 分组索引已清空
+    assert store2.groups is groups_ref and store2.member_to_key is member_ref  # 前置: 索引未清
+    assert store2.groups == {("R:\\D", ): ["H1"]} and store2.member_to_key == {"H1": ("R:\\D", )}
+    assert store2.group_sizes is sizes_ref
     m2.publish(force=True)
-    assert rt2._delta_timeline[-1]["full"] is True
-    m2.sync(ct2, cg2)  # 修复前此处红: B 合并结果 != A 全量快照
+    assert rt2._delta_timeline[-1]["full"] is True  # 无键命令源 -> 本代 full(索引保留不改变该判定)
+    m2.sync(ct2, cg2)  # 新语义: 索引保留后 B ≡ A, 组行原样保留
+
+    # c) row_key_unresolvable 真实路径(不靠清空索引): 组内最后成员被删 + grouping 的
+    #    _leave_group 解散该组(生产 removed_scan 相位同款操作) —— 删除清单里的 hash 查不到
+    #    组键(与「从未归组」不可区分) -> 本代必须 full, 增量归约无法表达「组行消失 + 成员回 singles」
+    from auto_qb.core.modules.grouping_mod import GroupingModule
+
+    store3 = make_store("H1", "H2")
+    store3.member_to_key["H1"] = ("R:\\D", )
+    store3.groups[("R:\\D", )] = ["H1"]
+    store3.group_sizes[("R:\\D", )] = {"H1": {"movie.mkv": 100}}
+    rt3 = _delta_runtime(store3)
+    m3 = Mirror(store3, rt3)
+    ct3, cg3 = DeltaClient("torrent"), DeltaClient("group")
+    rt3.mark_dirty()
+    m3.publish()
+    m3.sync(ct3, cg3)  # 基线含组行
+    assert cg3.rows["groups"], "基线应含组行"
+    store3.refresh([store3.client.torrents["H2"]])  # 真实删除: H1 从 qB 全集消失
+    GroupingModule._leave_group(SimpleNamespace(_ctx=SimpleNamespace(store=store3)), "H1")
+    assert ("R:\\D", ) not in store3.groups and "H1" not in store3.member_to_key  # 前置: 组行真实消失
+    with rt3.view_lock:
+        rt3._drain_delta_locked(store3)
+    assert "row_key_unresolvable" in rt3._pending_full_reasons  # 覆盖路径本身
+    m3.publish(force=True)
+    assert rt3._delta_timeline[-1]["full"] is True
+    m3.sync(ct3, cg3)  # B ≡ A: 组行消失由 full 重放表达
+    assert not cg3.rows["groups"]
 
 
 # ---------- M6: 重启 ver 播种 -> 旧 rid 窗外 full ----------
