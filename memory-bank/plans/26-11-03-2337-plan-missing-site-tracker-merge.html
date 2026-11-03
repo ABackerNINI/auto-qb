@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>缺失站点导出/导入 tracker 合并</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="missing-site-tracker-merge">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-03-2337">
+<meta name="doc-updated" content="26-11-03-2337">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: missing-site-tracker-merge</div>
+<h1>缺失站点导出/导入 tracker 合并</h1>
+<p class="lede">缺失站点导出(CLI)与导入(WEBUI)默认把「同种子共现」的多个 tracker 域名合并为一个站点条目(<code>domains</code> 数组),可选拆回逐域名;两端共用同一分组构件,口径不漂移。设计主轴:分组只在缺失域名内做 union-find,合并条目的站点名/默认标签由组内最短域名生成。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-03-2337 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「导出缺失站点时默认合并同一颗种子的多个 tracker 到同一个站点,可选择分开;WEBUI 导入缺失站点同步支持」→ 会话 grilling 两轮拍板(D1~D6,见 §06)后定稿
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>:一个 PT 站点常有多个 tracker 域名(主站域名 + announce 子域等)。现状是一域名一条站点条目,同站被拆成多条,标签/限速/HR 要重复配 N 遍。目标:导出与导入默认产出<b>每站一条</b>(domains 数组本就是 schema 原生形态),想拆的能一键拆回。</p>
+<p><b>做到什么程度算成</b>:</p>
+<ul>
+<li>CLI <code>--export-yaml</code>(两种模式)默认产出合并条目,<code>--split-trackers</code> 拆回逐域名(与改造前输出逐字节一致);</li>
+<li>WEBUI「导入缺失站点」在<b>存在会真实合并的组</b>时弹三钮引导(合并默认+推荐),否则维持现状路径;两种选择都只填编辑器待审,保存仍走既有 <code>PUT /api/config</code>;</li>
+<li>两端分组结果一致(同一构件),全量测试绿 + 新基线切片。</li>
+</ul>
+<p><b>设计底线 / 不变量</b>:</p>
+<ul>
+<li>不新增 config 键 —— 开关是 CLI flag 与前端交互,不进 <code>config.validate_config</code>/schema;</li>
+<li>只读面不变 —— 依旧只调 qB 查询接口,不碰任务队列与 state_file(qB 调用次数与现状相同,逐种查 tracker 那次遍历不变);</li>
+<li>已配置域名永不进产物 —— 分组只在缺失域名集合内做,已配置域名<b>不参与粘合</b>(保守:两个从不直接同现的缺失域名,不因都碰过某已配置域名而合并);</li>
+<li>产物一律待审 —— CLI 是模板用户填键,WEBUI 是填编辑器不落盘,合并错焊肉眼可查、可改。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<ul>
+<li><code>collect_all_tracker_hostnames</code>(<code>src/auto_qb/core/exporter.py:27</code>)把「域名↔种子」关联<b>在收集时就丢掉了</b>,只返回去重集合——分组所需的共现信息无处可取,这是要动的根。</li>
+<li>CLI <code>export_yaml_template</code>(<code>exporter.py:100</code>)逐域名 <code>build_tracker_entry(domain)</code> → 一域名一条,站点名/标签由该域名生成(<code>gen_tracker_name</code> :69 / <code>gen_default_tag</code> :58)。</li>
+<li>WEBUI <code>/api/sites/missing</code>(<code>src/auto_qb/webui/server/routes/sites.py:29</code>)与 CLI 同一套构件、同样逐域名;前端 <code>hubImportSites</code>(<code>config_hub_tracker.js:202</code>)扫描后直接 confirmDialog 列清单确认,无合并概念。</li>
+<li>现成可复用件:对话框层已有三钮 <code>confirmThreeDialog</code>(<code>ui_feedback.js:179</code>,返回 <code>true|"extra"|false</code>,extra 钮恒按 danger-solid 渲染)——形态对得上本需求,只差第三钮的样式位。</li>
+<li>测试现状:<code>tests/test_exporter.py</code>、<code>tests/test_web_backend_misc_sites.py</code>(6 条 missing 端点用例 + 前端接线测试 :122);e2e 无 spec 覆盖此流程。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 后端分组构件(exporter.py,两端共用)</h3>
+<ul>
+<li><code>collect_torrent_tracker_hostnames(api) -&gt; list[set[str]]</code>:逐种收集,每颗种子一组,单种查 tracker 失败 = 空集(沿用现状静默跳过);旧的 <code>collect_all_tracker_hostnames</code> 改为对它做并集,调用方签名不变。</li>
+<li><code>group_missing_domains(torrent_sets, missing) -&gt; list[list[str]]</code>:仅对 <code>missing</code> 做共现 union-find(任一种子内两缺失域名同现即并,跨种子传递闭包);输入先 sorted 保证确定性;全单元素组时退化为现状。</li>
+<li><code>build_merged_entry(domains, taken)</code>:代表域名 = 组内<b>最短</b>(tie 取字典序),站点名与默认标签由代表域名经既有 <code>gen_tracker_name</code>/<code>gen_default_tag</code> 生成;<code>domains</code> 列表 = 整组 sorted;其余字段与 <code>build_tracker_entry</code> 同源。</li>
+</ul>
+<h3>3.2 CLI(<code>--split-trackers</code>)</h3>
+<ul>
+<li><code>export_yaml_template</code> 增参 <code>split_trackers: bool = False</code>;False 走分组合并,True 恒拆(逐域名,行为=现状);only_missing 与追加模式共用同一落点(<code>exporter.py:129-137</code> 往 <code>trackers_config</code> 塞条目),一处分支两模式同时生效。</li>
+<li><code>cli.py</code> 加 <code>--split-trackers</code>(store_true),并加入与 <code>--only-missing</code> 同款的配合校验(不带 <code>--export-yaml</code> 时报错);<code>export_yaml</code> 透传。</li>
+</ul>
+<h3>3.3 WEBUI:响应加 <code>groups</code> + 三钮自适应引导</h3>
+<ul>
+<li><code>/api/sites/missing</code> 响应<b>追加</b> <code>groups: [{name, domains: [...]}]</code>(name=代表站点名,与 CLI 同规则);<code>sites</code> 字段保持逐域名条目<b>原形</b>——现有断言与逻辑零破坏,加字段向后兼容。</li>
+<li>前端 <code>hubImportSites</code> 三分支:
+  <ol>
+  <li>无缺失 → 现状 toast(不变);</li>
+  <li>groups 全单域名 → 现状 confirmDialog 直接列清单(不变);</li>
+  <li>存在 ≥2 域名组 → 三钮弹窗:「取消」/「拆分导入」/「合并导入」——合并=ok 钮(Enter 默认、推荐样式),拆分=extra 钮;body 带解释文案(同站多域名合并后共享标签/限速/HR,拆分会产生重复站点)+ 合并明细列前 ~10 组、超出折叠「…另有 N 组」。拆分导入走现状逐域名路径;合并导入每组一条(entry = 代表 site.entry + domains=组内全域名,键=代表名)。</li>
+  </ol></li>
+<li><code>_openModal</code>/<code>confirmThreeDialog</code> 扩展 extra 钮样式位(<code>opts.extraStyle</code>:缺省 <code>"danger-solid"</code> 兜底,既有调用点渲染零变化;本需求传 ghost——「拆分导入」不是破坏性动作,不该渲染成红钮)。</li>
+<li>同名不覆盖语义保留(现有 <code>config_hub_tracker.js:224</code> skip 逻辑,合并模式按组代表名查重)。</li>
+</ul>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+<tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+<tr><td>M1 后端构件</td><td>exporter.py 新增 <code>collect_torrent_tracker_hostnames</code> / <code>group_missing_domains</code> / <code>build_merged_entry</code>,旧并集函数改为包装;补 <code>tests/test_exporter.py</code>:共现闭包、跨种子传递合并、代表=最短(tie 字典序)、全单组退化=现状、已配置域名不粘合</td><td><code>commands run test.quick</code> 相关用例绿;单元素组路径与改造前逐字节等价</td></tr>
+<tr><td>M2 CLI 接线</td><td><code>cli.py</code> 加 <code>--split-trackers</code> + 配合校验;<code>export_yaml_template</code> 加参分支;两模式各一条 dry-run 冒烟</td><td>默认导出含合并条目(domains 数组);<code>--split-trackers</code> 输出与改造前一致;缺 <code>--export-yaml</code> 时报错</td></tr>
+<tr><td>M3 WEBUI 后端</td><td>routes/sites.py 生成 <code>groups</code>;<code>test_web_backend_misc_sites.py</code> 补 groups 断言(分组正确/全单组退化/代表名与 CLI 同规则/响应仍含原 sites 形)</td><td>missing 端点用例全绿,旧断言不改一行仍绿</td></tr>
+<tr><td>M4 WEBUI 前端</td><td>ui_feedback.js 加 <code>extraStyle</code>;config_hub_tracker.js hubImportSites 三分支 + 明细折叠;更新 <code>test_frontend_sites_import_wiring</code>(:122)</td><td>接线测试绿;GUI 冒烟三路径(无缺失 / 全单组 / 有多组各点一次合并与拆分)</td></tr>
+<tr><td>M5 收尾</td><td><code>commands run test.full</code> + <code>kb.new baseline</code> 基线切片;文档回写(根 README 若提及导出行为)</td><td>全量绿 + 新切片记实测数字</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p class="aside">无 —— 全部决策已于 26-11-03 会话 grilling 中拍板,结论迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+<tr><th>#</th><th>日期</th><th>决策</th><th>结论</th><th>备选(未采用)</th></tr>
+<tr><td>D1</td><td>26-11-03</td><td>分组键</td><td><b>共现连通分量</b>(union-find 传递闭包)</td><td>共现+同主域约束(会漏无关备用域名)/ 纯注册域分组(与种子无关,非用户原意)</td></tr>
+<tr><td>D2</td><td>26-11-03</td><td>代表域名</td><td><b>最短域名</b>(tie 字典序)生成站点名与默认标签</td><td>字典序第一 / 列表第一个</td></tr>
+<tr><td>D3</td><td>26-11-03</td><td>CLI 默认与开关</td><td><b>默认合并</b>,<code>--split-trackers</code> 拆分;两模式均生效</td><td>保守默认(默认分开+合并开关)/ 仅 only_missing 生效</td></tr>
+<tr><td>D4</td><td>26-11-03</td><td>WEBUI 触发口径</td><td><b>会真实合并才引导</b>(存在 ≥2 域名组);否则维持现状</td><td>有多 tracker 种子就引导(产物相同时空转)</td></tr>
+<tr><td>D5</td><td>26-11-03</td><td>弹窗形态</td><td><b>三按钮</b>:取消 / 拆分导入 / 合并导入(合并默认+推荐+解释文案,不同颜色)</td><td>复选框 / 两钮 / 不给选项</td></tr>
+<tr><td>D6</td><td>26-11-03</td><td>明细展示</td><td><b>列前 ~10 组 + 折叠</b>「…另有 N 组」</td><td>全量列出 / 只给计数</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+<tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+<tr><td>跨站种子错焊(转载/合种携带多站 tracker,共现闭包把不同站焊成一条)</td><td>用户库中存在跨站 multi-tracker 种子</td><td>产物一律待审(YAML 填键 / 编辑器核对)且弹窗明细可见;真实撞上用 <code>--split-trackers</code> / 「拆分导入」兜底;不在本期加同主域约束(D1 已裁)</td></tr>
+<tr><td>extraStyle 扩展引发既有三钮框回归</td><td>改 <code>_openModal</code> 时动了默认渲染分支</td><td>缺省值 = 现状 danger-solid,既有调用点(刷新守卫/关闭工具等)渲染零变化;前端接线测试断言默认样式</td></tr>
+<tr><td>合并模式改变 <code>gen_tracker_name</code> 查重序列,条目命名与旧导出不一致</td><td>对同一批缺失域名先后两次导出对比</td><td>模板是一次性产物,无兼容承诺;不在文档中承诺命名稳定</td></tr>
+<tr><td>扫描性能劣化</td><td>种子量大</td><td>qB 调用次数不变(逐种查 tracker 那次遍历复用);分组是域名级 union-find,开销可忽略;前端 loading 与现状同</td></tr>
+<tr><td>Vue 语义静默白坑(改共享对话框层)</td><td>M4 动 ui_feedback.js</td><td>开工前过 <code>memory-bank/pitfalls/web-ui/_index.md</code>;GUI 冒烟三路径全覆盖</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-2337</span> 初版:用户指令发起,grilling 两轮(8 问)拍板 D1~D6 后定稿;主线=后端共用分组构件 + CLI 默认合并(--split-trackers 拆分)+ WEBUI 三钮自适应引导,分期 M1~M5。</li>
+</ul>
+
+</div>
+</body>
+</html>
