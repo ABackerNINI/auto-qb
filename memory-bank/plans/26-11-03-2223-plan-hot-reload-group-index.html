@@ -7,10 +7,10 @@
 <title>热重载 L2 重建后分组索引恢复（辅种页空态修复）计划</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="hot-reload-group-index">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-2223">
-<meta name="doc-updated" content="26-11-03-2252">
-<meta name="doc-refs" content="memory-bank/issues/26-11-03-2206-bug-webui-hotreload-group-index-vanish.html, memory-bank/testing/baselines/26-11-03-2329-hot-reload-group-index-step-b.md, memory-bank/tasks/26-11-03-test-hot-reload-group-index-step-c.md">
+<meta name="doc-updated" content="26-11-03-2355">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-2206-bug-webui-hotreload-group-index-vanish.html, memory-bank/issues/26-10-01-2129-bug-webui-hotreload-ext-vanish.html, memory-bank/testing/baselines/26-11-03-2329-hot-reload-group-index-step-b.md, memory-bank/tasks/26-11-03-test-hot-reload-group-index-step-c.md">
 <style>
   :root {
     --bg: #10151a;
@@ -69,9 +69,9 @@
 <h1>热重载 L2 重建后分组索引恢复（辅种页空态修复）计划</h1>
 <p class="lede">修复「保存配置命中 L2 结构重建 → 辅种分组索引被清空且不再重归组 → 辅种页永久空态」；设计主轴：先判定分组索引的输入是否真的被 L2 触达，再决定「保留」还是「重建」，不为同义重算付出 O(N) 成本。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-2223 · <b>doc-updated</b> 26-11-03-2252 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-2223 · <b>doc-updated</b> 26-11-03-2355 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「为 issue 26-11-03-2206 写修复计划并用 grilling 拷问」；调查会话受控实验；本会话代码复核 @ HEAD 6ffa85a3（同步前实验基线 f89de69e）；本会话按用户拍板 D1–D6 推进至实施就绪，分支 <code>fix/hot-reload-group-index</code><br>
-  <b>关联</b> issue 26-11-03-2206（本次待修）；issue 26-10-01-2129（Superseded，结论需更正）；先例 rules_mod._on_full_round（issue 26-10-01-2147）
+  <b>关联</b> issue 26-11-03-2206（已修，Done）；issue 26-10-01-2129（Superseded，结论已更正并回链 2206）；先例 rules_mod._on_full_round（issue 26-10-01-2147）
 </div>
 
 <h2><span class="no">§01</span>目标与设计原则</h2>
@@ -153,31 +153,32 @@
 
 <h3>4.1 实施步骤拆分（每步一个独立会话执行）</h3>
 <p>分支 <code>fix/hot-reload-group-index</code>（基于本地 <code>develop</code> HEAD <code>6ffa85a3</code>）上执行；本轮工作模式为<b>仅本地 commit、不推送</b>，不使用 <code>ship.commit</code>/<code>ship.push</code>/<code>my-commit-flow.sync</code>。任一步验收未过即停手，把实测证据回写本计划 §08 后交回用户，不带着未验证状态进入下一步。</p>
+<p><b>执行结果</b>：A/B/C/D 四步全部 <span class="good">Done</span>（A <code>95a497d5</code> · B <code>0efcdee1</code> · C <code>281e7982</code> · D 本步收尾提交）；总验收 V1–V4 全绿，计划转 <b>Done</b>。</p>
 <table>
   <tr><th>步</th><th>内容</th><th>产出</th><th>验收判据</th><th>明确不做</th></tr>
   <tr>
-    <td><b>A</b><br>代码改动</td>
+    <td><b>A</b><br>代码改动<br><span class="good">Done · 95a497d5</span></td>
     <td>改 <code>TorrentStore.reset_runtime()</code>：移除 <code>groups.clear()/group_sizes.clear()/member_to_key.clear()</code>（D1=B）；<code>group_key_migrations</code> 按 D2 保留；同步改 <code>view_changed</code> 附近与 <code>transitional_missing_skips</code> 的注释理由；方法 docstring 写明「分组键输入不在 L2 变更面；未来若 L2 判据触及 save_path/files/物理解析，须改走 §03 C/A 的重建路径」，并按 D5 不加运行时自检。</td>
     <td>一个本地 commit：<code>store.py</code> 该方法 + 注释。</td>
     <td>diff 只落在 <code>reset_runtime</code> 与其注释/docstring；无新配置键、无 <code>config/schema.py</code> 变更、无跨模块改动。</td>
     <td>不改 grouping/tracker/rules 模块；不顺手改无关缺陷（scope-guard 入池）。</td>
   </tr>
   <tr>
-    <td><b>B</b><br>守阵与回归</td>
+    <td><b>B</b><br>守阵与回归<br><span class="good">Done · 0efcdee1</span></td>
     <td>新增三条测试（优先并入既有 <code>tests/test_grouping_*.py</code>；新建文件须同步文件头「## 测试计划」）：① <code>test_reset_runtime_keeps_group_index</code>（守阵：reset 后 <code>groups/group_sizes/member_to_key</code> 原样、<code>view_changed=True</code>、<code>tracker_conf=None</code>，docstring 标「决策钉死」）；② <code>test_l2_rebuild_group_view_not_empty</code>（回归：<code>rules.rebuild_runtime()</code> + 一次全量 refresh 后 <code>groups=1</code>、<code>_build_group_view()</code> ≥1 行、<code>torrents_files</code> 调用数不增）；③ <code>test_reset_runtime_no_regroup_cost</code>（成本守阵：reset 本身不增 <code>files_calls</code>/<code>dirty_groups</code>）。再改 <code>test_store_reset_runtime_marks_view_changed</code> 的过时 docstring（断言不变）。跑 <code>commands run test.quick</code> → <code>commands run test.full</code>，按 <code>kb.new baseline --total "&lt;实测&gt;"</code> 新建基线切片（数字从输出誊写）。</td>
     <td>测试文件 commit + 基线切片 + 实测数字。</td>
     <td>②在未改 Step A 时必须先红（否则证明不了修复）；三条全绿；全量绿；基线数字与输出一致。</td>
     <td>不为绿而放宽断言；不改产品代码（若需改，回 Step A 并说明）。</td>
   </tr>
   <tr>
-    <td><b>C</b><br>真机验证</td>
+    <td><b>C</b><br>真机验证<br><span class="good">Done · 281e7982（PASS）</span></td>
     <td>按 4.2 执行；先 <code>commands run real.env</code> 定环境、<code>commands run real.guard</code> 过守卫，再跑 R0–R6。结果按 PASS/FAIL/BLOCKED 三态记录，<b>当轮不修缺陷</b>。</td>
     <td>实测记录（阶段、时间、环境 id、种子数、视图行数、pass/fail/blocked）。</td>
     <td>R5 三项：辅种页恢复且不回落、key 与保存前一致、<code>torrents_files</code> 不增（或明确 N/A 并说明单测③兜底）。</td>
     <td>不动其它 qB；不让真实种子活跃；不把 token 写入任何文件；不因跑不通放宽约束。</td>
   </tr>
   <tr>
-    <td><b>D</b><br>收尾回写</td>
+    <td><b>D</b><br>收尾回写<br><span class="good">Done · 本步收尾提交</span></td>
     <td>issue 26-11-03-2206 补「复验」与「修复后补充」并推进状态；更正 26-10-01-2129 的 Superseded 结论并互链；<code>commands run kb.wrap --topic hot-reload-group-index --did ".."</code> / <code>kb.index</code> / <code>kb.check</code>；计划置 Done 并追加变更记录。</td>
     <td>文档 commit + 机检绿。</td>
     <td>DoD 五步完成；issue/计划/2129 三处互链一致；<code>kb.check</code> 绿。</td>
@@ -386,14 +387,14 @@
   <tr><td>大库重归组成本</td><td class="wr">未验证（仅 A/C 相关）</td><td>键计算 O(N) + <code>_physical_dir</code>/第三方链接探测 syscall；若选 A/C，实施轮需在真实种子库量一次单轮耗时与请求数。B 无此项。</td></tr>
   <tr><td>save_path 与 L2 同轮</td><td class="wr">未验证（A/C 的理论缺口）</td><td>见 G11；B 不涉及，若改选 C 必须补测。</td></tr>
   <tr><td><code>grouping.enabled</code> false→true</td><td class="wr">已识别、未复验</td><td>另一个永久空入口（D4）；本轮不修，复验后入池。</td></tr>
-  <tr><td>前端端到端</td><td class="wr">待真机（Step C）</td><td>本计划只到后端索引与视图快照；<b><code>--dry-run</code> 不启 WEB 服务</b>（<code>webui/module.py:66</code>），无法观察辅种页 ⇒ 必须按 D6 用一次非 dry-run 真机（限测试环境）+ 浏览器确认「暂无辅种」消失。</td></tr>
+  <tr><td>前端端到端</td><td class="good">已真机验证（Step C, 2026-11-03）</td><td>环境2 非 dry-run（<b><code>--dry-run</code> 不启 WEB 服务</b>，故按 D6 授权的一轮真机）：L2 后 27 次采样辅种页组行保持，未出现「暂无辅种」；组 key 与保存前一致。</td></tr>
   <tr><td>qB 断连叠加多次 L2</td><td>推理未实测</td><td>B 幂等（保留同一索引）；A/C 的 pending 语义按 G3 补测。</td></tr>
   <tr><td>跨组检测重扫</td><td>现状行为</td><td><code>reset_runtime</code> 本就不清 <code>dirty_groups</code>；B 不新增 dirty。A/C 会新增全量 dirty → 一次全量展开（见 G2）。</td></tr>
   <tr><td>行号时效性</td><td>以 HEAD 6ffa85a3 复核</td><td>实施轮若代码漂移，按符号名（<code>reset_runtime</code>/<code>_on_post</code>/<code>_on_full_round</code>）重新定位，不照抄行号。</td></tr>
   <tr><td>假种子能否进管线</td><td>硬前提（real-machine.md §2.9）</td><td>无 announce 或配置无对应 <code>domains</code> ⇒ 匹配不到 <code>tracker_conf</code> ⇒ 整条 <code>torrents_added</code> 管线被跳过、groups 恒空。真机验证必须带本机死端口 announce + 配置 domains，否则结论无效（假绿/假红都可能）。</td></tr>
   <tr><td>真实种子前提</td><td>环境相关</td><td>2026-11-01 实测：环境1 有 8 枚真实种子、环境2 主实例 0 枚。本轮用 L1 假种子，两环境均可；依赖真实种子的面在环境2 前提不成立。</td></tr>
   <tr><td>真机环境与 token</td><td>会话级</td><td>环境选择按 §04 4.3（<code>real.env</code> 单点，双 EXE 并存必须显式 <code>QBT_REAL_ENV</code>）；<b>token 由用户每轮给出、经 <code>QBT_TEST_&lt;端口&gt;</code> 注入，不落盘、不入任何入库文件</b>。本机物理实例全机唯一，同一时刻只允许一个 clone 跑 <code>real.*</code>。</td></tr>
-  <tr><td>收尾证据</td><td>待 Step C</td><td>PASS/FAIL/BLOCKED 三态 + 环境 id + 时间 + 视图行数 + 组 key + files 计数（或 N/A）；FAIL 按 scope-guard 入池，当轮不修。</td></tr>
+  <tr><td>收尾证据</td><td class="good">PASS（Step C, 2026-11-03；环境2 56589/56590）</td><td>L2 重建 0.22s；重建后 14s 内 27 次采样组行回落 0、key 变化 0、成员丢失 0；<code>/torrents/files</code> 重建后新请求 0；日志 <code>Traceback</code>/<code>Unknown</code> 均为 0。收尾种子/进程/qB 复原。</td></tr>
   <tr><td>范围外入口</td><td>已识别、未修</td><td><code>grouping.enabled</code> false→true 热重载（D4）与「启用分组后存量种子不归组」需复验后单独立项；本计划与测试均不覆盖。</td></tr>
 </table>
 
@@ -401,6 +402,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-03-2223</span> 初版：基于调查会话受控实验 + HEAD 6ffa85a3 代码复核；列出 A/B/C 三案与取舍，推荐 B（保留分组索引），把 grilling 拷问结论落进 §07、证据边界落进 §08。</li>
   <li><span class="tag">R1 · 26-11-03-2252</span> 用户拍板 D1=B / D2=保留 / D4 不并入 / D5 不加自检 / D6 允许测试环境一次非 dry-run，去掉待决状态（§05/§06）；新增 4.1 实施步骤拆分（A 代码 / B 守阵与回归 / C 真机验证 / D 收尾回写，含每步输入清单）、4.2 真机验证方案（R0–R6，按 real-machine.md 与 0641）、4.3 环境选择判据、4.4 回滚与验证判据；§08 补证据边界（dry-run 不启 WEB、假种子进管线前提、环境/token 约束）；计划状态 Open → In Progress，工作分支 <code>fix/hot-reload-group-index</code>。</li>
+  <li><span class="tag">R2 · 26-11-03-2355</span> Step D 收尾：§04.1 四步状态补齐（A <code>95a497d5</code> / B <code>0efcdee1</code> / C <code>281e7982</code> / D 本步），§08 前端端到端与收尾证据改为实测 PASS；issue 26-11-03-2206 补「复验」「修复后补充」并置 Done；26-10-01-2129 更正 Superseded 理由并回链；<code>rules_mod.rebuild_runtime</code> docstring 与 D1=B 新语义对齐；计划 In Progress → Done，机检 <code>kb.wrap</code>/<code>kb.index</code>/<code>kb.check</code>/<code>doc.links</code> 全绿。</li>
 </ul>
 
 </div>

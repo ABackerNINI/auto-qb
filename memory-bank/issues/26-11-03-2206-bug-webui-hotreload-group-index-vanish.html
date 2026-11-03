@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-2206">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hot-reload">
-<meta name="doc-refs" content="memory-bank/plans/26-11-03-2223-plan-hot-reload-group-index.html, memory-bank/testing/baselines/26-11-03-2329-hot-reload-group-index-step-b.md, memory-bank/tasks/26-11-03-test-hot-reload-group-index-step-c.md">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-2223-plan-hot-reload-group-index.html, memory-bank/testing/baselines/26-11-03-2329-hot-reload-group-index-step-b.md, memory-bank/tasks/26-11-03-test-hot-reload-group-index-step-c.md, memory-bank/issues/26-10-01-2129-bug-webui-hotreload-ext-vanish.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复)">
 <meta name="issue-summary" content="配置 L2 结构重建调用 store.reset_runtime 清空 groups/member_to_key, 但无任何模块对存量种子重归组; 只有首轮全量(重启)的 torrents_added 会重建, 故辅种页长期空态">
 <title>热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复)</h1>
     <p class="lede">配置 L2 结构重建调用 store.reset_runtime 清空 groups/member_to_key, 但无任何模块对存量种子重归组; 只有首轮全量(重启)的 torrents_added 会重建, 故辅种页长期空态</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-2206-bug-webui-hotreload-group-index-vanish</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 22:06</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -182,14 +182,20 @@ H1 conf = &lt;helpers.FakeTracker object ...&gt; | torrents_files calls = 2
     <ul>
       <li>2026-11-03 22:06 — 入池，状态 <strong>Open</strong>（计划外，未修）。本轮为调查任务：未改代码、未 commit/push。</li>
       <li>2026-11-03 22:52 — 修复计划已拍板并推进至 <strong>In Progress</strong>（D1=B 保留分组索引）；本件保持 <strong>Open</strong>，等待实施 A/B/C/D 四步与真机复验。仍不改代码。</li>
+      <li>2026-11-03 23:09 — 认领并实施 Step A（代码）：状态 <strong>In Progress</strong>。<code>TorrentStore.reset_runtime()</code> 移除 <code>groups.clear()/group_sizes.clear()/member_to_key.clear()</code>，按 D2 保留 <code>group_key_migrations</code>；提交 <code>95a497d5</code>。</li>
+      <li>2026-11-03 23:36 — Step B（守阵与回归）：新增 3 条测试并适配 1 条既有用例，<code>test.full</code> 4997 passed / 10 skipped（基线切片 <code>26-11-03-2329</code>）；提交 <code>0efcdee1</code>。</li>
+      <li>2026-11-03 23:53 — Step C（真机验证）：环境2（56589/56590）非 dry-run，R0–R6 全 PASS；提交 <code>281e7982</code>。</li>
+      <li>2026-11-03 23:55 — Step D（收尾回写）：状态 <strong>Done</strong>。修复见「修复后补充」，真机复验见「复验」；计划置 Done。</li>
     </ul>
     <h3>关联</h3>
     <p>与 <code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> 同现象(「热重载后辅种消失」), 但该件已于 2026-10-02 置 <strong>Superseded</strong>, 理由是「新机制 apply_new_config 下无对应路径」兼「辅种消失未经证实」。本轮在 HEAD f89de69e 上以受控实验证实<b>该结论不成立</b>: 新机制的 L2 分支即对应路径, 现象可稳定复现。建议认领本件时把那条的结论一并更正(或在本件修复后将其改为指向本件)。</p>
     <p><b>修复计划</b>: <a href="../plans/26-11-03-2223-plan-hot-reload-group-index.html">26-11-03-2223 热重载 L2 重建后分组索引恢复计划</a>。2026-11-03 用户已拍板 D1=B(保留分组索引, 只删 <code>reset_runtime</code> 的 3 个 clear 并加守阵测试)、D2=保留 <code>group_key_migrations</code>、D4 不并入本轮、D5 不加运行时自检、D6 允许测试环境一次非 dry-run 真机验证; 计划状态 <strong>In Progress</strong>, 工作分支 <code>fix/hot-reload-group-index</code>(基于本地 develop <code>6ffa85a3</code>)。本件保持 <strong>Open</strong>, 待实施 A/B/C/D 四步并真机复验后推进。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><b>复验：2026-11-03 23:47（Step C，修复后）PASS —— 已消失。</b>环境2（主 <code>56589</code> / 副 <code>56590</code>），非 dry-run；L2 触发方式为 <code>PUT /api/config</code> 改 <code>rules.interval</code> 60S→61S（回执 <code>changes=["interval"]</code>、<code>restart_required=[]</code>，日志见 <code>rebuild_runtime</code>→<code>reset_runtime</code>→<code>reconnect</code>）。重建后 14s 内 27 次采样：组行回落 0、组 key 变化 0、成员集丢失 0、重建后 <code>/torrents/files</code> 新请求 0。修复前复现证据见 §02 受控实验（HEAD <code>f89de69e</code>，阶段 2/3 <code>groups=0</code>）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（方案 B，与 §06 建议方案 A 不同）</b>：<code>TorrentStore.reset_runtime()</code> 不再清除 <code>groups/group_sizes/member_to_key</code>，<code>group_key_migrations</code> 按 D2 保留；方法 docstring 写明「分组键的三个输入（save_path / 文件表 / 物理解析）都不在 L2 变更面」，并标注未来若 L2 判据触及这些输入须改走 §03 的 C/A 重建路径。改道原因：<code>reset_runtime</code> 不丢 <code>TorrentRecord</code>，而 <code>files()</code> 是持久缓存，A/C 的重算只能得到同一批键，却要付一次 O(N) 键计算、把全部组标脏并触发跨组全量展开；A 还需给 <code>full_round</code> 补 <code>dry_run</code> 载荷以避免 dry-run 真停种。建议原文保留于 §06。</p>
+    <p><b>验证方式与数字</b>：①守阵 <code>test_store_reset_runtime_keeps_group_index</code>（reset 后 <code>groups/group_sizes/member_to_key</code> 原样、<code>view_changed=True</code>、<code>tracker_conf=None</code>）；②成本守阵 <code>test_store_reset_runtime_no_regroup_cost</code>（reset 不增 <code>files_calls</code>/<code>dirty_groups</code>）；③回归 <code>test_l2_rebuild_group_view_not_empty</code>（<code>rules.rebuild_runtime()</code> + 全量 refresh 后 <code>groups=1</code>、视图 ≥1 行、files 调用不增），该条在回退 <code>store.py</code> 至父提交 <code>3adfc5d8</code> 时先红（<code>0 == 1</code> 失败）。全量 <code>test.full</code>: <b>4997 passed / 10 skipped</b>（基线切片 <code>26-11-03-2329</code>）。真机: L2 重建 <b>0.22s</b>；27 次采样组行零回落；<code>/torrents/files</code> 重建后零重放；重建后组 key 零变化；日志 <code>Traceback</code>/<code>Unknown</code> 均为 0。</p>
+    <p><b>关联更正</b>：<code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> 的 Superseded 理由句已按本轮实证更正并回链本件（见该件「状态变更日志」2026-11-03 条目）。</p>
   </section>
 
   <footer>

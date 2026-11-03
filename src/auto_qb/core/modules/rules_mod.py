@@ -219,8 +219,9 @@ class RulesModule(BaseModule):
 
         - 不重读磁盘 state: state 平时不落盘, 磁盘上只有上次退出的旧版, 重读 = 回滚
           运行期内存态(exec_history/skip_check_day 等)。内存态即真相。
-        - store.reset_runtime: 清分组索引/缓存, tracker_conf 置空 → 下轮全量 refresh 经
-          full_round 相位重匹配(plan §4.2; 客户端重连使 rid 失效保证下轮是全量轮)。
+        - store.reset_runtime: 清缓存/状态快照等运行态; 分组索引有意保留(分组键为纯函数派生,
+          输入面不在 L2 变更面, 计划 26-11-03-2223 D1=B), tracker_conf 置空 → 下轮全量 refresh
+          经 full_round 相位重匹配(plan §4.2; 客户端重连使 rid 失效保证下轮是全量轮)。
         - queue_rebuilt 相位: 全局任务(delete_tags*/speed_limit_curve)由各模块自注册重入队。
         - 总线 suppress 请求位: 热重载首轮的 added 事件重放保护 —— 挂请求不置 live 旗标
           (挂位到消费点之间的相位照常送达, issue 26-10-01-0750), 窗口协议见 EventBus。

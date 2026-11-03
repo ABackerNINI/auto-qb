@@ -7,6 +7,7 @@
 <meta name="issue-stamp" content="26-10-01-2129">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="hot-reload">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-2206-bug-webui-hotreload-group-index-vanish.html, memory-bank/plans/26-11-03-2223-plan-hot-reload-group-index.html">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Superseded">
 <meta name="issue-title" content="配置热重载后辅种消失; 「变更 N 项」计数与实际不符">
@@ -156,7 +157,8 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
-      <li>2026-10-02 17:05 — 状态 <strong>Superseded</strong>（roadmap 清偿核对批次 1/5 W1-W2 静态核验）：现象出自旧级别表热重载机制时代（回执「级别 ['L0', 'L2'], 变更 9 项」），该机制已随内核化重构（计划 26-09-30-1819, Done）整体退役 —— 新机制 <code>apply_new_config</code>（src/auto_qb/core/qbmanager.py）回执按变更顶层段计数，「变更 N 项」计数失真源头随实现取代消失；「辅种消失」为同轮未经证实的疑似现象，新机制下无对应路径。</li>
+      <li>2026-10-02 17:05 — 状态 <strong>Superseded</strong>（roadmap 清偿核对批次 1/5 W1-W2 静态核验）：现象出自旧级别表热重载机制时代（回执「级别 ['L0', 'L2'], 变更 9 项」），该机制已随内核化重构（计划 26-09-30-1819, Done）整体退役 —— 新机制 <code>apply_new_config</code>（src/auto_qb/core/qbmanager.py）回执按变更顶层段计数，「变更 N 项」计数失真源头随实现取代消失（Superseded 仍成立）。「辅种消失」原判定为「同轮未经证实的疑似现象、新机制下无对应路径」—— 该判定已被 2026-11-03 实证推翻并更正，见下方 2026-11-03 条目与 issue 26-11-03-2206。</li>
+      <li>2026-11-03 23:55 — <strong>结论更正（状态仍 Superseded）</strong>：原 2026-10-02 条目中「辅种消失未经证实、新机制下无对应路径」不成立。<code>apply_new_config</code> 命中 <code>RulesModule._rebuild_needed</code> 的 L2 分支会经 <code>rebuild_runtime</code> → <code>store.reset_runtime</code> 清空分组索引，且无模块对存量种子重归组，辅种页因此恒显「暂无辅种」；受控实验（HEAD <code>f89de69e</code>）可稳定复现。该缺陷已由 <a href="26-11-03-2206-bug-webui-hotreload-group-index-vanish.html">26-11-03-2206</a> 修复（Step C 真机 PASS：重建后 27 次采样组行零回落、key 零变化、<code>/torrents/files</code> 零重放）。本件因「变更 N 项」计数口径已随旧机制退役而维持 Superseded；不再代表「辅种消失无对应路径」。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。TODO 原行标 <code>[-]</code> 正在做，但入池按默认保持 Open，未置 In Progress。</p>
     <h3>复验</h3>
