@@ -85,9 +85,11 @@
   /* 结构性常量(S6 提升原语): preset 恒值重声明保持配方完整(分调是未来选项) */
   --fx-zoom-from: 1.08;
   --fx-row-h: 44px;
-  /* 风格供给面: 发光开 */
+  /* 风格供给面: 发光开(墨色走 currentColor; 配色公式在 fx.css * 通用层) */
   --fx-glow: 12px;
-  --fx-glow-c: color-mix(in srgb, currentColor 45%, transparent);
+  --fx-glow-ink: currentColor;
+  --fx-glow-a: 45%;
+  --fx-glow-a-hi: 85%;
   --fx-blur: 0px;
   --fx-sheen-c: color-mix(in srgb, currentColor 60%, transparent);
   --fx-sheen-op: 0.2;
@@ -160,11 +162,18 @@
   /* 风格供给面: 毛玻璃开(组件配方消费; 禁用在全屏遮罩/吸顶层, PERF-01)。
    * glow 开 = S4 拍板的 flux 定制(26-11-01, 计划 §06 待办②): 主 preset glass +
    * D1-2 glow / D2-5 / D6-5 等 glow 系候选被选, 取 showcase 强制补供口径
-   * (.fx-force-glow): 12px 级、色取 accent-ink 系; glass 原始配方语义在
-   * showcase 对比区仍有未补供对照组。sheen 本就开(白 40%/0.12, D1-3 sheen
-   * 被选维持现值), 不另动。 */
+   * (.fx-force-glow): 12px 级、色取亮 accent 系。sheen 本就开(白 40%/0.12,
+   * D1-3 sheen 被选维持现值), 不另动。
+   * 辉光墨色(--fx-glow-ink, 26-11-04 修「雾蒙蒙」): 原配方取 --accent-ink, 但
+   * flux 皮肤从未定义该名(仅 showcase 有), var() 落到 currentColor 兜底 —— ghost
+   * 钮(浅灰白字)发灰白雾、实心 danger 钮(深字)发暗雾, 全无荧光感。现供给端
+   * 挂 --fx-glow-ink = --accent-hi(四皮肤对等的亮 accent 令牌), 三层荧光配色
+   * 公式在 fx.css * 通用层逐元素现算(单点), 组件层可按变体重挂 ink(danger 系
+   * 在 flux 挂载层换 --error, 实心红钮不发青光)。消费端一律取 --fx-glow-stack。 */
   --fx-glow: 12px;
-  --fx-glow-c: color-mix(in srgb, var(--accent-ink, currentColor) 60%, transparent);
+  --fx-glow-ink: var(--accent-hi, currentColor);
+  --fx-glow-a: 62%;
+  --fx-glow-a-hi: 92%;
   --fx-blur: 10px;
   --fx-sheen-c: color-mix(in srgb, #ffffff 40%, transparent);
   --fx-sheen-op: 0.12;
@@ -221,7 +230,9 @@
   --fx-row-h: 44px;
   /* 风格供给面: 全关(装饰归零, 只剩时序) */
   --fx-glow: 0px;
-  --fx-glow-c: transparent;
+  --fx-glow-ink: transparent;
+  --fx-glow-a: 0%;
+  --fx-glow-a-hi: 0%;
   --fx-blur: 0px;
   --fx-sheen-c: transparent;
   --fx-sheen-op: 0;
@@ -233,7 +244,9 @@
  * -------------------------------------------------------------------- */
 [data-fx-preset]:not([data-fx-preset="neon"]):not([data-fx-preset="glass"]):not([data-fx-preset="crisp"]) {
   --fx-glow: 0px;
-  --fx-glow-c: transparent;
+  --fx-glow-ink: transparent;
+  --fx-glow-a: 0%;
+  --fx-glow-a-hi: 0%;
   --fx-blur: 0px;
   --fx-sheen-c: transparent;
   --fx-sheen-op: 0;

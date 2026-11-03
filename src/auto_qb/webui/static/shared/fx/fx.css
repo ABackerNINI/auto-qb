@@ -109,12 +109,48 @@
 
   /* ---- 风格层供给面(preset 配方整体替换的槽位; 基线值 = 全关闭, 具体消费方:
    *      sheen 用 --fx-sheen-c, 发光/毛玻璃类组件配方用 --fx-glow* / --fx-blur,
-   *      本文件基线规则不消费 glow/blur -- 供 S3+ 组件配方取用) ---- */
-  --fx-glow: 0px;              /* 发光 spread(0 = 关) */
-  --fx-glow-c: transparent;    /* 发光颜色 */
+   *      本文件基线规则不消费 glow/blur -- 供 S3+ 组件配方取用) ----
+   * glow 供给是四个标量(半径/ink 色/两层 alpha), 配色公式在下方 * 通用层
+   * 逐元素现算 -- 不能像旧版那样把算好的颜色(--fx-glow-c)当供给槽: 自定义
+   * 属性的 var() 代入发生在声明元素上, preset 在 <html> 把颜色算死后, 组件层
+   * 再重挂 --fx-glow-ink(如 danger 变体换红)就追不回来了(26-11-04 实测)。 */
+  --fx-glow: 0px;              /* 发光半径(0 = 关) */
+  --fx-glow-ink: transparent;  /* 辉光墨色(关档 = transparent) */
+  --fx-glow-a: 60%;            /* 晕/泛光层 alpha */
+  --fx-glow-a-hi: 90%;         /* 荧光芯层 alpha */
   --fx-blur: 0px;              /* 毛玻璃半径(0 = 关; 禁用在遮罩/吸顶层, 见 PERF-01) */
   --fx-sheen-c: transparent;   /* 扫光颜色 */
   --fx-sheen-op: 0.14;         /* 扫光峰值不透明度 */
+}
+
+/* ====================================================================
+ * 辉光配色公式(单点; * 通用层 = 每个元素用自己的 --fx-glow-ink 现算,
+ * 组件层按变体重挂 ink 即时换色) -- 消费方一律取 var(--fx-glow-stack) 整体,
+ * 不得自行拆层重拼(配方改动只落这里一处)。
+ * 三层荧光配方: 单层 blur 阴影衰减均匀 = 雾(用户口径「雾蒙蒙, 聚到一起」),
+ * 荧光感 = 白热亮芯(ink 掺白提亮) + 紧晕 + 负 spread 泛光的分层衰减(近缘
+ * 双层叠加自然增亮)。关档(ink transparent / 半径 0)下组合值不可见。
+ * 芯层 0 blur 硬边(26-11-04 二修「辉光呈弧形, 按钮看着像圆角」): flux 皮肤
+ * 方角语言(radius 0), 芯层一带 blur 角就软成弧、按钮读成圆角 -- 硬 1px 环
+ * 让辉光轮廓跟住方角(霓虹管直角弯)。
+ * 三修(26-11-04「没有散发荧光了, 只剩一个荧光色方框」): 二修把柔光层负
+ * spread 收过头, 辐射感归零。
+ * 四修(26-11-04「四角没有荧光, 边上的荧光整体呈弧形」): 根因 = box-shadow
+ * 的 blur 是环形光源的扩散, 角部到光源是对角线距离、天然比边中点弱 -- 负
+ * spread 环不管怎么分层, 角上都缺光、光弧贴边走。柔光层改**正 spread 扩方**:
+ * 轮廓 = 放大了的方块(角半径 = spread, 仅 1-3px), 角部被填充照亮, 沿周边
+ * 亮度均匀; 方角观感仍由 0 blur 硬芯 + 按钮自身方角边框锚死, 外层云的轻微
+ * 圆角不再读成按钮圆角。三层 c 同色叠亮, 近缘强、向远递减成辐射。
+ * ==================================================================== */
+* {
+  --fx-glow-c: color-mix(in srgb, var(--fx-glow-ink, currentColor) var(--fx-glow-a, 60%), transparent);
+  --fx-glow-c-hi: color-mix(in srgb,
+    color-mix(in srgb, var(--fx-glow-ink, currentColor) 62%, #ffffff) var(--fx-glow-a-hi, 90%), transparent);
+  --fx-glow-stack:
+    0 0 0 1px var(--fx-glow-c-hi),
+    0 0 calc(var(--fx-glow, 0px) / 4) calc(var(--fx-glow, 0px) / 12) var(--fx-glow-c),
+    0 0 calc(var(--fx-glow, 0px) / 2) calc(var(--fx-glow, 0px) / 6) var(--fx-glow-c),
+    0 0 var(--fx-glow, 0px) calc(var(--fx-glow, 0px) / 4) var(--fx-glow-c);
 }
 
 /* ====================================================================
@@ -226,16 +262,17 @@
   transition-duration: var(--fx-dur-press);
 }
 
-/* glow 辉光(D1 候选 2): hover 发光渐亮, 消费 preset 供给面 --fx-glow* /
- * --fx-glow-c(neon 开 12px, glass/crisp 关 = 无辉光, preset 切换可对比);
- * 时长走 --fx-dur-fast(120ms), 超 hover 100ms 软约束上限 -- 只标注不淘汰 */
+/* glow 辉光(D1 候选 2): hover 发光渐亮, 消费供给面组合式 --fx-glow-stack
+ * (三层荧光配方, 公式单点在上方 * 通用层; neon 开 12px, glass/crisp 关 =
+ * 无辉光, preset 切换可对比); 时长走 --fx-dur-fast(120ms), 超 hover 100ms
+ * 软约束上限 -- 只标注不淘汰 */
 [data-fx~="glow"] {
   transition-property: opacity, transform, box-shadow;
   transition-timing-function: var(--fx-ease-standard);
   transition-duration: var(--fx-dur-fast);
 }
 [data-fx~="glow"]:hover {
-  box-shadow: 0 0 var(--fx-glow) var(--fx-glow-c);
+  box-shadow: var(--fx-glow-stack);
 }
 
 /* press 按压回弹(D1 候选 5): active 缩到 --fx-pop-scale(60ms 直给), 松开

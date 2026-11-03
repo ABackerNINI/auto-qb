@@ -60,6 +60,7 @@
   --card-deep: #111820;
   --accent: #6db3c9;
   --accent-ink: #8fd0e0;
+  --accent-hi: #8fd0e0;  /* 辉光色源兜底: glass/neon 配方消费 var(--fx-glow-ink, var(--accent-hi, ...)), 演示页补齐 skins 均有的这名 */
   --warn: #e2a86e;
   --ok: #8fc98f;
   --no: #d98a8a;
@@ -116,8 +117,9 @@ h1 { font-size: 28px; line-height: 1.2; font-weight: 600; margin: 8px 0 6px; }
               box-shadow var(--fx-dur-fast, 120ms) var(--fx-ease-standard, ease-out);
 }
 .ctl:hover { color: var(--ink); border-color: var(--accent); }
-/* 激活态辉光消费供给面: neon 档发光、glass/crisp 档只换描边(全页 preset 差异信号) */
-.ctl.on { color: var(--accent-ink); border-color: var(--accent); box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent); }
+/* 激活态辉光消费供给面组合式: neon/glass 档发光(glass 的辉光供给面 S4 flux 定制起是开的)、
+ * crisp 档只换描边(全页 preset 差异信号) */
+.ctl.on { color: var(--accent-ink); border-color: var(--accent); box-shadow: var(--fx-glow-stack); }
 .ops label, .card-ops label { display: inline-flex; gap: 5px; align-items: center; font-size: 12.5px; color: var(--dim); cursor: pointer; }
 
 /* ---- S4 复验补: 当前 preset 状态条(切换器旁, 切档即更新) ---- */
@@ -265,7 +267,10 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
  * 浅色字钮展示真实观感)。 */
 .fx-force-glow {
   --fx-glow: 12px;
-  --fx-glow-c: color-mix(in srgb, var(--accent-ink) 60%, transparent);
+  /* 供给标量(配色公式在 fx.css * 通用层): ink 取亮 accent, alpha 对齐 glass 档 */
+  --fx-glow-ink: var(--accent-ink);
+  --fx-glow-a: 62%;
+  --fx-glow-a-hi: 92%;
 }
 .fx-force-sheen {
   --fx-sheen-c: color-mix(in srgb, #ffffff 72%, transparent);
@@ -321,12 +326,11 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
  * 纯平细线框。静态截图三栏两两可辨。 */
 .pc-sig { display: flex; flex-direction: column; gap: 4px; }
 .pc-sig-demo { min-height: 44px; display: flex; align-items: center; }
-/* neon 签名: 常亮辉光强调条(glow 走 currentColor, 抬到 --ink 亮度保证深底可辨) */
+/* neon 签名: 常亮辉光强调条(消费 --fx-glow-stack 组合式, 与生产配方同源) */
 .pc-sig-bar {
   display: inline-block; width: 76px; height: 12px; border-radius: 6px;
   background: var(--accent-ink); color: var(--ink);
-  box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent),
-              0 0 calc(var(--fx-glow, 0px) * 2) var(--fx-glow-c, transparent);
+  box-shadow: var(--fx-glow-stack);
 }
 /* glass 签名: 高反差彩条上的磨砂贴片(blur 消费 --fx-blur) */
 .pc-sig-glass .pc-sig-demo {
@@ -429,7 +433,7 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
   transform: translateY(calc(-1 * var(--fx-lift)));
   box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.55), 0 2px 6px -2px rgba(0, 0, 0, 0.4);
 }
-[data-fx~="glow"].fx-demo-hover { box-shadow: 0 0 var(--fx-glow) var(--fx-glow-c); }
+[data-fx~="glow"].fx-demo-hover { box-shadow: var(--fx-glow-stack); }
 [data-fx~="press"].fx-demo-press { transform: scale(var(--fx-pop-scale)); }
 
 /* ---- 样例组件: 输入框(D5) ---- */
@@ -838,7 +842,7 @@ section > h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accen
 /* neon 供给下辉光版: 消费 --fx-glow*(glow 供给面; 卡级强制补供见 .fx-force-glow) */
 .hsp-glow { transition: opacity 200ms var(--fx-ease-standard), height 200ms var(--fx-ease-standard),
               box-shadow 200ms var(--fx-ease-standard); }
-.hsp-glow.on { box-shadow: 0 0 var(--fx-glow, 0px) var(--fx-glow-c, transparent); }
+.hsp-glow.on { box-shadow: var(--fx-glow-stack); }
 
 
 /* ---- 页内 keyframes 的 reduced-motion 降级(硬惯例: 每个 @keyframes 配套) ---- */
@@ -1897,7 +1901,7 @@ S4 复验实测(chromium 156 + Edge 156, 1440x960, longtask 全零): 有头 -- D
       meta: {
         attr: "box-shadow(辉光, 胶囊小面积) + opacity(显隐同基线)",
         dur: "淡入 150ms / 淡出 200ms; 辉光随显隐同步 200ms",
-        js: "纯 CSS(消费 --fx-glow/--fx-glow-c; 演示态强制补供)",
+        js: "纯 CSS(消费 --fx-glow-stack 组合式; 演示态强制补供)",
         rm: "辉光去动画(纯装饰, 无信息量)",
         src: "S4 变体候选(flux 风格层, neon 档供给面)",
         states: "出现 = 淡入 + 辉光渐亮(neon 档 12px; 其余档由卡级补供演示)"

@@ -97,9 +97,15 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
    * D1-4 ripple 走 flux/fx-mount.js 的 document 级 pointerdown 委托(.bt 命中
    * 即 FX.ripple), 波纹节点样式在 fx.css -- CSS 侧只需上面的裁边载体。
    * glow 与各变体既有 hover 落影**合成**(保留原第一段阴影, 追加 fx 辉光段):
-   * glass 供给面已开 --fx-glow 12px accent-ink 系(S4 拍板 flux 定制), 基线
+   * glass 供给面已开 --fx-glow 12px 亮 accent 系(S4 拍板 flux 定制; 辉光色源 =
+   * --fx-glow-ink 钩子, 缺省 --accent-hi, 见 fx-presets.css glass 块注记), 基线
    * .bt:hover 的 --glow-soft 在 ghost/icon 的 transparent --tone 下不可见,
-   * 故该两变体 hover 只剩 fx 辉光 -- 六变体全覆盖(D1-2 选中口径)。
+   * 故该两变体 hover 只剩 fx 辉光 -- 六变体全覆盖(D1-2 选中口径)。辉光体
+   * 本体 = --fx-glow-stack 三层荧光配方(fx.css :root 单点公式, 白热芯 + 紧晕 +
+   * 负 spread 泛光; 26-11-04 修用户口径「雾蒙蒙, 聚到一起」)。
+   * danger 系变体 ink 重挂: 实心红/描边红的辉光若跟着缺省亮 accent 会发青光,
+   * 这里把 --fx-glow-ink 重挂为 --error(preset 消费 var(--fx-glow-ink, ...) 自动
+   * 换色; 单点在变体级, 不逐 hover 规则重写)。
    * ================================================================== */
   html[data-fx-preset] .bt {
     /* press(D1-5)回弹段: 整条 transition 重声明, 仅 transform 段换 fx 骨对
@@ -108,13 +114,15 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
       color var(--dur) var(--ease), box-shadow var(--dur) var(--ease), filter var(--dur) var(--ease),
       transform 120ms var(--fx-ease-back);
   }
+  html[data-fx-preset] .bt.danger,
+  html[data-fx-preset] .bt.danger-solid { --fx-glow-ink: var(--error); }
   html[data-fx-preset] .bt:active:not(:disabled) {
     transform: scale(var(--fx-pop-scale));
     transition-duration: var(--fx-dur-press);
     transition-timing-function: var(--fx-ease-standard);
   }
-  html[data-fx-preset] .bt:hover:not(:disabled) { box-shadow: var(--glow-soft), 0 0 var(--fx-glow) var(--fx-glow-c); }
-  html[data-fx-preset] .bt.primary:hover:not(:disabled) { box-shadow: var(--glow), 0 0 var(--fx-glow) var(--fx-glow-c); }
+  html[data-fx-preset] .bt:hover:not(:disabled) { box-shadow: var(--glow-soft), var(--fx-glow-stack); }
+  html[data-fx-preset] .bt.primary:hover:not(:disabled) { box-shadow: var(--glow), var(--fx-glow-stack); }
   /* sheen(D1-3): hover 触发一次扫光, 复用 fx.css 的 fx-sheen keyframes 与
    * --fx-sheen-* 供给面(glass 维持白 40%/0.12); ::after 载体同 fx.css sheen 契约 */
   html[data-fx-preset] .bt::after {
@@ -258,9 +266,10 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
    * ================================================================== */
 
   /* ---- 标签 chip(.site-chip/.tag-chip/.cat-chip, 筛选交互件): hover 辉光
-   *      (glass 供给面 --fx-glow*, 与 .bt 同 tokens; 对小面积 chip 取半量,
-   *      R2 精修 V1 再降一档: 加 -2px 负 spread -- 半量全 spread 在小面积上
-   *      偏糊, 收敛成搜索框原版同族「负 spread 柔光」配方)
+   *      (与 .bt 同消费 --fx-glow-stack 三层荧光配方, 单点公式在 fx.css :root;
+   *      26-11-04 随「雾蒙蒙」修复从半量单层换成整组 stack -- 原半量全 spread
+   *      偏糊的根因是单层配方本身, stack 的负 spread 层已把糊压掉, 小面积不必
+   *      再单独取半量, 按钮与 chip 辉光语言统一)
    *      + active 按压缩放(press 原语同款)。base transition 已含 box-shadow
    *      var(--dur-fast)(120ms, 超 hover 100ms 软约束 -- S6 按钮 glow 同口径
    *      只标注), transform 段在此并入(时长同 fast 档)。 ---- */
@@ -273,7 +282,7 @@ html[data-fx-preset] input[type="checkbox"]:not(.hb-switch input):focus-visible 
   html[data-fx-preset] .site-chip:hover:not(.f-on),
   html[data-fx-preset] .tag-chip:hover:not(.f-on),
   html[data-fx-preset] .cat-chip:hover:not(.f-on) {
-    box-shadow: 0 0 calc(var(--fx-glow) / 2) -2px var(--fx-glow-c);
+    box-shadow: var(--fx-glow-stack);
   }
   html[data-fx-preset] .site-chip:active,
   html[data-fx-preset] .tag-chip:active,
