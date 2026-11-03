@@ -9,7 +9,11 @@
 - 已有非零限速的完成种子不写、只监控(条目在触发时按需创建, 无 monitor_only 状态);
 - 种子消失即删条目; enabled=false 零动作零 qB 写; dry-run 零写零落状态。
 
-S2 不含标签逻辑(§3.8 属 S3): triggered 只靠 state + 暂停事实, adopt 只重建 armed。
+S3 标签(§3.8): 固定名来自 config.download_fuse.fuse_tag, 只在状态迁移时写 ——
+armed→triggered 与 pause 同拍批量加; 显式放行离开 triggered 与恢复限速同批删;
+被外部移除只记一条日志、不自动重加(否则与清理任务互删成环); adopt 时标签兼作
+「触发过的持久证据」: 完成 + dl_limit==fence + 暂停 + 带标签 -> 直接重建 triggered,
+无标签仍重建 armed。所有标签读写都走 QbApi facade(登记自写期望, 不直连 raw client)。
 """
 import logging
 import time
@@ -54,6 +58,8 @@ class FuseModule(BaseModule):
         self._dry_run = False
         # 无 state 条目的非零限速完成种子: 只在本轮内存里记连击(触发时才落条目)
         self._streak: Dict[str, int] = {}
+        # 同名标签复用告警只记一次(§3.8 启动一次性; 读快照聚合, 零额外请求)
+        self._tag_warned = False
 
     def sections(self) -> tuple[str, ...]:
         """配置面单点: download_fuse 段(S1 曾临时登记在 impact.KERNEL_SECTIONS, S2 迁出)"""
@@ -87,19 +93,22 @@ class FuseModule(BaseModule):
 
         entries = self._entries()
         self._drop_missing(entries, store)
+        tag = cfg.fuse_tag
+        self._warn_tag_reuse(store, tag)
         now = time.time()
         to_arm: List[str] = []
         to_adopt: List[str] = []
         to_pause: List[str] = []
+        to_tag: List[str] = []
 
         for h, rec in list(store.by_hash.items()):
             dl_limit = int(rec.dl_limit or 0)
             dlspeed = int(rec.dlspeed or 0)
             ent = entries.get(h)
             if ent is None:
-                self._scan_unmanaged(entries, h, rec, dl_limit, dlspeed, cfg, now, to_arm, to_adopt, to_pause)
+                self._scan_unmanaged(entries, h, rec, dl_limit, dlspeed, cfg, now, to_arm, to_adopt, to_pause, to_tag)
                 continue
-            self._advance(entries, h, rec, ent, dl_limit, dlspeed, cfg, now, store, to_arm, to_pause)
+            self._advance(entries, h, rec, ent, dl_limit, dlspeed, cfg, now, store, to_arm, to_pause, to_tag)
 
         if to_adopt:
             # 零写: 只按证据重建条目(§3.7); 日志标注 adopt 便于与真武装区分
@@ -114,10 +123,24 @@ class FuseModule(BaseModule):
             logger.warning(
                 f"fuse: paused {len(to_pause)} torrents (batch) first={','.join(h[:8] for h in to_pause[:3])}"
             )
+        if to_tag:
+            # §3.8: 与 pause 同拍、按批一次请求; 已在快照带标签的不发请求(集合幂等)
+            added = self._apply_tag_add(api, to_tag, tag, entries, store)
+            if added:
+                logger.warning(f"fuse: 打标签 {tag} 到 {added} 个触发种子(batch) first={','.join(h[:8] for h in to_tag[:3])}")
+
+    def _warn_tag_reuse(self, store: Any, tag: str) -> None:
+        """同名标签复用告警(§3.8): 读快照聚合, 不发额外请求; 只记一次"""
+        if self._tag_warned:
+            return
+        self._tag_warned = True
+        usage = store.tag_usage()
+        if tag in usage:
+            logger.warning(f"fuse: 标签 {tag} 已被 {usage[tag]} 个现有种子使用, 复用该定义(保留名, 请勿泛匹配)")
 
     def _scan_unmanaged(
         self, entries: Dict[str, dict], h: str, rec: Any, dl_limit: int, dlspeed: int, cfg: Any, now: float,
-        to_arm: List[str], to_adopt: List[str], to_pause: List[str]
+        to_arm: List[str], to_adopt: List[str], to_pause: List[str], to_tag: List[str]
     ) -> None:
         """无 state 条目的种子: 建条目(武装/adopt)或仅监控(§3.7 无 monitor_only 状态)"""
         complete = _is_complete(rec)
@@ -126,9 +149,16 @@ class FuseModule(BaseModule):
             to_arm.append(h)
             return
         if complete and cfg.download_limit > 0 and dl_limit == cfg.download_limit:
-            # state 丢失自愈: 值恰等于哨兵 = 上次武装的残留证据 -> 按 armed 重建, 不写 qB。
-            # pre_limit 未知, 按哨兵语义假定为 0(不限速) —— 放行时才可能写回 0。
-            entries[h] = self._new_entry(h, rec, cfg.download_limit, STATUS_ARMED, now, orig_limit=0)
+            # state 丢失自愈(§3.7/§3.8): 标签 = 「触发过」的持久证据
+            # 完成 + 哨兵限速 + 暂停 + 带标签 -> 直接重建 triggered(零 qB 写)
+            if _is_paused(rec) and cfg.fuse_tag in rec.tags_set:
+                entries[h] = self._new_entry(h, rec, cfg.download_limit, STATUS_TRIGGERED, now, orig_limit=0)
+                entries[h]["tagged"] = True
+                entries[h]["reason"] = "adopt: 完成+哨兵限速+暂停+标签"
+            else:
+                # 只有哨兵限速证据 -> 按 armed 重建, 不写 qB。
+                # pre_limit 未知, 按哨兵语义假定为 0(不限速) —— 放行时才可能写回 0。
+                entries[h] = self._new_entry(h, rec, cfg.download_limit, STATUS_ARMED, now, orig_limit=0)
             to_adopt.append(h)
             return
         if complete and dlspeed > 0:
@@ -139,6 +169,7 @@ class FuseModule(BaseModule):
                 entries[h]["reason"] = f"连续 {streak} 拍 dlspeed>0(已有限速 {dl_limit}B/s)"
                 self._streak.pop(h, None)
                 to_pause.append(h)
+                to_tag.append(h)
             else:
                 self._streak[h] = streak
             return
@@ -146,7 +177,7 @@ class FuseModule(BaseModule):
 
     def _advance(
         self, entries: Dict[str, dict], h: str, rec: Any, ent: dict, dl_limit: int, dlspeed: int, cfg: Any, now: float,
-        store: Any, to_arm: List[str], to_pause: List[str]
+        store: Any, to_arm: List[str], to_pause: List[str], to_tag: List[str]
     ) -> None:
         """已有条目按状态推进(armed / triggered / released)"""
         status = ent.get("status")
@@ -168,10 +199,15 @@ class FuseModule(BaseModule):
                     ent["status"] = STATUS_TRIGGERED
                     ent["reason"] = f"连续 {ent['confirm_count']} 拍 dlspeed>0"
                     to_pause.append(h)
+                    to_tag.append(h)
                 return
             ent["confirm_count"] = 0
             return
         if status == STATUS_TRIGGERED:
+            # §3.8: 标签被外部移除只记一条日志, 不自动重加(与清理任务互删会成环)
+            if ent.get("tagged") and cfg.fuse_tag not in rec.tags_set:
+                ent["tagged"] = False
+                logger.warning(f"fuse: {h[:8]} 标签 {cfg.fuse_tag} 已被外部移除, 不自动重加(triggered 仍由 state+暂停保证)")
             # 被外部启动(或暂停尚未回流)时再暂停一次; own_write 未回流期不重复下发(幂等)
             if dlspeed > 0 and not _is_paused(rec) and not store.own_write_pending(h, group=False):
                 to_pause.append(h)
@@ -212,9 +248,11 @@ class FuseModule(BaseModule):
 
         api = self._ctx.api
         store = self._ctx.store
+        tag = self._ctx.config.download_fuse.fuse_tag
         if not dry_run and (api is None or api.client is None):
             logger.warning("fuse: 未连接 qB, 放行只标记 released 不写限速")
         writes: Dict[int, List[str]] = defaultdict(list)
+        to_untag: List[str] = []
         for h in targets:
             ent = entries[h]
             fence = int(ent.get("fence") or 0)
@@ -228,6 +266,9 @@ class FuseModule(BaseModule):
                 writes[orig].append(h)
             else:
                 logger.info(f"fuse: 放行 {h[:8]} 仅标记 released(CAS 不成立/无哨兵: fence={fence}, 当前={cur})")
+            # §3.8: 离开 triggered 时摘标签(先写限速、后清标签, 下面的写循环在前)
+            if ent.get("status") == STATUS_TRIGGERED and rec is not None and tag in rec.tags_set:
+                to_untag.append(h)
             ent["status"] = STATUS_RELEASED
             ent["confirm_count"] = 0
             ent["was_incomplete"] = False
@@ -238,6 +279,10 @@ class FuseModule(BaseModule):
                 api.torrents_set_download_limit(torrent_hashes=chunk, limit=limit)
         restored = sum(len(group) for group in writes.values())
         logger.info(f"fuse: 放行 {len(targets)} 个条目(其中 {restored} 个恢复原限速)")
+        if to_untag:
+            removed = self._apply_tag_remove(api, to_untag, tag, entries, store)
+            if removed:
+                logger.info(f"fuse: 摘除标签 {tag} {removed} 个(放行)")
         return len(targets)
 
     # ---------- state / 批写 ----------
@@ -270,7 +315,7 @@ class FuseModule(BaseModule):
         confirm_count: int = 0,
         orig_limit: Optional[int] = None
     ) -> dict:
-        """条目字段集: hash/status/fence/orig_limit/armed_at/confirm_count(+released 用的 was_incomplete)"""
+        """条目字段集: hash/status/fence/orig_limit/armed_at/confirm_count/tagged(+released 用的 was_incomplete)"""
         return {
             "hash": h,
             "status": status,
@@ -279,6 +324,7 @@ class FuseModule(BaseModule):
             "armed_at": now,
             "confirm_count": int(confirm_count),
             "was_incomplete": False,
+            "tagged": False,  # S3: 是否已持有触发标签(外部移除后置 False, 不重加)
         }
 
     @staticmethod
@@ -289,3 +335,40 @@ class FuseModule(BaseModule):
     def _write_fence(self, api: Any, hashes: List[str], fence: int) -> None:
         for chunk in self._chunks(hashes):
             api.torrents_set_download_limit(torrent_hashes=chunk, limit=fence)
+
+    # ---------- 标签(§3.8, 一律走 QbApi facade) ----------
+
+    def _apply_tag_add(self, api: Any, hashes: List[str], tag: str, entries: Dict[str, dict], store: Any) -> int:
+        """批量加触发标签: 快照已带的短路(集合幂等), 其余按批一次请求; 返回实际请求数"""
+        pending: List[str] = []
+        for h in hashes:
+            ent = entries.get(h)
+            rec = store.get(h) if store is not None else None
+            if rec is not None and tag in rec.tags_set:
+                if ent is not None:
+                    ent["tagged"] = True
+                continue
+            pending.append(h)
+        for chunk in self._chunks(pending):
+            api.torrents_add_tags(tags=[tag], torrent_hashes=chunk)
+        for h in pending:
+            ent = entries.get(h)
+            if ent is not None:
+                ent["tagged"] = True  # facade 已把 tags_add 合并进快照并登记自写期望
+        return len(pending)
+
+    def _apply_tag_remove(self, api: Any, hashes: List[str], tag: str, entries: Dict[str, dict], store: Any) -> int:
+        """批量摘触发标签(只摘快照里真有的, 外部已移除的不发请求); 返回实际请求数"""
+        pending: List[str] = []
+        for h in hashes:
+            rec = store.get(h) if store is not None else None
+            if rec is None or tag not in rec.tags_set:
+                continue
+            pending.append(h)
+        for chunk in self._chunks(pending):
+            api.torrents_remove_tags(tags=[tag], torrent_hashes=chunk)
+        for h in pending:
+            ent = entries.get(h)
+            if ent is not None:
+                ent["tagged"] = False
+        return len(pending)

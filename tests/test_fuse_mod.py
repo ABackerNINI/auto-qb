@@ -1,4 +1,4 @@
-"""test_fuse_mod 测试计划: 已完成种子下载保险丝三态状态机(S2, 不连接真实 qB)
+"""test_fuse_mod 测试计划: 已完成种子下载保险丝三态状态机(S2) + 触发标签(S3), 不连接真实 qB
 
 ## 测试计划(每个测试函数一条)
 - test_fuse_arm_writes_fence_once: 完成+dl_limit==0 -> 一次批量写哨兵; 再扫零写(幂等)
@@ -19,13 +19,20 @@
 - test_fuse_removed_torrent_drops_entry: 种子消失 -> 条目删除
 - test_fuse_monitor_only_pauses_without_entry: 非零限速完成种子无条目, N 拍后暂停并建 triggered 条目
 - test_fuse_sections_and_kernel_migration: sections 认领 download_fuse 且已从 KERNEL_SECTIONS 迁出
+- test_fuse_trigger_adds_tag_batch_once: 同拍触发 2 个 -> 加标签仅 1 次批量请求, 二拍零调用
+- test_fuse_release_removes_tag_after_limit_write: 放行先恢复限速再摘标签, 单次批量请求
+- test_fuse_release_all_removes_tags_and_idempotent: 批量放行一次摘标签; 二次放行零请求
+- test_fuse_external_tag_removal_not_readded: 标签被外部移除只记日志, 不重加, 条目仍 triggered
+- test_fuse_adopt_tagged_paused_is_triggered: 完成+fence+暂停+标签 -> adopt 重建 triggered 零写
+- test_fuse_adopt_fence_without_tag_is_armed: 完成+fence 无标签 -> 仍重建 armed(标签不重加)
+- test_fuse_tag_reuse_warns_once_without_extra_request: 同名标签已被使用 -> 启动一条 WARNING, 不建标签定义
 """
 
 from auto_qb.config.impact import KERNEL_SECTIONS
 
 from auto_qb.config.models import DownloadFuseConfig
 
-from helpers import FakeClient, FakeTorrent, make_manager, seed_store
+from helpers import FakeClient, FakeTorrent, capture_logs, make_manager, seed_store
 
 FENCE = 13 * 1024
 TICKS = 3
@@ -284,3 +291,130 @@ def test_fuse_sections_and_kernel_migration(tmp_path):
     assert mgr.ctx.fuse.sections() == ("download_fuse", )
     assert "download_fuse" not in KERNEL_SECTIONS
     assert "download_fuse" in mgr.host.claimed_sections()
+
+
+# ---------- S3: 触发标签(§3.8) ----------
+
+FUSE_TAG = "zFusePaused"
+
+
+def _tag_add_calls(client):
+    return [c for c in client.calls if c[0] == "add_tags"]
+
+
+def _tag_remove_calls(client):
+    return [c for c in client.calls if c[0] == "remove_tags"]
+
+
+def test_fuse_trigger_adds_tag_batch_once(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    tori = [_tor("v1" + "a" * 38, dlspeed=1000), _tor("v2" + "b" * 38, dlspeed=1000)]
+    seed_store(mgr, tori)
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    adds = _tag_add_calls(client)
+    assert adds == [("add_tags", [FUSE_TAG])], "同拍触发 2 个 -> 仅一次批量加标签请求"
+    for tor in tori:
+        assert FUSE_TAG in tor.tags_set, "facade 合并快照: 二拍照到标签"
+        assert _entries(mgr)[tor.hash]["status"] == "triggered"
+        assert _entries(mgr)[tor.hash]["tagged"] is True
+    _tick(mgr)
+    assert _tag_add_calls(client) == adds, "状态未迁移动 -> 二拍零调用"
+
+
+def test_fuse_release_removes_tag_after_limit_write(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("v3" + "c" * 38, dlspeed=1000)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])]
+    assert mgr.ctx.fuse.release([tor.hash]) == 1
+    removes = _tag_remove_calls(client)
+    assert removes == [("remove_tags", [FUSE_TAG])], "放行摘标签一次批量请求"
+    assert FUSE_TAG not in tor.tags_set
+    set_idx = max(i for i, c in enumerate(client.calls) if c[0] == "set_download_limit")
+    remove_idx = next(i for i, c in enumerate(client.calls) if c[0] == "remove_tags")
+    assert set_idx < remove_idx, "释放顺序: 先写限速、后清标签"
+    assert _entries(mgr)[tor.hash]["tagged"] is False
+    assert _entries(mgr)[tor.hash]["was_incomplete"] is False, "清标签不重置 was_incomplete 之外额外语义"
+
+
+def test_fuse_release_all_removes_tags_and_idempotent(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    tori = [_tor("v4" + "d" * 38, dlspeed=1000), _tor("v5" + "e" * 38, dlspeed=1000)]
+    seed_store(mgr, tori)
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert mgr.ctx.fuse.release(None) == 2
+    assert _tag_remove_calls(client) == [("remove_tags", [FUSE_TAG])], "2 个种子一次批量摘标签"
+    for tor in tori:
+        assert FUSE_TAG not in tor.tags_set
+    assert mgr.ctx.fuse.release(None) == 0, "已 released 无目标"
+    assert _tag_remove_calls(client) == [("remove_tags", [FUSE_TAG])], "二次放行零请求"
+
+
+def test_fuse_external_tag_removal_not_readded(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("v6" + "f" * 38, dlspeed=1000)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])]
+    # 模拟外部(规则/清理/用户)摘掉标签: 快照同步回流后 trigger 条目仍在
+    tor.tags = ""
+    tor._tags_set = None
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        _tick(mgr)
+        _tick(mgr)
+    assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])], "外部删除不自动重加"
+    assert _entries(mgr)[tor.hash]["status"] == "triggered", "标签丢失不影响 triggered(state+暂停事实)"
+    assert _entries(mgr)[tor.hash]["tagged"] is False
+    hits = [m for m in cap.messages if "已被外部移除" in m]
+    assert len(hits) == 1, "只记一条日志(不刷屏)"
+
+
+def test_fuse_adopt_tagged_paused_is_triggered(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("v7" + "g" * 38, dl_limit=FENCE, state="pausedUP", tags=FUSE_TAG)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    assert client.calls == [], "adopt 重建 triggered 零 qB 写"
+    ent = _entries(mgr)[tor.hash]
+    assert ent["status"] == "triggered" and ent["tagged"] is True
+    assert ent["fence"] == FENCE and ent["orig_limit"] == 0
+    assert "标签" in ent["reason"]
+    assert mgr.ctx.fuse.release([tor.hash]) == 1
+    assert _set_calls(client)[-1][1] == 0
+    assert FUSE_TAG not in tor.tags_set, "放行离开 triggered 时摘标签"
+
+
+def test_fuse_adopt_fence_without_tag_is_armed(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("v8" + "h" * 38, dl_limit=FENCE, state="pausedUP")
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    assert client.calls == [], "无标签只重建 armed, 零写"
+    ent = _entries(mgr)[tor.hash]
+    assert ent["status"] == "armed" and ent["tagged"] is False
+    assert mgr.ctx.fuse.release([tor.hash]) == 1
+    assert _tag_remove_calls(client) == [], "armed 不带标签 -> 放行不发摘标签请求"
+
+
+def test_fuse_tag_reuse_warns_once_without_extra_request(tmp_path):
+    mgr, client = _mgr(tmp_path)
+    other = _tor("v9" + "i" * 38, progress=0.5, amount_left=1024, state="downloading", tags=FUSE_TAG)
+    tor = _tor("va" + "j" * 38, dlspeed=1000)
+    seed_store(mgr, [other, tor])
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        _tick(mgr)
+        for _ in range(TICKS):
+            _tick(mgr)
+    assert not [c for c in client.calls if c[0] == "create_tags"], "复用已有定义, 不额外建标签"
+    hits = [m for m in cap.messages if "复用该定义" in m]
+    assert len(hits) == 1, "启动只记一条复用 WARNING"
+    assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])], "正常加标签请求不变"
