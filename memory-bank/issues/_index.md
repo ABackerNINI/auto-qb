@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 14 |
+| bug | 15 |
 | perf | 5 |
 | docs | 2 |
 | test | 5 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [缺失站点扫描复用 store 级 tracker 惰性缓存, qB 侧改 tracker 后二次扫描读到旧值](26-11-04-0228-bug-sites-missing-stale-tracker-cache.html) — /api/sites/m…
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在…
 - [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all…
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_cont…
