@@ -35,10 +35,10 @@
 | T0a | rules/base 35 + validation/rules 22 → test_rules_core.py · test_config_rules.py | Done (2026-11-04, 4e4acde6) |
 | T0b | fuse_mod 33 + cli 16 → test_fuse_mod.py · test_cli.py | Done (2026-11-04, 806f954b) |
 | T0c | P0 验收:TOTAL ≥99.3% + 基线切片(M8 首记)+ 红验 ≥10% | Done (2026-11-04, 118261bf, 切片 26-11-04-0507) |
-| T1a | ops_skip 18 + ops_jobs 8 + routes/traffic_monitor 10 | Open |
-| T1b | hr/discovery 14 + service_wave 10 + hr/runtime 7 + hr/server 5 | Open |
-| T1c | transfer/orchestrator 10 + sections 12 + writer 6 + loaders 2 | Open |
-| T1d | P1 验收:TOTAL ≥99.55% + 阈值抬 win 99.3/其他 98.8 + 基线切片 + 红验 | Open |
+| T1a | ops_skip 18 + ops_jobs 8 + routes/traffic_monitor 10 | Done (2026-11-04, a9aac90e, 36/36 全清) |
+| T1b | hr/discovery 14 + service_wave 10 + hr/runtime 7 + hr/server 5 | Done (2026-11-04, 1d261b29, 33/36, 余 3 条到不了弧) |
+| T1c | transfer/orchestrator 10 + sections 12 + writer 6 + loaders 2 | Done (2026-11-04, 3890c6a6, 30/30 全清四文件 100%) |
+| T1d | P1 验收:TOTAL ≥99.55% + 阈值抬 win 99.3/其他 98.8 + 基线切片 + 红验 | Done (2026-11-04, aaaecd74, 切片 26-11-04-0644) |
 | T2a | webui 二线 ≈40(runtime_views/commands/runtime_commands/views_episodes/module/runtime_common/runtime_stream/commands_torrents/routes/auth/static_ui/views) | Open |
 | T2b | core 尾 ≈30(traffic_grid/relocate_*/ops_mod/state/qbmanager/qbapi/rules_mod/traffic_snapshot_mod/relocate_journal)+ registry 4 + finalize_watch 5 | Open |
 | T2c | P2 收口:TOTAL ≥99.7% 且缺口 ≤100 + 阈值抬 win 99.5/其他 99.0 + M8 定稿回写 baseline.md + 残留列名 + watchlist 清零 | Open |
@@ -59,3 +59,10 @@
 - T0b 揭出 1 条潜在产品缺陷(fuse_mod 摘标签路径缺 None-client 守卫,现行接线不可达)——按 I1 未修,收尾时随全轮总结提请入池裁决。
 - 插曲:T0a 全量揭出本档 R0 触发措辞守卫的等待类句式违规(既有红,非本轮代码引入),已改不变措辞(`7afc56f4`)转绿。
 - 待办:派发 T1a(ops 叶 + traffic_monitor 路由)。
+
+### R2 · P1 四步完成 (2026-11-04)
+
+- T1a(`a9aac90e`)36/36 全清;T1b(`1d261b29`)33/36(discovery/server 双 100%,wave/runtime 余 3 条引擎内不可构造的防御弧,已列名);T1c(`3890c6a6`)30/30 全清且四文件 100%。
+- T1d(`aaaecd74`)P1 验收过线:基线切片 `26-11-04-0644-test-coverage-uplift-3-p1`,阈值抬 win 99.3 / 其他 98.8 抬后全量绿,watchlist 4→3(存量 3 个滚 T2),豁免 8 零新增,红验抽 11.6% 全杀零假绿。
+- 备案:T1b 揭出存量 apply 用例疑似假绿(原地改配置致断言空转,测试质量问题非产品缺陷,范围守恒未动);T1d 记一条与本轮无关的既有偶发 flake(webui static dom 守阵,单跑绿)。
+- 待办:派发 T2a(webui 二线)。
