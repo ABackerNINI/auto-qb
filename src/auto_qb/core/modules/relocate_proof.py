@@ -128,6 +128,19 @@ def _unavailable(detail: str) -> Evidence:
     return Evidence(UNAVAILABLE, "", detail)
 
 
+def _int_of(v):
+    """qB 数值字段兜底: int(float(x)); 不可数值化(None/畸形串/inf 等)返回 None
+
+    qB 条目 last_modification_date 的形态跨版本不稳(数字/数字字符串/浮点/缺失 None),
+    裸 int() 一条坏条目就打穿整个 relocate_precheck —— 守卫成「该条不等」跳过, 不抛
+    (float() 兜字符串/浮点形态; 亚秒四舍五入误差可留, None/畸形绝不抛)。
+    """
+    try:
+        return int(float(v))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
 # ---------- D 级: qB 列目录元数据比对 ----------
 
 
@@ -171,10 +184,10 @@ def _d_evidence(
     checked = 0
     for e in _sample(comparable, sample_k):
         name = e.get("name")
-        size, mtime = e.get("size"), e.get("last_modification_date")
+        size, mtime = e.get("size"), _int_of(e.get("last_modification_date"))
         hit = local.get(name)
         checked += 1
-        if hit is not None and hit[0] == size and hit[1] == int(mtime):
+        if hit is not None and mtime is not None and hit[0] == size and hit[1] == mtime:
             return Evidence(POSITIVE, LEVEL_D, f"代表文件 {name} 的 size+mtime 与本机完全相等")
     detail = "; ".join(str(e.get("name")) for e in _sample(comparable, sample_k)[:3])
     return Evidence(NEGATIVE, LEVEL_D, f"抽中的 {checked} 个代表文件 size/mtime 与本机全不等({detail})")

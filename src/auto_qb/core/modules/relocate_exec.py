@@ -643,6 +643,22 @@ class ExecMixin:
         if facts.same_fs_proved:
             return None
         qb_conf = getattr(getattr(self._ctx, "config", None), "qbittorrent", None)
+        if qb_conf is None:
+            # qB 连接配置缺失: 指纹无从谈起, 按环境性失败短路(不缓存, 下次迁移重试) ——
+            # 退化常量指纹会让多组共享同一缓存键(环境性失败, 不得缓存)
+            return {
+                **verdict,
+                "cls":
+                    "blocked",
+                "reasons":
+                    list(verdict.get("reasons") or []) + [
+                        {
+                            "gate": ru.GATE_SAME_FS,
+                            "cls": ru.CLS_BLOCKED,
+                            "text": "qB 连接配置缺失, 无法执行同机探测(环境性失败, 未缓存, 下次迁移将重试)",
+                        }
+                    ],
+            }
         fp = probe_fingerprint(qb_conf)
         hit = self.probe_get(fp)
         if hit is not None:

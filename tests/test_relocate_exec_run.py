@@ -824,7 +824,11 @@ def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
     mod9._ctx = types.SimpleNamespace(
         store=store9,
         api=types.SimpleNamespace(client=object(), torrents_set_location=lambda **kw: None),
-        config=types.SimpleNamespace(relocate=RelocateConfig(enabled=True)),
+        config=types.SimpleNamespace(
+            relocate=RelocateConfig(enabled=True),
+            # 探测闸消费指纹(qb_conf=None 会按环境性失败短路) —— 本用例只聚焦幂等面
+            qbittorrent=types.SimpleNamespace(host="127.0.0.1", port=8080, username="", password="", api_key=""),
+        ),
         state=types.SimpleNamespace(data={}),
     )
     # P3b 执行链强探测闸(26-11-04-0055): 桩 FS 未证明面会消费探测闸 —— 本用例聚焦幂等面,

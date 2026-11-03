@@ -29,6 +29,8 @@ app_get_directory_content(响应形状按报告 26-11-03-2306 §8.1 实测: with
 - test_evidence_constants: 三态与级别常量取值钉住(稳定字符串, 调用方按值分支)
 - test_sample_helper_deterministic: _sample 短表原样 / k<=1 取首 / 长表均匀步长且确定性
 - test_d_mtime_size_pairwise: size/mtime 任一分量不等即不等(完全相等才 positive)
+- test_d_malformed_mtime_no_raise: last_modification_date 为 None/数字字符串/浮点/畸形串时
+  数值化守卫兜住(可数值化按 int(float(x)) 参与比对, 畸形按该条不等跳过) —— 单条坏条目不抛不炸预检
 ### P4 F 运行时兜底(计划 26-11-04-0055 §04 P4): link_follow_evidence
 - test_link_follow_positive_negative_unavailable: 一致 positive / 全不等 negative / 404 unavailable
   (不降级 B′ —— B′ 与「链接是否被跟随」无关)
@@ -320,6 +322,25 @@ def test_d_mtime_size_pairwise(tmp_path, size, mtime, expect):
     """size/mtime 任一分量不等即不等(完全相等才 positive; 报告实测 mtime 无时区偏差)"""
     _make_file(tmp_path, "a.txt", 100, MT)
     client = _DirClient([_entry("a.txt", size, mtime)])
+    ev = rp.path_evidence(_ctx(client), str(tmp_path), str(tmp_path))
+    assert ev.status == expect, ev
+
+
+@pytest.mark.parametrize(
+    "mtime,expect",
+    [
+        (None, rp.NEGATIVE),  # None: 按该条不等跳过, 不抛
+        ("garbage", rp.NEGATIVE),  # 畸形串: 同上
+        (str(MT), rp.POSITIVE),  # 数字字符串: int(float(x)) 数值化后相等
+        (str(MT) + ".7", rp.POSITIVE),  # 字符串小数: 同上(亚秒截断)
+        (MT + 0.4, rp.POSITIVE),  # 浮点形态: int(float(x)) 截断后相等
+    ]
+)
+def test_d_malformed_mtime_no_raise(tmp_path, mtime, expect):
+    """last_modification_date 形态不稳(None/数字字符串/浮点/畸形): 数值化守卫兜住,
+    一条坏条目只按「该条不等」跳过, 绝不 TypeError/ValueError 打穿 relocate_precheck"""
+    _make_file(tmp_path, "a.txt", 100, MT)
+    client = _DirClient([_entry("a.txt", 100, mtime)])
     ev = rp.path_evidence(_ctx(client), str(tmp_path), str(tmp_path))
     assert ev.status == expect, ev
 

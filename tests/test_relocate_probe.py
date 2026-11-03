@@ -17,9 +17,15 @@
 - test_probe_add_rejected_env: add 被拒 => failed + env=True(不缓存方向), 本机临时目录已清
 - test_probe_api_error_env: recheck/recheck 轮询期 API 异常 => failed + env=True
 - test_probe_torrent_invisible_env: add 受理但种子始终不可见 => failed + env=True
+- test_probe_tag_fallback_delete_on_invisible: add 受理但探测窗口拿不到 hash => finally 按 tag
+  补删探测种子(此刻可见则删成; 恒不可见则只告警留证)
+- test_probe_passes_with_namespaced_view: 容器部署命名空间错位(fs.path_map: qB 视角 /qb/... 与
+  本机视图不同, FS 实际共享)下 run_probe 仍 passed —— 本机读写侧经 map_to_container 换算
 - test_probe_cleanup_runs_on_every_failure_path: 各阶段中断仍清理(本机写失败/add 拒/读证失败/delete 失败留证+warning 但不改结论)
 - test_probe_timeout_budget_constants: 超时常量单点取值钉住(读 10s/写 10s/清理 5s/轮询 0.25s)
 - test_sweep_probe_residue: 启动扫描清残留(种子+目录), 幂等二次为 0, 非本前缀目录不动
+- test_sweep_residue_tag_only_no_delete_files: tag 命中但种子名/保存路径均不带 aqb-probe 前缀
+  => 只删种子记录, delete_files=False(绝不误删用户数据); 目录侧保留现状
 - test_start_hook_sweeps_residue: relocate 启动钩子: enabled 时清残留并在日志提及; disabled/dry_run 不动手
 - test_lifecycle_mixin_wires_sweep: LifecycleMixin.start 源码里确实调用 sweep_probe_residue(钩子挂接不回退)
 """
@@ -31,10 +37,11 @@ import shutil
 
 import pytest
 
-from auto_qb.config.models import QbittorrentConfig
+from auto_qb.config.models import PathMapEntry, QbittorrentConfig
 from auto_qb.core.modules import relocate_probe as rp
 from auto_qb.core.modules.relocate_lifecycle import LifecycleMixin
 from auto_qb.hr.bencode import bdecode
+from auto_qb.infra import file_access
 from helpers import FakeClient, FakeTorrent, capture_logs, make_manager
 
 # ---------- 替身与环境 ----------
@@ -81,6 +88,24 @@ class _MuteListClient(FakeClient):
     """torrents_info 恒空: add 受理但种子永远不可见"""
     def torrents_info(self, torrent_hashes=None, **kw):
         return []
+
+
+class _NamespacedClient(_SameFsClient):
+    """命名空间错位替身(容器部署形态): qB 记账用逻辑路径(/qb/...), 物理搬目录经
+    file_access.map_to_container 换算本机真实路径 —— 模拟「FS 实际共享、仅视角不同」;
+    修复前 run_probe 直用 qB 视角路径做本机读写, 该替身下必然证写超时(env=False)"""
+    def _mp(self, p):
+        fa = file_access.get_file_access()
+        return fa.map_to_container(p) or p
+
+    def torrents_set_location(self, torrent_hashes=None, location=None):
+        FakeClient.torrents_set_location(self, torrent_hashes=torrent_hashes, location=location)  # 记台账
+        for h in (torrent_hashes if isinstance(torrent_hashes, (list, tuple)) else [torrent_hashes]):
+            tor = self.torrents.get(h)
+            if tor is None or not os.path.isdir(self._mp(tor.save_path)):
+                continue
+            shutil.move(self._mp(tor.save_path), self._mp(location))  # qB 物理侧在容器挂载点
+            tor.save_path = location
 
 
 def _env(tmp_path, client=None):
@@ -251,6 +276,48 @@ def test_probe_torrent_invisible_env(tmp_path, fast_timeouts):
     result = rp.run_probe(ctx, src, dst)
     assert result.status == "failed" and result.reason == "torrent_invisible" and result.env is True
     assert not os.path.exists(result.evidence["src_dir"])
+    # finally 按 tag 补删对 _MuteListClient(info 恒空)列不到种子: 尽力删除零动作,
+    # 种子留残属预期 —— 补删生效的形态由 test_probe_tag_fallback_delete_on_invisible 钉
+
+
+def test_probe_tag_fallback_delete_on_invisible(tmp_path, fast_timeouts, monkeypatch):
+    """add 受理但探测窗口按 tag 不可见(hash 拿不到) => finally 按 tag 补删探测种子(尽力)"""
+    ctx, client, src, dst = _env(tmp_path, client=FakeClient())
+    # 可见轮询窗口压成 0: add 受理(种子已在 client 里)但 _await_probe_torrent 一次都列不到
+    monkeypatch.setattr(rp, "PROBE_READ_TIMEOUT_S", 0.0)
+    result = rp.run_probe(ctx, src, dst)
+    assert result.status == "failed" and result.reason == "torrent_invisible" and result.env is True
+    assert "hash" not in result.evidence  # probe_hash=None, 常规按 hash 删不到
+    assert _probe_torrents(client) == []  # 按 tag 补删成功: 探针种子不留残
+    assert client.calls[-1] == ("delete", True) and result.evidence["cleanup"]["torrent_deleted"] is True
+
+
+def test_probe_passes_with_namespaced_view(tmp_path, fast_timeouts, monkeypatch):
+    """容器部署命名空间错位: fs.path_map 把 qB 视角(/qb/src|/qb/dst)映到本机临时目录,
+    FS 实际共享仅视角不同 => 本机读写经 map_to_container 换算后 run_probe 照常通过
+    (修复前: 本机直 stat qB 视角路径 => 证写超时 env=False 被永久缓存, 组被永久硬拦)"""
+    local_src = os.path.join(str(tmp_path), "local-src")
+    local_dst = os.path.join(str(tmp_path), "local-dst")
+    os.makedirs(local_src)  # qB 视角下的挂载点, 本机视图的真实目录
+    os.makedirs(local_dst)
+    ctx, client, _src, _dst = _env(tmp_path, client=_NamespacedClient())
+    # make_manager 构造会经 init_file_access 重建单例, 映射替换必须在其后
+    monkeypatch.setattr(
+        file_access, "_instance",
+        file_access.MappedFileAccess(
+            (
+                PathMapEntry(src="/qb/src", dst=local_src),
+                PathMapEntry(src="/qb/dst", dst=local_dst),
+            )
+        )
+    )
+    result = rp.run_probe(ctx, "/qb/src", "/qb/dst")
+    assert result.status == "passed" and result.reason == "ok" and result.env is False, result.evidence
+    # qB API 侧保持逻辑路径不动(save_path/setLocation 均是 /qb/... 视角)
+    assert result.evidence["src_dir"].replace("\\", "/").startswith("/qb/src/")
+    assert any(call[0] == "set_location" and call[1] == result.evidence["dst_dir"] for call in client.calls)
+    # 本机侧(映射挂载点)无残留: 探针目录在真实 FS 落过且被清掉
+    assert os.listdir(local_src) == [] and os.listdir(local_dst) == []
 
 
 def test_probe_cleanup_runs_on_every_failure_path(tmp_path, fast_timeouts, monkeypatch):
@@ -320,6 +387,23 @@ def test_sweep_probe_residue(tmp_path):
     client.torrents["RES2"] = FakeTorrent(hash="RES2", name="user.bin", save_path=other_dir, tags=rp.TAG_PROBE)
     assert rp.sweep_probe_residue(ctx) == 1
     assert os.path.exists(os.path.join(other_dir, "keep.txt"))  # 目录保守未动
+    assert client.calls[-1] == ("delete", False)  # 名不匹配: 只删种子记录, 不 deleteFiles
+
+
+def test_sweep_residue_tag_only_no_delete_files(tmp_path):
+    """tag 命中但种子名/保存路径均不带 aqb-probe 前缀 => 只删种子记录不删文件
+    (delete_files=False, 保守默认: 用户自己打了同名 tag 的种子数据绝不能被误删)"""
+    ctx, client, src, dst = _env(tmp_path)
+    user_dir = os.path.join(src, "user-data")
+    os.makedirs(user_dir)
+    keep_file = os.path.join(user_dir, "e01.mkv")
+    with open(keep_file, "w") as f:
+        f.write("keep")
+    client.torrents["RES9"] = FakeTorrent(hash="RES9", name="My Show S01", save_path=user_dir, tags=rp.TAG_PROBE)
+    assert rp.sweep_probe_residue(ctx) == 1
+    assert _probe_torrents(client) == []  # 种子记录已摘(探测 tag 认领)
+    assert os.path.exists(keep_file)  # 数据文件保留(不 deleteFiles)
+    assert client.calls[-1] == ("delete", False)
 
 
 def test_start_hook_sweeps_residue(tmp_path, fast_timeouts):

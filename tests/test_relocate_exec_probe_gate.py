@@ -21,6 +21,8 @@
 - test_single_member_assume_shared_and_dry_run_skip_probe: 单成员组(D2)/assume_shared(D7)/
   dry-run 三面零探测调用
 - test_fingerprint_change_reprobes: qB 配置 host/port 变更 => 指纹变化 => 重新探测(D3)
+- test_missing_qb_config_blocks_without_caching: qbittorrent 连接配置缺失 => 按环境性失败
+  短路 blocked(gate same_fs, 文案「qB 连接配置缺失, 无法执行同机探测」), 不触发探测、不写缓存
 """
 
 import types
@@ -249,6 +251,21 @@ def test_single_member_assume_shared_and_dry_run_skip_probe(monkeypatch):
     assert items[0]["cls"] == "ok", items
     assert calls == [] and locs == [], (calls, locs)
     assert any("dry-run: 跳过强探测" in n for n in items[0]["notes"]), items[0]["notes"]
+
+
+def test_missing_qb_config_blocks_without_caching(monkeypatch):
+    """qbittorrent 连接配置缺失 => 环境性失败短路: blocked(gate same_fs)、零探测、零缓存写入"""
+    mod, locs = _gate_env(monkeypatch)
+    calls = _stub_run_probe(monkeypatch, [_passed()])
+    mod._ctx.config = types.SimpleNamespace(relocate=RelocateConfig(enabled=True))  # 无 qbittorrent 段
+    items = mod.relocate_execute(["HA"], "R:/dst")
+    it = items[0]
+    assert it["cls"] == "blocked", it
+    assert it["reasons"][-1]["gate"] == "same_fs" and it["reasons"][-1]["cls"] == "blocked", it["reasons"]
+    assert "qB 连接配置缺失, 无法执行同机探测" in it["reasons"][-1]["text"], it["reasons"]
+    assert calls == [] and locs == [], "配置缺失不得触发探测/建账"
+    assert not mod.active_jobs(), "配置缺失不得建账"
+    assert mod._ctx.state.data == {}, "环境性失败不得写探测缓存"
 
 
 def test_fingerprint_change_reprobes(monkeypatch):

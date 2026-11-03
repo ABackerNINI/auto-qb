@@ -33,6 +33,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 
+from ...infra import file_access
 from .relocate_common import logger
 
 # ---------- 常量单点(计划 §04 P2-⑤: 每步独立短超时, 总预算收敛; 真机实测常态 ~1.3s) ----------
@@ -138,6 +139,21 @@ def _failed(evidence: dict, reason: str, env: bool, extra: dict = None) -> Probe
     return ProbeResult(STATUS_FAILED, reason, env, evidence)
 
 
+def _map_local(path: str) -> str:
+    """qB 视角逻辑路径 -> 本机 syscall 路径(file_access.map_to_container 既有单点)
+
+    与 relocate_proof._syscall / relocate_plan._syscall 同款: 未命中/无映射/查询失败
+    原样返回 —— 宿主直跑(零映射)行为与不映射逐字节一致; 容器部署(path_map 非空)时,
+    探测的本机读写侧必须经它换算, 否则本机 stat 不到 qB 视角路径, 证写超时(env=False)
+    被永久缓存, 多成员组被永久硬拦。qB API 侧(save_path/location)保持逻辑路径不动。
+    """
+    try:
+        fa = file_access.get_file_access()
+        return fa.map_to_container(path) or path
+    except Exception:  # noqa: BLE001 - 映射查询失败按原路径(本机直跑形态, 旧行为)
+        return path
+
+
 def _await_probe_torrent(api, deadline: float, evidence: dict):
     """轮询按 tag 列种子直到探针种子可见(报告实测 add 后 ~0.26s 可见); 超时/异常返回 None
 
@@ -207,9 +223,28 @@ def _cleanup(api, torrent_hash, dirs, evidence: dict) -> None:
     """尽力清理(finally 语义): deleteFiles 删种子 -> 轮询消失 -> rmtree 两侧临时目录
 
     失败不抛不改变探测结论: 进 evidence["cleanup"] 并 logger.warning(R2: 启动扫描/人工兜底)。
+    hash 拿不到(add 受理但按 tag 不可见, probe_hash=None)时按 tag 补一次定位删除(尽力,
+    失败只 warning —— 残留由启动扫描兜底), 免得探针种子留在用户 qB 里。
     """
     info = {"torrent_deleted": False, "torrent_gone": None, "dirs_removed": [], "residue": []}
     deadline = time.monotonic() + PROBE_CLEANUP_TIMEOUT_S
+    if not torrent_hash:
+        # 种子不可见(add 受理但按 tag 列不出)拿不到 hash: 按 tag 补删(同一写线程下同 tag
+        # 只有探测种子; 此刻仍不可见 = 真没有, 轮询空列表零动作)
+        try:
+            for tor in api.torrents_info(tag=TAG_PROBE) or []:
+                h = getattr(tor, "hash", None)
+                if not h:
+                    continue
+                try:
+                    api.torrents_delete(torrent_hashes=[h], delete_files=True)
+                    info["torrent_deleted"] = True
+                except Exception as e:  # noqa: BLE001 - 尽力删除, 失败只告警
+                    info["tag_delete_error"] = str(e)
+                    logger.warning(f"relocate | probe: 按 tag 补删探测种子失败 {h}({e})")
+        except Exception as e:  # noqa: BLE001 - 定位失败只告警, 结论不受清理失败影响
+            info["tag_locate_error"] = str(e)
+            logger.warning(f"relocate | probe: 按 tag 定位探测种子失败({e}) —— 残留由启动扫描清理")
     if torrent_hash:
         try:
             api.torrents_delete(torrent_hashes=[torrent_hash], delete_files=True)
@@ -258,10 +293,14 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
         return _failed(evidence, "api_unavailable", True)
     token = secrets.token_hex(6)
     name = f"{PROBE_DIR_PREFIX}{token}.bin"  # info.name = aqb-probe-<rand>.bin
-    src_dir = os.path.join(src, PROBE_DIR_PREFIX + token)  # D8: 临时子目录隔离
+    src_dir = os.path.join(src, PROBE_DIR_PREFIX + token)  # D8: 临时子目录隔离(qB 视角逻辑路径)
     dst_dir = os.path.join(dst, PROBE_DIR_PREFIX + token)
-    src_file = os.path.join(src_dir, name)
-    dst_file = os.path.join(dst_dir, name)
+    # 本机读写侧统一经 map_to_container 换算(major 修: 容器 path_map 部署下 qB 视角路径
+    # 本机 stat 不到, 直用会证写超时被永久缓存); qB API 侧 save_path/location 保持逻辑路径
+    local_src_dir = _map_local(src_dir)
+    local_dst_dir = _map_local(dst_dir)
+    local_src_file = os.path.join(local_src_dir, name)
+    local_dst_file = os.path.join(local_dst_dir, name)
     evidence.update(name=name, src_dir=src_dir, dst_dir=dst_dir, size=PROBE_FILE_SIZE)
     content = make_probe_content()
     expect_sha = hashlib.sha1(content).hexdigest()
@@ -271,8 +310,8 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
     try:
         # a. 落源(本机写; 磁盘满/权限失败 = 环境性)
         try:
-            os.makedirs(src_dir)
-            with open(src_file, "wb") as f:
+            os.makedirs(local_src_dir)
+            with open(local_src_file, "wb") as f:
                 f.write(content)
         except OSError as e:
             return _failed(evidence, "local_write_failed", True, {"error": str(e)})
@@ -312,22 +351,22 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
         except Exception as e:  # noqa: BLE001 - setLocation 被拒 = 环境性
             return _failed(evidence, "set_location_rejected", True, {"error": str(e)})
         verdict = _write_proof_poll(
-            dst_file, src_file, expect_sha, len(content),
+            local_dst_file, local_src_file, expect_sha, len(content),
             time.monotonic() + PROBE_WRITE_TIMEOUT_S
         )
         if verdict != "ok":
             extra = {}
-            if os.path.isfile(dst_file):
+            if os.path.isfile(local_dst_file):
                 extra["dst_seen"] = True
-            if os.path.exists(src_file):
+            if os.path.exists(local_src_file):
                 extra["src_present"] = True
             return _failed(evidence, "write_mismatch" if verdict == "mismatch" else "write_proof_timeout", False, extra)
         evidence["write_ok"] = True
         evidence["elapsed_s"] = round(time.monotonic() - started, 3)
         return ProbeResult(STATUS_PASSED, "ok", False, evidence)
     finally:
-        # e. 清理(所有出口都走): deleteFiles -> 轮询种子消失 -> rmtree 两侧临时目录
-        _cleanup(api, probe_hash, (src_dir, dst_dir), evidence)
+        # e. 清理(所有出口都走): deleteFiles -> 轮询种子消失 -> rmtree 两侧临时目录(本机侧)
+        _cleanup(api, probe_hash, (local_src_dir, local_dst_dir), evidence)
 
 
 # ---------- 启动残留扫描(R2: 崩溃在 add 之后 delete 之前会留探测种子+文件) ----------
@@ -337,7 +376,9 @@ def sweep_probe_residue(ctx) -> int:
     """按 tag=TAG_PROBE 列种子, deleteFiles 删除并清理已知前缀的临时目录; 返回清理条数
 
     幂等(重复调用二次为 0), 异常一律吞掉只 logger.warning —— 扫描失败绝不能挡启动。
-    save_path 不带固定前缀的种子(极端: 用户自己打了同名 tag)只删种子不动其目录(保守默认)。
+    deleteFiles 双条件(保守默认): tag 命中只说明"可能"是探测种子, 种子名或保存路径带
+    aqb-probe 固定前缀才认领并删文件 —— 极端(用户自己打了同名 tag 的种子)只删种子记录,
+    绝不 delete_files 误删用户数据; 目录侧同样只清自己命名规律的路径。
     """
     api = getattr(ctx, "api", None)
     if api is None or getattr(api, "client", None) is None:
@@ -351,9 +392,11 @@ def sweep_probe_residue(ctx) -> int:
     for tor in tors:
         t_hash = getattr(tor, "hash", None)
         save_path = getattr(tor, "save_path", "") or ""
+        ours = str(getattr(tor, "name", "") or "").startswith(PROBE_DIR_PREFIX) or \
+            os.path.basename(str(save_path).rstrip("\\/")).startswith(PROBE_DIR_PREFIX)
         try:
             if t_hash:
-                api.torrents_delete(torrent_hashes=[t_hash], delete_files=True)
+                api.torrents_delete(torrent_hashes=[t_hash], delete_files=ours)
         except Exception as e:  # noqa: BLE001 - 单条失败不影响其余条目
             logger.warning(f"relocate | probe: 残留探测种子删除失败 {t_hash}({e})")
             continue
