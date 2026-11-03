@@ -35,24 +35,32 @@ Sampler -> stop_event -> ControlServer -> 绑端口 -> 清注记 -> Notifier -> 
 - stdio 编码兜底: `_utf8_stdio` 把 cp1252 管道流重配成 UTF-8 (中文原样、不丢行、不碰
   非文本流); `python -m gtm` 子进程在 `PYTHONIOENCODING=cp1252` 下 stdout 帮助与
   stderr 错误文案仍可见, 退出码语义不变 (0 / 1)
+- 日志落盘 (S6/§08): gtm.log 创建且 WARNING 原文落盘 (速率告警字段 nic/dir/delta/dt/
+  eff_dt/rate/threshold 全在行内); 小 maxBytes 注入可触发轮转; 重复挂载不叠加 handler;
+  `sys.stderr=None` (pythonw) 时不挂流 handler、无 "Logging error" 噪声; 目录不可写只
+  WARNING 降级不抛; 轮转 rename 失败 (模拟 WinError 32) 原地截断兜底、文件仍可写
 """
 
 from __future__ import annotations
 
 import argparse
 import io
+import logging
 import os
 import runpy
 import subprocess
 import sys
 import threading
+from types import SimpleNamespace
 
 import pytest
 
+import gtm.sampler as sampler_mod
 from gtm import __main__ as cli
 from gtm.config import Config
 from gtm.identity import Decision, DeferredNote, Identity, IdentityError, PrimaryRecord
 from gtm.installer import AutostartError, AutostartResult
+from gtm.sampler import Sampler
 from gtm.storage import SingleInstanceLockError
 
 IDENTITY = Identity(install_root="/install/self", install_id="id-self")
@@ -236,6 +244,7 @@ class Harness:
         self.loop_calls: list[tuple] = []
         self.loop_exc: BaseException | None = None
         self.install_calls: list[str] = []
+        self.real_file_logging = False
 
     # -- 装配 --
 
@@ -311,12 +320,16 @@ class Harness:
             if self.loop_exc is not None:
                 raise self.loop_exc
 
+        def fake_file_logging(data_dir, **kwargs):
+            rec.add("install_file_logging", data_dir)
+            return None
+
         def fake_build_installer(data_dir):
             rec.add("build_installer", data_dir)
             self.install_calls.append(data_dir)
             return FakeBackend(rec, error=self.autostart_error)
 
-        for name, value in (
+        targets = [
             ("load_or_create_install_id", fake_identity),
             ("resolve_startup", fake_resolve),
             ("write_deferred", fake_write_deferred),
@@ -332,7 +345,10 @@ class Harness:
             ("Notifier", make_notifier),
             ("_run_loop", fake_loop),
             ("build_installer", fake_build_installer),
-        ):
+        ]
+        if not self.real_file_logging:
+            targets.append(("_install_file_logging", fake_file_logging))
+        for name, value in targets:
             monkeypatch.setattr(cli, name, value)
         FakeServer.instances.clear()
         FakeNotifier.instances.clear()
@@ -380,6 +396,7 @@ def test_run_primary_full_sequence_order(monkeypatch) -> None:
         "resolve_startup",
         "ensure_data_ownership",
         "fill_primary_data_dir",
+        "install_file_logging",
         "load_config",
         "Storage",
         "storage.acquire_lock",
@@ -398,6 +415,8 @@ def test_run_primary_full_sequence_order(monkeypatch) -> None:
     ]
     # 顺序不变式 S12/D8: 锁早于绑端口
     assert harness.recorder.before("storage.acquire_lock", "server.start")
+    # 日志挂载时机: data_dir 已定、配置加载之前 (配置校验失败也能落盘, §08)
+    assert harness.recorder.before("install_file_logging", "load_config")
     # 顺序不变式: 清注记是「正主真正站起来」之后 (锁 + 端口齐备)
     assert harness.recorder.before("server.start", "clear_deferred")
     # 收尾顺序
@@ -757,6 +776,153 @@ def test_module_main_guard_runs_cli(monkeypatch, capsys) -> None:
             sys.modules["gtm.__main__"] = saved
     assert excinfo.value.code == 0
     assert "usage: global-traffic-monitor" in capsys.readouterr().out
+
+
+# ---- 日志落盘 (S6/§08) ----
+
+
+@pytest.fixture(autouse=True)
+def _close_gtm_file_handlers():
+    """每个用例后摘除并关闭 gtm 文件 handler (Windows 下否则临时目录清理失败)."""
+    yield
+    gtm_logger = logging.getLogger("gtm")
+    for handler in list(gtm_logger.handlers):
+        if isinstance(handler, logging.FileHandler):
+            gtm_logger.removeHandler(handler)
+            handler.close()
+
+
+GIB = 1024**3
+
+
+class _Monotonic:
+    """S5 速率判定的单调钟/墙钟替身 (同一对象供 sampler.time 使用)."""
+    def __init__(self) -> None:
+        self.mono = 0.0
+        self.wall = 1_000_000.0
+
+    def monotonic(self) -> float:
+        return self.mono
+
+    def time(self) -> float:
+        return self.wall
+
+
+def test_file_log_creates_and_captures_full_rate_warning_fields(tmp_path, monkeypatch):
+    """gtm.log 被创建; S5 速率 WARNING 的 nic/dir/delta/dt/eff_dt/rate/threshold 全在行内."""
+    handler = cli._install_file_logging(str(tmp_path))
+    assert handler is not None
+    clock = _Monotonic()
+    monkeypatch.setattr(sampler_mod, "time", clock)
+    counters = {"eth0": SimpleNamespace(bytes_sent=0, bytes_recv=0)}
+    stats = {"eth0": SimpleNamespace(isup=True), "lo": SimpleNamespace(isup=True)}
+    sampler = Sampler(counters_provider=lambda: counters, stats_provider=lambda: stats)
+    sampler.sample_once(5.0, GIB)  # 首轮只立基线
+    clock.mono += 5.0
+    clock.wall += 5.0
+    injected = 6 * GIB
+    counters["eth0"] = SimpleNamespace(bytes_sent=injected, bytes_recv=0)
+    sampler.sample_once(5.0, GIB)  # 6GiB/5s > 1GiB/s -> WARNING
+
+    handler.flush()
+    text = (tmp_path / "gtm.log").read_text(encoding="utf-8")
+    assert "单轮速率超阈值" in text
+    for token in (
+        "nic=eth0",
+        "dir=up",
+        f"delta={injected}",
+        "dt=5.000s",
+        "eff_dt=5.000s",
+        "rate=",
+        f"threshold={GIB}B/s",
+    ):
+        assert token in text, token
+
+
+def test_file_log_rotates_with_small_max_bytes(tmp_path):
+    """注入小 maxBytes: 写满即生成 gtm.log.1 (滚动由 stdlib 完成)."""
+    handler = cli._install_file_logging(str(tmp_path), max_bytes=512, backup_count=2)
+    assert handler is not None
+    gtm_logger = logging.getLogger("gtm")
+    for i in range(20):
+        gtm_logger.warning("轮转填充行 %02d %s", i, "x" * 120)
+    handler.flush()
+    assert (tmp_path / "gtm.log").exists()
+    assert (tmp_path / "gtm.log.1").exists()
+
+
+def test_file_logging_mount_is_idempotent(tmp_path):
+    """重复挂载复用同一 handler: 不叠加、不重复写 (测试/重复调用安全)."""
+    first = cli._install_file_logging(str(tmp_path))
+    second = cli._install_file_logging(str(tmp_path))
+    assert first is second
+    handlers = [h for h in logging.getLogger("gtm").handlers if isinstance(h, logging.FileHandler)]
+    assert len(handlers) == 1
+
+
+def test_configure_logging_skips_stream_handler_when_stderr_none(monkeypatch, capsys):
+    """pythonw (sys.stderr=None): 不挂 stream handler, 也不产生 "Logging error" 噪声."""
+    root = logging.getLogger()
+    before = len(root.handlers)
+    with monkeypatch.context() as m:
+        m.setattr(sys, "stderr", None)
+        cli._configure_logging()
+        assert len(root.handlers) == before
+        logging.getLogger("gtm.sampler").warning("pythonw 告警")
+    assert "Logging error" not in capsys.readouterr().err
+
+
+def test_file_logging_failure_degrades_without_raising(tmp_path, caplog):
+    """目录不存在/不可写: 只 WARNING 降级返回 None, 不建目录、不阻断主流程."""
+    missing = tmp_path / "no-such-dir"
+    with caplog.at_level("WARNING", logger="gtm"):
+        assert cli._install_file_logging(str(missing)) is None
+    assert "日志文件挂载失败" in caplog.text
+    assert not missing.exists()
+
+
+def test_rotation_failure_falls_back_to_in_place_truncate(tmp_path, monkeypatch, capsys):
+    """Windows 文件占用 (WinError 32): 轮转失败不冒泡, 原地截断后当前文件仍可写."""
+    handler = cli._install_file_logging(str(tmp_path), max_bytes=512, backup_count=1)
+    assert isinstance(handler, cli._ResilientRotatingFileHandler)
+
+    def refuse(source, dest):
+        raise OSError(32, "文件被占用 (模拟 WinError 32)")
+
+    monkeypatch.setattr(handler, "rotate", refuse)
+    gtm_logger = logging.getLogger("gtm")
+    for i in range(6):
+        gtm_logger.warning("占用场景 %02d %s", i, "y" * 200)
+    handler.flush()
+    assert "Logging error" not in capsys.readouterr().err
+    assert "占用场景 05" in (tmp_path / "gtm.log").read_text(encoding="utf-8")
+
+
+def test_truncate_in_place_keeps_handler_writable(tmp_path):
+    """兜底截断对活句柄也成立: 旧内容清空, 同一 handler 继续写新行."""
+    handler = cli._install_file_logging(str(tmp_path))
+    assert handler is not None
+    handler.stream.write("旧行\n")
+    handler.flush()
+    handler._truncate_in_place()
+    assert (tmp_path / "gtm.log").read_text(encoding="utf-8") == ""
+    logging.getLogger("gtm").warning("截断后新行")
+    handler.flush()
+    assert "截断后新行" in (tmp_path / "gtm.log").read_text(encoding="utf-8")
+
+
+def test_run_mounts_log_file_and_writes_startup_warning(monkeypatch, tmp_path, caplog):
+    """cmd_run 真挂载: 启动路径的 WARNING 落进 <data_dir>/gtm.log (文件存在且可读)."""
+    harness = Harness()
+    harness.real_file_logging = True
+    harness.storage_opts = {"recover_warnings": ("dat 坏行 3 条已跳过", )}
+    harness.install(monkeypatch)
+    with caplog.at_level("WARNING", logger="gtm"):
+        assert cli.cmd_run(run_args(data_dir=str(tmp_path))) == 0
+
+    handler = next(h for h in logging.getLogger("gtm").handlers if isinstance(h, logging.FileHandler))
+    handler.flush()
+    assert "dat 坏行 3 条已跳过" in (tmp_path / "gtm.log").read_text(encoding="utf-8")
 
 
 # ---- stdio 编码兜底 ----

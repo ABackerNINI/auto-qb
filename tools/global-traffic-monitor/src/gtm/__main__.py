@@ -20,8 +20,11 @@ import argparse
 import io
 import json
 import logging
+import logging.handlers
+import os
 import sys
 import threading
+import time
 from typing import Optional
 
 from gtm import __version__
@@ -59,6 +62,12 @@ from gtm.storage import (
 
 logger = logging.getLogger("gtm")
 
+# 日志格式单点 (stderr 与 gtm.log 共用, 防两份 format 各自漂移; 计划 §08)
+_LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+_LOG_FILE_NAME = "gtm.log"
+_LOG_MAX_BYTES = 4 * 1024 * 1024
+_LOG_BACKUP_COUNT = 3
+
 
 def _utf8_stdio() -> None:
     """CLI 入口的 stdio 编码兜底: 非控制台的 stdout/stderr 一律按 UTF-8 输出.
@@ -76,6 +85,98 @@ def _utf8_stdio() -> None:
         encoding = (stream.encoding or "").lower().replace("-", "")
         if encoding != "utf8":
             stream.reconfigure(encoding="utf-8", errors="replace")
+
+
+def _configure_logging() -> None:
+    """进程级日志初始化: 只在 stderr 真实可用时挂流 handler (pythonw 下为 None).
+
+    为什么不用无脑 `basicConfig(stream=sys.stderr)`: 该调用在 stderr=None 时会造出一个
+    stream=None 的 StreamHandler, emit 时抛 AttributeError 被 logging 打成 "Logging error"
+    噪声, 且告警反而丢失。pythonw 拉起时只留 gtm.log 一个落点 (计划 §08)。
+    """
+    stream = sys.stderr
+    if stream is not None:
+        logging.basicConfig(stream=stream, level=logging.INFO, format=_LOG_FORMAT)
+        return
+    root = logging.getLogger()
+    if not root.handlers:
+        # 生产 pythonw: 还没有任何 handler -> 抬级别让 INFO 进后面挂的 gtm.log。
+        # 已有 handler (测试里 pytest 的捕获器) 时不动根级别 —— 否则会把 INFO 泛化到
+        # 后续用例, 无谓增加格式化/写盘延迟 (曾让 server 的关停时序断言假红)。
+        root.setLevel(logging.INFO)
+
+
+class _ResilientRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """轮转失败不炸进程的 RotatingFileHandler (Windows 文件占用兜底).
+
+    stdlib 的 `doRollover` 先关流再 rename/remove; Windows 上日志文件被外部句柄占用
+    (Get-Content / 杀软 / 采集器) 时 rename 抛 OSError (WinError 32), 异常进 emit 侧会
+    变成 "Logging error" 且该行丢失。策略: 原样先试 -> 短暂等待重试一次 -> 仍失败则
+    原地截断并重开句柄。旧日志丢失, 但取证面保持可写、进程与主流程不断。
+    """
+    def doRollover(self) -> None:
+        if self._rollover_once():
+            return
+        time.sleep(0.05)
+        if self._rollover_once():
+            return
+        self._truncate_in_place()
+
+    def _rollover_once(self) -> bool:
+        try:
+            super().doRollover()
+            return True
+        except OSError:
+            return False
+
+    def _truncate_in_place(self) -> None:
+        try:
+            if self.stream is not None:
+                self.stream.close()
+                self.stream = None
+            self.stream = open(self.baseFilename, "w", encoding=self.encoding, errors=self.errors)
+        except OSError:
+            self.stream = None
+
+
+def _install_file_logging(
+    data_dir: str,
+    *,
+    max_bytes: int = _LOG_MAX_BYTES,
+    backup_count: int = _LOG_BACKUP_COUNT,
+) -> logging.Handler | None:
+    """把轮转文件 handler 幂等挂到 "gtm" 父 logger (sampler/storage/server 子 logger 随行).
+
+    时机: data_dir 已确定、配置加载之前 —— 配置校验失败也能落盘 (计划 §08)。
+    幂等: 已存在指向同一文件的 FileHandler 就复用 (重复调用/测试叠加不重复写; 新进程
+    自然是新句柄)。降级: 目录不可写/句柄分配失败等 -> 记一次 WARNING 后继续, 日志是
+    取证面而不是启动前提, 绝不阻断主流程。
+    """
+    target = os.path.join(data_dir, _LOG_FILE_NAME)
+    gtm_logger = logging.getLogger("gtm")
+    wanted = os.path.normcase(os.path.abspath(target))
+    for handler in gtm_logger.handlers:
+        if not isinstance(handler, logging.FileHandler):
+            continue
+        if os.path.normcase(os.path.abspath(handler.baseFilename)) == wanted:
+            return handler
+    try:
+        handler = _ResilientRotatingFileHandler(
+            target,
+            maxBytes=max_bytes,
+            backupCount=backup_count,
+            encoding="utf-8",
+        )
+    except Exception as e:
+        try:
+            gtm_logger.warning("日志文件挂载失败 (继续运行, 仅 stderr): %s", e)
+        except Exception:
+            pass  # pythonw 下连告警面都没有: 静默降级
+        return None
+    handler.setLevel(logging.INFO)
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    gtm_logger.addHandler(handler)
+    return handler
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -208,11 +309,7 @@ def _note_from(reason: str, identity: Identity, decision: Decision) -> DeferredN
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    logging.basicConfig(
-        stream=sys.stderr,
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    _configure_logging()
     # 正主注册判定 (计划 §03 矩阵): 排在取锁/绑端口/解析数据目录之前 —— 身份不定,
     # 后面每一步都可能在替别人的安装打工。让位方绝不自身启动 (Q1-a): 代拉正主后
     # 立即退出 (exit 0 —— 让位是正常行为, auto-qb 探活会等到正主应答); 拒绝/矛盾
@@ -259,6 +356,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         print(f"global-traffic-monitor: {e}", file=sys.stderr)
         return 1
     fill_primary_data_dir(identity, data_dir)
+    # 日志落盘 (计划 §08): data_dir 已定、配置加载之前 —— 配置校验失败也能留痕;
+    # 失败降级在 _install_file_logging 内部 (只 WARNING 不阻断)
+    _install_file_logging(data_dir)
     # 配置加载: 校验失败 fail-fast 并聚合报错 (黄金法则 4; 不静默用默认值继续)
     config, _ = _load_config_or_fail(data_dir)
     if config is None:
