@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="e2e-port-8236">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e 列偏好用例仍引用无监听方的 8236 遗留端口">
 <meta name="issue-summary" content="column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口">
 <title>e2e 列偏好用例仍引用无监听方的 8236 遗留端口 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0316-refactor-e2e-port-8236-legacy</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 03:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 03:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 — 用户指派认领并修复，状态 <strong>Open → In Progress</strong>；复验（2026-11-04）：grep <code>8236</code> 仍命中 <code>e2e/column-prefs.spec.mjs:55</code>（另 :44-45 为旧脚本删块前的历史对账叙述，明确标注「删块前」，不属本件），现象仍在。现行口径核实：<code>scripts/ui_harness.py</code> 默认 port 0（OS 分配）、<code>e2e/global-teardown.mjs</code> 走 <code>UI_HARNESS_PORT</code> 捕获值，仓库无任何固定监听口。</li>
+      <li>2026-11-04 — 修完，状态 <strong>In Progress → Done</strong>。实际修法：按建议改 <code>e2e/column-prefs.spec.mjs</code> 收尾判据注释 —— 固定口 8137/8236 提法删除，改为「netstat 现查本次 run 实际端口均无 LISTENING（端口取自启动日志/捕获值，无固定口，现行 harness 端口由 OS 分配）」，dev.e2e 兜底补注 <code>UI_HARNESS_PORT</code>；:44-45 历史对账叙述按范围守恒保留。验证方式：纯注释改动不涉运行行为，<code>node --check e2e/column-prefs.spec.mjs</code> 过，grep 确认收尾判据行已无固定口数字。</li>
     </ul>
   </section>
 

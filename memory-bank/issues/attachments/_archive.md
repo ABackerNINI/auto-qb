@@ -11,7 +11,6 @@
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
-- [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例
 - [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](../26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery 并行用例端口抢占偶发红，单跑均绿；与本轮 CSS 改动无关
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
@@ -104,6 +103,7 @@
 - [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
 - [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
+- [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口
 - [bug] [搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留](../26-11-03-0254-bug-search-uncovered-stale-virtual-row.html) — 未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索
 - [bug] [full_checking 自愈 pop 后缺 state.save 落盘](../26-11-03-0104-bug-full-checking-selfheal-state-save.html) — recheck_fails 自愈清除写点不落盘，崩溃/断电窗口可能丢失自愈结果
 - [test] [sidefx 会话守卫在串行单跑时误报越界(TEMP_ROOTS 导入时固化)](../26-11-02-2142-test-sidefx-serial-false-positive.html) — 串行 -n 0 跑测试时 sidefx 把 R:/Temp 临时目录删除全判越界；conftest 先 import sidefx 再 bootstrap 切 TMPDIR

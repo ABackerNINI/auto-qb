@@ -52,8 +52,10 @@ import { readInst } from './lib/vm.mjs';
  *    colHide/dragCol/colState/clearCols, 原位留指路注释; `node --check` 过。
  *  · 步骤5 双复跑: 旧脚本 4 项 0 FAIL(14→4, 恰降 10 = 5 名 × 2 皮肤); dev.e2e 全量复跑
  *    76 passed / 10 skipped / 0 failed(2.7m)。`npm run test:e2e:fast` 4 passed(7.7s)与本批前一致。
- *  · Windows 收尾: stub(TaskStop)杀净后 netstat 现查 8137/8236 均无 LISTENING、tasklist 无
- *    python 孤儿进程; dev.e2e 侧由 e2e/global-teardown.mjs 兜底(日志见「收尾兜底」行)。
+ *  · Windows 收尾: stub(TaskStop)杀净后 netstat 现查本次 run 实际端口均无 LISTENING(端口取自
+ *    启动日志/捕获值, 无固定口 —— 旧脚本固定口叙述已随其退役, 现行 harness 端口由 OS 分配)、
+ *    tasklist 无 python 孤儿进程; dev.e2e 侧由 e2e/global-teardown.mjs 兜底
+ *    (UI_HARNESS_PORT 捕获值, 日志见「收尾兜底」行)。
  *
  * ── D4 断言翻译守则落地说明(计划 §3.5) ──
  *  · 多标签/多视口(计划 D4 专条): 每条 test 独立 context(localStorage 天然隔离), test 内
