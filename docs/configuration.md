@@ -168,7 +168,8 @@ config:
     #     rule1: ...
 
     # tracker 站点配置 (也可在 Web UI 设置页增删改, 「站点」分区可一键导入缺失站点自动生成默认配置;
-    # 用 YAML 时建议先 `--export-yaml missing.yml --only-missing` 导出骨架再改)
+    # 用 YAML 时建议先 `--export-yaml missing.yml --only-missing` 导出骨架再改;
+    # 缺失站点默认按种子共现合并为一个站点, `--split-trackers` 可拆回逐域名条目)
     trackers:
         tracker1:                                  # 自定义 tracker 站点名称
             domains:                               # 站点域名，可以有多个

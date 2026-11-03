@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="missing-site-tracker-merge">
 <meta name="doc-status" content="Open">
 <meta name="doc-added" content="26-11-03-2337">
-<meta name="doc-updated" content="26-11-03-2337">
+<meta name="doc-updated" content="26-11-04-0036">
 <meta name="doc-refs" content="">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>缺失站点导出/导入 tracker 合并</h1>
 <p class="lede">缺失站点导出(CLI)与导入(WEBUI)默认把「同种子共现」的多个 tracker 域名合并为一个站点条目(<code>domains</code> 数组),可选拆回逐域名;两端共用同一分组构件,口径不漂移。设计主轴:分组只在缺失域名内做 union-find,合并条目的站点名/默认标签由组内最短域名生成。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-03-2337 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-04-0036 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「导出缺失站点时默认合并同一颗种子的多个 tracker 到同一个站点,可选择分开;WEBUI 导入缺失站点同步支持」→ 会话 grilling 两轮拍板(D1~D6,见 §06)后定稿
 </div>
 
@@ -166,6 +166,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-03-2337</span> 初版:用户指令发起,grilling 两轮(8 问)拍板 D1~D6 后定稿;主线=后端共用分组构件 + CLI 默认合并(--split-trackers 拆分)+ WEBUI 三钮自适应引导,分期 M1~M5。</li>
+  <li><span class="tag">R1 · 26-11-04-0036</span> M1~M5 全部完成:M1 exporter 共现分组构件(group_missing_domains / build_merged_entry)、M2 CLI 默认合并 + <code>--split-trackers</code> 与配合校验、M3 <code>/api/sites/missing</code> 增 groups 分组字段、M4 WEBUI 导入三钮自适应引导;M5 全量测试绿(4944 passed / 10 skipped / 覆盖率 99%,实测誊写见 kb.baseline 新切片)+ 基线切片落档;README 与 docs/configuration.md 回写默认合并与 <code>--split-trackers</code> 说明。§04 各期 DoD 达成;真机验收与 GUI 冒烟未做,doc-status 保持 Open。</li>
 </ul>
 
 </div>

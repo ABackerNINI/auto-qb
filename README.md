@@ -126,7 +126,7 @@ config:
         token: (留空)     # 访问密钥; 留空 = 首次启动随机生成
 ```
 
-启动程序(见下一步)后,浏览器打开 `http://localhost:8080`,输入访问密钥登录,在「设置」页完成站点 / 规则 / 限速曲线等**全部配置**:表单化增删改、站点支持**一键导入**(自动发现种子里尚未配置的 tracker 站点并生成默认配置, 核对后保存生效)、保存前自动校验、自动 `.bak` 备份、改完即时生效。
+启动程序(见下一步)后,浏览器打开 `http://localhost:8080`,输入访问密钥登录,在「设置」页完成站点 / 规则 / 限速曲线等**全部配置**:表单化增删改、站点支持**一键导入**(自动发现种子里尚未配置的 tracker 站点并生成默认配置, 存在多域名共现的缺失站点会先弹三钮引导: 合并导入为默认, 也可拆分为逐域名条目; 核对后保存生效)、保存前自动校验、自动 `.bak` 备份、改完即时生效。
 
 > 访问密钥留空时首次启动自动生成(存到数据目录的 `web.token` 文件,日志打印一次);本机访问可开启「跳过本地验证」免密钥进入。
 >
@@ -143,6 +143,10 @@ uv run auto-qb minimal.yml --export-yaml config.yml
 
 # 加 --only-missing 只导出尚未配置的 tracker, 生成最小骨架(同样会覆盖输出文件)
 uv run auto-qb minimal.yml --export-yaml config.yml --only-missing
+
+# 缺失站点默认按种子共现合并: 同一颗种子上出现的多个缺失域名并为一个站点;
+# 加 --split-trackers 拆回逐域名条目(需配合 --export-yaml, 两种导出模式均生效)
+uv run auto-qb minimal.yml --export-yaml config.yml --only-missing --split-trackers
 ```
 
 > 全部配置项的字段说明与完整示例见[配置参考](docs/configuration.md);直接编辑 YAML 后需重启程序生效。
@@ -178,6 +182,7 @@ uv run auto-qb --tray
 | `config`                     | 配置文件路径(位置参数,默认 `config.yml`)                              |
 | `--export-yaml`, `-e OUTPUT` | 导出 YAML 配置模板到 OUTPUT 后退出(不进入自动管理)                     |
 | `--only-missing`             | 仅导出尚未配置的 tracker 站点(配合 `--export-yaml` 使用)               |
+| `--split-trackers`           | 缺失站点拆回逐域名条目(默认把种子共现的缺失域名合并为一个站点; 配合 `--export-yaml` 使用) |
 | `--dry-run`, `-n`            | 试运行:只打印将执行的动作,不实际操作 qBittorrent                      |
 | `--tray`                     | 托盘常驻模式:系统托盘图标 + 状态窗口;再次启动会唤起已运行实例的窗口   |
 | `--export-torrents_info`     | 把全部种子的信息导出到 `torrents.txt`(排障用,导出后退出)             |
