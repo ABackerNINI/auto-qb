@@ -4,10 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (64)
+## Open (63)
 
 - [bug] [conftest 按命令名拦截 PowerShell: 非通知用途调用被误拦, 掩盖真实副作用](../26-11-03-2216-bug-test-notifier-guard.html) — NOTIFIER_EXECUTABLES 按命令名拦 powershell/pwsh: 非通知用途的子进程在 Popen 构造前抛 FileNotFoundError, sidefx 台账因此出现偶然遮蔽与假绿
-- [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
 - [test] [HR feeder wake 转发测试未断言转发目标](../26-11-03-1209-test-test-hr-runtime-feeder-wake-forward-unasserted.html) — 用例名声称转发 worker.wake()，实际只调用不加断言
 - [bug] [sim_qb torrents/export 生成非法 bencode：announce 长度标 26、实际 25](../26-11-03-1145-bug-sim-qb-export-bencode.html) — minimal_bencode 把 announce 值写成 26: 但 URL 只有 25 字节，消费端解析必然错位；模拟器导出种子不可用
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
@@ -77,10 +76,11 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (378)
+## Done (379)
 
 - [bug] [热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复)](../26-11-03-2206-bug-webui-hotreload-group-index-vanish.html) — 配置 L2 结构重建调用 store.reset_runtime 清空 groups/member_to_key, 但无任何模块对存量种子重归组; 只有首轮全量(重启)的 torrents_added 会重建, 故辅种页长期空态
 - [docs] [tests-real env_registry 环境2 注释与配置不一致](../26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html) — 注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01
+- [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
 - [docs] [docs/configuration.md 缺 web.transfer 配置参考](../26-11-03-1208-docs-docs-configuration-transfer-missing.html) — 转移功能已落地，memory-bank keys.md 有全量键，用户配置参考无对应段
 - [docs] [docs/context7 索引锁定版本与模块路径已漂移](../26-11-03-1208-docs-docs-context7-version-path-drift.html) — 5/10 依赖版本与 uv.lock 不符，2 个模块路径已不存在
 - [docs] [根 README 用例规模数字停留在 2026-10-03](../26-11-03-1208-docs-docs-readme-test-scale-drift.html) — README 写 2300+/2312/2309+3，最新基线 4971+2

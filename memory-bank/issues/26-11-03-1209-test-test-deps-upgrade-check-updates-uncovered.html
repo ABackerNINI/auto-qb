@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1209">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="code-review-3">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-04-0133-testing-deps-upgrade-check-updates.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="deps-upgrade check_updates.py 无自动化测试">
 <meta name="issue-summary" content="版本段切分/增量分类/部分失败容错无回归网">
 <title>deps-upgrade check_updates.py 无自动化测试 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 12:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 12:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 — 认领（用户直接指派），状态 <strong>In Progress</strong>；开工复验：现象仍成立（<code>tests/</code> 无 <code>check_updates</code> 引用，无任何测试文件）</li>
+      <li>2026-11-04 — 状态 <strong>Done</strong>。实际修法：新建 <code>tests/test_deps_upgrade_check_updates.py</code>（21 用例）—— <code>version_segments</code>/<code>delta_kind</code> 参数化（CalVer、rc 预发布、v 前缀、位数不等、非数字段、六类增量、数字序非字典序）+ watch/pin 单个上游源失败降级 + 支持矩阵触发行；进程内 importlib 加载脚本，网络访问全 monkeypatch 打桩（零真实网络）。验证方式：红绿双验（2 处源码突变均被杀死后还原）+ 全量 <code>test.quick</code> 5038 passed / 2 skipped</li>
     </ul>
   </section>
 
