@@ -132,30 +132,44 @@ def group_missing_domains(torrent_sets: list, missing: set) -> list:
     return sorted(sorted(group) for group in groups.values())
 
 
-def build_merged_entry(domains: list, taken: set) -> dict:
+def build_merged_entry(domains: list, taken: set) -> tuple:
     """为一组共现缺失域名生成合并条目: 代表域名 = 组内最短(tie 取字典序)。
 
-    站点名经 gen_tracker_name(代表域名, taken) 生成并就地登记;
-    其余字段复用 build_tracker_entry(代表域名), domains 键改写为整组 sorted 列表。
+    返回 (name, entry) 二元组: name = gen_tracker_name(代表域名, taken) 生成的站点名
+    (已就地登记进 taken); entry 其余字段复用 build_tracker_entry(代表域名),
+    domains 键改写为整组 sorted 列表。
     """
     rep = min(domains, key=lambda d: (len(d), d))
-    gen_tracker_name(rep, taken)
+    name = gen_tracker_name(rep, taken)
     entry = build_tracker_entry(rep)
     entry["domains"] = sorted(domains)
-    return entry
+    return name, entry
 
 
-def export_yaml_template(api, config, config_path: str, output_path: str, dry_run: bool, only_missing: bool = False):
+def export_yaml_template(
+    api,
+    config,
+    config_path: str,
+    output_path: str,
+    dry_run: bool,
+    only_missing: bool = False,
+    split_trackers: bool = False,
+):
     """
     生成 YAML 配置模板: 导出种子中未在配置里定义的 tracker 域名。
 
     only_missing=True 时只导出未配置的站点(最小骨架, 不含已有配置, 便于直接复制);
     否则将缺失条目追加到现有配置后完整导出。
+    split_trackers=False(默认)时同一颗种子共现的缺失域名合并为一个站点;
+    True 拆回逐域名(行为与改造前一致)。
     """
-    # 1. 获取所有种子并收集 tracker 域名
+    # 1. 获取所有种子并收集 tracker 域名(逐种集合保留, 共现分组复用同一次逐种遍历)
     torrents = api.torrents_info()
     logger.info(f"扫描 {len(torrents)} 个种子的 tracker")
-    all_domains = collect_all_tracker_hostnames(api)
+    torrent_sets = collect_torrent_tracker_hostnames(api)
+    all_domains = set()
+    for host_set in torrent_sets:
+        all_domains |= host_set
     logger.info(f"发现 {len(all_domains)} 个去重 tracker 域名")
 
     # 2. 筛选出未配置的域名
@@ -177,8 +191,15 @@ def export_yaml_template(api, config, config_path: str, output_path: str, dry_ru
     trackers_config = export_config.get("config", {}).get("trackers", {})
 
     taken = set(trackers_config)
-    for domain in sorted(missing_domains):
-        trackers_config[gen_tracker_name(domain, taken)] = build_tracker_entry(domain)
+    if split_trackers:
+        # 拆分路径(= 改造前行为): 逐域名一条
+        for domain in sorted(missing_domains):
+            trackers_config[gen_tracker_name(domain, taken)] = build_tracker_entry(domain)
+    else:
+        # 默认合并: 同一颗种子共现的缺失域名并为一个站点(全单元素组时退化为逐域名)
+        for group in group_missing_domains(torrent_sets, missing_domains):
+            name, entry = build_merged_entry(group, taken)
+            trackers_config[name] = entry
 
     export_config["config"]["trackers"] = trackers_config
     # 写出侧打标(计划 26-09-26-0506): 模板统一带当前 schema 版本, 用户拿去填键即被版本链接管

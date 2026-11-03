@@ -16,6 +16,7 @@
 - test_main_hr_status_mutex_with_hr_once: --hr-status 与 --hr-once 互斥 -> 退出码 2
 - test_main_hr_status_runs_report_without_qb: --hr-status 不构造 manager(不连 qB), 行数上限透传
 - test_main_tray_mutex_with_export: --tray 与 --export-yaml 互斥 -> 退出码 2
+- test_main_split_trackers_requires_export_yaml: --split-trackers 单独传(无 --export-yaml)配合校验 -> 退出码 2
 - test_main_tray_mode_calls_run_tray: --tray 模式交由 ui.run_tray 托管
 - test_main_tray_second_instance_wakes_running: --tray 双开唤起已运行实例 -> 静默退出 0
 - test_main_tray_second_instance_wake_fail_returns_1: --tray 双开唤起失败 -> 常规锁错误退出 1
@@ -228,6 +229,17 @@ def test_main_unrelated_value_error_not_swallowed():
 def test_main_tray_mutex_with_export():
     """--tray 与 --export-yaml 互斥: parser.error 退出码 2(manager 未构造)"""
     with _patch_argv("auto-qb", "config.yml", "--tray", "--export-yaml", "out.yml"), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        with pytest.raises(SystemExit) as ei:
+            main()
+    assert ei.value.code == 2
+    m_qb.assert_not_called()
+
+
+def test_main_split_trackers_requires_export_yaml():
+    """--split-trackers 单独传(无 --export-yaml): 配合校验 parser.error 退出码 2(manager 未构造)"""
+    with _patch_argv("auto-qb", "config.yml", "--split-trackers"), \
             mock.patch("auto_qb.cli.QbManager") as m_qb:
         from auto_qb.cli import main
         with pytest.raises(SystemExit) as ei:

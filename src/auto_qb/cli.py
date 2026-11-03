@@ -24,7 +24,8 @@ def export_yaml(manager: QbManager, args):
         manager.config_path,
         args.export_yaml,
         args.dry_run,
-        only_missing=args.only_missing
+        only_missing=args.only_missing,
+        split_trackers=args.split_trackers
     )
     return True
 
@@ -99,6 +100,11 @@ def main():
         action="store_true",
         help="只导出未配置的 tracker 站点(需配合 --export-yaml, 生成最小骨架)",
     )
+    parser.add_argument(
+        "--split-trackers",
+        action="store_true",
+        help="同一颗种子共现的缺失 tracker 域名默认合并为一个站点; 本开关拆回逐域名(需配合 --export-yaml)",
+    )
     parser.add_argument("--dry-run", "-n", action="store_true", help="Dry run")
     parser.add_argument(
         "--tray",
@@ -156,6 +162,8 @@ def main():
         parser.error("--tray 与导出模式互斥")
     if args.hr_html_dir and not args.hr_once:
         parser.error("--hr-html-dir 需配合 --hr-once 使用")
+    if args.split_trackers and not args.export_yaml:
+        parser.error("--split-trackers 需配合 --export-yaml 使用")
     if args.hr_once and (args.tray or args.export_yaml or args.export_torrents_info):
         parser.error("--hr-once 与托盘/导出模式互斥")
     if args.hr_status and (args.tray or args.export_yaml or args.export_torrents_info):
