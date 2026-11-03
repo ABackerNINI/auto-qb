@@ -29,7 +29,7 @@
  * 桩是长驻共享实例, 每条用例 afterEach 必须删除自己加的种子。
  */
 import { expect, test } from '@playwright/test';
-import { BASE_URL } from './harness.mjs';
+import { baseUrl } from './harness.mjs';
 import { collectRuntimeErrors, installRuntimeErrorGuard } from './lib/errors.mjs';
 import { tab } from './lib/gestures.mjs';
 import { readInst } from './lib/vm.mjs';
@@ -61,7 +61,7 @@ const DUPLICATE_REPORT = `(() => {
 /** 桩控制面: 运行期新增一个合成种子(名称含 token), 返回 hash 供收尾删除。 */
 async function addSeed(request, name, category = '') {
     const res = await request.post(
-        `${BASE_URL}/__harness__/add_torrent?name=${encodeURIComponent(name)}` +
+        `${baseUrl()}/__harness__/add_torrent?name=${encodeURIComponent(name)}` +
         `&category=${encodeURIComponent(category)}`,
     );
     expect(res.ok(), '桩控制面 add_torrent 必须 200').toBeTruthy();
@@ -71,7 +71,7 @@ async function addSeed(request, name, category = '') {
 /** 首屏直接落种子页: 首轮 /api/state?view=torrent 不回 groups => this.groups=[]。 */
 async function openSeedViewFirst(page, skin) {
     await page.addInitScript(() => localStorage.setItem('autoqb.ui.view', 'torrents'));
-    await page.goto(`${BASE_URL}/${skin}/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${baseUrl()}/${skin}/`, { waitUntil: 'domcontentloaded' });
     await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 15_000 });
     await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 20_000 });
     /* 前奏必须真的生效: 种子页首轮 groups 为空 —— 否则下面的命中不会被判成「未归组」,
@@ -102,7 +102,7 @@ for (const skin of SEARCH_SKINS) {
 
         test.afterEach(async ({ request }) => {
             if (!addedHash) return;
-            await request.post(`${BASE_URL}/__harness__/remove_torrent?hash=${addedHash}`);
+            await request.post(`${baseUrl()}/__harness__/remove_torrent?hash=${addedHash}`);
             addedHash = null;
         });
 
@@ -171,7 +171,7 @@ for (const skin of SEARCH_SKINS) {
             const staleVirtual = `vm.filteredGroups.some((g) => g.virtual && g.members.some((m) => m.hash === ${JSON.stringify(added.hash)}))`;
 
             // 删除走生产路径 => search_rev 自增 => 静默重查(冷却 2s + 轮询 2s; 25s 是故障余量)
-            await request.post(`${BASE_URL}/__harness__/remove_torrent?hash=${added.hash}`);
+            await request.post(`${baseUrl()}/__harness__/remove_torrent?hash=${added.hash}`);
             await expect.poll(() => readInst(page, 'vm.searchHits.has(' + JSON.stringify(added.hash) + ')'), { timeout: 25_000 }).toBe(false);
             await expect.poll(() => readInst(page, hashRows), { timeout: 25_000 }).toBe(0);
             await expect.poll(() => readInst(page, staleVirtual), { timeout: 5_000 }).toBe(false);

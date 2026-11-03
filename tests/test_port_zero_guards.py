@@ -10,6 +10,7 @@
 - test_global_teardown_reads_captured_port: teardown 读 UI_HARNESS_PORT, 不导入固定 PORT
 - test_no_reusable_port_helper_in_scripts: scripts/ 下无取号模块/`def free_port`
 - test_tests_real_free_port_has_rebind_selfcheck: tests-real 取号含回绑自验且 RETRIES=3
+- test_e2e_modules_use_lazy_base_url: e2e 全部 .mjs 不得引用已删除的 BASE_URL(新增 spec 回潮守阵)
 """
 from __future__ import annotations
 
@@ -30,6 +31,19 @@ def test_harness_port_contract():
     assert "process.env.E2E_PORT" not in text, "只允许 `'E2E_PORT' in process.env` 的存在性检测"
     assert "WAIT_STDOUT" in text and "export function baseUrl" in text
     assert "--port 0" in text, "起桩命令必须显式 --port 0"
+
+
+def test_e2e_modules_use_lazy_base_url():
+    """新增 spec 最易回潮的点: 从 harness.mjs import 已删除的 BASE_URL。
+
+    harness.mjs 侧守阵(上一条)只保证定义不再出现, 拦不住调用方 —— 2a3e22db 新增的
+    search-uncovered-no-duplicate.spec.mjs 就这样带着 BASE_URL 进库, Playwright 收集期
+    直接 SyntaxError(CI 红), 故这里扫整个 e2e/ 的 .mjs。
+    """
+    offenders = [
+        str(p.relative_to(REPO)) for p in (REPO / "e2e").rglob("*.mjs") if "BASE_URL" in p.read_text(encoding="utf-8")
+    ]
+    assert not offenders, f"e2e 一律 baseUrl() 懒取值, 不得 import 静态 BASE_URL: {offenders}"
 
 
 def test_playwright_web_server_uses_wait():

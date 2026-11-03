@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (75)
+## Open (76)
 
 - [docs] [tests-real env_registry 环境2 注释与配置不一致](../26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html) — 注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01
 - [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
@@ -16,6 +16,7 @@
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）](../26-11-03-1144-bug-gtm-auth-body-drain.html) — 鉴权失败分支不读请求体即回 401 并关连接，Win 上客户端偶发 WinError 10053，test_auth_required_on_all_write_endpoints 间歇失败
 - [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](../26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量
+- [test] [site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿](../26-11-03-1135-test-e2e-site-alerts-order-pollution.html) — 全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](../26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败
 - [bug] [flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖](../26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html) — views.css @media(max-width:900px) 的 .ce-page padding 12px 12px 24px 恒被 dialogs.css 的 .ce-page padding 16px 12px calc(...) 覆盖, 移动端紧凑内边距从未生效
 - [test] [前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫](../26-11-03-1120-test-webui-config-normalize-parity-gap.html) — config_rules.js 手抄 compat.py 的动作/条件/choose 归一语义, 两套期望分散在 Python 与 DOM 电池, 无同输入同输出的跨语言对拍用例

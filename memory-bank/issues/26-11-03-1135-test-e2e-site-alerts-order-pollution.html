@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="e2e-site-alerts-order-pollution">
+<meta name="issue-stamp" content="26-11-03-1135">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="e2e-full-run-pollution">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿">
+<meta name="issue-summary" content="全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关">
+<title>site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿</h1>
+    <p class="lede">全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-03-1135-test-e2e-site-alerts-order-pollution</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:35</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-11-03 11:00 前后, 修 CI <code>BASE_URL</code> 收集崩溃后做<strong>全量 e2e 验收</strong>时撞见: <code>npx playwright test</code>
+    跑 440 例, <code>site-alerts.spec.mjs</code> 稳定红 6 条(3 用例 × prism/atlas), 其余 spec 的收集与执行正常。
+    同一份代码<strong>只跑该文件</strong>则 8 passed 全绿 —— 典型的「全量红 / 隔离绿」顺序或共享状态污染。</p>
+    <p>触发条件: 全量(48 个 spec 共享同一 webServer 桩进程)且 <code>site-alerts</code> 排在前面的 spec 之后执行;
+    单文件隔离、或只跑该文件时必绿。与本轮 <code>BASE_URL</code> 修复无关(修前该文件是收集期就崩, 根本跑不到)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 全量（取证 2026-11-03 10:42, HEAD 4a9e233c + 本地 BASE_URL 修复; 本机 CI=true ⇒ retries=1）
+$ npx playwright test
+Running 440 tests using 1 worker
+  ✓  360 ...
+  ✘  361 [chromium] › e2e\site-alerts.spec.mjs:71:5 › 站点问题走颜色: 缺配置橙底+虚线 / 报错红底, tooltip 挂整块 chip @fast (prism) (30.1s)
+  ✘  362 ... 同一用例 (retry #1) (31.1s)
+  ✘  364 [chromium] › e2e\site-alerts.spec.mjs:209:5 › 搜索命中让出底色: 站点问题仍占填充, 命中改 inset 描边 (prism) (1.8s)
+  ✘  365 ... 同一用例 (retry #1) (2.0s)
+  ✘  366 [chromium] › e2e\site-alerts.spec.mjs:236:5 › 明细行同语义: .m-site 染文字色 + 同款 tooltip (prism) (16.6s)
+  ✘  367 ... 同一用例 (retry #1) (17.7s)
+  ✘  368 / 369 / 371 / 372 / 373 / 374 = 同 3 用例的 atlas 皮肤（均各跑 2 次）
+  416 passed, 6 failed (21.9m)
+
+Error: 缺站点配置的 chip 应染橙底
+expect(locator).toBeVisible() failed
+Error: element(s) not found
+> 77 | await expect(noConf.first(), '缺站点配置的 chip 应染橙底').toBeVisible({ timeout: 30_000 });
+
+Error: 桩里应有 no_site_conf 成员(否则本用例无从命中)
+> 220 | expect(site, '桩里应有 no_site_conf 成员(否则本用例无从命中)').not.toBe('');
+
+# 启动时注入本身是成功的（同一轮全量的 webServer 首行）
+[WebServer] [harness] 站点健康两态已注入: 1 行缺配置(no_site_conf) + 1 行 tracker 报错(tracker_error)
+
+# 隔离（取证 2026-11-03 11:00）
+$ commands run dev.e2e -- e2e/site-alerts.spec.mjs
+8 passed (prism/atlas 各 4)
+
+# 组合复现（取证 2026-11-03 10:55）—— 用三个前置 spec + site-alerts，32 例
+$ commands run dev.e2e -- e2e/search-auto-refresh.spec.mjs e2e/search-uncovered-no-duplicate.spec.mjs e2e/shift-select-anchor.spec.mjs e2e/site-alerts.spec.mjs
+26 passed, 6 failed (4.1m)   # 与全量同一组 6 条，site-alerts 排在它们之后即红</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>全量 <code>npx playwright test</code> / <code>commands run dev.e2e</code>（48 个 spec 共享一个 webServer 桩进程）时必现；单文件隔离不现。</td></tr>
+      <tr><td>影响范围</td><td>CI Playwright job 与本地全量验收长期带 6 条假红，掩盖新增回归信号；产品功能本身无证据受损（隔离全绿）。</td></tr>
+      <tr><td>严重度</td><td>中（CI 无法转绿 / 信号噪声；不阻塞发版，但阻塞「全量绿」判据）。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>e2e/site-alerts.spec.mjs:71</code>（取证 2026-11-03 11:35）· 首测「站点问题走颜色」· grep 关键词 <code>缺站点配置的 chip 应染橙底</code></li>
+      <li><code>e2e/site-alerts.spec.mjs:220</code>（同上）· 预取 <code>no_site_conf</code> 成员断言 · grep 关键词 <code>桩里应有 no_site_conf 成员</code></li>
+      <li><code>e2e/site-alerts.spec.mjs:236</code>（同上）· 明细行 <code>.m-site</code> 同语义 · grep 关键词 <code>明细行同语义</code></li>
+      <li><code>scripts/ui_harness.py:179,197</code>（同上）· 桩注入点 · grep 关键词 <code>no_site_conf</code> / <code>站点健康两态已注入</code></li>
+      <li><code>e2e/lib/gestures.mjs:114</code>（同上）· <code>openApp</code> · grep 关键词 <code>function openApp</code>（确认每组用例的起手视图/存储前提）</li>
+      <li>可疑共享状态（待查方向）：webServer 桩进程内存态（<code>/__harness__/add_torrent</code> / <code>remove_torrent</code> / config 重载是否重建种子并丢掉 <code>site_alert</code> 标记）、浏览器 localStorage（<code>autoqb.ui.*</code>）、以及 <code>site-alerts</code> 前面按字母序执行的 <code>search-*</code> / <code>shift-select-*</code> spec。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查。已排除：① BASE_URL 收集崩溃（已另修，收集 440/48 通过）；② 端口/URL 写死；③ site-alerts 自身逻辑（隔离 8/8 绿）。<br>
+    已确认：污染由「排在 site-alerts 之前执行的 spec」引入 —— 用 <code>search-auto-refresh</code> + <code>search-uncovered-no-duplicate</code> + <code>shift-select-anchor</code> 三个前置 spec 与 site-alerts 组合跑即可复现同类红，说明桩内共享状态或浏览器存储被前置用例改写。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方向: 先定位污染源 spec（用已复现的三件套做二分：逐个移出前置集，看 6 红是否消失），再按「谁写谁复位」收口。候选方案与代价：</p>
+    <ul>
+      <li><b>A. 前置自证 + 复位</b>：在 <code>site-alerts.spec.mjs</code> 的 <code>beforeEach</code> 重新注入/校验站点健康两态（桩侧暴露一个 idempotent 的 <code>/__harness__/reset_site_alerts</code>），代价最小但要求桩新增一个只读/幂等端点。</li>
+      <li><b>B. 污染源隔离</b>：找到改写共享态的 spec（候选 <code>search-*</code> 的 add/remove_torrent、config 保存类），在其 <code>afterEach</code> 复位，代价是要先定位、且容易再回潮。</li>
+      <li><b>C. 分轮执行</b>：把 <code>site-alerts</code> 划进独立 worker/批次（CI 与 <code>dev.e2e</code> 双份配置），代价是总时长上升、且掩盖真污染。</li>
+    </ul>
+    <p>倾向 A + B 组合：先用二分定位源，A 兜底判据，不选 C。</p>
+    <p><b>验收判据</b>：① 全量 <code>npx playwright test</code>（或 <code>commands run dev.e2e</code>）440 例跑完且 site-alerts 6 条转绿、其余用例无新增红；② 隔离 <code>commands run dev.e2e -- e2e/site-alerts.spec.mjs</code> 仍 8 passed；③ 用上面的「三件套 + site-alerts」组合复现命令跑出 32 passed。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-03 11:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-03-1135-test-e2e-site-alerts-order-pollution.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

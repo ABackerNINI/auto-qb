@@ -3,8 +3,8 @@
 > 摘要: `scripts/ui_harness.py` + `e2e/`(@playwright/test)是本仓库覆盖前端渲染的唯一手段; 这里是它的环境坑与验证手法
 > 等级: L1
 > (部分条目源自旧单页冒烟脚本时代 —— 该脚本 2026-10-06 已退役, 判据对 e2e 新轨同样成立)。
-> 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因, 回归, 验错对象, 旧进程, 旧页签, 桩服务死了, 皮肤差异, prism 正常 atlas 异常, 服务端发出的字节
-**Refs:** memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md
+> 触发: 浏览器冒烟, e2e, Playwright, Edge, 白屏, 前端改完, 时序复现, 聚合行状态色, Cannot find module playwright, 修饰键点击, Ctrl+click, 多选失败, site-chip, 点击落点, 落点验证 5 拍未过, 最后拦截者 (null), elementFromPoint, scrollIntoView, 行高于视口, sticky-head 拦截面, 3000 种子, 规模轮, 用例超时, 冒烟整体执行, stash 对照, 归因, 回归, 验错对象, 旧进程, 旧页签, 桩服务死了, 皮肤差异, prism 正常 atlas 异常, 服务端发出的字节, BASE_URL, does not provide an export named, 收集期 SyntaxError, 新增 spec 回潮
+**Refs:** memory-bank/testing/baselines/26-10-29-0348-webui-move-dialog-pick-geometry.md, memory-bank/testing/baselines/26-11-03-1053-ci-e2e-base-url-fix.md
 
 ### 能力与定位
 
@@ -68,6 +68,32 @@
   *现状(2026-11-03, 计划 26-11-03-0316): e2e 端口已改为由脚本取号(`ui_harness --port 0` +
   Playwright `webServer.wait` 捕获回传), `E2E_PORT` 已取消(设置即报错); 残留桩归属按实绑端口 +
   命令行里的 clone 路径判。以上复发记录保留为当时的现场。*
+
+### 新增 spec 从 harness import `BASE_URL` ⇒ 收集期 SyntaxError, 一条 spec 拖垮全量收集
+
+- **触发**: 跑全量 e2e(`commands run dev.e2e`)在**收集阶段**就崩(一条用例都没跑), 报
+  `SyntaxError: The requested module './harness.mjs' does not provide an export named 'BASE_URL'`。
+- **判别**: 2026-11-03 实证 —— 端口改 0 的机械替换(47a61c7c, 41 个 spec)只覆盖**当时存量**,
+  之后新增的 `e2e/search-uncovered-no-duplicate.spec.mjs`(2a3e22db)照旧
+  `import { BASE_URL } from './harness.mjs'`, 而 `harness.mjs` 早已只导出 `baseUrl()` 函数。
+  ESM 具名导出缺失在**链接期**抛错, 与平台 / 浏览器无关 —— 本机跑同一命令同样必红;
+  本地"绿"只是因为没跑全量收集(未执行 `--list`), CI 一收集就现形。
+- **处置**: spec 一律 `import { baseUrl }` 并在**使用点**调用(`${baseUrl()}/...`) —— 端口要等
+  webServer.wait 注入 `UI_HARNESS_PORT` 后才可读, 模块级常量恒 undefined。新增 spec 先跑
+  `commands run dev.e2e -- --list` 收口。守阵: `tests/test_port_zero_guards.py::test_e2e_modules_use_lazy_base_url`
+  扫 `e2e/` 全部 `.mjs`(`BASE_URL` 零命中) —— 原守阵只查 harness.mjs 的**定义侧**, 拦不住调用方回潮。
+
+### 全量套件增长撞预算: `dev.e2e` 引擎 timeout / CI job timeout 到点强杀
+
+- **触发**: `commands run dev.e2e` 报 `[FAIL] dev.e2e 超时(1200s) —— 卡住的全量 playwright 运行`
+  (用例没跑完、也没失败清单), 或 GitHub Playwright job 在 20 分钟处被 canceled。
+- **判别**: 2026-11-03 实证 —— 套件涨到 440 例后全量实测 21.9m(本机 CI=true 会 retry 1 次), 旧
+  `dev.e2e` 预算 1200s 与 CI job `timeout-minutes: 20` 双双不够; 这不是用例挂起, 是预算顶满(看
+  `--list` 能秒过、小范围能跑绿即可区分)。
+- **处置**: 两处预算**同轮按 ≈2× 实测抬高并保持单点** —— `.commands/dev/config.toml` 的 `timeout`
+  字段是引擎唯一读源(别在引擎/脚本里再写一个数字); 抬完用引擎加载器核对解析值
+  (`_config.load_tree().tasks['dev.e2e'].timeout`) + 跑一次 `commands run dev.e2e -- --list` 证 task 可启动。
+  套件再涨就该拆轮/与 CI 分工, 别再靠调数字顶。
 
 ### 「冒烟整体执行 — elementHandle.click: Timeout」≠ 桩没起来 —— 归因先做 HEAD stash 对照
 
