@@ -6,20 +6,22 @@
 
 ## 测试计划
 
-- 正常 delta: 两样本差值进入当日累计; day_total_bytes = up+down
-- 重置归零: 上行/下行/双侧重置三种, delta 记 0 + 告警, 不产生负流量, 另一侧正常计
-- 跨天硬切: day_rolled=True, 旧日累计清零, 跨日流量计入新日
+- 正常 delta: 两样本差值进入当日累计; day_total_bytes = up+down; 同一读数重放 3 次
+  第 2/3 轮 (0,0) (T7 幂等 I3)
+- 重置归零: 上行/下行/双侧重置三种, 该卡该侧 delta 记 0 + 告警, 不产生负流量, 另一侧正常计
+- 跨天硬切: day_rolled=True, 旧日累计清零, 跨日流量计入新日, 逐卡记忆保留 (T10)
 - 挂钟回跳跨日界: 不硬切 (累计保持 + 采样日钉原日界 + 告警), 日界再前进恢复正常硬切
 - 基线: 首样本 delta 恒 0 + baseline=True; 全过滤空场景告警且不改任何逐卡记忆
 - 适配器过滤: loopback 三名形态 (lo/lo0/Loopback Pseudo-Interface 1) / down / include 白名单 /
   exclude 黑名单 / stats 缺失不收编 / 顺序优先级 (include 不翻案 loopback 开关)
 - 断连-恢复: 无真实增长记 (0,0) (T1); 有真实增长只记增量 (T2); 全过滤后恢复仍记 (0,0) 且
   记忆保留 (T4); 首次出现的网卡只立基线不入账
-- state 恢复: 今天载荷累计+基线接续; 昨天载荷累计清零基线接续; 未来/损坏/非映射/版本不符 ->
-  降级 (告警 + 无基线); 降级后首样本 baseline=True; v1 载荷升级保留 day 累计、逐卡记忆置空,
-  首轮 (0,0) + 升级告警 (T8)
+- state 恢复 (v2 载荷): 今天累计 + 逐卡基线接续; 昨天累计清零、逐卡记忆接续;
+  未来/损坏/非映射/版本不符 -> 降级 (告警 + 无基线); 降级后首样本 baseline=True
+- state 恢复 (v1 兼容): 保留 day 累计、忽略合计基线 (逐卡记忆置空), 首轮 (0,0) +
+  一条「state v1 升级」告警, state_restored=True (T8)
 - dat 兜底: 今天行恢复 (KB->字节, TM 倒序与正序两态); 无今天行返回 False; 基线仍取当前值
-- snapshot/restore round-trip: 快照载荷恢复后与原状态一致
+- snapshot/restore round-trip: v2 载荷 (version=2 + nic_baseline, last_* 为各卡求和) 恢复后与原状态一致
 """
 
 from __future__ import annotations
@@ -80,6 +82,19 @@ def make_sampler(
 
 
 # ---- 正常 delta ----
+
+
+def test_replay_same_reading_is_idempotent():
+    """T7 (I3 幂等): 同一组读数连续采样 3 次, 第 2/3 轮 delta 恒 (0,0)."""
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(1234, 5678), "wlan0": nic(11, 22)}
+    r1 = sampler.sample_once()
+    assert r1.baseline is True and (r1.delta_up_bytes, r1.delta_down_bytes) == (0, 0)
+    for _ in range(2):
+        r = sampler.sample_once()
+        assert (r.delta_up_bytes, r.delta_down_bytes) == (0, 0)
+        assert (r.day_up_bytes, r.day_down_bytes) == (0, 0)
+        assert r.counter_reset is False
 
 
 def test_normal_delta_accumulates_into_day():
@@ -155,8 +170,9 @@ def test_all_adapters_filtered_keeps_baselines_and_new_adapter_only_establishes(
     assert any("无适配器通过过滤" in w for w in r1.warnings)
     counters.page = {"eth0": nic(100, 100)}
     r2 = sampler.sample_once()
-    # eth0 从未被观测过 (只在全空后出现): 按新卡只立基线, 历史累计(100)不入账
-    assert r2.baseline is False
+    # eth0 从未被观测过 (只在全空后出现): 按新卡只立基线, 历史累计(100)不入账;
+    # 全过滤轮没有建立任何记忆 -> 本轮开始时逐卡记忆仍为空, baseline 仍为 True
+    assert r2.baseline is True
     assert (r2.delta_up_bytes, r2.delta_down_bytes) == (0, 0)
     assert (r2.day_up_bytes, r2.day_down_bytes) == (0, 0)
 
@@ -180,6 +196,25 @@ def test_day_rollover_resets_accumulation():
     assert (r2.delta_up_bytes, r2.delta_down_bytes) == (100, 60)
     assert (r2.day_up_bytes, r2.day_down_bytes) == (100, 60)  # 旧日累计已清零
     assert r2.counter_reset is False
+
+
+def test_day_rollover_keeps_nic_baseline():
+    """T10: 23:59 采样后 00:00 采样 -> day 累计清零, 逐卡记忆保留, 该轮 delta 正常."""
+    sampler, clock, counters = make_sampler(clock=FakeClock(datetime(2026, 10, 16, 23, 59, 0)))
+    counters.page = {"eth0": nic(100, 200)}
+    sampler.sample_once()
+    counters.page = {"eth0": nic(300, 500)}  # +200/+300
+    r1 = sampler.sample_once()
+    assert (r1.day_up_bytes, r1.day_down_bytes) == (200, 300)
+    assert sampler.snapshot()["nic_baseline"] == {"eth0": {"up": 300, "down": 500}}
+
+    clock.now = datetime(2026, 10, 17, 0, 0, 1)
+    counters.page = {"eth0": nic(400, 560)}  # +100/+60
+    r2 = sampler.sample_once()
+    assert r2.day_rolled is True
+    assert (r2.delta_up_bytes, r2.delta_down_bytes) == (100, 60)
+    assert (r2.day_up_bytes, r2.day_down_bytes) == (100, 60)  # 旧日累计已清零
+    assert sampler.snapshot()["nic_baseline"] == {"eth0": {"up": 400, "down": 560}}
 
 
 def test_clock_rollback_across_day_boundary_keeps_accumulation():
@@ -361,21 +396,26 @@ def test_all_filtered_preserves_nic_memory_and_counts_later_growth():
 
 
 def test_restore_same_day_resumes_accumulation_and_baseline():
+    """v2 载荷: 今天 -> 累计接续 + 逐卡基线恢复, 首次采样按真实增量入账."""
     sampler, _, counters = make_sampler()
     snap = {
-        "version": 1,
+        "version": 2,
         "day": "2026-10-16",
         "day_up_bytes": 4096,
         "day_down_bytes": 8192,
         "last_up_bytes": 5000,
-        "last_down_bytes": 9000
+        "last_down_bytes": 9000,
+        "nic_baseline": {"eth0": {"up": 5000, "down": 9000}}
     }
     warns = sampler.restore(snap)
     assert warns == ()
+    assert sampler.state_restored is True
+    assert sampler.has_baseline
     assert sampler.day == DAY and sampler.day_up_bytes == 4096 and sampler.day_down_bytes == 8192
-    counters.page = {"eth0": nic(5600, 9300)}  # 相对恢复的基线 +600/+300
+    counters.page = {"eth0": nic(5600, 9300)}  # 相对恢复的逐卡基线 +600/+300
     r = sampler.sample_once()
     assert r.baseline is False
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (600, 300)
     assert (r.day_up_bytes, r.day_down_bytes) == (4096 + 600, 8192 + 300)
 
 
@@ -402,20 +442,24 @@ def test_restore_v1_payload_upgrade_keeps_day_and_zeroes_first_delta():
 
 
 def test_restore_yesterday_clears_accumulation_keeps_baseline():
+    """v2 载荷: 昨天 -> 当日累计清零, 逐卡记忆保留 (跨天停机窗增量归今天)."""
     sampler, _, counters = make_sampler()
     snap = {
-        "version": 1,
+        "version": 2,
         "day": "2026-10-15",
         "day_up_bytes": 4096,
         "day_down_bytes": 8192,
         "last_up_bytes": 5000,
-        "last_down_bytes": 9000
+        "last_down_bytes": 9000,
+        "nic_baseline": {"eth0": {"up": 5000, "down": 9000}}
     }
     warns = sampler.restore(snap)
     assert len(warns) == 1 and "早于今天" in warns[0]
+    assert sampler.state_restored is True and sampler.has_baseline
     assert (sampler.day_up_bytes, sampler.day_down_bytes) == (0, 0)
     counters.page = {"eth0": nic(5100, 9100)}
     r = sampler.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (100, 100)
     assert (r.day_up_bytes, r.day_down_bytes) == (100, 100)  # 跨天停机窗流量归今天
 
 
@@ -446,13 +490,22 @@ def test_restore_none_is_degraded_first_sample_is_baseline():
 
 
 def test_restore_corrupt_variants_all_degraded():
-    base = {
+    base_v1 = {
         "version": 1,
         "day": "2026-10-16",
         "day_up_bytes": 1,
         "day_down_bytes": 1,
         "last_up_bytes": 1,
         "last_down_bytes": 1
+    }
+    base_v2 = {
+        "version": 2,
+        "day": "2026-10-16",
+        "day_up_bytes": 1,
+        "day_down_bytes": 1,
+        "last_up_bytes": 1,
+        "last_down_bytes": 1,
+        "nic_baseline": {"eth0": {"up": 1, "down": 1}}
     }
     bad_cases = [
         "not-a-mapping",
@@ -463,22 +516,25 @@ def test_restore_corrupt_variants_all_degraded():
             "last_up_bytes": 1,
             "last_down_bytes": 1
         },  # 缺 version
-        dict(base, version=2),
-        dict(base, day="not-a-date"),
-        dict(base, day_up_bytes="abc"),
-        dict(base, last_down_bytes=-5),
-        dict(base, day="2026/10/16"),  # 非 ISO
+        dict(base_v1, version=3),  # 不支持的版本
+        dict(base_v1, day="not-a-date"),
+        dict(base_v1, day_up_bytes="abc"),
+        dict(base_v1, last_down_bytes=-5),  # v1 合计基线仍按字段合法性校验
+        dict(base_v1, day="2026/10/16"),  # 非 ISO
+        dict(base_v2, day="not-a-date"),
+        dict(base_v2, day=None),  # day 为 None 但逐卡基线有值
     ]
     for bad in bad_cases:
         sampler, _, _ = make_sampler()
         warns = sampler.restore(bad)
         assert len(warns) == 1, bad
         assert not sampler.has_baseline, bad
+        assert not sampler.state_restored, bad
         assert sampler.day is None, bad
 
 
 def test_restore_valid_state_without_baseline_allows_baseline_sample():
-    # 合法载荷但 last_* 为 None (首次采样前宕机): 不算损坏, 首样本走 baseline
+    # v1 载荷 (首次采样前宕机): 不算损坏 -> 保留当日累计, 逐卡记忆置空, 首样本走 baseline
     sampler, _, counters = make_sampler()
     snap = {
         "version": 1,
@@ -489,7 +545,8 @@ def test_restore_valid_state_without_baseline_allows_baseline_sample():
         "last_down_bytes": None
     }
     warns = sampler.restore(snap)
-    assert warns == ()
+    assert len(warns) == 1 and "state v1 升级" in warns[0]
+    assert sampler.state_restored is True and not sampler.has_baseline
     counters.page = {"eth0": nic(100, 200)}
     r = sampler.sample_once()
     assert r.baseline is True
@@ -561,18 +618,21 @@ def test_snapshot_restore_round_trip():
     sampler.sample_once()
     snap = sampler.snapshot()
     assert snap == {
-        "version": 1,
+        "version": 2,
         "day": "2026-10-16",
         "day_up_bytes": 500,
         "day_down_bytes": 400,
-        "last_up_bytes": 1500,
-        "last_down_bytes": 2400
+        "last_up_bytes": 1500,  # 兼容/观测口径: 各卡基线求和
+        "last_down_bytes": 2400,
+        "nic_baseline": {"eth0": {"up": 1500, "down": 2400}}
     }
 
     revived, _, counters2 = make_sampler()
     assert revived.restore(snap) == ()
+    assert revived.state_restored is True and revived.has_baseline
     counters2.page = {"eth0": nic(1600, 2500)}
     r = revived.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (100, 100)
     assert (r.day_up_bytes, r.day_down_bytes) == (600, 500)
     assert r.baseline is False
 
@@ -580,15 +640,17 @@ def test_snapshot_restore_round_trip():
 def test_snapshot_before_any_sample():
     sampler, _, _ = make_sampler()
     assert sampler.snapshot() == {
-        "version": 1,
+        "version": 2,
         "day": None,
         "day_up_bytes": 0,
         "day_down_bytes": 0,
         "last_up_bytes": None,
-        "last_down_bytes": None
+        "last_down_bytes": None,
+        "nic_baseline": {}
     }
     revived, _, _ = make_sampler()
     assert revived.restore(sampler.snapshot()) == ()
+    assert revived.state_restored is True
     assert not revived.has_baseline
 
 
