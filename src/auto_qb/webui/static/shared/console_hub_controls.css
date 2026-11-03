@@ -376,6 +376,34 @@
   color: var(--error); font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace);
   font-size: 9.5px; font-weight: 600; line-height: 1.2; text-align: center; }
 
+/* ==========================================================================
+   GTM 当日总量虚高告警的常驻横幅(计划 26-11-03-1102 S7c / D5)
+   --------------------------------------------------------------------------
+   **主告知面**: 与 .sb-err 同处状态栏、同范式(图标 + 文案 + 小钮), 差别是它由数据驱动
+   (v-if="gtmAlert", 不依赖 todayTraffic), 有异常就一直挂着, 无异常整组不渲染、不留空位。
+   三皮肤共用本层(颜色一律走皮肤令牌), 皮肤目录**不得**重复定义这三个类名(守阵钉住)。
+   窄屏纪律: 本组只吃剩余空间(flex: 0 1 auto + min-width: 0), 文案 ellipsis; 右侧
+   速度/限速组(.sb-speed)是 flex: 0 0 auto —— 横幅再长也不得把它挤变形。
+   ========================================================================== */
+.sb-gtm-alert { display: inline-flex; align-items: center; gap: 2px; min-width: 0;
+  max-width: min(440px, 46vw); padding-left: 8px; flex: 0 1 auto;
+  border-left: 1px solid var(--border-soft); }
+.sb-gtm-main { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%;
+  padding: 1px 7px; border: 1px solid var(--border-soft); border-radius: var(--radius-sm);
+  background: var(--surface-1); font: inherit; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease); }
+.sb-gtm-main:hover { background: var(--surface-2); border-color: var(--border); }
+.sb-gtm-main .ico { color: var(--warn); flex: 0 0 auto; }
+.sb-gtm-main .lbl { flex: 0 0 auto; color: var(--warn); font-size: 11.5px; font-weight: 600; }
+.sb-gtm-main .val { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--fg); font-weight: 600; font-size: 12.5px;
+  font-family: var(--font-mono, ui-monospace, Consolas, "Cascadia Mono", monospace); }
+.sb-gtm-ack { flex: 0 0 auto; padding: 1px 7px; border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); background: var(--surface-1); color: var(--fg-muted);
+  font: inherit; font-size: 12.5px; line-height: 1.2; cursor: pointer;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease), color var(--dur) var(--ease); }
+.sb-gtm-ack:hover { background: var(--surface-2); border-color: var(--border); color: var(--fg); }
+
 /* 面板本体: v-if 挂载即播入场动画; max-height 兜底防极端窄高视口溢出(状态栏之上留 24px) */
 .err-panel { position: fixed; right: 20px; bottom: calc(var(--statusbar-h, 34px) + 8px); z-index: 121;
   width: min(430px, calc(100vw - 40px));

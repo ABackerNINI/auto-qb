@@ -23,6 +23,11 @@ const HIST_GRAN_ITEMS = [
  * FX-08 改就近弹出时的历史值, 无注释也无佐证必须不同; issue 26-10-20-2231 复验时按
  * 行为零变化口径显式命名保留, 夹取走单点显式传参, 确要统一只改这一个常量。 */
 const SPEED_PAD = 12;
+/* GTM 当日总量虚高告警(计划 26-11-03-1102 S7c / D5)的本机消警单点:
+ * 只写 localStorage(不写服务端状态 —— 避免新增写路径), 键值 = 已确认的 gtm_anomaly.ts;
+ * 展示窗口 24h(服务端只保留最近一轮, 前端按 ts 过滤防"陈年异常"长期占位)。 */
+const GTM_ACK_KEY = "gtm.spike.ack";
+const GTM_ALERT_TTL_MS = 24 * 3600 * 1000;
 
 window.AQB_DIALOGS = {
   methods: {
@@ -55,6 +60,26 @@ window.AQB_DIALOGS = {
     connText(v) {
       if (v === null || v === undefined || v === "") return "—";
       return { connected: "已连接", firewalled: "已连接(防火墙限制)", disconnected: "未连接" }[v] || String(v);
+    },
+    /* ---------------- GTM 告警横幅的两条交互(计划 26-11-03-1102 S7c) ----------------
+     * 点击横幅 -> toast 完整文案(细节只在用户主动要看时才铺开, 状态栏保持一行);
+     * × -> 本机消警: 键 = 当前 gtm_anomaly.ts, 同一 ts 不再显示、新 ts 自动重显。 */
+    ackGtmAlert() {
+      const a = this.gtmAnomaly;
+      if (!a) return;
+      try {
+        localStorage.setItem(GTM_ACK_KEY, a.ts);
+      } catch (e) {
+        /* 隐私模式/存储被禁: 写失败就当本轮没消警(仍显示, 不静默假装已确认) */
+        return;
+      }
+      /* ack 不在响应式数据里: 赋值同内容的新对象触发 gtmAlert 重算(与 refresh() 的整份
+       * 替换同口径, 只多一次 patch), 否则横幅要等下一轮轮询才消失。 */
+      this.status = { ...(this.status || {}) };
+    },
+    showGtmAlert() {
+      const a = this.gtmAlert;
+      if (a) this.toast(a.full, "warn", 8000);
     },
     /* ---------------- 遮罩关窗: 判据必须是"按下的那一点也在遮罩上"(2026-10-03 报障) ----------------
      * 旧写法 @click.self 判的是 click 事件的 target, 而 click 由 mousedown 与 mouseup 的
@@ -458,6 +483,58 @@ window.AQB_DIALOGS = {
     },
     todayTraffic() {
       return (this.traffic.periods || []).find((p) => p.period === "day") || null;
+    },
+    /* ---------------- GTM 当日总量虚高告警(计划 26-11-03-1102 S7c / D5) ----------------
+     * 数据源: traffic.gtm_anomaly(快照可选段, 来自 GTM /status.last_spike)。**判空矩阵**是
+     * 版本兼容与失败降级的单点(旧后端根本没这个键, 旧 GTM 发 null):
+     *   键缺失 / null / 非对象(含数组) / 缺 ts / ts 非字符串或不可解析 / items 为空或没有一条
+     *   可用(需要 nic + up|down + 数值 rate_bps)-> null = 无异常 = 模板整组不渲染。
+     * 只做形状与时间判定, 不读服务端状态、不发请求 => GTM 不可达时主界面完全不受影响(T30)。 */
+    gtmAnomaly() {
+      const raw = (this.traffic || {}).gtm_anomaly;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+      const ts = raw.ts;
+      if (typeof ts !== "string" || !ts.trim()) return null;
+      const t = Date.parse(ts);
+      if (!Number.isFinite(t)) return null;
+      const items = Array.isArray(raw.items)
+        ? raw.items.filter((it) => it && typeof it === "object" && typeof it.nic === "string" && it.nic
+          && (it.dir === "up" || it.dir === "down") && Number.isFinite(Number(it.rate_bps)))
+        : [];
+      if (!items.length) return null;
+      return { ts, t, raw, items };
+    },
+    /* 横幅展示判定单点: 无异常 -> null; 本机已 ack 同一 ts -> null; 超过 24h -> null。
+     * 未来 ts(本机时钟偏差)按新异常处理(不因负 age 静默丢掉真实告警)。
+     * 短版只给 items[0], 多方向追加 +N; 完整版含 ts / delta+dt_s / threshold_bps, 点击横幅时看。 */
+    gtmAlert() {
+      const a = this.gtmAnomaly;
+      if (!a) return null;
+      let ack = null;
+      try { ack = localStorage.getItem(GTM_ACK_KEY); } catch (e) { ack = null; }
+      if (ack === a.ts) return null;  // 同一 ts 已消警; 新异常 ts 不同 => 自动重显
+      const now = Number.isFinite(this.nowSec) ? this.nowSec * 1000 : Date.now();
+      if (now - a.t > GTM_ALERT_TTL_MS) return null;  // 超过 24h: 不再占位(服务端只留最近一轮)
+      // 本区段是 computed: 辅助函数一律内联为局部量(见 limitRows 的 2026-09-14 实测注)
+      const num = (v) => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v))
+        ? null : Number(v));
+      const dirText = (v) => (v === "down" ? "下行" : "上行");
+      const d = new Date(a.t);
+      const p = (n) => String(n).padStart(2, "0");
+      const at = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      const dtS = num(a.raw.dt_s);
+      const rate = (v) => this.fmtSpeed(num(v) === null ? 0 : num(v));
+      const rows = a.items.map((it) => {
+        const delta = num(it.delta);
+        return `${it.nic} ${dirText(it.dir)} ${delta === null ? "—" : this.fmtSize(delta)}`
+          + `${dtS === null ? "" : "/" + dtS + "s"} ≈ ${rate(it.rate_bps)}`;
+      });
+      const thr = num(a.raw.threshold_bps);
+      const first = a.items[0];
+      const short = `${first.nic} ${dirText(first.dir)} ${rate(first.rate_bps)}`
+        + (a.items.length > 1 ? ` +${a.items.length - 1}` : "");
+      const full = `最近异常：${at} ${rows.join("；")}（阈值 ${thr === null ? "—" : this.fmtSpeed(thr)}），已照常入账`;
+      return { ts: a.ts, short, full };
     },
     /* 全局限速取数单点(R10-04): qB server_state 的全局限速键是 **dl_rate_limit / up_rate_limit**
      * (bytes/s, 0 = 不限速), **不是 dl_limit/up_limit** —— 后者是**单种子**级字段(TorrentRecord,

@@ -26,6 +26,19 @@
           </button>
         </span>
       </template>
+      <!-- GTM 当日总量虚高告警(计划 26-11-03-1102 S7c / D5): 主告知是**常驻横幅**, 不依赖
+           todayTraffic 的 v-if 分支 —— 只要打开 WebUI 就能看见, 不需要进设置页。
+           数据源 = traffic.gtm_anomaly(GTM /status.last_spike 经快照透传), 判空/24h/本机 ack
+           全部收在 dialogs.js 的 gtmAlert 单点; 无异常或字段缺失 -> null -> 整组不渲染(降级)。
+           × 只写本机 localStorage(gtm.spike.ack), 不写服务端; 新 ts 自动重显。
+           位置纪律: 必须在 .sb-stats 之前(左侧告知优先), 且不挤压右侧速度/限速组。 -->
+      <span v-if="gtmAlert" class="sb-item sb-gtm-alert">
+        <button class="sb-gtm-main" :title="gtmAlert.full" @click.stop="showGtmAlert()">
+          <svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-bell"></use></svg>
+          <span class="lbl">流量异常</span><span class="val">{{ gtmAlert.short }}</span>
+        </button>
+        <button class="sb-gtm-ack" title="已知晓(仅本机隐藏)" @click.stop="ackGtmAlert()">&times;</button>
+      </span>
       <span class="sb-stats">
         <span v-for="it in sbStats" :key="it.key" class="sb-item" :title="it.title">
           <svg class="ico ico-sm" :class="it.cls" viewBox="0 0 16 16"><use :href="it.icon"></use></svg>
