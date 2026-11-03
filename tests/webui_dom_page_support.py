@@ -291,8 +291,12 @@ const rp = (rn) => ctx.cfgCondRootPath("example_rules", rn);
 const DEF_OE = J({ policy: "stop", retries: 3, backoff: 60 });
 const checks = [
   // ---- 草稿规范化(D2): 打开即归一形, 保存即写新形态 ----
+  // 红验式三步(issue 26-11-04-0504): 先钉输入确为扁平列表(fixture 漂成树形则红) -> 调归一
+  // -> 再钉变树形(归一没真执行则红)。原来归一塞在逗号表达式里, 绿与"电池没跑到"不可判
   ["cfgNormalizeRulesDraft: 扁平 conditions 包隐式 all(叶子零触碰)",
-    (ctx.cfgNormalizeRulesDraft(), J(t().legacy.conditions) === J({ all: [{ size: ">=1MiB" }, { path: ["/a"] }] }))],
+    (J(t().legacy.conditions) === J([{ size: ">=1MiB" }, { path: ["/a"] }])
+     && (ctx.cfgNormalizeRulesDraft(), true)
+     && J(t().legacy.conditions) === J({ all: [{ size: ">=1MiB" }, { path: ["/a"] }] }))],
   ["cfgNormalizeRulesDraft: 树形 conditions 零改写",
     J(t().treeform.conditions) === J({ any: [{ size: ">=1MiB" }, { not: { tags: "HR" } }] })],
   ["cfgNormalizeRulesDraft: 扁平动作翻译规范形 + 缺省 on_error 注入",
@@ -301,8 +305,23 @@ const checks = [
     J(t().chooser.actions[0].choose[0].when) === J({ all: [{ size: ">=1MiB" }] })
     && J(t().chooser.actions[0].choose[0].then[0]) === J({ type: "add_tags", params: ["T"], on_error: { policy: "stop", retries: 3, backoff: 60 } })
     && t().chooser.actions[0].default[0].type === "add_tags"],
+  // 幂等改快照深比较(issue 26-11-04-0504): 原来两次返回值被逗号表达式丢弃、第三元素字面量
+  // true 恒绿; 归一本身无返回值, 改比整棵 example_rules 前后快照 —— 非幂等必红。
+  // 专桩: 同一比较模式喂非幂等样本必须抓出差异, 自证该模式可红(否则又是一条恒绿)
   ["cfgNormalizeRulesDraft 幂等(重复归一零差异)",
-    (ctx.cfgNormalizeRulesDraft(), ctx.cfgNormalizeRulesDraft(), true)],
+    (() => {
+      const snap1 = J(ctx.cfg.tree.config.example_rules);
+      ctx.cfgNormalizeRulesDraft();
+      const snap2 = J(ctx.cfg.tree.config.example_rules);
+      ctx.cfgNormalizeRulesDraft();
+      return snap1 === snap2 && snap2 === J(ctx.cfg.tree.config.example_rules);
+    })()],
+  ["幂等比较模式活性专桩: 非幂等样本必须被抓出",
+    (() => {
+      const s = { conditions: { all: [{ size: "" }] } };
+      const step = () => { s.conditions.all.push({ size: "" }); return J(s); };
+      return step() !== step();
+    })()],
   // ---- 条件树读侧 ----
   ["cfgCondNodeKey: 树形根键", ctx.cfgCondNodeKey(rp("treeform")) === "any"],
   ["cfgCondChildren: 组合孩子数", ctx.cfgCondChildren(rp("treeform")).length === 2],
@@ -350,6 +369,12 @@ const checks = [
      ctx.cfgChooseDefaultToggle("example_rules", "chooser", 0, true),
      J(t().chooser.actions[0].default) === J([]))],
 ];
+// 活性注入(issue 26-11-04-0504, 坑档 pitfalls/testing/guard-dead-branch 手法): Python 侧
+// 二次运行传 "liveness" 追加一例必红期望, 供端到端红验 —— 电池空转(某条语句早退/结果
+// 未真实比对)时注入的红不会出现在 failed, Python 侧即报。正常运行不带此参, 不含本条。
+if (process.argv[3] === "liveness") {
+  checks.push(["活性探针: 故意注入必红期望(端到端红验专用)", false]);
+}
 console.log(JSON.stringify({ ok: checks.filter((c) => c[1]).length, total: checks.length,
   failed: checks.filter((c) => !c[1]).map((c) => c[0]) }));
 """

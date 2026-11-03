@@ -4,10 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (53)
+## Open (52)
 
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
-- [test] [cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿](../26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html) — webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
@@ -66,10 +65,11 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (395)
+## Done (396)
 
 - [test] [test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）](../26-11-04-0600-test-testing-persist-thread-active-count.html) — 全局 active_count 快照断言受同 xdist worker 无关线程启停污染, 已改 spy Thread.start 只量本窗口, 红验+全量验证通过
 - [bug] [D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′](../26-11-04-0504-bug-relocate-d-evidence-container-type.html) — relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效
+- [test] [cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿](../26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html) — webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到
 - [docs] [real-baselines 两个附加切片的相对链接坏链, doc-links 守阵红](../26-11-04-0245-docs-memory-baseline-broken-links.html) — 26-11-04-0126/26-11-04-0156 两切片第23行链接指向「跨种子传递闭包/传递闭包」不存在目标, test_memory_bank_docs::test_doc_links_are_not_broken 红, 连带 test.full 闸门失败
 - [bug] [缺失站点扫描复用 store 级 tracker 惰性缓存, qB 侧改 tracker 后二次扫描读到旧值](../26-11-04-0228-bug-sites-missing-stale-tracker-cache.html) — /api/sites/missing 与 CLI 导出的 tracker 扫描走 store 记录级惰性缓存, 只在产品自身 tracker 写操作时失效; qB 侧(网页/外部)改 tracker 后同进程二次扫描吃到首扫缓存
 - [bug] [conftest 按命令名拦截 PowerShell: 非通知用途调用被误拦, 掩盖真实副作用](../26-11-03-2216-bug-test-notifier-guard.html) — NOTIFIER_EXECUTABLES 按命令名拦 powershell/pwsh: 非通知用途的子进程在 Popen 构造前抛 FileNotFoundError, sidefx 台账因此出现偶然遮蔽与假绿

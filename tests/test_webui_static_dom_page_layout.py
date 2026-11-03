@@ -824,7 +824,11 @@ def test_frontend_rule_tree_and_choose_editor():
        三皮肤清单接线 + app.js 注册 + 共用层 CSS(.hb-cond-node/.hb-branch)成对;
     4. 有 node 时真跑语义电池: 归一幂等 / 树形读侧(根键/孩子/叶子计数)/ 建树-切换-删除收敛
        (空列表向上收敛删 conditions 键 = 无条件直过)/ choose 分支增删 + then 动作规范形写入 +
-       on_error 路径版三档控件 + default 开关。
+       on_error 路径版三档控件 + default 开关。归一条目为红验式(issue 26-11-04-0504):
+       条 1 先钉输入扁平 -> 归一 -> 钉树形三步分开, 幂等改整树快照深比较并附非幂等专桩
+       自证比较模式可红;
+    5. 电池活性探针: 注入一例必红期望二次运行, 注入的红必须真实出现在 failed ——
+       防整组电池因早退/结果未真实比对而全绿空转(坑档 guard-dead-branch 手法)。
 
     无 node 的机器只跑静态那一半(与本文件其它守阵同口径, 不引入 pytest skip)。
     """
@@ -904,6 +908,26 @@ def test_frontend_rule_tree_and_choose_editor():
         res = json.loads(proc.stdout.strip())
         assert res["total"] >= 16, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
         assert not res["failed"], ("条件树/choose 编辑器行为漂移: " + "、".join(res["failed"]))
+        # 5. 恒久活性探针(坑档 pitfalls/testing/guard-dead-branch 手法, issue 26-11-04-0504):
+        #    注入一例必红期望再跑一遍, 注入的红必须真实出现在 failed —— 防整组电池因某条
+        #    语句早退/结果未真实比对而全绿空转(绿与"没跑"不可判的形态由此破除)
+        proc2 = subprocess.run(
+            [
+                node,
+                "-e",
+                _NODE_RULE_TREE_PROBE,
+                bundle_file("config_editor.js"),
+                os.path.join(shared, "config_rules.js"),
+                "liveness",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert proc2.returncode == 0, f"活性探针 node 运行挂了: {(proc2.stderr or '').strip()[:400]}"
+        res2 = json.loads(proc2.stdout.strip())
+        assert res2["total"] == res["total"] + 1, "活性注入未生效(必红期望没进电池)"
+        assert len(res2["failed"]) == 1 and "活性探针" in res2["failed"][0], \
+            f"注入必红期望后整体仍全绿 —— 电池空转: {res2}"
 
 
 def test_frontend_action_on_error_control():

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-config-contract">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-04-test-webui-config-normalize-parity.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿">
 <meta name="issue-summary" content="webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到">
 <title>cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-0504-test-webui-normalize-dom-battery-vacuous</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 05:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -188,11 +188,24 @@ const t = () =&gt; ctx.cfg.tree.config.example_rules;
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 05:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 07:04 — 修复完成并验证（红验式条 1 + 快照幂等 + 活性探针），状态 <strong>Open → Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p>复验：2026-11-04 05:03 仍复现 —— <code>webui_dom_page_support.py:280-296</code> 条 1 期望 <code>{all: […]}</code>、fixture 为扁平列表、条 5 第三元素字面量 <code>true</code>, 与入池时一致, 未修。</p>
+    <p>复验：2026-11-04 05:03 仍复现 —— <code>webui_dom_page_support.py:280-296</code> 条 1 期望 <code>{all: […]}</code>、fixture 为扁平列表、条 5 第三元素字面量 <code>true</code>, 与入池时一致, 未修。2026-11-04 07:00 认领开工时再复验: 代码逐字未变(<code>git log --since=2026-11-04</code> 两文件零提交), <code>test_frontend_rule_tree_and_choose_editor</code> 单跑 1 passed —— 空转绿仍在。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（2026-11-04 07:04, 用户指派认领; 按建议修法两条全落地, 无改道）:</p>
+    <ol>
+      <li><b>红验式参差断言</b>: 条 1 改三步分开 —— 先钉输入确为扁平列表(fixture 漂成树形则红) → 调归一 → 再钉变树形(归一没真执行则红)。</li>
+      <li><b>条 5 幂等改快照深比较</b>: 归一无返回值, 改比整棵 <code>example_rules</code> 归一前后两次快照(<code>J()</code> 深比较); 另附<b>非幂等专桩</b>一条(同比较模式喂逐次追加的样本, 断言必抓出差异), 自证比较模式可红。</li>
+      <li><b>电池结果活性探针</b>(建议 2): <code>_NODE_RULE_TREE_PROBE</code> 支持第三参 <code>liveness</code> 追加一例必红期望; Python 侧二次运行, 断言注入的红真实出现在 <code>failed</code> 且 <code>total == 正常轮 + 1</code> —— 电池早退/结果未真实比对时注入红不出现, 守阵即红(坑档 <code>pitfalls/testing/guard-dead-branch.md</code> 手法)。</li>
+    </ol>
+    <p><b>验证方式与测试数字</b>（2026-11-04 实测）:</p>
+    <ul>
+      <li>守阵绿: <code>test_frontend_rule_tree_and_choose_editor</code> 1 passed; 受影响面 <code>test_webui_static_dom_page_layout.py</code> + <code>test_webui_static_dom_page_store.py</code> 共 35 passed, 对拍守卫 <code>test_webui_config_normalize_parity.py</code> 3 passed。</li>
+      <li>变异红验 A(杀死 conditions 包 <code>all</code>): 守阵红, <code>failed</code> 精确报条 1。</li>
+      <li>变异红验 B(归一改非幂等逐次追加): 守阵红, <code>failed</code> 精确报条 5 幂等(条 1/2 不受扰, 隔离成立)。</li>
+      <li>变异后均已还原复绿。</li>
+    </ul>
   </section>
 
   <footer>
