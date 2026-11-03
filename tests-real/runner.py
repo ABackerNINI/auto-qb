@@ -79,8 +79,6 @@ def cmd_pause_all(args) -> int:
 
 
 def cmd_env(args) -> int:
-    from lib import instances
-
     env = guard._ENV
     eid = next(k for k, v in env_registry.ENVIRONMENTS.items() if v is env)
     print(f"当前环境: 环境{eid}({env['machine']})  [QBT_REAL_ENV={os.environ.get('QBT_REAL_ENV') or '(未设, 按 EXE 探测)'}]")
@@ -91,9 +89,7 @@ def cmd_env(args) -> int:
     else:
         print("  BT 监听端口: 待本轮实测回填(规程 §2.5)")
     for port in guard.WHITELIST_PORTS:
-        via_env = f"已设(QBT_TEST_{port})" if os.environ.get(instances.TOKEN_ENV[port]) else "未设"
-        via_file = "有(local.json)" if str(port) in instances._local_tokens() else "无"
-        print(f"  token @{port}: 环境变量 {via_env} / local.json {via_file}(口径: token 由用户每轮会话给, 不落盘)")
+        print(f"  免鉴权口径 @{port}: 本机直连零凭据(四实例均已开「跳过本地验证」; 收 401/403 = 设置被重置, 去 qB WebUI 重新勾选)")
     return 0
 
 

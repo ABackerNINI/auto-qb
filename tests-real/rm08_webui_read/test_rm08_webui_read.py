@@ -16,7 +16,8 @@ web.enabled + skip_local_verify: true 回环免密钥), 连 副实例(空库草�
 lib/app.py 的 wait_web 判据不合), 用例按它的 CONFIG_TMPL 语义生成同款最小配置(schema_version: 5)
 后用 `python -m auto_qb` 起 —— 与 dev_webui.py 内部 `cli_main()` 完全等价。收尾一律 taskkill
 /F /T 杀整棵进程树(§2.7: 不带 /T 只杀 uv 启动器, 孤儿继续持端口)。RM08-05 的腿A(主实例 侧)
-是本片唯一的 主实例 面产品实例: 配置经 api_key 直连(qB 5.x WebUI API Key, 实测本机可用),
+是本片唯一的 主实例 面产品实例: 配置经空凭据直连(主实例已免鉴权, 免token口径 2026-11-04;
+历史机制是 api_key 直连, 已随 token 注入退役),
 grouping 关死(零写路径), 同步线只读; 腿A 按 D1 计数分支: 主实例真实种子 >0 走原腿(真实
 tracker 域名 mask), ==0(环境2 实况)走私有假种子替身(假种子 info 硬编码 private:1, 私有
 msg 与 mask 断言机制等价成立; 「真实 PT 域名」词面缺失降级记账)。RM08-07 的产品实例经
@@ -628,8 +629,8 @@ def test_rm08_03_view_arrays_payload(clean_fakes):
 def test_rm08_05_detail_drawer(clean_fakes):
     """[RM08-05] 详情抽屉四端点: detail 同源一致 + trackers mask + files/peers + 未知 hash 负向
 
-    前置: 副实例 主基座 + 1 假种子(假种子腿); 主实例 侧另起一份 api_key 直连产品实例
-          (grouping 关死零写路径)。腿A 按 D1 计数分支: 主实例真实种子 >0 → 原腿(paused 只读
+    前置: 副实例 主基座 + 1 假种子(假种子腿); 主实例 侧另起一份空凭据直连产品实例
+          (主实例免鉴权, 免token口径; grouping 关死零写路径)。腿A 按 D1 计数分支: 主实例真实种子 >0 → 原腿(paused 只读
           走一遍, 真实 tracker 域名最有说服力); ==0(环境2 实况)→ 私有假种子替身(主实例 1 枚
           带数据假种子, announce=死端口 URL 带 passkey 形参 —— lib/torrent.py info 硬编码
           private:1, 假种子天然私有, 私有 msg 与 mask 断言机制等价成立; 零外连: 死端口连接
@@ -668,8 +669,8 @@ def test_rm08_05_detail_drawer(clean_fakes):
         code, p = web_err(port, "GET", f"/api/torrents/{'f' * 40}")
         assert code == 404, f"未知 hash 应 404(_require_torrent): {code} {p}"
 
-    # ---- 腿 A: 主实例 侧(独立产品实例 api_key 直连, grouping 关死; D1 计数分支) ----
-    api_key = instances.token_for(instances.PRIMARY) or ""
+    # ---- 腿 A: 主实例 侧(独立产品实例直连, 主实例已免鉴权空凭据; grouping 关死; D1 计数分支) ----
+    api_key = ""  # 免token口径(2026-11-04): 测试实例本机免鉴权, 产品空凭据直连
     with product_case("rm08_05_real", qb_port=instances.PRIMARY, grouping=False, api_key=api_key) as (
         case_real,
         port_real,

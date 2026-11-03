@@ -6,8 +6,8 @@ confirmed = true
 [tasks."real.env"]
 run     = ["uv run python tests-real/runner.py env"]
 timeout = 30
-when    = "看当前测试环境(环境 id / 主副端口 / EXE 路径 / token 配置方式; 换机器或端口对不上时先跑它)"
-note    = "双环境: 环境1 = D盘机 36595/36596, 环境2 = C盘机 56589/56590; QBT_REAL_ENV 显式指定, 缺省按 EXE 存在性探测; token 不落盘, 由用户每轮会话给(QBT_TEST_<端口>)"
+when    = "看当前测试环境(环境 id / 主副端口 / EXE 路径 / 免鉴权口径; 换机器或端口对不上时先跑它)"
+note    = "双环境: 环境1 = D盘机 36595/36596, 环境2 = C盘机 56589/56590; QBT_REAL_ENV 显式指定, 缺省按 EXE 存在性探测; 四测试实例本机一律免鉴权(「跳过本地验证」), 无需任何 token —— 收 401/403 = qB 设置被重置, 去 WebUI 重新勾选(fail-closed, 无绕行)"
 
 [tasks."real.guard"]
 run     = ["uv run python tests-real/runner.py guard"]

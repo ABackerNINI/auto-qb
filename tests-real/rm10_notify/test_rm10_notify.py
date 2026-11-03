@@ -247,9 +247,8 @@ CONFIGURED_DOMAINS = {"rm10probe.invalid"}
 
 
 def write_export_cfg(case: Path) -> Path:
-    """生成 tests-real 派生导出配置(指主实例(PRIMARY)真实例, api_key 直连; 红线 config.yml 零触碰)。"""
-    api_key = instances.token_for(instances.PRIMARY) or ""
-    assert api_key, f"主实例 {instances.PRIMARY} 缺 token(环境变量 QBT_TEST_{instances.PRIMARY}, 用户每轮会话给)—— 无法派生导出配置"
+    """生成 tests-real 派生导出配置(指主实例(PRIMARY)真实例, 免token空凭据直连; 红线 config.yml 零触碰)。"""
+    api_key = ""  # 免token口径(2026-11-04): 主实例本机免鉴权, 产品空凭据直连(与副实例同口径)
     cfg = case / "config.yml"
     cfg.write_text(
         EXPORT_CONFIG_TEMPLATE.format(

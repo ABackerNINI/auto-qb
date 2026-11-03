@@ -14,8 +14,8 @@
 多 clone 注意: 本机常有多个平行 clone, 但**物理测试实例(端口/进程)全机只有一套** ——
 真机轨同一时刻只允许一个 clone 在跑 `real.*`, 端口与进程不共享。
 
-token 不入本表也不落盘: 由用户每轮会话给出, 经环境变量 `QBT_TEST_<端口>` 注入
-(见 lib/instances.py)。
+免鉴权口径(2026-11-04 起): 四实例均已开 WebUI「跳过本地验证」, 本机直连零凭据,
+token 注入机制(`QBT_TEST_<端口>` / instances.local.json)已退役删除 —— 见 lib/instances.py。
 """
 from __future__ import annotations
 
