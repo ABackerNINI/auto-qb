@@ -57,5 +57,5 @@
 - T0a(`4e4acde6`)rules 家族:base 全清、validation/rules 余 3 条 normalize 兜底防御支(到不了,列名留档);T0b(`806f954b`)fuse 家族:cli 全清、fuse_mod 余 1 条同快照防御 partial。
 - T0c(`118261bf`)P0 验收过线(非及格带):基线切片 `26-11-04-0507-test-coverage-uplift-3-p0`(数字见切片,M8 净额首记为负),watchlist 7→4、豁免 8 零新增、红验抽 11.8% 全杀零假绿。
 - T0b 揭出 1 条潜在产品缺陷(fuse_mod 摘标签路径缺 None-client 守卫,现行接线不可达)——按 I1 未修,收尾时随全轮总结提请入池裁决。
-- 插曲:T0a 全量揭出本档 R0 的「等…指令」措辞违规(既有红,措辞守卫),已改不变措辞(`7afc56f4`)转绿。
+- 插曲:T0a 全量揭出本档 R0 触发措辞守卫的等待类句式违规(既有红,非本轮代码引入),已改不变措辞(`7afc56f4`)转绿。
 - 待办:派发 T1a(ops 叶 + traffic_monitor 路由)。
