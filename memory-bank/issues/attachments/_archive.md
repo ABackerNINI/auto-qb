@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (66)
+## Open (65)
 
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](../26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败
 - [bug] [flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖](../26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html) — views.css @media(max-width:900px) 的 .ce-page padding 12px 12px 24px 恒被 dialogs.css 的 .ce-page padding 16px 12px calc(...) 覆盖, 移动端紧凑内边距从未生效
@@ -21,7 +21,6 @@
 - [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](../26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 4933+2(切片 0534, +9 为端口改 0 守阵); 计划仍引 0459 的 4924+2 作为终验持平基准
 - [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](../26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实测仅大文件拆分与 qB 5.3 在途, 另有 version-management 等 3 件未列, 2 件已 Done, 2 件实为 issue 锚
 - [docs] [第三次评审计划 §02 底册数字三处与事实不符(Open 52/54、新入池 17/18、总数自相矛盾)](../26-11-03-0630-docs-plan-review3-ledger-counts-drift.html) — 计划 0557 §02 记 52 Open/17 条新入池/共 424 条; 实测 54 Open、18 个入池 issue、分项和为 422
-- [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
 - [docs] [端口口径文档漂移: port 1-65535 概括, sim 16585 叙述与 minimal.yml 生产口](../26-11-03-0316-docs-port-doc-drift.html) — loading-and-write 把 port 一律写 1-65535 但 channel 允许 0; sim-client 文档叙述 16585 但 sim_qb 绑定 0; minimal.yml 示例写生产 qB 口 16585
 - [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例
@@ -73,8 +72,9 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (3)
+## In Progress (4)
 
+- [bug] [WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断](../26-11-03-0316-bug-webui-bind-failure-silent.html) — uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突
 - [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位

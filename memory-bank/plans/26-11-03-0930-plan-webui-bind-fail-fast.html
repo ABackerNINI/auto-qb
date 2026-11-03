@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>WebUI bind 失败改为启动期 fail-fast</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-bind-fail-fast">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-03-0930">
+<meta name="doc-updated" content="26-11-03-0930">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-0316-bug-webui-bind-failure-silent.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-bind-fail-fast</div>
+<h1>WebUI bind 失败改为启动期 fail-fast</h1>
+<p class="lede">把「WebUI 端口被占 → 只记一条 ERROR、进程带病继续」反转为「启动期 fail-fast：干净退出码 1 + 可操作文案 + 跨平台占用者诊断」。设计主轴：失败发生在启动期，就让它带走进程；运行期语义一行不改。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-0930 · <b>doc-updated</b> 26-11-03-0930 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling（Q1→Q6，2026-11-03 用户逐题拍板）；认领 issue 26-11-03-0316-bug-webui-bind-failure-silent
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>目标</b>：当 <code>web.enabled=true</code> 且 WebUI 监听失败时，进程在启动期以退出码 1 结束，stderr 给出一条可直接照做的单行指令，日志留下含占用者与处置的结构化诊断。做到这一步即算完成；不做运行期自愈、不做 WebUI 内状态展示。</p>
+<p><b>设计底线 / 不变量</b>：</p>
+<ul>
+  <li><b>只碰启动期</b>：热重载 <code>apply()</code> 的重启路径行为不变；运行中 uvicorn 线程异常退出不在本计划范围。</li>
+  <li><b>单一写线程（黄金法则 5）</b>：状态落盘与锁释放仍只在主循环线程/<code>run()</code> 的 finally 执行；诊断探针不写任何业务状态。</li>
+  <li><b>无新配置键（黄金法则 4）</b>：不引入 <code>web.fail_fast_on_bind</code> 之类开关，因此 <code>validate_config</code> 与 <code>config/schema</code> 零改动。既有的 <code>web.enabled</code> / <code>web.host</code> / <code>web.port</code> 原样使用。</li>
+  <li><b>诊断是旁路</b>：探针失败、超时、命令缺失都不得改变退出码、错误类型或 stderr 主行。</li>
+  <li><b>可操作</b>：文案必须同时给出「改哪个键 / 怎么改 / 怎么关 / 进程会怎样」。</li>
+</ul>
+
+<h2><span class="no">§02</span>问题与取证结论</h2>
+<p>issue 标题说「静默吞掉」，复验后的准确结论是<b>三缺一有</b>：缺诊断、缺机器可读面、缺自愈；但<b>人可见的失败信号其实已经存在</b>。</p>
+<table>
+  <thead><tr><th>维度</th><th>现状（取证）</th><th>结论</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>失败是否被记录</td>
+      <td><code>_run_server</code> 捕获 <code>BaseException</code> 并记 ERROR（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/server/lifecycle.py">lifecycle.py:146-157</a>）；<code>start_web_server</code> 再记一条「WEB UI 启动失败: host:port 无法监听」（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/server/lifecycle.py">lifecycle.py:206-208</a>），并返回 <code>started=False</code> 的句柄。</td>
+      <td class="bad">不是「无日志」，是<b>日志没有可操作性</b>（只说「端口被占用?」）</td>
+    </tr>
+    <tr>
+      <td>失败态是否被消费</td>
+      <td><code>WebServerHandle.started</code> 全仓零消费方；失败后 <code>web.handle</code> 仍非空，<code>WebUIModule.start</code> 的幂等闸（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/module.py">module.py:69-71</a>）导致配置不变即<b>永不重试</b>。</td>
+      <td class="bad">无状态面、不自愈</td>
+    </tr>
+    <tr>
+      <td>人可见信号</td>
+      <td>控制台 <code>StreamHandler(sys.stdout)</code>（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/infra/logging.py">logging.py:101-105</a>）；滚动日志文件默认 <code>&lt;data_dir&gt;/logs/auto-qb.log</code>（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/config/loaders.py">loaders.py:660</a>）；notify handler 在 webui 之前挂载（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">qbmanager.py:166-168</a> vs <a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">L218</a>），<code>min_level</code> 默认 ERROR（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/config/models.py">models.py:350</a>），所以<b>今天这条 ERROR 已经会推一条 toast</b>。</td>
+      <td class="good">已有，但信息量不足</td>
+    </tr>
+    <tr>
+      <td>机器可读面</td>
+      <td>容器 healthcheck 仅 <code>GET /</code> 布尔值（<a href="file:///d:/Projects/auto-qb-clone1/compose.yaml">compose.yaml:25-32</a>）；<code>/api/status</code> 由「起不来的那个服务」提供（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/server/routes/state.py">routes/state.py:46-52</a>）→ 对本次故障恒不可读；<code>state.json</code> 是业务态且有单一写线程约束，不适合承载运行期健康位。</td>
+      <td class="bad">容器有布尔面（unhealthy）；裸机无面</td>
+    </tr>
+    <tr>
+      <td>契约</td>
+      <td><code>RM01-06</code> 显式断言「端口被占进程照常活」（<a href="file:///d:/Projects/auto-qb-clone1/tests-real/rm01_startup/test_rm01_startup.py">test_rm01_startup.py:191-215</a>）；真机基线切片把「不退出」记为 PASS（<a href="file:///d:/Projects/auto-qb-clone1/memory-bank/testing/real-baselines/26-10-31-0831-real-RM01.md">real-baselines/26-10-31-0831-real-RM01.md:25</a>）；<code>qbmanager</code> 注释把 web 与 HR 的不对称写成口径（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">qbmanager.py:478-481</a>）。</td>
+      <td class="wr">反转对象，见 §03</td>
+    </tr>
+  </tbody>
+</table>
+<div class="aside">关键结构事实：失败检测<b>同步发生在主线程</b>——<code>start_web_server</code> 会等最多 <code>WEB_START_TIMEOUT=5s</code> 才返回（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/server/lifecycle.py">lifecycle.py:159-168、199</a>），不是只发生在 web 线程里。因此「读结果 → 抛错 → 走 finally 释放锁」天然满足单一写线程。</div>
+
+<h2><span class="no">§03</span>已确认推翻的既有判断（契约反转）</h2>
+<p><b>被推翻的判断</b>：「一个端口占用不该带走整个程序」。它不是一个注释，而是三处固化的事实：</p>
+<ul>
+  <li><code>RM01-06</code> 的 docstring 把它写成<b>失败判据</b>（「进程直接退出 = 红」），断言 <code>assert p.alive()</code>（<a href="file:///d:/Projects/auto-qb-clone1/tests-real/rm01_startup/test_rm01_startup.py">test_rm01_startup.py:191-215</a>）。</li>
+  <li>真机基线切片把它记为 PASS（<a href="file:///d:/Projects/auto-qb-clone1/memory-bank/testing/real-baselines/26-10-31-0831-real-RM01.md">real-baselines/26-10-31-0831-real-RM01.md:25</a>）。</li>
+  <li><code>qbmanager.py:478-481</code> 用注释把「web 记 ERROR 由句柄呈现 / HR 抛错穿透」的不对称写成产品口径。</li>
+</ul>
+<p><b>谁确认</b>：用户在 2026-11-03 的 grilling Q2 中明确回答「确认推翻」，并选择<b>改判据</b>（保留「先占端口再启动」的场景，把断言翻成干净退出），否掉「改场景配 <code>web.enabled=false</code>」与「删用例」两种更不诚实的做法。</p>
+<p><b>反转后的统一口径</b>：启动期监听了可选服务（WebUI / HR）失败 → 一律 fail-fast、干净退出码 1。HR 的既有 <code>HrChannelBindError</code> 行为不变，只是不再漏锁（见 §04.1）。</p>
+<p><b>历史处理</b>：旧真机基线切片是历史事实，<b>不改写数字</b>；RM01-06 改判据后，用<b>新切片</b>记录新实测（口径见 <code>memory-bank/testing/baseline.md</code>）。</p>
+
+<h2><span class="no">§04</span>代码改动面</h2>
+
+<h3>4.1 前置：把 <code>start_all</code> 移入 <code>try/finally</code>（<code>qbmanager.run</code>）</h3>
+<p>现状：<code>self.host.start_all(dry_run)</code> 在 <a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">qbmanager.py:484</a>，位于 <a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">L485</a> 的 <code>try</code> <b>之外</b>；负责 <code>stop_all</code> → <code>state.save()</code> → <code>lock.release()</code> 的 <code>finally</code> 在 <a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">L703-710</a>。任何模块 <code>start</code> 抛错都会跳过 finally → 锁与 <code>state.lock.meta.json</code> 残留。</p>
+<pre><code><span class="cm"># qbmanager.run()：目标结构（示意）</span>
+lifecycle_ready = False
+try:
+    self.host.start_all(dry_run)      <span class="cm"># ← 从 try 外移入</span>
+    lifecycle_ready = True            <span class="cm"># ← 新增：启动期完成闸</span>
+    ...                               <span class="cm"># 连接 / 主循环（原样）</span>
+finally:
+    self.host.stop_all()
+    if not dry_run and lifecycle_ready:   <span class="cm"># ← §4.2 闸门</span>
+        self.ctx.state.save()
+    if self._lock is not None:
+        self._lock.release()</code></pre>
+<p>连带行为变更（需在提交信息与文档写明）：既有 <code>HrChannelBindError</code> 在启动期抛出时，现在也会走 <code>stop_all</code> + <code>lock.release()</code>，即<b>修掉 HR fail-fast 的既有漏锁</b>。这不是顺手改，是 A 路线「锁已释放」判据成立的必需前置（Q4b 已确认）。</p>
+<p>注意：<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/qbmanager.py">qbmanager.py:472</a> 的 <code>materialize_schema_migration</code> 仍在 <code>start_all</code> 之前，磁盘版本落后时的迁移落盘不受影响。</p>
+
+<h3>4.2 空态 <code>state.json</code> 闸门</h3>
+<p>失败启动若执行 <code>state.save()</code>，会在 fresh 目录落一个只有 <code>schema_version</code> 的空态文件（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/state.py">state.py:179-180、227-242</a>）。功能上无副作用（<code>load()</code> 对缺失/空文件都返回 <code>{}</code>，<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/core/state.py">state.py:95-98</a>），但会误导人、并破坏「fresh 目录不该有 state.json」类断言。</p>
+<p>方案：用 §4.1 的 <code>lifecycle_ready</code> 闸门，只有 <code>start_all</code> 正常返回后才允许退出落盘。仍由主循环线程调用（黄金法则 5）；正常运行的非优雅终止丢失窗口语义不变（黄金法则 3）。</p>
+
+<h3>4.3 <code>WebUIBindError</code> 与抛点（R1）</h3>
+<p><b>错误类</b>：定义在 <a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/server/lifecycle.py">lifecycle.py</a>（就地定义，不新建模块文件，仿 <code>QbConnectError</code> 的做法）：</p>
+<pre><code>class WebUIBindError(AutoQbError):
+    """启动期 WebUI 监听失败(端口被占/地址非法)。AutoQbError => CLI 干净退出: 码 1、stderr 一行、无堆栈。"""</code></pre>
+<p><b>抛点</b>：<code>WebUIModule.start</code>——<code>web.start_server()</code> 返回后检查 <code>web.handle</code> 的 <code>started</code>：</p>
+<pre><code><span class="cm"># webui/module.py  start() 尾部（示意）</span>
+web.start_server()
+handle = web.handle
+if handle is not None and not handle.started:
+    owner = describe_port_owner(...)          <span class="cm"># 旁路探针，见 4.4</span>
+    logger.info(_format_bind_diagnosis(ctx.config.web, owner))   <span class="cm"># 多行诊断块</span>
+    raise WebUIBindError(_bind_message(ctx.config.web))          <span class="cm"># 单行，给 stderr/notify_fatal</span>
+self._subscriber.sync()</code></pre>
+<ul>
+  <li><b>为什么不在 <code>start_web_server</code> 内抛</b>：该函数同时服务热重载 <code>apply()</code> 的重启分支（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/module.py">module.py:107-112</a>），在那里抛错会把异常带进 <code>PUT /api/config</code> 请求，属于运行期语义变更。R1 让低层函数<b>保持返回 handle 的原契约</b>，<code>test_start_web_server_reports_failure_when_port_taken</code> 继续绿。</li>
+  <li><b>日志分层</b>：lifecycle 既有的那条 ERROR 保留（既有单测断言它）；模块层的多行诊断块用 <b>INFO</b> 记——它不是新的失败事件，而是同一故障的附加诊断，避免 handler 再推第二条 toast。前缀固定为 <code>WEB UI 启动失败诊断</code>，紧跟在 ERROR 之后。</li>
+  <li><b>toast 可靠性</b>：只押 <code>notify_fatal</code>（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/infra/notify.py">notify.py:299-310</a>，同步发送）；它由 <a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/cli.py">cli.py:210</a> 在 <code>AutoQbError</code> 分支调用，此时 <code>manager</code> 已构造、配置可读。handler 的异步队列在退出时可能丢，接受它「可能多一条、可能没有」。</li>
+  <li><b>不改 cli.py</b>：<code>except AutoQbError</code> 已覆盖新错误类，<code>prefix</code> 只对 <code>ConfigError</code> 加「配置错误:」，本错误直接输出。<code>return 1</code> 已是契约。</li>
+</ul>
+
+<h3>4.4 P1 跨平台占用者探针</h3>
+<p>新增 <code>src/auto_qb/infra/port_owner.py</code>（无外部依赖，纯标准库 + 平台命令）。返回三态，供日志选择文案：</p>
+<pre><code>PortOwner  = (pid: int, name: str, cmdline: str)
+PortProbe  = found(owner) | absent(未找到监听者) | unavailable(原因)
+
+def describe_port_owner(host: str, port: int, budget: float = 1.5) -> PortProbe</code></pre>
+<table>
+  <thead><tr><th>平台</th><th>实现</th><th>单步超时</th></tr></thead>
+  <tbody>
+    <tr><td>Linux</td><td><code>ss -ltnp</code>（首选，解析 <code>pid=</code>）→ 失败转 <code>lsof -nP -iTCP:&lt;port&gt; -sTCP:LISTEN</code>；命令行直读 <code>/proc/&lt;pid&gt;/cmdline</code>（不再 spawn）</td><td>各 0.5s</td></tr>
+    <tr><td>Windows</td><td><b>一次</b> PowerShell（<code>-NoProfile -NonInteractive</code>）：<code>Get-NetTCPConnection</code> + <code>Get-CimInstance Win32_Process</code> 合并输出 <code>pid|name|cmdline</code>；不沿用 scripts 的两次调用</td><td>1.0s</td></tr>
+    <tr><td>macOS</td><td><code>lsof -nP -iTCP:&lt;port&gt; -sTCP:LISTEN</code>；命令行再 <code>ps -o command= -p &lt;pid&gt;</code></td><td>各 0.5s</td></tr>
+  </tbody>
+</table>
+<p><b>铁律</b>：总预算硬上限 <b>1.5s</b>（失败路径在等完 5s 之后再叠加，可接受）；每步超时即杀子进程并降级；任何异常（FileNotFoundError / PermissionError / 超时 / 解析失败）只写 debug 日志；探针结果<b>只进日志</b>，绝不进 <code>WebUIBindError</code> 消息、stderr 或 <code>notify_fatal</code> 内容。</p>
+<p><b>降级文案（显式，不静默）</b>：found → <code>占用者: pid=…, 进程=…, 命令行=…</code>；absent → <code>占用者: 未找到(端口可能刚被释放)</code>；unavailable → <code>占用者: 未识别(本机无 ss/lsof 或查询超时)</code>。容器（<code>python:3.12-slim-bookworm</code> 只装了 tzdata）里 <code>ss</code> 与 <code>lsof</code> 都没有，走 <code>unavailable</code> 是常态。</p>
+<p><b>安全</b>：命令行截断 160 字符、换行替换为空格；可能含凭据，只落日志文件，不写 stderr、不推 toast。</p>
+
+<h3>4.5 文案</h3>
+<p><b>stderr（单行，<code>WebUIBindError</code> 消息原文）</b>：</p>
+<pre><code>WebUI 启动失败: 127.0.0.1:8080 无法监听 (web.enabled=true, web.host=127.0.0.1, web.port=8080); 常见原因: web.port 被占用(同机多实例默认同端口); 处置: 改 web.port 换空闲端口, 或设 web.enabled: false 关闭; auto-qb 将退出(退出码 1), 采集不会启动</code></pre>
+<p><b>日志（多行 INFO 诊断块，紧跟既有 ERROR 之后）</b>：</p>
+<pre><code>WEB UI 启动失败诊断 (web.enabled=true, web.host=127.0.0.1, web.port=8080)
+  - 原因: 端口无法监听 (uvicorn: [Errno 10048] ...)
+  - 占用者: pid=12345, 进程=python.exe, 命令行=...
+  - 处置: 改 web.port(同机多实例各配一个); 监听地址写错则改 web.host; 不需要 WebUI 则 web.enabled: false
+  - 退出: 启动期 fail-fast, 退出码 1, 采集不会启动</code></pre>
+<p class="aside">文案里的 host/port 用<b>配置原值</b>（<code>127.0.0.1</code>），不用展示口径 <code>localhost</code>（<code>display_host</code> 只用于「已启动」那条 INFO）。原因：用户要照着改 <code>web.host</code>。</p>
+
+<h2><span class="no">§05</span>文档与运维口径</h2>
+<h3>5.1 <code>docs/deployment.md</code> 两处</h3>
+<ol>
+  <li><b>healthcheck 成因（L169-170）</b>：由两种改为三种——① <code>web.port</code> 改了而 compose 的 ports/healthcheck 没同步；② <code>web.enabled: false</code>（容器活着但 unhealthy）；③ <b>端口被占</b>。第③种在 A 之后的容器表现是「进程退出 → 容器 Restarting」，<b>不再</b>是「unhealthy 但照跑」，必须把这两种表现分开写。</li>
+  <li><b>退出码表（L174-181）新增一行</b>：<code>WebUI 启动失败(bind 失败/端口被占)</code> → 退出码 <b>1</b> → stderr <code>WebUI 启动失败: ...</code> → 「按 restart 策略重启」。</li>
+</ol>
+<h3>5.2 compose / systemd / 多 clone（只写口径，不改代码）</h3>
+<ul>
+  <li><b>compose 不改</b>：<code>restart: unless-stopped</code>（<a href="file:///d:/Projects/auto-qb-clone1/compose.yaml">compose.yaml:9</a>）对任何退出码都会拉起，Docker 自带指数退避（上限 1 分钟）；端口冲突不会自愈 → 表现是<b>永久 Restarting、每分钟一次空转</b>，不是快速崩溃循环。当前 compose 用 <code>8081:8080</code> 且容器独占网络命名空间，进程内 8080 冲突是低频场景；改 restart 无法区分 bind 失败与 qB 不可达，属生产行为变更，不做。</li>
+  <li><b>systemd</b>：仓内无 auto-qb 自己的 unit 文件（<code>systemd</code> 只属于 <code>tools/global-traffic-monitor</code>，不受影响）。文档加一句：用户自建 unit 的 <code>Restart=on-failure</code> 会对退出码 1 按 <code>RestartSec</code> 无退避循环，建议 <code>RestartSec=30s</code> 或配 <code>StartLimitIntervalSec</code>。</li>
+  <li><b>多 clone 并行</b>：默认 <code>web.port=8080</code>（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/config/models.py">models.py:307-326</a>），A 之后第二个启用 WebUI 的实例启动即死。这是<b>用户已接受</b>的代价；缓解只在文档（每 clone 独立 <code>web.port</code>）+ 文案已点明「同机多实例默认同端口」。配置层不做端口探测（那会把纯配置校验变成网络探测，破坏黄金法则 4 的分层），也不改默认端口。</li>
+</ul>
+
+<h2><span class="no">§06</span>测试改动清单</h2>
+<table>
+  <thead><tr><th>文件 / 用例</th><th>改动</th><th>验收</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><code>tests-real/rm01_startup/test_rm01_startup.py::test_rm01_06_port_taken_reports_failure_not_silent</code></td>
+      <td><b>改判据</b>（场景保持「先占端口再启动」）：docstring 失败判据反转；用例名与断言改「干净退出」。断言：<code>p.wait(90)</code> 得 <b>rc==1</b>；日志含 <code>WebUI 启动失败</code> 与端口；stderr/日志文案含 <code>web.port</code> / <code>web.enabled</code>；<code>state.lock.meta.json</code> <b>不存在</b>（锁已释放）；占位 socket 仍能 listen（端口仍被占）；<b>不得</b>改成 <code>web.enabled=false</code>。</td>
+      <td>真机跑 <code>commands run test.real</code>（或该用例对应 task）通过；旧切片不改，另建新真机基线切片</td>
+    </tr>
+    <tr>
+      <td><code>tests/test_web_admin.py</code></td>
+      <td><b>新增模块级用例</b>：<code>WebUIModule.start</code> 在端口被占时抛 <code>WebUIBindError</code>，且日志含诊断块（<code>caplog</code> 或模块 logger 采集，沿用文件既有方式）。</td>
+      <td>专用 <code>pytest -k</code> 通过</td>
+    </tr>
+    <tr>
+      <td><code>tests/test_web_views_reload.py::test_start_web_server_reports_failure_when_port_taken</code></td>
+      <td><b>不改，保持绿</b>：它守的是 <code>start_web_server</code> 返回 <code>started=False</code> 句柄的低层契约（R1）。</td>
+      <td>既有测试全绿</td>
+    </tr>
+    <tr>
+      <td><code>tests/test_port_owner.py</code>（新增）</td>
+      <td>mock <code>subprocess.run</code> / <code>platform.system</code> / 文件读：Linux <code>ss</code> 命中、<code>ss</code> 失败转 <code>lsof</code>、两者都缺；Windows 单次调用命中、超时、输出不可解析；macOS <code>lsof</code> 命中 + <code>ps</code> 失败；统一断言「异常类型与 stderr 主消息与探针结果无关」「总预算 ≤1.5s（常量与短路逻辑）」。新增文件头需写 <code>## 测试计划</code> 清单。</td>
+      <td><code>pytest tests/test_port_owner.py</code> 全绿（三平台 mock 分支）</td>
+    </tr>
+    <tr>
+      <td>真探针：Linux</td>
+      <td>CI <code>ubuntu-latest</code> 上真实占端口后调探针（探针缺失则 <code>skip</code>，<b>不假绿</b>）。</td>
+      <td>CI 绿；skip 理由可见</td>
+    </tr>
+    <tr>
+      <td>真探针：Windows</td>
+      <td><code>skipif(not sys.platform == "win32")</code> 的本地真跑用例（占端口 → 探针命中自身 pid），在当前 dev 机执行。</td>
+      <td>本机通过</td>
+    </tr>
+    <tr>
+      <td>真探针：macOS</td>
+      <td><b>只做 mock + 代码分支审查</b>；不新增 macOS CI job（属扩范围）。</td>
+      <td>mock 覆盖 + 评审确认</td>
+    </tr>
+    <tr>
+      <td><code>tests/test_qbmanager_loop.py</code></td>
+      <td><b>新增</b>：<code>start_all</code> 抛错时 <code>stop_all</code> 执行、<code>state.json</code> 不落盘（fresh 目录）、锁与 <code>state.lock.meta.json</code> 释放。用假模块注入失败，不依赖真实端口。</td>
+      <td>用例通过；反证：不移动 <code>start_all</code> 时该用例红</td>
+    </tr>
+  </tbody>
+</table>
+<p><b>基线口径</b>：实现完成后跑 <code>commands run test.full</code>，按 <code>memory-bank/testing/baseline.md</code> 用 <code>kb.new baseline --total ..</code> 从实测输出誊写<b>新切片</b>；旧切片是历史事实，不改数字。真机侧同理新建 real 切片。其余文档只引用不手抄。</p>
+
+<h2><span class="no">§07</span>明确「不做」清单</h2>
+<ul>
+  <li><b>运行中挂掉不处理</b>：bind 成功后 uvicorn 线程异常退出仍维持现状（记 ERROR、句柄置未就绪、不自愈），不在本计划范围。</li>
+  <li><b><code>/api/status</code> catch-22 明确不做</b>：WebUI 死了就没有可读端点；不设计「失败态写进 API」的任何方案。</li>
+  <li><b>不新增 <code>web.enabled=false</code> 长活用例</b>：认 RM02-02 等既有真机覆盖（<a href="file:///d:/Projects/auto-qb-clone1/tests-real/rm02_loop/test_rm02_loop.py">test_rm02_loop.py:244-259</a>，<code>write_cfg</code> 默认 <code>web_enabled=False</code>）。</li>
+  <li><b>不改 compose</b>（restart / ports / healthcheck 一行不动）。</li>
+  <li><b>不建 / 不改 systemd unit 文件</b>（仓内不存在 auto-qb 的 unit）。</li>
+  <li><b>不新增配置键</b>，<code>validate_config</code>、<code>config/schema</code> 不动；也不在配置校验里探端口。</li>
+  <li><b>不改默认端口 / 不做动态端口分配</b>（issue 原文已定）。</li>
+  <li><b>不清理失败启动留下的 <code>web.token</code></b>：<code>ensure_token</code> 在等待前已落盘（<a href="file:///d:/Projects/auto-qb-clone1/src/auto_qb/webui/runtime_stream.py">runtime_stream.py:210-212</a>），属既有幂等语义，清理会引入额外删除路径。</li>
+  <li><b>不重建 scripts 里 Windows 两次 PowerShell 查询</b>；只在新 <code>src/</code> 模块内实现单次合并。</li>
+  <li><b>不新增 macOS CI job</b>；不改写历史基线切片。</li>
+</ul>
+
+<h2><span class="no">§08</span>实施顺序与验收</h2>
+<table>
+  <thead><tr><th>#</th><th>步骤</th><th>验收判据</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><code>infra/port_owner.py</code> + <code>tests/test_port_owner.py</code>（三平台 mock + 三态降级 + 1.5s 预算）</td><td>单测全绿；探针异常不影响任何调用方</td></tr>
+    <tr><td>2</td><td><code>WebUIBindError</code>（lifecycle.py）+ <code>WebUIModule.start</code> 抛点 + 单行消息 + 多行诊断日志</td><td>新增模块级用例绿；既有低层用例仍绿</td></tr>
+    <tr><td>3</td><td><code>qbmanager.run</code>：<code>start_all</code> 移入 try + <code>lifecycle_ready</code> 闸门</td><td>新增 qbmanager 用例绿（stop_all 执行、不落空态 state、锁释放）</td></tr>
+    <tr><td>4</td><td>RM01-06 改判据 + 真机执行；新建真机基线切片</td><td>退出码 1、文案可操作、meta 已释放、端口仍被占；新切片落盘</td></tr>
+    <tr><td>5</td><td><code>docs/deployment.md</code> 两处更新（healthcheck 三成因、退出码表新行）+ systemd/多 clone 口径</td><td>文档与实测一致；无第三处重复抄基线数字</td></tr>
+    <tr><td>6</td><td><code>commands run test.full</code> + 格式化 + 文档回写（AGENTS DoD）</td><td>全量绿；新基线切片记录实测数字；<code>kb.wrap</code> 收尾</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§09</span>待拍板清单</h2>
+<p><b>无。</b>grilling Q1→Q6 已全部收敛（A / 改判据 / 不新增长活用例 / P1 / 移入 try / 取证边界 / 文档口径 / R1 / 闸门 / 范围收口），结论见 §10。实施中若出现与 §10 冲突的新事实，按「代码 &gt; memory-bank &gt; README &gt; 想法」裁决并回填本表。</p>
+
+<h2><span class="no">§10</span>拍板记录</h2>
+<table>
+  <thead><tr><th>编号</th><th>结论</th><th>日期 / 来源</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>选 <b>A</b>：web bind 失败无条件 fail-fast，带走主进程；不做 B/C 宽松分支</td><td>2026-11-03 · grilling Q1</td></tr>
+    <tr><td>D2</td><td><b>确认推翻</b>「一个端口占用不该带走整个程序」；RM01-06 保留场景、<b>改判据</b>（不改场景 / 不删用例）</td><td>2026-11-03 · Q2</td></tr>
+    <tr><td>D3</td><td><code>web.enabled=false</code> 长活不新增用例，认 RM02-02 既有覆盖</td><td>2026-11-03 · Q3</td></tr>
+    <tr><td>D4</td><td>退出契约 <b>P1</b>：<code>AutoQbError</code> 子类 + 干净退出 + 单行 stderr/多行日志 + <code>src/</code> 跨平台占用者查询</td><td>2026-11-03 · Q4</td></tr>
+    <tr><td>D5</td><td><code>start_all</code> 移入 <code>try/finally</code> 作为必需前置；接受顺带修 HR 漏锁</td><td>2026-11-03 · Q4b</td></tr>
+    <tr><td>D6</td><td>取证边界：1.5s 总上限、单次 PowerShell、显式「未识别」降级、macOS 仅 mock、Linux CI 真跑缺失 skip</td><td>2026-11-03 · Q5a</td></tr>
+    <tr><td>D7</td><td>compose 不改、systemd 仅文案、多 clone 仅文档；<code>docs/deployment.md</code> 改两处</td><td>2026-11-03 · Q5b</td></tr>
+    <tr><td>D8</td><td>抛点选 <b>R1</b>：<code>WebUIBindError</code> 在 <code>WebUIModule.start</code>；<code>start_web_server</code> 契约与 <code>apply</code> 行为不变</td><td>2026-11-03 · Q6</td></tr>
+    <tr><td>D9</td><td>空态 state 闸门：<code>lifecycle_ready</code> + <code>if not dry_run and lifecycle_ready: state.save()</code></td><td>2026-11-03 · Q6</td></tr>
+    <tr><td>D10</td><td>范围收口：运行中挂掉不做；<code>/api/status</code> catch-22 不做；长活用例不新增</td><td>2026-11-03 · Q6</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§11</span>风险与对策</h2>
+<table>
+  <thead><tr><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td>探针拖慢退出</td><td>PowerShell 启动抖动 &gt;1.0s，或 <code>ss</code> 卡住</td><td>每步硬超时 + 总预算 1.5s；超时杀子进程并降级为 <code>unavailable</code>；主消息不受影响</td></tr>
+    <tr><td>容器无探针</td><td>slim 镜像无 <code>ss</code>/<code>lsof</code></td><td>固定输出「占用者: 未识别(…无 ss/lsof…)」；不假装「没人占」</td></tr>
+    <tr><td>占用者误判</td><td>端口刚被释放 / IPv4/IPv6 双栈差异 / 权限不足</td><td>文案统一用「疑似/未识别」措辞；探针仅辅助，不参与退出判定</td></tr>
+    <tr><td>命令行泄密</td><td>占用进程命令行含凭据</td><td>截断 160 字符、换行替换；只进日志文件，不进 stderr / toast</td></tr>
+    <tr><td>重复通知</td><td>lifecycle ERROR 的 handler toast 抢在退出前发出 + <code>notify_fatal</code></td><td>接受「最多两条」；可靠性押 <code>notify_fatal</code>；诊断块用 INFO 不再触发新 toast</td></tr>
+    <tr><td>启动期其他模块抛错</td><td>notify/logging 等 <code>start</code> 失败（非本次引入）</td><td>移入 try 后统一走 <code>stop_all</code> + 锁释放；属行为改善，写进提交信息</td></tr>
+    <tr><td>热重载路径回归</td><td>误把抛点放进 <code>start_web_server</code></td><td>R1 明确禁止；新增模块级用例 + 既有低层用例双向守</td></tr>
+    <tr><td>容器重启空转</td><td>端口被占 + <code>restart: unless-stopped</code></td><td>文档写明「永久 Restarting、每分钟一次、不会自愈」；用户按文案改端口</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§12</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-0930</span> 初版：基于 2026-11-03 grilling Q1→Q6 的十项拍板（D1-D10）。来源：issue <code>26-11-03-0316-bug-webui-bind-failure-silent</code>，用户显式授权认领并逐题选择 A / P1 / R1。</li>
+</ul>
+
+</div>
+</body>
+</html>

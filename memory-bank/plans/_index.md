@@ -19,6 +19,7 @@
 
 ## Open
 
+- [26-11-03-0930] [WebUI bind 失败改为启动期 fail-fast](26-11-03-0930-plan-webui-bind-fail-fast.html) — `webui-bind-fail-fast`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
