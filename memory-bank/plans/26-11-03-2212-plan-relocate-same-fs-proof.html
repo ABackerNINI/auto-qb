@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组迁移同盘证明误拒：根因与修复计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-same-fs-proof">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-03-2212">
+<meta name="doc-updated" content="26-11-03-2212">
+<meta name="doc-refs" content="memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/testing/real-baselines/26-11-01-2113-real-RM04.md, memory-bank/tasks/26-11-03-backend-relocate-same-fs-proof.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-same-fs-proof</div>
+<h1>整组迁移同盘证明误拒：根因与修复计划</h1>
+<p class="lede">把「3 成员组跨盘移动必失败」拆成可判定的因果链：真正拦人的不是链接能力，而是用 qB 默认保存路径的剩余空间去证明「同一块盘」的代理判据。本计划只做分析与规划，不改 <code>src/</code>。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-2212 · <b>doc-updated</b> 26-11-03-2212 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户现场报错 + 会话只读定位 + 测试实例 56590 只读探针 + 26-10-18-1604 设计计划 + 26-11-01-2113 RM04 真机基线
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p>目标：让「qB 与 auto-qb 同机、但 qB 默认保存路径不在这两块盘上」的多成员组能完成跨卷迁移；同时保证真正的远程 / 跨 OS 容器场景仍被拒绝，且拒绝时一条消息就能说清是哪一种情况、差多少。</p>
+<h3>不变量（本轮不动）</h3>
+<ul>
+  <li>单成员组继续走 <code>FORM_DIRECT</code>：qB 自己搬字节，不建链接，不受本闸门影响。</li>
+  <li>多成员组仍必须建链接；链接必须 qB 可读，这是安全底线，不能为了通过而取消。</li>
+  <li>保守默认：新的「同机共享」声明默认关闭；CI / 单机用户不配置时行为不变。</li>
+  <li>不引入 auto-qb 自己复制数据的新形态；字节搬运仍由 qB 完成。</li>
+  <li>新增配置键必须同步 <code>config.validate_config</code> 与 <code>config/schema.py</code>（黄金法则 4）。</li>
+</ul>
+<h3>做到什么程度算成</h3>
+<ul>
+  <li>现场同类 3 成员组在 <code>auto</code> 或显式声明后可完成；拒绝时消息包含实测数字与唯一归因。</li>
+  <li>远程 qB / 跨 OS 容器仍 100% 拒绝；无法判定时仍 fail-fast。</li>
+  <li>单测覆盖判据分支；真机在环境 1 用伪造种子完成跨卷正反例。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状、判定点与根因</h2>
+<h3>2.1 判定点（文件:行号）</h3>
+<pre><code><span class="cm"># 多成员判定</span>
+src/auto_qb/core/modules/relocate_units.py:420
+    multi = len(facts.hashes) &gt; 1
+
+<span class="cm"># 同盘证明：任一吻合即过</span>
+src/auto_qb/core/modules/relocate_plan.py:247-260
+    src_free    = fa.disk_usage(save_path).free        <span class="cm"># 经 fs.path_map 译成挂载路径</span>
+    qb_free     = store.server_state["free_space_on_disk"]
+    proved      = same_volume_proof(qb_free, src_free) or same_volume_proof(qb_free, target_free)
+
+<span class="cm"># 猜成远程，进一步决定平台能力</span>
+src/auto_qb/core/modules/relocate_plan.py:263-265
+    verdict = alias_fs.platform_verdict(cap, target_is_unc=..., remote=not proved, same_volume=...)
+
+<span class="cm"># 多成员才硬拦；单成员只记 note</span>
+src/auto_qb/core/modules/relocate_units.py:495-504
+    if not facts.same_fs_proved:
+        if multi: _block(GATE_SAME_FS, text + " —— 只有独占情形(单成员组)可迁移")
+        else:     notes.append(text + " —— 独占情形由 qB 自行搬运, 免同卷证明与链接能力")
+
+<span class="cm"># 判据本体：容差 max(1GiB, 本机剩余 x 2%)</span>
+src/auto_qb/core/modules/relocate_units.py:702-714
+    tolerance = max(1 &lt;&lt; 30, int(local_free * 0.02))
+    return abs(qb_free - local_free) &lt;= tolerance</code></pre>
+
+<h3>2.2 为什么 3 成员组必失败、单成员组为何可过</h3>
+<ol>
+  <li>组里有 3 个种子 ⇒ <code>multi=True</code>（units.py:420）。多成员组不能由 qB 一次性搬：只能让一个 mover 搬字节，其余成员靠 <b>src 上的链接指向 dst</b> 继续做种（exec.py:171-203）。所以必须证明 qB 能读到本机在 src / dst 上看到的文件系统。</li>
+  <li>当前「同盘证明」拿 <code>server_state.free_space_on_disk</code> 与本机 src / dst 的剩余空间比。问题是：qB 的这个字段报的是它<b>默认保存路径</b>那块卷，不是本次迁移的源卷或目标卷（代码注释自述，relocate_plan.py:256-259；RM04 真机基线实测同口径）。</li>
+  <li>因此只要 qB 默认保存路径落在<b>第三块盘</b>（既不是 src 也不是 dst），两侧比较都不吻合 ⇒ <code>proved=False</code> ⇒ <code>GATE_SAME_FS</code> 硬拦。同一台机器上也会误拒，这是<b>假阴性</b>。</li>
+  <li>单成员组走 <code>FORM_DIRECT</code>（units.py:31、184、454）：qB 自己搬，没有链接，也就不需要「qB 看得见」的证明，所以它「能过」<b>不是</b>因为盘证明通过了，而是这个闸门根本不适用。不能拿「单成员能搬」推断盘没问题。</li>
+  <li><code>remote=not proved</code>（plan.py:265）还会把同一个假阴性传染给平台能力判定（alias_fs.py:656-659），即使链接能力完全可用也会被记为「远程 qB 无共享文件系统」。</li>
+</ol>
+
+<h3>2.3 已验证 vs 推测</h3>
+<table>
+  <tr><th>结论</th><th>状态</th><th>证据</th></tr>
+  <tr><td>多成员走链接、单成员走 direct；<code>multi</code> 只按成员数判定</td><td class="good">已验证</td><td>units.py:31-33、420、454；exec.py:171-203</td></tr>
+  <tr><td>qB 的 <code>free_space_on_disk</code> 是默认保存路径卷的剩余空间，不是本次迁移源/目标卷</td><td class="good">已验证</td><td>relocate_plan.py:256-259 注释；RM04 真机基线；本机 56590 探针：save_path 为不存在的 <code>R:\Download\PTing</code> 时该字段返回 <code>-1</code></td></tr>
+  <tr><td>证明失败就把 qB 当远程，进而可能压掉平台能力</td><td class="good">已验证</td><td>relocate_plan.py:265；alias_fs.py:656-659</td></tr>
+  <tr><td>报错只显示第一条 reason，且本条文案不含任何实测数字</td><td class="good">已验证</td><td>commands_torrents.py:403-411（取第一条即 break）；units.py:496-497</td></tr>
+  <tr><td>跨卷时不会尝试硬链接，而是走文件符号链接 / 目录别名</td><td class="good">已验证</td><td>alias_fs.py:131-148（<code>same_volume=False</code> 时直接返回 symlink）</td></tr>
+  <tr><td>qB 5.2.3 没有按路径查剩余空间的端点；5.3 才新增 <code>getFreeSpaceAtPath</code></td><td class="good">本机已验证 5.2.3 为 404；5.3 行为待验证</td><td>56590：version v5.2.3 / WebAPI 2.15.1，两种端点名均 404；报告 26-10-31-0548 记录 5.3 新增能力</td></tr>
+  <tr><td>用户现场属于「同机第三块盘」「qB 默认路径不可读」「path_map 未覆盖」「真远程/容器」中的哪一种</td><td class="wr">推测 / 待取证</td><td>现有文案四者共用一句话，无法区分；需要现场事实与 P1 诊断</td></tr>
+</table>
+
+<h3>2.4 三种候选原因的最小判据</h3>
+<table>
+  <tr><th>候选</th><th>最小判据</th><th>与用户现象是否吻合</th></tr>
+  <tr><td>同机，但 qB 默认保存路径是第三块盘</td><td>qB <code>app/preferences.save_path</code> 的卷 ≠ src 卷 ≠ dst 卷；qB 剩余空间与本机默认路径卷一致</td><td>吻合：3 成员必拦，单成员照过</td></tr>
+  <tr><td>qB 默认路径不可读 / 盘未挂载</td><td><code>free_space_on_disk</code> 为 <code>-1</code> 或 <code>None</code></td><td>吻合：本机 56590 已复现此形态</td></tr>
+  <tr><td>auto-qb 容器映射错位 / 真远程</td><td><code>fs.path_map</code> 命中失败，或 qB 与本进程不在同一文件系统；平台能力探测报 <code>container_cross_os</code> / 远程</td><td>部分吻合，但此时通常还会撞 <code>GATE_SPACE</code> / <code>GATE_PLATFORM</code>，只是被第一条 reason 盖住</td></tr>
+</table>
+<p class="aside">本轮只读探针在环境 2 的 56590 上复核：<code>save_path = R:\Download\PTing</code>（本机无 R:），<code>free_space_on_disk = -1</code>，本机 C: 剩余 71,579,795,456 字节；<code>app/getFreeSpaceAtPath</code> 与 <code>app/getFreeSpaceAtPathAction</code> 均返回 404。这说明「默认路径不可读 ⇒ -1 ⇒ 必然误拒」是真实存在的分支，不是假想。</p>
+
+<h2><span class="no">§03</span>方案对比与建议</h2>
+<table>
+  <tr><th>方案</th><th>做法</th><th>优点</th><th>代价 / 风险</th><th>结论</th></tr>
+  <tr>
+    <td><b>A. 加强同盘证明</b><br>A1 按路径直证<br>A2 默认路径读数<br>A3 显式声明</td>
+    <td>A1：qB ≥5.3 时对 src / dst 分别查 qB 侧剩余空间，与本机映射后的读数比对（两卷都要证）。<br>A2：qB &lt;5.3 时先证明「qB 默认路径那块卷 == 本机某卷」，把 <code>-1</code> 与「不吻合」拆成两种归因。<br>A3：新增 <code>relocate.assume_shared</code>（默认 false），用户显式声明 qB 与本程序共享同一文件系统，跳过代理判据但保留能力探测与移动后校验。</td>
+    <td>A1 是唯一能证明「两块盘都对」的直证；A3 给同机用户一个诚实、可审计的出口；A2 消除 <code>-1</code> 与第三盘混报。</td>
+    <td>A1 依赖 qB 5.3（用户版本未知）；A3 把判断责任交给用户，配错会破坏做种；A2 仍不能证明 dst。</td>
+    <td class="good">首选主线：A3 + A2 先行，A1 观察 qB 版本后跟进</td>
+  </tr>
+  <tr>
+    <td><b>B. 跨卷降级为复制 + 替换</b></td>
+    <td>auto-qb 把数据复制到 dst，再对全部成员下发 setLocation，最后由 qB 重校验。</td>
+    <td>不需要链接，天然绕开可见性证明。</td>
+    <td>暂停做种的时间与数据量成正比；复制期占双倍空间；进度依赖重校验恢复；若 qB 真远程则本机根本写不到它的盘；与「qB 搬字节」的既有设计冲突。</td>
+    <td class="bad">本轮不做；最多作为后续显式「慢速复制」选项</td>
+  </tr>
+  <tr>
+    <td><b>C. 明确禁止 + 可操作报错</b></td>
+    <td>保持拦截，但把「qB 剩余 / 本机 src / 本机 dst / 容差 / qB 默认路径」全部列出，按归因给下一步；并显示全部闸门而不是第一条。</td>
+    <td>不改变安全边界；能立刻把「误拒」变成「可解释的拒绝」。</td>
+    <td>单独做不能解锁同机用户。</td>
+    <td class="wr">必做配套，不是独立方案</td>
+  </tr>
+  <tr>
+    <td><b>D. 配置里显式声明盘映射</b></td>
+    <td><code>fs.path_map</code> 已能把逻辑路径译成容器挂载路径，但它只解决 auto-qb 自己怎么读盘，不解决 qB 怎么看盘。新增同机共享布尔声明（与 A3 同一件事），不新增逐盘映射表。</td>
+    <td>语义最小，避免用户维护两张映射表；配置项可审计。</td>
+    <td>布尔声明无法表达「部分卷共享」；误配责任在用户。</td>
+    <td class="wr">作为 A3 的命名与 UX 形态，不单独成方案</td>
+  </tr>
+</table>
+<p><b>首选理由</b>：现场是「同机跨盘 + 默认路径在第三块盘」时，A1 需要 qB 5.3，A2 仍证不了 dst；只有 A3 能立刻、可审计地解锁，同时 C 保证拒绝时可解释。B 把暂停做种和双倍空间引入核心路径，不符合保守默认。</p>
+
+<h2><span class="no">§04</span>实施步骤（分期与验收）</h2>
+<table>
+  <tr><th>期</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td>P1 诊断先行<br><span class="tag">不改行为</span></td>
+    <td>预检 / 日志输出一组固定字段：qB 版本与 WebAPI、qB 默认 save_path、<code>free_space_on_disk</code>、src/dst 本机剩余、容差、<code>fs.path_map</code> 命中结果、能力探测 verdict、全部未过闸门。WebUI 回执从「第一条 reason」改为「有界的前三条 + 展开」。</td>
+    <td>用户一次粘贴即可判定属于 2.4 的哪一类；单测断言字段齐全、含数字；现有 <code>test_web_relocate</code> 不回归。</td>
+  </tr>
+  <tr>
+    <td>P2 归因拆分<br><span class="tag">不改放行</span></td>
+    <td>把同盘证明失败拆成三类文案：<code>unavailable</code>（-1/None/路径读不到）、<code>default_path_elsewhere</code>（qB 默认卷不等于 src/dst）、<code>mismatch</code>（有值但对不上）。每类给具体动作（检查默认保存路径 / 检查盘符 / 检查容器映射 / 声明同机）。</td>
+    <td>三类各有一条单测；文案包含实测数字；不再出现「远程 qB 或容器路径错位」这种无证据断言。</td>
+  </tr>
+  <tr>
+    <td>P3 显式出口<br><span class="tag">行为变更</span></td>
+    <td>新增 <code>relocate.assume_shared</code>（默认 false）。为 true 时：跳过 free-space 代理判据，仍跑能力探测、目标冲突、空间、<code>.!qB</code> 等闸门；发起前 UI 要求一次风险确认；日志记录「用户声明同机」。</td>
+    <td>配置进 <code>validate_config</code> + <code>schema.py</code>；默认 false 时行为与今天一致；开启后 3 成员跨盘可进入执行；有审计日志。</td>
+  </tr>
+  <tr>
+    <td>P4 直证跟进<br><span class="tag">条件项</span></td>
+    <td>qB ≥5.3 时优先用 <code>app/getFreeSpaceAtPathAction</code>（或 5.3 对应端点）对 src / dst 各查一次；两卷都与本机映射读数吻合才算 auto 通过。库若不支持，用受控的原始请求封装，不做全局替换。</td>
+    <td>5.3 实例上正例通过、反例拒绝；5.2.3 上自动回落到 A2，不产生 404 噪音；端点不可用时 fail-fast 到旧路径。</td>
+  </tr>
+  <tr>
+    <td>P5 真机与回归</td>
+    <td>环境 1（D: + R: 两卷，测试实例 36595/36596）：构造 3 个同内容伪造种子成组，做「默认卷=源卷」「默认卷=第三卷」两组场景；全部真实种子保持非活跃。</td>
+    <td>场景一 auto 通过；场景二 auto 拒绝且文案归因正确；声明后场景二通过；清理伪造种子、进程与临时目录。</td>
+  </tr>
+</table>
+<p class="aside">顺序理由：P1 不改变行为却能立即止损；P3 是解锁现场的最小行为改动；P4 依赖用户 qB 版本与库支持，放最后。若用户拍板「只要 P1+P3」，P4 可单独挂起。</p>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>问题</th><th>默认（推荐）</th><th>备选</th></tr>
+  <tr><td>D1</td><td>是否接受 <code>relocate.assume_shared</code>（默认 false、开启需确认）作为同机用户的正式出口？</td><td class="good">接受，先做</td><td>只做诊断与文案，不放行</td></tr>
+  <tr><td>D2</td><td>是否投入 qB 5.3 按路径直证（P4）？</td><td class="good">先探测版本，有 5.3 实例再排期</td><td>完全不做，长期依赖声明出口</td></tr>
+  <tr><td>D3</td><td><code>auto</code> 模式是否允许把「qB 默认卷 == 本机任一卷」当作通过？</td><td class="bad">不允许（证不了 dst，会造假阳性）</td><td>允许，接受误判风险</td></tr>
+  <tr><td>D4</td><td>WebUI 拒绝回执是否展示全部闸门（有界前三条）？</td><td class="good">展示，避免第一条掩盖其余原因</td><td>只显示一条，但日志全量</td></tr>
+  <tr><td>D5</td><td>是否允许「本次操作临时以同机共享重试」而不落配置？</td><td>不做；声明必须落配置，状态可审计</td><td>增加一次性的勾选重试</td></tr>
+  <tr><td>D6</td><td>是否保留「跨卷复制 + 替换」为后续选项？</td><td class="bad">本轮不做，不排期</td><td>列为后续独立计划</td></tr>
+  <tr><td>D7</td><td>现场事实补齐（判定真实归因）</td><td>需要用户提供：qB 默认保存路径、qB 版本、qB 是否容器/远程、auto-qb 是否容器、src/dst 盘符、<code>fs.path_map</code> 是否启用</td><td>若不便提供，先上线 P1 拿诊断</td></tr>
+</table>
+
+<h2><span class="no">§06</span>grilling：批判性压测</h2>
+
+<h3>G1 · 剩余空间比对是否本身就是错判据？</h3>
+<p><b>质疑</b>：它比较的是「qB 默认保存路径卷」与「本次 src/dst」，不是同一个对象；同容量两块盘剩余相近时会<b>假阳性</b>，默认路径在第三块盘时又<b>假阴性</b>。这不是身份证明，是相关性猜测。</p>
+<p><b>证据</b>：plan.py:256-259 注释自述字段语义；<code>tolerance = max(1GiB, local_free × 2%)</code>（units.py:713）；现有单测只覆盖「值相等 / 差数量级」，未覆盖「两块 20TB 盘剩余都在 2% 带内」（<code>tests/test_relocate_units.py:519-525</code>）。</p>
+<p><b>结论</b>：是错判据，不能作为 <code>auto</code> 的唯一放行依据。<span class="tag">需用户拍板 → D2 / D3</span></p>
+
+<h3>G2 · 硬链接跨卷必然失败，是否被误当成盘错位？</h3>
+<p><b>质疑</b>：是不是产品在跨卷时尝试硬链接、失败后误报成「盘不一致」？</p>
+<p><b>证据</b>：<code>file_alias_kind</code> 在 <code>same_volume=False</code> 时直接返回 symlink，硬链接只作为同卷首选（alias_fs.py:131-148）。跨卷 rename 也不会被尝试：qB 自己搬字节，剩下的靠链接。用户看到的是 <code>GATE_SAME_FS</code> 的文案，不是链接创建错误。</p>
+<p><b>结论</b>：不是。硬链接跨卷失败不是本次根因；但在同机 + 无 symlink 权限时，真正的拦人点会是 <code>GATE_PLATFORM</code>，而它可能被第一条 reason 盖住。<span class="tag">与 G6 联动</span></p>
+
+<h3>G3 · 单成员组可迁移，是否只是因为不需要链接？</h3>
+<p><b>质疑</b>：「单成员能搬」是否证明盘其实是好的？</p>
+<p><b>证据</b>：单成员走 <code>FORM_DIRECT</code>（units.py:31、184、454），证明失败时只进 notes（units.py:500-503），因此它<b>根本不经过</b>同盘证明与链接能力。它的成功只说明 qB 能自己搬，不能说明 qB 与本机共享文件系统。</p>
+<p><b>结论</b>：是。不能用单成员成功反推盘没问题；反过来，多成员失败也不能说明盘真的错位。<span class="good">已验证</span></p>
+
+<h3>G4 · qB 容器路径 vs 本机路径，是否应由用户显式声明？</h3>
+<p><b>质疑</b>：<code>fs.path_map</code> 只告诉 auto-qb 自己怎么读盘，不告诉 qB 怎么读；让用户声明「共享同一文件系统」是否把安全责任外推？</p>
+<p><b>证据</b>：file_access.py:5、301、312-325：path_map 是 syscall 边界翻译，命中失败就 raise；它没有任何 qB 侧语义。平台探测能识别跨 OS 容器（alias_fs.py:660-664），但识别不了「同 OS 容器只挂载了部分卷」。</p>
+<p><b>结论</b>：需要显式声明，但必须默认关、需确认、可审计，并配合移动后校验。否则无解。<span class="tag">需用户拍板 → D1 / D3</span></p>
+
+<h3>G5 · 降级复制是否会破坏做种连续性 / 进度？</h3>
+<p><b>质疑</b>：复制 + 替换看起来能绕开链接，为什么不直接做？</p>
+<p><b>证据</b>：复制期间组内成员必须暂停；复制完成前 dst 占双倍空间；之后只能靠 qB 重校验把进度拉回；若 qB 真远程，本机连 dst 都写不到。它把故障窗口从「一次预检」放大到「整段复制时间」。</p>
+<p><b>结论</b>：会。本轮拒绝；如未来做，必须是显式慢速选项，不能成为自动降级。<span class="tag">需用户拍板 → D6</span></p>
+
+<h3>G6 · 报错文案是否在掩盖真实原因？</h3>
+<p><b>质疑</b>：一句话同时指控「远程 qB」「容器路径错位」「本机源卷」，却不给任何数字，用户无法判断。</p>
+<p><b>证据</b>：文案在 units.py:496-497；WebUI 只取第一条 reason（commands_torrents.py:403-411）；<code>GATE_SAME_FS</code> 在 <code>GATE_PLATFORM</code> 之前（units.py:495 vs 505），所以平台失败也会被这条盖住。更糟的是 <code>remote=not proved</code> 会把假阴性写成「远程 qB」。</p>
+<p><b>结论</b>：是。P1 + P2 是所有方案的前置，否则无法验证修复是否真的命中。<span class="good">已验证</span></p>
+
+<h3>G7 · 若 qB 默认卷是第三块盘，<code>auto</code> 是否永远误拒？</h3>
+<p><b>质疑</b>：同机三块盘（默认 D:、源 E:、目标 F:）在今天的 <code>auto</code> 下是否无解？</p>
+<p><b>证据</b>：<code>proved</code> 只与 src/dst 比较（plan.py:260）；两侧都不吻合 ⇒ false ⇒ 多成员硬拦。没有其他同机证据入口。</p>
+<p><b>结论</b>：是，今天无解。这正是现场最可能的形态之一，也是 A3 存在的理由。<span class="tag">需用户拍板 → D1</span></p>
+
+<h3>G8 · 2% / 1GiB 容差是否会把不同盘判成同盘？</h3>
+<p><b>质疑</b>：两台同型号 20TB 盘、剩余都在 10TB 左右时，2% 带 = 200GB，足以让不同盘落进带内。</p>
+<p><b>证据</b>：units.py:713；注释称「真不同盘通常差数量级」，但同构车队不成立。假阳性会让 qB 读不到链接却照样放行。</p>
+<p><b>结论</b>：会。容差只能用于「同机抖动」，不能用于「跨盘身份」；这也支持 G1 的结论。<span class="tag">需用户拍板 → D2</span></p>
+
+<h3>G9 · 放宽闸门后，如何独立验证 qB 真能读链接？</h3>
+<p><b>质疑</b>：<code>assume_shared</code> 只是用户声明，产品没有 qB 侧的读验证；如果声明错了，链接建好但 qB 读不到，做种会静默坏掉。</p>
+<p><b>证据</b>：<code>_build_links</code> 只验证本进程建链成功（exec.py:192-203）；reconcile 只看 qB 的搬迁相位（exec.py:365-411），没有「qB 读到文件」的探针。qB 侧唯一的间接反馈是 progress / state 变化，且要等它自己重校验或读写。</p>
+<p><b>结论</b>：当前没有独立验证。必须在计划里定义：声明开启后，移动完成时对非 mover 成员做一次 progress/state 采样，发现 progress 掉到 0 或 error 就告警并给出回滚动作；或者把该风险写进用户确认文案。选哪种<span class="tag">需用户拍板 → D1</span>。</p>
+
+<h3>G10 · 诊断信息是否过度暴露？</h3>
+<p><b>质疑</b>：打印 qB 默认路径 / 盘符 / 剩余空间是否泄露隐私？</p>
+<p><b>证据</b>：这些数据只进本机 WebUI 与 localhost API 的响应；现有日志已含 save_path。</p>
+<p><b>结论</b>：可接受。只需确保诊断不把 token / qB 凭据带出；<code>free_space_on_disk</code> 等字段与既有日志同级。<span class="good">低风险</span></p>
+
+<h3>G11 · 是否应先拿到现场事实，再决定修哪一层？</h3>
+<p><b>质疑</b>：现在直接排期 P3 可能修错层（如果用户其实是真远程/跨 OS 容器）。</p>
+<p><b>证据</b>：2.4 的三类候选在文案上完全同形；本机只能证明「-1 分支存在」，不能证明用户属于哪类。</p>
+<p><b>结论</b>：是的。P1 既是修复也是取证；D7 的事实最好在 P3 编码前补齐。<span class="tag">需用户拍板 → D7</span></p>
+
+<h2><span class="no">§07</span>风险与回滚</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置 / 回滚</th></tr>
+  <tr><td>声明开启后 qB 实际读不到链接，做种静默中断</td><td><code>relocate.assume_shared=true</code> 但 qB 是远程 / 部分挂载容器</td><td>移动后采样非 mover 的 progress / state；异常则暂停并给「删除链接 + 让 qB 搬回 src」的回滚指引；默认关时不受影响</td></tr>
+  <tr><td>代理判据假阳性（不同盘同容量）</td><td>两盘剩余落进 2% / 1GiB 带内</td><td>不把自由空间当唯一证据；声明模式下不依赖它；保留能力探测 + 移动后采样</td></tr>
+  <tr><td>qB 5.3 端点/库不兼容</td><td>5.3 端点返回 404 或被库拒绝</td><td>P4 特性探测失败即回落 A2；不改变 5.2.3 行为</td></tr>
+  <tr><td>诊断字段影响既有回执契约</td><td>WebUI 前端只认旧字段</td><td>新字段只增不改；回执仍保留 <code>cls</code> / <code>reasons</code> 结构；<code>test_web_relocate</code> 回归</td></tr>
+  <tr><td>用户误配 <code>assume_shared</code></td><td>用户不理解「同机共享」的语义</td><td>UI 二次确认 + 文档写清「跨 OS 容器 / 远程 qB 必开不得」；日志留痕</td></tr>
+  <tr><td>本轮为分析轮，误改 <code>src/</code></td><td>发现顺手可修的产品缺陷</td><td>范围守恒：不修，按 create-issue 入池；本计划只落文档与基线</td></tr>
+</table>
+
+<h2><span class="no">§08</span>测试策略</h2>
+<h3>单测</h3>
+<ul>
+  <li><code>tests/test_relocate_units.py</code>：<code>same_volume_proof</code> 增加 <code>-1</code> / <code>None</code> / 第三卷 / 同容量相似剩余 四类；<code>evaluate_group</code> 增加 <code>multi=3</code> 与 <code>multi=1</code> 的对照，断言单成员只 note、不断言「证明通过」。</li>
+  <li><code>tests/test_relocate_exec_jobs.py:232</code> 的「任一侧吻合即过」用例随语义变化同步改写；新增声明模式用例：跳过同盘证明但仍跑冲突 / 空间 / 能力闸门。</li>
+  <li><code>tests/test_relocate_config.py</code>：新配置键的默认值、类型、<code>validate_config</code> 聚合报错、<code>schema.py</code> 一致。</li>
+  <li><code>tests/test_web_relocate.py</code>：回执展示有界多条 reason；新字段只增不改。</li>
+</ul>
+<h3>真机（环境 1：D: 与 R: 两卷，测试实例 36595 / 36596）</h3>
+<ul>
+  <li>正例：qB 默认保存路径在源卷 → 3 个伪造种子成组，跨卷移动；<code>auto</code> 应通过并收尾。</li>
+  <li>反例 A：qB 默认保存路径改到第三卷（如 C:）→ <code>auto</code> 应拒绝，文案归因为 <code>default_path_elsewhere</code>。</li>
+  <li>反例 B：默认路径指向不存在的盘 → 归因为 <code>unavailable</code>，不再混报远程。</li>
+  <li>声明模式：反例 A 下开启 <code>assume_shared</code>，应进入执行；移动后采样非 mover，确认 progress 未因链接不可读而掉零。</li>
+  <li>约束：全部真实种子保持非活跃；只用伪造种子搬运；结束后清理种子、进程、临时数据；token 不落任何文件。</li>
+</ul>
+<h3>fallback 路径</h3>
+<ul>
+  <li>qB 5.2.3（本机 56590 已确认）：无 <code>getFreeSpaceAtPath</code>，走 A2 + 声明；断言不产生 404 噪音。</li>
+  <li>qB 5.3：走 A1 直证；需另备 5.3 实例（当前未验证，列条件项）。</li>
+  <li>能力探测失败 / UNC / 跨 OS 容器：仍走既有拒绝文案，且不再被 <code>GATE_SAME_FS</code> 的第一条掩盖。</li>
+</ul>
+
+<h2><span class="no">§09</span>不做什么</h2>
+<ul>
+  <li>不取消 <code>GATE_SAME_FS</code>，不把「多成员组」降级成单成员直搬。</li>
+  <li>不让 auto-qb 自己复制数据（B 方案本轮拒绝）。</li>
+  <li>不新增逐盘映射表；不改变 <code>fs.path_map</code> 的既有语义。</li>
+  <li>不改 <code>same_volume_proof</code> 的容差数值来「调通过率」——那只会把假阳性做大。</li>
+  <li>不改 <code>src/</code> 的任何代码（本轮是分析与计划）；不碰 <code>config.yml</code> 与 <code>auto-qb-data/</code>；不跨 clone。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-2212</span> 初版：基于用户现场报错、只读定位（relocate_units / relocate_plan / alias_fs / relocate_exec / commands_torrents）与 56590 只读探针，给出 A/B/C/D 四方案对比、P1-P5 分期、grilling 11 问与待拍板 D1-D7。来源：本轮会话。</li>
+</ul>
+
+</div>
+</body>
+</html>

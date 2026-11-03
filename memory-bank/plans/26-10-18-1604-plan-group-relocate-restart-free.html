@@ -10,7 +10,7 @@
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-10-18-1604">
 <meta name="doc-updated" content="26-10-30-0211">
-<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-19-1421-group-relocate-p7.md">
+<meta name="doc-refs" content="memory-bank/reports/26-10-18-0818-report-group-relocate-restart-free.html, memory-bank/reports/26-10-18-1300-report-group-relocate-restart-free-verified.html, memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-18-2038-group-relocate-restart-free-p1.md, memory-bank/testing/baselines/26-10-18-2257-group-relocate-restart-free.md, memory-bank/testing/baselines/26-10-19-1421-group-relocate-p7.md, memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html">
 <style>
   :root {
     --bg: #10151a;
@@ -342,7 +342,7 @@
 <h3>3.7 开关与配置面</h3>
 <pre><code>relocate:
   enabled: false             # 总开关; 关 = 三入口逐字节保持现状
-  alias_file_threshold: 8    # 文件数 < 阈值 ⇒ 逐文件链接; >= 且目录专属(确认后) ⇒ 目录别名
+  alias_file_threshold: 8    # 文件数 &lt; 阈值 ⇒ 逐文件链接; &gt;= 且目录专属(确认后) ⇒ 目录别名
   hard_max_links: 2000       # 逐文件链接硬上限, 超过且无法用目录别名则拒绝
   verify: size               # size(默认) | sample(抽样 SHA1)
   allow_uac: true            # 允许弹 UAC 建 symlink; false = 直接拒绝
