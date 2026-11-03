@@ -5,7 +5,7 @@
 **Updated:** 2026-11-03
 **Summary:** S4 完成 B7 33 件 + B8 8 件评审：4 条发现入池（P1×1/P2×1/P3×2）；test.gtm 1 failed 已入池；扩展安全复核无新增风险
 **Topics:** memory-bank-code-review-3-s4
-**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md
 
 ## 原始请求
 
