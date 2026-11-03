@@ -6,6 +6,11 @@
 
 跳检闸门扩展(plan 26-10-05-0314 S1b-1: 三分流 detail 单点 + force + 预检):
 - test_g6_stale_snapshot_window_recovered_by_deferral: G6 端到端(A 系 S3 D1): 陈旧快照窗口存在 + deferral 拦下 + 回流后保护恢复
+
+覆盖率第三轮 T1a(ops_jobs 同步线对账叶, 26-11-04 快照缺口 8 单位):
+- test_ops_sync_line_noop_without_backup_ledger: 无备份账本时同步线对账直接返回(33), 一次性闸照常落
+- test_ops_sync_line_missing_backup_file_errors_and_keeps_entry: 不在客户端且备份文件缺失 -> ERROR 交人, 账本条目保留(41-43)
+- test_ops_sync_line_readd_failure_keeps_backup: 备份重加抛错 -> ERROR+备份保留, 条目不清、备份文件不动(56-58)
 """
 
 import copy
@@ -42,7 +47,9 @@ from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_ski
 
 from ops_support import (
     _TMP_STATE_DIR,
+    capture_ops_logs,
     make_mgr,
+    seed_paused,
     wire_group,
 )
 
@@ -122,3 +129,61 @@ def test_g6_stale_snapshot_window_recovered_by_deferral():
     mgr.store.by_hash["HD"].state = "stalledDL"  # 同步落真值
     assert mgr.store.group_has_downloading("HC") is True, "回流后 G6 判据恢复"
     assert any(g.gate == "G6" for g in mgr.ctx.ops._skip_gates_detail("HC", c_snap)), "回流后 G6 应拦下"
+
+
+# ============================================================
+# 覆盖率第三轮 T1a: ops_jobs 同步线对账叶余量(26-11-04 快照缺口 8 单位)
+# ============================================================
+def test_ops_sync_line_noop_without_backup_ledger():
+    """测试: 无备份账本(state 无 skip_check_backup)时同步线对账直接返回(33), 零动作;
+    一次性闸照常落(每进程只对账一次)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HA")
+    assert not mgr.state.get("skip_check_backup"), "前提: 无备份账本"
+    mgr.ctx.ops.on_sync_line(True)
+    assert client.calls == [], "无账本不得有任何客户端动作"
+    assert mgr.ctx.ops._skip_recovered is True, "一次性闸已落(后续同步线不再对账)"
+
+
+def test_ops_sync_line_missing_backup_file_errors_and_keeps_entry(tmp_path):
+    """测试: 种子不在客户端且备份文件已丢 -> 无恢复凭据, 只能 ERROR 交人(42-43);
+    账本条目保留(清账=静默丢凭据), 零客户端动作"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HA")
+    mgr.state.setdefault("skip_check_backup", {})["HLOST"] = {
+        "path": str(tmp_path / "nope.torrent"),
+        "save_path": "R:/Downloads",
+        "ts": 0,
+    }
+    with capture_ops_logs() as logs:
+        mgr.ctx.ops.on_sync_line(True)
+    assert any("不在客户端且备份文件缺失" in m and "HLOST"[:8] in m for m in logs), logs
+    assert "HLOST" in mgr.state["skip_check_backup"], "无凭据不得清账(交人处理)"
+    assert client.calls == [], "备份丢失不得触发任何重加动作"
+
+
+def test_ops_sync_line_readd_failure_keeps_backup(tmp_path):
+    """测试: 备份重加抛错 -> ERROR 点名原因 + 备份保留(56-58); 账本条目不清、备份文件不动"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HA")
+    backup = tmp_path / "HRETRY.torrent"
+    backup.write_bytes(b"torrent-bytes")
+    mgr.state.setdefault("skip_check_backup", {})["HRETRY"] = {
+        "path": str(backup),
+        "save_path": "R:/Downloads",
+        "category": "c",
+        "tags": "t",
+        "ts": 0,
+    }
+    client.add_error = RuntimeError("duplicate torrent")
+    with capture_ops_logs() as logs:
+        mgr.ctx.ops.on_sync_line(True)
+    assert any("重加失败" in m and "备份保留" in m and "HRETRY"[:8] in m for m in logs), logs
+    assert "HRETRY" in mgr.state["skip_check_backup"], "重加失败不得清账(凭据还在, 下轮可再试)"
+    assert backup.exists(), "备份文件不得被改动"

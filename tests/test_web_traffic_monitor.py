@@ -50,6 +50,14 @@
 - test_notify_rejects_non_dict_body (P0-T0.4): 事件体非 JSON 对象 -> 400(契约漂移响亮报错)
 - test_claim_refused_409_with_tool_output
 - test_status_passes_autostart_error_through
+
+覆盖率第三轮 T1a(traffic_monitor 竞态/缺字段余量, 26-11-04 快照缺口 10 单位; 既有「unreachable
+-> 502」三例实际红在前置闸(_source_status 内的 /status 调用失败), 代理调用的同型分支未达):
+- test_write_endpoints_token_vanish_race_502: 状态探测时密钥在、写端点取密钥时已消失(竞态窗口的
+  第二次读) -> 502 点名路径(133)
+- test_write_proxy_tool_unreachable_midcall_502: 探活成功与代理调用之间工具掉线 -> PUT /config /
+  POST /autostart / POST /shutdown 三个代理调用的 ToolUnreachable 各自收口 502(232-233/254-255/291-292)
+- test_autostart_tool_400_passthrough: 工具 400(action 校验错)原样透传(258-259)
 """
 import os
 import re
@@ -651,8 +659,7 @@ def test_frontend_tool_params_use_unit_controls():
     # 模板: 单位复合控件(含 rate 文法) + 复用设置页的「?」浮窗
     for needle in (
         "class=\"hb-unit\"", "tmUnitParts(p)", "tmSetUnitPart(p", "cfgUnitOptions(p.kind)",
-        "p.kind === 'time' || p.kind === 'size' || p.kind === 'speed'",
-        "$root.hubAsk($root.tmAskItem(p), $event)"
+        "p.kind === 'time' || p.kind === 'size' || p.kind === 'speed'", "$root.hubAsk($root.tmAskItem(p), $event)"
     ):
         assert needle in tpl, f"流量与限速卡的工具参数行缺 {needle}"
     # 载荷: 时间/大小/速率原样透传, 不做 Number()
@@ -803,3 +810,58 @@ def test_frontend_claim_wiring():
     load = hub[hub.index("async tmLoad()"):]
     load = load[:load.index("async tmRelaunch()")]
     assert "r.claim_note" in load
+
+
+# ---- 覆盖率第三轮 T1a: 竞态/缺字段余量(探活成功后的写链路分支) ----
+
+
+def test_write_endpoints_token_vanish_race_502(tm_env, monkeypatch):
+    """竞态分支: 状态探测时密钥文件还在、写端点取密钥时已消失(_ready_endpoint 的第二次读)
+    -> 502 且点名路径(写端点必须真报错, 不静默空转)"""
+    mgr, client, token_file = tm_env
+    reads = {"n": 0}
+
+    def flaky_read(path):
+        reads["n"] += 1
+        return "tool-token-abc" if reads["n"] == 1 else ""  # 第二次读: 密钥已消失
+
+    monkeypatch.setattr(tm_routes, "_read_token", flaky_read)
+    monkeypatch.setattr(tm_routes, "_call_tool", lambda *a, **k: (200, {"ok": True}))
+    r = client.put("/api/traffic/monitor/config", json={"config": {}}, headers=_auth(mgr))
+    assert r.status_code == 502, f"密钥竞态消失应 502: {r.status_code}"
+    assert "工具密钥文件不存在或为空" in r.json()["detail"] and token_file in r.json()["detail"]
+    assert reads["n"] == 2, f"竞态窗口的两次读(状态区一次 + 写端点一次): {reads['n']}"
+
+
+def test_write_proxy_tool_unreachable_midcall_502(tm_env, monkeypatch):
+    """探活成功与代理调用之间工具掉线(竞态): 三个写端点的代理调用 ToolUnreachable
+    各自收口 502(前置闸 _source_status 内的 /status 仍成功, 502 只能来自代理段)"""
+    mgr, client, _ = tm_env
+
+    def flaky_call(base, path, method, token, payload=None, timeout=None):
+        if path == "/status":
+            return 200, {"ok": True}  # 探活成功
+        raise tm_routes.ToolUnreachable("connection reset mid-call")  # 代理段掉线
+
+    monkeypatch.setattr(tm_routes, "_call_tool", flaky_call)
+    r = client.put("/api/traffic/monitor/config", json={"config": {"sample_interval": 2.5}}, headers=_auth(mgr))
+    assert r.status_code == 502 and "connection reset mid-call" in r.json()["detail"]
+    r = client.post("/api/traffic/monitor/autostart", json={"action": "install"}, headers=_auth(mgr))
+    assert r.status_code == 502 and "connection reset mid-call" in r.json()["detail"]
+    r = client.post("/api/traffic/monitor/shutdown", headers=_auth(mgr))
+    assert r.status_code == 502 and "connection reset mid-call" in r.json()["detail"]
+
+
+def test_autostart_tool_400_passthrough(tm_env, monkeypatch):
+    """工具 400(action 校验错) -> 400 原样透传(501 平台不支持/5xx 已各有用例, 400 透传是缺的那格)"""
+    mgr, client, _ = tm_env
+
+    def fake_call(base, path, method, token, payload=None, timeout=None):
+        if path == "/status":
+            return 200, {"ok": True}
+        return 400, {"errors": ["action: 必须是 install 或 uninstall"]}
+
+    monkeypatch.setattr(tm_routes, "_call_tool", fake_call)
+    r = client.post("/api/traffic/monitor/autostart", json={"action": "install"}, headers=_auth(mgr))
+    assert r.status_code == 400, f"工具校验错应原样透传 400: {r.status_code}"
+    assert "action" in r.json()["detail"], r.json()["detail"]

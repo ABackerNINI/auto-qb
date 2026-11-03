@@ -31,6 +31,17 @@
 - test_guard_skip_readd_args_pin: 重加参数直传 pin(torrent_files/save_path/category/tags/contentLayout/stopped/seq/f_l/limits, ac 簇 + pr14)
 - test_guard_skip_submit_defaults_conservative: 缺省参数保守默认(ss3 WEB 不自动开始/ss5 rule 不自动豁越 + origin 保存 ss14/ss22/sb42/sb49/jn11/jn20)
 - test_guard_skip_begin_idempotent: 同 hash 在途幂等闸(sb8 失效=旧 job 被覆盖)
+
+覆盖率第三轮 T1a(ops_skip 相位机推进/守卫余量, 26-11-04 快照缺口 18 单位):
+- test_skip_gone_retry_delete_raise_and_attempts_exhausted: gone 相位确认种子仍在 -> 幂等重试删除抛错被吞(402-403), 退避次数耗尽终态失败 + 残留记录撤账
+- test_skip_drive_settle_during_backoff_sleep_race: 退避 sleep 期间主循环微步并发推进把 job 推到终态 -> 驱动循环经 while 条件出口收束(189->200 分支弧, 非 break 出口)
+- test_skip_step_after_settle_is_noop: 终态 job 再被步进(并发双驱动形态)为 no-op: 不重复结算/广播/回调(213->217 分支)
+- test_skip_result_cache_trims_oldest: 终态结果缓存超 _SKIP_RESULT_KEEP 淘汰最旧条目(234-235); 兼验 web=None 时 settle 跳过进度广播(237->249 分支)
+- test_skip_settle_notify_failure_isolated: 进度事件广播失败只记 WARNING, 不影响已落定终态(247-248)
+- test_skip_settle_on_done_failure_isolated: 终态回调异常只记 ERROR, 终态结果照常落账可查(254-255)
+- test_advance_due_budget_calls_truncates: advance_due 步数预算先到先止, 超预算 job 留待下轮(296-297)
+- test_skip_appeared_confirm_error_retries: 确认重加直查异常走退避重试不终态(418-420, 直驱拨相位)
+- test_skip_appeared_retry_add_raise_swallowed: 重加确认不到时的幂等重加抛错被吞(433-434), 次数耗尽终态失败并撤掉快照残留记录
 """
 
 import copy
@@ -53,6 +64,7 @@ from datetime import date
 
 from types import SimpleNamespace
 
+from auto_qb.core.modules.ops_common import SKIP_PHASE_APPEARED
 from auto_qb.core.modules.ops_mod import OpsModule
 
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
@@ -971,3 +983,215 @@ def test_guard_skip_begin_idempotent():
     r = ops.skip_submit("HA", source="web")
     assert "已在执行中" in r.message, f"幂等闸必须拒绝二次提交: {r}"
     assert ops._skip_jobs["HA"] is job1, "旧 job 不得被覆盖"
+
+
+# ============================================================
+# 覆盖率第三轮 T1a: 相位机推进/守卫余量(26-11-04 快照缺口 18 单位)
+# ============================================================
+def test_skip_gone_retry_delete_raise_and_attempts_exhausted():
+    """测试: gone 相位确认种子仍在(qB 删除异步未落地形态) -> 幂等重试删除抛错被吞(兜底分支),
+    退避次数(10/20/50/50/50ms)耗尽终态失败; 删除不摘记录, 失败不清同日去重"""
+    from unittest.mock import patch
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    dels = {"n": 0}
+
+    def flaky_delete(torrent_hashes=None, **kw):
+        dels["n"] += 1
+        if dels["n"] > 1:
+            raise RuntimeError("delete in flight")  # 重试删除抛错: 兜底分支只吞不炸
+        # 首删"成功"但不摘种子(模拟 qB 删除异步未落地): gone 相位确认仍在 -> 进退避重试
+
+    client.torrents_delete = flaky_delete
+    slept = []
+    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: slept.append(s)):
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "删除后种子仍在客户端" in r.message, f"重试耗尽应终态失败: {r}"
+    assert dels["n"] == 5, f"首删 + 4 次幂等重试(第 5 次退避名额耗尽不再重试): {dels['n']}"
+    assert len(slept) >= 1, "退避窗口真实存在(相位机每步一次调用, 步间退避)"
+    assert mgr.store.get("HASH123") is t, "失败路径不摘快照记录(种子明明还在)"
+    assert mgr.ctx.ops._skip_jobs == {}, "终态后 job 出账"
+
+
+def test_skip_drive_settle_during_backoff_sleep_race():
+    """测试: 退避 sleep 期间主循环微步并发推进(竞态形态, 同线程直驱模拟)把 job 推到终态 ->
+    驱动循环经 while 条件出口收束(而非 break) —— 覆盖 189->200 分支弧"""
+    from unittest.mock import patch
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    ops = mgr.ctx.ops
+
+    def sticky_delete(torrent_hashes=None, **kw):
+        pass  # 删除恒"成功"但种子仍在(gone 相位每轮进退避重试)
+
+    client.torrents_delete = sticky_delete
+
+    def race_sleep(_seconds):
+        for j in list(ops._skip_jobs.values()):  # 主循环微步线并发布进(竞态)
+            for _ in range(10):  # 一口气把余下退避走完: 终态确定在 sleep 窗口内落定
+                ops._skip_step(j)
+
+    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=race_sleep):
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "删除后种子仍在客户端" in r.message, f"并发推进应把 job 推到终态: {r}"
+    assert ops.skip_result("HASH123") is r, "终态在 sleep 中落定, 同对象返回"
+    assert ops.next_run_at() is None and ops._skip_jobs == {}, "终态后在途清空"
+
+
+def test_skip_step_after_settle_is_noop():
+    """测试: 终态 job 再被步进(并发双驱动形态)为 no-op —— 不重复结算/不重复广播/不重复回调
+    (覆盖 213->217 分支弧: handler None 落到终态短路)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    ops = mgr.ctx.ops
+    done_calls = {"n": 0}
+    seen = {}
+
+    def on_done(job):
+        done_calls["n"] += 1
+        seen["job"] = job
+
+    assert ops.skip_submit("HASH123", source="web", on_done=on_done).is_pending
+    assert drive_skip(mgr), "在途 job 应推到终态"
+    job = seen["job"]
+    assert job.settled and job.result.is_ok
+    calls_before = list(client.calls)
+    notify_calls = []
+    mgr.ctx.web = SimpleNamespace(notify=lambda name, payload: notify_calls.append(name))
+    ops._skip_step(job)  # 终态后再次步进: 必须整段 no-op
+    assert notify_calls == [], "终态 job 不得重复广播进度事件"
+    assert done_calls["n"] == 1, "终态回调不得重放"
+    assert list(client.calls) == calls_before, "终态 job 再步进不得有新客户端调用"
+    assert job.result.is_ok and job.settled, "结果与终态标志原样"
+
+
+def test_skip_result_cache_trims_oldest():
+    """测试: 终态结果缓存超 _SKIP_RESULT_KEEP(64)淘汰最旧条目(234-235);
+    兼验 ctx.web=None(web 未启用形态)时 settle 跳过进度广播(237->249 分支弧)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    ops = mgr.ctx.ops
+    for i in range(64):
+        ops._skip_results[f"OLD{i:02d}"] = object()
+    mgr.ctx.web = None  # web 未启用: settle 的进度广播段整体跳过
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"跳检应完成: {r}"
+    assert "OLD00" not in ops._skip_results, "第 65 条入账后最旧条目应被淘汰"
+    assert len(ops._skip_results) == 64, f"缓存上限钉死 64: {len(ops._skip_results)}"
+    assert ops.skip_result("HASH123") is r, "新终态可查且与返回同对象"
+
+
+def test_skip_settle_notify_failure_isolated():
+    """测试: 进度事件广播失败只记 WARNING(事件广播失败不得影响已落定的终态)(247-248)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    mgr.ctx.web = SimpleNamespace(notify=lambda name, payload: (_ for _ in ()).throw(RuntimeError("bus down")))
+    with capture_ops_logs() as logs:
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_ok, f"广播失败不得影响跳检终态: {r}"
+    assert any("跳检进度事件广播失败" in m for m in logs), logs
+    res = mgr.ctx.ops.skip_result("HASH123")
+    assert res is not None and res.is_ok, "终态结果照常落账"
+
+
+def test_skip_settle_on_done_failure_isolated():
+    """测试: 终态回调异常只记 ERROR(回调异常不得影响已落定的终态), 终态结果照常落账可查(254-255)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    ops = mgr.ctx.ops
+
+    def bad_on_done(job):
+        raise RuntimeError("collector crashed")
+
+    assert ops.skip_submit("HASH123", source="web", on_done=bad_on_done).is_pending
+    with capture_ops_logs() as logs:
+        assert drive_skip(mgr), "回调抛错不得挡住其它 job 的推进"
+    r = ops.skip_result("HASH123")
+    assert r is not None and r.is_ok, f"终态结果照常落账: {r}"
+    assert any("跳检终态回调异常" in m and "collector crashed" in m for m in logs), logs
+    assert ops.next_run_at() is None and ops._skip_jobs == {}, "job 已出账"
+
+
+def test_advance_due_budget_calls_truncates():
+    """测试: advance_due 步数预算先到先止 —— budget_calls=1 时本轮只推进一条,
+    超预算的 job 留待下轮(296-297), 后续推进仍能全部到终态"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    a = FakeTorrent(hash="HASH123", state="pausedDL", progress=0.0)
+    b = FakeTorrent(hash="HB", state="pausedDL", progress=0.0)
+    seed_store(mgr, [a, b])  # 一次性灌入(seed_store 是整表替换, 两次各灌会互相覆盖)
+    client.torrents["HASH123"] = a
+    client.torrents["HB"] = b
+    ops = mgr.ctx.ops
+    assert ops.skip_submit("HASH123", source="web").is_pending
+    assert ops.skip_submit("HB", source="web").is_pending
+    stepped = ops.advance_due(budget_ms=50.0, budget_calls=1)
+    assert stepped == 1, f"预算先到先止: 本轮只推一步, 实推 {stepped}"
+    assert len(ops._skip_jobs) == 2, "两条 job 均未到终态(单步不足以结算)"
+    assert drive_skip(mgr), "余下预算内应能把全部在途 job 推到终态"
+    assert ops.next_run_at() is None and ops._skip_jobs == {}, "终态后在途清空"
+
+
+def test_skip_appeared_confirm_error_retries():
+    """测试: 确认重加(qB 侧尚未处理完/直查异常)走退避重试, 不终态(418-420; 直驱拨相位)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    seed_paused(mgr, client, hash="HASH123")
+    ops = mgr.ctx.ops
+    assert ops.skip_submit("HASH123", source="web").is_pending
+    job = ops._skip_jobs["HASH123"]
+    job.phase = SKIP_PHASE_APPEARED  # 直驱: 相位拨到「确认重加」
+    client.torrents_info = lambda **kw: (_ for _ in ()).throw(RuntimeError("api down"))
+    ops._skip_step(job)
+    assert job.attempts == 1, "确认异常应记一次退避重试"
+    assert job.phase == SKIP_PHASE_APPEARED and not job.settled, "确认异常不终态, 留待退避后再试"
+    assert ops.skip_result("HASH123") is None, "未到终态不应有结果缓存"
+
+
+def test_skip_appeared_retry_add_raise_swallowed():
+    """测试: 重加后确认不到时的幂等重加抛错被吞(433-434), 退避次数耗尽终态失败;
+    失败路径把快照里的残留记录撤掉(它是假账, 下轮上报按真删除处理)"""
+    from unittest.mock import patch
+
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HASH123", state="stoppedDL", progress=0.0)
+    seed_store(mgr, [t])
+    client.torrents["HASH123"] = t
+    adds = {"n": 0}
+
+    def flaky_add(**kw):
+        adds["n"] += 1
+        if adds["n"] > 1:
+            raise RuntimeError("duplicate in flight")  # 幂等重加抛错: 兜底分支只吞不炸
+        FakeClient.torrents_add(client, **kw)  # 首次重加正常受理
+        client.torrents.pop("HASH123", None)  # qB 尚未处理完: 确认相位看不到 -> 进退避
+
+    client.torrents_add = flaky_add
+    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: None):
+        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    assert r.is_failed and "重加后未确认到种子" in r.message, f"确认不到应终态失败: {r}"
+    assert adds["n"] == 5, f"首次重加 + 4 次幂等重加(第 5 次重试名额耗尽不再重加): {adds['n']}"
+    assert mgr.store.get("HASH123") is None, "失败路径应撤掉快照残留记录(假账)"
+    assert mgr.ctx.ops._skip_jobs == {}, "终态后 job 出账"
