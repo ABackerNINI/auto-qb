@@ -63,6 +63,30 @@ config:
         token: (留空)            # 访问密钥; 留空首启随机生成 -> <data_dir>/web.token
         skip_local_verify: false  # 本机(127.0.0.1)访问跳过密钥鉴权直接进入; 对外暴露仍强制
         # skip_check_menu: false  # 右键菜单显示跳检(单选/单组/多选): 默认关闭 = 菜单不显示且 web 端点拒绝; 规则源跳检不受影响
+        # 种子转移(计划 26-10-31-0306): 把种子转移到其它下载器; 默认空 = 未配置目标, 功能不可用
+        # transfer:
+        #     targets:                       # 目标列表, 每项一套独立配置; name 全表唯一
+        #         - name: "tr1"              # 目标名(非空、全表唯一)
+        #           type: qb                 # 下载器类型: qb(先行) | tr(接口预留)
+        #           base_url: "http://127.0.0.1:8081"  # 目标 Web UI 地址(http(s)://; enabled 时必填)
+        #           username: (目标用户名)
+        #           password: (目标口令)
+        #           api_key: ""              # qB 5.x API Key; 非空时经 Bearer 直连, 不走密码登录
+        #           enabled: false           # 目标启用开关, 默认关闭(转移是高风险动作)
+        #           fields:                  # 转移字段集; save_path 锁死必开, 缺键按模板默认补齐
+        #               save_path: true
+        #               category: true
+        #               tags: true
+        #               share_ratio_limit: true
+        #               seeding_time_limit: true
+        #               up_limit: true
+        #               down_limit: true
+        #               super_seeding: false  # 唯一默认关闭的字段
+        #           after_state: keep        # 转移后状态: keep(保持原状态, 默认) | paused(统一暂停)
+        #           skip_check: true         # 跳过校验(默认开; 未完成种子执行层自动降级为校验添加)
+        #           path_map: []             # 有序 from->to 保存路径前缀替换; 首条命中生效, 空 = 原样
+        #             # - from: "D:/Downloads"
+        #             #   to: "/mnt/downloads"
 
     # 主动通知: WARNING 及以上日志推送系统原生通知(默认关闭)
     # ❗容器部署无效: 无桌面会话, 且 slim 镜像没有 notify-send —— send() 只返回 False, 静默无通知

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1208">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="code-review-3">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-2145-docs-drift-issues-1208.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="docs/configuration.md 缺 web.transfer 配置参考">
 <meta name="issue-summary" content="转移功能已落地，memory-bank keys.md 有全量键，用户配置参考无对应段">
 <title>docs/configuration.md 缺 web.transfer 配置参考 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1208-docs-docs-configuration-transfer-missing</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 12:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,7 +98,16 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 12:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 21:33 — 认领（用户指派：认领并修复四条文档漂移），状态 <strong>In Progress</strong></li>
+      <li>2026-11-03 21:33 — 修复并验证，状态 <strong>Done</strong></li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充</h2>
+    <p><strong>复验（2026-11-03 21:33）</strong>：修改前 <code>docs/configuration.md</code> web 段无任何 <code>transfer</code> 子键；<code>memory-bank/config-reference/keys.md:23</code> 与 <code>src/auto_qb/config/models.py</code> 的 <code>TransferConfig</code>/<code>TransferTargetConfig</code> 均含完整键集，现象仍复现。</p>
+    <p><strong>实际修法</strong>：在 <code>docs/configuration.md</code> 的 <code>web:</code> 段（<code>skip_check_menu</code> 之后）补注释态 <code>transfer:</code> 示例，覆盖 <code>targets</code> 各键（name / type / base_url / username / password / api_key / enabled / fields / after_state / skip_check / path_map），与键表及代码模型逐键对齐；默认 <code>enabled: false</code>、<code>after_state: keep</code>、<code>skip_check: true</code>、<code>super_seeding: false</code>。</p>
+    <p><strong>验证</strong>：<code>commands run test.one -- tests/test_config_schema.py</code>（含 docs↔代码漂移守卫）通过；全量结果见基线（<code>commands run kb.baseline</code>）。</p>
   </section>
 
   <footer>

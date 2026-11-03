@@ -4,14 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (67)
+## Open (63)
 
-- [docs] [tests-real env_registry 环境2 注释与配置不一致](../26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html) — 注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01
 - [test] [deps-upgrade check_updates.py 无自动化测试](../26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部分失败容错无回归网
 - [test] [HR feeder wake 转发测试未断言转发目标](../26-11-03-1209-test-test-hr-runtime-feeder-wake-forward-unasserted.html) — 用例名声称转发 worker.wake()，实际只调用不加断言
-- [docs] [docs/configuration.md 缺 web.transfer 配置参考](../26-11-03-1208-docs-docs-configuration-transfer-missing.html) — 转移功能已落地，memory-bank keys.md 有全量键，用户配置参考无对应段
-- [docs] [docs/context7 索引锁定版本与模块路径已漂移](../26-11-03-1208-docs-docs-context7-version-path-drift.html) — 5/10 依赖版本与 uv.lock 不符，2 个模块路径已不存在
-- [docs] [根 README 用例规模数字停留在 2026-10-03](../26-11-03-1208-docs-docs-readme-test-scale-drift.html) — README 写 2300+/2312/2309+3，最新基线 4971+2
 - [bug] [sim_qb torrents/export 生成非法 bencode：announce 长度标 26、实际 25](../26-11-03-1145-bug-sim-qb-export-bencode.html) — minimal_bencode 把 announce 值写成 26: 但 URL 只有 25 字节，消费端解析必然错位；模拟器导出种子不可用
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）](../26-11-03-1144-bug-gtm-auth-body-drain.html) — 鉴权失败分支不读请求体即回 401 并关连接，Win 上客户端偶发 WinError 10053，test_auth_required_on_all_write_endpoints 间歇失败
@@ -80,8 +76,12 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (372)
+## Done (376)
 
+- [docs] [tests-real env_registry 环境2 注释与配置不一致](../26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html) — 注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01
+- [docs] [docs/configuration.md 缺 web.transfer 配置参考](../26-11-03-1208-docs-docs-configuration-transfer-missing.html) — 转移功能已落地，memory-bank keys.md 有全量键，用户配置参考无对应段
+- [docs] [docs/context7 索引锁定版本与模块路径已漂移](../26-11-03-1208-docs-docs-context7-version-path-drift.html) — 5/10 依赖版本与 uv.lock 不符，2 个模块路径已不存在
+- [docs] [根 README 用例规模数字停留在 2026-10-03](../26-11-03-1208-docs-docs-readme-test-scale-drift.html) — README 写 2300+/2312/2309+3，最新基线 4971+2
 - [test] [site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿](../26-11-03-1135-test-e2e-site-alerts-order-pollution.html) — 全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关
 - [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](../26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败
 - [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行

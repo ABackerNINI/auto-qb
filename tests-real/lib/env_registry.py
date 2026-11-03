@@ -25,7 +25,7 @@ from pathlib import Path
 _ENV_VAR = "QBT_REAL_ENV"
 
 # EXE 键 = WebUI 端口; bt_listen 键 = WebUI 端口, 值 = 该实例的 BT 监听端口(RM00 实测,
-# 用例拿它做"禁用端口"黑名单; 环境2 尚未实测, 留空 = 黑名单只查 WebUI 白名单端口)。
+# 两环境均已于 2026-11-01 实测回填; 用例拿它做"禁用端口"黑名单, 留空 = 只查 WebUI 白名单端口)。
 ENVIRONMENTS: dict[str, dict] = {
     "1":
         {

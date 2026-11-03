@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1209">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="code-review-3">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-2145-docs-drift-issues-1208.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="tests-real env_registry 环境2 注释与配置不一致">
 <meta name="issue-summary" content="注释称环境2未实测留空，实际 bt_listen 已填 2026-11-01">
 <title>tests-real env_registry 环境2 注释与配置不一致 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1209-docs-docs-tests-real-env2-comment-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 12:09</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,7 +97,16 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 12:09 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 21:33 — 认领（用户指派：认领并修复四条文档漂移），状态 <strong>In Progress</strong></li>
+      <li>2026-11-03 21:33 — 修复并验证，状态 <strong>Done</strong></li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充</h2>
+    <p><strong>复验（2026-11-03 21:33）</strong>：<code>tests-real/lib/env_registry.py</code> 环境1/环境2 的 <code>bt_listen</code> 均已实测回填（环境2 = 27049 / 32719，注释标注 2026-11-01），原注释「环境2 尚未实测, 留空」与配置矛盾，现象仍复现。</p>
+    <p><strong>实际修法</strong>：只改注释、不动数据与守卫逻辑 —— 第 27-28 行改为「两环境均已于 2026-11-01 实测回填；留空 = 只查 WebUI 白名单端口」，与 <code>lib/guard.py</code> 的 <code>BT_LISTEN_PORTS = frozenset(_ENV["bt_listen"].values())</code> 语义一致。</p>
+    <p><strong>验证</strong>：<code>commands run test.one -- tests/test_real_machine_safety.py</code>（tests-real 源级安全守卫）通过；全量结果见基线（<code>commands run kb.baseline</code>）。</p>
   </section>
 
   <footer>

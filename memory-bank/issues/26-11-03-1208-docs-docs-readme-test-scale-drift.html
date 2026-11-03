@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1208">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="code-review-3">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-2145-docs-drift-issues-1208.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="根 README 用例规模数字停留在 2026-10-03">
 <meta name="issue-summary" content="README 写 2300+/2312/2309+3，最新基线 4971+2">
 <title>根 README 用例规模数字停留在 2026-10-03 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1208-docs-docs-readme-test-scale-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 12:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,7 +97,16 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 12:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 21:33 — 认领（用户指派：认领并修复四条文档漂移），状态 <strong>In Progress</strong></li>
+      <li>2026-11-03 21:33 — 修复并验证，状态 <strong>Done</strong></li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充</h2>
+    <p><strong>复验（2026-11-03 21:33）</strong>：<code>README.md:247</code> 仍写「约 2300+ 用例 / 收集 2312 / 2309 passed + 3 skipped」，与 <code>commands run kb.baseline</code> 的最新基线不符，现象仍复现。</p>
+    <p><strong>实际修法</strong>：按 AGENTS.md「测试基线数字只写一处」删除手抄数字，改为一句指向 <code>commands run kb.baseline</code>；数字只留在 <code>memory-bank/testing/baselines/</code> 切片。</p>
+    <p><strong>验证</strong>：<code>commands run test.full</code>（数字写入基线，不在 README 重复）；<code>commands run kb.check</code>。</p>
   </section>
 
   <footer>

@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1208">
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="code-review-3">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-03-2145-docs-drift-issues-1208.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="docs/context7 索引锁定版本与模块路径已漂移">
 <meta name="issue-summary" content="5/10 依赖版本与 uv.lock 不符，2 个模块路径已不存在">
 <title>docs/context7 索引锁定版本与模块路径已漂移 · docs · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1208-docs-docs-context7-version-path-drift</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 12:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -98,7 +98,16 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 12:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 21:33 — 认领（用户指派：认领并修复四条文档漂移），状态 <strong>In Progress</strong></li>
+      <li>2026-11-03 21:33 — 修复并验证，状态 <strong>Done</strong></li>
     </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>修复后补充</h2>
+    <p><strong>复验（2026-11-03 21:33）</strong>：<code>uv.lock</code> 实测 qbittorrent-api 2026.8.1→2026.10.1、fastapi 0.141.1→0.162.0、uvicorn 0.53.0→0.54.0、pillow 12.3.0→13.0.0、filelock 3.32.6→4.2.5；表内 <code>src/auto_qb/qbclient.py</code> 实为 <code>src/auto_qb/core/qbclient.py</code>，<code>src/auto_qb/web_commands.py</code> 实为 <code>src/auto_qb/webui/server/</code>。现象仍复现。</p>
+    <p><strong>实际修法</strong>：索引改为「快照版本 / 当前锁定」两列并逐行对齐 <code>uv.lock</code>（5 条差异显式可见），两处代码位置改指现行模块；「精确版本号」承诺改为「抓取时锁版本，当前锁定已更新、快照尚未重建」。快照正文需重新抓取，本轮只修正索引真值，未臆造快照内容。</p>
+    <p><strong>验证</strong>：表内版本逐条与 <code>uv.lock</code> 比对；<code>commands run doc.links</code>；全量结果见基线（<code>commands run kb.baseline</code>）。</p>
   </section>
 
   <footer>
