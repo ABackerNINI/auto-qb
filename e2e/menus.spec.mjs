@@ -492,12 +492,16 @@ for (const skin of SKINS) {
         await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
         await clickRow(page, page.locator('.torrent-row').nth(0), { button: 'right' });
         await expect(page.locator('.ctx-menu')).toBeVisible({ timeout: 5_000 });
-        // CTX-06: 一级只允许一个次级菜单入口(复制族曾单列第二个子面板)
+        // CTX-06: 一级只允许一个**静态**次级菜单入口(复制族曾单列第二个子面板)。现产品另有
+        // 一个动态父项「转移到」(commit d839a417, subName=CTX_DYN_SUB, 目标来自当前种子/组),
+        // 故一级 has-sub 恒 = 2: 动态转移 + 静态「更多操作」。用 data-item 锁定身份, 不靠位置。
         const subs = page.locator('.ctx-menu > .ctx-item.has-sub');
-        expect(await subs.count(), '一级 has-sub 恰好 1 个').toBe(1);
-        await expect(subs.first()).toContainText('更多操作');
+        expect(await subs.count(), '一级 has-sub = 动态「转移到」+ 静态「更多操作」').toBe(2);
+        await expect(subs.filter({ hasText: '转移到' }), '动态次级入口「转移到」在座').toHaveCount(1);
+        const more = page.locator('.ctx-menu > .ctx-item.has-sub[data-item="sub-more"]');
+        await expect(more).toContainText('更多操作');
         // 展开子面板(hover 父项 —— 与用户路径一致)
-        await subs.first().hover();
+        await more.hover();
         await expect(page.locator('.ctx-sub')).toBeVisible({ timeout: 3_000 });
         const panel = ((await page.locator('.ctx-sub').textContent()) || '').replace(/\s+/g, ' ');
         for (const t of ['复制名称', '复制哈希', '复制 magnet']) {
@@ -562,7 +566,7 @@ for (const skin of SKINS) {
         expect(spot, '视口下半带内找到可右键的行(行右段落点)').toBeTruthy();
         await page.mouse.click(spot.x, spot.y, { button: 'right' });
         await expect(page.locator('.ctx-menu')).toBeVisible({ timeout: 5_000 });
-        await page.locator('.ctx-menu > .ctx-item.has-sub').hover();
+        await page.locator('.ctx-menu > .ctx-item.has-sub[data-item="sub-more"]').hover();
         const sub = page.locator('.ctx-sub');
         await expect(sub).toBeVisible({ timeout: 3_000 });
         const vp = /** @type {{width: number, height: number}} */ (page.viewportSize());

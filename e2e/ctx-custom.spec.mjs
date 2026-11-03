@@ -59,11 +59,12 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
       const blk = page.locator('.ctx-custom');
       await expect(blk).toBeVisible({ timeout: 10_000 });
       await expect(blk.locator('.ctx-custom-tab')).toHaveCount(4);
-      /* 默认 tab = 单种子(唯一有默认次级内容的一支): 一级 14 项 + 5 线, 次级 11 项 + 2 线
-         —— 行数含分隔线, 与注册表逐位一致的直接读数 */
+      /* 默认 tab = 单种子(唯一有默认次级内容的一支): 一级 15 项 + 5 线, 次级 11 项 + 2 线
+         —— 行数含分隔线, 与注册表逐位一致的直接读数(「转移到」为 26-10-28 加入的第二个
+         动态父项, 与「更多操作」并列; 见 shared/ctx_menu.js order.member) */
       const secTop = blk.locator('.ctx-custom-sec').nth(0);
       const secSub = blk.locator('.ctx-custom-sec').nth(1);
-      await expect(secTop.locator('.ctx-custom-row')).toHaveCount(19);
+      await expect(secTop.locator('.ctx-custom-row')).toHaveCount(20);
       await expect(secSub.locator('.ctx-custom-row')).toHaveCount(13);
       /* 跳检开关同卡(D6): 「常规」里的那块已 hidden, 这里必须在 */
       await expect(page.locator('.hb-blk', { hasText: '跳检开关' })).toHaveCount(1);
@@ -80,7 +81,7 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
       const member = saved.tree.config.web.ctx_menu.member;
       expect(member.hidden, '隐藏项没写进布局').toContain('info');
       expect(member.order, '隐藏项被从 order 里删掉了(隐藏必须保留槽位, 否则勾回来不归位)').toContain('info');
-      expect(member.order).toHaveLength(19);
+      expect(member.order).toHaveLength(20);
 
       /* ---------- ③ 不刷新页面, 右键菜单当场少一项(D8 热应用) ---------- */
       await tab(page, 'torrents').click();

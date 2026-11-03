@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-0559">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-existing-red">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-webui-drawer-window-firstbeat-converge.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)">
 <meta name="issue-summary" content="dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)">
 <title>e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关) · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)</h1>
     <p class="lede">dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0559-test-e2e-big-table-existing-red</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 05:59</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -134,7 +134,7 @@ HEAD:     12 failed（6 用例 × 双皮肤）
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td>跑这两个 spec（全量或隔离）必现，双皮肤各一例；用例本身是千文件 / 树表批量变体。与端口机制无关（HEAD 固定 8137 / 当前动态端口均复现）</td></tr>
-      <tr><td>影响范围</td><td>e2e 门禁恒红 6 条；均为大表/虚拟滚动/批量变体的行为断言，可能是用例自身时序或产品侧真实退化，待逐条取证</td></tr>
+      <tr><td>影响范围</td><td>e2e 门禁恒红 6 条；修复后确认其中 4 条（dt-live #10/#12 双皮肤）为产品侧窗口引擎缺陷，2 条（dt11 批量双皮肤）为用例期望落后于产品乐观写行为</td></tr>
       <tr><td>严重度</td><td>中（阻塞「e2e 全绿」验收；本轮已确认非端口改造回归）</td></tr>
     </table>
   </section>
@@ -152,24 +152,32 @@ HEAD:     12 failed（6 用例 × 双皮肤）
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：本轮端口改造 —— HEAD 固定 8137 + <code>use.baseURL</code> 与当前 <code>--port 0</code> + <code>WAIT_STDOUT</code> + <code>baseUrl()</code> 两套机制下同为 12 failed、同集合）</div>
+    <div class="callout"><b>已查清（2026-11-03 08:02）。已排除：端口改造、夹具、环境。</b><br>
+      <b>① dt-live #10/#12（4 条）= 产品缺陷，窗口引擎三处接线错</b>（<code>src/auto_qb/webui/static/shared/columns_grid.js</code>）：<br>
+      - 抽屉内容桥首渲时 <code>.group-table</code> 尚未落 DOM（同一次 patch 的 Teleport 子节点），<code>_winGapFor</code> 回退 0；<b>不能借主表 rowGap</b> —— 主表挂 <code>.rl-scope</code>，<code>row_lang.css</code> 把它的 rowGap 清零，抽屉不挂该类恒为皮肤基值 5/6px（实测借到 0）。首拍占位总高少 5~6px×1000 行（27309 vs 约 33150），滚到底被钳在被压短的总高上 → 间距随后收敛时末行已不在视窗。<br>
+      - <code>_rowWindow</code> 的 end 用文档型 <code>_winViewH</code> 而非容器 <code>vh</code>，抽屉按主表/文档视口开窗（多渲染约一倍行数）。<br>
+      - 行高首拍在抽屉入场期被 <code>content-visibility:auto</code> 报成 <code>contain-intrinsic-size</code> 内容盒 27+边框=28，落定后真渲染 27；首拍均值 28 使「下一次实测」（点勾选那拍）才发现差 1px → 再收一窗，正是 #10 变异数超预算的来源。<br>
+      <b>② dt11 树表批量（2 条）= 过时 spec</b>：批量「最高」的产品行为已改为<b>乐观写</b>（<code>drawer_files.js::setFilePriority</code> 先写本地 priority 再 POST），批量后 E01 徽章当帧读 7，<code>PRIO_CYCLE [0,1,6,7]</code> 循环 7→0；原断言 6 基于「批量后 E01 仍为 1」的旧行为，已落后于产品（提交 2d5d7b8c「抽屉文件优先级乐观写落地」）。</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-    <p>待定（<b>本轮不修</b>）：①先只跑单条 spec 并打开 trace / <code>error-context.md</code> 采断言原值，再判断是「时序预算」还是「真实行为退化」；②dt11 若与吸顶/吸底几何相关，先看坑档 <code>pitfalls/web-ui/sticky-scrollpad-inset.md</code> 的守阵口径；③在取到原值前不要凭红名猜根因。</p>
+    <p><b>原建议（保留）</b>：待定（本轮不修）：①先只跑单条 spec 并打开 trace / <code>error-context.md</code> 采断言原值，再判断是「时序预算」还是「真实行为退化」；②dt11 若与吸顶/吸底几何相关，先看坑档 <code>pitfalls/web-ui/sticky-scrollpad-inset.md</code> 的守阵口径；③在取到原值前不要凭红名猜根因。</p>
+    <p><b>实际修法（2026-11-03）</b>：产品侧只改 <code>columns_grid.js</code> 三处（end 用容器 <code>vh</code>；抽屉 gap 首拍逐帧收敛、不借主表且上限 12 帧；行高实测过滤 <code>checkVisibility({contentVisibilityAuto:true})</code> 跳过行 + 收窗后补两拍实测）。spec 侧只改 <code>drawer-content-variant-tables.spec.mjs</code> 的期望 6→0（附乐观写依据注释）；未放宽任一断言、未加 skip、未改超时。计划外发现的 <code>dtRowAfter</code> 死链另入池 <code>26-11-03-0802-bug-drawer-rowafter-dead-hook</code>，本轮未改。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 05:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 06:27 — 用户指派本轮修复，状态 <strong>In Progress</strong>；认领档案 <code>memory-bank/tasks/26-11-03-webui-drawer-window-firstbeat-converge.md</code></li>
+      <li>2026-11-03 08:02 — 修复并验证，状态 <strong>Done</strong>：dt-live 全文件 14 passed（#10 变异 2/2、#11 5/5、#12 两皮肤绿）；drawer-content-variant-tables 6 passed</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点（<code>commands run dev.e2e -- e2e/dt-live-update.spec.mjs --grep "#10 千文件勾选单行|#12 千文件窗口化"</code>），补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-03 07:xx — 仍复现（修复前定点复跑：#10 变异 10(prism)/11(atlas)、#12 两皮肤末行 <code>D/f0999 - file.mkv</code> 不在 DOM；dt11 批量实际 POST priority=0 对旧断言 6）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法 / 验证方式 / 测试数字见 §05、§06 与状态日志；定向实测命令：<code>commands run dev.e2e -- e2e/dt-live-update.spec.mjs</code>、<code>commands run dev.e2e -- e2e/drawer-content-variant-tables.spec.mjs</code>。基线数字见 <code>memory-bank/testing/baselines/</code> 最新切片。</p>
   </section>
 
   <footer>

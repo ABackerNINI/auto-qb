@@ -189,7 +189,53 @@ Object.assign(window.AQB_COLUMNS.methods, {
     _winGapFor(kind) {
       if (this._winGap[kind] === undefined) {
         const g = this._winGapOf(kind);
-        if (g === null) return null;
+        if (g === null) {
+          /* 抽屉内容桥(W3)首渲时锚里的 .group-table 还没落 DOM(同一次 patch 的 Teleport 子节点),
+           * 首拍只能按兜底间距开窗。**不能**借主表缓存: 主表挂 .rl-scope, row_lang.css 会把它的
+           * rowGap 清零(抽屉不挂该类, 恒为皮肤基值 5/6px) —— 实测借来 0px, 千行占位总高少
+           * ~18%(滚到底差一大截)。故首拍照旧兜底, 并安排一个逐帧收敛: 桥表落 DOM 后实测到
+           * 真值就作废本轮估算, 让窗口按真间距重算一次(上限约 12 帧; 锚比首帧晚一两拍才落也
+           * 能等到, 有 pending 守卫不重排)。 */
+          if (kind === "drawerContent" && !this._winGapPending
+              && typeof this.$nextTick === "function") {
+            this._winGapPending = true;
+            const raf = typeof requestAnimationFrame === "function"
+              ? requestAnimationFrame
+              : (fn) => setTimeout(fn, 16);
+            let tries = 0;
+            const settle = () => {
+              // 已实测到(其他路径先量到) / 面板关了: 收敛结束
+              if (this._winGap[kind] !== undefined || !this.drawer || !this.drawer.open) {
+                this._winGapPending = false;
+                return;
+              }
+              if (this._winGapOf(kind) !== null) {
+                this._winGapPending = false;
+                this._rowHVer++;  // 真值到手: 作废首拍估算, 让窗口按实测间距重算一次
+                /* 行高也有首拍落定问题: 抽屉行挂 content-visibility:auto, 首拍(抽屉入场
+                 * 动画/首布局未完成时)量到的是 contain-intrinsic-size 内容盒 27+边框=28,
+                 * 真正渲染后是 27。收窗后再补两拍实测, 把均值从 28 拉回 27 —— 否则下一次
+                 * 实测(用户点勾选/数据回路那拍)才发现差 1px, 又收一窗(可见勾选跳动)。 */
+                let post = 0;
+                const remeasure = () => {
+                  if (post++ >= 2 || !this.drawer || !this.drawer.open) return;
+                  this._rowHVer++;
+                  raf(remeasure);
+                };
+                raf(remeasure);
+                return;
+              }
+              // 锚(Teleport 目标)可能比首帧晚一两拍才落 DOM: 逐帧探到为止, 上限约 200ms
+              if (++tries > 12) {
+                this._winGapPending = false;
+                return;
+              }
+              raf(settle);
+            };
+            raf(settle);
+          }
+          return null;
+        }
         this._winGap[kind] = g;
       }
       return this._winGap[kind];
@@ -351,14 +397,25 @@ Object.assign(window.AQB_COLUMNS.methods, {
         const drows = block ? block.querySelectorAll(".group-row[data-dt-key]") : [];
         if (!drows.length) continue;
         let dChanged = false;
+        let dMeasured = 0;
         for (const r of drows) {
+          /* !抽屉行挂 content-visibility:auto(视图外延迟渲染), 被跳过时 gBR 返回的是
+           * contain-intrinsic-size(27px 内容盒)+边框, 比真正渲染的行恒多 1px; 抽屉开场
+           * 动画期整表被判在视口外 -> 首拍量到全 28, 动画落定后真渲染 27, 下一轮实测
+           * 因此必变 -> 已收窗的窗口再收一窗(用户可见勾选/滚动跳动, 量具记成多余变异)。
+           * 只量**确实已渲染**的行; 本轮一行都没量到(整表在动画/视口外)就不动均值与
+           * _winMeasured, 留给下一拍(容器间距收敛那拍必然还有一次渲染)。 */
+          if (typeof r.checkVisibility === "function"
+              && !r.checkVisibility({ contentVisibilityAuto: true })) continue;
           const h = r.getBoundingClientRect().height;
           const key = "drawerContent:" + (r.getAttribute("data-dt-key") || "");
+          dMeasured++;
           if (this._rowHs[key] === undefined || Math.abs(this._rowHs[key] - h) > 0.5) {
             this._rowHs[key] = h;
             dChanged = true;
           }
         }
+        if (!dMeasured) continue;
         // 未量过的行(新文件)用它兜底; 口径同主表 = 已实测行的全局均值而非当前窗口均值
         const davg = this._rowHAvgOf("drawerContent");
         if (this._rowH["drawerContent"] === undefined || Math.abs(this._rowH["drawerContent"] - davg) > 0.01) {
@@ -433,7 +490,7 @@ Object.assign(window.AQB_COLUMNS.methods, {
       this._rowPre[kind] = pre;
       const rel = sy - (this._winTop[kind] || 0);
       let start = this._prefixFloor(pre, rel) - ROW_WIN_OVERSCAN;
-      let end = this._prefixFloor(pre, rel + this._winViewH) + 1 + ROW_WIN_OVERSCAN;
+      let end = this._prefixFloor(pre, rel + vh) + 1 + ROW_WIN_OVERSCAN;
       if (!(start >= 0) || start > n) start = 0;
       if (!(end > 0) || end > n) end = n;
       if (start >= end) return off;  // 数值异常: 宁可全渲染, 也不渲染"空窗口"

@@ -184,10 +184,11 @@ for (const skin of SKINS) {
       await expect.poll(() => prioPosts.length, '批量优先级真提交').toBe(1);
       expect(prioPosts[0]).toMatchObject({ priority: 7, indices: [0, 1] });
 
-      // 徽章循环(单文件, 逐次真实提交): E01 正常(1) → 高(6)
+      // 徽章循环(单文件, 逐次真实提交): E01 已随批量「最高」= 7(乐观写当帧可见,
+      // _drawerFilePriority 先写 priority 再 POST) → PRIO_CYCLE [0,1,6,7] 循环 7 → 0(跳过)
       await rows.filter({ hasText: 'E01 - intro.mkv' }).first().locator('.dt11-pbadge').click();
       await expect.poll(() => prioPosts.length).toBe(2);
-      expect(prioPosts[1]).toMatchObject({ priority: 6, indices: [0] });
+      expect(prioPosts[1]).toMatchObject({ priority: 0, indices: [0] });
 
       // 清除勾选 → 批量条回落汇总条
       await drawer.locator('.dt11-foot .dt11-clear').click();

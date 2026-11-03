@@ -7,12 +7,12 @@
 <meta name="issue-stamp" content="26-11-03-0559">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="e2e-existing-red">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-webui-ctx-menu-e2e-existing-red.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)">
 <meta name="issue-summary" content="ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)">
-<title>e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关) · test · 计划外问题</title>
+<title>e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关) · test · 计划外问题（已修）</title>
 <style>
   :root {
     --bg: #10151a;
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)</h1>
     <p class="lede">ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0559-test-e2e-ctx-menu-existing-red</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 05:59</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -140,7 +140,7 @@ Error: strict mode violation: locator('.ctx-menu > .ctx-item.has-sub') resolved 
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td>跑这两个 spec（全量或隔离）必现；双皮肤各一例。与端口机制无关（HEAD 固定 8137 / 当前动态端口均复现）</td></tr>
-      <tr><td>影响范围</td><td>e2e 门禁恒红 6 条；<code>ctx-custom</code> 的 19 vs 20 可能牵出定制块实际行数与用例预期漂移（产品或用例，待查）；<code>menus</code> 两例只影响断言定位</td></tr>
+      <tr><td>影响范围</td><td>e2e 门禁恒红 6 条；修复后确认 <b>6 条全部为过时 spec</b>（产品侧 26-10-28 起新增动态「转移到」父项，一级 20 行 / 2 个 <code>has-sub</code>），产品 <code>src/</code> 零改动</td></tr>
       <tr><td>严重度</td><td>中（测试门禁噪声，阻塞「e2e 全绿」验收；本轮已确认非端口改造回归）</td></tr>
     </table>
   </section>
@@ -158,24 +158,36 @@ Error: strict mode violation: locator('.ctx-menu > .ctx-item.has-sub') resolved 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
     <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
-    <div class="callout">待查（已排除：本轮端口改造 —— HEAD 固定 8137 + <code>use.baseURL</code> 与当前 <code>--port 0</code> + <code>WAIT_STDOUT</code> + <code>baseUrl()</code> 两套机制下同红同值）</div>
+    <div class="callout"><b>已查清（2026-11-03 08:02）。结论：6 条全部为过时 spec，产品非缺陷。已排除：端口改造、夹具、环境、布局退化。</b><br>
+      <b>产品侧现状证据</b>：注册表 <code>src/auto_qb/webui/static/shared/ctx_menu.js</code> 的 <code>order.member</code> 为 <b>20 行</b>（15 项 + 5 条分隔线）；一级含两个带子面板的项 —— 动态「转移到」（<code>data-item="transfer"</code>，提交 <code>d839a417</code> 于 26-10-28 加入）与静态「更多操作」（<code>data-item="sub-more"</code>）。<br>
+      <b>① ctx-custom 19≠20</b>：定制块首段按成员菜单注册表渲染，产品实为 20 行；旧断言 19 是「一级只有静态更多操作、共 19 行」时代的预期。<br>
+      <b>② menus CTX-04/05/06</b>：旧断言 <code>.ctx-item.has-sub</code> 数量 == 1 并取 <code>.first()</code>；产品现有两个 <code>has-sub</code> ⇒ <code>resolved to 2 elements</code> 触发 strict mode violation。<br>
+      <b>③ menus CTX-sub fit</b>：hover 选择器 <code>.ctx-menu > .ctx-item.has-sub</code> 同样命中 2 个，悬停对象不唯一；量具（复制族子面板尺寸）本身未变。<br>
+      <b>为何原断言失效</b>：三条都隐含「一级只有一个次级入口 / 一级 19 行」的旧口径，产品 26-10-28 增加动态转移父项后口径已变；DOM 与注册表一致，无多渲染、无布局退化。</div>
   </section>
 
   <section id="s6">
     <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
     <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
-    <p>待定。候选方向（<b>本轮不修</b>）：①先核对「定制块首段应有多少行」——若 UI 实际就是 20 行而用例写 19，改预期；反之查定制块为何多渲染一行；②<code>menus</code> 的 <code>.ctx-item.has-sub</code> 会同时命中「转移」与「更多操作」，按 <code>data-item</code> 精确选择器拆分即可解除 strict 冲突；③CTX-sub fit 需先采断言原值再定。</p>
+    <p><b>原建议（保留）</b>：待定。候选方向（<b>本轮不修</b>）：①先核对「定制块首段应有多少行」——若 UI 实际就是 20 行而用例写 19，改预期；反之查定制块为何多渲染一行；②<code>menus</code> 的 <code>.ctx-item.has-sub</code> 会同时命中「转移」与「更多操作」，按 <code>data-item</code> 精确选择器拆分即可解除 strict 冲突；③CTX-sub fit 需先采断言原值再定。</p>
+    <p><b>实际修法（2026-11-03）</b>：按建议②落地，<b>只改 spec、产品 <code>src/</code> 零改动</b>：<br>
+      - <code>e2e/ctx-custom.spec.mjs</code>：定制块首段行数 19→20（含 <code>.ctx-custom-row</code> 计数与 <code>member.order</code> 长度），补注册表 20 行 / 转移父项依据注释；次级 13 不动。<br>
+      - <code>e2e/menus.spec.mjs</code> CTX-04/05/06：<code>has-sub</code> 恒 2、断言 <code>[data-item="transfer"]</code> 在座、hover 与内容断言锁定 <code>[data-item="sub-more"]</code>（复制族子面板仍在静态入口下）。<br>
+      - <code>e2e/menus.spec.mjs</code> CTX-sub fit：hover 选择器改为 <code>.ctx-menu > .ctx-item.has-sub[data-item="sub-more"]</code>，量具仍是复制族子面板尺寸。<br>
+      未放宽任一断言、未加 skip、未改超时。计划外发现的 <code>dtRowAfter</code> 死链已另入池 <code>26-11-03-0802-bug-drawer-rowafter-dead-hook</code>，与本件根因无关，本轮未改。</p>
   </section>
 
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 05:59 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 06:27 — 用户指派本轮修复，状态 <strong>In Progress</strong>；认领档案 <code>memory-bank/tasks/26-11-03-webui-ctx-menu-e2e-existing-red.md</code></li>
+      <li>2026-11-03 08:02 — 修复并验证，状态 <strong>Done</strong>：判定 6 条全部为过时 spec；<code>ctx-custom</code> 2 passed、<code>menus</code> 全文件 30 passed / 6 skipped（skip 为既有 W5-off 条件组）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点（<code>commands run dev.e2e -- e2e/ctx-custom.spec.mjs --grep "定制块: 四支 tab"</code>），补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-03 07:xx — 仍复现（修复前定点复跑：<code>ctx-custom</code> 2 failed 19 vs 20；<code>menus</code> CTX-04 2 failed <code>has-sub</code> 计数 1 vs 2 + strict mode；CTX-sub fit 2 failed hover 选择器命中 2）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法 / 验证方式 / 测试数字见 §05、§06 与状态日志；定向实测命令：<code>commands run dev.e2e -- e2e/ctx-custom.spec.mjs</code>、<code>commands run dev.e2e -- e2e/menus.spec.mjs</code>。基线数字见 <code>memory-bank/testing/baselines/</code> 最新切片。</p>
   </section>
 
   <footer>
