@@ -13,6 +13,9 @@
 - test_run_exception_backs_off_next_tick: 守阵(26-10-02-0728)——主循环 except Exception 路径必须把 next_*_at 推到 max(原值, now+main_tick) 退避, 不得 wait_for=0 快速重试
 - test_p2a_init_with_lock_cleans_orphan_tmp_and_releases: 持锁构造清孤儿 tmp; 释放后可再持锁 (P2-a)
 - test_p2a_run_with_lock_releases_in_finally: run() finally 释放锁 (P2-a)
+- test_start_all_failure_runs_stop_all_and_skips_state: start_all 抛错时 finally 仍执行 stop_all, 失败启动不落空态 state.json (S3)
+- test_start_all_failure_releases_lock: 启动期抛错后锁与 state.lock.meta.json 均已释放, 他实例可接管 (S3)
+- test_hr_bind_error_on_start_releases_lock_and_skips_state: HR 的 HrChannelBindError 走同一 finally 路径, 既有漏锁已修 (S3)
 """
 
 import json
@@ -47,7 +50,9 @@ from auto_qb.infra import file_access
 
 from auto_qb.infra.file_access import MappedFileAccess
 
-from auto_qb.core.module import ApplyResult
+from auto_qb.core.module import ApplyResult, BaseModule
+
+from auto_qb.hr import HrChannelBindError
 
 from auto_qb.core import qbmanager as _qbm
 
@@ -299,3 +304,76 @@ def test_p2a_run_with_lock_releases_in_finally():
         lock2 = SingleInstanceLock(cfg.state_file)
         lock2.acquire()
         lock2.release()
+
+
+class _StartBoomModule(BaseModule):
+    """S3 测试替身: start 抛指定异常(模拟 WebUI/HR 启动期失败), stop 只记调用"""
+
+    name = "s3_start_boom"
+
+    def __init__(self, exc):
+        self._exc = exc
+        self.stopped = False
+
+    def start(self, ctx, dry_run):
+        raise self._exc
+
+    def stop(self):
+        self.stopped = True
+
+
+def test_start_all_failure_runs_stop_all_and_skips_state():
+    """守阵(S3): start_all 抛错必须进 finally —— stop_all 仍执行, 且失败启动不落空态 state.json
+
+    修复前 start_all 在 try 之外, 抛错直接穿透 run(), finally 被跳过: 模块未停、锁未放。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        state_file = os.path.join(td, "state.json")
+        mgr = make_manager(state_file)
+        boom = _StartBoomModule(RuntimeError("start boom"))
+        mgr.host.register(boom)
+        with pytest.raises(RuntimeError, match="start boom"):
+            mgr.run(dry_run=False)
+        assert boom.stopped, "启动期抛错必须走 stop_all(模块 stop 被调用)"
+        assert not os.path.exists(state_file), "失败启动不得落空态 state.json(fresh 目录)"
+
+
+def test_start_all_failure_releases_lock():
+    """守阵(S3): 启动期抛错后单实例锁与其伴生 meta 均已释放, 他实例可接管"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg = FakeConfig()
+        cfg.state_file = os.path.join(td, "state.json")
+        mgr = make_manager(cfg=cfg, no_lock=False)
+        boom = _StartBoomModule(RuntimeError("start boom"))
+        mgr.host.register(boom)
+        assert os.path.exists(mgr._lock.meta_path), "前置: 构造期持锁应已写 state.lock.meta.json"
+        with pytest.raises(RuntimeError, match="start boom"):
+            mgr.run(dry_run=False)
+        assert mgr._lock._held is False, "finally 必须释放单实例锁"
+        assert not os.path.exists(mgr._lock.meta_path), "finally 必须移除 state.lock.meta.json"
+        from auto_qb.infra.locking import SingleInstanceLock
+
+        lock2 = SingleInstanceLock(cfg.state_file)
+        lock2.acquire()  # 不抛 = 锁确实已释放
+        lock2.release()
+        assert not os.path.exists(cfg.state_file), "失败启动不得落空态 state.json"
+
+
+def test_hr_bind_error_on_start_releases_lock_and_skips_state():
+    """守阵(S3): HR 的 HrChannelBindError 在启动期抛出同样走 finally —— 既有漏锁行为已修
+
+    修复前该异常与其它模块 start 抛错一样跳过 finally: 锁与 meta 残留(HR fail-fast 的
+    既有缺陷)。S3 把 start_all 移入 try 后, 同一路径必须释放锁且不落 state.json。
+    """
+    with tempfile.TemporaryDirectory() as td:
+        cfg = FakeConfig()
+        cfg.state_file = os.path.join(td, "state.json")
+        mgr = make_manager(cfg=cfg, no_lock=False)
+        boom = _StartBoomModule(HrChannelBindError("HR 端点端口被占用"))
+        mgr.host.register(boom)
+        with pytest.raises(HrChannelBindError):
+            mgr.run(dry_run=False)
+        assert boom.stopped, "HrChannelBindError 也必须走 stop_all"
+        assert mgr._lock._held is False, "HR fail-fast 不得漏锁"
+        assert not os.path.exists(mgr._lock.meta_path), "HR fail-fast 不得残留 meta"
+        assert not os.path.exists(cfg.state_file), "失败启动不得落空态 state.json"

@@ -482,13 +482,16 @@ class QbManager(
             logger.info(f"配置 schema 已迁移 {desc} 并落盘(迁移前备份: {backup})")
         logger.info(f"启动 qB 管理器: 主循环 {self.config.main_tick}s, 默认任务间隔 {self.config.interval}s")
         # 模块启用(plan P1/P2): web 服务器(启用时)/HR 端点与取数线程/通知挂载全部在各自模块
-        # 的 start(dry-run/未启用 = 无操作, 模块自判), 内核只按装配序调 —— web 启动失败(端口
-        # 被占)记 ERROR 由句柄呈现; HR 端口被占抛 HrChannelBindError 穿透到 CLI 干净退出
-        # (fail-fast 契约原样)。logging 已在构造期初始化(start 幂等跳过)。
+        # 的 start(dry-run/未启用 = 无操作, 模块自判), 内核只按装配序调。启动期致命错误
+        # (WebUIBindError / HrChannelBindError)穿透到 CLI 干净退出(fail-fast 契约), 故
+        # start_all 必须在 try 内 —— 否则 finally 被跳过, 锁与 state.lock.meta.json 残留。
+        # logging 已在构造期初始化(start 幂等跳过)。
         # P3 起 speed_curve/maintenance 的全局任务自注册也发生在 start_all(原 _create_global_tasks
         # 在连接成功后手工调用, 入队时点前移到启动 —— 队列在首个任务线才被 drain, 行为等价)。
-        self.host.start_all(dry_run)
+        lifecycle_ready = False  # 启动期完成闸: 只有 start_all 正常返回才允许退出落盘
         try:
+            self.host.start_all(dry_run)
+            lifecycle_ready = True  # 失败启动不落空态 state.json(见 finally 的闸门)
             main_tick = self.config.main_tick
             # 首连失败: 托管模式按 main_tick 重试直至成功/停止; 非托管模式 fail-fast 抛
             # QbConnectError(退出码 1, docs/deployment.md 契约)。条件本身是有意语义(见
@@ -708,9 +711,11 @@ class QbManager(
                 logger.info("停止")
         finally:
             # 模块停用(plan P2): 装配逆序 stop(hr → webui → notify → logging)—— 状态落盘与
-            # 锁释放是内核生命周期, 留在 stop_all 之后
+            # 锁释放是内核生命周期, 留在 stop_all 之后。启动期抛错同样走到这里(S3):
+            # stop 幂等保证已启动模块被拆、未启动模块无副作用; lifecycle_ready 闸门让失败
+            # 启动不落空态 state.json, 锁则在任何路径都释放(修掉 HR fail-fast 的既有漏锁)。
             self.host.stop_all()
-            if not dry_run:
+            if not dry_run and lifecycle_ready:
                 self.ctx.state.save()
             if self._lock is not None:
                 self._lock.release()
