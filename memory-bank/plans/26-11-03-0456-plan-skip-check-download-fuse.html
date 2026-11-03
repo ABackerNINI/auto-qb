@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>已完成种子下载保险丝（极简版）</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="skip-check-download-fuse">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-03-0456">
+<meta name="doc-updated" content="26-11-03-0735">
+<meta name="doc-refs" content="memory-bank/issues/26-10-22-0308-feat-ops-skip-check-download-cost.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .box { border: 1px solid var(--hair); padding: 12px 16px; margin: 14px 0; }
+  .box b { color: var(--accent-ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: skip-check-download-fuse</div>
+<h1>已完成种子下载保险丝（极简版）</h1>
+<p class="lede">默认覆盖<strong>全部已完成种子</strong>：完成即给一个「奇数 KiB 单种下载限速」哨兵；只要看到<strong>持续下载证据</strong>（连续 N 拍 <code>dlspeed &gt; 0</code>），就<strong>暂停</strong>并打上固定标签 <code>zFusePaused</code>。没有大小分级、没有比例阈值、没有预算窗口、批量场景也不降级。放行只认显式动作。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-0456 · <b>doc-updated</b> 26-11-03-0735 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> issue <code>26-10-22-0308</code> 认领；本机 qB/libtorrent 源码只读核验（<code>C:\Users\11059\Desktop\Projects\Else</code>）；本轮按「极简」口径重写<br>
+  <b>范围</b> 只做保险丝；<strong>抽样校验本轮不做</strong>（issue 中的另一道防线，另行立计划）
+</div>
+
+<h2><span class="no">§01</span>目标与极简原则</h2>
+<h3>1.1 要解决的问题</h3>
+<p>已完成种子（<code>progress≈1</code>、<code>amount_left=0</code>）本不该再产生下载。一旦出现下载证据，说明本地数据/resume 声明与实际不一致，而损失<strong>直接计入 PT 下载量且不可逆</strong>。出错概率本来就小，所以保险丝的定位是<strong>低成本兜底</strong>，不是一套监控系统。</p>
+<h3>1.2 极简原则（本轮新增，优先于一切「更周全」的设计）</h3>
+<ul>
+  <li><b>S1 单一判据</b>：只看「持续下载证据」。不区分文件大小、不区分缺口比例、不做累计预算。</li>
+  <li><b>S2 单一升级动作</b>：证据成立就暂停。不做 L0–L3 梯度，不做「只告警」档位。</li>
+  <li><b>S3 零副作用</b>：数据完整时不做第二次 qB 写；稳态零请求。</li>
+  <li><b>S4 批量也暂停</b>：批量触发大概率是磁盘/系统级问题，此时停种就是正确动作，<strong>不降级为只告警</strong>；只处理日志风暴。</li>
+  <li><b>S5 可撤销</b>：放行是显式动作；放行后在「重新完成」之前不再重新武装。</li>
+</ul>
+<h3>1.3 不变量（违反即实现错误）</h3>
+<ol>
+  <li><b>只写两件事</b>：该种子的单种下载限速、该种子的 pause/resume。绝不动全局限速、上传限速、分享率、tracker 配置。</li>
+  <li><b>哨兵必须 &gt; 0 且为奇数 KiB/s</b>。qB 会把 0 归一成「不限速」（§02）；奇数 KiB 复用仓库既有「用户手动限速」约定（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/infra/utils.py#L793-L798"><code>utils.py:793-798</code></a>），让规则/tracker 自动限速主动跳过。校验器直接拒绝 0/偶数。</li>
+  <li><b>只对 <code>dl_limit == 0</code> 的种子写</b>。这既是幂等（重复武装不产生第二刀），也是不覆盖用户已有意图的结构性保证——不用额外配置键。</li>
+  <li><b>无定时解除</b>：恢复只有三种来源——显式放行、种子删除、放行后重新完成。</li>
+  <li><b>放行必须 CAS</b>：当前限速仍等于哨兵值才恢复 <code>pre_limit</code>；否则视为第三方已接管，什么都不写。</li>
+  <li><b>幂等 + dry-run 只读</b>：重复武装/触发/放行、进程重启都不产生第二次副作用；<code>--dry-run</code> 不写 qB、不落状态。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与源码事实</h2>
+<p>下表是本方案成立的前提，已在 <code>C:\Users\11059\Desktop\Projects\Else</code> 对照 qBittorrent 5.x / libtorrent 源码核实（只读，未改动）。</p>
+<table>
+  <tr><th>事实</th><th>结论</th><th>位置</th></tr>
+  <tr><td>跳检前置门</td><td>只允许「暂停中且未完成」；实际走到跳检的是 progress=0 的跨种场景，数据完整性<strong>无证据</strong></td><td><a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/rules/actions/checking.py#L27-L48"><code>checking.py:27-48</code></a></td></tr>
+  <tr><td>跳检重加</td><td><code>is_skip_checking=True</code>、<code>is_stopped=True</code>、<code>download_limit=tor.dl_limit</code>；成功后打 <code>zSkipChecked</code> 标签</td><td><a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/core/modules/ops_mod.py#L1038-L1062"><code>ops_mod.py:1038-1062</code></a> / <a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/core/modules/ops_mod.py#L1147-L1170"><code>1147-1170</code></a></td></tr>
+  <tr><td>单种限速的写入者</td><td>tracker（<code>torrents_added</code> 相位）与规则动作，两者都跳过奇数 KiB；全局限速曲线只写全局，与单种 min() 叠加</td><td><a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/core/modules/tracker_mod.py#L95-L130"><code>tracker_mod.py:95-130</code></a> / <a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/rules/actions/transfer.py#L84-L97"><code>transfer.py:84-97</code></a> / <a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/core/modules/speed_curve_mod.py#L198-L225"><code>speed_curve_mod.py:198-225</code></a></td></tr>
+  <tr><td>resume 校验判据</td><td>「have_pieces 全置位」或 <code>seed_mode</code> 都当 seed；只检查文件存在性 + 尺寸，<strong>不比较 mtime</strong></td><td><code>storage_utils.cpp:551-580</code>、<code>stat_cache.cpp:57-95</code></td></tr>
+  <tr><td>校验失败后</td><td>→ <code>need_full_check</code> → 全量 recheck → 校验后置 <code>downloading</code> 并请求缺块</td><td><code>posix_disk_io.cpp:332-349</code>、<code>torrent.cpp:2301-2337</code>、<code>9135-9248</code></td></tr>
+  <tr><td>qB 缺文件拦截</td><td><code>fastresume_rejected_alert</code> → <code>unset auto_managed + pause</code>；校验后仍缺文件 → 「Missing files」</td><td><code>nativesessionextension.cpp:38-42</code>、<code>torrentimpl.cpp:2165-2183</code></td></tr>
+  <tr><td>运行期读盘失败</td><td><code>set_error + pause</code>，不会自动 recheck；文件错误只打日志</td><td><code>torrent.cpp:1203-1207</code>、<code>sessionimpl.cpp:6381-6402</code></td></tr>
+  <tr><td>供块前校验</td><td><strong>只有 <code>seed_mode</code></strong> 会本地校验哈希；普通做种不校验，同尺寸损坏发现不了</td><td><code>peer_connection.cpp:5331-5363</code>、<code>5431-5515</code></td></tr>
+  <tr><td>暂停的副作用</td><td>qB <code>stop()</code> = <code>setAutoManaged(false) + pause()</code>；<code>start(mode)</code> 会重新 <code>setAutoManaged</code>（队列位重排）</td><td><code>torrentimpl.cpp:2014-2030</code>、<code>2033-2064</code></td></tr>
+</table>
+<div class="aside"><b>结论</b>：qB 现在会用「缺文件暂停」挡住一类路径，但 seed_mode 坏片、fastresume 丢失/损坏、强制校验、跨版本策略都会真下载。<strong>保险丝不能把安全建立在版本行为上</strong>——这是全量覆盖的唯一理由，也是它只能算 <em>defense-in-depth</em>（低概率、高损失）的原因。</div>
+
+<h2><span class="no">§03</span>极简方案</h2>
+<h3>3.1 三个状态</h3>
+<pre><code>      （完成 &amp; dl_limit==0 &amp; 无条目）
+                 │ 写哨兵
+                 ▼
+              [armed] ──连续 N 拍 dlspeed &gt; 0──▶ [triggered]（pause）
+                 ▲                                    │
+                 │                                    │ 显式放行（CAS 恢复限速）
+                 │                                    ▼
+                 │ 重新完成 &amp; dlspeed==0          [released]
+                 └────────────────────────────────────┘
+</code></pre>
+<table>
+  <tr><th>状态</th><th>由什么事件进入</th><th>这一状态下做什么</th></tr>
+  <tr><td><code>armed</code></td><td>种子完成且 <code>dl_limit==0</code></td><td>哨兵已在；每拍看 <code>dlspeed</code> 累计连击数</td></tr>
+  <tr><td><code>triggered</code></td><td>连击数达到 <code>confirm_ticks</code></td><td>已暂停；每拍确认仍在暂停（被外部启动则再暂停一次）</td></tr>
+  <tr><td><code>released</code></td><td>显式放行（或外部把限速改走）</td><td>不再干预；等「重新完成且 <code>dlspeed==0</code>」回到 <code>armed</code></td></tr>
+</table>
+<p>三点刻意简化：</p>
+<ul>
+  <li><strong>没有 <code>monitor_only</code> 状态</strong>：<code>dl_limit!=0</code> 的种子<strong>不建条目</strong>，只在触发时建一条 <code>triggered</code>。判定是「值是否为 0」的无状态分支，不需要记「我打算不写它」。</li>
+  <li><strong>没有 <code>released_external</code></strong>：外部改走限速与用户放行的后续行为完全一样（都不再干预），合并进 <code>released</code>。</li>
+  <li><strong>没有 <code>gc</code></strong>：种子消失就是删条目，不是状态。</li>
+</ul>
+<h3>3.2 武装：每拍扫一遍，写入只发生在「第一次」</h3>
+<ul>
+  <li>主循环每拍本来就会遍历完整快照，<strong>不需要额外的定时器或 sweep</strong>：对满足完成谓词的种子，若 <code>dl_limit==0</code> 且无条目 → 写哨兵并建 <code>armed</code>。</li>
+  <li>批量写：<code>setDownloadLimit</code> 的 <code>hashes</code> 用 <code>|</code> 合并，每批 100（常量，不做配置键）。</li>
+  <li>完成谓词：<code>progress ≥ 0.999 &amp;&amp; amount_left == 0</code> 且 <code>state</code> 不在 <code>checking* / moving / allocating / metaDL / forcedMetaDL</code>。<strong>不要求 <code>dlspeed==0</code></strong>——已在异常下载的种子也要被纳管。</li>
+  <li>跳检路径仍在 <code>torrents/add</code> 里直接带 <code>download_limit=fence</code>，消除「add 成功→首拍武装」的不限速窗口。</li>
+</ul>
+<h3>3.3 触发判据：连续 N 拍 <code>dlspeed &gt; 0</code></h3>
+<p>两个候选里选「持续」，不选「累计字节」：</p>
+<table>
+  <tr><th>候选</th><th>实现代价</th><th>可解释性</th><th>结论</th></tr>
+  <tr><td>连续 N 拍 <code>dlspeed &gt; 0</code></td><td>一个整数连击计数；无基线、无字节运算</td><td>「完成种子的持续下载」本身就是异常</td><td><span class="good">采用</span></td></tr>
+  <tr><td>自武装起累计 <code>downloaded</code> 增量 &gt; 固定阈值</td><td>要记基线 + 处理重启/计数器回绕 + 每次比较</td><td>阈值天然要选一个「字节数」，等于变相按大小分级</td><td><span class="bad">不采用</span></td></tr>
+</table>
+<p><b>量级依据（这不是大小分级）</b>：哨兵把速度压到 13&nbsp;KiB/s，因此「发现前最多损失多少」只由检测窗口决定——<code>confirm_ticks=3</code> × 同步拍间隔（约 5–10&nbsp;s）≈ 15–30&nbsp;s，对应 <strong>≈0.2–0.4&nbsp;MB</strong>。也就是说阈值不是「容忍多少数据」，而是「容忍多长的证据延迟」；文件多大都无关紧要。</p>
+<p>为什么不需要额外的速度下限：qB 的 <code>dlspeed</code> 是整数 B/s，真实下载必然 &gt; 0；连击要求已经把单拍抖动过滤掉。也<strong>不需要</strong>「&gt;2×fence 的超速单独判据」——超速和普通下载的处置完全一样（都是暂停），多一条判据不改变动作。</p>
+<h3>3.4 动作集合：三个写动作 + 一个标记</h3>
+<table>
+  <tr><th>动作</th><th>触发时机</th><th>说明</th></tr>
+  <tr><td>写哨兵 <code>setDownloadLimit(fence)</code></td><td>种子首次完成</td><td>只对 <code>dl_limit==0</code>；奇数 KiB</td></tr>
+  <tr><td><code>torrents_pause</code></td><td>连击数达标</td><td>唯一升级动作；<code>note_own_write</code> 让规则延后一拍</td></tr>
+  <tr><td>恢复 <code>pre_limit</code></td><td>显式放行且 CAS 成立</td><td>通常恢复为 0（不限速），不 resume（由用户决定是否启动）</td></tr>
+  <tr><td>加 / 删标记标签</td><td>进入 triggered / 离开 triggered</td><td>固定 <code>zFusePaused</code>；只随状态迁移写，详见 §3.8</td></tr>
+</table>
+<p>没有告警档、没有限速降档、没有全局动作。<strong>日志</strong>只承担可观测性：L1 级一行 WARNING（hash/name/证据/已下载量），批量时见 §3.5。</p>
+<h3>3.5 批量场景：全停 + 聚合日志（不引入保护逻辑）</h3>
+<ul>
+  <li><b>动作不降级</b>：同一拍内有多少条就暂停多少条。批量触发大概率是磁盘/权限/系统级问题，停种正是正确处置。</li>
+  <li><b>日志聚合</b>：每拍最多一条汇总行——<code>fuse: paused 12 torrents (batch) first=abc123,def456,ghi789</code>；单条明细降到 DEBUG。这不叫保护逻辑，只是输出格式。</li>
+  <li><b>通知聚合</b>：每拍一条，内容同上；不按种子各发一条。</li>
+  <li><b>恢复</b>：提供 <code>fuse release --all</code>（一次性放行全部 <code>triggered</code>，内部按批 CAS）；这是运维命令，不是自动保护。</li>
+</ul>
+<h3>3.6 用户主动补齐：最简放行</h3>
+<ul>
+  <li><b>唯一入口</b>：WebUI 列表/详情的「解除保险丝」按钮，或命令 <code>fuse release &lt;hash&gt;</code>。放行 = CAS（当前仍为 fence）→ 恢复 <code>pre_limit</code> → 状态 <code>released</code>；不自动 resume（用户自己点启动，避免我们在错误的语义上替他做决定）。</li>
+  <li><b>不会立刻被重新武装</b>：<code>released</code> 期间不做任何写；只有「该种子重新完成（<code>amount_left==0</code>）且 <code>dlspeed==0</code>」才回到 <code>armed</code>。因此一次放行足够完成整个补齐过程；补完自动重新武装，不需要冷却参数。</li>
+  <li><b>不猜意图</b>：外部 qB 的 resume、规则 start 都不算放行（否则一次误点即失守）。想补齐就用本 UI 的按钮——这是刻意的取舍（见 §04 Q3）。</li>
+</ul>
+<h3>3.7 状态与自愈</h3>
+<pre><code>state.data["download_fuse"] = {
+  "entries": {
+    "&lt;hash&gt;": {
+      "status": "armed|triggered|released",
+      "fence": 13312,        // 写入时的哨兵值（配置改了也按旧值 CAS）
+      "pre_limit": 0,        // 首次武装前的值
+      "streak": 0            // 连续 dlspeed&gt;0 拍数
+    }
+  }
+}</code></pre>
+<ul>
+  <li><b>写盘点</b>：武装一批一次、触发、放行、重新武装。都不是每拍。</li>
+  <li><b>体积</b>：约 80&nbsp;B/条；2000 个完成种子 ≈0.16&nbsp;MB。</li>
+  <li><b>自愈（state 丢失/损坏）</b>：条目缺失但该种子「已完成 + <code>dl_limit</code> 恰等于配置的 <code>download_limit</code>」→ 按证据重建：带 <code>zFusePaused</code> 标签且已暂停 ⇒ <code>triggered</code>；否则 <code>armed</code>。两种都不写 qB，日志标注 <code>adopt</code>；由 <code>fuse release --all</code> 兜底。</li>
+  <li><b>外部改限速</b>：<code>armed</code> 条目发现 <code>dl_limit != fence</code> → 转 <code>released</code>，不写回。</li>
+</ul>
+
+<h3>3.8 触发标记：一个固定 qB 标签（本轮新增）</h3>
+<p><b>结论</b>：triggered 的种子加 <code>zFusePaused</code> 标签——固定常量、<strong>不可配置</strong>、由 qB 自动创建；进入 triggered 时加，放行时删；只在状态迁移时写，不做每拍对齐。标签同时出现在 qB 原生列表与自家 WebUI（标签 chip / 搜索行天然可见），前端零改动。</p>
+<h4>载体对比：为什么不是分类 / comment / 只在我们 UI 标</h4>
+<table>
+  <tr><th>载体</th><th>利</th><th>弊</th><th>结论</th></tr>
+  <tr><td>qB 标签</td><td>qB 原生列表可见，正是用户痛点所在；自家 WebUI 的标签 chip/搜索自动可见；集合语义天然幂等；定义随首个 add 自动创建</td><td>规则引擎可见（有规避路径，见下）；每个触发种子多一次 resume 写</td><td><span class="good">采用</span></td></tr>
+  <tr><td>qB 分类</td><td>qB 列表同样显眼</td><td>单值：会覆盖用户分类，并影响保存路径/分组/规则；写一次就破坏现状</td><td><span class="bad">否</span></td></tr>
+  <tr><td>comment</td><td>规则不可见（<code>record.comment</code> 未进条件/表达式，仅展示）</td><td>覆盖站点/用户备注；要恢复就得把原文存进 state（长度不可控）；列表默认看不到，只在详情抽屉；还需新增 API 方法</td><td><span class="bad">否</span></td></tr>
+  <tr><td>只在自家 WebUI 标</td><td>零 qB 写、零规则冲突</td><td>qB 原生里仍是「莫名暂停」，与用户原始诉求相反；后端加字段 + 前端加 chip 一样要改</td><td><span class="wr">仅作兜底</span></td></tr>
+</table>
+<h4>命名、创建与生命周期</h4>
+<ul>
+  <li><b>名字固定 <code>zFusePaused</code></b>，不设配置键：唯一性是规避规则误匹配的前提；可配置会让「文档 / 用户排除规则 / WebUI 识别」三处跟着漂移。qB 只裁剪首尾空白、含逗号即非法、区分大小写（<code>tag.cpp:37-62</code>）；本名不含逗号与空白。</li>
+  <li><b>谁创建</b>：首次加标签时 qB session 自动建定义（<code>m_session-&gt;addTag</code>），无需额外 create 调用。</li>
+  <li><b>加</b>：仅 <code>armed → triggered</code> 迁移时，与 pause 同拍、按批一次请求。<b>删</b>：显式放行离开 triggered 时，与恢复限速同一批。删种：标签随种子消失，定义可能余留到 qB / 清理任务处理，无害。</li>
+  <li><b>幂等</b>：qB 侧 <code>TagSet</code> 集合 + <code>hasTag</code> 提前返回，重复加无副作用；我们侧调用前先读快照 <code>tags_set</code>，已存在则不发请求。</li>
+  <li><b>不每拍对齐</b>：标签若被规则/清理/用户移除，只记一条日志，<strong>不自动重加</strong>——否则会和清理任务互删成环；triggered 仍由 state + 暂停事实保证。</li>
+</ul>
+<h4>关键冲突：规则引擎会不会吃掉或误触发</h4>
+<table>
+  <tr><th>链路</th><th>源码事实</th><th>结论 / 规避</th></tr>
+  <tr><td>规则按标签匹配</td><td><code>TagsCondition</code> 支持精确、<code>regex:</code>、<code>:ignore_case</code>（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/rules/conditions.py#L49-L72"><code>conditions.py:49-72</code></a>）</td><td>标签对规则<strong>可见</strong>：用户若写泛匹配（如 <code>regex:z.*</code>）会命中。规避 = 固定 <code>z</code> 前缀 + 文档声明为保留名、不鼓励泛匹配。</td></tr>
+  <tr><td>标签变更触发 <code>on_torrent_field_changed</code></td><td><code>watch_fields</code> 可含 <code>tags</code>（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/torrents/store.py#L627-L632"><code>store.py:627-632</code></a>）；但 QbApi 写 tags 会登记 <code>self_caused_fields</code> 期望值，下轮上报值一致即按自写消费（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/torrents/store.py#L648-L663"><code>store.py:648-663</code></a> / <code>788-819</code>）</td><td><span class="good">不自触发</span>：前提是<strong>所有标签写都走 QbApi facade</strong>，绝不直接用 raw client。</td></tr>
+  <tr><td>规则 / 维护 <code>remove_tags</code></td><td><a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/rules/actions/basic.py#L44-L58"><code>basic.py:44-58</code></a>、<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/core/modules/maintenance_mod.py#L181-L194"><code>maintenance_mod.py:181-194</code></a> 用 <code>match_tag_patterns</code>（含 regex）</td><td>泛正则可能误删：<strong>标记丢失，保险丝状态不受影响</strong>；不自动重加。文档要求排除 <code>zFusePaused</code>。</td></tr>
+  <tr><td>全局标签清理</td><td><code>delete_tags</code> / <code>delete_tags_if_has_no_torrents</code> 对全部定义做 regex 匹配并整标签删除（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/core/modules/maintenance_mod.py#L345-L371"><code>maintenance_mod.py:345-371</code></a>）</td><td>同上：用户配 <code>regex:</code> 通配时标记会被清掉；建议收窄清理正则，或接受标记消失。</td></tr>
+  <tr><td>HR 排除 / 站点 <code>remove_tags</code> / <code>remove_similar_tags</code></td><td><code>hr.exclude_tags</code>（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/torrents/record.py#L318-L331"><code>record.py:318-331</code></a>）、<code>maintenance_mod.py:215-230</code></td><td>只有用户显式把本标签写进排除/删除规则才生效；<code>remove_similar_tags</code> 只比对站点 tags，天然安全。</td></tr>
+  <tr><td>WebUI 标签候选</td><td><code>auto_managed_tag_rules</code> 只从配置派生（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/src/auto_qb/infra/utils.py#L687-L726"><code>utils.py:687-726</code></a>；<code>torrent_detail.py:131-142</code>）</td><td>本标签不在配置 → 会出现在「添加标签」候选里（轻微噪声），无功能影响。</td></tr>
+</table>
+<p><b>取舍</b>：不在规则引擎里给保险丝开特例（例如让 <code>TagsCondition</code> 跳过本标签）——那会改变全局规则语义，爆炸半径远大于「标记可能被清掉」。选择保留名 + 文档 + 不重加。</p>
+<h4>同名冲突与多实例</h4>
+<ul>
+  <li><b>用户已有同名标签</b>：固定保留名；启动时若定义已存在记一条 WARNING（一次性，读 store 标签缓存，不发额外请求），行为上复用同一标签。残余影响：用户曾把该标签用在别的种子，我们在「该种子被触发并放行」时会移除它——文档写明这是保留名。</li>
+  <li><b>同一 qB 多实例</b>：标签共享；A 放行会摘掉 B 仍触发的种子的标记。多实例共用一个 qB 时，保险丝只应在一个实例启用（写入文档与残余风险）。多 qB 各自独立，无影响。</li>
+</ul>
+<h4>成本（Else 源码）</h4>
+<p>只有真实变更才写：<code>addTag</code> 走 <code>deferredRequestResumeData()</code>（合并到同一事件循环，每种子最多一次 save），而 <code>stop()</code> 本身也触发一次 resume 写（<code>torrentimpl.cpp:2014-2022</code>、<code>890-910</code>、<code>965-1008</code>）——标签只让每个 triggered 种子多一次同量级写，不改变数量级。批量 N 个：1 次 HTTP + N 次 resume 写；标签不影响队列/状态，也不会让种子起跑。</p>
+<h4>adopt 顺带变准（不增加配置）</h4>
+<p>state 丢失后：完成 + <code>dl_limit==fence</code> + <strong>暂停且带标签</strong> → 直接重建 <code>triggered</code>（零 qB 写）；只有 fence 没标签 → <code>armed</code>。标签因此兼作「触发过的持久证据」。</p>
+<div class="aside"><b>若不想引入标签</b>：唯一零冲突的替代是「只在自家 WebUI 标」（后端把状态作行字段、前端加 chip），代价是要改 WebUI，且在 qB 原生里仍看不出原因——与你的原始诉求相反。因此推荐标签；它的全部复杂度就是一条 add/remove + 一条保留名约定。</div>
+
+<h2><span class="no">§04</span>极简版 grilling：简化后会咬人的地方</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>会不会真咬</th><th>是否加复杂度</th></tr>
+  <tr><td>Q1</td><td>「连续 dlspeed&gt;0」挡不住慢速大额下载</td><td>不会更糟：慢速同样满足 &gt;0，反而<strong>更早</strong>被暂停；且哨兵已把速度压到 13KiB/s，慢速大额本来就走不完。</td><td><span class="good">不加</span></td></tr>
+  <tr><td>Q2</td><td>暂停落在 <code>checking</code> 上不中止校验</td><td>真咬一小口：校验会延后到恢复之后，但不会丢数据、不会误判。用户看到「暂停 + 校验中」即可。</td><td><span class="good">不加</span>（只记一行日志）</td></tr>
+  <tr><td>Q3</td><td>用户连续小量补齐被反复暂停</td><td>不会：<code>released</code> 在重新完成前不重新武装，一次放行覆盖整个补齐过程。真正的体验代价是「不能在 qB 里直接 resume，要来本 UI 点一下」。</td><td><span class="good">不加</span></td></tr>
+  <tr><td>Q4</td><td>批量暂停把做种面整体打停</td><td>会，但这正是用户要求的语义（磁盘级问题就该停）。恢复靠 <code>release --all</code>。</td><td><span class="bad">不加</span>（拒绝对 mass guard）</td></tr>
+  <tr><td>Q5</td><td>adopt 误判：用户恰好手设 13KiB</td><td>概率低但非零；后果只是多一条被我们盯着的条目，行为与用户手动限速一致（不写、可暂停）。</td><td><span class="good">不加</span></td></tr>
+  <tr><td>Q6</td><td>每拍全量扫描的开销</td><td>不会：遍历的是已在快照里的记录，零 HTTP；写入只发生在状态迁移时。</td><td><span class="good">不加</span></td></tr>
+  <tr><td>Q7</td><td>state 丢失后残留 13KiB 限速</td><td>完成态不下载 ⇒ 当期危害≈0；adopt 重建；真正影响是「将来补齐被拖慢」。</td><td><span class="good">不加</span></td></tr>
+  <tr><td>Q8</td><td>「我经常要补齐，每次都点按钮烦」</td><td>会咬，但这是少数场景；本轮先不加白名单（两个键 + 一条判断），等真出现频次再说。</td><td><span class="wr">先不加</span>（记为后续候选）</td></tr>
+</table>
+
+<h2><span class="no">§05</span>配置：三个键</h2>
+<table>
+  <tr><th>键</th><th>类型</th><th>默认</th><th>校验</th><th>说明</th></tr>
+  <tr><td><code>enabled</code></td><td>bool</td><td>false</td><td>—</td><td>总开关；默认关（保守默认，等价今天行为）</td></tr>
+  <tr><td><code>download_limit</code></td><td>speed</td><td>13KiB/s</td><td>&gt;0、整 KiB、KiB 数为奇数、≤1024KiB</td><td>哨兵值；0/偶数直接报错</td></tr>
+  <tr><td><code>confirm_ticks</code></td><td>int</td><td>3</td><td>1..20</td><td>连续多少拍 <code>dlspeed&gt;0</code> 才暂停</td></tr>
+</table>
+<h4>去掉的键与理由</h4>
+<table>
+  <tr><th>去掉</th><th>理由</th></tr>
+  <tr><td><code>scope</code></td><td>只有一种作用域（全部已完成）。留一个键只会让「默认到底覆盖什么」重新变成问题。</td></tr>
+  <tr><td><code>fill_bytes</code> / <code>large_bytes</code> / <code>large_ratio</code></td><td>用户明确否掉按大小分级；动作已经是「暂停」，分级不改变结果。</td></tr>
+  <tr><td><code>overspeed_factor</code></td><td>超速与普通下载的处置相同（暂停），多一条判据不改变动作。</td></tr>
+  <tr><td><code>budget_window_hours</code></td><td>没有累计阈值就没有预算；<code>released</code> 语义已天然挡住「反复小量」。</td></tr>
+  <tr><td><code>mass_trigger_count</code> / <code>mass_guard_global_limit</code></td><td>用户否掉批量降级。日志聚合是输出格式，不是策略，不需要键。</td></tr>
+  <tr><td><code>sweep_minutes</code> / <code>arm_batch</code></td><td>每拍扫描本就有；批大小 100 作为常量足够。</td></tr>
+  <tr><td><code>respect_existing_limit</code></td><td>变成无需配置的结构性行为：只对 <code>dl_limit==0</code> 写（同时是幂等基础）。</td></tr>
+  <tr><td><code>settle_ticks</code> / <code>rearm_cooldown</code> / <code>fill_grace</code></td><td>重新武装的条件简化成「重新完成且 dlspeed==0」，不需要时间参数。</td></tr>
+  <tr><td><code>exempt_tags</code> / <code>exempt_categories</code></td><td>白名单是「高频补齐」的优化；先用显式放行覆盖，真有频次再加（§04 Q8）。</td></tr>
+  <tr><td><code>trust_priority_fill</code> / <code>trust_runtime_recheck</code> / <code>trust_external_resume</code></td><td>不再自动猜意图；补齐只认显式放行。这是简化后的明确取舍，不是遗漏。</td></tr>
+  <tr><td><code>fuse_tag</code></td><td>标签名固定为保留常量 <code>zFusePaused</code>。可配置会让「文档 / 用户排除规则 / WebUI 识别」三处跟着漂移，也让规则误匹配更难解释。</td></tr>
+</table>
+
+<h2><span class="no">§06</span>决策清单</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>推荐</th><th>备选 / 备注</th></tr>
+  <tr><td>D01</td><td>总开关</td><td><b>默认关</b>（<code>enabled=false</code>）</td><td>默认开：首日全量写盘风险大</td></tr>
+  <tr><td>D02</td><td>作用域</td><td><b>全部已完成种子</b>，无配置键</td><td>仅跳检：省不了代码，只少覆盖</td></tr>
+  <tr><td>D03</td><td>哨兵值</td><td><b>13KiB/s 奇数，可配</b></td><td>取全局 5%：随曲线漂移、有偶数风险</td></tr>
+  <tr><td>D04</td><td>触发判据</td><td><b>连续 <code>confirm_ticks</code>（默认 3）拍 <code>dlspeed&gt;0</code></b></td><td>累计字节阈值：要基线与字节算术，且天然是大小分级</td></tr>
+  <tr><td>D05</td><td>升级动作</td><td><b>唯一动作：暂停</b></td><td>L0–L3 梯度：已否</td></tr>
+  <tr><td>D06</td><td>批量</td><td><b>全停；只聚合日志/通知</b></td><td>降级为只告警：已否</td></tr>
+  <tr><td>D07</td><td>已有非零限速</td><td><b>不写、只监控</b>（无配置键）</td><td>一律接管：会抹掉用户预置值</td></tr>
+  <tr><td>D08</td><td>放行</td><td><b>显式 release（CAS 恢复，不 auto resume）；<code>released</code> 到重新完成才再武装</b></td><td>自动识别补齐：复杂度不成比例</td></tr>
+  <tr><td>D09</td><td>state 自愈</td><td><b>adopt（值恰等于 fence 且完成）+ <code>release --all</code></b></td><td>不 adopt：残留限速无人认领</td></tr>
+  <tr><td>D10</td><td>触发标记载体</td><td><b>固定 qB 标签 <code>zFusePaused</code>（不可配置）</b>：qB 原生可见、我们 UI 自动可见、集合幂等、qB 自建定义</td><td>仅自家 WebUI：qB 原生仍无解释；comment：覆盖用户备注且需存原文</td></tr>
+  <tr><td>D11</td><td>标签写入策略</td><td><b>只在状态迁移时加/删；不每拍对齐；全部走 QbApi（自写抑制防规则自触发）</b></td><td>每拍 ensure：会与用户清理任务互删成环；规则引擎开特例：改全局语义</td></tr>
+</table>
+
+<h2><span class="no">§07</span>分步实施（每阶段可独立验收、可回滚）</h2>
+<p>四个阶段各自是一个「能单独收尾」的最小闭环：任一阶段结束都可以停手，后续不做也不会留下半成品。每阶段收尾都要跑 <code>commands run test.full</code>，并按仓库口径记基线切片。</p>
+<table>
+  <tr><th>阶段</th><th>改动范围（文件）</th><th>退出条件 / 验收判据</th><th>回滚</th></tr>
+  <tr><td><b>S1 配置面</b><br><span class="tag">无行为</span></td><td><code>config/models.py</code>（<code>download_fuse</code>: <code>enabled</code>/<code>download_limit</code>/<code>confirm_ticks</code>）、<code>config/loaders.py</code>、<code>config/validation/core.py</code>、<code>config/schema.py</code>、配置单测</td><td>默认 <code>enabled=false</code>；<code>0</code>/偶数/越界聚合报错且含键名；默认配置下全量测试与 <a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/tests/test_actions_skip.py#L122"><code>test_actions_skip.py:122</code></a> 不变；<code>dev.run --dry-run</code> 能打印配置且零 qB 写</td><td>删键即回滚；不产生 state、不写 qB</td></tr>
+  <tr><td><b>S2 状态机 + 哨兵 + 暂停</b><br><span class="tag">核心</span></td><td>新模块 <code>core/modules/fuse_mod.py</code>（三态 / 每拍扫 / 批 100 / CAS 恢复 / 无标签版 adopt）、<code>state</code> 的 <code>download_fuse</code>、聚合日志、<code>fuse release &lt;hash&gt;</code> 入口</td><td>单测：武装写、N 拍触发、恒 0 不误伤、批量全停 + 单条汇总、CAS 失败不写、dry-run 零写、state 丢失 adopt、重复执行幂等；真机隔离实例：3 个完成种子得到 13KiB，制造缺片（删一个 piece/文件后强制校验）→ 连续 3 拍 <code>dlspeed&gt;0</code> → pause</td><td><code>enabled=false</code> 即停；<code>fuse release --all</code> 清残留限速；state 字段留存无副作用</td></tr>
+  <tr><td><b>S3 标签标记 + adopt 增强</b></td><td><code>fuse_mod.py</code>：进入 triggered 批量加标签、放行删标签、adopt 以标签判 triggered、<code>released</code> 残留标签有界重试；常量 <code>FUSE_TAG="zFusePaused"</code>；启动一次性 WARNING（定义已存在）</td><td>单测：加标签一次 / 第二拍零调用、放行删、批量一请求、标签被外部删除不重加、dry-run 零写、adopt 命中标签 → triggered；真机：qB 列表与自家 WebUI 都能看到该标签；规则日志无 <code>on_torrent_field_changed</code> 自触发</td><td>回滚 S3 代码即可；已打标签用 <code>fuse release --all</code> 摘除</td></tr>
+  <tr><td><b>S4 隔离实例端到端 + 回写</b></td><td>无产品代码；测试补全、README / 知识库回写、验收剧本</td><td>完整剧本：武装 → 触发（标签 + 暂停）→ 放行 → 重新完成再武装；批量 10 个；state 清空重启；dry-run 全程零写；<code>test.full</code> 全绿并记基线</td><td>关 <code>enabled</code> 回退；文档变更可单独回退</td></tr>
+</table>
+<p class="aside"><b>阶段间不留半成品</b>：S1 只有配置没有行为（等价现状）；S2 有行为但没有标记（可用但可读性差）；S3 才补标记。任何一段停下都能上线，因为默认关闭 + 显式放行始终成立。</p>
+
+<h2><span class="no">§08</span>待拍板</h2>
+<ol>
+  <li><b>P1 默认是否开</b>：推荐保持 <code>false</code>，先手工跑一轮观察再开。</li>
+  <li><b>P2 <code>confirm_ticks=3</code></b>：按约 5–10s 一拍，即 15–30s 证据窗口；如果你希望「更快拦」可设 2。</li>
+  <li><b>P3 放行后不 auto resume</b>：推荐维持；若你希望「点一下就继续下载」，加一个 <code>resume=true</code> 参数即可（不加配置键）。</li>
+  <li><b>P4 白名单</b>：本轮不加（§04 Q8）；若你有固定的「经常补齐」标签/分类，这里需要你确认再补。</li>
+  <li><b>P5 标签名 <code>zFusePaused</code></b>：推荐就用它（<code>z</code> 前缀沿用程序标签约定）；若你想要更直白的中文/其它名字，现在改成本最低——之后改会连带文档与可能的排除规则。</li>
+</ol>
+
+<h2><span class="no">§09</span>残余风险（选择接受）</h2>
+<table>
+  <tr><th>风险</th><th>影响</th><th>为什么接受</th></tr>
+  <tr><td>R1 暂停落在校验中会延后校验</td><td>补齐/自检变慢</td><td>不丢数据、不误判；加「等校验结束再暂停」要多一个状态判定</td></tr>
+  <tr><td>R2 批量暂停打停做种面</td><td>短时无上传、队列位变手排</td><td>批量触发≈磁盘级问题，停种是用户认可的正确动作</td></tr>
+  <tr><td>R3 adopt 误判（用户恰设 13KiB）</td><td>多盯一个种子</td><td>行为与用户手动限速一致；日志可见；可一键清</td></tr>
+  <tr><td>R4 外部 resume 不算放行</td><td>用户要多点一次按钮</td><td>否则误点即失守；这是刻意的安全侧重</td></tr>
+  <tr><td>R5 state 丢失残留限速</td><td>未来补齐被拖慢</td><td>完成态不下载，当期危害≈0；adopt 重建</td></tr>
+  <tr><td>R6 无白名单，高频补齐需重复点</td><td>体验成本</td><td>先观察频次；真高频再加两个键</td></tr>
+  <tr><td>R7 哨兵被规则/tracker 当「手动限速」跳过</td><td>规则限速不生效于这些种子</td><td>这正是设计意图（防止规则覆盖保险丝）</td></tr>
+  <tr><td>R8 用户规则/清理正则泛匹配清掉标签</td><td>标记消失，qB 里又看不出原因</td><td>保险丝状态不受影响；保留名 + 文档；不自动重加（避免互删成环）</td></tr>
+  <tr><td>R9 同一 qB 多实例共享标签</td><td>A 放行会摘掉 B 仍触发种子的标记</td><td>多实例共用 qB 时只在一个实例启用保险丝（文档写明）</td></tr>
+  <tr><td>R10 标签多一次 resume 写</td><td>每个 triggered 种子多一次 save；批量 N 次</td><td>与 <code>pause()</code> 自身的 resume 写同量级，不改变数量级</td></tr>
+</table>
+
+<h2><span class="no">§10</span>验收（逐条可测）</h2>
+<ol>
+  <li><b>武装</b>：启用后，3 个完成种子（<code>dl_limit=0</code>）首拍后各有一次批量写、<code>dl_limit==13KiB</code>；<code>dl_limit=2MiB</code> 的完成种子<strong>没有条目也不被写</strong>。</li>
+  <li><b>触发</b>：伪造连续 3 拍 <code>dlspeed=5KiB/s</code> → 一次 pause、状态 triggered、日志含 hash/证据；第 1–2 拍不动作。</li>
+  <li><b>零误伤</b>：完成种子 <code>dlspeed</code> 恒 0 跨 100 拍，无 pause 调用。</li>
+  <li><b>放行</b>：CAS 成立 → 恢复 <code>pre_limit</code>；当前值被外部改成 3MiB → 不写；放行后未完成期间不再武装；重新完成后回到 armed 并重写哨兵。</li>
+  <li><b>批量</b>：同拍 10 个触发 → 10 次 pause、日志恰好 1 条汇总、通知 1 条；<code>release --all</code> 后全部恢复。</li>
+  <li><b>自愈</b>：清空 state 重启 → fence 值的完成种子按证据重建（无标签 <code>armed</code> / 带标签且暂停 <code>triggered</code>）且零 qB 写；<code>release --all</code> 全部转 released 并恢复限速。</li>
+  <li><b>dry-run</b>：所有 fuse 方法零 qB 调用、不落状态。</li>
+  <li><b>回归</b>：<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/tests/test_actions_skip.py#L122"><code>test_actions_skip.py:122</code></a>（默认配置下 add 仍为 2001KiB）保持通过，证明默认关闭不改变现状。</li>
+  <li><b>标记</b>：触发后 <code>zFusePaused</code> 出现（与 pause 同拍、批量一次请求）；同一触发状态第二拍不再发标签请求；放行后标签消失。</li>
+  <li><b>规则不被打扰</b>：标签写入后的下一轮<b>没有</b> <code>field_changed(tags)</code> 事件（self_caused 已消费）；只有用户规则在正常节奏按 <code>tags</code> 命中时才可能动作。</li>
+  <li><b>adopt 带标签</b>：清空 state 重启，带标签且暂停的种子重建为 <code>triggered</code>（零 qB 写）；同 fence 无标签的重建为 <code>armed</code>。</li>
+  <li><b>标签被外部删除</b>：不自动重加、不产生写循环；<code>released</code> 条目残留标签下一拍删一次后停止。</li>
+</ol>
+<p class="aside">真机验证只用隔离 qB 实例（独立端口 + 独立数据目录 + <code>minimal.yml</code>），绝不碰生产 <code>config.yml</code> 与 <code>auto-qb-data/</code>。</p>
+
+<h2><span class="no">§11</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-0456</span> 初版：基于本机 qB/libtorrent 源码核实（add 限速 / 0=不限速 / seed_mode / pause 与校验语义），完成 12 条假设的 grilling；方案锁定「add 时注入奇数 KiB 单种限速 + 快照下载证据熔断 + 显式放行 CAS 恢复」。</li>
+  <li><span class="tag">R1 · 26-11-03</span> 按「已完成种子全量」口径重做：默认作用域改为 <code>all_completed</code>，引入 E1–E5 信号、L0–L3 梯度、1GiB/4GiB/50% 阈值、mass guard、24h 预算、fill 自动识别。</li>
+  <li><span class="tag">R2 · 26-11-03-0626</span> 版本机械更新。</li>
+  <li><span class="tag">R3 · 26-11-03</span> 用户以「过于复杂」否掉 R1：删掉全部大小分级/比例/预算/批量降级；判据收敛为「连续 N 拍 dlspeed&gt;0」，动作收敛为「写哨兵 / 暂停 / 恢复」三件，状态收敛为 armed / triggered / released 三态，配置收敛为 3 个键。</li>
+  <li><span class="tag">R4 · 26-11-03-0659</span> 按用户「极简」口径重写：删大小分级/比例/预算/批量降级，判据=连续 N 拍 dlspeed&gt;0，动作=写哨兵/暂停/恢复，状态=三态，配置=3 键</li>
+  <li><span class="tag">R5 · 26-11-03</span> 按用户补充：①新增 §3.8 触发标记——固定 qB 标签 <code>zFusePaused</code>（不可配置、随状态迁移加删、走 QbApi 自写抑制、adopt 兼用），并核实规则侧冲突（tags 条件可见 / remove_tags 与全局清理是 regex / 变更事件被 self_caused 抑制）；②新增 §07 分步实施（S1 配置面 / S2 状态机+哨兵+暂停 / S3 标签+adopt / S4 隔离端到端），每阶段给改动范围、退出条件、验收与回滚。</li>
+  <li><span class="tag">R6 · 26-11-03-0735</span> 补充触发标签方案与分步实施</li>
+</ul>
+
+</div>
+</body>
+</html>
