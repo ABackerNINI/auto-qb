@@ -26,6 +26,17 @@
 - test_publish_event_ignores_non_today_and_source_off
 - test_publish_event_patches_day_row_without_reading
 
+S7b 告警段(计划 26-11-03-1102, 主告知数据链路) ——
+- test_refresh_appends_gtm_anomaly_only: T28 只增字段; periods/state/limit/source/history/date 与
+  「无该键时」逐键一致(ts 除外), derive_state 输入输出不受影响
+- test_refresh_keeps_old_anomaly_when_gtm_unreachable: T29 不可达保留旧值, 流量照常发布、无异常冒泡
+- test_old_gtm_without_last_spike_publishes_none_and_api_stays_200: T30 旧 GTM 无字段 -> 发布 None,
+  /api/status 与 /api/state 仍 200 且 traffic.gtm_anomaly 为 null
+- test_anomaly_persists_across_refresh_and_new_instance: T31 两轮同值; 新实例(模拟重启)首轮重新取到
+- test_anomaly_fetch_exception_does_not_break_traffic_publish: T33 取数抛异常不中断 periods/history,
+  旧告警段保留, 只记 DEBUG
+- test_source_off_clears_anomaly_and_skips_gtm_call: T34 关源清空该段且零 GTM 请求(计数桩断言)
+
 W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-analysis/w7-r31/classify.md) ——
 - test_apply_reload_receipt_and_short_circuit: apply 回执契约(module/action 逐字)+ 段相等短路
   (apply_1/6/7/9/14/15 短路失效族 + apply_16/28~33 回执字段族 + apply_27 INFO 审计, 一条守阵整族杀)
@@ -56,7 +67,9 @@ from datetime import date, timedelta
 from types import SimpleNamespace
 
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
+import auto_qb.core.modules.traffic_snapshot_mod as tsm
 from auto_qb.core.modules.traffic_snapshot_mod import (
+    ANOMALY_KEY,
     LIMIT_DISABLED,
     LIMIT_DRY_RUN,
     LIMIT_OK,
@@ -66,6 +79,7 @@ from auto_qb.core.modules.traffic_snapshot_mod import (
     SOURCE_OK,
     SOURCE_STALE,
     TASK_NAME,
+    TrafficSnapshotModule,
     derive_state,
 )
 from auto_qb.core.taskqueue import Task
@@ -643,3 +657,194 @@ def test_publish_off_reason_contract(tmp_path):
 
     mod.publish_off()  # 默认 reason: 落回退文案
     assert mgr.web.traffic_view["source"]["reasons"][0]["text"] == "流量来源已关闭"
+
+
+# ---------- S7b 告警段(计划 26-11-03-1102; 主告知数据链路) ----------
+
+
+def _spike(ts="2026-11-03T10:47:28+08:00") -> dict:
+    """GTM `/status.last_spike` 的真实形状(见 sampler._evaluate_rate / 计划 §06.6)"""
+    return {
+        "ts":
+            ts,
+        "dt_s":
+            5.0,
+        "eff_dt_s":
+            5.0,
+        "threshold_bps":
+            1 * GIB,
+        "items":
+            [
+                {
+                    "nic": "以太网",
+                    "dir": "up",
+                    "cur": 1_115_700,
+                    "last": 800,
+                    "delta": 273_400,
+                    "rate_bps": int(54.7 * GIB),
+                }
+            ],
+    }
+
+
+def _patch_spike(monkeypatch, result, calls=None):
+    """把快照模块的告警取数换成替身(conftest 已全局置不可达, 这里按用例覆盖)"""
+    def fake(*_a, **_k):
+        if calls is not None:
+            calls.append(result)
+        return result
+
+    monkeypatch.setattr(tsm.agent, "fetch_last_spike", fake)
+
+
+def test_refresh_appends_gtm_anomaly_only(tmp_path, monkeypatch):
+    """T28 只增字段: 发布 gtm_anomaly; 其余段与「无该键时」逐键一致(ts 除外)
+
+    两个 manager 同 dat 同配置: A 侧取到 spike, B 侧取数不可达(不发布该键) —— 除告警段
+    与时间戳外整个快照必须逐键相等; derive_state 的输入输出也一致(告警段不参与派生)。
+    """
+    spike = _spike()
+    rows = [(date.today(), 3 * GIB, 5 * GIB)]
+    a, b = tmp_path / "with-spike", tmp_path / "without"
+    a.mkdir()
+    b.mkdir()
+    with_mgr = _mgr(a, write_dat(a, rows))
+    _patch_spike(monkeypatch, (True, spike))
+    assert _mod(with_mgr).refresh() is True
+
+    plain_mgr = _mgr(b, write_dat(b, rows))
+    _patch_spike(monkeypatch, (False, None))
+    assert _mod(plain_mgr).refresh() is True
+
+    va, vb = with_mgr.web.traffic_view, plain_mgr.web.traffic_view
+    assert va[ANOMALY_KEY] == spike
+    assert ANOMALY_KEY not in vb
+    for key in ("source", "periods", "history", "limit", "state", "date"):
+        assert va[key] == vb[key], f"告警段改动了 {key} 段(只增不改契约被破坏)"
+    assert va["state"] == derive_state(va["source"]["state"], va["limit"]["state"])
+
+
+def test_refresh_keeps_old_anomaly_when_gtm_unreachable(tmp_path, monkeypatch):
+    """T29 不可达降级: 保留旧 gtm_anomaly, 流量 periods/history 照常发布, 无异常冒泡"""
+    spike = _spike()
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)]))
+    _patch_spike(monkeypatch, (True, spike))
+    assert _mod(mgr).refresh() is True
+    old = copy.deepcopy(mgr.web.traffic_view[ANOMALY_KEY])
+
+    _patch_spike(monkeypatch, (False, None))
+    assert _mod(mgr).refresh() is True
+    tv = mgr.web.traffic_view
+    assert tv[ANOMALY_KEY] == old, "不可达不许覆盖旧告警段"
+    assert {r["period"]: (r["up"], r["down"]) for r in tv["periods"]}["day"] == (3 * GIB, 5 * GIB)
+    assert tv["history"] == [{"date": date.today().isoformat(), "up": 3 * GIB, "down": 5 * GIB}]
+
+
+def test_old_gtm_without_last_spike_publishes_none_and_api_stays_200(tmp_path, monkeypatch, web_env):
+    """T30 旧字段缺失: 可达但无 last_spike -> 发布 None; /api/status 与 /api/state 仍 200
+
+    前端取到 null(与键缺失同判「无异常」), 其余 traffic 键完整。
+    """
+    pub = tmp_path / "pub"
+    pub.mkdir()
+    mgr = _mgr(pub, write_dat(pub, [(date.today(), 1, 2)]))
+    _patch_spike(monkeypatch, (True, None))
+    assert _mod(mgr).refresh() is True
+    assert mgr.web.traffic_view[ANOMALY_KEY] is None
+
+    wmgr, client = web_env
+    today = date.today().isoformat()
+    wmgr.web.traffic_view = {
+        "ts": 1.0,
+        "date": today,
+        "state": "ok",
+        "source": {
+            "state": "ok",
+            "reasons": []
+        },
+        "periods": [{
+            "period": "day",
+            "label": "今日",
+            "up": 1,
+            "down": 2
+        }],
+        "limit":
+            {
+                "target": {
+                    "up": None,
+                    "down": None
+                },
+                "actual": {
+                    "up": None,
+                    "down": None
+                },
+                "reasons": [],
+                "state": "ok"
+            },
+        ANOMALY_KEY: None,
+    }
+    r = client.get("/api/status", headers=_auth(wmgr))
+    assert r.status_code == 200, r.text
+    assert r.json()["traffic"][ANOMALY_KEY] is None
+    assert r.json()["traffic"]["periods"][0]["period"] == "day"
+    r = client.get("/api/state", headers=_auth(wmgr))
+    assert r.status_code == 200, r.text
+    assert r.json()["status"]["traffic"][ANOMALY_KEY] is None
+
+
+def test_anomaly_persists_across_refresh_and_new_instance(tmp_path, monkeypatch):
+    """T31 跨刷新/模拟重启持久: 同一 spike 连续两轮同值; 新实例首轮从 agent 重新取到
+
+    新实例的 `_hw` 与内存快照语义完全重建(等价 auto-qb 重启), 告警段仍应出现 —— 不依赖
+    旧实例的内存遗留。
+    """
+    spike = _spike()
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)]))
+    _patch_spike(monkeypatch, (True, spike))
+    mod = _mod(mgr)
+    for _ in range(2):
+        assert mod.refresh() is True
+        assert mgr.web.traffic_view[ANOMALY_KEY] == spike
+
+    fresh = TrafficSnapshotModule(mgr.ctx)  # 模拟 auto-qb 重启: 新实例零内存状态
+    assert fresh.refresh() is True
+    assert mgr.web.traffic_view[ANOMALY_KEY] == spike
+
+
+def test_anomaly_fetch_exception_does_not_break_traffic_publish(tmp_path, monkeypatch):
+    """T33 告警段失败隔离: 取数抛任意异常 -> refresh 不抛, periods/history 照常, 旧段保留"""
+    spike = _spike()
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)]))
+    _patch_spike(monkeypatch, (True, spike))
+    assert _mod(mgr).refresh() is True
+
+    def _boom(*_a, **_k):
+        raise RuntimeError("告警取数炸了")
+
+    monkeypatch.setattr(tsm.agent, "fetch_last_spike", _boom)
+    with capture_logs("auto_qb.core.modules.traffic_snapshot_mod") as cap:
+        assert _mod(mgr).refresh() is True
+    tv = mgr.web.traffic_view
+    assert tv[ANOMALY_KEY] == spike, "取数异常不许清空/覆盖旧告警段"
+    assert {r["period"]: (r["up"], r["down"]) for r in tv["periods"]}["day"] == (3 * GIB, 5 * GIB)
+    assert len(tv["history"]) == 1
+    assert any(
+        rec.levelno == logging.DEBUG and "读取 GTM 异常失败" in msg for rec, msg in zip(cap.records, cap.messages)
+    ), "取数异常必须留 DEBUG 轨迹"
+
+
+def test_source_off_clears_anomaly_and_skips_gtm_call(tmp_path, monkeypatch):
+    """T34 来源关闭: 清空告警段(发布 None)且**零 GTM 请求**(计数桩断言)"""
+    calls = []
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(date.today(), 3 * GIB, 5 * GIB)]))
+    _patch_spike(monkeypatch, (True, _spike()), calls)
+    assert _mod(mgr).refresh() is True
+    assert len(calls) == 1, "开源的刷新应取一次数"
+
+    calls.clear()
+    mgr.config.traffic_source.enabled = False
+    assert _mod(mgr).refresh() is False
+    tv = mgr.web.traffic_view
+    assert tv[ANOMALY_KEY] is None, "关源必须清空告警段"
+    assert tv["state"] == "off" and tv["periods"] == [] and tv["history"] == []
+    assert calls == [], "关源的刷新不得发起 GTM 请求"

@@ -65,6 +65,18 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 (如 `test_hr_discovery._isolate_registry`)照旧 monkeypatch, 会自然覆盖本夹具。
 
 **不拦什么**: 生产路径照旧; 用户真实注册表与 `auto-qb-data/` 一个字节都不写。
+
+## 5. 全局流量监视器只读探活 (2026-11-03, 计划 26-11-03-1102 S7b)
+
+**背景**: 流量快照 `refresh()` 新增了告警段取数(`agent.fetch_last_spike()`, 只读 `GET /status`)。
+指针放在**用户级平台目录**(`endpoint.json`), 本机若真装着 GTM, 既有刷新用例就会连上真实控制面 ——
+用例结果随机器状态漂移(有没有工具、工具有没有 `last_spike`)。
+
+**处置**: 函数级 autouse 把 `agent.fetch_last_spike` 换成恒 `(False, None)` 的替身(= 不可达,
+保留旧段、不发请求)。需要真实行为的用例(`fetch_last_spike` 的失败矩阵 / 快照告警段 T28-T34)
+自行再 `monkeypatch.setattr` 覆盖本夹具。
+
+**不拦什么**: 回环 HTTP 仍在 `sidefx` 放行面内(真需要连本机假服务时照旧); 本夹具只钉 GTM 取数这一个入口。
 """
 import os
 import re
@@ -275,6 +287,18 @@ def _isolated_hr_registry(tmp_path_factory):
 
 
 from webui_helpers import WEB_ENV_CONFIG_TEXT, _make_web_manager
+
+
+@pytest.fixture(autouse=True)
+def gtm_spike_isolation(monkeypatch):
+    """测试期 GTM 告警取数一律「不可达」(详见模块 docstring 5.)
+
+    默认替身 = 保留旧段、零请求: 快照刷新用例不受本机真实 GTM 影响。要覆盖的用例在测试体内
+    再 monkeypatch 本模块属性即可(后设的替身生效)。
+    """
+    from auto_qb.core.traffic_source import agent as _agent
+
+    monkeypatch.setattr(_agent, "fetch_last_spike", lambda *a, **k: (False, None))
 
 
 @pytest.fixture()

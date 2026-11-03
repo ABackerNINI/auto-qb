@@ -29,6 +29,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 from .. import curves
 from ..module import AppContext, ApplyResult, BaseModule
 from ..taskqueue import REQUEUE, Task
+from ..traffic_source import agent
 from ..traffic_source import paths as traffic_paths
 from ..traffic_source.reader import read_source_rows
 
@@ -44,6 +45,10 @@ TASK_NAME = "traffic_snapshot_refresh"
 #: month 供口径对照。曲线侧要的 ND 累计仍由曲线模块自己 `curves.aggregate` 算, 不进快照 ——
 #: 快照的 periods 不再是"各曲线 period 的并集", 所以曲线增删不改变快照形状。
 PERIODS: Tuple[Tuple[str, str], ...] = (("day", "今日"), ("month", "本月"))
+
+#: 告警段键(计划 26-11-03-1102 S7b): **可选键**, 只有发布过才在; 对象或 None(可达但无异常)
+#: —— 不参与 derive_state, 缺失即「无异常」(前端据此不渲染常驻横幅)
+ANOMALY_KEY = "gtm_anomaly"
 
 # 段状态取值(契约面; 前端逐批迁移到细分字段, 顶层 state 恒为 derive 结果)
 SOURCE_OK, SOURCE_STALE, SOURCE_OFF = "ok", "stale", "off"
@@ -210,6 +215,8 @@ class TrafficSnapshotModule(BaseModule):
             logger.info("流量快照 | 来源总开关关闭(traffic_source.enabled=false), 发布 off 快照")
             self.publish_off("流量来源已关闭(traffic_source.enabled=false): 已停止取数")
             return False
+        # 告警段先取(失败即返回, 不覆盖旧段), 随后照常读 dat —— 取数异常不得中断流量发布
+        self._refresh_anomaly()
         dat_path = traffic_paths.dat_path(self._ctx.config)
         rows, bad, fail = read_source_rows(dat_path)
         if fail is not None:
@@ -225,6 +232,23 @@ class TrafficSnapshotModule(BaseModule):
         # (26-10-18 用户要求降级); 读盘失败/坏行两条 WARNING 不降, 异常仍要响亮。
         logger.debug(f"流量快照 | 发布历史流量: {len(rows)} 行" + (f", 今日 上传 {day[1]}B/下载 {day[2]}B" if day else ""))
         return True
+
+    def _refresh_anomaly(self) -> None:
+        """取一次 GTM 最近异常并发布告警段(计划 26-11-03-1102 S7b)
+
+        只有**取数成功**才发布: `spike=None` 也发布(可达但无异常/旧工具无字段 -> 清空段);
+        不可达/取数抛异常一律**不发布**, 保留上次值 —— 边界 try/except 隔离告警取数,
+        失败只记 DEBUG, 绝不断流量的 periods/history 发布(T29/T33)。
+        """
+        try:
+            reachable, spike = agent.fetch_last_spike()
+        except Exception as e:  # 告警段失败隔离: 任何取数异常都不得中断流量刷新
+            logger.debug(f"流量快照 | 读取 GTM 异常失败, 保留上次告警段: {e}")
+            return
+        if not reachable:
+            logger.debug("流量快照 | 全局流量监视器不可达, 保留上次异常段")
+            return
+        self.publish_anomaly(spike)
 
     def publish_event(self, day: str, up, down) -> bool:
         """事件载荷补丁(26-10-21): **零读盘**, 只把当日累计写进 periods 的 day 行
@@ -297,6 +321,14 @@ class TrafficSnapshotModule(BaseModule):
             history=_history_rows(rows),
         )
 
+    def publish_anomaly(self, spike: Optional[dict]) -> None:
+        """写告警段(只改 `ANOMALY_KEY`, 段级合并) —— **不动** source/periods/history/limit
+
+        spike 为 GTM `/status.last_spike` 的对象或 None(可达但无异常/旧工具无字段)。
+        告警段不参与 derive_state: 顶层 state、pill、限速浮层与历史弹层语义零改动。
+        """
+        self._publish(**{ANOMALY_KEY: spike})
+
     def publish_limit(
         self,
         target: Optional[dict] = None,
@@ -311,10 +343,11 @@ class TrafficSnapshotModule(BaseModule):
         self._publish(limit=_limit_segment(target, actual, reasons, state))
 
     def publish_off(self, reason: str = "") -> None:
-        """来源关闭: source 翻 off、清 periods/history、limit 复位 disabled
+        """来源关闭: source 翻 off、清 periods/history、limit 复位 disabled、清告警段
 
         limit 的 target/actual 一并归 None: 来源关了就没有"命中目标"可言, 与今日 off 快照
-        逐字段一致(限速浮层此时不列任何受管方向)。
+        逐字段一致(限速浮层此时不列任何受管方向)。告警段同时清空(发布 None): 关源后
+        **不发 GTM 请求**, 前端据 None/缺失不渲染常驻横幅(T34)。
         """
         self._publish(
             source={
@@ -328,6 +361,7 @@ class TrafficSnapshotModule(BaseModule):
             periods=[],
             history=[],
             limit=_limit_segment(state=LIMIT_DISABLED),
+            **{ANOMALY_KEY: None},
         )
 
     # ---------- 内部 ----------
@@ -353,6 +387,7 @@ __all__ = [
     "MODULE_NAME",
     "TASK_NAME",
     "PERIODS",
+    "ANOMALY_KEY",
     "TrafficSnapshotModule",
     "derive_state",
     "LIMIT_DISABLED",

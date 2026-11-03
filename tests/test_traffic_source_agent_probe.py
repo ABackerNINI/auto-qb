@@ -44,6 +44,12 @@ W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-a
 - test_read_pointer_pins_utf8_encoding: 指针 open utf-8 契约(read_pointer_3/6)
 - test_stub_conf_without_tool_dir_attr_uses_default_dir: 桩配置缺 tool_dir 属性走默认目录
   (rlt_39/rct_32)
+
+S7b 告警取数(计划 26-11-03-1102, 主告知数据链路) ——
+- test_fetch_last_spike_reads_status_and_returns_spike: 复用 discover/read_token/call_tool, 只发一次
+  GET /status(默认超时 PROBE_TIMEOUT_S); 成功 -> (True, last_spike 对象)
+- test_fetch_last_spike_failure_matrix: 指针缺失/密钥缺失/不可达(ToolUnreachable)/非 200/响应非对象
+  -> (False, None)(前置失败不发请求); 旧工具无键或载荷非对象 -> (True, None)
 """
 
 import ast
@@ -69,6 +75,8 @@ from types import SimpleNamespace
 import pytest
 
 from auto_qb.core.traffic_source import agent
+
+from auto_qb.core.traffic_source.agent import fetch_last_spike as real_fetch_last_spike
 
 from auto_qb.infra.utils import is_windows
 
@@ -524,3 +532,75 @@ def test_stub_conf_without_tool_dir_attr_uses_default_dir():
     """
     assert agent.resolve_launch_target(SimpleNamespace(tool_exe="")) is not None
     assert agent.resolve_claim_target(SimpleNamespace(tool_exe="")) is not None
+
+
+# ---------- S7b 告警取数(计划 26-11-03-1102) ----------
+#: 真实实现按符号直取(conftest 的 gtm_spike_isolation 只替换模块属性, 不拦住本符号)
+_SPIKE = {
+    "ts": "2026-11-03T10:47:28+08:00",
+    "dt_s": 5.0,
+    "eff_dt_s": 5.0,
+    "threshold_bps": 1024**3,
+    "items": [{
+        "nic": "以太网",
+        "dir": "up",
+        "cur": 1115700,
+        "last": 800,
+        "delta": 273400,
+        "rate_bps": 1024**3 * 54,
+    }],
+}
+
+
+def test_fetch_last_spike_reads_status_and_returns_spike(tmp_path, monkeypatch):
+    """只读取数: 复用发现/鉴权/HTTP 单点, 只发一次 GET /status(默认超时 PROBE_TIMEOUT_S)"""
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
+    seen = []
+    monkeypatch.setattr(
+        tool_client,
+        "call_tool",
+        lambda base_url, path, method, credential, payload=None, timeout=None:
+        (seen.append((base_url, path, method, credential, timeout)) or (200, {
+            "ok": True,
+            "last_spike": _SPIKE
+        })),
+    )
+
+    assert real_fetch_last_spike() == (True, _SPIKE)
+    assert seen == [("http://127.0.0.1:8099", "/status", "GET", "tool-credential-abc", agent.PROBE_TIMEOUT_S)]
+
+
+def test_fetch_last_spike_failure_matrix(tmp_path, monkeypatch):
+    """失败矩阵一律 (False, None) 且前置失败不发请求; 可达但无字段/载荷非对象 -> (True, None)"""
+    calls = []
+    monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: (calls.append(a) or (200, {})))
+
+    # 指针缺失 -> 不发请求
+    monkeypatch.setattr(agent, "endpoint_path", lambda: str(tmp_path / "absent.json"))
+    assert real_fetch_last_spike() == (False, None)
+    assert calls == []
+
+    # 密钥缺失 -> 不发请求
+    empty = tmp_path / "empty.token"
+    empty.write_text("", encoding="utf-8")
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=str(empty))
+    assert real_fetch_last_spike() == (False, None)
+    assert calls == []
+
+    # 不可达(连接失败 / 响应非 JSON 都归 ToolUnreachable)
+    monkeypatch.setattr(tool_client, "call_tool", _down)
+    assert real_fetch_last_spike() == (False, None)
+
+    # 非 200
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
+    monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: (500, {"error": "x"}))
+    assert real_fetch_last_spike() == (False, None)
+
+    # 响应非对象
+    monkeypatch.setattr(tool_client, "call_tool", lambda *a, **k: (200, ["not-a-dict"]))
+    assert real_fetch_last_spike() == (False, None)
+
+    # 旧工具无 last_spike 键 / 载荷非对象 -> 可达但无异常
+    for payload in ({"ok": True}, {"last_spike": "oops"}):
+        monkeypatch.setattr(tool_client, "call_tool", lambda *a, _p=payload, **k: (200, _p))
+        assert real_fetch_last_spike() == (True, None)

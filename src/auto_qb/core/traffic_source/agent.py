@@ -192,6 +192,38 @@ def probe(timeout: float = PROBE_TIMEOUT_S) -> Optional[ToolEndpoint]:
     return ep if code == 200 else None
 
 
+def fetch_last_spike(timeout: float = PROBE_TIMEOUT_S) -> tuple[bool, Optional[dict]]:
+    """只读取工具最近一轮越界记录(计划 26-11-03-1102 S7b): (可达, last_spike)
+
+    复用既有发现/鉴权/HTTP 单点(discover / read_token / call_tool), 只发一次 `GET /status`;
+    **不拉起进程、不订阅、不写任何状态**(纯读, 供流量快照把告警段带给前端)。
+
+    失败矩阵一律 `(False, None)`(绝不抛异常 —— 调用方据此保留旧段, 主界面不受牵连):
+    指针缺失 / 密钥缺失 / 连接失败 / 响应非 JSON / 非 200 / 响应非对象。
+    旧工具无 `last_spike` 键或载荷非对象 -> `(True, None)`(可达但无异常, 发布 None 清空段)。
+    """
+    ep = discover()
+    if ep is None:
+        logger.debug("全局流量监视器指针缺失: 取不到最近异常(保留上次快照段)")
+        return False, None
+    # 延迟 import(与 probe 同因): tool_client 顶层 import 本模块, 顶层互引会成环
+    from ...webui.tool_client import ToolUnreachable, call_tool, read_token
+    token = read_token(ep.token_path)
+    if not token:
+        logger.debug(f"全局流量监视器密钥尚未就绪({ep.token_path}): 取不到最近异常")
+        return False, None
+    try:
+        code, resp = call_tool(ep.base_url, "/status", "GET", token, None, timeout)
+    except ToolUnreachable as e:
+        logger.debug(f"全局流量监视器不可达, 取不到最近异常: {e}")
+        return False, None
+    if code != 200 or not isinstance(resp, dict):
+        logger.debug(f"全局流量监视器 /status 非预期(status={code}, type={type(resp).__name__}): 取不到最近异常")
+        return False, None
+    spike = resp.get("last_spike")
+    return True, (spike if isinstance(spike, dict) else None)
+
+
 def resolve_launch_target(conf) -> Optional[LaunchTarget]:
     """D10 拉起解析顺序 -> 目标或 None(未安装)
 
