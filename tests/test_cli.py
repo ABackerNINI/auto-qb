@@ -36,6 +36,11 @@
 - test_compat_entry_shim_imported_without_main_guard: 兼容入口被当模块导入(非 __main__) -> 只暴露 main, 不触发执行
 - test_dunder_main_module_runs_main: python -m auto_qb(run_module, __main__.py 守卫 -> sys.exit(main()))
 - test_cli_main_guard_under_dunder_main: 直接执行 cli.py 源码时 __main__ 守卫调 main()
+- test_fuse_release_connect_failure_returns_false: fuse_release 连接失败 -> error 日志 + 返回 False, 不触 release
+- test_fuse_release_snapshot_sync_failure_warns_and_continues: 放行前快照同步失败 -> warning 降级继续 release(只标记不写)
+- test_fuse_release_dry_run_skips_state_save: dry-run 放行 -> release(dry_run=True) 且不落 state
+- test_main_fuse_release_mutex_errors: fuse 放行互斥矩阵(--fuse-release 与 --all / 与托盘导出 HR 模式 / 纯分隔符空清单) -> 退出码 2
+- test_main_fuse_release_dispatch_parses_hashes: --fuse-release 清单解析(全角逗号/空白归一小写)并派发 fuse_release, 落 state 后返回 0
 """
 import signal
 import sys
@@ -45,6 +50,8 @@ from unittest import mock
 import pytest
 
 from auto_qb.config import ConfigError
+
+from helpers import capture_logs
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -523,3 +530,107 @@ def test_cli_main_guard_under_dunder_main():
         with pytest.raises(SystemExit) as ei:
             exec(compile(code, path, "exec"), mod.__dict__)
     assert ei.value.code == 2
+
+
+# ---------- T0b 补测: fuse 放行 CLI 入口与互斥校验(零子进程, argv 直驱) ----------
+
+
+def _fuse_mgr():
+    """fuse_release 直驱用 manager 替身(连接成功 + 快照同步正常)"""
+    mgr = mock.MagicMock()
+    mgr.connect.return_value = True
+    mgr.store.apply_sync.return_value = ([], [])
+    mgr.ctx.fuse.release.return_value = 1
+    return mgr
+
+
+def test_fuse_release_connect_failure_returns_false():
+    """fuse_release 连接失败: error 日志 + 返回 False, 不触快照同步与 release"""
+    from auto_qb.cli import fuse_release
+
+    mgr = mock.MagicMock()
+    mgr.connect.return_value = False
+    with capture_logs("") as cap:  # cli 用模块级 logging.*, 落 root logger
+        assert fuse_release(mgr, ["x" * 40], False, False) is False
+    mgr.store.apply_sync.assert_not_called()
+    mgr.ctx.fuse.release.assert_not_called()
+    assert any("放行失败" in m for m in cap.messages)
+
+
+def test_fuse_release_snapshot_sync_failure_warns_and_continues():
+    """放行前快照同步失败(qB 断连/旧版本降级): warning 降级, 仍继续 release(只标记不写的安全侧)"""
+    from auto_qb.cli import fuse_release
+
+    mgr = _fuse_mgr()
+    mgr.store.apply_sync.side_effect = RuntimeError("connection closed")
+    with capture_logs("") as cap:
+        assert fuse_release(mgr, ["x" * 40], False, False) is True
+    mgr.ctx.fuse.release.assert_called_once_with(["x" * 40], dry_run=False)
+    assert any("快照同步失败" in m for m in cap.messages)
+    mgr.ctx.state.save.assert_called_once()  # 非 dry-run 放行要落 state
+
+
+def test_fuse_release_dry_run_skips_state_save():
+    """dry-run 放行: release 收 dry_run=True, 不落 state(日志带 dry-run 标记)"""
+    from auto_qb.cli import fuse_release
+
+    mgr = _fuse_mgr()
+    mgr.ctx.fuse.release.return_value = 2
+    with capture_logs("") as cap:
+        assert fuse_release(mgr, ["x" * 40], False, True) is True
+    mgr.ctx.fuse.release.assert_called_once_with(["x" * 40], dry_run=True)
+    mgr.ctx.state.save.assert_not_called()
+    assert any("dry-run" in m and "已放行 2 个条目" in m for m in cap.messages)
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ("auto-qb", "config.yml", "--fuse-release", "ABC", "--fuse-release-all"),  # 两放行形态互斥
+        ("auto-qb", "config.yml", "--fuse-release-all", "--tray"),  # 写操作与托盘互斥
+        ("auto-qb", "config.yml", "--fuse-release", "ABC", "--hr-once"),  # 写操作与 HR 走查互斥
+        ("auto-qb", "config.yml", "--fuse-release-all", "--hr-status"),  # 写操作与 HR 现状互斥
+        ("auto-qb", "config.yml", "--fuse-release", "ABC", "--hr-confirm-empty", "X"),  # 写操作与 HR 写模式互斥
+        ("auto-qb", "config.yml", "--export-torrents_info", "--fuse-release-all"),  # 写操作与导出互斥
+        ("auto-qb", "config.yml", "--fuse-release", "， , "),  # 清单解析后为空
+    ],
+    ids=["both-forms", "vs-tray", "vs-hr-once", "vs-hr-status", "vs-hr-confirm-empty", "vs-export", "blank-hashes"],
+)
+def test_main_fuse_release_mutex_errors(argv):
+    """fuse 放行互斥矩阵: 七条 parser.error 支路各自可达, 退出码 2 且不构造 manager"""
+    with _patch_argv(*argv), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        with pytest.raises(SystemExit) as ei:
+            main()
+    assert ei.value.code == 2
+    m_qb.assert_not_called()
+
+
+def test_main_fuse_release_dispatch_parses_hashes():
+    """--fuse-release 派发: 清单解析(全角逗号归一 + 去空白 + 小写)后转交 fuse_release, 落 state 返回 0
+
+    26-11-05 合流对齐 02ad25d3 新语义: 入参加 40 位十六进制校验, 清单改用合法 hash
+    (仍保留全角逗号/空白/大写以覆盖归一化路径); 另补非法 hash 被 parser.error 拒收断言。
+    """
+    manager = mock.MagicMock()
+    manager.connect.return_value = True
+    manager.store.apply_sync.return_value = ([], [])
+    manager.ctx.fuse.release.return_value = 2
+    with _patch_argv("auto-qb", "config.yml", "--fuse-release", " " + "A" * 40 + "，" + "b" * 40 + " "), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager), \
+            capture_logs("") as cap:
+        from auto_qb.cli import main
+        assert main() == 0
+    manager.ctx.fuse.release.assert_called_once_with(["a" * 40, "b" * 40], dry_run=False)
+    manager.ctx.state.save.assert_called_once()
+    assert any("已放行 2 个条目" in m for m in cap.messages), "放行汇总日志要带条目数"
+
+    # 02ad25d3 新增校验: 非 40 位十六进制 -> parser.error(退出码 2, 不构造 manager)
+    with _patch_argv("auto-qb", "config.yml", "--fuse-release", " ABC ，def,gh "), \
+            mock.patch("auto_qb.cli.QbManager") as m_qb:
+        from auto_qb.cli import main
+        with pytest.raises(SystemExit) as ei:
+            main()
+    assert ei.value.code == 2
+    m_qb.assert_not_called()

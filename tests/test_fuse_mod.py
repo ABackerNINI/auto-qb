@@ -30,6 +30,18 @@
 - test_fuse_adopt_fence_without_tag_is_armed: 完成+fence 无标签 -> 仍重建 armed(标签不重加)
 - test_fuse_tag_reuse_warns_once_without_extra_request: 同名标签已被使用 -> 启动一条 WARNING, 不建标签定义
 - test_fuse_release_cli_syncs_snapshot_before_cas: CLI 放行先同步 store 快照再调 release(CAS 才读得到当前限速); 非 dry-run 落盘、dry-run 不落盘; 显式列表 0 命中返回 False
+- test_fuse_start_sets_dry_run_and_stop_clears_streak: start 记模块级 dry-run(零动作零 state), stop 清连击缓存
+- test_fuse_dependency_missing_early_return: api 依赖缺失 -> 整拍早退, 零写零 state 域
+- test_fuse_armed_refence_idempotent_after_external_clear: armed 下 dl_limit 被外部清零 -> 幂等补写哨兵
+- test_fuse_armed_external_limit_change_released_no_writeback: armed 下限速被外部改值 -> 转 released 不写回
+- test_fuse_unknown_status_entry_dropped: 条目状态未知(历史脏数据) -> 丢弃后按无条目重新判定
+- test_fuse_release_state_service_none_returns_zero: state 服务缺失 -> release 返回 0
+- test_fuse_release_no_entries_return_zero: state 域缺失/entries 空/域非 dict -> release 返回 0
+- test_fuse_release_without_connection_marks_only_with_warning: 放行时未连接 qB -> 告警且只标 released 不写限速
+- test_fuse_release_dry_run_prints_plan_only: dry-run 放行 -> 打印计划, 零写零改状态
+- test_fuse_release_untag_skipped_when_tag_gone: 放行时标签已被外部移除 -> 不发摘标签请求, 无汇总日志
+- test_fuse_monitor_trigger_already_tagged_zero_requests: 触发时快照已带标签 -> 加标签零请求且无打标签日志
+- test_fuse_tag_apply_helpers_tolerate_missing_entries: 标签批量助手直驱 entries 缺 hash/rec 无标签 -> 防御假两侧不炸
 """
 
 from unittest import mock
@@ -507,3 +519,174 @@ def test_fuse_release_cli_syncs_snapshot_before_cas():
     mgr_zero.store.apply_sync.side_effect = lambda api: ([], [])
     mgr_zero.ctx.fuse.release.side_effect = lambda hashes, dry_run: 0
     assert fuse_release(mgr_zero, ["a" * 40], False, False) is False, "显式列表 0 命中要报错, 不无声 exit 0"
+
+
+# ---------- T0b 补测: 生命周期 / 早退分支 / armed 推进 / release 兜底 ----------
+
+
+def test_fuse_start_sets_dry_run_and_stop_clears_streak(tmp_path):
+    """start 记模块级 dry-run(之后整拍零动作零 state); stop 清空连击缓存"""
+    mgr, client = _mgr(tmp_path)
+    fuse = mgr.ctx.fuse
+    tor = _tor("w9" + "i" * 38)
+    mon = _tor("wa" + "j" * 38, dl_limit=512 * 1024, dlspeed=1000)
+    fuse.start(mgr.ctx, True)
+    assert fuse._dry_run is True
+    seed_store(mgr, [tor, mon])
+    _tick(mgr)
+    assert client.calls == [] and "download_fuse" not in mgr.ctx.state.data, "模块级 dry-run 零动作零 state"
+    fuse.start(mgr.ctx, False)
+    _tick(mgr)
+    assert len(_set_calls(client)) == 1, "恢复后正常武装"
+    assert mon.hash in fuse._streak, "监控连击已累计"
+    fuse.stop()
+    assert fuse._streak == {}, "stop 清空连击缓存"
+
+
+def test_fuse_dependency_missing_early_return(tmp_path):
+    """api 依赖缺失(未连接) -> _scan 整拍早退: 零写、不建 state 域(直调 _scan 避开同相位其它模块)"""
+    mgr, client = _mgr(tmp_path)
+    seed_store(mgr, [_tor("wb" + "k" * 38, dlspeed=1000)])
+    mgr.ctx.api = None
+    mgr.ctx.fuse._scan(False)
+    assert client.calls == []
+    assert "download_fuse" not in mgr.ctx.state.data, "依赖缺失不建 state 域"
+
+
+def test_fuse_armed_refence_idempotent_after_external_clear(tmp_path):
+    """armed 下 dl_limit 被外部清零(上次写失败/外部干预) -> 幂等补写哨兵"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wc" + "l" * 38)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    assert len(_set_calls(client)) == 1
+    tor.dl_limit = 0
+    _tick(mgr)
+    calls = _set_calls(client)
+    assert len(calls) == 2 and calls[-1][1] == FENCE, "armed 下 dl_limit==0 应幂等补齐哨兵"
+
+
+def test_fuse_armed_external_limit_change_released_no_writeback(tmp_path):
+    """armed 下限速被外部改为非哨兵值 -> 不写回, 条目转 released(确认计数/补齐标记一并复位)"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wd" + "m" * 38)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    assert len(_set_calls(client)) == 1
+    tor.dl_limit = 512 * 1024
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        _tick(mgr)
+    assert len(_set_calls(client)) == 1, "外部改限速不写回(之后由显式放行兜底)"
+    ent = _entries(mgr)[tor.hash]
+    assert ent["status"] == "released" and ent["confirm_count"] == 0 and ent["was_incomplete"] is False
+    assert any("转 released" in m for m in cap.messages)
+
+
+def test_fuse_unknown_status_entry_dropped(tmp_path):
+    """条目状态为未知值(历史脏数据) -> 本拍丢弃, 下拍按无条目重新判定"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("we" + "n" * 38)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    assert tor.hash in _entries(mgr)
+    _entries(mgr)[tor.hash]["status"] = "bogus"
+    _tick(mgr)
+    assert tor.hash not in _entries(mgr), "未知状态条目被丢弃"
+
+
+def test_fuse_release_state_service_none_returns_zero(tmp_path):
+    """state 服务缺失 -> release 直接返回 0(无条目可放行)"""
+    mgr, _client = _mgr(tmp_path)
+    mgr.ctx.state = None
+    assert mgr.ctx.fuse.release(None) == 0
+
+
+def test_fuse_release_no_entries_return_zero(tmp_path):
+    """state 域缺失 / entries 为空 / 域非 dict 三形态 -> release 都返回 0"""
+    mgr, _client = _mgr(tmp_path)
+    assert mgr.ctx.fuse.release(["x" * 40]) == 0, "无 download_fuse 域"
+    mgr.ctx.state.data["download_fuse"] = {"entries": {}}
+    assert mgr.ctx.fuse.release(None) == 0, "entries 为空"
+    mgr.ctx.state.data["download_fuse"] = "junk"
+    assert mgr.ctx.fuse.release(None) == 0, "域非 dict"
+
+
+def test_fuse_release_without_connection_marks_only_with_warning(tmp_path):
+    """放行时未连接 qB -> 告警一条, 条目只标 released, 零限速写"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wf" + "o" * 38)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    before = len(_set_calls(client))
+    mgr.ctx.api = None
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        assert mgr.ctx.fuse.release([tor.hash]) == 1
+    assert len(_set_calls(client)) == before, "无连接零写"
+    assert _entries(mgr)[tor.hash]["status"] == "released"
+    assert any("未连接 qB" in m for m in cap.messages), "断连放行要有告警"
+
+
+def test_fuse_release_dry_run_prints_plan_only(tmp_path):
+    """dry-run 放行 -> 打印计划行, 零 qB 写、条目状态不动"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wg" + "p" * 38)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    before = len(_set_calls(client))
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        assert mgr.ctx.fuse.release([tor.hash], dry_run=True) == 1
+    assert len(_set_calls(client)) == before, "dry-run 零写"
+    assert _entries(mgr)[tor.hash]["status"] == "armed", "dry-run 不改 state"
+    assert any("[dry-run] 将放行" in m for m in cap.messages)
+
+
+def test_fuse_release_untag_skipped_when_tag_gone(tmp_path):
+    """放行 triggered 条目但标签已被外部移除 -> 不发摘标签请求, removed==0 无汇总日志"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wh" + "q" * 38, dlspeed=1000)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])]
+    tor.tags = ""
+    tor._tags_set = None
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        assert mgr.ctx.fuse.release([tor.hash]) == 1
+    assert _tag_remove_calls(client) == [], "快照里已无标签: 摘标签零请求"
+    assert _entries(mgr)[tor.hash]["status"] == "released"
+    assert not any("摘除标签" in m for m in cap.messages), "removed==0 不打摘标签汇总日志"
+
+
+def test_fuse_monitor_trigger_already_tagged_zero_requests(tmp_path):
+    """监控路径触发时快照已带同名标签 -> 加标签零请求(集合幂等), added==0 无打标签汇总日志"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wi" + "r" * 38, dl_limit=512 * 1024, dlspeed=1000, tags=FUSE_TAG)
+    seed_store(mgr, [tor])
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        for _ in range(TICKS):
+            _tick(mgr)
+    assert _pause_calls(client) == [("pause", [tor.hash])]
+    assert _tag_add_calls(client) == [], "快照已带标签: 加标签零请求"
+    ent = _entries(mgr)[tor.hash]
+    assert ent["status"] == "triggered" and ent["tagged"] is True
+    assert not any("打标签" in m for m in cap.messages), "added==0 无打标签汇总日志"
+
+
+def test_fuse_tag_apply_helpers_tolerate_missing_entries(tmp_path):
+    """标签批量助手直驱: entries 缺该 hash(防御假 ent is None)与 rec 无标签(continue)两侧都不炸
+
+    经 _scan/release 真流 ent 恒存在、rec 恒带标签, 防御假只能直驱 _apply_tag_add/_apply_tag_remove
+    补齐(348-350/365-366 语句 + ent is None / continue 分支); api 用 MagicMock 隔离 facade 的快照回写。
+    """
+    mgr, _client = _mgr(tmp_path)
+    fuse = mgr.ctx.fuse
+    tagged = _tor("wj" + "s" * 38, tags=FUSE_TAG)
+    untagged = _tor("wk" + "t" * 38)
+    store = mock.MagicMock()
+    store.get = lambda h: tagged if h == tagged.hash else untagged
+    api = mock.MagicMock()
+    assert fuse._apply_tag_add(api, [tagged.hash, untagged.hash], FUSE_TAG, entries={}, store=store) == 1
+    api.torrents_add_tags.assert_called_once_with(tags=[FUSE_TAG], torrent_hashes=[untagged.hash])
+    assert fuse._apply_tag_remove(api, [tagged.hash, untagged.hash], FUSE_TAG, entries={}, store=store) == 1
+    api.torrents_remove_tags.assert_called_once_with(tags=[FUSE_TAG], torrent_hashes=[tagged.hash])
