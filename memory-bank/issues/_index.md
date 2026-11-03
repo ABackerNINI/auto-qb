@@ -19,17 +19,21 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 13 |
+| bug | 16 |
 | perf | 5 |
 | docs | 9 |
 | test | 6 |
-| refactor | 4 |
+| refactor | 5 |
 | feat | 20 |
 | chore | 2 |
 | question | 6 |
 
 ## Open
 
+- [bug] [sim_qb torrents/export 生成非法 bencode：announce 长度标 26、实际 25](26-11-03-1145-bug-sim-qb-export-bencode.html) — minimal_benc…
+- [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在…
+- [bug] [gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）](26-11-03-1144-bug-gtm-auth-body-drain.html) — 鉴权失败分支不读请求体即…
+- [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all…
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_cont…
 - [bug] [flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖](26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html) — views.css @m…
 - [test] [前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫](26-11-03-1120-test-webui-config-normalize-parity-gap.html) — config_rules…

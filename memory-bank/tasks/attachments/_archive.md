@@ -34,7 +34,7 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (277)
+## Done (278)
 
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
@@ -46,6 +46,7 @@
 - [26-11-03-memory-bank-code-review-3-s1](../26-11-03-memory-bank-code-review-3-s1.md) 第三次全量代码评审 S1:文件打标与批次定稿
 - [26-11-03-memory-bank-code-review-3-s2](../26-11-03-memory-bank-code-review-3-s2.md) 全量代码评审第三轮 S2（B1–B4 后端批次）
 - [26-11-03-memory-bank-code-review-3-s3](../26-11-03-memory-bank-code-review-3-s3.md) 全量代码评审第三轮 S3（B5 前端实质评审 + B6 拆分等价核验）
+- [26-11-03-memory-bank-code-review-3-s4](../26-11-03-memory-bank-code-review-3-s4.md) 全量代码评审 3 · S4（B7 gtm/扩展/scripts + B8 HR/infra/tray）
 - [26-11-03-memory-bank-kb-nav-searchbox](../26-11-03-memory-bank-kb-nav-searchbox.md) kb.nav 搜索支持文件名与相对路径
 - [26-11-03-test-big-file-split](../26-11-03-test-big-file-split.md) 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
 - [26-11-03-test-port-zero](../26-11-03-test-port-zero.md) 测试/开发侧端口改 0(webServer.wait 捕获)实施

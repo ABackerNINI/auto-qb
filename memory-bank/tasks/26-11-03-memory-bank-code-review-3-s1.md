@@ -5,7 +5,7 @@
 **Updated:** 2026-11-03
 **Summary:** 第三次全量代码评审 S1: 479 个代码文件三类打标(实质 295 / move-only 184 / 未变 0), B1-B10 批次矩阵定稿并自证 0 漏 0 重, 入池 3 条范围/分类问题
 **Topics:** memory-bank-code-review-3-s1
-**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/issues/26-11-03-0704-docs-plan-domain-table-count.html, memory-bank/issues/26-11-03-0704-test-split-carried-inrange-changes.html, memory-bank/issues/26-11-03-0704-docs-split-residue-rename.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/issues/26-11-03-0704-docs-plan-domain-table-count.html, memory-bank/issues/26-11-03-0704-test-split-carried-inrange-changes.html, memory-bank/issues/26-11-03-0704-docs-split-residue-rename.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md
 
 ## 原始请求
 
