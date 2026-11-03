@@ -32,7 +32,7 @@ KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password", "api_key"}
 
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag", "cross_group_conflict_check"}
 
-# download_fuse(已完成种子下载保险丝, 计划 26-11-03-0456 §05): 默认关闭, 本阶段仅配置面
+# download_fuse(已完成种子下载保险丝, 计划 26-11-03-0456 §05): 默认关闭; 行为见 core/modules/fuse_mod.py
 KNOWN_DOWNLOAD_FUSE_KEYS = {"enabled", "download_limit", "confirm_ticks", "fuse_tag"}
 
 # fs(文件访问, plan 26-09-27-1407): 容器部署路径映射, 空表 = 现状(保守默认)

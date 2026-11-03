@@ -228,7 +228,7 @@ class DownloadFuseConfig:
     download_limit: 哨兵限速(字节/秒, YAML 原始缺省 "13KiB/s"); 校验要求 >0、整 KiB、
       KiB 数为奇数、<= 1024KiB —— 0(qB 语义 = 不限速)与偶数都直接报错
     confirm_ticks: 连续多少拍 dlspeed > 0 才暂停; 默认 3, 校验 1..20
-    fuse_tag: 触发标记标签名; 默认 zFusePaused(S2/S3 使用; 本阶段只做配置面)
+    fuse_tag: 触发标记标签名; 默认 zFusePaused(S2/S3 使用; 默认值即保留名)
     """
     enabled: bool = False
     download_limit: int = 13 * 1024  # 13KiB/s
@@ -591,7 +591,7 @@ class Config:
 
     grouping: GroupingConfig = field(default_factory=GroupingConfig)  # 种子分组管理(辅种管理)
 
-    # 已完成种子下载保险丝(计划 26-11-03-0456): 默认关闭; 本阶段仅配置面, 无运行逻辑
+    # 已完成种子下载保险丝(计划 26-11-03-0456): 默认关闭; 行为在 core/modules/fuse_mod
     download_fuse: DownloadFuseConfig = field(default_factory=DownloadFuseConfig)
 
     fs: FsConfig = field(default_factory=FsConfig)  # 文件访问(容器部署路径映射, 空 = 现状)

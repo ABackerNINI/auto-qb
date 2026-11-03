@@ -43,6 +43,12 @@ def fuse_release(manager: QbManager, hashes, release_all: bool, dry_run: bool) -
     if not manager.connect():
         logging.error("放行失败: 无法连接 qBittorrent")
         return False
+    # CLI 是一次性进程: 模块构造时 store 为空, 必须先同步一轮快照, 否则 CAS 读不到当前限速,
+    # 只会把条目标记 released 而写不回 orig_limit(真机 S4 验出)。只读同步, 不触发业务相位。
+    try:
+        manager.store.apply_sync(manager.api)
+    except Exception as e:  # qB 断连/旧版本降级: 保持「只标记不写」的安全侧, 不掩盖错误
+        logging.warning(f"fuse: 放行前快照同步失败, 按无快照处理(CAS 不成立): {e}")
     released = manager.ctx.fuse.release(None if release_all else hashes, dry_run=dry_run)
     if not dry_run:
         manager.ctx.state.save()

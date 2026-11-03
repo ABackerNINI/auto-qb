@@ -26,7 +26,10 @@
 - test_fuse_adopt_tagged_paused_is_triggered: 完成+fence+暂停+标签 -> adopt 重建 triggered 零写
 - test_fuse_adopt_fence_without_tag_is_armed: 完成+fence 无标签 -> 仍重建 armed(标签不重加)
 - test_fuse_tag_reuse_warns_once_without_extra_request: 同名标签已被使用 -> 启动一条 WARNING, 不建标签定义
+- test_fuse_release_cli_syncs_snapshot_before_cas: CLI 放行先同步 store 快照再调 release(CAS 才读得到当前限速)
 """
+
+from unittest import mock
 
 from auto_qb.config.impact import KERNEL_SECTIONS
 
@@ -418,3 +421,16 @@ def test_fuse_tag_reuse_warns_once_without_extra_request(tmp_path):
     hits = [m for m in cap.messages if "复用该定义" in m]
     assert len(hits) == 1, "启动只记一条复用 WARNING"
     assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])], "正常加标签请求不变"
+
+
+def test_fuse_release_cli_syncs_snapshot_before_cas():
+    """CLI 是一次性进程: 必须先 apply_sync 填快照, release 的 CAS 才读得到当前 dl_limit"""
+    from auto_qb.cli import fuse_release
+
+    mgr = mock.MagicMock()
+    mgr.connect.return_value = True
+    order = []
+    mgr.store.apply_sync.side_effect = lambda api: order.append("sync") or ([], [])
+    mgr.ctx.fuse.release.side_effect = lambda hashes, dry_run: order.append("release") or 1
+    assert fuse_release(mgr, ["abc"], False, False) is True
+    assert order == ["sync", "release"], "先快照后放行, 顺序不可颠倒"

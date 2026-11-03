@@ -15,8 +15,9 @@
 
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (195)
+## Done (196)
 
+- [26-11-03-0456] [已完成种子下载保险丝（极简版）](../26-11-03-0456-plan-skip-check-download-fuse.html) — `skip-check-download-fuse`
 - [26-11-03-0316] [测试侧端口改 0 自动分配](../26-11-03-0316-plan-test-port-zero.html) — `test-port-zero`
 - [26-11-03-0120] [WEBUI 搜索结果随新增种子自动更新](../26-11-03-0120-plan-webui-search-auto-refresh.html) — `webui-search-auto-refresh`
 - [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](../26-11-02-2342-plan-big-file-split.html) — `big-file-split`

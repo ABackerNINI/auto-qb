@@ -7,9 +7,9 @@
 <title>已完成种子下载保险丝（极简版）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="skip-check-download-fuse">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0456">
-<meta name="doc-updated" content="26-11-03-0735">
+<meta name="doc-updated" content="26-11-03-0956">
 <meta name="doc-refs" content="memory-bank/issues/26-10-22-0308-feat-ops-skip-check-download-cost.html">
 <style>
   :root {
@@ -74,7 +74,7 @@
 <h1>已完成种子下载保险丝（极简版）</h1>
 <p class="lede">默认覆盖<strong>全部已完成种子</strong>：完成即给一个「奇数 KiB 单种下载限速」哨兵；只要看到<strong>持续下载证据</strong>（连续 N 拍 <code>dlspeed &gt; 0</code>），就<strong>暂停</strong>并打上固定标签 <code>zFusePaused</code>。没有大小分级、没有比例阈值、没有预算窗口、批量场景也不降级。放行只认显式动作。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0456 · <b>doc-updated</b> 26-11-03-0735 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-0456 · <b>doc-updated</b> 26-11-03-0956 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> issue <code>26-10-22-0308</code> 认领；本机 qB/libtorrent 源码只读核验（<code>C:\Users\11059\Desktop\Projects\Else</code>）；本轮按「极简」口径重写<br>
   <b>范围</b> 只做保险丝；<strong>抽样校验本轮不做</strong>（issue 中的另一道防线，另行立计划）
 </div>
@@ -196,8 +196,8 @@
   <li><b>外部改限速</b>：<code>armed</code> 条目发现 <code>dl_limit != fence</code> → 转 <code>released</code>，不写回。</li>
 </ul>
 
-<h3>3.8 触发标记：一个固定 qB 标签（本轮新增）</h3>
-<p><b>结论</b>：triggered 的种子加 <code>zFusePaused</code> 标签——固定常量、<strong>不可配置</strong>、由 qB 自动创建；进入 triggered 时加，放行时删；只在状态迁移时写，不做每拍对齐。标签同时出现在 qB 原生列表与自家 WebUI（标签 chip / 搜索行天然可见），前端零改动。</p>
+<h3>3.8 触发标记：一个 qB 标签（默认名固定）</h3>
+<p><b>结论</b>：triggered 的种子加 <code>zFusePaused</code> 标签——默认值 <code>zFusePaused</code>、可由配置键 <code>download_fuse.fuse_tag</code> 覆盖（保留名，默认值即约定）；进入 triggered 时加，放行时删；只在状态迁移时写，不做每拍对齐。标签同时出现在 qB 原生列表与自家 WebUI（标签 chip / 搜索行天然可见），前端零改动。</p>
 <h4>载体对比：为什么不是分类 / comment / 只在我们 UI 标</h4>
 <table>
   <tr><th>载体</th><th>利</th><th>弊</th><th>结论</th></tr>
@@ -208,7 +208,7 @@
 </table>
 <h4>命名、创建与生命周期</h4>
 <ul>
-  <li><b>名字固定 <code>zFusePaused</code></b>，不设配置键：唯一性是规避规则误匹配的前提；可配置会让「文档 / 用户排除规则 / WebUI 识别」三处跟着漂移。qB 只裁剪首尾空白、含逗号即非法、区分大小写（<code>tag.cpp:37-62</code>）；本名不含逗号与空白。</li>
+  <li><b>名字默认 <code>zFusePaused</code>，配置键 <code>fuse_tag</code></b>：实现的落点是可配置键（默认值即保留名），文档 / 用户排除规则 / WebUI 识别都以配置值为准；默认值不许改的理由仍在——<code>z</code> 前缀是规避规则泛匹配的约定。qB 只裁剪首尾空白、含逗号即非法、区分大小写（<code>tag.cpp:37-62</code>）；默认名不含逗号与空白。</li>
   <li><b>谁创建</b>：首次加标签时 qB session 自动建定义（<code>m_session-&gt;addTag</code>），无需额外 create 调用。</li>
   <li><b>加</b>：仅 <code>armed → triggered</code> 迁移时，与 pause 同拍、按批一次请求。<b>删</b>：显式放行离开 triggered 时，与恢复限速同一批。删种：标签随种子消失，定义可能余留到 qB / 清理任务处理，无害。</li>
   <li><b>幂等</b>：qB 侧 <code>TagSet</code> 集合 + <code>hasTag</code> 提前返回，重复加无副作用；我们侧调用前先读快照 <code>tags_set</code>，已存在则不发请求。</li>
@@ -249,12 +249,13 @@
   <tr><td>Q8</td><td>「我经常要补齐，每次都点按钮烦」</td><td>会咬，但这是少数场景；本轮先不加白名单（两个键 + 一条判断），等真出现频次再说。</td><td><span class="wr">先不加</span>（记为后续候选）</td></tr>
 </table>
 
-<h2><span class="no">§05</span>配置：三个键</h2>
+<h2><span class="no">§05</span>配置：四个键</h2>
 <table>
   <tr><th>键</th><th>类型</th><th>默认</th><th>校验</th><th>说明</th></tr>
   <tr><td><code>enabled</code></td><td>bool</td><td>false</td><td>—</td><td>总开关；默认关（保守默认，等价今天行为）</td></tr>
   <tr><td><code>download_limit</code></td><td>speed</td><td>13KiB/s</td><td>&gt;0、整 KiB、KiB 数为奇数、≤1024KiB</td><td>哨兵值；0/偶数直接报错</td></tr>
   <tr><td><code>confirm_ticks</code></td><td>int</td><td>3</td><td>1..20</td><td>连续多少拍 <code>dlspeed&gt;0</code> 才暂停</td></tr>
+  <tr><td><code>fuse_tag</code></td><td>str</td><td>zFusePaused</td><td>非空字符串</td><td>触发标记名；默认值即保留名，改值需同步排除规则与文档</td></tr>
 </table>
 <h4>去掉的键与理由</h4>
 <table>
@@ -269,7 +270,6 @@
   <tr><td><code>settle_ticks</code> / <code>rearm_cooldown</code> / <code>fill_grace</code></td><td>重新武装的条件简化成「重新完成且 dlspeed==0」，不需要时间参数。</td></tr>
   <tr><td><code>exempt_tags</code> / <code>exempt_categories</code></td><td>白名单是「高频补齐」的优化；先用显式放行覆盖，真有频次再加（§04 Q8）。</td></tr>
   <tr><td><code>trust_priority_fill</code> / <code>trust_runtime_recheck</code> / <code>trust_external_resume</code></td><td>不再自动猜意图；补齐只认显式放行。这是简化后的明确取舍，不是遗漏。</td></tr>
-  <tr><td><code>fuse_tag</code></td><td>标签名固定为保留常量 <code>zFusePaused</code>。可配置会让「文档 / 用户排除规则 / WebUI 识别」三处跟着漂移，也让规则误匹配更难解释。</td></tr>
 </table>
 
 <h2><span class="no">§06</span>决策清单</h2>
@@ -284,7 +284,7 @@
   <tr><td>D07</td><td>已有非零限速</td><td><b>不写、只监控</b>（无配置键）</td><td>一律接管：会抹掉用户预置值</td></tr>
   <tr><td>D08</td><td>放行</td><td><b>显式 release（CAS 恢复，不 auto resume）；<code>released</code> 到重新完成才再武装</b></td><td>自动识别补齐：复杂度不成比例</td></tr>
   <tr><td>D09</td><td>state 自愈</td><td><b>adopt（值恰等于 fence 且完成）+ <code>release --all</code></b></td><td>不 adopt：残留限速无人认领</td></tr>
-  <tr><td>D10</td><td>触发标记载体</td><td><b>固定 qB 标签 <code>zFusePaused</code>（不可配置）</b>：qB 原生可见、我们 UI 自动可见、集合幂等、qB 自建定义</td><td>仅自家 WebUI：qB 原生仍无解释；comment：覆盖用户备注且需存原文</td></tr>
+  <tr><td>D10</td><td>触发标记载体</td><td><b>qB 标签，默认 <code>zFusePaused</code>、配置键 <code>fuse_tag</code></b>：qB 原生可见、我们 UI 自动可见、集合幂等、qB 自建定义</td><td>仅自家 WebUI：qB 原生仍无解释；comment：覆盖用户备注且需存原文</td></tr>
   <tr><td>D11</td><td>标签写入策略</td><td><b>只在状态迁移时加/删；不每拍对齐；全部走 QbApi（自写抑制防规则自触发）</b></td><td>每拍 ensure：会与用户清理任务互删成环；规则引擎开特例：改全局语义</td></tr>
 </table>
 
@@ -292,10 +292,10 @@
 <p>四个阶段各自是一个「能单独收尾」的最小闭环：任一阶段结束都可以停手，后续不做也不会留下半成品。每阶段收尾都要跑 <code>commands run test.full</code>，并按仓库口径记基线切片。</p>
 <table>
   <tr><th>阶段</th><th>改动范围（文件）</th><th>退出条件 / 验收判据</th><th>回滚</th></tr>
-  <tr><td><b>S1 配置面</b><br><span class="tag">无行为</span></td><td><code>config/models.py</code>（<code>download_fuse</code>: <code>enabled</code>/<code>download_limit</code>/<code>confirm_ticks</code>）、<code>config/loaders.py</code>、<code>config/validation/core.py</code>、<code>config/schema.py</code>、配置单测</td><td>默认 <code>enabled=false</code>；<code>0</code>/偶数/越界聚合报错且含键名；默认配置下全量测试与 <a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/tests/test_actions_skip.py#L122"><code>test_actions_skip.py:122</code></a> 不变；<code>dev.run --dry-run</code> 能打印配置且零 qB 写</td><td>删键即回滚；不产生 state、不写 qB</td></tr>
+  <tr><td><b>S1 配置面</b><br><span class="tag">无行为</span></td><td><code>config/models.py</code>（<code>download_fuse</code>: <code>enabled</code>/<code>download_limit</code>/<code>confirm_ticks</code>/<code>fuse_tag</code>）、<code>config/loaders.py</code>、<code>config/validation/core.py</code>、<code>config/schema.py</code>、配置单测</td><td>默认 <code>enabled=false</code>；<code>0</code>/偶数/越界聚合报错且含键名；默认配置下全量测试与 <a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone3/tests/test_actions_skip.py#L122"><code>test_actions_skip.py:122</code></a> 不变；<code>dev.run --dry-run</code> 能打印配置且零 qB 写</td><td>删键即回滚；不产生 state、不写 qB</td></tr>
   <tr><td><b>S2 状态机 + 哨兵 + 暂停</b><br><span class="tag">核心</span></td><td>新模块 <code>core/modules/fuse_mod.py</code>（三态 / 每拍扫 / 批 100 / CAS 恢复 / 无标签版 adopt）、<code>state</code> 的 <code>download_fuse</code>、聚合日志、<code>fuse release &lt;hash&gt;</code> 入口</td><td>单测：武装写、N 拍触发、恒 0 不误伤、批量全停 + 单条汇总、CAS 失败不写、dry-run 零写、state 丢失 adopt、重复执行幂等；真机隔离实例：3 个完成种子得到 13KiB，制造缺片（删一个 piece/文件后强制校验）→ 连续 3 拍 <code>dlspeed&gt;0</code> → pause</td><td><code>enabled=false</code> 即停；<code>fuse release --all</code> 清残留限速；state 字段留存无副作用</td></tr>
-  <tr><td><b>S3 标签标记 + adopt 增强</b></td><td><code>fuse_mod.py</code>：进入 triggered 批量加标签、放行删标签、adopt 以标签判 triggered、<code>released</code> 残留标签有界重试；常量 <code>FUSE_TAG="zFusePaused"</code>；启动一次性 WARNING（定义已存在）</td><td>单测：加标签一次 / 第二拍零调用、放行删、批量一请求、标签被外部删除不重加、dry-run 零写、adopt 命中标签 → triggered；真机：qB 列表与自家 WebUI 都能看到该标签；规则日志无 <code>on_torrent_field_changed</code> 自触发</td><td>回滚 S3 代码即可；已打标签用 <code>fuse release --all</code> 摘除</td></tr>
-  <tr><td><b>S4 隔离实例端到端 + 回写</b></td><td>无产品代码；测试补全、README / 知识库回写、验收剧本</td><td>完整剧本：武装 → 触发（标签 + 暂停）→ 放行 → 重新完成再武装；批量 10 个；state 清空重启；dry-run 全程零写；<code>test.full</code> 全绿并记基线</td><td>关 <code>enabled</code> 回退；文档变更可单独回退</td></tr>
+  <tr><td><b>S3 标签标记 + adopt 增强</b></td><td><code>fuse_mod.py</code>：进入 triggered 批量加标签、放行删标签、adopt 以标签判 triggered；标签名走配置键 <code>download_fuse.fuse_tag</code>（默认 <code>zFusePaused</code>）；启动一次性 WARNING（定义已存在）；<code>released</code> 残留标签<strong>不重加、不自动重试摘除</strong>（放行时删一次，删失败就留着，等下一次显式放行/人工处理）</td><td>单测：加标签一次 / 第二拍零调用、放行删、批量一请求、标签被外部删除不重加、dry-run 零写、adopt 命中标签 → triggered；真机：qB 列表与自家 WebUI 都能看到该标签；规则日志无 <code>on_torrent_field_changed</code> 自触发</td><td>回滚 S3 代码即可；已打标签用 <code>fuse release --all</code> 摘除</td></tr>
+  <tr><td><b>S4 隔离实例端到端 + 回写</b></td><td>测试补全、README / 知识库回写、验收剧本；实测发现 CLI 放行缺快照同步，最小修复 <code>cli.py</code>（<code>fuse_release</code> 先 <code>store.apply_sync</code> 再走 CAS）</td><td>完整剧本：武装 → 触发（标签 + 暂停）→ 放行 → 重新完成再武装；批量 10 个；state 清空重启（adopt 只覆盖已完成种子）；<code>enabled=false</code> 与 dry-run 全程零写；<code>test.full</code> 全绿并记基线</td><td>关 <code>enabled</code> 回退；文档变更可单独回退</td></tr>
 </table>
 <p class="aside"><b>阶段间不留半成品</b>：S1 只有配置没有行为（等价现状）；S2 有行为但没有标记（可用但可读性差）；S3 才补标记。任何一段停下都能上线，因为默认关闭 + 显式放行始终成立。</p>
 
@@ -336,9 +336,20 @@
   <li><b>标记</b>：触发后 <code>zFusePaused</code> 出现（与 pause 同拍、批量一次请求）；同一触发状态第二拍不再发标签请求；放行后标签消失。</li>
   <li><b>规则不被打扰</b>：标签写入后的下一轮<b>没有</b> <code>field_changed(tags)</code> 事件（self_caused 已消费）；只有用户规则在正常节奏按 <code>tags</code> 命中时才可能动作。</li>
   <li><b>adopt 带标签</b>：清空 state 重启，带标签且暂停的种子重建为 <code>triggered</code>（零 qB 写）；同 fence 无标签的重建为 <code>armed</code>。</li>
-  <li><b>标签被外部删除</b>：不自动重加、不产生写循环；<code>released</code> 条目残留标签下一拍删一次后停止。</li>
+  <li><b>标签被外部删除</b>：不自动重加、不产生写循环；<code>released</code> 条目残留标签<strong>不重加、不自动重试摘除</strong>——放行时删一次，删失败就保留，等下一次显式放行或人工处理。</li>
 </ol>
 <p class="aside">真机验证只用隔离 qB 实例（独立端口 + 独立数据目录 + <code>minimal.yml</code>），绝不碰生产 <code>config.yml</code> 与 <code>auto-qb-data/</code>。</p>
+<h3>10.1 S4 真机验收记录（26-11-03，副实例 56590，qB v5.2.3）</h3>
+<ol>
+  <li>11 个本地假种子（主 8MiB + 批量 10×2MiB）首拍武装为 <code>dl_limit=13312B/s</code>；</li>
+  <li>主种子暂停 → 前 2MiB 写零 → recheck 落账后再 resume（<b>校验中 resume 会被 qB 忽略</b>）→ web seed 真下载，条目 reason=<code>连续 3 拍 dlspeed&gt;0</code>，pause + <code>zFusePaused</code>；</li>
+  <li>CLI <code>--fuse-release &lt;hash&gt;</code>：限速归 0、摘标签、状态 <code>released</code>（修好 CLI 快照同步后才生效）；</li>
+  <li>复原文件 + recheck → 重新完成 → 回 <code>armed</code> 并重写 13312B/s；</li>
+  <li>批量 10 个同拍触发 → 单条汇总日志 <code>paused 10 torrents (batch)</code>，10/10 pause + 标签；</li>
+  <li>批量复原为完成态 → 清空 state 的 <code>download_fuse</code> 域 → 重启 adopt 11 条（10 triggered + 1 armed），零 qB 写；</li>
+  <li><code>--fuse-release-all</code> 后 <code>enabled=false</code> 与 <code>--dry-run</code> 各 3 拍，标签/限速/日志全部零变化。</li>
+</ol>
+<p class="aside">adopt 只覆盖「已完成」种子：未完成的 triggered 条目在 state 丢失后无法凭 fence 值重建，需人工 / 下次放行兜底——这是当前实现的已知边界。</p>
 
 <h2><span class="no">§11</span>变更记录</h2>
 <ul>
@@ -349,6 +360,7 @@
   <li><span class="tag">R4 · 26-11-03-0659</span> 按用户「极简」口径重写：删大小分级/比例/预算/批量降级，判据=连续 N 拍 dlspeed&gt;0，动作=写哨兵/暂停/恢复，状态=三态，配置=3 键</li>
   <li><span class="tag">R5 · 26-11-03</span> 按用户补充：①新增 §3.8 触发标记——固定 qB 标签 <code>zFusePaused</code>（不可配置、随状态迁移加删、走 QbApi 自写抑制、adopt 兼用），并核实规则侧冲突（tags 条件可见 / remove_tags 与全局清理是 regex / 变更事件被 self_caused 抑制）；②新增 §07 分步实施（S1 配置面 / S2 状态机+哨兵+暂停 / S3 标签+adopt / S4 隔离端到端），每阶段给改动范围、退出条件、验收与回滚。</li>
   <li><span class="tag">R6 · 26-11-03-0735</span> 补充触发标签方案与分步实施</li>
+  <li><span class="tag">R7 · 26-11-03</span> S4 收尾：按实现消漂移——标签名由固定常量改为配置键 <code>download_fuse.fuse_tag</code>（默认值即保留名 <code>zFusePaused</code>），配置面 3→4 键；<code>released</code> 残留标签明确「不重加、不自动重试摘除」；补记真机验出的 CLI 放行缺快照同步（<code>cli.py</code> 先 <code>store.apply_sync</code> 再 CAS）。</li>
 </ul>
 
 </div>

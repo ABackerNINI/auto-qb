@@ -9,9 +9,9 @@
 |---|---|---|
 | 内核 | `core/qbmanager.py` | 只知「何时」(节拍/相位/生命周期): 主循环三时间线、连接管理、落盘计时、ModuleHost 编排。**零业务 import**(AST 守阵) |
 | 能力服务 | `ctx.store / api / state` 等 | 无启用开关、无线程、无热重载语义、被多方消费的纯能力; 内核与模块共同消费 |
-| 功能模块 | 十二模块: 10 个本体在 `core/modules/*_mod.py`, 2 个门面在 `webui/module.py` / `hr/module.py` | 有启用开关、可能持线程/服务器/队列任务、有配置认领与热重载语义的自治单元 |
+| 功能模块 | 十四模块: 12 个本体在 `core/modules/*_mod.py`, 2 个门面在 `webui/module.py` / `hr/module.py` | 有启用开关、可能持线程/服务器/队列任务、有配置认领与热重载语义的自治单元 |
 
-模块清单与装配序: logging → notify → webui → hr → tracker → **traffic_snapshot → speed_curve** → maintenance → grouping → ops → qb_traffic → **rules 最后**(它消费前面所有人的服务)。
+模块清单与装配序: logging → notify → webui → hr → tracker → **traffic_snapshot → speed_curve** → maintenance → grouping → ops → rules → qb_traffic → relocate → **fuse 末尾**(认领 post, 排在 grouping 的 post 检查之后)。
 
 > **traffic_snapshot 必须排在 speed_curve 之前**(26-10-18-0813 A1): 曲线模块 `start()` 首行取 `ctx.traffic_snapshot` 句柄, 缺项或序错即 fail-fast —— 快照所有权在快照模块(source/limit 段级 API), 曲线只是 limit 段的写入方, 装配序即这个依赖的编码。守阵: `test_traffic_snapshot::test_task_registered_and_assembled_before_speed_curve` + `test_module_host::test_ctx_services_are_same_objects`。
 

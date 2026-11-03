@@ -23,6 +23,7 @@
 
 ## Done
 
+- [26-11-03-0456] [已完成种子下载保险丝（极简版）](26-11-03-0456-plan-skip-check-download-fuse.html) — `skip-check-download-fuse`
 - [26-11-03-0316] [测试侧端口改 0 自动分配](26-11-03-0316-plan-test-port-zero.html) — `test-port-zero`
 - [26-11-03-0120] [WEBUI 搜索结果随新增种子自动更新](26-11-03-0120-plan-webui-search-auto-refresh.html) — `webui-search-auto-refresh`
 - [26-11-02-2342] [大文件多轮拆分实施计划（&gt;1000 行候选 80 个）](26-11-02-2342-plan-big-file-split.html) — `big-file-split`
@@ -82,9 +83,8 @@
 - [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 - [26-10-16-1509] [agg 行 totals 归属错位 · 修法三形态对照 · auto-qb](26-10-16-1509-plan-agg-hour-totals-attribution.html) — `qb-traffic-restart-spike-gap`
 - [26-10-16-0541] [全局流量监视小工具(TrafficMonitor 替代)· 分步实施计划 · auto-qb](26-10-16-0541-plan-global-traffic-monitor.html) — `global-traffic-monitor`
-- [26-10-16-0453] [HR 取数代理 · 工具栏图标候选 · 2026-10-16](26-10-16-0453-plan-hr-ext-icons.html) — `hr-ext-icons`
 
-> 更早的 **135** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **136** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

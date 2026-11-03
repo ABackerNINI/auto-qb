@@ -115,7 +115,7 @@ download_fuse:
 | `confirm_ticks` | int / `3` | 1..20 | 连续多少拍检测到 dlspeed > 0 才判定为真实下载并暂停; 1 = 首拍即暂停 |
 | `fuse_tag` | str / `zFusePaused` | 非空 | 触发保险丝后给种子添加的标记标签; 带此标签的种子不会重复暂停 |
 
-本阶段(S1)只落配置面: 校验/加载/设置页可用, 运行逻辑与标签动作由后续步骤接入。
+行为(S2/S3 已接入): 每拍只对「已完成 + `dl_limit==0`」的种子写 `download_limit` 哨兵; 连续 `confirm_ticks` 拍 `dlspeed>0` 且限速仍等于哨兵 → 暂停并加 `fuse_tag`; 放行走 `python -m auto_qb <cfg> --fuse-release <hash>`(或 `--fuse-release-all`), 按 CAS 恢复原限速并摘标签(不自动 resume); 未完成的 `released` 条目在重新完成后回武装。state 丢失时按「完成 + `dl_limit` 恰等于哨兵」adopt(带标签且暂停 → triggered, 否则 armed, 两种都零 qB 写), 且 **adopt 只覆盖已完成种子**。标签名默认 `zFusePaused` 为保留约定, 改 `fuse_tag` 需同步用户排除规则与文档。
 
 ## relocate 段 (整组迁移)
 
