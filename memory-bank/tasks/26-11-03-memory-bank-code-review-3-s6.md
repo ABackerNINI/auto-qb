@@ -1,11 +1,11 @@
 # 26-11-03-memory-bank-code-review-3-s6 — 第三次评审 S6 跨批契约交叉验证 + 汇总分级
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
 **Summary:** S6：6 对跨批契约（5 一致 / 1 不一致）+ S2–S5 全 18 条分级终表（P0 0 / P1 2 / P2 8 / P3 8）+ HEAD fbfc2825 可达性复验 + 18↔18 去重闭环（Open 75 = 底册 50 + 本轮 25）+ test.gtm 当期绿
 **Topics:** memory-bank-code-review-3-s6
-**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s7.md
 
 ## 原始请求
 

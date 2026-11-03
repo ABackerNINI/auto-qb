@@ -7,10 +7,10 @@
 <title>实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="full-code-review-3">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0557">
-<meta name="doc-updated" content="26-11-03-0827">
-<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s6.md">
+<meta name="doc-updated" content="26-11-03-1249">
+<meta name="doc-refs" content="memory-bank/plans/26-10-05-0951-plan-full-code-review.html, memory-bank/plans/26-10-06-0103-plan-full-code-review-remediation.html, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/plans/26-11-02-2342-plan-big-file-split.html, memory-bank/testing/baselines/26-11-03-0459-test-big-file-split.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-11-03-0636-report-memory-bank-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s6.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s7.md">
 <style>
   :root {
     --bg: #10151a;
@@ -72,7 +72,7 @@
 <h1>实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审</h1>
 <p class="lede">对第二次全面评审终点 <code>bf9920d3</code> 到当前 HEAD <code>812ad785</code> 的 <b>358 笔提交</b>做第三次只读评审, 并补审前两次始终未独立覆盖的 <code>tests/</code> 测试质量面与文档漂移面。设计主轴: <b>实质增量全量读码、move-only 拆分做等价核验、未变旧面轻量抽验; 本轮零改动, 只产出发现、分级与处置建议</b>。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-0704 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-0557 · <b>doc-updated</b> 26-11-03-1249 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户 26-11-03 指令「参照仓库前两次 code review 制定第三次分步实施计划; 本轮只写计划, 不执行评审、不改代码、不 commit」; 骨架继承首次 <a href="26-10-05-0951-plan-full-code-review.html">26-10-05-0951</a> 与第二次 <a href="26-10-30-0221-plan-full-code-review-2.html">26-10-30-0221</a>, 底数实测自 HEAD <code>812ad785</code> 与基线切片 <a href="../testing/baselines/26-11-03-0459-test-big-file-split.md">26-11-03-0459</a>
 </div>
 
@@ -229,7 +229,7 @@
   </tr>
   <tr>
     <td><b>S6</b><br>交叉验证 + 汇总分级</td>
-    <td>全部发现表 + 底册（<b>In Progress 26-11-03</b>；六对跨批契约与 18 条分级终表见 <code>tasks/26-11-03-memory-bank-code-review-3-s6.md</code>）</td>
+    <td>全部发现表 + 底册（<b>Done 26-11-03</b>；六对跨批契约与 18 条分级终表见 <code>tasks/26-11-03-memory-bank-code-review-3-s6.md</code>）</td>
     <td>跨批契约核对(transfer↔rules↔webui; gtm↔主程序 dat; extension↔backend; 拆分↔守阵); 每条 P 级二次论证(P0 数据破坏/安全 · P1 功能错误 · P2 健壮性 · P3 可维护性); 与 52 Open issue 终验去重</td>
     <td>分级终表 + 去重报告</td>
     <td>每条 P0/P1 在当期 HEAD 复验可达; 无 ID 断号; 降级/升级均写理由; 撞车数与底册逐条对得上</td>
@@ -237,7 +237,7 @@
   </tr>
   <tr>
     <td><b>S7</b><br>处置建议 + 回写与测试确认</td>
-    <td>分级终表; 用户对处置清单的批准</td>
+    <td>分级终表; 用户对处置清单的批准（<b>Done 26-11-03</b>；终版报告 <a href="../reports/26-11-03-0636-report-memory-bank-full-code-review-3.html">26-11-03-0636</a>，18 条去向与优先级见报告 §02–§03）</td>
     <td>给每条发现定去向(新 issue/并入既有/已知接受/不修); P0/P1 清单请用户确认后 <code>create-issue</code> 入池并互链; 报告 doc-status → Done; 计划 → Done; <code>kb.index</code>; 基线切片(无代码改动则引用 26-11-03-0459); 跑 <code>test.full</code>/<code>doc.*</code>/<code>kb.check</code></td>
     <td>终版报告 + 新 issue(经批准) + 计划 Done</td>
     <td><code>test.full</code> 持平 4924+2 / 99%; <code>doc.caps</code>/<code>doc.drift</code>/<code>doc.links</code>/<code>kb.check</code> 全绿; 入池数与报告清单一致; 无源码改动</td>
@@ -310,6 +310,7 @@
 <h2><span class="no">§10</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-03-0557</span> 初版: 用户指令发起「参照前两次 code review 制定第三次分步实施计划, 本轮只写计划」; 考古确认首次 57 条/28 issue 全部 Done、二次 26 条(P0×0/P1×1/P2×6/P3×19)/17 条入池且除类型注解债外全部 Done; 范围定为 <code>bf9920d3..812ad785</code>(358 笔提交, 479 件代码变更 +122,931/−62,415), 并入 tests 遗留面与文档漂移; 十批 B1–B10 + S0–S7 + R12/R13 + 拍板点 D1–D9, 待拍板。底数: HEAD 812ad785 / 基线 4924 passed + 2 skipped / 99%(切片 26-11-03-0459)/ issues Open 52。</li>
+  <li><span class="tag">R1 · 26-11-03-1249</span> S7 收尾：18 条处置去向与优先级定稿、终版报告落盘、计划完成；零源码改动</li>
 </ul>
 
 </div>

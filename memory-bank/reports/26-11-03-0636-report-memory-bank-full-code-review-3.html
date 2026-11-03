@@ -4,13 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="color-scheme" content="dark">
-<title>第三次全量代码评审报告(骨架)</title>
+<title>第三次全量代码评审报告（终版）</title>
 <meta name="doc-type" content="report">
 <meta name="doc-topic" content="memory-bank-full-code-review-3">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0636">
-<meta name="doc-updated" content="26-11-03-0636">
-<meta name="doc-refs" content="memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html">
+<meta name="doc-updated" content="26-11-03-1240">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md, memory-bank/reports/26-10-30-0237-report-full-code-review-2.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s7.md">
 <style>
   :root {
     --bg: #10151a;
@@ -66,45 +66,262 @@
   .wr { color: var(--warn); }
   .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
   .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .pill { font-family: var(--mono); font-size: 11px; border: 1px solid var(--hair); padding: 1px 6px; border-radius: 3px; color: var(--dim); white-space: nowrap; }
+  .p1 { color: var(--no); border-color: #5a3a3a; }
+  .p2 { color: var(--warn); border-color: #5a4a37; }
+  .p3 { color: var(--faint); }
 </style>
 </head>
 <body>
 <div class="sheet">
 
-<div class="kicker">REPORT · memory-bank · doc-topic: memory-bank-full-code-review-3 · 骨架(Open)</div>
+<div class="kicker">REPORT · memory-bank · doc-topic: memory-bank-full-code-review-3 · 终版</div>
 <h1>第三次全量代码评审报告</h1>
-<p class="lede">本件为第三次全量代码评审的报告骨架：只保留章节结构与封面事实，S0 底册与过程记录见 task 文档，正文待 S1–S6 完成后填充。</p>
+<p class="lede">范围 <code>bf9920d3..812ad785</code>（358 笔提交 / 479 个代码文件，<b>+122,931 / −62,415</b> 行）。本轮零源码改动，只产出发现、分级与处置建议：<b>18 条发现，P0 0 · P1 2 · P2 8 · P3 8</b>，全部已入池且一对一无重复。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0636 · <b>doc-updated</b> 26-11-03-0636 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
-  <b>计划</b> memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html<br>
-  <b>S0 底册</b> memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md<br>
-  <b>起点 HEAD</b> 47a61c7c（计划记载 812ad785，S0 开工快进 1 笔）· <b>基线</b> 4933 passed + 2 skipped / 99%（切片 26-11-03-0534）<br>
-  <b>来源</b> 用户指派执行第三次全量代码评审，S0 只做准备与底册。
+  <b>doc-added</b> 26-11-03-0636 · <b>doc-updated</b> 26-11-03-1240 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>计划</b> memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html · <b>底册与过程</b> tasks/26-11-03-memory-bank-code-review-3-s0 … s7<br>
+  <b>终验 HEAD</b> 6ea8c949（S7 开工同步后）· <b>基线</b> 见 <code>commands run kb.baseline</code>（最新切片 26-11-03-1112）<br>
+  <b>来源</b> 用户指派执行第三次全量代码评审 S0–S7；S7 只做处置建议、终版报告与收尾。
 </div>
 
 <h2><span class="no">§01</span>结论</h2>
-<p class="aside">待 S6 终验后填写：分批结论、全局判断、与二次评审的差异。</p>
+<ul>
+  <li><b>分级计数</b>：P0 0 · P1 2 · P2 8 · P3 8。18 条全部带三锚与可达性论证，均已在 issue 池（Open），与池外既有条目无重复，终表 1–18 无断号、无「观察」混入。</li>
+  <li><b>跨批契约</b>：六对核对 <b>5 一致 / 1 不一致</b>。唯一不一致点是 capture 侧契约 C4：<code>sanitize_all</code> 漏掉 <code>fs_delta</code>（= 发现 #9）。其余 C1 config↔schema、C2 规则归一、C3 transfer API↔前端、C5 路由↔fetch、C6 HR↔队列均一致，可作为修复后的回归判据。</li>
+  <li><b>拆分等价</b>：R1–R4 四组 <code>missing=0 / drift=0</code>；测试函数多重集 3778 → 4591，仅 2 个退役 <code>ignore_next_action_error</code> 用例有序退场且有替代覆盖，不判丢失。</li>
+  <li><b>门禁</b>：<code>test.full</code> 与最新基线持平（见 §06）；<code>test.gtm</code> 绿（463 passed / 2 skipped），但 #10 的连接重置是间歇型，单轮绿不构成关闭依据；<code>dev.e2e</code> 全量仍被 #5 阻塞，定向 spec 回收 148 passed / 16 skipped / 0 failed。</li>
+  <li><b>全局判断</b>：无数据破坏或安全红线级问题。两条 P1 都属「结果正确性 / 安全面」，修复面收敛、可局部验证，建议先行；其余 16 条不打断主线，按 §03 的依赖顺序分批。</li>
+</ul>
 
-<h2><span class="no">§02</span>证据快照</h2>
-<p class="aside">待各批完成后填写：关键实测数字、CDP/测试输出、行号与取证时间。快照按当时现场固定，不回改历史值。</p>
-
-<h2><span class="no">§03</span>方法与局限</h2>
-<p class="aside">待填写：取证工具、复现条件、未覆盖模块与已知边界。</p>
-
-<h2><span class="no">§04</span>分批发现汇总</h2>
+<h2><span class="no">§02</span>18 条终表（级 / 类型 / 三锚 / 可达性 / 对应 issue）</h2>
+<p class="aside">可达性列取证于当期 HEAD；<b>实证</b>为执行过语义电池/探针/门禁，<b>静态</b>为读码与机器比对推断（证据边界见 §04）。</p>
 <table>
-  <tr><th>批</th><th>范围</th><th>发现数</th><th>P0/P1</th><th>结论</th></tr>
-  <tr><td>B1–B10</td><td>按计划 §05 分批表</td><td>待填</td><td>待填</td><td>待填</td></tr>
+  <tr><th>#</th><th>级</th><th>类型</th><th>三锚（文件:行 · 符号）</th><th>可达性（当期 HEAD）</th><th>issue</th></tr>
+  <tr>
+    <td>1</td><td><span class="pill p2">P2</span></td><td>bug</td>
+    <td><code>transfer/orchestrator.py:370</code> · <code>_transfer_one</code> → <code>:443</code> · <code>_delete_source</code></td>
+    <td>静态·可达：目标加种并校验成功后删源抛异常 → 整条结算为失败（删源段无保护）</td>
+    <td><a href="../issues/26-11-03-0824-bug-transfer-source-delete-misreport.html">0824 source-delete</a></td>
+  </tr>
+  <tr>
+    <td>2</td><td><span class="pill p3">P3</span></td><td>bug</td>
+    <td><code>webui/server/routes/transfer.py:58</code> · <code>api_transfer_run</code></td>
+    <td>静态·可达：持 token 直调且 hashes 传字符串 → 逐字符拆成伪 hash；前端恒传数组</td>
+    <td><a href="../issues/26-11-03-0901-bug-transfer-hashes-input-type.html">0901 hashes-type</a></td>
+  </tr>
+  <tr>
+    <td>3</td><td><span class="pill p3">P3</span></td><td>bug</td>
+    <td><code>config/validation/sections.py:893</code> · <code>_validate_transfer_path_map</code></td>
+    <td>静态·可达：手写 YAML 的 from/to 为 dict/list → <code>str()</code> 判空放行 → 前缀替换静默失效</td>
+    <td><a href="../issues/26-11-03-0901-bug-transfer-pathmap-nonscalar.html">0901 pathmap</a></td>
+  </tr>
+  <tr>
+    <td>4</td><td><span class="pill p1">P1</span></td><td>bug</td>
+    <td><code>shared/columns.js:72-75</code> · <code>WIN_SOURCES.group</code> + <code>shared/columns_grid.js:461</code> · <code>_rowWindow</code></td>
+    <td><b>实证·可达</b>：语义电池绿且断言 <code>SRC.group !== DOC</code>；抽屉关 <code>_winCtnState().h=0</code> → 全量渲染，抽屉开 → 按抽屉坐标系切主表</td>
+    <td><a href="../issues/26-11-03-1035-bug-webui-group-window-source-mismatch.html">1035 group-window</a></td>
+  </tr>
+  <tr>
+    <td>5</td><td><span class="pill p2">P2</span></td><td>test</td>
+    <td><code>e2e/search-uncovered-no-duplicate.spec.mjs:32</code> · 具名导入 <code>BASE_URL</code> ↔ <code>e2e/harness.mjs:44</code> · 仅导出 <code>baseUrl</code></td>
+    <td><b>实证·可达</b>：ESM 具名导入无绑定 → 集合期 SyntaxError，<code>dev.e2e</code> 全量起不来（实测 import 阶段失败）</td>
+    <td><a href="../issues/26-11-03-1035-test-e2e-harness-baseurl-import.html">1035 e2e-BASE_URL</a></td>
+  </tr>
+  <tr>
+    <td>6</td><td><span class="pill p2">P2</span></td><td>bug</td>
+    <td><code>core/modules/rules_mod.py:53</code> · <code>retired_control_keys_in</code> + <code>config/validation/rules.py:404</code> + <code>rules/base.py:323</code> · <code>registry.create_action</code></td>
+    <td><b>实证·可达（低门槛）</b>：<code>choose.then/default</code> 内嵌退役伪动作 → 校验放行（伪动作分支先返回）→ 启动 <code>Rule()</code> 抛 <code>ConfigError</code> 硬失败</td>
+    <td><a href="../issues/26-11-03-1120-bug-rules-choose-nested-retired-control.html">1120 nested-retired</a></td>
+  </tr>
+  <tr>
+    <td>7</td><td><span class="pill p3">P3</span></td><td>bug</td>
+    <td><code>flux/css/views.css:133</code> · 移动端 <code>.ce-page</code> ↔ <code>flux/css/dialogs.css:482</code> 同特异性后置</td>
+    <td>静态·可达：移动端宽 + flux 皮肤下设置页内边距 4px 偏差（层叠顺序由 <code>_ui_css_aggregate</code> 固定）</td>
+    <td><a href="../issues/26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html">1120 ce-page</a></td>
+  </tr>
+  <tr>
+    <td>8</td><td><span class="pill p3">P3</span></td><td>test</td>
+    <td><code>shared/config_rules.js:49/:61</code> ↔ <code>config/compat.py</code> 归一化</td>
+    <td>静态·可达：改任一侧漏对拍即静默，现无自动化守卫</td>
+    <td><a href="../issues/26-11-03-1120-test-webui-config-normalize-parity-gap.html">1120 parity</a></td>
+  </tr>
+  <tr>
+    <td>9</td><td><span class="pill p1">P1</span></td><td>bug</td>
+    <td><code>scripts/qb_capture.py:376</code> · <code>sanitize_all</code>（流帧分支 :414-427 无 <code>fs_delta</code>）+ <code>:883</code> · <code>probe_fs_delta</code> + <code>:904</code></td>
+    <td><b>实证·可达</b>：脱敏分支清单证明 <code>fs_delta</code> 未遍历（真 hash/文件路径落盘）；回放端 <code>sim_qb_model.py:163-172</code> 按伪名化 torrents 取 <code>save_path</code> → 真 hash 落空，增量被叠到<b>错误完整路径</b>（非静默丢弃）</td>
+    <td><a href="../issues/26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html">1144 fs_delta</a></td>
+  </tr>
+  <tr>
+    <td>10</td><td><span class="pill p2">P2</span></td><td>bug</td>
+    <td><code>tools/global-traffic-monitor/src/gtm/server.py:273-279</code> · <code>handle</code>（401 短路）</td>
+    <td><b>实证·间歇可达</b>：无/错 token 的 POST 带体未读体即回 401 → Windows keep-alive 收连接重置；S4 单轮红、单测 3/3 绿、S6 复跑绿</td>
+    <td><a href="../issues/26-11-03-1144-bug-gtm-auth-body-drain.html">1144 gtm-body-drain</a></td>
+  </tr>
+  <tr>
+    <td>11</td><td><span class="pill p3">P3</span></td><td>bug</td>
+    <td><code>scripts/sim_qb_core.py:236-240</code> · <code>minimal_bencode</code></td>
+    <td>静态·可达：announce 长度标 26、实际 25 → 非法 bencode；仅测试替身保真度</td>
+    <td><a href="../issues/26-11-03-1145-bug-sim-qb-export-bencode.html">1145 bencode</a></td>
+  </tr>
+  <tr>
+    <td>12</td><td><span class="pill p3">P3</span></td><td>refactor</td>
+    <td><code>scripts/qb_capture_cli.py:60</code> · <code>main</code>（:78 引用未定义 <code>Capture</code>；无 <code>__main__</code>）</td>
+    <td>静态·可达：执行/导入该 CLI 即 <code>NameError</code>；拆分后死入口</td>
+    <td><a href="../issues/26-11-03-1145-refactor-qb-capture-cli-dead-main.html">1145 dead-main</a></td>
+  </tr>
+  <tr>
+    <td>13</td><td><span class="pill p2">P2</span></td><td>docs</td>
+    <td><code>docs/configuration.md</code>（全文无 <code>web.transfer</code>）↔ <code>config/models.py:313</code> · <code>TransferConfig</code></td>
+    <td>静态·可达：按文档配转移必漏键（键面真值见 C1）</td>
+    <td><a href="../issues/26-11-03-1208-docs-docs-configuration-transfer-missing.html">1208 config-transfer</a></td>
+  </tr>
+  <tr>
+    <td>14</td><td><span class="pill p2">P2</span></td><td>docs</td>
+    <td><code>docs/context7/README.md:4/:11/:12</code> ↔ <code>uv.lock</code> 真值</td>
+    <td>静态·可达：5/10 版本不符 + 2 条模块路径已迁（<code>core/qbclient.py</code>、<code>webui/server/</code>）</td>
+    <td><a href="../issues/26-11-03-1208-docs-docs-context7-version-path-drift.html">1208 context7</a></td>
+  </tr>
+  <tr>
+    <td>15</td><td><span class="pill p2">P2</span></td><td>docs</td>
+    <td><code>README.md:247</code> · 用例规模段</td>
+    <td>静态·可达：停留 2026-10-03「2300+/2312」，与现行收集数不符</td>
+    <td><a href="../issues/26-11-03-1208-docs-docs-readme-test-scale-drift.html">1208 readme-scale</a></td>
+  </tr>
+  <tr>
+    <td>16</td><td><span class="pill p2">P2</span></td><td>test</td>
+    <td><code>.agents/skills/deps-upgrade/scripts/check_updates.py</code>（版本切分 / 增量分类）</td>
+    <td>静态·可达：该脚本无任何 <code>tests/</code> 覆盖，改动无守阵</td>
+    <td><a href="../issues/26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html">1209 check_updates</a></td>
+  </tr>
+  <tr>
+    <td>17</td><td><span class="pill p3">P3</span></td><td>test</td>
+    <td><code>tests/test_hr_runtime_feeder.py:277-285</code> · wake 转发用例</td>
+    <td>静态·可达：用例名声称转发，未断言转发目标 → 实现回退仍绿</td>
+    <td><a href="../issues/26-11-03-1209-test-test-hr-runtime-feeder-wake-forward-unasserted.html">1209 feeder</a></td>
+  </tr>
+  <tr>
+    <td>18</td><td><span class="pill p3">P3</span></td><td>docs</td>
+    <td><code>tests-real/lib/env_registry.py:5</code> ↔ <code>:28</code></td>
+    <td>静态·可达：环境2 端口/exe 已定（56589/56590）与「尚未实测留空」注释自相矛盾</td>
+    <td><a href="../issues/26-11-03-1209-docs-docs-tests-real-env2-comment-drift.html">1209 env2-comment</a></td>
+  </tr>
 </table>
 
-<h2><span class="no">§05</span>终验</h2>
-<p class="aside">待填写：test.full 实测数字（对照 4933+2 / 99%）、diff 核对、与 Open issue 去重结果（基数为 S0 57 条）。</p>
+<h2><span class="no">§03</span>处置建议与优先级</h2>
+<h3>P1 先行（两条）</h3>
+<table>
+  <tr><th>#</th><th>条目</th><th>为什么先行</th><th>修复面 / 影响面</th><th>回归判据</th></tr>
+  <tr>
+    <td>9</td>
+    <td>capture <code>fs_delta</code> 未脱敏（<a href="../issues/26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html">1144 fs_delta</a>）</td>
+    <td><b>安全红线</b>：真实 infohash 与文件路径会随 <code>sync-stream</code> 落到语料（进 git/共享即泄漏）；同时回放端把增量叠到错误完整路径，self-test 仍绿 = 假绿掩盖回归。二者同源，一处修复。</td>
+    <td><code>scripts/qb_capture.py</code>（<code>sanitize_all</code> 补 <code>fs_delta</code> 遍历：hash 伪名化、相对路径按伪名重写）+ <code>scripts/sim_qb_model.py</code>（回放取键改按伪名命中）+ self-test 断言。不触生产主循环。</td>
+    <td>脱敏后语料零真 hash/零真路径；回放命中率 = 100%（以 <code>fs_delta</code> 伪名化后回放可命中为断言）；<code>tests/test_qb_capture*</code> 绿。</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>group 视图窗口化坐标系错判（<a href="../issues/26-11-03-1035-bug-webui-group-window-source-mismatch.html">1035 group-window</a>）</td>
+    <td><b>功能错误</b>：千级 group 视图在抽屉关闭时不做窗口化（全量渲染，卡顿回归），抽屉打开时又按抽屉坐标系切主表（可视区错位）。属用户可感的主表性能/正确性问题。</td>
+    <td><code>shared/columns.js</code>（<code>WIN_SOURCES.group</code> 的身份判定改为显式来源枚举，不再依赖 <code>Object.assign</code> 克隆身份）+ <code>shared/columns_grid.js</code>（<code>_rowWindow</code> 取坐标系）。四皮肤共享层，影响全体列表页。</td>
+    <td>现有语义电池由红转绿并断言 group 走容器分支；<code>dev.e2e</code> 定向 spec + R13 行窗口 DOM 规模实测。</td>
+  </tr>
+</table>
+<p class="aside"><b>与 #5 的依赖</b>：#5（e2e <code>BASE_URL</code> 导入断裂）是 P2，但它是前端修复的<b>回归门禁前提</b>——建议与 #4 同批修复（先修 #5 恢复 <code>dev.e2e</code> 全量，再改 #4 并用全量门禁验证），否则 #4 只能用定向 spec 抽查。</p>
 
-<h2><span class="no">§06</span>拍板与后续</h2>
-<p class="aside">待 S6 填写：与计划 §06 的 D1–D9 拍板记录对齐；入池/不修/后续计划的分流。</p>
+<h3>其余 16 条（按依赖 / 风险排序）</h3>
+<table>
+  <tr><th>批次</th><th>条目</th><th>排序理由</th></tr>
+  <tr>
+    <td><b>批 1</b><br>门禁与启动硬失败</td>
+    <td>#5 e2e-BASE_URL（P2）· #6 嵌套退役键（P2）</td>
+    <td>#5 是其余前端修复的验证前提；#6 是<b>启动期硬失败</b>（用户手写 YAML 即触发，属可用性事故），门槛低、修复点集中，先于普通健壮性问题。</td>
+  </tr>
+  <tr>
+    <td><b>批 2</b><br>功能正确性与可观测性</td>
+    <td>#1 删源误报（P2）· #10 gtm 401 未读体（P2）· #2 hashes 入参（P3）· #3 path_map 非标量（P3）</td>
+    <td>#1 会让「目标已成功」被报成整条失败并诱发重试；#10 为用户侧可见的连接重置且门禁偶发红，需先稳定再谈关闭；#2/#3 属同一 transfer 契约面的边界校验，随 #1 一并收敛成本最低。</td>
+  </tr>
+  <tr>
+    <td><b>批 3</b><br>文档真值</td>
+    <td>#13 configuration 缺 transfer（P2）· #14 context7 版本/路径（P2）· #15 README 规模（P2）· #18 env2 注释（P3）</td>
+    <td>纯文档、零代码风险，可并行；#13 直接影响用户配置转移，#14/#15 影响外部查阅与贡献者判断，宜在功能批之后立即补齐。</td>
+  </tr>
+  <tr>
+    <td><b>批 4</b><br>守阵补强</td>
+    <td>#8 归一 parity（P3）· #16 check_updates 覆盖（P2）· #17 feeder 断言（P3）</td>
+    <td>都是「实现可回退而测试仍绿」的假绿风险；#16 影响依赖升级决策，风险最高，与 #8/#17 同批补测即可。</td>
+  </tr>
+  <tr>
+    <td><b>批 5</b><br>低风险清理</td>
+    <td>#7 <code>.ce-page</code> 级联（P3）· #11 bencode（P3）· #12 CLI 死入口（P3）</td>
+    <td>仅移动端 4px 偏差、测试替身保真度、拆分残留入口，均可独立小改，不阻塞任何主线。</td>
+  </tr>
+</table>
+<p class="aside"><b>不修 / 已知接受</b>：本轮 18 条无「不修」判定；#10 在修复落地前不得以单轮绿关闭（间歇型）。所有条目当前均为 <strong>Open</strong>，处置动作（认领/修复/关闭）不在本轮范围。</p>
 
-<h2><span class="no">附录</span>底册四表</h2>
-<p class="aside">S0 底册（Open issue 54/57、坑档 7 类、在途计划 5 件、二次 26 条去向）不在本报告复述，单点在 <code>memory-bank/tasks/26-11-03-memory-bank-code-review-3-s0.md</code>。</p>
+<h2><span class="no">§04</span>证据边界</h2>
+<h3>实证（执行过 / 可复现）</h3>
+<ul>
+  <li><b>#4</b>：现成语义电池通过，其断言 <code>SRC.group !== DOC</code> 本身即证明 group 走容器分支；结合 <code>_winCtnState().h=0</code> 回退可判定抽屉关/开两种行为。</li>
+  <li><b>#9</b>：<code>sanitize_all</code> 分支清单逐支核对证明 <code>fs_delta</code> 未被遍历；回放端 <code>_apply_fs_delta</code> 取键真值证明真 hash 必落空。</li>
+  <li><b>#5</b>：<code>dev.e2e</code> 全量在 import 阶段实测失败；<code>harness.mjs</code> 的 10 个导出中无 <code>BASE_URL</code>（静态闭合）。</li>
+  <li><b>#6</b>：node 探针复现 <code>retired_keys=()</code> 且 <code>Rule</code> 构造抛 <code>ConfigError</code>。</li>
+  <li><b>#10</b>：S4 <code>test.gtm</code> 单轮 1 failed（<code>WinError 10053</code>），同用例单测 3/3 绿；S6 复跑 463 passed / 2 skipped —— 间歇性，代码路径未改。</li>
+  <li><b>门禁与实测数字</b>：<code>test.full</code>、<code>test.gtm</code>、定向 e2e（148 passed / 16 skipped / 0 failed）、R13 性能数字（dt10 24 行 / 302 节点、rowsFn max 1.1ms；dt11 max 5.6ms；折叠 longtask 0ms、&gt;100ms 帧 0/40）。</li>
+</ul>
+<h3>静态推断（读码 / 机器比对，未运行复现）</h3>
+<ul>
+  <li><b>#1 / #2 / #3</b>：代码路径闭合 + 入参可构造。其中 #2 需持 token 直调 API、#3 需手写 YAML，故维持 P3；#6 同属手写 YAML 类，但因是启动期硬失败维持 P2。</li>
+  <li><b>#7</b>：按真实加载序做「选择器 → 特异性 → 声明位置 → 胜出者」全量计算得出；未做浏览器逐像素截图比对。</li>
+  <li><b>#8 / #16 / #17</b>：AST/断言强度扫描与 grep 覆盖映射；#17 为「零断言」分类后唯一真弱断言。</li>
+  <li><b>#11 / #12</b>：算术核验（25 vs 26）与静态符号解析（<code>Capture</code> 未定义）。</li>
+  <li><b>#13 / #14 / #15 / #18</b>：代码/锁文件真值 vs 文档文本逐条比对；未验证渲染后外部读者体验。</li>
+  <li><b>跨批契约 C1–C6</b>：以「后端 ↔ 前端字面量」机器比对（81 路由 vs 118 端点）与两侧真值对读为主；4 条「未匹配」均为构造式误报（动态段展开/尾斜杠/注释文本），零真失配。</li>
+</ul>
+<p class="aside">边界纪律：静态推断条目均附「可达性前提」（需直调 / 手写 YAML / 特定客户端），不以推理代替复现；实证条目在修复后须以同一判据复跑，避免结论随代码漂移。</p>
+
+<h2><span class="no">§05</span>未覆盖面</h2>
+<ul>
+  <li><b>元层未评审</b>：<code>memory-bank/</code>、<code>.commands/</code>、<code>.agents/</code>（D3 拍板不纳入；会引入第二套评审标准）。</li>
+  <li><b>重复代码审查 Phase 3/4 未并入</b>（D4）：只把其 322 条发现与 17 条入池 issue 收进底册做撞车比对，不并跑、不重盘。</li>
+  <li><b>生产配置与运行数据未触碰</b>：<code>config.yml</code> 与 <code>auto-qb-data/</code> 属红线文件，本轮未读未改未审。</li>
+  <li><b>真机面</b>：<code>tests-real/</code> 只做静态评审与 <code>real.list</code> 清单核对（104 条 / rm00–rm10），<b>未跑真机</b>（D6），未触碰真实 qB/托盘程序。</li>
+  <li><b>动态安全扫描</b>：仓库无 ruff/bandit，未引入一次性扫描；安全面仅覆盖 transfer 凭据/路由/扩展中转/认证面的人工与工具提示复核。</li>
+  <li><b>区间外历史面</b>：<code>bf9920d3</code> 之前仅轻量抽验与上次同域回归；HEAD 之后变更按 D9 视为底册已知，不再复报。</li>
+  <li><b>浏览器与性能矩阵</b>：前端证据基于 Chromium/e2e harness 与 R13 指定场景（千级行/抽屉/折叠/滚动），未做四皮肤 × 全页面的性能矩阵。</li>
+</ul>
+
+<h2><span class="no">§06</span>过程账</h2>
+<table>
+  <tr><th>步</th><th>范围 / 动作</th><th>代码发现</th><th>入池 issue</th><th>说明</th></tr>
+  <tr><td>S0</td><td>准备与底册四表</td><td>0</td><td>3</td><td>计划底数三处漂移（docs/light），非代码发现</td></tr>
+  <tr><td>流程</td><td>认领链修复</td><td>0</td><td>1</td><td>0647 refchain，机械面问题，非代码发现</td></tr>
+  <tr><td>S1</td><td>479 件三类打标 + 批次定稿</td><td>0</td><td>3</td><td>范围/分类问题（docs/test），非代码发现</td></tr>
+  <tr><td>S2</td><td>B1–B4 后端 53 件</td><td>3</td><td>3</td><td>P2×1 / P3×2（transfer 域）</td></tr>
+  <tr><td>S3</td><td>B5 前端实质 + B6 四组等价</td><td>5</td><td>5</td><td>P1×1 / P2×2 / P3×2</td></tr>
+  <tr><td>S4</td><td>B7 33 件 + B8 8 件</td><td>4</td><td>4</td><td>P1×1 / P2×1 / P3×2</td></tr>
+  <tr><td>S5</td><td>B9 测试面 + B10 文档漂移</td><td>6</td><td>6</td><td>P2×4 / P3×2</td></tr>
+  <tr><td>S6</td><td>六对契约 + 分级去重</td><td>0</td><td>0</td><td>仅分级/复验；无新发现</td></tr>
+  <tr><td>S7</td><td>处置建议 + 终版报告</td><td>0</td><td>0</td><td>零代码改动</td></tr>
+  <tr><td><b>合计</b></td><td>S0–S7</td><td><b>18</b></td><td><b>25</b></td><td>18 发现 + 7 流程/计划类 = 25；池 Open 75 = 历史 50 + 本轮 25</td></tr>
+</table>
+<h3>终验数字（S7 实测）</h3>
+<ul>
+  <li><code>commands run test.full</code>：本步实测数字见新建切片 <a href="../testing/baselines/26-11-03-1245-code-review-3-s7.md">26-11-03-1245</a>；与同口径最近切片（develop，26-11-03-1053）相比收集面相同，差额全部落在 skipped 一侧（当前进程缺符号链接权限的环境跳过，8 条），非本轮代码改动（正文不手抄数字）。</li>
+  <li><code>test.gtm</code>：463 passed / 2 skipped / 覆盖率 99%（S6 复跑；门禁 88%）。</li>
+  <li>定向 e2e：148 passed / 16 skipped / 0 failed（全量入口受 #5 阻塞）。</li>
+  <li><code>doc.drift</code> 0 漂移 · <code>doc.links</code> 通过 · <code>doc.caps</code> 无新增硬违规 · <code>kb.check</code>/<code>kb.index</code> 绿。</li>
+  <li>本轮零源码改动：未改 <code>src/</code>、<code>tests/</code>、<code>scripts/</code>、<code>config.yml</code>。</li>
+</ul>
+
+<h2><span class="no">附录</span>材料索引</h2>
+<ul>
+  <li>计划：<a href="../plans/26-11-03-0557-plan-full-code-review-3.html">26-11-03-0557 plan-full-code-review-3</a></li>
+  <li>过程档：<a href="../tasks/26-11-03-memory-bank-code-review-3-s0.md">S0</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s1.md">S1</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s2.md">S2</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s3.md">S3</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s4.md">S4</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s5.md">S5</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s6.md">S6</a> · <a href="../tasks/26-11-03-memory-bank-code-review-3-s7.md">S7</a></li>
+  <li>二次评审对照：<a href="26-10-30-0237-report-full-code-review-2.html">26-10-30-0237 report-full-code-review-2</a></li>
+  <li>18 条 issue 链接见 §02 终表；全部状态 Open，未认领、未修复（本轮只评审）。</li>
+</ul>
 
 </div>
 </body>

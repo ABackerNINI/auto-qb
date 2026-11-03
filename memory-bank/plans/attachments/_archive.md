@@ -4,9 +4,8 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**。
 > 每条链接指回 `plans/` 下的制品原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (4)
+## In Progress (3)
 
-- [26-11-03-0557] [实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审](../26-11-03-0557-plan-full-code-review-3.html) — `full-code-review-3`
 - [26-10-31-1119] [qBittorrent 5.3.x 双版本支持落地计划(facade 修复→升库→升 qB→走查→回写)](../26-10-31-1119-plan-qb-5-3-support.html) — `qb-5-3-support`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
@@ -15,9 +14,10 @@
 
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (197)
+## Done (198)
 
 - [26-11-03-0930] [WebUI bind 失败改为启动期 fail-fast](../26-11-03-0930-plan-webui-bind-fail-fast.html) — `webui-bind-fail-fast`
+- [26-11-03-0557] [实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审](../26-11-03-0557-plan-full-code-review-3.html) — `full-code-review-3`
 - [26-11-03-0456] [已完成种子下载保险丝（极简版）](../26-11-03-0456-plan-skip-check-download-fuse.html) — `skip-check-download-fuse`
 - [26-11-03-0316] [测试侧端口改 0 自动分配](../26-11-03-0316-plan-test-port-zero.html) — `test-port-zero`
 - [26-11-03-0120] [WEBUI 搜索结果随新增种子自动更新](../26-11-03-0120-plan-webui-search-auto-refresh.html) — `webui-search-auto-refresh`
