@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-normalize-dom-battery-vacuous">
+<meta name="issue-stamp" content="26-11-04-0504">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="webui-config-contract">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-04-test-webui-config-normalize-parity.md">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿">
+<meta name="issue-summary" content="webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到">
+<title>cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿 · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿</h1>
+    <p class="lede">webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-04-0504-test-webui-normalize-dom-battery-vacuous</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 05:04</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>在做 issue <a href="26-11-03-1120-test-webui-config-normalize-parity-gap.html">26-11-03-1120-test-webui-config-normalize-parity-gap</a>（前后端归一缺跨语言对拍）时，通读 <code>tests/webui_dom_page_support.py</code> 的 <code>cfgNormalizeRulesDraft</code> 用例作对照, 发现其中一条断言与"归一生效"在逻辑上互斥:</p>
+    <pre><code>["cfgNormalizeRulesDraft: 扁平 conditions 包隐式 all(叶子零触碰)",
+  (ctx.cfgNormalizeRulesDraft(), J(t().legacy.conditions) === J({ all: [{ size: "&gt;=1MiB" }, { path: ["/a"] }] }))],</code></pre>
+    <p>该用例的 fixture（同文件 <code>RULES.legacy</code>）是扁平列表 <code>conditions: [{ size: "&gt;=1MiB" }, { path: ["/a"] }]</code>。若 <code>cfgNormalizeRulesDraft()</code> 真执行了 <code>spec.conditions = { all: spec.conditions }</code>, 断言期望值成立、用例绿；否则期望值是 <code>[{size:…},{path:…}]</code>、用例红。<b>当前该用例为绿</b> —— 但绿与"电池没跑"同样无法区分（扫描型/行为型守阵共同的不可判形态）。</p>
+    <p>与此并存的是同一文件里 <code>cfgNormalizeRulesDraft</code> 幂等那条：<code>(ctx.cfgNormalizeRulesDraft(), ctx.cfgNormalizeRulesDraft(), true)</code> —— 第二次返回值被忽略、恒比 <code>true</code>, 无论归一是否生效都绿。这两条合起来意味着：这组 DOM 电池对"归一语义"的检出能力存疑（一条可能恒绿的真常形态 + 一条恒真的假绿形态）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-04 05:03 · tests/webui_dom_page_support.py:280-296
+const t = () =&gt; ctx.cfg.tree.config.example_rules;
+...
+  ["cfgNormalizeRulesDraft: 扁平 conditions 包隐式 all(叶子零触碰)",
+    (ctx.cfgNormalizeRulesDraft(), J(t().legacy.conditions) === J({ all: [{ size: "&gt;=1MiB" }, { path: ["/a"] }] }))],
+  ["cfgNormalizeRulesDraft: 树形 conditions 零改写",
+    J(t().treeform.conditions) === J({ any: [{ size: "&gt;=1MiB" }, { not: { tags: "HR" } }] })],
+  ["cfgNormalizeRulesDraft: 扁平动作翻译规范形 + 缺省 on_error 注入",
+    J(t().legacy.actions[0]) === J({ type: "add_tags", params: ["x"], on_error: { policy: "stop", retries: 3, backoff: 60 } })],
+  ["cfgNormalizeRulesDraft: choose 键面保留 + when 包 all + then/default 注入缺省",
+    J(t().chooser.actions[0].choose[0].when) === J({ all: [{ size: "&gt;=1MiB" }] })
+    &amp;&amp; J(t().chooser.actions[0].choose[0].then[0]) === J({ type: "add_tags", params: ["T"], on_error: { policy: "stop", retries: 3, backoff: 60 } })
+    &amp;&amp; t().chooser.actions[0].default[0].type === "add_tags"],
+  ["cfgNormalizeRulesDraft 幂等(重复归一零差异)",
+    (ctx.cfgNormalizeRulesDraft(), ctx.cfgNormalizeRulesDraft(), true)],   # &lt;-- 两次返回值被丢弃, 恒 true
+
+# fixture 输入形态(同文件 RULES.legacy): conditions 为扁平单键 dict 列表, 未归一
+</code></pre>
+    <table>
+      <tr><th>观察</th><th>结论</th></tr>
+      <tr><td>条 1 期望 <code>{all: [...]}</code>, 输入是扁平列表</td><td>只有归一真执行才可能绿; 绿了 ≠ 电池有效(可能根本没跑到条 1, 或 <code>t()</code> 取到的不是被归一的那棵树)</td></tr>
+      <tr><td>条 5 返回值被 <code>()</code> 吃掉, 第三元素 <code>true</code> 字面量</td><td><b>确证恒真</b> —— 无论归一是否幂等都绿</td></tr>
+      <tr><td>条 2 未调用 <code>cfgNormalizeRulesDraft()</code> 直接读 <code>t().treeform.conditions</code></td><td>若归一有副作用改了 <code>legacy</code> 就该失效; 现绿说明<b>断言间存在执行顺序耦合</b>（条 1 是否先跑、<code>t()</code> 是否返回同一引用）—— 待查</td></tr>
+    </table>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>跑任何执行 <code>tests/webui_dom_page_support.py</code> 这组电池的测试(本机有 node 时); 与配置数据无关, 与是否 node 无关</td></tr>
+      <tr><td>影响范围</td><td>草稿归一(D2/W3-A/W3-B)在 webui DOM 测试面的自动守阵, 即"打开即归一形"这条验收的电池担保</td></tr>
+      <tr><td>严重度</td><td>中 —— 不影响运行行为, 但会让前置镜像与后端归一的内存漂移静默通过这段电池</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tests/webui_dom_page_support.py:280-296</code> · <code>const t = () =&gt; ctx.cfg.tree.config.example_rules</code> · <code>cfgNormalizeRulesDraft</code>（取证 2026-11-04 05:03）</li>
+      <li>条 1-5 同上（取证 2026-11-04 05:03）· grep <code>cfgNormalizeRulesDraft: 扁平 conditions</code></li>
+      <li><code>tests/test_webui_static_dom_page_layout.py:896</code> · 电池入口 <code>subprocess.run([node, "-e", _NODE_RULE_TREE_PROBE, ...])</code>, 结果 `assert res["ok"] == res["total"]`（取证 2026-11-04 05:03）· grep <code>_NODE_RULE_TREE_PROBE</code></li>
+      <li><code>src/auto_qb/webui/static/shared/config_editor.js:195</code> · 归一挂载点 <code>this.cfgNormalizeRulesDraft();</code>（取证 2026-11-04 05:03）· grep <code>cfgNormalizeRulesDraft()</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">待查（已排除：<b>非</b> <code>cfgNormalizeRulesDraft</code> 实现本身缺失 —— <code>config_rules.js:374</code> 实现在场, <code>config_editor.js:195</code> 挂载恰一次, 静态守阵 <code>test_webui_static_dom_page_layout.py</code> 也已钉这两点。待查的是该电池五条断言是否真的逐一执行、<code>t()</code> 取到的引用在归一前后是否同一对象、<code>res.ok/res.total</code> 是否被真实比对 —— 同一文件里其它电池条目的形态可做反面对照。）</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>方向: 先让这组电池"知道自己有没有跑"(活性), 再谈修断言。候选(未拍板):</p>
+    <ol>
+      <li><b>红验式参差断言</b>：条 1 改成"先断言输入是扁平列表 → 调归一 → 再断言变树形", 三步分开; 条 5 幂等改成取两次返回值做 <code>J(a) === J(b)</code> 深比较(而不是丢返回值恒 <code>true</code>), 并先用一个<b>非幂等专桩样本</b>证明它红。</li>
+      <li><b>电池结果代替置喙</b>：<code>_NODE_RULE_TREE_PROBE</code> 的 <code>ok/total</code> 在 Python 侧只有失败才打印; 加一条"故意注入一例必红期望, 整体必须红"的活性探针(同 <code>pitfalls/testing/guard-dead-branch.md</code> 手法), 防整组电池因某条语句早退/正常结束而全绿。</li>
+    </ol>
+    <p class="hint">建议修法 <b>不改</b> 生产代码：<code>config_rules.js</code> / <code>config_editor.js</code> 产物在 issue 26-11-03-1120-test-webui-config-normalize-parity-gap 的对拍守卫(src/tests/<code>config_normalize_parity_support.py</code> / <code>test_webui_config_normalize_parity.py</code>)中已被独立对拍; 本条只涉及 DOM 电池自身的有效性和活性。</p>
+    <!-- 成员: 归一语义已由新对拍守卫在跨语言层兜住; 本条是测试面守卫自身的活性债, 不与 26-11-03-1120 重复 -->
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-04 05:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验：2026-11-04 05:03 仍复现 —— <code>webui_dom_page_support.py:280-296</code> 条 1 期望 <code>{all: […]}</code>、fixture 为扁平列表、条 5 第三元素字面量 <code>true</code>, 与入池时一致, 未修。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

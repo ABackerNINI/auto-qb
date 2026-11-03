@@ -4,10 +4,11 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (59)
+## Open (60)
 
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
 - [test] [test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）](../26-11-04-0600-test-testing-persist-thread-active-count.html) — 全量并行跑时 active_count 3==4 判红, 单跑通过; 疑似并行执行抖动, 根因待查
+- [test] [cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿](../26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html) — webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](../26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量
 - [test] [前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫](../26-11-03-1120-test-webui-config-normalize-parity-gap.html) — config_rules.js 手抄 compat.py 的动作/条件/choose 归一语义, 两套期望分散在 Python 与 DOM 电池, 无同输入同输出的跨语言对拍用例
