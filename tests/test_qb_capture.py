@@ -17,7 +17,12 @@
 - test_stream_accumulator_matches_store_semantics: server_state 是 merge / torrents 后写覆盖 / *_removed 净额
 - test_diff_full_tolerates_volatile_but_flags_structural: 采样抖动(last_activity)不判红, 结构字段(state)判红
 - test_write_corpus_end_to_end_minimal: write_corpus 端到端回归(H-01): 一场最小 capture 落盘全链成功不 NameError,
-  meta.sanitize_map.known_tags 经伪名反查命中 auto-qb 自有标签
+  meta.sanitize_map.known_tags 经伪名反查命中 auto-qb 自有标签; 流内 fs_delta 脱敏后 .gz 不含真 hash/真文件名
+- test_sanitize_all_rewrites_fs_delta_with_same_derivation: **红验** —— fs_delta 外层伪 hash / 内层伪相对名必须与
+  files_map、disk_map 同源派生, 且与 files 的 name 逐字一致(漏脱敏时真值原样留在流里)
+- test_sanitize_all_drops_unknown_fs_delta_rows: 对不上 files 的 fs_delta 行丢弃并 WARN, 流里不残留真名
+- test_self_test_flags_unscrubbed_fs_delta: **红验** —— 未脱敏 fs_delta 时 sanitize_stream_consistent 必红;
+  走完 sanitize_all 后同一输入转绿
 """
 from __future__ import annotations
 
@@ -405,7 +410,15 @@ def test_write_corpus_end_to_end_minimal(tmp_path):
             "t_seq": 1,
             "role": "inc",
             "torrents": {},
-            "tags": ["zSkipChecked"]
+            "tags": ["zSkipChecked"],
+            "fs_delta": {
+                "H1": {
+                    "ShowA/a.mkv": {
+                        "exists": False,
+                        "size": 100
+                    }
+                }
+            },
         },
         {
             "t_seq": 2,
@@ -422,6 +435,7 @@ def test_write_corpus_end_to_end_minimal(tmp_path):
     ]
     c.files_map = {"H1": [{"name": "ShowA/a.mkv", "size": 100}]}
     c.trackers_map = {"H1": [{"url": "https://tracker.example.com/announce"}]}
+    c.disk_map = {"H1": {"ShowA/a.mkv": {"exists": True, "size": 100}}}
 
     # run_full 收尾序列(scripts/qb_capture.py run_full 尾部): raw 快照 -> 脱敏 -> 终态重取
     c.acc_torrents = c._final_torrents()
@@ -442,14 +456,133 @@ def test_write_corpus_end_to_end_minimal(tmp_path):
     assert "SiteA" not in smap["known_tags"]
     # 落盘产物完整且自洽: 流三帧齐全、流内标签已伪名化、守恒判据绿
     with gzip.open(c.out / "sync-stream.jsonl.gz", "rt", encoding="utf-8") as fh:
-        frames = [json.loads(line) for line in fh]
+        raw_txt = fh.read()
+    frames = [json.loads(line) for line in raw_txt.splitlines()]
     assert [f["t_seq"] for f in frames] == [0, 1, 2]
     for f in frames:
         for t in f.get("tags") or []:
             assert t not in ("MISSING", "SiteA", "zSkipChecked"), f"流内标签必须已伪名化: {t!r}"
+    # fs_delta 也必须脱敏: 真 hash / 真文件名不得以明文进 .gz
+    # !no_credentials 跳过 .gz(scripts/qb_capture.py 的凭据扫描), 这条断言是它唯一的补位
+    assert "H1" not in raw_txt and "ShowA" not in raw_txt, "真 hash / 真文件名漏进 sync-stream.jsonl.gz"
+    ph = san.infohash("H1")
+    assert set(frames[1]["fs_delta"]) == {ph}
+    assert set(frames[1]["fs_delta"][ph]) == {san.name(cap.utils.path_normalize("ShowA/a.mkv"))}
+    assert san.name(cap.utils.path_normalize("ShowA/a.mkv")) in {x["name"] for x in c.files_map[ph]}
     assert meta["group_conservation"]["ok"], f"脱敏分组守恒必须绿: {meta['group_conservation']}"
     for name in ("files.json.gz", "trackers.json.gz", "groups.json.gz", "warnings.jsonl"):
         assert (c.out / name).exists(), f"产物 {name} 必须落盘"
+
+
+# --------------------------------------------------------------------------- fs_delta 脱敏
+def _fs_delta_capture(tmp_path):
+    """一场只含 fs_delta 的最小 capture(真 hash H1 / 真相对名 ShowA/a.mkv)"""
+    c = _bare_capture(tmp_path)
+    c.stream = [
+        {
+            "t_seq": 0,
+            "role": "closure",
+            "full_update": True,
+            "torrents": {
+                "H1": {
+                    "name": "ShowA",
+                    "save_path": "R:\\Download\\TV"
+                }
+            },
+            "fs_delta": {
+                "H1": {
+                    "ShowA/a.mkv": {
+                        "exists": False,
+                        "size": 100
+                    }
+                }
+            },
+        }
+    ]
+    c.files_map = {"H1": [{"name": "ShowA/a.mkv", "size": 100}]}
+    c.disk_map = {"H1": {"ShowA/a.mkv": {"exists": True, "size": 100}}}
+    return c
+
+
+def test_sanitize_all_rewrites_fs_delta_with_same_derivation(tmp_path):
+    """fs_delta 外层键 -> 伪 hash、内层 rel -> 伪相对名, 与 files_map 同源
+
+    红验口径: 修复前 sanitize_all 不动 fs_delta ⇒ 真 hash/真文件名原样留在流里
+    (而 no_credentials 跳过 .gz, 凭据扫描永远看不见)。
+    """
+    c = _fs_delta_capture(tmp_path)
+    c.sanitize_all()
+    san = c.sanitizer
+    ph = san.infohash("H1")
+    pn = san.name(cap.utils.path_normalize("ShowA/a.mkv"))
+    assert c.stream[0]["fs_delta"] == {ph: {pn: {"exists": False, "size": 100}}}
+    # 回放端按 files 的 name 拼全路径 ⇒ 必须逐字同源(不是另起一套拼名规则)
+    assert pn in {x["name"] for x in c.files_map[ph]}
+    # disk_map 也走同一派生, 三者 key 空间一致
+    assert pn in c.disk_map[ph]
+    assert "H1" not in json.dumps(c.stream, ensure_ascii=False)
+    assert "ShowA" not in json.dumps(c.stream, ensure_ascii=False)
+
+
+def test_sanitize_all_drops_unknown_fs_delta_rows(tmp_path):
+    """对不上 files 的行丢弃并 WARN —— 保留只能靠真名落盘; 伪名化无名条目又无法对表"""
+    c = _fs_delta_capture(tmp_path)
+    c.stream[0]["fs_delta"] = {
+        "H1": {
+            "ShowA/a.mkv": {
+                "exists": False,
+                "size": 100
+            },
+            "ShowA/gone.mkv": {
+                "exists": False,
+                "size": None
+            }
+        },
+        "G" * 40: {
+            "ShowA/a.mkv": {
+                "exists": False,
+                "size": None
+            }
+        },
+    }
+    c.sanitize_all()
+    san = c.sanitizer
+    ph = san.infohash("H1")
+    pn = san.name(cap.utils.path_normalize("ShowA/a.mkv"))
+    assert c.stream[0]["fs_delta"] == {ph: {pn: {"exists": False, "size": 100}}}
+    assert [w["kind"] for w in c.warnings] == ["fs_delta_unsanitized"]
+    assert c.warnings[0]["dropped"] == 2
+    # WARN 取样也只含伪名, 不把真名写进 warnings.jsonl
+    assert "ShowA" not in json.dumps(c.warnings, ensure_ascii=False)
+
+
+def test_self_test_flags_unscrubbed_fs_delta(tmp_path):
+    """**红验**: 未脱敏 fs_delta 必须让 sanitize_stream_consistent 判红; 同源派生后转绿"""
+    c = _fs_delta_capture(tmp_path)
+    c.out.mkdir(parents=True, exist_ok=True)
+    c.args = SimpleNamespace(probe_fs="off", user="", password="")
+    c._save_path_pref = ""
+    c._temp_path = ""
+    c.status = "ok"
+    c.sanitize_all()
+    # 人为把已脱敏的流改回"漏项"状态(模拟修复前 sanitize_all 没覆盖 fs_delta)
+    c.stream[0]["fs_delta"] = {"H1": {"ShowA/a.mkv": {"exists": False, "size": 100}}}
+    res = c.self_test()
+    assert res["sanitize_stream_consistent"]["ok"] is False, "未脱敏 fs_delta 必须判红"
+    assert res["sanitize_stream_consistent"]["fs_delta_hash_not_in_files"]
+    # 用同一套派生写回 -> 必须转绿(否则判据是空壳)
+    san = c.sanitizer
+    c.stream[0]["fs_delta"] = {
+        san.infohash("H1"): {
+            san.name(cap.utils.path_normalize("ShowA/a.mkv")): {
+                "exists": False,
+                "size": 100
+            }
+        }
+    }
+    res2 = c.self_test()
+    assert res2["sanitize_stream_consistent"]["ok"] is True
+    assert res2["sanitize_stream_consistent"]["fs_delta_orphan_count"] == 0
 
 
 if __name__ == "__main__":

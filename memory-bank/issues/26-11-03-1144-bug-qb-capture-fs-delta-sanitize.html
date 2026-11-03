@@ -7,11 +7,11 @@
 <meta name="issue-stamp" content="26-11-03-1144">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="code-review-3-s4">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-04-0627-qb-capture-fs-delta-sanitize.md, memory-bank/activeContext/26-11-04-0628-qb-capture-fs-delta-sanitize.md, memory-bank/pitfalls/testing/gz-plaintext-assertion.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配">
-<meta name="issue-summary" content="sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量">
+<meta name="issue-summary" content="sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到 save_path 而把增量叠到错误的完整路径">
 <title>qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配 · bug · 计划外问题</title>
 <style>
   :root {
@@ -97,12 +97,12 @@
   <header class="cover">
     <div class="kicker">计划外问题（未修）· bug</div>
     <h1>qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配</h1>
-    <p class="lede">sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量</p>
+    <p class="lede">sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到 save_path 而把增量叠到错误的完整路径</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1144-bug-qb-capture-fs-delta-sanitize</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:44</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">scripts</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -135,7 +135,7 @@
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td>仅 <code>--probe-fs</code> 开启且探测到差异（文件被删/改名/出现 .!qB）时产生 fs_delta</td></tr>
-      <tr><td>影响范围</td><td>① 脱敏红线：真实资源名与 infohash 漏入语料（与 disk_map 已修过的同类泄漏）；② 功能：回放端 <code>_apply_fs_delta</code> 用伪 hash 查表，真 hash 永远查不到，增量被静默丢弃 ⇒ fs mock 看不到删除/改名</td></tr>
+      <tr><td>影响范围</td><td>① 脱敏红线：真实资源名与 infohash 漏入语料（与 disk_map 已修过的同类泄漏）；② 功能：回放端 <code>_apply_fs_delta</code> 用伪 hash 查不到 save_path，<code>full</code> 退化为裸相对名，增量被叠到错误的完整路径 ⇒ fs mock 看不到删除/改名</td></tr>
       <tr><td>严重度</td><td>高（P1：脱敏红线 + 回放语义静默失真，自带 self-test 假绿）</td></tr>
     </table>
   </section>
@@ -163,11 +163,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 11:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 06:02 — 认领（用户指派，clone2 会话接手），状态 <strong>Open → In Progress</strong>；本轮仅认领，未改代码 / 未改 <code>src</code>，正文技术结论保持原样</li>
+      <li>2026-11-04 06:27 — 修复完成（clone2 会话），状态 <strong>In Progress → Done</strong>；改动仅 <code>scripts/qb_capture.py</code> + 两个测试文件，<code>src/</code> 未动；<code>test.quick</code> / <code>test.full</code> 全绿（数字见 kb.baseline）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-04 06:02 — 静态锚点仍复现：<code>sanitize_all</code> 仍无 <code>fs_delta</code> 分支；<code>probe_fs_delta</code> 仍以真实 hash 与真实相对路径写入流帧；self-test 流级一致性仍只遍历 <code>torrents</code>。运行期未取样（需真机 qB + <code>--probe-fs</code>，留待修复轮次）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法（2026-11-04 06:27，clone2）：<code>sanitize_all</code> 增逐帧 <code>fs_delta</code> 分支（<code>scripts/qb_capture.py:428-429</code>），调用新增的 <code>_san_fs_delta</code>（同文件 462-486）：外层 hash 走 <code>san.infohash</code>、内层 rel 走 <code>san.name(utils.path_normalize(rel))</code> —— 与 <code>files_map</code> / <code>disk_map</code> 完全同源（两处本来就是 <code>san.name(utils.path_normalize(...))</code>）。对不上 files 的行<strong>丢弃并 WARN</strong>（<code>fs_delta_unsanitized</code>，取样只写伪值），理由：保留只能靠真名落盘（违脱敏红线），而伪名化一个 files 里不存在的名字，回放端也无从对表。自检 <code>sanitize_stream_consistent</code> 增「外层伪 hash 必须在 files_map / 内层伪相对名必须在对应 files 的 name 集合」判据（同文件 765-789，新增 <code>fs_delta_hash_not_in_files</code> / <code>fs_delta_rel_not_in_files</code> / <code>fs_delta_orphan_count</code>）。验证：红验（未脱敏 fs_delta 判红、同源派生后转绿）与回放四形态（出现 / 删除 / 改名 / .!qB）均实测通过，<code>test.quick</code> / <code>test.full</code> 全绿（数字见 kb.baseline）。口径订正：按 S6 复核把「静默丢增量」改为「叠到错误完整路径」（meta / lede / 影响面三处同一结论同步，其余技术结论未动）。真机 <code>--probe-fs</code> 抽样终验留待下次真机轮（本机无真机轨）。</p>
   </section>
 
   <footer>

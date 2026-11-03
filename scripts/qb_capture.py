@@ -425,6 +425,8 @@ class Capture:
                     f["categories"] = {san.text(k): v for k, v in f["categories"].items()}
                 if f.get("categories_removed"):
                     f["categories_removed"] = [san.text(k) for k in f["categories_removed"]]
+                if isinstance(f.get("fs_delta"), dict):
+                    f["fs_delta"] = self._san_fs_delta(f["fs_delta"], san)
         self.meta["sanitize_map_sizes"] = san.dump_stats()
         self.meta["collisions"] = dict(san.collisions) if san.collisions else {}
         if san.collisions:
@@ -455,6 +457,32 @@ class Capture:
         for k in ("comment", "created_by"):
             if k in out:
                 out[k] = ""
+        return out
+
+    def _san_fs_delta(self, delta: dict, san: Sanitizer) -> dict:
+        """fs_delta 脱敏: 外层 hash 与内层相对名必须与 files_map/disk_map 同一套派生。
+
+        !漏处理会把真实 infohash 与真实资源名原样写进 sync-stream.jsonl.gz(且凭据扫描跳过 .gz);
+         回放端还会按伪 hash 查 save_path 落空, 把增量叠到错误的完整路径。
+        对不上 files 的行**丢弃并 WARN**: 保留只能靠真名落盘(脱敏红线), 而伪名化一个 files 里
+        不存在的名字又会让回放端无从对表。WARN 取样只写伪值, 不把真名带进 warnings.jsonl。
+        """
+        out: dict = {}
+        dropped = []
+        for h, rels in (delta or {}).items():
+            ph = san.infohash(h)
+            names = {utils.path_normalize(f["name"]) for f in (self.files_map.get(ph) or [])}
+            keep = {}
+            for rel, rec in (rels or {}).items():
+                pn = san.name(utils.path_normalize(rel))
+                if pn not in names:
+                    dropped.append(f"{ph[:12]}:{pn[:40]}")
+                    continue
+                keep[pn] = rec
+            if keep:
+                out[ph] = keep
+        if dropped:
+            self.warn("fs_delta_unsanitized", dropped=len(dropped), samples=dropped[:5])
         return out
 
     # ---------- 落盘 ----------
@@ -734,13 +762,30 @@ class Capture:
                     if rel not in names:
                         disk_orphans.append(f"{h[:12]}:{rel[:40]}")
                         break
+        # !fs_delta 也必须与 files 对表: 外层伪 hash 必须在 files_map, 内层伪相对名必须与
+        #   对应 files 的 name 逐字一致(回放端按 save_path + 它拼全路径)。
+        #   no_credentials 跳过 .gz, 漏脱敏只能由这条判据拦下(否则 self-test 恒假绿)。
+        fs_hash_orphans: list[str] = []
+        fs_rel_orphans: list[str] = []
+        for f in stream:
+            for h, rels in (f.get("fs_delta") or {}).items():
+                names = {utils.path_normalize(x["name"]) for x in (self.files_map.get(h) or [])}
+                if not names:
+                    fs_hash_orphans.append(h[:12])
+                    continue
+                for rel in rels:
+                    if rel not in names:
+                        fs_rel_orphans.append(f"{h[:12]}:{rel[:40]}")
         res["sanitize_stream_consistent"] = {
-            "ok": not unknown_files and not disk_orphans,
+            "ok": not unknown_files and not disk_orphans and not fs_hash_orphans and not fs_rel_orphans,
             "hashes_in_stream": len(stream_hashes),
             "missing_files_entry": unknown_files[:5],
             "missing_files_count": len(unknown_files),
             "disk_rel_not_in_files": disk_orphans[:5],
             "disk_rel_orphan_count": len(disk_orphans),
+            "fs_delta_hash_not_in_files": fs_hash_orphans[:5],
+            "fs_delta_rel_not_in_files": fs_rel_orphans[:5],
+            "fs_delta_orphan_count": len(fs_hash_orphans) + len(fs_rel_orphans),
         }
         # 6. 凭据泄漏扫描(计划 §05 / P2-3): 明文产物里不得出现用户名/密码/真实路径前缀
         creds = [c for c in (self.args.password, self.args.user) if c]

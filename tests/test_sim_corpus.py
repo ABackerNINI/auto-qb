@@ -35,7 +35,7 @@
 - test_minimal_bencode_roundtrip_parse: 导出物 bencode 回读解析(issue 26-11-03-1145)—— 长度前缀漂移在此必炸; 非 ASCII 名/0 字节/大 size 三档
 - test_replay_latency_modes
 - test_timeline_advances_and_merges_window
-- test_timeline_applies_fs_delta
+- test_timeline_applies_fs_delta: 录制期变化按 t_seq 重演; 出现 / 删除 / 改名 / .!qB 后缀四形态各一例
 - test_timeline_excludes_closure_frame
 - test_two_layer_state_info_newer_than_maindata
 - test_two_layer_state_red_without_lag
@@ -797,14 +797,29 @@ def _write_timeline_corpus(tmp_path: Path) -> Path:
         "server_state": {
             "up_info_speed": 222
         },
-        "fs_delta": {
-            h1: {
-                "x/f.mkv": {
-                    "exists": True,
-                    "size": 10
-                }
+        "fs_delta":
+            {
+                h1:
+                    {
+                        "x/f.mkv": {
+                            "exists": True,
+                            "size": 10
+                        },
+                        "x/old.mkv": {
+                            "exists": False,
+                            "size": None
+                        },
+                        "x/new.mkv": {
+                            "exists": True,
+                            "size": 10
+                        },
+                        "x/q.mkv": {
+                            "exists": False,
+                            "size": 10,
+                            "suffix": ".!qB"
+                        }
+                    }
             }
-        }
     }
     cl = {
         "t_seq": 3,
@@ -846,11 +861,60 @@ def _write_timeline_corpus(tmp_path: Path) -> Path:
         for fr in (t0, i1, i2, cl):
             f.write(json.dumps(fr, ensure_ascii=False) + "\n")
     with gzip.open(d / "files.json.gz", "wt", encoding="utf-8") as f:
-        json.dump({h1: [{"name": "x/f.mkv", "size": 10}], h2: [{"name": "y/g.mkv", "size": 20}]}, f)
+        json.dump(
+            {
+                h1:
+                    [
+                        {
+                            "name": "x/f.mkv",
+                            "size": 10
+                        },
+                        {
+                            "name": "x/old.mkv",
+                            "size": 10
+                        },
+                        {
+                            "name": "x/new.mkv",
+                            "size": 10
+                        },
+                        {
+                            "name": "x/q.mkv",
+                            "size": 10
+                        },
+                    ],
+                h2: [{
+                    "name": "y/g.mkv",
+                    "size": 20
+                }]
+            }, f
+        )
     with gzip.open(d / "trackers.json.gz", "wt", encoding="utf-8") as f:
         json.dump({h1: [], h2: []}, f)
     with gzip.open(d / "disk.json.gz", "wt", encoding="utf-8") as f:
-        json.dump({h1: {"x/f.mkv": {"exists": False, "size": None}}, h2: {}}, f)
+        json.dump(
+            {
+                h1:
+                    {
+                        "x/f.mkv": {
+                            "exists": False,
+                            "size": None
+                        },
+                        "x/old.mkv": {
+                            "exists": True,
+                            "size": 10
+                        },
+                        "x/new.mkv": {
+                            "exists": False,
+                            "size": None
+                        },
+                        "x/q.mkv": {
+                            "exists": True,
+                            "size": 10
+                        },
+                    },
+                h2: {}
+            }, f
+        )
     with gzip.open(d / "groups.json.gz", "wt", encoding="utf-8") as f:
         json.dump({"groups": []}, f)
     (d / "meta.json").write_text(json.dumps({"status": "ok", "frames": 4}), encoding="utf-8")
@@ -902,15 +966,31 @@ def test_timeline_advances_and_merges_window(tmp_path):
 
 
 def test_timeline_applies_fs_delta(tmp_path):
-    """录制期真发生过的磁盘变化必须按 t_seq 重演(不是"回放时文件都齐全")"""
+    """录制期真发生过的磁盘变化必须按 t_seq 重演(不是"回放时文件都齐全")
+
+    四形态各一例: 出现(f.mkv False->True) / 删除(old.mkv True->False) /
+    改名(old->new: 旧路径消失、新路径出现) / .!qB 后缀(q.mkv True->False + size 保留)。
+    """
     sim = _make_tl_sim(tmp_path, speed=0.0)
     h1 = "a" * 40
     key = sim.fs_root.replace("\\", "/") + "/d0/x/x/f.mkv"  # 解析后的 save_path + 相对路径
-    # 初值: disk.json 说它不存在
-    assert sim.fsmock_state()["files"][key]["exists"] is False
+    key_old = sim.fs_root.replace("\\", "/") + "/d0/x/x/old.mkv"
+    key_new = sim.fs_root.replace("\\", "/") + "/d0/x/x/new.mkv"
+    key_qb = sim.fs_root.replace("\\", "/") + "/d0/x/x/q.mkv"
+    # 初值: disk.json 的原始三态
+    files = sim.fsmock_state()["files"]
+    assert files[key]["exists"] is False
+    assert files[key_old]["exists"] is True
+    assert files[key_new]["exists"] is False
+    assert files[key_qb]["exists"] is True
     sim.consume_replay(2500)
-    assert sim.fsmock_state()["files"][key]["exists"] is True, "fs_delta 必须叠到磁盘状态上"
-    assert sim.fsmock_state()["files"][key]["size"] == 10
+    files = sim.fsmock_state()["files"]
+    assert files[key]["exists"] is True, "fs_delta 必须叠到磁盘状态上"
+    assert files[key]["size"] == 10
+    assert files[key_old]["exists"] is False, "删除必须重演"
+    assert files[key_new]["exists"] is True, "改名后的新路径必须出现"
+    assert files[key_qb]["exists"] is False, "转 .!qB 的文件在 auto-qb 眼里就是不存在"
+    assert files[key_qb]["size"] == 10, "后缀态仍保留已下载字节数"
 
 
 def test_replay_latency_modes(tmp_path):
