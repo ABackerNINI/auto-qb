@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="rules-choose-nested-retired-control">
+<meta name="issue-stamp" content="26-11-03-1120">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="rules-choose-retired">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError">
+<meta name="issue-summary" content="retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败">
+<title>choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError</h1>
+    <p class="lede">retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-03-1120-bug-rules-choose-nested-retired-control</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:20</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">rules</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>第三次全量 code review S3 深读 <code>shared/config_rules.js</code> 并对照 <code>config/compat.py</code> 时发现：退役伪动作 <code>ignore_next_action_error</code> 的检测与剔除都只扫规则**顶层** <code>actions</code>。把它写进 <code>choose</code> 分支的 <code>then</code>（或 <code>default</code>）时，校验器放行（视为合法伪动作），但规则未被转未启用、伪动作也未被剔除，构造 <code>Rule</code> 时按未知动作抛 <code>ConfigError</code>。触发条件是手写 YAML 显式使用 <code>choose</code> + 嵌套退役伪动作；webui 不能创建此形态（插件清单不含退役项），程序化 config 可达。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证 2026-11-03 11:18, uv run python %TEMP%\cr3_s3\probe_nested_retired.py
+# 输入: actions=[{choose:[{when:{all:[]}, then:[{type:"ignore_next_action_error", params:true}]}]}]
+retired_keys(top-level only) = ()
+Rule raised: ConfigError | 规则 g.pseudo: 动作 ignore_next_action_error: 'ignore_next_action_error'</code></pre>
+    <p class="hint">第一行证明 <code>retired_control_keys_in</code> 对嵌套项返回空（规则不会被转未启用）；第二行证明随后 <code>Rule</code> 构造失败。对照：同形状放在顶层 <code>actions</code> 时会被检测并剔除，规则转未启用不崩。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>手写/程序化生成的 YAML 在 <code>choose</code> 的 <code>then</code>/<code>default</code> 里使用 <code>ignore_next_action_error</code></td></tr>
+      <tr><td>影响范围</td><td>规则载入链（<code>rules_mod.load_rules</code> → <code>Rule</code> 构造）；该规则不再「转未启用 + 告警」，而是抛 <code>ConfigError</code> 中断载入</td></tr>
+      <tr><td>严重度</td><td>中（P2）：可达性低（webui 无法创建该形态），但一旦命中是启动期硬失败，且与文档承诺的「含退役键规则自动转未启用」不一致</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/core/modules/rules_mod.py:53-93</code> · <code>retired_control_keys_in</code> / <code>disable_retired_rule_spec</code>（取证 2026-11-03 11:18）· grep <code>retired_control_keys_in</code></li>
+      <li><code>src/auto_qb/config/validation/rules.py</code> · <code>_validate_action_entry</code> 把退役伪动作当合法项放行（含 choose 的 <code>then</code>/<code>default</code>）· grep <code>ignore_next_action_error</code></li>
+      <li><code>src/auto_qb/rules/base.py</code> · <code>_build_action_steps</code> 调 <code>registry.create_action</code> 抛 <code>ConfigError</code>（第 326 行附近，取证 2026-11-03 11:18）· grep <code>create_action</code></li>
+      <li><code>src/auto_qb/webui/static/shared/config_rules.js:49-58</code> · <code>cfgRuleRetiredKeys</code> 同样只查顶层 <code>spec.actions</code>（前端升级提示面对嵌套项同样无声）（取证 2026-11-03 11:18）· grep <code>cfgRuleRetiredKeys</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">已确认：退役检测/剔除按「顶层 actions 域」实现，<code>choose</code> 块 W3-B 新增后未递归到 <code>then</code>/<code>default</code>；校验器对退役伪动作的放行判定不区分嵌套层级。已排除：插件注册表缺失（顶层同形可正常识别并剔除）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p>方案 A（推荐）：<code>retired_control_keys_in</code> 与 <code>disable_retired_rule_spec</code> 递归进 <code>choose</code> 分支的 <code>then</code>/<code>default</code>（保持单点），剔除后规则转未启用；前端 <code>cfgRuleRetiredKeys</code> 同步递归以保证提示面一致。代价：两处遍历逻辑需与 choose 形状演进同步，建议抽出共用递归。</p>
+    <p>方案 B：校验器直接拒绝嵌套退役伪动作并给出明确错误（「<code>ignore_next_action_error</code> 不能出现在 choose 分支」），把问题前移到 <code>validate_config</code> 的聚合报错。代价：老配置升级路径由「自动禁用」改为「报错阻止启动」，需评估兼容。</p>
+    <p>两案都要补一条用例：choose 的 <code>then</code>/<code>default</code> 含退役伪动作时的行为（当前 <code>tests/</code> 只覆盖顶层）。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-03 11:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-03-1120-bug-rules-choose-nested-retired-control.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

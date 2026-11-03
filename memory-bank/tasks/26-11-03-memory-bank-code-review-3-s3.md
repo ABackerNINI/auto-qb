@@ -1,9 +1,9 @@
 # 26-11-03-memory-bank-code-review-3-s3 — 全量代码评审第三轮 S3（B5 前端实质评审 + B6 拆分等价核验）
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** 全量代码评审第三轮 S3：B5 前端逐文件过目 + B6 四组 R12 等价核验；命中 P1 后按用户决定就地收尾，留 2 项评审未完成
+**Summary:** 全量代码评审第三轮 S3：B5 前端逐文件过目（含 flux CSS 全量扫描）+ B6 四组 R12 等价核验 + config_rules 契约对照；B5 覆盖已闭合，发现全部入池
 **Topics:** memory-bank-code-review-3-s3
 **Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md
 
@@ -45,13 +45,13 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | S3-0 | 同步 + 底册/坑档入口 | Done(2026-11-03) |
-| S3-1 | B5 四皮肤 + shared + 结构件逐件过目 | Done(2026-11-03)（flux CSS 全量、`config_rules.js` 深读未完成，见附录 C） |
+| S3-1 | B5 四皮肤 + shared + 结构件逐件过目（含 flux CSS 全量、`config_rules.js` 深读） | Done(2026-11-03)，覆盖闭合 |
 | S3-2 | B6 四组 R12 等价核验 | Done(2026-11-03) |
 | S3-3 | R13 性能与渲染证据 | Done(2026-11-03) |
 | S3-4 | 前端验证（e2e-check + 定向 e2e） | Done(2026-11-03)（全量入口断裂已入池） |
-| S3-5 | 发现入池 + Open 去重 | Done(2026-11-03) |
-| S3-6 | 就地收尾（本档 + kb + 提交推送） | In Progress |
-| S3-7 | 续接评审（flux CSS 全量 / `config_rules.js` 深读） | Open |
+| S3-5 | 发现入池 + Open 去重 | Done(2026-11-03)，本步共 5 条（2+3） |
+| S3-6 | 收尾（本档 + kb + 提交推送） | Done(2026-11-03) |
+| S3-7 | 续接评审（flux CSS 全量 / `config_rules.js` 深读） | Done(2026-11-03) |
 | S3-8 | `S3-P1-01` 认领与修复 | Open（需用户指派） |
 
 ## 进度日志
@@ -68,6 +68,18 @@
   - `memory-bank/issues/26-11-03-1035-test-e2e-harness-baseurl-import.html` — HEAD 上全量 e2e 断裂。
 - **停止原因**：命中 `S3-P1-01`（P1），按原始请求第 9 条立即停下报告；用户拍板「就地收尾、不修 P1、不继续评审」。因此 flux 皮肤 CSS 全量与 `config_rules.js` 深读未做，属**有意保留**的未完成项（附录 C）。
 - 收尾 DoD：`kb.wrap` / `kb.index` / `kb.check` + 本档单独提交推送（S3-6）。
+
+### R1 · 补完 flux CSS 全量与 config_rules 契约对照 (2026-11-03)
+
+- **flux CSS 全量扫描闭合**：按 `flux/index.html` 实际加载序过 14 个 CSS 文件（flux 自有 5 个 / 177 KB + shared 9 个 / 173 KB，约 350 KB、5277 条声明）。逐条做「选择器 → 特异性 → 声明位置 → 胜出者」计算；4 处 `!important` 全部有明确兜底用途；344 个变量定义/引用全部可解析（`--head-h` 由 JS 注入并均带 fallback）；`@keyframes` 无跨文件重名。
+  - 跨文件同名同属性冲突 33 处，逐条判定：媒体查询内的响应式覆盖（`.topbar`/`.status-strip`/`.hb-row` 等）与 `html[data-fx-preset] :is(...)` 的提权覆盖均**有意为之且胜出**；`to/from/0%` 与 `:is()` 逗号拆分属扫描器伪差异。
+  - 唯一真问题：`.ce-page` 移动端内边距被后加载的 `dialogs.css` 同特异性规则恒覆盖（P3）→ 已入池。
+  - 复用/覆盖关系：flux 不重定义 shared 的结构性选择器，只通过 `html[data-fx-preset]` 提权层做主题化；shared → flux 的 token 借用完整，无未定义且无 fallback 的变量。
+- **`config_rules.js` 契约对照**：与 `config/compat.py` 的 `normalize_legacy_rule` / `normalize_action_entry` / `normalize_choose_block` 逐分支比对——扁平动作→规范形、单键提升、`choose` 保留未知键、`when` 列表包 `all`、`on_error` 缺省注入、退役伪动作跳过注入，**语义等价**；`String(value)` 写数值与全 UI 的字符串标量约定一致，后端 `int()/float()` 校验与引擎 cast 均可接受。
+  - `on_error`：默认值 `{policy: stop, retries: 3, backoff: 60}`、prune-if-default 与后端 normalize 注入等价；无契约偏差。
+  - 退役键：**发现真问题**——`retired_control_keys_in` / `disable_retired_rule_spec` 与前端 `cfgRuleRetiredKeys` 均只扫顶层 `actions`；`choose.then/default` 内的 `ignore_next_action_error` 校验放行但未被剔除，`Rule` 构造抛 `ConfigError`（已用探针复现）→ 已入池（P2）。
+  - 契约一致性另记一条：JS 规范化是 Python 的手抄镜像，无跨语言对拍守卫（R10）→ 已入池（test/light）。
+- 本步新增 3 条 issue（累计 5 条），B5 全量覆盖闭合，无 P0；P1 仍待指派。
 
 ## 附录 A · B6 拆分等价核验（R12）
 
@@ -91,7 +103,8 @@
 | 四皮肤入口 | 19 | atlas 4 / console 4 / flux 7 / prism 4（`index.html` + 皮肤 JS/CSS 挂载） |
 | flux 预读 | 1 组 | `flux/fx-mount.js`、`fx.js`、皮肤 CSS 装载链 |
 | shared JS | 19 | 含 `columns.js`/`columns_grid.js`/`transfer_*.js`/`console_hub_*`/`hscroll` 相关 |
-| CSS | 3 | `row_lang.css`、`dt_table.css`、`hscroll.css` |
+| CSS（初轮） | 3 | `row_lang.css`、`dt_table.css`、`hscroll.css` |
+| CSS（全量补扫） | 14 | flux 自有 5 个（`style.css` 9.8 KB、`components.css` 56 KB、`views.css` 38.6 KB、`dialogs.css` 46.5 KB、`fx-mount.css` 26.4 KB，合计 177 KB）+ shared 9 个（`console_hub*` 四层、`row_lang`、`hscroll`、`dt_table`、`fx.css`、`fx-presets.css`，合计 173 KB） |
 | `drawer_tpl` | 5 | `10-content-tree-detail-tall.js`、`11-content-treegrid-batch-low.js` 等 |
 | `tpl` | 8 | 含 `rule-tree.html`（条件树/编排）与 `ctx-menus.html`（通用 submenu） |
 | 根文件 | 8 | 区间内新增行合计 221 行 |
@@ -104,25 +117,49 @@
 - 层叠序：layout < controls < panels 单调；新增选择器未越级覆盖既有皮肤规则。
 - `drawer_tpl` 的 `rowMem`/`filesSig` 记忆化在同帧内可复用；`filesSig` 位运算截断小数属**候选未确认**（见「思考过程与决策」）。
 
-## 附录 C · 未完成项与续接点
+**flux CSS 全量扫描结论（覆盖闭合）：**
 
-**未完成（有意保留，非遗漏）：**
+- 规模：按 `flux/index.html` 真实加载序过 14 个文件、约 350 KB、5277 条声明；选择器级做了「特异性 → 声明位置 → 胜出者」全量计算，非抽样。
+- 特异性与层叠：无 `#id` 选择器；4 处 `!important` 均为移动端/降级兜底；`html[data-fx-preset] :is(...)` 统一用 `(0,2,1)` 提权做 flux 主题化，故意压过 shared 的 `(0,1,0)` 同名规则，胜出方向正确。
+- 跨文件同名同属性冲突 33 处：媒体查询内的响应式覆盖（`.topbar`/`.status-strip`/`.hb-row`/`.site-chip` 等）与主题提权覆盖均有意为之；`to/from/0%` 与 `:is()` 内逗号属扫描器伪差异，人工复核排除。
+- 变量与复用：344 个变量定义/引用全部可解析；`--head-h` 由 JS 注入且引用处均带 fallback；flux 不重定义 shared 的结构性选择器，token 借用完整。
+- 动画：`@keyframes` 无跨文件重名，无后加载覆盖导致的前段动画失效。
+- 唯一真问题：`.ce-page` 移动端 padding 被 `dialogs.css` 后置同特异性规则恒覆盖（P3）→ 已入池。
 
-1. **flux 皮肤 CSS 全量**：本轮只做加载序与层叠序核对，未做选择器级全量比对（复用度、特异性、与 shared CSS 的覆盖关系）。
-2. **`shared/config_rules.js` 深读**：未核 `on_error` 分支、退役键兼容与前后端契约（R4/R11）。
-3. 定向 e2e 已回收（148 passed / 16 skipped / 0 failed，64611），无需重跑；待办是**全量门禁恢复**：认领 HEAD 断裂 issue 并改 spec 的 `BASE_URL` 引用。
+## 附录 C · 未完成项与续接点（已闭合）
 
-**续接 S3 需要做的事：**
+**原两项未完成已补完并闭合：**
 
-1. 补完 flux 皮肤 CSS 全量扫描（选择器/特异性/层叠序 + 复用度），落进 B5 结论。
-2. 深读 `config_rules.js`（`on_error` 路径、退役键、契约一致性），与后端 `config/compat.py` 对照。
-3. 处理 `S3-P1-01`（认领后先复验三锚与两态桩）+ 修复全量 e2e 门禁（`baseUrl()` 改法与 import-smoke 守卫），完成后本档转 Done。
+1. ✅ **flux 皮肤 CSS 全量**：选择器/特异性/层叠序/复用与覆盖关系已扫完（见附录 B），结论「无 P0/P1，1 条 P3 已入池」。
+2. ✅ **`shared/config_rules.js` 深读**：`on_error` 语义、退役键、前后端契约已对照 `config/compat.py`；语义等价，1 条 P2（嵌套退役伪动作）+ 1 条 test 缺口已入池。
+3. ✅ 定向 e2e 已回收（148 passed / 16 skipped / 0 failed，64611）；全量门禁恢复仍作为 issue 待认领。
+
+**本档闭合后仍开放的事项（不在 S3 范围内修）：**
+
+1. `S3-P1-01`（group 窗口化坐标系，P1）待用户指派后认领。
+2. `webui-config-normalize-parity-gap`（test/light）待认领。
+3. `rules-choose-nested-retired-control`（bug/standard，P2）待认领。
+4. `webui-flux-ce-page-media-cascade`（bug/standard，P3）待认领。
+5. HEAD 全量 `dev.e2e` 门禁恢复（`BASE_URL` → `baseUrl()` + import-smoke 守卫）待认领。
 
 ## 附录 D · 本步新增 issue
 
 1. `memory-bank/issues/26-11-03-1035-bug-webui-group-window-source-mismatch.html` — bug/standard（P1）：`WIN_SOURCES.group` 为 `Object.assign` 克隆，`_winSrc(kind) === WIN_SRC_DOC` 恒假 → 抽屉关时 group 窗口化不启用、抽屉开时按抽屉滚切片。三锚 `columns_grid.js:461-465` / `columns.js:49-79` / `tests/webui_dom_page_support.py:483-484`（取证 2026-11-03 10:20）；引入 `e6b02991`，拆分 `20a74274` 原样保留。
 2. `memory-bank/issues/26-11-03-1035-test-e2e-harness-baseurl-import.html` — test/standard：`e2e/search-uncovered-no-duplicate.spec.mjs` 静态导入 `BASE_URL`，`e2e/harness.mjs` 已由窗口外 `47a61c7c` 改为 `baseUrl()`；区间终点 `812ad785` 正常，属窗口外回归。建议 spec 改 `baseUrl()` + 加 import-smoke 守卫。
+3. `memory-bank/issues/26-11-03-1120-bug-rules-choose-nested-retired-control.html` — bug/standard（P2）：`choose.then/default` 内 `ignore_next_action_error` 未被退役检测/剔除，校验放行后 `Rule` 构造抛 `ConfigError`。三锚 `rules_mod.py:53-93` / `validation/rules.py` 的 `_validate_action_entry` / `rules/base.py` 的 `_build_action_steps`；探针输出 `retired_keys=()` + `Rule raised: ConfigError`（取证 2026-11-03 11:18）。建议递归检测/剔除或校验前置拒绝，并补 then/default 用例。
+4. `memory-bank/issues/26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html` — bug/standard（P3）：`views.css:133` 的 `@media(max-width:900px) .ce-page` 被 `dialogs.css:482` 同特异性后置规则恒覆盖。三锚 `views.css:133` / `dialogs.css:482` / `flux/index.html:15,20`（取证 2026-11-03 11:22）。建议基础 padding 提前层或移动端覆盖并入 dialogs 媒体块，四皮肤一并评估。
+5. `memory-bank/issues/26-11-03-1120-test-webui-config-normalize-parity-gap.html` — test/light：`config_rules.js` 与 `compat.py` 两套归一实现无同输入对拍守卫。锚 `config_rules.js` 的 `cfgNormalize*` / `compat.py` 的 `normalize_*`（取证 2026-11-03 11:20）。建议共享 fixtures 跨语言对拍，或退役前端镜像。
 
-去重：两条分别属 `webui-windowing` 与 `e2e-harness-port` 专题，与既有 Open issue 无同锚点重复。
+去重：5 条分别覆盖 `webui-windowing`、`e2e-harness-port`、`rules-choose-retired`、`webui-css-cascade`、`webui-config-contract` 五个专题，与既有 Open/Done issue 无同锚点重复（`26-10-01-2211-refactor-rules-keys-semantics-review` 只覆盖顶层退役键，未覆盖 choose 嵌套，已在新报中引用为相关背景）。
+
+## 附录 E · 交给 S4 的输入清单
+
+1. **B7/B8 清单口径**：沿用 S1 附录 B 的 B7（工具链/scripts）与 B8（变更函数）范围；`claims_gate.py` 现由 `validation/rules.py` 的 `_validate_action_entry` 与 `rules/base.py` 的 `_build_action_steps` 双向守护，S4 读码时按 R11 核对 choose 分支。
+2. **待验证的前置结论**：`compat.py` 归一与前端 `config_rules.js` 语义等价（不含嵌套退役键）；`.ce-page` 是唯一 CSS 级联真问题，其余 32 处冲突已判定为有意覆盖。
+3. **可复用的只读资产**：`%TEMP%\cr3_s3\css_audit2.py`（级联扫描）、`kf_audit.py`（keyframes 重名）、`probe_nested_retired.py`（嵌套退役键复现）；均为临时脚本，不随提交入库，需要时可按附录锚点重写。
+4. **开放 issue 交接**：`S3-P1-01`、`rules-choose-nested-retired-control`、`webui-flux-ce-page-media-cascade`、`webui-config-normalize-parity-gap`、`e2e-harness-baseurl-import` 均保持 Open，S4 不认领、只按需引用。
+5. **测试基线引用**：本轮定向 e2e 数字与性能数字仅作本档记录，不抄进基线；S4 的全量测试数字以 `commands run kb.baseline` 为准。
 
 - 2026-11-03 10:41 S3 就地收尾：B5 主体过目 + B6 四组 R12 等价(0/0) + 定向 e2e 148p/16s + 入池 P1 与 e2e 断裂两条, 留 flux CSS/config_rules 续接
+
+- 2026-11-03 11:24 补完 flux CSS 全量扫描(14 文件/350KB/33 冲突逐条判定)与 config_rules 契约对照, B5 覆盖闭合, 新增 3 条 issue, 状态转 Done

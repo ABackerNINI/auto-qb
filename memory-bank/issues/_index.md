@@ -19,10 +19,10 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 12 |
+| bug | 14 |
 | perf | 5 |
 | docs | 9 |
-| test | 5 |
+| test | 6 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,9 @@
 
 ## Open
 
+- [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_cont…
+- [bug] [flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖](26-11-03-1120-bug-webui-flux-ce-page-media-cascade.html) — views.css @m…
+- [test] [前端 cfgNormalize* 与后端 compat 规范化缺自动对拍守卫](26-11-03-1120-test-webui-config-normalize-parity-gap.html) — config_rules…
 - [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.…
 - [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncov…
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api…
