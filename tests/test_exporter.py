@@ -5,10 +5,19 @@
 - test_collect_all_tracker_hostnames: 收集全部 tracker hostname
 - test_collect_all_tracker_hostnames_skips_errors: 收集出错跳过
 - test_collect_all_tracker_hostnames_skip_empty_url: 空 URL 跳过
+- test_collect_torrent_tracker_hostnames: 逐种子收集, 每颗种子一个集合
+- test_collect_torrent_tracker_hostnames_error_isolated: 单种查询异常该种子空集, 不终止
+- test_collect_torrent_tracker_hostnames_call_shape: qB 调用面 = 一次 torrents_info + 逐种 torrents_trackers
 - test_find_missing_domains: 找出缺失域名
+- test_group_missing_domains_cooccurrence: 共现合并(两缺失域名同现于一种子即一组)
+- test_group_missing_domains_transitive: 跨种子传递闭包(A+B 同现种1, B+C 同现种2 -> 一组)
+- test_group_missing_domains_no_cooccurrence_singletons: 不共现的缺失域名各自成组(全单元素组)
+- test_group_missing_domains_configured_never_glues: 已配置域名不进任何组, 也不粘合缺失域名
 - test_capitalize_special_tag: 特殊标签大写化
 - test_gen_default_tag: 生成默认标签
 - test_build_tracker_entry: 构建 tracker 条目
+- test_build_merged_entry: 合并条目(代表=最短/tie 字典序, domains 整组 sorted, 名字进 taken, 字段同源)
+- test_build_merged_entry_singleton_degenerates: 单元素组退化 = 逐域名 build_tracker_entry
 - test_gen_tracker_name: 域名转合法站点名(非法字符替换/既有占用与批内冲突加 _N 后缀)
 - test_export_yaml_template_append: 模板导出追加
 - test_export_yaml_template_only_missing_dry_run: 仅缺失 dry-run 导出
@@ -94,6 +103,65 @@ def test_collect_all_tracker_hostnames_skip_empty_url():
     assert exporter.collect_all_tracker_hostnames(client) == set()
 
 
+def test_collect_torrent_tracker_hostnames():
+    """逐种子收集 tracker hostname, 每颗种子一个集合(集合间不合并)"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    client.trackers_map = {
+        "H1": [{
+            "url": "https://a.example.com/announce"
+        }],
+        "H2": [{
+            "url": "https://b.example.com/announce"
+        }, {
+            "url": "https://a.example.com/announce"
+        }],
+    }
+    assert exporter.collect_torrent_tracker_hostnames(client) == [
+        {"a.example.com"},
+        {"a.example.com", "b.example.com"},
+    ]
+
+
+def test_collect_torrent_tracker_hostnames_error_isolated():
+    """单个种子 tracker 查询异常时该种子给空集, 不影响其它种子"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+
+    def trackers(h):
+        if h == "H1":
+            raise RuntimeError("boom")
+        return [{"url": "https://b.example.com/announce"}]
+
+    client.torrents_trackers = trackers
+    assert exporter.collect_torrent_tracker_hostnames(client) == [set(), {"b.example.com"}]
+
+
+def test_collect_torrent_tracker_hostnames_call_shape():
+    """qB 调用面与现状一致: 一次 torrents_info + 逐种 torrents_trackers(按 hash)"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+    info_calls = []
+    tracker_hashes = []
+
+    def fake_info():
+        info_calls.append(1)
+        return list(client.torrents.values())
+
+    def fake_trackers(h):
+        tracker_hashes.append(h)
+        return []
+
+    client.torrents_info = fake_info
+    client.torrents_trackers = fake_trackers
+    exporter.collect_torrent_tracker_hostnames(client)
+    assert len(info_calls) == 1
+    assert sorted(tracker_hashes) == ["H1", "H2"]
+
+
 def test_find_missing_domains():
     """筛选未配置域名(包含关系: configured 在 host 中或 host 在 configured 中)"""
     all_domains = {"tracker.hhanclub.net", "tracker.kufirc.com", "other.site.net"}
@@ -101,6 +169,39 @@ def test_find_missing_domains():
     assert exporter.find_missing_domains(all_domains, configured) == {"tracker.kufirc.com", "other.site.net"}
     # 无缺失
     assert exporter.find_missing_domains(all_domains, set(all_domains)) == set()
+
+
+def test_group_missing_domains_cooccurrence():
+    """共现合并: 两缺失域名只在一颗种子里同现即合并一组, 其余各自成组"""
+    torrent_sets = [{"a.com", "b.com"}, {"c.com"}]
+    missing = {"a.com", "b.com", "c.com"}
+    assert exporter.group_missing_domains(torrent_sets, missing) == [["a.com", "b.com"], ["c.com"]]
+
+
+def test_group_missing_domains_transitive():
+    """跨种子传递闭包: A+B 同现于种1, B+C 同现于种2 -> A/B/C 一组"""
+    torrent_sets = [{"a.com", "b.com"}, {"b.com", "c.com"}]
+    missing = {"a.com", "b.com", "c.com"}
+    assert exporter.group_missing_domains(torrent_sets, missing) == [["a.com", "b.com", "c.com"]]
+
+
+def test_group_missing_domains_no_cooccurrence_singletons():
+    """不共现的缺失域名各自成组(全单元素组), 组内与组间均 sorted"""
+    torrent_sets = [{"c.com"}, {"a.com"}, {"b.com"}]
+    missing = {"a.com", "b.com", "c.com"}
+    assert exporter.group_missing_domains(torrent_sets, missing) == [["a.com"], ["b.com"], ["c.com"]]
+
+
+def test_group_missing_domains_configured_never_glues():
+    """已配置域名不出现在任何组, 也不粘合两个从未直接同现的缺失域名
+
+    种1含 A+X、种2含 B+X, X 已配置(不在 missing)—— A、B 必须各自成组。
+    """
+    torrent_sets = [{"a.com", "x.com"}, {"b.com", "x.com"}]
+    missing = {"a.com", "b.com"}
+    groups = exporter.group_missing_domains(torrent_sets, missing)
+    assert groups == [["a.com"], ["b.com"]]
+    assert all("x.com" not in group for group in groups)
 
 
 def test_capitalize_special_tag():
@@ -127,6 +228,28 @@ def test_build_tracker_entry():
     assert entry["tags"] == ["HDChina"]
     assert entry["hr"]["required_seeding_time"] == "3D"
     assert entry["upload_speed_limit"] == "0KiB/s"
+
+
+def test_build_merged_entry():
+    """合并条目: 代表域名 = 组内最短(tie 取字典序); domains 键 = 整组 sorted; 站点名就地登记进 taken"""
+    # 等长 tie: 取字典序 "a.com" 为代表
+    taken = set()
+    entry = exporter.build_merged_entry(["b.com", "a.com"], taken)
+    assert entry["domains"] == ["a.com", "b.com"]
+    assert taken == {"a_com"}, "站点名应由代表域名生成并登记进 taken"
+    expected = exporter.build_tracker_entry("a.com")
+    expected["domains"] = ["a.com", "b.com"]
+    assert entry == expected, "其余字段必须与 build_tracker_entry(代表域名) 同源"
+
+    # 最短优先于字典序: "abc.example" 比 "tracker.abc.example" 短
+    entry2 = exporter.build_merged_entry(["tracker.abc.example", "abc.example"], set())
+    assert entry2["domains"] == ["abc.example", "tracker.abc.example"]
+    assert entry2["tags"] == [exporter.gen_default_tag("abc.example")]
+
+
+def test_build_merged_entry_singleton_degenerates():
+    """全单元素组退化: 单域名组的合并条目与逐域名 build_tracker_entry 逐字节等价"""
+    assert exporter.build_merged_entry(["hdchina.org"], set()) == exporter.build_tracker_entry("hdchina.org")
 
 
 def test_gen_tracker_name():

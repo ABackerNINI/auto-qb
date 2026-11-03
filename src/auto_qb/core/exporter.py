@@ -24,15 +24,23 @@ def collect_configured_domains(config) -> set:
     return configured
 
 
-def collect_all_tracker_hostnames(api) -> set:
-    """从所有种子中收集去重的 tracker hostname(api 为 QbApi Facade或兼容客户端)"""
-    all_domains = set()
+def collect_torrent_tracker_hostnames(api) -> list:
+    """逐种子收集 tracker hostname, 每颗种子一个集合(单种查询失败 = 空集, 沿用现状静默跳过)"""
+    torrent_sets = []
     for tor in api.torrents_info():
         try:
             trackers_info = api.torrents_trackers(tor.hash)
         except Exception:
-            continue
-        all_domains |= extract_tracker_hostnames(trackers_info)
+            trackers_info = []
+        torrent_sets.append(extract_tracker_hostnames(trackers_info))
+    return torrent_sets
+
+
+def collect_all_tracker_hostnames(api) -> set:
+    """从所有种子中收集去重的 tracker hostname(api 为 QbApi Facade或兼容客户端)"""
+    all_domains = set()
+    for host_set in collect_torrent_tracker_hostnames(api):
+        all_domains |= host_set
     return all_domains
 
 
@@ -95,6 +103,46 @@ def build_tracker_entry(domain: str) -> dict:
                 # "exclude_categories": ["free"],
             },  # 示例，需用户修改; 输出设置(add_tag 等)可覆盖全局 hr:
     }
+
+
+def group_missing_domains(torrent_sets: list, missing: set) -> list:
+    """仅对 missing 域名按种子共现做 union-find: 同一种子内同现即合并, 跨种子传递闭包。
+
+    已配置域名不在 missing 里, 不参与粘合(两个缺失域名不因都碰过某已配置域名而合并)。
+    返回每组一个组内 sorted 的域名列表, 组间也 sorted(确定性); 全单元素组时退化为逐域名。
+    """
+    parent = {domain: domain for domain in missing}
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]  # 路径压缩
+            x = parent[x]
+        return x
+
+    for hosts in torrent_sets:
+        present = sorted(hosts & missing)
+        for host in present[1:]:
+            root, other = find(present[0]), find(host)
+            if root != other:
+                parent[max(root, other)] = min(root, other)
+
+    groups = {}
+    for domain in missing:
+        groups.setdefault(find(domain), []).append(domain)
+    return sorted(sorted(group) for group in groups.values())
+
+
+def build_merged_entry(domains: list, taken: set) -> dict:
+    """为一组共现缺失域名生成合并条目: 代表域名 = 组内最短(tie 取字典序)。
+
+    站点名经 gen_tracker_name(代表域名, taken) 生成并就地登记;
+    其余字段复用 build_tracker_entry(代表域名), domains 键改写为整组 sorted 列表。
+    """
+    rep = min(domains, key=lambda d: (len(d), d))
+    gen_tracker_name(rep, taken)
+    entry = build_tracker_entry(rep)
+    entry["domains"] = sorted(domains)
+    return entry
 
 
 def export_yaml_template(api, config, config_path: str, output_path: str, dry_run: bool, only_missing: bool = False):
