@@ -4,11 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (57)
 
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
 - [test] [cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿](../26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html) — webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到
-- [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](../26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量
 - [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](../26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
@@ -71,7 +70,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (390)
+## Done (391)
 
 - [test] [test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）](../26-11-04-0600-test-testing-persist-thread-active-count.html) — 全局 active_count 快照断言受同 xdist worker 无关线程启停污染, 已改 spy Thread.start 只量本窗口, 红验+全量验证通过
 - [bug] [D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′](../26-11-04-0504-bug-relocate-d-evidence-container-type.html) — relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效
@@ -86,6 +85,7 @@
 - [docs] [docs/context7 索引锁定版本与模块路径已漂移](../26-11-03-1208-docs-docs-context7-version-path-drift.html) — 5/10 依赖版本与 uv.lock 不符，2 个模块路径已不存在
 - [docs] [根 README 用例规模数字停留在 2026-10-03](../26-11-03-1208-docs-docs-readme-test-scale-drift.html) — README 写 2300+/2312/2309+3，最新基线 4971+2
 - [bug] [sim_qb torrents/export 生成非法 bencode：announce 长度标 26、实际 25](../26-11-03-1145-bug-sim-qb-export-bencode.html) — minimal_bencode 把 announce 值写成 26: 但 URL 只有 25 字节，消费端解析必然错位；模拟器导出种子不可用
+- [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）](../26-11-03-1144-bug-gtm-auth-body-drain.html) — 鉴权失败分支不读请求体即回 401 并关连接，Win 上客户端偶发 WinError 10053，test_auth_required_on_all_write_endpoints 间歇失败
 - [test] [site-alerts 全量顺序污染: 全量 6 红 / 单文件隔离 8 绿](../26-11-03-1135-test-e2e-site-alerts-order-pollution.html) — 全量 npx playwright test 时 site-alerts 6 条红(3 用例×prism/atlas), 单文件隔离 8 passed; 疑跨 spec 顺序/共享桩状态污染, 与本轮 BASE_URL 修复无关
 - [bug] [choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError](../26-11-03-1120-bug-rules-choose-nested-retired-control.html) — retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败

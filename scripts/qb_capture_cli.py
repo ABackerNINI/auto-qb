@@ -1,11 +1,14 @@
-"""qb_capture CLI: 配置解析 / 参数 / 自检模式(从 qb_capture.py 原样搬迁)"""
+"""qb_capture CLI 共享 helper: 配置解析 / 参数构造 / 离线自检。
+
+CLI 入口( main + __main__ )只在 qb_capture.py —— 本文件不再有 main,
+勿在此构造 Capture(符号在 qb_capture.py, 引用即 NameError)。
+"""
 from __future__ import annotations
 
 import argparse
 import gzip
 import json
 import logging
-import sys
 from pathlib import Path
 
 from qb_capture_core import *  # noqa: F401,F403
@@ -55,30 +58,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--dry", action="store_true", help="只打印将要发的请求数与预估耗时, 不发请求")
     p.add_argument("-v", "--verbose", action="store_true")
     return p
-
-
-def main(argv=None) -> int:
-    args = build_parser().parse_args(argv)
-    logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)s %(message)s",
-        datefmt="%H:%M:%S"
-    )
-    if args.from_config:
-        args.__dict__.update(load_from_config(args.from_config))
-    if not args.out:
-        raise SystemExit("[FATAL] 必须显式传 --out <dir>(计划 §12: 语料位置是参数, 不写死)")
-
-    # self-test 只读本地语料目录, 不连 qB ⇒ 不需要凭据
-    if args.command == "self-test":
-        return _self_test_only(args)
-    if not args.user or not args.password:
-        raise SystemExit("[FATAL] 缺凭据: 传 --user/--pass, 或 --from-config <path> 只读解析")
-
-    cap = Capture(args)
-    if args.command in ("capture", "snapshot", "record"):
-        return cap.run_capture()
-    return 0
 
 
 def _self_test_only(args) -> int:

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="code-review-3-s4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口">
 <meta name="issue-summary" content="拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造">
 <title>qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口 · refactor · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1145-refactor-qb-capture-cli-dead-main</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:45</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">refactor</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 11:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 — 用户指派认领，状态 <strong>In Progress</strong>；复验：现象仍在（<code>qb_capture_cli.py:60</code> 残留 <code>main()</code>，:78 引用未定义 <code>Capture</code>，无 <code>__main__</code>，全仓无引用）。方案取「删除重复入口」：CLI 入口保持收口在 <code>qb_capture.py</code>，本件仅留真共享 helper（<code>build_parser</code>/<code>load_from_config</code>/<code>_self_test_only</code>）</li>
+      <li>2026-11-04 — 已修，状态 <strong>Done</strong>。删除 <code>qb_capture_cli.py</code> 死 <code>main()</code>(-22 行)与同文件既有未用 <code>import sys</code>，docstring 改写为 helper 模块定位并标注「入口只在 qb_capture.py」防再犯。验证：py_compile + 导入冒烟（helper 三件完好、<code>main</code>/<code>Capture</code> 仅存在于 <code>qb_capture.py</code>）；全量 <code>5123 passed, 10 skipped in 267.10s</code>，覆盖率闸门绿（99%）</li>
     </ul>
   </section>
 
