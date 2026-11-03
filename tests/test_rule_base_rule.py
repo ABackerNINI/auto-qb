@@ -8,6 +8,10 @@
   配置原内容原样保留(D1 升级路线, plan 26-11-01-0106 W1)
 - test_load_retired_ignore_key_warns_equivalent: 载入检测伪动作 ignore_next_action_error -> 转未启用 +
   warning 话术含等价新写法 on_error: {policy: continue}
+- test_load_retired_nested_in_choose_branches: 载入检测 choose 分支 then/default 内的嵌套伪动作 ->
+  转未启用 + 嵌套剔除(issue 26-11-03-1120: 曾只扫顶层, 嵌套项通过校验后构造 Rule ConfigError)
+- test_retired_detection_strip_nested_edge_shapes: 嵌套检测/剔除的边界形状 —— 非 dict 项透传、
+  异形 choose/分支透传(形状报错归校验器)、多分支不短路在首分支、then 净 default 染
 - test_load_retired_keys_warn_every_load: 每次载入都提示(热重载重建也再报)
 - test_load_clean_rules_no_retired_warning: 无退役键的规则载入零告警且 enabled 原样(不带两键零行为变化)
 - test_rule_condition_exception: 条件异常 -> verdict=error, 本条本轮跳过且话术不再宣称「停止后续规则」
@@ -216,6 +220,180 @@ def test_load_retired_ignore_key_warns_equivalent():
         msg = next(m for m in records if "g.r" in m)
         assert "已退役" in msg and "enabled=false" in msg, msg
         assert "on_error: {policy: continue}" in msg, f"warning 必须含等价新写法: {msg}"
+
+
+def test_load_retired_nested_in_choose_branches():
+    """载入检测 choose 分支 then/default 内的嵌套伪动作 -> 转未启用 + 嵌套剔除(issue 26-11-03-1120)
+
+    退役检测/剔除曾只扫顶层 actions: choose.then 里的 ignore_next_action_error 通过校验
+    (伪动作键面合法)但未被检测/剔除, 构造 Rule 按未知动作 ConfigError, 载入硬失败。
+    未启用规则也照常构造 Rule, 嵌套伪动作必须真的从内存副本里剥掉。配置原内容原样保留。
+    """
+    import logging
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        spec = {
+            "enabled":
+                True,
+            "actions":
+                [
+                    {
+                        "choose":
+                            [
+                                {
+                                    "when": {
+                                        "all": []
+                                    },
+                                    "then": [{
+                                        "ignore_next_action_error": "true"
+                                    }, {
+                                        "add_tags": ["T"]
+                                    }]
+                                },
+                            ],
+                        "default": [{
+                            "ignore_next_action_error": "true"
+                        }, {
+                            "add_tags": ["D"]
+                        }],
+                    }, {
+                        "add_tags": ["X"]
+                    }
+                ],
+        }
+        # 检测单点: 嵌套伪动作同样命中(顶层无伪动作键)
+        assert rules_mod.retired_control_keys_in(spec) == ("ignore_next_action_error", )
+        records = []
+
+        class Grab(logging.Handler):
+            def emit(self, record):
+                records.append(record.getMessage())
+
+        lg = logging.getLogger("auto_qb.core.modules.rules_mod")
+        handler = Grab(level=logging.WARNING)
+        lg.addHandler(handler)
+        lg.setLevel(logging.WARNING)
+        try:
+            rules = _load_rules(mgr, {"g": {"r": spec}})
+        finally:
+            lg.removeHandler(handler)
+        assert rules.rules[0].enabled is False, "嵌套伪动作命中的规则载入即转未启用"
+        assert rules.rules[0] not in rules.enabled_rules
+        msg = next(m for m in records if "g.r" in m)
+        assert "已退役" in msg and "on_error: {policy: continue}" in msg, msg
+        # 内存副本: 嵌套伪动作剥掉(then/default 两侧), 顶层普通动作与 choose 结构保留
+        rule = rules.rules[0]
+        assert [a.name for a in rule.actions] == ["add_tags"], "顶层普通动作保留"
+        choose_steps = [s for s in rule.steps if s[0] == "choose"]
+        assert len(choose_steps) == 1, "choose 编排块保留"
+        block = choose_steps[0][1]
+        assert [[a.name for a in br.actions] for br in block.branches] == [["add_tags"]], \
+            "分支 then 内伪动作剥掉, 普通动作保留"
+        assert [a.name for a in block.default_actions] == ["add_tags"], \
+            "块级 default 内伪动作剥掉, 普通动作保留"
+        # 配置原内容原样保留供改写(内存副本改写, 不回写)
+        assert spec["actions"][0]["choose"][0]["then"][0] == {"ignore_next_action_error": "true"}
+        assert spec["enabled"] is True
+
+
+def test_retired_detection_strip_nested_edge_shapes():
+    """嵌套检测/剔除的边界形状(短路覆盖, issue 26-11-03-1120)
+
+    - 非 dict 动作项: 检测跳过、剔除原样透传(与顶层容错同口径 P2-a);
+    - choose 非 list / 分支非 dict / 分支无 then: 剔除侧原样透传(形状报错归校验器单点);
+    - 多分支首个净第二个染: 检测不短路在首分支;
+    - then 净 default 染: 检测落到块级 default 分支, 剔除剥 default。
+    """
+    spec = {
+        "enabled":
+            True,
+        "actions":
+            [
+                "not-a-dict",
+                {
+                    "choose": "not-a-list"
+                },
+                {
+                    "choose": ["not-a-dict", {
+                        "when": {
+                            "all": []
+                        }
+                    }]
+                },
+                {
+                    "choose":
+                        [
+                            {
+                                "when": {
+                                    "all": []
+                                },
+                                "then": [{
+                                    "add_tags": ["a"]
+                                }]
+                            },
+                            {
+                                "when": {
+                                    "all": []
+                                },
+                                "then": [{
+                                    "ignore_next_action_error": "true"
+                                }]
+                            },
+                        ]
+                },
+                {
+                    "choose": [{
+                        "when": {
+                            "all": []
+                        },
+                        "then": [{
+                            "add_tags": ["a"]
+                        }]
+                    }],
+                    "default": [{
+                        "ignore_next_action_error": "true"
+                    }]
+                },
+            ],
+    }
+    assert rules_mod.retired_control_keys_in(spec) == ("ignore_next_action_error", )
+    # 顶层短路面: 多分支项在前会先命中(上面的 spec 走不到 default 分支), default 命中要单测:
+    default_only = {
+        "enabled":
+            True,
+        "actions":
+            [
+                {
+                    "choose": [{
+                        "when": {
+                            "all": []
+                        },
+                        "then": [{
+                            "add_tags": ["a"]
+                        }]
+                    }],
+                    "default": [{
+                        "ignore_next_action_error": "true"
+                    }],
+                }
+            ],
+    }
+    assert rules_mod.retired_control_keys_in(default_only) == ("ignore_next_action_error", ), \
+        "then 净 default 染: 检测必须落到块级 default 分支"
+    assert rules_mod.retired_control_keys_in("not-a-spec") == (), "非 dict spec 检测返回空"
+    stripped = rules_mod.disable_retired_rule_spec(spec)["actions"]
+    assert stripped[0] == "not-a-dict", "非 dict 项原样透传"
+    assert stripped[1] == {"choose": "not-a-list"}, "choose 非 list 原样透传(形状报错归校验器)"
+    assert stripped[2] == {"choose": ["not-a-dict", {"when": {"all": []}}]}, "异形分支原样透传"
+    b4 = stripped[3]["choose"]
+    assert b4[0]["then"] == [{"add_tags": ["a"]}], "净分支零触碰"
+    assert b4[1]["then"] == [], "染分支伪动作剥掉"
+    assert stripped[4]["choose"][0]["then"] == [{"add_tags": ["a"]}], "default 染时 then 照常剥(净)"
+    assert stripped[4]["default"] == [], "块级 default 染分支剥掉"
+    # 配置原内容原样保留(内存副本改写)
+    assert spec["actions"][3]["choose"][1]["then"] == [{"ignore_next_action_error": "true"}]
+    assert spec["actions"][4]["default"] == [{"ignore_next_action_error": "true"}]
 
 
 def test_load_retired_keys_warn_every_load():

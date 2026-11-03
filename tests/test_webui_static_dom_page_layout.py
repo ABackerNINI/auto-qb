@@ -24,7 +24,7 @@
 - test_api_traffic_history_endpoint: /api/traffic/history 透出快照 history; 缺省空数组
 - test_frontend_password_field_ignores_autofill: 密码框的浏览器/密码管理器自动填充不得写进配置树(2026-10-20 报障「进常规就显示有改动还没保存」)—— 模板密码分支须 autocomplete=new-password 且写回走 setSecret, setSecret 须按「是否焦点」判据(未聚焦不写树并回填显示)
 - test_frontend_config_default_ladder_single_point: schema→默认值梯单点守阵(issue 26-10-20-2231 / R20-C-05) —— 三入口(可选段 cfgDefaultForField / 插件 spec / 插件 section)不得再各写一份「按 schema 形状造初值」的循环(插件侧零手搓循环、enum 首选项默认值全仓一处、旧 cfgPluginDefaultSpec/Section 零残留); 三个单点(cfgDefaultScalar/cfgDefaultForFields/cfgDefaultForPlugin)各定义一处且入口只转调; 有 node 时真跑语义电池钉行为(插件 bool="true" vs 字段 bool="false" / list=[] / enum=options[0] / str=placeholder / object 只填必填且子段按全字段口径 / 未知形态沿用子表单 / 可选段非 object=[])
-- test_frontend_retired_rule_keys_upgrade_surface: 两键退役升级提示面守阵(plan 26-11-01-0106 W1/D1) —— 旧伪动作判断 isIgnoreNext 及「忽略下一个动作的错误」友好话术零残留; 退役键检测/提示单点(cfgRuleRetiredKeys/cfgIsRetiredAction/cfgRuleRetiredHint)在 config_rules.js 各定义一处; settings.html 规则卡「未启用·含退役键」徽标(hb-badge warn)与卡脚提示接线齐全(webui 侧自测键名, 不依赖后端回写 config.yml); hubPluginText 退役标记判定必须在 meta 判空之前(退役键不在插件索引); 有 node 时真跑语义电池(四规则形态 × 检测/提示/动作行人话)
+- test_frontend_retired_rule_keys_upgrade_surface: 两键退役升级提示面守阵(plan 26-11-01-0106 W1/D1) —— 旧伪动作判断 isIgnoreNext 及「忽略下一个动作的错误」友好话术零残留; 退役键检测/提示单点(cfgRuleRetiredKeys/cfgIsRetiredAction/cfgRuleRetiredHint)在 config_rules.js 各定义一处; settings.html 规则卡「未启用·含退役键」徽标(hb-badge warn)与卡脚提示接线齐全(webui 侧自测键名, 不依赖后端回写 config.yml); hubPluginText 退役标记判定必须在 meta 判空之前(退役键不在插件索引); 有 node 时真跑语义电池(七规则形态 × 检测/提示/动作行人话, 含 choose 分支 then/default 内嵌套伪动作识别, issue 26-11-03-1120)
 - test_frontend_list_row_pad_and_empty_single_point
 - test_frontend_action_on_error_control: 动作级 on_error 控件守阵(plan 26-11-01-0106 W2/D8) ——
   cfgOnError* 方法族单点(config_rules.js); settings.html 动作卡失败策略行(policy 三档下拉 +
@@ -1023,7 +1023,7 @@ def test_frontend_retired_rule_keys_upgrade_surface():
         )
         assert proc.returncode == 0, f"退役键 node 探针跑挂了: {(proc.stderr or '').strip()[:400]}"
         res = json.loads(proc.stdout.strip())
-        assert res["total"] >= 9, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
+        assert res["total"] >= 12, f"语义电池只有 {res['total']} 项(被删减? 同步本守阵)"
         assert not res["failed"], ("退役键提示面行为漂移: " + "、".join(res["failed"]) + " —— 检测/提示口径被改掉了")
 
 

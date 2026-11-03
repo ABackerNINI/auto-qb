@@ -69,8 +69,8 @@ process(ctx) -> verdict: str   # 单值, 取值域 = base.py 模块级 VERDICT_*
 
 `stop_following_rules_if` 与伪动作 `ignore_next_action_error` 已退役, **引擎零消费**:
 
-- **载入层** (`rules_mod.disable_retired_rule_spec`): 检测到含键规则 → 内存副本转**未启用** (enabled=false) + 剔除 actions 里的伪动作项; 配置原内容**不回写、原样保留**供改写; **每次载入**出 warning, 话术给出 `ignore_next_action_error` 的等价新写法 `on_error: {policy: continue}` (on_error 随 W2 落地)。
-- **键面保留识别**: schema/RULE_FIELDS 与校验侧仍识别两键(用于升级检测), webui 规则卡对含键规则显示「未启用·含退役键」徽标与卡脚升级提示(检测单点 `cfgRuleRetiredKeys`, 与后端 `retired_control_keys_in` 同口径)。
+- **载入层** (`rules_mod.disable_retired_rule_spec`): 检测到含键规则 → 内存副本转**未启用** (enabled=false) + 剔除 actions 里的伪动作项 —— **顶层与 choose 分支 then/块级 default 内的嵌套伪动作项都递归检测/剔除** (issue 26-11-03-1120: 曾只扫顶层, 嵌套项通过校验后构造 Rule ConfigError); 配置原内容**不回写、原样保留**供改写; **每次载入**出 warning, 话术给出 `ignore_next_action_error` 的等价新写法 `on_error: {policy: continue}` (on_error 随 W2 落地)。
+- **键面保留识别**: schema/RULE_FIELDS 与校验侧仍识别两键(用于升级检测), webui 规则卡对含键规则显示「未启用·含退役键」徽标与卡脚升级提示(检测单点 `cfgRuleRetiredKeys`, 与后端 `retired_control_keys_in` 同口径, 同样递归 choose 嵌套项)。
 - **绕过载入层**直接构造 Rule 遇伪动作按未知动作 ConfigError; 需「首中即停」→ `evaluation: first_match`
   (W4 枚举位已占坑, 本版本占位未实现, 见下节); 需「动作失败继续」→ `on_error: {policy: continue}` (W2)。
 

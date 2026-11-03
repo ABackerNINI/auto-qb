@@ -51,10 +51,23 @@ window.CONFIG_RULES = {
       if (!spec || typeof spec !== "object") return [];
       const keys = [];
       if ("stop_following_rules_if" in spec) keys.push("stop_following_rules_if");
-      if ((spec.actions || []).some((a) => this.cfgIsRetiredAction(a))) {
+      if (this.cfgActionsContainRetired(spec.actions)) {
         keys.push("ignore_next_action_error");
       }
       return keys;
+    },
+    /* actions 域退役伪动作判定(含 choose 分支 then/块级 default 的嵌套项, issue 26-11-03-1120):
+     * 与后端 retired_control_keys_in 同口径递归 —— 只扫顶层时嵌套伪动作的升级提示面无声。 */
+    cfgActionsContainRetired(actions) {
+      return (actions || []).some((a) => {
+        if (!a || typeof a !== "object") return false;
+        if (this.cfgIsRetiredAction(a)) return true;
+        if (Array.isArray(a.choose)
+          && a.choose.some((br) => br && typeof br === "object" && this.cfgActionsContainRetired(br.then))) {
+          return true;
+        }
+        return Array.isArray(a.default) && this.cfgActionsContainRetired(a.default);
+      });
     },
     /* actions 域伪动作项识别(退役键自身): 不再当可渲染动作(hubPluginText 显示退役标记)
      * W2-B: 规范形 {type, params, on_error}(手写 YAML 经载入规范化的形态)同样识别。 */

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="rules-choose-retired">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError">
 <meta name="issue-summary" content="retired_control_keys_in 与 disable_retired_rule_spec 只扫顶层 actions; choose.then 中的 ignore_next_action_error 通过校验但构造 Rule 抛 ConfigError, 启停失败">
 <title>choose 的 then/default 内退役伪动作未被检测/剔除，校验放行后 Rule 构造 ConfigError · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1120-bug-rules-choose-nested-retired-control</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">rules</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -162,11 +162,15 @@ Rule raised: ConfigError | 规则 g.pseudo: 动作 ignore_next_action_error: 'ig
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 11:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 02:50 — 用户指派认领，状态 <strong>In Progress</strong>；复验仍复现（probe 重跑同形）</li>
+      <li>2026-11-04 — 状态 <strong>Done</strong>：方案 A 落地（检测/剔除递归 choose 分支，前端同口径），相关 5 文件 160 passed、全量 5051 passed（唯一失败为上游既有坏链 26-11-04-0245）；详见「修复后补充」</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p class="todo">复验：2026-11-04 仍复现（同形 probe 重跑, retired_keys(top-level only)=() 且 Rule 构造抛 ConfigError, 见下方修复后补充）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>(2026-11-04, 按建议方案 A, 未改道): 后端检测/剔除抽共用递归单点 —— <code>rules_mod._is_retired_action</code>(命中判定, 过 normalize_action_entry 漏斗) + <code>_iter_retired_action_checks</code>(检测递归进 choose 分支 then 与块级 default) + <code>_strip_retired_actions</code>(剔除递归, choose 块浅拷贝改写, 异形分支原样透传交校验器); <code>retired_control_keys_in</code>/<code>disable_retired_rule_spec</code> 改走递归。前端 <code>config_rules.js</code> 新增 <code>cfgActionsContainRetired</code> 同口径递归(嵌套项升级提示面可见)。校验器不改: 嵌套伪动作键面放行口径保留(语义=由载入层转未启用剔除, 与顶层一致)。</p>
+    <p><strong>验证方式</strong>: 同形 probe 修复前 <code>retired_keys=()</code> + Rule 构造崩 → 修复后 <code>=('ignore_next_action_error',)</code> + 嵌套剔除后 Rule 构造通过; 相关套件 <code>test_rule_base_rule.py</code> 41 passed(含 2 条新用例: 嵌套载入链全行为 + 边界形状), node 语义电池 12 项全绿(新增 nestedThen/nestedDefault/nestedClean 三形态)。</p>
+    <p><strong>测试数字</strong>(2026-11-04 实测, <code>commands run test.full</code>): 5051 passed / 1 failed / 10 skipped, 146.82s; 唯一失败为上游既有坏链(<code>test_memory_bank_docs.py::test_doc_links_are_not_broken</code>, f16188e2 带入, 已入池 26-11-04-0245, 与本修复无关); 覆盖率 98.86% 同为上游面。新代码覆盖: 相关 5 文件套件下 rules_mod 92%, 缺口全在未触碰既有段。</p>
   </section>
 
   <footer>

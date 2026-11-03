@@ -50,37 +50,93 @@ RETIRED_CONTROL_KEYS = ("stop_following_rules_if", "ignore_next_action_error")
 RETIRED_IGNORE_EQUIV = "on_error: {policy: continue}"
 
 
+def _is_retired_action(act) -> bool:
+    """动作项是否退役伪动作(经兼容层单点漏斗归一后判名, 规范形/旧扁平形都识别)"""
+    return isinstance(act, dict) and normalize_action_entry(act).get("type") == "ignore_next_action_error"
+
+
+def _iter_retired_action_checks(actions):
+    """actions 域(含 choose 分支 then 与块级 default)的退役伪动作检测, 返回是否命中
+
+    choose 编排块(W3-B)是唯一合法的嵌套容器: 分支 then 与块级 default 里的动作项递归
+    同径检测(issue 26-11-03-1120: 只扫顶层时嵌套伪动作漏检 -> 校验放行后 Rule 构造崩)。
+    嵌套 choose 非法(校验器 fail-fast), 合法配置不会出现; 若手写穿透到本层, 检测照递归
+    (漏检方向无益), 形状归一与报错仍由校验器单点负责。
+    """
+    for act in actions or []:
+        if not isinstance(act, dict):
+            continue
+        if _is_retired_action(act):
+            return True
+        if "choose" in act:
+            branches = act.get("choose")
+            if isinstance(branches, list):
+                for br in branches:
+                    if isinstance(br, dict) and _iter_retired_action_checks(br.get("then")):
+                        return True
+            if _iter_retired_action_checks(act.get("default")):
+                return True
+    return False
+
+
+def _strip_retired_actions(actions):
+    """actions 列表剔除退役伪动作项(顶层与 choose 分支 then/块级 default 递归同径)
+
+    保留项原样透传不重排; choose 块浅拷贝改写(未命中的分支列表引用原样保留), 其余键零触碰。
+    """
+    out = []
+    for act in actions or []:
+        if isinstance(act, dict) and _is_retired_action(act):
+            continue
+        if isinstance(act, dict) and "choose" in act:
+            branches = act.get("choose")
+            if isinstance(branches, list):
+                new_branches = []
+                for br in branches:
+                    if isinstance(br, dict) and isinstance(br.get("then"), list):
+                        nbr = dict(br)
+                        nbr["then"] = _strip_retired_actions(br["then"])
+                        new_branches.append(nbr)
+                    else:
+                        new_branches.append(br)
+                act = dict(act)
+                act["choose"] = new_branches
+            if isinstance(act.get("default"), list):
+                act = dict(act)
+                act["default"] = _strip_retired_actions(act["default"])
+        out.append(act)
+    return out
+
+
 def retired_control_keys_in(spec) -> tuple:
     """规则 spec 里出现的已退役控制键(规则级 stop_following_rules_if + actions 域伪动作项)
 
     升级检测单点: 载入层(rules_mod.load_rules)与后续 webui 未启用徽标共用同一判定。
     动作项先过兼容层单点漏斗(normalize_action_entry, 幂等)再取动作名 —— 载入链上游
     (load_config)已把 spec 规范化成 {type, params}, 直收旧扁平单键形的调用方(测试/内存
-    Config)同样识别, 不在此重写第二套形状判断。
+    Config)同样识别, 不在此重写第二套形状判断; choose 分支 then/块级 default 内的嵌套
+    动作项递归同径检测(issue 26-11-03-1120)。
     """
     if not isinstance(spec, dict):
         return ()
     keys = [k for k in RETIRED_CONTROL_KEYS if k in spec]
-    for act in spec.get("actions") or []:
-        if isinstance(act, dict) and normalize_action_entry(act).get("type") == "ignore_next_action_error":
-            if "ignore_next_action_error" not in keys:
-                keys.append("ignore_next_action_error")
+    if "ignore_next_action_error" not in keys and _iter_retired_action_checks(spec.get("actions")):
+        keys.append("ignore_next_action_error")
     return tuple(keys)
 
 
 def disable_retired_rule_spec(spec: dict) -> dict:
     """含退役键的规则「转未启用」的内存副本: enabled 置 false + 剔除 actions 里的伪动作项
 
-    伪动作已不被引擎消费(直接构造 Rule 会按未知动作 ConfigError), 载入前须剔除; 规则级
-    stop_following_rules_if 键无消费方, 保留在副本里无害。配置原内容不动(只改内存副本)。
-    动作项经兼容层单点漏斗识别(normalize_action_entry), 规范形/旧扁平形都剥。
+    伪动作已不被引擎消费(直接构造 Rule 会按未知动作 ConfigError), 载入前须剔除 —— 含
+    choose 分支 then/块级 default 内的嵌套伪动作项(未启用规则也照常构造 Rule, 不剔除
+    照样构造崩, issue 26-11-03-1120); 规则级 stop_following_rules_if 键无消费方, 保留在
+    副本里无害。配置原内容不动(只改内存副本)。动作项经兼容层单点漏斗识别
+    (normalize_action_entry), 规范形/旧扁平形都剥。
     """
     disabled = dict(spec)
     disabled["enabled"] = False
-    disabled["actions"] = [
-        act for act in (spec.get("actions") or [])
-        if not (isinstance(act, dict) and normalize_action_entry(act).get("type") == "ignore_next_action_error")
-    ]
+    disabled["actions"] = _strip_retired_actions(spec.get("actions"))
     return disabled
 
 

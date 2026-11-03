@@ -164,6 +164,12 @@ const RULES = {
   stopOnly: { enabled: "true", stop_following_rules_if: "conditions-met", conditions: [], actions: [{ add_tags: ["x"] }] },
   ignoreOnly: { enabled: "true", conditions: [], actions: [{ ignore_next_action_error: "true" }, { add_tags: ["x"] }] },
   both: { enabled: "true", stop_following_rules_if: "never", conditions: [], actions: [{ ignore_next_action_error: "true" }] },
+  nestedThen: { enabled: "true", conditions: [], actions: [
+      { choose: [{ when: { all: [] }, then: [{ ignore_next_action_error: "true" }, { add_tags: ["t"] }] }] }, { add_tags: ["x"] }] },
+  nestedDefault: { enabled: "true", conditions: [], actions: [
+      { choose: [{ when: { all: [] }, then: [{ add_tags: ["t"] }] }], default: [{ ignore_next_action_error: "true" }] }] },
+  nestedClean: { enabled: "true", conditions: [], actions: [
+      { choose: [{ when: { all: [] }, then: [{ add_tags: ["t"] }] }], default: [{ add_tags: ["d"] }] }] },
 };
 const ctx = Object.assign({
   cfg: { tree: { config: { example_rules: RULES } } },
@@ -178,6 +184,9 @@ const checks = [
   ["规则级 stop_following_rules_if 被识别", J(keys("stopOnly")) === J(["stop_following_rules_if"])],
   ["actions 域伪动作被识别", J(keys("ignoreOnly")) === J(["ignore_next_action_error"])],
   ["两键并存全识别(口径=后端 retired_control_keys_in)", J(keys("both")) === J(["stop_following_rules_if", "ignore_next_action_error"])],
+  ["choose 分支 then 内嵌套伪动作被识别(issue 26-11-03-1120)", J(keys("nestedThen")) === J(["ignore_next_action_error"])],
+  ["块级 default 内嵌套伪动作被识别(issue 26-11-03-1120)", J(keys("nestedDefault")) === J(["ignore_next_action_error"])],
+  ["choose 无退役键不误报(嵌套递归零行为变化)", J(keys("nestedClean")) === "[]"],
   ["cfgIsRetiredAction 只认伪动作项", ctx.cfgIsRetiredAction({ ignore_next_action_error: "true" }) && !ctx.cfgIsRetiredAction({ add_tags: ["x"] })],
   ["stop-only 提示宣称转未启用且不开 on_error 空票(等价写法尚未落地)", hint("stopOnly").includes("未启用") && !hint("stopOnly").includes("on_error")],
   ["含 ignore 的提示给等价新写法 on_error: {policy: continue}", hint("ignoreOnly").includes("on_error: {policy: continue}")],
