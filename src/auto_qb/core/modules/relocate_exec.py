@@ -622,7 +622,7 @@ class ExecMixin:
         blocked 回执, 与 evaluate_group 现行 blocked item 同形: reasons 元素 gate/cls/text):
         - 单成员组(D2): 完全跳过, 零动作零 note —— 独占内容由 qB 自搬, 免同机证明;
         - dry-run: 零副作用承诺(不落探针文件、不动 qB), note「dry-run: 跳过强探测」;
-        - assume_shared=true(D7): 用户显式越权, 跳过探测, note 注明「未经 auto-qb 验证」;
+        - assume_shared=true(D7): 用户显式越权, 跳过探测, note 注明「未经 auto-qb 验证, 由用户承担」;
         - 路径级已证明(facts.same_fs_proved, D4 组合口径的 D 复查面): E1 无增量, 放行;
         - 指纹缓存(D3: host+port+username+secret)命中 passed => 放行;
           命中 failed => blocked(D7① 同指纹不重试);
@@ -638,7 +638,7 @@ class ExecMixin:
         conf = self._live_conf()
         if bool(getattr(conf, "assume_shared", False)):
             verdict["notes"] = list(verdict.get("notes") or []) + \
-                ["assume_shared: 未经 auto-qb 验证(用户显式越权), 跳过同机强探测"]
+                ["assume_shared: 未经 auto-qb 验证, 由用户承担(用户显式越权) —— 跳过同机强探测"]
             return None
         if facts.same_fs_proved:
             return None
@@ -650,6 +650,7 @@ class ExecMixin:
                 # 缓存放行的组合口径(拍板 D4): E1 机器级强证明是「一次性」的 —— 同连接身份
                 # 缓存(D3), 之后每次多成员迁移仍由预检 D 级路径证据复查(降级链 D->B'),
                 # 运行时 F 兜底不变; 见 memory-bank/plans/26-11-04-0055-plan-relocate-same-fs-proof.html §06 D4。
+                verdict["notes"] = list(verdict.get("notes") or []) + [f"同机强探测: 命中缓存(指纹 {fp}), 跳过重复探测"]
                 return None
             reason = str((hit.get("evidence") or {}).get("reason") or "fs_unreachable")
             return {
@@ -661,7 +662,9 @@ class ExecMixin:
                         {
                             "gate": ru.GATE_SAME_FS,
                             "cls": ru.CLS_BLOCKED,
-                            "text": f"上次同机探测失败({reason}): 已缓存, 更改 qB 连接配置或清除 state.relocate.probes 后重试",
+                            "text":
+                                f"上次同机探测失败({reason}): 已缓存(FS 不可达方向, 同指纹不重试) —— 出路: 检查 fs.path_map 映射是否覆盖源/目标路径, "
+                                "或确认 qB 与 auto-qb 确实共享文件系统后配置 relocate.assume_shared; 确已修复可清除 state.relocate.probes 后重试",
                         }
                     ],
             }
@@ -671,7 +674,11 @@ class ExecMixin:
             return None
         if probe.env:
             # 环境性失败(网络/凭据/连接中断/本机写探针失败): 与 FS 可达性无关, 不缓存(D7②)
-            text = f"探测环境性失败: {probe.reason}(未缓存, 下次迁移将重试)"
+            text = (
+                f"探测环境性失败: {probe.reason}(与 FS 可达性无关, 未缓存, 下次迁移将重试) —— 出路: 排查环境后重试"
+                "(磁盘满/队列满/权限/连接; 容器部署检查 fs.path_map), 或配置 relocate.assume_shared 显式越权"
+                "(未经 auto-qb 验证, 由用户承担)"
+            )
         else:
             # FS 不可达(证读/证写超时): 硬拦 + 缓存失败(D7① 同指纹不重试 —— 探测要真写一次
             # 目标盘, 缓存免得每次迁移都白搬一遍探针); 坏缓存可经 probe_put 覆盖写修复

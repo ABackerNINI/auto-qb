@@ -11,9 +11,13 @@
 - test_probe_fs_unreachable_blocks_without_job_or_setlocation: run_probe env=False => 无 job、
   零 setLocation、缓存里是 failed(带 reason)
 - test_second_migration_hits_failed_cache_without_reprobe: 二次迁移命中 failed 缓存 =>
-  run_probe 不再被调、直接 blocked(文案带「已缓存」语义)
+  run_probe 不再被调、直接 blocked(文案带「已缓存」语义 + path_map/assume_shared 两条出路)
 - test_env_failure_not_cached_and_retried_next_time: env=True 失败 => 无缓存写入、下次迁移再探
-- test_cached_passed_hits_with_zero_probe_calls: 缓存 passed 命中 => 零 run_probe 调用(D4 组合口径)
+  (blocked 文案区分环境性语义并带两条出路)
+- test_cached_passed_hits_with_zero_probe_calls: 缓存 passed 命中 => 零 run_probe 调用(D4 组合口径;
+  预检层凭缓存证 proved 短路, note「凭机器级强证明(E1 缓存)放行」随 same_fs_note 带出)
+- test_gate_cached_passed_direct_hit_appends_note: 预检层缓存读失败(证明面不可判定)而执行闸
+  直读缓存 passed => 放行 + note「同机强探测: 命中缓存(指纹 …)」
 - test_single_member_assume_shared_and_dry_run_skip_probe: 单成员组(D2)/assume_shared(D7)/
   dry-run 三面零探测调用
 - test_fingerprint_change_reprobes: qB 配置 host/port 变更 => 指纹变化 => 重新探测(D3)
@@ -159,6 +163,7 @@ def test_second_migration_hits_failed_cache_without_reprobe(monkeypatch):
     assert it["reasons"][-1]["gate"] == "same_fs", it["reasons"]
     assert "上次同机探测失败(write_proof_timeout)" in it["reasons"][-1]["text"], it["reasons"]
     assert "已缓存" in it["reasons"][-1]["text"] and "state.relocate.probes" in it["reasons"][-1]["text"], it["reasons"]
+    assert "path_map" in it["reasons"][-1]["text"] and "assume_shared" in it["reasons"][-1]["text"], it["reasons"]
     assert len(calls) == 1, "缓存 failed 命中不得再探(D7① 同指纹不重试)"
 
 
@@ -171,6 +176,8 @@ def test_env_failure_not_cached_and_retried_next_time(monkeypatch):
     assert it["cls"] == "blocked" and it["reasons"][-1]["gate"] == "same_fs", it
     assert "探测环境性失败: add_rejected" in it["reasons"][-1]["text"], it["reasons"]
     assert "未缓存, 下次迁移将重试" in it["reasons"][-1]["text"], it["reasons"]
+    assert "fs.path_map" in it["reasons"][-1]["text"] and "assume_shared" in it["reasons"][-1]["text"], it["reasons"]
+    assert "由用户承担" in it["reasons"][-1]["text"], it["reasons"]
     fp = probe_fingerprint(mod._ctx.config.qbittorrent)
     assert mod.probe_get(fp) is None, "环境性失败不得写缓存"
     second = mod.relocate_execute(["HA"], "R:/dst")
@@ -186,6 +193,31 @@ def test_cached_passed_hits_with_zero_probe_calls(monkeypatch):
     items = mod.relocate_execute(["HA"], "R:/dst")
     assert items[0]["cls"] == "started", items
     assert calls == [], "缓存 passed 命中不得触发探测"
+    # 预检层已凭缓存证 proved(same_fs_note 带出), 执行闸在 same_fs_proved 短路, 零增量 note
+    assert any("凭机器级强证明" in n for n in items[0]["notes"]), items[0]["notes"]
+    assert len(locs) == 1, locs
+
+
+def test_gate_cached_passed_direct_hit_appends_note(monkeypatch):
+    """预检层缓存读失败(证明面不可判定)而执行闸直读缓存 passed => 放行 + note「同机强探测: 命中缓存(指纹 …)」"""
+    mod, locs = _gate_env(monkeypatch)
+    calls = _stub_run_probe(monkeypatch, [_passed()])
+    fp = probe_fingerprint(mod._ctx.config.qbittorrent)
+    mod.probe_put(fp, "passed", {"method": "e1"})
+    orig = mod.probe_get
+    seq = {"n": 0}
+
+    def flaky(fp_):
+        seq["n"] += 1
+        if seq["n"] == 1:
+            raise RuntimeError("预检层缓存读失败(演练)")
+        return orig(fp_)
+
+    monkeypatch.setattr(mod, "probe_get", flaky)
+    items = mod.relocate_execute(["HA"], "R:/dst")
+    assert items[0]["cls"] == "started", items
+    assert calls == [], "执行闸缓存 passed 直读命中不得触发探测"
+    assert any("同机强探测: 命中缓存" in n and fp in n for n in items[0]["notes"]), items[0]["notes"]
     assert len(locs) == 1, locs
 
 
@@ -207,7 +239,7 @@ def test_single_member_assume_shared_and_dry_run_skip_probe(monkeypatch):
     assert items[0]["cls"] == "started", items
     assert calls == [], "assume_shared 不得触发探测"
     assert len(locs) == 1, locs
-    assert any("assume_shared" in n and "未经" in n for n in items[0]["notes"]), items[0]["notes"]
+    assert any("assume_shared" in n and "未经" in n and "由用户承担" in n for n in items[0]["notes"]), items[0]["notes"]
 
     # dry-run: 不执行探测(零副作用), note「dry-run: 跳过强探测」
     mod, locs = _gate_env(monkeypatch)

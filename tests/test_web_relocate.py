@@ -38,7 +38,8 @@
 - test_relocate_module_precheck_scandir_and_lstat_degraded
 - test_relocate_module_precheck_scandir_missing_root
 - test_relocate_module_same_fs_p3_semantics: P3 同机判据替换预检层 —— D 级 wiring(withMetadata="true"/
-  列内容根)/ B′ 判负硬拦(两条出路)/ 不可判定转 note 不拦 / E1 缓存凭据放行 / assume_shared 直通
+  列内容根)/ B′ 判负硬拦(两条出路, reasons 元素 gate/cls/text 同形, gate id "same_fs")/
+  不可判定转 note 不拦 / E1 缓存凭据放行 / assume_shared 直通(note 注明由用户承担)
 - test_relocate_module_start_and_apply_probe_wiring
 - test_relocate_precheck_no_false_dir_link_note
   混合计数; precheck_add 回执 truth=单 item
@@ -497,7 +498,10 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
         t._files = None
     item2 = mgr2.host.get("relocate").relocate_precheck(["HA", "HB"], dst2)[0]
     assert item2["cls"] == "blocked" and "same_fs" in [r["gate"] for r in item2["reasons"]]
-    text2 = next(r["text"] for r in item2["reasons"] if r["gate"] == "same_fs")
+    # 回执 truth 结构(gate/cls/text 同形): gate id 断言用 "same_fs" 不用全文
+    r2 = next(r for r in item2["reasons"] if r["gate"] == "same_fs")
+    assert r2["cls"] == "blocked" and set(r2) >= {"gate", "cls", "text"}, item2["reasons"]
+    text2 = r2["text"]
     assert "fs.path_map" in text2 and "assume_shared" in text2
 
     # 3. 不可判定(D 端点不可用 + 本机文件读不到)-> 多成员不再硬拦, note 转执行链强探测
@@ -520,7 +524,7 @@ def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
     # 5. assume_shared 直通: 全部证据不可得也放行, note 注明用户承担
     mgr3.config.relocate.assume_shared = True
     item5 = mod3.relocate_precheck(["HA", "HB"], dst3)[0]
-    assert item5["cls"] == "ok" and any("未经 auto-qb 验证" in n for n in item5["notes"]), item5["notes"]
+    assert item5["cls"] == "ok" and any("未经 auto-qb 验证" in n and "由用户承担" in n for n in item5["notes"]), item5["notes"]
 
 
 def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypatch):
