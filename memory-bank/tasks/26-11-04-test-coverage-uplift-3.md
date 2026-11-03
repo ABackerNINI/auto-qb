@@ -32,9 +32,9 @@
 | 步 | 内容 | 状态 |
 |---|---|---|
 | S0 | 拍板回填 + 立档 + 开分支 + 提交计划 | Done (2026-11-04) |
-| T0a | rules/base 35 + validation/rules 22 → test_rules_core.py · test_config_rules.py | Open |
-| T0b | fuse_mod 33 + cli 16 → test_fuse_mod.py · test_cli.py | Open |
-| T0c | P0 验收:TOTAL ≥99.3% + 基线切片(M8 首记)+ 红验 ≥10% | Open |
+| T0a | rules/base 35 + validation/rules 22 → test_rules_core.py · test_config_rules.py | Done (2026-11-04, 4e4acde6) |
+| T0b | fuse_mod 33 + cli 16 → test_fuse_mod.py · test_cli.py | Done (2026-11-04, 806f954b) |
+| T0c | P0 验收:TOTAL ≥99.3% + 基线切片(M8 首记)+ 红验 ≥10% | Done (2026-11-04, 118261bf, 切片 26-11-04-0507) |
 | T1a | ops_skip 18 + ops_jobs 8 + routes/traffic_monitor 10 | Open |
 | T1b | hr/discovery 14 + service_wave 10 + hr/runtime 7 + hr/server 5 | Open |
 | T1c | transfer/orchestrator 10 + sections 12 + writer 6 + loaders 2 | Open |
@@ -51,3 +51,11 @@
 - D1–D3 拍板回填计划 §06(kb.bump R1),本档建立并双向认领计划件。
 - 拆解定稿:三阶段 11 步(2+1 / 3+1 / 2+1)+ S0/S9 编排步;同家族合并、串行派发、每步本地 commit。
 - 待办:开分支 `coverage-uplift-3` 提交计划件后开始派发 T0a。
+
+### R1 · P0 三步完成 (2026-11-04)
+
+- T0a(`4e4acde6`)rules 家族:base 全清、validation/rules 余 3 条 normalize 兜底防御支(到不了,列名留档);T0b(`806f954b`)fuse 家族:cli 全清、fuse_mod 余 1 条同快照防御 partial。
+- T0c(`118261bf`)P0 验收过线(非及格带):基线切片 `26-11-04-0507-test-coverage-uplift-3-p0`(数字见切片,M8 净额首记为负),watchlist 7→4、豁免 8 零新增、红验抽 11.8% 全杀零假绿。
+- T0b 揭出 1 条潜在产品缺陷(fuse_mod 摘标签路径缺 None-client 守卫,现行接线不可达)——按 I1 未修,收尾时随全轮总结提请入池裁决。
+- 插曲:T0a 全量揭出本档 R0 的「等…指令」措辞违规(既有红,措辞守卫),已改不变措辞(`7afc56f4`)转绿。
+- 待办:派发 T1a(ops 叶 + traffic_monitor 路由)。
