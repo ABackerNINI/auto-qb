@@ -84,6 +84,7 @@ def test_linux_ss_hit_returns_owner_with_proc_cmdline(monkeypatch):
     assert probe.state == port_owner.STATE_FOUND
     assert probe.owner == port_owner.PortOwner(12345, "python3", "python3 -m auto_qb --pid=12345")
     assert [cmd[0] for cmd, _ in calls] == ["ss"]
+    assert calls[0][0] == ["ss", "-ltnp"], "argv 必须精确等于 ss -ltnp(改旗标=探针行为变了)"
     assert calls[0][1]["timeout"] <= port_owner.STEP_TIMEOUT_S
 
 

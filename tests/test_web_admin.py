@@ -18,7 +18,7 @@
 - test_api_log_level_filter_keeps_multiline_record: 多行日志(整段 traceback)折行后跟随其记录的等级, 筛 ERROR 不丢栈
 - test_api_log_note_when_level_unfilterable: 筛不了(格式无等级字段 / 已存行与格式不符)回全部行 + note, 不静默给空
 - test_webui_module_apply_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄; 经 WebUIModule.apply 驱动, P2)
-- test_webui_module_start_raises_bind_error_when_port_taken: 端口被占 -> WebUIModule.start 抛 WebUIBindError(启动期 fail-fast); 消息单行且含 host/port/配置键/常见原因/处置; 低层仍返回未就绪句柄(R1)
+- test_webui_module_start_raises_bind_error_when_port_taken: 端口被占 -> WebUIModule.start 抛 WebUIBindError(启动期 fail-fast); 消息单行且含 host/port/配置键/常见原因/处置; 低层仍返回未就绪句柄(R1); 探针替身注入(不真跑 ss/lsof/powershell), 并断言探针仍被调用一次(诊断接线未断)
 - test_webui_module_bind_diagnosis_block_when_port_taken: 端口被占 -> start 落多行 INFO 诊断块(host/port/配置键/原因/占用者/处置三选一/退出后果), 异常消息不含探针内容
 - test_webui_module_bind_diagnosis_probe_unrecognized: 探针不可用或抛异常 -> 诊断块固定写「未识别」且异常类型/消息不变; 探针失败只写 DEBUG
 - test_webui_module_bind_diagnosis_adds_no_error_events: 探针 found / 抛异常两轮对比, auto_qb 树下 ERROR 条数不变(既有 lifecycle 两条保持原样)
@@ -639,19 +639,32 @@ def test_webui_module_apply_toggle_enabled(monkeypatch):
         assert mgr.web.handle is None
 
 
-def test_webui_module_start_raises_bind_error_when_port_taken(tmp_path):
+def test_webui_module_start_raises_bind_error_when_port_taken(tmp_path, monkeypatch):
     """WebUIModule.start: 端口被占 -> 抛 WebUIBindError(启动期 fail-fast), 消息单行且含关键字段
 
     R1 抛点在模块层: 低层 `start_web_server` 保持「返回 handle」的原契约(其契约守阵在
     test_web_views_reload), 热重载 apply() 复用同一低层函数, 行为不变。
+
+    !探针必须注入替身: 本用例只验消息面, 但生产路径会调 `describe_port_owner` —— Linux 上那会
+    真跑 `ss -ltnp`, 即一条越界的真实系统副作用(CI 曾因此红; Windows 只是被 conftest 的通知器
+    守卫偶然挡住 powershell, 不是设计保证)。注入后仍断言探针被调用一次: 诊断接线被摘掉/绕开
+    时该断言会红, 「不 spawn」与「接线在」两件事同时钉住。
     """
     import socket
 
+    from auto_qb.infra.port_owner import PortProbe
     from auto_qb.webui import stop_web_server
     from auto_qb.webui.server.lifecycle import WebUIBindError
 
     from helpers import make_manager
 
+    probe_calls = []
+
+    def probe(host, _port):
+        probe_calls.append((host, _port))
+        return PortProbe.unavailable("测试替身: 诊断旁路不跑外部命令")
+
+    monkeypatch.setattr("auto_qb.webui.module.describe_port_owner", probe)
     with socket.socket() as holder:  # 占住端口(bind + listen 后不可再绑)
         holder.bind(("127.0.0.1", 0))
         holder.listen(1)
@@ -676,6 +689,10 @@ def test_webui_module_start_raises_bind_error_when_port_taken(tmp_path):
         assert f"web.port={port}" in message and "web.enabled=true" in message, "文案必须含配置键路径"
         assert "同机多实例默认同端口" in message, "常见原因要点明多实例同端口"
         assert "web.enabled: false" in message and "采集不会启动" in message, "处置与退出后果必须可照做"
+        assert probe_calls == [(mgr.config.web.host, port)], (
+            "启动失败诊断仍须调用端口占用者探针(接线被摘掉=诊断面退化); 且调用点必须是"
+            "`auto_qb.webui.module.describe_port_owner`(绕开该符号=替身失效, 真实外部命令会重新跑起来)"
+        )
 
 
 def _start_webui_on_taken_port(tmp_path, monkeypatch, probe, logger_name="auto_qb.webui.module"):

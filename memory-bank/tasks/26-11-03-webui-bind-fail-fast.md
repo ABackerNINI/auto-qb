@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** 已交付(合入 develop 8e6b4bdc): WebUI 启动期 bind 失败 fail-fast + 跨平台占用者诊断
+**Summary:** 已交付(合入 develop 8e6b4bdc): WebUI 启动期 bind 失败 fail-fast + 跨平台占用者诊断; 后续测试面修复: 启动失败用例原先真跑 `ss -ltnp`(Linux CI 的 sidefx 越界) → 注入探针替身 + 接线断言, 零 `src/` 改动
 **Topics:** webui-bind-fail-fast
-**Refs:** memory-bank/plans/26-11-03-0930-plan-webui-bind-fail-fast.html, memory-bank/testing/baselines/26-11-03-1112-webui-bind-fail-fast.md
+**Refs:** memory-bank/plans/26-11-03-0930-plan-webui-bind-fail-fast.html, memory-bank/testing/baselines/26-11-03-1112-webui-bind-fail-fast.md, memory-bank/testing/baselines/26-11-03-2158-webui-bind-fail-fast-ci-sidefx.md
 
 ## 原始请求
 
@@ -58,3 +58,7 @@
 - 实测数字不在此手抄: 全量见 [baselines/26-11-03-1112](../testing/baselines/26-11-03-1112-webui-bind-fail-fast.md), 真机见 [real-baselines/26-11-03-1045](../testing/real-baselines/26-11-03-1045-real-rm01-webui-bind.md)。
 
 - 2026-11-03 11:45 收口 issue 与计划状态，标记已交付
+
+- 2026-11-03 21:59 修复 CI sidefx 越界(越界项 POPEN ss -ltnp): 启动失败用例只验文案、未注入端口探针替身, Linux 上真跑 ss -ltnp; 改为注入 describe_port_owner 替身 + 断言探针仍被调用(host/port), 另补 ss argv 精确守阵; 零 src 改动, 未登记放行清单; 数字见 kb.baseline
+
+- 2026-11-03 22:23 追加: tests/test_tmp_bootstrap.py 模块 docstring 改 raw 前缀清掉 \\T 无效转义(编译期 SyntaxWarning 归零, 字面语义与判据未动); notifier 按命令名拦截 PowerShell 的耦合入池(bug/light, Open, 未挂本档案); 全量数字见 kb.baseline
