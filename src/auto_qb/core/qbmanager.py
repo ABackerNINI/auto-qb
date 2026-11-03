@@ -48,6 +48,7 @@ from ..infra.errors import AutoQbError
 from ..infra.locking import SingleInstanceLock
 from .module import AppContext, EventBus, ModuleHost
 from .modules import (
+    FuseModule,
     GroupingModule,
     LoggingModule,
     MaintenanceModule,
@@ -258,6 +259,11 @@ class QbManager(
         # enabled=false(缺省)零副作用(不探测不建链), 段变化热重载即生效
         self.ctx.relocate = RelocateModule(self.ctx)
         self.host.register(self.ctx.relocate)
+        # 装配清单追加(计划 26-11-03-0456 S2): 已完成种子下载保险丝 —— 认领 post 相位,
+        # 每轮读快照零额外 HTTP; enabled=false(缺省)零动作零 qB 写。挂末尾使其在 grouping
+        # 的 post 检查之后运行(同相位按注册序同步调用)。句柄挂 ctx(S2 显式放行入口经此)。
+        self.ctx.fuse = FuseModule(self.ctx)
+        self.host.register(self.ctx.fuse)
         # 命令唤醒事件(**核心域原语**, 不是表现层的): 投递命令后 set, 主循环不等下个节拍
         # 立即消费一次命令(只走命令线, 不触发 tick —— 见 run() 的双时间线与 wake() 说明)。
         # 托盘 UI 停止时也要用它打断等待, 故留在核心域。

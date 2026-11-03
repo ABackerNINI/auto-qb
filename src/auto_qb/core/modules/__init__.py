@@ -9,6 +9,7 @@
 -> P4 grouping/ops(+checking 并入) -> P5 rules + 刷新管线收口 -> P6 traffic_snapshot(流量快照
 从限速曲线任务手里拿走, 计划 26-10-18-0813 A1; 装配序在 speed_curve 之前 —— 装配序即消费序)。
 """
+from .fuse_mod import FuseModule
 from .logging_mod import LoggingModule
 from .notify_mod import NotifyModule
 from .relocate_mod import RelocateModule
@@ -22,6 +23,7 @@ from .rules_mod import RulesModule
 from .traffic_sample_mod import TrafficSampleModule
 
 __all__ = [
+    "FuseModule",
     "LoggingModule",
     "NotifyModule",
     "TrackerModule",

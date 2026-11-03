@@ -61,11 +61,12 @@ def test_grouping_ops_on_ctx_and_registered():
 
 
 def test_grouping_phases_wired():
-    """transitions/removed_scan/post 三相位各恰有 grouping 一个订阅者
+    """transitions/removed_scan 各恰有 grouping 一个订阅者; post 自 S2 起为 grouping+fuse 两家
 
     订阅在装配点一次性登记(EventBus 持注册期绑定的 handler), 故以登记计数 + emit 返回值
     锁定接线; 行为由本文件其余用例直接验证。torrents_added 相位自 P5 起由四家认领
     (tracker/maintenance/grouping/rules, plan §4.2), 订阅面在 test_modules_p5 锁定。
+    post 相位 S2(计划 26-11-03-0456)追加 fuse(下载保险丝), 故按 phase 给定期望订阅数。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = _mgr(td)
@@ -73,21 +74,23 @@ def test_grouping_phases_wired():
         t = FakeTorrent(hash="H1", name="T1", state="stalledUP", save_path=r"R:\Downloads")
         seed_store(mgr, [t])  # torrents_added 相位直驱 _assign_new_torrent, 需要库内活记录
         payloads = {
-            "transitions": {
+            "transitions": ({
                 "dry_run": True
-            },
-            "removed_scan": {
+            }, 1),
+            "removed_scan": ({
                 "hashes": [],
                 "dry_run": True
-            },
-            "post": {
+            }, 1),
+            "post": ({
                 "dry_run": True
-            },
+            }, 2),  # grouping + fuse(S2)
         }
-        for phase, payload in payloads.items():
+        for phase, (payload, expected) in payloads.items():
             handlers = mgr.events._handlers.get(phase, [])
-            assert len(handlers) == 1, f"{phase} 相位应恰有 grouping 一个订阅者, 实际 {len(handlers)}"
-            assert mgr.events.emit(phase, payload) == 1, f"{phase} 相位广播应触达 1 个订阅者"
+            assert len(handlers) == expected, f"{phase} 相位订阅数应为 {expected}, 实际 {len(handlers)}"
+            assert any(getattr(h, "__self__", None) is mgr.host.get("grouping") for h in handlers), \
+                f"{phase} 相位缺 grouping 订阅"
+            assert mgr.events.emit(phase, payload) == expected, f"{phase} 相位广播应触达 {expected} 个订阅者"
 
 
 def test_transitions_phase_guards_enabled_and_clears_dedup():
@@ -152,7 +155,8 @@ def test_removed_scan_and_post_phases_drive_grouping():
                 mock.patch.object(mod, "_check_download_conflicts") as conflicts:
             assert mgr.events.emit("removed_scan", {"hashes": ["H1"], "dry_run": False}) == 1
             removed.assert_called_once_with(["H1"], False)
-            assert mgr.events.emit("post", {"dry_run": True}) == 1
+            # post 自 S2 起 grouping+fuse 两家; dry_run=True 时 fuse 零动作
+            assert mgr.events.emit("post", {"dry_run": True}) == 2
             save_path.assert_called_once_with(True)
             conflicts.assert_called_once_with(True)
 

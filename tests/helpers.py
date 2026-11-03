@@ -28,6 +28,7 @@ from auto_qb.config.models import AddEpisodeTagsConfig  # noqa: E402  (重导出
 from auto_qb.config.models import RelocateConfig  # noqa: E402  (整组迁移, 计划 26-10-18-1604 §3.7; 默认全关)
 from auto_qb.config.models import TrafficSourceConfig  # noqa: E402  (包 __init__ 未导出)
 from auto_qb.config.models import HrCheckConfig  # noqa: E402  (包 __init__ 未导出 HR 在线核实配置类)
+from auto_qb.config.models import DownloadFuseConfig  # noqa: E402  (S2 保险丝: 模块每轮现读该段)
 from auto_qb.core.qbmanager import QbManager  # noqa: E402
 from auto_qb.core.traffic_source import agent  # noqa: E402
 from auto_qb.rules import ActionResult, RuleContext  # noqa: E402
@@ -1031,6 +1032,7 @@ class FakeConfig:
     # 既有 skip-check 端点用例(期望入队 200)无需逐个补开
     # HR 在线核实(M2 起 QbManager 会读它): 默认关 = 不建端点、不建取数线程, 与真实默认一致
     hr_check = HrCheckConfig()
+    download_fuse = DownloadFuseConfig()  # 已完成种子下载保险丝(默认关, 与真 Config 默认一致)
     data_dir = ""  # 由测试按需设置(HR 站点文件目录从它派生)
 
 

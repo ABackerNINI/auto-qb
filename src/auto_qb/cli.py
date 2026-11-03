@@ -38,6 +38,18 @@ def export_torrents_info(manager: QbManager, output_file: str):
     return True
 
 
+def fuse_release(manager: QbManager, hashes, release_all: bool, dry_run: bool) -> bool:
+    """保险丝显式放行(fuse release <hash> / --all): 连接后由模块按 CAS 恢复 pre_limit 并落 state"""
+    if not manager.connect():
+        logging.error("放行失败: 无法连接 qBittorrent")
+        return False
+    released = manager.ctx.fuse.release(None if release_all else hashes, dry_run=dry_run)
+    if not dry_run:
+        manager.ctx.state.save()
+    logging.info(f"fuse: 已放行 {released} 个条目" + ("(dry-run: 未写 qB/state)" if dry_run else ""))
+    return True
+
+
 def _sigterm_to_keyboardinterrupt(signum, frame):
     """SIGTERM 处理: 转 KeyboardInterrupt, 复用 Ctrl+C 的整条优雅关闭路径(见 _install_sigterm_handler)"""
     # 首个信号后改 SIG_IGN: 清理期间(finally 落盘/停服)再到的 SIGTERM 不打断收尾
@@ -121,6 +133,17 @@ def main():
         "之后结构完好的零行波可正常签发放行; 清单再现非零行时确认戳自动失效; "
         "页头计数可自证空集的站点无需人工确认",
     )
+    parser.add_argument(
+        "--fuse-release",
+        metavar="HASH",
+        help="保险丝显式放行(等价 fuse release <hash>): CAS 恢复写哨兵前的限速, 逗号分隔多个; "
+        "写操作需单独执行(持单实例锁, 生产实例在跑时会冲突)",
+    )
+    parser.add_argument(
+        "--fuse-release-all",
+        action="store_true",
+        help="保险丝显式放行全部条目(等价 fuse release --all), 常与 enabled=false 配合清残留限速",
+    )
     args = parser.parse_args()
 
     if args.tray and (args.export_yaml or args.export_torrents_info):
@@ -139,6 +162,18 @@ def main():
         args.tray or args.export_yaml or args.export_torrents_info or args.hr_once or args.hr_status
     ):
         parser.error("--hr-confirm-empty 与其它 HR 模式互斥(它本身是写操作, 单独执行)")
+    if args.fuse_release and args.fuse_release_all:
+        parser.error("--fuse-release 与 --fuse-release-all 互斥")
+    if (args.fuse_release or args.fuse_release_all) and (
+        args.tray or args.export_yaml or args.export_torrents_info or args.hr_once or args.hr_status or
+        args.hr_confirm_empty
+    ):
+        parser.error("保险丝放行是写操作, 需单独执行(与托盘/导出/HR 模式互斥)")
+    fuse_hashes = []
+    if args.fuse_release:
+        fuse_hashes = [s.strip().lower() for s in args.fuse_release.replace("，", ",").split(",") if s.strip()]
+        if not fuse_hashes:
+            parser.error("--fuse-release 需要至少一个 torrent hash(逗号分隔)")
 
     # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(非托盘模式经 KeyboardInterrupt 在下面捕获;
     # 托盘模式由 TrayUi.run 换装 quit 事件 handler —— 异常路径跳过托盘收尾会挂死进程退出, issue 26-10-31-1030)
@@ -175,6 +210,10 @@ def main():
 
         if args.export_torrents_info:
             return 0 if export_torrents_info(manager, "torrents.txt") else 1
+
+        # 保险丝显式放行(写模式): 先写 state 再让下轮扫描按 released 收敛, 不自动 resume
+        if args.fuse_release or args.fuse_release_all:
+            return 0 if fuse_release(manager, fuse_hashes, args.fuse_release_all, args.dry_run) else 1
 
         # 托盘常驻模式: 第二实例(锁被占)尝试唤起已运行实例的窗口后静默退出
         if args.tray:

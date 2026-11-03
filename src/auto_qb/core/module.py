@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from ..config import Config
     from ..torrents import TorrentStore
     from ..webui.runtime import WebUIRuntime
+    from .modules.fuse_mod import FuseModule
     from .modules.grouping_mod import GroupingModule
     from .modules.notify_mod import NotifyModule
     from .modules.ops_mod import OpsModule
@@ -84,6 +85,9 @@ class AppContext:
         # grouping(P4 起, 计划 26-10-18-1604)是模块句柄: 整组迁移建链后经 ctx.grouping.
         # regroup_scope 强制重归组(免裂组), 与 maintenance/ops 同口径 —— 不 import 兄弟模块
         self.grouping: Optional["GroupingModule"] = None
+        # fuse(S2 起, 计划 26-11-03-0456)是模块句柄: 显式放行入口(fuse release)经 ctx.fuse 调,
+        # 不绕过模块直写 state/qB(与 ops/relocate 同口径)
+        self.fuse: Optional["FuseModule"] = None
 
     @property
     def config(self):

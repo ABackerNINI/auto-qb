@@ -80,7 +80,7 @@ def test_ctx_services_are_same_objects():
         # 计划 26-10-18-1604 P1: relocate(整组迁移)挂清单末尾(P1 只认领段, 引擎随 P2 起)
         assert [m.name for m in mgr.host.modules()] == [
             "logging", "notify", "webui", "hr", "tracker", "traffic_snapshot", "speed_curve", "maintenance", "grouping",
-            "ops", "rules", "qb_traffic", "relocate"
+            "ops", "rules", "qb_traffic", "relocate", "fuse"
         ]
         assert mgr.ctx.notify is mgr.host.get("notify"), "托盘经 ctx.notify 调公开方法(单一真相)"
         assert mgr.ctx.trackers is mgr.host.get("tracker"), "tracker 匹配经 ctx.trackers 服务(决策点 D3)"
