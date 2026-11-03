@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="relocate-same-fs-proof-options">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-2306">
-<meta name="doc-updated" content="26-11-03-2332">
-<meta name="doc-refs" content="memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html">
+<meta name="doc-updated" content="26-11-04-0024">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html, memory-bank/plans/26-11-04-0055-plan-relocate-same-fs-proof.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>整组迁移同机证明：推翻与最小改的可行性对比</h1>
 <p class="lede">该推翻的是判据，不是 mover 架构：剩余空间相等只是代理信号，且比的是 qB 默认保存路径那块卷；改成让 qB 用自己的目录 API 回答「我看不看得见目标路径」即可，改动量与「最小改」同一量级。主方案 D（qB 侧目录探测 + 元数据比对），兜底 A（用户显式声明）。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-2306 · <b>doc-updated</b> 26-11-03-2332 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-2306 · <b>doc-updated</b> 26-11-04-0024 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户实机撞上多成员组「批量移动失败 · 无法证明 auto-qb 与 qB 看到同一块盘」；认为现行同机/共享文件系统预证明过于复杂，要求评估「完全推翻重做」与「最小改」的可行性差异（调研轮，不改代码、不提交）。<br>
   <b>引用</b> 计划 26-11-03-2212 · 设计计划 26-10-18-1604 · 报告 26-10-31-0548
 </div>
@@ -91,7 +91,7 @@
 <p>代码事实：<code>same_volume_proof(qb_free, local_free)</code> 的判据是 <code>abs(qb_free - local_free) &lt;= max(1GiB, local_free*2%)</code>（<a href="file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone4/src/auto_qb/core/modules/relocate_units.py#L702-L714">relocate_units.py L702-L714</a>）。</p>
 <ul>
   <li><strong>假阳</strong>：两块 4TB 盘剩余空间恰好接近（1GiB 绝对容差或 2% 相对容差很容易覆盖）→ 判为同盘。数值相等只说明「两个卷的剩余量接近」，与「是不是同一块盘」没有逻辑蕴含。</li>
-  <li><strong>误放的真实后果</strong>：判据通过后，多成员组会在本机 src 建链接指向 dst；若 qB 其实在另一台机器/容器里，它读到的是另一套路径命名空间，链接解析失败——这正是闸门想防的事故，代理判据却可能放行。</li>
+  <li><strong>误放的真实后果（按场景分层，代价差一个数量级）</strong>：判据通过后，多成员组会在本机 src 建链接指向 dst，但破坏面分三层。①<strong>完全异机 qB</strong>：数据被 qB 搬进它自己命名空间的 dst，本机 dst 无文件，执行链的 verify 阶段（<code>_dst_ready</code> 本机逐文件 stat+比大小，relocate_exec.py L135-L148）先失败——链接一条不建，qB 侧做种无损，代价只是 job 账目与重归组不一致（安全侧，被现有后置防线兜住）；②<strong>容器/映射错位（最贵的一类）</strong>：qB 的 <code>setLocation</code> 已成功把数据搬进容器内部未挂载路径（overlay 层），本机 verify 同样失败，但数据已脱离宿主管理、占双份空间、容器重建即丢，恢复要再整搬一次；③<strong>半对齐（src 可见 dst 不可见）与巧合副本</strong>：全链本机校验都能过，破坏延迟到未来成员经 src 链接写入时爆发（qB 看不到、recheck 失败、孤儿文件）。现行代理判据对 ②③ 无任何拦截能力——这正是闸门想防的事故。</li>
   <li><strong>假阴</strong>：qB 的 <code>free_space_on_disk</code> 来自 <code>sync/maindata</code> 快照，与本机读取之间存在同步周期和写盘漂移；虽然 2% 容差能吸收日常抖动，但大文件写入/删除会直接跨出容差带，产生间歇性误拒（设计文档 §2.4 已承认「完全相等必然间歇性误拒」）。</li>
 </ul>
 <h3>2.2 参数取错：比的是 qB 默认保存路径那块盘</h3>
@@ -212,13 +212,13 @@
     <tr><th>方案</th><th>可靠性 35%</th><th>低侵入 20%</th><th>版本普适 15%</th><th>成本 15%</th><th>可验证 15%</th><th>加权</th></tr>
   </thead>
   <tbody>
-    <tr><td>A 显式声明</td><td>2</td><td>5</td><td>5</td><td>5</td><td>2</td><td>3.0</td></tr>
+    <tr><td>A 显式声明</td><td>2</td><td>5</td><td>5</td><td>5</td><td>2</td><td>3.5</td></tr>
     <tr><td>B 内容/身份比对</td><td>3</td><td>5</td><td>4</td><td>4</td><td>3</td><td>3.7</td></tr>
     <tr><td>C 按路径查空间</td><td>3</td><td>5</td><td>2</td><td>4</td><td>4</td><td>3.6</td></tr>
     <tr><td><b>D 目录内容探测</b></td><td><b>4</b></td><td><b>5</b></td><td><b>4</b></td><td><b>3</b></td><td><b>5</b></td><td class="good"><b>4.2</b></td></tr>
     <tr><td>E 写入探针</td><td>5</td><td>3</td><td>3</td><td>3</td><td>5</td><td>4.0</td></tr>
     <tr><td>F 建链后自检</td><td>4</td><td>4</td><td>4</td><td>4</td><td>4</td><td>4.0</td></tr>
-    <tr><td>G 维持现状+修参数</td><td>2</td><td>5</td><td>5</td><td>5</td><td>2</td><td>3.0</td></tr>
+    <tr><td>G 维持现状+修参数</td><td>2</td><td>5</td><td>5</td><td>5</td><td>2</td><td>3.5</td></tr>
     <tr><td><b>E1 假种探测</b>（E 的具体化）</td><td><b>5</b></td><td>2</td><td>4</td><td>3</td><td><b>5</b></td><td class="good"><b>4.0</b></td></tr>
     <tr><td><b>I 地址放行</b>（新增）</td><td class="bad">1</td><td>5</td><td>5</td><td>5</td><td>2</td><td class="bad">3.2</td></tr>
   </tbody>
@@ -230,14 +230,14 @@
 <ol>
   <li><strong>预检阶段</strong>：把 <code>proved</code> 的来源从 free-space 比值改为「qB 侧目录证据」：
     <ul>
-      <li>对 src：qB 列 <code>save_path</code> 的条目，取本组代表文件，比对 <code>size</code> 与 <code>last_modification_date</code> 与本机 <code>stat</code>（本轮实测同一文件可完全相等，见 §08）。</li>
+      <li>对 src：qB 列<strong>本组 <code>content_root</code>（组自己的内容目录）</strong>的条目，与本机 <code>os.scandir</code> 的 name→(size, mtime) 映射做<strong>集合比对</strong>（条目多时抽 k 个代表文件），比对 <code>size</code> 与 <code>last_modification_date</code>（本轮实测同一文件可完全相等，见 §08）。<strong>不下沉到 <code>save_path</code> 下载根列目录</strong>——多组共存时那会列回数千条目，§8.3 的「超大目录未压测」风险应在设计上消掉而不是留作实测项；组内文件已不齐（二次发起/断点续跑）时按「至少一个代表文件全等」判定，全空目录只走 dst 侧判定。</li>
       <li>对 dst：qB 列目标或其<strong>最近存在祖先</strong>（与现有 <code>_volume_free_resolved</code> 同一上溯机制），只要求「qB 看得见该目录」；dst 叶子尚未创建是正常输入。</li>
       <li>两者都成立 ⇒ 证明 qB 与本进程共享同一命名空间；链接 src→dst 才可能被 qB 解析。任一侧不成立 ⇒ 保留 <code>GATE_SAME_FS</code> 硬拦，但报错改成「qB 列目录失败/404（附 qB 视角路径）」。</li>
     </ul>
   </li>
   <li><strong>路径翻译</strong>：请求前用现有 <code>fs.path_map</code> 把本机路径译成 qB 视角路径；容器场景下这正好暴露「映射缺失」而不是误判。</li>
   <li><strong>运行时兜底（F）</strong>：建链后的 <code>penetrate</code> 阶段增加一次 qB 侧列目录校验；失败按现状保留现场 + <code>failed</code> + 明确原因，不承诺搬回。</li>
-  <li><strong>旧证据降级</strong>：free-space 比值只在 D 不可用时作为<strong>提示</strong>或 legacy fallback，不再单独构成硬拦（除非用户显式选择 legacy 模式）。</li>
+  <li><strong>旧证据降级</strong>：free-space 比值不再单独构成硬拦（仅用户显式选择 legacy 模式时保留）；D 不可用时的降级路径用 <strong>B′（<code>torrents/files</code> 元数据比对）</strong>而非 free-space——用既有成员种子的 <code>torrents/files</code>（全版本可用）+ 本机同路径 <code>stat</code> 比 size。它证不了「qB 现在读得到」（size 来自种子元数据而非实时 FS），但作为兜底严格优于 free-space 代理：至少修掉「比错盘」（默认路径不可读 → -1 必败）与「不同盘剩余空间巧合」两类病，且不碰未文档化端点。</li>
 </ol>
 <h3>6.2 兜底：A 显式声明</h3>
 <p>面向 qB &lt;5.0、远程 qB、NFS/SMB 跨机共享、或 D 端点被未来版本移除的场景。配置层允许用户声明「已确认共享文件系统」，预检回执必须显著标注「未经 auto-qb 验证，由用户承担」。这是逃生通道，不是默认路径。</p>
@@ -270,13 +270,13 @@
 </ul>
 <h3>7.3 既有测试与真机基线</h3>
 <ul>
-  <li><code>same_volume_proof</code> 的单测保留（作为 legacy fallback 的判据），新增 D 的证明函数单测：元数据一致 / 不一致 / 纯列表（无 metadata）/ 404 / 400 / 400 缺参。</li>
+  <li><code>same_volume_proof</code> 的单测保留（仅 legacy 模式判据）；新增 B′（torrents/files 比对）与 D 的证明函数单测：元数据一致 / 不一致 / 纯列表（无 metadata）/ 404 / 400 / 400 缺参。</li>
   <li>真机：56590（5.2.3）可完整验证 D 与 F；C 需要 5.3 实例，本轮无法证实。</li>
   <li>RM04 的「临时改 save_path 再逐字还原」绕法可以退役——D 不再依赖默认路径；基线里该段作为历史快照保留。</li>
 </ul>
 <h3>7.4 老用户行为会不会变</h3>
 <ul>
-  <li><strong>会变宽</strong>：默认保存路径不可读（<code>R:</code> 不存在）但 qB 与本机确实共享 src/dst 的用户，从「必败」变为「通过」。</li>
+  <li><strong>会变宽（待实测闭合，验证前只是推断）</strong>：默认保存路径不可读（本机无 <code>R:</code>）的场景——本轮只实测了 <code>free_space_on_disk = -1</code> 与 <code>C:\</code> 列目录，<strong>未实测 qB 能否列出 <code>R:\Download\PTing</code></strong>。若 qB 自己也读不到 R:，D 会 404 照拒（出路是 <code>assume_shared</code> 或修盘符可见性，但报错从「必败的 -1 比对」变成可操作的 404）；若 qB 能列出而只是取不到剩余空间，D 才真正放行。落地前应在 56590 补一发 <code>getDirectoryContent?dirPath=R:\...</code> 验证，发版说明不要预写「必败 → 通过」。</li>
   <li><strong>会变严</strong>：远端 qB 恰好有相同路径与相近剩余空间的用户，从「可能误放」变为「正确拒绝」——这是修 bug，但需要在发版说明里写清。</li>
   <li>真正跨机的用户需要 <code>fs.path_map</code> 或显式 <code>assume_shared</code>，否则被拒；文案必须给出这两条出路。</li>
 </ul>
@@ -492,6 +492,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-03-2306</span> 初版：只读考古现行 <code>same_volume_proof</code> 判据与取数（relocate_units / relocate_plan / relocate_exec / alias_fs），核实 qB <code>getDirectoryContent</code>、<code>getFreeSpaceAtPath</code>、<code>processInfo</code> 等端点的版本门槛与 56590 实测；给出 A-G 方案对比、1-5 评分矩阵、推荐 D+F 与 A 兜底。来源：本轮会话。</li>
   <li><span class="tag">R1 · 26-11-03-2332</span> 按用户要求追加两个方案并复评：新增 <strong>§10 直接放行本机地址</strong>（12 行候选判据逐项判方向 + 56590 实测 <code>0.0.0.0</code>/LAN/回环/双栈可达性）与 <strong>§11 假种一次性探测 E1</strong>（设计、5.2.3 实测 1.3 s 全生命周期、覆盖性/清理/版本/与 D 对比）；§05 矩阵增补 E1=4.0、I=3.2 并重述排名；§06 增补 6.4 两方案对结论的影响；§12 增补地址定位与 E1 两项待拍板。<strong>结论不变：主方案 D+F，方案 1 仅负向过滤，E1 降为可选严格模式。</strong></li>
+  <li><span class="tag">R2 · 26-11-04-0024</span> R2 评审修订: §05 A/G 加权分算术修正 3.0→3.5; §02.1 误放后果改为三层场景(异机被 verify 兜住/容器 overlay 最贵/半对齐延迟爆发); §6.1 探测粒度下沉 content_root+集合比对, legacy fallback 由 free-space 换 B′(torrents/files 比对); §7.4 R: 放行断言降级为待实测; §7.3 单测口径同步</li>
 </ul>
 
 </div>

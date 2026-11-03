@@ -2,10 +2,10 @@
 
 **Status:** In Progress
 **Added:** 2026-11-03
-**Updated:** 2026-11-03
+**Updated:** 2026-11-04
 **Summary:** 整组迁移同盘证明误拒：根因与修复计划
 **Topics:** backend-relocate-same-fs-proof
-**Refs:** memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html
+**Refs:** memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/plans/26-11-04-0055-plan-relocate-same-fs-proof.html
 
 ## 原始请求
 
@@ -55,3 +55,7 @@ P5 真机与回归：环境 1（D: + R:）用伪造种子做正例、第三卷�
 完成只读定位：`GATE_SAME_FS` 在多成员组硬拦，单成员组因 `FORM_DIRECT` 不受该闸门影响；根因是 `free_space_on_disk` 只代表 qB 默认保存路径卷。56590 只读探针复现「默认路径不可读 ⇒ -1 ⇒ 必拒」分支，并确认 5.2.3 无按路径查剩余空间端点。已产出计划（四方案对比、P1-P5、D1-D7、G1-G11），未改 `src/`。全量测试与基线见 `commands run kb.baseline`。
 
 - 2026-11-03 22:25 只读定位 GATE_SAME_FS 根因（qB 默认保存路径剩余空间代理判据），56590 探针复现 -1 分支，产出四方案对比计划与 grilling 11 问；未改 src/。
+
+- 2026-11-04 00:25 R2 评审修订报告: A/G 评分算术、误放后果三层化、探测粒度 content_root、fallback 换 B′、R: 断言降级待实测
+
+- 2026-11-04 00:58 grilling 两轮拍板 D1-D8, 立分步实施计划 26-11-04-0055(三层证据体系+六期实施)

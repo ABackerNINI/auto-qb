@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>同机证明实施计划:D+F 主方案 + E1 一次性强探测</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-same-fs-proof">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-04-0055">
+<meta name="doc-updated" content="26-11-04-0105">
+<meta name="doc-refs" content="memory-bank/reports/26-11-03-2306-report-relocate-same-fs-proof-options.html, memory-bank/tasks/26-11-03-backend-relocate-same-fs-proof.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-same-fs-proof</div>
+<h1>同机证明实施计划:D+F 主方案 + E1 一次性强探测</h1>
+<p class="lede">主方案 = 报告推荐的 D+F 判据替换(目录元数据每次复查 + 建链后 qB 侧自检);E1 假种探测是叠加的一次性强制增强(按 qB 连接身份缓存),三者合成三层真证据,探测失败零数据移动。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-0055 · <b>doc-updated</b> 26-11-04-0105 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 承接报告 26-11-03-2306(R2 修订版)与 grilling 两轮 11 问;用户拍板「主方案(D+F)+E1 一次性探测,粒度 = qB 连接身份,host/port/凭据变更后首迁重探」(2026-11-04)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>目标</strong>:多成员组迁移的闸门不再依赖「qB 上报剩余空间 ≈ 本机卷剩余」的代理判据,改为可判定的三层证据,并做到——①多成员组首次迁移前必然完成一次 E1 强探测(qB 里加删临时种验证「qB 读得到本机 src、写得到本机 dst」);②qB 连接身份变更后自动重探;③单成员组零打扰;④探测/证明失败时<strong>零数据移动</strong>。</p>
+<p><strong>设计底线(不变量)</strong>:</p>
+<ul>
+  <li><strong>预检只读契约不破</strong>:<code>relocate_precheck</code>(relocate_plan.py:118)保持零副作用;一切带副作用的探测只发生在执行路径。</li>
+  <li><strong>失败 ⇒ 零数据移动</strong>:E1 探测先于建账与 <code>torrents_set_location</code>(relocate_exec.py:639);探测不通过就不建 job、不驱动 qB 搬字节——不回到「搬完才发现、回退=二次全量写盘」的困境。</li>
+  <li><strong>保守默认</strong>:<code>relocate.assume_shared</code> 默认关闭;强制探测不提供 off 开关;越权必须显式。</li>
+  <li><strong>黄金法则 4</strong>:新配置键进 <code>config.validate_config</code> 并同步 <code>config/schema.py</code>(含 UI schema)。</li>
+  <li><strong>单一写线程</strong>:探测结果缓存走 <code>state_file</code> 的模块内 <code>setdefault</code> 单点(仿 relocate_mod.py:70-85),不引入绕开主循环假设的并发代码。</li>
+  <li><strong>闸门 id 稳定</strong>:<code>GATE_SAME_FS</code>(relocate_units.py:52)保留,只换判定来源与文案——测试与前端按 id 断言。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>现行证明链(详见报告 26-11-03-2306 R2):<code>same_volume_proof</code>(relocate_units.py:702-714)用 <code>abs(qb_free - local_free) &lt;= max(1GiB, 2%)</code> 做代理判据,取数取的是 qB <strong>默认保存路径</strong>那块卷(relocate_plan.py:255-260)。三层后果:</p>
+<ul>
+  <li><strong>误拒</strong>:默认路径本机不可读(实测 56590 报 <code>free_space_on_disk = -1</code>)⇒ 必败;反向迁移两侧都对不上。</li>
+  <li><strong>误放</strong>:不同盘剩余空间落进容差带 ⇒ 放行;真正能穿过本机 verify 防线(<code>_dst_ready</code>,relocate_exec.py:135-148)的误放集中在容器半对齐/巧合副本,破坏延迟到未来成员经链接写入时爆发。</li>
+  <li><strong>判据语义错位</strong>:闸门要回答的是「qB 与本机共享文件系统」,数值代理在逻辑上既不充分也不必要。</li>
+</ul>
+<p>执行链现状:verify(本机 stat)→ link → penetrate(本机 stat)→ arm,全部校验都是 auto-qb 视角,没有一个从 qB 侧做(relocate_exec.py:158-190);建链失败不搬回、保留现场 failed(relocate_exec.py:192-197)——预证明必须前置于数据搬移,这是 E1 探测放在执行链最前的根本原因。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 三层证据体系(拍板 D4)</h3>
+<p class="aside">定位:<strong>主方案是 D+F</strong>(判据替换,报告 R2 推荐);E1 不替代 D/F,是叠加的一次性强制增强——机器级强证明按连接身份只探一次,路径级的每次复查仍靠 D,运行时兜底仍靠 F。</p>
+<table>
+  <thead><tr><th>层</th><th>手段</th><th>时机与粒度</th><th>证明什么</th><th>失败语义</th></tr></thead>
+  <tbody>
+    <tr><td><b>E1 一次性强探测</b></td><td>qB 里加删临时种:写探针文件到 src → recheck 通过(证读)→ <code>setLocation</code> 到 dst、本机比对 SHA-1(证写)→ <code>deleteFiles</code> 清理</td><td>第一次<strong>多成员组</strong>迁移执行前,懒触发;缓存键 = qB 连接身份指纹(host+port+username+password/api_key 哈希);指纹变更 ⇒ 下一次多成员迁移前重探</td><td>机器级「qB 与 auto-qb 同机、共享这套文件系统」</td><td>FS 不可达 ⇒ 硬拦 + 缓存失败(同指纹不重试);环境性失败(磁盘满/队列满/权限/超时)⇒ 硬拦不缓存</td></tr>
+    <tr><td><b>D 每次复查</b></td><td><code>app/getDirectoryContent</code> 列本组 content_root,与本机 scandir 做 name→(size, mtime) 集合比对;qB &lt;5.0 / 端点不可用 ⇒ 降级 B′(<code>torrents/files</code> 元数据比对)</td><td>每次多成员迁移预检,只读</td><td>路径级「qB 现在仍看得到这批文件」(兜缓存有效期内的权限/挂载漂移)</td><td>不可判定按现行 conservative 拒绝;端点不可用降级而非拒</td></tr>
+    <tr><td><b>F 运行时兜底</b></td><td>建链后 penetrate 阶段加一次 qB 侧列目录自检(依赖 D 端点;不可用则跳过 qB 侧部分,保留本机穿透)</td><td>每次多成员迁移执行链内</td><td>「qB 能跟随本进程建的这条链接」</td><td>失败保留现场 + failed(现状,不承诺搬回)</td></tr>
+  </tbody>
+</table>
+<p class="aside">同卷证明 <code>same_volume_proof</code> 降级为 legacy 提示(仅用户显式 legacy 模式保留),不再单独构成硬拦;其单测保留。</p>
+<h3>3.2 触发面与缓存模型</h3>
+<table>
+  <thead><tr><th>入口</th><th>位置</th><th>E1 行为</th></tr></thead>
+  <tbody>
+    <tr><td>WebUI 单种子/批量移动</td><td>webui/commands_torrents.py:427 / :660 → <code>relocate_execute</code></td><td>多成员组:执行前查缓存,未命中同步探测;失败回执 blocked</td></tr>
+    <tr><td>规则引擎自动迁移</td><td>rules/actions/transfer.py:32(confirm=False)</td><td>同一闸,无旁路(拍板 D6);首探失败该组按拒绝处理,不 skip 绕过</td></tr>
+    <tr><td>只读预检</td><td>relocate_plan.py:118</td><td>不探测;回执 note「首次执行将做一次性强探测」(拍板 D5)</td></tr>
+  </tbody>
+</table>
+<p><strong>状态结构</strong>:<code>state.data["relocate"]["probes"][指纹哈希] = {"status": "passed|failed", "evidence": {...}, "at": ...}</code>——模块内 <code>_state_probes()</code> <code>setdefault</code> 单点(先例 relocate_mod.py:70-85);新增顶层键,不需要 bump state 版本。</p>
+<p><strong>配置键</strong>:仅新增 <code>relocate.assume_shared: bool = false</code>(逃生口:跳过 E1/D 探测,回执显著标注「未经 auto-qb 验证,由用户承担」);探测本身无开关。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <thead><tr><th>期</th><th>内容</th><th>落点</th><th>验收判据</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><b>P1</b><br>配置与状态</td>
+      <td>①新增 <code>relocate.assume_shared</code>(默认 false)进 validate_config 聚合校验 + schema;②<code>_state_probes()</code> 读写单点(缓存命中/失效/写入,幂等)。</td>
+      <td>config/validation/、config/schema/groups.py(relocate 段 UI)、config/models.py;relocate_mod.py(仿 :70-85 先例)</td>
+      <td>validate_config 对未知/非法值聚合报错;守卫测试(黄金法则 4)过;<code>_state_probes</code> 单测:命中/指纹变更失效/坏条目跳过</td>
+    </tr>
+    <tr>
+      <td><b>P2</b><br>E1 探测模块</td>
+      <td>新模块 <code>relocate_probe.py</code>:①指纹 = sha1(host|port|username|password/api_key);②造种:单文件 4KiB、piece 16KiB、手工 bencode、<code>info.name = aqb-probe-&lt;rand&gt;.bin</code>、tag <code>aqb-probe</code>(常量单点);③生命轮询:文件写入 src(固定前缀临时子目录,拍板 D8)→ add(paused/stopped 兼容、autoTMM=false、category 空、无 tracker)→ recheck 至 progress=1.0(证读)→ <code>setLocation(dst)</code> 轮询本机 dst 出现文件 + SHA-1 比对 + src 消失(证写)→ <code>deleteFiles=true</code> → 轮询种子消失 → rmdir 空目录 → 无残留断言;④失败二分:FS 不可达 vs 环境性(add 被拒/磁盘满/队列满/权限/超时);⑤总超时预算(常态 ~1.3s,上限收敛,见 §07-R4);⑥启动残留扫描:启动时按 tag 清 aqb-probe 种子。qbapi.py 加薄封装(与 get_alt_speed_limits 同风格,app_preferences 裸调先例 qbapi.py:394)。</td>
+      <td>src/auto_qb/core/modules/relocate_probe.py(新);core/qbapi.py</td>
+      <td>单测(FakeClient):全生命通过 / recheck 不进 1.0(读失败,缓存 failed)/ dst 不出现(写失败)/ add 被拒(环境性,不缓存)/ 超时 / 各阶段中断后清理 / 启动扫描清残留</td>
+    </tr>
+    <tr>
+      <td><b>P3</b><br>执行链接入</td>
+      <td><code>relocate_execute</code> 内 evaluate 通过后、<code>_start_job</code> 前:多成员组且未开 assume_shared ⇒ <code>ensure_probe</code>(缓存查 → 未命中跑 E1);失败 ⇒ 回执 blocked(复用 <code>GATE_SAME_FS</code>,文案按失败二分),<strong>不建 job</strong>。单成员组跳过。预检 <code>relocate_precheck</code>:<code>proved</code> 来源换 D(降级链 D→B′),回执 note 标注「首次执行将做一次性强探测」。</td>
+      <td>relocate_exec.py:486-563 区段;relocate_plan.py:118、:244-260</td>
+      <td>test_relocate_exec_run.py 新增:首探触发并建 job / 探测失败零 job 零 setLocation / 单成员零探测 / assume_shared 跳过 / 缓存命中零探测调用 / 指纹变更后重探</td>
+    </tr>
+    <tr>
+      <td><b>P4</b><br>F 运行时兜底</td>
+      <td>penetrate 阶段(<code>_step_moved</code> 的 stage=="penetrate")加 qB 侧列目录自检:qB 列 src content_root 与本机 stat 比对;端点不可用(404 语义区分)/ qB&lt;5.0 ⇒ 跳过 qB 侧部分,保留本机穿透。</td>
+      <td>relocate_exec.py:179-185、:245-255</td>
+      <td>相位机测试:qB 侧校验失败 ⇒ 保留现场 + failed + 原因可读;端点不可用 ⇒ 行为与现状一致</td>
+    </tr>
+    <tr>
+      <td><b>P5</b><br>文案与回执</td>
+      <td><code>GATE_SAME_FS</code> 文案可操作化(区分「qB 列目录/探测 404 看不见」vs「探测环境性失败」),给出 path_map / assume_shared 两条出路;webui 回执 truth 结构断言同步。</td>
+      <td>relocate_units.py:494-504;webui/commands_torrents.py:391-411</td>
+      <td>test_web_relocate.py 回执结构用例过;文案断言按 gate id 不按全文</td>
+    </tr>
+    <tr>
+      <td><b>P6</b><br>真机与收尾</td>
+      <td>56590(5.2.3)全流程:首迁触发探测 → 迁移 → qB 内无 aqb-probe 残留;指纹变更(改 port)重探;补 <code>getDirectoryContent?dirPath=R:\...</code> 闭合报告 §7.4 的待实测项;test.full + 基线切片;报告/README 回写。</td>
+      <td>—</td>
+      <td>真机探测无残留;基线切片记实测;<code>commands run test.full</code> 绿</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无遗留——本轮 grilling 全部决策已拍板并迁 §06(D1-D8);实现层的两个备选(探测同步 vs 异步相位、超时上限具体值)按 §07-R4 的默认执行,实现时若真机实测压不住再回此清单。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <thead><tr><th>#</th><th>结论</th><th>日期</th></tr></thead>
+  <tbody>
+    <tr><td>D1</td><td>E1 为<strong>一次性</strong>探测,懒触发:第一次多成员组迁移执行前;开关翻转不触发</td><td>2026-11-04</td></tr>
+    <tr><td>D2</td><td>仅多成员组触发并强制;单成员组不触发、不被拦(维持 note 语义)</td><td>2026-11-04</td></tr>
+    <tr><td>D3</td><td>失效指纹 = host+port+username+password/api_key 哈希,任一变化 ⇒ 下一次多成员迁移前重探一次;qB 重启不失效,不做 launch_time 检测</td><td>2026-11-04</td></tr>
+    <tr><td>D4</td><td>组合口径:E1 一次性机器级强证明 + D 每次多成员迁移预检复查(降级链 D→B′)+ F 运行时兜底不变;same_volume_proof 降级 legacy</td><td>2026-11-04</td></tr>
+    <tr><td>D5</td><td>探测在 <code>relocate_execute</code> 内、建账与 setLocation 之前同步执行;预检保持只读</td><td>2026-11-04</td></tr>
+    <tr><td>D6</td><td>规则引擎自动迁移走同一闸,无旁路;首探失败该组按拒绝处理</td><td>2026-11-04</td></tr>
+    <tr><td>D7</td><td>失败语义:FS 不可达 ⇒ 硬拦+缓存失败(同指纹不重试);环境性失败 ⇒ 硬拦不缓存;<code>relocate.assume_shared=true</code> 跳过探测并标注「未经验证」;无 off 开关</td><td>2026-11-04</td></tr>
+    <tr><td>D8</td><td>探测文件写入 dst 下固定前缀临时子目录(非 dst 根散落),rmdir 收尾,残留按前缀+tag 扫描</td><td>2026-11-04</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <thead><tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr></thead>
+  <tbody>
+    <tr><td>R1</td><td>探测种子污染用户 qB(自动分类/通知/队列上限被触发)</td><td>用户 qB 配有分类规则或分享限制</td><td>paused/stopped + autoTMM=false + category 空 + 无 tracker + tag 隔离;文档写明「aqb-probe 种子出现数秒属预期」</td></tr>
+    <tr><td>R2</td><td>探测中途崩溃留残留(种子+文件)</td><td>add 之后 delete 之前进程被杀</td><td>启动扫描按 tag 清理(P2-⑥);同指纹下次迁移重探,失败缓存不阻塞人工</td></tr>
+    <tr><td>R3</td><td><code>getDirectoryContent</code> 未文档化端点被未来版本移除</td><td>qB 升级后 D/F 失效</td><td>降级链已内建:D→B′(torrents/files),F 退回本机穿透;E1 不依赖该端点</td></tr>
+    <tr><td>R4</td><td>探测同步阻塞执行线,HTTP 命令时延被放大</td><td>轮询超时上限过大 + qB 响应慢</td><td>常态 ~1.3s(报告 §11 实测);各阶段独立短超时、总预算收敛;真机实测若压不住 HTTP 时延 ⇒ 回 §05 改「PROBING 独立相位异步推进」(备选,默认同步)</td></tr>
+    <tr><td>R5</td><td>并发首探重复加种</td><td>两个多成员组同 tick 首迁</td><td>单一写线程假设下 execute 串行;ensure_probe 幂等(先查缓存后写);同指纹去重</td></tr>
+    <tr><td>R6</td><td>探测被误判「FS 不可达」并缓存,用户环境修复后仍被拦</td><td>网络/挂载抖动导致一次误判</td><td>failed 缓存随指纹变更失效;GATE 文案给出「删除 state.relocate.probes 对应指纹或改连接配置强制重探」的人工出口</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-0055</span> 初版:承接报告 26-11-03-2306 R2 与 grilling 两轮 11 问,用户拍板 D1-D8(一次性 E1 按连接身份缓存、懒触发、仅多成员组、凭据入指纹、重启不失效、D/F 保留、执行链前置、assume_shared 唯一越权);定三层证据体系、六期实施(P1 配置状态 / P2 探测模块 / P3 执行链接入 / P4 F 兜底 / P5 文案回执 / P6 真机收尾)与六条风险对策。来源:本会话。</li>
+  <li><span class="tag">R1 · 26-11-04-0105</span> 标题与定位修正: 主方案为 D+F(判据替换), E1 不是主方案而是叠加的一次性强制增强探测</li>
+</ul>
+
+</div>
+</body>
+</html>
