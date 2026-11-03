@@ -4,12 +4,11 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (63)
+## Open (62)
 
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](../26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。
-- [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行
 - [docs] [第三次评审计划 域表分项合计 478 与总数 479 不符(漏记 finalize_watch.py)](../26-11-03-0704-docs-plan-domain-table-count.html) — 计划 02 节 10 行分项相加 478, git 实测代码面 479; 差额为 src/auto_qb/tools/finalize_watch.py 未列行
 - [docs] [12 个拆分残片被 git 判为 rename(R051-R072), 配对表不能按 1:1 改名解读](../26-11-03-0704-docs-split-residue-rename.html) — 拆分提交中仅一个目标桶被 -M50% 判为 rename, 其余为 A/D; 相似度 51-72%, 非等价移动
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
@@ -75,8 +74,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (361)
+## Done (362)
 
+- [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行
 - [test] [e2e 大表/详情类既有红: dt-live #10/#12 与 dt11 树表批量(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-big-table-existing-red.html) — dt-live-update #10 千文件勾选单行、#12 千文件窗口化、drawer dt11 树表批量: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [test] [e2e 右键菜单类既有红: ctx-custom 19≠20 与 menus CTX 两例(双皮肤, 与端口改造无关)](../26-11-03-0559-test-e2e-ctx-menu-existing-red.html) — ctx-custom 定制块 19≠20、menus CTX-04/05/06 strict mode 双命中、CTX-sub 整盒收进视口: HEAD 95499056 上同样红, 6 条(3 用例×双皮肤)
 - [bug] [搜索未归组命中转归组后重复展示, 删除命中后虚拟行滞留](../26-11-03-0254-bug-search-uncovered-stale-virtual-row.html) — 未归组命中转归组后同屏出现真实组行与陈旧虚拟行(重复一次); 删除命中后虚拟行滞留到下一次搜索

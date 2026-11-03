@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-0802">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-drawer-window">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-11-03-0852-webui-drawer-rowafter-dead-hook.md, memory-bank/testing/baselines/26-11-03-0910-webui-drawer-rowafter-dead-hook.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行">
 <meta name="issue-summary" content="dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行">
 <title>抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行 · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题 · bug</div>
     <h1>抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行</h1>
     <p class="lede">dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0802-bug-drawer-rowafter-dead-hook</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 08:02</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -169,11 +169,22 @@ drawer_tpl/11-content-treegrid-batch-low.js:637 rowAfterFn: rowAfterFn,</code></
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 08:02 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 08:52 — 认领（用户直接指派「认领并修复」），状态 <strong>In Progress</strong></li>
+      <li>2026-11-03 08:52 — 已修并验证，状态 <strong>Done</strong>（实际修法见下）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-03 08:52 仍复现：修前调用点仍是 <code>dtRowAfter($root.dtBridgeTbl(tab), $event)</code>；node 探针实测传 table id（<code>drawerContentV11</code>）时 <code>dtBridgeDef</code> 返回 <code>null</code>、<code>rowAfterFn</code> 调用 0 次，传页签 key（<code>content</code>）时命中。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（采纳建议①）</strong>：<code>src/auto_qb/webui/static/shared/tpl/xtpl.html:362</code> 的桥表 mounted 钩子改为
+    <code>@vue:mounted="$root.dtRowAfter(tab, $event)"</code>，把页签 key 交给 <code>dtRowAfter</code>，与
+    <code>dtBridgeDef</code>/<code>dtBridgeTbl</code>/<code>dtBridgeSegs</code> 等桥方法「只认页签 key」的契约一致。
+    <code>tab</code> 是 <code>aq-dt-bridge</code> 组件的 prop（<code>table.js</code> 以 <code>:tab="t.v"</code> 传入），作用域已确认；
+    <code>drawer_templates.js</code> 零改动（未采纳建议②：让 <code>dtRowAfter</code> 改吃 table id 会让同族桥方法参数口径分叉）。</p>
+    <p><strong>回归守阵</strong>：<code>tests/test_webui_static_dom_panel_drawer.py::test_drawer_tpl_row_after_hook_wiring</code> —— 静态钉住模板调用点传
+    <code>tab</code>（并拦住 <code>$root.dtBridgeTbl(tab)</code> 回潮）+ node 电池真跑：<code>dtRowAfter("content")</code> 命中 <code>rowAfterFn</code>、
+    <code>dtRowAfter("drawerContentV11")</code> 不命中（旧死链行为钉死）；已登记该文件头部「## 测试计划」。</p>
+    <p><strong>验证方式与测试数字</strong>：抽屉/布局/表格三个静态守阵文件定向全绿；全量 <code>commands run test.full</code> 通过，数字见
+    <code>commands run kb.baseline</code> 最新切片（数字只写基线一处）。</p>
   </section>
 
   <footer>
