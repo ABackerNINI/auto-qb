@@ -4,8 +4,10 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (61)
+## Open (63)
 
+- [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](../26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型
+- [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](../26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](../26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。

@@ -5,7 +5,7 @@
 **Updated:** 2026-11-03
 **Summary:** 全量代码评审第三轮 S2：B1（18）/ B2（25）/ B3（9）/ B4（11）后端批次评审，区间 `bf9920d3..812ad785`，零代码改动
 **Topics:** memory-bank-code-review-3-s2
-**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s3.md
 
 ## 原始请求
 

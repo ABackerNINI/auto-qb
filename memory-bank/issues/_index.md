@@ -19,10 +19,10 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 11 |
+| bug | 12 |
 | perf | 5 |
 | docs | 9 |
-| test | 4 |
+| test | 5 |
 | refactor | 4 |
 | feat | 20 |
 | chore | 2 |
@@ -30,6 +30,8 @@
 
 ## Open
 
+- [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.…
+- [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncov…
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api…
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 pa…
 - [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后,…
