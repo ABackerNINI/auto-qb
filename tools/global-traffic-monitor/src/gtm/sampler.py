@@ -3,7 +3,7 @@
 每次采样 (sample_once; 休眠循环随 S2 run 命令落地, 节奏取 sample_interval
 默认 5s) 读全适配器计数器 (默认注入点经 nic.default_providers 平台决议: Windows 原生
 GetIfTable2 整表单读, 非 Windows/回退为 psutil 两次调用, 见 issue 26-10-20-2345),
-按 AdapterFilter 过滤后按**逐网卡基线**记账, 维护三条状态:
+按 AdapterFilter 过滤后按**逐网卡基线**记账, 维护三条记账状态与一条只读观测:
 
 - 逐网卡基线 (_nic_base): {网卡名: (last_up, last_down)}; 每轮对选中卡逐卡做差
   delta = cur - last 后求和入账。新出现的卡只立基线 (历史累计不入账); 消失的卡
@@ -14,6 +14,9 @@ GetIfTable2 整表单读, 非 Windows/回退为 psutil 两次调用, 见 issue 2
   (SampleResult.day_rolled=True 上报, 旧行的最终落盘属 S2 storage)。硬切带方向检查:
   只有日界**前进**才切; 挂钟回跳跨日界记 WARNING 且保持累计不清零 (采样日钉在原
   日界, 与 restore 的未来日期降级同一防线, 宁可少报不重置).
+- 速率告警 (C-prime, S5): 单卡单方向 delta/eff_dt 严格大于 sample_rate_warn_bps
+  (默认 1GiB/s, eff_dt = min(dt, 3 × sample_interval)) 只写 WARNING 与 last_spike,
+  **不改 delta/day 入账**; 时钟跳变/陈旧 state 跳过判定。
 
 崩溃恢复 (S2 run 启动链路接入, 两步有序):
 - restore(snapshot): 用 state.json 载荷 (本模块 snapshot() 产出, S2 负责读写)

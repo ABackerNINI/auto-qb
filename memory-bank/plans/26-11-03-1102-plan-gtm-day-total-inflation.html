@@ -7,10 +7,10 @@
 <title>GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="gtm-day-total-inflation">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-1102">
-<meta name="doc-updated" content="26-11-03-1211">
-<meta name="doc-refs" content="memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html">
+<meta name="doc-updated" content="26-11-03-2120">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html, memory-bank/tasks/26-11-03-backend-gtm-day-total-inflation.md, memory-bank/pitfalls/backend/gtm-total-baseline.md, memory-bank/testing/baselines/26-11-03-2148-gtm-day-total-inflation.md">
 <style>
   :root {
     --bg: #10151a;
@@ -77,7 +77,7 @@
 <h1>GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）</h1>
 <p class="lede">主修法不变：把「过滤后合计差分」拆成「逐网卡差分再求和」。v2 的三项修订（速率口径、可见告警、overlay 配置迁移）继续保留；v3 只改告警的<b>主告知面</b>：从「设置页一行」移到 auto-qb 主界面底部状态栏的常驻横幅/徽标，数据经流量快照追加的可选字段 <code>gtm_anomaly</code> 传递；设置页行与 GTM <code>/status</code> 降为次级详情，日志仍只作取证。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-1102 · <b>doc-updated</b> 26-11-03-1211 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-1102 · <b>doc-updated</b> 26-11-03-2120 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令（2026-11-03）：v1 三点被否后出 v2；v3 再否「告警只落在设置页」，要求常驻可见通道；其余三项默认（1 GiB/s、24h 展示窗口、3× 钳制）保持不变<br>
   <b>关联</b> memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html（症状/证据/根因取证在 issue，本文不复述全部证据）<br>
   <b>拍板</b> D1=A（逐网卡基线） · D2=C-prime（速率口径、只告警） · D3=<b>顶栏常驻横幅</b>（快照 <code>gtm_anomaly</code>） · D4=overlay 配置迁移
@@ -317,7 +317,7 @@ self._day_up += delta_up; self._day_down += delta_down</code></pre>
   <li>阈值从 <code>ConfigHolder.current.sample_rate_warn_bps</code> 每轮读取，热改立即生效。</li>
 </ul>
 <h3>6.6 用户可见通道（v3：主告知必须是常驻面）</h3>
-<p>v2 把主告知放在设置页「工具状态」行 + 打开设置页时 toast。用户否决：<b>设置页不常访问，24h 展示窗口等于没有</b>。v3 把主告知移到 auto-qb 主界面的底部状态栏——只要打开 WebUI 就看到，不需要进设置页；设置页行与 GTM <code>/status</code> 降为次级详情，日志仍只作取证。其余三项默认（1 GiB/s、24h、3× 钳制）保持不变。</p>
+<p>v2 把主告知放在设置页「工具状态」行 + 打开设置页时 toast。用户否决：<b>设置页不常访问，24h 展示窗口等于没有</b>。v3 把主告知移到 auto-qb 主界面的底部状态栏——只要打开 WebUI 就看到，不需要进设置页；<b>主告知是状态栏常驻横幅，设置页不是唯一入口</b>。设置页行与 GTM <code>/status</code> 降为次级详情，日志仍只作取证。其余三项默认（1 GiB/s、24h、3× 钳制）保持不变。</p>
 <h4>6.6.1 候选对比（成本 / 爆炸半径 / 失败降级）</h4>
 <table>
   <tr><th>#</th><th>候选</th><th>数据来源与传递路径</th><th>成本</th><th>爆炸半径</th><th>失败降级</th><th>结论</th></tr>
@@ -553,20 +553,21 @@ Get-Content &lt;data_dir&gt;\gtm.log -Tail 20
 
 <h2><span class="no">§11</span>分阶段实施步骤</h2>
 <table>
-  <tr><th>步</th><th>内容</th><th>验证命令</th><th>判定</th><th>回滚点</th></tr>
-  <tr><td>S0</td><td>先落测试：按 §09 改写 2 条主用例 + 新增 T1/T2/T4/T8，跑红</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py --no-cov -q</code></td><td>失败点正是旧语义（1999/100/恢复首包）</td><td>丢弃测试改动</td></tr>
-  <tr><td>S1</td><td>sampler：<code>_nic_base</code>/<code>_nic_seen</code>/<code>_state_restored</code>，重写 <code>sample_once</code> 差分；<code>SNAPSHOT_VERSION=2</code>；<code>snapshot()</code>/<code>restore()</code> 双版本</td><td>同上 + <code>tests/test_sampler.py</code> 全量</td><td>T1/T2/T4/T7/T8/T10 绿；旧日志文案不变</td><td>revert S1</td></tr>
-  <tr><td>S2</td><td>storage：<code>recover</code> 兜底条件改 <code>state_restored/day</code>（§04.3）；确保 v1 升级不走 dat 回退</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_storage.py --no-cov -q</code></td><td>v1 升级用例 day 保留；缺失/损坏仍 dat 兜底</td><td>revert S2</td></tr>
-  <tr><td>S3</td><td>补完 T3/T5/T6/T9/T13 与快照往返断言；工具全量</td><td><code>commands run test.gtm</code></td><td>TOTAL 绿且覆盖率 ≥88</td><td>revert 测试</td></tr>
-  <tr><td>S4</td><td><b>真机断连复验</b>（不改生产配置）：拔网线/禁用网卡 ≥1 个采样周期再恢复，观察 state/dat</td><td>只读 <code>state.json</code>、<code>history_traffic.dat</code>；见 §9.3 判据</td><td><code>day - last</code> 不再出现恒定正偏移；当日增量≈真实增量</td><td>无（只观测）</td></tr>
-  <tr><td>S5</td><td>速率阈值：<code>units.py</code> parse/format speed + <code>config.py</code> 字段/<code>_RATE_FIELDS</code>/<code>_check_rate</code> + sampler <code>_dt_since_last</code>/<code>_evaluate_rate</code>；T11/T12/T15-T21</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py tests/test_config.py --no-cov -q</code></td><td>速率告警出现且入账不变；dt 场景逐条符合 §06.3</td><td>revert S5</td></tr>
-  <tr><td>S6</td><td>配置升级：<code>ensure_v2_overlay</code> + <code>load_config(overlay)</code> + <code>save_config</code> 拆分；T23-T26</td><td>工具测试；手工查看 <code>config.yml</code> 与 <code>config.v2.yml</code></td><td>overlay 首次创建、二次幂等；主文件无新键；旧版校验模拟通过</td><td>revert S6（删除 overlay 即回到单文件）</td></tr>
-  <tr><td>S7</td><td><b>次级可见面</b>：state <code>last_spike</code> + GTM <code>/status</code> 透传 + <code>traffic-card.html</code> 一行 + <code>config_hub_tm.js</code> helper/表单 kind speed；T27</td><td><code>commands run test.gtm</code> + <code>commands run test.quick</code> + 打开设置页目视</td><td>设置页能看到「最近异常」；24h 外隐藏；无告警时不渲染该行</td><td>revert S7（模板/JS 纯增量）</td></tr>
-  <tr><td>S7b</td><td><b>主告知数据链路</b>：<code>agent.fetch_last_spike()</code> + 快照 <code>gtm_anomaly</code> 段 + <code>refresh()</code> 钩子；T28-T31/T33/T34</td><td>主仓测试（快照模块单测 + 静态守卫）</td><td>只增字段；不可达保留旧值；旧字段缺失为 <code>None</code>；流量刷新不中断</td><td>revert S7b（快照/agent 纯增量）</td></tr>
-  <tr><td>S7c</td><td><b>主告知渲染</b>：<code>statusbar.html</code> 常驻横幅 + <code>dialogs.js</code> helper/ack + CSS；T32 e2e</td><td><code>commands run test.quick</code> + <code>npm run test:e2e:fast</code> + 双皮肤目视</td><td>无异常不渲染；有异常常驻；<code>&times;</code> 后本机隐藏且跨刷新保持；新 <code>ts</code> 再显示；窄屏不挤压速度组</td><td>revert S7c（模板/JS/CSS 纯增量）</td></tr>
-  <tr><td>S8</td><td>日志文件 handler（§08）+ T14</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_main_run.py --no-cov -q</code>；真机 <code>Get-Content gtm.log -Tail 20</code></td><td>重启后文件存在、含启动行；WARNING 可见</td><td>revert S8（纯增量）</td></tr>
-  <tr><td>S9</td><td>文档回写：<code>sampler.py:29-31</code> 抖动说明改写；<code>memory-bank/</code> 口径；issue 状态日志补「已修复 + 实测数字」；新基线切片</td><td><code>commands run kb.index</code> / <code>commands run test.full</code>（若触发收尾）</td><td>文档与代码一致；基线切片记实测</td><td>revert 文档</td></tr>
+  <tr><th>步</th><th>内容</th><th>验证命令</th><th>判定</th><th>回滚点</th><th>状态 / 提交</th></tr>
+  <tr><td>S0</td><td>先落测试：按 §09 改写 2 条主用例 + 新增 T1/T2/T4/T8，跑红</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py --no-cov -q</code></td><td>失败点正是旧语义（1999/100/恢复首包）</td><td>丢弃测试改动</td><td><span class="good">Done</span> · f71517c4</td></tr>
+  <tr><td>S1</td><td>sampler：<code>_nic_base</code>/<code>_nic_seen</code>/<code>_state_restored</code>，重写 <code>sample_once</code> 差分；<code>SNAPSHOT_VERSION=2</code>；<code>snapshot()</code>/<code>restore()</code> 双版本</td><td>同上 + <code>tests/test_sampler.py</code> 全量</td><td>T1/T2/T4/T7/T8/T10 绿；旧日志文案不变</td><td>revert S1</td><td><span class="good">Done</span> · b427f33a</td></tr>
+  <tr><td>S2</td><td>storage：<code>recover</code> 兜底条件改 <code>state_restored/day</code>（§04.3）；确保 v1 升级不走 dat 回退</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_storage.py --no-cov -q</code></td><td>v1 升级用例 day 保留；缺失/损坏仍 dat 兜底</td><td>revert S2</td><td><span class="good">Done</span> · 29bde200</td></tr>
+  <tr><td>S3</td><td>补完 T3/T5/T6/T9/T13 与快照往返断言；工具全量</td><td><code>commands run test.gtm</code></td><td>TOTAL 绿且覆盖率 ≥88</td><td>revert 测试</td><td><span class="good">Done</span> · c26d8cfa</td></tr>
+  <tr><td>S4</td><td><b>真机断连复验</b>（不改生产配置）：拔网线/禁用网卡 ≥1 个采样周期再恢复，观察 state/dat</td><td>只读 <code>state.json</code>、<code>history_traffic.dat</code>；见 §9.3 判据</td><td><code>day - last</code> 不再出现恒定正偏移；当日增量≈真实增量</td><td>无（只观测）</td><td><span class="warn">未执行</span>（需物理断网；本流水线不覆盖，不阻塞代码验收）</td></tr>
+  <tr><td>S5</td><td>速率阈值：<code>units.py</code> parse/format speed + <code>config.py</code> 字段/<code>_RATE_FIELDS</code>/<code>_check_rate</code> + sampler <code>_dt_since_last</code>/<code>_evaluate_rate</code>；T11/T12/T15-T21</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_sampler.py tests/test_config.py --no-cov -q</code></td><td>速率告警出现且入账不变；dt 场景逐条符合 §06.3</td><td>revert S5</td><td><span class="good">Done</span> · 3bce4a06</td></tr>
+  <tr><td>S6</td><td>配置升级：<code>ensure_v2_overlay</code> + <code>load_config(overlay)</code> + <code>save_config</code> 拆分；T23-T26</td><td>工具测试；手工查看 <code>config.yml</code> 与 <code>config.v2.yml</code></td><td>overlay 首次创建、二次幂等；主文件无新键；旧版校验模拟通过</td><td>revert S6（删除 overlay 即回到单文件）</td><td><span class="good">Done</span> · 1a687e50</td></tr>
+  <tr><td>S7</td><td><b>次级可见面</b>：state <code>last_spike</code> + GTM <code>/status</code> 透传 + <code>traffic-card.html</code> 一行 + <code>config_hub_tm.js</code> helper/表单 kind speed；T27</td><td><code>commands run test.gtm</code> + <code>commands run test.quick</code> + 打开设置页目视</td><td>设置页能看到「最近异常」；24h 外隐藏；无告警时不渲染该行</td><td>revert S7（模板/JS 纯增量）</td><td><span class="good">Done</span> · 88baad0f</td></tr>
+  <tr><td>S7b</td><td><b>主告知数据链路</b>：<code>agent.fetch_last_spike()</code> + 快照 <code>gtm_anomaly</code> 段 + <code>refresh()</code> 钩子；T28-T31/T33/T34</td><td>主仓测试（快照模块单测 + 静态守卫）</td><td>只增字段；不可达保留旧值；旧字段缺失为 <code>None</code>；流量刷新不中断</td><td>revert S7b（快照/agent 纯增量）</td><td><span class="good">Done</span> · eb6d6735</td></tr>
+  <tr><td>S7c</td><td><b>主告知渲染</b>：<code>statusbar.html</code> 常驻横幅 + <code>dialogs.js</code> helper/ack + CSS；T32 e2e</td><td><code>commands run test.quick</code> + <code>npm run test:e2e:fast</code> + 双皮肤目视</td><td>无异常不渲染；有异常常驻；<code>&times;</code> 后本机隐藏且跨刷新保持；新 <code>ts</code> 再显示；窄屏不挤压速度组</td><td>revert S7c（模板/JS/CSS 纯增量）</td><td><span class="good">Done</span> · c040cce7</td></tr>
+  <tr><td>S8</td><td>日志文件 handler（§08）+ T14</td><td><code>uv run --directory tools/global-traffic-monitor pytest tests/test_main_run.py --no-cov -q</code>；真机 <code>Get-Content gtm.log -Tail 20</code></td><td>重启后文件存在、含启动行；WARNING 可见</td><td>revert S8（纯增量）</td><td><span class="good">Done</span> · 75cc0f77（提交记为 S6 日志）</td></tr>
+  <tr><td>S9</td><td>文档回写：<code>sampler.py:29-31</code> 抖动说明改写；<code>memory-bank/</code> 口径；issue 状态日志补「已修复 + 实测数字」；新基线切片</td><td><code>commands run kb.index</code> / <code>commands run test.full</code>（若触发收尾）</td><td>文档与代码一致；基线切片记实测</td><td>revert 文档</td><td><span class="good">Done</span>（随本专题入库）</td></tr>
 </table>
+<p><b>实施状态</b>：除 <b>S4</b>（真机断连观测，需物理断网 ≥1 个采样周期）外全部完成；S4 只观测、不改码，不阻塞代码验收。各步提交均在本分支 <code>feat/gtm-day-total-inflation</code>。</p>
 <p><b>建议顺序理由</b>：S0-S4 是主修复且相互耦合，先做完并真机复验，保证「先有正确的 delta」；S5 叠加速率观测，S6 叠加配置升级；S7 先把告警接到 GTM 与次级设置页（可独立验收），S7b/S7c 再把主告知接到状态栏并做前端行为验收，S8 最后补日志。任何一步失败都能单独 revert，且 S5/S6/S7/S7b/S7c 都不改变 dat 契约。</p>
 
 <h2><span class="no">§12</span>风险、回滚与不做清单</h2>
@@ -634,6 +635,7 @@ Get-Content &lt;data_dir&gt;\gtm.log -Tail 20
   <li><span class="tag">R0 · 26-11-03-1102</span> 初版：依据 issue <code>26-11-03-1039</code> 的取证结论与用户拍板（A + C-prime）编写；范围只到方案，未实施代码、未改测试、未提交。</li>
   <li><span class="tag">R1 · 26-11-03-1147</span> v2 按用户否决点修订：阈值由绝对字节改为速率口径(1GiB/s, delta/eff_dt, 长gap 3倍间隔钳制)、告警落到设置页 /status.last_spike 可见面、新键改走 config.v2.yml overlay 程序化迁移且主 config.yml 零改写；新增 §13 否决点与改法并保留 v1 原文摘录。</li>
   <li><span class="tag">R2 · 26-11-03-1211</span> v3 按「告警不得只在设置页」修订：主告知改为 auto-qb 顶栏常驻横幅（快照追加 gtm_anomaly，只增不改），设置页行与 GTM /status 降为次级；新增候选对比、契约兼容与 T28-T34 测试。</li>
+  <li><span class="tag">R3 · 26-11-03-2120</span> S9 收尾：实施阶段标为完成并附 commit（S0 f71517c4 / S1 b427f33a / S2 29bde200 / S3 c26d8cfa / S5 3bce4a06 / S6 1a687e50 / S7 88baad0f / S7b eb6d6735 / S7c c040cce7 / S8 75cc0f77）；S4 真机断连复验未执行（需物理断网，不阻塞代码验收）；告警可见面注明确认主告知为状态栏常驻横幅、设置页非唯一入口。</li>
 </ul>
 
 </div>

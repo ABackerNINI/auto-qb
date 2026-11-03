@@ -588,6 +588,7 @@ def test_fetch_last_spike_failure_matrix(tmp_path, monkeypatch):
     assert calls == []
 
     # 不可达(连接失败 / 响应非 JSON 都归 ToolUnreachable)
+    write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
     monkeypatch.setattr(tool_client, "call_tool", _down)
     assert real_fetch_last_spike() == (False, None)
 

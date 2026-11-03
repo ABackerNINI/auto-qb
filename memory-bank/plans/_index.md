@@ -18,11 +18,11 @@
 
 ## Open
 
-- [26-11-03-1102] [GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）](26-11-03-1102-plan-gtm-day-total-inflation.html) — `gtm-day-total-inflation`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
 
+- [26-11-03-1102] [GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）](26-11-03-1102-plan-gtm-day-total-inflation.html) — `gtm-day-total-inflation`
 - [26-11-03-0930] [WebUI bind 失败改为启动期 fail-fast](26-11-03-0930-plan-webui-bind-fail-fast.html) — `webui-bind-fail-fast`
 - [26-11-03-0557] [实施计划: 全项目第三次全面 Code Review — 增量区间评审与遗留测试面补审](26-11-03-0557-plan-full-code-review-3.html) — `full-code-review-3`
 - [26-11-03-0456] [已完成种子下载保险丝（极简版）](26-11-03-0456-plan-skip-check-download-fuse.html) — `skip-check-download-fuse`
@@ -82,9 +82,8 @@
 - [26-10-18-0813] [流量与限速合并与流量快照解耦 (Phase 2)](26-10-18-0813-plan-global-traffic-source-phase2.html) — `global-traffic-source-phase2`
 - [26-10-17-1737] [全局流量来源联动缺陷修复 (Phase 1)](26-10-17-1737-plan-global-traffic-source-integration-fixes.html) — `global-traffic-source-integration-fixes`
 - [26-10-17-0527] [memory-bank 文档流水线:统一模板 × 命令化创建/更新 · 修改计划 · auto-qb](26-10-17-0527-plan-memory-bank-doc-pipeline.html) — `memory-bank-doc-pipeline`
-- [26-10-17-0339] [全局流量来源:一键切换与自动拉起 · 集成层改版计划 · auto-qb](26-10-17-0339-plan-global-traffic-source-integration.html) — `global-traffic-source-integration`
 
-> 更早的 **138** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **139** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

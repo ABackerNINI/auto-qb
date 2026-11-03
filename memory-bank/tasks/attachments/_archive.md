@@ -35,7 +35,7 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (281)
+## Done (282)
 
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
@@ -43,6 +43,7 @@
 - [26-11-02-backend-relocate-qbtemp-narrow](../26-11-02-backend-relocate-qbtemp-narrow.md) 整组迁移 qb_temp 闸门按归属收窄
 - [26-11-02-webui-flux-overlay-opacity](../26-11-02-webui-flux-overlay-opacity.md) 修复 flux 皮肤浮层透出正文
 - [26-11-02-webui-large-filelist-perf](../26-11-02-webui-large-filelist-perf.md) WEBUI 单种子千级文件列表性能统一优化 (W1-W5 + W6a 落地, W6b Dropped, 真机轨完成)
+- [26-11-03-backend-gtm-day-total-inflation](../26-11-03-backend-gtm-day-total-inflation.md) GTM 当日总量虚高（断连恢复把网卡生命周期累计计入当日）修复
 - [26-11-03-memory-bank-code-review-3-s0](../26-11-03-memory-bank-code-review-3-s0.md) 第三次全量代码评审 S0:准备与底册
 - [26-11-03-memory-bank-code-review-3-s1](../26-11-03-memory-bank-code-review-3-s1.md) 第三次全量代码评审 S1:文件打标与批次定稿
 - [26-11-03-memory-bank-code-review-3-s2](../26-11-03-memory-bank-code-review-3-s2.md) 全量代码评审第三轮 S2（B1–B4 后端批次）

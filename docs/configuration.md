@@ -476,7 +476,7 @@ lines: "30"
 
 ### 定位与边界
 
-- **口径**：整机全适配器合计，默认排除回环（loopback）与 down 状态的网卡，可用 `adapter_include` / `adapter_exclude` 正则再圈定（匹配网卡名）。
+- **口径**：整机全适配器合计，默认排除回环（loopback）与 down 状态的网卡，可用 `adapter_include` / `adapter_exclude` 正则再圈定（匹配网卡名）。记账按**逐网卡基线**做差后求和：新出现的网卡只立基线（历史累计不入账），消失的网卡保留记忆（7 天未见才清理），因此断连/过滤集收缩不会把网卡生命周期累计一次性计入当日总量。
 - **落盘**：Traffic Monitor 兼容格式 —— 每行 `YYYY/MM/DD 上传KB/下载KB`（KB = 1024B，向下取整），首行 `lines: "N"`；与既有 dat 解析器完全兼容。
 - **取数路径**：auto-qb **不需要你配数据目录** —— 工具把真实数据目录写进发现指针 `endpoint.json`，auto-qb 从指针取 `<数据目录>/history_traffic.dat`（配置里没有这个键；工具换目录也不用改配置）。设置页「流量与限速」卡（来源区）状态区显示的「数据目录」就是指针里的值。
 - **唯一写者**：工具是历史文件的唯一写者，落盘用「临时文件 + 原子替换」，任意数量读者在任意时刻都看到完整一致的文件（见下方「双写者禁令」）。
@@ -520,7 +520,10 @@ uv run global-traffic-monitor endpoint # 读发现指针，打印当前 host:por
 | `lease_ttl_s` / `heartbeat_interval_s` | `3M`（180 秒）/ `1M`（60 秒） | 订阅租约与心跳周期 |
 | `notify_timeout_s` | `3S` | 单个订阅者推送超时 |
 | `adapter_include` / `adapter_exclude` | 空 | 网卡名正则白 / 黑名单（include 先于 exclude；回环与 down 恒排除） |
+| `sample_rate_warn_bps` | `1GiB/s` | 单轮速率告警阈值：单卡单方向 `delta / eff_dt`（`eff_dt = min(dt, 3×sample_interval)`）严格超出才 WARNING 并写 `/status.last_spike`；**只告警，不记 0、不改当日累计** |
 | `autostart` | true | 自启意图的**唯一裁决点**：显式改成 `false`（设置页关掉开关）= 之后任何拉起都**不**再注册，不会被自动装回 |
+
+`sample_rate_warn_bps` 是 v2 新键，只写数据目录的 `config.v2.yml`（工具启动时自动创建/补齐，文件缺失或缺键才写）；主 `config.yml` 永不含该键，旧版本读不到未知键即可零操作回滚。告警的主告知面是 auto-qb 顶栏常驻横幅（读快照 `gtm_anomaly`，来源 `/status.last_spike`）；设置页「最近异常」行与 GTM `/status` 是次级入口，`gtm.log` 只作取证。
 
 ### 开机自启（三平台）
 

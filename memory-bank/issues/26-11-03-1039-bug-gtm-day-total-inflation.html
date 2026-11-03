@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-1039">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="gtm-traffic-day-total">
-<meta name="doc-refs" content="memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html, memory-bank/tasks/26-11-03-backend-gtm-day-total-inflation.md, memory-bank/pitfalls/backend/gtm-total-baseline.md, memory-bank/testing/baselines/26-11-03-2148-gtm-day-total-inflation.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)">
 <meta name="issue-summary" content="断网恢复后今日流量暴涨: 过滤后合计基线被降到子集(0), 网卡恢复时把其整个生命周期累计当成一次 delta 入账; 实测 state.json 佐证跳变量 = 273GiB/528GiB">
 <title>断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修复并验证）· bug</div>
     <h1>断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)</h1>
     <p class="lede">断网恢复后今日流量暴涨: 过滤后合计基线被降到子集(0), 网卡恢复时把其整个生命周期累计当成一次 delta 入账; 实测 state.json 佐证跳变量 = 273GiB/528GiB</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1039-bug-gtm-day-total-inflation</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 10:39</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">gtm</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">agent/会话(用户报告)</div></div>
     </div>
@@ -146,7 +146,7 @@
   <tr><td>last_down（最近一次合计读数）</td><td>567,490,630,570</td><td>528.51</td></tr>
 </table>
 <p>正常单调计数器若全日在同一基线上累计，应满足 <code>day = last - base(当日首样)</code>（day &lt; last）。这里 <b>day 反而比 last 大</b>，且差额精确落在用户报告的断网前读数上 → 当日累计里混进了一笔「不属于当前基线区间」的字节，其大小恰等于恢复瞬间的合计读数（≈273.4 GiB 上传 / ≈528.5 GiB 下载）。</p>
-<p><b>二次取证对照（相隔约 10 分钟）</b>：<code>day_up</code> 与 <code>last_up</code> <b>同增 69,166,852 B</b>；<code>day_down</code> 与 <code>last_down</code> <b>同增 37,398,242 B</b>——差值不变。这正是「一次性错位注入 + 之后正常同步累计」的签名，排除「持续重复累加」（H4）。<b>2026/11/02 行 62 GiB/299 GiB 也提示历史上可能已发生过同类冲高，待认领时核对。</b></p>
+<p><b>二次取证对照（相隔约 10 分钟）</b>：<code>day_up</code> 与 <code>last_up</code> <b>同增 69,166,852 B</b>；<code>day_down</code> 与 <code>last_down</code> <b>同增 37,398,242 B</b>——差值不变。这正是「一次性错位注入 + 之后正常同步累计」的签名，排除「持续重复累加」（H4）。<b>2026-11-02 行 62 GiB/299 GiB 也提示历史上可能已发生过同类冲高，待认领时核对。</b></p>
 <h3>2.4 代码证据（取证 2026-11-03，行号仅加速项）</h3>
 <pre><code># tools/global-traffic-monitor/src/gtm/sampler.py
 338  selected = self.filter.select(counters, stats)
@@ -278,11 +278,19 @@ tests/test_sampler.py:244-254  test_down_adapter_recovering_counts_from_zero：�
       <li>2026-11-03 11:02 — <b>已出实施方案</b>：用户拍板 <b>A（逐网卡基线）+ C-prime（单轮增量超阈值只 WARNING、不记 0）</b>，方案见 <code>memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html</code>（已双向挂 doc-refs）。本轮仍未改代码/未改测试/未提交；§06 的 C 方案（超限记 0）<b>已被 C-prime 取代</b>，实施以 plan 为准。</li>
       <li>2026-11-03 11:46 — <b>方案 v2 按用户口径修订</b>：①阈值由绝对字节改为<b>速率口径</b>（<code>sample_rate_warn_bps</code>，默认 1GiB/s，判定 <code>delta/eff_dt</code>，长 gap 按 3×采样间隔钳制，无 dt 时跳过判定）；②告警落到<b>用户可见面</b>（<code>/status.last_spike</code> + 设置页「工具状态」一行 + 打开设置页 toast，日志仅取证）；③新键走<b>程序化 overlay 迁移</b>（<code>config.v2.yml</code>，主 <code>config.yml</code> 零改写，旧版本可回滚），禁止人工加/删键。C-prime 核心不变：只告警、不记 0、不丢账。本轮仍未改代码/未改测试/未提交。</li>
       <li>2026-11-03 12:11 — <b>方案 v3 按「告警不得只在设置页」修订</b>：主告知改为 auto-qb 顶栏常驻横幅（快照追加可选字段 <code>gtm_anomaly</code>，数据来自 <code>/status.last_spike</code>，只增不改），设置页行与 GTM <code>/status</code> 降为次级；支持本机 ack 消警，GTM 不可达时静默降级不影响主界面。方案见 plan 的 §6.6 / §13-V4 / R2。本轮仍未改代码/未跑全量/未提交。</li>
+      <li>2026-11-03 21:20 — <b>修复完成，状态 → Done</b>：分支 <code>feat/gtm-day-total-inflation</code> 按计划 S0–S9 落地（S0 f71517c4 红测试 / S1 b427f33a 逐网卡基线 / S2 29bde200 storage 兜底 / S3 c26d8cfa 测试补齐 / S5 3bce4a06 C-prime / S6 1a687e50 overlay / S7 88baad0f 次级可见面 / S7b eb6d6735 快照 gtm_anomaly / S7c c040cce7 状态栏横幅 / S8 75cc0f77 gtm.log）。S4 真机断连复验未执行（需物理断网 ≥1 个采样周期，只观测不改码，不阻塞代码验收）。验证证据见下方「复验」与「修复后补充」；存量虚高 dat 行<b>未回写</b>，所需数值见「修复后补充」。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」；建议先做真机断连-恢复（拔网线 ≥1 个采样周期）核对当日增量。</p>
+    <p><b>2026-11-03 21:48 全量实测（分支 HEAD 收尾状态，Windows 并行 + 覆盖率）</b>：<code>commands run test.full</code> → <code>5012 passed, 2 skipped, 3 warnings in 216.82s</code>，<b>failed = 0</b>；TOTAL 23327 语句 / 167 未覆盖，覆盖率闸（Windows 99.0）通过。工具包独立口径 <code>commands run test.gtm</code> → <code>547 passed, 2 skipped in 95.31s</code>（TOTAL 2585 / 23 未覆盖，门槛 88 通过）。静态守阵：<code>webui_static</code> 133 passed、新增 GTM 告警 DOM 守卫 2 passed（S7c 记录）；T32 e2e 双皮肤 <code>2 passed</code>（prism/atlas，15.1s，S7c 记录）。</p>
+    <p><b>复现判定</b>：代码语义层面已消失（逐网卡基线 + 新卡只立基线 + 消失卡保留记忆，恢复首轮 delta 为真实增量而非全量累计）；测试覆盖 down→up 不涨/涨 X、过滤集全空、TTL、v1 降级等场景。<b>真机断连-恢复复验（S4）未执行</b>——需物理断网 ≥1 个采样周期，属观测步，不阻塞代码验收；存量 dat 虚高行不回写，因此<b>生产 WebUI 在当前日内仍会显示旧虚高值，跨日硬切后恢复真实</b>（见下节）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法（与 §06 建议的差异）</b>：采用 <b>A（逐网卡基线）+ C-prime（单轮速率告警，只告警不记 0、不丢账、不改 day）</b>，没有按建议 C 的做法把超阈值 delta 记 0；B 未采用。额外落地：state 载荷升 <code>version:2</code>（v1 降级逐卡基线置空、首轮 delta 0、保留 day）、storage 兜底改 <code>state_restored/day</code>、新键只写 <code>config.v2.yml</code> overlay、GTM <code>/status.last_spike</code> + 快照可选 <code>gtm_anomaly</code> + auto-qb 顶栏<b>常驻横幅</b>（主告知；设置页行/GMT <code>/status</code> 为次级；本机 ack 跨刷新保持）。各步 commit：S0 f71517c4、S1 b427f33a、S2 29bde200、S3 c26d8cfa、S5 3bce4a06、S6 1a687e50、S7 88baad0f、S7b eb6d6735、S7c c040cce7、S8 75cc0f77；S9 收尾随本专题入库。</p>
+    <p><b>旧虚高存量未回写（事实）</b>：生产 dat 的当日行仍为 <code>2026/11/03 352748235/564672295</code>（KiB）；其中「恢复瞬间合计读数」被一次性注入，注入量 = state 的 <code>last_up_bytes = 293,613,556,677 B</code> / <code>last_down_bytes = 567,490,630,570 B</code>。若要人工修正当日行，所需数值（按 dat 字节口径做差后换算 KiB）：</p>
+<pre><code>上传: 361,214,192,640 - 293,613,556,677 = 67,600,635,963 B ≈ 62.95 GiB ≈ 66,016,246 KiB
+下载: 578,224,430,080 - 567,490,630,570 = 10,733,799,510 B ≈  9.997 GiB ≈ 10,482,226 KiB
+目标当日行: 2026/11/03 66016246/10482226 0.00/0.00   (其余历史行保持原样, 待逐日审计)</code></pre>
+    <p><b>未回写原因</b>：dat 是 upsert 单调累计、无撤回语义；生产数据目录在本机另一 clone（<code>D:\Projects\auto-qb\tools\global-traffic-monitor\data</code>），本流水线只读、禁止跨仓库写。同一 bug 也可能污染更早的日行（如 2026-11-02 的 62 GiB/299 GiB 量级），需按同一「day − 注入量」口径逐日核对后再改；本次<b>未逐行审计、未回写任何 dat</b>。</p>
+
   </section>
 
   <footer>
