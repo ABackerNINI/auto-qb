@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (58)
+## Open (59)
 
+- [bug] [D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′](../26-11-04-0504-bug-relocate-d-evidence-container-type.html) — relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效
 - [bug] [缺失站点扫描复用 store 级 tracker 惰性缓存, qB 侧改 tracker 后二次扫描读到旧值](../26-11-04-0228-bug-sites-missing-stale-tracker-cache.html) — /api/sites/missing 与 CLI 导出的 tracker 扫描走 store 记录级惰性缓存, 只在产品自身 tracker 写操作时失效; qB 侧(网页/外部)改 tracker 后同进程二次扫描吃到首扫缓存
 - [refactor] [qb_capture_cli.py 残留重复 main()：引用未定义的 Capture，且无 __main__ 入口](../26-11-03-1145-refactor-qb-capture-cli-dead-main.html) — 拆分后 CLI 入口仍在 qb_capture.py；qb_capture_cli.main 为死代码且一旦启用即 NameError，易误导后续改造
 - [bug] [qb_capture --probe-fs：fs_delta 未脱敏，真实 infohash/相对路径漏入 sync-stream 且回放端失配](../26-11-03-1144-bug-qb-capture-fs-delta-sanitize.html) — sanitize_all 只重键 torrents/tags/categories/disk_map，未处理流帧 fs_delta；真 hash 与真文件名落盘，回放端按伪 hash 查不到而静默丢增量

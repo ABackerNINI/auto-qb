@@ -7,9 +7,9 @@
 <title>同机证明实施计划:D+F 主方案 + E1 一次性强探测</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="relocate-same-fs-proof">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="In Progress">
 <meta name="doc-added" content="26-11-04-0055">
-<meta name="doc-updated" content="26-11-04-0105">
+<meta name="doc-updated" content="26-11-04-0510">
 <meta name="doc-refs" content="memory-bank/reports/26-11-03-2306-report-relocate-same-fs-proof-options.html, memory-bank/tasks/26-11-03-backend-relocate-same-fs-proof.md">
 <style>
   :root {
@@ -162,7 +162,7 @@
       <td><b>P6</b><br>真机与收尾</td>
       <td>56590(5.2.3)全流程:首迁触发探测 → 迁移 → qB 内无 aqb-probe 残留;指纹变更(改 port)重探;补 <code>getDirectoryContent?dirPath=R:\...</code> 闭合报告 §7.4 的待实测项;test.full + 基线切片;报告/README 回写。</td>
       <td>—</td>
-      <td>真机探测无残留;基线切片记实测;<code>commands run test.full</code> 绿</td>
+      <td><b>2026-11-04 真机实测</b>:无残留 ✓(RM04-11 1.536s/探针零残留);指纹变更重探 ✓(RM04-12 首探 1.796s/缓存 0.000s/重探 1.312s);R: 列目录闭证 ✓(RM04-13 404 照拒);RM04-05 全流程主链 ✓、L490 小目标前置缺失未过(环境项);<b>未绿</b>:真机 D 级恒判 <code>DirectoryContentList</code> 形态异常,降级 B′(F 同源失效),入池 <code>26-11-04-0504</code> —— 计划保持 In Progress,待修该缺陷后复验。</td>
     </tr>
   </tbody>
 </table>
@@ -202,6 +202,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-04-0055</span> 初版:承接报告 26-11-03-2306 R2 与 grilling 两轮 11 问,用户拍板 D1-D8(一次性 E1 按连接身份缓存、懒触发、仅多成员组、凭据入指纹、重启不失效、D/F 保留、执行链前置、assume_shared 唯一越权);定三层证据体系、六期实施(P1 配置状态 / P2 探测模块 / P3 执行链接入 / P4 F 兜底 / P5 文案回执 / P6 真机收尾)与六条风险对策。来源:本会话。</li>
   <li><span class="tag">R1 · 26-11-04-0105</span> 标题与定位修正: 主方案为 D+F(判据替换), E1 不是主方案而是叠加的一次性强制增强探测</li>
+  <li><span class="tag">R2 · 26-11-04-0510</span> P6 真机实测(56590/5.2.3):RM04-11 E1 真写通过 1.536s 零残留;RM04-12 首探 1.796s / 同指纹缓存 0.000s / 改 port 重探 1.312s;RM04-13 R: 默认路径 404 照拒、C: raw 元数据吻合但产品 D 级恒降级 B′;RM04-05 主链过、L490 小目标前置缺失。偏差:路径级 D 在真机本可证明时(源目录 qB 可列)E1 按 D4 短路,故 P6 的「首迁触发探测」在健康同机场景不会出现,改用 RM04-12 在 <code>_ensure_probe</code> 层验指纹语义。新增缺陷入池 26-11-04-0504(D/F 容器类型)。</li>
 </ul>
 
 </div>

@@ -4,7 +4,7 @@
 **Added:** 2026-11-03
 **Updated:** 2026-11-04
 **Summary:** 整组迁移同盘证明误拒：根因与修复计划
-**Topics:** backend-relocate-same-fs-proof
+**Topics:** relocate-same-fs-proof
 **Refs:** memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/plans/26-11-04-0055-plan-relocate-same-fs-proof.html
 
 ## 原始请求
@@ -42,11 +42,11 @@ P5 真机与回归：环境 1（D: + R:）用伪造种子做正例、第三卷�
 | A2 | 测试实例 56590 只读探针（版本/默认路径/free/-1/5.3 端点） | Done(2026-11-03) |
 | A3 | 计划 HTML + grilling + 待拍板清单 | Done(2026-11-03) |
 | A4 | 收尾：kb 守卫、全量测试、基线切片、提交 | Done(2026-11-03) |
-| P1 | 诊断先行（字段 + 回执显示全部闸门） | Open |
-| P2 | 同盘证明失败归因拆分 | Open |
-| P3 | `relocate.assume_shared` 显式出口 | Open |
-| P4 | qB 5.3 按路径直证 | Open |
-| P5 | 真机正反例与声明模式验证 | Open |
+| P1 | 诊断先行（字段 + 回执显示全部闸门） | Done(2026-11-04, 随新计划 P1 落地) |
+| P2 | 同盘证明失败归因拆分 | Done(2026-11-04, 新计划 P5 收口) |
+| P3 | `relocate.assume_shared` 显式出口 | Done(2026-11-04) |
+| P4 | qB 5.3 按路径直证 | Open(条件项, 无 5.3 实例) |
+| P5 | 真机正反例与声明模式验证 | Done(2026-11-04, RM04-11..13; L490 小目标前置缺失待补) |
 
 ## 进度日志
 
@@ -61,3 +61,25 @@ P5 真机与回归：环境 1（D: + R:）用伪造种子做正例、第三卷�
 - 2026-11-04 00:58 grilling 两轮拍板 D1-D8, 立分步实施计划 26-11-04-0055(三层证据体系+六期实施)
 
 - 2026-11-04 04:42 P1-P5 全部实施+评审修复(2 major)完成, 快进合入本地 develop(826ff778); 基线 5074 passed, 待提交指令
+
+### R3 · P6 真机验收 (2026-11-04 05:07)
+
+开工同步 `commands run my-commit-flow.sync`:已同步 `e80d9f8e`(快进 861e2b45→e80d9f8e)。`real.guard` 通过:环境 2,56589 pid 8228 / 56590 pid 7596,qB v5.2.3 双实例 connected,自造种子 0。
+
+实测(新增 `tests-real/rm04_relocate/test_rm04_probe_real.py`,三例,均经 `commands run real.run -- --case ... --yes`):
+
+| 用例 | 命令 | 实测结果 |
+|---|---|---|
+| RM04-11 E1 真写正向 | `commands run real.run -- --case RM04-11 --yes` | PASS;真实 qB 探测 `passed/reason=ok/env=False`,`elapsed_s=1.536`,4KiB sha1 `aed7854d…` 一致;清理 `torrent_deleted/torrent_gone=true`、`residue=[]`、两侧探针目录 0 |
+| RM04-12 指纹缓存/重探 | `commands run real.run -- --case RM04-12 --yes` | PASS;首探 1.796s → 同指纹 0.000s(命中缓存,零探测)→ 改 port 指纹 `e298aa9d…→854eb950…` 后 1.312s 真重探;state 缓存 2 条均 passed,两实例零残留 |
+| RM04-13 R: 闭证 + D 对照 | `commands run real.run -- --case RM04-13 --yes` | PASS;默认 `save_path=R:\Download\PTing`,`getDirectoryContent` 返回 `NotFound404Error: 目录不存在` → 产品 D 判 unavailable(不放行);C: 对照 raw 1 条 entry、size/mtime 与本机 stat 吻合 |
+| RM04-05 全流程 | `commands run real.run -- --case RM04-05 --yes` | 主链 PASS(多成员组同盘迁移、dst 大小、junction、phase/job done);尾部 L490 小目标反例因 `QBT_REAL_SMALL_TARGET` 未预置显式失败(环境前置缺失,非产品回归) |
+
+全量:`commands run test.full` 通过(数字见 kb.baseline,新切片 `26-11-04-0507`)。
+
+两个关键发现/偏差:
+
+1. **计划 P6「首迁触发探测」在健康同机场景不会发生**。真机上源目录对 qB 可列,B′(或修复后的 D)能判 positive ⇒ 按 D4 的 `facts.same_fs_proved` 短路,E1 被跳过。故改用两层取证:E1 行为由 RM04-11 直接驱产品 `run_probe` 真写;指纹缓存语义由 RM04-12 驱 `RelocateModule._ensure_probe`(真 facts + 真 state + 真 qB)。未改产品代码。
+2. **真机发现 D 级恒降级 B′**:`relocate_proof._d_evidence` 只认 `list/tuple`,而 `qbittorrentapi` 返回 `DirectoryContentList`(UserList 子类)⇒ 判「响应形态异常」;`link_follow_evidence`(F)同函数同源失效。raw 端点本身正常(1 条 entry、元数据吻合)。该缺陷属本轮实施面但在「本轮不改 src/」约束下未修,按 scope-guard 入池 `memory-bank/issues/26-11-04-0504-bug-relocate-d-evidence-container-type.html`(Open,待指派)。
+
+结论:**真机验收整体通过(qB 侧 E1 写证/清理、指纹缓存、R: 闭证、全量回归均绿);阻塞项仅 L490 小目标环境前置与上述 D/F 缺陷**。产品代码未改;未收到提交指令,未 commit/push。
