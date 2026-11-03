@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import uvicorn
 
+from ...infra.errors import AutoQbError
 from ...infra.utils import display_host
 from .common import state_dir
 from .factory import create_app
@@ -20,6 +21,26 @@ logger = logging.getLogger("auto_qb.web")
 
 WEB_STOP_TIMEOUT = 5.0
 WEB_START_TIMEOUT = 5.0
+
+
+class WebUIBindError(AutoQbError):
+    """启动期 WebUI 监听失败(端口被占/地址非法)
+
+    AutoQbError => CLI 干净退出: 码 1、stderr 一行、无堆栈。只在启动期抛(R1 抛点见
+    WebUIModule.start); 低层 start_web_server 保持「返回 handle」的原契约(热重载复用)。
+    """
+
+
+def _bind_message(web) -> str:
+    """WebUIBindError 的单行消息(配置原值, 供用户照改; 不含换行)"""
+    return (
+        f"WebUI 启动失败: {web.host}:{web.port} 无法监听 "
+        f"(web.enabled={str(bool(web.enabled)).lower()}, web.host={web.host}, web.port={web.port}); "
+        "常见原因: web.port 被占用(同机多实例默认同端口); "
+        "处置: 改 web.port 换空闲端口, 或设 web.enabled: false 关闭; "
+        "auto-qb 将退出(退出码 1), 采集不会启动"
+    )
+
 
 # h11「未完成事件」(请求行+全部头) 的缓冲上限。缺省 16KB(h11 DEFAULT_MAX_INCOMPLETE_EVENT_SIZE)
 # 会拦掉组级路由的真实请求: 组 key = base64url(组路径+全组文件相对路径)(infra.utils.encode_group_key),

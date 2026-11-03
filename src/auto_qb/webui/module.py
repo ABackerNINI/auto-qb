@@ -21,6 +21,7 @@ S7 追加: 全局流量监视器的**订阅生命周期**也内聚在本模块 �
 import logging
 
 from ..core.module import AppContext, ApplyResult, BaseModule
+from .server.lifecycle import WebUIBindError, _bind_message
 from .tool_client import TrafficMonitorSubscriber
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,10 @@ class WebUIModule(BaseModule):
             # start 幂等(黄金法则 1): 已在跑不重复拉起(与 LoggingModule 的 _configured 闸同款)
             return None
         web.start_server()
+        # R1 抛点: 启动期监听失败 -> fail-fast(低层 start_web_server 保持返回 handle 的原契约,
+        # 热重载 apply 的同一函数不在此抛, 运行期语义不变)。AutoQbError => CLI 退出码 1 + 单行 stderr
+        if web.handle is not None and not web.handle.started:
+            raise WebUIBindError(_bind_message(ctx.config.web))
         # 监视器订阅按期望态收敛(S7): 未启用/关订阅 -> 无操作, 零线程零请求(黄金法则 2)
         # 放在 start_server 之后: 回调端点要监听身份, 凭证也要 ensure_token 先落到位
         self._subscriber.sync()

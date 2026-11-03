@@ -18,6 +18,7 @@
 - test_api_log_level_filter_keeps_multiline_record: 多行日志(整段 traceback)折行后跟随其记录的等级, 筛 ERROR 不丢栈
 - test_api_log_note_when_level_unfilterable: 筛不了(格式无等级字段 / 已存行与格式不符)回全部行 + note, 不静默给空
 - test_webui_module_apply_toggle_enabled: web.enabled 热开关(关->开启动 / 开->关停止并清句柄; 经 WebUIModule.apply 驱动, P2)
+- test_webui_module_start_raises_bind_error_when_port_taken: 端口被占 -> WebUIModule.start 抛 WebUIBindError(启动期 fail-fast); 消息单行且含 host/port/配置键/常见原因/处置; 低层仍返回未就绪句柄(R1)
 """
 import base64
 import logging
@@ -25,6 +26,8 @@ import os
 import tempfile
 from types import SimpleNamespace
 from unittest import mock
+
+import pytest
 
 from auto_qb.webui import create_app
 
@@ -631,3 +634,42 @@ def test_webui_module_apply_toggle_enabled(monkeypatch):
         mod.apply(SimpleNamespace(web=_web_stub(enabled=True, port=8080)), mgr.config)
         stopped.assert_called_once()
         assert mgr.web.handle is None
+
+
+def test_webui_module_start_raises_bind_error_when_port_taken(tmp_path):
+    """WebUIModule.start: 端口被占 -> 抛 WebUIBindError(启动期 fail-fast), 消息单行且含关键字段
+
+    R1 抛点在模块层: 低层 `start_web_server` 保持「返回 handle」的原契约(其契约守阵在
+    test_web_views_reload), 热重载 apply() 复用同一低层函数, 行为不变。
+    """
+    import socket
+
+    from auto_qb.webui import stop_web_server
+    from auto_qb.webui.server.lifecycle import WebUIBindError
+
+    from helpers import make_manager
+
+    with socket.socket() as holder:  # 占住端口(bind + listen 后不可再绑)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        port = holder.getsockname()[1]
+        mgr = make_manager(str(tmp_path / "state.json"))
+        mgr.config.web.enabled = True
+        mgr.config.web.port = port
+        mod = mgr.host.get("webui")
+        try:
+            with pytest.raises(WebUIBindError) as excinfo:
+                mod.start(mgr.ctx, dry_run=False)
+        finally:
+            if mgr.web.handle is not None:
+                stop_web_server(mgr.web.handle)
+
+        handle = mgr.web.handle
+        assert handle is not None and handle.started is False, "低层仍返回未就绪句柄(R1: 不改原契约)"
+        message = str(excinfo.value)
+        assert "\n" not in message, "stderr 文案必须单行"
+        assert "WebUI 启动失败" in message
+        assert f"127.0.0.1:{port}" in message, "文案必须给出配置原值的 host:port"
+        assert f"web.port={port}" in message and "web.enabled=true" in message, "文案必须含配置键路径"
+        assert "同机多实例默认同端口" in message, "常见原因要点明多实例同端口"
+        assert "web.enabled: false" in message and "采集不会启动" in message, "处置与退出后果必须可照做"
