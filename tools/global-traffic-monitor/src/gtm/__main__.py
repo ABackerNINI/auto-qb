@@ -178,7 +178,7 @@ def _run_loop(
             # 过滤器重建也进 try: 配置侧万一漏过非法正则, 只丢一轮不杀循环
             sampler.filter = _build_adapter_filter(cfg)
             storage.set_flush_params(cfg.flush_delta_bytes, cfg.flush_interval_s)
-            result = sampler.sample_once()
+            result = sampler.sample_once(cfg.sample_interval, cfg.sample_rate_warn_bps)
             storage.record(result, sampler.snapshot())
             if notifier is not None:
                 notifier.notify(result, catch_up=first_frame)

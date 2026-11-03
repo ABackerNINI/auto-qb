@@ -128,8 +128,9 @@ class FakeSampler:
         self.filter = adapter_filter
         self.samples = 0
 
-    def sample_once(self):
+    def sample_once(self, interval_hint=5.0, rate_warn_bps=None):
         self.samples += 1
+        self.last_sampling_args = (interval_hint, rate_warn_bps)
         return f"sample-{self.samples}"
 
     def snapshot(self):
@@ -630,8 +631,8 @@ def test_run_loop_single_round_failure_does_not_kill_loop() -> None:
     stop = threading.Event()
 
     class ExplodingSampler(FakeSampler):
-        def sample_once(self):
-            super().sample_once()
+        def sample_once(self, interval_hint=5.0, rate_warn_bps=None):
+            super().sample_once(interval_hint, rate_warn_bps)
             raise OSError("Windows replace 竞态耗尽重试")
 
     sampler = ExplodingSampler()

@@ -37,6 +37,7 @@ def test_defaults_match_plan_section_05() -> None:
     assert c.lease_ttl_s == 180.0
     assert c.heartbeat_interval_s == 60.0
     assert c.notify_timeout_s == 3.0
+    assert c.sample_rate_warn_bps == 1024**3  # S5: 默认 1GiB/s
     assert c.adapter_include == () and c.adapter_exclude == ()
     assert c.autostart is True  # 未显式关过 = 默认真 (run --autostart 会注册)
 
@@ -176,6 +177,7 @@ def test_validate_accepts_compound_strings() -> None:
             "heartbeat_interval_s": "1M",
             "notify_timeout_s": "500S",
             "notify_threshold_bytes": "512KiB",
+            "sample_rate_warn_bps": "500MiB/s",
         }
     )
     assert errors == ()
@@ -185,6 +187,18 @@ def test_validate_accepts_compound_strings() -> None:
     assert config.flush_interval_s == 60.0
     assert config.lease_ttl_s == 180.0
     assert config.notify_threshold_bytes == 512 * 1024
+    assert config.sample_rate_warn_bps == 500 * 1024**2
+
+
+def test_validate_rate_field_requires_compound_string() -> None:
+    """S5: sample_rate_warn_bps 只收 "数字+二进制单位/s"; 裸数值/缺 /s/十进制/0 一律聚合报错."""
+    config, errors = validate_payload({"sample_rate_warn_bps": "1GiB/s"})
+    assert errors == ()
+    assert config is not None and config.sample_rate_warn_bps == 1024**3
+    for bad in (1024**3, "1GiB", "1MB/s", "0MiB/s", "-1MiB/s", True, None):
+        cfg, errs = validate_payload({"sample_rate_warn_bps": bad})
+        assert cfg is None
+        assert len(errs) == 1 and "sample_rate_warn_bps" in errs[0]
 
 
 def test_validate_legacy_numbers_shift_by_semantics() -> None:
@@ -227,10 +241,12 @@ def test_payload_only_contains_compound_strings(tmp_path) -> None:
     assert raw["sample_interval"] == "2.5S"
     assert raw["flush_delta_bytes"] == "2MiB"
     assert raw["notify_threshold_bytes"] == "100MiB"
+    assert raw["sample_rate_warn_bps"] == "1GiB/s"  # S5: 速率同样只写复合串
     assert raw["http_port"] == 0  # 非时间/大小字段保持原形态
     # 回显 (= PUT /config 与 GET /status 的 config) 与盘上同源: 取「能整除的最大单位」
     assert config_to_payload(Config())["lease_ttl_s"] == "3M"  # 180 秒
     assert config_to_payload(Config())["heartbeat_interval_s"] == "1M"  # 60 秒
+    assert config_to_payload(Config())["sample_rate_warn_bps"] == "1GiB/s"
 
 
 def test_migrate_legacy_config_rewrites_once(tmp_path) -> None:

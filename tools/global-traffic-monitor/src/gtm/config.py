@@ -36,7 +36,7 @@ from typing import Any, Mapping, Optional, Tuple
 
 import yaml
 
-from gtm.units import UnitError, format_duration, format_size, parse_duration, parse_size
+from gtm.units import UnitError, format_duration, format_size, format_speed, parse_duration, parse_size, parse_speed
 
 logger = logging.getLogger("gtm.config")
 
@@ -53,6 +53,9 @@ DEFAULT_HTTP_PORT = 0
 DEFAULT_LEASE_TTL_S = 180.0
 DEFAULT_HEARTBEAT_INTERVAL_S = 60.0
 DEFAULT_NOTIFY_TIMEOUT_S = 3.0
+# S5 (C-prime): 单卡单方向单轮速率告警阈值, 默认 1 GiB/s。盘上是复合串 "1GiB/s",
+# 内存是 B/s; 只告警不拦截 (见 sampler._evaluate_rate)。
+DEFAULT_SAMPLE_RATE_WARN_BPS = 1024**3
 
 MIB = 1024 * 1024
 
@@ -74,6 +77,7 @@ class Config:
     lease_ttl_s: float = DEFAULT_LEASE_TTL_S
     heartbeat_interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S
     notify_timeout_s: float = DEFAULT_NOTIFY_TIMEOUT_S
+    sample_rate_warn_bps: int = DEFAULT_SAMPLE_RATE_WARN_BPS  # S5: 单轮速率告警阈值 (B/s; 盘上 "1GiB/s")
     adapter_include: Tuple[str, ...] = ()
     adapter_exclude: Tuple[str, ...] = ()
     # S14/D13: 开机自启意图 (默认 true = 未显式关过即注册)。这是自启的**唯一裁决权**,
@@ -94,12 +98,15 @@ _DURATION_FIELDS = (
     "notify_timeout_s",
 )
 _SIZE_FIELDS = ("flush_delta_bytes", "notify_threshold_bytes")
+_RATE_FIELDS = ("sample_rate_warn_bps", )
 _INT_FIELDS = ("http_port", )
 # http_host 独立于普通字符串字段: 校验不只查非空, 还强制回环 (见 _check_http_host)
 _HOST_FIELDS = ("http_host", )
 _LIST_FIELDS = ("adapter_include", "adapter_exclude")
 _BOOL_FIELDS = ("autostart", )
-_KNOWN_FIELDS = frozenset(_DURATION_FIELDS + _SIZE_FIELDS + _INT_FIELDS + _HOST_FIELDS + _LIST_FIELDS + _BOOL_FIELDS)
+_KNOWN_FIELDS = frozenset(
+    _DURATION_FIELDS + _SIZE_FIELDS + _RATE_FIELDS + _INT_FIELDS + _HOST_FIELDS + _LIST_FIELDS + _BOOL_FIELDS
+)
 
 # 端口区间 (S13/D9): 0 合法 = 内核分配随机端口; 下限从 1 放开到 0
 _PORT_RANGE = (0, 65535)
@@ -161,6 +168,19 @@ def _check_size(name: str, value: Any, errors: list[str]) -> Optional[int]:
         errors.append(f"{name}: 期望正数 (>0), 收到 {value!r}")
         return None
     return nbytes
+
+
+def _check_rate(name: str, value: Any, errors: list[str]) -> Optional[int]:
+    """速率字段: 只收复合串 ("1GiB/s") -> B/s; 裸数值/缺 /s/非二进制单位一律报错."""
+    try:
+        bps = parse_speed(value)
+    except UnitError as e:
+        errors.append(f"{name}: {e}")
+        return None
+    if bps <= 0:
+        errors.append(f"{name}: 期望正数 (>0), 收到 {value!r}")
+        return None
+    return bps
 
 
 def _check_str(name: str, value: Any, errors: list[str]) -> Optional[str]:
@@ -243,6 +263,11 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
             ok = _check_size(name, payload[name], errors)
             if ok is not None:
                 overrides[name] = ok
+    for name in _RATE_FIELDS:
+        if name in payload:
+            ok = _check_rate(name, payload[name], errors)
+            if ok is not None:
+                overrides[name] = ok
     for name in _INT_FIELDS:
         if name in payload:
             ok = _check_int(name, payload[name], errors)
@@ -309,6 +334,8 @@ def config_to_payload(config: Config) -> dict[str, Any]:
             payload[f.name] = format_duration(value)
         elif f.name in _SIZE_FIELDS:
             payload[f.name] = format_size(value)
+        elif f.name in _RATE_FIELDS:
+            payload[f.name] = format_speed(value)
         else:
             payload[f.name] = value
     return payload

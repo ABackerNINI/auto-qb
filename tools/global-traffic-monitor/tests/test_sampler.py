@@ -28,14 +28,22 @@
 - 逐卡记忆 TTL (T13): 超过 7 天未见的卡被清理, 再出现按新卡只立基线 (0,0)
 - dat 兜底: 今天行恢复 (KB->字节, TM 倒序与正序两态); 无今天行返回 False; 基线仍取当前值
 - snapshot/restore round-trip: v2 载荷 (version=2 + nic_baseline, last_* 为各卡求和) 恢复后与原状态一致
+- 单轮速率告警 (S5/C-prime, T11/T12/T17/T19): delta/eff_dt 严格大于阈值才 WARNING (阈值相等不告警),
+  告警只写 last_spike 不改 delta/day; 长 gap 按 3×interval_hint 钳制后仍能触发; 间隔热改时
+  eff_dt 跟随新 hint 不产生假告警
+- 速率时间基线 (S5/T20): 重启后单调钟失效时用 last_sample_wall 兜底; dt<=0/非有限/超 7 天
+  跳过判定且不产生负速率; last_spike 随 v2 往返, 旧载荷缺键/结构非法降级为 None (T21)
 """
 
 from __future__ import annotations
 
+import logging
+from contextlib import contextmanager
 from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 from typing import Mapping, Optional
 
+import gtm.sampler as sampler_mod
 from gtm.sampler import AdapterFilter, Sampler, SampleResult, is_loopback
 
 DAY = date(2026, 10, 16)
@@ -85,6 +93,52 @@ def make_sampler(
         stats_provider=lambda: stats,
     )
     return sampler, clock, counters
+
+
+class FakeTime:
+    """可拖动的单调钟/墙钟 (S5 速率判定): sample_once 同一时刻各取一次."""
+    def __init__(self, mono: float = 0.0, wall: float = 1_000_000.0) -> None:
+        self.mono = mono
+        self.wall = wall
+
+    def monotonic(self) -> float:
+        return self.mono
+
+    def time(self) -> float:
+        return self.wall
+
+    def advance(self, seconds: float) -> None:
+        self.mono += seconds
+        self.wall += seconds
+
+
+def install_fake_time(monkeypatch, fake: FakeTime) -> FakeTime:
+    monkeypatch.setattr(sampler_mod, "time", fake)
+    return fake
+
+
+class ListHandler(logging.Handler):
+    """模块 logger 直挂捕获器 (pitfalls/testing/log-capture: 不用 caplog)."""
+    def __init__(self) -> None:
+        super().__init__()
+        self.messages: list[str] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.messages.append(record.getMessage())
+
+
+@contextmanager
+def capture_sampler_logs(level: int = logging.WARNING):
+    log = logging.getLogger("gtm.sampler")
+    handler = ListHandler()
+    old_level = log.level
+    log.addHandler(handler)
+    log.setLevel(level)
+    try:
+        yield handler
+    finally:
+        log.removeHandler(handler)
+        log.setLevel(old_level)
 
 
 # ---- 正常 delta ----
@@ -500,7 +554,12 @@ def test_restore_same_day_resumes_accumulation_and_baseline():
         "day_down_bytes": 8192,
         "last_up_bytes": 5000,
         "last_down_bytes": 9000,
-        "nic_baseline": {"eth0": {"up": 5000, "down": 9000}}
+        "nic_baseline": {
+            "eth0": {
+                "up": 5000,
+                "down": 9000
+            }
+        }
     }
     warns = sampler.restore(snap)
     assert warns == ()
@@ -546,7 +605,12 @@ def test_restore_yesterday_clears_accumulation_keeps_baseline():
         "day_down_bytes": 8192,
         "last_up_bytes": 5000,
         "last_down_bytes": 9000,
-        "nic_baseline": {"eth0": {"up": 5000, "down": 9000}}
+        "nic_baseline": {
+            "eth0": {
+                "up": 5000,
+                "down": 9000
+            }
+        }
     }
     warns = sampler.restore(snap)
     assert len(warns) == 1 and "早于今天" in warns[0]
@@ -604,9 +668,20 @@ def test_restore_v2_nic_baseline_local_corruption_variants():
     cases = [
         (None, "缺失", "无告警"),
         ([], "非映射", "nic_baseline 不是映射"),
-        ({5: {"up": 1, "down": 2}}, "键非字符串", "网卡名非字符串"),
-        ({"eth0": 7}, "条目非映射", "不是映射"),
-        ({"eth0": {"up": 1}}, "缺字段", "up/down 缺失"),
+        ({
+            5: {
+                "up": 1,
+                "down": 2
+            }
+        }, "键非字符串", "网卡名非字符串"),
+        ({
+            "eth0": 7
+        }, "条目非映射", "不是映射"),
+        ({
+            "eth0": {
+                "up": 1
+            }
+        }, "缺字段", "up/down 缺失"),
     ]
     for raw, label, expect in cases:
         sampler, _, _ = make_sampler()
@@ -662,7 +737,12 @@ def test_restore_corrupt_variants_all_degraded():
         "day_down_bytes": 1,
         "last_up_bytes": 1,
         "last_down_bytes": 1,
-        "nic_baseline": {"eth0": {"up": 1, "down": 1}}
+        "nic_baseline": {
+            "eth0": {
+                "up": 1,
+                "down": 1
+            }
+        }
     }
     bad_cases = [
         "not-a-mapping",
@@ -767,10 +847,12 @@ def test_restore_from_dat_then_sample_baseline_from_current():
 # ---- snapshot round-trip ----
 
 
-def test_snapshot_restore_round_trip():
+def test_snapshot_restore_round_trip(monkeypatch):
+    fake = install_fake_time(monkeypatch, FakeTime())
     sampler, _, counters = make_sampler()
     counters.page = {"eth0": nic(1000, 2000)}
     sampler.sample_once()
+    fake.advance(5)
     counters.page = {"eth0": nic(1500, 2400)}
     sampler.sample_once()
     snap = sampler.snapshot()
@@ -781,17 +863,26 @@ def test_snapshot_restore_round_trip():
         "day_down_bytes": 400,
         "last_up_bytes": 1500,  # 兼容/观测口径: 各卡基线求和
         "last_down_bytes": 2400,
-        "nic_baseline": {"eth0": {"up": 1500, "down": 2400}}
+        "nic_baseline": {
+            "eth0": {
+                "up": 1500,
+                "down": 2400
+            }
+        },
+        "last_sample_wall": fake.wall,  # S5: 重启后 dt 兜底
+        "last_spike": None  # S5: 500B/5s 远低于阈值
     }
 
     revived, _, counters2 = make_sampler()
     assert revived.restore(snap) == ()
     assert revived.state_restored is True and revived.has_baseline
+    fake.advance(5)
     counters2.page = {"eth0": nic(1600, 2500)}
     r = revived.sample_once()
     assert (r.delta_up_bytes, r.delta_down_bytes) == (100, 100)
     assert (r.day_up_bytes, r.day_down_bytes) == (600, 500)
     assert r.baseline is False
+    assert revived.last_spike is None
 
 
 def test_snapshot_before_any_sample():
@@ -803,7 +894,9 @@ def test_snapshot_before_any_sample():
         "day_down_bytes": 0,
         "last_up_bytes": None,
         "last_down_bytes": None,
-        "nic_baseline": {}
+        "nic_baseline": {},
+        "last_sample_wall": None,
+        "last_spike": None
     }
     revived, _, _ = make_sampler()
     assert revived.restore(sampler.snapshot()) == ()
@@ -889,3 +982,240 @@ def test_restore_negative_day_bytes_is_corrupt():
     )
     assert len(warns) == 1 and "当日累计为负" in warns[0]
     assert sampler.day is None
+
+
+# ---- S5: C-prime 单轮速率告警 ----
+
+GIB = 1024**3
+
+
+def v2_payload(**extra):
+    """最小可用 v2 载荷 (eth0 基线 0); extra 用于逐键覆盖/缺键模拟."""
+    payload = {
+        "version": 2,
+        "day": DAY.isoformat(),
+        "day_up_bytes": 0,
+        "day_down_bytes": 0,
+        "last_up_bytes": 0,
+        "last_down_bytes": 0,
+        "nic_baseline": {
+            "eth0": {
+                "up": 0,
+                "down": 0
+            }
+        },
+    }
+    payload.update(extra)
+    return payload
+
+
+def test_rate_over_threshold_warns_but_keeps_delta_and_day(monkeypatch):
+    """T11: 6GiB/5s = 1.28GiB/s > 1GiB/s -> 一条 WARNING; delta/day 照常入账."""
+    fake = install_fake_time(monkeypatch, FakeTime())
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(0, 0)}
+    sampler.sample_once(5.0, GIB)
+    fake.advance(5)
+    injected = 6 * GIB
+    counters.page = {"eth0": nic(injected, 0)}
+    with capture_sampler_logs() as logs:
+        r = sampler.sample_once(5.0, GIB)
+    assert len(logs.messages) == 1
+    msg = logs.messages[0]
+    for token in (
+        "nic=eth0",
+        "dir=up",
+        f"cur={injected}",
+        "last=0",
+        f"delta={injected}",
+        "dt=5.000s",
+        "eff_dt=5.000s",
+        "rate=",
+        f"threshold={GIB}B/s",
+        "仅告警, 照常入账",
+    ):
+        assert token in msg, token
+    # 告警是旁路: 入账口径完全不变
+    assert r.delta_up_bytes == injected and r.delta_down_bytes == 0
+    assert r.day_up_bytes == injected and r.day_down_bytes == 0
+    spike = sampler.last_spike
+    assert spike is not None
+    assert spike["dt_s"] == 5.0 and spike["eff_dt_s"] == 5.0 and spike["threshold_bps"] == GIB
+    assert spike["items"] == [
+        {
+            "nic": "eth0",
+            "dir": "up",
+            "cur": injected,
+            "last": 0,
+            "delta": injected,
+            "rate_bps": int(injected / 5)
+        }
+    ]
+
+
+def test_rate_equal_threshold_does_not_warn(monkeypatch):
+    """T12: delta/eff_dt 严格大于才告警; 恰好 1GiB/s (==== 阈值) 不告警."""
+    fake = install_fake_time(monkeypatch, FakeTime())
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(0, 0)}
+    sampler.sample_once(5.0, GIB)
+    fake.advance(5)
+    counters.page = {"eth0": nic(5 * GIB, 0)}
+    with capture_sampler_logs() as logs:
+        r = sampler.sample_once(5.0, GIB)
+    assert logs.messages == []
+    assert sampler.last_spike is None
+    assert r.delta_up_bytes == 5 * GIB
+
+
+def test_long_gap_is_clamped_to_3x_interval_and_still_warns(monkeypatch):
+    """T17: 600s gap 注入 273.45GiB; eff_dt 钳到 15s -> 18.23GiB/s, 仍告警."""
+    fake = install_fake_time(monkeypatch, FakeTime())
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(0, 0)}
+    sampler.sample_once(5.0, GIB)
+    fake.advance(600)
+    injected = int(273.45 * GIB)
+    counters.page = {"eth0": nic(injected, 0)}
+    with capture_sampler_logs() as logs:
+        r = sampler.sample_once(5.0, GIB)
+    assert len(logs.messages) == 1
+    msg = logs.messages[0]
+    assert "dt=600.000s" in msg and "eff_dt=15.000s" in msg
+    assert f"rate={injected / 15:.1f}B/s" in msg
+    assert r.delta_up_bytes == injected  # 钳制只作用于告警, 不改入账
+    assert sampler.last_spike["dt_s"] == 600.0
+    assert sampler.last_spike["eff_dt_s"] == 15.0
+
+
+def test_interval_hint_hot_change_drives_eff_dt_without_false_alarm(monkeypatch):
+    """T19: 同一注入在不同 interval_hint 下 eff_dt 跟随 (180s vs 15s), 热改立即生效."""
+    fake = install_fake_time(monkeypatch, FakeTime())
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(0, 0)}
+    with capture_sampler_logs() as logs:
+        sampler.sample_once(5.0, GIB)
+        fake.advance(5)
+        counters.page = {"eth0": nic(1 * GIB, 0)}
+        sampler.sample_once(5.0, GIB)  # 1GiB/5s = 0.2GiB/s, 不告警
+        fake.advance(60)
+        counters.page = {"eth0": nic(7 * GIB, 0)}
+        sampler.sample_once(60.0, GIB)  # 6GiB/60s = 0.1GiB/s, 不告警
+        fake.advance(600)
+        counters.page = {"eth0": nic(57 * GIB, 0)}
+        sampler.sample_once(60.0, GIB)  # 50GiB/600s, eff_dt=180s -> 0.278GiB/s, 不告警
+        assert logs.messages == []
+        assert sampler.last_spike is None
+        fake.advance(600)
+        counters.page = {"eth0": nic(107 * GIB, 0)}
+        sampler.sample_once(5.0, GIB)  # 同一 50GiB/600s, eff_dt=15s -> 3.33GiB/s, 告警
+    assert len(logs.messages) == 1
+    assert "eff_dt=15.000s" in logs.messages[0]
+    assert sampler.last_spike["eff_dt_s"] == 15.0
+
+
+def test_restart_uses_last_sample_wall_fallback(monkeypatch):
+    """T20: 进程内单调钟无基线时, 用 state 的 last_sample_wall 算 dt."""
+    fake = install_fake_time(monkeypatch, FakeTime(mono=0.0, wall=1_000_600.0))
+    sampler, _, counters = make_sampler()
+    assert sampler.restore(v2_payload(last_sample_wall=1_000_000.0)) == ()
+    injected = int(273.45 * GIB)
+    counters.page = {"eth0": nic(injected, 0)}
+    with capture_sampler_logs() as logs:
+        r = sampler.sample_once(5.0, GIB)
+    assert len(logs.messages) == 1
+    assert r.delta_up_bytes == injected
+    assert sampler.last_spike["dt_s"] == 600.0
+    assert sampler.last_spike["eff_dt_s"] == 15.0
+
+
+def test_restart_invalid_dt_skips_rate_and_never_goes_negative(monkeypatch):
+    """T20: wall 差值为负/超 7 天 -> 跳过判定 (无负速率), 入账照常."""
+    fake = install_fake_time(monkeypatch, FakeTime(mono=0.0, wall=1_000_000.0))
+    sampler, _, counters = make_sampler()
+    assert sampler.restore(v2_payload(last_sample_wall=1_001_000.0)) == ()
+    counters.page = {"eth0": nic(273 * GIB, 0)}
+    with capture_sampler_logs(logging.DEBUG) as logs:
+        r = sampler.sample_once(5.0, GIB)
+    assert r.delta_up_bytes == 273 * GIB
+    assert sampler.last_spike is None
+    assert any("dt 非法" in m and "wall" in m for m in logs.messages)
+
+    # 陈旧 state: wall 差值 > 7 天 -> 同样跳过, 不按 8 天摊薄出假速率
+    sampler2, _, counters2 = make_sampler()
+    assert sampler2.restore(v2_payload(last_sample_wall=1_000_000.0)) == ()
+    fake.wall = 1_000_000.0 + 8 * 86400
+    counters2.page = {"eth0": nic(5 * GIB, 0)}
+    with capture_sampler_logs(logging.DEBUG) as logs2:
+        r2 = sampler2.sample_once(5.0, GIB)
+    assert r2.delta_up_bytes == 5 * GIB
+    assert sampler2.last_spike is None
+    assert any("超过 7 天" in m for m in logs2.messages)
+
+
+def test_last_spike_snapshot_restore_and_legacy_payload_downgrade(monkeypatch):
+    """T21: last_spike 随 v2 往返; 旧载荷缺键/结构非法 -> 降级 None, 不崩."""
+    fake = install_fake_time(monkeypatch, FakeTime())
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(0, 0)}
+    sampler.sample_once(5.0, GIB)
+    fake.advance(5)
+    counters.page = {"eth0": nic(6 * GIB, 0)}
+    sampler.sample_once(5.0, GIB)
+    snap = sampler.snapshot()
+    spike = snap["last_spike"]
+    assert spike is not None and spike["items"][0]["nic"] == "eth0"
+
+    revived, _, _ = make_sampler()
+    assert revived.restore(snap) == ()
+    assert revived.last_spike == spike
+    assert revived.snapshot()["last_spike"] == spike
+
+    # 旧 v2 载荷 (S5 之前写出) 缺 last_sample_wall/last_spike: 静默降级, 其余照常恢复
+    legacy, _, _ = make_sampler()
+    assert legacy.restore(v2_payload()) == ()
+    assert legacy.last_spike is None
+    legacy_snap = legacy.snapshot()
+    assert legacy_snap["last_sample_wall"] is None and legacy_snap["last_spike"] is None
+
+    # 缺失/非法 wall -> None; 非法 spike 结构 -> None
+    for bad_wall in ("oops", 0, -1, True, float("nan")):
+        s, _, _ = make_sampler()
+        assert s.restore(v2_payload(last_sample_wall=bad_wall)) == ()
+        assert s.snapshot()["last_sample_wall"] is None
+    bad_spikes = (
+        {
+            "ts": 1
+        },
+        {
+            "ts": "x",
+            "dt_s": 5,
+            "eff_dt_s": 5,
+            "threshold_bps": GIB,
+            "items": []
+        },
+        {
+            "ts": "x",
+            "dt_s": 0,
+            "eff_dt_s": 5,
+            "threshold_bps": GIB,
+            "items": [{
+                "nic": "eth0"
+            }]
+        },
+        {
+            "ts": "x",
+            "dt_s": 5,
+            "eff_dt_s": 5,
+            "threshold_bps": GIB,
+            "items": [{
+                "nic": "eth0",
+                "dir": "bogus"
+            }]
+        },
+        "not-a-mapping",
+    )
+    for bad_spike in bad_spikes:
+        s, _, _ = make_sampler()
+        assert s.restore(v2_payload(last_spike=bad_spike)) == ()
+        assert s.last_spike is None

@@ -1,7 +1,7 @@
-"""S7 守阵: 时间/大小复合串的解析与回显 (计划 26-10-17-1737 §04 S7 / D12-D13).
+"""S7 守阵: 时间/大小/速率复合串的解析与回显 (计划 26-10-17-1737 §04 S7 / D12-D13; 26-11-03-1102 S5).
 
 单点: gtm/units.py —— 文法镜像 auto-qb (TIME_UNITS / SIZE_UNITS + parse_time / parse_fsize),
-盘上与契约只留复合串 ("30S" / "10MiB"), 不留「数值 + 独立单位」两种形态。
+盘上与契约只留复合串 ("30S" / "10MiB" / "1GiB/s"), 不留「数值 + 独立单位」两种形态。
 全部用例纯函数级, 不碰文件/网络。
 """
 
@@ -15,8 +15,10 @@ from gtm.units import (
     UnitError,
     format_duration,
     format_size,
+    format_speed,
     parse_duration,
     parse_size,
+    parse_speed,
 )
 
 # ---- 解析: 每个单位都认 ----
@@ -140,3 +142,66 @@ def test_format_duration(seconds: float, expected: str) -> None:
 def test_format_size(nbytes: int, expected: str) -> None:
     assert format_size(nbytes) == expected
     assert parse_size(expected) == nbytes
+
+
+# ---- 速率 (S5/C-prime): 只收复合串, 裸数值一律拒绝 ----
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1B/s", 1),
+        ("2KiB/s", 2 * 1024),
+        ("500MiB/s", 500 * 1024**2),
+        ("1GiB/s", 1024**3),
+        ("1TiB/s", 1024**4),
+        ("1.5MiB/s", int(1.5 * 1024**2)),
+        (" 10 mib/S ", 10 * 1024**2),  # 首尾空白 + 大小写不敏感
+    ]
+)
+def test_parse_speed_all_units(text: str, expected: int) -> None:
+    assert parse_speed(text) == expected
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        1024**3,  # 裸数值: 速率键只有复合串一种盘上形态 (无历史包袱可兼容)
+        0.0,
+        True,
+        None,
+        "1GiB",  # 缺 /s
+        "1MB/s",  # 十进制单位不认
+        "1MiB",  # 大小串不是速率串
+        "MiB/s",  # 缺数字
+        "1.2.3MiB/s",
+        "-1MiB/s",
+    ]
+)
+def test_parse_speed_rejects_bad_values(bad: object) -> None:
+    with pytest.raises(UnitError):
+        parse_speed(bad)
+
+
+def test_parse_speed_requires_integral_bytes() -> None:
+    with pytest.raises(UnitError):
+        parse_speed("1.5B/s")
+    assert parse_speed("1.5KiB/s") == 1536
+
+
+@pytest.mark.parametrize(
+    ("bps", "expected"),
+    [
+        (1, "1B/s"),
+        (1024, "1KiB/s"),
+        (1280, "1280B/s"),  # 除不尽 KiB -> 退到 B/s, 不编造小数
+        (1024**2, "1MiB/s"),
+        (100 * 1024**2, "100MiB/s"),
+        (1536 * 1024, "1536KiB/s"),
+        (1024**3, "1GiB/s"),
+        (1024**4, "1TiB/s"),
+    ]
+)
+def test_format_speed(bps: int, expected: str) -> None:
+    assert format_speed(bps) == expected
+    assert parse_speed(expected) == bps

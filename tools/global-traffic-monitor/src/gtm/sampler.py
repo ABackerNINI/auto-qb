@@ -39,19 +39,30 @@ GetIfTable2 整表单读, 非 Windows/回退为 psutil 两次调用, 见 issue 2
 from __future__ import annotations
 
 import logging
+import math
 import re
+import time
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Callable, Mapping, Optional, Protocol
 
 import psutil
 
+from .config import DEFAULT_SAMPLE_RATE_WARN_BPS
 from .nic import default_providers
 
 logger = logging.getLogger("gtm.sampler")
 
 # 采样周期默认值 (s); 休眠循环在 S2 run 命令, 此处仅作为默认口径单点
 DEFAULT_SAMPLE_INTERVAL = 5.0
+
+# S5 (C-prime): 速率判定的 dt 钳制倍数 —— eff_dt = min(dt, 3 × 当前采样间隔).
+# 长 gap (休眠/断连) 不把注入量摊薄到阈值以下 (计划 §06.3)。
+WARN_DT_CLAMP_FACTOR = 3
+
+# 重启后单调钟断代, 用 state 的 last_sample_wall 兜底时允许的最大差值 (7 天);
+# 超出视为时钟跳变/陈旧 state, 跳过本轮速率判定 (只影响告警, 不影响入账)。
+_MAX_RESTART_DT_S = 7 * 24 * 3600.0
 
 # state.json 快照载荷版本 (S2 storage 消费; 升级载荷时 +1 并在此注明差异)
 # v2: 新增 nic_baseline (逐卡基线); last_up/last_down 降级为各卡求和 (兼容/观测);
@@ -103,6 +114,64 @@ def _opt_int(value: object) -> Optional[int]:
     if iv < 0:
         raise ValueError(f"负值: {value!r}")
     return iv
+
+
+def _parse_epoch(raw: object) -> Optional[float]:
+    """state 的 epoch 秒 (last_sample_wall): 非法/缺失/非正 -> None (降级而非报错)."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        return None
+    value = float(raw)
+    if not math.isfinite(value) or value <= 0:
+        return None
+    return value
+
+
+def _parse_last_spike(raw: object) -> Optional[dict[str, object]]:
+    """state 的 last_spike: 结构非法 -> None (旧 v2 载荷缺该键、或手工改坏都走这里).
+
+    只接受本模块写出的结构 (ts/dt_s/eff_dt_s/threshold_bps/items), 逐项重建而不是
+    原样回填 —— state 文件是外部可改的输入面, 不把未知键/非法数值带进 /status。
+    """
+    if not isinstance(raw, Mapping):
+        return None
+    ts = raw.get("ts")
+    if not isinstance(ts, str) or not ts.strip():
+        return None
+    try:
+        dt_s = float(raw["dt_s"])
+        eff_dt_s = float(raw["eff_dt_s"])
+        threshold_bps = int(raw["threshold_bps"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(dt_s) and math.isfinite(eff_dt_s)) or dt_s <= 0 or eff_dt_s <= 0 or threshold_bps <= 0:
+        return None
+    items_raw = raw.get("items")
+    if not isinstance(items_raw, list) or not items_raw:
+        return None
+    items: list[dict[str, object]] = []
+    for entry in items_raw:
+        if not isinstance(entry, Mapping):
+            return None
+        nic, direction = entry.get("nic"), entry.get("dir")
+        if not isinstance(nic, str) or not nic or not isinstance(direction, str) or direction not in ("up", "down"):
+            return None
+        try:
+            cur = int(entry["cur"])
+            last = int(entry["last"])
+            delta = int(entry["delta"])
+            rate_bps = int(entry["rate_bps"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if cur < 0 or last < 0 or delta < 0 or rate_bps < 0:
+            return None
+        items.append({"nic": nic, "dir": direction, "cur": cur, "last": last, "delta": delta, "rate_bps": rate_bps})
+    return {
+        "ts": ts,
+        "dt_s": dt_s,
+        "eff_dt_s": eff_dt_s,
+        "threshold_bps": threshold_bps,
+        "items": items,
+    }
 
 
 @dataclass
@@ -207,6 +276,11 @@ class Sampler:
         self._nic_seen: dict[str, datetime] = {}
         # restore() 是否接受了合法载荷 (含 v1): S2 recover 据此决定是否走 dat 兜底
         self._state_restored = False
+        # S5 (C-prime): 速率判定时间基线。_last_mono 不落盘 (单调钟跨进程断代);
+        # _last_sample_wall 落盘, 供重启后首轮 dt 兜底; _last_spike 只留最近一轮越界记录
+        self._last_mono: Optional[float] = None
+        self._last_sample_wall: Optional[float] = None
+        self._last_spike: Optional[dict[str, object]] = None
 
     # ---- 状态出口 (S2 storage / S3 status 消费) ----
 
@@ -237,6 +311,11 @@ class Sampler:
         """restore() 是否接受了合法载荷 (含 v1 升级); False -> 需走 dat 兜底 (S2 判据)."""
         return self._state_restored
 
+    @property
+    def last_spike(self) -> Optional[dict[str, object]]:
+        """最近一轮越界记录 (S7 供 /status 透出); 无越界历史为 None."""
+        return self._last_spike
+
     def _nic_base_sums(self) -> tuple[Optional[int], Optional[int]]:
         """逐卡基线的合计 (v2 载荷 last_up/last_down 的兼容/观测口径); 空表为 (None, None)."""
         if not self._nic_base:
@@ -254,8 +333,14 @@ class Sampler:
             "last_up_bytes": last_up,
             "last_down_bytes": last_down,
             "nic_baseline": {
-                name: {"up": up, "down": down} for name, (up, down) in self._nic_base.items()
+                name: {
+                    "up": up,
+                    "down": down
+                }
+                for name, (up, down) in self._nic_base.items()
             },
+            "last_sample_wall": self._last_sample_wall,
+            "last_spike": self._last_spike,
         }
 
     # ---- 崩溃恢复 ----
@@ -274,6 +359,11 @@ class Sampler:
         self._nic_base = {}
         self._nic_seen = {}
         self._state_restored = False
+        # 速率基线不随 restore 复活: _last_mono 属本进程 (单调钟跨进程断代);
+        # wall/spike 由 v2 载荷恢复, v1/降级载荷一律置 None
+        self._last_mono = None
+        self._last_sample_wall = None
+        self._last_spike = None
 
         if snapshot is None:
             warnings.append("state 快照缺失: 当日累计从 dat 恢复(若有), 计数器基线取当前值, 停机窗口丢流量")
@@ -319,8 +409,9 @@ class Sampler:
                 return False
             warnings.append("state v1 升级: 逐卡基线重建, 本轮 delta 记 0")
             return True
-        if not self._restore_day(day_raw, snapshot.get("day_up_bytes"), snapshot.get("day_down_bytes"), warnings,
-                                 today):
+        if not self._restore_day(
+            day_raw, snapshot.get("day_up_bytes"), snapshot.get("day_down_bytes"), warnings, today
+        ):
             return False
         warnings.append("state v1 升级: 逐卡基线重建, 本轮 delta 记 0")
         return True
@@ -335,16 +426,18 @@ class Sampler:
                 return False
             warnings.extend(entry_warnings)
             return True
-        if not self._restore_day(day_raw, snapshot.get("day_up_bytes"), snapshot.get("day_down_bytes"), warnings,
-                                 now.date()):
+        if not self._restore_day(
+            day_raw, snapshot.get("day_up_bytes"), snapshot.get("day_down_bytes"), warnings, now.date()
+        ):
             return False
         self._nic_base = parsed
         self._nic_seen = {name: now for name in parsed}
+        self._last_sample_wall = _parse_epoch(snapshot.get("last_sample_wall"))
+        self._last_spike = _parse_last_spike(snapshot.get("last_spike"))
         warnings.extend(entry_warnings)
         return True
 
-    def _restore_day(self, day_raw: object, day_up: object, day_down: object, warnings: list[str],
-                     today: date) -> bool:
+    def _restore_day(self, day_raw: object, day_up: object, day_down: object, warnings: list[str], today: date) -> bool:
         """校验并落当日累计 (日界方向检查); 返回 False 表示损坏/未来日期 (调用方降级)."""
         try:
             snap_day = date.fromisoformat(str(day_raw))
@@ -423,16 +516,28 @@ class Sampler:
 
     # ---- 采样 ----
 
-    def sample_once(self) -> SampleResult:
-        """单次采样: 读 -> 过滤 -> 逐卡差分 (回绕归零) -> 求和入账 -> 当日累计 (跨天硬切)."""
+    def sample_once(
+        self,
+        interval_hint: float = DEFAULT_SAMPLE_INTERVAL,
+        rate_warn_bps: int = DEFAULT_SAMPLE_RATE_WARN_BPS,
+    ) -> SampleResult:
+        """单次采样: 读 -> 过滤 -> 逐卡差分 (回绕归零) -> 求和入账 -> 当日累计 (跨天硬切).
+
+        S5 (C-prime): interval_hint 由主循环每轮传入当前 ``config.sample_interval``
+        (不缓存 -> 热改立即生效), rate_warn_bps 同理由配置每轮现读。速率判定是旁路:
+        只写 WARNING 与 ``last_spike``, 不改 delta/day (计划 §06.1)。
+        """
         now = self._clock()
         day = now.date()
         counters = self._counters_provider()
         stats = self._stats_provider()
+        now_mono = time.monotonic()  # 与计数器读取同一时刻 (单调钟优先, 不受对时影响)
+        now_wall = time.time()
         selected = self.filter.select(counters, stats)
         total_up = sum(io.bytes_sent for io in selected.values())
         total_down = sum(io.bytes_recv for io in selected.values())
         warnings: list[str] = []
+        dt_info = self._dt_since_last(now_mono, now_wall, interval_hint)
 
         # 日界方向检查 (与 restore 的未来日期降级同一防线): 只有日界**前进**才硬切清零。
         # 挂钟回跳跨日界 (NTP 大步校正/手动改钟) 不清零 —— 回跳侧的"新日"其实是历史日,
@@ -461,6 +566,7 @@ class Sampler:
             logger.info("采样基线 | 上次快照不可用, 本次读数作为基线 (up=%d down=%d)", total_up, total_down)
 
         next_base: dict[str, tuple[int, int]] = {}
+        per_nic_delta: list[tuple[str, int, int, tuple[int, int], tuple[int, int]]] = []
         for name, io in selected.items():
             cur = (io.bytes_sent, io.bytes_recv)
             prev = self._nic_base.get(name)
@@ -480,6 +586,7 @@ class Sampler:
                 dd = 0
             delta_up += du
             delta_down += dd
+            per_nic_delta.append((name, du, dd, cur, prev))
             next_base[name] = cur
 
         # 合并而不是替换: 消失卡的记忆保留 (回来后按真实增量差分), 仅清 7 天未见条目
@@ -487,6 +594,11 @@ class Sampler:
         for name in next_base:
             self._nic_seen[name] = now
         self._prune_nic_base(now)
+        # 时间基线在本轮读完后推进 (下一轮 dt 才以本轮读数为起点)
+        self._last_mono = now_mono
+        self._last_sample_wall = now_wall
+        # C-prime: 只算速率/只告警, 不改 delta/day
+        self._evaluate_rate(per_nic_delta, dt_info, now_wall, rate_warn_bps)
         self._day_up += delta_up
         self._day_down += delta_down
 
@@ -507,6 +619,91 @@ class Sampler:
             baseline=baseline,
             warnings=tuple(warnings),
         )
+
+    def _dt_since_last(
+        self,
+        now_mono: float,
+        now_wall: float,
+        interval_hint: float,
+    ) -> Optional[tuple[float, float]]:
+        """本轮 dt 与钳制后的 eff_dt (计划 §06.3); 无可用基线/非法 -> None (跳过判定).
+
+        来源优先级: 进程内 ``_last_mono`` (单调钟) -> 重启后 state 的 ``_last_sample_wall``。
+        wall 兜底额外要求 ``0 < dt <= 7 天``: 陈旧 state 或时钟跳变不制造虚假速率。
+        eff_dt = min(dt, 3 × interval_hint) —— 长 gap 不把注入量摊薄到阈值以下。
+        """
+        if self._last_mono is not None:
+            dt = now_mono - self._last_mono
+            source = "mono"
+        elif self._last_sample_wall is not None:
+            dt = now_wall - self._last_sample_wall
+            source = "wall"
+        else:
+            logger.debug("速率判定跳过 | 无上一轮时间基线 (首轮/state 缺失)")
+            return None
+        if not math.isfinite(dt) or dt <= 0:
+            logger.debug("速率判定跳过 | dt 非法: %.6fs (来源 %s)", dt, source)
+            return None
+        if source == "wall" and dt > _MAX_RESTART_DT_S:
+            logger.debug("速率判定跳过 | 重启 wall 差值 %.1fs 超过 7 天上限", dt)
+            return None
+        return dt, min(dt, WARN_DT_CLAMP_FACTOR * interval_hint)
+
+    def _evaluate_rate(
+        self,
+        per_nic_delta: list[tuple[str, int, int, tuple[int, int], tuple[int, int]]],
+        dt_info: Optional[tuple[float, float]],
+        now_wall: float,
+        threshold_bps: int,
+    ) -> None:
+        """C-prime 速率判定: 单卡单方向 ``delta / eff_dt > threshold`` 才告警 (严格大于).
+
+        只记 WARNING 与 ``last_spike`` (只留最近一轮); delta/day 已在调用方照常入账,
+        本方法不读写累计 (计划 T11)。回绕方向 delta=0 -> 速率为 0, 另一方向独立判定。
+        """
+        if dt_info is None:
+            return
+        dt, eff_dt = dt_info
+        hits: list[dict[str, object]] = []
+        for name, du, dd, cur, prev in per_nic_delta:
+            for direction, delta, cur_val, last_val in (
+                ("up", du, cur[0], prev[0]),
+                ("down", dd, cur[1], prev[1]),
+            ):
+                rate = delta / eff_dt
+                if rate <= threshold_bps:
+                    continue
+                logger.warning(
+                    "单轮速率超阈值 | nic=%s dir=%s cur=%d last=%d delta=%d dt=%.3fs eff_dt=%.3fs rate=%.1fB/s threshold=%dB/s (仅告警, 照常入账)",
+                    name,
+                    direction,
+                    cur_val,
+                    last_val,
+                    delta,
+                    dt,
+                    eff_dt,
+                    rate,
+                    threshold_bps,
+                )
+                hits.append(
+                    {
+                        "nic": name,
+                        "dir": direction,
+                        "cur": cur_val,
+                        "last": last_val,
+                        "delta": delta,
+                        "rate_bps": int(rate),
+                    }
+                )
+        if not hits:
+            return
+        self._last_spike = {
+            "ts": datetime.fromtimestamp(now_wall).astimezone().isoformat(timespec="seconds"),
+            "dt_s": dt,
+            "eff_dt_s": eff_dt,
+            "threshold_bps": threshold_bps,
+            "items": hits,
+        }
 
     def _prune_nic_base(self, now: datetime) -> None:
         """清理 7 天未被选中的逐卡记忆 (避免 state 无界增长; 8 天后回来按新卡处理)."""

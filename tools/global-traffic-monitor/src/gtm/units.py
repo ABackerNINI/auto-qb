@@ -1,4 +1,4 @@
-"""时间 / 大小的复合串解析与回显单点 (计划 26-10-17-1737 S7/D13).
+"""时间 / 大小 / 速率的复合串解析与回显单点 (计划 26-10-17-1737 S7/D13; 26-11-03-1102 S5).
 
 **为什么有这个模块**: 设置页把工具参数（采样间隔 / 落盘阈值 / 订阅租约 …）渲染成「数值框 +
 单位下拉」，而盘上与控制面契约里只留**一个复合串**（``"30S"`` / ``"10MiB"``）—— 不留「数值 +
@@ -12,6 +12,8 @@
 - 时间: ``^([\\d.]+)\\s*([SMHD])$``，单位 S/M/H/D（大小写不敏感，写回统一大写）
 - 大小: ``^([\\d.]+)\\s*([KMGTP]?i?B)$``，单位只认二进制阶梯 B/KiB/MiB/GiB/TiB
   （与设置页下拉的 SIZE_UNITS 逐字一致 —— 多认一个 PiB 就会出现「界面选不出来的值被回显」）
+- 速率: ``^([\\d.]+)\\s*([KMGTP]?i?B)/s$``，单位同上但**必须是复合串**（裸数值一律拒 ——
+  速率的物理量语义不能靠猜，见 C-prime 配置键 ``sample_rate_warn_bps``）
 
 **回显（format_*）走「最大且能整除的单位」**: 1048576 -> ``"1MiB"``、30.0 -> ``"30S"``、
 5400 -> ``"90M"``；除不尽就退到下一级，最后落到 ``"<n>B"`` / ``"<n>S"``，保证
@@ -37,6 +39,7 @@ _SIZE_SCALE = {"B": 1, "KIB": 1024, "MIB": 1024**2, "GIB": 1024**3, "TIB": 1024*
 # 文法与 auto-qb 同形（大小那条忽略大小写，但单位键仍按大写查表 —— "1kib" 也认）
 _DURATION_RE = re.compile(r"^([\d.]+)\s*([SMHD])$", re.IGNORECASE)
 _SIZE_RE = re.compile(r"^([\d.]+)\s*([KMGTP]?i?B)$", re.IGNORECASE)
+_SPEED_RE = re.compile(r"^([\d.]+)\s*([KMGTP]?i?B)/s$", re.IGNORECASE)
 
 
 class UnitError(ValueError):
@@ -111,6 +114,30 @@ def _as_int_bytes(raw: float, original: object) -> int:
     return int(raw)
 
 
+def parse_speed(value: object) -> int:
+    """速率复合串 -> B/s（``"1GiB/s"`` -> 1073741824）。
+
+    与 parse_size 的**刻意差异**: 裸数值一律拒绝。大小的旧盘形态是裸字节数（D13 兼容），
+    速率键是本轮新引进的语义，没有历史裸值可兼容; 把 ``1073741824`` 当 B/s 还是别的口径
+    只能靠猜 —— 校验期直接报错（C-prime 配置键 ``sample_rate_warn_bps`` 必须复合串）。
+    """
+    if isinstance(value, bool):
+        raise UnitError(f"期望速率串 (如 1GiB/s), 收到布尔 {value!r}")
+    if isinstance(value, (int, float)):
+        raise UnitError(f"速率须为复合串 (如 1GiB/s), 收到裸数值 {value!r}")
+    if not isinstance(value, str):
+        raise UnitError(f"期望速率串 (如 1GiB/s), 收到 {type(value).__name__} {value!r}")
+    text = value.strip()
+    match = _SPEED_RE.match(text)
+    if not match:
+        raise UnitError(f"期望速率串 (如 1GiB/s / 500MiB/s), 收到 {value!r}")
+    number, unit = match.groups()
+    key = unit.upper()
+    if key not in _SIZE_SCALE:
+        raise UnitError(f"速率须用二进制单位 (B/KiB/MiB/GiB/TiB)/s, 收到 {value!r}")
+    return _as_int_bytes(_parse_number(number, "速率") * _SIZE_SCALE[key], value)
+
+
 def format_duration(seconds: float) -> str:
     """秒 -> 时间复合串（取「能整除的最大单位」，除不尽退到秒）。"""
     value = float(seconds)
@@ -129,6 +156,16 @@ def format_size(nbytes: int) -> str:
         if value >= scale and value % scale == 0:
             return f"{value // scale}{unit}"
     return f"{value}B"
+
+
+def format_speed(bps: int) -> str:
+    """B/s -> 速率复合串（取「能整除的最大单位」+ ``/s``，除不尽退到 B/s）。"""
+    value = int(bps)
+    for unit in ("TiB", "GiB", "MiB", "KiB"):
+        scale = _SIZE_SCALE[unit.upper()]
+        if value >= scale and value % scale == 0:
+            return f"{value // scale}{unit}/s"
+    return f"{value}B/s"
 
 
 def _fmt_number(value: float) -> str:
