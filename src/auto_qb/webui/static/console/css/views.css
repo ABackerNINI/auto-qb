@@ -130,7 +130,8 @@ select option { background: var(--bg-elev); color: var(--fg); }
 @media (max-width: 900px) {
   .topbar { flex-wrap: wrap; gap: 10px; padding: 10px 12px; }
   .topbar .spacer { display: none; }
-  .ce-page { padding: 12px 12px 24px; }
+  /* .ce-page 窄屏 padding 不在这里写(issue 26-11-03-1120): dialogs.css 的无条件 .ce-page 后加载,
+   * 同特异性恒胜, 写这边必成死规则 —— 已并入 dialogs.css 基础规则后的媒体覆盖 */
   .status-strip { padding: 7px 12px; overflow-x: auto; }
   .dist-bar { flex-basis: 120px; }
   .group-head, .group-row { min-width: 1180px; }

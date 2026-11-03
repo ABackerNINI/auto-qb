@@ -529,6 +529,12 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .ce-page { padding: 16px 12px calc(24px + var(--statusbar-h)); display: flex; flex-direction: column;
   --ce-input-max: 720px;  /* 输入控件/说明文字的最大宽度(页面利用率) */
 }
+/* 窄屏紧凑内边距(issue 26-11-03-1120): 原写在 views.css 的 @media(max-width:900px), 但本文件
+ * 无条件 .ce-page 后加载、同特异性恒胜, 那边成了死规则。挪到基础规则之后, 同文件内媒体覆盖
+ * 不再赌跨文件加载序。 */
+@media (max-width: 900px) {
+  .ce-page { padding: 12px 12px 24px; }
+}
 
 /* ============ HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup) ============
  * 单例浮层由 Vue teleport 到 body 级(脱离列表容器的 overflow/特异性纠缠), 触发/定位/数据

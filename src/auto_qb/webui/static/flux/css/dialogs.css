@@ -481,6 +481,12 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 /* 设置页骨架(版式由 shared/console_hub.css 承担) */
 .ce-page { padding: 16px 12px calc(24px + var(--statusbar-h)); display: flex; flex-direction: column;
   --ce-input-max: 720px; }
+/* 窄屏紧凑内边距(issue 26-11-03-1120): 原写在 views.css 的 @media(max-width:900px), 但本文件
+ * 无条件 .ce-page 后加载、同特异性恒胜, 那边成了死规则。挪到基础规则之后, 同文件内媒体覆盖
+ * 不再赌跨文件加载序。 */
+@media (max-width: 900px) {
+  .ce-page { padding: 12px 12px 24px; }
+}
 
 /* ============ HR 悬停弹窗(T3 进度仪表; z-index 140 高于 ctx-menu 与 speed-pop) ============ */
 .hr-pop { position: fixed; left: 0; top: 0; z-index: 140; width: 300px; padding: 12px 13px;

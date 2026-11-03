@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-css-cascade">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖">
 <meta name="issue-summary" content="views.css @media(max-width:900px) 的 .ce-page padding 12px 12px 24px 恒被 dialogs.css 的 .ce-page padding 16px 12px calc(...) 覆盖, 移动端紧凑内边距从未生效">
 <title>flux .ce-page 移动端内边距规则被 dialogs.css 后置同特异性规则覆盖 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1120-bug-webui-flux-ce-page-media-cascade</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:20</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -173,11 +173,13 @@ SELECTOR .ce-page   PROP padding
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 11:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 02:31 — 用户指派认领，复验后修复，状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-11-04 02:20：<strong>仍复现</strong>，且影响面修正为 flux/atlas/console 三皮肤（各自 views.css 媒体规则 vs dialogs.css 无条件规则）；prism 两条规则同在 views.css（:522 无条件 → :680 媒体），同文件内后置胜出，媒体规则生效、无须修。另核实一处 issue 未记的事实：<code>.ce-page</code> 唯一落点是 <code>shared/tpl/settings.html</code> 的 <code>class="ce-page hub-page"</code>，shared/console_hub.css（加载序在所有皮肤 dialogs.css 之后）的 <code>.hub-page { padding: 0; }</code> 同特异性恒胜，把 base 与媒体两条 padding <em>都</em>压死 —— 设置页实际内边距由 <code>.hb-wrap</code> 承担，故本缺陷为级联卫生问题（死规则 + 赌加载序），实测渲染差异为零。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：采用建议修法的「dialogs.css 内加媒体覆盖」支线 —— 三皮肤（flux/atlas/console）各自把 <code>.ce-page { padding: 12px 12px 24px; }</code> 从 views.css 的 <code>@media(max-width:900px)</code> 块移除（留指路注释），挪进 dialogs.css 基础规则之后新增的同条件媒体块。同文件内媒体覆盖紧跟基础规则，不再赌跨文件加载序，也保住 views/dialogs 的层级职责，未用提权。与建议的「提到 components.css」支线相比改道原因：components.css 无 <code>--statusbar-h</code> 之外的骨架语义且 base 规则本就住在 dialogs.css，就近内聚改动面最小。prism 不动（序已正确）。</p>
+    <p><strong>验证方式</strong>：grep 六文件复核规则落位（每皮肤 <code>.ce-page</code> padding 仅存 dialogs.css 一处 base + 一处同文件媒体覆盖）；跑 webui 静态扫描测试 <code>test_webui_static_skins_skin.py / dom_panel_dialogs.py / dom_page_layout.py</code>（58 passed）与 <code>skins_table / skins_widget / dom_page_hr / dom_panel_misc</code>（30 passed），全部通过。</p>
   </section>
 
   <footer>
