@@ -16,8 +16,10 @@
 - state: 每次 record 必写 (丢失窗口 <= 采样间隔); 缺失/损坏 read() -> None
 - 节流: 低于阈值且未到间隔不落盘; 达 1MiB 落盘; 达 30s 落盘; 首帧必落盘
   (恢复值/初始值即时持久化); render 活尾随时可服务 (文件未落盘时内存即最新)
-- 恢复: kill -9 后续跑日累计接续不丢不重 (state 权威); state 缺失/损坏(版本不符)
-  -> dat 兜底; 有效载荷 (今天) 不触发兜底 —— state 与 dat 冲突时取 state
+- 恢复: kill -9 后续跑日累计接续不丢不重 (state 权威); state 缺失/损坏(版本不符)/
+  v2 字段损坏/未来日期 -> dat 兜底; 有效载荷 (今天 v1/v2、v1 空快照无 day) 的兜底
+  判据 = state_restored + day —— v1 升级 (逐卡记忆为空) 不触发 dat 回退; v2 往返
+  同时恢复当日累计与逐卡基线 (state 与 dat 冲突时取 state)
 - 跨天: day_rolled 封存旧日最终值 (未达阈值也落盘) + 新日行懒写 + 节流基线重置
 - 单实例锁: 进程内二次获取 fail-fast (含持有者 PID); 跨进程 (真·二次启动) 同样
   fail-fast; 释放后可再获取; release 幂等; 伴生 meta 随释放删除
@@ -433,6 +435,10 @@ def test_state_written_on_every_record(tmp_path):
     sample_record(storage, sampler, counters, 5 * MIB, 0)  # +5MiB
     state = json.loads((tmp_path / "state.json").read_text(encoding="utf-8"))
     assert state["day_up_bytes"] == 5 * MIB and state["last_up_bytes"] == 5 * MIB
+    # v2 载荷: 逐卡基线随快照落盘 (单卡时 last_up 与基线求和相等)
+    assert state["version"] == 2
+    assert state["nic_baseline"] == {"eth0": {"up": 5 * MIB, "down": 0}}
+    assert state["last_down_bytes"] == 0
     # 丢失窗口 <= 采样间隔的证据: 每次采样后 state 已是最新 (无需 close)
 
 
@@ -607,6 +613,7 @@ def test_recover_fallback_when_state_version_unsupported(tmp_path):
 
 
 def test_recover_prefers_state_over_dat_when_valid(tmp_path):
+    """v1 载荷有效: state 权威 (保留当日累计), 逐卡记忆为空也不算「不可用」-> 不回落 dat."""
     atomic_write_text(
         str(tmp_path / "history_traffic.dat"),
         f'lines: "1"\n2026/10/16 {1 * MIB // KB}/{1 * MIB // KB}\n',
@@ -626,9 +633,142 @@ def test_recover_prefers_state_over_dat_when_valid(tmp_path):
     )
     sampler = make_sampler()
     storage = make_storage(tmp_path)
+    warnings = storage.recover(sampler)
+    assert sampler.day_up_bytes == 5 * MIB and sampler.day_down_bytes == 1 * MIB  # state 权威 (未回退到 1/1MiB)
+    assert sampler.state_restored is True
+    assert not sampler.has_baseline  # v1 无逐卡基线: 首轮每卡只立基线
+    assert any("state v1 升级" in w for w in warnings)
+
+
+def test_recover_v2_payload_roundtrip_keeps_day_and_per_nic_baseline(tmp_path):
+    """v2 载荷往返: 当日累计 + 逐卡基线一并恢复, 首轮按真实增量接续 (不被 dat 滞后值覆盖)."""
+    atomic_write_text(
+        str(tmp_path / "history_traffic.dat"),
+        f'lines: "1"\n2026/10/16 {1 * MIB // KB}/{1 * MIB // KB}\n',
+    )
+    atomic_write_text(
+        str(tmp_path / "state.json"),
+        json.dumps(
+            {
+                "version": 2,
+                "day": "2026-10-16",
+                "day_up_bytes": 5 * MIB,
+                "day_down_bytes": 1 * MIB,
+                "last_up_bytes": 9 * MIB,
+                "last_down_bytes": 4 * MIB,
+                "nic_baseline": {
+                    "eth0": {
+                        "up": 9 * MIB,
+                        "down": 4 * MIB
+                    }
+                },
+            }
+        ),
+    )
+    counters = FakeCounters()
+    sampler = make_sampler(counters=counters)
+    storage = make_storage(tmp_path)
     storage.recover(sampler)
-    assert sampler.day_up_bytes == 5 * MIB and sampler.day_down_bytes == 1 * MIB  # state 权威
-    assert sampler.has_baseline
+    assert (sampler.day_up_bytes, sampler.day_down_bytes) == (5 * MIB, 1 * MIB)
+    assert sampler.state_restored is True and sampler.has_baseline
+    counters.page = {"eth0": nic(11 * MIB, 5 * MIB)}  # 相对恢复的逐卡基线 +2/+1 MiB
+    r = sampler.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (2 * MIB, 1 * MIB)
+    assert (r.day_up_bytes, r.day_down_bytes) == (7 * MIB, 2 * MIB)
+
+
+def test_recover_fallback_to_dat_when_v2_payload_corrupt(tmp_path):
+    """v2 字段损坏 (day 非 ISO): restore 不接受 -> 当日累计与逐卡基线都回落 dat."""
+    atomic_write_text(
+        str(tmp_path / "history_traffic.dat"),
+        f'lines: "1"\n2026/10/16 {4 * MIB // KB}/{2 * MIB // KB}\n',
+    )
+    atomic_write_text(
+        str(tmp_path / "state.json"),
+        json.dumps(
+            {
+                "version": 2,
+                "day": "not-a-date",
+                "day_up_bytes": 9 * MIB,
+                "day_down_bytes": 0,
+                "last_up_bytes": 5,
+                "last_down_bytes": 5,
+                "nic_baseline": {
+                    "eth0": {
+                        "up": 5,
+                        "down": 5
+                    }
+                },
+            }
+        ),
+    )
+    sampler = make_sampler()
+    storage = make_storage(tmp_path)
+    warnings = storage.recover(sampler)
+    assert sampler.day_up_bytes == 4 * MIB and sampler.day_down_bytes == 2 * MIB  # dat 兜底
+    assert sampler.state_restored is False
+    assert not sampler.has_baseline  # 计数器基线取当前值 (首样本 baseline)
+    assert any("state 快照损坏" in w for w in warnings)
+
+
+def test_recover_fallback_to_dat_when_v2_day_in_future(tmp_path):
+    """v2 日期在未来 (时钟偏差): 不采信, 走 dat 兜底 (宁可少报不虚增)."""
+    atomic_write_text(
+        str(tmp_path / "history_traffic.dat"),
+        f'lines: "1"\n2026/10/16 {4 * MIB // KB}/{2 * MIB // KB}\n',
+    )
+    atomic_write_text(
+        str(tmp_path / "state.json"),
+        json.dumps(
+            {
+                "version": 2,
+                "day": "2026-10-17",
+                "day_up_bytes": 9 * MIB,
+                "day_down_bytes": 0,
+                "last_up_bytes": 5,
+                "last_down_bytes": 5,
+                "nic_baseline": {
+                    "eth0": {
+                        "up": 5,
+                        "down": 5
+                    }
+                },
+            }
+        ),
+    )
+    sampler = make_sampler()
+    storage = make_storage(tmp_path)
+    warnings = storage.recover(sampler)
+    assert sampler.day_up_bytes == 4 * MIB and sampler.day_down_bytes == 2 * MIB
+    assert sampler.state_restored is False
+    assert any("晚于今天" in w for w in warnings)
+
+
+def test_recover_v1_empty_snapshot_falls_back_to_dat(tmp_path):
+    """v1 空快照 (首次采样前宕机, 无 day): 载荷自洽被接受, 但 day 缺失 -> dat 兜底."""
+    atomic_write_text(
+        str(tmp_path / "history_traffic.dat"),
+        f'lines: "1"\n2026/10/16 {3 * MIB // KB}/{1 * MIB // KB}\n',
+    )
+    atomic_write_text(
+        str(tmp_path / "state.json"),
+        json.dumps(
+            {
+                "version": 1,
+                "day": None,
+                "day_up_bytes": 0,
+                "day_down_bytes": 0,
+                "last_up_bytes": None,
+                "last_down_bytes": None,
+            }
+        ),
+    )
+    sampler = make_sampler()
+    storage = make_storage(tmp_path)
+    storage.recover(sampler)
+    assert sampler.state_restored is True  # 载荷本身合法 (v1 空快照)
+    assert sampler.day_up_bytes == 3 * MIB and sampler.day_down_bytes == 1 * MIB  # day 缺失 -> dat 兜底
+    assert not sampler.has_baseline
 
 
 # ---- 跨天 ----

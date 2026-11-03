@@ -524,6 +524,9 @@ class Storage:
 
         返回恢复告警 (调用方负责日志可见; sampler.restore 的语义见 S1)。
         有效载荷 (今天接续/昨天清零基线续) 不触发兜底 —— state 权威, dat 仅兜底。
+        兜底判据 = state_restored + day (计划 §04.3): v1 升级后逐卡记忆为空但当日
+        累计有效, 用 has_baseline 会把 state 的精确累计回退到 dat 的滞后值;
+        has_baseline 此后只表示「逐卡记忆非空」(sample_once 的 baseline 分支)。
         S3: 注册表 (subscribers) 与末事件号 (last_event_id) 随本调用从 state
         提取入内存; 坏条跳过 (端点缺失/时间戳非数值), 局部损坏不拖垮恢复。
         """
@@ -533,9 +536,9 @@ class Storage:
             if isinstance(state, dict):
                 self._load_registry(state)
             warnings = list(sampler.restore(state))
-            if state is None or not sampler.has_baseline:
-                # 降级路径 (计划 S1 口径: state 缺失/损坏 -> 当日累计从 dat 末行恢复,
-                # 计数器基线仍取当前值, 停机窗口丢流量)
+            if state is None or sampler.day is None or not sampler.state_restored:
+                # 降级路径 (计划 §04.3: state 缺失/损坏/版本不符/未来日期 -> 当日累计
+                # 从 dat 末行恢复, 计数器基线仍取当前值, 停机窗口丢流量)
                 sampler.restore_from_dat(self._dat.render())
         return tuple(warnings)
 
