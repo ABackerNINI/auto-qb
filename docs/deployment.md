@@ -166,8 +166,14 @@ interval: 30s / timeout: 5s / retries: 3 / start_period: 15s
 - 探的是 **Web UI 端口**(slim 镜像没有 curl/wget, 用 python 内联探活); `GET /` 307 → `/atlas/`
   静态页, 非 `/api` 路径免 token —— 所以 healthy ≠ 已登录, 只代表"服务在听、前端资产在"。
 - 实测启动后 **12~21 秒**转 healthy (start_period 15s 内的失败不计数, 之后每 30s 一次、连败 3 次判 unhealthy, 约 1 分钟)。
-- `unhealthy` 的两种已知成因: ① `web.port` 改了而 compose 的 healthcheck/ports 没同步; ② `web.enabled: false`
-  (见 §4)。容器**不会**因 unhealthy 被重启(健康状态 ≠ 存活), 程序照常运行。
+- `unhealthy` / Web UI 起不来的**三种**已知成因(容器表现按现行 fail-fast 口径区分):
+  ① **端口被占**(宿主机或共享网络场景下容器内 `web.port` 已被占用; 容器独占网络命名空间时属低频):
+  启动期 bind 失败即 fail-fast —— 进程以**退出码 1** 结束, stderr 一行 `WebUI 启动失败: ...`,
+  容器进入 `Restarting`(restart 策略拉不活, 端口冲突不会自愈);
+  ② **配置同步错**(`web.port` 改了而 compose 的 `ports` / `healthcheck` 没同步): 容器内可能监听成功,
+  但宿主映射与探活仍指向旧端口 ⇒ Web UI 同样起不来/连不上, 健康检查恒失败; 三处必须同步改(见 §13);
+  ③ **关闭 WebUI**(`web.enabled: false`): 进程照常运行, 但健康检查没有探测目标 ⇒ 约 1 分钟后恒 `unhealthy`(见 §4)。
+  容器**不会**因 unhealthy 被重启(健康状态 ≠ 存活); 想 Web UI 与健康检查都不要就删掉 compose 的 `healthcheck` 段。
 - healthy 只证明 Web 层活着, 不证明 qB 连通 —— qB 连通看 `GET /api/status` 的 `connected`
   或日志里的连接错误。
 
@@ -179,6 +185,7 @@ interval: 30s / timeout: 5s / retries: 3 / start_period: 15s
 | 配置错误(校验失败/YAML 坏) | **1** | stderr `配置错误: ...` 聚合报错, 无堆栈 | 按 restart 策略重启 |
 | 单实例锁被占 | **1** | stderr `另一实例已持有锁 ...`, 无堆栈 | 同上 |
 | **连不上 qB** | **1** | stderr `无法连接 qBittorrent <host>:<port>: 请检查...` + 上一行 `连接 qBittorrent 失败` 的详细原因 | 同上 |
+| **WebUI 启动失败**(bind 失败 / 端口被占) | **1** | stderr `WebUI 启动失败: <host>:<port> 无法监听 ...`; 日志另有多行 `WEB UI 启动失败诊断`(原因 / 占用者 / 处置 / 退出) | 受 restart 策略影响(可能反复重启; 端口冲突不会自愈, 表现为持续 `Restarting`) |
 
 - `restart: unless-stopped` 对**任何**退出码都会拉起容器, 但 Docker 自带**指数退避**
   (100ms 起翻倍, 上限 1 分钟): 实测 qB 不可达时首轮 40 秒内约 9 次, 随后自动降到最多每分钟一次;
@@ -187,6 +194,11 @@ interval: 30s / timeout: 5s / retries: 3 / start_period: 15s
 - 连不上 qB 之所以退出码 1 而不是带病常驻: 非托管(CLI)模式走 fail-fast 契约
   (`QbConnectError` → stderr 干净消息), 托管模式(--tray)才按 main_tick 重试常驻。
 - qB 在运行中途宕机**不需要**容器重启: 主循环内有重连退避(2s→2×→…→上限 30s), 恢复即自动接上。
+- **systemd(用户自建 unit)**: 仓内没有 auto-qb 自己的 unit 文件; 自建时 `Restart=on-failure` / `always`
+  会对退出码 1 按 `RestartSec`(默认 100ms)**无退避地循环拉起**, 建议 `RestartSec=30s`, 或配
+  `StartLimitIntervalSec` / `StartLimitBurst` 限流, 免得端口冲突时刷日志。
+- **同机多 clone**: 默认 `web.port` 是 8080, 同机多实例必须**各配独立 `web.port`**; 后启动且启用 WebUI
+  的实例会因端口被占 fail-fast(退出码 1), 表现为反复 `Restarting`。
 
 ## 11. 容器化后的功能变化(失效 / 降级 / 不变)
 
