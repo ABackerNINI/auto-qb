@@ -1274,6 +1274,12 @@ def test_frontend_window_source_kind_descriptor_parameterized():
     assert "this._winSrc(kind).topOffset(el)" in _body(cols, "_ensureWinTop"), "_ensureWinTop 未走描述符"
     assert "WIN_SRC_DOC.scrollY()" in _body(cols, "_onWinScroll"), "_onWinScroll 未走描述符"
     assert "WIN_SRC_DOC.viewH()" in _body(cols, "_onWinResize"), "_onWinResize 未走描述符"
+    # _rowWindow 的族分流判据(issue 26-11-03-1035): 必须 = 描述符 family 标记, 禁对象身份比较
+    # —— group 是 Object.assign 换行键的克隆, 身份比较恒假把它误判进容器分支(抽屉关全量渲染 /
+    # 抽屉开切片跟抽屉滚)。
+    body_rw = _body(cols, "_rowWindow")
+    assert "=== WIN_SRC_DOC" not in body_rw, "_rowWindow 回到对象身份比较 —— 克隆描述符(group)会被误判进容器分支(issue 26-11-03-1035)"
+    assert ".family" in body_rw, "_rowWindow 未按源族 family 标记分流(issue 26-11-03-1035 修法契约)"
     for call in ('_rowWindow("member"', '_rowWindow("torrent"', '_rowWindow("group"'):
         assert call in cols, f"{call} 调用点消失 —— 主表三窗口断了(恒久活性探针)"
 
@@ -1331,6 +1337,9 @@ def test_frontend_row_window_sig_and_ctn_sync_guard():
        出流(三皮肤 dialogs.css .drawer-leave-active), clientWidth 实测跳 1894->1918 是过渡假象;
        采信就假 bump 与主表**共用**的 _winResize, 下一拍 updated 钩子按签名失配全量重渲主表
        (3000 行实测 5.6s 长任务, 用户所见「关抽屉后卡死; 能滚不能点」—— 滚轮走合成器不进主线程)。
+    3. _rowWindow 族分流判据 = 描述符 family 标记(issue 26-11-03-1035), 禁对象身份比较:
+       group 是 Object.assign 换行键的克隆, 身份不等但同族 —— 误判进容器分支会让抽屉关
+       全量渲染、抽屉开切片跟抽屉滚。行为面对: node 探针 group 两态电池。
     """
     rel = "shared/columns.js"
     text = read_shared("columns.js")

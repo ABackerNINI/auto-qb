@@ -458,7 +458,10 @@ Object.assign(window.AQB_COLUMNS.methods, {
       // 滚动几何按**源族**分流(计划 26-11-02-0351 W3): 文档型 = 主表三 kind 共用一对
       // _winScrollY/_winViewH; 容器型 = 抽屉 .drawer-body 自己一对(_winCtnState)。
       // 两套坐标系混用会让主表窗口跟着抽屉滚动漂移(主表与抽屉同屏可见)。
-      const doc = this._winSrc(kind) === WIN_SRC_DOC;
+      // 分流判据 = 描述符的 family 标记(issue 26-11-03-1035): 身份比较对克隆描述符恒假 ——
+      // group 是 Object.assign 换行键的克隆, 曾被误判进容器分支(抽屉关 = 窗口化关闭全量渲染,
+      // 抽屉开 = 切片跟抽屉滚动漂移)。缺 family 一律按文档型 = 保守默认(未注册 kind 同口径)。
+      const doc = this._winSrc(kind).family !== "container";
       const st = doc ? null : this._winCtnState();
       const sy = doc ? this._winScrollY : st.y;
       const vh = doc ? this._winViewH : st.h;

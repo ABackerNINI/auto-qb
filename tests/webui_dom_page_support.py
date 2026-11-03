@@ -489,8 +489,10 @@ const checks = [
       const h = () => {}; d.bindScroll(h); d.unbindScroll(h);
       return JSON.stringify(rec) === JSON.stringify([["on", "scroll", h, { passive: true }], ["off", "scroll", h]]); })()],
   // --- kind 解析与行键 ---
-  ["主表三 kind 注册齐全: torrent/member 共用文档型, group 覆盖行键", SRC.torrent === DOC && SRC.member === DOC
-      && SRC.group !== DOC && SRC.group.keyOf({ key: "a" }) === "a" && SRC.group.scrollY() === 1000],
+  ["主表三 kind 注册齐全: torrent/member 共用文档型, group 克隆换行键但同族(doc)", SRC.torrent === DOC && SRC.member === DOC
+      && SRC.group !== DOC && SRC.group.keyOf({ key: "a" }) === "a" && SRC.group.scrollY() === 1000
+      && DOC.family === "doc" && SRC.torrent.family === "doc" && SRC.member.family === "doc"
+      && SRC.group.family === "doc" && SRC.drawerContent.family === "container"],
   ["未注册 kind 回落文档型", M._winSrc("nope") === DOC && M._winSrc("torrent") === DOC && M._winSrc("member") === DOC],
   ["主表行键: group=item.key 其余=item.hash", M._rowKeyOf("group", { key: "g1" }) === "group:g1"
       && M._rowKeyOf("torrent", { hash: "t1" }) === "torrent:t1" && M._rowKeyOf("member", { hash: "m1" }) === "member:m1"],
@@ -563,6 +565,26 @@ const familySplit = () => {
   return okCtn && docStill && wCtn.active;
 };
 checks.push(["源族分流: 容器族只读 _winCtn / 文档族只读 _winScrollY 对, 未注册 kind 回落文档族", familySplit()]);
+
+// --- group 克隆描述符两态(issue 26-11-03-1035): group 是 Object.assign 换行键的克隆, 旧码
+// 按对象身份判族恒假 —— 抽屉关 = 窗口化关闭全量渲染; 抽屉开 = 切片跟抽屉滚(文档 y 被无视)。
+// 两态都必须 active 且窗口逐位相同(同按文档坐标切片): 抽屉关 h=0 不许把 group 关进全量,
+// 抽屉滚到 5000 不许把切片拽走(文档滚动位恒 2000)。
+const groupCloneFamily = () => {
+  const rows = Array.from({ length: N }, (_, i) => ({ key: "g" + i }));
+  const mk = (ctnY, ctnH) => {
+    const c = mkCtx();
+    c._winTop.group = 0; c._winScrollY = 2000; c._winCtn = { y: ctnY, h: ctnH };
+    rows.forEach((r, i) => { c._rowHs["group:" + r.key] = i % 2 ? 65.4 : 43.7; });
+    return c;
+  };
+  const closed = mk(0, 0)._rowWindow("group", rows, null);      // 抽屉关: 容器视口 0
+  const open = mk(5000, 800)._rowWindow("group", rows, null);   // 抽屉开滚到 5000
+  return closed.active && closed.start > 0 && closed.end < N
+    && closed.padTop > 0 && closed.padBottom > 0
+    && JSON.stringify(closed) === JSON.stringify(open);
+};
+checks.push(["group 克隆描述符两态按文档坐标切片(抽屉关 h=0 / 抽屉开滚 5000, 窗口逐位相同)", groupCloneFamily()]);
 
 // --- 零差异回退不回潮 ---
 const fallback = () => {

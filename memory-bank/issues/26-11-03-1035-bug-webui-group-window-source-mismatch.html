@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-windowing">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）">
 <meta name="issue-summary" content="WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型">
 <title>group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚） · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）</h1>
     <p class="lede">WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1035-bug-webui-group-window-source-mismatch</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 10:35</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -175,11 +175,16 @@ const vh  = doc ? this._winViewH  : st.h;
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 10:35 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 06:12 — 用户指派认领，状态 <strong>In Progress</strong>（开工复验仍复现，见上方复验记录）</li>
+      <li>2026-11-04 06:20 — 修复完成，状态 <strong>Done</strong>（按建议修法 A 落地：描述符加 <code>family</code> 源族标记，<code>_rowWindow</code> 按族分流；验证与数字见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-03 10:20 仍复现（入池取证时已跑 node 两态桩，输出见 §02）。认领后需按最新 HEAD 重跑。</p>
+    <p>复验：2026-11-04 06:12 按最新 HEAD <code>0c2571e1</code> 仍复现（认领开工复验，node 两态桩重跑：抽屉关 <code>{"active":false,"start":0,"end":300}</code> 全量渲染；抽屉 scrollTop=5000 时切片 <code>start=72, end=106</code> 按抽屉坐标计算，文档 scrollY=2000 被忽略）。行为与入池取证一致，行号小数差异来自桩的行高混排口径。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（= 建议修法 A）</strong>：滚动源描述符加显式族标记 <code>family: "doc" | "container"</code> —— <code>WIN_SRC_DOC</code> 带 <code>family: "doc"</code>（group 克隆 <code>Object.assign</code> 自动继承），<code>winSrcContainer</code> 工厂带 <code>family: "container"</code>；<code>_rowWindow</code> 改按 <code>this._winSrc(kind).family !== "container"</code> 分流（缺 <code>family</code> 按文档型 = 保守默认，与未注册 kind 回落同口径），不再做对象身份比较。三处单点：<code>shared/columns.js</code>（描述符）、<code>shared/columns_grid.js</code> <code>_rowWindow</code>（分流判据）。</p>
+    <p><strong>守阵</strong>：①<code>tests/webui_dom_page_support.py</code> node 探针新增 group 两态电池（抽屉关 h=0 / 抽屉开滚 5000 且文档滚动位 2000，断言两态均 active 且窗口逐位相同 = 同按文档坐标切片），「主表三 kind 注册齐全」检查补族断言；②<code>tests/test_webui_static_dom_page_layout.py</code> 签名守卫加两条：<code>_rowWindow</code> 禁 <code>=== WIN_SRC_DOC</code> 身份比较、必须含 <code>.family</code> 分流。</p>
+    <p><strong>验证与测试数字</strong>（2026-11-04 06:20 实测）：开工复验桩两态复现（抽屉关 <code>active:false</code> 全量渲染 300 行 / 抽屉滚 5000 切片 <code>start=72</code> 跟抽屉走）；修复后同桩两态均 <code>active:true, start=23, end=57</code> 逐位相同（按文档坐标）。全量 <code>commands run test.full</code>：5123 passed / 10 skipped，覆盖 99%（数字基线以 <code>memory-bank/testing/baselines/</code> 最新切片为准）。</p>
   </section>
 
   <footer>

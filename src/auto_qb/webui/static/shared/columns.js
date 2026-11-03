@@ -45,6 +45,8 @@ const HSCROLL_IND = {
  * - 容器型 winSrcContainer(预留, W3 接线 drawerContent): 滚动源 = 指定容器的 scrollTop,
  *   视口 = 容器 clientHeight, 绑定 = 元素 scroll 监听 + ResizeObserver(容器高变化不触发 window resize)。
  * 保守默认: kind 未在 WIN_SOURCES 注册时 _winSrc 回落 WIN_SRC_DOC —— 描述符缺失 = 现行为。
+ * 每个描述符带 family("doc" | "container")源族标记, _rowWindow 按它分流滚动坐标系(issue
+ * 26-11-03-1035): 不做对象身份比较 —— 克隆描述符(Object.assign 换行键)身份不等但同族。
  * _winTop 的几何口径两型对称: 文档型 = rect.top + scrollY(相对文档内容顶), 容器型 =
  * rect.top - 滚动容器rect.top + scrollTop(相对容器内容顶) —— rel = scrollY - top 都是
  * 「已滚进行块的距离」, _rowWindow 的前缀和算式两型共用。
@@ -54,6 +56,10 @@ const HSCROLL_IND = {
  */
 /* WIN-SOURCES-BEGIN: 窗口化几何对 window.scrollY / window.innerHeight 的直读只允许出现在这一段 */
 const WIN_SRC_DOC = {
+  /* 源族标记(issue 26-11-03-1035): _rowWindow 按它分流坐标系, 不做对象身份比较 ——
+   * group 等克隆描述符(Object.assign 换行键)与 WIN_SRC_DOC 身份不等但同族, 身份比较会把
+   * 文档型 kind 误判进容器分支(读抽屉滚动坐标)。 */
+  family: "doc",
   scrollY: () => window.scrollY,
   viewH: () => window.innerHeight,
   topOffset(el) {
@@ -84,6 +90,7 @@ const WIN_SOURCES = {
  * (惰性求值 —— 容器可能 v-if 未渲染, 各函数逐次判空: 未渲染 = scrollY 0 / viewH 0, 走零差异回退)。 */
 function winSrcContainer(getEl) {
   return {
+    family: "container",  // 源族标记(issue 26-11-03-1035): _rowWindow 按它分流, 见 WIN_SRC_DOC
     scrollY() {
       const el = getEl();
       return el ? el.scrollTop : 0;

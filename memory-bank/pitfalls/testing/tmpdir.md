@@ -30,6 +30,9 @@
   裸 `uv run pytest` 与 `commands run test.full`(后台 shell 同 env)双双 rc=4, `env -u TMPDIR` 前缀后正常
   (为什么没命中: AGENTS.md 有该硬约束提示但开工只读了 pitfalls 总索引没进 testing 类索引;
   收尾跑全量换后台 shell 时又忘了 env 随 shell 走)。
+- **复发**: 2(2026-11-04)—— 同日不同 clone 再踩同形: `commands run test.quick` 直跑 rc=4,
+  `unset TMPDIR` 后过。为什么没命中: 跑测试前没进 testing 类索引(路由没到);
+  失败行自带清理配方, 照做即过, 零排查成本。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 
