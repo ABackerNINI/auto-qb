@@ -189,13 +189,16 @@ def test_rm01_05_web_start_log_and_token_no_leak():
 
 
 def test_rm01_06_port_taken_reports_failure_not_silent():
-    """[RM01-06] 端口被占时显式报「WEB UI 启动失败」, 进程不装死也不崩
+    """[RM01-06] 端口被占时启动期 fail-fast: 退出码 1 + 可操作诊断 + 锁已释放(A 路线)
 
-    前置: 先用 socket 占住目标端口
-    副作用: 进程照常跑主循环(没有 WEB), 用例收尾停掉
-    回滚: 关 socket + 停进程
-    失败判据: 日志无「WEB UI 启动失败」(用户以为 UI 开着) / 进程直接退出(一个端口占用
-              不该带走整个程序)
+    前置: 先用 socket 占住目标端口, 配置保持 web.enabled=true(场景不变)
+    副作用: 进程启动即失败退出(采集不会启动); 用例收尾关 socket
+    回滚: 关 socket(进程已退)
+    失败判据: 退出码 != 1 / 日志或 stderr 缺「WebUI 启动失败」与端口号 / 文案缺 web.port 或
+              web.enabled 键路径(用户不知道改哪个键) / state.lock.meta.json 残留(锁没释放) /
+              占位 socket 不再占用该端口(用例前提失效, 断言不可信)。
+              注意: 旧口径「进程必须活着」已按计划 D2 反转; state.lock 文件本身可残留
+              (filelock 语义, 同 RM01-04), 但必须不被持有 —— 原地重取一次自证。
     """
     case = app.case_dir("rm01_06")
     holder = socket.socket()
@@ -203,13 +206,37 @@ def test_rm01_06_port_taken_reports_failure_not_silent():
     holder.listen(1)
     taken = holder.getsockname()[1]
     cfg = _cfg(case, web_port=taken)
+    meta = case / "data" / "state.lock.meta.json"
 
     p = app.start(cfg, case)
     try:
-        assert p.wait_log("WEB UI 启动失败", 40), f"端口被占却没有明确失败日志:\n{p.log()[-1200:]}"
-        assert str(taken) in p.log(), "失败日志没带端口号, 用户不知道该去查谁"
-        time.sleep(1.0)
-        assert p.alive(), "端口被占导致整个进程退出 —— 一个 WEB 端口不该带走主程序"
+        rc = p.wait(90)
+        assert rc == 1, f"绑定失败应干净退出码 1, 实际 {rc}; 日志尾部:\n{p.log()[-1200:]}"
+
+        text = p.log()
+        assert "WEB UI 启动失败" in text, f"日志没有明确的启动失败行:\n{text[-1200:]}"
+        assert str(taken) in text, "失败日志没带端口号, 用户不知道该去查谁"
+        assert "web.port" in text, "诊断块没点出 web.port 键路径, 用户不知道改哪个键"
+        assert "web.enabled" in text, "诊断块没点出 web.enabled 键路径, 用户不知道怎么关"
+
+        # 控制台面: CLI 把 AutoQbError 收缩成单行 stderr(旧口径只看日志, 这里补上用户实际看到的那行)
+        r = app.run_cli([str(cfg)], timeout=90)
+        assert r.returncode == 1, f"stderr 路径退出码应为 1, 实际 {r.returncode}; stderr={r.stderr!r}"
+        assert "WebUI 启动失败" in r.stderr, f"stderr 缺「WebUI 启动失败」: {r.stderr!r}"
+        assert str(taken) in r.stderr, f"stderr 没带端口号: {r.stderr!r}"
+        assert "web.port" in r.stderr and "web.enabled" in r.stderr, f"stderr 缺键路径: {r.stderr!r}"
+
+        assert not meta.exists(), "失败启动后 state.lock.meta.json 残留 —— 锁没释放"
+        # 锁文件本身可残留(filelock 语义), 但必须**不被持有**: 原地重取一次, 失败即锁没释放
+        from auto_qb.infra.locking import SingleInstanceLock
+
+        lock = SingleInstanceLock(str(case / "data" / "state.json"))
+        lock.acquire()
+        lock.release()
+
+        holder.listen(1)  # 占位 socket 仍能 listen: 证明端口确实是被占住的那个
+        assert holder.getsockname()[1] == taken
+        assert not app.port_free(taken), f"占位 socket 已失效, {taken} 不再是「被占端口」"
     finally:
         p.stop()
         holder.close()
