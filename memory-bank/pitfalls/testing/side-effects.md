@@ -23,8 +23,11 @@
     `StubRegKey` 放在 `sidefx.py` 而不是 conftest —— 用"替身类型识别"避免两个夹具的**安装顺序**影响判定。
   - **通知器必须拦在真实执行点**: ①给被测代码传 `MagicMock` 当配置对象时, **任何 `if not cfg.xxx` 形式的守卫都会放行**
     ⇒ 守卫后面接真实副作用的路径必须**显式 mock 该副作用入口**; ②`PlatformChannel("linux")` 只是**换了个后端**,
-    后台线程照样真实执行 `notify-send` ⇒ **"换后端 ≠ 不发"**; ③conftest 只拦通知器**命令名**,
-    不拦命令构造与非通知器子进程, 需要真实 `subprocess.run` 的用例自行 monkeypatch 即可覆盖夹具。
+    后台线程照样真实执行 `notify-send` ⇒ **"换后端 ≠ 不发"**; ③conftest 按**通知载荷形态**拦
+    (`notify-send` 按名; `powershell`/`pwsh` 只拦 `-EncodedCommand`; `osascript` 认 `display notification`),
+    不拦命令构造与非通知载荷子进程, 需要真实 `subprocess.run` 的用例自行 monkeypatch 即可覆盖夹具。
+    !判据是「用来干什么」不是「谁」—— 按裸命令名拦会在 `Popen` 构造前抛错, sidefx 台账**漏记**
+    那条 `POPEN`(Windows 假绿 / Linux 红, issue 26-11-03-2216), 放行的非通知调用改由台账按越界判。
   - **排查输出必须写文件, 不能写 `sys.stderr`** —— pytest 按用例捕获输出, **通过的用例直接丢弃** ⇒
     横幅全被吞掉, 统计成 0(**假阴性**)。统计一律用 **ASCII 标记**(中文在日志里会被写坏, 按中文串 grep 会得到假的 0)。
   - **记账器里"断言会话累计越界数为 0"是哨兵**而非单点用例 —— 别的用例污染台账它就会红,

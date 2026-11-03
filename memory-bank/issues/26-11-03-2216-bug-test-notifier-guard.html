@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-2216">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="test-notifier-guard">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/activeContext/26-11-04-0131-test-notifier-guard.md, memory-bank/testing/baselines/26-11-04-0130-notifier-guard-payload-match.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="conftest 按命令名拦截 PowerShell: 非通知用途调用被误拦, 掩盖真实副作用">
 <meta name="issue-summary" content="NOTIFIER_EXECUTABLES 按命令名拦 powershell/pwsh: 非通知用途的子进程在 Popen 构造前抛 FileNotFoundError, sidefx 台账因此出现偶然遮蔽与假绿">
 <title>conftest 按命令名拦截 PowerShell: 非通知用途调用被误拦, 掩盖真实副作用 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-2216-bug-test-notifier-guard</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 22:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -104,7 +104,9 @@
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
-      <li>2026-11-03 22:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 22:16 — 入池, 状态 <strong>Open</strong>(计划外, 未修)</li>
+      <li>2026-11-04 01:30 — 用户指派认领并修复; 复验: 锚点仍复现(<code>NOTIFIER_EXECUTABLES</code> 按名拦在 <code>tests/conftest.py:101</code>, 取证 2026-11-04)</li>
+      <li>2026-11-04 01:30 — 修完置 <strong>Done</strong>: 采用建议② —— <code>_is_notifier_cmd</code> 按「argv 命中通知载荷形态」判: <code>notify-send</code> 按名拦; <code>powershell</code>/<code>pwsh</code> 只拦 <code>-EncodedCommand</code>(toast 专用, 端口探针的 <code>-Command</code> 放行); <code>osascript</code> 按脚本短语 <code>display notification</code> 拦。验证: <code>test_notify_guard_payload_matching</code>(非通知 powershell 穿透到真实 run + 四形态通知载荷仍拦)+ <code>test_notify_real_send_blocked_under_pytest</code> 补 win32 send 失败分支; 全量 <code>test.full</code> 实测 5010 passed / 10 skipped, 覆盖率 99%(基线切片 <code>memory-bank/testing/baselines/26-11-04-0130-notifier-guard-payload-match.md</code>)</li>
     </ul>
   </section>
 

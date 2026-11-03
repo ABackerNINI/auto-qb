@@ -117,12 +117,17 @@
   (与 `test_autostart_windows_registry` 的 Run 键不同, 那个在 `finally` 里自清理)。
 - **处置**: **通用规则: 给被测代码传 `MagicMock` 当配置对象时, `if not cfg.xxx` 形式的守卫一律会放行**,
   后面接着真实系统副作用的路径必须在测试里**显式 mock**。
-  安全网: `tests/conftest.py` 会话级夹具把通知器命令名(`notify-send` / `osascript` / `powershell` / `pwsh`)
-  拦在 `subprocess.run` **之前**(抛 `OSError` = "机器上没装通知器"), `send()` 仍走失败分支返回 False;
-  命令**构造**(`_build_*`)与非通知器子进程(`node --check` 等)不受影响。
+  安全网: `tests/conftest.py` 会话级夹具把**通知载荷形态**的命令拦在 `subprocess.run` **之前**
+  (抛 `OSError` = "机器上没装通知器"), `send()` 仍走失败分支返回 False。判据是「argv 命中通知专属
+  载荷」而非「命令名」(issue 26-11-03-2216): `notify-send` 按名拦(无非通知用途); `powershell`/`pwsh`
+  只拦 `-EncodedCommand`(toast 专用传递通道) —— 端口探针等 `-Command` 用途**放行**, 真实进 sidefx
+  台账按 POPEN 判越界(此前按名拦会在 Popen 构造前抛错、台账漏记 ⇒ Windows 假绿/Linux 红);
+  `osascript` 按脚本短语 `display notification` 拦。命令**构造**(`_build_*`)与非通知载荷子进程
+  (`node --check` 等)不受影响。
   同一夹具只把 **AUMID 前缀**的 `CreateKeyEx` / `SetValueEx` 变成空操作(**静默成功, 不抛异常** ——
   否则 `_appid` 会回退成 `WINDOWS_TOAST_APPID_FALLBACK` 打乱断言), 其余注册表写入放行。
-  回归: `test_notify.py::test_notify_real_send_blocked_under_pytest`。
+  回归: `test_notify.py::test_notify_real_send_blocked_under_pytest`(linux/win32 send 失败分支)+
+  `test_notify_guard_payload_matching`(非通知 powershell 放行 / 三平台通知载荷仍拦)。
   **副作用普查结论**(全量 1007 项实测): 外部进程 0; 文件删除 157 条全在 `C:\TEMP\pytest-of-*`(仓库内外均 0);
   建链 117 条全在临时目录; 网络监听全为 `127.0.0.1` 且自清理; 注册表仅剩 autostart Run 键(自清理)。
   ⚠ **排查方法论**: 诊断插件输出**不能写 stderr**(pytest 按用例捕获、**通过的用例直接丢弃** ⇒ 假阴性),

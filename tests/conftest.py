@@ -12,16 +12,21 @@ win32 = PowerShell 调 WinRT toast / linux = `notify-send` / darwin = `osascript
 确实启动过 `notify-send` 进程(用 subprocess 探针抓到的)。在装了通知器的机器
 (Linux 开发机 / CI)上, 那就是**真的弹出系统通知** —— 即"跑测试时弹出系统通知框"。
 
-**处置**: 会话级把"通知器可执行名"统一拦在 `subprocess.run` 之前 —— 进程不启动、
+**处置**: 会话级把**通知载荷形态**的命令统一拦在 `subprocess.run` 之前 —— 进程不启动、
 通知不弹出; 且 `PlatformChannel.send()` 仍走"发送失败"分支(返回 False, 只记 DEBUG),
 与"机器上没装通知器"的表现完全一致, 调用方语义不变。
+判别维度是「用来干什么」(argv 命中通知专属载荷)而非「谁」(命令名)—— 此前按裸命令名拦
+`powershell`/`pwsh`, 把非通知用途的调用(port_owner 的端口探针走 `-Command` 跑
+`Get-NetTCPConnection`)也在 `Popen` 构造前拦下, `sidefx` 台账漏记这条 `POPEN` ⇒
+同一用例 Windows 假绿、Linux 红(issue 26-11-03-2216)。
 
 **不拦什么**:
 - 通知命令的**构造**不拦 —— `PlatformChannel._build_windows/_build_linux/_build_darwin` 照常返回命令列表,
   `test_notify_channel_*` 的命令结构断言不受影响;
 - 需要真实 `subprocess.run` 行为的用例(如 `test_notify_channel_send_failure`)自行 monkeypatch
   `subprocess.run`, 会自然覆盖本夹具;
-- `node --check` 等**非通知器**子进程原样放行。
+- `node --check`、powershell `-Command` 端口探针等**非通知载荷**子进程原样放行 ——
+  放行后它们作为真实 `POPEN` 进 sidefx 台账, 越界照判, 不再被本守卫提前遮蔽。
 
 ## 2. AUMID 注册表键 (2026-09-18 副作用普查发现)
 
@@ -97,8 +102,18 @@ _tmp_bootstrap.bootstrap()
 COVERAGE_FLOOR_WIN = 99.0
 COVERAGE_FLOOR_OTHER = 98.5
 
-# 通知器可执行名(小写、不含 .exe): 与 notify.PlatformChannel 的三个平台后端一一对应
+# 通知器可执行名(小写、不含 .exe): 与 notify.PlatformChannel 的三个平台后端一一对应。
+# !只作 _is_notifier_cmd 的第一道筛, 不单独成判据 —— powershell/pwsh 还有非通知用途,
+# 最终判据是「argv 命中通知载荷形态」(见该函数 docstring / 模块 docstring 1.)。
 NOTIFIER_EXECUTABLES = frozenset({"notify-send", "osascript", "powershell", "pwsh"})
+
+# 通知载荷特征(与 notify.PlatformChannel._build_* 的 argv 形态一一对应):
+# - windows: powershell -EncodedCommand <toast 脚本双 base64> —— -EncodedCommand 是 toast 专用
+#   传递通道(port_owner 的端口探针走 -Command, 非通知用途, 不得误拦);
+# - darwin: osascript -e 'display notification ...' —— 按脚本短语认;
+# - linux: notify-send 没有非通知用途, 命中命令名即算。
+NOTIFIER_PAYLOAD_FLAG = "-encodedcommand"
+NOTIFIER_OSASCRIPT_PHRASE = "display notification"
 
 # AUMID 键前缀: PlatformChannel("win32") 构造时会真写这个键(见模块 docstring 2.)
 AUMID_KEY_PREFIX = "Software\\Classes\\AppUserModelId\\"
@@ -135,13 +150,27 @@ def pytest_configure(config):
     plugin.options.cov_fail_under = COVERAGE_FLOOR_WIN if sys.platform == "win32" else COVERAGE_FLOOR_OTHER
 
 
+def _is_notifier_cmd(cmd) -> bool:
+    """argv 是否命中**通知载荷形态**(判「用来干什么」, 不是「谁」—— 动机见模块 docstring 1.)
+
+    与 `notify.PlatformChannel._build_windows/_build_darwin` 的 argv 形态一一对应;
+    notify-send 没有非通知用途, 命中命令名即算。非 list/tuple(如 shell=True 的命令串)
+    与旧守卫同口径: 不拦(真实执行后由 sidefx 台账按 POPEN 记账判定)。
+    """
+    if not isinstance(cmd, (list, tuple)) or not cmd:
+        return False
+    exe = os.path.basename(str(cmd[0])).lower().removesuffix(".exe")
+    if exe not in NOTIFIER_EXECUTABLES:
+        return False
+    if exe == "notify-send":
+        return True
+    return any(str(a).lower() == NOTIFIER_PAYLOAD_FLAG or NOTIFIER_OSASCRIPT_PHRASE in str(a).lower() for a in cmd[1:])
+
+
 def _guard_run(cmd, *args, **kwargs):
-    """拦掉通知器命令(抛 OSError 等价于"机器上没装通知器"); 其余子进程原样交给真实 subprocess.run"""
-    exe = ""
-    if isinstance(cmd, (list, tuple)) and cmd:
-        exe = os.path.basename(str(cmd[0])).lower().removesuffix(".exe")
-    if exe in NOTIFIER_EXECUTABLES:
-        raise FileNotFoundError(2, "测试期禁止真实系统通知(conftest 拦截)", exe)
+    """拦掉通知载荷(抛 OSError 等价于"机器上没装通知器"); 其余子进程原样交给真实 subprocess.run"""
+    if _is_notifier_cmd(cmd):
+        raise FileNotFoundError(2, "测试期禁止真实系统通知(conftest 拦截)", cmd[0])
     return _real_run(cmd, *args, **kwargs)
 
 

@@ -25,7 +25,8 @@
 - test_notify_close_twice_safe: close 幂等(重复调用/队列已空均不炸)
 - test_notify_fatal_channel_error_swallowed: notify_fatal 渠道构造异常 -> 静默(不外抛)
 - test_notify_legacy_shortcut_cleanup: legacy lnk 清理: 存在的旧快捷方式被删除(APPDATA 显式给定, winreg 注入替身, 文件操作经 monkeypatch, 不动真实开始菜单)
-- test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知器命令(不启动真实进程), send 走失败分支返回 False
+- test_notify_real_send_blocked_under_pytest: conftest 会话夹具拦截通知载荷(不启动真实进程), linux/win32 send 走失败分支返回 False
+- test_notify_guard_payload_matching: 守卫按「通知载荷形态」判(26-11-03-2216): 非通知 powershell(-Command 端口探针)穿透到真实 run, 三平台通知载荷仍拦
 - test_notify_fatal_enabled_does_not_launch_process: 通知**启用且全程不 mock** 走 `notify_fatal` 真实路径 ⇒ 一个进程都不启动(用户原始诉求"测试时弹出通知框"的最直接回归点)
 - test_notify_icon_ico_points_to_real_file: 守阵(26-10-06-0028 H-02)——ICON_ICO 两级 dirname 指向真实存在的 icon.ico(与 tray 同口径)
 - test_notify_legacy_shortcut_paths_without_appdata: APPDATA 缺失 -> 旧快捷方式清单空(不拼半截路径去删)
@@ -515,15 +516,62 @@ def test_notify_legacy_shortcut_cleanup(monkeypatch):
     assert channel._appid == notify_mod.WINDOWS_TOAST_APPID
 
 
-def test_notify_real_send_blocked_under_pytest():
-    """conftest 会话夹具: 测试期通知器命令被拦截(不启动真实进程), send 走失败分支返回 False
+def test_notify_real_send_blocked_under_pytest(monkeypatch):
+    """conftest 会话夹具: 测试期通知载荷被拦截(不启动真实进程), send 走失败分支返回 False
 
     回归点: 此前测试里写 PlatformChannel("linux") 只是"换了个后端", **并不阻止真实执行**
     notify-send —— 在装了通知器的机器(Linux 开发机/CI)上跑测试会真的弹出系统通知。
+    win32 一并钉住: toast 走 powershell -EncodedCommand, 载荷形态改判(issue 26-11-03-2216)后
+    该确凿通知路径必须仍被挡住。
     """
     with pytest.raises(OSError):
         notify_mod.subprocess.run(["notify-send", "-a", "auto-qb", "标题", "正文"])
     assert PlatformChannel("linux").send("标题", "正文") is False
+    monkeypatch.setattr(PlatformChannel, "_ensure_appid_registered", lambda self: notify_mod.WINDOWS_TOAST_APPID)
+    assert PlatformChannel("win32").send("标题", "正文") is False
+
+
+def test_notify_guard_payload_matching(monkeypatch):
+    """conftest 守卫按「通知载荷形态」判, 不再按裸命令名拦 powershell(issue 26-11-03-2216)
+
+    修复前 NOTIFIER_EXECUTABLES 按命令名拦 powershell/pwsh —— 非通知用途的调用
+    (port_owner 端口探针: `-Command` 跑 Get-NetTCPConnection, 与通知无关)在 Popen 构造前
+    被抛 FileNotFoundError, sidefx 台账漏记这条 POPEN ⇒ 同一用例 Linux 红、Windows 假绿。
+    验收口径: 非通知 PowerShell 穿透到真实 subprocess.run(台账才有机会记 POPEN);
+    三平台通知载荷(notify-send / -EncodedCommand / display notification)仍拦在真实 run 之前
+    —— 确实的通知路径没被放开。
+    """
+    import conftest as conftest_mod
+
+    calls = []
+
+    def fake_real_run(cmd, *a, **kw):
+        calls.append(cmd)
+        return "穿透成功"
+
+    monkeypatch.setattr(conftest_mod, "_real_run", fake_real_run)
+
+    # 非通知用途: port_owner 端口探针的真实 argv 形态(src/auto_qb/infra/port_owner.py)
+    probe_cmd = [
+        "powershell",
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        f"$ids = Get-NetTCPConnection -LocalPort {8080} -State Listen | Select-Object -ExpandProperty OwningProcess",
+    ]
+    assert conftest_mod._guard_run(probe_cmd) == "穿透成功"
+    assert calls == [probe_cmd], "非通知 powershell 应原样穿透到真实 subprocess.run(修复前在此被误拦)"
+
+    # 通知载荷仍拦: argv 形态与 notify.PlatformChannel._build_* 一一对应
+    for notifier_cmd in (
+        ["notify-send", "-a", "auto-qb", "-u", "critical", "标题", "正文"],
+        ["powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", "aGVsbG8="],
+        ["pwsh", "-NoProfile", "-NonInteractive", "-EncodedCommand", "aGVsbG8="],
+        ["osascript", "-e", 'display notification "正文" with title "标题"'],
+    ):
+        with pytest.raises(OSError, match="conftest"):
+            conftest_mod._guard_run(notifier_cmd)
+    assert calls == [probe_cmd], "通知载荷必须被拦在真实 subprocess.run 之前(不落 fake 的账)"
 
 
 def test_notify_fatal_enabled_does_not_launch_process(sidefx_recorder):
