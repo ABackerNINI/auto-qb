@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="code-review-3-s4">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）">
 <meta name="issue-summary" content="鉴权失败分支不读请求体即回 401 并关连接，Win 上客户端偶发 WinError 10053，test_auth_required_on_all_write_endpoints 间歇失败">
 <title>gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败） · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>gtm 401 短路未读请求体：Windows 客户端收到连接重置而非 401（test.gtm 偶发失败）</h1>
     <p class="lede">鉴权失败分支不读请求体即回 401 并关连接，Win 上客户端偶发 WinError 10053，test_auth_required_on_all_write_endpoints 间歇失败</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-1144-bug-gtm-auth-body-drain</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 11:44</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">gtm</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -158,11 +158,15 @@ E   ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了�
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 11:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 02:07 — 认领（用户指派），状态 <strong>Open → In Progress</strong>；复验：锚点代码在位（根因分支原样），间歇现象本身时序依赖、未赌复现，改用确定性断言验证修法（见下）</li>
+      <li>2026-11-04 02:07 — 修复完成，状态 <strong>In Progress → Done</strong>（实际修法 / 验证方式 / 测试数字见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-04 02:07 — 仍复现（锚点代码在位，<code>handle()</code> 两个 401 出口均未消费请求体）；间歇现象依赖连接时序，未赌复现，以确定性 drain 断言替代（见「修复后补充」）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：取建议修法一（读空 body 再回 401，保持既有断链行为）—— <code>ControlServer.handle()</code> 两个 401 出口前置 <code>_drain_body(handler)</code>：按 Content-Length 读空请求体，声明超过 <code>_MAX_BODY_BYTES</code> 只陪读到上限（不陪恶意声明陪绑），Transfer-Encoding 分块无长度边界、urllib 客户端也不产生，维持既有断链。<strong>机制更正</strong>：<code>_Handler</code> 未设 <code>protocol_version</code>（即 HTTP/1.0，每请求后断链），触发面不是原文所写「持久连接上继续读下一请求解析失败」，而是「关链时 socket 残留未读数据 → 内核关闭时补 RST → 客户端先收 WinError 10053」——结论同向，修法不变，故保留建议原文。</p>
+    <p><strong>验证方式</strong>：新增确定性回归 <code>tests/test_server.py::test_auth_401_drains_request_body_before_responding</code>（声明 Content-Length=100 只先发 11 字节，断言 401 必须等 body 发满才上 wire——修前 401 会立即到达、该用例必红；修后阻塞在 drain 上、补齐后才拿到 401）；<code>test_server.py</code> 头部「测试计划」同步。同形 404 出口（<code>handle()</code> 末尾 unknown endpoint）与本缺陷同机制，本次未动，见回复说明。</p>
+    <p><strong>测试数字</strong>：<code>commands run test.gtm</code>（2026-11-04 02:07）→ 551 passed, 2 skipped，TOTAL 2613 / 28 miss，覆盖率 99%，门槛判定通过。</p>
   </section>
 
   <footer>

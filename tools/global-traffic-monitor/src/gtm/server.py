@@ -276,10 +276,12 @@ class ControlServer:
         auth = handler.headers.get("Authorization") or ""
         presented = auth[len("Bearer "):].strip() if auth.startswith("Bearer ") else ""
         if not presented:
+            self._drain_body(handler)
             self._send(handler, 401, {"error": "invalid token"})
             return
         if not self.token_manager.verify(presented):
             logger.warning("鉴权失败: 密钥不匹配")
+            self._drain_body(handler)
             self._send(handler, 401, {"error": "invalid token"})
             return
         self._prune_leases()
@@ -510,6 +512,26 @@ class ControlServer:
             return
         logger.info("收到停止请求 (POST /shutdown), 优雅退出")
         self._stop_event.set()
+
+    def _drain_body(self, handler: "_Handler") -> None:
+        """短路出口 (401) 回响应前消费请求体 (issue 26-11-03-1144)。
+
+        不读 body 就 _send 并断链, socket 里残留的请求字节会让内核在关闭时补 RST,
+        Windows 客户端可能还没读到 401 就先收到 WinError 10053 —— 鉴权失败被误判成
+        连接中断 (错误语义失真 + 门禁间歇红)。按 Content-Length 读空; 超过
+        _MAX_BODY_BYTES 的长度只陪读到上限 (不陪恶意声明陪绑), Transfer-Encoding
+        分块无长度边界、urllib 客户端也不产生, 维持既有断链行为。
+        """
+        try:
+            length = int(handler.headers.get("Content-Length") or 0)
+        except ValueError:
+            return
+        remaining = min(length, _MAX_BODY_BYTES)
+        while remaining > 0:
+            chunk = handler.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            remaining -= len(chunk)
 
     def _read_json(self, handler: "_Handler") -> tuple[Optional[Any], Optional[str]]:
         """读请求体并解析 JSON (上限 _MAX_BODY_BYTES; 坏 JSON -> (None, 错误))."""

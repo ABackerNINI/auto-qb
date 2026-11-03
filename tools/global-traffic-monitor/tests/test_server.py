@@ -10,6 +10,8 @@
 + 26-10-31-0537: POST /autostart 成功后 patch 发现指针 autostart 字段 (卸载/注册即时回写真值,
   UI 开关不再漂移到重启); patch 失败只 WARNING 不阻断响应.
 + S7 (T27): GET /status 透传最近一轮越界记录 last_spike (无越界为 null; 既有字段不变).
++ 26-11-03-1144: 401 短路出口回响应前按 Content-Length 消费请求体 (_drain_body),
+  消除关链 RST 致 Windows 客户端先收 WinError 10053 的间歇失败 (确定性 drain 断言).
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -108,6 +110,42 @@ def test_auth_required_on_all_write_endpoints(tmp_path) -> None:
         assert http(server, "POST", "/subscribe", body={}, token=None)[0] == 401
         assert http(server, "POST", "/shutdown", token=None)[0] == 401
     finally:
+        server.stop()
+
+
+def test_auth_401_drains_request_body_before_responding(tmp_path) -> None:
+    """issue 26-11-03-1144: 401 短路出口回响应前按 Content-Length 消费请求体。
+
+    修前不读 body 就 _send 并断链, 关闭时残留字节触发 RST, Windows 客户端偶发
+    先收 WinError 10053 而非 401 (间歇性, 复赌时序不可靠)。这里做确定性断言:
+    声明 Content-Length=100 只先发 11 字节 —— 修后服务端必须阻塞在 drain 上
+    (响应不提前上 wire), 补齐剩余字节后才拿到 401; 修前 401 会立刻到达。
+    """
+    server, *_ = make_server(tmp_path)
+    sock = socket.create_connection((server.host, server.port), timeout=5)
+    try:
+        sock.sendall(
+            b"POST /subscribe HTTP/1.0\r\n"
+            b"Content-Type: application/json\r\n"
+            b"Authorization: Bearer nope\r\n"
+            b"Content-Length: 100\r\n"
+            b"\r\n"
+            b'{"partial":'  # body 前 11 字节
+        )
+        sock.settimeout(0.4)
+        with pytest.raises(socket.timeout):
+            sock.recv(4096)  # body 未发满, 服务端应在 drain 上阻塞, 不提前回 401
+        sock.settimeout(5)
+        sock.sendall(b"x" * 89)  # 补齐剩余 body
+        data = b""
+        while True:
+            chunk = sock.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+        assert data.startswith(b"HTTP/1.0 401")
+    finally:
+        sock.close()
         server.stop()
 
 
