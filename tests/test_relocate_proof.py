@@ -37,12 +37,22 @@ app_get_directory_content(响应形状按报告 26-11-03-2306 §8.1 实测: with
 - test_link_follow_name_filter: names 过滤到本组文件(无关条目不进比对) / 过滤后无条目 unavailable
   / 空 names 不过滤(既有 D 级语义)
 - test_link_follow_no_client_unavailable: 客户端缺失 / 客户端无该方法(qB<5.0 替身) -> unavailable
+### 真实 qbittorrentapi 容器形态(issue 26-11-04-0504, 真机 D/F 恒失效回归)
+- test_d_real_directory_content_list_positive: 真实 DirectoryContentList(UserList 子类)承载 dict 条目,
+  元数据相等 -> positive(级 D); 改前因容器判形态异常 -> unavailable(B′ 降级)故红
+- test_d_real_list_entry_entries: 同容器内条目为 ListEntry(dict 子类)仍按 dict 参与比对 -> positive(级 D)
+- test_d_plain_userlist_same_shape: 非 qbittorrentapi 类的 UserList 同形也放行(判据是序列协议不是类名)
+- test_d_container_shape_still_rejected: 反误放对照: 裸 str/bytes/dict/None 响应仍 unavailable(形态异常)
+- test_link_follow_real_directory_content_list: F 级同函数同源路径: DirectoryContentList 一致 -> positive(级 D)
 """
 
 import os
 import types
+from collections import UserList
 
 import pytest
+from qbittorrentapi.app import DirectoryContentList
+from qbittorrentapi.definitions import ListEntry
 from qbittorrentapi.exceptions import InvalidRequest400Error, NotFound404Error
 
 from auto_qb.core.modules import relocate_proof as rp
@@ -379,3 +389,69 @@ def test_link_follow_no_client_unavailable():
     assert ev.status == rp.UNAVAILABLE and "客户端不可用" in ev.detail, ev
     ev = rp.link_follow_evidence(_ctx(_plain_client()), "qbsrc", "nowhere")
     assert ev.status == rp.UNAVAILABLE and ev.level == "", ev
+
+
+# ---------- 真实 qbittorrentapi 返回容器形态(issue 26-11-04-0504 回归) ----------
+
+
+class _RawDirClient:
+    """原样返回预置容器的替身(不做 list() 归一化, 保留 qbittorrentapi 容器类型)"""
+    def __init__(self, entries):
+        self.calls = []
+        self._entries = entries
+
+    def app_get_directory_content(self, directory_path=None, with_metadata=None, **kw):
+        self.calls.append({"directory_path": directory_path, "with_metadata": with_metadata})
+        return self._entries
+
+
+def test_d_real_directory_content_list_positive(tmp_path):
+    """真实 DirectoryContentList(UserList 子类, 非 list/tuple) -> 元数据相等 positive(级 D)
+
+    改前容器判据只认 list/tuple, 真机 100% 判「响应形态异常」并降级 B′(或无清单则 unavailable);
+    改后按序列协议接受, 不再恒降级。"""
+    _make_file(tmp_path, "a.txt", 100)
+    entries = DirectoryContentList([_entry("a.txt", 100, MT)])
+    ev = rp.path_evidence(_ctx(_RawDirClient(entries)), str(tmp_path), str(tmp_path))
+    assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev
+    # visibility_only 同容器同样按「列目录成功」放行(空目录也算)
+    ev2 = rp.path_evidence(
+        _ctx(_RawDirClient(DirectoryContentList([]))), str(tmp_path), str(tmp_path), visibility_only=True
+    )
+    assert ev2.status == rp.POSITIVE and ev2.level == rp.LEVEL_D, ev2
+
+
+def test_d_real_list_entry_entries(tmp_path):
+    """容器内条目是 ListEntry(dict 子类)时仍按 dict 参与比对(不误判「纯路径列表」)"""
+    _make_file(tmp_path, "a.txt", 100)
+    entries = DirectoryContentList([ListEntry(data=_entry("a.txt", 100, MT))])
+    ev = rp.path_evidence(_ctx(_RawDirClient(entries)), str(tmp_path), str(tmp_path))
+    assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev
+
+
+def test_d_plain_userlist_same_shape(tmp_path):
+    """非 qbittorrentapi 类的 UserList 同形也放行 —— 判据是序列协议而非类名(不按类名硬编码)"""
+    _make_file(tmp_path, "a.txt", 100)
+    ev = rp.path_evidence(_ctx(_RawDirClient(UserList([_entry("a.txt", 100, MT)]))), str(tmp_path), str(tmp_path))
+    assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev
+
+
+@pytest.mark.parametrize("payload", ["a.txt", b"a.txt", {"name": "a.txt"}, None])
+def test_d_container_shape_still_rejected(tmp_path, payload):
+    """反误放对照: 裸 str/bytes/dict/None 不是条目序列 -> 仍 unavailable(形态异常)
+
+    放宽只到「有序序列」; str/bytes 虽是 Sequence 但语义是单个标量响应, dict 是映射 ——
+    都不该被当成「列目录成功的条目列表」, 否则 visibility_only 会假 positive。"""
+    _make_file(tmp_path, "a.txt", 100)
+    ev = rp.path_evidence(_ctx(_RawDirClient(payload)), str(tmp_path), str(tmp_path))
+    assert ev.status == rp.UNAVAILABLE and "形态异常" in ev.detail, ev
+    ev2 = rp.path_evidence(_ctx(_RawDirClient(payload)), str(tmp_path), str(tmp_path), visibility_only=True)
+    assert ev2.status == rp.UNAVAILABLE and "形态异常" in ev2.detail, ev2
+
+
+def test_link_follow_real_directory_content_list(tmp_path):
+    """F 级同源路径: link_follow_evidence 走同一 _d_evidence, DirectoryContentList 一致 -> positive(级 D)"""
+    _make_file(tmp_path, "a.txt", 100)
+    entries = DirectoryContentList([_entry("a.txt", 100, MT)])
+    ev = rp.link_follow_evidence(_ctx(_RawDirClient(entries)), "qbsrc", str(tmp_path), names=["a.txt"])
+    assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev

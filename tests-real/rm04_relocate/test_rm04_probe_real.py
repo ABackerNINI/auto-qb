@@ -190,10 +190,9 @@ def test_rm04_12_probe_fingerprint_cache_and_reprobe(secondary, workdir):
 def test_rm04_13_directory_content_default_save_path(secondary, workdir):
     """报告 §7.4 待实测闭合: 56590 默认保存路径(R: 不存在)列目录 → 不可判定; C: 目录降级链对照。
 
-    对照腿只断言「产品最终判 positive」, 不钉证据级(D/B′): 本轮实测发现 D 级对
-    qbittorrent-api 返回的 UserList 容器(DirectoryContentList)判定为形态异常而恒降级,
-    当前真实链路走 B′ —— 该产品缺陷按 scope-guard 记 issue, 本用例记录两种级别实测值。
-    """
+    对照腿断言「产品最终判 positive」; D 级单腿(Issue 26-11-04-0504 修复后)同样应达 D:
+    此前 qbittorrent-api 返回的 UserList 容器(DirectoryContentList)被误判形态异常而恒降级,
+    修复后按序列协议接受, 本用例同时钉 D 级与最终级别。"""
     ctx, client = _ctx(instances.SECONDARY)
     prefs = secondary.prefs()
     default_save_path = str(prefs.get("save_path") or "")
@@ -231,6 +230,7 @@ def test_rm04_13_directory_content_default_save_path(secondary, workdir):
     assert raw_matched, f"raw 端点元数据与本机 stat 不吻合({raw_type}, entries={raw_entries})"
 
     d_only = path_evidence(ctx, str(content), str(content))
+    assert d_only.status == POSITIVE and d_only.level == "D", f"D 级单腿应直接 positive(D), 实际 {d_only}"
     ev_control = path_evidence(ctx, str(content), str(content), files=(("sample.bin", 4096), ))
     assert ev_control.status == POSITIVE, f"C: 目录路径级证据最终应 positive, 实际 {ev_control}"
 

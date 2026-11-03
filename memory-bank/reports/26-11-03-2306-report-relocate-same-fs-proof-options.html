@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-same-fs-proof-options">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-2306">
-<meta name="doc-updated" content="26-11-04-0024">
+<meta name="doc-updated" content="26-11-04-0553">
 <meta name="doc-refs" content="memory-bank/plans/26-11-03-2212-plan-relocate-same-fs-proof.html, memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/reports/26-10-31-0548-report-qb-5-3-upgrade-impact.html, memory-bank/plans/26-11-04-0055-plan-relocate-same-fs-proof.html">
 <style>
   :root {
@@ -75,7 +75,7 @@
 <h1>整组迁移同机证明：推翻与最小改的可行性对比</h1>
 <p class="lede">该推翻的是判据，不是 mover 架构：剩余空间相等只是代理信号，且比的是 qB 默认保存路径那块卷；改成让 qB 用自己的目录 API 回答「我看不看得见目标路径」即可，改动量与「最小改」同一量级。主方案 D（qB 侧目录探测 + 元数据比对），兜底 A（用户显式声明）。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-2306 · <b>doc-updated</b> 26-11-04-0024 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-2306 · <b>doc-updated</b> 26-11-04-0553 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户实机撞上多成员组「批量移动失败 · 无法证明 auto-qb 与 qB 看到同一块盘」；认为现行同机/共享文件系统预证明过于复杂，要求评估「完全推翻重做」与「最小改」的可行性差异（调研轮，不改代码、不提交）。<br>
   <b>引用</b> 计划 26-11-03-2212 · 设计计划 26-10-18-1604 · 报告 26-10-31-0548
 </div>
@@ -277,7 +277,7 @@
 <h3>7.4 老用户行为会不会变</h3>
 <ul>
   <li><strong>会变宽（待实测闭合，验证前只是推断）</strong>：默认保存路径不可读（本机无 <code>R:</code>）的场景——本轮只实测了 <code>free_space_on_disk = -1</code> 与 <code>C:\</code> 列目录，<strong>未实测 qB 能否列出 <code>R:\Download\PTing</code></strong>。若 qB 自己也读不到 R:，D 会 404 照拒（出路是 <code>assume_shared</code> 或修盘符可见性，但报错从「必败的 -1 比对」变成可操作的 404）；若 qB 能列出而只是取不到剩余空间，D 才真正放行。落地前应在 56590 补一发 <code>getDirectoryContent?dirPath=R:\...</code> 验证，发版说明不要预写「必败 → 通过」。</li>
-  <li><strong>已闭合（2026-11-04 05:05，真机 RM04-13）</strong>：56590 默认保存路径确为 <code>R:\Download\PTing</code>，<code>app/getDirectoryContent?dirPath=R:\Download\PTing&amp;withMetadata=true</code> 返回 <code>NotFound404Error: 目录不存在</code>；产品 D 级据此判 <code>unavailable</code>（conservative 拒绝），不会放行。结论落在第一支：<strong>qB 自己也读不到 R:，旧场景不会「必败 → 通过」</strong>，出路仍是 <code>assume_shared</code> 或修盘符可见性。同轮还发现 D 级对真实返回容器（<code>DirectoryContentList</code>，UserList 子类）判形态异常而恒降级 B′，F 级同源失效，已入池 <code>memory-bank/issues/26-11-04-0504-bug-relocate-d-evidence-container-type.html</code>。</li>
+  <li><strong>已闭合（2026-11-04 05:05，真机 RM04-13）</strong>：56590 默认保存路径确为 <code>R:\Download\PTing</code>，<code>app/getDirectoryContent?dirPath=R:\Download\PTing&amp;withMetadata=true</code> 返回 <code>NotFound404Error: 目录不存在</code>；产品 D 级据此判 <code>unavailable</code>（conservative 拒绝），不会放行。结论落在第一支：<strong>qB 自己也读不到 R:，旧场景不会「必败 → 通过」</strong>，出路仍是 <code>assume_shared</code> 或修盘符可见性。同轮还发现 D 级对真实返回容器（<code>DirectoryContentList</code>，UserList 子类）判形态异常而恒降级 B′，F 级同源失效，已入池 <code>memory-bank/issues/26-11-04-0504-bug-relocate-d-evidence-container-type.html</code>（已于 2026-11-04 05:52 修复并真机复验：D 级恢复 <code>positive/D</code>，最终级别由 B′ 升 D）。</li>
   <li><strong>会变严</strong>：远端 qB 恰好有相同路径与相近剩余空间的用户，从「可能误放」变为「正确拒绝」——这是修 bug，但需要在发版说明里写清。</li>
   <li>真正跨机的用户需要 <code>fs.path_map</code> 或显式 <code>assume_shared</code>，否则被拒；文案必须给出这两条出路。</li>
 </ul>

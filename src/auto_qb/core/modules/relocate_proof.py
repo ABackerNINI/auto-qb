@@ -34,6 +34,7 @@ local_dir 是本机 syscall 路径(调用方经 file_access.map_to_container 既
 读 API + 本机 scandir/stat, 零写副作用。
 """
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from ...infra import file_access, utils
@@ -124,6 +125,23 @@ def _client_of(ctx):
     return getattr(api, "client", None) if api is not None else None
 
 
+# 标量型 Sequence(str/bytes/bytearray)不是「列目录条目列表」; 排除后剩下的有序序列才按容器放行
+_SCALAR_SEQUENCES = (str, bytes, bytearray)
+
+
+def _is_entry_sequence(value) -> bool:
+    """qB 列目录响应的容器判据: 有序序列协议(不是 list/tuple 具体类型)
+
+    真机实测(issue 26-11-04-0504): qbittorrentapi 的 `app_get_directory_content` 返回
+    `DirectoryContentList`(MRO: List -> UserList -> MutableSequence -> Sequence), 不是
+    list/tuple 子类 —— 只认具体类型会把正常响应判成「形态异常」。按序列协议判定既覆盖
+    该容器, 也不按类名硬编码(任何有序序列同形都可用)。
+    str/bytes/bytearray 虽是 Sequence 但语义是单个标量响应, 必须排除: 若按「列表成功」
+    放行会让 visibility_only 把畸形响应误判 positive。
+    """
+    return isinstance(value, Sequence) and not isinstance(value, _SCALAR_SEQUENCES)
+
+
 def _unavailable(detail: str) -> Evidence:
     return Evidence(UNAVAILABLE, "", detail)
 
@@ -158,7 +176,7 @@ def _d_evidence(
         entries = client.app_get_directory_content(directory_path=qb_dir, with_metadata=WITH_METADATA)
     except Exception as e:  # noqa: BLE001 - 404/端点不存在(qB<5.0)/权限/网络都按不可判定降级
         return _unavailable(f"qB 列目录不可用({type(e).__name__}: {e})")
-    if not isinstance(entries, (list, tuple)):
+    if not _is_entry_sequence(entries):
         return _unavailable(f"qB 列目录响应形态异常({type(entries).__name__})")
     if visibility_only:
         return Evidence(POSITIVE, LEVEL_D, f"qB 列目录成功({len(entries)} 条), qB 看得见该目录")

@@ -80,6 +80,17 @@ P5 真机与回归：环境 1（D: + R:）用伪造种子做正例、第三卷�
 两个关键发现/偏差:
 
 1. **计划 P6「首迁触发探测」在健康同机场景不会发生**。真机上源目录对 qB 可列,B′(或修复后的 D)能判 positive ⇒ 按 D4 的 `facts.same_fs_proved` 短路,E1 被跳过。故改用两层取证:E1 行为由 RM04-11 直接驱产品 `run_probe` 真写;指纹缓存语义由 RM04-12 驱 `RelocateModule._ensure_probe`(真 facts + 真 state + 真 qB)。未改产品代码。
-2. **真机发现 D 级恒降级 B′**:`relocate_proof._d_evidence` 只认 `list/tuple`,而 `qbittorrentapi` 返回 `DirectoryContentList`(UserList 子类)⇒ 判「响应形态异常」;`link_follow_evidence`(F)同函数同源失效。raw 端点本身正常(1 条 entry、元数据吻合)。该缺陷属本轮实施面但在「本轮不改 src/」约束下未修,按 scope-guard 入池 `memory-bank/issues/26-11-04-0504-bug-relocate-d-evidence-container-type.html`(Open,待指派)。
+2. **真机发现 D 级恒降级 B′**:`relocate_proof._d_evidence` 只认 `list/tuple`,而 `qbittorrentapi` 返回 `DirectoryContentList`(UserList 子类)⇒ 判「响应形态异常」;`link_follow_evidence`(F)同函数同源失效。raw 端点本身正常(1 条 entry、元数据吻合)。该缺陷属本轮实施面但在「本轮不改 src/」约束下未修,按 scope-guard 入池 `memory-bank/issues/26-11-04-0504-bug-relocate-d-evidence-container-type.html`(Open,待指派;后由用户指派修复,见 R4)。
 
 结论:**真机验收整体通过(qB 侧 E1 写证/清理、指纹缓存、R: 闭证、全量回归均绿);阻塞项仅 L490 小目标环境前置与上述 D/F 缺陷**。产品代码未改;未收到提交指令,未 commit/push。
+
+### R4 · 计划外缺陷修复: D 级证据容器判据 (2026-11-04 05:52)
+
+R3 发现的 D/F 级缺陷按用户指派修复（issue `26-11-04-0504`，状态 Done）：
+
+- 根因：`_d_evidence` 容器判据只认 `list/tuple`，qbittorrent-api 返回的 `DirectoryContentList` 是 `UserList` 子类（`Sequence` 协议，非 list/tuple 子类），被误判「响应形态异常」。
+- 修法：新增 `_is_entry_sequence()`，按 `collections.abc.Sequence` 判定并排除 `str/bytes/bytearray`（避免 `visibility_only` 假 positive）；F 级 `link_follow_evidence` 同函数同源生效；不按类名硬编码。
+- 验证：`commands run test.one -- tests/test_relocate_proof.py` 改前 4 failed（复现 `形态异常(DirectoryContentList)`）→ 改后全绿；真机 `commands run real.run -- --case RM04-13 --yes` 1 passed，`control_d_only` 由 `unavailable` 转 `positive/D`，`control_final` 由 `B′` 升 `D`；全量数字见 `commands run kb.baseline`（新切片 `26-11-04-0553`；另 1 例无关线程抖动单跑通过，覆盖率 98.70% 属既有闸红）。
+- 未收到提交指令，未 commit/push。
+
+- 2026-11-04 05:54 修复 issue 26-11-04-0504: relocate_proof 容器判据改序列协议(_is_entry_sequence)+5 回归; 真机 RM04-13 D 级恢复; 新基线 26-11-04-0553

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="relocate-same-fs-proof">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′">
 <meta name="issue-summary" content="relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效">
 <title>D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′ · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′</h1>
     <p class="lede">relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-0504-bug-relocate-d-evidence-container-type</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 05:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">relocate</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -167,11 +167,13 @@ qbittorrentapi/definitions.py:271 class ListEntry(Dictionary[JsonValueT])
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 05:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 05:39 — 用户指派认领并修复，状态 <strong>In Progress</strong>；复验: 锚点仍复现（<code>relocate_proof.py:161</code> 仍为 <code>isinstance(entries, (list, tuple))</code>；库侧 <code>DirectoryContentList</code> MRO 为 <code>List → UserList → MutableSequence → Sequence</code>，非 list/tuple 子类，取证 2026-11-04）</li>
+      <li>2026-11-04 05:52 — 修复完成并验证，状态 <strong>Done</strong>：容器判据改为序列协议（<code>_is_entry_sequence</code>，排除 str/bytes/bytearray）；单测 <code>tests/test_relocate_proof.py</code> 改前 4 failed（复现 <code>形态异常(DirectoryContentList)</code>）→ 改后 35 passed；真机 <code>commands run real.run -- --case RM04-13 --yes</code> → 1 passed，证据副本 <code>control_d_only</code> 由 <code>unavailable</code> 转为 <code>positive/D</code>，<code>control_final</code> 由 <code>B′</code> 升为 <code>D</code>；全量 <code>test.full</code> 5128 passed + 10 skipped（1 例无关线程计数抖动单跑通过）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>认领复验（2026-11-04 05:39）：锚点仍复现（见上一条日志）。修复后真机复验（05:52，<code>RM04-13</code> 1 passed）：<code>control_raw</code> 容器仍为 <code>DirectoryContentList</code>、1 entry、元数据吻合；<code>control_d_only</code> = <code>positive / D</code>（改前 <code>unavailable / ""</code>，detail <code>qB 列目录响应形态异常(DirectoryContentList)</code>）；<code>control_final</code> = <code>positive / D</code>（改前 <code>B′</code>）。默认路径 <code>R:\Download\PTing</code> 仍按 404 判 <code>unavailable</code>，语义未变。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：<code>relocate_proof._d_evidence</code> 的容器判据由 <code>isinstance(entries, (list, tuple))</code> 改为 <code>_is_entry_sequence()</code> —— <code>collections.abc.Sequence</code> 协议判定，并排除 <code>str/bytes/bytearray</code>（它们是 Sequence 但语义为单个标量响应，放行会让 <code>visibility_only</code> 假 positive）。不按 <code>DirectoryContentList</code> 类名硬编码，任何有序序列同形都可用；<code>dict/None</code> 非 Sequence，仍判形态异常。条目层 <code>isinstance(e, dict)</code> 无需改动：实测 <code>ListEntry</code> 是 dict 子类。F 级 <code>link_follow_evidence</code> 走同一 <code>_d_evidence</code>，同源生效。<strong>验证方式与数字</strong>：<code>commands run test.one -- tests/test_relocate_proof.py</code> 改前 4 failed / 31 passed（失败信息即 <code>形态异常(DirectoryContentList)</code>），改后 35 passed（新增 5 个回归：真实容器正向、<code>ListEntry</code> 条目、裸 <code>UserList</code>、F 级同源、反误放对照 str/bytes/dict/None）；真机 <code>RM04-13</code> 1 passed（见复验）；<code>commands run test.full</code> 5128 passed + 10 skipped。覆盖率输出 98.70% 低于 Windows 99.0 闸属既有口径（上一基线 05:07 实测 98.74% 同样低于闸），非本次引入。</p>
   </section>
 
   <footer>
