@@ -29,6 +29,12 @@ app_get_directory_content(响应形状按报告 26-11-03-2306 §8.1 实测: with
 - test_evidence_constants: 三态与级别常量取值钉住(稳定字符串, 调用方按值分支)
 - test_sample_helper_deterministic: _sample 短表原样 / k<=1 取首 / 长表均匀步长且确定性
 - test_d_mtime_size_pairwise: size/mtime 任一分量不等即不等(完全相等才 positive)
+### P4 F 运行时兜底(计划 26-11-04-0055 §04 P4): link_follow_evidence
+- test_link_follow_positive_negative_unavailable: 一致 positive / 全不等 negative / 404 unavailable
+  (不降级 B′ —— B′ 与「链接是否被跟随」无关)
+- test_link_follow_name_filter: names 过滤到本组文件(无关条目不进比对) / 过滤后无条目 unavailable
+  / 空 names 不过滤(既有 D 级语义)
+- test_link_follow_no_client_unavailable: 客户端缺失 / 客户端无该方法(qB<5.0 替身) -> unavailable
 """
 
 import os
@@ -316,3 +322,39 @@ def test_d_mtime_size_pairwise(tmp_path, size, mtime, expect):
     client = _DirClient([_entry("a.txt", size, mtime)])
     ev = rp.path_evidence(_ctx(client), str(tmp_path), str(tmp_path))
     assert ev.status == expect, ev
+
+
+# ---------- 链接跟随自检(P4 F 运行时兜底, 计划 26-11-04-0055 §04 P4) ----------
+
+
+def test_link_follow_positive_negative_unavailable(tmp_path):
+    """链接跟随三态: 一致 positive / 全不等 negative / 404 unavailable(不降级 B′)"""
+    _make_file(tmp_path, "a.txt", 100)
+    ev = rp.link_follow_evidence(_ctx(_DirClient([_entry("a.txt", 100)])), "qbsrc", str(tmp_path), names=["a.txt"])
+    assert ev.status == rp.POSITIVE and ev.level == rp.LEVEL_D, ev
+    ev = rp.link_follow_evidence(_ctx(_DirClient([_entry("a.txt", 999)])), "qbsrc", str(tmp_path), names=["a.txt"])
+    assert ev.status == rp.NEGATIVE, ev
+    # 端点不可用保持 unavailable —— 该函数没有 B′ 降级(B′ 证不了链接被跟随)
+    ev = rp.link_follow_evidence(_ctx(_DirClient(error=NotFound404Error)), "qbsrc", str(tmp_path), names=["a.txt"])
+    assert ev.status == rp.UNAVAILABLE and ev.level == "", ev
+
+
+def test_link_follow_name_filter(tmp_path):
+    """names 过滤: 无关条目不进比对 / 过滤后无条目 unavailable / 空 names 不过滤(既有 D 级语义)"""
+    _make_file(tmp_path, "a.txt", 100)
+    client = _DirClient([_entry("ghost.bin", 7), _entry("a.txt", 100)])
+    ev = rp.link_follow_evidence(_ctx(client), "qbsrc", str(tmp_path), names=["a.txt"])
+    assert ev.status == rp.POSITIVE, ev  # ghost.bin 被滤掉, 不拉低抽样
+    ev = rp.link_follow_evidence(_ctx(_DirClient([_entry("ghost.bin", 7)])), "qbsrc", str(tmp_path), names=["a.txt"])
+    assert ev.status == rp.UNAVAILABLE and "未见本组文件" in ev.detail, ev
+    # 空 names: 不过滤 —— 独有名字算不等(与 path_evidence 的 D 级语义一致)
+    ev = rp.link_follow_evidence(_ctx(_DirClient([_entry("ghost.bin", 7)])), "qbsrc", str(tmp_path))
+    assert ev.status == rp.NEGATIVE, ev
+
+
+def test_link_follow_no_client_unavailable():
+    """客户端缺失 / 客户端无该方法(qB<5.0 替身) -> unavailable(调用方按跳过处理)"""
+    ev = rp.link_follow_evidence(types.SimpleNamespace(api=types.SimpleNamespace(client=None)), "qbsrc", "nowhere")
+    assert ev.status == rp.UNAVAILABLE and "客户端不可用" in ev.detail, ev
+    ev = rp.link_follow_evidence(_ctx(_plain_client()), "qbsrc", "nowhere")
+    assert ev.status == rp.UNAVAILABLE and ev.level == "", ev

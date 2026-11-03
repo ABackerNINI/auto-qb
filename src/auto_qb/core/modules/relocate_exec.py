@@ -7,6 +7,7 @@ import time
 from dataclasses import replace
 
 from ...infra import alias_fs, file_access, relocate_journal, utils
+from . import relocate_proof as rp
 from . import relocate_units as ru
 from .relocate_probe import probe_fingerprint, run_probe
 from .relocate_units import RelocateJob, evaluate_group
@@ -178,10 +179,21 @@ class ExecMixin:
             rt["stage"] = "penetrate"
             return
         if stage == "penetrate":
-            if job.alias_paths and not self._penetration_ok(job):
-                # 穿透失败: 保留链接现场(便于排查), 不删链接不搬回
-                self._fail(job, "alias_unreadable", "经原路径读不到已迁数据")
-                return
+            if job.alias_paths:
+                if not self._penetration_ok(job):
+                    # 穿透失败: 保留链接现场(便于排查), 不删链接不搬回
+                    self._fail(job, "alias_unreadable", "经原路径读不到已迁数据")
+                    return
+                # 本机穿透过了再补一次 qB 侧自检(运行时 F 兜底, 计划 26-11-04-0055 §04 P4):
+                # 本机先判(失败优先级高), qB 侧不可用只跳过不挡武装
+                if self._qb_side_check(job, rt) == "failed":
+                    # qB 侧不一致: 与本机穿透失败同路径 —— 保留链接现场, 不删链接不搬回
+                    self._fail(
+                        job,
+                        "qb_side_check_failed",
+                        "qB 经原路径读到的文件元数据与本机 dst 不一致: 链接可能未被 qB 跟随",
+                    )
+                    return
             rt["stage"] = "arm"
             return
         if stage == "arm":
@@ -254,6 +266,41 @@ class ExecMixin:
             except Exception:  # noqa: BLE001
                 return False
         return True
+
+    def _qb_side_check(self, job: RelocateJob, rt: dict) -> str:
+        """qB 侧自检(运行时 F 兜底, 计划 26-11-04-0055 §04 P4 / §06 D4): -> passed/failed/skipped
+
+        链接建成后 qB 经 src 原路径读到的就是 dst 的数据 —— 用 rp.link_follow_evidence
+        列 src 内容根(qB 视角路径复用计划期 content_root_of 产物, 即 job.scope)带元数据,
+        与本机 dst 内容根同相对路径文件的 stat 比对(抽样语义与预检 D 级一致):
+
+        - passed(任一代表文件 size+mtime 一致) => 通过, 照常武装;
+        - failed(抽中文件全不一致) => 调用方按本机穿透失败同路径判失败(保留链接现场);
+        - skipped(端点 404/400/权限/qB<5.0/客户端缺失等不可判定) => 行为与无自检一致,
+          rt 记一笔供排查(不 fail、不往回执 notes 刷屏)。
+        """
+        try:
+            ev = rp.link_follow_evidence(
+                self._ctx,
+                job.scope,  # qB 视角内容根(计划期既有单点, save_path 派生)
+                _native(job.dst, self._scope_rel(job)),  # 本机 dst 内容根(证据侧走 map_to_container 单点)
+                names=self._scope_names(job),
+            )
+        except Exception as e:  # noqa: BLE001 - 自检自身意外炸了按跳过(保守默认: 不挡武装)
+            rt["qb_side_check"] = f"skipped: 自检异常({type(e).__name__}: {e})"
+            logger.info(f"relocate | job {job.job_id}: qB 侧自检异常按跳过({type(e).__name__}: {e})")
+            return "skipped"
+        if ev.status == rp.POSITIVE:
+            return "passed"
+        if ev.status == rp.NEGATIVE:
+            return "failed"
+        rt["qb_side_check"] = f"skipped: {ev.detail}"
+        logger.info(f"relocate | job {job.job_id}: qB 侧自检跳过({ev.detail})")
+        return "skipped"
+
+    def _scope_names(self, job: RelocateJob) -> tuple:
+        """成员文件表换算到内容根相对名(自检比对集; 复用 _cr_files 既有换算单点)"""
+        return tuple(name for name, _size in self._cr_files(self._plan_files(job), job.scope, job.src))
 
     def _arm(self, job: RelocateJob, rt: dict) -> None:
         """重归组 + 落账(armed) + 拉起 guardian + 恢复运行态"""

@@ -131,11 +131,15 @@ def _unavailable(detail: str) -> Evidence:
 # ---------- D 级: qB 列目录元数据比对 ----------
 
 
-def _d_evidence(client, qb_dir: str, local_dir: str, visibility_only: bool, sample_k: int) -> Evidence:
+def _d_evidence(
+    client, qb_dir: str, local_dir: str, visibility_only: bool, sample_k: int, name_filter=None
+) -> Evidence:
     """D 级证据: qB app/getDirectoryContent + withMetadata, 与本机 scandir 比对
 
     visibility_only(dst 侧): 列目录成功即 positive(哪怕空目录/纯字符串列表) ——
     只证明「qB 看得见该目录」, 不做内容比对。
+    name_filter(链接跟随自检用): 内容根相对文件名集合, 过滤 qB 条目到本组文件
+    (免得抽样踩进同目录无关条目); None = 不过滤(既有调用点行为不变)。
     """
     try:
         entries = client.app_get_directory_content(directory_path=qb_dir, with_metadata=WITH_METADATA)
@@ -148,12 +152,14 @@ def _d_evidence(client, qb_dir: str, local_dir: str, visibility_only: bool, samp
     # 元数据未生效(qB<5.0 忽略 withMetadata 回纯字符串, 或参数被未来版本改名) => 无法比对
     if entries and not all(isinstance(e, dict) for e in entries):
         return _unavailable("qB 返回纯路径列表(withMetadata 未生效), 无 size/mtime 可比对")
+    if name_filter is not None:
+        entries = [e for e in entries if str(e.get("name")) in name_filter]
     try:
         local = _local_listing(local_dir)
     except OSError as e:
         return _unavailable(f"本机目录不可读({e}), 无法与 qB 视角比对")
     if not entries:
-        return _unavailable("qB 侧目录为空, 无可比条目")
+        return _unavailable("qB 侧目录为空, 无可比条目" if name_filter is None else "qB 侧列目录未见本组文件, 无可比条目")
     # 只比文件条目: 本机侧是目录的剔除(qB 对目录的 size 语义未实测, 比对会造假阴性);
     # qB 独有名字(本机没有)保留比对 —— 同一命名空间下不该出现单侧独有的条目
     comparable = [
@@ -233,6 +239,27 @@ def path_evidence(
         return b_ev
     # 两级都不可判定: 保留 D 级的失败原因(更根本), detail 注明已尝试降级
     return Evidence(UNAVAILABLE, "", d_ev.detail + "(B′ 降级同样不可判定)")
+
+
+def link_follow_evidence(ctx, qb_dir: str, local_dir: str, names=(), sample_k: int = PROOF_SAMPLE_K) -> Evidence:
+    """链接跟随自检(运行时 F 兜底, 计划 26-11-04-0055 §04 P4 / §06 D4)
+
+    链接建成后 qB 经 src 原路径读到的就是 dst 的数据 —— 列 src 内容根(qB 视角, 即
+    计划期 content_root_of 的产物)带元数据, 与本机 dst 侧同相对路径文件的 stat 比对
+    (抽样语义与 D 级一致): 任一代表文件 size+mtime 完全相等 => positive(链接被 qB
+    跟随); 抽中代表文件全不等 => negative(链接未被跟随); 端点 404/400/权限/
+    qB<5.0(纯字符串列表)/客户端缺失/本机 dst 不可读 => unavailable(调用方跳过
+    qB 侧部分, 行为与无自检一致)。
+
+    只做 D 级、不降级 B′: B′ 比的是种子元数据 size(非实时 FS), 与「链接是否被
+    跟随」无关。names 是内容根相对文件名集合(把 qB 条目过滤到本组文件, 免得抽样
+    踩进同目录无关条目); 空序列不过滤。
+    """
+    client = _client_of(ctx)
+    if client is None:
+        return _unavailable("qB 客户端不可用, 无法做链接跟随自检")
+    flt = {str(n) for n in (names or ())} or None
+    return _d_evidence(client, qb_dir, local_dir, False, sample_k, name_filter=flt)
 
 
 def nearest_existing_ancestor(fa, path: str):

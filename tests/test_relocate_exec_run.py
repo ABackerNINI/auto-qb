@@ -57,6 +57,15 @@
 - test_summ_counts_contract: 汇总计数逐值契约
 - test_dst_size_sums_all_files: 采样求和与异常跳过
 - test_native_syscall_and_finalize_members_faces: _native 空格名/syscall 映射/收尾集合两分量
+### P4 F 运行时兜底(计划 26-11-04-0055 §04 P4 / §06 D4)
+- test_exec_qb_side_check_passes_and_arms: qB 侧元数据一致 -> 自检通过照常武装(列目录入参钉住:
+  qB 视角内容根 + with_metadata="true")
+- test_exec_qb_side_check_all_mismatch_fails: qB 侧全不一致 -> failed(qb_side_check_failed)
+  + 链接现场保留(账面与磁盘)+ 不搬回
+- test_exec_qb_side_check_unavailable_skips: 端点 404 -> 跳过 qB 侧部分(不 fail), rt 记一笔供排查
+- test_exec_local_penetration_failure_precedes_qb_check: 本机穿透先失败 -> 走原 fail(alias_unreadable),
+  qB 侧零调用(优先级: 本机先判)
+- test_exec_single_member_no_qb_side_call: 单成员组 direct 不经 penetrate 分支, 推进期零 qB 侧列目录
 """
 
 import os
@@ -66,6 +75,8 @@ import time
 import types
 
 import pytest
+
+from qbittorrentapi.exceptions import NotFound404Error
 
 from auto_qb.core.modules import relocate_units as ru
 
@@ -1135,3 +1146,138 @@ def test_native_syscall_and_finalize_members_faces(monkeypatch):
     with capture_logs("auto_qb.core.modules.relocate_mod") as cap:
         assert RelocateModule._file_map(_srec("HZ", "x", None), object()) == {}
     assert any("读取文件列表失败" in m for m in cap.messages), cap.messages
+
+
+# ---------- P4 F 运行时兜底(计划 26-11-04-0055 §04 P4 / §06 D4) ----------
+
+
+def _stub_dir_content(client, holder, calls):
+    """app_get_directory_content 替身: 回 holder[0] 预制条目并记录 (directory_path, with_metadata)"""
+    def _list(directory_path=None, with_metadata=None, **kw):
+        calls.append((directory_path, with_metadata))
+        return list(holder[0])
+
+    client.app_get_directory_content = _list
+
+
+def _entries_from(dirpath, size_delta=0):
+    """本机目录 -> qB 列目录条目形状(name/size/last_modification_date/type; 元数据取真实 stat)"""
+    out = []
+    for e in os.scandir(str(dirpath)):
+        if e.is_dir():
+            continue
+        st = e.stat()
+        out.append(
+            {
+                "name": e.name,
+                "size": int(st.st_size) + size_delta,
+                "last_modification_date": int(st.st_mtime),
+                "type": "File",
+            }
+        )
+    return out
+
+
+def test_exec_qb_side_check_passes_and_arms(tmp_path, monkeypatch):
+    """qB 侧自检通过: 元数据一致 -> 照常武装; 列目录入参钉住(qB 视角内容根 + with_metadata="true")"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
+    mod = mgr.host.get("relocate")
+    spawned = []
+    _spy_spawn(mod, spawned)
+    holder = [[]]  # 预检期条目为空: D 不可判定 -> B′ 元数据 size 相等 -> proved(既有降级链)
+    calls = []
+    _stub_dir_content(client, holder, calls)
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    calls.clear()
+    holder[0] = _entries_from(os.path.join(dst, "Show"))  # qB 经链接读到 dst 数据的形态
+    _run_ticks(mod, 6)
+    job = mod.get_job(job_id)
+    assert job.phase == ru.PHASE_ARMED, (job.phase, job.reason, job.last_error)
+    assert any(
+        os.path.normpath(str(p)) == os.path.normpath(content) and w == "true" for p, w in calls
+    ), f"推进期应以 qB 视角内容根 + with_metadata='true' 列目录: {calls}"
+
+
+def test_exec_qb_side_check_all_mismatch_fails(tmp_path, monkeypatch):
+    """qB 侧全不一致 -> failed(qb_side_check_failed): 链接现场保留(账面+磁盘), 不搬回"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    holder = [[]]
+    _stub_dir_content(client, holder, [])
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    holder[0] = _entries_from(os.path.join(dst, "Show"), size_delta=1)  # qB 未跟随链接的形态
+    _run_ticks(mod, 6)
+    job = mod.get_job(job_id)
+    assert (job.phase, job.reason) == (ru.PHASE_FAILED, "qb_side_check_failed"), (job.phase, job.reason)
+    assert "链接可能未被 qB 跟随" in job.last_error, job.last_error
+    assert len(job.alias_paths) == 2, "失败不得清链接账(保留现场)"
+    for p in job.alias_paths:
+        assert os.path.exists(p), f"链接现场必须真实保留: {p}"
+    assert len([c for c in client.calls if c[0] == "set_location"]) == 1, "失败不得搬回(重发 setLocation)"
+
+
+def test_exec_qb_side_check_unavailable_skips(tmp_path, monkeypatch):
+    """端点 404 -> 跳过 qB 侧部分(行为与改造前一致): 不 fail 照常武装, rt 记一笔供排查"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+
+    def _boom(directory_path=None, with_metadata=None, **kw):
+        raise NotFound404Error
+
+    client.app_get_directory_content = _boom
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    job = mod.get_job(job_id)
+    assert job.phase == ru.PHASE_ARMED, (job.phase, job.reason, job.last_error)
+    assert "skipped" in str(mod._rt.get(job_id, {}).get("qb_side_check", "")), mod._rt.get(job_id)
+
+
+def test_exec_local_penetration_failure_precedes_qb_check(tmp_path, monkeypatch):
+    """本机穿透先失败 -> 仍走原 fail(alias_unreadable), qB 侧零调用(优先级: 本机先判)"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, state="uploading")
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    holder = [[]]
+    calls = []
+    _stub_dir_content(client, holder, calls)
+    job_id = mod.relocate_execute(["HA"], dst)[0]["job_id"]
+    _simulate_moved(mgr, dst, files, content)
+    calls.clear()
+    monkeypatch.setattr(mod, "_penetration_ok", lambda job: False)  # 本机穿透失败
+    _run_ticks(mod, 6)
+    job = mod.get_job(job_id)
+    assert (job.phase, job.reason) == (ru.PHASE_FAILED, "alias_unreadable"), (job.phase, job.reason)
+    assert calls == [], f"本机穿透失败时不得再发 qB 侧自检: {calls}"
+
+
+def test_exec_single_member_no_qb_side_call(tmp_path, monkeypatch):
+    """单成员组 direct: 不经 penetrate 分支 —— 推进期零 qB 侧列目录调用, 照常 done"""
+    pin_disk_usage(monkeypatch)
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    store = mgr.store
+    key = store.member_to_key["HB"]
+    store.groups[key].remove("HB")
+    store.group_sizes[key].pop("HB", None)
+    store.member_to_key.pop("HB", None)
+    store.by_hash.pop("HB", None)
+    mod = mgr.host.get("relocate")
+    _spy_spawn(mod, [])
+    calls = []
+    _stub_dir_content(client, [[]], calls)
+    items = mod.relocate_execute(["HA"], dst)
+    assert items[0]["form"] == "direct", items
+    calls.clear()  # 预检面的 path_evidence 不在本断言范围; 这里钉的是推进期零自检
+    _simulate_moved(mgr, dst, files, content)
+    _run_ticks(mod, 6)
+    job = _only_job(mod)
+    assert job["phase"] == ru.PHASE_DONE, job
+    assert calls == [], f"单成员组不得做 qB 侧自检: {calls}"
