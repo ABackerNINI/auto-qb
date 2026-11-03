@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>测试覆盖率提升 · 第三轮 — 新欠账清偿与出生即绿 (99% / 319 单位 → 收敛)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="test-coverage-uplift-3">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-04-0157">
+<meta name="doc-updated" content="26-11-04-0210">
+<meta name="doc-refs" content="memory-bank/plans/26-10-01-2157-plan-test-coverage-uplift.html, memory-bank/plans/26-10-20-2101-plan-test-coverage-uplift-2.html, memory-bank/tasks/26-11-04-test-coverage-uplift-3.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: test-coverage-uplift-3</div>
+<h1>测试覆盖率提升 · 第三轮 — 新欠账清偿与出生即绿 (99% / 319 单位 → 收敛)</h1>
+<p class="lede">承接前两轮(91%→96%、97.66%→99.41%)的第三轮:门槛 99 已稳住,但两周新功能让缺口从 162 回涨到 319 单位——第三轮的主战场不再是「旧残留」,而是「新欠账」。三阶段(新欠账快赢 → hr/ops/transfer 中坚 → 长尾收口)把缺口收敛到 ≤100 单位(TOTAL ≈ 99.7%),并把「出生即绿」从口号落成基线切片上的缺口净额台账。全部缺口数字实测于 2026-11-04 develop @ <code>7701cd22</code> 的 <code>test.full</code>(5040 passed + 2 skipped,222s),非估算基数。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-0157 · <b>doc-updated</b> 26-11-04-0210 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「参照前两轮覆盖率提升实施,写一个第三轮实施计划」;前序:第一轮 <code>26-10-01-2157</code>(91%→96%, Done)、第二轮 <code>26-10-20-2101</code>(97.66%→99.41%, Done,收尾给第三轮留 162 单位残留清单)、gtm 工具侧门禁 <code>26-10-21-0120</code>(Done,工具侧已收口不在本轮范围)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>1.1 背景与前两轮的关系</h3>
+<p>第二轮收口时(2026-10-21):TOTAL <b>99.41%</b>、缺口 <b>162 单位</b>、门槛 <code>--cov-fail-under=99</code>(win)转绿、watchlist 清零,残留硬骨头(真机探测 / GUI / 低频错误路径 / 路由竞态)逐条列名留第三轮。两周后的今天(2026-11-04 实测):TOTAL 仍显示 <b>99%</b>(win 门槛通过,exit 0),但缺口绝对量回涨到 <b>319 单位</b>(167 miss + 152 partial),覆盖分母 27,683 → 31,281(+3,598)。发生了什么:</p>
+<ul>
+  <li><b>旧残留基本清偿</b>:第二轮列名的残留大头被后续重构连清带补——<code>relocate_mod</code> 29 → 8(<code>26-11-02-2342</code> 大文件拆成 relocate_exec/plan/units 三叶后补测)、<code>webui/runtime</code> 25 → 21(拆 4 个 runtime_* 叶)、<code>views</code> 8 → 1、<code>ops_mod</code> 7 → 4、<code>traffic_grid</code> 8 → 7。</li>
+  <li><b>新欠账约 +157 单位进场</b>:规则引擎重设计(<code>26-11-01-0106</code>)带进 <code>rules/base.py</code> 35 + <code>config/validation/rules.py</code> 22;下载熔断(<code>26-11-03-0456</code>)带进 <code>fuse_mod.py</code> 33 + cli 放行入口 16;种子转移(<code>26-10-31-0306</code>)带进 <code>transfer/orchestrator.py</code> 10;追剧视图、ops 拆分叶等零散进账。新面出生覆盖率约 95.6%(+3,598 单位里 157 未覆盖)。</li>
+  <li><b>M4「增量不欠账」的口径盲区</b>:覆盖率守在 99% 没人红,<span class="wr">欠账绝对量没人看</span>——门槛是比例指标,分母一涨,同样的 99% 背后多藏了 157 个未覆盖单位。这是第三轮机制段要堵的洞。</li>
+</ul>
+
+<h3>1.2 目标(做到什么程度算成)</h3>
+<ul>
+  <li><b>缺口收敛</b>:319 → <b>≤100 单位</b>(TOTAL ≈ 99.7%±0.2),残留逐条列名(预计为真机探测 / GUI / 防御支)。</li>
+  <li><b>阈值阶梯</b>:win 99 → <b>99.3</b>(P1 后)→ <b>99.5</b>(P2 后);其他平台 98.5 → 98.8 → 99.0(单点 <code>tests/conftest.py::COVERAGE_FLOOR_*</code>)。</li>
+  <li><b>watchlist 清回零</b>:行覆盖 &lt;95% 单文件从回沉的 7 个清回 0(§2.5)。</li>
+  <li><b>机制 M8</b>:基线切片新增「缺口净额 vs 上一条切片」栏,新欠账当轮点名(M1–M7 继承不动)。</li>
+</ul>
+
+<h3>1.3 设计底线(不变量)</h3>
+<table>
+  <tr><th>#</th><th>不变量</th><th>为什么</th></tr>
+  <tr><td>I1</td><td>只补测试不改产品码</td><td>补测试轮发现产品缺陷入池 <code>issues/</code>(黄金法则 6 / scope-guard),不顺手修;前两轮先例:origin 端口解析 bug 入池预留断言位。</td></tr>
+  <tr><td>I2</td><td>同口径对比,行号当快照</td><td>-n 8 默认,分支 partial 与串行差 1;本计划行号是 26-11-04 快照,各阶段开工先重刷 <code>test.full</code> 对表,不按旧行号写测试。</td></tr>
+  <tr><td>I3</td><td>豁免只减不增(现 8 行)</td><td>新豁免逐块写理由(照 tray 先例);真机/平台分支优先注入替身。</td></tr>
+  <tr><td>I4</td><td>零真实副作用</td><td>tasklist/ps/socket/网络探测/前台进程一律 monkeypatch;sidefx 台账白名单不钻空子。</td></tr>
+  <tr><td>I5</td><td>阈值恒低于当期实测 0.3–0.5 点</td><td>并行口径波动 + 特性新增稀释;抬阈值与基线切片同轮落地。</td></tr>
+  <tr><td>I6</td><td>硬骨头不硬啃</td><td>终点未清的逐条列名(哪几行 / 为什么到不了 / 值不值得改产品结构),不为凑数加 pragma 或编假测试。</td></tr>
+</table>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>2.1 基线口径与单位经济学</h3>
+<p><b>99%</b> 综合覆盖率(语句 + 分支,win 门槛 99 通过)· <b>319 未覆盖单位</b>(167 行 + 152 partial 分支出口)· 50 文件 · 分母 23,325 语句 + 7,956 分支出口 = <b>31,281 单位</b> · 5040 passed + 2 skipped,222.4s(-n 8)。</p>
+<p>换算口径:每补齐 1 个单位 ≈ <b>+0.0032%</b>。各档位代价:</p>
+<table>
+  <tr><th>目标档位</th><th>需新增单位</th><th>折合缺口消耗</th><th>对应阶段 / 阈值</th></tr>
+  <tr><td>99.3%(P0 后过程线)</td><td>+94</td><td>29%</td><td>P0 · 阈值维持 99</td></tr>
+  <tr><td>99.55%(P1 验收线)</td><td>+172</td><td>54%</td><td>P1 · 阈值抬 win 99.3 / 其他 98.8</td></tr>
+  <tr><td>99.7%(P2 终点)</td><td>+219</td><td>69%</td><td>P2 · 阈值抬 win 99.5 / 其他 99.0</td></tr>
+  <tr><td>99.9%(超范围)</td><td>+281</td><td>88%</td><td>超出本计划(硬骨头不成比例,见 I6 / D1)</td></tr>
+</table>
+<div class="aside">口径警告(照抄 baseline.md 常驻警告):并行 -n 8 下分支 partial 与串行差 1;对比数字必须同口径,换并行度要重刷。<code>test.quick</code> 带 <code>--no-cov</code>,覆盖率数字一律以 <code>commands run test.full</code> 为准。阈值单点在 <code>tests/conftest.py::pytest_configure</code>(win 99.0 / 其他 98.5,平台分档依据见该 docstring)。单文件排查 <code>-n 0</code> 且须 <code>--no-cov</code>(addopts 带 fail-under 时单文件跑必然假红,<code>pitfalls/testing/single-file-coverage-gate.md</code>)。</div>
+
+<h3>2.2 分包欠账(缺口单位 = 未覆盖行 + partial 分支出口)</h3>
+<table>
+  <tr><th>包</th><th>文件数</th><th>miss</th><th>partial</th><th>缺口单位</th><th>主攻阶段 / 备注</th></tr>
+  <tr><td>core</td><td>13</td><td>44</td><td>42</td><td><b>86</b></td><td>P0 fuse_mod / P1 ops 叶 / P2 尾;旧 relocate_mod 29 已随拆分清到 8</td></tr>
+  <tr><td>webui</td><td>16</td><td>37</td><td>37</td><td><b>74</b></td><td>P1 traffic_monitor / P2 二线;旧 runtime 25 重分布进 4 个拆分叶</td></tr>
+  <tr><td>config</td><td>4</td><td>19</td><td>23</td><td><b>42</b></td><td>P0 validation/rules / P1 sections 尾;规则引擎重设计新欠账</td></tr>
+  <tr><td>hr</td><td>9</td><td>20</td><td>22</td><td><b>42</b></td><td>P1 discovery+wave;第二轮已明确不硬啃的 41 单位基本原样(改名 service→service_wave)</td></tr>
+  <tr><td>rules</td><td>2</td><td>25</td><td>14</td><td><b>39</b></td><td>P0 主攻;base.py 一个文件占 35,全是新引擎的守卫与行为分支</td></tr>
+  <tr><td>直属 cli.py</td><td>1</td><td>10</td><td>6</td><td><b>16</b></td><td>P0;fuse 放行入口整块 + 互斥校验,第二轮收口时为 0</td></tr>
+  <tr><td>transfer</td><td>1</td><td>7</td><td>3</td><td><b>10</b></td><td>P1;orchestrator 流水分支(26-10-31 新包)</td></tr>
+  <tr><td>tools</td><td>1</td><td>2</td><td>3</td><td><b>5</b></td><td>P2;finalize_watch 余竞态</td></tr>
+  <tr><td>tray</td><td>1</td><td>3</td><td>0</td><td><b>3</b></td><td>维持豁免口径,不追加</td></tr>
+  <tr><td>infra / torrents</td><td>2</td><td>0</td><td>2</td><td><b>2</b></td><td>P2 尾</td></tr>
+  <tr><td>合计</td><td>50</td><td>167</td><td>152</td><td><b>319</b></td><td>—</td></tr>
+</table>
+
+<h3>2.3 单文件欠账 Top 16(缺口 = miss + partial)</h3>
+<table>
+  <tr><th>#</th><th>文件</th><th>语句</th><th>miss</th><th>partial</th><th>缺口</th><th>行覆盖</th><th>主攻</th></tr>
+  <tr><td>1</td><td><code>rules/base.py</code></td><td>420</td><td>23</td><td>12</td><td>35</td><td>94%</td><td>P0</td></tr>
+  <tr><td>2</td><td><code>core/modules/fuse_mod.py</code></td><td>248</td><td>18</td><td>15</td><td>33</td><td>90%</td><td>P0</td></tr>
+  <tr><td>3</td><td><code>config/validation/rules.py</code></td><td>323</td><td>8</td><td>14</td><td>22</td><td>96%</td><td>P0</td></tr>
+  <tr><td>4</td><td><code>core/modules/ops_skip.py</code></td><td>255</td><td>13</td><td>5</td><td>18</td><td>95%</td><td>P1</td></tr>
+  <tr><td>5</td><td><code>cli.py</code></td><td>126</td><td>10</td><td>6</td><td>16</td><td>90%</td><td>P0</td></tr>
+  <tr><td>6</td><td><code>hr/discovery.py</code></td><td>283</td><td>9</td><td>5</td><td>14</td><td>96%</td><td>P1</td></tr>
+  <tr><td>7</td><td><code>config/validation/sections.py</code></td><td>678</td><td>8</td><td>4</td><td>12</td><td>99%</td><td>P1</td></tr>
+  <tr><td>8</td><td><code>webui/server/routes/traffic_monitor.py</code></td><td>175</td><td>8</td><td>2</td><td>10</td><td>96%</td><td>P1</td></tr>
+  <tr><td>9</td><td><code>transfer/orchestrator.py</code></td><td>189</td><td>7</td><td>3</td><td>10</td><td>96%</td><td>P1</td></tr>
+  <tr><td>10</td><td><code>hr/service_wave.py</code></td><td>512</td><td>5</td><td>5</td><td>10</td><td>99%</td><td>P1</td></tr>
+  <tr><td>11</td><td><code>webui/runtime_views.py</code></td><td>389</td><td>3</td><td>6</td><td>9</td><td>98%</td><td>P2</td></tr>
+  <tr><td>12</td><td><code>webui/commands.py</code></td><td>79</td><td>3</td><td>6</td><td>9</td><td>90%</td><td>P2</td></tr>
+  <tr><td>13</td><td><code>core/modules/ops_jobs.py</code></td><td>57</td><td>6</td><td>2</td><td>8</td><td>90%</td><td>P1</td></tr>
+  <tr><td>14</td><td><code>webui/runtime_commands.py</code></td><td>241</td><td>4</td><td>4</td><td>8</td><td>98%</td><td>P2</td></tr>
+  <tr><td>15</td><td><code>webui/views_episodes.py</code></td><td>109</td><td>3</td><td>4</td><td>7</td><td>94%</td><td>P2</td></tr>
+  <tr><td>16</td><td><code>core/traffic_grid.py</code></td><td>339</td><td>2</td><td>5</td><td>7</td><td>99%</td><td>P2</td></tr>
+</table>
+<p class="cm">Top 16 合计 228 单位 = 总缺口 72%;Top 6 合计 138 = 43%。集中度高,按文件逐个清偿。第 7 名以后每件 ≤10 单位,P2 一表收。</p>
+
+<h3>2.4 缺口形态(沿用前两轮四分类,决定手法与难度)</h3>
+<table>
+  <tr><th>形态</th><th>可捕预估</th><th>代表位置(26-11-04 实测行号)</th><th>手法</th></tr>
+  <tr><td>A · 整块功能空洞</td><td>~55</td><td>cli.py 44-45,50-51(fuse 放行连接失败/同步失败)、172-182,222(互斥校验);ops_jobs 33,42-43,56-58;orchestrator 293-295</td><td>优先清偿——按行为写正例 + 边界,全部有现成测试档落点</td></tr>
+  <tr><td>B · 守卫/错误分支长尾</td><td>~150</td><td>rules/base 条件树构造守卫(201-215,336-343,387,453-457,480-481,596-604);validation/rules 14 条 partial;fuse_mod 状态机分支(188-195,224-264,348-372);sections 12;writer 6</td><td>参数化矩阵批量清——守卫触发值 × 合法默认值,桌面即测</td></tr>
+  <tr><td>C · 外部依赖 / 竞态</td><td>~90</td><td>hr/discovery 网络探测(89,192-194,219,230,351-352,411);routes/traffic_monitor 路由竞态;service_wave / traffic_grid / relocate_exec 复合条件</td><td>回环 stub / monkeypatch 三证输入;竞态类照第二轮 T1.5 单例直驱先例</td></tr>
+  <tr><td>D · 真机 / GUI 残留</td><td>~25</td><td>tray 3 行(维持豁免);各文件零散防御支(「到不了的支」)</td><td>能测的测,到不了的逐条列名(I6),不硬啃</td></tr>
+</table>
+
+<h3>2.5 watchlist 回沉——机制为什么没拦住</h3>
+<p>第二轮 M5(watchlist:行覆盖 &lt;95% 单文件每轮切片点名)在收口时清零,但两周后回到 <b>7 个</b>:<code>fuse_mod</code> 90% / <code>webui/commands.py</code> 90% / <code>cli.py</code> 90% / <code>ops_jobs</code> 90% / <code>runtime_common</code> 93% / <code>views_episodes</code> 94% / <code>rules/base</code> 94%——其中 6 个是这段时间新出生或拆分出的文件。M5 只「点名」不「拦截」,新模块进场时没人看它一眼。第三轮处置:P0/P1 任务表把 7 项全部纳入核销范围,P2 目标清回零;机制段 M8 把「缺口净额」钉进基线切片,让新欠账在收尾轮必然被看见(§03)。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<p>排序原则沿用前两轮:先清「没测过」(A 类),再扫「测不全」(B 类),外部依赖型(C 类)用回环 stub 与 monkeypatch 收敛,长尾收口并逐条列名残留。每阶段是可独立提交、可独立验收的闭环;预估单位按 §2.1 换算,完成时以 <code>test.full</code> 实测为准,不达标的差额滚动进下一阶段任务表。三阶段预估合计 +256±35,与「319 − 100 = 219」的终点需求之间留了新码继续进场的稀释余量。</p>
+
+<table>
+  <tr><th>阶段</th><th>目标</th><th>预估</th><th>主攻</th></tr>
+  <tr><td>P0 快赢轮</td><td>99% → ≈99.3%</td><td>+106±20</td><td>新欠账四件:rules/base(35) · fuse_mod(33) · validation/rules(22) · cli(16)——全是本轮新码,测试档现成,桌面可测</td></tr>
+  <tr><td>P1 中坚</td><td>≈99.3% → ≈99.55%</td><td>+80±20</td><td>ops 拆分叶(26) · hr 家族(36) · transfer orchestrator(10) · config 尾(20) · traffic_monitor 路由(10)</td></tr>
+  <tr><td>P2 长尾收口</td><td>≈99.55% → ≈99.7%</td><td>+70±25</td><td>webui 二线(~40) · core/hr/tools 零尾(~30) · M8 台账定稿与 baseline.md 回写</td></tr>
+</table>
+
+<h3>3.1 执行纪律(沿用第二轮 §4 清单,全部是 pitfalls/testing/ 已记录的坑)</h3>
+<table>
+  <tr><th>纪律</th><th>约束</th><th>单点</th></tr>
+  <tr><td>测试命令</td><td>一律 <code>commands run test.full</code> / <code>test.one</code>,TMPDIR 已内置,禁手工加前缀</td><td><code>testing/tmpdir.md</code></td></tr>
+  <tr><td>断言有效性</td><td>禁恒真 / 恒红 / 安慰剂断言;每阶段抽 ≥10% 变异红验</td><td><code>testing/assertions.md</code></td></tr>
+  <tr><td>分支真抵达</td><td>夹具数据必须让被测分支真正执行(第二轮 R5 修掉 4 处假绿的教训)</td><td><code>testing/unreached-branch-guard.md</code></td></tr>
+  <tr><td>副作用台账</td><td>tasklist/socket/网络探测/前台进程一律 monkeypatch</td><td><code>testing/side-effects.md</code></td></tr>
+  <tr><td>替身保真</td><td>HTTP 契约用本地回环 stub(真 socket loopback),不自造假 manager</td><td><code>testing/stubs-sim.md</code></td></tr>
+  <tr><td>计时容差</td><td>节流 / 轮询断言下界留 15.6ms 刻度余量</td><td><code>testing/timing-tolerance.md</code></td></tr>
+  <tr><td>日志断言</td><td>不用 caplog,自建 handler 挂模块 logger + 显式 setLevel</td><td><code>testing/log-capture.md</code></td></tr>
+  <tr><td>共享可变夹具</td><td>FakeConfig 段对象是类属性,原地改先拷贝</td><td><code>testing/fake-config-shared-mutables.md</code></td></tr>
+  <tr><td>并行口径</td><td>-n 8 默认(勿用 auto);单文件排查 -n 0 + --no-cov</td><td><code>testing/parallel-run.md</code></td></tr>
+  <tr><td>覆盖率文件</td><td>覆盖率导出与分析临时件不留仓库根,用完即删</td><td><code>testing/tmpdir.md</code></td></tr>
+</table>
+
+<h3>3.2 机制:M1–M7 继承 + M8 缺口净额台账(新增)</h3>
+<table>
+  <tr><th>机制</th><th>本轮状态</th></tr>
+  <tr><td>M1 阈值阶梯</td><td>延续:99(win)不动 → P1 后抬 99.3 / 其他 98.8 → P2 后抬 99.5 / 其他 99.0。抬阈值与基线切片同轮。</td></tr>
+  <tr><td>M2 基线切片</td><td>每阶段验收一条(Windows 侧数字;Linux 侧数字经 CI 或 <code>test.linux</code> 取得后补记)。</td></tr>
+  <tr><td>M3 红验纪律</td><td>每阶段新用例抽 ≥10% 注入缺陷确认变红。</td></tr>
+  <tr><td>M4 增量不欠账</td><td>由 M8 兜底量化(见下)——这是本轮机制段的核心修补。</td></tr>
+  <tr><td>M5 watchlist</td><td>复位重启:7 个(§2.5)列入 P0/P1 任务表核销,P2 目标清零;新文件出生 &lt;95% 当轮切片点名。</td></tr>
+  <tr><td>M6 豁免治理</td><td>8 行零新增;tray 3 行维持既有豁免口径不追加。</td></tr>
+  <tr><td>M7 工具侧联动</td><td>gtm 已完成门禁四阶段(99.42% / 阈值 98.5 分档),不在本轮范围;契约联动规则(改端点两侧测试同轮跑)继续常态。</td></tr>
+  <tr><td><b>M8 缺口净额台账(新)</b></td><td>每条基线切片新增一行「缺口净额 vs 上一条切片」;<span class="wr">净额为正且 &gt; +15 单位</span>的收尾轮必须点名新模块与原因(拆分搬家造成的重分布注明「重分布不计」)。落点:基线切片模板 + <code>memory-bank/testing/baseline.md</code> 口径段回写。让 M4 从口号变成切片上的数字——本轮 162 → 319 的回涨若有此栏,两周内就会现形。</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>P0 快赢轮 — 新欠账主攻 · 99% → ≈99.3% · 预估 +106±20</h3>
+<table>
+  <tr><th>#</th><th>任务</th><th>落点(测试文件)</th><th>预估单位</th><th>难度</th></tr>
+  <tr><td>T0.1</td><td><code>rules/base.py</code> 35:条件树构造守卫簇(嵌套上限 197-199 / 单键字典 / all-any 非列表 / 非 dict 项跳过 / not 孩子递归 / leaf 包装 ConfigError)+ 336-343,387,453-457,480-481,596-604 行为分支——参数化矩阵批量</td><td><code>tests/test_rules_core.py</code>(扩展)</td><td>35±5</td><td>低-中</td></tr>
+  <tr><td>T0.2</td><td><code>fuse_mod.py</code> 33:状态机迁移对逐对构造——enabled 早退 / 依赖缺失早退 / armed 幂等补齐(92,188-195)/ 外部改限速转 released(224-241)/ CAS 写回与快照缺失(253-286)/ 批量与终态分支(348-372)</td><td><code>tests/test_fuse_mod.py</code>(扩展,替身群照既有惯例)</td><td>33±8</td><td>中</td></tr>
+  <tr><td>T0.3</td><td><code>config/validation/rules.py</code> 22:spec 校验守卫(键/取值域/conditions-actions 结构/插件深校验分发),14 条 partial 逐对构造非法样例</td><td><code>tests/test_config_rules.py</code>(扩展)</td><td>22±5</td><td>低</td></tr>
+  <tr><td>T0.4</td><td><code>cli.py</code> 16:fuse 放行入口整块(44-45,50-51 连接失败 / 53-&gt;55 / 172,177,180-182,222 子命令与互斥校验)——argv 参数化直驱 <code>parser.error</code>(SystemExit 断言),不起真进程</td><td><code>tests/test_cli.py</code>(扩展)</td><td>16±3</td><td>低</td></tr>
+</table>
+<p><b>验收 DoD</b>:<code>test.full</code> 全绿且 TOTAL ≥ 99.3%(落在 99.0–99.3 记「及格带」,差额滚 P1 任务表)→ 基线切片(M8 缺口净额首记)→ 阈值维持 99 不动 → 新用例抽 ≥10% 变异红验 → watchlist 7 项中本轮核销数记录在案。</p>
+
+<h3>P1 中坚 — hr / ops / transfer 家族 · ≈99.3% → ≈99.55% · 预估 +80±20</h3>
+<table>
+  <tr><th>#</th><th>任务</th><th>落点(测试文件)</th><th>预估单位</th><th>难度</th></tr>
+  <tr><td>T1.1</td><td>ops 拆分叶:<code>ops_skip</code> 18(相位机 189-217 / 跳检守卫 235-255,297 / 402-434 对账分支)+ <code>ops_jobs</code> 8(33,42-43,56-58 同步线对账整块)</td><td><code>tests/test_ops_skip.py</code> · <code>tests/test_ops_misc.py</code>(扩展)</td><td>26±8</td><td>中</td></tr>
+  <tr><td>T1.2</td><td><code>hr/discovery.py</code> 14:网络探测边界(89,192-194,219,230,351-352,411)——monkeypatch 三证输入,沿用第二轮 T0.6 手法,不起真网络</td><td><code>tests/test_hr_discovery.py</code>(扩展)</td><td>14±4</td><td>中</td></tr>
+  <tr><td>T1.3</td><td><code>transfer/orchestrator.py</code> 10:单种子流水分支(174,178 状态门 / 293-295 / 342 / 404 收尾)</td><td><code>tests/test_transfer_orchestrator.py</code>(扩展)</td><td>10±3</td><td>中</td></tr>
+  <tr><td>T1.4</td><td>hr 二线:<code>service_wave</code> 10(300,344,455-456,639-640 波次分支)+ <code>hr/runtime</code> 7(129-131,214-224,335-341,432)+ <code>hr/server</code> 5(283-284,339-340)</td><td><code>tests/test_hr_service_wave.py</code> · <code>tests/test_hr_runtime.py</code>(扩展)</td><td>22±6</td><td>中</td></tr>
+  <tr><td>T1.5</td><td>config 尾:<code>sections</code> 12(536-537,871-873,882-883,920)+ <code>writer</code> 6(118,172)+ <code>loaders</code> 2</td><td>config 家族测试档(<code>test_config_misc.py</code> 等扩展)</td><td>20±5</td><td>低-中</td></tr>
+  <tr><td>T1.6</td><td><code>routes/traffic_monitor.py</code> 10:缺字段 4xx 与竞态分支(133,232-233,254-255,259,291-292)——第二轮已清过一轮,余量是新暴露面</td><td><code>tests/test_web_traffic_monitor.py</code>(扩展)</td><td>10±3</td><td>低-中</td></tr>
+</table>
+<p><b>验收 DoD</b>:TOTAL ≥ 99.55% → 阈值抬 win 99.3 / 其他 98.8(单点 <code>tests/conftest.py</code>)→ 基线切片(两侧数字,含 M8 净额)→ 红验抽 ≥10% → watchlist 应 ≤ 2 个。</p>
+
+<h3>P2 长尾收口 — ≈99.55% → ≈99.7% · 预估 +70±25</h3>
+<table>
+  <tr><th>#</th><th>任务</th><th>落点(测试文件)</th><th>预估单位</th><th>难度</th></tr>
+  <tr><td>T2.1</td><td>webui 二线(~40):<code>runtime_views</code> 9 / <code>commands.py</code> 9 / <code>runtime_commands</code> 8 / <code>views_episodes</code> 7 / <code>module</code> 4 / <code>runtime_common</code> 4 / <code>commands_torrents</code> 4 / <code>runtime_stream</code> 4 / routes 四件 7 / <code>auth</code> 3 / <code>static_ui</code> + <code>views</code> 2</td><td><code>tests/test_web_longtail_runtime.py</code> · <code>tests/test_web_backend_misc_views.py</code> · <code>tests/test_episodes.py</code> 等(扩展)</td><td>40±12</td><td>中</td></tr>
+  <tr><td>T2.2</td><td>core 尾(~25):<code>traffic_grid</code> 7 / <code>relocate_exec</code> 4 / <code>ops_mod</code> 4 / <code>relocate_units</code> 3 / <code>rules_mod</code> 3 / <code>state</code> 2 / <code>qbmanager</code> / <code>qbapi</code> / <code>traffic_snapshot_mod</code> / <code>relocate_plan</code> / <code>relocate_journal</code> 各 1</td><td><code>tests/test_core_modules.py</code> · <code>tests/test_traffic_grid.py</code> 等对应档(扩展)</td><td>25±8</td><td>低-中</td></tr>
+  <tr><td>T2.3</td><td>rules/registry 4(76,84)+ <code>finalize_watch</code> 5(212,285 真机竞态,能测则测)+ tray 3(维持豁免口径,不追加 pragma)</td><td><code>tests/test_rules_core.py</code> · <code>tests/test_finalize_watch.py</code>(扩展)</td><td>9±4</td><td>低</td></tr>
+  <tr><td>T2.4</td><td>(机制)M8 台账定稿:基线切片模板补「缺口净额」栏 + 点名规则写进 <code>memory-bank/testing/baseline.md</code> 口径段(文档回写随主提交)</td><td><code>memory-bank/testing/baseline.md</code></td><td>0</td><td>低</td></tr>
+</table>
+<p><b>验收 DoD</b>:TOTAL ≥ 99.7% 且缺口 ≤ 100 → 阈值抬 win 99.5 / 其他 99.0 → 基线切片(两侧,含豁免行数、watchlist 与 M8 净额)→ 残留逐条列名(哪几行 / 为什么到不了 / 值不值得改产品结构,预计 60±20:真机探测 / GUI / 防御支)→ 计划转 Done。</p>
+
+<h3>4.1 阶段闸门总览</h3>
+<table>
+  <tr><th>闸门</th><th>覆盖率条件</th><th>机制动作</th><th>产出</th></tr>
+  <tr><td>P0 完成</td><td>TOTAL ≥ 99.3%(门槛 99 维持绿)</td><td>阈值不动;红验 ≥10%;watchlist 核销记录</td><td>基线切片 ×1(M8 净额首记)+ 差额滚动说明</td></tr>
+  <tr><td>P1 完成</td><td>TOTAL ≥ 99.55%</td><td>阈值抬 win 99.3 / 其他 98.8;红验 ≥10%</td><td>基线切片 ×1</td></tr>
+  <tr><td>P2 完成</td><td>TOTAL ≥ 99.7% 且缺口 ≤ 100</td><td>阈值抬 win 99.5 / 其他 99.0;watchlist 清零核验</td><td>基线切片 ×1 + baseline.md 回写 + 残留清单 + 计划转 Done</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>默认(推荐)</th><th>备选</th><th>取舍理由</th></tr>
+  <tr><td>D1</td><td>终点档位</td><td>缺口 ≤100 / TOTAL ≈99.7%,阈值抬 win 99.5</td><td>追 99.9(缺口 &lt;35)/ 只清新欠账不动阈值</td><td>99.9 的最后 35 单位集中在真机探测与防御支,硬追只能豁免或改产品结构,违 I3/I6;只清新欠账则 watchlist 回沉不处理、阈值停在 99 失去抬升意义。</td></tr>
+  <tr><td>D2</td><td>P0 主攻顺序</td><td>rules/base(35) 先</td><td>fuse_mod(33) 先</td><td>base 是纯配置构造守卫,参数化桌面即测、最快见数;fuse_mod 状态机需要 store/state/api 替身群,夹具成本高,放 T0.2 踩在既有 test_fuse_mod 替身群上做。</td></tr>
+  <tr><td>D3</td><td>M8 净额点名门槛</td><td>净额为正且 &gt; +15 单位必须点名</td><td>&gt;0 即点名 / 只记录不设门槛</td><td>&gt;0 会被拆分搬家(重分布)刷噪音;不设门槛则重蹈本轮「162 → 319 无人看见」。15 单位 ≈ 0.05 点,能滤掉搬家噪音又拦得住真欠账。</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>终点取「缺口 ≤100 / TOTAL ≈99.7%」,阈值阶梯抬 win 99.5 / 其他 99.0(采纳推荐;未取追 99.9,也未取只清新欠账)。理由:最后 35 单位集中在真机探测与防御支,硬追违 I3/I6;只清新欠账则 watchlist 回沉不处理、阈值失去抬升意义。</td><td>2026-11-04</td></tr>
+  <tr><td>D2</td><td>P0 主攻顺序 rules/base(35) 先、fuse_mod(33) 后(采纳推荐)。理由:base 是纯配置构造守卫,参数化桌面即测最快见数;fuse_mod 状态机需 store/state/api 替身群,踩既有 <code>test_fuse_mod.py</code> 替身群做。</td><td>2026-11-04</td></tr>
+  <tr><td>D3</td><td>M8 净额点名门槛 = 净额为正且 &gt; +15 单位必须点名(采纳推荐;未取 &gt;0 即点名,也未取只记录)。理由:15 单位 ≈ 0.05 点,滤掉拆分搬家重分布噪音又拦得住真欠账。</td><td>2026-11-04</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>R1</td><td>缺口行号漂移</td><td>执行期间代码继续演进,26-11-04 行号失效</td><td>各阶段开工先重刷 <code>test.full</code> 对表(I2);本计划行号只作定位起点,不作为断言依据。</td></tr>
+  <tr><td>R2</td><td>状态机夹具成本超估</td><td>fuse_mod / orchestrator 替身群搭建超出单簇预算</td><td>按行为簇分批提交,单簇不达标差额滚动进下一阶段任务表(前两轮惯例);红验拦截安慰剂断言。</td></tr>
+  <tr><td>R3</td><td>新码继续进场稀释</td><td>P0–P2 执行期间新功能落地带进新缺口</td><td>M8 净额栏让增量现形;P2 终点按当轮实测评估,Done 说明里把「新欠账 / 旧残留」分列,不为凑数放宽口径。</td></tr>
+  <tr><td>R4</td><td>并行与平台口径差</td><td>partial ±1 漂移 / Linux 侧分母不同</td><td>数字对比同口径(-n 8);阈值抬升取双平台较低侧留 0.3–0.5 点余量(平台分档单点已在 conftest)。</td></tr>
+  <tr><td>R5</td><td>补测撞出产品缺陷</td><td>写测试时发现守卫缺失 / 行为可疑</td><td>入池 <code>issues/</code>(scope-guard),测试侧预留断言位,不顺手修(I1 / 黄金法则 6 / 请求边界)。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-0157</span> 立档 Open。实测 2026-11-04 <code>test.full</code>(develop @ 7701cd22):TOTAL 99%(门槛 win 99 通过),缺口 319 单位(167 miss + 152 partial,50 文件),分母 31,281;构成诊断:旧残留 162 基本清偿、新欠账约 +157(规则引擎重设计 / 下载熔断 / 种子转移 / 大文件拆分叶),M4 出现「比例守住、绝对量回涨」的口径盲区。分 P0 新欠账快赢(+106±20)/ P1 hr-ops-transfer 中坚(+80±20)/ P2 长尾收口(+70±25)三阶段,终点缺口 ≤100(TOTAL ≈ 99.7%),机制 M1–M7 继承 + M8 缺口净额台账(新增)。缺口明细分析临时件在 <code>tmp-analysis/</code>(用完即删,不入库)。</li>
+  <li><span class="tag">R1 · 26-11-04-0210</span> D1-D3 拍板回填 §06: 终点缺口≤100(≈99.7%) / P0 rules/base 先 / M8 净额&gt;+15 点名</li>
+</ul>
+
+</div>
+</body>
+</html>
