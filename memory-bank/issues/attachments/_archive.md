@@ -4,13 +4,12 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (55)
+## Open (54)
 
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
 - [test] [cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿](../26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html) — webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
-- [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](../26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
 - [refactor] [e2e 列偏好用例仍引用无监听方的 8236 遗留端口](../26-11-03-0316-refactor-e2e-port-8236-legacy.html) — column-prefs.spec.mjs 的注释仍在描述 8236 旧桩对照, 当前无任何代码监听该端口
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例
@@ -68,7 +67,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (393)
+## Done (394)
 
 - [test] [test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）](../26-11-04-0600-test-testing-persist-thread-active-count.html) — 全局 active_count 快照断言受同 xdist worker 无关线程启停污染, 已改 spy Thread.start 只量本窗口, 红验+全量验证通过
 - [bug] [D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′](../26-11-04-0504-bug-relocate-d-evidence-container-type.html) — relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效
@@ -93,6 +92,7 @@
 - [bug] [断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)](../26-11-03-1039-bug-gtm-day-total-inflation.html) — 断网恢复后今日流量暴涨: 过滤后合计基线被降到子集(0), 网卡恢复时把其整个生命周期累计当成一次 delta 入账; 实测 state.json 佐证跳变量 = 273GiB/528GiB
 - [bug] [group 视图窗口化坐标系错判（抽屉关全量 / 抽屉开跟抽屉滚）](../26-11-03-1035-bug-webui-group-window-source-mismatch.html) — WIN_SOURCES.group 是 Object.assign 克隆, _winSrc(kind)===WIN_SRC_DOC 恒假, group 被误判为容器型
 - [test] [HEAD 上 dev.e2e 全量无法启动: 新 spec 导入 BASE_URL, harness 已改 baseUrl()](../26-11-03-1035-test-e2e-harness-baseurl-import.html) — search-uncovered-no-duplicate.spec.mjs 导入 BASE_URL, harness.mjs 由窗口外 47a61c7c 移除, 全量 e2e 在 import 阶段失败
+- [bug] [种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)](../26-11-03-0824-bug-transfer-source-delete-misreport.html) — 目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。
 - [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行
 - [docs] [第三次评审计划 域表分项合计 478 与总数 479 不符(漏记 finalize_watch.py)](../26-11-03-0704-docs-plan-domain-table-count.html) — 计划 02 节 10 行分项相加 478, git 实测代码面 479; 差额为 src/auto_qb/tools/finalize_watch.py 未列行
 - [docs] [12 个拆分残片被 git 判为 rename(R051-R072), 配对表不能按 1:1 改名解读](../26-11-03-0704-docs-split-residue-rename.html) — 拆分提交中仅一个目标桶被 -M50% 判为 rename, 其余为 A/D; 相似度 51-72%, 非等价移动

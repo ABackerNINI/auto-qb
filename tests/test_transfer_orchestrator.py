@@ -17,6 +17,8 @@
 - test_duplicate_skips_and_keeps_source: 已存在(SKIPPED) -> 结果跳过 + DUPLICATE, 源保留
 - test_delete_source_only_removes_task: 删源调用恒 delete_files=False(只删任务不删文件)
 - test_keep_source_flag_skips_delete: 仅本次保留源种子 -> 不删源且原因注明
+- test_delete_source_failure_keeps_success: 删源抛异常 -> 仍 SUCCESS(code=None)且注明"源删除失败, 源已保留",
+  不落 UNEXPECTED(issue 26-11-03-0824)
 - test_path_map_first_rule_wins: 两条规则都命中前缀 -> 只第一条生效
 - test_path_map_no_match_or_empty_passthrough: 空映射/无命中 -> 保存路径原样
 - test_map_save_path_sep_norm_fwd_from_hits_backslash_sp: 正斜杠 from 对反斜杠 save_path
@@ -98,10 +100,17 @@ def _source_record(hash_: str = HASH_A, state: str = "stalledUP", progress: floa
 
 class _FakeQbApi:
     """主 qB QbApi 替身: 只实现 orchestrator 消费的三个方法(读源/导出/删源)"""
-    def __init__(self, torrents: Optional[Dict[str, Dict[str, object]]] = None, export_error=None, info_error=None):
+    def __init__(
+        self,
+        torrents: Optional[Dict[str, Dict[str, object]]] = None,
+        export_error=None,
+        info_error=None,
+        delete_error=None,
+    ):
         self.torrents = dict(torrents or {})
         self.export_error = export_error
         self.info_error = info_error
+        self.delete_error = delete_error
         self.deletions: List[tuple] = []  # (torrent_hashes, delete_files)
 
     def torrents_info(self, torrent_hashes=None, **kwargs):
@@ -117,6 +126,8 @@ class _FakeQbApi:
 
     def torrents_delete(self, torrent_hashes=None, delete_files=False, **kwargs):
         self.deletions.append((torrent_hashes, delete_files))
+        if self.delete_error is not None:
+            raise self.delete_error
 
 
 class _FakeAdapter:
@@ -368,6 +379,18 @@ def test_keep_source_flag_skips_delete(monkeypatch):
     assert results[0].status is TransferStatus.SUCCESS
     assert "保留源种子" in results[0].reason
     assert qb.deletions == []
+
+
+def test_delete_source_failure_keeps_success(monkeypatch):
+    """删源抛异常: 目标侧已验证成功, 整条仍 SUCCESS 并注明源已保留, 不落 UNEXPECTED(issue 26-11-03-0824)"""
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()}, delete_error=RuntimeError("connection reset"))
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}])
+    results, _ = _run(monkeypatch, qb, _make_target(), [HASH_A], adapter=adapter)
+    assert results[0].status is TransferStatus.SUCCESS
+    assert results[0].code is None  # 成功不进 outcome 枚举, 不落 UNEXPECTED
+    assert "源删除失败" in results[0].reason
+    assert "源已保留" in results[0].reason
+    assert qb.deletions == [(HASH_A, False)]  # 删源调用确已发起(delete_files 恒 False)
 
 
 # ---------- 路径映射 ----------

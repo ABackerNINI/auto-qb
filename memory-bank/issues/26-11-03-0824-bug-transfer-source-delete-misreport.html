@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)">
 <meta name="issue-summary" content="目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。">
 <title>种子转移: 源删除失败被误判为整条转移失败(目标侧已成功) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>种子转移: 源删除失败被误判为整条转移失败(目标侧已成功)</h1>
     <p class="lede">目标侧加种并验证成功后, 源 torrents_delete 抛异常会让整条结果落 FAILED/未预期异常; 源仍在做种、目标已接收, 前端提示失败且可能重试。</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0824-bug-transfer-source-delete-misreport</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 08:24</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">transfer</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -169,11 +169,15 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 08:24 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 — 用户指派认领，状态 <strong>In Progress</strong>（复验仍复现）</li>
+      <li>2026-11-04 — 修复完成并验证，状态 <strong>Done</strong>：test.quick 5146 passed / 2 skipped（40.40s）；test.full 数字见 memory-bank/testing/baselines/ 最新切片（kb.baseline）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-04 仍复现（HEAD <code>17c0bf20</code>，锚点行号未漂移）——<code>_delete_source</code>（<code>orchestrator.py:443-445</code>）无 try，<code>_transfer_one:370</code> 调用点无兜底，异常仍会落到 <code>run_batch:293-297</code> 的 UNEXPECTED 兜底。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>（与建议修法一致，采纳「无独立 outcome code」变体）：<code>_delete_source</code> 改为内部捕获异常并返回 bool（成功 True / 失败 False + WARNING 日志），不再外抛；调用点在失败时往 note 追加「源删除失败, 源已保留」，结果恒 <code>SUCCESS</code>。<strong>未新增</strong>独立 outcome code——<code>TransferOutcomeCode</code> 契约是「成功不进本枚举（code=None）」，该注记形态由 reason/notes 承载（<code>_join_notes</code>），与「目标暂停失败」注记同款。</p>
+    <p><strong>验证方式</strong>：新增 <code>test_delete_source_failure_keeps_success</code>（删源抛 <code>RuntimeError</code> → 仍 SUCCESS、code=None、reason 含「源删除失败」「源已保留」、删源调用确已发起且 delete_files=False）；存量用例全量回归通过。</p>
+    <p><strong>测试数字</strong>：见「状态变更日志」2026-11-04 条（test.quick / test.full 实测）。</p>
   </section>
 
   <footer>

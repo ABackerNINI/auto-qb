@@ -367,7 +367,9 @@ class TransferOrchestrator:
         if keep_source:
             return TorrentTransferResult(hash_, TransferStatus.SUCCESS, _join_notes(reason, "按勾选保留源种子", note))
 
-        self._delete_source(source_hash)
+        if not self._delete_source(source_hash):
+            # 删源失败不翻盘已成功的转移(目标侧已验证成功): 结果仍 SUCCESS, 只注明源已保留(issue 26-11-03-0824)
+            note = _join_notes(note, "源删除失败, 源已保留")
         return TorrentTransferResult(hash_, TransferStatus.SUCCESS, _join_notes(reason, note))
 
     # ---------- 各步实现 ----------
@@ -440,6 +442,15 @@ class TransferOrchestrator:
             self._sleep(self._poll_interval)
             waited += self._poll_interval
 
-    def _delete_source(self, source_hash: str) -> None:
-        """删源: 仅删任务, delete_files=False 恒定(不变量 1: 数据文件永不删除)"""
-        self._qb_api.torrents_delete(torrent_hashes=source_hash, delete_files=False)
+    def _delete_source(self, source_hash: str) -> bool:
+        """删源: 仅删任务, delete_files=False 恒定(不变量 1: 数据文件永不删除)
+
+        删源异常不外抛(此时目标侧已验证成功, 外抛会把整条翻成 FAILED): 成功 True,
+        失败 False 并记 WARNING, 由调用方在结果注明"源已保留"。
+        """
+        try:
+            self._qb_api.torrents_delete(torrent_hashes=source_hash, delete_files=False)
+        except Exception as exc:  # noqa: BLE001 —— 删源失败只降级为注记, 不改已成功的结算
+            logger.warning("transfer: 源删除失败 %s(%s), 源已保留", source_hash, exc)
+            return False
+        return True
