@@ -46,6 +46,7 @@
 - test_step_move_watching_resets_stall: 转 watching 时停滞账清零
 - test_execute_branches_never_break_multi_group: 五个分支 continue 不得提前断多组循环
 - test_execute_idempotent_faces_and_skip_contract: 幂等三面(touches 目标不同/全组已在目标/后置)与 skip 回执契约
+  (桩 FS 未证明面踩 P3b 强探测闸 —— run_probe 替身直通, 闸门决策表单点在 test_relocate_exec_probe_gate.py)
 - test_execute_receipts_and_ctx_guard: 三张拒收回执逐字契约 + ctx 守卫 or 链
   + 补发 setLocation 入参(只发 mover) + 发起 rt 初值(stall_since/last_size/sample_ts)
 - test_step_finalize_targets_and_journal: 收尾集合(rt 优先回落 hashes)与 DONE journal
@@ -74,7 +75,11 @@ from helpers import pin_disk_usage, relocate_env
 
 from auto_qb.config.models import RelocateConfig
 
+from auto_qb.core.modules import relocate_exec as rex
+
 from auto_qb.core.modules.grouping_mod import group_key_of
+
+from auto_qb.core.modules.relocate_probe import ProbeResult
 
 from auto_qb.core.modules.relocate_mod import RelocateModule, _native as _mod_native
 
@@ -811,6 +816,9 @@ def test_execute_idempotent_faces_and_skip_contract(tmp_path, monkeypatch):
         config=types.SimpleNamespace(relocate=RelocateConfig(enabled=True)),
         state=types.SimpleNamespace(data={}),
     )
+    # P3b 执行链强探测闸(26-11-04-0055): 桩 FS 未证明面会消费探测闸 —— 本用例聚焦幂等面,
+    # 探测替身直通(闸门自身的决策表已由 test_relocate_exec_probe_gate.py 覆盖)
+    monkeypatch.setattr(rex, "run_probe", lambda ctx, src, dst: ProbeResult("passed", "ok", False, {}))
     assert mod9.relocate_execute(["HA", "HB"], "R:/dst")[0]["cls"] == "started"
 
     mgr, client, src, dst, content, files = relocate_env(tmp_path / "idm", state="pausedUP")

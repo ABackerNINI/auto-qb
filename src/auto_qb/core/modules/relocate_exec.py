@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from ...infra import alias_fs, file_access, relocate_journal, utils
 from . import relocate_units as ru
+from .relocate_probe import probe_fingerprint, run_probe
 from .relocate_units import RelocateJob, evaluate_group
 from .relocate_common import _LINK_CHUNK, _native, logger
 
@@ -556,9 +557,93 @@ class ExecMixin:
             if self._norm(target) == self._norm(records[0].save_path):
                 items.append({**verdict, "cls": "skip", "notes": list(verdict["notes"]) + ["已在目标位置(幂等): 未发起迁移"]})
                 continue
+            gate = self._ensure_probe(records, facts, verdict)
+            if gate is not None:
+                items.append(gate)
+                continue
             items.append(self._start_job(records, target, facts, verdict, client))
         logger.info(f"relocate | 迁移执行({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
+
+    def _ensure_probe(self, records, facts, verdict: dict):
+        """执行链一次性同机强探测闸(计划 26-11-04-0055 §04 P3 行后半 + §06 D1-D7)
+
+        位置契约(D5): 必须在建账(_start_job)与任何 torrents_set_location 之前调用 ——
+        探测失败 => 零建账、零 setLocation; 规则引擎自动迁移共用本入口, 无旁路(D6)。
+
+        决策表(按序短路, 返回 None = 放行, verdict 的 notes 可能被追加; 返回 dict =
+        blocked 回执, 与 evaluate_group 现行 blocked item 同形: reasons 元素 gate/cls/text):
+        - 单成员组(D2): 完全跳过, 零动作零 note —— 独占内容由 qB 自搬, 免同机证明;
+        - dry-run: 零副作用承诺(不落探针文件、不动 qB), note「dry-run: 跳过强探测」;
+        - assume_shared=true(D7): 用户显式越权, 跳过探测, note 注明「未经 auto-qb 验证」;
+        - 路径级已证明(facts.same_fs_proved, D4 组合口径的 D 复查面): E1 无增量, 放行;
+        - 指纹缓存(D3: host+port+username+secret)命中 passed => 放行;
+          命中 failed => blocked(D7① 同指纹不重试);
+        - 未命中 => run_probe 同步执行(常态 ~1.3s): passed => probe_put(passed) 放行;
+          failed env=False(FS 不可达) => probe_put(failed) + blocked(D7①);
+          failed env=True(环境性) => 不写缓存 + blocked(下次迁移重试, D7②)。
+        """
+        if len(records) <= 1:
+            return None
+        if self._dry_run():
+            verdict["notes"] = list(verdict.get("notes") or []) + ["dry-run: 跳过强探测"]
+            return None
+        conf = self._live_conf()
+        if bool(getattr(conf, "assume_shared", False)):
+            verdict["notes"] = list(verdict.get("notes") or []) + \
+                ["assume_shared: 未经 auto-qb 验证(用户显式越权), 跳过同机强探测"]
+            return None
+        if facts.same_fs_proved:
+            return None
+        qb_conf = getattr(getattr(self._ctx, "config", None), "qbittorrent", None)
+        fp = probe_fingerprint(qb_conf)
+        hit = self.probe_get(fp)
+        if hit is not None:
+            if hit["status"] == "passed":
+                # 缓存放行的组合口径(拍板 D4): E1 机器级强证明是「一次性」的 —— 同连接身份
+                # 缓存(D3), 之后每次多成员迁移仍由预检 D 级路径证据复查(降级链 D->B'),
+                # 运行时 F 兜底不变; 见 memory-bank/plans/26-11-04-0055-plan-relocate-same-fs-proof.html §06 D4。
+                return None
+            reason = str((hit.get("evidence") or {}).get("reason") or "fs_unreachable")
+            return {
+                **verdict,
+                "cls":
+                    "blocked",
+                "reasons":
+                    list(verdict.get("reasons") or []) + [
+                        {
+                            "gate": ru.GATE_SAME_FS,
+                            "cls": ru.CLS_BLOCKED,
+                            "text": f"上次同机探测失败({reason}): 已缓存, 更改 qB 连接配置或清除 state.relocate.probes 后重试",
+                        }
+                    ],
+            }
+        probe = run_probe(self._ctx, facts.save_path, facts.target)
+        if probe.status == "passed":
+            self.probe_put(fp, probe.status, probe.evidence)
+            return None
+        if probe.env:
+            # 环境性失败(网络/凭据/连接中断/本机写探针失败): 与 FS 可达性无关, 不缓存(D7②)
+            text = f"探测环境性失败: {probe.reason}(未缓存, 下次迁移将重试)"
+        else:
+            # FS 不可达(证读/证写超时): 硬拦 + 缓存失败(D7① 同指纹不重试 —— 探测要真写一次
+            # 目标盘, 缓存免得每次迁移都白搬一遍探针); 坏缓存可经 probe_put 覆盖写修复
+            self.probe_put(fp, probe.status, {**probe.evidence, "reason": probe.reason})
+            text = (
+                "qB 读不到本机 src 或写不进 dst: " + probe.reason + " —— 出路: 检查 fs.path_map 映射是否覆盖源/目标路径, "
+                "或确认 qB 与 auto-qb 确实共享文件系统后配置 relocate.assume_shared"
+            )
+        return {
+            **verdict,
+            "cls":
+                "blocked",
+            "reasons":
+                list(verdict.get("reasons") or []) + [{
+                    "gate": ru.GATE_SAME_FS,
+                    "cls": ru.CLS_BLOCKED,
+                    "text": text,
+                }],
+        }
 
     def _start_job(self, records, target: str, facts, verdict: dict, client) -> dict:
         """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)"""
