@@ -49,7 +49,7 @@ GATE_TARGET_UNKNOWN = "target_unknown"  # 目标路径存在性不可判定(容�
 GATE_TARGET_TYPE = "target_type"  # 目标路径已存在但不是目录(qB 无法在其下创建内容, R2 #3)
 GATE_QB_TEMP = "qb_temp"  # 本组文件处于 .!qB 未落定态(外组/无主 .!qB 降 notes: qB 逐文件搬运碰不到, plan 26-11-02-0134)
 GATE_SPACE = "space"  # 目标卷剩余不足 / 不可判定
-GATE_SAME_FS = "same_fs"  # 无法证明 auto-qb 与 qB 看同一块盘(§2.4 同卷证明)
+GATE_SAME_FS = "same_fs"  # 确定性不共享(路径级证据判负, P3; 未证明不再硬拦 —— 执行链强探测兜底)
 GATE_PLATFORM = "platform"  # §3.3 能力矩阵不支持(跨 OS 容器 / 无链接能力)
 GATE_HARDLINK = "hardlink"  # 组文件是第三方硬链接(st_nlink > 1, D11 拒迁)
 GATE_THIRD_PARTY_LINK = "third_party_link"  # 组文件是第三方文件级链接(D11 拒迁)
@@ -363,7 +363,12 @@ class GroupFacts:
     - target_conflicts: 目标侧已存在的同名路径(任一命中 qB 就走 need_full_check)。
     - same_volume: 源/目标是否同卷(None = 不可判定, 按跨卷保守处理)。
     - target_free: 目标卷剩余字节(None = 不可判定 ⇒ space 闸门拒绝)。
-    - same_fs_proved: §2.4 同卷证明(qB 上报 free_space_on_disk 与本机源卷剩余**相等**)。
+    - same_fs_proved: 同机证明成立(P3 判据: assume_shared 直通 / E1 机器级缓存 passed /
+      路径级证据任一侧 positive; 计划 26-11-04-0055 §03.1; free-space 代理已退役为提示)。
+    - same_fs_negative: 确定性不共享(路径级证据判负)—— 未证明不再硬拦多成员组(P3 闸门
+      重排, 执行链一次性强探测兜底), 判负仍然硬拦且优先于其它结论。
+    - same_fs_note: 同机判定的告知性 note(assume_shared 越权/E1 凭据放行/判负详情/
+      不可判定原因), evaluate_group 原样入 notes。
     - file_link_kind/dir_link_kind: alias_fs 能力探测 + 同卷判定后的可用形态(None = 不可用)。
     - jobs: 活跃 job 视图(模块侧给非终态; 这里仍自查终态)。
     - link_path_limit: 链接路径长度上限(Windows 260 / POSIX None)。
@@ -387,6 +392,8 @@ class GroupFacts:
     same_volume: Optional[bool] = None
     target_free: Optional[int] = None
     same_fs_proved: bool = False
+    same_fs_negative: bool = False  # P3: 路径级证据判负(确定性不共享)—— 优先于 proved 的硬拦面
+    same_fs_note: str = ""  # P3: 同机判定告知性 note(assume_shared 越权/E1 凭据/判负详情), 原样入 notes
     capability_ok: bool = True
     capability_reason: str = ""
     file_link_kind: Optional[str] = None
@@ -491,17 +498,27 @@ def evaluate_group(facts: GroupFacts) -> dict:
         _block(GATE_SPACE, f"目标卷剩余 {facts.target_free} 字节 < 本组数据 {needed} 字节: 空间不足, 拒绝迁移")
     # 同卷(True): rename 不占额外空间, 空间预检不适用(R2 #1) —— 数值仅展示, 见 same_volume note
 
-    # ---- 同卷证明 + 平台能力(多成员组需要 qB 能读到本机建的链接) ----
-    if not facts.same_fs_proved:
-        text = ("无法证明 auto-qb 与 qB 看到同一块盘(qB 上报的剩余空间与本机源卷不一致或读不到): "
+    # ---- 同机证明(P3 判据重排, 计划 26-11-04-0055 §03.1) + 平台能力 ----
+    # 三态: negative(确定性不共享)硬拦 / 未证明(不可判定)转 note 由执行链一次性强探测
+    # 兜底 / proved 放行。单成员组维持 note 不拦(独占情形 qB 自搬, 免证明)。
+    if facts.same_fs_negative and multi:
+        _block(
+            GATE_SAME_FS,
+            "qB 侧目录证据与本机不符(确定性不共享): 本机建的链接 qB 读不了 —— "
+            "请检查 fs.path_map 映射是否覆盖该路径, 或确认 qB 与 auto-qb 确实共享文件系统后配置 relocate.assume_shared",
+        )
+    elif not facts.same_fs_proved:
+        text = ("无法证明 auto-qb 与 qB 看到同一块盘(路径级证据不可判定): "
                 "远程 qB 或容器路径错位下, 本机建的链接 qB 读不了")
         if multi:
-            _block(GATE_SAME_FS, text + " —— 只有独占情形(单成员组)可迁移")
+            notes.append("同机证明未成立 —— 首次执行迁移时将做一次性强探测(失败将拒绝)")
         else:
             notes.append(
                 text +
                 " —— 独占情形由 qB 自行搬运, 免同卷证明与链接能力; 其余闸门(冲突/空间/未落定/未收尾)照跑(plan 26-11-02-0134 R1 方案B: 原文「目标冲突/空间未预检」与实现不符)"
             )
+    if facts.same_fs_note:
+        notes.append(facts.same_fs_note)
     if not facts.capability_ok:
         text = facts.capability_reason or "无法建出 qB 能读的链接"
         if multi:

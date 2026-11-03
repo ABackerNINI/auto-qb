@@ -16,9 +16,11 @@
 - test_evaluate_group_unfinished_job_blocks: 非终态 job 碰本组 -> blocked(unfinished);
   终态 job 不拦(§3.6 第 14 行 / S10)
 - test_evaluate_group_gates_table: 闸门表驱动(incomplete/moving/target_conflict/target_type/qb_temp/
-  space 不足/space 不可判定/target_unknown/same_fs 多成员/platform 多成员/第三方文件链接/硬链接)
+  space 不足/space 不可判定/target_unknown/same_fs 判负多成员/platform 多成员/第三方文件链接/硬链接)
 - test_evaluate_group_single_member_remote_allows: 单成员 + 证明不过/能力不支持 -> ok + note
   (独占情形由 qB 自搬)
+- test_evaluate_group_same_fs_semantics_p3: P3 闸门重排 —— 未证明多成员转 note(执行链强探测兜底)/
+  判负多成员硬拦(fs.path_map + assume_shared 两条出路)/单成员判负维持 note/same_fs_note 入 notes
 - test_evaluate_group_same_volume_space_exempt: 同卷 rename 不占额外空间 -> 空间预检不适用(R2 #1);
   跨卷不足/不可读仍拦
 - test_within_empty_scope_false: _within 空 scope -> False(退化分支, 覆盖补齐)
@@ -344,7 +346,7 @@ def test_evaluate_group_gates_table():
         (_ok_facts(target_free=None, same_volume=False), "space", "空间不可判定"),
         (_ok_facts(target_free=50, same_volume=False), "space", "空间不足"),
         (_ok_facts(target_unknown=True), "target_unknown", "目标存在性不可判定"),
-        (_ok_facts(same_fs_proved=False), "same_fs", "同卷证明不过(多成员)"),
+        (_ok_facts(same_fs_negative=True), "same_fs", "同机证据判负(多成员, P3)"),
         (_ok_facts(capability_ok=False, capability_reason="跨 OS 容器"), "platform", "能力矩阵不支持(多成员)"),
         (_ok_facts(third_party_link_files=("Show/e00.mkv", )), "third_party_link", "第三方文件级链接"),
         (_ok_facts(hardlink_files=("Show/e00.mkv", )), "hardlink", "第三方硬链接"),
@@ -374,6 +376,40 @@ def test_evaluate_group_single_member_remote_allows():
     joined = " ".join(item["notes"])
     assert "同一块盘" in joined and "独占" in joined
     assert any("不可判定" in n for n in item["notes"])  # same_volume=None -> 按跨卷保守处理
+
+
+def test_evaluate_group_same_fs_semantics_p3():
+    """P3 闸门重排(计划 26-11-04-0055 §03.1): 未证明多成员不再硬拦(note 转执行链强探测);
+    判负(same_fs_negative)多成员硬拦且文案给 fs.path_map / assume_shared 两条出路;
+    单成员判负维持 note 不拦; same_fs_note 原样入 notes"""
+    # 未证明 + 非判负(多成员): ok + note「一次性强探测」(旧行为是 GATE_SAME_FS 硬拦)
+    item = ru.evaluate_group(_ok_facts(same_fs_proved=False))
+    assert item["cls"] == ru.CLS_OK and "same_fs" not in _gates(item)
+    assert any("一次性强探测" in n for n in item["notes"]), item["notes"]
+    # 判负(多成员): blocked + same_fs + 两条出路
+    item2 = ru.evaluate_group(_ok_facts(same_fs_proved=False, same_fs_negative=True))
+    assert item2["cls"] == ru.CLS_BLOCKED and "same_fs" in _gates(item2)
+    text = next(r["text"] for r in item2["reasons"] if r["gate"] == "same_fs")
+    assert "fs.path_map" in text and "assume_shared" in text
+    # 单成员判负: 维持 note 不拦(独占情形 qB 自搬)
+    item3 = ru.evaluate_group(
+        _ok_facts(
+            hashes=("HA", ),
+            mover="HA",
+            progresses=(1.0, ),
+            states=("pausedUP", ),
+            same_fs_proved=False,
+            same_fs_negative=True
+        )
+    )
+    assert item3["cls"] == ru.CLS_OK and "same_fs" not in _gates(item3)
+    assert any("独占" in n for n in item3["notes"])
+    # same_fs_note 原样入 notes(proved 与否都带)
+    note = "同机判定: relocate.assume_shared=true —— 未经 auto-qb 验证, 由用户承担"
+    item4 = ru.evaluate_group(_ok_facts(same_fs_note=note))
+    assert note in item4["notes"]
+    item5 = ru.evaluate_group(_ok_facts(same_fs_proved=False, same_fs_note="判负详情: x"))
+    assert "判负详情: x" in item5["notes"]
 
 
 def test_evaluate_group_same_volume_space_exempt():

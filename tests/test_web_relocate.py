@@ -37,6 +37,8 @@
 - test_relocate_module_classify_entries_per_record_error
 - test_relocate_module_precheck_scandir_and_lstat_degraded
 - test_relocate_module_precheck_scandir_missing_root
+- test_relocate_module_same_fs_p3_semantics: P3 同机判据替换预检层 —— D 级 wiring(withMetadata="true"/
+  列内容根)/ B′ 判负硬拦(两条出路)/ 不可判定转 note 不拦 / E1 缓存凭据放行 / assume_shared 直通
 - test_relocate_module_start_and_apply_probe_wiring
 - test_relocate_precheck_no_false_dir_link_note
   混合计数; precheck_add 回执 truth=单 item
@@ -449,7 +451,76 @@ def test_relocate_module_fs_fact_branches(tmp_path, monkeypatch):
     monkeypatch.setattr(alias_fs, "same_volume", lambda a, b: False)  # R2 #1 后同卷豁免会让 space 不拦, 桩成跨卷才能测到空间闸门
     item3 = mod.relocate_precheck(["HA", "HB"], dst)[0]
     gates3 = [r["gate"] for r in item3["reasons"]]
-    assert "space" in gates3 and "same_fs" in gates3  # 空间不可判定 + 同卷证明读不到
+    # P3 判据替换: 空间不可判定照拦; 同机证据走 B′(文件 size 相等)正证放行 ——
+    # free-space 代理不再参与 proved, 同机不再因「qB 默认路径读不到」被硬拦
+    assert "space" in gates3 and "same_fs" not in gates3
+    assert any("同机判定" in n for n in item3["notes"]), item3["notes"]
+
+
+def test_relocate_module_same_fs_p3_semantics(tmp_path, monkeypatch):
+    """P3 同机判据替换(计划 26-11-04-0055 §03.1, 预检层): D 级正证 wiring(qB dirPath=内容根)/
+    B′ 判负硬拦 / 不可判定转 note 不拦 / assume_shared 直通 / E1 缓存凭据放行"""
+    from auto_qb.core.modules.relocate_probe import probe_fingerprint
+    from auto_qb.core.modules import relocate_proof as rp_mod
+
+    # 1. D 级 wiring: 桩 app_get_directory_content 回真实 stat 的元数据 -> positive(D 级)放行
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, file_count=2, data_dir=False)
+    mtimes = {}
+    for f in files:
+        st = os.stat(os.path.join(src, *f.name.split("/")))
+        mtimes[f.name] = (st.st_size, int(st.st_mtime))
+    captured = []
+
+    def _dir_content(directory_path=None, with_metadata=None, **kw):
+        captured.append((directory_path, with_metadata))
+        return [
+            {
+                "name": name,
+                "size": sz,
+                "last_modification_date": mt,
+                "type": "File"
+            } for name, (sz, mt) in mtimes.items()
+        ]
+
+    client.app_get_directory_content = _dir_content
+    item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
+    assert item["cls"] == "ok", (item["cls"], item["reasons"])
+    assert captured and captured[0][1] == "true"  # withMetadata 钉死字符串 "true"
+    assert captured[0][0].replace("\\", "/").endswith("Show")  # 列的是内容根, 不是下载根上层
+    assert any("D 级" in n for n in item["notes"]), item["notes"]
+
+    # 2. B′ 判负: qB 元数据 size 与本机文件全不等 -> blocked(same_fs, 两条出路)
+    mgr2, client2, src2, dst2, content2, _ = relocate_env(tmp_path / "b", file_count=2, data_dir=False)
+    client2.files_map["HA"] = [_fake_file("Show/e00.mkv", 999), _fake_file("Show/e01.mkv", 999)]
+    client2.files_map["HB"] = list(client2.files_map["HA"])
+    for t in (mgr2.store.by_hash["HA"], mgr2.store.by_hash["HB"]):
+        t._files = None
+    item2 = mgr2.host.get("relocate").relocate_precheck(["HA", "HB"], dst2)[0]
+    assert item2["cls"] == "blocked" and "same_fs" in [r["gate"] for r in item2["reasons"]]
+    text2 = next(r["text"] for r in item2["reasons"] if r["gate"] == "same_fs")
+    assert "fs.path_map" in text2 and "assume_shared" in text2
+
+    # 3. 不可判定(D 端点不可用 + 本机文件读不到)-> 多成员不再硬拦, note 转执行链强探测
+    mgr3, client3, src3, dst3, content3, _ = relocate_env(tmp_path / "c", file_count=2, data_dir=False)
+    ghost = [_fake_file("Show/ghost.mkv", 100)]
+    client3.files_map["HA"] = list(ghost)
+    client3.files_map["HB"] = list(ghost)
+    for t in (mgr3.store.by_hash["HA"], mgr3.store.by_hash["HB"]):
+        t._files = None
+    item3 = mgr3.host.get("relocate").relocate_precheck(["HA", "HB"], dst3)[0]
+    assert item3["cls"] == "ok" and "same_fs" not in [r["gate"] for r in item3["reasons"]]
+    assert any("一次性强探测" in n for n in item3["notes"]), item3["notes"]
+
+    # 4. E1 缓存 passed: 两侧证据不可判定时凭机器级强证明放行(note 注明)
+    mod3 = mgr3.host.get("relocate")
+    mod3.probe_put(probe_fingerprint(mgr3.config.qbittorrent), "passed", {"method": "e1"})
+    item4 = mod3.relocate_precheck(["HA", "HB"], dst3)[0]
+    assert item4["cls"] == "ok" and any("机器级强证明" in n for n in item4["notes"]), item4["notes"]
+
+    # 5. assume_shared 直通: 全部证据不可得也放行, note 注明用户承担
+    mgr3.config.relocate.assume_shared = True
+    item5 = mod3.relocate_precheck(["HA", "HB"], dst3)[0]
+    assert item5["cls"] == "ok" and any("未经 auto-qb 验证" in n for n in item5["notes"]), item5["notes"]
 
 
 def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypatch):
@@ -462,7 +533,10 @@ def test_relocate_module_precheck_scandir_and_lstat_degraded(tmp_path, monkeypat
     for t in (mgr.store.by_hash["HA"], mgr.store.by_hash["HB"]):
         t._files = None  # 失效惰性缓存, 重拉
     item = mgr.host.get("relocate").relocate_precheck(["HA", "HB"], dst)[0]
-    assert item["cls"] == "blocked" and item["form"] == "file_links"  # 不专属 -> 逐文件
+    # P3 同机闸门重排: 未证明(此处 B′ 也不可判定 —— ghost 文件 stat 不到)不再硬拦多成员组
+    assert item["cls"] == "ok" and item["form"] == "file_links"  # 不专属 -> 逐文件
+    assert "same_fs" not in [r["gate"] for r in item["reasons"]]
+    assert any("一次性强探测" in n for n in item["notes"])
     notes = " ".join(item["notes"])
     assert "杂项" in notes and "不可读" in notes
 

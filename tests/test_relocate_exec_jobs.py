@@ -19,9 +19,10 @@
 - test_cancel_dry_run_is_blocked: dry-run 撤销零动作(不删链接不搬回)
 ### W8(R32) S5 补测(变异审计真洞守阵, 分类: tmp-analysis/w8-r32/classify-mod-{a,b}.md)
 - test_group_facts_gate_inputs_block_gates: 事实包字段丢失/损坏仍拦闸(incomplete/moving/third_party_link/hardlink 四闸) + reparse 非零 tag/缺省 tag 判别
-- test_group_facts_same_volume_proof_both_sides: 同卷证明任一侧吻合即过(源侧/目标侧两场景)
+- test_group_facts_same_fs_free_space_retired: P3 free-space 代理退出 proved(吻合只作参考 note,
+  proved/negative 不随它变)
 - test_group_facts_fact_sources_faces: 文件表/目标卷剩余/listing 失败三事实源的单点行为
-- test_group_facts_platform_and_unc_faces: remote 拦 platform 闸 / cap 崩溃面 / UNC dir 形态 / file_alias_kind 实参
+- test_group_facts_platform_and_unc_faces: 未证明不撞 platform 闸 + 跨 OS 行拦 multi / cap 崩溃面 / UNC dir 形态 / file_alias_kind 实参
   + 同卷硬链接兜底(same_volume 实参丢失 ⇒ capability_ok 翻假)
 - test_group_facts_long_path_and_start_plan_faces: 长路径校正(260) + 执行入口 plan 同参 + file_link_error 文案 + hard_max 配置
 - test_group_facts_multi_root_and_hard_max_faces: 多首段内容根回落 + 硬上限拒绝
@@ -229,8 +230,10 @@ def test_group_facts_gate_inputs_block_gates(monkeypatch):
     assert facts.name == "Show" and facts.target == "R:/dst"  # 事实包身份面不得 None 化
 
 
-def test_group_facts_same_volume_proof_both_sides(monkeypatch):
-    """同卷证明: qB 上报与**任一侧**吻合即过(源侧/目标侧两场景, gf_126~132/103/104)"""
+def test_group_facts_same_fs_free_space_retired(monkeypatch):
+    """P3 判据替换(计划 26-11-04-0055 §03.1): free-space 代理退出 proved ——
+    qB 上报与任一侧吻合/不吻合都不再改变 proved; 证据不可判定时 proved=False +
+    negative=False(待执行链强探测), 吻合侧只作参考 note(函数本体与单测保留)"""
     client = FakeClient()
     client.files_map["HA"] = [_fake_file("Show/e00.mkv", 64)]
     client.files_map["HB"] = client.files_map["HA"]
@@ -242,17 +245,25 @@ def test_group_facts_same_volume_proof_both_sides(monkeypatch):
         _stub_cap(monkeypatch, file_kind="hardlink")
         return mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
 
-    # 源侧吻合(正向迁移: qB 报的就是源卷)—— and 化/任一侧 None 化都会误拒
+    # 源侧吻合(正向迁移: qB 报的就是源卷; 旧判据会 proved=True): 现在只是参考 note
     facts = _facts(lambda p: qb_free if p == "R:/src" else (1 << 39))
-    assert facts.target_free == 1 << 39 and facts.same_fs_proved is True, (facts.target_free, facts.same_fs_proved)
+    assert facts.target_free == 1 << 39, facts.target_free
+    assert facts.same_fs_proved is False and facts.same_fs_negative is False
+    assert "free-space 代理参考吻合" in facts.same_fs_note, facts.same_fs_note
     v = ru.evaluate_group(facts)
-    assert all(r["gate"] != "same_fs" for r in v["reasons"]), v
+    assert all(r["gate"] != "same_fs" for r in v["reasons"]), v  # 未证明不再硬拦多成员组
 
-    # 目标侧吻合(反向迁移/复位场景: 源是 T, qB 报 S)
-    facts = _facts(lambda p: qb_free if p == "R:/dst" else (1 << 39))
-    assert facts.same_fs_proved is True, facts.same_fs_proved
-    v = ru.evaluate_group(facts)
-    assert all(r["gate"] != "same_fs" for r in v["reasons"]), v
+    # 目标侧吻合(反向迁移/复位场景: 源是 T, qB 报 S): 同样只作参考 note
+    facts2 = _facts(lambda p: qb_free if p == "R:/dst" else (1 << 39))
+    assert facts2.same_fs_proved is False and facts2.same_fs_negative is False
+    assert "free-space 代理参考吻合" in facts2.same_fs_note, facts2.same_fs_note
+
+    # 两侧都不吻合: proved/negative 不变, note 不含 free-space 参考位
+    facts3 = _facts(lambda p: 1 << 39)
+    assert facts3.same_fs_proved is False and facts3.same_fs_negative is False
+    assert "free-space" not in facts3.same_fs_note, facts3.same_fs_note
+    v3 = ru.evaluate_group(facts3)
+    assert all(r["gate"] != "same_fs" for r in v3["reasons"]), v3
 
 
 def test_group_facts_fact_sources_faces(monkeypatch):
@@ -276,14 +287,17 @@ def test_group_facts_platform_and_unc_faces(monkeypatch, tmp_path):
     client.files_map["HA"] = [_fake_file("Show/e00.mkv", 64)]
     client.files_map["HB"] = client.files_map["HA"]
 
-    # remote(两侧 free 都对不上 => proved False): 多成员组必须拦 platform 闸
+    # P3: platform_verdict 的 remote 实参喂 same_fs_negative(确定性不共享)而非「未证明」
+    # —— 未证明(两侧证据不可判定)不再让多成员组撞 platform 闸(执行链强探测兜底);
+    # 平台闸的多成员拦截面改由跨 OS 容器行(link_visible_to_host=False)验证
     mod = _facts_mod(server_free=12345)
     _fake_fs(monkeypatch, free=1 << 40)
-    _stub_cap(monkeypatch, file_kind="hardlink")
+    _stub_cap(monkeypatch, link_visible=False)
     facts = mod._group_facts([_rec("HA"), _rec("HB")], "R:/dst", client)
-    assert facts.same_fs_proved is False, facts.same_fs_proved
+    assert facts.same_fs_proved is False and facts.same_fs_negative is False, facts
     v = ru.evaluate_group(facts)
     assert any(r["gate"] == "platform" for r in v["reasons"]), v
+    assert all(r["gate"] != "same_fs" for r in v["reasons"]), v
 
     # 健康能力包: platform_verdict 必须拿到 cap(None 化 = AttributeError 崩溃面)
     mod2 = _facts_mod(server_free=1 << 40)

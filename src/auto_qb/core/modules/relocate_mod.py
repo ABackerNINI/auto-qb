@@ -95,8 +95,13 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
 
         坏条目(非 dict / 缺字段 / status 非法)按未命中处理 —— 留在原地不删,
         由下一次 probe_put 覆盖; 返回条目深副本(调用方改不动缓存真身)。
+        **只读不建箱**(P3 起 precheck 经它消费缓存 —— 预检承诺零副作用, state 深比对
+        不变; 箱的惰性创建只属于写路径 probe_put/probe_drop)。
         """
-        box = self._state_probes()
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        relocate = data.get("relocate") if isinstance(data, dict) else None
+        box = relocate.get("probes") if isinstance(relocate, dict) else None
         entry = box.get(fingerprint) if isinstance(box, dict) else None
         if not isinstance(entry, dict):
             return None

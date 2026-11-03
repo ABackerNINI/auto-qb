@@ -9,8 +9,10 @@ from typing import Optional
 from ...infra import alias_fs, file_access, utils
 from ...infra.alias_fs import KIND_SYMLINK
 from ...torrents import TorrentRecord
+from . import relocate_proof as rp
 from . import relocate_units as ru
 from .grouping_mod import group_key_of
+from .relocate_probe import probe_fingerprint
 from .relocate_units import (
     CLS_BLOCKED,
     AddFacts,
@@ -241,7 +243,7 @@ class PlanMixin:
                 target_unknown = True  # 容器映射 miss: 不可判定一律拒绝, 不猜「不存在」
                 break
 
-        # ---- 空间 / 同卷 / 同卷证明 ----
+        # ---- 空间 / 同卷 / 同机证明(P3 判据替换, 计划 26-11-04-0055 §03.1) ----
         # 目标叶子未创建是迁移正常输入 => 上溯最近存在祖先取卷剩余(plan R1 方案A);
         # 全链不可用 => None => GATE_SPACE 照旧硬拦(真不可判定)
         target_free = _volume_free_resolved(fa, target)
@@ -253,16 +255,21 @@ class PlanMixin:
         # 上溯最近存在祖先比 st_dev(与 _volume_free_resolved 同一机制, plan R1 方案A)
         same_vol = _same_volume_resolved(alias_fs, self._syscall(save_path), self._syscall(target))
         qb_free = (getattr(store, "server_state", None) or {}).get("free_space_on_disk")
-        # 同卷证明的语义是「auto-qb 与 qB 看到同一批盘」: qB 的 free_space_on_disk 报的是
-        # 它**默认保存路径**那块卷, 未必是本次迁移的源卷 —— 正向迁移(S->T)时源就是默认路径,
-        # 反向迁移/回滚(T->S)时源是 T 而 qB 报 S, 只比源侧会必然误判(P7 真机: 复位搬回被
-        # same_fs 拒)。与**任一侧**吻合即证明同机同盘, 安全性不变(远程 qB 两侧都对不上)。
-        proved = same_volume_proof(qb_free, src_free) or same_volume_proof(qb_free, target_free)
+        # 同机证明换判据: free-space 代理(same_volume_proof)退出判定(它比的是 qB **默认
+        # 保存路径**那块卷, 未必是本次迁移的源/目标卷 —— 比错盘与剩余空间巧合两类病,
+        # 报告 26-11-03-2306 §06.1), 换成路径级证据(D 列目录元数据比对 -> B′ 元数据
+        # size 降级); 代理只在两侧证据均不可判定时作参考 note 保留(函数本体与单测保留)。
+        proved, same_fs_negative, same_fs_note = self._same_fs_proof(
+            save_path, content_root, target, files, conf, fa, qb_free, src_free, target_free
+        )
 
         # ---- 能力探测 + 形态 kind(目标卷差异由 P3 复探; P2 用进程级能力) ----
+        # remote 喂**确定性不共享**(same_fs_negative)而非「未证明」: 未证明的多成员组
+        # 预检不再硬拦(P3 闸门重排), 由执行链一次性强探测兜底; 只有证据判负才按远程
+        # 处理(平台矩阵直接拒绝)。
         cap = alias_fs.get_capability()
         verdict = alias_fs.platform_verdict(
-            cap, target_is_unc=alias_fs.is_unc(target), remote=not proved, same_volume=bool(same_vol)
+            cap, target_is_unc=alias_fs.is_unc(target), remote=same_fs_negative, same_volume=bool(same_vol)
         )
         file_kind = cap.file_alias_kind(bool(same_vol)) if cap.link_visible_to_host else None
         file_err = ""
@@ -341,6 +348,8 @@ class PlanMixin:
             same_volume=same_vol,
             target_free=target_free,
             same_fs_proved=proved,
+            same_fs_negative=same_fs_negative,
+            same_fs_note=same_fs_note,
             capability_ok=verdict.supported,
             capability_reason=verdict.reason,
             file_link_kind=file_kind,
@@ -355,6 +364,67 @@ class PlanMixin:
             hardlink_files=hl_files,
             third_party_dir_note=tp_dir_note,
         )
+
+    def _same_fs_proof(self, save_path, content_root, target, files, conf, fa, qb_free, src_free, target_free):
+        """同机判定(计划 26-11-04-0055 §03.1/§04 P3 前半): -> (proved, negative, note)
+
+        判据链(优先级从高到低):
+        - assume_shared=true: 用户显式越权直通(note 注明「未经 auto-qb 验证, 由用户承担」);
+        - 路径级证据(relocate_proof.path_evidence: D 列目录元数据比对 -> B′ 降级):
+          任一侧 positive => 证明成立; 任一侧 negative => 确定性不共享(优先于 E1 缓存);
+        - 两侧都 unavailable: E1 机器级缓存 passed => 凭缓存放行(note 注明路径级复查
+          不可用); 否则未证明(negative=False, 待执行链一次性强探测), free-space 代理
+          结果只作参考 note 保留(不再参与判定)。
+        """
+        if bool(getattr(conf, "assume_shared", False)):
+            return True, False, "同机判定: relocate.assume_shared=true —— 未经 auto-qb 验证, 由用户承担"
+        e1_passed = False
+        qb_conf = getattr(getattr(self._ctx, "config", None), "qbittorrent", None)
+        if qb_conf is not None:
+            try:
+                e1 = self.probe_get(probe_fingerprint(qb_conf))
+                e1_passed = (e1 or {}).get("status") == "passed"
+            except Exception:  # noqa: BLE001 - 缓存读失败按未命中(执行链会再探), 不挡预检
+                e1_passed = False
+        src_ev = rp.path_evidence(
+            self._ctx, content_root, self._syscall(content_root), files=self._cr_files(files, content_root, save_path)
+        )
+        dst_probe = rp.nearest_existing_ancestor(fa, target)
+        if dst_probe is None:
+            dst_ev = rp.Evidence(rp.UNAVAILABLE, "", "目标链路本机不可读, 无法定位可列的最近存在祖先")
+        else:
+            dst_ev = rp.path_evidence(self._ctx, dst_probe, self._syscall(dst_probe), visibility_only=True)
+        if rp.POSITIVE in (src_ev.status, dst_ev.status):
+            ev, side = (src_ev, "源侧") if src_ev.status == rp.POSITIVE else (dst_ev, "目标侧")
+            weak = "(弱证据: 仅种子元数据 size 比对)" if ev.level == rp.LEVEL_BPRIME else ""
+            return True, False, f"同机判定: {side}路径级证据吻合({ev.level} 级{weak})"
+        if rp.NEGATIVE in (src_ev.status, dst_ev.status):
+            ev = src_ev if src_ev.status == rp.NEGATIVE else dst_ev
+            return False, True, f"同机判负详情: {ev.detail}"
+        # 两侧证据均不可判定: E1 机器级缓存兜底放行, 否则未证明(执行链强探测兜底)
+        if e1_passed:
+            return True, False, "同机判定: 路径级复查不可用(qB 列目录与元数据比对均不可判定), 凭机器级强证明(E1 缓存)放行"
+        legacy = same_volume_proof(qb_free, src_free) or same_volume_proof(qb_free, target_free)
+        hint = "; free-space 代理参考吻合(仅提示, 已从判据退役)" if legacy else ""
+        return False, False, f"路径级同机证据不可判定({src_ev.detail}){hint}"
+
+    @staticmethod
+    def _cr_files(files, content_root, save_path):
+        """成员文件表换算到内容根粒度((相对 content_root 的路径, size)), B′ 比对用
+
+        files 是 save_path 相对路径(qB files API 口径); 内容根 = save_path 本身(flat)
+        时原样透传, 否则剥掉内容根那一段前缀。
+        """
+        cr_norm = utils.path_normalize(content_root)
+        sp_norm = utils.path_normalize(save_path)
+        if cr_norm == sp_norm or not cr_norm.startswith(sp_norm + "/"):
+            return [(utils.path_normalize(name), size) for name, size in files]
+        prefix = cr_norm[len(sp_norm) + 1:]
+        return [
+            (norm[len(prefix) + 1:], size)
+            for norm, size in ((utils.path_normalize(name), size) for name, size in files)
+            if norm.startswith(prefix + "/")
+        ]
 
     def _classify_entries(self, rest, save_path, content_root, hashes, store, client):
         """内容根多出的条目分类: (杂项, 组外种子文件)
