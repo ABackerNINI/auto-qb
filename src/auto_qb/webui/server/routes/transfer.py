@@ -45,7 +45,9 @@ def build_router(ctx: WebContext) -> APIRouter:
         """执行一次转移批次(计划 26-10-31-0306 W3): body {target_id, hashes[], keep_source?}
 
         校验在路由层 400 拒收不入队(同 skip-check 预检先例, 前端即时可见): target_id 空 /
-        hashes 空列表 / 目标不存在 / 目标未启用。keep_source(「仅本次保留源种子」, D1)
+        hashes 非数组(issue 26-11-03-0901: 字符串会被逐字符拆成伪 hash, 直调可达) /
+        hashes 空列表 / 目标不存在 / 目标未启用; hashes 顺手去重保序。keep_source(「仅本次
+        保留源种子」, D1)
         按「提供才透传」—— 缺省队列载荷不带该键, 命令层缺省 False(默认删源)。
         回执(经 cmd 通道): status=ok + truth={results: [{hash, 状态(成功/跳过/失败),
         原因}], summary: {success, skipped, failed}, target: 目标名}, 逐种子结果由
@@ -55,7 +57,10 @@ def build_router(ctx: WebContext) -> APIRouter:
         target_id = str(b.get("target_id") or "").strip()
         if not target_id:
             raise HTTPException(status_code=400, detail="未提供 target_id(转移目标不能为空)")
-        hashes = [str(h) for h in (b.get("hashes") or []) if h]
+        raw_hashes = b.get("hashes") or []
+        if not isinstance(raw_hashes, list):
+            raise HTTPException(status_code=400, detail="hashes 必须是数组(issue 26-11-03-0901: 字符串会被逐字符拆成伪 hash)")
+        hashes = list(dict.fromkeys(str(h) for h in raw_hashes if h))
         if not hashes:
             raise HTTPException(status_code=400, detail="未提供任何 hash(转移批次不能为空)")
         target, err = _find_target(ctx, target_id, require_enabled=True)

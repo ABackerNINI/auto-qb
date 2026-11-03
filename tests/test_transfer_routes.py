@@ -9,9 +9,10 @@ pitfalls/testing/web-auth-test-forms.md: 缺省 TestClient 形态非 loopback, �
 - test_transfer_run_unauthenticated_401: 无凭证/错密钥打 run+test -> 401, 零入队
 - test_transfer_run_cross_site_origin_rejected: skip_local_verify 开启时跨站 Origin ->
   403 且零入队; 同源 Origin + 凭证放行入队
-- test_transfer_run_route_validation: target_id 空 / hashes 空列表 / 目标不存在 /
-  目标未启用 -> 400 且零入队; 合法请求 200 入队 cmd=transfer_run, 载荷
-  {target_id, hashes}(hash 清洗去空), keep_source 提供才透传
+- test_transfer_run_route_validation: target_id 空 / hashes 空列表 / hashes 非数组
+  (字符串/dict, issue 26-11-03-0901) / 目标不存在 / 目标未启用 -> 400 且零入队; 合法
+  请求 200 入队 cmd=transfer_run, 载荷 {target_id, hashes}(hash 清洗去空 + 去重保序),
+  keep_source 提供才透传
 - test_transfer_run_drain_receipt: mock orchestrator, [成功, 跳过, 失败] 混合批次 ->
   回执 ok, truth.results 逐条 {hash, 状态(中文三态), 原因} 与 orchestrator 分类一致
   (to_receipt 直出), summary 三态计数; 单种子失败不中断批次(3 条全结);
@@ -128,6 +129,16 @@ def test_transfer_run_route_validation(web_env):
             "hashes": []
         }),  # hashes 空列表
         ("/api/transfer/run", {
+            "target_id": "目标A",
+            "hashes": "HA"
+        }),  # hashes 非数组(字符串会被逐字符拆成伪 hash, issue 26-11-03-0901)
+        ("/api/transfer/run", {
+            "target_id": "目标A",
+            "hashes": {
+                "HA": 1
+            }
+        }),  # hashes 非数组(dict 可迭代, 同样必须拒收)
+        ("/api/transfer/run", {
             "target_id": "目标A"
         }),  # hashes 缺失 = 空
         ("/api/transfer/run", {
@@ -152,6 +163,20 @@ def test_transfer_run_route_validation(web_env):
     payload.pop("cmd_id")
     payload.pop("_queued_ts", None)
     assert payload == {"target_id": "目标A", "hashes": ["HA", "HB"]}, payload
+    # 重复 hash 去重保序(路由层顺手去重, 不放大主循环批次)
+    resp = client.post(
+        "/api/transfer/run",
+        headers=auth,
+        json={
+            "target_id": "目标A",
+            "hashes": ["HB", "HA", "HB", "HA"]
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    cmd, payload = mgr.web.commands.get_nowait()
+    payload.pop("cmd_id")
+    payload.pop("_queued_ts", None)
+    assert payload == {"target_id": "目标A", "hashes": ["HB", "HA"]}, payload
     # keep_source: 提供才透传
     resp = client.post(
         "/api/transfer/run", headers=auth, json={

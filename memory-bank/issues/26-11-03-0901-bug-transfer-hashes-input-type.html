@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash">
 <meta name="issue-summary" content="直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。">
 <title>transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0901-bug-transfer-hashes-input-type</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 09:01</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 09:01 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 06:56 — 认领修复，状态 <strong>Done</strong>：路由入口加 <code>isinstance(raw_hashes, list)</code> 校验（字符串/dict 等非数组直接 400），并顺手去重保序；未做条数上限（需另定限额口径，未顺手发明）。验证：<code>commands run test.quick</code> 全量 5137 passed / 10 skipped，新增非数组 400 ×2 与去重保序用例（<code>test_transfer_routes.py</code>）</li>
     </ul>
   </section>
 
