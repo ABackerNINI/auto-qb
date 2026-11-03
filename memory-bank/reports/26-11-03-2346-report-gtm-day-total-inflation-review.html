@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>GTM 当日总量虚高修复 Code Review</title>
+<meta name="doc-type" content="report">
+<meta name="doc-topic" content="gtm-day-total-inflation-review">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-03-2346">
+<meta name="doc-updated" content="26-11-03-2346">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html, memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html, memory-bank/tasks/26-11-03-backend-gtm-day-total-inflation.md, memory-bank/testing/baselines/26-11-03-2352-gtm-day-total-inflation.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">REPORT · memory-bank · doc-topic: gtm-day-total-inflation-review</div>
+<h1>GTM 当日总量虚高修复 Code Review</h1>
+<p class="lede">对 GTM 逐网卡基线重构 + C-prime 速率告警批次(<code>2edd68dd</code> → <code>554e1932</code>,11 个代码提交)的逐文件代码评审:<strong>通过,无阻塞缺陷</strong>;4 条次要发现中 3 条当轮修复,1 条复核后撤回(评审误判),修复后全量测试双绿。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-2346 · <b>doc-updated</b> 26-11-03-2346 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令(2026-11-03):对当天入库的 GTM 当日总量虚高修复(计划 26-11-03-1102 v3,S0-S6)做 code review;评审给出 4 条次要发现后,用户指示「直接修,然后写一个 code review 报告」
+</div>
+
+<h2><span class="no">§01</span>结论</h2>
+
+<p><strong>总评:通过。</strong>实现与计划 v3 逐节吻合,11 条不变量(I1-I11)在代码层全部核实成立;评审后当轮修复 3 条次要发现并补 4 条守阵测试,修复后 <code>test.gtm</code> 550 passed(覆盖率 99%)、<code>test.quick</code> 5014 passed,双绿。</p>
+
+<h3>1.1 关键面核对矩阵</h3>
+<table>
+<tr><th>面</th><th>判定</th><th>依据(抽样详审)</th></tr>
+<tr><td>主修法:逐卡基线</td><td class="good">符合</td><td><code>sampler.py</code> 合并而非替换 <code>_nic_base</code>、消失卡保留记忆、7 天 TTL、单卡回绕只清该卡该侧 —— 与计划 §04.4 伪代码逐行一致;§05 处理矩阵 14 种情形均有对应用例(T1-T13)</td></tr>
+<tr><td>C-prime 速率告警</td><td class="good">符合</td><td>旁路实现:只写 WARNING + <code>last_spike</code>,不碰 delta/day(T11 显式断言入账不变);<code>eff_dt = min(dt, 3×interval)</code> 钳制防长 gap 摊薄(T17);mono 优先 / wall 兜底带 7 天上限与有限性检查</td></tr>
+<tr><td>state v2/v1 兼容</td><td class="good">符合</td><td>v1 载荷保留 day、逐卡置空、首轮 delta=0;<code>storage.py</code> 兜底判据按计划 §04.3 改为 <code>state_restored + day</code>,v1 升级不再误触发 dat 回退</td></tr>
+<tr><td>overlay 配置迁移</td><td class="good">符合</td><td>主配置零改写(<code>_write_main_config</code> 剥离 <code>_V2_FIELDS</code>)、原子写 + 单世代 .bak、未知键同等级 fail-fast、启动幂等(mtime 不变)——T23-T26 全覆盖</td></tr>
+<tr><td>快照只增字段(I10)</td><td class="good">符合</td><td><code>public_traffic_view</code> 只摘 history,<code>gtm_anomaly</code> 原样透传;<code>publish_off</code> 清空告警段且不发请求(T34);不可达保留旧段只记 DEBUG(T29/T33)</td></tr>
+<tr><td>前端降级矩阵(I11)</td><td class="good">符合</td><td><code>gtmAnomaly/gtmAlert</code> 判空单点(键缺失/null/非对象/缺 ts/空 items → 不渲染);24h 窗口读 <code>nowSec</code>(30s 一跳);ack 写 localStorage。评审特意核实 <code>ackGtmAlert()</code> 注释的成立性:<code>traffic</code> 确是 <code>status.traffic</code> 的 computed(<code>dialogs.js</code>),整份替换 <code>status</code> 确能触发重算</td></tr>
+<tr><td>测试隔离</td><td class="good">加分项</td><td>conftest 新增 autouse 替身把 <code>fetch_last_spike</code> 钉成不可达,防本机真实 GTM 污染用例,且文档化了「不拦什么」</td></tr>
+</table>
+
+<h3>1.2 发现与处置</h3>
+<table>
+<tr><th>#</th><th>发现</th><th>处置</th></tr>
+<tr><td>1</td><td><code>fetch_last_spike</code> 复用探活超时 10s,但它在主循环线程的快照 <code>refresh()</code> 里同步执行;GTM 控制面挂起(非拒连)时最长拖主循环 10s/轮 —— 对一个「允许失败、失败即静默」的横幅数据源不成比例</td><td class="good">已修:新增专用常量 <code>SPIKE_TIMEOUT_S = 3.0</code>(<code>agent.py</code>),取数默认超时改用它;补超时契约测试钉住「3.0 且严格小于探活超时」</td></tr>
+<tr><td>2</td><td><code>sample_once</code> 直调误传 <code>interval_hint &lt;= 0</code> 时 <code>min(dt, 3×hint)</code> 给 0,<code>_evaluate_rate</code> 除法抛 ZeroDivisionError(生产路径安全:<code>_check_duration</code> 拒绝 ≤0,仅直调 API 防御面)</td><td class="good">已修:<code>_dt_since_last</code> 对 <code>interval_hint</code> 先行校验(≤0/NaN 跳过判定 + DEBUG);补直调守阵测试。NaN 单独说:<code>min(dt, NaN)</code> 因 NaN 比较恒 False 会<strong>静默放行真实 dt</strong>,所以校验必须放在 hint 入口而不是 eff_dt 出口 —— 首版守卫写反了位置,被新测试当场抓红后改正</td></tr>
+<tr><td>3</td><td><code>save_config</code> 拆分路径每次 PUT /config 都重写 overlay(含 .bak),即使值未变 —— 与启动路径 <code>ensure_v2_overlay</code>「相等不写盘」(I3)的幂等口径不对称</td><td class="good">已修:新增 <code>_overlay_already_matches</code>,overlay 已存在且解析值与内存值逐项相等时跳过改写(mtime 不变、不陪跑 .bak);补幂等测试(两次保存 mtime 不变、值变仍照常改写)</td></tr>
+<tr><td>4</td><td>「<code>_restore_v1</code> 不校验合计基线非负」</td><td class="wr">撤回:<strong>评审误判</strong>。<code>_opt_int</code> 本就是「可选非负整数」契约,负值走 <code>ValueError("负值: ...")</code> → 损坏降级,既有行为已正确。新增测试保留为该契约的回归钉(断言「负值」文案),修复代码撤销</td></tr>
+</table>
+
+<aside class="aside">诚实记录:评审轮报告的第 4 条是错的 —— 报告里写的「顺手记一笔」级别问题经实核不成立。<code>_opt_int</code> 的 docstring("可选非负整数…否则抛")当时没有展开看。教训与「先索引后 grep」同构:断言"缺校验"前先看被调用的校验单点。</aside>
+
+<h2><span class="no">§02</span>证据快照</h2>
+
+<h3>2.1 评审范围</h3>
+<p>提交区间 <code>2edd68dd</code>(S0 先落逐网卡基线测试)→ <code>554e1932</code>(消除断连用例 ss 探针副作用),11 个代码提交;改动 31 文件 +3104/-170,核心:<code>tools/global-traffic-monitor/src/gtm/</code>(sampler/config/units/storage/server/__main__)+ 主仓 <code>traffic_snapshot_mod.py</code> / <code>agent.py</code> / WebUI 静态面(statusbar.html / dialogs.js / config_hub_tm.js / console_hub_controls.css / traffic-card.html)+ e2e <code>gtm-alert.spec.mjs</code>。</p>
+
+<h3>2.2 修复落点(本轮)</h3>
+<table>
+<tr><th>文件</th><th>改动</th></tr>
+<tr><td><code>src/auto_qb/core/traffic_source/agent.py</code></td><td>新增 <code>SPIKE_TIMEOUT_S = 3.0</code>(带主循环阻塞面注释);<code>fetch_last_spike</code> 默认超时改用之</td></tr>
+<tr><td><code>tools/.../gtm/sampler.py</code></td><td><code>_dt_since_last</code> 入口校验 <code>interval_hint</code>(isfinite 且 &gt;0,否则 DEBUG + 跳过判定)</td></tr>
+<tr><td><code>tools/.../gtm/config.py</code></td><td>新增 <code>_overlay_already_matches</code>;<code>save_config</code> 拆分路径相等即跳过 overlay 改写</td></tr>
+<tr><td>测试 ×4</td><td><code>test_sampler.py</code>(hint 非法跳过判定不炸除法 / v1 负基线降级回归钉)、<code>test_config.py</code>(overlay 幂等:mtime 不变、无 .bak、值变仍改写)、<code>test_traffic_source_agent_probe.py</code>(SPIKE_TIMEOUT_S=3.0 契约);三份文件头部「测试计划」清单同步</td></tr>
+</table>
+
+<h3>2.3 实测数字</h3>
+<table>
+<tr><th>轮次</th><th>test.gtm(工具全量)</th><th>test.quick(主仓全量)</th></tr>
+<tr><td>评审基线(修复前)</td><td>547 passed, 2 skipped,99%(64.04s → 67.65s 首跑撞 uv 文件锁重跑)</td><td>5013 passed, 2 skipped(60.6s)</td></tr>
+<tr><td>修复后(终态)</td><td><strong>550 passed, 2 skipped,99%</strong>(64.8s)</td><td><strong>5014 passed, 2 skipped</strong>(51.5s)</td></tr>
+</table>
+<p>中间过程:修复后首跑 <code>test.gtm</code> <strong>2 failed</strong>(上文 1.2 的 #2 首版守卫位置错、#4 断言文案错)——正是这两条红把评审误判暴露出来,修正后全绿。</p>
+
+<h2><span class="no">§03</span>方法与局限</h2>
+
+<p><strong>方法</strong>:①先读计划 v3 全文(§01-§12)建立不变量与处理矩阵清单;②逐文件精读 diff(sampler 445 行核心段逐行对计划 §04.4 伪代码),按 I1-I11 逐条找落地检查点;③集成单点用 grep 反查(<code>fmtSpeed</code>/<code>nowSec</code>/<code>#i-bell</code>/<code>public_traffic_view</code> 透传/<code>discover()</code> 只读性/<code>has_baseline</code> 旧消费方清零核实);④两套测试全量实测;⑤前端契约核对了 <code>gtmAlert</code> 重算链(traffic 是 status 的 computed)与 <code>conftest</code> 隔离夹具。</p>
+
+<p><strong>局限</strong>:①未做真机断连复验(计划 §11-S4 的现场判据,需真实网卡环境);②e2e <code>gtm-alert.spec.mjs</code> 未跑(需 Playwright 环境,本轮以静态 DOM 守阵 + 单测覆盖其断言面);③评审为单人逐文件,未跑变异测试 —— 速率判定分支的变异存活面留待下次变异审计;④报告快照截止 26-11-03,<code>test.gtm</code> 首跑撞 uv 构建文件锁(os error 32,与并行 test.quick 竞争)属环境现象非代码问题,重跑即绿。</p>
+
+</div>
+</body>
+</html>

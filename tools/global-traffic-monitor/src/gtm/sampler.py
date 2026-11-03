@@ -634,7 +634,13 @@ class Sampler:
         来源优先级: 进程内 ``_last_mono`` (单调钟) -> 重启后 state 的 ``_last_sample_wall``。
         wall 兜底额外要求 ``0 < dt <= 7 天``: 陈旧 state 或时钟跳变不制造虚假速率。
         eff_dt = min(dt, 3 × interval_hint) —— 长 gap 不把注入量摊薄到阈值以下。
+        interval_hint 先行校验 (<= 0/NaN 直调误传; 配置路径已由 _check_duration 拒绝):
+        ``min(dt, NaN)`` 会因 NaN 比较恒 False 而静默放行真实 dt, ``min(dt, 0)`` 会给 0 ——
+        两者都不可信, 直接跳过判定 (旁路, 不影响入账), 不让 _evaluate_rate 的除法冒险。
         """
+        if not math.isfinite(interval_hint) or interval_hint <= 0:
+            logger.debug("速率判定跳过 | interval_hint 非法: %r", interval_hint)
+            return None
         if self._last_mono is not None:
             dt = now_mono - self._last_mono
             source = "mono"

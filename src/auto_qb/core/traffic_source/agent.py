@@ -63,6 +63,11 @@ _LAUNCHER_POSIX = "launch.sh"
 #: 单次 `GET /status` 探活的请求超时(秒): 本机回环, 正常亚毫秒级; 给足余量但不无限等
 PROBE_TIMEOUT_S = 10.0
 
+#: 最近异常取数(`fetch_last_spike`)的专用超时(秒, 26-11-03 review): 比探活短 —— 该调用
+#: 在主循环线程的流量快照 refresh() 里同步执行, 且语义是「允许失败、失败即静默保留旧段」
+#: 的横幅数据源, 不值得为主循环停顿付出 10s 级代价; 探活(可能触发拉起判据)才需要大余量
+SPIKE_TIMEOUT_S = 3.0
+
 #: claim 有界前台执行的超时(秒, 计划 §03): 跑安装内 claim 启动器(试锁+改写记录+清
 #: 注记), 正常亚秒级; 给足余量但不无限等 —— UI 线程不能被 claim 卡死
 CLAIM_TIMEOUT_S = 30.0
@@ -192,7 +197,7 @@ def probe(timeout: float = PROBE_TIMEOUT_S) -> Optional[ToolEndpoint]:
     return ep if code == 200 else None
 
 
-def fetch_last_spike(timeout: float = PROBE_TIMEOUT_S) -> tuple[bool, Optional[dict]]:
+def fetch_last_spike(timeout: float = SPIKE_TIMEOUT_S) -> tuple[bool, Optional[dict]]:
     """只读取工具最近一轮越界记录(计划 26-11-03-1102 S7b): (可达, last_spike)
 
     复用既有发现/鉴权/HTTP 单点(discover / read_token / call_tool), 只发一次 `GET /status`;

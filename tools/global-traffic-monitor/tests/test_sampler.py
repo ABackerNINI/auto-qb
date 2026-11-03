@@ -33,6 +33,8 @@
   eff_dt 跟随新 hint 不产生假告警
 - 速率时间基线 (S5/T20): 重启后单调钟失效时用 last_sample_wall 兜底; dt<=0/非有限/超 7 天
   跳过判定且不产生负速率; last_spike 随 v2 往返, 旧载荷缺键/结构非法降级为 None (T21)
+- review 加固 (26-11-03): interval_hint<=0/NaN 直调误传 -> 跳过速率判定不炸除法, 入账照常;
+  v1 载荷合计基线为负 -> 按损坏降级 (_opt_int 非负契约的回归钉)
 """
 
 from __future__ import annotations
@@ -1219,3 +1221,45 @@ def test_last_spike_snapshot_restore_and_legacy_payload_downgrade(monkeypatch):
         s, _, _ = make_sampler()
         assert s.restore(v2_payload(last_spike=bad_spike)) == ()
         assert s.last_spike is None
+
+
+def test_interval_hint_non_positive_or_nan_skips_rate_without_zero_division(monkeypatch):
+    """26-11-03 review 修 2: interval_hint <= 0 / NaN 直调误传 -> 跳过判定不炸除法, 入账照常.
+
+    生产路径 sample_interval 由 _check_duration 保证 > 0; 本条钉住直调 API 的防御面 ——
+    min(dt, 3*hint) 会放行 0/NaN, 没有守卫时 _evaluate_rate 的 delta/eff_dt 直接 ZeroDivisionError。
+    """
+    fake = install_fake_time(monkeypatch, FakeTime())
+    for bad_hint in (0.0, -5.0, float("nan")):
+        sampler, _, counters = make_sampler()
+        counters.page = {"eth0": nic(0, 0)}
+        sampler.sample_once(5.0, GIB)  # 立基线 (首轮无速率判定)
+        fake.advance(5)
+        injected = 6 * GIB
+        counters.page = {"eth0": nic(injected, 0)}
+        with capture_sampler_logs() as logs:
+            r = sampler.sample_once(bad_hint, GIB)  # 不抛异常
+        assert logs.messages == []  # 跳过判定: 无告警
+        assert sampler.last_spike is None
+        assert r.delta_up_bytes == injected  # 旁路: 入账照常
+        assert r.day_up_bytes == injected
+
+
+def test_restore_v1_negative_baseline_is_corrupt():
+    """26-11-03 review 复核钉: v1 合计基线为负 -> _opt_int 拒绝, 按损坏降级 (既有行为回归钉).
+
+    评审曾误判为缺口; 实核 _opt_int 本就只收非负整数, 本条把该行为钉住防将来回退.
+    """
+    sampler, _, _ = make_sampler()
+    warns = sampler.restore(
+        {
+            "version": 1,
+            "day": DAY.isoformat(),
+            "day_up_bytes": 1,
+            "day_down_bytes": 2,
+            "last_up_bytes": -1,
+            "last_down_bytes": 1,
+        }
+    )
+    assert len(warns) == 1 and "负值" in warns[0]
+    assert sampler.day is None and not sampler.state_restored

@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** GTM 当日总量虚高（断连恢复把网卡生命周期累计计入当日）修复：sampler 改逐网卡基线；新增 C-prime 单轮速率告警（只告警不改入账）；配置新键走 config.v2.yml overlay；告警主告知为 auto-qb 状态栏常驻横幅。计划 26-11-03-1102，issue 26-11-03-1039。
+**Summary:** GTM 当日总量虚高（断连恢复把网卡生命周期累计计入当日）修复：sampler 改逐网卡基线；新增 C-prime 单轮速率告警（只告警不改入账）；配置新键走 config.v2.yml overlay；告警主告知为 auto-qb 状态栏常驻横幅。实施后整批 code review（报告 26-11-03-2346）：通过，3 条次要发现修复（取数专用短超时 / interval_hint 入口守卫 / overlay 保存幂等），1 条评审误判撤回。计划 26-11-03-1102，issue 26-11-03-1039。
 **Topics:** backend-gtm-day-total-inflation
-**Refs:** memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html, memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html, memory-bank/pitfalls/backend/gtm-total-baseline.md, memory-bank/testing/baselines/26-11-03-2148-gtm-day-total-inflation.md
+**Refs:** memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html, memory-bank/issues/26-11-03-1039-bug-gtm-day-total-inflation.html, memory-bank/pitfalls/backend/gtm-total-baseline.md, memory-bank/pitfalls/testing/uv-build-file-lock.md, memory-bank/testing/baselines/26-11-03-2148-gtm-day-total-inflation.md, memory-bank/testing/baselines/26-11-03-2352-gtm-day-total-inflation.md, memory-bank/reports/26-11-03-2346-report-gtm-day-total-inflation-review.html
 
 ## 原始请求
 
@@ -54,3 +54,5 @@ S0–S3/S5–S8 与 S7b/S7c 已在分支 `feat/gtm-day-total-inflation` 按计�
 第一次会话: 用户报告与两次只读取证（10:35/10:47）→ 根因「过滤集收缩污染合计基线」→ 方案 v3 定稿入库 `c33a7e46`。
 
 - 2026-11-03 21:51 S9 收尾：修正 issue 斜杠日期与 fetch_last_spike 失败矩阵前置；sampler/docs 文档回写；plan/issue 置 Done；全量实测基线入切片；kb.check 全绿（未合 develop、未 push）
+
+- 2026-11-03 23:54 code review 整批 GTM 虚高修复(通过, 无阻塞缺陷): 3 条次要发现当轮修复(取数专用 3s 超时/interval_hint 入口守卫/overlay 保存幂等), 1 条评审误判撤回; 补 4 条守阵测试; 评审报告 26-11-03-2346 与新基线切片入库

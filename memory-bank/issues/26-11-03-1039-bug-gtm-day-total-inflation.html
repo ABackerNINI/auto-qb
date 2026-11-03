@@ -7,7 +7,7 @@
 <meta name="issue-stamp" content="26-11-03-1039">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="gtm-traffic-day-total">
-<meta name="doc-refs" content="memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html, memory-bank/tasks/26-11-03-backend-gtm-day-total-inflation.md, memory-bank/pitfalls/backend/gtm-total-baseline.md, memory-bank/testing/baselines/26-11-03-2148-gtm-day-total-inflation.md">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html, memory-bank/tasks/26-11-03-backend-gtm-day-total-inflation.md, memory-bank/pitfalls/backend/gtm-total-baseline.md, memory-bank/testing/baselines/26-11-03-2148-gtm-day-total-inflation.md, memory-bank/reports/26-11-03-2346-report-gtm-day-total-inflation-review.html">
 <meta name="issue-tier" content="standard">
 <meta name="issue-status" content="Done">
 <meta name="issue-title" content="断网恢复后 GTM 当日累计被网卡生命周期累计一次性冲高(实测量级 336GiB 上传/538GiB 下载)">
@@ -153,7 +153,7 @@
 339  total_up = sum(io.bytes_sent for io in selected.values())     # 合计口径随过滤集变化
 340  total_down = sum(io.bytes_recv for io in selected.values())
 359  if not selected: warnings.append("无适配器通过过滤: 合计按 0 计 ...")
-369  if total_up < self._last_up:        # 集合缩小 与 计数器归零 走同一分支
+369  if total_up &lt; self._last_up:        # 集合缩小 与 计数器归零 走同一分支
 370      counter_reset = True; warnings.append("上行计数器重置 ... delta 记 0")
 380  self._last_up = total_up            # 无条件覆盖：基线被降为子集(常见=0)
 381  self._last_down = total_down

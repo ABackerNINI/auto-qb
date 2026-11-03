@@ -47,9 +47,11 @@ W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-a
 
 S7b 告警取数(计划 26-11-03-1102, 主告知数据链路) ——
 - test_fetch_last_spike_reads_status_and_returns_spike: 复用 discover/read_token/call_tool, 只发一次
-  GET /status(默认超时 PROBE_TIMEOUT_S); 成功 -> (True, last_spike 对象)
+  GET /status(默认超时 SPIKE_TIMEOUT_S); 成功 -> (True, last_spike 对象)
 - test_fetch_last_spike_failure_matrix: 指针缺失/密钥缺失/不可达(ToolUnreachable)/非 200/响应非对象
   -> (False, None)(前置失败不发请求); 旧工具无键或载荷非对象 -> (True, None)
+- test_fetch_last_spike_has_dedicated_short_timeout (26-11-03 review 修 1): 取数默认超时 =
+  SPIKE_TIMEOUT_S(3.0) 且严格小于探活超时 —— 主循环线程同步调用, 挂起连接最多拖 3s
 """
 
 import ast
@@ -553,7 +555,7 @@ _SPIKE = {
 
 
 def test_fetch_last_spike_reads_status_and_returns_spike(tmp_path, monkeypatch):
-    """只读取数: 复用发现/鉴权/HTTP 单点, 只发一次 GET /status(默认超时 PROBE_TIMEOUT_S)"""
+    """只读取数: 复用发现/鉴权/HTTP 单点, 只发一次 GET /status(默认超时 SPIKE_TIMEOUT_S)"""
     write_endpoint_pointer(tmp_path, monkeypatch, token_path=write_credential_file(tmp_path))
     seen = []
     monkeypatch.setattr(
@@ -567,7 +569,20 @@ def test_fetch_last_spike_reads_status_and_returns_spike(tmp_path, monkeypatch):
     )
 
     assert real_fetch_last_spike() == (True, _SPIKE)
-    assert seen == [("http://127.0.0.1:8099", "/status", "GET", "tool-credential-abc", agent.PROBE_TIMEOUT_S)]
+    assert seen == [("http://127.0.0.1:8099", "/status", "GET", "tool-credential-abc", agent.SPIKE_TIMEOUT_S)]
+
+
+def test_fetch_last_spike_has_dedicated_short_timeout():
+    """26-11-03 review 修 1: 取数走专用短超时(主循环线程同步调用, 允许失败不必等探活级余量).
+
+    SPIKE_TIMEOUT_S 严格小于 PROBE_TIMEOUT_S 且为常数 3.0 —— 快照 refresh() 里一次
+    挂起的控制面连接最多拖慢主循环 3s, 而不是探活的 10s。
+    """
+    assert agent.SPIKE_TIMEOUT_S == 3.0
+    assert agent.SPIKE_TIMEOUT_S < agent.PROBE_TIMEOUT_S
+    import inspect
+
+    assert inspect.signature(real_fetch_last_spike).parameters["timeout"].default == agent.SPIKE_TIMEOUT_S
 
 
 def test_fetch_last_spike_failure_matrix(tmp_path, monkeypatch):

@@ -475,6 +475,25 @@ def ensure_v2_overlay(
     return f"已{action} config.v2.yml（速率告警 {rate_text}）", ()
 
 
+def _overlay_already_matches(overlay_path: str, config: Config) -> bool:
+    """overlay 已存在且解析值与 config 内存值逐项相等 -> True (保存路径跳过改写).
+
+    与启动路径 ensure_v2_overlay 的「相等不写盘」(I3 mtime 不变) 对齐: PUT /config 是
+    全量覆写, 用户只改主配置字段时 overlay 不该陪跑重写 + 陪跑生成 .bak。
+    overlay 缺失 / 读取失败 / 校验失败(未知键/非法值) -> False, 交给原子写覆盖成合法内容。
+    """
+    if not os.path.exists(overlay_path):
+        return False
+    raw, read_errors = _read_overlay(overlay_path)
+    if read_errors:
+        return False
+    errors: list[str] = []
+    parsed = _validate_overlay(raw, errors)
+    if errors:
+        return False
+    return all(name in parsed and parsed[name] == getattr(config, name) for name in _V2_FIELDS)
+
+
 def _write_main_config(path: str, config: Config) -> None:
     """写主 config.yml, 且**永不包含** _V2_FIELDS (旧版本回滚可读)."""
     from gtm.storage import atomic_write_text  # 延迟 import: config 单测不强制拉起 storage/filelock 链
@@ -488,6 +507,7 @@ def save_config(path: str, config: Config, overlay_path: Optional[str] = None) -
 
     overlay_path 给定时按 §07.5 拆分写: 先 overlay (含 _V2_FIELDS), 后主配置 (不含新键)。
     先 overlay 保证主配置写失败时新键仍在; 主配置永远保持旧版本可读。
+    overlay 已存在且解析值与内存值相等时跳过改写 (mtime 不变, 见 _overlay_already_matches)。
     overlay_path=None 保持既有单文件行为 (旧 API / 既有测试)。
 
     写盘用 storage.atomic_write_text (同目录 tmp -> fsync -> replace): 读侧任何时刻
@@ -499,8 +519,9 @@ def save_config(path: str, config: Config, overlay_path: Optional[str] = None) -
 
         atomic_write_text(path, yaml.safe_dump(payload, allow_unicode=True, sort_keys=True))
         return
-    overlay_payload = {k: v for k, v in payload.items() if k in _V2_FIELDS}
-    _atomic_write_overlay(overlay_path, _render_overlay(overlay_payload))
+    if not _overlay_already_matches(overlay_path, config):
+        overlay_payload = {k: v for k, v in payload.items() if k in _V2_FIELDS}
+        _atomic_write_overlay(overlay_path, _render_overlay(overlay_payload))
     _write_main_config(path, config)
 
 

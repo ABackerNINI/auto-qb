@@ -693,3 +693,27 @@ def test_migrate_legacy_config_backup_failure_warns_but_rewrites(tmp_path, caplo
     assert message
     assert "配置备份失败" in caplog.text
     assert yaml.safe_load(p.read_text(encoding="utf-8"))["sample_interval"] == "2.5S"
+
+
+def test_save_config_split_skips_overlay_rewrite_when_unchanged(tmp_path) -> None:
+    """26-11-03 review 修 3: overlay 已存在且解析值与内存值相等 -> 跳过改写 (mtime 不变, 无新 .bak).
+
+    与启动路径 ensure_v2_overlay 的「相等不写盘」(I3) 对齐: PUT /config 全量覆写时,
+    用户只改主配置字段不应让 overlay 陪跑重写。值变了仍照常改写 (留单世代 .bak)。
+    """
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    cfg = Config(sample_rate_warn_bps=500 * 1024**2)
+    save_config(str(main), cfg, str(overlay))
+    first_mtime = overlay.stat().st_mtime_ns
+    bak = tmp_path / "config.v2.yml.bak"
+    assert not bak.exists()  # 首次创建: 改写前无旧文件, 不产生 .bak
+    save_config(str(main), cfg, str(overlay))
+    assert overlay.stat().st_mtime_ns == first_mtime  # 幂等: 值未变不重写
+    assert not bak.exists()  # 跳过改写连 .bak 都不陪跑
+    changed = Config(sample_rate_warn_bps=1024**3)
+    save_config(str(main), changed, str(overlay))
+    assert overlay.stat().st_mtime_ns != first_mtime  # 值变了照常改写
+    assert yaml.safe_load(overlay.read_text(encoding="utf-8")) == {"sample_rate_warn_bps": "1GiB/s"}
+    loaded, errors = load_config(str(main), str(overlay))
+    assert errors == () and loaded == changed
