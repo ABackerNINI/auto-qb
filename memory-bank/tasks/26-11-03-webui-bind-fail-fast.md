@@ -1,9 +1,9 @@
 # 26-11-03-webui-bind-fail-fast — WebUI 启动期 bind 失败 fail-fast + 诊断
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-03
 **Updated:** 2026-11-03
-**Summary:** WebUI 启动期 bind 失败 fail-fast + 诊断
+**Summary:** 已交付(合入 develop 8e6b4bdc): WebUI 启动期 bind 失败 fail-fast + 跨平台占用者诊断
 **Topics:** webui-bind-fail-fast
 **Refs:** memory-bank/plans/26-11-03-0930-plan-webui-bind-fail-fast.html, memory-bank/testing/baselines/26-11-03-1112-webui-bind-fail-fast.md
 
@@ -50,3 +50,11 @@
 分支 `feat/webui-bind-fail-fast`(基于 `1d4f31fa`)已实现 S1-S5; 真机 RM01-06 复测绿(见 [real-baselines/26-11-03-1045-real-rm01-webui-bind.md](../testing/real-baselines/26-11-03-1045-real-rm01-webui-bind.md)); 全量实测 4971 passed + 2 skipped / 覆盖率 99%, 基线切片 [26-11-03-1112](../testing/baselines/26-11-03-1112-webui-bind-fail-fast.md)。分支未合入 develop, issue 保持 In Progress。
 
 - 2026-11-03 11:19 S6b 收尾: 新建全量基线切片(4971 passed + 2 skipped / 99%); 回写 main-loop/web-runtime/core-runtime/overview 的启动期 fail-fast、port_owner、WebUIBindError、lifecycle_ready 事实; 新建 task 档案 26-11-03-webui-bind-fail-fast; issue 保持 In Progress
+
+### R1 · 交付 (2026-11-03 11:44)
+
+- 已交付: 8 笔提交(`e2353608..8e6b4bdc`)合入本地 `develop` `8e6b4bdc`; 分支 `feat/webui-bind-fail-fast` 与 develop 同一提交。
+- issue `26-11-03-0316-bug-webui-bind-failure-silent` 与计划 `26-11-03-0930-plan-webui-bind-fail-fast` 由 In Progress 翻到 Done。
+- 实测数字不在此手抄: 全量见 [baselines/26-11-03-1112](../testing/baselines/26-11-03-1112-webui-bind-fail-fast.md), 真机见 [real-baselines/26-11-03-1045](../testing/real-baselines/26-11-03-1045-real-rm01-webui-bind.md)。
+
+- 2026-11-03 11:45 收口 issue 与计划状态，标记已交付

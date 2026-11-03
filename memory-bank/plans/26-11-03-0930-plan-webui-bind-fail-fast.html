@@ -7,9 +7,9 @@
 <title>WebUI bind 失败改为启动期 fail-fast</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="webui-bind-fail-fast">
-<meta name="doc-status" content="In Progress">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0930">
-<meta name="doc-updated" content="26-11-03-1124">
+<meta name="doc-updated" content="26-11-03-1145">
 <meta name="doc-refs" content="memory-bank/issues/26-11-03-0316-bug-webui-bind-failure-silent.html, memory-bank/testing/baselines/26-11-03-1112-webui-bind-fail-fast.md, memory-bank/tasks/26-11-03-webui-bind-fail-fast.md">
 <style>
   :root {
@@ -72,7 +72,7 @@
 <h1>WebUI bind 失败改为启动期 fail-fast</h1>
 <p class="lede">把「WebUI 端口被占 → 只记一条 ERROR、进程带病继续」反转为「启动期 fail-fast：干净退出码 1 + 可操作文案 + 跨平台占用者诊断」。设计主轴：失败发生在启动期，就让它带走进程；运行期语义一行不改。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-0930 · <b>doc-updated</b> 26-11-03-1124 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-0930 · <b>doc-updated</b> 26-11-03-1145 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 会话 grilling（Q1→Q6，2026-11-03 用户逐题拍板）；认领 issue 26-11-03-0316-bug-webui-bind-failure-silent
 </div>
 
@@ -330,6 +330,7 @@ def describe_port_owner(host: str, port: int, budget: float = 1.5) -> PortProbe<
 <h2><span class="no">§12</span>变更记录</h2>
 <ul>
   <li><span class="tag">R0 · 26-11-03-0930</span> 初版：基于 2026-11-03 grilling Q1→Q6 的十项拍板（D1-D10）。来源：issue <code>26-11-03-0316-bug-webui-bind-failure-silent</code>，用户显式授权认领并逐题选择 A / P1 / R1。</li>
+  <li><span class="tag">R1 · 26-11-03-1144</span> 已交付：D1-D10 全部落地（A / 改判据 / P1 / R1），8 笔提交合入本地 develop <code>8e6b4bdc</code>；实测见基线切片 <a href="../testing/baselines/26-11-03-1112-webui-bind-fail-fast.md">26-11-03-1112</a> 与真机切片 <a href="../testing/real-baselines/26-11-03-1045-real-rm01-webui-bind.md">26-11-03-1045</a>（数字不在此手抄）。状态 In Progress → Done。</li>
 </ul>
 
 </div>

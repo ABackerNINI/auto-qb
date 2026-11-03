@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="webui-bind-failure">
 <meta name="doc-refs" content="memory-bank/plans/26-11-03-0930-plan-webui-bind-fail-fast.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断">
 <meta name="issue-summary" content="uvicorn 绑定失败被吞成 SystemExit, 只留 ERROR 日志; WebUI 静默不可用, 用户只能从日志推断端口冲突">
 <title>WebUI 端口被占时仅记 ERROR 且主程序继续, 无重试与冲突诊断 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0316-bug-webui-bind-failure-silent</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 03:16</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -165,6 +165,7 @@
       <li>2026-11-03 03:16 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-03 08:43 — 用户显式授权认领，状态 <strong>Open → In Progress</strong>（推进计划待产出）</li>
       <li>2026-11-03 09:30 — grilling 收敛（A / 改判据 / P1 / R1 等十项拍板），计划产出：<a href="26-11-03-0930-plan-webui-bind-fail-fast.html">26-11-03-0930-plan-webui-bind-fail-fast</a>（状态仍 <strong>In Progress</strong>，未改业务代码）</li>
+      <li>2026-11-03 11:44 — 已交付：启动期 bind 失败改为 fail-fast（退出码 1 + 可操作文案 + 跨平台占用者诊断），8 笔提交合入本地 develop <code>8e6b4bdc</code>；状态 <strong>In Progress → Done</strong></li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-03 08:43 仍复现。定向用例
@@ -175,7 +176,14 @@
       显式断言「端口被占不该带走主程序」（<code>assert p.alive()</code>）——
       无条件进程退出与该契约冲突，修复方向须先裁决这一点。</p>
     <h3>修复后补充</h3>
-    <p class="hint">待修复时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（按建议方向 A 落地，未改道）：</p>
+    <ul>
+      <li><code>WebUIBindError(AutoQbError)</code> 定义在 <code>src/auto_qb/webui/server/lifecycle.py</code>；<code>WebUIModule.start</code> 检查 <code>handle.started</code>，失败先落一条 INFO 多行诊断，再抛错走 <code>AutoQbError</code> 通道（退出码 1 / 单行 stderr / 无堆栈）。低层 <code>start_web_server</code> 保持返回句柄的原契约，热重载路径不变。</li>
+      <li>新增 <code>src/auto_qb/infra/port_owner.py</code>：三平台占用者探针（Linux <code>ss</code>→<code>lsof</code>、Windows 单次 PowerShell、macOS <code>lsof</code>），三态显式降级、总预算 1.5s、结果只进日志。</li>
+      <li><code>qbmanager.run</code> 的 <code>start_all</code> 移入 <code>try/finally</code>，加 <code>lifecycle_ready</code> 闸门：失败启动不落空态 <code>state.json</code>、锁与 <code>state.lock.meta.json</code> 必释放（连带修掉既有 <code>HrChannelBindError</code> 启动期漏锁）。</li>
+      <li>RM01-06 保留「先占端口再启动」场景、判据反转为干净退出（<code>rc==1</code>、锁已释放、端口仍被占）；<code>docs/deployment.md</code> 补 healthcheck 第三成因与退出码表新行。</li>
+    </ul>
+    <p><b>验证方式与实测数字</b>：全量见基线切片 <a href="../testing/baselines/26-11-03-1112-webui-bind-fail-fast.md">26-11-03-1112-webui-bind-fail-fast</a>；真机 RM01-06 见 <a href="../testing/real-baselines/26-11-03-1045-real-rm01-webui-bind.md">26-11-03-1045-real-rm01-webui-bind</a>（数字不在此手抄）。合入提交 <code>8e6b4bdc</code>。</p>
   </section>
 
   <footer>

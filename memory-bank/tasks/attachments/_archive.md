@@ -4,10 +4,9 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (23)
+## In Progress (22)
 
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
-- [26-11-03-webui-bind-fail-fast](../26-11-03-webui-bind-fail-fast.md) WebUI 启动期 bind 失败 fail-fast + 诊断
 - [26-11-03-webui-search-uncovered-dedup](../26-11-03-webui-search-uncovered-dedup.md) 搜索未归组虚拟行去重(issue 26-11-03-0254)
 - [26-10-31-memory-bank-recurrence-tooling](../26-10-31-memory-bank-recurrence-tooling.md) 复发榜堆3四件机械化: e2e自检/doc-refs双向/写盘形态守卫/聚合内容映射
 - [26-10-31-webui-write-side](../26-10-31-webui-write-side.md) 修复 reannounce 确认跟踪对在途 tracker 过早落 ok(issue 26-10-31-1740)
@@ -35,7 +34,7 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (276)
+## Done (277)
 
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
@@ -50,6 +49,7 @@
 - [26-11-03-memory-bank-kb-nav-searchbox](../26-11-03-memory-bank-kb-nav-searchbox.md) kb.nav 搜索支持文件名与相对路径
 - [26-11-03-test-big-file-split](../26-11-03-test-big-file-split.md) 大文件多轮拆分 R1: 10 个测试文件 move-only 拆分
 - [26-11-03-test-port-zero](../26-11-03-test-port-zero.md) 测试/开发侧端口改 0(webServer.wait 捕获)实施
+- [26-11-03-webui-bind-fail-fast](../26-11-03-webui-bind-fail-fast.md) WebUI 启动期 bind 失败 fail-fast + 诊断
 - [26-11-03-webui-ctx-menu-e2e-existing-red](../26-11-03-webui-ctx-menu-e2e-existing-red.md) 修复 e2e 右键菜单既有红: 定制块行数漂移与 CTX 选择器/子面板 fit
 - [26-11-03-webui-ctx-src-target-marker](../26-11-03-webui-ctx-src-target-marker.md) 右键目标行持续可见标识：四皮肤 .ctx-src 改静态实心 outline 框
 - [26-11-03-webui-drawer-window-firstbeat-converge](../26-11-03-webui-drawer-window-firstbeat-converge.md) 修复 e2e 大表既有红: 抽屉窗口化首拍间距未收敛(dt-live #10/#12, dt11 树表批量)
