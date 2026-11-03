@@ -199,10 +199,47 @@ Object.assign(window.CONFIG_HUB.methods, {
         prefill,
       });
     },
+    /* 逐域名导入(现状路径单点, 计划 26-11-03-2337 M4 抽出): confirmDialog 列清单 ->
+     * 逐域名各填一条(键 = sites[i].name)。分支2(全单域名组/无 groups)与分支3的「拆分导入」
+     * 同走这一份, 不留两份拷贝; 逻辑与拆分前 hubImportSites 逐行一致。 */
+    async _hubImportPerDomain(sites) {
+      const list = sites.map((s) => `${s.name}(${s.domain})`).join("、");
+      const ok = await this.confirmDialog(
+        `导入 ${sites.length} 个缺失站点`,
+        `将按默认配置填入编辑器: ${list}。默认限速为不限、HR 为示例值 —— 保存前请在编辑器中核对。`,
+        { okText: "导入" }
+      );
+      if (!ok) return;
+      const trackers = { ...(this.cfgConfig().trackers || {}) };
+      let added = 0;
+      for (const s of sites) {
+        if (trackers[s.name]) continue; // 已存在同名键(如待生效热重载)不覆盖
+        trackers[s.name] = s.entry;
+        if (!added) this.cfg.trackerKey = s.name;
+        added++;
+      }
+      if (!added) {
+        this.toast("站点已存在, 没有可导入项", "error");
+        return;
+      }
+      this.cfgSetPath([...this.cfgConfigPath(), "trackers"], trackers);
+      this.toast(`已填入 ${added} 个站点, 核对后点「保存」生效`, "ok", 6000);
+    },
     async hubImportSites() {
       /* 一键导入缺失站点(对齐 CLI --export-yaml --only-missing): 后端只读扫描,
        * 条目填入编辑器待审 —— 示例值不未经审阅生效, 保存走既有 cfgSave 路径。
-       * busy 骨架走 dialogs.js::_panelLoad(toast 通道 errToast: 恒提示不看 auth)。 */
+       * busy 骨架走 dialogs.js::_panelLoad(toast 通道 errToast: 恒提示不看 auth)。
+       *
+       * 三分支自适应引导(计划 26-11-03-2337 M4, 后端契约: sites 逐域名原形 + groups
+       * 共现合并组, 组数可为 0; 全单元素组时 groups 与 sites 一一对应):
+       *   1. sites 空 -> 现状「无需导入」toast(不变);
+       *   2. 不存在 >=2 域名的组(groups 缺省/为空/全单元素) -> 现状 confirmDialog
+       *      逐域名导入(_hubImportPerDomain, 路径零变化);
+       *   3. 存在 >=2 域名的组 -> 三钮 confirmThreeDialog 引导:
+       *      ok=「合并导入」(Enter 默认, 推荐; 键 = groups[i].name, 值 = groups[i].entry,
+       *      entry.domains 已含组内全域名, 后端单点产出)、extra=「拆分导入」(ghost 样式
+       *      —— 拆分不是破坏性动作, 走现状逐域名路径)、cancel=「取消」(什么都不做)。
+       *      两种导入都只填编辑器待审, 保存仍走既有 PUT /api/config。 */
       if (this.hub.importing) return;
       await this._panelLoad(this.hub, async () => {
         const res = await this.api("/api/sites/missing");
@@ -211,27 +248,46 @@ Object.assign(window.CONFIG_HUB.methods, {
           this.toast("无需导入: 没有发现未配置的站点", "ok");
           return;
         }
-        const list = sites.map((s) => `${s.name}(${s.domain})`).join("、");
-        const ok = await this.confirmDialog(
-          `导入 ${sites.length} 个缺失站点`,
-          `将按默认配置填入编辑器: ${list}。默认限速为不限、HR 为示例值 —— 保存前请在编辑器中核对。`,
-          { okText: "导入" }
-        );
-        if (!ok) return;
-        const trackers = { ...(this.cfgConfig().trackers || {}) };
-        let added = 0;
-        for (const s of sites) {
-          if (trackers[s.name]) continue; // 已存在同名键(如待生效热重载)不覆盖
-          trackers[s.name] = s.entry;
-          if (!added) this.cfg.trackerKey = s.name;
-          added++;
-        }
-        if (!added) {
-          this.toast("站点已存在, 没有可导入项", "error");
+        const groups = res.groups || [];
+        const hasMulti = groups.some((g) => (g.domains || []).length >= 2);
+        if (!hasMulti) {
+          await this._hubImportPerDomain(sites);
           return;
         }
-        this.cfgSetPath([...this.cfgConfigPath(), "trackers"], trackers);
-        this.toast(`已填入 ${added} 个站点, 核对后点「保存」生效`, "ok", 6000);
+        /* 合并明细: 列前 10 组 Name(d1、d2), 超出折叠一行(单行文案, .modal-body 无
+         * white-space 预处理, 不靠换行排版) */
+        const DETAIL_MAX = 10;
+        const detail = groups.slice(0, DETAIL_MAX)
+          .map((g) => `${g.name}(${(g.domains || []).join("、")})`).join("、");
+        const fold = groups.length > DETAIL_MAX ? `…另有 ${groups.length - DETAIL_MAX} 组` : "";
+        const choice = await this.confirmThreeDialog(
+          `导入 ${sites.length} 个缺失站点(含多域名站点)`,
+          `同站多个 tracker 域名可合并为一个站点条目, 合并后共享标签/限速/HR 配置; 拆分则逐域名各一条(旧行为)。推荐合并。` +
+          `合并明细: ${detail}${fold}。合并/拆分都只填入编辑器待审, 保存前请逐条核对。`,
+          { okText: "合并导入", extraText: "拆分导入", extraStyle: "ghost" }
+        );
+        if (choice === true) {
+          const trackers = { ...(this.cfgConfig().trackers || {}) };
+          let added = 0, domains = 0;
+          for (const g of groups) {
+            if (trackers[g.name]) continue; // 同名键已存在不覆盖(与逐域名路径同一 skip 语义)
+            trackers[g.name] = g.entry;
+            if (!added) this.cfg.trackerKey = g.name;
+            added++;
+            domains += (g.domains || []).length;
+          }
+          if (!added) {
+            this.toast("站点已存在, 没有可导入项", "error");
+            return;
+          }
+          this.cfgSetPath([...this.cfgConfigPath(), "trackers"], trackers);
+          // 文案形态受「主标题: 说明」守阵约束(_scan_toast_copy_two_part: 首个分隔符前 ≤14 字),
+          // 组数/域名数都塞标题会超长 —— 数字进说明段
+          this.toast(`已填入 ${added} 组: 共 ${domains} 个域名, 核对后点「保存」生效`, "ok", 6000);
+        } else if (choice === "extra") {
+          await this._hubImportPerDomain(sites);
+        }
+        // choice === false/null(取消/Esc/遮罩): 什么都不做
       }, { loading: "importing", errToast: { prefix: "导入失败", fallback: "未知错误", ms: 9000 } });
     },
     async hubAddRuleGroup() {

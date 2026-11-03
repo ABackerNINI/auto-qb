@@ -9,7 +9,7 @@
 - test_sites_missing_groups_merge_cooccurring_domains: 同一颗种子共现的两缺失域名 -> groups 一条(domains 两元素 sorted、name=代表名=组内最短域名、entry 为后端单点产出的合并条目, 与 CLI 合并导出同规则)
 - test_sites_missing_groups_single_domains_match_sites: 无共现全单元素组 -> groups 与 sites 一一对应且 domains 单元素、entry 键存在; sites 保持 name/domain/entry 三键原形
 - test_sites_missing_no_missing_groups_empty: 无缺失域名 -> groups 空数组(与 sites 空数组同现)
-- test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
+- test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志 + M4 三分支自适应引导(sites 空 toast 不变 / 无 >=2 域名组走现状逐域名单点 / 有多域名组弹 confirmThreeDialog 三钮, ok=合并导入(Enter 默认)·extra=拆分导入(ghost 样式, 复用逐域名单点)·cancel 不做) + 合并模式键=groups[i].name 值=groups[i].entry + 合并明细列前 10 组超限折叠 + ui_feedback extraStyle 契约(缺省 "" 兜底 danger-solid 零变化, ghost 落地单点 _applyExtraBtnGhost)
 - test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 收层路径四条一律清词单点(点命中/Esc/点暗幕/点外即收; 方案C 聚焦层 2026-09-29 拍板) + 聚焦层开合/键盘导航/IME 守卫 + 悬停接管位移门限(治上下键选中项闪烁 2026-09-29) + 键盘活动项滚动跟随(26-09-29-2142) + pill 无键数徽标 + 行尾动作区分形 + hb-tr-* 类 CSS 成对定义
 - test_frontend_dialog_combo_hover_takeover: 弹窗下拉悬停接管守阵(issue 26-09-29-2142, 站点搜索闪烁同族) —— 分类/标签/编辑分类下拉 @mousemove+3px 位移门限共享小工具(comboHoverIdx) + @mouseenter 直写零残留 + 门限坐标 state 声明 + 开层单点复位 + 三皮肤 data-hi 行 CSS 摘 :hover(高亮只走 .on 单路)
 - test_frontend_search_help_wiring: 顶栏搜索语法浮卡接线守阵(计划 26-09-28-0201 方案A) —— 模板(「?」钮/浮卡/示例回填/简化占位符) + state 声明 + view.js 方法(回填即搜) + 点空白/Esc/导航三条收起路径 + 三皮肤 CSS 成对定义与 input 右内边距留位
@@ -183,14 +183,49 @@ def test_sites_missing_no_missing_groups_empty(web_env):
 
 
 def test_frontend_sites_import_wiring():
-    """一键导入缺失站点的前端接线守阵(2026-09-26)
+    """一键导入缺失站点的前端接线守阵(2026-09-26; M4 三分支引导 计划 26-11-03-2337)
 
     两套 UI 的站点 pill 行都必须挂「⤓ 导入缺失站点」按钮并调用 config_hub.js 的
     hubImportSites —— 漏一套那套 UI 就没有入口; 防重入标志 hub.importing 必须存在。
+    M4(2026-11-04): 后端 /api/sites/missing 已带 groups(共现合并组, 组数可为 0), 前端
+    三分支自适应 —— ①sites 空 -> 现状 toast; ②不存在 >=2 域名的组(groups 缺省/为空/全单
+    元素) -> 现状 confirmDialog 逐域名导入(路径零变化, 抽成 _hubImportPerDomain 单点,
+    分支②与「拆分导入」共用一份不留拷贝); ③存在 >=2 域名的组 -> confirmThreeDialog
+    三钮(ok=合并导入[Enter 默认·推荐] / extra=拆分导入[extraStyle:"ghost" —— 拆分不是
+    破坏性动作] / cancel=取消)。合并模式键 = groups[i].name、值 = groups[i].entry
+    (entry.domains 已含组内全域名), 同名键跳过语义与逐域名路径一致。
     """
-    hub_js = read_shared("config_hub.js")
+    hub_js = read_shared("config_hub.js")  # 聚合含 config_hub_tracker.js(hubImportSites 落点)
     assert "async hubImportSites()" in hub_js, "config_hub.js 缺 hubImportSites 方法"
     assert "this.hub.importing" in hub_js, "缺防重入标志 hub.importing"
+    # 分支①: sites 空 -> 现状 toast(不变)
+    assert "没有发现未配置的站点" in hub_js, "缺「无需导入」空态提示(分支①被改坏?)"
+    # 分支②/拆分共用逐域名单点(不留两份拷贝); 逐域名键 = sites[i].name
+    assert "async _hubImportPerDomain(sites)" in hub_js, \
+        "缺逐域名导入单点(分支②与拆分导入必须共用一份, 各抄一份 = 行为漂移温床)"
+    assert "trackers[s.name] = s.entry" in hub_js, "逐域名模式键必须是 sites[i].name"
+    assert hub_js.count("_hubImportPerDomain(sites)") >= 3, \
+        "分支②与 extra 分支都要调逐域名单点(方法定义 + 两处调用)"
+    # 分支③闸门: 只有存在 >=2 域名的组才引导(D4: 会真实合并才弹框, 否则空转)
+    assert "some((g) => (g.domains || []).length >= 2)" in hub_js, \
+        "缺多域名组闸门(缺了 = 全单域名场景也弹三钮, 现状路径被无谓改写)"
+    assert 'confirmThreeDialog(' in hub_js, "缺三钮弹窗入口(分支③)"
+    assert 'okText: "合并导入"' in hub_js and 'extraText: "拆分导入"' in hub_js, \
+        "三钮文案错(合并=ok 且 Enter 默认推荐, 拆分=extra)"
+    assert 'extraStyle: "ghost"' in hub_js, \
+        "拆分钮必须传 extraStyle:\"ghost\"(非破坏性动作不该渲染成 danger-solid 红钮)"
+    # 合并模式: 键 = groups[i].name, 值 = groups[i].entry(后端单点产出的合并条目)
+    assert "trackers[g.name] = g.entry" in hub_js, "合并模式必须用 groups[i].name/entry 作键值"
+    assert "合并明细" in hub_js and "另有" in hub_js, \
+        "三钮 body 必须带合并明细(列前 10 组 Name(d1、d2), 超出折叠「…另有 N 组」)"
+    # ui_feedback 侧 extraStyle 契约: 缺省 "" = danger-solid 现状(既有调用点零变化),
+    # ghost 只认白名单值, 落地单点 = _applyExtraBtnGhost(模板第三钮类静态, 只能开框后换类)
+    fb = read_shared("ui_feedback.js")
+    assert 'extraStyle: "",' in fb, "ui_feedback _modalInit 缺 extraStyle 缺省声明(漏声明 = 既有框读到 undefined)"
+    assert 'extraStyle: opts.extraStyle === "ghost" ? "ghost" : ""' in fb, \
+        "extraStyle 必须白名单归一(任意字符串不得经 opts 流进 DOM 类名)"
+    assert "_applyExtraBtnGhost()" in fb and "extraStyle === \"ghost\"" in fb, \
+        "缺 ghost 落地单点(缺省路径必须完全不走 DOM 改动 = 既有三钮框渲染逐字节不变)"
     for ui in _UI_ALL:
         html = _ui_aggregate(ui)
         assert "hubImportSites()" in html, f"{ui} 站点分区缺导入按钮"

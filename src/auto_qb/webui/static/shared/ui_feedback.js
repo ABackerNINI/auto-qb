@@ -140,6 +140,9 @@ window.AQB_FEEDBACK = {
       return {
         visible: false, title: "", body: "", okText: "", cancelText: "",
         extraText: "",  // 第三个按钮文案(三选一框, 见 confirmThreeDialog); 空 = 不渲染该钮
+        extraStyle: "", // 第三钮样式位(计划 26-11-03-2337 M4): "" | "ghost"。空 = 缺省 danger-solid
+                        // (现状破坏性分支, 既有调用点零变化); "ghost" = 非破坏性第三钮按次钮渲染,
+                        // 落地单点在 _openModal 的 $nextTick(_applyExtraBtnGhost), 只认这两个值
         danger: false, input: false, value: "", placeholder: "",
         checkbox: "", checked: false,  // 额外选项勾选框(如删除时"同时删除磁盘文件")
         checks: null,   // 多选项 [{key,label,checked,disabled?,title?}](删除确认框: 强制重新汇报 + 删除文件并存; disabled/title = 非活跃闸门禁用态, issue 26-10-17-1703)
@@ -173,13 +176,18 @@ window.AQB_FEEDBACK = {
      * 只有"刷新守卫"那类三分支才用得上 —— 两钮对话框表达不了「先保存再走 / 直接走 / 不走」
      * (报告 26-10-02-0508 U1-b: 键盘刷新弹自绘框, 之所以值得自绘就是因为多了「保存并刷新」这一支)。
      * 与 confirmDialog 的**布尔契约分开**, 互不影响: extraText 缺省为空 = 第三个钮不渲染,
-     * 既有全部两钮对话框零变化。第三个钮一律按**破坏性分支**渲染(danger-solid): 它代表
+     * 既有全部两钮对话框零变化。第三个钮缺省按**破坏性分支**渲染(danger-solid): 它代表
      * "放弃这批改动"这类不可逆选择, 排在「取消」与「确认」之间。
+     * extraStyle(计划 26-11-03-2337 M4): 第三钮样式位 —— 缺省 "" = danger-solid(现状, 既有
+     * 调用点零变化); "ghost" = 第三钮按次钮渲染, 给**非破坏性**的 extra 分支用(如站点导入的
+     * 「拆分导入」—— 拆分不丢数据, 不该渲染成红钮)。只认这两个值, 其余一律兜底成缺省,
+     * 避免任意字符串经 opts 流进 DOM 类名。落地单点见 _openModal 的 $nextTick。
      */
     confirmThreeDialog(title, body, opts = {}) {
       return this._openModal({
         title, body, input: false,
         okText: opts.okText || "确认", extraText: opts.extraText || "", cancelText: opts.cancelText || "取消",
+        extraStyle: opts.extraStyle === "ghost" ? "ghost" : "",
         danger: !!opts.danger,
       });
     },
@@ -215,6 +223,11 @@ window.AQB_FEEDBACK = {
         // 防迟到异步回执把上一框的结果写进无关弹窗
         this.modal = { ...this._modalInit(), ...cfg, tone, visible: true, mid: (this._modalSeq = (this._modalSeq || 0) + 1) };
         this.$nextTick(() => {
+          // extraStyle 落地单点(计划 26-11-03-2337 M4): 模板第三钮类名是静态 danger-solid
+          // (popovers.html, 编译期 hoist, 不进动态 props), ghost 档只能在此按框换类 ——
+          // 见 _applyExtraBtnGhost; 缺省 "" 完全不走这段, 既有框零变化。先换类再定焦点,
+          // 焦点语义不变(仍落 modalOk, Enter = 确认钮 = 推荐分支)。
+          if (this.modal.extraStyle === "ghost") this._applyExtraBtnGhost();
           // 多字段形态聚焦第一个输入框(fields), 单输入形态聚焦 modalInput;
           // 确认类(计划 26-09-28-0354 §08): 默认焦点在「确定」钮 —— Enter 即确认(按钮原生行为),
           // Esc 取消走 lifecycle 退栈链。删除类确认框(危险钮)同此, 与计划"默认确定 / Enter 确认"一致。
@@ -230,6 +243,24 @@ window.AQB_FEEDBACK = {
           if (ok) ok.focus();
         });
       });
+    },
+    /* extraStyle="ghost" 的落地单点(M4): 模板第三钮的类是**静态** "bt danger-solid", ghost
+     * 档在开框后的这一帧把 danger-solid 换成 ghost(ghost 类弹窗组件里已有 = 取消钮同款,
+     * 三皮肤各自定义, 复用不新加)。定位 = modalOk 的父容器(三钮同住 .modal-actions), 按
+     * 「带 danger-solid 且文案 === extraText」双条件锁定第三钮 —— ok 钮在 danger 框里也带
+     * danger-solid, 但文案是 okText, 不会误中。静态类不进 Vue 动态 props, 后续补丁(文案
+     * 原位更新等)不回收换上的类; 每次开框重跑一次(v-if 重建后类还原成静态值, 恰好兜底)。
+     * 只在 extraStyle === "ghost" 时被调 —— 缺省路径零 DOM 改动, 既有调用点渲染逐字节不变。 */
+    _applyExtraBtnGhost() {
+      const ok = this.$refs.modalOk;
+      if (!ok || !ok.parentElement) return;
+      for (const b of ok.parentElement.children) {
+        if (b === ok || !b.classList || !b.classList.contains("danger-solid")) continue;
+        if (b.textContent.trim() === this.modal.extraText) {
+          b.classList.remove("danger-solid");
+          b.classList.add("ghost");
+        }
+      }
     },
     /* 异步落框守卫单点(issue 26-10-06-0028 F1-01): 「单例 modal + 异步回执回写 this.modal」
      * 形态在落袋前必经 —— 比对发起时刻的框身份戳与当前可见框是否同一框(关闭/被任何新框
