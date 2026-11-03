@@ -32,6 +32,7 @@
 - test_known_tag_literals_are_mapped_after_sanitization
 - test_merge_window_tags_net
 - test_minimal_bencode_is_parseable_shape
+- test_minimal_bencode_roundtrip_parse: 导出物 bencode 回读解析(issue 26-11-03-1145)—— 长度前缀漂移在此必炸; 非 ASCII 名/0 字节/大 size 三档
 - test_replay_latency_modes
 - test_timeline_advances_and_merges_window
 - test_timeline_applies_fs_delta
@@ -434,6 +435,42 @@ def test_minimal_bencode_is_parseable_shape():
     blob = simqb.minimal_bencode("movie.mkv", 1234)
     assert blob.startswith(b"d") and blob.endswith(b"e")
     assert b"movie.mkv" in blob and b"i1234e" in blob
+
+
+def _bdecode(buf: bytes):
+    """极简 bencode 解析器(只作守阵回读): 长度前缀漂移会在这里直接抛错/错位"""
+    def dec(i: int):
+        c = buf[i:i + 1]
+        if c == b"i":
+            j = buf.index(b"e", i)
+            return int(buf[i + 1:j]), j + 1
+        if c == b"l" or c == b"d":
+            out, i = ([] if c == b"l" else {}), i + 1
+            while buf[i:i + 1] != b"e":
+                k, i = dec(i)
+                if isinstance(out, list):
+                    out.append(k)
+                else:
+                    v, i = dec(i)
+                    out[k] = v
+            return out, i + 1
+        j = buf.index(b":", i)
+        n = int(buf[i:j])
+        return buf[j + 1:j + 1 + n], j + 1 + n
+
+    v, end = dec(0)
+    assert end == len(buf), f"尾部残留 {buf[end:]!r}: 长度前缀与实际不符"
+    return v
+
+
+def test_minimal_bencode_roundtrip_parse():
+    """守阵: 导出物必须能被标准 bencode 解析回读(issue 26-11-03-1145: announce 长度标 26 实 25)"""
+    for name, size in [("movie.mkv", 1234), ("x", 0), ("很长很长的一段种子名.mkv", 10**12)]:
+        d = _bdecode(simqb.minimal_bencode(name, size))
+        assert d[b"announce"] == b"http://site-1.example/ann"
+        assert d[b"info"][b"name"] == name.encode("utf-8")
+        assert d[b"info"][b"length"] == size
+        assert d[b"info"][b"piece length"] == 262144
 
 
 # --------------------------------------------------------------------------- 语料加载

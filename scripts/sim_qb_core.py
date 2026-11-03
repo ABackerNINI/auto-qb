@@ -235,8 +235,12 @@ def piece_hashes_of(rel_sizes: list[tuple[str, int]], pieces: int = 8) -> list[s
 
 def minimal_bencode(name: str, size: int) -> bytes:
     """torrents/export 的最小合法 bencode(单文件 info dict + announce)"""
-    info = f"d6:lengthi{size}e4:name{len(name)}:{name}12:piece lengthi262144ee".encode("utf-8")
-    return b"d8:announce26:http://site-1.example/ann4:info" + info + b"e"
+    announce = b"http://site-1.example/ann"
+    name_b = name.encode("utf-8")
+    # 所有长度前缀一律按**字节数**动态拼: 写死常量曾漂移(announce 标 26 实 25);
+    # len(name) 是字符数, 非 ASCII 名同样会漂移(守阵用例用非 ASCII 名钉住这一点)
+    info = f"d6:lengthi{size}e4:name{len(name_b)}:".encode("utf-8") + name_b + b"12:piece lengthi262144ee"
+    return b"d8:announce" + f"{len(announce)}:".encode() + announce + b"4:info" + info + b"e"
 
 
 def merge_window(frames: list[dict]) -> dict:
