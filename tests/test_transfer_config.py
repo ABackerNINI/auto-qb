@@ -29,6 +29,9 @@
 - test_transfer_base_url_shape_and_required_when_enabled
 - test_transfer_target_api_key_load_and_unknown_keys_guard
 - test_transfer_section_shape_errors
+- test_transfer_base_url_unparsable: urlsplit 抛 ValueError 的畸形 URL(残缺 IPv6)走「URL 无法解析」分支
+- test_transfer_fields_non_dict: target.fields 非字典 -> 「必须是字典(键: ...)」
+- test_transfer_section_null_spec_is_valid: transfer 显式 null(整段未配置) -> 合法空过
 - test_transfer_enum_constants_are_schema_derived
 """
 import tempfile
@@ -336,6 +339,24 @@ def test_transfer_section_shape_errors():
     # transfer 缺省/空字典均合法
     assert _validate_transfer({}) == []
     assert _validate_transfer({"targets": []}) == []
+
+
+def test_transfer_base_url_unparsable():
+    """urlsplit 抛 ValueError 的畸形 URL(残缺 IPv6) -> 「URL 无法解析」分支(与形状错分流)"""
+    errors = _validate_transfer({"targets": [{"name": "t1", "base_url": "http://["}]})
+    assert any("base_url: URL 无法解析" in e for e in errors)
+
+
+def test_transfer_fields_non_dict():
+    """target.fields 非字典 -> 「必须是字典(键: ...)」(含键表提示)"""
+    errors = _validate_transfer({"targets": [{"name": "t1", "fields": "nope"}]})
+    assert any("targets[0].fields: 必须是字典" in e for e in errors)
+    assert any("save_path" in e and "super_seeding" in e for e in errors)  # 键表提示在消息里
+
+
+def test_transfer_section_null_spec_is_valid():
+    """transfer 显式 null(整段未配置) -> 合法空过(_validate_transfer 的 None 早退)"""
+    assert _validate_transfer(None) == []
 
 
 def test_transfer_enum_constants_are_schema_derived():

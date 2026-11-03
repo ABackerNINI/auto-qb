@@ -21,6 +21,7 @@
 - test_loader_defaults_config_top_level_scalars: load_config 顶层标量键全缺省 -> Config 字段默认
 - test_loader_defaults_sections_when_absent: 各段整段缺省 -> 段内键逐个走该段字段默认
 - test_loader_defaults_gslc_optional_keys: global_speed_limit_curve 可选键缺省 -> interval=None/enabled=True/省略方向=None
+- test_load_transfer_targets_non_list_defaults_empty: web.transfer 有段但 targets 缺失/非列表 -> TransferConfig() 空过(未配置语义)
 """
 
 import logging
@@ -359,6 +360,20 @@ def test_load_web_ctx_menu_passthrough():
         }
         cfg = load_config(_write_raw(td, base))
         assert cfg.web.ctx_menu is None  # 缺省 = 四支默认布局(与静态模板逐位一致)
+
+
+def test_load_transfer_targets_non_list_defaults_empty():
+    """web.transfer 有段但 targets 键缺失/非列表 -> TransferConfig() 空过(「未配置」语义, loader 不做形状兜底)"""
+    from auto_qb.config import TransferConfig, load_web_config
+
+    assert load_web_config({"transfer": {}}).transfer == TransferConfig()  # targets 键缺失
+    assert load_web_config({"transfer": {"targets": "nope"}}).transfer == TransferConfig()  # targets 非列表
+    assert load_web_config({"transfer": None}).transfer == TransferConfig()  # 整段缺省(另一早退)
+    # 真实链路: transfer 空段过校验, 回读 = 未配置
+    base = "config:\n  trackers:\n    T1:\n      domains:\n        - a.com\n"
+    with tempfile.TemporaryDirectory() as td:
+        cfg = load_config(_write_raw(td, base + "  web:\n    transfer: {}\n"))
+        assert cfg.web.transfer == TransferConfig()
 
 
 def test_loader_defaults_tracker_config_keys_absent():

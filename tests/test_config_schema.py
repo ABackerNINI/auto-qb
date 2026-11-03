@@ -42,6 +42,7 @@
 - test_download_fuse_defaults: download_fuse 缺省 enabled=false / 13KiB/s / confirm_ticks=3 / fuse_tag=zFusePaused
 - test_download_fuse_valid: 合法值通过 fail-fast 校验(下载限速奇数 KiB 边界含 1/13/1023)
 - test_download_fuse_invalid_aggregates: 0/偶数/非整数 KiB/超上限/拍数越界/空标签/含逗号标签/首尾空白标签一次性聚合报错
+- test_download_fuse_shape_and_unparsable_limit: 段非字典报「必须是字典」; download_limit 非速度串只报解析错不进 KiB 域检查
 """
 import re
 from pathlib import Path
@@ -553,6 +554,18 @@ def test_download_fuse_invalid_aggregates():
     for limit, word in (("14KiB/s", "奇数"), ("13.5KiB/s", "整数 KiB"), ("1025KiB/s", "<= 1024KiB")):
         errors = validate_config({"config": {"download_fuse": {"download_limit": limit}}})
         assert any(word in e for e in errors), (limit, errors)
+
+
+def test_download_fuse_shape_and_unparsable_limit():
+    """段非字典 -> 「必须是字典」; download_limit 非速度串 -> 只报解析错, 不进 KiB 域检查(解析失败缺相分支)"""
+    from auto_qb.config.validation import validate_config
+
+    errors = validate_config({"config": {"download_fuse": "nope"}})
+    assert any("config.download_fuse: 必须是字典" in e for e in errors)
+
+    errors = validate_config({"config": {"download_fuse": {"download_limit": "abc"}}})
+    assert any("config.download_fuse.download_limit" in e and "无效速度格式" in e for e in errors)
+    assert not any("必须 > 0" in e or "KiB 数" in e or "整数 KiB" in e for e in errors)  # 域检查未执行
 
 
 # ---------- 键面/分支函数守阵(issue 26-10-08-0903-test-config-mutation-schema-surface) ----------

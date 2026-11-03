@@ -14,6 +14,8 @@
 - test_unmask_transfer_targets_typed_and_new_entries: 用户真改的密码/新增条目的密码(含空)原样保留, 不得被旧值覆盖
 - test_unmask_transfer_targets_rename_and_delete_pairing: 配对两轮 —— name 为主, 等量剩余按下标兜底「只改名」; 删除后幸存者按 name 对上; 改名+删除(数量不等)不猜, 哨兵原样留下; 旧值缺失/即哨兵同守卫
 - test_transfer_target_api_key_mask_and_unmask: targets 条目 api_key 与 password 同套哨兵(issue 26-11-01-0335) —— 非空掩码/空不掩/GET→PUT 还原旧值; 逐键判定(只改 password 不动 api_key 哨兵, 反之亦然)
+- test_mask_tree_target_non_dict_entry_passthrough: targets 里的非 dict 条目掩码原样放行(交给校验层报错), dict 条目照常掩码
+- test_unmask_targets_skips_non_dict_and_unnamed_old_entries: 旧表非 dict 条目/无名条目不进 name 索引; 提交表非 dict 条目跳过还原; 按 name 配对照常
 """
 
 import copy
@@ -334,6 +336,49 @@ def test_transfer_target_api_key_mask_and_unmask():
     unmask_tree(submitted2, old2)
     assert t2[0]["api_key"] == "new_key", "真改的 api_key 不得被旧值覆盖"
     assert t2[0]["password"] == "pa", "未动的 password 哨兵照常还原"
+
+
+def test_mask_tree_target_non_dict_entry_passthrough():
+    """targets 里的非 dict 条目(手编畸形)掩码原样放行, 交给校验层报错; dict 条目照常掩码"""
+    from auto_qb.config.writer import MASK_SENTINEL, mask_tree
+
+    tree = {"config": {"web": {"transfer": {"targets": ["junk", {"name": "a", "password": "pa"}]}}}}
+    masked = mask_tree(tree)
+    targets = masked["config"]["web"]["transfer"]["targets"]
+    assert targets[0] == "junk", "非 dict 条目原样放行"
+    assert targets[1]["password"] == MASK_SENTINEL, "dict 条目照常掩码"
+    assert tree["config"]["web"]["transfer"]["targets"][0] == "junk", "掩码不得就地修改原树"
+
+
+def test_unmask_targets_skips_non_dict_and_unnamed_old_entries():
+    """旧表非 dict 条目 / 无名(空 name)条目不进 name 索引; 提交表非 dict 条目跳过还原
+
+    按 name 配对的主路径不受畸形条目影响 —— 有名旧条目照常认领回填。
+    """
+    from auto_qb.config.writer import MASK_SENTINEL, unmask_tree
+
+    old = {
+        "config":
+            {
+                "web": {
+                    "transfer": {
+                        "targets": [
+                            "junk",  # 非 dict 旧条目: 不进 name 索引, 也不进位置配对
+                            {"name": "", "password": "px"},  # 无名旧条目: 不进 name 索引
+                            {"name": "a", "password": "pa"},
+                        ]
+                    }
+                },
+            }
+    }
+    submitted = {"config": {"web": {"transfer": {"targets": [
+        "junk",  # 提交表非 dict 条目: 原样跳过
+        {"name": "a", "password": MASK_SENTINEL},
+    ]}}}}
+    unmask_tree(submitted, old)
+    targets = submitted["config"]["web"]["transfer"]["targets"]
+    assert targets[0] == "junk", "提交表非 dict 条目不动"
+    assert targets[1]["password"] == "pa", "有名条目按 name 正常配对还原"
 
 
 def test_unmask_tree_init_and_guards():

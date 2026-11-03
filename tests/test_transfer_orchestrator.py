@@ -38,6 +38,12 @@
 - test_source_read_failure: maindata 查无/查询故障 -> SOURCE_READ_FAILED, 不删源
 - test_field_collection_respects_switches: 字段开关逐键生效(关的键不下发), save_path 锁死恒采集, infohash 探针在
 - test_field_collection_maps_maindata_keys: 字段键 -> 源 maindata 键映射(ratio_limit/dl_limit 等)
+- test_field_of_attr_record_value_and_none_default: 属性式记录(对象属性优先)取值; 属性值为 None 回落 default
+- test_field_of_plain_object_returns_default: 既无属性也无 get 的裸对象 -> 返回 default(不炸)
+- test_batch_prepare_failure_settles_entry_and_continues: 单种子准备阶段抛未预期异常 -> run_batch 兜底
+  结算 UNEXPECTED, 源保留, 批次不中断
+- test_ignored_fields_noted_in_reason: 目标降级忽略字段 -> 成功回执注明「目标不支持已忽略字段」
+- test_field_collection_skips_missing_maindata_values: 开关开但源 maindata 值为 None/缺失 -> 该键不下发, 其余照常
 - test_result_receipt_shape: to_receipt() = {hash, 状态(中文三态), 原因}; label 单点
 - test_empty_hashes_skips_adapter: 空 hashes -> 空结果且不实例化适配器
 - test_auth_failure_classified: 添加失败原因含"登录失败" -> AUTH_FAILED; 其余 -> ADD_FAILED
@@ -56,6 +62,7 @@ from auto_qb.transfer.orchestrator import (
     TransferOutcomeCode,
     TransferOrchestrator,
     TransferStatus,
+    _field_of,
     map_save_path,
 )
 
@@ -494,6 +501,23 @@ def test_batch_continues_after_skipped_seed(monkeypatch):
     assert qb.deletions == [(HASH_A, False), (HASH_C, False)]
 
 
+def test_batch_prepare_failure_settles_entry_and_continues(monkeypatch):
+    # 准备阶段(非添加调用)抛未预期异常 -> run_batch 的单种子兜底, 源保留, 批次继续
+    qb = _FakeQbApi(
+        torrents={
+            HASH_A.lower(): _full_torrent(HASH_A, progress="abc"),  # float("abc") 未预期 ValueError
+            HASH_B.lower(): _full_torrent(HASH_B),
+        }
+    )
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_B, "state": "stoppedUP"}])
+    results, _ = _run(monkeypatch, qb, _make_target(), [HASH_A, HASH_B], adapter=adapter)
+    assert [r.status for r in results] == [TransferStatus.FAILED, TransferStatus.SUCCESS]
+    assert results[0].code is TransferOutcomeCode.UNEXPECTED
+    assert "未预期异常" in results[0].reason
+    assert len(adapter.add_calls) == 1  # 异常条目没走到添加
+    assert qb.deletions == [(HASH_B, False)]  # 异常条目源保留
+
+
 def test_batch_unexpected_exception_does_not_interrupt(monkeypatch):
     qb = _FakeQbApi(
         torrents={
@@ -626,6 +650,55 @@ def test_field_collection_maps_maindata_keys(monkeypatch):
     assert sent["up_limit"] == -1
     assert sent["down_limit"] == -1  # <- maindata dl_limit
     assert sent["super_seeding"] is False
+
+
+# ---------- 字段读取纯函数(_field_of) ----------
+
+
+class _AttrRecord:
+    """属性式记录替身(qbittorrent-api TorrentDictionary / store TorrentRecord 的属性侧形态)"""
+    def __init__(self, **attrs):
+        for k, v in attrs.items():
+            setattr(self, k, v)
+
+
+def test_field_of_attr_record_value_and_none_default():
+    rec = _AttrRecord(category="tv", tags=None)
+    assert _field_of(rec, "category") == "tv"  # 对象属性优先且非 None -> 直接取值
+    assert _field_of(rec, "tags", ["x"]) == ["x"]  # 属性值为 None -> 回落 default
+
+
+def test_field_of_plain_object_returns_default():
+    class _Bare:
+        pass
+
+    assert _field_of(_Bare(), "category", "fallback") == "fallback"  # 无属性无 get -> default
+    assert _field_of(_Bare(), "category") is None
+
+
+def test_ignored_fields_noted_in_reason(monkeypatch):
+    # 目标 capabilities 不含而被降级忽略的字段 -> 回执注明(与添加原因按序拼接)
+    qb = _FakeQbApi(torrents={HASH_A.lower(): _full_torrent()})
+    adapter = _FakeAdapter(add_results=[AddResult.added("目标已受理", ignored_fields=("tags", "category"))])
+    results, _ = _run(monkeypatch, qb, _make_target(), [HASH_A], adapter=adapter)
+    assert results[0].status is TransferStatus.SUCCESS
+    assert "目标已受理" in results[0].reason
+    assert "目标不支持已忽略字段: tags, category" in results[0].reason
+    assert qb.deletions == [(HASH_A, False)]
+
+
+def test_field_collection_skips_missing_maindata_values(monkeypatch):
+    # 开关全开但源 maindata 值为 None / 键缺失 -> 该键不下发, 其余键照常
+    rec = _full_torrent(HASH_A, ratio_limit=None)
+    rec.pop("up_limit")
+    qb = _FakeQbApi(torrents={HASH_A.lower(): rec})
+    adapter = _FakeAdapter(find_sequence=[{"hash": HASH_A, "state": "stoppedUP"}])
+    all_on = {key: True for key in TRANSFER_FIELD_KEYS}
+    _run(monkeypatch, qb, _make_target(fields=all_on), [HASH_A], adapter=adapter)
+    sent = adapter.add_calls[0]["fields"]
+    assert "share_ratio_limit" not in sent  # ratio_limit=None -> 不下发
+    assert "up_limit" not in sent  # 键缺失 -> 不下发
+    assert sent["category"] == "tv" and sent["tags"] == ["zE01", "grp"]  # 其余照常
 
 
 # ---------- 结果结构 / 杂项 ----------
