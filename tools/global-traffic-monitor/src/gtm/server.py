@@ -331,6 +331,8 @@ class ControlServer:
                         "token": self.token_manager.path,
                     },
                 "config": config_to_payload(config),
+                # S7 次级可见面: 最近一轮越界记录 (无越界为 null); 纯追加键, 旧消费方忽略即兼容
+                "last_spike": self.sampler.last_spike,
                 "uptime_s": round(time.time() - self._started_at, 3),
             },
         )

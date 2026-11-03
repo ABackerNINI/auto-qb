@@ -31,8 +31,10 @@
 - test_frontend_readonly_row_class_not_colliding: 裸 .hb-ro 选择器清零 —— 摘要容器的
   max-width:460px 曾落到只读状态行上, 把「工具状态」压窄到值列 206px(文字自动换行)
 - test_frontend_tool_settings_button_removed: S6/D9 —— 「打开工具设置」按钮与其处理方法全仓清零
-- test_frontend_tool_params_use_unit_controls: S7/D12/D13 —— 时间/大小参数走「数值+单位下拉+?」,
+- test_frontend_tool_params_use_unit_controls: S7/D12/D13 —— 时间/大小/速率参数走「数值+单位下拉+?」,
   复合串原样回传(不 Number() 化), 元数据齐备
+- test_frontend_last_spike_row_is_secondary_visibility: S7/T27 —— 设置页「最近异常」一行读
+  /status.last_spike, 24h 窗口过滤, 无越界/旧工具缺键时整行不渲染
 - test_frontend_unit_tables_match_tool_grammar: S7/D13 —— 前端单位表 == auto-qb schema ==
   gtm/units.py 三处同源(文法单点, 前端不复制规则)
 - test_claim_missing_entry_502 / test_claim_ok_returns_tool_output /
@@ -626,9 +628,9 @@ def _tm_params_block(hub: str) -> str:
 
 
 def test_frontend_tool_params_use_unit_controls():
-    """S7/D12/D13: 时间/大小参数呈现为「数值框 + 单位下拉 + ?」, 复合串原样回传
+    """S7/D12/D13: 时间/大小/速率参数呈现为「数值框 + 单位下拉 + ?」, 复合串原样回传
 
-    守的是三件事: ① 五个时间键 + 两个大小键都声明了 kind(不靠标签里塞"(秒)"糊过去);
+    守的是三件事: ① 五个时间键 + 两个大小键 + 一个速率键都声明了 kind(不靠标签里塞"(秒)"糊过去);
     ② 每项都有 help(否则「?」浮窗只剩一句"这一项还没有说明"); ③ 提交时不再 Number() 化
     —— 数值化会把 "10MiB" 变成 10, 单位凭空消失(D13 之前的老毛病)。
     """
@@ -637,23 +639,46 @@ def test_frontend_tool_params_use_unit_controls():
     params = _tm_params_block(hub)
     time_keys = ("sample_interval", "flush_interval_s", "lease_ttl_s", "heartbeat_interval_s", "notify_timeout_s")
     size_keys = ("flush_delta_bytes", "notify_threshold_bytes")
+    speed_keys = ("sample_rate_warn_bps", )
     for key in time_keys:
         assert re.search(rf'key: "{key}".*?kind: "time"', params, re.S), f"{key} 不是 time kind"
     for key in size_keys:
         assert re.search(rf'key: "{key}".*?kind: "size"', params, re.S), f"{key} 不是 size kind"
-    assert params.count("help:") == params.count("key:") == len(time_keys) + len(size_keys) + 4, \
+    for key in speed_keys:
+        assert re.search(rf'key: "{key}".*?kind: "speed"', params, re.S), f"{key} 不是 speed kind"
+    assert params.count("help:") == params.count("key:") == len(time_keys) + len(size_keys) + len(speed_keys) + 4, \
         "工具参数元数据条数/说明文案不齐(新增参数必须补 help)"
-    # 模板: 单位复合控件 + 复用设置页的「?」浮窗
+    # 模板: 单位复合控件(含 rate 文法) + 复用设置页的「?」浮窗
     for needle in (
         "class=\"hb-unit\"", "tmUnitParts(p)", "tmSetUnitPart(p", "cfgUnitOptions(p.kind)",
+        "p.kind === 'time' || p.kind === 'size' || p.kind === 'speed'",
         "$root.hubAsk($root.tmAskItem(p), $event)"
     ):
         assert needle in tpl, f"流量与限速卡的工具参数行缺 {needle}"
-    # 载荷: 时间/大小原样透传, 不做 Number()
+    # 载荷: 时间/大小/速率原样透传, 不做 Number()
     payload = hub[hub.index("tmBuildPayload() {"):]
     payload = payload[:payload.index("    },\n")]
     assert 'out[p.key] = v' in payload and "p.kind === 'time'" not in payload
-    assert 'else if (p.kind === "time" || p.kind === "size") out[p.key] = v;' in payload
+    assert 'else if (p.kind === "time" || p.kind === "size" || p.kind === "speed") out[p.key] = v;' in payload
+
+
+def test_frontend_last_spike_row_is_secondary_visibility():
+    """S7/T27: 设置页「最近异常」一行读 /status.last_spike(24h 窗口), 无越界不渲染
+
+    次级面是详情/排障入口: 数据来自工具 /status 的纯追加键, 前端只读; 24h 外与旧工具
+    缺键(undefined)一律走 null -> 整行不渲染, 不让空行或 Invalid Date 上屏。
+    """
+    hub = _static("shared", "config_hub.js")
+    tpl = _tm_tpl()
+    assert 'v-if="$root.tmLastSpikeText()"' in tpl and "最近异常" in tpl, \
+        "工具状态区缺「最近异常」行(无该行时设置页看不到告警详情)"
+    body = hub[hub.index("tmLastSpikeText() {"):]
+    body = body[:body.index("    },\n")]
+    assert "this.tm.status && this.tm.status.last_spike" in body, \
+        "helper 未读工具 /status 透传的 last_spike"
+    assert "Array.isArray(s.items)" in body, "缺少 items 结构判定(旧工具/坏载荷会抛错)"
+    assert "24 * 3600 * 1000" in body, "缺少 24h 展示窗口过滤"
+    assert "return null" in body, "无越界/越窗必须返回 null(整行不渲染)"
 
 
 def test_frontend_unit_tables_match_tool_grammar():

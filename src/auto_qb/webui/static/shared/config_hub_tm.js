@@ -242,7 +242,7 @@ Object.assign(window.CONFIG_HUB.methods, {
       }
     },
     /* 工具配置 -> 表单: 列表字段折成逗号串(表单是纯文本输入), 其余原样
-     * (时间/大小是复合串 "30S"/"10MiB", 原样留在表单里, 由单位控件拆成「数值 + 单位」显示) */
+     * (时间/大小/速率是复合串 "30S"/"10MiB"/"1GiB/s", 原样留在表单里, 由单位控件拆成「数值 + 单位」显示) */
     tmNormalizeForm(cfg) {
       const out = {};
       for (const k of Object.keys(cfg || {})) {
@@ -252,7 +252,7 @@ Object.assign(window.CONFIG_HUB.methods, {
       return out;
     },
     /* 表单 -> 工具配置载荷(全量覆盖, last-writer-wins): 列表字段逗号串转数组, 其余按 kind 归一。
-     * S7/D13: 时间/大小**不再 Number() 化**(数值化会丢掉单位), 复合串原样回传; 用户没动过的键
+     * S7/D13: 时间/大小/速率**不再 Number() 化**(数值化会丢掉单位), 复合串原样回传; 用户没动过的键
      * 也原样回传 —— 旧版工具回显的裸数值因此能无损往返, 迁移的语义平移由工具侧负责。 */
     tmBuildPayload() {
       const f = this.tm.form;
@@ -263,7 +263,7 @@ Object.assign(window.CONFIG_HUB.methods, {
         const v = f[p.key];
         if (v === undefined) continue;  // 工具没回显该键: 不发明值(丢给工具侧默认)
         if (p.kind === "list") out[p.key] = list(v);
-        else if (p.kind === "time" || p.kind === "size") out[p.key] = v;
+        else if (p.kind === "time" || p.kind === "size" || p.kind === "speed") out[p.key] = v;
         else if (p.kind === "text") out[p.key] = String(v || "");
         else out[p.key] = num(v);
       }
@@ -319,6 +319,22 @@ Object.assign(window.CONFIG_HUB.methods, {
     tmFmtBytes(n) {
       return this.fmtSize(n);
     },
+    /* S7 次级可见面: 「最近异常」一行(设置页工具状态区)。数据源 = 工具 GET /status.last_spike
+     * (S5 采样器落 state 的最近一轮越界记录), 前端只读不改。
+     * 24h 外或旧工具无该键/无越界 -> null(整行不渲染); 展示口径与日志同字段(阈值/速率)。 */
+    tmLastSpikeText() {
+      const s = this.tm.status && this.tm.status.last_spike;
+      if (!s || !Array.isArray(s.items) || !s.items.length) return null;
+      const t = Date.parse(s.ts);
+      if (!Number.isFinite(t) || Date.now() - t > 24 * 3600 * 1000) return null;
+      const p = (n) => String(n).padStart(2, "0");
+      const d = new Date(t);
+      const at = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+      const dir = (x) => (x === "up" ? "上行" : "下行");
+      const detail = s.items.map((it) => `${it.nic} ${dir(it.dir)} ${this.fmtSpeed(it.rate_bps)}`).join("；");
+      const thr = s.threshold_bps ? `（阈值 ${this.fmtSpeed(s.threshold_bps)}，仅告警已照常入账）` : "（仅告警已照常入账）";
+      return `${at} ${detail}${thr}`;
+    },
     /* ---- 文件选择器(D10③): 找不到工具时, 目录导航 + 文件名输入写 tool_exe / tool_dir ----
      * 后端 /api/fs/dirs 只列目录、且限在允许的保存路径内 —— 工具安装目录若不在范围内, 走上方文本框
      * 手填绝对路径; 在范围内可直接导航并用文件名拼出绝对路径写 tool_exe。 */
@@ -359,7 +375,7 @@ Object.assign(window.CONFIG_HUB.methods, {
       this.tm.pick.open = false;
     },
     /* 工具参数表(§05 工具侧参数): 键/标签/控件形态/说明; 模板按此 v-for 渲染, 避免 11 行硬编码。
-     * S7/D12/D13: kind=time/size 走「数值框 + 单位下拉 + ?」——
+     * S7/D12/D13: kind=time/size/speed 走「数值框 + 单位下拉 + ?」——
      *   - 单位表与设置页同源(cfgUnitOptions / UNIT_OPTIONS), 默认单位由 unitDefault 给;
      *   - 盘上与契约只留复合串("30S"/"10MiB"), 这里只负责显示层拆合;
      *   - def 只作「?」浮窗的「默认值」展示, **真值以工具侧 gtm/config.py 为权威**(写错不会生效,
@@ -387,6 +403,13 @@ Object.assign(window.CONFIG_HUB.methods, {
           def: "100MiB",
           help: "当日累计流量每涨这么多, 工具就向 auto-qb 推一次事件, 让它立刻重读历史文件刷新图表。"
             + "auto-qb 侧还有一层刷新冷却, 两边都设才不会被频繁推送牵着跑。",
+        },
+        {
+          key: "sample_rate_warn_bps", label: "单轮速率告警阈值", kind: "speed", unitDefault: "GiB/s",
+          def: "1GiB/s",
+          help: "单个网卡单方向的速率(本轮增量/有效间隔)超过这个值就告警。只告警、不拦截, 流量照常入账;"
+            + "告警会出现在设置页「最近异常」与工具日志里。默认 1GiB/s 覆盖常见千兆/2.5G/万兆峰值,"
+            + "线路能跑满万兆时可适当调高。",
         },
         {
           key: "http_host", label: "控制面监听地址", kind: "text", def: "127.0.0.1",

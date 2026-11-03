@@ -9,6 +9,7 @@
   /autostart 读-改-写不丢并发 PUT 的参数); PUT /config 拒绝非回环 http_host.
 + 26-10-31-0537: POST /autostart 成功后 patch 发现指针 autostart 字段 (卸载/注册即时回写真值,
   UI 开关不再漂移到重启); patch 失败只 WARNING 不阻断响应.
++ S7 (T27): GET /status 透传最近一轮越界记录 last_spike (无越界为 null; 既有字段不变).
 
 设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S3, S6, S12).
 全部用例 hermetic: tmp_path 数据目录 + 端口 0 (系统分配) + 注入计数器,
@@ -134,6 +135,27 @@ def test_status_fields(tmp_path) -> None:
         assert payload["config"]["sample_interval"] == "5S"
         assert payload["config"]["flush_delta_bytes"] == "1MiB"
         assert payload["config"]["http_port"] == 0  # 端口/地址仍是原形态
+    finally:
+        server.stop()
+
+
+def test_status_last_spike_passthrough(tmp_path) -> None:
+    """T27 (S7): /status 透出最近一轮越界记录; 无越界为 null, 既有字段不变."""
+    server, storage, sampler, holder, token = make_server(tmp_path)
+    try:
+        status, payload = http(server, "GET", "/status", token=token.token())
+        assert status == 200 and payload["last_spike"] is None
+
+        sampler.sample_once(5.0, 1)  # 首轮只立基线
+        sampler._last_mono -= 1.0  # 上一轮时间基线推回 1s: 次轮 1024B / 1s > 1B/s
+        result = sampler.sample_once(5.0, 1)
+        assert sampler.last_spike is not None and result.day_up_bytes == 1024
+
+        status, payload = http(server, "GET", "/status", token=token.token())
+        assert status == 200 and payload["last_spike"] == sampler.last_spike
+        assert payload["last_spike"]["items"][0]["nic"] == "eth0"
+        # 既有字段语义零改动 (只追加新键)
+        assert payload["ok"] is True and payload["day_up_bytes"] == 1024
     finally:
         server.stop()
 

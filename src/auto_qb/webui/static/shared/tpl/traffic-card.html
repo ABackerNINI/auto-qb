@@ -63,6 +63,8 @@
             <template v-else-if="$root.tm.state === 'ready' && $root.tm.status">
               <div class="hb-row hb-ro"><div class="hb-lb">控制面</div><div class="hb-ct">端口 {{ $root.tm.toolUrl }} · PID {{ $root.tm.pid || '—' }} · 版本 {{ $root.tm.version || '—' }} · 数据目录 <span style="font-family:var(--hb-font-mono)">{{ $root.tm.dataDir || '—' }}</span></div></div>
               <div class="hb-row hb-ro"><div class="hb-lb">当日流量</div><div class="hb-ct">上行 {{ $root.tmFmtBytes($root.tm.status.day_up_bytes) }} · 下行 {{ $root.tmFmtBytes($root.tm.status.day_down_bytes) }} · 合计 {{ $root.tmFmtBytes($root.tm.status.day_total_bytes) }} · {{ $root.tm.status.subscriber_count }} 个订阅 · 末事件号 {{ $root.tm.status.last_event_id }}</div></div>
+              <!-- S7 次级可见面: 最近一轮越界只显示 24h 内(跨窗/无越界/旧工具无该键 -> helper 返回 null, 整行不渲染) -->
+              <div v-if="$root.tmLastSpikeText()" class="hb-row hb-ro"><div class="hb-lb">最近异常</div><div class="hb-ct">{{ $root.tmLastSpikeText() }}</div></div>
               <div class="hb-row hb-ro"><div class="hb-lb">历史文件</div><div class="hb-ct" style="font-family:var(--hb-font-mono)">{{ $root.tm.status.paths && $root.tm.status.paths.dat }}</div></div>
               <div class="hb-row hb-ro"><div class="hb-lb">开机自启</div><div class="hb-ct"><label><input type="checkbox" :checked="$root.tm.autostartRegistered" :disabled="$root.tm.autoBusy" @change="$root.tmAutostart($event.target.checked ? 'install' : 'uninstall')">&nbsp;已注册</label><span class="bh-n">{{ $root.tm.autostartRegistered ? '开机会自动起' : '未注册(开机不会自动起)' }}</span><span v-if="!$root.tm.autostartRegistered && $root.tm.autostartError" class="hb-hp risk" :title="$root.tm.autostartError" style="max-width:60ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom">· {{ $root.tm.autostartError }}</span><span v-if="$root.tm.autoMsg" class="bh-n">{{ $root.tm.autoMsg }}</span><span v-if="$root.tm.autoErr" class="hb-hp risk">{{ $root.tm.autoErr }}</span></div></div>
             </template>
@@ -115,7 +117,7 @@
             <div v-for="p in $root.tmParams()" :key="p.key" class="hb-row">
               <div class="hb-lb">{{ p.label }}</div>
               <div class="hb-ct">
-                <div v-if="p.kind === 'time' || p.kind === 'size'" class="hb-unit">
+                <div v-if="p.kind === 'time' || p.kind === 'size' || p.kind === 'speed'" class="hb-unit">
                   <input class="hb-input hb-mono hb-w-sm" type="text" :value="$root.tmUnitParts(p).num"
                          :placeholder="p.placeholder || ''"
                          @input="$root.tmSetUnitPart(p, $event.target.value, $root.tmUnitParts(p).unit)">
