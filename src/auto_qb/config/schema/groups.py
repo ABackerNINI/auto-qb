@@ -502,6 +502,15 @@ GROUPS: Tuple[Group, ...] = (
                         grey_if=("enabled", "true"),
                         help="别名目标卷剩余空间低于该值时告警(只告警, 不暂停); 填 0 = 不告警",
                     ),
+                    Field(
+                        "assume_shared",
+                        "声明已共享文件系统",
+                        "bool",
+                        default="false",
+                        grey_if=("enabled", "true"),
+                        help="显式声明 qB 与 auto-qb 已共享文件系统: 跳过同机探测, 回执将标注未经 auto-qb 验证"
+                        "(由用户承担风险); 默认关闭 = 多成员组首次迁移前照常做一次性强探测",
+                    ),
                 ),
             ),
             Field(

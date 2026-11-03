@@ -534,6 +534,9 @@ class RelocateConfig:
     finalize_timeout: 收尾(qB 重启后经旧路径 setLocation)等待上限; 超过 ⇒ failed,
         链接已删, 由用户处理
     low_space_warn: 别名目标卷低空间告警阈值(只告警, 不暂停); 0 = 不告警
+    assume_shared: 显式声明 qB 与 auto-qb 已共享文件系统(计划 26-11-04-0055 §03.2):
+        true = 跳过一次性同机强探测(E1), 回执显著标注「未经 auto-qb 验证, 由用户承担」;
+        false(默认, 保守默认)= 不跳过, 多成员组首次迁移前照常强探测。唯一越权逃生口
     """
 
     enabled: bool = False
@@ -545,6 +548,7 @@ class RelocateConfig:
     move_warn_after: float = 2 * 3600.0  # 秒; YAML 原始缺省 "2h"
     finalize_timeout: float = 30 * 86400.0  # 秒; YAML 原始缺省 "30d"
     low_space_warn: int = 10 * 1024**3  # 字节; YAML 原始写法 "10GiB"
+    assume_shared: bool = False
 
 
 @dataclass

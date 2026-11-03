@@ -12,6 +12,8 @@ P1 只做配置面: RelocateConfig + loader + KNOWN_RELOCATE_KEYS 校验 + schem
 - test_relocate_int_bounds: alias_file_threshold/hard_max_links 非整数或 < 1 报错
 - test_relocate_time_keys_positive: 三个时间键必须可解析且 > 0
 - test_relocate_low_space_warn_units: low_space_warn 走 parse_fsize(二进制单位; 10G 这种写法拒收)
+- test_relocate_assume_shared_bool: assume_shared(计划 26-11-04-0055 §03.2)缺省 False(保守默认)/
+  显式 true 经 loader 进 Config / 非法类型走 parse_bool 聚合报错(不打断其它键)
 - test_relocate_load_config_explicit_values: 显式 YAML 值按 parse_* 语义进入 Config(含时间/大小)
 - test_relocate_section_absent_uses_defaults: 配置里没有 relocate 段时走字段默认
 - test_relocate_non_dict_section_rejected: 段形状守卫 —— 缺省(None)静默走默认; 非字典报「必须是字典」并停在该层(不跑逐键校验)
@@ -100,6 +102,27 @@ def test_relocate_low_space_warn_units():
     assert _validate({"low_space_warn": "0B"}) == []  # 0 = 不告警
     errors = _validate({"low_space_warn": "10G"})
     assert any("config.relocate.low_space_warn" in e for e in errors), errors
+
+
+def test_relocate_assume_shared_bool():
+    """assume_shared(计划 26-11-04-0055 §03.2): 缺省 False(保守默认, 不跳过同机强探测);
+    显式 true 经 loader 进 Config; 非法类型走 parse_bool 聚合报错且不打断其它键"""
+    assert RelocateConfig().assume_shared is False  # 缺省关闭(黄金法则 2)
+    assert _validate({"assume_shared": "true"}) == []
+    assert _validate({"assume_shared": "false", "enabled": "true"}) == []
+
+    errors = _validate({"assume_shared": "maybe", "enabled": "maybe"})
+    assert any("config.relocate.assume_shared" in e for e in errors), errors
+    assert any("config.relocate.enabled" in e for e in errors), errors  # 聚合: 其它键报错不被打断
+
+    # loader 面: 显式 YAML 值按 parse_bool 语义进入 Config
+    cfg_dict = {"config": {"relocate": {"assume_shared": "true"}}}
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "c.yml")
+        with open(path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(cfg_dict, f, allow_unicode=True)
+        cfg = load_config(path)
+    assert cfg.relocate.assume_shared is True
 
 
 def test_relocate_load_config_explicit_values():

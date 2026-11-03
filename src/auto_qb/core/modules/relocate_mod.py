@@ -43,6 +43,9 @@ from .relocate_lifecycle import LifecycleMixin
 from .relocate_plan import PlanMixin
 from .relocate_exec import ExecMixin
 
+# 同机强探测(E1)结论的合法取值(计划 26-11-04-0055 §03.2); 其余一律按坏条目/未命中处理
+_PROBE_STATUSES = ("passed", "failed")
+
 
 class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
     """整组迁移模块: relocate 段认领 + P2 只读预检引擎(执行体随 P3)
@@ -74,6 +77,53 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         if not isinstance(data, dict):
             return {}
         return data.setdefault("relocate", {}).setdefault("jobs", {})
+
+    def _state_probes(self) -> dict:
+        """state.json 的 relocate.probes 容器(同机强探测缓存, 计划 26-11-04-0055 §03.2)
+
+        形状: {指纹哈希: {"status": "passed"|"failed", "evidence": {...}, "at": <epoch秒>}}。
+        仿 _state_jobs 的 setdefault 先例(惰性创建; 上下文缺失返回空 dict 不炸)。
+        """
+        st = getattr(self._ctx, "state", None) if self._ctx is not None else None
+        data = getattr(st, "data", None)
+        if not isinstance(data, dict):
+            return {}
+        return data.setdefault("relocate", {}).setdefault("probes", {})
+
+    def probe_get(self, fingerprint: str) -> Optional[dict]:
+        """按连接身份指纹查探测缓存; 未命中(无条目/坏条目)返回 None, 不抛异常
+
+        坏条目(非 dict / 缺字段 / status 非法)按未命中处理 —— 留在原地不删,
+        由下一次 probe_put 覆盖; 返回条目深副本(调用方改不动缓存真身)。
+        """
+        box = self._state_probes()
+        entry = box.get(fingerprint) if isinstance(box, dict) else None
+        if not isinstance(entry, dict):
+            return None
+        if entry.get("status") not in _PROBE_STATUSES:
+            return None
+        evidence = entry.get("evidence")
+        if not isinstance(evidence, dict):
+            return None
+        at = entry.get("at")
+        if isinstance(at, bool) or not isinstance(at, (int, float)):
+            return None
+        return {"status": entry["status"], "evidence": dict(evidence), "at": at}
+
+    def probe_put(self, fingerprint: str, status: str, evidence: dict) -> dict:
+        """覆盖写一条探测结果(同指纹重探直接覆盖, 幂等); 返回写入的条目副本"""
+        entry = {
+            "status": status,
+            "evidence": dict(evidence or {}),
+            "at": int(time.time()),
+        }
+        self._state_probes()[fingerprint] = entry
+        return {"status": entry["status"], "evidence": dict(entry["evidence"]), "at": entry["at"]}
+
+    def probe_drop(self, fingerprint: str) -> bool:
+        """删单条指纹缓存(指纹变更失效/手动清缓存); 本就没有也返回 False, 幂等"""
+        box = self._state_probes()
+        return box.pop(fingerprint, None) is not None
 
     def _persist(self) -> None:
         """job 账写回 state(整段重写: 条数 = 组数, 极小; 周期落盘由 state 服务负责)"""

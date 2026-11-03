@@ -54,6 +54,7 @@ KNOWN_RELOCATE_KEYS = {
     "move_warn_after",
     "finalize_timeout",
     "low_space_warn",
+    "assume_shared",
 }
 
 KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu", "transfer"}
@@ -657,7 +658,7 @@ def _validate_relocate(spec, errors: List[str]) -> None:
         errors.append("config.relocate: 必须是字典")
         return
     _check_unknown_keys(spec, KNOWN_RELOCATE_KEYS, "config.relocate", errors)
-    for key in ("enabled", "allow_uac"):
+    for key in ("enabled", "allow_uac", "assume_shared"):
         if key in spec:
             _try(parse_bool, spec[key], f"config.relocate.{key}", errors)
     for key in ("alias_file_threshold", "hard_max_links"):

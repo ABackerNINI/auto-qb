@@ -147,6 +147,7 @@ qbittorrent.username
 relocate
 relocate.alias_file_threshold
 relocate.allow_uac
+relocate.assume_shared
 relocate.enabled
 relocate.finalize_timeout
 relocate.hard_max_links

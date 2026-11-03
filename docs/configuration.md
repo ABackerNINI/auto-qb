@@ -128,6 +128,7 @@ config:
     #     move_warn_after: 2h        # 超过该时长仍在搬 => 只提示"已超预期", 不判失败
     #     finalize_timeout: 30d      # 收尾(qB 重启后经旧路径 setLocation)等待上限
     #     low_space_warn: 10GiB      # 别名目标卷低空间告警阈值(只告警, 不暂停)
+    #     assume_shared: false       # 显式声明 qB 与 auto-qb 已共享文件系统: 跳过同机探测(回执标注未经验证)
 
     # 下载目录路径映射(容器部署, plan 26-09-27-1407): qB 报回的宿主路径前缀 -> 本容器挂载点。
     # 留空(默认)= 完全现状(宿主直跑 / Linux 同路径挂载不需要); 配好映射后缺文件扫描/跳检前置/
@@ -686,6 +687,7 @@ config:
         move_warn_after: 2h        # 超过该时长仍在搬 → 只提示"已超预期"，不判失败
         finalize_timeout: 30d      # 收尾（qB 重启后经旧路径 setLocation）等待上限；超过 → failed
         low_space_warn: 10GiB      # 别名目标卷低空间告警阈值（只告警，不暂停）；0 = 不告警
+        assume_shared: false       # 显式声明 qB 与 auto-qb 已共享文件系统：跳过同机探测（回执标注未经验证）
 ```
 
 - 本段与 `fs`（容器路径映射，改完要重启进程）分开：由迁移模块认领，**保存配置即时生效**，不需要重启。
