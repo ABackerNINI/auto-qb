@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-22-0308">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="skip-check-arch">
-<meta name="doc-refs" content="memory-bank/reports/26-10-22-0234-report-skip-check-arch.html">
+<meta name="doc-refs" content="memory-bank/reports/26-10-22-0234-report-skip-check-arch.html, memory-bank/plans/26-11-03-0456-plan-skip-check-download-fuse.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="In Progress">
 <meta name="issue-title" content="跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量">
 <meta name="issue-summary" content="跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线">
 <title>跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-22-0308-feat-ops-skip-check-download-cost</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-22 03:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -201,9 +201,10 @@ set_have_all(false);
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-22 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-03 — <strong>用户指派认领</strong>，状态 → <strong>In Progress</strong>；本轮只做「下载限速保险丝」，抽样校验明确不在本轮。计划：<a href="26-11-03-0456-plan-skip-check-download-fuse.html">26-11-03-0456-plan-skip-check-download-fuse.html</a>（Open，待拍板 D01–D10）</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>2026-11-03 认领时复验：<strong>仍复现</strong>——跳检重加仍按原 <code>download_limit=tor.dl_limit</code> 加种（<code>ops_mod.py:1043</code>），无任何下载量上限或熔断；仓库内亦无相关配置键与状态字段。本轮产出为计划，未改产品代码。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (62)
+## Open (61)
 
 - [bug] [transfer/run 未校验 hashes 为数组: 传字符串会按字符拆成多条伪 hash](../26-11-03-0901-bug-transfer-hashes-input-type.html) — 直调 POST /api/transfer/run 时 hashes 若为字符串, 会被逐字符当作 hash 处理, 产生 N 条 SOURCE_READ_FAILED 并线性占用主循环; 前端恒传数组故仅直调可达。
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
@@ -24,7 +24,6 @@
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
 - [feat] [qB 5.3 新能力可优化点(升 5.3 后可选, 非阻塞)](../26-10-31-0711-feat-qb-5-3-new-capabilities.html) — transfer/getSpeedLimits 替代 alt_* 逐键读写、app/getFreeSpaceAtPathAction 做 relocate 空间预检、server_state.session_state 消费、Lua 插件引擎事件回调、ip_ban_alert 日志监听 —— 每条需 qB 5.3
 - [test] [真机实测定期排期(常驻排期锚)](../26-10-31-0641-test-real-machine-test-standing.html) — 常驻锚: 连两个测试 qB 实例做真机实测(写侧/真行为/文件系统/观感), 切片排期、用例成熟度与覆盖进度都在本件; 规程见 testing/real-machine.md
-- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
@@ -69,8 +68,9 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (2)
+## In Progress (3)
 
+- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
