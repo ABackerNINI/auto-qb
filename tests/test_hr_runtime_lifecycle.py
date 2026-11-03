@@ -35,6 +35,9 @@
 ### 端口隔离守卫(issue 26-10-16-0348)
 - test_channel_runtime_leaves_discovery_unbound: 本文件 channel 用例默认关发现(discovery_port=0),
 - test_extension_id_empty_warns
+
+### 覆盖率第三轮 T1b: 运行时长尾分支
+- test_data_endpoint_url_reports_bound_port: 心跳自述 URL —— 在听报实绑端口, 未建/已停空串
 """
 
 import logging
@@ -438,3 +441,16 @@ def test_channel_runtime_leaves_discovery_unbound(tmp_path):
         assert runtime.endpoint is not None and runtime.endpoint.started, "数据端点不受影响(照常监听)"
     finally:
         runtime.stop()
+
+
+def test_data_endpoint_url_reports_bound_port(tmp_path):
+    """心跳自述 URL: 端点在听 -> http://host:实绑端口; 未建/已停 -> 空串(聚合侧剔除残条目)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=True)
+    assert runtime._data_endpoint_url() == "", "端点未建: 空串"
+    runtime.start()
+    try:
+        ep = runtime.endpoint
+        assert runtime._data_endpoint_url() == f"http://{ep.host}:{ep.bound_port}", "自述用实绑端口"
+    finally:
+        runtime.stop()
+    assert runtime._data_endpoint_url() == "", "stop 后端点已收: 空串"

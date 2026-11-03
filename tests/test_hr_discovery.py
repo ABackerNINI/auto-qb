@@ -54,6 +54,14 @@ worker 的同族用例占住, 候选轮换是特性而非碰撞。
 - test_startup_log_separates_endpoint_url: 发现端点启动日志的 URL 后必须有空白(编辑器点击不吞括号)
 - test_stop_is_idempotent_and_releases
 - test_wildcard_host_uses_request_host
+
+### 覆盖率第三轮 T1b: hr/discovery 长尾分支
+- test_default_registry_path_posix_shape: 类 Unix 分支(XDG_DATA_HOME 优先 / 缺省 ~/.local/share)
+- test_hostport_parsing_units: _host_of_hostport 的 IPv6 括号两弧 + _replace_url_host 非法形态早退
+- test_pairing_gate_with_empty_secret_never_passes: 密钥未生成 = 永不通过(_pairing_ok 防御弧)
+- test_registry_unrecoverable_os_error_is_empty_table: 非拒绝类 OSError 当空表(不抛, 只记 WARNING)
+- test_retry_loop_exits_immediately_when_stop_preset: stop 预置 ⇒ while 即假, 一次绑定尝试都不做
+- test_status_snapshot_reports_listening_and_candidates: 自检快照(未监听 note / 监听态字段)
 """
 import builtins
 import json
@@ -717,3 +725,93 @@ def test_retry_loop_backoff_and_stop_exit(monkeypatch):
         srv._retry_stop.set()
         t.join(timeout=3.0)
         assert not t.is_alive(), "stop 置位后退避循环必须退出"
+
+
+# ---------- 6. 覆盖率第三轮 T1b: 长尾分支 ----------
+
+
+def test_default_registry_path_posix_shape(monkeypatch):
+    """类 Unix 分支(S2 ② 平台单点): XDG_DATA_HOME 优先, 缺省回落 ~/.local/share"""
+    import auto_qb.hr.discovery as discovery_mod
+
+    monkeypatch.setattr(discovery_mod.sys, "platform", "linux")
+    monkeypatch.setenv("XDG_DATA_HOME", "/xdg-root")
+    assert default_registry_path() == os.path.join("/xdg-root", "auto-qb-hr", "instances.json")
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    assert default_registry_path() == os.path.join(
+        os.path.expanduser("~"), ".local", "share", "auto-qb-hr", "instances.json"
+    ), "XDG 缺省回落 ~/.local/share"
+
+
+def test_registry_unrecoverable_os_error_is_empty_table(tmp_path, monkeypatch):
+    """非拒绝类 OSError(重试救不了) → 按空表处理(R5): 读面不抛, 只记 WARNING"""
+    from helpers import capture_logs
+
+    p = tmp_path / "instances.json"
+    reg = InstanceRegistry(str(p))
+    real_open = builtins.open
+    target = os.path.abspath(str(p))
+
+    def broken(file, *args, **kwargs):
+        if os.path.abspath(str(file)) == target:
+            raise OSError(9, "坏的文件描述符", str(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "open", broken)
+    with capture_logs("auto_qb.hr.discovery") as cap:
+        assert reg.alive(ttl=INSTANCE_TTL_S, now=1.0) == [], "OSError 当空表, 不抛"
+    assert any("无法读取" in m for m in cap.messages), cap.messages
+
+
+def test_hostport_parsing_units():
+    """Host 头解析与 0.0.0.0 自述替换的纯函数单元: IPv6 括号两弧 + 非法形态早退"""
+    from auto_qb.hr.discovery import _host_of_hostport, _replace_url_host
+
+    assert _host_of_hostport("") == ""
+    assert _host_of_hostport("198.51.100.7:18788") == "198.51.100.7"
+    assert _host_of_hostport("example.com") == "example.com"
+    assert _host_of_hostport("[2001:db8::1]:18788") == "[2001:db8::1]", "带 [] 的 IPv6 字面量原样保留括号"
+    assert _host_of_hostport("[2001:db8::1") == "[2001:db8::1", "缺右括号: 原样返回(不崩)"
+    # _replace_url_host: 无 scheme / 空 host 一律原样返回(只影响响应文本, 不进判据)
+    assert _replace_url_host("not-a-url", "1.2.3.4") == "not-a-url"
+    assert _replace_url_host("http://1.2.3.4:5001/myhr.php", "") == "http://1.2.3.4:5001/myhr.php"
+    assert _replace_url_host("http://1.2.3.4:5001/myhr.php", "[2001:db8::1]") == \
+        "http://[2001:db8::1]:5001/myhr.php", "换主机部分, 端口与路径保留(条目自己的实绑端口不能跟换)"
+
+
+def test_status_snapshot_reports_listening_and_candidates():
+    """自检快照: 未监听给兜 note; 监听态字段如实(port/bound_port/candidates/pairing)"""
+    base = _free_port()
+    srv = make_discovery(port=base, pairing="on")
+    st = srv.status(enabled=True)
+    assert st.enabled is True and st.listening is False and st.bound_port == 0
+    assert st.port == base
+    assert st.candidates == tuple(discovery_candidates(base))
+    assert st.pairing_required is True
+    assert st.note == "发现端点未在监听(候选端口被占时后台重试中)"
+    assert srv.start() is True
+    try:
+        st = srv.status()
+        assert st.listening is True and st.bound_port == srv.bound_port and st.note == "", "监听态不给 note"
+    finally:
+        srv.stop()
+
+
+def test_pairing_gate_with_empty_secret_never_passes():
+    """密钥未生成 = 永不通过(_pairing_ok 防御弧): 对码请求也 401 pairing_invalid(不该发生形态)"""
+    srv = make_discovery(pairing="on", pairing_secret="")
+    status, _h, body = _get(srv, {"Origin": ORIGIN, PAIRING_HEADER: pairing_display_code(SC)})
+    assert status == 401 and json.loads(body) == {"error": "pairing_invalid"}
+
+
+def test_retry_loop_exits_immediately_when_stop_preset(monkeypatch):
+    """stop 预置 ⇒ while 条件即假: 一次绑定尝试都不做, 同步返回(不挂线程)"""
+    srv = make_discovery()
+
+    def _boom():
+        raise AssertionError("stop 已置位就不该再尝试绑定")
+
+    monkeypatch.setattr(srv, "_try_bind", _boom)
+    srv._retry_stop.set()
+    srv._retry_loop()
+    assert srv.bound_port == 0 and not srv.started, "预置 stop: 未绑定未启动, 干净退出"

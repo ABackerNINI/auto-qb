@@ -62,6 +62,11 @@
 - test_http_wire_headers_and_server_banner: 线头 Server/Content-Type/Content-Length 现原值
 - test_http_dispatch_boundaries_and_500: 线 413 体/上限边界不 413/路由异常 500 体+记带堆栈+访问日志
 - test_json_wire_encoding_compact_and_literal_cjk: _json 紧凑分隔与 CJK 原原(不转 uXXXX 形)
+
+### 覆盖率第三轮 T1b: hr/server 长尾分支
+- test_startup_log_non_loopback_branch: 非回环监听日志分支(is_loopback_host 打桩, 不真绑私网)——
+  「已暴露到内网」文案 + discovery_port 在场补「发现端口」段/缺省不带
+- test_status_note_survives_discovery_bound_fn_error: 发现读取器抛异常 -> note 回落「发现 关」不打死 status
 """
 import json
 import logging
@@ -87,6 +92,8 @@ from auto_qb.hr.channel import (
 from auto_qb.hr.queue import HrTaskQueue
 from auto_qb.hr.server import HrChannelServer, HrEndpointHandle
 from auto_qb.hr.threadlifecycle import HrThreadHandle
+
+from helpers import capture_logs
 
 TOKEN = "t" * 64
 ORIGIN = "chrome-extension://" + "a" * 32
@@ -880,3 +887,55 @@ def test_json_wire_encoding_compact_and_literal_cjk():
 
     assert _json({"a": 1, "b": [2, 3]}) == b'{"a":1,"b":[2,3]}', "紧凑分隔"
     assert _json({"note": "已受理"}) == '{"note":"已受理"}'.encode("utf-8"), "CJK 原原"
+
+
+# ==================== 覆盖率第三轮 T1b: 启动日志非回环分支 + status 发现读取器容错 ====================
+
+
+def test_startup_log_non_loopback_branch(monkeypatch):
+    """非回环监听日志分支: 启动日志如实报「已暴露到内网」; discovery_port 在场补「发现端口」段
+
+    !不真绑私网地址(本机无私网 NIC 时报 10049, 且 sidefx 只放行回环绑定): is_loopback_host
+    打桩为 False, 绑定仍在回环上做, 只验日志分支与文案。
+    """
+    import auto_qb.hr.server as server_mod
+
+    monkeypatch.setattr(server_mod, "is_loopback_host", lambda _host: False)
+    server = HrChannelServer(
+        queue=HrTaskQueue(), token=TOKEN, port=_free_port(), host="127.0.0.1", discovery_port=18788
+    )
+    with capture_logs("auto_qb.hr.server") as cap:
+        handle = server.start()
+    try:
+        line = next(m for m in cap.messages if "端点已启动" in m)
+        assert "已暴露到内网" in line, line
+        assert "; 发现端口 18788" in line, "发现端口在场时日志补发现段"
+        # discovery_port=0(发现关): 内网日志不带发现段
+        server2 = HrChannelServer(queue=HrTaskQueue(), token=TOKEN, port=_free_port(), host="127.0.0.1")
+        with capture_logs("auto_qb.hr.server") as cap2:
+            handle2 = server2.start()
+        try:
+            line2 = next(m for m in cap2.messages if "端点已启动" in m)
+            assert "已暴露到内网" in line2 and "发现端口" not in line2, line2
+        finally:
+            server2.stop()
+    finally:
+        server.stop()
+
+
+def test_status_note_survives_discovery_bound_fn_error():
+    """发现读取器抛异常 -> note 回落「发现 关」, status() 不被打死(端点自检的容错弧)"""
+    server = make_server()
+
+    def _boom():
+        raise RuntimeError("discovery on fire")
+
+    server.discovery_bound_fn = _boom
+    handle = server.start()
+    try:
+        st = server.status()
+        assert st.listening is True
+        assert st.note.startswith("发现 关 · "), st.note
+        assert "配对 关" in st.note and "数据" in st.note, "其余段照常组合"
+    finally:
+        server.stop()

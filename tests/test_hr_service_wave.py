@@ -86,6 +86,13 @@
 - test_sign_releases_hit_head_does_not_abort_rest: 本波命中对象跳过(continue 非 break): unmatched 首条命中也不拦后续签发
 
 ### 站点可选权限轮(计划 26-10-29-0147 W2/W4): 归层、判据与告警
+
+### 覆盖率第三轮 T1b: 波次引擎长尾分支
+- test_counter_claim_none_value_is_not_claimed: parse_counters 上交 None 值不上交(首个非 None 胜出口跳过弧)
+- test_run_pages_final_sweep_classifies_active_lanes: 轮转收尾分类直驱 —— LANE_OK 档跳过不改写 / 零页档记失效
+- test_downloaded_identity_backfills_row_not_in_index: 永久层身份回填(行不在索引但 downloaded 有记录)
+- test_append_history_swallows_internal_error: 记录历史内部异常降级 WARNING 不外抛, 历史原样
+- test_finish_wave_zero_listing_warn_gated_by_parse_problem: 零行波第二道守卫 —— parse_problem 在场不打 zero_listing 告警
 """
 
 import logging
@@ -161,6 +168,7 @@ from auto_qb.hr.service import (
     INDEX_RETENTION,
     LANE_FAIL_ALERT_STREAK,
     MISSING_GRACE_WAVES,
+    HrRefreshResult,
     HrRefreshService,
     MAX_DOWNLOAD_RETRIES,
     REASON_BUDGET,
@@ -1407,3 +1415,112 @@ def test_sign_releases_hit_head_does_not_abort_rest(tmp_path):
     assert data.index[11].infohash_v1 == h_hit and h_hit not in data.verified, "本波命中不放行"
     assert "h_ghost" in data.verified, "跳过命中的不拦后续对象"
     assert result.releases_signed == 1, f"逐条累加(不是 0/2): {result.releases_signed}"
+
+
+# ---------- 覆盖率第三轮 T1b: 波次引擎长尾分支 ----------
+
+
+def test_counter_claim_none_value_is_not_claimed(tmp_path, monkeypatch):
+    """parse_counters 上交 None 值 = 该档无声明(首个非 None 胜出口的跳过弧): count_claim 保持 None"""
+    counter_adapter(monkeypatch, {"A": None, "B": 5, "C": 0})
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
+    service = make_service(tmp_path, fetcher, clock=Clock())
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.wave.lanes["A"].count_claim is None, "None 值不上交(降级现状: 视同无计数)"
+    assert data.wave.lanes["A"].count_match is None
+    assert data.wave.lanes["B"].count_claim == 5 and data.wave.lanes["B"].count_match is True
+    assert data.wave.lanes["C"].count_claim == 0, "0 是合法声明值(不是 None), 照常上交"
+    assert result.action == ACTION_REFRESHED
+
+
+def test_run_pages_final_sweep_classifies_active_lanes(tmp_path):
+    """轮转收尾分类(直驱 pages_left=0): 已是 LANE_OK 的活跃档直接跳过不改写; 零页档记「未轮到」失效"""
+    from auto_qb.hr.service import _dl_by_hash
+
+    from hr_service_support import _StubAdapter, _dl_budget
+
+    clock = Clock()
+    service = make_service(tmp_path, FakeFetcher(pages=standard_pages()), clock=clock)
+    with service.store(SITE).hold() as session:
+        data = session.data
+        result = HrRefreshResult(site=SITE, action=ACTION_REFRESHED)
+        wave = _WaveContext({})
+        wave.dl_by_hash = _dl_by_hash(data)
+        lanes = {
+            "A": HrLaneState(lane="A", status=LANE_OK, detail="已翻到末页"),
+            "B": HrLaneState(lane="B", status=LANE_IDLE),
+            "C": HrLaneState(lane="C", status=LANE_IDLE),
+        }
+        service._run_pages(
+            SITE,
+            _StubAdapter(),
+            data,
+            session,
+            result,
+            _dl_budget(service, data),
+            wave,
+            lanes,
+            objects={},
+            unmatched={},
+            pages_left=0,
+        )
+        assert lanes["A"].status == LANE_OK and lanes["A"].detail == "已翻到末页", "已完成档不被二次收尾改写"
+        assert lanes["B"].status == LANE_FAILED and lanes["B"].fail_streak == 1, "零页档记失效"
+        assert lanes["B"].detail == "本波未轮到取数(预算被其它档耗尽)", "pages_left<=0 的零页档文案"
+        assert lanes["C"].status == LANE_FAILED, "逐档分类(continue 非 break)"
+
+
+def test_downloaded_identity_backfills_row_not_in_index(tmp_path):
+    """永久层身份回填: 行不在活跃索引但 downloaded 有记录 -> infohash 从永久层回填, 永不重取"""
+    clock = Clock()
+    blob, h1 = mk_blob("LOCAL 21")
+    fetcher = FakeFetcher(pages=standard_pages(rows_b=[row(21, "OTHER 21", done=DONE_OLD)]))
+    service = make_service(tmp_path, fetcher, clock=clock)
+    with service.store(SITE).hold() as session:
+        session.data.downloaded[21] = HrDownloaded(tid=21, ts=clock.now, name="LOCAL 21", infohash_v1=h1)
+        session.commit(clock())
+    result = run_wave(service, {})
+    data, _ = service.store(SITE).read_unlocked()
+    assert data.index[21].infohash_v1 == h1, "行身份从永久层回填(不用重新下载)"
+    assert data.index[21].infohash_v2 == ""
+    assert result.torrents_fetched == 0, "已下载过: 同 tid 永不重下"
+
+
+def test_append_history_swallows_internal_error(tmp_path):
+    """历史是纯观测: 记录内部异常降级为 WARNING 不外抛进取数主流程, 历史原样"""
+    service = make_service(tmp_path, FakeFetcher(pages=standard_pages()), clock=Clock())
+    data, _ = service.store(SITE).read_unlocked()
+    before = list(data.history)
+    with capture_logs("auto_qb.hr.service") as cap:
+        service._append_history(SITE, data, kind="wave", trigger="auto", result=object())  # 缺字段 -> 内部异常
+    assert list(data.history) == before, "异常路径不写历史"
+    assert any("记录拉取历史失败" in m for m in cap.messages), cap.messages
+
+
+def test_finish_wave_zero_listing_warn_gated_by_parse_problem(tmp_path, monkeypatch):
+    """零行波第二道守卫: parse_problem 在场 -> 不打 zero_listing 告警(754 假弧); 干净零行波才打"""
+    clock = Clock()
+    service = make_service(tmp_path, FakeFetcher(pages=standard_pages()), clock=clock)
+    warns = []
+    monkeypatch.setattr(service, "_warn_parse", lambda *a, **k: warns.append(a))
+    site_c = service.site_confs[SITE]
+
+    def _zero_wave(wave):
+        with service.store(SITE).hold() as session:
+            result = HrRefreshResult(site=SITE, action=ACTION_REFRESHED)
+            lanes = {lane: HrLaneState(lane=lane, status=LANE_OK, full_depth=True) for lane in FETCH_LANES}
+            service._finish_wave(SITE, site_c, session.data, session, result, wave, lanes, unmatched={})
+            session.commit(clock())
+        return result
+
+    wave = _WaveContext({})
+    wave.parse_problem = True
+    result = _zero_wave(wave)
+    assert "结构完好但清单为 0" in result.reason, "零行 note 仍在(第一道守卫, 752)"
+    assert warns == [], "parse_problem 在场 -> zero_listing 告警被第二道守卫跳过"
+
+    result2 = _zero_wave(_WaveContext({}))
+    assert "结构完好但清单为 0" in result2.reason
+    assert len(warns) == 1 and SITE in warns[0][1], "干净零行波(无 parse_problem)才打 zero_listing 告警"
+    assert result2.alerted is True, "零行未确认也是告警态"

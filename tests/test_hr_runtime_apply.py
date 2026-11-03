@@ -23,6 +23,10 @@
 - test_apply_remount_message_is_precise: 重挂端点的 INFO 钉首尾(松匹配会被 service 的「重挂端点」文案顶替)
 
 ### 端口隔离守卫(issue 26-10-16-0348)
+
+### 覆盖率第三轮 T1b: apply 长尾分支
+- test_apply_l0_rebuild_channel_off_keeps_readonly_shape: 无通道实例的 L0 热重载 —— 不建端点, 线程照常重建并启动
+- test_apply_l0_rebuild_keeps_started_discovery_object: 有发现服务的实例走 L0 重建 —— 发现对象原样保留
 """
 
 import logging
@@ -260,5 +264,50 @@ def test_apply_remount_message_is_precise(tmp_path, caplog):
             runtime.apply(old)
         msgs = [r.getMessage() for r in caplog.records]
         assert any(m.startswith("HR 取数通道监听身份变化 ") and m.endswith(": 重挂端点与取数线程") for m in msgs), msgs
+    finally:
+        runtime.stop()
+
+
+def test_apply_l0_rebuild_channel_off_keeps_readonly_shape(tmp_path):
+    """无通道实例(只读共享)的 L0 热重载: 不建端点, 服务与线程照常重建并启动(整份换配置对象防短路)"""
+    runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    runtime.start()
+    try:
+        assert runtime.worker is not None and runtime.endpoint is None
+        service_before = runtime.service
+        old = runtime.global_conf
+        fresh = make_config(tmp_path, enabled=True, channel=False)
+        fresh.trackers["pt.example.com"].hr_check.refresh_interval = 6 * 3600.0
+        runtime.config.hr_check = fresh.hr_check
+        runtime.config.trackers = fresh.trackers
+        runtime.apply(old)
+        assert runtime.service is not service_before, "L0 变更必须真走重建路径(短路会让本用例放空)"
+        assert runtime.service.site_confs["pt.example.com"].refresh_interval == 6 * 3600.0, "服务要用新配置重建"
+        assert runtime.endpoint is None and runtime.discovery is None, "无通道: 端点与发现都不建"
+        assert runtime.worker is not None and runtime.worker.started, "重建后线程收敛到「enabled ⇒ 在跑」"
+    finally:
+        runtime.stop()
+
+
+def test_apply_l0_rebuild_keeps_started_discovery_object(tmp_path):
+    """有发现服务的实例走 L0 重建: 发现对象原样保留不重建不重绑(监听身份未变)"""
+    base = _free_port()
+    runtime = make_runtime(tmp_path, enabled=True, channel=True, discovery_port=base)
+    runtime.start()
+    try:
+        discovery_before = runtime.discovery
+        endpoint_before = runtime.endpoint
+        assert discovery_before is not None and discovery_before.started
+        old = runtime.global_conf
+        fresh = make_config(tmp_path, enabled=True, channel=True, discovery_port=base)
+        fresh.trackers["pt.example.com"].hr_check.refresh_interval = 6 * 3600.0
+        runtime.config.hr_check = fresh.hr_check
+        runtime.config.trackers = fresh.trackers
+        runtime.apply(old)
+        assert runtime.service.site_confs["pt.example.com"].refresh_interval == 6 * 3600.0, \
+            "L0 重建真发生(整份换配置对象防短路)"
+        assert runtime.discovery is discovery_before, "监听身份未变 ⇒ 发现对象不重建"
+        assert runtime.discovery.started, "发现服务保持监听"
+        assert runtime.endpoint is endpoint_before
     finally:
         runtime.stop()
