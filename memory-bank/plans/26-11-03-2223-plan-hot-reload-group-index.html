@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>热重载 L2 重建后分组索引恢复（辅种页空态修复）计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="hot-reload-group-index">
+<meta name="doc-status" content="In Progress">
+<meta name="doc-added" content="26-11-03-2223">
+<meta name="doc-updated" content="26-11-03-2252">
+<meta name="doc-refs" content="memory-bank/issues/26-11-03-2206-bug-webui-hotreload-group-index-vanish.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: hot-reload-group-index</div>
+<h1>热重载 L2 重建后分组索引恢复（辅种页空态修复）计划</h1>
+<p class="lede">修复「保存配置命中 L2 结构重建 → 辅种分组索引被清空且不再重归组 → 辅种页永久空态」；设计主轴：先判定分组索引的输入是否真的被 L2 触达，再决定「保留」还是「重建」，不为同义重算付出 O(N) 成本。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-03-2223 · <b>doc-updated</b> 26-11-03-2252 · <b>doc-status</b> In Progress · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令「为 issue 26-11-03-2206 写修复计划并用 grilling 拷问」；调查会话受控实验；本会话代码复核 @ HEAD 6ffa85a3（同步前实验基线 f89de69e）；本会话按用户拍板 D1–D6 推进至实施就绪，分支 <code>fix/hot-reload-group-index</code><br>
+  <b>关联</b> issue 26-11-03-2206（本次待修）；issue 26-10-01-2129（Superseded，结论需更正）；先例 rules_mod._on_full_round（issue 26-10-01-2147）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>目标</h3>
+<ul>
+  <li>热重载命中 L2 后，辅种分组索引不再永久为空；视图在当轮刷新（最迟下一个成功同步轮）恢复为真实行数。</li>
+  <li>不改变「首轮启动 / 新增种子 / save_path 变化」的既有归组语义；不新增任何配置键（因此不触碰 <code>config.validate_config</code> 与 <code>config/schema.py</code>）。</li>
+  <li>用守阵测试钉死「L2 重建后不会再次永久空」，并防止后续改动顺手把索引清空或引入无谓的全量重算。</li>
+</ul>
+<h3>不变量与底线</h3>
+<ol>
+  <li><b>分组键的输入面</b> = <code>(规范化 save_path, 文件相对路径元组, 物理解析结果)</code>；见纯函数 <code>group_key_of</code>（<a href="../../src/auto_qb/core/modules/grouping_mod.py">grouping_mod.py</a>:41-49）。</li>
+  <li><b>单写线程</b>：<code>groups/group_sizes/member_to_key</code> 只由主循环线程改；Web 线程只读已发布视图（既有约束，本计划不引入第二把锁、不新增跨线程通路）。</li>
+  <li><b>reset_runtime 的职责边界</b>：继续清 <code>tracker_conf/state_snapshot/verified_references/own_writes/state_since</code> 等真·运行态；分组索引是否属于「必须清」由本计划 §03 判定，不按名称惯性处理。</li>
+  <li><b>幂等</b>：重复 L2 重建/全量轮不得产生重复成员、重复停种或重复警告。</li>
+  <li><b>dry-run 零真实副作用</b>：任何重归组路径不得在 dry-run 下触发 <code>torrents_stop</code>。</li>
+</ol>
+<div class="aside">成功判据：受控实验四阶段脚本中「阶段 3（全量轮兑现）后 groups 仍为 1、队列视图行数 &gt; 0」；新增回归/守阵测试全绿；<code>commands run test.full</code> 通过并重记基线切片。</div>
+
+<h2><span class="no">§02</span>现状与根因</h2>
+<h3>触发链（代码复核）</h3>
+<ol>
+  <li>WebUI 保存配置 → <code>QbManager.apply_new_config()</code>（<a href="../../src/auto_qb/core/qbmanager.py">qbmanager.py</a>:733-770）→ 每模块无条件 <code>apply</code>。</li>
+  <li><code>RulesModule._rebuild_needed()</code>（<a href="../../src/auto_qb/core/modules/rules_mod.py">rules_mod.py</a>:189-202）判 L2：<code>rules_config</code> / <code>interval</code> / <code>delete_tags</code> / <code>delete_tags_if_has_no_torrents</code> / <code>global_speed_limit_curve</code> / <code>trackers</code> 的 domains·rules·groups 三元组或 tracker 增删。</li>
+  <li><code>RulesModule.rebuild_runtime()</code>（rules_mod.py:217-233）→ <code>store.reset_runtime()</code>（<a href="../../src/auto_qb/torrents/store.py">store.py</a>:747-770）：750-753 清 <code>groups/group_sizes/member_to_key/group_key_migrations</code>，765 <code>view_changed=True</code>；769-770 保留记录但 <code>tracker_conf=None</code>；尾段 <code>reconnect()</code> 使 rid 失效。</li>
+  <li>下一成功同步轮是全量轮：<code>store.need_validate</code> → 广播 <code>full_round</code>（qbmanager.py:922-932），tracker 模块把 <code>tracker_conf</code> 重匹配（<a href="../../src/auto_qb/core/modules/tracker_mod.py">tracker_mod.py</a>:59-68）。</li>
+  <li>但归组只有两个入口：<code>torrents_added</code>（新纪录才判 added；全量轮只重建 by_hash，<a href="../../src/auto_qb/torrents/store.py">store.py</a>:424-469 对 <code>prev.get(h)</code> 复用记录，不判 added）与 <code>post</code> 中的 save_path 变化（grouping_mod.py:269-308）。<code>GroupingModule.subscribe</code>（grouping_mod.py:104-108）不订阅 <code>full_round</code>。</li>
+  <li>结果：索引永久为空 → <code>_build_group_view()</code> 输出 0 行并 <code>group_view_ver += 1</code>、<code>notify("ver")</code>（<a href="../../src/auto_qb/webui/runtime_views.py">runtime_views.py</a>:377-404）→ 前端收到合法的空 groups 代 → 整页「暂无辅种」。</li>
+</ol>
+<h3>受控实验证据（调查会话，HEAD f89de69e）</h3>
+<pre><code>阶段1 首轮全量:  by_hash=2 groups=1 members=2  view_changed=True  (torrents_files calls = 2)
+阶段2 L2 重建:   by_hash=2 groups=0 members=0  view_changed=True
+阶段2 重连后:    by_hash=2 groups=0 members=0
+阶段3 全量轮:    by_hash=2 groups=0 members=0  → 分组视图行数 = 0
+阶段4 模拟重启:  by_hash=2 groups=1 members=2
+</code></pre>
+<h3>先例与先例更正</h3>
+<ul>
+  <li><code>RulesModule._on_full_round</code>（rules_mod.py:133-154）是「L2 后恢复存量种子派生态」的既有先例，但它恢复的是种子级任务，不是分组索引；两者是否该用同一手法，取决于派生数据的输入面（§03）。</li>
+  <li><code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> 已于 2026-10-02 置 Superseded，理由「新机制无对应路径、辅种消失未经证实」。本件受控实验证明该结论不成立：新机制的 L2 分支就是对应路径。修复落地时应在该件「状态变更日志」补一行更正，并指向本件/本计划。</li>
+</ul>
+<h3>关键观察（决定方案取舍）</h3>
+<div class="aside">
+<b>「重建索引」不等于「向 qB 重新取证」。</b> <code>TorrentRecord.files()</code> 是持久缓存（<a href="../../src/auto_qb/torrents/record.py">record.py</a>:290-296），只在本进程首次读取时请求 <code>torrents_files</code>；<code>reset_runtime</code> 不丢记录（store.py:424-425 全量轮复用 <code>prev</code> 记录），故 L2 后重新归组读到的仍是同一份 <code>_files</code> 缓存。<br>
+因此方案 A/C 的「重算」与保留索引得到<b>完全相同的分组键</b>；差别只在成本与副作用，不在正确性。这是本计划推荐 B 的核心依据。
+</div>
+
+<h2><span class="no">§03</span>候选方案与取舍</h2>
+<table>
+  <tr><th>方案</th><th>做法与改动面</th><th>取舍</th><th>主要风险 / 成本</th><th>验证与回滚</th></tr>
+  <tr>
+    <td><b>A</b><br>订阅 full_round</td>
+    <td><code>GroupingModule</code> 订阅 <code>full_round</code>，<code>reset_runtime</code> 置一次性 pending；在该相位对所有 <code>tracker_conf</code> 已就位且未归组的记录重跑归组。<br>改动：store 新字段 + grouping 订阅/处理器 + <b>内核 <code>full_round</code> 载荷补 <code>dry_run</code></b> + 测试。</td>
+    <td>与 <code>rules_mod._on_full_round</code> 同款，语义直白：「全量轮恢复派生态」。</td>
+    <td class="wr">全量归组把每个组标 <code>dirty_groups</code> → <code>post</code> 的跨组检测全量展开（grouping_mod.py:603-660，O(组×文件)）+ 每组大小一致性检查；A 的 <code>full_round</code> 当前无 <code>dry_run</code> 载荷（qbmanager.py:932），不加就会在 dry-run 下真停种；<b>依赖「tracker 先于 grouping 装配」</b>（当前 qbmanager.py:227 vs 245，但无测试钉住）；同轮 save_path 变化的缺文件扫描可能被「已归组」短路。</td>
+    <td>单测：<code>files_calls</code> 不增（缓存命中）、恢复后视图 &gt; 0、dry-run 无 stop；回滚 = revert 单提交（无磁盘/状态迁移）。</td>
+  </tr>
+  <tr>
+    <td><b>B</b><br>保留分组索引<br><span class="good">（推荐）</span></td>
+    <td><code>store.reset_runtime()</code> 不再清 <code>groups/group_sizes/member_to_key</code>（及 <code>group_key_migrations</code>，见 D2）；更新注释；新增守阵测试。改动约 4 行 + 注释 + 测试。</td>
+    <td>分组键输入（save_path / 文件表缓存 / 物理解析）<b>都不在 L2 判据的变更面</b>；与既有「<code>cross_group_conflict_warned</code> 有意不清」同一条逻辑（store.py:760-762 已写明「同数据派生同 key」）。零 API、零 syscall、零 O(N)、无 dry-run 风险、无装配序依赖；不新增跨线程状态。</td>
+    <td class="wr">把 <code>reset_runtime</code>「全清」语义收窄：若未来 L2 判据纳入影响分组键的配置（当前没有），B 会保留旧键 —— 用注释 + 守阵测试提示；不修复「重置前已不完整」的索引（与本次症状无关）。</td>
+    <td>单测：reset 后 groups/member_to_key/group_sizes 原样、<code>view_changed=True</code>、<code>tracker_conf=None</code>；L2 + 全量轮后视图 &gt; 0；回滚 = revert。</td>
+  </tr>
+  <tr>
+    <td><b>C</b><br>pending + post 重建</td>
+    <td><code>reset_runtime</code> 置 <code>regroup_pending</code>；<code>GroupingModule._on_post</code> 在 <code>_handle_save_path_changes</code> <b>之后</b>一次性消费，对未归组记录重归组。<br>改动：store 新字段 + grouping post 入口 + 测试；不改内核载荷。</td>
+    <td>避开 A 的两个硬伤：<code>post</code> 自带 <code>dry_run</code>；<code>full_round</code> 已在同轮更早发出，不依赖模块装配序。且在 <code>torrents_added</code> 之后，配合「已在 <code>member_to_key</code> 则跳过」不会与首轮 added 管线重复；重建放在 save_path 处理之后可保住缺文件扫描触发。</td>
+    <td class="wr">与 A 相同的 O(N) 重算与 <code>dirty_groups</code> 全量 → 跨组全量展开（一次）；pending 生命周期需定义（启用关闭时消费还是保留，D3）；若 <code>post</code> 前 refresh 抛异常，pending 留到下一成功轮（可接受）；<code>group_key_migrations</code>/<code>transitional_missing_skips</code> 的注释与实现需同步。</td>
+    <td>同 A/C 单测 + dry-run 无 stop；回滚 = revert。</td>
+  </tr>
+</table>
+<div class="aside"><b>A vs C</b>：C 严格优于 A（少改内核载荷、无装配序依赖）。若用户否决 B、坚持「显式重建」，选 C 而不是 A。</div>
+
+<h2><span class="no">§04</span>推荐方案与实施就绪（决策已定）</h2>
+<h3>决策：B（保留分组索引），并用测试钉死</h3>
+<p>理由：A/C 的重算不会产生新的分组键（<code>_files</code> 缓存 + 记录保留，见 §02「关键观察」），却会付出一次 O(N) 键计算/目录 syscall、把全部组标脏触发跨组全量展开，并新增 pending 生命周期；A 还额外要求改内核 <code>full_round</code> 载荷以避免 dry-run 真停种。B 直接消除错误的前提——「分组索引必须随 L2 清空」——改动最小、风险最低，且与项目既有「纯函数派生 → 热重载可续用」的决策一致。</p>
+<div class="aside"><b>拍板状态</b>：D1=B、D2=保留 <code>group_key_migrations</code>、D4=不并入本轮、D5=不加运行时自检、D6=允许在测试环境做一次非 dry-run 真机验证；D3 随 D1=B 关闭（仅 A/C 适用）。逐条结论见 §05/§06。</div>
+
+<h3>4.1 实施步骤拆分（每步一个独立会话执行）</h3>
+<p>分支 <code>fix/hot-reload-group-index</code>（基于本地 <code>develop</code> HEAD <code>6ffa85a3</code>）上执行；本轮工作模式为<b>仅本地 commit、不推送</b>，不使用 <code>ship.commit</code>/<code>ship.push</code>/<code>my-commit-flow.sync</code>。任一步验收未过即停手，把实测证据回写本计划 §08 后交回用户，不带着未验证状态进入下一步。</p>
+<table>
+  <tr><th>步</th><th>内容</th><th>产出</th><th>验收判据</th><th>明确不做</th></tr>
+  <tr>
+    <td><b>A</b><br>代码改动</td>
+    <td>改 <code>TorrentStore.reset_runtime()</code>：移除 <code>groups.clear()/group_sizes.clear()/member_to_key.clear()</code>（D1=B）；<code>group_key_migrations</code> 按 D2 保留；同步改 <code>view_changed</code> 附近与 <code>transitional_missing_skips</code> 的注释理由；方法 docstring 写明「分组键输入不在 L2 变更面；未来若 L2 判据触及 save_path/files/物理解析，须改走 §03 C/A 的重建路径」，并按 D5 不加运行时自检。</td>
+    <td>一个本地 commit：<code>store.py</code> 该方法 + 注释。</td>
+    <td>diff 只落在 <code>reset_runtime</code> 与其注释/docstring；无新配置键、无 <code>config/schema.py</code> 变更、无跨模块改动。</td>
+    <td>不改 grouping/tracker/rules 模块；不顺手改无关缺陷（scope-guard 入池）。</td>
+  </tr>
+  <tr>
+    <td><b>B</b><br>守阵与回归</td>
+    <td>新增三条测试（优先并入既有 <code>tests/test_grouping_*.py</code>；新建文件须同步文件头「## 测试计划」）：① <code>test_reset_runtime_keeps_group_index</code>（守阵：reset 后 <code>groups/group_sizes/member_to_key</code> 原样、<code>view_changed=True</code>、<code>tracker_conf=None</code>，docstring 标「决策钉死」）；② <code>test_l2_rebuild_group_view_not_empty</code>（回归：<code>rules.rebuild_runtime()</code> + 一次全量 refresh 后 <code>groups=1</code>、<code>_build_group_view()</code> ≥1 行、<code>torrents_files</code> 调用数不增）；③ <code>test_reset_runtime_no_regroup_cost</code>（成本守阵：reset 本身不增 <code>files_calls</code>/<code>dirty_groups</code>）。再改 <code>test_store_reset_runtime_marks_view_changed</code> 的过时 docstring（断言不变）。跑 <code>commands run test.quick</code> → <code>commands run test.full</code>，按 <code>kb.new baseline --total "&lt;实测&gt;"</code> 新建基线切片（数字从输出誊写）。</td>
+    <td>测试文件 commit + 基线切片 + 实测数字。</td>
+    <td>②在未改 Step A 时必须先红（否则证明不了修复）；三条全绿；全量绿；基线数字与输出一致。</td>
+    <td>不为绿而放宽断言；不改产品代码（若需改，回 Step A 并说明）。</td>
+  </tr>
+  <tr>
+    <td><b>C</b><br>真机验证</td>
+    <td>按 4.2 执行；先 <code>commands run real.env</code> 定环境、<code>commands run real.guard</code> 过守卫，再跑 R0–R6。结果按 PASS/FAIL/BLOCKED 三态记录，<b>当轮不修缺陷</b>。</td>
+    <td>实测记录（阶段、时间、环境 id、种子数、视图行数、pass/fail/blocked）。</td>
+    <td>R5 三项：辅种页恢复且不回落、key 与保存前一致、<code>torrents_files</code> 不增（或明确 N/A 并说明单测③兜底）。</td>
+    <td>不动其它 qB；不让真实种子活跃；不把 token 写入任何文件；不因跑不通放宽约束。</td>
+  </tr>
+  <tr>
+    <td><b>D</b><br>收尾回写</td>
+    <td>issue 26-11-03-2206 补「复验」与「修复后补充」并推进状态；更正 26-10-01-2129 的 Superseded 结论并互链；<code>commands run kb.wrap --topic hot-reload-group-index --did ".."</code> / <code>kb.index</code> / <code>kb.check</code>；计划置 Done 并追加变更记录。</td>
+    <td>文档 commit + 机检绿。</td>
+    <td>DoD 五步完成；issue/计划/2129 三处互链一致；<code>kb.check</code> 绿。</td>
+    <td>提交信息按仓库口径（gitmoji + 中文）；本轮只本地 commit。</td>
+  </tr>
+</table>
+<h4>每步会话的输入清单</h4>
+<ul>
+  <li><b>公共</b>：本计划全文、<a href="../issues/26-11-03-2206-bug-webui-hotreload-group-index-vanish.html">issue 26-11-03-2206</a>、<code>memory-bank/pitfalls/_index.md</code>；按符号名定位 <code>reset_runtime</code>/<code>_rebuild_needed</code>/<code>rebuild_runtime</code>/<code>_on_full_round</code>/<code>_on_post</code>/<code>_assign_to_group</code>（不照抄 §02 行号）。</li>
+  <li><b>Step A</b>：<code>store.py</code> 的 <code>reset_runtime</code> 与相邻注释、<code>grouping_mod.py</code> 的 <code>subscribe/_on_post/_handle_save_path_changes</code>、<code>rules_mod.py</code> 的 <code>_rebuild_needed/rebuild_runtime/_on_full_round</code>；先跑一次 <code>commands run test.quick</code> 留改动前绿基线。</li>
+  <li><b>Step B</b>：<code>tests/test_torrents_store.py</code>（<code>test_store_reset_runtime_marks_view_changed</code>）、<code>tests/test_modules_p5.py</code>（重连后重挂 client 的写法）、既有 grouping 测试与 <code>test_cross_group_reset_runtime_keeps_warned</code> 体例、<code>memory-bank/testing/baseline.md</code> 口径。</li>
+  <li><b>Step C</b>：<code>memory-bank/testing/real-machine.md</code> §01/§02/§03/§09、<code>memory-bank/issues/26-10-31-0641-test-real-machine-test-standing.html</code> §03/§04/§05、<code>tests-real/lib/env_registry.py</code>、<code>tests-real/lib/app.py</code>；<code>real.*</code> 命令用 task id。</li>
+  <li><b>Step D</b>：<code>memory-bank/conventions/doc-forms.md</code>、<code>memory-bank/conventions/webui.md</code>（dark 主题）、issue 与计划互链现状。</li>
+</ul>
+
+<h3>4.2 真机验证方案（严格按 real-machine.md 与 0641 的流程与判据）</h3>
+<p><b>定片</b>：触发链属 RM02（主循环·热重载），断言面属 RM04（辅种与分组）。按 0641 §05 的「归属优先」不新开片：本轮按 <b>RM02</b> 排期，L1 假种子造法复用 RM04 口径，漂移体检 globs 取两片并集（<code>src/auto_qb/core/qbmanager.py</code>、<code>core/state.py</code>、<code>core/module.py</code>、<code>core/modules/grouping_mod.py</code>、<code>src/auto_qb/torrents/**</code>），基线 commit = Step A 前的 HEAD。若 <code>git log &lt;base&gt;..HEAD -- &lt;globs&gt;</code> 有命中，按 §07 分类并在记录里标「重构后复验 / 判据变降档」。</p>
+<p class="hint">前置：真机轨不挂闸门、不进 <code>testing/baselines/</code>；本轮只为验证本修复，不做大片排期，不新建 <code>real-baselines</code> 之外的档案。</p>
+<table>
+  <tr><th>阶段</th><th>动作</th><th>判据 / 证据</th></tr>
+  <tr>
+    <td><b>R0</b><br>环境与守卫</td>
+    <td><code>commands run real.env</code> 打印当前环境；两套 EXE 都在时必须显式 <code>QBT_REAL_ENV=1|2</code>（判据见 4.3）。<code>commands run real.guard</code>：端口/镜像路径白名单、<code>connection_status</code> ∈ {connected, firewalled}、目标实例种子全 paused、配置路径非仓库根 <code>config.yml</code>。token 由用户当轮给出、经 <code>QBT_TEST_&lt;端口&gt;</code> 注入，<b>不落盘、不写入任何入库文件</b>。</td>
+    <td>guard 全绿才进 R1；<code>disconnected</code> 或端口被占 ⇒ 先查是否另一 clone 在跑 <code>real.*</code>，仍不过即 <code>BLOCKED</code>，不放宽约束。</td>
+  </tr>
+  <tr>
+    <td><b>R1</b><br>造可进管线的假种子</td>
+    <td>用 <code>commands run real.seed</code> 造 <b>2 枚</b>同 save_path、同文件表、异 <code>piece_len</code>（区分 infohash）的 L1 假种子（默认 KB 级，打 <code>real-fake</code> 标签，落点限 <code>tests-real/.work</code>/<code>R:/qbt-fake</code>）。<b>必须带 announce</b>（<code>http://&lt;局域网IP&gt;:1/announce</code>，本机死端口、零外连），且测试配置 <code>trackers</code> 段有对应 <code>domains</code> —— 否则匹配不到 <code>tracker_conf</code>，种子整体跳过 <code>torrents_added</code> 管线，groups 恒空（real-machine.md §2.9）。</td>
+    <td>假种子进入产品快照（非「未匹配」跳过）；真实种子全程保持 <code>paused</code>；假种子允许活跃但不必须（保持 paused/stalledUP 均可）。记录种子 hash 与标签，供收尾删除。</td>
+  </tr>
+  <tr>
+    <td><b>R2</b><br>起产品（非 dry-run）</td>
+    <td><b>必须非 dry-run</b>：<code>--dry-run</code> 不启 WEB 服务（<code>webui/module.py:66</code>），无法观察辅种页 —— 这正是 D6 授权的「测试环境一次非 dry-run」。用 <code>tests-real/lib/app.py</code> 起进程：配置须 <code>schema_version: 5</code>、派生自 <code>tests-real/config/*.yml</code>、数据目录独立、日志可抓；<b>不要手工双击 exe</b>。</td>
+    <td>进程经 <code>lib/app.py</code> 起停、日志含「WEB UI 已启动」；真实种子仍全 paused；运行期不对生产实例发任何写请求。</td>
+  </tr>
+  <tr>
+    <td><b>R3</b><br>首轮基线</td>
+    <td>等产品完成首轮全量同步；从视图/接口确认该组出现：<code>groups == 1</code>、组内成员 2、辅种页 1 行。记录组 key 与 <code>torrents_files</code> 调用计数（能取到就记；取不到标 <code>N/A</code>，由单测②/③兜底）。</td>
+    <td>首轮 <code>groups=1</code>、成员 2、视图行数 &gt; 0；真实种子零活跃。</td>
+  </tr>
+  <tr>
+    <td><b>R4</b><br>触发 L2</td>
+    <td>经 WebUI 配置保存（或 <code>PUT /api/config</code>）改 rules 模块认领段的最小触发键 <code>interval</code>：回执 <code>changes</code> 含 rules、<b>无</b> <code>restart_required</code>（R 级段才要求重启）。日志应见 <code>rebuild_runtime</code> → <code>reset_runtime</code> → <code>reconnect</code>。</td>
+    <td>确认走的是 L2 分支（<code>_rebuild_needed</code> 命中），不是「未认领段兜底」误触发；无 <code>restart_required</code>。</td>
+  </tr>
+  <tr>
+    <td><b>R5</b><br>核心断言</td>
+    <td>保存后同轮/下一成功同步轮（≤ <code>sync_interval</code>）内观察：辅种页仍 1 行、无「暂无辅种」；来回切换页签/刷新不回落；组 key 与 R3 记录一致、成员 2；<code>torrents_files</code> 调用数不增；日志无 <code>Unknown</code> 轰炸与异常栈。</td>
+    <td>三项全过才算 PASS：①视图行数 &gt; 0 且不回落；②key 一致；③files 调用不增（或 N/A + 单测③）。任一不过 = FAIL ⇒ 按 scope-guard 入池 bug，<b>当轮不修</b>。</td>
+  </tr>
+  <tr>
+    <td><b>R6</b><br>收尾</td>
+    <td><code>commands run real.seed.rm</code> 删本轮自造种子（只认 <code>real-fake</code>）、<code>commands run real.seed.clean</code> 清残留；停产品（优雅退出或 <code>real.down</code>），恢复 guard 前置快照，重跑进程比对；确认无其它 qB 被新增/消失。</td>
+    <td>进程表与运行前一致（仅目标实例启停）；假种子/数据/标签无残留；token 与 <code>QBT_REAL_ENV</code> 未落盘。</td>
+  </tr>
+</table>
+
+<h3>4.3 环境选择判据</h3>
+<table>
+  <tr><th>项</th><th>判据</th><th>约束 / 红线</th></tr>
+  <tr>
+    <td>单点</td>
+    <td><code>tests-real/lib/env_registry.py</code> 是端口、EXE 路径、BT 监听端口的唯一派生源；先跑 <code>commands run real.env</code>，不手抄端口。</td>
+    <td>端口/镜像路径不在白名单 ⇒ 拒跑，<b>无 <code>--force</code></b>。</td>
+  </tr>
+  <tr>
+    <td>环境1（D 盘机）</td>
+    <td>主/副 WebUI <code>36595</code>/<code>36596</code>，镜像前缀 <code>D:\Programs\qBittorrent-testing</code>（两套：<code>qBittorrent-testing</code> 与 <code>qBittorrent-testing2</code>）。</td>
+    <td>BT 监听 <code>26803</code>/<code>60539</code>；<code>connection_status</code> 必须非 <code>disconnected</code>（36596 曾与生产实例撞 60537 导致假红，见 real-machine.md §2.5.1）。</td>
+  </tr>
+  <tr>
+    <td>环境2（C 盘机）</td>
+    <td>主/副 WebUI <code>56589</code>/<code>56590</code>，镜像前缀 <code>C:\Programs\qBittorrent-testing</code>（两套：<code>qBittorrent-testing</code> 与 <code>qBittorrent-testing2</code>）。</td>
+    <td>BT 监听 <code>27049</code>/<code>32719</code>；换机抄 profile 后必查 <code>current_network_interface</code>（残留网卡标识会导致 <code>disconnected</code>）。</td>
+  </tr>
+  <tr>
+    <td>二选一判据</td>
+    <td><code>QBT_REAL_ENV=1|2</code> 显式指定优先；缺省按 EXE 存在性 <code>1→2</code> 探测。<b>两套 EXE 都在本机时必须显式指定，不得猜。</b>本轮只需 L1 假种子，两环境都满足；选当前 <code>real.env</code> 报出且 <code>real.guard</code> 全绿的那套。</td>
+    <td>需要真实种子只读扫描时优先环境1（2026-11-01 实测：环境1 有 8 枚真实种子，环境2 主实例 0 枚）。</td>
+  </tr>
+  <tr>
+    <td>并发</td>
+    <td>物理测试实例全机唯一：同一时刻只允许一个 clone 跑 <code>real.*</code>。</td>
+    <td><b>严禁动其它 qB 实例（可能是生产）</b>；杀进程/重启前先核镜像路径；<code>dev.port-kill</code> 只传当前环境白名单端口。</td>
+  </tr>
+  <tr>
+    <td>token</td>
+    <td>由用户每轮会话给出，经环境变量 <code>QBT_TEST_&lt;端口&gt;</code> 注入（如 <code>QBT_TEST_36595</code>/<code>QBT_TEST_56589</code>）。</td>
+    <td><b>token 一律不得写入任何入库文件</b>（含本计划、issue、切片、日志副本、commit message）。</td>
+  </tr>
+  <tr>
+    <td>测试 qB 生命周期</td>
+    <td>可启动/重启（走 <code>real.up</code>/<code>real.down</code>）；真实种子必须全程非活跃；伪造种子可活跃。</td>
+    <td>约束 2「真实种子非活跃」无豁免；冲突用例标 <code>[需活跃种子]</code> 跳过并记账，不临时放宽。</td>
+  </tr>
+</table>
+
+<h3>4.4 回滚与验证判据</h3>
+<table>
+  <tr><th>层面</th><th>回滚动作</th><th>验证判据</th></tr>
+  <tr>
+    <td>代码</td>
+    <td>纯内存逻辑：无配置键、无 state 文件格式、无迁移脚本。回滚 = 本地 <code>git revert &lt;Step A commit&gt;</code>（保留轨迹）→ 重启进程即回到旧行为（重启本来会重建索引）。</td>
+    <td>diff 只含 <code>reset_runtime</code> 与注释/docstring；<code>config.validate_config</code>/<code>config/schema.py</code> 零变更；回滚后 <code>test.full</code> 仍绿。</td>
+  </tr>
+  <tr>
+    <td>测试</td>
+    <td>revert Step B 或单独移除三条新测；既有 <code>test_store_reset_runtime_marks_view_changed</code> 的断言未被改动。</td>
+    <td>回归②在未改 Step A 时先红（先红后绿是修复有效性的唯一证明）；其余测试不因新增条目改变既有断言。</td>
+  </tr>
+  <tr>
+    <td>真机</td>
+    <td>删 <code>real-fake</code> 种子 + <code>real.seed.clean</code>；停产品并恢复 guard 前置快照；被测配置是 <code>tests-real/config</code> 派生件，<b>不触碰仓库根 <code>config.yml</code></b>。</td>
+    <td>进程表与开工前一致；种子/标签/落点无残留；真实种子状态恢复原快照。</td>
+  </tr>
+  <tr>
+    <td>文档</td>
+    <td>若 Step C 为 FAIL/BLOCKED：issue 保持 <code>Open</code>，在「复验」里写失败证据与解锁条件；计划状态回 <code>Open</code> 并记 §10。</td>
+    <td>三态结论有实测时间、环境 id、数字；不把 FAIL 写成「待跟进」。</td>
+  </tr>
+  <tr>
+    <td><b>总验收</b></td>
+    <td>V1 单测三层（守阵/回归/成本）+ 既有注释更新；V2 <code>test.full</code> 全绿并新建基线切片；V3 真机 R5 三项；V4 无范围外 diff。</td>
+    <td>四项全绿才置计划 Done 并推进 issue；缺一项按 DoD 停手。</td>
+  </tr>
+</table>
+
+<h2><span class="no">§05</span>决策清单（已拍板，无待决项）</h2>
+<table>
+  <tr><th>编号</th><th>决策</th><th>结论</th><th>影响 / 备选降级</th></tr>
+  <tr><td><b>D1</b></td><td>方案选择：B（保留索引） vs C（pending+post 重建） vs A（订阅 full_round）</td><td class="good"><b>B</b>（已拍板）：<code>reset_runtime</code> 保留分组索引，只删 3 个 <code>clear()</code>、改注释、加守阵测试</td><td>A/C 降为备选：<b>C</b> 的触发条件 = 未来 L2 判据纳入影响分组键的输入（save_path / 文件表 / 物理解析），或要求「本轮显式重建」；<b>A</b> 另需给 <code>full_round</code> 补 <code>dry_run</code> 载荷并补装配序守阵。选 C/A 须接受一次 O(N) + 跨组全量展开。</td></tr>
+  <tr><td><b>D2</b></td><td>若选 B，<code>group_key_migrations</code> 清空还是保留？</td><td class="good"><b>保留</b>（已拍板）：索引未重建，P7 迁移待办语义继续成立；<code>view_changed</code> 仍兜底一次 full 代</td><td>清空会让「迁移随索引重建清零」的注释再次与实现错位，故不选。</td></tr>
+  <tr><td><b>D3</b></td><td>若选 A/C，pending 在 <code>grouping.enabled=False</code> 时如何处置？</td><td><b>已关闭</b>：仅 A/C 适用，随 D1=B 无 pending 生命周期</td><td>若未来改选 C：无条件消费 + INFO 日志（避免标志悬挂），不保留到启用后消费。</td></tr>
+  <tr><td><b>D4</b></td><td>「<code>grouping.enabled</code> false→true 热重载后存量种子不归组」是否本轮一并修？</td><td><b>不并入本轮</b>（已拍板）：先真机复验，再按 scope-guard 单独立项</td><td>本轮只承诺 L2 路径；测试不得假装覆盖 false→true 入口。</td></tr>
+  <tr><td><b>D5</b></td><td>是否给 <code>reset_runtime</code> 增加运行时自检（reset 前后 groups 数量比对告警）？</td><td><b>不加</b>（已拍板）：没有可靠的「未来 L2 是否影响分组键」判据，靠注释 + 守阵测试</td><td>加自检会引入误报与维护点，收益低。</td></tr>
+  <tr><td><b>D6</b></td><td>真机验证是否允许非 dry-run？</td><td class="good"><b>允许一次</b>（已拍板，限测试环境）：用于观察 WebUI 辅种页恢复</td><td>边界：真实种子全程非活跃、只用 <code>tests-real/config</code> 派生配置、严禁动其它 qB；<code>--dry-run</code> 不启 WEB 服务，不能替代本次观察。</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p class="hint">2026-11-03 用户拍板；本计划据此从 Open 推进为 In Progress，实施拆分见 §04。</p>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th><th>备注</th></tr>
+  <tr><td>D1</td><td class="good"><b>B</b></td><td>2026-11-03</td><td>保留分组索引；A/C 为备选（触发条件见 §05）</td></tr>
+  <tr><td>D2</td><td class="good"><b>保留</b> <code>group_key_migrations</code></td><td>2026-11-03</td><td>索引未重建，迁移待办保持</td></tr>
+  <tr><td>D3</td><td><b>不适用</b></td><td>2026-11-03</td><td>仅 A/C 适用；D1=B 关闭</td></tr>
+  <tr><td>D4</td><td><b>不并入本轮</b></td><td>2026-11-03</td><td>复验后按 scope-guard 单独立项</td></tr>
+  <tr><td>D5</td><td><b>不加运行时自检</b></td><td>2026-11-03</td><td>注释 + 守阵测试兜底</td></tr>
+  <tr><td>D6</td><td class="good"><b>允许一次非 dry-run</b></td><td>2026-11-03</td><td>仅测试环境；约束见 §04 4.2/4.3</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策（grilling 拷问记录）</h2>
+<p class="hint">按 grilling 的「设计树」逐条拷问：隐含假设 → 失败模式 → 边界条件 → 并发/单写线程 → 幂等 → fail-fast → 性能/内存 → 回退 → 「测试如何证明不会再次永久空」。每条给出处置：<b>改方案</b> / <b>补验证</b> / <b>接受风险</b>。</p>
+
+<h3>G1 · 「重建 = 从 qB 重新取证」是错的 —— A/C 没有正确性收益</h3>
+<p><b>拷问</b>：<code>reset_runtime</code> 不丢 <code>TorrentRecord</code>，而 <code>files()</code> 是持久缓存；重算读到的是同一份文件表。那 A/C 所谓的「重建」到底改变了什么？如果什么都没变，为什么要付 O(N)？</p>
+<p><b>结论</b>：站不住。A/C 只重算同一函数、同样输入的相同结果，额外成本换不到新信息。<b>处置：改方案 → B</b>（并保留 A/C 作为「未来分组键输入进入 L2 变更面」时的备选）。若用户坚持「显式重建」，改选 C，并在测试里写明「重建不刷新 <code>_files</code> 缓存」这一事实，避免后人误以为它提供自愈。</p>
+
+<h3>G2 · 全量归组的副作用被低估：跨组全量展开 + 可能的整组停种</h3>
+<p><b>拷问</b>：<code>_assign_to_group</code> 每次都会 <code>dirty_groups.add(key)</code>（grouping_mod.py:364），并对组内做大小一致性检查（:367-368）。一次性重归全部记录 = 把所有组标脏 → 同轮 <code>post</code> 的 <code>_check_cross_group_file_conflicts</code> 走全量展开（组×文件，:643-660）+ <code>_check_download_conflicts</code>。若某组原本就大小不一致（外部改文件），重归组会当场停整组。另外 A 的 <code>full_round</code> 无 <code>dry_run</code> 载荷，dry-run 下会真停。</p>
+<p><b>结论</b>：A 存在真实侧效应与 dry-run 破口；C 有侧效应但 dry-run 安全；B 全部规避。<b>处置</b>：D1 默认 B；若选 C，必须在实施轮补「dry-run 下断言语义（zero stop）+ 大库单轮耗时实测」；A 必须给 <code>full_round</code> 补 <code>dry_run</code> 载荷，否则不得采用。<span class="wr">大库成本（5000+ 种子的键计算 + <code>_physical_dir</code> syscall）未实测 → 补验证项</span>。</p>
+
+<h3>G3 · 一次性 pending 的失败模式：请求位悬挂 / 被启用开关吞掉 / 另一个永久空入口</h3>
+<p><b>拷问</b>：全量轮失败（qB 断连、tracker 重匹配抛异常）时 pending 会不会丢？<code>enabled=False</code> 时消费是否导致「启用分组后依旧空」？这算不算把同一个 bug 换个入口留下？</p>
+<p><b>结论</b>：<br>
+① pending 不应在「轮首」清除：<code>full_round</code>/<code>post</code> 都是 refresh 尾段，异常轮根本到不了；pending 留存到下一成功轮（与 rules 的 <code>queue_rebuilt</code> 幂等重入同理），可接受。<br>
+② <code>enabled=False</code> 时建议无条件消费并记 INFO，避免标志在后续无关全量轮突然生效（D3）。<br>
+③ false→true 热重载不触发 L2，确实构成另一个「永久空」入口（D4）：<b>不并入本轮，复验后单独入池</b>；本轮计划只承诺修 L2 路径，测试也不应假装覆盖该入口。<br>
+<b>处置：B 天然无 pending；若选 A/C，按上述语义补测试（失败轮后 pending 存活、启用关闭时消费、启用后不误触发）。</b></p>
+
+<h3>G4 · 装配序依赖（A）没有契约保护</h3>
+<p><b>拷问</b>：A 依赖 tracker 模块先跑、把 <code>tracker_conf</code> 填好；当前装配序是 tracker（qbmanager.py:227）先于 grouping（:245），但这是注释约定还是可回归的契约？</p>
+<p><b>结论</b>：目前只有装配注释，无守阵测试。<b>处置</b>：B/C 不依赖它（C 在 <code>post</code>，<code>full_round</code> 早已发出）；若选 A，必须补「tracker 注册序号 &lt; grouping」的守阵测试，否则未来一次装配重排就会让恢复静默失效（比原 bug 更隐蔽）。</p>
+
+<h3>G5 · 幂等与重复重置</h3>
+<p><b>拷问</b>：<code>apply_new_config</code> 可能同时触发 L2 与「未认领段兜底」<code>rebuild_runtime</code>（qbmanager.py:750-767），reset 两次；A/C 的 pending 会不会消费两次、归组两次、停种两次？</p>
+<p><b>结论</b>：<code>_assign_to_group</code> 是「先 leave 再 add」的幂等实现（grouping_mod.py:360-363）；A/C 用「已在 <code>member_to_key</code> 则跳过」可消除重复；pending 用布尔位只会消费一次。<b>处置：接受风险 + 补一条「连续两次 rebuild_runtime 后只重建/消费一次」的单测（A/C 才需要；B 无此状态）。</b></p>
+
+<h3>G6 · 并发与单写线程</h3>
+<p><b>拷问</b>：B 让 <code>reset_runtime</code> 少改三个容器，会不会反而破坏「reset 后视图读到一致快照」？Web 线程读取时可能看到什么？</p>
+<p><b>结论</b>：B 减少了 reset 对共享容器的突变（更安全）；<code>view_changed=True</code> 仍保证下一次 flush 全量重建；<code>tracker_conf=None</code> 窗口在 A/B/C 都存在，而 <code>tracker_name</code> 对 None 返回 <code>"Unknown"</code>（record.py:216-227），不会让视图构建抛异常。<b>处置：接受风险（无新增并发面）；实施轮在 dry-run 真机观察一次「保存后首帧」即可。</b></p>
+
+<h3>G7 · 性能与内存</h3>
+<p><b>拷问</b>：保留索引会不会让内存长期偏高？A/C 重建期间会不会出现旧/新两份索引叠加？</p>
+<p><b>结论</b>：B 保留的是稳态本来就在内存里的结构（<code>groups/group_sizes</code>），无新增峰值；A/C 是原地 leave/add，不会复制整份，但会把 <code>dirty_groups</code> 一次性填满并在同轮触发跨组展开，峰值 CPU/syscall 更高。<b>处置：B 接受；A/C 需补大库实测（见 G2）。</b></p>
+
+<h3>G8 · 回退路径</h3>
+<p><b>拷问</b>：出问题能否一键回到旧行为？有没有磁盘/状态迁移要回滚？</p>
+<p><b>结论</b>：三个方案都是纯内存逻辑，无配置键、无 state 文件格式、无迁移脚本；回退 = revert 单个提交 + 重启（重启本来就会重建索引）。B 的最小 diff 使回退成本最低。<b>处置：接受，无需额外回退开关。</b></p>
+
+<h3>G9 · 测试如何证明「不会再次永久空」</h3>
+<p><b>拷问</b>：现有测试只断言 <code>reset_runtime</code> 置 <code>view_changed</code>（test_torrents_store.py:346-352），根本测不到「索引恢复」。新增测试怎么防止假绿？</p>
+<p><b>结论</b>：需要三层：①守阵（reset 后索引原样，防止再次 clear）；②回归（L2 重建 + 全量轮后 <code>groups</code> 与 <code>_build_group_view()</code> 非空，直接复刻受控实验阶段 3）；③成本守阵（<code>files_calls</code> 不增，防止未来改成 A/C 而无提示）。②必须在「未改 S1」时先红，否则证明不了修复。<b>处置：按 S2 落地；②的失败态（阶段 3 视图 0 行）写进测试 docstring 作为反例。</b></p>
+
+<h3>G10 · fail-fast 与配置校验</h3>
+<p><b>拷问</b>：方案是否引入新配置键或运行期校验分支？会不会绕过 <code>config.validate_config</code> 的聚合报错？</p>
+<p><b>结论</b>：三个方案都不新增配置键，不触碰 <code>config/schema.py</code>、<code>validate_config</code> 与「新配置键必须登记」守阵。<b>处置：接受（无变更）。</b></p>
+
+<h3>G11 · save_path 同轮变化 + L2 的联合边界</h3>
+<p><b>拷问</b>：若某种子在 L2 的同一轮里 save_path 变化，A/C 的重归组会不会吞掉 <code>_handle_save_path_changes</code> 本该触发的缺文件扫描？</p>
+<p><b>结论</b>：A 在 <code>post</code> 之前归组、C 若放在 save_path 处理之前，都会让后者看到「键已正确」而提前返回，丢掉扫描触发；B 保留 <code>group_sizes/member_to_key</code>，原有扫描路径不变。<b>处置：B 无此问题；若选 C，必须把重建放在 <code>_handle_save_path_changes</code> 之后，并补一条「save_path 变化同轮仍触发扫描」的测试。</b></p>
+
+<h2><span class="no">§08</span>证据边界与未验证项</h2>
+<table>
+  <tr><th>项</th><th>状态</th><th>影响与后续</th></tr>
+  <tr><td>受控实验环境</td><td>in-process <code>FakeClient</code>（2 个种子），非真机大库</td><td>足以证明「索引清空且不恢复」的因果链；不足以给出大库耗时/内存数字。</td></tr>
+  <tr><td>大库重归组成本</td><td class="wr">未验证（仅 A/C 相关）</td><td>键计算 O(N) + <code>_physical_dir</code>/第三方链接探测 syscall；若选 A/C，实施轮需在真实种子库量一次单轮耗时与请求数。B 无此项。</td></tr>
+  <tr><td>save_path 与 L2 同轮</td><td class="wr">未验证（A/C 的理论缺口）</td><td>见 G11；B 不涉及，若改选 C 必须补测。</td></tr>
+  <tr><td><code>grouping.enabled</code> false→true</td><td class="wr">已识别、未复验</td><td>另一个永久空入口（D4）；本轮不修，复验后入池。</td></tr>
+  <tr><td>前端端到端</td><td class="wr">待真机（Step C）</td><td>本计划只到后端索引与视图快照；<b><code>--dry-run</code> 不启 WEB 服务</b>（<code>webui/module.py:66</code>），无法观察辅种页 ⇒ 必须按 D6 用一次非 dry-run 真机（限测试环境）+ 浏览器确认「暂无辅种」消失。</td></tr>
+  <tr><td>qB 断连叠加多次 L2</td><td>推理未实测</td><td>B 幂等（保留同一索引）；A/C 的 pending 语义按 G3 补测。</td></tr>
+  <tr><td>跨组检测重扫</td><td>现状行为</td><td><code>reset_runtime</code> 本就不清 <code>dirty_groups</code>；B 不新增 dirty。A/C 会新增全量 dirty → 一次全量展开（见 G2）。</td></tr>
+  <tr><td>行号时效性</td><td>以 HEAD 6ffa85a3 复核</td><td>实施轮若代码漂移，按符号名（<code>reset_runtime</code>/<code>_on_post</code>/<code>_on_full_round</code>）重新定位，不照抄行号。</td></tr>
+  <tr><td>假种子能否进管线</td><td>硬前提（real-machine.md §2.9）</td><td>无 announce 或配置无对应 <code>domains</code> ⇒ 匹配不到 <code>tracker_conf</code> ⇒ 整条 <code>torrents_added</code> 管线被跳过、groups 恒空。真机验证必须带本机死端口 announce + 配置 domains，否则结论无效（假绿/假红都可能）。</td></tr>
+  <tr><td>真实种子前提</td><td>环境相关</td><td>2026-11-01 实测：环境1 有 8 枚真实种子、环境2 主实例 0 枚。本轮用 L1 假种子，两环境均可；依赖真实种子的面在环境2 前提不成立。</td></tr>
+  <tr><td>真机环境与 token</td><td>会话级</td><td>环境选择按 §04 4.3（<code>real.env</code> 单点，双 EXE 并存必须显式 <code>QBT_REAL_ENV</code>）；<b>token 由用户每轮给出、经 <code>QBT_TEST_&lt;端口&gt;</code> 注入，不落盘、不入任何入库文件</b>。本机物理实例全机唯一，同一时刻只允许一个 clone 跑 <code>real.*</code>。</td></tr>
+  <tr><td>收尾证据</td><td>待 Step C</td><td>PASS/FAIL/BLOCKED 三态 + 环境 id + 时间 + 视图行数 + 组 key + files 计数（或 N/A）；FAIL 按 scope-guard 入池，当轮不修。</td></tr>
+  <tr><td>范围外入口</td><td>已识别、未修</td><td><code>grouping.enabled</code> false→true 热重载（D4）与「启用分组后存量种子不归组」需复验后单独立项；本计划与测试均不覆盖。</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-03-2223</span> 初版：基于调查会话受控实验 + HEAD 6ffa85a3 代码复核；列出 A/B/C 三案与取舍，推荐 B（保留分组索引），把 grilling 拷问结论落进 §07、证据边界落进 §08。</li>
+  <li><span class="tag">R1 · 26-11-03-2252</span> 用户拍板 D1=B / D2=保留 / D4 不并入 / D5 不加自检 / D6 允许测试环境一次非 dry-run，去掉待决状态（§05/§06）；新增 4.1 实施步骤拆分（A 代码 / B 守阵与回归 / C 真机验证 / D 收尾回写，含每步输入清单）、4.2 真机验证方案（R0–R6，按 real-machine.md 与 0641）、4.3 环境选择判据、4.4 回滚与验证判据；§08 补证据边界（dry-run 不启 WEB、假种子进管线前提、环境/token 约束）；计划状态 Open → In Progress，工作分支 <code>fix/hot-reload-group-index</code>。</li>
+</ul>
+
+</div>
+</body>
+</html>

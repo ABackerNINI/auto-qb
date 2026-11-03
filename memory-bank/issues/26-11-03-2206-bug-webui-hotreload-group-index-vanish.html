@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-hotreload-group-index-vanish">
+<meta name="issue-stamp" content="26-11-03-2206">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="hot-reload">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-2223-plan-hot-reload-group-index.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复)">
+<meta name="issue-summary" content="配置 L2 结构重建调用 store.reset_runtime 清空 groups/member_to_key, 但无任何模块对存量种子重归组; 只有首轮全量(重启)的 torrents_added 会重建, 故辅种页长期空态">
+<title>热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复)</h1>
+    <p class="lede">配置 L2 结构重建调用 store.reset_runtime 清空 groups/member_to_key, 但无任何模块对存量种子重归组; 只有首轮全量(重启)的 torrents_added 会重建, 故辅种页长期空态</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-03-2206-bug-webui-hotreload-group-index-vanish</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 22:06</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>用户报告: 辅种页偶发只剩空态「暂无辅种」, 重启后端即恢复, 高度怀疑配置热重载。本轮调查在 clone1 当前 HEAD <code>f89de69e</code> 上完成 (2026-11-03 22:05 取证), 结论: <b>确为热重载导致, 但只在 L2 结构重建路径触发</b>; 不是前端订阅断链, 也不是 transfer(转种) 状态源问题。</p>
+    <p>空态文案单点在 <code>filters.js groupsEmptyText()</code>: 只有<b>辅种页的 groups 数组为空</b>时才会显示「暂无辅种」; 未归组种子(singles)不参与该页正常行渲染(仅搜索命中时以虚拟单行兜底), 所以「groups 被清空」在页面上表现为整页空态, 而种子页仍正常。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">受控实验 (in-process, 临时脚本置于 %TEMP%, 未入仓库; 用 tests/helpers 的 FakeClient + 默认装配, grouping.enabled=True): 2 个同 save_path/同文件列表的种子 → 期望 1 个辅种组。</p>
+<pre><code>grouping.enabled = True
+==== 阶段1: 首轮全量, 存量种子归组 ====
+H1 conf = &lt;helpers.FakeTracker object ...&gt; | torrents_files calls = 2
+[首轮后] by_hash=2 groups=1 members=2 view_changed=True
+==== 阶段2: 模拟 L2 热重载(rules.rebuild_runtime -&gt; store.reset_runtime) ====
+[重建后] by_hash=2 groups=0 members=0 view_changed=True
+[重连后] by_hash=2 groups=0 members=0 view_changed=True
+==== 阶段3: 全量轮兑现(tracker 重匹配 + 各相位广播) ====
+[全量轮后] by_hash=2 groups=0 members=0 view_changed=True
+分组视图行数 = 0
+==== 阶段4: 模拟重启(新进程同数据首轮) ====
+[重启首轮后] by_hash=2 groups=1 members=2 view_changed=True</code></pre>
+    <p>即: L2 重建后 <code>groups</code> 归零; 之后即便兑现一次完整全量轮(tracker_conf 已重匹配), <b>仍为 0</b>; 视图构建器 <code>_build_group_view()</code> 随之输出 0 行并自增版本, 前端收到的是一份<b>合法的 full 代但 groups 为空数组</b>(singles 仍在, 所以不是坏 payload)。新进程同数据首轮才恢复 1 组 —— 这正是「重启后端即恢复」。</p>
+    <p>已排除的假设: ①前端 SSE/轮询断链 —— <code>_publish_locked</code> 在重建后照常 <code>group_view_ver += 1</code> 并 <code>notify("ver")</code>, 客户端正常刷新, 只是内容为空; ②transfer 状态(<code>TransferStatus</code> 三态/汇总) —— 转种目标是 <code>web.transfer.targets</code> 配置源, 与分组索引无关; 空数据下转种汇总只是 0 计, 不产出「暂无辅种」; ③前端空 payload 解析 —— 前端在 full 代整表替换 groups, 行为符合协议。</p>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>保存配置且命中 <code>RulesModule._rebuild_needed</code>: <code>rules_config</code> 任意变更 · <code>interval</code> · <code>delete_tags</code> · <code>delete_tags_if_has_no_torrents</code> · <code>global_speed_limit_curve</code> · <code>trackers</code> 段的 <code>domains/rules/groups</code> 三元组变更或 tracker 增删。WebUI 设置页保存这些段即可触发; 仅改 <code>web/notify/logging/grouping/hr</code> 等段不触发(不调用 reset_runtime)。</td></tr>
+      <tr><td>影响范围</td><td>辅种页(groups 视图)全空; 组级/成员级动作不可达, 含右键「转移到」的 group/member 两支。种子页与状态栏计数正常(计数走 groups 成员数 + singles, singles 未丢); 搜索命中时可用虚拟单行兜底。</td></tr>
+      <tr><td>严重度</td><td>中高 —— 数据未丢, 但分组索引丢失后无自愈路径, 必须重启进程(或等新增种子/保存路径变化)才能恢复。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">符号名 + grep 关键词 + 当时行号(取证 2026-11-03 22:05 @ HEAD f89de69e)。</p>
+    <ul>
+      <li><code>src/auto_qb/torrents/store.py:747</code> <code>TorrentStore.reset_runtime()</code> — 750-753 清 <code>groups/group_sizes/member_to_key/group_key_migrations</code>; 765 <code>view_changed=True</code>。grep: <code>def reset_runtime</code></li>
+      <li><code>src/auto_qb/core/modules/rules_mod.py:217</code> <code>RulesModule.rebuild_runtime()</code> — 229 调 <code>reset_runtime()</code>, 233 <code>reconnect()</code>。grep: <code>def rebuild_runtime</code></li>
+      <li><code>.../rules_mod.py:189</code> <code>_rebuild_needed()</code> — L2 判据唯一单点(上面的触发 keys)。grep: <code>_rebuild_needed</code></li>
+      <li><code>.../rules_mod.py:133</code> <code>_on_full_round()</code> — <b>已有先例</b>: 订阅 full_round 为 L2 重建后的存量种子补建任务(issue 26-10-01-2147), 注释明确「torrents_added 对存量记录不触发」; grouping 没有同款补建。</li>
+      <li><code>.../grouping_mod.py:104</code> <code>subscribe()</code> — 只订阅 <code>transitions/torrents_added/removed_scan/post</code>, <b>无 full_round</b>。grep: <code>def subscribe</code></li>
+      <li><code>.../grouping_mod.py:118</code> <code>_on_torrents_added</code> → 346 <code>_assign_new_torrent</code>(唯一归组入口之一); 128 <code>_on_post</code> → 269 <code>_handle_save_path_changes</code>(仅对 save_path 变更的记录重归组) —— 两条都不会覆盖「索引被整体清空但记录未变」。</li>
+      <li><code>src/auto_qb/core/qbmanager.py:733</code> <code>apply_new_config()</code> — 762 换 config, 764 <code>host.apply_all()</code>; 767 未认领段兜底 <code>emit rebuild_runtime</code>(次要风险面)。</li>
+      <li><code>src/auto_qb/webui/runtime_views.py:377</code> <code>_publish_locked()</code> — 379 <code>group_view = host._build_group_view()</code>, 394 <code>group_view_ver += 1</code>, 404 <code>notify("ver")</code> —— 空 groups 被当作正常 full 代发布。</li>
+      <li><code>src/auto_qb/webui/static/shared/filters.js:303</code> <code>groupsEmptyText()</code>; 189 <code>filteredGroups()</code>(数据源 <code>sortedGroups</code>, sort.js:159); <code>tpl/groups.html:52</code> <code>v-if="!filteredGroups.length"</code> —— 空态就是该布尔。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout"><b>已定位(受控实验 + 代码链双向确认)</b>: L2 结构重建把分组索引当作「下轮全量 refresh 会重算」的派生缓存清空, 但全量轮只经 <code>full_round</code> 重匹配 <code>tracker_conf</code>, 归组只由 <code>torrents_added</code>(新种子)与 save_path 变更触发 —— 存量记录既不再算 added 也通常不改 save_path, 于是分组索引永久为空。<br>
+    重启能恢复, 是因为新进程 <code>by_hash</code> 为空, 首轮全量所有种子都判 added → <code>torrents_added</code> 相位逐条归组(实验阶段4已验证)。<br>
+    已排除: reset_runtime 把 by_hash 也清了、tracker_conf 未重匹配、视图未重建、前端丢数据 —— 均不是。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向: 补齐「L2 重建后派生索引恢复」这一环; 只写方案, 不在本报告实施。</p>
+    <ol>
+      <li><b>方案A(推荐, 与 26-10-01-2147 同款)</b>: <code>GroupingModule</code> 订阅 <code>full_round</code>, 在 tracker 重匹配之后, 对 <code>store.by_hash</code> 中 <code>tracker_conf</code> 已就位且未归组的记录重跑归组(需要 <code>torrents_files</code>)。为避免每轮全量重归组, 用一次性标志(如 <code>reset_runtime</code> 置位, 首个 full_round 消费), 并做队列查重防止与首轮 <code>torrents_added</code> 管线重复。代价: 重建后首个全量轮会多 N 次 files 查询, 大库需分批/限流。</li>
+      <li><b>方案B(语义最轻)</b>: <code>reset_runtime</code> 不清 <code>groups/member_to_key</code>, 只清 <code>tracker_conf</code>。分组 key 是纯函数派生(<code>group_key_of</code>), 同数据同 key; 但需先确认 P7 <code>group_key_migrations</code> 与文件列表缓存失效语义不依赖清空。</li>
+      <li><b>方案C(折中)</b>: 不改 reset, 在 <code>reset_runtime</code> 置 <code>regroup_all_pending</code>, 由 <code>grouping</code> 的 <code>post</code> 相位在首个全量轮一次性全量重归组。</li>
+    </ol>
+    <p>建议先补一条守阵测试: L2 重建 + 全量轮后 <code>store.groups</code> 应恢复, 防止再次回归。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-03 22:06 — 入池，状态 <strong>Open</strong>（计划外，未修）。本轮为调查任务：未改代码、未 commit/push。</li>
+      <li>2026-11-03 22:52 — 修复计划已拍板并推进至 <strong>In Progress</strong>（D1=B 保留分组索引）；本件保持 <strong>Open</strong>，等待实施 A/B/C/D 四步与真机复验。仍不改代码。</li>
+    </ul>
+    <h3>关联</h3>
+    <p>与 <code>26-10-01-2129-bug-webui-hotreload-ext-vanish</code> 同现象(「热重载后辅种消失」), 但该件已于 2026-10-02 置 <strong>Superseded</strong>, 理由是「新机制 apply_new_config 下无对应路径」兼「辅种消失未经证实」。本轮在 HEAD f89de69e 上以受控实验证实<b>该结论不成立</b>: 新机制的 L2 分支即对应路径, 现象可稳定复现。建议认领本件时把那条的结论一并更正(或在本件修复后将其改为指向本件)。</p>
+    <p><b>修复计划</b>: <a href="../plans/26-11-03-2223-plan-hot-reload-group-index.html">26-11-03-2223 热重载 L2 重建后分组索引恢复计划</a>。2026-11-03 用户已拍板 D1=B(保留分组索引, 只删 <code>reset_runtime</code> 的 3 个 clear 并加守阵测试)、D2=保留 <code>group_key_migrations</code>、D4 不并入本轮、D5 不加运行时自检、D6 允许测试环境一次非 dry-run 真机验证; 计划状态 <strong>In Progress</strong>, 工作分支 <code>fix/hot-reload-group-index</code>(基于本地 develop <code>6ffa85a3</code>)。本件保持 <strong>Open</strong>, 待实施 A/B/C/D 四步并真机复验后推进。</p>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-03-2206-bug-webui-hotreload-group-index-vanish.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

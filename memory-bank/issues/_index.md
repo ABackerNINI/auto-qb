@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 17 |
+| bug | 18 |
 | perf | 5 |
 | docs | 2 |
 | test | 7 |
@@ -31,6 +31,7 @@
 ## Open
 
 - [bug] [conftest 按命令名拦截 PowerShell: 非通知用途调用被误拦, 掩盖真实副作用](26-11-03-2216-bug-test-notifier-guard.html) — NOTIFIER_EXE…
+- [bug] [热重载 L2 重建后辅种分组索引被清空且不再重归组(辅种页恒显「暂无辅种」, 重启后端才恢复)](26-11-03-2206-bug-webui-hotreload-group-index-vanish.html) — 配置 L2 结构重建调用…
 - [test] [deps-upgrade check_updates.py 无自动化测试](26-11-03-1209-test-test-deps-upgrade-check-updates-uncovered.html) — 版本段切分/增量分类/部…
 - [test] [HR feeder wake 转发测试未断言转发目标](26-11-03-1209-test-test-hr-runtime-feeder-wake-forward-unasserted.html) — 用例名声称转发 work…
 - [bug] [sim_qb torrents/export 生成非法 bencode：announce 长度标 26、实际 25](26-11-03-1145-bug-sim-qb-export-bencode.html) — minimal_benc…

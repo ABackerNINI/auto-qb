@@ -12,6 +12,7 @@
 
 ## In Progress
 
+- [26-11-03-2223] [热重载 L2 重建后分组索引恢复（辅种页空态修复）计划](26-11-03-2223-plan-hot-reload-group-index.html) — `hot-reload-group-index`
 - [26-10-31-1119] [qBittorrent 5.3.x 双版本支持落地计划(facade 修复→升库→升 qB→走查→回写)](26-10-31-1119-plan-qb-5-3-support.html) — `qb-5-3-support`
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](26-09-22-2318-version-management-plan.html) — `deps-version-management`
