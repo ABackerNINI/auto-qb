@@ -11,6 +11,7 @@ from ..module import AppContext, ApplyResult
 from . import relocate_units as ru
 from .relocate_units import RelocateJob
 from .relocate_common import logger
+from .relocate_probe import sweep_probe_residue
 
 
 class LifecycleMixin:
@@ -22,7 +23,11 @@ class LifecycleMixin:
         if getattr(self._conf, "enabled", False):
             alias_fs.get_capability(refresh=True)
             n = self._load_jobs()
-            logger.info(f"relocate | 启动: 整组迁移已启用(恢复在途 job {n} 条), 已完成本机链接能力探测")
+            # E1 探测崩溃残留扫描(计划 26-11-04-0055 P2-⑥): add 之后 delete 之前被杀会在用户
+            # qB 留探测种子+文件, 启动时按 tag 清理(R2); dry-run 不动手(真写, 与相位机同口径)
+            swept = 0 if self._dry_run() else sweep_probe_residue(ctx)
+            swept_note = f", 启动扫描清理探测残留 {swept} 条" if swept else ""
+            logger.info(f"relocate | 启动: 整组迁移已启用(恢复在途 job {n} 条), 已完成本机链接能力探测{swept_note}")
         else:
             logger.debug("relocate | 启动: 未启用(enabled=false), 不探测不建链不恢复 job")
 
