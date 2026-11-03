@@ -1,6 +1,7 @@
 """S1 采样器守阵: delta / 重置归零 / 跨天硬切 / 适配器过滤 / state 恢复降级 / dat 兜底.
 
-设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S1).
+设计单点: memory-bank/plans/26-10-16-0541-plan-global-traffic-monitor.html (S1);
+逐网卡基线重构: memory-bank/plans/26-11-03-1102-plan-gtm-day-total-inflation.html (S0).
 全部用例 hermetic: clock/counters/stats 一律注入替身, 不碰真实网卡与文件.
 
 ## 测试计划
@@ -9,11 +10,14 @@
 - 重置归零: 上行/下行/双侧重置三种, delta 记 0 + 告警, 不产生负流量, 另一侧正常计
 - 跨天硬切: day_rolled=True, 旧日累计清零, 跨日流量计入新日
 - 挂钟回跳跨日界: 不硬切 (累计保持 + 采样日钉原日界 + 告警), 日界再前进恢复正常硬切
-- 基线: 首样本 delta 恒 0 + baseline=True; 全过滤空场景告警
+- 基线: 首样本 delta 恒 0 + baseline=True; 全过滤空场景告警且不改任何逐卡记忆
 - 适配器过滤: loopback 三名形态 (lo/lo0/Loopback Pseudo-Interface 1) / down / include 白名单 /
   exclude 黑名单 / stats 缺失不收编 / 顺序优先级 (include 不翻案 loopback 开关)
+- 断连-恢复: 无真实增长记 (0,0) (T1); 有真实增长只记增量 (T2); 全过滤后恢复仍记 (0,0) 且
+  记忆保留 (T4); 首次出现的网卡只立基线不入账
 - state 恢复: 今天载荷累计+基线接续; 昨天载荷累计清零基线接续; 未来/损坏/非映射/版本不符 ->
-  降级 (告警 + 无基线); 降级后首样本 baseline=True
+  降级 (告警 + 无基线); 降级后首样本 baseline=True; v1 载荷升级保留 day 累计、逐卡记忆置空,
+  首轮 (0,0) + 升级告警 (T8)
 - dat 兜底: 今天行恢复 (KB->字节, TM 倒序与正序两态); 无今天行返回 False; 基线仍取当前值
 - snapshot/restore round-trip: 快照载荷恢复后与原状态一致
 """
@@ -143,7 +147,7 @@ def test_counter_reset_never_negative_across_many_samples():
         assert r.delta_up_bytes == 0 and r.delta_down_bytes == 0
 
 
-def test_all_adapters_filtered_warns_and_counts_zero():
+def test_all_adapters_filtered_keeps_baselines_and_new_adapter_only_establishes():
     sampler, _, counters = make_sampler()
     counters.page = {"lo": nic(500, 500)}  # 只有回环 -> 全被默认过滤
     r1 = sampler.sample_once()
@@ -151,8 +155,10 @@ def test_all_adapters_filtered_warns_and_counts_zero():
     assert any("无适配器通过过滤" in w for w in r1.warnings)
     counters.page = {"eth0": nic(100, 100)}
     r2 = sampler.sample_once()
-    # 基线(0) -> 100: 缺失窗流量打进恢复后首包 (文档声明的抖动语义)
-    assert (r2.delta_up_bytes, r2.delta_down_bytes) == (100, 100)
+    # eth0 从未被观测过 (只在全空后出现): 按新卡只立基线, 历史累计(100)不入账
+    assert r2.baseline is False
+    assert (r2.delta_up_bytes, r2.delta_down_bytes) == (0, 0)
+    assert (r2.day_up_bytes, r2.day_down_bytes) == (0, 0)
 
 
 # ---- 跨天硬切 ----
@@ -241,17 +247,18 @@ def test_exclude_down_adapter():
     assert (r.delta_up_bytes, r.delta_down_bytes) == (10, 10)
 
 
-def test_down_adapter_recovering_counts_from_zero():
+def test_down_adapter_recovering_does_not_backfill_lifetime_counter():
     stats = stats_page(down="wlan0")
     sampler, _, counters = make_sampler(stats=stats)
     counters.page = {"eth0": nic(0, 0), "wlan0": nic(999, 999)}
     sampler.sample_once()
-    # wlan0 恢复 up: 过滤条件变化后其缺失窗流量打进首包 (与重置同理的抖动语义)
+    # wlan0 恢复 up: 它在 down 前从未被选中 (无逐卡记忆) -> 恢复首轮只立基线
     stats["wlan0"] = SimpleNamespace(isup=True)
     counters.page = {"eth0": nic(0, 0), "wlan0": nic(1999, 1999)}
     r = sampler.sample_once()
-    # 基线时合计 0 (wlan0 被过滤), 恢复后合计 = 0+1999: 缺失窗流量全额打进首包
-    assert (r.delta_up_bytes, r.delta_down_bytes) == (1999, 1999)
+    # 1999 里含 999 的历史累计: 无法判定增量, 按 I6 只立基线, 不入账
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (0, 0)
+    assert (r.day_up_bytes, r.day_down_bytes) == (0, 0)
 
 
 def test_include_whitelist_and_exclude_blacklist():
@@ -295,6 +302,61 @@ def test_stats_missing_for_adapter_included():
     assert (r.delta_up_bytes, r.delta_down_bytes) == (50, 50)
 
 
+# ---- 断连-恢复 (逐网卡基线) ----
+
+
+def test_disconnect_recover_without_growth_counts_zero():
+    """T1 主回归: 断连被过滤期间计数不涨, 恢复后不得把整份生命周期累计入账."""
+    stats = stats_page()
+    sampler, _, counters = make_sampler(stats=stats)
+    counters.page = {"eth0": nic(999, 999)}
+    sampler.sample_once()  # 首轮只立基线
+    stats["eth0"] = SimpleNamespace(isup=False)  # down -> 被默认 exclude_down 过滤
+    counters.page = {"eth0": nic(999, 999)}
+    r_down = sampler.sample_once()
+    assert (r_down.delta_up_bytes, r_down.delta_down_bytes) == (0, 0)
+    stats["eth0"] = SimpleNamespace(isup=True)  # 恢复, 计数未涨
+    counters.page = {"eth0": nic(999, 999)}
+    r_up = sampler.sample_once()
+    assert (r_up.delta_up_bytes, r_up.delta_down_bytes) == (0, 0)
+    assert (r_up.day_up_bytes, r_up.day_down_bytes) == (0, 0)
+
+
+def test_disconnect_recover_with_real_growth_counts_only_increment():
+    """T2: 断连-恢复且计数有真实增长 -> 只记增量(100), 不是整份累计(1099)."""
+    stats = stats_page()
+    sampler, _, counters = make_sampler(stats=stats)
+    counters.page = {"eth0": nic(999, 999)}
+    sampler.sample_once()
+    stats["eth0"] = SimpleNamespace(isup=False)
+    counters.page = {"eth0": nic(999, 999)}
+    r_down = sampler.sample_once()
+    assert (r_down.delta_up_bytes, r_down.delta_down_bytes) == (0, 0)
+    stats["eth0"] = SimpleNamespace(isup=True)
+    counters.page = {"eth0": nic(1099, 1099)}
+    r_up = sampler.sample_once()
+    assert (r_up.delta_up_bytes, r_up.delta_down_bytes) == (100, 100)
+    assert (r_up.day_up_bytes, r_up.day_down_bytes) == (100, 100)
+
+
+def test_all_filtered_preserves_nic_memory_and_counts_later_growth():
+    """T4: 全部被过滤时记忆完全不动; 恢复后仍 (0,0), 再涨 50 才记 50."""
+    sampler, _, counters = make_sampler()
+    counters.page = {"eth0": nic(100, 100)}
+    sampler.sample_once()
+    counters.page = {"lo": nic(500, 500)}  # selected 全空
+    r_empty = sampler.sample_once()
+    assert any("无适配器通过过滤" in w for w in r_empty.warnings)
+    assert (r_empty.delta_up_bytes, r_empty.delta_down_bytes) == (0, 0)
+    counters.page = {"eth0": nic(100, 100)}
+    r_back = sampler.sample_once()
+    assert (r_back.delta_up_bytes, r_back.delta_down_bytes) == (0, 0)
+    counters.page = {"eth0": nic(150, 150)}
+    r_grow = sampler.sample_once()
+    assert (r_grow.delta_up_bytes, r_grow.delta_down_bytes) == (50, 50)
+    assert (r_grow.day_up_bytes, r_grow.day_down_bytes) == (50, 50)
+
+
 # ---- state 恢复 ----
 
 
@@ -315,6 +377,28 @@ def test_restore_same_day_resumes_accumulation_and_baseline():
     r = sampler.sample_once()
     assert r.baseline is False
     assert (r.day_up_bytes, r.day_down_bytes) == (4096 + 600, 8192 + 300)
+
+
+def test_restore_v1_payload_upgrade_keeps_day_and_zeroes_first_delta():
+    """T8: v1 载荷升级 -> 保留当日累计, 忽略 v1 合计基线 (逐卡记忆置空), 首轮 (0,0) + 升级告警."""
+    sampler, _, counters = make_sampler()
+    snap = {
+        "version": 1,
+        "day": "2026-10-16",
+        "day_up_bytes": 4096,
+        "day_down_bytes": 8192,
+        "last_up_bytes": 5000,
+        "last_down_bytes": 9000
+    }
+    warns = sampler.restore(snap)
+    assert any("state v1 升级" in w for w in warns), f"warns={warns!r}"
+    assert getattr(sampler, "state_restored", None) is True
+    assert (sampler.day_up_bytes, sampler.day_down_bytes) == (4096, 8192)
+    assert not sampler.has_baseline  # 逐卡记忆置空, 首轮按新卡立基线
+    counters.page = {"eth0": nic(5600, 9300)}
+    r = sampler.sample_once()
+    assert (r.delta_up_bytes, r.delta_down_bytes) == (0, 0)
+    assert (r.day_up_bytes, r.day_down_bytes) == (4096, 8192)
 
 
 def test_restore_yesterday_clears_accumulation_keeps_baseline():
