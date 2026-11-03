@@ -16,14 +16,51 @@ test_rule_interval; stop_following_rules_if 已退役, plan 26-11-01-0106 W1)。
 - test_state_mapping: 状态条件语义判定(枚举属性名 is_*)
 - test_tracker_rules_ref: tracker 规则引用 @rule_set / @rule_set.rule_name 过滤绑定; 重复引用运行时按名去重绑定恰一次(回归锁)
 - test_rule_interval: 规则 interval 调度(任务队列到期才执行, interval=0 归一化每 tick)
+- test_condition_tree_depth_limit: 条件组合树嵌套超上限拒绝 + 上限内恰好的嵌套放行(构造期兜底, 覆盖率第三轮 T0a)
+- test_condition_tree_node_shape_guards: 条件节点必须单键字典(顶层与嵌套)/ all 必须是列表 -> ConfigError
+- test_condition_tree_not_node_negation: not 孩子递归建树 + 求值取反语义(命中取反不命中)
+- test_rule_conditions_non_dict_rejected: conditions 归一后非 dict(字符串透传) -> ConfigError
+- test_choose_block_construction_guards: choose 分支非 dict / when 建树异常包装规则名 / then 非列表 -> ConfigError
+- test_choose_step_pending_with_task: choose 分支动作 pending + 任务驱动 -> 断点记块后(si+1), VERDICT_PENDING
+- test_choose_step_pending_without_task: choose 分支动作 pending 无任务(外部入口) -> 视为成功继续, VERDICT_EXECUTED
+- test_choose_step_retry_requeues_block: choose 内动作 skip 后 retry 档 -> 断点记块首(si) + retry_delay 置入
+- test_pick_choose_branch_without_trace: _pick_choose_branch trace=None 直调三态(命中分支/default/空操作)
+- test_process_exception_traced_and_reraised: _process 未兜住异常 -> trace 记 exception 留痕后原样上抛
+- test_trace_record_failure_swallowed: trace 记录失败只 DEBUG 吞掉, 不影响 verdict
 """
 import os
 import tempfile
 import time
+from contextlib import contextmanager
+from types import SimpleNamespace
 
+import pytest
+
+from auto_qb.config import ConfigError
+from auto_qb.config.compat import CONDITION_TREE_MAX_DEPTH
+from auto_qb.rules import registry
 from auto_qb.rules.actions import AddCategoryAction
-from auto_qb.rules.base import VERDICT_EXECUTED, VERDICT_PENDING
-from helpers import FakeClient, FakeConfig, FakeTorrent, FakeTracker, _hr_rule, make_ctx, make_manager, seed_store
+from auto_qb.rules.base import (
+    VERDICT_EXECUTED,
+    VERDICT_NO_MATCH,
+    VERDICT_PENDING,
+    VERDICT_RETRY,
+    ActionResult,
+    ChooseBlock,
+    ChooseBranch,
+    Rule,
+)
+from helpers import (
+    FakeClient,
+    FakeConfig,
+    FakeTorrent,
+    FakeTracker,
+    _hr_rule,
+    capture_logs,
+    make_ctx,
+    make_manager,
+    seed_store,
+)
 
 
 def _run_rules(mgr, client, tor, dry_run=False):
@@ -291,3 +328,288 @@ def test_rule_interval():
         client.calls.clear()
         assert tq.run_due(False, now=now + 60) >= 1, "stop_low_ratio 应到期"
         assert ("stop", None) in client.calls, f"60s 后应再次 stop: {client.calls}"
+
+
+# ---------------------------------------------------------------------------
+# 条件组合树 / choose 编排块守卫簇(覆盖率第三轮 T0a): 构造期 ConfigError 兜底 +
+# choose 步 pending/retry 断点语义 + trace 留痕失败面。只补测试, 产品代码零改动。
+# ---------------------------------------------------------------------------
+
+
+class _FixedCond:
+    """内存直构哑条件(测试桩, 与 _trace_cond_name 注释的「哑条件」同形): match 返回固定值"""
+    def __init__(self, result):
+        self.result = result
+
+    def match(self, ctx):
+        return self.result
+
+
+@contextmanager
+def _fake_rule_actions():
+    """临时注册三个假动作(pending/skip/fail)供 choose 步断点语义用例使用
+
+    registry 是全局面: 用完 ACTIONS/ACTION_ENTRIES 双字典同弹(与 test_registry 同纪律,
+    残条目会污染派生守卫与其它用例)。
+    """
+    @registry.register_action
+    class T0aPending:
+        name = "t0a_pending"
+
+        def __init__(self, spec):
+            pass
+
+        def execute(self, ctx):
+            return ActionResult.pending("等待异步")
+
+    @registry.register_action
+    class T0aSkip:
+        name = "t0a_skip"
+
+        def __init__(self, spec):
+            pass
+
+        def execute(self, ctx):
+            return ActionResult.skip("跳过")
+
+    @registry.register_action
+    class T0aFail:
+        name = "t0a_fail"
+
+        def __init__(self, spec):
+            pass
+
+        def execute(self, ctx):
+            return ActionResult.fail("炸了")
+
+    try:
+        yield
+    finally:
+        for n in ("t0a_pending", "t0a_skip", "t0a_fail"):
+            registry.ACTIONS.pop(n, None)
+            registry.ACTION_ENTRIES.pop(n, None)
+
+
+def test_condition_tree_depth_limit():
+    """条件组合树嵌套超上限拒绝(构造期兜底); 上限内恰好的嵌套放行(守卫刻度校准)"""
+    node = {"state": "is_complete"}
+    for _ in range(CONDITION_TREE_MAX_DEPTH):  # 16 层 not -> 叶子落在第 17 层, 超限
+        node = {"not": node}
+    with pytest.raises(ConfigError, match="嵌套超过上限"):
+        Rule("t0a-deep", {"conditions": node}, None)
+
+    ok = {"state": "is_complete"}
+    for _ in range(CONDITION_TREE_MAX_DEPTH - 1):  # 15 层 not -> 叶子恰在第 16 层, 放行
+        ok = {"not": ok}
+    rule = Rule("t0a-deep-ok", {"conditions": ok}, None)
+    assert rule.condition_tree[0] == "not", "上限内嵌套应正常建树"
+
+
+def test_condition_tree_node_shape_guards():
+    """条件节点形状兜底: 多键字典(顶层与嵌套同拦)/ all 非列表 -> ConfigError"""
+    with pytest.raises(ConfigError, match="单键字典"):
+        Rule("t0a-shape", {"conditions": {"state": "is_complete", "hr": "satisfied"}}, None)
+    with pytest.raises(ConfigError, match="单键字典"):
+        Rule("t0a-shape", {"conditions": {"all": [{"state": "is_complete", "hr": "satisfied"}]}}, None)
+    with pytest.raises(ConfigError, match="必须是列表"):
+        Rule("t0a-shape", {"conditions": {"all": "not-a-list"}}, None)
+
+
+def test_condition_tree_not_node_negation():
+    """not 孩子递归建树 + 求值取反: 命中取反成不命中, 不命中取反成命中"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "t0a-not",
+            {
+                "conditions": {
+                    "not": {
+                        "state": "is_complete"
+                    }
+                },
+                "actions": [{
+                    "add_tags": ["t0a-not"]
+                }]
+            },
+            mgr,
+        )
+        ctx_hit = make_ctx(mgr, FakeTorrent(), client)  # stalledUP: is_complete True
+        assert rule.matches(ctx_hit) is False, "内层命中, not 应取反成 False"
+        ctx_miss = make_ctx(mgr, FakeTorrent(state="pausedDL"), client)  # is_complete False
+        assert rule.matches(ctx_miss) is True, "内层不命中, not 应取反成 True"
+
+
+def test_rule_conditions_non_dict_rejected():
+    """conditions 归一后非 dict(normalize 对字符串原样透传) -> ConfigError"""
+    with pytest.raises(ConfigError, match="conditions 必须是组合树字典"):
+        Rule("t0a-nd", {"conditions": "is_complete"}, None)
+
+
+def test_choose_block_construction_guards():
+    """choose 构造期兜底三分支: 分支非 dict / when 建树异常包装规则名 / then 非列表"""
+    with pytest.raises(ConfigError, match=r"choose 分支\[0\]: 必须是字典"):
+        Rule("t0a-ch", {"actions": [{"choose": ["junk"]}]}, None)
+    with pytest.raises(ConfigError, match=r"choose 分支\[0\]\.when"):
+        Rule("t0a-ch", {"actions": [{"choose": [{"when": {"no_such_cond_t0a": 1}, "then": []}]}]}, None)
+    with pytest.raises(ConfigError, match=r"choose 分支\[0\]\.then: 必须是列表"):
+        Rule("t0a-ch", {"actions": [{"choose": [{"when": {"state": "is_complete"}, "then": "oops"}]}]}, None)
+
+
+def test_choose_step_pending_with_task():
+    """choose 分支动作 pending + 任务驱动: 断点记块后(si+1), VERDICT_PENDING"""
+    with tempfile.TemporaryDirectory() as td, _fake_rule_actions():
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "t0a-ch-pending",
+            {"actions": [{
+                "choose": [{
+                    "when": {
+                        "state": "is_complete"
+                    },
+                    "then": [{
+                        "t0a_pending": None
+                    }]
+                }]
+            }]},
+            mgr,
+        )
+        tor = FakeTorrent()
+        ctx = make_ctx(mgr, tor, client)
+        task = SimpleNamespace(resume_index=None, attempt=0, retry_delay=None)
+        ctx.task = task
+        assert rule.process(ctx) == VERDICT_PENDING
+        assert task.resume_index == 1, "choose 步粒度: 断点记块后(si=0 -> 1)"
+
+
+def test_choose_step_pending_without_task():
+    """choose 分支动作 pending 无任务(外部入口, 不应发生): 视为成功继续, VERDICT_EXECUTED"""
+    with tempfile.TemporaryDirectory() as td, _fake_rule_actions():
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "t0a-ch-pending2",
+            {"actions": [{
+                "choose": [{
+                    "when": {
+                        "state": "is_complete"
+                    },
+                    "then": [{
+                        "t0a_pending": None
+                    }]
+                }]
+            }]},
+            mgr,
+        )
+        ctx = make_ctx(mgr, FakeTorrent(), client)
+        assert rule.process(ctx) == VERDICT_EXECUTED, "无任务 pending 应按成功继续收场"
+
+
+def test_choose_step_retry_requeues_block():
+    """choose 内 retry(W3-B 口径): skip 动作放行到 retry 档动作 -> 断点记块首(si), retry_delay 置入 task"""
+    with tempfile.TemporaryDirectory() as td, _fake_rule_actions():
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "t0a-ch-retry",
+            {
+                "actions":
+                    [
+                        {
+                            "choose":
+                                [
+                                    {
+                                        "when": {
+                                            "state": "is_complete"
+                                        },
+                                        "then":
+                                            [
+                                                {
+                                                    "t0a_skip": None
+                                                },  # skip: 穿过整条分派链落回循环(613 假向)
+                                                {
+                                                    "t0a_fail": None,
+                                                    "on_error": {
+                                                        "policy": "retry",
+                                                        "retries": 2,
+                                                        "backoff": 60
+                                                    }
+                                                },
+                                            ],
+                                    }
+                                ]
+                        }
+                    ]
+            },
+            mgr,
+        )
+        ctx = make_ctx(mgr, FakeTorrent(), client)
+        task = SimpleNamespace(resume_index=None, attempt=0, retry_delay=None)
+        ctx.task = task
+        assert rule.process(ctx) == VERDICT_RETRY
+        assert task.resume_index == 0, "choose 内 retry: 断点记块首, 续跑整块重新求值"
+        assert task.retry_delay == 60.0, "retry_delay 应由 _dispatch_result 置入 task"
+
+
+def test_pick_choose_branch_without_trace():
+    """_pick_choose_branch trace=None 直调三态(process 恒传 trace, 无 trace 面由直调补)"""
+    rule = Rule("t0a-pick", {}, None)
+    hit = ChooseBlock([ChooseBranch(("leaf", _FixedCond(True)), [], [])], [], [])
+    assert rule._pick_choose_branch(hit, None, "log", trace=None)[2] == 0, "命中分支返回分支序号"
+    to_default = ChooseBlock([ChooseBranch(("leaf", _FixedCond(False)), [], [])], ["d-act"], [{"policy": "stop"}])
+    actions, _, label = rule._pick_choose_branch(to_default, None, "log", trace=None)
+    assert label == "default" and actions == ["d-act"], "无命中走 default"
+    to_none = ChooseBlock([ChooseBranch(("leaf", _FixedCond(False)), [], [])], [], [])
+    actions, on_errors, label = rule._pick_choose_branch(to_none, None, "log", trace=None)
+    assert label is None and actions == [] and on_errors == [], "无命中且无 default = 空操作"
+
+
+def test_process_exception_traced_and_reraised(monkeypatch):
+    """_process 未兜住的异常: trace 记 verdict=exception 留痕后原样上抛(引擎 _run_rule 记 ERROR)"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule("t0a-boom", {"actions": [{"add_tags": ["t0a-boom"]}]}, mgr)
+        ctx = make_ctx(mgr, FakeTorrent(tags=""), client)
+
+        seen = {}
+
+        def boom(*a, **k):
+            raise RuntimeError("record 炸了")
+
+        monkeypatch.setattr(mgr.ctx.state, "record_execution", boom)
+        monkeypatch.setattr(mgr.ctx.state, "record_rule_trace", lambda name, h, entry: seen.update(entry))
+        with pytest.raises(RuntimeError, match="record 炸了"):
+            rule.process(ctx)
+        assert seen.get("verdict") == "exception", "异常路径应先留痕再上抛"
+        assert "RuntimeError" in seen.get("error", ""), "异常串应进 trace.error"
+
+
+def test_trace_record_failure_swallowed(monkeypatch):
+    """trace 记录失败只 DEBUG 吞掉(排障辅助不反噬执行), verdict 照常返回"""
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        client = FakeClient()
+        rule = Rule(
+            "t0a-notrace",
+            {
+                "conditions": {
+                    "state": "is_downloading"
+                },
+                "actions": [{
+                    "add_tags": ["x"]
+                }]
+            },
+            mgr,
+        )
+        ctx = make_ctx(mgr, FakeTorrent(), client)  # stalledUP: is_downloading False -> NO_MATCH
+
+        def boom(*a, **k):
+            raise RuntimeError("trace 写入炸了")
+
+        monkeypatch.setattr(mgr.ctx.state, "record_rule_trace", boom)
+        with capture_logs("auto_qb.rules.base") as cap:
+            verdict = rule.process(ctx)
+        assert verdict == VERDICT_NO_MATCH, "trace 失败不应改变 verdict"
+        assert any("trace 记录失败" in m for m in cap.messages), f"应有 DEBUG 留痕: {cap.messages}"

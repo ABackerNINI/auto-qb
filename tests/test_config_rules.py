@@ -13,6 +13,12 @@
 - test_non_tri_state_empty_still_stripped: 全局段与站点段非 tri_state 键的显式空串照剥(语义不随 v4 翻转)
 - test_load_web_skip_check_menu_tristate: web.skip_check_menu 三态(显式 true / 显式 false / 缺省默认 false, 计划 26-10-02-1955 W1)
 - test_skip_checking_tag_global_default_and_override
+- test_tracker_rules_ref_valid_set_and_rule_no_error: tracker.rules 合法 @规则集.规则名 引用零报错(覆盖率第三轮 T0a)
+- test_validate_rules_tags_condition_non_string_group_skipped: tags 条件组内非字符串项静默跳过(类型错留 Rule 构造暴露)
+- test_validate_rules_conditions_retired_pseudo_action_bool: conditions 域退役伪动作按布尔校验(合法值放行/非法值报错)
+- test_validate_rules_action_missing_params: 规范形动作缺 params -> fail-fast 报错
+- test_validate_rules_choose_branch_not_dict: choose 分支非 dict -> 按分支坐标报错
+- test_validate_rules_deleted_trigger_choose_whitelist: on_torrent_deleted 下 choose 块内动作白名单核对的结构残缺跳过面 + 块内白名单外动作照拦
 """
 
 import logging
@@ -228,3 +234,132 @@ def test_load_web_skip_check_menu_tristate():
         assert cfg.web.skip_check_menu is False
         cfg = load_config(_write_raw(td, base))
         assert cfg.web.skip_check_menu is False  # 缺省走保守默认(菜单不显示 + 端点拒绝)
+
+
+# ---------------------------------------------------------------------------
+# 规则集 spec 校验守卫簇(覆盖率第三轮 T0a): 键/取值域/conditions-actions 结构 +
+# on_torrent_deleted 白名单 choose 块核对面。只补测试, 产品代码零改动。
+# 直调 _validate_rules 的用例说明: 目标分支是「YAML 全标量字符串」形状到不了的防御位
+# (BaseLoader 读入的标量恒为 str), 内存直构 spec 才能触发 —— 与 config-validation-test-input
+# 坑档「走真实链路最省事」不冲突, 这里是链路本身到不了的面。
+# ---------------------------------------------------------------------------
+
+
+def _validate_spec_errors(spec) -> list:
+    """内存直构单规则 spec -> 校验错误清单(绕过 YAML 链路, 触发字符串形状到不了的分支)"""
+    from auto_qb.config.validation.rules import _validate_rules
+
+    errors: list = []
+    _validate_rules({"t0a_rules": {"r": spec}}, errors)
+    return errors
+
+
+def test_tracker_rules_ref_valid_set_and_rule_no_error():
+    """tracker.rules 合法引用(@规则集.规则名 与 @规则集)零报错: 引用存在性校验的通过面"""
+    text = (
+        "config:\n"
+        "  trackers:\n"
+        "    T1:\n"
+        "      domains: [a.com]\n"
+        "      rules: [\"@t0a_rules.myrule\", \"@t0a_rules\"]\n"
+        "  t0a_rules:\n"
+        "    myrule:\n"
+        "      conditions: [{state: is_uploading}]\n"
+        "      actions: [{add_tags: [x]}]\n"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        assert _load_errors(td, text) == "", "合法规则集/规则引用不应报错"
+
+
+def test_validate_rules_tags_condition_non_string_group_skipped():
+    """tags 条件组内非字符串项静默跳过(正则只查字符串组员; 类型错由 Rule 构造自然暴露)"""
+    errors = _validate_spec_errors({"conditions": {"tags": [123]}})
+    assert errors == [], f"非字符串组员应跳过不报: {errors}"
+
+
+def test_validate_rules_conditions_retired_pseudo_action_bool():
+    """conditions 域退役伪动作 ignore_next_action_error 按布尔校验(升级检测): 合法值放行, 非法值报错"""
+    errors = _validate_spec_errors({"conditions": {"ignore_next_action_error": "true"}})
+    assert errors == [], f"合法布尔值应放行: {errors}"
+    errors = _validate_spec_errors({"conditions": {"ignore_next_action_error": "not-a-bool"}})
+    assert any("ignore_next_action_error" in e for e in errors), f"非法布尔值应报错: {errors}"
+
+
+def test_validate_rules_action_missing_params():
+    """规范形动作缺 params -> fail-fast 报错(normalize 只补 on_error, params 缺失直报)"""
+    errors = _validate_spec_errors({"actions": [{"type": "add_tags"}]})
+    assert any("缺少 params" in e for e in errors), f"缺 params 应报错: {errors}"
+
+
+def test_validate_rules_choose_branch_not_dict():
+    """choose 分支非 dict -> 按分支坐标 fail-fast(choose[i]: 必须是字典)"""
+    errors = _validate_spec_errors({"actions": [{"choose": ["junk"]}]})
+    assert any("choose[0]: 必须是字典" in e for e in errors), f"分支非 dict 应报错: {errors}"
+
+
+def test_validate_rules_deleted_trigger_choose_whitelist():
+    """on_torrent_deleted 下 choose 块内动作白名单核对: 结构残缺项跳过(交 _validate_action_entry 报),
+    块内白名单外动作照拦、白名单内动作零报(坐标 choose[i].then[j])"""
+    # choose 本体非列表: 白名单核对跳过, 结构错交 _validate_choose_block
+    errors = _validate_spec_errors({"trigger": "on_torrent_deleted", "actions": [{"choose": "oops"}]})
+    assert not any("不适用于" in e for e in errors), f"choose 本体异形不应进白名单核对: {errors}"
+    assert any("必须是分支列表" in e for e in errors), errors
+    # 分支非 dict / then 非列表: 白名单核对同样跳过
+    errors = _validate_spec_errors(
+        {
+            "trigger": "on_torrent_deleted",
+            "actions": [{
+                "choose": ["junk", {
+                    "when": {
+                        "state": "is_seeding"
+                    },
+                    "then": "oops"
+                }]
+            }],
+        }
+    )
+    assert not any("不适用于" in e for e in errors), f"结构残缺分支不应进白名单核对: {errors}"
+    assert any("choose[0]: 必须是字典" in e for e in errors), errors
+    assert any("then: 必须是列表" in e for e in errors), errors
+    # then 内非 dict 项 / 空 dict 项: 白名单单项核对跳过
+    errors = _validate_spec_errors(
+        {
+            "trigger": "on_torrent_deleted",
+            "actions": [{
+                "choose": [{
+                    "when": {
+                        "state": "is_seeding"
+                    },
+                    "then": [123, {}]
+                }]
+            }],
+        }
+    )
+    assert not any("不适用于" in e for e in errors), f"非 dict/空动作不应进白名单核对: {errors}"
+    # 块内白名单外动作照拦(坐标 then[1]); 白名单内动作零报(then[0])
+    errors = _validate_spec_errors(
+        {
+            "trigger":
+                "on_torrent_deleted",
+            "actions":
+                [
+                    {
+                        "choose":
+                            [
+                                {
+                                    "when": {
+                                        "state": "is_seeding"
+                                    },
+                                    "then": [{
+                                        "print_torrent_details": None
+                                    }, {
+                                        "add_tags": ["x"]
+                                    }]
+                                }
+                            ]
+                    }
+                ],
+        }
+    )
+    assert any("choose[0].then[1]" in e and "'add_tags'" in e for e in errors), f"块内白名单外动作应拦: {errors}"
+    assert not any("then[0]" in e for e in errors), f"白名单内动作不应报: {errors}"
