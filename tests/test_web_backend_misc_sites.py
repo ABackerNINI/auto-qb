@@ -6,6 +6,9 @@
 - test_sites_missing_all_covered_returns_empty: 全部域名已被覆盖 -> sites 空数组
 - test_sites_missing_requires_connected_client: qB 断连 -> 503(不得拿空扫描冒充"没有缺失站点")
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
+- test_sites_missing_groups_merge_cooccurring_domains: 同一颗种子共现的两缺失域名 -> groups 一条(domains 两元素 sorted、name=代表名=组内最短域名、entry 为后端单点产出的合并条目, 与 CLI 合并导出同规则)
+- test_sites_missing_groups_single_domains_match_sites: 无共现全单元素组 -> groups 与 sites 一一对应且 domains 单元素、entry 键存在; sites 保持 name/domain/entry 三键原形
+- test_sites_missing_no_missing_groups_empty: 无缺失域名 -> groups 空数组(与 sites 空数组同现)
 - test_frontend_sites_import_wiring: 一键导入按钮接线守阵 —— 两套 UI 站点 pill 行都挂「⤓ 导入缺失站点」+ config_hub.js 的 hubImportSites/防重入标志
 - test_frontend_tracker_search_wiring: 站点页搜索接线守阵(计划 26-09-27-1852) —— 模板三件套(输入绑定/清空钮/计数) + 归一化必须 \\p{L}\\p{N}(u 标志, ASCII \\W 折碎中文词) + 收层路径四条一律清词单点(点命中/Esc/点暗幕/点外即收; 方案C 聚焦层 2026-09-29 拍板) + 聚焦层开合/键盘导航/IME 守卫 + 悬停接管位移门限(治上下键选中项闪烁 2026-09-29) + 键盘活动项滚动跟随(26-09-29-2142) + pill 无键数徽标 + 行尾动作区分形 + hb-tr-* 类 CSS 成对定义
 - test_frontend_dialog_combo_hover_takeover: 弹窗下拉悬停接管守阵(issue 26-09-29-2142, 站点搜索闪烁同族) —— 分类/标签/编辑分类下拉 @mousemove+3px 位移门限共享小工具(comboHoverIdx) + @mouseenter 直写零残留 + 门限坐标 state 声明 + 开层单点复位 + 三皮肤 data-hi 行 CSS 摘 :hover(高亮只走 .on 单路)
@@ -117,6 +120,66 @@ def test_sites_missing_api_failure_maps_502(web_env):
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.get("/api/sites/missing", headers=auth)
     assert resp.status_code == 502 and "boom" in resp.json()["detail"]
+
+
+def test_sites_missing_groups_merge_cooccurring_domains(web_env):
+    """groups(计划 26-11-03-2337 M3): 同一颗种子共现的两缺失域名 -> 合并成一条组
+
+    分组/代表名与 CLI 合并导出同一套构件(group_missing_domains / build_merged_entry):
+    代表域名 = 组内最短(tie 取字典序), domains 组内 sorted。
+    """
+    mgr, client = _site_scan_env(
+        web_env,
+        {"T1": [{
+            "url": "https://www.longptsite.com/announce"
+        }, {
+            "url": "http://abc.pt/announce"
+        }]},
+    )
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = client.get("/api/sites/missing", headers=auth).json()
+    assert len(data["groups"]) == 1, "同一颗种子共现 -> 只并成一条组"
+    g = data["groups"][0]
+    assert g["domains"] == ["abc.pt", "www.longptsite.com"], "组内域名 sorted"
+    # 代表名 = 最短域名 abc.pt 的清洗名; sites 先逐域名取名占用了 abc_pt,
+    # 组名沿用同一 taken 查重序列顺延 _1 后缀(两边永不撞名)
+    assert g["name"] == "abc_pt_1"
+    assert "entry" in g and g["entry"]["domains"] == ["abc.pt", "www.longptsite.com"], \
+        "合并 entry 由后端单点产出(build_merged_entry), domains 键为组内全域名"
+
+
+def test_sites_missing_groups_single_domains_match_sites(web_env):
+    """groups 退化形态: 无共现全单元素组 -> 与 sites 一一对应且 domains 单元素; sites 原形不变"""
+    mgr, client = _site_scan_env(
+        web_env,
+        {
+            "T1": [{
+                "url": "http://alpha.io/announce"
+            }],
+            "T2": [{
+                "url": "http://beta.net/announce"
+            }],
+        },
+    )
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = client.get("/api/sites/missing", headers=auth).json()
+    assert [g["domains"] for g in data["groups"]] == [["alpha.io"], ["beta.net"]]
+    assert [g["domains"][0] for g in data["groups"]] == [s["domain"] for s in data["sites"]], \
+        "全单元素组时 groups 与 sites 按序一一对应"
+    assert [g["name"] for g in data["groups"]] == ["alpha_io_1", "beta_net_1"], \
+        "组名在 sites 之后的同一 taken 查重序列上顺延"
+    for g in data["groups"]:
+        assert "entry" in g, "groups 每条带合并 entry(前端合并模式直接用)"
+    for s in data["sites"]:
+        assert set(s.keys()) == {"name", "domain", "entry"}, "sites 保持逐域名三键原形(加字段零破坏)"
+
+
+def test_sites_missing_no_missing_groups_empty(web_env):
+    """无缺失域名 -> groups 空数组(与 sites 空数组同现, 前端维持现状路径)"""
+    mgr, client = _site_scan_env(web_env, {"T1": [{"url": "https://tracker.d.com/announce"}]})
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    data = client.get("/api/sites/missing", headers=auth).json()
+    assert data["sites"] == [] and data["groups"] == []
 
 
 def test_frontend_sites_import_wiring():
