@@ -9,36 +9,42 @@
 
 ```python
 run(dry_run, stop_event=None, pause_event=None):        # qbmanager.py:403
-    materialize_schema_migration()   # 配置 schema 启动物化(磁盘落后才写; dry-run 只探测, :423)
-    host.start_all(dry_run)          # 模块 start 按装配序: web 服务器 / HR 端点与取数线程 /
-                                     # 全局任务自注册(原 _create_global_tasks 点名退役, :435)
-    while not connect():             # 首连: 非托管模式失败抛 QbConnectError 干净退出(:441-449);
-        ...                          # 托管模式(--tray)按 main_tick 重试直至成功或收到停止
-    self.state = ctx.state.load()    # run() 启动再加载一次(:452)
-    ctx.state.materialize_migration(dry_run)            # state schema 迁移物化(:456)
-    ctx.state.next_flush_at = now + interval            # 周期落盘起点重置(:458)
-    host.get("rules")._load_rules()                     # 规则加载在 run() 进行(:459)
-    while True:
-        main_tick = config.main_tick                    # L0 热重载: 每轮重读
-        sync_interval = min(config.sync_interval, main_tick)   # 快档>任务档时钳制(BUG-6)
-        _wake_event.clear()
-        state_changed = host.run_command_line()         # 命令线(:485): 消费命令+检查在途汇报确认
-        if paused: _wait_next(...); continue            # 暂停 = 完全旁观
-        host.run_micro_line(dry_run)                    # 微步线: 跳检相位机每轮一步(无固定节拍)
-        sync_due = now >= next_sync_at or (state_changed and not dry_run)  # P0-5 命令后补一次
-        tick_due = now >= next_tick_at
-        if sync_due and tick_due: _tick(dry_run, force=cmd_forced)   # 两线同拍 -> 完整一轮
-        elif sync_due:            _sync_line(dry_run, force=cmd_forced)
-        elif tick_due:            _task_line(dry_run, force=cmd_forced)
-        web.flush_truths()               # 推迟回执无条件落(:526; 异常路径兜底 :564-565)
-        if not dry_run:
-            ctx.state.maybe_flush(...)   # 周期落盘(:534-535, 间隔 state_save_interval)
-        重连检测(:540 附近, 门是 _ran_line) + 断连稳态守卫/退避重连(:573 附近)
-        _wait_next(stop_event, _wake_event, min(next_sync_at, next_tick_at, 微步线到期) - now)
-    finally:                             # (:573-580)
+    materialize_schema_migration()   # 配置 schema 启动物化(磁盘落后才写; dry-run 只探测)
+    lifecycle_ready = False          # 启动期完成闸(2026-11-03): 失败启动不落空态 state
+    try:
+        host.start_all(dry_run)      # 模块 start 按装配序: web 服务器 / HR 端点与取数线程 /
+                                     # 全局任务自注册(原 _create_global_tasks 点名退役);
+                                     # 移入 try 后启动期致命错误(WebUIBindError/HrChannelBindError)
+                                     # 也走 finally -> stop_all + 释放锁
+        lifecycle_ready = True       # start_all 正常返回才允许退出落盘
+        while not connect():         # 首连: 非托管模式失败抛 QbConnectError 干净退出;
+            ...                      # 托管模式(--tray)按 main_tick 重试直至成功或收到停止
+        self.state = ctx.state.load()    # run() 启动再加载一次
+        ctx.state.materialize_migration(dry_run)            # state schema 迁移物化
+        ctx.state.next_flush_at = now + interval            # 周期落盘起点重置
+        host.get("rules")._load_rules()                     # 规则加载在 run() 进行
+        while True:
+            main_tick = config.main_tick                    # L0 热重载: 每轮重读
+            sync_interval = min(config.sync_interval, main_tick)   # 快档>任务档时钳制(BUG-6)
+            _wake_event.clear()
+            state_changed = host.run_command_line()         # 命令线: 消费命令+检查在途汇报确认
+            if paused: _wait_next(...); continue            # 暂停 = 完全旁观
+            host.run_micro_line(dry_run)                    # 微步线: 跳检相位机每轮一步(无固定节拍)
+            sync_due = now >= next_sync_at or (state_changed and not dry_run)  # P0-5 命令后补一次
+            tick_due = now >= next_tick_at
+            if sync_due and tick_due: _tick(dry_run, force=cmd_forced)   # 两线同拍 -> 完整一轮
+            elif sync_due:            _sync_line(dry_run, force=cmd_forced)
+            elif tick_due:            _task_line(dry_run, force=cmd_forced)
+            web.flush_truths()               # 推迟回执无条件落(异常路径兜底)
+            if not dry_run:
+                ctx.state.maybe_flush(...)   # 周期落盘(间隔 state_save_interval)
+            重连检测(门是 _ran_line) + 断连稳态守卫/退避重连
+            _wait_next(stop_event, _wake_event, min(next_sync_at, next_tick_at, 微步线到期) - now)
+    finally:
         host.stop_all()                  # 模块停用(装配逆序); 状态落盘与锁释放留在其后
-        ctx.state.save()                 # 优雅退出落盘(:577-578)
-        lock.release()
+        if not dry_run and lifecycle_ready:  # 失败启动不落空态 state.json(2026-11-03)
+            ctx.state.save()             # 优雅退出落盘
+        lock.release()                   # 任何路径都释放(含启动期 fail-fast)
 
 _sync_line(dry_run, flush=True):         # 同步线 (sync_interval, 默认 1.5s) —— 只刷快照不跑任务
     _refresh_torrents(dry_run)           # 刷新快照 + 相位广播(见下节, :726-832)
@@ -51,6 +57,8 @@ _task_line(dry_run):                     # 任务线 (main_tick, 默认 2s)
 
 _tick = _sync_line(flush=False) + _task_line()       # 完整一轮; 两线同拍时视图只重建一次
 ```
+
+**启动期 fail-fast 与清理(2026-11-03, plan 26-11-03-0930)**: `start_all` 移入 `try` 后, 任何模块 `start` 抛错(`WebUIBindError` / 既有 `HrChannelBindError`)都不再跳过 `finally` —— `stop_all` 幂等拆已启动模块, `lock.release()` 与 `state.lock.meta.json` 在任何路径都释放(连带修掉 HR fail-fast 的既有漏锁)。`lifecycle_ready` 闸门只放行「`start_all` 正常返回」后的退出落盘, 失败启动不在 fresh 目录写空态 `state.json`; 正常运行的非优雅终止丢失窗口语义不变(黄金法则 3)。
 
 **主循环与表现层的边界(P2 门面转正)**: 内核只按节拍调宿主 hooks(`run_command_line`/`run_sync_line`/`run_task_line`, `qbmanager.py:485/663/679`), 「要不要重建视图 / 要不要预取错误原因」等判据全部内聚在表现层 —— 三步收尾单点在 `webui/module.py:82-106`(on_command_line: consume_commands + check_pending / on_sync_line: flush_views / on_task_line: advance_error_reasons → flush_views → advance_search_index)。
 

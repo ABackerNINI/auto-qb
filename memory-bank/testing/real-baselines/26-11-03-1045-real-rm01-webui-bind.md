@@ -3,7 +3,7 @@
 > 摘要: 真机实测轨 RM01 单条复测 —— 端口被占时 WebUI bind 失败无条件 fail-fast: 退出码 1、ERROR 行与诊断块含 web.port/web.enabled、state.lock 与 meta 已释放、占位 socket 仍持有端口
 > 基线时间: 2026-11-03 10:45
 > 基线 commit: 2f61ce98(实测时刻 HEAD; 判据改动在工作树)
-**Refs:**
+**Refs:** memory-bank/testing/baselines/26-11-03-1112-webui-bind-fail-fast.md
 
 ## 01 验收数字
 
