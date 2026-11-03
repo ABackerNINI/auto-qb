@@ -30,7 +30,9 @@ from __future__ import annotations
 import ipaddress
 import logging
 import math
+import os
 import re
+import shutil
 from dataclasses import dataclass, fields, replace
 from typing import Any, Mapping, Optional, Tuple
 
@@ -107,6 +109,10 @@ _BOOL_FIELDS = ("autostart", )
 _KNOWN_FIELDS = frozenset(
     _DURATION_FIELDS + _SIZE_FIELDS + _RATE_FIELDS + _INT_FIELDS + _HOST_FIELDS + _LIST_FIELDS + _BOOL_FIELDS
 )
+
+# S6/D6: v2 overlay 白名单 —— 新版本新增、旧版本不认识的键只允许出现在
+# <data_dir>/config.v2.yml; 主 config.yml 永不含它们, 旧版本读不到未知键即可零操作回滚。
+_V2_FIELDS = _RATE_FIELDS
 
 # 端口区间 (S13/D9): 0 合法 = 内核分配随机端口; 下限从 1 放开到 0
 _PORT_RANGE = (0, 65535)
@@ -293,32 +299,209 @@ def validate_payload(payload: Mapping[str, Any]) -> Tuple[Optional[Config], Tupl
     return replace(Config(), **overrides), ()
 
 
-def load_config(path: str) -> Tuple[Optional[Config], Tuple[str, ...]]:
-    """从 config.yml 加载并校验: 文件缺失 -> 默认配置 (空载荷语义);
-    解析失败/顶层非映射/校验失败 -> (None, 错误)."""
+def v2_overlay_path(config_path: str) -> str:
+    """主配置路径 -> 同目录 v2 overlay 路径 (config.yml -> config.v2.yml).
+
+    同目录是硬约束: 原子写走同卷 os.replace, 跨目录/跨卷替换不保证原子。
+    """
+    root, ext = os.path.splitext(config_path)
+    return f"{root}.v2{ext or '.yml'}"
+
+
+def _read_overlay(overlay_path: str) -> Tuple[Any, Tuple[str, ...]]:
+    """读 overlay: 缺失 -> (None, ()); YAML/IO 失败 -> (None, (文件感知错误,)).
+
+    缺失与空文件都归 None (空载荷 = 尚无 v2 键), 交给 ensure 补齐。
+    """
+    try:
+        with open(overlay_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f), ()
+    except FileNotFoundError:
+        return None, ()
+    except yaml.YAMLError as e:
+        return None, (f"config.v2.yml 解析失败 (YAML): {e}", )
+    except OSError as e:
+        return None, (f"config.v2.yml 读取失败: {e}", )
+
+
+def _validate_overlay(raw: Any, errors: list[str]) -> dict[str, int]:
+    """校验 overlay 载荷: 只允许 _V2_FIELDS, 值走与主配置同一解析器。
+
+    未知键/非法值聚合进 errors 且带文件名 —— 与主配置同等级 fail-fast, 不静默忽略。
+    返回已解析的内存值 (B/s), 供 ensure 与内存值逐项比较。
+    """
+    if raw is None:
+        return {}
+    if not isinstance(raw, Mapping):
+        errors.append(f"config.v2.yml 载荷必须是映射, 收到 {type(raw).__name__}")
+        return {}
+    parsed: dict[str, int] = {}
+    for key in raw:
+        if key not in _V2_FIELDS:
+            errors.append(f"config.v2.yml 未知键: {key!r} (允许: {', '.join(_V2_FIELDS)})")
+    for name in _V2_FIELDS:
+        if name not in raw:
+            continue
+        sub: list[str] = []
+        value = _check_rate(name, raw[name], sub)
+        errors.extend(f"config.v2.yml {msg}" for msg in sub)
+        if value is not None:
+            parsed[name] = value
+    return parsed
+
+
+def load_config(path: str, overlay_path: Optional[str] = None) -> Tuple[Optional[Config], Tuple[str, ...]]:
+    """从 config.yml (+ 可选 config.v2.yml overlay) 加载并校验: 文件缺失 -> 默认配置
+    (空载荷语义); 解析失败/顶层非映射/校验失败 -> (None, 错误).
+
+    overlay_path 给定时: overlay 只允许 _V2_FIELDS, 同名字段覆盖主配置 (overlay 为准),
+    再交给 validate_payload 全量校验。overlay 未知键/非法 YAML/非法值 -> 与主配置同级的
+    聚合 fail-fast (错误带 config.v2.yml 文件名, 不静默忽略)。
+    overlay_path=None 保持既有单文件语义 (旧 API / 既有测试)。
+    """
     try:
         with open(path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except FileNotFoundError:
-        return Config(), ()
+        raw = None
     except yaml.YAMLError as e:
         return None, (f"config.yml 解析失败 (YAML): {e}", )
     except OSError as e:
         return None, (f"config.yml 读取失败: {e}", )
+    if overlay_path is None:
+        if raw is None:
+            return Config(), ()
+        return validate_payload(raw)
     if raw is None:
-        return Config(), ()  # 空文件 = 全部默认
-    return validate_payload(raw)
+        main_payload: Mapping[str, Any] = {}
+    elif isinstance(raw, Mapping):
+        main_payload = raw
+    else:
+        return validate_payload(raw)  # 顶层非映射: 与单文件路径同文案
+    errors: list[str] = []
+    _, main_errors = validate_payload(main_payload)
+    errors.extend(main_errors)
+    overlay_payload, overlay_read_errors = _read_overlay(overlay_path)
+    errors.extend(overlay_read_errors)
+    if not overlay_read_errors:
+        _validate_overlay(overlay_payload, errors)
+    if errors:
+        return None, tuple(errors)
+    merged = dict(main_payload)
+    if isinstance(overlay_payload, Mapping):
+        merged.update(overlay_payload)
+    return validate_payload(merged)
 
 
-def save_config(path: str, config: Config) -> None:
-    """配置落盘: YAML (与 auto-qb 同族解析器, S6 WebUI 经 PUT /config 代理读写).
+_OVERLAY_HEADER = "# <data_dir>/config.v2.yml\n# 由 gtm v2 自动创建/维护; 旧版本不会读取本文件\n"
 
-    写盘用 storage.atomic_write_text 工具内原子写单点 (同目录 tmp -> fsync ->
-    replace): 读侧 (auto-qb 设置页 / 工具重启加载) 任何时刻见到完整文件。
+
+def _render_overlay(payload: Mapping[str, Any]) -> str:
+    return _OVERLAY_HEADER + yaml.safe_dump(dict(payload), allow_unicode=True, sort_keys=True)
+
+
+def _backup_file(path: str) -> None:
+    """改写前复制单世代 <path>.bak (覆盖式); 备份失败只 WARNING, 不阻断改写。"""
+    if not os.path.exists(path):
+        return
+    try:
+        shutil.copyfile(path, f"{path}.bak")
+    except OSError as e:
+        logger.warning("配置备份失败 (继续改写): %s", e)
+
+
+def _atomic_write_overlay(path: str, text: str) -> None:
+    """overlay 原子写: 同目录 <path>.tmp.<pid> -> flush -> fsync -> os.replace。
+
+    不建目录 (目录缺失/只读即失败, 由 ensure 降级为内存值继续); 失败清理临时文件。
     """
+    _backup_file(path)
+    tmp_path = f"{path}.tmp.{os.getpid()}"
+    try:
+        with open(tmp_path, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass
+        raise
+
+
+def ensure_v2_overlay(
+    config_path: str,
+    overlay_path: str,
+    config: Optional[Config] = None,
+) -> Tuple[Optional[str], Tuple[str, ...]]:
+    """确保 overlay 含全部 _V2_FIELDS 且解析值等于内存值 (S6/D6 配置升级).
+
+    返回 (写盘消息 or None, 错误元组):
+      - 错误非空 = fail-fast (overlay 未知键/非法 YAML/非法值, 或主配置不可读), 不写盘;
+      - 仅「文件缺失 / 缺键 / 解析值与内存值不等」才写; 键齐全且相等 -> 零写盘 (mtime 不变);
+      - 写盘失败 (目录只读/磁盘满/句柄冲突) -> logger.warning 后返回 (None, ()) 用内存值继续;
+      - 改写前留单世代 <overlay>.bak; 原子写 = <path>.tmp.<pid> -> flush -> fsync -> replace。
+
+    config=None 时以「主配置 + 现有 overlay 合并后的内存值」为准 (启动路径, 保留用户在
+    overlay 里的自定义阈值); 显式传入 config 供保存/测试按给定内存值对齐。
+    """
+    if config is None:
+        loaded, errors = load_config(config_path, overlay_path)
+        if loaded is None:
+            return None, errors
+        config = loaded
+    overlay_raw, read_errors = _read_overlay(overlay_path)
+    if read_errors:
+        return None, read_errors
+    errors: list[str] = []
+    parsed = _validate_overlay(overlay_raw, errors)
+    if errors:
+        return None, tuple(errors)
+    desired = {name: getattr(config, name) for name in _V2_FIELDS}
+    exists = os.path.exists(overlay_path)
+    if exists and all(name in parsed and parsed[name] == desired[name] for name in _V2_FIELDS):
+        return None, ()
+    payload = {name: format_speed(value) for name, value in desired.items()}
+    action = "更新" if exists else "创建"
+    try:
+        _atomic_write_overlay(overlay_path, _render_overlay(payload))
+    except OSError as e:
+        logger.warning("config.v2.yml 写入失败 (降级为内存值继续采样): %s", e)
+        return None, ()
+    rate_text = format_speed(desired["sample_rate_warn_bps"])
+    return f"已{action} config.v2.yml（速率告警 {rate_text}）", ()
+
+
+def _write_main_config(path: str, config: Config) -> None:
+    """写主 config.yml, 且**永不包含** _V2_FIELDS (旧版本回滚可读)."""
     from gtm.storage import atomic_write_text  # 延迟 import: config 单测不强制拉起 storage/filelock 链
 
-    atomic_write_text(path, yaml.safe_dump(config_to_payload(config), allow_unicode=True, sort_keys=True))
+    payload = {k: v for k, v in config_to_payload(config).items() if k not in _V2_FIELDS}
+    atomic_write_text(path, yaml.safe_dump(payload, allow_unicode=True, sort_keys=True))
+
+
+def save_config(path: str, config: Config, overlay_path: Optional[str] = None) -> None:
+    """配置落盘: YAML (与 auto-qb 同族解析器, S6 WebUI 经 PUT /config 代理读写).
+
+    overlay_path 给定时按 §07.5 拆分写: 先 overlay (含 _V2_FIELDS), 后主配置 (不含新键)。
+    先 overlay 保证主配置写失败时新键仍在; 主配置永远保持旧版本可读。
+    overlay_path=None 保持既有单文件行为 (旧 API / 既有测试)。
+
+    写盘用 storage.atomic_write_text (同目录 tmp -> fsync -> replace): 读侧任何时刻
+    见到完整文件; overlay 走本模块 _atomic_write_overlay (同目录 <path>.tmp.<pid> + .bak)。
+    """
+    payload = config_to_payload(config)
+    if overlay_path is None:
+        from gtm.storage import atomic_write_text
+
+        atomic_write_text(path, yaml.safe_dump(payload, allow_unicode=True, sort_keys=True))
+        return
+    overlay_payload = {k: v for k, v in payload.items() if k in _V2_FIELDS}
+    _atomic_write_overlay(overlay_path, _render_overlay(overlay_payload))
+    _write_main_config(path, config)
 
 
 def config_to_payload(config: Config) -> dict[str, Any]:
@@ -366,7 +549,9 @@ def migrate_legacy_config(path: str) -> Optional[str]:
     config, _ = validate_payload(raw)
     if config is None:
         return None  # 坏配置留给启动路径报错 (不在这里二次改写磁盘)
-    save_config(path, config)
+    # 改写主文件前留单世代 .bak (§07.4); 主文件永不含 _V2_FIELDS —— 旧版本仍可启动。
+    _backup_file(path)
+    _write_main_config(path, config)
     return f"旧式数值配置已迁移为复合串 ({', '.join(sorted(legacy))}) -> {path}"
 
 

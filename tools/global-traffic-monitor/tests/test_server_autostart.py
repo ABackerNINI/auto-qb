@@ -291,12 +291,12 @@ def test_config_writes_serialized_put_and_autostart(tmp_path, monkeypatch) -> No
     entered = threading.Event()  # autostart 已持锁进入 save_config
     allow = threading.Event()
 
-    def fake_save(path: str, config: Config) -> None:
+    def fake_save(path: str, config: Config, overlay_path: str | None = None) -> None:
         calls.append(config)
         if len(calls) == 1:
             entered.set()
             assert allow.wait(timeout=5)
-        real_save(path, config)
+        real_save(path, config, overlay_path)
 
     monkeypatch.setattr(server_module, "save_config", fake_save)
     backend = FakeBackend(result=AutostartResult("registered", "已注册"))

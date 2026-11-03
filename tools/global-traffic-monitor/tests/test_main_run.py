@@ -725,7 +725,8 @@ def test_resolve_data_dir_explicit_skips_migration(monkeypatch) -> None:
 
 def test_load_config_or_fail_prints_each_error(monkeypatch, capsys) -> None:
     """校验失败: 聚合错误逐条打到 stderr, 返回 (None, errors)."""
-    monkeypatch.setattr(cli, "load_config", lambda path: (None, ("e1: 未知键 x", "e2: 端口越界")))
+    monkeypatch.setattr(cli, "ensure_v2_overlay", lambda path, overlay: (None, ()))
+    monkeypatch.setattr(cli, "load_config", lambda path, overlay_path=None: (None, ("e1: 未知键 x", "e2: 端口越界")))
     config, errors = cli._load_config_or_fail("/data/self")
     assert config is None and errors == ("e1: 未知键 x", "e2: 端口越界")
     err = capsys.readouterr().err
@@ -735,7 +736,8 @@ def test_load_config_or_fail_prints_each_error(monkeypatch, capsys) -> None:
 def test_load_config_or_fail_reports_legacy_migration(monkeypatch, capsys) -> None:
     """加载成功 + 盘上是旧式裸数值: 迁移一次并打印提示 (只提示, 不改判定)."""
     config = Config()
-    monkeypatch.setattr(cli, "load_config", lambda path: (config, ()))
+    monkeypatch.setattr(cli, "ensure_v2_overlay", lambda path, overlay: (None, ()))
+    monkeypatch.setattr(cli, "load_config", lambda path, overlay_path=None: (config, ()))
     monkeypatch.setattr(cli, "migrate_legacy_config", lambda path: "已把 sample_interval 改写为 5S")
     assert cli._load_config_or_fail("/data/self") == (config, ())
     assert "已把 sample_interval 改写为 5S" in capsys.readouterr().err
@@ -744,10 +746,52 @@ def test_load_config_or_fail_reports_legacy_migration(monkeypatch, capsys) -> No
 def test_load_config_or_fail_silent_when_nothing_to_migrate(monkeypatch, capsys) -> None:
     """无旧值: migrate 返回空串 -> 不打印 (不制造噪音)."""
     config = Config()
-    monkeypatch.setattr(cli, "load_config", lambda path: (config, ()))
+    monkeypatch.setattr(cli, "ensure_v2_overlay", lambda path, overlay: (None, ()))
+    monkeypatch.setattr(cli, "load_config", lambda path, overlay_path=None: (config, ()))
     monkeypatch.setattr(cli, "migrate_legacy_config", lambda path: "")
     assert cli._load_config_or_fail("/data/self") == (config, ())
     assert capsys.readouterr().err == ""
+
+
+def test_load_config_or_fail_creates_overlay_before_load(tmp_path, caplog) -> None:
+    """S6 启动路径: 空 data_dir -> 程序自建 config.v2.yml (INFO 进 gtm logger), 主配置不生成."""
+    caplog.set_level(logging.INFO, logger="gtm")
+    config, errors = cli._load_config_or_fail(str(tmp_path))
+    assert errors == () and config == Config()
+    overlay = tmp_path / "config.v2.yml"
+    assert overlay.exists()
+    assert "sample_rate_warn_bps" in overlay.read_text(encoding="utf-8")
+    assert "1GiB/s" in overlay.read_text(encoding="utf-8")
+    assert not (tmp_path / "config.yml").exists()
+    assert "已创建 config.v2.yml" in caplog.text  # 日志已先挂载 -> INFO 可见
+
+
+def test_load_config_or_fail_overlay_unknown_key_fail_fast(tmp_path, capsys) -> None:
+    """S6/T26: overlay 未知键与主配置同级 fail-fast, 错误带文件名与键名; 不写任何文件."""
+    (tmp_path / "config.v2.yml").write_text("foo: 1\n", encoding="utf-8")
+    before = (tmp_path / "config.v2.yml").read_bytes()
+    config, errors = cli._load_config_or_fail(str(tmp_path))
+    assert config is None
+    assert any("config.v2.yml" in e and "foo" in e for e in errors)
+    assert "config 校验失败" in capsys.readouterr().err
+    assert (tmp_path / "config.v2.yml").read_bytes() == before
+
+
+def test_load_config_or_fail_overlay_write_failure_degrades_and_samples(tmp_path, monkeypatch, caplog) -> None:
+    """S6 失败降级: overlay 写盘失败只 WARNING, 主流程继续; 采样用内存默认值不中断."""
+    import gtm.config as config_module
+
+    def boom(overlay_path, text):
+        raise OSError("目录不可写 (模拟)")
+
+    monkeypatch.setattr(config_module, "_atomic_write_overlay", boom)
+    config, errors = cli._load_config_or_fail(str(tmp_path))
+    assert errors == () and config == Config()  # 内存默认值顶住, 不阻断
+    assert not (tmp_path / "config.v2.yml").exists()
+    assert "config.v2.yml 写入失败" in caplog.text
+    sampler_inst = Sampler(counters_provider=lambda: {}, stats_provider=lambda: {})
+    result = sampler_inst.sample_once(config.sample_interval, config.sample_rate_warn_bps)
+    assert result.day_total_bytes == 0  # 采样照常跑, 用内存值判定速率
 
 
 def test_main_dispatches_run_and_claim(monkeypatch) -> None:

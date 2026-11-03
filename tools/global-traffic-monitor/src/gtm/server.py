@@ -54,7 +54,7 @@ from typing import Any, Callable, Mapping, Optional
 from urllib.parse import urlsplit
 
 from gtm import __version__
-from gtm.config import ConfigHolder, config_to_payload, save_config, validate_payload
+from gtm.config import ConfigHolder, config_to_payload, save_config, v2_overlay_path, validate_payload
 from gtm.installer import AutostartError, UnsupportedPlatformError, build_installer
 from gtm.sampler import Sampler
 from gtm.storage import ENDPOINT_SCHEMA, Storage, atomic_write_text, endpoint_path, remove_endpoint, write_endpoint
@@ -176,6 +176,11 @@ class ControlServer:
     @property
     def config_path(self) -> str:
         return os.path.join(self.storage.data_dir, "config.yml")
+
+    @property
+    def overlay_path(self) -> str:
+        """v2 overlay 落点 (S6/D6): 新键只写这里, 主 config.yml 永不含它们。"""
+        return v2_overlay_path(self.config_path)
 
     # ---- 生命周期 ----
 
@@ -348,7 +353,7 @@ class ControlServer:
         if config is None:
             return self._send(handler, 400, {"ok": False, "errors": list(errors)})
         with self._config_write_lock:
-            save_config(self.config_path, config)
+            save_config(self.config_path, config, self.overlay_path)
             self.config_holder.replace(config)
         logger.info("配置热重载: %s", self.config_path)
         self._send(handler, 200, {"ok": True, "config": config_to_payload(config)})
@@ -457,7 +462,7 @@ class ControlServer:
         # 交叠时旧快照整份回写会丢更新 (issue 26-10-30-0624 T-01)
         with self._config_write_lock:
             new_config = replace(self.config_holder.current, autostart=(action == "install"))
-            save_config(self.config_path, new_config)
+            save_config(self.config_path, new_config, self.overlay_path)
             self.config_holder.replace(new_config)
         logger.info("自启 %s: %s (config autostart=%s)", action, result.message, new_config.autostart)
         self._patch_endpoint_autostart()  # 指针与真值即时一致 (失败只 WARNING, 见方法内)

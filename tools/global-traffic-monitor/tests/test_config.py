@@ -9,16 +9,23 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
+
 import pytest
 import yaml
 
 from gtm.config import (
     Config,
     ConfigHolder,
+    _KNOWN_FIELDS,
+    _V2_FIELDS,
     config_to_payload,
+    ensure_v2_overlay,
     load_config,
     migrate_legacy_config,
     save_config,
+    v2_overlay_path,
     validate_payload,
 )
 
@@ -419,3 +426,270 @@ def test_migrate_legacy_config_skips_rewrite_when_validation_fails(tmp_path) -> 
     before = p.read_bytes()
     assert migrate_legacy_config(str(p)) is None
     assert p.read_bytes() == before
+
+
+# ---- S6/D6: config.v2.yml overlay 配置升级 (§07, T23-T26) ----
+
+
+def test_v2_overlay_path_is_same_directory() -> None:
+    """overlay 与主配置同目录 (同卷 os.replace 才原子); 无扩展名也落到 config.v2.yml."""
+    assert v2_overlay_path("config.yml") == "config.v2.yml"
+    assert v2_overlay_path("config") == "config.v2.yml"
+
+
+def test_ensure_overlay_creates_default_and_never_writes_main(tmp_path) -> None:
+    """T23 首次缺失: 用默认值生成 overlay; 主 config.yml 不生成 (零改写)."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert errors == () and message and "创建" in message
+    raw = yaml.safe_load(overlay.read_text(encoding="utf-8"))
+    assert raw == {"sample_rate_warn_bps": "1GiB/s"}
+    text = overlay.read_text(encoding="utf-8")
+    assert "旧版本不会读取本文件" in text  # 文件头注释说明用途
+    assert not main.exists()
+
+
+def test_ensure_overlay_second_start_is_noop(tmp_path) -> None:
+    """T23 重复启动幂等: 键齐全且相等 -> 不写盘, 内容与 mtime 都不变; 不产生 .bak."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    assert ensure_v2_overlay(str(main), str(overlay))[0]
+    before_mtime = os.stat(overlay).st_mtime_ns
+    before_bytes = overlay.read_bytes()
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert message is None and errors == ()
+    assert os.stat(overlay).st_mtime_ns == before_mtime
+    assert overlay.read_bytes() == before_bytes
+    assert not (tmp_path / "config.v2.yml.bak").exists()
+
+
+def test_ensure_overlay_keeps_custom_value_across_startup(tmp_path) -> None:
+    """启动路径 (config=None) 以合并后的内存值为准: 用户在 overlay 里调高的阈值不被默认值覆盖."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text('sample_rate_warn_bps: "2GiB/s"\n', encoding="utf-8")
+    before = overlay.read_bytes()
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert message is None and errors == ()
+    assert overlay.read_bytes() == before
+
+
+def test_ensure_overlay_rewrites_mismatch_with_single_generation_backup(tmp_path) -> None:
+    """值不等 -> 按内存值改写并留单世代 .bak (旧内容可恢复)."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text('sample_rate_warn_bps: "500MiB/s"\n', encoding="utf-8")
+    desired = Config(sample_rate_warn_bps=2 * 1024**3)
+    message, errors = ensure_v2_overlay(str(main), str(overlay), desired)
+    assert errors == () and message and "更新" in message
+    assert yaml.safe_load(overlay.read_text(encoding="utf-8")) == {"sample_rate_warn_bps": "2GiB/s"}
+    assert "500MiB/s" in (tmp_path / "config.v2.yml.bak").read_text(encoding="utf-8")
+
+
+def test_ensure_overlay_fills_missing_key_and_backs_up_empty_file(tmp_path) -> None:
+    """overlay 存在但缺键 (空文件): 补齐默认值, 改写前留 .bak."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text("", encoding="utf-8")
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert errors == () and message and "更新" in message
+    assert yaml.safe_load(overlay.read_text(encoding="utf-8"))["sample_rate_warn_bps"] == "1GiB/s"
+    assert (tmp_path / "config.v2.yml.bak").exists()
+
+
+def test_ensure_overlay_unknown_key_fail_fast(tmp_path) -> None:
+    """T26: overlay 未知键 -> fail-fast (带文件名与键名), 不写盘、不改原文件."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text("foo: 1\n", encoding="utf-8")
+    before = overlay.read_bytes()
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert message is None
+    assert any("config.v2.yml 未知键" in e and "foo" in e for e in errors)
+    assert overlay.read_bytes() == before
+
+
+def test_ensure_overlay_invalid_value_fail_fast(tmp_path) -> None:
+    """overlay 值非法 (裸数值不符合速率复合串) -> 聚合 fail-fast, 不静默忽略."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text("sample_rate_warn_bps: 1073741824\n", encoding="utf-8")
+    message, errors = ensure_v2_overlay(str(main), str(overlay), Config())
+    assert message is None
+    assert len(errors) == 1 and "config.v2.yml" in errors[0] and "sample_rate_warn_bps" in errors[0]
+
+
+def test_ensure_overlay_bad_yaml_or_unreadable_fail_fast(tmp_path) -> None:
+    """T26: overlay 非法 YAML / 读失败 (路径是目录) -> fail-fast, 错误含文件名."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text("sample_rate_warn_bps: [broken\n", encoding="utf-8")
+    _, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert any("config.v2.yml 解析失败" in e for e in errors)
+    overlay.unlink()
+    overlay.mkdir()
+    _, errors = ensure_v2_overlay(str(main), str(overlay), Config())
+    assert any("config.v2.yml 读取失败" in e for e in errors)
+
+
+def test_ensure_overlay_non_mapping_payload_fail_fast(tmp_path) -> None:
+    """overlay 顶层非映射 (列表) -> fail-fast, 不猜结构."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text("- sample_rate_warn_bps\n", encoding="utf-8")
+    _, errors = ensure_v2_overlay(str(main), str(overlay), Config())
+    assert any("载荷必须是映射" in e and "list" in e for e in errors)
+
+
+def test_ensure_overlay_bad_main_config_fail_fast_without_writing(tmp_path) -> None:
+    """主配置解析失败时 ensure 也 fail-fast, 不凭默认值先造 overlay."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    main.write_text("sample_interval: [broken\n", encoding="utf-8")
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert message is None and any("config.yml 解析失败" in e for e in errors)
+    assert not overlay.exists()
+
+
+def test_ensure_overlay_write_failure_degrades_without_blocking(tmp_path, caplog) -> None:
+    """目录缺失/只读: 写入失败只 WARNING, 返回 (None, ()) 让调用方用内存值继续."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "missing" / "config.v2.yml"
+    message, errors = ensure_v2_overlay(str(main), str(overlay))
+    assert message is None and errors == ()
+    assert "config.v2.yml 写入失败" in caplog.text
+    assert not overlay.exists()
+
+
+def test_atomic_overlay_write_failure_cleans_tmp_and_keeps_old_file(tmp_path, monkeypatch, caplog) -> None:
+    """写入中途失败 (fsync): 清理 <path>.tmp.<pid>, 旧 overlay 原样保留, 只 WARNING 降级."""
+    import gtm.config as config_module
+
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text('sample_rate_warn_bps: "500MiB/s"\n', encoding="utf-8")
+
+    def boom(fd):
+        raise OSError("fsync 模拟失败")
+
+    monkeypatch.setattr(config_module.os, "fsync", boom)
+    message, errors = ensure_v2_overlay(str(main), str(overlay), Config())
+    assert message is None and errors == ()
+    assert "config.v2.yml 写入失败" in caplog.text
+    assert list(tmp_path.glob("config.v2.yml.tmp.*")) == []
+    assert "500MiB/s" in overlay.read_text(encoding="utf-8")
+
+
+def test_atomic_overlay_write_cleanup_failure_still_degrades(tmp_path, caplog) -> None:
+    """临时路径被目录占住: open 失败 -> 清理也失败, 但 ensure 仍降级不抛."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text('sample_rate_warn_bps: "500MiB/s"\n', encoding="utf-8")
+    blocker = tmp_path / f"config.v2.yml.tmp.{os.getpid()}"
+    blocker.mkdir()
+    try:
+        message, errors = ensure_v2_overlay(str(main), str(overlay), Config())
+        assert message is None and errors == ()
+        assert "config.v2.yml 写入失败" in caplog.text
+        assert "500MiB/s" in overlay.read_text(encoding="utf-8")
+    finally:
+        blocker.rmdir()
+
+
+def test_ensure_overlay_never_touches_existing_main(tmp_path) -> None:
+    """主 config.yml 已存在时 ensure 一个字节都不改 (内容哈希与 mtime 不变, 无新键)."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    main.write_text("sample_interval: 5S\nhttp_port: 9100\n", encoding="utf-8")
+    before_hash = hashlib.sha256(main.read_bytes()).hexdigest()
+    before_mtime = os.stat(main).st_mtime_ns
+    assert ensure_v2_overlay(str(main), str(overlay))[0]
+    assert hashlib.sha256(main.read_bytes()).hexdigest() == before_hash
+    assert os.stat(main).st_mtime_ns == before_mtime
+    assert "sample_rate_warn_bps" not in main.read_text(encoding="utf-8")
+
+
+def test_load_config_merges_overlay_and_overlay_wins(tmp_path) -> None:
+    """load_config(path, overlay): overlay 同名键覆盖主配置, 其余键照常生效."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    main.write_text("http_port: 9100\nsample_rate_warn_bps: \"3GiB/s\"\n", encoding="utf-8")
+    overlay.write_text('sample_rate_warn_bps: "1GiB/s"\n', encoding="utf-8")
+    loaded, errors = load_config(str(main), str(overlay))
+    assert errors == () and loaded is not None
+    assert loaded.http_port == 9100
+    assert loaded.sample_rate_warn_bps == 1024**3  # overlay 为准
+
+
+def test_load_config_overlay_bad_yaml_or_non_mapping_fail_fast(tmp_path) -> None:
+    """overlay 解析失败/顶层非映射都在 load 面 fail-fast (与主配置同级)."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    overlay.write_text("sample_rate_warn_bps: [broken\n", encoding="utf-8")
+    loaded, errors = load_config(str(main), str(overlay))
+    assert loaded is None and any("config.v2.yml 解析失败" in e for e in errors)
+    overlay.write_text("- x\n", encoding="utf-8")
+    loaded, errors = load_config(str(main), str(overlay))
+    assert loaded is None and any("config.v2.yml 载荷必须是映射" in e for e in errors)
+
+
+def test_load_config_overlay_non_mapping_main_still_fails(tmp_path) -> None:
+    """主配置顶层非映射 + 给定 overlay: 仍按单文件路径的「必须是映射」报错."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    main.write_text("- sample_interval\n", encoding="utf-8")
+    overlay.write_text('sample_rate_warn_bps: "1GiB/s"\n', encoding="utf-8")
+    loaded, errors = load_config(str(main), str(overlay))
+    assert loaded is None and any("配置载荷必须是映射" in e for e in errors)
+
+
+def test_save_config_split_keeps_v2_keys_out_of_main(tmp_path) -> None:
+    """T24 保存拆分: 先 overlay 后主配置; 主文件不含 sample_rate_warn_bps, 合并加载正确."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    cfg = Config(sample_interval=2.5, sample_rate_warn_bps=500 * 1024**2)
+    save_config(str(main), cfg, str(overlay))
+    main_raw = yaml.safe_load(main.read_text(encoding="utf-8"))
+    assert "sample_rate_warn_bps" not in main_raw
+    assert main_raw["sample_interval"] == "2.5S"
+    overlay_raw = yaml.safe_load(overlay.read_text(encoding="utf-8"))
+    assert overlay_raw == {"sample_rate_warn_bps": "500MiB/s"}
+    loaded, errors = load_config(str(main), str(overlay))
+    assert errors == () and loaded == cfg
+
+
+def test_split_save_main_payload_passes_v1_known_fields(tmp_path) -> None:
+    """T25 旧版本读取模拟: 主文件键集落在 v1 已知字段内 (无未知键 -> 退回旧二进制可启动)."""
+    main = tmp_path / "config.yml"
+    overlay = tmp_path / "config.v2.yml"
+    save_config(str(main), Config(), str(overlay))
+    main_raw = yaml.safe_load(main.read_text(encoding="utf-8"))
+    v1_known = set(_KNOWN_FIELDS) - set(_V2_FIELDS)
+    assert set(main_raw) == v1_known  # 全量回显里唯独缺本轮新增键
+    assert "sample_rate_warn_bps" not in main_raw
+    assert validate_payload(main_raw)[0] is not None  # 旧载荷按现行校验仍合法
+
+
+def test_migrate_legacy_config_backs_up_before_rewrite(tmp_path) -> None:
+    """D13 迁移改写主文件前留 config.yml.bak; 主文件仍不含新键 (回滚可读)."""
+    p = tmp_path / "config.yml"
+    p.write_text("sample_interval: 2.5\n", encoding="utf-8")
+    message = migrate_legacy_config(str(p))
+    assert message
+    raw = yaml.safe_load(p.read_text(encoding="utf-8"))
+    assert raw["sample_interval"] == "2.5S"
+    assert "sample_rate_warn_bps" not in raw
+    bak = yaml.safe_load((tmp_path / "config.yml.bak").read_text(encoding="utf-8"))
+    assert bak["sample_interval"] == 2.5  # 单世代备份保留改写前原文
+
+
+def test_migrate_legacy_config_backup_failure_warns_but_rewrites(tmp_path, caplog) -> None:
+    """备份目标被目录占住: 备份失败只 WARNING, 迁移仍完成 (不因备份阻断配置规范化)."""
+    p = tmp_path / "config.yml"
+    p.write_text("sample_interval: 2.5\n", encoding="utf-8")
+    (tmp_path / "config.yml.bak").mkdir()
+    message = migrate_legacy_config(str(p))
+    assert message
+    assert "配置备份失败" in caplog.text
+    assert yaml.safe_load(p.read_text(encoding="utf-8"))["sample_interval"] == "2.5S"
