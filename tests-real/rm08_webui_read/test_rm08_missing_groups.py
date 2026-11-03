@@ -1,8 +1,9 @@
-"""RM08 附加轮(读侧): /api/sites/missing groups 分组字段 —— 缺失站点合并 WebUI 读侧 3 条。
+"""RM08 附加轮(读侧): /api/sites/missing groups 分组字段 —— 缺失站点合并 WebUI 读侧 4 条。
 
 验证面对准计划 plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html §03 与功能计划
 plans/26-11-03-2337-plan-missing-site-tracker-merge.html(M3/M4 已入库): groups 分组契约
-(RM08-10)· 负向空场 + 已配置域不粘合(RM08-11, L3 红验)· 三分支自适应引导数据前提(RM08-12)。
+(RM08-10)· 负向空场 + 已配置域不粘合(RM08-11, L3 红验)· 三分支自适应引导数据前提(RM08-12)·
+同进程双扫描新鲜度(RM08-13, issue 26-11-04-0228 修复直验)。
 
 造场(复用 RM10 附加轮配方, tests-real/rm10_notify/test_rm10_export_merge.py build_scene):
 副实例(空库草稿本, bypass_local_auth 空凭据直连 —— 产品配置零 token 落盘, D2)造 paused 假种子
@@ -50,9 +51,7 @@ SCENE_MERGE = [
 CONFIGURED_KEY = "rm08grp_invalid"  # 测试配置已配条目: 与全部 announce 域零命中(保缺失面成立)
 CONFIGURED_DOMAIN = "rm08grp.invalid"
 
-
 # ---------------------------------------------------------------- 基座(配置/产品进程/造场)
-
 
 GRP_CONFIG_TEMPLATE = """\
 config:
@@ -234,9 +233,7 @@ def test_rm08_10_groups_contract():
     d, qb, seeds = build_scene("rm08_10", SCENE_MERGE)
     try:
         assert len(qb.torrents()) == 3, f"副实例应为恰 3 枚种子(设计场), 实际 {len(qb.torrents())}"
-        with product_case_grp("rm08_10", tracker_entry_block(CONFIGURED_KEY, CONFIGURED_DOMAIN)) as (
-            case, port, _proc
-        ):
+        with product_case_grp("rm08_10", tracker_entry_block(CONFIGURED_KEY, CONFIGURED_DOMAIN)) as (case, port, _proc):
             sm = base.web_req(port, "GET", "/api/sites/missing")
             assert sm["torrents"] == 3 and sm["domains"] == 4, \
                 f"计数漂移: torrents={sm['torrents']} domains={sm['domains']}"
@@ -261,8 +258,10 @@ def test_rm08_10_groups_contract():
                 rep = min(g["domains"], key=lambda x: (len(x), x))
                 assert g["name"].startswith(rep.replace(".", "_")), \
                     f"组名应自代表域名(组内最短)派生: {g['name']}"
-            base.metric(f"RM08-10 sites={len(sm['sites'])} groups={len(groups)} "
-                        f"合并组={groups[0]['domains']} 组名={sorted(names)}")
+            base.metric(
+                f"RM08-10 sites={len(sm['sites'])} groups={len(groups)} "
+                f"合并组={groups[0]['domains']} 组名={sorted(names)}"
+            )
     finally:
         base.rm_all_fakes(qb)
 
@@ -285,9 +284,7 @@ def test_rm08_11_negative_empty_and_no_glue():
     # 腿① 空场: 配置已覆盖全部 announce 域名
     _d1, qb1, _seeds1 = build_scene("rm08_11a", SCENE_MERGE)
     try:
-        with product_case_grp("rm08_11a", tracker_entry_block("rm08_cover", "127.0.0")) as (
-            case, port, _proc
-        ):
+        with product_case_grp("rm08_11a", tracker_entry_block("rm08_cover", "127.0.0")) as (case, port, _proc):
             sm = base.web_req(port, "GET", "/api/sites/missing")
             assert isinstance(sm["sites"], list) and sm["sites"] == [], \
                 f"空场 sites 应为空数组(不是 null/缺键): {sm['sites']!r}"
@@ -307,9 +304,7 @@ def test_rm08_11_negative_empty_and_no_glue():
         ("rm08grp-pb.bin", [X, Q]),
     ])
     try:
-        with product_case_grp("rm08_11b", tracker_entry_block("rm08_glue", X)) as (
-            case, port, _proc
-        ):
+        with product_case_grp("rm08_11b", tracker_entry_block("rm08_glue", X)) as (case, port, _proc):
             sm = base.web_req(port, "GET", "/api/sites/missing")
             assert sm["torrents"] == 2 and sm["domains"] == 3, \
                 f"腿②计数漂移: torrents={sm['torrents']} domains={sm['domains']}"
@@ -348,9 +343,8 @@ def test_rm08_12_adaptive_gate_premise():
     d, qb, seeds = build_scene("rm08_12", [("rm08grp-s1.bin", [S1]), ("rm08grp-s2.bin", [S2])])
     try:
         # 形态一: 全单组
-        with product_case_grp("rm08_12a", tracker_entry_block(CONFIGURED_KEY, CONFIGURED_DOMAIN)) as (
-            case, port, _proc
-        ):
+        with product_case_grp("rm08_12a", tracker_entry_block(CONFIGURED_KEY,
+                                                              CONFIGURED_DOMAIN)) as (case, port, _proc):
             sm1 = base.web_req(port, "GET", "/api/sites/missing")
             groups1 = sm1["groups"]
             sites1 = {s["domain"]: s for s in sm1["sites"]}
@@ -377,9 +371,8 @@ def test_rm08_12_adaptive_gate_premise():
             15,
             "S1 追加域未在 tracker 视图出现",
         )
-        with product_case_grp("rm08_12b", tracker_entry_block(CONFIGURED_KEY, CONFIGURED_DOMAIN)) as (
-            case, port, _proc
-        ):
+        with product_case_grp("rm08_12b", tracker_entry_block(CONFIGURED_KEY,
+                                                              CONFIGURED_DOMAIN)) as (case, port, _proc):
             sm2 = base.web_req(port, "GET", "/api/sites/missing")
             groups2 = sm2["groups"]
             fat = [g for g in groups2 if len(g["domains"]) >= 2]
@@ -388,5 +381,52 @@ def test_rm08_12_adaptive_gate_premise():
             assert any(len(g["domains"]) >= 2 for g in groups2) is True, "形态二闸门应判真"
             assert {s["domain"] for s in sm2["sites"]} == {S1, S2}, "sites 原形应在共现后保持"
             base.metric(f"RM08-12 共现组={fat[0]['domains']} 闸门=True")
+    finally:
+        base.rm_all_fakes(qb)
+
+
+# ================================================================ RM08-13
+
+
+def test_rm08_13_same_process_scan_freshness():
+    """[RM08-13] 同进程双扫描新鲜度(issue 26-11-04-0228 修复直验): qB 侧改 tracker 后, 同一产品进程的二次扫描读到新值
+
+    前置: 副实例在线空库; dev.webui 产品连副实例(trackers 配 rm08grp.invalid);
+      2 枚 paused 假种子 S1=[127.0.0.41] S2=[127.0.0.42]。
+    副作用: 副实例加 2 枚 real-fake 假种子(全程 paused); S1 经 /torrents/addTrackers 追加
+      S2 的域(真写 qB 种子 tracker 表, 收尾随种子删除); 同一产品进程内只读 GET 两次。
+      修复前二次扫描吃首扫惰性缓存维持旧形态(首跑实测红, 切片 26-11-04-0156); 修复后
+      扫描走 QbApi.torrents_trackers_fresh 直查旁路缓存。
+    回滚: 删自造种子(连数据) + 产品进程 taskkill /F /T + 临时目录清场。
+    失败判据: 首扫场漂移(sites != {S1,S2} 或非全单组) / qB 侧追加后同进程二次扫描仍维持
+      首扫形态(无 ≥2 域名组) —— 修复回退即红。
+    """
+    S1, S2 = "127.0.0.41", "127.0.0.42"
+    d, qb, seeds = build_scene("rm08_13", [("rm08grp-f1.bin", [S1]), ("rm08grp-f2.bin", [S2])])
+    try:
+        # 单一产品进程贯穿两次扫描(RM08-12 时代形态二必须起新进程绕缓存 —— 本条钉死修复后同进程即可见)
+        with product_case_grp("rm08_13", tracker_entry_block(CONFIGURED_KEY, CONFIGURED_DOMAIN)) as (case, port, _proc):
+            sm1 = base.web_req(port, "GET", "/api/sites/missing")
+            sites1 = {s["domain"] for s in sm1["sites"]}
+            assert sites1 == {S1, S2} and sm1["torrents"] == 2 and sm1["domains"] == 2, \
+                f"首扫场漂移: {sm1.get('torrents')}/{sm1.get('domains')}/{sorted(sites1)}"
+            assert all(len(g["domains"]) == 1 for g in sm1["groups"]), f"首扫应全单组: {sm1['groups']}"
+            base.metric("RM08-13 首扫 sites=2 全单组=ok")
+
+            # qB 侧(绕产品, 等价 qB 自家 WebUI 改 tracker)给 S1 追加 S2 的域 → 共现
+            add_trackers(qb, seeds["rm08grp-f1.bin"], [f"http://{S2}:1/announce"])
+            base.wait_until(
+                lambda: {S1, S2} <= extract_tracker_hostnames(qb.trackers(seeds["rm08grp-f1.bin"])),
+                15,
+                "S1 追加域未在 tracker 视图出现",
+            )
+
+            # 同一进程二次扫描: 修复后读新值(恰一组 2 域名); 修复回退这里吃首扫缓存必红
+            sm2 = base.web_req(port, "GET", "/api/sites/missing")
+            fat = [g for g in sm2["groups"] if len(g["domains"]) >= 2]
+            assert len(fat) == 1 and sorted(fat[0]["domains"]) == [S1, S2], \
+                f"同进程二次扫描应读到 qB 侧改后新值(恰一组 2 域名): {sm2['groups']}"
+            assert {s["domain"] for s in sm2["sites"]} == {S1, S2}, "sites 原形应在二次扫描保持"
+            base.metric(f"RM08-13 同进程二次扫描 共现组={fat[0]['domains']} 新鲜=ok")
     finally:
         base.rm_all_fakes(qb)

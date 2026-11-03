@@ -26,6 +26,10 @@
   · 同 clone 写重型全量互斥锁 `<系统temp>/auto-qb-locks/<repo hash8>`: 撞锁 **rc=3** + 打印持锁者,
     强杀后下一位自愈; 残留实例根按「mtime 超 12h 且内嵌 pid 已死」双条件清扫(阈值暂定可调)。
 - **处置**: 一律 `commands run test.*` 或裸 `uv run pytest tests ...`, **任何层都别预设 TMPDIR**。
+- **复发**: 1(2026-11-04)—— AI shell 环境自带外部 `TMPDIR=C:\Users\…\AppData\Local\Temp`,
+  裸 `uv run pytest` 与 `commands run test.full`(后台 shell 同 env)双双 rc=4, `env -u TMPDIR` 前缀后正常
+  (为什么没命中: AGENTS.md 有该硬约束提示但开工只读了 pitfalls 总索引没进 testing 类索引;
+  收尾跑全量换后台 shell 时又忘了 env 随 shell 走)。
 
 ### `--basetemp` 换了目录会让 4 条 sidefx 用例**假红**
 

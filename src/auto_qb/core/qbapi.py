@@ -338,6 +338,15 @@ class QbApi:
         # store 未命中直连同样过 mask(计划 26-10-07-0055 S1): 两条读路径口径一致, 原文不出 Facade
         return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
 
+    def torrents_trackers_fresh(self, torrent_hash, **kwargs):
+        """旁路 store 惰性缓存的 tracker 直查(脱敏同口径)
+
+        供低频扫描路径(缺失站点扫描/CLI 导出)用: 记录级缓存只被产品自身 tracker 写操作
+        失效, qB 侧(网页/外部)改 tracker 后缓存读到旧值(issue 26-11-04-0228);
+        扫描低频, 每种一轮直查代价可接受, 不动主循环/tracker 重绑的缓存读路径。
+        """
+        return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
+
     def torrents_files(self, torrent_hash, **kwargs):
         torrent = self.store.get(torrent_hash)
         if torrent is not None:

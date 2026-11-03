@@ -25,11 +25,17 @@ def collect_configured_domains(config) -> set:
 
 
 def collect_torrent_tracker_hostnames(api) -> list:
-    """逐种子收集 tracker hostname, 每颗种子一个集合(单种查询失败 = 空集, 沿用现状静默跳过)"""
+    """逐种子收集 tracker hostname, 每颗种子一个集合(单种查询失败 = 空集, 沿用现状静默跳过)
+
+    走 Facade 的 fresh 直查旁路记录级惰性缓存(issue 26-11-04-0228): 扫描是低频事件,
+    缓存只被产品自身 tracker 写操作失效, qB 侧改 tracker 后二次扫描会吃到首扫旧值;
+    非 Facade 客户端(测试桩/兼容客户端)没有 fresh 方法, 回退普通 torrents_trackers。
+    """
+    fetch_trackers = getattr(api, "torrents_trackers_fresh", None) or api.torrents_trackers
     torrent_sets = []
     for tor in api.torrents_info():
         try:
-            trackers_info = api.torrents_trackers(tor.hash)
+            trackers_info = fetch_trackers(tor.hash)
         except Exception:
             trackers_info = []
         torrent_sets.append(extract_tracker_hostnames(trackers_info))

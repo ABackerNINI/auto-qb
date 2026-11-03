@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-04-0228">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="missing-site-tracker-merge">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-04-0531-missing-site-tracker-merge.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="缺失站点扫描复用 store 级 tracker 惰性缓存, qB 侧改 tracker 后二次扫描读到旧值">
 <meta name="issue-summary" content="/api/sites/missing 与 CLI 导出的 tracker 扫描走 store 记录级惰性缓存, 只在产品自身 tracker 写操作时失效; qB 侧(网页/外部)改 tracker 后同进程二次扫描吃到首扫缓存">
 <title>缺失站点扫描复用 store 级 tracker 惰性缓存, qB 侧改 tracker 后二次扫描读到旧值 · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-0228-bug-sites-missing-stale-tracker-cache</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 02:28</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -131,7 +131,7 @@
     <table>
       <tr><th>维度</th><th>结论</th></tr>
       <tr><td>触发条件</td><td>同一常驻产品进程存活期间, qB 侧(网页/外部客户端)对任意种子的 tracker 做增删改, 且产品自身此后未再发起 tracker 写操作</td></tr>
-      <tr><td>影响范围</td><td>WEBUI「导入缺失站点」扫描(<code>/api/sites/missing</code> 的 sites+groups)读到旧 tracker 集 —— 缺失面可能多报/漏报; 主循环维护面不在本条确认范围(它走同步快照, 待认领时一并核实)</td></tr>
+      <tr><td>影响范围</td><td>WEBUI「导入缺失站点」扫描(<code>/api/sites/missing</code> 的 sites+groups)读到旧 tracker 集 —— 缺失面可能多报/漏报; 主循环维护面认领复验已核实<b>不受影响</b>(qbmanager 仅对新增种子首读 trackers_info、tracker_mod 重绑有意走惰性缓存零调用, 均不吃旧值)</td></tr>
       <tr><td>严重度</td><td>低~中: 数据新鲜度口径问题, 不崩溃不误操作; 产物一律待审(填编辑器/YAML 模板), 用户核对时可发现; 进程重启后自然恢复</td></tr>
     </table>
   </section>
@@ -159,11 +159,21 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 02:28 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 05:20 — 用户指派认领，状态 <strong>In Progress</strong>；复验仍复现（机制面），主循环消费面核实不受影响</li>
+      <li>2026-11-04 05:35 — 修复完成，状态 <strong>Done</strong>（扫描路径 fresh 直查旁路缓存，= 建议修法①；全量 5121 passed + 10 skipped）</li>
+      <li>2026-11-04 05:40 — 真机验收（功能完工触发，环境2）：RM08-13 新建即 L3 红绿双验（摘修复必红/恢复复绿），RM08 缺失站点合并片 4/4 passed</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-04 05:20 仍复现（机制面锚点全部在位）。锚点路径勘误：issue 原文 <code>core/torrents/record.py</code> 实为 <code>src/auto_qb/torrents/record.py</code>（惰性缓存读取 :269-276 / invalidate :282-288）；<code>qbapi.py</code> 失效点 :261-268 在位，facade 读路径 :334-339。主循环消费面一并核实不受影响（见影响面）。修复采纳建议修法①。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（= 建议修法①，扫描路径旁路缓存直查，两处单点）：</p>
+    <ul>
+      <li><code>src/auto_qb/core/qbapi.py</code> 新增 <code>torrents_trackers_fresh(torrent_hash)</code>：旁路 store 记录级缓存直查 qB，脱敏同口径（mask 过 Facade 不出原文）；不动常规 <code>torrents_trackers</code> 读路径（主循环/tracker 重绑的零调用语义保留，缓存照旧只在产品自身 tracker 写操作时失效）。</li>
+      <li><code>src/auto_qb/core/exporter.py</code> <code>collect_torrent_tracker_hostnames</code> 优先走 fresh 直查（<code>getattr(api, "torrents_trackers_fresh", None)</code>），非 facade 兼容客户端/测试桩无该方法回退普通读 —— CLI 与 WEBUI 扫描同一入口一并覆盖。</li>
+      <li>取舍依据：扫描是低频事件（用户认领时点明），逐种直查一轮的代价可接受；不选②每拍对比（同步循环常态开销）与③记录级 TTL（读路径全实现，改新语义风险大）。</li>
+    </ul>
+    <p><b>验证方式</b>：<code>tests/test_exporter.py</code> 两条新回归 —— <code>test_collect_torrent_tracker_hostnames_prefers_fresh_bypass</code>（有 fresh 方法时逐种走直查）与 <code>test_collect_torrent_tracker_hostnames_fresh_bypass_facade_cache</code>（红验：QbApi+store 记录级缓存吃 qB 侧旧值时，扫描仍读到改后新值，且直查不回填污染缓存）。<b>真机轨已验</b>（2026-11-04 功能完工触发，环境2）：新建 RM08-13 同进程双扫描新鲜度（新建即 L3，红绿双验真跑——摘修复必红复现 bug 本体，恢复后复绿），RM08 缺失站点合并片 4/4 passed（28.63s）；切片 <code>memory-bank/testing/real-baselines/26-11-04-0540-real-RM08-missing-freshness.md</code>。</p>
+    <p><b>测试数字</b>：全量 5121 passed + 10 skipped in 182.72s（2026-11-04 本机 Windows，test.full 口径）；覆盖率 TOTAL 23896 stmts / 230 miss / 98.69% —— 改动面三文件 0 miss（qbapi/exporter 仅既有 partial 分支、sites.py 100%），缺口 45 条系同机证明代码（e80d9f8e）在无真机条件下 8 条测试 skip 所致，与本改动无关（对照 02:45/02:53 入库前切片 23370 stmts / 167-185 miss）。基线切片见 <code>memory-bank/testing/baselines/</code>（kb.baseline 看最新）。</p>
   </section>
 
   <footer>

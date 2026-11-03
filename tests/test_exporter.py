@@ -39,6 +39,9 @@
 - test_export_yaml_template_missing_trackers_section: 守阵(W6)—— 配置无 trackers 段走缺省 {}(不崩)
 - test_export_yaml_template_pins_utf8_encoding: 守阵(W6, 平台相关)—— 读 config/写 output 显式钉 encoding="utf-8"
   (参数面用 open 探针全平台可观测; Windows locale 内容面 mojibake 仅作加强, WSL UTF-8 locale 下不敏感)
+- test_collect_torrent_tracker_hostnames_prefers_fresh_bypass: 扫描优先走 fresh 直查(不吃记录级缓存)
+- test_collect_torrent_tracker_hostnames_fresh_bypass_facade_cache: 红验(issue 26-11-04-0228)——
+  facade 记录级缓存吃 qB 侧旧值时, 扫描仍读到改后新值
 """
 import os
 import tempfile
@@ -682,3 +685,49 @@ def test_export_yaml_template_pins_utf8_encoding(monkeypatch):
         with real_open(out_path, "r", encoding="utf-8") as f:
             data = yaml.load(f, Loader=yaml.BaseLoader)
         assert "站A" in data["config"]["trackers"], "中文站点名必须按 utf-8 原样往返"
+
+
+def test_collect_torrent_tracker_hostnames_prefers_fresh_bypass():
+    """api 暴露 fresh 直查(= QbApi facade)时扫描优先用之, 不吃记录级缓存; 逐种按 hash 取"""
+    class _FacadeShapedApi:
+        def __init__(self):
+            self.fresh_hashes = []
+
+        def torrents_info(self):
+            return [FakeTorrent(hash="H1"), FakeTorrent(hash="H2")]
+
+        def torrents_trackers(self, h):  # 模拟记录级缓存: 恒回旧值
+            return [{"url": "https://stale.example.com/announce"}]
+
+        def torrents_trackers_fresh(self, h):
+            self.fresh_hashes.append(h)
+            return [{"url": "https://fresh.example.com/announce"}]
+
+    api = _FacadeShapedApi()
+    assert exporter.collect_torrent_tracker_hostnames(api) == [{"fresh.example.com"}, {"fresh.example.com"}]
+    assert sorted(api.fresh_hashes) == ["H1", "H2"], "必须逐种走 fresh 直查"
+
+
+def test_collect_torrent_tracker_hostnames_fresh_bypass_facade_cache():
+    """红验(issue 26-11-04-0228): qB 侧改 tracker 后记录级缓存吃旧值, 扫描仍读到改后新值"""
+    from auto_qb.core.qbapi import QbApi
+    from auto_qb.torrents import TorrentRecord, TorrentStore
+
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.trackers_map["H1"] = [{"url": "https://old.example.com/announce"}]
+    store = TorrentStore(client)
+    store.restore_torrent(TorrentRecord.from_torrent(FakeTorrent(hash="H1", name="T1")))
+    api = QbApi(client, store)
+
+    # 常规读路径先填充记录级惰性缓存(old; 主循环/tracker 重绑的既有语义)
+    assert api.torrents_trackers("H1")[0]["url"] == "https://old.example.com/announce"
+
+    # qB 侧(网页/外部)改 tracker —— 不经产品写路径, 缓存不失效
+    client.trackers_map["H1"] = [{"url": "https://new.example.com/announce"}]
+
+    # 常规 facade 读路径吃旧值(惰性缓存的既有语义, 主循环/tracker 重绑依赖它零调用)
+    assert api.torrents_trackers("H1")[0]["url"] == "https://old.example.com/announce"
+    # 扫描走 fresh 直查: 读到改后新值(且不回填污染记录级缓存)
+    assert exporter.collect_torrent_tracker_hostnames(api) == [{"new.example.com"}]
+    assert api.torrents_trackers("H1")[0]["url"] == "https://old.example.com/announce"
