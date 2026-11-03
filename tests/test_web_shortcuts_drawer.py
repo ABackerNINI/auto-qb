@@ -64,9 +64,13 @@ Delete 直连注册表外, 均为已拍板的口径, 逐条落断言。W5 局部
 - test_help_overlay_wiring: help-panel run -> _kbToggleKbHelp(已开 ⇒ closeKbHelp, 未开仍走 kbOpenHelp);
   kbHelpOpen 在 state.js 根选项;
   Esc 退栈链 / escBusy / _kbOverlayBusy 三处名单同步; 帮助浮层模板(只读速查 + 前往设置链接)
-- test_settings_panel_section: settings-detail 有 hub.view === 'keys' 分支(录制/禁用/重置/
-  冲突三选一/保存放弃全套钮); config_hub 首页卡+hubNow+hubRestore 认 "keys";
-  console_hub.css 有 .kb-row 样式
+- test_settings_panel_section: settings-detail 独立 'keys' 分支已删除(2026-11-03 改版并入 WebUI 卡):
+  aqb:kb-full-modal 扫描锚内录制/禁用/重置/冲突三选一/保存放弃全套钮 + 覆盖层三件套(遮罩/面板/
+  v-show=kbFullOpen, 默认折叠) + 折叠块头展开钮与读数; config_hub 只认 "webui"(旧 keys 存量值经
+  HUB_VIEW_ALIAS 映射), 独立首页卡不复活; console_hub.css 有 .kb-row 样式
+- test_kb_full_overlay_wiring: 键位编辑全屏覆盖层(2026-11-03 改版)接线 —— Esc 退栈链有 kbFullOpen
+  分支(对话层级先于清筛选兜底), escBusy/_kbOverlayBusy 两名单同步, state.js 默认折叠不持久化;
+  刷新兜底 U1-b 双脏源(cfgGuardActive = cfgDirty || kbDirtyView) + 双 watcher 传 true 重算
 - test_drawer_narrow_fullscreen_w4: 方案A W4(计划 26-10-03-0917 D3 + 前波移交观察项) ——
   D3 窄屏降级三皮肤成对(≤900px 面板 fixed 全屏覆盖主区 / !important 压内联高度记忆 /
   statusbar 让位 / grip 隐藏 / 停靠基线 relative 不删 / 关闭钮保留); W4 几何走查产出
@@ -576,7 +580,8 @@ def test_recorder_and_panel_wiring() -> None:
         assert at >= 0 and hub.find("kbGuardLeave",
                                     at) < hub.find("this.hub.view",
                                                    at), (f"{fn.split('(')[0]} 必须先过 kbGuardLeave 离开守卫(未保存提示, §5.2)")
-    assert "kbGuardLeave(target)" in eng and 'this.hub.view !== "keys"' in eng, "缺离开守卫实现"
+    assert "kbGuardLeave(target)" in eng and 'this.hub.view !== "webui"' in eng, \
+        "缺离开守卫实现(2026-11-03 改版: 面板并入 webui 分区, 守卫口径随迁)"
 
 
 def test_adapter_and_backend_endpoints() -> None:
@@ -623,20 +628,60 @@ def test_help_overlay_wiring() -> None:
 
 
 def test_settings_panel_section() -> None:
-    """W6 设置页「快捷键」分区: 模板分支 + 首页卡/元信息/恢复 + CSS"""
+    """W6 设置页「快捷键」: WebUI 卡内折叠块 + 全屏覆盖层(2026-11-03 改版) + CSS
+
+    独立「keys」分区/首页卡已删除, 面板并入「WebUI」卡: 折叠块(读数) ⇄ 全屏覆盖层
+    (HR 站点状态同款骨架, 复用 .hr-full-mask/.hr-full-modal), 覆盖层盖住配置树 actbar
+    (任一时刻视野里只有一个保存按钮)。"""
     detail = (SHARED / "tpl" / "settings-detail.html").read_text(encoding="utf-8")
-    assert "hub.view === 'keys'" in detail, "settings-detail 缺快捷键分区分支"
+    assert "hub.view === 'keys'" not in detail, "独立 keys 分区应已删除(并入 WebUI 卡)"
+    m = re.search(r"<!-- aqb:kb-full-modal:begin.*?-->(.*?)<!-- aqb:kb-full-modal:end.*?-->", detail, re.S)
+    assert m, "settings-detail 缺 aqb:kb-full-modal 扫描锚 —— 覆盖层被移走或锚被删? 同步本守阵"
+    frag = m.group(1)
     for needle in (
         "kbRecord(it.id)", "kbDisableRow(it)", "kbResetRow(it)", "kbResetAll()", "kbSaveKeys()", "kbDraftRevert()",
         "kbConflictResolve(", "kbDisplayName(kbSerialOf(it))"
     ):
-        assert needle in detail, f"快捷键面板缺交互 {needle}"
+        assert needle in frag, f"快捷键面板缺交互 {needle}"
+    # 覆盖层三件套 + 默认折叠(HR 覆盖层同款判据, test_frontend_hr_full_modal_wiring 同口径)
+    for needle, what in (
+        ('class="hr-full-mask"', "遮罩(点遮罩关闭路径)"),
+        ('class="hr-full-modal"', "全屏面板"),
+        ("kbFullClose()", "关闭动作(✕ 与遮罩两路复用)"),
+        ('aria-label="关闭"', "✕ 关闭钮可访问名"),
+        ('v-show="kbFullOpen"', "显隐挂 kbFullOpen(折叠 ⇄ 全屏覆盖层)"),
+    ):
+        assert needle in frag, f"键位覆盖层缺 {what}(应有 `{needle}`)"
+    assert not re.search(r'class="hr-full-modal[^"]*\bopen\b', frag), "全屏面板不得带预展开属性(默认折叠是拍板交互)"
+    # 折叠块头: 展开钮 + 读数
+    assert ':aria-expanded="kbFullOpen"' in detail and "kbFullOpenPanel()" in detail, "折叠块头缺展开钮接线"
+    assert "kbReadout()" in detail, "折叠块头缺键位读数"
     hub = _read("config_hub.js")
-    for needle in ('key: "keys"', 'hub.view === "keys"', 'v === "keys"'):
-        assert needle in hub, f"config_hub 缺 keys 分区接线: {needle}"
+    for needle in ('key: "webui"', 'keys: "webui"', 'v === "webui"'):
+        assert needle in hub, f"config_hub 缺 webui 分区接线(旧 keys 存量值经 HUB_VIEW_ALIAS 映射): {needle}"
+    assert 'key: "keys"' not in hub, "独立「快捷键」首页卡应已删除(读数并入 WebUI 卡)"
     css = read_shared("console_hub.css")
     for cls in (".kb-row", ".kb-grp-t", ".kb-help", ".kb-conflict", ".kb-danger"):
         assert cls in css, f"console_hub.css 缺 {cls}(挂件类名必须有对应规则)"
+
+
+def test_kb_full_overlay_wiring() -> None:
+    """键位编辑全屏覆盖层接线(2026-11-03 改版): 关闭三路 + 名单三处同步 + 刷新兜底双脏源"""
+    life = _read("lifecycle.js")
+    chain_at = life.find('e.key !== "Escape"')
+    kb_at = life.find("this.kbFullOpen) this.kbFullClose()")
+    assert chain_at >= 0 and kb_at > chain_at, "键位覆盖层必须进 lifecycle Esc 退栈链(对话层级, 先于清筛选兜底)"
+    assert "this.kbFullOpen" in _read("dialogs.js"), "escBusy 必须同步 kbFullOpen(否则覆盖层开着时 Esc 顺带退回设置首页)"
+    assert "this.kbFullOpen" in _read("shortcuts.js"), "_kbOverlayBusy 必须同步 kbFullOpen(覆盖层开着时列表键位失效)"
+    state = _read("state.js")
+    assert "kbFullOpen: false" in state, "state.js 缺 kbFullOpen: false(默认折叠, hrsOpen 同款先例)"
+    # 刷新兜底(U1-b)双脏源: 配置树 || 键位草稿 —— watcher 必须传 true 让 cfgGuardActive 重算,
+    # 传各自新值会在「一源变净另一源仍脏」时把还需要的 beforeunload 摘掉
+    assert "this.cfgDirty || this.kbDirtyView" in _read("config_editor.js"), \
+        "刷新兜底判据必须含键位草稿第二脏源(否则键位脏时 F5 静默丢失; 计算属性=属性访问)"
+    assert "kbDirtyView() {" in _read("config_hub.js"), "config_hub 缺 kbDirtyView 计算属性(watcher 的可观察信号)"
+    assert "kbDirtyView() {" in state and "cfgGuardSync(true)" in state, \
+        "state.js 双 watcher(cfgDirty/kbDirtyView)必须传 true 让 cfgGuardActive 重算"
 
 
 def test_drawer_narrow_fullscreen_w4() -> None:

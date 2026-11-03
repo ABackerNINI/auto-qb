@@ -289,6 +289,8 @@ window.AQB_STATE = {
       kbCursor: null,
       // 键盘快捷键 W6(计划 26-09-28-0354): 帮助浮层 + 设置页自定义面板/录制器(方法在 shortcuts.js)
       kbHelpOpen: false,      // ? 帮助浮层(只读速查, Shift+Slash 打开; Esc/导航关闭 —— 归退栈链)
+      kbFullOpen: false,      // 键位编辑全屏覆盖层(2026-11-03 改版: WebUI 卡折叠块的「展开」态,
+                              // hrsOpen 同款先例; 不持久化, 进 webui 分区回折叠 —— hubGo 复位)
       kbDraft: null,          // 面板工作副本 {schema_version, template, overrides}(null = 未初始化)
       kbSaved: null,          // 最近一次保存的服务端真值副本(面板脏检测基准)
       kbRecId: "",            // 正在录制的 action id("" = 不在录制态)
@@ -301,6 +303,8 @@ window.AQB_STATE = {
         branch: "member",     // 当前编辑的支(multi|episode|member|group; D15 tab 切换)
         drag: null,           // 拖拽源 { branch, level, idx, id }; null = 无拖拽
         over: null,           // 拖拽悬停落点 { level, idx }; null = 未落在行上
+        open: false,          // 布局编辑体展开态(2026-11-03 起默认折叠, 运行日志同款; 不持久化,
+                              // 进 webui 分区回折叠 —— cmPanelEnter 复位)
       },
       // 种子转移目标编辑器(计划 26-10-31-0306 W1/T5; 方法在 transfer_targets.js): 与 ctxCust
       // 同款 —— 编辑直接落在 cfg.tree.config.web.transfer(整对象替换写回, 脏标记/保存/放弃全走
@@ -590,9 +594,15 @@ window.AQB_STATE = {
     totalUl() { if (this.ui === "flux" && window.AQB_FX_MOUNT) this.$nextTick(() => window.AQB_FX_MOUNT.numRoll()); },
     /* 未保存改动防护(U1-b, 报告 26-10-02-0508): 原生 beforeunload 兜底**随脏态**挂载 / 摘除 ——
      * 常驻挂载会让 Firefox 放弃 bfcache, 且没改动也弹框 = 弹框疲劳(报告 §6)。判据与挂载点
-     * 都在 config_editor.js(cfgGuardSync), 这里只负责把脏态变化喂过去。 */
-    cfgDirty(v) {
-      this.cfgGuardSync(v);
+     * 都在 config_editor.js(cfgGuardSync), 这里只负责把脏态变化喂过去。
+     * 2026-11-03 起判据是双脏源(cfgGuardActive = 配置树 || 键位草稿), 两个 watcher 都传 true
+     * 让 cfgGuardActive 重算 —— 不能传各自的新值: 一源变净而另一源仍脏时, 传 false 会把还
+     * 需要的兜底摘掉。 */
+    cfgDirty() {
+      this.cfgGuardSync(true);
+    },
+    kbDirtyView() {
+      this.cfgGuardSync(true);  // 键位草稿脏态并入刷新兜底(计算属性在 config_hub.js)
     },
     /* 停靠面板 DOM 出入门(drawerVisible: 两形态都限主内容页, 种子详情另限种子视图) ——
      * Vue 的 v-if 拆装会**换掉建图宿主**: uPlot 的 root/canvas 挂在被拆走的旧 .qb-chart-host 上,

@@ -318,11 +318,13 @@
       cmSetSkipCheck(v) {
         this.cmSetWeb({ skip_check_menu: !!v });
       },
-      /* 进分区: 固定回单种子支(不记忆上次 tab —— 一次只看一支, 记忆会让人以为"卡住") */
+      /* 进分区: 固定回单种子支(不记忆上次 tab —— 一次只看一支, 记忆会让人以为"卡住"),
+       * 并回编辑体折叠态(2026-11-03 起默认折叠, 展开态不持久化 —— 运行日志同款先例) */
       cmPanelEnter() {
         this.ctxCust.branch = "member";
         this.ctxCust.drag = null;
         this.ctxCust.over = null;
+        this.ctxCust.open = false;
       },
     },
   };

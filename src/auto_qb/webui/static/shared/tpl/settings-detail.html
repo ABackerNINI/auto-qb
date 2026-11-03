@@ -1,57 +1,3 @@
-              <!-- 快捷键分区(W6, 计划 26-09-28-0354 §5.2): 客户端块, 不进配置 schema
-                   (与「运行日志」块同款先例); 数据走 GET/PUT /api/keys, 方法在 shortcuts.js -->
-              <template v-else-if="hub.view === 'keys'">
-                <div class="hb-blk hb-cut">
-                  <div class="hb-blk-hd">
-                    <span class="bh-t">键位自定义</span>
-                    <span class="bh-n">点「录制」后按下组合键即录入 · Esc 取消录制 · 禁用 = 空键位</span>
-                    <span class="bh-r">
-                      <button class="hb-btn ghost sm" :disabled="kbKeysLoading" @click="kbPanelEnter()">重新加载</button>
-                      <button class="hb-btn ghost sm" :disabled="!kbDirty()" @click="kbDraftRevert()">放弃改动</button>
-                      <button class="hb-btn ghost sm" :disabled="kbKeysLoading" @click="kbResetAll()">全部重置</button>
-                      <button class="hb-btn primary sm" :disabled="!kbDirty() || kbKeysLoading" @click="kbSaveKeys()">保存</button>
-                    </span>
-                  </div>
-                  <div style="padding:12px 14px">
-                    <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p>
-                    <p class="kb-note">
-                      键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后当前页即时生效,
-                      其它标签/浏览器刷新后生效。浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定;
-                      标 ⚠ 的危险操作触发时有确认框兜底。
-                    </p>
-                    <div v-for="grp in kbGroups()" :key="grp" class="kb-grp">
-                      <div class="kb-grp-t">{{ grp }}</div>
-                      <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-row"
-                           :class="{ rec: kbRecId === it.id }">
-                        <span class="kb-row-label">
-                          {{ kbLabel(it) }}
-                          <span v-if="it.danger" class="kb-danger">⚠ 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
-                          <span v-if="it.fixed" class="hb-badge on">固定</span>
-                        </span>
-                        <span class="kb-row-keys">
-                          <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
-                          <span v-else class="kb-none">未绑定</span>
-                        </span>
-                        <span class="kb-row-acts">
-                          <template v-if="!it.fixed">
-                            <button class="hb-btn ghost sm" @click="kbRecord(it.id)">{{ kbRecId === it.id ? '取消' : '录制' }}</button>
-                            <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" @click="kbDisableRow(it)">禁用</button>
-                            <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" @click="kbResetRow(it)">重置</button>
-                          </template>
-                        </span>
-                        <span v-if="kbRecId === it.id" class="kb-rec-tip">按下组合键…(Esc 取消, 纯修饰键不收)</span>
-                        <div v-if="kbConflict && kbConflict.id === it.id" class="kb-conflict">
-                          <span>{{ kbDisplayName(kbConflict.serial) }} 已绑定为「{{ kbConflict.otherLabel }}」</span>
-                          <button class="hb-btn sm" @click="kbConflictResolve('swap')">交换</button>
-                          <button class="hb-btn sm" @click="kbConflictResolve('steal')">覆盖(对方置空)</button>
-                          <button class="hb-btn ghost sm" @click="kbConflict = null">取消</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </template>
-
               <!-- 「WebUI」卡(计划 26-10-20-0024 W4, D6): 跳检开关迁入 + 行右键菜单布局定制。
                    布局落在 config.web.ctx_menu: 每次编辑**整对象替换**写回配置树, 脏标记/保存/放弃
                    全走全局 actbar(cfgDirty/cfgSave/cfgDiscard), 面板不另存草稿; 方法在
@@ -73,15 +19,23 @@
                   </div>
                 </div>
 
+                <!-- 右键菜单布局(本轮改版起默认折叠, 运行日志同款: 展开态不持久化, 每次进分区回折叠):
+                     折叠态仅头部(定制读数摘要); 编辑体用 v-if 卸载(26-10-20-2231 判据 (d),
+                     收起时不留"看不见的表格")。布局草稿在配置树里, 折叠/展开不碰它,
+                     脏标记/保存/放弃仍走全局 actbar —— 无键位那种独立草稿, 收起不需要守卫 -->
                 <div class="hb-blk hb-cut ctx-custom">
                   <div class="hb-blk-hd">
                     <span class="bh-t">右键菜单布局</span>
-                    <span class="bh-n">拖动或 ↑↓ 调顺序 · 取消勾选 = 隐藏(位置留着, 勾回来即归位) · 「移入次级/移出到一级」在一级与「更多操作」之间搬家</span>
+                    <span v-if="!ctxCust.open" class="bh-n">{{ cmCardReadout() }} · 四支菜单的重排/显隐/次级迁移 —— 点「展开」编辑</span>
+                    <span v-else class="bh-n">拖动或 ↑↓ 调顺序 · 取消勾选 = 隐藏(位置留着, 勾回来即归位) · 「移入次级/移出到一级」在一级与「更多操作」之间搬家</span>
                     <span class="bh-r">
-                      <button class="hb-btn ghost sm" :disabled="!cmBranchCustomized"
+                      <button v-if="ctxCust.open" class="hb-btn ghost sm" :disabled="!cmBranchCustomized"
                               @click="cmResetBranch(cmBranch)">恢复默认</button>
+                      <button class="hb-btn ghost sm" :aria-expanded="ctxCust.open"
+                              @click="ctxCust.open = !ctxCust.open">{{ ctxCust.open ? '收起' : '展开' }}</button>
                     </span>
                   </div>
+                  <template v-if="ctxCust.open">
 
                   <!-- tab(一支一屏, D15): 角标 = 一级/次级可见项数(隐藏与开关关掉的都不计, 与菜单同口径) -->
                   <div class="ctx-custom-tabs">
@@ -150,6 +104,21 @@
                     布局与其它配置项一起保存(右上角「保存」), 保存后当前标签的右键菜单立即生效, 其它标签/浏览器刷新后生效。
                     分隔线是一等公民: 用户加的线可以删, 默认线只能隐藏(隐藏后位置仍保留在配置里)。
                   </p>
+                  </template>
+                </div>
+
+                <!-- 快捷键块(本轮改版: 独立「keys」卡并入 WebUI 卡): 默认折叠, 折叠态仅头部(读数);
+                     「展开」即全屏覆盖层(HR 站点状态同款, 两态之间没有内嵌展开态)。客户端块不进
+                     配置 schema, 数据走 GET/PUT /api/keys, 方法在 shared/shortcuts_panel.js。 -->
+                <div class="hb-blk hb-cut">
+                  <div class="hb-blk-hd">
+                    <span class="bh-t">快捷键</span>
+                    <span class="bh-n">查看与自定义键盘快捷键(录制/冲突/重置) · 当前 {{ kbReadout() }}</span>
+                    <span class="bh-r">
+                      <button class="hb-btn ghost sm" :aria-expanded="kbFullOpen"
+                              @click="kbFullOpenPanel()">展开</button>
+                    </span>
+                  </div>
                 </div>
 
                 <!-- 种子转移目标(计划 26-10-31-0306 W1/T5): 目标列表 + 编辑器 + 测试连接。
@@ -159,6 +128,70 @@
                      shared/transfer_targets.js; 体量原因抽独立分片(单分片 560 行上限, 见
                      test_webui_static_skins 的 settings-detail 例外额度注)。 -->
                 <aq-transfer-targets></aq-transfer-targets>
+
+                <!-- 键位编辑全屏覆盖层(HR 站点状态同款骨架, 复用 .hr-full-mask/.hr-full-modal):
+                     覆盖层盖住配置树 actbar, 任一时刻视野里只有一个保存按钮(键位草稿独立状态机,
+                     与 cfgDirty 互不掺和; 刷新兜底两源都认, 见 config_editor.js cfgGuardActive)。
+                     !必须是 .hb-blk 的**兄弟**而不是子节点: atlas/console 的 .hb-cut 带 clip-path,
+                     会把 fixed 后代的绘制裁剪到块盒内(pitfalls/web-ui/clip-path-clips-fixed);
+                     同一节点 v-show 显隐, 不做 DOM 搬迁。关闭三路: ✕ / ESC(lifecycle 退栈链
+                     kbFullOpen 分支, 对话框层级先于清筛选兜底) / 点遮罩 —— 三路都走 kbFullClose,
+                     未保存先确认(放弃并关闭 / 留在面板)。录制态的 Esc 不归这里: 录制器在捕获段
+                     stopPropagation, 退栈链收不到(录制优先级天然最高)。 -->
+                <!-- aqb:kb-full-modal:begin (守阵 test_settings_panel_section 的扫描锚) -->
+                <div class="hr-full-mask" v-show="kbFullOpen" aria-hidden="true" @click="kbFullClose()"></div>
+                <section v-show="kbFullOpen" class="hr-full-modal" role="dialog" aria-modal="true" aria-label="快捷键编辑(全屏)">
+                  <div class="hr-full-modal-hd">
+                    <span class="hr-full-modal-t">键位自定义</span>
+                    <span class="hr-full-modal-sub">改动即时试用(当前页立即生效), 保存只是落盘共享</span>
+                    <span class="hr-full-modal-acts">
+                      <button class="hb-btn ghost sm" :disabled="kbKeysLoading" @click="kbPanelEnter()">重新加载</button>
+                      <button class="hb-btn ghost sm" :disabled="!kbDirty()" @click="kbDraftRevert()">放弃改动</button>
+                      <button class="hb-btn ghost sm" :disabled="kbKeysLoading" @click="kbResetAll()">全部重置</button>
+                      <button class="hb-btn primary sm" :disabled="!kbDirty() || kbKeysLoading" @click="kbSaveKeys()">保存</button>
+                      <button class="hb-btn ghost sm" aria-label="关闭" @click="kbFullClose()">✕</button>
+                    </span>
+                  </div>
+                  <div class="hr-full-modal-bd">
+                    <div style="padding:12px 14px">
+                      <p v-if="kbKeysLoading" class="hb-hp">正在读取服务端键位…</p>
+                      <p class="kb-note">
+                        键位存于服务端 webui-keys.json, 所有浏览器共享; 保存后其它标签/浏览器刷新后生效。
+                        浏览器保留键(Ctrl+W/T/N/Q 等)不可绑定; 标 ⚠ 的危险操作触发时有确认框兜底。
+                      </p>
+                      <div v-for="grp in kbGroups()" :key="grp" class="kb-grp">
+                        <div class="kb-grp-t">{{ grp }}</div>
+                        <div v-for="it in kbEntriesOf(grp)" :key="it.id" class="kb-row"
+                             :class="{ rec: kbRecId === it.id }">
+                          <span class="kb-row-label">
+                            {{ kbLabel(it) }}
+                            <span v-if="it.danger" class="kb-danger">⚠ 危险操作{{ kbHasConfirm(it) ? ' (有确认框)' : '' }}</span>
+                            <span v-if="it.fixed" class="hb-badge on">固定</span>
+                          </span>
+                          <span class="kb-row-keys">
+                            <kbd v-if="kbSerialOf(it)">{{ kbDisplayName(kbSerialOf(it)) }}</kbd>
+                            <span v-else class="kb-none">未绑定</span>
+                          </span>
+                          <span class="kb-row-acts">
+                            <template v-if="!it.fixed">
+                              <button class="hb-btn ghost sm" @click="kbRecord(it.id)">{{ kbRecId === it.id ? '取消' : '录制' }}</button>
+                              <button v-if="kbSerialOf(it)" class="hb-btn ghost sm" @click="kbDisableRow(it)">禁用</button>
+                              <button v-if="kbIsOverridden(it)" class="hb-btn ghost sm" @click="kbResetRow(it)">重置</button>
+                            </template>
+                          </span>
+                          <span v-if="kbRecId === it.id" class="kb-rec-tip">按下组合键…(Esc 取消, 纯修饰键不收)</span>
+                          <div v-if="kbConflict && kbConflict.id === it.id" class="kb-conflict">
+                            <span>{{ kbDisplayName(kbConflict.serial) }} 已绑定为「{{ kbConflict.otherLabel }}」</span>
+                            <button class="hb-btn sm" @click="kbConflictResolve('swap')">交换</button>
+                            <button class="hb-btn sm" @click="kbConflictResolve('steal')">覆盖(对方置空)</button>
+                            <button class="hb-btn ghost sm" @click="kbConflict = null">取消</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <!-- aqb:kb-full-modal:end -->
               </template>
 
               <!-- 运行日志(2026-09-26 并入「常规」分区页尾, 不再单列首页卡/独立分区; 2026-09-28 起默认折叠):

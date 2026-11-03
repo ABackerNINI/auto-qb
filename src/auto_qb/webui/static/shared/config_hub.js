@@ -126,6 +126,8 @@ const HUB_VIEW_ALIAS = {
   traffic_source: "traffic_limit",
   speed: "traffic_limit",
   traffic: "traffic_limit",
+  /* 独立「快捷键」卡已并入「WebUI」卡(2026-11-03 改版): 存量恢复值同款取值处映射 */
+  keys: "webui",
 };
 
 /* 「关闭工具」确认框的受影响功能文案(D4, 计划 26-10-17-1737 S1/S4): schema 字段
@@ -231,40 +233,30 @@ window.CONFIG_HUB = {
       // HR 站点状态同理(2026-09-25 合并): 它是只读现状不是配置项,
       // 并进「HR 在线核实」分区页尾; 打开分区只复位折叠态不发请求(阶段2 决策点⑤a,
       // 见 hubGo), 首次展开(hrsToggle)才拉 /api/hr/status。
-      // 键盘快捷键(W6, 计划 26-09-28-0354 §5.2): 同为客户端块(不进配置 schema),
-      // 数据走 GET/PUT /api/keys; 读数 = 当前派生条数(overrides)。
-      const keysDoc = window.AQB_KEYS ? window.AQB_KEYS.load() : null;
-      const nKeys = keysDoc ? Object.keys(keysDoc.overrides || {}).length : 0;
-      cards.push({
-        key: "keys",
-        icon: "i-select-all",
-        title: "快捷键",
-        label: "快捷键",
-        desc: "查看与自定义键盘快捷键：录制新键位、冲突交换、恢复默认。",
-        lede: "键盘快捷键的查看与自定义。每条动作可重新录制键位（按下即录），冲突时可交换或覆盖并置空对方，浏览器保留键当场拒绑；键位存于服务端，所有浏览器共享，保存后其它标签刷新生效。",
-        led: "on",
-        readout: nKeys ? `${nKeys} 条已自定义` : "默认键位",
-        badges: [],
-      });
+      // 键盘快捷键(W6, 计划 26-09-28-0354 §5.2)原也是首页独立卡 —— 本轮改版(2026-11-03)并入
+      // 「WebUI」卡(展开即全屏覆盖层编辑), 首页不再单列, 读数并入 WebUI 卡读数段。
       /* 「WebUI」卡(计划 26-10-20-0024 W4, D6): 右键菜单布局定制 + 跳检开关(从「常规」的
        * WebUI 配置块迁入)。与「快捷键」同属客户端块 —— 但注意它**不是**纯客户端:
        * 布局落在 config.web.ctx_menu, 走全局 cfgSave 与 /api/webui/flags 下发, 所以脏标记/
        * 保存/放弃全是配置树那一套, 不自建状态机。
        * 26-10-31(计划 26-10-31-0306 W1/T5): 种子转移目标编辑器并入本卡(配置树 web.transfer),
-       * 同款「编辑直接落配置树」范式; 读数 = 菜单定制 + 目标数两段拼接。 */
+       * 同款「编辑直接落配置树」范式; 本轮改版: 键盘快捷键编辑也并入本卡 —— 键位是独立草稿
+       * 状态机(GET/PUT /api/keys), 展开即全屏覆盖层; 读数 = 菜单定制 + 目标数 + 键位三段拼接。 */
       const cmReadout = this.cmCardReadout ? this.cmCardReadout() : "";
       const trReadout = this.ttCardReadout ? this.ttCardReadout() : "";
+      const kbReadout = this.kbReadout ? this.kbReadout() : "";
       cards.push({
         key: "webui",
         icon: "i-sliders",
         title: "WebUI",
         label: "WebUI",
-        desc: "右键菜单布局定制：重排、显隐、移进「更多操作」；跳检开关；种子转移目标管理。",
+        desc: "右键菜单布局定制：重排、显隐、移进「更多操作」；快捷键自定义；跳检开关；种子转移目标管理。",
         lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；" +
           "布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。跳检开关也搬到了这一张卡（键不变，仍是 config.yml 的 web.skip_check_menu）。" +
-          "「种子转移目标」也在这里配置：把种子任务原样转移到其它下载器（移动任务、不动数据），保留哪些字段按目标各配一套。",
+          "「键盘快捷键」的查看与自定义也在这里（展开即进入全屏编辑层）：每条动作可重新录制键位（按下即录，改动即时试用），冲突时可交换或覆盖并置空对方，浏览器保留键当场拒绑。" +
+          "「种子转移目标」同样在这里配置：把种子任务原样转移到其它下载器（移动任务、不动数据），保留哪些字段按目标各配一套。",
         led: "on",
-        readout: [cmReadout, trReadout].filter(Boolean).join(" · ") || "默认布局",
+        readout: [cmReadout, trReadout, kbReadout].filter(Boolean).join(" · ") || "默认布局",
         badges: [],
       });
       return cards;
@@ -290,19 +282,13 @@ window.CONFIG_HUB = {
     },
     /* 当前二级页的分区元信息 */
     hubNow() {
-      if (this.hub.view === "keys") {
-        // 键盘快捷键分区(W6): 客户端块不进 schema, 元信息在此补齐(首页卡/面包屑/页头共用)
-        return {
-          key: "keys", label: "快捷键", icon: "i-select-all", title: "快捷键",
-          lede: "键盘快捷键的查看与自定义。每条动作可重新录制键位（按下即录），冲突时可交换或覆盖并置空对方，浏览器保留键当场拒绑；键位存于服务端，所有浏览器共享，保存后其它标签刷新生效。",
-        };
-      }
       if (this.hub.view === "webui") {
         // 「WebUI」卡(计划 26-10-20-0024 W4): 同款客户端块(布局键在 config 里, 但分区本身不进 schema)
-        // 26-10-31 起本卡还带种子转移目标编辑器(计划 26-10-31-0306 W1/T5), 页头说明一并交代
+        // 26-10-31 起本卡还带种子转移目标编辑器(计划 26-10-31-0306 W1/T5); 本轮改版(2026-11-03)
+        // 键盘快捷键编辑也并入本卡(独立「keys」卡删除), 页头说明一并交代
         return {
           key: "webui", label: "WebUI", icon: "i-sliders", title: "WebUI",
-          lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。「种子转移目标」在下方：把种子任务原样转移到其它下载器（移动任务、不动数据），目标可以增删改配、逐目标测连通。",
+          lede: "界面行为定制。四支行右键菜单（多选批量/整集整剧/单种子/单组）的项可以重排、隐藏、以及在一级与「更多操作」之间移动；布局存在服务端配置里，保存后当前标签立即生效，其它标签/浏览器刷新后生效。「键盘快捷键」在下方：展开即进入全屏编辑层，录制新键位（按下即录，改动即时试用）、冲突交换、恢复默认。「种子转移目标」也在本页：把种子任务原样转移到其它下载器（移动任务、不动数据），目标可以增删改配、逐目标测连通。",
         };
       }
       const schema = this.cfg.schema;
@@ -311,6 +297,12 @@ window.CONFIG_HUB = {
       if (!g) return { key: "", title: "", lede: "", icon: "i-settings" };
       const meta = HUB_GROUP_META[g.key] || {};
       return { key: g.key, label: g.label, icon: g.icon || "i-settings", title: meta.title || g.label, lede: meta.lede || g.help || "" };
+    },
+    /* 键位草稿脏态的计算属性化(方法 kbDirty 在 shortcuts_panel.js): 刷新兜底 watcher 用 ——
+     * U1-b 的未保存防护扩展成「配置树 || 键位草稿」双脏源后, state.js 的 watcher 需要一个
+     * 可观察的键位脏信号(方法不进响应式, 计算属性才进) */
+    kbDirtyView() {
+      return this.kbDirty();
     },
     /* 当前分区的「块 → 行」(站点/规则/限速三个专段不走这里, 模板里单独渲染) */
     hubBlocks() {
@@ -445,12 +437,15 @@ window.CONFIG_HUB = {
       // 首次展开才拉, 取数时机在 hr_status.js hrsToggle) —— 展开态不持久化, 每次进分区
       // (含刷新后 hubRestore 恢复到本分区)都回到折叠态
       if (key === "hr_check") this.hrsOpen = false;
-      // 键盘快捷键分区(W6): 每次进入都重拉服务端真值对齐草稿(他处保存后刷新可见)
-      if (key === "keys") this.kbPanelEnter();
+      // 键盘快捷键(本轮改版并入「WebUI」卡): 展开编辑覆盖层的时机移到 kbFullOpenPanel
+      // (块头「展开」/帮助浮层跳转), 进分区本身不拉数, 且每次进分区回折叠态
       // 「WebUI」定制卡(W4): 进入即回单种子支, 并清掉上次的拖拽残留(拖到一半按 Esc/切走会留源)
       if (key === "webui") this.cmPanelEnter();
       // 同卡的目标编辑器(W1/T5, 计划 26-10-31-0306): 收起展开中的编辑器与测试回执, 不带残留进分区
       if (key === "webui" && this.ttPanelEnter) this.ttPanelEnter();
+      // 同卡键位编辑覆盖层(本轮改版): 进分区回折叠(展开态不持久化, 运行日志/HR 同款先例);
+      // 键位草稿只可能存在于覆盖层展开期(kbFullClose 守卫), 这里复位不会丢未保存改动
+      if (key === "webui") this.kbFullOpen = false;
       // 「流量与限速」合并卡(B1/D13): 每次进入都拉工具控制面真值(工具是外部进程, 状态随时变)
       if (key === "traffic_limit") this.tmLoad();
       window.scrollTo({ top: 0 });
@@ -490,8 +485,9 @@ window.CONFIG_HUB = {
       let v = this.hub.view;
       if (v === "__logs") v = "basic"; // 旧版「运行日志」分区已并入常规(2026-09-26), 存量偏好映射过去
       if (!v || v === "hub") return;
-      // "keys" / "webui" 是客户端块(分区本身不进 schema), 与 schema 分区一样允许从存储恢复
-      const known = v === "keys" || v === "webui" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
+      // "webui" 是客户端块(分区本身不进 schema), 与 schema 分区一样允许从存储恢复;
+      // 旧值 "keys" 已在取值处经 HUB_VIEW_ALIAS 映射成 "webui", 这里不会再见到
+      const known = v === "webui" || !!(this.cfg.schema && this.cfg.schema.groups.some((g) => g.key === v));
       if (!known) {
         this.hub.view = "hub";
         return;

@@ -426,8 +426,12 @@ def test_frontend_unsaved_changes_guard_wiring():
     assert unm and 'removeEventListener("keydown", this._cfgGuardKey)' in unm.group(1), \
         "lifecycle.js unmounted 未撤除键盘拦截(热重载后句柄堆叠, 一次按键弹 N 个框)"
     assert "this.cfgGuardRelease();" in unm.group(1), "unmounted 未摘原生兜底(同上, 防堆叠)"
-    assert re.search(r"cfgDirty\(v\) \{\s*this\.cfgGuardSync\(v\);", st), \
+    # 2026-11-03 起判据是双脏源(cfgGuardActive = 配置树 || 键位草稿), 两个 watcher 都传 true
+    # 让 cfgGuardActive 重算 —— 传各自新值会在「一源变净另一源仍脏」时把还需要的兜底摘掉
+    assert re.search(r"cfgDirty\(\) \{\s*this\.cfgGuardSync\(true\);", st), \
         "state.js 缺 cfgDirty watcher —— 兜底不随脏态挂载(要么永不弹, 要么常驻弹)"
+    assert re.search(r"kbDirtyView\(\) \{\s*this\.cfgGuardSync\(true\);", st), \
+        "state.js 缺 kbDirtyView watcher —— 键位草稿脏态不入兜底, 键位脏时刷新静默丢失"
 
 
 def test_frontend_expand_state_survives_view_switch():

@@ -38,7 +38,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
         this.metaOpen || this.filePrio.visible || this.historyOpen || this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
-        this.kbHelpOpen);
+        this.kbHelpOpen || this.kbFullOpen);
     },
     /* 引擎入口(lifecycle.js mounted 注册在 Esc 退栈链之后; unmounted 撤除) */
     _kbOnKeyDown(e) {

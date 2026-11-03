@@ -58,6 +58,8 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
 
       const blk = page.locator('.ctx-custom');
       await expect(blk).toBeVisible({ timeout: 10_000 });
+      /* 2026-11-03 起布局编辑体默认折叠(运行日志同款): 点块头「展开」再数 tab/行 */
+      await blk.getByRole('button', { name: '展开', exact: true }).click();
       await expect(blk.locator('.ctx-custom-tab')).toHaveCount(4);
       /* 默认 tab = 单种子(唯一有默认次级内容的一支): 一级 15 项 + 5 线, 次级 11 项 + 2 线
          —— 行数含分隔线, 与注册表逐位一致的直接读数(「转移到」为 26-10-28 加入的第二个
@@ -101,6 +103,10 @@ test.describe('设置页 · WebUI 卡右键菜单定制(W4)', () => {
         await page.locator('.hb-card', { hasText: '右键菜单布局定制' }).first().click();
       }
       await expect(blk).toBeVisible({ timeout: 10_000 });
+      /* 展开态不持久化, 但只在「分区级」复位(hubGo/cmPanelEnter) —— 页面级往返(去种子页再回
+         设置, SPA 不卸载根状态)不触发复位, 块还是展开的; 两种都收, 有「展开」钮才点 */
+      const expandBtn = blk.getByRole('button', { name: '展开', exact: true });
+      if (await expandBtn.isVisible().catch(() => false)) await expandBtn.click();
       saved = null;
       await blk.getByRole('button', { name: '恢复默认' }).click();
       /* 直接写草稿 = 不出确认框, 脏标记立刻回来 */

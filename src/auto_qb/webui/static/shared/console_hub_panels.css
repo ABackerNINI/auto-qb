@@ -403,6 +403,12 @@
 .hr-detail-table td.wrap { max-width: 150px; }
 .hr-full-modal .hr-detail-table td.wrap { max-width: none; }
 
+/* 键位编辑全屏覆盖层(2026-11-03 改版)复用 .hr-full-mask/.hr-full-modal 骨架(皮肤 dialogs.css),
+ * 只补头部按钮组一条: 头部基线规则是 `.hr-full-modal-hd .hb-btn { margin-left: auto }`
+ * (单按钮右推), 按钮组五个同吃会把自由空间均分成五段摊开 —— 包一层 span 收拢成一组整体右靠。 */
+.hr-full-modal-acts { margin-left: auto; display: inline-flex; gap: 8px; flex: none; }
+.hr-full-modal-acts .hb-btn { margin-left: 0; }
+
 /* ---- E · 种子转移目标编辑器(.tr-tgt-*: 「WebUI」卡二级页, 计划 26-10-31-0306 W1/T5) ----
  * 三皮肤共用层(与 .ctx-custom-* 同层); 本段只摆列表/编辑器/映射表的版式,
  * 控件外观全复用 hb-* 件套(.hb-btn/.hb-input/.hb-select/.hb-badge/aq-switch)。 */

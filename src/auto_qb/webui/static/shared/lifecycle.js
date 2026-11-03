@@ -111,6 +111,7 @@ window.AQB_LIFECYCLE = {
       else if (this.metaOpen) this.closeMeta();  // 标签/分类编辑对话框: 与管理对话框同层
       else if (this.moveOpen) this.closeMove();  // 设定位置对话框(2026-10-13): 与 meta 同层
       else if (this.hrsOpen) this.hrsCollapse();  // HR 站点状态全屏覆盖层(计划 26-10-02-1936 阶段2): 对话框层级, 先于清筛选兜底; escBusy 已同步(dialogs.js)
+      else if (this.kbFullOpen) this.kbFullClose();  // 键位编辑全屏覆盖层(2026-11-03 改版): 对话框层级, 同 hrsOpen 档; 未保存由 kbFullClose 确认; escBusy 已同步(dialogs_meta.js)
       else if (this.filePrio.visible) this.filePrio.visible = false;  // 文件优先级小菜单: 抽屉内浮层先于抽屉关闭
       else if (this.drawerMenu.visible) this.drawerMenu.visible = false;  // 抽屉右键菜单(R2 S3): 同为抽屉内浮层
       // 历史流量弹层: 遮罩层(z-index 130)盖在停靠抽屉(80)之上, 与 qB 口径流量图(drawerVisible)

@@ -10,8 +10,40 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
     },
     kbGoSettings() {
       this.kbHelpOpen = false;
-      this.openSettings();
-      this.hubGo("keys");
+      // 必须链在 openSettings 之后: 首次进设置页 cfgLoad 成功会 hubRestore -> hubGo(view),
+      // 同步先设的展开态会被那条路径的「进分区回折叠」冲掉(transfer_flow.js 同款先例)
+      this.openSettings().then(() => {
+        this.hubGo("webui");
+        this.kbFullOpenPanel();  // 跳转即展开键位编辑覆盖层(拍板: 帮助浮层入口直达编辑面, 不让用户再找一次)
+      });
+    },
+    /* ---------------- 键位编辑全屏覆盖层(2026-11-03 改版: 面板从独立「keys」分区并入 WebUI 卡) ----------------
+     * 折叠块头「展开」即全屏覆盖层(HR 站点状态同款, 两态之间没有内嵌展开态): 覆盖层盖住配置树
+     * actbar, 任一时刻视野里只有一个保存按钮。展开态不持久化, 每次进 webui 分区回折叠(hubGo 复位)。
+     * 键位草稿只可能存在于覆盖层展开期 —— 关闭(kbFullClose)未保存先确认, 确认后回滚; */
+    kbFullOpenPanel() {
+      this.kbFullOpen = true;
+      return this.kbPanelEnter();  // 首次展开才拉服务端真值(运行日志/HR「首次展开才拉」先例)
+    },
+    kbFullClose() {
+      if (this.kbDirty()) {
+        this.confirmDialog("键位改动还未保存",
+          "关闭将放弃本次试用的改动; 点「保存」才会写入服务端(所有浏览器共享)。",
+          { okText: "放弃并关闭", cancelText: "留在面板" }).then((ok) => {
+          if (!ok) return;
+          this.kbDraftRevert();
+          this.kbFullOpen = false;
+        });
+        return;
+      }
+      this.kbFullOpen = false;
+    },
+    /* 折叠块头/首页卡共用的键位读数: N 条已自定义 / 默认键位(AQB_KEYS 适配器同步快照,
+     * 非响应式 —— 与旧首页卡读数同口径, 滞后一次重渲染可接受) */
+    kbReadout() {
+      const doc = window.AQB_KEYS ? window.AQB_KEYS.load() : null;
+      const n = doc ? Object.keys(doc.overrides || {}).length : 0;
+      return n ? `${n} 条已自定义` : "默认键位";
     },
     /* ---------------- W6: 自定义面板(设置页「快捷键」分区) ----------------
      * 面板语义(计划 §5.2): 改动先本地生效(即时试用) → 「保存」PUT 落盘; 离开未保存 → 提示。
@@ -27,10 +59,12 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
         this.kbKeysLoading = false;
       });
     },
-    /* 面板离开守卫(config_hub hubGo/hubBack 调): 未保存先确认; 确认后回滚再继续导航 */
+    /* 面板离开守卫(config_hub hubGo/hubBack 调): 键位编辑覆盖层开着且未保存时, 离开 webui
+     * 分区先确认; 确认后回滚再继续导航。覆盖层开着时正常导航路径都被盖住, 本守卫是漏网路径
+     * (如程序化跳转)的安全网 —— 关闭覆盖层自身的守卫在 kbFullClose */
     kbGuardLeave(target) {
-      if (this.hub.view !== "keys" || target === "keys" || !this.kbDirty()) return false;
-      this.confirmDialog("快捷键改动还未保存",
+      if (this.hub.view !== "webui" || target === "webui" || !this.kbFullOpen || !this.kbDirty()) return false;
+      this.confirmDialog("键位改动还未保存",
         "离开将放弃本次试用的改动; 点「保存」才会写入服务端(所有浏览器共享)。",
         { okText: "放弃并离开", cancelText: "留在此页" }).then((ok) => {
         if (!ok) return;

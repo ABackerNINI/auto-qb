@@ -38,6 +38,7 @@
 
 ## Done (283)
 
+- [26-11-04-webui-hub-keys-merge](../26-11-04-webui-hub-keys-merge.md) WebUI 快捷键设置并入 WebUI 卡与双折叠改版
 - [26-09-30-memory-bank-cap-debt](../26-09-30-memory-bank-cap-debt.md) cap 守卫改债务制 (WARN 不拦提交 + 派生可见 + 独立清理会话)
 - [26-10-16-backend-global-traffic-monitor](../26-10-16-backend-global-traffic-monitor.md) 全局流量监视小工具 (TrafficMonitor 替代)
 - [26-11-01-rule-engine-redesign](../26-11-01-rule-engine-redesign.md) 规则引擎重设计与重设计方案

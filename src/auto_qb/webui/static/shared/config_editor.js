@@ -274,14 +274,17 @@ window.CONFIG_EDITOR = {
      * 重置 baseline, 这里只是把它从"静默发生"变成"用户点了离开之后发生" —— 语义极简
      * (要么你保存了, 要么它没存在过), 且天然免疫"敏感字段进 Web Storage"与"陈旧草稿幽灵"。
      *
-     * 判据沿用 cfgDirty(全树 JSON 对比 baseline, 与 actbar「有改动还没保存」同源单点), 零新增状态机。
+     * 判据 = **双脏源**(2026-11-03 扩): 配置树 cfgDirty(全树 JSON 对比 baseline, 与 actbar
+     * 「有改动还没保存」同源单点) || 键位草稿 kbDirtyView(独立状态机, GET/PUT /api/keys,
+     * 计算属性在 config_hub.js)—— 键位面板从独立分区并入 WebUI 卡后, 它的未保存改动同样
+     * 会被刷新静默清零, 不扩就是复刻「刷新后清零」的洞。零新增状态机。
      * 挂载范围 = **只要 dirty**, 不额外收窄到设置页: 配置树是内存常驻的, 在设置页改完没保存就
      * 切走, 那棵树仍是脏的 —— 按页收窄会在那条路径上留下一个静默丢失的洞。dirty 只可能在
      * 设置页被造出来(且保存/放弃/登出即清零), 判据本身已经足够窄: 既不弹框疲劳,
      * 也不会因常驻监听让 Firefox 放弃 bfcache(报告 §6)。
      */
     cfgGuardActive() {
-      return this.cfgDirty;
+      return this.cfgDirty || this.kbDirtyView;  // kbDirtyView 是计算属性(属性访问, 不是方法)
     },
     /* 原生兜底的挂载 / 摘除(幂等): 只在 dirty 期存在 —— 脏态由 state.js 的 watcher 驱动 */
     cfgGuardSync(on) {
@@ -322,19 +325,24 @@ window.CONFIG_EDITOR = {
     async cfgReloadGuard() {
       const choice = await this.confirmThreeDialog(
         "有改动还没保存",
-        "刷新会丢弃当前编辑的配置(不做草稿恢复, 刷新后回到磁盘上的配置)。",
+        "刷新会丢弃当前编辑的配置与未保存的键位改动(不做草稿恢复, 刷新后回到磁盘上的配置)。",
         { okText: "保存并刷新", extraText: "放弃改动并刷新", cancelText: "留在此页" }
       );
       if (choice === true) {
         const saved = await this.cfgSave();
         if (!saved) return;  // 保存失败: 留在页面看报错(toast 已给原因), 绝不能带着改动刷新
+        if (this.kbDirtyView) {
+          // 键位草稿后存(双脏源的第二源): 失败内部已回滚草稿(kbDraftRevert + toast),
+          // 无论成败此刻都不再有未保存键位改动, 同样可安全刷新
+          await this.kbSaveKeys();
+        }
         this.cfgGuardRelease();
         location.reload();
         return;
       }
       if (choice === "extra") {
         this.cfgGuardRelease();
-        location.reload();
+        location.reload();  // 键位草稿只在内存(引擎试用态), 刷新自然清零, 无需显式回滚
       }
       // false = 留在此页(Esc / 点暗幕 / 取消): 什么都不做, 改动仍在
     },
