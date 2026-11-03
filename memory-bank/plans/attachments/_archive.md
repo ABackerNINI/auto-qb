@@ -10,15 +10,15 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (4)
+## Open (3)
 
-- [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](../26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-03-2337] [缺失站点导出/导入 tracker 合并](../26-11-03-2337-plan-missing-site-tracker-merge.html) — `missing-site-tracker-merge`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (202)
+## Done (203)
 
+- [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](../26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-04-0115] [RM10 附加轮: 缺失站点导出合并真机实测(导出面)](../26-11-04-0115-plan-real-rm10-addendum-missing-merge.html) — `real-rm10-addendum-missing-merge`
 - [26-11-04-0055] [同机证明实施计划:D+F 主方案 + E1 一次性强探测](../26-11-04-0055-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-11-03-2223] [热重载 L2 重建后分组索引恢复（辅种页空态修复）计划](../26-11-03-2223-plan-hot-reload-group-index.html) — `hot-reload-group-index`

@@ -18,13 +18,13 @@
 
 ## Open
 
-- [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-03-2337] [缺失站点导出/导入 tracker 合并](26-11-03-2337-plan-missing-site-tracker-merge.html) — `missing-site-tracker-merge`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
 ## Done
 
+- [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-04-0115] [RM10 附加轮: 缺失站点导出合并真机实测(导出面)](26-11-04-0115-plan-real-rm10-addendum-missing-merge.html) — `real-rm10-addendum-missing-merge`
 - [26-11-04-0055] [同机证明实施计划:D+F 主方案 + E1 一次性强探测](26-11-04-0055-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-11-03-2223] [热重载 L2 重建后分组索引恢复（辅种页空态修复）计划](26-11-03-2223-plan-hot-reload-group-index.html) — `hot-reload-group-index`
@@ -84,9 +84,8 @@
 - [26-10-19-2206] [站点问题改色表达与 chip 图标收口](26-10-19-2206-plan-webui-site-chip-color.html) — `webui-site-chip-color`
 - [26-10-19-2007] [WEBUI 站点列状态提醒与逐目标汇报回执](26-10-19-2007-plan-webui-site-alerts.html) — `webui-site-alerts`
 - [26-10-18-2013] [WEBUI 选中摘要: 种子个数 + 合计/实际占用大小](26-10-18-2013-plan-webui-selection-size-summary.html) — `webui-selection-size-summary`
-- [26-10-18-1604] [免重启整组迁移(A/C)分步实施计划](26-10-18-1604-plan-group-relocate-restart-free.html) — `group-relocate-restart-free`
 
-> 更早的 **142** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **143** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
