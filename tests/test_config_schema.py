@@ -39,6 +39,9 @@
 - test_schema_payload_preset_key_metadata: hr_check_site_presets 每条键集合与逐字段取值钉住
 - test_grouping_cross_group_conflict_check_non_bool_aggregates
 - test_grouping_cross_group_conflict_check_valid_bool
+- test_download_fuse_defaults: download_fuse 缺省 enabled=false / 13KiB/s / confirm_ticks=3 / fuse_tag=zFusePaused
+- test_download_fuse_valid: 合法值通过 fail-fast 校验(下载限速奇数 KiB 边界含 1/13/1023)
+- test_download_fuse_invalid_aggregates: 0/偶数/非整数 KiB/超上限/拍数越界/空标签一次性聚合报错
 """
 import re
 from pathlib import Path
@@ -49,6 +52,7 @@ from auto_qb.config import schema
 from auto_qb.config.validation import (
     CHECKING_ACTION_KNOWN_KEYS,
     KNOWN_CONFIG_KEYS,
+    KNOWN_DOWNLOAD_FUSE_KEYS,
     KNOWN_FS_KEYS,
     KNOWN_GROUPING_KEYS,
     KNOWN_HR_CHANNEL_KEYS,
@@ -105,6 +109,7 @@ def test_top_level_keys_match_validation():
         ("log", KNOWN_LOG_KEYS),
         ("qbittorrent", KNOWN_QBITTORRENT_KEYS),
         ("grouping", KNOWN_GROUPING_KEYS),
+        ("download_fuse", KNOWN_DOWNLOAD_FUSE_KEYS),
         ("fs", KNOWN_FS_KEYS),
         ("relocate", KNOWN_RELOCATE_KEYS),
         ("web", KNOWN_WEB_KEYS),
@@ -476,6 +481,73 @@ def test_grouping_cross_group_conflict_check_non_bool_aggregates():
     errors = validate_config({"config": {"grouping": {"cross_group_conflict_check": "maybe", "enabled": "also-bad"}}})
     assert any("config.grouping.cross_group_conflict_check" in e for e in errors)
     assert any("config.grouping.enabled" in e for e in errors)
+
+
+# ---------- download_fuse(计划 26-11-03-0456 S1): 配置键全链路守卫 ----------
+
+
+def test_download_fuse_defaults():
+    """缺省: 关闭 + 13KiB/s + 3 拍 + zFusePaused; loader 缺键时回落到 dataclass 默认"""
+    from auto_qb.config.loaders import load_download_fuse_config
+    from auto_qb.config.models import DownloadFuseConfig
+
+    d = DownloadFuseConfig()
+    assert d.enabled is False
+    assert d.download_limit == 13 * 1024
+    assert d.confirm_ticks == 3
+    assert d.fuse_tag == "zFusePaused"
+    assert load_download_fuse_config({}) == d
+
+
+def test_download_fuse_valid():
+    """合法值通过 fail-fast 校验; 限速奇数 KiB 边界 1/13/1023"""
+    from auto_qb.config.validation import validate_config
+
+    for limit in ("1KiB/s", "13KiB/s", "1023KiB/s"):
+        assert validate_config({"config": {"download_fuse": {"download_limit": limit}}}) == []
+    assert validate_config(
+        {
+            "config":
+                {
+                    "download_fuse":
+                        {
+                            "enabled": "true",
+                            "download_limit": "13KiB/s",
+                            "confirm_ticks": "1",
+                            "fuse_tag": "zFusePaused",
+                        }
+                }
+        }
+    ) == []
+    assert validate_config({"config": {"download_fuse": {"confirm_ticks": "20"}}}) == []
+
+
+def test_download_fuse_invalid_aggregates():
+    """0(qB 不限速)/偶数/非整数 KiB/超上限/拍数越界/空标签都报错, 且一次聚合"""
+    from auto_qb.config.validation import validate_config
+
+    errors = validate_config(
+        {
+            "config":
+                {
+                    "download_fuse":
+                        {
+                            "enabled": "maybe",
+                            "download_limit": "0KiB/s",
+                            "confirm_ticks": "21",
+                            "fuse_tag": "   ",
+                        }
+                }
+        }
+    )
+    assert any("config.download_fuse.enabled" in e for e in errors)
+    assert any("必须 > 0" in e for e in errors)
+    assert any("config.download_fuse.confirm_ticks" in e for e in errors)
+    assert any("config.download_fuse.fuse_tag" in e for e in errors)
+
+    for limit, word in (("14KiB/s", "奇数"), ("13.5KiB/s", "整数 KiB"), ("1025KiB/s", "<= 1024KiB")):
+        errors = validate_config({"config": {"download_fuse": {"download_limit": limit}}})
+        assert any(word in e for e in errors), (limit, errors)
 
 
 # ---------- 键面/分支函数守阵(issue 26-10-08-0903-test-config-mutation-schema-surface) ----------

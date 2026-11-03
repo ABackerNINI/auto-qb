@@ -221,6 +221,22 @@ class GroupingConfig:
 
 
 @dataclass
+class DownloadFuseConfig:
+    """已完成种子下载保险丝(计划 26-11-03-0456 §05, 极简版)
+
+    enabled: 总开关; 默认 false(保守默认, 等价今天行为)
+    download_limit: 哨兵限速(字节/秒, YAML 原始缺省 "13KiB/s"); 校验要求 >0、整 KiB、
+      KiB 数为奇数、<= 1024KiB —— 0(qB 语义 = 不限速)与偶数都直接报错
+    confirm_ticks: 连续多少拍 dlspeed > 0 才暂停; 默认 3, 校验 1..20
+    fuse_tag: 触发标记标签名; 默认 zFusePaused(S2/S3 使用; 本阶段只做配置面)
+    """
+    enabled: bool = False
+    download_limit: int = 13 * 1024  # 13KiB/s
+    confirm_ticks: int = 3
+    fuse_tag: str = "zFusePaused"
+
+
+@dataclass
 class AddEpisodeTagsConfig:
     """种子添加时自动添加集数标签配置
 
@@ -574,6 +590,9 @@ class Config:
     delete_tags_if_has_no_torrents: List[str] = field(default_factory=list)
 
     grouping: GroupingConfig = field(default_factory=GroupingConfig)  # 种子分组管理(辅种管理)
+
+    # 已完成种子下载保险丝(计划 26-11-03-0456): 默认关闭; 本阶段仅配置面, 无运行逻辑
+    download_fuse: DownloadFuseConfig = field(default_factory=DownloadFuseConfig)
 
     fs: FsConfig = field(default_factory=FsConfig)  # 文件访问(容器部署路径映射, 空 = 现状)
 

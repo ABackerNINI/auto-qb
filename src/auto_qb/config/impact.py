@@ -34,6 +34,7 @@ KERNEL_SECTIONS = frozenset(
         "max_tasks_per_tick",  # 任务线速率语义(任务线现读)
         "state_save_interval",  # 周期落盘间隔(maybe_flush 每次现读传入)
         "qbittorrent",  # 连接管理属内核(plan §3.1): 段变自判重连
+        "download_fuse",  # S1 配置面占位: S2 引入保险丝模块后由该模块 sections() 认领并从此表迁出
     )
 )
 

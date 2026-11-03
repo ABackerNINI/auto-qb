@@ -258,6 +258,9 @@ def test_models_default_sources():
     assert c.add_episode_tags.add_tag_single == "zE${episode_first}"
     assert c.add_episode_tags.add_tag_multi == "zE${episode_first}-${episode_last}"
     assert c.trackers == {} and c.global_speed_limit_curve is None
+    assert (
+        c.download_fuse.enabled, c.download_fuse.download_limit, c.download_fuse.confirm_ticks, c.download_fuse.fuse_tag
+    ) == (False, 13 * 1024, 3, "zFusePaused")
 
 
 def test_load_tracker_groups():
@@ -433,6 +436,8 @@ def test_loader_defaults_sections_when_absent():
         assert n.channels == ["platform"]  # 缺省即 platform 单渠道(不是空表)
         assert cfg.hr.add_tag == "" and cfg.hr.add_category == "" and cfg.hr.overwrite_category is False
         assert cfg.fs.path_map == ()
+        d = cfg.download_fuse
+        assert (d.enabled, d.download_limit, d.confirm_ticks, d.fuse_tag) == (False, 13 * 1024, 3, "zFusePaused")
         assert cfg.delete_tags == [] and cfg.delete_tags_if_has_no_torrents == []
 
 

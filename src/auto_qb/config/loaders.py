@@ -17,6 +17,7 @@ from .models import (
     AddEpisodeTagsConfig,
     Config,
     CurvePoint,
+    DownloadFuseConfig,
     FsConfig,
     GlobalSpeedLimitCurve,
     GlobalTrafficMonitorSourceConfig,
@@ -107,6 +108,17 @@ def load_grouping_config(spec: dict) -> GroupingConfig:
         check_missing_files=_get(spec, "check_missing_files", d.check_missing_files, parse_bool),
         missing_tag=_get(spec, "missing_tag", d.missing_tag),
         cross_group_conflict_check=_get(spec, "cross_group_conflict_check", d.cross_group_conflict_check, parse_bool),
+    )
+
+
+def load_download_fuse_config(spec: dict) -> DownloadFuseConfig:
+    """解析 config.download_fuse 段(已完成种子下载保险丝, 默认关闭)"""
+    d = DownloadFuseConfig()
+    return DownloadFuseConfig(
+        enabled=_get(spec, "enabled", d.enabled, parse_bool),
+        download_limit=_get(spec, "download_limit", d.download_limit, parse_speed),
+        confirm_ticks=_get(spec, "confirm_ticks", d.confirm_ticks, int),
+        fuse_tag=_get(spec, "fuse_tag", d.fuse_tag),
     )
 
 
@@ -682,6 +694,7 @@ def load_config(config_path: str) -> Config:
         delete_tags=delete_tags,
         delete_tags_if_has_no_torrents=delete_tags_if_has_no_torrents,
         grouping=load_grouping_config(_get(cfg, "grouping", {})),
+        download_fuse=load_download_fuse_config(_get(cfg, "download_fuse", {})),
         fs=load_fs_config(_get(cfg, "fs", {})),
         notify=load_notify_config(_get(cfg, "notify", {})),
         web=load_web_config(_get(cfg, "web", {})),

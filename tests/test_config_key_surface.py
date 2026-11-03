@@ -285,6 +285,11 @@ _LOADER_PROBES = {
     "grouping.check_missing_files": ("false", False),
     "grouping.missing_tag": ("PROBETAG", "PROBETAG"),
     "grouping.cross_group_conflict_check": ("true", True),
+    # download_fuse 段(计划 26-11-03-0456 S1): 全键默认关闭, 探针值全部偏离默认
+    "download_fuse.enabled": ("true", True),
+    "download_fuse.download_limit": ("15KiB/s", 15 * 1024),
+    "download_fuse.confirm_ticks": ("7", 7),
+    "download_fuse.fuse_tag": ("probe-fuse-tag", "probe-fuse-tag"),
     # qbittorrent 段
     "qbittorrent.host": ("192.0.2.1", "192.0.2.1"),
     "qbittorrent.port": ("16585", 16585),

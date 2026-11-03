@@ -372,6 +372,48 @@ GROUPS: Tuple[Group, ...] = (
                 )
             ),
             Field(
+                "download_fuse",
+                "下载保险丝",
+                "object",
+                help="已完成种子出现下载流量时先用低限速兜底, 连续确认后暂停并打标, 防止「已完成却被重新拉取」的重复下载; "
+                "整段缺省 = 功能未启用(默认关闭, 行为与今天一致)",
+                fields=(
+                    Field(
+                        "enabled",
+                        "启用",
+                        "bool",
+                        default="false",
+                        help="总开关; 默认关闭 = 不增加任何 qB 读写与判断",
+                    ),
+                    Field(
+                        "download_limit",
+                        "哨兵限速",
+                        "speed",
+                        default="13KiB/s",
+                        grey_if=("enabled", "true"),
+                        help="检测到已完成种子有下载流量时先压到的限速(>0、整数 KiB、KiB 数为奇数、<=1024KiB; 0 = 不限速, 不接受)",
+                    ),
+                    Field(
+                        "confirm_ticks",
+                        "确认拍数",
+                        "int",
+                        default="3",
+                        min=1,
+                        max=20,
+                        grey_if=("enabled", "true"),
+                        help="连续多少拍检测到 dlspeed > 0 才判定为真实下载并暂停; 1 = 首拍即暂停",
+                    ),
+                    Field(
+                        "fuse_tag",
+                        "保险丝标签",
+                        "str",
+                        default="zFusePaused",
+                        grey_if=("enabled", "true"),
+                        help="触发保险丝后给种子添加的标记标签; 有此标签的种子不会重复暂停",
+                    ),
+                )
+            ),
+            Field(
                 "relocate",
                 "整组迁移",
                 "object",

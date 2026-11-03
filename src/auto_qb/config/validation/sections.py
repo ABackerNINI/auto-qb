@@ -32,6 +32,9 @@ KNOWN_QBITTORRENT_KEYS = {"host", "port", "username", "password", "api_key"}
 
 KNOWN_GROUPING_KEYS = {"enabled", "check_missing_files", "missing_tag", "cross_group_conflict_check"}
 
+# download_fuse(已完成种子下载保险丝, 计划 26-11-03-0456 §05): 默认关闭, 本阶段仅配置面
+KNOWN_DOWNLOAD_FUSE_KEYS = {"enabled", "download_limit", "confirm_ticks", "fuse_tag"}
+
 # fs(文件访问, plan 26-09-27-1407): 容器部署路径映射, 空表 = 现状(保守默认)
 KNOWN_FS_KEYS = {"path_map"}
 
@@ -519,6 +522,41 @@ def _validate_hr_site_entry(spec, where: str, errors: List[str]) -> None:
             f"{where}.idle_refresh_interval: 降频不能比常态还快 —— 稳态拉取间隔({_fmt_s(idle_s)}s)"
             f"须 >= 拉取间隔({_fmt_s(refresh_s)}s); 相等 = 等效关闭降频"
         )
+
+
+def _validate_download_fuse(spec, errors: List[str]) -> None:
+    """校验 config.download_fuse 段(已完成种子下载保险丝)
+
+    download_limit 四重口径: >0(qB 语义 0 = 不限速)、整数 KiB、KiB 数为奇数、<=1024KiB。
+    0/偶数直接报错而非静默兜底 —— 哨兵限速必须落在可观测的窄区间, 避免「看起来开了、实际没限」。
+    """
+    if spec is None:
+        return
+    if not isinstance(spec, dict):
+        errors.append("config.download_fuse: 必须是字典")
+        return
+    _check_unknown_keys(spec, KNOWN_DOWNLOAD_FUSE_KEYS, "config.download_fuse", errors)
+    if "enabled" in spec:
+        _try(parse_bool, spec["enabled"], "config.download_fuse.enabled", errors)
+    if "download_limit" in spec:
+        n = _try(parse_speed, spec["download_limit"], "config.download_fuse.download_limit", errors)
+        if n is not None:
+            if n <= 0:
+                errors.append("config.download_fuse.download_limit: 必须 > 0(qB 语义 0 = 不限速)")
+            elif n % 1024 != 0:
+                errors.append(f"config.download_fuse.download_limit: 须为整数 KiB: {spec['download_limit']}")
+            else:
+                kib = n // 1024
+                if kib % 2 == 0:
+                    errors.append(f"config.download_fuse.download_limit: KiB 数须为奇数: {kib}")
+                elif kib > 1024:
+                    errors.append(f"config.download_fuse.download_limit: 须 <= 1024KiB: {kib}")
+    if "confirm_ticks" in spec:
+        n = _try(int, spec["confirm_ticks"], "config.download_fuse.confirm_ticks", errors)
+        if n is not None and not 1 <= n <= 20:
+            errors.append(f"config.download_fuse.confirm_ticks: 须在 1-20 范围内: {n}")
+    if "fuse_tag" in spec and (not isinstance(spec["fuse_tag"], str) or not spec["fuse_tag"].strip()):
+        errors.append("config.download_fuse.fuse_tag: 必须是非空字符串")
 
 
 def _validate_grouping(spec, errors: List[str]) -> None:

@@ -70,6 +70,11 @@ add_episode_tags.enabled
 data_dir
 delete_tags
 delete_tags_if_has_no_torrents
+download_fuse
+download_fuse.confirm_ticks
+download_fuse.download_limit
+download_fuse.enabled
+download_fuse.fuse_tag
 fs
 fs.path_map
 fs.path_map.*.from

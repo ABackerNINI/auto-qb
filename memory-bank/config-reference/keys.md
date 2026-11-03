@@ -23,6 +23,7 @@
 | `web` | 默认关闭 | `{enabled: bool, host: "127.0.0.1", port: 8080, token: (空串), skip_local_verify: false, skip_check_menu: false, ctx_menu: (缺省)}`; WEB UI(辅种管理): 分组视图/组控制/**图形化配置编辑(每项可增删改 + 只读 YAML 预览)**; token 留空 = 首启随机生成持久化到 data_dir/web.token; host 默认仅本机(对外暴露需自行评估安全); `skip_local_verify=true` 时本机(loopback)访问 /api/* 免密钥鉴权直接进入, 对外暴露仍强制; `skip_check_menu=true` 时种子右键菜单(单选/单组/多选)显示跳检项且 web 端点放行, 默认关闭 = 菜单不显示且端点拒绝(fail-closed), 规则源跳检不受影响(计划 26-10-02-1955 W1; 2026-10-20 起该开关的编辑位置迁到设置页「WebUI」卡, 键与 fail-closed 语义不变); `ctx_menu` = 行右键菜单四支(单组/单种子/整集整剧/多选批量)的用户布局(计划 26-10-20-0024): `{支名: {order: [项id|"sep:分隔线token"], hidden: [隐藏项id], sub: {order: [...], hidden: [...]}}}`, 在设置页「WebUI」卡定制(重排/显隐/一级与「更多操作」次级间移动/分隔线增删), 保存后即时生效; 缺省 = 四支默认布局(与静态模板逐位一致, 不写配置零漂移); 后端只验形状(数组/字符串/sub 同构), 未知 id 前端补尾/忽略, 换版本不丢布局; `transfer` = 种子转移目标配置(计划 26-10-31-0306 §03): `{targets: [{name, type(qb/tr), base_url, username, password, api_key, enabled, fields, after_state, skip_check, path_map}]}`, 每个 target 各配一套: `api_key` = 目标 Web UI 的 API Key(qB 5.x, 与主 `qbittorrent.api_key` 同款; 非空时经 `Authorization: Bearer` 直连, 不再走密码登录; 空串 = 未配置; 写侧与 password 同作哨兵掩码), `fields` = per-target 字段集(键闭合: save_path 锁死必开/category/tags/share_ratio_limit/seeding_time_limit/up_limit/down_limit/super_seeding, 缺键按新建模板默认补——除 super_seeding 外全开), `after_state` 单选 `keep`(保持原状态, 默认)/`paused`(统一暂停), `skip_check` 跳过校验(默认开, 未完成种子执行层自动降级校验添加), `path_map` = 有序 from→to 前缀替换规则表(默认空 = 原样, 首条命中生效; 比对前分隔符归一, 正反斜杠互认, 命中后仍对原串替换); 校验: 名称非空唯一/type 枚举/base_url 须 http(s) URL(启用时必填)/字段集键闭合/save_path 显式 false 拒绝/from·to 非空, 聚合报错不落盘; 目标编辑器在设置页「WebUI」卡(执行层 W2 后续任务) |
 | `notify` | 默认关闭 | `{enabled: bool, min_level: "ERROR", quiet_hours: "", max_per_hour: 20, dedup_window: "10M", channels: [platform]}`; 主动通知(ERROR 及以上日志 -> 平台原生通知, 零依赖; 26-09-27 等级整改后默认只推真正危险, WARNING 仅排障, 想看排障消息手动调低); quiet_hours "HH:MM-HH:MM" 支持跨午夜, 时段内跳过发送(含 ERROR); channels v1 仅 platform(缺省即启用); 节流为内存态不进 state_file |
 | `grouping` | | `{enabled: bool, check_missing_files: bool, missing_tag: "MISSING", cross_group_conflict_check: false}`; `cross_group_conflict_check` = 跨组文件交叉检查(默认关, 开启后检测不同辅种组的文件指向同一磁盘物理文件, 警告并暂停涉事下载方) |
+| `download_fuse` | 默认关闭 | 已完成种子下载保险丝(计划 26-11-03-0456): `{enabled(false), download_limit("13KiB/s"), confirm_ticks(3), fuse_tag("zFusePaused")}`; 见下 |
 | `fs` | | 容器部署路径映射: `{path_map: [{from, to}]}`; 留空 = 现状, 改后需重启 |
 | `relocate` | 默认关闭 | 整组迁移(辅种组保存位置迁移, 计划 26-10-18-1604 §3.7), 见下; 热重载即生效(非 R 级) |
 | `delete_tags` | [] | 彻底删除的标签格式 (支持 `regex:`, `:ignore_case`, `@tracker_tags` 引用) |
@@ -96,6 +97,25 @@ global_speed_limit_curve:
 | `rollup_window` | time / `30D` | 7D~无上限 | 小时均值保留窗: 小时封口行(均值/峰值)的保留时长, hour 段视图(3d/7d/30d)从它取数; 也是已删种子文件的淘汰龄 |
 
 整段缺省 = 未启用。启用后按 `sample_interval` 周期读内存快照采样(零新增 qB 请求): 全局系列恒采(qB 速度/累计), 单种系列仅采活跃种子(`dlspeed>0 or upspeed>0`; 空闲期不产 raw 点, 已有数据文件者记零值行程行(z 行, plan 26-10-04-0721 v2), 从未传输者无文件)。数据供 WEB UI 流量图(1m/5m/30m/3h/6h/12h/24h 对齐 qB 速度图 + 3d/7d/30d 共十视图, 2026-10-04)消费; 空闲在图上表现为 0 平线, 停机/断连/计数器重置表现为断线(null), 不补 0 不回填。
+
+## download_fuse 段 (已完成种子下载保险丝)
+
+```yaml
+download_fuse:
+    enabled: false             # 总开关; 关闭 = 行为与今天一致(默认)
+    download_limit: 13KiB/s    # 哨兵限速; >0、整数 KiB、KiB 数为奇数、<=1024KiB
+    confirm_ticks: 3           # 连续多少拍 dlspeed>0 才暂停; 1..20
+    fuse_tag: zFusePaused      # 触发后的标记标签名(非空)
+```
+
+| 键 | 类型/默认 | 校验边界 | 说明 |
+|----|-----------|----------|------|
+| `enabled` | bool / `false` | — | 功能总开关; false(缺省) = 不增加任何 qB 读写与判断 |
+| `download_limit` | speed / `13KiB/s` | >0、整数 KiB、KiB 数奇数、<=1024KiB | 检测到已完成种子有下载流量时先压到的限速; **0(qB 语义 = 不限速)与偶数 KiB 直接报错**, 避免「看起来开了、实际没限」 |
+| `confirm_ticks` | int / `3` | 1..20 | 连续多少拍检测到 dlspeed > 0 才判定为真实下载并暂停; 1 = 首拍即暂停 |
+| `fuse_tag` | str / `zFusePaused` | 非空 | 触发保险丝后给种子添加的标记标签; 带此标签的种子不会重复暂停 |
+
+本阶段(S1)只落配置面: 校验/加载/设置页可用, 运行逻辑与标签动作由后续步骤接入。
 
 ## relocate 段 (整组迁移)
 

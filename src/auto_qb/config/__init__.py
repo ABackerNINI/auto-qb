@@ -23,6 +23,7 @@ from .models import (
     UNLIMITED_SPEED,
     Config,
     CurvePoint,
+    DownloadFuseConfig,
     GlobalSpeedLimitCurve,
     GroupingConfig,
     HRRule,
@@ -44,6 +45,7 @@ from .models import (
 from .validation import validate_config
 from .loaders import (
     load_config,
+    load_download_fuse_config,
     load_global_hr,
     load_global_speed_limit_curve,
     load_grouping_config,
@@ -61,6 +63,7 @@ __all__ = [
     "ConfigError",
     "Config",
     "CurvePoint",
+    "DownloadFuseConfig",
     "FsConfig",
     "PathMapEntry",
     "GlobalSpeedLimitCurve",
@@ -80,6 +83,7 @@ __all__ = [
     "TrackerConfig",
     "validate_config",
     "load_config",
+    "load_download_fuse_config",
     "load_global_hr",
     "load_global_speed_limit_curve",
     "load_grouping_config",
