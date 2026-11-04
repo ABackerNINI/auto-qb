@@ -5,7 +5,6 @@ move-only 自 runtime.py 切出(计划 26-11-02-2342 §07 R5), 未改语义; 由
 import logging
 import queue
 import secrets
-import time
 from typing import List, Tuple
 
 from .runtime_common import (
@@ -50,7 +49,7 @@ class StreamMixin:
         再把票据放查询串开流 —— 查询串会进反代访问日志, 所以只放**单次消费的短命票据**,
         不再放长期访问密钥(26-10-02 加固, 取代旧 ?token= 兜底)。
         """
-        now = time.time()
+        now = self._clock.now()
         with self._event_tickets_lock:
             if len(self._event_tickets) >= EVENT_TICKET_MAX:
                 # 先清过期再判满额; 仍满则拒签(都是没被消费的活票, 退避比挤掉别人合理)
@@ -67,7 +66,7 @@ class StreamMixin:
         """消费票据: **取即删**(单次有效), TTL 外按无效; 重放/过期/未知一律 False"""
         with self._event_tickets_lock:
             issued_at = self._event_tickets.pop(ticket, None)
-        return issued_at is not None and (time.time() - issued_at) <= EVENT_TICKET_TTL_S
+        return issued_at is not None and (self._clock.now() - issued_at) <= EVENT_TICKET_TTL_S
 
     # ------------------------------------------------------------------ 错误历史(/api/errlog)
 
@@ -75,7 +74,7 @@ class StreamMixin:
         """入环一条 WARNING+ 记录(日志线程经 WebErrLogHandler 调用): seq 自增, 环满挤最旧"""
         with self.err_log_lock:
             self.err_log_seq += 1
-            self.err_log_ring.append({"seq": self.err_log_seq, "ts": time.time(), "level": level, "msg": msg})
+            self.err_log_ring.append({"seq": self.err_log_seq, "ts": self._clock.now(), "level": level, "msg": msg})
 
     def err_log_since(self, after: int) -> Tuple[List[dict], int]:
         """只读增量(Web 线程): 回 (seq > after 的条目, 环当前最大 seq)
@@ -104,7 +103,7 @@ class StreamMixin:
         !必须**非阻塞**: 调用点可能在主循环线程(且 `_publish_locked` 还持有 view_lock)。
         这里只做 put_nowait, 慢消费者丢事件(它下一轮轮询会补上)。
         """
-        ev = {"type": etype, "payload": payload, "ts": time.time()}
+        ev = {"type": etype, "payload": payload, "ts": self._clock.now()}
         hit = 0
         with self._sub_lock:
             subs = list(self._subscribers)
@@ -126,11 +125,11 @@ class StreamMixin:
         「Web 未启用 / 网页已关闭」在本方法里自然恒为 False —— 主循环因此不需要任何
         `if web_enabled` 分支(空对象语义): 这与拆分前 `_web_last_seen = 0` 的判据逐字等价。
         """
-        return (time.time() - self.last_seen) < WEB_VIEW_TTL
+        return (self._clock.now() - self.last_seen) < WEB_VIEW_TTL
 
     def touch(self) -> None:
         """WEB 请求心跳: 刷新 last_seen, 让主循环在活跃窗口内持续组装视图"""
-        self.last_seen = time.time()
+        self.last_seen = self._clock.now()
 
     def mark_dirty(self, full: bool = False, reason: str = "") -> None:
         """核心域 → 表现层: 视图内容已变, 下次组装前必须重建

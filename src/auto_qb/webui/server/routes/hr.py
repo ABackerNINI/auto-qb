@@ -10,7 +10,6 @@
 `/api/hr/refresh` 是唯一的写通路, 但也只到「置一次性 force 旗标 + 唤醒取数线程」为止
 (manager.hr.request_refresh 单点, 与插件端点同一实现) —— 取数仍由取数线程串行执行。
 """
-import time
 from typing import Any, Dict, List, Mapping
 
 from fastapi import APIRouter, HTTPException
@@ -18,6 +17,7 @@ from fastapi import APIRouter, HTTPException
 from ....hr.model import HISTORY_CAP, HrSiteData
 from ....hr.report import run_hr_confirm_empty
 from ....hr.status import build_site_statuses, entry_details, history_rows
+from ....infra.clock import SYSTEM_CLOCK
 from ..context import WebContext
 
 
@@ -146,9 +146,9 @@ def build_router(ctx: WebContext) -> APIRouter:
                 "sites": [],
                 "channel": {},
                 "note": "HR 在线核实未启用(config.hr_check.enabled=false)" if conf is None or not conf.enabled else "取数线程未启动",
-                "now": time.time(),
+                "now": SYSTEM_CLOCK.now(),  # 请求处理叶子走取时单点(挂钟语义, 与落盘 ts 同侧展示)
             }
-        now = time.time()
+        now = SYSTEM_CLOCK.now()
         sites: List[Dict] = [st.to_dict() for st in build_site_statuses(service, now)]
         run = runtime.status()
         channel = run.channel
@@ -204,7 +204,7 @@ def build_router(ctx: WebContext) -> APIRouter:
             "site": site,
             "entries": rows,
             "read_error": err or "",
-            "now": time.time(),
+            "now": SYSTEM_CLOCK.now(),
         }
 
     @router.get("/api/hr/history")
@@ -238,7 +238,7 @@ def build_router(ctx: WebContext) -> APIRouter:
                 read_errors[name] = err
             else:
                 datas[name] = data
-        now = time.time()
+        now = SYSTEM_CLOCK.now()
         rows = [row.to_dict() for row in history_rows(datas, max(1, min(int(limit), HISTORY_CAP)), now)]
         return {"enabled": True, "rows": rows, "read_errors": read_errors, "now": now}
 

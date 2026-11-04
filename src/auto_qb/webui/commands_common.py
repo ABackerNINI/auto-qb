@@ -4,11 +4,12 @@ move-only 自 commands.py 切出(计划 26-11-02-2342 §07 R5), 未改语义。
 日志名显式钉为 "auto_qb.webui.commands" —— 消费方(测试/排障)按该名字取日志, 不能随模块漂移。
 """
 import logging
-import time
 from collections.abc import Mapping
 from typing import Optional
 
 from qbittorrentapi import HTTP401Error, HTTP4XXError
+
+from ..infra.clock import SYSTEM_CLOCK, Clock
 
 logger = logging.getLogger("auto_qb.webui.commands")
 
@@ -203,11 +204,14 @@ def is_deferred_receipt(cmd: str, args: Optional[dict] = None) -> bool:
     return cmd in DEFERRED_RECEIPT_COMMANDS
 
 
-def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
+def _timing(queued_ts: Optional[float], start_ts: float, clock: Optional[Clock] = None) -> dict:
     """P0-0 埋点: 把一次命令拆成两段耗时(毫秒), 供 /api/cmd/{id} 回传
 
     wait_ms = 出队时刻 - 投递时刻(命令排队等主循环的空档, P0-1 唤醒后应趋近 0)
     exec_ms = 执行完时刻 - 出队时刻(真正干活: 多数是 1 次 qB API 往返)
+
+    clock: 取时注入(D8) —— start_ts 由调用方经同一只钟取, exec 段终点在这里现读;
+    缺省取时单点(调用方不传时与真实行为同)。三段埋点必须同钟, 否则假钟下 exec_ms 是垃圾值。
 
     !这两段**只在回执里回传**, 要看就得开浏览器控制台 —— 真机上用户不一定开得了(嵌入式
     WebView / 手机 / 不愿开 F12)。故 drain 侧同时落一行日志(见 _log_cmd_timing),
@@ -215,9 +219,10 @@ def _timing(queued_ts: Optional[float], start_ts: float) -> dict:
     """
     if not queued_ts:
         return {}
+    end_ts = (SYSTEM_CLOCK if clock is None else clock).now()
     return {
         "wait_ms": round((start_ts - queued_ts) * 1000, 1),
-        "exec_ms": round((time.time() - start_ts) * 1000, 1),
+        "exec_ms": round((end_ts - start_ts) * 1000, 1),
     }
 
 

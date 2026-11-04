@@ -13,8 +13,9 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
   code-style 的数据例外保留, 不算代码用语。
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
-(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 59 处/22 文件
-[core 域 90 处/16 文件、hr 域 12 处/5 文件已随 S2 各域提交清零] · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
+(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 24 处/11 文件
+[core 域 90 处/16 文件、hr 域 12 处/5 文件、webui/traffic 域 35 处/11 文件已随 S2 各域提交清零]
+· bind 位固定端口 0 处), 与守阵扫描逐条对得上。
 """
 
 # ---------- ALLOW_SLEEP_TESTS: tests/ 裸 time.sleep 调用(AST 实调用, patch 字符串不算) ----------
@@ -98,6 +99,9 @@ ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
     # S2 hr 域提交已完成(2026-11-05): 5 文件 12 处已按 D8 清零, 条目删净 —— 等待预算
     # (runtime.sleeper / queue.wait)走 SYSTEM_CLOCK.monotonic 单点保真实单调钟(与既有
     # sleeper/now_fn 可调用注入口径对齐, 阻塞预算不入假钟); 挂钟叶子走 SYSTEM_CLOCK.now() 单点。
+    # S2 webui/traffic 域提交已完成(2026-11-05): 11 文件 35 处已按 D8 清零, 条目删净 ——
+    # WebUIRuntime/ChainCache/RoCache 构造期注入 clock(WebUIRuntime 经 QbManager 装配链透传),
+    # 路由/处理器与请求期栅格等叶子走 SYSTEM_CLOCK.now() 单点, lifecycle 等待预算走 monotonic 单点。
     # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
     "src/auto_qb/infra/alias_fs.py": {
         "probed_at=time.time(),": 1
@@ -159,81 +163,6 @@ ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
             "self._started = time.time()": 1,
             "self.card_uptime.configure(text=self._format_uptime(time.time() - self._started))": 1
         },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(1 处)
-    "src/auto_qb/webui/commands_common.py": {
-        "\"exec_ms\": round((time.time() - start_ts) * 1000, 1),": 1
-    },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(1 处)
-    "src/auto_qb/webui/commands_torrents.py": {
-        "t0 = time.time()": 1
-    },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(3 处)
-    "src/auto_qb/webui/relocate_chain.py":
-        {
-            "\"probed_at\": time.time(),": 1,
-            "now = time.time()": 1,
-            "self._data[key] = (time.time(), value)": 1
-        },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(2 处)
-    "src/auto_qb/webui/runtime.py":
-        {
-            "self.group_view_ver: int = int(time.time())": 1,
-            "self.search_rev: int = int(time.time() * 1000)": 1
-        },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(7 处)
-    "src/auto_qb/webui/runtime_commands.py":
-        {
-            "\"ts\": time.time(),": 1,
-            "body[\"_queued_ts\"] = time.time()  # 埋点: 投递时刻, 回执据此拆出排队耗时": 1,
-            "ms = round((time.time() - t0) * 1000, 1)": 1,
-            "now = time.time()": 3,
-            "start_ts = time.time()  # 出队即开始, 用于拆 wait_ms / exec_ms": 1
-        },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(6 处)
-    "src/auto_qb/webui/runtime_stream.py":
-        {
-            "ev = {\"type\": etype, \"payload\": payload, \"ts\": time.time()}":
-                1,
-            "now = time.time()":
-                1,
-            "return (time.time() - self.last_seen) < WEB_VIEW_TTL":
-                1,
-            "return issued_at is not None and (time.time() - issued_at) <= EVENT_TICKET_TTL_S":
-                1,
-            "self.err_log_ring.append({\"seq\": self.err_log_seq, \"ts\": time.time(), \"level\": level, \"msg\": msg})":
-                1,
-            "self.last_seen = time.time()":
-                1
-        },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(2 处)
-    "src/auto_qb/webui/server/context.py": {
-        "now = time.time()": 1,
-        "self._cache[full_key] = (time.time(), value)": 1
-    },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(3 处)
-    "src/auto_qb/webui/server/lifecycle.py":
-        {
-            "deadline = time.monotonic() + timeout": 1,
-            "if time.monotonic() >= deadline:": 1,
-            "now = time.monotonic()": 1
-        },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(4 处)
-    "src/auto_qb/webui/server/routes/hr.py": {
-        "\"now\": time.time(),": 2,
-        "now = time.time()": 2
-    },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(5 处)
-    "src/auto_qb/webui/server/traffic_qb.py":
-        {
-            "_SERVER_STARTED_AT = time.time()": 1,
-            "grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)": 2,
-            "return tg.build_grid(window, time.time(), sample)": 1,
-            "return tg.build_month_grid((), time.time())": 1
-        },
-    # S2 webui/traffic 域提交: 构造期注入 clock 后删除(1 处)
-    "src/auto_qb/webui/views.py": {
-        "now = time.time()": 1
-    },
 }
 
 # ---------- ALLOW_WAIT_TIMEOUT_E2E: e2e/*.mjs 的 page.waitForTimeout(...) 固定睡等(含注释里的历史提及, 行文本全等口径) ----------

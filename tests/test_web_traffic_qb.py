@@ -369,7 +369,9 @@ def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
     离线期 qB 自行传输的字节被误归恢复首桶出假尖峰(rate 300 / totals 9000); 修复后标记
     保留并断链, 恢复首桶按真实跨度摊配回收(覆盖份额 9000/4500 x 30 // span 60 = 4500/2250
     -> rate 150/75, 误接旧值 300 可判红), 离线字节不进 totals。时钟钉死(1 秒带需确定性
-    now; 端点 _grid 走 traffic_qb.time.time)"""
+    now; 端点 _grid 走 traffic_qb.SYSTEM_CLOCK 单点, patch 模块内单点名请求时现读)"""
+    from types import SimpleNamespace
+
     from auto_qb.core.traffic_store import V4Sample, v4_epoch_date_str
     from auto_qb.webui.server import traffic_qb as tq
 
@@ -379,11 +381,7 @@ def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
     store = _qb_v4(mgr)
     fixed = 1_800_000_000.0  # 30 的整倍 -> 5m 窗栅格对齐(确定性几何)
 
-    class _FixedClock:
-        def time(self):
-            return fixed
-
-    monkeypatch.setattr(tq, "time", _FixedClock())
+    monkeypatch.setattr(tq, "SYSTEM_CLOCK", SimpleNamespace(now=lambda: fixed))
     g_t0 = int(fixed) - 300  # 5m 窗栅格首桶
     seed_t0 = g_t0 - 30  # D3 窗首种子外扩 = grid.t0 - grid.interval
     store.append_records(  # 种子块: 末槽恰落 (seed_t0-1, seed_t0) 的 1 秒带(首记录 @seed_t0-30, 次记录 +29.5s)

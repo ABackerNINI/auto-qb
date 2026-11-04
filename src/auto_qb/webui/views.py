@@ -14,7 +14,6 @@
 """
 import logging
 import re
-import time
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from qbittorrentapi import TorrentState, TrackerStatus
@@ -226,7 +225,7 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         client = self.client
         if client is None:
             return  # qB 断开: 无 API 可用, 保持现值待连接恢复后刷新
-        now = time.time()
+        now = self._clock.now()  # 宿主 = QbManager, _clock 为 core 域注入的取时单点(D8)
         changed: set = set()  # 本轮改写了行级展示派生字段的行(行级脏)
         buckets = ([], [], [], [])  # 0 疑似 / 1 已亮 / 2 error 态 / 3 全库轮转
         for rec in self.store.by_hash.values():

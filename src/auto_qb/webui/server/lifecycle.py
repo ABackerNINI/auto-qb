@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 import uvicorn
 
+from ...infra.clock import SYSTEM_CLOCK
 from ...infra.errors import AutoQbError
 from ...infra.utils import display_host
 from .common import state_dir
@@ -91,7 +92,7 @@ def _is_network_fluctuation(exc: Any) -> bool:
 
 def _log_network_noise(exc: BaseException) -> None:
     """网络波动: 单行 INFO + 窗口节流(避免 SSE 重连 / 关页面刷屏)"""
-    now = time.monotonic()
+    now = SYSTEM_CLOCK.monotonic()  # 节流窗口叶子走取时单点(单调钟语义, 不受调钟影响)
     suppressed = _noise_state["suppressed"]
     if now - _noise_state["at"] < NET_NOISE_WINDOW:
         _noise_state["suppressed"] = suppressed + 1
@@ -179,11 +180,12 @@ def _run_server(server: uvicorn.Server) -> None:
 
 def _wait_until_started(handle: WebServerHandle, timeout: float) -> bool:
     """等待监听就绪: server.started 置位即成功; 线程提前退出(启动失败)/超时返回 False"""
-    deadline = time.monotonic() + timeout
+    # 启动等待预算走取时单点(真实单调钟; 阻塞预算不入假钟, 与 hr 域等待预算同口径)
+    deadline = SYSTEM_CLOCK.monotonic() + timeout
     while not handle.started:
         if not handle.thread.is_alive():
             return False
-        if time.monotonic() >= deadline:
+        if SYSTEM_CLOCK.monotonic() >= deadline:
             return False
         time.sleep(0.01)
     return True

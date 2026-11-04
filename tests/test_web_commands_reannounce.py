@@ -22,6 +22,7 @@ import time
 
 from types import SimpleNamespace
 
+from auto_qb.infra.clock import SYSTEM_CLOCK
 from auto_qb.infra.utils import encode_group_key, mask_tracker_url
 
 from auto_qb.webui.runtime import WebUIRuntime
@@ -417,7 +418,10 @@ def test_reannounce_background_verify_and_cap():
 
     def _runtime(rows):
         client = SimpleNamespace(torrents_trackers=lambda h: rows)
-        return WebUIRuntime(SimpleNamespace(client=client, _verdict_reannounce=QbManager._verdict_reannounce))
+        # _clock: 取时单点(D8 构造期注入) —— SimpleNamespace 宿主补齐 QbManager 的同名属性
+        return WebUIRuntime(
+            SimpleNamespace(client=client, _verdict_reannounce=QbManager._verdict_reannounce, _clock=SYSTEM_CLOCK)
+        )
 
     # confirmed: 达 min_e 后前跳 -> INFO 日志后移除
     rt = _runtime([_epoch_tracker(next_announce=105_000)])
@@ -475,6 +479,7 @@ def test_reannounce_background_verify_and_cap():
         client=SimpleNamespace(torrents_trackers=lambda h: []),
         store=SimpleNamespace(get=lambda h: None),
         _verdict_reannounce=QbManager._verdict_reannounce,
+        _clock=SYSTEM_CLOCK,  # 取时单点(D8): _register_reannounce_pending 经宿主 _clock 现取
     )
     host.web = rt
     fut = time.time() + 1000  # min_e - t0 > 25s: HNEW 以推迟身份登记, 触发超限逐出

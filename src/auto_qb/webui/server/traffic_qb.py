@@ -39,8 +39,6 @@ plan 26-10-04-1957 S3b, §05.2-§05.4)
   (任一成员 r/z 观测即程序存活真值); 指纹解析不到成员 / 组从未产过流量(全部成员无块无
   agg 行, v4_earliest_row_ts 全 None)-> 空态。
 """
-import time
-
 from fastapi import HTTPException
 
 from ...core import traffic_grid as tg
@@ -52,6 +50,7 @@ from ...core.traffic_store import (
     v4_live_tail_slots,
     v4_series_dir,
 )
+from ...infra.clock import SYSTEM_CLOCK
 from .common import group_key_param
 
 #: window 查询参数合法值(§08 + plan 26-10-04-1957 §05.3/D4: 1m-24h 与 qB 速度图窗口对齐
@@ -67,7 +66,7 @@ WINDOW_NAMES = ("1m", "5m", "30m", "3h", "6h", "12h", "24h", "3d", "7d", "30d", 
 #: 落在尾部未观测区」的尾区读成重启缝(「数据接缝中」)而非停机洞(判据单点在
 #: static/shared/qb_traffic_chart.js _qbSeamHint, node 单测钉住)。模块常量非配置键
 #: (与 P2 seam 常量同族, 无 validate_config 面)。
-_SERVER_STARTED_AT = time.time()
+_SERVER_STARTED_AT = SYSTEM_CLOCK.now()  # 模块导入期叶子取时走单点(挂钟语义, 接缝锚点)
 
 
 def parse_window(window: str) -> str:
@@ -129,8 +128,8 @@ class QbTrafficChartApi:
         conf = self._conf()
         sample = conf.sample_interval if conf is not None else tg.DEFAULT_SAMPLE_INTERVAL_S
         if tg.WINDOW_SPECS[window][1] == "month":
-            return tg.build_month_grid((), time.time())
-        return tg.build_grid(window, time.time(), sample)
+            return tg.build_month_grid((), SYSTEM_CLOCK.now())  # 请求处理叶子走取时单点(挂钟)
+        return tg.build_grid(window, SYSTEM_CLOCK.now(), sample)
 
     def _meta(self, grid: tg.WindowGrid, stale: bool) -> dict:
         """meta 装配单点(全部出口——正常/空态/组空态——都经此, P4 新键只增不改: 旧前端忽略
@@ -317,7 +316,7 @@ class QbTrafficChartApi:
                 # S7: 活尾当月部分行并入铺格面(否则当前月桶不在栅格内被合流丢弃)
                 epochs = [r.epoch for a in aggs if a is not None for r in a.months]
                 epochs += [r.epoch for t in live_tails for r in _live_rows(t)]
-                grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)
+                grid = tg.build_month_grid(epochs, SYSTEM_CLOCK.now()) if epochs else self._grid(window)
             else:
                 grid = self._grid(window)
             member_obs = [tg.v4_agg_obs_live(_rows(a), _live_rows(t), grid) for a, t in zip(aggs, live_tails)]
@@ -359,7 +358,7 @@ class QbTrafficChartApi:
             if seg == "month":
                 # all 视图数据面铺格计入活尾当月行(否则当前月桶不在栅格内, 合流被窗外过滤丢弃)
                 epochs = [r.epoch for r in rows] + [r.epoch for r in live_rows]
-                grid = tg.build_month_grid(epochs, time.time()) if epochs else self._grid(window)
+                grid = tg.build_month_grid(epochs, SYSTEM_CLOCK.now()) if epochs else self._grid(window)
             obs = tg.v4_agg_obs_live(rows, live_rows, grid)
             degraded = False
         except OSError:

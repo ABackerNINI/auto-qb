@@ -52,9 +52,9 @@ import json
 import random
 import time
 from types import SimpleNamespace
-from unittest import mock
 
 from auto_qb.core.qbapi import QbApi
+from auto_qb.infra.clock import SYSTEM_CLOCK
 from auto_qb.torrents import REQUIRED_TORRENT_FIELDS, TorrentStore
 from auto_qb.webui import WebUIRuntime
 from auto_qb.webui.views import WebviewMixin
@@ -72,6 +72,7 @@ class _ViewHost(WebviewMixin):
         self.store = store
         self.web = None  # _delta_runtime 里回填
         self.client = None
+        self._clock = SYSTEM_CLOCK  # refresh_tracker_health 的取时点(views 走宿主 _clock, D8)
 
     def wake(self):  # _build_shows_view 的 post_command 路径兜底(本文件用例不会触发)
         pass
@@ -472,13 +473,11 @@ def test_m6_restart_ver_seeding_old_rid_full():
     m.publish()
     m.sync(ct, cg)  # 旧进程两代, 旧客户端持 gen2
     old_rid = ct.rid
-    # 重启: 全新运行时, ver 以进程启动时间播种(测试用 mock 前移播种钟点, 保证旧 rid 必然窗外);
+    # 重启: 全新运行时, ver 以进程启动时间播种(构造期注入前移的假钟, 保证旧 rid 必然窗外);
     # 真实重启 store 同样全新 —— 此处清掉 S1「最近一轮」残值模拟「首轮全量 sync 前无快照」
     future = int(time.time()) + 100
     host = rt._host
-    with mock.patch("auto_qb.webui.runtime.time") as ft:
-        ft.time.return_value = future
-        rt2 = WebUIRuntime(host)
+    rt2 = WebUIRuntime(host, clock=SimpleNamespace(now=lambda: float(future), monotonic=lambda: float(future)))
     host.web = rt2  # 构建器 note_cross_keys 接线切到新运行时
     rt2.touch()
     store.last_added = []

@@ -12,11 +12,11 @@
 import copy
 import os
 import threading
-import time
 from collections import OrderedDict
 from typing import Mapping, Optional, Sequence, Tuple
 
 from ..infra import alias_fs
+from ..infra.clock import SYSTEM_CLOCK, Clock
 from ..infra.utils_paths import path_normalize
 
 #: 单条链最多跟随的链接跳数(超过即「链路过长」, 不再展开)
@@ -69,10 +69,7 @@ def build_alias_index(snapshot: Optional[Mapping], torrent_hash: str) -> dict:
     if snapshot is None:
         return {}
     jobs = tuple(getattr(snapshot, "jobs", ()) or ())
-    candidates = [
-        job for job in jobs
-        if torrent_hash in (job.get("hashes") or ()) and job.get("alias_paths")
-    ]
+    candidates = [job for job in jobs if torrent_hash in (job.get("hashes") or ()) and job.get("alias_paths")]
     if not candidates:
         return {}
     from ..core.modules.relocate_units import job_rank  # 局部导入: 只此一处消费选取序
@@ -107,8 +104,10 @@ def _attribution(job: Optional[Mapping], node_status: str, torrent_hash: str) ->
     }
 
 
-def _node(path: str, info: Optional[alias_fs.PathInspection], status: str, reason: str,
-          alias_index: Mapping[str, Mapping], torrent_hash: str) -> dict:
+def _node(
+    path: str, info: Optional[alias_fs.PathInspection], status: str, reason: str, alias_index: Mapping[str, Mapping],
+    torrent_hash: str
+) -> dict:
     kind = info.kind if info and info.status == "ok" else "unknown"
     return {
         "path": path_normalize(path),
@@ -121,8 +120,14 @@ def _node(path: str, info: Optional[alias_fs.PathInspection], status: str, reaso
     }
 
 
-def probe_chain(start: str, allowed_roots: Sequence[str], alias_index: Mapping[str, Mapping],
-                torrent_hash: str, *, env: str = ENV_LOCAL) -> dict:
+def probe_chain(
+    start: str,
+    allowed_roots: Sequence[str],
+    alias_index: Mapping[str, Mapping],
+    torrent_hash: str,
+    *,
+    env: str = ENV_LOCAL
+) -> dict:
     """从服务端派生的起点开始逐跳探测, 返回可直接序列化的链结果
 
     env != local(容器映射/远程)时不做任何 syscall, 只返回一个 unknown 节点并给出原因。
@@ -141,8 +146,7 @@ def probe_chain(start: str, allowed_roots: Sequence[str], alias_index: Mapping[s
         nodes.append(_node("", None, "unknown", "种子记录没有可用路径", alias_index, torrent_hash))
         return _result(start_norm, nodes, env)
     if not path_within_roots(start_norm, allowed_roots):
-        nodes.append(_node(start_norm, None, "outside_scope", "起点在允许根之外, 未探测",
-                           alias_index, torrent_hash))
+        nodes.append(_node(start_norm, None, "outside_scope", "起点在允许根之外, 未探测", alias_index, torrent_hash))
         return _result(start_norm, nodes, env)
 
     seen = set()
@@ -151,8 +155,7 @@ def probe_chain(start: str, allowed_roots: Sequence[str], alias_index: Mapping[s
     while True:
         key = _compare_key(current)
         if key and key in seen:
-            nodes.append(_node(current, None, "cycle", "检测到环: 该路径已出现过",
-                               alias_index, torrent_hash))
+            nodes.append(_node(current, None, "cycle", "检测到环: 该路径已出现过", alias_index, torrent_hash))
             break
         if key:
             seen.add(key)
@@ -174,23 +177,22 @@ def probe_chain(start: str, allowed_roots: Sequence[str], alias_index: Mapping[s
         nodes[-1]["target"] = target
         links_followed += 1
         if links_followed > MAX_HOPS:
-            nodes.append(_node(target, None, "limit",
-                               f"超过 {MAX_HOPS} 跳上限, 未继续展开", alias_index, torrent_hash))
+            nodes.append(_node(target, None, "limit", f"超过 {MAX_HOPS} 跳上限, 未继续展开", alias_index, torrent_hash))
             break
         if not path_within_roots(target, allowed_roots):
-            nodes.append(_node(target, None, "outside_scope", "目标在允许根之外, 未展开",
-                               alias_index, torrent_hash))
+            nodes.append(_node(target, None, "outside_scope", "目标在允许根之外, 未展开", alias_index, torrent_hash))
             break
         current = target
     return _result(start_norm, nodes, env)
 
 
 def _result(start: str, nodes: list, env: str) -> dict:
+    # probed_at 叶子取时走单点(挂钟语义: 与展示/落盘时间戳同侧, S2 时钟注入收编)
     return {
         "start": start,
         "env": env,
         "max_hops": MAX_HOPS,
-        "probed_at": time.time(),
+        "probed_at": SYSTEM_CLOCK.now(),
         "nodes": nodes,
     }
 
@@ -200,16 +202,22 @@ class ChainCache:
 
     key 由调用方拼好(hash + 起点 + 快照代次), 任何一代快照变化都会自然换键。
     """
-
-    def __init__(self, ttl: float = CHAIN_CACHE_TTL, capacity: int = CHAIN_CACHE_CAPACITY) -> None:
+    def __init__(
+        self,
+        ttl: float = CHAIN_CACHE_TTL,
+        capacity: int = CHAIN_CACHE_CAPACITY,
+        clock: Optional[Clock] = None
+    ) -> None:
         self.ttl = float(ttl)
         self.capacity = int(capacity)
+        # 取时注入(D8): TTL 判定与入缓存戳用挂钟; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         self._lock = threading.Lock()
         self._data: "OrderedDict[str, Tuple[float, dict]]" = OrderedDict()
 
     def get(self, key: str, loader, refresh: bool = False) -> Tuple[dict, bool]:
         """返回 (结果, 是否命中缓存); refresh=True 强制重探"""
-        now = time.time()
+        now = self._clock.now()
         with self._lock:
             hit = self._data.get(key)
             if not refresh and hit is not None and now - hit[0] < self.ttl:
@@ -217,7 +225,7 @@ class ChainCache:
                 return copy.deepcopy(hit[1]), True
         value = loader()
         with self._lock:
-            self._data[key] = (time.time(), value)
+            self._data[key] = (self._clock.now(), value)
             self._data.move_to_end(key)
             while len(self._data) > self.capacity:
                 self._data.popitem(last=False)

@@ -34,10 +34,10 @@ import logging
 import queue
 import secrets
 import threading
-import time
 from collections import deque
 from typing import Dict, List, Optional, Tuple
 
+from ..infra.clock import SYSTEM_CLOCK, Clock
 from ..infra.logging import is_record_suppressed
 from .commands import (
     CMD_ID_COMMANDS,
@@ -78,9 +78,12 @@ from .runtime_views import ViewsMixin
 
 class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
     """WEB UI 表现层状态 + 节拍判据 + 命令编排(主循环经门面方法调用, Web 线程经只读方法调用)"""
-    def __init__(self, host):
+    def __init__(self, host, clock: Optional[Clock] = None):
         # host = QbManager。逆向引用只用于回调写能力与视图构建器, 不读它的表现层字段
         self._host = host
+        # 取时注入(D8): 视图版本播种 / 回执与票据时间戳 / TTL 门控用挂钟; 缺省单点经模块
+        # 属性现取(测试可 monkeypatch 本模块 SYSTEM_CLOCK 或构造期传假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # 控制命令队列: Web 线程投递, 主循环线程消费(写操作只在主循环线程)
         self.commands: "queue.Queue" = queue.Queue()
         # 写命令序号: 任何一条非自投递命令执行成功即自增 —— Web 线程的只读端点短缓存据此失效,
@@ -109,12 +112,12 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         self.shows_pending: bool = False
         # 视图版本号(等价 qB 的 rid): 每次发布自增, Web 端按版本跳过整表替换。
         # 以进程启动时间播种 —— 进程重启后版本号不会回落到旧客户端已持有的值
-        self.group_view_ver: int = int(time.time())
+        self.group_view_ver: int = int(self._clock.now())
         # 搜索数据版本号(plan 26-11-03-0120 S1): 搜索相关数据(增删 / name/category/
         # save_path/tags 变化 / full_round)一变化就在主循环自增一次; 随 /api/state 恒回传,
         # 前端发现手上的结果版本落后就静默重查。以启动毫秒播种 —— 服务重启后旧页面版本
         # 几乎必然不等, 天然触发一次自愈刷新; 只自增, 不清理、不落盘(搜索词本就不持久化)。
-        self.search_rev: int = int(time.time() * 1000)
+        self.search_rev: int = int(self._clock.now() * 1000)
         # 快照是否过期(全部 Web 视图共享: 主循环据此惰性重建)
         self.group_view_dirty: bool = True
         # HR 判定新鲜度基线: 最近一次视图重建完成时的 hr.revision。HR 判定结果不是 store

@@ -226,7 +226,7 @@ class TorrentsMixin:
         """
         if not cmd_id:
             return  # 无回执需求的调用(直接构造 manager 的场景): 只发指令不跟踪
-        t0 = time.time()
+        t0 = self._clock.now()  # 宿主 = QbManager, _clock 为 core 域注入的取时单点(D8)
         items = {}
         deferred = {}
         for h in hashes:

@@ -5,9 +5,11 @@
 (测试会对同一 manager 多次 create_app), 不得提升为模块级全局(决策 K4)。
 """
 import threading
-import time
+from typing import Optional
 
 from fastapi import HTTPException
+
+from ...infra.clock import SYSTEM_CLOCK, Clock
 
 
 class RoCache:
@@ -19,8 +21,11 @@ class RoCache:
     !失效靠 `manager.web.write_seq`(任何写命令执行成功即自增, 见 WebUIRuntime.post_command):
     不加这道保险会出现"刚改完文件优先级、重取还拿到缓存旧值"这种**看起来没生效**的假象。
     """
-    def __init__(self, manager) -> None:
+    def __init__(self, manager, clock: Optional[Clock] = None) -> None:
         self._manager = manager
+        # 取时注入(D8): TTL 判定与入缓存戳用挂钟; 缺省单点经模块属性现取(测试可换假钟,
+        # WebContext 构造期透传 manager 的钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         self._cache: dict = {}
         self._lock = threading.Lock()
         self.ttl = 2.0  # 秒; peers 更"活", 调用方以 ttl 参数单独用更短的窗口
@@ -30,7 +35,7 @@ class RoCache:
         if ttl is None:
             ttl = self.ttl
         full_key = (key, self._manager.web.write_seq)
-        now = time.time()
+        now = self._clock.now()
         with self._lock:
             hit = self._cache.get(full_key)
             if hit is not None and now - hit[0] < ttl:
@@ -39,15 +44,16 @@ class RoCache:
                 self._cache.clear()
         value = fn()
         with self._lock:
-            self._cache[full_key] = (time.time(), value)
+            self._cache[full_key] = (self._clock.now(), value)
         return value
 
 
 class WebContext:
     """一次 create_app 一个实例, 各 routes 模块经 build_router(ctx) 共享。"""
-    def __init__(self, manager) -> None:
+    def __init__(self, manager, clock: Optional[Clock] = None) -> None:
         self.manager = manager
-        self.ro_cache = RoCache(manager)
+        # 取时注入(D8): 缺省沿用 manager 的钟(构造期装配链透传, 与 WebUIRuntime 同源)
+        self.ro_cache = RoCache(manager, clock=clock if clock is not None else getattr(manager, "_clock", None))
 
     # ---- 原 create_app 闭包件逐字平移(仅 manager → self.manager) ----
 

@@ -216,7 +216,7 @@ class QbManager(
         # P2 门面转正: 服务器启停/热重载语义/loop hooks 内聚 WebUIModule(webui/module.py)。
         # (P3 起 web 挂 ctx: speed_curve 模块经 ctx.web.set_traffic_view 推送流量快照,
         #  本属性只是委托, 测试整对象替换也经 setter 落回 ctx)
-        self.web = WebUIRuntime(self)
+        self.web = WebUIRuntime(self, clock=self._clock)
         # HR 在线核实运行时: 本地取数端点 + 取数线程 + 只读视图(计划 §8)。
         # 同 WebUIRuntime 的思路 —— 附属线程与文件句柄的生命周期不进核心域, 主循环只见门面:
         # 取数线程按 poll_interval 自唤醒, 主循环与判定路径只读视图(hr.view_set(), 零等待、

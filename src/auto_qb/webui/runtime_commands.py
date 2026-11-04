@@ -4,7 +4,6 @@ move-only 自 runtime.py 切出(计划 26-11-02-2342 §07 R5), 未改语义; 由
 """
 import queue
 import secrets
-import time
 from typing import List, Optional
 
 from .commands import (
@@ -46,7 +45,7 @@ class CommandsMixin:
                 # 下划线前缀的键是埋点/元数据, 不传给 handler(否则被当命令参数报 TypeError)
                 args = {k: v for k, v in payload.items() if k != "cmd_id" and not k.startswith("_")}
                 queued_ts = payload.get("_queued_ts")
-                start_ts = time.time()  # 出队即开始, 用于拆 wait_ms / exec_ms
+                start_ts = self._clock.now()  # 出队即开始, 用于拆 wait_ms / exec_ms
                 try:
                     # !按 (cmd, action) 分流判定: bulk_torrents 的 pause/resume 不走延迟回执族,
                     #   要落到下面的 defer_receipt(与单种同通路)。判定单点在 commands.is_deferred_receipt。
@@ -62,7 +61,7 @@ class CommandsMixin:
                     # 建索引期间完全失效
                     if cmd not in SELF_POSTED_COMMANDS:
                         self.write_seq += 1
-                    timing = _timing(queued_ts, start_ts)
+                    timing = _timing(queued_ts, start_ts, self._clock)
                     # !`cmd_id not in self.results`: handler 可能已自写回执(bulk 部分 hash 缺失时
                     #   写的是 error) —— 那种情况 drain 不得再用 ok 覆盖(report 26-10-11-2017 §6.2)。
                     if cmd_id and not deferred and cmd_id not in self.results:
@@ -84,7 +83,7 @@ class CommandsMixin:
                 except KeyError as e:
                     logger.warning(f"WEB UI 未知命令: {e}")
                     if cmd_id:
-                        self.set_result(cmd_id, "error", f"未知命令: {e}", _timing(queued_ts, start_ts))
+                        self.set_result(cmd_id, "error", f"未知命令: {e}", _timing(queued_ts, start_ts, self._clock))
                 except Exception as e:
                     # qB 业务拒绝(HTTP 4xx, 未启用 torrent 队列 / 名字已存在 ...) 是**用户这次
                     # 操作被 qB 拒绝**, 不是未预期异常: 前端已有可读回执, 用户看得懂, 不必弹窗
@@ -97,7 +96,7 @@ class CommandsMixin:
                     else:
                         logger.warning(f"WEB UI 命令被 qB 拒绝: {cmd}: {reason}")
                     if cmd_id:
-                        self.set_result(cmd_id, "error", reason, _timing(queued_ts, start_ts))
+                        self.set_result(cmd_id, "error", reason, _timing(queued_ts, start_ts, self._clock))
         except queue.Empty:
             pass
         return changed
@@ -129,7 +128,7 @@ class CommandsMixin:
         host = self._host
         if not self.reannounce_pending and not self.reannounce_background:
             return
-        now = time.time()
+        now = self._clock.now()
         self._advance_reannounce_background(now)
         if not self.reannounce_pending:
             return
@@ -238,7 +237,7 @@ class CommandsMixin:
         if not self.truth_pending:
             return
         pending, self.truth_pending = self.truth_pending, {}
-        now = time.time()
+        now = self._clock.now()
         n_push = 0
         n_wait = 0
         for cmd_id, item in pending.items():
@@ -267,7 +266,7 @@ class CommandsMixin:
 
         与 set_result 里的 wait_ms / exec_ms 合起来是"点下去到真值进快照"的三段归因。
         """
-        ms = round((time.time() - t0) * 1000, 1)
+        ms = round((self._clock.now() - t0) * 1000, 1)
         # !正常耗时只打 DEBUG: 每条命令都会跑一次补刷新, 全打 INFO 会把日志刷满 ——
         #   而现在真值走直查、撤下也不再等它, 它已经不在用户可见的延迟链路上。
         #   只有**异常慢**才升到 WARNING(那时它确实会拖慢下一次视图数据的新鲜度)。
@@ -292,7 +291,7 @@ class CommandsMixin:
         timing: 埋点(wait_ms 排队等主循环 / exec_ms 执行耗时), 由 /api/cmd/{id} 一并返回。
         truth: 受影响种子的当前真值, 前端拿到即可撤下乐观态, 省掉一次全量 refresh。
         """
-        now = time.time()
+        now = self._clock.now()
         if len(self.results) > WEB_RESULT_MAX:
             self.results = {k: v for k, v in self.results.items() if now - v.get("ts", 0) < WEB_RESULT_TTL}
         rec = {"status": status, "error": error, "ts": now}
@@ -321,7 +320,7 @@ class CommandsMixin:
         self.truth_pending[cmd_id] = {
             "cmd": cmd,
             "args": dict(args or {}),
-            "ts": time.time(),
+            "ts": self._clock.now(),
         }
 
     @staticmethod
@@ -434,7 +433,7 @@ class CommandsMixin:
             # 自投递: 不入回执(没有 cmd_id), 也不带埋点 —— 它根本没有回执消费者
             self.commands.put((cmd, body))
             return {"queued": True, "cmd_id": ""}
-        body["_queued_ts"] = time.time()  # 埋点: 投递时刻, 回执据此拆出排队耗时
+        body["_queued_ts"] = self._clock.now()  # 埋点: 投递时刻, 回执据此拆出排队耗时
         cmd_id = secrets.token_hex(8)
         body["cmd_id"] = cmd_id
         self.commands.put((cmd, body))

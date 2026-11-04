@@ -18,6 +18,7 @@ from auto_qb.infra.utils import encode_group_key
 
 from auto_qb.webui import WebUIRuntime
 
+from auto_qb.infra.clock import SYSTEM_CLOCK
 from auto_qb.webui.views import WebviewMixin
 
 from helpers import FakeTorrent, FakeTracker
@@ -32,6 +33,7 @@ class _ViewHost(WebviewMixin):
         self.store = store
         self.web = None  # _delta_runtime 里回填
         self.client = None
+        self._clock = SYSTEM_CLOCK  # refresh_tracker_health 的取时点(views 走宿主 _clock, D8)
 
     def wake(self):  # _build_shows_view 的 post_command 路径兜底(本文件用例不会触发)
         pass
