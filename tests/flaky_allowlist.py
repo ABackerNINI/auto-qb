@@ -13,8 +13,9 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
   code-style 的数据例外保留, 不算代码用语。
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
-(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 24 处/11 文件
-[core 域 90 处/16 文件、hr 域 12 处/5 文件、webui/traffic 域 35 处/11 文件已随 S2 各域提交清零]
+(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 **已全部清零**
+[core 90 处/16 文件、hr 12 处/5 文件、webui/traffic 35 处/11 文件、其余叶子 24 处/11 文件
+已随 S2 各域提交清零, 本表 src 组只剩完成注释]
 · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
 """
 
@@ -102,67 +103,11 @@ ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
     # S2 webui/traffic 域提交已完成(2026-11-05): 11 文件 35 处已按 D8 清零, 条目删净 ——
     # WebUIRuntime/ChainCache/RoCache 构造期注入 clock(WebUIRuntime 经 QbManager 装配链透传),
     # 路由/处理器与请求期栅格等叶子走 SYSTEM_CLOCK.now() 单点, lifecycle 等待预算走 monotonic 单点。
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
-    "src/auto_qb/infra/alias_fs.py": {
-        "probed_at=time.time(),": 1
-    },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(2 处)
-    "src/auto_qb/infra/port_owner.py":
-        {
-            "deadline = time.monotonic() + budget": 1,
-            "return deadline - time.monotonic()": 1
-        },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(3 处)
-    "src/auto_qb/infra/relocate_journal.py":
-        {
-            "_write_json(path, {\"pid\": os.getpid(), \"ts\": time.time()})": 1,
-            "body.setdefault(\"ts\", time.time())": 1,
-            "return max(0.0, (now if now is not None else time.time()) - float(ts))": 1
-        },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
-    "src/auto_qb/infra/store_recovery.py": {
-        "target = f\"{p}.bad-{int(time.time())}\"": 1
-    },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(2 处)
-    "src/auto_qb/infra/utils.py":
-        {
-            "deadline = time.monotonic() + _EXPLORER_FG_TIMEOUT": 1,
-            "if time.monotonic() >= deadline:": 1
-        },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(2 处)
-    "src/auto_qb/rules/actions/full_checking.py":
-        {
-            "if time.time() - start > GROUP_CHECK_WAIT_LIMIT:": 1,
-            "start = time.time()": 1
-        },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
-    "src/auto_qb/rules/actions/transfer.py": {
-        "now = time.time()": 1
-    },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
-    "src/auto_qb/rules/base.py": {
-        "now = time.time()": 1
-    },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
-    "src/auto_qb/torrents/record.py": {
-        "now=time.time(),": 1
-    },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(8 处)
-    "src/auto_qb/torrents/store.py":
-        {
-            "if self._expect_retries >= _EXPECT_MAX_RETRIES or time.time() >= self._expect_deadline:": 1,
-            "now = time.monotonic()": 2,
-            "now = time.time()": 2,
-            "now_ts = time.time()  # state_since 的同一时刻基准(纯展示用, 不参与判定)": 1,
-            "return None if ts is None else max(0.0, time.time() - ts)": 1,
-            "self._expect_due_at = time.time() + _EXPECT_RETRY_INTERVAL": 1
-        },
-    # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(2 处)
-    "src/auto_qb/tray/app.py":
-        {
-            "self._started = time.time()": 1,
-            "self.card_uptime.configure(text=self._format_uptime(time.time() - self._started))": 1
-        },
+    # S2 其余叶子提交已完成(2026-11-05): 11 文件 24 处已按 D8 清零, 条目删净 —— src/ 裸取时归零
+    # (除 clock.py 单点本体豁免), S2 收口。TorrentStore 构造期注入 clock(expect 调度与 state_since
+    # 挂钟侧走注入钟 now, own_writes TTL 单调侧走注入钟 monotonic); 其余 10 文件叶子走
+    # SYSTEM_CLOCK 单点: journal/probe/留证戳与 reannounce 限频/HR 锚点/托盘 uptime 挂钟语义走
+    # now(), port_owner/utils/full_checking 等待预算与 base 同因节流单调语义走 monotonic()。
 }
 
 # ---------- ALLOW_WAIT_TIMEOUT_E2E: e2e/*.mjs 的 page.waitForTimeout(...) 固定睡等(含注释里的历史提及, 行文本全等口径) ----------

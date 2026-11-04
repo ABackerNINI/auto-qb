@@ -17,9 +17,9 @@ journal 写入一律原子写(tmp + fsync + os.replace): 「删链接」是唯�
 """
 import json
 import os
-import time
 from typing import Optional
 
+from .clock import SYSTEM_CLOCK
 from .utils import atomic_write
 
 SUBDIR = "relocate"
@@ -76,7 +76,7 @@ def write_journal(data_dir: str, job_id: str, payload: dict) -> bool:
     调用方(guardian)据此立即退休, 不再继续后续动作(尤其不得再删链接)。
     """
     body = dict(payload or {})
-    body.setdefault("ts", time.time())
+    body.setdefault("ts", SYSTEM_CLOCK.now())  # journal 心跳戳: 挂钟语义走取时单点(S2 时钟注入收编)
     current = _read_json(journal_path(data_dir, job_id))
     if current is not None and str(current.get("phase") or "") in STOP_PHASES \
             and str(body.get("phase") or "") not in STOP_PHASES:
@@ -95,7 +95,8 @@ def heartbeat_age(data_dir: str, job_id: str, now: Optional[float] = None) -> fl
     ts = (j or {}).get("ts")
     if not ts:
         return float("inf")
-    return max(0.0, (now if now is not None else time.time()) - float(ts))
+    # 与落盘 ts 同侧相减: 挂钟语义走取时单点(now 参数照旧可注入, 缺省才取单点)
+    return max(0.0, (now if now is not None else SYSTEM_CLOCK.now()) - float(ts))
 
 
 # ---------- spec(auto-qb 写 / guardian 读) ----------
@@ -124,7 +125,7 @@ def acquire_pid(data_dir: str, job_id: str) -> bool:
         pid = int(old.get("pid") or 0)
         if pid and _alive(pid):
             return False
-    _write_json(path, {"pid": os.getpid(), "ts": time.time()})
+    _write_json(path, {"pid": os.getpid(), "ts": SYSTEM_CLOCK.now()})  # 锁文件落盘戳: 挂钟语义走单点
     return True
 
 

@@ -20,11 +20,11 @@ import os
 import queue
 import signal
 import threading
-import time
 import webbrowser
 from collections import deque
 
 from ..infra import autostart, utils
+from ..infra.clock import SYSTEM_CLOCK
 from ..infra.errors import AutoQbError
 from ..infra.notify import ICON_ICO, WINDOWS_TOAST_APPID
 from ..core.qbmanager import QbManager
@@ -170,7 +170,7 @@ class TrayUi:
         self._icon = None
         self._icon_title = ""
         self._paused = False  # 托盘勾选态缓存(权威来源为 pause_event, 轮询时同步)
-        self._started = time.time()
+        self._started = SYSTEM_CLOCK.now()  # 运行时长起点: 挂钟语义走取时单点(S2 时钟注入收编)
         self._manager_thread = None
         # AUMID 必须在首个窗口创建前设置(core-domain.md 四轮实测: 无显式 AUMID 时 Windows
         # 任务栏按钮恒为 python.exe 默认图标, iconbitmap 救不了); 此前该函数自 9891c030 引入起
@@ -390,7 +390,7 @@ class TrayUi:
         snap = self.manager.status_snapshot()
         self._paused = snap["paused"]  # 同步托盘勾选态缓存(权威来源为 pause_event)
         self.card_torrents.configure(text=str(snap["torrents"]))
-        self.card_uptime.configure(text=self._format_uptime(time.time() - self._started))
+        self.card_uptime.configure(text=self._format_uptime(SYSTEM_CLOCK.now() - self._started))
         conn_text = {None: "连接中…", True: "已连接", False: "已断开"}[snap["connected"]]
         self.card_conn.configure(text=conn_text)
         if snap["paused"]:

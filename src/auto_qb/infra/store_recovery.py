@@ -20,9 +20,10 @@
 """
 import logging
 import os
-import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple
+
+from .clock import SYSTEM_CLOCK
 
 __all__ = ["BadFileRecovery", "quarantine_bad_file", "recover_corrupt_file"]
 
@@ -47,7 +48,7 @@ def quarantine_bad_file(path: str, *, logger: logging.Logger, what: str) -> str:
     p = str(path)
     if not os.path.exists(p):
         return ""
-    target = f"{p}.bad-{int(time.time())}"
+    target = f"{p}.bad-{int(SYSTEM_CLOCK.now())}"  # 留证戳: 挂钟语义走取时单点(S2 时钟注入收编)
     try:
         os.replace(p, target)
     except OSError as e:

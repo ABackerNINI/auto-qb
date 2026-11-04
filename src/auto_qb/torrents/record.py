@@ -1,5 +1,4 @@
 """TorrentRecord: 种子快照记录(种子数据的唯一所有者, slots + 惰性缓存 + HR 判定)"""
-import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Dict, FrozenSet, List, Optional, Set
@@ -8,6 +7,7 @@ from qbittorrentapi import TorrentState
 
 from ..config import TrackerConfig
 from ..hr.resolve import HrAnchor, HrIdentity, HrJudgement
+from ..infra.clock import SYSTEM_CLOCK
 from ..infra.utils import mask_tracker_entry, match_tag_patterns
 from .compat import REQUIRED_TORRENT_FIELDS, _SNAPSHOT_FIELDS, _SNAPSHOT_FIELD_SET
 from .view import _VIEW_FIELD_SET, _VIEW_QUANTUM, view_field_value
@@ -382,7 +382,7 @@ class TorrentRecord:
             conf.name,
             (self.infohash_v1, self.infohash_v2),
             anchor=self.hr_anchor(),
-            now=time.time(),
+            now=SYSTEM_CLOCK.now(),  # 站点判定锚点: 与落盘观测 ts 同侧相减, 挂钟语义走单点(S2 收编)
         )
 
     def _hr_guard(self) -> bool:

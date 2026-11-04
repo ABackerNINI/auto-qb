@@ -1,6 +1,5 @@
 """rules 框架基础: 动作结果, 条件/动作基类, 规则上下文, Rule 插件"""
 import logging
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -9,6 +8,7 @@ from qbittorrentapi import Client
 
 from . import registry
 from ..infra import utils
+from ..infra.clock import SYSTEM_CLOCK
 from ..torrents import TorrentRecord
 from ..config import Config, ConfigError
 from ..config.compat import (
@@ -712,7 +712,8 @@ class Rule:
         与连接异常日志节流同一套路: 同一规则同一类错误 5 分钟内只报一次, 其后转 DEBUG 计数;
         换原因或冷却过后重新报。话术只宣称真实语义: 本条规则本轮跳过, 不涉及任何「后续规则」。
         """
-        now = time.time()
+        # 同因节流只测间隔时长: 单调钟语义走取时单点(S2 时钟注入收编); 纯内存不落盘
+        now = SYSTEM_CLOCK.monotonic()
         key = f"{type(e).__name__}:{e}"
         if key != self._cond_err_key or now - self._cond_err_ts > _COND_ERR_THROTTLE:
             logger.error(f"规则[{self.name}] {ctx.torrent.log_repr} | 本条规则本轮跳过(条件求值出错): {e}")

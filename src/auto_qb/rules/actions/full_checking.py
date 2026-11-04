@@ -12,10 +12,10 @@ kernel-module-refactor P4): 本模块经它取用并**再导出**(测试导入�
 —— ops -> rules 包初始化会走到此处, 反向导入成环(方向说明见 checking_meta 头注)。
 """
 import logging
-import time
 from typing import Optional
 
 from ...core.taskqueue import FINISHED, REQUEUE, Task
+from ...infra.clock import SYSTEM_CLOCK
 from ..base import ActionResult, RuleContext
 from ..checking_meta import (  # noqa: F401  中性单点再导出(测试/外部导入路径兼容)
     CHECK_RESULT_INTERVAL,
@@ -78,7 +78,8 @@ class FullCheckingMixin:
             return ActionResult.skip("组内有种子校验进行中(无任务驱动, 不等待)")
         tq = manager.task_queue
         rule_name = ctx.rule_name
-        start = time.time()
+        # 等待预算只做时长测量: 单调钟语义走取时单点(S2 时钟注入收编), 不受调钟影响
+        start = SYSTEM_CLOCK.monotonic()
 
         def revive():
             """恢复触发任务重走完整决策链(add_task 默认重置)"""
@@ -92,7 +93,7 @@ class FullCheckingMixin:
                     tq.add_task(origin)
                     return FINISHED
                 if others_checking():
-                    if time.time() - start > GROUP_CHECK_WAIT_LIMIT:
+                    if SYSTEM_CLOCK.monotonic() - start > GROUP_CHECK_WAIT_LIMIT:
                         logger.warning(f"规则[{rule_name}] {hash[:8]} | 组内校验等待超时({GROUP_CHECK_WAIT_LIMIT:.0f}s), 强制恢复重判")
                         revive()
                         return FINISHED

@@ -374,8 +374,19 @@ def test_budget_caps_step_timeouts(monkeypatch):
 
 def test_budget_exhausted_skips_commands(monkeypatch):
     _platform(monkeypatch, "linux")
-    ticks = iter([100.0, 101.6, 101.7])
-    monkeypatch.setattr(port_owner.time, "monotonic", lambda: next(ticks))
+
+    class _TickClock:
+        """预算替身: monotonic() 依序返回预置刻度(顶替 SYSTEM_CLOCK 单点, S2 时钟注入口径)"""
+        def __init__(self, ticks):
+            self._ticks = iter(ticks)
+
+        def monotonic(self):
+            return next(self._ticks)
+
+        def now(self):  # Clock protocol 完整形态(本用例只用到 monotonic)
+            return next(self._ticks)
+
+    monkeypatch.setattr(port_owner, "SYSTEM_CLOCK", _TickClock([100.0, 101.6, 101.7]))
     calls = _install_run(monkeypatch, lambda cmd, kwargs, index: _cp(""))
 
     probe = port_owner.describe_port_owner("127.0.0.1", 8080)

@@ -27,6 +27,8 @@ from functools import wraps
 from urllib.parse import urlparse
 from typing import Callable, List, Optional, Tuple
 
+from .clock import SYSTEM_CLOCK
+
 logger = logging.getLogger(__name__)
 
 # ---- R5 拆分后的公开面回填: 原 utils 名继续可用, 调用方 import 路径不变 ----
@@ -759,7 +761,8 @@ def _win_wait_explorer(before: set, target: str):
     """
     before = set(before)
     names = _win_reuse_title_candidates(target)
-    deadline = time.monotonic() + _EXPLORER_FG_TIMEOUT
+    # 等待预算只做时长测量: 单调钟语义走取时单点(S2 时钟注入收编); sleep 节拍不属取时, 原样保留
+    deadline = SYSTEM_CLOCK.monotonic() + _EXPLORER_FG_TIMEOUT
     while True:
         hwnds = _win_explorer_hwnds()
         new = sorted(hwnds - before)
@@ -769,7 +772,7 @@ def _win_wait_explorer(before: set, target: str):
             reused = _win_match_reused_explorer(hwnds, before, names)
             if reused is not None:
                 return reused
-        if time.monotonic() >= deadline:
+        if SYSTEM_CLOCK.monotonic() >= deadline:
             return None
         time.sleep(_EXPLORER_FG_POLL)
 

@@ -1,7 +1,6 @@
 """传输相关动作: move_to, reannounce, upload_speed_limit, download_speed_limit"""
-import time
-
 from ...infra import utils
+from ...infra.clock import SYSTEM_CLOCK
 from ..base import ActionResult, BaseAction, RuleContext
 from ..registry import register_action
 
@@ -63,7 +62,8 @@ class ReannounceAction(BaseAction):
         if ctx.torrent.state_enum.is_stopped:
             return ActionResult.skip("种子已暂停, 无需汇报")
         history = ctx.manager.state.setdefault("reannounce_ts", {})
-        now = time.time()
+        # 与 state_file 落盘的历史戳同侧相减: 挂钟语义走取时单点(S2 时钟注入收编)
+        now = SYSTEM_CLOCK.now()
         if now - history.get(ctx.hash, 0) < self.MIN_INTERVAL:
             return ActionResult.skip(f"距上次 reannounce 不足 {int(self.MIN_INTERVAL)}s")
         if not ctx.dry_run:

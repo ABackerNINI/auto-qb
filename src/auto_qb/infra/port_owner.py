@@ -20,9 +20,9 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-import time
 from dataclasses import dataclass
 
+from .clock import SYSTEM_CLOCK
 from .utils import is_linux, is_mac, is_windows
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,8 @@ def describe_port_owner(host: str, port: int, budget: float = TOTAL_BUDGET_S) ->
     Get-NetTCPConnection -LocalPort), 因为通配监听(0.0.0.0 / [::])同样会占用该端口,
     再按 host 筛会漏掉它们。
     """
-    deadline = time.monotonic() + budget
+    # 总预算只做时长测量: 单调钟语义走取时单点(S2 时钟注入收编), 不受调钟影响
+    deadline = SYSTEM_CLOCK.monotonic() + budget
     try:
         if is_windows():
             return _probe_windows(port, deadline)
@@ -91,7 +92,7 @@ def describe_port_owner(host: str, port: int, budget: float = TOTAL_BUDGET_S) ->
 
 
 def _remaining(deadline: float) -> float:
-    return deadline - time.monotonic()
+    return deadline - SYSTEM_CLOCK.monotonic()
 
 
 def _run(cmd: list[str], step_timeout: float, deadline: float) -> subprocess.CompletedProcess | None:

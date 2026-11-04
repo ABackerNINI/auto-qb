@@ -10,7 +10,7 @@
 - test_quarantine_bad_file_missing_returns_empty: 文件不存在(无处可挪) -> 空串
 - test_quarantine_bad_file_replace_failure_returns_empty: 挪不动(OSError) -> 空串 + debug 留痕, 原文件保留现场
 - test_recovery_chain_single_point_in_infra: 静态守阵 —— 恢复链编排单点只在 infra/store_recovery.py;
-  hr/store.py 与 core/state.py 必须委托(自抄 `.bad-{int(time.time())}` 时间戳留证即红)
+  hr/store.py 与 core/state.py 必须委托(自抄 `.bad-{int(SYSTEM_CLOCK.now())}` 时间戳留证即红)
 - test_filelock_dependency_single_point_in_infra_locking: 静态守阵 —— `from filelock import` 只在
   infra/locking.py(hr 站点锁与单实例锁同族收口; 别处再裸 import 即红)
 """
@@ -135,14 +135,15 @@ def test_recovery_chain_single_point_in_infra():
     """静态守阵(issue 26-10-11-0240): 恢复链编排单点只在 infra/store_recovery.py
 
     hr/store.py 与 core/state.py 必须委托 recover_corrupt_file; 自抄「时间戳留证」
-    (`.bad-{int(time.time())}` 挪文件)或各自重复「损坏 -> 读 .bak」编排即红。
+    (`.bad-{int(SYSTEM_CLOCK.now())}` 挪文件, 取时单点口径见 flaky 治理 S2)或各自重复
+    「损坏 -> 读 .bak」编排即红。
     """
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1] / "src" / "auto_qb"
     hits = sorted(
         p.relative_to(root).as_posix()
-        for p in root.rglob("*.py") if ".bad-{int(time.time())}" in p.read_text(encoding="utf-8")
+        for p in root.rglob("*.py") if ".bad-{int(SYSTEM_CLOCK.now())}" in p.read_text(encoding="utf-8")
     )
     assert hits == ["infra/store_recovery.py"], f"时间戳留证(.bad-<ts>)只允许在 infra 单点, 现分布: {hits}"
     for rel, needle in (

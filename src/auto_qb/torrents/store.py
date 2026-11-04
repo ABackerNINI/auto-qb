@@ -3,10 +3,10 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Dict, FrozenSet, List, Optional, Set, Tuple, Union
 
 import logging
-import time
 
 from qbittorrentapi import NotFound404Error, TorrentDictionary
 
+from ..infra.clock import SYSTEM_CLOCK, Clock
 from .record import TorrentRecord
 from .view import _VIEW_FIELD_SET
 
@@ -82,8 +82,11 @@ class TorrentStore:
     参考种子集合(仅内存): verified_references
     全局缓存: all_tags() / all_categories()(写操作后 invalidate)
     """
-    def __init__(self, client: Any = None):
+    def __init__(self, client: Any = None, clock: Optional[Clock] = None):
         self.client: Any = client
+        # 取时注入(D8): 缺省系统时钟单点(经构造期现取: 测试可换假钟, S3 收敛为显式注入)。
+        # 挂钟侧(expect 调度时刻 / state_since)与主循环 now 同侧相减; 单调侧(own_writes TTL)纯内存时长。
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # HR 判定桥(QbManager 注入 `HrRuntime` 门面): 新记录构建/变更时挂到 record 上,
         # 供 HR 四个消费点现算三态(计划 §9)。门面对象**稳定**(热重载不换), 故已挂过的
         # 记录不必重挂 —— 未变化的记录也不会被本类碰到。None ⇒ 全部走本地字段逻辑。
@@ -214,7 +217,7 @@ class TorrentStore:
         want = {h for h in want if h not in self.by_hash}  # 已在快照里的不必追
         if not want:
             return
-        now = time.time()
+        now = self._clock.now()  # 与主循环调度 now 同侧: 挂钟语义走注入钟(S2 时钟注入收编)
         self._expect_pending |= want
         self._expect_retries = 0
         self._expect_deadline = now + _EXPECT_TTL
@@ -228,7 +231,7 @@ class TorrentStore:
         """
         if not self._expect_pending:
             return 0.0
-        now = time.time()
+        now = self._clock.now()  # 挂钟语义走注入钟(S2 时钟注入收编)
         if now >= self._expect_deadline:
             self._clear_expect()
             return 0.0
@@ -260,7 +263,7 @@ class TorrentStore:
         if not self._expect_pending:
             self._clear_expect()
             return
-        if self._expect_retries >= _EXPECT_MAX_RETRIES or time.time() >= self._expect_deadline:
+        if self._expect_retries >= _EXPECT_MAX_RETRIES or self._clock.now() >= self._expect_deadline:
             logger.debug(
                 "期望落地追平放弃: 仍缺 %d 个(%s), 交给常规同步节拍",
                 len(self._expect_pending),
@@ -269,7 +272,7 @@ class TorrentStore:
             self._clear_expect()
             return
         self._expect_retries += 1
-        self._expect_due_at = time.time() + _EXPECT_RETRY_INTERVAL
+        self._expect_due_at = self._clock.now() + _EXPECT_RETRY_INTERVAL
 
     # ---------- 快照(增量同步) ----------
 
@@ -423,7 +426,7 @@ class TorrentStore:
             return [], []
         prev = self.by_hash
         by_hash = {} if full else dict(prev)  # 全量重建 / 增量: C 级浅拷贝, 未变化记录原样保留
-        now_ts = time.time()  # state_since 的同一时刻基准(纯展示用, 不参与判定)
+        now_ts = self._clock.now()  # state_since 的同一时刻基准(纯展示用, 不参与判定); 挂钟语义走注入钟
         added: List[str] = []
         # 跳检窗口内的 hash 不算删除(ops 相位机登记): 记录保留, 由下一轮上报原地校正
         # 本轮 patches 已含的 hash 同样不算删除(26-10-11-2045 防御): _apply 先写 patches
@@ -533,7 +536,7 @@ class TorrentStore:
         重启后从首见重新起算 —— 宁可少报时长, 不编造时长。
         """
         ts = self.state_since.get(hash)
-        return None if ts is None else max(0.0, time.time() - ts)
+        return None if ts is None else max(0.0, self._clock.now() - ts)  # 与登记同侧: 挂钟语义走注入钟
 
     def update_state_snapshot(self) -> None:
         """本轮结束前更新状态快照(hash -> state_enum)
@@ -555,7 +558,7 @@ class TorrentStore:
         纯内存、不落盘; 有界性由「同步应用到新 state 时逐出」+「TTL 兜底」双保险给出。
         """
         hashes = [torrent_hashes] if isinstance(torrent_hashes, str) else list(torrent_hashes or [])
-        now = time.monotonic()
+        now = self._clock.monotonic()  # 纯内存 TTL 登记时长: 单调钟语义走注入钟(S2 时钟注入收编)
         for h in hashes:
             self.own_writes[h] = now
 
@@ -591,7 +594,7 @@ class TorrentStore:
         """
         if not self.own_writes:
             return
-        now = time.monotonic()
+        now = self._clock.monotonic()  # TTL 时长测量: 单调钟语义走注入钟(S2 时钟注入收编)
         for h in [h for h, t in self.own_writes.items() if now - t > _OWN_WRITE_TTL]:
             logger.warning(f"自有写登记超时(TTL {_OWN_WRITE_TTL:g}s)未逐出, 丢弃: {h[:8]} | "
                            f"相关校验决策恢复执行(命令在 qB 侧可能未生效/状态未变)")

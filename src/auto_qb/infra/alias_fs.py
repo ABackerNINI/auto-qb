@@ -44,11 +44,11 @@ import stat
 import struct
 import tempfile
 import threading
-import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional, Tuple
 
 from . import utils
+from .clock import SYSTEM_CLOCK
 
 logger = logging.getLogger(__name__)
 
@@ -893,7 +893,7 @@ def probe_capability(work_dir: Optional[str] = None) -> AliasCapability:
         hardlink=hardlink,
         uac_available=uac_available,
         probe_root=root,
-        probed_at=time.time(),
+        probed_at=SYSTEM_CLOCK.now(),  # 探测记录时间戳: 挂钟语义走取时单点(S2 时钟注入收编)
         notes=tuple(notes),
     )
 
