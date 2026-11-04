@@ -443,6 +443,8 @@ _LOADER_PROBES = {
     "relocate.low_space_warn": ("20GiB", 20 * 1024**3),
     # assume_shared(计划 26-11-04-0055 §03.2): 默认 false, 探针用 true(防与默认同值空转)
     "relocate.assume_shared": ("true", True),
+    # pending_tag(计划 26-11-04-1042 P3): 默认空 = 关闭, 探针用保留命名空间内的非空值
+    "relocate.pending_tag": ("zRelocateProbe", "zRelocateProbe"),
 }
 
 

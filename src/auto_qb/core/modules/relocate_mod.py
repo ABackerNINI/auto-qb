@@ -70,6 +70,11 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         # WebUI 只读快照(plan 26-11-04-1042 P0-1): 只在主循环 job 变更路径发布, Web 构建期
         # 零遍历 _jobs; 初值 generation=0 / 空表 = 正常「无 job」态。
         self._snapshot = ru.RelocateSnapshot()
+        # qB 标签镜像(P3, 只写不读): job_id -> 已推到的目标态(add/remove) + 失败退避时刻。
+        # 重启后清空 = 非终态 job 的标签在恢复首轮由 _reconcile_pending_tags 补写。
+        self._tag_applied: dict = {}
+        self._tag_next_try: dict = {}
+        self._tag_failures = 0
 
     def sections(self) -> tuple:
         return ("relocate", )
@@ -210,10 +215,15 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             reg.update(job.resume_hashes)
 
     def _set_job(self, job: RelocateJob) -> RelocateJob:
-        """登记相位推进后的 job(单点: 落内存 + 刷登记 + 写 state)"""
+        """登记相位推进后的 job(单点: 落内存 + 刷登记 + 写 state + 可选 qB 标签镜像)
+
+        标签镜像在 state 落盘之后做: state 是唯一事实源, 镜像失败(超时/不支持/权限)
+        只告警计数, 绝不回滚相位或影响收尾判定。
+        """
         job = replace(job, updated_at=time.time())
         self._jobs[job.job_id] = job
         self._sync_relocating()
         self._persist()
         self._publish_snapshot()
+        self._sync_pending_tag(job)
         return job

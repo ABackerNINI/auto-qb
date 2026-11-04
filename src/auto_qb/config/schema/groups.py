@@ -511,6 +511,16 @@ GROUPS: Tuple[Group, ...] = (
                         help="显式声明 qB 与 auto-qb 已共享文件系统: 跳过同机探测, 回执将标注未经 auto-qb 验证"
                         "(由用户承担风险); 默认关闭 = 多成员组首次迁移前照常做一次性强探测",
                     ),
+                    Field(
+                        "pending_tag",
+                        "待收尾镜像标签",
+                        "str",
+                        default="",
+                        grey_if=("enabled", "true"),
+                        help="可选: 迁移进入待收尾(armed)时给组内种子打上此标签, 进入终态时摘除, 便于在 qB 界面直接识别。"
+                        "标签只写不读 —— 迁移状态仍以 auto-qb 自身记录为准, 用户手动删除标签不影响判断; "
+                        "必须落在保留命名空间(以 zRelocate 开头, 如 zRelocatePending); 留空(默认)= 不打标签, 零额外 qB 写",
+                    ),
                 ),
             ),
             Field(

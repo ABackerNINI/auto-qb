@@ -71,6 +71,9 @@ TERMINAL_PHASES = frozenset({PHASE_DONE, PHASE_FAILED, PHASE_CANCELLED})
 # 收尾窗口(链接已删、qB 重启后 setLocation 之前): 此窗口内往原路径加种子会落原盘,
 # 可能与已迁到新位置的数据重复(§3.6 第 8 行)
 FINALIZE_WINDOW_PHASES = frozenset({PHASE_REMOVING, PHASE_REMOVED, PHASE_FINALIZING})
+# qB 待收尾标签镜像窗口(计划 26-11-04-1042 P3): 数据已搬走、qB 尚未收尾期间都算「待收尾」,
+# 标签在 armed 时加上、进入终态时摘除; 标签只写不读, 迁移状态判定仍只认 state。
+PENDING_TAG_PHASES = frozenset({PHASE_ARMED}) | FINALIZE_WINDOW_PHASES
 
 # ---------------------------------------------------------------- 路径纯函数
 

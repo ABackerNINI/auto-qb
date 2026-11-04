@@ -9,7 +9,15 @@ from urllib.parse import urlsplit
 from ...infra.utils import is_loopback_host, parse_bool, parse_fsize, parse_hr_condition, parse_speed, parse_time
 from .. import site_presets
 from ..models import TRANSFER_FIELD_KEYS
-from ..schema.fields import LOG_LEVELS, NOTIFY_CHANNELS, NOTIFY_LEVELS, RELOCATE_VERIFY_MODES, TRANSFER_AFTER_STATES, TRANSFER_TARGET_TYPES
+from ..schema.fields import (
+    LOG_LEVELS,
+    NOTIFY_CHANNELS,
+    NOTIFY_LEVELS,
+    RELOCATE_TAG_NS,
+    RELOCATE_VERIFY_MODES,
+    TRANSFER_AFTER_STATES,
+    TRANSFER_TARGET_TYPES,
+)
 from .core import (
     _check_regex_patterns,
     _check_str_list,
@@ -55,6 +63,7 @@ KNOWN_RELOCATE_KEYS = {
     "finalize_timeout",
     "low_space_warn",
     "assume_shared",
+    "pending_tag",
 }
 
 KNOWN_WEB_KEYS = {"enabled", "host", "port", "token", "skip_local_verify", "skip_check_menu", "ctx_menu", "transfer"}
@@ -676,6 +685,28 @@ def _validate_relocate(spec, errors: List[str]) -> None:
             _try_time(spec[key], f"config.relocate.{key}", errors, positive=True)
     if "low_space_warn" in spec:
         _try(parse_fsize, spec["low_space_warn"], "config.relocate.low_space_warn(如 10GiB)", errors)
+    if "pending_tag" in spec:
+        _validate_relocate_pending_tag(spec["pending_tag"], errors)
+
+
+def _validate_relocate_pending_tag(raw, errors: List[str]) -> None:
+    """pending_tag 形状守卫(计划 26-11-04-1042 P3): 空/None = 关闭; 非空须落在保留命名空间
+
+    保留前缀(RELOCATE_TAG_NS)是防污染约束: 标签只写不读, 但若允许任意名字, 用户的
+    自定义标签或规则 remove_tags 可能与镜像标签同名互删。逗号是 qB 标签分隔符, 一并拒收。
+    """
+    if raw is None:
+        return
+    if not isinstance(raw, str):
+        errors.append("config.relocate.pending_tag: 须为字符串(留空 = 不打标签)")
+        return
+    tag = raw.strip()
+    if not tag:
+        return
+    if not tag.startswith(RELOCATE_TAG_NS):
+        errors.append(f"config.relocate.pending_tag: 必须落在保留命名空间(以 {RELOCATE_TAG_NS} 开头): '{raw}'")
+    if "," in tag:
+        errors.append(f"config.relocate.pending_tag: 不能含逗号(qB 标签分隔符): '{raw}'")
 
 
 def _validate_tag_lists(cfg: dict, errors: List[str]) -> None:

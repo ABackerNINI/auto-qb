@@ -154,6 +154,7 @@ relocate.hard_max_links
 relocate.low_space_warn
 relocate.move_stall_timeout
 relocate.move_warn_after
+relocate.pending_tag
 relocate.verify
 remove_similar_tags
 skip_checking_tag

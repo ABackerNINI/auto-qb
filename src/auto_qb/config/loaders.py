@@ -510,6 +510,7 @@ def load_relocate_config(spec) -> RelocateConfig:
         finalize_timeout=_get(spec, "finalize_timeout", d.finalize_timeout, parse_time),
         low_space_warn=_get(spec, "low_space_warn", d.low_space_warn, parse_fsize),
         assume_shared=_get(spec, "assume_shared", d.assume_shared, parse_bool),
+        pending_tag=_get(spec, "pending_tag", d.pending_tag, lambda v: str(v or "").strip()),
     )
 
 

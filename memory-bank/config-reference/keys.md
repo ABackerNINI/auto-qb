@@ -131,6 +131,7 @@ relocate:
     finalize_timeout: 30d      # 收尾(qB 重启后经旧路径 setLocation)等待上限; 超过 => failed
     low_space_warn: 10GiB      # 别名目标卷低空间告警阈值(只告警, 不暂停); 0 = 不告警
     assume_shared: false       # 显式声明 qB 与 auto-qb 已共享文件系统: 跳过同机探测(回执标注未经验证)
+    pending_tag: ""            # 待收尾镜像标签(qB 侧): 留空 = 关闭; 非空须以 zRelocate 开头(只写不读)
 ```
 
 | 键 | 类型/默认 | 校验边界 | 说明 |
@@ -145,6 +146,7 @@ relocate:
 | `finalize_timeout` | time / `30d` | > 0 | 收尾等待上限: qB 重启后经旧路径自动 `setLocation` 的最长等待; 超过 ⇒ failed(链接已删, 由用户处理) |
 | `low_space_warn` | size / `10GiB` | 二进制单位 | 别名目标卷剩余空间低于该值时告警(只告警, 不暂停); 填 `0` = 不告警。**大小单位只认二进制**(`10GiB` 而非 `10G`) |
 | `assume_shared` | bool / `false` | — | 显式声明 qB 与 auto-qb 已共享文件系统(计划 26-11-04-0055 §03.2): `true` = 跳过同机一次性强探测, 回执显著标注「未经 auto-qb 验证, 由用户承担」; 默认关闭 = 多成员组首次迁移前照常强探测(唯一越权逃生口) |
+| `pending_tag` | str / `""` | 空 = 关; 非空须以 `zRelocate` 开头且不含逗号 | qB 侧「待收尾」镜像标签(计划 26-11-04-1042 P3, opt-in): 迁移进入 armed 时给组内种子打标签, 进入终态(完成/撤销/失败)时摘除。**只写不读** —— 迁移状态仍以 auto-qb 自身记录为准, 用户手删标签不影响判断; 保留前缀 `zRelocate` 防与自定义标签/`remove_tags` 互删; 留空(默认)= 零额外 qB 写 |
 
 热重载口径: 本段与 `fs`(R 级, 改完要重启进程)分开, 由 `RelocateModule.sections()` 认领, 保存配置即时生效。有未收尾迁移的组会被拒绝再迁(先收尾或先撤销)。
 

@@ -549,6 +549,7 @@ class RelocateConfig:
     finalize_timeout: float = 30 * 86400.0  # 秒; YAML 原始缺省 "30d"
     low_space_warn: int = 10 * 1024**3  # 字节; YAML 原始写法 "10GiB"
     assume_shared: bool = False
+    pending_tag: str = ""  # qB 待收尾镜像标签: 空(默认)= 关闭, 零 qB 写; 非空须落在 zRelocate 前缀下
 
 
 @dataclass

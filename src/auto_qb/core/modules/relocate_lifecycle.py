@@ -13,6 +13,10 @@ from .relocate_units import RelocateJob
 from .relocate_common import logger
 from .relocate_probe import sweep_probe_residue
 
+# 标签镜像失败后的重试间隔(秒): qB 失联/超时/版本不支持时只告警, 不阻塞迁移主流程,
+# 也不每 tick 撞一次 qB。配置关闭时该常量不参与任何路径。
+_TAG_RETRY_SECONDS = 30.0
+
 
 class LifecycleMixin:
     def start(self, ctx: AppContext, dry_run: bool) -> None:
@@ -128,6 +132,71 @@ class LifecycleMixin:
         self._resume_members(failed)
         return failed
 
+    # ---------- qB 待收尾标签镜像(P3 可选, 只写不读) ----------
+
+    def _tag_name(self) -> str:
+        """生效的待收尾标签名(空 = 配置关闭; 只读配置, 绝不读 qB 标签反推状态)"""
+        conf = self._live_conf()
+        if conf is None:
+            return ""
+        return str(getattr(conf, "pending_tag", "") or "").strip()
+
+    def _tag_goal(self, job: RelocateJob) -> Optional[str]:
+        """标签镜像目标: 待收尾窗口 = add, 终态 = remove, 其余相位不动"""
+        if job.is_terminal:
+            return "remove"
+        if job.phase in ru.PENDING_TAG_PHASES:
+            return "add"
+        return None
+
+    def _sync_pending_tag(self, job: RelocateJob) -> None:
+        """把单个 job 的标签镜像推到 qB(幂等; 失败降级只记日志/计数, 不影响迁移主流程)
+
+        只在「目标态变化」时发请求(armed 一次 add, 终态一次 remove), 平时靠
+        _reconcile_pending_tags 补写 —— 重启/断连期间错过的标签在恢复后自然补上。
+        失败不记 applied, 按 _TAG_RETRY_SECONDS 退避重试; 标签被用户手动删掉时
+        本函数不会重加(不读标签), WebUI/state 结论完全不受影响。
+        """
+        tag = self._tag_name()
+        if not tag or self._dry_run():
+            return
+        want = self._tag_goal(job)
+        if want is None or not job.hashes:
+            return
+        if self._tag_applied.get(job.job_id) == want:
+            return
+        now = time.monotonic()
+        if now < self._tag_next_try.get(job.job_id, 0.0):
+            return
+        api = getattr(self._ctx, "api", None)
+        try:
+            if want == "add":
+                api.torrents_add_tags(tags=tag, torrent_hashes=list(job.hashes))
+            else:
+                api.torrents_remove_tags(tags=tag, torrent_hashes=list(job.hashes))
+        except Exception as e:  # noqa: BLE001 - 镜像失败绝不改迁移相位/收尾判定
+            self._tag_next_try[job.job_id] = now + _TAG_RETRY_SECONDS
+            self._tag_failures += 1
+            action = "加" if want == "add" else "摘"
+            logger.warning(
+                f"relocate | job {job.job_id}: {action}待收尾标签 {tag!r} 失败({e}) —— "
+                f"仅镜像失败, 迁移状态与收尾判定不受影响(稍后重试)"
+            )
+            return
+        self._tag_applied[job.job_id] = want
+        self._tag_next_try.pop(job.job_id, None)
+
+    def _reconcile_pending_tags(self) -> None:
+        """每 tick 补写非终态 job 的标签(重启/断连窗口的缺失不视为错误)
+
+        只扫非终态 job: 终态 job 会永久留在账上, 若也扫会在重启后对历史 job 批量
+        发 remove —— 那是无意义写放大。终态的摘除由 _set_job 的相位跃迁当场完成。
+        """
+        if not self._tag_name() or self._dry_run():
+            return
+        for job in self.active_jobs():
+            self._sync_pending_tag(job)
+
     # ---------- 任务线: 每 tick 推进一步(P3 状态机) ----------
 
     def on_task_line(self, force: bool = False) -> None:
@@ -156,6 +225,8 @@ class LifecycleMixin:
             except Exception as e:  # noqa: BLE001 - 单 job 异常不得拖垮任务线(其它 job 照常推进)
                 logger.exception(f"relocate | job {job.job_id} 推进异常: {e}")
                 self._fail(job, "internal_error", str(e))
+        # qB 标签镜像补写(可选功能): 重启/断连期间错过 armed 的 job 在恢复后补上标签
+        self._reconcile_pending_tags()
 
     def _advance(self, job: RelocateJob) -> None:
         """按相位分派一步"""

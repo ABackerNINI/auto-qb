@@ -21,6 +21,12 @@ config:
         enabled: true # 启用种子分组管理
         missing_tag: MISSING # 文件丢失时整组添加的标签
 
+    # 整组迁移(默认关闭): 开启后可将辅种组整体搬到新目录; 待收尾期间可选在 qB 侧打镜像标签
+    # (标签只写不读, 必须落在保留前缀 zRelocate 下; 留空 = 不打标签, 零额外 qB 写)
+    # relocate:
+    #     enabled: true
+    #     pending_tag: zRelocatePending
+
     # 全局标签清理(作为两个独立任务周期执行, 支持正则 regex: 前缀):
     delete_tags: # 彻底删除的标签格式(从所有种子移除并删除标签定义)
         - "M-Team - TP:ignore_case"
