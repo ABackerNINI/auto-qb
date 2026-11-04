@@ -34,9 +34,10 @@
   迁移表同步的静态断言(原来只在运行时 migrate() 里 fail-fast, 抬号忘迁移提前到测试期暴露)
 - test_keys_md_covers_key_surface: 键面每个叶键(路径末段, 词边界匹配)在参考文档反引号 span 内有
   出处 —— 改键忘回写文档当场报。语料 = keys.md + 其规则集段委托的插件参考
-  (rule-system/conditions-and-actions.md), 跟随委托关系不重复维护。**豁免**: 插件 spec 内部键
-  (<任意>_rules.*.conditions/actions.<插件名> 之下的层级) —— 插件 spec 键面尚未逐键进参考文档,
-  权威单点是 schema 插件表; 插件名本身仍要求有出处。展开插件 spec 键面属独立回写任务, 未做前豁免保持
+  (rule-system/conditions-and-actions.md), 跟随委托关系不重复维护。插件 spec 内部键(conditions/
+  actions 插件名之下的层级)同样无豁免(issue 26-09-28-1946 清偿): checking spec 逐键参考在
+  conditions-and-actions.md「checking 动作详解」节, 其余插件键在两份文档的 spec 示例 span 内,
+  改键必须同步回写
 - test_loader_probe_table_covers_named_leaf_surface: loader 消费探针表必须恰好覆盖键面命名叶键
   (扣动态段与豁免) —— 新增键不配探针当场红, 逼着补「YAML 显式值」探针; 键在面上但 loader 漏读
   (issue 26-10-06-0027 D-01 形态: 键面/schema/校验五处齐备唯独 loaders 不取值, 三道旧守卫全探不到)
@@ -69,10 +70,6 @@ _DOC_PATHS = (
     REPO_ROOT / "memory-bank" / "config-reference" / "keys.md",
     REPO_ROOT / "memory-bank" / "rule-system" / "conditions-and-actions.md",
 )
-
-# keys.md 出处检查的豁免段: 插件 spec 内部键(插件名之下的层级) —— 参考文档尚未逐键展开,
-# 权威单点是 schema 插件表(keys.md 规则集段已声明指向); 插件名本身不豁免
-_DOC_EXEMPT = re.compile(r"^<任意>_rules\.[^.]+\.(conditions|actions)\.[^.]+\.")
 
 # 版本章自身不入键面(它归版本链框架管); trackers 顶层键单独按动态段展开
 _EXCLUDED_TOP_KEYS = {"schema_version", "trackers"}
@@ -219,8 +216,6 @@ def test_keys_md_covers_key_surface():
         spans.extend(re.findall(r"`([^`\n]+)`", doc.read_text(encoding="utf-8")))
     missing = []
     for path in sorted(build_config_key_surface()):
-        if _DOC_EXEMPT.match(path):
-            continue
         leaf = path.rsplit(".", 1)[-1]
         pattern = re.compile(rf"(?<![A-Za-z0-9_]){re.escape(leaf)}(?![A-Za-z0-9_])")
         if not any(pattern.search(span) for span in spans):

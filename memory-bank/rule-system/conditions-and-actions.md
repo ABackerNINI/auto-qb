@@ -1,7 +1,7 @@
 # 条件与动作 (含 expr 速查)
 
-> 摘要: 条件组合树 (`all`/`any`/`not`, W3) + choose 编排块 (`choose`/`default`/`when`/`then`, W3-B) + 13 种条件 + `expr` 速查 + 12 种动作 + 限速单数值保护 + 状态映射表 + 变量替换。
-> 触发: 条件, 组合树, all, any, not, 逗号分组, 动作, choose, 分支, default, when, then, expr, 表达式, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
+> 摘要: 条件组合树 (`all`/`any`/`not`, W3) + choose 编排块 (`choose`/`default`/`when`/`then`, W3-B) + 13 种条件 + `expr` 速查 + 12 种动作 + `checking` spec 逐键参考 + 限速单数值保护 + 状态映射表 + 变量替换。
+> 触发: 条件, 组合树, all, any, not, 逗号分组, 动作, choose, 分支, default, when, then, expr, 表达式, checking, basic_check, with_reference, without_reference, 跳检, 参考种子, 状态映射, 变量替换, 限速保护, 禁止下载, stop 压制
 
 ## 条件组合树 (W3, plan 26-11-01-0106)
 
@@ -102,7 +102,7 @@ conditions:
 | `remove_category` | `true` | 分类为空 skip |
 | `start` | `true` | 非 `is_stopped` → skip("已开始") |
 | `stop` | `true` | 已 `is_stopped` → skip |
-| `checking` | 见下节 | 校验/跳检, 最复杂动作 |
+| `checking` | 见「`checking` 动作详解」节 | 校验/跳检, 最复杂动作 |
 | `move_to` | `{path: "/new"}` | set_location; path 空 → fail |
 | `reannounce` | `true` | ⚠️ 有风险: 运行时最小间隔 10M(同种子, state 键 `reannounce_ts`, 独立于规则去重兜底) + 暂停种子跳过 + 未配 execute_once/cooldown 时加载 WARNING; 高频 announce 会被封号 |
 | `upload_speed_limit` | `"1000KiB/s"` | 见下"限速保护" |
@@ -110,6 +110,44 @@ conditions:
 | `print_torrent_details` | `true` | **只读留档动作** (2026-09-12): 读取 `ctx.torrent` 快照字段 + tracker 派生信息, logger.info 输出单行详情; 纯读取无副作用, dry-run 照常打印, 恒 success。种子已删除时 `ctx.torrent` 回退删除前快照副本 (snapshot), 仍可打印 — 是 `on_torrent_deleted` 白名单里唯一允许的动作 |
 
 > ⚠️ **没有「禁止下载」类动作**: 能影响下载方向的只有 `stop`(暂停 —— 需**反复压制**, 且对 `checkingDL`/`metaDL` 同样生效)与 `download_speed_limit`(限速 ≠ 禁止)。故「禁止某分类的种子开始下载」只能近似表达为「发现即暂停(**条件须带 `state: ["is_downloading"]`**, 否则会误伤做种)+ 缺省 interval 每 tick 兜底」, 且**不能**配 `execute_once: once/daily` —— 完整状态矩阵 / 去重实测 / 竞态与绑定前提见 [报告 26-09-27-0047](../reports/26-09-27-0047-report-rule-iyuu-stop-guard.html)。
+
+## `checking` 动作详解 (spec 逐键参考, 2026-11-05 issue 26-09-28-1946 清偿)
+
+> 逐键口径与 schema 插件表(`ACTION_PLUGINS` 的 checking 项 `Plugin.fields` + `CHECKING_SECTION_FIELDS`)及深度校验 `_validate_checking_action_spec` 一一对应; 键面守卫 `test_config_key_surface` 对插件 spec 键**不再豁免**, 改键忘回写本节当场报。
+
+`checking` 是 object 动作: 按「组内能否找到已完成且**可信**的同内容参考种子」分两分支, 各分支的校验方式(跳检/强校验)独立配置; 推荐配法 = 有参考配跳检、无参考配强制校验。**可信**由顶层 `basic_check` 统一判定。执行体在 ops 层(规则侧 `ctx.ops.skip_submit` 一行委托, 异步 job); 跳检会**删种重加**(期间停止做种), 请配 `cooldown`/去重避免反复执行。
+
+```yaml
+- action: checking
+  basic_check: filelist            # 参考判定方式
+  with_reference:                  # 找到参考种子时
+    enabled: true
+    mode: skip-checking            # 跳检(删种重加, 不再哈希校验)
+    auto_start: true
+  without_reference:               # 找不到参考种子时
+    enabled: false
+    mode: full-checking            # 强制完整哈希校验
+    auto_start: false
+```
+
+顶层键:
+
+| 键 | 类型/取值 | 缺省 | 语义 |
+|----|-----------|------|------|
+| `basic_check` | enum: `filelist`/`piecehashes`/`custom` | 必配 | 如何确认候选参考种子数据可信: `filelist` 比对文件列表(快); `piecehashes` 比对分片哈希(慢但更严); `custom` 调用自定义脚本 |
+| `custom_basic_check_program_path` | path | `""` | 仅 `basic_check: custom` 时必配(否则校验报错); 以 `<候选参考种子hash> <其保存路径>` 为参数对每个候选逐个执行, 退出码 0 = 该候选可信 |
+| `with_reference` | object | 未配 = 该分支跳过 | 组内能找到已完成且可信的同内容种子(参考种子)时的处理方式 |
+| `without_reference` | object | 未配 = 该分支跳过 | 找不到参考种子时的处理方式; 选跳检属高风险(未做哈希校验直接开始), 建议强制校验或不开该分支 |
+
+分支段(`with_reference` / `without_reference` 同键面, 即 `CHECKING_SECTION_FIELDS`):
+
+| 键 | 类型/取值 | 缺省 | 语义 |
+|----|-----------|------|------|
+| `enabled` | bool | `false` | 不启用时该分支整体跳过(日志里记跳过原因) |
+| `mode` | enum: `skip-checking`/`full-checking` | `skip-checking` | `skip-checking` 跳检(删种重加, 不再哈希校验); `full-checking` 强制完整哈希校验 |
+| `auto_start` | bool | `false` | 完成后自动开始该种子(重加/校验通过后种子处于暂停, 开启后才恢复运行) |
+
+校验要点(fail-fast, 配置期 `_validate_checking_action_spec`): spec 只接受 dict(旧字符串形式已移除); 未知键报错 —— `skip_checking_tag` 是全局配置, spec **不可**配同名键; 子段键面同样 fail-fast(拼错 `enabled` = 分支静默不启用, issue 26-10-06-0028 D-02)。全局「跳检成功标签」种子未经哈希校验, 参考判定一律排除(防"未验证"经参考链传播)。
 
 ### 限速的"单数值保护" (tracker.py 与 actions.py 同逻辑)
 

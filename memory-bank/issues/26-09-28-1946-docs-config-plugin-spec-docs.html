@@ -8,7 +8,7 @@
 <meta name="issue-type" content="docs">
 <meta name="doc-topic" content="config-version-guard">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免">
 <meta name="issue-summary" content="conditions/actions 插件名之下的 spec 键在 keys.md 与 rule-system/conditions-and-actions.md 均无逐键覆盖, test_config_key_surface 出处检查对该层豁免(权威单点=schema 插件表)">
 <title>插件 spec 内部键无逐键参考文档, 键面守卫出处钩暂豁免 · docs · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-09-28-1946-docs-config-plugin-spec-docs</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-28 19:46</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">docs</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-09-28 19:46 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 认领并复验：问题仍在（<code>_DOC_EXEMPT</code> 未动），但范围已收窄 —— 后续文档演进已覆盖大部分插件 spec 键，真缺口只剩 <code>checking</code> 动作 6 个叶键（<code>basic_check</code>/<code>custom_basic_check_program_path</code>/<code>with_reference</code>(+<code>auto_start</code>)/<code>without_reference</code>(+<code>auto_start</code>)，模拟删豁免实测），且动作表 checking 行「见下节」为悬空引用（下节不存在）</li>
+      <li>2026-11-05 — 状态 <strong>Done</strong>。实际修法（= 建议方向一「逐键展开+删豁免」，成本已从 20+ 键缩到一节）：①<code>rule-system/conditions-and-actions.md</code> 新增「<code>checking</code> 动作详解」节（顶层 4 键 + 分支段 3 键逐键表，口径对齐 schema 插件表与 <code>_validate_checking_action_spec</code>），修悬空引用，摘要/触发词同步；②删除 <code>tests/test_config_key_surface.py</code> 的 <code>_DOC_EXEMPT</code>（定义+使用+docstring 口径段），键面出处检查对插件 spec 键全面生效。验证：<code>uv run pytest tests/test_config_key_surface.py</code> 5 passed（删豁免后全绿）</li>
     </ul>
   </section>
 
