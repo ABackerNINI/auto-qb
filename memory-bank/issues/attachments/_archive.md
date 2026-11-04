@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (44)
+## Open (43)
 
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
@@ -34,7 +34,6 @@
 - [feat] [浏览器扩展优化信息展示](../26-10-01-2203-feat-ext-info-display.html) — EXT 域一句话 TODO: 扩展侧信息展示优化(无细节, 开工先复验现状与诉求)
 - [feat] [扩展版本号 + 主程序仅支持固定版本 + 扩展高度参数化](../26-10-01-2203-feat-ext-version-pinning.html) — 扩展加版本号, 主程序只认固定版本以简化兼容; 扩展行为高度参数化把复杂度交给后端, 最大限度免升级
 - [feat] [支持多语言(低优先级)](../26-10-01-2203-feat-i18n-multi-language.html) — (低优先级)WEBUI/通知多语言支持, 未排期
-- [feat] [整组迁移防进度丢失(qB 逐个移动同组种子的问题)](../26-10-01-2147-feat-group-move-atomicity.html) — qB 一次设定多个种子位置会依次移动, 同组多个种子随机丢进度, 需要整组迁移方案
 - [feat] [HR 在线核实同步修改 HR 标签/分类](../26-10-01-2147-feat-hr-verify-sync-hr-tags.html) — 在线核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等), 当前无此联动(grep hr/ 无标签同步逻辑)
 - [feat] [命中的限速曲线强调显示 + 限速时可配置弹窗提醒](../26-10-01-2147-feat-speedlimit-curve-emphasis.html) — 当前生效的限速档位在曲线上强调显示; 被限速时可选配置弹窗提醒
 - [question] [HR 在线核实同组间优先核实下载量高的种子(前提待商榷)](../26-10-01-2147-question-hr-same-group-download-priority.html) — [?]想法: 同组优先确认下载量高者; 前提「种子在 A 站考核中就不会在 B 站考核」待商榷
@@ -489,8 +488,9 @@
 - [bug] [WEBUI 批量操作引发 WARNING 桌面通知](../26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
 - [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](../26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
 
-## Superseded (3)
+## Superseded (4)
 
+- [feat] [整组迁移防进度丢失(qB 逐个移动同组种子的问题)](../26-10-01-2147-feat-group-move-atomicity.html) — qB 一次设定多个种子位置会依次移动, 同组多个种子随机丢进度, 需要整组迁移方案
 - [question] [「在线核实」与「全站HR」两个选项的区别说明/取舍](../26-10-01-2147-question-hr-online-vs-sitewide-option.html) — 设置中两个 HR 选项语义不清: 补文档说明或合并冗余选项, 待定
 - [bug] [配置热重载后辅种消失; 「变更 N 项」计数与实际不符](../26-10-01-2129-bug-webui-hotreload-ext-vanish.html) — 热重载回执报「变更 9 项」实际只加了 1 个 exclude_categories, 且辅种列表疑似因此消失 —— 内核化重构后先复验是否仍复现
 - [question] [doc-map 容量无余量: 任何新「计划+档案」对必破 12200 cap](../26-09-28-0219-question-kb-doc-map-cap.html) — HEAD 源重生成 12153/12200 (余 47 字符), 一笔合规计划+档案对固定占 ~106 字符; topic 收口反而增大文件 —— 需要定调: 提 cap / 砍单件登记段 / 精简多件条目
