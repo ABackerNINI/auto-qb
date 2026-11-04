@@ -2,7 +2,6 @@
 
 拆分(R5)只搬位置: 方法体与 relocate_mod.py 原文件逐字一致。
 """
-import time
 from dataclasses import replace
 from typing import Optional
 
@@ -170,7 +169,7 @@ class LifecycleMixin:
             return
         if self._tag_applied.get(job.job_id) == want:
             return
-        now = time.monotonic()
+        now = self._clock.monotonic()  # 标签重试退避: 单调钟(D8; 宿主 RelocateModule 注入)
         if now < self._tag_next_try.get(job.job_id, 0.0):
             return
         api = getattr(self._ctx, "api", None)

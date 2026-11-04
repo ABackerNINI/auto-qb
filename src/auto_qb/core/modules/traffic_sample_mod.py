@@ -172,6 +172,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
+from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from ..traffic_limits import SpeedLimitRecorder
 from ..traffic_store import (
@@ -225,8 +226,10 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
 
     name = "qb_traffic"
 
-    def __init__(self, ctx: AppContext) -> None:
+    def __init__(self, ctx: AppContext, clock: Optional[Clock] = None) -> None:
         self._ctx = ctx
+        # 取时注入(D8): 采样节拍/游程时间戳用挂钟; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # 差分基线(§03.3): 系列键 -> {"dl_total", "up_total"}, 仅进程内推进不落盘;
         # 重启为空 -> 首个采样只立基线不出增量(首窗 null)。null 点不推进基线。
         self._baselines: dict = {}
@@ -281,7 +284,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         # ---- 限速历史记录器(plan 26-10-12-0535 D2) ----
         # 主循环线程独占, _sample_global 顺带观测; data_dir 为空 = 禁用(observe 内防御);
         # dry_run 经 observe 的 persistence_on 旗标短路(与落盘同门)
-        self._limits_rec = SpeedLimitRecorder(getattr(ctx.config, "data_dir", "") or "")
+        self._limits_rec = SpeedLimitRecorder(getattr(ctx.config, "data_dir", "") or "", clock=clock)
 
     def sections(self) -> tuple[str, ...]:
         return ("qb_traffic", )
@@ -306,7 +309,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         live_tail), 读侧按请求现取 live_tail 引用, 视图何时发布都不影响采样可见性。
         异常口径与其余 loop hooks 一致(无隔离, 异常上抛主循环兜底)。
         """
-        now = time.time()
+        now = self._clock.now()
         if self._next_sample_at is not None and now < self._next_sample_at:
             return
         self.handle_traffic_sample(dry_run=not self._persistence_on)
@@ -324,7 +327,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
             # 到期点不动 —— 重新启用后首拍即采
             return
         self._persistence_on = not dry_run  # dry_run 同口径不落盘(观测写盘属真实副作用)
-        now = time.time()
+        now = self._clock.now()
         self._round_keys.clear()
         effective = self._apply_interval(conf)  # C1(§3.5): 现读间隔 -> effective(失配告警 + 变化关块)
         self._next_sample_at = now + effective
@@ -366,7 +369,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         游程」合成进 pending 副本, 与 raw 面 v4_live_tail_slots 的开放游程合成同构。
         """
         tails: dict = {}
-        now = time.time()
+        now = self._clock.now()
         for key in set(self._buffers) | set(self._open_runs) | set(self._agg_states):
             buf = self._buffers.get(key)
             run = self._open_runs.get(key)
@@ -576,7 +579,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
             buf = self._buffers[key]
             if buf.start_epoch is None and not buf.records and key not in self._open_runs and key not in self._round_keys:
                 del self._buffers[key]
-        self._agg_flush_all(time.time())
+        self._agg_flush_all(self._clock.now())
 
     def _recover_aggregates(self) -> None:
         """重启恢复(§4.3): 扫现存系列, 逐系列恢复水位 + 重建累计器 + catch-up 补算
@@ -589,7 +592,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
         conf = self._ctx.config.qb_traffic
         if conf is None or not conf.enabled or not self._ctx.config.data_dir:
             return
-        t0 = time.time()
+        t0 = self._clock.now()
         store = self._get_v4_store()
         keys = store.series_keys()
         logger.info(f"流量采样 | 启动恢复开始: 启用态, {len(keys)} 个现存系列(读集 = agg 水位日 -> 今日, 按需口径)")
@@ -605,7 +608,7 @@ class TrafficSampleModule(_SampleAggMixin, _SampleBlocksMixin, BaseModule):
                 total_slots += reads[key]["slots"]
             except OSError as e:
                 logger.warning(f"流量采样 | {key} 聚合恢复失败(该系列按 agg 现状运行): {e}")
-        elapsed = time.time() - t0
+        elapsed = self._clock.now() - t0
         self.recovery_reads = reads
         self.recovery_stats = {
             "series": len(keys),

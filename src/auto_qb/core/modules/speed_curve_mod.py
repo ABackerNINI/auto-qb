@@ -30,11 +30,12 @@ dat(工具来源是运行期事实, 不在配置里), 按每条 period 曲线聚
   归 traffic_snapshot 的 traffic_source.refresh_interval, 两者互不影响
 """
 import logging
-import time
+import time  # noqa: F401 - 存量测试经本模块的 time 属性 patch stdlib(见 test_speed_curve_dispatch), 不可删
 from datetime import date
 from typing import List, Optional, Tuple
 
 from ...infra import utils
+from ...infra.clock import SYSTEM_CLOCK, Clock
 from .. import curves
 from ..module import AppContext, BaseModule
 from ..state import prune_day_keys
@@ -99,8 +100,10 @@ class SpeedCurveModule(BaseModule):
 
     name = "speed_curve"
 
-    def __init__(self, ctx: AppContext) -> None:
+    def __init__(self, ctx: AppContext, clock: Optional[Clock] = None) -> None:
         self._ctx = ctx
+        # 取时注入(D8): 日志节流间隔用挂钟; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # 手动保护日志节流: {方向: (手动值 KiB/s, 上次记 INFO 时刻)} —— 模块实例自持
         # (手动值是持续状态, 状态变化才报 + 周期提醒; 退出手动保护时清键, 见 _log_manual_skip)
         self._curve_manual_log: dict = {}
@@ -271,7 +274,7 @@ class SpeedCurveModule(BaseModule):
 
         可见性不依赖这行日志: Web UI 的 `reasons`(code=manual)已显示锁图标与"命中/实际"两值。
         """
-        now = time.time()
+        now = self._clock.now()
         prev = self._curve_manual_log.get(dir_key)
         if prev is None or prev[0] != cur or now - prev[1] >= _MANUAL_REMIND_GAP:
             self._curve_manual_log[dir_key] = (cur, now)

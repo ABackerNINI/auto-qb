@@ -22,11 +22,11 @@ enabled 时做 —— 开关关着却开机建删探测链接, 属于为关着�
 依赖方向: 本模块 -> infra(alias_fs/file_access/utils) + torrents + 兄弟模块**零**
 import(需要别人能力经 ctx); 决策纯函数在 relocate_units(不触盘), 本文件只收集事实。
 """
-import time
 from dataclasses import replace
 from types import MappingProxyType
 from typing import Optional
 
+from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule
 from . import relocate_units as ru
 from .relocate_units import RelocateJob
@@ -60,8 +60,10 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
 
     name = "relocate"
 
-    def __init__(self, ctx: Optional[AppContext] = None) -> None:
+    def __init__(self, ctx: Optional[AppContext] = None, clock: Optional[Clock] = None) -> None:
         self._ctx: Optional[AppContext] = ctx
+        # 取时注入(D8): Lifecycle/Exec 两 mixin 与本体的取时点共用; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         self._conf = None  # 生效的 RelocateConfig(热重载换对象即更新)
         self._jobs: dict = {}  # job_id -> RelocateJob(P3 执行体写入; P2 恒空)
         self._rt: dict = {}  # job_id -> 运行期进度(采样式, 不落盘; 重启由 qB 现场恢复)
@@ -129,7 +131,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         entry = {
             "status": status,
             "evidence": dict(evidence or {}),
-            "at": int(time.time()),
+            "at": int(self._clock.now()),
         }
         self._state_probes()[fingerprint] = entry
         return {"status": entry["status"], "evidence": dict(entry["evidence"]), "at": entry["at"]}
@@ -187,7 +189,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             # 定夺(不能一律 False —— 账先落、指令后发, 两步之间崩溃的 job 会永远等不到搬迁)
             self._rt[jid] = {
                 "issue": False,
-                "started": time.monotonic(),
+                "started": self._clock.monotonic(),
                 "sample_ts": 0.0,
                 "last_size": -1,
                 "stall_since": 0.0,
@@ -220,7 +222,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         标签镜像在 state 落盘之后做: state 是唯一事实源, 镜像失败(超时/不支持/权限)
         只告警计数, 绝不回滚相位或影响收尾判定。
         """
-        job = replace(job, updated_at=time.time())
+        job = replace(job, updated_at=self._clock.now())
         self._jobs[job.job_id] = job
         self._sync_relocating()
         self._persist()

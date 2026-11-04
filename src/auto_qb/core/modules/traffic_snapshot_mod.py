@@ -22,10 +22,10 @@
 事件路径(publish_event)连文件都不读 —— 读盘是成本, 全部收拢在 refresh_interval 闸门。
 """
 import logging
-import time
 from datetime import date
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+from ...infra.clock import SYSTEM_CLOCK, Clock
 from .. import curves
 from ..module import AppContext, ApplyResult, BaseModule
 from ..taskqueue import REQUEUE, Task
@@ -136,8 +136,10 @@ class TrafficSnapshotModule(BaseModule):
 
     name = MODULE_NAME
 
-    def __init__(self, ctx: AppContext) -> None:
+    def __init__(self, ctx: AppContext, clock: Optional[Clock] = None) -> None:
         self._ctx = ctx
+        # 取时注入(D8): 视图 ts 时间戳用挂钟; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         #: 每日事件补丁高水位(26-10-21): day -> (已发布最大 up, 已发布最大 down)。
         #: 事件路径零读盘, 但崩溃恢复时工具内存可能低于 dat 已有值(state.json 比 dat 旧),
         #: 首个 catch-up 事件载荷会偏低 —— 钳制让 pill 不回退, 按日清零只留今天的键。
@@ -377,7 +379,7 @@ class TrafficSnapshotModule(BaseModule):
         """
         view = dict(self._ctx.web.traffic_view or {})
         view.update(segments)
-        view["ts"] = time.time()
+        view["ts"] = self._clock.now()
         view["date"] = date.today().isoformat()
         view["state"] = derive_state(_source_state_of(view), _limit_state_of(view))
         self._ctx.web.set_traffic_view(view)

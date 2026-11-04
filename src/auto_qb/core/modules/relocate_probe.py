@@ -33,6 +33,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 
+from ...infra import clock
 from ...infra import file_access
 from .relocate_common import logger
 
@@ -160,7 +161,7 @@ def _await_probe_torrent(api, deadline: float, evidence: dict):
     按 tag 而非 hash 定位: add 响应形态跨版本分裂(Web API 2.14.0 前后), 而 tag 是我们
     自己下发的确定事实; 单一写线程下同 tag 只会有探测种子(启动扫描已清历史残留)。
     """
-    while time.monotonic() < deadline:
+    while clock.SYSTEM_CLOCK.monotonic() < deadline:
         try:
             tors = api.torrents_info(tag=TAG_PROBE) or []
         except Exception as e:  # noqa: BLE001 - API 异常按环境性失败处理
@@ -184,7 +185,7 @@ def _read_progress_poll(api, torrent_hash: str, deadline: float, evidence: dict)
         progress = getattr(tors[0], "progress", 0.0) if tors else 0.0
         if tors and float(progress or 0.0) >= 1.0:
             return "ok"
-        if time.monotonic() >= deadline:
+        if clock.SYSTEM_CLOCK.monotonic() >= deadline:
             return "timeout"
         time.sleep(PROBE_POLL_INTERVAL_S)
 
@@ -214,7 +215,7 @@ def _write_proof_poll(dst_file: str, src_file: str, expect_sha: str, expect_size
             if not os.path.exists(src_file):
                 return "ok"
             # dst 已一致但源未消失: qB 只复制未搬走, 继续等( setLocation 语义应搬走)
-        if time.monotonic() >= deadline:
+        if clock.SYSTEM_CLOCK.monotonic() >= deadline:
             return "mismatch" if os.path.isfile(dst_file) else "timeout"
         time.sleep(PROBE_POLL_INTERVAL_S)
 
@@ -227,7 +228,7 @@ def _cleanup(api, torrent_hash, dirs, evidence: dict) -> None:
     失败只 warning —— 残留由启动扫描兜底), 免得探针种子留在用户 qB 里。
     """
     info = {"torrent_deleted": False, "torrent_gone": None, "dirs_removed": [], "residue": []}
-    deadline = time.monotonic() + PROBE_CLEANUP_TIMEOUT_S
+    deadline = clock.SYSTEM_CLOCK.monotonic() + PROBE_CLEANUP_TIMEOUT_S
     if not torrent_hash:
         # 种子不可见(add 受理但按 tag 列不出)拿不到 hash: 按 tag 补删(同一写线程下同 tag
         # 只有探测种子; 此刻仍不可见 = 真没有, 轮询空列表零动作)
@@ -252,7 +253,7 @@ def _cleanup(api, torrent_hash, dirs, evidence: dict) -> None:
         except Exception as e:  # noqa: BLE001 - 清理路径不抛: 结论不受清理失败影响
             info["delete_error"] = str(e)
             logger.warning(f"relocate | probe: 删除探测种子失败({e}) —— 残留由启动扫描按 tag 清理")
-        while time.monotonic() < deadline:
+        while clock.SYSTEM_CLOCK.monotonic() < deadline:
             try:
                 if not (api.torrents_info(torrent_hashes=[torrent_hash]) or []):
                     info["torrent_gone"] = True
@@ -286,7 +287,7 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
     同 FS 的一对目录(通常为组 content_root 与迁移目标卷根)。每步独立短超时(常量单点),
     各阶段失败路径都执行尽力清理(finally), 绝不把探针种子留在用户 qB 里。
     """
-    started = time.monotonic()
+    started = clock.SYSTEM_CLOCK.monotonic()
     evidence: dict = {"method": "e1"}
     api = getattr(ctx, "api", None)
     if api is None or getattr(api, "client", None) is None:
@@ -328,7 +329,7 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
         except Exception as e:  # noqa: BLE001 - add 被拒(磁盘满/队列满/4xx) = 环境性
             return _failed(evidence, "add_rejected", True, {"error": str(e)})
         # c. 证读: 显式 recheck, 轮询 progress==1.0(qB 校验通过 = 读到了本机这份内容)
-        tor = _await_probe_torrent(api, time.monotonic() + PROBE_READ_TIMEOUT_S, evidence)
+        tor = _await_probe_torrent(api, clock.SYSTEM_CLOCK.monotonic() + PROBE_READ_TIMEOUT_S, evidence)
         if tor is None:
             # 可见超时与 API 异常都是环境性(qB 状态/连接问题, 与 FS 无关)
             reason = "torrent_invisible" if "error" not in evidence else "api_error"
@@ -339,7 +340,10 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
             api.torrents_recheck(torrent_hashes=[probe_hash])
         except Exception as e:  # noqa: BLE001 - recheck 被拒 = 环境性
             return _failed(evidence, "recheck_rejected", True, {"error": str(e)})
-        read_verdict = _read_progress_poll(api, probe_hash, time.monotonic() + PROBE_READ_TIMEOUT_S, evidence)
+        read_verdict = _read_progress_poll(
+            api, probe_hash,
+            clock.SYSTEM_CLOCK.monotonic() + PROBE_READ_TIMEOUT_S, evidence
+        )
         if read_verdict == "api_error":
             return _failed(evidence, "api_error", True)
         if read_verdict != "ok":
@@ -352,7 +356,7 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
             return _failed(evidence, "set_location_rejected", True, {"error": str(e)})
         verdict = _write_proof_poll(
             local_dst_file, local_src_file, expect_sha, len(content),
-            time.monotonic() + PROBE_WRITE_TIMEOUT_S
+            clock.SYSTEM_CLOCK.monotonic() + PROBE_WRITE_TIMEOUT_S
         )
         if verdict != "ok":
             extra = {}
@@ -362,7 +366,7 @@ def run_probe(ctx, src: str, dst: str) -> ProbeResult:
                 extra["src_present"] = True
             return _failed(evidence, "write_mismatch" if verdict == "mismatch" else "write_proof_timeout", False, extra)
         evidence["write_ok"] = True
-        evidence["elapsed_s"] = round(time.monotonic() - started, 3)
+        evidence["elapsed_s"] = round(clock.SYSTEM_CLOCK.monotonic() - started, 3)
         return ProbeResult(STATUS_PASSED, "ok", False, evidence)
     finally:
         # e. 清理(所有出口都走): deleteFiles -> 轮询种子消失 -> rmtree 两侧临时目录(本机侧)

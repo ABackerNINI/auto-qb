@@ -168,8 +168,8 @@ def _spy_sample_rounds(monkeypatch, clock) -> list:
 
 # ---------- 开放游程 + 批量落盘(plan 26-10-04-1957 S2a §3.2/§3.3) ----------
 class _Clock:
-    """可控时钟: 替换采样模块内的 time 名(monkeypatch 只换 traffic_sample_mod 的引用,
-    不影响 store 等其它模块), 逐轮推进采样时刻"""
+    """可控假钟: .now 是浮点(测试自由赋值/advance), .time() 是旧「换模块 time 名」形态的
+    兼容面(S3 迁删); 注入生产取时单点位须经 _as_clock 适配 Clock 协议"""
     def __init__(self, now: float = 1_700_000_000.0):
         self.now = now
 
@@ -178,6 +178,22 @@ class _Clock:
 
     def advance(self, seconds: float) -> None:
         self.now += seconds
+
+
+class _AsClock:
+    """_Clock/_FakeLoopTime -> Clock 协议适配: 实时镜像宿主假钟的浮点 .now(非快照)"""
+    def __init__(self, c):
+        self._c = c
+
+    def now(self) -> float:
+        return self._c.now
+
+    def monotonic(self) -> float:
+        return self._c.now
+
+
+def _as_clock(c):
+    return _AsClock(c)
 
 
 def _idle_state(**overrides) -> dict:
@@ -332,5 +348,5 @@ def _w5_mgr(tmp_path, monkeypatch, clock, **conf_kw):
     """W5 守阵公共装配: 固定时钟 + 30s 采样档(键可覆盖)"""
     kw = {"enabled": True, "sample_interval": 30, "flush_interval": 10**9}
     kw.update(conf_kw)
-    monkeypatch.setattr(ts_mod, "time", clock)
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
     return _mgr_with_traffic(tmp_path, QbTraffic(**kw))

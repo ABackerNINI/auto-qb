@@ -31,10 +31,10 @@ RuleEngineMixin(状态持久化已于 P0 迁 core/state.py)整体迁入, 相位/
     (内核刷新轮把它收敛到 events_removed/events_added 两个相位)。
 """
 import logging
-import time
 from typing import List, Optional
 
 from ...config.compat import normalize_action_entry
+from ...infra.clock import SYSTEM_CLOCK, Clock
 from ...rules import Rule, RuleContext
 from ...rules.base import VERDICT_RETRY
 from ..module import AppContext, ApplyResult, BaseModule
@@ -154,9 +154,11 @@ class RulesModule(BaseModule):
 
     name = "rules"
 
-    def __init__(self, manager) -> None:
+    def __init__(self, manager, clock: Optional[Clock] = None) -> None:
         # Rule/RuleContext 的宿主面(见模块 docstring): 规则动作仍按 QbManager 消费
         self._manager = manager
+        # 取时注入(D8): 任务重入队 next_run 用挂钟; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # 规则结构(规则加载在 run() 中进行: --export-yaml 等只导出模式不需要)
         self.rules: List[Rule] = []
         self.enabled_rules: List[Rule] = []
@@ -526,7 +528,7 @@ class RulesModule(BaseModule):
         if verdict == VERDICT_RETRY and self._ctx.task_queue is not None:
             task.attempt += 1
             # 带断点按 backoff 推迟重入队(add_task 的 now 即 next_run; keep_progress 保断点)
-            self._ctx.task_queue.add_task(task, now=time.time() + task.retry_delay, keep_progress=True)
+            self._ctx.task_queue.add_task(task, now=self._clock.now() + task.retry_delay, keep_progress=True)
         return task
 
     def _handle_event_rule(self, rule: Rule, task: Task, snapshot, dry_run: bool) -> bool:
@@ -590,7 +592,7 @@ class RulesModule(BaseModule):
             return False
 
         # 创建内置种子任务(handler 经 ctx.maintenance 模块句柄取, 不 import 兄弟模块)
-        now = time.time()
+        now = self._clock.now()
         queue.add_task(
             Task(
                 "internal",

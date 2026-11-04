@@ -3,7 +3,6 @@
 拆分(R5)只搬位置: 方法体与 relocate_mod.py 原文件逐字一致。
 """
 import os
-import time
 from dataclasses import replace
 
 from ...infra import alias_fs, file_access, relocate_journal, utils
@@ -72,7 +71,7 @@ class ExecMixin:
                 self._fail(job, "move_rejected", f"setLocation 被拒: {e}")
                 return
             rt["issue"] = False
-            rt["started"] = time.monotonic()
+            rt["started"] = self._clock.monotonic()
             rt["sample_ts"] = 0.0
             rt["last_size"] = -1
             rt["stall_since"] = 0.0
@@ -80,7 +79,7 @@ class ExecMixin:
             logger.info(f"relocate | job {job.job_id}: 已下发 qB 搬迁(mover {job.mover[:8]} -> {job.dst})")
             return
 
-        now = time.monotonic()
+        now = self._clock.monotonic()
         moving = "moving" in str(getattr(mover, "state", "") or "").lower()
         interval = 5.0 if job.phase == ru.PHASE_MOVING else 30.0
         if now - float(rt.get("sample_ts") or 0.0) >= interval:
@@ -311,7 +310,7 @@ class ExecMixin:
             except Exception as e:  # noqa: BLE001 - 重归组失败不影响落账(下轮 save_path 变化还会再归)
                 logger.warning(f"relocate | job {job.job_id}: 重归组失败({e})")
         # attempts 归零: 重建链接成功即本轮重试周期结束, 上次的历史失败不该占着下次的配额
-        armed = replace(job, phase=ru.PHASE_ARMED, armed_at=time.time(), reason="", attempts=0)
+        armed = replace(job, phase=ru.PHASE_ARMED, armed_at=self._clock.now(), reason="", attempts=0)
         self._set_job(armed)
         self._spawn_guardian(armed)
         self._resume_members(armed)
@@ -342,7 +341,7 @@ class ExecMixin:
 
     def _qb_up(self) -> bool:
         """「qB 在?」= 连得上(三证之一); 结果缓存 10s, 免得每 tick 一次请求"""
-        now = time.monotonic()
+        now = self._clock.monotonic()
         cached = self._qb_up_cache
         if cached is not None and now - cached[0] < 10.0:
             return cached[1]
@@ -394,8 +393,8 @@ class ExecMixin:
         # 搬过去的, 用它会把自己刚武装的 job 立刻判成 done)
         at_dst = self._all_at_dst(job)
         hb = journal.get("ts")
-        heartbeat_age = max(0.0, time.time() - float(hb)) if hb else float("inf")
-        elapsed = time.time() - float(job.armed_at or job.updated_at or time.time())
+        heartbeat_age = max(0.0, self._clock.now() - float(hb)) if hb else float("inf")
+        elapsed = self._clock.now() - float(job.armed_at or job.updated_at or self._clock.now())
         conf = self._live_conf()
         action = ru.reconcile(
             job,
@@ -419,7 +418,12 @@ class ExecMixin:
             return
         if action == ru.ACT_REVERT_INTENT:
             logger.info(f"relocate | job {job.job_id}: 删别名期间 qB 回来了 —— 撤销删除意图, 回 armed")
-            relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_ARMED, "ts": time.time()})
+            relocate_journal.write_journal(
+                self._data_dir(), job.job_id, {
+                    "phase": ru.PHASE_ARMED,
+                    "ts": self._clock.now()
+                }
+            )
             self._set_job(replace(job, phase=ru.PHASE_ARMED))
             self._respawn_guardian(job, rt)
             return
@@ -435,10 +439,10 @@ class ExecMixin:
             # None = 从未重建过, 不吃退避; 旧写法 or 0.0 会把开机后前 REBUILD_BACKOFF 秒全算成退避窗口
             # (monotonic 0 点是开机时刻, 见 pitfalls/testing/monotonic-warn-sentinel.md, issue 26-10-31-0932)
             rebuild_ts = rt.get("rebuild_ts")
-            if rebuild_ts is not None and time.monotonic() - float(rebuild_ts) < ru.REBUILD_BACKOFF:
+            if rebuild_ts is not None and self._clock.monotonic() - float(rebuild_ts) < ru.REBUILD_BACKOFF:
                 logger.debug(f"relocate | job {job.job_id}: 重建链接退避中(距上次 < {ru.REBUILD_BACKOFF}s), 本轮跳过")
                 return
-            rt["rebuild_ts"] = time.monotonic()
+            rt["rebuild_ts"] = self._clock.monotonic()
             logger.warning(f"relocate | job {job.job_id}: 链接不在而 qB 在线(删的时候 qB 其实在跑) —— 重建链接")
             rt["stage"] = "link"
             rt["link_pos"] = 0
@@ -446,7 +450,12 @@ class ExecMixin:
             job = replace(job, phase=ru.PHASE_MOVED, alias_paths=(), reason="")
             self._set_job(job)
             # 意图回滚: journal 也退回 armed —— 否则旧「removed」会反复把 job 拉回收尾判定
-            relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_ARMED, "ts": time.time()})
+            relocate_journal.write_journal(
+                self._data_dir(), job.job_id, {
+                    "phase": ru.PHASE_ARMED,
+                    "ts": self._clock.now()
+                }
+            )
             if self._build_links(job, rt):
                 rt["stage"] = "penetrate"
             return
@@ -461,7 +470,7 @@ class ExecMixin:
                 self._fail(job, "finalize_rejected", str(e))
                 return
             rt["finalize"] = list(members)
-            rt["finalize_ts"] = time.time()
+            rt["finalize_ts"] = self._clock.now()
             self._set_job(replace(job, phase=ru.PHASE_FINALIZING))
             return
         if action == ru.ACT_FAILED_GONE:
@@ -477,7 +486,12 @@ class ExecMixin:
         if action == ru.ACT_DONE_EXTERNAL:
             self._set_job(replace(job, phase=ru.PHASE_DONE, reason="external"))
             # 通知 guardian 退休: 否则已终结 job 的守护进程会永远每 10s 写心跳
-            relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_DONE, "ts": time.time()})
+            relocate_journal.write_journal(
+                self._data_dir(), job.job_id, {
+                    "phase": ru.PHASE_DONE,
+                    "ts": self._clock.now()
+                }
+            )
             return
         logger.debug(f"relocate | job {job.job_id}: 对账动作 {action} 无处置")
 
@@ -520,13 +534,13 @@ class ExecMixin:
                 ok = False
         if not ok:
             conf = self._live_conf()
-            if time.time() - float(rt.get("finalize_ts") or time.time()) > float(
+            if self._clock.now() - float(rt.get("finalize_ts") or self._clock.now()) > float(
                 getattr(conf, "finalize_timeout", 0) or 0
             ):
                 self._fail(job, "finalize_timeout")
             return
         self._set_job(replace(job, phase=ru.PHASE_DONE, reason="finalized"))
-        relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_DONE, "ts": time.time()})
+        relocate_journal.write_journal(self._data_dir(), job.job_id, {"phase": ru.PHASE_DONE, "ts": self._clock.now()})
         logger.info(f"relocate | job {job.job_id}: 收尾完成({len(targets)} 个成员已到目标位置)")
 
     # ---------- P3 执行入口(三入口共用) ----------
@@ -773,7 +787,7 @@ class ExecMixin:
                 self._ctx.api.torrents_pause(torrent_hashes=running)
             except Exception as e:  # noqa: BLE001 - 暂停失败不继续: 搬迁窗口必须先把组按住
                 return {**verdict, "cls": "blocked", "reasons": [{"gate": "pause_failed", "text": f"暂停成员失败: {e}"}]}
-        stamp = time.time()  # 设置位置发起时刻: created_at 与首笔 updated_at 同一窗口, 不取两次
+        stamp = self._clock.now()  # 设置位置发起时刻: created_at 与首笔 updated_at 同一窗口, 不取两次
         job = RelocateJob(
             job_id=job_id,
             hashes=tuple(r.hash for r in records),
@@ -798,7 +812,7 @@ class ExecMixin:
         self._jobs[job_id] = job
         self._rt[job_id] = {
             "issue": True,
-            "started": time.monotonic(),
+            "started": self._clock.monotonic(),
             "sample_ts": 0.0,
             "last_size": -1,
             "stall_since": 0.0
@@ -870,7 +884,7 @@ class ExecMixin:
             return {"cls": "blocked", "cost": cost, "reasons": [{"gate": "cancel_failed", "text": f"搬回被拒: {e}"}]}
         cancelled = self._set_job(replace(job, phase=ru.PHASE_CANCELLED, alias_paths=(), reason="cancelled"))
         # 通知 guardian 退休(它可能在等 qB 退出; 撤销后没有它要干的活了)
-        relocate_journal.write_journal(self._data_dir(), job_id, {"phase": ru.PHASE_CANCELLED, "ts": time.time()})
+        relocate_journal.write_journal(self._data_dir(), job_id, {"phase": ru.PHASE_CANCELLED, "ts": self._clock.now()})
         self._resume_members(cancelled)
         return {"cls": "ok", "cost": cost, "job_id": job_id, "phase": ru.PHASE_CANCELLED}
 
@@ -900,7 +914,7 @@ class ExecMixin:
         退避窗口内跳过 —— 判断依据(心跳/链接/qB)没变, 下一轮还会判到同一个动作;
         首次拉起(rt 无记录)不受退避影响, 与「刚武装」时的 _spawn_guardian 直调同口径。
         """
-        now = time.monotonic()
+        now = self._clock.monotonic()
         # None = 首拉不受退避(方法 docstring 口径); 旧写法 or 0.0 会把开机后前 RESPAWN_BACKOFF 秒全算成退避窗口
         # (monotonic 0 点是开机时刻, 见 pitfalls/testing/monotonic-warn-sentinel.md, issue 26-10-31-0932)
         respawn_ts = rt.get("respawn_ts")

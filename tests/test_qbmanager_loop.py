@@ -41,6 +41,8 @@ import pytest
 
 from qbittorrentapi import APIConnectionError, Client
 
+from traffic_sample_support import _as_clock
+
 from auto_qb.config import QbittorrentConfig
 
 from auto_qb.config import PathMapEntry
@@ -211,7 +213,7 @@ def test_periodic_flush_is_wired_in_run_loop():
     i_hook = src.find("maybe_flush")
     assert i_hook >= 0, "run() 必须接线周期落盘"
     assert "not dry_run" in src[max(0, i_hook - 200):i_hook], "周期落盘必须在 not dry_run 门内(dry-run 零磁盘写入)"
-    assert "self.ctx.state.next_flush_at = time.time()" in src, "run() 加载状态后必须重置周期落盘到期点"
+    assert "self.ctx.state.next_flush_at = self._clock.now()" in src, "run() 加载状态后必须重置周期落盘到期点(S2 时钟注入后的字面)"
 
 
 def test_run_stopiteration_from_tick_not_swallowed():
@@ -387,7 +389,6 @@ def test_hr_bind_error_on_start_releases_lock_and_skips_state():
 
 class _FakeLoopTime:
     """可步进的假时钟(纪元取 2027 年附近, 避开 Windows 1970 邻域 timestamp OSError 坑)"""
-
     def __init__(self, start=1_800_000_000.0):
         self.now = start
 
@@ -407,13 +408,15 @@ def test_run_cmd_driven_sync_not_by_time_keeps_next_sync(monkeypatch):
     假时钟 + _wait_next 步进直驱: 唤醒时刻不再是真实挂钟, 分支判据(轮次到点关系)确定化"""
     from auto_qb.core import qbmanager as qbm
 
+    clock = _FakeLoopTime()
+    # 注入须先于 QbManager 构造(缺省钟在构造期解析模块属性; 旧「换模块 time 名」在调用期
+    # 生效, 时序等价面 = 构造前替换)
+    monkeypatch.setattr(qbm, "SYSTEM_CLOCK", _as_clock(clock))
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.connect = mock.Mock(return_value=True)
         mgr.config.sync_interval = 1.5
         mgr.config.main_tick = 2.0
-        clock = _FakeLoopTime()
-        monkeypatch.setattr(qbm, "time", clock)
 
         steps = iter([1.8, 0.2, 1.0, 1.0])  # 各轮推进量: 1001.8 / 1002 / 1003 / 1004
 

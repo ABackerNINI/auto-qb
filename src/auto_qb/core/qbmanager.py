@@ -45,6 +45,7 @@ from ..config import Config, load_config
 from ..config.writer import materialize_schema_migration
 from ..infra import file_access
 from ..infra.errors import AutoQbError
+from ..infra.clock import SYSTEM_CLOCK, Clock
 from ..infra.locking import SingleInstanceLock
 from .module import AppContext, EventBus, ModuleHost
 from .modules import (
@@ -137,9 +138,9 @@ def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Even
     if stop_event is None:
         wake_event.wait(timeout)
         return False
-    deadline = time.time() + timeout
+    deadline = SYSTEM_CLOCK.now() + timeout  # 叶子函数: 走取时单点(D8); 原 time.time() 挂钟语义
     while True:
-        remaining = deadline - time.time()
+        remaining = deadline - SYSTEM_CLOCK.now()
         if remaining <= 0:
             return False
         if wake_event.wait(min(remaining, STOP_POLL_INTERVAL)):
@@ -152,8 +153,18 @@ class QbManager(
     WebviewMixin,
     WebCommandsMixin,
 ):
-    def __init__(self, config_path: str, config: Config = None, no_lock: bool = False):
+    def __init__(
+        self,
+        config_path: str,
+        config: Config = None,
+        no_lock: bool = False,
+        clock: Optional[Clock] = None,
+    ):
         self.config_path = config_path
+        # 取时注入(D8 构造期统一制): 缺省系统时钟单点(经模块属性现取 —— 旧测试按模块换
+        # 假钟的寻址位, S3 收敛为显式 FakeClock 注入后可改回求值期默认)。各组件各自持钟,
+        # 不由本类向下传递: 存量测试按模块替换假钟的生效面依赖这一点。
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
         # ctx, 本类同名属性自此刻起全部委托 ctx(单一真相; 见下方服务委托属性区)。
         self.ctx = AppContext(config or load_config(config_path))
@@ -374,7 +385,7 @@ class QbManager(
         每 tick 无脑重连在 qB 宕机时是纯空转: 一次 connect() 要重建 Client(含 netrc /
         代理解析), 2s 一次既刷不到有用日志也不加快恢复。恢复后由 _reset_reconnect_backoff 归零。
         """
-        now = time.monotonic()
+        now = self._clock.monotonic()
         if now < self._reconnect_at:
             return False
         base = self._reconnect_interval or main_tick
@@ -518,7 +529,7 @@ class QbManager(
             # 此处已持锁(与 __init__ 的 cleanup_orphan_tmp 同判据); __init__ 的早期加载只做内存迁移。
             self.ctx.state.materialize_migration(dry_run)
             # 周期落盘起点: 刚从磁盘加载过, 到期点从现在起算一个完整间隔(避免启动即无意义重写)
-            self.ctx.state.next_flush_at = time.time() + max(self.config.state_save_interval, 0.0)
+            self.ctx.state.next_flush_at = self._clock.now() + max(self.config.state_save_interval, 0.0)
             self.host.get("rules").load_rules()
 
             try:
@@ -561,7 +572,7 @@ class QbManager(
                     # 走模块 hook(与命令线/同步线/任务线同款): 内核只知「何时」, 不知「何事」;
                     # 放在暂停判断之后 —— 暂停 = 完全旁观, 不在此时对 qB 发写命令。
                     self.host.run_micro_line(dry_run)
-                    now = time.time()
+                    now = self._clock.now()
                     # P0-5: 本批命令改了 qB 种子状态 -> 立即同步一次, 让真实状态在几十毫秒内
                     # 进快照(不必等下个节拍)。整批只补一次: sync_due 为真时本轮至多跑一次刷新。
                     # dry_run 不补(只观察); 暂停时上面已 continue(暂停 = 完全旁观)。
@@ -586,7 +597,7 @@ class QbManager(
                         # 命令驱动的那一轮顺带计时: 「补刷新」是用户感知延迟的第三段
                         # (前两段 排队/执行 由门面的 _log_cmd_timing 落日志)。
                         # 真值在这一段结束才进快照 —— 前端乐观 UI 撤下要等的就是它。
-                        _t_line = time.time() if (cmd_changed_state and not dry_run) else 0.0
+                        _t_line = self._clock.now() if (cmd_changed_state and not dry_run) else 0.0
                         _ran_line = False  # 本轮是否真有线跑成功(连接恢复检测的门, 26-10-31-1029)
                         if self.client is None and self._last_conn_ok is False:
                             # 断连稳态: 追平无从兑现(本分支不跑同步线), 先作废待办 ——
@@ -608,25 +619,25 @@ class QbManager(
                                 self._sync_line(dry_run, force=cmd_forced)
                             # 线没跑也要推进两条时间线: 否则 next_sync_at 停在过去的到期值,
                             # wait_for 恒算出 0, while True 立即进下一拍空转(26-10-02-0728 同款判据)
-                            next_sync_at = time.time() + sync_interval
-                            next_tick_at = time.time() + main_tick
+                            next_sync_at = self._clock.now() + sync_interval
+                            next_tick_at = self._clock.now() + main_tick
                         elif sync_due and tick_due:
                             self._tick(dry_run, force=cmd_forced)
                             _ran_line = True
-                            next_tick_at = time.time() + main_tick
+                            next_tick_at = self._clock.now() + main_tick
                             # 补刷新只在「按时到的」或「这次真拿到了变化」时才重设同步节拍:
                             # 读到同一份节流缓存的白刷不能把下一次校正推后一个周期(S4)
                             if sync_due_by_time or self._sync_moved():
-                                next_sync_at = time.time() + sync_interval
+                                next_sync_at = self._clock.now() + sync_interval
                         elif sync_due:
                             self._sync_line(dry_run, force=cmd_forced)
                             _ran_line = True
                             if sync_due_by_time or self._sync_moved():
-                                next_sync_at = time.time() + sync_interval
+                                next_sync_at = self._clock.now() + sync_interval
                         elif tick_due:
                             self._task_line(dry_run, force=cmd_forced)
                             _ran_line = True
-                            next_tick_at = time.time() + main_tick
+                            next_tick_at = self._clock.now() + main_tick
                         # !无条件落"推迟的回执"(哪怕本轮没跑补刷新 / dry_run):
                         # 漏调会让前端 waitCmd 干等 40s。放在补刷新**之后**是刻意的 ——
                         # 回执带上此刻的真值, 前端就不必再拉一次全量 /api/state。
@@ -639,12 +650,12 @@ class QbManager(
                         # 状态全丢; 间隔 state_save_interval(0=关闭), dry-run 不落盘(与退出路径
                         # `if not dry_run` 口径一致), 暂停分支已在上面 continue(暂停期无变更)。
                         if not dry_run:
-                            self.ctx.state.maybe_flush(time.time(), self.config.state_save_interval)
+                            self.ctx.state.maybe_flush(self._clock.now(), self.config.state_save_interval)
                         # 还在等真值落地 ⇒ 下一轮**立刻**再同步一次(不再等 sync_interval)。
                         # 有 TRUTH_PUSH_CAP_MS 兜底, 不会无限空转。
                         # web 真值弧单测不可达(truth_pending 仅 web 启用时非空; 26-10-02-0441)
                         if _wait_truth and getattr(self.web, "truth_pending", None):  # pragma: no cover
-                            next_sync_at = time.time() + TRUTH_RETRY_S
+                            next_sync_at = self._clock.now() + TRUTH_RETRY_S
                         # 添加种子后的有界追平(issue 26-10-30-0626 候选 A): qB 的 add 是四跳
                         # 异步管线(sessionimpl.cpp:3113-3171), 命令后那次补刷新距 add 返回仅
                         # 0.5~0.8ms, 必然落在管线中间 -> 这一批只进来一部分。store 登记了还没
@@ -689,7 +700,7 @@ class QbManager(
                         # StopIteration 已重抛、APIConnectionError 走 _reconnect_due, 均不在此列)。
                         # 两条时间线一起推到 max(原值, now + main_tick): 失败的线最早下个节拍重试
                         # (退避起步与 _reconnect_due 口径一致); max 不把尚未到期的时间线往回拨。
-                        _backoff = time.time() + main_tick
+                        _backoff = self._clock.now() + main_tick
                         next_sync_at = max(next_sync_at, _backoff)
                         next_tick_at = max(next_tick_at, _backoff)
                     # 兜底: 上面任何一条线抛异常时也要把推迟的回执落掉 —— 漏写会让前端 waitCmd
@@ -703,7 +714,7 @@ class QbManager(
                     wake_at = min(next_sync_at, next_tick_at)
                     if ops_next is not None:
                         wake_at = min(wake_at, ops_next)
-                    wait_for = max(0.0, wake_at - time.time())
+                    wait_for = max(0.0, wake_at - self._clock.now())
                     if _wait_next(stop_event, self._wake_event, wait_for):
                         logger.info("收到停止信号, 退出主循环")
                         break
@@ -824,7 +835,7 @@ class QbManager(
         只在 Web 客户端活跃时才有意义 —— 门控在 webui 模块与门面里, 内核只负责在节拍上
         调 on_task_line hook(plan P2), 收尾次序(预取 -> 发布 -> 索引)是模块内聚知识。
         """
-        now = time.time()
+        now = self._clock.now()
 
         self.task_queue.run_due(
             dry_run,

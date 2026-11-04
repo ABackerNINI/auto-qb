@@ -107,6 +107,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple, Optional
 
+from ..infra import clock
+
 logger = logging.getLogger(__name__)
 
 # ---------- 拆分件重导出(公开面保持: 旧 import 路径全部继续可用) ----------
@@ -215,7 +217,7 @@ def _warn_bad_lines(source: str, bad_lines: int, data_lines: int, torn_tail: boo
     bad = bad_lines - (1 if torn_tail else 0)
     if bad < _BAD_LINE_WARN_MIN_LINES or data_lines <= 0 or bad / data_lines <= _BAD_LINE_WARN_RATIO:
         return
-    now = time.monotonic()
+    now = clock.SYSTEM_CLOCK.monotonic()  # 叶子函数: 走取时单点(D8); 原 time.monotonic() 节流语义
     prev = _bad_line_warn_ts.get(source)
     if prev is not None and now - prev < _BAD_LINE_WARN_GAP_S:
         return

@@ -36,6 +36,8 @@ import os
 import time
 from typing import Optional
 
+from ...infra.clock import SYSTEM_CLOCK, Clock
+
 from ...rules.base import ActionResult
 from ...rules.checking_meta import (
     CHECK_RESULT_INTERVAL,
@@ -87,8 +89,10 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
 
     name = "ops"
 
-    def __init__(self, ctx: AppContext) -> None:
+    def __init__(self, ctx: AppContext, clock: Optional[Clock] = None) -> None:
         self._ctx = ctx
+        # 取时注入(D8): 本体与 SkipMixin 各取时点共用; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         # 在途跳检 job(相位机; 同步入口内联驱动, 异步入口由微步线推进)
         self._skip_jobs: dict = {}
         # 最近终态结果 {hash: ActionResult}(供规则侧/测试取异步终态, 也供进度事件回放);
@@ -232,7 +236,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
                     seen_checking=seen_checking,
                     progress=rec.progress,
                     baseline_progress=baseline_progress,
-                    elapsed=time.time() - submitted_at,
+                    elapsed=self._clock.now() - submitted_at,
                     giveup=CHECK_START_GIVEUP,  # 显式透传(与默认同值): 宽限上限保持 ops_mod 命名空间可打桩
                 )
                 if verdict is PollVerdict.WAITING:
@@ -277,7 +281,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
                     # 宽限耗尽仍未见校验启动: 判超时前先仲裁直查(D5, 事件驱动一次性)—— 快照
                     # 同步线可能暂停/滞后(暂停旁观 pause_event / 同步线故障), qB 可能真在校验
                     # 而快照看不见; 本生命周期内至多仲裁 1 次, 第二次宽限耗尽直接判败
-                    elapsed_now = time.time() - submitted_at  # 真实等待时长(日志用; 须在宽限重置前取)
+                    elapsed_now = self._clock.now() - submitted_at  # 真实等待时长(日志用; 须在宽限重置前取)
                     if not arbitrated:
                         arbitrated = True
                         try:
@@ -290,7 +294,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
                         if live and is_piece_checking(live[0].state):
                             # qB 实际在校验(快照看不见): 延长一次宽限, 重置窗口后继续纯快照观测
                             # (证据照常经闩/verdict 判定, 观测零 API 不变)
-                            submitted_at = time.time()
+                            submitted_at = self._clock.now()
                             logger.info(
                                 f"{prefix} {rec.log_repr} | "
                                 f"启动超时仲裁: qB 实际在校验而快照未见, 已等 {elapsed_now:.0f}s, 延长一次宽限继续观测"
@@ -320,7 +324,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
                 return FINISHED
 
         submitted = False  # recheck 是否发送成功(先登记后发送; 失败时轮询子任务据此消亡)
-        submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
+        submitted_at = self._clock.now()  # 校验启动宽限窗口起点(recheck 发送成功时刻)
         seen_checking = False  # 本轮询周期内是否观察到过生效证据(成功结论的必要背书)
         arbitrated = False  # 本轮询生命周期内是否已仲裁过(启动超时判败前的一次性直查, D5 至多 1 次)
         # (baseline_progress 取提交时的快照 progress, 见上方说明)
@@ -339,7 +343,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
         try:
             self._ctx.api.torrents_recheck(torrent_hashes=hash)
             submitted = True
-            submitted_at = time.time()
+            submitted_at = self._clock.now()
         except Exception as e:
             return ActionResult.fail(f"发送 recheck 失败: {e}")
         logger.info(f"{prefix} {self._ops_repr(tor)} | full-checking 校验已提交")
@@ -369,7 +373,7 @@ class OpsModule(SkipMixin, VerdictMixin, JobsMixin, BaseModule):
             "save_path": tor.save_path,
             "category": tor.category,
             "tags": tor.tags,
-            "ts": time.time(),
+            "ts": self._clock.now(),
         }
         self.save_state()
         return path

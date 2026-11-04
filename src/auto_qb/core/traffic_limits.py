@@ -50,11 +50,12 @@
 import logging
 import os
 import threading
-import time
+import time  # noqa: F401 - 存量测试经本模块的 time 属性 patch stdlib(test_traffic_limits 节流哨兵用例), 不可删
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Optional
 
+from ..infra.clock import SYSTEM_CLOCK, Clock
 from .traffic_store import DAT_SUFFIX, _validate_date, v4_epoch_date_str, v4_root_dir, v4_window_dates
 
 logger = logging.getLogger(__name__)
@@ -134,8 +135,10 @@ class SpeedLimitRecorder:
     上次成功写入的日期串(00:00 硬切判据)。失败轮两者都不推进(下一轮重试, 值不丢)。
     data_dir 为空(防御, 对齐 _feature_on 语义)= 记录器整体禁用(observe 零操作)。
     """
-    def __init__(self, data_dir: str) -> None:
+    def __init__(self, data_dir: str, clock: Optional[Clock] = None) -> None:
         self._data_dir = data_dir or ""
+        # 取时注入(D8): 节流间隔测量用 monotonic; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         self._last: Optional[tuple] = None
         self._last_date: Optional[str] = None
         self._bootstrapped = False
@@ -200,7 +203,7 @@ class SpeedLimitRecorder:
                 f.flush()
                 os.fsync(f.fileno())
         except OSError as exc:
-            now = time.monotonic()
+            now = self._clock.monotonic()
             if self._oswarn_ts is None or now - self._oswarn_ts >= _LIMITS_WARN_GAP_S:
                 self._oswarn_ts = now
                 logger.warning(f"限速历史 | {date_str}.dat 追加失败(本轮不记, 下轮重试): {exc}")
@@ -215,7 +218,7 @@ class SpeedLimitRecorder:
             self._day_events = 0
         self._day_events += 1
         if self._day_events > _LIMITS_DAILY_EVENT_WARN:
-            now = time.monotonic()
+            now = self._clock.monotonic()
             if self._guard_ts is None or now - self._guard_ts >= _LIMITS_GUARD_WARN_GAP_S:
                 self._guard_ts = now
                 logger.warning(f"限速历史 | {date_str} 事件数 {self._day_events} 超常(疑似外部高频改限速), "

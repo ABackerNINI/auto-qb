@@ -13,8 +13,8 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
   code-style 的数据例外保留, 不算代码用语。
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
-(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 161 处/43 文件 ·
- bind 位固定端口 0 处), 与守阵扫描逐条对得上。
+(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 71 处/27 文件
+[core 域 90 处/16 文件已随 S2 core 提交清零] · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
 """
 
 # ---------- ALLOW_SLEEP_TESTS: tests/ 裸 time.sleep 调用(AST 实调用, patch 字符串不算) ----------
@@ -94,143 +94,7 @@ ALLOW_SLEEP_TESTS: dict[str, dict[str, int]] = {
 
 # ---------- ALLOW_TIME_SRC: src/ 裸 time.time()/time.monotonic[_ns]() 直调(clock.py 本体路径豁免, 不进本表) ----------
 ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
-    # S2 core 域提交: 组件构造期注入 clock 后删除(1 处)
-    "src/auto_qb/core/modules/fuse_mod.py": {
-        "now = time.time()": 1
-    },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(6 处)
-    "src/auto_qb/core/modules/ops_mod.py":
-        {
-            "\"ts\": time.time(),": 1,
-            "elapsed=time.time() - submitted_at,": 1,
-            "elapsed_now = time.time() - submitted_at  # 真实等待时长(日志用; 须在宽限重置前取)": 1,
-            "submitted_at = time.time()": 2,
-            "submitted_at = time.time()  # 校验启动宽限窗口起点(recheck 发送成功时刻)": 1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(12 处)
-    "src/auto_qb/core/modules/ops_skip.py":
-        {
-            "deadline = time.monotonic() + (budget_ms / 1000.0)": 1,
-            "deadline = time.time() + SKIP_DRIVE_TIMEOUT": 1,
-            "if stepped >= budget_calls or time.monotonic() >= deadline:": 1,
-            "job.next_run = time.time()": 5,
-            "job.next_run = time.time() + (_SKIP_BACKOFF_MS[job.attempts] / 1000.0)": 1,
-            "now = time.time()": 3
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(20 处)
-    "src/auto_qb/core/modules/relocate_exec.py":
-        {
-            "\"started\": time.monotonic(),":
-                1,
-            "armed = replace(job, phase=ru.PHASE_ARMED, armed_at=time.time(), reason=\"\", attempts=0)":
-                1,
-            "elapsed = time.time() - float(job.armed_at or job.updated_at or time.time())":
-                2,
-            "heartbeat_age = max(0.0, time.time() - float(hb)) if hb else float(\"inf\")":
-                1,
-            "if rebuild_ts is not None and time.monotonic() - float(rebuild_ts) < ru.REBUILD_BACKOFF:":
-                1,
-            "if time.time() - float(rt.get(\"finalize_ts\") or time.time()) > float(":
-                2,
-            "now = time.monotonic()":
-                3,
-            "relocate_journal.write_journal(self._data_dir(), job.job_id, {\"phase\": ru.PHASE_ARMED, \"ts\": time.time()})":
-                2,
-            "relocate_journal.write_journal(self._data_dir(), job.job_id, {\"phase\": ru.PHASE_DONE, \"ts\": time.time()})":
-                2,
-            "relocate_journal.write_journal(self._data_dir(), job_id, {\"phase\": ru.PHASE_CANCELLED, \"ts\": time.time()})":
-                1,
-            "rt[\"finalize_ts\"] = time.time()":
-                1,
-            "rt[\"rebuild_ts\"] = time.monotonic()":
-                1,
-            "rt[\"started\"] = time.monotonic()":
-                1,
-            "stamp = time.time()  # 设置位置发起时刻: created_at 与首笔 updated_at 同一窗口, 不取两次":
-                1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(1 处)
-    "src/auto_qb/core/modules/relocate_lifecycle.py": {
-        "now = time.monotonic()": 1
-    },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(3 处)
-    "src/auto_qb/core/modules/relocate_mod.py":
-        {
-            "\"at\": int(time.time()),": 1,
-            "\"started\": time.monotonic(),": 1,
-            "job = replace(job, updated_at=time.time())": 1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(10 处)
-    "src/auto_qb/core/modules/relocate_probe.py":
-        {
-            "deadline = time.monotonic() + PROBE_CLEANUP_TIMEOUT_S": 1,
-            "evidence[\"elapsed_s\"] = round(time.monotonic() - started, 3)": 1,
-            "if time.monotonic() >= deadline:": 2,
-            "read_verdict = _read_progress_poll(api, probe_hash, time.monotonic() + PROBE_READ_TIMEOUT_S, evidence)": 1,
-            "started = time.monotonic()": 1,
-            "time.monotonic() + PROBE_WRITE_TIMEOUT_S": 1,
-            "tor = _await_probe_torrent(api, time.monotonic() + PROBE_READ_TIMEOUT_S, evidence)": 1,
-            "while time.monotonic() < deadline:": 2
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(2 处)
-    "src/auto_qb/core/modules/rules_mod.py":
-        {
-            "now = time.time()": 1,
-            "self._ctx.task_queue.add_task(task, now=time.time() + task.retry_delay, keep_progress=True)": 1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(1 处)
-    "src/auto_qb/core/modules/speed_curve_mod.py": {
-        "now = time.time()": 1
-    },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(6 处)
-    "src/auto_qb/core/modules/traffic_sample_mod.py":
-        {
-            "elapsed = time.time() - t0": 1,
-            "now = time.time()": 3,
-            "self._agg_flush_all(time.time())": 1,
-            "t0 = time.time()": 1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(1 处)
-    "src/auto_qb/core/modules/traffic_snapshot_mod.py": {
-        "view[\"ts\"] = time.time()": 1
-    },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(17 处)
-    "src/auto_qb/core/qbmanager.py":
-        {
-            "_backoff = time.time() + main_tick": 1,
-            "_t_line = time.time() if (cmd_changed_state and not dry_run) else 0.0": 1,
-            "deadline = time.time() + timeout": 1,
-            "next_sync_at = time.time() + TRUTH_RETRY_S": 1,
-            "next_sync_at = time.time() + sync_interval": 3,
-            "next_tick_at = time.time() + main_tick": 3,
-            "now = time.monotonic()": 1,
-            "now = time.time()": 2,
-            "remaining = deadline - time.time()": 1,
-            "self.ctx.state.maybe_flush(time.time(), self.config.state_save_interval)": 1,
-            "self.ctx.state.next_flush_at = time.time() + max(self.config.state_save_interval, 0.0)": 1,
-            "wait_for = max(0.0, wake_at - time.time())": 1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(6 处)
-    "src/auto_qb/core/taskqueue.py":
-        {
-            "now = time.time() if now is None else now": 2,
-            "return None if ts is None else max(0.0, time.monotonic() - ts)": 1,
-            "self._active_checks[task.hash] = time.monotonic()": 1,
-            "self.created_at = time.time()": 1,
-            "self.uid = f\"{kind}:{name}:{hash}:{time.monotonic_ns()}\"": 1
-        },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(1 处)
-    "src/auto_qb/core/traffic_grid.py": {
-        "return build_grid(window, time.time(), sample_interval)": 1
-    },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(2 处)
-    "src/auto_qb/core/traffic_limits.py": {
-        "now = time.monotonic()": 2
-    },
-    # S2 core 域提交: 组件构造期注入 clock 后删除(1 处)
-    "src/auto_qb/core/traffic_store.py": {
-        "now = time.monotonic()": 1
-    },
+    # S2 core 域提交已完成(2026-11-05): 上表 16 文件 90 处已按 D8 构造期注入 clock 清零, 条目删净
     # S2 hr 域提交: 与 runtime.sleeper 等待注入口径对齐后删除(1 处)
     "src/auto_qb/hr/channel.py":
         {

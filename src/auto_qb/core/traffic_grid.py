@@ -37,10 +37,10 @@ totals 段(§05.1, 单系列与组共用差分层):
   在线」真值, 不借全局系列(组图 3d+ 窗 M 个成员各只读 1 个 agg 文件)。
 """
 import math
-import time
 from dataclasses import dataclass
 from typing import Optional
 
+from ..infra import clock
 from .traffic_store import (
     HOUR_SECONDS,
     V4ParsedAgg,
@@ -184,8 +184,8 @@ def build_month_grid(month_epochs: tuple, now: float) -> WindowGrid:
 
 
 def grid_for_now(window: str, sample_interval: float = DEFAULT_SAMPLE_INTERVAL_S) -> WindowGrid:
-    """以当前时刻建栅格(API 层入口; 纯函数版 build_grid 的现在时包装)"""
-    return build_grid(window, time.time(), sample_interval)
+    """以当前时刻建栅格(API 层入口; 纯函数版 build_grid 的现在时包装; 叶子取时走 clock 单点)"""
+    return build_grid(window, clock.SYSTEM_CLOCK.now(), sample_interval)
 
 
 @dataclass(frozen=True)

@@ -159,7 +159,7 @@ class SkipMixin:
         同时把 hash 登记进 `store.skipping_hashes`: 删除→重加窗口内 sync 若报 torrents_removed,
         `_apply` 不把它当删除(记录不摘、不触发分组删除链路) —— 窗口抑制的登记点。
         """
-        now = time.time()
+        now = self._clock.now()
         job = SkipJob(
             hash=hash,
             tor=tor,
@@ -185,12 +185,12 @@ class SkipMixin:
         每步一次调用, 等待用 `_SKIP_BACKOFF_MS` 退避; 总时长受 `SKIP_DRIVE_TIMEOUT` 约束。
         S3 起改为「提交即返回 + 主循环按 next_run_at 推进」, 本方法退化为同步驱动体。
         """
-        deadline = time.time() + SKIP_DRIVE_TIMEOUT
+        deadline = self._clock.now() + SKIP_DRIVE_TIMEOUT
         while not job.settled:
             self._skip_step(job)
             if job.settled:
                 break
-            now = time.time()
+            now = self._clock.now()
             if now >= deadline:
                 self._skip_fail(job, "跳检执行超时(客户端未在期限内响应), 备份保留")
                 break
@@ -284,16 +284,16 @@ class SkipMixin:
         """
         if not self._skip_jobs:
             return 0
-        now = time.time()
+        now = self._clock.now()
         due = sorted(
             (j for j in self._skip_jobs.values() if j.next_run <= now and not j.settled), key=lambda j: j.next_run
         )
         if not due:
             return 0
-        deadline = time.monotonic() + (budget_ms / 1000.0)
+        deadline = self._clock.monotonic() + (budget_ms / 1000.0)
         stepped = 0
         for job in due:
-            if stepped >= budget_calls or time.monotonic() >= deadline:
+            if stepped >= budget_calls or self._clock.monotonic() >= deadline:
                 break
             self._skip_step(job)
             stepped += 1
@@ -305,7 +305,7 @@ class SkipMixin:
         if job.attempts >= len(_SKIP_BACKOFF_MS):
             self._skip_fail(job, message)
             return False
-        job.next_run = time.time() + (_SKIP_BACKOFF_MS[job.attempts] / 1000.0)
+        job.next_run = self._clock.now() + (_SKIP_BACKOFF_MS[job.attempts] / 1000.0)
         return True
 
     def _skip_fail(self, job: SkipJob, message: str) -> None:
@@ -369,7 +369,7 @@ class SkipMixin:
             return
         job.phase = SKIP_PHASE_DELETING
         job.attempts = 0
-        job.next_run = time.time()
+        job.next_run = self._clock.now()
 
     def _skip_step_delete(self, job: SkipJob) -> None:
         """删除种子(保留文件); keep_record=True: 不动快照(见 QbApi.torrents_delete 注)"""
@@ -381,7 +381,7 @@ class SkipMixin:
         logger.info(f"ops[{job.source}] {job.tor.log_repr} | 跳检删除种子(保留文件)")
         job.phase = SKIP_PHASE_GONE
         job.attempts = 0
-        job.next_run = time.time()
+        job.next_run = self._clock.now()
 
     def _skip_step_gone(self, job: SkipJob) -> None:
         """确认消失(qB 删除是异步的; 存在性是会话级事实, 直查可靠)"""
@@ -393,7 +393,7 @@ class SkipMixin:
         if gone:
             job.phase = SKIP_PHASE_ADDING
             job.attempts = 0
-            job.next_run = time.time()
+            job.next_run = self._clock.now()
             return
         if not self._skip_retry(job, "删除后种子仍在客户端, 放弃跳检(重加会撞已存在的种子)"):
             return
@@ -410,7 +410,7 @@ class SkipMixin:
             return
         job.phase = SKIP_PHASE_APPEARED
         job.attempts = 0
-        job.next_run = time.time()
+        job.next_run = self._clock.now()
 
     def _skip_step_appeared(self, job: SkipJob) -> None:
         try:
@@ -421,7 +421,7 @@ class SkipMixin:
         if appeared:
             job.phase = SKIP_PHASE_FINISHING
             job.attempts = 0
-            job.next_run = time.time()
+            job.next_run = self._clock.now()
             return
         if not self._skip_retry(
             job, f"重加后未确认到种子(客户端可能尚未处理完), 请检查客户端; "

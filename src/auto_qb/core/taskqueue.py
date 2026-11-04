@@ -11,8 +11,9 @@
 """
 import heapq
 import logging
-import time
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Set, Tuple
+
+from ..infra.clock import SYSTEM_CLOCK, Clock
 
 if TYPE_CHECKING:
     from ..torrents import TorrentStore
@@ -65,8 +66,13 @@ class Task:
         interval: float = 0.0,
         payload: Any = None,
         handler: Handler = None,
+        clock: Optional[Clock] = None,
     ):
-        self.uid = f"{kind}:{name}:{hash}:{time.monotonic_ns()}"
+        if clock is None:
+            clock = SYSTEM_CLOCK  # 缺省系统时钟单点(经模块属性现取: 测试可换假钟, S3 收敛为显式注入)
+        # uid 唯一性后缀: 原 time.monotonic_ns() 的等价注入形态(monotonic 单调秒 x 1e9 取整,
+        # 同为 QPC 源; float 在常年 uptime 下量化仍远细于此钟粒度, 唯一性语义不变)
+        self.uid = f"{kind}:{name}:{hash}:{int(clock.monotonic() * 1e9)}"
         self.kind = kind
         self.name = name
         self.hash = hash
@@ -82,7 +88,7 @@ class Task:
         self.attempt = 0
         self.retry_delay = 0.0
         self.run_count = 0
-        self.created_at = time.time()
+        self.created_at = clock.now()
         self.payload = payload  # 可选: 任务附带数据(自定义)
         self.handler = handler  # 主循环执行任务时调用: handler(task, dry_run) -> REQUEUE/FINISHED
 
@@ -129,7 +135,9 @@ class TaskQueue:
       在完成后按情况重新入队(keep_progress=True 断点续跑 / 默认重置重走)
     - 无锁: 仅主循环线程修改队列结构
     """
-    def __init__(self):
+    def __init__(self, clock: Optional[Clock] = None):
+        # 取时注入(D8): 缺省系统时钟单点(经模块属性现取: 测试可换假钟, S3 收敛为显式注入)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         self._fast: List[Task] = []  # heapq: 所有按时间调度的任务
         # 在途校验登记: hash -> 登记时刻(monotonic)。集合语义(成员即"在途")+ 时刻供
         # 闸门判泄漏(active_check_age / checking_meta.INFLIGHT_TTL): 登记只在轮询任务
@@ -159,8 +167,8 @@ class TaskQueue:
         if task.kind == "check":
             if task.hash in self._active_checks:
                 return False
-            self._active_checks[task.hash] = time.monotonic()
-        now = time.time() if now is None else now
+            self._active_checks[task.hash] = self._clock.monotonic()
+        now = self._clock.now() if now is None else now
         task.interval = self._norm_interval(task.interval)
         task.next_run = now
         task.state = PENDING
@@ -217,7 +225,7 @@ class TaskQueue:
         任务被异常丢弃(队列重建等)时登记会残留 —— 时长超 TTL 由调用方判为泄漏并忽略。
         """
         ts = self._active_checks.get(hash)
-        return None if ts is None else max(0.0, time.monotonic() - ts)
+        return None if ts is None else max(0.0, self._clock.monotonic() - ts)
 
     # ---------- 到期执行 + 收尾 ----------
 
@@ -239,7 +247,7 @@ class TaskQueue:
         返回数只统计**真正执行**的任务: 让位者既没做事也没消耗 qB 请求预算, 计进返回数会
         让上面的速率语义(20 个/2s)在 own_write 窗口内失真(整组让位时窗口内接近空转)。
         """
-        now = time.time() if now is None else now
+        now = self._clock.now() if now is None else now
         due, deferred = self._pop_due(now, max_tasks, defer_gate)
         for task in due:
             if self._run_one(task, dry_run):

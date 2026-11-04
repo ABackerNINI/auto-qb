@@ -18,10 +18,10 @@ armed→triggered 与 pause 同拍批量加; 显式放行离开 triggered 与恢
 无标签仍重建 armed。所有标签读写都走 QbApi facade(登记自写期望, 不直连 raw client)。
 """
 import logging
-import time
 from collections import defaultdict
 from typing import Any, Dict, Iterable, List, Optional
 
+from ...infra.clock import SYSTEM_CLOCK, Clock
 from ..module import AppContext, BaseModule, PhaseEvent
 
 logger = logging.getLogger(__name__)
@@ -58,8 +58,10 @@ class FuseModule(BaseModule):
     """已完成种子下载保险丝: 三态状态机 + 哨兵限速 + 批量暂停(§3.1/§3.4/§3.5/§3.7)"""
     name = "fuse"
 
-    def __init__(self, ctx: AppContext) -> None:
+    def __init__(self, ctx: AppContext, clock: Optional[Clock] = None) -> None:
         self._ctx = ctx
+        # 取时注入(D8): armed_at 落盘时间戳用挂钟; 缺省单点经模块属性现取(测试可换假钟)
+        self._clock = SYSTEM_CLOCK if clock is None else clock
         self._dry_run = False
         # 无 state 条目的非零限速完成种子: 只在本轮内存里记连击(触发时才落条目)
         self._streak: Dict[str, int] = {}
@@ -100,7 +102,7 @@ class FuseModule(BaseModule):
         self._drop_missing(entries, store)
         tag = cfg.fuse_tag
         self._warn_tag_reuse(store, tag)
-        now = time.time()
+        now = self._clock.now()
         to_arm: List[str] = []
         to_adopt: List[str] = []
         to_pause: List[str] = []
