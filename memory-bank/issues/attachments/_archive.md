@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (50)
+## Open (51)
 
+- [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
 - [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](../26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 normpath 恒返回 '.', _within 的 if not s 守卫现实不可达; 覆盖率第三轮已用 _norm 替身钉住契约弧, 残留问题是守卫本身去留
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](../26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbmanager.py 619/624 补刷新闸注入三型变异全部存活: 用例观察窗在第 4 轮 KI 退出前, 重置节拍的可观测分歧落在窗后; 留待 mutants 审计兜底
@@ -57,13 +58,12 @@
 - [chore] [hatch-pet 调付费 OpenAI 图像 API 且无成本提示](../26-09-20-1427-chore-skill-hatch-pet-api-cost.html) — hatch-pet 生成图会直连 api.openai.com 计费接口, skill 未标注费用风险
 - [perf] [节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径](../26-09-19-2122-perf-webui-poll-gate-no-net-saving.html) — 节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档
 
-## In Progress (3)
+## In Progress (2)
 
-- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (413)
+## Done (414)
 
 - [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
 - [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
@@ -228,6 +228,7 @@
 - [refactor] [「无 HR 配置」缺省在 expr 再抄一份记录侧守卫](../26-10-29-1259-refactor-b-r17b01-hr-absent-default.html) — env._hr 自判 无 conf/无 hr 返 false, 与 record._hr_guard 的 未配 hr 不判定 重复; 可等价收敛为单一权威, satisfied 两侧差异另记
 - [bug] [parse_speed 单位表缺白名单兜底: 配置写 1iB/s 抛 KeyError 逃出校验层, 用户只见 traceback](../26-10-29-1252-bug-b-r18b01-parse-unit-ladder.html) — parse_speed 正则允许 'iB/S' 但单位表无此键 → KeyError 不被 _try(ValueError) 捕获; 三份解析器单位阶梯同构可一并收敛
 - [bug] [流量卡「启用」开关恒显启用且无法保存: aq-fold 缺 ce 透传, hub-field 注入到空 cfg 树](../26-10-22-0435-bug-webui-aq-fold-ce-inject-break.html) — aq-fold 未按既有范式透传 ce, 折叠段内 hub-field 注入到带空 cfg 树的组件实例: 字段只显 schema 默认值、编辑不进根树。磁盘 traffic_source.enabled=false 时开关恒显「启用」, 拨动不脏树、「保存并应用」不出现, 重启无效
+- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](../26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线
 - [test] [守阵扫描面窄于验收口径: 计划写「全库」而机检只扫 qbapi/store 两个文件](../26-10-21-2232-test-guard-scope-narrower-than-acceptance.html) — 计划 26-10-13-0540 §10 验收要求「全库无合成 state 值」, 但 S1 静态守阵 test_no_synthetic_state_write_site 只扫 qbapi.py/store.py; ops_mod 的 _skip_readd 直查回写因此在机检全绿下漏网(直到 26-10-21 S2 才删)
 - [bug] [写操作门面在命令返回后直接改写快照: 删除摘记录 + 确定性字段写后同步的边界未定义](../26-10-21-1813-bug-qbapi-write-facade-store-writes.html) — QbApi 的写方法以「命令已生效」为前提立即改 store: 删除摘记录(计划全文未涉及) + 确定性字段(限速/路径)的写后同步边界从未定义; tags/category 属 A 系计划 §11 明文非目标, 不算缺陷
 - [bug] [P0-5 命令驱动补刷新: 写命令后强制立即 sync, 假定命令返回时 qB 状态已变](../26-10-21-1812-bug-cmd-driven-resync.html) — cmd_changed_state 使 sync_due 立即为真(qbmanager.py:549), 但 qB 状态按自身节拍刷新, 立即补刷新读到的仍是命令前状态; 同时把下一次自然刷新推迟一个 interval, 校正反而更晚

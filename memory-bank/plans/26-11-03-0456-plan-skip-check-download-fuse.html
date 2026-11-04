@@ -10,7 +10,7 @@
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-0456">
 <meta name="doc-updated" content="26-11-03-0956">
-<meta name="doc-refs" content="memory-bank/issues/26-10-22-0308-feat-ops-skip-check-download-cost.html">
+<meta name="doc-refs" content="memory-bank/issues/26-10-22-0308-feat-ops-skip-check-download-cost.html, memory-bank/issues/26-11-05-0514-question-skip-check-sampling-value.html">
 <style>
   :root {
     --bg: #10151a;
@@ -257,7 +257,7 @@
   <tr><td><code>confirm_ticks</code></td><td>int</td><td>3</td><td>1..20</td><td>连续多少拍 <code>dlspeed&gt;0</code> 才暂停</td></tr>
   <tr><td><code>fuse_tag</code></td><td>str</td><td>zFusePaused</td><td>非空字符串</td><td>触发标记名；默认值即保留名，改值需同步排除规则与文档</td></tr>
 </table>
-<h4>去掉的键与理由</h4>
+<h3>去掉的键与理由</h3>
 <table>
   <tr><th>去掉</th><th>理由</th></tr>
   <tr><td><code>scope</code></td><td>只有一种作用域（全部已完成）。留一个键只会让「默认到底覆盖什么」重新变成问题。</td></tr>

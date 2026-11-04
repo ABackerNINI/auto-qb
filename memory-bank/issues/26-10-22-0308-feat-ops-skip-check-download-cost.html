@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-22-0308">
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="skip-check-arch">
-<meta name="doc-refs" content="memory-bank/reports/26-10-22-0234-report-skip-check-arch.html, memory-bank/plans/26-11-03-0456-plan-skip-check-download-fuse.html">
+<meta name="doc-refs" content="memory-bank/reports/26-10-22-0234-report-skip-check-arch.html, memory-bank/plans/26-11-03-0456-plan-skip-check-download-fuse.html, memory-bank/issues/26-11-05-0514-question-skip-check-sampling-value.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="In Progress">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量">
 <meta name="issue-summary" content="跳检在数据不完整时仍宣告 seeder，撞坏片即触发全量重校验并重新下载，下载量不可逆；缺抽样校验与下载限速保险丝两道防线">
 <title>跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量 · feat · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-22-0308-feat-ops-skip-check-download-cost</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-22 03:08</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">In Progress</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -202,11 +202,13 @@ set_have_all(false);
     <ul>
       <li>2026-10-22 03:08 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-11-03 — <strong>用户指派认领</strong>，状态 → <strong>In Progress</strong>；本轮只做「下载限速保险丝」，抽样校验明确不在本轮。计划：<a href="26-11-03-0456-plan-skip-check-download-fuse.html">26-11-03-0456-plan-skip-check-download-fuse.html</a>（Open，待拍板 D01–D10）</li>
+      <li>2026-11-05 — 计划 26-11-03-0456 实施<strong>完成并收口</strong>（含收口评审修复 6 项与 <a href="26-11-05-0200-bug-fuse-untag-none-client-guard.html">26-11-05-0200</a> 摘标签守卫补丁），状态 → <strong>Done</strong>；实际修法/验证方式见下方「修复后补充」。抽样校验（建议修法第 1 条）不在本轮指派范围，仍未实施——<strong>故意不做</strong>，是否值得做已挂账 <a href="26-11-05-0514-question-skip-check-sampling-value.html">26-11-05-0514-question-skip-check-sampling-value.html</a></li>
     </ul>
     <h3>复验</h3>
     <p>2026-11-03 认领时复验：<strong>仍复现</strong>——跳检重加仍按原 <code>download_limit=tor.dl_limit</code> 加种（<code>ops_mod.py:1043</code>），无任何下载量上限或熔断；仓库内亦无相关配置键与状态字段。本轮产出为计划，未改产品代码。</p>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h3>修复后补充（2026-11-05 · 下载限速保险丝）</h3>
+    <p><strong>实际修法</strong>：与建议修法第 2 条同向但实现改道——不是加种时带极小 <code>dlLimit</code>，而是<strong>后置武装</strong>：新增 <code>src/auto_qb/core/modules/fuse_mod.py</code>，对「已完成 + <code>dl_limit==0</code>」的种子写 13 KiB/s 奇数哨兵限速；连续 <code>confirm_ticks</code> 拍 <code>dlspeed&gt;0</code> 且限速仍等于哨兵 → <code>pause</code> + 标签（默认 <code>zFusePaused</code>，配置键 <code>fuse_tag</code>）。每拍零 qB 写，只在状态迁移写；显式放行 <code>--fuse-release &lt;hash&gt;</code> / <code>--fuse-release-all</code> 按 CAS 恢复原限速并摘标签（不自动 resume）；released 未完成者重新完成后回武装；state 丢失时 adopt 按「完成 + 限速恰等于哨兵」重建（零 qB 写）。状态机收敛 armed / triggered / released 三态，配置 3 键；默认关闭（<code>enabled=false</code>），dry-run 零写。配置口径见 <code>memory-bank/config-reference/keys.md</code>。建议修法第 1 条<strong>抽样校验未实施</strong>（不在本轮指派范围），保留原文备后续。</p>
+    <p><strong>验证方式</strong>：真机验收（副实例 56590，qB v5.2.3）——武装 / 3 拍触发 / 放行 / 回武装 / 批量 10 拍单条汇总 / adopt 11 条 / <code>enabled=false</code> 与 dry-run 零写，全部通过；收口评审修复与摘标签守卫补丁后全量测试通过，实测数字见 kb.baseline（最新切片 26-11-05-0253-fuse-release-untag-guard）。</p>
   </section>
 
   <footer>

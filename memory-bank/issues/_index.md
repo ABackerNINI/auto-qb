@@ -26,10 +26,11 @@
 | refactor | 3 |
 | feat | 20 |
 | chore | 2 |
-| question | 7 |
+| question | 8 |
 
 ## Open
 
+- [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(…
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 st…
 - [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 nor…
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbman…
@@ -83,7 +84,6 @@
 
 ## In Progress
 
-- [feat] [跳检缺少「不完整数据触发重新下载」的防线，损失直接计入 PT 下载量](26-10-22-0308-feat-ops-skip-check-download-cost.html) — 跳检在数据不完整时仍宣告…
 - [question] [兼容 Transmission 可行性分析](26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持…
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正…
 
@@ -150,7 +150,7 @@
 - [perf] [种子详情面板页签切换卡 1-2 秒](26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(genera…
 - [perf] [各视图首次访问全量量齐行高(3000 行单发长任务)](26-11-02-0902-perf-webui-first-visit-rowh-measure.html) — 各视图首访时窗口化引擎走…
 
-> 更早的 **353** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **354** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
