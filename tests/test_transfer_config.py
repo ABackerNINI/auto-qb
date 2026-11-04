@@ -7,7 +7,7 @@
 - 非法 targets 聚合报错(一条配置多个非法点一次全报, 保存被拦不落盘)
 - 字段集键闭合校验(未知键报错) + save_path 显式 false 拒绝(同机硬约束)
 - 字段集值须为布尔(parse_bool 域)
-- 路径映射规则表校验(列表形状/条目 {from, to} 键闭合/两侧非空)
+- 路径映射规则表校验(列表形状/条目 {from, to} 键闭合/两侧须为非空字符串, 非标量报错)
 - target 名称非空且全表唯一
 - type 枚举(qb/tr)与 after_state 单选(keep/paused)
 - base_url URL 形状(http(s)://host) + enabled=true 时必填
@@ -22,6 +22,8 @@
 - test_transfer_field_set_key_closure_and_save_path_locked
 - test_transfer_field_set_values_must_be_bool
 - test_transfer_path_map_validation
+- test_transfer_path_map_from_to_must_be_string
+- test_transfer_path_map_nonscalar_blocks_load
 - test_transfer_target_name_required_and_unique
 - test_transfer_type_and_after_state_enum
 - test_transfer_base_url_shape_and_required_when_enabled
@@ -32,9 +34,10 @@
 import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
-from auto_qb.config import TransferConfig, TransferTargetConfig, default_transfer_fields, load_config, schema
+from auto_qb.config import ConfigError, TransferConfig, TransferTargetConfig, default_transfer_fields, load_config, schema
 from auto_qb.config.models import TRANSFER_FIELD_KEYS
 from auto_qb.config.validation import validate_config
 
@@ -245,6 +248,42 @@ def test_transfer_path_map_validation():
             }]
         }]}
     ) == []
+
+
+def test_transfer_path_map_from_to_must_be_string():
+    """from/to 必须是非空字符串 —— dict/list/bool/int 不得经 str() 静默通过(issue 26-11-03-0901)"""
+    for bad in ({"k": "v"}, ["x"], True, 1):
+        errors = _validate_transfer({"targets": [{"name": "t1", "path_map": [{"from": bad, "to": "/mnt/a"}]}]})
+        assert any("path_map[0].from: 必须是字符串" in e for e in errors), (bad, errors)
+        errors = _validate_transfer({"targets": [{"name": "t1", "path_map": [{"from": "D:/a", "to": bad}]}]})
+        assert any("path_map[0].to: 必须是字符串" in e for e in errors), (bad, errors)
+    # 缺键仍按「不能为空」报(类型分支不改旧文案)
+    errors = _validate_transfer({"targets": [{"name": "t1", "path_map": [{"from": "D:/a"}]}]})
+    assert any("path_map[0].to: 不能为空" in e for e in errors)
+    assert _validate_transfer({"targets": [{"name": "t1", "path_map": [{"from": "D:/a", "to": "/mnt/a"}]}]}) == []
+
+
+def test_transfer_path_map_nonscalar_blocks_load(tmp_path):
+    """真实 YAML 链路: from 写成嵌套列表(BaseLoader 标量恒为字符串, 只有容器能进类型分支)⇒ ConfigError"""
+    data = {
+        "config": {
+            "web": {
+                "transfer": {
+                    "targets": [{
+                        "name": "t1",
+                        "path_map": [{
+                            "from": ["D:/a"],
+                            "to": "/mnt/a"
+                        }]
+                    }]
+                }
+            }
+        }
+    }
+    path = tmp_path / "config.yml"
+    path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError, match=r"path_map\[0\]\.from: 必须是字符串"):
+        load_config(str(path))
 
 
 # ---------------- 名称非空唯一 / 枚举 / URL ----------------

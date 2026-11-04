@@ -2,7 +2,8 @@
 
 > 摘要: 沙箱内跑 `commands run test.full` 等自带 `TMPDIR=R:/Temp/...` 的测试命令, 沙箱拒写 R 盘 ⇒ `TMPDIR` 建不了目录 ⇒ pytest 回落 `H:\Temp`(重解析点读不了) ⇒ **点号全过却在收尾崩**, 看着像回归实为沙箱拦截; 关沙箱即消失。
 > 等级: L0
-> 触发: 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红
+> 触发: 沙箱, 沙箱假红, TRAE Sandbox, R:\Temp, TMPDIR 没设, 跑全量, test.full, preflight, 闸门假红, run_in_background, 后台跑测试
+> 复发: 1
 
 ## 现象与处置(2026-09-24 实测; 从 testing/tmpdir.md 拆出)
 
@@ -14,3 +15,8 @@
   这是**沙箱拦截**, 关沙箱即消失。
 - **处置**: 跑全量时**关沙箱**, **不是改命令**(命令是对的, 改了反而失去 TMPDIR 收口)。
   ⚠ 沙箱内的 `preflight` 命中 pytest 闸门时同样假红 —— 闸门继承调用方的沙箱。
+- **后台执行不买账(2026-11-04 复发)**: `run_in_background: true` 时即使调用方传了
+  `dangerouslyDisableSandbox: true`, 临时根仍回落 `H:\Temp` ⇒ 出现 12 failed + 8 errors
+  (全部与 junction / symlink / sidefx / 临时根重解析点相关, 同代码前台即全绿); 同一命令改**前台**
+  关沙箱重跑即 `5150 passed, 2 skipped / TOTAL 99%`。**判别**: 看实例临时根落在 `H:\Temp` 而非
+  `R:\Temp`。**处置**: 全量/任何依赖真实临时根的测试一律**前台**跑, 后台只跑与临时根无关的任务。

@@ -591,8 +591,8 @@ def _norm_prefix(p: str) -> str:
 def _validate_fs(spec, errors: List[str]) -> None:
     """fs 段(文件访问, plan 26-09-27-1407): path_map 映射表
 
-    from 必须是绝对路径(带盘符 / UNC / 以 / 开头); to 必须以 / 开头(容器挂载点);
-    两侧尾斜杠归一后再比较; from 重复(大小写/尾斜杠归一后)报错;
+    条目 from/to 须为非空字符串; from 必须是绝对路径(带盘符 / UNC / 以 / 开头);
+    to 必须以 / 开头(容器挂载点); 两侧尾斜杠归一后再比较; from 重复(大小写/尾斜杠归一后)报错;
     两条 from 互不为对方前缀(带 `/` 边界)报错 —— 否则命中顺序依赖表序, 语义歧义。
     """
     if spec is None:
@@ -616,16 +616,32 @@ def _validate_fs(spec, errors: List[str]) -> None:
             errors.append(f"{w}: 必须是字典 {{from, to}}")
             continue
         _check_unknown_keys(item, KNOWN_PATH_MAP_ENTRY_KEYS, w, errors)
-        src = str(item.get("from", "") or "").strip()
-        dst = str(item.get("to", "") or "").strip()
-        if not src:
+        src_raw = item.get("from")
+        dst_raw = item.get("to")
+        src = ""
+        dst = ""
+        # 先卡类型再判空: dict/list/bool/int 经 str() 会变成垃圾串静默通过, 归一后永不命中
+        # (issue 26-11-03-0901 同批, 口径与 _validate_transfer_path_map 一致)
+        if src_raw is None:
             errors.append(f"{w}.from: 不能为空")
-        elif not (re.match(r"^[A-Za-z]:[\\/]", src) or src.startswith(("/", "\\\\"))):
-            errors.append(f"{w}.from: 必须是绝对路径(带盘符如 D:/Downloads、UNC 或以 / 开头): {src}")
-        if not dst:
+        elif not isinstance(src_raw, str):
+            errors.append(f"{w}.from: 必须是字符串(当前为 {type(src_raw).__name__})")
+        else:
+            src = src_raw.strip()
+            if not src:
+                errors.append(f"{w}.from: 不能为空")
+            elif not (re.match(r"^[A-Za-z]:[\\/]", src) or src.startswith(("/", "\\\\"))):
+                errors.append(f"{w}.from: 必须是绝对路径(带盘符如 D:/Downloads、UNC 或以 / 开头): {src}")
+        if dst_raw is None:
             errors.append(f"{w}.to: 不能为空")
-        elif not dst.startswith("/"):
-            errors.append(f"{w}.to: 必须是以 / 开头的容器挂载点(如 /mnt/downloads): {dst}")
+        elif not isinstance(dst_raw, str):
+            errors.append(f"{w}.to: 必须是字符串(当前为 {type(dst_raw).__name__})")
+        else:
+            dst = dst_raw.strip()
+            if not dst:
+                errors.append(f"{w}.to: 不能为空")
+            elif not dst.startswith("/"):
+                errors.append(f"{w}.to: 必须是以 / 开头的容器挂载点(如 /mnt/downloads): {dst}")
         if not src or not dst:
             continue
         src_n = _norm_prefix(src)
@@ -923,7 +939,7 @@ def _validate_transfer_fields(spec, where: str, errors: List[str]) -> None:
 
 
 def _validate_transfer_path_map(spec, where: str, errors: List[str]) -> None:
-    """路径映射规则表校验(计划 §03): 列表条目 {from, to} 两侧非空; 键闭合复用 fs 的
+    """路径映射规则表校验(计划 §03): 列表条目 {from, to} 两侧须为非空字符串; 键闭合复用 fs 的
     KNOWN_PATH_MAP_ENTRY_KEYS(from/to 同名同义); 不查重复/前缀歧义 —— 有序前缀替换
     首条命中生效是既定语义, 表序即优先级, 不算歧义"""
     if not isinstance(spec, list):
@@ -936,8 +952,14 @@ def _validate_transfer_path_map(spec, where: str, errors: List[str]) -> None:
             continue
         _check_unknown_keys(item, KNOWN_PATH_MAP_ENTRY_KEYS, w, errors)
         for side in ("from", "to"):
-            value = str(item.get(side, "") or "").strip()
-            if not value:
+            # 先卡类型再判空: dict/list/bool/int 经 str() 会变成 "{'k': 'v'}" / "True" 之类的
+            # 垃圾串, 静默通过后 loader 强转成永不命中的映射(issue 26-11-03-0901)
+            value = item.get(side)
+            if value is None:
+                errors.append(f"{w}.{side}: 不能为空")
+            elif not isinstance(value, str):
+                errors.append(f"{w}.{side}: 必须是字符串(当前为 {type(value).__name__})")
+            elif not value.strip():
                 errors.append(f"{w}.{side}: 不能为空")
 
 

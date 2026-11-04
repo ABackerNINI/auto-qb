@@ -69,6 +69,8 @@
 - test_validate_value_errors_extended
 - test_validate_web_errors
 - test_validate_qbittorrent_str_keys
+- test_validate_fs_path_map_from_to_must_be_string
+- test_fs_path_map_nonscalar_blocks_load
 """
 
 import logging
@@ -1104,6 +1106,34 @@ def test_validate_fs_reports_all_entries():
         err = _load_errors(td, text)
         assert "config.fs.path_map[0]: 必须是字典" in err, err
         assert "config.fs.path_map[2].from: 与第 1 条重复" in err, err
+
+
+def test_validate_fs_path_map_from_to_must_be_string():
+    """fs.path_map from/to 必须是非空字符串 —— dict/list/bool/int 不得经 str() 静默通过
+    (issue 26-11-03-0901 同批, 口径与 transfer path_map 一致)"""
+    for bad in ({"k": "v"}, ["x"], True, 1):
+        errs = _errs({"fs": {"path_map": [{"from": bad, "to": "/mnt/a"}]}})
+        assert any("path_map[0].from: 必须是字符串" in e for e in errs), (bad, errs)
+        errs = _errs({"fs": {"path_map": [{"from": "D:/a", "to": bad}]}})
+        assert any("path_map[0].to: 必须是字符串" in e for e in errs), (bad, errs)
+    # 缺键仍按「不能为空」报(类型分支不改旧文案)
+    errs = _errs({"fs": {"path_map": [{"from": "D:/a"}]}})
+    assert any("path_map[0].to: 不能为空" in e for e in errs)
+    assert _errs({"fs": {"path_map": [{"from": "D:/a", "to": "/mnt/a"}]}}) == []
+
+
+def test_fs_path_map_nonscalar_blocks_load():
+    """真实 YAML 链路: from 写成嵌套列表(BaseLoader 标量恒为字符串, 只有容器能进类型分支)
+    ⇒ load_config 抛 ConfigError(issue 26-11-03-0901 同批)"""
+    text = ("config:\n"
+            "  fs:\n"
+            "    path_map:\n"
+            "      - from:\n"
+            "          - D:/a\n"
+            "        to: /mnt/a\n")
+    with tempfile.TemporaryDirectory() as td:
+        with pytest.raises(ConfigError, match=r"path_map\[0\]\.from: 必须是字符串"):
+            load_config(_write_raw(td, text))
 
 
 def test_validate_schema_version_shape():

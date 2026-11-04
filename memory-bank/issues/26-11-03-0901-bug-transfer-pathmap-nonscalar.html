@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="torrent-transfer">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验">
 <meta name="issue-summary" content="手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。">
 <title>transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验 · bug · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0901-bug-transfer-pathmap-nonscalar</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 09:01</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -94,9 +94,24 @@
   </section>
 
   <section id="s4">
-    <h2><span class="no">04</span>状态变更日志</h2>
+    <h2><span class="no">04</span>实际修法 / 验证</h2>
+    <ul>
+      <li>修法: <code>_validate_transfer_path_map</code> 先 <code>isinstance(value, str)</code> 再判空；非字符串报 <code>必须是字符串(当前为 dict/list/bool/int)</code>，缺键/空串仍沿用旧文案「不能为空」；<code>loaders.py</code> 保持只转换（合法性由校验层保证，未改动）。</li>
+      <li>测试: 新增 <code>test_transfer_path_map_from_to_must_be_string</code>（dict/list/bool/int × from/to 矩阵 + 缺键口径）与 <code>test_transfer_path_map_nonscalar_blocks_load</code>（真实 YAML <code>load_config</code> 链路抛 <code>ConfigError</code>）。</li>
+      <li>红验: 临时还原旧实现后 2 failed（<code>errors == []</code> / <code>DID NOT RAISE</code>）；恢复修复后 <code>commands run test.one -- tests/test_transfer_config.py</code> 15 passed。</li>
+      <li>全量: <code>commands run test.full</code> 5152 passed, 2 skipped, TOTAL 99%（<code>23962 stmts / 208 miss / 8200 branch / 162 partial</code>，2026-11-04 22:42 实测）。</li>
+      <li>同批（2026-11-04 22:42，用户授权「同类问题一并修复」）: <code>fs.path_map</code> 的 from/to 按同口径收掉 —— 先 <code>isinstance(value, str)</code> 再判空，非字符串报「必须是字符串(当前为 …)」，缺键/空串仍报「不能为空」；<code>loaders.py</code> 未动（同样只转换，合法性由校验层保证）。</li>
+      <li>同批测试: <code>test_config_misc.py</code> 新增 <code>test_validate_fs_path_map_from_to_must_be_string</code>（dict/list/bool/int × from/to 矩阵 + 缺键口径）与 <code>test_fs_path_map_nonscalar_blocks_load</code>（真实 YAML <code>load_config</code> 链路抛 <code>ConfigError</code>）；红验旧实现 2 failed，恢复后该文件 67 passed。</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 09:01 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 21:57 — 用户授权认领，状态 <strong>In Progress</strong>；复验：<code>_validate_transfer_path_map</code> 仍只做 <code>str(value or "").strip()</code> 判空，dict/list/bool/int 静默通过，现象未消失</li>
+      <li>2026-11-04 22:22 — 修复并验证，状态 <strong>Done</strong>（数字见上一节）</li>
+      <li>2026-11-04 22:42 — 同批修复 <code>fs.path_map</code>（用户授权「同类问题一并修复」），状态保持 <strong>Done</strong>；红验 2 failed / 定向 67 passed / <code>test.full</code> 5152 passed</li>
     </ul>
   </section>
 
