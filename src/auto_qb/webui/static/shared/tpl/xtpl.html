@@ -267,9 +267,6 @@
       <!-- 做种/用户: 口径单点化(FX-03) —— 暂停中的种子不显示; 同一函数也为种子页/追剧集明细服务 -->
       <span v-else-if="col.key === 'num_seeds'" class="m-stat" :class="{ zero: !$root.cellPeers(m, 'seeds') }">{{ $root.cellPeers(m, 'seeds') }}</span>
       <span v-else-if="col.key === 'num_leechs'" class="m-stat" :class="{ zero: !$root.cellPeers(m, 'leechs') }">{{ $root.cellPeers(m, 'leechs') }}</span>
-      <!-- 做种(总)/用户(总): tracker 汇报的 swarm 全量(与"做种/用户"括号里的总数同源), 独立成列可排序 -->
-      <span v-else-if="col.key === 'num_complete'" class="m-stat" :class="{ zero: !m.num_complete }">{{ m.num_complete }}</span>
-      <span v-else-if="col.key === 'num_incomplete'" class="m-stat" :class="{ zero: !m.num_incomplete }">{{ m.num_incomplete }}</span>
       <span v-else-if="col.key === 'dlspeed'" class="m-stat" :class="{ zero: !m.dlspeed }">{{ $root.fmtSpeedOrDash(m.dlspeed) }}</span>
       <span v-else-if="col.key === 'upspeed'" class="m-stat" :class="{ zero: !m.upspeed }">{{ $root.fmtSpeedOrDash(m.upspeed) }}</span>
       <!-- 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应) -->

@@ -90,9 +90,8 @@ const DETAIL_COLUMNS = [
   // sortable 标记与 TORRENT_COLUMNS 同字段对齐(明细表头已接排序, 2026-09-17)
   { key: "num_seeds", label: "做种数", tpl: "92px", sortable: true, align: "right" },
   { key: "num_leechs", label: "用户", tpl: "92px", sortable: true, align: "right" },
-  // 做种(总)/用户(总): tracker 汇报的 swarm 全量(即"做种/用户"列括号里的那个数), 独立成列可按它排序
-  { key: "num_complete", label: "做种数(总)", tpl: "92px", sortable: true, align: "right" },
-  { key: "num_incomplete", label: "用户(总)", tpl: "92px", sortable: true, align: "right" },
+  // 做种数(总)/用户(总)两列已删(2026-11-04 用户报重复列): 做种/用户列按 qB 口径自带 "(总数)"
+  // 括注(fmtPeersQb), 独立总数列纯重复 —— 总数仍在括号里可见; 后端字段保留(抽屉各变体仍用)
   { key: "dlspeed", label: "下载", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   { key: "upspeed", label: "上传", tpl: "minmax(92px, 1fr)", sortable: true, align: "right" },
   // 剩余时间: 只有下载中的成员有值(与组级"最小有效 eta"口径呼应); 表头名称与种子页对齐
