@@ -300,9 +300,13 @@ class FuseModule(BaseModule):
         restored = sum(len(group) for group in writes.values())
         logger.info(f"fuse: 放行 {len(targets)} 个条目(其中 {restored} 个恢复原限速)")
         if to_untag:
-            removed = self._apply_tag_remove(api, to_untag, tag, entries, store)
-            if removed:
-                logger.info(f"fuse: 摘除标签 {tag} {removed} 个(放行)")
+            # 与上面写回侧同口径: 未连接时摘标签也跳过(标签保留, 只标记 released), 不发请求
+            if api is None or api.client is None:
+                logger.warning(f"fuse: 未连接 qB, 放行跳过摘标签 {tag} {len(to_untag)} 个(标签保留)")
+            else:
+                removed = self._apply_tag_remove(api, to_untag, tag, entries, store)
+                if removed:
+                    logger.info(f"fuse: 摘除标签 {tag} {removed} 个(放行)")
         return len(targets)
 
     # ---------- state / 批写 ----------

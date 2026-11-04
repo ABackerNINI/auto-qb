@@ -40,6 +40,7 @@
 - test_fuse_release_without_connection_marks_only_with_warning: 放行时未连接 qB -> 告警且只标 released 不写限速
 - test_fuse_release_dry_run_prints_plan_only: dry-run 放行 -> 打印计划, 零写零改状态
 - test_fuse_release_untag_skipped_when_tag_gone: 放行时标签已被外部移除 -> 不发摘标签请求, 无汇总日志
+- test_fuse_release_untag_skipped_when_client_none: 放行时 api.client 已断 -> 摘标签路径安全降级(零请求/告警/只标 released), 不 AttributeError
 - test_fuse_monitor_trigger_already_tagged_zero_requests: 触发时快照已带标签 -> 加标签零请求且无打标签日志
 - test_fuse_tag_apply_helpers_tolerate_missing_entries: 标签批量助手直驱 entries 缺 hash/rec 无标签 -> 防御假两侧不炸
 """
@@ -656,6 +657,25 @@ def test_fuse_release_untag_skipped_when_tag_gone(tmp_path):
     assert _tag_remove_calls(client) == [], "快照里已无标签: 摘标签零请求"
     assert _entries(mgr)[tor.hash]["status"] == "released"
     assert not any("摘除标签" in m for m in cap.messages), "removed==0 不打摘标签汇总日志"
+
+
+def test_fuse_release_untag_skipped_when_client_none(tmp_path):
+    """放行 triggered 条目时 api.client 已断(None) -> 摘标签路径安全降级: 零请求、告警、只标 released(26-11-05-0200)"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("wn" + "u" * 38, dlspeed=1000)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    assert _tag_add_calls(client) == [("add_tags", [FUSE_TAG])]
+    before = len(client.calls)
+    mgr.ctx.api.bind(None, mgr.ctx.store)
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        assert mgr.ctx.fuse.release([tor.hash]) == 1
+    assert len(client.calls) == before, "断连放行零 qB 请求(含摘标签)"
+    assert _entries(mgr)[tor.hash]["status"] == "released"
+    assert FUSE_TAG in tor.tags_set, "标签保留未动"
+    assert any("跳过摘标签" in m for m in cap.messages), "断连跳过摘标签要有告警"
 
 
 def test_fuse_monitor_trigger_already_tagged_zero_requests(tmp_path):
