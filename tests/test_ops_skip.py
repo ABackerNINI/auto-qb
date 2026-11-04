@@ -884,11 +884,6 @@ def test_guard_skip_finish_start_scope():
     client.torrents["HASH123"] = t
     starts = []
 
-    def rec_start(torrent_hashes=None, **kw):
-        starts.append(torrent_hashes)
-        return client.torrents_start.__wrapped__(torrent_hashes=torrent_hashes, **
-                                                 kw) if hasattr(client.torrents_start, "__wrapped__") else None
-
     orig_start = FakeClient.torrents_start
     client.torrents_start = lambda torrent_hashes=None, **kw: (
         starts.append(torrent_hashes), orig_start(client, torrent_hashes=torrent_hashes, **kw)

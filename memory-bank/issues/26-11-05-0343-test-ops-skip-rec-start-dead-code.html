@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="split-inrange-review">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-05-test-split-inrange-review.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_ops_skip rec_start 定义后从未使用, 实际生效的是紧随其后的 lambda 替身">
 <meta name="issue-summary" content="test_guard_skip_finish_start_scope 里 rec_start 闭包从未赋给 client.torrents_start, 死代码误导读者以为两层包装">
 <title>test_ops_skip rec_start 定义后从未使用, 实际生效的是紧随其后的 lambda 替身 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0343-test-ops-skip-rec-start-dead-code</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 03:43</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 03:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 认领并修复（用户指派）：照建议删 <code>test_guard_skip_finish_start_scope</code> 里 <code>rec_start</code> 死代码定义（全文件 grep 确认零引用，<code>__wrapped__</code> 探测在 lambda 方案下本就永不执行），仅保留紧随其后的 lambda 替身，记录行为零变化。验证：test.one 跑 <code>tests/test_ops_skip.py</code> 37 passed（2026-11-05），状态 <strong>Done</strong></li>
     </ul>
   </section>
 
