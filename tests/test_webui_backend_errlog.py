@@ -14,6 +14,9 @@
 - test_pure_memory_no_disk: 纯内存守阵 —— 错误环实现零磁盘触点(静态断言)
 - test_attach_idempotent: handler 挂接幂等 —— start_server 重复调用不重复挂(抽出的
   attach_err_log_handler 可独立调用, 用 logger.handlers 计数断言; 兼验真实 logger 链路)
+### T2a 覆盖率第三轮
+- test_public_traffic_view_shapes: 轮询流量快照出口 —— falsy 原样返回 / 常规视图浅拷贝摘 history 原视图不动
+- test_emit_swallows_poisoned_record: emit 静默兜底 —— 坏格式参数记录不逃逸, 错误环零污染
 """
 import inspect
 import logging
@@ -203,3 +206,26 @@ def test_attach_idempotent():
 
 if __name__ == "__main__":  # pragma: no cover
     pytest.main([__file__])
+
+
+# ---------- T2a 覆盖率第三轮: 流量快照出口形状与采集器静默兜底 ----------
+
+def test_public_traffic_view_shapes():
+    """轮询流量快照出口: falsy 视图原样返回(无键可摘); 常规视图浅拷贝摘 history,
+    原视图不动(单点契约: history 不进轮询响应)"""
+    from auto_qb.webui.runtime_common import public_traffic_view
+
+    empty = {}
+    assert public_traffic_view(empty) is empty, "空视图原样返回(不复制)"
+    view = {"x": 1, "history": [{"d": 1}]}
+    out = public_traffic_view(view)
+    assert out == {"x": 1} and "history" not in out
+    assert view == {"x": 1, "history": [{"d": 1}]}, "浅拷贝: 原视图不被摘键"
+
+
+def test_emit_swallows_poisoned_record():
+    """emit 全程静默兜底: 记录文案插值炸(坏格式参数)不得逃逸, 错误环零污染"""
+    rt = _runtime()
+    poisoned = _record(logging.WARNING, "bad %d", args=("not-a-number",))
+    WebErrLogHandler(rt).emit(poisoned)  # 不得抛(收集器永不干扰业务日志)
+    assert len(rt.err_log_ring) == 0 and rt.err_log_seq == 0

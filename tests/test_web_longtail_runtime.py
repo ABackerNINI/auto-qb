@@ -8,6 +8,11 @@
 - test_web_runtime_set_result_prunes_stale_and_carries_truth: 回执表 TTL 淘汰 + truth 附带
 - test_web_runtime_affected_hashes_shapes: 受影响种子三种取法 + 异常退化
 - test_web_runtime_affected_truth_queries_live_api: 真值直查 qB, 失败回 None 不回落快照
+### T2a 覆盖率第三轮: runtime_commands / Stream 防御弧
+- test_web_runtime_consume_unknown_cmd_writes_error_receipt: 未知命令 KeyError 分流 —— cmd_id 在场时写 error 回执(文案含「未知命令」), 本批不改状态
+- test_web_runtime_check_pending_storeless_and_background_reads: check_pending 无 store 宿主(判空跳过快照直判走判定链聚合 ok) + 后台核实读失败 DEBUG 保留条目 + 非终态结论条目保留
+- test_web_runtime_affected_truth_skips_foreign_rows: 真值直查逐行过滤 —— qB 返回窗口外的行不进 truth
+- test_web_runtime_unsubscribe_unknown_queue_noop: 退订未订阅队列静默 no-op(订阅计数不变)
 """
 
 import base64
@@ -217,3 +222,83 @@ def test_web_runtime_affected_truth_queries_live_api():
     with capture_logs("auto_qb.webui.runtime") as cap:
         assert rt2._affected_truth("pause_torrent", {"hash": "HA"}) is None
     assert any("真值直查失败" in m for m in cap.messages), "直查失败落 WARNING(不回落快照)"
+
+
+def test_web_runtime_consume_unknown_cmd_writes_error_receipt():
+    """未知命令 KeyError 分流: cmd_id 在场 -> 写 error 回执(文案含「未知命令」), 不改种子状态"""
+    rt = WebUIRuntime(SimpleNamespace(_web_command_handlers=lambda: {}))
+    rt.commands.put(("no_such_cmd", {"cmd_id": "cx", "x": 1}))
+    assert rt.consume_commands() is False, "未知命令不属 RESYNC_COMMANDS, 不算改状态"
+    rec = rt.results["cx"]
+    assert rec["status"] == "error" and "未知命令" in rec["error"], rec
+
+
+def test_web_runtime_check_pending_storeless_and_background_reads():
+    """check_pending 无 store 宿主与后台核实读路径: store 判空跳过快照直判(走判定链聚合 ok);
+    后台核实读 tracker 失败 -> DEBUG 后条目保留; 判定非终态(断连无结论)条目同样保留"""
+    now = time.time()
+
+    def _item(**over):
+        it = {
+            "done": False,
+            "status": "",
+            "reason": "",
+            "baseline": {},
+            "epoch_mode": True,
+            "t0": now,
+            "deadline": now + REANNOUNCE_CONFIRM_TIMEOUT,
+        }
+        it.update(over)
+        return it
+
+    # a) 宿主没有 store 属性(getattr 判空) -> 快照直判段跳过, 直接走判定链 -> 聚合 ok
+    host = SimpleNamespace(
+        client=SimpleNamespace(torrents_trackers=lambda h: ["T"]),
+        _verdict_reannounce=lambda trackers, baseline, **kw: ("confirmed", ""),
+    )
+    rt = WebUIRuntime(host)
+    rt.reannounce_pending["c1"] = {"items": {"HA": _item()}}
+    rt.check_pending()
+    assert rt.results["c1"]["status"] == "ok" and rt.reannounce_pending == {}
+
+    # b) 后台核实: 判定读 tracker 抛异常 -> DEBUG 落日志, 条目保留(不误删等恢复)
+    def boom(h):
+        raise RuntimeError("读取失败")
+
+    rt2 = WebUIRuntime(
+        SimpleNamespace(client=SimpleNamespace(torrents_trackers=boom), _verdict_reannounce=lambda *a, **kw: ("", ""))
+    )
+    rt2.reannounce_background["HB"] = {"min_e": now - 1.0, "baseline": {}, "t0": now}
+    with capture_logs("auto_qb.webui.runtime") as cap:
+        rt2.check_pending()
+    assert "HB" in rt2.reannounce_background, "读失败不出结论, 条目保留"
+    assert any("推迟汇报后台核实读取失败" in m for m in cap.messages), "读失败只落 DEBUG"
+
+    # c) 后台核实: 判定非终态(client 断连回空结论) -> 两个终态分支都不进, 条目保留
+    rt3 = WebUIRuntime(SimpleNamespace(client=None, _verdict_reannounce=lambda *a, **kw: ("", "")))
+    rt3.reannounce_background["HC"] = {"min_e": now - 1.0, "baseline": {}, "t0": now}
+    rt3.check_pending()
+    assert "HC" in rt3.reannounce_background, "无结论条目留在途, 等下一拍"
+
+
+def test_web_runtime_affected_truth_skips_foreign_rows():
+    """真值直查逐行过滤: qB 返回里窗口外的 hash 行不进 truth(390 判据)"""
+    mine = SimpleNamespace(hash="HA")
+    foreign = SimpleNamespace(hash="HZ")
+    host = SimpleNamespace(
+        api=SimpleNamespace(torrents_info=lambda torrent_hashes=None: [foreign, mine]),
+        state_kind=lambda t: "seeding",
+    )
+    rt = WebUIRuntime(host)
+    assert rt._affected_truth("pause_torrent", {"hash": "HA"}) == {"HA": {"kind": "seeding"}}
+
+
+def test_web_runtime_unsubscribe_unknown_queue_noop():
+    """退订未订阅的队列: 静默 no-op, 订阅计数不变(36 假分支)"""
+    import queue as _queue
+
+    rt = WebUIRuntime(SimpleNamespace())
+    kept = rt.subscribe()
+    stranger = _queue.Queue()
+    rt.unsubscribe(stranger)
+    assert rt.subscriber_count() == 1 and rt._subscribers == [kept]

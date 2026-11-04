@@ -23,6 +23,10 @@
 - test_s8_rename_migration_stages_candidates: S8 改名迁移 —— hash 剧键变化(name 改写经真增量轮) -> 暂存产出旧键 removed + 新键 upsert 候选且映射更新为新键; S9b 落代段暂存两侧并入 show 桶重建候选后清空, 旧键重算无成员转 removed/新键 upsert; 变体: 改名进未识别区 -> 折叠面变化检测(R11)本代 full
 - test_s8_removed_hash_cleans_mapping: S8 删除清理 —— 种子删除 -> 映射条目清除; 候选只由键变化产出(删除不记候选, S8 口径单点)
 - test_s9b_reduce_show_view_normal: S9b show 视图归约 —— delta.shows 回剧行整行(键 = 剧键字符串, R1 引用恒等)/removed.shows 回剧键; show 视图连带 groups/singles 桶(S4 成员索引语义); 纯 show 键代照常归约不退化 full
+### T2a 覆盖率第三轮: 登记口与归约防御弧
+- test_error_reason_ungrouped_hash_skips_group_bucket: 错误原因登记的非组员 hash 只进 torrent 桶, 组键推导按成员映射判空跳过
+- test_reduce_delta_show_upsert_missing_row_yields_full: 跨代 show 残留(R5 让位后 up_s 存无行键) -> 剧行缺失防御性转全量
+- test_reduce_delta_ungrouped_upsert_missing_from_singles_yields_full: 组员变更代里成员映射与 singles 视图失配(竞态残留) -> 未归组行缺行防御性转全量
 """
 
 import inspect
@@ -701,3 +705,58 @@ def test_s9b_reduce_show_view_normal():
     assert state["delta"]["shows"] == [] and state["removed"]["shows"] == [key_h1]
     assert state["removed"]["groups"] == [encode_group_key(("R:\\D", ))]  # 连带桶照常
     assert state["removed"]["singles"] == ["H1"]
+
+
+def test_error_reason_ungrouped_hash_skips_group_bucket():
+    """错误原因登记的 hash 不在任何组(成员映射查无) -> 只进 torrent 桶, 组键推导判空跳过"""
+    store = make_store("H1")
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代: 全量路径(映射回填; H1 未归组)
+    assert rt._host.store.member_to_key.get("H1") is None  # 前置: 非组员
+    rt.note_error_reason_hashes(["H1"])
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False
+    assert entry["upsert"]["torrent"] == {"H1"}
+    assert entry["upsert"]["group"] == set(), "非组员的错误行不得推导组键"
+
+
+def test_reduce_delta_show_upsert_missing_row_yields_full():
+    """跨代 show 残留: gen1 upsert 旧剧键, gen2 改名迁移后旧键行已不在视图 —— R5 让位后
+    up_s 并集残留无行键, 剧行缺失防御性转全量(与 torrent 桶「先加后删」同构的 show 版)"""
+    store, rt, keys = _s8_baseline("H1")
+    rid = rt.group_view_ver
+    _beat(store, "H1", dlspeed=512)
+    rt.mark_dirty()
+    e1 = _publish(rt)
+    assert e1["full"] is False and e1["upsert"]["show"] == {keys["H1"]}
+    new_name = "Renamed.Show.S02E03.1080p.x264-GRP"
+    new_key = tvshows.parse_release(new_name).key
+    assert new_key != keys["H1"]
+    _beat(store, "H1", name=new_name)
+    rt.mark_dirty()
+    e2 = _publish(rt)
+    assert e2["full"] is False
+    assert e2["upsert"]["show"] == {new_key} and e2["removed"]["show"] == {keys["H1"]}
+    state = rt.ensure_state(rid, "show", True)  # 窗内两代均非 full: full 只能来自防御检查
+    assert state["full"] is True and "delta" not in state and "removed" not in state
+
+
+def test_reduce_delta_ungrouped_upsert_missing_from_singles_yields_full():
+    """组员变更代里成员映射与 singles 视图失配(映射在视图重建后被摘的竞态残留) ->
+    未归组行不在当前 singles 视图 -> 防御性转全量(singles 桶缺行防御)"""
+    store = make_store("H1")
+    store.member_to_key["H1"] = ("R:\\D", )
+    store.groups[("R:\\D", )] = ["H1"]
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代: H1 归组(singles 无 H1 行)
+    rid = rt.group_view_ver
+    _beat(store, "H1", dlspeed=512)
+    rt.mark_dirty()
+    e1 = _publish(rt)
+    assert e1["full"] is False and e1["upsert"]["torrent"] == {"H1"}
+    store.member_to_key.pop("H1")  # 竞态残留: 归约读映射时 H1 已被摘, 视图还是旧的
+    state = rt.ensure_state(rid, "group", True)
+    assert state["full"] is True and "delta" not in state and "removed" not in state

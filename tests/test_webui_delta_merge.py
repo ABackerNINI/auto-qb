@@ -17,6 +17,9 @@
 - test_s9b_show_unrecognized_downgrade_full: S9b 折叠面降级(R11) —— 未识别种子新增/改名进未识别区/删除 -> 本代 full 且下一拍恢复行级增量; 对照: 未识别种子字段抖动(分类不变)不触发 full
 - test_merge_rows_single_point_semantics: _merge_rows 合并骨架单点(issue 26-10-11-0309 认领修) —— removed 键剔除/脏行换新对象/未脏行同一 dict 原样复用/新增行追加尾部; key_field 参数化(hash 键空间); pop 清空无二次消费
 - test_publish_partial_merge_skeleton_single_point: 静态守阵 —— _publish_partial_locked 四段合并只走 _merge_rows 单点(4 调用点), 内联骨架(.pop(k) if k in 形态)零残留, 单点内恰一份
+### T2a 覆盖率第三轮: HR 基线竞态弧与兑底登记不重投
+- test_publish_hr_baseline_holds_when_revision_moves_mid_build: 局部重建期间 HR revision 被并发发布抬高(确定性收束替身) -> 基线保留旧值不前移, 下一拍 flush 波次判定补一次 full, 前移后不循环置脏
+- test_show_partial_pending_without_index_coverage_does_not_repost_command: 局部剧重建兑底登记(季包索引未覆盖 -> shows_pending); 索引已建成且无脏 -> 不重复投递 build_search_index
 """
 
 import inspect
@@ -482,3 +485,73 @@ def test_s9b_show_unrecognized_downgrade_full():
     assert entry["full"] is True and rt.shows_view["unrecognized"] == []
     _beat(store, "H1", dlspeed=200)
     assert _publish(rt)["full"] is False  # 恢复行级增量
+
+
+class _MidBuildWaveHr:
+    """确定性收束的跨线程竞态替身: HR 线程在 flush 波次判定(第 1 次读)之后、基线前移点
+    (第 3 次读)之前发布新判定 —— revision 前 2 次读回旧值 1, 之后恒回新值 2(不起真线程)"""
+
+    def __init__(self):
+        self._reads = 0
+
+    @property
+    def revision(self):
+        self._reads += 1
+        return 1 if self._reads <= 2 else 2
+
+
+def test_publish_hr_baseline_holds_when_revision_moves_mid_build():
+    """局部重建期间 HR 波次又动了(跨线程登记竞态): 基线保留旧值不前移, 下一拍 flush 的
+    波次判定补一次 full —— 未脏行的 HR 字段不被静默吞掉, 且基线前移后不循环置脏"""
+    store = make_store("H1")
+    rt = _delta_runtime(store)
+    rt._host.hr = SimpleNamespace(revision=1)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代(全量): 基线记当刻 revision
+    assert rt._hr_rev_at_build == 1
+    # 局部代: 门控与 hr_wave 判定都读到旧值(竞态尚未现), 构建期间 HR 线程发布新判定
+    _beat(store, "H1", dlspeed=512)
+    rt._host.hr = _MidBuildWaveHr()
+    rt.mark_dirty()
+    entry = _publish(rt)
+    assert entry["full"] is False, "前置: 门控读到的还是旧基线, 该代走局部路径"
+    assert rt._hr_rev_at_build == 1, "构建期间 revision 已动: 基线不前移(保留给下一拍补 full)"
+    # 下一拍: 波次判定读到新值 -> 本代 full; 基线前移后不再循环置脏
+    rt.pending_ver = None
+    rt.flush_views()
+    assert rt._delta_timeline[-1]["full"] is True, "被竞态吞掉的波次必须由下一拍 full 补上"
+    assert rt._hr_rev_at_build == 2
+    rt.pending_ver = None
+    rt.flush_views()
+    assert rt.group_view_dirty is False, "基线已前移, 不得循环置脏"
+
+
+def test_show_partial_pending_without_index_coverage_does_not_repost_command():
+    """局部剧重建的兑底登记: 可兑底成员(季包)索引未覆盖 -> 登记 shows_pending; 索引已建成
+    (非 None)且索引无脏 -> 不重复投递 build_search_index(防建索引自激)"""
+    import queue as _queue
+
+    store = make_store("H1")
+    store.client.torrents["HP"] = FakeTorrent(hash="HP", name="Show.Pack.S01.720p.x264-GRP", state="stalledUP")
+    store.apply_sync(QbApi(store.client, store))
+    store.last_added = []
+    store.delta_fields = {}
+    store.consume_view_changed()
+    rt = _delta_runtime(store)
+    rt.mark_dirty()
+    _publish(rt)  # 基线代: 全量(季包成员可兑底而索引缺 -> shows_pending 置位)
+    assert rt.shows_pending is True
+    while True:  # 清掉基线代投递的建索引命令, 只考察本代是否重复投递
+        try:
+            rt.commands.get_nowait()
+        except _queue.Empty:
+            break
+    rt.search_index = {}  # 索引已建成(非 None)但不覆盖 HP; 建索引命令已消费过(脏位已清)
+    rt.search_index_dirty = False
+    _beat(store, "HP", dlspeed=333)
+    rt.mark_dirty()
+    entry = _publish(rt)
+    key_hp = tvshows.parse_release("Show.Pack.S01.720p.x264-GRP").key
+    assert entry["full"] is False and entry["upsert"]["show"] == {key_hp}
+    assert rt.shows_pending is True, "可兑底而索引未覆盖: 登记待归位(归位拍由索引推进兜住)"
+    assert rt.commands.qsize() == 0, "索引非空且无脏: 不重复投递 build_search_index"

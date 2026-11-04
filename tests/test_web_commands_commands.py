@@ -3,6 +3,8 @@
 ## 测试计划(每个测试函数一条)
 - test_virtual_tracker_prefix_single_point: 守阵(issue webui-virtual-tracker-prefix-dup) 虚拟 tracker 前缀集只认 infra 单点 —— commands.py 零字面量 + 改单点即改三处过滤(猴补空元组后 DHT 行进基线)
 - test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
+### T2a 覆盖率第三轮: 转移命令回执弧
+- test_transfer_cmd_receipt_paths: 转移命令回执弧直驱 —— run 目标缺失/空批次成功两路无 cmd_id 只落日志不写回执; test 目标缺失(cmd_id 在场)写 error / 适配器异常无 cmd_id 落 WARNING / tr stub 按不可用处理 / 正常探测成功落 INFO
 """
 
 import tempfile
@@ -203,3 +205,63 @@ def test_api_torrent_write_endpoints_enqueue(web_env):
     # 鉴权沿用既有 /api/* 依赖: 无/错密钥 401
     assert client.post("/api/torrents/HA/recheck").status_code == 401
     assert client.post("/api/torrents/bulk", json={"hashes": ["HA"], "action": "pause"}).status_code == 401
+
+
+def test_transfer_cmd_receipt_paths(monkeypatch):
+    """转移命令回执弧直驱: run 在「目标不存在」与「空批次成功」两路无 cmd_id 时只落日志不写
+    回执; test 的四路各归其位 —— 目标缺失(cmd_id 在场)写 error 回执 / 适配器异常无 cmd_id
+    只落 WARNING / tr stub 探测按不可用处理(无 cmd_id 只落 INFO) / 正常探测成功只落 INFO"""
+    import os
+
+    from auto_qb.config.models import TransferConfig, TransferTargetConfig
+    from auto_qb.webui import commands as cmd_mod
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.config.web.transfer = TransferConfig(
+            targets=(
+                TransferTargetConfig(name="T1", type="qb", base_url="http://127.0.0.1:1", enabled=True),
+                TransferTargetConfig(name="TS", type="tr"),
+                TransferTargetConfig(name="TB", type="zzz"),
+            )
+        )
+        assert mgr.config.web.transfer.targets, "前置: 目标表已就位"
+
+        # run: 目标不存在且无 cmd_id -> 静默返回(不写回执, 不碰源)
+        mgr._cmd_transfer_run("ghost", hashes=["HA"], cmd_id="")
+        assert mgr.web.results == {}
+        # run: 目标在、空批次、无 cmd_id -> 不写回执, 只落汇总日志
+        with capture_logs("auto_qb.webui.commands") as cap:
+            mgr._cmd_transfer_run("T1", hashes=[], cmd_id="")
+        assert mgr.web.results == {}, "无 cmd_id 不写回执"
+        assert any("转移批次 -> T1" in m for m in cap.messages)
+
+        # test: 目标不存在且 cmd_id 在场 -> error 回执(投递-执行之间目标被删的热重载窗口兜底)
+        mgr._cmd_transfer_test("ghost", cmd_id="c1")
+        assert mgr.web.results["c1"]["status"] == "error"
+        assert "转移目标不存在" in mgr.web.results["c1"]["error"]
+        mgr.web.results.pop("c1")
+        # test: 目标不存在且无 cmd_id -> 静默返回(与 run 同口径)
+        mgr._cmd_transfer_test("ghost", cmd_id="")
+        assert mgr.web.results == {}
+
+        # test: 未知适配器类型(create_adapter 抛 TransferAdapterError 子类)且无 cmd_id -> 只落 WARNING
+        with capture_logs("auto_qb.webui.commands") as cap:
+            mgr._cmd_transfer_test("TB", cmd_id="")
+        assert mgr.web.results == {}
+        assert any("转移目标测试失败" in m for m in cap.messages)
+
+        # test: tr stub 探测恒回「暂未实现」文案 -> 按不可用处理, 无 cmd_id 只落 INFO
+        with capture_logs("auto_qb.webui.commands") as cap:
+            mgr._cmd_transfer_test("TS", cmd_id="")
+        assert mgr.web.results == {}
+        assert any("转移目标测试 TS" in m and "暂未实现" in m for m in cap.messages)
+
+        # test: 正常适配器探测成功且无 cmd_id -> 只落 INFO(不写回执)
+        fake = SimpleNamespace(test_connection=lambda: "qBittorrent v5.2.3")
+        monkeypatch.setattr(cmd_mod, "create_adapter", lambda t: fake)
+        with capture_logs("auto_qb.webui.commands") as cap:
+            mgr._cmd_transfer_test("T1", cmd_id="")
+        assert mgr.web.results == {}
+        assert any("转移目标测试 T1: qBittorrent v5.2.3" in m for m in cap.messages)

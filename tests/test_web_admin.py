@@ -22,6 +22,9 @@
 - test_webui_module_bind_diagnosis_block_when_port_taken: 端口被占 -> start 落多行 INFO 诊断块(host/port/配置键/原因/占用者/处置三选一/退出后果), 异常消息不含探针内容
 - test_webui_module_bind_diagnosis_probe_unrecognized: 探针不可用或抛异常 -> 诊断块固定写「未识别」且异常类型/消息不变; 探针失败只写 DEBUG
 - test_webui_module_bind_diagnosis_adds_no_error_events: 探针 found / 抛异常两轮对比, auto_qb 树下 ERROR 条数不变(既有 lifecycle 两条保持原样)
+### T2a 覆盖率第三轮: 诊断面静默采集与探针降级
+- test_bind_capture_swallows_poisoned_record: _BindFailureCapture.emit 采集失败静默(坏记录不逃逸不伪造原因), 好记录仍可采集
+- test_port_owner_line_absent_state: 探针回 STATE_ABSENT -> 固定降级文案「未找到(端口可能刚被释放)」
 """
 import base64
 import logging
@@ -808,3 +811,36 @@ def test_webui_module_bind_diagnosis_adds_no_error_events(tmp_path, monkeypatch)
     messages = [r.getMessage() for r in runs[1]]
     assert any("WEB UI 服务异常退出" in m for m in messages), "既有 _run_server 的 ERROR 必须原样保留"
     assert any("WEB UI 启动失败" in m for m in messages), "既有 start_web_server 的 ERROR 必须原样保留"
+
+
+# ---------- T2a 覆盖率第三轮: 启动诊断的静默采集与占用者探针降级 ----------
+
+def test_bind_capture_swallows_poisoned_record():
+    """_BindFailureCapture.emit 采集失败静默: 记录本身坏掉(文案插值炸)不得逃逸,
+    也不得污染已采集的原因(启动期 fail-fast 不被诊断面干扰)"""
+    from auto_qb.webui.module import _BindFailureCapture
+
+    capture = _BindFailureCapture()
+    poisoned = logging.LogRecord(
+        name="t", level=logging.ERROR, pathname=__file__, lineno=1, msg="bad %d", args=("not-a-number",), exc_info=None
+    )
+    capture.emit(poisoned)  # 不得抛(采集器永不干扰业务日志)
+    assert capture.reason == "", "坏记录不得伪造原因"
+    # 正常记录仍可采集(对照: 同一 handler 对好记录工作)
+    good = logging.LogRecord(
+        name="t", level=logging.ERROR, pathname=__file__, lineno=1, msg="OSError: bind", args=(), exc_info=None
+    )
+    capture.emit(good)
+    assert capture.reason == "OSError: bind"
+
+
+def test_port_owner_line_absent_state(monkeypatch):
+    """占用者探针回 STATE_ABSENT(端口已释放) -> 固定降级文案「未找到」(不写未识别)"""
+    from auto_qb.infra.port_owner import STATE_ABSENT
+    from auto_qb.webui import module as webui_module
+
+    monkeypatch.setattr(
+        "auto_qb.webui.module.describe_port_owner",
+        lambda host, port: SimpleNamespace(state=STATE_ABSENT, owner=None),
+    )
+    assert webui_module._port_owner_line("127.0.0.1", 18080) == "占用者: 未找到(端口可能刚被释放)"

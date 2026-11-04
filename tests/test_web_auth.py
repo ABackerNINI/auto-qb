@@ -17,6 +17,8 @@
 - test_oversized_request_line_reaches_app_not_transport_400: 真实 uvicorn 下 >16KB 请求行(组 key 真实形态)必须打到应用层, 不得被传输层判 "Invalid HTTP request received." 回裸 400(分片到达: 头停在未完成态且缓冲已超 16KB —— h11 判非法的确切条件, 一次性完整到达不触发)
 - test_frontend_sse_ticket_wiring: polling.js 换票接线守阵 —— POST /api/events/ticket + ?ticket= 连流 + 重连换新票; ?token 通道不得回潮
 - test_skip_local_verify_default_off: 默认关闭(保守), 本机连接也不免鉴权
+### T2a 覆盖率第三轮
+- test_sse_ticket_quota_expired_slot_is_recycled: 满额后全部过期 -> 先清过期再判满, 清理释放名额后照常签发(新票不重号)
 """
 import logging
 import os
@@ -504,3 +506,20 @@ def test_skip_local_verify_default_off(web_env):
     mgr, loopback = web_env
     assert mgr.config.web.skip_local_verify is False  # 默认 false
     assert loopback.get("/api/status").status_code == 401
+
+
+def test_sse_ticket_quota_expired_slot_is_recycled(web_env):
+    """满额后票据全部过期 -> 先清过期再判满: 清理释放名额后照常签发(退避比挤掉别人合理,
+    但过期票不占坑); 新票与旧票不重号"""
+    from auto_qb.webui.runtime import EVENT_TICKET_MAX, EVENT_TICKET_TTL_S
+
+    mgr, _client = web_env
+    tickets = [mgr.web.issue_event_ticket() for _ in range(EVENT_TICKET_MAX)]
+    assert mgr.web.issue_event_ticket() == "", "前置: 满额拒签"
+    now = time.time()
+    for t in tickets:  # 全部票据拨到 TTL 之外
+        mgr.web._event_tickets[t] = now - (EVENT_TICKET_TTL_S + 1.0)
+    fresh = mgr.web.issue_event_ticket()
+    assert fresh, "全部过期清场后必须放行签发(清理先于满额判定)"
+    assert fresh not in tickets, "新票不得与旧票重号"
+    assert mgr.web._event_tickets.keys() == {fresh}, "过期票已清场, 只剩新票"

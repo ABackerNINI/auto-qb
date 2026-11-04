@@ -7,6 +7,8 @@
 - test_web_bulk_skip_check_receipt_aggregates_same_reason: S1(26-10-21-1857) —— 批量同因失败按原因聚合: 3 个已完成目标只出一条「3 个失败: …」, 不再按条拼接截前 3 条(旧口径 = 3 段逐字重复)
 - test_web_force_passthrough: T22(26-10-05-0314 S2) —— 单发 body.force → ops.skip_check 收到 force=True(mock kwarg 断言)/缺省 force=False; 批量 body.force → _bulk_skip_check_via_ops 逐 hash 透传; 路由级提供才透传(缺省载荷形态不变); force=true 时 case 1 闸门(G3)照常硬拒进回执
 - test_webui_no_rules_import: 边界守阵(P2') —— webui 操作链不得 import 规则模块; 其余 webui 模块不得触碰规则动作插件(rules.actions/registry)
+### T2a 覆盖率第三轮: 批量跳检聚合层结果分流
+- test_web_bulk_skip_check_ops_result_shapes_direct: ops 边界替身直驱 —— 同步 success 提交不计数不折断循环; 终态回调 skipped 结果按原因聚合进 error 回执
 """
 import os
 import re
@@ -289,3 +291,37 @@ def test_webui_no_rules_import():
                         violations.append(f"{rel}:{i}: import {m.group(1).strip()}")
     assert not violations, ("webui 出现规则模块引用(依赖方向做反, 操作语义必须单点在 core/modules/ops_mod.py): "
                             f"{violations}")
+
+
+def test_web_bulk_skip_check_ops_result_shapes_direct():
+    """批量跳检聚合层直驱(ops 边界替身, 不起真相位机): 同步返回 success 的提交不计数且不折断
+    循环(逐 hash 照常提交); 在途 job 终态回调回 skipped 结果按原因聚合进回执(部分成功也报错)"""
+    from types import SimpleNamespace
+
+    from auto_qb.rules.base import ActionResult
+    from helpers import make_manager
+
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        captured = {}
+
+        def fake_submit(h, source="web", force=False, on_done=None, **kw):
+            captured[h] = on_done
+            if h == "HSYNC":
+                return ActionResult.ok("直接成功")  # 非 pending/skip/fail: 静默放行继续下一 hash
+            return ActionResult.pending("跳检已受理")
+
+        with mock.patch.object(mgr.ctx.ops, "skip_submit", side_effect=fake_submit):
+            mgr._bulk_skip_check_via_ops(["HSYNC", "HP"], "cmd1")
+        assert set(captured) == {"HSYNC", "HP"}, "两个 hash 都照常提交(ok 返回不折断循环)"
+        assert "cmd1" not in mgr.web.results, "在途未收口不写回执"
+        captured["HP"](SimpleNamespace(result=ActionResult.skip("种子已消失")))
+        rec = mgr.web.results["cmd1"]
+        assert rec["status"] == "error", "部分成功也报错(跳过计数必须可见)"
+        assert "1 个跳过: 种子已消失" in rec["error"], rec["error"]
+
+        # 终态回调带空 result(job 未落 result 的防御弧): 不计数, 照常收口 ok 回执
+        with mock.patch.object(mgr.ctx.ops, "skip_submit", side_effect=fake_submit):
+            mgr._bulk_skip_check_via_ops(["HP2"], "cmd2")
+        captured["HP2"](SimpleNamespace(result=None))
+        assert mgr.web.results["cmd2"]["status"] == "ok", "空结果不计成功不计失败, 全清口径收口"
