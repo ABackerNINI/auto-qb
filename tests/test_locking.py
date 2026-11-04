@@ -12,7 +12,6 @@
 """
 import os
 import re
-import time
 
 import pytest
 
@@ -46,9 +45,7 @@ def test_lock_contention_raises_with_holder_info(tmp_path):
     """第二次获取抛 SingleInstanceLockError, 消息含持有者 PID/时间/路径"""
     state_file = str(tmp_path / "state.json")
     lock1 = SingleInstanceLock(state_file)
-    lock1.acquire()
-    # 等一下确保 meta 起始时间可读
-    time.sleep(0.05)
+    lock1.acquire()  # meta 在 acquire 内同步写完(with open 落盘)才返回, 无竞态窗
     try:
         lock2 = SingleInstanceLock(state_file)
         with pytest.raises(SingleInstanceLockError) as excinfo:

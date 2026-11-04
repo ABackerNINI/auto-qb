@@ -37,7 +37,6 @@ import logging
 import os
 import re
 import sys
-import time
 from datetime import datetime
 
 import pytest
@@ -309,7 +308,7 @@ def test_notify_handler_throttle_drops():
             )
         )
     assert wait_until(lambda: len(channel.sent) == 2, timeout=2.0, interval=0.01), f"应按上限仅派发 2 条: {channel.sent}"
-    time.sleep(0.05)
+    # 节流丢弃发生在 emit 内同步完成(不入派发队列), wait_until 到 2 条即终态 —— 无需观察窗
     assert len(channel.sent) == 2, "节流后不应再派发"
 
 

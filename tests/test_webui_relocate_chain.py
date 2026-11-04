@@ -21,7 +21,6 @@ import re
 import shutil
 import stat
 import subprocess
-import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,6 +31,7 @@ from auto_qb.infra import alias_fs
 from auto_qb.infra import file_access as fa_mod
 from auto_qb.infra.utils_paths import path_normalize
 from auto_qb.webui import relocate_chain
+from clock import FakeClock  # noqa: E402  统一假钟单点(时间语义用例: tests/clock.py)
 
 ROOT = Path(__file__).resolve().parents[1]
 HASH = "a" * 40
@@ -195,12 +195,12 @@ def test_chain_cache_ttl_refresh_and_capacity(web_env, tmp_path):
         calls["n"] += 1
         return {"n": calls["n"]}
 
-    cache = relocate_chain.ChainCache(ttl=0.01, capacity=2)
+    cache = relocate_chain.ChainCache(ttl=10.0, capacity=2, clock=FakeClock())
     value, hit = cache.get("k", _load)
     assert value == {"n": 1} and hit is False
     value, hit = cache.get("k", _load)
     assert value == {"n": 1} and hit is True
-    time.sleep(0.03)
+    cache._clock.advance(11.0)  # TTL 过期语义走注入假钟(判据②), 不真睡等过期
     value, hit = cache.get("k", _load)
     assert value == {"n": 2} and hit is False, "TTL 过期后必须重探"
     cache.get("x", _load)

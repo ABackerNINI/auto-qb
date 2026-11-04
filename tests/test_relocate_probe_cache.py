@@ -22,10 +22,12 @@ import types
 
 from auto_qb.core.modules.relocate_mod import RelocateModule
 
+from clock import FakeClock
 
-def _mod(state_data=None):
+
+def _mod(state_data=None, clock=None):
     """不落盘的裸模块: ctx 用 SimpleNamespace 拼(仿 relocate_exec_support._bare_mod 的最小面)"""
-    mod = RelocateModule()
+    mod = RelocateModule(clock=clock)
     mod._ctx = types.SimpleNamespace(state=types.SimpleNamespace(data=state_data if state_data is not None else {}), )
     return mod
 
@@ -41,15 +43,15 @@ def test_probe_put_get_roundtrip():
     assert mod._ctx.state.data["relocate"]["probes"]["fp1"] == entry
 
 
-def test_probe_put_overwrites():
+def test_probe_put_overwrites(fake_clock):
     """同指纹二次 put 覆盖写: status/evidence/at 全部换新(缓存失效后重探的修复路径)"""
-    mod = _mod()
+    mod = _mod(clock=fake_clock)
     first = mod.probe_put("fp1", "failed", {"reason": "fs_unreachable"})
-    time.sleep(0.01)  # 保证 at 有机会前进(同秒也算覆盖, 这里只验证字段换新)
+    fake_clock.advance(5.0)  # 假钟推进替代真睡: at 跟着注入钟走, 同秒覆盖不再靠运气
     second = mod.probe_put("fp1", "passed", {"method": "e1"})
     assert mod.probe_get("fp1") == second
     assert second["status"] == "passed" and second["evidence"] == {"method": "e1"}
-    assert second["at"] >= first["at"]
+    assert second["at"] > first["at"], "推进后 at 必须严格换新(此前同秒时 >= 是弱断言)"
     assert len(mod._ctx.state.data["relocate"]["probes"]) == 1  # 不新增键
 
 

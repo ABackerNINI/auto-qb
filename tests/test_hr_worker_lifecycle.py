@@ -717,8 +717,13 @@ def test_loop_waits_for_poll_interval(tmp_path):
     worker.start()
     try:
         assert wait_until(lambda: worker.rounds >= 1, timeout=10.0)
-        time.sleep(0.4)
-        assert worker.rounds == 1, "poll_interval=60s, 0.4s 内不该再跑"
+        # 观察窗: 有意真睡的真实时间窗(退避/变异面判据③) —— 忙等退化会在窗内把 rounds 顶上去
+        settle = threading.Event()
+        window_start = time.monotonic()
+        settle.wait(0.4)
+        elapsed = time.monotonic() - window_start
+        assert elapsed >= 0.4 - 0.02, f"观察窗要真睡满(15.6ms 刻度余量): 实测 {elapsed:.3f}s"
+        assert worker.rounds == 1, "poll_interval=60s, 观察窗内不该再跑"
     finally:
         worker.stop(timeout=5.0)
 

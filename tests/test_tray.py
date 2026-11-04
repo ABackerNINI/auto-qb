@@ -79,6 +79,7 @@ from auto_qb.infra.errors import AutoQbError
 from auto_qb.tray import UI_PORT_FILE_NAME, ShowIpcServer, TrayUi, UiLogHandler, run_tray, send_show
 from auto_qb.tray import app as tray_app
 from helpers import make_manager
+from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 MODULE_LOGGER = logging.getLogger("auto_qb.tray.app")
 
@@ -341,10 +342,7 @@ def test_ipc_ignores_non_show_payload(tmp_path):
         conn.sendall(b"hide\n")  # 非 show 载荷: 回调不得触发
         conn.close()
         assert send_show(port_file) is True  # 真实 show 证明服务仍存活
-        deadline = time.time() + 5
-        while not calls and time.time() < deadline:
-            time.sleep(0.01)
-        assert calls == [1], "非 show 载荷不得触发 on_show (真实 show 恰好触发一次)"
+        assert wait_until(lambda: calls == [1], timeout=5.0), "非 show 载荷不得触发 on_show (真实 show 恰好触发一次)"
     finally:
         srv.stop()
 

@@ -90,9 +90,12 @@ def test_fake_clock_fixture_fresh(fake_clock):
 
 
 def test_wait_until_returns_fast_on_immediate_true():
+    # S3 性能断言裁决(计划 26-11-05-0118): 挂钟上界按「被守回归的量级」定界(pitfalls/testing/
+    # timing-tolerance)。被守回归 = 快路径混入一次节拍睡眠 —— interval 显式放大到 0.5s 后,
+    # 一次真睡即 0.5s 必红; 上界 0.3s 对真实耗时(~0)余量 6x, 慢机/抢占不再撞线。
     t0 = time.perf_counter()
-    assert wait_until(lambda: True, timeout=5.0) is True
-    assert time.perf_counter() - t0 < 0.05, "条件立真必须零等待快路径"
+    assert wait_until(lambda: True, timeout=5.0, interval=0.5) is True
+    assert time.perf_counter() - t0 < 0.3, "条件立真必须零等待快路径(混入一次 0.5s 节拍即红)"
 
 
 def test_wait_until_times_out_without_oversleep():

@@ -13,7 +13,8 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
   code-style 的数据例外保留, 不算代码用语。
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
-(tests 裸 sleep 19 处/13 文件[S1 实测 27 处/15 文件, S3 优先域已清 2 文件 8 处] · e2e waitForTimeout 91 处/20 文件 · src 裸取时 **已全部清零**
+(tests 裸 sleep **已清零**[S1 实测 27 处/15 文件 -> T3b 清 2 文件 8 处 -> S3 收口清 12 文件 18 处,
+仅剩 clock.py 合法等待单点本体 1 处带理由保留] · e2e waitForTimeout 91 处/20 文件 · src 裸取时 **已全部清零**
 [core 90 处/16 文件、hr 12 处/5 文件、webui/traffic 35 处/11 文件、其余叶子 24 处/11 文件
 已随 S2 各域提交清零, 本表 src 组只剩完成注释]
 · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
@@ -25,58 +26,9 @@ ALLOW_SLEEP_TESTS: dict[str, dict[str, int]] = {
     "tests/clock.py": {
         "time.sleep(interval)": 1
     },
-    # S3 hr 域清理: discovery 轮询真睡改事件/wait_until 后删除
-    "tests/test_hr_discovery.py": {
-        "time.sleep(0.005)": 1,
-        "time.sleep(0.01)": 1,
-        "time.sleep(0.05)": 1
-    },
-    # S3 hr 域清理: 线程协作点改事件/wait_until 后删除
-    "tests/test_hr_fetcher_channel.py": {
-        "time.sleep(0.005)": 1
-    },
-    # S3 hr 域清理: 线程协作点改事件/wait_until 后删除
-    "tests/test_hr_runtime_lifecycle.py": {
-        "time.sleep(0.02)": 1
-    },
-    # S3 hr 域清理: 服务线程协作点改事件/wait_until 后删除
-    "tests/test_hr_server.py": {
-        "time.sleep(0.05)": 2
-    },
-    # S3 hr 域清理: worker 等待改 wait_until(长预算真睡兜底一并评估)后删除
-    "tests/test_hr_worker_lifecycle.py": {
-        "time.sleep(0.4)": 1
-    },
-    # S3 清理: filelock 竞态窗口改事件同步后删除
-    "tests/test_locking.py": {
-        "time.sleep(0.05)": 1
-    },
-    # S3 清理: 通知派发线程改 wait_until 后删除
-    "tests/test_notify.py": {
-        "time.sleep(0.05)": 1
-    },
-    # S3 清理: 同秒覆盖语义改注入假钟后删除
-    "tests/test_relocate_probe_cache.py": {
-        "time.sleep(0.01)  # 保证 at 有机会前进(同秒也算覆盖, 这里只验证字段换新)": 1
-    },
-    # S3 清理: tray 线程协作改 wait_until 后删除
-    "tests/test_tray.py": {
-        "time.sleep(0.01)": 1
-    },
-    # S3 清理: webui 轮询真睡改 wait_until/事件后删除
-    "tests/test_ui.py": {
-        "time.sleep(0.01)": 2,
-        "time.sleep(0.15)": 1,
-        "time.sleep(0.2)": 1
-    },
-    # S3 清理: 会话过期时序改注入假钟后删除
-    "tests/test_web_auth.py": {
-        "time.sleep(0.15)": 1
-    },
-    # S3 清理: 迁移链轮询真睡改 wait_until 后删除
-    "tests/test_webui_relocate_chain.py": {
-        "time.sleep(0.03)": 1
-    },
+    # S3 收口(2026-11-05): 其余 12 文件 18 处已全部清零, 条目删净 —— 线程协作点改 Event/
+    # wait_until(判据①); 时间语义(TTL/覆盖戳)改注入假钟(判据②); 有意真窗(忙等观察窗/
+    # h11 分片时序)改 Event.wait 真窗 + 注明判据③后不再属裸 sleep 实调用。
 }
 
 # ---------- ALLOW_TIME_SRC: src/ 裸 time.time()/time.monotonic[_ns]() 直调(clock.py 本体路径豁免, 不进本表) ----------

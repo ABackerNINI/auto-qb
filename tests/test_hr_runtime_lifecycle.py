@@ -67,6 +67,7 @@ from auto_qb.hr.service import POLL_INTERVAL
 import auto_qb.hr.runtime as rt_module
 
 from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py); 取当前空闲端口
+from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 from hr_runtime_support import (
     _FakeManager,
@@ -246,10 +247,7 @@ def test_stop_is_prompt_while_waiting_for_extension(tmp_path):
     runtime = HrRuntime(_FakeManager(config))
     runtime.start()
     try:
-        deadline = time.monotonic() + 3.0
-        while runtime.queue.pending() == 0 and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert runtime.queue.pending() > 0, "线程应已下发任务并在等回传"
+        assert wait_until(lambda: runtime.queue.pending() > 0, timeout=3.0), "线程应已下发任务并在等回传"
         started = time.monotonic()
         runtime.stop()
         elapsed = time.monotonic() - started

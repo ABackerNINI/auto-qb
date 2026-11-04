@@ -70,6 +70,7 @@ from auto_qb.hr.fetcher import (
 )
 from auto_qb.hr.queue import HrTaskQueue
 from hr_helpers import site_conf
+from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 URL = "https://pt.example.com/myhr.php?hrtype=A"
 DL = "https://pt.example.com/download.php?id=313852"
@@ -473,11 +474,7 @@ def test_cancel_after_dispatch_reports_stopped():
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
-    for _ in range(400):
-        if queue.pending() > 0:
-            break
-        time.sleep(0.005)
-    assert queue.pending() > 0, "任务应先下发, 才能测「下发后叫停」"
+    assert wait_until(lambda: queue.pending() > 0, timeout=3.0), "任务应先下发, 才能测「下发后叫停」"
     queue.cancel_all("HR 取数线程正在停止")
     thread.join(5.0)
     assert errors and isinstance(errors[0], HrChannelStopped), errors

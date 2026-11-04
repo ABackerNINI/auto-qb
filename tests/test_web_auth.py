@@ -464,7 +464,7 @@ def test_oversized_request_line_reaches_app_not_transport_400(web_env):
     应用层裁决(未匹配的 /api 路径 → FastAPI 404), 且不含传输层 400 的特征串。
     """
     import socket
-    import time
+    import threading
 
     from auto_qb.webui import start_web_server, stop_web_server
 
@@ -480,7 +480,10 @@ def test_oversized_request_line_reaches_app_not_transport_400(web_env):
         head2 = b"a" * 3000 + b" HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
         with socket.create_connection(("127.0.0.1", mgr.config.web.port), timeout=5) as s:
             s.sendall(head1)
-            time.sleep(0.15)
+            # 有意真窗(退避/变异面判据③): 复现「头分片到达」的传输层时序 —— 隔开两读是刺激
+            # 本身, 服务端无可观测同步点(收到未完成头不外露), 只能真等一窗
+            fragment_gap = threading.Event()
+            fragment_gap.wait(0.15)
             try:
                 s.sendall(head2)
             except OSError:

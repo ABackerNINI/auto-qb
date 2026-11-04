@@ -114,6 +114,7 @@ def make_server(*, queue=None, token=TOKEN, extension_id="", now_fn=time.time, s
 
 
 from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py)
+from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 # ---------- 1. 纯逻辑路由 ----------
 
@@ -461,7 +462,8 @@ def test_handler_survives_broken_connection():
         raw = socket.create_connection(("127.0.0.1", handle.port), timeout=5)
         raw.sendall(b"GET /api/hr/tasks HTTP/1.1\r\nHost: x\r\n\r\n")
         raw.close()  # 不等响应就断
-        time.sleep(0.05)
+        # 现形窗: 线程若被半路断开的异常击落会立刻退出 —— 短窗轮询「已死」, 超时即幸存
+        wait_until(lambda: not handle.thread.started, timeout=0.1)
         assert handle.started, "端点线程必须还活着"
         assert _http("GET", handle.port, API_TASKS, token=TOKEN)[0] == 200
     finally:
@@ -474,8 +476,7 @@ def test_threads_do_not_leak_on_stop():
     handle = server.start()
     _http("GET", handle.port, API_TASKS, token=TOKEN)
     assert server.stop()
-    time.sleep(0.05)
-    assert threading.active_count() <= before + 1, "端点线程要真的退出(不能残留)"
+    assert wait_until(lambda: threading.active_count() <= before + 1, timeout=2.0), "端点线程要真的退出(不能残留)"
 
 
 # ==================== P1 覆盖率提升轮: 端点 HTTP 适配层长尾 ====================

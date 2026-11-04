@@ -91,6 +91,7 @@ TK = "t" * 48  # 测试用数据端点密钥(字面量本身无意义, 只验聚
 SC = "s" * 48  # 测试用配对密钥(同上; 真生成路径由 runtime 用例走 resolve_pairing_secret)
 
 from _test_ports import free_port as _free_port  # noqa: E402  端口单点(防散落守卫: tests/test_free_port.py)
+from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 
 def _simulate_read_denial(monkeypatch, path, *, times=None):
@@ -422,10 +423,7 @@ def test_start_all_busy_returns_false_and_retries():
         assert srv.start() is False, "三候选全占 ⇒ 不抛、返回 False(数据端点照常的语义)"
         assert not srv.started
         holds[0].close()  # 释放首位: 占用者退出
-        deadline = time.monotonic() + 5.0
-        while not srv.started and time.monotonic() < deadline:
-            time.sleep(0.05)
-        assert srv.started, "后台退避重试在占用者退出后接管(R6 翻转)"
+        assert wait_until(lambda: srv.started, timeout=5.0), "后台退避重试在占用者退出后接管(R6 翻转)"
         assert srv.bound_port == base, "接管绑定的正是释放出来的首位"
     finally:
         srv.stop()
@@ -484,10 +482,7 @@ def test_heartbeat_loop_runs_until_stopped(tmp_path, monkeypatch):
     t = threading.Thread(target=srv._heartbeat_loop, daemon=True)
     t.start()
     try:
-        deadline = time.monotonic() + 3.0
-        while not reg.alive(ttl=INSTANCE_TTL_S, now=srv._now()) and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert reg.alive(ttl=INSTANCE_TTL_S, now=srv._now()), "心跳循环应登记本实例"
+        assert wait_until(lambda: reg.alive(ttl=INSTANCE_TTL_S, now=srv._now()), timeout=3.0), "心跳循环应登记本实例"
     finally:
         srv._heartbeat_stop.set()
         t.join(timeout=3.0)
@@ -723,10 +718,7 @@ def test_retry_loop_backoff_and_stop_exit(monkeypatch):
     t = threading.Thread(target=srv._retry_loop, daemon=True)
     t.start()
     try:
-        deadline = time.monotonic() + 3.0
-        while fails["n"] < 3 and time.monotonic() < deadline:
-            time.sleep(0.005)
-        assert fails["n"] >= 3, "退避循环应持续重试(失败不退出)"
+        assert wait_until(lambda: fails["n"] >= 3, timeout=3.0), "退避循环应持续重试(失败不退出)"
     finally:
         srv._retry_stop.set()
         t.join(timeout=3.0)

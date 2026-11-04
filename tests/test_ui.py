@@ -38,6 +38,7 @@ from auto_qb.core.qbmanager import QbConnectError
 from auto_qb.tray import ShowIpcServer, TrayUi, UiLogHandler, send_show
 from auto_qb.config import QbittorrentConfig
 from helpers import FakeClient, FakeConfig, FakeQbServer, FakeTorrent, make_manager, seed_store
+from clock import wait_until  # noqa: E402  条件轮询单点(禁裸 time.sleep 睡等: tests/clock.py)
 
 
 def test_log_dir_resolves_and_creates(tmp_path):
@@ -116,15 +117,18 @@ def test_run_connection_restored_updates_state(tmp_path):
     """断开后 tick 成功即恢复 _last_conn_ok 为 True(connect() 仅启动时调用一次, 恢复只能在此翻转)"""
     mgr = _make_ready_manager(tmp_path)
     mgr._last_conn_ok = False  # 模拟曾断开
-    mgr.config.main_tick = 0.02
     stop = threading.Event()
+    ticks = []
+    real_tick = mgr._tick
 
-    def stopper():
-        time.sleep(0.15)
-        stop.set()
+    def tick_then_stop(dry_run, force=False):
+        real_tick(dry_run, force=force)
+        ticks.append(1)
+        stop.set()  # 一次真实 tick 即足以验证恢复, 事件同步替代挂钟睡等
 
-    threading.Thread(target=stopper, daemon=True).start()
+    mgr._tick = tick_then_stop
     mgr.run(dry_run=True, stop_event=stop)
+    assert ticks, "至少应跑过一拍"
     assert mgr._last_conn_ok is True, "tick 成功后应恢复已连接状态"
 
 
@@ -134,16 +138,24 @@ def test_run_pause_event_skips_ticks(tmp_path):
     pause = threading.Event()
     pause.set()
     stop = threading.Event()
-    mgr.config.main_tick = 0.02
     ticks = []
     mgr._tick = lambda dry_run, force=False: ticks.append(1)
 
-    def stopper():
-        time.sleep(0.2)
-        stop.set()
+    def runner():
+        mgr.run(dry_run=True, stop_event=stop, pause_event=pause)
 
-    threading.Thread(target=stopper, daemon=True).start()
-    mgr.run(dry_run=True, stop_event=stop, pause_event=pause)
+    loop = threading.Thread(target=runner, daemon=True)
+    loop.start()
+    try:
+        # 正向同步证明暂停轮次真的在转: 主循环每轮 clear 唤醒位, 等它清零即消费了一轮;
+        # 连续 3 轮零 tick 后再叫停 —— 不靠挂钟睡等出「暂停期间没跑 tick」的结论
+        for _ in range(3):
+            mgr._wake_event.set()
+            assert wait_until(lambda: not mgr._wake_event.is_set(), timeout=3.0), "暂停期间主循环应保持轮转"
+        assert ticks == [], "暂停期间不应执行任何 tick"
+    finally:
+        stop.set()
+        loop.join(timeout=5.0)
     assert ticks == [], "暂停期间不应执行任何 tick"
 
 
@@ -180,15 +192,9 @@ def test_ipc_show_roundtrip(tmp_path):
     server = ShowIpcServer(str(port_file), lambda: got.append(True))
     server.start()
     try:
-        deadline = time.time() + 2
-        while not port_file.exists() and time.time() < deadline:
-            time.sleep(0.01)
-        assert port_file.exists(), "server 启动后应写入端口文件"
+        assert wait_until(lambda: port_file.exists(), timeout=2.0), "server 启动后应写入端口文件"
         assert send_show(str(port_file)) is True
-        deadline = time.time() + 2
-        while not got and time.time() < deadline:
-            time.sleep(0.01)
-        assert got == [True], "应收到第二实例的唤起请求"
+        assert wait_until(lambda: got == [True], timeout=2.0), "应收到第二实例的唤起请求"
     finally:
         server.stop()
     assert not port_file.exists(), "stop 后应删除端口文件"
