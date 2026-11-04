@@ -22,7 +22,7 @@
 | bug | 8 |
 | perf | 5 |
 | docs | 2 |
-| test | 5 |
+| test | 6 |
 | refactor | 3 |
 | feat | 20 |
 | chore | 3 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [test_w6_flush_fallback_once_per_round 偶发红: 并行负载下主循环只跑 1 轮](26-11-05-0035-test-qbmanager-flush-fallback-flaky.html) — qbmanager 主循…
 - [bug] [缺失站点扫描把逐种 tracker 失败吞成空集, 批量失败时误报无缺失](26-11-04-2347-bug-missing-scan-partial-failure.html) — collect_torr…
 - [test] [缺失站点导入三路径 GUI 冒烟不可复跑](26-11-04-2312-test-webui-sites-import-gui-smoke.html) — 三路径验收靠一次性 ha…
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基…

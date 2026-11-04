@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (52)
+## Open (53)
 
+- [test] [test_w6_flush_fallback_once_per_round 偶发红: 并行负载下主循环只跑 1 轮](../26-11-05-0035-test-qbmanager-flush-fallback-flaky.html) — qbmanager 主循环时序敏感用例偶发只跑 1 轮, 断言两轮失败; 单跑恒绿, 判并行/时序偶发
 - [bug] [缺失站点扫描把逐种 tracker 失败吞成空集, 批量失败时误报无缺失](../26-11-04-2347-bug-missing-scan-partial-failure.html) — collect_torrent_tracker_hostnames 对单种查询异常一律空集; qB 重启/断连导致全部失败时 /api/sites/missing 仍 200 返回空 sites/groups, CLI 导出静默漏站
 - [test] [缺失站点导入三路径 GUI 冒烟不可复跑](../26-11-04-2312-test-webui-sites-import-gui-smoke.html) — 三路径验收靠一次性 harness 脚本+gitignore 的 .work 证据, 仓库内无可重跑回归; 需补 e2e/浏览器用例
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
