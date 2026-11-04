@@ -38,13 +38,15 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (291)
+## Done (292)
 
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
+- [26-10-07-webui-delta-sync-feasibility](../26-10-07-webui-delta-sync-feasibility.md) webui 增量同步(qB rid 式)可行性分析
 - [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)
 - [26-11-04-webui-flux-glass-popups](../26-11-04-webui-flux-glass-popups.md) flux全浮层玻璃化: 预算4→16+遮罩浓度修复
 - [26-11-05-backend-rule-skipcheck-dedup](../26-11-05-backend-rule-skipcheck-dedup.md) 规则侧链0遮蔽跳检dedup修复(26-11-05-0019)
 - [26-11-05-test-split-inrange-review](../26-11-05-test-split-inrange-review.md) 拆分承载区间改动归属与逐行评审(认领 26-11-03-0704)
+- [26-11-05-webui-delta-sync](../26-11-05-webui-delta-sync.md) store 增量 removed 同轮 pop 隐患: 真机复测 + 防御修(issue 26-10-11-2045)
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-11-04-memory-bank-code-review](../26-11-04-memory-bank-code-review.md) 收口 code review 制度化: code-review skill + review 命令包 + 协议挂钩
 - [26-11-04-webui-fx-glow](../26-11-04-webui-fx-glow.md) fx 辉光荧光化四轮修(雾/圆角/无辐射/角缺光)
@@ -191,7 +193,6 @@
 - [26-10-06-ship-rerun-stale-config](../26-10-06-ship-rerun-stale-config.md) 自我改写后仍用启动时那份配置: commit 的闸门复跑 + sync 的生成物自动化解
 - [26-10-06-webui-detail-panel](../26-10-06-webui-detail-panel.md) WEBUI 种子详情面板重构 · 设计模板轮 + 全量实施
 - [26-10-07-ship-self-snapshot](../26-10-07-ship-self-snapshot.md) my-commit-flow 自我改写版本撕裂: 快照自举可行性验证与治本方案
-- [26-10-07-webui-delta-sync-feasibility](../26-10-07-webui-delta-sync-feasibility.md) webui 增量同步(qB rid 式)可行性分析
 - [26-10-07-webui-detail-panel-audit-fixes](../26-10-07-webui-detail-panel-audit-fixes.md) 详情面板变体审计问题修复轮
 - [26-10-07-webui-detail-panel-followups](../26-10-07-webui-detail-panel-followups.md) 详情面板 followups 四修轮
 - [26-10-07-webui-perf-issues-recheck](../26-10-07-webui-perf-issues-recheck.md) 两条 WebUI perf issue 重构后复验

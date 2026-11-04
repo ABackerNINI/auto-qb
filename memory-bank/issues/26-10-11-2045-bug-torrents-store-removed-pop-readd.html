@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-2045">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-delta-sync">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/testing/baselines/26-11-05-0540-store-removed-patch-wins.md, memory-bank/tasks/26-11-05-webui-delta-sync.md, memory-bank/pitfalls/testing/real-probe-rid-window.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)">
 <meta name="issue-summary" content="store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生">
 <title>增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-2045-bug-torrents-store-removed-pop-readd</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 20:45</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">torrents</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">worktree:auto-qb-clone4/agent</div></div>
     </div>
@@ -164,7 +164,7 @@
 
   <section id="s5">
     <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
-    <div class="callout">已确认（代码顺序）：「先写 patches、后 pop removed」使「同轮既在 patches 又在 removed」的 hash 以删除告终。<br>待查（真机行为）：qB 的增量 sync 是否会对「删后重加的同 hash」下发 removed（同轮或次轮）。<br>已排除：全量轮无此问题（<code>full=True</code> 走 <code>by_hash</code> 重建 + 未出现者即删除，不经过 pop 循环）。</div>
+    <div class="callout">已确认（代码顺序）：「先写 patches、后 pop removed」使「同轮既在 patches 又在 removed」的 hash 以删除告终。<br>待查（真机行为）：qB 的增量 sync 是否会对「删后重加的同 hash」下发 removed（同轮或次轮）。<br>已排除：全量轮无此问题（<code>full=True</code> 走 <code>by_hash</code> 重建 + 未出现者即删除，不经过 pop 循环）。<br><b>真机已答（2026-11-05，环境2 副实例 56590，qB 5.2.3，探针 5 组）</b>：两通道<b>从不同轮命中同 hash</b> —— 只删不重加时 <code>torrents_removed</code> 单独一轮下发（通道正常）；删→重加间隔≈3ms 时事件完全合并、<b>无 removed 只有 patches</b>；间隔 0.3/1.5/5s 时 removed 先行一轮、patch 后续一轮。触发前置在 qB 5.2.3 不成立，<code>skipping_hashes</code>（store.py:432 豁免跳检窗，取证为修复前行号）与 <code>restore_torrent</code> 摘 pending（store.py:868-876）又已挡住产品侧制造者 —— 修复前仅剩纯潜在顺序隐患，仍按方案 1 防御性修掉。</div>
   </section>
 
   <section id="s6">
@@ -183,11 +183,16 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 20:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 05:11 — 用户指派认领，状态 <strong>In Progress</strong>（真机探针复测中）</li>
+      <li>2026-11-05 — 真机复测完成（qB 5.2.3 不会同轮下发 patch+removed）+ 方案 1 防御性修复落地（红绿双验 + M4 钉子改道），状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 05:11 —— 锚点仍复现（<code>_apply</code> 增量分支先写 patches(439-471) 后 pop(480-481)，取证为修复前行号）；但真机探针证实 qB 5.2.3 不会同轮下发 patch+removed（见 §05 真机已答），且立档后新增的 <code>skipping_hashes</code> / <code>restore_torrent</code> 已挡住产品侧制造者 —— 现象降级为纯潜在顺序隐患。另：证据 D 已过期，<code>tests/helpers.py</code> 的 <code>FakeClient.sync_maindata</code> 现已驱动 <code>torrents_removed</code>（按快照 diff 计算，结构上仍造不出同轮双通道）。</p>
+    <p class="hint">探针方法论坑（v1 教训）：trigger 后才从 rid=0 重拉会把窗口内积累的 removed 被全量响应冲掉，得出假阴性 —— 探针必须先取全量基线 rid、轮询全程连续、删/重加作为定时事件在循环内触发。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><b>实际修法</b>（与建议方案 1 同向，落点不同）：不在 pop 循环加判断，而是在 <code>changes</code> 构造单点过滤 —— <code>store.py:429-432</code> 把「本轮 patches 已含的 hash」与跳检窗 hash 一起从删除清单剔除。这样 pop 循环、全量轮、added/removed 上报三处同时自洽（若只改 pop，新写入的行虽保留、<code>removed</code> 上报仍会自相矛盾地含该 hash）。</p>
+    <p><b>验证方式</b>：① 单测红绿双验 —— <code>tests/test_torrents_store.py::test_store_apply_removed_yields_to_same_round_patch</code>（修复前红：同轮双通道把刚写的行 pop 掉且 removed 含该 hash；修复后绿：行保留、patch 赢、纯 removed 照常 pop）；② M4 镜像钉子按新语义改道 —— <code>tests/test_webui_delta_mirror.py::test_m4_same_tick_add_remove_and_pending_removed_overlap</code> b 段原断言「一增一删经 R5 交叉抵消成响应不含该 hash」，该契约本身自相矛盾（store 行被 pop 而镜像保持旧态），改为断言 patch 赢、行按 upsert 下发、store 与镜像一致；③ 真机探针（§05）。</p>
+    <p><b>测试数字</b>（2026-11-05 实测）：全量 <code>test.full</code> 绿、覆盖率过闸 —— 数字见 kb.baseline（切片 26-11-05-0540-store-removed-patch-wins）。</p>
   </section>
 
   <footer>

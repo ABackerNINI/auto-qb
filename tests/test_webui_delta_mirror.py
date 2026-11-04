@@ -16,9 +16,9 @@ removed 剔除, full 轮(payload.full 非 False, 含未协商形状)清空重放
 - test_m3_quantum_boundary_beat_invisible: M3(避坑#4) —— last_activity 在 _VIEW_QUANTUM(60s)
   桶内跳动: apply_delta 量化判定不记变化 -> 不置脏不落代(对照: 跨桶跳动正常产生增量代, 行
   内容为量化值); 活跃速度字段(dlspeed)不量化属预期真脏, 不在本用例范围
-- test_m4_same_tick_add_remove_and_pending_removed_overlap: M4(避坑#7) —— 同一 hash 同拍一增
-  一删经 R5 交叉抵消, 响应不含该 hash 的 upsert/removed; 待报删除(_pending_removed)与增量
-  removed 重叠去重, 响应恰一次
+- test_m4_same_tick_add_remove_and_pending_removed_overlap: M4(避坑#7) —— 待报删除(_pending_removed)
+  与增量 removed 重叠去重, 响应恰一次; 同一 hash 同拍 patch+removed 时 patch 赢(26-10-11-2045
+  防御), 行保留按 upsert 下发(修复前经 R5 交叉抵消成「谁也没说」, store 行被 pop 而镜像保持旧态)
 - test_m5_hr_revision_wave_yields_full: M5(02 笔记 2.5.3) —— HR revision 波次 -> 本代 full,
   响应不含 delta/removed 键(R10); 下一拍 revision 未再变 -> 恢复行级增量
 - test_unkeyed_command_source_yields_full: 无键 dirty 源(R11 缺口, S3 观察) —— 命令自写字段
@@ -340,20 +340,22 @@ def test_m4_same_tick_add_remove_and_pending_removed_overlap():
     assert resp["removed"]["torrents"] == ["H2"]  # 重叠不双报
     assert resp["delta"]["torrents"] == []
     # b) 同一 hash 同拍一增一删(H3 自删登记在前, 同拍 qB 又报一增一删)+ 组键预置可解析
-    #    -> R5 交叉抵消, 响应不含该 hash 的 upsert/removed
+    #    -> patch 赢(26-10-11-2045 防御): 有 patch 即代表该轮它存在, 行保留并按 upsert 下发
+    #    (修复前 store 行被 pop 而镜像保持旧态, 靠 R5 抵消把矛盾掩在响应层)
     store.member_to_key["H3"] = ("R:\\D", )  # 组键可解析(组仍在), 不触发 R11 full
     h3 = FakeTorrent(hash="H3", name="Show.H3.S01E01.720p.x264-GRP")
     patch = {f: getattr(h3, f) for f in REQUIRED_TORRENT_FIELDS if hasattr(h3, f)}
     store._pending_removed.add("H3")
     added, removed = store._apply({"H3": patch}, ["H3"], full=False)
-    assert added == ["H3"] and removed == ["H3"]  # 待报删除与增量 removed 重叠去重
+    assert added == ["H3"] and removed == []  # patch 赢: 行保留, 不自相矛盾地报删除
     assert store._pending_removed == set()  # 对齐时序: 报过即清
     entry = m.publish()
-    assert "H3" not in entry["upsert"]["torrent"] and "H3" not in entry["removed"]["torrent"]
+    assert "H3" in entry["upsert"]["torrent"] and "H3" not in entry["removed"]["torrent"]
     out = m.sync(ct, cg)
     resp = out["resps"][0]
     assert resp["full"] is False
-    assert resp["delta"]["torrents"] == [] and resp["removed"]["torrents"] == []
+    assert [r["hash"] for r in resp["delta"]["torrents"]] == ["H3"]
+    assert resp["removed"]["torrents"] == []
 
 
 # ---------- M5: HR revision 波次 -> full(02 笔记 2.5.3) ----------

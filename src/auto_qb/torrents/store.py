@@ -426,7 +426,10 @@ class TorrentStore:
         now_ts = time.time()  # state_since 的同一时刻基准(纯展示用, 不参与判定)
         added: List[str] = []
         # 跳检窗口内的 hash 不算删除(ops 相位机登记): 记录保留, 由下一轮上报原地校正
-        changes = [h for h in removed if h not in self.skipping_hashes]
+        # 本轮 patches 已含的 hash 同样不算删除(26-10-11-2045 防御): _apply 先写 patches
+        # 后按 removed pop, 两通道同轮命中同 hash 时刚写进的行会被删掉 —— 有 patch 即代表
+        # 该轮它存在(qB 5.2.3 真机实测 2026-11-05: 两通道从不同轮命中同 hash, 此行为兜底)
+        changes = [h for h in removed if h not in self.skipping_hashes and h not in patches]
         view_changed = False
         delta_fields: Dict[str, FrozenSet[str]] = {}
         state_changed: List[Tuple[str, Any]] = []

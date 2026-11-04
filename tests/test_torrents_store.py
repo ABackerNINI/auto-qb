@@ -31,6 +31,7 @@
 - test_store_reset_runtime_keeps_group_index: reset_runtime 不清 groups/group_sizes/member_to_key(D1=B)
 - test_store_reset_runtime_no_regroup_cost: reset 不触发 O(N) 重归组(不拉文件表/不标脏组)
 - test_store_view_changed_on_membership
+- test_store_apply_removed_yields_to_same_round_patch: 增量轮同 hash 同现 patches+removed 时 patch 赢(26-10-11-2045 防御), 纯 removed 照常 pop
 """
 
 from dataclasses import MISSING, fields as dc_fields
@@ -86,6 +87,34 @@ def test_store_restore_torrent():
     store.restore_torrent(rec)  # 幂等: 重复调用无副作用
     assert store.get("H1") is rec
     assert store._pending_removed == set()
+
+
+def test_store_apply_removed_yields_to_same_round_patch():
+    """增量轮同 hash 同现 patches+removed: patch 赢(行保留), 不自相矛盾地报删除; 纯 removed 照常 pop
+
+    26-10-11-2045 防御: _apply 先写 patches 后按 removed pop, 两通道同轮命中同 hash 时
+    刚写进的行会被删掉。qB 5.2.3 真机实测(2026-11-05)两通道从不同轮命中同 hash,
+    此用例钉住兜底语义 —— 有 patch 即代表该轮它存在。
+    """
+    store = TorrentStore()
+    store.refresh([FakeTorrent(hash="H1"), FakeTorrent(hash="H2")])
+    # 双通道命中既有记录: 行保留 + 字段更新兑现 + 不进 removed 上报
+    added, removed = store._apply({"H1": FakeTorrent(hash="H1", name="Readd")}, ["H1"], full=False)
+    assert added == []
+    assert removed == [], "同轮 patch 已证明该行存在, 不得按 removed pop 掉"
+    assert "H1" in store
+    assert store.get("H1").name == "Readd"
+    assert store.last_removed == []
+    # 双通道命中库外新 hash: 按新增入库, 不刚加就删
+    added, removed = store._apply({"H3": FakeTorrent(hash="H3")}, ["H3"], full=False)
+    assert added == ["H3"]
+    assert removed == []
+    assert "H3" in store
+    # 对照: 纯 removed(无 patch)照常删除 —— 防御不得放宽正常删除路径
+    added, removed = store._apply({}, ["H1", "H2"], full=False)
+    assert added == []
+    assert sorted(removed) == ["H1", "H2"]
+    assert "H1" not in store and "H2" not in store
 
 
 def test_store_refresh_diff():

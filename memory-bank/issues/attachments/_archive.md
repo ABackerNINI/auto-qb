@@ -4,7 +4,7 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (50)
 
 - [question] [跳检抽样校验是否值得做: 读盘换下载量的成本收益待拍板](../26-11-05-0514-question-skip-check-sampling-value.html) — 跳检防线之二的抽样校验(建议修法第1条)故意未做, 需讨论读盘成本/边界复杂度与残余风险是否值得投入; 主件 26-10-22-0308 已因保险丝落地收 Done
 - [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
@@ -18,7 +18,6 @@
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
-- [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
 - [test] [变异测试定期审计(常驻排期锚)](../26-10-08-0642-test-mutation-audit-standing.html) — 常驻锚: 按包/按模块定期跑变异测试(全量或部分), 机器提名+手工确认存活变异, 真洞各自入池; 指导见 mutation-testing skill, 命令走 mutants 包
 - [perf] [/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)](../26-10-08-0411-perf-webui-api-state-pagination.html) — 增量 delta 已覆盖稳态, 但全量轮(首屏/多标签冷启动/时间线窗外/防御降级)仍回整表: 3000 种子回包 6.3 MiB 量级; 原 issue 方向③未实施
 - [perf] [组行 hash 引用式响应体二次演进: 组视图增量粒度从「组行」降到「成员」级](../26-10-07-1420-perf-webui-group-row-hash-ref.html) — 组行内嵌完整 members 数组(3000 种子全量回包 6.3 MiB 主体), 任意成员速度抖动脏整条组行; hash 引用式可把组行增量粒度降到成员级, 但波及前端筛选器计数与列模型数据源, 独立立项级改动(计划 P-02 选项 B)
@@ -63,7 +62,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (414)
+## Done (415)
 
 - [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
 - [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
@@ -282,6 +281,7 @@
 - [docs] [种子页扩展列注释称「默认隐藏」但无 hide 标志, 实际默认渲染全部 28 列](../26-10-12-1911-docs-webui-torrent-column-default-hidden.html) — TORRENT_COLUMNS 扩展段注释声明默认隐藏, 但 13 列均无 hide:true; loadColState 播种判据 filter(c=>c.hide) 因此不隐藏 ⇒ 种子页默认 28 列全显(与注释及文件头口径不一致)。
 - [bug] [引擎 aq-table 表头缺 role/aria-sort 与键盘可达(P3-4 件套未上移)](../26-10-12-0800-bug-webui-table-head-a11y.html) — D3 排序并引擎后, 旧手搓表头的 role=button+tabindex+aria-sort a11y 件套未随载体迁入引擎 .h-cell(click-only div), 全引擎表头键盘不可达、读屏不知排序态
 - [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
+- [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
 - [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](../26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿
 - [docs] [三份基线切片缺三行头 > 摘要 致 kb.check 恒红](../26-10-11-1630-docs-baselines-missing-summary-header.html) — 26-10-10-2245/2306/2335 三份 webui 基线切片缺 `> 摘要:` 头, 使 gen_baseline_recent --check(kb.check 第 4 条)恒红; 提交闸门未含此条故不拦
