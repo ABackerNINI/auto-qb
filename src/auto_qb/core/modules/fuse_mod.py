@@ -3,6 +3,8 @@
 职责边界(§3.1 状态机 / §3.4 动作集合 / §3.5 批量 / §3.7 状态与自愈):
 - 每轮刷新收尾(post 相位)只读扫描已加载快照, 零额外 HTTP; 写只发生在状态迁移时;
 - armed    : 完成且 dl_limit==0 -> 批量写哨兵限速(config.download_fuse.download_limit);
+             写后连续 _REARM_YIELD 拍仍读到 0(写失败或被外部清零, 不可区分)则让位转
+             released, 不与用户在 qB 侧的操作互写(§3.7);
 - triggered: 连续 confirm_ticks 拍 dlspeed>0 -> 批量 torrents_pause(唯一升级动作);
 - released : 显式放行(CAS 恢复哨兵写入前的限速; 不自动 resume); 直到「离开完成态后重新完成
              且 dlspeed==0」才回 armed —— 一次放行覆盖整个补齐过程(§3.6);
@@ -30,6 +32,9 @@ STATUS_TRIGGERED = "triggered"
 STATUS_RELEASED = "released"
 
 _BATCH = 100  # 批量写上限(§3.5 批 100 —— 常量而非配置键)
+# armed 条目补齐哨兵的连续上限: dl_limit==0 无法区分「写失败」与「用户清零」; 连续超限
+# 视为外部接管, 让位转 released(§3.7 不写回) —— 常量而非配置键, 与 _BATCH 同口径
+_REARM_YIELD = 3
 # 这些 state 下即使 progress==1 也不当作「已完成」(计划 §3.1 的排除项)
 _NON_COMPLETE_STATES = frozenset(
     ("checkingDL", "checkingUP", "checkingResumeData", "moving", "allocating", "metaDL", "forcedMetaDL")
@@ -184,7 +189,20 @@ class FuseModule(BaseModule):
         fence = int(ent.get("fence") or 0)
         if status == STATUS_ARMED:
             if dl_limit == 0:
-                # 上次写失败/被外部清零: 幂等补齐(成功回写快照后下轮 dl_limit==fence, 不再重复)
+                # 上次写失败/被外部清零(二者不可区分): 先幂等补齐(成功回写快照后下轮
+                # dl_limit==fence, 计数清零); 连续 _REARM_YIELD 拍仍为 0 视为外部接管,
+                # 让位转 released 不再互写(§3.7), 由显式放行兜底
+                ent["rearm"] = int(ent.get("rearm") or 0) + 1
+                if int(ent["rearm"]) >= _REARM_YIELD:
+                    ent["status"] = STATUS_RELEASED
+                    ent["confirm_count"] = 0
+                    ent["was_incomplete"] = False
+                    logger.warning(f"fuse: {h[:8]} 连续 {ent['rearm']} 拍 dl_limit==0(写失败或被外部清零), 让位转 released 不再补写")
+                    return
+                if int(ent["rearm"]) == 1:
+                    logger.warning(
+                        f"fuse: {h[:8]} dl_limit==0(写失败或被外部清零), 幂等补齐哨兵(连续 {ent['rearm']}/{_REARM_YIELD} 拍, 超限让位)"
+                    )
                 to_arm.append(h)
             elif fence and dl_limit != fence:
                 # 外部改限速: 不写回, 只转 released(§3.7); 之后由显式放行兜底
@@ -193,6 +211,8 @@ class FuseModule(BaseModule):
                 ent["was_incomplete"] = False
                 logger.info(f"fuse: {h[:8]} 限速被外部改为 {dl_limit}B/s, 转 released(不写回)")
                 return
+            else:
+                ent["rearm"] = 0  # 哨兵已在场(写成功回流), 补齐计数清零
             if dlspeed > 0:
                 ent["confirm_count"] = int(ent.get("confirm_count") or 0) + 1
                 if int(ent["confirm_count"]) >= int(cfg.confirm_ticks):
@@ -315,7 +335,7 @@ class FuseModule(BaseModule):
         confirm_count: int = 0,
         orig_limit: Optional[int] = None
     ) -> dict:
-        """条目字段集: hash/status/fence/orig_limit/armed_at/confirm_count/tagged(+released 用的 was_incomplete)"""
+        """条目字段集: hash/status/fence/orig_limit/armed_at/confirm_count/rearm/tagged(+released 用的 was_incomplete)"""
         return {
             "hash": h,
             "status": status,
@@ -323,6 +343,7 @@ class FuseModule(BaseModule):
             "orig_limit": int(rec.dl_limit or 0) if orig_limit is None else int(orig_limit),
             "armed_at": now,
             "confirm_count": int(confirm_count),
+            "rearm": 0,  # 连续补齐哨兵计数(见 _REARM_YIELD); 哨兵回流即清零
             "was_incomplete": False,
             "tagged": False,  # S3: 是否已持有触发标签(外部移除后置 False, 不重加)
         }

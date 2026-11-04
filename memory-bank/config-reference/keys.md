@@ -113,9 +113,9 @@ download_fuse:
 | `enabled` | bool / `false` | — | 功能总开关; false(缺省) = 不增加任何 qB 读写与判断 |
 | `download_limit` | speed / `13KiB/s` | >0、整数 KiB、KiB 数奇数、<=1024KiB | 检测到已完成种子有下载流量时先压到的限速; **0(qB 语义 = 不限速)与偶数 KiB 直接报错**, 避免「看起来开了、实际没限」 |
 | `confirm_ticks` | int / `3` | 1..20 | 连续多少拍检测到 dlspeed > 0 才判定为真实下载并暂停; 1 = 首拍即暂停 |
-| `fuse_tag` | str / `zFusePaused` | 非空 | 触发保险丝后给种子添加的标记标签; 带此标签的种子不会重复暂停 |
+| `fuse_tag` | str / `zFusePaused` | 非空; 无逗号(qB 标签分隔符); 首尾无空白(qB 会裁剪) | 触发保险丝后给种子添加的标记标签; 带此标签的种子不会重复暂停 |
 
-行为(S2/S3 已接入): 每拍只对「已完成 + `dl_limit==0`」的种子写 `download_limit` 哨兵; 连续 `confirm_ticks` 拍 `dlspeed>0` 且限速仍等于哨兵 → 暂停并加 `fuse_tag`; 放行走 `python -m auto_qb <cfg> --fuse-release <hash>`(或 `--fuse-release-all`), 按 CAS 恢复原限速并摘标签(不自动 resume); 未完成的 `released` 条目在重新完成后回武装。state 丢失时按「完成 + `dl_limit` 恰等于哨兵」adopt(带标签且暂停 → triggered, 否则 armed, 两种都零 qB 写), 且 **adopt 只覆盖已完成种子**。标签名默认 `zFusePaused` 为保留约定, 改 `fuse_tag` 需同步用户排除规则与文档。
+行为(S2/S3 已接入): 每拍只对「已完成 + `dl_limit==0`」的种子写 `download_limit` 哨兵(armed 条目写后连续 3 拍仍读到 0 —— 写失败或被外部清零不可区分 —— 让位转 `released` 不再互写, 留 WARNING); 连续 `confirm_ticks` 拍 `dlspeed>0` 且限速仍等于哨兵 → 暂停并加 `fuse_tag`; 放行走 `python -m auto_qb <cfg> --fuse-release <hash>`(或 `--fuse-release-all`), 按 CAS 恢复原限速并摘标签(不自动 resume; 显式 hash 列表 0 命中退出码 1), 未完成的 `released` 条目在重新完成后回武装。state 丢失时按「完成 + `dl_limit` 恰等于哨兵」adopt(带标签且暂停 → triggered, 否则 armed, 两种都零 qB 写), 且 **adopt 只覆盖已完成种子**。标签名默认 `zFusePaused` 为保留约定, 改 `fuse_tag` 需同步用户排除规则与文档。
 
 ## relocate 段 (整组迁移)
 

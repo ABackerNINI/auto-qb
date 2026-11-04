@@ -40,7 +40,11 @@ def export_torrents_info(manager: QbManager, output_file: str):
 
 
 def fuse_release(manager: QbManager, hashes, release_all: bool, dry_run: bool) -> bool:
-    """保险丝显式放行(fuse release <hash> / --all): 连接后由模块按 CAS 恢复 pre_limit 并落 state"""
+    """保险丝显式放行(fuse release <hash> / --all): 连接后由模块按 CAS 恢复 pre_limit 并落 state
+
+    显式 hash 列表零命中(拼错 hash/条目已 released)返回 False -> 退出码 1, 不无声成功;
+    --all 零条目是合法清点(常与 enabled=false 配合), 仍返回 True。
+    """
     if not manager.connect():
         logging.error("放行失败: 无法连接 qBittorrent")
         return False
@@ -53,6 +57,9 @@ def fuse_release(manager: QbManager, hashes, release_all: bool, dry_run: bool) -
     released = manager.ctx.fuse.release(None if release_all else hashes, dry_run=dry_run)
     if not dry_run:
         manager.ctx.state.save()
+    if released == 0 and not release_all:
+        logging.warning(f"fuse: 放行 0 条(显式列表未命中任何非 released 条目): {','.join(hashes)}")
+        return False
     logging.info(f"fuse: 已放行 {released} 个条目" + ("(dry-run: 未写 qB/state)" if dry_run else ""))
     return True
 
@@ -188,6 +195,9 @@ def main():
         fuse_hashes = [s.strip().lower() for s in args.fuse_release.replace("，", ",").split(",") if s.strip()]
         if not fuse_hashes:
             parser.error("--fuse-release 需要至少一个 torrent hash(逗号分隔)")
+        bad = [s for s in fuse_hashes if len(s) != 40 or any(c not in "0123456789abcdef" for c in s)]
+        if bad:
+            parser.error(f"--fuse-release 须为 40 位十六进制 torrent hash(逗号分隔): {','.join(bad)}")
 
     # 容器/服务化场景: SIGTERM 转入 Ctrl+C 同款优雅关闭(非托盘模式经 KeyboardInterrupt 在下面捕获;
     # 托盘模式由 TrayUi.run 换装 quit 事件 handler —— 异常路径跳过托盘收尾会挂死进程退出, issue 26-10-31-1030)

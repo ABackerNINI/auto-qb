@@ -2,6 +2,8 @@
 
 ## 测试计划(每个测试函数一条)
 - test_fuse_arm_writes_fence_once: 完成+dl_limit==0 -> 一次批量写哨兵; 再扫零写(幂等)
+- test_fuse_armed_transient_zero_limit_recovers: 偶发 0 一拍 -> 补齐一次回流后计数清零不升级
+- test_fuse_armed_zero_limit_yields_after_rearm_ticks: 哨兵持续 0 连续 3 拍 -> 让位转 released 不再互写
 - test_fuse_arm_only_complete_zero_limit: 未完成/校验中/已有非零限速 -> 不写不建条目
 - test_fuse_trigger_after_confirm_ticks: 连续 N 拍 dlspeed>0 -> 一次批量 pause, 状态 triggered 带原因
 - test_fuse_zero_speed_never_triggers: 恒 0 连击不累积、不暂停(不误伤)
@@ -9,8 +11,9 @@
 - test_fuse_triggered_no_duplicate_within_own_write: own_write 未回流期间不重复下发暂停(幂等)
 - test_fuse_release_cas_restores_pre_limit: 放行 CAS 成立 -> 恢复 orig_limit(0) 且标 released, 不 resume
 - test_fuse_release_cas_failed_only_marks: 放行时限速已被外部改 -> 零写只标 released
-- test_fuse_release_all_batches: release(None) 批量放行全部条目并恢复限速
+- test_fuse_release_all_batches: release(None) 批量放行全部条目并恢复限速; 触发拍汇总 WARNING 恰一条
 - test_fuse_release_unknown_hash_noop: 放行不存在的 hash -> 0 且零写
+- test_fuse_release_dry_run_zero_writes: release(dry_run=True) -> 返回命中数但零 qB 调用、状态不变
 - test_fuse_release_then_rearm_after_refill: released 不立即重武装; 离开完成态再完成后才武装
 - test_fuse_enabled_false_zero_side_effect: enabled=false -> 零 qB 写、不建 state 域
 - test_fuse_dry_run_zero_writes: dry-run -> 零 qB 写、不建 state 域
@@ -26,7 +29,7 @@
 - test_fuse_adopt_tagged_paused_is_triggered: 完成+fence+暂停+标签 -> adopt 重建 triggered 零写
 - test_fuse_adopt_fence_without_tag_is_armed: 完成+fence 无标签 -> 仍重建 armed(标签不重加)
 - test_fuse_tag_reuse_warns_once_without_extra_request: 同名标签已被使用 -> 启动一条 WARNING, 不建标签定义
-- test_fuse_release_cli_syncs_snapshot_before_cas: CLI 放行先同步 store 快照再调 release(CAS 才读得到当前限速)
+- test_fuse_release_cli_syncs_snapshot_before_cas: CLI 放行先同步 store 快照再调 release(CAS 才读得到当前限速); 非 dry-run 落盘、dry-run 不落盘; 显式列表 0 命中返回 False
 """
 
 from unittest import mock
@@ -88,6 +91,40 @@ def test_fuse_arm_writes_fence_once(tmp_path):
     assert tor.dl_limit == FENCE, "Facade 写后应回写快照, 下轮据 dl_limit==fence 短路"
     _tick(mgr)
     assert len(_set_calls(client)) == 1, "值未变不重复写(幂等)"
+
+
+def test_fuse_armed_transient_zero_limit_recovers(tmp_path):
+    """偶发 0(上一拍写失败未回流) -> 补齐一次, 哨兵回流后计数清零, 不升级 released"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("y" * 40)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    tor.dl_limit = 0  # 模拟写失败: 快照没回流哨兵
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        _tick(mgr)
+    assert len(_set_calls(client)) == 2 and tor.dl_limit == FENCE, "补齐一次成功回流"
+    assert [m for m in cap.messages if "dl_limit==0" in m], "补齐留 WARNING 痕迹(不与外部静默互写)"
+    _tick(mgr)  # 哨兵已在场: 计数清零, 零写
+    assert len(_set_calls(client)) == 2
+    ent = _entries(mgr)["y" * 40]
+    assert ent["status"] == "armed" and ent["rearm"] == 0
+
+
+def test_fuse_armed_zero_limit_yields_after_rearm_ticks(tmp_path):
+    """哨兵持续为 0 连续 _REARM_YIELD 拍(写失败或被外部清零) -> 让位转 released, 不再互写"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("x" * 40)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    assert tor.dl_limit == FENCE, "首次武装写入(facade 回写快照)"
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        for _ in range(3):
+            tor.dl_limit = 0  # 模拟用户每拍把哨兵清回不限速
+            _tick(mgr)
+    assert len(_set_calls(client)) == 3, "武装 1 次 + 补齐 2 次; 第 3 拍让位零写"
+    assert tor.dl_limit == 0, "让位后不再回写哨兵(不与用户操作打架)"
+    assert _entries(mgr)["x" * 40]["status"] == "released"
+    assert [m for m in cap.messages if "让位转 released" in m], "让位留 WARNING 痕迹"
 
 
 def test_fuse_arm_only_complete_zero_limit(tmp_path):
@@ -185,9 +222,12 @@ def test_fuse_release_all_batches(tmp_path):
     tori = [_tor("k" * 40, dlspeed=1000), _tor("l" * 40, dlspeed=1000)]
     seed_store(mgr, tori)
     _tick(mgr)
-    for _ in range(TICKS):
-        _tick(mgr)
+    with capture_logs("auto_qb.core.modules.fuse_mod") as cap:
+        for _ in range(TICKS):
+            _tick(mgr)
     assert len(_pause_calls(client)) == 1 and len(_pause_calls(client)[0][1]) == 2
+    assert len([m for m in cap.messages if "paused 2 torrents (batch)" in m]) == 1, \
+        "批量触发汇总 WARNING 每拍最多一条(§3.5, 不逐条刷屏)"
     assert mgr.ctx.fuse.release(None) == 2
     last = _set_calls(client)[-1]
     assert last[1] == 0
@@ -203,6 +243,23 @@ def test_fuse_release_unknown_hash_noop(tmp_path):
     before = len(_set_calls(client))
     assert mgr.ctx.fuse.release(["n" * 40]) == 0
     assert len(_set_calls(client)) == before
+
+
+def test_fuse_release_dry_run_zero_writes(tmp_path):
+    """release(dry_run=True) -> 返回命中数但零 qB 调用、不置 released(§10 所有 fuse 方法零写)"""
+    mgr, client = _mgr(tmp_path)
+    tor = _tor("w" * 40, dlspeed=1000)
+    seed_store(mgr, [tor])
+    _tick(mgr)
+    for _ in range(TICKS):
+        _tick(mgr)
+    ent = _entries(mgr)["w" * 40]
+    assert ent["status"] == "triggered"
+    before = len(client.calls)
+    assert mgr.ctx.fuse.release(["w" * 40], dry_run=True) == 1
+    assert len(client.calls) == before, "dry-run 放行零 qB 调用(不写限速/不摘标签)"
+    assert _entries(mgr)["w" * 40]["status"] == "triggered", "dry-run 不置 released"
+    assert _entries(mgr)["w" * 40]["tagged"] == ent["tagged"], "dry-run 不改任何条目字段"
 
 
 def test_fuse_release_then_rearm_after_refill(tmp_path):
@@ -424,7 +481,9 @@ def test_fuse_tag_reuse_warns_once_without_extra_request(tmp_path):
 
 
 def test_fuse_release_cli_syncs_snapshot_before_cas():
-    """CLI 是一次性进程: 必须先 apply_sync 填快照, release 的 CAS 才读得到当前 dl_limit"""
+    """CLI 是一次性进程: 必须先 apply_sync 填快照, release 的 CAS 才读得到当前 dl_limit;
+    非 dry-run 必须落盘(漏调则放行重启后遇 0 限速被重新武装), dry-run 不落盘;
+    显式 hash 列表 0 命中返回 False(退出码 1), 不无声成功"""
     from auto_qb.cli import fuse_release
 
     mgr = mock.MagicMock()
@@ -434,3 +493,17 @@ def test_fuse_release_cli_syncs_snapshot_before_cas():
     mgr.ctx.fuse.release.side_effect = lambda hashes, dry_run: order.append("release") or 1
     assert fuse_release(mgr, ["abc"], False, False) is True
     assert order == ["sync", "release"], "先快照后放行, 顺序不可颠倒"
+    assert mgr.ctx.state.save.called, "放行结果必须落盘(state 主通道)"
+
+    mgr_dry = mock.MagicMock()
+    mgr_dry.connect.return_value = True
+    mgr_dry.store.apply_sync.side_effect = lambda api: ([], [])
+    mgr_dry.ctx.fuse.release.side_effect = lambda hashes, dry_run: 1
+    assert fuse_release(mgr_dry, ["abc"], False, True) is True
+    assert not mgr_dry.ctx.state.save.called, "dry-run 不落盘"
+
+    mgr_zero = mock.MagicMock()
+    mgr_zero.connect.return_value = True
+    mgr_zero.store.apply_sync.side_effect = lambda api: ([], [])
+    mgr_zero.ctx.fuse.release.side_effect = lambda hashes, dry_run: 0
+    assert fuse_release(mgr_zero, ["a" * 40], False, False) is False, "显式列表 0 命中要报错, 不无声 exit 0"

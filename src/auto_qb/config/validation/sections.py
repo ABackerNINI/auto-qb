@@ -565,8 +565,16 @@ def _validate_download_fuse(spec, errors: List[str]) -> None:
         n = _try(int, spec["confirm_ticks"], "config.download_fuse.confirm_ticks", errors)
         if n is not None and not 1 <= n <= 20:
             errors.append(f"config.download_fuse.confirm_ticks: 须在 1-20 范围内: {n}")
-    if "fuse_tag" in spec and (not isinstance(spec["fuse_tag"], str) or not spec["fuse_tag"].strip()):
-        errors.append("config.download_fuse.fuse_tag: 必须是非空字符串")
+    if "fuse_tag" in spec:
+        tag = spec["fuse_tag"]
+        if not isinstance(tag, str) or not tag.strip():
+            errors.append("config.download_fuse.fuse_tag: 必须是非空字符串")
+        elif "," in tag:
+            # 逗号是 qB 标签分隔符: add_tags 携带含逗号标签会被 qB 拒收/拆裂
+            errors.append(f"config.download_fuse.fuse_tag: 不得包含逗号(qB 标签分隔符): {tag!r}")
+        elif tag != tag.strip():
+            # qB 侧会裁剪标签首尾空白: 带空白的值会造成快照标签集比对失配(触发误报/放行摘不掉)
+            errors.append(f"config.download_fuse.fuse_tag: 首尾不得含空白(qB 会裁剪): {tag!r}")
 
 
 def _validate_grouping(spec, errors: List[str]) -> None:

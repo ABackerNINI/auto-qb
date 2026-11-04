@@ -41,7 +41,7 @@
 - test_grouping_cross_group_conflict_check_valid_bool
 - test_download_fuse_defaults: download_fuse 缺省 enabled=false / 13KiB/s / confirm_ticks=3 / fuse_tag=zFusePaused
 - test_download_fuse_valid: 合法值通过 fail-fast 校验(下载限速奇数 KiB 边界含 1/13/1023)
-- test_download_fuse_invalid_aggregates: 0/偶数/非整数 KiB/超上限/拍数越界/空标签一次性聚合报错
+- test_download_fuse_invalid_aggregates: 0/偶数/非整数 KiB/超上限/拍数越界/空标签/含逗号标签/首尾空白标签一次性聚合报错
 """
 import re
 from pathlib import Path
@@ -523,7 +523,7 @@ def test_download_fuse_valid():
 
 
 def test_download_fuse_invalid_aggregates():
-    """0(qB 不限速)/偶数/非整数 KiB/超上限/拍数越界/空标签都报错, 且一次聚合"""
+    """0(qB 不限速)/偶数/非整数 KiB/超上限/拍数越界/空标签/含逗号/首尾空白标签都报错, 且一次聚合"""
     from auto_qb.config.validation import validate_config
 
     errors = validate_config(
@@ -544,6 +544,11 @@ def test_download_fuse_invalid_aggregates():
     assert any("必须 > 0" in e for e in errors)
     assert any("config.download_fuse.confirm_ticks" in e for e in errors)
     assert any("config.download_fuse.fuse_tag" in e for e in errors)
+
+    # fuse_tag 与 qB 标签口径对齐: 逗号是分隔符(qB 拒收/拆裂), 首尾空白会被 qB 裁剪致比对失配
+    for bad_tag, word in (("z,Fuse", "逗号"), (" z ", "空白")):
+        errors = validate_config({"config": {"download_fuse": {"fuse_tag": bad_tag}}})
+        assert any(f"config.download_fuse.fuse_tag" in e and word in e for e in errors), (bad_tag, errors)
 
     for limit, word in (("14KiB/s", "奇数"), ("13.5KiB/s", "整数 KiB"), ("1025KiB/s", "<= 1024KiB")):
         errors = validate_config({"config": {"download_fuse": {"download_limit": limit}}})
