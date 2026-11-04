@@ -10,15 +10,15 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (3)
+## Open (2)
 
-- [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](../26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (206)
+## Done (207)
 
 - [26-11-04-2357] [跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案](../26-11-04-2357-plan-skip-check-gates.html) — `skip-check-gates`
+- [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](../26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-04-0554] [收口 code review 制度化实施计划](../26-11-04-0554-plan-memory-bank-code-review.html) — `memory-bank-code-review`
 - [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](../26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-04-0115] [RM10 附加轮: 缺失站点导出合并真机实测(导出面)](../26-11-04-0115-plan-real-rm10-addendum-missing-merge.html) — `real-rm10-addendum-missing-merge`
