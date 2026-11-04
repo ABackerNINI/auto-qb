@@ -1,9 +1,9 @@
 # 26-11-04-test-coverage-uplift-3 — 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)
 
-**Status:** In Progress
+**Status:** Done
 **Added:** 2026-11-04
-**Updated:** 2026-11-04
-**Summary:** 承接前两轮(91%→96% / 97.66%→99.41%)的第三轮实施档:门槛 99 已稳但缺口 162→319 回涨(新欠账约 +157),按计划三阶段 P0/P1/P2 收敛缺口到 ≤100(TOTAL ≈99.7%),机制 M1–M7 继承 + M8 缺口净额台账新增
+**Updated:** 2026-11-05
+**Summary:** 第三轮实施完成:缺口 319 → 20 单位(净清偿 299,终点线 ≤100 大幅超出),精确 TOTAL 99.9361%,阈值抬 win 99.5 / 其他 99.0,watchlist 清零,豁免 8 零新增,M8 缺口净额台账定稿;全轮零产品码改动,新增 ≈132 用例,红验 14 杀 1 假绿(已定位)
 **Topics:** test-coverage-uplift-3
 **Refs:** memory-bank/plans/26-11-04-0157-plan-test-coverage-uplift-3.html
 
@@ -39,10 +39,11 @@
 | T1b | hr/discovery 14 + service_wave 10 + hr/runtime 7 + hr/server 5 | Done (2026-11-04, 1d261b29, 33/36, 余 3 条到不了弧) |
 | T1c | transfer/orchestrator 10 + sections 12 + writer 6 + loaders 2 | Done (2026-11-04, 3890c6a6, 30/30 全清四文件 100%) |
 | T1d | P1 验收:TOTAL ≥99.55% + 阈值抬 win 99.3/其他 98.8 + 基线切片 + 红验 | Done (2026-11-04, aaaecd74, 切片 26-11-04-0644) |
-| T2a | webui 二线 ≈40(runtime_views/commands/runtime_commands/views_episodes/module/runtime_common/runtime_stream/commands_torrents/routes/auth/static_ui/views) | Open |
-| T2b | core 尾 ≈30(traffic_grid/relocate_*/ops_mod/state/qbmanager/qbapi/rules_mod/traffic_snapshot_mod/relocate_journal)+ registry 4 + finalize_watch 5 | Open |
-| T2c | P2 收口:TOTAL ≥99.7% 且缺口 ≤100 + 阈值抬 win 99.5/其他 99.0 + M8 定稿回写 baseline.md + 残留列名 + watchlist 清零 | Open |
-| S9 | 计划与档案转 Done + 总结 + 合回本地 develop | Open |
+| T2a | webui 二线 ≈40(runtime_views/commands/runtime_commands/views_episodes/module/runtime_common/runtime_stream/commands_torrents/routes/auth/static_ui/views) | Done (2026-11-05, 91c8d516, 41/42) |
+| T2a2 | webui 余下小件(views_episodes/auth/routes 四件/static_ui/views) | Done (2026-11-05, d14a5391, 22/22 八文件 100%) |
+| T2b | core 尾 ≈30(traffic_grid/relocate_*/ops_mod/state/qbmanager/qbapi/rules_mod/traffic_snapshot_mod/relocate_journal)+ registry 4 + finalize_watch 5 | Done (2026-11-05, abc5381f, 37/38) |
+| T2c | P2 收口:TOTAL ≥99.7% 且缺口 ≤100 + 阈值抬 win 99.5/其他 99.0 + M8 定稿回写 baseline.md + 残留列名 + watchlist 清零 | Done (2026-11-05, 8cdeff31, 切片 26-11-05-0116) |
+| S9 | 计划与档案转 Done + 总结 + 合回本地 develop | Done (2026-11-05) |
 
 ## 进度日志
 
@@ -66,3 +67,12 @@
 - T1d(`aaaecd74`)P1 验收过线:基线切片 `26-11-04-0644-test-coverage-uplift-3-p1`,阈值抬 win 99.3 / 其他 98.8 抬后全量绿,watchlist 4→3(存量 3 个滚 T2),豁免 8 零新增,红验抽 11.6% 全杀零假绿。
 - 备案:T1b 揭出存量 apply 用例疑似假绿(原地改配置致断言空转,测试质量问题非产品缺陷,范围守恒未动);T1d 记一条与本轮无关的既有偶发 flake(webui static dom 守阵,单跑绿)。
 - 待办:派发 T2a(webui 二线)。
+
+### R3 · P2 收口与全轮完成 (2026-11-05)
+
+- T2a(`91c8d516`)41/42;T2a2(`d14a5391`)22/22 八文件全 100%;T2b(`abc5381f`)37/38(余 same_volume 三态穷尽假弧)。webui 侧 watchlist 三项(commands/runtime_common/views_episodes)全部核销。
+- T2c(`8cdeff31`)收口达成:D1 终点线大幅超出——缺口 20 单位(5m+15p,终点线 ≤100)、精确 TOTAL 99.9361%;阈值抬 win 99.5 / 其他 99.0 全绿;watchlist 清零;豁免 8 零新增;M8 台账定稿回写 baseline.md(净额序列 −102/−99/−98 全负无点名);残留 20 单位逐条列名(tray 豁免 3 / 到不了防御支 4 / 零头 13)。基线切片 `26-11-05-0116-test-coverage-uplift-3-p2`。
+- 红验累计:P0 4/4 + P1 5/5 + P2 5杀1假绿(qbmanager 补刷新闸——断言窗口在第 4 轮 KI 退出前,分歧落在窗后,原因已定位记切片,后续 mutants 审计兜底)。
+- 全轮轨迹:缺口 319 → 20(净清偿 299 单位),TOTAL 98.94%(coverage json 口径)→ 99.94%,阈值 99.0/98.5 → 99.5/99.0,新增用例 15+17+23+16+12+16+9+24 ≈ 132 条,零产品码改动,豁免零新增。
+- 提请裁决项(未入池,见 S9 总结):①fuse_mod 摘标签路径缺 None-client 守卫(潜在,现行接线不可达);②T1b 揭出存量 apply 用例疑似假绿(原地改配置);③relocate_units 空 scope 守卫现实不可达(存量用例空转,本轮已用替身钉住契约);④qbmanager 变异假绿待 mutants 审计。
+- 委派过程记录:T0a/T2a/T2c 各发生 1 次派发通道失败或失活(均重试或续作成功,未触发 3 次停止线);T2c 中断留下的半成品(阈值/切片骨架/baseline.md M8 段)经审阅合格后由续作智能体沿用收口,未重做。

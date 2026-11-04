@@ -4,11 +4,10 @@
 > 主索引的已完结区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**(只列 slug 与标题; 摘要全文在档案里)。
 > 每条链接指回 `tasks/` 下的档案原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## In Progress (27)
+## In Progress (26)
 
 - [26-11-05-backend-skip-check-gates](../26-11-05-backend-skip-check-gates.md) 跳检 dedup 闸门遮蔽修复(26-10-11-2045)
 - [26-11-03-backend-relocate-same-fs-proof](../26-11-03-backend-relocate-same-fs-proof.md) 整组迁移同盘证明误拒：根因与修复计划
-- [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)
 - [26-11-04-test-webui-config-normalize-parity](../26-11-04-test-webui-config-normalize-parity.md) 前端 cfgNormalize* 与后端 compat 规范化跨语言对拍守卫
 - [26-10-08-test-mutation-audit](../26-10-08-test-mutation-audit.md) 变异测试定期审计(指导 / 命令 / 排期锚)
 - [26-11-03-docs-doc-drift-sweep](../26-11-03-docs-doc-drift-sweep.md) 文档漂移 7 条批量修复（评审计划 0557 + 端口口径）
@@ -39,9 +38,10 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (288)
+## Done (289)
 
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
+- [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)
 - [26-11-04-webui-flux-glass-popups](../26-11-04-webui-flux-glass-popups.md) flux全浮层玻璃化: 预算4→16+遮罩浓度修复
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-11-04-memory-bank-code-review](../26-11-04-memory-bank-code-review.md) 收口 code review 制度化: code-review skill + review 命令包 + 协议挂钩
