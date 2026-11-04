@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-zero-move-fix-stress">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-05-0546">
+<meta name="doc-updated" content="26-11-05-0656">
+<meta name="doc-refs" content="memory-bank/issues/26-11-05-0420-bug-relocate-zero-move.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-zero-move-fix-stress</div>
+<h1>relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)</h1>
+<p class="lede">认领 issue 26-11-05-0420,对 §06 五条修法(主方向 = ACT_FINALIZE 后按声明名核对 + <code>torrents/renameFolder</code> 两步纯改名复位)做实施前压测:先以 qB v5.2.3 源码逐跳核对机制,再在测试 qB(36596 草稿本 + 36595 流量对端,R: 内存盘,real-fake 假种子)上逐项实测"能否正常工作 / 约束符合性 / 同组多种子竞态 / 组外共享者影响 / 上传中行为",产出逐项证据与修法收紧结论。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-0546 · <b>doc-updated</b> 26-11-05-0546 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令(2026-11-05): 认领 26-11-05-0420-bug-relocate-zero-move, 对其方案压测 —— 主要方向能否正常工作 / 是否符合约束 / 同组多种子竞态 / 改目录名对同目录其它种子的影响 / 种子在上传时的行为; 先分析更优方案, 再写详细压测方案, 最后用测试 qB 逐项实测; R 盘为内存盘, 中间态难捕捉, 必要时构造 10GiB 种子
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>1.1 背景</h3>
+<p>生产事故(取证报告 <a href="../reports/26-11-05-0417-report-relocate-zero-move.html">26-11-05-0417</a>): ACT_FINALIZE 归位把共享物理文件挂 <code>.!qB</code>,下次整组迁移按声明名 stat 全 miss,qB 报「成功移动」但零搬移,10min 后停滞看门狗才判失败。issue §06 给了 5 条修法,其中修复 5(renameFolder 两步复位)已经在实验 G5 单点验证过一次。<b>本计划=实施前的压测轮</b>:不改生产代码,先静态核机制,再在测试 qB 上把用户点名的六个方向逐一打出证据,给后续实现轮一份"哪里能照抄、哪里必须收紧"的清单。</p>
+<h3>1.2 压测问题清单(用户点名)</h3>
+<ol>
+  <li>主要方向(renameFolder 两步复位)能否正常工作?</li>
+  <li>是否符合设计约束:不删种 / 不 skip_check 重加 / 不读盘校验?</li>
+  <li>同组多种子(共享同一物理内容根)修复时有没有竞态?</li>
+  <li>改目录名(两步复位的内容根改名)会不会影响同目录下其它种子(组外共享者)?</li>
+  <li>种子在上传(活跃做种流量)时,修复与搬迁各会发生什么?</li>
+  <li>(附加,静态分析发现)两步之间是异步入队,step1→step2 的时序窗口有没有竞态?</li>
+</ol>
+<h3>1.3 设计底线 / 不变量</h3>
+<ul>
+  <li><b>数据安全第一</b>:本轮只在测试实例(36595/36596)+ real-fake 假种子 + R:/tests-real/.work 上操作;生产 26586/16585 与 <code>I:\PT\</code> 零触碰。</li>
+  <li><b>三项设计约束全程作为断言</b>:不删种 / 不 skip_check 重加 / 不读盘(哈希)校验 —— 每个修复实验都要核 qB 日志与种子账面,确认没有 recheck / re-add / delete 发生。</li>
+  <li><b>先复现再修复</b>:每个修复实验先构造出冻结态(错位),修复后再断言「磁盘原名 + 账面 1.00 不动 + 嵌套搬迁恢复真搬」。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<h3>2.1 代码锚点(认领复验 2026-11-05,行号有漂移)</h3>
+<table>
+  <tr><th>锚点(issue §04 原行号)</th><th>复验</th><th>现状</th></tr>
+  <tr><td><code>relocate_plan.py:197-219</code> GATE_QB_TEMP 收集</td><td class="good">仍复现</td><td>仅 <code>fa.scandir(content_root)</code> 一层,深层 <code>.!qB</code> 漏拦;无源侧逐文件存在性检查</td></tr>
+  <tr><td><code>qbapi.py:144-156</code> setLocation</td><td class="good">仍复现</td><td>纯转发,不消费 qB 异步搬失败</td></tr>
+  <tr><td><code>relocate_exec.py:791</code> 下发段</td><td class="wr">漂移 → 现行 816</td><td>成功即回「已发起」;唯一兜底 10min 停滞(<code>relocate_exec.py:106</code> + <code>stall_verdict</code>)</td></tr>
+  <tr><td><code>relocate_units.py:431</code> evaluate_group</td><td class="good">仍复现</td><td>无「目标 ⊆ 源」嵌套闸门</td></tr>
+  <tr><td><code>relocate_lifecycle.py:122</code> _resume_members</td><td class="good">仍复现</td><td>失败收口恢复成员</td></tr>
+  <tr><td><code>relocate_units.py:952,976-1030</code> ACT_FINALIZE</td><td class="good">仍复现</td><td>missingFiles ⇒ setLocation 归位,归位搬迁的 .!qB 副作用未对冲(<code>relocate_exec.py:453-465</code>)</td></tr>
+</table>
+<h3>2.2 源码机制核对(本轮新证,qB v5.2.3 @ D:\Projects\Else 只读)</h3>
+<table>
+  <tr><th>环节</th><th>位置</th><th>事实</th><th>对修法的含义</th></tr>
+  <tr><td>renameFolder API 校验</td><td><code>torrentcontenthandler.cpp:64</code></td><td>newPath 绝对路径拒;「folder already exists / No such folder」按 <b>filePath(i) 声明名</b>判,不看磁盘</td><td>冻结态(账面声明名不变)调用必过校验 —— 两步可行;但也意味着校验给不出磁盘真相,时序必须自己盯磁盘</td></tr>
+  <tr><td>doRenameFolder</td><td><code>torrentimpl.cpp:1862</code></td><td>逐文件 <code>makeActualPath(i, newFilePath)</code> 后 <code>doRenameFile</code>;完成位 true ⇒ 目标名无 .!qB</td><td>两步摘后缀的机制根据:step1(root→tmp)把磁盘 <code>declared.!qB</code> 改到 <code>tmp/declared</code>;step2 改回 <code>root/declared</code></td></tr>
+  <tr><td>doRenameFile</td><td><code>torrentimpl.cpp:2583</code></td><td>入 <code>m_renamingFiles</code> 队列 + libtorrent <code>rename_file</code>(<b>异步</b>)</td><td>🔴 WebAPI 立即返回,改名在后台队列;step1 未落盘就发 step2 可能撞队列 —— 两步之间必须等磁盘证据</td></tr>
+  <tr><td>makeActualPath</td><td><code>torrentimpl.cpp:628</code></td><td>仅 <code>fileSize&gt;0 且未完成</code>才挂 .!qB;另有 unwanted-folder 分支(默认关)</td><td>零大小文件不参与错位;修复只针对完成位 true 的冻结态</td></tr>
+  <tr><td>搬迁逐文件</td><td><code>storage_utils.cpp:151</code></td><td>源 stat 不到 ⇒ 忽略并算成功</td><td>「声明名与 .!qB 都不在」(数据藏走)同样零搬移假成功 —— 修复①只查两态不够,要三态</td></tr>
+</table>
+<h3>2.3 修复方案五条的静态压测预判</h3>
+<table>
+  <tr><th>修法(issue §06)</th><th>预判</th><th>须压测点</th></tr>
+  <tr><td>① GATE_QB_TEMP 按声明文件双查</td><td class="wr">方向对,两态不够</td><td>三态(在 / .!qB / 缺)+ exists 不可判定保守处置;成本与现行 target_conflicts 逐文件判定同型</td></tr>
+  <tr><td>② 短窗核验(30-60s)</td><td class="wr">信号选择是命门</td><td>save_path 翻转在零搬移时同样发生(事故实证),不能当成功信号;stopped 种子搬迁有无 moving 态未知;同卷瞬搬/慢搬不误杀</td></tr>
+  <tr><td>③ 嵌套目标闸门</td><td class="good">方向对</td><td>路径成分级比较(防 <code>待删</code> vs <code>待删2</code> 前缀误判)+ Windows 大小写 + 覆盖全部成员</td></tr>
+  <tr><td>④ 失败反馈面</td><td class="good">纯 UI</td><td>实现轮做,本轮跳过</td></tr>
+  <tr><td>⑤ 按声明名核对 + renameFolder 两步复位</td><td class="good">主方向成立(源码+G5 互证)</td><td>异步入队时序 / 同组去重 / 组外共享者 / 上传中 / 崩溃窗口 / 单文件与多根形态缺口</td></tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 更优方案比对(静态分析结论)</h3>
+<ul>
+  <li><b>治本(阻止错位诞生)不可行</b>:错位发生在 finalize 归位 + 自动 recheck(<code>need_full_check ⇒ force_recheck</code>),无 API 可抑制;resume 是收尾目的本身,绕不开。<b>事后纯改名复位是三项约束面内的唯一通路</b>(recheck=完整哈希违背「不读盘」;skip_check 重加违背约束;renameFile 有 G4 的 409 前科)。</li>
+  <li><b>⑤ 的降级选项</b>:检测到错位只告警不自动修。折中推荐:<b>目录形态内容根 + 组内专属(<code>content_root_exclusive</code> 现成事实)→ 自动修;单文件/多根/有组外共享者 → 检测 + 告警交人</b>。以 E1.4/E1.7 实测结论定边界。</li>
+  <li><b>①②③ 是互补纵深</b>:②(短窗核验,信号 = dst 侧证据或 moving)是真正兜底网,不管什么原因的零搬移都能抓;①③ 是前置 UX。<b>不替换,只收紧</b>:① 升三态;② 明确信号 = dst_size&gt;0 / dst_ready / moving,save_path 翻转单独不认;③ 成分级比较 + 全成员覆盖。</li>
+  <li><b>⑤ 的收紧清单</b>(实测确认后写进实现轮):按<b>物理内容根去重</b>(一次两步修全组,成员级各修既有害又多余);两步之间<b>磁盘证据驱动</b>(tmp 根出现且文件摘净才发 step2);检测逻辑识别「声明根不在 + 临时根在」=<b>上次修复中断</b> → 补完 step2 而非重新 finalize;组外共享者降级告警。</li>
+</ul>
+<h3>3.2 压测分期</h3>
+<table>
+  <tr><th>期</th><th>内容</th><th>实验</th></tr>
+  <tr><td>P0 基线</td><td>环境守卫 + 冻结态复现(顺带补 issue 复验行)</td><td>E0.1-E0.2</td></tr>
+  <tr><td>P1 主方向</td><td>renameFolder 两步复位:基本 / API 语义 / 同组去重 / 组外共享者 / 上传中 / 崩溃窗口 / 形态缺口</td><td>E1.1-E1.7</td></tr>
+  <tr><td>P2 预检闸门</td><td>三态源侧判定 + 嵌套闸门边界(脚本模拟新判据,不改代码)</td><td>E2.1-E2.3</td></tr>
+  <tr><td>P3 短窗核验</td><td>10GiB paused 搬迁信号普查 / 零搬移快败 / 慢搬不误杀 / 同卷瞬搬不误杀</td><td>E3.1-E3.4</td></tr>
+  <tr><td>P4 清场</td><td>种子删净 + 数据目录清理 + 实例复位</td><td>—</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤(压测矩阵)</h2>
+<h3>4.0 通用构造与安全边界</h3>
+<ul>
+  <li><b>实例</b>:36596 = 主草稿本(在线空库);36595 = 流量对端(按需 <code>real.up</code> 拉起)。开工 guard 手工三条核验留痕。</li>
+  <li><b>种子</b>:一律 real-fake 假种子;<code>real.seed</code> 造;≥2G 需 <code>--allow-huge --reason</code>。</li>
+  <li><b>数据落点</b>:R:/qbt-fake(内存盘,重启即清)为主;10GiB 级仅在 E3 用(用户已授权)。跨卷慢搬用 R:→D:。</li>
+  <li><b>跳检构造冻结态的标准配方</b>(E 系列复用):两/三枚同内容异 infohash 种子以 skip_checking 添加(seed_mode)→ 组搬迁 → 中途重启 qB(rejected ×2)→ ACT_FINALIZE 归位 + resume → 共享文件挂 .!qB(报告 E1-E4/F2 同款)。</li>
+  <li><b>每实验收尾断言</b>:磁盘名对账(声明名/声明名.!qB 计数)+ 账面 progress + qB 日志无 recheck/re-add/delete + torrents/files 声明名不变。</li>
+</ul>
+<h3>4.1 P0 基线</h3>
+<table>
+  <tr><th>#</th><th>实验</th><th>构造</th><th>断言</th></tr>
+  <tr><td>E0.1</td><td>环境守卫</td><td>guard 手工三条(端口白名单 / 种子 paused / 配置非 config.yml)</td><td>留痕「guard 手工: 端口 ok / 种子 paused ok / 配置 ok」</td></tr>
+  <tr><td>E0.2</td><td>冻结态复现(复验)</td><td>标准配方,2 成员,R: 内部搬迁</td><td>磁盘 .!qB 化 + 账面 1.00 并存 = 「仍复现」→ 回写 issue 复验行</td></tr>
+</table>
+<h3>4.2 P1 主方向(renameFolder 两步复位)</h3>
+<table>
+  <tr><th>#</th><th>实验</th><th>构造</th><th>断言</th></tr>
+  <tr><td>E1.1</td><td>基本复位</td><td>冻结态单成员;按声明名逐文件双查检出;renameFolder(root→tmp, 等磁盘证据)→(tmp→root)</td><td>磁盘回原名;账面 1.00 不动;state 无 checking;qB 日志无 recheck;再搬迁真搬</td></tr>
+  <tr><td>E1.2</td><td>API 语义探针</td><td>oldPath/newPath 形态(相对/绝对/大小写/尾斜杠);重复调用幂等;对不存在 root 调用;step1 后立即 step2(撞队列观察)</td><td>错误码清单(409 文案);「立即 step2」的失败形态 → 定出两步最小间隔证据</td></tr>
+  <tr><td>E1.3</td><td>同组多种子竞态</td><td>3 成员共享内容根冻结态;按「内容根去重」修一次</td><td>单次两步修全组(其余成员磁盘同步回原名);各成员账面不动;逐成员各修的交错形态复现 409(证明去重必要性)</td></tr>
+  <tr><td>E1.4</td><td>组外共享者</td><td>冻结组 + 1 枚组外种子(异 infohash)共享同一物理目录;组外种子保持做种态</td><td>修复窗口前后组外种子账面/可读性无损;窗口内(上传流量下)读失败观察;结论喂 3.1 降级边界</td></tr>
+  <tr><td>E1.5</td><td>上传中修复 <span class="tag">[需活跃种子]</span></td><td>L2 互传(36596 做种→36595 下载,伪 tracker,限速钉住);上传进行中执行两步复位</td><td>上传曲线中断窗时长;对端错误面;结束后账面 1.00 / 无 recheck / 数据无损</td></tr>
+  <tr><td>E1.6</td><td>崩溃窗口</td><td>step1 落盘后杀 qB → 重启 → 现场形态(声明根不在+临时根在)</td><td>成员态记录;检测逻辑能否识别「修复中断」;人工补 step2 恢复对照</td></tr>
+  <tr><td>E1.7</td><td>形态缺口</td><td>单文件种子 .!qB 化;多根内容(内容根=save_path).!qB 化;renameFile 可行性复探(G4 409)</td><td>两形态「自动修可行 / 只能告警交人」的明确结论</td></tr>
+</table>
+<h3>4.3 P2 预检闸门(脚本模拟新判据,不改代码)</h3>
+<table>
+  <tr><th>#</th><th>实验</th><th>构造</th><th>断言</th></tr>
+  <tr><td>E2.1</td><td>深层 .!qB 漏拦复现 + 新判据</td><td>冻结态发起整组迁移(现行代码)</td><td>现行放行且零搬移(事故同形);新三态判据对同现场判 blocked</td></tr>
+  <tr><td>E2.2</td><td>源文件整体缺失</td><td>账面完成种子,数据藏走;发起迁移</td><td>现行放行 → qB 零搬移假成功(证明两态不够);三态判据判「源文件缺失」blocked</td></tr>
+  <tr><td>E2.3</td><td>嵌套目标边界</td><td>target=内容根子目录 / 兄弟目录(待删2)/ 大小写变体 / 尾斜杠 / 全成员覆盖</td><td>成分级判据全对(嵌套全拦,兄弟不误伤)</td></tr>
+</table>
+<h3>4.4 P3 短窗核验(信号设计依据)</h3>
+<table>
+  <tr><th>#</th><th>实验</th><th>构造</th><th>断言</th></tr>
+  <tr><td>E3.1</td><td>搬迁信号普查 <span class="tag">10GiB</span></td><td>10GiB real-fake 种子 paused,R:→D: 真搬,0.2s 采样 state/save_path/dst_size</td><td>回答:stopped 搬迁有无 moving 态;dst_size 何时&gt;0;有无预分配(size 突满)假 ready 风险</td></tr>
+  <tr><td>E3.2</td><td>零搬移快败</td><td>冻结态发起(现行放行)</td><td>30s 窗内 dst_size 恒 0 → 新判据快败;现行要 10min(对比数字)</td></tr>
+  <tr><td>E3.3</td><td>慢搬不误杀 <span class="tag">10GiB</span></td><td>同 E3.1 现场</td><td>判据「dst_size&gt;0 或 moving 即放行」在慢搬全程不误判</td></tr>
+  <tr><td>E3.4</td><td>同卷瞬搬不误杀</td><td>R: 内部 rename 级搬迁</td><td>无 moving 态 / dst 立即 ready → 判据不误杀</td></tr>
+</table>
+<h3>4.5 P4 清场</h3>
+<ul>
+  <li><code>real.seed.rm --all</code> + R:/tests-real 数据目录删除;36595 若拉起则 <code>real.down</code>;进程比对收尾。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>⑤ 自动修的形态边界</td><td>目录形态内容根 + 组内专属 → 自动修;单文件/多根/组外共享者 → 检测+告警交人(按 E1.4/E1.7 实测微调)</td><td>全部只告警不自动修(最保守,冻结态靠人工处理)</td></tr>
+  <tr><td>D2</td><td>① 源侧检查的三态处置</td><td>「在 / .!qB 态 / 缺失」三态都 block;.!qB 与缺失给不同文案;exists 不可判定按现行 target_unknown 同款保守拒</td><td>只查 .!qB 态(缺失态交给②短窗兜底)</td></tr>
+  <tr><td>D3</td><td>本轮范围</td><td>压测产出证据与收紧结论,不改生产代码;实现轮按本计划 §3.1 收紧清单另起任务</td><td>压测通过后当轮直接实现(超出用户指令范围)</td></tr>
+  <tr><td>D4</td><td>⑤ 对形态 F(生产冻结态, 完成位 false)的处置 —— <b>已随 D5 整案作废</b></td><td colspan="2" class="bad">用户拍板(2026-11-05): 建议修法整案不采纳, relocate 功能待完全重构(见 §06 D5)</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D0</td><td>用户指令即拍板:认领 issue + 压测方案 + 测试 qB 实测;允许必要时构造 10GiB 种子;数据安全特别慎重(全部约束进 §1.3)</td><td>2026-11-05</td></tr>
+  <tr><td>D5</td><td class="bad"><strong>压测方案(即 issue §06 五条修法)整案不采纳, relocate 整组迁移功能待完全重构</strong>(用户拍板)。理由: 压测证明主方向 G5 两步纯改名复位对生产冻结形态(形态 F)不成立(§8.2), 其余各条(三态闸门/短窗核验/嵌套闸门)只是对既有架构的缝补; 完成位被 <code>makeActualPath</code> 锁死、rename API 静默假成功等 qB 机制面意味着在「免重启迁移 + dir_alias 收尾」既有架构内修补的复杂度已超过重写。重构输入 = 本计划(根因链/源码机制表/E0-E3 实测数字全部有效) + issue 26-11-05-0420。</td><td>2026-11-05</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>误伤生产</td><td>端口/路径写错</td><td>全程只用 36595/36596 白名单 + real-fake 标签;guard 手工三条开工留痕;收尾进程比对</td></tr>
+  <tr><td>R 盘掉电丢数据</td><td>内存盘重启即清</td><td>实验数据当次会话有效;.torrent 元数据落 tests-real/.work;10GiB 实验前确认 free≥25GiB</td></tr>
+  <tr><td>上传中实验误伤真实种子</td><td>36595 拉起后有真实种子回场</td><td>开工种子清单快照 + real-fake 标签隔离;real.seed.clean 收尾;违反 guard 口径立即中止</td></tr>
+  <tr><td>冻结态构造失败</td><td>竞态导致 rejected 恢复态漂移(F1 vs G 已知两形态)</td><td>按报告 F2 配方重试;两形态都能进入错位,任一即视为构造成功</td></tr>
+  <tr><td>10GiB 实验空间不足</td><td>R: 剩余不足</td><td>开工查 free(当前 47.7GiB);实验间即删即清</td></tr>
+</table>
+
+<h2><span class="no">§08</span>实测结果(E0-E3 全部完成, 2026-11-05, 测试 qB 36596/36595 + R 盘)</h2>
+<h3>8.1 逐项结果</h3>
+<table>
+  <tr><th>#</th><th>实验</th><th>实测结果</th><th>判</th></tr>
+  <tr><td>E0.2</td><td>冻结态复现</td><td>3 成员组 setLocation 归位后 0.4s 内共享文件全挂 .!qB(ok=0/qBext=4), T1 账面声明名 prog=1.00 错位; 自动触发态 = checkingResumeData</td><td class="bad">仍复现</td></tr>
+  <tr><td>E1.1</td><td>基本复位</td><td>三态检测命中 4/4(含深层 <code>data/b/c/f3.bin</code>); <b>完成位 false 时 step1 只挪目录不摘后缀</b>; recheck 置完成位 true 后 step1 立即摘净, 两步后磁盘原名/账面 1.00/账面名不变; 复位后嵌套搬迁真搬(4 文件原名落 <code>dst\嵌套</code>)</td><td class="wr">条件成立</td></tr>
+  <tr><td>E1.2</td><td>API 语义</td><td>绝对路径 409「不允许使用绝对路径」; 不存在 oldPath 409「没有这个文件夹」; 同名改/目标已存在 200(校验只看账面); <b>0ms 连发 step1+step2 不撞队</b>(每 torrent 内部改名队列串行, 终态一致); case-only 改名可用; <b>renameFolder 全程零日志(成败都不写)</b></td><td class="good">语义清楚</td></tr>
+  <tr><td>E1.3</td><td>同组竞态</td><td>一次两步修全组(T6 修复 → T4 同步痊愈); <b>其它成员的陈旧 .!qB 映射会被一次修复打破</b>(T5 映射 .!qB 而磁盘被 T6 修净 → T5 的 step1 成账面级假成功腐蚀 T5 账面)</td><td class="bad">有竞态</td></tr>
+  <tr><td>E1.4</td><td>组外共享者</td><td>磁盘改名窗口内组外种子读失败瞬态; <b>窗口中重启 → 组外种子 fastresume rejected → missingFiles</b>(实测 T4/T6); 窗口完成后 recheck 自愈</td><td class="wr">窗口风险</td></tr>
+  <tr><td>E1.5</td><td>上传中修复</td><td>改名窗口 R 盘 4 文件 &lt;1ms(step1 0.001s 落盘, 两步总 0.069s); <b>上传零硬中断</b>(upspeed 从未归零 224→45→2644 B/s, 衰减与拥塞控制同相), 对端无错误, 数据完好, 账面 1.00</td><td class="good">安全</td></tr>
+  <tr><td>E1.6</td><td>崩溃窗</td><td>优雅停/硬杀(taskkill /F)收敛同一现场形态: 磁盘停在临时名、改名成员痊愈、其余 missingFiles; 优雅关停会把队列内改名做完。恢复 = 补 step2 + resume/recheck</td><td class="wr">可恢复</td></tr>
+  <tr><td>E1.7</td><td>形态缺口</td><td>单文件冻结态: renameFolder 409(单文件无目录可改); renameFile 账面级假成功(ENOENT→succeed, <code>storage_utils.cpp:343</code> 注释原文)—— <b>API 层无修复通路</b></td><td class="bad">只能告警</td></tr>
+  <tr><td>E2.1</td><td>深层 .!qB</td><td>三态检测对冻结现场命中全部 4 文件(现行顶层扫描漏拦面)</td><td class="good">新判据有效</td></tr>
+  <tr><td>E2.2</td><td>源文件缺失</td><td>整体藏走 → 三态判「缺失」4/4(现行放行 → 零搬移假成功); <b>两态不够, 三态必要</b></td><td class="good">新判据有效</td></tr>
+  <tr><td>E2.3</td><td>嵌套边界</td><td>成分级判据 8/8: 子目录/深层/大小写变体判嵌套; 兄弟(待删2)/前缀同串(待删除)/尾斜杠/父目录不误伤</td><td class="good">8/8</td></tr>
+  <tr><td>E3.1/3.3</td><td>10GiB 慢搬</td><td>10GiB paused R:→D: 5.8s: <b>moving 态全程出现(paused 种子也有)</b>; <b>dst 首采样即 10GiB —— 搬迁先预分配目标全尺寸, dst_size&gt;0 甚至 ==full 都不是真进度证据</b>; 「moving 即放行」全程不误杀</td><td class="wr">信号改道</td></tr>
+  <tr><td>E3.4</td><td>同卷瞬搬</td><td>R: 内 8ms 到位、无 moving 态、dst 立即全尺寸(rename 级) → 「not moving 且 dst_ready 即完成」不误杀</td><td class="good">不误杀</td></tr>
+  <tr><td>E3.2</td><td>零搬移快败</td><td>生产 mover 同形(10GiB paused 账面净+磁盘 .!qB): qB 照报「加入队列→开始移动→成功移动」四连, <b>35s 无 moving 态、dst 恒 0、save_path 翻转</b> → 「无 moving + dst 空 30s」快败信号成立(现行 10min 的 1/20)</td><td class="good">信号成立</td></tr>
+</table>
+<h3>8.2 重大发现:G5 配方的前提对生产冻结形态不成立(🔴)</h3>
+<p>冻结态有两个变体, 由 rejected 恢复路径决定(报告已注「F1 vs G 竞态」, 本次实证两形态对修法的影响):</p>
+<table>
+  <tr><th>变体</th><th>完成位</th><th>两步复位</th><th>来源路径</th></tr>
+  <tr><td>形态 G</td><td>true</td><td class="good">成立(G5 + 本次 T6 复现): step1 立即摘后缀</td><td>完整校验通过的恢复</td></tr>
+  <tr><td>形态 F(生产)</td><td>false</td><td class="bad">不成立: <code>makeActualPath</code>(<code>torrentimpl.cpp:628</code>)对未完成文件恒挂 .!qB, <b>renameFolder/renameFile 任何目标都摘不掉后缀</b>; 摘后缀唯一通路 = 完整哈希 recheck(实测 prog=0 态 recheck 全清自愈; 冻结态 recheck 置完成位)或 skip_check 重加</td><td>checkingResumeData 路径(E0.2 复现 = 生产同形)</td></tr>
+</table>
+<p>即 <b>issue §06 建议修法 5「三项约束全守」的承诺对生产形态不成立</b>:要么放宽约束③允许对检出成员定向 recheck(数据已知完好, 读盘是确认不是修复; 成本 = 全量读一遍), 要么对形态 F 只检测+告警+人工摘后缀。另有配套收紧:修复成员的映射必须与磁盘一致(recheck 先行对齐)且<b>按内容根去重一次覆盖全组</b>(E1.3 竞态); 崩溃窗检测须识别「声明根不在+临时根在」=修复中断(E1.6); 单文件/多根形态只能告警(E1.7)。</p>
+<h3>8.3 修法收紧结论(喂实现轮)</h3>
+<ol>
+  <li><b>① 三态</b>(在 / .!qB / 缺失)必要且充分 → §05 D2 默认成立。</li>
+  <li><b>② 信号改道</b>:成功/进行证据 = <b>moving 态</b>(真搬必有, 零搬移永无; paused 种子也有); <b>dst_size 不可作进度证据</b>(预分配假 ready); 完成 = not moving 且 dst_ready(同卷瞬搬 8ms 即完成, 不误杀); 失败 = not moving 且 dst 空 30s(E3.2 实证)。</li>
+  <li><b>③ 成分级嵌套判据</b>(大小写不敏感, 全成员覆盖) → E2.3 逻辑已验证。</li>
+  <li><b>⑤ 按形态分流</b> → §05 D4 待拍板。</li>
+  <li><b>④</b> 失败反馈面照旧实现轮做。</li>
+</ol>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-0546</span> 初版:用户指令认领 issue 26-11-05-0420 并压测其 §06 五条修法。要点 —— qB 源码机制核对(renameFolder 校验按声明名/doRenameFile 异步入队/makeActualPath 完成位驱动)得出三处静态预判:①两态不够要三态、②信号选型是命门(save_path 翻转不可作成功信号)、⑤主方向成立但异步入队时序/同组去重/组外共享者/崩溃窗口/单文件多根形态五点必须收紧;压测矩阵 E0-E3 共 14 项,全程测试实例 + real-fake 假种子。</li>
+  <li><span class="tag">R1 · 26-11-05-0700</span> E0-E3 全部实测完成(§08):14 项全跑, 关键产出 —— 🔴G5 配方前提对生产冻结形态(F/完成位 false)不成立, makeActualPath 使 API 层无法摘后缀, 需拍板 D4; 信号面改道(moving 态是唯一干净判据, dst_size 因预分配不可作进度证据); 同组修复必须按内容根去重+recheck 先行; 组外共享者窗口风险实测; 快败信号 30s 实证(10min→30s)。</li>
+  <li><span class="tag">R2 · 26-11-05-0656</span> 用户拍板 D5:压测方案整案不采纳, relocate 整组迁移功能待完全重构;D4 随之作废;issue 26-11-05-0420 回 Open 待重构排期,本计划转「重构输入」角色(§08 实测数字与 §2.2 源码机制表继续有效)。</li>
+</ul>
+
+</div>
+</body>
+</html>

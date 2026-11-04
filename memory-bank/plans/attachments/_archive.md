@@ -18,8 +18,9 @@
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
-## Done (208)
+## Done (209)
 
+- [26-11-05-0546] [relocate 零搬移修复方案压测(renameFolder 两步复位 + 三闸门)](../26-11-05-0546-plan-relocate-zero-move-fix-stress.html) — `relocate-zero-move-fix-stress`
 - [26-11-04-2357] [跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案](../26-11-04-2357-plan-skip-check-gates.html) — `skip-check-gates`
 - [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](../26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-04-0554] [收口 code review 制度化实施计划](../26-11-04-0554-plan-memory-bank-code-review.html) — `memory-bank-code-review`
