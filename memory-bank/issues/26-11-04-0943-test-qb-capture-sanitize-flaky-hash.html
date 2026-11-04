@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-04-0943">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="qb-capture-sanitize">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/pitfalls/testing/flaky-random-salt-hash-identity.md, memory-bank/testing/baselines/26-11-04-1121-qb-capture-sanitize.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)">
 <meta name="issue-summary" content="夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红">
 <title>test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射) · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)</h1>
     <p class="lede">夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-0943-test-qb-capture-sanitize-flaky-hash</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 09:43</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -198,11 +198,31 @@ E         ?                                                                    +
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 09:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 11:04 — 用户指派认领，状态 <strong>In Progress</strong>（本轮只修测试侧夹具，不动产品侧）</li>
+      <li>2026-11-04 11:04 — 修复完成，状态 <strong>Done</strong>（测试侧最小改动；验证明细见「修复后补充」）</li>
     </ul>
     <h3>复验</h3>
-    <p class="hint">未认领，待复验（认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」）。</p>
+    <p>2026-11-04 11:04 仍复现（同进程内直跑目标用例 100 次 → 8 次红；
+      <code>test_self_test_flags_unscrubbed_fs_delta</code> 同 100 次 → 5 次红，同源）；
+      随机盐下 <code>infohash("H1") == "H1"</code> 实测 59/1000（≈1/16），合法 40 位 hex 假 hash 实测 0/1000。
+      结论与 §05 一致，无需改判。</p>
     <h3>修复后补充</h3>
-    <p class="hint">未修（本轮按范围守恒不改码）；修完时在此写「实际修法 / 验证方式 / 测试数字」。</p>
+    <p><b>实际修法</b>（测试侧最小改动，产品侧零改动）：<code>tests/test_qb_capture.py</code> 新增模块常量
+      <code>_FAKE_HASH = "0123456789abcdef0123456789abcdef01234567"</code>（合法 40 位 hex），把
+      <code>test_write_corpus_end_to_end_minimal</code>、<code>_fs_delta_capture</code> 及其调用用例里的非 hex
+      假 hash <code>"H1"</code> 全部替换为它。断言口径不变（仍是「真 hash / 真文件名不得留在流里」），
+      只是夹具恢复成 qB 真实可能的 hash 形态 —— 即 §06 推荐方案 A。<br>
+      <code>test_self_test_flags_unscrubbed_fs_delta</code> 同属该根因（<code>infohash("H1") == "H1"</code> 时
+      「未脱敏」态与已脱敏态无法区分，红验断言假红），一并修正。</p>
+    <p><b>验证方式与实测</b>（2026-11-04 本机 Windows）：</p>
+    <ul>
+      <li>同进程直跑目标用例 100 次：修前 8 次红 → 修后 0 次；<code>test_self_test_flags_unscrubbed_fs_delta</code>
+        同 100 次：修前 5 次红 → 修后 0 次。</li>
+      <li>随机盐恒等映射：<code>infohash("H1") == "H1"</code> 修前实测 59/1000；40 位 hex 假 hash 实测 0/1000。</li>
+      <li><code>commands run test.one -- tests/test_qb_capture.py</code> → 16 passed。</li>
+      <li><code>commands run test.quick</code> → 5140 passed / 10 skipped。</li>
+      <li><code>commands run test.full</code> → 5140 passed / 10 skipped / 覆盖率 99%。</li>
+    </ul>
   </section>
 
   <footer>
