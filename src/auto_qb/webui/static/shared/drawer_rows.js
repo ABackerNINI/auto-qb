@@ -116,8 +116,10 @@ Object.assign(window.AQB_DRAWER.methods, {
             { icon: "#i-info", label: "设置来源", text: this.relocateOriginText(rel.origin) },
             { icon: "#i-check-circle", label: "auto-qb 设置", text: "是" },
             { icon: "#i-hash", label: "任务标识", text: rel.job_id || "—", mono: true, wide: true, act: "copy" },
-            { icon: "#i-folder", label: "源路径", text: rel.src || "—", wide: true, act: "open" },
-            { icon: "#i-folder-open", label: "目标路径", text: rel.dst || "—", wide: true, act: "open" },
+            /* 这两行的 open 动作按种子**当前**路径打开, 与行内展示的迁移源/目标不对应;
+             * 改为复制本行路径, 打开目录仍走通用路径行(不改路由/不加客户端传路径面)。 */
+            { icon: "#i-folder", label: "源路径", text: rel.src || "—", wide: true, act: "copy" },
+            { icon: "#i-folder-open", label: "目标路径", text: rel.dst || "—", wide: true, act: "copy" },
             { icon: "#i-layers", label: "关联别名", text: rel.alias_count ? `${rel.alias_count} 个（${rel.alias_kind || "未知类型"}）` : "无" },
             // P2: 详情段入口 —— 与徽标同一浮窗; 文本说明「A → B → C」而不在此猜测链内容
             { icon: "#i-link", label: "路径链", text: "查看 A → B → C", act: "chain" },

@@ -75,7 +75,7 @@ def group_relocate(members: Sequence[dict]) -> Optional[dict]:
     """组级迁移聚合(后端算, 前端只渲染)
 
     - state: 成员标注的最高优先级状态; 同一优先级出现多个不同 job_id -> "mixed"
-    - pending / total: 非终态成员数 / 组内成员总数(同组多成员共享一个 job 时只计一次)
+    - pending / total: 非终态成员数 / 组内成员总数(按成员计, 同一 job 覆盖多个成员时逐成员计入)
     - job_ids / dst: 全组涉及的非撤销 job 去重排序
     全组无标注(无 job / 全部 cancelled / relocate 关) -> None。
     """

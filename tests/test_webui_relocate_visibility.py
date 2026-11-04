@@ -12,7 +12,9 @@
 - test_p1_badge_rendered_in_path_cells: 组行/种子行路径列渲染 button.rel-badge, click.stop 只开详情
 - test_p1_badge_state_mapping_node: node 探针验证 moving/pending/failed/mixed 词表与 done/空态不挂徽标
 - test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛仍按 save_path
+- test_p1_filter_behavior_node: node 探针真跑 filteredGroups/relocateOptions —— 组内或、跨筛与、路径筛叠加、清空重置
 - test_p1_detail_section_and_endpoint_projection: 详情端点带 relocate; 无 job 时详情段整段不渲染
+- test_p1_detail_endpoint_passes_relocate: 真实 /api/torrents/{hash} 端点: 有 job 回传 relocate 投影, 无 job 为 null, save_path 不变
 """
 from __future__ import annotations
 
@@ -241,7 +243,10 @@ def test_p1_badge_rendered_in_path_cells():
     assert cells.count('@click.stop="$root.relocateOpen(') == 2, "徽标点击只能开详情, 不得冒泡触发路径筛选"
     assert cells.count("$root.relocateBadge(") >= 4, "徽标文案/类/title 必须走同一展示方法, 模板不写状态字面量"
     assert ".g-save-path.has-rel" in _static("shared/row_lang.css")
-    assert "rel-badge" in _static("shared/row_lang.css") and ":focus-visible" in _static("shared/row_lang.css")
+    css = _static("shared/row_lang.css")
+    assert ".rl-scope .rel-badge" in css
+    # 可访问性验收: 焦点环必须钉在徽标自己身上(文件里别处也有 :focus-visible, 泛断言守不住)
+    assert ".rl-scope .rel-badge:focus-visible" in css, "徽标必须有焦点可见样式"
 
 
 _NODE_BADGE_PROBE = r"""
@@ -313,6 +318,78 @@ def test_p1_filter_semantics_and_path_filter_untouched():
     assert "filterFromChip('path', m.save_path)" in _static("shared/tpl/xtpl-cells.html")
 
 
+_NODE_FILTER_PROBE = r"""
+const fs=require('fs'),vm=require('vm');
+const sandbox={window:{},console};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);  // decorate.js
+vm.runInContext(fs.readFileSync(process.argv[2],'utf8'),sandbox);  // filters.js
+const M=sandbox.window.AQB_FILTERS.methods, C=sandbox.window.AQB_FILTERS.computed;
+const D=sandbox.window.AQB_DECORATE.methods;
+const groups=[
+  {key:'g1',save_path:'R:/a',members:[{hash:'H1',relocate:{state:'moving'}},{hash:'H2'}]},
+  {key:'g2',save_path:'R:/a',members:[{hash:'H3',relocate:{state:'pending_finalize'}}]},
+  {key:'g3',save_path:'R:/b',members:[{hash:'H4',relocate:{state:'moving'}}]},
+  {key:'g4',save_path:'R:/a',members:[{hash:'H5',relocate:{state:'done'}}]},
+];
+const base={sortedGroups:groups,facetRows:groups,groups:groups,torrents:[],kindFilter:'',
+  hrFilter:[],hrSrcFilter:[],relocateFilter:[],pathFilter:[],tagFilter:[],categoryFilter:[],
+  siteFilter:[],searchQuery:'',searchHits:new Set(),searchPending:false,searchUncovered:[]};
+const ctx=(over)=>Object.assign({},base,D,M,over);
+const ids=(rows)=>rows.map(g=>g.key);
+process.stdout.write(JSON.stringify({
+  moving:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中']}))),
+  multi:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中','待收尾']}))),
+  andPath:ids(C.filteredGroups.call(ctx({relocateFilter:['迁移中'],pathFilter:['R:/a']}))),
+  pathOnly:ids(C.filteredGroups.call(ctx({pathFilter:['R:/a']}))),
+  cleared:ids(C.filteredGroups.call(ctx({relocateFilter:[],pathFilter:[]}))),
+  options:C.relocateOptions.call(ctx({})),
+  active:C.filtersActive.call(ctx({relocateFilter:['迁移中']})),
+  facets:C.facetsActive.call(ctx({relocateFilter:['迁移中']})),
+}));
+"""
+
+
+def test_p1_filter_behavior_node():
+    """行为面: 迁移状态筛 = 组内或 / 跨筛与 / 路径筛保持 save_path / 清空可重置"""
+    node = shutil.which("node")
+    if not node:
+        return
+    from pathlib import Path
+
+    shared = Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static/shared"
+    proc = subprocess.run(
+        [node, "-e", _NODE_FILTER_PROBE,
+         str(shared / "decorate.js"),
+         str(shared / "filters.js")],
+        capture_output=True,
+        text=True
+    )
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+
+    assert out["moving"] == ["g1", "g3"], "组内任一成员迁移中即保留整组(或语义)"
+    assert out["multi"] == ["g1", "g2", "g3"], "同一筛选器多选 = 或; done 组不命中"
+    assert out["andPath"] == ["g1"], "迁移状态与路径筛为且; 路径筛仍按 save_path"
+    assert out["pathOnly"] == ["g1", "g2", "g4"], "路径筛语义不受迁移状态筛影响(用户已拍板)"
+    assert out["cleared"] == ["g1", "g2", "g3", "g4"]
+    assert out["options"] == [
+        {
+            "value": "有过迁移",
+            "count": 4
+        },
+        {
+            "value": "迁移中",
+            "count": 2
+        },
+        {
+            "value": "待收尾",
+            "count": 1
+        },
+    ], "选项计数 = 含该状态的组数"
+    assert out["active"] is True and out["facets"] is True, "迁移筛必须进入 filtersActive/facetsActive"
+
+
 def test_p1_detail_section_and_endpoint_projection():
     route = _static("../server/routes/torrent_detail.py")
     assert '"relocate": relocate(hash) if relocate else None' in route
@@ -324,3 +401,26 @@ def test_p1_detail_section_and_endpoint_projection():
     tpl02 = _static("shared/drawer_tpl/02-general-cards-low.js")
     tpl03 = _static("shared/drawer_tpl/03-general-dossier-collapsed.js")
     assert 'secs["迁移"]' in tpl02 and 'secs["迁移"]' in tpl03
+
+
+def test_p1_detail_endpoint_passes_relocate(web_env):
+    """真实端点: 有 job 透传 relocate 投影, 无 job 为 null; save_path 语义不变"""
+    from auto_qb.torrents import TorrentRecord
+    from auto_qb.webui.views_relocate import member_relocate
+
+    mgr, client = web_env
+    records = {
+        "HA": TorrentRecord(hash="HA", name="X", save_path=r"R:\src"),
+        "HB": TorrentRecord(hash="HB", name="Y", save_path=r"R:\src"),
+    }
+    mgr.store.get = records.get
+    job = {"job_id": "j1", "phase": ru.PHASE_MOVING, "src": r"R:\src", "dst": r"R:\dst", "alias_paths": []}
+    mgr._relocate_member = lambda h: member_relocate(job, h) if h == "HA" else None
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    ha = client.get("/api/torrents/HA", headers=auth).json()["torrent"]
+    assert ha["relocate"]["state"] == "moving" and ha["relocate"]["dst"] == r"R:\dst"
+    assert ha["save_path"] == r"R:\src", "迁移可见性不得改写 qB save_path 语义"
+
+    hb = client.get("/api/torrents/HB", headers=auth).json()["torrent"]
+    assert hb["relocate"] is None, "无 job 时字段恒在但值为 null(详情段整段不渲染)"

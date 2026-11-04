@@ -14,6 +14,7 @@
 - test_pending_tag_never_read_back: 运行时路径不调用 torrents_tags(monkeypatch 抛错也不影响)
 - test_pending_tag_user_delete_keeps_state: 用户手删标签后不再重加, 相位与视图结论不变
 - test_pending_tag_failure_degrades: qB 写失败只计数告警, 相位保持 armed, 按退避不每 tick 重撞
+- test_pending_tag_remove_failure_retried: 终态摘标签失败后由 reconcile 退避重试, 不永久残留
 - test_pending_tag_reconcile_after_restart: 重启后非终态 job 的标签由 reconcile 补写
 - test_pending_tag_dry_run_never_writes: dry-run 不发任何 qB 标签写
 """
@@ -142,6 +143,38 @@ def test_pending_tag_failure_degrades(tmp_path, monkeypatch):
     _run_ticks(mod, 3)  # 退避期内不重复撞 qB
     assert mod._tag_failures == 1
     assert mod.get_job(job_id).phase == ru.PHASE_ARMED
+
+
+def test_pending_tag_remove_failure_retried(tmp_path, monkeypatch):
+    """终态摘标签失败: reconcile 必须重试 — 否则一次 qB 抖动就让标签永久残留"""
+    mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
+    _to_armed(mgr, mod, job_id, dst, content, files)
+    assert mod._tag_applied[job_id] == "add"
+
+    original = mgr.ctx.api.torrents_remove_tags
+
+    def _boom(**kw):
+        raise RuntimeError("qB 摘除失败")
+
+    monkeypatch.setattr(mgr.ctx.api, "torrents_remove_tags", _boom, raising=False)
+    mod.relocate_cancel(job_id, cost_confirmed=True)
+    assert mod.get_job(job_id).phase == ru.PHASE_CANCELLED
+    assert mod._tag_applied[job_id] == "add", "摘除未成功, 不能记成已摘"
+    assert mod._tag_failures == 1
+
+    # qB 恢复 + 跳过 30s 退避窗口(等价于下一次重试 tick)
+    monkeypatch.setattr(mgr.ctx.api, "torrents_remove_tags", original, raising=False)
+    mod._tag_next_try.pop(job_id, None)
+    client.calls.clear()
+    mod._reconcile_pending_tags()
+    removes = _tag_calls(client, "remove_tags")
+    assert len(removes) == 1 and removes[0][1] == TAG
+    assert mod._tag_applied[job_id] == "remove"
+
+    # 已摘除的终态 job 不参与 reconcile —— 不对历史 job 写放大
+    client.calls.clear()
+    mod._reconcile_pending_tags()
+    assert _tag_calls(client, "remove_tags") == []
 
 
 def test_pending_tag_reconcile_after_restart(tmp_path, monkeypatch):

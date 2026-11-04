@@ -384,6 +384,39 @@ def is_unc(path: str) -> bool:
     return p.startswith("\\\\")
 
 
+_DRIVE_REMOTE = 4
+
+
+def is_remote_path(path: str) -> bool:
+    """路径是否落在**远端存储**: UNC, 或 Windows 盘符映射的网络共享(GetDriveTypeW == DRIVE_REMOTE)
+
+    仅 is_unc 不够: `Z:` 映射到 NAS 时语法上是盘符, 但 lstat/readlink 同样走网络, 共享离线
+    时会长时间阻塞调用线程。路径链探测据此判「不做 syscall」; 判不了时按本地处理(保持原行为)。
+    """
+    logical = strip_device_prefix(path).replace("/", "\\")
+    if is_unc(logical):
+        return True
+    if not utils.is_windows():
+        return False
+    match = re.match(r"([A-Za-z]):", logical)
+    if not match:
+        return False
+    return _drive_type(f"{match.group(1).upper()}:\\") == _DRIVE_REMOTE
+
+
+def _drive_type(root: str) -> int:
+    """GetDriveTypeW; 取不到(非 Windows / 调用失败)返回 0(DRIVE_UNKNOWN), 调用方按本地处理"""
+    try:
+        import ctypes
+
+        get_type = ctypes.WinDLL("kernel32", use_last_error=True).GetDriveTypeW
+        get_type.argtypes = [ctypes.c_wchar_p]
+        get_type.restype = ctypes.c_uint
+        return int(get_type(root))
+    except Exception:  # noqa: BLE001 - 不新增拒绝面
+        return 0
+
+
 def same_volume(a: str, b: str) -> Optional[bool]:
     """两个路径是否在同一卷(st_dev 相等); 任一侧不可读 => None(不可判定, 闸门按拒绝处理)"""
     try:
@@ -736,9 +769,7 @@ def inspect_path(path: str) -> PathInspection:
         except OSError as exc:
             status, reason = _classify_probe_error(exc)
             return PathInspection(status="unknown", kind=kind, nlink=st.st_nlink, error=reason)
-    return PathInspection(
-        status="ok", kind=kind, target=target, nlink=st.st_nlink, is_mount=is_mount
-    )
+    return PathInspection(status="ok", kind=kind, target=target, nlink=st.st_nlink, is_mount=is_mount)
 
 
 def remove_alias(path: str) -> None:

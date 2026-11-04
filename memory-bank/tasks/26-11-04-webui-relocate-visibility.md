@@ -56,3 +56,5 @@ P0–P3 实现与评审修复已完成(详见计划 §10 与 activeContext R1–
 - RM04-14 回归通过(34.3s): 迁移 confirm 回路(浏览器点击 → 7 要素 → 确认)仍正常。
 
 - 2026-11-04 15:24 真机验收完成: 新增 tests-real RM04-15..18 并全过(四皮肤行高/浮窗翻转夹取与滚动关闭/Esc 退栈回焦/组行入口基准/A->B->C 与 UNC 15.1ms 未确认/pending_tag 加-手删不重加-重启补写-终态摘/关闭零写), RM04-14 confirm 回路回归通过; test.full 5185 passed + 10 skipped, 新基线 26-11-04-1519
+
+- 2026-11-04 21:06 收口评审重做(按仓库 code-review skill): 分面评审 7 条发现(2 major/5 minor)全修, 修复增量二轮复核 2 minor 已修, blocker 清零; 新增/收紧 6 例测试; test.full 见 kb.baseline(新基线 26-11-04-2106)

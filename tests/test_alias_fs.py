@@ -20,6 +20,9 @@
 - test_platform_verdict_unsupported_reason: 全不可用时 supported=False 且原因里带上各探测错误
 - test_same_volume_and_free: 同卷 True / 不可读 None(不可判定, 不是 False); 剩余空间可读与不可读
 - test_is_unc: UNC 判定(含 `\\\\?\\` 与 `\\\\.\\` 设备前缀不算 UNC)
+- test_is_remote_path: 远端判定 = UNC(含设备前缀 UNC); 本机固定盘/相对路径/非 Windows 为 False
+- test_is_remote_path_drive_type: 盘符映射网络盘(DRIVE_REMOTE)判远端, 本机固定盘判本地
+- test_drive_type_failure_degrades: GetDriveTypeW 不可用返回 DRIVE_UNKNOWN(按本地处理), 不抛
 - test_container_evidence: 环境变量 / 哨兵文件 / cgroup 三路证据(含 `container=0` 不算)
 - test_is_wsl: env 与 /proc/version 两路判定
 - test_mount_info_and_windows_backed: /proc/mounts 解析(最长前缀 + 八进制转义)与 Windows 共享挂载识别
@@ -390,6 +393,39 @@ def test_is_unc():
     assert not alias_fs.is_unc("/mnt/downloads")
     assert not alias_fs.is_unc(r"\\?\C:\Download")
     assert not alias_fs.is_unc(r"\\.\PhysicalDrive0")
+
+
+def test_is_remote_path(monkeypatch):
+    assert alias_fs.is_remote_path(r"\\nas\share\movie")
+    assert alias_fs.is_remote_path("//nas/share/movie")
+    assert alias_fs.is_remote_path(r"\\?\UNC\nas\share\movie"), "设备前缀 UNC 仍是远端"
+    assert not alias_fs.is_remote_path(r"C:\Download")
+    assert not alias_fs.is_remote_path("/mnt/downloads")
+    assert not alias_fs.is_remote_path("")
+    assert not alias_fs.is_remote_path(r"..\relative")
+
+    # 非 Windows 不做盘符判定(保持旧行为)
+    monkeypatch.setattr(alias_fs.utils, "is_windows", lambda: False)
+    assert not alias_fs.is_remote_path(r"Z:\movie")
+
+
+def test_is_remote_path_drive_type(monkeypatch):
+    # 核心分支: 盘符映射网络盘(DRIVE_REMOTE=4)必须判远端; 本机固定盘(3)判本地
+    monkeypatch.setattr(alias_fs.utils, "is_windows", lambda: True)
+    monkeypatch.setattr(alias_fs, "_drive_type", lambda root: 4 if root == "Z:\\" else 3)
+    assert alias_fs.is_remote_path(r"Z:\movie")
+    assert not alias_fs.is_remote_path(r"C:\Download")
+
+
+def test_drive_type_failure_degrades(monkeypatch):
+    # GetDriveTypeW 不可用 => 0(DRIVE_UNKNOWN), 调用方按本地处理, 不抛
+    import ctypes
+
+    def _boom(*args, **kwargs):
+        raise OSError("no kernel32")
+
+    monkeypatch.setattr(ctypes, "WinDLL", _boom, raising=False)
+    assert alias_fs._drive_type("C:\\") == 0
 
 
 def test_container_evidence():

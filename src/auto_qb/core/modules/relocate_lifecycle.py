@@ -153,7 +153,8 @@ class LifecycleMixin:
         """把单个 job 的标签镜像推到 qB(幂等; 失败降级只记日志/计数, 不影响迁移主流程)
 
         只在「目标态变化」时发请求(armed 一次 add, 终态一次 remove), 平时靠
-        _reconcile_pending_tags 补写 —— 重启/断连期间错过的标签在恢复后自然补上。
+        _reconcile_pending_tags 补写 —— 非终态的缺失在重启/断连恢复后自然补上; 终态摘除
+        失败在本进程内退避重试(重启后不追历史 job, 避免写放大)。
         失败不记 applied, 按 _TAG_RETRY_SECONDS 退避重试; 标签被用户手动删掉时
         本函数不会重加(不读标签), WebUI/state 结论完全不受影响。
         """
@@ -187,14 +188,18 @@ class LifecycleMixin:
         self._tag_next_try.pop(job.job_id, None)
 
     def _reconcile_pending_tags(self) -> None:
-        """每 tick 补写非终态 job 的标签(重启/断连窗口的缺失不视为错误)
+        """每 tick 补写标签镜像: 非终态 job + 「已加未摘」的终态 job
 
-        只扫非终态 job: 终态 job 会永久留在账上, 若也扫会在重启后对历史 job 批量
-        发 remove —— 那是无意义写放大。终态的摘除由 _set_job 的相位跃迁当场完成。
+        终态 job 会永久留在账上, 若全扫会在重启后对历史 job 批量发 remove —— 那是无意义
+        写放大。故只扫两类: 非终态 job; 本进程内 add 成功、摘除失败(相位跃迁只尝试一次)
+        的终态 job —— 不补扫一次 qB 抖动就会让标签永久残留。重启后 applied 已清空, 历史
+        终态 job 仍不扫(维持零写放大)。
         """
         if not self._tag_name() or self._dry_run():
             return
-        for job in self.active_jobs():
+        for job in self._jobs.values():
+            if job.is_terminal and self._tag_applied.get(job.job_id) != "add":
+                continue
             self._sync_pending_tag(job)
 
     # ---------- 任务线: 每 tick 推进一步(P3 状态机) ----------

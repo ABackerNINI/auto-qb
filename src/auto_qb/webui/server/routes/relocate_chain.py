@@ -38,9 +38,9 @@ def _start_path(rec, roots: List[str], mapped: bool) -> str:
     for candidate in candidates:
         if not relocate_chain.path_within_roots(candidate, roots):
             continue
-        # Local qB 也可能配 UNC 保存路径: 判 remote 前不得在本机 lstat 远端路径
+        # Local qB 也可能配 UNC / 盘符映射的网络盘保存路径: 判 remote 前不得在本机 lstat
         # (共享不可达时 lstat 会长时间阻塞线程池; 计划 4.1「远端不做 syscall」)
-        if alias_fs.is_unc(candidate):
+        if alias_fs.is_remote_path(candidate):
             return candidate
         if alias_fs.inspect_path(candidate).status == "ok":
             return candidate
@@ -67,7 +67,7 @@ def build_router(ctx: WebContext) -> APIRouter:
         env = relocate_chain.ENV_LOCAL
         if mapped:
             env = relocate_chain.ENV_MAPPED
-        elif alias_fs.is_unc(start):
+        elif alias_fs.is_remote_path(start):
             env = relocate_chain.ENV_REMOTE
 
         mod = getattr(getattr(manager, "ctx", None), "relocate", None)
