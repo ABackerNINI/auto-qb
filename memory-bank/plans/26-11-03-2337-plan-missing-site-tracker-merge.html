@@ -9,8 +9,8 @@
 <meta name="doc-topic" content="missing-site-tracker-merge">
 <meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-2337">
-<meta name="doc-updated" content="26-11-04-2312">
-<meta name="doc-refs" content="memory-bank/plans/26-11-04-0115-plan-real-rm10-addendum-missing-merge.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/tasks/26-09-26-webui-sites-import.md, memory-bank/issues/26-11-04-2312-test-webui-sites-import-gui-smoke.html">
+<meta name="doc-updated" content="26-11-04-2347">
+<meta name="doc-refs" content="memory-bank/plans/26-11-04-0115-plan-real-rm10-addendum-missing-merge.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/tasks/26-09-26-webui-sites-import.md, memory-bank/issues/26-11-04-2312-test-webui-sites-import-gui-smoke.html, memory-bank/issues/26-11-04-2347-bug-missing-scan-partial-failure.html">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>缺失站点导出/导入 tracker 合并</h1>
 <p class="lede">缺失站点导出(CLI)与导入(WEBUI)默认把「同种子共现」的多个 tracker 域名合并为一个站点条目(<code>domains</code> 数组),可选拆回逐域名;两端共用同一分组构件,口径不漂移。设计主轴:分组只在缺失域名内做 union-find,合并条目的站点名/默认标签由组内最短域名生成。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-04-2312 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-04-2347 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「导出缺失站点时默认合并同一颗种子的多个 tracker 到同一个站点,可选择分开;WEBUI 导入缺失站点同步支持」→ 会话 grilling 两轮拍板(D1~D6,见 §06)后定稿
 </div>
 
@@ -169,6 +169,7 @@
   <li><span class="tag">R1 · 26-11-04-0036</span> M1~M5 全部完成:M1 exporter 共现分组构件(group_missing_domains / build_merged_entry)、M2 CLI 默认合并 + <code>--split-trackers</code> 与配合校验、M3 <code>/api/sites/missing</code> 增 groups 分组字段、M4 WEBUI 导入三钮自适应引导;M5 全量测试绿(4944 passed / 10 skipped / 覆盖率 99%,实测誊写见 kb.baseline 新切片)+ 基线切片落档;README 与 docs/configuration.md 回写默认合并与 <code>--split-trackers</code> 说明。§04 各期 DoD 达成;真机验收与 GUI 冒烟未做,doc-status 保持 Open。</li>
   <li><span class="tag">R2 · 26-11-04-2200</span> 收口补齐最后一项 M4 验收 —— <b>GUI 冒烟三路径</b>:用 <code>scripts/ui_harness.py</code>(真页面 + 真鼠标事件)在 <code>/api/sites/missing</code> API 边界注入三形态载荷,Playwright 真浏览器实跑。① 无缺失:仅 toast「无需导入: 没有发现未配置的站点」,不弹框;② 全单组:两钮框标题「导入 2 个缺失站点」、逐域名清单,确认后填入 2 个站点;③ 多域名两组:三钮框标题「导入 4 个缺失站点(含多域名站点)」、合并明细列两组、拆分钮 <code>ghost</code> 非破坏性样式 / 合并钮 <code>primary</code> / 默认焦点落合并(Enter 推荐);合并填入 2 组共 4 域名(组名与 CLI 同规则, 独立 taken 查重),拆分走二次确认后填入 4 个站点。三路径期间零 <code>PUT /api/config</code>(只填编辑器待审)、零 console error / 零 pageerror;三钮行布局与文案截图留证(<code>tests-real/.work/l0-missing-import/</code>)。真实 groups 数据面已由 RM10/RM08 双附加轮覆盖(见两条 addendum 与切片),本轮只补前端交互与布局可见性。§04 M4 验收判据全数达成;计划内无剩余未完成项,doc-status Open → <b>Done</b>。纯观感(配色/密度)仍归 user 目视清单,不在本计划的验收判据内。</li>
   <li><span class="tag">R3 · 26-11-04-2312</span> 计划级 code review(base = 任务起点 commit <code>62b5cbcf</code> 的 parent <code>1102e8b4</code>;评审面 M1~M5 + 收口回写,忽略范围内其它并发专题)。三只读子代理分正确性/安全/测试缺口三面串行评审,发现经引文校验后裁决:<b>blocker 0</b>。已修:① M3 groups 取名未与 CLI 同规则(复用 sites 的 taken 导致 <code>_1</code> 后缀)→ 组名改用独立 taken,与 <code>gen_tracker_name(rep)</code> 一致;② 前端判重 <code>trackers[name]</code> 会命中 <code>constructor</code>/<code>__proto__</code> 继承属性 → 两处改用 <code>hasOwnProperty.call</code>;③ 补 CLI <code>--split-trackers</code> 透传/缺省两用例(并修正原 <code>only_missing</code> 断言漏 <code>assert</code>);④ 补追加模式 + split 组合用例;⑤ 合并明细截断三件套加入接线守阵。入池:GUI 冒烟不可复跑(一次性脚本 + gitignore 证据)→ issue <code>26-11-04-2312-test-webui-sites-import-gui-smoke</code>。裁决不相关:exporter 逐种 tracker 查询异常吞空集为 M1 之前既有语义,本计划未改变。修复后定向用例与 test.quick 全绿;计划仍 Done。</li>
+  <li><span class="tag">R4 · 26-11-04-2347</span> 评审发现 #1(collector 逐种 tracker 失败吞空集)复核:review base <code>1102e8b4</code> 的旧实现同样 <code>continue</code> 跳过,属既有语义、本计划未引入 → <b>不修</b>,按 create-issue 入池 <code>26-11-04-2347-bug-missing-scan-partial-failure</code>(标准档:现象/证据/影响面/定位锚点/根因/候选修法齐备, 状态 Open)。本轮不改码,计划仍 Done。</li>
 </ul>
 
 </div>

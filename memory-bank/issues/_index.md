@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 8 |
 | perf | 5 |
 | docs | 2 |
 | test | 5 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [缺失站点扫描把逐种 tracker 失败吞成空集, 批量失败时误报无缺失](26-11-04-2347-bug-missing-scan-partial-failure.html) — collect_torr…
 - [test] [缺失站点导入三路径 GUI 冒烟不可复跑](26-11-04-2312-test-webui-sites-import-gui-smoke.html) — 三路径验收靠一次性 ha…
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基…
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件…
