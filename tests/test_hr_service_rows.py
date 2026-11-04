@@ -158,7 +158,6 @@ from hr_helpers import (
     EMPTY_TABLE_PAGE,
     LOGIN_PAGE,
     REVISED_PAGE,
-    Clock,
     FakeFetcher,
     global_conf,
     make_service as hr_make_service,
@@ -168,6 +167,7 @@ from hr_helpers import (
     torrent_blob,
 )
 
+from clock import FakeClock
 from hr_service_support import (
     DONE_NEW,
     DONE_OLD,
@@ -195,7 +195,7 @@ from hr_service_support import (
 
 def test_stop3_local_full_coverage(tmp_path):
     """停翻3.: 未对账对象全部与已见行对上且无待回填 → 停翻(不再为终态行翻页)"""
-    clock = Clock()
+    clock = FakeClock()
     # 对象的行在 A 档第 1 页(命中即定论); B/C 档还有别的行与下一页 —— 3.在 A 命中后即停 A
     pages = {
         url_of("A", 1):
@@ -221,7 +221,7 @@ def test_stop3_local_full_coverage(tmp_path):
 
 def test_untrusted_done_pure_seed(tmp_path):
     """纯辅种(无本机完成时刻、未绑定): 不参与1.; 由2.(B/C 到期段)与末页(A)收尾且可获放行"""
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(
         rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
     )
@@ -237,7 +237,7 @@ def test_untrusted_done_pure_seed(tmp_path):
 
 def test_a_lane_rows_downloaded_unconditionally(tmp_path):
     """A 档行无条件全部下载(硬规则); 同 tid 永不重下(永久层)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"): myhr_page([row(11, "TOTALLY-UNRELATED-NAME"),
                                 row(12, "ANOTHER-STRANGER")]),
@@ -260,7 +260,7 @@ def test_a_lane_rows_downloaded_unconditionally(tmp_path):
 
 def test_terminal_rows_download_on_fuzzy_match(tmp_path):
     """B/C/D 行仅当宽泛名称粗配疑似本地才下载; 粗配误配由 infohash 精配自愈"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"):
             myhr_page([], has_next=False),
@@ -289,7 +289,7 @@ def test_terminal_rows_download_on_fuzzy_match(tmp_path):
 
 def test_rows_not_local_not_downloaded(tmp_path):
     """本地没有的种子(粗配也不像)不下载; A 档之外的陌生行零下载"""
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(
         rows_a=[row(11, "OTHER 11", done=DONE_NEW, remain="1天00:00:00")], rows_b=five_expired_rows(20), rows_c=[]
     )
@@ -303,7 +303,7 @@ def test_rows_not_local_not_downloaded(tmp_path):
 
 def test_exempt_seed_not_in_objects_passive_hit_managed(tmp_path):
     """超额种子(≥3×)不进对象集(老藏深不拉深覆盖); 被动命中考察中仍转管束(网站绝对权威)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         # A 档第 1 页就有超额种子的行 —— 被动命中(infohash 由下载获得)
         url_of("A"): myhr_page([row(11, "EXAMPLE 11")]),
@@ -320,13 +320,13 @@ def test_exempt_seed_not_in_objects_passive_hit_managed(tmp_path):
     entry = next(e for e in data.index.values() if e.tid == 11)
     assert entry.lane == LANE_SCOPE and entry.active  # 命中考察中 → 管束(进视图)
     view = service.build_view_for(SITE, data)
-    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock())
+    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock.now())
     assert j.identity is HrIdentity.HR  # 超额不构成免死金牌
 
 
 def test_local_satisfied_hit_scope_still_managed(tmp_path):
     """本地已达标 × 命中考察中 → 管束(20:58 定稿: 站点说还在考就是还在考)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(rows_a=[row(11, "EXAMPLE 11")], rows_b=[], rows_c=[])
     blob, h11 = mk_blob("EXAMPLE 11")
     fetcher = FakeFetcher(pages=pages, blobs={11: blob})
@@ -335,7 +335,7 @@ def test_local_satisfied_hit_scope_still_managed(tmp_path):
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     view = service.build_view_for(SITE, data)
-    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock())
+    j = judge_record(view, (h11, ), anchor=anchors[h11], now=clock.now())
     assert j.identity is HrIdentity.HR
 
 
@@ -343,7 +343,7 @@ def test_verified_record_not_overwritten_on_rewave(tmp_path):
     """已放行未漂移跨波记录原样保留 —— 「批量签发整条覆写既有放行」不可达的端到端守阵
     (issue 26-10-02-0526): _build_objects 对已 verified 未漂移的对象不出对象集,
     _sign_releases 无从覆写(放行永续有效, 终态不可逆); 漂移(本机重下)才回炉重签。"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
     service = make_service(tmp_path, fetcher, clock=clock)
     anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
@@ -363,7 +363,7 @@ def test_zero_rows_no_release(tmp_path):
     """结构完好零行 → 不签发放行(改版空表即整站误放行, 不冒这个险)。
     首波先立索引(命中登记, 无「未列出」可签), 次波改版空表 —— 零行卡点分支才可达
     (索引全空时 blocking_reason 先报「还没有任何可判数据」)。"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, h11 = mk_blob("EXAMPLE 11")
     pages = {
         url_of("A"): myhr_page([row(11, "EXAMPLE 11")]),
@@ -384,24 +384,24 @@ def test_zero_rows_no_release(tmp_path):
     assert "清单为 0" in result.reason
     assert result.alerted is True  # 零行未确认 = 产生处已告警
     # M3 展示口径对齐(计划 26-09-29-2036): 无计数站点不误标「计数自证空集」, 人工戳提示照旧
-    snap = build_site_statuses(service, clock.now)[0]
+    snap = build_site_statuses(service, clock.now())[0]
     assert snap.count_attested_empty is False
     assert "--hr-confirm-empty" in snap.blocking
 
 
 def test_zero_rows_confirmed_release(tmp_path):
     """人工对账戳后零行可正常签发; 清单再现非零行 → 确认戳自动失效"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in ("A", "B", "C")})
     service = make_service(tmp_path, fetcher, clock=clock)
     anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
-    data.empty_confirmed_at = clock()  # --hr-confirm-empty 的动作
-    service.store(SITE).hold().__enter__().commit(clock()) if False else None
+    data.empty_confirmed_at = clock.now()  # --hr-confirm-empty 的动作
+    service.store(SITE).hold().__enter__().commit(clock.now()) if False else None
     with service.store(SITE).hold() as session:
-        session.data.empty_confirmed_at = clock()
-        session.commit(clock())
+        session.data.empty_confirmed_at = clock.now()
+        session.commit(clock.now())
     clock.advance(13 * 3600)
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
@@ -422,7 +422,7 @@ def test_terminal_vanish_writes_release(tmp_path):
     分支才进得去 —— 否则 infohash 为空, 那三行永不执行, 守阵假绿灯(2026-09-29 实报
     `LANE_SATISFIED` NameError 正是从这个从未被覆盖的分支炸出来的)。
     """
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(rows_b=[row(21, "EXAMPLE 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")])
     blob, h21 = mk_blob("EXAMPLE 21")
     fetcher = FakeFetcher(pages=pages, blobs={21: blob})
@@ -444,7 +444,7 @@ def test_terminal_vanish_writes_release(tmp_path):
     assert data.verified[h21].has_anchor_snapshot, "记录必须带锚点快照, 否则判定侧当场判漂移作废"
     assert data.verified[h21].anchor_downloaded == anchors[h21].downloaded
     view = service.build_view_for(SITE, data)
-    j = judge_record(view, (h21, ), anchor=anchors[h21], now=clock())
+    j = judge_record(view, (h21, ), anchor=anchors[h21], now=clock.now())
     assert j.identity is HrIdentity.RELEASED  # 终态不可逆: 退役后照常放行
 
 
@@ -454,7 +454,7 @@ def test_terminal_vanish_c_lane_release_source(tmp_path):
     冻结落记录的三元表达式有 B／非 B 两条子句, 2026-09-29 的 NameError 只在**条件求值**
     上, 故两个可达终态档各钉一条(另一条 C 子句同样是真机路径)。
     """
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(rows_c=[row(21, "EXAMPLE 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")])
     blob, h21 = mk_blob("EXAMPLE 21")
     fetcher = FakeFetcher(pages=pages, blobs={21: blob})
@@ -475,7 +475,7 @@ def test_terminal_vanish_c_lane_release_source(tmp_path):
 
 def test_terminal_vanish_unproven_kept(tmp_path):
     """终态条目消失但位置未被覆盖(截断) → 维持原状(命中照常, 保守无害)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A", 1):
             myhr_page([], has_next=False),
@@ -549,7 +549,7 @@ def test_fuzzy_name_match_rejects_noise_only_overlap():
 def test_counter_positive_zero_rows_page_changed(tmp_path, monkeypatch, caplog):
     """T51. 计数>0 ∧ 行数=0(tab 形): 整表被吃光/首页即被截的显式信号 → page_changed 硬告警 + 不签发。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {"B": 3})
     pages = {
         url_of("A"): myhr_page(five_expired_rows(20)),  # A 有行(避免零行波噪声), 全深度
@@ -589,7 +589,7 @@ def test_excluded_anchor_still_counts_as_local_hit(tmp_path):
 def test_terminal_row_matching_only_excluded_seed_not_downloaded(tmp_path):
     """issue 26-10-08-1304 核心: B/C/D 终态行(无 infohash)按名称粗配**只**命中被排除种子 ⇒
     不进 pending_downloads ⇒ 零 .torrent 请求(省站点日额/频控)。行仍被记录(不下载 ≠ 不认识)。"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"): myhr_page([], has_next=False),
         url_of("B"): myhr_page([row(21, "Example.Ultra.S01E01.1080p")], has_next=False),
@@ -617,7 +617,7 @@ def test_terminal_row_matching_excluded_and_managed_still_downloaded(tmp_path):
     """形态守阵(计划 26-10-09-1057 §03.3): 粗配宽松(K=12 标题重合即命中), 同一行可**同时**命中
     排除与受管种子(同剧不同集/季)。收窄候选集写法保住受管那侧 ⇒ 仍下载(绝不漏下受管种子身份);
     防退回「命中排除名即 return False」的误杀写法。"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"): myhr_page([], has_next=False),
         url_of("B"): myhr_page([row(21, "Example.Ultra.S01E01.1080p")], has_next=False),
@@ -696,7 +696,7 @@ def test_history_wave_events_six_terminal_states(tmp_path):
     字段搬运自 result/lane_states/wave.notes 且随站点文件落盘; trigger 按 force 区分(§3.3)"""
     # 1. 正常波 refreshed(force 立即拉取 -> trigger=manual; .torrent 回填成功计入 torrents_ok)
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), blobs={11: torrent_blob("other.bin")})
-    service = make_service(tmp_path / "s1-refreshed", fetcher, clock=Clock())
+    service = make_service(tmp_path / "s1-refreshed", fetcher, clock=FakeClock())
     result = service.refresh_site(SITE, {}, force=True)
     assert result.action == ACTION_REFRESHED
     (ev, ) = _history_from_disk(service)
@@ -708,7 +708,7 @@ def test_history_wave_events_six_terminal_states(tmp_path):
 
     # 2. partial(B 档页面取数失败, 失效档快照与 reason 都搬运进事件)
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), fail_text_at={"B": "boom"})
-    service = make_service(tmp_path / "s2-partial", fetcher, clock=Clock())
+    service = make_service(tmp_path / "s2-partial", fetcher, clock=FakeClock())
     assert service.refresh_site(SITE, {}).action == ACTION_PARTIAL
     (ev, ) = _history_from_disk(service)
     assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "partial")
@@ -718,14 +718,14 @@ def test_history_wave_events_six_terminal_states(tmp_path):
 
     # 3. login(A 档命中登录页 -> 走 _finish_wave 收尾, 终态 error)
     fetcher = FakeFetcher(pages=standard_pages(), login_at={"A"})
-    service = make_service(tmp_path / "s3-login", fetcher, clock=Clock())
+    service = make_service(tmp_path / "s3-login", fetcher, clock=FakeClock())
     assert service.refresh_site(SITE, {}).action == ACTION_ERROR
     (ev, ) = _history_from_disk(service)
     assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "error")
     assert "登录页" in ev.reason
 
     # 4. no-channel(端点级故障 -> 波级让位, 档位快照全为未跑)
-    service = make_service(tmp_path / "s4-nochannel", NullFetcher("通道未启用"), clock=Clock())
+    service = make_service(tmp_path / "s4-nochannel", NullFetcher("通道未启用"), clock=FakeClock())
     assert service.refresh_site(SITE, {}).action == ACTION_NO_CHANNEL
     (ev, ) = _history_from_disk(service)
     assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "no-channel")
@@ -733,7 +733,7 @@ def test_history_wave_events_six_terminal_states(tmp_path):
     assert all(l["status"] == LANE_IDLE for l in ev.lanes)
 
     # 5. quota(扩展侧硬上限 -> 波级让位)
-    service = make_service(tmp_path / "s5-quota", FakeFetcher(pages=standard_pages(), quota=True), clock=Clock())
+    service = make_service(tmp_path / "s5-quota", FakeFetcher(pages=standard_pages(), quota=True), clock=FakeClock())
     assert service.refresh_site(SITE, {}).action == ACTION_WAITING
     (ev, ) = _history_from_disk(service)
     assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "waiting")
@@ -742,7 +742,7 @@ def test_history_wave_events_six_terminal_states(tmp_path):
 
     # 6. Retry-After(站点指令 -> 波级落 retry_after_until 让位)
     fetcher = FakeFetcher(pages=standard_pages(), retry_after_at={"A": 600.0})
-    service = make_service(tmp_path / "s6-retry", fetcher, clock=Clock())
+    service = make_service(tmp_path / "s6-retry", fetcher, clock=FakeClock())
     assert service.refresh_site(SITE, {}).action == ACTION_WAITING
     (ev, ) = _history_from_disk(service)
     assert (ev.kind, ev.trigger, ev.action) == ("wave", "auto", "waiting")
@@ -781,7 +781,7 @@ def test_run_downloads_backfill_discards_pending_without_local_hit(tmp_path):
 
 def test_run_downloads_hit_prefers_local_hash(tmp_path):
     """命中侧: v1 不在本地而 v2 在 → 记 v2 命中(取本地那一侧)"""
-    clock = Clock()
+    clock = FakeClock()
     blob, _h1 = mk_blob("T11")
     service = make_service(tmp_path, FakeFetcher(pages={}, blobs={11: blob}), clock=clock)
     _v1, v2, _info = hr_service.compute_infohashes(blob)
@@ -802,7 +802,7 @@ def test_run_downloads_hit_prefers_local_hash(tmp_path):
 
 def test_run_downloads_no_hit_when_neither_hash_local(tmp_path):
     """命中侧: 两侧都不在本地 → 不记命中(不得回落 v1 / 空串 / 占位串)"""
-    clock = Clock()
+    clock = FakeClock()
     blob, _h1 = mk_blob("T11")
     service = make_service(tmp_path, FakeFetcher(pages={}, blobs={11: blob}), clock=clock)
     data = HrSiteData()
@@ -822,7 +822,7 @@ def test_run_downloads_no_hit_when_neither_hash_local(tmp_path):
 
 def test_finish_wave_healthy_requires_rows_or_full_depth(tmp_path):
     """健康波判据: 档位 ok ∧ (有行 ∨ 全深度) —— 有行但未全深度(1.停翻)也算健康"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of(l): myhr_page([row(10 + i, f"OTHER {i}", done=DONE_OLD)], has_next=True)
         for i, l in enumerate("ABC")
@@ -833,12 +833,12 @@ def test_finish_wave_healthy_requires_rows_or_full_depth(tmp_path):
     assert all(
         data.wave.lanes[l].ok and data.wave.lanes[l].rows > 0 and not data.wave.lanes[l].full_depth for l in "ABC"
     )
-    assert data.wave.healthy_ts == clock.now
+    assert data.wave.healthy_ts == clock.now()
 
 
 def test_finish_wave_not_healthy_when_rows_zero_and_not_full(tmp_path):
     """健康波判据: ok 但零行且非全深度(页面取数失败截断)不算健康 ⇒ healthy_ts 不前进"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {url_of(l, 1): myhr_page([], has_next=True) for l in "ABC"}  # 第 2 页缺失 → 取数失败
     service = make_service(tmp_path, FakeFetcher(pages=pages), clock=clock)
     run_wave(service, {})
@@ -850,7 +850,7 @@ def test_finish_wave_not_healthy_when_rows_zero_and_not_full(tmp_path):
 def test_finish_wave_counter_claim_one_zero_rows_hard_error(tmp_path, monkeypatch, caplog):
     """声明 1 行实抓 0 行也走 page_changed 硬告警(判据是 claim > 0 而非 > 1), 不落到 mismatch 节流告警"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {"A": 1, "B": 1, "C": 1})
     fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -861,7 +861,7 @@ def test_finish_wave_counter_claim_one_zero_rows_hard_error(tmp_path, monkeypatc
 
 def test_run_pages_rows_accumulate_over_pages(tmp_path):
     """行数跨页累加(+= 而非 =): 第 2 页的行并进本档计数"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A", 1):
             myhr_page([row(11, "OTHER 11", done=DONE_NEW)], has_next=True),
@@ -882,7 +882,7 @@ def test_run_pages_rows_accumulate_over_pages(tmp_path):
 
 def test_finish_wave_zero_rows_note_exact_text(tmp_path):
     """零行不签发的持久化文案单点(带人工对账命令): 文案改写即测试红"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, h11 = mk_blob("EXAMPLE 11")
     pages = {url_of("A"): myhr_page([row(11, "EXAMPLE 11")]), url_of("B"): myhr_page([]), url_of("C"): myhr_page([])}
     fetcher = FakeFetcher(pages=pages, blobs={11: blob11})
@@ -899,7 +899,7 @@ def test_finish_wave_zero_rows_note_exact_text(tmp_path):
 
 def test_freeze_terminal_multi_entry_position_rules(tmp_path):
     """一波多条目退役: 位置未证明的维持管束, 全深度/自身 done 越过 cutoff 的退役; 逐条计数"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, h11 = mk_blob("EXAMPLE 11")
     blob21, h21 = mk_blob("EXAMPLE 21")
     blob22, h22 = mk_blob("EXAMPLE 22")
@@ -954,7 +954,7 @@ def test_freeze_terminal_multi_entry_position_rules(tmp_path):
 
 def test_process_rows_carries_identity_across_waves(tmp_path):
     """重例行继承旧身份: 已登记的 infohash 带过来, 命中定论照判(不因页面不带 hash 就重新下载/误签)"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, h11 = mk_blob("EXAMPLE 11")
     pages = {url_of("A"): myhr_page([row(11, "EXAMPLE 11")]), url_of("B"): myhr_page([]), url_of("C"): myhr_page([])}
     fetcher = FakeFetcher(pages=pages, blobs={11: blob11})
@@ -989,7 +989,7 @@ def test_build_objects_excludes_terminal_verified_exempt():
         h11: anchor_for("EXAMPLE 11", completion_on=T_DONE_NEW),  # 受管 -> 观察集
         "h_ghost": anchor_for("GHOST 1", completion_on=T_DONE_NEW),  # 未对账
     }
-    svc = make_service(tempfile.mkdtemp(), FakeFetcher(pages={}), clock=Clock())
+    svc = make_service(tempfile.mkdtemp(), FakeFetcher(pages={}), clock=FakeClock())
     objects, observing, unmatched = svc._build_objects(data, anchors, 2 * 86400.0)
     assert set(objects) == {h11, "h_ghost"}, f"受管的才进对象集(排除项在前, continue 非 break): {sorted(objects)}"
     assert set(observing) == {h11}, "命中绑定到活动条目的进观察集"
@@ -1005,7 +1005,7 @@ def test_build_objects_excludes_terminal_verified_exempt():
 
 def test_freeze_terminal_failed_lane_between_entries(tmp_path):
     """档位失效的条目只跳过自己(continue 非 break): 其后可退役的终态条目照常退役"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, h11 = mk_blob("EXAMPLE 11")
     blob21, h21 = mk_blob("EXAMPLE 21")
     blob22, h22 = mk_blob("EXAMPLE 22")
@@ -1057,7 +1057,7 @@ def test_zero_rows_false_when_all_lanes_failed(tmp_path):
     改前 `zero_rows = 总量为 0`, 于是「一页都没取到」也自称「结构完好但清单为 0」, 并把 WebUI
     引向 `--hr-confirm-empty` 人工对账 —— 2026-10-28 那次 12h 的故障就一直在这么说。
     """
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNoPermission("扩展未授权该站点"))
     service = make_service(tmp_path, fetcher, clock=clock)
     result = run_wave(service, {})
@@ -1070,7 +1070,7 @@ def test_zero_rows_false_when_all_lanes_failed(tmp_path):
 
 def test_zero_rows_true_when_all_lanes_ok_and_empty(tmp_path):
     """全档有效且确实为空 ⇒ 零行波成立(人工对账话术照旧)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([], [], []))
     service = make_service(tmp_path, fetcher, clock=clock)
     result = run_wave(service, {})
@@ -1083,7 +1083,7 @@ def test_zero_rows_true_when_all_lanes_ok_and_empty(tmp_path):
 
 def test_zero_rows_false_when_one_lane_failed(tmp_path):
     """A 档取到空表、B 档取数失败 ⇒ 也不是零行波: 有档没看到, 这一波没资格判「空」"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([], [], []), fail_text_at={"B": "HTTP 500"})
     service = make_service(tmp_path, fetcher, clock=clock)
     result = run_wave(service, {})

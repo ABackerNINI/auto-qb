@@ -93,8 +93,8 @@ import pytest
 import sidefx
 
 # flaky 治理单点(计划 26-11-05-0118 S1): 统一假钟夹具注册进全局命名空间 ——
-# 用例直接 `def test_x(fake_clock):` 即用; 条件轮询 helper 走 `from helpers import wait_until`
-# (单一实现在 tests/clock.py, helpers 再导出), 详见 tests/clock.py 的用法规范。
+# 用例直接 `def test_x(fake_clock):` 即用; 条件轮询 helper 直连 `from clock import wait_until`
+# (单一实现在 tests/clock.py), 详见 tests/clock.py 的用法规范。
 from clock import fake_clock  # noqa: F401  (pytest 夹具再导出)
 
 # 临时目录自举 + 写重型互斥锁(计划 26-11-02-0657): 必须在任何插件固化 tempfile 缓存前跑,

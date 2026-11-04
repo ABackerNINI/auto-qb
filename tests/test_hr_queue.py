@@ -40,7 +40,7 @@ import time
 
 from auto_qb.hr.channel import TASK_PAGE, TASK_TORRENT, HrResult
 from auto_qb.hr.queue import HrTaskQueue
-from hr_helpers import Clock
+from clock import FakeClock
 
 URL = "https://pt.example.com/myhr.php?hrtype=A"
 DL = "https://pt.example.com/download.php?id=313852"
@@ -110,8 +110,8 @@ def test_submit_rejects_foreign_host():
 
 
 def test_ttl_expires_task():
-    clock = Clock()
-    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    clock = FakeClock()
+    queue = HrTaskQueue(now_fn=clock.now, ttl=10.0)
     task = queue.put("pt.example.com", TASK_PAGE, URL)
     queue.take_batch()
     clock.advance(11.0)
@@ -179,8 +179,8 @@ def test_resume_clears_cancel():
 
 def test_ttl_expires_unclaimed_results():
     """已回传但没人取走的结果超 TTL 也清掉(两个方向都会自然到期, 不无限堆积)"""
-    clock = Clock()
-    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    clock = FakeClock()
+    queue = HrTaskQueue(now_fn=clock.now, ttl=10.0)
     task = queue.put("pt.example.com", TASK_PAGE, URL)
     queue.take_batch()
     assert queue.submit(HrResult(task_id=task.task_id, ok=True, url=URL, body=b"<html/>")) is True
@@ -192,8 +192,8 @@ def test_ttl_expires_unclaimed_results():
 
 def test_received_at_missing_does_not_crash_expiry():
     """received_at 缺失(0)的回执按「当下」起算, 不立刻过期也不除零"""
-    clock = Clock()
-    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    clock = FakeClock()
+    queue = HrTaskQueue(now_fn=clock.now, ttl=10.0)
     task = queue.put("pt.example.com", TASK_PAGE, URL)
     queue.take_batch()
     result = HrResult(task_id=task.task_id, ok=True, url=URL, body=b"x")
@@ -281,8 +281,8 @@ def test_queue_submit_clears_outstanding():
 
 def test_queue_ttl_boundary_exact_is_kept():
     """TTL 判定是严格 >(恰好到期不作废): 任务侧与结果侧都要"""
-    clock = Clock()
-    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    clock = FakeClock()
+    queue = HrTaskQueue(now_fn=clock.now, ttl=10.0)
     task = queue.put("pt.example.com", TASK_PAGE, URL)
     queue.take_batch()
     queue.put("pt.example.com", TASK_PAGE, f"{URL}&page=2")
@@ -295,8 +295,8 @@ def test_queue_ttl_boundary_exact_is_kept():
 
 def test_queue_small_clock_values_still_work():
     """假时钟给 0..1 之间的小值: 派发标记与「未派发」闸都不能把 0.5 当 0"""
-    clock = Clock(start=0.5)
-    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    clock = FakeClock(start=0.5)
+    queue = HrTaskQueue(now_fn=clock.now, ttl=10.0)
     task = queue.put("pt.example.com", TASK_PAGE, URL)
     assert len(queue.take_batch()) == 1
     assert queue.take_batch() == [], "派发过(0.5)不再重复派"
@@ -305,8 +305,8 @@ def test_queue_small_clock_values_still_work():
 
 def test_queue_expire_uses_small_dispatched_at():
     """小派发时刻(0.5)也参与 TTL 作废(不被「> 1」漏掉)"""
-    clock = Clock(start=0.5)
-    queue = HrTaskQueue(now_fn=clock, ttl=10.0)
+    clock = FakeClock(start=0.5)
+    queue = HrTaskQueue(now_fn=clock.now, ttl=10.0)
     queue.put("pt.example.com", TASK_PAGE, URL)
     queue.take_batch()  # dispatched_at = 0.5
     clock.advance(11.0)
@@ -315,8 +315,8 @@ def test_queue_expire_uses_small_dispatched_at():
 
 def test_queue_wait_aborts_on_epoch_change_without_retiring():
     """等待期间「代」变了且任务仍在 -> 放弃等待, 但**不**作废任务(epoch 分支不 pop)"""
-    clock = Clock()
-    queue = HrTaskQueue(now_fn=clock, ttl=100.0)
+    clock = FakeClock()
+    queue = HrTaskQueue(now_fn=clock.now, ttl=100.0)
     task = queue.put("pt.example.com", TASK_PAGE, URL)
     queue.take_batch()
     real_expire = queue._expire_locked

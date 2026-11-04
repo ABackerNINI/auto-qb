@@ -231,18 +231,6 @@ class FakeFetcher:
         return self.blobs[tid]
 
 
-class Clock:
-    """可推进的假时钟(测试有效期与频控, 不真等)"""
-    def __init__(self, start: float = 1_700_000_000.0) -> None:
-        self.now = start
-
-    def __call__(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
-
-
 def site_conf(**overrides) -> SiteHrCheckConfig:
     """站点级 hr_check 配置(测试默认: enabled / 清单型 / 12H 周期; 页面事实为派生字段)"""
     base = dict(
@@ -290,9 +278,9 @@ def make_service(
 
     参数面覆盖 HrRefreshService 全量构造参数; 新场景扩这里, 不要内联 new
     (守阵 tests/test_manager_single_point.py 会拦)。硬约束:
-    - now_fn **无默认值**: 每个调用点必须显式表态真钟(time.time)/假钟(Clock 实例) ——
+    - now_fn **无默认值**: 每个调用点必须显式表态真钟(time.time)/假钟(FakeClock 实例) ——
       「默认假钟落到需要真实时刻的用例」是一种新型假绿;
-    - 假钟不许 partial 绑同一个 Clock 实例(181 个用例共享一个可推进时钟 = 跨用例状态泄漏),
+    - 假钟不许 partial 绑同一个 FakeClock 实例(181 个用例共享一个可推进时钟 = 跨用例状态泄漏),
       每处绑定新建实例;
     - owner 字样有断言钉着(test_hr_service 钉 "test", test_web_hr 钉 "tester"),
       改默认值前先 grep。

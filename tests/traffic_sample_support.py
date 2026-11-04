@@ -64,6 +64,8 @@ from helpers import FakeClient, FakeTorrent, active_torrent, capture_logs, make_
 
 from webui_helpers import _enable_qb_traffic, _qb_v4
 
+from clock import FakeClock
+
 # 写入侧凭据判据的测试 idiom 消误报(2026-10-16 形态 D 轮用户拍板, 样板与缘由见
 # pitfalls/testing/credential-shape-write-guard.md): 键名程序化拆写, 判据按「键名标识符 +
 # 赋值形态」匹配 —— 拆写后键名不再出现在赋值位; 行为零变化(字典键值/YAML 输出逐位一致)。
@@ -159,7 +161,7 @@ def _spy_sample_rounds(monkeypatch, clock) -> list:
     orig = TrafficSampleModule._publish_live_tail
 
     def spy(self):
-        rounds.append(clock.now)
+        rounds.append(clock.now())
         return orig(self)
 
     monkeypatch.setattr(TrafficSampleModule, "_publish_live_tail", spy)
@@ -167,33 +169,6 @@ def _spy_sample_rounds(monkeypatch, clock) -> list:
 
 
 # ---------- 开放游程 + 批量落盘(plan 26-10-04-1957 S2a §3.2/§3.3) ----------
-class _Clock:
-    """可控假钟: .now 是浮点(测试自由赋值/advance), .time() 是旧「换模块 time 名」形态的
-    兼容面(S3 迁删); 注入生产取时单点位须经 _as_clock 适配 Clock 协议"""
-    def __init__(self, now: float = 1_700_000_000.0):
-        self.now = now
-
-    def time(self) -> float:
-        return self.now
-
-    def advance(self, seconds: float) -> None:
-        self.now += seconds
-
-
-class _AsClock:
-    """_Clock/_FakeLoopTime -> Clock 协议适配: 实时镜像宿主假钟的浮点 .now(非快照)"""
-    def __init__(self, c):
-        self._c = c
-
-    def now(self) -> float:
-        return self._c.now
-
-    def monotonic(self) -> float:
-        return self._c.now
-
-
-def _as_clock(c):
-    return _AsClock(c)
 
 
 def _idle_state(**overrides) -> dict:
@@ -348,5 +323,5 @@ def _w5_mgr(tmp_path, monkeypatch, clock, **conf_kw):
     """W5 守阵公共装配: 固定时钟 + 30s 采样档(键可覆盖)"""
     kw = {"enabled": True, "sample_interval": 30, "flush_interval": 10**9}
     kw.update(conf_kw)
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     return _mgr_with_traffic(tmp_path, QbTraffic(**kw))

@@ -41,7 +41,7 @@ import pytest
 
 from qbittorrentapi import APIConnectionError, Client
 
-from traffic_sample_support import _as_clock
+from clock import FakeClock
 
 from auto_qb.config import QbittorrentConfig
 
@@ -387,31 +387,16 @@ def test_hr_bind_error_on_start_releases_lock_and_skips_state():
 # ---------- 覆盖率第三轮 T2b 补测(26-11-05): 命令驱动补刷新不重设同步节拍 ----------
 
 
-class _FakeLoopTime:
-    """可步进的假时钟(纪元取 2027 年附近, 避开 Windows 1970 邻域 timestamp OSError 坑)"""
-    def __init__(self, start=1_800_000_000.0):
-        self.now = start
-
-    def time(self):
-        return self.now
-
-    def monotonic(self):
-        return self.now
-
-    def sleep(self, _s):
-        pass
-
-
 def test_run_cmd_driven_sync_not_by_time_keeps_next_sync(monkeypatch):
     """(T2b)tick 到期而同步时间未到的命令轮(619->633): sync_due_by_time 假 + _sync_moved()
     假(白刷) -> 不重设 next_sync_at —— 命令驱动的白刷不能把下一次自然校正推后一个周期。
     假时钟 + _wait_next 步进直驱: 唤醒时刻不再是真实挂钟, 分支判据(轮次到点关系)确定化"""
     from auto_qb.core import qbmanager as qbm
 
-    clock = _FakeLoopTime()
+    clock = FakeClock(start=1_800_000_000.0)  # 纪元取 2027 年附近: 避开 Windows 1970 邻域 timestamp OSError 坑
     # 注入须先于 QbManager 构造(缺省钟在构造期解析模块属性; 旧「换模块 time 名」在调用期
     # 生效, 时序等价面 = 构造前替换)
-    monkeypatch.setattr(qbm, "SYSTEM_CLOCK", _as_clock(clock))
+    monkeypatch.setattr(qbm, "SYSTEM_CLOCK", clock)
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
         mgr.connect = mock.Mock(return_value=True)
@@ -421,14 +406,14 @@ def test_run_cmd_driven_sync_not_by_time_keeps_next_sync(monkeypatch):
         steps = iter([1.8, 0.2, 1.0, 1.0])  # 各轮推进量: 1001.8 / 1002 / 1003 / 1004
 
         def _fake_wait(stop_event, wake_event, timeout):
-            clock.now += next(steps, 1.0)
+            clock.advance(next(steps, 1.0))
             return False
 
         monkeypatch.setattr(qbm, "_wait_next", _fake_wait)
         mgr.host.run_command_line = mock.Mock(return_value=True)  # 每轮都有命令改状态
         mgr._tick = mock.Mock(side_effect=[None, None, KeyboardInterrupt()])
         sync_times = []
-        mgr._sync_line = lambda dry_run, flush=True, force=False: sync_times.append(clock.now)
+        mgr._sync_line = lambda dry_run, flush=True, force=False: sync_times.append(clock.now())
         mgr.run(dry_run=False)
         assert mgr._tick.call_count == 3, "命令轮(614 支)恰好三轮后 KI 退出"
         assert sync_times == [1_800_000_001.8, 1_800_000_003.0], sync_times

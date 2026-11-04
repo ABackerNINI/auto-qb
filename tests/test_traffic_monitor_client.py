@@ -62,7 +62,9 @@ import pytest
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve
 from auto_qb.core.traffic_source import agent
 from auto_qb.webui import tool_client
-from helpers import dat_text, make_manager, wait_until, write_credential_file, write_endpoint_pointer
+from clock import wait_until
+
+from helpers import dat_text, make_manager, write_credential_file, write_endpoint_pointer
 
 GIB = 1024**3
 MIB = 1024**2
@@ -353,7 +355,7 @@ def test_stop_is_bounded_when_tool_hangs(sub_env):
     tool.hang = hang
     sub.sync()  # 起线程: 它会阻塞在假死调用里
     try:
-        assert wait_until(lambda: tool.paths() == ["/status"], poll=0.01), "线程未发起探活调用"
+        assert wait_until(lambda: tool.paths() == ["/status"], interval=0.01), "线程未发起探活调用"
         t0 = time.monotonic()
         with _LogCapture("auto_qb.webui.tool_client") as buf:
             sub.stop(timeout=0.05)
@@ -366,7 +368,7 @@ def test_stop_is_bounded_when_tool_hangs(sub_env):
     finally:
         hang.set()  # 放行挂起调用, 让线程收尾(不污染后续用例)
         sub.stop(timeout=3.0)
-        assert wait_until(lambda: not _sub_threads(), poll=0.01), "释放假死后订阅线程未收线"
+        assert wait_until(lambda: not _sub_threads(), interval=0.01), "释放假死后订阅线程未收线"
 
 
 # ---------- 线程生命周期 ----------
@@ -376,22 +378,22 @@ def test_thread_lifecycle_sync_then_stop(sub_env):
     """sync 起订阅线程并完成注册; stop 收线前把订阅注销掉"""
     _mgr, sub, tool = sub_env
     sub.sync()
-    assert wait_until(lambda: "/subscribe" in tool.paths(), poll=0.01), "sync 后线程未注册"
+    assert wait_until(lambda: "/subscribe" in tool.paths(), interval=0.01), "sync 后线程未注册"
     assert sub._thread is not None and sub._thread.is_alive()
     sub.stop()
-    assert wait_until(lambda: "/unsubscribe" in tool.paths(), poll=0.01), "stop 未注销订阅"
-    assert wait_until(lambda: not _sub_threads(), poll=0.01), "订阅线程未退出"
+    assert wait_until(lambda: "/unsubscribe" in tool.paths(), interval=0.01), "stop 未注销订阅"
+    assert wait_until(lambda: not _sub_threads(), interval=0.01), "订阅线程未退出"
 
 
 def test_thread_self_terminates_when_disabled(sub_env):
     """来源中途切走 + sync -> 线程读到期望态为假, 注销后自行退出(不必等 stop)"""
     mgr, sub, tool = sub_env
     sub.sync()
-    assert wait_until(lambda: "/subscribe" in tool.paths(), poll=0.01)
+    assert wait_until(lambda: "/subscribe" in tool.paths(), interval=0.01)
     mgr.config.traffic_source.provider = "traffic_monitor"
     sub.sync()
-    assert wait_until(lambda: "/unsubscribe" in tool.paths(), poll=0.01), "切走来源后未注销"
-    assert wait_until(lambda: not _sub_threads(), poll=0.01), "订阅线程未自行退出"
+    assert wait_until(lambda: "/unsubscribe" in tool.paths(), interval=0.01), "切走来源后未注销"
+    assert wait_until(lambda: not _sub_threads(), interval=0.01), "订阅线程未自行退出"
 
 
 # ---------- 只读刷新(speed_curve 模块 + WEB 命令) ----------

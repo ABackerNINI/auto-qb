@@ -144,7 +144,6 @@ from hr_helpers import (
     EMPTY_TABLE_PAGE,
     LOGIN_PAGE,
     REVISED_PAGE,
-    Clock,
     FakeFetcher,
     global_conf,
     make_service as hr_make_service,
@@ -154,6 +153,7 @@ from hr_helpers import (
     torrent_blob,
 )
 
+from clock import FakeClock
 from hr_service_support import (
     DONE_NEW,
     DONE_OLD,
@@ -195,18 +195,18 @@ def test_store_prebuilt_per_site_confs(tmp_path):
 
 def test_login_expired_marks_interval(tmp_path):
     """登录失效路径同样前进间隔基准: 登录恢复前重试节奏受 min_interval 约束(M1)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages(), login_at={"A"})
     service = make_service(tmp_path, fetcher, clock=clock)
     result = run_wave(service, {})
     data, _ = service.store(SITE).read_unlocked()
-    assert data.rate.last_fetch_ts == clock.now  # 修复前恒 0: 每 poll(60s)都立即重发烧日额
+    assert data.rate.last_fetch_ts == clock.now()  # 修复前恒 0: 每 poll(60s)都立即重发烧日额
     assert result.action == ACTION_ERROR
 
 
 def test_counter_match_releases(tmp_path, monkeypatch):
     """T1 对平放行: 三档 claim == rows 且全深度 → 照常签发(与无计数基线一致), count_match 全 True"""
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {"A": 0, "B": 5, "C": 0})
     fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -223,7 +223,7 @@ def test_counter_mismatch_freezes_batch(tmp_path, monkeypatch, caplog):
     """T2 不对平冻结: 全深度档 claim≠rows → depth_broken 整波不签发; 连续 3 波 ERROR 升级;
     对平自愈 + streak 清零。不变量: 命中登记 / 管束 / 复用窗照常(门只拦批量「未列出」签发)。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     claims = counter_adapter(monkeypatch, {"B": 50})
     blob11, h11 = mk_blob("EXAMPLE 11")
     pages = {
@@ -269,7 +269,7 @@ def test_counter_mismatch_freezes_batch(tmp_path, monkeypatch, caplog):
 def test_counter_absent_degrades_to_legacy(tmp_path):
     """T3 无计数降级: 默认 adapter(parse_counters 默认空 dict) → 全路径与旧逻辑逐位一致;
     旧版站点文件(无三键)加载 count_claim/count_match 为 None(T1 迁移陷阱守阵: 不得变 0)。"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
     service = make_service(tmp_path, fetcher, clock=clock)
     anchors = {"h1": anchor_for("h1", completion_on=T_DONE_NEW)}
@@ -292,7 +292,7 @@ def test_counter_zero_claims_self_attest_empty(tmp_path, monkeypatch, caplog):
     """T4 计数零自证空: 三档 claim=0 ∧ rows=0 → 视同人工确认戳, 签发放行;
     zero_listing 软提示不出现, 无需 --hr-confirm-empty。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {"A": 0, "B": 0, "C": 0})
     fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -304,7 +304,7 @@ def test_counter_zero_claims_self_attest_empty(tmp_path, monkeypatch, caplog):
     assert result.alerted is False  # 计数自证空集 = 已确认, 不告警
     assert "若确认账号的 HR 清单确实为空" not in caplog.text
     # M3 展示口径对齐(计划 26-09-29-2036 §2.5): 计数自证空集的站点不再标「零行未确认」/「需人工对账」
-    snap = build_site_statuses(service, clock.now)[0]
+    snap = build_site_statuses(service, clock.now())[0]
     assert snap.count_attested_empty is True and snap.empty_confirmed is False
     assert snap.blocking == ""
 
@@ -313,7 +313,7 @@ def test_counter_truncation_gap_informational(tmp_path, monkeypatch, caplog):
     """T6 截断差值信息性: 预算截断(非全深度) rows<claim → 不告警不冻结; notes 记差值;
     REASON_BUDGET 语义不变(与解析问题分层)。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {"A": 30, "B": 30, "C": 30})
     pages = {
         url_of("A", 1):
@@ -340,7 +340,7 @@ def test_counter_truncation_gap_informational(tmp_path, monkeypatch, caplog):
 
 def test_persist_false_reports_readonly_mode(tmp_path):
     """只读走查口径(persist=False): 波照常跑、不写盘, reason 注明「只读模式, 未写盘」"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock, persist=False)
     result = run_wave(service, {})
@@ -353,7 +353,7 @@ def test_persist_false_reports_readonly_mode(tmp_path):
 
 def test_history_auto_poll_gate_skip_writes_nothing(tmp_path):
     """硬不变量(§3.3): 自动 poll 被调度闸(复用窗/拉取间隔)跳过 -> 零事件 + 零写盘(站点文件一字节不变)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, gconf=global_conf(reuse_window=3600.0), clock=clock)
     run_wave(service)
@@ -379,7 +379,7 @@ def test_history_auto_poll_gate_skip_writes_nothing(tmp_path):
 def test_history_defer_only_on_force(tmp_path):
     """defer 事件仅 force 路径产生(§3.3): 非 force 被闸拦无事件不写盘; force 撞 min_interval
     (账号安全线) -> 恰一条 defer 并随显式 commit 落盘"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, gconf=global_conf(min_interval=90.0, reuse_window=1.0), clock=clock)
     run_wave(service)  # 首波健康波(1 条 wave 事件); last_fetch_ts = now
@@ -399,7 +399,7 @@ def test_history_defer_only_on_force(tmp_path):
     assert (defer_ev.kind, defer_ev.trigger, defer_ev.action) == ("defer", "manual", "waiting")
     assert "间隔" in defer_ev.reason
     assert defer_ev.lanes == [] and defer_ev.rows == 0 and defer_ev.pages == 0
-    assert defer_ev.by == "test" and defer_ev.ts == clock.now
+    assert defer_ev.by == "test" and defer_ev.ts == clock.now()
 
 
 def test_stop_condition_no_condition_reports_not_full(tmp_path):
@@ -412,7 +412,7 @@ def test_stop_condition_no_condition_reports_not_full(tmp_path):
 def test_finish_wave_counter_mismatch_error_level_and_text(tmp_path, monkeypatch, caplog):
     """计数对不平 ERROR 升级: 连续 3 波恰一条 ERROR, 且逐参文案(站点/档位/实抓/声明/波数)完整"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {"B": 50})
     fetcher = FakeFetcher(pages=standard_pages(rows_b=five_expired_rows(20)))
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -432,7 +432,7 @@ def test_run_pages_counters_receive_page_html(tmp_path, monkeypatch):
     html_b = myhr_page([row(21, "B 21")])
     pages = {url_of("A", 1): myhr_page([row(11, "OTHER 11")]), url_of("B", 1): html_b, url_of("C", 1): myhr_page([])}
     recorder = _RecordingCounterAdapter(_real_adapter())
-    service = make_service(tmp_path, FakeFetcher(pages=pages), clock=Clock())
+    service = make_service(tmp_path, FakeFetcher(pages=pages), clock=FakeClock())
     # 让引擎这一轮用记录壳取数: build_adapter 替换(monkeypatch 自动还原)
     import auto_qb.hr.service as hs
 
@@ -444,7 +444,7 @@ def test_run_pages_counters_receive_page_html(tmp_path, monkeypatch):
 
 def test_run_pages_js_marks_next_page_keeps_paging(tmp_path):
     """JS 翻页标记(currentpage<maxpage)也算「还有下一页」: 链接未标注也继续翻(last-page 判据双证据)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A", 1): _marks_page([row(11, "OTHER 11", done=DONE_NEW)], currentpage=1, maxpage=2),
         url_of("A", 2): myhr_page([row(12, "OTHER 12", done=DONE_OLD)]),
@@ -459,7 +459,7 @@ def test_run_pages_js_marks_next_page_keeps_paging(tmp_path):
 
 def test_run_pages_js_marks_at_last_page(tmp_path):
     """currentpage==maxpage 即末页(< 而非 <=): 不翻不存在的下一页, 记全深度"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A", 1): _marks_page([row(11, "OTHER 11", done=DONE_NEW)], currentpage=2, maxpage=2),
         url_of("A", 2): myhr_page([row(19, "NEVER 19", done=DONE_OLD)]),
@@ -475,7 +475,7 @@ def test_run_pages_js_marks_at_last_page(tmp_path):
 
 def test_do_wave_channel_stopped_yields_without_history(tmp_path):
     """被叫停(停止/重挂期间) = 让位不告警: action=WAITING 且不记拉取历史(瞬态事件, 不刷屏)"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(tmp_path, _StoppedFetcher(pages={}), clock=clock)
     result = run_wave(service, {})
     assert result.action == ACTION_WAITING
@@ -486,7 +486,7 @@ def test_do_wave_channel_stopped_yields_without_history(tmp_path):
 
 def test_do_wave_quota_abort_records_history_and_elapsed(tmp_path):
     """扩展侧硬上限让位收尾: 记一条 wave 历史(含档位快照), elapsed 落 0(假时钟冻结)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([]), quota=True)
     service = make_service(tmp_path, fetcher, clock=clock)
     result = run_wave(service, {})
@@ -501,7 +501,7 @@ def test_do_wave_quota_abort_records_history_and_elapsed(tmp_path):
 
 def test_do_wave_login_expired_marks_error_note_and_alerted(tmp_path):
     """登录失效: action=ERROR + 告警 + notes 留痕(站点与异常详情都在), 波照常收尾不外抛"""
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages([])
     fetcher = FakeFetcher(pages=pages, login_at={"A"})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -516,7 +516,7 @@ def test_do_wave_login_expired_marks_error_note_and_alerted(tmp_path):
 
 def test_do_wave_fetch_failure_marks_partial_and_lane_failed(tmp_path):
     """页面取数失败(无 Retry-After): 该档失效截断, 波级降 PARTIAL 并告警(其余档已跑完)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"): myhr_page([]),
         url_of("C"): myhr_page([]),
@@ -535,7 +535,7 @@ def test_do_wave_fetch_failure_marks_partial_and_lane_failed(tmp_path):
 
 def test_refresh_locked_dry_run_force_defers_with_history(tmp_path):
     """dry-run(allow_fetch=false)被 force 叫起: 让位 + 记一条 defer 历史(kind/trigger/action 都对)"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(tmp_path, FakeFetcher(pages=standard_pages([])), clock=clock, allow_fetch=False)
     result = service.refresh_site(SITE, {}, force=True)
     assert result.action == ACTION_WAITING
@@ -559,7 +559,7 @@ def test_lanes_summary_from_display_tags_and_counters():
 
 def test_history_wave_event_carries_result_fields(tmp_path):
     """波终态历史事件逐字段搬运(不新算): 计数/签发放行/耗时/档位快照/notes 都来自本波结果"""
-    clock = Clock()
+    clock = FakeClock()
     blob21, h21 = mk_blob("EXAMPLE 21")
     pages = {
         url_of("A"): myhr_page([row(11, "EXAMPLE 11"), row(21, "EXAMPLE 21")]),  # 11 的 blob 缺 -> 下载失败
@@ -593,7 +593,7 @@ def test_history_wave_event_carries_result_fields(tmp_path):
 
 def test_history_event_reason_kind_budget_carried(tmp_path):
     """被页数上限截断的波: reason_kind=budget(非空)逐字搬进历史(区分「没跑完」的类型)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"): myhr_page([row(11, "OTHER 11")], has_next=True),
         url_of("B"): myhr_page([row(21, "OTHER 21")], has_next=True),
@@ -608,7 +608,7 @@ def test_history_event_reason_kind_budget_carried(tmp_path):
 
 def test_history_defer_event_field_defaults(tmp_path):
     """defer(立即拉取被拦)历史: 未提供的计数字段落默认 0(不冒泡成 1 / None)"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(tmp_path, FakeFetcher(pages=standard_pages([])), clock=clock, allow_fetch=False)
     result = service.refresh_site(SITE, {}, force=True)
     assert result.action == ACTION_WAITING

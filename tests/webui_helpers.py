@@ -13,6 +13,8 @@ from auto_qb.infra.utils import encode_group_key
 from auto_qb.torrents import TorrentStore
 from auto_qb.webui.runtime import WebUIRuntime
 
+from clock import FakeClock
+
 KEY = ("R:/seeds", ("a.mkv", "b.mkv"))
 
 # WEB 测试环境配置文本单点(issue 26-10-21-0502-refactor-test-web-env-param-dup):
@@ -522,11 +524,11 @@ def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
 
     from auto_qb.hr.runtime import HrRuntimeStatus
     from auto_qb.config.models import SiteHrCheckConfig
-    from hr_helpers import Clock, FakeFetcher, global_conf, make_service, myhr_page, row, site_conf, torrent_blob
+    from hr_helpers import FakeFetcher, global_conf, make_service, myhr_page, row, site_conf, torrent_blob
 
     # !假时钟要落在**真实当前时间**附近: 端点用真 `time.time()` 取 now, 若测试时钟是
-    # hr_helpers 默认的 2023 基准, 数据必然被判「已过有效期」—— 测的就不是想测的东西了
-    clock = Clock(start=time.time())
+    # 统一假钟默认的 2023 基准(tests/clock.py DEFAULT_CLOCK_START), 数据必然被判「已过有效期」—— 测的就不是想测的东西了
+    clock = FakeClock(start=time.time())
     if pages is None:
         pages = {"A": myhr_page([row(101)]), "B": myhr_page([row(101)]), "C": myhr_page([row(101)])}
         if not complete:
@@ -534,7 +536,7 @@ def _hr_status_env(mgr, tmp_path, *, complete=True, pages=None):
     svc = make_service(
         tmp_path,
         FakeFetcher(pages, {101: torrent_blob("t101.bin")}),
-        now_fn=clock,
+        now_fn=clock.now,
         site_confs={"HHan": site_conf()},
     )
     svc.refresh_site("HHan")
@@ -613,16 +615,14 @@ def _attach_live_tail_host(mgr, tails):
 
 
 def _freeze_traffic_endpoint_clock(monkeypatch, now):
-    """只替换 qB 流量端点模块(traffic_qb)的取时单点为固定钟: 端点 `_grid` 请求时
+    """只替换 qB 流量端点模块(traffic_qb)的取时单点为冻结假钟: 端点 `_grid` 请求时
     现读的 now 与用例算边界(尾桶/全等)用的 now 钉成同一个值, 不冻测试进程其它
     time.time(日志/超时/其它域仍走真钟)。边界派生断言必须走这条, 否则慢机跨边界即红
     (见 pitfalls/testing/flaky-midnight-daycount.md 第六轮)。
-    S2 时钟注入后端点走 SYSTEM_CLOCK 单点(模块名请求时现读), patch 该名即可。"""
-    from types import SimpleNamespace
-
+    端点走 SYSTEM_CLOCK 单点(模块名请求时现读), 换上统一假钟(tests/clock.py)即可。"""
     from auto_qb.webui.server import traffic_qb as tq
 
-    monkeypatch.setattr(tq, "SYSTEM_CLOCK", SimpleNamespace(now=lambda: float(now)))
+    monkeypatch.setattr(tq, "SYSTEM_CLOCK", FakeClock(start=float(now)))
 
 
 # ---------- 增量时间线装库(issue 26-10-21-0502: 原 test_webui_delta / _mirror 各一份) ----------

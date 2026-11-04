@@ -25,10 +25,13 @@ from auto_qb.hr.worker import HrViewPublisher, HrWorker, pacing_class, stable_ke
 
 from auto_qb.infra.logging import DOMAIN_ATTR
 
-from helpers import capture_logs, wait_until
+from helpers import capture_logs
 
-from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, make_service, myhr_page, row, \
+from clock import wait_until
+
+from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, FakeFetcher, global_conf, make_service, myhr_page, row, \
     site_conf, torrent_blob
+from clock import FakeClock
 
 TID_A = 313852
 
@@ -53,7 +56,7 @@ def _service(tmp_path, fetcher, *, global_overrides=None, persist=True, allow_fe
     return make_service(
         tmp_path,
         fetcher,
-        now_fn=clock or time.time,
+        now_fn=clock.now if clock is not None else time.time,
         site_confs=confs or {"pt.example.com": site_conf()},
         gconf=global_conf(**(global_overrides or {})),
         persist=persist,
@@ -68,6 +71,6 @@ def _silence_worker(tmp_path, clock, endpoint, *, web_active):
         publisher=HrViewPublisher(),
         endpoint=endpoint,
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
         web_active_fn=lambda: web_active,
     )

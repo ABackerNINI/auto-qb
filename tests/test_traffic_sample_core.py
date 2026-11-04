@@ -60,7 +60,7 @@ v4 定约用例(plan 26-10-05-2200 §04 表 ③⑤⑥⑦, B2 落地):
 - test_v4_crash_restart_idle_window_is_vacuum: ⑦ 崩溃重启该时段 = 真空 —— 空闲段 cov_s 缺失,
   hour 行 avg 不被零速稀释(无偏)
 
-时钟/落盘纪律: 需要确定时刻的用例经 monkeypatch 固定模块 time 引用(_Clock 逐轮推进); flush 时点
+时钟/落盘纪律: 需要确定时刻的用例经 monkeypatch 把模块 SYSTEM_CLOCK 换成统一假钟(tests/clock.py FakeClock)逐轮推进; flush 时点
 除专项驱动用例外用 mod._flush_all_series() 直调(绕开驱动计时, 驱动时序由专项用例钉住)。
 
 形态 D 封口末端锚点(plan 26-10-16-1509 §04, z 行扩列; 五条封口路径):
@@ -183,9 +183,7 @@ from helpers import FakeClient, FakeTorrent, active_torrent, capture_logs, make_
 from webui_helpers import _enable_qb_traffic, _qb_v4
 
 from traffic_sample_support import (
-    _as_clock,
     _AGG_H0,
-    _Clock,
     _FlipSpeedTorrent,
     _add_backlog,
     _agg_text,
@@ -204,6 +202,7 @@ from traffic_sample_support import (
     _w5_mgr,
     _w5_ts,
 )
+from clock import FakeClock
 
 
 def test_sample_task_registered_when_enabled(tmp_path):
@@ -219,8 +218,8 @@ def test_sample_not_starved_by_immediate_task_backlog(tmp_path, monkeypatch):
     配额 20 个/拍)时, 采样**每拍照常产样** —— 修复前它排在队列里, 排水窗内一次都轮不到
     (实测 7/7 复现 37~55s 静默, 1.5s 档丢约 36 轮)。判据走真实任务线入口, 排水未完成期间
     每一拍都必须采到。"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.config.main_tick = 30.0  # 采样节拍 = 1 个主循环拍(每拍都该采到)
     mgr.store.server_state = server_state()
@@ -239,8 +238,8 @@ def test_sample_not_starved_by_immediate_task_backlog(tmp_path, monkeypatch):
 def test_sample_clock_line_gate_and_hot_reload_enable(tmp_path, monkeypatch):
     """时钟线到期闸门 + 启停: 未到 effective interval 不重复采; 停用零采样; 热重载
     enabled=true **不经 queue_rebuilt 相位**即开采(采样已与队列解耦)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.config.main_tick = 2.0  # 时钟线每 2s 一拍, 采样间隔 30s -> 闸门只在到点放行
     mgr.store.server_state = server_state()
@@ -403,8 +402,8 @@ def test_enabled_false_creates_zero_files_or_dirs(tmp_path):
 def test_enabled_true_persists_under_data_dir(tmp_path, monkeypatch):
     """enabled=true: 采样点落 v3 天文件 <data_dir>/qb-traffic-v4/{global,torrents/<h>}/<date>.dat
     (头行 v3 + key 行 + B 块头 + r 行); 时钟整间隔步进 -> 零漂移零 dt 行; 会话快照列不落盘"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent()])
@@ -413,15 +412,15 @@ def test_enabled_true_persists_under_data_dir(tmp_path, monkeypatch):
     clock.advance(30)
     _run_sample(mgr)  # t0+30
     _flush(mod)
-    gpath = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now)
-    tpath = _v4_path(tmp_path, "torrent:HASH123", clock.now)
+    gpath = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now())
+    tpath = _v4_path(tmp_path, "torrent:HASH123", clock.now())
     assert gpath.is_file() and tpath.is_file()
     lines = gpath.read_text(encoding="utf-8").splitlines()
     assert lines[0] == "# auto-qb qb-traffic v4" and lines[1] == "key,global"
     parsed = parse_v4_day_text(gpath.read_text(encoding="utf-8"))
     assert parsed.key == "global" and len(parsed.blocks) == 1
     block = parsed.blocks[0]
-    assert block.start_epoch == int(clock.now) - 30 and block.interval_s == 30  # B 块头
+    assert block.start_epoch == int(clock.now()) - 30 and block.interval_s == 30  # B 块头
     assert len(block.records) == 2 and all(isinstance(r, V4Sample) for r in block.records)
     r0 = block.records[0]
     assert (r0.dl_rate, r0.up_rate, r0.dl_total, r0.up_total) == (1024, 2048, 10_000_000, 20_000_000)
@@ -444,29 +443,29 @@ def test_flush_driver_interval_and_deferred_first_round(tmp_path, monkeypatch):
     """flush 驱动(§3.3): 进程首轮只记时不提前 flush(批量优先); now - last_flush >=
     flush_interval 才全系列批量落盘; v4 关块谓词(flush ∧ has_r_row)下带 r 行的块随
     flush 关闭, 之后的记录开新块(每块块头恰写一次)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=60))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0: r 进缓冲; 首轮只记 flush 时点
-    assert _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now) is None
+    assert _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now()) is None
     assert mod._buffers[GLOBAL_SERIES_KEY].records
     clock.advance(30)
     _run_sample(mgr)  # 30 < 60: 未到点, 缓冲滞留
-    assert _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now) is None
+    assert _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now()) is None
     clock.advance(30)
     _run_sample(mgr)  # 60 >= 60: 批量落盘(本轮记录含在内; 块头随批)+ 关块(has_r_row)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed is not None and len(parsed.blocks) == 1 and len(parsed.blocks[0].records) == 3
     buf = mod._buffers[GLOBAL_SERIES_KEY]
     assert buf.records == [] and buf.start_epoch is None  # v4: 带 r 行的块随 flush 关闭
     clock.advance(30)
     _run_sample(mgr)  # 30 < 60: 缓冲滞留(新块已开)
-    assert len(_v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now).blocks[0].records) == 3
+    assert len(_v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now()).blocks[0].records) == 3
     clock.advance(30)
     _run_sample(mgr)  # 60 >= 60: 新块落盘(自带新块头)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 2 and len(parsed.blocks[1].records) == 2  # 两块两 B 行, 每块头恰一次
 
 
@@ -474,8 +473,8 @@ def test_global_idle_run_stays_open_across_flush_and_seals_on_resume(tmp_path, m
     """空闲块不关(v4 §01 关块谓词 + 「空闲封口」): 全局空闲开放 z 游程跨 flush 时点滞留
     内存(N4 天级保险闸, 600s 不再常态触发), 空闲段不落盘; 恢复传输(非 z 事件)封口,
     z 游程成为新块首(基线 = 该快照, delta = 0); 恢复 r 行 delta <= flush 窗 x 速率"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -485,7 +484,7 @@ def test_global_idle_run_stays_open_across_flush_and_seals_on_resume(tmp_path, m
         clock.advance(30)
         _run_sample(mgr)
     assert GLOBAL_SERIES_KEY in mod._open_runs  # 空闲块不关: 游程仍开放(天级保险闸未触)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 1 and [type(r) for r in parsed.blocks[0].records] == [V4Sample]
     # 恢复传输(非 z 事件): 封 z 游程成新块首 + r 记录; 下一 flush 关块重开
     mgr.store.server_state = server_state(alltime_dl=10_000_400, alltime_ul=20_000_200)
@@ -493,7 +492,7 @@ def test_global_idle_run_stays_open_across_flush_and_seals_on_resume(tmp_path, m
     _run_sample(mgr)
     assert GLOBAL_SERIES_KEY not in mod._open_runs  # 封口即移除
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 2  # 空闲块不关 -> 恢复块 = 新块(块首 z)
     z, r2 = parsed.blocks[1].records
     assert isinstance(z, V4ZeroRun) and z.run_len == 21  # [t0+30, t0+630] 共 21 个零样本
@@ -507,8 +506,8 @@ def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
     """单种动过->停: z 记录 totals 快照固定在开启时刻(首个零样本的 all-time 对);
     空闲期两个不同 totals 的零样本不刷新快照(§3.4 沿用); 形态 D: 末端列落封口触发
     样本的读数(路径 ①, 冻结列不受影响)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123", downloaded=5_000_000, uploaded=3_000_000)
@@ -538,15 +537,15 @@ def test_torrent_idle_run_snapshot_fixed_at_open(tmp_path, monkeypatch):
     assert (z.dl_total_end, z.up_total_end) == (5_001_000, 3_000_600)  # 形态 D 末端列 = 封口触发样本(路径 ①)
     assert rel_key not in mod._open_runs
     _flush(mod)
-    parsed = _v4_read(tmp_path, rel_key, clock.now)
+    parsed = _v4_read(tmp_path, rel_key, clock.now())
     recs = parsed.blocks[0].records
     assert [type(r) for r in recs] == [V4Sample, V4ZeroRun, V4Sample]  # 文件序 = 时间序
 
 
 def test_never_transferred_torrent_zero_files_runs_entries(tmp_path, monkeypatch):
     """从未传输的种子: 零文件、零游程(数据门 = 目录判定 + 进程内缓存, §3.2)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [FakeTorrent(hash="NEVER")])  # 全零速且从无流量
@@ -561,8 +560,8 @@ def test_never_transferred_torrent_zero_files_runs_entries(tmp_path, monkeypatch
 
 def test_nonzero_arrival_seals_z_before_raw_same_round(tmp_path, monkeypatch):
     """触发 (1): 非零样本到达同轮先封 z 游程再出 r —— buffer 记录序 = 文件序 = 时间序"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123")
@@ -579,7 +578,7 @@ def test_nonzero_arrival_seals_z_before_raw_same_round(tmp_path, monkeypatch):
     _run_sample(mgr)  # t0+60: 再活跃 -> 同轮先 z 后 r
     assert key not in mod._open_runs  # 封口即移除
     _flush(mod)
-    parsed = _v4_read(tmp_path, key, clock.now)
+    parsed = _v4_read(tmp_path, key, clock.now())
     recs = parsed.blocks[0].records
     assert [type(r) for r in recs] == [V4Sample, V4ZeroRun, V4Sample]  # 文件序 = 时间序
     z = recs[1]
@@ -591,8 +590,8 @@ def test_nonzero_arrival_seals_z_before_raw_same_round(tmp_path, monkeypatch):
 def test_disconnect_seals_run_before_null_r2(tmp_path, monkeypatch):
     """触发 (2)(R2): null 到达先封开放 z 游程再记 n 游程 —— z 覆盖不横跨断连期
     (把「未知」虚标成「观测到 0」的 v3 形态 = z 与 n 各占各的槽)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -611,7 +610,7 @@ def test_disconnect_seals_run_before_null_r2(tmp_path, monkeypatch):
     clock.advance(30)
     _run_sample(mgr)  # t0+120: 重连且活跃 -> 封 n 游程(触发 (1)) + r
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     recs = parsed.blocks[0].records
     assert [type(r) for r in recs] == [V4Sample, V4ZeroRun, V4NullRun, V4Sample]  # z 行在 n 之前
     assert recs[1].run_len == 2  # z 封 [t0+30, t0+60], 末日早于断连轮
@@ -621,8 +620,8 @@ def test_disconnect_seals_run_before_null_r2(tmp_path, monkeypatch):
 def test_zero_run_requires_valid_totals_snapshot(tmp_path, monkeypatch):
     """零样本读数口径: 开 z 游程需要合法 totals 快照 —— totals 缺失的零样本不开新游程
     (空闲不出 null 槽); 已开游程的零样本只推进 last_seen 无需重读 totals"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123")
@@ -646,14 +645,14 @@ def test_zero_run_requires_valid_totals_snapshot(tmp_path, monkeypatch):
     clock.advance(30)
     _run_sample(mgr)
     run = mod._open_runs[key]
-    assert run.samples == 2 and run.last_seen == clock.now  # 只推进, 不因 totals 缺失断游程
+    assert run.samples == 2 and run.last_seen == clock.now()  # 只推进, 不因 totals 缺失断游程
 
 
 def test_global_always_opens_run_vs_torrent_gated(tmp_path, monkeypatch):
     """两系列零样本纪律对照(§3.2): 全局恒开游程(无数据门); 单种目录判定门拦截
     (从未传输不开游程不建文件)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = _idle_state()
     seed_store(mgr, [FakeTorrent(hash="NEVER")])
@@ -671,8 +670,8 @@ def test_global_always_opens_run_vs_torrent_gated(tmp_path, monkeypatch):
 def test_restart_loses_at_most_one_open_run(tmp_path, monkeypatch):
     """崩溃/重启语义: 重建 sampler 实例 -> 内存游程与缓冲消失(丢 <=1 个未封口游程, 纯零
     信息), 已落盘块不受影响; 零样本按纪律重新开游程(重启后首个封口游程成为新块首)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -692,18 +691,18 @@ def test_restart_loses_at_most_one_open_run(tmp_path, monkeypatch):
     clock.advance(30)  # t0+180: 封 z(4 槽) + r
     mod2.handle_traffic_sample(dry_run=False)
     mod2._flush_all_series()
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 2  # 重启前后各一块(重启 = 新块首)
     assert [type(r) for r in parsed.blocks[0].records] == [V4Sample]  # 已落盘块不受重启影响
     z = parsed.blocks[1].records[0]
     assert isinstance(z, V4ZeroRun) and z.run_len == 3  # 重启后游程如期封口(t0+90..t0+150)
-    assert parsed.blocks[1].start_epoch == int(clock.now) - 90  # 块首 = 游程首零样本(t0+90)
+    assert parsed.blocks[1].start_epoch == int(clock.now()) - 90  # 块首 = 游程首零样本(t0+90)
 
 
 def test_zero_samples_do_not_touch_baselines_or_latest(tmp_path, monkeypatch):
     """零样本不动 baselines/latest(§3.4): 基线只在 r 采样点推进, 镜像冻结在最后活跃点"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     rec = active_torrent("HASH123")
@@ -728,8 +727,8 @@ def test_zero_samples_do_not_touch_baselines_or_latest(tmp_path, monkeypatch):
 
 def test_dry_run_no_disk_but_memory_runs_advance(tmp_path, monkeypatch):
     """dry_run: 全程零落盘; 缓冲与游程内存照常推进, flush 触发静默跳过写(记录照常清空)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=60))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -756,20 +755,20 @@ def test_dry_run_no_disk_but_memory_runs_advance(tmp_path, monkeypatch):
 
 def test_clock_rollback_clamped_dt_min_1(tmp_path, monkeypatch):
     """时钟回拨(§2.3): 单调钳制 dt_ms = max(1, 实测) —— 回拨行 dt_ms 恒 >= 1, 链不产负推进"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
     _run_sample(mgr)  # t0
     clock.advance(30)
     _run_sample(mgr)  # t0+30(标称, 游标 t0+30)
-    clock.now -= 10  # 回拨 10s: 实测 t0+20
+    clock.freeze(clock.now() - 10)  # 回拨 10s: 实测 t0+20
     _run_sample(mgr)
     recs = mod._buffers[GLOBAL_SERIES_KEY].records
     assert recs[-1].dt_ms == 1  # max(1, round((t0+20 - (t0+30)) x 1000)) = 1
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.blocks[0].records[-1].dt_ms == 1  # 落盘形态一致
 
 
@@ -779,8 +778,8 @@ def test_interval_change_hot_reload_new_block_and_effective_interval(tmp_path, m
     interval) + 新块带新 interval —— 新旧数据分块各有 interval(A3 根因闭合)。
     !节拍表达已随 issue 26-10-16-0954 从「回写 task.interval」改为时钟线自持
     (_next_sample_at), 故断言 _effective_interval(节拍与块头共用同一单点)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -789,16 +788,16 @@ def test_interval_change_hot_reload_new_block_and_effective_interval(tmp_path, m
     mgr.config.qb_traffic.sample_interval = 10
     mod.handle_traffic_sample(dry_run=False)  # t0+30: 检测变化 -> 关旧块 + 记新节拍
     assert mod._effective_interval == 10  # A3: 现读生效
-    assert mod._next_sample_at == clock.now + 10  # 下一到期点随新节拍推进
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    assert mod._next_sample_at == clock.now() + 10  # 下一到期点随新节拍推进
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 30  # 旧块随关块落盘(旧 interval)
     assert [type(r) for r in parsed.blocks[0].records] == [V4Sample]
     clock.advance(10)
     mod.handle_traffic_sample(dry_run=False)  # t0+40: 新块(新 interval)
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 2
-    assert parsed.blocks[1].interval_s == 10 and parsed.blocks[1].start_epoch == int(clock.now) - 10
+    assert parsed.blocks[1].interval_s == 10 and parsed.blocks[1].start_epoch == int(clock.now()) - 10
     # 变化轮自身记录落在新块首(关块先行于本轮采样), 下轮续写同块
     assert [type(r) for r in parsed.blocks[1].records] == [V4Sample, V4Sample]
 
@@ -828,8 +827,8 @@ def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
     """整数倍匹配的小数档原样生效(2026-10-05 修复): main_tick=1.5 配 1.5s ->
     _effective_interval == 1.5(不再被整数秒口径静默抬到 2), 块头 interval_s == 1.5(B 行写
     1.5), 失配告警不触发; 同块两记录标称 1.5s 推进零漂移(r 行不写显式 dt)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=1.5))
     mgr.config.main_tick = 1.5  # FakeConfig 缺省 1.0; 显式对齐构造匹配小数档
     mgr.store.server_state = server_state()
@@ -841,9 +840,9 @@ def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
     clock.advance(1.5)
     mod.handle_traffic_sample(dry_run=False)  # t0+1.5: 同块续写
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert len(parsed.blocks) == 1 and parsed.blocks[0].interval_s == 1.5
-    text = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now).read_text(encoding="utf-8")
+    text = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now()).read_text(encoding="utf-8")
     b_rows = [ln for ln in text.splitlines() if ln.startswith("B,")]
     assert len(b_rows) == 1 and b_rows[0].split(",")[2] == "1.5"  # B 行 interval 列如实带小数
     recs = parsed.blocks[0].records
@@ -853,37 +852,37 @@ def test_interval_decimal_match_kept_not_ceiled(tmp_path, monkeypatch):
 def test_day_boundary_cut(tmp_path, monkeypatch):
     """跨天切块(00:00 硬切, 本地时区, §3.3): 跨界记录使旧块落旧日期文件、新记录开新块落
     新日期文件 —— 23:59 块与 00:00 新块各带正确块头(interval 不变)"""
-    clock = _Clock(now=_local_epoch(23, 59, 50))
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=_local_epoch(23, 59, 50))
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
-    t_before = clock.now
+    t_before = clock.now()
     _run_sample(mgr)  # 23:59:50: 块 A(今日)
     clock.advance(20)  # 00:00:10(次日): 跨界 -> 旧块落盘 + 新块
     _run_sample(mgr)
     _flush(mod)
     today = v4_epoch_date_str(t_before)
     p_today = _v4_path(tmp_path, GLOBAL_SERIES_KEY, t_before)
-    p_tomorrow = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    p_tomorrow = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert p_today.is_file() and p_tomorrow.is_file()
     d1 = parse_v4_day_text(p_today.read_text(encoding="utf-8"))
     d2 = parse_v4_day_text(p_tomorrow.read_text(encoding="utf-8"))
     assert len(d1.blocks) == 1 and d1.blocks[0].start_epoch == int(t_before)  # 23:59 块
     assert d1.blocks[0].interval_s == 30 and len(d1.blocks[0].records) == 1
-    assert len(d2.blocks) == 1 and d2.blocks[0].start_epoch == int(clock.now)  # 00:00 新块
+    assert len(d2.blocks) == 1 and d2.blocks[0].start_epoch == int(clock.now())  # 00:00 新块
     assert d2.blocks[0].interval_s == 30 and len(d2.blocks[0].records) == 1
 
 
 def test_day_boundary_seals_open_run(tmp_path, monkeypatch):
     """跨天封游程(块不跨天的必要触发): 00:00 样本先封旧日游程(记录入旧块), 本样本开新
     游程; 封口后换型记录跨天 -> 旧块落盘 + 单槽游程成为新块首(不写 dt, 无引导间隔)"""
-    clock = _Clock(now=_local_epoch(23, 59, 20))
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=_local_epoch(23, 59, 20))
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
-    t_before = clock.now
+    t_before = clock.now()
     _run_sample(mgr)  # 23:59:20: 活跃 -> 块 A 首 r
     mgr.store.server_state = _idle_state()
     clock.advance(30)
@@ -896,7 +895,7 @@ def test_day_boundary_seals_open_run(tmp_path, monkeypatch):
     _run_sample(mgr)
     _flush(mod)
     p_today = _v4_path(tmp_path, GLOBAL_SERIES_KEY, t_before)
-    p_tomorrow = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    p_tomorrow = _v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     d1 = parse_v4_day_text(p_today.read_text(encoding="utf-8"))
     d2 = parse_v4_day_text(p_tomorrow.read_text(encoding="utf-8"))
     assert [type(r) for r in d1.blocks[0].records] == [V4Sample, V4ZeroRun]  # 旧块: r + 跨天前封的 z
@@ -904,13 +903,13 @@ def test_day_boundary_seals_open_run(tmp_path, monkeypatch):
     assert [type(r) for r in d2.blocks[0].records] == [V4ZeroRun, V4Sample]  # 新块首 = 单槽游程
     z2 = d2.blocks[0].records[0]
     assert z2.run_len == 1 and z2.dt_ms is None  # 块首单槽游程: dt 无消费者不写
-    assert d2.blocks[0].start_epoch == int(clock.now) - 30  # B.start = 游程首槽(00:00:10)
+    assert d2.blocks[0].start_epoch == int(clock.now()) - 30  # B.start = 游程首槽(00:00:10)
 
 
 def test_stop_flushes_all_and_seals_open_runs(tmp_path, monkeypatch):
     """stop() 钩子(§3.4): 封全部开放游程 + 全量 flush(优雅退出零丢失); 幂等(重复调用零副作用)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -922,20 +921,20 @@ def test_stop_flushes_all_and_seals_open_runs(tmp_path, monkeypatch):
     _run_sample(mgr)  # t0+60: 推进(未封口)
     mod.stop()
     assert GLOBAL_SERIES_KEY not in mod._open_runs  # 游程全封
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     recs = parsed.blocks[0].records
     assert [type(r) for r in recs] == [V4Sample, V4ZeroRun]  # 全量落盘
     assert recs[1].run_len == 2
     before = parsed.blocks[0].records
     mod.stop()  # 幂等: 缓冲游程已空, 零副作用
-    assert _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now).blocks[0].records == before
+    assert _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now()).blocks[0].records == before
 
 
 def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
     """形态 D 封口路径 ③(无样本在手 = stop()): 末端锚点 = 游程内最后一条零样本读数
     (全局系列每轮现读 totals, 跟踪字段随读刷新); 冻结列不变, 末端列落盘该读数"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -945,7 +944,7 @@ def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
         clock.advance(30)
         _run_sample(mgr)
     mod.stop()
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     z = parsed.blocks[0].records[1]
     assert isinstance(z, V4ZeroRun) and z.run_len == 3
     assert (z.dl_total, z.up_total) == (10_000_400, 20_000_200)  # 冻结列 = 开启快照(首零样本对)
@@ -955,8 +954,8 @@ def test_zrun_end_anchor_tracked_reading_on_stop(tmp_path, monkeypatch):
 def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatch):
     """形态 D 封口路径 ④(采样间隔热重载关块): 关块前封开放游程, 末端锚点 = 跟踪的最后
     零样本读数; 旧块以旧 interval 落盘、新数据新块新 interval(A3 口径不变)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -969,7 +968,7 @@ def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatc
     clock.advance(30)
     _run_sample(mgr)  # t0+90: 检测变化 -> 封游程 + 旧块落盘
     assert mod._effective_interval == 10
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.blocks[0].interval_s == 30
     z = parsed.blocks[0].records[1]
     assert isinstance(z, V4ZeroRun) and z.run_len == 2
@@ -979,8 +978,8 @@ def test_zrun_end_anchor_tracked_reading_on_interval_change(tmp_path, monkeypatc
 
 def test_stop_dry_run_short_circuit(tmp_path, monkeypatch):
     """stop() dry_run 短路: 不落盘不建目录(观测写盘属真实副作用)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -1017,8 +1016,8 @@ def test_stop_seals_aggregates_and_dry_run_short_circuit(tmp_path, monkeypatch):
     # 时钟钉在测试 hour 附近: stop() 封口用真实 time.time() 时, 该 hour 行已到龄会被
     # rollup_window 裁剪(C-01 修复后运行期新建系列裁剪生效, 数据降级进 day 行) —— 本用例
     # 验的是封口语义, 与裁剪无关, 故注入时钟。注入须先于模块构造(缺省钟构造期解析)
-    clock = _Clock(now=base + 2 * HOUR_SECONDS)
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=base + 2 * HOUR_SECONDS)
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mod = mgr.host.get("qb_traffic")
     key = GLOBAL_SERIES_KEY
@@ -1082,13 +1081,13 @@ def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, 
     """⑥ 空闲块不关(v4 §04 用例 ⑥): 纯空闲系列(数据门有数据 + 零速)跨 flush 时点
     主文件零写入, 封口后天文件恰 1 条 B 行 + 1 条长 z 行; 跨 flush 开放 z 游程的
     LiveTail 复原与落盘重算恒等(块首封口形态); 恢复传输后 r 行 delta <= flush 窗 x 速率"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=600))
     mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=512)  # 全局保持活跃(隔离单种面)
     seed_store(mgr, [active_torrent("HASH123")])
     st = TrafficV4Store(str(tmp_path))  # 数据门: 预置系列目录含 .dat(有过历史数据)
-    day = v4_epoch_date_str(clock.now)
+    day = v4_epoch_date_str(clock.now())
     os.makedirs(os.path.dirname(st.series_day_path("torrent:HASH123", day)), exist_ok=True)
     with open(st.series_day_path("torrent:HASH123", day), "w", encoding="utf-8", newline="\n") as f:
         f.write(f"{HEADER_LINE_V4}\nkey,torrent:HASH123\n")
@@ -1099,7 +1098,7 @@ def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, 
     for _ in range(25):  # t0+30 .. t0+750: 纯空闲系列跨 flush 时点
         clock.advance(30)
         _run_sample(mgr)
-    tpath = _v4_path(tmp_path, "torrent:HASH123", clock.now)
+    tpath = _v4_path(tmp_path, "torrent:HASH123", clock.now())
     assert tpath.read_text(encoding="utf-8").splitlines() == [HEADER_LINE_V4, "key,torrent:HASH123"]
     # 空闲期主文件零写入; 跨 flush 开放 z 游程的 LiveTail 快照
     tail = mod.live_tail["torrent:HASH123"]
@@ -1129,12 +1128,12 @@ def test_v4_idle_block_stays_open_single_b_row_and_live_tail_identity(tmp_path, 
 def test_v4_non_z_seal_midnight_materializes_idle_b_z_batch(tmp_path, monkeypatch):
     """⑦ 非 z 事件封口(v4 §04 用例 ⑦): 长空闲段恰 1 条长 z 行, 00:00 物化进当日天文件
     (B + z 一批 append, 空闲期主文件零写入); 次日 LiveTail 开放游程跨天接力与落盘重算恒等"""
-    clock = _Clock(now=_local_epoch(23, 57, 40))
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=_local_epoch(23, 57, 40))
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=10**9))
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
-    t_before = clock.now
+    t_before = clock.now()
     _run_sample(mgr)  # 23:57:40: 活跃 -> r 进缓冲(块 A)
     _flush(mod)  # 手动 flush: 块 A 落盘(此后空闲期主文件零写入)
     today_file = _v4_path(tmp_path, GLOBAL_SERIES_KEY, t_before)
@@ -1165,7 +1164,7 @@ def test_v4_non_z_seal_midnight_materializes_idle_b_z_batch(tmp_path, monkeypatc
     clock.advance(30)  # 00:01:20: 封新 z 游程(2 槽)+ r
     _run_sample(mgr)
     _flush(mod)
-    d2 = parse_v4_day_text(_v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now).read_text(encoding="utf-8"))
+    d2 = parse_v4_day_text(_v4_path(tmp_path, GLOBAL_SERIES_KEY, clock.now()).read_text(encoding="utf-8"))
     assert len(d2.blocks) == 1
     z2 = d2.blocks[0].records[0]
     assert isinstance(z2, V4ZeroRun) and z2.run_len == 2
@@ -1176,8 +1175,8 @@ def test_v4_crash_restart_idle_window_is_vacuum(tmp_path, monkeypatch):
     """⑦ 崩溃重启该时段 = 真空(v4 §04 用例 ⑦): 开放 z 游程是空闲期唯一副本, 崩溃即丢
     「在场证明」—— 重启 catch-up 后空闲段 cov_s 缺失, hour 行 avg 不被零速稀释(无偏)"""
     base_t = _local_epoch(10, 0, 0)
-    clock = _Clock(now=base_t)
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=base_t)
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr1 = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr1.store.server_state = server_state()
     mod1 = mgr1.host.get("qb_traffic")
@@ -1194,7 +1193,7 @@ def test_v4_crash_restart_idle_window_is_vacuum(tmp_path, monkeypatch):
     mod2.start(mgr2.ctx, dry_run=False)  # 重启恢复: catch-up 从天文件 raw 补算(空闲段无 raw)
     mgr2.store.server_state = server_state()
     _run_sample(mgr2)  # 10:10:30: 活跃 r —— 块首 gap 630s 超容差 -> 空闲段真空不结算
-    clock.now = _local_epoch(11, 0, 10)  # 跨到下一小时首样
+    clock.freeze(_local_epoch(11, 0, 10))  # 跨到下一小时首样
     mgr2.store.server_state = server_state(alltime_dl=10_100_000, alltime_ul=20_100_000)
     _run_sample(mgr2)  # 11:00:10: 结算 [10:10:30, 11:00:10)(10:00 桶内 2970s)
     _flush(mod2)
@@ -1282,8 +1281,8 @@ def test_live_tail_idle_run_publishes_zero_hour_rows_end_to_end(tmp_path, monkey
     即 3d+ 视图不再把空闲段画成「无采样」; 同一快照的 raw 面开放游程照旧在(两面同构)"""
     d0 = v4_day_epoch(_AGG_H0)
     h0 = d0 + 2 * HOUR_SECONDS
-    clock = _Clock(h0)
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=h0)
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30, flush_interval=600))
     mgr.store.server_state = server_state(dl_info_speed=100, up_info_speed=50, alltime_dl=1000, alltime_ul=2000)
     mod = mgr.host.get("qb_traffic")
@@ -1356,8 +1355,8 @@ def test_close_blocks_for_interval_change_skips_runless_and_unopened(tmp_path):
 def test_torrent_active_missing_fields_takes_null_run(tmp_path, monkeypatch):
     """活跃种子关键字段缺失(活跃过滤已过) -> n 游程槽(不写 0 不吞样本): 缓冲里零记录,
     游程记 n; DEBUG 留痕说明本轮按 null 处理"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [active_torrent("HASH123", uploaded=None)])
@@ -1374,8 +1373,8 @@ def test_torrent_active_missing_fields_takes_null_run(tmp_path, monkeypatch):
 def test_torrent_zero_speed_readings_drift_defensive_raw_row(tmp_path, monkeypatch):
     """零速过滤与字段读数口径漂移的防御支: 过滤判零但读数非零 -> 按 r 记录处理(绝不把活跃
     读数吞进游程, 否则该段速率永久丢失)"""
-    clock = _Clock()
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock()
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=30))
     mgr.store.server_state = server_state()
     seed_store(mgr, [_FlipSpeedTorrent()])
@@ -1433,11 +1432,11 @@ def test_stop_early_return_when_disabled_or_no_data_dir(tmp_path):
 def test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg(tmp_path, monkeypatch):
     """块首游程零漂移支(常态形态): 游标标称推进(不反向/不塌缩) + 块首游程槽位端点含
     (agg 逐区间 dt 断言) —— _append_record_128 / _record_slots_9/12 / _agg_feed_8"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
     mod = mgr.host.get("qb_traffic")
-    t0 = clock.now
+    t0 = clock.now()
     _run_sample(mgr)  # r@t0(块 A)
     _flush(mod)  # 块 A 落盘关块, 信用滞留
     mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
@@ -1450,7 +1449,7 @@ def test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg(tmp_path, monkeypa
     clock.advance(30)
     _run_sample(mgr)  # t0+120: r 零漂移(游标标称推进 -> 不写 dt)
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.bad_lines == 0
     blocks = [b for b in parsed.blocks if b.start_epoch == int(t0 + 30)]
     assert len(blocks) == 1
@@ -1466,11 +1465,11 @@ def test_w5_blockhead_zero_drift_run_cursor_roundtrip_and_agg(tmp_path, monkeypa
 
 def test_w5_blockhead_run_rollback_clamp_dt_min_1(tmp_path, monkeypatch):
     """块首游程回拨钳制: 末端仅高出 B.start 亚毫秒 -> dt_ms = max(1, 实测) = 1 —— _append_record_113"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
-    t0 = clock.now
+    t0 = clock.now()
     _run_sample(mgr)
     _flush(mod)
     mgr.store.server_state = _idle_state()
@@ -1487,11 +1486,11 @@ def test_w5_blockhead_run_rollback_clamp_dt_min_1(tmp_path, monkeypatch):
 
 def test_w5_nonhead_zero_drift_run_no_dt(tmp_path, monkeypatch):
     """非块首多槽游程标称 = run_len*interval: 零漂移不写 dt —— _append_record_142"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
-    t0 = clock.now
+    t0 = clock.now()
     _run_sample(mgr)
     _flush(mod)
     mgr.store.server_state = _idle_state()
@@ -1517,10 +1516,10 @@ def test_w5_nonhead_zero_drift_run_no_dt(tmp_path, monkeypatch):
 def test_w5_n_prefix_split_zero_run_no_crash(tmp_path, monkeypatch):
     """n-only 前缀拆块: 拆块实参携带 end_ts —— 新块首为 run_len>=2 z 游程不崩
     (_append_record_54; 真实序列: 断连 -> 重连空闲 -> 恢复传输)"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
-    t0 = clock.now
+    t0 = clock.now()
     mgr.store.server_state = server_state(alltime_dl=None)  # 关键字段缺失 -> n 游程
     for _ in range(2):
         clock.advance(30)
@@ -1533,7 +1532,7 @@ def test_w5_n_prefix_split_zero_run_no_crash(tmp_path, monkeypatch):
     clock.advance(30)
     _run_sample(mgr)  # 变异(end_ts=None)在新块首游程 span 处 TypeError
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.bad_lines == 0 and len(parsed.blocks) == 2
     b1, b2 = parsed.blocks
     assert (b1.dl_base, b1.up_base) == (None, None)  # n 前缀 3 列 B 无基线块
@@ -1545,7 +1544,7 @@ def test_w5_n_prefix_split_zero_run_no_crash(tmp_path, monkeypatch):
 def test_w5_counter_reset_split_zero_run_no_crash(tmp_path, monkeypatch):
     """计数器重置关块: 拆块实参携带 end_ts —— 重置记录为 run_len>=2 z 游程不崩
     (_append_record_65; 真实序列: z 开启快照低于块内最近 totals)"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
     mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
@@ -1561,7 +1560,7 @@ def test_w5_counter_reset_split_zero_run_no_crash(tmp_path, monkeypatch):
     clock.advance(30)
     _run_sample(mgr)  # r 封 z -> z 记录 totals 100 < 5.1M -> 强制关块重开(变异在拆块实参)
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.bad_lines == 0 and len(parsed.blocks) == 2
     b2 = parsed.blocks[1]
     assert (b2.dl_base, b2.up_base) == (100, 50)  # 新块基线 = 重置后 totals
@@ -1572,7 +1571,7 @@ def test_w5_counter_reset_split_zero_run_no_crash(tmp_path, monkeypatch):
 def test_w5_day_boundary_seal_uses_current_readings(tmp_path, monkeypatch):
     """跨天封口末端锚点用本轮读数(docstring 明文): 增长 totals 的全局 z 游程跨 00:00 封口
     -> z 行末端列 = 本轮读数 —— _advance_run_10/11/13/14"""
-    clock = _Clock(now=_w5_ts(2026, 6, 1, 23, 58, 0))
+    clock = FakeClock(start=_w5_ts(2026, 6, 1, 23, 58, 0))
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
     mgr.store.server_state = _idle_state(alltime_dl=1000, alltime_ul=5000)
@@ -1595,15 +1594,15 @@ def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
     单种数据门不开(不开游程) —— on_task_line_5 / _sample_global_24 / _torrent_has_data_8/9
     / _agg_append_3 / _agg_trim_1"""
     h0 = int(1_700_000_000) // HOUR_SECONDS * HOUR_SECONDS
-    clock = _Clock(now=h0 - 7200 + 10)
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", _as_clock(clock))
+    clock = FakeClock(start=h0 - 7200 + 10)
+    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
     # data_dir 先于模块构造注入: _limits_rec 构造期取值(observe 的 persistence_on 面才可达)
     mgr = make_manager(str(tmp_path / "state.json"), data_dir=str(tmp_path))
     mgr.client = FakeClient()
     mgr.config.qb_traffic = QbTraffic(enabled=True, sample_interval=30, flush_interval=60, rollup_window=60.0)
     st = TrafficV4Store(str(tmp_path))
     st.append_agg_rows(GLOBAL_SERIES_KEY, (AggRow("hour", h0 - 10800, 7, 9, 3, 4, 500, 600, 3600), ))
-    day = v4_epoch_date_str(clock.now)
+    day = v4_epoch_date_str(clock.now())
     os.makedirs(os.path.dirname(st.series_day_path("torrent:A1", day)), exist_ok=True)
     with open(st.series_day_path("torrent:A1", day), "w", encoding="utf-8", newline="\n") as f:
         f.write(f"{HEADER_LINE_V4}\nkey,torrent:A1\n")  # A1 有历史数据: 数据门在真实运行会开
@@ -1626,7 +1625,7 @@ def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
     mod.on_task_line(False)  # t0: r(时钟线首拍即采)
     clock.advance(30)
     mod.on_task_line(False)  # t0+30: r(信用结算)
-    clock.now = h0 - 3600 + 30  # 跳到 hour(h0-7200) 完结之后
+    clock.freeze(h0 - 3600 + 30)  # 跳到 hour(h0-7200) 完结之后
     mod.on_task_line(False)  # 采样 + flush 驱动: hour 封口(agg append/trim 门)+ 内存推进
     assert snapshot() == before  # 零新文件零改写(agg append/裁剪/主文件/限速历史全静默)
     assert "torrent:A1" not in mod._open_runs  # 数据门 dry-run 不开(不开游程)
@@ -1636,10 +1635,10 @@ def test_w5_dry_run_full_chain_zero_write(tmp_path, monkeypatch):
 def test_w5_problem_torrents_do_not_truncate_round(tmp_path, monkeypatch):
     """单种采样轮不被问题种子截断: 从未传输/空闲游程/缺字段活跃/缺字段空闲在前,
     健康种子在后照常出 r; 连续两轮 null 不崩 —— _sample_torrents_44/41/25/57/22"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     st = TrafficV4Store(str(tmp_path))
-    day = v4_epoch_date_str(clock.now)
+    day = v4_epoch_date_str(clock.now())
     for h in ("A1", "A3"):  # 有历史数据(数据门开)
         os.makedirs(os.path.dirname(st.series_day_path(f"torrent:{h}", day)), exist_ok=True)
         with open(st.series_day_path(f"torrent:{h}", day), "w", encoding="utf-8", newline="\n") as f:
@@ -1660,7 +1659,7 @@ def test_w5_problem_torrents_do_not_truncate_round(tmp_path, monkeypatch):
     )
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
-    t0 = clock.now
+    t0 = clock.now()
     _run_sample(mgr)
     assert "torrent:A4" in mod.latest and mod.latest["torrent:A4"].dl_rate == 512
     assert "torrent:A1" in mod._open_runs and mod._open_runs["torrent:A1"].kind == "z"
@@ -1671,7 +1670,7 @@ def test_w5_problem_torrents_do_not_truncate_round(tmp_path, monkeypatch):
 
 def test_w5_single_direction_global_records_raw(tmp_path, monkeypatch):
     """零速判(方向性样本常态): 仅单方向活跃的全局轮出 r 不进 z 游程 —— _sample_global_25"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
     mgr.store.server_state = server_state(dl_info_speed=0, up_info_speed=2048)
@@ -1688,10 +1687,10 @@ def test_w5_single_direction_global_records_raw(tmp_path, monkeypatch):
 def test_w5_active_filter_1bps_boundary(tmp_path, monkeypatch):
     """活跃过滤边界: dlspeed=1 / upspeed=1(1 B/s 合法读数)不被当空闲 ——
     _sample_torrents_5/7(已开游程形态: 应封口 + r)"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     st = TrafficV4Store(str(tmp_path))
-    day = v4_epoch_date_str(clock.now)
+    day = v4_epoch_date_str(clock.now())
     os.makedirs(os.path.dirname(st.series_day_path("torrent:HASHA", day)), exist_ok=True)
     with open(st.series_day_path("torrent:HASHA", day), "w", encoding="utf-8", newline="\n") as f:
         f.write(f"{HEADER_LINE_V4}\nkey,torrent:HASHA\n")
@@ -1719,11 +1718,11 @@ def test_w5_active_filter_1bps_boundary(tmp_path, monkeypatch):
 def test_w5_interval_change_closes_idle_block(tmp_path, monkeypatch):
     """改间隔关块覆盖纯空闲块(z/n): 旧块落盘 + 新块带新 interval(新旧数据分块各有 interval)
     —— _close_blocks_for_interval_change_11/13/14"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
     mod = mgr.host.get("qb_traffic")
-    t0 = clock.now
+    t0 = clock.now()
     _run_sample(mgr)
     _flush(mod)
     mgr.store.server_state = _idle_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
@@ -1740,7 +1739,7 @@ def test_w5_interval_change_closes_idle_block(tmp_path, monkeypatch):
     clock.advance(45)
     _run_sample(mgr)  # r 封 z2 -> 新块首(45s 档)
     _flush(mod)
-    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now)
+    parsed = _v4_read(tmp_path, GLOBAL_SERIES_KEY, clock.now())
     assert parsed.bad_lines == 0
     assert [b.interval_s for b in parsed.blocks] == [30.0, 30.0, 45.0]  # 块A/纯空闲块(旧interval)/新块(新interval)
     assert [r.run_len for r in parsed.blocks[1].records] == [2]
@@ -1750,7 +1749,7 @@ def test_w5_interval_change_closes_idle_block(tmp_path, monkeypatch):
 def test_w5_interval_change_audit_log_and_first_round_silent(tmp_path, monkeypatch):
     """采样率变化审计 INFO: 首轮不虚假告「变化」/ 真变化必留痕 ——
     __init___12(_effective_interval 初值) / _apply_interval_52"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state()
     mod = mgr.host.get("qb_traffic")
@@ -1766,7 +1765,7 @@ def test_w5_interval_change_audit_log_and_first_round_silent(tmp_path, monkeypat
 
 def test_w5_live_tail_no_buffer_interval_contract(tmp_path, monkeypatch):
     """无块时活尾 interval_s 取当前生效采样间隔(LiveTail 契约)—— _publish_live_tail_63"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = _idle_state()
     mod = mgr.host.get("qb_traffic")
@@ -1782,7 +1781,7 @@ def test_w5_live_tail_no_buffer_interval_contract(tmp_path, monkeypatch):
 def test_w5_live_tail_interval_change_reset_window_uses_effective(tmp_path, monkeypatch):
     """改间隔复位窗口内无块活尾 interval_s 取当前生效间隔(非陈旧旧块值)——
     LiveTail.interval_s 契约(traffic_store.py:511); 变异 _publish_live_tail__mutmut_59 方向与此一致(疑等价变异, 复核销账)"""
-    clock = _Clock()
+    clock = FakeClock()
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mgr.store.server_state = server_state(alltime_dl=5_000_000, alltime_ul=3_000_000)
     mod = mgr.host.get("qb_traffic")
@@ -1836,7 +1835,7 @@ def test_w5_recover_midday_restart_catchup_and_open_hour(tmp_path, monkeypatch):
         (V4Sample(100, 50, 3000, 4000), V4Sample(100, 50, 3100, 4100)),
         (3000, 4000),
     )  # 今日开放小时 11:00: pending 重建
-    clock = _Clock(now=now)
+    clock = FakeClock(start=now)
     mgr = _w5_mgr(tmp_path, monkeypatch, clock)
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)

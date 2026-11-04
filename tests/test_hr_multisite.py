@@ -18,7 +18,8 @@ from typing import Dict
 from auto_qb.hr import ACTION_ERROR, ACTION_REFRESHED, build_adapter
 from auto_qb.hr.fetcher import HrFetchError
 from auto_qb.hr.status import build_site_statuses
-from hr_helpers import Clock, FakeFetcher, make_service, myhr_page, row, site_conf, torrent_blob
+from hr_helpers import FakeFetcher, make_service, myhr_page, row, site_conf, torrent_blob
+from clock import FakeClock
 
 ALPHA = "alpha"
 BETA = "beta"
@@ -63,7 +64,12 @@ def _service(tmp_path, fetcher, clock, confs=None):
 
     假钟由每个调用点显式给(单点不给时钟默认值); owner 用单点默认 "tester"(与收口前一致)。
     """
-    return make_service(tmp_path, fetcher, now_fn=clock, site_confs=confs or {ALPHA: _conf(ALPHA), BETA: _conf(BETA)})
+    return make_service(
+        tmp_path, fetcher, now_fn=clock.now, site_confs=confs or {
+            ALPHA: _conf(ALPHA),
+            BETA: _conf(BETA)
+        }
+    )
 
 
 def test_second_nexusphp_site_needs_config_only(tmp_path):
@@ -72,7 +78,7 @@ def test_second_nexusphp_site_needs_config_only(tmp_path):
     这正是 M4「多站点」的实际形态 —— 绝大多数 PT 站是 NexusPHP 的 `myhr.php` 九列表, 接站点
     不需要写代码; 必须写代码的只有「有更便宜的来源(JSON 接口 / 逐种标记)」的少数站。
     """
-    clock = Clock()
+    clock = FakeClock()
     conf_a, conf_b = _conf(ALPHA, refresh_interval=6 * 3600.0), _conf(BETA, refresh_interval=24 * 3600.0)
     pages = _pages_for(ALPHA, (101, ), conf_a)
     pages.update(_pages_for(BETA, (201, 202), conf_b))
@@ -98,7 +104,7 @@ def test_second_nexusphp_site_needs_config_only(tmp_path):
 
 def test_sites_do_not_share_quota_or_failure(tmp_path):
     """站点 A 连续失败截断, B 照常取数: 频控账本落在各自的站点文件里(不串味); v3 无熔断"""
-    clock = Clock()
+    clock = FakeClock()
     confs = {ALPHA: _conf(ALPHA), BETA: _conf(BETA)}
     pages = _pages_for(BETA, (201, ), confs[BETA])
     fetcher = _ByUrlFetcher(pages, {201: torrent_blob("b201.bin")}, fail_prefix="https://alpha.example.com/")
@@ -124,7 +130,7 @@ def test_sites_do_not_share_quota_or_failure(tmp_path):
 
 def test_sites_hold_independent_locks(tmp_path):
     """A 持锁时 B 仍能刷新(锁粒度 = 站点): 一个站点的抓取不会冻结其它站点"""
-    clock = Clock()
+    clock = FakeClock()
     confs = {ALPHA: _conf(ALPHA), BETA: _conf(BETA)}
     pages = _pages_for(BETA, (201, ), confs[BETA])
     svc = _service(tmp_path, FakeFetcher(pages, {201: torrent_blob("b201.bin")}), clock, confs)
@@ -137,7 +143,7 @@ def test_sites_hold_independent_locks(tmp_path):
 
 def test_same_infohash_keeps_independent_identity_per_site(tmp_path):
     """同一内容在两站身份独立: 已取记录 / 索引 / 视图键都不跨站(同一内容多站辅种各自算 HR)"""
-    clock = Clock()
+    clock = FakeClock()
     confs = {ALPHA: _conf(ALPHA), BETA: _conf(BETA)}
     same = torrent_blob("same-content.bin")  # 两个站点下到的是同一个 .torrent
     pages = _pages_for(ALPHA, (101, ), confs[ALPHA])
@@ -161,14 +167,14 @@ def test_same_infohash_keeps_independent_identity_per_site(tmp_path):
 
 def test_status_covers_every_site(tmp_path):
     """站点现状快照逐站点各一条(`--hr-status` 与 `/api/hr/status` 的共同层)"""
-    clock = Clock()
+    clock = FakeClock()
     confs = {ALPHA: _conf(ALPHA), BETA: _conf(BETA)}
     pages = _pages_for(ALPHA, (101, ), confs[ALPHA])
     pages.update(_pages_for(BETA, (201, ), confs[BETA]))
     svc = _service(tmp_path, FakeFetcher(pages, {101: torrent_blob("a.bin"), 201: torrent_blob("b.bin")}), clock, confs)
 
     svc.refresh_all()
-    rows = build_site_statuses(svc, clock.now)
+    rows = build_site_statuses(svc, clock.now())
 
     assert [s.site for s in rows] == [ALPHA, BETA], "两个站点都要有自己的一条(不是只报第一个)"
     assert all(s.index_total == 1 and s.quota.day > 0 for s in rows)

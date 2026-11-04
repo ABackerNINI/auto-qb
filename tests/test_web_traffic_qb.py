@@ -28,6 +28,8 @@ import pytest
 
 from auto_qb.infra.utils import encode_group_key
 
+from clock import FakeClock
+
 from webui_helpers import KEY, _enable_qb_traffic, _qb_v4, _attach_live_tail_host
 
 #: 鉴权头键名(拆写拼装): 该键名字面量会触发写入侧凭据判据的「凭据键名 + 值不回显」误报 ——
@@ -381,7 +383,7 @@ def test_api_traffic_qb_raw_seed_vacuum_null_1s_edge_band(web_env, monkeypatch):
     store = _qb_v4(mgr)
     fixed = 1_800_000_000.0  # 30 的整倍 -> 5m 窗栅格对齐(确定性几何)
 
-    monkeypatch.setattr(tq, "SYSTEM_CLOCK", SimpleNamespace(now=lambda: fixed))
+    monkeypatch.setattr(tq, "SYSTEM_CLOCK", FakeClock(start=fixed))
     g_t0 = int(fixed) - 300  # 5m 窗栅格首桶
     seed_t0 = g_t0 - 30  # D3 窗首种子外扩 = grid.t0 - grid.interval
     store.append_records(  # 种子块: 末槽恰落 (seed_t0-1, seed_t0) 的 1 秒带(首记录 @seed_t0-30, 次记录 +29.5s)

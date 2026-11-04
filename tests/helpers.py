@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
-from clock import wait_until as _clock_wait_until  # noqa: E402  (单一实现单点, 计划 26-11-05-0118 S1)
+from clock import wait_until  # noqa: E402  (单一实现单点, 计划 26-11-05-0118 S1/S3: 调用点一律直连 clock 模块)
 
 from auto_qb.config import (
     GroupingConfig,
@@ -1274,7 +1274,7 @@ def drive_skip(mgr, timeout=5.0):
         ops.advance_due(budget_ms=200.0, budget_calls=100)
         return ops.next_run_at() is None
 
-    return _clock_wait_until(_drive, timeout=timeout, interval=0.01)
+    return wait_until(_drive, timeout=timeout, interval=0.01)
 
 
 def seed_store(mgr, torrents=None):
@@ -1412,15 +1412,6 @@ def pin_atomic_write_crash(monkeypatch) -> None:
         return real_atomic_write(path, _half, **kw)
 
     monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
-
-
-def wait_until(pred, *, timeout=3.0, poll=None):
-    """条件轮询等待 —— 单一实现在 tests/clock.py(计划 26-11-05-0118 S1 收编), 此处只再导出
-
-    既有调用点 `from helpers import wait_until` 不破; S3 迁移调用点后本别名一并删除。
-    新代码直接 `from clock import wait_until`。
-    """
-    return _clock_wait_until(pred, timeout=timeout, poll=poll)
 
 
 def write_endpoint_pointer(

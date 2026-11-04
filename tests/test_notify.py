@@ -53,7 +53,7 @@ from auto_qb.infra.notify import (
     setup_notify,
 )
 
-from helpers import wait_until
+from clock import wait_until
 
 
 class FakeChannel:
@@ -113,7 +113,7 @@ def test_notify_handler_level_filter():
     try:
         test_logger.info("不应通知的 INFO")
         test_logger.warning("应当通知的 WARNING")
-        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, poll=0.01), f"应仅派发 WARNING: {channel.sent}"
+        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), f"应仅派发 WARNING: {channel.sent}"
         assert channel.sent[0][0] == "auto-qb WARNING"
         assert channel.sent[0][1] == "应当通知的 WARNING"
     finally:
@@ -133,7 +133,9 @@ def test_notify_default_min_level_is_error():
         test_logger.warning("默认配置下不通知的 WARNING(仅排障)")
         assert not channel.sent, f"默认配置下 INFO/WARNING 均不应通知: {channel.sent}"
         test_logger.error("默认配置下应当通知的 ERROR")
-        assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, poll=0.01), f"默认配置下 ERROR 应派发: {channel.sent}"
+        assert wait_until(
+            lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01
+        ), f"默认配置下 ERROR 应派发: {channel.sent}"
         assert channel.sent[0][1] == "默认配置下应当通知的 ERROR"
     finally:
         test_logger.removeHandler(handler)
@@ -152,7 +154,7 @@ def test_notify_handler_dispatch():
         exc_info=None,
     )
     handler.emit(record)
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, poll=0.01), f"应派发 ERROR 通知: {channel.sent}"
+    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), f"应派发 ERROR 通知: {channel.sent}"
     title, body, urgent = channel.sent[0]
     assert title == "auto-qb ERROR"
     assert body == "文件丢失, 暂停整组: HASH123 [HHan]"
@@ -206,7 +208,7 @@ def test_notify_skips_records_suppressed_from_frontends():
         exc_info=None,
     )
     handler.emit(visible)
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, poll=0.01), "未打标记录照常派发(向后兼容)"
+    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "未打标记录照常派发(向后兼容)"
 
 
 def test_notify_handler_quiet_hours():
@@ -231,7 +233,7 @@ def test_notify_handler_quiet_hours():
     handler.quiet_hours = "23:00-08:00"
     handler._now = lambda: datetime(2026, 9, 12, 12, 0)
     handler.emit(record)
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, poll=0.01), "时段外应照常派发"
+    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "时段外应照常派发"
 
 
 def test_notify_quiet_hours_does_not_consume_quota():
@@ -273,7 +275,7 @@ def test_notify_quiet_hours_does_not_consume_quota():
             exc_info=None,
         )
     )
-    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, poll=0.01), "免打扰结束后应立刻放行(未被配额挡住)"
+    assert wait_until(lambda: len(channel.sent) == 1, timeout=2.0, interval=0.01), "免打扰结束后应立刻放行(未被配额挡住)"
 
 
 def test_notify_throttle_dedup_table_evicted():
@@ -306,7 +308,7 @@ def test_notify_handler_throttle_drops():
                 exc_info=None,
             )
         )
-    assert wait_until(lambda: len(channel.sent) == 2, timeout=2.0, poll=0.01), f"应按上限仅派发 2 条: {channel.sent}"
+    assert wait_until(lambda: len(channel.sent) == 2, timeout=2.0, interval=0.01), f"应按上限仅派发 2 条: {channel.sent}"
     time.sleep(0.05)
     assert len(channel.sent) == 2, "节流后不应再派发"
 

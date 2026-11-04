@@ -186,7 +186,6 @@ from hr_helpers import (
     EMPTY_TABLE_PAGE,
     LOGIN_PAGE,
     REVISED_PAGE,
-    Clock,
     FakeFetcher,
     global_conf,
     make_service as hr_make_service,
@@ -196,6 +195,7 @@ from hr_helpers import (
     torrent_blob,
 )
 
+from clock import FakeClock
 from hr_service_support import (
     DONE_NEW,
     DONE_OLD,
@@ -224,7 +224,7 @@ from hr_service_support import (
 
 def test_retention_check_freezes_batch(tmp_path):
     """A 档流转守恒: 上波 A 行本波留存 < 70% → 批量「未列出」签发冻结(命中不受影响)"""
-    clock = Clock()
+    clock = FakeClock()
     # 首波: A 档 3 行陌生种子(下载后都不是本地) → prev_a_tids = {11,12,13}
     blobs = {tid: torrent_blob(name=f"STRANGER {tid}") for tid in (11, 12, 13)}
     # 首波: A 全深度(3 行陌生种子); B 只有 2 行零 remain 且有下一页(翻不到 → 截断, 位置有界);
@@ -256,7 +256,7 @@ def test_retention_check_freezes_batch(tmp_path):
 
 def test_retention_does_not_block_observation(tmp_path):
     """守恒只拦批量签发, 不拦观察期状态机(22:38 定稿): 单条失踪照常推进, 无死锁"""
-    clock = Clock()
+    clock = FakeClock()
     # 首波: 本地种子 S 的行在 A 档(命中, 绑定) + 2 行陌生种子
     blob, h11 = mk_blob("EXAMPLE 11")
     pages = standard_pages(rows_a=[row(11, "EXAMPLE 11"), row(12, "STRANGER 12"), row(13, "STRANGER 13")])
@@ -291,7 +291,7 @@ def test_retention_does_not_block_observation(tmp_path):
 
 def test_observing_seed_resighted(tmp_path):
     """失踪种子重见 → streak 清零, 按当波档位定论"""
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(rows_a=[row(11, "EXAMPLE 11")])
     blob, h11 = mk_blob("EXAMPLE 11")
     fetcher = FakeFetcher(pages=pages, blobs={11: blob})
@@ -313,14 +313,14 @@ def test_observing_seed_resighted(tmp_path):
 
 def test_merge_seen_refreshes_last_seen(tmp_path):
     """合并口刷新 last_seen: 本波已见行 = 合并时刻; 未重见条目冻结在最后见到时刻(写入点修复)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = standard_pages(
         rows_b=[row(21, "OTHER 21", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")],
         rows_c=[row(22, "OTHER 22", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")],
     )
     fetcher = FakeFetcher(pages=pages)
     service = make_service(tmp_path, fetcher, clock=clock)
-    t0 = clock()
+    t0 = clock.now()
     run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].last_seen == t0, "本波已见行: last_seen = 合并进索引的时刻"
@@ -336,7 +336,7 @@ def test_merge_seen_refreshes_last_seen(tmp_path):
             myhr_page([row(22, "OTHER 22", done=DONE_NEW, remain="0天00:00:00", need="0:00:00")], has_next=False),
     }
     clock.advance(13 * 3600)
-    t1 = clock()
+    t1 = clock.now()
     run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[21].active is False
@@ -350,7 +350,7 @@ def test_merge_seen_refreshes_last_seen(tmp_path):
 def test_index_retention_prune_revives(tmp_path):
     """INDEX_RETENTION 复活链: 退役条目超期(距 last_seen > 30 天)被清理 / 活跃与未超期退役条目保留 /
     放行记录不随索引清理丢失 / 淘汰结果落盘"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, _h11 = mk_blob("OTHER 11")
     blob21, h21 = mk_blob("EXAMPLE 21")
     pages = standard_pages(
@@ -360,7 +360,7 @@ def test_index_retention_prune_revives(tmp_path):
     fetcher = FakeFetcher(pages=pages, blobs={11: blob11, 21: blob21})
     service = make_service(tmp_path, fetcher, clock=clock)
     anchors = {h21: anchor_for("EXAMPLE 21", completion_on=T_DONE_NEW)}
-    t0 = clock()
+    t0 = clock.now()
     run_wave(service, anchors)
     data, _ = service.store(SITE).read_unlocked()
     assert data.index[11].active and data.index[11].last_seen == t0
@@ -380,7 +380,7 @@ def test_index_retention_prune_revives(tmp_path):
         url_of("C"): myhr_page([], has_next=False),
     }
     clock.advance(2 * 86400)
-    t2 = clock()
+    t2 = clock.now()
     result = run_wave(service, {})
     data, _ = service.store(SITE).read_unlocked()
     assert 21 not in data.index, "退役条目距 last_seen 超过 INDEX_RETENTION: 被清理"
@@ -411,7 +411,7 @@ def test_no_objects_sweeps_to_last_page(tmp_path):
 
 def test_no_fuse_no_suspension(tmp_path):
     """页面失败 → 该档截断, 下周期自然重试; 不存在熔断/停用状态(数据上无 fuse/suspended 字段)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {url_of("A"): myhr_page([], has_next=False), url_of("B"): myhr_page([]), url_of("C"): myhr_page([])}
     fetcher = FakeFetcher(pages=pages, fail_text_at={"A": "超时"})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -429,7 +429,7 @@ def test_no_fuse_no_suspension(tmp_path):
 def test_interval_empty_page_keeps_manual_stamp(tmp_path, monkeypatch, caplog):
     """T52. 分页区间形空表(无标记 ⇒ claim=None): 自证空不可用 → 维持 zero_listing 人工戳路径。"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     counter_adapter(monkeypatch, {})  # 区间形空表无计数标记: 覆写了也拿不到键
     fetcher = FakeFetcher(pages={url_of(l): EMPTY_TABLE_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -444,19 +444,19 @@ def test_interval_empty_page_keeps_manual_stamp(tmp_path, monkeypatch, caplog):
 
 def test_reuse_window_uses_min_of_config_and_interval(tmp_path):
     """1. 复用窗时长 = min(reuse_window, 拉取间隔): 新鲜度不再借用节奏值(12H→2H); 窗内再跑 → REUSED(既有语义不变)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)  # 默认 reuse_window=2H, interval=12H
     run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.expires_at == clock.now + 2 * 3600.0, "min(2H, 12H) = 2H —— 不再是 12H"
+    assert data.expires_at == clock.now() + 2 * 3600.0, "min(2H, 12H) = 2H —— 不再是 12H"
     result = run_wave(service)
     assert result.action == "reused"
 
 
 def test_reuse_window_never_exceeds_interval(tmp_path):
     """1b. clamp 另一半: 复用窗(2H) > 拉取间隔(1H) → 生效 1H(拉取间隔是硬节奏, 静默收敛不报错)"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(
         tmp_path,
         FakeFetcher(pages=standard_pages([row(11, "OTHER 11")])),
@@ -465,36 +465,36 @@ def test_reuse_window_never_exceeds_interval(tmp_path):
     )
     run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.expires_at == clock.now + 3600.0
+    assert data.expires_at == clock.now() + 3600.0
 
 
 def test_reuse_window_not_extended_by_idle_interval(tmp_path):
     """1c. 复用窗公式不跟随 idle(计划 26-10-05-0555 §2.7 不变项): 稳态降频只动拉取间隔闸,
     复用窗仍 = min(reuse_window, refresh_interval) —— 新鲜度与节奏解耦, 稳态期窗不放大到 24H"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)  # 默认 reuse_window=2H / refresh=12H / idle=24H
     run_wave(service, {})  # 确认零锚点 → 稳态降频生效
     data, _ = service.store(SITE).read_unlocked()
     assert data.wave.idle_mode is True, "前置: 零对象站点已进稳态"
-    assert data.expires_at == clock.now + 2 * 3600.0, "稳态期复用窗仍 min(2H, 12H)=2H, 不跟随 idle(24H)"
+    assert data.expires_at == clock.now() + 2 * 3600.0, "稳态期复用窗仍 min(2H, 12H)=2H, 不跟随 idle(24H)"
 
 
 def test_force_bypasses_reuse_and_interval_gates(tmp_path):
     """4. 立即拉取(force)→ 跳过复用窗与拉取间隔两道闸, 时钟未动也直接开波"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.wave.healthy_ts > 0 and data.expires_at > clock.now, "前置: 处于复用窗 + 拉取间隔内"
+    assert data.wave.healthy_ts > 0 and data.expires_at > clock.now(), "前置: 处于复用窗 + 拉取间隔内"
     result = service.refresh_site(SITE, {}, force=True)
     assert result.action in ("refreshed", "partial"), f"force 应越过两道闸, got: {result.action} {result.reason}"
 
 
 def test_force_still_respects_min_interval(tmp_path):
     """5. 立即拉取不越过账号安全线: min_interval 未到 → 仍 WAITING(间隔, 非「拉取间隔」)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, gconf=global_conf(min_interval=90.0), clock=clock)
     run_wave(service)  # 页面请求已发出: last_fetch_ts = now
@@ -506,7 +506,7 @@ def test_force_still_respects_min_interval(tmp_path):
 
 def test_refresh_all_force_not_blocked_by_gates(tmp_path):
     """8. 走查语义: refresh_all(force=True) 在复用窗/拉取间隔内仍开波(--hr-once 不被新闸门挡)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service)
@@ -520,13 +520,13 @@ def test_refresh_all_force_not_blocked_by_gates(tmp_path):
 def test_idle_interval_used_when_objects_empty(tmp_path):
     """稳态 1. 零锚点站点(对账对象集为空): healthy+idle 间隔内 WAITING 且理由带「稳态降频」标记,
     过 idle 闸后正常开波 —— 降频只动节奏闸, 波的形态不变"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     first = run_wave(service, {})  # 首波 healthy_ts=0 间隔闸不拦, 照常开波并立稳态旗
     assert first.action in (ACTION_REFRESHED, ACTION_PARTIAL)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.wave.healthy_ts == clock.now and data.wave.idle_mode is True
+    assert data.wave.healthy_ts == clock.now() and data.wave.idle_mode is True
     clock.advance(3 * 3600.0)  # 复用窗(2H)外, idle 间隔(24H)内
     waiting = run_wave(service, {})
     assert waiting.action == ACTION_WAITING
@@ -538,7 +538,7 @@ def test_idle_interval_used_when_objects_empty(tmp_path):
 def test_anchor_collection_failure_disables_idle(tmp_path):
     """稳态 3. 锚点采集失败(None)≠稳态(§2.5, 报告 R5 唯一实质风险): 常态间隔照常判闸 ——
     已过 12H 即开波不吃 idle 降频; wave 拿到空锚点, 行为与实施前一致"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service, {})  # 首波零锚点 → 稳态立旗
@@ -555,7 +555,7 @@ def test_anchor_collection_failure_disables_idle(tmp_path):
 def test_zero_anchors_site_still_idles(tmp_path):
     """稳态 4. 显式 {}(采集成功但该站零种子)照常降频 —— 与失败路径的区分回归钉:
     同为「13H 处 poll」, {} 等 idle 闸; None 立即开波(test_anchor_collection_failure_disables_idle)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service, {})  # 确认零锚点 → 稳态
@@ -570,7 +570,7 @@ def test_zero_anchors_site_still_idles(tmp_path):
 def test_idle_mode_flip_persists_once(tmp_path):
     """稳态 5. 旗标仅翻转时写盘(§2.4): 翻转 poll 恰好一次写(revision +1), 稳态期反复 poll
     零额外写; 落盘数据 JSON 往返保真(idle_mode 不丢)"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
 
@@ -615,7 +615,7 @@ def test_build_objects_skips_hr_excluded_anchor(tmp_path):
 def test_hr_excluded_anchor_does_not_break_idle(tmp_path):
     """方案 B(计划 26-10-08-1249 S3-1): 站点只剩被排除的本地种子时, 对象集为空 ⇒ 稳态降频照常生效。
     实施前该锚点进对象集 ⇒ idle 永不成立、拉取停在 refresh_interval —— 本用例即该回归的钉。"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     _, h_exc = mk_blob("IYUU SEED 1")
@@ -632,7 +632,7 @@ def test_hr_excluded_anchor_does_not_break_idle(tmp_path):
     first = run_wave(service, anchors)
     assert first.action in (ACTION_REFRESHED, ACTION_PARTIAL)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.wave.healthy_ts == clock.now and data.wave.idle_mode is True, \
+    assert data.wave.healthy_ts == clock.now() and data.wave.idle_mode is True, \
         "被排除种子不构成对账义务 ⇒ 稳态成立"
     clock.advance(13 * 3600.0)  # 常态间隔(12H)已过, idle(24H)未到
     waiting = run_wave(service, anchors)
@@ -643,7 +643,7 @@ def test_hr_excluded_anchor_does_not_break_idle(tmp_path):
 
 def test_refresh_site_guard_paths(tmp_path):
     """站点未接入 / 全局开关关 -> 不取数直接返回; HrRefreshResult.ok 属性语义"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages())
     service = make_service(tmp_path, fetcher, clock=clock)
     # 站点未接入(site_confs 没有该站)
@@ -663,7 +663,7 @@ def test_refresh_site_guard_paths(tmp_path):
 def test_refresh_site_unknown_adapter(tmp_path):
     """未登记的 adapter -> ACTION_ERROR, 单站点失败不外抛"""
     fetcher = FakeFetcher(pages=standard_pages())
-    service = make_service(tmp_path, fetcher, site=site_conf(adapter="no-such-adapter"), clock=Clock())
+    service = make_service(tmp_path, fetcher, site=site_conf(adapter="no-such-adapter"), clock=FakeClock())
     result = run_wave(service)
     assert result.action == ACTION_ERROR
     assert "未登记的 adapter" in result.reason
@@ -673,7 +673,7 @@ def test_refresh_site_unknown_adapter(tmp_path):
 def test_refresh_site_lock_busy_returns_locked(tmp_path):
     """站点锁被其它实例持有 -> ACTION_LOCKED(等下一轮), 不外抛"""
     fetcher = FakeFetcher(pages=standard_pages())
-    service = make_service(tmp_path, fetcher, clock=Clock())
+    service = make_service(tmp_path, fetcher, clock=FakeClock())
     outsider = HrSiteStore(SITE, service.dir, lock_timeout=0.0, owner="other-instance")
     with outsider.hold():
         result = service.refresh_site(SITE, {})
@@ -684,7 +684,7 @@ def test_refresh_site_lock_busy_returns_locked(tmp_path):
 
 def test_refresh_site_internal_error_contained(tmp_path, monkeypatch):
     """非取数异常(如编程错误) -> ACTION_ERROR + alerted, 波次异常不外拖"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages())
     service = make_service(tmp_path, fetcher, clock=clock)
 
@@ -700,14 +700,14 @@ def test_refresh_site_internal_error_contained(tmp_path, monkeypatch):
 
 def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
     """登录页由 adapter 页面形态识别(与扩展回传异常同一波级出口); 登录告警每站一次, 恢复后重置"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages={url_of(l): LOGIN_PAGE for l in "ABC"})
     service = make_service(tmp_path, fetcher, clock=clock)
     with capture_logs("auto_qb.hr.service") as cap:
         first = run_wave(service)
         assert first.action == ACTION_ERROR and "登录页" in first.reason
         data, _ = service.store(SITE).read_unlocked()
-        assert data.rate.last_fetch_ts == clock.now, "登录页路径同样前进间隔基准"
+        assert data.rate.last_fetch_ts == clock.now(), "登录页路径同样前进间隔基准"
         clock.advance(120.0)
         second = run_wave(service)
         assert second.action == ACTION_ERROR
@@ -732,7 +732,7 @@ def test_login_page_detected_by_adapter_and_warned_once(tmp_path):
 
 def test_missing_fields_abort_after_valid_page(tmp_path):
     """第 2 页必填字段缺失 -> 该档在失效点截断, 第 1 页之前的数据仍有效(LANE_OK 非全深度)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A", 1): myhr_page([row(11, "OTHER 11", done=DONE_NEW)], has_next=True),
         url_of("A", 2): _page_with_blank_required_row(12),
@@ -752,7 +752,7 @@ def test_missing_fields_abort_after_valid_page(tmp_path):
 
 def test_tail_zero_partial_reset(tmp_path):
     """停翻2. 跨页重算: 第 1 页尾只有 1 行到期 -> 计数重置为 1; 第 2 页凑满 5 行才停(全深度)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("B", 1):
             myhr_page(
@@ -809,7 +809,7 @@ def test_run_downloads_unit_paths(tmp_path):
 
 def test_download_invalid_blob_counted_as_fail(tmp_path):
     """.torrent 内容不是合法 bencode -> 计一次种子失败(冷却记账), 波次不外抛"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A"): myhr_page([row(11, "TOTALLY-UNRELATED")]),
         url_of("B"): myhr_page([]),
@@ -822,13 +822,13 @@ def test_download_invalid_blob_counted_as_fail(tmp_path):
     assert result.torrents_failed == 3 and result.torrents_fetched == 0
     data, _ = service.store(SITE).read_unlocked()
     assert data.fails[11].count == 3
-    assert data.fails[11].last_ts == clock.now, "fail.last_ts 必须来自注入时钟, 不直调 time.time()"
+    assert data.fails[11].last_ts == clock.now(), "fail.last_ts 必须来自注入时钟, 不直调 time.time()"
     assert data.index[11].infohash_v1 == "", "身份未回填"
 
 
 def test_readonly_degradation_noted_in_result(tmp_path):
     """锁自检失败(revision 回退) -> 波照跑但只读: reason 注明「锁自检失败」, 文件不被覆写"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]))
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service)
@@ -894,7 +894,7 @@ def test_build_views_skips_disabled_and_channel_states(tmp_path):
     """视图构建跳过未启用站点; channel_state 的 ok / silent(老化) / 无锁读 / disabled 分支"""
     from auto_qb.config.models import HrChannelConfig
 
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([row(11, "OTHER 11")]), blobs={11: torrent_blob(name="OTHER 11")})
     confs = {SITE: site_conf(), "offsite": site_conf(tracker="offsite", enabled=False)}
     service = make_service(
@@ -918,12 +918,12 @@ def test_build_views_skips_disabled_and_channel_states(tmp_path):
         tmp_path,
         fetcher,
         data_dir=tmp_path / "d2",
-        clock=Clock(),
+        clock=FakeClock(),
         gconf=global_conf(channel=HrChannelConfig(enabled=True))
     )
     assert service2.channel_state(SITE) == "silent", "从未有健康波 -> silent"
     # 通道未启用 -> disabled
-    service3 = make_service(tmp_path, fetcher, data_dir=tmp_path / "d3", clock=Clock(), gconf=_gconf_channel_off())
+    service3 = make_service(tmp_path, fetcher, data_dir=tmp_path / "d3", clock=FakeClock(), gconf=_gconf_channel_off())
     assert service3.channel_state(SITE, None) == "disabled"
 
 
@@ -993,7 +993,7 @@ def test_channel_timeout_routes_to_no_channel(tmp_path, caplog):
     写 `wave.notes`(环境噪音进持久证据链)、推进 `fail_streak`(攒到 3 就升成「疑似改版」ERROR)
     —— 即计划 §03.3 的 P1/P2/P3(用户实报 2026-10-09)。
     """
-    service = make_service(tmp_path, _TimeoutFetcher(), clock=Clock())
+    service = make_service(tmp_path, _TimeoutFetcher(), clock=FakeClock())
     with caplog.at_level(logging.WARNING):
         result = service.refresh_site(SITE, {})
     assert result.action == ACTION_NO_CHANNEL
@@ -1008,7 +1008,7 @@ def test_channel_timeout_routes_to_no_channel(tmp_path, caplog):
 
 def test_channel_timeout_never_upgrades_to_page_changed(tmp_path, caplog):
     """连续多波通道不可用也**不**升级成「疑似改版」ERROR(§03.3 的 P2 升级路径)"""
-    service = make_service(tmp_path, _TimeoutFetcher(), clock=Clock())
+    service = make_service(tmp_path, _TimeoutFetcher(), clock=FakeClock())
     with caplog.at_level(logging.ERROR):
         for _ in range(4):
             assert service.refresh_site(SITE, {}).action == ACTION_NO_CHANNEL
@@ -1020,7 +1020,7 @@ def test_channel_timeout_never_upgrades_to_page_changed(tmp_path, caplog):
 def test_generic_fetch_error_still_page_failure(tmp_path, caplog):
     """边界回归: 真页面取数失败(HrFetchError)仍按**站点层**处理 —— 收层不得一刀切吞掉真异常"""
     fetcher = FakeFetcher(pages=standard_pages(), fail_text_at={"A": "HTTP 500"})
-    service = make_service(tmp_path, fetcher, clock=Clock())
+    service = make_service(tmp_path, fetcher, clock=FakeClock())
     with caplog.at_level(logging.WARNING):
         result = service.refresh_site(SITE, {})
     data, _err = service.store(SITE).read_unlocked()
@@ -1032,7 +1032,7 @@ def test_generic_fetch_error_still_page_failure(tmp_path, caplog):
 
 def test_run_downloads_continues_after_backfill(tmp_path):
     """回填分支后继续处理后续 tid(continue 不是 break)"""
-    clock = Clock()
+    clock = FakeClock()
     blob, h14 = mk_blob("T14")
     service = make_service(tmp_path, FakeFetcher(pages={}, blobs={14: blob}), clock=clock)
     data = HrSiteData()
@@ -1052,7 +1052,7 @@ def test_run_downloads_continues_after_backfill(tmp_path):
 
 def test_run_downloads_cooldown_gate_boundaries(tmp_path):
     """下载失败冷却闸: 达上限 ∧ 冷却窗内 → 跳过; 恰好到期(now - last_ts == 冷却) → 放行"""
-    clock = Clock()
+    clock = FakeClock()
     blob, _h = mk_blob("T11")
     fetcher = FakeFetcher(pages={}, blobs={11: blob})
     service = make_service(tmp_path, fetcher, clock=clock)
@@ -1072,13 +1072,13 @@ def test_run_downloads_cooldown_gate_boundaries(tmp_path):
         return wave
 
     data = HrSiteData()
-    data.fails[11] = HrDlFail(tid=11, count=MAX_DOWNLOAD_RETRIES, last_ts=clock())
+    data.fails[11] = HrDlFail(tid=11, count=MAX_DOWNLOAD_RETRIES, last_ts=clock.now())
     _run(data, _wave())
     assert fetcher.byte_calls == [], "冷却窗内不得重下"
 
     fetcher.byte_calls.clear()
     data2 = HrSiteData()
-    data2.fails[11] = HrDlFail(tid=11, count=MAX_DOWNLOAD_RETRIES, last_ts=clock() - DL_RETRY_COOLDOWN)
+    data2.fails[11] = HrDlFail(tid=11, count=MAX_DOWNLOAD_RETRIES, last_ts=clock.now() - DL_RETRY_COOLDOWN)
     _run(data2, _wave())
     assert fetcher.byte_calls, "恰好到期应放行下载"
 
@@ -1087,7 +1087,7 @@ def test_run_downloads_failure_paths_count_and_continue(tmp_path, caplog):
     """失败路径: HrFetchError 与非法 blob 各计一次失败并 **continue** 到后续 tid;
     torrents_failed / torrents_fetched 均累加(非赋值/自减); 两条告警文案保留"""
     caplog.set_level(logging.WARNING, logger="auto_qb.hr.service")
-    clock = Clock()
+    clock = FakeClock()
     blob14, _h14 = mk_blob("T14")
     blob15, _h15 = mk_blob("T15")
     fetcher = FakeFetcher(
@@ -1119,7 +1119,7 @@ def test_run_downloads_failure_paths_count_and_continue(tmp_path, caplog):
 
 def test_run_downloads_registers_hash_pending_and_clears_fail(tmp_path):
     """下载成功: dl_by_hash 登记 v1/v2 → tid / tid 出队 / 清失败记账 / torrents_fetched 累加"""
-    clock = Clock()
+    clock = FakeClock()
     blob11, _h11 = mk_blob("T11")
     blob12, _h12 = mk_blob("T12")
     service = make_service(tmp_path, FakeFetcher(pages={}, blobs={11: blob11, 12: blob12}), clock=clock)
@@ -1146,21 +1146,21 @@ def test_run_downloads_registers_hash_pending_and_clears_fail(tmp_path):
 
 def test_run_downloads_downloaded_record_fields(tmp_path):
     """下载成功落 HrDownloaded: ts=取回时刻 / name 取 torrent 展示名(非行名) / v1 v2 双写"""
-    clock = Clock()
+    clock = FakeClock()
     blob, h1 = mk_blob("other.bin")
     fetcher = FakeFetcher(pages=standard_pages(rows_a=[row(11, "EXAMPLE 11")]), blobs={11: blob})
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service, {})
     data, _ = service.store(SITE).read_unlocked()
     rec = data.downloaded[11]
-    assert rec.ts == clock.now
+    assert rec.ts == clock.now()
     assert rec.name == "other.bin"
     assert rec.infohash_v1 == h1 and rec.infohash_v2
 
 
 def test_run_pages_page_cap_one_keeps_rotation_bounded(tmp_path):
     """单波页数下限是 1: max_pages_per_wave=1 时每档恰取 1 页(不是 0 页也不是 2 页)"""
-    clock = Clock()
+    clock = FakeClock()
     pages = {
         url_of("A", 1): myhr_page([row(11, "OTHER 11")], has_next=True),
         url_of("A", 2): myhr_page([row(12, "OTHER 12")], has_next=False),
@@ -1177,25 +1177,25 @@ def test_run_pages_page_cap_one_keeps_rotation_bounded(tmp_path):
 
 def test_run_pages_merge_seen_uses_now(tmp_path):
     """合并口传入取数时刻(不是 None): 索引行 last_seen = 本波时刻(陈旧淘汰计时起点)"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(tmp_path, FakeFetcher(pages=standard_pages([row(11, "OTHER 11")])), clock=clock)
     run_wave(service, {})
     data, _ = service.store(SITE).read_unlocked()
-    assert data.index[11].last_seen == clock.now
+    assert data.index[11].last_seen == clock.now()
 
 
 def test_run_pages_commits_stamp_writer_heartbeat(tmp_path):
     """增量落盘时间戳 = 本波时刻(不是 None): 站点文件 heartbeat 供排障读"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(tmp_path, FakeFetcher(pages=standard_pages([row(11, "OTHER 11")])), clock=clock)
     run_wave(service, {})
     payload = _site_file_json(service)
-    assert payload["writer"]["heartbeat"] == clock.now
+    assert payload["writer"]["heartbeat"] == clock.now()
 
 
 def test_refresh_locked_reuse_window_boundary_refetches(tmp_path):
     """复用窗边界是「到期即取」(expires_at > now): 窗口为 0 的站点不等下一节拍直接重取"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(
         tmp_path,
         FakeFetcher(pages=standard_pages([])),
@@ -1206,14 +1206,14 @@ def test_refresh_locked_reuse_window_boundary_refetches(tmp_path):
     first = run_wave(service, {})
     assert first.action in (ACTION_REFRESHED, ACTION_PARTIAL)
     data, _ = service.store(SITE).read_unlocked()
-    assert data.expires_at == clock.now, "复用窗 0: 窗边界恰在本波时刻"
+    assert data.expires_at == clock.now(), "复用窗 0: 窗边界恰在本波时刻"
     second = run_wave(service, {})
     assert second.action == ACTION_REFRESHED, f"边界当刻不复用, 应重取: {second.action}"
 
 
 def test_refresh_locked_reuse_path_fills_result_fields(tmp_path):
     """复用(不取数)路径也回填结果字段: 条目数 / 计数 / 档位摘要 / 原因 / 快照"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(tmp_path, FakeFetcher(pages=standard_pages([row(11, "OTHER 11")])), clock=clock)
     first = run_wave(service, {})
     assert first.action == ACTION_REFRESHED
@@ -1226,7 +1226,7 @@ def test_refresh_locked_reuse_path_fills_result_fields(tmp_path):
 
 def test_refresh_locked_fetch_interval_reason_exact_seconds(tmp_path):
     """拉取间隔闸门: 还差多少秒如实算(due - now), action=WAITING"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(
         tmp_path,
         FakeFetcher(pages=standard_pages([])),
@@ -1243,7 +1243,7 @@ def test_refresh_locked_fetch_interval_reason_exact_seconds(tmp_path):
 
 def test_refresh_locked_min_interval_force_defers_with_exact_seconds(tmp_path):
     """force 撞账号安全线(min_interval): 让位 + defer 历史, 还差秒数如实(due - now)"""
-    clock = Clock()
+    clock = FakeClock()
     service = make_service(
         tmp_path, FakeFetcher(pages=standard_pages([])), gconf=global_conf(min_interval=90.0), clock=clock
     )
@@ -1259,7 +1259,7 @@ def test_refresh_locked_min_interval_force_defers_with_exact_seconds(tmp_path):
 
 def test_advance_observation_multi_entry_exit_counts(tmp_path):
     """观察期逐条目推进: 位置未证明的 streak 冻结, 被覆盖的连续 2 波后各自出口(逐个计数)"""
-    clock = Clock()
+    clock = FakeClock()
     blobs = {}
     anchors = {}
     for tid in (11, 12, 13):
@@ -1480,7 +1480,7 @@ def test_no_permission_is_channel_layer_and_persisted(tmp_path):
     !这条是「环境态不许冒充站点结论」的机械守卫: 若哪天有人把它改回 HrFetchError,
     `fail_streak` 会开始涨、日志会带 `[HR 页面改版]`, 这里立刻红。
     """
-    clock = Clock()
+    clock = FakeClock()
     from auto_qb.config.models import HrChannelConfig
 
     fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNoPermission("扩展未授权该站点"))
@@ -1499,7 +1499,7 @@ def test_no_permission_is_channel_layer_and_persisted(tmp_path):
 
 def test_network_failure_persists_network_kind(tmp_path):
     """网络层失败与缺权限落成**不同**的 kind(动作不同: 查代理 vs 去授权)"""
-    clock = Clock()
+    clock = FakeClock()
     from auto_qb.config.models import HrChannelConfig
 
     fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNetwork("Failed to fetch"))
@@ -1512,7 +1512,7 @@ def test_network_failure_persists_network_kind(tmp_path):
 
 def test_channel_error_cleared_on_recovery(tmp_path):
     """拿到正常内容页即清通道痕 —— 告警态与展示态必须同一个恢复点"""
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages={}, channel_error=HrExtensionNoPermission("扩展未授权该站点"))
     service = make_service(tmp_path, fetcher, clock=clock)
     run_wave(service, {})
@@ -1533,7 +1533,7 @@ def test_page_fetch_failure_escalates_after_streak(tmp_path, caplog):
     此前只有「结构失效」(_LaneAbort)接了升级告警, 取数失败这条没接 —— 于是 fail_streak 涨到
     58 也没有一句「疑似改版」, 信号全被 `_warn_parse` 节流成 INFO(2026-10-28 实报)。
     """
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=standard_pages([], [], []), fail_text_at={"A": "HTTP 500"})
     service = make_service(tmp_path, fetcher, clock=clock)
     # 推进 25h: 部分成功波会把拉取间隔推到 24h(稳态降频), 13h 不够 —— 不然中间会夹一个

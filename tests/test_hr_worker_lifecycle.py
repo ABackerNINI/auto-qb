@@ -76,10 +76,13 @@ from auto_qb.hr.worker import HrViewPublisher, HrWorker, pacing_class, stable_ke
 
 from auto_qb.infra.logging import DOMAIN_ATTR
 
-from helpers import capture_logs, wait_until
+from helpers import capture_logs
 
-from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, make_service, myhr_page, row, \
+from clock import wait_until
+
+from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, FakeFetcher, global_conf, make_service, myhr_page, row, \
     site_conf, torrent_blob
+from clock import FakeClock
 
 from hr_worker_support import (
     TID_A,
@@ -151,7 +154,7 @@ def test_start_publishes_disk_views_before_first_wave(tmp_path):
     .torrent 越积越久), 108 个种子 `hr_state` **全是空串** ⇒ 界面全回落本地兜底; 而站点文件里
     B 档命中与放行记录都在。修复 = `_loop` 在首轮取数**之前**先发布一次 `build_views()`。
     """
-    clock = Clock()
+    clock = FakeClock()
     first = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
     HrWorker(service=first, publisher=HrViewPublisher(), poll_interval=60.0).run_once()
     data, _err = first.store("pt.example.com").read_unlocked()
@@ -162,7 +165,7 @@ def test_start_publishes_disk_views_before_first_wave(tmp_path):
     stuck = _BlockingFetcher()
     service = _service(tmp_path, stuck, clock=clock)
     publisher = HrViewPublisher()
-    worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0, now_fn=clock.now)
     assert publisher.revision == 0
     worker.start()
     try:
@@ -170,7 +173,7 @@ def test_start_publishes_disk_views_before_first_wave(tmp_path):
         assert publisher.revision >= 1, "第一轮跑完前就必须发布磁盘既有结论"
         view = publisher.latest().get("pt.example.com")
         assert view is not None and h in view.lane_terminal, "磁盘上的终态命中要进视图"
-        judged = judge_record(view, (h, ), now=clock())
+        judged = judge_record(view, (h, ), now=clock.now())
         assert judged is not None and judged.identity is HrIdentity.RELEASED, "判定侧立刻可用"
     finally:
         stuck.release.set()
@@ -232,9 +235,9 @@ def test_worker_refresh_forgets_pacing_memory(tmp_path, caplog):
     这一条直接驱 `_note`(日志策略的单测): 端到端很难在同一个小时窗口里既完成完整刷新
     又恰好再次被频控拦住(完整刷新要多次请求, 而配额就是按请求计的)。
     """
-    clock = Clock()
+    clock = FakeClock()
     service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
-    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock.now)
     pacing = HrRefreshResult(
         site="pt.example.com", action=ACTION_PARTIAL, reason="配额/间隔受限(间隔: 还差 104s)", reason_kind=REASON_BUDGET
     )
@@ -252,9 +255,9 @@ def test_worker_refresh_forgets_pacing_memory(tmp_path, caplog):
 
 def test_worker_does_not_repeat_alert_owned_by_producer(tmp_path, caplog):
     """已由产生处告警的事件(取数失败 / 文件读坏): 状态层只记 INFO, 不再打第二条 WARNING"""
-    clock = Clock()
+    clock = FakeClock()
     service = _service(tmp_path, FakeFetcher({}, {}, fail_text_at={"A": "429 Too Many Requests"}), clock=clock)
-    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock.now)
 
     with caplog.at_level(logging.DEBUG, logger="auto_qb.hr"):
         worker.run_once()
@@ -339,11 +342,11 @@ def test_loop_survives_round_exception(tmp_path, caplog, monkeypatch):
 
 
 def test_revision_bumps_when_data_changes(tmp_path):
-    clock = Clock()
+    clock = FakeClock()
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A, TID_B))
     service = _service(tmp_path, fetcher, clock=clock)
     publisher = HrViewPublisher()
-    worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=publisher, poll_interval=60.0, now_fn=clock.now)
     worker.run_once()
     assert publisher.revision == 1
     clock.advance(13 * 3600.0)  # 超过 refresh_interval: 数据过期, 必须重新抓
@@ -392,7 +395,7 @@ class _BoomPublisher:
 def test_start_twice_is_idempotent(tmp_path):
     """start 幂等: 线程已在跑时不重复起(否则会出现两个取数线程抢同一把站点锁)"""
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
-    service = _service(tmp_path, fetcher, clock=Clock())
+    service = _service(tmp_path, fetcher, clock=FakeClock())
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
     worker.start()
     first_thread = worker._handle._thread
@@ -404,7 +407,7 @@ def test_start_twice_is_idempotent(tmp_path):
 def test_stop_timeout_reports_error(tmp_path):
     """线程超时未退出 -> stop 返回 False 并 ERROR(可能仍在等扩展回传)"""
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
-    service = _service(tmp_path, fetcher, clock=Clock())
+    service = _service(tmp_path, fetcher, clock=FakeClock())
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=3600.0)
     stuck = threading.Thread(target=time.sleep, args=(30, ), name="stuck-hr-worker", daemon=True)
     stuck.start()  # join 需要线程已启动
@@ -416,7 +419,7 @@ def test_stop_timeout_reports_error(tmp_path):
 def test_request_refresh_site_filtering(tmp_path):
     """request_refresh: 未点名站点 = 全部启用站点; 点名未启用站点 = 空受理(不告警)"""
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
-    service = _service(tmp_path, fetcher, clock=Clock())
+    service = _service(tmp_path, fetcher, clock=FakeClock())
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
     assert worker.request_refresh(["ghost"]) == [], "未启用站点不受理"
     assert worker._force in (set(), None) or not worker._force, "空受理不残留旗标"
@@ -426,9 +429,9 @@ def test_request_refresh_site_filtering(tmp_path):
 def test_loop_survives_startup_publish_failure(tmp_path, monkeypatch):
     """冷启动发布既有视图失败(读盘异常) -> ERROR 但线程照常进入取数循环"""
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
-    clock = Clock()
+    clock = FakeClock()
     service = _service(tmp_path, fetcher, clock=clock)
-    worker = HrWorker(service=service, publisher=_BoomPublisher(), poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=_BoomPublisher(), poll_interval=60.0, now_fn=clock.now)
 
     calls = []
 
@@ -447,7 +450,7 @@ def test_loop_survives_startup_publish_failure(tmp_path, monkeypatch):
 def test_record_status_warns_on_partial_and_error(tmp_path):
     """刷新不完备(partial/error)且产生处未告警 -> 取数线程补一条 WARNING(改版让放行证明不成立)"""
     fetcher = FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A))
-    service = _service(tmp_path, fetcher, clock=Clock())
+    service = _service(tmp_path, fetcher, clock=FakeClock())
     worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0)
     with capture_logs("auto_qb.hr.worker") as cap:
         result = HrRefreshResult(site="pt.example.com", action=ACTION_PARTIAL, reason="页面取数失败", alerted=False)
@@ -656,7 +659,7 @@ def test_build_views_prefers_memory_snapshot(tmp_path):
 
 
 def test_silence_where_started_label(tmp_path, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _Fresh:

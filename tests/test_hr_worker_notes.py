@@ -55,10 +55,13 @@ from auto_qb.hr.worker import HrViewPublisher, HrWorker, pacing_class, stable_ke
 
 from auto_qb.infra.logging import DOMAIN_ATTR
 
-from helpers import capture_logs, wait_until
+from helpers import capture_logs
 
-from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, Clock, FakeFetcher, global_conf, make_service, myhr_page, row, \
+from clock import wait_until
+
+from hr_helpers import EMPTY_TABLE_PAGE, REVISED_PAGE, FakeFetcher, global_conf, make_service, myhr_page, row, \
     site_conf, torrent_blob
+from clock import FakeClock
 
 from hr_worker_support import (
     TID_A,
@@ -76,9 +79,9 @@ def test_pacing_partial_is_info_not_warning_and_not_repeated(tmp_path, caplog):
     系统通知 ⇒ 弹窗淹没。去重按「被拦的根因」(间隔/配额/熔断…) 而不是「本轮返回了哪个 action」——
     同一个「等间隔」在轮次间会分别表现为 partial(首页抓到、第二页被拦)与 waiting。
     """
-    clock = Clock()
+    clock = FakeClock()
     service = _service(tmp_path, FakeFetcher(pages={}, blobs={}), clock=clock)
-    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock.now)
     pacing = HrRefreshResult(
         site="pt.example.com", action=ACTION_PARTIAL, reason="配额/间隔受限(间隔: 还差 104s)", reason_kind=REASON_BUDGET
     )
@@ -103,9 +106,9 @@ def test_pacing_partial_is_info_not_warning_and_not_repeated(tmp_path, caplog):
 
 def test_pacing_state_reminds_once_per_window(tmp_path, caplog):
     """节流态持续时按 channel_silence_warn 周期提醒一次(既不满屏也不静默消失)"""
-    clock = Clock()
+    clock = FakeClock()
     service = _service(tmp_path, FakeFetcher(pages={}, blobs={}), clock=clock)
-    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock)
+    worker = HrWorker(service=service, publisher=HrViewPublisher(), poll_interval=60.0, now_fn=clock.now)
     pacing = HrRefreshResult(
         site="pt.example.com", action=ACTION_PARTIAL, reason="配额/间隔受限(间隔: 还差 104s)", reason_kind=REASON_BUDGET
     )
@@ -120,7 +123,7 @@ def test_pacing_state_reminds_once_per_window(tmp_path, caplog):
 
 
 def test_silence_reminder_is_throttled(tmp_path, caplog, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
     service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
@@ -135,7 +138,7 @@ def test_silence_reminder_is_throttled(tmp_path, caplog, monkeypatch):
         publisher=HrViewPublisher(),
         endpoint=_Endpoint(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
         web_active_fn=lambda: True,
     )
     with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
@@ -156,7 +159,7 @@ def test_silence_warning_names_affected_sites(tmp_path, caplog, monkeypatch):
 
     只说「通道静默」而不说「哪些站点的数据在变旧」, 用户没法判断该不该管它。
     """
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
     service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
@@ -169,7 +172,7 @@ def test_silence_warning_names_affected_sites(tmp_path, caplog, monkeypatch):
         publisher=HrViewPublisher(),
         endpoint=_Endpoint(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
         web_active_fn=lambda: True,
     )
     with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
@@ -186,7 +189,7 @@ def test_silence_is_quiet_when_nobody_watching(tmp_path, caplog, monkeypatch):
 
     这正是用户实报的那一类(关浏览器过夜) —— 它不该出现在错误历史里(计划 §03.2 / D2①)。
     """
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
     service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
@@ -199,7 +202,7 @@ def test_silence_is_quiet_when_nobody_watching(tmp_path, caplog, monkeypatch):
         publisher=HrViewPublisher(),
         endpoint=_Endpoint(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
         web_active_fn=lambda: False,
     )
     with caplog.at_level(logging.INFO, logger="auto_qb.hr.worker"):
@@ -217,7 +220,7 @@ def test_silence_is_visible_when_web_active(tmp_path, caplog, monkeypatch):
 
     只陈述「有人在看 WebUI, 而扩展没在联系」; **不**推断「扩展离线」, 也**不**判断是否同机 / 同源。
     """
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
     service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
@@ -230,7 +233,7 @@ def test_silence_is_visible_when_web_active(tmp_path, caplog, monkeypatch):
         publisher=HrViewPublisher(),
         endpoint=_Endpoint(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
         web_active_fn=lambda: True,
     )
     with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
@@ -247,7 +250,7 @@ def test_silence_names_rejected_root_cause(tmp_path, caplog, monkeypatch):
 
     「有人在敲门但被拒」是后端唯一能证明「不是浏览器离线」的证据(计划 §03.6 / P4)。
     """
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
     service = _service(tmp_path, FakeFetcher(pages=_pages(TID_A), blobs=_blobs(TID_A)), clock=clock)
 
@@ -260,7 +263,7 @@ def test_silence_names_rejected_root_cause(tmp_path, caplog, monkeypatch):
         publisher=HrViewPublisher(),
         endpoint=_Endpoint(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
         web_active_fn=lambda: False,
     )
     with caplog.at_level(logging.WARNING, logger="auto_qb.hr.worker"):
@@ -347,13 +350,13 @@ def test_note_alerted_separates_reason_url(tmp_path):
 
 def test_note_warn_gap_floor_and_exact_boundary(tmp_path, monkeypatch):
     """非节流告警: warn_gap 下界 60s; 同 action 恰好到点即再报"""
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 0.0)
     worker = HrWorker(
         service=_service(tmp_path, FakeFetcher(pages={}), clock=clock),
         publisher=HrViewPublisher(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
     )
     err = HrRefreshResult(site="pt.example.com", action=ACTION_ERROR, reason="表头缺失")
     with capture_logs("auto_qb.hr.worker", logging.WARNING) as cap:
@@ -367,13 +370,13 @@ def test_note_warn_gap_floor_and_exact_boundary(tmp_path, monkeypatch):
 
 def test_note_pacing_reminder_fires_at_exact_gap(tmp_path, monkeypatch):
     """节流态持续: 恰好满一个 warn_gap 就要再说明白一次(不是「超过」才说)"""
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
     worker = HrWorker(
         service=_service(tmp_path, FakeFetcher(pages={}), clock=clock),
         publisher=HrViewPublisher(),
         poll_interval=60.0,
-        now_fn=clock,
+        now_fn=clock.now,
     )
     waiting = HrRefreshResult(
         site="pt.example.com", action=ACTION_WAITING, reason="未到可取时刻(间隔, 还差 5s)", reason_kind=REASON_BUDGET
@@ -396,7 +399,7 @@ def test_note_info_branch_message(tmp_path):
 
 
 def test_silence_reference_prefers_last_contact(tmp_path, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _Endpoint:
@@ -411,7 +414,7 @@ def test_silence_reference_prefers_last_contact(tmp_path, monkeypatch):
 
 def test_silence_reference_defaults_when_attr_missing(tmp_path, monkeypatch):
     """端点缺 last_contact_ts -> 缺省 0.0 = 视为刚启动, 不告警"""
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _BareEndpoint:
@@ -424,7 +427,7 @@ def test_silence_reference_defaults_when_attr_missing(tmp_path, monkeypatch):
 
 
 def test_silence_missing_rejected_attr_defaults_zero(tmp_path, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _NoRejected:
@@ -437,7 +440,7 @@ def test_silence_missing_rejected_attr_defaults_zero(tmp_path, monkeypatch):
 
 
 def test_silence_where_after_contact_label(tmp_path, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _Contacted:
@@ -457,7 +460,7 @@ def test_silence_where_after_contact_label(tmp_path, monkeypatch):
 
 def test_silence_gap_floor_and_exact_boundary(tmp_path, monkeypatch):
     """静默 gap 下界 60s; 恰好到点即出声(不是「超过」才出声)"""
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 0.0)
 
     class _Fresh:
@@ -475,7 +478,7 @@ def test_silence_gap_floor_and_exact_boundary(tmp_path, monkeypatch):
 
 def test_silence_rejected_threshold_is_positive(tmp_path, monkeypatch):
     """被拒计数 >0 即算「有人在敲门」"""
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _Endpoint:
@@ -490,11 +493,11 @@ def test_silence_rejected_threshold_is_positive(tmp_path, monkeypatch):
 
 
 def test_silence_hours_value_uses_3600(tmp_path, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _Endpoint:
-        last_contact_ts = clock() - 650000.0
+        last_contact_ts = clock.now() - 650000.0
         rejected_contacts = 0
 
     worker = _silence_worker(tmp_path, clock, _Endpoint(), web_active=True)
@@ -504,7 +507,7 @@ def test_silence_hours_value_uses_3600(tmp_path, monkeypatch):
 
 
 def test_silence_event_tag_sets_domain(tmp_path, monkeypatch):
-    clock = Clock()
+    clock = FakeClock()
     monkeypatch.setattr(worker_module, "CHANNEL_SILENCE_WARN", 3600.0)
 
     class _Endpoint:

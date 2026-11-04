@@ -98,7 +98,6 @@ from hr_helpers import (
     EMPTY_TABLE_PAGE,
     LOGIN_PAGE,
     REVISED_PAGE,
-    Clock,
     FakeFetcher,
     global_conf,
     make_service as hr_make_service,
@@ -107,6 +106,8 @@ from hr_helpers import (
     site_conf,
     torrent_blob,
 )
+
+from clock import FakeClock
 
 SITE = "example"
 
@@ -167,7 +168,7 @@ def make_service(
 ) -> HrRefreshService:
     """薄绑定到 hr_helpers.make_service 单点(issue 26-10-29-1404 收口, 调用点签名不变)。
 
-    本文件的差异面: 假钟(clock 缺省时**每次新建** Clock 实例, 不共享 —— 可推进时钟
+    本文件的差异面: 假钟(clock 缺省时**每次新建** FakeClock 实例, 不共享 —— 可推进时钟
     跨用例共享就是状态泄漏)+ 空转 sleeper + owner="test"(owner 透传守阵
     test_store_lazy_branch_constructor_args 钉死该字样)。新场景(多站 confs / 换
     data_dir / sleeper=None)扩参数而不是内联 new。
@@ -175,7 +176,7 @@ def make_service(
     return hr_make_service(
         tmp_path,
         fetcher,
-        now_fn=clock or Clock(),
+        now_fn=(clock or FakeClock()).now,
         site_confs=confs if confs is not None else {SITE: site or site_conf()},
         gconf=gconf,
         owner="test",
