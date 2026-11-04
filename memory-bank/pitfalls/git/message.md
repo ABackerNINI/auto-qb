@@ -13,10 +13,12 @@
 
 ### `git commit -F - <<'MSG' … MSG && git push` 会让 push 静默不执行
 
-- **触发**: 想一条命令里"提交完顺手推"。
+- **触发**: 手拼裸 git 命令想"提交完顺手推"(提交与推送已由 `commands run ship.commit` 一条走完,
+  正常流程不会写出这种命令; 见于排障 / 绕行场景)。
 - **判别**: 结束符没被识别, 命令体读到 EOF, **push 被当成 heredoc 内容** ⇒ 提交成功但根本没推。
-- **处置**: commit 与 push 写成**两条独立命令**, 结束符单独占一行;
-  提交后看 `git status -sb` 的 `[ahead N]` 确认还没推。
+- **处置**: 提交与推送**不手拼命令** —— 一律 `commands run ship.commit`; 推没推上只认它的结果行
+  (「提交成功 <hash>」; 带「(未推送)」才补 `ship.push`) —— **不要**提交后用 `git status -sb` 快照
+  或手工 ls-remote 自查(快照本环境不可信, ls-remote 核对已内联进脚本; 见 [push.md](push.md) / [refs.md](refs.md))。
 
 ### 提交消息里的规模数字要在提交那一刻实测
 
@@ -28,7 +30,8 @@
 
 - **触发**: gitmoji 提交信息 / 闸门与远端输出含 emoji, 走 my-commit-flow 脚本 print。
 - **判别**: `UnicodeEncodeError: 'gbk' codec can't encode character '\U0001f41b'` —— 崩在打印层,
-  但 git 操作(如 commit)可能**已成功**; 别被退出码骗, 先跑 `verify_ref.py` 核实再决定重不重跑。
+  但 git 操作(如 commit)可能**已成功**; 别被退出码骗, 也**不要**手工核 ref / 远端 —— 核对已内联进
+  ship 脚本, 树净与否由重跑 `ship.commit` 的分流判定(见 [push.md](push.md))。
 - **处置**: 四个 CLI 入口脚本(commit/preflight/push/verify_ref)入口已统一
   `sys.stdout/stderr.reconfigure(encoding="utf-8", errors="replace")`; 新增打印外部输出的
   CLI 脚本照抄这三行(库模块不动全局 stdout)。顺带补了 verify_ref 的 `--help` 契约:
