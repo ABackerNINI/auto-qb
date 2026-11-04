@@ -19,17 +19,21 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 8 |
 | perf | 5 |
 | docs | 2 |
-| test | 4 |
+| test | 6 |
 | refactor | 3 |
 | feat | 20 |
 | chore | 3 |
-| question | 6 |
+| question | 7 |
 
 ## Open
 
+- [bug] [fuse release 摘标签路径缺 None-client 守卫(潜在, 现行接线不可达)](26-11-05-0200-bug-fuse-untag-none-client-guard.html) — fuse_mod rel…
+- [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 nor…
+- [test] [存量 hr apply 用例疑似假绿: 原地改 hr_check 致 apply 短路断言空转](26-11-05-0200-test-hr-apply-inplace-config-false-green.html) — test_hr_disc…
+- [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbman…
 - [bug] [规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)](26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html) — CheckAction…
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基…
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件…
