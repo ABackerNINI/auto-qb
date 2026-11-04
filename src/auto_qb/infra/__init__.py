@@ -5,6 +5,8 @@
 - locking.py   单实例锁（filelock + 伴生 meta.json）+ 全项目文件锁构造/释放单点（open_file_lock / release_file_lock）
 - store_recovery.py 「读坏 -> 留证 -> .bak 兜底」恢复链公共骨架（hr 站点文件与 state.json 共用）
 - versioning.py 落盘文件 schema 版本与逐级升级链（CURRENT_VERSIONS / MIGRATIONS / detect_version / migrate）
+- clock.py     生产时钟单点（Clock protocol + SystemClock/SYSTEM_CLOCK；生产代码唯一合法取时入口，
+               flaky 治理计划 26-11-05-0118 S1；测试侧假钟单点在 tests/clock.py）
 - logging.py   日志配置（控制台 + RotatingFileHandler；WARN: 与 stdlib logging 同名，包内一律相对导入）
 - utils.py     通用工具（解析/匹配/路径/变量替换）
 - notify.py    主动通知（WinRT toast / notify-send / osascript，零第三方依赖）

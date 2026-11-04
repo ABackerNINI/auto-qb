@@ -16,6 +16,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
+from clock import wait_until as _clock_wait_until  # noqa: E402  (单一实现单点, 计划 26-11-05-0118 S1)
+
 from auto_qb.config import (
     GroupingConfig,
     HRRule,
@@ -1263,19 +1265,16 @@ def drive_skip(mgr, timeout=5.0):
 
     生产由主循环每轮调 `ops.advance_due()`, 等待超时由 `next_run_at()` 并入; 测试里没有主循环,
     这里按同一预算反复推进直到没有在途 job。返回是否清空(超时 -> False)。
+    轮询骨架已收编进 tests/clock.py 的 wait_until 单点(计划 26-11-05-0118 S1), 这里只留
+    领域语义: 每拍 pump 一次 advance_due, 清空即 True。
     """
     ops = mgr.ctx.ops
-    deadline = time.time() + timeout
-    while True:
-        nxt = ops.next_run_at()
-        if nxt is None:
-            return True
-        if time.time() >= deadline:
-            return False
-        wait = nxt - time.time()
-        if wait > 0:
-            time.sleep(min(wait, 0.01))
+
+    def _drive() -> bool:
         ops.advance_due(budget_ms=200.0, budget_calls=100)
+        return ops.next_run_at() is None
+
+    return _clock_wait_until(_drive, timeout=timeout, interval=0.01)
 
 
 def seed_store(mgr, torrents=None):
@@ -1415,19 +1414,13 @@ def pin_atomic_write_crash(monkeypatch) -> None:
     monkeypatch.setattr(infra_utils, "atomic_write", _crash_mid)
 
 
-def wait_until(pred, *, timeout=3.0, poll=0.02) -> bool:
-    """轮询等待条件成立(线程用例): 命中即返回 True
+def wait_until(pred, *, timeout=3.0, poll=None):
+    """条件轮询等待 —— 单一实现在 tests/clock.py(计划 26-11-05-0118 S1 收编), 此处只再导出
 
-    超时分支再判一次 pred()(monitor_client 版语义): 只为减少线程用例的 flake ——
-    最后一个 poll 窗口内条件刚好翻转时多判一次, 方向只会更宽松, 不放宽任何断言语义
-    (现有断言没有一处依赖「必须更严」)。
+    既有调用点 `from helpers import wait_until` 不破; S3 迁移调用点后本别名一并删除。
+    新代码直接 `from clock import wait_until`。
     """
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if pred():
-            return True
-        time.sleep(poll)
-    return pred()
+    return _clock_wait_until(pred, timeout=timeout, poll=poll)
 
 
 def write_endpoint_pointer(
