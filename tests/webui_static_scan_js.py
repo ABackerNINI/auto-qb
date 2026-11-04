@@ -342,7 +342,7 @@ def _scan_filter_facets(text, rel, problems):
     text = _strip_js_comments(text)  # 注释里出现这些名字不算数(见 _strip_js_comments)
     if not re.search(r"^\s*facetRows\(\)\s*\{", text, re.M):
         problems.append(f"{rel} 找不到 facetRows() —— 筛选器选项的取数面单点(见 filters.js 注释)")
-    for name in ("tagOptions", "categoryOptions", "siteOptions", "pathOptions"):
+    for name in ("tagOptions", "categoryOptions", "siteOptions", "pathOptions", "relocateOptions"):
         body = _computed_body(text, name)
         if body is None:
             problems.append(f"{rel} 找不到 computed.{name}(改名前请同步本守阵)")

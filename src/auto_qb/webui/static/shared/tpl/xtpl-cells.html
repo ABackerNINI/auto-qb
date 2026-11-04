@@ -106,9 +106,16 @@
       <div v-else-if="col.key === 'last_activity'" class="g-stat" :title="$root.cellTimeHint(g.last_activity, 'last_activity')">{{ $root.cellTime(g.last_activity, 'last_activity') }}</div>
       <!-- 保存路径(2026-09-17): 组级取首位成员值(与路径筛选器同口径) -->
       <!-- 选中下划线(f-on)挂文字包裹层 .sp-body(同种子页口径): 挂单元格 div 会随列宽(行是 grid) -->
-      <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="g.save_path">
+      <!-- P1 迁移徽标(plan 26-11-04-1042): 位于路径列但**独立于路径筛选** ——
+           button 原生支持 Tab/Enter/Space/触屏 tap, @click.stop 只开详情, 不触发路径筛选 -->
+      <div v-else-if="col.key === 'save_path'" class="g-save-path"
+           :class="{ 'has-rel': !!$root.relocateBadge(g) }" :title="g.save_path">
         <span class="sp-body f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', g.save_path) }"
               @click.stop="$root.filterFromChip('path', g.save_path)">{{ g.save_path || '' }}</span>
+        <button v-if="$root.relocateBadge(g)" type="button" class="rel-badge"
+                :class="'rel-' + $root.relocateBadge(g).cls"
+                :title="$root.relocateBadge(g).title" :aria-label="$root.relocateBadge(g).title"
+                @click.stop="$root.relocateOpen(g)">{{ $root.relocateBadge(g).label }}</button>
       </div>
       <!-- 可选列(默认隐藏口径见 app.js DEFAULT_HIDDEN_KEYS): 表头名称与种子页同名列对齐 -->
       <!-- 剩余 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
@@ -190,9 +197,14 @@
       </div>
       <!-- 保存路径: 选中下划线(f-on)必须挂**文字**包裹层 .sp-body —— 挂单元格 div 会随列宽
            (行是 grid, 单元格被拉满列宽), 与 .m-dur 的 .dur-body 同一教训 -->
-      <div v-else-if="col.key === 'save_path'" class="g-save-path" :title="m.save_path">
+      <div v-else-if="col.key === 'save_path'" class="g-save-path"
+           :class="{ 'has-rel': !!$root.relocateBadge(m) }" :title="m.save_path">
         <span class="sp-body f-cell" :class="{ 'f-on': $root.isFilterOn('pathFilter', m.save_path) }"
               @click.stop="$root.filterFromChip('path', m.save_path)">{{ m.save_path || '' }}</span>
+        <button v-if="$root.relocateBadge(m)" type="button" class="rel-badge"
+                :class="'rel-' + $root.relocateBadge(m).cls"
+                :title="$root.relocateBadge(m).title" :aria-label="$root.relocateBadge(m).title"
+                @click.stop="$root.relocateOpen(m)">{{ $root.relocateBadge(m).label }}</button>
       </div>
     </template>
   </script>

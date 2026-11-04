@@ -209,6 +209,7 @@
             <template v-if="siteFilter.length">站点“{{ siteFilter.join('/') }}” </template>
             <template v-if="hrFilter.length">H&R“{{ hrFilter.join('/') }}” </template>
             <template v-if="hrSrcFilter.length">HR 来源“{{ hrSrcFilter.join('/') }}” </template>
+            <template v-if="relocateFilter.length">迁移状态“{{ relocateFilter.join('/') }}” </template>
             <template v-if="pathFilter.length">路径“{{ pathFilter.join(' / ') }}” </template>
             → <b>{{ viewMode === 'torrents' ? filteredTorrents.length : viewMode === 'shows' ? showStats.eps : filteredGroups.length }}</b>{{ viewMode === 'torrents' ? ' 个种子' : viewMode === 'shows' ? ` 集(共 ${showStats.shows} 部剧)` : ` 个${l10nGroup}` }}<template v-if="searchQuery.trim()">(仅命中成员高亮)</template>
             <!-- 搜索自动更新提示(plan 26-11-03-0120 F4): 紧接结果计数, 3s 后自收(窗口内累计计数);

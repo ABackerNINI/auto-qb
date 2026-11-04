@@ -26,7 +26,7 @@ Object.assign(window.AQB_DRAWER.methods, {
       const size = (v) => this.fmtSizeOrDash(v) || "—";
       const yn = (v) => (v ? "是" : "否");
       const lim = (v) => (v === null || v === undefined || v < 0) ? "未设" : (v === 0 ? "不限" : this.fmtDuration(v));
-      return [
+      const out = [
         {
           title: "基础",
           sum: `容量 ${size(d.size)} · 分享率 ${(d.ratio ?? 0).toFixed(2)}`,
@@ -104,6 +104,28 @@ Object.assign(window.AQB_DRAWER.methods, {
           ],
         },
       ];
+      /* P1 迁移段(plan 26-11-04-1042): 数据源 = /api/torrents/{hash} 新增的 relocate 投影。
+       * 无 job 时**整段不渲染** —— 旧 state / 未迁移种子不得出现「已完成」之类误导结论。 */
+      const rel = d.relocate;
+      if (rel) {
+        out.push({
+          title: "迁移",
+          sum: `${this.relocateStateText(rel.state)}${rel.mover ? " · 搬移成员" : " · 受影响成员"}`,
+          rows: [
+            { icon: "#i-refresh", label: "迁移状态", text: this.relocateStateText(rel.state) },
+            { icon: "#i-info", label: "设置来源", text: this.relocateOriginText(rel.origin) },
+            { icon: "#i-check-circle", label: "auto-qb 设置", text: "是" },
+            { icon: "#i-hash", label: "任务标识", text: rel.job_id || "—", mono: true, wide: true, act: "copy" },
+            { icon: "#i-folder", label: "源路径", text: rel.src || "—", wide: true, act: "open" },
+            { icon: "#i-folder-open", label: "目标路径", text: rel.dst || "—", wide: true, act: "open" },
+            { icon: "#i-layers", label: "关联别名", text: rel.alias_count ? `${rel.alias_count} 个（${rel.alias_kind || "未知类型"}）` : "无" },
+            { icon: "#i-timer", label: "收尾武装", text: rel.armed_at ? ts(rel.armed_at) : "未武装" },
+            { icon: "#i-clock", label: "最近更新", text: ts(rel.updated_at) },
+          ].concat(rel.state === "failed" && rel.reason
+            ? [{ icon: "#i-warn", label: "失败原因", text: rel.reason, wide: true }] : []),
+        });
+      }
+      return out;
     },
     /* FX-22: 字段行图标着色 —— 由**图标名派生**色调类, 而不是给 48 行逐个加 tone 字段:
      * 图标本身已隐含语义(下载/上传/日历/文件夹/哈希...), 派生表是单点, 新增行自动生效。

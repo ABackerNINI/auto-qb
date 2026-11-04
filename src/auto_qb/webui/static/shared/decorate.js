@@ -29,13 +29,24 @@
  */
 const _decoCache = new WeakMap();
 
-/* relocate 标注签名(plan 26-11-04-1042 P0-5): 后端每次重建会产出新的 relocate 对象,
- * 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成值签名后再比较。 */
+/* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at): 后端每次重建会产出新的
+ * relocate 对象, 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成值签名后再比较。
+ * P1 详情段消费 src/armed_at; 徽标 title 也消费 src, 任一值推进必须让装饰缓存失效。 */
 function _relocateSig(r) {
   if (!r) return "";
-  return [r.state, r.phase, r.job_id, r.mover ? 1 : 0, r.origin, r.alias_kind, r.alias_count, r.dst,
-          r.updated_at, r.reason].join("|");
+  return [r.state, r.phase, r.job_id, r.mover ? 1 : 0, r.origin, r.alias_kind, r.alias_count, r.src, r.dst,
+          r.armed_at, r.updated_at, r.reason].join("|");
 }
+
+/* 迁移状态展示词表(plan 26-11-04-1042 P1): 徽标 / 筛选 / 详情段共用一份, 禁止在模板里
+ * 另写字面量三元。done / cancelled 不长期挂徽标, 但仍算「有过迁移」。 */
+const RELOCATE_STATE_TEXT = {
+  moving: "迁移中", pending_finalize: "待收尾", failed: "迁移失败",
+  mixed: "迁移多任务", done: "已完成", cancelled: "已撤销",
+};
+const RELOCATE_STATE_CLASS = { moving: "moving", pending_finalize: "pending", failed: "failed", mixed: "mixed" };
+const RELOCATE_FILTER_ANY = "有过迁移";
+const RELOCATE_ORIGIN_TEXT = { web: "WebUI", rule: "规则", unknown: "未知来源" };
 
 function _groupRelocateSig(r) {
   if (!r) return "";
@@ -103,6 +114,76 @@ const REANNOUNCE_BLOCKED_KINDS = { paused: "种子暂停", checking: "种子校�
 
 window.AQB_DECORATE = {
   methods: {
+    /* ------------------------------------------- 迁移可见性 P1(plan 26-11-04-1042)
+     * 行内徽标 / 筛选桶 / 详情段的**唯一**展示口径。数据一律来自后端 P0 投影:
+     * 组行读 g.relocate(后端聚合, 不取首成员推断), 种子行读 m.relocate。 */
+    relocateStateText(state) {
+      return RELOCATE_STATE_TEXT[state] || "未知状态";
+    },
+    relocateOriginText(origin) {
+      return RELOCATE_ORIGIN_TEXT[origin] || (origin ? origin : "未知来源");
+    },
+    /* 徽标只挂"还需要用户看一眼"的状态: moving / pending_finalize / failed / mixed。
+     * done / cancelled / 无 relocate 恒 null —— 没有迁移记录时绝不显示「已完成」之类结论。 */
+    relocateBadge(row) {
+      const rel = row && row.relocate;
+      if (!rel) return null;
+      const cls = RELOCATE_STATE_CLASS[rel.state];
+      if (!cls) return null;
+      const label = RELOCATE_STATE_TEXT[rel.state];
+      if (!label) return null;
+      return { cls, label, title: this.relocateTitle(row) };
+    },
+    relocateTitle(row) {
+      const rel = row.relocate;
+      // 组行 dst 是数组(P0 聚合), 成员行 dst 是字符串(P0 投影) —— 展示层统一成列表, 不在此猜类型
+      const dst = (Array.isArray(rel.dst) ? rel.dst : (rel.dst ? [rel.dst] : [])).filter(Boolean);
+      const dstText = dst.length ? ` · 目标 ${dst.join(" / ")}` : "";
+      if (row.members) {
+        const base = rel.state === "mixed" ? "组内存在多个迁移任务，状态不一致"
+          : rel.state === "failed" ? "迁移失败"
+            : rel.state === "moving" ? "迁移中" : "待收尾";
+        const pendingText = rel.total ? ` · ${rel.pending}/${rel.total} 个成员待收尾` : "";
+        return `${base}${pendingText}${dstText} · 点击打开详情`;
+      }
+      const arrow = rel.src && rel.dst ? ` · ${rel.src} → ${rel.dst}` : dstText;
+      const base = rel.state === "failed"
+        ? `迁移失败${rel.reason ? "：" + rel.reason : ""}`
+        : rel.state === "pending_finalize"
+          ? `待收尾${rel.armed_at ? "（已武装收尾）" : ""}` : "迁移中";
+      return `${base}${arrow} · 点击打开详情`;
+    },
+    /* 徽标点击只开详情, 绝不触发路径筛选(@click.stop 在模板侧保证)。组行取搬移成员优先 */
+    relocateTargetHash(row) {
+      const ms = row && row.members;
+      if (!ms || !ms.length) return (row && row.hash) || "";
+      const rel = ms.find((m) => m.relocate && m.relocate.mover) || ms.find((m) => m.relocate) || ms[0];
+      return rel.hash || "";
+    },
+    relocateOpen(row) {
+      const hash = this.relocateTargetHash(row);
+      if (hash) this.openTorrentDrawer(hash);
+    },
+    /* 迁移筛选桶(成员级): 进行中三态 + 「有过迁移」(done/cancelled 也计入历史, 但不挂徽标) */
+    _relocatePick(r) {
+      const rel = r && r.relocate;
+      if (!rel) return [];
+      const out = [];
+      if (rel.state !== "done" && rel.state !== "cancelled" && rel.state !== "mixed") {
+        const label = RELOCATE_STATE_TEXT[rel.state];
+        if (label) out.push(label);
+      }
+      out.push(RELOCATE_FILTER_ANY);
+      return out;
+    },
+    /* 组级筛选桶: 组内任一成员落某档即保留整组(与 _hrBuckets 同语义) */
+    _relocateBuckets(row) {
+      const out = [];
+      for (const r of row.members || [row]) {
+        for (const b of this._relocatePick(r)) if (!out.includes(b)) out.push(b);
+      }
+      return out;
+    },
     /* ------------------------------------------- 组级"共同值"计算(组级标签/分类列)
      *
      * 后端只透出成员原始值, 共同值(交集/一致值)在**前端**计算: 这类派生展示数据不参与

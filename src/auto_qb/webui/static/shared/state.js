@@ -247,14 +247,17 @@ window.AQB_STATE = {
       searchHelpOpen: false,  // 搜索语法浮卡开合(计划 26-09-28-0201 方案A; 临时浮层, 点空白/Esc/导航收起)
       kindFilter: "",         // 状态筛选(seeding/downloading/... ; 空 = 不筛选)
       // 多选筛选(组内任一成员命中任一选中值即保留该组; 同一筛选器内多选为"或")
-      // pathFilter 与其它筛选器同形(数组多选) —— 四个筛选器共用一份 filterDefs 与渲染模板
+      // pathFilter 与其它筛选器同形(数组多选) —— 各筛选器共用一份 filterDefs 与渲染模板
       pathFilter: [],
       tagFilter: [],
       categoryFilter: [],
       siteFilter: [],
       hrFilter: [],          // H&R 筛选(不能删/考核未通过/可删/疑似辅种; 与其它多选筛选器同形, 口径见 _hrBuckets)
       hrSrcFilter: [],       // HR 来源筛选(在线核实/本地兜底/策略; 口径见 hr.js hrSrcOptions)
-      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "hr" | "hr-src" | "path"
+      // 迁移状态筛选(plan 26-11-04-1042 P1): 与路径筛**互不影响** —— 路径筛仍按 qB save_path,
+      // 本筛选只读 relocate 标注(moving/pending_finalize/failed/有过迁移; 口径见 decorate.js _relocateBuckets)
+      relocateFilter: [],
+      filterMenu: "",         // 当前展开的筛选弹层: "" | "tag" | "category" | "site" | "hr" | "hr-src" | "relocate" | "path"
       popFlip: false,         // 筛选弹层视口翻转(锚点靠右时改为右对齐, 避免伸出屏幕)
       colFlip: false,         // 列选择器弹层视口翻转(同上)
       toasts: [],             // 站内提示条(替代 alert)

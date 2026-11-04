@@ -498,3 +498,33 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 .rowlang-menu .rowlang-item:hover { background: var(--surface-2); color: var(--fg); }
 .rowlang-menu .rowlang-item.on { background: var(--accent-soft); color: var(--fg); font-weight: 600;
   box-shadow: inset 2px 0 0 var(--accent); }
+
+/* ---------------------------------------------------------------- 迁移徽标(plan 26-11-04-1042 P1)
+ * 落点 = 路径列 .g-save-path(**在 .rl-scope 主表内**, 故只挂 .rl-scope 前缀; 与行语言无关,
+ * 不依赖 data-rowlang)。结构: 路径文字 .sp-body + 可访问控件 button(原生 Tab/Enter/Space/触屏
+ * tap), 点击只开详情(@click.stop 在模板侧), 不触发路径筛选。
+ * 宽度: has-rel 时单元格转 flex, 路径文字 flex:1 min-width:0 保左右省略, 徽标 flex:0 0 auto
+ * 不被长路径挤出列外。颜色一律吃皮肤令牌(warn/error/accent 三族名集由 token parity 守阵)。 */
+.rl-scope .g-save-path.has-rel { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.rl-scope .g-save-path.has-rel .sp-body { flex: 1 1 auto; min-width: 0; }
+.rl-scope .rel-badge {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  min-height: 0; height: 18px; margin: 0; padding: 0 6px; box-sizing: border-box;
+  border: 1px solid var(--accent-line, rgba(255,255,255,.25)); border-radius: 999px;
+  background: var(--accent-soft, rgba(58,166,166,.12)); color: var(--accent, #3aa6a6);
+  font: inherit; font-size: 11px; line-height: 1; white-space: nowrap; cursor: pointer;
+}
+.rl-scope .rel-badge:hover { filter: brightness(1.08); }
+.rl-scope .rel-badge:focus-visible { outline: 2px solid var(--accent, #3aa6a6); outline-offset: 2px; }
+.rl-scope .rel-badge.rel-pending {
+  border-color: var(--warn-line, rgba(245,187,66,.45)); background: var(--warn-soft, rgba(245,187,66,.15));
+  color: var(--warn, #f5bb42);
+}
+.rl-scope .rel-badge.rel-failed {
+  border-color: var(--error-line, rgba(243,118,111,.45)); background: var(--error-soft, rgba(243,118,111,.15));
+  color: var(--error, #f3766f);
+}
+.rl-scope .rel-badge.rel-mixed {
+  border-color: var(--warn-line, rgba(245,187,66,.45)); background: var(--warn-soft, rgba(245,187,66,.15));
+  color: var(--warn, #f5bb42); border-style: dashed;
+}

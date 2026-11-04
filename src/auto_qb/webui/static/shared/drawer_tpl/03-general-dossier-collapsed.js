@@ -268,6 +268,8 @@
       secHtml("xfer", "传输", gridRows(secs["传输"]), secs["传输"] ? secs["传输"].rows.length : 0),
       secHtml("time", "时间", gridRows(secs["时间"]), secs["时间"] ? secs["时间"].rows.length : 0),
       secHtml("path", "路径与开关", gridRows(secs["路径"]), secs["路径"] ? secs["路径"].rows.length : 0),
+      // P1 迁移段: 仅在有 relocate 投影时 drawerGeneralSections 才产出该项, 空态整段不渲染
+      secHtml("relocate", "迁移", gridRows(secs["迁移"]), secs["迁移"] ? secs["迁移"].rows.length : 0),
     ].join("");
 
     /* ---- 右栏 ---- */

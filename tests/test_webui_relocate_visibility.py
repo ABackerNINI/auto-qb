@@ -1,4 +1,4 @@
-"""WebUI 迁移可见性 P0(plan 26-11-04-1042): 快照/标注/组级聚合/指纹/零触盘
+"""WebUI 迁移可见性 P0/P1(plan 26-11-04-1042): 快照/标注/组级聚合/指纹/行内徽标/筛选/详情段
 
 ## 测试计划
 - test_state_of_phase_merges: 相位归并到 moving / pending_finalize / done / failed / cancelled(未知按 moving)
@@ -9,10 +9,17 @@
 - test_relocate_null_when_disabled_or_no_jobs: relocate 关 / 无 job(含旧 state 无 relocate 段) => relocate 字段 null
 - test_view_build_does_not_probe_filesystem_or_iterate_jobs: 列表构建期不 lstat/stat/readlink/islink, 不遍历 _jobs
 - test_decorate_fingerprint_includes_relocate: decorate.js 成员/组 relocate 签名进指纹且槽位长度同步
+- test_p1_badge_rendered_in_path_cells: 组行/种子行路径列渲染 button.rel-badge, click.stop 只开详情
+- test_p1_badge_state_mapping_node: node 探针验证 moving/pending/failed/mixed 词表与 done/空态不挂徽标
+- test_p1_filter_semantics_and_path_filter_untouched: 迁移状态筛走 facetRows/_facetOptions, 路径筛仍按 save_path
+- test_p1_detail_section_and_endpoint_projection: 详情端点带 relocate; 无 job 时详情段整段不渲染
 """
 from __future__ import annotations
 
+import json
 import os
+import shutil
+import subprocess
 
 import pytest
 
@@ -218,3 +225,102 @@ def test_decorate_fingerprint_includes_relocate():
     assert "_relocateSig(m.relocate)" in js
     assert "fp.length !== ms.length * 8 + 3" in js, "成员 relocate 槽 + 组 relocate 槽必须同步长度"
     assert "_groupRelocateSig(g.relocate)" in js
+    assert "r.armed_at" in js and "r.src" in js, "P1 详情/徽标消费 src/armed_at, 必须进装饰指纹"
+
+
+def _static(name: str) -> str:
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static" / name).read_text(encoding="utf-8")
+
+
+def test_p1_badge_rendered_in_path_cells():
+    cells = _static("shared/tpl/xtpl-cells.html")
+    assert cells.count('class="rel-badge"') >= 2, "组行与种子行路径列都要有迁移徽标"
+    assert cells.count('type="button" class="rel-badge"') == 2, "徽标必须是可访问 button(非 div/span)"
+    assert cells.count('@click.stop="$root.relocateOpen(') == 2, "徽标点击只能开详情, 不得冒泡触发路径筛选"
+    assert cells.count("$root.relocateBadge(") >= 4, "徽标文案/类/title 必须走同一展示方法, 模板不写状态字面量"
+    assert ".g-save-path.has-rel" in _static("shared/row_lang.css")
+    assert "rel-badge" in _static("shared/row_lang.css") and ":focus-visible" in _static("shared/row_lang.css")
+
+
+_NODE_BADGE_PROBE = r"""
+const fs=require('fs'),vm=require('vm');
+const sandbox={window:{},console};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(process.argv[1],'utf8'),sandbox);
+const M=Object.assign({},sandbox.window.AQB_DECORATE.methods);
+const call=(name,row)=>M[name].call(Object.assign({},M),row);
+const b=(row)=>{const x=call('relocateBadge',row);return x&&{label:x.label,cls:x.cls,title:x.title};};
+const out={
+  moving:b({relocate:{state:'moving',src:'R:/src',dst:'R:/dst'}}),
+  pending:b({relocate:{state:'pending_finalize',src:'R:/src',dst:'R:/dst',armed_at:5}}),
+  failed:b({relocate:{state:'failed',src:'R:/src',dst:'R:/dst',reason:'boom'}}),
+  mixed:b({members:[{}],relocate:{state:'mixed',pending:1,total:2,dst:['R:/dst']}}),
+  done:b({relocate:{state:'done',src:'R:/src',dst:'R:/dst'}}),
+  cancelled:b({relocate:{state:'cancelled',src:'R:/src',dst:'R:/dst'}}),
+  none:b({relocate:null}),
+  buckets:call('_relocateBuckets',{members:[
+    {relocate:{state:'moving'}},{relocate:{state:'pending_finalize'}},{relocate:{state:'done'}},{}
+  ]}),
+  target:call('relocateTargetHash',{members:[{hash:'H0'},{hash:'H1',relocate:{mover:true}}]}),
+  targetNone:call('relocateTargetHash',{members:[{hash:'H0'}]}),
+};
+process.stdout.write(JSON.stringify(out));
+"""
+
+
+def test_p1_badge_state_mapping_node():
+    node = shutil.which("node")
+    if not node:
+        return
+    from pathlib import Path
+
+    js = Path(__file__).resolve().parents[1] / "src/auto_qb/webui/static/shared/decorate.js"
+    proc = subprocess.run([node, "-e", _NODE_BADGE_PROBE, str(js)], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)
+
+    assert out["moving"]["label"] == "迁移中" and out["moving"]["cls"] == "moving"
+    assert out["moving"]["title"].startswith("迁移中") and "R:/src → R:/dst" in out["moving"]["title"]
+    assert out["pending"]["label"] == "待收尾" and out["pending"]["cls"] == "pending"
+    assert "已武装收尾" in out["pending"]["title"]
+    assert out["failed"]["label"] == "迁移失败" and out["failed"]["cls"] == "failed"
+    assert "boom" in out["failed"]["title"]
+    assert out["mixed"]["label"] == "迁移多任务" and out["mixed"]["cls"] == "mixed"
+    # 空态/终态绝不挂徽标 —— 没有迁移记录时不得出现「已完成」误导结论
+    assert out["done"] is None and out["cancelled"] is None and out["none"] is None
+    # 组级筛选桶: 组内任一成员落档即保留; done 只贡献「有过迁移」
+    assert "迁移中" in out["buckets"] and "待收尾" in out["buckets"] and "有过迁移" in out["buckets"]
+    assert out["target"] == "H1", "组行徽标优先打开搬移成员详情"
+    assert out["targetNone"] == "H0", "无迁移成员时退回组内首成员"
+
+
+def test_p1_filter_semantics_and_path_filter_untouched():
+    filters = _static("shared/filters.js")
+    state = _static("shared/state.js")
+    assert "relocateFilter: []" in state
+    assert "relocateOptions() {" in filters
+    assert '_facetOptions("relocate")' in filters and 'kind === "relocate"' in filters
+    assert 'kind: "relocate", label: "迁移状态"' in filters
+    assert "this.relocateFilter.length" in filters, "迁移状态筛选必须进入筛选激活判定/应用分支"
+    assert '_relocateBuckets(g)' in filters and '_relocateBuckets(r)' in filters
+    assert '_relocateBuckets(m)' in _static("shared/hr.js"), "展开组成员也要吃迁移状态筛选"
+    # 路径筛选保持 qB save_path 语义不变(用户已拍板)
+    assert "this.pathFilter.includes(g.save_path)" in filters
+    assert "this.pathFilter.includes(r.save_path || \"\")" in filters
+    assert "filterFromChip('path', g.save_path)" in _static("shared/tpl/xtpl-cells.html")
+    assert "filterFromChip('path', m.save_path)" in _static("shared/tpl/xtpl-cells.html")
+
+
+def test_p1_detail_section_and_endpoint_projection():
+    route = _static("../server/routes/torrent_detail.py")
+    assert '"relocate": relocate(hash) if relocate else None' in route
+    assert 'getattr(manager, "_relocate_member", None)' in route
+    rows = _static("shared/drawer_rows.js")
+    assert 'title: "迁移"' in rows and "if (rel)" in rows
+    assert 'label: "迁移状态"' in rows and 'label: "设置来源"' in rows
+    assert 'label: "任务标识"' in rows and 'label: "收尾武装"' in rows
+    tpl02 = _static("shared/drawer_tpl/02-general-cards-low.js")
+    tpl03 = _static("shared/drawer_tpl/03-general-dossier-collapsed.js")
+    assert 'secs["迁移"]' in tpl02 and 'secs["迁移"]' in tpl03

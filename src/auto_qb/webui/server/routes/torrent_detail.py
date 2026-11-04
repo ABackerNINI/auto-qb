@@ -31,14 +31,23 @@ def build_router(ctx: WebContext) -> APIRouter:
     @router.get("/api/torrents/{hash}")
     def api_torrent_detail(hash: str):
         """单种子全量详情: TorrentRecord.to_dict 全字段(含 _raw 前向兼容字段)
-        + site(站点名) + HR 展示字段(与分组成员视图同源) —— 详情抽屉 General tab 数据源"""
+        + site(站点名) + HR 展示字段(与分组成员视图同源) + 迁移标注(P1 详情段)
+        —— 详情抽屉 General tab 数据源"""
         manager.web.touch()
         rec = _require_torrent(hash)
+        # 与列表成员视图同一投影(P0 契约): 无 job 时为 null, 详情段据此整段不渲染。
+        # 老测试替身没有该内联方法 => 回落 null(只影响装配期替身, 生产 manager 恒有实现)
+        relocate = getattr(manager, "_relocate_member", None)
         return JSONResponse(
-            content={"torrent": {
-                **rec.to_dict(), "site": rec.tracker_name,
-                **manager.hr_view_fields(rec)
-            }}
+            content={
+                "torrent":
+                    {
+                        **rec.to_dict(),
+                        "site": rec.tracker_name,
+                        **manager.hr_view_fields(rec),
+                        "relocate": relocate(hash) if relocate else None,
+                    }
+            }
         )
 
     @router.get("/api/torrents/{hash}/trackers")

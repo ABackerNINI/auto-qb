@@ -278,6 +278,7 @@ window.AQB_HR = {
       if (this.siteFilter.length && !this.siteFilter.includes(m.site)) return false;
       if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(m))) return false;
       if (this.hrSrcFilter.length && !this.hrSrcFilter.includes(this._hrSrcBucketMember(m))) return false;
+      if (this.relocateFilter.length && !this.relocateFilter.some((b) => this._relocateBuckets(m).includes(b))) return false;
       return true;
     },
     _hrBucketMember(m) {

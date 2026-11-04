@@ -105,6 +105,7 @@ window.AQB_AUTH = {
       this.categoryFilter = [];
       this.siteFilter = [];
       this.hrFilter = [];
+      this.relocateFilter = [];
       this.singles = [];
       this.torrents = [];
       this.shows = { list: [], unrecognized: [] };

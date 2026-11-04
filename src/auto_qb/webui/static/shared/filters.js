@@ -42,10 +42,11 @@ window.AQB_FILTERS = {
         else if (kind === "category" && r.category) out.push(r.category);
         else if (kind === "site" && r.site) out.push(r.site);
         else if (kind === "path") out.push(r.save_path || "");
+        else if (kind === "relocate") out.push(...this._relocatePick(r));
       }
       return out;
     },
-    /* 选项(带计数, 按出现行数降序, 同数按值排序): 四个筛选器共用一份实现 */
+    /* 选项(带计数, 按出现行数降序, 同数按值排序): 各筛选器共用一份实现 */
     _facetOptions(kind) {
       const counts = new Map();
       for (const row of this.facetRows) {
@@ -102,6 +103,7 @@ window.AQB_FILTERS = {
       this.siteFilter = [];
       this.hrFilter = [];
       this.hrSrcFilter = [];
+      this.relocateFilter = [];
       this.filterMenu = "";
       this.expandedKey = null;
     },
@@ -142,13 +144,15 @@ window.AQB_FILTERS = {
     },
     filtersActive() {
       return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length || this.categoryFilter.length ||
-        this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length || (this.searchQuery || "").trim());
+        this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length || this.relocateFilter.length ||
+        (this.searchQuery || "").trim());
     },
     /* 面筛(不含搜索词)是否有值: Esc 退栈链「清筛选」兜底的门 —— 与 clearFilters 字段清单
      * 同源, 新增面筛字段时两处同步; 搜索词不算(归 clearSearch, Esc 兜底不动它) */
     facetsActive() {
       return !!(this.kindFilter || this.pathFilter.length || this.tagFilter.length ||
-        this.categoryFilter.length || this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length);
+        this.categoryFilter.length || this.siteFilter.length || this.hrFilter.length || this.hrSrcFilter.length ||
+        this.relocateFilter.length);
     },
     /* 四个筛选器的定义(模板只遍历这一份, 不再手写四块相同结构)
      * 路径筛选器与其它三个同形(多选数组): 选中项存 field 指向的数组, 计数口径见 facetRows
@@ -163,6 +167,8 @@ window.AQB_FILTERS = {
         // HR 来源副筛选(在线核实/本地兜底/策略): 结论来自优先级链哪一档 —— "只看本地兜底"
         // 正是最需要等在线核实结果的一批种子(计划 webui-hr-safety-display §5 P3)
         { kind: "hr-src", label: "HR 来源", icon: "i-hr", options: this.hrSrcOptions, selected: this.hrSrcFilter, field: "hrSrcFilter" },
+        // 迁移状态(plan 26-11-04-1042 P1): 独立筛选器, **不改路径筛语义** —— 路径仍按 qB save_path
+        { kind: "relocate", label: "迁移状态", icon: "i-refresh", options: this.relocateOptions, selected: this.relocateFilter, field: "relocateFilter" },
         { kind: "path", label: "路径", icon: "i-folder-open", options: this.pathOptions, selected: this.pathFilter, field: "pathFilter" },
       ];
     },
@@ -179,6 +185,10 @@ window.AQB_FILTERS = {
     },
     pathOptions() {
       return this._facetOptions("path");
+    },
+    // 迁移状态选项: 与其它筛选器同一取数单点(facetRows + _facetOptions), 计数 = 含该状态的组/种子数
+    relocateOptions() {
+      return this._facetOptions("relocate");
     },
     // 搜索是辅种管理的筛选: 在真实辅种组上筛选——组内任一成员命中即保留整组(组行沿用真实 key,
     // 组级操作可用), 仅命中成员 search-hit 高亮; 未归组的命中种子(分组未启用/文件列表不可读等)
@@ -197,6 +207,10 @@ window.AQB_FILTERS = {
       }
       if (this.hrSrcFilter.length) {
         base = base.filter((g) => this.hrSrcFilter.some((b) => this._hrSrcBuckets(g).includes(b)));
+      }
+      // 迁移状态筛选独立于路径筛选: 组内任一成员落某档即保留整组(与 H&R 组级桶同语义)
+      if (this.relocateFilter.length) {
+        base = base.filter((g) => this.relocateFilter.some((b) => this._relocateBuckets(g).includes(b)));
       }
       if (this.pathFilter.length) {
         base = base.filter((g) => this.pathFilter.includes(g.save_path));
@@ -239,6 +253,7 @@ window.AQB_FILTERS = {
         if (this.kindFilter && r.kind !== this.kindFilter) continue;
         if (this.hrFilter.length && !this.hrFilter.includes(this._hrBucketMember(r))) continue;
         if (this.hrSrcFilter.length && !this.hrSrcFilter.includes(this._hrSrcBucketMember(r))) continue;
+        if (this.relocateFilter.length && !this.relocateFilter.some((b) => this._relocateBuckets(r).includes(b))) continue;
         if (this.pathFilter.length && !this.pathFilter.includes(r.save_path || "")) continue;
         if (this.tagFilter.length && !(r.tags || []).some((t) => this.tagFilter.includes(t))) continue;
         if (this.categoryFilter.length && !this.categoryFilter.includes(r.category || "")) continue;
@@ -252,6 +267,7 @@ window.AQB_FILTERS = {
           hr_triggered: r.hr_triggered ? 1 : 0,
           hr_pending: r.hr_triggered && !r.hr_satisfied ? 1 : 0,
           status: { primary: r.kind, text: this.kindText(r.kind) },
+          relocate: r.relocate || null,  // 未归组命中行保留迁移标注(筛选桶不丢历史)
           commonTags: { list: this.mTags(r), diff: false },
           commonCategory: { value: r.category || "", diff: false },
           sizeMismatch: false,

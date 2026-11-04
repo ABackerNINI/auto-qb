@@ -281,6 +281,7 @@
       [
         metaBody ? card("meta", "元信息", "", metaBody) : "",
         (secs["路径"] || flags) ? card("store", "存储与行为", (secs["路径"] || { rows: [] }).rows.length + " 项", storeBody) : "",
+        secs["迁移"] ? card("relocate", "迁移", secs["迁移"].rows.length + " 项", secRows(secs["迁移"])) : "",
       ],
     ];
     const html = T`<div class="dt02-wrap"><div class="dt02-cards">${R(cols.map((col) => T`<div class="dt02-col">${R(col.join(""))}</div>`).join(""))}</div></div>`;
