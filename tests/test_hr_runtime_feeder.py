@@ -48,6 +48,8 @@ import time
 
 import pytest
 
+from clock import wait_until  # noqa: E402  (单一实现单点, 计划 26-11-05-0118 S3: 调用点一律直连 clock 模块)
+
 from auto_qb.config.models import Config, HrChannelConfig, HrCheckConfig, SiteHrCheckConfig, TrackerConfig
 
 from auto_qb.hr.channel import HrChannelBindError
@@ -75,6 +77,22 @@ from hr_runtime_support import (
 )
 
 H1 = "aa" * 20
+
+
+class _WaitProbe(threading.Event):
+    """wait() 入口探针: 线程一进可中断等待就置 entered —— 替代「睡一拍赌它进去了」的固定睡等
+
+    sleeper 的可中断语义钉在 `_sleep_stop.wait()` 这一位上: 探针子类只记入口不改行为,
+    set()/clear()/is_set() 全部走 Event 原实现(stop() 直接可用)。用例等 entered 命中后再
+    打断, 打断必然落在等待**内**(sleeper 已越过循环顶的 is_set 检查), 不再依赖真睡步长。
+    """
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = threading.Event()
+
+    def wait(self, timeout=None):
+        self.entered.set()
+        return super().wait(timeout)
 
 
 def test_view_snapshot_and_wake_are_safe_when_not_started(tmp_path):
@@ -123,6 +141,8 @@ def test_sleeper_is_interruptible_by_stop(tmp_path):
     共享目录下其它实例也一直被挡在锁外。
     """
     runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    probe = _WaitProbe()
+    runtime._sleep_stop = probe  # 打断点必须落在等待内: 探针在 wait() 入口置 entered
     errs: list = []
 
     def run():
@@ -133,7 +153,7 @@ def test_sleeper_is_interruptible_by_stop(tmp_path):
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
-    time.sleep(0.1)  # 让它真的睡进去
+    assert probe.entered.wait(5.0), "用例前提: 线程已睡进可中断等待"
     started = time.monotonic()
     runtime.stop()
     thread.join(5.0)
@@ -178,10 +198,7 @@ def test_runtime_uses_anchors_provider(tmp_path):
     runtime._anchors = counting  # 实例属性遮蔽: HrWorker 构造时绑定的就是这个包装
     runtime.start()
     try:
-        deadline = time.monotonic() + 3.0
-        while not calls and time.monotonic() < deadline:
-            time.sleep(0.02)
-        assert calls, "取数线程应经门面 _anchors 拿本地锚点(M3 的交接面)"
+        assert wait_until(lambda: calls, timeout=3.0), "取数线程应经门面 _anchors 拿本地锚点(M3 的交接面)"
     finally:
         runtime.stop()
 
@@ -370,6 +387,8 @@ def test_sleeper_stop_message_is_precise(tmp_path):
 def test_sleeper_interrupt_during_wait_message_is_precise(tmp_path):
     """等待循环**内**被打断(第二处 raise)的文案同样要精确 —— 两处 raise 各是一条独立变异"""
     runtime = make_runtime(tmp_path, enabled=True, channel=False)
+    probe = _WaitProbe()
+    runtime._sleep_stop = probe  # 打断点必须落在等待内: 探针在 wait() 入口置 entered
     errs: list = []
 
     def run():
@@ -380,7 +399,7 @@ def test_sleeper_interrupt_during_wait_message_is_precise(tmp_path):
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
-    time.sleep(0.2)  # 让它真的睡进 wait()
+    assert probe.entered.wait(5.0), "用例前提: 线程已睡进可中断等待"
     runtime._sleep_stop.set()
     thread.join(5.0)
     assert errs, "等待中被打断必须抛 HrChannelStopped"

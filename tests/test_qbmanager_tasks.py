@@ -103,9 +103,11 @@ def test_wake_drains_commands_without_extra_ticks():
         mgr.config.sync_interval = 5.0
         calls = {"drain": 0, "task": 0, "sync": 0}
         real_drain = mgr.web.consume_commands
+        drained = threading.Event()
 
         def drain():
             calls["drain"] += 1
+            drained.set()  # 每次命令线落袋都亮一次灯: waker 见灯再投下一条(事件同步, 不睡赌)
             return real_drain()
 
         mgr.web.consume_commands = drain  # 命令线入口(门面), 主循环每轮调用它
@@ -115,8 +117,10 @@ def test_wake_drains_commands_without_extra_ticks():
 
         def waker():
             for _ in range(3):
-                time.sleep(0.15)
                 mgr.wake()  # 模拟 Web 线程连续投递 3 条命令
+                if not drained.wait(5.0):
+                    break  # 唤醒没被立即消费: 收掉循环让主线程断言报实情, 不挂死
+                drained.clear()
             stop.set()
             mgr.wake()
 
@@ -191,9 +195,12 @@ def test_command_batch_triggers_single_resync():
         mgr.config.main_tick = 5.0
         mgr.config.sync_interval = 5.0  # 无补刷新时观测窗口内不会再次同步
         calls = {"refresh": 0}
+        first_refresh = threading.Event()
 
         def refresh(dry_run=False):
             calls["refresh"] += 1
+            if calls["refresh"] == 1:
+                first_refresh.set()  # 首轮落定再投命令批(否则首轮直接吃掉, 合单语义无从谈起)
             if calls["refresh"] >= 2:
                 raise KeyboardInterrupt  # 观测到"补的那一次"即退出
 
@@ -201,19 +208,18 @@ def test_command_batch_triggers_single_resync():
         mgr._task_line = lambda dry_run, force=False: None
         mgr._cmd_pause_torrent = mock.Mock()
         stop = threading.Event()
+        # 兜底: 补刷新缺失时循环不会自行退出(刷新停在 1 次), 到点置 stop 防挂死(正常路径自行 cancel)
+        timer = _daemon_timer(10.0, stop.set)
 
         def poster():
-            time.sleep(0.15)
+            first_refresh.wait(4.0)
             for i in range(5):
                 mgr.web.commands.put(("pause_torrent", {"cmd_id": f"c{i}", "hash": "HA"}))
-            mgr.wake()
-            # 兜底: 补刷新缺失时循环不会自行退出(刷新停在 1 次), 这里兜住避免用例挂死
-            time.sleep(0.8)
-            stop.set()
             mgr.wake()
 
         threading.Thread(target=poster, daemon=True).start()
         mgr.run(dry_run=False, stop_event=stop)
+        timer.cancel()
         # 首轮(两条线都到期)一次 + 命令批一次 = 2; 5 条命令不产生 5 次
         assert calls["refresh"] == 2, f"一批 5 条命令应只补一次刷新, 实际 {calls['refresh']}"
 
@@ -256,17 +262,23 @@ def test_cmd_resync_keeps_schedule_when_nothing_moved():
         mgr._task_line = lambda dry_run, force=False: None
         mgr._cmd_pause_torrent = mock.Mock()
         stop = threading.Event()
+        # 兜底: 第 3 次没来时循环不会自行退出, 到点置 stop 防挂死(正常路径自行 cancel)
+        timer = _daemon_timer(4.0, stop.set)
 
+        # 命令到达时刻是本用例的**时间语义量**(t≈0.9s, 落在 1.0s 节拍之前一点点):
+        # 「补刷新不推后节拍」与旧行为「推到 1.9s」的分差全靠它 —— 提前到 t≈0 会让
+        # 旧行为也落在 <1.4s 容差内, 断言失去判别力。用一次性定时器在既定墙钟偏移
+        # 投递(不是等它完成, 是模拟外部命令的到达时刻), 不用裸 sleep 赌线程进度。
         def poster():
-            time.sleep(0.9)
             mgr.web.commands.put(("pause_torrent", {"cmd_id": "c1", "hash": "HA"}))
             mgr.wake()
-            time.sleep(1.5)  # 兜底: 第 3 次没来时不挂死
-            stop.set()
-            mgr.wake()
 
-        threading.Thread(target=poster, daemon=True).start()
+        poster_timer = threading.Timer(0.9, poster)
+        poster_timer.daemon = True
+        poster_timer.start()
         mgr.run(dry_run=False, stop_event=stop)
+        timer.cancel()
+        poster_timer.join(1.0)
         assert len(stamps) >= 3, f"应观测到 3 次刷新(按时/补刷新/下一个按时): {len(stamps)}"
         gap = stamps[2] - stamps[0]
         assert gap < 1.4, f"补刷新无变化时不得推后节拍(第 3 次应 ≈1.0s, 实得 {gap:.2f}s)"

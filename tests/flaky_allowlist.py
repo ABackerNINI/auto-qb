@@ -13,7 +13,7 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
   code-style 的数据例外保留, 不算代码用语。
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
-(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 **已全部清零**
+(tests 裸 sleep 19 处/13 文件[S1 实测 27 处/15 文件, S3 优先域已清 2 文件 8 处] · e2e waitForTimeout 91 处/20 文件 · src 裸取时 **已全部清零**
 [core 90 处/16 文件、hr 12 处/5 文件、webui/traffic 35 处/11 文件、其余叶子 24 处/11 文件
 已随 S2 各域提交清零, 本表 src 组只剩完成注释]
 · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
@@ -35,13 +35,6 @@ ALLOW_SLEEP_TESTS: dict[str, dict[str, int]] = {
     "tests/test_hr_fetcher_channel.py": {
         "time.sleep(0.005)": 1
     },
-    # S3 hr 域清理: feeder 协作点改事件/wait_until 或注入假钟后删除
-    "tests/test_hr_runtime_feeder.py":
-        {
-            "time.sleep(0.02)": 1,
-            "time.sleep(0.1)  # 让它真的睡进去": 1,
-            "time.sleep(0.2)  # 让它真的睡进 wait()": 1
-        },
     # S3 hr 域清理: 线程协作点改事件/wait_until 后删除
     "tests/test_hr_runtime_lifecycle.py": {
         "time.sleep(0.02)": 1
@@ -62,14 +55,6 @@ ALLOW_SLEEP_TESTS: dict[str, dict[str, int]] = {
     "tests/test_notify.py": {
         "time.sleep(0.05)": 1
     },
-    # S3 清理: qbmanager 任务时序真睡改注入假钟推进后删除
-    "tests/test_qbmanager_tasks.py":
-        {
-            "time.sleep(0.15)": 2,
-            "time.sleep(0.8)": 1,
-            "time.sleep(0.9)": 1,
-            "time.sleep(1.5)  # 兜底: 第 3 次没来时不挂死": 1
-        },
     # S3 清理: 同秒覆盖语义改注入假钟后删除
     "tests/test_relocate_probe_cache.py": {
         "time.sleep(0.01)  # 保证 at 有机会前进(同秒也算覆盖, 这里只验证字段换新)": 1
