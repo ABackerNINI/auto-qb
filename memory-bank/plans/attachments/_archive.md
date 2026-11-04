@@ -10,8 +10,9 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (4)
+## Open (5)
 
+- [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](../26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
 - [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](../26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
 - [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](../26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`

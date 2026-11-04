@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>类型注解标准清偿与 mypy 渐进接入分步计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="type-annotations-mypy">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-05-0635">
+<meta name="doc-updated" content="26-11-05-0635">
+<meta name="doc-refs" content="memory-bank/issues/26-09-21-1408-refactor-type-annotations-mypy.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: type-annotations-mypy</div>
+<h1>类型注解标准清偿与 mypy 渐进接入分步计划</h1>
+<p class="lede">为 issue 26-09-21-1408 建立第一只静态类型防线: 接入 mypy(独立任务, 不进提交闸门), 全库清偿 RUF013 隐式 Optional 债, 优先模块补全注解, 抵抗面进 allowlist 且只减不增 —— 主轴是「分级覆盖 + allowlist 递减」, 而不是一次性全库强标。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-0635 · <b>doc-updated</b> 26-11-05-0635 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户指令认领 issue 26-09-21-1408(2026-11-05 会话); 三项口径(清偿范围/工具/闸门接入)当轮 AskUserQuestion 拍板, 记 §06 D1-D3
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>为什么做</strong>: issue 26-09-21-1408(2026-09-21 入池)指出全库类型注解覆盖低、pyproject 无 mypy/pyright 配置, 类型回归无静态防线; 二评报告(26-10-30-0237)§8.6 又把 RUF013 隐式 Optional 债(批C/批D/批T/批GH 点名)并入本池备注, 要求处置时合并处理。</p>
+<p><strong>做到什么程度算成(标准清偿口径, D1)</strong>:</p>
+<ol>
+  <li>mypy 接入跑通: <code>[tool.mypy]</code> 配置 + <code>dev.typecheck</code> task id + 豁免面之外全绿;</li>
+  <li>RUF013/隐式 Optional 债全库清零(含二评点名处);</li>
+  <li>优先模块(config/core/rules 插件层/torrents)注解补全;</li>
+  <li>抵抗面(tray/expr 闭包/webui 裸 dict)进 per-module allowlist, 且有守阵保证 allowlist 只减不增;</li>
+  <li>issue 置 Done, rules/webui 剩余覆盖缺口作为递减目标留池内备注。</li>
+</ol>
+<p><strong>设计底线/不变量</strong>:</p>
+<ul>
+  <li><strong>行为零差异</strong>: 全部改动限签名级(注解)与显式类型表述, 不改运行逻辑; 任何一处注解改动若需改函数体, 停下来单独评审。</li>
+  <li><strong>红线不动</strong>: <code>config.yml</code>、<code>auto-qb-data/</code> 不碰; <code>minimal.yml</code> 等示例配置不动。</li>
+  <li><strong>闸门不放松</strong>: 覆盖率闸(Windows 99.0)与 test.full 既有判据不动; typecheck 不进提交闸门(D3)。</li>
+  <li><strong>allowlist 只减不增</strong>: 豁免清单冻结进守阵, 新增豁免必须显式改守阵 —— 摩擦是有意的。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><strong>注解覆盖</strong>(AST 实测, 取证 2026-11-05, 口径: 实参注解+返回值注解齐全 = full): 全库 2333 个 def 中完整 1511(65%)、部分 682(29%)、无 140(6%)。入池时(2026-09-21)为 749 个 def 完整 43% —— 期间代码增长与既有补全已把覆盖抬升, 但缺口仍集中:</p>
+<table>
+  <tr><th>子包</th><th>def</th><th>full</th><th>part</th><th>none</th><th>备注</th></tr>
+  <tr><td><code>core</code></td><td>751</td><td>503</td><td>220</td><td>28</td><td>大头是 qbapi.py 27 处 Facade 方法缺返回注解 + modules/ 各模块</td></tr>
+  <tr><td><code>hr</code></td><td>431</td><td>382</td><td>49</td><td>0</td><td>质量最好</td></tr>
+  <tr><td><code>webui</code></td><td>417</td><td>200</td><td>184</td><td>33</td><td>routes 层 <code>body: dict = None</code> 形态约 46 处; manager 贯穿类型缺失</td></tr>
+  <tr><td><code>rules</code></td><td>186</td><td>49</td><td>79</td><td>58</td><td>conditions.py 13 个插件类全无注解; expr/env.py 37 def 仅 9 个有返回注解(闭包工厂)</td></tr>
+  <tr><td><code>config</code></td><td>160</td><td>84</td><td>72</td><td>4</td><td>loaders/validation 边界函数: 入参裸 dict、缺返回注解, 模式高度重复</td></tr>
+  <tr><td><code>tray</code></td><td>30</td><td>8</td><td>19</td><td>3</td><td>customtkinter/pystray 回调, 三方类型贫瘠, <span class="bad">抵抗面</span></td></tr>
+</table>
+<p><strong>隐式 Optional(RUF013 债)</strong>: 全库 <code>x: T = None</code> 形态单行约 312 处 + 多行签名续行至少 83 处, 合计 400+ 处, 是最大单一机械化修点。二评报告点名处: <code>core/curves.py:76</code>(C-02, <code>aggregate(today: date = None)</code>)、config/validation ×2、webui ×38、notify ×2 —— 均判「注解与契约不符, 行为零差异」。</p>
+<p><strong>工具链空白</strong>: pyproject 无 <code>[tool.ruff]</code>/<code>[tool.mypy]</code> 任何段, dev 依赖组仅 pytest 族 + yapf; uv.lock 无 mypy/pyright 条目 —— mypy 属全新依赖, 接入后走 <code>commands run env.sync</code>。</p>
+<p class="aside">痛点本质: 注解债已从「好看不好看」变成「防线缺位」—— 312+ 处签名宣称 <code>T</code> 实收 <code>None</code>, 类型检查视角下全部误报; 二评 4 个批次各自独立撞见同一类问题, 静态工具缺位让这类债只能靠人工评审发现。</p>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><strong>主线</strong>: mypy 全库默认宽松起跑 → RUF013 债机械清偿 → 优先模块补全后逐个收紧(<code>disallow_untyped_defs</code>) → 抵抗面 per-module 豁免进 allowlist 并冻结守阵。与 issue 原建议「渐进接入, 先 torrents/config 后 mixins/web, allowlist 递减」同向, 落点按 2026-11-05 实测缺口修正为 config/core/rules 优先(webui 剩余面大, 留递减)。</p>
+<table>
+  <tr><th>分期</th><th>内容</th><th>产出判据</th><th>依赖</th></tr>
+  <tr><td><strong>S1</strong></td><td>mypy 接入: 依赖定版 + [tool.mypy] + dev.typecheck task</td><td><code>commands run dev.typecheck</code> 可跑通(错误数不限)</td><td>—</td></tr>
+  <tr><td><strong>S2</strong></td><td>RUF013 债全清(~400+ 处隐式 Optional)</td><td>AST 扫描 <code>x: T = None</code> 归零; mypy <code>no_implicit_optional</code> 面零错</td><td>S1</td></tr>
+  <tr><td><strong>S3</strong></td><td>优先模块注解补全(config/core/rules 插件/torrents 查漏)</td><td>四个目标面 full 率显著抬升, AST 复测留证</td><td>S2(同文件先清债)</td></tr>
+  <tr><td><strong>S4</strong></td><td>allowlist 分级 + 守阵 test_mypy_allowlist_guard</td><td>dev.typecheck 全绿(豁免面外); 守阵红验通过</td><td>S1-S3</td></tr>
+  <tr><td><strong>S5</strong></td><td>实施轮验证与收尾</td><td>test.full 全量绿(数字见 kb.baseline); issue Done</td><td>S4</td></tr>
+</table>
+<p>拍板 D1-D3(范围/工具/闸门)见 §06; 已无待拍板项。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<h3>S1 · mypy 接入</h3>
+<ul>
+  <li><code>[dependency-groups] dev</code> 加 <code>mypy</code>(PyPI 实查定版, 照 yapf 条目注释惯例写明版本依据), 跑 <code>commands run env.sync</code>。</li>
+  <li><code>[tool.mypy]</code>: <code>python_version = "3.12"</code>(与 requires-python 单点对齐); 全局起步宽松(不开 strict, 依赖缺 stub 的三方库按 <code>ignore_missing_imports</code> 处理); 分级用 <code>[[tool.mypy.overrides]]</code> per-module。</li>
+  <li><code>.mypy_cache</code> 确认进 .gitignore(若已被通配覆盖则留一行注释指认)。</li>
+  <li><code>.commands/dev/config.toml</code> 照 <code>dev.fmt</code> 形态收录 <code>dev.typecheck</code>(<code>run = ["uv run mypy &lt;args&gt;"]</code>, timeout 兜底 —— mypy 缓存目录与 yapf 同族沙箱风险, 参照 <code>pitfalls/testing/sandbox-tool-cache.md</code>)。<strong>收录前先跑 task-command-surface 消费点检查</strong>(<code>pitfalls/kb/task-command-surface.md</code>: run 条数/生成器集合可能被测试或文档写死断言)。</li>
+  <li>验收: <code>commands run dev.typecheck</code> 跑通并产出首份全库错误分级清单(该清单只进本档案执行记录, 不散抄)。</li>
+</ul>
+
+<h3>S2 · RUF013 债全清</h3>
+<ul>
+  <li>AST 脚本定位全库 <code>arg: T = None</code>(含多行签名), 产出清单按子包分批; 每处改 <code>arg: T | None = None</code>(PEP 604, 3.12 运行期原生支持, 无需 future import)。</li>
+  <li><strong>逐处目检防语义误标</strong>: 默认 <code>None</code> 但实现从不接受 None 的(如二评 C-02 判定过的曲线注入点属「None 回落默认」, 是合法 Optional; 反例是「None 必然炸」的)—— 属后者的不是注解债而是潜在 bug, 单独入池不静默改。</li>
+  <li>二评点名处逐条核销: <code>core/curves.py:76</code>、config/validation ×2、notify ×2、webui 批量面随 S2 全库扫描一并覆盖。</li>
+  <li>FastAPI 边界注意: routes 层 <code>body: dict = None</code> → <code>body: dict | None = None</code> 语义等价; <strong>不动无默认值的注解</strong>(参照 <code>pitfalls/backend/deps-upgrade-2026-10.md</code>: FastAPI 0.x 按注解决定 422 行为); dataclass 默认值同步改写。</li>
+  <li>分族跑定向测试(改哪个子包跑哪族), 全部完成后 <code>commands run test.full</code>。</li>
+  <li>验收: AST 复扫隐式 Optional 归零; mypy 对应错误类清零; 全量绿(数字见 kb.baseline)。</li>
+</ul>
+
+<h3>S3 · 优先模块注解补全</h3>
+<ul>
+  <li><strong>config</strong>(模式重复度最高, 先做): loaders/validation 边界函数补 <code>spec: dict</code> 入参、<code>parse: Callable[..., T] | None = None</code> 类参数、<code>-&gt; XxxConfig</code> 返回。</li>
+  <li><strong>core</strong>: qbapi.py 27 处 Facade 方法补返回注解(<code>**kwargs: Any</code> 转发面保持); qbmanager/module/state/taskqueue 机械补齐。</li>
+  <li><strong>rules 插件 LSP 对齐</strong>: conditions.py 13 个插件类 <code>__init__(self, spec: ...)</code> 与 <code>match(...) -&gt; bool</code> 对齐基类签名; actions 同理对齐 <code>-&gt; ActionResult</code>。registry 的 <code>PluginEntry.decl: Any</code>/<code>executor: Any</code> 既有意逃逸口保持不动。expr/ 闭包工厂(<code>env.py</code>)高阶链噪音大, <span class="wr">不在此步强标</span>, 留 allowlist。</li>
+  <li><strong>torrents</strong>: 已 94% full, 查漏即可。</li>
+  <li>验收: AST 复测四个目标面 full 率(前后对照写进执行记录); 该四面子集上开 <code>disallow_untyped_defs</code> 可跑绿。</li>
+</ul>
+
+<h3>S4 · allowlist 分级 + 守阵</h3>
+<ul>
+  <li>抵抗面 per-module 豁免(overrides <code>ignore_errors = true</code> 起步): <code>tray.*</code>(GUI 三方回调)、<code>rules.expr.env</code>(闭包工厂)、webui routes 中裸 dict payload 重灾区按首跑错误量决定豁免粒度(优先用 error code 级豁免而非整模块, 收窄递减空间)。</li>
+  <li>已全注解面(config/torrents/core 选定面)加 <code>disallow_untyped_defs</code> override —— 这就是「递减」的推进方式: 模块从豁免侧迁到收紧侧。</li>
+  <li>新增 <code>tests/test_mypy_allowlist_guard.py</code>: 静态扫描 pyproject 的 overrides 清单 vs 测试内冻结清单, 出现新增豁免模块即红; 照 <code>test_test_plan_docstring_guard.py</code> 形态(合成源红验内建); 文件头带「## 测试计划」docstring 清单(机械守卫强制)。</li>
+  <li>验收: <code>commands run dev.typecheck</code> 豁免面外全绿; 守阵用例通过 + 掐掉守阵后红验成立; <code>commands run test.full</code> 全量绿。</li>
+</ul>
+
+<h3>S5 · 实施轮验证与收尾</h3>
+<ul>
+  <li><code>commands run test.full</code> 全量过闸(签名级改动不碰覆盖率闸, 数字见新基线切片)。</li>
+  <li>新建基线切片(<code>kb.new baseline</code>): 记 test.full 实测 + mypy 面数字(豁免模块数/收紧模块数/AST full 率复测), 其它文档一律引用不手抄。</li>
+  <li>issue 26-09-21-1408 置 Done, 状态日志注明 Done 口径(§01 五条)与 rules/webui 剩余覆盖缺口的递减去向。</li>
+  <li>坑档沉淀: typing 运行期求值边界(参照 <code>pitfalls/testing/annotations-lazy-eval.md</code>, 若实施中撞到新增形态)、mypy 缓存沙箱实测结论(补进 sandbox-tool-cache 或新档)。</li>
+  <li>收尾 DoD 照例: code-review skill 评审 + kb.wrap; 实施中发现的计划外缺陷入池不修(scope-guard)。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无剩余待拍板项 —— 三项关键口径(清偿范围/工具选型/闸门接入)已在认领轮拍板, 结论见 §06; S4 中 webui 豁免粒度按首跑错误量在实施现场定, 属执行细节不另设拍板。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td><strong>标准清偿</strong>: mypy 接入 + RUF013 债全清 + 优先模块补全 + allowlist 守阵, issue Done; rules/webui 剩余缺口留递减目标。备选「最小清偿/全量清偿」否决。</td><td>2026-11-05</td></tr>
+  <tr><td>D2</td><td><strong>工具选 mypy</strong>: 纯 Python、uv 依赖组原生安装、no_implicit_optional 默认开启恰覆盖 RUF013 语义; pyright(Node 运行时绕道)与双工具否决。</td><td>2026-11-05</td></tr>
+  <tr><td>D3</td><td><strong>dev.typecheck 独立任务, 不进提交闸门</strong>: 首期错误量大, 进闸门抬高收尾成本且卡提交; allowlist 递减到位后再议升闸。守阵只冻结 allowlist 清单本身(静态扫描, 不在 pytest 内跑 mypy)。</td><td>2026-11-05</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>注解改动改变运行行为</td><td>FastAPI/pydantic 按注解做运行期校验(422); dataclass 字段类型参与校验</td><td>S2 只动「有默认值」的注解; 分族定向测试 + 全量; 行为相关面(routes)单独过 e2e 冒烟</td></tr>
+  <tr><td>语义误标把真 bug 掩成 Optional</td><td>默认 None 但实现从未接受 None 的参数被顺手标成 <code>| None</code></td><td>S2 逐处目检; 判定「None 必炸」的不改注解, 入池走 bug 流程</td></tr>
+  <tr><td>typing 运行期求值炸导入</td><td>≤3.13 注解急切求值, 注解引用未导入的 typing 名(既有坑档 annotations-lazy-eval 的形态)</td><td>全量 import-all 守卫已在; 实施中撞到新形态补坑档</td></tr>
+  <tr><td>mypy 缓存目录沙箱拒写致挂死</td><td>.mypy_cache 落在沙箱白名单外(yapf 同族事故)</td><td>task 配 timeout 兜底; 实测后把结论与目录处置写进 sandbox-tool-cache 坑档</td></tr>
+  <tr><td>收录 dev.typecheck 撞消费点断言</td><td>run 条数/生成器集合被测试或文档写死</td><td>收录前按 task-command-surface 坑档先搜消费点</td></tr>
+  <tr><td>覆盖率闸回退</td><td>注解行落进未被测试覆盖的分支</td><td>签名级改动随既有调用覆盖; 若个别行触发, 用既有测试补路径, 不放松闸值</td></tr>
+  <tr><td>范围蔓延</td><td>清债/补全途中发现顺手可改的逻辑问题</td><td>scope-guard: 入池不修; 只有注解语义误标判定出的「None 必炸」型疑似 bug 走入池</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-0635</span> 初版: 认领 issue 26-09-21-1408(用户指派, 2026-11-05 会话); 现状取证(AST 复测 + 工具链调查); 三项拍板 D1-D3; S1-S5 分期与验收判据定稿。本轮零代码改动。</li>
+</ul>
+
+</div>
+</body>
+</html>
