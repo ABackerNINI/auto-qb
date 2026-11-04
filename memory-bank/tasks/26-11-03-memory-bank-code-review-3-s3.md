@@ -5,7 +5,7 @@
 **Updated:** 2026-11-03
 **Summary:** 全量代码评审第三轮 S3：B5 前端逐文件过目（含 flux CSS 全量扫描）+ B6 四组 R12 等价核验 + config_rules 契约对照；B5 覆盖已闭合，发现全部入池
 **Topics:** memory-bank-code-review-3-s3
-**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md
+**Refs:** memory-bank/plans/26-11-03-0557-plan-full-code-review-3.html, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s2.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s4.md, memory-bank/tasks/26-11-03-memory-bank-code-review-3-s5.md, memory-bank/tasks/26-11-05-test-split-inrange-review.md
 
 ## 原始请求
 
@@ -94,6 +94,7 @@
 
 - 覆盖率修订：初版仅比对切片，残留根文件（`columns.js`/`background.js`/`qb_capture.py` 等）漏计造成误报；把拆分的 M 文件新版本加入 targets 后，四组均 `missing=0`。
 - 区间改动目标扩大核验：`tests/test_transfer_targets_editor.py`（S2 点名）纳入 R2 目标集，AST 比对 `missing=0 / drift=0`。
+- 「含区间改动」归属与逐行评审已于 2026-11-05 由 issue `26-11-03-0704-test-split-carried-inrange-changes` 认领补完：承载进 move-only 目标的区间增量 R1 2,249 / R2 4,672 / R3 146 行（45 目标）全量评审，26/30 源 clean、4 条发现（1 P2 + 3 P3）见该 issue「修复后补充」；R4 经归属比对确认全部落入实质目标，B5/B9 已覆盖。
 - 脚本缺陷自纠：初版把 `(lineno, dump)` 元组整体入多重集，比较时取错位导致 1170 条伪漂移；改为只存 dump 后归零。
 
 ## 附录 B · B5 已过目清单

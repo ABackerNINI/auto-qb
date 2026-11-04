@@ -38,12 +38,13 @@
 - [26-10-14-webui-qb-traffic-agg-live-tail](../26-10-14-webui-qb-traffic-agg-live-tail.md) qB 流量图 agg 段活尾合流(S7): 3d+ 视图图尾真空修复
 - [26-10-09-backend-transport-encryption](../26-10-09-backend-transport-encryption.md) 本地通道传输安全调研(WebUI + HR 取数通道)
 
-## Done (290)
+## Done (291)
 
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
 - [26-11-04-test-coverage-uplift-3](../26-11-04-test-coverage-uplift-3.md) 覆盖率提升第三轮实施 — 新欠账清偿与出生即绿 (99% / 319 单位 → ≤100)
 - [26-11-04-webui-flux-glass-popups](../26-11-04-webui-flux-glass-popups.md) flux全浮层玻璃化: 预算4→16+遮罩浓度修复
 - [26-11-05-backend-rule-skipcheck-dedup](../26-11-05-backend-rule-skipcheck-dedup.md) 规则侧链0遮蔽跳检dedup修复(26-11-05-0019)
+- [26-11-05-test-split-inrange-review](../26-11-05-test-split-inrange-review.md) 拆分承载区间改动归属与逐行评审(认领 26-11-03-0704)
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-11-04-memory-bank-code-review](../26-11-04-memory-bank-code-review.md) 收口 code review 制度化: code-review skill + review 命令包 + 协议挂钩
 - [26-11-04-webui-fx-glow](../26-11-04-webui-fx-glow.md) fx 辉光荧光化四轮修(雾/圆角/无辐射/角缺光)

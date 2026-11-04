@@ -4,12 +4,15 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (54)
 
+- [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](../26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_line/run_task_line 的 assert_called_once_with(False), "..." 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失
+- [test] [test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载](../26-11-05-0344-test-rule-compat-mapping-dup-assert.html) — test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验
+- [test] [test_ops_skip rec_start 定义后从未使用, 实际生效的是紧随其后的 lambda 替身](../26-11-05-0343-test-ops-skip-rec-start-dead-code.html) — test_guard_skip_finish_start_scope 里 rec_start 闭包从未赋给 client.torrents_start, 死代码误导读者以为两层包装
+- [test] [relocate dry-run 闸守阵空洞: 删掉闸 test_on_task_line_holds_in_dry_run 仍全绿](../26-11-05-0343-test-relocate-dryrun-gate-guard-hole.html) — 夹具未构造崩溃窗(move_issued=False), 无闸反事实下恢复路径走只记日志分支, 删 relocate_lifecycle.py:240 的闸两段断言仍绿; 守阵失效时不报警
 - [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](../26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 normpath 恒返回 '.', _within 的 if not s 守卫现实不可达; 覆盖率第三轮已用 _norm 替身钉住契约弧, 残留问题是守卫本身去留
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](../26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbmanager.py 619/624 补刷新闸注入三型变异全部存活: 用例观察窗在第 4 轮 KI 退出前, 重置节拍的可观测分歧落在窗后; 留待 mutants 审计兜底
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
-- [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例
 - [test] [Windows 并行全量测试偶发 WinError 10013：_free_port / _hold_ports 抢端口](../26-11-03-0115-test-hr-discovery-port-bind-flake.html) — HR discovery 并行用例端口抢占偶发红，单跑均绿；与本轮 CSS 改动无关
 - [docs] [文档回写: qB 双版本支持口径与 5.3 升级部署注记](../26-10-31-0711-docs-qb-5-3-upgrade-docs.html) — memory-bank 主题文档与根 README 补: 双版本(5.2.3/5.3)支持口径; libtorrent 2.1 legacy TLS 禁用/会话上限 15 等部署注记; 升级后 server_state 会话速率口径核对与基线重测
@@ -64,7 +67,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (407)
+## Done (408)
 
 - [bug] [fuse release 摘标签路径缺 None-client 守卫(潜在, 现行接线不可达)](../26-11-05-0200-bug-fuse-untag-none-client-guard.html) — fuse_mod release() 的 to_untag 摘标签路径对 api.client 为 None 无守卫, 会 AttributeError 而非像限速写回侧那样安全降级; 现行唯一调用方 cli 先 connect 故不可达
 - [test] [存量 hr apply 用例疑似假绿: 原地改 hr_check 致 apply 短路断言空转](../26-11-05-0200-test-hr-apply-inplace-config-false-green.html) — test_hr_discovery 等档对 cfg.trackers[...].hr_check 原地改 refresh_interval, 但 hr_site_confs() 返回同一对象, site_confs 比较恒等使 apply 短路, 重建断言空转
@@ -104,6 +107,7 @@
 - [bug] [抽屉行级键盘恢复钩子死链: dtRowAfter 收到 table id, dtBridgeDef 只认页签 key, rowAfterFn 永不执行](../26-11-03-0802-bug-drawer-rowafter-dead-hook.html) — dtRowAfter(dtBridgeTbl(tab)) 把 table id 当页签 key 传给 dtBridgeDef → 描述符恒空 → 10/11 变体声明的 rowAfterFn(锚换代后 roving/回焦恢复)从未运行
 - [docs] [第三次评审计划 域表分项合计 478 与总数 479 不符(漏记 finalize_watch.py)](../26-11-03-0704-docs-plan-domain-table-count.html) — 计划 02 节 10 行分项相加 478, git 实测代码面 479; 差额为 src/auto_qb/tools/finalize_watch.py 未列行
 - [docs] [12 个拆分残片被 git 判为 rename(R051-R072), 配对表不能按 1:1 改名解读](../26-11-03-0704-docs-split-residue-rename.html) — 拆分提交中仅一个目标桶被 -M50% 判为 rename, 其余为 A/D; 相似度 51-72%, 非等价移动
+- [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
 - [docs] [计划 0557 两条反向引用因旧 HTML 差错被移除(增量闸门阻断, 反向链缺失)](../26-11-03-0647-docs-plan-review3-legacy-html-refchain.html) — 旧件 0221 计划/1036 报告含 9 条既有 VNU error; 仅改 doc-refs 也被增量 HTML 闸门拦下, 为避免修计划外文档, 移除 plan-3 两条 doc-refs 及反向引用
 - [docs] [第三次评审计划 §02 起点基线引用过期(4924+2/0459 vs 现行 4933+2/0534)](../26-11-03-0630-docs-plan-review3-baseline-anchor-stale.html) — 现行最新全量基线为 4933+2(切片 0534, +9 为端口改 0 守阵); 计划仍引 0459 的 4924+2 作为终验持平基准
 - [docs] [第三次评审计划 §02 在途件清单失效(2 已 Done、2 误记为计划、3 在途未列)](../26-11-03-0630-docs-plan-review3-inflight-list-stale.html) — 计划列 6 件在途; 实测仅大文件拆分与 qB 5.3 在途, 另有 version-management 等 3 件未列, 2 件已 Done, 2 件实为 issue 锚

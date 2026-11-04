@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-03-0704">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="code-review-3-s1">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-03-memory-bank-code-review-3-s1.md, memory-bank/tasks/26-11-05-test-split-inrange-review.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审">
 <meta name="issue-summary" content="R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审">
 <title>拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审 · test · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-03-0704-test-split-carried-inrange-changes</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-03 07:04</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -159,11 +159,26 @@ R1/R2/R3/R4 的 A 类拆分目标合计 45+101+11+23 = 180 个（按命名前缀
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-03 07:04 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 03:45 — 状态 <strong>Open → Done</strong>：归属比对 + 承载增量逐行评审完成（见「修复后补充」），4 条发现入池；核验由任务档案 <code>26-11-05-test-split-inrange-review</code> 认领执行</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 仍复现。重跑 <code>git log bf9920d3..&lt;split&gt;^ -- &lt;source&gt;</code> 并排除 4 个拆分提交自身的触达后，四组污染计数与取证完全一致：R1 9/10、R2 18/25、R3 3/9、R4 22/38，逐源笔数亦逐条吻合（如 <code>test_memory_bank.py</code> 14 笔、<code>test_webui_static_skins.py</code> 15 笔）。注意口径：R3/R4 的部分源会被**其它拆分提交**（R1/R2 创建/改动的文件）触达，不复核拆分提交会把 R3 记成 7/9、R4 记成 34/38。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>状态：Done（2026-11-05）</strong>——任务档案 <code>memory-bank/tasks/26-11-05-test-split-inrange-review.md</code>；4 条评审发现已入池：<code>26-11-05-0343-test-relocate-dryrun-gate-guard-hole</code>（P2）、<code>26-11-05-0343-test-ops-skip-rec-start-dead-code</code>、<code>26-11-05-0344-test-qbmanager-tasks-missing-assert</code>、<code>26-11-05-0344-test-rule-compat-mapping-dup-assert</code>（P3×3，均 test 类，topic <code>split-inrange-review</code>）。</p>
+    <p><strong>实际修法</strong>（按建议修法第一分支执行：归属比对 + 对承载区间增量做逐行评审；R4 经归属比对确认全部落入实质目标，已被 B5/B9 覆盖，无需扩大）：</p>
+    <ol>
+      <li><strong>源→目标内容归属比对</strong>（行多重集法：目标@拆分提交 减 源@bf9920d3 基线，再与源区间新增行集取交集）：承载进 <strong>move-only 目标</strong>的区间行 R1 <strong>2,249</strong> / R2 <strong>4,672</strong> / R3 <strong>146</strong>，合计 <strong>7,067 行 / 45 个目标</strong>。重灾区：R1 <code>test_relocate_exec_*</code> 1,260、<code>test_memory_bank_cli</code> 556、<code>test_grouping_*</code> 341；R2 <code>test_rule_compat_*</code> 1,751、<code>test_qbmanager_*</code> 565、<code>test_traffic_store_*</code> 533、<code>test_ops_*</code> 398。落入实质目标（如 R1 <code>test_webui_static_dom_panel_*</code> 四分片、R2 <code>test_rule_base_rule.py</code>）的区间增量不计缺口——A 类实质目标全文过目已覆盖。</li>
+      <li><strong>逐行评审</strong>：对 30 个污染源（R1 9 + R2 18 + R3 3）的区间累计 diff（共 12,401 行，含上下文）全量读完、不抽样（3 个只读评审分片并行 + 逐字引文校验 + 协调人复核）；评审判据：弱断言/自证、行为遮蔽、危险副作用（触网/真机/固定端口/tmpdir）、测试逻辑错误、死代码。</li>
+      <li><strong>评审结论：26/30 源 clean；4 条发现（P1 0 / P2 1 / P3 3）</strong>，全部在 HEAD 仍存在：
+        <ul>
+          <li><strong>P2</strong> <code>tests/test_relocate_exec_run.py:616</code> <code>test_on_task_line_holds_in_dry_run</code> —— dry-run 闸守阵空洞：夹具里 job 已 <code>move_issued=True</code> 且 FakeClient 的 <code>torrents_set_location</code> 只记 calls 不改现场，无闸反事实下恢复路径走「已下发+无现场⇒只记日志」（<code>relocate_exec.py:37</code> 补发分支要求 <code>move_issued=False</code>），把 <code>relocate_lifecycle.py:240</code> 的闸整行删掉两段断言仍全绿——守不住 docstring 声称的闸。建议：夹具在 <code>mod._dry = True</code> 前构造崩溃窗形态（<code>move_issued=False</code>），无闸时恢复 tick 必补发 setLocation 而当场红。</li>
+          <li><strong>P3</strong> <code>tests/test_ops_skip.py:887</code> —— <code>rec_start</code> 定义后从未使用（实际生效的是紧随其后的 lambda 替身），死代码误导读者以为两层包装。建议删除。</li>
+          <li><strong>P3</strong> <code>tests/test_qbmanager_tasks.py:497、:513</code> —— <code>mgr.host.run_sync_line.assert_called_once_with(False), "..."</code> 为缺 <code>assert</code> 的元组表达式（两处同型）；mock 自身失败仍会抛 AssertionError，丢的只是失败消息。建议补回 <code>assert</code>。</li>
+          <li><strong>P3</strong> <code>tests/test_rule_compat_mapping.py:111、:113</code> —— 相邻逐字重复断言，第二条死断言；其上注释宣称「不新建 actions 列表项」未被任何断言检验。建议删重复行或补 <code>is</code> 身份断言。</li>
+        </ul>
+      </li>
+    </ol>
+    <p><strong>与建议修法的差异</strong>：建议按「污染源分组批量核对约 180 个 A 目标」；实际先归后筛——只对落入 move-only 目标的 7,067 行做逐行评审，落入实质目标的部分引用 B5/B9 既有覆盖不重复评审，省约一半载荷。</p>
   </section>
 
   <footer>
