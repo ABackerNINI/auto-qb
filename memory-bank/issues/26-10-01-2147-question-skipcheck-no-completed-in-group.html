@@ -8,7 +8,7 @@
 <meta name="issue-type" content="question">
 <meta name="doc-topic" content="skipcheck-no-completed-in-group">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Dropped">
 <meta name="issue-title" content="同组中无已完成种子时拒绝跳检">
 <meta name="issue-summary" content="[?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板">
 <title>同组中无已完成种子时拒绝跳检 · question · 计划外问题（便签）</title>
@@ -68,7 +68,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2147-question-skipcheck-no-completed-in-group</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:47</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Dropped</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -97,6 +97,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:47 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 复验 + grilling 压测拍板：不采纳，状态 <strong>Dropped</strong>。复验（取证 2026-11-05）：跳检决策链（<code>rules/actions/checking.py</code>）无「组内无已完成成员拒绝跳检」闸，无参考段跳检照常放行。理由：①现状是用户显式 opt-in 路径（无参考段默认关闭），已有配置端风险文案 + 规则侧告警日志（<code>ops_skip.py</code> 无参考跳检高风险）+ WEB 确认框三层软防护，硬闸与黄金法则 2（保守默认，只对显式配置范围生效）取向冲突；②原口径「组内无已完成成员」仅为「无参考」子集（custom 判定全失败 / piecehashes 拉取失败 / 候选带跳检标签被排除同样落无参考段），挡不住动机场景，真要做也须改口径为「无参考拒绝跳检」；③动机为 TODO 盘点规则想法，无实际误跳实证，现有软防护覆盖足够。</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行（L85）由末阶段统一移除，本报告不回改 TODO.md。</p>
   </section>

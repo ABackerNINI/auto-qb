@@ -37,7 +37,6 @@
 - [feat] [HR 在线核实同步修改 HR 标签/分类](../26-10-01-2147-feat-hr-verify-sync-hr-tags.html) — 在线核实结论变化时同步增删 HR 相关标签/分类(考核中/未达标等), 当前无此联动(grep hr/ 无标签同步逻辑)
 - [feat] [命中的限速曲线强调显示 + 限速时可配置弹窗提醒](../26-10-01-2147-feat-speedlimit-curve-emphasis.html) — 当前生效的限速档位在曲线上强调显示; 被限速时可选配置弹窗提醒
 - [question] [HR 在线核实同组间优先核实下载量高的种子(前提待商榷)](../26-10-01-2147-question-hr-same-group-download-priority.html) — [?]想法: 同组优先确认下载量高者; 前提「种子在 A 站考核中就不会在 B 站考核」待商榷
-- [question] [同组中无已完成种子时拒绝跳检](../26-10-01-2147-question-skipcheck-no-completed-in-group.html) — [?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板
 - [feat] [追剧视图完善: 同剧判定调研与分组排序打磨](../26-10-01-2138-feat-webui-shows-grouping-research.html) — 追剧视图已加但不完善: 同剧判定需调研头脑风暴, 组内按季/集排序, 多站点辅种不分开显示
 - [feat] [tracker error/warning 状态展示, 且可配置忽略错误或警告](../26-10-01-2138-feat-webui-tracker-error-warning-state.html) — 为种子/组的 tracker 状态增加 error/warning 呈现, 并支持配置忽略(不告警不阻断)
 - [feat] [WEBUI 自定义站点名/分类/标签字体颜色](../26-10-01-2120-feat-webui-custom-chip-colors.html) — 允许用户为站点名/分类/标签 chip 自定义字体颜色(未排期增强)
@@ -479,11 +478,12 @@
 - [bug] [sync_interval 与前端分档轮询错配: >3000 种子时约一半视图重建无人消费](../26-09-19-1900-bug-webui-poll-cadence-mismatch.html) — 服务端固定 1.5s 重建四视图, 前端 >3000 种子时 3s 才取一次 ⇒ 约一半 rebuild_views 无人消费; 需先拍板方向
 - [perf] [/api/search 等热端点仍返回裸 dict: 服务端白跑 jsonable_encoder(实测 82.6 ms)](../26-09-19-1900-perf-webui-hot-endpoints-jsonable-encoder.html) — /api/state 与 /api/groups 已改 JSONResponse 直返(189→23.5ms), /api/search(1.46MB/82.6ms)与详情族未改
 
-## Dropped (6)
+## Dropped (7)
 
 - [docs] [activeContext 切片 26-10-22-0102 的 3990 属冻结存量(误判入池, 已撤销)](../26-10-22-1247-docs-midnight-window-slice-handwritten-baseline-number.html) — 误判: 守卫只报扫描序末 N 条, 0102 的命中其实是 HEAD 里已有的冻结存量; 本轮真正新增的手抄是本会话 R12 回写行, 已改「数字见 kb.baseline」
 - [refactor] [pending_ver 发布未消费门控冗余评估: 增量下保护对象已缩水为一次键集追加](../26-10-07-1420-refactor-webui-pending-ver-gate-redundancy.html) — 增量同步落地后 pending_ver 门控的保护对象从「全量重建成本」缩水成「一次键集追加成本」, 已按计划 P-03 定案保留(黄金法则 2); 若未来实测确认纯冗余可另立小步移除, 但移除会改变现有节拍行为, 须单独拍板
 - [bug] [hr/service._do_wave 的 except HrFetchError 尾段不可达, 兜底分支永不触发](../26-10-02-0441-bug-hr-do-wave-hrfetcherror-dead-tail.html) — _do_wave 末段 except HrFetchError 兜底(约 582-585)不可达: _run_pages 内层已就地截断无 Retry-After 的页面失败, 能上抛的只有 retry_after>0; 与已修的 last_seen 死分支同族
+- [question] [同组中无已完成种子时拒绝跳检](../26-10-01-2147-question-skipcheck-no-completed-in-group.html) — [?]规则想法: 组内没有任何已完成成员时拒绝跳检(防误跳), 待拍板
 - [question] [WEBUI 流量历史图做不做(待取舍)](../26-10-01-2138-question-webui-traffic-history-chart.html) — [待取舍] 是否为 WEBUI 增加流量历史图, 与单种/全局统计重设计同族
 - [bug] [WEBUI 批量操作引发 WARNING 桌面通知](../26-10-01-2129-bug-webui-batch-warning-notify.html) — 批量操作(多选动作)似乎都会触发 WARNING 级桌面通知, 需定位并收敛通知级别
 - [feat] [HR 计数：looks_like_login 补计数文本佐证（P3 缓做项）](../26-09-30-0052-feat-hr-login-counter-attest.html) — 登录态判定 looks_like_login 补页头计数文本负信号佐证（报告 26-09-29-1803 §6 登录态负信号 / HR 计划 §7 P3），依赖 D4 口径实证，缓做
