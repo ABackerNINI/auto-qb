@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-05-0019">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="skip-check-gates">
-<meta name="doc-refs" content="memory-bank/plans/26-11-04-2357-plan-skip-check-gates.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-04-2357-plan-skip-check-gates.html,memory-bank/tasks/26-11-05-backend-rule-skipcheck-dedup.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)">
 <meta name="issue-summary" content="CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)">
 <title>规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构) · bug · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· bug</div>
+    <div class="kicker">计划外问题（已修）· bug</div>
     <h1>规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)</h1>
     <p class="lede">CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 00:19</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">rules</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -172,11 +172,13 @@ t.progress = 0.0</code></pre>
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 00:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 认领（用户指令「认领并修复」），状态 <strong>In Progress</strong>；开工复验：证据 A/B/C 锚点逐一重跑仍复现（<code>checking.py</code> 链 0 现位于 :97-98，判定原文未变）；任务档案 <a href="../tasks/26-11-05-backend-rule-skipcheck-dedup.md">26-11-05-backend-rule-skipcheck-dedup</a>（doc-refs 双向建链）</li>
+      <li>2026-11-05 — 修复完成，状态 <strong>Done</strong>。实际修法（= 建议修法 1，拍板自用户指令「认领并修复」）：① 谓词单点化 ops 侧只读 helper <code>skip_checked_today</code>（<code>ops_verdict.py</code>，<code>_skip_gates_detail</code> dedup 闸门同源消费，防两套谓词漂移）；② 规则侧决策链 dedup 前插（<code>checking.py</code>，dry-run 后、S2 deferral 前，只读不碰 qB 快照故无须让位）；③ 保真用例显式置 <code>progress=1.0</code> 还真机现场。验证：红验实测旧码下规则 B 恒返「种子非暂停中未完成状态, 无需校验」，新码返「今日已跳检过该种子(跨规则去重)」；全量绿（数字见 kb.baseline）。<b>取证纠正</b>：证据 C 的「progress 绕行」实为空操作——替身默认 progress=0.0 且跳检流程不改写 <code>t</code>，旧用例经 pausedDL 直达 ops dedup、从未复现真机遮蔽链路；修复后用例才首次真正钉住本缺陷。任务档案 <a href="../tasks/26-11-05-backend-rule-skipcheck-dedup.md">26-11-05-backend-rule-skipcheck-dedup</a></li>
     </ul>
     <h3>复验</h3>
     <p>复验：2026-11-05 00:19 入池取证即复验 —— 锚点与证据 A/B/C 均为当时代码原文；26-10-11-2045 的 ops 侧修复（dedup 前移）不影响本件（链 0 在 ops 闸门之前，修复只改 ops 内部顺序）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法与验证方式见上面状态变更日志 2026-11-05 第二条（与建议修法 1 一致，未改道；「待拍板」的悬念由用户指令「认领并修复」拍板落定）。</p>
   </section>
 
   <footer>

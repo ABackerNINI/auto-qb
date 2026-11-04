@@ -13,6 +13,17 @@ from .ops_common import GATE_BLOCKED, GATE_FORCE, GATE_OK, GateVerdict, logger
 
 
 class VerdictMixin:
+    def skip_checked_today(self, hash: str) -> bool:
+        """跨规则同日去重只读判定(谓词单点): 该 hash 当日已跳检成功过则 True
+
+        消费方两处同源(防两套谓词漂移, 同 T18 思路): 本模块 _skip_gates_detail 的 dedup
+        闸门(执行+预检两路径)与规则侧决策链 0 前插(checking.py, 26-11-05-0019 —— 跳检成功
+        ⇒ 种子必已完成 ⇒ 链 0「非暂停中未完成」先拦, ops dedup 对规则源结构性不可达, 与
+        ops 侧 26-10-11-2045 同构)。只读: 不写入不 prune(T20), 清理仍留在 _skip_gates 尾部。
+        """
+        skip_day = self.state.get("skip_check_day") or {}
+        return skip_day.get(hash) == date.today().isoformat()
+
     def skip_check_precheck(self, hashes: list) -> list:
         """跳检预检(只读 dry-run, plan 26-10-05-0314 D6/D9): 逐 hash 给出三分流判定, 供 WEB 确认框
         在用户确认之前摊开「该不该跳检、赌什么」; 执行路径闸门原样全跑 —— 预检与执行之间无信任传递。
@@ -143,7 +154,7 @@ class VerdictMixin:
           G3 之后即被结构性遮蔽(执行路径取首个未过, 文案与 skip 类别双双被改写); 「今日已
           跳检过」也是重复请求的最直接答案 —— 谓词全组最便宜(一次 dict 查询), 前移零副作用(T20 只读)。
         - G3 已完成(progress>=1, 无论状态) / G4 活跃中(非 stopped 且 p<1): 放行谓词逐字同
-          rules/actions/checking.py:88 决策链 0(两处注释互指); stalledDL 等边缘态口径由
+          rules/actions/checking.py 决策链 0(两处注释互指); stalledDL 等边缘态口径由
           state_enum 现有语义决定, 与规则侧天然一致(同一谓词), 不发明 WEB 特有口径(plan §03)。
         - G5 同 hash 校验在途(ctx.task_queue.active_check_hashes(), recheck 在途互斥同款原语):
           跳检删种会杀死在途校验轮询 —— case 2(组内其它成员校验在途同归 case 2, 见 G7)。
@@ -164,7 +175,7 @@ class VerdictMixin:
         - partial(0<p<1): 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的零块,
           is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。仅 progress==0(全新辅种,
           数据完整)可跳检; full-checking 对部分下载安全, 不设限。
-        - filelist: 前置文件检查, 调 check_filelist(checking.py:121 决策链 4 同一原语, 规则侧
+        - filelist: 前置文件检查, 调 check_filelist(checking.py 决策链 4 同一原语, 规则侧
           双查为计划明文接受); 失败语义 blocked(fail), 不是 skip; 映射 miss(路径不可判定)保守
           停住, 文案自带「修 fs.path_map 配置」出路。
         """
@@ -174,12 +185,12 @@ class VerdictMixin:
 
         # dedup 跨规则同日去重(排最前, 26-10-11-2045): 跳检成功 ⇒ 种子必为已完成 ⇒ G3 与 dedup
         # 恒同时成立, dedup 排后即被 G3 结构性遮蔽(执行路径取首个未过, 文案与 skip 类别被改写);
-        # 只读判定(不 setdefault 不 prune), 前移零副作用(T20)
-        skip_day = self.state.get("skip_check_day") or {}
-        if skip_day.get(hash) == date.today().isoformat():
+        # 只读判定(不 setdefault 不 prune), 前移零副作用(T20)。谓词单点 skip_checked_today
+        # (规则侧链 0 前插同源消费, 26-11-05-0019)
+        if self.skip_checked_today(hash):
             verdicts.append(GateVerdict("dedup", GATE_BLOCKED, "今日已跳检过该种子(跨规则去重)"))
 
-        # G3/G4 共用放行谓词 —— 逐字同 rules/actions/checking.py:88 决策链 0(两处注释互指):
+        # G3/G4 共用放行谓词 —— 逐字同 rules/actions/checking.py 决策链 0(两处注释互指):
         # 仅「暂停中未完成」放行; 做种态 p=1 落 G3/G5, 下载中等非 stopped 态 p<1 落 G4。
         # (当日已跳检的种子已被 dedup 先拦 —— G3 在此只对「已完成且当日未跳检」成判)
         paused_incomplete = state_enum.is_stopped and progress < 1.0
@@ -231,8 +242,8 @@ class VerdictMixin:
                             "跳检会把全部块标有效(脏数据); 请先暂停组内下载方再跳检")
             )
 
-        # ---- G7/G8 组内镜像闸门(S1b-2): members 数据源与规则侧同一真相(checking.py:93
-        # grouping._group_members 即委托 store.group_members), 谓词逐字镜像, 镜像注释互指在 ops 侧
+        # ---- G7/G8 组内镜像闸门(S1b-2): members 数据源与规则侧同一真相(checking.py 决策链 1
+        # 的 grouping._group_members, 即委托 store.group_members), 谓词逐字镜像, 镜像注释互指在 ops 侧
         members = self._ctx.store.group_members(hash)
         others = [h for h in members if h != hash]
 

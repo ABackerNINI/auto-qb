@@ -30,6 +30,10 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
     config.skip_checking_tag(默认 zSkipChecked, 默认值唯一来源在 config models)。
 
     决策链(想法2):
+      dedup. 跨规则同日去重(26-11-05-0019, 排最前): 当日已跳检成功过 -> skip「今日已跳检过
+         该种子(跨规则去重)」; 谓词经 ctx.ops.skip_checked_today 只读 helper(与 ops 闸门组
+         同源)。必须排在链 0 之前 —— 跳检成功 ⇒ 种子必已完成 ⇒ 链 0「非暂停中未完成」恒先拦,
+         ops dedup 闸门对规则源结构性不可达(与 ops 侧 26-10-11-2045 同构)
       0. 仅"暂停中未完成"种子(is_paused 且 progress<1, 如跨种添加后的 pausedDL)才校验,
          已完成(progress=1)/活跃中(下载/做种中)种子一律跳过(避免已完成种子被反复校验)
       1. 组内有活跃下载种子(is_downloading) -> skip(整组未完成, 不进行任何校验, 包括跳检)
@@ -80,6 +84,14 @@ class CheckAction(FullCheckingMixin, SkipCheckingMixin, BaseAction):
         manager = ctx.manager
 
         # TODO: 未完成且暂停的种子若 recheck 后仍未完成，下一轮会再次校验, 需处理
+
+        # 跨规则同日去重(26-11-05-0019): 排最前 —— 谓词一次 dict 查询全链最便宜(对齐 ops 侧
+        # dedup 排最前先例, ops_verdict._skip_gates_detail); 只读 ops 的 skip_check_day(经
+        # skip_checked_today 单点), 不碰 qB 快照, 不属 S2 让位闸门防的「陈旧状态出决策」面。
+        # 覆盖 skip/full 两模式: 跳检成功 ⇒ 数据已验证, 同日 full recheck 同样无收益; 边缘
+        # (当日删种重加后 recheck 被拦)方向保守且次日自愈, 与 ops 侧跳检 dedup-first 口径一致。
+        if manager.ctx.ops.skip_checked_today(ctx.hash):
+            return ActionResult.skip("今日已跳检过该种子(跨规则去重)")
 
         # S2 deferral 闸门(D-3, A 系 26-10-13-0540): 目标种子或**其所在组任一成员**刚被自有
         # 停/起、qB 快照尚未回流 ⇒ 决策链 0(暂停中未完成)/链 1(组内有活跃下载)读到的状态陈旧,

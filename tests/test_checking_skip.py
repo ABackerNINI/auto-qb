@@ -190,11 +190,11 @@ def test_checking_skip_dedup_across_rules():
     # 模拟另一条规则B: 换规则名但同种子, 同日再跳检
     rule_b = next(r for r in mgr.host.get("rules").enabled_rules if r.name == "example_rules.check_rule")
     client.calls.clear()
-    # !保真替身下规则A跳检成功后种子已完成(progress=1) ⇒ rules 决策链 0(checking.py)会先判
-    #   "种子非暂停中未完成", 走不到跨规则去重闸门 —— 真机同理。把进度还原为未完成以单独验证
-    #   去重闸门本身。这是规则侧链 0 对 ops dedup 的遮蔽(与 ops 侧 26-10-11-2045 同构, 独立成
-    #   缺陷未修): issues/26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html
-    t.progress = 0.0
+    # 保真现场(26-11-05-0019): 真机跳检成功 ⇒ 种子必为已完成(progress=1)。替身不会自动反映
+    #   这一点(跳检流程不改写 t), 故显式置 1 —— 旧代码下链 0 先以「非暂停中未完成」遮蔽,
+    #   走不到规则侧 dedup 前插, 本用例必红(旧绕行 t.progress=0.0 是空操作: 替身默认就是 0,
+    #   用例从未复现过真机遮蔽链路, 见任务档案 26-11-05-backend-rule-skipcheck-dedup)
+    t.progress = 1.0
     ctx = make_ctx(mgr, t, client, dry_run=False)
     from auto_qb.rules.actions import CheckAction
     action = CheckAction({"basic_check": "filelist", "without_reference": {"enabled": True, "mode": "skip-checking"}})
