@@ -2,10 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-09-26
-**Updated:** 2026-11-04
-**Summary:** 设置页「站点」pill 行新增「⤓ 导入缺失站点」按钮：`GET /api/sites/missing`（新路由模块 `routes/sites.py`，只读）复用 `core/exporter.py` 同一套构件（`collect_all_tracker_hostnames` / `find_missing_domains` 双向包含匹配 / `build_tracker_entry` 默认条目）扫描 qB 全部种子的 tracker 域名，找出未配置站点并生成默认配置；前端确认对话框列出站点名(域名)后填入编辑器**待审**（不自动保存，示例值不未经审阅生效），用户核对后走既有「保存」→ PUT /api/config 校验/备份/热重载生效。`exporter.py` 提取 `gen_tracker_name`（既有占用/批内同名 → `_N` 后缀）供 CLI 导出与 webui 扫描共用。+7 测试，全量 **1623 passed + 1 skipped**（TOTAL 92%），金清单 61→62 条。**已入库 `e3fb35d`**（提交后合流远端 9 笔，合并提交 `8bacfae` 推送）。
+**Updated:** 2026-11-05
+**Summary:** 设置页「站点」pill 行新增「⤓ 导入缺失站点」按钮：`GET /api/sites/missing`（新路由模块 `routes/sites.py`，只读）复用 `core/exporter.py` 同一套构件（`collect_all_tracker_hostnames` / `find_missing_domains` 双向包含匹配 / `build_tracker_entry` 默认条目）扫描 qB 全部种子的 tracker 域名，找出未配置站点并生成默认配置；前端确认对话框列出站点名(域名)后填入编辑器**待审**（不自动保存，示例值不未经审阅生效），用户核对后走既有「保存」→ PUT /api/config 校验/备份/热重载生效。`exporter.py` 提取 `gen_tracker_name`（既有占用/批内同名 → `_N` 后缀）供 CLI 导出与 webui 扫描共用。2026-11-05 修复批量失败误报：collector 带失败计数、过半(严格多数)即 502/TrackerScanBatchError 拒出结果，不拿空集冒充「无缺失站点」。**已入库 `e3fb35d`**（提交后合流远端 9 笔，合并提交 `8bacfae` 推送）。
 **Topics:** webui-sites-import
-**Refs:** memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html
+**Refs:** memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html,memory-bank/issues/26-11-04-2347-bug-missing-scan-partial-failure.html
 
 ## 原始请求
 
@@ -58,3 +58,5 @@
   成功(ls-remote 核对一致)。回写状态随本条; 真机走查仍待真实 qB。
 - **2026-11-04 (缺失站点 tracker 合并扩展收口)** — 计划 `memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html` 的 M1~M5 此前已完成（R1），本轮补齐最后一项 M4 验收：**GUI 冒烟三路径**。用 `scripts/ui_harness.py` + Playwright 真浏览器，在 `/api/sites/missing` API 边界注入三形态载荷：无缺失只出 toast；全单组走原两钮逐域名确认；多域名两组弹三钮框（拆分 `ghost`/合并 `primary`/默认焦点合并），合并填入 2 组共 4 域名，拆分二次确认后填入 4 站点；三路径零 `PUT /api/config`、零 console error。真实 groups 数据面已由 RM10/RM08 双附加轮覆盖；纯观感仍归用户目视清单。计划 doc-status 置 **Done**，计划内无剩余未完成项。
 - **2026-11-04 (计划级 code review 与修复)** — 对计划 `26-11-03-2337` 全代码面（M1 exporter 分组构件 / M2 CLI `--split-trackers` / M3 `/api/sites/missing` groups）+ 收口回写做整计划评审。base 取任务起点 commit `62b5cbcf` 的 parent `1102e8b4`（`git show --parents` 核验；无上次收口 commit）。`review.pack` 分三面，派三个只读子代理串行（正确性 / 安全 / 测试缺口），交回 8 条发现全部经 `review.check` 引文校验通过。裁决 **blocker 0**：已修 ① groups 组名复用 sites 的 taken 导致 `_1` 后缀，与 CLI 同规则不符 → 改用独立 `taken_groups`；② 前端判重 `trackers[name]` 命中 `constructor`/`__proto__` 继承属性 → 两处改 `hasOwnProperty.call`；③ 补 CLI `--split-trackers` 透传/缺省两用例并修正原 `only_missing` 断言漏 `assert`；④ 补追加模式 + split 组合用例；⑤ 合并明细截断三件套加入接线守阵。入池：GUI 冒烟依赖一次性 harness 脚本 + gitignored 证据、无仓库内可复跑回归 → issue `26-11-04-2312-test-webui-sites-import-gui-smoke`。裁决不相关并保留痕迹：exporter 逐种 tracker 查询异常吞空集经 review base 旧实现复核属既有语义、本计划未引入，不修但入池 issue `26-11-04-2347-bug-missing-scan-partial-failure`。修复后定向用例与 test.quick 全绿；计划仍 Done。
+
+- 2026-11-05 01:08 修复 issue 26-11-04-2347: collector 带失败计数+过半判据, WebUI 502/CLI TrackerScanBatchError 拒出空结果; 新测试 6 条; review 分面两面 blocker 0 修 4 入池 0; 基线 5211 passed(TOTAL 99%, 见 kb.baseline)

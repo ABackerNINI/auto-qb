@@ -40,8 +40,8 @@
 
 ## Done (288)
 
-- [26-11-04-webui-flux-glass-popups](../26-11-04-webui-flux-glass-popups.md) flux全浮层玻璃化: 预算4→16+遮罩浓度修复
 - [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
+- [26-11-04-webui-flux-glass-popups](../26-11-04-webui-flux-glass-popups.md) flux全浮层玻璃化: 预算4→16+遮罩浓度修复
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-11-04-memory-bank-code-review](../26-11-04-memory-bank-code-review.md) 收口 code review 制度化: code-review skill + review 命令包 + 协议挂钩
 - [26-11-04-webui-fx-glow](../26-11-04-webui-fx-glow.md) fx 辉光荧光化四轮修(雾/圆角/无辐射/角缺光)

@@ -7,6 +7,8 @@
 - test_collect_all_tracker_hostnames_skip_empty_url: 空 URL 跳过
 - test_collect_torrent_tracker_hostnames: 逐种子收集, 每颗种子一个集合
 - test_collect_torrent_tracker_hostnames_error_isolated: 单种查询异常该种子空集, 不终止
+- test_collect_torrent_tracker_hostnames_with_failures_counts: with_failures 变体返回 (逐种集合, 失败数)
+- test_tracker_scan_batch_failed_threshold: 批量失败判据边界(无种子/单种/恰好一半不触发, 过半/全失败触发)
 - test_collect_torrent_tracker_hostnames_call_shape: qB 调用面 = 一次 torrents_info + 逐种 torrents_trackers
 - test_find_missing_domains: 找出缺失域名
 - test_group_missing_domains_cooccurrence: 共现合并(两缺失域名同现于一种子即一组)
@@ -38,6 +40,9 @@
 - test_export_yaml_template_scan_audit_logs: 守阵(W6)—— 扫描/发现/导出 INFO 审计日志丢真即红
 - test_export_yaml_template_only_missing_output_keys: 守阵(W6)—— only_missing 产物 config 键面与回写 trackers 键名
 - test_export_yaml_template_missing_trackers_section: 守阵(W6)—— 配置无 trackers 段走缺省 {}(不崩)
+- test_export_yaml_template_batch_failure_raises: 逐种 tracker 查询过半失败 -> TrackerScanBatchError
+  (CLI 经 AutoQbError 出口干净退出码 1), 不静默导出「无缺失」空模板(issue 26-11-04-2347)
+- test_export_yaml_template_minor_failure_still_exports: 单种失败(未过半)仍正常导出(阈值不过界)
 - test_export_yaml_template_pins_utf8_encoding: 守阵(W6, 平台相关)—— 读 config/写 output 显式钉 encoding="utf-8"
   (参数面用 open 探针全平台可观测; Windows locale 内容面 mojibake 仅作加强, WSL UTF-8 locale 下不敏感)
 - test_collect_torrent_tracker_hostnames_prefers_fresh_bypass: 扫描优先走 fresh 直查(不吃记录级缓存)
@@ -47,6 +52,7 @@
 import os
 import tempfile
 
+import pytest
 import yaml
 
 from auto_qb.core import exporter
@@ -145,6 +151,40 @@ def test_collect_torrent_tracker_hostnames_error_isolated():
 
     client.torrents_trackers = trackers
     assert exporter.collect_torrent_tracker_hostnames(client) == [set(), {"b.example.com"}]
+
+
+def test_collect_torrent_tracker_hostnames_with_failures_counts():
+    """with_failures 变体: 返回 (逐种集合, 失败数), 单种失败计入失败数且不影响其它种子"""
+    client = FakeClient()
+    client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+    client.torrents["H2"] = FakeTorrent(hash="H2", name="T2")
+
+    def trackers(h):
+        if h == "H1":
+            raise RuntimeError("boom")
+        return [{"url": "https://b.example.com/announce"}]
+
+    client.torrents_trackers = trackers
+    assert exporter.collect_torrent_tracker_hostnames_with_failures(client) == (
+        [set(), {"b.example.com"}],
+        1,
+    )
+    client.torrents_trackers = lambda h: [{"url": "https://a.example.com/announce"}]
+    assert exporter.collect_torrent_tracker_hostnames_with_failures(client) == (
+        [{"a.example.com"}, {"a.example.com"}],
+        0,
+    )
+
+
+def test_tracker_scan_batch_failed_threshold():
+    """批量失败判据边界: 无种子/单种失败/恰好一半不触发(严格多数), 过半与全失败触发"""
+    assert exporter.tracker_scan_batch_failed(0, 0) is False, "没有种子谈不上批量失败"
+    assert exporter.tracker_scan_batch_failed(0, 5) is False
+    assert exporter.tracker_scan_batch_failed(1, 3) is False, "单种失败属预期容忍"
+    assert exporter.tracker_scan_batch_failed(1, 2) is False, "恰好一半不算严格多数"
+    assert exporter.tracker_scan_batch_failed(2, 3) is True, "过半失败 = 系统性故障"
+    assert exporter.tracker_scan_batch_failed(1, 1) is True, "仅一颗且失败 = 全失败"
+    assert exporter.tracker_scan_batch_failed(3, 3) is True
 
 
 def test_collect_torrent_tracker_hostnames_call_shape():
@@ -672,6 +712,40 @@ def test_export_yaml_template_missing_trackers_section():
         with open(out_path, "r", encoding="utf-8") as f:
             data = yaml.load(f, Loader=yaml.BaseLoader)
         assert any("hdchina.org" in str(v["domains"]) for v in data["config"]["trackers"].values())
+
+
+def test_export_yaml_template_batch_failure_raises():
+    """逐种 tracker 查询过半失败 -> TrackerScanBatchError, 不静默导出「无缺失」空模板
+
+    issue 26-11-04-2347: 全部查询失败曾被吞成空结果 = 「无缺失站点」假象。CLI 侧经
+    main() 的 AutoQbError 出口 stderr 干净输出 + 退出码 1。
+    """
+    client = FakeClient()
+    for i in range(3):
+        client.torrents[f"H{i}"] = FakeTorrent(hash=f"H{i}", name=f"T{i}")
+
+    def boom(h):
+        raise RuntimeError("connection lost")
+
+    client.torrents_trackers = boom
+    with pytest.raises(exporter.TrackerScanBatchError, match="3/3"):
+        exporter.export_yaml_template(client, FakeConfig(), "unused.yml", "out.yml", dry_run=True, only_missing=True)
+
+
+def test_export_yaml_template_minor_failure_still_exports():
+    """单种失败(未过半)仍容忍: 正常导出, 不触发批量失败(回归守阵: 阈值收紧不过界)"""
+    client = FakeClient()
+    for i in range(3):
+        client.torrents[f"H{i}"] = FakeTorrent(hash=f"H{i}", name=f"T{i}")
+
+    def flaky(h):
+        if h == "H0":
+            raise RuntimeError("boom")
+        return [{"url": "https://hdchina.org/announce.php"}]
+
+    client.torrents_trackers = flaky
+    # only_missing + dry_run: 不落盘, 走完即视为未抛错
+    exporter.export_yaml_template(client, FakeConfig(), "unused.yml", "out.yml", dry_run=True, only_missing=True)
 
 
 def test_export_yaml_template_pins_utf8_encoding(monkeypatch):

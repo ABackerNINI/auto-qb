@@ -21,10 +21,11 @@ from ....core.exporter import (
     build_merged_entry,
     build_tracker_entry,
     collect_configured_domains,
-    collect_torrent_tracker_hostnames,
+    collect_torrent_tracker_hostnames_with_failures,
     find_missing_domains,
     gen_tracker_name,
     group_missing_domains,
+    tracker_scan_batch_failed,
 )
 from ..context import WebContext
 
@@ -43,16 +44,25 @@ def build_router(ctx: WebContext) -> APIRouter:
           填入编辑器并提示用户核对后保存
         - groups 与 CLI 合并导出同规则: 同一颗种子共现的缺失域名并成一组, 代表名与合并
           entry 由 build_merged_entry 单点生成; sites 保持逐域名原形, 前端按组形态自适应引导
+        - 批量失败(逐种 tracker 查询过半报错, qB 断连/重启等) -> 502 拒出结果, 不拿空集
+          冒充「无缺失站点」误导前端分支1(issue 26-11-04-2347); 单种失败仍容忍为空集
         - 种子量大时本端点耗时随种子数线性增长(逐种查 tracker), 前端按钮置 loading
         """
         manager.web.touch()
         _require_client()  # 断连即 503: 绝不能拿空扫描结果冒充"没有缺失站点"
         try:
             torrents = manager.api.torrents_info()
-            # 逐种集合保留(单种失败=空集), 并集就地算 —— 共现分组复用同一次逐种遍历
-            torrent_sets = collect_torrent_tracker_hostnames(manager.api)
+            # 逐种集合保留(单种失败=空集), 并集就地算 —— 共现分组复用同一次逐种遍历;
+            # 失败数一并带回, 过半失败的 502 在 try 外单列(不折进下方 except 二次包一层)
+            torrent_sets, failed_count = collect_torrent_tracker_hostnames_with_failures(manager.api)
         except Exception as e:
             raise HTTPException(status_code=502, detail=f"扫描 qB tracker 失败: {e}")
+        if tracker_scan_batch_failed(failed_count, len(torrent_sets)):
+            raise HTTPException(
+                status_code=502,
+                detail=f"扫描 qB tracker 批量失败({failed_count}/{len(torrent_sets)} 颗种子查询报错), "
+                f"结果不可信: 请检查 qB 状态后重试",
+            )
         all_domains = set()
         for host_set in torrent_sets:
             all_domains |= host_set

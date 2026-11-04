@@ -6,6 +6,9 @@
 - test_sites_missing_all_covered_returns_empty: 全部域名已被覆盖 -> sites 空数组
 - test_sites_missing_requires_connected_client: qB 断连 -> 503(不得拿空扫描冒充"没有缺失站点")
 - test_sites_missing_api_failure_maps_502: 扫描中途 qB 调用失败 -> 502 带原因(不裸 500)
+- test_sites_missing_batch_tracker_failure_maps_502: 逐种 tracker 查询过半失败 -> 502 拒出结果
+  (不拿空集冒充「无缺失站点」误导前端分支1, issue 26-11-04-2347)
+- test_sites_missing_single_tracker_failure_tolerated: 单种失败(未过半)仍容忍, 正常出结果
 - test_sites_missing_groups_merge_cooccurring_domains: 同一颗种子共现的两缺失域名 -> groups 一条(domains 两元素 sorted、name=代表名=组内最短域名、entry 为后端单点产出的合并条目, 与 CLI 合并导出同规则)
 - test_sites_missing_groups_single_domains_match_sites: 无共现全单元素组 -> groups 与 sites 一一对应且 domains 单元素、entry 键存在; sites 保持 name/domain/entry 三键原形
 - test_sites_missing_no_missing_groups_empty: 无缺失域名 -> groups 空数组(与 sites 空数组同现)
@@ -120,6 +123,47 @@ def test_sites_missing_api_failure_maps_502(web_env):
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     resp = client.get("/api/sites/missing", headers=auth)
     assert resp.status_code == 502 and "boom" in resp.json()["detail"]
+
+
+def test_sites_missing_batch_tracker_failure_maps_502(web_env):
+    """逐种 tracker 查询过半失败 -> 502 拒出结果(issue 26-11-04-2347)
+
+    torrents_info() 成功而逐种 tracker 请求全失败(qB 重启/断连)曾被吞成空 sites/groups,
+    前端按分支1提示「无需导入」—— 现在过半失败必须 502 且 detail 带失败比例。
+    """
+    from types import SimpleNamespace
+
+    def _boom(h):
+        raise RuntimeError("tracker query lost")
+
+    mgr, client = web_env
+    mgr.client = object()
+    torrents = [SimpleNamespace(hash=f"H{i}") for i in range(3)]
+    mgr.api = SimpleNamespace(torrents_info=lambda **kw: list(torrents), torrents_trackers=_boom)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    resp = client.get("/api/sites/missing", headers=auth)
+    assert resp.status_code == 502
+    detail = resp.json()["detail"]
+    assert "批量失败" in detail and "3/3" in detail, "detail 必须带失败比例(排障可读)"
+
+
+def test_sites_missing_single_tracker_failure_tolerated(web_env):
+    """单种失败(未过半)仍容忍: 该种空集不触发 502, 其余种子正常出结果(回归守阵)"""
+    from types import SimpleNamespace
+
+    def trackers(h):
+        if h == "H1":
+            raise RuntimeError("boom")
+        return [{"url": "https://tracker.d.com/announce"}]
+
+    mgr, client = web_env
+    mgr.client = object()
+    torrents = [SimpleNamespace(hash="H1"), SimpleNamespace(hash="H2")]
+    mgr.api = SimpleNamespace(torrents_info=lambda **kw: list(torrents), torrents_trackers=trackers)
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+    resp = client.get("/api/sites/missing", headers=auth)
+    assert resp.status_code == 200
+    assert resp.json()["torrents"] == 2
 
 
 def test_sites_missing_groups_merge_cooccurring_domains(web_env):

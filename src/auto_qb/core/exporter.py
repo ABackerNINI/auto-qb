@@ -10,6 +10,7 @@ import re
 import yaml
 
 from ..config import UNLIMITED_SPEED, _strip_none
+from ..infra.errors import TrackerScanBatchError
 from ..infra.utils import convert_bool_in_dict, extract_tracker_hostnames
 from ..infra.versioning import CURRENT_VERSIONS
 
@@ -24,22 +25,47 @@ def collect_configured_domains(config) -> set:
     return configured
 
 
-def collect_torrent_tracker_hostnames(api) -> list:
-    """逐种子收集 tracker hostname, 每颗种子一个集合(单种查询失败 = 空集, 沿用现状静默跳过)
+def collect_torrent_tracker_hostnames_with_failures(api) -> tuple:
+    """逐种子收集 tracker hostname, 返回 (torrent_sets, 失败数) 二元组
 
+    单种查询失败 = 该种空集 + 失败数 +1(沿用现状静默容忍单种); 但批量失败(qB 断连/重启等
+    系统性故障)同样被吞成空集, 会冒充「没有缺失站点」静默漏站(issue 26-11-04-2347), 所以
+    把失败数交给调用方按 tracker_scan_batch_failed(WebUI/CLI 共用单一判据)裁决, 不在本函数
+    内自行抛错。
     走 Facade 的 fresh 直查旁路记录级惰性缓存(issue 26-11-04-0228): 扫描是低频事件,
     缓存只被产品自身 tracker 写操作失效, qB 侧改 tracker 后二次扫描会吃到首扫旧值;
     非 Facade 客户端(测试桩/兼容客户端)没有 fresh 方法, 回退普通 torrents_trackers。
     """
     fetch_trackers = getattr(api, "torrents_trackers_fresh", None) or api.torrents_trackers
     torrent_sets = []
+    failed_count = 0
     for tor in api.torrents_info():
         try:
             trackers_info = fetch_trackers(tor.hash)
         except Exception:
             trackers_info = []
+            failed_count += 1
         torrent_sets.append(extract_tracker_hostnames(trackers_info))
+    return torrent_sets, failed_count
+
+
+def collect_torrent_tracker_hostnames(api) -> list:
+    """逐种子收集 tracker hostname, 每颗种子一个集合(单种查询失败 = 空集, 沿用现状静默跳过)
+
+    需要感知批量失败的调用方(WebUI /api/sites/missing 与 --export-yaml)走
+    collect_torrent_tracker_hostnames_with_failures 拿失败数; fresh 直查旁路说明见其 docstring。
+    """
+    torrent_sets, _ = collect_torrent_tracker_hostnames_with_failures(api)
     return torrent_sets
+
+
+def tracker_scan_batch_failed(failed_count: int, torrent_count: int) -> bool:
+    """批量失败判据(WebUI 与 CLI 共用的单一判据): 有种子且逐种 tracker 查询失败过半(严格多数)
+
+    单种失败属预期容忍(种子被删/瞬时错误); 过半失败基本只能是 qB 断连/重启等系统性故障,
+    此时吞成空集 = 静默漏站 —— 宁可报错也不出「没有缺失站点」的假结果(issue 26-11-04-2347)。
+    """
+    return torrent_count > 0 and failed_count * 2 > torrent_count
 
 
 def collect_all_tracker_hostnames(api) -> set:
@@ -172,7 +198,14 @@ def export_yaml_template(
     # 1. 获取所有种子并收集 tracker 域名(逐种集合保留, 共现分组复用同一次逐种遍历)
     torrents = api.torrents_info()
     logger.info(f"扫描 {len(torrents)} 个种子的 tracker")
-    torrent_sets = collect_torrent_tracker_hostnames(api)
+    torrent_sets, failed_count = collect_torrent_tracker_hostnames_with_failures(api)
+    if tracker_scan_batch_failed(failed_count, len(torrent_sets)):
+        # 批量失败(过半)拒绝出结果: 空结果会被当成「无缺失站点」静默漏站(issue 26-11-04-2347);
+        # CLI 经 main() 的 AutoQbError 出口 stderr 干净退出 + 退出码 1
+        raise TrackerScanBatchError(
+            f"扫描 qB tracker 批量失败({failed_count}/{len(torrent_sets)} 颗种子查询报错), "
+            f"导出结果不可信(会静默漏站): 请检查 qB 连接后重试"
+        )
     all_domains = set()
     for host_set in torrent_sets:
         all_domains |= host_set

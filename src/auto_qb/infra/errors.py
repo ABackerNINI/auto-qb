@@ -8,8 +8,18 @@ class AutoQbError(Exception):
     - ConfigError (config/errors.py): 配置文件读取/YAML 解析/校验失败/启动期规则 spec 错误
     - SingleInstanceLockError (locking.py): 单实例锁竞争/锁文件错误
     - QbCompatError (torrents.py): qBittorrent torrent info 字段与预期不符(版本不兼容)
+    - TrackerScanBatchError (errors.py): 缺失站点扫描批量失败, 结果不可信(会静默漏站)
 
     其它异常(程序 bug)不在此列, 照常抛出保留堆栈。
+    """
+
+
+class TrackerScanBatchError(AutoQbError):
+    """缺失站点扫描批量失败: 逐种 tracker 查询过半报错, 扫描结果不可信(会静默漏站)
+
+    与「真的没有缺失站点」必须区分开(issue 26-11-04-2347): 拿空结果冒充无缺失会让
+    WebUI 提示「无需导入」、CLI 静默导出空模板。CLI 侧经 main() 的 AutoQbError 出口
+    干净退出(stderr + 退出码 1); WebUI 侧映射 502。
     """
 
 
