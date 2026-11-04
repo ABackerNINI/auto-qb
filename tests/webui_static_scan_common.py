@@ -164,7 +164,14 @@ _PERF_BACKDROP_BANNED = ("modal-mask", "topbar", "status-strip", "statusbar", "c
 # 这是**有意接受的小面积嵌套** —— 遮罩级全屏 blur 不回来, 帧率实测背书, 见计划档案 R2 实录)。
 # 计数口径 = **逻辑处**(按规则体): `-webkit-backdrop-filter` 是 Safari 前缀别名, 与同体的无前缀
 # 声明只计一处 —— 否则加一条兼容声明就把预算顶红, 迫使 agent 去改预算而不是改样式。
-_FLUX_BACKDROP_BUDGET = 4
+# 2026-11-04 全浮层玻璃化(用户报"添加种子/右键菜单等弹窗毛玻璃近乎没有", 显式改预算 + 红绿双验):
+# 预算 4 → 16, 新增 12 处 = 下拉(.col-menu/.pop-menu)/右键菜单(.ctx-menu/.ctx-sub)/图表与历史
+# 悬停卡(.ce-chart-tip/.hist-tip)/HR 全屏面板(.hr-full-modal)/拖放落点(.add-drop-box)/
+# 限速浮层(.speed-pop)/HR 悬停弹窗(.hr-pop/.hp-arrow)/共用层覆盖(.hb-pop 与 :is 组含 .relc-pop)。
+# 26-11-02「透正文」的根因是半透明底**无 blur**; 挂上 blur 后半透明即毛玻璃, 不再透可读正文。
+# 唯一保留不透明 --bg-pop 的浮层 = .col-ghost(列头拖动虚影, 每帧移动的 fixed 元素挂 blur = 逐帧
+# 回读采样, 不玻璃化)。遮罩级全屏 blur 仍任何皮肤不回来。
+_FLUX_BACKDROP_BUDGET = 16
 
 
 def _extract_column_keys(app_js: str, const_name: str):

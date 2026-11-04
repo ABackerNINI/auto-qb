@@ -17,6 +17,7 @@
 """
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -51,7 +52,8 @@ def _install(web_env, root_path: str, snapshot=None):
     # save_path 用链接所在目录作为允许根(测试都在同一个 src 下造链)
     rec = SimpleNamespace(
         save_path=str(Path(root_path).parent),
-        root_path=root_path, content_path="",
+        root_path=root_path,
+        content_path="",
     )
     mgr.store.by_hash = {HASH: rec}
     mgr.store.get = lambda h: rec if h == HASH else None
@@ -100,9 +102,7 @@ def test_chain_endpoint_ignores_path_param(web_env, tmp_path):
     _link(link, target)
     mgr, client, _rec = _install(web_env, str(link))
 
-    resp = client.get(
-        f"/api/relocate/chain?hash={HASH}&path={target}", headers=_auth(mgr)
-    )
+    resp = client.get(f"/api/relocate/chain?hash={HASH}&path={target}", headers=_auth(mgr))
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["start"] == path_normalize(str(link)), "起点必须由服务端派生, 客户端 path 参数无效"
@@ -120,11 +120,19 @@ def test_chain_walk_types_targets_and_attribution(web_env, tmp_path):
     kind_a = _link(a_link, b_link)
 
     job = {
-        "hashes": [HASH], "alias_paths": [str(a_link), str(b_link)], "job_id": "job-1",
-        "phase": "armed", "origin": "web", "armed_at": 100.0, "updated_at": 200.0,
-        "mover": HASH, "attempts": 0, "last_error": "", "alias_kind": kind_a,
+        "hashes": [HASH],
+        "alias_paths": [str(a_link), str(b_link)],
+        "job_id": "job-1",
+        "phase": "armed",
+        "origin": "web",
+        "armed_at": 100.0,
+        "updated_at": 200.0,
+        "mover": HASH,
+        "attempts": 0,
+        "last_error": "",
+        "alias_kind": kind_a,
     }
-    snap = SimpleNamespace(jobs=(job,), generation=7)
+    snap = SimpleNamespace(jobs=(job, ), generation=7)
     mgr, client, _rec = _install(web_env, str(a_link), snap)
 
     resp = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr))
@@ -202,12 +210,10 @@ def test_chain_cache_ttl_refresh_and_capacity(web_env, tmp_path):
 
 def test_chain_mapped_and_remote_are_unknown_not_guessed():
     roots = ["C:/root"]
-    mapped = relocate_chain.probe_chain("C:/root/a", roots, {}, HASH,
-                                       env=relocate_chain.ENV_MAPPED)
+    mapped = relocate_chain.probe_chain("C:/root/a", roots, {}, HASH, env=relocate_chain.ENV_MAPPED)
     assert mapped["nodes"][0]["status"] == "unknown"
     assert "映射" in mapped["nodes"][0]["reason"]
-    remote = relocate_chain.probe_chain("//server/share/a", roots, {}, HASH,
-                                       env=relocate_chain.ENV_REMOTE)
+    remote = relocate_chain.probe_chain("//server/share/a", roots, {}, HASH, env=relocate_chain.ENV_REMOTE)
     assert remote["nodes"][0]["status"] == "unknown"
     assert "远程" in remote["nodes"][0]["reason"]
     outside = relocate_chain.probe_chain("/etc/passwd", ["C:/root"], {}, HASH)
@@ -219,9 +225,7 @@ def test_chain_mapped_and_remote_are_unknown_not_guessed():
 def test_probe_chain_edge_states(tmp_path, monkeypatch):
     assert relocate_chain.path_within_roots("", ["C:/root"]) is False
     assert relocate_chain.path_within_roots("C:/root/a", ["", "C:/root"]) is True
-    assert relocate_chain.build_alias_index(
-        SimpleNamespace(jobs=({"hashes": [HASH], "alias_paths": []},)), HASH
-    ) == {}
+    assert relocate_chain.build_alias_index(SimpleNamespace(jobs=({"hashes": [HASH], "alias_paths": []}, )), HASH) == {}
 
     missing = relocate_chain.probe_chain(str(tmp_path / "gone"), [str(tmp_path)], {}, HASH)
     assert missing["nodes"][0]["status"] == "missing"
@@ -235,9 +239,7 @@ def test_probe_chain_edge_states(tmp_path, monkeypatch):
     escaped = relocate_chain.probe_chain(str(link), [str(outside_root)], {}, HASH)
     assert escaped["nodes"][-1]["status"] == "outside_scope"
 
-    fake = alias_fs.PathInspection(
-        status="ok", kind=alias_fs.KIND_SYMLINK, target="\\??\\Volume{1}\\x"
-    )
+    fake = alias_fs.PathInspection(status="ok", kind=alias_fs.KIND_SYMLINK, target="\\??\\Volume{1}\\x")
     monkeypatch.setattr(relocate_chain.alias_fs, "inspect_path", lambda p: fake)
     unmappable = relocate_chain.probe_chain(str(link), [str(outside_root)], {}, HASH)
     assert unmappable["nodes"][-1]["status"] == "unknown"
@@ -296,7 +298,9 @@ def test_inspect_path_link_variants(tmp_path, monkeypatch):
 
     # 重解析点标签 SYMLINK(不依赖 islink): 分类为符号链接并能读目标
     st_tag = SimpleNamespace(
-        st_mode=stat.S_IFDIR, st_nlink=1, st_dev=1,
+        st_mode=stat.S_IFDIR,
+        st_nlink=1,
+        st_dev=1,
         st_reparse_tag=alias_fs.IO_REPARSE_TAG_SYMLINK,
     )
     monkeypatch.setattr(alias_fs.os, "lstat", lambda p: st_tag)
@@ -336,7 +340,8 @@ def test_inspect_path_error_classification(tmp_path, monkeypatch):
     assert unknown.status == "unknown"
 
     monkeypatch.setattr(
-        alias_fs.os, "lstat",
+        alias_fs.os,
+        "lstat",
         lambda p: SimpleNamespace(st_mode=stat.S_IFSOCK, st_nlink=1, st_dev=1),
     )
     assert alias_fs.inspect_path(str(tmp_path / "z")).kind == alias_fs.KIND_OTHER
@@ -363,17 +368,14 @@ def test_alias_helpers(tmp_path):
 
 
 def test_chain_alias_index_prefers_active_job():
-    old = {"hashes": [HASH], "alias_paths": ["C:/x"], "job_id": "old", "phase": "failed",
-           "updated_at": 10.0}
-    active = {"hashes": [HASH], "alias_paths": ["C:/x"], "job_id": "active", "phase": "armed",
-              "updated_at": 20.0}
+    old = {"hashes": [HASH], "alias_paths": ["C:/x"], "job_id": "old", "phase": "failed", "updated_at": 10.0}
+    active = {"hashes": [HASH], "alias_paths": ["C:/x"], "job_id": "active", "phase": "armed", "updated_at": 20.0}
     snap = SimpleNamespace(jobs=(old, active))
     index = relocate_chain.build_alias_index(snap, HASH)
     assert list(index.values()) == [active]
     assert job_rank(active) > job_rank(old)
 
-    other = {"hashes": ["b" * 40], "alias_paths": ["C:/x"], "job_id": "other",
-             "phase": "armed", "updated_at": 30.0}
+    other = {"hashes": ["b" * 40], "alias_paths": ["C:/x"], "job_id": "other", "phase": "armed", "updated_at": 30.0}
     snap = SimpleNamespace(jobs=(old, active, other))
     assert list(relocate_chain.build_alias_index(snap, HASH).values()) == [active], \
         "别的 hash 的 job 不得串到本种子的归属章"
@@ -394,22 +396,29 @@ def test_chain_frontend_static_and_node():
         )
 
     pop = _static("shared/tpl/popovers.html")
-    for needle in ('role="dialog"', 'aria-label="迁移路径链"', 'tabindex="-1"',
-                   '@keydown.esc', "relc-backdrop", "relChainRefresh()", "relChainCopyAll()"):
+    for needle in (
+        'role="dialog"', 'aria-label="迁移路径链"', 'tabindex="-1"', '@keydown.esc', "relc-backdrop", "relChainRefresh()",
+        "relChainCopyAll()"
+    ):
         assert needle in pop, needle
     assert ">关闭路径链<" in pop or 'aria-label="关闭路径链"' in pop
-    # 浮窗不透底(P1-4): 四皮肤里 flux 的 --bg-card 带 alpha, 必须用不透明 --bg-pop
+    # 浮窗底(P1-4): shared 基线仍不透明 --bg-pop(另三皮肤无毛玻璃); flux 侧 2026-11-04 全浮层
+    # 玻璃化 —— html[data-fx-preset] 前缀覆盖为半透明 --bg-card + blur(详见 _scan_flux_modal_frost)
     css = _static("shared/row_lang.css")
     pop_css = css.split(".relc-pop {", 1)[1].split("}", 1)[0]
-    assert "background: var(--bg-pop)" in pop_css, "路径链浮窗必须用不透明 --bg-pop"
+    assert "background: var(--bg-pop)" in pop_css, "路径链浮窗 shared 基线必须用不透明 --bg-pop"
+    flux_pop = _static("flux/css/dialogs.css")
+    assert re.search(r"html\[data-fx-preset\] :is\([^)]*\.relc-pop[^)]*\)\s*\{[^}]*var\(--bg-card\)", flux_pop), \
+        "flux 侧路径链浮窗必须玻璃化覆盖(半透明 --bg-card + blur), 与全浮层玻璃化档位一致"
     # 长链可滚(P2-4): 浮窗自身 overflow:auto, 内部滚动不得触发「滚动即关」
     assert "overflow: auto" in pop_css
     assert "pop.contains(t)" in js, "滚动关闭必须放过浮窗内部滚动, 否则长链滚不动"
     rows = _static("shared/drawer_rows.js")
     assert 'act: "chain"' in rows and 'A → B → C' in rows
-    for tpl in ("shared/drawer_tpl/01-general-hero-tall.js",
-                "shared/drawer_tpl/02-general-cards-low.js",
-                "shared/drawer_tpl/03-general-dossier-collapsed.js"):
+    for tpl in (
+        "shared/drawer_tpl/01-general-hero-tall.js", "shared/drawer_tpl/02-general-cards-low.js",
+        "shared/drawer_tpl/03-general-dossier-collapsed.js"
+    ):
         assert 'data-act="chain"' in _static(tpl) and "ctx.relChainOpen" in _static(tpl)
     assert "relChain.open" in _static("shared/lifecycle.js"), "Esc 必须进退栈链"
     assert "this.relChain.open" in _static("shared/dialogs_meta.js")
@@ -444,8 +453,11 @@ process.stdout.write(JSON.stringify({
     Object.assign({},M,{fmtTs:()=>'T',relChain:{data:{probed_at:1,cached:false}}}))
 }));
 """
-    proc = subprocess.run([node, "-e", probe, str(ROOT / "src/auto_qb/webui/static/shared/relocate_chain.js")],
-                          capture_output=True, text=True)
+    proc = subprocess.run(
+        [node, "-e", probe, str(ROOT / "src/auto_qb/webui/static/shared/relocate_chain.js")],
+        capture_output=True,
+        text=True
+    )
     assert proc.returncode == 0, proc.stderr
     out = json.loads(proc.stdout)
     assert out["dataKeys"] == ["relChain"]

@@ -113,9 +113,9 @@
 .filter-btn.active { border-color: var(--accent); color: var(--accent-hi); background: var(--accent-soft); }
 .filter-caret { opacity: .55; }
 .filter-btn.active .filter-caret { opacity: 1; }
-/* 浮层弹层(列选择器/筛选器共用): 方角 + 顶亮渐变 + 大阴影 */
+/* 浮层弹层(列选择器/筛选器共用): 方角 + 顶亮渐变 + 大阴影; 2026-11-04 玻璃化(半透明底+blur, 本文件 700 行卡满, 声明内联零净增行) */
 .col-menu, .pop-menu { position: absolute; left: 0; top: calc(100% + 6px); z-index: 40; padding: 8px;
-  background: var(--bg-pop); border: 1px solid var(--border-strong);
+  background: var(--bg-card); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-strong);
   box-shadow: var(--shadow-3); animation: drop-in .12s var(--ease-out); }
 .col-menu { width: 300px; }
 .pop-menu { width: 260px; max-height: 330px; overflow-y: auto; }
@@ -425,9 +425,9 @@
   background: repeating-linear-gradient(90deg, var(--st, var(--green)) 0 5px, transparent 5px 8px); }
 .m-progress .val { flex: 0 0 auto; min-width: 4em; text-align: right; font: 500 11.5px/1 var(--font-mono); color: var(--fg-muted); }
 
-/* ---------------- 右键菜单 ---------------- */
+/* ---------------- 右键菜单(2026-11-04 玻璃化: 半透明底+blur, 替代无 blur 时代的不透明 --bg-pop) ---------------- */
 .ctx-menu { position: fixed; z-index: 100; min-width: 196px; padding: 6px;
-  background: var(--bg-pop); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  background: var(--bg-card); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drop-in .12s var(--ease); }
 .ctx-item { display: flex; align-items: center; gap: 9px; padding: 8px 11px;
   font-size: 13px; cursor: pointer; transition: background var(--dur) var(--ease); }
@@ -465,7 +465,7 @@
  * 不裁剪时 Vue 绑定的内联 top 恒为 -6px —— 与本条默认值一致, 改默认值两处要同步 */
 .ctx-sub { position: absolute; left: calc(100% + 4px); top: -6px; z-index: 1;
   min-width: 190px; padding: 6px;
-  background: var(--bg-pop); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
+  background: var(--bg-card); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drop-in .12s var(--ease); }
 .ctx-sub.flip-x { left: auto; right: calc(100% + 4px); }
 .ctx-item.danger { color: var(--error); }
@@ -513,8 +513,8 @@
 /* ---------------- 站内确认框: 弹窗大面 → 切角 14px + 顶亮渐变(hb-modal 语言) ----------------
  * PERF-01: 遮罩**不带** backdrop-filter(嵌套毛玻璃卡顿根因) */
 .modal-mask { position: fixed; inset: 0; z-index: 130; display: flex; align-items: center; justify-content: center;
-  padding: 20px; background: rgba(4, 10, 22, .72); animation: fade-in .14s var(--ease); --msg-base: var(--bg-card);
-  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防滚轮穿透; 弹窗 blur 需 82% 透视底 */
+  padding: 20px; background: rgba(4, 10, 22, .5); animation: fade-in .14s var(--ease); --msg-base: var(--bg-card);
+  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防滚轮穿透; 2026-11-04 遮罩 .72→.5 —— 玻璃可见度 = 弹窗底 alpha × 遮罩 alpha 的叠乘, 遮罩过浓把 blur 压成肉眼不可见(见 _scan_flux_modal_frost 遮罩浓度钉) */
 @keyframes fade-in { from { opacity: 0; } }
 /* R3 精修 T1: 弹窗形状回退 console 原版切角 14px(毛玻璃 blur 等取值保留) */
 .modal-mask .modal { --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0,
@@ -618,7 +618,7 @@
 .ce-chart-dot { fill: var(--fg); stroke: var(--bg); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .ce-chart-svg .ce-axis-labels text { fill: var(--fg-dim); font-size: 10px; }
 .ce-chart-tip { position: absolute; transform: translate(10px, -50%); display: flex; flex-direction: column;
-  gap: 1px; padding: 6px 9px; background: var(--bg-pop);
+  gap: 1px; padding: 6px 9px; background: var(--bg-card); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   border: 1px solid var(--border-strong); box-shadow: var(--shadow-2); pointer-events: none;
   font: 500 11.5px/1.5 var(--font-mono); color: var(--fg-soft); white-space: nowrap; z-index: 2; }
 .ce-chart-tip.flip { transform: translate(calc(-100% - 10px), -50%); }

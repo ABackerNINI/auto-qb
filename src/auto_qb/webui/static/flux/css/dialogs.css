@@ -151,11 +151,12 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
  * backdrop-filter); z-index 取 128/129 —— 压在内容与右键菜单(100)之上、确认框(130)之下,
  * 覆盖层开着时弹确认框仍能盖上来。三套 UI 成对改(atlas/console dialogs.css, prism components.css)。 */
 .hr-full-mask { position: fixed; left: 0; right: 0; top: var(--head-h, 0px); bottom: var(--statusbar-h, 34px);
-  z-index: 128; background: rgba(4, 10, 22, .72); animation: fade-in .14s var(--ease);
-  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防弹窗滚轮穿透背景 */
+  z-index: 128; background: rgba(4, 10, 22, .5); animation: fade-in .14s var(--ease);
+  overflow: hidden; overscroll-behavior: contain; } /* 遮罩截断滚动链, 防弹窗滚轮穿透背景; 2026-11-04 .72→.5 同 .modal-mask(玻璃可见度) */
 .hr-full-modal { position: fixed; left: 0; right: 0; top: var(--head-h, 0px); bottom: var(--statusbar-h, 34px);
   z-index: 129; display: flex; flex-direction: column;
-  background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-pop);
+  background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-card);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); /* 2026-11-04 全浮层玻璃化 */
   border-top: 1px solid var(--border-strong); box-shadow: var(--shadow-3); animation: modal-in .16s var(--ease); }
 .hr-full-modal-hd { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
   background: var(--bg-card); border-bottom: 1px solid var(--hairline); }
@@ -239,13 +240,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 
 /* ---------------- DND-01 全局拖拽落点提示 ---------------- */
 .add-drop-mask { position: fixed; inset: 0; z-index: 132; display: flex; align-items: center; justify-content: center;
-  background: rgba(4, 10, 22, .62); pointer-events: none; animation: fade-in .14s var(--ease); }
+  background: rgba(4, 10, 22, .5); pointer-events: none; animation: fade-in .14s var(--ease); } /* 2026-11-04 .62→.5 同 .modal-mask */
 .add-drop-box { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 34px 52px;
   /* R3 精修 T1: 拖放落点形状回退 console 原版切角 14px */
   --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0,
     100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut));
   border: 2px dashed var(--accent); background:
-    linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-pop);
+    linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-card);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); /* 2026-11-04 全浮层玻璃化 */
   box-shadow: var(--shadow-3); }
 .add-drop-box .ico { width: 30px; height: 30px; color: var(--accent); }
 .add-drop-box p { margin: 0; font: 600 17px/1.4 var(--font-display); color: var(--fg); }
@@ -458,7 +460,8 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
   /* R3 精修 T1: 限速浮层形状回退 console 原版切角 14px */
   --hb-cut: 14px; clip-path: polygon(var(--hb-cut) 0, 100% 0,
     100% calc(100% - var(--hb-cut)), calc(100% - var(--hb-cut)) 100%, 0 100%, 0 var(--hb-cut));
-  background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-pop);
+  background: linear-gradient(135deg, var(--surface-1), transparent 46%), var(--bg-card);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); /* 2026-11-04 全浮层玻璃化 */
   border: 1px solid var(--border-strong); box-shadow: var(--shadow-3);
   animation: drop-in .12s var(--ease-out); }
 .speed-pop .add-dialog-body { display: flex; flex-direction: column; gap: 10px; overflow: visible; }
@@ -490,12 +493,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 
 /* ============ HR 悬停弹窗(T3 进度仪表; z-index 140 高于 ctx-menu 与 speed-pop) ============ */
 .hr-pop { position: fixed; left: 0; top: 0; z-index: 140; width: 300px; padding: 12px 13px;
-  color: var(--fg); background: var(--bg-pop); border: 1px solid var(--border-strong);
+  color: var(--fg); background: var(--bg-card); border: 1px solid var(--border-strong);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); /* 2026-11-04 全浮层玻璃化 */
   box-shadow: var(--shadow-3);
   animation: hrpop-in var(--dur) var(--ease); }
 @keyframes hrpop-in { from { opacity: 0; transform: translateY(4px) scale(.98); } }
 @media (prefers-reduced-motion: reduce) { .hr-pop { animation: none; } }
-.hp-arrow { position: absolute; width: 10px; height: 10px; background: var(--bg-pop);
+.hp-arrow { position: absolute; width: 10px; height: 10px; background: var(--bg-card);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); /* 箭头同材质: 不 blur 会与面板接缝处锐/糊不一致 */
   transform: rotate(45deg); display: none; }
 .hr-pop.above .hp-arrow { display: block; bottom: -5.5px;
   border-right: 1px solid var(--border-strong); border-bottom: 1px solid var(--border-strong); }
@@ -578,11 +583,14 @@ body.drawer-resizing { cursor: ns-resize; user-select: none; }
 .drawer-body .group-row.sel { background: var(--accent-soft); border-color: var(--accent-line); }
 .drawer-body .mono-cell { font-family: var(--font-mono); font-size: 12px; }
 
-/* ================= 共用层浮动层的不透明兜底(仅 flux 作用域) =================
+/* ================= 共用层浮动层的玻璃化覆盖(仅 flux 作用域) =================
  * R7(2026-11-02): 设置页/顶栏/提示等浮层样式单点在 shared/console_hub.css 与 shared/row_lang.css
  * (四皮肤共用), 它们用 --bg-elev; 另三皮肤该令牌不透明, 只有 flux 带 .92 alpha ⇒ 本皮肤下弹层
  * 会透出正文。故只在 flux 侧覆盖底色, 不动 shared 本体(否则波及 atlas/prism/console)。
- * html[data-fx-preset] 前缀提权(0,2,1 > shared 的 0,1,0), 级联序在 console_hub.css 之后也不怕。 */
-html[data-fx-preset] .hb-pop { background-color: var(--bg-pop); }
-html[data-fx-preset] :is(.hb-pop-arrow, .hb-tr-drop, .search-help-pop, .aq-tip, .err-panel, .rowlang-menu) {
-  background: var(--bg-pop); }
+ * html[data-fx-preset] 前缀提权(0,2,1 > shared 的 0,1,0), 级联序在 console_hub.css 之后也不怕。
+ * 2026-11-04 全浮层玻璃化: 覆盖底色从 --bg-pop(不透明) 改 --bg-card(半透明) + blur —— 26-11-02
+ * 的「透正文」根因是半透明但无 blur; 挂上 blur 后半透明底即毛玻璃, 不再透出可读正文。
+ * .relc-pop(路径链浮窗, shared 基线钉 --bg-pop)并入同组 —— flux 侧玻璃化, shared 本体不动。 */
+html[data-fx-preset] .hb-pop { background-color: var(--bg-card); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+html[data-fx-preset] :is(.hb-pop-arrow, .hb-tr-drop, .search-help-pop, .aq-tip, .err-panel, .rowlang-menu, .relc-pop) {
+  background: var(--bg-card); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
