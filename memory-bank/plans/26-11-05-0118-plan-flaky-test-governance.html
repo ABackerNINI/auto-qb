@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>flaky 测试结构化治理: 时钟注入与抖动消除</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="flaky-test-governance">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-05-0118">
+<meta name="doc-updated" content="26-11-05-0128">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: flaky-test-governance</div>
+<h1>flaky 测试结构化治理: 时钟注入与抖动消除</h1>
+<p class="lede">把 tests/ / e2e/ 的时序抖动类 flaky 从「逐案打地鼠」升级为结构化消除: 生产代码全量时钟注入、测试侧统一假钟、消灭固定睡等, 并用守阵 + 随机序巡检防回归; 平台差异做机制化收敛, 不建隔离区、不放开 retry。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-0118 · <b>doc-updated</b> 26-11-05-0128 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(D1–D13, 用户逐项拍板) + 业界调研子代理(13 组检索: Google/Microsoft/Meta/Datadog/Trunk 等, 附录 §11)
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<h3>背景</h3>
+<p>时序/抖动类 flaky 反复冒头: 修掉一个(跨零点、分钟戳、时钟粒度坍缩…)另一个又冒出来, 呈打地鼠形态。<code>memory-bank/pitfalls/testing/</code> 中 flaky 直接相关坑档已 10+ 条, 全部是<b>逐案修、无机制沉淀</b>。另有平台差异类(Windows 定时器刻度、POSIX vs nt)偶发假红。业界实证(Microsoft ISSTA 2019): async-wait/时序是 flaky 第一大类根因, 且属<b>确定性根因</b>——可复现、可根治, 与网络类概率性根因不同, 值得先治。</p>
+<h3>目标(做到什么程度算成)</h3>
+<ol>
+  <li>守阵上线且<b>零存量违例</b>: tests/ 裸 <code>time.sleep</code> 归零(白名单外)、e2e <code>waitForTimeout</code> 归零、src/ 裸取时归零(白名单外)、bind 位固定端口归零; 新增即红。</li>
+  <li>测试侧假钟<b>统一单点</b>: 4 套旧假钟类全部迁完并删除。</li>
+  <li>生产时钟<b>注入全覆盖</b>: 44 文件 161 处取时点全部收口。</li>
+  <li>本机全量(含 e2e fast)<b>连续 5 次绿</b>。</li>
+  <li>flaky 台账 / 根因类目覆盖表 / testing 文档 / 坑档回写完成。</li>
+</ol>
+<h3>设计底线/不变量</h3>
+<ul>
+  <li><b>时间控制权在测试</b>: 生产代码不裸取时; 测试不真睡等真时序。断言<b>区间</b>不精确值(业界共识: 完全冻结+精确断言脆弱)。</li>
+  <li><b>retry 不是修复</b>: pytest 主套件 reruns 恒 0; 新引入的 flaky 必须 fail CI 当场修, 修不了走 skip(reason+issue 入池), 不养隔离区。</li>
+  <li><b>skip 必带理由+issue 链接</b>, 纳入巡检审计, 防腐烂。</li>
+  <li>本计划<b>不新增生产配置键</b>(不触发 validate_config 面); pytest-randomly 等是 dev 依赖+CI job, 不进生产配置。</li>
+  <li>黄金法则不冲突: 守阵只做只读扫描断言; 单一写线程/幂等/状态持久化口径不受影响。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<table>
+  <tr><th>面</th><th>实测现状</th><th>痛点</th></tr>
+  <tr>
+    <td>生产取时</td>
+    <td><code>time.time()/time.monotonic()</code> 直调 <b>161 处 / 44 文件</b>, 无时钟注入点; 仅 hr runtime 有 <code>runtime.sleeper</code> 可中断等待注入先例</td>
+    <td>测试无法控制时间, 只能真睡/轮询/零散 monkeypatch——结构性根因</td>
+  </tr>
+  <tr>
+    <td>tests/ (296 文件)</td>
+    <td>裸 <code>time.sleep</code> <b>63 处 / 27 文件</b>(top: test_hr_runtime_feeder 10、test_qbmanager_loop 7、test_traffic_store_paths 5、test_qbmanager_tasks 5、test_ui 4); monkeypatch time <b>126 处</b></td>
+    <td>线程真睡等真时序; monkeypatch 零散且形态不一, 每个新用例重新踩坑</td>
+  </tr>
+  <tr>
+    <td>假钟碎片化</td>
+    <td><b>4 套</b>互不相通: <code>tests/hr_helpers.py:234</code> Clock、<code>tests/traffic_sample_support.py:170</code> _Clock、<code>tests/test_web_traffic_qb.py:382</code> _FixedClock、<code>tests/webui_helpers.py:622</code> _FixedClock</td>
+    <td>语义各异地步演化; 没有单点就立不了「禁止新增」的守阵</td>
+  </tr>
+  <tr>
+    <td>e2e (50 spec)</td>
+    <td>1554 个 expect 对 <b>91 处 <code>waitForTimeout</code></b>(固定睡等) + 21 处 <code>setTimeout</code>; <code>workers:1</code> 串行; CI <code>retries:1</code></td>
+    <td>固定睡等是 Playwright 头号反模式: 睡短了 flaky、睡长了慢; retry 在掩盖问题</td>
+  </tr>
+  <tr>
+    <td>tests-real (120 用例)</td>
+    <td>真机轨, 真实时序是其存在意义</td>
+    <td>不做时钟改造(拍板 D7), 只做规范/坑档层</td>
+  </tr>
+  <tr>
+    <td>端口/资源</td>
+    <td><code>tests/_test_ports.py</code> 单点(bind(0)+回绑自验压 TOCTOU)+守卫用例已治大头; e2e 已 OS 分配端口(26-11-03); hr discovery 固定候选表坑已修(discovery_port=0)</td>
+    <td>「bind 位禁固定口」只有坑档纪律无守阵; 残留固定口(如 <code>tests/helpers.py:1000</code> 16585)均在配置值位、从不 bind, 无碰撞面</td>
+  </tr>
+  <tr>
+    <td>坑档分布</td>
+    <td>flaky 直接相关: flaky-midnight-daycount / flaky-minute-stamp-dup / flaky-random-salt-hash-identity / poll-last-round-race / time-tick-collapse-strict-advance / timing-tolerance(15.6ms 刻度) / xdist-worker-global-snapshot / iab-click-rerender-flake / fixed-port-test-collision / hr-registry-pollution / cross-thread-teardown-assert 等</td>
+    <td>覆盖 time/并发/顺序/平台/随机/端口多类, 但治理动作全部逐案、零机制</td>
+  </tr>
+</table>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>主线: 三根支柱</h3>
+<ol>
+  <li><b>时间控制权收归测试</b>——生产 <code>src/auto_qb/infra/clock.py</code> 单点(Clock protocol + 系统时钟), 组件构造期注入(默认系统时钟), 叶子函数走单点; 测试侧 <code>tests/clock.py</code> 统一假钟(advance/freeze + autouse 复位)。</li>
+  <li><b>消灭固定睡等</b>——Python 侧 sleep 改「事件同步或 <code>wait_until(cond, timeout)</code> 条件轮询」(收编 <code>tests/helpers.py:1268/1425</code> 两处雏形); e2e 侧 <code>waitForTimeout</code> 改 <code>expect(locator).toHaveXxx()</code> / <code>expect.poll()</code> / <code>toPass()</code>。</li>
+  <li><b>防回归机制</b>——四类守阵(裸 sleep / waitForTimeout / 裸取时 / bind 位固定口)+ pytest-randomly 周巡检(随机序暴露顺序依赖与随机数依赖)+ flaky 台账。</li>
+</ol>
+<p>辅助: 平台差异机制化收敛(<code>tests/platform_tolerance.py</code> 容差单点+规范, 不做生产平台抽象层); 根因类目覆盖表归因框架; e2e 提速走 shard 隔离桩(D14)。已拍板决策见 §06(D1–D14)。</p>
+<h3>根因类目覆盖表(打地鼠 → 归因框架)</h3>
+<p>之后每轮 flaky 先对表归因再修; 冒出无主类目再立条。<span class="cm">(分类学参照 Tahir et al. 2023 十类)</span></p>
+<table>
+  <tr><th>类目</th><th>本仓库证据(坑档/实测)</th><th>治理动作</th><th>阶段</th></tr>
+  <tr><td>async-wait/时序</td><td>161 取时点 / 63 sleep / 91 waitForTimeout</td><td>时钟注入 + wait_until + expect.poll</td><td>S2/S3/S4</td></tr>
+  <tr><td>time(边界/粒度)</td><td>flaky-midnight-daycount、flaky-minute-stamp-dup、time-tick-collapse-strict-advance</td><td>假钟固定时间+区间断言</td><td>S2/S3</td></tr>
+  <tr><td>并发/竞态</td><td>poll-last-round-race、cross-thread-teardown-assert</td><td>事件同步/条件轮询替代末值断言</td><td>S3</td></tr>
+  <tr><td>顺序依赖</td><td>xdist-worker-global-snapshot、hr-registry-pollution(已治)</td><td>pytest-randomly 周巡检暴露</td><td>S5</td></tr>
+  <tr><td>platform</td><td>timing-tolerance(15.6ms)、ci-only-guard、coverage-floor-platform</td><td>platform_tolerance 单点+规范+守阵</td><td>S5</td></tr>
+  <tr><td>随机数</td><td>flaky-random-salt-hash-identity</td><td>种子纪律(pytest-randomly 顺带重置 seed)+断言避开恒等映射</td><td>S5</td></tr>
+  <tr><td>端口/资源</td><td>fixed-port-test-collision(已治)、_test_ports 单点</td><td>bind 位固定口守阵收尾</td><td>S1</td></tr>
+  <tr><td>共享状态</td><td>fake-config-shared-mutables、importlib-sys-modules-dataclass(已治)</td><td>conftest 隔离单点+巡检暴露新例</td><td>S5</td></tr>
+  <tr><td>网络</td><td>仅 tests-real 真网络面</td><td>真机轨职责, 不改造(留档口即可)</td><td>—</td></tr>
+  <tr><td>UI randomness</td><td>iab-click-rerender-flake(已治)</td><td>归入 e2e 清理与台账</td><td>S4</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<h3>分期总表</h3>
+<table>
+  <tr><th>阶段</th><th>内容</th><th>验收判据</th></tr>
+  <tr><td><b>S1 基建</b></td><td>infra/clock 单点 + tests/clock 统一假钟 + wait_until helper + 四类守阵</td><td>新单点上线; 守阵全绿(存量白名单); 全量+基线切片</td></tr>
+  <tr><td><b>S2 生产时钟注入</b></td><td>44 文件 161 点, 按域拆 4 提交</td><td>src 裸取时仅剩 clock.py 白名单; 每提交全量+基线</td></tr>
+  <tr><td><b>S3 tests/ 清理</b></td><td>63 sleep 逐域改 / 旧假钟 4 套迁删 / monkeypatch 收敛 / 性能断言迁出</td><td>裸 sleep 归零(白名单外); 旧假钟类删除</td></tr>
+  <tr><td><b>S4 e2e 清理</b></td><td>91 waitForTimeout→expect 系 / setTimeout 审计 / retry 探测口径 / 台账上线</td><td>waitForTimeout 归零; e2e fast 绿</td></tr>
+  <tr><td><b>S5 e2e 并行化</b></td><td>shard 隔离桩(--shard=x/N, 每进程独立 webServer) / CPU 敏感用例钉单 shard / fast 门禁时长入基线</td><td>fast 门禁时长实测下降(数字进基线切片); 0 新增 flaky</td></tr>
+  <tr><td><b>S6 收口</b></td><td>平台容差单点+规范 / pytest-randomly 周巡检 / 覆盖表入档 / 文档坑档回写 / 验收</td><td>全量(含 e2e fast)连续 5 次绿; 台账/文档齐</td></tr>
+</table>
+<h3>S1 基建</h3>
+<ul>
+  <li><code>src/auto_qb/infra/clock.py</code>: <code>Clock</code> protocol(<code>now()</code> / <code>monotonic()</code>)+ <code>SystemClock</code> 系统时钟单点。生产代码唯一合法取时入口。</li>
+  <li><code>tests/clock.py</code>(或并入 helpers 单点): 统一假钟 <code>advance()/freeze()</code>, fixture 级自动复位(xdist 每 worker 独立, 不跨 worker 共享); 用法规范一段。</li>
+  <li><code>wait_until(cond, timeout, interval)</code> 条件轮询 helper: 收编 <code>tests/helpers.py:1268/1425</code> 两处雏形为单一实现。</li>
+  <li>守阵 4 条(复用既有扫描框架): ① tests/ 裸 <code>time.sleep</code>; ② e2e/ <code>waitForTimeout</code>; ③ src/ 裸 <code>time.time/monotonic</code>(白名单 clock.py); ④ bind 位固定端口(配置值位不拦)。存量违例先入白名单单点(带理由注释), 随 S3/S4 清零后收紧。</li>
+  <li>全量 + 基线切片。</li>
+</ul>
+<h3>S2 生产时钟注入(按域 4 提交, 每步全量+基线)</h3>
+<ol>
+  <li>core: <code>state.py</code>、<code>qbmanager.py</code> 等——组件构造期收 <code>clock</code> 参数, 默认系统时钟单点。</li>
+  <li>hr 域(runtime/service_wave/feeder 等)——与既有 <code>runtime.sleeper</code> 注入口径对齐。</li>
+  <li>webui/traffic 域。</li>
+  <li>其余(cli/rules/infra/tools)叶子——纯函数直接走 <code>from auto_qb.infra import clock</code> 单点。</li>
+</ol>
+<p class="cm">每步验收: 该域 0 处裸取时; 全量绿+基线; 高风险整合前 <code>cp -a .git</code> 备份(AGENTS 建议口径)。</p>
+<h3>S3 tests/ 清理(逐域推进)</h3>
+<ul>
+  <li>63 处 sleep: 线程协作点改 <code>Event</code>/<code>Queue</code> 同步或 <code>wait_until</code>; 时间语义(阈值/过期/节流)改注入假钟——feeder(10)、qbmanager_loop(7)、traffic_store_paths(5)、qbmanager_tasks(5) 优先。</li>
+  <li>4 套旧假钟(hr_helpers.Clock、traffic_sample_support._Clock、两处内嵌 _FixedClock)迁 <code>tests/clock.py</code> 后<b>删除</b>。</li>
+  <li>126 处 monkeypatch time 收敛到统一假钟。</li>
+  <li>挂钟性能断言(耗时上界类)迁出功能测试: 改 CPU 时间/行为断言, 或独立基准轨。</li>
+</ul>
+<h3>S4 e2e 清理</h3>
+<ul>
+  <li>91 处 <code>waitForTimeout</code>: DOM 条件→<code>expect(locator).toHaveXxx()</code> 自动轮询; 非 DOM 条件(后端状态/localStorage/URL)→<code>expect.poll()</code>/<code>toPass()</code>; 动画遮蔽用 trace 复盘, 不加 timeout。</li>
+  <li>21 处 <code>setTimeout</code> 审计: 属业务延迟语义的保留并注释, 属睡等的改造。</li>
+  <li>retry 探测口径: CI <code>retries:1</code> 保留为探测器, Playwright flaky 标记进台账当场修。</li>
+  <li>flaky 台账上线 <code>memory-bank/testing/</code>(用例名/根因类目/状态/处置/日期)。</li>
+</ul>
+<h3>S5 e2e 并行化(D14, 插在 S4 之后——先清睡等再定 shard 数)</h3>
+<ul>
+  <li><b>卡点校正</b>: 串行是 <code>playwright.config.mjs:30-32</code> 的刻意设计(单共享桩, 用例互相影响观测)——直接 <code>workers:N</code> 会用新 flaky 换速度; Playwright 并行的正确形态是 <b>shard 多进程</b>。</li>
+  <li><code>--shard=x/N</code>: 每个 shard 是独立进程, <b>各自拉起自己的 webServer</b>——桩 <code>--port 0</code> OS 分配 + wait 捕获注入已具备全部前提, <code>reuseExistingServer:false</code> 纵深不受影响; 改动面 ≈ npm script。</li>
+  <li>shard 数<b>在 S4 跑完后按实测时长定</b>(91 处固定睡等是串行时长大头, 清完先量化); shard 内先保持 <code>workers:1</code>, 跑稳后纯只读 spec 才考虑升 workers。</li>
+  <li>边界: <code>perf.spec.mjs</code> 等 CPU 敏感用例钉单 shard(与 D10 性能断言迁出协同); 模式矩阵轮(env 组合决定桩形态)轮间保持串行, 提速落在每轮内部。</li>
+  <li>验收: fast 门禁时长实测数字进基线切片(补上 e2e 时长无基线的空缺); 0 新增 flaky。</li>
+</ul>
+<h3>S6 收口</h3>
+<ul>
+  <li><code>tests/platform_tolerance.py</code>: Windows 15.6ms 刻度(≥2 tick 余量)等容差常量单点; 「跨平台断言规范」入 testing 文档; 平台相关 skipif 强制带理由+负责人。</li>
+  <li>pytest-randomly 周巡检 job: 随机序+固定 seed 输出(可复现), 允许 reruns 作统计采样; 主套件默认顺序不动; 巡检红→入池修。</li>
+  <li>根因类目覆盖表(§03)入 testing 文档单点; tests-real 补一条「真时序轨职责边界」规范。</li>
+  <li>最终验收: 本机全量(含 e2e fast)连续 5 次绿。</li>
+</ul>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——D1–D14 已于 2026-11-05 会话中逐项拍板, 结论在 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>决策点</th><th>结论(2026-11-05)</th></tr>
+  <tr><td>D1</td><td>治理主轴</td><td>结构性消除为主 + 轻量兜底; 不做 retry 遮羞布</td></tr>
+  <tr><td>D2</td><td>时钟注入深度</td><td><b>全量注入</b>(44 文件 161 点), 不只热点域</td></tr>
+  <tr><td>D3</td><td>测试侧假钟</td><td>统一单点, 4 套旧假钟迁完删除</td></tr>
+  <tr><td>D4</td><td>e2e waitForTimeout</td><td>91 处全量替换 + 守阵禁新增</td></tr>
+  <tr><td>D5</td><td>兜底机制</td><td><b>不建隔离区</b>: flaky 当场修; 修不了 skip(理由+issue 入池)</td></tr>
+  <tr><td>D6</td><td>平台差异</td><td>机制化不做生产抽象层: 容差单点+规范+守阵</td></tr>
+  <tr><td>D7</td><td>tests-real 与推进</td><td>tests-real 只做规范/坑档层; 按 S1–S5 分期独立提交</td></tr>
+  <tr><td>D8</td><td>注入形态</td><td>构造期注入统一制(默认系统时钟), 叶子走单点; 无全局可变时钟</td></tr>
+  <tr><td>D9</td><td>retry 政策</td><td>pytest 主套件 reruns 恒 0; e2e CI retries=1 保留为探测器+台账</td></tr>
+  <tr><td>D10</td><td>新增候选</td><td>三项全纳入: 随机序周巡检 / 性能断言迁出 / flaky 台账</td></tr>
+  <tr><td>D11</td><td>验收口径</td><td>守阵零违例+假钟统一+注入全覆盖+连续 5 次绿+回写(§01)</td></tr>
+  <tr><td>D12</td><td>分期骨架</td><td>S1–S5(§04); S2 内部按域 4 提交 <span class="cm">(R1: e2e 并行化插入后为 S1–S6)</span></td></tr>
+  <tr><td>D14</td><td>e2e 提速(2026-11-05 R1 追加)</td><td>纳入为 S5「e2e 并行化」: shard 隔离桩(多进程, 非多线程), 先 S4 清睡等再按实测定 shard 数; CPU 敏感用例钉单 shard; 时长入基线</td></tr>
+  <tr><td>D13</td><td>类目补全</td><td>覆盖表+bind 位守阵+随机数/共享状态纪律入文档</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>S2 体量大引入回归</td><td>44 文件注入中途行为漂移</td><td>按域 4 提交, 每步全量+基线; monotonic vs 挂钟语义逐点核对; 整合前 cp -a .git 备份</td></tr>
+  <tr><td>注入后时钟语义变化</td><td>组件改收 clock 后生产路径取时点变化</td><td>每域提交后 <code>dev.run -- config.yml --dry-run</code> 真机冒烟</td></tr>
+  <tr><td>e2e 替换后时长变化</td><td>expect.poll 轮询比固定睡等慢</td><td>fast 子集与基线时长对比; 单例超长回看轮询间隔</td></tr>
+  <tr><td>统一假钟 xdist 并发问题</td><td>跨用例/跨 worker 状态泄漏</td><td>fixture 级自动复位, 不做模块级共享; 沿 xdist worker 独立</td></tr>
+  <tr><td>守阵误报</td><td>合理的 sleep(如 tests-real 真机等待)被拦</td><td>白名单单点+理由注释; 误报先白名单后归因, 白名单定期收紧</td></tr>
+  <tr><td>台账/skip 纪律腐烂</td><td>台账没人看、skip 无理由堆积</td><td>台账挂验收条目; 周巡检顺带审 skip 清单(带 reason+issue)</td></tr>
+  <tr><td>真 bug 被误标 flaky</td><td>测试正确暴露产品竞态(Microsoft 数据: 占比可观)</td><td>归因先对覆盖表; 产品侧竞态走 issue 修产品, 不改测试迁就</td></tr>
+  <tr><td>过度工程</td><td>想上 SaaS/ML/AI 修复/全员跑 N 遍</td><td>明令不做(业界公认不划算); 台账=自建清单, 采样=巡检 job reruns</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-0118</span> 初版: 会话 grilling 13 项拍板(D1–D13) + 业界调研子代理(13 组检索)合并成文。要点: S1–S5 分期、全量时钟注入、统一假钟、e2e 睡等清零、四类守阵、不建隔离区不放开 retry、平台容差单点、根因类目覆盖表。</li>
+  <li><span class="tag">R1 · 26-11-05-0128</span> R1: D14 拍板纳入 e2e 提速——新增 S5 e2e 并行化(shard 隔离桩, 先 S4 清睡等再定 shard 数), 原 S5 收口顺延 S6, D12/D14/覆盖表引用同步</li>
+</ul>
+
+<h2><span class="no">§11</span>附录: 业界依据(主要来源)</h2>
+<ul>
+  <li>Microsoft ISSTA 2019《Root Causing Flaky Tests in a Large-Scale Industrial Setting》——时序等待为第一大根因: <span class="cm">patricegodefroid.github.io/public_psfiles/issta2019.pdf</span></li>
+  <li>Tahir et al. 2023 十类根因分类学: <span class="cm">arxiv.org/html/2212.00908v1</span></li>
+  <li>Google Testing Blog 2016《Flaky Tests at Google and How We Mitigate Them》: <span class="cm">testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html</span></li>
+  <li>Meta PFS(概率化 flakiness 分数): <span class="cm">engineering.fb.com/2020/12/10/developer-tools/probabilistic-flakiness</span><!-- time:allow --></li>
+  <li>time-machine(不冻结/断言区间): <span class="cm">time-machine.readthedocs.io</span>; Ganssle《pytest xfail 深度》: <span class="cm">blog.ganssle.io/articles/2021/11/pytest-xfail.html</span></li>
+  <li>Playwright 反模式(waitForTimeout 头号)与 expect.poll: <span class="cm">testchimp.io/guides/gotchas/playwright-flaky-waits-and-timing</span></li>
+  <li>pytest-randomly: <span class="cm">github.com/pytest-dev/pytest-randomly</span>; Awaitility 条件等待 DSL: <span class="cm">awaitility.org</span></li>
+  <li>Windows 15.6ms 定时器刻度: <span class="cm">siliceum.com/en/blog/post/windows-high-resolution-timers</span></li>
+  <li>retry 掩盖真 bug(两次 rerun 绿 99.2% 含真 bug 的 build): <span class="cm">devops.com/your-ci-retries-are-hiding-real-bugs</span></li>
+  <li>Trunk《The Ultimate Guide to Flaky Tests》/ Airtable monorepo 实践(quarantine+owner+SLA): <span class="cm">trunk.io/blog/the-ultimate-guide-to-flaky-tests</span></li>
+</ul>
+
+</div>
+</body>
+</html>
