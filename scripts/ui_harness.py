@@ -65,6 +65,9 @@ import yaml
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "src"))
+# tests/helpers 直连 clock 顶级模块(wait_until 单点, 计划 26-11-05-0118 S1/S3) ——
+# 桩进程不在 pytest 下, 必须自己把 tests/ 也放进 sys.path 才 import 得到(缺了 e2e 桩起不来)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests"))
 
 from auto_qb.config import WebConfig  # noqa: E402
 from auto_qb.config.loaders import load_config  # noqa: E402

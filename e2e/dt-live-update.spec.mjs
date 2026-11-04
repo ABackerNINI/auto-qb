@@ -92,6 +92,32 @@ function makeFilesK(n = 1000) {
   return out;
 }
 
+/**
+ * 等窗口化表格渲染窗落定: 连续三拍采样(节拍 = expect.poll 默认间隔, 静默跨度 >= 350ms)行键集
+ * 一致 —— 滚动触发的合帧 rAF + 窗口重渲没有单一 DOM 终点, 旧 120/400ms 睡等「赌重算跑完」的
+ * 显式化; 三拍口径防「重渲尚未开始就判稳」的提前通过。
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} anchor 表格锚
+ */
+const awaitWindowSettled = (page, anchor, timeout = 5_000) => {
+  const seq = [];
+  return expect.poll(async () => {
+    seq.push(await anchor.evaluate((a) => Array.from(a.querySelectorAll('.group-row[data-dt-key]'))
+      .map((r) => r.getAttribute('data-dt-key')).join('|')));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] !== '' && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout }).toBe(true);
+};
+
+/**
+ * 量具观察窗(测量程序参数, 非条件等待): #9 的逐帧采样量具必须覆盖「点击 → 数据回路 → 换帧」
+ * 整个窗口取全程最大偏移(300/1600ms); #10/#11 的 mut/longtask 预算按「点击后固定窗内计数」
+ * 定版(500/800ms) —— 窗内计数含 patch 本身, 窗时长是量具口径的一部分, 等待即测量程序本身。
+ * 属 e2e setTimeout 审计的「业务/量具延迟语义, 保留并注释」类, 走 Node 侧 setTimeout 不占页面时钟。
+ * @param {number} ms
+ */
+const measureWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function openTorrentDrawer(page) {
   await page.click('nav.tabs [data-view="torrents"]');
   await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
@@ -139,16 +165,17 @@ for (const skin of SKINS) {
         await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ peers: makePeers(DL_B) }) });
       });
 
-      // 轮询最快 5s 一拍: 等文本变化(上限 8s), 落地时刻已由 fulfillAt 记录
-      const changedAt = await (async () => {
-        const t0 = Date.now();
-        for (;;) {
-          const txt = await row0.evaluate((row) => { const c = row.querySelector('.dt07-spd.d'); return c && c.textContent.trim(); });
-          if (txt && txt !== text0) return Date.now();
-          if (Date.now() - t0 > 8_000) return -1;
-          await page.waitForTimeout(40);
+      // 轮询最快 5s 一拍: poll 等文本变化(上限 8s, 节拍 40ms 保住「响应落地→格子更新」量程粒度),
+      // 落地时刻已由 fulfillAt 记录
+      let changedAt = -1;
+      await expect.poll(async () => {
+        const txt = await row0.evaluate((row) => { const c = row.querySelector('.dt07-spd.d'); return c && c.textContent.trim(); });
+        if (txt && txt !== text0) {
+          changedAt = Date.now();
+          return true;
         }
-      })();
+        return false;
+      }, { timeout: 8_000, intervals: [40] }).toBe(true);
       expect(changedAt, '两轮注入后 dlspeed 格文案变化(速度实时更新)').toBeGreaterThan(0);
       expect(changedAt - fulfillAt, `响应落地→格子更新 <500ms(实测 ${changedAt - fulfillAt}ms)`).toBeLessThan(500);
       await expect(row0.locator('[data-live-probe="1"]'),
@@ -183,7 +210,8 @@ for (const skin of SKINS) {
       expect(n).toBeGreaterThanOrEqual(2);
       for (let i = 0; i < n; i++) {
         await boxes.nth(i).click();
-        await page.waitForTimeout(80); // 等一帧渲染(换代重挂若有, 此处即暴露)
+        // 旧 80ms 睡等「等一帧渲染」→ 等勾选态上屏(渲染产物的显式等待; 换代重挂若有, 终态快照即暴露)
+        await expect(boxes.nth(i), `第 ${i + 1} 个勾选框勾选态上屏`).toBeChecked();
       }
 
       const after = await anchor.evaluate((a) => {
@@ -273,7 +301,7 @@ for (const skin of SKINS) {
       await drawer.locator('.drawer-body').evaluate((el) => {
         el.scrollTop = Math.round((el.scrollHeight - el.clientHeight) * 0.45);
       });
-      await page.waitForTimeout(120);
+      await awaitWindowSettled(page, anchor);  // 旧 120ms 睡等: 滚动触发的窗口重渲落定的显式化
 
       // 逐帧采样器(rAF 每帧 + 4ms 定时双路): 钉两行(靠顶部 + 中部)的视口 rect 与 scrollTop
       await page.evaluate(() => {
@@ -292,7 +320,9 @@ for (const skin of SKINS) {
         requestAnimationFrame(raf);
         P.stop = () => { clearInterval(iv); cancelAnimationFrame(P.raf); };
       });
-      await page.waitForTimeout(80); // 攒基线采样
+      await expect.poll(() => page.evaluate(() => window.__jumpProbe.s.length),
+        { message: '探针攒够基线采样帧(与旧 80ms 睡等同量级: 4ms 间隔 x 20)' })
+        .toBeGreaterThan(20); // 攒基线采样
 
       // 点击①: 优先级徽章 → 小菜单 → 最高(POST files/priority → 静默补拉 → 整帧换帧)
       const badge = anchor.locator('.group-row').nth(21).locator('.dt10-pbadge');
@@ -301,11 +331,11 @@ for (const skin of SKINS) {
       const menu = page.locator('.ctx-menu', { hasText: '最高' });
       await expect(menu).toBeVisible({ timeout: 3_000 });
       await menu.locator('.ctx-item', { hasText: '最高' }).click();
-      await page.waitForTimeout(300); // 数据回路窗口内持续采样
+      await measureWindow(300); // 数据回路窗口内持续采样(量具观察窗, 见 measureWindow 注)
 
       // 点击②: 行选中(rerender 整帧换帧 + 右详情变化)
       await anchor.locator('.group-row').nth(22).click();
-      await page.waitForTimeout(1600); // 覆盖换帧后的全部余波
+      await measureWindow(1600); // 覆盖换帧后的全部余波(量具观察窗, 见 measureWindow 注)
 
       const dev = await page.evaluate(() => {
         window.__jumpProbe.stop();
@@ -350,7 +380,7 @@ for (const skin of SKINS) {
       await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
       const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
       await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(400); // 首渲 settle(千行挂载自身的成本不计入判据窗口)
+      await measureWindow(400); // 首渲 settle + 启动噪声吸收窗(千行挂载自身的成本不计入判据窗口)
       // W4(计划 26-11-02-0351)修测量口径: W3 窗口化后首渲是「全量量高 → 收窗」两拍, 固定
       // 400ms 等不到收窗完成 —— 探针把收窗(摘 ~950 行, mut 实测 957/961)算进交互窗, 预算
       // 断言量错对象恒红(2026-11-02 实测取证)。对齐 #12 的 settle 判据: 占位件在场 = 收窗完成,
@@ -373,7 +403,7 @@ for (const skin of SKINS) {
 
       const firstCk = anchor.locator('.dt11-ck[data-act="ck"]').first();
       await firstCk.click();
-      await page.waitForTimeout(500); // 交互 + patch 全部余波落进观察窗
+      await measureWindow(500); // 交互 + patch 全部余波落进观察窗(探针测量窗, 预算按窗内计数定版)
 
       const lt = await page.evaluate(() => window.__lt || []);
       const mut = await page.evaluate(() => window.__mut || 0);
@@ -416,7 +446,7 @@ for (const skin of SKINS) {
       await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
       const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
       await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(400);
+      await measureWindow(400); // 首渲 settle + 启动噪声吸收窗(同 #10 口径)
       // W4 settle 判据同 #10(占位件在场 = 收窗完成), 探针别量进收窗本身(取证见 #10 注)
       await expect(anchor.locator('.row-pad').first(), '窗口化收窗完成(占位件在场)').toBeAttached({ timeout: 10_000 });
 
@@ -439,7 +469,7 @@ for (const skin of SKINS) {
       // 点击 file0 优先级徽章(循环 6→7 一次真实提交) → waitCmd 回执 → 静默补拉 → 换帧
       const badge0 = anchor.locator('.group-row[data-dt-key="D/f0000 - file.mkv"] .dt11-pbadge');
       await badge0.click();
-      await page.waitForTimeout(800); // 覆盖 POST→回执→补拉→换帧全程
+      await measureWindow(800); // 覆盖 POST→回执→补拉→换帧全程(探针测量窗, 预算按窗内计数定版)
 
       const lt = await page.evaluate(() => window.__lt || []);
       const mut = await page.evaluate(() => window.__mut || 0);
@@ -496,11 +526,22 @@ for (const skin of SKINS) {
 
       // ③ 键盘跨窗: 回顶, 焦点落首行, 连按 ↓ 越过窗底沿 —— 目标行先被滚进窗再回焦
       await body.evaluate((el) => { el.scrollTop = 0; });
-      await page.waitForTimeout(400);  // 窗口重算(合帧 rAF + 重渲)落定
+      await awaitWindowSettled(page, anchor);  // 旧 400ms 睡等: 窗口重算(合帧 rAF + 重渲)落定的显式化
       await anchor.locator('.group-row[data-dt-key="D/f0000 - file.mkv"]').focus();
+      const focusedKey = () => page.evaluate(() => {
+        const el = document.activeElement;
+        const row = el && el.closest ? el.closest('[data-dt-key]') : null;
+        return row ? row.getAttribute('data-dt-key') : '';
+      });
+      let prevKey = await focusedKey();
       for (let i = 0; i < 80; i++) {
         await page.keyboard.press('ArrowDown');
-        await page.waitForTimeout(30);
+        // 旧 30ms 睡等「让每拍按键的滚动+回焦处理完」→ poll 等焦点行实际前进到新行(逐拍收敛)
+        await expect.poll(async () => {
+          const k = await focusedKey();
+          return k && k !== prevKey ? k : '';
+        }, { timeout: 5_000, intervals: [15] }).not.toBe('');
+        prevKey = await focusedKey();
       }
       const fk = await page.evaluate(() => {
         const el = document.activeElement;

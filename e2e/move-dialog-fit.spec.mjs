@@ -176,15 +176,58 @@ const scrollSamplerOn = (page) => page.evaluate(() => {
   const note = d.querySelector('.move-note');
   const arr = [];
   window.__moveScroll = arr;
+  window.__moveScrollDone = false;  // 完成旗标: 读帧前 poll 此旗标, 旧 1000ms 睡等赌窗跑完的显式化
   const t0 = performance.now();
   const tick = () => {
     arr.push([Math.round(body.scrollTop), Math.round(note.getBoundingClientRect().top)]);
     if (performance.now() - t0 < 900) requestAnimationFrame(tick);
+    else window.__moveScrollDone = true;
   };
   requestAnimationFrame(tick);
 });
 
 const scrollSamplerOff = (page) => page.evaluate(() => window.__moveScroll || []);
+
+/**
+ * 等对话框几何进入稳态(连续三拍采样全等, 节拍 = expect.poll 默认间隔, 静默跨度 >= 350ms) ——
+ * 开/收层的 padding 过渡(200ms)与面板挂载没有单一 DOM 终点, 旧 350/400/450ms 睡等「赌过渡
+ * 跑完」的显式化: 稳态即过渡终态, 超时上限挂在 poll 上, 不再赌时长; 三拍口径防「过渡尚未
+ * 开始就判稳」的提前通过。
+ * @param {import('@playwright/test').Page} page
+ */
+const awaitGeomStable = async (page, timeout = 5_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    seq.push(JSON.stringify(await geom(page)));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout }).toBe(true);
+};
+
+/**
+ * 负条件观察窗的显式化(六修/七修的「点一下不该收」断言): 逐帧采样面板在 DOM 的存在性,
+ * 覆盖误收层危险窗(movePathBlurClose 的 40ms 合帧定时器) —— 旧 300/400ms 睡等
+ * 「睡一觉赌坏事没发生」的 expect 化, 返回帧序列由测试体断言恒真。
+ * @param {import('@playwright/test').Page} page
+ */
+const popMountedFrames = (page, ms) => page.evaluate((dur) => new Promise((res) => {
+  const frames = [];
+  const t0 = performance.now();
+  const tick = () => {
+    frames.push(!!document.querySelector('.modal.move-dialog .pop-menu.add-pop'));
+    if (performance.now() - t0 < dur) requestAnimationFrame(tick);
+    else res(frames);
+  };
+  requestAnimationFrame(tick);
+}), ms);
+
+/**
+ * 合成手势的确定性按压节拍(按下/抬起之间隔开固定时长复刻真人手感) —— 不是等条件的睡等:
+ * 按住时长本身是被测编排的一部分(面板在按住期间挂载, 换条件等待会改变被测行为), 走 Node 侧
+ * setTimeout, 不占页面时钟(e2e setTimeout 审计口径: 业务/编排延迟语义, 保留并注释)。
+ * @param {number} ms
+ */
+const gestureHold = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** 高亮项是否真的落在列表可视区内(证明滚动跟随没被"修死") */
 const hiVisible = (page) => page.evaluate(() => {
@@ -229,7 +272,7 @@ for (const skin of SKINS) {
       await sbSamplerOn(page);  // 四修: 逐帧记 body 滚动条状态(过渡期面板伸出 body = 闪滚动条)
       await page.locator('#move-path').click();
       await expect(pop.locator('.pop-item').first()).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(450);  // 过渡 200ms + settle 重测 240ms
+      await awaitGeomStable(page);  // 旧 450ms 睡等「过渡 200ms + settle 240ms」→ poll 等几何稳态
       await settleAnim(dlg);
 
       const open = await geom(page);
@@ -264,7 +307,7 @@ for (const skin of SKINS) {
       await sbSamplerOn(page);  // 面板离场淡出期间仍在 DOM 里撑高度, 而 .pop-open 已摘
       await page.keyboard.press('Escape');
       await expect(pop).toBeHidden();
-      await page.waitForTimeout(350);
+      await awaitGeomStable(page);  // 旧 350ms 睡等: 收层回落过渡(200ms)跑完的显式化
       await settleAnim(dlg);
       const sbClose = await sbSamplerOff(page);
       const closed1 = await geom(page);
@@ -328,7 +371,7 @@ for (const skin of SKINS) {
       const dlg = page.locator('.modal.move-dialog');
       const pop = dlg.locator('.pop-menu.add-pop');
       await expect(dlg).toBeVisible();
-      await page.waitForTimeout(700);
+      await settleAnim(dlg);  // 旧 700ms 睡等: 等模态入场动画播完(getAnimations finished)
 
       // 真人手感: 按下/抬起隔 150ms(合成零延迟点击测不出按压时序竞态)
       const box = await page.locator('#move-path').boundingBox();
@@ -337,16 +380,19 @@ for (const skin of SKINS) {
       const cy = Math.round(box.y + box.height / 2);
       await page.mouse.move(cx, cy);
       await page.mouse.down();
-      await page.waitForTimeout(150);
+      await gestureHold(150);
       await page.mouse.up();
       await expect(pop.locator('.pop-item').first()).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(450);  // 过渡 200ms + settle 240ms 全跑完
+      await awaitGeomStable(page);  // 旧 450ms 睡等「过渡 200ms + settle 240ms」→ poll 等几何稳态
 
       // —— 同一屏幕坐标再点一次: 修复前面板已顶到光标底下, 这一下命中候选行 = 面板"自动弹回"
       await page.mouse.down();
-      await page.waitForTimeout(150);
+      await gestureHold(150);
       await page.mouse.up();
-      await page.waitForTimeout(400);
+      // 旧 400ms 睡等「睡一觉赌面板没被点没」→ 逐帧采样合帧收层危险窗内恒可见
+      const frames2 = await popMountedFrames(page, 400);
+      expect(frames2.length, '第二次点击后观察窗采样帧数 >0(采样器没挂上?)').toBeGreaterThan(0);
+      expect(frames2.every(Boolean), '同一位置连点两次: 合帧收层危险窗(40ms 定时器)内面板恒在').toBe(true);
 
       await expect(pop, '同一位置连点两次后面板必须还在(用户报的「出现后自动弹回」)').toBeVisible();
       expect(await page.locator('#move-path').inputValue(), '第二次点击不得回填候选').toBe('');
@@ -367,13 +413,16 @@ for (const skin of SKINS) {
       await page.locator('#move-path').click();
       const head = pop.locator('.pop-head');
       await expect(head).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(450);
+      await awaitGeomStable(page);  // 旧 450ms 睡等: 面板开层过渡跑完的显式化
 
       // —— 六修: 面板头「选择保存位置 N」是**纯展示区**, 点它什么都不该发生。修复前 mousedown 的
       //    默认动作把焦点从输入框抢走 → @focusout → movePathBlurClose 的 40ms 合帧定时器收层
       //    = 面板"点一下就消失"(光标本来就在候选行上方, 误触概率极高)
       await head.click();
-      await page.waitForTimeout(300);  // > 40ms 合帧窗, 定时器该响的都响完了
+      // 旧 300ms 睡等「> 40ms 合帧窗, 定时器该响的都响完了」→ 逐帧采样危险窗内恒可见
+      const headFrames = await popMountedFrames(page, 300);
+      expect(headFrames.length, '点面板头后观察窗采样帧数 >0(采样器没挂上?)').toBeGreaterThan(0);
+      expect(headFrames.every(Boolean), '点面板头: 合帧收层危险窗内面板恒在(40ms 定时器该响的都响完了)').toBe(true);
       await expect(pop, '点面板头不得收起面板(非交互区抢焦点 → focusout → 合帧收层)').toBeVisible();
       expect(await page.locator('#move-path').inputValue(), '点面板头不得改写路径').toBe('');
       // 点完头面板仍是"活着"的: 候选照常可点(修复成"点了头顺手把面板冻住"也算坏)
@@ -393,36 +442,42 @@ for (const skin of SKINS) {
       const dlg = page.locator('.modal.move-dialog');
       const pop = dlg.locator('.pop-menu.add-pop');
       await expect(dlg).toBeVisible();
-      await page.waitForTimeout(700);
+      await settleAnim(dlg);  // 旧 700ms 睡等: 等模态入场动画播完(getAnimations finished)
 
       const inputBox = await page.locator('#move-path').boundingBox();
       if (!inputBox) throw new Error('#move-path 没有 boundingBox');
       const cx = Math.round(inputBox.x + inputBox.width / 2);
       const cy = Math.round(inputBox.y + inputBox.height / 2);
 
-      /** 无焦点按下 -> 按住 140ms(面板在这段里挂载) -> 抬到 (tx,ty) */
+      /** 无焦点按下 -> 按住 140ms(面板在这段里挂载) -> 抬到 (tx,ty); 观察窗移到调用点显式断言 */
       const downThenUpAt = async (tx, ty) => {
         await page.mouse.move(cx, cy);
         await page.mouse.down();
-        await page.waitForTimeout(140);
+        await gestureHold(140);
         await page.mouse.move(tx, ty, { steps: 4 });
         await page.mouse.up();
-        await page.waitForTimeout(400);
       };
 
       // —— 变体 A: 抬到输入框下方 6px(行内留白 / 面板顶)。click 的 target 变成公共祖先
       //    `.add-input-row` —— 修复前它没有 @click.stop, 事件冒泡到 lifecycle 的 window 收层名单
       //    ⇒ 面板"点一下就消失"(七修, 排查「无焦点点击弹回」时复现)
       await page.locator('.move-note').click();  // 先失焦: 面板在按住期间才挂载, 落点才可能被改写
-      await page.waitForTimeout(300);
+      await expect(pop).toBeHidden();  // 旧 300ms 睡等: blur 收层(40ms 合帧)落定的显式等待
       await downThenUpAt(cx, Math.round(inputBox.y + inputBox.height + 6));
+      // 旧 400ms 睡等「睡一觉赌面板没被点没」→ 逐帧采样合帧收层危险窗内恒可见
+      const framesA = await popMountedFrames(page, 400);
       await expect(pop, '按下在输入框、抬到行内留白不得收起面板(click 目标 = 公共祖先 = 冒泡到 window 收层)')
         .toBeVisible();
+      expect(framesA.length, '变体 A 观察窗采样帧数 >0(采样器没挂上?)').toBeGreaterThan(0);
+      expect(framesA.every(Boolean), '变体 A: 合帧收层危险窗(40ms 定时器)内面板恒在').toBe(true);
       expect(await page.locator('#move-path').inputValue(), '这一路不得回填路径').toBe('');
 
       // —— 变体 B: 抬到候选行上(面板内部)。onPick 走 mousedown, 这一路只 mousemove/mouseup ⇒ 不得回填
       await downThenUpAt(cx, Math.round(inputBox.y + inputBox.height + 80));
+      const framesB = await popMountedFrames(page, 400);
       await expect(pop, '按下在输入框、抬到候选行不得收起面板(同上: 公共祖先 = .add-input-row)').toBeVisible();
+      expect(framesB.length, '变体 B 观察窗采样帧数 >0(采样器没挂上?)').toBeGreaterThan(0);
+      expect(framesB.every(Boolean), '变体 B: 合帧收层危险窗(40ms 定时器)内面板恒在').toBe(true);
       expect(await page.locator('#move-path').inputValue(), '抬到候选行不得回填(onPick 走 mousedown)').toBe('');
 
       // —— 反向守门: 真点到组件外(上方说明文案)仍必须收层 —— 防 @click.stop 挂得过宽
@@ -445,12 +500,12 @@ for (const skin of SKINS) {
       // 先选中一条候选(路径回填, 面板收起) —— 用户报的正是"选中过新路径之后"再点下拉
       await page.locator('#move-path').click();
       await expect(pop.locator('.pop-item').first()).toBeVisible({ timeout: 10_000 });
-      await page.waitForTimeout(450);
+      await awaitGeomStable(page);  // 旧 450ms 睡等: 面板开层过渡跑完的显式化
       await pop.locator('.pop-item').nth(4).click();
       await expect(pop).toBeHidden();
       const picked = await page.locator('#move-path').inputValue();
       expect(picked, '第 5 条候选应回填到输入框').not.toBe('');
-      await page.waitForTimeout(400);
+      await awaitGeomStable(page);  // 旧 400ms 睡等: 收层回落过渡跑完, 采样窗从净态起步
 
       // —— 八修: 再点下拉。修复前 _hiScroll 用 scrollIntoView, 把 .add-dialog-body(祖先滚动容器)
       //    也一起滚了 ⇒ body.scrollTop 0→166→83→18→0, 说明文案 top 352→186→269→334 = 用户看到的
@@ -458,7 +513,8 @@ for (const skin of SKINS) {
       await scrollSamplerOn(page);
       await page.locator('#move-path').click();
       await expect(pop).toBeVisible({ timeout: 5_000 });
-      await page.waitForTimeout(1000);
+      await expect.poll(() => page.evaluate(() => window.__moveScrollDone === true),
+        { message: '滚动观察窗(900ms)跑完后再读帧序列' }).toBe(true);  // 旧 1000ms 睡等赌窗跑完
       const frames = await scrollSamplerOff(page);
       expect(frames.length, '滚动采样帧数为 0(采样器没挂上?)').toBeGreaterThan(0);
       expect(frames.filter(([st]) => st !== 0).map(([st]) => st),

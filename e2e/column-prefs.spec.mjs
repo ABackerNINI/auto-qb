@@ -73,7 +73,7 @@ import { readInst } from './lib/vm.mjs';
  *  · evaluate 保留处(均为 D4 允许的两类): ①守阵 1 的 F3 visibilitychange 模拟 —— 标签冻结/恢复
  *    是浏览器行为, 无真实 UI 路径(旧脚本同款); ②守阵 4 的 v4 载荷注入 —— 桩态注入; ③vm 内部
  *    字段读数(colW/colHidden/_visibleCols/tableDefs) —— 列意图态没有 DOM 之外的取径。
- *  · 装饰性 waitForTimeout(400/600/500/300/200) 全部换成 expect / expect.poll 显式等待:
+ *  · 装饰性固定睡等(400/600/500/300/200) 全部换成 expect / expect.poll 显式等待:
  *    跨标签 storage 事件传播(旧 600ms)→ poll 等对方 vm 采纳了具体键; Escape 收弹层(旧 200ms)→
  *    poll vm.colMenuOpen === false(不用 toHaveCount(0): pop 过渡挂在 rAF 上, 后台页可能不停走完,
  *    vm 态才是真信号); 拖宽落定(旧 300ms)→ poll colW.group 非空。语义不变, 不再赌时长。
@@ -99,7 +99,7 @@ async function openColMenu(pg) {
 }
 
 /**
- * 菜单里切换某列显隐(真实手势), 等勾选态翻转(旧 waitForTimeout(400) 的显式化)再 Escape 收起
+ * 菜单里切换某列显隐(真实手势), 等勾选态翻转(旧 400ms 睡等的显式化)再 Escape 收起
  * (旧 200ms → poll vm.colMenuOpen, 见头部 D4 说明)。
  *
  * @param {import('@playwright/test').Page} pg
@@ -119,7 +119,7 @@ async function colToggle(pg, section, label, toHidden) {
 
 /**
  * 拖宽手势(旧脚本 dragCol 逐字照搬: 第 2 列 resizer, +5 起手 / +60px / steps 6),
- * 末尾旧 waitForTimeout(300) 换成 poll 等固化落地 —— 固化页 colW.group 非空是后续断言的前提。
+ * 末尾旧 300ms 睡等换成 poll 等固化落地 —— 固化页 colW.group 非空是后续断言的前提。
  */
 async function dragCol(pg) {
   const h = pg.locator('.group-head .h-cell:nth-child(2) .resizer');
@@ -157,7 +157,7 @@ for (const skin of SKINS) {
       await rowsReady(tab2);
 
       await colToggle(page, '辅种表', '总上传', true);   // 标签 1 先改(旧 items[3] = uploaded)
-      /* 旧 waitForTimeout(600)「等 storage 事件把改动推给标签 2」→ poll 显式等标签 2 采纳。 */
+      /* 旧 600ms 睡等「等 storage 事件把改动推给标签 2」→ poll 显式等标签 2 采纳。 */
       await expect.poll(
         () => readInst(tab2, `(vm.colHidden.group || []).includes('uploaded')`),
         { message: '标签 2 经 storage 事件采纳标签 1 的改动' },
@@ -191,7 +191,7 @@ for (const skin of SKINS) {
 
       await dragCol(page);   // A 拖宽 -> group 固化(colW 非空)
       await colToggle(pb, '辅种表', '总大小', true);   // B(更窄窗口)隐藏一列
-      /* 旧 waitForTimeout(600)「等 storage 事件把 B 的改动推给 A」→ poll 等采纳。 */
+      /* 旧 600ms 睡等「等 storage 事件把 B 的改动推给 A」→ poll 等采纳。 */
       await expect.poll(
         () => readInst(page, `(vm.colHidden.group || []).includes('total_size')`),
         { message: 'A 经 storage 事件采纳 B 的改动' },
@@ -208,7 +208,7 @@ for (const skin of SKINS) {
         document.dispatchEvent(new Event("visibilitychange"));
         Object.defineProperty(document, "hidden", { value: false, configurable: true });
         document.dispatchEvent(new Event("visibilitychange"));`);
-      /* 旧 waitForTimeout(500) → poll 等 B 采纳 A 的改动。旧条件 h.group.length >= 2 被播种恒真,
+      /* 旧 500ms 睡等 → poll 等 B 采纳 A 的改动。旧条件 h.group.length >= 2 被播种恒真,
        * 升级为「含 A 刚隐藏的 uploaded」—— F3 补采纳的实际语义(见头部映射表)。 */
       await expect.poll(
         () => readInst(pb, `(vm.colHidden.group || []).includes('uploaded')`),

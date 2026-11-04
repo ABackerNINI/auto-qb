@@ -77,6 +77,47 @@ import { INST, readInst } from './lib/vm.mjs';
 const tab = (page, view) => page.locator(`nav.tabs [data-view="${view}"]`);
 
 /**
+ * 等主表窗口化(补行/重测)落定: 滚动位+总高+行键集连续三拍采样(节拍 = expect.poll 默认间隔,
+ * 静默跨度 >= 350ms)一致 —— 滚动后的异步补行与视口重测没有单一 DOM 终点, 旧 400/600ms 睡等
+ * 「赌 settle 跑完」的显式化(读的是 settle 后的布局不变量, 等待即测量程序的一部分口径不变,
+ * 见头部 D4 落地说明); 三拍口径防「补行尚未开始就判稳」的提前通过。
+ * @param {import('@playwright/test').Page} page
+ */
+const awaitMainSettled = async (page, timeout = 10_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    seq.push(await page.evaluate(() => `${window.scrollY}#${document.documentElement.scrollHeight}#` +
+      Array.from(document.querySelectorAll('.torrent-row')).map((r) => r.getAttribute('data-hash')).join(',')));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout }).toBe(true);
+};
+
+/**
+ * 等抽屉表格渲染窗落定(行键集连续三拍采样一致, 静默跨度 >= 350ms) —— 回顶/折叠后的窗口重渲
+ * 没有单一 DOM 终点, 旧 400ms 睡等「赌重渲跑完」的显式化。
+ * @param {import('@playwright/test').Page} page
+ * @param {import('@playwright/test').Locator} anchor 表格锚
+ */
+const awaitDrawerSettled = async (page, anchor, timeout = 10_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    seq.push(await anchor.evaluate((a) => Array.from(a.querySelectorAll('.group-row[data-dt-key]'))
+      .map((r) => r.getAttribute('data-dt-key')).join('|')));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] !== '' && seq[0] === seq[1] && seq[1] === seq[2];
+  }, { timeout }).toBe(true);
+};
+
+/**
+ * 量具节拍(测量程序参数, 非条件等待): 40 步匀速滚到底的步进节奏是量具口径 —— 窗口随滚动连续
+ * 重算, 交互窗时长是「轮询节拍不被放大/拖累」断言的分母(2000ms 档期望 2±1 拍按此时长定版)。
+ * 属 e2e setTimeout 审计的「业务/量具延迟语义, 保留并注释」类, 走 Node 侧 setTimeout 不占页面时钟。
+ * @param {number} ms
+ */
+const measureWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
  * 首访估算开窗阈值(镜像 `src/auto_qb/webui/static/shared/app.js` 的 ROW_WIN_EST_MIN;
  * 真值单点仍在 app.js, 这里只给本 spec 的断言分档用): n >= 此值的首访用估算行高开窗、
  * 随滚动渐进实测收敛(issue 26-11-02-0902) —— 占位总高只做粗界守阵, 滚到底按"不塌陷"判。
@@ -208,7 +249,7 @@ for (const skin of SKINS) {
       await page.evaluate(() => { window.__gbr0 = 0; });
       await tab(page, 'torrents').click();
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 15_000 });
-      await page.waitForTimeout(600);  // 等 updated 量齐拍结束, 计数稳定
+      await awaitMainSettled(page);  // 旧 600ms 睡等「等 updated 量齐拍结束」→ poll 等行集/总高稳态, 计数稳定
       const gbr = await page.evaluate(() => window.__gbr0);
       const tTotal = await readInst(page, 'vm.filteredTorrents.length');
       /* 判别依据(2026-11-02 实测): 估算开窗首访只对窗口内 ~24 行量高, gbr≈55 且**与行数无关**
@@ -264,9 +305,9 @@ for (const skin of SKINS) {
        * 会量到补行中间态 —— 两次滚动贴底 + settle 是测量程序的一部分(旧块同值同节奏)。 */
       const before = await page.evaluate('document.documentElement.scrollHeight');
       await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)');
-      await page.waitForTimeout(400);
+      await awaitMainSettled(page);  // 旧 400ms 睡等: 补行 settle 的显式化
       await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight)'); // 再滚一次(贴底)
-      await page.waitForTimeout(400);
+      await awaitMainSettled(page);  // 旧 400ms 睡等: 贴底补行 settle 的显式化
       const after = await page.evaluate('document.documentElement.scrollHeight');
       const lastHash = await page.$$eval('.torrent-row', (ns) => (ns.length ? ns[ns.length - 1].getAttribute('data-hash') : null));
       /* 末行视口相交读数(getBoundingClientRect, 第②类): locator 的 isVisible 不含视口相交语义。 */
@@ -336,11 +377,11 @@ for (const skin of SKINS) {
       const anchor = drawer.locator('[data-dt-table-anchor="drawerContentV11"]');
       await expect(anchor.locator('.group-row[data-table="drawerContentV11"]').first()).toBeVisible({ timeout: 10_000 });
       await expect(anchor.locator('.row-pad').first(), '抽屉窗口化占位件在场').toBeAttached({ timeout: 10_000 });
-      await page.waitForTimeout(600); // 抽屉 dock 挤压视口后主表窗口重测 settle
+      await awaitMainSettled(page);  // 旧 600ms 睡等: 抽屉 dock 挤压视口后主表窗口重测 settle 的显式化
 
-      /* 主表滚到中段(千级窗口居中态, 抽屉同屏在场), 等窗口化补行 settle(同上 400ms 口径)。 */
+      /* 主表滚到中段(千级窗口居中态, 抽屉同屏在场), 等窗口化补行 settle(旧 600ms 睡等的显式化)。 */
       await page.evaluate('window.scrollTo(0, document.documentElement.scrollHeight * 0.5)');
-      await page.waitForTimeout(600);
+      await awaitMainSettled(page);
 
       /* 快照①: 主表窗口(滚动位 + 渲染窗首末行 + 常驻行数); 挂轮询 tick 与 longtask 探针。
        * vm.refresh 实例属性影子化计数(第①类注入; 节拍链 fn 走 this.refresh 命中影子)。 */
@@ -374,15 +415,15 @@ for (const skin of SKINS) {
       const body = drawer.locator('.drawer-body');
       for (let step = 1; step <= 40; step++) {
         await body.evaluate((el, s) => { el.scrollTop = (el.scrollHeight * s) / 40; }, step);
-        await page.waitForTimeout(80);
+        await measureWindow(80);  // 匀速滚动节拍(量具口径, 见 measureWindow 注)
       }
       await body.evaluate((el) => { el.scrollTop = 0; });
-      await page.waitForTimeout(400);
+      await awaitDrawerSettled(page, anchor);  // 旧 400ms 睡等: 回顶后抽屉窗口重渲落定的显式化
       const tgl = anchor.locator('.group-row.dir [data-act="fold"]').first();
       await tgl.click();
-      await page.waitForTimeout(400);
+      await awaitMainSettled(page);  // 旧 400ms 睡等: 折叠后主表窗口重算 settle 的显式化
       await tgl.click();
-      await page.waitForTimeout(400);
+      await awaitMainSettled(page);  // 旧 400ms 睡等: 展开后主表窗口重算 settle 的显式化
 
       /* 快照②: 主表窗口必须逐字段不变(抽屉滚动/折叠不漂移主表文档型窗口)。 */
       const after = await snap();

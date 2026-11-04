@@ -32,6 +32,30 @@ const INSTALL_LT = `(() => {
   window.__po.observe({ entryTypes: ['longtask'] });
 })()`;
 
+/**
+ * 负条件观察窗(观察程序参数, 非条件等待): 切回种子页后要给「无冻结」留出观察时长再读
+ * longtask 探针(旧 2000ms 同值) —— 观察窗内冒出的长任务都会被记进 __lt, 窗后读数;
+ * 属 e2e setTimeout 审计的「业务/观察延迟语义, 保留并注释」类, 走 Node 侧 setTimeout。
+ * @param {number} ms
+ */
+const observeWindow = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * 等 _winResize 计数静默(连续三拍、拍距 300ms 全等 = 静默 >= 600ms, 覆盖旧 600/800ms 睡等的
+ * 静默保证)后返回计数值 —— 开抽屉的合法 bump 先落进计数再取基线; 关抽屉的假 bump(修复前)
+ * 在退场期落进计数, 稳定值即被 stable 前后对比抓红。三拍口径防「bump 尚未开始就判稳」。
+ * @param {import('@playwright/test').Page} page
+ */
+const awaitResizeQuiet = async (page, timeout = 15_000) => {
+  const seq = [];
+  await expect.poll(async () => {
+    seq.push(await page.evaluate(`(async () => { const vm = ${INST}; return vm._winResize; })()`));
+    if (seq.length > 3) seq.shift();
+    return seq.length === 3 && seq[0] === seq[1] && seq[1] === seq[2] ? seq[2] : null;
+  }, { timeout, intervals: [300] }).not.toBe(null);
+  return seq[2];
+};
+
 for (const skin of SKINS3) {
   test.describe(`行窗失效签名 ${skin}`, () => {
     installRuntimeErrorGuard(test);
@@ -44,18 +68,27 @@ for (const skin of SKINS3) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 20_000 });
       await page.click('nav.tabs [data-view="torrents"]');
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 30_000 });
-      await page.waitForTimeout(2500); // 首访量齐全量轮 settle(设计内一次; 3000 种子实测 ~5.4s 长任务在此窗内完成)
+      // 旧 2500ms 睡等「首访量齐全量轮 settle」→ poll 等行高实测态就位(设计内一次;
+      // 3000 种子实测 ~5.4s 长任务在此窗内完成)
+      await expect.poll(
+        () => page.evaluate(`(async () => { const vm = ${INST}; return vm._winMeasured.torrent; })()`),
+        { timeout: 30_000, message: '首访量齐全量轮 settle(行高实测态就位)' },
+      ).toBe(true);
       const total = await page.evaluate(`(async () => { const vm = ${INST}; return vm.filteredTorrents.length; })()`);
       expect(await page.locator('.torrent-row').count(), '量齐后主表窗口化(常驻 << 数据)').toBeLessThan(total * 0.5);
 
       await page.evaluate(INSTALL_LT);
       // 切走再切回(修复前: 切走即作废行高, 切回全量渲染 5.8~8.4s)
       await page.click('nav.tabs [data-view="shows"]');
-      await page.waitForTimeout(600);
+      await expect(page.locator('.torrent-row').first(), '切走 shows 落定(种子行已卸载)').toBeHidden(); // 旧 600ms 睡等
       await page.click('nav.tabs [data-view="torrents"]');
-      await page.waitForTimeout(500); // 全量渲染进行中就要读数(修复后窗口化即时, 修复前 3000 行 patch 中)
+      // 旧 500ms 睡等 + 一次性读数「全量渲染进行中就要读数」→ 500ms 预算内 poll 行数收敛
+      // (修复后窗口化即时首拍即中; 修复前 3000 行 patch 中, 预算耗尽即红)
+      await expect.poll(() => page.locator('.torrent-row').count(),
+        { timeout: 500, message: '切回种子页 500ms 内即窗口化常驻(修复前 3000 行全量渲染中)' })
+        .toBeLessThan(total * 0.5);
       const rowsEarly = await page.locator('.torrent-row').count();
-      await page.waitForTimeout(2000);
+      await observeWindow(2_000); // 无冻结观察窗(观察程序参数, 见 observeWindow 注; 修复前 5.8s 重量在窗内不完成)
 
       expect(rowsEarly, `切回种子页 500ms 内即窗口化常驻(实测 ${rowsEarly}, 数据 ${total}; ` +
         `签名含 viewMode 时此处全量渲染中) `).toBeLessThan(total * 0.5);
@@ -79,7 +112,11 @@ for (const skin of SKINS3) {
       await expect(page.locator('#app')).not.toHaveAttribute('v-cloak', { timeout: 20_000 });
       await page.click('nav.tabs [data-view="torrents"]');
       await expect(page.locator('.torrent-row').first()).toBeVisible({ timeout: 30_000 });
-      await page.waitForTimeout(2500); // 量齐轮 settle
+      // 旧 2500ms 睡等「量齐轮 settle」→ poll 等行高实测态就位
+      await expect.poll(
+        () => page.evaluate(`(async () => { const vm = ${INST}; return vm._winMeasured.torrent; })()`),
+        { timeout: 30_000, message: '量齐轮 settle(行高实测态就位)' },
+      ).toBe(true);
       const total = await page.evaluate(`(async () => { const vm = ${INST}; return vm.filteredTorrents.length; })()`);
       await page.evaluate(INSTALL_LT);
       const rowPt = await page.locator('.torrent-row').first().boundingBox();
@@ -93,14 +130,11 @@ for (const skin of SKINS3) {
           await drawer.locator('.drawer-tabs button', { hasText: '内容' }).click();
           await expect(drawer.locator('.drawer-body .group-row').first()).toBeVisible({ timeout: 10_000 });
         }
-        await page.waitForTimeout(800);
-        const resize0 = await page.evaluate(`(async () => { const vm = ${INST}; return vm._winResize; })()`);
+        const resize0 = await awaitResizeQuiet(page); // 旧 800ms 睡等: 开抽屉的 RO 余波落定再取基线
 
         await page.click('.drawer-dock .drawer-close');
         await expect(drawer).toHaveCount(0, { timeout: 5_000 }); // 面板真卸载(收场动画含 220ms 退场)
-        await page.waitForTimeout(600); // 收场 RO 余波落定(修复前 bump 在此窗内发生)
-
-        const resize1 = await page.evaluate(`(async () => { const vm = ${INST}; return vm._winResize; })()`);
+        const resize1 = await awaitResizeQuiet(page); // 旧 600ms 睡等: 收场 RO 余波落定再读数(修复前 bump 落进计数即被抓红)
         expect(resize1, `关抽屉(${round})不假 bump 宽度代: _winResize ${resize0} -> ${resize1}`).toBe(resize0);
 
         // 下一拍数据回合(确定性触发 updated 钩子; 修复前此处按失配签名全量重渲 3000 行 5.6s)
