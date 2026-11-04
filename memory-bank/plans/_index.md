@@ -24,6 +24,7 @@
 
 ## Done
 
+- [26-11-04-0554] [收口 code review 制度化实施计划](26-11-04-0554-plan-memory-bank-code-review.html) — `memory-bank-code-review`
 - [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-04-0115] [RM10 附加轮: 缺失站点导出合并真机实测(导出面)](26-11-04-0115-plan-real-rm10-addendum-missing-merge.html) — `real-rm10-addendum-missing-merge`
 - [26-11-04-0055] [同机证明实施计划:D+F 主方案 + E1 一次性强探测](26-11-04-0055-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
@@ -83,9 +84,8 @@
 - [26-10-19-2341] [WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)](26-10-19-2341-plan-webui-dialog-tone-color.html) — `webui-dialog-tone-color`
 - [26-10-19-2206] [站点问题改色表达与 chip 图标收口](26-10-19-2206-plan-webui-site-chip-color.html) — `webui-site-chip-color`
 - [26-10-19-2007] [WEBUI 站点列状态提醒与逐目标汇报回执](26-10-19-2007-plan-webui-site-alerts.html) — `webui-site-alerts`
-- [26-10-18-2013] [WEBUI 选中摘要: 种子个数 + 合计/实际占用大小](26-10-18-2013-plan-webui-selection-size-summary.html) — `webui-selection-size-summary`
 
-> 更早的 **143** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **144** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

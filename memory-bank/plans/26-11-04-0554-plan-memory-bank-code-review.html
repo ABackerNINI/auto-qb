@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>收口 code review 制度化实施计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="memory-bank-code-review">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-04-0554">
+<meta name="doc-updated" content="26-11-04-0705">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-04-memory-bank-code-review.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: memory-bank-code-review</div>
+<h1>收口 code review 制度化实施计划</h1>
+<p class="lede">把 code review 固化为「完整任务收口」的前置动作:规程住新 skill、机械面进 review 命令包、触发挂收尾 DoD 第 0 步——设计主轴是<b>判断与机械分离</b>:收口判定与相关性裁决留给 agent,引文逐字校验、规模分档、基线钉死交给脚本。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-0554 · <b>doc-updated</b> 26-11-04-0705 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 本会话 grilling 15 题(2026-11-04);两轮并行子代理调研(人工评审方法论 + AI 代理评审实践);档案 <code>tasks/26-11-04-memory-bank-code-review.md</code>
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>为什么做</b>:任务收口前没有第二双眼睛。agent 自查会顺着写代码时的思路走(新鲜眼缺失),而 LLM 评审有两个已证实的失效模式——<b>幻觉引文</b>(引文与源码对不上)与<b>长上下文稀释</b>(单代理扫大 diff 时漏检)。本任务把评审做成带固定输入、固定产出格式、固定裁决口径的流水动作,失效模式用机械手段对治。</p>
+<p><b>完成判据</b>:①收口任务在收尾 DoD 各步之前完成评审+裁决+留痕,blocker 级发现清零;②评审发现可追溯(引文过逐字校验、入池件有编号);③本任务自身首跑评审通过(dogfood)。</p>
+<p><b>设计底线/不变量</b>:</p>
+<ol>
+  <li><b>判断与机械分离</b>:收口判定、相关性裁决、severity 定级是判断,不脚本化;引文校验、分档、基线自检是机械,不靠人眼。</li>
+  <li><b>reviewer 只读</b>:评审子代理禁任何 git 状态变更(单一写线程原则在评审场景的延伸)。</li>
+  <li><b>基线钉死</b>:评审期间工作区状态不变;子代理开工自检基线 hash,不匹配即停手。</li>
+  <li><b>范围守恒不被架空</b>:「相关」写死定义(计划目标内 / 本任务改动直接引入或暴露),其余一律入池。</li>
+  <li><b>不加机械守卫</b>:评审是判断性动作,硬守卫逼出走过场;先攒复发数据再议。</li>
+  <li><b>既有闸门不重复</b>:红线(<code>.my-commit-flow.toml</code> <code>red_lines</code>)、非ASCII(commit 闸门)、新配置键同步(validate 守卫测试)已有机检,评审只查闸门外侧面。</li>
+</ol>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p><b>现状</b>:收尾 DoD 实际 7 步(<code>.agents/skills/memory-bank/SKILL.md</code> 「收尾 DoD」节),无评审步;评审质量全靠 agent 自觉,无固定评审包构造、无产出 schema、无裁决口径、无留痕。</p>
+<p><b>痛点证据</b>:</p>
+<ul>
+  <li>AGENTS.md 两处写「DoD 5步」(L16、L20),与 skill 实际 7 步漂移;守卫指针 <code>tests/test_memory_bank.py</code> 是死路径(实际四分:<code>test_memory_bank_{cli,docs,naming,structure}.py</code>)——顺手修,见 D10。</li>
+  <li>子代理上下文自动继承 AGENTS.md 的「开工同步硬性」规则,评审子代理可能执行 <code>my-commit-flow.sync</code> → 快进/rebase 使评审基线漂移、引文行号全错。三层修复见 §03。</li>
+  <li>调研佐证:单次评审 200–400 行可达 70–90% 缺陷检出率,超 400 行明显衰减(SmartBear/Cisco 案例,smartbear.com);业界对幻觉引文的对治是逐字引文+行号、对不上即弃(level1techs 社区流水线);Cloudflare 按风险分档定评审投入(blog.cloudflare.com/ai-code-review)。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线三层</b>:①触发层——完整任务=命中立档阈值 4 条,review 挂任务收口那次收尾、DoD 全部步骤之前,中途「提交」不触发;②规程层——新 skill 八节承载全部语义;③机械层——<code>.commands/review/</code> 包两个 task id(<code>review.pack</code> 评审包生成、<code>review.check</code> 引文校验)。</p>
+<p><b>子代理 sync 风险的三层修复</b>(排障时按层检查):</p>
+<ol>
+  <li><b>治本</b>:AGENTS.md 同步条目加「子代理一律豁免」句——子代理实际只看得到 AGENTS.md,豁免必须写在它读的文件里。</li>
+  <li><b>固化</b>:skill ③ 评审提示模板三件套(只读契约 / 双 hash 钉死 / 开工自检),主 agent 派遣照抄不临场发挥。</li>
+  <li><b>兜底</b>:开工自检把静默错位变干净中止——即使前两层失效,sync 后 hash 不匹配即停手报告,不产出行号全错的报告。</li>
+</ol>
+<p><b>落点表</b>(排障从这里对号):</p>
+<table>
+  <tr><th>落点</th><th>内容</th><th>排障入口</th></tr>
+  <tr><td><code>.agents/skills/code-review/SKILL.md</code></td><td>八节规程(触发/评审包/派遣/产出裁决/checklist/留痕/降级)</td><td>评审行为不对 → 先读该 skill 的对应节</td></tr>
+  <tr><td><code>.commands/review/</code>(config.toml + 脚本)</td><td><code>review.pack</code>(基线/diff/分档/红线预警)、<code>review.check</code>(引文逐字校验)</td><td><code>commands run list</code> 查 task id;脚本内 <code>--help</code></td></tr>
+  <tr><td><code>.agents/skills/memory-bank/SKILL.md</code></td><td>DoD 第 0 步 + 会话开始段子代理豁免句</td><td>评审没被触发 → 查第 0 步措辞</td></tr>
+  <tr><td><code>AGENTS.md</code></td><td>收尾 bullet 路由句 + 同步条目子代理豁免句 + 3 处漂移修正</td><td><code>commands run doc.caps</code>(8000 硬上限)</td></tr>
+  <tr><td><code>.commands/review/scripts/test_review_pkg.py</code></td><td>review 包配置守阵与脚本行为测试</td><td><code>commands run test.one -- .commands/review</code>(提交闸门走 <code>test.pkg.scoped</code>)</td></tr>
+</table>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>#</th><th>步骤</th><th>验收判据</th></tr>
+  <tr><td>1</td><td>新建 <code>code-review/SKILL.md</code> 八节</td><td>frontmatter 触发词、三件套模板、findings JSON schema、16 条 checklist(通用 6+本仓库 10,条条挂锚点)齐备</td></tr>
+  <tr><td>2</td><td>新建 <code>.commands/review</code> 包</td><td><code>review.pack --base &lt;hash&gt;</code> 输出基线/分档/文件清单/红线预警;<code>review.check</code> 对幻觉引文 refute;测试绿</td></tr>
+  <tr><td>3</td><td>改 memory-bank SKILL.md 两处</td><td>DoD 第 0 步在位;子代理豁免句在位;<code>test_memory_bank_structure</code> 仍绿</td></tr>
+  <tr><td>4</td><td>改 AGENTS.md 四处</td><td>路由句+豁免句在位;两处「5步」与守卫死路径清零;<code>doc.caps</code> 不超 8000</td></tr>
+  <tr><td>5</td><td>收尾:首跑 dogfood → 立档(已建)→ test.full+基线切片 → kb.wrap</td><td>本任务自身评审走完 pack→派遣→check→裁决全流程;基线切片含实测数字</td></tr>
+</table>
+<h3>排障地图</h3>
+<table>
+  <tr><th>症状</th><th>先查</th><th>处置</th></tr>
+  <tr><td><code>review.pack</code> 报 command not found</td><td><code>.commands/review/config.toml</code> task id 注册;wrapper 是否安装</td><td>按 commands skill 装wrapper或展开 run.py 跑</td></tr>
+  <tr><td><code>review.check</code> 全部 refute</td><td>findings JSON 字段名与 skill ④ schema 是否一致;引文是否取了跨行片段</td><td>引文取单行内连续片段;对齐字段名</td></tr>
+  <tr><td>评审子代理仍跑 sync</td><td>AGENTS.md 豁免句是否在位(子代理只看 AGENTS.md);派遣是否照抄三件套</td><td>补豁免句/照抄模板;开工自检会拦截,重派即可</td></tr>
+  <tr><td>发现条目行号错位</td><td>基线 hash 与开工自检输出是否一致</td><td>不一致=评审期间树被动过,重新锚定基线后重评</td></tr>
+  <tr><td><code>doc.caps</code> 报 AGENTS.md 超标</td><td>路由句/豁免句措辞是否过长</td><td>就地精简措辞,不削其它段落</td></tr>
+  <tr><td>分档判断错误(该分面没分)</td><td><code>review.pack</code> 的行数统计与安全敏感面提示</td><td>以 pack 输出为准,不手工数行数</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无剩余待拍板——15/15 已拍板(2026-11-04 会话内逐题确认),结论全表见 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>D</th><th>议题</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>触发边界</td><td>命中立档阈值 4 条=完整任务才触发;小修/问答不评审</td><td>2026-11-04</td></tr>
+  <tr><td>D2</td><td>时点</td><td>只挂任务收口那次收尾、DoD 全部步骤之前;中途「提交」不触发</td><td>2026-11-04</td></tr>
+  <tr><td>D3</td><td>评审包</td><td>diff 为主体+指路(档案/计划、模块清单、验收标准、安全敏感面、基线 hash);禁整库扫描</td><td>2026-11-04</td></tr>
+  <tr><td>D4</td><td>派遣</td><td>有子代理能力就派、无大小豁免;reviewer 只读;产出格式固化;无子代理环境降级自查</td><td>2026-11-04</td></tr>
+  <tr><td>D5</td><td>相关性裁决</td><td>主 agent 裁;「相关」=计划目标内或本任务改动直接引入/暴露;不强制二轮,修复 &gt;100 行追加</td><td>2026-11-04</td></tr>
+  <tr><td>D6</td><td>豁免</td><td>纯文档任务跳过 code review(归既有闸门)</td><td>2026-11-04</td></tr>
+  <tr><td>D7</td><td>留痕</td><td>档案进度日志一行+切片 R 行(--did 承载);暂不加机械守卫</td><td>2026-11-04</td></tr>
+  <tr><td>D8</td><td>住址</td><td>新 skill + 双钩子(memory-bank DoD 第 0 步、AGENTS.md 路由句);不进 scope-guard(其 DO NOT USE FOR 明文排除)</td><td>2026-11-04</td></tr>
+  <tr><td>D9</td><td>硬门槛</td><td>blocker(真缺陷/违黄金法则/红线风险)必修完才可收口;major/minor 裁量;nit 通常忽略</td><td>2026-11-04</td></tr>
+  <tr><td>D10</td><td>连带漂移</td><td>AGENTS.md 三处既有错误(两处「5步」、守卫死路径)顺手修</td><td>2026-11-04</td></tr>
+  <tr><td>D11</td><td>调研产出</td><td>蒸馏进 skill,不落 reports/ 独立制品</td><td>2026-11-04</td></tr>
+  <tr><td>D12</td><td>骨架</td><td>八节:frontmatter/触发豁免/评审包/派遣/产出裁决/checklist/留痕/降级</td><td>2026-11-04</td></tr>
+  <tr><td>D13</td><td>checklist 约束</td><td>总数 ≤25 条;条条挂锚点(法则编号/文件路径/pitfalls);超了先砍通用面</td><td>2026-11-04</td></tr>
+  <tr><td>D14</td><td>拓扑</td><td>两档:diff ≤400 行 1 个全能;&gt;400 行或安全敏感面拆 2–3 个分面(正确性/安全/测试缺口)</td><td>2026-11-04</td></tr>
+  <tr><td>D15</td><td>机械化</td><td>a 档:两脚本都做(pack/check)+ findings 改 JSON schema;C 类判断不脚本化</td><td>2026-11-04</td></tr>
+</table>
+<p class="aside">非拍板的设计补丁(会话中确认):子代理 sync 风险三层修复(AGENTS.md 豁免句 + 模板三件套 + 基线自检兜底),见 §03。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
+  <tr><td>1</td><td>评审子代理执行 sync 改写基线</td><td>子代理继承 AGENTS.md 硬规则且模板未照抄</td><td>开工自检 hash 拦截→停手报告→重新锚定重派;治本靠 AGENTS.md 豁免句</td></tr>
+  <tr><td>2</td><td>评审走过场(全绿通过)</td><td>赶收尾、评审包过大</td><td>留痕必须写明发现数(修 N/入池 M);复发数据攒够再议机械守卫</td></tr>
+  <tr><td>3</td><td>「相关」判定扩架范围守恒</td><td>agent 把顺手改判成相关</td><td>定义写死在 skill(D5);拿不准的逐条问用户</td></tr>
+  <tr><td>4</td><td>checker 误杀真发现</td><td>引文跨行/空白差异/行号偏移超窗口</td><td>引文约定单行连续片段+行号 ±邻近窗口;误杀样本回填脚本测试用例</td></tr>
+  <tr><td>5</td><td>本仓库 checklist 条目过期</td><td>锚点文件移动/法则改版</td><td>条条挂锚点(路径/编号),锚点失效即文档修正任务</td></tr>
+  <tr><td>6</td><td>AGENTS.md 触 8000 上限</td><td>路由句+豁免句超预算(余量 ~665)</td><td><code>doc.caps</code> 自查;超了就地精简两句话术</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-0554</span> 初版。来源:本会话 grilling 15 题定稿 + 两轮子代理调研(SmartBear/Google/OWASP 人工方法论;Cloudflare/Copilot/CodeRabbit AI 评审实践)。要点:15 拍板(§06)+ 三层 sync 修复(§03)+ 机械化 a 档(§04 步骤 2)。</li>
+  <li><span class="tag">R1 · 26-11-04-0659</span> 首跑评审修订:一轮 24 条发现全部落地后,二轮评审修正两处指路(落点表测试路径与排障命令、三件套节号 ④→③);doc-refs 改仓库根相对路径修认领链。</li>
+</ul>
+
+</div>
+</body>
+</html>

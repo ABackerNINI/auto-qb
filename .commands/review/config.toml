@@ -1,0 +1,16 @@
+[pack]
+name      = "review"
+when      = "收口评审：评审包生成 / 发现引文校验（code-review skill 的机械面）"
+confirmed = true
+
+[tasks."review.pack"]
+run     = ["uv run python .commands/review/scripts/review_pack.py pack <args>"]
+timeout = 120
+when    = "code-review skill ② 评审包：任务收口、派遣评审子代理之前"
+note    = "--base <rev> 必填（任务起点：任务第一个 commit 的 parent / 多会话任务=上次收口 commit，拿不准问用户）。输出基线与 HEAD hash、diff 统计与 400 行分档提示、文件清单、红线/安全敏感面预警 —— 红线清单与 my-commit-flow 闸门同源（读 .commands/my-commit-flow/.my-commit-flow.toml 的 red_lines/warn_lines，缺文件给可见警告不静默降级）。分档与预警是提示不是闸门，拦截仍归提交闸门"
+
+[tasks."review.check"]
+run     = ["uv run python .commands/review/scripts/review_pack.py check <args>"]
+timeout = 120
+when    = "code-review skill ④ 产出裁决：reviewer 交回 findings JSON 后、采信任何一条之前"
+note    = "--findings <json文件|-> 必填（- 指 stdin），--root 可指定仓库根（默认 cwd）。逐条校验：字段齐全（file/line/quote/severity/claim/relevance/fix）、severity/relevance 枚举合法、quote 与源码逐字比对（单行内连续片段 ≥4 字符，行号允许 ±3 邻近，--window 可调）。REFUTE 的发现直接弃、不复核；rc=0 全部通过 / rc=1 存在被弃条目 / rc=2 用法或环境错误"

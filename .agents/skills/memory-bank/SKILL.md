@@ -11,7 +11,7 @@ user-invocable: true
 
 ## 会话开始 (5 步)
 
-1. **先同步分支(硬性, 无豁免 —— 问答/只读分析轮次也必须先同步)**: `commands run my-commit-flow.sync` —— 自动 fetch + 快进 / 分叉自动 rebase(保线性, 2026-09-28 拍板), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑。**禁止在落后的分支上工作(含只读分析)**; 只读轮次遇同步失败**不自作主张 stash**(那是写操作) —— 把失败行贴进回复并停下, 不在陈旧基线上作答。见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」。
+1. **先同步分支(硬性, 无豁免 —— 问答/只读分析轮次也必须先同步)**: `commands run my-commit-flow.sync` —— 自动 fetch + 快进 / 分叉自动 rebase(保线性, 2026-09-28 拍板), 成功一行「已同步 / 同步成功 <hash>」贴进回复; 失败一行含原因与步骤(树脏 / 冲突已自动回滚), 照做后重跑。**禁止在落后的分支上工作(含只读分析)**; 只读轮次遇同步失败**不自作主张 stash**(那是写操作) —— 把失败行贴进回复并停下, 不在陈旧基线上作答。见 `AGENTS.md`「⚠️ 环境硬约束: Git 操作」。**子代理一律豁免本步**(同步是主会话的开工动作; 子代理 git 状态一律不动, 基线以任务提示给的 hash 为准, 派遣时照抄 code-review skill ③ 的开工自检三件套 —— 子代理跑 sync 会漂移评审基线/改写被评审代码)。
    - 完整步骤见 [my-commit-flow 包](../../.commands/my-commit-flow/README.md)。
 2. 看会话滚动状态: `commands run kb.active` —— 扫 `memory-bank/activeContext/` 的时间戳切片, 按「最后活动」倒序输出一行摘要 + 陈旧标记。
    - ⚠ **activeContext 不含长青职能**: 「下一步」看 `想法.md` + `progress/roadmap.md`, 定案口径看 `AGENTS.md`/`conventions/`/`pitfalls/` —— 走 `memory-bank/README.md` 细路由。
@@ -55,6 +55,8 @@ KB 内**任何日期**只有一个来源: `commands run kb.time` —— UTC+8 �
 ## 收尾 DoD (缺一不可)
 
 > **由「提交」触发时**：直接按下面各步回写 —— 与远端的合流由 `ship.commit` **提交后 rebase** 完成（2026-10-04 起提交先行：各 `_index` 撞车由生成物自动化解兜底，手写件冲突才停下要人; 单点: my-commit-flow [pipeline.md](../../../.commands/my-commit-flow/references/pipeline.md)）。回写件仍是全体 clone 的最热写点, **随主提交一并暂存**, 不推完再补一笔。
+
+0. **收口评审 (仅收口任务)**: 本次收尾若是某个命中立档阈值的任务的**最后一次**(收口判定与豁免表见 [code-review skill](../code-review/SKILL.md) ①), 先按该 skill 走完评审与裁决 —— 派**只读**子代理(派遣三件套照抄其 ③)→ 发现过 `commands run review.check` 引文校验 → **blocker 必修完**才可走下面各步; 相关发现当场修, 不相关按 create-issue 入池, 结论进进度日志(其 ⑥)。中途「提交」/阈值不命中的小修/纯文档任务不触发; 修复 diff > 100 行追加一轮。
 
 1. **activeContext 切片 (机械面走命令)**: `commands run kb.wrap --topic <slug> --did "一句话"` —— 抬「最后活动」+ 追加 R 行(编号 = 现有最大 + 1); 同专题档案抬 `**Updated:**` + 进度日志追加带日期行(裁定 A5: 日期属派生面, 轮内不逐行写); 动了档案即重建 `tasks/_index.md`。**只做机械面 (D6)** —— 蒸馏与判断仍是 agent 的活: **同一专题跨会话沿用同一个 slug**、已完成条目沉淀到 `progress/` 或主题文档后**从切片删除**、超 14 天没动 → 蒸馏后删除、摘要与档案 `Summary` 精编。切片不存在时 kb.wrap 按模板建(零 SLOT 即合规, 裁定 A6)。伞形档案与派生计划各持不同 key 时加 `--archive <档案 Topics 键>` 单独锚定档案(切片仍按 `--topic` 落; 不传则沿用 `--topic` 匹配, 行为不变), 别为此改档案 Topics。体例 (`# 标题`/`> 摘要:`/`> 最后活动: YYYY-MM-DD HH:MM`) 与四条约定见 [references/kb-structure.md](references/kb-structure.md); 文件名与「最后活动」的时刻由 kb.wrap 经 timekit 单点派生。
 2. **tasks/**: 命中阈值 → `commands run kb.new task --title ".." --topic <领域>-<专题>` 建档(命名/头部字段/SLOT 清单/查重全派生 —— 查重含跨 clone, 同专题已存在即拒绝并给路径; 建后填「原始请求」等 SLOT), 续作既有档案直接编辑(**进度日志的日期行由 kb.wrap 追加**, 追加进度时精修 `Summary`, 裁定 A1), 然后 `commands run kb.index` 重建索引 —— **不要手改 `tasks/_index.md`**。建/更新件的体例与必备章节见下方「任务档案规范」。
