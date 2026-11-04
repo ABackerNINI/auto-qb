@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>待收尾迁移种子的 WebUI 可见性与路径链展示计划</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="webui-relocate-visibility">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-04-1042">
+<meta name="doc-updated" content="26-11-04-1048">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-18-backend-group-relocate-restart-free.md, memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/issues/26-11-04-0734-bug-webui-relocate-confirm-unwired.html">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+  .layer { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.08em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: webui-relocate-visibility</div>
+<h1>待收尾迁移种子的 WebUI 可见性与路径链展示计划</h1>
+<p class="lede">在不改写 qB 保存路径语义的前提下，为「已搬走但尚未收尾」的种子增加一层只读展示：行内状态标记 + 按需路径链浮窗；路径筛选保持 qB 口径，另设独立的迁移状态筛选。先交付可确认事实的最小面，再分阶段增加文件系统探测与 qB 标签。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-1042 · <b>doc-updated</b> 26-11-04-1048 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 用户新需求 + grilling 压测（本轮只分析、写计划；不改产品代码、不改测试、不 commit / push）
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><strong>目标</strong>：让用户在 WebUI 里能回答四个问题——①这颗/这组种子是否正在迁移、是否已搬走待收尾、是否失败；②qB 报告的保存路径与实际数据位置是否不同；③路径跳转链是什么（A → B → C，含非 auto-qb 创建的链接）；④如果是 auto-qb 设置的跳转，属于哪个 job、何时设置、属于哪种触发来源、当前收尾到哪一步。</p>
+<p><strong>做到什么程度算成</strong>：<span class="layer">P0</span> 后端只读投影上线，列表/详情能稳定显示迁移状态且不改变任何既有筛选与操作语义；<span class="layer">P1</span> 行内标记与详情可用、键盘/触屏可达；<span class="layer">P2</span> 浮窗能按需展示完整路径链并对不可判定态显式标注「未确认」；<span class="layer">P3</span>（可选）qB 标签镜像。每一阶段可独立回滚。</p>
+<p><strong>设计底线（不变量）</strong>：</p>
+<ul>
+  <li><strong>qB 的 save_path 是生效值</strong>：<code>save_path</code> 参与路径筛选、删除汇报、转移改写、移动预填与 qB <code>setLocation</code> 语义，展示层<b>绝不复写</b>它，只加派生标注。</li>
+  <li><strong>三层拆分</strong>：显示值 / 筛选值 / 生效值各自独立；新增能力只加新层，不改旧层口径。</li>
+  <li><strong>事实源优先 state</strong>：迁移状态与归属以 <code>state.json</code> 的 <code>relocate.jobs</code> 为准；文件系统探测只提供「当前可验证/不可验证」，不反向覆盖 job 记录。</li>
+  <li><strong>不知道就显示未确认</strong>：映射 miss、权限失败、远端不可达、环、跨范围目标，都标「未确认」并给原因，不猜成「不存在/已迁移」。</li>
+  <li><strong>列表零文件探测</strong>：列表构建只做内存 join；任何 <code>lstat</code>/<code>readlink</code> 只在用户打开浮窗或显式刷新时发生。</li>
+  <li><strong>单一写线程</strong>：job 快照由主循环发布为不可变元组，Web 线程只读；不在 Web 线程遍历主循环可变 dict。</li>
+  <li><strong>黄金法则 4</strong>：若新增配置键（仅 P3 标签），必须进 <code>config.validate_config</code> 并同步 <code>src/auto_qb/config/schema/</code>。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与压测结论</h2>
+<h3>2.1 今天是什么样</h3>
+<ul>
+  <li><b>没有任何迁移展示</b>：静态层 grep <code>relocate</code> 只命中移动确认回路与添加落点预检，没有迁移状态 UI。后端 <code>jobs_view()</code>（[relocate_lifecycle.py:68](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/core/modules/relocate_lifecycle.py#L68-L70)）注释写着「界面视图」，但 WebUI 从未消费。</li>
+  <li><b>路径列只显示 qB 原文</b>：成员视图直接透出 <code>r.save_path</code>（[views_row.py:36](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/views_row.py#L36)）；组视图本身没有 <code>save_path</code>，前端由首成员补出（[decorate.js:304](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/static/shared/decorate.js#L304)）。</li>
+  <li><b>组路径假设已失效</b>：[app.js:73-75](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/static/shared/app.js#L73-L75) 的注释仍假设「组内成员路径本就一致」；整组迁移 armed 期间 mover 在 dst、其余成员仍在 src，首成员取谁取决于顺序。</li>
+  <li><b>筛选与多处操作都吃 save_path</b>：路径筛选按组首成员 / 成员原文匹配（[filters.js:202](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/static/shared/filters.js#L202)、[filters.js:242](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/static/shared/filters.js#L242)）；HR 搜索也按成员 <code>save_path</code>（[hr.js:275](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/static/shared/hr.js#L275)）；删除汇报按不同 <code>save_path</code> 归组（[delete_flow.js:119](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/webui/static/shared/delete_flow.js#L119)）；转移流程用 <code>save_path</code> 做前缀改写。</li>
+  <li><b>状态事实源完整但未投影</b>：<code>RelocateJob</code> 有 phase / alias_paths / armed_at / updated_at / scope / reason / plan（[relocate_units.py:261-282](file:///c:/Users/11059/Desktop/Projects/auto-qb-trae-clones/auto-qb-clone1/src/auto_qb/core/modules/relocate_units.py#L261-L282)），并按 <code>state.json → relocate.jobs</code> 持久化且不裁剪；<code>hashes</code> 是整组成员，足以做精确归属。</li>
+</ul>
+
+<h3>2.2 压测结论：哪些假设站不住</h3>
+<ol>
+  <li><b>「把路径改成移动后路径」站不住。</b> 保存路径不是一个展示字段，它是筛选键、删除汇报分组键、转移改写基准、移动预填值和 qB 生效值。直接改写会同时破坏路径筛选、删除提示、转移预览与后续 <code>setLocation</code> 语义。结论：<b>显示层加标注，筛选层保持原口径，生效层不动</b>。</li>
+  <li><b>「每行实时探测跳转链」站不住。</b> 列表首屏按行 <code>lstat/readlink</code> 会叠加网络盘/权限失败/长路径成本；且用户鼠标扫过就会触发大量重复探测。结论：<b>列表只读 state 内存；链路按需探测 + 短 TTL 缓存 + 显式刷新</b>。</li>
+  <li><b>「qB 标签可以当事实源」站不住。</b> 标签可被用户手工删除、被 tracker 规则 <code>remove_tags</code> 清掉，也可能与用户自定义标签冲突。结论：<b>state 是唯一事实源；标签只能是可选镜像，且读取端不得依赖它</b>。</li>
+  <li><b>「一次 realpath 就能拿到完整链」站不住。</b> 需要逐跳识别 junction / 符号链接 / 挂载点 / 硬链接；Windows junction 目标可能是 <code>\??\</code> 前缀，POSIX 符号链接可能是相对路径；还要处理环、跨卷、跨允许根、权限失败与探测期间变化。结论：<b>逐跳探测、有上限、有环检测、有「未确认」态</b>。</li>
+  <li><b>「谁设的可以从文件系统判断」站不住。</b> 文件系统只给出链接目标，不给创建者。结论：<b>归属只能来自 job 记录（alias_paths 精确匹配 + origin）；不匹配就标「非 auto-qb 设置」</b>。</li>
+  <li><b>「待收尾 / 已完成靠 phase 一位就能讲清」一半成立。</b> phase 十态可精确映射到用户状态，但终态 job 在 state 里永久保留，不能用「存在 job」当「仍在迁移」。结论：<b>后端做状态归并，终态 done 不进行内徽标，失败态要可见</b>。</li>
+  <li><b>「hover 浮窗就够了」站不住。</b> 触屏没有 hover，键盘用户也无法悬停；本项目已有 <code>aq-tip</code> 锚点漂移与浮层 Esc 退栈的坑。结论：<b>徽标必须是可点击、可聚焦的按钮；hover 只是鼠标的快捷入口</b>。</li>
+  <li><b>「组行路径与筛选天然一致」已被 armed 打穿。</b> 首成员口径既有实现本身在混合路径组上就是不稳定的。结论：<b>组级迁移状态由后端聚合，前端不再从首成员推导</b>。</li>
+</ol>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<h3>3.1 三层路径语义（D1）</h3>
+<table>
+  <tr><th>层</th><th>值</th><th>消费者</th><th>本计划是否改</th></tr>
+  <tr><td><span class="layer">显示值</span></td><td>qB <code>save_path</code> 原文 + 迁移徽标/工具提示</td><td>组行、成员行、详情抽屉</td><td>只加标注，文本不变</td></tr>
+  <tr><td><span class="layer">筛选值</span></td><td>qB <code>save_path</code>（组=首成员，成员=原文）</td><td>路径筛选、HR 搜索、转移目标预览</td><td><b>不变</b>；新增独立的「迁移状态」筛选</td></tr>
+  <tr><td><span class="layer">生效值</span></td><td>qB <code>save_path</code></td><td><code>setLocation</code>、删除、限速、转移、添加落点</td><td><b>绝对不变</b></td></tr>
+</table>
+<p class="aside">路径列显示「qB 路径」并在其后加一个 <code>→ 目标</code> 徽标，是解决「看起来没移动」的最小改动；筛选仍按 qB 路径，用户若想筛「迁移相关」用新维度，而不是让路径筛选偷偷跟随物理位置。</p>
+
+<h3>3.2 状态归并（D2）</h3>
+<table>
+  <tr><th>用户状态</th><th>来源 phase</th><th>行内展示</th><th>说明</th></tr>
+  <tr><td>迁移中</td><td><code>moving</code> / <code>watching</code></td><td>「迁移中」</td><td>qB 正在搬字节；mover 的 <code>save_path</code> 可能已变</td></tr>
+  <tr><td>待收尾</td><td><code>moved</code> / <code>armed</code> / <code>removing</code> / <code>removed</code> / <code>finalizing</code></td><td>「已搬走 · 待收尾」</td><td>数据在 dst，qB 仍可能指向 src；别名仍在或正在拆</td></tr>
+  <tr><td>已完成</td><td><code>done</code></td><td>不进行内徽标</td><td>终态；详情里保留最近一次迁移记录</td></tr>
+  <tr><td>迁移失败</td><td><code>failed</code></td><td>「迁移失败」警告</td><td>需保留现场；原因进详情/浮窗</td></tr>
+  <tr><td>已撤销</td><td><code>cancelled</code></td><td>不进行内徽标</td><td>回滚完成；详情可见历史</td></tr>
+</table>
+
+<h3>3.3 分期落点</h3>
+<table>
+  <tr><th>阶段</th><th>范围</th><th>交付物</th><th>明确不做</th></tr>
+  <tr><td><b>P0</b> 只读投影</td><td>后端</td><td>成员/组 <code>relocate</code> 标注、job 快照发布、origin 字段、聚合状态、指纹更新</td><td>不做 UI、不做文件探测</td></tr>
+  <tr><td><b>P1</b> 行内可见</td><td>前端</td><td>路径列徽标 + 详情「迁移」段 + 独立迁移状态筛选 + 键盘/触屏可达</td><td>不做完整链探测、不做标签</td></tr>
+  <tr><td><b>P2</b> 路径链</td><td>后端 + 前端</td><td>按需链探测端点、浮窗链展示、归属、未确认态、缓存/刷新</td><td>不做每行预探测</td></tr>
+  <tr><td><b>P3</b> qB 标签（可选）</td><td>配置 + 后端</td><td>opt-in 单标签镜像；生命周期内加/摘；失败不致命</td><td>不作为事实源、不做启动期复活</td></tr>
+</table>
+
+<h3>3.4 数据契约（草案）</h3>
+<p>成员视图新增可空对象 <code>relocate</code>（无 job 时省略/为 null，旧前端不受影响）：</p>
+<pre><code>{
+  "state": "moving | pending_finalize | done | failed | cancelled",
+  "phase": "armed",                  <span class="cm">// 原始相位，排障用</span>
+  "job_id": "...",
+  "mover": true,                     <span class="cm">// 该成员是否 mover</span>
+  "src": "R:/Seeds/A",
+  "dst": "S:/Seeds/A",
+  "alias_kind": "dir | file |",
+  "alias_count": 12,
+  "armed_at": 1760000000.0,
+  "updated_at": 1760000000.0,
+  "origin": "web | rule | cli | unknown",
+  "reason": ""
+}</code></pre>
+<p>组视图新增聚合对象（同键名，结构不同；前端按组行读取）：</p>
+<pre><code>{
+  "state": "moving | pending_finalize | failed | mixed | done",
+  "pending": 3, "total": 4,
+  "job_ids": ["...", "..."],
+  "dst": ["S:/Seeds/A"],             <span class="cm">// 去重后的目标路径</span>
+  "updated_at": 1760000000.0
+}</code></pre>
+<p class="aside">不把 job 的 <code>plan</code>、完整 <code>alias_paths</code> 塞进每轮轮询载荷；路径链与更细的现场走 P2 的按需端点。避免重蹈「显式动作才需要的字段不塞进轮询载荷」的坑。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<table>
+  <tr><th>步骤</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td><b>P0-1</b><br>job 快照发布</td>
+    <td>主循环在 job 变更后发布不可变快照（hash → 最佳 job 的映射 + 聚合元数据），Web 线程只读；不直接遍历 <code>ctx.relocate._jobs</code>。</td>
+    <td>Web 视图构建期间对 job dict 零遍历；同一 hash 同时存在终态旧 job 与新 job 时取活跃者；快照变更能触发视图刷新（至少 30s 轮询内可见）。</td>
+  </tr>
+  <tr>
+    <td><b>P0-2</b><br>成员标注</td>
+    <td><code>_member_view</code> 增加 <code>relocate</code>；状态归并单点在后端；不改 <code>save_path</code> 行。</td>
+    <td>relocate 关闭 / 无 job / 旧 state.json 三种情况字段为 null 且视图不炸；旧 job 无 origin 显示 <code>unknown</code>。</td>
+  </tr>
+  <tr>
+    <td><b>P0-3</b><br>组级聚合</td>
+    <td><code>_build_group_row</code> 增加组级 <code>relocate</code>；优先级 failed &gt; moving &gt; pending_finalize &gt; done，同优先级多 job 记 <code>mixed</code>；计数 pending/total。</td>
+    <td>成员顺序任意打乱，组级状态与 dst 集合不变；mover 与未 mover 混合时不再显示「路径一致」。</td>
+  </tr>
+  <tr>
+    <td><b>P0-4</b><br>origin 归因</td>
+    <td><code>relocate_execute</code> 增加可选 origin；三处调用方分别传 <code>web</code> / <code>rule</code> / <code>cli</code>；旧 job 默认 <code>unknown</code>。</td>
+    <td>WebUI 手动移动、规则 move_to、命令行三路各有真值；未知来源不冒充 auto-qb。</td>
+  </tr>
+  <tr>
+    <td><b>P0-5</b><br>前端指纹</td>
+    <td><code>decorate.js</code> 的记忆化指纹加入成员 relocate 签名与组 relocate 签名；同步槽位长度断言。</td>
+    <td>job 相位变化后组行徽标不陈旧；仅 store 数据不变而 relocate 变化时也能刷新（必要时主循环 touch Web 快照）。</td>
+  </tr>
+  <tr>
+    <td><b>P1-1</b><br>行内徽标</td>
+    <td>路径列文本后加小徽标（<code>迁移中</code> / <code>待收尾</code> / <code>迁移失败</code>）；徽标独立点击，<code>@click.stop</code> 不触发路径筛选；徽标是 <code>button</code>，可 Tab 聚焦、Enter/Space 打开。</td>
+    <td>点路径文本仍按 qB 路径筛选；点徽标只开详情；触屏可点开；四皮肤下不增高行、不撑破路径列。</td>
+  </tr>
+  <tr>
+    <td><b>P1-2</b><br>详情段</td>
+    <td>抽屉详情新增「迁移」段：状态、src → dst、job_id、origin、设置时间、别名形态/数量、原因、最近记录。</td>
+    <td>done/cancelled 只在详情可见，不污染列表；failed 的原因可复制；字段为空显示「—」。</td>
+  </tr>
+  <tr>
+    <td><b>P1-3</b><br>迁移筛选</td>
+    <td>新增独立 facet：迁移中 / 待收尾 / 失败 / 有过迁移；沿用 <code>facetRows</code> / <code>_facetOptions</code> 取数单点，不新增按组自算的第二套实现。</td>
+    <td>种子页与辅种页计数口径各随行走；不改变路径筛选结果；选中后与其它筛选可组合。</td>
+  </tr>
+  <tr>
+    <td><b>P1-4</b><br>浮窗骨架</td>
+    <td>复用 HR 弹窗形态：120ms 显示 / 160ms 宽限、body 级 teleport、fixed 定位、上方优先翻下方、横向夹取、Esc/滚动/缩放关闭；底色用不透明 <code>--bg-pop</code>，不走 blur；Esc 退栈顺序按视觉层级。</td>
+    <td>四皮肤无透底；下部锚点不压元素；键盘 focus 可打开；滚动时随锚点关闭而不漂移。</td>
+  </tr>
+  <tr>
+    <td><b>P2-1</b><br>链探测端点</td>
+    <td><code>GET /api/relocate/chain?hash=...&amp;refresh=1</code>；只收 hash，起点由服务端快照派生（优先 <code>root_path</code>/<code>content_path</code>，回退 <code>save_path</code>）；沿用 <code>_require_relocate</code> 403 门控；逐跳 <code>lstat/readlink</code>，上限 8 跳，环检测，目标规范化（相对链接、<code>\??\</code> 前缀、长路径）。</td>
+    <td>不接受客户端任意路径；点在允许根内才继续展开，范围外标 <code>outside_scope</code>；环标 <code>cycle</code>；权限失败标 <code>unknown</code>；非 Windows / Mapped / 远端返回 <code>unknown</code> 而非猜。</td>
+  </tr>
+  <tr>
+    <td><b>P2-2</b><br>归属与证据</td>
+    <td>每一跳与该 hash 的 job <code>alias_paths</code> 精确归一比对：命中给 job_id / origin / armed_at / phase；未命中标「非 auto-qb 设置」；记录存在但文件已消失标 <code>stale_record</code>。</td>
+    <td>手工 junction、其他工具符号链接不误归因；同一路径被多 job 用过时优先活跃 job。</td>
+  </tr>
+  <tr>
+    <td><b>P2-3</b><br>缓存与刷新</td>
+    <td>服务端 LRU（键 = hash + 起点 + job generation），TTL 20s，容量 128；<code>refresh=1</code> 绕过；前端同一时刻只发一个链请求，结果区显示探测时间。</td>
+    <td>连续扫多行不产生 N 倍探测；job 状态变化后旧缓存不冒充新事实；探测失败可重试。</td>
+  </tr>
+  <tr>
+    <td><b>P2-4</b><br>浮窗链展示</td>
+    <td>节点行：路径、类型（目录/文件/junction/符号链接/挂载点/硬链接）、状态（已确认/未确认/不存在/环/范围外）、归属章；自动换行、可复制；长链可滚。</td>
+    <td>A → B → C 完整可见；不可判定不给假结论；硬链接只显示「N 个名字」不伪造目标。</td>
+  </tr>
+  <tr>
+    <td><b>P3-1</b><br>qB 标签（可选）</td>
+    <td>新配置 <code>relocate.pending_tag</code>，默认空 = 关闭；armed 时加、终态时摘；幂等、dry-run 感知、失败仅告警；不读回作为事实源。</td>
+    <td>关闭时零 qB 写；开启后 qB UI 可见；用户删除后 WebUI 状态不受影响；被 <code>remove_tags</code> 清掉不导致状态错乱。</td>
+  </tr>
+</table>
+
+<h3>4.1 路径链探测边界（P2 细则）</h2>
+<table>
+  <tr><th>情形</th><th>处理</th><th>展示</th></tr>
+  <tr><td>目录 junction / 符号链接</td><td><code>lstat</code> 读 reparse tag + <code>readlink</code></td><td>下一跳；标注形态</td></tr>
+  <tr><td>相对符号链接</td><td>相对链接父目录解析</td><td>显示解析后的绝对路径</td></tr>
+  <tr><td>Windows <code>\??\</code> / 长路径</td><td>剥前缀 + 长路径前缀后探测</td><td>显示逻辑路径，复制保留原形</td></tr>
+  <tr><td>硬链接</td><td>无目标，<code>st_nlink &gt; 1</code></td><td>「硬链接（N 个名字）」，不展开</td></tr>
+  <tr><td>挂载点</td><td>作为一跳，标「挂载点」</td><td>继续探测目标</td></tr>
+  <tr><td>环</td><td>规范化集合命中即停</td><td>「环」并停止</td></tr>
+  <tr><td>权限失败 / 不存在</td><td><code>OSError</code> 分类</td><td>未确认 / 不存在</td></tr>
+  <tr><td>目标在允许根之外</td><td>不继续展开</td><td>范围外（可复制路径）</td></tr>
+  <tr><td>Mapped / 远端 / 非本机</td><td>不做 syscall</td><td>未确认（原因：需在 qB 主机查看）</td></tr>
+  <tr><td>探测期间被替换</td><td>结果带 <code>probed_at</code>；显式刷新</td><td>「探测于 HH:mm:ss」</td></tr>
+</table>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>按重要性排序；每条都给了推荐（默认）与备选，不阻塞计划推进。</p>
+<table>
+  <tr><th>编号</th><th>问题</th><th>推荐（默认）</th><th>备选</th></tr>
+  <tr>
+    <td>D1</td>
+    <td>MVP 边界：先做「状态标注 + 详情」，还是把完整路径链一起上？</td>
+    <td><b>先 P0+P1 最小面</b>：状态可用、筛选不破坏；P2 再做完整链。理由：状态事实源已存在，链路探测是新读能力，风险与测试面大，分开可独立回滚。</td>
+    <td>一次做到 P2：用户马上能看到 A → B → C，但首版范围与验收面显著变大。</td>
+  </tr>
+  <tr>
+    <td>D2</td>
+    <td>保存路径筛选怎么处理？</td>
+    <td><b>保持路径筛选 = qB 路径；新增独立「迁移状态」筛选</b>。理由：路径筛选是既有契约，多消费者依赖；新维度语义清晰。</td>
+    <td>给路径筛选加「按实际位置筛选」开关（默认关）：更贴近物理位置，但同一条目会同时属于两个路径集合，容易产生「筛 src 却筛出 dst」的误解。</td>
+  </tr>
+  <tr>
+    <td>D3</td>
+    <td>qB 标签本期做不做？</td>
+    <td><b>本期不做，留 P3 opt-in</b>。理由：标签可被用户/规则删除，不能当事实源；写入 qB 增加失败面与清理责任，而 WebUI 已能回答同一问题。</td>
+    <td>本期做 opt-in 单标签：qB 界面直接可见，但需接受标签污染、被清掉后语义漂移、回滚清理复杂。</td>
+  </tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<p>本轮为分析 + 计划，尚无用户拍板。D1–D3 拍板后在此回填结论与日期；未拍板时按 §05 推荐值推进 P0/P1。</p>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>路径筛选语义被悄悄改变</td><td>任何把 <code>save_path</code> 改成 dst 的改动</td><td>P0 明确不改 <code>save_path</code>；对照测试钉住路径筛选输入；代码审查禁止在视图层改写。</td></tr>
+  <tr><td>组行徽标陈旧</td><td>job 相位变化但 store 数据未变，前端记忆化命中旧指纹</td><td>指纹加入 relocate 签名；主循环 job 变更时 touch Web 快照；真机确认 30s 内更新。</td></tr>
+  <tr><td>Web 线程读主循环 dict 竞态</td><td>视图直接遍历 <code>_jobs</code></td><td>只读不可变快照；视图构建不做 job dict 迭代；测试用并发替换快照验证。</td></tr>
+  <tr><td>链探测拖慢或挂起 Web 线程</td><td>UNC / 未就绪盘 / 大量 hover</td><td>按需探测 + TTL + 单飞；远端/Mapped 直接未确认；不跟随范围外目标；显式刷新才重试。</td></tr>
+  <tr><td>敏感路径泄露</td><td>链接指向允许根之外</td><td>沿用 <code>fs.py</code> 白名单口径：只展开允许根内目标；范围外只标状态不给细节。</td></tr>
+  <tr><td>浮窗遮挡 / 透底 / Esc 关错层</td><td>四皮肤令牌差异、下部锚点、与抽屉/弹窗同开</td><td>复用 HR 弹窗单例与定位；<code>--bg-pop</code> 不透明底；Esc 退栈按视觉层级；下部锚点几何测试。</td></tr>
+  <tr><td>键盘/触屏不可达</td><td>只绑 mouseenter</td><td>徽标为 button + focus 态 + Enter/Space；点击钉住；触屏 tap 等价 hover。</td></tr>
+  <tr><td>标签成为第二个事实源</td><td>P3 读取标签渲染状态</td><td>硬约束：标签只写不读；状态渲染只读 state；用户删除标签不改变 WebUI 结论。</td></tr>
+  <tr><td>终态 job 永久累积导致误显示</td><td>用「存在 job」当「迁移中」</td><td>后端状态归并；行内只显示非终态与 failed；详情区保留历史。</td></tr>
+</table>
+
+<h2><span class="no">§08</span>测试策略</h2>
+<table>
+  <tr><th>层</th><th>用例</th><th>判据</th></tr>
+  <tr><td>后端单测</td><td>成员/组标注；状态归并；旧 state.json；relocate 关闭；混合成员顺序；多 job 同 hash</td><td>无 job 时 null；组状态与顺序无关；origin 缺省 unknown；不改 save_path</td></tr>
+  <tr><td>性能守阵</td><td>列表构建时把 <code>file_access</code>/<code>alias_fs</code> 探测函数替换为抛错</td><td>视图仍能构建，证明列表零文件探测</td></tr>
+  <tr><td>链探测单测</td><td>junction、符号链接、相对链接、硬链接、环、不存在、权限失败、范围外、超长路径（Windows + POSIX 分平台）</td><td>三态正确；环不无限；范围外不展开；Mapped 返回 unknown</td></tr>
+  <tr><td>路由契约</td><td>403（功能关）、404（未知 hash）、200 结构；<code>refresh</code> 绕过缓存</td><td>只收 hash；不接受任意路径；响应字段稳定</td></tr>
+  <tr><td>前端静态守阵</td><td>徽标按钮化、<code>@click.stop</code>、指纹含 relocate、facet 走单点、浮窗 teleport/定位/关闭</td><td>接线存在且无旧路径残留</td></tr>
+  <tr><td>前端几何 e2e</td><td>下部锚点、四皮肤、键盘 focus、触屏 tap、滚动关闭、与抽屉同开 Esc 顺序</td><td>不遮挡锚点、不漂移、Esc 关最上层</td></tr>
+  <tr><td>真机 UI（tests-real）</td><td>real-fake 沙箱：构造 junction 链 A→B→C，验证 WebUI 标注/链/未确认态；零写副作用</td><td>按 <code>real.run --case</code> 跑通；不触碰用户数据与进程</td></tr>
+  <tr><td>回归</td><td><code>test.full</code> + 路径筛选/删除/转移/HR 搜索既有用例</td><td>基线不回退；新基线切片按 <code>kb.new baseline</code> 誊写</td></tr>
+</table>
+
+<h2><span class="no">§09</span>兼容与回滚</h2>
+<ul>
+  <li><b>旧数据</b>：<code>relocate.jobs</code> 旧记录无 <code>origin</code> → 显示「未知来源」；phase 缺省沿用 <code>moving</code>；不需要迁移脚本。</li>
+  <li><b>旧前端/旧客户端</b>：新增字段是加法，旧消费方忽略；<code>save_path</code>、组键、路径筛选选项不变。</li>
+  <li><b>功能关闭</b>：<code>relocate.enabled=false</code> 时不发标注、链端点 403、徽标不渲染；无 qB 写。</li>
+  <li><b>回滚</b>：P0/P1 纯读展示，回滚 = 隐藏徽标/详情段；P2 回滚 = 摘除端点与浮窗，无 state 变更；P3 回滚 = 配置置空，标签仅随 job 生命周期自然摘除（不自动复活）。</li>
+  <li><b>数据安全</b>：链探测只做 <code>lstat/readlink</code>，不读文件内容、不写盘、不投命令；沿用 <code>_require_relocate</code> 与 <code>fs.py</code> 的允许根白名单口径。</li>
+</ul>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-1042</span> 初版：基于用户需求与 grilling 压测（8 条假设裁决），给出 P0–P3 分期、三层路径语义、数据契约、链探测边界、测试与回滚。本轮只分析写计划，未改产品代码/测试，未 commit/push。</li>
+</ul>
+
+</div>
+</body>
+</html>

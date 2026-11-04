@@ -10,8 +10,9 @@
 - [26-10-10-2001] [计划 · WEBUI 选中 × 触发 一致性](../26-10-10-2001-plan-webui-selection-trigger-parity.html) — `webui-selection-trigger-parity`
 - [26-09-22-2318] [auto-qb 软件版本管理方案 · 版本号 / Tag / CHANGELOG / 发版流程](../26-09-22-2318-version-management-plan.html) — `deps-version-management`
 
-## Open (3)
+## Open (4)
 
+- [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](../26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-03-2337] [缺失站点导出/导入 tracker 合并](../26-11-03-2337-plan-missing-site-tracker-merge.html) — `missing-site-tracker-merge`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](../26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](../26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`

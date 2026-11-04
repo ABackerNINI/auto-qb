@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
 - [26-11-03-2337] [缺失站点导出/导入 tracker 合并](26-11-03-2337-plan-missing-site-tracker-merge.html) — `missing-site-tracker-merge`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
