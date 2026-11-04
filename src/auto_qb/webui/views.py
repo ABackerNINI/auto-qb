@@ -54,6 +54,7 @@ from .views_common import (
 )
 from .views_episodes import EpisodesMixin
 from .views_group import GroupMixin
+from .views_relocate import member_relocate
 from .views_row import RowMixin
 from .views_search import SearchMixin
 
@@ -106,6 +107,25 @@ class WebviewMixin(GroupMixin, RowMixin, EpisodesMixin, SearchMixin):
         if e is TorrentState.ERROR:
             return rec.tracker_error_msg or "错误"
         return ""
+
+    def _relocate_snapshot(self):
+        """主循环发布的只读 job 快照(relocate 关 / 模块缺失 / 无 job => None)
+
+        构建期只取引用, 不遍历任何 job 表(plan 26-11-04-1042 P0-1)。
+        """
+        ctx = getattr(self, "ctx", None)
+        conf = getattr(getattr(ctx, "config", None), "relocate", None)
+        if not getattr(conf, "enabled", False):
+            return None
+        mod = getattr(ctx, "relocate", None)
+        getter = getattr(mod, "jobs_snapshot", None)
+        return getter() if callable(getter) else None
+
+    def _relocate_member(self, torrent_hash: str) -> Optional[dict]:
+        """成员/种子页条目的迁移标注(快照 O(1) 查找; 无 job => None)"""
+        snap = self._relocate_snapshot()
+        job = snap.job_for(torrent_hash) if snap is not None else None
+        return member_relocate(job, torrent_hash)
 
     @staticmethod
     def _fetch_tracker_error(rec: TorrentRecord, client) -> Optional[str]:

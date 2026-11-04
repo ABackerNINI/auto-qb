@@ -23,7 +23,8 @@
 """
 import os
 from dataclasses import dataclass, field
-from typing import Optional, Sequence, Tuple
+from types import MappingProxyType
+from typing import Mapping, Optional, Sequence, Tuple
 
 # ---------------------------------------------------------------- 常量
 
@@ -280,6 +281,10 @@ class RelocateJob:
     # (§3.5.1), 两步之间崩溃时这一位仍是 False —— 「qB 从未收到搬迁」在 qB 侧与「下发了
     # 但没动静」不可分辨, 只有账上这一位能把两者分开, 重启据此补发一次而非静默等停滞超时。
     move_issued: bool = False
+    # 发起入口(web / rule / cli; 旧 state 条目缺失时回落 "unknown") —— 只作展示归属,
+    # 不参与任何闸门判定。写入端在 relocate_execute(origin=...); web/rule 调用方各自传值,
+    # cli 为保留值(当前树无 CLI 入口, 仅保证跨端落账口径一致)。
+    origin: str = "unknown"
 
     @property
     def is_terminal(self) -> bool:
@@ -766,6 +771,7 @@ def job_to_dict(job: RelocateJob) -> dict:
         "last_error": job.last_error,
         "plan": job.plan,
         "move_issued": job.move_issued,
+        "origin": job.origin,
     }
 
 
@@ -792,9 +798,36 @@ def job_from_dict(d) -> Optional[RelocateJob]:
             last_error=str(d.get("last_error") or ""),
             plan=d.get("plan") if isinstance(d.get("plan"), dict) else None,
             move_issued=bool(d.get("move_issued")),
+            origin=str(d.get("origin") or "unknown"),
         )
     except (TypeError, ValueError):
         return None
+
+
+@dataclass(frozen=True)
+class RelocateSnapshot:
+    """主循环发布的 job **只读快照**(WebUI 构建期消费, plan 26-11-04-1042 P0-1)
+
+    - `jobs`: 全部 job 的只读视图(元组, 元素为 MappingProxyType 包住的 job dict)
+    - `by_hash`: hash -> 该 hash 的**最佳 job**(非终态优先, 同态取 updated_at 最新)
+    - `generation`: 每次内容变化 +1, 供 Web 侧判断快照是否换代
+
+    Web 线程只读 `by_hash` 做 O(1) 成员判定; 不再遍历 `_jobs`, 也不再在构建期
+    调 jobs_view()。发布动作只发生在主循环的 job 变更路径(register/_set/_start/_load)。
+    """
+
+    generation: int = 0
+    jobs: Tuple[Mapping, ...] = ()
+    by_hash: Mapping[str, Mapping] = field(default_factory=lambda: MappingProxyType({}))
+
+    def job_for(self, torrent_hash: str) -> Optional[Mapping]:
+        return self.by_hash.get(torrent_hash)
+
+
+def job_rank(job: Mapping) -> tuple:
+    """同一 hash 多 job 时的选取序: 非终态优先, 再按 updated_at 新→旧, 最后 job_id 稳定兜底"""
+    terminal = str(job.get("phase") or PHASE_MOVING) in TERMINAL_PHASES
+    return (not terminal, float(job.get("updated_at") or 0.0), str(job.get("job_id") or ""))
 
 
 def content_root_of(save_path: str, files: Sequence[str]) -> str:

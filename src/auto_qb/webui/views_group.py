@@ -5,6 +5,7 @@ from typing import List, Optional
 from ..torrents import TorrentRecord
 
 from .views_common import _max_valid_ts, _min_valid_eta
+from .views_relocate import group_relocate
 
 
 class GroupMixin:
@@ -108,6 +109,10 @@ class GroupMixin:
             # 去重集合的增删由 grouping_mod 显式置 view_changed, 本视图重建后标记自然出现/消失
             "cross_group_conflict":
                 key in cross_keys,
+            # 组级迁移状态必须在后端聚合(plan P0-3): 前端不得取首成员推断。
+            # 无标注/全撤销 => None(字段恒在, 值为 null 的契约同 occ_key)
+            "relocate":
+                group_relocate(members_view),
             "members":
                 members_view,
         }

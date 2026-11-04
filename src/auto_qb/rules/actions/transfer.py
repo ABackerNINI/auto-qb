@@ -29,7 +29,7 @@ class MoveToAction(BaseAction):
             return ActionResult.fail("move_to.path 为空")
         mod = getattr(getattr(ctx.manager, "ctx", None), "relocate", None)
         if mod is not None and not ctx.dry_run and getattr(getattr(ctx.config, "relocate", None), "enabled", False):
-            items = mod.relocate_execute([ctx.hash], self.path, confirm=False)
+            items = mod.relocate_execute([ctx.hash], self.path, confirm=False, origin="rule")
             item = items[0] if items else {}
             cls = item.get("cls")
             if cls == "started":

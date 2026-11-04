@@ -24,6 +24,7 @@ import(需要别人能力经 ctx); 决策纯函数在 relocate_units(不触盘),
 """
 import time
 from dataclasses import replace
+from types import MappingProxyType
 from typing import Optional
 
 from ..module import AppContext, BaseModule
@@ -66,6 +67,9 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._rt: dict = {}  # job_id -> 运行期进度(采样式, 不落盘; 重启由 qB 现场恢复)
         self._qb_up_cache: Optional[tuple] = None  # (monotonic, up) 「qB 在?」探测缓存
         self._dry = False  # dry_run(启动期透传; 干跑不落盘不建链, 与全局口径一致)
+        # WebUI 只读快照(plan 26-11-04-1042 P0-1): 只在主循环 job 变更路径发布, Web 构建期
+        # 零遍历 _jobs; 初值 generation=0 / 空表 = 正常「无 job」态。
+        self._snapshot = ru.RelocateSnapshot()
 
     def sections(self) -> tuple:
         return ("relocate", )
@@ -139,6 +143,32 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         for jid, job in self._jobs.items():
             box[jid] = ru.job_to_dict(job)
 
+    def _publish_snapshot(self) -> None:
+        """发布不可变 job 快照(主循环写线程单点; Web 只读引用)
+
+        内容相等时不换代也不置脏 —— _sync_relocating 之后的重复发布不该让 Web 每轮重建。
+        内容变化时置 full 脏: 迁移标注会影响组行内嵌成员数组与组级聚合, 局部桶无法覆盖
+        未显式登记的组键, 用 full 保证整份视图与快照同代。
+        """
+        jobs = tuple(MappingProxyType(d) for d in self.jobs_view())
+        if jobs == self._snapshot.jobs:
+            return
+        by_hash: dict = {}
+        for job in jobs:
+            for h in job.get("hashes") or ():
+                prev = by_hash.get(h)
+                if prev is None or ru.job_rank(job) > ru.job_rank(prev):
+                    by_hash[h] = job
+        self._snapshot = ru.RelocateSnapshot(
+            generation=self._snapshot.generation + 1,
+            jobs=jobs,
+            by_hash=MappingProxyType(by_hash),
+        )
+        web = getattr(self._ctx, "web", None) if self._ctx is not None else None
+        mark_dirty = getattr(web, "mark_dirty", None)
+        if callable(mark_dirty):
+            mark_dirty(full=True, reason="relocate_jobs")
+
     def _load_jobs(self) -> int:
         """启动/热重载时从 state 恢复 job 账; 非终态的重挂 relocating 登记(抑制缺文件误判)"""
         box = self._state_jobs()
@@ -162,6 +192,7 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
             }
             n += 1
         self._sync_relocating()
+        self._publish_snapshot()
         return n
 
     def _sync_relocating(self) -> None:
@@ -184,4 +215,5 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._jobs[job.job_id] = job
         self._sync_relocating()
         self._persist()
+        self._publish_snapshot()
         return job

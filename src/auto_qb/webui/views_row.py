@@ -34,6 +34,8 @@ class RowMixin:
             # 组级"共同标签/分类"与保存路径筛选器的数据来源(交集/共同值由前端计算,
             # 后端只透出原始值, 避免每次重建做 O(成员数) 以上的集合运算)
             "save_path": r.save_path,
+            # 迁移可见性(P0): 只读 job 快照标注(不改 save_path; 构建期零文件系统探测)
+            "relocate": self._relocate_member(r.hash),
             "tags": sorted(r.tags_set),
             "category": r.category,
             "progress": round(r.progress, 4),

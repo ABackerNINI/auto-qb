@@ -431,7 +431,7 @@ class TorrentsMixin:
             raise ValueError("location 不能为空")
         if self._relocate_armed():
             # 开: 走整组迁移闸门 + 执行体(字节一律由 qB 搬, auto-qb 只建别名与收尾)
-            items = self.ctx.relocate.relocate_execute([hash], location, confirm=bool(confirm))
+            items = self.ctx.relocate.relocate_execute([hash], location, confirm=bool(confirm), origin="web")
             self._relocate_receipt(cmd_id, items, f"移动位置(整组迁移) {hash[:8]}")
             return
         self.api.torrents_set_location(torrent_hashes=[hash], location=location)
@@ -659,7 +659,7 @@ class TorrentsMixin:
             return
         if action == "location" and self._relocate_armed():
             # 整组迁移开: 批量移动走同一闸门 + 执行体(多选按组拆开逐组判定, §3.2.1)
-            items = self.ctx.relocate.relocate_execute(known, extra["location"], confirm=bool(confirm))
+            items = self.ctx.relocate.relocate_execute(known, extra["location"], confirm=bool(confirm), origin="web")
             self._relocate_receipt(cmd_id, items, f"批量移动位置(整组迁移) {len(known)} 个")
             return
         if action == "skip_check":

@@ -503,14 +503,14 @@ def test_move_to_confirm_gate_skips():
 
         class _Relocate:
             """迁移闸门替身: 别名形态需要显式确认"""
-            def relocate_execute(self, hashes, path, confirm=False):
-                calls.append((list(hashes), path, confirm))
+            def relocate_execute(self, hashes, path, confirm=False, origin="rule"):
+                calls.append((list(hashes), path, confirm, origin))
                 return [{"cls": "confirm", "form": "alias"}]
 
         mgr.ctx.relocate = _Relocate()
         r = MoveToAction({"path": r"R:\New"}).execute(ctx)
         assert r.is_skipped, f"需确认的形态只能 skip: {r}"
-        assert calls == [([ctx.hash], r"R:\New", False)], f"规则侧不得请求确认: {calls}"
+        assert calls == [([ctx.hash], r"R:\New", False, "rule")], f"规则侧不得请求确认且必须标记 rule 来源: {calls}"
         assert all(c[0] != "set_location" for c in client.calls), "闸门形态不得再直下 set_location"
 
 

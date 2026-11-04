@@ -594,12 +594,14 @@ def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
         api = mgr.api
 
     act = MoveToAction({"path": dst})
-    monkeypatch.setattr(mod, "relocate_execute", lambda hashes, path, confirm=False: [{"cls": "confirm"}])
+    monkeypatch.setattr(
+        mod, "relocate_execute", lambda hashes, path, confirm=False, origin="rule": [{"cls": "confirm"}]
+    )
     r = act.execute(_Ctx())
     assert r.is_skipped and "显式确认" in r.message, r
 
     monkeypatch.setattr(
-        mod, "relocate_execute", lambda hashes, path, confirm=False: [{
+        mod, "relocate_execute", lambda hashes, path, confirm=False, origin="rule": [{
             "cls": "blocked",
             "reasons": []
         }]

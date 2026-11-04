@@ -60,6 +60,7 @@ class LifecycleMixin:
     def register_job(self, job: RelocateJob) -> None:
         """登记/更新一个在途迁移(job_id 同键覆盖; P3 相位推进时逐次调用)"""
         self._jobs[job.job_id] = job
+        self._publish_snapshot()
 
     def active_jobs(self) -> tuple:
         """非终态 job 视图(未收尾拦截与别名作用域判定的数据源)"""
@@ -68,6 +69,10 @@ class LifecycleMixin:
     def jobs_view(self) -> list:
         """全部 job 的界面视图(终态一并列出: 失败现场要可见 —— §3.5.1「保留现场交人处理」)"""
         return [ru.job_to_dict(j) for j in self._jobs.values()]
+
+    def jobs_snapshot(self) -> ru.RelocateSnapshot:
+        """WebUI 消费的只读 job 快照(主循环发布; 调用方不得遍历/改写)"""
+        return self._snapshot
 
     def get_job(self, job_id: str):
         return self._jobs.get(job_id)

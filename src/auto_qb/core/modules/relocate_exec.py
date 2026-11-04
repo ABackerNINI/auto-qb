@@ -531,12 +531,14 @@ class ExecMixin:
 
     # ---------- P3 执行入口(三入口共用) ----------
 
-    def relocate_execute(self, hashes, location: str = "", confirm: bool = False) -> list:
+    def relocate_execute(self, hashes, location: str = "", confirm: bool = False, origin: str = "unknown") -> list:
         """整组迁移执行入口(三入口共用): 预检 -> 暂停 -> qB 搬 -> (后续相位由任务线推进)
 
         **只做零成本的前置动作**: 闸门不过 ⇒ 一条 blocked 回执, 零副作用; 通过 ⇒
         暂停运行中的成员 + 下发 setLocation(mover) 并落 job 账(phase=moving)。
         搬字节一律由 qB 完成(D2), 本方法绝不复制/移动任何数据文件。
+
+        origin = 发起入口(web / rule / cli 保留值), 只随 job 落账供 WebUI 展示归属, 不参与判定。
         """
         req = [str(h) for h in (hashes or []) if h]
         target = str(location or "").strip()
@@ -608,7 +610,7 @@ class ExecMixin:
             if gate is not None:
                 items.append(gate)
                 continue
-            items.append(self._start_job(records, target, facts, verdict, client))
+            items.append(self._start_job(records, target, facts, verdict, client, origin))
         logger.info(f"relocate | 迁移执行({len(req)} 个 hash -> {len(items)} 项): {self._summ(items)}")
         return items
 
@@ -715,7 +717,7 @@ class ExecMixin:
                 }],
         }
 
-    def _start_job(self, records, target: str, facts, verdict: dict, client) -> dict:
+    def _start_job(self, records, target: str, facts, verdict: dict, client, origin: str = "unknown") -> dict:
         """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)"""
         mover = records[0]
         src = mover.save_path
@@ -767,6 +769,7 @@ class ExecMixin:
             phase=ru.PHASE_MOVING,
             resume_hashes=tuple(running),
             updated_at=time.time(),
+            origin=str(origin or "unknown"),
             plan={
                 "form": unit.form,
                 "link_kind": unit.link_kind,
@@ -784,6 +787,7 @@ class ExecMixin:
         }
         self._sync_relocating()
         self._persist()
+        self._publish_snapshot()
         if self._dry_run():
             return {
                 **verdict, "cls": "ok",

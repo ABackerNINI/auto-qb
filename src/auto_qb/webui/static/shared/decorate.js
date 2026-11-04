@@ -29,30 +29,50 @@
  */
 const _decoCache = new WeakMap();
 
+/* relocate 标注签名(plan 26-11-04-1042 P0-5): 后端每次重建会产出新的 relocate 对象,
+ * 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成值签名后再比较。 */
+function _relocateSig(r) {
+  if (!r) return "";
+  return [r.state, r.phase, r.job_id, r.mover ? 1 : 0, r.origin, r.alias_kind, r.alias_count, r.dst,
+          r.updated_at, r.reason].join("|");
+}
+
+function _groupRelocateSig(r) {
+  if (!r) return "";
+  return [r.state, r.pending, r.total, (r.job_ids || []).join(","), (r.dst || []).join(","),
+          r.updated_at].join("|");
+}
+
 /* 指纹槽位(与 _decoFpBuild 逐字对应): [members 引用, (kind, size, category, site, tags 引用,
- * site_alert, site_alert_msg)*n, 首成员 save_path]
+ * site_alert, site_alert_msg, relocate 签名)*n, 首成员 save_path, 组 relocate 签名]
  * !site_alert / site_alert_msg 必须进指纹(计划 26-10-19-2007 R3): 它们是站点 chip 左槽图标的
  *   唯一数据源, 而组行装饰是记忆化的 —— 不进指纹则"站点报错"出现/消失后组行仍命中旧缓存,
- *   图标永远陈旧(成员行是现渲染的, 只有组行会停在旧态, 这类不一致最难查)。 */
+ *   图标永远陈旧(成员行是现渲染的, 只有组行会停在旧态, 这类不一致最难查)。
+ * !成员/组的 relocate 签名同理必须进指纹(P0 迁移可见性): 相位推进只改 relocate 值,
+ *   组行与成员对象引用不变, 漏槽会让进度徽标停在旧相位。 */
 function _decoFpBuild(g) {
   const ms = g.members || [];
   const fp = [ms];
-  for (const m of ms) fp.push(m.kind, m.size, m.category, m.site, m.tags, m.site_alert, m.site_alert_msg);
-  fp.push(ms.length ? ms[0].save_path : undefined);
+  for (const m of ms) {
+    fp.push(m.kind, m.size, m.category, m.site, m.tags, m.site_alert, m.site_alert_msg, _relocateSig(m.relocate));
+  }
+  fp.push(ms.length ? ms[0].save_path : undefined, _groupRelocateSig(g.relocate));
   return fp;
 }
 
 function _decoFpHit(g, fp) {
   const ms = g.members || [];
-  if (fp[0] !== ms || fp.length !== ms.length * 7 + 2) return false;
+  if (fp[0] !== ms || fp.length !== ms.length * 8 + 3) return false;
   let i = 1;
   for (const m of ms) {
     if (fp[i++] !== m.kind || fp[i++] !== m.size || fp[i++] !== m.category || fp[i++] !== m.site ||
-        fp[i++] !== m.tags || fp[i++] !== m.site_alert || fp[i++] !== m.site_alert_msg) {
+        fp[i++] !== m.tags || fp[i++] !== m.site_alert || fp[i++] !== m.site_alert_msg ||
+        fp[i++] !== _relocateSig(m.relocate)) {
       return false;
     }
   }
-  return fp[i] === (ms.length ? ms[0].save_path : undefined);
+  return fp[i] === (ms.length ? ms[0].save_path : undefined) &&
+    fp[i + 1] === _groupRelocateSig(g.relocate);
 }
 
 /* 强制重新汇报"非活跃"状态集(qB 口径, 单点): qBittorrent commit aa189a7(关闭 issue #12080)
