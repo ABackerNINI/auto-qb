@@ -29,6 +29,10 @@
 - test_guard_recheck_scope_single: recheck 作用域必须单 hash(rc164 高危 None=全库重校验)
 - test_guard_recheck_delete_branch_requeues_origin: 轮询期种子删除 -> rule origin 重入队(rc53)
 - test_guard_recheck_success_clears_cooldown: 校验成功清除失败冷却(rc74/77/81/82)
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_ops_recheck_gone_hash_skips_cleanly: 快照与显式传入都没有该种子 -> 干净放弃零 API 成本(182->184)
+- test_ops_web_recheck_failed_regression_without_evidence: web 源未见证据而 progress 跌破快照基线 -> 「回落」判败(267->270)
 """
 
 import copy
@@ -51,6 +55,7 @@ from datetime import date
 
 from types import SimpleNamespace
 
+from auto_qb.core.modules.ops_common import _RECHECK_GONE_MSG
 from auto_qb.core.modules.ops_mod import OpsModule
 
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
@@ -740,3 +745,35 @@ def test_guard_recheck_success_clears_cooldown():
     run_queue(mgr, now + 3)  # 证据已立 + progress=1.0 -> SUCCESS
     assert "HA" not in mgr.state["recheck_fails"], \
         f"校验成功必须清除冷却账: {mgr.state.get('recheck_fails')}"
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 干净放弃与判败文案标签 ----------
+
+
+def test_ops_recheck_gone_hash_skips_cleanly():
+    """(T2b)快照与显式传入都没有该种子(182->184) -> 干净放弃, 零 API 成本 —— 真正的
+    「已不在」由导出/轮询各自收口, 提交点不再直查"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    r = mgr.ctx.ops.recheck("GONE00000000", source="web")
+    assert r.is_skipped and r.message == _RECHECK_GONE_MSG, r
+    assert client.calls == [] and client.info_calls == 0, (client.calls, client.info_calls)
+
+
+def test_ops_web_recheck_failed_regression_without_evidence():
+    """(T2b)web 源未见生效证据而 progress 跌破快照基线(267->270) -> 「回落」文案判败,
+    处置与见证据路径相同 —— 数据缺损签名在 web 源同样成立(基线取快照, 26-10-21-2323 S3)"""
+    mgr = make_mgr(FakeConfig())
+    client = FakeClient()
+    mgr.client = client
+    t = FakeTorrent(hash="HA", state="pausedDL", progress=0.5)
+    seed_store(mgr, [t])
+    client.torrents["HA"] = t
+    assert mgr.ctx.ops.recheck("HA", source="web").is_ok
+    now = time.time()
+    t.progress = 0.3  # 无校验证据先行回落(校验发现坏块的签名)
+    with capture_ops_logs() as logs:
+        run_queue(mgr, now + 3)
+    assert any("校验未通过(progress 回落 0.3 < 基线 0.5)" in m for m in logs), logs
+    assert "HA" not in mgr.task_queue.active_check_hashes(), "判败后在途登记释放"

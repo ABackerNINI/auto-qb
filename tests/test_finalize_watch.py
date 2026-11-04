@@ -38,6 +38,11 @@ test_guardian_removes_links_after_three_proofs 钉住; 本文件补其余出口�
 - test_heartbeat_age_no_journal_is_inf
 - test_heartbeat_age_uses_ts
 - test_release_pid_tolerates_missing
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_names_from_tasklist_skips_non_quoted_lines: tasklist 输出非引号行(空行/INFO)跳过不进名册(66->65)
+- test_run_verify_write_refused_returns_stopped: verify_mismatch 的 failed 落账被拒 -> 立即 stopped 不动链接(205->212)
+- test_module_main_entry_exits_with_result_code: python -m 入口 main() 结论码经 sys.exit 上抛(284->285)
 """
 import os
 import subprocess
@@ -445,3 +450,50 @@ def test_release_pid_tolerates_missing(tmp_path):
     """释放 pid 锁: 文件不在(已释放/从未持有) ⇒ 静默返回不抛"""
     relocate_journal.release_pid(str(tmp_path), "jr-none")
     relocate_journal.release_pid(str(tmp_path), "jr-none")
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 非引号行 / failed 落账被拒 / -m 入口 ----------
+
+
+def test_names_from_tasklist_skips_non_quoted_lines(monkeypatch):
+    """(T2b)tasklist 输出混入非引号行(空行 / INFO: 提示) -> 跳过不进名册(66->65)"""
+    out = 'INFO: no tasks are running which match the specified criteria.\r\n\r\n"qbittorrent.exe","4","Console","1","123,456 K"\r\n'
+    monkeypatch.setattr(fw.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0, stdout=out, stderr=""))
+    assert fw._names_from_tasklist() == ("qbittorrent.exe", )
+
+
+def test_run_verify_write_refused_returns_stopped(tmp_path, monkeypatch):
+    """(T2b)verify_mismatch 的 failed 落账被拒(205->212: auto-qb 恰在读写间隙落了终态)
+    -> 立即 stopped 且一条链接不删 —— 收口竞争下不得凭半份结论动现场"""
+    link = tmp_path / "src" / "a.mkv"
+    spec = _spec(tmp_path, files=(("a.mkv", 8), ), alias_paths=[str(link)])
+    (tmp_path / "dst" / "a.mkv").write_bytes(b"x" * 3)  # 大小不符 -> verify 判不齐
+    os.link(tmp_path / "dst" / "a.mkv", link)
+    data_dir = str(tmp_path / "data")
+    relocate_journal.write_spec(data_dir, "jr-fw", spec)
+    monkeypatch.setattr(fw, "_qb_process_names", lambda: ("explorer.exe", ))
+    monkeypatch.setattr(fw, "_port_refused", lambda *a, **k: True)
+    real_write = fw.write_journal
+
+    def _write(dd, jid, payload):
+        if payload.get("phase") == "failed":
+            return False  # 模拟 auto-qb 恰在此间隙落了终态: failed 意图拒写
+        return real_write(dd, jid, payload)
+
+    monkeypatch.setattr(fw, "write_journal", _write)
+    result = fw.run(data_dir, "jr-fw", heartbeat=10.0, stable=30.0, poll=0.0, clock=_clock_gen(), sleep=lambda s: None)
+    assert result == "stopped", result
+    assert os.path.exists(link), "failed 落账被拒不得动链接"
+    assert relocate_journal.read_journal(data_dir, "jr-fw")["phase"] == "armed"
+
+
+def test_module_main_entry_exits_with_result_code(tmp_path, monkeypatch, capsys):
+    """(T2b)python -m 入口(284->285): main() 结论码经 sys.exit 上抛 —— no_spec 档退出码 1"""
+    import runpy
+    import sys
+
+    monkeypatch.setattr(sys, "argv", ["finalize_watch", "--data-dir", str(tmp_path / "none"), "--job", "jr-none"])
+    with pytest.raises(SystemExit) as ei:
+        runpy.run_module("auto_qb.tools.finalize_watch", run_name="__main__")
+    assert ei.value.code == 1
+    assert "no_spec" in capsys.readouterr().out

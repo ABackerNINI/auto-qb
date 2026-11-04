@@ -28,6 +28,9 @@ guardian 的退化路径、journal 落盘与 pid 锁、CLI 入口。目的有二
 - test_guardian_retires_when_job_closed
 - test_guardian_spawn_and_link_failure_paths
 - test_module_guard_branches
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_journal_pid_lock_stale_lock_allows_takeover: 残留 pid 锁(pid=0/进程已死)视为无主可接管(125->127)
 """
 import os
 import time
@@ -565,3 +568,16 @@ def test_cancel_and_finalize_close_journal(tmp_path, monkeypatch):
         mod.on_task_line()
     mod.relocate_cancel(job_id, cost_confirmed=True)
     assert relocate_journal.read_journal(str(tmp_path / "data"), job_id)["phase"] == ru.PHASE_CANCELLED
+
+
+def test_journal_pid_lock_stale_lock_allows_takeover(tmp_path, monkeypatch):
+    """(T2b)残留 pid 锁(125->127): 锁内 pid 无效(pid=0)或进程已死 -> 视为无主, 新
+    guardian 可接管 —— 残留锁最多让收尾推迟到下次巡检重拉, 不该永久挡路"""
+    d = str(tmp_path / "data")
+    relocate_journal._write_json(relocate_journal.pid_path(d, "j1"), {"pid": 0, "ts": 1.0})
+    assert relocate_journal.acquire_pid(d, "j1") is True, "pid=0 无效 -> 直接接管"
+    relocate_journal.release_pid(d, "j1")
+    monkeypatch.setattr(relocate_journal, "_alive", lambda pid: False)
+    relocate_journal._write_json(relocate_journal.pid_path(d, "j1"), {"pid": 999999, "ts": 1.0})
+    assert relocate_journal.acquire_pid(d, "j1") is True, "进程已死 -> 接管"
+    assert relocate_journal._read_json(relocate_journal.pid_path(d, "j1"))["pid"] == os.getpid(), "接管后锁写本进程 pid"

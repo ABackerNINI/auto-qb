@@ -32,6 +32,10 @@
 - test_recover_dispatch_faces: 恢复四分派(moving/补发/不补发/RESUME)
 - test_misc_low_contract_faces: on_task_line 守卫/异常账面/_fail 文案/武装与收口实参/纵深单层
 - test_precheck_receipt_contract_and_add_param: 预检拒收回执契约 + 添加预检空参
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_arm_and_finish_direct_without_grouping_ctx: ctx 无 grouping 模块 -> 重归组段整段跳过, 落账/guardian/恢复照旧(260->266/278->283)
+- test_remove_links_skips_non_alias_paths: 非别名/空条目跳过不删不计(709->705)
 """
 
 import os
@@ -534,3 +538,31 @@ def test_precheck_receipt_contract_and_add_param(tmp_path, monkeypatch):
     assert out["cls"] == "blocked" and out["reasons"][0]["gate"] == "param", out
     assert set(out) >= {"save_path", "name", "requested_path", "reasons"}, set(out)
     assert out["save_path"] == "" and out["name"] == "n" and out["requested_path"] == "", out
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): ctx 无 grouping 装配面 / 非别名路径删除 ----------
+
+
+def test_arm_and_finish_direct_without_grouping_ctx(monkeypatch):
+    """(T2b)ctx 没挂 grouping 模块(装配裁剪/裸替身) -> 重归组段整段跳过(260->266/278->283),
+    落账/guardian/恢复成员照旧 —— grouping 是可选协作方, 不是硬依赖"""
+    spawned = []
+    mod = _bare_mod(api=types.SimpleNamespace(client=None, torrents_resume=lambda **kw: None))
+    monkeypatch.setattr(mod, "_spawn_guardian", lambda job: spawned.append(job.job_id) or True)
+    mod._arm(_job("j1", phase=ru.PHASE_MOVED), {})
+    assert mod._jobs["j1"].phase == ru.PHASE_ARMED and mod._jobs["j1"].attempts == 0, mod._jobs["j1"]
+    assert spawned == ["j1"], "guardian 照拉"
+
+    mod2 = _bare_mod(api=types.SimpleNamespace(client=None, torrents_resume=lambda **kw: None))
+    mod2._finish_direct(_job("j2", src="R:/src2"))
+    assert mod2._jobs["j2"].phase == ru.PHASE_DONE and mod2._jobs["j2"].reason == "direct", mod2._jobs["j2"]
+
+
+def test_remove_links_skips_non_alias_paths(tmp_path):
+    """(T2b)非别名路径(709->705): alias_kind_of 为 None -> 跳过不删不计; 空串条目同轮跳过
+    —— 幂等重删只对真别名生效, 普通文件不得被 remove_alias 波及"""
+    plain = tmp_path / "plain.txt"
+    plain.write_text("x")
+    mod = _bare_mod()
+    assert mod._remove_links([str(plain), "", None]) == 0
+    assert plain.exists(), "非别名路径不得被删"

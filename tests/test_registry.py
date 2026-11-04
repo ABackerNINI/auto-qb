@@ -7,7 +7,13 @@
 - test_create_action_unknown: 未知动作直接按名索引抛 KeyError
 - test_register_condition_decorator: 条件注册装饰器
 - test_register_action_decorator: 动作注册装饰器
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_plugin_entry_schema_ref_miss_raises_keyerror: 按名引用声明缺失 -> KeyError 显式炸出(73->76)
+- test_plugin_entry_doc_text_falls_back_to_schema_help: doc 缺省取声明 help, 显式 doc 优先(83->84)
 """
+from types import SimpleNamespace
+
 import pytest
 
 from auto_qb.rules.registry import (
@@ -15,6 +21,7 @@ from auto_qb.rules.registry import (
     ACTIONS,
     CONDITION_ENTRIES,
     CONDITIONS,
+    PluginEntry,
     create_action,
     create_condition,
     register_action,
@@ -97,3 +104,24 @@ def test_register_action_decorator():
         ACTIONS.pop("noop", None)
         # W5 派生口径: 名称字典与条目字典平行, 清理须两侧同弹(残条目会污染派生守卫)
         ACTION_ENTRIES.pop("noop", None)
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 按名引用脱节与文档回退 ----------
+
+
+def test_plugin_entry_schema_ref_miss_raises_keyerror():
+    """(T2b)按名引用的声明未在 config.schema 登记表(73->76) -> KeyError 显式炸出不静默
+    缺省 —— registry 与声明表脱节时守卫测试靠这个红"""
+    e = PluginEntry(name="no_such_plugin_xyz", kind="condition", cls=object)
+    with pytest.raises(KeyError, match="no_such_plugin_xyz"):
+        e.plugin()
+
+
+def test_plugin_entry_doc_text_falls_back_to_schema_help():
+    """(T2b)doc 缺省取 schema 声明的 help(83->84); 显式 doc 优先的另一半照旧"""
+    e = PluginEntry(name="x", kind="condition", cls=object, doc="显式片段")
+    assert e.doc_text() == "显式片段"
+    e2 = PluginEntry(name="x2", kind="condition", cls=object, decl=SimpleNamespace(help="声明侧帮助"))
+    assert e2.doc_text() == "声明侧帮助"
+    e3 = PluginEntry(name="x3", kind="condition", cls=object, decl=SimpleNamespace(help=None))
+    assert e3.doc_text() == "", "声明 help 为 None -> 空串(help or '')"

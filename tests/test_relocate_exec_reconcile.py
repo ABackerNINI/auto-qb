@@ -31,6 +31,9 @@
 - test_qb_host_port_and_guardian_spec_pinned: qB host/port 读配置 + guardian spec 关键键值
 - test_reconcile_merge_and_elapsed: journal 前向合并 + elapsed 不得过早判死
 - test_respawn_and_reconcile_logs: 重拉退避账 + 审计日志
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_step_reconcile_same_journal_phase_no_remerge: journal 相位与 job 相位一致 -> 不重复落账, 对账照常走完(340->342)
 """
 
 import os
@@ -413,3 +416,24 @@ def test_respawn_and_reconcile_logs(tmp_path, monkeypatch):
     assert spawned == ["j1"], spawned
     assert rt["respawn_ts"] > 0, rt  # 退避账(丢失 = 每 tick 重拉进程)
     assert any("重拉" in m for m in cap.messages), cap.messages
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): journal 同相位不重复落账 ----------
+
+
+def test_step_reconcile_same_journal_phase_no_remerge(tmp_path):
+    """(T2b)journal 相位与 job 相位一致(340->342) -> 不重复落账(_set_job 不被调), 对账
+    照常走完(本环境判 WAIT 零动作); 相位不同则照旧向前合并"""
+    rec = types.SimpleNamespace(hash="HA", save_path="R:/src", state="pausedUP")
+    mod = _bare_mod(data_dir=str(tmp_path))
+    mod._ctx.store = types.SimpleNamespace(by_hash={"HA": rec}, relocating_hashes=set())
+    relocate_journal.write_journal(str(tmp_path), "j1", {"phase": ru.PHASE_REMOVING, "ts": time.time()})
+    job = _job("j1", phase=ru.PHASE_REMOVING)
+    mod._step_reconcile(job, {})
+    assert mod._jobs == {}, "同相位不得重复落账"
+
+    mod2 = _bare_mod(data_dir=str(tmp_path))
+    mod2._ctx.store = types.SimpleNamespace(by_hash={"HA": rec}, relocating_hashes=set())
+    job2 = _job("j1", phase=ru.PHASE_ARMED)
+    mod2._step_reconcile(job2, {})
+    assert "j1" in mod2._jobs and mod2._jobs["j1"].phase == ru.PHASE_REMOVING, "异相位照旧向前合并"

@@ -41,6 +41,11 @@
 - test_v4_series_points_three_raw_same_bucket_no_typeerror: (mut-core W2 vsp_97)同桶三条 raw 照常均值/末条快照 —— e[4] 被写坏时第三条比较 TypeError
 - test_v4_series_points_same_timestamp_later_snapshot_wins: (mut-core W2 vsp_95)同刻双 raw 记录快照取后到者 —— >= 变异成 > 保留先到者(vsp_98/vsp_112 判等价: e[4] 只作单调比较基线, 不参与输出)
 - test_v4_series_points_mixed_bucket_raw_priority_keeps_mean: (mut-core W2 vsp_105/vsp_107/vsp_115)z+raw+raw 混桶 raw 优先后两条 raw 仍取均值 —— is_raw 旗写坏退化末条单值, dl 覆盖取错向则均值失真
+- test_v4_series_points_stale_slot_below_lookback_not_consumed: (T2b 覆盖率第三轮)P2 回看界外槽(桶+w < t0-86400)不消费, 界内槽照常
+- test_v4_series_points_same_bucket_second_zero_slot_keeps_first: (T2b)同桶 z+z 先到者保留 —— 第二条 z 槽落进已有桶直接落空(497->478)
+- test_v4_series_points_same_bucket_out_of_order_ts_keeps_latest_snapshot: (T2b)同桶 raw+raw 乱序 ts: 速率照均值, 快照按 ts 竞争取更晚者(503->478)
+- test_v4_totals_points_marked_run_not_zero_shape_drops_delta: (T2b)标记后台阶但游程非 z 形 -> 断链 None 不摊配(614->615)
+- test_v4_grid_obs_wide_point_before_window_start_partial_overlap: (T2b)宽桶跨窗首: b < first 迭代不消费, 窗内部分按重叠秒展开(713->729)
 
 线程/时钟纪律: 纯函数层无时钟无文件 —— 窗口由用例给定固定 epoch, 输入直接构造 V4Block
 (天文件文本路径经 format_v4_day_text -> parse_v4_day_text 打通解析接缝); V4Block 直构时
@@ -776,3 +781,66 @@ def test_v4_grid_obs_broken_bucket_zero_rate_kept_zero():
     )
     obs = v4_grid_obs(pts, g)
     assert obs[b0] == BucketObs(0, 0, 2000, 900)  # 有覆盖 -> 0 线; 快照照记
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 窗界/快照竞争复合条件 ----------
+
+
+def test_v4_series_points_stale_slot_below_lookback_not_consumed():
+    """(T2b)P2 回看界外槽不消费(492): 桶起点+覆盖宽 < t0-_V4_SEAM_LOOKBACK_S 的槽直接
+    跳过 —— 差分链只保留回看界内的完整陈旧跨度, 更老的槽不进桶点流; 界内槽照常消费"""
+    stale = V4Slot(1000.5, 1.0, (5, 9, 3000, 4000), False)  # key+w=1001 << t0-86400
+    fresh = V4Slot(200000.5, 1.0, (6, 10, 5000, 6000), False)
+    points = v4_series_points((), 200000, 200600, tail_slots=(stale, fresh))
+    assert [_p(p) for p in points] == [(200000, 6, 10, 5000, 6000)]
+
+
+def test_v4_series_points_same_bucket_second_zero_slot_keeps_first():
+    """(T2b)同桶 z+z: 先到者保留(497->478)—— 第二条 z 槽落进已有桶直接落空, 不覆盖
+    先到快照(z 到 z 桶口径)"""
+    slots = (
+        V4Slot(998.5, 1.0, (0, 0, 1000, 2000), True),
+        V4Slot(998.9, 1.0, (0, 0, 9000, 9000), True),  # 更晚但 totals 更大: 不抢
+    )
+    points = v4_series_points((), 900, 2000, tail_slots=slots)
+    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(998, 0, 0, 1000, 2000)]
+
+
+def test_v4_series_points_same_bucket_out_of_order_ts_keeps_latest_snapshot():
+    """(T2b)同桶 raw+raw 且后到槽 ts 更早(乱序): 速率照均值, 快照保持实测更晚的先到者
+    (503->478)—— 快照竞争判据是 ts 不是到达序"""
+    slots = (
+        V4Slot(998.9, 1.0, (5, 9, 3000, 4000), False),
+        V4Slot(998.5, 1.0, (15, 21, 4000, 5000), False),  # 后到但 ts 早: 不抢快照
+    )
+    points = v4_series_points((), 900, 2000, tail_slots=slots)
+    assert [(p.t, p.dl_rate, p.up_rate, p.dl_total, p.up_total) for p in points] == [(998, 10, 15, 3000, 4000)]
+
+
+def test_v4_totals_points_marked_run_not_zero_shape_drops_delta():
+    """(T2b)既有断链语义(614->615): null 标记后的台阶但锚点后游程非全 z 形(有真速率记录)
+    -> 不摊配, delta=None —— 摊配的 z 形签名是必要条件, marked 只是或支之一"""
+    pts = (
+        V4PointEntry(1000, 10, 10, 1000, 1000, w=30),
+        V4PointEntry(1030, 5, 5, 1000, 1000, w=30),  # 等值游程延续(速率非零 -> 非 z 形)
+        V4PointEntry(1060, None, None, None, None, w=0),  # null 点: marked 立
+        V4PointEntry(1090, 20, 20, 1100, 1100, w=30),  # 台阶 100, 游程非 z 形 -> 不摊配
+    )
+    totals = v4_totals_points(pts)
+    assert [(e.t, e.dl, e.up) for e in totals] == [
+        (1000, None, None),  # 窗首基线缺失
+        (1030, 0, 0),  # 等值游程
+        (1060, None, None),  # null 点
+        (1090, None, None),  # 标记后基线缺失(不摊配)
+    ]
+
+
+def test_v4_grid_obs_wide_point_before_window_start_partial_overlap():
+    """(T2b)宽桶跨窗首(713->729): 覆盖起点在栅格窗前的点, 首个对齐迭代 b < first 不消费,
+    落窗内的部分按重叠秒照常展开 —— 窗外桶不凭空出现"""
+    g = build_grid("24h", NOW, 30.0)
+    first = g.first
+    pts = (V4PointEntry(first - 5, 10, 10, 1000, 500, w=30), )  # 覆盖 [first-5, first+25)
+    obs = v4_grid_obs(pts, g)
+    assert set(obs) == {first}, "窗外对齐迭代(b < first)不得出桶"
+    assert obs[first] == BucketObs(10, 10, 1000, 500)  # 重叠 25s 全单速: 均值 10, 快照照记

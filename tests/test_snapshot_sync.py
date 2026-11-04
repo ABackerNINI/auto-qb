@@ -37,6 +37,9 @@ Bug 背景: _handle_delete_tags_if_has_no_torrents 用快照聚合 tag_usage() �
 - test_qbapi_read_fallback_wires_hash_to_client: 守阵(W6)—— store 未命中直连路径把 hash 传给 client
 - test_qbapi_store_cache_hit_skips_repeat_client_call: 守阵(W6)—— 记录惰性缓存命中后不再直连 client
 - test_qbapi_passthrough_positional_and_rid_default: 守阵(W6, 极低危)—— *args 透传与 sync_maindata rid 默认 0
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_qbapi_tracker_invalidate_skips_unknown_hash: tracker 写后缓存失效, 未知/缺 hash 静默跳过(263->exit)
 """
 import os
 import tempfile
@@ -427,3 +430,17 @@ def test_qbapi_passthrough_positional_and_rid_default():
     client.torrents_info.assert_called_once_with("H1")
     api.sync_maindata()
     client.sync_maindata.assert_called_once_with(rid=0)
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): tracker 缓存失效的未知 hash 面 ----------
+
+
+def test_qbapi_tracker_invalidate_skips_unknown_hash():
+    """(T2b)tracker 写后失效惰性缓存(263->exit): hash 不在快照库/未传 hash -> 静默跳过,
+    写调用本身照常透传 —— 未知 hash 不炸"""
+    client = mock.MagicMock()
+    api = QbApi(client, TorrentStore())
+    api.torrents_add_trackers(torrent_hash="NOPE", urls=["http://t/announce"])
+    client.torrents_add_trackers.assert_called_once_with(torrent_hash="NOPE", urls=["http://t/announce"])
+    api.torrents_remove_trackers(torrent_hash=None, urls=["http://t/announce"])
+    client.torrents_remove_trackers.assert_called_once_with(torrent_hash=None, urls=["http://t/announce"])

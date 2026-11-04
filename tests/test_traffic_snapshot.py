@@ -51,6 +51,9 @@ W7(R31) S5 补测(变异审计真洞守阵, 2026-11-01; 分类与位点见 tmp-a
   up/down; publish_event_12/13 高水位缺省 + 55/56/57 label 键值)
 - test_publish_off_reason_contract: off reasons 契约逐键逐字 + 默认回退文案(publish_off_1/14~16/21~24)
 
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_publish_source_without_day_row_tolerates_hw: ok 发布 periods 无 day 行时不炸照常发布, 钳制只在 day 行在场时生效(313->315)
+
 ## 事件零读盘补丁(26-10-21, 用户拍板「读盘本身就是副作用, 事件基本无副作用应立即刷新」)
 - test_publish_event_patches_day_row_without_reading: 补丁只改 periods 的 day 行(month/history/limit 段不动),
   ts 推进, 且**一次读盘都没有**(read_source_rows 打桩成 raise)
@@ -848,3 +851,19 @@ def test_source_off_clears_anomaly_and_skips_gtm_call(tmp_path, monkeypatch):
     assert tv[ANOMALY_KEY] is None, "关源必须清空告警段"
     assert tv["state"] == "off" and tv["periods"] == [] and tv["history"] == []
     assert calls == [], "关源的刷新不得发起 GTM 请求"
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 高水位钳制的无 day 行防御弧 ----------
+
+
+def test_publish_source_without_day_row_tolerates_hw(tmp_path, monkeypatch):
+    """(T2b)ok 发布的高水位钳制(313->315): periods 里没有 day 行(上游行序变化)时不炸,
+    照常发布 —— 钳制只在 day 行在场时生效"""
+    mgr = _mgr(tmp_path)
+    mod = _mod(mgr)
+    assert mod.publish_event(date.today().isoformat(), 100, 200) is True  # 立 _hw
+    monkeypatch.setattr(tsm, "_period_rows", lambda rows, today: [])
+    mod.publish_source([], SOURCE_OK)
+    tv = mgr.web.traffic_view
+    assert tv["source"]["state"] == SOURCE_OK
+    assert tv["periods"] == []

@@ -27,6 +27,10 @@ test_rule_interval; stop_following_rules_if 已退役, plan 26-11-01-0106 W1)。
 - test_pick_choose_branch_without_trace: _pick_choose_branch trace=None 直调三态(命中分支/default/空操作)
 - test_process_exception_traced_and_reraised: _process 未兜住异常 -> trace 记 exception 留痕后原样上抛
 - test_trace_record_failure_swallowed: trace 记录失败只 DEBUG 吞掉, 不影响 verdict
+
+覆盖率第三轮 T2b 补测(26-11-05, rules_mod 退役控制键识别):
+- test_retired_control_keys_non_dict_spec_empty: 非 dict spec -> 空元组(61->62)
+- test_retired_control_keys_duplicate_pseudo_action_single_key: 伪动作重复 -> 判重不追加(66->64)
 """
 import os
 import tempfile
@@ -38,6 +42,7 @@ import pytest
 
 from auto_qb.config import ConfigError
 from auto_qb.config.compat import CONDITION_TREE_MAX_DEPTH
+from auto_qb.core.modules import rules_mod
 from auto_qb.rules import registry
 from auto_qb.rules.actions import AddCategoryAction
 from auto_qb.rules.base import (
@@ -613,3 +618,18 @@ def test_trace_record_failure_swallowed(monkeypatch):
             verdict = rule.process(ctx)
         assert verdict == VERDICT_NO_MATCH, "trace 失败不应改变 verdict"
         assert any("trace 记录失败" in m for m in cap.messages), f"应有 DEBUG 留痕: {cap.messages}"
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 退役控制键识别退化分支 ----------
+
+
+def test_retired_control_keys_non_dict_spec_empty():
+    """(T2b)非 dict spec(61->62) -> 空元组: 载入链上游保证形状, 直收调用方的防御面"""
+    assert rules_mod.retired_control_keys_in("not-a-dict") == ()
+    assert rules_mod.retired_control_keys_in(None) == ()
+
+
+def test_retired_control_keys_duplicate_pseudo_action_single_key():
+    """(T2b)伪动作重复出现(66->64) -> 第二条判重不追加, 键面仍单条 —— 升级徽标不重复计数"""
+    spec = {"actions": [{"ignore_next_action_error": "a"}, {"ignore_next_action_error": "b"}]}
+    assert rules_mod.retired_control_keys_in(spec) == ("ignore_next_action_error", )

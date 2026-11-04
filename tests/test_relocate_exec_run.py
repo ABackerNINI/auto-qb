@@ -66,6 +66,9 @@
 - test_exec_local_penetration_failure_precedes_qb_check: 本机穿透先失败 -> 走原 fail(alias_unreadable),
   qB 侧零调用(优先级: 本机先判)
 - test_exec_single_member_no_qb_side_call: 单成员组 direct 不经 penetrate 分支, 推进期零 qB 侧列目录
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_buckets_group_members_missing_from_by_hash_dropped: 组成员全不在 by_hash -> 该组跳过不进预检(151->146 relocate_plan)
 """
 
 import os
@@ -1287,3 +1290,27 @@ def test_exec_single_member_no_qb_side_call(tmp_path, monkeypatch):
     job = _only_job(mod)
     assert job["phase"] == ru.PHASE_DONE, job
     assert calls == [], f"单成员组不得做 qB 侧自检: {calls}"
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 组成员与登记表脱节 ----------
+
+
+def test_buckets_group_members_missing_from_by_hash_dropped():
+    """(T2b)组 key 有桶但成员全不在 store.by_hash(登记表与快照脱节) -> records 空,
+    该组跳过不进预检(151->146); 登记齐全的对照形态照常产出组"""
+    recs = {
+        "HA":
+            types.SimpleNamespace(
+                hash="HA",
+                save_path="R:/src",
+                log_repr="HA",
+                files=lambda c: [_fake_file("Show/a.mkv", 64)],
+            )
+    }
+    store_gap = types.SimpleNamespace(get=lambda h: recs.get(h), groups={}, by_hash={})
+    mod1 = _bare_mod(store=store_gap, api=types.SimpleNamespace(client=object()))
+    gone, groups = mod1._buckets(["HA"])
+    assert gone == [] and groups == [], (gone, groups)
+
+    store_ok = types.SimpleNamespace(get=lambda h: recs.get(h), groups={}, by_hash=recs)
+    mod2 = _bare_mod(store=store_ok, api=types.SimpleNamespace(client=object()))
+    gone2, groups2 = mod2._buckets(["HA"])
+    assert gone2 == [] and len(groups2) == 1 and groups2[0][0].hash == "HA", (gone2, groups2)

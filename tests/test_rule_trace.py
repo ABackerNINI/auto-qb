@@ -29,6 +29,9 @@ trace 无去重语义, 与 exec_history(去重依据)同键口径互不迁移; p
 - test_trace_old_state_keys_unaffected: 旧 state 载入回归 —— 既有 exec_history 去重判定不变,
   rule_traces 新键面零干扰(旧文件无该键照常 setdefault), 落盘重读两键面共存
 - test_trace_dry_run_flagged: dry-run 运行在 trace 里带 dry 标记(据 trace 分辨真实/演练运行)
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_trace_prune_ring_fallback_trims_oversized_dim: 环形兜底 —— 外部种入超限维度被 prune 裁回 KEEP_PER_DIM(351->352)
 """
 import json
 import os
@@ -335,3 +338,22 @@ def test_trace_dry_run_flagged():
         ctx2 = make_ctx(mgr, FakeTorrent(tags=""), client)
         rule.process(ctx2)
         assert "dry" not in _latest_trace(mgr, "g.test", "HASH123"), "真实运行无 dry 标记"
+
+
+# ---------- 覆盖率第三轮 T2b 补测(26-11-05): 环形兜底裁维度 ----------
+
+
+def test_trace_prune_ring_fallback_trims_oversized_dim():
+    """(T2b)环形兜底(351->352): 写入侧已裁, 但外部种入超限维度(旧版本 state 文件)后
+    任一次写入触发的 prune 都会把维度裁回 _TRACE_KEEP_PER_DIM, 最旧先出"""
+    with tempfile.TemporaryDirectory() as td:
+        svc = StateService(os.path.join(td, "state.json"))
+        today = datetime.now().date().isoformat()
+        svc.data["rule_traces"] = {
+            "r:H": [{"verdict": "executed", "date": today, "ts": float(i)}
+                    for i in range(state_mod._TRACE_KEEP_PER_DIM + 2)],
+        }
+        svc.record_rule_trace("r2", "H2", {"verdict": "no_match"})
+        dim = svc.data["rule_traces"]["r:H"]
+        assert len(dim) == state_mod._TRACE_KEEP_PER_DIM, len(dim)
+        assert [e["ts"] for e in dim] == [2.0, 3.0, 4.0, 5.0, 6.0], "最旧两条先出"

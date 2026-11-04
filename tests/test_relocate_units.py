@@ -62,6 +62,9 @@ W8(R32) S5a 守阵追加(变异测试 classify-units 真洞簇钉面):
 
 2026-11-02 issue 26-11-02-1208 追加(L490 跨卷空间不足分支红验):
 - test_evaluate_group_space_cross_volume_branch: 严格小于才拒 / 恰等放行 / same_volume=None 按跨卷保守拒 / 同卷豁免
+
+覆盖率第三轮 T2b 补测(26-11-05):
+- test_within_empty_scope_guard_via_norm_empty: 空 scope 守卫(归一化空串防御弧, 经 _norm 替身直驱)永不匹配(98->99)
 """
 import os
 
@@ -1130,3 +1133,14 @@ def test_evaluate_add_flow_faces():
     )
     r = ru.evaluate_add(ru.AddFacts(save_path=S, name="", jobs=(scope_all, )))
     assert r["actual_path"] == T  # 空名: rel 为空 -> actual = dst(不伪段)
+
+
+def test_within_empty_scope_guard_via_norm_empty(monkeypatch):
+    """(T2b)空 scope 守卫(98->99): 归一化器退化为返回空串时(现实 normpath 恒返回'.',
+    守卫属防御弧, 经 _norm 替身直驱)空 scope 永不匹配; 非空 scope 语义不变"""
+    real_norm = ru._norm
+    monkeypatch.setattr(ru, "_norm", lambda p: "" if p == "" else real_norm(p))
+    assert ru._within("", "R:/any/path") is False
+    assert ru._within("", "") is False
+    assert ru._within("R:/scope", "R:/scope/a") is True
+    assert ru._within("R:/scope", "R:/other") is False
