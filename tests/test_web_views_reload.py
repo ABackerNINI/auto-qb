@@ -528,7 +528,7 @@ def test_apply_new_config_levels(monkeypatch):
         assert mgr.config is new_cfg
         assert mgr.task_queue is queue_before, "零动作热重载不应重建任务队列"
         assert not mgr.events.suppressed and not mgr.events.replay_requested, "零动作热重载不置事件重放保护(请求位/live 旗标都不动)"
-        mgr.hr.apply.assert_called_once(), "HR 运行时每次热重载都要过一遍 apply(站点接入无分支)"
+        assert mgr.hr.apply.call_count == 1, "HR 运行时每次热重载都要过一遍 apply(站点接入无分支)"
         # 生命周期消息守阵: 完成消息必须是 INFO, 不得用 WARNING(否则 notify 开启时每次保存配置弹通知)
         done_logs = [r for r in grabbed if "配置热重载完成" in r.getMessage()]
         assert done_logs, "热重载完成应留一行日志"
@@ -566,7 +566,7 @@ def test_apply_new_config_levels(monkeypatch):
         monkeypatch.setattr("auto_qb.webui.start_web_server", _fake_start)
         res = _apply([ConfigChange("web", None, None)])
         assert all(a["action"] != "none" for a in res["actions"] if a["module"] == "webui")
-        mgr.connect.assert_not_called(), "web 端口变化不重连 qB(重连只由 qbittorrent 段变触发)"
+        assert not mgr.connect.call_args_list, "web 端口变化不重连 qB(重连只由 qbittorrent 段变触发)"
         assert calls == [("stop", old_handle), ("start", mgr)], "必须先停旧服务(并等其线程退出)再启新服务"
         assert mgr.web.handle == "新句柄", "web 句柄应换为新服务句柄"
 
@@ -587,7 +587,7 @@ def test_apply_new_config_levels(monkeypatch):
         )
         new_cfg.qbittorrent = SimpleNamespace(host="new", port=1, username="u", password="p")
         _apply([ConfigChange("qbittorrent", None, None)])
-        mgr.connect.assert_called_once(), "qbittorrent 段变由内核自判重连"
+        assert mgr.connect.call_args_list == [mock.call()], "qbittorrent 段变由内核自判重连"
 
         # 4. R 段: 仅提示重启, 配置对象照常替换(实际拦截在 webui PUT 侧回退 R 字段)
         res = _apply([ConfigChange("state_file", "a", "b")])
@@ -834,7 +834,7 @@ def test_web_loop_exception_handler_downgrades_connection_reset():
 
     assert len(grabbed) == 1 and grabbed[0].levelno == logging.INFO, "断连应记为一行 INFO"
     assert not any(r.levelno >= logging.ERROR for r in grabbed), "不得再出现 ERROR"
-    loop.default_exception_handler.assert_not_called(), "波动型异常不应交给默认处理器"
+    assert not loop.default_exception_handler.call_args_list, "波动型异常不应交给默认处理器"
 
 
 def test_web_loop_noise_log_throttled_in_window():
@@ -869,7 +869,7 @@ def test_web_loop_exception_handler_delegates_real_bug():
     finally:
         restore()
 
-    loop.default_exception_handler.assert_called_once_with(context), "真 bug 必须照旧走默认处理器(ERROR)"
+    assert loop.default_exception_handler.call_args_list == [mock.call(context)], "真 bug 必须照旧走默认处理器(ERROR)"
     assert not grabbed, "不得被误判成网络波动"
 
 

@@ -80,7 +80,7 @@ def test_webui_module_stop_requests_exit_without_wait():
         mgr.web.handle = handle
         mod.stop()
         handle.stop.assert_called_once_with()
-        handle.wait.assert_not_called(), "关停路径不等线程(daemon 随进程终灭), 热重载重启才需要等"
+        assert not handle.wait.call_args_list, "关停路径不等线程(daemon 随进程终灭), 热重载重启才需要等"
 
 
 # ---------- WebUIModule 热重载语义 ----------
@@ -175,16 +175,16 @@ def test_hr_module_contract():
 
         with mock.patch.object(mgr.hr, "start") as start, mock.patch.object(mgr.hr, "stop") as stop:
             mod.start(mgr.ctx, dry_run=True)
-            start.assert_not_called(), "dry-run 不建端点/取数线程(原 run() 调用点口径)"
+            assert not start.call_args_list, "dry-run 不建端点/取数线程(原 run() 调用点口径)"
             mod.start(mgr.ctx, dry_run=False)
-            start.assert_called_once_with(), "非 dry-run 透传 start(未启用由 HrRuntime.start 自判)"
+            assert start.call_args_list == [mock.call()], "非 dry-run 透传 start(未启用由 HrRuntime.start 自判)"
             mod.stop()
             stop.assert_called_once_with()
 
         old_check = HrCheckConfig()
         with mock.patch.object(mgr.hr, "apply") as apply_:
             res = mod.apply(SimpleNamespace(hr_check=old_check), mgr.config)
-            apply_.assert_called_once_with(old_check), "apply 透传旧 hr_check 段(短路/重建判据在门面)"
+            assert apply_.call_args_list == [mock.call(old_check)], "apply 透传旧 hr_check 段(短路/重建判据在门面)"
             assert res.module == "hr"
 
 

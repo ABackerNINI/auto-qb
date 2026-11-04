@@ -354,7 +354,7 @@ def test_rules_apply_rebuild_on_section_change():
         assert rebuilt, "queue_rebuilt 相位应广播(全局任务各模块自注册重入队)"
         assert mgr.events.replay_requested, "重建应挂事件重放保护请求位(窗口协议见 EventBus)"
         assert not mgr.events.suppressed, "挂请求不得置 live 旗标(窗口内相位照常送达, issue 26-10-01-0750)"
-        mgr.connect.assert_called_once(), "重建尾段重连(rid 失效 -> 下轮全量)"
+        assert mgr.connect.call_count == 1, "重建尾段重连(rid 失效 -> 下轮全量)"
 
 
 # ============================================================

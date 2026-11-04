@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-05-0344">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="split-inrange-review">
-<meta name="doc-refs" content="memory-bank/tasks/26-11-05-test-split-inrange-review.md">
+<meta name="doc-refs" content="memory-bank/tasks/26-11-05-test-split-inrange-review.md, memory-bank/testing/baselines/26-11-05-0415-pseudo-assert-sweep.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)">
 <meta name="issue-summary" content="run_sync_line/run_task_line 的 assert_called_once_with(False), &quot;...&quot; 是表达式语句非 assert 语句, 校验仍生效但失败消息丢失">
 <title>test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言) · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0344-test-qbmanager-tasks-missing-assert</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 03:44</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 03:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 03:56 — 认领（用户指派）并修复，状态 <strong>Done</strong>。复验：03:56 grep 锚点两行仍在。实际修法：<strong>未按建议直接补 <code>assert</code> 前缀</strong>——<code>assert_called_once_with</code> 成功时返回 <code>None</code>，<code>assert mock方法(...), "msg"</code> 会恒失败；改道为等价断言 <code>assert mgr.host.run_sync_line.call_args_list == [mock.call(False)], "..."</code>（同时覆盖「恰好一次 + 实参 False」两重语义，与同函数既有 <code>call_args == mock.call(...)</code> 风格一致），两处同改。验证：<code>commands run test.one -- tests/test_qbmanager_tasks.py</code> 21 passed，副作用台账越界 0。另：全测试目录扫出 9 处同类伪断言分布在另外 4 个文件（test_facade_modules.py:180,187 / test_modules_p5.py:357 / test_qbmanager_w6.py:577,578 / test_modules_p6.py:94 / test_web_views_reload.py:531,590,872，取证 03:56），超出本件范围未动，待定是否入池。</li>
+      <li>2026-11-05 04:07 — 用户拍板本轮顺手一并修，状态保持 <strong>Done</strong>。扩展扫描 <code>assert_not_called</code> 变体后终计 <strong>16 处</strong>（本件 2 + facade 4 + core 1 + p5 1 + p6 1 + w6 2 + reload 5），改法三型：<code>assert_not_called</code>→<code>assert not call_args_list</code>；<code>assert_called_once()</code>→<code>call_count == 1</code>（首版误改 <code>call_args_list == [mock.call()]</code> 被 test_web_views_reload 实测红逮住——原契约只数次数不管实参，语义比伪断言更严）；<code>assert_called_once_with(...)</code>→<code>call_args_list == [mock.call(...)]</code>。验证：受影响 7 文件 133 passed，全量 <code>test.full</code> 5339 passed/10 skipped/覆盖率 99%（数字单点见 kb.baseline 新切片），副作用台账越界 0。</li>
     </ul>
   </section>
 

@@ -574,5 +574,5 @@ def test_w6_tick_contract():
         mgr._sync_line = mock.Mock()
         mgr._task_line = mock.Mock()
         mgr._tick(True, force=True)
-        mgr._sync_line.assert_called_once_with(True, flush=False), "_tick 合轮必须压 flush(视图只重建一次)"
-        mgr._task_line.assert_called_once_with(True, force=True), "_tick 必须把 force 直传任务线"
+        assert mgr._sync_line.call_args_list == [mock.call(True, flush=False)], "_tick 合轮必须压 flush(视图只重建一次)"
+        assert mgr._task_line.call_args_list == [mock.call(True, force=True)], "_tick 必须把 force 直传任务线"

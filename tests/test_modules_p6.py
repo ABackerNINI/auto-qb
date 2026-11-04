@@ -91,7 +91,7 @@ def test_unclaimed_section_change_warns_and_rebuilds():
             receipt = mgr.apply_new_config(new)
         warns = [r for r in cap.records if "add_episode_tags" in r.getMessage()]
         assert warns and warns[0].levelno == logging.WARNING, "未认领段变更必须落 WARN 且点名段名(保守性可解释)"
-        rebuild.assert_called_once(), "兜底 = 全量重建(经 rebuild_runtime 相位由 rules 执行)"
+        assert rebuild.call_count == 1, "兜底 = 全量重建(经 rebuild_runtime 相位由 rules 执行)"
         fallback = [a for a in receipt["actions"] if a["module"] == "kernel"]
         assert fallback and fallback[0]["action"] == "rebuild_fallback", "回执必须含 kernel 兜底动作"
 

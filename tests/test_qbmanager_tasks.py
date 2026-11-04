@@ -494,7 +494,7 @@ def test_w6_sync_line_contract():
         mgr.host.run_sync_line = mock.Mock()
         mgr._sync_line(False)
         assert mgr._refresh_torrents.call_args == mock.call(False), "同步线必须把 dry_run 原样传刷新(None≈False=dry-run 真写)"
-        mgr.host.run_sync_line.assert_called_once_with(False), "flush 缺省必须收尾 on_sync_line 且 force=False"
+        assert mgr.host.run_sync_line.call_args_list == [mock.call(False)], "flush 缺省必须收尾 on_sync_line 且 force=False"
         mgr._sync_line(False, flush=False)
         assert mgr.host.run_sync_line.call_count == 1, "flush=False 不收尾"
 
@@ -510,4 +510,4 @@ def test_w6_task_line_contract():
         assert call.args == (True, ), f"run_due 必须收到 dry_run 位置实参: {call}"
         assert call.kwargs["defer_gate"] == mgr._own_write_defer_gate, "defer_gate 必须接到队列级闸门(None=闸失效)"
         assert call.kwargs["max_tasks"] == mgr.config.max_tasks_per_tick
-        mgr.host.run_task_line.assert_called_once_with(False), "收尾 force 缺省 False 且不得为 None"
+        assert mgr.host.run_task_line.call_args_list == [mock.call(False)], "收尾 force 缺省 False 且不得为 None"

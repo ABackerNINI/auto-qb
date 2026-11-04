@@ -123,7 +123,7 @@ def test_notify_module_tray_api():
         # 未挂载态(配置未启用且未会话挂载): 托盘按 None 区分, 不误同步开关
         assert mod.enabled_state() is None and mod.is_enabled() is False
         mod.set_enabled(False)
-        setup.assert_not_called(), "未挂载 + 关 -> 无操作"
+        assert not setup.call_args_list, "未挂载 + 关 -> 无操作"
         # 会话级开启: force 挂载(重启后回到配置状态), 失败异常原样上抛由 UI 弹窗
         mod.set_enabled(True)
         setup.assert_called_once_with(ctx.config.notify, force=True)
