@@ -163,8 +163,8 @@ class QbManager(
         self.config_path = config_path
         # 取时注入(D8 构造期统一制): 缺省系统时钟单点(经模块属性现取 —— 旧测试按模块换
         # 假钟的寻址位, S3 收敛为显式 FakeClock 注入后可改回求值期默认)。时钟面经装配链
-        # 向下透传的目前有 WebUIRuntime 与流量采样/快照两模块(S3 monkeypatch 收敛: 测试
-        # 用构造期 FakeClock 注入, 不再按模块换假钟); 其余组件各自持钟。
+        # 向下透传的目前有 WebUIRuntime、流量采样/快照与 ops/speed_curve/relocate 三模块
+        # (S3 monkeypatch 收敛: 测试用构造期 FakeClock 注入, 不再按模块换假钟); 其余组件各自持钟。
         self._clock = SYSTEM_CLOCK if clock is None else clock
         # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
         # ctx, 本类同名属性自此刻起全部委托 ctx(单一真相; 见下方服务委托属性区)。
@@ -244,7 +244,7 @@ class QbManager(
         # 不再依赖曲线配置(结构性死角的修复点)。
         self.ctx.traffic_snapshot = TrafficSnapshotModule(self.ctx, clock=self._clock)
         self.host.register(self.ctx.traffic_snapshot)
-        self.host.register(SpeedCurveModule(self.ctx))
+        self.host.register(SpeedCurveModule(self.ctx, clock=self._clock))
         # maintenance 句柄挂 ctx(P4): grouping 打标经 ctx.maintenance.add_tags, 不 import 兄弟模块
         self.ctx.maintenance = MaintenanceModule(self.ctx)
         self.host.register(self.ctx.maintenance)
@@ -256,7 +256,7 @@ class QbManager(
         # regroup_scope 强制重归组, 不 import 兄弟模块(与 ctx.maintenance 同口径)
         self.ctx.grouping = GroupingModule(self.ctx)
         self.host.register(self.ctx.grouping)
-        self.ctx.ops = OpsModule(self.ctx)
+        self.ctx.ops = OpsModule(self.ctx, clock=self._clock)
         self.host.register(self.ctx.ops)
         # 装配清单 P5 收官(plan §3.3): rules 最后 —— 事件分派/建任务改相位认领, L2 结构
         # 重建收进 rules.apply(W3), 级别分派层与三张手写表退役(W4)
@@ -269,7 +269,7 @@ class QbManager(
         # P2 起只读预检引擎(relocate_precheck / precheck_add / capability_view); 句柄挂
         # ctx(P2): WEB 命令经 ctx.relocate 调预检, 不绕过模块直碰决策层。
         # enabled=false(缺省)零副作用(不探测不建链), 段变化热重载即生效
-        self.ctx.relocate = RelocateModule(self.ctx)
+        self.ctx.relocate = RelocateModule(self.ctx, clock=self._clock)
         self.host.register(self.ctx.relocate)
         # 装配清单追加(计划 26-11-03-0456 S2): 已完成种子下载保险丝 —— 认领 post 相位,
         # 每轮读快照零额外 HTTP; enabled=false(缺省)零动作零 qB 写。挂末尾使其在 grouping

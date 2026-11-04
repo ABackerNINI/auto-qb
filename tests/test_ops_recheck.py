@@ -66,6 +66,8 @@ from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
 
+from clock import FakeClock
+
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, make_manager, seed_store
 
 from ops_support import (
@@ -335,7 +337,8 @@ def test_ops_recheck_giveup_arbitration_extends_grace():
     """测试: 超宽限 + 仲裁直查见真校验态(快照滞后看不见) -> 延长一次宽限继续纯快照观测, 不判败;
     快照跟上后走正常 SUCCESS 序列。直查次数: 提交前 0 次 + 仲裁直查恰
     1 次 = 全程 2 次(仲裁后观测零 API, 等价性红线)"""
-    mgr = make_mgr(FakeConfig())
+    clock = FakeClock()  # 宽限窗走注入假钟(S3 收敛: 不再直赋 stdlib time.time)
+    mgr = make_mgr(FakeConfig(), clock=clock)
     client = FakeClient()
     mgr.client = client
     t = seed_paused(mgr, client)  # 快照与 qB 同为 pausedDL(提交前不再复核)
@@ -345,14 +348,10 @@ def test_ops_recheck_giveup_arbitration_extends_grace():
     assert r.is_pending, f"rule 源应 pending: {r}"
     # 提交后 qB 应用 recheck 开检而快照同步线冻结看不见: live 真值翻 checkingDL(与快照分离)
     client.torrents["HA"] = FakeTorrent(hash="HA", state="checkingDL")
+    clock.advance(601.0)  # 整体平移注入钟模拟 600s 宽限耗尽(S3 收敛: ops 经构造期假钟取时)
     now = time.time()
-    real_time = time.time
-    try:
-        time.time = lambda: now + 601.0  # 整体平移时钟模拟 600s 宽限耗尽
-        with capture_ops_logs() as logs:
-            run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查见 checkingDL -> 延长一次宽限
-    finally:
-        time.time = real_time
+    with capture_ops_logs() as logs:
+        run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查见 checkingDL -> 延长一次宽限
     assert any("延长一次宽限" in m and "601s" in m for m in logs), f"应有延长日志且报真实已等时长: {logs}"
     assert not any("校验启动超时" in m for m in logs), f"延期不得判败: {logs}"
     assert "HA" in mgr.task_queue.active_check_hashes(), "延期后轮询须存活"
@@ -374,21 +373,18 @@ def test_ops_recheck_giveup_arbitration_extends_grace():
 def test_ops_recheck_giveup_arbitration_not_checking_fails():
     """测试: 超宽限 + 仲裁直查见非校验态(快照与 qB 真值一致, 确未开检) -> 判败序列不变
     (rule 源冷却计数 +1 / origin 默认重置重入队), 日志报真实等待时长(非固定宽限常量)"""
-    mgr = make_mgr(FakeConfig())
+    clock = FakeClock()  # 宽限窗走注入假钟(S3 收敛: 不再直赋 stdlib time.time)
+    mgr = make_mgr(FakeConfig(), clock=clock)
     client = FakeClient()
     mgr.client = client
     seed_paused(mgr, client)  # store 快照与 live 应答同为 pausedDL(非真校验态)
     origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
     r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
     assert r.is_pending, f"rule 源应 pending: {r}"
+    clock.advance(601.0)  # 宽限耗尽(S3 收敛: 注入假钟, 不再直赋 stdlib time.time)
     now = time.time()
-    real_time = time.time
-    try:
-        time.time = lambda: now + 601.0
-        with capture_ops_logs() as logs:
-            run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查见 pausedDL -> 判败
-    finally:
-        time.time = real_time
+    with capture_ops_logs() as logs:
+        run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查见 pausedDL -> 判败
     assert any("校验启动超时" in m and "601s" in m for m in logs), f"应判启动超时且报真实时长: {logs}"
     assert mgr.state["recheck_fails"]["HA"]["count"] == 1, "直查未见校验态: 判败序列不变(冷却 +1)"
     assert any(task is origin for task in mgr.task_queue._fast), "判败后 origin 应默认重置重入队"
@@ -399,7 +395,8 @@ def test_ops_recheck_giveup_arbitration_not_checking_fails():
 def test_ops_recheck_giveup_arbitration_api_error_fails():
     """测试: 超宽限 + 仲裁直查 API 异常 -> 与「未见」同判 fail-closed 判败(异常分支内吃掉,
     不走「校验轮询异常」外层路径); D5 仲裁恰 1 次: 直查延期后第二次宽限耗尽不再直查直接判败"""
-    mgr = make_mgr(FakeConfig())
+    clock = FakeClock()  # 宽限窗走注入假钟(S3 收敛: 不再直赋 stdlib time.time)
+    mgr = make_mgr(FakeConfig(), clock=clock)
     client = FakeClient()
     mgr.client = client
     # ---- 第 1 段: 直查异常 -> 判败序列原样(冷却 +1 / origin 重入队 / 真实时长日志) ----
@@ -414,14 +411,10 @@ def test_ops_recheck_giveup_arbitration_api_error_fails():
         raise RuntimeError("api down")
 
     client.torrents_info = boom
+    clock.advance(601.0)  # 宽限耗尽(S3 收敛: 注入假钟, 不再直赋 stdlib time.time)
     now = time.time()
-    real_time = time.time
-    try:
-        time.time = lambda: now + 601.0
-        with capture_ops_logs() as logs:
-            run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查抛异常 -> 分支内吃掉, 按未见判败
-    finally:
-        time.time = real_time
+    with capture_ops_logs() as logs:
+        run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查抛异常 -> 分支内吃掉, 按未见判败
     assert len(direct) == 1, f"仲裁直查应恰一次: {direct}"
     assert not any("校验轮询异常" in m for m in logs), f"异常须分支内吃掉, 不走外层路径: {logs}"
     assert any("仲裁直查失败" in m for m in logs), f"直查异常应有独立告警: {logs}"
@@ -447,14 +440,11 @@ def test_ops_recheck_giveup_arbitration_api_error_fails():
     client.torrents_info = flaky_info
     info_calls_before = client.info_calls
     now2 = time.time()
-    try:
-        time.time = lambda: now2 + 601.0
-        with capture_ops_logs() as logs2:
-            run_queue(mgr, now2 + 601.0)  # 第一次宽限耗尽: 仲裁直查见 checkingDL -> 延长一次
-            time.time = lambda: now2 + 1202.0
-            run_queue(mgr, now2 + 1202.0)  # 第二次宽限耗尽: 不再直查, 直接判败(D5)
-    finally:
-        time.time = real_time
+    with capture_ops_logs() as logs2:
+        clock.advance(601.0)  # 第一次宽限耗尽(注入假钟, S3 收敛)
+        run_queue(mgr, now2 + 601.0)  # 第一次宽限耗尽: 仲裁直查见 checkingDL -> 延长一次
+        clock.advance(601.0)
+        run_queue(mgr, now2 + 1202.0)  # 第二次宽限耗尽: 不再直查, 直接判败(D5)
     assert len(live_calls) == 1, f"D5: 直查不得超一次: {live_calls}"
     assert client.info_calls - info_calls_before == 1, f"D5: 直查计数恰 +1: {client.info_calls}"
     assert sum("延长一次宽限" in m for m in logs2) == 1, f"延期只发生一次: {logs2}"
@@ -566,21 +556,16 @@ def test_ops_web_recheck_poll_torrent_deleted_no_origin():
 def test_ops_web_recheck_start_giveup_timeout():
     """测试: 宽限耗尽仍未见 checking(web 源) -> 仲裁直查见非校验态(live 应答 = 暂停种子)判败
     防活锁, 不计冷却(origin=None 直接消亡); 判败原语义保持(S2b)"""
-    mgr = make_mgr(FakeConfig())
+    clock = FakeClock()  # 宽限窗走注入假钟(S3 收敛: 不再直赋 stdlib time.time)
+    mgr = make_mgr(FakeConfig(), clock=clock)
     client = FakeClient()
     mgr.client = client
     t = seed_paused(mgr, client)  # client.torrents["HA"] = t: 仲裁直查的 live 应答(pausedDL 非校验态)
     r = mgr.ctx.ops.recheck("HA", source="web")
     assert r.is_ok
-    t0 = time.time()
-    # 轮询内部用真实 time.time() 对比 submitted_at: 整体平移时钟模拟 600s 宽限耗尽
-    shifted = t0 + 601.0
-    real_time = time.time
-    try:
-        time.time = lambda: shifted
-        run_queue(mgr, shifted)
-    finally:
-        time.time = real_time
+    # 宽限耗尽(注入假钟 advance): ops 内部 elapsed 对比 submitted_at 全走假钟
+    clock.advance(601.0)
+    run_queue(mgr, time.time() + 601.0)
     assert "HA" not in mgr.task_queue.active_check_hashes(), "宽限耗尽判败后轮询应消亡"
     assert "HA" not in mgr.state.get("recheck_fails", {}), "web 源不计冷却"
     assert t.state == "pausedDL", "判败不得改动种子状态"

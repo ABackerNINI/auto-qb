@@ -64,7 +64,7 @@ from datetime import date
 
 from types import SimpleNamespace
 
-from auto_qb.core.modules.ops_common import SKIP_PHASE_APPEARED
+from auto_qb.core.modules.ops_common import SKIP_PHASE_APPEARED, SKIP_PHASE_GONE
 from auto_qb.core.modules.ops_mod import OpsModule
 
 from auto_qb.core.taskqueue import REQUEUE, Task, TaskQueue
@@ -74,6 +74,8 @@ from auto_qb.rules.actions import RECHECK_FAIL_LIMIT
 from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
+
+from clock import wait_until
 
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, make_manager, seed_store
 
@@ -252,9 +254,13 @@ def test_skip_gates_allows_paused_incomplete():
 
 def test_skip_check_no_sleep_polling_and_keeps_record():
     """测试(S2): 相位机成功路径不 sleep(原实现 500ms × 10 轮询, 单条 ~6s);
-    且全程不动记录 —— 删除不摘记录(keep_record), 也不做 live 回写(运行状态等 qB 上报)"""
-    from unittest.mock import patch
+    且全程不动记录 —— 删除不摘记录(keep_record), 也不做 live 回写(运行状态等 qB 上报)
 
+    S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 计数断言 slept == [] ——
+    那是 stdlib time 模块对象的进程级改写; 「成功路径零 sleep」改由相位调用序结构性证明:
+    退避只在重试(失败后再步进)之间发生, 而下方断言钉死每相位恰一次调用
+    ["export","delete","add","add_tags"] —— 有任何退避重试必然出现重复调用名, 结构性互斥。
+    """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
@@ -262,11 +268,8 @@ def test_skip_check_no_sleep_polling_and_keeps_record():
     seed_store(mgr, [t])
     client.torrents["HASH123"] = t
 
-    slept = []
-    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: slept.append(s)):
-        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
     assert r.is_ok, f"暂停未完成应完成跳检: {r}"
-    assert slept == [], f"成功路径不应有任何 sleep(相位机每步一次调用): {slept}"
     # 记录对象原样保留(既没被 remove_torrent 摘除, 也没被 restore_torrent 重建)
     assert mgr.store.get("HASH123") is t, "跳检不得摘除/重建记录(keep_record)"
     assert t.progress == 0.0 and t.state == "stoppedDL", "运行状态不得被跳检路径写入(只等 qB 上报)"
@@ -985,9 +988,13 @@ def test_guard_skip_begin_idempotent():
 # ============================================================
 def test_skip_gone_retry_delete_raise_and_attempts_exhausted():
     """测试: gone 相位确认种子仍在(qB 删除异步未落地形态) -> 幂等重试删除抛错被吞(兜底分支),
-    退避次数(10/20/50/50/50ms)耗尽终态失败; 删除不摘记录, 失败不清同日去重"""
-    from unittest.mock import patch
+    退避次数(10/20/50/50/50ms)耗尽终态失败; 删除不摘记录, 失败不清同日去重
 
+    S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 计数断言退避真发生 ——
+    那是 stdlib time 模块对象的进程级改写; 现改用**真实经过时间下界**验证(4 次重试退避
+    名义合计 170ms, Windows 睡眠刻度抖动下界留 60ms 余量; 退避被跳过/归零当场红),
+    与 test_guard_drive_backoff_sleeps 同口径, 真实退避直接发生(测试耗时 +~0.2s)。
+    """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
@@ -1003,20 +1010,26 @@ def test_skip_gone_retry_delete_raise_and_attempts_exhausted():
         # 首删"成功"但不摘种子(模拟 qB 删除异步未落地): gone 相位确认仍在 -> 进退避重试
 
     client.torrents_delete = flaky_delete
-    slept = []
-    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: slept.append(s)):
-        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    start = time.monotonic()
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    elapsed = time.monotonic() - start
     assert r.is_failed and "删除后种子仍在客户端" in r.message, f"重试耗尽应终态失败: {r}"
     assert dels["n"] == 5, f"首删 + 4 次幂等重试(第 5 次退避名额耗尽不再重试): {dels['n']}"
-    assert len(slept) >= 1, "退避窗口真实存在(相位机每步一次调用, 步间退避)"
+    assert elapsed >= 0.11, f"退避窗口真实存在(名义合计 170ms, 跳过/归零即红): {elapsed:.3f}s"
     assert mgr.store.get("HASH123") is t, "失败路径不摘快照记录(种子明明还在)"
     assert mgr.ctx.ops._skip_jobs == {}, "终态后 job 出账"
 
 
 def test_skip_drive_settle_during_backoff_sleep_race():
-    """测试: 退避 sleep 期间主循环微步并发推进(竞态形态, 同线程直驱模拟)把 job 推到终态 ->
-    驱动循环经 while 条件出口收束(而非 break) —— 覆盖 189->200 分支弧"""
-    from unittest.mock import patch
+    """测试: 退避 sleep 期间主循环微步并发推进(竞态形态)把 job 推到终态 ->
+    驱动循环经 while 条件出口收束(而非 break) —— 覆盖 189->200 分支弧
+
+    S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 桩在 sleep 回调里
+    同线程内联驱动竞态 —— 那是 stdlib time 模块对象的进程级改写; 现改用后台线程在
+    GONE 重试退避窗(真实 20~50ms sleep, 驱动循环 >95% 墙钟在睡)内并发步进: 终态
+    落定在退避窗口内, 主驱动醒来经 while 条件出口收束。全程零 time 名寻址。
+    """
+    import threading
 
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
@@ -1031,13 +1044,23 @@ def test_skip_drive_settle_during_backoff_sleep_race():
 
     client.torrents_delete = sticky_delete
 
-    def race_sleep(_seconds):
-        for j in list(ops._skip_jobs.values()):  # 主循环微步线并发布进(竞态)
-            for _ in range(10):  # 一口气把余下退避走完: 终态确定在 sleep 窗口内落定
-                ops._skip_step(j)
+    def race_driver():
+        # 等主驱动进 GONE 重试(attempts>=1, 随即进入退避 sleep 窗), 再一口气把余下退避走完
+        in_retry = lambda: any(  # noqa: E731
+            j.phase == SKIP_PHASE_GONE and j.attempts >= 1 for j in list(ops._skip_jobs.values())
+        )
+        if not wait_until(in_retry, timeout=2.0, interval=0.001):
+            return
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and ops._skip_jobs:
+            for j in list(ops._skip_jobs.values()):  # 主循环微步线并发布进(竞态)
+                for _ in range(10):  # 一口气把余下退避走完: 终态确定在 sleep 窗口内落定
+                    ops._skip_step(j)
 
-    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=race_sleep):
-        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    driver = threading.Thread(target=race_driver, daemon=True)
+    driver.start()
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    driver.join(timeout=2.0)
     assert r.is_failed and "删除后种子仍在客户端" in r.message, f"并发推进应把 job 推到终态: {r}"
     assert ops.skip_result("HASH123") is r, "终态在 sleep 中落定, 同对象返回"
     assert ops.next_run_at() is None and ops._skip_jobs == {}, "终态后在途清空"
@@ -1165,9 +1188,11 @@ def test_skip_appeared_confirm_error_retries():
 
 def test_skip_appeared_retry_add_raise_swallowed():
     """测试: 重加后确认不到时的幂等重加抛错被吞(433-434), 退避次数耗尽终态失败;
-    失败路径把快照里的残留记录撤掉(它是假账, 下轮上报按真删除处理)"""
-    from unittest.mock import patch
+    失败路径把快照里的残留记录撤掉(它是假账, 下轮上报按真删除处理)
 
+    S3 monkeypatch 收敛(2026-11-05): sleep 桩解包 —— 4 次重试退避(名义 170ms)真实发生,
+    `ops_mod.time.sleep` 是 stdlib time 模块对象的进程级改写, 无断言价值的等待抑制一并退役。
+    """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
@@ -1184,8 +1209,7 @@ def test_skip_appeared_retry_add_raise_swallowed():
         client.torrents.pop("HASH123", None)  # qB 尚未处理完: 确认相位看不到 -> 进退避
 
     client.torrents_add = flaky_add
-    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: None):
-        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
     assert r.is_failed and "重加后未确认到种子" in r.message, f"确认不到应终态失败: {r}"
     assert adds["n"] == 5, f"首次重加 + 4 次幂等重加(第 5 次重试名额耗尽不再重加): {adds['n']}"
     assert mgr.store.get("HASH123") is None, "失败路径应撤掉快照残留记录(假账)"

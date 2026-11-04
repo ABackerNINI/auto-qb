@@ -49,6 +49,8 @@ from auto_qb.rules.checking_meta import INFLIGHT_TTL, is_piece_checking
 
 from auto_qb.rules.actions.full_checking import bump_recheck_fail
 
+from clock import FakeClock
+
 from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_skip, make_manager, seed_store
 
 from ops_support import (
@@ -252,7 +254,8 @@ def test_guard_on_sync_line_once():
 def test_guard_arbitration_scope_single():
     """守阵(W9a rc112): 启动超时仲裁直查必须单 hash —— torrents_info(None)=全库表, 任意
     他种子的校验态会劫持宽限判定(双向失真)"""
-    mgr = make_mgr(FakeConfig())
+    clock = FakeClock()  # 宽限窗走注入假钟(S3 收敛: 不再直赋 stdlib time.time)
+    mgr = make_mgr(FakeConfig(), clock=clock)
     client = FakeClient()
     mgr.client = client
     other = FakeTorrent(hash="HOTHER", state="checkingDL", progress=0.5)
@@ -261,22 +264,23 @@ def test_guard_arbitration_scope_single():
     origin = Task("rule", "rule-test", hash="HA", store=mgr.store, handler=lambda task, d: REQUEUE)
     r = mgr.ctx.ops.recheck("HA", source="rule", origin=origin)
     assert r.is_pending, f"rule 源应 pending: {r}"
+    clock.advance(601.0)  # 宽限耗尽: 仲裁直查(单 hash)见 pausedDL -> 判败
     now = time.time()
-    real_time = time.time
-    try:
-        time.time = lambda: now + 601.0
-        run_queue(mgr, now + 601.0)  # 宽限耗尽: 仲裁直查(单 hash)见 pausedDL -> 判败
-    finally:
-        time.time = real_time
+    run_queue(mgr, now + 601.0)
     assert mgr.state["recheck_fails"]["HA"]["count"] == 1, \
         "仲裁直查必须单 hash: 他人 checking 态不得劫持判定(误延长宽限=不计失败)"
 
 
-def test_guard_drive_backoff_sleeps(monkeypatch):
+def test_guard_drive_backoff_sleeps():
     """守阵(W9a dr22 + rt11 + gn14): GONE 相位确认不到消失 -> 重试退避 10~50ms 必须真睡
-    (退避被跳过=存在性直查热轮询 API 轰炸; 退避归零=窗口内重试风暴)"""
-    from unittest.mock import patch
+    (退避被跳过=存在性直查热轮询 API 轰炸; 退避归零=窗口内重试风暴)
 
+    S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 计数 —— 那是 stdlib
+    time 模块对象的进程级改写; 现改用**真实经过时间下界**验证退避真发生: 4 次重试退避
+    名义合计 170ms(20+50+50+50), Windows 睡眠按 15.6ms 定时器刻度取整有抖动,
+    下界留 60ms 余量不损失判别力(退避跳过/归零当场红), 与 test_qbmanager_connect
+    的 _throttle 下界同口径, 不再引入任何 time 名寻址。
+    """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()
     mgr.client = client
@@ -285,11 +289,11 @@ def test_guard_drive_backoff_sleeps(monkeypatch):
     client.torrents["HASH123"] = t
     client.torrents_info = lambda **kw: [t]  # 恒报「仍在客户端」-> GONE 相位反复重试
     dels = _wrap_client(client, "torrents_delete", [])
-    slept = []
-    with patch("auto_qb.core.modules.ops_mod.time.sleep", side_effect=lambda s: slept.append(s)):
-        r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    start = time.monotonic()
+    r = mgr.ctx.ops.skip_check("HASH123", source="web")
+    elapsed = time.monotonic() - start
     assert r.is_failed and "删除后种子仍在客户端" in r.message, f"重试耗尽应失败且文案点明: {r}"
-    assert slept and all(s > 0 for s in slept), f"10~50ms 退避必须真睡(跳过/归零即红): {slept}"
+    assert elapsed >= 0.11, f"10~50ms 退避必须真睡(名义合计 130ms, 跳过/归零即红): {elapsed:.3f}s"
     assert len(dels) == 5, f"初删 + 4 次重试删除: {[d.get('torrent_hashes') for d in dels]}"
     assert all(d["torrent_hashes"] == "HASH123" for d in dels), \
         f"删除(含重试)作用域必须单 hash(不得 None=全库摘登记): {dels}"

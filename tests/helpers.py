@@ -1482,6 +1482,7 @@ def relocate_env(
     data_dir=True,
     free=1 << 40,
     paths=None,
+    clock=None,
 ) -> RelocateEnv:
     """真临时目录 + HA/HB 双成员组 + 目标卷的 relocate 测试环境(四份局部构建器的单点)
 
@@ -1492,9 +1493,11 @@ def relocate_env(
     - data_dir: False 时不设 mgr.config.data_dir(journal 落盘位置; 预检用例不依赖)
     - paths: 传入相对路径元组可指定成员文件名(默认按 file_count 生成 e00/e01/...)
     - size: 声明文件大小(字节), 磁盘实际写入同尺寸(声明与磁盘一致; 原web版100/64不一致已统一)
+    - clock: 透传 make_manager 的构造期时钟(S3 monkeypatch 收敛: 「开机窗口」类用例传
+      FakeClock(start=开机后秒数) 复现 monotonic < 退避常量, 不再进程级 patch stdlib time)
     pin_disk_usage(monkeypatch) 是能力钉不是环境, 仍由用例自己调。
     """
-    mgr = make_manager(os.path.join(str(td), "state.json"))
+    mgr = make_manager(os.path.join(str(td), "state.json"), clock=clock)
     client = FakeClient()
     mgr.client = client
     src = os.path.join(str(td), "src")

@@ -42,6 +42,8 @@ import yaml
 
 from auto_qb.core import curves
 
+from clock import FakeClock
+
 from auto_qb.config import CurvePoint, GlobalSpeedLimitCurve, PeriodCurve, load_config
 
 from auto_qb.config import ConfigError
@@ -383,25 +385,24 @@ def test_speed_curve_manual_log_throttled_same_state(tmp_path):
     assert [r["code"] for r in mgr.web.traffic_view["limit"]["reasons"]] == ["manual", "manual"]
 
 
-def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path, monkeypatch):
+def test_speed_curve_manual_log_periodic_reminder_and_value_change(tmp_path):
     """超 _MANUAL_REMIND_GAP 再提醒一次; 手动值变化(仍是奇数)立即重报, 不等周期"""
     today = date.today()
     dat = write_dat(tmp_path, [(today, 5 * GIB, 0)])
     gslc = _gslc(dat, _pc("day", up=_points(FULL_UPLOAD)))
-    mgr, client = _make_mgr(tmp_path, gslc)
+    # 构造期注入(S3 收敛: 不再经模块 time 名 patch stdlib; speed_curve 经装配链收 _clock)
+    clock = FakeClock(start=1_000_000.0)
+    mgr, client = _make_mgr(tmp_path, gslc, clock=clock)
     client.transfer.limits["upload_limit"] = 2001 * 1024
-
-    clock = {"now": 1_000_000.0}
-    monkeypatch.setattr("auto_qb.core.modules.speed_curve_mod.time.time", lambda: clock["now"])
 
     with capture_logs("auto_qb.core.modules.speed_curve_mod") as cap:
         assert _run_curve(mgr)
         assert cap.text.count("本轮不覆盖") == 1  # 首次进入该状态 -> 说明白一次
-        clock["now"] += 61.0  # 远小于提醒周期
+        clock.advance(61.0)  # 远小于提醒周期
         assert _run_curve(mgr)
         assert cap.text.count("本轮不覆盖") == 1  # 同状态不重复
         # 恰好整周期(不是"越过"): >= 边界必须再提醒一次(改成 > 就会吞掉这一轮)
-        clock["now"] = 1_000_000.0 + _MANUAL_REMIND_GAP
+        clock.freeze(1_000_000.0 + _MANUAL_REMIND_GAP)
         assert _run_curve(mgr)
         assert cap.text.count("本轮不覆盖") == 2
         # 手动值变化(2001 -> 2003, 仍是奇数): 状态指纹变了 -> 立即重报

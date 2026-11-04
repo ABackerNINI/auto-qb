@@ -1261,7 +1261,8 @@ def test_read_side_view_contract_table(web_env, monkeypatch, window):
     mgr, client = web_env
     auth = {_AUTH_HEADER_KEY: f"Bearer {mgr.web.token}"}
     frozen = float(int(time.time()))  # 冻结端点时钟: 期望集与请求同一 now(免午夜竞态)
-    monkeypatch.setattr("auto_qb.webui.server.traffic_qb.SYSTEM_CLOCK", SimpleNamespace(now=lambda: frozen))
+    # S3 收敛: 单点置换统一走 FakeClock(不再 SimpleNamespace 手拼 now 单方法替身)
+    monkeypatch.setattr("auto_qb.webui.server.traffic_qb.SYSTEM_CLOCK", FakeClock(start=frozen))
     _enable_qb_traffic(mgr)  # sample_interval 缺省 30s(raw 段桶宽 = 30)
     store = _qb_v4(mgr)
     key = "global"

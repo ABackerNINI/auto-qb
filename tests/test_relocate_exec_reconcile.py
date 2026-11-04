@@ -46,6 +46,8 @@ import pytest
 
 from auto_qb.core.modules import relocate_units as ru
 
+from clock import FakeClock
+
 from auto_qb.infra import relocate_journal
 
 from helpers import pin_disk_usage, relocate_env
@@ -123,8 +125,10 @@ def test_rebuild_first_attempt_not_backoff_on_fresh_boot(tmp_path, monkeypatch):
     (同树 09:05 全量绿、重启后 09:15 起单跑稳定红的翻转点)。
     """
     pin_disk_usage(monkeypatch)
-    monkeypatch.setattr(time, "monotonic", lambda: 120.0)  # 模拟开机 2 分钟
-    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    # 构造期注入(S3 收敛: 不再进程级 patch stdlib time.monotonic): 模拟开机 2 分钟 ——
+    # rt 无 rebuild_ts 的首建不得被旧 0.0 兜底吞进退避窗口(monotonic 0 点是开机时刻)
+    boot_clock = FakeClock(start=120.0)
+    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch, clock=boot_clock)
     mod._qb_up = lambda: True
     relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_REMOVED, "ts": time.time()})
     mod._remove_links(mod.get_job(job_id).alias_paths)
@@ -172,10 +176,19 @@ def test_respawn_first_spawn_not_backoff_on_fresh_boot(tmp_path, monkeypatch):
     在开机不满 60s 的机器上连首拉也静默吞掉 —— 与重建退避同一处缺陷的孪生实例。
     """
     pin_disk_usage(monkeypatch)
-    monkeypatch.setattr(time, "monotonic", lambda: 30.0)  # 模拟开机 30 秒
-    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch)
+    # 构造期注入(S3 收敛: 不再进程级 patch stdlib time.monotonic): 模拟开机 30 秒 ——
+    # rt 无 respawn_ts 的 guardian 首拉不得被旧 0.0 兜底吞进退避窗口
+    boot_clock = FakeClock(start=30.0)
+    mgr, client, mod, job_id, spawned, src, dst, content = _armed_env(tmp_path, monkeypatch, clock=boot_clock)
     mod._qb_up = lambda: True
-    relocate_journal.write_journal(str(tmp_path / "data"), job_id, {"phase": ru.PHASE_ARMED, "ts": time.time() - 999})
+    # journal 心跳时间戳落注入钟时间线(心跳年龄 = clock.now() - ts, S3 注入后两侧同源取时;
+    # 旧写 time.time() - 999 依赖「monotonic 被钉 30s 而墙钟仍走真钟」的进程级改写)
+    relocate_journal.write_journal(
+        str(tmp_path / "data"), job_id, {
+            "phase": ru.PHASE_ARMED,
+            "ts": boot_clock.now() - 999
+        }
+    )
     spawned.clear()
     # rt 不落盘(重启由 qB 现场恢复) —— 守护进程重启后重拉记录清零, 这正是「首拉」的真实形态;
     # _armed_env 的对账 tick 已写过 respawn_ts, 弹掉还原首拉现场

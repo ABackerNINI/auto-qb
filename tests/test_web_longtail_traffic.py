@@ -69,12 +69,13 @@ def test_api_traffic_qb_global_live_tail_realtime(web_env, monkeypatch):
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
     now = int(time.time())
-    # 钉住入口时刻(服务端 _grid 与用例同读 time.time, 钉一次双边生效): 5m 栅格是
-    # [now-300, now) 滚动窗, 桶数 = ceil((now - floor(now-300))/30) —— now 恰在 30s
-    # 边界(r=0)时开放桶 [now, now+30) 覆盖为 0 被省略, 其后一秒(r>0)又补回, 响应
-    # 因此多/少一个空桶。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI 慢一点就红
+    # 钉住入口时刻(端点 _grid 现读 traffic_qb.SYSTEM_CLOCK 单点, 换冻结假钟钉一次双边
+    # 生效): 5m 栅格是 [now-300, now) 滚动窗, 桶数 = ceil((now - floor(now-300))/30) ——
+    # now 恰在 30s 边界(r=0)时开放桶 [now, now+30) 覆盖为 0 被省略, 其后一秒(r>0)又补回,
+    # 响应因此多/少一个空桶。三次请求逐点一致的前提是同一个 now, 不冻时钟 CI 慢一点就红
     # (生产滚动窗语义正确, 不是产品缺陷; 同坑档 testing/flaky-midnight-daycount.md)。
-    monkeypatch.setattr(time, "time", lambda: float(now))
+    # S3 收敛: 不再进程级 patch stdlib time.time, 改换端点取时单点(与 test_web_traffic_qb 同口径)。
+    _freeze_traffic_endpoint_clock(monkeypatch, now)
     base = ((now - 240) // 30) * 30  # 5m 窗内
     b0, b1, b2 = (base + i * 30 for i in range(3))
     recs = (V4Sample(100, 50, 1000, 500), V4Sample(200, 70, 2000, 800))

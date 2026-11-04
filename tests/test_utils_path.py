@@ -127,6 +127,9 @@ def test_atomic_write_replace_retries_transient_denial(tmp_path, monkeypatch):
     (含杀软/索引器/另一进程)开-读-关的微秒~毫秒窗口内 `MoveFileEx` 拒绝替换, 不是持久故障。
     2026-10-16 用户实报 HR 实例注册表心跳一次性失败(`instances.json.o7e7o6ed.tmp` ->
     `instances.json`)即此坑的写侧 —— 主仓当时的 `atomic_write` 没有这层重试(gtm 工具侧已有)。
+
+    S3 monkeypatch 收敛(2026-11-05): sleep 桩解包, 退避(50ms × 2)真实发生 —— utils.time
+    是 stdlib time 模块对象, 经它 patch 即进程级改写(第一半「真实退避」先例同款)。
     """
     attempts = []
     real_replace = os.replace
@@ -138,7 +141,6 @@ def test_atomic_write_replace_retries_transient_denial(tmp_path, monkeypatch):
         return real_replace(src, dst)
 
     monkeypatch.setattr(utils.os, "replace", flaky_replace)
-    monkeypatch.setattr(utils.time, "sleep", lambda _s: None)  # 不真等退避
 
     p = tmp_path / "state.json"
     utils.atomic_write(str(p), lambda f: f.write("NEW"))
@@ -147,7 +149,11 @@ def test_atomic_write_replace_retries_transient_denial(tmp_path, monkeypatch):
 
 
 def test_atomic_write_replace_retry_exhausted_raises_and_keeps_old(tmp_path, monkeypatch):
-    """重试耗尽仍抛 PermissionError(不吞)、旧内容不变、临时文件清理 —— 容错口径留给调用方"""
+    """重试耗尽仍抛 PermissionError(不吞)、旧内容不变、临时文件清理 —— 容错口径留给调用方
+
+    S3 monkeypatch 收敛(2026-11-05): sleep 桩解包, 退避(50ms × 4)真实发生 —— utils.time
+    是 stdlib time 模块对象, 经它 patch 即进程级改写(第一半「真实退避」先例同款)。
+    """
     attempts = []
 
     def always_denied(src, dst):
@@ -155,7 +161,6 @@ def test_atomic_write_replace_retry_exhausted_raises_and_keeps_old(tmp_path, mon
         raise PermissionError(13, "拒绝访问", dst)
 
     monkeypatch.setattr(utils.os, "replace", always_denied)
-    monkeypatch.setattr(utils.time, "sleep", lambda _s: None)
 
     p = tmp_path / "state.json"
     p.write_text("OLD", encoding="utf-8")
@@ -167,7 +172,12 @@ def test_atomic_write_replace_retry_exhausted_raises_and_keeps_old(tmp_path, mon
 
 
 def test_atomic_write_replace_only_retries_permission_error(tmp_path, monkeypatch):
-    """只重试 PermissionError: 其它 OSError(磁盘满/路径非法)重试不解决, 一次即抛(不白等 250ms)"""
+    """只重试 PermissionError: 其它 OSError(磁盘满/路径非法)重试不解决, 一次即抛(不白等退避)
+
+    S3 monkeypatch 收敛(2026-11-05): `utils.time.sleep` 的 pytest.fail 桩解包 —— utils.time
+    是 stdlib time 模块对象, 经它 patch 即进程级改写; 「非 PermissionError 不退避」由下方
+    `len(attempts) == 1` 结构性证明(退避只在两次重试之间, 一次即抛则零退避)。
+    """
     attempts = []
 
     def other_oserror(src, dst):
@@ -175,7 +185,6 @@ def test_atomic_write_replace_only_retries_permission_error(tmp_path, monkeypatc
         raise OSError(28, "磁盘空间不足")
 
     monkeypatch.setattr(utils.os, "replace", other_oserror)
-    monkeypatch.setattr(utils.time, "sleep", lambda _s: pytest.fail("非 PermissionError 不该退避"))
     with pytest.raises(OSError):
         utils.atomic_write(str(tmp_path / "state.json"), lambda f: f.write("x"))
     assert len(attempts) == 1, "非瞬时错误必须早抛"

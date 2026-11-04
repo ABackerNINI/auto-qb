@@ -107,8 +107,8 @@ def _run_curve(mgr, dry_run: bool = False) -> bool:
     return mgr.host.get("speed_curve").handle_speed_limit_curve(task, dry_run=dry_run)
 
 
-def _make_mgr(tmp_path, gslc: _GslcBundle, with_app: bool = True):
-    mgr = make_manager(str(tmp_path / "state.json"))
+def _make_mgr(tmp_path, gslc: _GslcBundle, with_app: bool = True, clock=None):
+    mgr = make_manager(str(tmp_path / "state.json"), clock=clock)
     mgr.config.global_speed_limit_curve = gslc.curve
     # 取数路径来自顶层 traffic_source(S15): 直接注入 FakeConfig, 等价于 load_config 后的形态
     mgr.config.traffic_source.traffic_monitor.dat_path = gslc.dat_path

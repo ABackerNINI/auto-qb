@@ -114,8 +114,8 @@ def test_skip_checking_readd_preserves_values():
         tor.ratio_limit = 0  # qB 分享率限制(有语义)
         tor.seeding_time_limit = 0
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.core.modules.ops_mod.time.sleep"):
-            r = _run_action(action, ctx)
+        # !S3 收敛解包: 成功路径零重试零退避, sleep 桩(ops_mod.time = stdlib time 对象进程级改写)无对象可拦
+        r = _run_action(action, ctx)
         assert r.is_ok, f"{r}"
         add = next(c for c in client.calls if c[0] == "add")
         assert add[1]["upload_limit"] == 0, f"不限速 0 应直传: {add}"
@@ -137,8 +137,8 @@ def test_skip_checking_readd_restores_store_record():
         seed_store(mgr, [tor])
         action = _check_action(without_seg=_seg("skip-checking"))
         ctx = make_ctx(mgr, tor, client)
-        with patch("auto_qb.core.modules.ops_mod.time.sleep"):
-            r = _run_action(action, ctx)
+        # !S3 收敛解包: 成功路径零重试零退避, sleep 桩(ops_mod.time = stdlib time 对象进程级改写)无对象可拦
+        r = _run_action(action, ctx)
         assert r.is_ok, f"{r}"
         # 快照记录已恢复(对象身份 = 删除前捕获的 tor), tracker_conf 保留
         assert mgr.store.get("HASH123") is tor
@@ -200,8 +200,9 @@ def test_skip_checking_delete_not_confirmed():
 
         client.torrents_info = info_after_delete
         action = _check_action(without_seg=_seg("skip-checking"))
-        with patch("auto_qb.core.modules.ops_mod.time.sleep"):
-            r = _run_action(action, ctx)
+        # !S3 收敛: sleep 桩解包, 退避重试(10/20/50/50/50ms, 名义 170ms)真实发生 ——
+        #   ops_mod.time 是 stdlib time 模块对象, 经它 patch 即进程级改写
+        r = _run_action(action, ctx)
         assert r.is_failed and "确认删除失败" in r.message, f"应失败(看不见就当没确认, fail-closed): {r}"
         assert not any(c[0] == "add" for c in client.calls), "未确认消失前不得重加"
 

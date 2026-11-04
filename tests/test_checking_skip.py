@@ -309,8 +309,9 @@ def test_checking_skip_delete_unconfirmed_clears_backup():
         client.calls.append(("delete", delete_files))  # 只记调用, 不真删
 
     client.torrents_delete = noop_delete
-    with patch("auto_qb.core.modules.ops_mod.time.sleep"):  # 10 × 0.5s 确认轮询
-        handled = process_rule(mgr, client, t, dry_run=False)
+    # !S3 收敛: sleep 桩解包, 退避重试(10/20/50/50/50ms, 名义 170ms)真实发生 ——
+    #   ops_mod.time 是 stdlib time 模块对象, 经它 patch 即进程级改写(旧注释 10 × 0.5s 为相位机前口径)
+    handled = process_rule(mgr, client, t, dry_run=False)
     assert handled, "放弃跳检以 fail 返回(fail 视为已处理)"
     assert not any(c[0] == "add" for c in client.calls), f"未确认消失前不得重加: {client.calls}"
     backup_file = os.path.join(os.path.dirname(mgr.state_file), "skip-check-backup", "HASH123.torrent")

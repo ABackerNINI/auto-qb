@@ -60,10 +60,14 @@ def _only_job(mod):
     return jobs[0]
 
 
-def _armed_env(tmp_path, monkeypatch):
-    """跑到 armed 的环境(供对账/撤销用例)"""
+def _armed_env(tmp_path, monkeypatch, clock=None):
+    """跑到 armed 的环境(供对账/撤销用例)
+
+    clock: 透传 relocate_env -> make_manager 的构造期时钟(「开机窗口」用例传
+    FakeClock(start=开机后秒数), S3 收敛后不再进程级 patch stdlib time.monotonic)。
+    """
     pin_disk_usage(monkeypatch)
-    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
+    mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading", clock=clock)
     mod = mgr.host.get("relocate")
     spawned = []
     _spy_spawn(mod, spawned)

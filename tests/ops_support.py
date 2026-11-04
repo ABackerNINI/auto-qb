@@ -36,11 +36,16 @@ from helpers import FakeClient, FakeConfig, FakeTorrent, capture_logs, drive_ski
 _TMP_STATE_DIR = tempfile.TemporaryDirectory(prefix="autoqb-ops-state-")
 
 
-def make_mgr(cfg):
-    """构造 QbManager(独立任务队列); 自动分配临时 state 文件"""
+def make_mgr(cfg, clock=None):
+    """构造 QbManager(独立任务队列); 自动分配临时 state 文件
+
+    clock: 透传 make_manager 的构造期时钟(S3 monkeypatch 收敛: 需要把 ops 宽限窗等
+    时间判据拨快的用例传 FakeClock, 不再直赋 stdlib time.time; 缺省系统时钟)。
+    注意 task_queue 此处按缺省钟重建 —— run_queue 的 now 由调用方显式给, 与注入钟无关。
+    """
     if not cfg.state_file:
         cfg.state_file = os.path.join(_TMP_STATE_DIR.name, f"state-{uuid.uuid4().hex}.json")
-    mgr = make_manager(cfg=cfg, load_rules=True)
+    mgr = make_manager(cfg=cfg, load_rules=True, clock=clock)
     mgr.task_queue = TaskQueue()
     return mgr
 
