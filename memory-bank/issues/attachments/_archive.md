@@ -4,10 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (52)
+## Open (51)
 
 - [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](../26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 normpath 恒返回 '.', _within 的 if not s 守卫现实不可达; 覆盖率第三轮已用 _norm 替身钉住契约弧, 残留问题是守卫本身去留
-- [test] [存量 hr apply 用例疑似假绿: 原地改 hr_check 致 apply 短路断言空转](../26-11-05-0200-test-hr-apply-inplace-config-false-green.html) — test_hr_discovery 等档对 cfg.trackers[...].hr_check 原地改 refresh_interval, 但 hr_site_confs() 返回同一对象, site_confs 比较恒等使 apply 短路, 重建断言空转
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](../26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbmanager.py 619/624 补刷新闸注入三型变异全部存活: 用例观察窗在第 4 轮 KI 退出前, 重置节拍的可观测分歧落在窗后; 留待 mutants 审计兜底
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
@@ -65,9 +64,10 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (406)
+## Done (407)
 
 - [bug] [fuse release 摘标签路径缺 None-client 守卫(潜在, 现行接线不可达)](../26-11-05-0200-bug-fuse-untag-none-client-guard.html) — fuse_mod release() 的 to_untag 摘标签路径对 api.client 为 None 无守卫, 会 AttributeError 而非像限速写回侧那样安全降级; 现行唯一调用方 cli 先 connect 故不可达
+- [test] [存量 hr apply 用例疑似假绿: 原地改 hr_check 致 apply 短路断言空转](../26-11-05-0200-test-hr-apply-inplace-config-false-green.html) — test_hr_discovery 等档对 cfg.trackers[...].hr_check 原地改 refresh_interval, 但 hr_site_confs() 返回同一对象, site_confs 比较恒等使 apply 短路, 重建断言空转
 - [test] [test_w6_flush_fallback_once_per_round 偶发红: 并行负载下主循环只跑 1 轮](../26-11-05-0035-test-qbmanager-flush-fallback-flaky.html) — qbmanager 主循环时序敏感用例偶发只跑 1 轮, 断言两轮失败; 单跑恒绿, 判并行/时序偶发
 - [bug] [规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)](../26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html) — CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)
 - [bug] [缺失站点扫描把逐种 tracker 失败吞成空集, 批量失败时误报无缺失](../26-11-04-2347-bug-missing-scan-partial-failure.html) — collect_torrent_tracker_hostnames 对单种查询异常一律空集; qB 重启/断连导致全部失败时 /api/sites/missing 仍 200 返回空 sites/groups, CLI 导出静默漏站

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="coverage-uplift-3">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="存量 hr apply 用例疑似假绿: 原地改 hr_check 致 apply 短路断言空转">
 <meta name="issue-summary" content="test_hr_discovery 等档对 cfg.trackers[...].hr_check 原地改 refresh_interval, 但 hr_site_confs() 返回同一对象, site_confs 比较恒等使 apply 短路, 重建断言空转">
 <title>存量 hr apply 用例疑似假绿: 原地改 hr_check 致 apply 短路断言空转 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0200-test-hr-apply-inplace-config-false-green</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 02:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,7 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 02:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 03:11 — 认领并修复（用户指派）：照 T1b 惯例改 <code>test_runtime_l0_rebuild_keeps_discovery</code> 为整份换配置对象（<code>fresh</code> 换 <code>hr_check</code> + <code>trackers</code>），并加防短路断言 <code>service.site_confs[...].refresh_interval == 6*3600</code>（短路时 service 还持旧对象 12h 必炸）。草稿用例实证病根：原地改后 <code>runtime.service is not service_before</code> 断言确实失败（apply 短路、service 同一对象），旧用例重建断言空转坐实。验证：目标用例过 + hr 全族 4 文件 76 passed（test.one，2026-11-05），状态 <strong>Done</strong></li>
     </ul>
   </section>
 

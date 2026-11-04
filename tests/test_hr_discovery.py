@@ -692,8 +692,16 @@ def test_runtime_l0_rebuild_keeps_discovery(tmp_path, monkeypatch):
     try:
         before = runtime.discovery
         old = runtime.global_conf
-        cfg.trackers["pt.example.com"].hr_check.refresh_interval = 6 * 3600.0
+        # 整份换配置对象防短路(issue 26-11-05-0200): hr_site_confs() 返回 trackers 里的同一
+        # 对象, 原地改 refresh_interval 会连 service.site_confs 一起改 ⇒ site_confs 比较恒等
+        # ⇒ apply 短路, 下面的「不重建发现」断言空转。换整份 trackers 才真走 L0 重建路径。
+        fresh = make_config(tmp_path, enabled=True, channel=True, discovery_port=base)
+        fresh.trackers["pt.example.com"].hr_check.refresh_interval = 6 * 3600.0
+        runtime.config.hr_check = fresh.hr_check
+        runtime.config.trackers = fresh.trackers
         runtime.apply(old)
+        assert runtime.service.site_confs["pt.example.com"].refresh_interval == 6 * 3600.0, \
+            "L0 重建真发生(整份换配置对象防短路)"
         assert runtime.discovery is before, "L0 重建不重建发现对象(监听身份未变)"
         assert runtime.discovery.started
     finally:
