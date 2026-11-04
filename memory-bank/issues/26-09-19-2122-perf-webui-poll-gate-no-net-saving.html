@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="issue-slug" content="webui-poll-gate-no-net-saving">
 <meta name="issue-stamp" content="26-09-19-2122">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-type" content="perf">
 <meta name="doc-topic" content="webui-polling">
 <meta name="issue-tier" content="standard">
 <meta name="issue-title" content="节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径">
-<meta name="doc-refs" content="memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md, memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html">
+<meta name="doc-refs" content="memory-bank/tasks/26-10-08-webui-perf-issues-closing.md, memory-bank/tasks/26-10-07-webui-perf-issues-recheck.md, memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html, memory-bank/reports/26-10-07-0204-report-webui-delta-sync-feasibility.html, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html">
 <meta name="issue-summary" content="节拍门控(95fb673)在 3s 客户端档实测 41→40 次重建, 未省 CPU; 省下的 50% 只出现在 6s 档">
 <title>节拍门控未减少总重建次数: 一半只是从主循环搬到请求路径 · auto-qb 计划外问题</title>
 <style>
@@ -99,7 +99,7 @@
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-09-19-2122-webui-poll-gate-no-net-saving</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-09-19 21:22</div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">perf</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
@@ -238,9 +238,11 @@ def run(mgr, gate):
     <ul>
       <li>2026-09-19 21:22 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
       <li>2026-10-07 00:54 — 复验（重构后锚点核对, develop @ 20bd2157）: <strong>仍成立, Open 维持</strong>。门控双生产者结构逐字迁至 <code>webui/runtime.py</code>（<code>flush_views</code>:488 / <code>ensure_state</code>:811 / <code>ensure_view</code>:801 仍未清账）, 上面 §02 的旧代码引用是入池时证据快照, 文件已随内核化重构迁走（qbmanager.py / mixins/ 不复存在）。新变量: SSE ver 推送（0c18fcda, 2026-09-21）改写消费动态——SSE 主路径上门控等效失效（客户端每版必拉, 欠账恒即刻清）、请求侧 +48.7ms 伤害基本消失、方案 A 的 -51% 蒸发（消费率=生产率, 每个被消费版本必须建一次, 降级为线程归属交易）; 轮询兜底路径（SSE 断线/不支持）原动态原样回归。修法建议按复验报告 §04 重排: 方案 B（口径修正）+ 顺带小修仍值得做, 方案 C 降级。详见 <code>memory-bank/reports/26-10-07-0054-report-webui-perf-issues-recheck.html</code> §03-04。</li>
+      <li>2026-11-05 — 认领清偿（第三轮复验, develop @ 0fb1391a）: <strong>Done</strong>。剩余工作面核对: 门控结构现居 <code>webui/runtime_views.py</code>（<code>flush_views</code>:227, 门控判据 :284-286 / <code>ensure_state</code> 消费即清 :619 / <code>ensure_view</code> 仍未清账 :585）, 双生产者结构在增量同步重构（plan 26-10-07-0414, S6 局部重聚合/R4 键集累积）后原样保留; 门控去留已由 P-03 S10 裁决定案「保留不动」（记录在 <code>pending_ver</code> 字段声明, <code>runtime.py:131</code> 起）—— 方案 A 正式出局。本轮实施剩余两件: ①顺带小修——<code>ensure_view</code> 补「消费即清」（与 <code>ensure_state</code> 同款, 同临界区内 publish 后清账）, 只取 <code>/api/groups</code> 的外部脚本不再让欠账恒挂（前端 grep 复核: UI 只用 <code>/api/groups/{key}/{action}</code> 命令端点, 不取视图）; ②方案 B——<code>flush_views</code> 门控注释与 <code>pending_ver</code> 字段声明补 SSE 消费动态口径（主路径等效失效 / 保护对象只剩轮询兜底 / 「省 50%」系主循环单列口径）。方案 C 降级不做。守阵: 新增 <code>test_ensure_view_clears_pending_ver</code>（含收口评审 nit 补强: 脏时 <code>ensure_view</code> 自身触发发布再清账的同临界区顺序分支）。验证: 定向 pytest 与全量测试全绿（见 kb.baseline）; 收口评审 0 blocker。</li>
     </ul>
-    <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写“实际修法 / 验证方式 / 测试数字”；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <h3>修复后补充（2026-11-05）</h3>
+    <p><b>实际修法</b>（与 §05 建议的对照）: ①顺带小修照做——<code>ensure_view</code>（现 <code>webui/runtime_views.py</code>）持锁内无条件 <code>pending_ver = None</code>, 与 <code>ensure_state</code> 的「消费即清」同构; ②方案 B 照做（范围按复验报告 §04 扩到 SSE 语义）——<code>flush_views</code> 门控注释与 <code>pending_ver</code> 字段声明补齐「SSE 主路径门控等效失效 / 保护对象只剩轮询兜底路径 / 重建总次数由消费率决定 / 历史提交「省 50%」是主循环单列口径」; ③方案 A 未做——被 plan 26-10-07-0414 P-03 S10 裁决否决（增量落地后跳拍成本已降为一次键集追加, 门控保留无害且保守）; ④方案 C 未做——SSE 世界请求侧重建频次趋近于零, 失去意义。改道原因: 门控去留在 10-07 复验后由增量同步计划正式拍板, 本件不再另行决策。</p>
+    <p><b>验证方式</b>: 新增守阵 <code>tests/test_qbmanager_query.py::test_ensure_view_clears_pending_ver</code>（发布登记欠账 → <code>/api/groups</code> 消费清账且不顺带重建 → 门控重开主循环可重建; 外加脏时 <code>ensure_view</code> 自身触发发布、publish 置欠账后同临界区随即清账的顺序分支——收口评审 nit 补强）; 既有 <code>test_view_rebuild_waits_for_client_consume</code>（门控五步口径）回归通过; 定向 6 文件 129 passed, 全量测试全绿（数字见 kb.baseline, 不在此手抄）。评审: 收口评审（46 行 diff, 只读子代理）0 blocker / 1 nit（已当场修）。</p>
   </section>
 
   <footer>

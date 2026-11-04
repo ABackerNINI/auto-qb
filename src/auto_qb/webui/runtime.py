@@ -136,6 +136,10 @@ class WebUIRuntime(ViewsMixin, CommandsMixin, StreamMixin):
         # 累积进下一代不丢(R4), 跳拍轮在时间线上不留空洞; 保留无害且保守(黄金法则 2),
         # 移除只剩简化收益、没有正确性收益, 且会同时改变现有节拍行为。若实测确认纯冗余,
         # 另立独立小步移除, 届时单独拍板。
+        # 消费动态(issue 26-09-19-2122 方案 B 口径): SSE 主路径上客户端每版必拉, 本字段
+        # 恒即刻被清, 门控等效失效; 只在轮询兜底路径(SSE 断线/不支持)上起作用 —— 重建
+        # 总次数由消费率决定, 与门控无关。清账入口有二: ensure_state / ensure_view(同款
+        # 「消费即清」), /api/groups 的消费方此前不清账, 已对齐(issue 顺带小修)。
         self.pending_ver: Optional[int] = None
         # 发布锁: 四份视图 + 版本号必须**同一临界区内**发布
         self.view_lock = threading.Lock()

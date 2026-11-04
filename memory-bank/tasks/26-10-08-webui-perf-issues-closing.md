@@ -2,14 +2,14 @@
 
 **Status:** In Progress
 **Added:** 2026-10-08
-**Updated:** 2026-10-08
-**Summary:** 用户命题「最近进行了重构, 分析这三个性能相关 issues 是否已经解决」→ 只读裁定 → 用户指令「按照建议执行 1/2/3」。本轮落地三条: ①`26-10-01-2218-perf-webui-api-state-full-scan` 定案 **Done**（方向①②由增量同步计划 26-10-07-0414 兑现并有实测数字；方向③分页/按需字段未实施，转新件 `26-10-08-0411-perf-webui-api-state-pagination`）；②`26-09-21-1408-perf-webui-shows-view-full-rebuild` 定案 **Done**（补跑全量 `dev.e2e` **94 passed / 10 skipped / 0 failed**，S10 记录的 6 条存量失败已清零，三点现象复验均为已消失）；③`26-10-01-2218-perf-mainloop-max-tasks-adaptive` **未解决但已重归因 + 复测**：P2 同场景重跑稳态间隔 2.87→**2.139 s**、最大漂移 1.22→**0.801 s**（已进 `SYNC.drift_max_s ≤ 1.0` 稳态门限内），且认定原方案「给 `max_tasks_per_tick` 做自适应」指向的旋钮不承载该成本（灌入期每新种子 2 次内联请求跑在同步线 `_refresh_torrents`，不受任务线配额约束），改道为「灌入期每拍请求预算」并给出「倾向不做 / 走 Dropped」的判断 —— **状态保持 Open，等用户拍板**。
+**Updated:** 2026-11-05
+**Summary:** 用户命题「最近进行了重构, 分析这三个性能相关 issues 是否已经解决」→ 只读裁定 → 用户指令「按照建议执行 1/2/3」。本轮落地三条: ①`26-10-01-2218-perf-webui-api-state-full-scan` 定案 **Done**（方向①②由增量同步计划 26-10-07-0414 兑现并有实测数字；方向③分页/按需字段未实施，转新件 `26-10-08-0411-perf-webui-api-state-pagination`）；②`26-09-21-1408-perf-webui-shows-view-full-rebuild` 定案 **Done**（补跑全量 `dev.e2e` **94 passed / 10 skipped / 0 failed**，S10 记录的 6 条存量失败已清零，三点现象复验均为已消失）；③`26-10-01-2218-perf-mainloop-max-tasks-adaptive` **未解决但已重归因 + 复测**：P2 同场景重跑稳态间隔 2.87→**2.139 s**、最大漂移 1.22→**0.801 s**（已进 `SYNC.drift_max_s ≤ 1.0` 稳态门限内），且认定原方案「给 `max_tasks_per_tick` 做自适应」指向的旋钮不承载该成本（灌入期每新种子 2 次内联请求跑在同步线 `_refresh_torrents`，不受任务线配额约束），改道为「灌入期每拍请求预算」并给出「倾向不做 / 走 Dropped」的判断 —— **状态保持 Open，等用户拍板**。后续（2026-11-05, 独立会话）: 复验时遗留的第四条 perf issue `26-09-19-2122`（节拍门控双生产者, 10-07 复验维持 Open）认领清偿 **Done**——顺带小修（`ensure_view` 消费即清）+ 方案 B（门控注释补 SSE 口径）落地, 方案 A 已被 P-03 S10 裁决否决, 守阵测试 `test_ensure_view_clears_pending_ver` 新增, 详见该 issue 修复后补充段与基线切片。
 **Topics:** webui-perf-issues-closing
 
 ## 进度日志引用点
 
 增量收益数字与 S10 归档结论的单点在 `memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md`（其 **Refs:** 已对本件反向声明）与 `memory-bank/plans/26-10-07-0414-plan-webui-delta-sync.html`，不在此复述。
-**Refs:** memory-bank/issues/26-10-01-2218-perf-webui-api-state-full-scan.html, memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html, memory-bank/issues/26-10-01-2218-perf-mainloop-max-tasks-adaptive.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/testing/baselines/26-10-08-0427-webui-perf-issues-closing.md
+**Refs:** memory-bank/issues/26-10-01-2218-perf-webui-api-state-full-scan.html, memory-bank/issues/26-09-21-1408-perf-webui-shows-view-full-rebuild.html, memory-bank/issues/26-10-01-2218-perf-mainloop-max-tasks-adaptive.html, memory-bank/issues/26-10-08-0411-perf-webui-api-state-pagination.html, memory-bank/issues/26-09-19-2122-perf-webui-poll-gate-no-net-saving.html, memory-bank/tasks/26-10-07-webui-delta-sync-feasibility.md, memory-bank/testing/baselines/26-10-08-0427-webui-perf-issues-closing.md
 
 ## 原始请求
 
@@ -64,3 +64,5 @@
 
 - 用户拍板：mainloop 件走 **Dropped**（理由：复测已进稳态门限 + 原方案无效 + 症状为一次性代价）还是维持 Open 做"灌入期每拍请求预算"。
 - api-state 残留件（分页）与 `26-10-07-1420` 组行 hash 引用式的先后拍板 —— 两者都要动响应体形状，建议一起排。
+
+- 2026-11-05 06:21 认领清偿 issue 26-09-19-2122: ensure_view 消费即清 + SSE 口径注释, issue 翻 Done(同轮重跑, 补锚档案 Updated/进度日志; 上一条 R 行与本条同动作)

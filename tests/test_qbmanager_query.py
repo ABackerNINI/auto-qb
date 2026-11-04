@@ -9,6 +9,7 @@
 - test_refresh_schema_validation_passes_once: 全字段通过置 flag 不再重复校验
 - test_export_torrents_info: export_torrents_info 写种子信息到文件(编码恒 utf-8, GBK 外字符不崩)
 - test_view_rebuild_waits_for_client_consume: 节拍对齐门控 —— 上一版没被 /api/state 取走就不生产下一版(>3000 种子时约一半 rebuild 无人消费), 且**脏标记必须保留**; 命令驱动的那一轮 force=True **必须绕过**(P0-5 要求真值几十毫秒内进快照, 不能等客户端轮询)
+- test_ensure_view_clears_pending_ver: 守阵(issue 26-09-19-2122 顺带小修)——/api/groups 的 ensure_view 与 ensure_state 同款「消费即清」, 只取 /api/groups 的外部脚本不再让欠账恒挂
 - test_tick_rebuilds_all_views_when_changed: 视图变化且 Web 活跃 -> 四份视图同一入口**同次**重建
 - test_tick_rebuilds_views_when_grouping_disabled: 分组未启用时脏标记不被吞, 视图照样重建
 - test_qbmanager_source_has_no_web_state_fields: 静态守阵(2026-09-20 解耦, W3 起名单读分诊清单)——主循环源码不得直接读写表现层旧字段(别名层已删, 写回即静默造第二份真相, 只能靠扫描抓回潮)
@@ -300,6 +301,44 @@ def test_view_rebuild_waits_for_client_consume():
             assert g.call_count == 2
 
             # 5. 已被取走 -> 门控重新打开, 再脏就能重建
+            mgr.store.view_changed = True
+            mgr.web.flush_views()
+            assert g.call_count == 3
+
+
+def test_ensure_view_clears_pending_ver():
+    """守阵(issue 26-09-19-2122 顺带小修): /api/groups 的 ensure_view 与 ensure_state
+    同款「消费即清」—— 只打 /api/groups 的外部脚本不清账会让欠账恒挂, 门控把主循环
+    侧重建全部推给请求路径(前端 UI 只走 /api/state 所以不卡, 外部脚本会卡)
+    """
+    with tempfile.TemporaryDirectory() as td:
+        mgr = make_manager(os.path.join(td, "state.json"))
+        mgr.client = FakeClient()
+        mgr.web.touch()  # Web 活跃
+        with mock.patch.object(mgr, "_refresh_torrents"), mock.patch.object(
+            mgr, "_build_group_view", return_value=[]
+        ) as g, mock.patch.object(mgr, "_build_singles_view", return_value=[]), mock.patch.object(
+            mgr, "_build_shows_view", return_value={
+                "list": [],
+                "unrecognized": []
+            }
+        ), mock.patch.object(mgr, "_build_flat_view", return_value=[]):
+            # 1. 首版发布 -> 登记欠账
+            mgr.store.view_changed = True
+            mgr.web.flush_views()
+            assert mgr.web.pending_ver == mgr.web.group_view_ver
+            # 2. /api/groups 消费(不脏, 不顺带重建) -> 欠账同样被清
+            view = mgr.web.ensure_view()
+            assert view is mgr.web.group_view
+            assert mgr.web.pending_ver is None
+            assert g.call_count == 1
+            # 2b. 脏时 ensure_view 自身触发发布: publish 置欠账 -> 同临界区内随即清,
+            # 消费方仍拿到刚发布的版本, 不留挂账(钉住 publish+clear 的同临界区顺序)
+            mgr.web.mark_dirty()
+            assert mgr.web.ensure_view() is mgr.web.group_view
+            assert mgr.web.pending_ver is None
+            assert g.call_count == 2
+            # 3. 欠账已清 -> 门控重新打开, 再脏就能在主循环重建(不再被推给请求路径)
             mgr.store.view_changed = True
             mgr.web.flush_views()
             assert g.call_count == 3

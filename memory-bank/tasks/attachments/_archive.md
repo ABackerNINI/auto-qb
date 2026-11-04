@@ -6,6 +6,7 @@
 
 ## In Progress (26)
 
+- [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）
 - [26-11-05-backend-skip-check-gates](../26-11-05-backend-skip-check-gates.md) 跳检 dedup 闸门遮蔽修复(26-10-11-2045)
 - [26-11-03-backend-relocate-same-fs-proof](../26-11-03-backend-relocate-same-fs-proof.md) 整组迁移同盘证明误拒：根因与修复计划
 - [26-11-04-test-webui-config-normalize-parity](../26-11-04-test-webui-config-normalize-parity.md) 前端 cfgNormalize* 与后端 compat 规范化跨语言对拍守卫
@@ -27,7 +28,6 @@
 - [26-10-18-webui-selection-size-summary](../26-10-18-webui-selection-size-summary.md) WEBUI 选中摘要: 种子个数 + 合计/实际占用大小
 - [26-09-28-webui-keyboard-shortcuts](../26-09-28-webui-keyboard-shortcuts.md) WEBUI 键盘快捷键(可自定义): 成熟方案调研 + 存储定案
 - [26-10-08-deps-sandbox-yapf-hang](../26-10-08-deps-sandbox-yapf-hang.md) 沙箱内 yapf 挂住/刷磁盘: 引擎超时杀整棵树 + 项目内 yapf
-- [26-10-08-webui-perf-issues-closing](../26-10-08-webui-perf-issues-closing.md) 三条 perf issue 定案 / 重归因（含 e2e 与仿真复测）
 - [26-10-02-config-eol-unify-lf](../26-10-02-config-eol-unify-lf.md) 行尾统一 LF(仓库设防 + 全局 input)
 - [26-10-02-memory-bank-issue-clearance-roadmap](../26-10-02-memory-bank-issue-clearance-roadmap.md) Issue 全量清偿路线图(滚动执行)
 - [26-10-01-backend-transmission-compat](../26-10-01-backend-transmission-compat.md) 兼容 Transmission 可行性分析

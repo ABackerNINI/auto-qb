@@ -281,6 +281,10 @@ class ViewsMixin:
         # 「上一版有没有人取走」门控(P-03 S10 裁决: 保留, 全口径见 pending_ver 字段声明):
         # 服务端节拍与客户端节拍各自独立定档, 大库下服务端生产的中间版本可能无人消费。
         # 让"生产"等一等"消费" —— 增量下跳拍的成本已降为一次键集追加(R4), 保留无害。
+        # 消费动态实测口径(issue 26-09-19-2122): SSE 主路径上客户端每版必拉(ver 推送后
+        # 去抖即取), 欠账恒即刻清 —— 门控在主路径上等效失效, 重建次数由消费率决定;
+        # 保护对象只剩轮询兜底路径(SSE 断线/不支持时退回定档轮询, 节拍错配动态原样回归)。
+        # 历史提交的「省 50%」是主循环单列口径, 总重建次数并未下降。
         unconsumed = self.pending_ver is not None
         if self.group_view_dirty and web_active and (force or not unconsumed):
             self.rebuild_views()
@@ -590,6 +594,11 @@ class ViewsMixin:
         with self.view_lock:
             if self.group_view_dirty:
                 self._publish_locked()
+            # 本请求观察到了当前版本 ⇒ 已被消费, 允许主循环生产下一版 —— 与 ensure_state
+            # 同款「消费即清」(issue 26-09-19-2122 顺带小修): 此前只打 /api/groups 的客户端
+            # 不清账, 欠账恒挂, 门控会把主循环侧重建全部推给请求路径。前端 UI 只走
+            # /api/state 所以不卡, 影响面限只取 /api/groups 的外部脚本。
+            self.pending_ver = None
             return self.group_view
 
     def ensure_state(self, rid: Optional[int], view: Optional[str] = None, delta: bool = False) -> dict:
