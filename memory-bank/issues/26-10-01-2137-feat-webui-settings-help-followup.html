@@ -8,7 +8,7 @@
 <meta name="issue-type" content="feat">
 <meta name="doc-topic" content="webui-settings-help">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色">
 <meta name="issue-summary" content="「?」说明全面改写(Done)后的遗漏: 站点设置「删除标签格式」、自动化「彻底删除标签」等; 且「?」按钮边框与发光颜色应随选项色(危险项红等)">
 <title>设置页「?」说明遗漏项补齐 + 「?」按钮边框/发光色随选项语义色 · feat · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2137-feat-webui-settings-help-followup</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:37</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">feat</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -152,13 +152,14 @@
   <section id="s7">
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
+      <li>2026-11-05 07:20 — 复验后清偿回写，状态 <strong>Done</strong>：两项均已在其他提交补齐（语调色 <code>eb575956</code>；说明覆盖 <code>1371bdbc</code>），本件未建认领链、无需新修码，故直接回写 Done（详见上方「复验」「修复后补充」）</li>
       <li>2026-10-01 21:37 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
     </ul>
     <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。TODO 原行标 <code>[-]</code> 正在做，但本 issue 未被任何计划认领，状态保持 Open。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p><strong>复验：2026-11-05 07:20 已消失</strong> —— 两项诉求均已在前置提交补齐，本件无需新修码。①「?」按钮语调色：字段级「?」（<code>tpl/xtpl.html:186</code>）经 <code>hubToneOf</code>（config_hub_tracker.js:134，schema <code>tone</code> 优先）挂类，<code>.hb-ask.danger/.important</code> 红描边+发光已落地（console_hub_layout.css:255-258，<code>--tone-line/--glow</code> 派生单点 console_hub.css:76 含 <code>.hb-ask</code>）；②说明覆盖：两键 schema 现均有完整 <code>help</code>+<code>risk</code>+<code>tone="danger"</code>，「?」浮窗经 <code>hubHelpOf</code> 的 schema help 回退完整可显；全量扫 schema（GROUPS + rules/trackers/hr 各字段表）缺 help 字段数为 0。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法（改道：未按建议修法新开工）</strong> —— 两半边分别由其他提交在入池前后落地，本件只做清偿核对回写：①语调色半边由 <code>eb575956</code>（「设置页『?』按钮语调色对齐选项」，2026-09-28，早于本件入池）落地；②说明覆盖半边由 <code>1371bdbc</code>（W5-RFB-02 schema 文案用户化 84 处 help/risk）给 <code>remove_tags</code>（删除标签格式）与 <code>delete_tags</code>（彻底删除标签）补全，路线图 26-10-01-1758 记的「仍无 HUB_HELP 富文案条目」不构成覆盖缺口——富文案是增强层，schema help 回退即完整说明（与其他无富文案字段同机制）。<strong>验证方式</strong>：静态核验（schema 全量扫描 0 缺口 + 模板挂类链路 + CSS 语调派生单点核对），无代码变更故无测试数字。</p>
   </section>
 
   <footer>
