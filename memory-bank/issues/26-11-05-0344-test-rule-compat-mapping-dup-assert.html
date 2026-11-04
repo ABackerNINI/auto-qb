@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="split-inrange-review">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-05-test-split-inrange-review.md">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载">
 <meta name="issue-summary" content="test_normalize_idempotent :111/:113 同一断言出现两次, 第二条死断言; 注释宣称「不新建 actions 列表项」未被检验">
 <title>test_rule_compat_mapping 相邻逐字重复断言, 注释语义无断言承载 · test · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0344-test-rule-compat-mapping-dup-assert</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 03:44</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -90,12 +90,14 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>删除重复行；若要兑现注释语义，补 <code>is</code> 身份断言（或 actions 列表对象数目断言）。</p>
+    <p><strong>实际修法（2026-11-05，按建议执行）</strong>：删重复断言；相邻两次断言合并为一次 <code>renorm == once</code> 值断言，并补两条 <code>is</code> 身份断言（<code>renorm["actions"][0/1] is once["actions"][0/1]</code>）兑现注释语义 —— 依据 <code>normalize_action_entry</code>（<code>src/auto_qb/config/compat.py</code>，grep <code>def normalize_action_entry</code>）对已规范形（含 "type" + 完整 on_error）原对象 <code>return entry</code>，即列表项身份复用、不新建。<strong>验证</strong>：<code>commands run test.quick</code> 全量 5339 passed, 10 skipped。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 03:44 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 用户指派认领并修复：复验现象仍在，删重复断言 + 补 <code>is</code> 身份断言兑现注释语义，状态 <strong>Done</strong>（验证：test.quick 全量 5339 passed, 10 skipped）</li>
     </ul>
   </section>
 

@@ -108,9 +108,11 @@ def test_normalize_idempotent():
     }
     once = normalize_legacy_rule(legacy)
     assert once["conditions"] == {"all": [{"size": ">=1MiB"}, {"path": ["/a"]}]}, "扁平条件列表包隐式 all(W3-A)"
-    assert normalize_legacy_rule(once) == once
-    # 已规范形(含完整 on_error): 原样返回(同一内容), 且不新建 actions 列表项
-    assert normalize_legacy_rule(once) == once
+    # 已规范形(含完整 on_error): 原样返回(同一内容), 且不新建 actions 列表项(身份复用)
+    renorm = normalize_legacy_rule(once)
+    assert renorm == once
+    assert renorm["actions"][0] is once["actions"][0]
+    assert renorm["actions"][1] is once["actions"][1]
     # W2-B: 缺 on_error 的规范形在第一次 normalize 即补齐缺省, 其后收敛稳定(幂等不破坏)
     bare = {"actions": [{"type": "add_tags", "params": ["X"]}]}
     filled = normalize_legacy_rule(bare)
