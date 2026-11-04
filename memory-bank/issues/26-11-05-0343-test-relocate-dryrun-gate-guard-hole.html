@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="split-inrange-review">
 <meta name="doc-refs" content="memory-bank/tasks/26-11-05-test-split-inrange-review.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate dry-run 闸守阵空洞: 删掉闸 test_on_task_line_holds_in_dry_run 仍全绿">
 <meta name="issue-summary" content="夹具未构造崩溃窗(move_issued=False), 无闸反事实下恢复路径走只记日志分支, 删 relocate_lifecycle.py:240 的闸两段断言仍绿; 守阵失效时不报警">
 <title>relocate dry-run 闸守阵空洞: 删掉闸 test_on_task_line_holds_in_dry_run 仍全绿 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修）· test</div>
     <h1>relocate dry-run 闸守阵空洞: 删掉闸 test_on_task_line_holds_in_dry_run 仍全绿</h1>
     <p class="lede">夹具未构造崩溃窗(move_issued=False), 无闸反事实下恢复路径走只记日志分支, 删 relocate_lifecycle.py:240 的闸两段断言仍绿; 守阵失效时不报警</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0343-test-relocate-dryrun-gate-guard-hole</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 03:43</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">tests</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -169,11 +169,13 @@ tests/test_relocate_exec_run.py:616 test_on_task_line_holds_in_dry_run 夹具:
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 03:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 04:40 — 认领并修复（用户指派）：夹具补崩溃窗形态（move_issued=False），无闸红验当场红、有闸全量绿，详见上方「修复后补充」，状态 <strong>Done</strong></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验 2026-11-05 04:34：成立。真删闸跑测（<code>if False and self._dry_run()</code>），改造前夹具在无闸下确实仍绿（守阵空洞坐实）；补崩溃窗形态后无闸当场红——补发 setLocation <code>assert 2 == 1</code> 炸，日志命中「恢复发现搬迁指令未发出…补发 setLocation 一次」。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p>实际修法：照建议修法走——<code>test_on_task_line_holds_in_dry_run</code> 末尾新增 mod3 段：先 <code>mgr.store.own_writes.clear()</code>（relocate_execute 的自有写视为已回流；照 <code>test_restart_reissues_setlocation_when_never_issued</code> 的构造，漏了它 <code>own_write_pending</code> 回流闸会吞掉补发），再 <code>mod._state_jobs()[job_id]["move_issued"] = False</code> 构造崩溃窗，新进程 <code>mod3</code>（<code>_dry=True</code>）恢复后跑两个 tick，断言 setLocation 计数不变 + 相位停留 MOVING。表头 docstring 同步标注守阵含崩溃窗形态。</p>
+    <p>验证方式：真删闸（<code>if False and self._dry_run()</code>）跑目标用例必须红（实测红：<code>assert 2 == 1</code> 补发炸）→ 恢复闸跑同用例绿 → 全量终验。测试数字（2026-11-05 实测）：目标用例 test.one 1 passed；全量 <code>test.full</code> 5339 passed, 10 skipped, 覆盖率 99%（148.4s）。</p>
   </section>
 
   <footer>

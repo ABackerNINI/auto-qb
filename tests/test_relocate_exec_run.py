@@ -36,7 +36,7 @@
 - test_exec_unknown_stage_falls_back_to_arm
 - test_restart_recovers_to_moved_when_data_already_at_dst: 已下发且数据已在 dst ⇒ 直达 moved
 ### 收口 / 退避守卫(issues 26-10-30-0616 批A: resume_hashes 失败路径 / dry_run 短路 / 重试退避)
-- test_on_task_line_holds_in_dry_run: dry-run 相位机不推进(含 start() 恢复账本这条不经入口闸的路径)
+- test_on_task_line_holds_in_dry_run: dry-run 相位机不推进(含 start() 恢复账本这条不经入口闸的路径; 守阵含崩溃窗形态 move_issued=False —— 无闸必真写)
 - test_build_links_failure_bumps_attempts: 建链失败 ⇒ attempts +1(对账侧重建配额消费它)
 ### W8(R32) S5 补测(变异审计真洞守阵, 分类: tmp-analysis/w8-r32/classify-mod-{a,b}.md)
   + 同卷硬链接兜底(same_volume 实参丢失 ⇒ capability_ok 翻假)
@@ -598,7 +598,9 @@ def test_entry_rule_move_to_confirm_and_empty_reasons(tmp_path, monkeypatch):
 
     act = MoveToAction({"path": dst})
     monkeypatch.setattr(
-        mod, "relocate_execute", lambda hashes, path, confirm=False, origin="rule": [{"cls": "confirm"}]
+        mod, "relocate_execute", lambda hashes, path, confirm=False, origin="rule": [{
+            "cls": "confirm"
+        }]
     )
     r = act.execute(_Ctx())
     assert r.is_skipped and "显式确认" in r.message, r
@@ -619,6 +621,10 @@ def test_on_task_line_holds_in_dry_run(tmp_path, monkeypatch):
     相位机每一步都是真写(setLocation / 建删链接 / 拉 guardian / 恢复运行态), 而
     relocate_execute 那道闸只挡新建 job; 上一轮非终态 job 由 start() 从 state 恢复,
     携它以 --dry-run 启动必须同样零动作。
+
+    守阵必须覆盖崩溃窗形态(move_issued=False, 落账与下发之间中断): 无闸时恢复 tick
+    必补发 setLocation(issue 26-11-05-0343 —— 旧夹具只有已下发形态, 恢复路径走「只记
+    日志」尾分支零写, 删掉闸两段断言仍绿, 守阵失效不报警)。
     """
     pin_disk_usage(monkeypatch)
     mgr, client, src, dst, content, files = relocate_env(tmp_path, state="uploading")
@@ -639,6 +645,19 @@ def test_on_task_line_holds_in_dry_run(tmp_path, monkeypatch):
     assert mod2._load_jobs() >= 1, "state 里应有上一轮留下的非终态 job"
     mod2.on_task_line()
     assert len([c for c in client.calls if c[0] == "set_location"]) == before, "恢复账本路径同样不得真写"
+
+    # 崩溃窗形态(move_issued=False): 无闸时 _recover 判 RECOVER_STALLED 且未下发过 =>
+    # 置 rt["issue"]=True, 第二个 tick 经 _step_move 真补发 setLocation —— 闸必须挡住它
+    mgr.store.own_writes.clear()  # relocate_execute 的自有写已回流(参照 misc 补发用例的构造)
+    mod._state_jobs()[job_id]["move_issued"] = False  # 模拟「落账与下发之间」中断
+    mod3 = RelocateModule()  # 新进程: 恢复崩溃窗形态的 job
+    mod3._ctx = mod._ctx
+    mod3._dry = True
+    assert mod3._load_jobs() >= 1
+    mod3.on_task_line()  # 第一 tick: _recover 定夺现场(崩溃窗形态 => RECOVER_STALLED)
+    mod3.on_task_line()  # 第二 tick: 无闸必在此真补发
+    assert len([c for c in client.calls if c[0] == "set_location"]) == before, "崩溃窗形态 dry-run 同样不得补发 setLocation"
+    assert mod3.get_job(job_id).phase == ru.PHASE_MOVING, "崩溃窗形态相位机不得推进"
 
 
 def test_build_links_failure_bumps_attempts(tmp_path, monkeypatch):
@@ -1290,6 +1309,8 @@ def test_exec_single_member_no_qb_side_call(tmp_path, monkeypatch):
     job = _only_job(mod)
     assert job["phase"] == ru.PHASE_DONE, job
     assert calls == [], f"单成员组不得做 qB 侧自检: {calls}"
+
+
 # ---------- 覆盖率第三轮 T2b 补测(26-11-05): 组成员与登记表脱节 ----------
 
 
