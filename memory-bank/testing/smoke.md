@@ -28,10 +28,11 @@
 - `commands run dev.e2e` —— 跑 `e2e/` **全量集**(@playwright/test, chromium, prism/atlas 双皮肤循环)。
   双皮肤是**冒烟运行时预算**口径(`harness.mjs` 的 `SKINS`), 不是能力限制(桩服务静态挂载通用, 四皮肤都能访问);
   跨皮肤**只读测量**类断言(如 `views.spec` 的做种时间格行高守阵)走 `SKINS_ALL`(四皮肤, 数据驱动同一份断言体)。
-  spec 按旧断言块拆分: `views.spec`(渲染健康/视图/筛选器/轮询分档) ·
+  spec 分工: `views.spec`(渲染健康/视图/筛选器/轮询分档) ·
   `multiselect-shows.spec`(追剧 + 多选右键, 存量 flaky 所在块) · `optimistic.spec`(乐观 UI 全家) ·
   `menus.spec`(菜单族 + W5-off fail-closed) · `perf.spec`(性能埋点, 阈值逐字保留) ·
-  `hr-history.spec`(HR 表③) · `column-prefs.spec`(列设置守阵 ×5)。
+  `hr-history.spec`(HR 表③) · `column-prefs.spec`(列设置守阵 ×5) ·
+  `missing-sites-import.spec`(issue 26-11-04-2312 驱动的补齐: 设置→站点「导入缺失站点」三分支 + 零 PUT 落盘)。
 - **「每次改前端」门禁**(2026-10-06 口径平移, 取代旧"跑冒烟脚本 ok+error 两模式"):
   **`npm run test:e2e:fast`(`--grep @fast`)绿**; 触碰乐观 UI / 菜单 / 列设置时**加跑对应 spec 文件**
   (dev.e2e 支持传 spec 路径过滤); 全量矩阵轮(ok|error|hang × skip-check on|off ×

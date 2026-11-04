@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-04-2312">
 <meta name="issue-type" content="test">
 <meta name="doc-topic" content="webui-sites-import">
-<meta name="doc-refs" content="memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html">
+<meta name="doc-refs" content="memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html, memory-bank/testing/baselines/26-11-05-0122-missing-sites-import-e2e.md">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="缺失站点导入三路径 GUI 冒烟不可复跑">
 <meta name="issue-summary" content="三路径验收靠一次性 harness 脚本+gitignore 的 .work 证据, 仓库内无可重跑回归; 需补 e2e/浏览器用例">
 <title>缺失站点导入三路径 GUI 冒烟不可复跑 · test · 计划外问题</title>
@@ -95,14 +95,14 @@
   </nav>
 
   <header class="cover">
-    <div class="kicker">计划外问题（未修）· test</div>
+    <div class="kicker">计划外问题（已修复）· test</div>
     <h1>缺失站点导入三路径 GUI 冒烟不可复跑</h1>
     <p class="lede">三路径验收靠一次性 harness 脚本+gitignore 的 .work 证据, 仓库内无可重跑回归; 需补 e2e/浏览器用例</p>
     <div class="meta-row">
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-2312-test-webui-sites-import-gui-smoke</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 23:12</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -167,11 +167,24 @@ git check-ignore tests-real/.work/l0-missing-import/result.json</code></pre>
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 23:12 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 00:49 — 用户指派认领，状态 <strong>In Progress</strong>（本轮修复三路径 GUI 回归用例）。</li>
+      <li>2026-11-05 01:22 — 修复完成，状态 <strong>Done</strong>（新增 e2e 用例 8 条全绿 + 红绿双验；全量 5205 passed / 10 skipped；产品代码零改动）。</li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 00:49 仍复现 —— 仓库内无 <code>e2e/</code> 缺失站点导入用例，唯一守阵仍是
+      <code>tests/test_web_backend_misc_sites.py::test_frontend_sites_import_wiring</code> 的静态子串断言。</p>
+    <p>修复后复验：2026-11-05 01:22 已消失 —— <code>e2e/missing-sites-import.spec.mjs</code> 提供可复跑行为回归
+      （<code>commands run dev.e2e -- e2e/missing-sites-import.spec.mjs --retries=0</code> 实测 8 passed）。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>实际修法</strong>：新增 <code>e2e/missing-sites-import.spec.mjs</code>（约 200 行，prism/atlas 双皮肤各 4 条），
+      用 <code>page.route('**/api/sites/missing')</code> 注入三形态载荷：空集 / 全单域名组 / 多域名组 + 单域名组。
+      断言分支选型（② 两钮 vs ③ 三钮）、按钮文案与类（拆分钮 <code>ghost</code> 非 <code>danger-solid</code>）、
+      默认焦点、Enter 默认合并、拆分逐域名、填入后的 pill 集合，以及每条全程零 <code>PUT /api/config</code>
+      （等导入按钮从 busy 复位再取请求快照）。</p>
+    <p><strong>验证方式</strong>：红绿双验 —— 临时把分支强制走三钮 / 去掉 ghost 样式 / 去掉默认焦点，专测 6 条按预期变红；
+      还原后临时不写 <code>trackers</code>，再 6 条按预期变红；产品代码复原（<code>git diff src</code> 为空）后 8 passed 复绿。
+      静态断言 <code>test_frontend_sites_import_wiring</code> 保留为低成本第一层，spec 头部写明旧断言名→新用例映射。</p>
+    <p><strong>测试数字</strong>：e2e 8 passed（21.9s）；<code>test.full</code> 5205 passed / 10 skipped（155.91s，TOTAL 24444 / 227 miss / 99%，见 kb.baseline 最新切片）。</p>
   </section>
 
   <footer>
