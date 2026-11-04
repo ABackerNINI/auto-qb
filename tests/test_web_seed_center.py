@@ -25,6 +25,8 @@
 - test_cmd_timing_is_logged_without_browser
 - test_receipt_sent_immediately_truth_pushed_later
 - test_truth_hold_matches_truth_push_cap
+### T2a2 覆盖率第三轮: 静态挂载防御分支
+- test_mount_static_ui_missing_static_dir_registers_no_routes: static 目录不存在时 mount_static_ui 零注册不炸(不注册根重定向与 /newui, 防御分支直驱)
 """
 import logging
 import os
@@ -977,3 +979,20 @@ def test_torrent_detail_trackers_route_mask_canary():
     # 钉在 trackers 端点的取数 lambda 上(不是仅在文件里 import 一下): 缓存写入必须已 mask
     assert re.search(r"_cached_read\(\s*\n?\s*f?\"trackers:\{hash\}\".*mask_tracker_entry", src, re.S), \
         "trackers 端点的 _cached_read 取数 lambda 里没有 mask_tracker_entry —— mask 必须先于缓存写入"
+
+
+def test_mount_static_ui_missing_static_dir_registers_no_routes(tmp_path, monkeypatch):
+    """T2a2 清偿: 静态目录不存在(打包残缺/目录被删)时 mount_static_ui 零注册不炸
+
+    正常装配恒有 static/(防御分支在生产跑不到): __file__ 指向无 static/ 子目录的临时根,
+    分支 false 路径必须整段跳过 —— 不注册根重定向与 /newui, 也不抛异常。
+    """
+    from fastapi import FastAPI
+
+    from auto_qb.webui.server import static_ui as static_ui_mod
+
+    app = FastAPI()
+    monkeypatch.setattr(static_ui_mod, "__file__", str(tmp_path / "server" / "static_ui.py"))
+    static_ui_mod.mount_static_ui(app)
+    paths = [getattr(r, "path", "") for r in app.routes]
+    assert "/" not in paths and "/newui" not in paths, "static 目录缺失: 不应注册任何 UI 路由"

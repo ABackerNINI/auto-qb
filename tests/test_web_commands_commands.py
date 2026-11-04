@@ -2,7 +2,7 @@
 
 ## 测试计划(每个测试函数一条)
 - test_virtual_tracker_prefix_single_point: 守阵(issue webui-virtual-tracker-prefix-dup) 虚拟 tracker 前缀集只认 infra 单点 —— commands.py 零字面量 + 改单点即改三处过滤(猴补空元组后 DHT 行进基线)
-- test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401
+- test_api_torrent_write_endpoints_enqueue: 二轮种子写端点(15个) POST 转发 cmd/参数入队 + 无密钥 401; location 的 confirm 提供才透传(单发 /api/torrents/{hash}/location 与 bulk location 动作两处, T2a2)
 ### T2a 覆盖率第三轮: 转移命令回执弧
 - test_transfer_cmd_receipt_paths: 转移命令回执弧直驱 —— run 目标缺失/空批次成功两路无 cmd_id 只落日志不写回执; test 目标缺失(cmd_id 在场)写 error / 适配器异常无 cmd_id 落 WARNING / tr stub 按不可用处理 / 正常探测成功落 INFO
 """
@@ -64,7 +64,8 @@ def test_virtual_tracker_prefix_single_point(monkeypatch):
 
 
 def test_api_torrent_write_endpoints_enqueue(web_env):
-    """二轮种子写端点(15个) POST 转发: cmd 与参数正确入队; 无密钥 401(鉴权沿用 /api/* 依赖)"""
+    """二轮种子写端点(15个) POST 转发: cmd 与参数正确入队; 无密钥 401(鉴权沿用 /api/* 依赖)。
+    T2a2 补: location 的 confirm 提供才透传(单发与 bulk 两处, 整组迁移的目录别名确认)"""
     mgr, client = web_env
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
     cases = [
@@ -117,6 +118,32 @@ def test_api_torrent_write_endpoints_enqueue(web_env):
             "hash": "HA",
             "location": "R:/X"
         }),
+        # T2a2: location 的 confirm 提供才透传(整组迁移的目录别名确认)
+        (
+            "/api/torrents/HA/location", {
+                "location": "R:/X",
+                "confirm": True
+            }, "set_torrent_location", {
+                "hash": "HA",
+                "location": "R:/X",
+                "confirm": True
+            }
+        ),
+        # T2a2: bulk location 动作同样透传 confirm(提供才透传, 缺省载荷与历史一致)
+        (
+            "/api/torrents/bulk", {
+                "hashes": ["HA"],
+                "action": "location",
+                "location": "R:/X",
+                "confirm": True
+            }, "bulk_torrents", {
+                "hashes": ["HA"],
+                "action": "location",
+                "delete_files": False,
+                "location": "R:/X",
+                "confirm": True
+            }
+        ),
         ("/api/torrents/HA/rename", {
             "name": "New"
         }, "rename_torrent", {

@@ -17,7 +17,7 @@ pitfalls/testing/web-auth-test-forms.md: 缺省 TestClient 形态非 loopback, �
   回执 ok, truth.results 逐条 {hash, 状态(中文三态), 原因} 与 orchestrator 分类一致
   (to_receipt 直出), summary 三态计数; 单种子失败不中断批次(3 条全结);
   keep_source 透传 run_batch; 目标未启用/在投递-执行之间消失 -> error 回执零执行
-- test_transfer_test_route_and_drain: test 路由目标不存在 400 不入队; 未启用目标可测
+- test_transfer_test_route_and_drain: test 路由空/缺失 target_id 400 不入队(T2a2); 目标不存在 400 不入队; 未启用目标可测
   (只要求存在, 设置页先行测连通); drain 成功 -> ok truth={info}; 适配器抛
   TransferAdapterError -> error 回执回显文案
 - test_transfer_test_tr_stub: tr 目标走真 stub(test_connection 恒返回「暂未实现」文案,
@@ -252,6 +252,10 @@ def test_transfer_test_route_and_drain(web_env, tmp_path, monkeypatch):
     # 目标不存在: 400 零入队
     resp = client.post("/api/transfer/test", headers=auth, json={"target_id": "不存在"})
     assert resp.status_code == 400 and "不存在" in resp.json()["detail"], resp.text
+    assert mgr.web.commands.empty()
+    # T2a2: 空 target_id 路由层 400(先于目标查表, 不入队)
+    resp = client.post("/api/transfer/test", headers=auth, json={})
+    assert resp.status_code == 400 and "未提供 target_id" in resp.json()["detail"], resp.text
     assert mgr.web.commands.empty()
     # 未启用目标可测(设置页对未启用目标先行测连通): 200 入队, 载荷只有 target_id
     resp = client.post("/api/transfer/test", headers=auth, json={"target_id": "目标B"})

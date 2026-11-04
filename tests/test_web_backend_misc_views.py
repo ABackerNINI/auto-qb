@@ -13,7 +13,7 @@
 - test_refresh_tracker_health_budget_and_ttl: tracker 健康取数限流(单轮预算条数/TTL 内不重取/过期重取)
 - test_refresh_tracker_health_clears_when_recovered: 状态恢复后清空原因缓存并置脏(不留旧原因)
 - test_refresh_tracker_health_skips_when_disconnected: qB 断开时跳过(不发请求/不清空现值)
-- test_tracker_health_debounce_state_machine: 去抖状态机(计划 26-10-19-2007 S1) 首次报错只置疑似不亮 / 满窗复查仍报错才亮 / 恢复即灭
+- test_tracker_health_debounce_state_machine: 去抖状态机(计划 26-10-19-2007 S1) 首次报错只置疑似不亮 / 满窗复查仍报错才亮 / 已亮重复观测同报错无变化不置脏(T2a2) / 恢复即灭
 - test_tracker_health_ignores_fetch_failure: 取数失败(qB 异常)按"取不到"处理 —— 不改现值, 只推进 TTL 时间戳
 - test_tracker_health_skips_paused: 暂停态不扫描(不发请求), 健康态保留不灭
 - test_tracker_health_error_state_reason_ttl_unchanged: error 态展示原因仍按 ERROR_REASON_TTL 重取(与改造前一致)
@@ -526,6 +526,13 @@ def test_tracker_health_debounce_state_machine(tmp_path):
     assert t.tracker_health_msg == "连接被拒", "满窗复查仍报错 -> 确认亮"
     view = mgr._member_view(t)
     assert view["site_alert"] == "tracker_error" and view["site_alert_msg"] == "连接被拒"
+
+    # 已亮重复观测同报错(T2a2): 原因未变 -> 不重复登记变化, 不置脏
+    mgr.web.group_view_dirty = False
+    t.tracker_health_ts = time.time() - 61  # 已亮 -> 60s 复查到期
+    mgr.refresh_tracker_health()
+    assert t.tracker_health_msg == "连接被拒", "原因未变: 原值保留"
+    assert mgr.web.group_view_dirty is False, "无变化不置脏"
 
     # 恢复即灭: 站点恢复(无报错条目) -> 清空
     client.trackers_map["HA"] = [{"url": "https://tracker.hhanclub.net/announce.php", "status": 2, "msg": "Working"}]

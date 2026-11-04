@@ -20,6 +20,9 @@
 ### T2a 覆盖率第三轮: HR 基线竞态弧与兑底登记不重投
 - test_publish_hr_baseline_holds_when_revision_moves_mid_build: 局部重建期间 HR revision 被并发发布抬高(确定性收束替身) -> 基线保留旧值不前移, 下一拍 flush 波次判定补一次 full, 前移后不循环置脏
 - test_show_partial_pending_without_index_coverage_does_not_repost_command: 局部剧重建兑底登记(季包索引未覆盖 -> shows_pending); 索引已建成且无脏 -> 不重复投递 build_search_index
+### T2a2 覆盖率第三轮: 剧视图余下小件
+- test_agg_show_node_hr_counts_and_show_row_empty_title: _agg_show_node 的 HR 计数分支(触发计数/未达标 pending 两弧)与 _build_show_row 空标题成员分支(titles 不累加, 展示名回落剧键)直驱
+- test_build_shows_view_row_none_guard_and_pending_no_repost: _build_shows_view 行剔除防御弧(单剧可调用回 None -> 行不进视图, 确定性替身直驱)与全量路径 pending 兑底接线(索引已建成且无脏 -> 只登记 shows_pending 不重投 build_search_index)
 """
 
 import inspect
@@ -490,7 +493,6 @@ def test_s9b_show_unrecognized_downgrade_full():
 class _MidBuildWaveHr:
     """确定性收束的跨线程竞态替身: HR 线程在 flush 波次判定(第 1 次读)之后、基线前移点
     (第 3 次读)之前发布新判定 —— revision 前 2 次读回旧值 1, 之后恒回新值 2(不起真线程)"""
-
     def __init__(self):
         self._reads = 0
 
@@ -554,4 +556,104 @@ def test_show_partial_pending_without_index_coverage_does_not_repost_command():
     key_hp = tvshows.parse_release("Show.Pack.S01.720p.x264-GRP").key
     assert entry["full"] is False and entry["upsert"]["show"] == {key_hp}
     assert rt.shows_pending is True, "可兑底而索引未覆盖: 登记待归位(归位拍由索引推进兜住)"
+    assert rt.commands.qsize() == 0, "索引非空且无脏: 不重复投递 build_search_index"
+
+
+def test_agg_show_node_hr_counts_and_show_row_empty_title():
+    """T2a2 清偿: _agg_show_node 的 HR 计数分支与 _build_show_row 空标题成员分支(直驱)
+
+    - HR 计数: 触发成员逐个计入 hr_triggered, 其中未达标成员才计入 hr_pending(达标不重复计);
+    - 空标题成员: parsed.title 为空串是单剧可调用的合法输入(名称无剧名形态, 分类由调用方
+      完成传入) —— titles 不累加, 展示名回落剧键, 集行照常聚合不炸。
+    """
+    from helpers import _hr_rule
+
+    store = make_store()
+    conf = FakeTracker("HHan", hr=_hr_rule(required_share_ratio=2.0))
+
+    def tor(h, **kw):
+        base = dict(
+            hash=h,
+            name=f"Show.{h}.S01E05.1080p",
+            state="stalledUP",
+            tracker_conf=conf,
+            size=512**2,
+            total_size=512**2,
+            downloaded=512**2,  # dlratio 条件(默认 0.7): 下载量 >= 种子大小 -> 触发
+            progress=1.0,
+        )
+        base.update(kw)
+        return FakeTorrent(**base)
+
+    host = _ViewHost(store)
+    rec_pending = tor("HP1", seeding_time=100, ratio=0.5)  # 触发未达标
+    rec_done = tor("HD1", seeding_time=4 * 86400)  # 触发且时长达标
+    node = {
+        "members": [],
+        "kinds": [],
+        "sites": [],
+        "dlspeed": 0,
+        "upspeed": 0,
+        "uploaded": 0,
+        "size": 0,
+        "size_progress": -1.0,
+        "progress": 1.0,
+        "hr_triggered": 0,
+        "hr_pending": 0,
+        "added_on": 0,
+    }
+    host._agg_show_node(node, rec_pending)
+    host._agg_show_node(node, rec_done)
+    assert node["hr_triggered"] == 2, "两个成员都触发 HR: 计数求和"
+    assert node["hr_pending"] == 1, "只有未达标成员计入 pending(达标不重复计)"
+    assert node["members"] == ["HP1", "HD1"] and node["progress"] == 1.0, "集进度 = 最差版本(全完成为 1.0)"
+
+    # 空标题成员: titles 不累加 -> 展示名回落剧键(键面契约: name 恒非空)
+    parsed = tvshows.parse_release("S01E05.mkv")  # kind=episode, title="", 集键照常解析
+    assert parsed.title == "" and parsed.episode_key == ("ep", 5)
+    row = host._build_show_row("orphan-key", [(rec_pending, parsed)])
+    assert row is not None and row["key"] == "orphan-key"
+    assert row["name"] == "orphan-key", "无剧名成员: 展示名回落剧键"
+    assert row["member_count"] == 1 and row["episode_count"] == 1
+    assert row["seasons"][0]["episodes"][0]["hr_triggered"] == 1, "HR 计数进集行"
+
+
+def test_build_shows_view_row_none_guard_and_pending_no_repost():
+    """T2a2 清偿: _build_shows_view 的行剔除防御弧与全量路径 pending 兑底接线
+
+    ① 单剧可调用回 None(空成员集口径, S9b 旧行剔除依据) -> 该剧行不进视图不炸 ——
+       全量路径分桶成员恒非空, 防御弧用确定性替身(实例属性覆盖)直驱;
+    ② 全量路径 pending 接线: 季包索引未覆盖 -> 登记 shows_pending; 索引已建成(非 None)
+       且无脏 -> 不重复投递 build_search_index(与 S9b 局部路径同一防自激口径, 见 T2a 局部版)。
+    """
+    import queue as _queue
+
+    store = make_store("H1")
+    store.client.torrents["HP"] = FakeTorrent(hash="HP", name="Show.Pack.S02.720p.x264-GRP", state="stalledUP")
+    store.apply_sync(QbApi(store.client, store))
+    store.last_added = []
+    store.delta_fields = {}
+    store.consume_view_changed()
+    rt = _delta_runtime(store)
+    host = rt._host
+
+    # ① 防御弧: 行可调用回 None -> 行被跳过
+    host._build_show_row = lambda key, members: None  # 确定性替身: 只考察视图层的剔除口径
+    view = host._build_shows_view()
+    assert view["list"] == [] and view["unrecognized"] == [], "None 行不入视图"
+    assert rt.shows_pending is True, "季包索引未覆盖: pending 登记与行剔除互不影响"
+    del host._build_show_row  # 还原类方法查找
+
+    # ② pending 接线: 索引已建成且无脏 -> 只登记不投递(清掉①基线代投递的建索引命令再考察)
+    while True:
+        try:
+            rt.commands.get_nowait()
+        except _queue.Empty:
+            break
+    rt.search_index = {}  # 索引已建成(非 None)但不覆盖 HP
+    rt.search_index_dirty = False
+    view = host._build_shows_view()
+    key_hp = tvshows.parse_release("Show.Pack.S02.720p.x264-GRP").key
+    assert {row["key"] for row in view["list"]} == {"show h1", key_hp}, "还原后单剧可调用正常产行"
+    assert rt.shows_pending is True, "可兑底而索引未覆盖: 登记待归位"
     assert rt.commands.qsize() == 0, "索引非空且无脏: 不重复投递 build_search_index"

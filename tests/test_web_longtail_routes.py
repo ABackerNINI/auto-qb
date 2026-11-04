@@ -5,13 +5,14 @@
 - test_api_torrent_write_endpoints_extra_enqueue: 写端点补遗(pause/resume/delete/skip-check/limits 部分方向)
 - test_api_numeric_params_malformed_string_400: 数值型请求体字段畸形值(字符串)回 400 而不是 500(issue 26-10-30-0622, 五处裸 int()/float() 收口 common.int_param/float_param); 拒收在路由层不入队, 合法数值照常入队
 - test_api_torrents_add_endpoint_errors_and_enqueue: 添加种子 base64 坏/空载荷 400 + 合法入队
-- test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘
+- test_api_config_put_and_preview_tree_shape: 配置树 PUT/preview 非对象 400 + preview 不落盘; 校验失败(ConfigError) 400 带文案且不落盘(T2a2)
 - test_api_expr_eval_runtime_error: 求值期失败(除零) -> ok=False 带文案与 used
 - test_api_keys_endpoint_roundtrip_and_validation: 快捷键默认表/422 校验/保存读回
 - test_api_keys_sanitize_rejects_non_dict: _sanitize 非 dict 一律 None
 - test_api_category_and_tag_empty_rejections: 分类/标签空入参 400
 - test_api_speed_mode_reads_client_with_alt_fields: 限速托管直读 qB(含 ALT 双组) + 读失败/部分成功整组回 None(DEBUG 留摘要)
 - test_api_fs_error_semantics: fs 端点错误语义化(404/501/403/400)
+- test_api_open_path_file_gone_after_probe_404: open-path 定位选中路径探针后消失 -> 404 语义化(探针/复查竞态窗口, 确定性替身直驱, T2a2)
 """
 
 import base64
@@ -203,6 +204,12 @@ def test_api_config_put_and_preview_tree_shape(web_env):
     assert resp.status_code == 200 and "yaml" in resp.json()
     before = Path(mgr.config_path).read_text(encoding="utf-8")
     assert Path(mgr.config_path).read_text(encoding="utf-8") == before, "preview 不落盘"
+    # T2a2: 校验失败(ConfigError) -> 400 带精确文案, 照样不落盘
+    bad = client.get("/api/config", headers=auth).json()["tree"]
+    bad["config"]["qbittorrent"]["port"] = "abc"  # 端口必须是整数
+    resp = client.post("/api/config/preview", json={"tree": bad}, headers=auth)
+    assert resp.status_code == 400 and resp.json()["detail"], resp.text
+    assert Path(mgr.config_path).read_text(encoding="utf-8") == before, "校验失败照样不落盘"
 
 
 def test_api_expr_eval_runtime_error(web_env):
@@ -359,3 +366,31 @@ def test_api_fs_error_semantics(web_env, tmp_path, monkeypatch):
     encoded = encode_group_key((norm(root), ("a.mkv", )))
     resp = client.post("/api/open-path", json={"kind": "group", "key": encoded}, headers=auth)
     assert resp.status_code == 501 and "复制路径" in resp.json()["detail"]
+
+
+def test_api_open_path_file_gone_after_probe_404(web_env, monkeypatch):
+    """T2a2 清偿: open-path 定位选中路径在探针后消失 -> 404 语义化(不裸 500)
+
+    _probe 以 fa.isfile(cand)=True 选中文件(select=True), 随后请求内对同一路径复查已不存在
+    —— 探针/复查两查之间文件被删的竞态窗口, 用确定性替身直驱(首次 isfile 真、其后假)。
+    """
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    class _VanishFA:
+        """首次 isfile 真(探针选中), 其后假(复查时文件已不在)"""
+        def __init__(self):
+            self.calls = 0
+
+        def isfile(self, p):
+            self.calls += 1
+            return self.calls == 1
+
+        def isdir(self, p):
+            return False
+
+    mgr.store.by_hash = {"HA": SimpleNamespace(hash="HA", save_path="R:/s", content_path="R:/s/a.mkv", root_path="")}
+    mgr.store.get = lambda h: mgr.store.by_hash.get(h)  # web_env 的 store 桩 get 恒 None, 按 hash 查表补齐
+    monkeypatch.setattr(file_access, "get_file_access", lambda: _VanishFA())
+    resp = client.post("/api/open-path", json={"kind": "torrent", "hash": "HA"}, headers=auth)
+    assert resp.status_code == 404 and "目标文件不存在" in resp.json()["detail"], resp.text

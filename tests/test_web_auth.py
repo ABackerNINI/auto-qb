@@ -257,7 +257,13 @@ def test_skip_local_verify_default_off_no_cross_site_guard(web_env):
 
 def test_auth_host_origin_parsing_helpers():
     """Host 头解析与 Origin 判定纯函数单测: 形态 / fail-closed / 端口一致性 / *.localhost 后缀"""
-    from auto_qb.webui.server.auth import (_allowed_hostnames, _host_header_parts, _hostname_allowed, _origin_allowed)
+    from auto_qb.webui.server.auth import (
+        _allowed_hostnames,
+        _host_header_parts,
+        _hostname_allowed,
+        _is_loopback_host,
+        _origin_allowed,
+    )
 
     assert _host_header_parts("127.0.0.1:8080") == ("127.0.0.1", 8080)
     assert _host_header_parts("127.0.0.1") == ("127.0.0.1", None)
@@ -287,6 +293,16 @@ def test_auth_host_origin_parsing_helpers():
     assert not _origin_allowed("http://127.0.0.1:notaport", allowed, 8080)
     assert not _origin_allowed("https://api.localhost:notaport", allowed, None)  # *.localhost 也走同一闸门
     assert not _origin_allowed("http://localhost:notaport", allowed, 8080)
+    # T2a2: loopback 判据空值保守出口(request.client 缺席 -> None, 免鉴权分支按非回环处理)
+    assert _is_loopback_host(None) is False
+    assert _is_loopback_host("") is False
+    assert _is_loopback_host("127.0.0.1") is True and _is_loopback_host("::1") is True
+    assert _is_loopback_host("nas.lan") is False
+    # T2a2: 未配置 web.host(空串/纯空白) -> 白名单只含 loopback 变体, 不混入空串键
+    empty_allowed = _allowed_hostnames("")
+    blank_allowed = _allowed_hostnames("   ")
+    assert empty_allowed == blank_allowed == frozenset({"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"})
+    assert _hostname_allowed("127.0.0.1", empty_allowed) and _hostname_allowed("api.localhost", empty_allowed)
 
 
 def _auth_request(path="/api/events", query="", host="127.0.0.1:8080", client=("127.0.0.1", 50000), method="GET"):
