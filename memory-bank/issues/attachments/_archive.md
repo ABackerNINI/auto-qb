@@ -4,9 +4,8 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (50)
 
-- [test] [test_w6_flush_fallback_once_per_round 偶发红: 并行负载下主循环只跑 1 轮](../26-11-05-0035-test-qbmanager-flush-fallback-flaky.html) — qbmanager 主循环时序敏感用例偶发只跑 1 轮, 断言两轮失败; 单跑恒绿, 判并行/时序偶发
 - [bug] [规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)](../26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html) — CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
@@ -64,8 +63,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (403)
+## Done (404)
 
+- [test] [test_w6_flush_fallback_once_per_round 偶发红: 并行负载下主循环只跑 1 轮](../26-11-05-0035-test-qbmanager-flush-fallback-flaky.html) — qbmanager 主循环时序敏感用例偶发只跑 1 轮, 断言两轮失败; 单跑恒绿, 判并行/时序偶发
 - [bug] [缺失站点扫描把逐种 tracker 失败吞成空集, 批量失败时误报无缺失](../26-11-04-2347-bug-missing-scan-partial-failure.html) — collect_torrent_tracker_hostnames 对单种查询异常一律空集; qB 重启/断连导致全部失败时 /api/sites/missing 仍 200 返回空 sites/groups, CLI 导出静默漏站
 - [test] [缺失站点导入三路径 GUI 冒烟不可复跑](../26-11-04-2312-test-webui-sites-import-gui-smoke.html) — 三路径验收靠一次性 harness 脚本+gitignore 的 .work 证据, 仓库内无可重跑回归; 需补 e2e/浏览器用例
 - [test] [test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)](../26-11-04-0943-test-qb-capture-sanitize-flaky-hash.html) — 夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红

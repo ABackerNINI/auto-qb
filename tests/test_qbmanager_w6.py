@@ -377,12 +377,42 @@ def test_w6_flush_fallback_once_per_round():
         mgr.connect = mock.Mock(return_value=True)
         mgr.config.main_tick = 0.05
         mgr.config.sync_interval = 0.05
-        mgr._refresh_torrents = mock.Mock(side_effect=[None, RuntimeError("refresh boom")])
-        mgr.web.flush_truths = mock.Mock(side_effect=[None, KeyboardInterrupt()])
-        with capture_logs("auto_qb.core.qbmanager") as cap:
-            mgr.run(dry_run=False)
-        assert mgr._refresh_torrents.call_count == 2, "两轮: 正常轮 + 异常轮"
-        assert mgr.web.flush_truths.call_count == 2, "每轮恰一次回执 flush(异常轮兜底补, 正常轮不双发)"
+        rounds = {"refresh": 0}
+        flushes = []
+
+        def _refresh(dry_run=False):
+            rounds["refresh"] += 1
+            if rounds["refresh"] >= 2:
+                raise RuntimeError("refresh boom")
+
+        def _flush():
+            # 以 refresh 计数(而非 flush 自身调用次数)判定异常轮: flush 每轮无条件调用,
+            # 两条时间线各自取时, 负载下可能先出现只跑任务线/空转的轮次 —— 按 flush 序数
+            # 判定会让第 2 次 flush 提前抛 KI 退出, 只剩 1 次 refresh(issue 26-11-05-0035)。
+            flushes.append(rounds["refresh"])
+            if rounds["refresh"] >= 2:
+                raise KeyboardInterrupt()
+
+        mgr._refresh_torrents = _refresh
+        mgr.web.flush_truths = _flush
+        waits = []
+        real_wait = _qbm._wait_next
+
+        def _wait_spy(stop_event, wake_event, timeout):
+            waits.append(timeout)
+            # 兜底出口: 若回执兜底被改坏(异常轮不 flush), KI 永不到来 —— 迭代上限后按停止信号退出,
+            # 让断言干净地红, 而不是让 refresh 反复抛错直到测试超时。
+            if len(waits) > 10:
+                return True
+            return real_wait(stop_event, wake_event, timeout)
+
+        with mock.patch.object(_qbm, "_wait_next", _wait_spy):
+            with capture_logs("auto_qb.core.qbmanager") as cap:
+                mgr.run(dry_run=False)
+        assert rounds["refresh"] == 2, "两条同步线: 正常轮 + 异常轮"
+        # 回执 flush 每轮无条件调用 + 异常轮兜底: 轮数 = 等待次数 + 1(异常轮由 KI 退出, 不再等待)。
+        # 不绑定 refresh 调用数, 空转轮/只跑单线的轮次不再破坏记账。
+        assert len(flushes) == len(waits) + 1, "每轮恰一次回执 flush(异常轮兜底补, 正常轮不双发)"
         assert "停止" in cap.text, "KeyboardInterrupt 退出必须落'停止' INFO"
 
 
