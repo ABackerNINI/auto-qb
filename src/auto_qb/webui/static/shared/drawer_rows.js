@@ -114,6 +114,8 @@ Object.assign(window.AQB_DRAWER.methods, {
           rows: [
             { icon: "#i-refresh", label: "迁移状态", text: this.relocateStateText(rel.state) },
             { icon: "#i-info", label: "设置来源", text: this.relocateOriginText(rel.origin) },
+            // 设置时间 = job 登记/发起 setLocation 的时刻(created_at); 旧 state 无该字段 => "—"
+            { icon: "#i-calendar", label: "设置时间", text: rel.created_at ? ts(rel.created_at) : "—" },
             { icon: "#i-check-circle", label: "auto-qb 设置", text: "是" },
             { icon: "#i-hash", label: "任务标识", text: rel.job_id || "—", mono: true, wide: true, act: "copy" },
             /* 这两行的 open 动作按种子**当前**路径打开, 与行内展示的迁移源/目标不对应;

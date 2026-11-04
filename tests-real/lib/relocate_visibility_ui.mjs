@@ -460,6 +460,21 @@ try {
   await closeAll(page);
   const reqsEntry = await openChain(page, rowOfGroup(page, groupA, groupASave).locator('.rel-badge').first());
   const state1 = await vmEval(page, `(vm) => ({ drawerOpen: !!vm.drawer.open, drawerHash: vm.drawer.hash || '', chainHash: vm.relChain.hash || '' })`);
+  // P1-2 详情「迁移」段真渲染取证: 默认变体(dt01)按 data-sec 分组, 行 = .dt01-cell(.dt01-k/.dt01-vv)
+  // 详情请求与路径链请求独立, 先等迁移段真正渲染出来再读(否则 relRows=null 会偶发误红)
+  await page.waitForSelector('.dt01-sec[data-sec="迁移"] .dt01-cell', { timeout: 10_000 });
+  const relRows = await page.evaluate(() => {
+    const sec = document.querySelector('.dt01-sec[data-sec="迁移"]');
+    if (!sec) return null;
+    return [...sec.querySelectorAll('.dt01-cell')].map((c) => ({
+      label: (c.querySelector('.dt01-k')?.textContent || '').trim(),
+      value: (c.querySelector('.dt01-vv')?.textContent || '').trim(),
+    }));
+  });
+  const relShot = `${outDir}/drawer-relocate.png`;
+  await page.locator('.drawer').first().screenshot({ path: relShot });
+  out.drawerRelocate = { rows: relRows, shot: relShot, drawerHash: state1.drawerHash };
+  step('drawer-relocate', { rows: relRows ? relRows.length : 0 });
   await page.keyboard.press('Escape');
   await page.waitForTimeout(250);
   const afterEsc1 = await vmEval(page, `(vm) => ({
@@ -470,6 +485,10 @@ try {
   })`);
   const drawerEntry = page.locator('[data-act="chain"]:visible').first();
   await drawerEntry.waitFor({ state: 'visible', timeout: 10_000 });
+  // 详情新增「设置时间」行后路径链入口可能落到抽屉滚动区之外: 先滚到位再点击。
+  // 若让 click 自己滚, 滚动事件会在 relChainOpen 之后立刻把浮窗关掉(全局滚动关闭)。
+  await drawerEntry.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(350);
   const beforeDrawerReq = out.chainRequests.length;
   await drawerEntry.click();
   await page.locator('.relc-pop').waitFor({ state: 'visible', timeout: 10_000 });

@@ -16,10 +16,16 @@
 - test_pending_tag_failure_degrades: qB 写失败只计数告警, 相位保持 armed, 按退避不每 tick 重撞
 - test_pending_tag_remove_failure_retried: 终态摘标签失败后由 reconcile 退避重试, 不永久残留
 - test_pending_tag_reconcile_after_restart: 重启后非终态 job 的标签由 reconcile 补写
+- test_pending_tag_never_added_terminal_no_remove: 未 armed(从未加过标签)直接撤销 => 零 qB 标签写
+- test_pending_tag_failed_before_armed_no_remove: 未 armed 直接失败 => 不发 remove(多余清理)
+- test_pending_tag_remove_retry_after_restart: 「曾加」随 state 跨重启保留, 摘除失败重启后仍重试一次
+- test_pending_tag_job_id_reuse_carries_prev_state: 同 src→dst 重发复用 job_id 时继承旧账并清镜像记忆
 - test_pending_tag_dry_run_never_writes: dry-run 不发任何 qB 标签写
 """
 
 import types
+
+from dataclasses import replace
 
 from auto_qb.core.modules import relocate_units as ru
 
@@ -175,6 +181,75 @@ def test_pending_tag_remove_failure_retried(tmp_path, monkeypatch):
     client.calls.clear()
     mod._reconcile_pending_tags()
     assert _tag_calls(client, "remove_tags") == []
+
+
+def test_pending_tag_never_added_terminal_no_remove(tmp_path, monkeypatch):
+    """未 armed(从未加过标签)直接撤销: 终态也不得发 remove —— 那是多余的 qB 写"""
+    mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
+    assert mod.get_job(job_id).phase == ru.PHASE_MOVING  # 未 armed, 从未 add
+
+    r = mod.relocate_cancel(job_id, cost_confirmed=True)
+    assert r["cls"] == "ok" and mod.get_job(job_id).phase == ru.PHASE_CANCELLED
+    assert _tag_calls(client, "add_tags") == []
+    assert _tag_calls(client, "remove_tags") == [], client.calls
+
+
+def test_pending_tag_failed_before_armed_no_remove(tmp_path, monkeypatch):
+    """未 armed 直接失败(搬运中种子消失): 同样不发 remove"""
+    mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
+    mgr.store.by_hash.pop("HA", None)  # mover 从 qB 消失 -> _step_move 判 failed
+    _run_ticks(mod, 2)
+
+    assert mod.get_job(job_id).phase == ru.PHASE_FAILED
+    assert _tag_calls(client, "add_tags") == []
+    assert _tag_calls(client, "remove_tags") == [], client.calls
+
+
+def test_pending_tag_remove_retry_after_restart(tmp_path, monkeypatch):
+    """「曾加过标签」以 state 为准跨重启保留: 摘除失败后重启仍补写一次, 成功后不再写"""
+    mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
+    _to_armed(mgr, mod, job_id, dst, content, files)
+    assert mod.get_job(job_id).tag_on is True
+
+    original = mgr.ctx.api.torrents_remove_tags
+
+    def _boom(**kw):
+        raise RuntimeError("qB 摘除失败")
+
+    monkeypatch.setattr(mgr.ctx.api, "torrents_remove_tags", _boom, raising=False)
+    mod.relocate_cancel(job_id, cost_confirmed=True)
+    assert mod.get_job(job_id).phase == ru.PHASE_CANCELLED
+    assert mod.get_job(job_id).tag_on is True, "摘除未成功, state 不能记成已摘"
+
+    monkeypatch.setattr(mgr.ctx.api, "torrents_remove_tags", original, raising=False)
+    mod2 = type(mod)(mgr.ctx)
+    assert mod2._load_jobs() == 1
+    assert mod2.get_job(job_id).tag_on is True, "曾加标签必须随 state 跨重启保留"
+
+    client.calls.clear()
+    mod2._reconcile_pending_tags()
+    removes = _tag_calls(client, "remove_tags")
+    assert len(removes) == 1 and removes[0][1] == TAG
+    assert mod2.get_job(job_id).tag_on is False
+
+    client.calls.clear()
+    mod2._reconcile_pending_tags()
+    assert _tag_calls(client, "remove_tags") == [], "已摘除的 job 不得再写"
+
+
+def test_pending_tag_job_id_reuse_carries_prev_state(tmp_path, monkeypatch):
+    """同 src→dst 重发会复用 job_id: 直接覆盖旧账会让 tag_on 丢失, 旧标签终态无人摘"""
+    mgr, client, mod, job_id, dst, content, files = _tag_env(tmp_path, monkeypatch)
+    _to_armed(mgr, mod, job_id, dst, content, files)
+
+    prev = replace(mod.get_job(job_id), phase=ru.PHASE_CANCELLED, tag_on=True)
+    mod._jobs[job_id] = prev
+    mod._tag_applied[job_id] = "add"  # 上一轮 add 成功后的进程内记忆
+    fresh = replace(prev, phase=ru.PHASE_MOVING, tag_on=False)
+
+    carried = mod._carry_prev_tag_state(job_id, fresh)
+    assert carried.tag_on is True, "旧账 tag_on 丢失 => 新 job 终态不会摘掉 qB 上残留标签"
+    assert job_id not in mod._tag_applied, "旧 'add' 记忆不清 => 新 job armed 会跳过 add"
 
 
 def test_pending_tag_reconcile_after_restart(tmp_path, monkeypatch):

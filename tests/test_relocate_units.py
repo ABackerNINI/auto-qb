@@ -861,10 +861,20 @@ def test_same_volume_proof_tolerance_band():
 
 def test_job_dict_full_roundtrip_values():
     """落账往返保值: 非默认字段全量往返(断键/丢实参=重启恢复丢字段, resume_hashes 断链=成员滞留); 坏 plan 形状拒收"""
-    job = _job(reason="测试原因", armed_at=1.5, updated_at=2.5, resume_hashes=("HA", "HB"), attempts=2, last_error="boom")
+    job = _job(
+        reason="测试原因",
+        created_at=3.5,
+        armed_at=1.5,
+        updated_at=2.5,
+        resume_hashes=("HA", "HB"),
+        attempts=2,
+        last_error="boom",
+        tag_on=True
+    )
     back = ru.job_from_dict(ru.job_to_dict(job))
     assert back == job
     assert back.resume_hashes == ("HA", "HB") and back.attempts == 2 and back.last_error == "boom"
+    assert back.created_at == 3.5 and back.tag_on is True, "设置时间源/曾加标签账不得在重启恢复时丢失"
     assert ru.job_from_dict({"job_id": "x", "plan": "not-a-dict"}).plan is None  # 防御面: 非 dict plan 不透传
 
 

@@ -5,10 +5,12 @@
   顺带在 armed 状态用真实链路验证「归属章 auto=true」(src 内容根 junction -> dst)。
 - [RM04-16] 人工 A->B->C 链(逐跳 type/status/attribution)、6+ 跳长链、UNC 不可达快速返回;
   符号链接段在无 SeCreateSymbolicLinkPrivilege 时降级为 junction 并如实记录(不伪报)。
-- [RM04-17] pending_tag 生命周期(armed 真加 -> 手删不重加 -> 重启 reconcile 补写 -> 终态真摘)。
+- [RM04-17] pending_tag 生命周期(armed 真加 -> 手删不重加 -> 重启 reconcile 补写 -> 终态真摘 1 次)。
 - [RM04-18] pending_tag 关闭时零写请求(qB 代理计数证明)。
+- [RM04-19] 未 armed 直接撤销: 终态不得发 remove(代理计数 0); 对照 armed 终态仍 1 次(RM04-17)。
+-RM04-15 另含 P1-2 详情「迁移」段「设置时间」真渲染取证(值须等于 state job.created_at)。
 
-跑法: `commands run real.run -- --case RM04-15 --yes`(同理 RM04-16/17/18)。
+跑法: `commands run real.run -- --case RM04-15 --yes`(同理 RM04-16/17/18/19)。
 纪律: 只用 real-fake 假种子与副实例; 临时改 qB 默认 save_path 测毕还原; 产物只落 .work。
 """
 from __future__ import annotations
@@ -19,6 +21,7 @@ import re
 import subprocess
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -421,6 +424,25 @@ def test_rm04_15_webui_visibility_skins_popover():
         assert all(h == moved for h in ge["drawerEntryClick"]["newReqs"]), \
             f"详情段路径链请求 hash 非 drawer.hash: {ge['drawerEntryClick']['newReqs']}"
         assert ge["afterEsc2"] == {"chainOpen": False, "drawerOpen": False}, f"Esc 二层未关 drawer: {ge['afterEsc2']}"
+        # 3c) P1-2 详情「迁移」段真渲染: 「设置时间」必须真实出现, 且与 state 里 job.created_at 同一时刻
+        dra = ui.get("drawerRelocate") or {}
+        rows = {r["label"]: r["value"] for r in (dra.get("rows") or [])}
+        assert "设置时间" in rows, f"详情迁移段缺「设置时间」(plan P1-2): {dra}"
+        assert rows["设置时间"] != "—", f"新 job 的设置时间落空: {rows.get('设置时间')!r}"
+        created = float((armed["job"] or {}).get("created_at") or 0.0)
+        assert created > 0, f"state.json job 缺 created_at(设置时间无源): {armed['job']}"
+        expect_time = datetime.fromtimestamp(created).strftime("%m-%d %H:%M")
+        assert rows["设置时间"] == expect_time, \
+            f"设置时间与 job.created_at 不一致: UI={rows['设置时间']!r} state={expect_time}({created})"
+        armed_at = float((armed["job"] or {}).get("armed_at") or 0.0)
+        assert created <= armed_at, f"设置时间晚于武装时间, 时间线不通: created={created} armed={armed_at}"
+        ev["ui"]["drawerRelocate"] = {
+            "rows": dra.get("rows"),
+            "shot": dra.get("shot"),
+            "expected": expect_time,
+            "created_at": created,
+            "armed_at": armed_at
+        }
         # 3b) 组视图实际行为(plan §3.4 别名作用域重归组): armed 后源/目标**不裂组**,
         #     两个成员仍属同一组, 组行 save_path 取首位成员(此处 mover -> dst_a)
         g15_rows = [g for g in M.groups_view(web_port) if g.get("name") == "rm04c15a"]
@@ -678,7 +700,7 @@ def test_rm04_17_pending_tag_lifecycle():
         _wait_tag(qb, h1, PENDING_TAG, False, 60, "终态 h1 标签未摘")
         _wait_tag(qb, h2, PENDING_TAG, False, 60, "终态 h2 标签未摘")
         removes = tag_paths(proxy, TAG_REMOVE_PATHS)
-        assert removes, "终态标签已摘但代理未记录 removeTags"
+        assert len(removes) == 1, f"armed 终态应恰发 1 次 removeTags(实际 {len(removes)}): {removes}"
         ev["terminal_remove"] = {"requests": len(removes)}
         ev["result"] = "PASS"
     finally:
@@ -768,3 +790,87 @@ def test_rm04_18_pending_tag_disabled_zero_write():
             save_evidence(case, "rm04_18", ev)
             M.purge_tree(case)
             M.purge_tree(M.RAM / "rm04_18")
+
+
+# ---------------------------------------------------------------- RM04-19
+
+
+def test_rm04_19_pending_tag_unarmed_terminal_zero_remove():
+    """pending_tag 开启但从未 armed 直接撤销: 终态不得发 remove(空闲清理不算「曾加」)。"""
+    case = M.case_dir("rm04_19")
+    qb = M.qbfake()
+    orig_save_path = qb.prefs().get("save_path")
+    p = None
+    proxy = None
+    ev = {"case": "RM04-19", "head": M._head_sha()}
+    try:
+        assert orig_save_path, "副实例 save_path 读取失败"
+        assert not M.rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留"
+        probe_dir = case / "qbsave"
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        qb.set_prefs(save_path=str(probe_dir))
+        time.sleep(0.5)
+        assert qb.prefs().get("save_path") == str(probe_dir), "save_path 临时改写未生效"
+
+        proxy = TcpProxy(instances.SECONDARY, app.free_port())
+        proxy.start()
+        cfg, web_port = make_cfg(case, qb_port=proxy.port, pending_tag=PENDING_TAG, alias_threshold=1)
+        p = start_product(cfg, case, qb_port=proxy.port)
+        ev["web_port"] = web_port
+
+        src = M.RAM / "rm04_19" / "src"
+        dst = case / "dst"
+        M.purge_tree(M.RAM / "rm04_19")
+        dst.mkdir(parents=True, exist_ok=True)
+        files = files_of("rm04c19")
+        h1, h2 = seed_pair(qb, "rm04c19", files, src)
+        M.wait_complete(qb, [h1, h2], timeout=120)
+        assert M.wait_group(web_port, h1, {h1, h2}, 25, "组未成组")
+        M.wait_store_progress(web_port, [h1, h2], timeout=60)
+
+        job_id, _ = start_migration(web_port, h1, dst)
+        # 未武装窗口: armed 才会 add; cancel 必须在 moving/moved 窗口内落地, 否则本条不成立
+        live = M.wait_until(lambda: member_rel(web_port, h1), 3, "成员 relocate 投影未出现") or {}
+        assert live.get("phase") in ("moving", "watching", "moved"), \
+            f"job 已越过未武装窗口(phase={live.get('phase')}), 本条不成立"
+        assert not tag_paths(proxy, TAG_ADD_PATHS), "未 armed 前已发出 addTags(前置不成立)"
+
+        c1 = M.cmd_post_and_wait(web_port, "/api/relocate/cancel", {"job_id": job_id})
+        assert (c1.get("truth") or {}).get("cls") == "confirm", \
+            f"撤销首投未回成本确认: {json.dumps(c1, ensure_ascii=False)[:500]}"
+        c2 = M.cmd_post_and_wait(web_port, "/api/relocate/cancel", {"job_id": job_id, "confirm": True}, timeout=60)
+        assert c2.get("status") == "ok" and (c2.get("truth") or {}).get("cls") == "ok", \
+            f"撤销回执异常: {json.dumps(c2, ensure_ascii=False)[:500]}"
+        M.wait_job_phase(case, job_id, {"cancelled"}, 120, "job 未到 cancelled")
+        time.sleep(4.0)  # 覆盖终态后若干主循环节拍(旧实现会在这一时期发 remove)
+
+        adds = tag_paths(proxy, TAG_ADD_PATHS)
+        removes = tag_paths(proxy, TAG_REMOVE_PATHS)
+        assert adds == [], f"未 armed 却发出 addTags: {adds[:5]}"
+        assert removes == [], f"未 armed 终态仍发 removeTags(多余 qB 写): {removes[:5]}"
+        assert PENDING_TAG not in M._tags_of(qb.torrent(h1) or {}), "未动过的种子不该出现 pending 标签"
+        assert PENDING_TAG not in M._tags_of(qb.torrent(h2) or {}), "未动过的种子不该出现 pending 标签"
+        ev["unarmed_terminal"] = {
+            "live_phase": live.get("phase"),
+            "add_requests": len(adds),
+            "remove_requests": len(removes),
+            "job_phase": (M.jobs_on_disk(case).get(job_id) or {}).get("phase")
+        }
+        ev["result"] = "PASS"
+    finally:
+        if p is not None:
+            p.stop()
+        if proxy is not None:
+            proxy.stop()
+        try:
+            qb.set_prefs(save_path=orig_save_path)
+            time.sleep(0.3)
+            ev["save_path_restored"] = qb.prefs().get("save_path") == orig_save_path
+        except Exception:  # noqa: BLE001
+            ev["save_path_restored"] = False
+        try:
+            M.rm_all_fakes(M.qbfake())
+        finally:
+            save_evidence(case, "rm04_19", ev)
+            M.purge_tree(case)
+            M.purge_tree(M.RAM / "rm04_19")

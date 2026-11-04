@@ -272,6 +272,9 @@ class RelocateJob:
     alias_paths: Tuple[str, ...] = ()
     phase: str = PHASE_MOVING
     reason: str = ""
+    # 设置位置发起时间(job 登记时刻; 与 setLocation 下发同一动作窗口, 供 WebUI「设置时间」展示)。
+    # 旧 state 条目缺该字段 = 0.0(无处可考, 前端显示 "—", 不拿 updated_at 冒充)。
+    created_at: float = 0.0
     armed_at: float = 0.0
     updated_at: float = 0.0
     resume_hashes: Tuple[str, ...] = ()
@@ -284,6 +287,10 @@ class RelocateJob:
     # (§3.5.1), 两步之间崩溃时这一位仍是 False —— 「qB 从未收到搬迁」在 qB 侧与「下发了
     # 但没动静」不可分辨, 只有账上这一位能把两者分开, 重启据此补发一次而非静默等停滞超时。
     move_issued: bool = False
+    # 待收尾标签镜像账(plan 26-11-04-1042 P3 收窄): 仅本 job **成功 add 过**标签后为 True。
+    # 终态摘除只对曾 add 的 job 发 remove —— 从未 armed 的 failed/cancelled 不发多余 qB 写。
+    # 旧 state 条目缺该位 = False(未加过); 不读 qB 标签反推, 账即事实源。
+    tag_on: bool = False
     # 发起入口(web / rule / cli; 旧 state 条目缺失时回落 "unknown") —— 只作展示归属,
     # 不参与任何闸门判定。写入端在 relocate_execute(origin=...); web/rule 调用方各自传值,
     # cli 为保留值(当前树无 CLI 入口, 仅保证跨端落账口径一致)。
@@ -767,6 +774,7 @@ def job_to_dict(job: RelocateJob) -> dict:
         "alias_paths": list(job.alias_paths),
         "phase": job.phase,
         "reason": job.reason,
+        "created_at": job.created_at,
         "armed_at": job.armed_at,
         "updated_at": job.updated_at,
         "resume_hashes": list(job.resume_hashes),
@@ -774,6 +782,7 @@ def job_to_dict(job: RelocateJob) -> dict:
         "last_error": job.last_error,
         "plan": job.plan,
         "move_issued": job.move_issued,
+        "tag_on": job.tag_on,
         "origin": job.origin,
     }
 
@@ -794,6 +803,7 @@ def job_from_dict(d) -> Optional[RelocateJob]:
             alias_paths=tuple(d.get("alias_paths") or ()),
             phase=str(d.get("phase") or PHASE_MOVING),
             reason=str(d.get("reason") or ""),
+            created_at=float(d.get("created_at") or 0.0),
             armed_at=float(d.get("armed_at") or 0.0),
             updated_at=float(d.get("updated_at") or 0.0),
             resume_hashes=tuple(d.get("resume_hashes") or ()),
@@ -801,6 +811,7 @@ def job_from_dict(d) -> Optional[RelocateJob]:
             last_error=str(d.get("last_error") or ""),
             plan=d.get("plan") if isinstance(d.get("plan"), dict) else None,
             move_issued=bool(d.get("move_issued")),
+            tag_on=bool(d.get("tag_on")),
             origin=str(d.get("origin") or "unknown"),
         )
     except (TypeError, ValueError):

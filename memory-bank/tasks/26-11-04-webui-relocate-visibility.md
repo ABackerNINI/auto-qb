@@ -3,9 +3,9 @@
 **Status:** Done
 **Added:** 2026-11-04
 **Updated:** 2026-11-04
-**Summary:** P0–P3 已实现并评审修复，七项真机验收全过(RM04-15..18 + RM04-14 回归)，全量数字见基线 26-11-04-1519
+**Summary:** P0–P3 已实现并评审修复，七项真机验收全过(RM04-15..18 + RM04-14 回归)；21:54 再修两条评审遗留 minor(详情设置时间 / 未 armed 终态不发 remove)，全量数字见基线 26-11-04-2154
 **Topics:** webui-relocate-visibility
-**Refs:** memory-bank/plans/26-11-04-1042-plan-webui-relocate-visibility.html, memory-bank/testing/baselines/26-11-04-1519-webui-relocate-visibility-r5.md
+**Refs:** memory-bank/plans/26-11-04-1042-plan-webui-relocate-visibility.html, memory-bank/testing/baselines/26-11-04-2154-webui-relocate-visibility-minor-fix.md
 
 ## 原始请求
 
@@ -58,3 +58,11 @@ P0–P3 实现与评审修复已完成(详见计划 §10 与 activeContext R1–
 - 2026-11-04 15:24 真机验收完成: 新增 tests-real RM04-15..18 并全过(四皮肤行高/浮窗翻转夹取与滚动关闭/Esc 退栈回焦/组行入口基准/A->B->C 与 UNC 15.1ms 未确认/pending_tag 加-手删不重加-重启补写-终态摘/关闭零写), RM04-14 confirm 回路回归通过; test.full 5185 passed + 10 skipped, 新基线 26-11-04-1519
 
 - 2026-11-04 21:06 收口评审重做(按仓库 code-review skill): 分面评审 7 条发现(2 major/5 minor)全修, 修复增量二轮复核 2 minor 已修, blocker 清零; 新增/收紧 6 例测试; test.full 见 kb.baseline(新基线 26-11-04-2106)
+
+### R1 · 评审遗留两条 minor 修复 (2026-11-04, develop 05ce9404)
+
+- A 设置时间缺失: 数据面无既有创建时间(journal ts 每次重写、spec 不带时间、updated_at 随相位漂移), 判定新增 `RelocateJob.created_at`(= job 登记/setLocation 发起时刻)而非派生; state 双向持久化→`member_relocate` 投影→详情「迁移」段渲染, 旧 state 无源显示 "—"; 装饰指纹纳入。
+- B 未 armed 终态多余 remove: 先以单测复现 cancel/failed 两路径都发 removeTags; 改为 state 记 `tag_on`(仅成功 add 后 True), 终态仅当 tag_on=True 发 remove, reconcile 只扫非终态+曾 add 终态, 补写重试同样只针对曾 add; job_id 重发继承旧账并清镜像记忆。
+- 真机(RM04-15/17/19 全 PASS): RM04-15 抽屉「迁移」段 11 行, 设置时间 `11-04 21:49` == state created_at, 早于 armed_at(时间线通, 截图 `drawer-relocate.png`); RM04-17 armed 终态 removeTags 恰 1 次; RM04-19 未 armed 撤销(phase=moving 窗口) add/removeTags 均 0 次。
+- 收口评审(全能档 1 子代): 3 条发现(2 minor/1 nit)引文全过 `review.check`, 全修: job_id 复用继承 tag_on、UI 读取前等迁移段渲染、roundtrip 非默认值断言; blocker 清零。
+- 全量见基线 26-11-04-2154; 改动面见该切片「本改动面」。

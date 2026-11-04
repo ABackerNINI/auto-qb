@@ -325,6 +325,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-04-1042</span> 初版：基于用户需求与 grilling 压测（8 条假设裁决），给出 P0–P3 分期、三层路径语义、数据契约、链探测边界、测试与回滚。本轮只分析写计划，未改产品代码/测试，未 commit/push。</li>
   <li><span class="tag">R5 · 26-11-04-1516</span> 真机验收（分支 <code>feat/webui-relocate-visibility</code>，HEAD <code>3dd603f9</code>，对应切片 R5）：tests-real RM04-15/16/17/18 新增并全过，RM04-14 confirm 回路回归通过；四皮肤行高 43/44、flux 浮窗 alpha=1、底锚上翻/左右夹取、滚动关闭与 Esc 退栈回焦、A→B→C 三跳与 UNC 15.1ms remote 未确认、armed 标签加/手删不重加/重启补写/终态摘、关闭态 0 写。限制：本机无符号链接特权，symlink 段降级 junction（原因已入证据）。全量数字见 <code>kb.baseline</code>，档案见 <code>memory-bank/tasks/26-11-04-webui-relocate-visibility.md</code>。</li>
+  <li><span class="tag">R6 · 26-11-04-2154</span> 收口评审遗留两条 minor 修复（<code>develop</code> HEAD <code>05ce9404</code>）：<b>A</b> 详情「迁移」段补计划 P1-2 要求的「设置时间」——数据面无既有创建时间（journal ts 每次重写、spec 不带时间、updated_at 随相位漂移），故新增 <code>RelocateJob.created_at</code>（job 登记/setLocation 发起时刻）并持久化/投影/渲染，旧 state 无源显示 “—”；<b>B</b> 未 armed 的终态 job 不再发 <code>torrents_remove_tags</code>——state 新增 <code>tag_on</code>（仅成功 add 后为 True），终态只对曾 add 的 job 摘除，reconcile 与补写重试同口径，job_id 重发继承旧账。真机 RM04-15/17/19 全过（设置时间与 state created_at 一致且早于 armed_at；armed 终态 remove 恰 1 次；未 armed 撤销 add/remove 均 0）；收口评审 3 条（2 minor/1 nit）全修，blocker 清零。全量数字见 <code>kb.baseline</code>（基线 <code>26-11-04-2154</code>）。</li>
 </ul>
 
 </div>

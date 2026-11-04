@@ -38,6 +38,7 @@ def _job(
     phase: str = ru.PHASE_MOVING,
     origin: str = "web",
     updated_at: float = 1.0,
+    created_at: float = 0.5,
     alias_paths=(),
 ) -> RelocateJob:
     return RelocateJob(
@@ -51,6 +52,7 @@ def _job(
         alias_paths=tuple(alias_paths),
         phase=phase,
         origin=origin,
+        created_at=created_at,
         updated_at=updated_at,
     )
 
@@ -99,6 +101,7 @@ def test_member_relocate_origin_mover_and_contract(tmp_path):
     assert ha["origin"] == "rule", "origin 必须来自 job, 不得按调用路径猜"
     assert ha["alias_kind"] == "file" and ha["alias_count"] == 2
     assert ha["job_id"] == "j1" and ha["updated_at"] == 5.0
+    assert ha["created_at"] == 0.5, "设置时间来自 job 登记时刻, 必须随 relocate 投影下发"
     # 不改 save_path: 迁移可见性只加标注, 路径筛选仍按 qB save_path 语义
     assert env.mgr._member_view(env.mgr.store.by_hash["HA"])["save_path"] == env.src
 
@@ -228,6 +231,7 @@ def test_decorate_fingerprint_includes_relocate():
     assert "fp.length !== ms.length * 8 + 3" in js, "成员 relocate 槽 + 组 relocate 槽必须同步长度"
     assert "_groupRelocateSig(g.relocate)" in js
     assert "r.armed_at" in js and "r.src" in js, "P1 详情/徽标消费 src/armed_at, 必须进装饰指纹"
+    assert "r.created_at" in js, "P1 详情消费设置时间, 新字段必须进装饰指纹"
 
 
 def _static(name: str) -> str:
@@ -398,6 +402,7 @@ def test_p1_detail_section_and_endpoint_projection():
     assert 'title: "迁移"' in rows and "if (rel)" in rows
     assert 'label: "迁移状态"' in rows and 'label: "设置来源"' in rows
     assert 'label: "任务标识"' in rows and 'label: "收尾武装"' in rows
+    assert 'label: "设置时间"' in rows, "plan P1-2 要求详情段展示设置时间"
     tpl02 = _static("shared/drawer_tpl/02-general-cards-low.js")
     tpl03 = _static("shared/drawer_tpl/03-general-dossier-collapsed.js")
     assert 'secs["迁移"]' in tpl02 and 'secs["迁移"]' in tpl03
@@ -414,12 +419,20 @@ def test_p1_detail_endpoint_passes_relocate(web_env):
         "HB": TorrentRecord(hash="HB", name="Y", save_path=r"R:\src"),
     }
     mgr.store.get = records.get
-    job = {"job_id": "j1", "phase": ru.PHASE_MOVING, "src": r"R:\src", "dst": r"R:\dst", "alias_paths": []}
+    job = {
+        "job_id": "j1",
+        "phase": ru.PHASE_MOVING,
+        "src": r"R:\src",
+        "dst": r"R:\dst",
+        "alias_paths": [],
+        "created_at": 1234.5
+    }
     mgr._relocate_member = lambda h: member_relocate(job, h) if h == "HA" else None
     auth = {"Authorization": f"Bearer {mgr.web.token}"}
 
     ha = client.get("/api/torrents/HA", headers=auth).json()["torrent"]
     assert ha["relocate"]["state"] == "moving" and ha["relocate"]["dst"] == r"R:\dst"
+    assert ha["relocate"]["created_at"] == 1234.5
     assert ha["save_path"] == r"R:\src", "迁移可见性不得改写 qB save_path 语义"
 
     hb = client.get("/api/torrents/HB", headers=auth).json()["torrent"]

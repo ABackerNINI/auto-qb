@@ -226,4 +226,6 @@ class RelocateModule(LifecycleMixin, PlanMixin, ExecMixin, BaseModule):
         self._persist()
         self._publish_snapshot()
         self._sync_pending_tag(job)
-        return job
+        # 标签镜像可能改写 tag_on(_note_tag_state); 返回账上现值, 免得调用方拿旧对象继续
+        # 推进相位时把「曾加标签」这一位覆盖回 False(终态就会漏摘标签)。
+        return self._jobs.get(job.job_id, job)

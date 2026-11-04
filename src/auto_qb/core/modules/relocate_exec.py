@@ -717,6 +717,21 @@ class ExecMixin:
                 }],
         }
 
+    def _carry_prev_tag_state(self, job_id: str, job: RelocateJob) -> RelocateJob:
+        """同一 job_id 重发时继承上一轮的「曾加标签」账
+
+        job_id 由 mover|src→dst 派生, 撤销/失败后重发会复用同一 id; 直接覆盖 ``_jobs[job_id]``
+        会丢掉旧账 tag_on=True, 而进程内 ``_tag_applied="add"`` 又会让新 job 的 armed 跳过 add、
+        终态也不再 remove —— 旧标签永久留在 qB。继承 tag_on 并清掉进程内镜像记忆, 让本轮
+        armed 重新确认 add(幂等)、终态照常摘除。
+        """
+        prev = self._jobs.get(job_id)
+        if prev is None or not prev.tag_on:
+            return job
+        self._tag_applied.pop(job_id, None)
+        self._tag_next_try.pop(job_id, None)
+        return replace(job, tag_on=True)
+
     def _start_job(self, records, target: str, facts, verdict: dict, client, origin: str = "unknown") -> dict:
         """建账 + 暂停 + 下发搬迁(一步到位, 后续相位交任务线)"""
         mover = records[0]
@@ -758,6 +773,7 @@ class ExecMixin:
                 self._ctx.api.torrents_pause(torrent_hashes=running)
             except Exception as e:  # noqa: BLE001 - 暂停失败不继续: 搬迁窗口必须先把组按住
                 return {**verdict, "cls": "blocked", "reasons": [{"gate": "pause_failed", "text": f"暂停成员失败: {e}"}]}
+        stamp = time.time()  # 设置位置发起时刻: created_at 与首笔 updated_at 同一窗口, 不取两次
         job = RelocateJob(
             job_id=job_id,
             hashes=tuple(r.hash for r in records),
@@ -768,7 +784,8 @@ class ExecMixin:
             alias_kind=self._alias_kind_of_form(unit.form),
             phase=ru.PHASE_MOVING,
             resume_hashes=tuple(running),
-            updated_at=time.time(),
+            created_at=stamp,
+            updated_at=stamp,
             origin=str(origin or "unknown"),
             plan={
                 "form": unit.form,
@@ -777,6 +794,7 @@ class ExecMixin:
                 "files": [[n, s] for n, s in facts.files],
             },
         )
+        job = self._carry_prev_tag_state(job_id, job)
         self._jobs[job_id] = job
         self._rt[job_id] = {
             "issue": True,

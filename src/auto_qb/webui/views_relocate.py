@@ -64,6 +64,7 @@ def member_relocate(job: Optional[dict], torrent_hash: str) -> Optional[dict]:
         "dst": str(job.get("dst") or ""),
         "alias_kind": str(job.get("alias_kind") or ""),
         "alias_count": len(alias_paths),
+        "created_at": float(job.get("created_at") or 0.0),
         "armed_at": float(job.get("armed_at") or 0.0),
         "updated_at": float(job.get("updated_at") or 0.0),
         "origin": str(job.get("origin") or "unknown"),

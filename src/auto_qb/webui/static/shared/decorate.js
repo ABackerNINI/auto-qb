@@ -31,11 +31,11 @@ const _decoCache = new WeakMap();
 
 /* relocate 标注签名(plan 26-11-04-1042 P0-5; P1 补齐 src/armed_at): 后端每次重建会产出新的
  * relocate 对象, 直接把对象引用放进指纹会让所有组行恒失配 —— 必须压成值签名后再比较。
- * P1 详情段消费 src/armed_at; 徽标 title 也消费 src, 任一值推进必须让装饰缓存失效。 */
+ * P1 详情段消费 src/created_at/armed_at; 徽标 title 也消费 src, 任一值推进必须让装饰缓存失效。 */
 function _relocateSig(r) {
   if (!r) return "";
   return [r.state, r.phase, r.job_id, r.mover ? 1 : 0, r.origin, r.alias_kind, r.alias_count, r.src, r.dst,
-          r.armed_at, r.updated_at, r.reason].join("|");
+          r.created_at, r.armed_at, r.updated_at, r.reason].join("|");
 }
 
 /* 迁移状态展示词表(plan 26-11-04-1042 P1): 徽标 / 筛选 / 详情段共用一份, 禁止在模板里
