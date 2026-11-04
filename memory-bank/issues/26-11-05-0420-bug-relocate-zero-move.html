@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="relocate-zero-move">
+<meta name="issue-stamp" content="26-11-05-0420">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="relocate-zero-move">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功">
+<meta name="issue-summary" content="搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败">
+<title>整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功</h1>
+    <p class="lede">搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-05-0420-bug-relocate-zero-move</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 04:20</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">relocate / transfer / qbapi</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">用户报告 · AI 取证</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-11-05 01:33 生产整组迁移(3 个同内容种子共享内容根 <code>I:\PT\LongSeeding\待删</code>,dir_alias 形态,目标 <code>待删\测试</code> 在源内部):WebUI 回执「已发起 1」,之后 10 分钟组被按住暂停、零搬移、无任何报错;01:43:54 停滞看门狗判失败并恢复成员。qB 侧日志报「成功移动了 Torrent」而目标目录为空;mover 的 save_path 已被 qB 翻转到目标 → 组在 WebUI 里裂成两组。数据未丢(见证据对账)。</p>
+    <p>完整取证(生产现场 + qB/libtorrent 源码 + 测试 qB 全链路复现)见报告:<a href="../reports/26-11-05-0417-report-relocate-zero-move.html">memory-bank/reports/26-11-05-0417-report-relocate-zero-move.html</a>(doc-topic 相同)。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p>取证时间 2026-11-05 04:20。核心原文(完整清单见报告 §02):</p>
+<pre><code># 26586(生产 qB v5.2.3)主日志 01:33:45 —— 同秒四连,报成功:
+01:33:45 Web UI 设置路径：从 "I:\PT\LongSeeding\待删" 移动 至 "...\待删\测试"
+01:33:45 已将 Torrent 移动加入队列 → 开始移动 → 【成功移动了 Torrent】
+
+# 而目标目录 ctime = 01:33:45.940(= qB mkpath 建的,与 auto-qb 发起日志差 2ms),内容为空;
+# 磁盘 465 个文件全部名为 &lt;name&gt;.!qB,总量 59,854,758,901 B 与种子声明分毫不差(数据完好)。
+
+# 测试 qB 复现(F2/G2, 副实例):missingFiles 成员经旧路径 setLocation 归位(零搬移)
+# → 归位搬迁/重建把共享物理文件全部改名挂 .!qB(1.2s 内);账面 prog=1.00 与磁盘 .!qB 并存(事故冻结态同形)。
+
+# 实验对照:bogus hash setLocation = 静默 200 + mkpath 建目录 + 零搬移日志。</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>组内种子的磁盘文件名与 qB 账面名错位(如 <code>.!qB</code> 后缀冻结,深层嵌套);qB 部署开着 <code>AddExtensionToIncompleteFiles</code>;种子经转移/辅种跳检添加(seed_mode,做种不读盘,错位长期隐形)</td></tr>
+      <tr><td>影响范围</td><td>relocate 三入口(WebUI 整组迁移/规则 move_to/CLI)与种子转移的目标侧;零搬移假成功 + 组按 save_path 分裂 + 失败静默 10 分钟;别名收尾若在错位态进行还会把 junction/账本建在错误前提上</td></tr>
+      <tr><td>严重度</td><td><strong>高</strong>:报成功但数据未动且无告警;带嵌套目标时即使数据正常也属语义死路(junction 自递归)</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <ul>
+      <li><code>src/auto_qb/core/modules/relocate_plan.py:197-219</code>(取证 2026-11-05 04:20)· GATE_QB_TEMP 收集段 · grep <code>qb_temp</code> —— 仅 <code>fa.scandir(content_root)</code> 一层,深层 <code>.!qB</code> 漏拦</li>
+      <li><code>src/auto_qb/core/qbapi.py:144-156</code> · <code>torrents_set_location</code> · grep <code>set_location</code> —— 纯转发,不消费 qB 异步搬失败</li>
+      <li><code>src/auto_qb/core/modules/relocate_exec.py:791</code> · <code>_start_job</code> 下发段 · grep <code>torrents_set_location(torrent_hashes=[job.mover]</code> —— 成功即回「已发起」</li>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:431</code> · <code>evaluate_group</code> · grep <code>def evaluate_group</code> —— 无「目标 ⊆ 源」嵌套闸门</li>
+      <li><code>src/auto_qb/core/modules/relocate_lifecycle.py:122</code> · <code>_resume_members</code> · grep <code>已恢复</code> —— 失败收口恢复成员(01:43:54 日志来源)</li>
+      <li>qB 侧参照(只读分析,不在本仓库):<code>torrentscontroller.cpp:1761/176</code>(setLocation + applyToTorrents 静默跳过)、<code>storage_utils.cpp:151</code>(缺文件忽略)、<code>torrentimpl.cpp:2558/2494/628</code>(.!qB 挂/摘)、<code>sessionimpl.cpp:3011</code>+<code>filesearcher.cpp:48</code>(forceAppendExt 伪造工作名)</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">已查清(生产取证 + 源码 + 测试复现三重印证,详见报告):
+      ① 账面名与磁盘名错位 —— 11-04 组迁移收尾的 ACT_FINALIZE 归位把 non-movers 指向新位置,missingFiles 成员的归位搬迁/重建以未完成姿态计算目标路径,把共享物理文件整体改名挂上 <code>.!qB</code>(实验 F2/G2 实证),mover 账面 prog=1.00 不动(其工作名仍声明名),错位冻结;
+      ② qB 搬迁按声明名逐文件 stat,全 miss 被静默忽略并报「成功移动」(<code>storage_utils.cpp:151</code>);
+      ③ auto-qb <code>.!qB</code> 闸门只扫内容根顶层,深层文件漏拦;
+      ④ setLocation 为 fire-and-forget,唯一兜底是 10 分钟停滞看门狗,且失败不告警。
+      补充(2026-11-05 补证,设计意图经用户确认):dir_alias 收尾设计 = guardian 在 qB 关闭期间删 junction → qB 重启 → 成员 fastresume 找不到文件(missingFiles,<b>设计预期输入</b>)→ reconcile 的 ACT_FINALIZE(<code>relocate_units.py:952,976-1030</code>)setLocation 把成员指向新位置 → seed_mode 账面恢复进度,免全组重校验。libtorrent 对 ENOENT 也报 <code>mismatching_file_size</code>(<code>storage_utils.cpp:460-479</code>),故 rejected ×2 即该设计的正常触发。
+      <b>缺陷 = 设计的隐含假设被打破(实验 F1/F2 分步证伪)</b>:①「进度完整保留」在重启步即失效 —— rejected 成员恢复为 <code>missingFiles prog=0.00</code>(账面丢失,非保留);②「磁盘无副作用」在归位步失效 —— ACT_FINALIZE 的零搬移 setLocation 触发 <code>need_full_check</code> 自动 recheck,<b>1.2s 内磁盘原名文件被物理改名挂 <code>.!qB</code></b>(F2 逐步采样;E3 归因于 resume 不准确,F2 修正为归位步);③根源链:rejected re-add 时 filesearcher <code>forceAppendExt</code> 把工作名伪造为 <code>name.!qB</code>(save_path 下找不到文件)→ 归位后 recheck/状态机按伪造名把磁盘对齐 → 冻结;账面随后按 <code>.!qB</code> 名校验通过恢复 1.00(恰为设计禁止的读盘校验,被隐式触发);共享物理文件导致<b>一个成员的重建污染全组</b>(含账面从未出错的 mover)。
+      已排除:libtorrent/qB 拒绝嵌套目标(源码无此检查,实测真搬);空间/冲突/同机等其余闸门误判。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <ol>
+      <li><b>GATE_QB_TEMP 改为按声明文件核对</b>:对 plan 文件逐个「声明名 或 声明名+<code>.!qB</code>」存在性双查(替代内容根顶层 scandir);命中 <code>.!qB</code> 态 → blocked。</li>
+      <li><b>qB「成功」不可信</b>:setLocation 下发后短窗内(如 30-60s)核对 mover 进入 moving 态或 dst 落盘,否则快败并告警,不等 10 分钟停滞。</li>
+      <li><b>嵌套目标闸门</b>:target ⊆ save_path/content_root(或反向)→ 预检 blocked(dir_alias 的 junction 会自递归)。</li>
+      <li><b>失败反馈面</b>:move_stalled 等失败原因显式透出到 WebUI(红字/通知),不只落 job 账。</li>
+      <li><b>收尾后按声明名做 file_stat 级名核对 + renameFolder 两步复位(设计约束内,实验 G5 验证通过)</b>:归位链自动触发的只是 resume 数据校验(checkingResumeData,逐文件 file_stat 名字+大小,<b>不哈希不读内容</b>),它不会摘 <code>.!qB</code>(摘除在 handleFileCompleted 逐 piece 完成事件,仅完整哈希/下载完成时发生),且会被改名欺骗通过(账面恢复但磁盘名错位冻结)。收尾修法:成员账面恢复后按声明名核对磁盘,发现 <code>name.!qB</code> 化 → <code>torrents/renameFolder</code> 两步(内容根 → 临时名 → 原名;<code>doRenameFolder</code> 按完成位 true 重建实际路径,逐文件摘后缀并清 renamed_files)——纯改名,<b>不删种/不 skip_check 重加/不读盘校验</b>,三项设计约束全守(实验 G5:两步后磁盘原名、账面 1.00 未动、嵌套搬迁恢复真搬)。<b>勿用 torrents/recheck 兜底</b>(force_recheck 完整哈希,清账面+全盘读,违背约束);<code>torrents/renameFile</code> 也不可用(按用户路径解析,目标与其自身用户路径冲突 409,实验 G4)。</li>
+    </ol>
+    <p class="hint">修复现场(非本 issue 范围):465 文件摘 <code>.!qB</code> 后缀 → mover save_path 改回 <code>待删</code> → recheck → 恢复做种。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-05 04:20 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-05-0420-bug-relocate-zero-move.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

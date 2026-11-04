@@ -17,6 +17,7 @@
 
 ## Done
 
+- [26-11-05-0417] [整组迁移零搬移假成功事故取证(relocate 零搬移)](26-11-05-0417-report-relocate-zero-move.html) — `relocate-zero-move`
 - [26-11-03-2346] [GTM 当日总量虚高修复 Code Review](26-11-03-2346-report-gtm-day-total-inflation-review.html) — `gtm-day-total-inflation-review`
 - [26-11-03-2306] [整组迁移同机证明：推翻与最小改的可行性对比](26-11-03-2306-report-relocate-same-fs-proof-options.html) — `relocate-same-fs-proof-options`
 - [26-11-03-0636] [第三次全量代码评审报告（终版）](26-11-03-0636-report-memory-bank-full-code-review-3.html) — `memory-bank-full-code-review-3`

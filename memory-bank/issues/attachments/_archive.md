@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (49)
+## Open (50)
 
+- [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](../26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 stat,磁盘名带 .!qB 全 miss 被静默忽略,qB 报「成功移动」但零搬移;.!qB 闸门只扫内容根顶层漏拦,10min 后才由停滞看门狗判失败
 - [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](../26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 normpath 恒返回 '.', _within 的 if not s 守卫现实不可达; 覆盖率第三轮已用 _norm 替身钉住契约弧, 残留问题是守卫本身去留
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](../26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbmanager.py 619/624 补刷新闸注入三型变异全部存活: 用例观察窗在第 4 轮 KI 退出前, 重置节拍的可观测分歧落在窗后; 留待 mutants 审计兜底
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](../26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中 18788, 发现端点返回全机所有实例(含 token), 扩展取首个命中后把不同项目的实例混列; 旧设计只评估同机多实例

@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 5 |
 | docs | 2 |
 | test | 4 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [整组迁移可对「账面完成但磁盘名错位(.!qB)」的组零搬移假成功](26-11-05-0420-bug-relocate-zero-move.html) — 搬迁按声明名逐文件 st…
 - [question] [relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构](26-11-05-0200-question-relocate-units-empty-scope-unreachable.html) — _norm 底层 nor…
 - [test] [qbmanager 补刷新闸用例断言窗口局限, 变异三型全存活](26-11-05-0200-test-qbmanager-refresh-gate-assertion-window.html) — P2 红验对 qbman…
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中…
