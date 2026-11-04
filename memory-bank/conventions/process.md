@@ -18,7 +18,7 @@
 
 ## Git 约定 (观察自 git log)
 
-- **开工前先同步分支 (2026-09-19 用户指定)**: **无论只读分析还是改文件**, 会话开工第一步必为 `commands run my-commit-flow.sync` (自动 fetch + 快进 / 分叉自动 rebase; 判据与核验内联在脚本里, 不手工做); **禁止在落后的分支上工作**。细则见 `AGENTS.md`「会话协议 · 开始」与「提交 / PR」—— 该规则仍是**多处入口** (`AGENTS.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md`; `.github/copilot-instructions.md` 2026-10-06 起为纯指针), **改规则必须一次改全**, 本文件只留指针不复述。
+- **开工前先同步分支 (2026-09-19 用户指定)**: **无论只读分析还是改文件**, 会话开工第一步必为 `commands run my-commit-flow.sync` (自动 fetch + 快进 / 分叉自动 rebase; 判据与核验内联在脚本里, 不手工做); **禁止在落后的分支上工作**。**唯一例外 (2026-11-04): 派生的只读评审子代理** —— 同步是主会话开工动作, 其 git 状态不动, 自检锚取任务提示给的 head; 可写子代理不豁免。细则见 `AGENTS.md`「会话协议 · 开始」与「提交 / PR」—— 该规则仍是**多处入口** (`AGENTS.md` / `.agents/skills/memory-bank/SKILL.md` / `.github/instructions/ai-lib.md` / `memory-bank/conventions/collaboration.md` / `memory-bank/pitfalls/git/sync-pull.md` / `memory-bank/pitfalls/kb/request-boundary.md` / `.agents/skills/deps-upgrade/SKILL.md`; `.github/copilot-instructions.md` 2026-10-06 起为纯指针), **改规则必须一次改全**, 本文件只留指针不复述。
 - **push 口径单点定义在 `AGENTS.md`「提交 / PR」** (2026-09-19 起: "提交" = commit + 推送)。本文件不复述, 免得第三次漂移。
 - 分支: `develop` 开发 (协作主线, 统一以 Gitee 的 `develop` 为准), `master` 主干。
 - 提交信息: **格式单点定义在 `AGENTS.md`「提交 / PR」**(2026-09-22 起为 **gitmoji + 中文**: 首行 `<gitmoji> <中文一句话概述>` + 空行 + 详细描述); 本文件不复述。选 emoji 走 [gitmoji skill](../../.agents/skills/gitmoji/SKILL.md)。

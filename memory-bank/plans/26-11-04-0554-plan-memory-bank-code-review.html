@@ -86,10 +86,10 @@
 <ol>
   <li><b>判断与机械分离</b>:收口判定、相关性裁决、severity 定级是判断,不脚本化;引文校验、分档、基线自检是机械,不靠人眼。</li>
   <li><b>reviewer 只读</b>:评审子代理禁任何 git 状态变更(单一写线程原则在评审场景的延伸)。</li>
-  <li><b>基线钉死</b>:评审期间工作区状态不变;子代理开工自检基线 hash,不匹配即停手。</li>
+  <li><b>基线钉死</b>:评审期间工作区状态不变;子代理开工自检锚(派遣时 HEAD)不匹配即停手。</li>
   <li><b>范围守恒不被架空</b>:「相关」写死定义(计划目标内 / 本任务改动直接引入或暴露),其余一律入池。</li>
   <li><b>不加机械守卫</b>:评审是判断性动作,硬守卫逼出走过场;先攒复发数据再议。</li>
-  <li><b>既有闸门不重复</b>:红线(<code>.my-commit-flow.toml</code> <code>red_lines</code>)、非ASCII(commit 闸门)、新配置键同步(validate 守卫测试)已有机检,评审只查闸门外侧面。</li>
+  <li><b>既有闸门不重复</b>:红线(<code>.my-commit-flow.toml</code> <code>red_lines</code>)、新配置键同步(validate 守卫测试)已有机检,评审只查闸门外侧面;<b>非ASCII 符号不在任何闸门内,须评审真查</b>。</li>
 </ol>
 
 <h2><span class="no">§02</span>现状与痛点</h2>
@@ -105,7 +105,7 @@
 <p><b>主线三层</b>:①触发层——完整任务=命中立档阈值 4 条,review 挂任务收口那次收尾、DoD 全部步骤之前,中途「提交」不触发;②规程层——新 skill 八节承载全部语义;③机械层——<code>.commands/review/</code> 包两个 task id(<code>review.pack</code> 评审包生成、<code>review.check</code> 引文校验)。</p>
 <p><b>子代理 sync 风险的三层修复</b>(排障时按层检查):</p>
 <ol>
-  <li><b>治本</b>:AGENTS.md 同步条目加「子代理一律豁免」句——子代理实际只看得到 AGENTS.md,豁免必须写在它读的文件里。</li>
+  <li><b>治本</b>:AGENTS.md 同步条目加「只读评审子代理豁免」句(可写子代理不豁免)——子代理实际只看得到 AGENTS.md,豁免必须写在它读的文件里。</li>
   <li><b>固化</b>:skill ③ 评审提示模板三件套(只读契约 / 双 hash 钉死 / 开工自检),主 agent 派遣照抄不临场发挥。</li>
   <li><b>兜底</b>:开工自检把静默错位变干净中止——即使前两层失效,sync 后 hash 不匹配即停手报告,不产出行号全错的报告。</li>
 </ol>
@@ -134,7 +134,7 @@
   <tr><td><code>review.pack</code> 报 command not found</td><td><code>.commands/review/config.toml</code> task id 注册;wrapper 是否安装</td><td>按 commands skill 装wrapper或展开 run.py 跑</td></tr>
   <tr><td><code>review.check</code> 全部 refute</td><td>findings JSON 字段名与 skill ④ schema 是否一致;引文是否取了跨行片段</td><td>引文取单行内连续片段;对齐字段名</td></tr>
   <tr><td>评审子代理仍跑 sync</td><td>AGENTS.md 豁免句是否在位(子代理只看 AGENTS.md);派遣是否照抄三件套</td><td>补豁免句/照抄模板;开工自检会拦截,重派即可</td></tr>
-  <tr><td>发现条目行号错位</td><td>基线 hash 与开工自检输出是否一致</td><td>不一致=评审期间树被动过,重新锚定基线后重评</td></tr>
+  <tr><td>发现条目行号错位</td><td>自检锚(派遣时 HEAD)与开工自检输出是否一致</td><td>不一致=评审期间树被动过,重新锚定自检锚后重评</td></tr>
   <tr><td><code>doc.caps</code> 报 AGENTS.md 超标</td><td>路由句/豁免句措辞是否过长</td><td>就地精简措辞,不削其它段落</td></tr>
   <tr><td>分档判断错误(该分面没分)</td><td><code>review.pack</code> 的行数统计与安全敏感面提示</td><td>以 pack 输出为准,不手工数行数</td></tr>
 </table>
@@ -166,7 +166,7 @@
 <h2><span class="no">§07</span>风险与对策</h2>
 <table>
   <tr><th>#</th><th>风险</th><th>触发条件</th><th>处置</th></tr>
-  <tr><td>1</td><td>评审子代理执行 sync 改写基线</td><td>子代理继承 AGENTS.md 硬规则且模板未照抄</td><td>开工自检 hash 拦截→停手报告→重新锚定重派;治本靠 AGENTS.md 豁免句</td></tr>
+  <tr><td>1</td><td>评审子代理执行 sync 改写基线</td><td>评审子代理继承 AGENTS.md 硬规则且模板未照抄</td><td>开工自检 hash 拦截→停手报告→重新锚定重派;治本靠 AGENTS.md 的只读子代理豁免句</td></tr>
   <tr><td>2</td><td>评审走过场(全绿通过)</td><td>赶收尾、评审包过大</td><td>留痕必须写明发现数(修 N/入池 M);复发数据攒够再议机械守卫</td></tr>
   <tr><td>3</td><td>「相关」判定扩架范围守恒</td><td>agent 把顺手改判成相关</td><td>定义写死在 skill(D5);拿不准的逐条问用户</td></tr>
   <tr><td>4</td><td>checker 误杀真发现</td><td>引文跨行/空白差异/行号偏移超窗口</td><td>引文约定单行连续片段+行号 ±邻近窗口;误杀样本回填脚本测试用例</td></tr>

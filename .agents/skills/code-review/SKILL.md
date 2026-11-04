@@ -21,6 +21,7 @@ user-invocable: true
 | — | 纯文档/纯 HTML 交付任务(归既有闸门管) |
 
 - **收口判定**: agent 判"本次收尾是否该任务最后一次"; 拿不准 → 问用户一句"这次是收口吗", 不自行猜。
+- **豁免优先于阈值**: 同一任务同时命中「立档阈值」与「纯文档豁免」时, **豁免优先** —— 纯文档/纯 HTML 任务一律不评审。
 - 评审固定发生在收尾 DoD **全部步骤之前**(第 3 步"事实回写"假设代码已定稿; 评审若改代码, 回写件返工)。
 - 评审发现的修复随**最后一次提交**入库; 已推送的历史提交不回头。
 
@@ -65,7 +66,7 @@ user-invocable: true
 - reviewer 指令里显式写"**不报清单**": 理论风险(说不出具体失败场景)/ 未改动代码 / 风格偏好 / 库推荐, 一律不报。
 - **相关性裁决**(主 agent, reviewer 初判仅参考): 相关 = 属于本任务计划目标之内, **或**由本任务改动直接引入/直接暴露; 其余一律按 create-issue skill 入池。拿不准 → 默认入池(与 scope-guard 同口径)。
 - **分级处置**: blocker(真缺陷/违反黄金法则/碰红线风险)**必修完才可收口**(硬门槛); major/minor 裁量当场修或入池; nit 通常忽略。test.full 照常兜底(DoD 第 4 步), 修复不设额外闸门。
-- 修复后**不强制二轮**; 修复 diff > 100 行 → 追加一轮评审。
+- 修复后**不强制二轮**; 修复 diff > 100 行 → 追加一轮评审, 该轮 `--base` 取**上一轮评审基线**(只评修复增量, 不重跑全量 diff)。
 
 ## ⑤ checklist(16 条, 评审与降级自查共用)
 
@@ -83,11 +84,11 @@ user-invocable: true
 7. 幂等性: 重复执行无副作用; 窗口语义走 state_file 去重(`record_execution`), 不靠循环频率 → AGENTS.md 法则 1。
 8. 单一写线程: 队列结构与 state_file 只由主循环线程写; 查 TOCTOU → 法则 5。
 9. 状态持久化: 跨轮状态进 state_file; 优雅退出立即落盘 + 周期落盘 → 法则 3。
-10. fail-fast: 新配置键进了 `validate_config` 且同步 `config/schema.py` → 法则 4(守卫测试已兜底, 查守卫外侧面)。
+10. fail-fast: 新配置键进了 `validate_config` 且同步 `src/auto_qb/config/schema/` → 法则 4(键面守卫 `test_config_key_surface` 已兜底, 查守卫外侧面)。
 11. 保守默认: 高风险动作默认关, 只对显式配置范围生效 → 法则 2。
 12. 红线: diff 未触碰 `config.yml` / `auto-qb-data/` → AGENTS.md 红线节 + `pitfalls/ops/prod-files.md`(提交闸门已兜底, pack 预警双保险)。
 13. 范围守恒: diff 无计划外文件与"顺手改" → 法则 6 + scope-guard skill。
-14. 非ASCII图形符号: 代码/配置无 emoji 与图形符号 → `conventions/code-style.md`(提交闸门已兜底)。
+14. 非ASCII图形符号: 代码/配置无 emoji 与图形符号 → `conventions/code-style.md`(**需评审真查**: 提交闸门未覆盖源码符号)。
 15. 测试基建: 新增测试同步 docstring"测试计划"清单; TMPDIR 约束未破坏 → AGENTS.md 测试节 + `pitfalls/testing/tmpdir.md`。
 16. 真机准入: 完工功能落入真机轨两类准入 → 真机验收已做或理由已明示 → `testing/real-machine.md` §00/§06。
 

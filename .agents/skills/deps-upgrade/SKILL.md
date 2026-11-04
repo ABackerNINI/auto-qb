@@ -27,7 +27,7 @@ user-invocable: true
 
 ## 流程
 
-**第 0 步(开工,硬性)**:`commands run my-commit-flow.sync`,结果行贴进回复;落后分支禁止开工。
+**第 0 步(开工,硬性)**:`commands run my-commit-flow.sync`,结果行贴进回复;落后分支禁止开工。**派生的只读评审子代理豁免本步**(自检锚取任务提示给的 head)。
 **请求边界(硬性)**:本轮是问答/巡检 → 只出报告不改文件。**bump 不等于 commit**:green 档的 bump 也只改 pyproject/uv.lock + 跑测试,commit/push 必须等用户显式指令("提交/入库/推上去")。四类动作(新建文件/入池/认领/commit push)逐项显式确认,不引用旧授权。
 
 **第 1 步:检测(纯只读)**

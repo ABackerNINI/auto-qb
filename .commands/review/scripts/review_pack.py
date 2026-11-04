@@ -53,10 +53,13 @@ def _flat(value) -> str:
 
 
 def _git(root: Path, *args: str) -> str:
-    # 不传 -c 配置: 本仓路径面无中文/八进制转义; 传 -c 会让 git 多派生一级孙进程,
-    # 在 test.one 的副作用台账里记成越界 POPEN(见 tests/sidefx.py)。
-    cmd = ["git", *args]
-    proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    # 固定 quotepath=off: 仓库有成百上千个非 ASCII 路径, 依赖机器级 git 配置会让清单/归因在别的 clone
+    # 或 CI 上静默失真(同包 _pipeline.py 同类事故的处置口径)。
+    cmd = ["git", "-c", "core.quotepath=off", *args]
+    try:
+        proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    except OSError as exc:
+        _die(f"git 启动失败: {exc}")
     if proc.returncode != 0:
         _die(f"git {' '.join(args)} 失败: {proc.stderr.strip()}")
     return proc.stdout
@@ -68,7 +71,11 @@ def _resolve_root(explicit: str | None) -> Path:
         if not (root / ".git").exists():
             _die(f"--root {root} 不是 git 仓库(缺 .git)")
         return root
-    proc = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, encoding="utf-8")
+    proc = None
+    try:
+        proc = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, encoding="utf-8")
+    except OSError as exc:
+        _die(f"git 启动失败: {exc}")
     if proc.returncode != 0:
         _die("当前目录不在 git 仓库内(也没有 --root)")
     return Path(proc.stdout.strip()).resolve()
@@ -89,9 +96,8 @@ def _load_gate_lines(root: Path) -> tuple[list[str], list[str]]:
 
 
 def _match_rule(path: str, pattern: str) -> bool:
-    if pattern.endswith("/"):
-        return path.startswith(pattern)
-    return path == pattern or path.startswith(pattern + "/")
+    # 与提交闸门同口径: commit.py 按子串匹配(any(r in p)), 这里保持同源, 避免嵌套路径下预警漏报
+    return pattern in path
 
 
 def _hit_rules(paths: list[str], rules: list[str]) -> list[str]:
@@ -142,18 +148,23 @@ def cmd_pack(args: argparse.Namespace) -> int:
             n = 0
         untracked_lines[p] = n
 
-    # 按文件归因的新增行(安全敏感面提示要落到文件, 不给无名标记); 未跟踪文件内容直接扫。
-    # ---/+++ 头只在 diff --git 后两行内识别, 内容行以 ++ 开头也按新增收
+    # 按文件归因的新增行: 只认 hunk 内的 '+' 行(+++ 头在 hunk 外, 内容以 ++ 开头也不会被误当元数据);
+    # 新路径取 +++ b/<path> 头, 不再从 diff --git 行 rsplit(新旧路径本身含 " b/" 都能正确归属)。
     current: str | None = None
-    meta_left = 0
+    in_hunk = False
     per_file_added: dict[str, list[str]] = {}
     for line in _git(root, "diff", "-U0", base).splitlines():
         if line.startswith("diff --git "):
-            current = line.rsplit(" b/", 1)[-1]  # rsplit: 旧路径含 " b/" 时仍取到新路径
-            meta_left = 2
-        elif meta_left and (line.startswith("--- ") or line.startswith("+++ ")):
-            meta_left -= 1
-        elif line.startswith("+") and current:
+            current = None
+            in_hunk = False
+        elif line.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk and line.startswith("+++ b/"):
+            # git 对含空格的路径在 +++ 头末尾补一个 TAB —— 必须剥掉, 否则归因键带尾随 TAB 且与 name-status 重名
+            current = line[len("+++ b/"):].rstrip("\t")
+        elif not in_hunk and line.startswith("+++ /dev/null"):
+            current = None
+        elif in_hunk and line.startswith("+") and current:
             per_file_added.setdefault(current, []).append(line[1:])
     sensitive_hits = {p for p in changed + untracked if any(mark in p.lower() for mark in SENSITIVE_PATH_MARKERS)}
     sensitive_hits |= {
