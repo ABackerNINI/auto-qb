@@ -18,11 +18,11 @@
 - **单一权威在后端**: 扩展不做任何频控判断, 它只按后端返回的「最早可取时间」干活。
 """
 import random
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Tuple
 
+from ..infra.clock import SYSTEM_CLOCK
 from ..infra.utils import time_in_range
 from .model import HrSiteData
 
@@ -123,5 +123,5 @@ def next_allowed_at(
 
 
 def now_ts() -> float:
-    """当前 epoch 秒(单独抽出便于测试替换)"""
-    return time.time()
+    """当前 epoch 秒(单独抽出便于测试替换; 叶子走取时单点, S2 时钟注入收编)"""
+    return SYSTEM_CLOCK.now()

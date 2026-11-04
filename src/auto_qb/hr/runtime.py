@@ -15,11 +15,11 @@
 import hashlib
 import logging
 import threading
-import time
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Sequence, Tuple
 
 from ..config.models import HrCheckConfig, SiteHrCheckConfig
+from ..infra.clock import SYSTEM_CLOCK
 from .channel import (
     ChannelStatus,
     describe_token_source,
@@ -272,11 +272,14 @@ class HrRuntime:
         `stop()`(含热重挂) 会置 `_sleep_stop`: 被打断即抛 `HrChannelStopped`, 由 service 记成
         「本轮让位」—— 不计失败、不告警、不推进熔断(与关停时叫停取数同一口径)。
         """
-        deadline = time.monotonic() + max(0.0, seconds)
+        # 等待预算走取时单点的**真实单调钟**(S2 时钟注入收编, 原 time.monotonic 直调):
+        # 阻塞预算不入假钟(与 queue.wait 同一纪律), 中断语义只靠 _sleep_stop 事件 ——
+        # sleeper 作为可调用注入 service 的口径原样不动, 时钟注入不另设等待机制。
+        deadline = SYSTEM_CLOCK.monotonic() + max(0.0, seconds)
         while True:
             if self._sleep_stop.is_set():
                 raise HrChannelStopped("取数通道已停止(正在关停或重挂): 放弃本轮剩余的等待")
-            remain = deadline - time.monotonic()
+            remain = deadline - SYSTEM_CLOCK.monotonic()
             if remain <= 0:
                 return
             if self._sleep_stop.wait(min(remain, _SLEEP_SLICE)):

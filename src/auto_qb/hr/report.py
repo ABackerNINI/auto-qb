@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from ..config.models import Config
+from ..infra.clock import SYSTEM_CLOCK
 from ..infra.utils import fmt_size
 from .channel import API_TASKS, describe_token_source, token_path
 from .fetcher import HrChannelUnavailable, HrFetcher, NullFetcher, query_param
@@ -133,7 +134,7 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
     print(f"站点文件目录: {service.dir}(单次等待上限 {DIAGNOSTIC_MAX_WAIT:.0f}s)", file=out)
     _print_channel(config, service, out)
     print("-" * 92, file=out)
-    started = time.time()
+    started = SYSTEM_CLOCK.now()  # 叶子 CLI 入口走取时单点(挂钟语义, 展示用时)
     # force=True(计划 26-09-30-0240): 走查本义就是「人工立即跑一波给人看」, 不带 force
     # 会被拉取间隔闸门挡成「未到拉取时刻」, 失去走查意义(频控本身仍生效)
     results = service.refresh_all(force=True)
@@ -141,7 +142,7 @@ def run_hr_once(config: Config, html_dir: Optional[str] = None, out=None) -> int
         # 走查不写盘 ⇒ 已落盘视图必然是旧的; 用本轮内存快照预览, 否则报告会误显示「无可判数据」
         view = service.build_view_for(result.site, result.snapshot) if result.snapshot is not None else None
         _print_site(result, view, out)
-    elapsed = time.time() - started
+    elapsed = SYSTEM_CLOCK.now() - started
     print("-" * 92, file=out)
     print(f"合计 {len(results)} 个站点, 用时 {elapsed:.1f}s; 本次未写入任何文件。", file=out)
     if isinstance(service.fetcher, NullFetcher):
@@ -169,7 +170,7 @@ def run_hr_status(config: Config, limit: int = 10, out=None) -> int:
         persist=False,
         allow_fetch=False,  # 本报告连「试着取一次」都不做: 要抓数据请看 --hr-once
     )
-    now = time.time()
+    now = SYSTEM_CLOCK.now()  # 叶子 CLI 入口走取时单点(挂钟语义, 与落盘 ts 同侧比较)
     print(f"HR 在线核实现状(只读: 不取数 / 不加锁 / 不写盘) 共 {len(enabled)} 个站点: {', '.join(enabled)}", file=out)
     print(f"站点文件目录: {service.dir}(每站点一个 JSON; 多实例共享同一账号时需共用同一目录)", file=out)
     _print_channel(config, service, out)
@@ -209,7 +210,7 @@ def run_hr_confirm_empty(config: Config, sites: List[str], out=None) -> int:
         try:
             with service.store(site).hold() as session:
                 data = session.data
-                data.empty_confirmed_at = time.time()
+                data.empty_confirmed_at = SYSTEM_CLOCK.now()  # 落盘对账戳: 挂钟语义走取时单点
                 note = "; 人工对账: 确认账号 HR 清单为空(--hr-confirm-empty), 零行波恢复签发放行, 非零行自动失效"
                 data.wave.notes = ((data.wave.notes or "") + note).strip("; ")
                 # 拉取历史(计划 26-10-04-0312 §3.3): 对账是「零行波能不能放行」的关键前置, 入时间轴,
@@ -222,7 +223,7 @@ def run_hr_confirm_empty(config: Config, sites: List[str], out=None) -> int:
                     action="confirm-empty",
                     reason=note.strip("; ")
                 )
-                status = session.commit(time.time())
+                status = session.commit(SYSTEM_CLOCK.now())  # 落盘提交戳: 挂钟语义走取时单点
                 if status == "written":
                     print(f"[{site}] 已写入人工对账戳({stamp_text(data.empty_confirmed_at)})。", file=out)
                     print("      之后结构完好的零行波可正常签发放行; 清单再现任何非零行时确认戳自动失效。", file=out)
@@ -386,6 +387,6 @@ def _print_site(result: HrRefreshResult, view, out) -> None:
         channel = CHANNEL_TEXTS.get(view.channel_state, view.channel_state)
         print(
             f"    视图: 形态={view.listing} 考察中命中={len(view.lane_a)} 终态命中={len(view.lane_terminal)} "
-            f"放行={len(view.verified)} 最近健康波={ago_text(view.healthy_ts, time.time())} 通道={channel}",
+            f"放行={len(view.verified)} 最近健康波={ago_text(view.healthy_ts, SYSTEM_CLOCK.now())} 通道={channel}",
             file=out
         )

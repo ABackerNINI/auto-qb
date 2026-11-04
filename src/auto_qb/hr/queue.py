@@ -17,6 +17,7 @@ import time
 import uuid
 from typing import Callable, Dict, List, Optional, Tuple
 
+from ..infra.clock import SYSTEM_CLOCK
 from .channel import MAX_BATCH, HrResult, HrTask, host_of
 
 logger = logging.getLogger(__name__)
@@ -58,12 +59,13 @@ class HrTaskQueue:
     def wait(self, task_id: str, timeout: float) -> Optional[HrResult]:
         """等回传; 超时返回 None 并**就地作废**该任务(晚到的回传会被 submit 拒掉, 不会堆积)
 
-        等待预算用**真实单调时钟**(time.monotonic), 不用注入的 now_fn —— 注入的假时钟只服务
-        TTL 与频控(测试可自由推进), 若混进阻塞预算会让"时间不动"的假时钟把等待无限拉长。
+        等待预算用**真实单调时钟**(取时单点 SYSTEM_CLOCK.monotonic; S2 时钟注入收编, 原
+        time.monotonic 直调), 不用注入的 now_fn —— 注入的假时钟只服务 TTL 与频控(测试可自由
+        推进), 若混进阻塞预算会让"时间不动"的假时钟把等待无限拉长。
 
         被 `cancel_all` 叫停时同样返回 None(调用方据 `cancel_reason` 区分"被叫停"与"超时")。
         """
-        deadline = time.monotonic() + max(0.0, timeout)
+        deadline = SYSTEM_CLOCK.monotonic() + max(0.0, timeout)
         with self._cond:
             epoch = self._epoch
             while True:
@@ -77,7 +79,7 @@ class HrTaskQueue:
                 self._expire_locked()
                 if task_id not in self._outstanding or self._epoch != epoch:
                     return None
-                left = deadline - time.monotonic()
+                left = deadline - SYSTEM_CLOCK.monotonic()
                 if left <= 0:
                     self._outstanding.pop(task_id, None)
                     return None

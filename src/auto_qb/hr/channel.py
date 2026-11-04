@@ -23,11 +23,11 @@ import json
 import logging
 import os
 import re
-import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Tuple
 
 from ..config.models import SiteHrCheckConfig
+from ..infra.clock import SYSTEM_CLOCK
 from ..infra.errors import AutoQbError
 from ..infra.utils import is_loopback_host, resolve_or_create_token
 from .model import _as_float, _as_int  # 数值强转单点在 model(此前 channel 另抄一份逐字同)
@@ -396,7 +396,8 @@ class ChannelStatus:
 
     @property
     def silent_for(self) -> float:
-        return 0.0 if not self.last_contact_ts else max(0.0, time.time() - self.last_contact_ts)
+        # 展示量叶子: 走取时单点(S2 时钟注入收编); 挂钟语义 —— 与落盘 last_contact_ts 同侧相减
+        return 0.0 if not self.last_contact_ts else max(0.0, SYSTEM_CLOCK.now() - self.last_contact_ts)
 
 
 def describe_token_source(configured: str, data_dir: str) -> str:

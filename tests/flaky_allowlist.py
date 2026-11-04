@@ -13,8 +13,8 @@ S2/S3/S4 清理时逐条删除收紧。**新增违例不经本表直接红**; �
   code-style 的数据例外保留, 不算代码用语。
 
 各文件条目上方注释 = 该文件存量的清理归属与理由; 条目数 = 实测存量
-(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 71 处/27 文件
-[core 域 90 处/16 文件已随 S2 core 提交清零] · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
+(tests 裸 sleep 27 处/15 文件 · e2e waitForTimeout 91 处/20 文件 · src 裸取时 59 处/22 文件
+[core 域 90 处/16 文件、hr 域 12 处/5 文件已随 S2 各域提交清零] · bind 位固定端口 0 处), 与守阵扫描逐条对得上。
 """
 
 # ---------- ALLOW_SLEEP_TESTS: tests/ 裸 time.sleep 调用(AST 实调用, patch 字符串不算) ----------
@@ -95,37 +95,9 @@ ALLOW_SLEEP_TESTS: dict[str, dict[str, int]] = {
 # ---------- ALLOW_TIME_SRC: src/ 裸 time.time()/time.monotonic[_ns]() 直调(clock.py 本体路径豁免, 不进本表) ----------
 ALLOW_TIME_SRC: dict[str, dict[str, int]] = {
     # S2 core 域提交已完成(2026-11-05): 上表 16 文件 90 处已按 D8 构造期注入 clock 清零, 条目删净
-    # S2 hr 域提交: 与 runtime.sleeper 等待注入口径对齐后删除(1 处)
-    "src/auto_qb/hr/channel.py":
-        {
-            "return 0.0 if not self.last_contact_ts else max(0.0, time.time() - self.last_contact_ts)": 1
-        },
-    # S2 hr 域提交: 与 runtime.sleeper 等待注入口径对齐后删除(2 处)
-    "src/auto_qb/hr/queue.py":
-        {
-            "deadline = time.monotonic() + max(0.0, timeout)": 1,
-            "left = deadline - time.monotonic()": 1
-        },
-    # S2 hr 域提交: 与 runtime.sleeper 等待注入口径对齐后删除(1 处)
-    "src/auto_qb/hr/ratelimit.py": {
-        "return time.time()": 1
-    },
-    # S2 hr 域提交: 与 runtime.sleeper 等待注入口径对齐后删除(6 处)
-    "src/auto_qb/hr/report.py":
-        {
-            "data.empty_confirmed_at = time.time()": 1,
-            "elapsed = time.time() - started": 1,
-            "f\"放行={len(view.verified)} 最近健康波={ago_text(view.healthy_ts, time.time())} 通道={channel}\",": 1,
-            "now = time.time()": 1,
-            "started = time.time()": 1,
-            "status = session.commit(time.time())": 1
-        },
-    # S2 hr 域提交: 与 runtime.sleeper 等待注入口径对齐后删除(2 处)
-    "src/auto_qb/hr/runtime.py":
-        {
-            "deadline = time.monotonic() + max(0.0, seconds)": 1,
-            "remain = deadline - time.monotonic()": 1
-        },
+    # S2 hr 域提交已完成(2026-11-05): 5 文件 12 处已按 D8 清零, 条目删净 —— 等待预算
+    # (runtime.sleeper / queue.wait)走 SYSTEM_CLOCK.monotonic 单点保真实单调钟(与既有
+    # sleeper/now_fn 可调用注入口径对齐, 阻塞预算不入假钟); 挂钟叶子走 SYSTEM_CLOCK.now() 单点。
     # S2 其余叶子提交: 叶子函数走 clock 单点或加参注入后删除(1 处)
     "src/auto_qb/infra/alias_fs.py": {
         "probed_at=time.time(),": 1
