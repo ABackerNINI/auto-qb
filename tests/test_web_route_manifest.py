@@ -1,7 +1,7 @@
 """test_web_route_manifest 测试计划: W0 结构守阵 + 路由金清单
 
 ## 测试计划(每个测试函数一条)
-- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog, 26-10-16-0541 S6 增 3 条 traffic/monitor, 26-10-16-0541 S7 增 1 条 traffic/monitor/notify, 26-10-17-0339 S17 增 1 条 traffic/monitor/relaunch, 26-10-20-1316 §03 增 1 条 traffic/monitor/claim, 26-10-31-0306 W3 增 2 条 transfer/run+test): 89 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
+- test_web_route_manifest_frozen: 路由金清单守阵(W0, plan 26-09-22-1857; ALT-01 增 2 条 speed/alt, P2' 增 1 条 skip-check, 26-10-01-2216 阶段1 增 1 条 hr sites entries, 26-10-02-1955 W1 增 1 条 webui/flags, 26-10-03-0946 P4 增 3 条 traffic/qb, 26-10-04-0312 S3 增 1 条 hr history, 26-10-05-0314 S2 增 1 条 skip-check/precheck, WEBUI 错误历史 S2 增 1 条 errlog, 26-10-16-0541 S6 增 3 条 traffic/monitor, 26-10-16-0541 S7 增 1 条 traffic/monitor/notify, 26-10-17-0339 S17 增 1 条 traffic/monitor/relaunch, 26-10-20-1316 §03 增 1 条 traffic/monitor/claim, 26-10-31-0306 W3 增 2 条 transfer/run+test, 26-11-04-1042 P2 增 1 条 relocate/chain): 90 条 (method, path) 集合逐一钉死, web.py 拆 web/ 包期间任何路由丢失/改名/方法变更即红
 - test_create_app_is_thin_assembly: 组装壳守阵(W6): create_app 源 ≤150 行且无内联路由装饰器(防 926 行单函数回潮)
 - test_route_cmd_passthrough_single_point: 守阵(issue webui-route-cmd-boilerplate-dup) 「路由→命令」透传 mechanics 只存于形状单点 —— 8 个 helper 各定义恰好一次 + 21 个收敛端点体只剩一行 helper 调用 + 三种逐字透传形状零复发(AST 静态; 行为等值由既有表驱动用例逐端点钉 cmd/payload)
 """
@@ -36,6 +36,7 @@ _GOLDEN_ROUTES = {
     ("POST", "/api/expr/eval"),
     ("GET", "/api/fs/dirs"),
     ("POST", "/api/fs/mkdir"),
+    ("GET", "/api/relocate/chain"),  # 路径链探测(计划 26-11-04-1042 P2-1; 只收 hash, 403 门控 relocate.enabled)
     ("GET", "/api/groups"),
     ("POST", "/api/groups/{key}/delete"),
     ("POST", "/api/groups/{key}/pause"),

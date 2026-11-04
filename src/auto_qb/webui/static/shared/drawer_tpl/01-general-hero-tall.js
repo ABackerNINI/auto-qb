@@ -238,6 +238,7 @@
   function actBtn(r) {
     if (r.act === "open") return T`<button type="button" class="dt01-act" data-act="open" title="打开目录"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg></button>`;
     if (r.act === "copy") return T`<button type="button" class="dt01-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>`;
+    if (r.act === "chain") return T`<button type="button" class="dt01-act" data-act="chain" title="查看路径链"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg></button>`;
     return "";
   }
 
@@ -325,6 +326,10 @@
     const cellEl = btn.closest(".dt01-cell");
     if (btn.getAttribute("data-act") === "open") {
       ctx.openTargetPath("torrent", ctx.drawer.hash);
+      return;
+    }
+    if (btn.getAttribute("data-act") === "chain") {
+      ctx.relChainOpen(ctx.drawer.hash, btn);
       return;
     }
     const text = cellEl ? cellEl.querySelector(".dt01-vv") : null;

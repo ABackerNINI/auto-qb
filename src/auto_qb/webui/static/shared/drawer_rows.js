@@ -119,6 +119,8 @@ Object.assign(window.AQB_DRAWER.methods, {
             { icon: "#i-folder", label: "源路径", text: rel.src || "—", wide: true, act: "open" },
             { icon: "#i-folder-open", label: "目标路径", text: rel.dst || "—", wide: true, act: "open" },
             { icon: "#i-layers", label: "关联别名", text: rel.alias_count ? `${rel.alias_count} 个（${rel.alias_kind || "未知类型"}）` : "无" },
+            // P2: 详情段入口 —— 与徽标同一浮窗; 文本说明「A → B → C」而不在此猜测链内容
+            { icon: "#i-link", label: "路径链", text: "查看 A → B → C", act: "chain" },
             { icon: "#i-timer", label: "收尾武装", text: rel.armed_at ? ts(rel.armed_at) : "未武装" },
             { icon: "#i-clock", label: "最近更新", text: ts(rel.updated_at) },
           ].concat(rel.state === "failed" && rel.reason

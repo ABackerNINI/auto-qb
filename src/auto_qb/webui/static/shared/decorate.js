@@ -160,9 +160,12 @@ window.AQB_DECORATE = {
       const rel = ms.find((m) => m.relocate && m.relocate.mover) || ms.find((m) => m.relocate) || ms[0];
       return rel.hash || "";
     },
-    relocateOpen(row) {
+    relocateOpen(row, ev) {
       const hash = this.relocateTargetHash(row);
-      if (hash) this.openTorrentDrawer(hash);
+      if (!hash) return;
+      this.openTorrentDrawer(hash);
+      // P2: 徽标本身就是路径链入口 —— 打开浮窗(锚在徽标上), 详情在后; 列表渲染期不探测
+      this.relChainOpen(hash, ev && ev.currentTarget);
     },
     /* 迁移筛选桶(成员级): 进行中三态 + 「有过迁移」(done/cancelled 也计入历史, 但不挂徽标) */
     _relocatePick(r) {

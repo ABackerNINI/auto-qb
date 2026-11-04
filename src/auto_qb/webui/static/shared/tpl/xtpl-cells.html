@@ -115,7 +115,7 @@
         <button v-if="$root.relocateBadge(g)" type="button" class="rel-badge"
                 :class="'rel-' + $root.relocateBadge(g).cls"
                 :title="$root.relocateBadge(g).title" :aria-label="$root.relocateBadge(g).title"
-                @click.stop="$root.relocateOpen(g)">{{ $root.relocateBadge(g).label }}</button>
+                @click.stop="$root.relocateOpen(g, $event)">{{ $root.relocateBadge(g).label }}</button>
       </div>
       <!-- 可选列(默认隐藏口径见 app.js DEFAULT_HIDDEN_KEYS): 表头名称与种子页同名列对齐 -->
       <!-- 剩余 = 组内最小(补齐一份即可 —— 最完整成员还差的字节) -->
@@ -204,7 +204,7 @@
         <button v-if="$root.relocateBadge(m)" type="button" class="rel-badge"
                 :class="'rel-' + $root.relocateBadge(m).cls"
                 :title="$root.relocateBadge(m).title" :aria-label="$root.relocateBadge(m).title"
-                @click.stop="$root.relocateOpen(m)">{{ $root.relocateBadge(m).label }}</button>
+                @click.stop="$root.relocateOpen(m, $event)">{{ $root.relocateBadge(m).label }}</button>
       </div>
     </template>
   </script>

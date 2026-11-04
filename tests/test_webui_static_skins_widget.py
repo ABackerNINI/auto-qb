@@ -303,7 +303,8 @@ def test_frontend_hr_safety_wiring():
             (r'class="dur-body"', 2),  # 文字包裹层: 整格线随文字不随列宽(挂单元格 = 随列宽)
             (r'@mouseenter="(?:\$root\.)?hrPopEnter\(\$event, m\)"', 2),
             (r'@mouseleave="(?:\$root\.)?hrPopLeave"', 3),  # 2 处触发面 + 弹窗自身(移入弹窗不隐藏)
-            (r'<teleport to="body">', 1),
+            # 1 = HR 悬停弹窗; +1 = 迁移路径链浮窗(P2, 计划 26-11-04-1042)也 teleport 到 body 级
+            (r'<teleport to="body">', 2),
             (r'ref="hrPop"', 1),
         ):
             got = len(re.findall(pattern, html))

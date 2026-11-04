@@ -36,7 +36,7 @@ Object.assign(window.AQB_SHORTCUTS.methods, {
      * 开着时保持可用; escBusy(退栈链)仍含 drawer.open(Esc 关面板), 两名单自此职责分叉。 */
     _kbOverlayBusy() {
       return !!(this.modal.visible || this.addOpen || this.statsOpen || this.speedOpen || this.mgrOpen ||
-        this.metaOpen || this.filePrio.visible || this.historyOpen || this.headMenu.visible ||
+        this.metaOpen || this.relChain.open || this.filePrio.visible || this.historyOpen || this.headMenu.visible ||
         this.colMenuOpen || this.uiMenuOpen || this.searchHelpOpen || this.filterMenu || this.menu.visible ||
         this.kbHelpOpen || this.kbFullOpen);
     },

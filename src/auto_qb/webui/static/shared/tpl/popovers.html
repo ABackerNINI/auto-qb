@@ -246,6 +246,73 @@
       </div>
     </div>
 
+    <!-- 迁移路径链浮窗(P2, 计划 26-11-04-1042): 徽标 / 详情「路径链」按钮点击打开。
+         与 HR 弹窗同走 teleport 到 body 级 —— 脱离抽屉/表格的 overflow 与 z-index 纠缠;
+         层级高于停靠抽屉(40)但低于模态(200), 透明背板承接点外关闭; Esc 归 lifecycle 退栈链,
+         名单三处同步: lifecycle 退栈链 / escBusy(dialogs_meta.js) / _kbOverlayBusy(shortcuts_engine.js)。
+         数据只在打开或「重新探测」时取, 列表渲染期零文件系统探测。 -->
+    <teleport to="body">
+      <div v-if="relChain.open" class="relc-backdrop" @click="relChainClose(false)" aria-hidden="true"></div>
+      <div v-if="relChain.open" ref="relChainPop" class="relc-pop"
+           :style="{ left: relChain.left + 'px', top: relChain.top + 'px', width: relChain.width + 'px' }"
+           role="dialog" aria-modal="false" aria-label="迁移路径链" tabindex="-1"
+           @click.stop @keydown.esc.stop.prevent="relChainClose()">
+        <div class="relc-head">
+          <svg class="ico ico-sm relc-head-ico" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-link"></use></svg>
+          <b>迁移路径链</b>
+          <span class="relc-sub" :title="relChain.hash">{{ relChain.subtitle }}</span>
+          <button type="button" class="relc-x" aria-label="关闭路径链" @click="relChainClose()">
+            <svg class="ico ico-sm" viewBox="0 0 16 16" aria-hidden="true"><use href="#i-close"></use></svg>
+          </button>
+        </div>
+        <div v-if="relChain.loading" class="relc-state is-loading" role="status">
+          <span class="relc-spin" aria-hidden="true"></span>探测中: 正在逐跳读取链接与挂载点…
+        </div>
+        <div v-else-if="relChain.error" class="relc-state is-error" role="alert">{{ relChain.error }}</div>
+        <template v-else-if="relChain.data">
+          <div v-if="relChain.data.env === 'mapped'" class="relc-note">
+            容器映射环境无法逐跳探测, 以下仅显示服务端已知路径; 判不了的一律标「未确认」。
+          </div>
+          <div v-else-if="relChain.data.env === 'remote'" class="relc-note">
+            远程 / UNC 路径需在 qB 主机本地查看, 此处不做文件系统探测。
+          </div>
+          <div class="relc-chain">
+            <div v-for="(n, i) in relChain.data.nodes" :key="i" class="relc-hop-wrap">
+              <div class="relc-node" :class="'is-' + n.status">
+                <div class="relc-line">
+                  <span class="relc-hop-no" aria-hidden="true">{{ i + 1 }}</span>
+                  <span class="relc-type" :class="'t-' + n.type">{{ relChainTypeText(n.type) }}</span>
+                  <span class="relc-path" :title="n.path">{{ n.path || "—" }}</span>
+                </div>
+                <div class="relc-meta">
+                  <span class="relc-status">{{ relChainStatusText(n) }}</span>
+                  <span v-if="n.type === 'hardlink'" class="relc-submeta">{{ n.nlink }} 个目录项</span>
+                  <span v-if="n.attribution && n.attribution.auto" class="relc-auto">auto-qb 设置</span>
+                  <span v-else class="relc-manual">非 auto-qb 设置</span>
+                </div>
+                <div v-if="n.attribution && n.attribution.auto" class="relc-attr">
+                  <span>job {{ n.attribution.job_id || "—" }}</span>
+                  <span>来源 {{ relocateOriginText(n.attribution.origin) }}</span>
+                  <span>收尾 {{ relChainPhaseText(n.attribution.phase) }}</span>
+                  <span v-if="n.attribution.armed_at">武装 {{ fmtTs(n.attribution.armed_at) }}</span>
+                  <span v-else>未武装</span>
+                  <span v-if="n.attribution.is_mover" class="relc-submeta">搬移成员</span>
+                  <span v-if="n.attribution.stale_record" class="relc-warn">记录仍在, 别名已不存在</span>
+                </div>
+                <div v-if="n.reason" class="relc-reason">{{ n.reason }}</div>
+              </div>
+              <div v-if="i < relChain.data.nodes.length - 1" class="relc-arrow" aria-hidden="true">→</div>
+            </div>
+          </div>
+          <div class="relc-foot">
+            <span class="relc-probed">{{ relChainProbedText() }}</span>
+            <button type="button" class="relc-btn" :disabled="relChain.loading" @click="relChainRefresh()">重新探测</button>
+            <button type="button" class="relc-btn" @click="relChainCopyAll()">复制完整路径</button>
+          </div>
+        </template>
+      </div>
+    </teleport>
+
     <!-- HR 悬停弹窗(T3 进度仪表; 26-09-26-webui-hr-popup): 单例浮层, 触发面 = 做种时间单元格(6 处绑定)。
          teleport 到 body 级 —— 脱离列表容器的 overflow/特异性纠缠(同 .speed-pop 的教训);
          数据组装/调度/定位单点在 shared/hr.js(hrPop*), prism 主题令牌挂 html[data-theme] 自动继承。 -->

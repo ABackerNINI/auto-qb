@@ -172,7 +172,9 @@
         ? T`<button type="button" class="dt03-act" data-act="open" title="打开目录"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-folder-open"></use></svg></button>`
         : (r.act === "copy"
           ? T`<button type="button" class="dt03-act" data-act="copy" title="复制${r.label}"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-copy"></use></svg></button>`
-          : "");
+          : (r.act === "chain"
+            ? T`<button type="button" class="dt03-act" data-act="chain" title="查看路径链"><svg class="ico ico-sm" viewBox="0 0 16 16"><use href="#i-link"></use></svg></button>`
+            : ""));
       return T`<div class="dt03-item">${r.icon ? icoSvg(r.icon) : ""}<span class="k">${r.label}</span><span style="min-width:0; display:inline-flex; align-items:center; gap:4px; max-width:100%;"><span class="v">${r.text}</span>${btn ? R(btn) : ""}</span></div>`;
     }).join("");
   }
@@ -382,6 +384,10 @@
     const act = btn.getAttribute("data-act");
     if (act === "open") {
       ctx.openTargetPath("torrent", ctx.drawer.hash);
+      return;
+    }
+    if (act === "chain") {
+      ctx.relChainOpen(ctx.drawer.hash, btn);
       return;
     }
     if (act === "magnet") {

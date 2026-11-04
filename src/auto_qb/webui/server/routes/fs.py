@@ -25,6 +25,19 @@ from ..context import WebContext
 logger = logging.getLogger("auto_qb.web")  # noqa: F401  (mkdir 记录)
 
 
+def browse_roots(manager) -> List[str]:
+    """目录浏览的**允许根**集合(R10-11): 与 /api/paths 同源的已知保存路径
+
+    白名单只由服务端从自己的快照派生, 不接受客户端传参 —— 这是文件系统读端点的第一道闸门。
+    !roots 恒为**逻辑空间**路径(qB 报回的 save_path) —— 与映射无关, 见报告 §04。
+    路径链端点(relocate_chain.py)复用本单点, 不另抄一份。
+    """
+    # 读侧快照(同 api_paths): 文件系统读端点同为 Web 线程读端点
+    recs = tuple(manager.store.by_hash.values())
+    roots = {path_normalize(rec.save_path or "") for rec in recs if rec.save_path}
+    return sorted(r for r in roots if r)
+
+
 def _bare(p: str) -> str:
     """剥掉 Windows 扩展长度前缀 `\\\\?\\`(`\\\\?\\UNC\\` 还原成 `\\\\`), 非 Windows/无前缀原样返回
 
@@ -98,15 +111,8 @@ def build_router(ctx: WebContext) -> APIRouter:
         return {"paths": sorted(paths)}
 
     def _browse_roots() -> List[str]:
-        """目录浏览的**允许根**集合(R10-11): 与 /api/paths 同源的已知保存路径。
-
-        白名单只由服务端从自己的快照派生, 不接受客户端传参 —— 这是文件系统读端点的第一道闸门。
-        !roots 恒为**逻辑空间**路径(qB 报回的 save_path) —— 与映射无关, 见报告 §04。
-        """
-        # 读侧快照(同 api_paths): /api/fs/* 同为 Web 线程读端点
-        recs = tuple(manager.store.by_hash.values())
-        roots = {path_normalize(rec.save_path or "") for rec in recs if rec.save_path}
-        return sorted(r for r in roots if r)
+        """目录浏览的允许根(单点见模块级 browse_roots)"""
+        return browse_roots(manager)
 
     def _within_roots(target: str, roots: List[str]) -> bool:
         """目标是否落在某个允许根内(相等或为其子目录) —— 越界一律拒绝"""

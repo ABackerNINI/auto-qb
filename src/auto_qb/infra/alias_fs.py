@@ -58,6 +58,11 @@ logger = logging.getLogger(__name__)
 KIND_JUNCTION = "junction"
 KIND_SYMLINK = "symlink"
 KIND_HARDLINK = "hardlink"
+# 非链接节点的形态(路径链逐跳探测用, 与上面三种同属「事实」而非「结论」)
+KIND_DIR = "dir"
+KIND_FILE = "file"
+KIND_MOUNT = "mount"
+KIND_OTHER = "other"
 
 # Windows 重解析点标签(区分 junction 与符号链接的唯一可靠依据 —— islink 对两者都为真)
 IO_REPARSE_TAG_MOUNT_POINT = 0xA0000003
@@ -83,6 +88,22 @@ class LinkProbe:
 
     ok: bool
     detail: str = ""
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class PathInspection:
+    """单个路径的只读探测事实(路径链逐跳展示用, §P2-1)
+
+    `status` 是探测本身的结果(ok/missing/permission/unknown); 判不了的一律 unknown,
+    **不猜**类型 —— 界面按原因文案显示「未确认」。
+    """
+
+    status: str
+    kind: str = ""
+    target: str = ""  # 链接的原始目标(未归一; 归一由调用方做)
+    nlink: int = 0
+    is_mount: bool = False
     error: str = ""
 
 
@@ -613,6 +634,111 @@ def alias_target(path: str) -> Optional[str]:
         return os.readlink(utils.add_long_path_prefix_for_win(path))
     except OSError:
         return None
+
+
+#: Windows NT 设备前缀(junction 的 readlink 结果常见 `\??\H:\...`)
+_DEVICE_PREFIX = "\\??\\"
+
+
+def strip_device_prefix(path: str) -> str:
+    """剥掉 NT/扩展长度前缀, 统一成逻辑路径(`\\??\\H:\\a` / `\\\\?\\H:\\a` -> `H:\\a`)"""
+    if path.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + path[8:]
+    if path.startswith("\\\\?\\"):
+        return path[4:]
+    if path.startswith(_DEVICE_PREFIX):
+        return path[4:]
+    return path
+
+
+def resolve_link_target(raw: str, link_path: str) -> str:
+    """把 readlink 的原始结果归一成**绝对逻辑路径**; 无法映射时返回空串
+
+    - `\\??\\` / `\\\\?\\` 前缀剥掉(保留原目标只用于展示的出处, 这里给探测用);
+    - 相对目标按链接所在目录拼接(POSIX 相对符号链接的常见形态);
+    - 卷设备路径(`\\??\\Volume{...}`)无法映射到盘符, 返回空串让调用方标「未确认」。
+    """
+    target = strip_device_prefix((raw or "").strip())
+    if not target:
+        return ""
+    if target.startswith("Volume{"):
+        return ""
+    is_abs = os.path.isabs(target) or bool(re.match(r"^[A-Za-z]:[\\/]", target))
+    if not is_abs:
+        parent = os.path.dirname(strip_device_prefix(link_path))
+        target = os.path.join(parent, target)
+    return os.path.normpath(target)
+
+
+def _classify_probe_error(exc: OSError) -> Tuple[str, str]:
+    """OSError -> (status, 人话原因); 判不了归 unknown, 不把权限不足说成不存在"""
+    winerror = getattr(exc, "winerror", None)
+    code = getattr(exc, "errno", None)
+    if isinstance(exc, (FileNotFoundError, NotADirectoryError)) or winerror in (2, 3) \
+            or code in (errno.ENOENT, errno.ENOTDIR):
+        return "missing", "路径不存在"
+    if isinstance(exc, PermissionError) or winerror in (5, 1314) \
+            or code in (errno.EACCES, errno.EPERM):
+        return "permission", "权限不足"
+    return "unknown", f"无法读取: {exc}"
+
+
+def _is_mount_point(logical: str, st: os.stat_result) -> bool:
+    """目录是否挂载点(`st_dev` 与父目录不同); 根目录恒 False
+
+    仅供 POSIX 风格的「挂载点」识别; Windows 的卷挂载点会被重解析点标签先识别成 junction。
+    """
+    absolute = os.path.abspath(strip_device_prefix(logical))
+    parent = os.path.dirname(absolute)
+    if parent == absolute:
+        return False
+    try:
+        parent_st = os.lstat(utils.add_long_path_prefix_for_win(parent))
+    except OSError:
+        return False
+    return parent_st.st_dev != st.st_dev
+
+
+def inspect_path(path: str) -> PathInspection:
+    """逐跳探测单个路径(lstat/readlink), 返回事实而非结论
+
+    分类口径(§P2-1): 符号链接 / junction / 硬链接 / 普通目录 / 挂载点 / 其它;
+    路径不存在、权限不足、类型未知分别给出可展示原因 —— **判不了就 unknown**。
+    """
+    logical = strip_device_prefix(path)
+    probe = utils.add_long_path_prefix_for_win(logical)
+    try:
+        st = os.lstat(probe)
+    except OSError as exc:
+        status, reason = _classify_probe_error(exc)
+        return PathInspection(status=status, error=reason)
+
+    tag = getattr(st, "st_reparse_tag", 0)
+    is_mount = False
+    if tag == IO_REPARSE_TAG_MOUNT_POINT:
+        kind = KIND_JUNCTION
+    elif tag == IO_REPARSE_TAG_SYMLINK:
+        kind = KIND_SYMLINK
+    elif stat.S_ISLNK(st.st_mode):
+        kind = KIND_SYMLINK
+    elif stat.S_ISDIR(st.st_mode):
+        is_mount = _is_mount_point(logical, st)
+        kind = KIND_MOUNT if is_mount else KIND_DIR
+    elif stat.S_ISREG(st.st_mode):
+        kind = KIND_HARDLINK if st.st_nlink > 1 else KIND_FILE
+    else:
+        kind = KIND_OTHER
+
+    target = ""
+    if kind in (KIND_JUNCTION, KIND_SYMLINK):
+        try:
+            target = os.readlink(probe)
+        except OSError as exc:
+            status, reason = _classify_probe_error(exc)
+            return PathInspection(status="unknown", kind=kind, nlink=st.st_nlink, error=reason)
+    return PathInspection(
+        status="ok", kind=kind, target=target, nlink=st.st_nlink, is_mount=is_mount
+    )
 
 
 def remove_alias(path: str) -> None:
