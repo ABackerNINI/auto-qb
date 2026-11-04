@@ -549,7 +549,77 @@ window.AQB_DRAWER = {
         return null;
       }
     },
-    /* 编辑类命令统一投递: api + waitCmd 回执 + toast 三态; 成功后按动作刷新抽屉对应页签数据 */
+    /* ---------------- 整组迁移 confirm 回路(issue 26-11-04-0734 / 计划 26-10-18-1604 P5) ----------------
+     * 后端按设计「未确认零副作用」: relocate_exec 对 cls=confirm 直接 continue, 回执仍 status=ok,
+     * 只在 truth.summary.confirm 里计数 —— 前端必须在 r.ok 之上再读 summary, 否则会把「等确认」
+     * 误报成「已执行」。下列方法供 _editPost / _bulkEditPost 两条投递路径共用。 */
+    _relocateConfirmCount(r) {
+      return Number((r && r.truth && r.truth.summary && r.truth.summary.confirm) || 0);
+    },
+    /* 确认框行表: 形态/来源/目标/未来种子/原因/提示; 目录别名把「以后新增也落新位置」讲透。
+     * 多项时加 #n 前缀(verdict 行 key 按序号生成, 同 label 不会撞键)。 */
+    _relocateConfirmRows(r) {
+      const FORMS = { dir_alias: "目录别名(在目标路径建目录/符号链接)", file_links: "逐文件链接", direct: "直接搬移" };
+      const items = ((r && r.truth && r.truth.results) || []).filter((it) => it && it.cls === "confirm");
+      const multi = items.length > 1;
+      const rows = [];
+      items.forEach((it, i) => {
+        const p = multi ? `#${i + 1} ` : "";
+        const alias = it.form === "dir_alias";
+        rows.push({ icon: "#i-folder-open", label: p + "迁移形态", value: FORMS[it.form] || String(it.form || "未知") });
+        rows.push({ icon: "#i-folder", label: p + "来源", value: String(it.save_path || "") });
+        rows.push({ icon: "#i-folder", label: p + "目标", value: String(it.target || ""), wide: true });
+        rows.push({
+          icon: alias ? "#i-warn" : "#i-info",
+          label: p + "未来种子",
+          value: alias
+            ? "受影响: 目录别名指向新位置, 该目录以后新增/写入的文件也会落到新目标路径"
+            : "不受影响: 只链接本组现有文件, 以后新增的种子仍按各自保存路径落盘",
+          wide: true,
+        });
+        const reason = (it.reasons || []).map((x) => x && x.text).filter(Boolean).join("; ");
+        if (reason) rows.push({ icon: "#i-warn", label: p + "原因", value: reason, wide: true });
+        const note = (it.notes || []).filter(Boolean)[0];
+        if (note) rows.push({ icon: "#i-info", label: p + "提示", value: note, wide: true });
+      });
+      return rows;
+    },
+    /* 二次确认框(返回 Promise<boolean>); 取消 = 不重发、零副作用 */
+    async _relocateConfirmGate(r) {
+      const items = ((r && r.truth && r.truth.results) || []).filter((it) => it && it.cls === "confirm");
+      if (!items.length) {  // 回执只有计数没有明细: 不猜、不弹无信息框
+        this.toast("迁移未发起: 回执缺少确认明细, 请稍后重试", "warn", 8000);
+        return false;
+      }
+      const hasAlias = items.some((it) => it.form === "dir_alias");
+      const body = `后端已拦截 ${items.length} 个目标, 确认前不做任何改动(不建任务、不动 qB)。`
+        + (hasAlias
+          ? " 其中含目录别名: 确认后该目录会指向新位置, 目录里以后新增/写入的文件也会落到新目标路径。"
+          : " 确认后仅链接本组现有文件, 不影响未来新增。");
+      return (await this._openModal({
+        title: "需确认: 迁移方式",
+        body,
+        icon: "#i-warn",
+        verdict: this._relocateConfirmRows(r),
+        okText: "确认迁移",
+        cancelText: "取消",
+        tone: "warn",
+        wide: true,
+      })) === true;
+    },
+    /* 成功 toast 按真实回执计数(整组迁移回执带 truth.summary; 其余动作无 summary 走原文案) */
+    _relocateDoneText(r, okText) {
+      const s = (r && r.truth && r.truth.summary) || null;
+      if (!s) return `已执行: ${okText}`;
+      const parts = [`已发起 ${s.started || 0} 项`];
+      if (s.skip) parts.push(`跳过 ${s.skip} 项`);
+      if (s.blocked) parts.push(`拒绝 ${s.blocked} 项`);
+      if (s.confirm) parts.push(`待确认 ${s.confirm} 项`);
+      return `已执行: ${okText} — ${parts.join(" / ")}`;
+    },
+    /* 编辑类命令统一投递: api + waitCmd 回执 + toast 三态; 成功后按动作刷新抽屉对应页签数据。
+     * 返回 true/false; 整组迁移命中 confirm 时返回 "confirm"(零副作用等确认, 交 submitMoveDialog
+     * 开二次确认框后带 confirm=true 重发), 不弹成功。 */
     async _editPost(hash, action, body, okText) {
       try {
         const resp = await this.api(`/api/torrents/${hash}/${action}`, {
@@ -557,8 +627,13 @@ window.AQB_DRAWER = {
           body: JSON.stringify(body),
         });
         const r = await this.waitCmd(resp.cmd_id);
+        /* 整组迁移命中 confirm(目录别名/长路径校正): 后端零副作用等确认, 回执仍 ok —— 不报成功 */
+        if (r.ok && action === "location" && this._relocateConfirmCount(r) > 0) {
+          this._pendingRelocateConfirm = r;
+          return "confirm";
+        }
         if (r.ok) {
-          this.toast(`已执行: ${okText}`, "ok", 2500);
+          this.toast(this._relocateDoneText(r, okText), "ok", 2500);
           if (this.drawer.open && this.drawer.hash === hash) {
             this._fetchDrawerDetail();
             if (action.startsWith("trackers/")) this._fetchDrawerTrackers(true);
@@ -762,13 +837,42 @@ window.AQB_DRAWER = {
         this.toast("路径不能为空: 请填写新的保存位置", "warn");
         return;
       }
+      const post = (confirm) => {
+        const body = confirm ? { location, confirm: true } : { location };
+        return this.moveSingleHash
+          ? this._editPost(this.moveSingleHash, "location", body, "移动")
+          : this._bulkEditPost(this.moveTargets, "location", body, "批量移动");
+      };
       this.moveBusy = true;
       let ok = false;
       try {
-        if (this.moveSingleHash) ok = await this._editPost(this.moveSingleHash, "location", { location }, "移动");
-        else ok = await this._bulkEditPost(this.moveTargets, "location", { location }, "批量移动");
+        ok = await post(false);
       } finally {
         this.moveBusy = false;
+      }
+      /* confirm 回路(issue 26-11-04-0734): 后端零副作用等确认 -> 先收设定位置框再开确认框。
+       * 两层全屏遮罩同 z-index 且 move-dialog 在 DOM 靠后, 留着会被确认框盖住; 取消/失败则带
+       * 原路径重开(可改路径再试), 确认则带 confirm=true 重发同一命令。 */
+      if (ok === "confirm") {
+        const receipt = this._pendingRelocateConfirm;
+        this._pendingRelocateConfirm = null;
+        this.moveOpen = false;
+        const reopen = () => this.openMoveDialog(this.moveTargets, this.moveScope, this.moveSingleHash, location);
+        if (!(await this._relocateConfirmGate(receipt))) {
+          reopen();
+          return;
+        }
+        this.moveBusy = true;
+        let final = false;
+        try {
+          final = await post(true);
+        } finally {
+          this.moveBusy = false;
+        }
+        if (final === true) return;  // 成功: 框已收, 成功 toast 由投递点按真实回执给
+        if (final === "confirm") this.toast("迁移未发起: 后端仍在等确认(未执行任何改动)", "warn", 8000);
+        reopen();
+        return;
       }
       if (ok) this.moveOpen = false;  // 成功即关(与添加种子同口径); 失败留对话框开着让用户改路径
     },
@@ -850,7 +954,12 @@ window.AQB_DRAWER = {
           body: JSON.stringify({ action, keys: groupKeys, hashes: memberHashes, ...extra }),
         });
         const r = await this.waitCmd(resp.cmd_id);
-        if (r.ok) this.toast(`已执行: ${okText}(${groupKeys.length + memberHashes.length} 个目标)`, "ok", 2500);
+        /* 整组迁移命中 confirm: 同 _editPost, 返回 "confirm" 交 submitMoveDialog 二次确认后重发 */
+        if (r.ok && action === "location" && this._relocateConfirmCount(r) > 0) {
+          this._pendingRelocateConfirm = r;
+          return "confirm";
+        }
+        if (r.ok) this.toast(this._relocateDoneText(r, `${okText}(${groupKeys.length + memberHashes.length} 个目标)`), "ok", 2500);
         else this.toast(`${okText}失败: ${r.error}`, "error", 8000);
         return r.ok;
       } catch (e) {

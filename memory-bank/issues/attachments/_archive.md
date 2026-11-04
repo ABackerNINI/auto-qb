@@ -4,8 +4,9 @@
 > 主索引的已关闭区只列最近 `CLOSED_KEEP` 条(控 cap), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (51)
+## Open (52)
 
+- [test] [test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)](../26-11-04-0943-test-qb-capture-sanitize-flaky-hash.html) — 夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
 - [bug] [transfer path_map 的 from/to 只做 str() 判空: 字典/列表等非标量可静默通过校验](../26-11-03-0901-bug-transfer-pathmap-nonscalar.html) — 手写 YAML 把 path_map.from/to 写成 dict/list/bool 时, 校验仅 str() 判非空即通过, loader 再强转成永不命中的映射, 无任何报错。
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](../26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件在拆分前已被非拆分提交修改; 目标文件含区间新增内容, 按 R12 等价核验不覆盖逐行评审
@@ -64,8 +65,9 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (397)
+## Done (398)
 
+- [bug] [WEB UI 整组迁移 confirm 分支未接线：confirm 被当成成功、无二次确认、无 confirm=true 重发](../26-11-04-0734-bug-webui-relocate-confirm-unwired.html) — 整组迁移命中目录别名 confirm 时前端不弹确认、不回传 confirm=true，却提示已执行且零移动
 - [test] [test.full 中 test_all_persist_writes_on_caller_thread 线程计数断言失败（单跑通过）](../26-11-04-0600-test-testing-persist-thread-active-count.html) — 全局 active_count 快照断言受同 xdist worker 无关线程启停污染, 已改 spy Thread.start 只量本窗口, 红验+全量验证通过
 - [bug] [D 级路径证据对 qbittorrent-api 返回容器判形态异常, 真机恒降级 B′](../26-11-04-0504-bug-relocate-d-evidence-container-type.html) — relocate_proof 只认 list/tuple, 真实 DirectoryContentList 被当异常, D 级与 F 级真机永不生效
 - [test] [cfgNormalizeRulesDraft DOM 电池疑空转: 归一后断言仍按扁平条件形态为绿](../26-11-04-0504-test-webui-normalize-dom-battery-vacuous.html) — webui_dom_page_support 的 cfgNormalizeRulesDraft 用例先调归一、再断言 legacy.conditions 仍是扁平列表; 若归一真执行该断言必红, 现为绿 → 电池可能没真正驱动镜像, 两侧漂移也不会被它抓到

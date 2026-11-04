@@ -1,4 +1,4 @@
-"""RM04 辅种与分组 —— 十条真机用例(归组 key / 组内一致性 / 跨组冲突 / 缺失文件 / 跨盘移动 / journal / facade share_limits / .!qB 窄域)。
+"""RM04 辅种与分组 —— 十一条真机用例(归组 key / 组内一致性 / 跨组冲突 / 缺失文件 / 跨盘移动 / journal / facade share_limits / .!qB 窄域)。
 
 验证面对准冻结计划 plans/26-10-31-1042-plan-real-RM04.html §02 的六行代码映射(漂移复测轮
 plans/26-11-01-2033 追加 RM04-09: qbapi facade share_limits_mode):
@@ -7,7 +7,9 @@ plans/26-11-01-2033 追加 RM04-09: qbapi facade share_limits_mode):
 跨盘移动主链(同卷口径 C:→C:, 目录别名 + 穿透 + journal phase=done; 真跨卷半边 BLOCKED)·
 journal 恢复与坏账兜底 · facade share_limits_mode 5.2.3 端到端(RM04-09)·
 .!qB 窄域(S1/S2/R1/R2)真机复验(RM04-10: 组外 .!qB 不拦且原地不动 / 组内 .!qB 硬拦 /
-目标叶子未建可上溯 + 同卷 note / 目标为文件 target_type)。
+目标叶子未建可上溯 + 同卷 note / 目标为文件 target_type)·
+Web UI 整组迁移 confirm 回路真机化(RM04-14: 浏览器点击 -> 确认框 7 要素 -> confirm=true 重发
+-> dst 落地 + job/journal done; 取消路径原框带路径重开且 B 组零位移)。
 
 代码实况落刀点(计划给意图, 这里按 src 实况):
 - 单成员组恒走 FORM_DIRECT(qB 自搬, 无别名无 journal)—— 目录别名链必须多成员组 + 子目录布局
@@ -23,7 +25,7 @@ journal 恢复与坏账兜底 · facade share_limits_mode 5.2.3 端到端(RM04-0
   相位落盘走 state_save_interval(30S)周期, 断言等待窗按 30s+ 裕量给。
 
 跑法: `commands run real.suite -- --slice RM04 --yes`(不要裸 pytest)。真实种子全程非活跃;
-九条全部 L1 假种子(零外连); 假种子一律 real-fake 标签; 落点只认 tests-real/.work/ 与 R:/qbt-fake/。
+十一条全部 L1 假种子(零外连); 假种子一律 real-fake 标签; 落点只认 tests-real/.work/ 与 R:/qbt-fake/。
 """
 from __future__ import annotations
 
@@ -1532,3 +1534,259 @@ def test_rm04_10_qbtemp_narrow_foreign_allowed_own_blocked():
         rm_all_fakes(qbfake())
         purge_tree(case)
         purge_tree(RAM / "rm04_10")
+
+
+# ================================================================ RM04-14
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def _sha1_file(p: Path) -> str:
+    h = hashlib.sha1()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _head_sha() -> str:
+    """取证用构建版本(不参与闸门): HEAD 短 hash + 工作树是否带未提交改动。"""
+    try:
+        head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+        dirty = subprocess.run(["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
+        sha = (head.stdout or "").strip() or "unknown"
+        return f"{sha}{'-dirty' if (dirty.stdout or '').strip() else ''}"
+    except Exception:  # noqa: BLE001 - 取证失败不得阻塞用例
+        return "unknown"
+
+
+def _run_ui_script(web_port: int, mode: str, group: str, dst: Path, skin: str = "prism") -> dict:
+    """调 Node/Playwright 侧脚本点真实 Web UI; 返回 UI_RESULT JSON(失败即断言失败带现场)。"""
+    node = shutil.which("node")
+    assert node, "node 不在 PATH(浏览器验收入口需要 Node + playwright)"
+    script = Path(__file__).resolve().parents[1] / "lib" / "relocate_confirm_ui.mjs"
+    assert script.is_file(), f"UI 脚本缺失: {script}"
+    env = dict(os.environ)
+    env.update(
+        {
+            "RM_UI_BASE": f"http://127.0.0.1:{web_port}",
+            "RM_UI_GROUP": group,
+            "RM_UI_DST": str(dst),
+            "RM_UI_MODE": mode,
+            "RM_UI_SKIN": skin,
+        }
+    )
+    r = subprocess.run(
+        [node, str(script)],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=300,
+        env=env,
+    )
+    line = next((ln for ln in reversed((r.stdout or "").splitlines()) if ln.startswith("UI_RESULT ")), None)
+    assert line, f"UI 脚本无 UI_RESULT 输出(rc={r.returncode}):\nstdout={(r.stdout or '')[-1500:]}\nstderr={(r.stderr or '')[-1500:]}"
+    data = json.loads(line[len("UI_RESULT "):])
+    assert r.returncode == 0 and data.get("ok") is True, \
+        f"浏览器验收失败(mode={mode}): {data.get('error')}\n" \
+        f"steps={json.dumps(data.get('steps'), ensure_ascii=False)}\n" \
+        f"requests={json.dumps(data.get('requests'), ensure_ascii=False)[:800]}\n" \
+        f"stderr={(r.stderr or '')[-800:]}"
+    return data
+
+
+def test_rm04_14_webui_confirm_loop_ui():
+    """[RM04-14] Web UI 整组迁移 confirm 回路真机化: 浏览器点击 -> 确认框 7 要素 ->
+                 带 confirm=true 重发 -> dst 落地 + job/journal done; 取消路径原框带路径重开且零副作用
+
+    前置: relocate.enabled=true + alias_file_threshold: 8(默认); A/B 各 2 枚带数据多文件假种子
+          (9 个子目录文件 = 9MiB, 同文件列表同内容异 piece_len) 落 RAM(R: 缺席退 .work/rm04/ram/);
+          内容根 save_path/<name> 目录专属 ⇒ 多成员 + 文件数 ≥ 阈值 ⇒ FORM_DIR_ALIAS + needs_confirm。
+          dst_a/dst_b 预建且与 src 同卷; 同卷证明解锁同 RM04-05(qB 副实例 save_path 临时改指 C: 现存目录)。
+    动作: tests-real/lib/relocate_confirm_ui.mjs(Node + playwright) 真点 Web UI:
+          B 组「右键组行 -> 设定位置 -> 填 dst -> 设定位置」走取消; A 组同手势走确认。
+    副作用: A 组真实搬迁(qB 真移 9MiB; src 内容根成 junction); B 组零副作用(仅一次被拦截的首投)。
+          副实例 save_path 临时改写(finally 还原); 副实例新增 4 枚 real-fake 种子(收尾删净)。
+    回滚: 副实例 save_path 还原; 删 junction 只 rmdir 本体; 删光 real-fake 种子; 删用例目录 + RAM 树。
+    失败判据: 首投后出现「已执行」(把等确认误报成功); 确认框缺 7 要素任一; 取消后原框未带原路径
+              重开或发生第二次请求; 确认后无带 confirm=true 的第二次 POST; 成功 toast 未按回执计数;
+              dst 无落地/大小/哈希不符; src 内容根未成 junction; 缺「迁移发起」/「已武装收尾」;
+              job/journal 未 phase=done; B 组出现任何位移。
+    """
+    case = case_dir("rm04_14")
+    p = None
+    qb = qbfake()
+    orig_save_path = qb.prefs().get("save_path")
+    ev: dict = {"case": "RM04-14", "head": _head_sha()}
+    try:
+        assert orig_save_path, "副实例 save_path 读取失败(鉴权/连不通?), 拒跑"
+        assert not rm_all_fakes(qb), "开跑前 副实例 有 real-fake 残留, 先清场"
+        probe_dir = case / "qbsave"
+        probe_dir.mkdir(parents=True, exist_ok=True)
+        qb.set_prefs(save_path=str(probe_dir))
+        time.sleep(0.5)
+        assert qb.prefs().get("save_path") == str(probe_dir), \
+            "save_path 临时改写未生效(同卷证明解锁不成立, 多成员组会被 GATE_SAME_FS 拒)"
+
+        src_a = RAM / "rm04_14" / "src_a"
+        src_b = RAM / "rm04_14" / "src_b"
+        dst_a = case / "dst_a"
+        dst_b = case / "dst_b"
+        purge_tree(RAM / "rm04_14")
+        dst_a.mkdir(parents=True, exist_ok=True)
+        dst_b.mkdir(parents=True, exist_ok=True)
+        cfg, web_port = write_cfg(case, relocate=True)
+        p = app.start(cfg, case)
+        assert p.wait_web(40), f"WEB 没起来:\n{p.log()[-800:]}"
+        assert p.wait_log("整组迁移已启用", 20), f"relocate 启动日志缺失:\n{p.log()[-600:]}"
+        ev["web_port"] = web_port
+
+        files_a = [(f"rm04c11a/sub/f{i:02d}.bin", 1024 * 1024) for i in range(9)]
+        files_b = [(f"rm04c11b/sub/g{i:02d}.bin", 1024 * 1024) for i in range(9)]
+        h1a = fake_multi(qb, "rm04c11a", files_a, src_a, "rm04c11a")
+        h2a = fake_multi(qb, "rm04c11a", files_a, src_a, "rm04c11a", piece_len=32768, write=False)
+        h1b = fake_multi(qb, "rm04c11b", files_b, src_b, "rm04c11b")
+        h2b = fake_multi(qb, "rm04c11b", files_b, src_b, "rm04c11b", piece_len=32768, write=False)
+        wait_complete(qb, [h1a, h2a, h1b, h2b], timeout=120)
+        assert wait_group(web_port, h1a, {h1a, h2a}, 25, "A 组两成员未成组(前提不成立)")
+        assert wait_group(web_port, h1b, {h1b, h2b}, 25, "B 组两成员未成组(前提不成立)")
+        wait_store_progress(web_port, [h1a, h2a, h1b, h2b], timeout=60)
+
+        src_hashes = {rel: _sha1_file(src_a / rel) for rel, _size in files_a}
+        ev.update(
+            {
+                "src_a": str(src_a),
+                "dst_a": str(dst_a),
+                "src_b": str(src_b),
+                "dst_b": str(dst_b),
+                "hashes": src_hashes,
+                "hashes_before": len(src_hashes)
+            }
+        )
+
+        # ---- 取消路径(B 组): 首投被拦截 -> 确认框 -> 取消 -> 原框带路径重开 -> 零副作用
+        anchor0 = count_anchor(case, "迁移发起")
+        cancel = _run_ui_script(web_port, "cancel", "rm04c11b", dst_b)
+        ev["cancel"] = cancel
+        assert len(cancel["requests"]) == 1, f"取消路径首投请求数应为 1: {cancel['requests']}"
+        assert not cancel["requests"][0]["body"].get("confirm"), "取消路径首投不应带 confirm"
+        assert cancel["cancelPath"] == str(dst_b), f"取消后原框未带原路径重开: {cancel['cancelPath']}"
+        assert len(cancel["receipts"]) == 1, f"取消路径回执数应为 1: {cancel['receipts']}"
+        crec = cancel["receipts"][0]
+        assert crec.get("status") == "ok", f"confirm 回执契约应为 ok: {crec}"
+        csum = (crec.get("truth") or {}).get("summary") or {}
+        assert csum.get("confirm") == 1, f"回执 summary.confirm 应为 1: {csum}"
+        assert csum.get("started") == 0, f"等确认不得 started: {csum}"
+        citems = [it for it in ((crec.get("truth") or {}).get("results") or []) if it.get("cls") == "confirm"]
+        assert citems, f"回执缺 cls=confirm 项: {json.dumps(crec, ensure_ascii=False)[:600]}"
+        assert citems[0].get("form") == "dir_alias", f"确认项形态应为目录别名: {citems[0].get('form')}"
+        assert citems[0].get("needs_confirm") is True, "确认项 needs_confirm 不为 True"
+        assert norm(citems[0].get("target")) == norm(dst_b), f"确认项目标不符: {citems[0].get('target')}"
+        assert count_anchor(case, "迁移发起") == anchor0, "取消路径出现「迁移发起」(零副作用失守)"
+        assert not (dst_b / "rm04c11b").exists(), f"取消路径 dst 被写入: {dst_b / 'rm04c11b'}"
+        for rel, size in files_b:
+            f = src_b / rel
+            assert f.is_file() and f.stat().st_size == size, f"取消路径源文件位移: {f}"
+        for h in (h1b, h2b):
+            assert norm((qb.torrent(h) or {}).get("save_path")) == norm(src_b), \
+                f"取消路径 qB save_path 被改: {h[:8]} -> {(qb.torrent(h) or {}).get('save_path')}"
+        ev["cancel_side_effect_free"] = True
+
+        # ---- 确认路径(A 组): 首投被拦截 -> 确认框 -> 确认 -> 带 confirm=true 重发 -> 真实落地
+        anchor1 = count_anchor(case, "迁移发起")
+        conf = _run_ui_script(web_port, "confirm", "rm04c11a", dst_a)
+        ev["confirm"] = conf
+        assert len(conf["requests"]) == 2, f"确认路径应有两次 POST: {conf['requests']}"
+        assert conf["requests"][0]["body"].get("confirm") in (None, False), "首投不应带 confirm"
+        assert conf["requests"][1]["body"].get("confirm") is True, \
+            f"重发未带 confirm=true: {json.dumps(conf['requests'][1], ensure_ascii=False)}"
+        assert str(conf["requests"][1]["body"].get("location")) == str(dst_a), "重发目标与实际不一致"
+        assert len(conf["receipts"]) == 2, f"确认路径回执数应为 2: {conf['receipts']}"
+        rec1, rec2 = conf["receipts"]
+        assert rec1.get("status") == "ok", f"首投回执契约应为 ok: {rec1}"
+        r1sum = (rec1.get("truth") or {}).get("summary") or {}
+        assert r1sum.get("confirm") == 1 and r1sum.get("started") == 0, f"首投回执不符: {r1sum}"
+        r1items = [it for it in ((rec1.get("truth") or {}).get("results") or []) if it.get("cls") == "confirm"]
+        assert r1items and r1items[0].get("form") == "dir_alias", "首投确认项形态不符"
+        assert norm(r1items[0].get("target")) == norm(dst_a), "首投确认项目标不符"
+        assert rec2.get("status") == "ok", f"确认后回执 status 应为 ok: {rec2}"
+        r2sum = (rec2.get("truth") or {}).get("summary") or {}
+        assert r2sum.get("started") == 1 and r2sum.get("confirm") == 0, f"确认后回执不符: {r2sum}"
+        item = one_started_item(rec2)
+        job_id = item.get("job_id")
+        assert job_id, f"started 项缺 job_id: {json.dumps(item, ensure_ascii=False)[:500]}"
+        assert item.get("form") == "dir_alias", f"实际形态不是目录别名: {item.get('form')}"
+        assert item.get("same_volume") is True, f"同卷证明未通过: {item.get('same_volume')}"
+        assert "源与目标同卷" in " | ".join(item.get("notes") or []), \
+            f"同卷 note 缺失: {item.get('notes')}"
+        assert "已执行" in "".join(conf.get("toasts") or []), "确认后未出现「已执行」成功提示"
+        ev.update({"job_id": job_id, "started_item": item})
+
+        # ---- 文件系统双向取证: qB 侧漂移 + dst 落地 + src 内容根 junction + 穿透可读
+        moved = wait_until(
+            lambda: next((h for h in (h1a, h2a) if norm((qb.torrent(h) or {}).get("save_path")) == norm(dst_a)), None),
+            90, f"qB 侧无成员 save_path 变 dst: {[(h[:8], (qb.torrent(h) or {}).get('save_path')) for h in (h1a, h2a)]}"
+        )
+        other = h2a if moved == h1a else h1a
+        for rel, size in files_a:
+            f = dst_a / rel
+            wait_until(lambda f=f, size=size: f.is_file() and f.stat().st_size == size, 45, f"dst 侧文件未落地: {f}")
+            assert _sha1_file(f) == src_hashes[rel], f"dst 侧内容哈希不符(不是真搬移): {f}"
+        ev["dst_files"] = [
+            {
+                "path": str(dst_a / rel),
+                "size": (dst_a / rel).stat().st_size,
+                "sha1": src_hashes[rel]
+            } for rel, _size in files_a
+        ]
+        ev["mover"] = moved
+
+        content_root = src_a / "rm04c11a"
+        wait_until(lambda: _is_link(content_root), 45, f"src 内容根未成链接: {content_root}")
+        assert reparse_kind(content_root) == "junction", f"src 内容根链接形态非 junction: {reparse_kind(content_root)}"
+        ev["src_content_root_kind"] = reparse_kind(content_root)
+        for rel, size in files_a:
+            via_src = src_a / rel
+            wait_until(
+                lambda via_src=via_src, size=size: via_src.is_file() and via_src.stat().st_size == size,
+                20,
+                f"穿透校验失败(经原路径读不到同 size): {via_src}"
+            )
+        ev["src_through_alias_ok"] = True
+        wait_until(lambda: count_anchor(case, "迁移发起") > anchor1, 45, "日志缺「迁移发起」(搬迁没有真正下发)")
+        wait_until(lambda: "已武装收尾" in log_text(case), 45, "日志缺「已武装收尾」(arm 段没走)")
+        ev["log_anchors"] = {"迁移发起": count_anchor(case, "迁移发起"), "已武装收尾": count_anchor(case, "已武装收尾")}
+
+        # ---- 收口: 未移动成员经 qB 原生 setLocation 跟进 -> job/journal phase=done
+        qb.set_location(other, str(dst_a))
+        wait_until(
+            lambda: all(norm((qb.torrent(h) or {}).get("save_path")) == norm(dst_a) for h in (h1a, h2a)), 60,
+            "成员 save_path 未全部变 dst"
+        )
+        job = wait_job_phase(case, job_id, {"done"}, 120, "job 未推进到 done(reason=external 预期)")
+        assert job.get("reason") == "external", f"job done 但 reason={job.get('reason')}: {job}"
+        jr = journal_of(case, job_id)
+        assert jr and jr.get("phase") == "done", f"journal 未落 phase=done: {jr}"
+        ev.update({"job": job, "journal_phase": jr.get("phase"), "result": "PASS"})
+    finally:
+        if p is not None:
+            p.stop()
+        try:
+            qb.set_prefs(save_path=orig_save_path)
+            time.sleep(0.3)
+            ev["save_path_restored"] = qb.prefs().get("save_path") == orig_save_path
+        except Exception:  # noqa: BLE001 - 还原失败不得掩盖主断言结果
+            ev["save_path_restored"] = False
+        try:
+            rm_all_fakes(qbfake())
+        finally:
+            try:
+                WORK.mkdir(parents=True, exist_ok=True)
+                (WORK /
+                 "rm04_14_evidence.json").write_text(json.dumps(ev, ensure_ascii=False, indent=2), encoding="utf-8")
+                (WORK / "rm04_14_auto-qb.log").write_text(app.read_log(case), encoding="utf-8")
+            except Exception:  # noqa: BLE001 - 取证失败不得掩盖主断言结果
+                pass
+            purge_tree(case)
+            purge_tree(RAM / "rm04_14")

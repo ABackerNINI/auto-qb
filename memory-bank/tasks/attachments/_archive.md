@@ -39,6 +39,7 @@
 
 ## Done (286)
 
+- [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-11-04-memory-bank-code-review](../26-11-04-memory-bank-code-review.md) 收口 code review 制度化: code-review skill + review 命令包 + 协议挂钩
 - [26-11-04-webui-fx-glow](../26-11-04-webui-fx-glow.md) fx 辉光荧光化四轮修(雾/圆角/无辐射/角缺光)
 - [26-11-04-webui-hub-keys-merge](../26-11-04-webui-hub-keys-merge.md) WebUI 快捷键设置并入 WebUI 卡与双折叠改版
@@ -78,7 +79,6 @@
 - [26-10-31-memory-bank-doc-guard-filename-scope-fix](../26-10-31-memory-bank-doc-guard-filename-scope-fix.md) 新增面守卫圈面改文件名 stamp 前缀: 堵缺 doc-added 手写新件逃逸洞 (RM02-RM10 事故)
 - [26-10-31-test-snapshot-git-marker-validity](../26-10-31-test-snapshot-git-marker-validity.md) 快照 _find_repo_root 判据加 .git/HEAD 有效性校验: 空壳标记不算仓库根
 - [26-10-11-webui-optimistic-bulk-desync](../26-10-11-webui-optimistic-bulk-desync.md) WEBUI 批量跳检后「批量开始」状态脱节修复(真值出口 + 前端回滚 + 快照回写)
-- [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-10-30-backend-deadcode-contract-hygiene](../26-10-30-backend-deadcode-contract-hygiene.md) 第二次全项目评审 P3 合并池位收口: 死码批量清理与契约卫生
 - [26-10-30-test-mutants-verify-baseline-fix](../26-10-30-test-mutants-verify-baseline-fix.md) mutants.verify 判据修复: 基线常红致恒判 KILLED
 - [26-10-10-backend-dup-code-audit](../26-10-10-backend-dup-code-audit.md) 全仓重复代码审查(分步执行计划)

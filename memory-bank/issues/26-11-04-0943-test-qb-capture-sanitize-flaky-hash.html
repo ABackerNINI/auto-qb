@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="qb-capture-sanitize-flaky-hash">
+<meta name="issue-stamp" content="26-11-04-0943">
+<meta name="issue-type" content="test">
+<meta name="doc-topic" content="qb-capture-sanitize">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)">
+<meta name="issue-summary" content="夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红">
+<title>test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射) · test · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 test · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· test</div>
+    <h1>test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)</h1>
+    <p class="lede">夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-04-0943-test-qb-capture-sanitize-flaky-hash</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 09:43</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">test</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">testing</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>2026-11-04 08:45 前后，本轮「Web UI 整组迁移 confirm 回路真机验收」收尾连跑
+      <code>commands run test.full</code>：三次里第二次全量红一处，红的是
+      <code>tests/test_qb_capture.py::test_sanitize_all_rewrites_fs_delta_with_same_derivation</code>；
+      同一工作树前后两次全量均绿，该用例单文件单跑连续 5 次全绿。该文件与本轮改动无关
+      （本轮零改动 <code>tests/test_qb_capture.py</code> 与 <code>scripts/qb_capture*.py</code>）。</p>
+    <p>触发条件：用例夹具用<b>非 hex 的假 infohash</b> <code>"H1"</code> 造最小 capture；
+      <code>Sanitizer.infohash</code> 的派生规则是「非 hex 字符原样保留、hex 字符按随机盐重映射」。
+      <code>H1</code> 只有 2 个字符：<code>H</code> 恒保留，<code>1</code> 被替换为
+      <code>"0123456789abcdef"[b % 16]</code>；当 <code>b % 16 == 1</code>（约 1/16）时派生结果
+      恰好仍是 <code>"H1"</code>，用例末行 <code>"H1" not in stream</code> 必红。属<b>低概率不稳定</b>，
+      与平台/配置无关（并行度只影响被撞见的次数，不改变概率）。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+<pre><code># 取证: 2026-11-04 08:45 前后, commands run test.full(第二次)
+FAILED tests/test_qb_capture.py::test_sanitize_all_rewrites_fs_delta_with_same_derivation
+>       assert "H1" not in json.dumps(c.stream, ensure_ascii=False)
+E       AssertionError: assert 'H1' not in '{"t_seq": 0, ... "torrents": {"H1": {"name": ...
+E         ?                                                                    ++
+... (省略号为本报告所加)</code></pre>
+    <p>可判读的事实：报错串里种子名/保存路径已经是伪名（如 <code>PrtiF</code>、<code>&lt;FSROOT&gt;/...</code>），
+      唯独<b>字典键</b>仍是 <code>H1</code> —— 与 <code>sanitize_all</code> 用 <code>san.infohash(h)</code>
+      作键的实现一致；失败只因该盐下 <code>infohash("H1") == "H1"</code>，而非脱敏整体失效。</p>
+    <p>对照实测（取证时间同段）：</p>
+    <ul>
+      <li>单文件单跑（<code>uv run python -m pytest ... -n 1</code>）连续 5 次 → 全绿；</li>
+      <li><code>commands run test.full</code> 三次 → 绿 / 红 / 绿（红的那次仅此一条）；</li>
+      <li>最终轮全量绿（测试数字见 <code>commands run kb.baseline</code> 最新切片，本报告不手抄）。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>跑该用例即可能触发（与并行度无关）；只要随机盐把 <code>H1</code> 的
+        <code>1</code> 映射回 <code>1</code>（约 1/16）必红，属概率性必现。</td></tr>
+      <tr><td>影响范围</td><td>仅此一条测试；不影响产品行为与脱敏正确性（伪名化本身是生效的）。</td></tr>
+      <tr><td>严重度</td><td>低 —— 偶发假红会干扰全量门禁判读（需要重跑才能确认绿），但不掩盖真回归。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>tests/test_qb_capture.py:507</code>（取证 2026-11-04 09:43）· 符号
+        <code>test_sanitize_all_rewrites_fs_delta_with_same_derivation</code> · grep
+        <code>def test_sanitize_all_rewrites_fs_delta_with_same_derivation</code></li>
+      <li><code>tests/test_qb_capture.py:523</code>（同上）· 断言行
+        <code>assert "H1" not in json.dumps(c.stream, ...)</code> · grep <code>"H1" not in json.dumps</code></li>
+      <li><code>tests/test_qb_capture.py:478</code>（同上）· 夹具 <code>_fs_delta_capture</code>
+        （假 hash <code>H1</code>，真名 <code>ShowA/a.mkv</code>）· grep <code>def _fs_delta_capture</code></li>
+      <li><code>scripts/qb_capture_core.py:241</code>（同上）· <code>Sanitizer.infohash</code>
+        （非 hex 字符原样保留 + hex 重映射，带 nonce 单射循环）· grep <code>def infohash</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <div class="callout">已定位（高置信）：夹具给的 <code>"H1"</code> 不在合法 hash 形态内（长度与字符集都不符），
+      <code>Sanitizer.infohash</code> 对非 hex 字符原样保留；2 字符长度下约 1/16 的随机盐会把
+      <code>1</code> 映射回 <code>1</code> ⇒ <code>infohash("H1") == "H1"</code>，被末行全串扫描断言抓住。<br>
+      已排除：并行/进程间共享状态（单 worker 与单进程复现条件一致，失败只与随机盐有关）；
+      与本轮 confirm 回路改动无关（该文件与本轮改动零交集）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p>方向：让夹具的假 infohash 不再可能与自身伪名相等。候选：</p>
+    <ul>
+      <li><b>A（推荐，最小改动）</b>：把 <code>"H1"</code> 换成合法 40 位 hex 假 hash。红概率从约 1/16
+        降到约 <code>16^-40</code>（实质为 0），用例其余断言不动。</li>
+      <li><b>B（更贴语义）</b>：末行断言改判「键已换成伪 hash」，如
+        <code>assert ph != "H1"</code> 或直接比对 <code>c.stream[0]["torrents"].keys()</code>，
+        不再对整串做裸词扫描；可与 A 并用。</li>
+      <li><b>C（改产品侧）</b>：<code>Sanitizer.infohash</code> 在 <code>cand == h</code> 时继续派生
+        （拒绝恒等映射）。代价最大：会改变抓取产物的确定性映射行为，需另立范围评估。
+        本 issue 倾向不动产品侧。</li>
+    </ul>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-04 09:43 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p class="hint">未认领，待复验（认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」）。</p>
+    <h3>修复后补充</h3>
+    <p class="hint">未修（本轮按范围守恒不改码）；修完时在此写「实际修法 / 验证方式 / 测试数字」。</p>
+  </section>
+
+  <footer>
+    26-11-04-0943-test-qb-capture-sanitize-flaky-hash.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -19,6 +19,12 @@
   搬回 + phase=cancelled + journal 落盘
 - test_web_relocate_precheck_drain: drain 级回执 truth={results, summary} 结构 + gone verdict +
 - test_relocate_add_gate_wired_in_add_dialog
+- test_relocate_confirm_loop_wired_in_move_dialog: 前端静态守阵(issue 26-11-04-0734): _editPost /
+  _bulkEditPost 在 r.ok 且 truth.summary.confirm > 0 时返回 "confirm" 且不弹成功; submitMoveDialog
+  先收设定位置框 -> _relocateConfirmGate 展示形态/来源/目标/未来种子/原因 -> 带 confirm=true 重发;
+  confirm = 0 仍走原成功路径
+- test_web_relocate_confirm_passthrough_routes: 路由 confirm 透传契约 —— 缺省/False 载荷无 confirm
+  键(历史形状不变), confirm=true 才附加(单种子 set_torrent_location + 批量 bulk_torrents)
 - test_relocate_module_branch_extras
 - test_relocate_module_capability_view
 - test_relocate_module_classify_entries_degenerate
@@ -917,3 +923,95 @@ def test_relocate_add_gate_wired_in_add_dialog():
     assert "return true" in add_js.split("async _relocateAddGate()")[1].split("async submitAddTorrent()")[0]
     triggers = (shared / "triggers.js").read_text(encoding="utf-8")
     assert '"fn": "_relocateAddGate"' in triggers, "投递点必须登记进 triggers.js 金清单"
+
+
+def _drawer_body(src: str, start: str, end: str) -> str:
+    """取 drawer.js 中某方法体(从 start 到其后的 end 标记); 标记缺失即本守阵失败"""
+    i = src.index(start)
+    return src[i:src.index(end, i)]
+
+
+def test_relocate_confirm_loop_wired_in_move_dialog():
+    """confirm 回路前端静态守阵(issue 26-11-04-0734)
+
+    后端 confirm 仍回 status=ok(只在 truth.summary.confirm 计数), 前端必须在 r.ok 之上消费 summary:
+    命中时不得先弹「已执行」, 由设定位置提交点收框 -> 二次确认框 -> 带 confirm=true 重发。
+    confirm=0 仍走原成功路径(成功 toast + 关框)。
+    """
+    from pathlib import Path
+
+    shared = Path(__file__).resolve().parents[1] / "src" / "auto_qb" / "webui" / "static" / "shared"
+    drawer = (shared / "drawer.js").read_text(encoding="utf-8")
+    # 两条投递路径(单种子 / 批量)都要识别 confirm, 且确认分支先于成功 toast
+    edit = _drawer_body(drawer, "async _editPost(", "/* 速度限制")
+    assert 'action === "location"' in edit and "this._relocateConfirmCount(r) > 0" in edit
+    assert 'return "confirm"' in edit, "confirm 命中必须交回调用方, 不能当成功"
+    assert edit.index('return "confirm"') < edit.index("this._relocateDoneText(r, okText)"), \
+        "confirm 命中不得先弹「已执行」"
+    bulk = _drawer_body(drawer, "async _bulkEditPost(", "/* 重命名")
+    assert 'action === "location"' in bulk and "this._relocateConfirmCount(r) > 0" in bulk
+    assert 'return "confirm"' in bulk
+    assert bulk.index('return "confirm"') < bulk.index("this._relocateDoneText(r,")
+    # 回执读取单点: truth.summary.confirm
+    count = _drawer_body(drawer, "_relocateConfirmCount(r) {", "/* 确认框行表")
+    assert "truth.summary.confirm" in count
+    # 确认框信息面: 形态/来源/目标/未来种子(目录别名语义)/原因
+    rows = _drawer_body(drawer, "_relocateConfirmRows(r) {", "/* 二次确认框")
+    for token in ("未来种子", "目录别名", "save_path", "target", "reasons"):
+        assert token in rows, f"确认框缺 {token} 信息面"
+    gate = _drawer_body(drawer, "async _relocateConfirmGate(r) {", "/* 成功 toast")
+    assert "this._openModal({" in gate and "verdict:" in gate and "确认迁移" in gate
+    assert "目录别名" in gate, "确认框正文必须讲清目录别名会影响未来落点"
+    # 提交点: 先收设定位置框(两层遮罩同 z-index) -> 确认框 -> 带 confirm=true 重发
+    sub = _drawer_body(drawer, "async submitMoveDialog() {", "/* ---------------- 批量编辑")
+    assert "await this._relocateConfirmGate(receipt)" in sub
+    assert "this.moveOpen = false" in sub
+    assert sub.index("this.moveOpen = false") < sub.index("await this._relocateConfirmGate(receipt)")
+    assert "confirm: true" in sub and "await post(true)" in sub
+    assert sub.index("await post(true)") > sub.index("await this._relocateConfirmGate(receipt)")
+    # 取消/失败回到设定位置框; confirm=0 仍走原成功关框路径
+    assert "reopen()" in sub
+    assert "if (ok) this.moveOpen = false;" in sub
+    done = _drawer_body(drawer, "_relocateDoneText(r, okText) {", "/* 编辑类命令统一投递")
+    assert "if (!s) return `已执行: ${okText}`;" in done, "无 summary 的动作文案与历史一致"
+
+
+def test_web_relocate_confirm_passthrough_routes(web_env):
+    """confirm 透传契约: 缺省/False 不入载荷(历史形状不变), confirm=true 才附加
+
+    单种子 /api/torrents/{hash}/location 与批量 /api/torrents/bulk(action=location) 两个出口;
+    前端 confirm 回路靠这条通道把用户的显式确认带回后端。"""
+    mgr, client = web_env
+    auth = {"Authorization": f"Bearer {mgr.web.token}"}
+
+    def _queued():
+        cmd, payload = mgr.web.commands.get_nowait()
+        payload.pop("cmd_id", None)
+        payload.pop("_queued_ts", None)
+        return cmd, payload
+
+    for confirm in (None, False, True):
+        body = {"location": "R:/X"}
+        if confirm is not None:
+            body["confirm"] = confirm
+        resp = client.post("/api/torrents/HA/location", headers=auth, json=body)
+        assert resp.status_code == 200, resp.text
+        cmd, payload = _queued()
+        assert cmd == "set_torrent_location"
+        want = {"hash": "HA", "location": "R:/X"}
+        if confirm:
+            want["confirm"] = True
+        assert payload == want, (body, payload)
+
+    for confirm in (None, False, True):
+        body = {"hashes": ["HA"], "action": "location", "location": "R:/X"}
+        if confirm is not None:
+            body["confirm"] = confirm
+        resp = client.post("/api/torrents/bulk", headers=auth, json=body)
+        assert resp.status_code == 200, resp.text
+        cmd, payload = _queued()
+        assert cmd == "bulk_torrents"
+        want = {"hashes": ["HA"], "action": "location", "delete_files": False, "location": "R:/X"}
+        if confirm:
+            want["confirm"] = True
+        assert payload == want, (payload)

@@ -142,6 +142,7 @@ const mkCtx = (rows, waitImpl) => {
   Object.assign(ctx, CM);
   ctx.editRename = DM.editRename;
   ctx._editPost = DM._editPost;
+  ctx._relocateDoneText = DM._relocateDoneText;   // _editPost 成功 toast 的回执文案单点(issue 26-11-04-0734)
   ctx.toast = () => {};
   ctx.api = async () => { ctx.postSeenName = ctx.torrents[0] ? ctx.torrents[0].name : null; return { cmd_id: "c1" }; };
   ctx.waitCmd = waitImpl;

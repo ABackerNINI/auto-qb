@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="webui-relocate-confirm-unwired">
+<meta name="issue-stamp" content="26-11-04-0734">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="webui-relocate-confirm">
+<meta name="doc-refs" content="">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Done">
+<meta name="issue-title" content="WEB UI 整组迁移 confirm 分支未接线：confirm 被当成成功、无二次确认、无 confirm=true 重发">
+<meta name="issue-summary" content="整组迁移命中目录别名 confirm 时前端不弹确认、不回传 confirm=true，却提示已执行且零移动">
+<title>WEB UI 整组迁移 confirm 分支未接线：confirm 被当成成功、无二次确认、无 confirm=true 重发 · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（已修）· bug</div>
+    <h1>WEB UI 整组迁移 confirm 分支未接线：confirm 被当成成功、无二次确认、无 confirm=true 重发</h1>
+    <p class="lede">整组迁移命中目录别名 confirm 时前端不弹确认、不回传 confirm=true，却提示已执行且零移动</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-04-0734-bug-webui-relocate-confirm-unwired</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 07:34</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">webui</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>真机（Windows）在 2026-11-04 07:17 从 WEB UI 发起一次整组迁移：选中 3 个 hash，归为 1 项。日志显示 <code>ok 0 / confirm 1 / blocked 0</code>，数据侧没有任何移动。用户侧观察是“点了移动、界面没有报错，但 qB 的 save_path 与磁盘都没变”。</p>
+    <ul>
+      <li><strong>触发条件</strong>：整组迁移（同组多成员）被 <code>evaluate_group</code> 判为 <code>confirm</code>。当前执行路径中 confirm 的唯一来源是 <code>plan()</code> 提议「目录别名」：文件数 ≥ <code>alias_file_threshold</code>（默认 8）且内容根专属，或文件级链接建不出来（能力/长路径）但目录别名可建。</li>
+      <li><strong>本次具体子型未验证</strong>：是“文件数 ≥ 阈值”还是“长路径校正”，要拿预检 item 的 <code>reasons[0].text</code> 才能定。两者都是设计内需要显式确认的形态。</li>
+      <li><strong>平台相关性</strong>：长路径（≥ 260 字符）分支主要在 Windows 触发；但本缺陷（前端不弹确认）与平台无关，凡命中 confirm 的组都会复现。</li>
+    </ul>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p class="hint">贴原文（报错 / 日志 / 命令输出），不转述；附取证时间，让读者自己判断新鲜度。</p>
+    <h3>真机日志（用户提供，取证时间 2026-11-04 07:17）</h3>
+<pre><code>2026-11-04 07:17:00,663 - INFO - relocate | 迁移执行(3 个 hash -&gt; 1 项): ok 0 / confirm 1 / blocked 0
+2026-11-04 07:17:00,665 - INFO - WEB UI | 批量移动位置(整组迁移) 3 个: 已发起 0 / 幂等跳过 0 / 需确认 1 / 拒绝 0</code></pre>
+    <h3>代码证据（取证 2026-11-04 07:34，HEAD 04af5d4b）</h3>
+    <table>
+      <tr><th>位置</th><th>事实</th></tr>
+      <tr><td><code>relocate_exec.py:534</code> / <code>:597</code> / <code>:601-603</code></td><td><code>relocate_execute(..., confirm=False)</code>；命中 <code>CLS_CONFIRM and not confirm</code> 时追加 <code>cls=confirm</code> 后直接 <code>continue</code>，不建 job、不做同机强探测、不调 <code>setLocation</code>。</td></tr>
+      <tr><td><code>relocate_units.py:559-560</code></td><td><code>evaluate_group</code> 里执行路径唯一的 confirm 出口：<code>elif unit.needs_confirm: _confirm(GATE_FORM, unit.reason)</code>。</td></tr>
+      <tr><td><code>relocate_units.py:207-211</code> / <code>:213-216</code> / <code>:229-230</code></td><td><code>_dir_alias_proposal()</code> 固定 <code>needs_confirm=True</code>；两条入口：文件级链接不可建但目录别名可建（含长路径校正）、文件数 ≥ 阈值且内容根专属。</td></tr>
+      <tr><td><code>relocate_units.py:504-527</code></td><td>同机证明 negative → <code>_block</code>；未证明 → 仅追加 note（首次执行做一次性强探测）；能力不足 → <code>_block</code>。均不会产出 confirm。</td></tr>
+      <tr><td><code>commands_torrents.py:391-416</code></td><td><code>_relocate_receipt</code> 把 confirm 计入 summary，但回执仍是 <code>self._set_web_result(cmd_id, "ok", truth=...)</code>；docstring 写明「confirm 给 ok + truth（由前端据 summary 开确认框）」。</td></tr>
+      <tr><td><code>torrent_cmds.py:61-69</code> / <code>:338-341</code></td><td>单种子与批量 location 仅当请求体带 <code>confirm</code> 时才透传；缺省为 false。</td></tr>
+      <tr><td><code>drawer.js:553-574</code> / <code>:845-859</code></td><td><code>_editPost</code> / <code>_bulkEditPost</code> 只判断 <code>r.ok</code> 就 <code>toast("已执行: ...")</code> 并返回 true，完全不读 <code>r.truth.summary</code>。</td></tr>
+      <tr><td><code>drawer.js:662-683</code> / <code>:758-769</code></td><td>移动对话框只维护路径输入/候选（<code>movePathInput</code>/<code>moveBusy</code>），没有形态/目录别名说明与确认状态；提交时不带 <code>confirm</code>。</td></tr>
+      <tr><td>静态代码检索（<code>src/auto_qb/webui/static</code>）</td><td>只有 <code>/api/relocate/precheck-add</code> 的调用方（<code>add_torrent.js:637</code>）；整组迁移预检端点 <code>/api/relocate/precheck</code>（<code>torrent_cmds.py:144-154</code>，注释写明“供迁移确认框在用户确认前摊开”）<strong>没有任何前端调用方</strong>。</td></tr>
+    </table>
+    <h3>已排除的假设</h3>
+    <ul>
+      <li><strong>不是 D 级证据/同机证明导致的 confirm</strong>：confirm 判定发生在 <code>_ensure_probe</code> 与 job 启动之前；同机证明相关分支只会产出 blocked 或 note，不会产出 confirm。因此 <code>e19bace2</code>（D 级证据容器判据修复）与本现象无因果关系。</li>
+      <li><strong>不是目标容量/冲突/未落定/未收尾/job 在途</strong>：这些条件都走 blocked 或 skip；日志里 <code>blocked 0</code>、<code>幂等跳过 0</code>。</li>
+    </ul>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>整组迁移（含单种子移动）命中 <code>plan()</code> 的目录别名提议：文件数 ≥ <code>alias_file_threshold</code>（默认 8）且内容根专属，或文件级链接不可建（能力/长路径）但目录别名可建。非整组场景若仍走 <code>set_torrent_location</code> 也会同样命中。</td></tr>
+      <tr><td>影响范围</td><td>WEB UI 抽屉「移动位置」与右键批量移动的整组迁移；所有命中 confirm 的组<strong>永远无法完成迁移</strong>——用户看不到确认框，也无法回传 <code>confirm=true</code>。目录别名路径（大文件组、长路径组）整体不可用。</td></tr>
+      <tr><td>严重度</td><td>中。无数据损坏、无残留 job；但核心迁移功能静默失效，且前端提示「已执行」会误导用户以为成功。</td></tr>
+      <tr><td>用户可见后果</td><td>对话框关闭 + 成功 toast + 零移动；日志只有一行 confirm 计数，无原因文本，用户无法自助判断。</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/core/modules/relocate_exec.py:601</code>（取证 2026-11-04 07:34）· <code>relocate_execute</code> · grep <code>CLS_CONFIRM and not confirm</code></li>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:559</code>（同上）· <code>evaluate_group</code> · grep <code>unit.needs_confirm</code> / <code>_confirm(GATE_FORM</code></li>
+      <li><code>src/auto_qb/core/modules/relocate_units.py:207</code>（同上）· <code>_dir_alias_proposal</code> · grep <code>FORM_DIR_ALIAS</code> / <code>needs_confirm=True</code></li>
+      <li><code>src/auto_qb/webui/commands_torrents.py:391</code>（同上）· <code>_relocate_receipt</code> · grep <code>需二次确认</code> / <code>_set_web_result(cmd_id, "ok"</code></li>
+      <li><code>src/auto_qb/webui/static/shared/drawer.js:553</code> / <code>:845</code>（同上）· <code>_editPost</code> / <code>_bulkEditPost</code> · grep <code>已执行: ${okText}</code></li>
+      <li><code>src/auto_qb/webui/static/shared/drawer.js:662</code> / <code>:758</code>（同上）· <code>openMoveDialog</code> / <code>submitMoveDialog</code> · grep <code>movePathInput</code> / <code>confirm</code>（后者在前端不存在）</li>
+      <li><code>src/auto_qb/webui/server/routes/torrent_cmds.py:338-341</code>（同上）· <code>api_torrents_bulk</code> · grep <code>action == "location"</code> / <code>payload["confirm"]</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">
+      已证实：后端 confirm 语义正确（目录别名必须显式确认才继续），但回执把 confirm 报成 <code>status=ok</code>；前端两个移动提交函数只认 <code>r.ok</code>，不消费 <code>truth.summary</code>，移动对话框也没有确认回路、未调用预检端点。两层叠加导致「confirm 被当成成功 + 无二次确认 + 无 confirm=true 重发」。
+    </div>
+    <ul>
+      <li><strong>已证实</strong>：<code>_relocate_receipt</code> 的 docstring 明确约定“confirm 给 ok + truth，由前端据 summary 开确认框”，但前端没有任何消费 <code>truth.summary.confirm</code> 的代码；<code>/api/relocate/precheck</code> 也没有调用方。</li>
+      <li><strong>已排除</strong>：同机证明/证据级别 D/B′ 不会产生 confirm（见 02「已排除的假设」），因此该缺陷与 <code>e19bace2</code> 修复无关。</li>
+      <li><strong>未验证</strong>：本次 confirm 的具体子型（阈值 vs 长路径）；运行实例是否已在 07:17 前重启到含 <code>e19bace2</code> 的版本（<code>e19bace2</code> 提交于 06:06:40，HEAD <code>04af5d4b</code> 提交于 07:16:12，进程启动时间未取证）。版本问题不影响本缺陷的成立。</li>
+      <li><strong>未直接验证</strong>：用户浏览器确实弹了“已执行”toast（由代码路径可推得，尚未拿到前端截图/网络面板证据）。</li>
+    </ul>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <h3>首选：按计划 26-10-18-1604 P5 补确认回路</h3>
+    <ul>
+      <li>打开移动对话框时调用 <code>/api/relocate/precheck</code>（只读），把每组的形态（目录别名/逐文件链接/直搬）、目标、是否影响未来种子、拒绝原因摊开。</li>
+      <li>目录别名组加显式确认（勾选/二次按钮）；确认后提交带 <code>confirm=true</code>，未确认不提交。</li>
+      <li>回执为 confirm 时不要 toast「已执行」，改为“需确认”并保留对话框。</li>
+    </ul>
+    <h3>最低限度兜底（不做完整 P5 时）</h3>
+    <ul>
+      <li><code>_bulkEditPost</code> / <code>_editPost</code> 读取 <code>r.truth.summary.confirm</code>：&gt; 0 时不报成功，弹确认框（展示 <code>results[].reasons[].text</code>），用户确认后带 <code>confirm: true</code> 重投同一命令。</li>
+      <li>后端契约可保持现状（ok + truth），但需在报告/约定里明确“前端必须消费 summary.confirm”；若希望更防呆，可让 confirm 回执返回专门的 <code>needs_confirm</code> 状态，避免任何调用方只看 ok 就误判。</li>
+    </ul>
+    <h3>守阵</h3>
+    <ul>
+      <li>后端已有 <code>tests/test_web_commands_bulk.py</code> 的 confirm 计数用例；需补前端/契约层守阵：模拟 confirm 回执时不得弹成功、必须发出第二次带 <code>confirm=true</code> 的请求。</li>
+    </ul>
+    <h3>代价</h3>
+    <p>首选方案涉及前端对话框 + 两个提交函数 + 一次预检调用，低-中；兜底方案只改两个提交函数，低。两者都不改后端判定语义。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-04 07:34 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 — 认领开工，状态 <strong>In Progress</strong>（按计划 26-10-18-1604 P5 补确认回路）</li>
+      <li>2026-11-04 07:57 — 修复完成并验证，状态 <strong>Done</strong>（前端 confirm 回路接线 + 测试基线切片见 <code>kb.baseline</code>）</li>
+      <li>2026-11-04 08:55 — 真机 UI 复验通过（RM04-14：浏览器两条路径 + 文件系统/日志双向取证，见下方「真机复验」）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>2026-11-04 07:40 — 重跑锚点仍复现：<code>_editPost</code> / <code>_bulkEditPost</code> 在 HEAD <code>04af5d4b</code> 上只判
+      <code>r.ok</code>；<code>/api/relocate/precheck</code> 仍无前端调用方。修复后静态守阵
+      <code>test_relocate_confirm_loop_wired_in_move_dialog</code> 钉住新接线。</p>
+    <h3>修复后补充</h3>
+    <p><strong>实际修法（兜底方案，未改后端协议）：</strong></p>
+    <ul>
+      <li><code>drawer.js</code> 新增 <code>_relocateConfirmCount</code>（读 <code>truth.summary.confirm</code>）与
+        <code>_relocateConfirmRows</code> / <code>_relocateConfirmGate</code>（二次确认框：形态 / 来源 / 目标 /
+        未来种子（目录别名语义）/ 原因 / 提示，行数据取自执行回执 <code>truth.results[].reasons/notes</code>）；
+        <code>_editPost</code> / <code>_bulkEditPost</code> 命中 <code>confirm &gt; 0</code> 时返回 <code>"confirm"</code> 且
+        <strong>不弹成功</strong>；<code>submitMoveDialog</code> 先收设定位置框（两层全屏遮罩同 z-index，留着会被后渲染的
+        move-dialog 盖住）→ 开确认框 → 用户确认后带 <code>confirm=true</code> 重发同一命令；取消/失败按原路径重开对话框。
+        成功 toast 改按真实回执计数（已发起/跳过/拒绝/待确认）。</li>
+      <li><strong>与建议修法的差异：</strong>未在开框时调 <code>/api/relocate/precheck</code>，而是复用执行回执
+        <code>truth.results</code>（与预检同一 <code>evaluate_group</code> 产物）来展示，省一次只读请求、也保证
+        “确认框看到的”就是“被拦截的那一版判定”。</li>
+      <li><strong>后端契约取舍：</strong>保持现状 <code>status=ok + truth.summary.confirm</code>（不新增状态字段、不改协议），
+        原因：改状态会波及既有调用方与测试，且 <code>_relocate_receipt</code> docstring 已约定前端消费 summary；本 issue
+        把该约定落到了前端代码里。是否升级为专门 <code>needs_confirm</code> 字段留作独立契约讨论，不在本次范围内。</li>
+      <li><strong>验证方式：</strong><code>test_relocate_confirm_loop_wired_in_move_dialog</code>（前端静态守阵：confirm &gt; 0
+        不弹成功 / 走确认框 / 带 <code>confirm=true</code> 重发 / confirm=0 仍走原成功路径）+
+        <code>test_web_relocate_confirm_passthrough_routes</code>（单种子与批量路由 confirm 缺省/False 不入载荷、
+        <code>true</code> 才透传）；数字见 <code>commands run kb.baseline</code> 最新切片。真机 UI 复验见下方「真机复验」。</li>
+    </ul>
+    <h3>真机复验（RM04-14，2026-11-04 08:55）</h3>
+    <p>命令 <code>commands run real.run -- --case RM04-14 --yes</code>：副实例 <code>56590</code>，构建 HEAD
+      <code>62cb3c85-dirty</code>（含本 issue 未提交改动），落点只在 <code>tests-real/.work/rm04/</code>，
+      qB save_path 临时改指 C: 现存目录用于同卷证明（测毕已还原并自证）。</p>
+    <ul>
+      <li><strong>造场景：</strong>A/B 两组各 2 枚多文件假种子（9 个 <code>sub/fNN.bin</code>，每组 9MiB，同内容异
+        <code>piece_len</code>）；内容根目录专属且文件数 9 ≥ <code>alias_file_threshold: 8</code> ⇒ 命中
+        <code>FORM_DIR_ALIAS + needs_confirm</code>（回执 reasons：「文件数 9 &gt;= 阈值 8 且内容根目录专属」）。</li>
+      <li><strong>① 不出现「已执行」：</strong>首投被拦截期间 <code>.toast.ok</code> 含「已执行」计数为 0。</li>
+      <li><strong>② 确认框 7 要素：</strong><code>innerText</code> 含「迁移形态 / 来源 / 目标 / 未来种子 / 原因 / 提示」
+        全部在位，标题「需确认: 迁移方式」。</li>
+      <li><strong>③ 带 confirm=true 重发并真实落地：</strong>浏览器抓到 2 次 POST，第二次 body 为
+        <code>{confirm:true, location:dst_a}</code>；回执 <code>started=1 / confirm=0</code>，started 项
+        <code>form=dir_alias / same_volume=true / notes 含「源与目标同卷」/ job_id=jr-4809aca25b74</code>；
+        dst 侧 9 个文件各 1MiB（size 与 sha1 和搬迁前一致），src 内容根 <code>rm04c11a</code> 变
+        <code>junction</code> 且经原路径仍可读；日志「迁移发起(2 成员, 形态 dir_alias, mover c04d3cf8)」与
+        「已武装收尾(别名 1 条, 形态 dir)」各 1 条；job <code>phase=done / reason=external</code>、
+        journal <code>phase=done</code>；成功 toast 按真实回执计数「已执行: 批量移动(2 个目标) — 已发起 1 项」。</li>
+      <li><strong>④ 取消零副作用：</strong>确认框点「取消」后原设定位置框带原路径 <code>dst_b</code> 重开，POST 数仍为 1；
+        <code>dst_b/rm04c11b</code> 不存在、B 组源文件齐全、两成员 qB <code>save_path</code> 仍 <code>src_b</code>，
+        日志「迁移发起」计数不变。</li>
+    </ul>
+    <p>固化断言：<code>tests-real/rm04_relocate/test_rm04_relocate.py::test_rm04_14_webui_confirm_loop_ui</code>
+      （浏览器脚本 <code>tests-real/lib/relocate_confirm_ui.mjs</code>）。全量 <code>commands run test.full</code>
+      的实测数字见 <code>kb.baseline</code> 最新切片。</p>
+  </section>
+
+  <footer>
+    26-11-04-0734-bug-webui-relocate-confirm-unwired.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>

@@ -2,11 +2,11 @@
 
 **Status:** Done
 **Added:** 2026-10-18
-**Updated:** 2026-10-30
+**Updated:** 2026-11-04
 **Summary:** 免重启整组迁移实施档案: P0 能力探测(alias_fs) / P1 配置面 / P2 别名单元与只读预检 /
 P3-P6 执行体+组判定+三入口+guardian 收尾已落地(Fake qB 全替身); P7 真机验收 12 步全过(含 5 缺陷修复+2 补强, 全量 3754 通过)
 **Topics:** backend-group-relocate-restart-free
-**Refs:** memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/pitfalls/backend/alias-links.md, memory-bank/testing/baselines/26-10-18-1940-group-relocate-restart-free-p0.md
+**Refs:** memory-bank/plans/26-10-18-1604-plan-group-relocate-restart-free.html, memory-bank/pitfalls/backend/alias-links.md, memory-bank/testing/baselines/26-10-18-1940-group-relocate-restart-free-p0.md, memory-bank/testing/baselines/26-11-04-0837-rm04-14-webui-confirm-loop.md
 
 ## 原始请求
 
@@ -150,6 +150,16 @@ P3-P6 执行体+组判定+三入口+guardian 收尾已落地(Fake qB 全替身);
 
 - 单件/批量移动位置: 开关开 ⇒ `relocate_execute`(闸门 + 执行体), 回执 `truth={results, summary}`
   (started/skip/confirm/blocked); 开关关 ⇒ 原调用路径逐字节不变(守阵钉住)。
+- 单件/批量移动位置的 **confirm 回路(2026-11-04 补, issue 26-11-04-0734)**: 回执
+  `truth.summary.confirm > 0` 时前端不再报成功 —— 先收设定位置框, 弹二次确认框(形态/来源/目标/
+  未来种子/原因/提示, 取自回执 `results[].reasons/notes`), 用户确认后带 `confirm=true` 重发同一命令,
+  取消零副作用。未接 `/api/relocate/precheck`(回执与预检同为 `evaluate_group` 产物); 后端
+  `status=ok + truth.summary` 契约保持不变。守阵见 `tests/test_web_relocate.py`(前端静态 + 路由透传)。
+  真机 UI 复验(2026-11-04, RM04-14): `commands run real.run -- --case RM04-14 --yes` 在副实例点真实
+  Web UI(`tests-real/lib/relocate_confirm_ui.mjs`) —— 取消路径原框带路径重开且零位移; 确认路径重发带
+  `confirm=true`, dst 9 个 1MiB 文件落地(sha1 与搬迁前一致), src 内容根成 junction, 日志「迁移发起」
+  「已武装收尾」各 1 条, job/journal `phase=done`(`reason=external`); 已固化进
+  `tests-real/rm04_relocate/test_rm04_relocate.py::test_rm04_14_webui_confirm_loop_ui`。
 - 规则 `move_to`: 发起 / 幂等 skip / 需确认 skip(规则侧无交互, 不替用户点「目录别名以后新种子也落新位置」)
   / 拒绝 fail 四态; dry-run 不触发任何写。
 - 幂等先于闸门: 同组同目标的 job 在途 ⇒ skip —— 规则每轮都会命中同一目标, 落到「未收尾拦截」会天天报失败。
