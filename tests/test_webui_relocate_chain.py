@@ -264,14 +264,15 @@ def test_chain_start_derivation_and_env(web_env, tmp_path, monkeypatch):
     assert "映射" in mapped["nodes"][0]["reason"]
 
     # 3) 远程 UNC: 不做本机 syscall, 环境标 remote
+    #    ! 不能把 inspect_path 换成 stub 完事 —— 那样只是"用假实现避免真实网络 syscall",
+    #    无法证明路由真的没调它; 这里计数并断言 0 次(起点派生/链探测都不得碰 UNC)
     rec.root_path, rec.save_path = "//server/share/seed", "//server/share"
+    probes = []
     with monkeypatch.context() as m:
-        m.setattr(
-            alias_fs, "inspect_path",
-            lambda p: alias_fs.PathInspection(status="ok", kind=alias_fs.KIND_DIR),
-        )
+        m.setattr(alias_fs, "inspect_path", lambda p: probes.append(p))
         remote = client.get(f"/api/relocate/chain?hash={HASH}", headers=_auth(mgr)).json()
     assert remote["env"] == "remote" and "远程" in remote["nodes"][0]["reason"]
+    assert probes == [], f"远端 UNC 不得做本机 syscall, 实际探测了: {probes}"
 
     # 4) 候选全越界/不可用 -> 回退首选候选并如实标范围外(不换成可用路径假装成功)
     rec.root_path, rec.content_path = str(tmp_path / "elsewhere"), str(tmp_path / "elsewhere2")
@@ -397,6 +398,13 @@ def test_chain_frontend_static_and_node():
                    '@keydown.esc', "relc-backdrop", "relChainRefresh()", "relChainCopyAll()"):
         assert needle in pop, needle
     assert ">关闭路径链<" in pop or 'aria-label="关闭路径链"' in pop
+    # 浮窗不透底(P1-4): 四皮肤里 flux 的 --bg-card 带 alpha, 必须用不透明 --bg-pop
+    css = _static("shared/row_lang.css")
+    pop_css = css.split(".relc-pop {", 1)[1].split("}", 1)[0]
+    assert "background: var(--bg-pop)" in pop_css, "路径链浮窗必须用不透明 --bg-pop"
+    # 长链可滚(P2-4): 浮窗自身 overflow:auto, 内部滚动不得触发「滚动即关」
+    assert "overflow: auto" in pop_css
+    assert "pop.contains(t)" in js, "滚动关闭必须放过浮窗内部滚动, 否则长链滚不动"
     rows = _static("shared/drawer_rows.js")
     assert 'act: "chain"' in rows and 'A → B → C' in rows
     for tpl in ("shared/drawer_tpl/01-general-hero-tall.js",
@@ -429,6 +437,9 @@ process.stdout.write(JSON.stringify({
   limitStatus:call('relChainStatusText',{status:'limit'}),
   unknownStatus:call('relChainStatusText',{status:'unknown',reason:'boom'}),
   phase:call('relChainPhaseText','armed'),
+  phaseWatching:call('relChainPhaseText','watching'),
+  phaseMoved:call('relChainPhaseText','moved'),
+  phaseRemoving:call('relChainPhaseText','removing'),
   probed:Object.assign(M,{fmtTs:()=>'T'})['relChainProbedText'].call(
     Object.assign({},M,{fmtTs:()=>'T',relChain:{data:{probed_at:1,cached:false}}}))
 }));
@@ -444,4 +455,8 @@ process.stdout.write(JSON.stringify({
     assert out["limitStatus"] == "链路过长"
     assert out["unknownStatus"] == "未确认: boom"
     assert out["phase"] == "待收尾"
+    # 十个相位都必须落在用户状态词表(P1): 落空会显示「未知状态」
+    assert out["phaseWatching"] == "迁移中"
+    assert out["phaseMoved"] == "待收尾"
+    assert out["phaseRemoving"] == "待收尾"
     assert out["probed"].startswith("探测于 T")

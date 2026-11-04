@@ -538,7 +538,7 @@ html[data-rowlang="wave"]:not([data-theme="frost"]):not([data-theme="golden"]) .
 .relc-pop {
   position: fixed; z-index: 141; box-sizing: border-box; max-height: min(70vh, 560px);
   display: flex; flex-direction: column; gap: 10px; padding: 12px 13px 11px;
-  color: var(--fg); background: var(--bg-card); border: 1px solid var(--border-strong);
+  color: var(--fg); background: var(--bg-pop); border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm); box-shadow: var(--shadow-3);
   color-scheme: dark; overflow: auto; animation: relc-in var(--dur, .16s) var(--ease, ease-out);
 }

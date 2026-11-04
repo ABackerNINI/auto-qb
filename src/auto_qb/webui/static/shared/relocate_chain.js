@@ -34,10 +34,16 @@
     limit: "链路过长",
   };
 
+  // job phase -> 用户状态词(与 P1 状态词表同口径): watching 归「迁移中」,
+  // moved/armed/removing/removed/finalizing 归「待收尾」(计划 P1 表「用户状态」行)
   const REL_CHAIN_PHASE_TEXT = {
-    armed: "待收尾",
     moving: "迁移中",
-    pending_finalize: "待收尾",
+    watching: "迁移中",
+    moved: "待收尾",
+    armed: "待收尾",
+    removing: "待收尾",
+    removed: "待收尾",
+    finalizing: "待收尾",
     failed: "迁移失败",
     done: "已完成",
     cancelled: "已取消",
@@ -89,8 +95,13 @@
         if (relChainGlobalsHooked) return;
         relChainGlobalsHooked = true;
         // capture 阶段接滚动: 行内滚动容器滚动时同样关闭(浮窗定位相对旧锚点必然漂移)
-        window.addEventListener("scroll", () => {
-          if (this.relChain.open) this.relChainClose(false);
+        window.addEventListener("scroll", (ev) => {
+          if (!this.relChain.open) return;
+          // 浮窗自身可滚(长链): 内部滚动不关, 否则长链永远滚不动
+          const pop = this.$refs && this.$refs.relChainPop;
+          const t = ev && ev.target;
+          if (pop && t && (t === pop || (t.nodeType === 1 && pop.contains(t)))) return;
+          this.relChainClose(false);
         }, true);
         window.addEventListener("resize", () => {
           if (this.relChain.open) this.relChainClose(false);
