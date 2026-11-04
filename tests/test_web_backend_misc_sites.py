@@ -141,9 +141,8 @@ def test_sites_missing_groups_merge_cooccurring_domains(web_env):
     assert len(data["groups"]) == 1, "同一颗种子共现 -> 只并成一条组"
     g = data["groups"][0]
     assert g["domains"] == ["abc.pt", "www.longptsite.com"], "组内域名 sorted"
-    # 代表名 = 最短域名 abc.pt 的清洗名; sites 先逐域名取名占用了 abc_pt,
-    # 组名沿用同一 taken 查重序列顺延 _1 后缀(两边永不撞名)
-    assert g["name"] == "abc_pt_1"
+    # 代表名 = 最短域名 abc.pt 的清洗名; 组名按 CLI 同规则单独查重(不叠加 sites 的 _1 后缀)
+    assert g["name"] == "abc_pt"
     assert "entry" in g and g["entry"]["domains"] == ["abc.pt", "www.longptsite.com"], \
         "合并 entry 由后端单点产出(build_merged_entry), domains 键为组内全域名"
 
@@ -166,8 +165,8 @@ def test_sites_missing_groups_single_domains_match_sites(web_env):
     assert [g["domains"] for g in data["groups"]] == [["alpha.io"], ["beta.net"]]
     assert [g["domains"][0] for g in data["groups"]] == [s["domain"] for s in data["sites"]], \
         "全单元素组时 groups 与 sites 按序一一对应"
-    assert [g["name"] for g in data["groups"]] == ["alpha_io_1", "beta_net_1"], \
-        "组名在 sites 之后的同一 taken 查重序列上顺延"
+    assert [g["name"] for g in data["groups"]] == ["alpha_io", "beta_net"], \
+        "组名按 CLI 同规则单独查重(与 sites 逐域名名互不占用)"
     for g in data["groups"]:
         assert "entry" in g, "groups 每条带合并 entry(前端合并模式直接用)"
     for s in data["sites"]:
@@ -204,6 +203,8 @@ def test_frontend_sites_import_wiring():
     assert "async _hubImportPerDomain(sites)" in hub_js, \
         "缺逐域名导入单点(分支②与拆分导入必须共用一份, 各抄一份 = 行为漂移温床)"
     assert "trackers[s.name] = s.entry" in hub_js, "逐域名模式键必须是 sites[i].name"
+    assert "Object.prototype.hasOwnProperty.call(trackers, s.name)" in hub_js, \
+        "逐域名判重必须只认自有键(防 constructor/__proto__ 继承属性误判已存在)"
     assert hub_js.count("_hubImportPerDomain(sites)") >= 3, \
         "分支②与 extra 分支都要调逐域名单点(方法定义 + 两处调用)"
     # 分支③闸门: 只有存在 >=2 域名的组才引导(D4: 会真实合并才弹框, 否则空转)
@@ -216,8 +217,13 @@ def test_frontend_sites_import_wiring():
         "拆分钮必须传 extraStyle:\"ghost\"(非破坏性动作不该渲染成 danger-solid 红钮)"
     # 合并模式: 键 = groups[i].name, 值 = groups[i].entry(后端单点产出的合并条目)
     assert "trackers[g.name] = g.entry" in hub_js, "合并模式必须用 groups[i].name/entry 作键值"
+    assert "Object.prototype.hasOwnProperty.call(trackers, g.name)" in hub_js, \
+        "合并判重必须只认自有键(防 constructor/__proto__ 继承属性误判已存在)"
     assert "合并明细" in hub_js and "另有" in hub_js, \
         "三钮 body 必须带合并明细(列前 10 组 Name(d1、d2), 超出折叠「…另有 N 组」)"
+    assert "const DETAIL_MAX = 10;" in hub_js and "groups.slice(0, DETAIL_MAX)" in hub_js \
+        and "groups.length - DETAIL_MAX" in hub_js, \
+        "合并明细截断三件套(DETAIL_MAX / slice 上限 / 折叠计数)缺一即回归"
     # ui_feedback 侧 extraStyle 契约: 缺省 "" = danger-solid 现状(既有调用点零变化),
     # ghost 只认白名单值, 落地单点 = _applyExtraBtnGhost(模板第三钮类静态, 只能开框后换类)
     fb = read_shared("ui_feedback.js")

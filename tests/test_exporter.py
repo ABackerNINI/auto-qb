@@ -25,7 +25,8 @@
 - test_export_yaml_template_name_collision: 名称冲突处理
 - test_export_yaml_template_merged_default_only_missing: 默认合并(仅缺失)—— 共现缺失域名一条合并条目(键=最短域名名字)
 - test_export_yaml_template_merged_default_append: 默认合并(追加)—— 现有配置保留 + 共现缺失域名合并条目
-- test_export_yaml_template_split_trackers: split_trackers=True 拆回逐域名路径(单域名条目各一条)
+- test_export_yaml_template_split_trackers: split_trackers=True 拆回逐域名路径
+- test_export_yaml_template_split_trackers_append: split_trackers=True + 追加模式(only_missing=False), 保留既有条目并逐域名各一条
 - test_export_yaml_template_all_singleton_groups_equivalent: 全单元素缺失组时合并路径与 split 路径产物等价
 - test_collect_all_tracker_hostnames_per_hash_union_and_error_isolation: 守阵(W6 变异审计)—— 逐种取 tracker 按 hash,
   单种异常跳过不终止扫描, 多种域名并集
@@ -392,6 +393,37 @@ def test_export_yaml_template_merged_default_append():
         assert "HHan" in trackers, "追加模式必须保留现有配置"
         assert list(trackers.keys()) == ["HHan", "hdchina_org"]
         assert trackers["hdchina_org"]["domains"] == ["hdchina.org", "pt.example.com"]
+
+
+def test_export_yaml_template_split_trackers_append():
+    """split_trackers=True + 追加模式: 现有配置保留, 共现缺失域名逐域名各一条"""
+    with tempfile.TemporaryDirectory() as td:
+        cfg_path = os.path.join(td, "config.yml")
+        out_path = os.path.join(td, "out.yml")
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            yaml.dump({"config": {"trackers": {"HHan": {"domains": ["tracker.hhanclub.net"]}}}}, f, allow_unicode=True)
+        client = FakeClient()
+        client.torrents["H1"] = FakeTorrent(hash="H1", name="T1")
+        client.torrents_trackers = lambda h: [
+            {
+                "url": "https://hdchina.org/announce.php"
+            },
+            {
+                "url": "https://pt.example.com/announce.php"
+            },
+        ]
+        cfg = _make_config_with_trackers(_tracker("HHan", ["tracker.hhanclub.net"]))
+
+        exporter.export_yaml_template(
+            client, cfg, cfg_path, out_path, dry_run=False, only_missing=False, split_trackers=True
+        )
+        with open(out_path, "r", encoding="utf-8") as f:
+            data = yaml.load(f, Loader=yaml.BaseLoader)
+        trackers = data["config"]["trackers"]
+        assert "HHan" in trackers, "追加模式必须保留现有配置"
+        assert list(trackers.keys()) == ["HHan", "hdchina_org", "pt_example_com"]
+        assert trackers["hdchina_org"]["domains"] == ["hdchina.org"]
+        assert trackers["pt_example_com"]["domains"] == ["pt.example.com"]
 
 
 def test_export_yaml_template_split_trackers():

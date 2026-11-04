@@ -213,7 +213,7 @@ Object.assign(window.CONFIG_HUB.methods, {
       const trackers = { ...(this.cfgConfig().trackers || {}) };
       let added = 0;
       for (const s of sites) {
-        if (trackers[s.name]) continue; // 已存在同名键(如待生效热重载)不覆盖
+        if (Object.prototype.hasOwnProperty.call(trackers, s.name)) continue; // 已存在同名键(如待生效热重载)不覆盖
         trackers[s.name] = s.entry;
         if (!added) this.cfg.trackerKey = s.name;
         added++;
@@ -271,7 +271,7 @@ Object.assign(window.CONFIG_HUB.methods, {
           const trackers = { ...(this.cfgConfig().trackers || {}) };
           let added = 0, domains = 0;
           for (const g of groups) {
-            if (trackers[g.name]) continue; // 同名键已存在不覆盖(与逐域名路径同一 skip 语义)
+            if (Object.prototype.hasOwnProperty.call(trackers, g.name)) continue; // 同名键已存在不覆盖(与逐域名路径同一 skip 语义)
             trackers[g.name] = g.entry;
             if (!added) this.cfg.trackerKey = g.name;
             added++;

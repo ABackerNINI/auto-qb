@@ -17,6 +17,8 @@
 - test_main_hr_status_runs_report_without_qb: --hr-status 不构造 manager(不连 qB), 行数上限透传
 - test_main_tray_mutex_with_export: --tray 与 --export-yaml 互斥 -> 退出码 2
 - test_main_split_trackers_requires_export_yaml: --split-trackers 单独传(无 --export-yaml)配合校验 -> 退出码 2
+- test_main_export_yaml_split_trackers_passthrough: --export-yaml --split-trackers -> export_yaml_template kwargs.split_trackers is True
+- test_main_export_yaml_default_merge_passthrough: --export-yaml 缺省 -> kwargs.split_trackers is False
 - test_main_tray_mode_calls_run_tray: --tray 模式交由 ui.run_tray 托管
 - test_main_tray_second_instance_wakes_running: --tray 双开唤起已运行实例 -> 静默退出 0
 - test_main_tray_second_instance_wake_fail_returns_1: --tray 双开唤起失败 -> 常规锁错误退出 1
@@ -82,8 +84,34 @@ def test_main_export_yaml():
     assert args[2] == "config.yml"
     assert args[3] == "out.yml"
     assert args[4] is False  # dry_run
-    m_exp.call_args.kwargs["only_missing"] is True
+    assert m_exp.call_args.kwargs["only_missing"] is True
     manager.run.assert_not_called()
+
+
+def test_main_export_yaml_split_trackers_passthrough():
+    """--split-trackers 经 cli 透传到 export_yaml_template 的 kwargs"""
+    manager = mock.MagicMock()
+    manager.connect.return_value = True
+    manager.config_path = "config.yml"
+    with _patch_argv("auto-qb", "config.yml", "--export-yaml", "out.yml", "--split-trackers"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager), \
+            mock.patch("auto_qb.cli.export_yaml_template") as m_exp:
+        from auto_qb.cli import main
+        main()
+    assert m_exp.call_args.kwargs["split_trackers"] is True
+
+
+def test_main_export_yaml_default_merge_passthrough():
+    """缺省合并: 未传 --split-trackers 时 kwargs.split_trackers 为 False"""
+    manager = mock.MagicMock()
+    manager.connect.return_value = True
+    manager.config_path = "config.yml"
+    with _patch_argv("auto-qb", "config.yml", "--export-yaml", "out.yml"), \
+            mock.patch("auto_qb.cli.QbManager", return_value=manager), \
+            mock.patch("auto_qb.cli.export_yaml_template") as m_exp:
+        from auto_qb.cli import main
+        main()
+    assert m_exp.call_args.kwargs["split_trackers"] is False
 
 
 def test_main_export_connect_failure():

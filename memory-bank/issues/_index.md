@@ -22,7 +22,7 @@
 | bug | 7 |
 | perf | 5 |
 | docs | 2 |
-| test | 4 |
+| test | 5 |
 | refactor | 3 |
 | feat | 20 |
 | chore | 3 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [test] [缺失站点导入三路径 GUI 冒烟不可复跑](26-11-04-2312-test-webui-sites-import-gui-smoke.html) — 三路径验收靠一次性 ha…
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基…
 - [test] [拆分目标承载区间内既有实质改动, move-only 仅做等价核验会漏审](26-11-03-0704-test-split-carried-inrange-changes.html) — R1/R2/R3 源文件…
 - [bug] [HR 发现端点固定 18788 加用户级共享 instances.json 导致多 clone 跨项目混串实例与 token](26-11-03-0315-bug-hr-discovery-multi-clone-isolation.html) — 多 clone 都会命中…
