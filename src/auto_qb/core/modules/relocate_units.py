@@ -99,7 +99,7 @@ def _join(save_path: str, rel: str) -> str:
 def _within(scope: str, path: str) -> bool:
     """path 是否落在 scope 目录内(含等于); 归一后比较"""
     s, p = _norm(scope), _norm(path)
-    if not s:
+    if not s:  # 防御支: _norm 底层 normpath 恒返回 ".", 现实调用不可达; 契约由 _norm 替身直驱用例钉住(issue 26-11-05-0200)
         return False
     return p == s or p.startswith(s + "/")
 

@@ -23,7 +23,7 @@
   判负多成员硬拦(fs.path_map + assume_shared 两条出路)/单成员判负维持 note/same_fs_note 入 notes
 - test_evaluate_group_same_volume_space_exempt: 同卷 rename 不占额外空间 -> 空间预检不适用(R2 #1);
   跨卷不足/不可读仍拦
-- test_within_empty_scope_false: _within 空 scope -> False(退化分支, 覆盖补齐)
+- test_within_empty_scope_false: _within 空 scope -> False(端到端退化行为; 守卫支由替身直驱用例覆盖)
 - test_evaluate_group_dir_alias_confirms: F>=thr + 专属 -> confirm(dir_alias, needs_confirm)
 - test_evaluate_group_external_files_force_file_links: 组外文件 -> exclusive=False ->
   file_links + note 列出组外条目(不动别人的文件)
@@ -450,7 +450,8 @@ def test_evaluate_group_space_cross_volume_branch():
 
 
 def test_within_empty_scope_false():
-    """_within 空 scope -> False(退化分支, 覆盖补齐)"""
+    """_within 空 scope -> False(端到端退化行为; 守卫支现实不可达、经 _norm 替身直驱用例
+    test_within_empty_scope_guard_via_norm_empty 覆盖, 本例实际由前缀比较返回 False)"""
     assert ru._within("", "R:/any/path") is False
 
 

@@ -9,7 +9,7 @@
 <meta name="doc-topic" content="coverage-uplift-3">
 <meta name="doc-refs" content="">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构">
 <meta name="issue-summary" content="_norm 底层 normpath 恒返回 &#x27;.&#x27;, _within 的 if not s 守卫现实不可达; 覆盖率第三轮已用 _norm 替身钉住契约弧, 残留问题是守卫本身去留">
 <title>relocate_units._within 空 scope 守卫现实不可达, 是否值得改产品结构 · question · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-05-0200-question-relocate-units-empty-scope-unreachable</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 02:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">question</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -96,6 +96,8 @@
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-05 02:00 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 — 用户指派认领，状态 <strong>In Progress</strong>。复验：锚点仍在（<code>_within</code> 空 scope 守卫 <code>relocate_units.py</code> <code>if not s</code>；替身直驱用例 <code>test_within_empty_scope_guard_via_norm_empty</code> 已在），现象仍成立。拍板采建议①：守卫留+加注释</li>
+      <li>2026-11-05 — 状态 <strong>Done</strong>。实际修法（=建议①）：<code>_within</code> 守卫加「防御支」行内注释（零行为变更）；另澄清 <code>test_within_empty_scope_false</code> docstring 与测试计划清单（空转真相：端到端退化行为，实际走前缀比较；守卫支归替身直驱用例）。验证方式：<code>commands run test.full</code> 全量过闸（数字见 <code>kb.baseline</code> 切片 26-11-05-0558）</li>
     </ul>
   </section>
 
