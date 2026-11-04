@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>整组迁移回收机制改造: 单回收进程与未收尾再迁移</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="relocate-single-recycler">
+<meta name="doc-status" content="Open">
+<meta name="doc-added" content="26-11-05-0247">
+<meta name="doc-updated" content="26-11-05-0247">
+<meta name="doc-refs" content="">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: relocate-single-recycler</div>
+<h1>整组迁移回收机制改造: 单回收进程与未收尾再迁移</h1>
+<p class="lede">把「一个 job 一个 finalize_watch guardian 进程」收成「单个按需回收 daemon(事件驱动 + 长兜底扫)」,并把再迁移闸门从「未收尾一律拦截」收窄为「armed/removed 放行 + 旧 job 移交(supersede-transfer)+ 链接坍缩到新目标」,让迁移后没等 qB 退出收尾也能把组再挪一次,且旧链接零悬空、收尾者唯一。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-05-0247 · <b>doc-updated</b> 26-11-05-0247 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话 grilling(2026-11-05, 两轮共 15 问全部拍板, 见 §06);现状事实由只读探查代理给出 file:line 引文
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+
+<h3>背景与目标</h3>
+<p>两个真实痛点(用户确认 Q1 = (a)+(b) 都有):</p>
+<ul>
+  <li><b>(a) per-job guardian 进程模型难观察、难管理</b>:每个 job 武装时拉一个分离进程(<code>relocate_exec.py:941-957</code>),webui 看不见谁在跑;心跳过期后的 respawn 退避/重拉循环(<code>RESPAWN_BACKOFF=60s</code>, <code>relocate_exec.py:897-911</code>)是历史坑源(<code>pitfalls/backend/windows-relocate-traps.md</code> 四条里两条与之相关)。</li>
+  <li><b>(b) 未收尾前无法再次迁移</b>:分阶段换盘、目标路径选错要改时,<code>GATE_UNFINISHED</code> 一刀切(<code>relocate_units.py:460-463</code>);现有绕路 <code>relocate_cancel</code> 会删链接 + qB 搬回,语义与「接着往下挪」不符。</li>
+</ul>
+<p>做到什么程度算成:</p>
+<ol>
+  <li>任意时刻<b>至多一个</b>回收进程;job 武装到被 daemon 接管的延迟为秒级(nudge 命中)至 300s(兜底扫),nudge 丢失不影响正确性;</li>
+  <li>旧 job 处于 <code>armed</code>/<code>removed</code> 时可对同组再次发起整组迁移;旧 A 侧链接全部移交新 job,<b>零悬空、收尾者唯一</b>;</li>
+  <li>webui 能看到回收 daemon 状态与在管 job 数;</li>
+  <li><code>test.full</code> 全绿 + 新基线切片记实测数字。</li>
+</ol>
+
+<h3>设计底线 / 不变量</h3>
+<ul>
+  <li><b>文件事实源</b>:relocate 目录里的 journal/spec 始终是唯一事实源;nudge 只是加速器,丢了、daemon 没在跑、端口文件过期——都只影响延迟,不影响正确性(兜底扫兜住)。</li>
+  <li><b>单一写线程</b>(黄金法则 5):daemon 仍<b>绝不</b>碰 <code>state.json</code>,只写 <code>&lt;data_dir&gt;/relocate/</code> 下的 journal/spec/pid/端口文件;<code>state.json</code> 的 <code>relocate.jobs</code> 唯一写者仍是主循环线程。</li>
+  <li><b>终态前向合并</b>(<code>relocate_journal.py:68-85</code>):「非终态不得覆盖终态」规则保留,并把 <code>superseded</code> 收进 <code>STOP_PHASES</code>。</li>
+  <li><b>不留悬空</b>:A 侧链接坍缩(重写指向新目标)任何一条失败 ⇒ 新迁移整体拒绝、现场回滚(D7)。</li>
+  <li><b>保守默认 + 无新配置键</b>(黄金法则 2/4):兜底间隔、宽限期、心跳上限全部用模块常量(与现状 <code>GUARDIAN_HEARTBEAT_MAX_AGE</code> 同口径),不新增配置键、不动 <code>config/schema/</code>。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+
+<h3>现状机制(file:line 引文,只读探查 2026-11-05)</h3>
+<table>
+  <tr><th>环节</th><th>现状</th><th>位置</th></tr>
+  <tr><td>guardian 拉起</td><td>每个 job 武装时 <code>subprocess.Popen</code> 一个分离的 <code>finalize_watch</code> 进程(Windows <code>CREATE_NO_WINDOW</code> / POSIX <code>start_new_session</code>);对账触发 respawn 时带 60s 退避重拉</td><td><code>relocate_exec.py:941-957</code>, <code>:897-911</code>, <code>:305-321</code></td></tr>
+  <tr><td>pid 锁</td><td>per-job <code>&lt;job_id&gt;.pid</code>,一 job 一 guardian;Windows 存活探测用 OpenProcess 口径</td><td><code>relocate_journal.py:115-157</code></td></tr>
+  <tr><td>心跳</td><td>guardian 每 10s 写 journal(phase=armed);主循环判 <code>heartbeat_age &gt; 60s</code> ⇒ 重拉</td><td><code>finalize_watch.py:39</code>, <code>relocate_units.py:999-1000</code></td></tr>
+  <tr><td>收尾动作</td><td>三证判 qB 退出(进程+端口+稳定 30s)→ <code>_verify_dst</code> → 先落 <code>removing</code> 再逐条非递归删链接 → 落 <code>removed</code></td><td><code>finalize_watch.py:44-52, 103-140, 199-246</code></td></tr>
+  <tr><td>两本账</td><td>权威账 = <code>state.json</code> 的 <code>relocate.jobs</code>(主循环唯一写者);journal = guardian 自述,两个写者、无跨进程锁、last-writer-wins + 终态前向合并</td><td><code>relocate_journal.py:1-17, 68-85</code></td></tr>
+  <tr><td>对账动作表</td><td>ACT_WAIT / RESPAWN / REDELETE / REVERT_INTENT / REBUILD / FINALIZE / FAILED_TIMEOUT / DONE_EXTERNAL / FAILED_GONE</td><td><code>relocate_units.py:947-1006</code>, <code>relocate_exec.py:413-482</code></td></tr>
+  <tr><td>再迁移拦截</td><td><code>blocks_relocation</code>:任何非终态 job(armed/removing/removed/finalizing 都算)与本组成员 hash 相交或目录 scope 覆盖 ⇒ <code>GATE_UNFINISHED</code>;执行入口同 job_id 非终态 ⇒ blocked</td><td><code>relocate_units.py:341-358, 457-464</code>, <code>relocate_exec.py:741-753</code></td></tr>
+  <tr><td>别名形态阶梯</td><td>目录:junction → dir symlink;文件:同卷 hardlink → symlink;<code>alias_kind_of</code> 判形态</td><td><code>alias_fs.py:58-60, 142-167</code></td></tr>
+  <tr><td>终态清账</td><td>终态 job 永久留在 <code>state.json</code>;journal/spec 文件「只增」;pid 锁 guardian 退出时删</td><td><code>relocate_journal.py:28-30</code></td></tr>
+</table>
+
+<h3>痛点与现状的对应</h3>
+<ul>
+  <li><b>观察/管理难</b>:N 个 job = N 个分离进程,互不知晓;webui 只有 job 相位镜像(<code>pending_tag</code>, 计划 26-11-04-1042),看不见进程面。</li>
+  <li><b>respawn 循环脆弱</b>:心跳过期判定、60s 退避、<code>ACT_REDELETE</code> 重拉——三层机制都在补「单 job 单进程可能死」这个洞;坑档①(Windows 探测自噬)与④(多实例心跳正常但永远 armed)都发生在这层。</li>
+  <li><b>闸门过宽</b>:<code>armed</code> 之后旧 job 的剩余工作只有「qB 退出后删 A 侧链接」,与新迁移正交,却被和 moving/moved 一起拦死。闸门文案自己给出了理由:「否则链接套链接会让旧迁移的收尾失效」——本计划用<b>移交+坍缩</b>正面解决这个理由,而不是绕开它。</li>
+</ul>
+
+<h2><span class="no">§03</span>方案总览</h2>
+
+<h3>改动一:单个回收 daemon</h3>
+<table>
+  <tr><th>维度</th><th>现在</th><th>改为</th><th>拍板</th></tr>
+  <tr><td>进程模型</td><td>一 job 一个分离 guardian</td><td><b>单个回收 daemon</b>,首个 job 武装时按需拉起,最后一个 job 终态后 <b>60s 宽限</b>退出;职责边界不变(三证判 qB 退出、verify_dst、删链接、写 journal 相位),仍不碰 state.json</td><td>D1</td></tr>
+  <tr><td>通知通道</td><td>无(guardian 自循环)</td><td><b>localhost TCP ping</b>:daemon 启动时把端口写进 <code>relocate/daemon.json</code>;主循环在武装/取消/翻转 job 时连 127.0.0.1 发一次 "scan" 即断,连不上就不管;nudge 只是加速器,文件始终是事实源</td><td>D2</td></tr>
+  <tr><td>兜底</td><td>—</td><td>daemon <b>300s 全量扫</b>一次,覆盖 nudge 丢失 / 端口文件过期 / daemon 重启窗口</td><td>D3</td></tr>
+  <tr><td>活性模型</td><td>per-job pid 锁 + per-job 10s 心跳 + 60s 过期重拉 + respawn 退避</td><td><b>全局 <code>daemon.pid</code> + 全局心跳</b>(pid/ts,放 <code>daemon.json</code>);对账 <code>ACT_RESPAWN</code> 退化为「daemon 心跳 &gt;60s ⇒ ensure_daemon 重拉」;per-job pid 锁、per-job 心跳、<code>RESPAWN_BACKOFF</code> 退避循环<b>整块退役</b>;journal 里 per-job 只留相位(armed/removing/removed)</td><td>D4</td></tr>
+  <tr><td>多 job 并发</td><td>天然隔离(每 job 一进程)</td><td>daemon 单线程事件循环逐 job 处理;每 job 独立持三证状态(qB 退出判定、稳定窗口计时互不干扰);单 job 收尾中途 daemon 崩溃 ⇒ 重拉后重扫重删,天然幂等</td><td>D1</td></tr>
+</table>
+
+<div class="aside">守护读的 spec 仍按 job 一份(<code>&lt;job_id&gt;.spec.json</code>,每次拉起/接管重写),Unicode 路径不经命令行的既有设计不变。</div>
+
+<h3>改动二:未收尾前再迁移(supersede-transfer)</h3>
+<table>
+  <tr><th>维度</th><th>现在</th><th>改为</th><th>拍板</th></tr>
+  <tr><td>放行相位</td><td>全部非终态拦截</td><td>放行集 = <b>{armed, removed}</b>;moving/moved/watching/removing/finalizing 仍拦截。removing 是纯防御——它进入条件就是 qB 已掉线,而再迁移需要 qB 在线,实际撞不上</td><td>D5</td></tr>
+  <tr><td>旧 job 处置</td><td>—(拦截,无处置)</td><td><b>supersede-transfer</b>:新迁移武装时旧 job 翻终态 <code>reason=superseded</code>(<b>不删链接、不搬回</b>);其 A 侧别名清单并入新 job 的 <code>alias_paths</code>;junction/symlink 就地重写指向新 dst,hardlink 免重写直接并入;qB 退出后由新 job 一次收尾删光全部旧链接——单一写者、单一收尾,不存在两个 job 竞争同一批链接</td><td>D6</td></tr>
+  <tr><td>硬链接特例</td><td>—</td><td>hardlink 不是路径引用,无需坍缩:B→C 同卷改名后 A 侧硬链接照样解析到同一份数据;跨卷搬时它继续钉住旧数据、由收尾删除释放。只重写 junction/symlink</td><td>D6</td></tr>
+  <tr><td>坍缩失败</td><td>—</td><td>任何一条重写失败(权限/占用/长路径)⇒ <b>新迁移整体拒绝</b>:新 job 不建、旧 job 不 supersede、已重写的链接回滚重写回旧目标,现场恢复后报错给人看</td><td>D7</td></tr>
+  <tr><td>相邻闸门</td><td>①FINALIZE_WINDOW 添加种子 confirm;②ops_skip relocating_hashes 跳检让路;③同 src+dst 在途幂等 skip</td><td><b>全部维持现状</b>——拦的是别的风险面,与本次正交</td><td>D8</td></tr>
+  <tr><td>webui</td><td>job 列表有相位镜像</td><td>加一行 daemon 状态(pid / 心跳年龄 / 在管 job 数),最小件</td><td>D9</td></tr>
+</table>
+
+<h3>why 这两条是同一个计划</h3>
+<p>移交后的「旧链接清单」需要一个存活期覆盖到 qB 退出的执行者;per-job guardian 模型下旧 job 已终态、没有进程再认领这批链接——单 daemon 扫的是「目录里所有未竟事宜」,移交天然成立。反过来,单 daemon 的在管集合并不会因再迁移产生二义性,因为 supersede 保证了任意时刻每批链接至多一个归属 job。<b>两个改动互为前提,必须一期落地。</b></p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+
+<table>
+  <tr><th>期</th><th>步</th><th>内容</th><th>验收判据</th></tr>
+  <tr>
+    <td rowspan="4"><b>P1</b><br>单回收 daemon</td>
+    <td>S1</td>
+    <td>新增 <code>src/auto_qb/tools/recycle_daemon.py</code>(finalize_watch 的多 job 化改造,旧文件退役):全局 <code>daemon.pid</code> 抢占(沿用 OpenProcess 存活口径)、<code>daemon.json</code>(pid/ts/port)、TCP nudge 监听(127.0.0.1, 收包即全量扫)、300s 兜底扫、无非终态 job 后 60s 退出;job 处理逻辑移植现有三证/verify_dst/removing→removed 流程,<code>STOP_PHASES</code> 扩入 <code>superseded</code></td>
+    <td>单元:pid 抢占互斥、nudge 收包触发扫描、兜底周期触发、闲时 60s 退出、终态前向合并含 superseded</td>
+  </tr>
+  <tr>
+    <td>S2</td>
+    <td><code>relocate_exec.py</code> 改造:<code>_spawn/_spawn_guardian</code> → <code>_ensure_daemon</code>(pid 活则只 nudge,死则拉起);<code>_arm</code> 武装路径改调 ensure_daemon + nudge</td>
+    <td>武装后 daemon.json 出现且在管数 +1;nudge 失败(手动杀 daemon)不报错、300s 内被兜底扫接管</td>
+  </tr>
+  <tr>
+    <td>S3</td>
+    <td>对账瘦身(<code>relocate_units.py</code> reconcile 动作表 + <code>relocate_exec.py:380-482</code>):心跳源改为全局 daemon.json;<code>ACT_RESPAWN/ACT_REDELETE</code> 合并为 <code>ACT_ENSURE_DAEMON</code>;<code>RESPAWN_BACKOFF</code>、per-job 心跳过期判定删除;<code>ACT_REVERT_INTENT/ACT_REBUILD/ACT_FINALIZE</code> 等语义不动,只是「重拉 guardian」都换成「ensure_daemon + journal 写意图 + nudge」</td>
+    <td>对账纯函数测试更新:心跳过期 ⇒ ENSURE_DAEMON;杀 daemon 后 60s 内主循环重拉;现有 REBUILD/FINALIZE 测试全绿</td>
+  </tr>
+  <tr>
+    <td>S4</td>
+    <td>清理:finalize_watch.py、per-job pid 锁代码路径退役(保留 <code>relocate_journal.py</code> 的 journal/spec 读写与终态合并);坑档 <code>windows-relocate-traps.md</code> ①④ 复发面收窄的回写</td>
+    <td><code>grep finalize_watch</code> 仅剩历史文档引用;旧 per-job <code>.pid</code> 残留文件无消费者</td>
+  </tr>
+  <tr>
+    <td rowspan="3"><b>P2</b><br>supersede 再迁移</td>
+    <td>S5</td>
+    <td>闸门收窄(<code>relocate_units.py:341-358, 457-464</code>):<code>blocks_relocation</code> 拦截相位从「全部非终态」收窄为 {moving, moved, watching, removing, finalizing};报错文案同步改写(说明 armed/removed 会走移交)</td>
+    <td>armed/removed 相位预检放行;moving/removing 相位仍报 GATE_UNFINISHED(文案新)</td>
+  </tr>
+  <tr>
+    <td>S6</td>
+    <td>supersede-transfer 实现(<code>relocate_exec.py</code> <code>_start_job</code>/<code>_arm</code> 路径):①发现相交旧 job phase ∈ {armed, removed} ⇒ 旧 job 翻终态 reason=superseded(不动链接、不搬回、journal 写 superseded);②旧 alias_paths 并入新 job spec;③junction/symlink 逐条重写指向新 dst(新 <code>alias_fs</code> 重写函数:读旧目标→删→建→穿透校验),hardlink 直接并入;④任一失败 ⇒ 整体拒绝:已重写的回滚、新 job 不建、旧 job 不翻、报错列出失败条目;⑤旧 job 的 <code>relocating_hashes</code> 登记随终态迁出,新 job 重新登记(<code>relocate_mod.py:203-215</code>)</td>
+    <td>端到端测试:A→B armed 后发起 B→C ⇒ A 侧 junction/symlink 指向 C、hardlink 原样、旧 job superseded、qB 模拟退出后一批链接全删;重写注入失败 ⇒ 全量回滚 + 旧 job 仍 armed</td>
+  </tr>
+  <tr>
+    <td>S7</td>
+    <td>removed 相位再迁移路径:supersede 时序保证——supersede 判定读 state 当前相位,若对账已推进到 finalizing ⇒ 拒绝(窗口极短,保守处理)</td>
+    <td>removed 后立即再迁移 ⇒ 旧 job 不会触发 ACT_FINALIZE setLocation 回 B</td>
+  </tr>
+  <tr>
+    <td rowspan="2"><b>P3</b><br>可见性与收尾</td>
+    <td>S8</td>
+    <td>webui 最小件:job 列表接口附 daemon 状态(pid/心跳年龄/在管 job 数),列表头加一行状态条</td>
+    <td>webui 测试:daemon 活/死两态渲染正确</td>
+  </tr>
+  <tr>
+    <td>S9</td>
+    <td>收尾 DoD:<code>test.full</code> + 新基线切片;代码事实回写 <code>memory-bank/</code>(finalize_watch → recycle_daemon 的机制描述、<code>26-10-18-1604</code> 计划 §3.5 加改版注记指向本计划);坑档复发面回写</td>
+    <td><code>kb.wrap</code> 完成;基线切片含实测数字;新坑若有按 <code>kb.new pitfall</code> 落档</td>
+  </tr>
+</table>
+
+<div class="aside"><b>升级兼容(D9):不做。</b>部署新版本时在途旧格式 job(旧 guardian 可能还在跑)不管——在途窗口以小时/天计,撞升级概率可忽略;现有对账(重建链接/ensure_daemon)兜底。</div>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<p>无——两轮 grilling 共 9 组决策已全部拍板(2026-11-05),结论全部迁 §06。</p>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>#</th><th>决策</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D1</td><td>回收进程形态</td><td>单个 daemon,按需拉起、闲时退出(最后 job 终态后 60s 宽限);否决常驻与并入主循环(保留「qB 退出后 auto-qb 可能不在」的独立进程理由)</td><td>2026-11-05</td></tr>
+  <tr><td>D2</td><td>更新通道</td><td>localhost TCP ping + <code>daemon.json</code> 端口文件;文件是事实源,nudge 只是加速器;否决纯轮询与 IPC 协议</td><td>2026-11-05</td></tr>
+  <tr><td>D3</td><td>兜底扫描</td><td>300s 全量扫一次</td><td>2026-11-05</td></tr>
+  <tr><td>D4</td><td>活性模型</td><td>全局 daemon.pid + 全局心跳;per-job pid 锁/心跳/respawn 退避整块退役;<code>ACT_RESPAWN</code> → <code>ACT_ENSURE_DAEMON</code></td><td>2026-11-05</td></tr>
+  <tr><td>D5</td><td>放行相位</td><td>{armed, removed};moving/moved/watching/removing/finalizing 拦截(removing 为纯防御)</td><td>2026-11-05</td></tr>
+  <tr><td>D6</td><td>旧 job 处置</td><td>supersede-transfer:旧 job 翻终态 reason=superseded(不删链接不搬回),A 侧别名并入新 job;junction/symlink 重写指向新目标,hardlink 免重写并入;单一收尾者</td><td>2026-11-05</td></tr>
+  <tr><td>D7</td><td>坍缩失败</td><td>整体拒绝 + 现场回滚,不留半坍缩</td><td>2026-11-05</td></tr>
+  <tr><td>D8</td><td>相邻闸门</td><td>FINALIZE_WINDOW confirm / ops_skip 让路 / 同 src+dst 幂等 skip 三者全部不动</td><td>2026-11-05</td></tr>
+  <tr><td>D9</td><td>webui 与兼容</td><td>webui 加 daemon 状态最小件;升级兼容不做</td><td>2026-11-05</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>daemon 收尾中途崩溃(删了一半链接)</td><td>removing 进行中进程被杀/断电</td><td>删链接天然幂等:主循环对账发现链接仍在 ⇒ ensure_daemon 重拉,重扫重删;journal 先落 removing 再动手的既有顺序保留,不会出现「删了却不知情」</td></tr>
+  <tr><td>nudge 端口被占 / daemon.json 过期</td><td>端口冲突、daemon 换端口后旧文件未更新、多 auto-qb 实例</td><td>daemon 启动时重写 daemon.json(端口+pid+ts);主循环 nudge 前先对 pid 活性校验,连不上即静默放弃;正确性不依赖 nudge(300s 兜底)</td></tr>
+  <tr><td>supersede 与对账竞态</td><td>removed 相位再迁移发起的同一 tick,对账把旧 job 推进 finalizing(ACT_FINALIZE 会 setLocation 回 B)</td><td>supersede 判定一律读 state 当前相位;发现 finalizing ⇒ 拒绝本次再迁移(S7);判定后翻终态在同一主循环 tick 内完成——单一写线程保证无中间态</td></tr>
+  <tr><td>坍缩重写撞上 Windows 占用</td><td>A 侧 junction 正被资源管理器/杀软握着句柄</td><td>D7 整体拒绝 + 回滚;报错列出失败条目给人看;重试由用户再发起,天然幂等</td></tr>
+  <tr><td>跳检登记悬空</td><td>旧 job superseded 后 <code>relocating_hashes</code> 仍含其成员</td><td>S6⑤:终态迁出登记,新 job 武装时重新登记——让路窗口无缝衔接,不让同 hash 种子在移交瞬间被误跳检或漏跳检</td></tr>
+  <tr><td>移植回归:三证/verify 语义被改坏</td><td>finalize_watch → recycle_daemon 的多 job 化搬运</td><td>行为逐条移植不改语义;现有 finalize_watch 测试套全部迁移改挂新模块;P1 单独全量测试绿后才进 P2</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-05-0247</span> 初版。来源:会话 grilling(用户提出两项改动 → 两轮 15 问拍板 D1-D9);现状事实由只读探查代理给出 file:line 引文;方案主线 = 单回收 daemon(TCP nudge + 300s 兜底 + 全局活性)+ supersede-transfer 再迁移(armed/removed 放行 + 链接坍缩 + 失败整体拒绝)。</li>
+</ul>
+
+</div>
+</body>
+</html>

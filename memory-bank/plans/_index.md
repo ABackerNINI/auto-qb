@@ -18,6 +18,7 @@
 
 ## Open
 
+- [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
 - [26-11-05-0118] [flaky 测试结构化治理: 时钟注入与抖动消除](26-11-05-0118-plan-flaky-test-governance.html) — `flaky-test-governance`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
