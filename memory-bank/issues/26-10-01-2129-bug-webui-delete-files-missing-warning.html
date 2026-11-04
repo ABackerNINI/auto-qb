@@ -8,7 +8,7 @@
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="webui-delete-files-missing-warning">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="删除种子(同时删除文件)会引起缺文件 WARNING">
 <meta name="issue-summary" content="连文件一起删除的种子被缺文件扫描误报 WARNING, 删除路径需与缺文件检测互斥">
 <title>删除种子(同时删除文件)会引起缺文件 WARNING · bug · 计划外问题</title>
@@ -101,7 +101,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-01-2129-bug-webui-delete-files-missing-warning</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-01 21:29</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">未分类</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
@@ -154,12 +154,13 @@
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-01 21:29 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-05 07:15 — 复验已消失，状态 <strong>Done</strong>（用户指派认领；无专项修复提交，误报路径随缺文件扫描骨架收口与同族过渡态容忍已结构性消除，判定依据见「修复后补充」）</li>
     </ul>
-    <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除，本报告不回改 TODO.md。</p>
+    <p class="hint">来源：TODO.md 未完成项盘点入池（2026-10-01，清单见临时 manifest）；TODO 对应行由末阶段统一移除（c1b6d53f「已入池」清理），本报告不回改 TODO.md。</p>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-05 07:15 —— 快进同步 8adc4a57 后重跑锚点：<code>_check_missing_files</code>（现 <code>core/modules/grouping_mod.py:438</code>）与 <code>_handle_removed_torrents</code>（现 <code>core/modules/grouping_mod.py:140</code>）符号均在；<strong>现象已消失</strong>——删除事件先把已删种子移出组（<code>_leave_group</code>）再只对剩余成员扫描，三个触发源统一走 <code>_scan_triggered_groups</code>（<code>grouping_mod.py:154</code>，issue 26-10-11-0207 R10 收口）按 <code>by_hash</code> 过滤已删记录、空组不扫，已删种子不在任何缺文件扫描集合里。无真机 qB，未做真机复现，判定基于代码路径与守阵。</p>
     <h3>修复后补充</h3>
-    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+    <p><strong>判定依据（2026-11-05 复验，基线 develop @ 8adc4a57）</strong>：无专项修复提交——误报路径随以下结构性改动消除：① 删除事件「先移出组、后扫剩余」（<code>_handle_removed_torrents</code>，守阵 <code>tests/test_grouping_scan.py::test_grouping_removed_event_group_emptied_no_scan</code> 等）；② 三触发源扫描骨架单点 <code>_scan_triggered_groups</code> 按现存记录过滤（issue 26-10-11-0207 R10）；③ 同族过渡态误报（.!qB 孪生窗口）已由 issue 26-09-21-0219 清偿（c353e899）。剩余成员若与被删种子共享文件，WARNING 属真实缺失保护行为，非误报。与「建议修法」的差异：未做删除窗口互斥，因删除事件路径上已删种子先于任何扫描被排除，互斥窗口不存在。验证方式：<code>commands run test.quick</code> 全量 5341 passed + 10 skipped（2026-11-05）。</p>
   </section>
 
   <footer>
