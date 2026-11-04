@@ -148,7 +148,7 @@
 - [bug] [RM04-05 同卷跨盘移动主链: GATE_SPACE 负向对照红灯失守(环境差量)](26-11-02-1144-bug-rm04-gate-space-envdrift.html) — RM04 漂移复测轮(2…
 - [perf] [种子详情面板页签切换卡 1-2 秒](26-11-02-0902-perf-webui-drawer-tab-switch-lag.html) — 抽屉内页签(genera…
 
-> 更早的 **355** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **356** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
