@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-11-04-0600">
 <meta name="issue-type" content="chore">
 <meta name="doc-topic" content="test-full-red">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-11-04-0157-plan-test-coverage-uplift-3.html">
 <meta name="issue-tier" content="light">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）">
 <meta name="issue-summary" content="全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定">
 <title>test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径） · chore · 计划外问题（便签）</title>
@@ -69,7 +69,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-11-04-0600-chore-testing-coverage-floor-99</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-11-04 06:00</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">chore</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
     </div>
   </header>
@@ -91,12 +91,14 @@
   <section id="s3">
     <h2><span class="no">03</span>建议<span class="opt">（可选）</span></h2>
     <p>待定。先查「下降来源」：是新合并代码里存在 Windows 可跑但未被覆盖的语句/分支，还是统计口径（并行/分支计数）变化；定位后再决定「补测试」还是「按实测下调闸值」。不建议直接把闸值放宽到 98.7 当作修复。</p>
+    <p><strong>实际修法（2026-11-05 认领收口，与建议不同故保留上文并说明改道）：</strong>下降来源查清——是<strong>真实未覆盖单位累积</strong>，非统计口径漂移：覆盖率提升第三轮开工实测缺口 319 单位（167 缺语句 + 152 部分分支，50 文件）。处置走了比建议的「二选一」更彻底的路线：<a href="../plans/26-11-04-0157-plan-test-coverage-uplift-3.html">覆盖率提升第三轮</a>三阶段净清偿 299 单位，P2 定稿 TOTAL 99.9361%（缺口 20 单位）；闸值不降反升——<code>COVERAGE_FLOOR_WIN</code> 99.0→99.5、<code>COVERAGE_FLOOR_OTHER</code> 98.5→99.0（<code>tests/conftest.py</code>）。本件「不建议直接放宽闸值」的告诫被遵守。<strong>验证</strong>：P2 定稿基线切片 <code>26-11-05-0116-test-coverage-uplift-3-p2</code>；2026-11-05 复验 <code>commands run test.full</code>（develop @ 21b04f75）5339 passed / 0 failed，TOTAL 缺 69 语句 + 38 部分分支，覆盖率闸 99.5/99.0 全量过闸（exit 0）。</p>
   </section>
 
   <section id="s4">
     <h2><span class="no">04</span>状态变更日志</h2>
     <ul>
       <li>2026-11-04 06:00 — 入池，状态 <strong>Open</strong>（计划外，未修；用户授权新建）</li>
+      <li>2026-11-05 — 用户指派认领；复验现象已消失（test.full 全量过闸 exit 0），实质修复方为覆盖率提升第三轮（plans/26-11-04-0157，缺口 319→20 单位、TOTAL 99.9361%、闸值抬 99.5/99.0），状态 <strong>Done</strong>，doc-refs 接认领链</li>
     </ul>
   </section>
 
