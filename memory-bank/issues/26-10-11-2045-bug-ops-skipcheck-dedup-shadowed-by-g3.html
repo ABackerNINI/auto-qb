@@ -7,9 +7,9 @@
 <meta name="issue-stamp" content="26-10-11-2045">
 <meta name="issue-type" content="bug">
 <meta name="doc-topic" content="skip-check-gates">
-<meta name="doc-refs" content="">
+<meta name="doc-refs" content="memory-bank/plans/26-11-04-2357-plan-skip-check-gates.html">
 <meta name="issue-tier" content="standard">
-<meta name="issue-status" content="Open">
+<meta name="issue-status" content="Done">
 <meta name="issue-title" content="跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)">
 <meta name="issue-summary" content="跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)">
 <title>跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip) · bug · 计划外问题</title>
@@ -102,7 +102,7 @@
       <div class="item"><div class="k">编号</div><div class="v">26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3</div></div>
       <div class="item"><div class="k">报告时间</div><div class="v">2026-10-11 20:45</div></div>
       <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
-      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Done</span></div></div>
       <div class="item"><div class="k">涉及模块</div><div class="v">ops</div></div>
       <div class="item"><div class="k">发现者</div><div class="v">worktree:auto-qb-clone4/agent</div></div>
     </div>
@@ -189,9 +189,11 @@ self.state.setdefault("skip_check_day", {})[hash] = date.today().isoformat()</co
     <h2><span class="no">07</span>状态变更日志</h2>
     <ul>
       <li>2026-10-11 20:45 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+      <li>2026-11-04 23:57 — 认领（用户指令），状态 <strong>In Progress</strong>；修复计划 <a href="../plans/26-11-04-2357-plan-skip-check-gates.html">26-11-04-2357-plan-skip-check-gates</a>（doc-refs 双向建链）</li>
+      <li>2026-11-05 00:42 — 状态 <strong>Done</strong>（实际修法 = 建议修法 1：dedup 判定块前移至 G3/G4 之前，谓词与文案零变化，拍板 D2 放最前）。验证：保真链用例 <code>test_ops_skip.py::test_ops_skip_check_day_shared_across_sources</code> 撤 progress 绕行转绿 + 预检回归钉（<code>test_ops_recheck.py</code> HDUP 样本 reasons[0]=dedup）；全量 <code>test.full</code> 全量绿（数字见基线切片 <a href="../testing/baselines/26-11-05-0023-skip-check-gates.md">26-11-05-0023</a> / kb.baseline）。规则侧同构遮蔽独立入池 <a href="26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html">26-11-05-0019</a>；模式沉淀坑档 <code>pitfalls/backend/gate-order-reachability.md</code></li>
     </ul>
     <h3>复验</h3>
-    <p class="todo">TODO: 认领后先重跑锚点，补一行「复验：&lt;时间&gt; 仍复现 / 已消失」。</p>
+    <p>复验：2026-11-04 仍复现。锚点漂移：闸门代码已从 <code>ops_mod.py</code> move-only 切到 <code>ops_verdict.py</code>（R5 拆分），现锚点 —— 顺序注释 <code>ops_verdict.py:134</code> / G3 <code>:194-200</code> / dedup <code>:288-291</code> / 执行路径首未过闸门 <code>:80-87</code>；逻辑与入池时逐字一致。两条既有用例（<code>tests/test_ops_skip.py:82</code> · <code>tests/test_checking_skip.py:179</code>）仍靠手动还原 <code>progress=0.0</code> 绕开 G3 验证 dedup。</p>
     <h3>修复后补充</h3>
     <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
   </section>

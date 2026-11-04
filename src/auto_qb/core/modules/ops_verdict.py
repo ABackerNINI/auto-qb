@@ -131,12 +131,17 @@ class VerdictMixin:
         零副作用铁律(T20): 本判定不写 state、不 prune、不 pop、无任何 qB 写 API —— 预检
         「只是看看」不得改状态; skip_check_day 的清理留在执行路径(_skip_gates 尾部)。
 
-        顺序与短路: G3 → G4 → G5 → G6 → G7 → G8 → partial → dedup → filelist(排最后, plan 插入点由
+        顺序与短路: dedup → G3 → G4 → G5 → G6 → G7 → G8 → partial → filelist(排最后, plan 插入点由
         skip_check 的执行序保证: R2 实时复核之后、导出之前)。前面已有 **blocked** 未过时短路
         跳过 filelist(省一次 files API + N 次 stat —— 结论已注定 blocked); 仅 force 类未过时
         **不**短路: force=True 豁越后 filelist 仍须真跑(case 1 硬闸不得被短路绕过)。
 
         各闸门口径:
+        - dedup: 跨规则同日去重(全来源) —— 多条规则都配 checking 时, 同一种子当日只跳检一次
+          (跳检必然清空本地统计, 重复跳检只会再丢一次而毫无收益)。排最前(26-10-11-2045):
+          跳检成功 ⇒ 种子必为已完成 ⇒ 「已完成」(G3)与「今日已跳检」恒同时成立, dedup 若排在
+          G3 之后即被结构性遮蔽(执行路径取首个未过, 文案与 skip 类别双双被改写); 「今日已
+          跳检过」也是重复请求的最直接答案 —— 谓词全组最便宜(一次 dict 查询), 前移零副作用(T20 只读)。
         - G3 已完成(progress>=1, 无论状态) / G4 活跃中(非 stopped 且 p<1): 放行谓词逐字同
           rules/actions/checking.py:88 决策链 0(两处注释互指); stalledDL 等边缘态口径由
           state_enum 现有语义决定, 与规则侧天然一致(同一谓词), 不发明 WEB 特有口径(plan §03)。
@@ -159,8 +164,6 @@ class VerdictMixin:
         - partial(0<p<1): 预分配使文件尺寸=完整尺寸, filelist 尺寸检查无法发现未下载的零块,
           is_skip_checking 会把全部块标记有效 -> 零块被上传(垃圾数据)。仅 progress==0(全新辅种,
           数据完整)可跳检; full-checking 对部分下载安全, 不设限。
-        - dedup: 跨规则同日去重(全来源) —— 多条规则都配 checking 时, 同一种子当日只跳检一次
-          (跳检必然清空本地统计, 重复跳检只会再丢一次而毫无收益)。
         - filelist: 前置文件检查, 调 check_filelist(checking.py:121 决策链 4 同一原语, 规则侧
           双查为计划明文接受); 失败语义 blocked(fail), 不是 skip; 映射 miss(路径不可判定)保守
           停住, 文案自带「修 fs.path_map 配置」出路。
@@ -169,8 +172,16 @@ class VerdictMixin:
         progress = tor.progress
         state_enum = tor.state_enum
 
+        # dedup 跨规则同日去重(排最前, 26-10-11-2045): 跳检成功 ⇒ 种子必为已完成 ⇒ G3 与 dedup
+        # 恒同时成立, dedup 排后即被 G3 结构性遮蔽(执行路径取首个未过, 文案与 skip 类别被改写);
+        # 只读判定(不 setdefault 不 prune), 前移零副作用(T20)
+        skip_day = self.state.get("skip_check_day") or {}
+        if skip_day.get(hash) == date.today().isoformat():
+            verdicts.append(GateVerdict("dedup", GATE_BLOCKED, "今日已跳检过该种子(跨规则去重)"))
+
         # G3/G4 共用放行谓词 —— 逐字同 rules/actions/checking.py:88 决策链 0(两处注释互指):
         # 仅「暂停中未完成」放行; 做种态 p=1 落 G3/G5, 下载中等非 stopped 态 p<1 落 G4。
+        # (当日已跳检的种子已被 dedup 先拦 —— G3 在此只对「已完成且当日未跳检」成判)
         paused_incomplete = state_enum.is_stopped and progress < 1.0
         evidence = self._checking_evidence(hash, tor)
 
@@ -284,11 +295,6 @@ class VerdictMixin:
             verdicts.append(
                 GateVerdict("partial", GATE_BLOCKED, f"部分下载的种子禁止跳检(progress={progress}), 请改用 full-checking")
             )
-
-        # dedup 跨规则同日去重(既有闸门并入 detail, 文案零变化; 只读 —— 不 setdefault 不 prune)
-        skip_day = self.state.get("skip_check_day") or {}
-        if skip_day.get(hash) == date.today().isoformat():
-            verdicts.append(GateVerdict("dedup", GATE_BLOCKED, "今日已跳检过该种子(跨规则去重)"))
 
         # filelist 前置文件检查(排最后): 前面已有 blocked 未过 -> 短路(结论已注定, 省 files API);
         # 仅 force 类未过不短路(force 豁越后本闸门仍须真跑)

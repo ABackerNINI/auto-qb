@@ -25,7 +25,7 @@
 
 跳检闸门扩展(plan 26-10-05-0314 S1b-1: 三分流 detail 单点 + force + 预检):
 - test_skip_check_rejects_inflight_recheck: T6 同 hash 校验在途拒, 文案含「校验中」, 零副作用
-- test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定
+- test_skip_check_precheck_readonly: T20 预检只读(state 深比对不变/去重表不写入不 prune/零写 API/种子零变动)+ gone 判定 + dedup 前移回归钉(reasons[0]=dedup, 26-11-04-2357 R2)
 - test_guard_recheck_scope_single: recheck 作用域必须单 hash(rc164 高危 None=全库重校验)
 - test_guard_recheck_delete_branch_requeues_origin: 轮询期种子删除 -> rule origin 重入队(rc53)
 - test_guard_recheck_success_clears_cooldown: 校验成功清除失败冷却(rc74/77/81/82)
@@ -652,23 +652,31 @@ def test_skip_check_precheck_readonly():
     mgr.client = client
     t = seed_paused(mgr, client, hash="HASH123")  # ok 样本
     t2 = FakeTorrent(hash="HDONE", state="pausedUP", progress=1.0)  # blocked 样本(G3)
-    seed_store(mgr, [t, t2])
+    t3 = FakeTorrent(hash="HDUP", state="pausedUP", progress=1.0)  # blocked 样本(dedup 前移回归钉)
+    seed_store(mgr, [t, t2, t3])
     client.torrents["HDONE"] = t2
+    client.torrents["HDUP"] = t3
     mgr.state.setdefault("skip_check_day", {})["STALE"] = "2000-01-01"  # prune 若误入 detail 此处必红
+    mgr.state["skip_check_day"]["HDUP"] = date.today().isoformat()  # 当日已跳检 + 已完成: dedup 与 G3 恒同真
     before = copy.deepcopy(mgr.state)
     info_before, files_before = client.info_calls, client.files_calls
 
-    results = mgr.ctx.ops.skip_check_precheck(["HASH123", "HDONE", "HMISSING"])
+    results = mgr.ctx.ops.skip_check_precheck(["HASH123", "HDONE", "HDUP", "HMISSING"])
 
     # 回执形状(S2 将包成 {results, summary}; 单 hash: hash/name/cls/reasons)
-    assert [x["hash"] for x in results] == ["HASH123", "HDONE", "HMISSING"]
+    assert [x["hash"] for x in results] == ["HASH123", "HDONE", "HDUP", "HMISSING"]
     assert results[0]["cls"] == "ok" and results[0]["reasons"] == [] and results[0]["name"] == "Test"
     assert results[1]["cls"] == "blocked", f"已完成样本应 blocked: {results[1]}"
     assert results[1]["reasons"][0]["gate"] == "G3" and "已完成" in results[1]["reasons"][0]["text"]
-    assert results[2]["cls"] == "blocked" and results[2]["reasons"][0]["gate"] == "gone"
-    assert "已不在客户端" in results[2]["reasons"][0]["text"], f"gone 文案 T21 依赖: {results[2]}"
+    # dedup 前移回归钉(26-11-04-2357 R2): 同日已跳检样本 reasons[0] 必是 dedup(G3 随后), 钉死顺序
+    assert results[2]["reasons"][0]["gate"] == "dedup" and "今日已跳检过" in results[2]["reasons"][0]["text"], \
+        f"dedup 应排最前(修复前恒被 G3 改写): {results[2]}"
+    assert results[2]["reasons"][1]["gate"] == "G3", f"G3 应紧随 dedup(两谓词恒同真): {results[2]}"
+    assert results[3]["cls"] == "blocked" and results[3]["reasons"][0]["gate"] == "gone"
+    assert "已不在客户端" in results[3]["reasons"][0]["text"], f"gone 文案 T21 依赖: {results[3]}"
 
-    # 只读面: 零写 API; 预检不拉 live(info_calls 不增); files_calls 恰 +1(HDONE 被 G3 短路 filelist)
+    # 只读面: 零写 API; 预检不拉 live(info_calls 不增); files_calls 恰 +1(仅 HASH123 真跑 filelist,
+    # HDONE/HDUP/HMISSING 被 G3/dedup/gone 短路 —— dedup 前移不扩短路面, 仍是同一枚 files 调用)
     assert client.calls == [], f"预检不得调任何写 API: {client.calls}"
     assert client.info_calls == info_before, f"预检不得直查 torrents_info: {client.info_calls}"
     assert client.files_calls - files_before == 1, \
@@ -680,7 +688,8 @@ def test_skip_check_precheck_readonly():
 
     # 种子零变动
     assert t.state == "pausedDL" and t.progress == 0.0 and t2.state == "pausedUP" and t2.progress == 1.0
-    assert client.torrents["HASH123"] is t and client.torrents["HDONE"] is t2
+    assert t3.state == "pausedUP" and t3.progress == 1.0
+    assert client.torrents["HASH123"] is t and client.torrents["HDONE"] is t2 and client.torrents["HDUP"] is t3
 
 
 def test_guard_recheck_scope_single():

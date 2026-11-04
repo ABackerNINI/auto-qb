@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案</title>
+<meta name="doc-type" content="plan">
+<meta name="doc-topic" content="skip-check-gates">
+<meta name="doc-status" content="Done">
+<meta name="doc-added" content="26-11-04-2357">
+<meta name="doc-updated" content="26-11-05-0043">
+<meta name="doc-refs" content="memory-bank/issues/26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html,memory-bank/issues/26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html,memory-bank/tasks/26-11-05-backend-skip-check-gates.md">
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #6db3c9;
+    --accent-ink: #8fd0e0;
+    --warn: #e2a86e;
+    --ok: #8fc98f;
+    --no: #d98a8a;
+    --code-bg: #151d25;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); color-scheme: dark; font-family: var(--sans); font-size: 15px; line-height: 1.65; margin: 0; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  /* 版面自适应: sheet 随视口流动 (封顶 1280px), 侧距 clamp(18~44px) 随宽度伸缩;
+     正文与表格同宽 —— 右缘不再参差 (2026-10-17 用户反馈「宽度不统一不协调」) */
+  .sheet { max-width: 1280px; margin: 0 auto; padding: 48px clamp(18px, 3.2vw, 44px) 80px; }
+
+  .kicker { font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); }
+  h1 { font-family: var(--display); font-size: 33px; line-height: 1.18; letter-spacing: -0.01em; font-weight: 600; margin: 10px 0 6px; }
+  .lede { color: var(--dim); font-size: 16px; margin: 0 0 22px; }
+  .meta { font-family: var(--mono); font-size: 11.5px; color: var(--faint); line-height: 1.9; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); padding: 10px 0; margin-bottom: 40px; }
+  .meta b { color: var(--dim); font-weight: 400; }
+
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.005em; margin: 52px 0 4px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); letter-spacing: 0.08em; display: block; margin-bottom: 6px; font-weight: 400; }
+  h3 { font-family: var(--display); font-size: 16.5px; font-weight: 600; margin: 28px 0 6px; }
+  h4 { font-family: var(--display); font-size: 14.5px; font-weight: 600; margin: 20px 0 4px; color: var(--dim); }
+  p { margin: 10px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  code { font-family: var(--mono); font-size: 12.5px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; color: var(--accent-ink); }
+  pre { background: var(--code-bg); border: 1px solid var(--hair-soft); padding: 13px 16px; overflow-x: auto; margin: 12px 0; }
+  pre code { background: none; padding: 0; color: var(--ink); font-size: 12.5px; line-height: 1.6; }
+  .cm { color: var(--faint); }
+
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { text-align: left; font-weight: 600; color: var(--dim); font-size: 11.5px; letter-spacing: 0.08em; padding: 6px 10px; border-bottom: 1px solid var(--hair); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  td code, th code { white-space: nowrap; }
+  /* 窄视口 (<=1180px): 表格单元格内的长路径允许断行, 换取表格不溢出页面; 宽屏不受影响 */
+  @media (max-width: 1180px) { td code, th code { white-space: normal; overflow-wrap: anywhere; } }
+  .good { color: var(--ok); }
+  .bad { color: var(--no); }
+  .wr { color: var(--warn); }
+  .aside { border-left: 2px solid var(--hair); padding: 2px 0 2px 14px; color: var(--dim); margin: 14px 0; }
+  .tag { font-family: var(--mono); font-size: 11px; color: var(--accent-ink); letter-spacing: 0.06em; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+<div class="kicker">PLAN · memory-bank · doc-topic: skip-check-gates</div>
+<h1>跳检 dedup 闸门遮蔽修复: 提到 G3 之前恢复 skip 语义与文案</h1>
+<p class="lede">把 ops 跳检闸门组里的 dedup 判定块提到 G3 之前, 让「同日重跳」回到 dedup 语义(skip + 「今日已跳检过该种子(跨规则去重)」); 拦停行为零变化, 改动单点在 <code>_skip_gates_detail</code>。</p>
+<div class="meta">
+  <b>doc-added</b> 26-11-04-2357 · <b>doc-updated</b> 26-11-05-0043 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>来源</b> 会话: 用户认领 issue <code>26-10-11-2045</code> 并指令出修复计划 + grilling
+</div>
+
+<h2><span class="no">§01</span>目标与设计原则</h2>
+<p><b>背景</b>: <a href="../issues/26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html">issue 26-10-11-2045</a> —— 跳检成功 ⇔ 种子已完成是同一事实的两面, 而闸门顺序 G3(已完成, blocked)排在 dedup(今日已跳检, blocked)之前, 执行路径取首个未过闸门 ⇒ 同日重跳恒被 G3 拦下, dedup 的文案与 <code>skip</code> 类别结构性不可达。</p>
+<p><b>目标(做成即算成)</b>: 同一 hash 当日跳检成功后, 同日任意来源(web/规则直调 ops)再跳, 回执恢复 dedup 语义 —— 文案「今日已跳检过该种子(跨规则去重)」、类别 <code>skip</code>; 且不再需要测试侧手动还原 progress 才能走到 dedup。</p>
+<p><b>设计底线/不变量</b>:</p>
+<ul>
+  <li><b>拦停行为零变化</b>: 修复只改「回执的文案与类别」(<code>fail</code>→<code>skip</code>), 不改拒不拒 —— dedup 与 G3 同为 <code>GATE_BLOCKED</code>, force 均不可豁越, 两种顺序下都不发生重复跳检。</li>
+  <li><b>谓词单点 + 两路径同源(T18)不破</b>: 只调整 <code>_skip_gates_detail</code> 内 verdicts 追加顺序, 执行路径 <code>_skip_gates</code>(ops_verdict.py:80)与预检 <code>skip_check_precheck</code>(:49)自动同源, 不碰派生逻辑。</li>
+  <li><b>只读铁律(T20)不破</b>: dedup 判定本就是纯只读(dict 查询), 前移不引入任何写入/prune; <code>skip_check_day</code> 清理仍留在执行路径尾部。</li>
+  <li><b>filelist 短路语义不变</b>: 短路条件是「存在 blocked 未过」—— dedup 与 G3 都是 blocked, 两种顺序下该布尔同值。</li>
+</ul>
+
+<h2><span class="no">§02</span>现状与痛点</h2>
+<p>闸门判定单点已从 <code>ops_mod.py</code> move-only 切到 <code>ops_verdict.py</code>(issue 复验行已更新锚点, 取证 2026-11-04):</p>
+<table>
+  <tr><th>锚点</th><th>内容</th></tr>
+  <tr><td><code>ops_verdict.py:134</code></td><td>顺序注释: <code>G3 → G4 → G5 → G6 → G7 → G8 → partial → dedup → filelist</code></td></tr>
+  <tr><td><code>ops_verdict.py:188-200</code></td><td>G3 谓词(progress&gt;=1 且无在途证据 → blocked「种子已完成…跳检无任何意义」)</td></tr>
+  <tr><td><code>ops_verdict.py:288-291</code></td><td>dedup 谓词(skip_check_day.get(hash)==今天 → blocked「今日已跳检过该种子(跨规则去重)」)</td></tr>
+  <tr><td><code>ops_verdict.py:80-87</code></td><td>执行路径取<b>首个</b>未过闸门: dedup → <code>ActionResult.skip</code>, 其余 → <code>fail</code></td></tr>
+</table>
+<p><b>痛点</b>:</p>
+<ol>
+  <li><b>回执类别被改写</b>: web 批量跳检按 <code>is_failed</code>/<code>is_skipped</code> 分桶(commands_torrents.py:800-808), 「N 个跳过: 今日已跳检过…」变成「N 个失败: 种子已完成…」—— 失败计数虚高、跳过统计丢失 dedup 语义。</li>
+  <li><b>拒因文案被改写</b>: 用户看到「已完成」而非「今日已跳检过」, 去重的自解释价值丢失。</li>
+  <li><b>可测性受损</b>: 两条既有用例被迫手动还原 progress 绕开 G3(<code>tests/test_ops_skip.py:94</code> · <code>tests/test_checking_skip.py:196</code>), 「保真替身下真实发生的同日重跳」没有用例覆盖 —— 即回归面裸奔。</li>
+  <li><b>新发现(入池时未记录): 规则侧第二重遮蔽</b> —— <code>rules/actions/checking.py:100-103</code> 决策链 0「种子非暂停中未完成状态, 无需校验」(<code>skip</code>)在委托 <code>ctx.ops.skip_submit</code> 之前; 跳检成功 ⇒ 已完成 ⇒ 规则源同日重跳恒被链 0 拦下, 同样走不到 ops dedup 闸门。与 ops 侧同构, 但类别本来就是 <code>skip</code>(无分桶口径损伤, 仅文案不同)。范围处置见 D1。</li>
+</ol>
+
+<h2><span class="no">§03</span>方案总览</h2>
+<p><b>主线</b>(= issue 建议修法 1, 三选一里语义最正、代价最小): 在 <code>_skip_gates_detail</code> 内把 dedup 判定块(:288-291)整体移动到 G3/G4 判定之前(verdicts 追加顺序调整), 谓词与文案<b>零变化</b>; 同步更新 :134 顺序注释与 dedup 条目注释。改动约 10 行移动 + 注释。</p>
+<p><b>为什么放最前而不是「G3 之前、G5 之后」</b>: dedup 是全组最便宜的谓词(一次 dict 查询), 且「今日已跳检过」对「为什么不能再跳」是最直接的答案 —— 任何后续闸门(G5 在途校验/G8 组内证伪)提示的是「这次跳检本身的危险」, 而对一次<b>重复</b>请求, 「已经跳过了」恒为真且优先。代价: 当日已跳检 + 恰逢在途校验时, force=False 回执从 G5 的「正在全量校验」变为 dedup 的「今日已跳检过」—— 拦停等价(force 均到不了执行), 接受(风险 R3/D2 备选留了退路)。</p>
+<p><b>分期</b>: 单期完成(代码 + 测试 + 全量基线), 无分期表必要。</p>
+
+<h2><span class="no">§04</span>实施步骤</h2>
+<ol>
+  <li><b>dedup 块前移</b>: <code>ops_verdict.py</code> 把 :288-291 移到 G3/G4 判定块之前, 更新顺序注释(:134)与 dedup 条目注释、G3 条目注释互指。<b>验收</b>: 注释顺序与实际追加顺序逐字一致; <code>commands run dev.fmt</code> 过。</li>
+  <li><b>撤 ops 路径绕行</b>: <code>tests/test_ops_skip.py:82</code> 删 <code>t.progress = 0.0</code> 及绕行注释, 断言改为保真链 —— web 跳检成功后, 规则源直调 <code>skip_check</code> 同日重跳 → <code>is_skipped</code> + 「今日已跳检过」, 全程不手动改 progress。<b>验收</b>: 用例转绿即修复生效(修复前此形态必红, 返 G3 fail)。</li>
+  <li><b>规则侧用例注释改指</b>: <code>tests/test_checking_skip.py:179</code> 保留 progress 绕行(链 0 遮蔽未修, D1 默认), 注释从「真机同理」改为指向新入池的规则侧遮蔽 issue。<b>验收</b>: 注释与 D1 拍板一致。</li>
+  <li><b>全量回归 + 基线</b>: <code>commands run test.full</code> → <code>commands run kb.new baseline</code> 记实测。重点核对: <code>test_web_keys.py:272</code>(HDUP 预写 skip_check_day + progress=0, 期待「1 个跳过: 今日已跳检过该种子」)与 <code>test_web_skip_check.py:99</code>(无先跳检, 期待 G3「种子已完成」fail 桶)双绿。<b>验收</b>: 无用例转红, 基线切片落盘。</li>
+  <li><b>文档回写</b>: issue「修复后补充」节写实际修法/验证/数字; 若 D3 拍板记坑则 <code>kb.new pitfall</code> + <code>kb.index</code>。</li>
+</ol>
+
+<h2><span class="no">§05</span>待拍板清单</h2>
+<table>
+  <tr><th>编号</th><th>决策</th><th>默认(推荐)</th><th>备选</th></tr>
+  <tr><td>D1</td><td>规则侧决策链 0 遮蔽(checking.py:100)怎么处置</td><td><b>入池新 issue 不本次修</b>: 类别本就是 skip 无口径损伤; 且链 0 前插 dedup 检查需规则层读 ops 的 skip_check_day, 跨层边界变糊 —— 与本 issue 的 ops 侧修复分开裁决</td><td>一并修: 在链 0 之前查 skip_check_day 命中则 skip「今日已跳检过」; 代价: 规则侧新增一个绕行用例撤销点 + 层边界讨论</td></tr>
+  <tr><td>D2</td><td>dedup 放置位置</td><td><b>最前</b>(G3/G4/G5 之前): 最便宜谓词 + 最直接答案(理由见 §03)</td><td>仅提到 G3 之前、G5/G7 之后: 保「在途校验」提示优先于「已跳检过」, 适用场景 = 当日已跳检且此刻有在途校验、用户想知道校验动态; 代价: 两条同日重跳路径文案不一, 规则变复杂</td></tr>
+  <tr><td>D3</td><td>是否记坑档</td><td><b>记</b>: 主题「闸门顺序 = 语义回归面 —— 新闸门插入/顺序调整须过『后置闸门可达性』检查(前置同判时后置恒不可达)」, 类 backend</td><td>不记: 已由 issue + 计划承载, 不另立单点</td></tr>
+</table>
+
+<h2><span class="no">§06</span>拍板记录</h2>
+<table>
+  <tr><th>编号</th><th>结论</th><th>日期</th></tr>
+  <tr><td>D0</td><td>方案基线 = 方案 1(dedup 前移), 否决文档化与 G3 内改写文案</td><td>2026-11-05(grilling 第一轮, 用户「按推荐」)</td></tr>
+  <tr><td>D1</td><td>规则侧链 0 遮蔽: 本次不修, 入池新 issue 单独裁决; 既有用例保留绕行、注释改指</td><td>同上</td></tr>
+  <tr><td>D2</td><td>dedup 放置最前(G3/G4/G5 之前); 备选(仅 G3 前、G5/G7 后)否决</td><td>同上</td></tr>
+  <tr><td>D3</td><td>记 backend 坑档「闸门顺序 = 语义回归面(前置同判 ⇒ 后置结构性不可达)」</td><td>同上</td></tr>
+</table>
+
+<h2><span class="no">§07</span>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>触发条件</th><th>对策</th></tr>
+  <tr><td>R1 文案/分桶变化撞既有断言</td><td>有测试直接断言 G3 文案出现在「同日重跳」场景(而不是「无先跳检的已完成」场景)</td><td>已枚举断言面: <code>test_web_keys.py:272</code>(HDUP 预写去重表+progress=0, 修复后语义不变)、<code>test_web_skip_check.py:99</code>(无先跳检, G3 不受影响)双绿即覆盖; 全量 test.full 兜底, 转红逐条核对场景归属</td></tr>
+  <tr><td>R2 filelist 短路语义被误伤</td><td>顺序调整改变了「存在 blocked」判定</td><td>dedup/G3 同为 blocked, 布尔同值 —— 结构上不可能变; 步骤 1 用例覆盖预检 reasons 含 dedup 的场景作回归钉</td></tr>
+  <tr><td>R3 预检 reasons 展示次序变化</td><td>前端或测试对 reasons 次序有断言</td><td>已查测试面(test_ops_recheck.py:647 / test_web_commands_bulk.py:229 均无次序断言); 前端按 gate 名渲染, 不依赖次序; 仅在变更记录里注明</td></tr>
+  <tr><td>R4 dedup 最前吞掉 G5/G7 在途校验提示</td><td>当日已跳检 + 此刻恰有在途校验, force=False</td><td>拦停等价(force 均到不了执行), 且「已跳检过」是重复请求的更直接答案 —— 默认接受; 用户若要保留提示走 D2 备选</td></tr>
+</table>
+
+<h2><span class="no">§10</span>变更记录</h2>
+<ul>
+  <li><span class="tag">R0 · 26-11-04-2357</span> 初版: 认领 issue 26-10-11-2045 当轮产出; 复验确认仍复现(锚点漂移至 ops_verdict.py); 主线 = issue 建议修法 1; 新增发现规则侧链 0 第二重遮蔽(D1)。</li>
+  <li><span class="tag">R1 · 26-11-05-0013</span> 拍板: D0 方案1 / D1 入池不修 / D2 最前 / D3 记坑档, 进入实施</li>
+  <li><span class="tag">R2 · 26-11-05-0042</span> 收口评审(分面档): blocker 清零, 修 1 —— R2 承诺的预检 dedup 回归钉原计划未兑现, 已补 test_ops_recheck.py::test_skip_check_precheck_readonly 新增 HDUP 样本(reasons[0]=dedup, G3 紧随), 入池 0</li>
+</ul>
+
+</div>
+</body>
+</html>

@@ -7,6 +7,7 @@
 ## Open (53)
 
 - [test] [test_w6_flush_fallback_once_per_round 偶发红: 并行负载下主循环只跑 1 轮](../26-11-05-0035-test-qbmanager-flush-fallback-flaky.html) — qbmanager 主循环时序敏感用例偶发只跑 1 轮, 断言两轮失败; 单跑恒绿, 判并行/时序偶发
+- [bug] [规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)](../26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html) — CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)
 - [bug] [缺失站点扫描把逐种 tracker 失败吞成空集, 批量失败时误报无缺失](../26-11-04-2347-bug-missing-scan-partial-failure.html) — collect_torrent_tracker_hostnames 对单种查询异常一律空集; qB 重启/断连导致全部失败时 /api/sites/missing 仍 200 返回空 sites/groups, CLI 导出静默漏站
 - [test] [缺失站点导入三路径 GUI 冒烟不可复跑](../26-11-04-2312-test-webui-sites-import-gui-smoke.html) — 三路径验收靠一次性 harness 脚本+gitignore 的 .work 证据, 仓库内无可重跑回归; 需补 e2e/浏览器用例
 - [chore] [test.full 覆盖率 98.70% 低于 Windows 99.0% 闸限（既有口径）](../26-11-04-0600-chore-testing-coverage-floor-99.html) — 全量覆盖率闸红, 上一基线 98.74% 同样低于闸; 既有口径问题, 属闸限/口径待定
@@ -19,7 +20,6 @@
 - [question] [agg 速率 lane 是否应包含 z 游程内的隐形字节](../26-10-16-0020-question-agg-rate-lane-invisible-bytes.html) — 低载日在 ≥3d 视图显示 ~0 而 alltime 实增数百 MB, 速率 lane 要不要计入握手与模型化开销待拍板
 - [feat] [种子详情内容页签「重命名…」入口缺失](../26-10-14-0521-feat-content-tab-file-rename-missing.html) — 经典渲染链移除后, 内容页签三个变体(10/11/12)均无文件/目录重命名入口; 后端 rename-fs 命令与前发令链仍在, 变体 10 的「切回经典」提示已成孤儿文案
 - [question] [A系删回写后整组停种经同步回流: 被停成员再次满足「上传转暂停」谓词, 追加一次缺文件扫描(幂等, 一轮收敛)](../26-10-13-0626-question-grouping-transition-reflow-retrigger.html) — A系 S1(26-10-13-0540)删合成回写后, 自有整组停种结果推迟到下一轮同步才可见。被停成员 stalledUP->pausedUP 会再次命中 grouping_mod._handle_state_transitions 的「上传转暂停」谓词(:206), 追加一次缺文件扫描+停种。幂等、无害、一轮即收敛, 但属无谓重复。待拍板: 接受(源无关应有之义) / 加跨轮去重。
-- [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [bug] [增量 sync 若对「删后重加的同 hash」同轮下发 removed, 会把刚回写的行 pop 掉(待真机确认)](../26-10-11-2045-bug-torrents-store-removed-pop-readd.html) — store._apply 增量分支先写 patches、后按 removed 逐个 pop; 若 qB 同轮既含该 hash 的 patch 又含 removed, 回写行被删 —— 与跳检收尾回写真值互斥, 待真机确认是否发生
 - [test] [变异测试定期审计(常驻排期锚)](../26-10-08-0642-test-mutation-audit-standing.html) — 常驻锚: 按包/按模块定期跑变异测试(全量或部分), 机器提名+手工确认存活变异, 真洞各自入池; 指导见 mutation-testing skill, 命令走 mutants 包
 - [perf] [/api/state 分页/按需字段未做: 冷启动与降级轮仍回整表全量(5000 种子首屏峰值残留)](../26-10-08-0411-perf-webui-api-state-pagination.html) — 增量 delta 已覆盖稳态, 但全量轮(首屏/多标签冷启动/时间线窗外/防御降级)仍回整表: 3000 种子回包 6.3 MiB 量级; 原 issue 方向③未实施
@@ -66,7 +66,7 @@
 - [question] [兼容 Transmission 可行性分析](../26-10-01-2212-question-transmission-compat-feasibility.html) — (需要可行性分析)支持 tr 作为后端之一的可行性(qB 耦合面盘点)
 - [bug] [任务栏按钮图标仍为 python 图标(五轮尝试未解)](../26-10-01-2203-bug-taskbar-python-icon.html) — 窗口标题栏/托盘图标已正确(orbit), 仅任务栏按钮仍 python; BMP 帧 ico + AUMID + iconbitmap 组合均无效, 待定位
 
-## Done (400)
+## Done (401)
 
 - [test] [test_qb_capture sanitize 用例随机假红(非 hex 假 hash 可逆映射)](../26-11-04-0943-test-qb-capture-sanitize-flaky-hash.html) — 夹具 H1 在约 1/16 随机盐下被 infohash 映射回自身, 全量偶发红
 - [bug] [WEB UI 整组迁移 confirm 分支未接线：confirm 被当成成功、无二次确认、无 confirm=true 重发](../26-11-04-0734-bug-webui-relocate-confirm-unwired.html) — 整组迁移命中目录别名 confirm 时前端不弹确认、不回传 confirm=true，却提示已执行且零移动
@@ -271,6 +271,7 @@
 - [docs] [config/models.py QbTraffic rollup_window docstring 仍写「聚合补算窗口(= 天文件存活期)」三义合一](../26-10-12-2104-docs-traffic-rollup-window-docstring-drift.html) — 本轮启动恢复读集改为按需口径(下界 = agg 水位所在日)后, rollup_window 已不再决定恢复读集, 但 config/models.py QbTraffic docstring 仍写「聚合补算窗口(= 天文件存活期)」—— 与 traffic_sample_mod §4.3 新口径漂移
 - [docs] [种子页扩展列注释称「默认隐藏」但无 hide 标志, 实际默认渲染全部 28 列](../26-10-12-1911-docs-webui-torrent-column-default-hidden.html) — TORRENT_COLUMNS 扩展段注释声明默认隐藏, 但 13 列均无 hide:true; loadColState 播种判据 filter(c=>c.hide) 因此不隐藏 ⇒ 种子页默认 28 列全显(与注释及文件头口径不一致)。
 - [bug] [引擎 aq-table 表头缺 role/aria-sort 与键盘可达(P3-4 件套未上移)](../26-10-12-0800-bug-webui-table-head-a11y.html) — D3 排序并引擎后, 旧手搓表头的 role=button+tabindex+aria-sort a11y 件套未随载体迁入引擎 .h-cell(click-only div), 全引擎表头键盘不可达、读屏不知排序态
+- [bug] [跳检 dedup 闸门被 G3 遮蔽: 同日第二次跳检恒返「已完成」(fail) 而非「今日已跳检过」(skip)](../26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html) — 跳检成功后种子必为已完成态 ⇒ 同日重跳恒被前置 G3 拦下, dedup 闸门结构性不可达(拒因文案与回执类别双双被改写)
 - [test] [守阵 test_frontend_template_no_reserved_prefix_identifiers 的指令表达式分支是死的(正则组取错)](../26-10-11-2030-test-guard-reserved-prefix-directive-dead.html) — 保留前缀守阵只真正扫插值 {{}} 形态: 指令表达式的捕获组 1 是引号本身而非表达式(表达式在组 2), 守阵却读 group(1) 当表达式 ⇒ @click="_x()" 这类指令形态从未被真正检出, docstring 宣称的两类覆盖实际只覆盖一类
 - [test] [e2e delta-sync「置空 lastRid 走全量」全量轮偶发红、隔离轮恒绿](../26-10-11-1825-test-delta-sync-full-round-flake.html) — 全量 e2e 顺序下 delta-sync 增量轮 full=true 断言偶发超时, 隔离重跑 8/8 绿
 - [docs] [三份基线切片缺三行头 > 摘要 致 kb.check 恒红](../26-10-11-1630-docs-baselines-missing-summary-header.html) — 26-10-10-2245/2306/2335 三份 webui 基线切片缺 `> 摘要:` 头, 使 gen_baseline_recent --check(kb.check 第 4 条)恒红; 提交闸门未含此条故不拦

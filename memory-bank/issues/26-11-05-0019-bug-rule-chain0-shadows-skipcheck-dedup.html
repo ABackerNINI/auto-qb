@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="issue-slug" content="rule-chain0-shadows-skipcheck-dedup">
+<meta name="issue-stamp" content="26-11-05-0019">
+<meta name="issue-type" content="bug">
+<meta name="doc-topic" content="skip-check-gates">
+<meta name="doc-refs" content="memory-bank/plans/26-11-04-2357-plan-skip-check-gates.html">
+<meta name="issue-tier" content="standard">
+<meta name="issue-status" content="Open">
+<meta name="issue-title" content="规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)">
+<meta name="issue-summary" content="CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)">
+<title>规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构) · bug · 计划外问题</title>
+<style>
+  :root {
+    --bg: #10151a;
+    --ink: #e4eaef;
+    --dim: #a2b0bd;
+    --faint: #6f7d8a;
+    --hair: #26313a;
+    --hair-soft: #1c252d;
+    --accent: #5cc0cf;
+    --accent-ink: #7fd3de;
+    --warn: #e2a86e;
+    --warn-bg: #2a2119;
+    --code-bg: #171e26;
+    --mark: #161e26;
+    --sans: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    --display: "Bahnschrift", "Segoe UI", "Microsoft YaHei", sans-serif;
+    --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; color-scheme: dark; }
+  ::selection { background: #24424a; color: #fff; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2c3944; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a4a57; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.6; }
+  .sheet { max-width: 1180px; margin: 0 auto; padding: 56px 40px 80px; display: grid; grid-template-columns: 200px 1fr; gap: 56px; }
+  nav.toc { position: sticky; top: 48px; align-self: start; font-size: 12.5px; line-height: 1.5; }
+  nav.toc .toc-label { font-family: var(--display); letter-spacing: 0.08em; text-transform: uppercase; font-size: 10.5px; color: var(--faint); margin-bottom: 14px; }
+  nav.toc a { display: block; color: var(--dim); text-decoration: none; padding: 5px 0 5px 14px; border-left: 1px solid var(--hair); }
+  nav.toc a:hover { color: var(--accent-ink); border-left-color: var(--accent); }
+  nav.toc a .no { font-family: var(--mono); font-size: 10.5px; margin-right: 8px; color: var(--faint); }
+  nav.toc .toc-foot { margin-top: 22px; color: var(--faint); font-size: 11px; border-left: 1px solid var(--hair); padding-left: 14px; }
+  header.cover { grid-column: 2; margin-bottom: 8px; }
+  .kicker { font-family: var(--display); font-size: 11.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent-ink); margin-bottom: 18px; }
+  h1 { font-family: var(--display); font-size: 38px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 14px; }
+  .lede { font-size: 16px; color: var(--dim); max-width: 62ch; margin-bottom: 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 28px; padding: 16px 0; border-top: 1px solid var(--hair); border-bottom: 1px solid var(--hair); }
+  .meta-row .item .k { font-family: var(--display); font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+  .meta-row .item .v { font-size: 14px; font-family: var(--mono); }
+  .badge { display: inline-block; padding: 1px 9px; border-radius: 2px; font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; background: var(--warn-bg); color: var(--warn); border: 1px solid #4a3a2c; }
+  .badge.type { background: #16232a; color: var(--accent-ink); border-color: #2b4048; }
+  section { grid-column: 2; margin-top: 44px; }
+  h2 { font-family: var(--display); font-size: 21px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--hair-soft); }
+  h2 .no { font-family: var(--mono); font-size: 12px; color: var(--faint); margin-right: 10px; }
+  h2 .opt { font-family: var(--mono); font-size: 11px; color: var(--faint); letter-spacing: 0; margin-left: 8px; }
+  h3 { font-size: 15px; font-weight: 600; margin: 20px 0 8px; }
+  p { margin-bottom: 12px; max-width: 78ch; }
+  ul, ol { margin: 0 0 12px 22px; max-width: 78ch; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 13px; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { background: var(--code-bg); padding: 14px 16px; border-radius: 4px; overflow-x: auto; margin-bottom: 14px; }
+  pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 14px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--hair-soft); vertical-align: top; }
+  th { font-family: var(--display); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+  .callout { background: var(--mark); border-left: 3px solid var(--accent); padding: 12px 16px; margin-bottom: 14px; font-size: 14px; max-width: 78ch; }
+  .todo { color: var(--warn); font-family: var(--mono); font-size: 13px; }
+  .hint { color: var(--faint); font-size: 13px; max-width: 78ch; }
+  footer { grid-column: 2; margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--hair); color: var(--faint); font-size: 12px; }
+  a { color: var(--accent-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <nav class="toc">
+    <div class="toc-label">目录</div>
+    <a href="#s1"><span class="no">01</span>现象与发现场景</a>
+    <a href="#s2"><span class="no">02</span>证据</a>
+    <a href="#s3"><span class="no">03</span>影响面</a>
+    <a href="#s4"><span class="no">04</span>定位锚点</a>
+    <a href="#s5"><span class="no">05</span>根因<span class="opt">（可选）</span></a>
+    <a href="#s6"><span class="no">06</span>建议修法<span class="opt">（可选）</span></a>
+    <a href="#s7"><span class="no">07</span>状态变更日志</a>
+    <div class="toc-foot">
+      类型 bug · 档位 standard<br>
+      入池不改码 · 规范见 create-issue skill
+    </div>
+  </nav>
+
+  <header class="cover">
+    <div class="kicker">计划外问题（未修）· bug</div>
+    <h1>规则侧决策链 0 遮蔽 ops dedup 闸门: 跳检成功后同日重跳恒被链 0 以「非暂停中未完成」拦下(与 26-10-11-2045 ops 侧同构)</h1>
+    <p class="lede">CheckAction 决策链 0 在委托 ops 前先拦「非暂停中未完成」, 跳检成功⇒已完成⇒规则源同日重跳走不到 ops dedup 闸门(类别同为 skip, 仅文案与语义归因被改写)</p>
+    <div class="meta-row">
+      <div class="item"><div class="k">编号</div><div class="v">26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup</div></div>
+      <div class="item"><div class="k">报告时间</div><div class="v">2026-11-05 00:19</div></div>
+      <div class="item"><div class="k">类型</div><div class="v"><span class="badge type">bug</span></div></div>
+      <div class="item"><div class="k">状态</div><div class="v"><span class="badge">Open</span></div></div>
+      <div class="item"><div class="k">涉及模块</div><div class="v">rules</div></div>
+      <div class="item"><div class="k">发现者</div><div class="v">未署名</div></div>
+    </div>
+  </header>
+
+  <section id="s1">
+    <h2><span class="no">01</span>现象与发现场景</h2>
+    <p>发现于修复「跳检 dedup 闸门被 G3 遮蔽」（<a href="26-10-11-2045-bug-ops-skipcheck-dedup-shadowed-by-g3.html">26-10-11-2045</a>，计划 <code>plans/26-11-04-2357</code> D1 拍板）时：ops 侧同构缺陷的<b>规则侧镜像</b>。触发条件：同一 hash 当日跳检<b>成功</b>过（种子必为已完成态），同日规则源再次触发跳检决策。</p>
+    <p><b>现象</b>：规则源同日重跳不会走到 ops dedup 闸门（「今日已跳检过该种子(跨规则去重)」），而是在更靠前的 <b>CheckAction 决策链 0</b> 被以「种子非暂停中未完成状态, 无需校验」拦下。类别恰好同为 <code>skip</code>（无 web 批量分桶那种口径损伤），受损的是<b>语义归因</b>：去重的自解释文案与「统计只丢一次」的语义在规则源不可达。与平台/配置无关，纯逻辑顺序，必现。</p>
+  </section>
+
+  <section id="s2">
+    <h2><span class="no">02</span>证据</h2>
+    <p><b>A. 决策链 0 先于 ops 委托（<code>rules/actions/checking.py:100-103</code>，取证 2026-11-05 00:19）</b>—— 链 0 判「仅暂停中未完成放行」，跳检成功后种子已完成 ⇒ 恒命中：</p>
+<pre><code># 决策链 0: 只校验"暂停中未完成"的种子(跨种添加后的典型状态), 其余状态一律跳过:
+# - 已完成(progress&gt;=1, 无论状态): 已通过哈希校验, 重复 recheck/跳检无意义
+if not (ctx.torrent.state_enum.is_stopped and ctx.torrent.progress &lt; 1.0):
+    return ActionResult.skip("种子非暂停中未完成状态, 无需校验")</code></pre>
+    <p><b>B. dedup 单点在 ops 层（<code>core/modules/ops_verdict.py</code>，26-10-11-2045 修复后已排最前）</b>—— 规则源经 <code>skip_checking.py</code> 一行委托进 ops，但必须先活过链 0：</p>
+<pre><code># rules/actions/skip_checking.py: 委托入口
+return ctx.manager.ctx.ops.skip_submit(ctx.hash, source="rule", ...)</code></pre>
+    <p><b>C. 测试绕行实证（<code>tests/test_checking_skip.py:193-196</code>，取证 2026-11-05）</b>—— 规则侧 dedup 用例必须手动还原 progress 才能走到去重闸门，注释明文「真机同理」：</p>
+<pre><code># !保真替身下规则A跳检成功后种子已完成(progress=1) ⇒ rules 决策链 0 会先判"种子非暂停中
+#   未完成", 走不到跨规则去重闸门 —— 真机同理。把进度还原为未完成以单独验证去重闸门本身
+t.progress = 0.0</code></pre>
+  </section>
+
+  <section id="s3">
+    <h2><span class="no">03</span>影响面</h2>
+    <table>
+      <tr><th>维度</th><th>结论</th></tr>
+      <tr><td>触发条件</td><td>同一 hash 当日跳检成功过 → 同日规则源再触发；无配置依赖，必现</td></tr>
+      <tr><td>影响范围</td><td>① 规则源同日重跳的拒因文案是链 0 的「非暂停中未完成」而非 dedup 的「今日已跳检过」；② 类别同为 skip，<b>无</b> web 分桶式口径损伤（这是与 ops 侧 26-10-11-2045 的关键差异）；③ 保真替身下规则侧 dedup 闸门不可测（<code>tests/test_checking_skip.py</code> 依赖 progress 绕行）</td></tr>
+      <tr><td>严重度</td><td>低（拦停行为正确、类别正确，仅文案归因与可测性受损）</td></tr>
+    </table>
+  </section>
+
+  <section id="s4">
+    <h2><span class="no">04</span>定位锚点</h2>
+    <p class="hint">写「符号名 + grep 关键词 + 当时的行号（标取证时间）」—— 代码会漂移，靠符号与 grep 重新定位，行号只是加速项。</p>
+    <ul>
+      <li><code>src/auto_qb/rules/actions/checking.py:100-103</code>（取证 2026-11-05 00:19）· CheckAction.execute 决策链 0 · grep <code>种子非暂停中未完成状态</code></li>
+      <li><code>src/auto_qb/rules/actions/skip_checking.py:38</code> · _execute_skip_checking 委托入口 · grep <code>skip_submit</code></li>
+      <li><code>src/auto_qb/core/modules/ops_verdict.py</code> · dedup 闸门（26-10-11-2045 修复后排最前）· grep <code>今日已跳检过该种子</code></li>
+      <li><code>tests/test_checking_skip.py:179</code> · test_checking_skip_dedup_across_rules（progress 绕行宿主）· grep <code>跨规则去重</code></li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2><span class="no">05</span>根因<span class="opt">（可选）</span></h2>
+    <p class="hint">默认「待查」—— 不为填单做分析。有结论才写；不确定就写已排除的假设，不要把猜测写成结论。</p>
+    <div class="callout">同构于 26-10-11-2045：跳检成功 ⇔ 种子已完成是同一事实的两面，而规则侧链 0 的谓词（仅「暂停中未完成」放行）恰好覆盖「已完成」—— 链 0 排在 ops dedup 之前，dedup 对规则源结构性不可达。已排除：非 ops 闸门问题（ops 侧已于 26-10-11-2045 修复）；非并发/时序问题（决策链为同步顺序判定）。</div>
+  </section>
+
+  <section id="s6">
+    <h2><span class="no">06</span>建议修法<span class="opt">（可选）</span></h2>
+    <p class="hint">方向 + 候选方案 + 各自代价；没有想法就留「待定」，只写方案，不在本报告里实施。</p>
+    <p><b>待拍板（二选一）</b>：</p>
+    <ol>
+      <li><b>链 0 前插 dedup 查表</b>：在链 0 之前查 <code>skip_check_day.get(hash) == 今天</code>，命中则 <code>skip("今日已跳检过该种子(跨规则去重)")</code>。代价：规则层读 ops 的 state 表，跨层边界变糊（plan 26-11-04-2357 D1 讨论过的顾虑）；收益：规则源同日重跳归因正确 + 撤掉测试绕行。</li>
+      <li><b>接受遮蔽 + 文档化</b>：链 0 的「无需校验」对已完成种子本就成立，dedup 语义在规则源的增益有限；保留现状与绕行注释。零改动。</li>
+    </ol>
+    <p>无倾向 —— 等 ops 侧修复后的实际观察再定；未拍板前保持 <strong>Open</strong>，不予实施。</p>
+  </section>
+
+  <section id="s7">
+    <h2><span class="no">07</span>状态变更日志</h2>
+    <ul>
+      <li>2026-11-05 00:19 — 入池，状态 <strong>Open</strong>（计划外，未修）</li>
+    </ul>
+    <h3>复验</h3>
+    <p>复验：2026-11-05 00:19 入池取证即复验 —— 锚点与证据 A/B/C 均为当时代码原文；26-10-11-2045 的 ops 侧修复（dedup 前移）不影响本件（链 0 在 ops 闸门之前，修复只改 ops 内部顺序）。</p>
+    <h3>修复后补充</h3>
+    <p class="todo">TODO: 修完时写「实际修法 / 验证方式 / 测试数字」；与建议修法不同则保留建议原文并说明改道原因。</p>
+  </section>
+
+  <footer>
+    26-11-05-0019-bug-rule-chain0-shadows-skipcheck-dedup.html · 由 create-issue skill 入池；入池不等于已修，状态随修复推进在上面「状态变更日志」里留痕
+  </footer>
+
+</div>
+</body>
+</html>
