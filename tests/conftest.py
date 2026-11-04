@@ -99,8 +99,8 @@ import _tmp_bootstrap
 _tmp_bootstrap.bootstrap()
 
 # 覆盖率闸: 平台定档(为什么不是一个数, 见 pytest_configure 的 docstring)
-COVERAGE_FLOOR_WIN = 99.3
-COVERAGE_FLOOR_OTHER = 98.8
+COVERAGE_FLOOR_WIN = 99.5
+COVERAGE_FLOOR_OTHER = 99.0
 
 # 通知器可执行名(小写、不含 .exe): 与 notify.PlatformChannel 的三个平台后端一一对应。
 # !只作 _is_notifier_cmd 的第一道筛, 不单独成判据 —— powershell/pwsh 还有非通知用途,
