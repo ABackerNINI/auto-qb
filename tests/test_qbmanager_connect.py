@@ -42,6 +42,8 @@ from auto_qb.core.taskqueue import FINISHED, PENDING, REQUEUE, Task, TaskQueue
 
 import pytest
 
+from clock import FakeClock
+
 from qbittorrentapi import APIConnectionError, Client
 
 from auto_qb.config import QbittorrentConfig
@@ -143,10 +145,17 @@ def test_new_client_remote_keeps_default_trust_env():
 
 
 def test_throttle_sleeps_without_stop_event():
-    """非托管模式(stop_event=None): 真实阻塞 main_tick 秒且返回 False(不当作停止信号)"""
-    with mock.patch("auto_qb.core.qbmanager.time.sleep") as fake_sleep:
-        assert _throttle(None, 2.0) is False
-    fake_sleep.assert_called_once_with(2.0)
+    """非托管模式(stop_event=None): 真实阻塞 main_tick 秒且返回 False(不当作停止信号)
+
+    阻塞语义用真实经过时间验证(S3 monkeypatch 收敛: 不再经 stdlib time 名 patch 观测
+    sleep 调用), 与 test_run_loop_throttles_without_stop_event 同口径下界余量。档位 50ms:
+    Windows 等待按 15.6ms 定时器刻度取整可提前约 3 刻度(46.8ms), 下界留 20ms 余量不损失
+    判别力 —— 阻塞被退化成空转(微秒级)当场红。
+    """
+    tick = 0.05
+    start = time.monotonic()
+    assert _throttle(None, tick) is False
+    assert time.monotonic() - start >= tick - 0.02
 
 
 def test_throttle_waits_stop_event():
@@ -201,35 +210,32 @@ def test_reconnect_backoff_and_reset():
     Client(含 netrc / 代理解析), 纯空转。退避后重试间隔逐步拉长到 30s, 恢复即归零。
     """
     with tempfile.TemporaryDirectory() as td:
-        mgr = make_manager(os.path.join(td, "state.json"))
+        # 构造期注入(S3 收敛: 不再经 stdlib time 名 patch): _reconnect_due / connect 节流
+        # 读注入钟 monotonic, 读数与旧「钉 time.monotonic」逐值一致
+        clock = FakeClock(start=1000.0)
+        mgr = make_manager(os.path.join(td, "state.json"), clock=clock)
         tick = 2.0
-        clock = {"t": 1000.0}
-
-        def _monotonic():
-            return clock["t"]
-
-        with mock.patch("auto_qb.core.qbmanager.time.monotonic", _monotonic):
-            assert mgr._reconnect_due(tick) is True, "首次应立即重试"
-            assert mgr._reconnect_at == pytest.approx(1000.0 + tick)
-            # 未到点: 不重试
-            clock["t"] += tick - 0.01
-            assert mgr._reconnect_due(tick) is False
-            # 到点: 重试, 间隔翻倍
-            clock["t"] = 1000.0 + tick
-            assert mgr._reconnect_due(tick) is True
-            assert mgr._reconnect_at == pytest.approx(1000.0 + tick + 2 * tick)
-            # 连续失败推到上限 30s 后不再增长
-            for _ in range(12):
-                clock["t"] = mgr._reconnect_at
-                mgr._reconnect_due(tick)
-            assert mgr._reconnect_interval == pytest.approx(RECONNECT_MAX_INTERVAL), (
-                f"退避应封顶 {RECONNECT_MAX_INTERVAL}s: {mgr._reconnect_interval}"
-            )
-            # 连接成功(走真实 connect)后归零: 下次断开从最短间隔重新开始
-            with mock.patch("auto_qb.core.qbmanager.new_client", return_value=mock.Mock()):
-                assert mgr.connect() is True
-            assert mgr._reconnect_interval == 0.0 and mgr._reconnect_at == 0.0
-            assert mgr._reconnect_due(tick) is True, "归零后应能立即重试"
+        assert mgr._reconnect_due(tick) is True, "首次应立即重试"
+        assert mgr._reconnect_at == pytest.approx(1000.0 + tick)
+        # 未到点: 不重试
+        clock.advance(tick - 0.01)
+        assert mgr._reconnect_due(tick) is False
+        # 到点: 重试, 间隔翻倍
+        clock.freeze(1000.0 + tick)
+        assert mgr._reconnect_due(tick) is True
+        assert mgr._reconnect_at == pytest.approx(1000.0 + tick + 2 * tick)
+        # 连续失败推到上限 30s 后不再增长
+        for _ in range(12):
+            clock.freeze(mgr._reconnect_at)
+            mgr._reconnect_due(tick)
+        assert mgr._reconnect_interval == pytest.approx(RECONNECT_MAX_INTERVAL), (
+            f"退避应封顶 {RECONNECT_MAX_INTERVAL}s: {mgr._reconnect_interval}"
+        )
+        # 连接成功(走真实 connect)后归零: 下次断开从最短间隔重新开始
+        with mock.patch("auto_qb.core.qbmanager.new_client", return_value=mock.Mock()):
+            assert mgr.connect() is True
+        assert mgr._reconnect_interval == 0.0 and mgr._reconnect_at == 0.0
+        assert mgr._reconnect_due(tick) is True, "归零后应能立即重试"
 
 
 def test_run_client_none_reconnects_without_error_spam():
@@ -315,8 +321,7 @@ def test_connect_throttle_repeated_failures():
                          KeyboardInterrupt()]
         )
         with mock.patch("auto_qb.core.qbmanager.logger") as mock_logger:
-            with mock.patch("auto_qb.core.qbmanager.time.sleep"):
-                mgr.run(dry_run=False)
+            mgr.run(dry_run=False)  # 等待原语统一 _wait_next(事件等待), run() 不触 time.sleep(S3 收敛)
         errors = [c for c in mock_logger.error.call_args_list]
         assert len(errors) == 1, f"连接失败应只记录一条(节流), 实际 {len(errors)}: {errors}"
         assert "连接 qBittorrent 失败" in errors[0][0][0], f"应记录连接失败: {errors[0]}"

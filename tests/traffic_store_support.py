@@ -94,9 +94,9 @@ H0 = 10 * HOUR  # 被封口的小时桶起点
 H1 = 11 * HOUR  # 当前小时桶起点(封口触发时刻所在桶)
 
 
-def _mgr(tmp_path, qb_traffic, data_dir=True) -> object:
+def _mgr(tmp_path, qb_traffic, data_dir=True, clock=None) -> object:
     """带 qb_traffic 段的测试 manager(同 test_traffic_sample._mgr_with_traffic 口径)"""
-    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr = make_manager(str(tmp_path / "state.json"), clock=clock)
     if data_dir:
         mgr.config.data_dir = str(tmp_path)
     mgr.client = FakeClient()

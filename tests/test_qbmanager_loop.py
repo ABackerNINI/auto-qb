@@ -71,11 +71,14 @@ from helpers import LEGACY_V1, FakeClient, FakeConfig, FakeTorrent, capture_logs
 
 
 def test_run_loop_managed_never_sleeps():
-    """托管模式(传 stop_event): 阻塞走 Event.wait, 绝不调用 time.sleep(托盘停止信号即时响应)
+    """托管模式(传 stop_event): 阻塞走 Event.wait, 绝不经 time.sleep 系节流(托盘停止信号即时响应)
 
-    分层节拍后停止信号与命令唤醒是两个独立事件(Python 无多事件等待原语), `_wait_next`
-    按 STOP_POLL_INTERVAL 分段 wait(stop_event) 并在段间检查唤醒 —— 分段不影响本用例
-    的判据: 只要没走 time.sleep, 停止信号就仍是即时响应的。
+    分层节拍后停止信号与命令唤醒是两个独立事件(Python 无多事件等待原语), 等待原语统一是
+    `_wait_next`(托管分支按 STOP_POLL_INTERVAL 分段 wait 并在段间检查唤醒)—— run() 全程
+    不得触 `_throttle`(模块内唯一的 time.sleep 站点, 非托管真睡专用)。S3 monkeypatch 收敛
+    后守阵不再 patch stdlib time(进程级面过宽), 改钉模块唯一站点: 经 `_throttle` 的回归
+    同样必红, 裸 time.sleep 混进 run() 则由 test_run_loop_throttles_without_stop_event 的
+    真实经过时间判据兜住(空转/不阻塞当场红)。
     """
     with tempfile.TemporaryDirectory() as td:
         mgr = make_manager(os.path.join(td, "state.json"))
@@ -85,9 +88,9 @@ def test_run_loop_managed_never_sleeps():
         mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
         stop_event = threading.Event()
-        with mock.patch("auto_qb.core.qbmanager.time.sleep") as fake_sleep:
+        with mock.patch.object(_qbm, "_throttle") as fake_throttle:
             mgr.run(dry_run=True, stop_event=stop_event)
-        fake_sleep.assert_not_called()
+        fake_throttle.assert_not_called()
         assert mgr._tick.call_count == 2
 
 
@@ -130,8 +133,8 @@ def test_run_main_loop():
         mgr.config.main_tick = 0.05
         mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[RuntimeError("boom"), KeyboardInterrupt()])
-        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
-            mgr.run(dry_run=False)
+        # !无需 stub sleep: 等待原语统一 _wait_next(事件等待), run() 不触 time.sleep(S3 收敛)
+        mgr.run(dry_run=False)
         assert mgr._tick.call_count == 2, "异常应被捕获继续循环, KeyboardInterrupt 退出"
         assert os.path.exists(state_file), "finally 应保存状态"
 
@@ -180,8 +183,7 @@ def test_run_save_state_on_exit():
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
         mgr._tick = mock.Mock(side_effect=KeyboardInterrupt())
-        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
-            mgr.run(dry_run=False)
+        mgr.run(dry_run=False)  # 等待原语统一 _wait_next(事件等待), run() 不触 time.sleep(S3 收敛)
         with open(state_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         assert isinstance(data, dict), "状态文件应为 JSON dict"
@@ -194,8 +196,7 @@ def test_run_dry_run_no_save():
         mgr = make_manager(state_file)
         mgr.connect = mock.Mock(return_value=True)
         mgr._tick = mock.Mock(side_effect=KeyboardInterrupt())
-        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
-            mgr.run(dry_run=True)
+        mgr.run(dry_run=True)  # 等待原语统一 _wait_next(事件等待), run() 不触 time.sleep(S3 收敛)
         assert not os.path.exists(state_file), "dry_run 不应写状态文件"
 
 
@@ -231,9 +232,8 @@ def test_run_stopiteration_from_tick_not_swallowed():
         mgr.connect = mock.Mock(return_value=True)
         # 连续 StopIteration: 修复前每一拍都被吞下去(第 2 个 KeyboardInterrupt 只是红验时的兜底退出点)
         mgr._tick = mock.Mock(side_effect=[StopIteration(), KeyboardInterrupt()])
-        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
-            with pytest.raises(StopIteration):
-                mgr.run(dry_run=False)
+        with pytest.raises(StopIteration):  # 等待原语统一 _wait_next, run() 不触 time.sleep(S3 收敛)
+            mgr.run(dry_run=False)
         assert mgr._tick.call_count == 1, "StopIteration 必须当场穿透 run(), 不得进入下一拍"
 
 

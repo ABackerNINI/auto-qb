@@ -59,8 +59,9 @@ mut-core W4 S6 定向补测(2026-11-02, issue 26-10-31-1539 两件清偿; 红验
   与裁剪重写放弃的 WARNING 带语义文案与对象标识
 (_wblp_20 判等价变异: 两解析结果型恒带 torn_tail 字段, getattr 默认值不可达 —— 见 issue 状态日志)
 
-线程/时钟纪律: 需要确定时刻的用例经 monkeypatch 固定 time.time(测试进程内单线程, 恢复由
-monkeypatch 保证); 文件一律落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
+线程/时钟纪律: 本文件不再经 stdlib time 名 patch(S3 monkeypatch 收敛)—— 裁剪重写的
+PermissionError 退避(REWRITE_BACKOFF_S=0.05s x 3)让真实发生, 耗时毫秒级可接受; 文件一律
+落在 tmp_path(test.* 已内置 TMPDIR, 不手工加前缀)。
 """
 
 import builtins
@@ -270,7 +271,8 @@ def test_v4_write_text_payload_cleanup_paths(tmp_path, monkeypatch):
     target = tmp_path / "agg.dat"
     target.write_text("old\n", encoding="utf-8")
     real_remove = os.remove  # 打桩前捕获(桩内不能再走被替换的 os.remove)
-    monkeypatch.setattr("auto_qb.core.traffic_store.time.sleep", lambda s: None)
+
+    # !不桩 sleep(S3 收敛): 退避真实发生(3 x 0.05s x 2 次失败调用), 顺带覆盖真退避面
 
     def _always_locked(src, dst):
         raise PermissionError(13, "locked")
@@ -595,27 +597,27 @@ def test_v4_write_text_payload_tmp_same_directory(tmp_path, monkeypatch):
 
 
 def test_v4_write_text_payload_permission_backoff_real_sleep(tmp_path, monkeypatch):
-    """PermissionError 退避重试(Windows 读侧竞态): 不把 sleep 桩成 no-op —— 退避真调用
-    time.sleep(REWRITE_BACKOFF_S) 且重试 REWRITE_RETRIES 次后放弃返 False(原文件完好)。
+    """PermissionError 退避重试(Windows 读侧竞态): 全文件唯一**不桩 sleep** 的退避用例 ——
+    退避真调用 time.sleep(REWRITE_BACKOFF_S) 且重试 REWRITE_RETRIES 次后放弃返 False(原文件完好)。
     变异面: 退避被改成 sleep(None) 时 TypeError 上抛(调用方按 OSError 口径接不住);
-    重试计数器被改成永不退出时本用例挂起 —— 由红验 harness 超时判红(与 mutmut timeout 同口径)"""
+    重试计数器被改成永不退出时本用例挂起 —— 由红验 harness 超时判红(与 mutmut timeout 同口径)。
+    S3 收敛裁决(2026-11-05): 旧形态经「局部别名 real_sleep = time.sleep」计数, 是裸睡守阵的
+    口径盲区; 现改用**真实经过时间下界**验证退避真发生(Windows 睡眠按 15.6ms 刻度可提前
+    约 3 刻度, 3 次合计下界留 20ms 余量), 不再引入任何 time 名寻址, 守阵盲区随之消失
+    (无需白名单条目)。
+    """
     target = tmp_path / "agg.dat"
     target.write_text("old\n", encoding="utf-8")
-    sleeps = []
-    real_sleep = time.sleep
-
-    def counting_sleep(s):
-        sleeps.append(s)
-        real_sleep(s)
-
-    monkeypatch.setattr("auto_qb.core.traffic_store.time.sleep", counting_sleep)
 
     def always_locked(src, dst):
         raise PermissionError(13, "locked")
 
     monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", always_locked)
+    start = time.monotonic()
     assert traffic_store_module._write_text_payload(str(target), "new\n") is False
-    assert sleeps == [REWRITE_BACKOFF_S] * REWRITE_RETRIES  # 首试失败后真退避 3 次
+    elapsed = time.monotonic() - start
+    # 首试失败后真退避 3 次: 总耗时 >= 3 x REWRITE_BACKOFF_S(下界含刻度余量; 空转退避当场红)
+    assert elapsed >= REWRITE_RETRIES * REWRITE_BACKOFF_S - 0.02, elapsed
     assert target.read_text(encoding="utf-8") == "old\n"
 
 
@@ -757,9 +759,8 @@ def test_v4_evict_and_rewrite_failure_warning_message_content(tmp_path, caplog, 
     assert len(evict_warns) == 1 and "AAA" in evict_warns[0]
     # 裁剪重写被占用退避耗尽: 放弃本轮告警含文案与文件名, 原文件完好
     caplog.clear()
-    monkeypatch.setattr("auto_qb.core.traffic_store.time.sleep", lambda s: None)
 
-    def _boom_replace(src, dst):
+    def _boom_replace(src, dst):  # 退避真实发生(S3 收敛后不桩 sleep, 3 x 0.05s)
         raise PermissionError(13, "locked")
 
     monkeypatch.setattr("auto_qb.core.traffic_store.os.replace", _boom_replace)

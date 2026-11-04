@@ -1165,6 +1165,7 @@ def make_manager(
     load_rules=None,
     pass_config_none=False,
     qb_config_path="",
+    clock=None,
     **cfg_overrides,
 ):
     """QbManager 构造单点 —— 测试侧唯一装配入口(用例里不要再内联 QbManager(...))。
@@ -1181,6 +1182,8 @@ def make_manager(
     pass_config_none: True = 以 config=None 构造(触发 `config or load_config(config_path)` 主路径,
                 供 config_path 加载守阵用; 测试须自行 patch qbmanager.load_config)
     qb_config_path: 透传 QbManager 的 config_path 实参(默认 "")
+    clock: 透传 QbManager 的构造期时钟(S3 monkeypatch 收敛: 传 tests/clock.FakeClock 即
+                全组件确定性时间; None = 系统时钟。经装配链到达 webui/流量采样/快照等透传位)
     **cfg_overrides: 对最终 cfg 的段覆盖(未知段名抛 TypeError, 防手滑写成幽灵属性)
 
     用法: `make_manager(state_file)` 全默认; `make_manager(state_file, bare=True,
@@ -1203,7 +1206,7 @@ def make_manager(
     if pass_config_none:
         mgr = QbManager(qb_config_path, config=None, no_lock=no_lock)
     else:
-        mgr = QbManager(qb_config_path, config=cfg, no_lock=no_lock)
+        mgr = QbManager(qb_config_path, config=cfg, no_lock=no_lock, clock=clock)
     if load_rules is None:
         load_rules = assemble
     if load_rules:

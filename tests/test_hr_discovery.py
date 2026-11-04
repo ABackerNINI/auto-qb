@@ -99,7 +99,8 @@ def _simulate_read_denial(monkeypatch, path, *, times=None):
     复现读侧的竞态: 写者的替换事务窗口内, 读者的 `open()` 被瞬时拒绝(Python 的 open 不含
     FILE_SHARE_DELETE)。只拦**目标文件**、且只拦 `builtins.open`(discovery 的读取走的正是它) ——
     其余路径与 `Path.read_text`(走 io.open)原样放行, 断言侧读文件因此不受影响。返回逐次记下的
-    拒绝列表(供断言重试次数), 并把退避 sleep 置空(不真等)。
+    拒绝列表(供断言重试次数)。S3 收敛后不再把退避 sleep 置空(那要经模块 time 名 patch
+    stdlib): 读侧重试退避 REGISTRY_READ_RETRY_DELAY_S=0.05s x 重试次数真实发生, 总量毫秒级。
     """
     real_open = builtins.open
     target = os.path.abspath(str(path))
@@ -115,9 +116,6 @@ def _simulate_read_denial(monkeypatch, path, *, times=None):
         return real_open(file, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "open", denied)
-    import auto_qb.hr.discovery as discovery_mod
-
-    monkeypatch.setattr(discovery_mod.time, "sleep", lambda _s: None)
     return denials
 
 

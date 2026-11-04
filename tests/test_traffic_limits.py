@@ -44,6 +44,8 @@ import time
 
 import pytest
 
+from clock import FakeClock
+
 from auto_qb.core.traffic_limits import (
     LIMITS_DIR_NAME,
     SpeedLimitRecorder,
@@ -235,13 +237,14 @@ def test_recorder_warn_first_fire_on_fresh_boot(tmp_path, caplog, monkeypatch):
     """
     from auto_qb.core import traffic_limits as tl
 
-    monkeypatch.setattr(tl.time, "monotonic", lambda: 120.0)  # 模拟开机 2 分钟: < 3600
+    # 构造期注入(S3 收敛: 不再经模块 time 名 patch stdlib): 模拟开机 2 分钟(monotonic < 3600)
+    boot_clock = FakeClock(start=120.0)
     data_dir = str(tmp_path)
     # 固定同一天内(场景 B 病态翻转循环 ts+i 跨零点即把 _day_events 清零, 2000 阈值永不达)
     ts = _anchored_ts()  # 同一自然日内(_anchored_ts)
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
         # 场景 A: 追加失败告警
-        rec = tl.SpeedLimitRecorder(data_dir)
+        rec = tl.SpeedLimitRecorder(data_dir, clock=boot_clock)
         rec.observe(_state(1024, 2048), ts)
         import builtins
 
@@ -252,7 +255,7 @@ def test_recorder_warn_first_fire_on_fresh_boot(tmp_path, caplog, monkeypatch):
         finally:
             builtins.open = real_open
         # 场景 B: 病态翻转护栏告警
-        rec2 = tl.SpeedLimitRecorder(str(tmp_path / "guard"))
+        rec2 = tl.SpeedLimitRecorder(str(tmp_path / "guard"), clock=boot_clock)
         for i in range(tl._LIMITS_DAILY_EVENT_WARN + 5):
             rec2.observe(_state(1024 + (i % 2), 2048), ts + i)
     msgs = [r.message for r in caplog.records]
@@ -716,14 +719,13 @@ def test_recorder_guard_day_reset_after_warn(tmp_path, caplog, monkeypatch):
     反写(!= -> ==)会让计数变生命周期累计, 次日旧计数再跨过节流窗即误报"""
     from auto_qb.core import traffic_limits as tl
 
-    clock = {"t": 1000.0}
-    monkeypatch.setattr(tl.time, "monotonic", lambda: clock["t"])
-    rec = SpeedLimitRecorder(str(tmp_path))
+    clock = FakeClock(start=1000.0)  # 构造期注入(S3 收敛: 不再经模块 time 名 patch stdlib)
+    rec = SpeedLimitRecorder(str(tmp_path), clock=clock)
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
         for _ in range(tl._LIMITS_DAILY_EVENT_WARN + 1):
             rec._guard_count("2026-10-20")
         assert sum("超常" in r.message for r in caplog.records) == 1
-        clock["t"] += tl._LIMITS_GUARD_WARN_GAP_S + 60  # 越过节流窗: 旧计数若未清零必刷
+        clock.advance(tl._LIMITS_GUARD_WARN_GAP_S + 60)  # 越过节流窗: 旧计数若未清零必刷
         caplog.clear()
         rec._guard_count("2026-10-21")
         assert not any("超常" in r.message for r in caplog.records)
@@ -734,8 +736,7 @@ def test_recorder_guard_throttled_single_warning(tmp_path, caplog, monkeypatch):
     时间戳取不到(now=None)或存不进(_guard_ts=None)都会让每轮都刷 WARNING"""
     from auto_qb.core import traffic_limits as tl
 
-    monkeypatch.setattr(tl.time, "monotonic", lambda: 5000.0)
-    rec = SpeedLimitRecorder(str(tmp_path))
+    rec = SpeedLimitRecorder(str(tmp_path), clock=FakeClock(start=5000.0))  # S3 收敛: 构造期注入取代 time 名 patch
     with caplog.at_level(logging.WARNING, logger="auto_qb.core.traffic_limits"):
         for _ in range(tl._LIMITS_DAILY_EVENT_WARN + 5):
             rec._guard_count("2026-10-20")

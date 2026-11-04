@@ -88,8 +88,7 @@ def test_tick_refresh_error_continues():
         mgr.config.sync_interval = 0.05
         # 第一次抛普通异常(被内层 except Exception 捕获), 第二次抛 KeyboardInterrupt(退出循环)
         mgr._refresh_torrents = mock.Mock(side_effect=[RuntimeError("refresh boom"), KeyboardInterrupt()])
-        with mock.patch("auto_qb.core.qbmanager.time.sleep"):
-            mgr.run(dry_run=False)
+        mgr.run(dry_run=False)  # 等待原语统一 _wait_next(事件等待), run() 不触 time.sleep(S3 收敛)
         assert mgr._refresh_torrents.call_count == 2, "第一次异常应被捕获, 第二次 tick 继续执行"
 
 

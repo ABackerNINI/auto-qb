@@ -18,8 +18,6 @@ from auto_qb.config import QbTraffic, load_config
 
 from auto_qb.config.validation import validate_config
 
-from auto_qb.core.modules import traffic_sample_mod as ts_mod
-
 from auto_qb.core.modules.traffic_sample_mod import (
     EVICT_CHECK_INTERVAL_S,
     GLOBAL_SERIES_KEY,
@@ -75,8 +73,8 @@ _AUTH_HEADER_KEY = "Auth" + "orization"  # 测试鉴权头键名
 
 
 # ---------- 构造辅助 ----------
-def _mgr_with_traffic(tmp_path, qb_traffic) -> object:
-    mgr = make_manager(str(tmp_path / "state.json"))
+def _mgr_with_traffic(tmp_path, qb_traffic, clock=None) -> object:
+    mgr = make_manager(str(tmp_path / "state.json"), clock=clock)
     mgr.config.data_dir = str(tmp_path)  # v3 天文件落盘根目录(真实配置恒非空, loaders 默认 auto-qb-data)
     mgr.client = FakeClient()
     if qb_traffic is not None:
@@ -137,11 +135,12 @@ def _load(tmp_path, qb_traffic_spec):
 
 
 # ---------- 时钟线挂载(issue 26-10-16-0954: 采样移出队列, 挂任务线钩子) ----------
-def _add_backlog(mgr, n: int) -> list:
+def _add_backlog(mgr, n: int, clock=None) -> list:
     """模拟重启/热重载的种子级补建: n 个立即到期的种子级任务占满队列(interval 60s)。
     返回执行记录列表 —— 积压被弹走一份就会 requeue(不再是「队列剩多少」), 故判「排水
-    是否完成」只看执行计数。"""
-    now = time.time()
+    是否完成」只看执行计数。clock: manager 注入假钟时任务入队时刻必须同取假钟
+    (真实 time.time() 会落在假钟读数之后 -> 任务永不到期, S3 收敛实测踩坑)。"""
+    now = clock.now() if clock is not None else time.time()
     done = []
 
     def handler(task, dry_run):
@@ -223,9 +222,10 @@ def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
     采样恰在午夜: 跨天硬切把当天最后一段落盘(第 144 次天文件 append), 次日首样本随
     flush 落次日文件(1 次)。计数只算追加写 open(mode 含 a 且非二进制), 尾字节查补的
     "rb" 读不计。"""
-    t = {"now": day0}
-    monkeypatch.setattr("auto_qb.core.modules.traffic_sample_mod.time.time", lambda: t["now"])
-    mgr = _mgr_with_traffic(tmp_path, QbTraffic(enabled=True, sample_interval=sample_interval, flush_interval=600))
+    clock = FakeClock(start=day0)  # 构造期注入(S3 monkeypatch 收敛; 不再经 stdlib time 名寻址)
+    mgr = _mgr_with_traffic(
+        tmp_path, QbTraffic(enabled=True, sample_interval=sample_interval, flush_interval=600), clock=clock
+    )
     mgr.store.server_state = server_state(dl_info_speed=1024, up_info_speed=512)
     mod = mgr.host.get("qb_traffic")
     mod.start(mgr.ctx, dry_run=False)
@@ -247,7 +247,7 @@ def _drive_full_day(tmp_path, monkeypatch, sample_interval: int, day0: int):
 
     monkeypatch.setattr("builtins.open", counting_open)
     for i in range(86400 // sample_interval + 1):  # 含午夜样本(t = day0+86400, 属次日)
-        t["now"] = day0 + i * sample_interval
+        clock.freeze(day0 + i * sample_interval)
         mod.handle_traffic_sample(dry_run=False)
     return mod, counts
 
@@ -323,5 +323,4 @@ def _w5_mgr(tmp_path, monkeypatch, clock, **conf_kw):
     """W5 守阵公共装配: 固定时钟 + 30s 采样档(键可覆盖)"""
     kw = {"enabled": True, "sample_interval": 30, "flush_interval": 10**9}
     kw.update(conf_kw)
-    monkeypatch.setattr(ts_mod, "SYSTEM_CLOCK", clock)
-    return _mgr_with_traffic(tmp_path, QbTraffic(**kw))
+    return _mgr_with_traffic(tmp_path, QbTraffic(**kw), clock=clock)

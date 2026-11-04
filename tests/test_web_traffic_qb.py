@@ -594,18 +594,22 @@ def test_api_traffic_qb_global_24h_reads_only_involved_day_files(web_env, monkey
 
     from auto_qb.core.traffic_store import V4Sample, v4_day_epoch, v4_epoch_date_str, v4_window_dates
 
-    # 用例与服务端同读 time.time(端点 _grid 请求时现读), 钉一次双边生效:
+    # 用例与服务端同读一个钉死时刻(端点 _grid 请求时现读), 钉一次双边生效:
     # - 真钟档 = 钉在本用例入口时刻。窗口位置仍是现网形状(now 在什么时刻, 窗就在什么位置),
     #   只是不再让用例取的 now 与服务端收边的 now 横跨本地零点(2026-10-22 跨日窗口抖动);
     # - 假钟档 = 钉当日 00:05 / 00:00:15 两个常驻守阵位(_FROZEN_OFFSETS 注释)
+    # S3 monkeypatch 收敛: 不再进程级 patch stdlib time.time, 改 patch 端点取时单点
+    # traffic_qb.SYSTEM_CLOCK(请求处理叶子经它现读, 与用例共用同一 _pinned 常量)。
+    from auto_qb.webui.server import traffic_qb as tq
+
     _anchor = time.time()
     _pinned = _anchor if frozen_offset is None else v4_day_epoch(_anchor) + frozen_offset
-    monkeypatch.setattr(time, "time", lambda: _pinned)
+    monkeypatch.setattr(tq, "SYSTEM_CLOCK", FakeClock(start=_pinned))
     mgr, client = web_env
     auth = _auth(mgr)
     _enable_qb_traffic(mgr)
     store = _qb_v4(mgr)
-    now = int(time.time())
+    now = int(_pinned)
     # base 恒取本地当日 00:00(30 对齐): 它必在 24h 窗内(窗尾是 now, 当日总在窗里)且恒落
     # involved 末日 —— 跨日长洞的 null 语义依赖这个前提。旧写法 ((now - 600) // 30) * 30
     # 在每天 00:00-00:10 会把 base 甩到前一日, 与 involved[0] 撞进同一天, 长洞不成立(判 0)

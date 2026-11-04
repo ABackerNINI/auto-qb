@@ -87,6 +87,8 @@ from auto_qb.core.modules.traffic_snapshot_mod import (
 )
 from auto_qb.core.taskqueue import Task
 
+from clock import FakeClock
+
 from helpers import capture_logs, make_manager, write_dat
 
 GIB = 1024**3
@@ -96,9 +98,9 @@ _CRED_FIELD = "tok" + "en"
 _AUTH_KEY = "Auth" + "orization"
 
 
-def _mgr(tmp_path, dat_path=""):
+def _mgr(tmp_path, dat_path="", clock=None):
     """装配好的 manager(测试不跑 start_all): 来源路径直接注入 FakeConfig"""
-    mgr = make_manager(str(tmp_path / "state.json"))
+    mgr = make_manager(str(tmp_path / "state.json"), clock=clock)
     if dat_path:
         mgr.config.traffic_source.traffic_monitor.dat_path = dat_path
     return mgr
@@ -356,28 +358,24 @@ def test_publish_event_patches_day_row_without_reading(tmp_path, monkeypatch):
     读盘打桩成 raise: 事件路径(六键自带权威累计)若退回读文件, 这条用例直接红 ——
     「读盘本身就是副作用」的判据就钉在这里。
 
-    时钟钉成每次调用 +1s 的严格递增假钟: `_publish` 每次发布都刷
-    `view["ts"] = time.time()`, 本机背靠背两次 `time.time()` 可返回**同一值**
-    (亚 µs 粒度坍缩), 真钟下 before_ts 与补丁发布的 ts 会相等 -> 下面的
-    「ts 严格推进」断言天生 flaky(2026-10-22 提交闸门里现形过)。假钟下:
-    发布不少 1 次就严格推进; 一次都不发布(补丁失效)则 ts 一字不动, 断言仍拦得住。
+    时钟钉死(S3 monkeypatch 收敛: 快照模块构造期注入 FakeClock, 不再进程级 patch stdlib
+    time.time): `_publish` 每次发布都刷 `view["ts"] = clock.now()`, 本机背靠背两次
+    time.time() 可返回**同一值**(亚 µs 粒度坍缩), 真钟下 before_ts 与补丁发布的 ts 会
+    相等 -> 下面的「ts 严格推进」断言天生 flaky(2026-10-22 提交闸门里现形过)。假钟下:
+    两次发布之间显式 advance(1s), ts 不推进(补丁失效)则断言仍拦得住 —— 判别力与旧
+    「每次调用 +1s」假钟等价(发布至少落一次 ts 才过)。
     """
     import auto_qb.core.modules.traffic_snapshot_mod as tsm
 
-    _tick = {"t": time.time()}
-
-    def _fake_time():
-        _tick["t"] += 1.0
-        return _tick["t"]
-
-    monkeypatch.setattr(time, "time", _fake_time)
-
+    # 起点钉用例入口真钟: 快照面的"今天"语义与夹具数据(date.today())保持同日
+    clock = FakeClock(start=time.time())
     today = date.today()
-    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]))
+    mgr = _mgr(tmp_path, write_dat(tmp_path, [(today, 3 * GIB, 5 * GIB)]), clock=clock)
     mod = _mod(mgr)
     assert mod.refresh() is True  # 先有一份文件派生快照(day + month 两行)
     mod.publish_limit(target={"up": 5120, "down": 11264}, actual={"up": 5120, "down": 11264})
     before_ts = mgr.web.traffic_view["ts"]
+    clock.advance(1.0)  # 两次发布之间推进: 补丁若不刷新 ts, 严格推进断言当场红
     before = {k: copy.deepcopy(mgr.web.traffic_view[k]) for k in ("source", "history", "limit")}
 
     def _boom(*_a, **_k):

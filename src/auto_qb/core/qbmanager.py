@@ -162,8 +162,9 @@ class QbManager(
     ):
         self.config_path = config_path
         # 取时注入(D8 构造期统一制): 缺省系统时钟单点(经模块属性现取 —— 旧测试按模块换
-        # 假钟的寻址位, S3 收敛为显式 FakeClock 注入后可改回求值期默认)。各组件各自持钟,
-        # 不由本类向下传递: 存量测试按模块替换假钟的生效面依赖这一点。
+        # 假钟的寻址位, S3 收敛为显式 FakeClock 注入后可改回求值期默认)。时钟面经装配链
+        # 向下透传的目前有 WebUIRuntime 与流量采样/快照两模块(S3 monkeypatch 收敛: 测试
+        # 用构造期 FakeClock 注入, 不再按模块换假钟); 其余组件各自持钟。
         self._clock = SYSTEM_CLOCK if clock is None else clock
         # 内核地基(plan kernel-module-refactor P0): ctx 先立 —— config/store/api/state 挂上
         # ctx, 本类同名属性自此刻起全部委托 ctx(单一真相; 见下方服务委托属性区)。
@@ -241,7 +242,7 @@ class QbManager(
         # 装配序即消费序, 曲线模块 start 时已经要能取到 ctx.traffic_snapshot 写 limit 段。
         # 它自带任务(按 traffic_source.refresh_interval), 曲线没配也照跑 —— 历史流量图因此
         # 不再依赖曲线配置(结构性死角的修复点)。
-        self.ctx.traffic_snapshot = TrafficSnapshotModule(self.ctx)
+        self.ctx.traffic_snapshot = TrafficSnapshotModule(self.ctx, clock=self._clock)
         self.host.register(self.ctx.traffic_snapshot)
         self.host.register(SpeedCurveModule(self.ctx))
         # maintenance 句柄挂 ctx(P4): grouping 打标经 ctx.maintenance.add_tags, 不 import 兄弟模块
@@ -263,7 +264,7 @@ class QbManager(
         # 装配清单追加(plan 26-10-03-0946 方案C P1): qB 口径流量采样器 —— internal 采样任务
         # 自注册(start/queue_rebuilt), enabled=false(缺省)零任务零文件(黄金法则 2); 与其余
         # 模块零耦合(只读 store 快照), 挂清单末尾
-        self.host.register(TrafficSampleModule(self.ctx))
+        self.host.register(TrafficSampleModule(self.ctx, clock=self._clock))
         # 装配清单追加(计划 26-10-18-1604 §04 P1/P2): 整组迁移 —— P1 认领 relocate 段,
         # P2 起只读预检引擎(relocate_precheck / precheck_add / capability_view); 句柄挂
         # ctx(P2): WEB 命令经 ctx.relocate 调预检, 不绕过模块直碰决策层。

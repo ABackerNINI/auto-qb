@@ -50,7 +50,6 @@
 import logging
 import os
 import threading
-import time  # noqa: F401 - 存量测试经本模块的 time 属性 patch stdlib(test_traffic_limits 节流哨兵用例), 不可删
 from collections import OrderedDict
 from collections.abc import Mapping
 from typing import Optional
