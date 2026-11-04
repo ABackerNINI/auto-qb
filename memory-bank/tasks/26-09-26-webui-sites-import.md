@@ -2,9 +2,10 @@
 
 **Status:** Done
 **Added:** 2026-09-26
-**Updated:** 2026-09-26
+**Updated:** 2026-11-04
 **Summary:** 设置页「站点」pill 行新增「⤓ 导入缺失站点」按钮：`GET /api/sites/missing`（新路由模块 `routes/sites.py`，只读）复用 `core/exporter.py` 同一套构件（`collect_all_tracker_hostnames` / `find_missing_domains` 双向包含匹配 / `build_tracker_entry` 默认条目）扫描 qB 全部种子的 tracker 域名，找出未配置站点并生成默认配置；前端确认对话框列出站点名(域名)后填入编辑器**待审**（不自动保存，示例值不未经审阅生效），用户核对后走既有「保存」→ PUT /api/config 校验/备份/热重载生效。`exporter.py` 提取 `gen_tracker_name`（既有占用/批内同名 → `_N` 后缀）供 CLI 导出与 webui 扫描共用。+7 测试，全量 **1623 passed + 1 skipped**（TOTAL 92%），金清单 61→62 条。**已入库 `e3fb35d`**（提交后合流远端 9 笔，合并提交 `8bacfae` 推送）。
 **Topics:** webui-sites-import
+**Refs:** memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html
 
 ## 原始请求
 
@@ -38,7 +39,7 @@
 | 前端 `hubImportSites()` + 两套 UI 按钮 | Done | 填入编辑器待审；跳过同名键防竞态；atlas / prism 成对 |
 | 测试（+7）与守阵同步 | Done | 见 baseline 顶部；「## 测试计划」docstring 已同步 |
 | 文档回写 | Done | docs/configuration.md / README 设置页段 / progress/implemented-webui / baseline |
-| 真机走查 | Pending | 需真实 qB：设置 → 站点 → 导入按钮 → 确认框 → 填入编辑器 → 保存热重载全链走查（本会话无真机 qB，未做浏览器冒烟） |
+| 真机走查 | Pending | 需真实 qB：设置 → 站点 → 导入按钮 → 确认框 → 填入编辑器 → 保存热重载全链走查（本会话无真机 qB，未做浏览器冒烟）。2026-11-04 合并扩展轮已补「设置 → 站点 → 导入 → 确认框 → 填入编辑器」三路径浏览器冒烟（桩载荷，零保存）；保存/热重载通道另由 RM09-11 真机覆盖，全链同轮未串跑 |
 
 ## 进度日志
 
@@ -55,3 +56,4 @@
   最老 1 条外迁 attachments; 生成物 kb.index 重建) → 合并树 test.full 两采样全绿(**1636 collected: 1635 passed
   + 1 skipped, TOTAL 92%** / 10993 语句 / 787 未覆盖; 金清单 62 条) → 合并提交 `8bacfae` → `ship.push` 推 Gitee
   成功(ls-remote 核对一致)。回写状态随本条; 真机走查仍待真实 qB。
+- **2026-11-04 (缺失站点 tracker 合并扩展收口)** — 计划 `memory-bank/plans/26-11-03-2337-plan-missing-site-tracker-merge.html` 的 M1~M5 此前已完成（R1），本轮补齐最后一项 M4 验收：**GUI 冒烟三路径**。用 `scripts/ui_harness.py` + Playwright 真浏览器，在 `/api/sites/missing` API 边界注入三形态载荷：无缺失只出 toast；全单组走原两钮逐域名确认；多域名两组弹三钮框（拆分 `ghost`/合并 `primary`/默认焦点合并），合并填入 2 组共 4 域名，拆分二次确认后填入 4 站点；三路径零 `PUT /api/config`、零 console error。真实 groups 数据面已由 RM10/RM08 双附加轮覆盖；纯观感仍归用户目视清单。计划 doc-status 置 **Done**，计划内无剩余未完成项。

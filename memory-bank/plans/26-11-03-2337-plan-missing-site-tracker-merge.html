@@ -7,10 +7,10 @@
 <title>缺失站点导出/导入 tracker 合并</title>
 <meta name="doc-type" content="plan">
 <meta name="doc-topic" content="missing-site-tracker-merge">
-<meta name="doc-status" content="Open">
+<meta name="doc-status" content="Done">
 <meta name="doc-added" content="26-11-03-2337">
-<meta name="doc-updated" content="26-11-04-0036">
-<meta name="doc-refs" content="memory-bank/plans/26-11-04-0115-plan-real-rm10-addendum-missing-merge.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html">
+<meta name="doc-updated" content="26-11-04-2200">
+<meta name="doc-refs" content="memory-bank/plans/26-11-04-0115-plan-real-rm10-addendum-missing-merge.html, memory-bank/plans/26-11-04-0140-plan-real-rm08-addendum-missing-merge.html, memory-bank/tasks/26-09-26-webui-sites-import.md">
 <style>
   :root {
     --bg: #10151a;
@@ -75,7 +75,7 @@
 <h1>缺失站点导出/导入 tracker 合并</h1>
 <p class="lede">缺失站点导出(CLI)与导入(WEBUI)默认把「同种子共现」的多个 tracker 域名合并为一个站点条目(<code>domains</code> 数组),可选拆回逐域名;两端共用同一分组构件,口径不漂移。设计主轴:分组只在缺失域名内做 union-find,合并条目的站点名/默认标签由组内最短域名生成。</p>
 <div class="meta">
-  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-04-0036 · <b>doc-status</b> Open · <b>载体</b> 单文件 HTML(dark)<br>
+  <b>doc-added</b> 26-11-03-2337 · <b>doc-updated</b> 26-11-04-2200 · <b>doc-status</b> Done · <b>载体</b> 单文件 HTML(dark)<br>
   <b>来源</b> 用户指令「导出缺失站点时默认合并同一颗种子的多个 tracker 到同一个站点,可选择分开;WEBUI 导入缺失站点同步支持」→ 会话 grilling 两轮拍板(D1~D6,见 §06)后定稿
 </div>
 
@@ -167,6 +167,7 @@
 <ul>
   <li><span class="tag">R0 · 26-11-03-2337</span> 初版:用户指令发起,grilling 两轮(8 问)拍板 D1~D6 后定稿;主线=后端共用分组构件 + CLI 默认合并(--split-trackers 拆分)+ WEBUI 三钮自适应引导,分期 M1~M5。</li>
   <li><span class="tag">R1 · 26-11-04-0036</span> M1~M5 全部完成:M1 exporter 共现分组构件(group_missing_domains / build_merged_entry)、M2 CLI 默认合并 + <code>--split-trackers</code> 与配合校验、M3 <code>/api/sites/missing</code> 增 groups 分组字段、M4 WEBUI 导入三钮自适应引导;M5 全量测试绿(4944 passed / 10 skipped / 覆盖率 99%,实测誊写见 kb.baseline 新切片)+ 基线切片落档;README 与 docs/configuration.md 回写默认合并与 <code>--split-trackers</code> 说明。§04 各期 DoD 达成;真机验收与 GUI 冒烟未做,doc-status 保持 Open。</li>
+  <li><span class="tag">R2 · 26-11-04-2200</span> 收口补齐最后一项 M4 验收 —— <b>GUI 冒烟三路径</b>:用 <code>scripts/ui_harness.py</code>(真页面 + 真鼠标事件)在 <code>/api/sites/missing</code> API 边界注入三形态载荷,Playwright 真浏览器实跑。① 无缺失:仅 toast「无需导入: 没有发现未配置的站点」,不弹框;② 全单组:两钮框标题「导入 2 个缺失站点」、逐域名清单,确认后填入 2 个站点;③ 多域名两组:三钮框标题「导入 4 个缺失站点(含多域名站点)」、合并明细列两组、拆分钮 <code>ghost</code> 非破坏性样式 / 合并钮 <code>primary</code> / 默认焦点落合并(Enter 推荐);合并填入 2 组共 4 域名(组名顺延 <code>_1</code> 符合后端查重口径),拆分走二次确认后填入 4 个站点。三路径期间零 <code>PUT /api/config</code>(只填编辑器待审)、零 console error / 零 pageerror;三钮行布局与文案截图留证(<code>tests-real/.work/l0-missing-import/</code>)。真实 groups 数据面已由 RM10/RM08 双附加轮覆盖(见两条 addendum 与切片),本轮只补前端交互与布局可见性。§04 M4 验收判据全数达成;计划内无剩余未完成项,doc-status Open → <b>Done</b>。纯观感(配色/密度)仍归 user 目视清单,不在本计划的验收判据内。</li>
 </ul>
 
 </div>

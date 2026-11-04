@@ -39,6 +39,7 @@
 
 ## Done (287)
 
+- [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
 - [26-10-18-backend-group-relocate-restart-free](../26-10-18-backend-group-relocate-restart-free.md) 免重启整组迁移(A/C) P0 能力探测
 - [26-11-04-memory-bank-code-review](../26-11-04-memory-bank-code-review.md) 收口 code review 制度化: code-review skill + review 命令包 + 协议挂钩
 - [26-11-04-webui-fx-glow](../26-11-04-webui-fx-glow.md) fx 辉光荧光化四轮修(雾/圆角/无辐射/角缺光)
@@ -296,7 +297,6 @@
 - [26-09-26-webui-hr-popup](../26-09-26-webui-hr-popup.md) HR 悬停弹窗(做种时长/来源徽标 hover popover, T3 定稿)
 - [26-09-26-webui-long-path-open](../26-09-26-webui-long-path-open.md) WebUI 打开超长路径文件夹(Windows MAX_PATH 260)
 - [26-09-26-webui-settings-group-merge](../26-09-26-webui-settings-group-merge.md) 设置页分组合并: 日志/界面(WebUI)/通知/运行日志 并入「常规」
-- [26-09-26-webui-sites-import](../26-09-26-webui-sites-import.md) WEB UI 一键导入缺失站点（对齐 CLI --export-yaml --only-missing）
 - [26-09-26-webui-torrent-meta-edit](../26-09-26-webui-torrent-meta-edit.md) WEB UI 种子级标签/分类即时编辑（添加/删除标签 + 设置分类）
 - [26-09-25-webui-ext-hr-logging](../26-09-25-webui-ext-hr-logging.md) 浏览器扩展运行日志(分级 + 环形上限 + 选项页④区)
 - [26-09-25-webui-log-level-filter](../26-09-25-webui-log-level-filter.md) 运行日志按等级查看恒空(生产格式无方括号)

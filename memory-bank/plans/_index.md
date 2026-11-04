@@ -19,7 +19,6 @@
 ## Open
 
 - [26-11-04-1042] [待收尾迁移种子的 WebUI 可见性与路径链展示计划](26-11-04-1042-plan-webui-relocate-visibility.html) — `webui-relocate-visibility`
-- [26-11-03-2337] [缺失站点导出/导入 tracker 合并](26-11-03-2337-plan-missing-site-tracker-merge.html) — `missing-site-tracker-merge`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 - [26-10-01-1758] [Issue 全量清偿路线图 — 摸排 · 分波 · 执行顺序](26-10-01-1758-plan-issue-clearance-roadmap.html) — `issue-clearance-roadmap`
 
@@ -29,6 +28,7 @@
 - [26-11-04-0140] [真机实测 RM08 附加轮: /api/sites/missing groups 分组字段(缺失站点合并 WebUI 读侧)](26-11-04-0140-plan-real-rm08-addendum-missing-merge.html) — `real-rm08-addendum-missing-merge`
 - [26-11-04-0115] [RM10 附加轮: 缺失站点导出合并真机实测(导出面)](26-11-04-0115-plan-real-rm10-addendum-missing-merge.html) — `real-rm10-addendum-missing-merge`
 - [26-11-04-0055] [同机证明实施计划:D+F 主方案 + E1 一次性强探测](26-11-04-0055-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
+- [26-11-03-2337] [缺失站点导出/导入 tracker 合并](26-11-03-2337-plan-missing-site-tracker-merge.html) — `missing-site-tracker-merge`
 - [26-11-03-2223] [热重载 L2 重建后分组索引恢复（辅种页空态修复）计划](26-11-03-2223-plan-hot-reload-group-index.html) — `hot-reload-group-index`
 - [26-11-03-1102] [GTM 逐网卡基线重构 + C-prime 单轮速率告警 实施方案（v3）](26-11-03-1102-plan-gtm-day-total-inflation.html) — `gtm-day-total-inflation`
 - [26-11-03-0930] [WebUI bind 失败改为启动期 fail-fast](26-11-03-0930-plan-webui-bind-fail-fast.html) — `webui-bind-fail-fast`
@@ -84,9 +84,8 @@
 - [26-10-20-0024] [WEBUI 右键菜单自定义重排(重排/显隐/跨层)实施计划](26-10-20-0024-plan-webui-ctx-menu-custom-layout.html) — `webui-ctx-menu-custom-layout`
 - [26-10-19-2341] [WEBUI 弹窗语义配色分级(删除/跳检警示醒目化)](26-10-19-2341-plan-webui-dialog-tone-color.html) — `webui-dialog-tone-color`
 - [26-10-19-2206] [站点问题改色表达与 chip 图标收口](26-10-19-2206-plan-webui-site-chip-color.html) — `webui-site-chip-color`
-- [26-10-19-2007] [WEBUI 站点列状态提醒与逐目标汇报回执](26-10-19-2007-plan-webui-site-alerts.html) — `webui-site-alerts`
 
-> 更早的 **144** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **145** 条已出本索引 —— 制品仍在 `plans/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 
