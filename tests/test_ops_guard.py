@@ -278,8 +278,8 @@ def test_guard_drive_backoff_sleeps():
     S3 monkeypatch 收敛(2026-11-05): 旧形态经 `ops_mod.time.sleep` 计数 —— 那是 stdlib
     time 模块对象的进程级改写; 现改用**真实经过时间下界**验证退避真发生: 4 次重试退避
     名义合计 170ms(20+50+50+50), Windows 睡眠按 15.6ms 定时器刻度取整有抖动,
-    下界留 60ms 余量不损失判别力(退避跳过/归零当场红), 与 test_qbmanager_connect
-    的 _throttle 下界同口径, 不再引入任何 time 名寻址。
+    下界留 60ms 余量不损失判别力(退避跳过/归零当场红), 与 test_qbmanager_w6 的
+    _wait_next 下界同口径, 不再引入任何 time 名寻址。
     """
     mgr = make_mgr(FakeConfig())
     client = FakeClient()

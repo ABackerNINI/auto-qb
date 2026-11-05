@@ -96,13 +96,14 @@
   `config/writer.py::_prepare` 与 `qbmanager.apply_new_config`。
 - **处置**: 别把「段级 diff」当缺陷改细; R 闸段清单单点在 `RESTART_SECTIONS`(state_file/data_dir/fs)。
 
-### 主循环节流必须经模块级 `_throttle(stop_event, main_tick)`
+### 主循环节流必须经统一等待原语 `_wait_next`(原 `_throttle` 已删, 2026-11-06)
 
 - **触发**: 改主循环节流 / 等待逻辑。
-- **判别**: 正确实现是**非托管**(CLI, `stop_event=None`)走 `time.sleep`, **托管**(`--tray`)走 `Event.wait`。
-  写成 `if stop_event is not None and stop_event.wait(...)` 会被 `and` **短路成完全不阻塞** ⇒
-  主循环空转(**CPU 打满 + sync 请求放大数千倍**)。
-- **处置**: 一律经 `_throttle`; ⚠ **托管模式会掩盖该 bug** ⇒ 回归测试必须用**非托管**模式。
+- **判别**: 等待一律经 `_wait_next(stop_event, wake_event, timeout)`(阻塞到最近一条时间线到期, 兼顾
+  命令唤醒与停止信号; 原 `_throttle` 的非托管 `time.sleep` / 托管 `Event.wait` 分叉已随 2026-09-19
+  分层节拍改造失去消费点, 2026-11-06 删除)。写成 `if stop_event is not None and stop_event.wait(...)`
+  会被 `and` **短路成完全不阻塞** ⇒ 主循环空转(**CPU 打满 + sync 请求放大数千倍**)。
+- **处置**: 一律经 `_wait_next`, run() 内不得裸 sleep; ⚠ **托管模式会掩盖该 bug** ⇒ 回归测试必须用**非托管**模式。
   另: 首连失败重试循环里 `stop_event is None or stop_event.wait(...)` 是**有意语义**, 不要一并改。
 
 ### HR: 站点侧「没有可依据的数据」⇒ 回落本地, **不是**「未核实」(2026-09-25)

@@ -80,14 +80,14 @@ info 直查都不改变这一点(evidence: report 26-10-12-2148 §3 R4 的 26-10
 ❗**不能**退化成"单一 cadence + 任务线在内部按 next_tick_at 门控": 那样任务实际间隔会被循环粒度量化
 (1.5s 循环粒 + 2s 任务间隔 ⇒ 实际 3s 一次), 速率语义失真 —— 等待必须用 `min(两条线的到期时间)` 才能各自精确。
 
-**节流 (`_throttle`, 2026-09-14 修复)**: 非托管模式(CLI 默认, `stop_event=None`)走 `time.sleep(main_tick)`; 托管模式(`--tray` 传入 `stop_event`)走 `Event.wait(main_tick)` 以保持停止信号即时响应。**主循环的节流绝不能依赖 `stop_event` 是否存在** —— 曾写成 `if stop_event is not None and stop_event.wait(main_tick)`, 在非托管模式被 `and` 短路导致**完全不阻塞**, 主循环空转(实测约 2800 tick/s, 为 main_tick=2s 设计值的约 5500 倍), 详见 [pitfalls.md](../pitfalls.md)。注意首连失败重试循环的语义**不同**: 非托管模式首连失败直接抛错退出(不重试), 不可改成 `_throttle`。
+**节流 (2026-09-14 修复; 原实现 `_throttle` 已于 2026-11-06 删除)**: 历史上节流由 `_throttle` 承担 —— 非托管模式(CLI 默认, `stop_event=None`)走 `time.sleep(main_tick)`, 托管模式(`--tray` 传入 `stop_event`)走 `Event.wait(main_tick)`。**主循环的节流绝不能依赖 `stop_event` 是否存在** —— 曾写成 `if stop_event is not None and stop_event.wait(main_tick)`, 在非托管模式被 `and` 短路导致**完全不阻塞**, 主循环空转(实测约 2800 tick/s, 为 main_tick=2s 设计值的约 5500 倍), 详见 [pitfalls.md](../pitfalls.md)。注意首连失败重试循环的语义**不同**: 非托管模式首连失败直接抛错退出(不重试), 不要把它并进主循环的等待原语。
 
-**等待 (`_wait_next`, 2026-09-19 取代循环里的 `_throttle`)**: 阻塞到"距最近一条时间线的剩余时间", 同时响应
+**等待 (`_wait_next`, 2026-09-19 起为唯一等待原语)**: 阻塞到"距最近一条时间线的剩余时间", 同时响应
 **命令唤醒**(`manager.wake()`, Web 线程投递命令后调用)与停止信号。`stop_event` 与 `_wake_event` 是两个独立事件,
 Python 无多事件等待原语, 故**以唤醒为主**: 阻塞在 `_wake_event` 上(命令到达即返回, 延迟 ≈ 0), 按
 `STOP_POLL_INTERVAL=0.5s` 分段, 段间用**非阻塞**的 `stop_event.is_set()` 检查停止。顺序不能反 —— 先阻塞等
-`stop_event` 会让唤醒等满一个分段才被看见, 命令延迟从 ≈0 退化到 ≤0.5s。`_throttle` 仍保留(被单测直接覆盖),
-但循环里不再使用。
+`stop_event` 会让唤醒等满一个分段才被看见, 命令延迟从 ≈0 退化到 ≤0.5s。原 `_throttle` 自此退出循环,
+因再无生产消费点已于 2026-11-06 删除(直测由 `_wait_next` 的等价覆盖接替)。
 
 **命令线 / 唤醒 (`wake()`, 2026-09-19; 投递归口 2026-09-20)**: Web 侧投递命令统一走
 `WebUIRuntime.post_command`(生成 cmd_id + 埋点时间戳 + 入队 + 按需 `manager.wake()`, `webui/runtime.py:556`)⇒ 主循环不等下个节拍

@@ -69,7 +69,7 @@ from auto_qb.core import qbmanager as _qbm
 
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle, _wait_next
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _wait_next
 
 from auto_qb.torrents import QbCompatError
 

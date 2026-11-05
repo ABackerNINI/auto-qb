@@ -63,7 +63,7 @@ from auto_qb.core import qbmanager as _qbm
 
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle, _wait_next
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _wait_next
 
 from auto_qb.torrents import QbCompatError
 
@@ -71,13 +71,13 @@ from helpers import LEGACY_V1, FakeClient, FakeConfig, FakeTorrent, capture_logs
 
 
 def test_run_loop_managed_never_sleeps():
-    """托管模式(传 stop_event): 阻塞走 Event.wait, 绝不经 time.sleep 系节流(托盘停止信号即时响应)
+    """托管模式(传 stop_event): 阻塞走事件等待, 绝不经 time.sleep 系节流(托盘停止信号即时响应)
 
     分层节拍后停止信号与命令唤醒是两个独立事件(Python 无多事件等待原语), 等待原语统一是
-    `_wait_next`(托管分支按 STOP_POLL_INTERVAL 分段 wait 并在段间检查唤醒)—— run() 全程
-    不得触 `_throttle`(模块内唯一的 time.sleep 站点, 非托管真睡专用)。S3 monkeypatch 收敛
-    后守阵不再 patch stdlib time(进程级面过宽), 改钉模块唯一站点: 经 `_throttle` 的回归
-    同样必红, 裸 time.sleep 混进 run() 则由 test_run_loop_throttles_without_stop_event 的
+    `_wait_next`(托管分支按 STOP_POLL_INTERVAL 分段 wait 并在段间检查唤醒)。S3 monkeypatch
+    收敛后守阵不再 patch stdlib time(进程级面过宽), 改钉 run() 的实际等待站点: 透传 spy
+    包住 `_wait_next`, 断言 run() 的等待全部经该原语 —— 绕开原语直 sleep 的回归当场红;
+    裸 time.sleep 混进 run() 则由 test_run_loop_throttles_without_stop_event 的
     真实经过时间判据兜住(空转/不阻塞当场红)。
     """
     with tempfile.TemporaryDirectory() as td:
@@ -88,9 +88,10 @@ def test_run_loop_managed_never_sleeps():
         mgr.config.sync_interval = 0.05
         mgr._tick = mock.Mock(side_effect=[None, KeyboardInterrupt()])
         stop_event = threading.Event()
-        with mock.patch.object(_qbm, "_throttle") as fake_throttle:
+        real_wait = _qbm._wait_next
+        with mock.patch.object(_qbm, "_wait_next", side_effect=real_wait) as fake_wait:
             mgr.run(dry_run=True, stop_event=stop_event)
-        fake_throttle.assert_not_called()
+        assert fake_wait.call_count >= 1, "run() 的等待必须全部经 _wait_next 原语(绕开直 sleep 即回归)"
         assert mgr._tick.call_count == 2
 
 

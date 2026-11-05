@@ -197,7 +197,7 @@ def test_rm02_01_interval_cadence():
     副作用: 无(对 qB 零写, 只读快照请求; 用例目录随收尾删除)。
     回滚: 停进程 + 关代理 + 删用例目录。
     失败判据: 同步线请求间隔中位数偏离 1.5s 超出 +-20%; 或出现 >4.5s 的无请求死段;
-              或请求频率达到 _throttle 回归特征(25s 内数百次 = 空转)。
+              或请求频率达到主循环节流空转回归特征(25s 内数百次 = 空转, 2026-09-14 同型)。
     """
     case = case_dir("rm02_01")
     px = TcpProxy(app.QB_PORT, port=app.free_port())
@@ -216,7 +216,7 @@ def test_rm02_01_interval_cadence():
         assert 1.2 <= med <= 1.8, f"同步线节拍中位数 {med:.2f}s 偏离 1.5s 超出 +-20%: gaps={gaps}"
         assert max(gaps) <= 4.5, f"出现 >4.5s 的无请求死段(3 个 sync_interval): gaps={gaps}"
         total = len(px.requests())
-        assert total < 300, f"25s+ 内总请求数 {total} —— _throttle 空转回归特征(数百次/秒级)"
+        assert total < 300, f"25s+ 内总请求数 {total} —— 主循环节流空转回归特征(数百次/秒级)"
     finally:
         if p is not None:
             p.stop()

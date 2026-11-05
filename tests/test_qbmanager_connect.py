@@ -7,9 +7,8 @@
 - test_new_client_sets_request_timeout: P1-5 守卫——客户端必须带请求超时(否则 qB 假死时界面永久假死)
 - test_new_client_local_host_variants: localhost/IPv6 本机写法同样判定为本地
 - test_new_client_remote_keeps_default_trust_env: 远程地址用原生 Client 且保留 trust_env 默认
-- test_throttle_sleeps_without_stop_event: 非托管模式节流真实睡眠且返回 False
-- test_throttle_waits_stop_event: 托管模式节流走 Event.wait 并回传停止信号
-- test_run_loop_throttles_without_stop_event: 非托管模式主循环每轮 sleep(main_tick)(回归守卫)
+- test_wait_next_returns_stop_signal: 托管模式停止信号置位后 _wait_next 回传 True(等待原语停止响应契约)
+- test_run_loop_throttles_without_stop_event: 非托管模式主循环每轮经 _wait_next 阻塞到下一条时间线(真实经过时间判据, 回归守卫)
 - test_run_connect_failure: 非托管首连失败抛 QbConnectError(fail-fast -> CLI 退出码 1), 不进入主循环
 - test_reconnect_backoff_and_reset: 重连指数退避(间隔翻倍、上限 30s、未到点不重试)且连接成功后归零
 - test_run_client_none_reconnects_without_error_spam: 守阵(26-10-31-1029)——断连稳态(client=None+_last_conn_ok=False)跳过请求线走 _reconnect_due 重连, 成功即补同步并记「已重新连接」, 不得落「主循环异常」逐拍刷屏且 connect() 不再被调
@@ -65,7 +64,7 @@ from auto_qb.core import qbmanager as _qbm
 
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle, _wait_next
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _wait_next
 
 from auto_qb.torrents import QbCompatError
 
@@ -145,27 +144,15 @@ def test_new_client_remote_keeps_default_trust_env():
     assert client._session.trust_env is True
 
 
-def test_throttle_sleeps_without_stop_event():
-    """非托管模式(stop_event=None): 真实阻塞 main_tick 秒且返回 False(不当作停止信号)
+def test_wait_next_returns_stop_signal():
+    """托管模式: 停止信号置位后 _wait_next 回传 True(run 据此退出主循环)
 
-    阻塞语义用真实经过时间验证(S3 monkeypatch 收敛: 不再经 stdlib time 名 patch 观测
-    sleep 调用), 与 test_run_loop_throttles_without_stop_event 同口径下界余量。档位 50ms:
-    Windows 等待按 15.6ms 定时器刻度取整可提前(实测 46.8ms), 下界余量用平台刻度容差单点
-    SLEEP_LOWER_MARGIN_S(>=2 tick, tests/platform_tolerance.py) —— 阻塞被退化成空转
-    (微秒级)当场红, 余量依据与判别法见 pitfalls/testing/timing-tolerance.md。
+    等待原语的停止响应契约: 阻塞预算/真实睡眠面由 test_w6_wait_next_waits_full_timeout
+    与 test_run_loop_throttles_without_stop_event 覆盖, 此处只锁回传位。
     """
-    tick = 0.05
-    start = time.monotonic()
-    assert _throttle(None, tick) is False
-    assert time.monotonic() - start >= tick - SLEEP_LOWER_MARGIN_S
-
-
-def test_throttle_waits_stop_event():
-    """托管模式: 走 Event.wait(保持对停止信号的即时响应), 原样回传其停止信号"""
-    ev = mock.Mock()
-    ev.wait.return_value = True
-    assert _throttle(ev, 3.0) is True
-    ev.wait.assert_called_once_with(3.0)
+    stop = threading.Event()
+    stop.set()
+    assert _wait_next(stop, threading.Event(), 0.05) is True
 
 
 def test_run_loop_throttles_without_stop_event():

@@ -61,7 +61,7 @@ from auto_qb.core import qbmanager as _qbm
 
 from auto_qb.core.qbclient import REQUESTS_TIMEOUT, LocalQbClient, new_client
 
-from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _throttle, _wait_next
+from auto_qb.core.qbmanager import RECONNECT_MAX_INTERVAL, QbConnectError, QbManager, _wait_next
 
 from auto_qb.torrents import QbCompatError
 
@@ -76,7 +76,7 @@ def test_w6_wait_next_waits_full_timeout():
     """守阵(W6, 中): _wait_next 必须睡满 timeout 再返回
 
     deadline 排进过去 / while False / remaining<=1 三类变异都把等待归零 —— 托管模式
-    主循环变 CPU 空转(_throttle 2026-09-14 回归同型, 请求/CPU 放大面)。
+    主循环变 CPU 空转(2026-09-14 主循环节流空转回归同型, 请求/CPU 放大面)。
     """
     stop = threading.Event()
     wake = threading.Event()

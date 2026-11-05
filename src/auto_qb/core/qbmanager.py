@@ -36,7 +36,6 @@ rules 引用时该站点种子不绑定任何规则 —— 不会回退为"执�
 import logging
 import os
 import threading
-import time
 from typing import List, Optional
 
 from qbittorrentapi import APIConnectionError, Client
@@ -104,28 +103,10 @@ RECONNECT_MAX_INTERVAL = 30.0  # 重连退避上限(秒): qB 长时间宕机时�
 STOP_POLL_INTERVAL = 0.5  # 停止信号轮询粒度(秒): 见 _wait_next —— 多事件等待的分段间隔
 
 
-def _throttle(stop_event: Optional[threading.Event], main_tick: float) -> bool:
-    """主循环节流: 阻塞 main_tick 秒, 返回 True 表示收到停止信号
-
-    托管模式(tray/UI 传入 stop_event)走 Event.wait, 保持对停止信号的即时响应;
-    非托管模式(CLI 默认无 stop_event)走 time.sleep —— **必须真实睡眠**。
-
-    !回归背景(2026-09-14): 主循环曾写成 `if stop_event is not None and stop_event.wait(main_tick)`,
-    非托管模式下被 `and` 短路 -> 完全不阻塞 -> 空转。由每 tick 固定成本(update_state_snapshot 等)
-    反推约 2800 tick/s, 是 main_tick=2s 设计值的约 5500 倍: CPU 打满, 且把
-    sync/maindata 请求量同步放大 5500 倍(连带 requests 每次请求的 netrc/代理/注册表解析一并放大)。
-    任何"简化 stop_event 判断"的改动都必须保持本函数语义(非托管 -> time.sleep)。
-    """
-    if stop_event is None:
-        time.sleep(main_tick)
-        return False
-    return stop_event.wait(main_tick)
-
-
 def _wait_next(stop_event: Optional[threading.Event], wake_event: threading.Event, timeout: float) -> bool:
     """主循环等待: 睡到 timeout / 被命令唤醒 / 收到停止信号; 返回 True 表示收到停止信号
 
-    与 _throttle 的区别: 本函数额外响应「命令唤醒」, 让 WEB 操作不必等到下个节拍才被消费;
+    相比朴素 sleep 节流, 本函数额外响应「命令唤醒」, 让 WEB 操作不必等到下个节拍才被消费;
     且 timeout 是「距下一条时间线的剩余时间」而非固定的 main_tick。
 
     !stop_event 与 wake_event 是两个独立事件, Python 无多事件等待原语。这里**以唤醒为主**:
@@ -473,10 +454,10 @@ class QbManager(
         stop_event: Optional[threading.Event] = None,
         pause_event: Optional[threading.Event] = None,
     ):
-        """主循环(任务队列驱动): 每轮执行后经 _throttle 阻塞 main_tick 秒
+        """主循环(任务队列驱动): 每轮执行后经 _wait_next 等待到最近一条时间线到期
         - 弹出到期任务并执行(种子刷新/规则/种子级内置功能/校验结果轮询, 各任务有内置 interval)
         - stop_event: 置位后循环退出并落盘(UI/托盘托管模式必传; 传 None 时非托管,
-          节流退化为 time.sleep —— 见 _throttle 的回归说明)
+          等待退化为 wake_event.wait(剩余时间) —— 见 _wait_next 的说明)
         - pause_event: 置位期间完全旁观(不刷新/不执行任务, qB 自身行为不受影响),
           恢复后的首次 refresh 以增量 diff 补上暂停期间的状态变化
         - 托管模式(非 None)首连失败不退出, 按 main_tick 重试直至成功或收到停止 —— 托盘应用保持常驻;
