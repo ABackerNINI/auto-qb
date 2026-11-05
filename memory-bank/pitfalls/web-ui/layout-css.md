@@ -89,7 +89,7 @@
   一次归位。**不要**改用 `align-items: baseline` 兜: 档位 / 纵轴按钮组是**带边框胶囊**, 基线对齐会把整组
   按钮框顶上去(按钮文字对齐了、框错位了), 只是把一种错位换成另一种。
 - **机检**: headless 逐子项量 `Range.getBoundingClientRect().y` —— 同族文字必须同值(本仓实测
-  prism/atlas 835.7 · console 838, 按钮组同线); 守阵 `tests/test_webui_static_dom_panel.py`
+  prism/atlas 835.7 · console 838, 按钮组同线); 守阵 `tests/test_webui_static_dom_panel_*.py`
   「CSS 三皮肤成对」段钉 `.hist-summary` 必含 `align-items: center`(只改一处判红)。
   ⚠ 三挂点(全局/分组/单种)共用同一段模板, 所以**一处规则全覆盖**, 不要按挂点分别改。
 
@@ -171,7 +171,7 @@
     只改一处会得到"台账分得出、控制台分不出"。
   ⚠ 别把"已收口"压得和无底的出局态 (Dropped / Superseded) 一样暗 —— 那是把一对分不出换成另一对;
   出局态靠"**有底 vs 无底**"与它分开, 不靠再压一档透明度。
-- **守阵**: `tests/test_kb_nav.py::test_status_badge_colors_distinguishable`(Open / Done 底色 alpha 必须
+- **守阵**: `tests/test_kb_nav_shell.py::test_status_badge_colors_distinguishable`(Open / Done 底色 alpha 必须
   不同且 Open 更实 + 控制台与台账逐档对齐 + 出局态无底)。判别法可复用: headless 截图取徽章内侧填充
   像素, **同视图内**两两算 RGB 距离, <20 即判"分不出"。
 
@@ -218,7 +218,7 @@
   `--glass`(因为它同时管顶栏, 改它会把顶栏一起带偏)。遇到同类反馈先去翻这段再动手。
 - **现状留痕 (别重新"发现"再动手)**: kb.nav 顶栏与侧栏 / 工具栏的逐通道差仍是 **0** —— 用户 2026-10-05
   知情后明确**保持原样**(撤销了那一版改动)。要动先问用户。
-- **守阵**: `tests/test_kb_nav.py::test_ledger_thead_surface_distinguishable`(列标题行不得借回
+- **守阵**: `tests/test_kb_nav_shell.py::test_ledger_thead_surface_distinguishable`(列标题行不得借回
   `--bg` / `--paper` / `--paper-2` + 与数据行和工具栏**两面**都要 ≥24 + 文字对比度 ≥4.5:1 +
   专区表头与主表表头同一枚令牌 + 专区表头与置顶行**合成色** ≥24) ·
   `::test_topbar_surface_is_left_at_paper`(**反向守**: 顶栏底色一旦不再是 `--paper` 就报错, 提示先问用户)。
@@ -234,5 +234,5 @@
 - **处置**: 新态取**页面里未占用语义的色相**做一族三件(底 tint / 线 / 满亮左条), 相关 UI(计数 chip)
   跟同一族 —— kb.nav 落 `--msel-bar: #97a3f5 / --msel-bg / --msel-line`(真值取 auto-qb galaxy 主题
   `--sel-*`), 单击预览保持原 cyan; 两态同框时左条让给批量目标态(预览对象由抽屉表明)。
-- **守阵**: `tests/test_kb_nav.py::test_multiselect_renders_in_both_zones`(msel 规则必须用
+- **守阵**: `tests/test_kb_nav_interaction.py::test_multiselect_renders_in_both_zones`(msel 规则必须用
   `var(--msel-bar)`, 且规则体内不得回用 cyan 的 rgba —— 防改回"只差明度")。

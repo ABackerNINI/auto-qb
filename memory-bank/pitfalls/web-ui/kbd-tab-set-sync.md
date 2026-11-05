@@ -15,4 +15,4 @@
   2. **重排必须先于功能门控**: 第 3 档重排成 `traffic` 后仍要过 `qbTrafficOn` 门, 否则未启用也会切到无按钮的隐形页签(见坑 `drawer-open-vs-kind`)。
   3. 判据**复用页签栏的同一 computed**(`_kbMergeTabsOn` 读 `dtMergeTabsOn`), 不自造第二套; 门依赖视口宽时, 重排也随之随态。
   4. 帮助浮层 / 设置页的条目文案经**同一随态单点**(`kbLabel`)改写, 静态 label 仍归注册表(单一事实源), 只在本组 + 合并态时覆盖。
-- **守阵**: `tests/test_web_shortcuts.py::test_drawer_tab_shortcuts_merge_remap`(静态: 位次表 / 重排先于流量门 / 判据单点 / 两处模板走 `kbLabel`) + `e2e/drawer-merge.spec.mjs`(真浏览器: 合并态 Alt+1/2 切两页签对, Alt+4 停用零变化, 双皮肤)。
+- **守阵**: `tests/test_web_shortcuts_drawer.py::test_drawer_tab_shortcuts_merge_remap`(静态: 位次表 / 重排先于流量门 / 判据单点 / 两处模板走 `kbLabel`) + `e2e/drawer-merge.spec.mjs`(真浏览器: 合并态 Alt+1/2 切两页签对, Alt+4 停用零变化, 双皮肤)。

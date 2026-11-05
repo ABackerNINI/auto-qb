@@ -24,7 +24,7 @@
   Java 环境卡住。L1+L2 结构判据对分片**照常跑**(闭合标签/标签名对模板片段同样成立)。
   ⚠ 判据只认路径, 不用"文件里出现 `v-` 就跳过" —— 那会把真正写坏属性名的页面一并放过。
 
-- **守阵**: `tests/test_memory_bank.py::test_html_vnu_skips_vue_template_fragments` ——
+- **守阵**: `tests/test_memory_bank_docs.py::test_html_vnu_skips_vue_template_fragments` ——
   ① 分片认得出; ② 普通页面不被误判; ③ 全是分片时 `run_vnu(..., "java-does-not-exist") == 0`
   (用不存在的可执行名证明没走到子进程, 也就不会下载 jar)。红验: 判据改 `return False` →
   「tpl 分片未被认出 —— v.Nu 会整批误报」, 还原后绿。

@@ -18,7 +18,7 @@
   ① 上界 `shortcuts.js::_kbViewTop()` = `_headH` + 吸顶列头高(读 `.group-head` 的 `getBoundingClientRect().height`, **不用当前 rect.bottom** —— 吸顶前后 rect 在两态间跳, 只有高度恒定; 列头不在 DOM(成员明细 `.detail-head` 是 `position: relative`)或计算样式非 sticky 时回落纯顶栏高);
   ② 下界 `_kbViewBottom()` 开头补状态栏: `.statusbar` 实测 `position: fixed` 且高 > 0 时取 `min(bot, 状态栏顶缘)`, 再走原有的停靠面板让位(两者取更紧者 —— 面板本就吸在状态栏之上, 面板开着时它更紧);
   ③ 消费点三处: `_kbScrollRowIntoView` 的**渲染行 rect 路径**与**窗口化前缀和路径**、无光标回落 `_kbViewportRow`。渲染行那个 `scrollIntoView` 禁令照旧(见 `hover-keynav-fight`)。
-- **守阵**: `tests/test_web_shortcuts.py::test_kb_view_band_single_points`(静态: 两个单点在且被三处消费、上界不得再裸写 `_headH`/下界不得裸用 `innerHeight`)+ `e2e/kbd-scroll-band.spec.mjs`(真浏览器 @fast, 双皮肤: `End` 落末行不被状态栏盖 / `Home` 落首行不被列头盖, 且断言光标确实落在极值行 —— 否则"没被遮"可能只是光标没走到极值, 断言退化成恒真)。红验: 把 `shortcuts.js` 临时退回 HEAD 版, 新 e2e 双皮肤双双转红(已还原)。
+- **守阵**: `tests/test_web_shortcuts_cursor.py::test_kb_view_band_single_points`(静态: 两个单点在且被三处消费、上界不得再裸写 `_headH`/下界不得裸用 `innerHeight`)+ `e2e/kbd-scroll-band.spec.mjs`(真浏览器 @fast, 双皮肤: `End` 落末行不被状态栏盖 / `Home` 落首行不被列头盖, 且断言光标确实落在极值行 —— 否则"没被遮"可能只是光标没走到极值, 断言退化成恒真)。红验: 把 `shortcuts.js` 临时退回 HEAD 版, 新 e2e 双皮肤双双转红(已还原)。
 - **家族关系**: 本坑与 `dock-panel.md`(下界漏面板)、`hover-keynav-fight.md`(跟随禁用 scrollIntoView)是同一族 —— **凡"这个元素看得见吗"都要问"它上面/下面压着什么"**。新增消费点时先 grep `_kbViewTop|_kbViewBottom`, 别再手写边界算式。
 - **复发**: 0
 

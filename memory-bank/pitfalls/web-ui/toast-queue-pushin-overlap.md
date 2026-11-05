@@ -27,7 +27,7 @@
   ③ danger 队列条要带上 `fx-danger-glow` 双动画, 否则失败回执推入时丢了危险辉光。
   验证口径: 逐帧 `overlap` 全为负(实测 46 帧全部 -8)。
 
-- **守阵**: `tests/test_webui_static_skins.py::_scan_message_surface_parity` 第 20 项 —— 钉
+- **守阵**: `tests/test_webui_static_skins_*.py::_scan_message_surface_parity` 第 20 项 —— 钉
   `@keyframes fx-toast-queue-in` 存在、`[data-fx-queue]` 规则存在、JS 里 `setAttribute("data-fx-queue"` 盖章
   (三条都红验过: 摘掉任一条精确报红, 还原后绿)。静态守阵看不出"动画参数够不够", 改动画幅度时仍要跑一次逐帧采样。
 

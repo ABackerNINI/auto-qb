@@ -22,6 +22,6 @@
   在唯一一处显式判死哨兵语义: 本仓 `hr/service.py::_lane_covers_done(st, done, slack=0.0)`
   —— 全深度 ⇒ 对任意位置成立; 位置有界档 ⇒ `done` 已知且 `done - slack >= cutoff_done`;
   `cutoff_done <= 0` ⇒ **位置不可证**(保守维持管束, 命中照常)。三处调用方全部改调它。
-- **守阵**: `tests/test_hr_service.py::test_position_proof_cutoff_zero_is_unprovable`
+- **守阵**: `tests/test_hr_service_misc.py::test_position_proof_cutoff_zero_is_unprovable`
   (零位置概念三判据 + 反向对照组「全深度 / 边界已越过 / 差 1s 落余量外」, 防止修过头拦死正常放行; 已红验)
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

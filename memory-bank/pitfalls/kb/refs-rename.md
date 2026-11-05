@@ -11,10 +11,10 @@
   `pitfalls.md` 113 处), 且含 `.html` / `.md` / `.py` / `.yml`, **HTML 的 `href=` 与正文里的裸路径也算**。
 - **处置**: ①改之前全仓 grep 旧文件名统计引用数 ②用 **Python 显式 UTF-8** 批量替换
   ③替换后再 grep 确认为 0。
-  （相对链接存在性扫描守卫已建: `tests/test_memory_bank.py::test_doc_links_are_not_broken`,
+  （相对链接存在性扫描守卫已建: `tests/test_memory_bank_docs.py::test_doc_links_are_not_broken`,
   2026-09-29 实战拦截过一次 —— 守卫兜底不豁免本条三步, 写对路径仍是人的责任。）
   **新写的链接同样适用**: 相对路径按**写入文件所在目录**算深度(如 `testing/baselines/` 下指
-  `tasks/` 要 `../../tasks/`, 不是 `../tasks/`), 写完**先跑一次该守卫**(`commands run test.one -- tests/test_memory_bank.py::test_doc_links_are_not_broken`)
+  `tasks/` 要 `../../tasks/`, 不是 `../tasks/`), 写完**先跑一次该守卫**(`commands run test.one -- tests/test_memory_bank_docs.py::test_doc_links_are_not_broken`)
   再收尾, 别等全量闸门才红。
 - **复发**: 1 —— 2026-09-29 (auto-qb-clone1): M2 收尾把档案两条进度日志**外迁**进 `tasks/attachments/`
   时, 段内 `../testing/…`/`../plans/…` 链接深度差一层全变坏链; 手写的指针行还猜错了计划文件名

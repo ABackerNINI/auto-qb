@@ -54,7 +54,7 @@
 - **处置**: `distSegments` 按 viewMode 分支: groups 走 groups + singles / torrents 走 `torrents[].kind` /
   shows 走 `shows.list[].seasons[].episodes[].state`(**`shows` 是 `{list, unrecognized}` 不是数组**, 第一脚就踩过)。
   判定口诀"**凡跨视图呈现的派生值, 都问一次'它在另两个视图下还成立吗'**";
-  守阵: `tests/test_webui_static_dom_page.py::test_frontend_dist_segments_aggregates_per_view`。
+  守阵: `tests/test_webui_static_dom_page_layout.py::test_frontend_dist_segments_aggregates_per_view`。
 
 ### 上游从「空/未接入」变「有值」会点亮下游**从未跑过**的展示分支 (2026-09-29)
 
@@ -74,7 +74,7 @@
   不参与 `VIEW_ARRAYS` 分片、不参与 rid 门控。**不要**反过来把阵列加回 `VIEW_ARRAYS`(会废掉 P1-1 的体积优化)。
   ③的修法是"**取数面单点**": `facetRows` 按 `viewMode` 自取数(种子页 = `torrents`, 其余 = `decoratedGroups`),
   选项一律走 `_facetOptions(kind)` —— 计数口径**随行走**(组视图 = 含该值的组数, 种子页 = 含该值的种子数),
-  与各自页面真正在筛的行一致; 静态守阵 `tests/test_webui_static_skins.py::_scan_filter_facets` 钉住"不许再有第二条按组算的实现"
+  与各自页面真正在筛的行一致; 静态守阵 `tests/test_webui_static_skins_*.py::_scan_filter_facets` 钉住"不许再有第二条按组算的实现"
   (`_memberValueOptions` 已删, 复活即红); 冒烟断言按"计数 == 用 `vm.torrents` 现数的真值"判 ——
   **只判非空会放过"仍按组算"的错误口径**(先开过辅种页再切过来时 groups 还在, 按组也能算出非零)。
   ④同③, 取数面单点 = `add_torrent.js::_addRecencyRows`(种子页平铺 / 其余 `singles ∪ decoratedGroups[].members`),
@@ -174,5 +174,5 @@
   与后端 `infra/utils.path_normalize` 口径逐字一致: 转斜杠 + 压重复斜杠 + 保留首尾斜杠)。
   且**必须配真跑纯函数的 node 电池**(命中/不命中两态都钉) —— 静态守阵只验接线,
   看不出"键对不上", 而这正是本坑唯一可观测的面。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_add_options_recent_order`
+- **守阵**: `tests/test_webui_static_dom_panel_dialogs.py::test_frontend_add_options_recent_order`
   (node 电池真跑 `_addOrderByRecent`/`_addNormPath` + 静态钉接线, 已红验)。

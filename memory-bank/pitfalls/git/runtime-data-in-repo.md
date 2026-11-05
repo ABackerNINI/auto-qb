@@ -15,6 +15,6 @@
 - **处置**: ①`.gitignore` 增 `tools/global-traffic-monitor/data/` 与 `tools/global-traffic-monitor/run/`
   (目录尾斜杠, 只忽略目录不误伤同名文件); ②改默认落点与补忽略项放**同一笔**提交, 别留给后人;
   ③别用 `git add -A` / `git add .` 兜底 —— 一旦运行态已在树上, 会连带入库。
-- **守阵**: `tests/test_traffic_source_agent.py::test_tool_runtime_dirs_are_gitignored`(读 .gitignore
+- **守阵**: `tests/test_traffic_source_agent_probe.py::test_tool_runtime_dirs_are_gitignored`(读 .gitignore
   文本断言两条忽略项在场; 不起 git 进程 —— `tests/sidefx.py` 的 POPEN 白名单不放行)
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

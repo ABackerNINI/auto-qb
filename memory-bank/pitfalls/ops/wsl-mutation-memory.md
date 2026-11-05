@@ -6,7 +6,7 @@
 
 ### 12 GiB VM 里, 变异池的并发上限由「单 worker 体积」定, 降并发救不了
 
-- **触发**: 在 WSL 侧跑中池目标(`only_mutate = ["**/core/modules/traffic_sample_mod.py"]`, 池 = `tests/test_traffic_sample.py` / `test_traffic_limits.py` / `test_traffic_store.py`, `timeout_multiplier = 15`), 并按核数直觉只把 `--max-children` 从 3 降到 2。
+- **触发**: 在 WSL 侧跑中池目标(`only_mutate = ["**/core/modules/traffic_sample_mod.py"]`, 池 = `tests/test_traffic_sample_*.py` / `test_traffic_limits.py` / `test_traffic_store.py`, `timeout_multiplier = 15`), 并按核数直觉只把 `--max-children` 从 3 降到 2。
 - **判别**: ①三轮 2 路实测(2026-11-02 06:45 / 07:01 / 07:16, 三种不同启动方式)**全部停在第 80/1804 条**, 每轮只活 52–58 秒;
   ②采样峰值 `used` 10,587–11,468 MB(MemTotal 11,961 MB)、`avail` 最低 **493 MB**; 单进程 mutmut 峰值 **5,207–5,842 MB**, 进程和 9,050–9,999 MB;
   ③内存耗尽时**内核不一定留 OOM 记录**: 这几轮 kern.log 只有 `warn_alloc`, 07:19:04 的 Mem-Info 是 `inactive_anon 2,909,454 页 ≈ 11.1 GiB`、`free 19,264 页 ≈ 75 MB`、`Node 0 Normal free 30,296 kB < min 30,540 kB`、`all_unreclaimable? no`、`Free swap=0`; `wsl.exe` 会话本身先以 **rc=1** 断连(guest 控制面失联), 进程树随之消失;
@@ -21,7 +21,7 @@
   ②guest `uptime -s` 全程恒为 `2026-11-02 04:29:14`, 即 **VM 内核没有重启**;
   ③对照 11-01 的 R29(单次 811.3 s)与 R30(单次 1,635 s 干净收尾), 说明该行为是 **11-02 04:29 重写 `.wslconfig` 之后**才出现(该版只有 `swap=0` / `memory=12 GiB` / `autoMemoryReclaim=Gradual`, **没有 `vmIdleTimeout`**); 12 GiB 内存下 `avail` 仍在 21.5 GiB(宿主)/ 正常水位, 排除 OOM。
 - **处置**: ①在 `[wsl2]` 显式写 **`vmIdleTimeout=600000`**(10 分钟)并让 VM 重启后(判据: guest `uptime -s` 晚于 `.wslconfig` 的 mtime), 同一 650 秒哨兵实测 **651 s / rc=0 / 130 tick / 有 `[end]`**;
-  ②真实任务实测 `ops_mod.py` + `tests/test_ops.py` **1,135 变异 / 624 s / rc=0**、结果文件 334,597 B, 跨过 600 s **未被切**;
+  ②真实任务实测 `ops_mod.py` + `tests/test_ops_*.py` **1,135 变异 / 624 s / rc=0**、结果文件 334,597 B, 跨过 600 s **未被切**;
   ③**该结论与 VM 同时重启共变**(mtime 10:58:28 → `uptime -s` 10:58:37), 尚未单变量钉死 —— 要钉死需回退该键再测一次(改配置要用户授权);
   ④`vmIdleTimeout` 是 **VM 空闲**计时, **有客户端连着就不计空闲**, 所以 600000 不是硬上限; 但**必须保持一个客户端全程连着**, 否则 distro 空闲关停(见下条); 需要彻底免掉空闲关 VM 时才考虑 `-1`。
 - **守阵**: 无自动守阵(环境行为)。复现与取证脚本放 WSL 家目录(`sentinel6.sh` / `short_run.sh` / `round_run.sh` / `mem_trace.py`)。

@@ -12,7 +12,7 @@
   或被测对象是热重载/挂载口这类「按值比较后短路」的逻辑。
 - **判别**(两条形态):
 
-1. **分支不可达**: `tests/test_hr_service.py::test_terminal_vanish_writes_release` 断言的是
+1. **分支不可达**: `tests/test_hr_service_rows.py::test_terminal_vanish_writes_release` 断言的是
    「终态条目退役并落放行记录」, 但夹具的 B 行名称写成 `"OTHER 21"` —— 与本地锚点
    (`EXAMPLE 21`)**粗配不上** ⇒ 该行不下载 ⇒ 条目 `infohash_v1` 为空 ⇒ 冻结里
    `for h in (infohash_v1, infohash_v2)` 空转, **落记录那三行永不执行**; 而它断言的

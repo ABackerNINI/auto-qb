@@ -25,7 +25,7 @@
     }
   }
   ```
-- **守阵**: `tests/test_kb_nav.py::test_status_filter_not_reseeded_every_poll`(钉住 `statusSeeded.has(s)` 的 continue 闸门排在 `S.aStatuses.add(s)` 之前、且记账 `statusSeeded.add(s)` 全文件只有一处)。静态守阵只守得住形态; 运行时行为本次用 Node 回放验证 —— 页面脚本套最小 DOM 桩后依次 `applyData(...)` → `toggleSet(S.aStatuses, "Done")` → 再 `applyData(...)` 模拟轮询, 直接读 `S.aStatuses`(比肉眼审 diff 快且不会漏分支)。
+- **守阵**: `tests/test_kb_nav_shell.py::test_status_filter_not_reseeded_every_poll`(钉住 `statusSeeded.has(s)` 的 continue 闸门排在 `S.aStatuses.add(s)` 之前、且记账 `statusSeeded.add(s)` 全文件只有一处)。静态守阵只守得住形态; 运行时行为本次用 Node 回放验证 —— 页面脚本套最小 DOM 桩后依次 `applyData(...)` → `toggleSet(S.aStatuses, "Done")` → 再 `applyData(...)` 模拟轮询, 直接读 `S.aStatuses`(比肉眼审 diff 快且不会漏分支)。
 - **附带教训 · 表列位置也算"看不见"**: 同一轮用户还报「台账表没有状态」—— 状态列其实在第 6 列(专题右侧), 宽屏不横向拖也能看见, 但**紧贴右边界 + 低对比 chip** 让它被当成不存在。窄且用于判断的列(状态 / 标签)放标题左侧, 别跟「链 / 计数」一类辅助列挤在行尾; 改表格必须**表头与行模板同步改** —— 只改一头 = 整行数据错位一列且表格不报错(守阵 `test_ledger_status_column_between_form_and_title` 同时钉两头)。
 
 ### 持久化还原与「只补一次」台账的交互 (2026-10-05 kb.nav 筛选器落盘实测)
@@ -33,4 +33,4 @@
 - **触发**: 用户报「筛选器没保存, 每次刷新重置」, 于是给筛选器加 localStorage 持久化 (`mb-nav-filters`)。
 - **判别**: 落盘本身不难, 难在**还原后与派生重播种的时序**。若某组候选从数据派生、且靠 `statusSeeded`「只补一次」防重播种 (见上一节), 而 `statusSeeded` 只是**运行期内存态** —— 刷新后它归零, 首轮 `derive()` 会把数据里存在的候选**全部** `add` 回选中集, 把刚从 localStorage 还原的用户取舍又盖掉。表现极具迷惑性: 持久化代码逐字看着没错, 但「取消的已知状态刷新后又回来了」, 与**完全不落盘时症状一模一样** —— 容易误判成"localStorage 没写进去"。
 - **处置**: 还原时**先把已知候选 (定长常量那部分, 如 `KNOWN_ST`) 计入 `statusSeeded`**, 再把持久化的选中集覆盖进 `S`; 并把 `statusSeeded` 本身一并落盘 / 还原, 让「已入选过」的记账**跨会话延续** —— 这样数据里新冒出的候选仍会补一次, 已入选的永不回填。还原值还须对 schema 校验 (非法值丢弃 / 空集回落默认), 详见 [ui-location-persist.md](ui-location-persist.md)。
-- **守阵**: `tests/test_kb_nav.py::test_restore_filters_seeds_known_statuses`(还原体必须含 `statusSeeded` + `KNOWN_ST`) 与 `test_filter_state_not_reseeded_on_poll`(derive 不得读写持久化)。运行时用 Node 最小桩回放验证: 还原 → `derive()` 后, 取消的已知状态不被加回 (静态守阵只守得住形状, 时序靠回放)。
+- **守阵**: `tests/test_kb_nav_shell.py::test_restore_filters_seeds_known_statuses`(还原体必须含 `statusSeeded` + `KNOWN_ST`) 与 `test_filter_state_not_reseeded_on_poll`(derive 不得读写持久化)。运行时用 Node 最小桩回放验证: 还原 → `derive()` 后, 取消的已知状态不被加回 (静态守阵只守得住形状, 时序靠回放)。

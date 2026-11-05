@@ -24,7 +24,7 @@
   `_patch_endpoint_autostart()` 现读现 patch(缺失静默/失败 WARNING, 同 §09 口径)
   —— 只知 start() 一个写点的旧认知, 会让「卸载后 UI 开关漂移到重启才自愈」这种
   时序缺陷看不见根因。
-- **守阵**: `tests/test_traffic_source_agent.py::test_pointer_constants_mirror_tool_side`(跨包镜像
+- **守阵**: `tests/test_traffic_source_agent_probe.py::test_pointer_constants_mirror_tool_side`(跨包镜像
   常量同值) · 工具侧 `test_server.py::test_losing_instance_locks_out_before_binding_port` /
   `test_endpoint_written_on_start_with_fields` / `test_endpoint_removed_on_stop` /
   `test_autostart_uninstall_patches_pointer_immediately`(autostart 字段即时 patch)

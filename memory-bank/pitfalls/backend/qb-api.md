@@ -141,7 +141,7 @@
 - **处置**: 判据与文案单点在 `webui/commands.py::qb_reject_text`(4xx 且非 401 -> 可读文案 + 已知场景
   行动建议, `QB_REJECT_HINTS` 按 qB 文案子串匹配; qB 文案随其界面语言变, 匹配不到只给通用前缀, 不猜),
   分发层只分流: 命中 -> **WARNING 无堆栈**, 未命中(网络/鉴权/代码 bug) -> ERROR + `exc_info=True`。
-  守阵 `tests/test_web_commands.py::test_qb_reject_text_classification` 与
+  守阵 `tests/test_web_commands_bulk.py::test_qb_reject_text_classification` 与
   `test_queue_torrent_qb_reject_receipt_and_log`。
 
 ### qB `sync/torrentPeers` 的对端速度字段是 `dl_speed` / `up_speed`, **不是** `dlspeed` / `upspeed`
@@ -158,7 +158,7 @@
   别在各消费点各写一遍。**配套**: 桩服务 / 合成数据必须用**真 qB 键名**(`dl_speed`/`up_speed`) ——
   本 bug 正是因 `scripts/ui_harness.py` 自造数据用了 `dlspeed`/`upspeed`, 冒烟「看得见速度」而真机恒 0,
   一路逃过全部 e2e(见 [../testing/stubs-sim.md](../testing/stubs-sim.md) 同名复发条)。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_peers_speed_keys_normalized`(适配单点在 +
+- **守阵**: `tests/test_webui_static_dom_panel_drawer.py::test_drawer_peers_speed_keys_normalized`(适配单点在 +
   落袋走单点 + 桩键名与真 qB 同形); e2e `e2e/drawer-peers.spec.mjs`「上下行至少一格含数字」守卫。
 
 
@@ -182,5 +182,5 @@
   忽略未知参无副作用); 守阵含 **facade 出口** wire 用例 —— 直调裸库传显式参的用例钉不住
   facade 漏参形态。
 - **守阵**: `tests/test_qbapi_wire.py`(真库 + 真 requests 栈经 FakeQbServer 按线上原文断言三件事;
-  含 facade(QbApi)出口双必填参守阵); `tests/test_torrents.py` 的 _SNAPSHOT_FIELDS↔record slots 同步守卫。
+  含 facade(QbApi)出口双必填参守阵); `tests/test_torrents_*.py` 的 _SNAPSHOT_FIELDS↔record slots 同步守卫。
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

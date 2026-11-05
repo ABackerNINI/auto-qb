@@ -13,7 +13,7 @@
 
 > **批次守阵外迁存档**: 主循环/WEB解耦 · 后端高风险动作 · S2-S6 四批次 · 仿真/语料/平台语义 · src 结构卫生 · 规则表达式内核 · 配置键面 · 提提交水线包 —— 原文 → [attachments/guards-batches-archive.md](attachments/guards-batches-archive.md) (节标题同名, 检索按守阵名)。
 
-## 知识库结构(`tests/test_memory_bank.py`, 检查器在 skill 的 `check_kb_structure.py`)
+## 知识库结构(`tests/test_memory_bank_*.py`, 检查器在 skill 的 `check_kb_structure.py`)
 
 | 守阵 | 钉住的结论 | 红验 |
 |---|---|---|

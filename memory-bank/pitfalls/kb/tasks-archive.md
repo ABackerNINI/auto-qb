@@ -19,7 +19,7 @@
 
 - **触发**: 给 `tasks/*.md` 五个必备章节(`## 原始请求` / `## 思考过程与决策` / `## 实现计划` /
   `## 子任务状态表` / `## 进度日志`)的标题加后缀注释, 如 `## 实现计划 (仅备查, 不再更新)`。
-- **判别**: 守卫 `tests/test_memory_bank.py::test_task_file_naming_and_sections` 用
+- **判别**: 守卫 `tests/test_memory_bank_naming.py::test_task_file_naming_and_sections` 用
   `^<章节>\s*$` **行首锚**断言, 标题带任何后缀即红。⚠ 两个误导读法:
   ①报错文案写「**缺少**必备章节」, 实际章节在、只是标题带了后缀 —— 照文案去"补章节"会南辕北辙;
   ②红**不在写错的那一轮爆** —— 档案经 develop 合流到**其它 clone** 后, 在那个 clone 的 ship 闸门爆出来

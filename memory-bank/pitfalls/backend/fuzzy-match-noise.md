@@ -24,6 +24,6 @@
   ⑤守阵固化真实样本对(误配必须不再命中 + 真命中必须保住), 红验方式 = 只回退实现、保留测试。
 - **残余(有意留)**: 标题段短于 K 且两侧组标不同 ⇒ 不触发粗配, 该对象落回「无站点证据」兜底档 ——
   宁可少触发, 不再拿配额换假重合。
-- **守阵**: `tests/test_hr_service.py::test_fuzzy_name_match_rejects_noise_only_overlap`(4 条真实
+- **守阵**: `tests/test_hr_service_rows.py::test_fuzzy_name_match_rejects_noise_only_overlap`(4 条真实
   假重合 + 2 族真命中)、`::test_fuzzy_name_match_unit`(噪声整词不构成判据 / 整名皆噪声不上判据);
   红验 —— 仅回退 `src/auto_qb/hr/service.py` 即这两条红。

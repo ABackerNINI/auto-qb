@@ -27,7 +27,7 @@
      宽限耗尽仍无证据判「启动超时」—— 宁可标签诚实的超时, 不要标签体面的假成功。
   4. **周期观测与决定性直查分工**: 等待期的周期观测保持零 API 纯快照读(等价性红线, E 组用例钉住),
      API 只花在决定性时刻 —— 不把「直查真值」退化成高频轮询。
-- **守阵**: `tests/test_checking.py` A 组(谓词 / 逐行表测 / 160 组合穷举) + `tests/test_ops.py`
+- **守阵**: `tests/test_checking_*.py` A 组(谓词 / 逐行表测 / 160 组合穷举) + `tests/test_ops_*.py`
   B 组(门控状态机) / C 组(仲裁直查) / D 组(R1 实时复核) / E 组(等待期零 API 红线)。
 - **库内既有范本** (同一纪律的四处先例):
   [src/auto_qb/webui/runtime.py](../../../src/auto_qb/webui/runtime.py) `defer_receipt` / `flush_truths`
@@ -50,4 +50,4 @@
   排查轮路由到了 announce-epoch-semantics(方向语义)但没问「updating 算不算成功证据」。
   修复: 消解等待模型(plan 26-10-31-2354) —— updating 全域退出成功证据面(源码事实: updating 在
   请求发出前置位, 对成败零信息量), 成功凭 working 转换/epoch 前跳, 失败凭 status 4/5/6+msg;
-  守阵 `tests/test_web_commands.py` 三判定矩阵(语义翻转重写) + 真机 RM09-04 四态。
+  守阵 `tests/test_web_commands_*.py` 三判定矩阵(语义翻转重写) + 真机 RM09-04 四态。

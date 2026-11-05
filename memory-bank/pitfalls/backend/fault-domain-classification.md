@@ -18,7 +18,7 @@
 - **出口收放**: 出口侧读标记(如 `infra/logging.is_record_suppressed`), 生产点只**声明归属**(如 `hr_domain` / `hr_silent`)。**不要**在生产点写「前端别收我」这类带出口名字的标记 —— 那是耦合, 而且只遮住前端, 下面的污染一点没动。
 - **级别**: 静默子类降到 INFO/WARNING 之外, 还要注意「WARNING 以上会被推成系统通知」这条 —— 想「只打后端 log」就得同时挡住 errlog 与 notify 两条出口。
 
-**守阵**: `tests/test_hr_service.py`(通道归位 / 不升级疑似改版 / 页面失败边界回归 / 层表)· `tests/test_hr_worker.py`(三档可见性)· `tests/test_webui_backend_errlog.py`(静默不入环)· `tests/test_notify.py`(静默不通知)· `tests/test_hr_server.py`(被拒接触面 + 401 节流)
+**守阵**: `tests/test_hr_service_*.py`(通道归位 / 不升级疑似改版 / 页面失败边界回归 / 层表)· `tests/test_hr_worker_*.py`(三档可见性)· `tests/test_webui_backend_errlog.py`(静默不入环)· `tests/test_notify.py`(静默不通知)· `tests/test_hr_server.py`(被拒接触面 + 401 节流)
 
 **复发**: 2026-10-09 用户实报「关浏览器过夜, 错误历史出现 4 条 `[HR 页面改版] 页面取数失败(等待浏览器扩展取数超时 180s)` + 2 条 `[HR 通道静默]`」—— 根因即「等回传超时」抛的是裸 `HrFetchError`。修复见 [plans/26-10-09-0821](../../plans/26-10-09-0821-plan-hr-fault-domain.html)。
 

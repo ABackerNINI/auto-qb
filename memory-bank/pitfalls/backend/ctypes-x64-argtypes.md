@@ -14,7 +14,7 @@
   - 老系统可能没有某个导出(如 `SwitchToThisWindow`), 绑签名要逐个 `try` 跳过, 别让绑不上变成致命;
   - `ctypes.windll` 是按 dll 名缓存的, 绑一次全进程生效 —— 别以为你在对象上改的参数会被副本吃回去。
 - **排查手法**(没啥): 怀疑这类问题时不要靠推理, 用**同进程双句柄对照** —— `ctypes.WinDLL("user32")` 各取一份, 一份绑签名一份不绑, 在同一窗口上跑同一个调用, 比 `GetLastError` 更可信的是**看返回码 + 看实际效果(Z 序 / 标题)**。
-- **守阵**: `tests/test_utils.py::test_win_user32_binds_signatures`(Windows 上跑, 断言签名表逐条绑上; POSIX 跳过)。**别指望注入假 user32 的用例能发现这类问题** —— 那是它们的价值所在, 也是它们的盲区。
+- **守阵**: `tests/test_utils_windows.py::test_win_user32_binds_signatures`(Windows 上跑, 断言签名表逐条绑上; POSIX 跳过)。**别指望注入假 user32 的用例能发现这类问题** —— 那是它们的价值所在, 也是它们的盲区。
 
 ### 签名表的**构造**别写在实参位 —— 求值早于 windll 探测, "取不到返回 None" 成死代码
 
@@ -30,7 +30,7 @@
   存在, 这条路径永不现形), 真值在 Linux。
 - **处置**: 签名表改**工厂(可调用)**传参, 构造推到探测成功之后: `_win_dll(name, sigs_of)` + 调用点去括号
   `_win_dll("user32", _WIN_USER32_SIGNATURES)`; docstring 写明"别顺手改回传现成元组"。
-  守阵 `tests/test_utils.py::test_win_dll_missing_windll_returns_none`: **两平台**都删掉 `ctypes.windll` +
+  守阵 `tests/test_utils_windows.py::test_win_dll_missing_windll_returns_none`: **两平台**都删掉 `ctypes.windll` +
   `ctypes.WINFUNCTYPE` 造出 POSIX 等价形态, 断言返回 None 不抛错(红验: 退回实参写法即红, 报错与 CI 逐字一致)。
 - **❗别与"用例补门面"混为一谈**: `pitfalls/testing/patching.md` 那条(缺 `windll`/`WINFUNCTYPE` → 用例补
   `_shim_posix_ctypes`)治的是"**用例**要跑 Windows 分支而 POSIX 无门面" —— 那里缺门面**不是**被测代码的缺陷。

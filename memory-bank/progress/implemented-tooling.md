@@ -22,7 +22,7 @@
   严格落在 memory-bank/ 内, 越界一律 403, ../ %2e%2e ..%2f 反斜杠变体全拒)。壳 `nav_page.html` 入库
   scripts/(http 模式 fetch + 轮询; 静态模式 `--gen-static` 注入单文件, 默认 tmp-analysis/nav/ 已 gitignored);
   `color-scheme: dark` 零外链资源。挂点 `commands run kb.nav`(前台长跑 Ctrl-C 停)。守阵
-  `tests/test_kb_nav.py` 9 条: 数据形状 / issue enrich / stamp 防时钟 / collect() 键集合不回归 / 壳三视图
+  `tests/test_kb_nav_*.py` 9 条: 数据形状 / issue enrich / stamp 防时钟 / collect() 键集合不回归 / 壳三视图
   容器+dark+零外链 / 服务层三路由与防穿越, 全桩目录零网络外呼零子进程。基线 2471 passed + 4 skipped /
   覆盖率 99%(切片 26-10-04-1039)。计划
   [26-10-04-0952](../plans/26-10-04-0952-plan-kb-nav-page.html)。
@@ -32,7 +32,7 @@
   = 双向显示, 专区不受筛选/搜索影响) + 右键菜单 (置顶/取消置顶 · 打开原文 · 复制仓库路径)。pin 是**人的视线偏好**、
   非文档属性: 落 localStorage `mb-nav-pins`(与视图选择同款 try/catch 降级), **只在 boot 装载一次、derive() 绝不触碰**
   (同「状态筛选器自动重置」源风险, 坑档案 poll-reseed-filter.md), 不写进任何件 meta、**数据层/服务层零改动**。图钉
-  内嵌 title-cell (零列序改动, 不新增 td), 内联 SVG 无外链图标库、无 emoji。守阵 `tests/test_kb_nav.py` +4(专区/菜单
+  内嵌 title-cell (零列序改动, 不新增 td), 内联 SVG 无外链图标库、无 emoji。守阵 `tests/test_kb_nav_*.py` +4(专区/菜单
   骨架 · derive 不碰 pins 且装载点唯一 · 双向渲染 · 内联 SVG 无 emoji)。基线 2515 passed + 4 skipped / 99%
   (切片 26-10-04-1849)。计划 [26-10-04-1830](../plans/26-10-04-1830-plan-kb-nav-pin.html)。
   **2026-10-05 改版 (用户: 专区改为与主区同栏的详细列表, 只置顶 + 强调)**: 专区不再是紧凑 chip 列表, 而是与主表
@@ -49,14 +49,14 @@
   **分叉 / 本地改动重叠 / 离线一律失败**并回一行原因(不 rebase / 不生成 merge commit), 前端弹提示浮层; 成功即
   重拉 `/api/data` 刷新页面。远端按 gitee → origin → github 挑(同 my-commit-flow 的 main_candidates)。安全: 只绑
   127.0.0.1 + 必须带自定义头 `X-Nav-Action`(跨站 fetch 带自定义头会先发 OPTIONS 预检, 本服务不答即被浏览器拦下)
-  + Origin 回环校验 + `_PULL_LOCK` 串行化; 静态导出 / file:// 无服务端, 按钮隐藏。守阵 `tests/test_kb_nav.py`
+  + Origin 回环校验 + `_PULL_LOCK` 串行化; 静态导出 / file:// 无服务端, 按钮隐藏。守阵 `tests/test_kb_nav_*.py`
   +11(壳按钮骨架 / 分类纯逻辑 / 非仓库·游离 HEAD·离线·分叉·本地领先·快进六场景 / 端点 403 护栏 + 404 +
   结果回传), **数据层 nav_data.py 零改动**, 服务层新增 POST 路由与 git 编排。基线 2553 passed + 4 skipped /
   99%(切片 [26-10-05-0324](../testing/baselines/attachments/26-10-05-0324-kb-nav-pull.md))。
 
 - **kb.nav 跟进轮九~十七 (2026-10-05~13, 专题 kb-nav-page, 切片 26-10-04-0952)**: 导航页壳 `nav_page.html` 单文件多轮改, 数据/服务层零改动 —— ⑨状态徽章三层底色口径 (台账 `.chip.st-*` 与控制台 `.rs.st-*` 共用透明度阶梯, 底/边/字三通道; 根因 `.chip{color:--dim}` 同特异性后盖状态文字色 + cyan/green 令牌明度几乎相同靠 alpha 拉开); ⑩顶栏专用令牌 `--chrome` (用户撤销后还原 `--paper`, 反向守阵 `test_topbar_surface_is_left_at_paper`); ⑪台账列标题行 `thead th` 改 `--chrome` (列头与数据行同 `--bg` 差 0 读不出表头; 相邻面逐面过, 克隆同款表头必须跟着改); ⑫置顶专区表头修 (`--chrome` 抬 #232e3b→#2b3947, 强调过的行挤明度空间, 合成色真算); ⑬隐藏功能 (独立键 `mb-nav-hidden`, 复用 pin 骨架, 隐藏区 `#hidZone` 同构, 四处退场单点); ⑭类型栏 (issue-type chip, 列序守阵扩); ⑮类型栏空值去占符 (`"·"`→`""`); ⑯Esc 退栈计划 26-10-13-0324 (拉取失败全屏锁 = doPull 失败弹 `#overlay` z-50 全屏遮罩, POLL_MS 30000 ⇒ ≤30s 不可点击); ⑰Esc 退栈实施 `escRetreat()` 单链 (退栈 order = visual z-order overlay→ctxMenu→drawer→sel, IME 组合期守卫, 判据用可见性, 遮罩退最上档即消锁; 守阵 +4 single_point/ime_guard/overlay_first/closes_drawer). 各轮基线切片见 kb.baseline; 判据单点 [pitfalls/web-ui/layout-css.md](../pitfalls/web-ui/layout-css.md) 状态徽章/顶栏/表头面同色条 + [pitfalls/web-ui/poll-reseed-filter.md](../pitfalls/web-ui/poll-reseed-filter.md)。
 
-- **kb.nav 多选与批量右键菜单 (2026-10-31, 专题 kb-nav-multiselect, 计划 26-10-31-0143 全段落地)**: 台账加文件管理器式多选 —— Ctrl+click 切换 / Shift+click 锚点区间**并入** (auto-qb selection.js 口径: 锚点不动, 可从同一起点多次扩段), 主表 + 置顶专区双区同亮 (置顶件双向显示, link 为键), 普通单击 = 现行为且**不清多选** (拍板 D3, 用户明确拒绝「单击清多选」—— 容易误触); 右键批量升级照 auto-qb menu.js CTX-03 —— `ctxTargets` 单点解析 (集合>1 且行∈选区 → 整集合快照, openCtx 冻结 `dataset.links`, 右键不改选区), 批量文案带灰色 N (拍板 D12), 四项动作走批量链: pin/hide 幂等批量 (`every` 动态反向文案, 批量隐藏把隐藏件剪出选区), 复制每行一个 `memory-bank/<link>` 按主表可见序 (被筛掉的选中行按全量序追加), 打开 >5 先 `window.confirm`; 辅助件: 顶栏「已选 N」chip 点击清空, Esc 退栈链末档清多选 (drawer 档后、遗留 tr.sel 前), Ctrl+A 台账非输入态全选可见行, 切视图即清空。选区 `S.multi`/`S.multiAnchor` 纯会话态 (derive()/saveFilters() 均不碰, 同 pin 坑型)。守阵 `tests/test_kb_nav.py` +6 (会话态与手势 / 双区渲染 / 批量升级 / 幂等 / 辅助件 / 复制与打开); Playwright 无头真机冒烟全过 (脚本 tmp-analysis/nav/, gitignored)。
+- **kb.nav 多选与批量右键菜单 (2026-10-31, 专题 kb-nav-multiselect, 计划 26-10-31-0143 全段落地)**: 台账加文件管理器式多选 —— Ctrl+click 切换 / Shift+click 锚点区间**并入** (auto-qb selection.js 口径: 锚点不动, 可从同一起点多次扩段), 主表 + 置顶专区双区同亮 (置顶件双向显示, link 为键), 普通单击 = 现行为且**不清多选** (拍板 D3, 用户明确拒绝「单击清多选」—— 容易误触); 右键批量升级照 auto-qb menu.js CTX-03 —— `ctxTargets` 单点解析 (集合>1 且行∈选区 → 整集合快照, openCtx 冻结 `dataset.links`, 右键不改选区), 批量文案带灰色 N (拍板 D12), 四项动作走批量链: pin/hide 幂等批量 (`every` 动态反向文案, 批量隐藏把隐藏件剪出选区), 复制每行一个 `memory-bank/<link>` 按主表可见序 (被筛掉的选中行按全量序追加), 打开 >5 先 `window.confirm`; 辅助件: 顶栏「已选 N」chip 点击清空, Esc 退栈链末档清多选 (drawer 档后、遗留 tr.sel 前), Ctrl+A 台账非输入态全选可见行, 切视图即清空。选区 `S.multi`/`S.multiAnchor` 纯会话态 (derive()/saveFilters() 均不碰, 同 pin 坑型)。守阵 `tests/test_kb_nav_*.py` +6 (会话态与手势 / 双区渲染 / 批量升级 / 幂等 / 辅助件 / 复制与打开); Playwright 无头真机冒烟全过 (脚本 tmp-analysis/nav/, gitignored)。
   计划 [26-10-31-0143](../plans/26-10-31-0143-plan-kb-nav-multiselect.html)。
 
 - **kb.nav 搜索支持文件名/相对路径 (2026-11-03, 专题 kb-nav-searchbox)**: 用户复现「#gq 输入
@@ -64,7 +64,7 @@
   且匹配是对整串做 `includes`。修法: 壳内新增 `navSearchText()` / `navSearchQuery()` 单点, 索引加法式补
   `link` (basename 随之可搜) 与 `memory-bank/<link>` 仓库根相对形态; 台账 `aFiltered` / 控制台
   `renderChannels` / 卡片墙 `cVisibleItems` 三处统一消费, 正文不入索引 (体积口径), 大小写与反斜杠归一;
-  排序/展示与原有标题·专题·摘要匹配行为不变, 数据层/服务层零改动。守阵 `tests/test_kb_nav.py` 新增一条
+  排序/展示与原有标题·专题·摘要匹配行为不变, 数据层/服务层零改动。守阵 `tests/test_kb_nav_*.py` 新增一条
   (node 回放页内真实 JS 单点: basename / mb 内相对路径 / 仓库根相对路径 / 大小写 / 反斜杠 / 原字段 / 无关词),
   数字见 kb.baseline。合流后顺带修远端新守阵的环境依赖 (`tests/test_real_machine_safety.py` 受控桩分支
   原先默认 `tmp_path` 在非系统卷且祖先目录不带 hidden 属性, 本机 TMP=C:/AppData 下必然误红; 桩化
@@ -99,7 +99,7 @@
   **commands**: 收录协议细节 → `.agents/skills/commands/references/howto-add-command.md`(1293 字符, **按需读**), SKILL.md **2986 → 2089 字符**(半角逗号/斜杠/括号后的空格 327 → 171 个), `CONTEXT_CAPS` 上限 **4200 → 2600**。
   **memory-bank**: 知识库结构 / 脚本表 / activeContext 切片四条约定 / 检索纪律 / 扩类扩目录 → `.agents/skills/memory-bank/references/kb-structure.md`(3717 字符, **按需读**), SKILL.md **10114 → 5948 字符(-41%)**(空格 1254 → 580), 上限据此定 **7500**(此前无上限)。
   **两条纪律**: ①**上限跟着实测收** —— 不收的话, 省下的会被慢慢吃回去; ②细节搬进 `references/` 后, 反漂移闸门扫描面从 `.agents/skills/**/SKILL.md` 扩到 `.agents/skills/**/*.md`(扩前实测 0 命中, 不误伤别的 skill), 否则搬出去的内容成了闸门盲区。
-  **改 memory-bank SKILL.md 前必读的守卫约束**: `tests/test_memory_bank.py` 要求它含 `会话开始` / `立档阈值` / `收尾 DoD` 三个 token, 且 **cap 表必须留在该文件里**(`test_skill_cap_table_matches_cap_policy` 钉住数值集合与行数 == `_common.CAP_POLICY`)—— 所以 cap 表不能像别节那样外置。
+  **改 memory-bank SKILL.md 前必读的守卫约束**: `tests/test_memory_bank_docs.py` 要求它含 `会话开始` / `立档阈值` / `收尾 DoD` 三个 token, 且 **cap 表必须留在该文件里**(`test_skill_cap_table_matches_cap_policy` 钉住数值集合与行数 == `_common.CAP_POLICY`)—— 所以 cap 表不能像别节那样外置。
   ⚠ **顺带发现(未改)**: 该 SKILL.md 的「收尾 DoD」标题写"5 步"、实际列了 6 条, 而 `AGENTS.md` 也写"5 步" —— 两边同错, 要订正得一起改(本次只把标题里的数字去掉, 不替它选一个数)。
   实测: `test.full` **1201 passed + 1 skipped**; `doc.caps` commands 2089/2600 · memory-bank 5948/7500 · AGENTS.md 6999/8000; `doc.drift` 0 处。
 - **知识库瘦身 (2026-09-20, ✅ 已提交并推送 `9ccace6`, Gitee 与 GitHub 镜像均成功)**: 按"过时 / 重复 / 低价值"三分类清理根 `AGENTS.md` 与 `memory-bank/` —— **路由表与黄金法则单点收在 `AGENTS.md`**(`memory-bank/README.md` 改指针), 已完成条目从本文件迁出到 `progress.md` / 任务档案; `testing.md` 顶部基线数字**未动**(待补测 WSL 一侧再更)。提交时与上游 7 个提交 rebase, `AGENTS.md` 一处冲突按"保留上游新增的 HTML dark 主题规则 + 保留本轮压缩后的计划产出口径"解决。**知识库回写(pitfalls 新增「rebase --continue 被 VS Code 编辑器挂死 + packed-refs 陈旧致核 ref 假红」条目 + 本行状态更新)已入库 `060844e`。**

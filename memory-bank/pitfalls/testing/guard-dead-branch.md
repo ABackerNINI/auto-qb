@@ -18,7 +18,7 @@
 
 ## 守阵
 
-- `tests/test_webui_static_dom_page.py::test_frontend_template_no_reserved_prefix_identifiers` 尾部活性探针(指令形态 `_probeTap` + 插值形态 `_probeVar` 必须命中; `$emit`/`$root`/`$event` 必须放行) —— 同类扫描型守阵照此加装。
+- `tests/test_webui_static_dom_page_layout.py::test_frontend_template_no_reserved_prefix_identifiers` 尾部活性探针(指令形态 `_probeTap` + 插值形态 `_probeVar` 必须命中; `$emit`/`$root`/`$event` 必须放行) —— 同类扫描型守阵照此加装。
 - `tests/test_webui_static_dom_page_layout.py::test_frontend_rule_tree_and_choose_editor` 第 2 条(cfgNormalizeRulesDraft 归一条目红验式三步 + 幂等快照深比较 + 非幂等专桩)与第 5 条(liveness 注入必红期望端到端红验) —— 电池条目级空转照此加装。
 
 ## 关联

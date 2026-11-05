@@ -50,7 +50,7 @@
 - **处置**: 显式打开挂上面板状态后调 `shortcuts.js::_kbRevealRow(hash)` —— 内部 $nextTick 等
   面板挂载再量 (面板 DOM 随 open 状态 v-if, 同帧量不到), 目标行下缘低于 `_kbViewBottom() - 4`
   才 scrollBy, 本来可见不动, 行不在 DOM(窗口化折叠)静默放弃 —— 滚动位置宁可不动也不猜(P1-2 退避口径)。
-- **守阵**: `tests/test_web_shortcuts.py::test_drawer_open_reveal_row` —— openTorrentDrawer 必须调
+- **守阵**: `tests/test_web_shortcuts_drawer.py::test_drawer_open_reveal_row` —— openTorrentDrawer 必须调
   _kbRevealRow, 让位必须 nextTick + _kbViewBottom 单点, 禁 scrollIntoView 与 innerHeight, 行不在
   DOM 必须静默放弃。
 - **复发: 1** —— 2026-10-04 用户再报同一症状(「已修但回归」)。为什么没命中: 修复的让位调用确实
@@ -107,7 +107,7 @@
 - **处置**: ① 在 `state.js` 加 `watch(drawerVisible)`: 退场 `_qbChartDestroy(scope)`(连 ResizeObserver 一起断),
   进场 `_qbReloadOnEnter(scope)` 补拉一发(`_qbLoad` 内含 `$nextTick` 建图), 并对在途 `loading` 让路
   (打开路径本就先发一发, 否则首次打开的请求翻倍); ② Esc 两处名单改判 `drawerVisible`。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_drawer_page_guard`(可见性单点 / 三挂点 active 同宽 /
+- **守阵**: `tests/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_drawer_page_guard`(可见性单点 / 三挂点 active 同宽 /
   入口页面归一 / watcher 退场销毁 + 进场补拉)。
 
 ### 列表变短 = 文档变矮: sticky 吸底脱锚, 面板跟着内容末尾走
@@ -138,5 +138,5 @@
 - **处置**: 流量形态由 `drawer.js::drawerPanelStyle()` 给**确定高度**(`drawerHeightPx` 有值就用它,
   没有则回落 42vh = 与 CSS 默认上限同值), 高度因此也与种子详情**共用同一 drawerHeightPx**;
   建图侧 `_qbChartBuild` 量 `host.clientHeight` 当图高, ResizeObserver 宽高**双观察**才能跟着拖拽实时长。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
+- **守阵**: `tests/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_chart_wiring`(三皮肤 `.drawer-body.is-traffic`
   撑满段成对 + RO 宽高双观察) + `test_web_shortcuts.py::test_drawer_height_collapse_w3`(面板高度单点)。

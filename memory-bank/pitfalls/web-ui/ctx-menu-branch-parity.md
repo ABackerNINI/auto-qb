@@ -14,7 +14,7 @@
   1. 给一支加动作, **同步补另一支**(组菜单独有的 打开文件夹/流量图 除外)。
   2. 组级入口**复用多选链路**(目标 = 该组全部成员, 走 `_groupTargets`, 下游交 `_actCore` / `_skipCheckDialog` / `_exportHashes` / `openMetaDialog`), **不另开旁路** —— 两处口径漂移的根都在"各写一套"。
   3. 目标取**成员 hash** 而非组 key: 组键在 `_bulkTargets` 口径里算 1 个目标, 单组场景会把「N 个目标」显示成「1 个目标」。
-  4. 守阵 `test_frontend_ctx_menu_group_actions_parity`(`tests/test_webui_static_dom_panel.py`)钉单组支六入口(读注册表 `group` 支的 id 集)+ 跳检项 `gate` 字段 + 六入口复用多选下游链路 —— 再加/删单组项而不同步守阵即红。
+  4. 守阵 `test_frontend_ctx_menu_group_actions_parity`(`tests/test_webui_static_dom_panel_*.py`)钉单组支六入口(读注册表 `group` 支的 id 集)+ 跳检项 `gate` 字段 + 六入口复用多选下游链路 —— 再加/删单组项而不同步守阵即红。
 
 ### 根治后仍然会踩的三种"菜单里没有那一项"(2026-10-20)
 

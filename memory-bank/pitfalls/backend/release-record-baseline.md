@@ -21,7 +21,7 @@
   ≠ 「状态已变」 —— 前者只能保守放行, 硬判漂移会把所有旧记录(早于该字段落盘的)一并作废,
   与「迁移零过渡」的承诺直接冲突; ③守卫要断言**字段真的落盘**(本仓钉 `verified[h].source`
   与 `.has_anchor_snapshot`), 只断言「记录在」等于没测。
-- **守阵**: `tests/test_hr_service.py::test_terminal_vanish_writes_release`(断言
+- **守阵**: `tests/test_hr_service_rows.py::test_terminal_vanish_writes_release`(断言
   `data.verified[h21].has_anchor_snapshot` 且 `anchor_downloaded == anchors[h21].downloaded`)、
   `tests/test_hr_resolve.py::test_row3_record_without_anchor_snapshot_is_not_drift`。
 - **相关**: [hot-reload-held-config.md](hot-reload-held-config.md)(同一轮实报的另一条)、

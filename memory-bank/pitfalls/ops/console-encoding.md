@@ -7,7 +7,7 @@
 ## 反向: 非 Python 子进程输出是 UTF-8, 别用 `text=True` 让 locale 去猜
 
 - **触发**: 在测试或工具里 `subprocess.run(["node", ...], capture_output=True, text=True)`(2026-09-24 实测:
-  `tests/test_extension_proxy.py` 用 node 跑 JS 归一化用例, 期望值里含中文报错)。
+  `tests/test_extension_proxy_*.py` 用 node 跑 JS 归一化用例, 期望值里含中文报错)。
 - **判别**: 抛的是 `UnicodeDecodeError: 'gbk' codec can't decode byte 0xaf ...`(不是 mojibake), 而且**抛出点很怪** ——
   堆栈落在 `subprocess._readerthread` 的后台线程里, 以 `PytestUnhandledThreadExceptionWarning` 的形式出现;
   不看警告就会误以为是“断言写错”。
@@ -79,7 +79,7 @@
 - **触发**: AI 工具壳跑输出超大的命令(本仓实测 `commands run kb.active` ≈ 51KB) —— ZCode Bash 工具内联上限 **30,000 字节**(`outputLimit.maxInlineBytes` 硬编码 3e4), 超限即全量落盘 + 只回前 2000 字符预览; 若内联前缀在分块边界截断时**切进多字节 UTF-8 字符中间**, 预览整段变 `鍒涘缓` 形乱码且稳定复现。与终端无关 —— 纯 ASCII 超大输出预览不乱。
 - **判别**: ①落盘日志逐字节完好(`iconv -f UTF-8 -t UTF-8` 整文件校验通过) ⇒ 数据无损, 坏的只是预览解码; ②同会话对照探针: 正文连续 ASCII(截断点必落单字节)预览完好, 含中文且截断点切进汉字(kb.active 在 30,000 字节附近「的」= e7 9a ae 横跨截断区)预览全乱; ③工具源码定案: 解码函数 kme 对「干净且完整 UTF-8」按 UTF-8 解, 否则整段按 legacy(本机 GBK)重解 —— 截断留下的不完整序列尾巴就是触发器。注意显示口径: 工具报的 KB 数按 1024 进制, 30,343 字节显示 29.7KB 仍会落盘, 判定只认字节。
 - **处置**: ①预览乱不丢数据 —— 直接 Read 落盘的 `*-stdout.log` 即原文; ②要内联可读就把输出压到 30,000 字节以内(≈9,900 汉字); ③天然大输出的命令(kb.active 类)加截断/精简, 或接受落盘读文件; ④引擎/工具侧无可修也不许回退(同上节口径); 后台任务 persistOutput=always 与大小无关必落盘。
-  ③已落地(2026-10-02 当日): `gen_active_recent.py`(kb.active)默认按 20,000 字节预算取最近 K 条, 总数/待归档/省略数进页脚, `--all` / `-n N` 逃生 —— 守阵 `tests/test_memory_bank.py::test_kb_active_render_respects_byte_budget`。同族大输出命令若再中招, 照此模式办。
+  ③已落地(2026-10-02 当日): `gen_active_recent.py`(kb.active)默认按 20,000 字节预算取最近 K 条, 总数/待归档/省略数进页脚, `--all` / `-n N` 逃生 —— 守阵 `tests/test_memory_bank_structure.py::test_kb_active_render_respects_byte_budget`。同族大输出命令若再中招, 照此模式办。
 
 ## 重定向变体: PowerShell 5.1 `>` 落盘 = UTF-16LE, UTF-8 读方直接当二进制拒收(2026-10-19 补)
 
@@ -126,7 +126,7 @@
   进程不退不出。编码 `reconfigure(encoding=...)` **不改变缓冲策略**, 修完编码还是看不见。
 - **处置**: 常驻/长跑脚本入口对 stdio 一并 `reconfigure(line_buffering=True)`(同一次 reconfigure 里给,
   见 nav_server.py `_utf8_stdout`); 或者关键行改 `print(..., flush=True)`。守阵:
-  `tests/test_kb_nav.py::test_log_filters_polling` 旁的冒烟路径 + 引擎 stream 通道
+  `tests/test_kb_nav_shell.py::test_log_filters_polling` 旁的冒烟路径 + 引擎 stream 通道
   (commands run.py, 2026-10-04) —— stream 模式 stdio 直连不落管道, 是另一条独立防线。
 
 ## CLI 入口的同一兜底: gtm 非控制台 print 中文会崩(2026-11-03 补, 同因不另立坑档)

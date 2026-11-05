@@ -10,7 +10,7 @@
 - **触发**: 在带切角皮肤的卡片/块盒(`.hb-blk` 等, console/atlas 用 `.hb-cut` + `clip-path: polygon(...)` 实现)**内部**放 `position: fixed` 的覆盖式全屏层(遮罩 + 弹窗), 想让它铺满视口。
 - **判别**: 真浏览器目检(桩数据起盘)发现全屏层**只剩与块盒重叠的部分**可点/可见, 超出块盒的部分像不存在 —— `z-index` 调多高都没用, DOM 检查器里元素坐标是对的。根因: CSS 规范里 `clip-path`(同族还有 `transform` / `filter` / `will-change` 等生成 containing block 的属性)会使该元素成为 fixed 后代的**裁剪/包含上下文**, fixed 的「相对视口」语义在绘制层被截断为「相对该祖先」。静态守阵与代码审查都发现不了(坐标与类名全对), 必须真浏览器目检。
 - **处置**: 覆盖层写成块盒的**兄弟节点**而非子节点(HR 站点状态全屏层: 覆盖层是 `.hb-blk` 的兄弟, 单节点 `v-show` 显隐, 状态在组件 state 天然随行, 零 DOM 搬迁); 同理给这类皮肤写新弹层前先确认祖先链无 clip-path/transform。若确需在裁剪祖先内做浮层, 只能放弃 fixed 改用祖先内绝对定位(即放弃"全屏"语义)。
-- **守阵**: 阶段 2 提交在 settings-detail.html 模板注释里钉了「覆盖层是 .hb-blk 的兄弟而非子节点」的原因(含本坑一句话); `tests/test_webui_static_dom_page.py::test_frontend_hr_full_modal_wiring` 钉三套 UI CSS 成对与接线。
+- **守阵**: 阶段 2 提交在 settings-detail.html 模板注释里钉了「覆盖层是 .hb-blk 的兄弟而非子节点」的原因(含本坑一句话); `tests/test_webui_static_dom_page_hr.py::test_frontend_hr_full_modal_wiring` 钉三套 UI CSS 成对与接线。
 
 ### 入场动画的瞬时 transform 也会位移 fixed 后代 (2026-10-04 实测)
 
@@ -25,4 +25,4 @@
 - **触发**: flux 皮肤 S6 的 push-content(fx.css push 原语, transform 版)开详情面板时给 `main.content` 挂**持久** `transform: translateY(-push)`(此前两节都是瞬时动画 transform), 面板开着期间右键菜单(`.ctx-menu` 族: 行右键/表头菜单/文件优先级/抽屉菜单 —— ctx-menus.html 注入后渲染在 `main.content` 内)全部 `position: fixed` 坐标系被劫持: 实测主表行右键 dy=-464px(= 面板高 378 + sticky 头高 86, 恰为「包含块原点视口位置」)。
 - **判别**: 菜单 rect 与光标差值稳定等于「被 transform 祖先的视口 top/left」; `getComputedStyle(祖先).transform != none` 且 fixed 元素是其后代。**为什么上两节的教训没拦住**: fx push 原语拍板时只评了 layout 警示(transform vs height), 没对「fixed 后代在 main.content 内」跑本坑判据; 且本坑前两节记录的都是设置页瞬时动画, 「持久 transform 载体」是新形态 —— 挂载器消费方(fx-mount.js dock)与原语(fx.css)两侧都没查祖先链。
 - **处置**: push 载体改 `position: relative + top` 位移(不生成 containing block, fixed 后代恢复视口锚定), 视觉同幅读同一份 `--fx-push-y`; 覆盖写在 flux 作用域层(fx-mount.css), fx.css 原语与其它皮肤不动。通用结论升级: **持久 transform 载体**(面板让位/吸附位移这类常驻态)比瞬时动画更凶 —— 动画结束自己好, 载体不好; 给任何元素挂常驻 transform 前先枚举其 fixed 后代。
-- **守阵**: `tests/test_webui_static_skins.py::test_frontend_fx_wiring` 判据 6b 钉 relative-top 覆盖三件在档(transform:none + top 位移 + top 过渡); e2e 探针断言面板开着时主表行/抽屉内右键菜单 rect 与光标差 dx=dy=0。
+- **守阵**: `tests/test_webui_static_skins_skin.py::test_frontend_fx_wiring` 判据 6b 钉 relative-top 覆盖三件在档(transform:none + top 位移 + top 过渡); e2e 探针断言面板开着时主表行/抽屉内右键菜单 rect 与光标差 dx=dy=0。

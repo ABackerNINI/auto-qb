@@ -23,7 +23,7 @@
   让下一次重启再把同一 job 当崩溃窗口重发 —— 本轮实测就是这么漏的(首跑新守阵立刻转红)。
   同理, 「恢复判据」写好了却没人调用也是白搭: 死代码不等于已接线, `grep -rn <函数名> src/` 结果只有
   定义处就该警觉。
-- **守阵**: `tests/test_relocate_exec.py::test_restart_reissues_setlocation_when_never_issued`(崩溃窗口
+- **守阵**: `tests/test_relocate_exec_misc.py::test_restart_reissues_setlocation_when_never_issued`(崩溃窗口
   必补发) · `::test_restart_issued_without_evidence_keeps_polling`(已下发不重发不立刻失败) ·
   `::test_restart_recovers_to_moved_when_data_already_at_dst` · 反向底线
   `::test_restart_does_not_reissue_setlocation`(qB 仍在搬不许重发)

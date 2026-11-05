@@ -11,4 +11,4 @@
 - **触发**: 往 `_kbRows()` 里加一种 `kind`, 或给某动作加/改 `c.kind === "..."` 分支。
 - **判别**: 症状**静默** —— 不报错、无 toast, 只是"按了没反应"; 且**只在某种行上**复现(组行正常、成员行不灵)是本坑指纹。静态守阵只查"方法在不在", 查不出"这条 kind 走没走到分支", 必须真实按键 + 读 DOM 观感。
 - **处置**: 入链改动落地时, 把**全部** `c.kind ===` 分派点列一遍逐个确认覆盖: 展开/收起(`_kbExpandRow`/`_kbCollapseRow`)、选中(`_kbToggleSelect`/`_kbExtend`)、打开(`_kbOpenRow`/`_kbOpenDrawer`)、目标解析(`_kbTargets`/`_kbMeta`/`_kbOpenFolder`/`_kbSingleHash`)。无自身语义的行(叶子)要**显式**给出替代语义 —— 如成员行 ← 收起**所属单元**并把光标带回其行(`_kbParentRow`, 父行判据复用 `_memberRangeList` 与渲染同源), 而不是靠"落到 else 什么都不做"。
-- **守阵**: `tests/test_web_shortcuts.py::test_kb_collapse_parent_row`(静态: 成员行分支在 + 走父行单点 + 光标带回父行) + `e2e/kbd-members.spec.mjs`(真浏览器: 光标进成员行后 ← 收起所属单元并回父行, 双视图双皮肤)。
+- **守阵**: `tests/test_web_shortcuts_cursor.py::test_kb_collapse_parent_row`(静态: 成员行分支在 + 走父行单点 + 光标带回父行) + `e2e/kbd-members.spec.mjs`(真浏览器: 光标进成员行后 ← 收起所属单元并回父行, 双视图双皮肤)。

@@ -123,7 +123,7 @@
     严格判据必须**组件级 `os.listdir` 精确比对**, 全程不碰 `resolve()` / `abspath()`。
 - **处置**: `check_doc_links.py::link_exists` 改组件级精确比对 + 拒绝结尾点/空格的组件名
   (`_is_literal_name`: Windows 存不出这种名字 ⇒ 该链接在 CI 必坏); 守阵
-  `tests/test_memory_bank.py::test_doc_links_rejects_windows_normalized_targets`。
+  `tests/test_memory_bank_docs.py::test_doc_links_rejects_windows_normalized_targets`。
   **红验现场**(退回 `.exists()` 即红): 夹具里三条可疑目标只报出 `kb/x.`, **漏掉 `kb/...` 与 `kb/Cap.md`**
   —— 正是两类漏检的实证。
   **泛化: 任何"按路径存在性判绿"的检查(链接 / 找文件 / 白名单比对)在本机都是上界**;

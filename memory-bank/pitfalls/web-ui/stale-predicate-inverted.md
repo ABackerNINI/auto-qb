@@ -18,7 +18,7 @@
   ③ **同源另一半是对的**: `active` 与 `stale` 一起读就能看出矛盾(活跃时 `stale` 却为真)。
 - **处置**: `stale` 一律写成**否定式** `!(...)`(与 `_drawerStale(hash, seq)` 的 `hash !== hash || …` 同族语义);
   改名/重构时**连同极性一起复核**, 不要只换标识符。若一处是 `!(...)`、兄弟处是 `!!(...)`, 先假定后者是错的。
-  **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_scope_stale_polarity` —— 两层:
+  **守阵**: `tests/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_scope_stale_polarity` —— 两层:
   ① 静态极性(无 node 兜底): `torrent`/`group` 的 `stale` 表达式必须是 `!(t`, 出现 `!!(` 即红;
   ② **运行时行为**(主判据, node 电池): 用 `new Function(源码 + "return _QB_SCOPES;")` 取出作用域表
   (模块级 `const` 不会被 sloppy 直接 eval 漏到外层, 只有 function/var 会), 对三挂点喂

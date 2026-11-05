@@ -20,7 +20,7 @@
   ②顺序不能反: 发布多带「内容实质变化才抬版本」的短路, 若先跑了任务再补发**旧**快照,
   反而会把新视图盖回去; ③这条发布必须包 try/except 只记 ERROR —— 读盘失败不该打死后台线程;
   ④判据: `view_revision`/发布计数在「第一轮任务完成前」就该 > 0。
-- **守阵**: `tests/test_hr_worker.py::test_start_publishes_disk_views_before_first_wave`
+- **守阵**: `tests/test_hr_worker_lifecycle.py::test_start_publishes_disk_views_before_first_wave`
   (用「永远卡在取数上」的假通道把首轮钉在半路, 断言此时 `publisher.revision >= 1` 且判定侧已可用);
   红验实测未修复时正是 `assert 0 >= 1`。
 

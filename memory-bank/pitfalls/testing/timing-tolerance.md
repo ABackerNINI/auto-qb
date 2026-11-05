@@ -17,13 +17,13 @@
   1.8ms 仍会抖)。**不要**为对称加挂钟上界: 负载合法拉长等待, 上界会制造新的假红模式。相关: 同根双 issue
   [26-09-20-0952](../../issues/26-09-20-0952-test-mainloop-tick-timing-flaky.html) /
   [26-09-22-2052](../../issues/26-09-22-2052-test-throttle-test-sleep-tolerance.html)(2026-09-28 修复关闭)。
-- **复发**: 1 —— 2026-10-05 CI 假红: `tests/test_traffic_grid.py::test_group_50_members_correct_and_time_bound`
+- **复发**: 1 —— 2026-10-05 CI 假红: `tests/test_traffic_grid_group.py::test_group_50_members_correct_and_time_bound`
   的**挂钟上界** `elapsed < 3.0` 在 windows-latest 实测 4.01s(同一负载本机插桩中位 ~1.26s) —— 正是上面
   「不要为对称加挂钟上界」形态的**首次真兑现**(上界零容差, 合法负载直接撞线)。处置: 计时改
   `time.process_time`(CPU 时间, 不受 `-n 4` worker 抢占 / 调度放大), 上界 3.0 → 8.0s(≈30s 采样间隔的 1/4,
   仍拦数量级劣化)。**为什么没命中**: 断言 2026-09-19(P4, v2 口径)就写下, 早于本条坑档(09-28); 且本条
   `触发` 词面偏「节流 / 节拍守阵」(下界), 性能**上界**守阵不在路由视野 —— 上界此前只作为「别这么写」的
   告诫存在, 无实测个案可路由; windows-latest job 2026-10-04 才加, 假红此前无处现形。
-- **守阵**: `tests/test_qbmanager.py` `test_run_loop_throttles_without_stop_event` 断言处注释写明余量依据;
-  改守阵判据时先读该注释再动数字。性能**上界**形态的守阵见 `tests/test_traffic_grid.py`
+- **守阵**: `tests/test_qbmanager_*.py` `test_run_loop_throttles_without_stop_event` 断言处注释写明余量依据;
+  改守阵判据时先读该注释再动数字。性能**上界**形态的守阵见 `tests/test_traffic_grid_*.py`
   `test_group_50_members_correct_and_time_bound`(CPU 时间口径, 余量依据同样写在注释 / docstring 里)。

@@ -23,7 +23,7 @@
 - **处置**: ①**根治已落地 (2026-10-04)**: 5 处生成器写盘点(`gen_all.py` / `gen_kb_index.py` / `gen_tasks_index.py` /
   `gen_docs_index.py` / create-issue 的 `gen_issues_index.py`)一律显式 `write_text(..., newline="\n")` —— 原先吃
   `newline=None` 的默认值, 落盘时按 `os.linesep` 翻换行, Windows 上就是 CRLF。守阵
-  `tests/test_memory_bank.py::test_generated_indexes_are_lf_only`(逐字节断言生成物无 CR; `--check` 用 `read_text`
+  `tests/test_memory_bank_structure.py::test_generated_indexes_are_lf_only`(逐字节断言生成物无 CR; `--check` 用 `read_text`
   会把 CRLF 折成 LF, 对行尾不敏感, 所以这条缺陷此前能一路绿灯)。
   ②存量工作区(层3 未做)里**手写**文件仍可能是 CRLF, 归一只需 `git checkout -- <那批文件>`(内容零差异, 安全);
   提交侧 clean filter 本就会归一, 不归也**不进 commit**(blob 不变)。

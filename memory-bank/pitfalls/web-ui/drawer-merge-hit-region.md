@@ -14,4 +14,4 @@
   1. 命不中区域标记时,**不要直接回落"当前/默认值"** —— 先按几何(如指针 `clientX` 与各列矩形)归到最近的区域。
   2. 兜底只作用于**该交互所在的容器**(正文 `.drawer-body`), 不波及同类标记的其它宿主(页签栏/头部右键仍走原回落语义)。
   3. 归列判据用**列矩形右缘**从左到右取首个右缘不早于 x 的列(落在最右列之右取最右列、最左列之左取最左列), 与「左右半区」的视觉直觉一致。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_tpl_menu_right_click_selection`(静态: `_drawerMenuColByX` 存在 + 限定 `dtSplitOn && .drawer-body` + 按 `.dt-col[data-dt-tab]` 取列) + `e2e/drawer-merge.spec.mjs`(真浏览器: 右列下方空白右键仍须弹内容模板, 双皮肤; 真实坐标手势)。
+- **守阵**: `tests/test_webui_static_dom_panel_drawer.py::test_drawer_tpl_menu_right_click_selection`(静态: `_drawerMenuColByX` 存在 + 限定 `dtSplitOn && .drawer-body` + 按 `.dt-col[data-dt-tab]` 取列) + `e2e/drawer-merge.spec.mjs`(真浏览器: 右列下方空白右键仍须弹内容模板, 双皮肤; 真实坐标手势)。

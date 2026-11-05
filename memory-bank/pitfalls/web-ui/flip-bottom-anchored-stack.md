@@ -24,7 +24,7 @@
   `getBoundingClientRect()` 量视口位置(存 WeakMap); ② 再拿上一轮的值比对: 高度变了(等待态结算成
   终态)就补 `height` 关键帧, 只是位移就补 `transform: translateY(dy) → 0`。底锚定容器里高度一动,
   上沿自然跟着走, 不需要额外补位移。
-- **守阵**: 静态面 `tests/test_webui_static_skins.py::_scan_message_surface_parity` 钉「`toastSync`
+- **守阵**: 静态面 `tests/test_webui_static_skins_*.py::_scan_message_surface_parity` 钉「`toastSync`
   与 `toastDrop` 都必须调 `flipStack()`」(少一处 = 插入/退场有一侧回到瞬移); 行为面只能靠浏览器取证:
   `node.getAnimations()` 里应能看到 `translate`(邻居让位) / `height`(自身结算) 关键帧。
 - **复发**: 0

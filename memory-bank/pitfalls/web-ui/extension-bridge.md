@@ -81,7 +81,7 @@
 
 ## 守阵
 
-`tests/test_extension_proxy.py`(条数见 `commands run kb.baseline`): manifest 作用域(MV3 / 只申请回环 / **绝不 `<all_urls>`** / 站点走可选权限) ·
+`tests/test_extension_proxy_*.py`(条数见 `commands run kb.baseline`): manifest 作用域(MV3 / 只申请回环 / **绝不 `<all_urls>`** / 站点走可选权限) ·
 **真跑** `normalize.js`(裸域名 / localhost / https / 非法输入) · 归一化只有一份且载入顺序正确 ·
 **与后端协议常量对照**(端点路径 / 鉴权头 / 回传字段名, 用 `HrResult.from_json` 实测) ·
 调用顺序(归一化先于权限/存储 API) · 不得留裸拒绝 ·

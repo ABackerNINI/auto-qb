@@ -18,7 +18,7 @@
   折成 `localhost`, **对外地址(含 `0.0.0.0`)原样返回** —— 把暴露面也折掉等于掩盖风险;
   非字符串原样返回(调用方都在日志路径上, 不该炸)。已接三处: `webui/server/lifecycle.py`
   (启动成功 / 失败两行)、`scripts/dev_webui.py`、`README.md` 快速开始。
-- **守阵**: `tests/test_utils.py::test_display_host`(回环折 localhost / 对外原样 / 异常入参不炸)。
+- **守阵**: `tests/test_utils_parse.py::test_display_host`(回环折 localhost / 对外原样 / 异常入参不炸)。
 
 ## 另有两类 `127.0.0.1` 不许跟着改
 

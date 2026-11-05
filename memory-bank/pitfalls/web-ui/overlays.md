@@ -182,7 +182,7 @@
   `_selSeedAnchorFromCursor` **逐 kind(group/member/unit)试落** —— `_selContext` 只回当前视图
   主 kind(辅种页恒为 group), 单 kind 落点覆盖不到成员行的 member kind(辅种页成员行 Shift 手势
   同根取不到原点, 2026-10-19 一并收编)。
-  守阵: `tests/test_web_shortcuts.py::test_shift_anchor_unified`(五入口 seed 调用位于 kbCursor
+  守阵: `tests/test_web_shortcuts_cursor.py::test_shift_anchor_unified`(五入口 seed 调用位于 kbCursor
   改写之前且限 Shift; 落点覆盖 member/unit kind; `_kbExtend` seed 先于 `_kbMove`) +
   e2e `e2e/shift-select-anchor.spec.mjs`(2026-10-19, 双皮肤 @fast: 种子页"Esc 后 Shift 连选以
   光标为起点"原报场景 + 辅种页成员行同根场景 + 无 Esc 常规路径回归; 已做红验 —— 回退修复后

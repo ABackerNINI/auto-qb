@@ -16,6 +16,6 @@
 - **处置**: 把容器级规则收窄成**直接子代** (`>`), 只钉它本意那一个 (`.gsearch > svg`);
   新子元素的 svg 保持流内由父 flex 居中 (auto-qb `.bt.icon` + `.ico` 同机制, 不给图标
   单独 absolute)。改完真机量 dx/dy 双 0 收口。
-- **守阵**: `tests/test_kb_nav.py::test_gsearch_clear_button` 断言壳 CSS 里
+- **守阵**: `tests/test_kb_nav_interaction.py::test_gsearch_clear_button` 断言壳 CSS 里
   `.gsearch svg` 不存在且 `.gsearch > svg` 在位。
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

@@ -30,7 +30,7 @@
   **子目录被全部过滤掉(目录树恒空)** —— 看着像"这个目录就是空的", 完全不像越界。
 - **处置**: 设一个 `_bare()` 专剥前缀(`\\?\UNC\` 还原成 `\\`), 在 `normcase` / `path_normalize` **之前**调用;
   比较与返回都只认剥后形态。`_fs()` 的入参也先 `_bare` ⇒ 幂等(重复加前缀不叠加、不折坏)。
-- **守阵**: `tests/test_web_hr.py::test_fs_path_helpers_strip_long_path_prefix_before_compare`(纯路径归一,
+- **守阵**: `tests/test_web_hr_fs.py::test_fs_path_helpers_strip_long_path_prefix_before_compare`(纯路径归一,
   任何平台都跑 —— 故这三个 helper 特意放在**模块级**而不是路由闭包里)。
   ⚠ `os.path.realpath` **是否保留前缀与路径长度有关**(实测短路径保留、长路径剥掉) ⇒ 不能依赖它, 必须显式剥。
 
@@ -53,8 +53,8 @@
   代价: 窗口标题/地址栏会显示 `\\?\H:\…` 原样前缀(功能正常, 属外观瑕疵)。
   ⚠ **"进入"目录是另一条路线**(2026-10-11): `SHOpenFolderAndSelectItems` 对目录 pidl **也是"打开父窗口并选中该目录"**, 不是进入。要真正**进入**目录(显示其中内容)须走
   `ShellExecuteExW`(`fMask=SEE_MASK_INVOKEIDLIST`(0x0C, 已含 `SEE_MASK_IDLIST`), `lpVerb="open"`, `lpIDList=目录 PIDL`) —— 在 PIDL 上执行 `open` 默认动作 = 进入, 且**长路径安全**(全程 PIDL, 不碰字符串长度)。
-  单点 `utils._win_shell_enter`(与 `_win_shell_open` 共用 `_win_shell_with_pidl` 收 COM 配对 / `ILFree` 释放); `open_path` 目录分支 enter 优先、`_win_shell_open` 作降级(至少把用户带到该目录所在处)。守阵 `tests/test_utils.py::test_win_shell_enter_pidl_routes`。
-- **守阵**: `tests/test_utils.py::test_open_path_windows_*`(平台分支) + **`tests/sidefx.py` 的 LAUNCH 类必须收录该入口**
+  单点 `utils._win_shell_enter`(与 `_win_shell_open` 共用 `_win_shell_with_pidl` 收 COM 配对 / `ILFree` 释放); `open_path` 目录分支 enter 优先、`_win_shell_open` 作降级(至少把用户带到该目录所在处)。守阵 `tests/test_utils_windows.py::test_win_shell_enter_pidl_routes`。
+- **守阵**: `tests/test_utils_windows.py::test_open_path_windows_*`(平台分支) + **`tests/sidefx.py` 的 LAUNCH 类必须收录该入口**
   —— 它是 ctypes 直调 shell32, 不经任何 stdlib 入口, 不单列就是守阵盲区。
 
 ### `shutil.rmtree("\\?\…")` 会失败 —— 删长路径树要手工上溯

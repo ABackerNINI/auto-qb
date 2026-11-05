@@ -12,7 +12,7 @@
   ②**规则暴露点是否落在决策点** —— 写在只对 `memory-bank/**` 生效的 instruction 里, 而"该不该立档"的决策发生在
   编辑 `src/` 的时刻 ⇒ 规则不在上下文里;
   ③**阈值是否可判定** —— "大任务要立档"无阈值 ⇒ 默认不立档;
-  ④**有没有机械后果** —— 现由 `tests/test_memory_bank.py` 双向校验索引 ↔ 文件 / 命名 / 状态分区 / 必备章节。
+  ④**有没有机械后果** —— 现由 `tests/test_memory_bank_*.py` 双向校验索引 ↔ 文件 / 命名 / 状态分区 / 必备章节。
 - **处置**: 按查出的那一项补 —— 补载体 / 把规则挪到决策点 / 写死阈值 / 加守卫。**"再强调一遍"是最没用的处置。**
 
 ### 埋点 / 验收口径必须有人消费
@@ -43,7 +43,7 @@
   `my-commit-flow` 的 `memory-bank/` 闸门**同集**(改了闸门就要同步这两个任务的 `run`);
   ②**提示按脚本查表**(`_common.GEN_CMD_BY_SCRIPT`), 别退化成"所有脚本同一句" ——
   只校验不写文件的脚本(`gen_active_recent.py`)的"重跑"是 `kb.active --check`, 不是重建命令。
-  守阵 `tests/test_memory_bank.py::test_gen_cmd_hints_name_real_tasks`: 调用点全覆盖 +
+  守阵 `tests/test_memory_bank_structure.py::test_gen_cmd_hints_name_real_tasks`: 调用点全覆盖 +
   task id 真实存在 + **提示说跑 `kb.index` 的脚本必须真的在它的 run 列表里**(两处红验过:
   退回旧的两条 `kb.index` ⇒ 红; 删掉一条 `GEN_CMD_BY_SCRIPT` 登记 ⇒ 红)。
 
@@ -56,7 +56,7 @@
   三份基线切片缺三行头, `kb.check` 第 4 条 (`gen_baseline_recent --check`) 恒红, 而闸门里
   **既没有它、也没有 `check_wording --check`** —— 两条都漏了。
 - **处置**: 把缺的 `<脚本> --check` 补进 `.my-commit-flow.toml` 的 `[[gates]]` run 清单; 守阵
-  `tests/test_memory_bank.py::test_commit_gate_covers_kb_check` 钉住「闸门 ⊇ `kb.check`」
+  `tests/test_memory_bank_docs.py::test_commit_gate_covers_kb_check` 钉住「闸门 ⊇ `kb.check`」
   (取 `kb.check` 的每条 `--check`, `gen_all` 展开成 `GENERATORS`; 改闸门漏同步即红)。
   与本节上一条是**同一条纪律的两个方向**: 那条管"判红了修不修得掉", 这条管"该判的有没有判"。
 

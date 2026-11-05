@@ -59,7 +59,7 @@
   ③令牌必须**三皮肤(atlas/console/prism)+ prism 五主题(ocean/galaxy/orbit/frost/golden)成对定义**
   —— 缺一个就是那套皮肤下斜纹不可见。
   ④纪律: 面积底纹 / 高对比标注**一律单列专用令牌**, 不复用发丝线 / 网格线令牌。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_qb_traffic_yaxis_and_annotation`
+- **守阵**: `tests/test_webui_static_dom_panel_traffic.py::test_frontend_qb_traffic_yaxis_and_annotation`
   §5b 静态锚(令牌三皮肤 + 五主题成对、亮主题禁白 + **逐 run 缺口矩形 clip 存在**)+ node 电池
   (记账式假 ctx 调真实 `_qbDrawGaps`, 断言写入的 `strokeStyle` 走专用令牌、`globalAlpha` 不折半、
   **per-run clip == 缺口矩形**、扫线覆盖缺口两边界、线段跨度恒 = H)。

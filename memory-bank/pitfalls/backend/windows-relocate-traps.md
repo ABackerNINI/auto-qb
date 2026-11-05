@@ -23,7 +23,7 @@
 - **触发**: 组键是 `(物理目录, 文件元组)` 派生值 —— 迁移/回滚/重归组会让它**更换**；WebUI 增量视图的脏行推导只认 `member_to_key`（新键），旧键行既不在 upsert 也不在 removed；而 upsert/removed 桶的跨代抵消（R5）又会把「先 upsert 后 removed」的同键两清。
 - **判别**: 迁移/撤销后 `/api/groups` 少一组或同组成员出现两行（旧键+新键）；重启 auto-qb 后恢复正常（全量重建）；store 侧 `groups/member_to_key` 实际自洽。
 - **处置**: 归组路径（`_leave_group`/`_assign_to_group`）把旧/新键登记进 `store.group_key_migrations`；WebUI 排空段见待办即标**本代 full**（与 `row_key_unresolvable` 同口径，保守正确优先），并让「有 full 理由」本身触发一次重建（纯重键轮可能不伴随 `view_changed`）。
-- **守阵**: `tests/test_webui_delta.py::test_group_key_migration_old_removed_new_upsert`。
+- **守阵**: `tests/test_webui_delta_delta.py::test_group_key_migration_old_removed_new_upsert`。
 
 ### 作用域解析把「同 save_path 的别组」当成自己人 —— 单成员 direct 误判
 

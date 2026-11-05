@@ -13,7 +13,7 @@
 - **判别**: 需要区分**同 kind 不同 state** 的场合 —— `/api/state` 各行与详情 `to_dict()` 都带 qB 原文 `state`(`queuedDL` / `stoppedUP` / `checkingResumeData` / `missingFiles` / `moving` …), 而项目派生字段 `kind` 现 **7 档**: `queuedDL` 与 `downloading` 同为 `downloading`(`queuedUP` 与 `uploading` 同为 `seeding`)。
 - **⚠ 2026-10-29 新增的反向坑(同类第四例)**: 反过来也存在**"谓词收不到、kind 却收得到"**的状态 —— qB 的 `moving`(搬迁存储位置中)不属于 `TorrentState` 的**任何**谓词集合(is_downloading/is_uploading/is_complete/is_checking/is_errored/is_stopped 全不含它), 于是 `state_kind` 一路判空撞兜底 ⇒ 落成 `other`, 界面显示「其他」。这类"孤儿成员"的双重后果是: **显示层错位**(2026-10-29 用户报"移动中显示成了其它")且**门控层放行**(不在 blocked 表里 = 被当活跃, 强制汇报/删除前汇报都能点 —— 而 qB 在 moving 期间 peer 传输是真停的, 汇报换不回 peer)。**补法必须两边同时落**: `state_kind` 里单独成档(显示/筛选/统计)+ 前后端两张 blocked 表同步登记(门控); 只做成档不做门控 = 修了显示、漏放行。(第三方库同族孤儿还有 `allocating`, 已与 moving 同档合并 —— qB v5.3.0 不再产出, 老版回连才会复刻。完整穷举见上述计划文档 §03 全映射表)
 - **处置**: 门控读 `state`, 只在 `state` 缺失(老版本/异常行)时**回落** `kind` 的 paused/checking/error 三档兜底(2026-10-29 起 moving 亦然 —— 走 state 主路径, kind 兜底不扩那一档以免本末倒置)。判据单点 = `shared/decorate.js::REANNOUNCE_BLOCKED_STATES`(qB 口径逐项: paused*/stopped*/queued*/checking*/error/missingFiles/**moving**) + `REANNOUNCE_BLOCKED_KINDS`; 后端同名表在 `commands.py`, 与前端逐项同表由守阵钉住。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_reannounce_inactive_gate_wiring` —— 含 node 电池真跑(关键一条: `state=queuedDL` 且 `kind=downloading` 仍须判非活跃)。
+- **守阵**: `tests/test_webui_static_dom_panel_misc.py::test_frontend_reannounce_inactive_gate_wiring` —— 含 node 电池真跑(关键一条: `state=queuedDL` 且 `kind=downloading` 仍须判非活跃)。
 
 ## 一条"不允许"必须接**全部**入口, 少接即形同虚设
 

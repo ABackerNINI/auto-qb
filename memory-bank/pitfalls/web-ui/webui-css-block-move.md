@@ -12,5 +12,5 @@
   ② **文件前段式断言** —— 形如 `"inset: 0" not in css.split(".drawer-leave-active")[0]`(拿"某规则之前的整段文本"当判据)。原文件里该规则排在最前, 搬进弹窗层文件后 `.modal-mask`(合法地用 `inset: 0`)排到了它前面 → 假红;
   ③ shell 体量 cap —— 多一条 `<link>`(带注释两条)就顶破 `index.html ≤218 行`, 报"模板分片接线问题"。
 - **处置**: ①先改守阵读法再判定是不是真缺陷: 单文件引用改 `_ui_css_aggregate(ui)`(link 序聚合)或改到新路径; 前段式断言改成**逐条抽该选择器的声明体**来判(`re.findall(r"\.sel[^{]*\{([^}]*)\}", css)`); shell cap 按既有惯例"带理由 +N"(注释里续写一句谁加的)。②搬家等价性**先证后信**, 三件套: (a) 静态 —— 解析搬前(两文件)与搬后(三文件)的 `(媒体上下文, 选择器, 属性) → 赢家值` 表, 必须逐项相等, 再补一遍"特异性平手 + 末段类名相交 + 顺序反转"的交叉对清单人判能否同时命中; (b) 像素 —— 真浏览器桩服务下改前/改后各截同状态图(主列表/种子页/抽屉开/添加弹窗/设置页)逐像素比, 目标是 **0 差异**(改动前先跑两遍证明基线可复现, 只剩 topbar 数据噪声); (c) 用例 —— `test.full` + `npm run test:e2e:fast`(抽屉/弹窗几何断言是真浏览器兜底)。
-- **守阵**: `tests/test_webui_static_skins.py::test_frontend_template_split_wiring`(三皮肤链接序 + 行数口径) / `::test_frontend_skin_css_token_parity`(令牌名集相等, 防"少声明一个令牌 ⇒ 该皮肤 `var(--x)` 整条静默作废")
+- **守阵**: `tests/test_webui_static_skins_skin.py::test_frontend_template_split_wiring`(三皮肤链接序 + 行数口径) / `::test_frontend_skin_css_token_parity`(令牌名集相等, 防"少声明一个令牌 ⇒ 该皮肤 `var(--x)` 整条静默作废")
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

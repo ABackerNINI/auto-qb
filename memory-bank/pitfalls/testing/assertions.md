@@ -121,7 +121,7 @@
 - **触发**: 全量跑出 1 条红。
 - **判别**: 同一份代码全量跑两次: 一次 `1097 passed + 1 failed`, 一次 `1098 passed` ——
   它是**墙钟时序**断言(主循环节流间隔), 在覆盖率开启 + 全量负载下偶发超时;
-  单跑 `tests/test_qbmanager.py` **43 passed 恒绿**。
+  单跑 `tests/test_qbmanager_*.py` **43 passed 恒绿**。
 - **处置**: 全量跑出 1 条红时**先换全新临时根重跑一次再判回归**, 别急着改代码 ——
   **真回归会稳定复现**。
 
@@ -176,6 +176,6 @@
   `_ui_css_effective(ui)` = 皮肤聚合 + shell 里挂的 shared CSS(link 序) —— 判据落在**该皮肤实际吃到的级联面**上;
   ③ 收敛类改动的等价性别靠人眼: 对改前/改后各现算一次「最终生效规则表」(按 link 序拼接后取每个 selector 的最后
   一条声明), 逐条比 selector→body, 再查生效表内有无重复声明 —— 三者全等才算「搬了位置、没改结果」。
-- **守阵**: `tests/test_webui_static_skins.py::test_frontend_hr_detail_table_wiring`(反向断言: 徽章底形族必须在各
+- **守阵**: `tests/test_webui_static_skins_table.py::test_frontend_hr_detail_table_wiring`(反向断言: 徽章底形族必须在各
   皮肤自己的 CSS 里) / `tests/webui_helpers.py::_ui_css_effective`。
 - **复发**: 0

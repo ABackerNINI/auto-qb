@@ -9,7 +9,7 @@
 - **触发**: 窗口化引擎的行高签名(`_measureRowH` 的 sig)把 viewMode 这类「不真正改变行几何」的因子算进去; 切标签页(torrent/group/member 视图互换)→ 签名失配 → 三 kind 行高全表作废 → 回原视图时退回全量渲染量齐, 3000 行下单发 5.8~8.4s longtask。
 - **判别**: 切页后第一拍出现秒级 longtask, CDP 栈顶全指向 `_measureRowH ← updated (lifecycle.js)`; `getBoundingClientRect` 自耗秒级(布局抖动); `_winMeasured` 被翻 false。
 - **处置**: 签名因子白名单化 —— 只保留**真正改变行几何**的因子(resize 代 `_winResize`、列集合 colcounts); 每加一个新因子先自问「它变时行高会变吗, 有没有别的因子已经盯住它」。
-- **守阵**: `e2e/window-invalidation.spec.mjs` ①(切页往返不重置行窗) + `tests/test_webui_static_dom_page.py::test_frontend_row_window_sig_and_ctn_sync_guard`(静态断言签名无 viewMode)。
+- **守阵**: `e2e/window-invalidation.spec.mjs` ①(切页往返不重置行窗) + `tests/test_webui_static_dom_page_layout.py::test_frontend_row_window_sig_and_ctn_sync_guard`(静态断言签名无 viewMode)。
 
 ### 容器离场过渡期(clientWidth 跳变)被 ResizeObserver 当真 resize, 假 bump 与主表共用的引擎态
 

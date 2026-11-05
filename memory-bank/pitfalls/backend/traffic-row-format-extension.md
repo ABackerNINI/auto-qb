@@ -11,7 +11,7 @@
 - **触发**: 给「列数白名单」解析的行型加列(实例: v4 z 行加末端快照对, plan 26-10-16-1509 形态 D; 行型本身有可选尾列 dt_ms)。
 - **判别**: 列出新旧形状的**列数集合** —— 若存在交集即歧义(6 列: 是「dt + 半对」还是「无 dt 的整对」? 解析器无法判别)。判据与值有没有默认无关, 只看列数能否唯一映射形状。
 - **处置**: 位次插在可选尾列**之前**(`z,rl,dlt,upt[,dle,upe[,dt_ms]]`: {4,5} = 旧, {6,7} = 新, 两集合无交集), 解析按列数分支。同族要点: 新解析器必须同时接受新旧形状(旧 → None → 语义退化); 写出侧恒写新列(拿不到时写与旧列同值 = 显式退化), 避免「有无新列」的两态行为分叉。
-- **守阵**: `tests/test_traffic_store.py::test_v4_z_end_pair_shapes_legacy_compat`(混合形状同文件共存) · `::test_v4_format_fail_fast_and_torn_tail`(位次文本逐字钉住)。
+- **守阵**: `tests/test_traffic_store_codec.py::test_v4_z_end_pair_shapes_legacy_compat`(混合形状同文件共存) · `::test_v4_format_fail_fast_and_torn_tail`(位次文本逐字钉住)。
 
 ### 回滚到未扩列的旧版本: 旧解析器把新行整行判坏
 

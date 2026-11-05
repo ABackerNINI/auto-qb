@@ -1,6 +1,6 @@
 # node 守阵在本机静默跳过 = 假绿, 阈值类改动必配红验
 
-> 摘要: 扩展行为守阵(`tests/test_extension_proxy.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass**
+> 摘要: 扩展行为守阵(`tests/test_extension_proxy_*.py` 的 node VM 场景)在没有 node 的机器上**静默 return 当 pass**
 > 等级: L0
 > (docstring 明示的同口径), 于是「test.full 全绿」对这一层守阵是**假绿灯**: 09d4109(26-09-27)把 site-caps.js
 > 阈值提至 page 60/时·600/日、torrent 50/时·200/日, 但三条钉旧值 10/50 的守阵红了**一天没人看见** ——
@@ -12,7 +12,7 @@
 
 ### 3 条配额守阵漂移红了一天没人看见 (2026-09-28)
 
-- **触发**: 本轮(扩展日志降噪)为真跑新守阵, 下载便携 node 临时入 PATH 跑 `tests/test_extension_proxy.py`,
+- **触发**: 本轮(扩展日志降噪)为真跑新守阵, 下载便携 node 临时入 PATH 跑 `tests/test_extension_proxy_*.py`,
   `test_extension_quota_caps_and_refuses` / `test_extension_quota_windows_roll_over` /
   `test_background_events_ring_dual_write` 三条**同时红** —— 而前一天 `test.full` 一直「全绿」。
   根因: 三条守阵用 node VM 真跑 background.js + site-caps.js, 断言钉死「本小时访问上限 10 次」

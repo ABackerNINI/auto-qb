@@ -30,7 +30,7 @@
 ## 两个配套坑
 
 - **新增非 `_index.md` 的生成物会让守阵红**: `test_gen_all_declares_exactly_all_indexes` 按
-  「产出 == 库内全部 `_index.md`」比对 ⇒ 归档索引一出现就红。正解是在 `tests/test_memory_bank.py`
+  「产出 == 库内全部 `_index.md`」比对 ⇒ 归档索引一出现就红。正解是在 `tests/test_memory_bank_*.py`
   的 `EXTRA_GENERATED` 里**显式登记**, **别**把断言放宽成恒真(那样白名单多报手写件就没人拦了)。
 - **生成器必须同批产出主索引与归档索引**: 主流程是 `gen_all.collect()`(它被 `kb.index` 与
   `gen_issues_index --check` 共用); 只加进 `gen_issues_index.main()` 会让它俩对不上 ⇒ `--check` 恒红。

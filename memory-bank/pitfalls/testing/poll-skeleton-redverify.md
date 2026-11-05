@@ -33,6 +33,6 @@
 - **处置**: 电池一律带 `timeout=`(本仓取 60s)并在 `TimeoutExpired` 里抛**人话断言**
   (「骨架循环疑似失控 —— 拍数递增 / 收摊条件被拆?」), 让红验的结论是「红」而不是「挂」;
   排查时先 `taskkill //F //IM node.exe` 清残留进程, 再按上面第一条核对源码是否被突变残留。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_frontend_poll_skeleton_single_point`
+- **守阵**: `tests/test_webui_static_dom_panel_misc.py::test_frontend_poll_skeleton_single_point`
   (电池调用带 `timeout=60`)。
 - **复发**: 0 (复踩时在此行追加「+N (日期): 为什么没命中」, 无复发可删本行)

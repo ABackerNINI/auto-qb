@@ -41,7 +41,7 @@
 - **处置**: 先用 `\*\*([^*\n]+)\*\*` **取出配对好的粗体段**, 再对**段内容**跑判据(而不是对整行跑一个
   带 `\*\*` 边界的长正则)。同时: 一次性清洗脚本要 `import` 守卫的 `scan_text` 复用同一判据 ——
   实测首版两边各写一份, 命中数差 2 处(守卫多抓粗体形态), 清完仍留违规。**判据单点是"清的就是守的"的前提**。
-- **守阵**: `tests/test_memory_bank.py::test_wording_guard_flags_status_but_exempts_dated_and_tree_state`
+- **守阵**: `tests/test_memory_bank_docs.py::test_wording_guard_flags_status_but_exempts_dated_and_tree_state`
   的夹具里第 4/5 行故意各含一个粗体段, 钉住"不跨段误报"。
 
 ### ❗"回给调用方的摘要"不能只取末 N 行 —— 结论在最后, 异常行在中段; 但"摘要 + 略过提示"同样错, 终点是全文透传

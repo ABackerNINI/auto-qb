@@ -10,4 +10,4 @@
 - **触发**: 改键盘选择 / 范围选择 / 批量目标解析; 或任何"候选列表随视图或展开态变化"的操作。
 - **判别**: 症状**静默** —— 不报错、无 toast, 只是选中集合不增长; 且**只在部分视图复现**(种子页正常、辅种/追剧页失效)是本坑指纹。静态守阵看不出来(它只查"方法在不在 / 调用顺序对不对"), 必须真实按键 + 读选中态。
 - **处置**: 候选列表收成**一个按上下文解析的单点**(本仓库 = `selection.js::_memberRangeList`: 种子页 = `filteredTorrents`; 辅种页 = 展开组的成员; 追剧页 = 展开集的版本), 键盘 `_kbExtend` 与鼠标 `shiftMemberSel` 两个入口都吃它。取序与渲染 / 光标链同源(`sortedMembers`), 保证"屏幕上下 = 选择上下"。
-- **守阵**: `tests/test_web_shortcuts.py::test_kb_member_range_context_aware`(静态: 三分支齐全 + `_kbExtend` 走单点) + `e2e/kbd-members.spec.mjs`(真浏览器: 辅种页 Space 选中后 Shift+↓ 选中数 1→2)。
+- **守阵**: `tests/test_web_shortcuts_cursor.py::test_kb_member_range_context_aware`(静态: 三分支齐全 + `_kbExtend` 走单点) + `e2e/kbd-members.spec.mjs`(真浏览器: 辅种页 Space 选中后 Shift+↓ 选中数 1→2)。

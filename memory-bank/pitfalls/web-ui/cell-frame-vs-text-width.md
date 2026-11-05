@@ -11,4 +11,4 @@
 - **触发**: 给 grid 行里可点筛选的单元格(模板挂 `f-cell` + `f-on`, 点击走 `filterFromChip`)写强调样式 `.f-cell.f-on { box-shadow: inset 0 0 0 1px currentColor }`。站点/标签/分类 chip 是 inline 元素没问题; `.g-save-path`(保存路径列)是拉满列宽的块级 div —— 点路径筛选后强调框撑满整列。用户报障口径「点击路径筛选后匹配的路径强调框宽度错误, 宽度跟随保存路径栏宽度而不是文字宽度」(2026-10-09)。
 - **判别**: 强调元素是不是 grid/flex 行里被拉伸布满的**块级单元格本身**(判据: 单元格在模板上是 `div` 直接承载 `f-cell`)。同族前科: `.m-dur` 的整格 hr-line 曾挂在 `.m-dur` 上画成整列一条, 教训只写在 torrents.html 模板注释里(「整格线必须挂 .dur-body(文字包裹层)」), 未入坑档路由不到。凡「框/线宽度 = 列宽而预期 = 文字宽」都查这一条。
 - **处置**: 文字包一层内联块包裹层, `f-cell`/`f-on`/`@click`/`:title` 的框职责整体挪上去(外层 div 只留列省略兜底); 包裹层自带 `display:inline-block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; vertical-align:bottom` —— 短路径框贴文字, 超长路径铺满整列并省略、不破列。本次: torrents.html / groups.html 保存路径格内包 `<span class="sp-body f-cell">`, 三皮肤(atlas/console/prism)views.css 各增一条 `.g-save-path .sp-body` 规则(单页应用全局生效, 每皮肤一处即可; atlas/components.css 已顶 700 行上限, 新规则别往里塞)。
-- **守阵**: 无专项 —— 视觉宽度类缺陷, `tests/test_webui_static_skins.py` 只保结构与体量不超限; 真机核验走截图目检。
+- **守阵**: 无专项 —— 视觉宽度类缺陷, `tests/test_webui_static_skins_*.py` 只保结构与体量不超限; 真机核验走截图目检。

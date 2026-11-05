@@ -20,7 +20,7 @@
   守阵 `test_webui_static_dom_panel.py::test_drawer_tpl_registry_wiring` §4a 断言三 fetcher 内
   `loading = false` 的位置先于 `_dtNotify`。给变体加新消费状态时同问一句: 这个状态翻转
   的每条路径都有通知跟着吗。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_tpl_registry_wiring`(§4a 次序断言)。
+- **守阵**: `tests/test_webui_static_dom_panel_drawer.py::test_drawer_tpl_registry_wiring`(§4a 次序断言)。
 
 ### sig 跳过重建会把「随时间变化」的派生值冻帧: 时间基准必须计入 sig
 
@@ -33,7 +33,7 @@
   才跳一次。表上表现为"倒计时不走/隔很久才动", 无任何报错。
 - **处置**: 把**时间基准**计入 sig(`nowSec = Math.floor(Date.now()/1000)`, 每秒变 ⇒ 每次通知都重算,
   实际刷新粒度 = 轮询周期)。判据: 变体里凡有"显示值 = f(now)"就必须让 sig 感知 now。
-- **守阵**: `tests/test_webui_static_dom_panel.py::test_drawer_tpl_trackers_per_tracker_reannounce`(断言 sig 含 `nowSec`)。
+- **守阵**: `tests/test_webui_static_dom_panel_drawer.py::test_drawer_tpl_trackers_per_tracker_reannounce`(断言 sig 含 `nowSec`)。
 
 ### Vue <transition> 接 JS 钩子做布局动画: 钩位/几何登记/迟到的 after 钩子三处静默坑
 
@@ -51,7 +51,7 @@
   可见高(同帧零跳变) + seq 代际闸管 rAF 循环 + 豁免 reduced-motion 与窄屏全屏态。实例
   (2026-10-04 抽屉出入过渡): drawer.js 出入过渡块 + `drawer.html` `<transition>` 接线 +
   `shortcuts.js::_kbViewBottom` 优先读 `_drawerAnimTop` 登记值。
-- **守阵**: `tests/test_web_shortcuts.py::test_drawer_transition_dock_anim`(钩位 @enter / 槽位
+- **守阵**: `tests/test_web_shortcuts_drawer.py::test_drawer_transition_dock_anim`(钩位 @enter / 槽位
   插值 / 收场双高同步 / 登记单点消费 / seq 闸 / after 守卫 / 三皮肤 CSS 成对)。
 
 ### 挂件类名错配 ⇒ 整页静默废掉
@@ -210,6 +210,6 @@
 - **处置**: e2e 改点**段头本身**(它才是 role=button), 并顺手把 `aria-expanded` 的翻转也断言上 ——
   把可访问性契约变成断言, 而不是只把 locator 换个写法糊过去。别用 `includeHidden: true` 绕:
   那等于把"用户其实点不到这个钮"这件事写进测试。
-- **守阵**: `tests/test_webui_static_skins.py::test_frontend_tpl_ctl_bits_single_source`(段头
+- **守阵**: `tests/test_webui_static_skins_skin.py::test_frontend_tpl_ctl_bits_single_source`(段头
   role/tabindex/aria-expanded + 内钮 aria-hidden/tabindex=-1 的模板形态); 真手势侧在
   `e2e/views.spec.mjs` 的 B4 用例(`srcHead.click()` + `toHaveAttribute('aria-expanded', ...)`)。

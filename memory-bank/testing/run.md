@@ -9,8 +9,8 @@
 commands run env.sync                       # 依赖统一 uv 管理 (pyproject.toml + uv.lock); 首次 / 依赖变更后
 commands run test.full                      # 全量 (pytest.ini 已带 --cov=src --cov-report=term-missing --cov-branch)
 commands run test.quick                     # 快速迭代; 提交闸门 (auto = true) 跑的就是这一档, 覆盖率基线另算
-commands run test.one -- tests/test_grouping.py          # 单文件
-commands run test.one -- tests/test_checking.py -k skip  # 按关键词
+commands run test.one -- tests/test_grouping_*.py          # 单文件
+commands run test.one -- tests/test_checking_*.py -k skip  # 按关键词
 ```
 
 - **当前基线数字** → [baseline.md](baseline.md)(口径段; 看数字 `commands run kb.baseline`); **逐次增量流水** → `testing/baselines/` 切片。

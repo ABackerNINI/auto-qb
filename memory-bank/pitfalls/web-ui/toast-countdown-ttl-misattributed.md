@@ -35,7 +35,7 @@
   ③ sticky 条(ttl=0)照旧不挂 —— 归档成终态/「已投递」时才由 `_finishToast` 补上, 语义不变。
   修后实测: 归档条 4000 / 结果条 12000, 结果条在 11916/12000 时节点消失, 进度条终点 = 退场时刻。
 
-- **守阵**: `tests/test_webui_static_skins.py::_scan_message_surface_parity` 第 20 项 —— 三条
+- **守阵**: `tests/test_webui_static_skins_*.py::_scan_message_surface_parity` 第 20 项 —— 三条
   判据(都红验过): ① `var own = id != null` 与 `own && ttl > 0` 同时在档; ② `setAttribute("data-fx-cd"`
   **全文件唯一一处**(旁路 = 绕过归属判定); ③ `shared/ui_feedback.js` 里每个 `toastSync(...)`
   都必须两参且第二参是 `id`。静态守阵钉不住"两处时序谁先执行", 改这块仍需浏览器里看一次

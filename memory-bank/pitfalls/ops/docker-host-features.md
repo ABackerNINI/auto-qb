@@ -30,7 +30,7 @@ PlatformChannel()                                  ->  _build_linux ; send() -> 
 - 因此 `/api/open-path` **先**因路径不可见返回 **404**(前端 toast「目标目录不存在或不可访问」);
   只有把下载目录挂成可见之后, 才会暴露第二层 —— `xdg-open` 缺失 ⇒ **500**。两层根因不同, 别只修一层。
 - `check_missing_files` **默认 `true`** ⇒ 不显式关就会踩。2026-09-26 起 `docker/config.example.yml` 已显式写
-  `false`, 并由 `tests/test_config.py::test_example_docker_config_yml_passes_fail_fast` 钉住 —— **自己手搓的容器配置仍要记得关**。
+  `false`, 并由 `tests/test_config_load.py::test_example_docker_config_yml_passes_fail_fast` 钉住 —— **自己手搓的容器配置仍要记得关**。
 
 ## 处置
 

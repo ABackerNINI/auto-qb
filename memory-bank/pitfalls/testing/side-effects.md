@@ -44,7 +44,7 @@
   **留空就写到 CWD = 仓库根** —— 既污染仓库(多出 `skip-check-backup/`),
   又被 `sidefx.py` 把那次 `os.remove` 判成**越界删除**(FSDEL 放行条件只认临时目录)。
   此前只有两条重加失败的用例会落盘(它们各自传了 td), 把备份挪到删除之前后**每条跳检用例都会落盘**, 坑才暴露。
-- **处置**: `tests/test_checking.py::make_mgr` 里未指定 `state_file` 时**自动发一份临时 state 文件**
+- **处置**: `tests/test_checking_*.py::make_mgr` 里未指定 `state_file` 时**自动发一份临时 state 文件**
   (用**唯一文件名**, 防同用例内多个 manager 互读到对方落盘的 state)。
 
 ### 环境能力缺失 ≠ 代码缺陷

@@ -78,7 +78,7 @@
     `getComputedStyle(el, "::-webkit-scrollbar").display === "none"` 且 `scrollbar-width === "none"` ——
     它证明隐藏规则真的命中该元素、该皮肤真的链到了 `hscroll.css`, 这是静态守阵证明不了的。
     教训: 凡「量条槽高度」类断言, 先确认环境用的是 classic 还是 overlay 滚动条, 否则是安慰剂。
-- **守阵**: `tests/test_webui_static_skins.py::test_frontend_hscroll_indicator_wiring`(规则单点 / 三皮肤挂载级联 /
+- **守阵**: `tests/test_webui_static_skins_table.py::test_frontend_hscroll_indicator_wiring`(规则单点 / 三皮肤挂载级联 /
   接线锚点三族静默故障) · `e2e/hscroll-indicator.spec.mjs`(条槽 / 可滚 / 热区 / 拖动 / 宽窗五面)。
 - **复发**: 0
 

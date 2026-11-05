@@ -16,5 +16,5 @@
   **泛化**: 凡是"哨兵 / 初值代表某个绝对时刻"的写法(节流、去重、增量基线), 先问一句**那个时钟的 0 点是什么** —— `monotonic` = 开机, `time.time` = epoch(可用 0.0), `perf_counter` 起点未定义。
 
 - **复发**: 1 —— 2026-10-31（issue 26-10-31-0932）镜像形态、方向相反：relocate 对账退避判据 `now - float(rt.get("rebuild_ts") or 0.0) < REBUILD_BACKOFF`（300s）把「从未重建」当「开机那一刻重建过」，**开机不满 5 分钟的机器上判据恒真**，首次重建 / guardian 首拉被静默跳过（同文件 `_respawn_guardian` 的 `respawn_ts` 同款）—— 同树 09:05 全量绿、宿主重启后单跑稳定红，排查一度归因「时序/环境敏感」。
-  **守阵**: `tests/test_relocate_exec.py::test_rebuild_first_attempt_not_backoff_on_fresh_boot`（monotonic 钉 120.0）/ `::test_respawn_first_spawn_not_backoff_on_fresh_boot`（钉 30.0，弹掉 respawn_ts 还原「守护进程重启后首拉」现场）—— 旧实现即红，本机即现形，不再依赖重启窗口。
+  **守阵**: `tests/test_relocate_exec_reconcile.py::test_rebuild_first_attempt_not_backoff_on_fresh_boot`（monotonic 钉 120.0）/ `::test_respawn_first_spawn_not_backoff_on_fresh_boot`（钉 30.0，弹掉 respawn_ts 还原「守护进程重启后首拉」现场）—— 旧实现即红，本机即现形，不再依赖重启窗口。
   **为什么没命中**: flaky 排查按动作只进了 testing 类索引，本条触发词没有「重启 / 退避 / 开机窗口」入口；直到沿「退避窗口与时间源」假设 grep `monotonic` 才路由到（触发词已补）。
