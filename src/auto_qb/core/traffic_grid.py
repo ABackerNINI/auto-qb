@@ -38,7 +38,7 @@ totals 段(§05.1, 单系列与组共用差分层):
 """
 import math
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 from ..infra import clock
 from .traffic_store import (
@@ -237,7 +237,7 @@ def series_totals_points(obs: dict, grid: WindowGrid) -> list:
     v4_totals_points 是本函数的 v2 规则平移(输入形态 obs 桶表 vs v4 点序列, 边界
     max(0,·) 等价形), 改差分口径两处同步。
     """
-    out = []
+    out: list[dict[str, Any] | None] = []
     prev = None  # 相邻前桶快照(dl_total, up_total)
     for b in grid.buckets:
         o = obs.get(b)
@@ -245,8 +245,8 @@ def series_totals_points(obs: dict, grid: WindowGrid) -> list:
             out.append(None)
             prev = None
             continue
-        dl = _bucket_delta(o.dl_total, prev[0]) if prev is not None else None
-        up = _bucket_delta(o.up_total, prev[1]) if prev is not None else None
+        dl: int | None = _bucket_delta(o.dl_total, prev[0]) if prev is not None else None
+        up: int | None = _bucket_delta(o.up_total, prev[1]) if prev is not None else None
         out.append({"t": b, "dl": dl, "up": up})
         prev = (o.dl_total, o.up_total)
     return out
@@ -272,7 +272,7 @@ def group_rate_points(member_obs: list, grid: WindowGrid, null_mask: list) -> li
     观测而全成员该向速率皆未知**时该向出 None —— 组图同样不得把「断链来的未知」画成 0 值孤点
     (issue 26-10-16-0954 修复面; 桶级 null 仍由 null_mask/成员观测面承载, 语义不变)。
     """
-    out = []
+    out: list[dict[str, Any] | None] = []
     for i, b in enumerate(grid.buckets):
         if null_mask[i]:
             out.append(None)
@@ -310,7 +310,7 @@ def group_totals_points(member_obs: list, grid: WindowGrid, null_mask: list) -> 
     None 且桶链断开(null 桶之后成员基线同样缺失, 与单系列相邻桶口径一致)。
     """
     prevs = [None] * len(member_obs)  # 逐成员的相邻前桶快照
-    out = []
+    out: list[dict[str, Any] | None] = []
     for i, b in enumerate(grid.buckets):
         if null_mask[i]:
             out.append(None)
@@ -435,7 +435,7 @@ class V4TotalsEntry:
 def v4_series_slots(blocks: tuple) -> tuple:
     """块序列 -> 扁平槽序(记录时间轴层; S3b agg 段合流的接缝): 块按 start_epoch 升序
     (稳定排序, 同刻保文件序), 逐块 v4_block_slots 展开(复用 S1 游标 dt 链, 不另写推算)。"""
-    out = []
+    out: list[Any] = []
     for blk in sorted(blocks, key=lambda b: b.start_epoch):
         out.extend(v4_block_slots(blk))
     return tuple(out)
@@ -453,7 +453,7 @@ def v4_series_points(blocks: tuple, t0: float, t1: float, tail_slots: tuple = ()
     出 null 标记断链 —— 与磁盘块同一条判据, 两路径同几何取值一致; 同块续链天然不出标记)。
     无块且无活尾(停机/无数据)返回空元组(天然真空, 调用方按空态处理)。
     """
-    cells = {}  # 桶键 -> [is_raw, dl_sum, up_sum, n, last_ts, dl_total, up_total, w_max]
+    cells: dict[int, list[Any]] = {}  # 桶键 -> [is_raw, dl_sum, up_sum, n, last_ts, dl_total, up_total, w_max]
     marks: list = []  # null 点 (t, ...) —— n 游程折叠 + 块间真空
     prev_chain_end: Optional[float] = None
     last_was_null = False
@@ -693,7 +693,7 @@ def v4_grid_obs(points: tuple, grid: WindowGrid) -> dict:
     # 桶键 -> [dl 覆盖秒, dl 加权和, up 覆盖秒, up 加权和, 覆盖末端, dl_total, up_total,
     #          断链标记(本桶有覆盖起点晚于上一观测点覆盖末端的点)]
     # (覆盖秒逐向独立: D4 豁免点不占速率权重, 只更新覆盖末端与快照链)
-    acc = {}
+    acc: dict[int, list[Any]] = {}
     prev_cov_end: Optional[float] = None  # 上一观测点覆盖末端(观测缝基准; 含窗外点, 全程推进)
     for p in points:
         if p.w <= 0 or (p.dl_rate is None and p.up_rate is None and p.dl_total is None and p.up_total is None):

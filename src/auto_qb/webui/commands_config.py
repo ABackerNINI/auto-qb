@@ -217,7 +217,7 @@ class ConfigMixin:
 
         登记是**幂等合并**语义: 同一批文件+链接两次调用各自登记, 与并发添加互不覆盖。
         """
-        ids = []
+        ids: list[str] = []
         for r in results:
             if isinstance(r, Mapping):
                 ids.extend(str(x) for x in (r.get("added_torrent_ids") or []) if x)

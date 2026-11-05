@@ -246,7 +246,7 @@ class MappedFileAccess(FileAccess):
         ]
         # 挂载根真实路径缓存(dst → realpath+normcase): 映射/挂载根 R 级运行期不切换(与
         # 单例同生命周期), 根解析结果稳定可缓存; 惰性填充, 首次访问才做 syscall
-        self._root_real = {}
+        self._root_real: dict[str, str] = {}
 
     def _root_contained(self, dst: str, cp: str) -> bool:
         """容器路径 cp 经 realpath 解析后是否仍落在挂载根 dst 的真实路径内(SEC-1 判定单点)

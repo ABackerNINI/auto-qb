@@ -106,3 +106,135 @@ ignore_missing_imports = true
 # S2-S4 分级结构预留: [[tool.mypy.overrides]] per-module —— S3 给已注解面(config/torrents/core 选定面)加
 # disallow_untyped_defs 收紧; S4 给抵抗面(tray.* / rules.expr.env / webui 裸 dict 重灾区)加豁免, 并由
 # tests/test_mypy_allowlist_guard.py 冻结豁免清单(只减不增, 计划 §04 S4)
+
+# ---- S4 allowlist(计划 26-11-05-0635 §04 S4) ------------------------------------------
+# 豁免清单由 tests/test_mypy_allowlist_guard.py 冻结: 新增豁免(ignore_errors 模块或
+# disable_error_code 条目)守阵当场红, 减少(递减)不红。基线: 2026-11-06 S4 首跑 1087 错,
+# 纯注解级小修 -29 后 1058, 按下表豁免收敛到退出码 0。
+# 注意: 同一模块匹配多条 overrides 时, 每个选项按「最后一条匹配」取值 —— 对同一模块
+# 写多条条目时, 后条必须整表重复前条的同名选项(⑯⑰ 已照此办)。
+
+# ① 计划钉死豁免(§04 S4 明文): tray 是 GUI 三方回调面(customtkinter/pystray, 无 stub),
+#    回调签名由三方定义, 修面无意义 —— ignore_errors 起步。
+[[tool.mypy.overrides]]
+module = ["auto_qb.tray.*"]
+ignore_errors = true  # 2026-11-06, 计划钉死
+
+# ② 计划钉死豁免(§04 S3 明文「不在此步强标, 留 allowlist」): expr/env.py 闭包工厂高阶链,
+#    37 def 的闭包生成器链类型噪音大, 收益低。
+[[tool.mypy.overrides]]
+module = ["auto_qb.rules.expr.env"]
+ignore_errors = true  # 2026-11-06, 计划钉死
+
+# ③ mixin 动态组合面(现场裁量): core/modules 各 TrafficModule、webui 各 Runtime、hr service
+#    均由多个 Mixin 运行期拼装, 属性/方法定义在兄弟 Mixin 上(attr-defined/has-type 的根因);
+#    store/api 等 Optional 成员收窄(union-attr)与伴生 arg-type/operator/assignment 是同一
+#    架构形态的次生噪音。静态修复需 Protocol 基类改造 = 架构级, 属抵抗面。
+[[tool.mypy.overrides]]
+module = ["auto_qb.core.modules.*", "auto_qb.hr.service_wave", "auto_qb.hr.service_status"]
+disable_error_code = [
+  "attr-defined", "has-type",  # mixin 组合
+  "union-attr", "arg-type", "assignment", "operator", "misc", "return-value", "call-arg", "call-overload",  # Optional 收窄 + lambda/nonlocal/Popen 等次生噪音
+]  # 2026-11-06, 现场裁量
+
+# ④ core 非 modules 面(现场裁量): qbapi 是 qbittorrent-api 无 stub 动态库的透传 Facade
+#    (union-attr=Client|None 收窄 + return-value=三方无签名 + arg-type=Literal 字面量差),
+#    qbmanager/state/traffic_store_codec/tvshows/traffic_grid 是 Optional 收窄与三方重载噪音。
+[[tool.mypy.overrides]]
+module = [
+  "auto_qb.core.qbapi", "auto_qb.core.qbmanager", "auto_qb.core.state",
+  "auto_qb.core.traffic_store_codec", "auto_qb.core.tvshows", "auto_qb.core.traffic_grid",
+]
+disable_error_code = ["union-attr", "return-value", "arg-type", "assignment", "operator", "call-overload"]  # 2026-11-06, 现场裁量
+
+# ⑤ qbclient._session 与三方基类 qbittorrent-api Request 的签名不兼容, 对齐需改转发逻辑(留给递减)。
+[[tool.mypy.overrides]]
+module = ["auto_qb.core.qbclient"]
+disable_error_code = ["override"]  # 2026-11-06, 现场裁量
+
+# ⑥ hr 杂型面(现场裁量): store/model/server 的 Optional 收窄(arg-type/operator/assignment)。
+[[tool.mypy.overrides]]
+module = ["auto_qb.hr.store", "auto_qb.hr.model", "auto_qb.hr.server"]
+disable_error_code = ["arg-type", "operator", "assignment"]  # 2026-11-06, 现场裁量
+
+# ⑦ hr/bencode 字节级解析器(现场裁量): 两段式初始化变量(no-redef)与 bytes 键 list 写入
+#    (call-overload), 修面要改逻辑。
+[[tool.mypy.overrides]]
+module = ["auto_qb.hr.bencode"]
+disable_error_code = ["no-redef", "call-overload"]  # 2026-11-06, 现场裁量
+
+# ⑧ rules 插件层(现场裁量): conditions/actions 的 rec/store Optional 收窄, S3 已 100% 注解。
+[[tool.mypy.overrides]]
+module = ["auto_qb.rules.conditions", "auto_qb.rules.actions.*"]
+disable_error_code = ["union-attr"]  # 2026-11-06, 现场裁量
+
+# ⑨ rules/base(现场裁量): union-attr + rec 两段赋值(no-redef) + int < None(operator)。
+[[tool.mypy.overrides]]
+module = ["auto_qb.rules.base"]
+disable_error_code = ["union-attr", "operator", "no-redef"]  # 2026-11-06, 现场裁量
+
+# ⑩ torrents(现场裁量): qbittorrent-api JsonValueT 动态返回面(store)与 Optional 收窄
+#    (record), S3 已 100% 注解。
+[[tool.mypy.overrides]]
+module = ["auto_qb.torrents.store", "auto_qb.torrents.record"]
+disable_error_code = ["arg-type", "assignment", "union-attr", "index", "operator", "misc"]  # 2026-11-06, 现场裁量
+
+# ⑪ config 边界面(现场裁量): 100% 注解但既有数据形状债(loaders float→int、migrations/
+#    fields/writer 的 Optional 与元组形状), 收紧面内的递减目标。
+[[tool.mypy.overrides]]
+module = ["auto_qb.config.migrations", "auto_qb.config.loaders", "auto_qb.config.schema.fields", "auto_qb.config.writer"]
+disable_error_code = ["union-attr", "operator", "arg-type", "assignment"]  # 2026-11-06, 现场裁量
+
+# ⑫ infra(现场裁量): port_owner Optional 收窄 + file_access 的 shutil.disk_usage 返回
+#    namedtuple 与 DiskUsage 协议的结构差(修面需包一层构造 = 逻辑改动)。
+[[tool.mypy.overrides]]
+module = ["auto_qb.infra.port_owner", "auto_qb.infra.file_access"]
+disable_error_code = ["union-attr", "return-value"]  # 2026-11-06, 现场裁量
+
+# ⑬ 三方重载不命中(现场裁量): alias_fs Array 切片+bytes 写入、agent Popen 形参字典类型。
+[[tool.mypy.overrides]]
+module = ["auto_qb.infra.alias_fs", "auto_qb.core.traffic_source.agent"]
+disable_error_code = ["call-overload"]  # 2026-11-06, 现场裁量
+
+# ⑭ transfer adapter(现场裁量): torrents_add 的 **dict 动态 kwargs 与三方 Literal 形参差,
+#    dict[str, object] → 精确 kwarg 类型是收窄目标。
+[[tool.mypy.overrides]]
+module = ["auto_qb.transfer.adapters.qb"]
+disable_error_code = ["arg-type", "list-item"]  # 2026-11-06, 现场裁量
+
+# ⑮ webui mixin 面(现场裁量, 先于⑯⑰): webui 顶层 13 个 Mixin 文件动态组合形态(同③)。
+#    server 子模块无 mixin, 这两码对其不出现(空转); ⑯⑰ 因同选项整表替换而重复此两码。
+[[tool.mypy.overrides]]
+module = ["auto_qb.webui.*"]
+disable_error_code = ["attr-defined", "has-type"]  # 2026-11-06, 现场裁量
+
+# ⑯ webui server routes 裸 dict payload 面(现场裁量, 最后匹配): FastAPI routes 手写表单
+#    解析 dict[str, str] 复写多类型 + body dict|None 收窄。
+[[tool.mypy.overrides]]
+module = ["auto_qb.webui.server.*"]
+disable_error_code = ["attr-defined", "has-type", "arg-type", "assignment", "union-attr"]  # 2026-11-06, 现场裁量
+
+# ⑰ webui 零散残余(现场裁量, 最后匹配): 5 个 mixin 文件里的 Optional 收窄/None 不可调用/
+#    any() item 类型等少量杂码; 两 mixin 码为⑮同选项整表替换的必要重复。
+[[tool.mypy.overrides]]
+module = [
+  "auto_qb.webui.commands_torrents", "auto_qb.webui.views_relocate", "auto_qb.webui.runtime_views",
+  "auto_qb.webui.runtime_stream", "auto_qb.webui.tool_client",
+]
+disable_error_code = ["attr-defined", "has-type", "union-attr", "index", "misc", "arg-type"]  # 2026-11-06, 现场裁量
+
+# ⑱ cli(现场裁量): 模块级单例 Optional 收窄。
+[[tool.mypy.overrides]]
+module = ["auto_qb.cli"]
+disable_error_code = ["union-attr"]  # 2026-11-06, 现场裁量
+
+# ---- S4 收紧面(递减推进方式: 实测 100% full 的面开 disallow_untyped_defs) ---------------
+# 实测(annotation_stats 2026-11-06): config 160/160、core 751/751、torrents 65/65、
+# rules 非 expr 55/55 —— 四面 full 率 100%, 新增未注解 def 当场红(递减推进)。
+[[tool.mypy.overrides]]
+module = ["auto_qb.config.*", "auto_qb.torrents.*", "auto_qb.core.*"]
+disallow_untyped_defs = true  # 2026-11-06, S4 收紧面
+
+[[tool.mypy.overrides]]
+module = ["auto_qb.rules.base", "auto_qb.rules.conditions", "auto_qb.rules.registry", "auto_qb.rules.checking_meta", "auto_qb.rules.actions.*"]
+disallow_untyped_defs = true  # 2026-11-06, S4 收紧面(rules 插件层; expr/* 缺口不动)

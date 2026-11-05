@@ -228,7 +228,7 @@ def _cleanup(api: Any, torrent_hash: str, dirs: Iterable[str], evidence: dict) -
     hash 拿不到(add 受理但按 tag 不可见, probe_hash=None)时按 tag 补一次定位删除(尽力,
     失败只 warning —— 残留由启动扫描兜底), 免得探针种子留在用户 qB 里。
     """
-    info = {"torrent_deleted": False, "torrent_gone": None, "dirs_removed": [], "residue": []}
+    info: dict[str, Any] = {"torrent_deleted": False, "torrent_gone": None, "dirs_removed": [], "residue": []}
     deadline = clock.SYSTEM_CLOCK.monotonic() + PROBE_CLEANUP_TIMEOUT_S
     if not torrent_hash:
         # 种子不可见(add 受理但按 tag 列不出)拿不到 hash: 按 tag 补删(同一写线程下同 tag

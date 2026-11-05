@@ -28,12 +28,12 @@ from ..traffic_store import (
     v4_z_totals_ramp,
 )
 
-from .traffic_sample_common import EVICT_CHECK_INTERVAL_S, SeriesAgg, _hour_spans, _record_slots
+from .traffic_sample_common import EVICT_CHECK_INTERVAL_S, OpenRun, SeriesAgg, _hour_spans, _record_slots
 
 logger = logging.getLogger("auto_qb.core.modules.traffic_sample_mod")
 
 
-def _open_run_hour_samples(agg: "SeriesAgg", run: Optional["OpenRun"]) -> dict:
+def _open_run_hour_samples(agg: "SeriesAgg", run: Optional[OpenRun]) -> dict:
     """开放游程 + 未结算信用 -> hour 桶样本(活尾合成, plan 26-10-29-0231 §03; 模块级纯函数)。
 
     为什么需要它: agg 记账只在记录落盘时发生(_agg_feed <- _append_record), 而 z 游程
@@ -82,7 +82,7 @@ def _open_run_hour_samples(agg: "SeriesAgg", run: Optional["OpenRun"]) -> dict:
     return out
 
 
-def _pending_agg_rows(agg: "SeriesAgg", run: Optional["OpenRun"], now: float) -> tuple:
+def _pending_agg_rows(agg: "SeriesAgg", run: Optional[OpenRun], now: float) -> tuple:
     """聚合累计器 -> 活尾未封口部分行(S7, 2026-10-14; 模块级纯函数供单测探针)。
 
     agg.dat 只有**封口**行(hour 完结整小时 / day 完结本地日 / month 完结自然月才
@@ -252,7 +252,7 @@ class _SampleAggMixin:
         agg = self._agg_states.get(key)
         if agg is None:
             return False
-        rows = []
+        rows: List[Any] = []  # AggRow 行; 写成 Any 规避 _agg_ingest_* 形参 List[V4HourSample] 的既有型差(递减面)
         for h in sorted(agg.pending):
             if h + HOUR_SECONDS > now:
                 break  # 首个未完结小时即止(pending 按序, 之后只会更晚)

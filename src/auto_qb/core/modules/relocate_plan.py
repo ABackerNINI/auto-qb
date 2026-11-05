@@ -139,7 +139,7 @@ class PlanMixin:
                 gone_items.append({"hash": h, "cls": CLS_BLOCKED, "reasons": [{"gate": "gone", "text": "种子已不在客户端"}]})
             else:
                 present[h] = rec
-        buckets = {}  # group key -> [hashes](仅本次选中的)
+        buckets: dict[Tuple[str, Tuple[str, ...]], List[str]] = {}  # group key -> [hashes](仅本次选中的)
         for h, rec in present.items():
             fmap = self._file_map(rec, client)
             root = ru.content_root_of(rec.save_path, list(fmap.keys()))
@@ -189,7 +189,10 @@ class PlanMixin:
 
         # ---- 内容根 listing(归属分类; 读不到 = 不可判定 = 不专属) ----
         exclusive: Optional[bool] = None
-        misc, external, qb_temp = [], [], []
+        # (三行拆开写只为逐个补注解; _classify_entries 回 List[Any], 故元素口径同 Any)
+        misc: List[Any] = []
+        external: List[Any] = []
+        qb_temp: List[Any] = []
         if len(names) == 1 and "/" not in names[0]:
             content_root = save_path  # 单文件平铺: 内容根 = save_path
         else:

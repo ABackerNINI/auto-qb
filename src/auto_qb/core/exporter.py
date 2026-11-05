@@ -159,7 +159,7 @@ def group_missing_domains(torrent_sets: list, missing: set) -> list:
             if root != other:
                 parent[max(root, other)] = min(root, other)
 
-    groups = {}
+    groups: dict[str, list[str]] = {}
     for domain in missing:
         groups.setdefault(find(domain), []).append(domain)
     return sorted(sorted(group) for group in groups.values())
@@ -221,7 +221,7 @@ def export_yaml_template(
     # 3. 构建导出内容
     if only_missing:
         # 只导出未配置的站点: 生成最小配置骨架
-        export_config = {"config": {"trackers": {}}}
+        export_config: dict[str, Any] = {"config": {"trackers": {}}}
     else:
         # 读取原始配置结构并追加缺失条目(同一文件已经 load_config fail-fast 校验, 仅剔除留空段)
         with open(config_path, "r", encoding="utf-8") as f:
