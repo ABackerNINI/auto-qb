@@ -13,6 +13,22 @@ from .infra.notify import notify_fatal
 from .core.qbmanager import QbManager
 
 
+def _cli_version_string() -> str:
+    """--version 输出值: 打包元数据优先, __version__ 兜底(计划 26-09-22-2318 v2 §05)。
+
+    懒加载: 元数据/包内版本都不能在模块导入期读(包初始化次序坑, 见
+    webui/server/common.py 的同款注释)。
+    """
+    try:
+        import importlib.metadata
+
+        return importlib.metadata.version("auto-qb")
+    except importlib.metadata.PackageNotFoundError:
+        from . import __version__
+
+        return __version__
+
+
 def export_yaml(manager: QbManager, args):
     """导出模式: 连接后由 exporter 模块完成导出"""
     if not manager.connect():
@@ -90,6 +106,12 @@ def _install_sigterm_handler() -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="PT Seed Manager for qBittorrent")
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"auto-qb {_cli_version_string()}",
+        help="输出版本号后退出",
+    )
     parser.add_argument(
         "config",
         nargs="?",

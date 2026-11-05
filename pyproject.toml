@@ -1,6 +1,8 @@
 [project]
 name = "auto-qb"
-version = "0.1.0"
+# 版本号单源: 唯一权威出处是 src/auto_qb/__init__.py 的 __version__(计划 26-09-22-2318 v2 §05);
+# 构建期由 hatchling regex 提取, 消灭 pyproject/源码双写漂移(旧 version = "0.1.0" 已实证漂移)。
+dynamic = ["version"]
 description = "基于 qBittorrent WebUI API 的 PT 种子自动化管理工具"
 readme = "README.md"
 license = "Apache-2.0"
@@ -43,6 +45,8 @@ auto-qb = "auto_qb.cli:main"
 # 开发/测试依赖 (PEP 735 依赖组, 取代 .github/workflows/requirements-dev.txt 的 dev 部分)
 [dependency-groups]
 dev = [
+    # 机械化 bump 执行器(计划 26-09-22-2318 v2 §6.2 步骤③): 1.8.1 为实装时最新(PyPI 实查 2026-11-06)。
+    "bump-my-version==1.8.1",
     "pytest==9.2.0",
     "pytest-cov==7.1.0",
     # 并行跑测试: 全量 19.4s → 5.0s(`-n 4`)。见 pytest.ini 的 addopts 与
@@ -57,6 +61,24 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# 版本号单源接线: 构建时从 __init__.py 的 __version__ 行提取(计划 26-09-22-2318 v2 §4.2/§05)。
+[tool.hatch.version]
+source = "regex"
+path = "src/auto_qb/__init__.py"
+
+# 机械化 bump 接线(计划 26-09-22-2318 v2 §6.2 步骤③): bump-my-version 只负责改版本文件
+# —— commit/tag 一律 false, 提交走 ship.commit 闸门、tag 走 release.tag(显式 ref + ls-remote 核验)。
+# current_version 由 release.bump 流程维护; 档位由 gitmoji 决策器(suggest_bump.py)提案、agent 改判留痕。
+[tool.bumpversion]
+current_version = "0.2.0"
+commit = false
+tag = false
+
+[[tool.bumpversion.files]]
+filename = "src/auto_qb/__init__.py"
+search = '__version__ = "{current_version}"'
+replace = '__version__ = "{new_version}"'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/auto_qb"]
