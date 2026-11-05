@@ -357,14 +357,14 @@ class QbApi:
     def torrents_export(self, torrent_hash: str, **kwargs: Any) -> bytes:
         return self._client.torrents_export(torrent_hash, **kwargs)
 
-    def torrents_trackers(self, torrent_hash: Optional[str] = None, **kwargs: Any) -> List[dict]:
+    def torrents_trackers(self, torrent_hash: Optional[str], **kwargs: Any) -> List[dict]:
         torrent = self.store.get(torrent_hash)
         if torrent is not None:
             return torrent.trackers_info(self._client)
         # store 未命中直连同样过 mask(计划 26-10-07-0055 S1): 两条读路径口径一致, 原文不出 Facade
         return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
 
-    def torrents_trackers_fresh(self, torrent_hash: Optional[str] = None, **kwargs: Any) -> List[dict]:
+    def torrents_trackers_fresh(self, torrent_hash: Optional[str], **kwargs: Any) -> List[dict]:
         """旁路 store 惰性缓存的 tracker 直查(脱敏同口径)
 
         供低频扫描路径(缺失站点扫描/CLI 导出)用: 记录级缓存只被产品自身 tracker 写操作
@@ -373,7 +373,7 @@ class QbApi:
         """
         return [mask_tracker_entry(t) for t in (self._client.torrents_trackers(torrent_hash, **kwargs) or [])]
 
-    def torrents_files(self, torrent_hash: Optional[str] = None, **kwargs: Any) -> TorrentFilesList:
+    def torrents_files(self, torrent_hash: Optional[str], **kwargs: Any) -> TorrentFilesList:
         torrent = self.store.get(torrent_hash)
         if torrent is not None:
             return torrent.files(self._client)
