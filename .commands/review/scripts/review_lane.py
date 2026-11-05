@@ -744,6 +744,11 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     route = args.route
     snap = _snapshot_dir(root, None)
 
+    def step(msg: str) -> None:
+        # 负例步骤走 stderr(无缓冲), stdout 是块缓冲 —— 每步即时 flush 才不产生乱序伪影
+        print(msg, flush=True)
+        sys.stdout.flush()
+
     def cleanup(tag: str) -> None:
         lane = root / LANE_DIR
         for p in (lane / f"route-{route}.json", lane / f"route-{route}-findings.json",
@@ -752,11 +757,11 @@ def cmd_smoke(args: argparse.Namespace) -> int:
                 p.unlink()
         if snap.is_dir():
             shutil.rmtree(snap, ignore_errors=True)
-        print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / 快照目录已删")
+        print(f"[smoke] 清理完成({tag}): route JSON / findings / 小结 / 快照目录已删", flush=True)
 
-    print(f"[smoke 1/7] claim {route} (真实写入)")
+    step(f"[smoke 1/7] claim {route} (真实写入)")
     cmd_claim(ns(route=route, owner="smoke", remote=args.remote, root=str(root), dry_run=False))
-    print("[smoke 2/7] claim 重复认领负例(必须失败)")
+    step("[smoke 2/7] claim 重复认领负例(必须失败)")
     try:
         cmd_claim(ns(route=route, owner="smoke", remote=args.remote, root=str(root), dry_run=False))
         cleanup("负例失败, 未通过")
@@ -765,12 +770,12 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         if exc.code != 1:
             cleanup(f"负例异常 rc={exc.code}")
             raise
-        print("[smoke] 重复认领按预期拒绝 (rc=1)")
-    print("[smoke 3/7] start (真实导出快照)")
+        print("[smoke] 重复认领按预期拒绝 (rc=1)", flush=True)
+    step("[smoke 3/7] start (真实导出快照)")
     cmd_start(ns(route=route, snapshot=None, fresh=False, root=str(root), dry_run=False))
-    print("[smoke 4/7] verify (必须通过)")
+    step("[smoke 4/7] verify (必须通过)")
     cmd_verify(ns(route=route, batch=None, root=str(root)))
-    print("[smoke 5/7] done 负例(批次未齐, 必须失败)")
+    step("[smoke 5/7] done 负例(批次未齐, 必须失败)")
     try:
         cmd_done(ns(route=route, root=str(root)))
         cleanup("负例失败, 未通过")
@@ -779,8 +784,8 @@ def cmd_smoke(args: argparse.Namespace) -> int:
         if exc.code != 1:
             cleanup(f"负例异常 rc={exc.code}")
             raise
-        print("[smoke] 批次未齐按预期拒绝 (rc=1)")
-    print("[smoke 6/7] 逐批勾选后 done (真实终态)")
+        print("[smoke] 批次未齐按预期拒绝 (rc=1)", flush=True)
+    step("[smoke 6/7] 逐批勾选后 done (真实终态)")
     manifest = _load_manifest(root)
     data = _load_route(root, route)
     findings = root / LANE_DIR / f"route-{route}-findings.json"
@@ -790,9 +795,9 @@ def cmd_smoke(args: argparse.Namespace) -> int:
     for b in data["batches"]:
         cmd_batch(ns(route=route, id=b["id"], findings=0, root=str(root)))
     cmd_done(ns(route=route, root=str(root)))
-    print("[smoke 7/7] 清理全部痕迹")
+    step("[smoke 7/7] 清理全部痕迹")
     cleanup("全环通过")
-    print("[smoke] 全环通过: claim/重复认领负例/start/verify/done 负例/逐批勾选/done/清理 全部符合预期")
+    print("[smoke] 全环通过: claim/重复认领负例/start/verify/done 负例/逐批勾选/done/清理 全部符合预期", flush=True)
     return 0
 
 
