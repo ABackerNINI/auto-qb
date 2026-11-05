@@ -4,8 +4,9 @@
 > 主索引的已关闭区按 8,000 字符预算裁剪(上限 `CLOSED_KEEP` 条), **本文件是全量**, 摘要不截断。
 > 每条链接指回 `memory-bank/issues/` 下的报告原文(文件未搬动); 本目录在 `EXCLUDED_DIRS`, 不计 cap。
 
-## Open (47)
+## Open (49)
 
+- [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](../26-11-06-0448-bug-real-down-force-kill.html) — tests-real/runner.py cmd_down 以 PowerShell Stop-Process -Force 强杀 qB 进程(按镜像+路径匹配), 违反 AGENTS.md 禁止一切 taskkill/强杀红线; 替代=WebAPI app/shutdown 优雅退出(实验轮实测 HTTP 200)
 - [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](../26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Refs:** 行时 TASK_REFS_RE 的 \s* 跨行吞掉下一行标题当 ref, test_claim_chain_is_bidirectional 误红; kb.new 模板默认留空行, 新档案踩坑
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](../26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-alert.spec.mjs 硬编码 T1/T2/T3=2026-11-03, 超过 dialogs.js gtmAlert computed 的 24h TTL 后横幅被判空, 双皮肤 prism/atlas 各 1 条必红
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](../26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无条件注册 relocate kind 但 ui_harness 桩不注入任何 relocate 态, 断言空筛选器 kinds=[] 必红; 修桩还是修产品待裁决

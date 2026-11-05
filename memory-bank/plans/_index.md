@@ -20,9 +20,8 @@
 - [26-11-05-2335] [存量代码全库评审 R4·五路线并行体系化](26-11-05-2335-plan-legacy-code-review-4.html) — `legacy-code-review-4`
 - [26-11-05-1049] [memory-bank 文档压缩与防回涨分步执行计划(8K 新口径)](26-11-05-1049-plan-kb-doc-compress.html) — `kb-doc-compress`
 - [26-11-05-0848] [跳检自身失败闸门 G9: WEB case-2 强制 + 规则侧硬 skip 双点同谓词](26-11-05-0848-plan-skip-check-self-fail-gate-g9.html) — `skip-check-self-fail-gate-g9`
-- [26-11-05-0808] [relocate 整组迁移重构: fastresume 改写收尾(journal+下线窗口)](26-11-05-0808-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
+- [26-11-05-0808] [relocate 整组迁移重构: fastresume 改写收尾(回收 daemon 下线窗口)+ 未收尾再迁移](26-11-05-0808-plan-relocate-fastresume-finalize.html) — `relocate-fastresume-finalize`
 - [26-11-05-0635] [类型注解标准清偿与 mypy 渐进接入分步计划](26-11-05-0635-plan-type-annotations-mypy.html) — `type-annotations-mypy`
-- [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
 - [26-11-03-2212] [整组迁移同盘证明误拒：根因与修复计划](26-11-03-2212-plan-relocate-same-fs-proof.html) — `relocate-same-fs-proof`
 
 ## Done
@@ -74,6 +73,7 @@
 
 ## Superseded
 
+- [26-11-05-0247] [整组迁移回收机制改造: 单回收进程与未收尾再迁移](26-11-05-0247-plan-relocate-single-recycler.html) — `relocate-single-recycler`
 - [26-10-13-0413] [种子状态双写通道重构 · B2 实施计划 — 真值回写 + 显式自写变更发射](26-10-13-0413-plan-seed-state-writeback-truth-emission.html) — `seed-state-writeback`
 - [26-10-09-0856] [HR 取数通道「外部扩展 / 跨机」支持 · 分步实施计划 · auto-qb](26-10-09-0856-plan-hr-channel-remote.html) — `hr-channel-remote`
 - [26-09-30-1751] [计划 · 热重载机制简化: 统一挂载口 vs 保存即重启](26-09-30-1751-plan-hot-reload-simplify.html) — `hot-reload-simplify`

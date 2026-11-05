@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 6 |
+| bug | 7 |
 | perf | 2 |
 | docs | 2 |
 | test | 10 |
@@ -30,6 +30,7 @@
 
 ## Open
 
+- [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](26-11-06-0448-bug-real-down-force-kill.html) — tests-real/r…
 - [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Re…
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-aler…
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无…
