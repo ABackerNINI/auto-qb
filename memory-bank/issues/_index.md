@@ -19,7 +19,7 @@
 
 | 类型 | 条数 |
 |---|---|
-| bug | 7 |
+| bug | 6 |
 | perf | 2 |
 | docs | 2 |
 | test | 10 |
@@ -31,7 +31,6 @@
 ## Open
 
 - [bug] [real.down 实现用 Stop-Process -Force 强杀 qB, 触进程安全红线](26-11-06-0448-bug-real-down-force-kill.html) — tests-real/r…
-- [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Re…
 - [test] [gtm-alert 双皮肤日期炸弹: 硬编码日期超 24h TTL 必红](26-11-06-0330-test-e2e-gtm-alert-date-bomb.html) — e2e/gtm-aler…
 - [test] [views 种子页筛选器有数据恒红: relocate kind 在 e2e 桩下恒空](26-11-06-0330-test-e2e-views-relocate-kind-empty.html) — filters.js 无…
 - [test] [test_start_all_busy_returns_false_and_retries 偶发 WinError 10013](26-11-06-0330-test-hr-discovery-busy-retry-flake.html) — 随机序巡检第 1 轮触发…
@@ -89,9 +88,9 @@
 
 ## Done
 
-- [test] [test_qbmanager_tasks 两处缺 assert 的元组表达式(伪断言)](26-11-05-0344-test-qbmanager-tasks-missing-assert.html) — run_sync_lin…
+- [bug] [TASK_REFS_RE 空行跨行捕获: 空 **Refs:** 行把下一行标题吞成 ref, 认领链守阵误红](26-11-06-0415-bug-kb-refs-regex-blank-line.html) — md 档案留空 **Re…
 
-> 更早的 **421** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
+> 更早的 **422** 条已出本索引 —— 报告仍在 `issues/` 目录(未搬动), 全量清单见 [attachments/_archive.md](attachments/_archive.md).
 
 ## Dropped
 

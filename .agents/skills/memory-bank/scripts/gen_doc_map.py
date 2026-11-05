@@ -48,7 +48,9 @@ KEBAB_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 TASK_UPDATED_RE = re.compile(r"\*\*Updated:\*\*\s*(\d{4}-\d{2}-\d{2})")
 STAMP_RE = re.compile(r"^(\d\d-\d\d-\d\d)-(\d{4})-")
 HTML_REFS_RE = re.compile(r'<meta name="doc-refs" content="([^"]*)">')
-TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*\s*(.+)$", re.MULTILINE)
+# `\s*` 会跨行: 空 **Refs:** 行(旧模板默认形态)后随的下一行标题被吞成 ref, 认领链机检误红
+# (issue 26-11-06-0415) —— 只吃同行空白 `[^\S\n]`(含 \r, CRLF 不受影响), 空行即视为未声明。
+TASK_REFS_RE = re.compile(r"^\*\*Refs:\*\*[^\S\n]*(.+)$", re.MULTILINE)
 # refs 多目标的唯一合法分隔符是英文逗号; 这些视觉分隔符常见误用, 命中即进报错提示 (issue 26-10-03-0746)
 VISUAL_SEP_RE = re.compile(r"[·、;；|｜]")
 NAME_WRAP = 4000  # 名录折行宽度, 只影响换行 —— 零信息损失 (150→400→4000 三轮收口, 见 git 历史; 折行以专题名为原子, 2026-10-18 修名称被撕断)

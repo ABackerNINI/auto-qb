@@ -5,7 +5,6 @@
 **Updated:** @@DATE@@
 **Summary:** @@TITLE@@
 **Topics:** @@TOPIC@@
-**Refs:**
 
 ## 本篇只回答
 

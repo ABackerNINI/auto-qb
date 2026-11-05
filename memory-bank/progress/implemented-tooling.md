@@ -5,6 +5,8 @@
 
 ## 已实现 (✅, 有单测覆盖)
 
+- **TASK_REFS_RE 空行跨行捕获修复 (2026-11-06, 专题 memory-bank-task-refs-regex, 档案 [26-11-06-memory-bank-task-refs-regex](../tasks/26-11-06-memory-bank-task-refs-regex.md))**: md 档案留空 `**Refs:**` 行(kb.new 旧模板默认形态)时 `gen_doc_map.py` 的 `\s*` 跨行把下一行标题吞成 ref, 认领链机检误红(issue [26-11-06-0415](../issues/26-11-06-0415-bug-kb-refs-regex-blank-line.html)); 正则改 `[^\S\n]*` 只吃同行空白(CRLF 不受影响, 空行即视为未声明), task/baseline/progress/slice/pitfall 五个 md 模板删空 Refs 行(存量惯例: 不声明就整行不写; `md_set_refs` 缺行时在 `**Topics:**` 后插, 不受影响), 守阵 `tests/test_docs_forms.py::test_empty_refs_line_is_not_a_ref`。数字见 kb.baseline。
+
 - **AGENTS.md 精简 + Copilot 入口收敛指针 (2026-10-06, 三笔 `376dda34`/`cba7c4f6`/`295bb226`)**: 7,896→6,533 字符(去链接/装饰/空格 950→163/日期标注), 判据一条没删; `.github/copilot-instructions.md` 2,159→83 纯指针。坑: 文档删不干净先查是不是机检 token 在吊着; 「」引文照抄原文(新坑 [pitfalls/docs/anchor-quote.md](../pitfalls/docs/anchor-quote.md))。
 - **my-commit-flow 输出契约 v3.1 步骤行 (2026-10-06, 档案 [26-09-28-commands-shipflow-output-contract](../tasks/26-09-28-commands-shipflow-output-contract.md))**: 真改写 HEAD 的步骤在结果行上面各留一行 旧hash→新hash(链尾==结果行, 相邻两步首尾相接), 没发生不报; 结果行逐字不动。
 - **COMMIT_MSG_AI 消费即删 + 残留收口 (2026-09-27 / 2026-10-07)**: 消息文件在 ref 核对通过后删除(失败出口保留现场); 恢复路径补「HEAD 消息与文件一致照常消费 + 入口残留扫描 + unlink 重试」。

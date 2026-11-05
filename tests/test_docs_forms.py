@@ -26,6 +26,7 @@
 - test_issue_topics_present: 每条 issue 都有 `doc-topic` (否则会从专题视图里静默漏掉)
 - test_claim_chain_is_bidirectional: 声明了 `doc-refs` / `**Refs:**` 的件, 目标必须存在且反向声明
 - test_claim_chain_missing_target_hints_separator: ref 含视觉分隔符报「目标不存在」时, 报错自带英文逗号分隔提示 (issue 26-10-03-0746)
+- test_empty_refs_line_is_not_a_ref: 空 `**Refs:**` 行视为未声明不吞下一行 (issue 26-11-06-0415), 带值行含 CRLF 正常取值; 模板不再输出空 Refs 行
 
 CLOSED_KEEP=60 索引出口 (计划 26-10-31-0534 R3/D14, 2026-10-31 加, 2026-11-05 B4 扩到 reports;
 plans/reports 主索引的已完结区只留最近 60 条且装不进 8,000 预算还会继续收紧, 全量清单另落
@@ -236,6 +237,25 @@ def test_claim_chain_missing_target_hints_separator() -> None:
     problems = gen.check_claim_chain([plain_item], ROOT, MB)
     assert len(problems) == 1, f"普通断链 case 应恰好报一条: {problems}"
     assert "视觉分隔符" not in problems[0], problems[0]
+
+
+def test_empty_refs_line_is_not_a_ref(tmp_path: Path) -> None:
+    """空 `**Refs:**` 行视为未声明 —— TASK_REFS_RE 的 `\\s*` 曾跨行把下一行标题吞成 ref,
+    `test_claim_chain_is_bidirectional` 对 kb.new 旧模板形态(自带空 Refs 行)的新档案误红
+    (issue 26-11-06-0415)。修法: 正则只吃同行空白; 模板不再输出空 Refs 行 (与存量惯例一致)。
+    """
+    gen = _load_generator("gen_doc_map")
+    empty = tmp_path / "empty.md"
+    empty.write_text("**Topics:** t\n**Refs:**\n\n## 原始请求\n", encoding="utf-8")
+    assert gen._refs_of(empty) == [], "空 Refs 行必须视为未声明, 不得吞下一行标题"
+    filled = tmp_path / "filled.md"
+    filled.write_text("**Topics:** t\n**Refs:** memory-bank/tasks/x.md\r\n\r\n## 原始请求\r\n", encoding="utf-8")
+    assert gen._refs_of(filled) == ["memory-bank/tasks/x.md"], "带值行正常取值 (CRLF 亦然)"
+    for name in ("task.md", "baseline.md", "progress.md", "slice.md", "pitfall.md"):
+        tpl = (ROOT / ".agents" / "skills" / "memory-bank" / "templates" / name).read_text(encoding="utf-8")
+        assert not re.search(
+            r"^\*\*Refs:\*\*\s*$", tpl, re.MULTILINE
+        ), f"{name} 不得再输出空 **Refs:** 行 (issue 26-11-06-0415)"
 
 
 # --------------------------------------------------------------------------- 状态词表 fail-fast 守阵
