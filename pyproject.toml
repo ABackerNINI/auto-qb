@@ -67,6 +67,10 @@ build-backend = "hatchling.build"
 source = "regex"
 path = "src/auto_qb/__init__.py"
 
+# wheel 构建钩子(hatch_build.py): 构建期把 git hash 注入 .dist-info/BUILD_ID 侧车
+# —— Version 本体保持纯 SemVer, hash 经侧车溯源(计划 v2 §4.2 双路径)。
+[tool.hatch.build.hooks.custom]
+
 # 机械化 bump 接线(计划 26-09-22-2318 v2 §6.2 步骤③): bump-my-version 只负责改版本文件
 # —— commit/tag 一律 false, 提交走 ship.commit 闸门、tag 走 release.tag(显式 ref + ls-remote 核验)。
 # current_version 由 release.bump 流程维护; 档位由 gitmoji 决策器(suggest_bump.py)提案、agent 改判留痕。

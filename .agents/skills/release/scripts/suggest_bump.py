@@ -26,6 +26,7 @@ import json
 import re
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 # 决策表: gitmoji 前缀 -> (bump 档位, CHANGELOG 段)。⚡️ 实为 ⚡ + VS16, startswith 两种都命中。
@@ -39,6 +40,9 @@ BREAKING_EMOJI = "💥"
 # 表述里常见, 误报会把 patch 抬成 minor + 虚假警示(评审 R1-F1)。💥 前缀仍是主判定。
 BREAKING_PATTERN = re.compile(r"\bBREAKING\b")
 SEMVER_PATTERN = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
+# 未显式给 --version-regex 时的默认: __version__ dunder 行(单/双引号都吃)。
+# 走默认而非 task 传参 —— 引擎 shell 拼接下"含空格又含双引号"的参数无法安全过境。
+DEFAULT_VERSION_REGEX = r'__version__\s*=\s*["\']([^"\']+)["\']'
 
 # bump 档位优先级: minor > patch > none (永不含 major —— major 只走显式 --major 旗标)。
 _KIND_ORDER = {"none": 0, "patch": 1, "minor": 2}
@@ -158,11 +162,22 @@ def preview(sections: dict[str, list[str]], per_section: int = 5) -> list[str]:
     return lines
 
 
+def default_version_file(repo: str) -> Path:
+    """默认版本文件 = pyproject [tool.hatch.version].path(hatchling 单源约定)。"""
+    pyproject = Path(repo) / "pyproject.toml"
+    with pyproject.open("rb") as fh:
+        data = tomllib.load(fh)
+    path = data.get("tool", {}).get("hatch", {}).get("version", {}).get("path")
+    if not path:
+        raise RuntimeError("pyproject 无 [tool.hatch.version].path, 请显式给 --version-file")
+    return pyproject.parent / path
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="gitmoji -> SemVer bump 决策器 (release skill)")
     parser.add_argument("--repo", required=True, help="仓库根 (git -C 的目标)")
-    parser.add_argument("--version-file", required=True, type=Path, help="当前版本所在文件")
-    parser.add_argument("--version-regex", required=True, help="版本提取正则 (须恰好一个捕获组)")
+    parser.add_argument("--version-file", type=Path, default=None, help="当前版本所在文件(默认 = [tool.hatch.version].path)")
+    parser.add_argument("--version-regex", default=None, help="版本提取正则, 须恰好一个捕获组(默认 = __version__ dunder 行)")
     parser.add_argument("--from-ref", default=None, help="起算 ref (默认 = 最近 v<数字> tag)")
     parser.add_argument("--major", action="store_true", help="显式 major 放行 (人工拍板专用, 永不自动)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="输出完整 JSON 结构")
@@ -176,13 +191,15 @@ def main(argv: list[str] | None = None) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
     try:
-        current = load_version(ns.version_file, ns.version_regex)
+        current = load_version(
+            ns.version_file or default_version_file(ns.repo), ns.version_regex or DEFAULT_VERSION_REGEX
+        )
         from_ref = ns.from_ref or default_from_ref(ns.repo)
         subjects = [
             line for line in run_git(["log", f"{from_ref}..HEAD", "--pretty=%s"], ns.repo).splitlines() if line.strip()
         ]
         verdict = decide(subjects)
-    except (RuntimeError, re.error, OSError) as exc:
+    except (RuntimeError, re.error, OSError, tomllib.TOMLDecodeError) as exc:
         # 单行错误契约: re.error(非法 --version-regex) / OSError(版本文件缺失、git 缺失)一并收口(评审 R1-F5)。
         print(f"[suggest_bump] {exc}", file=sys.stderr)
         return 1
